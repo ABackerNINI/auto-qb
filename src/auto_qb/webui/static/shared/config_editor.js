@@ -33,11 +33,6 @@ window.CONFIG_EDITOR = {
         loading: false,
         saving: false,
         error: "",  // 加载/保存错误(加载失败时整页替换; 保存失败走 toast)
-        activeGroup: "basic",
-        previewOpen: false,
-        previewText: "",
-        previewError: "",
-        previewBusy: false,
         trackerKey: null,  // 站点编辑器当前选中站点
         newTrackerName: "",
         ruleGroupKey: null,  // 规则集编辑器当前选中规则集
@@ -45,11 +40,9 @@ window.CONFIG_EDITOR = {
         newRuleName: "",
         addOpen: "",  // 当前展开的"新增"表单: "" | tracker | ruleGroup | rule(同时只允许一个)
         collapsedRules: {},  // 规则卡折叠态 { "<规则集>::<规则名>": true }
-        openRules: {},  // 规则卡展开态 { "<规则集>::<规则名>": true }; 缺省 = 折叠(规则默认只看摘要)
         openSections: {},  // 可选段展开态 { "<路径>": true }; **缺省 = 折叠**(设置页字段多, 展开应是主动选择)
         openGroups: {},  // 普通 object 段(group)展开态 { "<路径 join>": true }; 缺省 = 折叠(同 section)
         openLists: {},  // pattern_list 字段 list 区展开态 { "<路径 join>": true }; 缺省 = 折叠
-        openCurves: {},  // 限速曲线卡展开态 { "<曲线序号>": true }; 缺省 = 折叠
         picker: { open: false, groupKey: "", ruleName: "", list: "" },  // 条件/动作选择面板(单例)
         chartHover: null,  // 限速曲线鼠标取值: { chartKey, x, y, tLabel, sLabel } | null
       },
@@ -60,28 +53,6 @@ window.CONFIG_EDITOR = {
     return { ce: this };
   },
   computed: {
-    /* 左导航: 分组 + 图标 + 条目数徽标 */
-    cfgGroups() {
-      const schema = this.cfg.schema;
-      if (!schema || !this.cfg.tree) return [];
-      const conf = this.cfgConfig();
-      return schema.groups.map((g) => {
-        const badge = g.key === "trackers" ? Object.keys(conf.trackers || {}).length :
-          g.key === "rules" ? Object.keys(this.cfgRuleGroups()).length : 0;
-        return { key: g.key, label: g.label, help: g.help, badge: badge, icon: g.icon || "i-settings" };
-      });
-    },
-    /* 当前分组的渲染项(嵌套字段已扁平化) */
-    cfgActive() {
-      const schema = this.cfg.schema;
-      if (!schema) return { key: "", label: "", help: "", icon: "", items: [] };
-      const g = schema.groups.find((x) => x.key === this.cfg.activeGroup) || schema.groups[0];
-      if (!g) return { key: "", label: "", help: "", icon: "", items: [] };
-      return {
-        key: g.key, label: g.label, help: g.help, icon: g.icon || "i-settings",
-        items: this.cfgFlatten(g.fields, ["config"], 0),
-      };
-    },
     cfgDirty() {
       if (!this.cfg.tree) return false;
       return JSON.stringify(this.cfg.tree) !== this.cfg.baseline;
@@ -204,7 +175,6 @@ window.CONFIG_EDITOR = {
         } else {
           this.toast(`已保存并热重载(变更 ${n} 项)`, "ok", 3500);
         }
-        this.cfg.previewOpen = false;
       } catch (e) {
         this.toast("保存失败: " + (e.message || "未知错误"), "error", 9000);
       } finally {
@@ -219,7 +189,6 @@ window.CONFIG_EDITOR = {
         if (!ok) return;
       }
       await this.cfgLoad();
-      this.cfg.previewOpen = false;
     },
     cfgReset() {
       // 登出时清空受保护内容(与分组数据同等对待)
@@ -227,42 +196,17 @@ window.CONFIG_EDITOR = {
       this.cfg.tree = null;
       this.cfg.baseline = "";
       this.cfg.error = "";
-      this.cfg.previewOpen = false;
-      this.cfg.previewText = "";
-      this.cfg.previewError = "";
       this.cfg.trackerKey = null;
       this.cfg.ruleGroupKey = null;
       this.cfg.addOpen = "";
-      this.cfg.openRules = {};
       this.cfg.openGroups = {};
       this.cfg.openLists = {};
-      this.cfg.openCurves = {};
       this.cfg.chartHover = null;
       this.cfgPickerClose();
     },
     async openSettings() {
       this.page = "settings";
       if (!this.cfg.schema) await this.cfgLoad();
-    },
-    async cfgTogglePreview() {
-      if (this.cfg.previewOpen) {
-        this.cfg.previewOpen = false;
-        return;
-      }
-      this.cfg.previewBusy = true;
-      this.cfg.previewError = "";
-      try {
-        const data = await this.api("/api/config/preview", {
-          method: "POST",
-          body: JSON.stringify({ tree: this.cfg.tree }),
-        });
-        this.cfg.previewText = data.yaml;
-        this.cfg.previewOpen = true;
-      } catch (e) {
-        this.cfg.previewError = e.message || "预览失败";
-      } finally {
-        this.cfg.previewBusy = false;
-      }
     },
 
     /* ---------------------------------------------------------- 路径读写 */
@@ -520,16 +464,6 @@ window.CONFIG_EDITOR = {
       else next[key] = true;
       this.cfg.openLists = next;
     },
-    /* 限速曲线卡展开/折叠: 缺省 = 折叠(主区只看周期与档位数, 详情展开才看折线/档位表) */
-    cfgCurveOpen(i) {
-      return !!this.cfg.openCurves[i];
-    },
-    cfgCurveToggle(i) {
-      const next = { ...this.cfg.openCurves };
-      if (next[i]) delete next[i];
-      else next[i] = true;
-      this.cfg.openCurves = next;
-    },
     /* 内联开关(父字段的布尔从属项, 如"覆盖已有分类"): 路径由调用方给出 */
     cfgInlineBool(path, fallback) {
       return this.cfgBool(path, fallback);
@@ -623,20 +557,6 @@ window.CONFIG_EDITOR = {
     },
     cfgConfigPath() {
       return ["config"];
-    },
-    /* ---------------------------------------------------------- "新增"按钮: 就地展开输入框 */
-
-    cfgAddStart(kind) {
-      this.cfg.addOpen = this.cfg.addOpen === kind ? "" : kind;
-      this.cfg.newTrackerName = "";
-      this.cfg.newRuleGroupName = "";
-      this.cfg.newRuleName = "";
-      if (this.cfg.addOpen) {
-        this.$nextTick(() => {
-          const el = this.$refs.addInput;
-          if (el) el.focus();
-        });
-      }
     },
     cfgAddCancel() {
       this.cfg.addOpen = "";
@@ -828,12 +748,6 @@ window.CONFIG_EDITOR = {
      * 语义与 curves.curve_speed 一致 —— 阈值是区间**上限**, 末档之后一直沿用末档速度。
      */
 
-    cfgCurvePeriodHint(i) {
-      const p = (this.cfgCurvePeriod(i).period || "").trim();
-      if (!p) return "未填写周期(DAY / MONTH / 7D)";
-      const known = { DAY: "按当天累计流量", MONTH: "按本月累计流量" };
-      return known[p.toUpperCase()] || `按最近 ${p} 的累计流量`;
-    },
     cfgCurveInvalid(i, direction) {
       // 无法解析的档位数(阈值需形如 10GiB, 限速需形如 6MiB/s)
       let bad = 0;

@@ -42,12 +42,6 @@ window.CONFIG_RULES = {
       list.push({ [pluginName]: this.cfgPluginDefaultSpec(pluginName) });
       this.cfgSetPath(path, list);
     },
-    cfgIgnoreNextAdd(groupKey, ruleName) {
-      const path = [...this.cfgRulePath(groupKey, ruleName), "actions"];
-      const list = [...this.cfgPluginList(groupKey, ruleName, "actions")];
-      list.push({ ignore_next_action_error: "true" });
-      this.cfgSetPath(path, list);
-    },
     cfgPluginRemove(groupKey, ruleName, listName, index) {
       const path = [...this.cfgRulePath(groupKey, ruleName), listName];
       const list = [...this.cfgPluginList(groupKey, ruleName, listName)];
@@ -143,14 +137,6 @@ window.CONFIG_RULES = {
         }
       ];
     },
-    /* 切换条目使用的插件(重置为该插件的默认 spec) */
-    cfgPluginReplace(groupKey, ruleName, listName, index, pluginName) {
-      const entry = this.cfgPluginEntry(groupKey, ruleName, listName, index);
-      if (!pluginName || pluginName === this.cfgPluginName(entry)) return;
-      this.cfgSetPath([...this.cfgRulePath(groupKey, ruleName), listName, index], {
-        [pluginName]: this.cfgPluginDefaultSpec(pluginName),
-      });
-    },
     /* 表达式「试算」(expr 条件的按钮): 调后端 /api/expr/eval
      *
      * 留空 hash = 只做编译 + 语义校验(语法/名字拼写错的即时反馈, 不用等保存);
@@ -219,26 +205,8 @@ window.CONFIG_RULES = {
       return section;
     },
 
-    /* ---------------------------------------------------------- 规则级字段与动作可用性 */
+    /* ---------------------------------------------------------- 规则卡交互(启用/摘要) */
 
-    cfgRuleItems(groupKey, ruleName) {
-      if (!this.cfg.schema) return [];
-      return this.cfgFlatten(this.cfg.schema.rule_fields, this.cfgRulePath(groupKey, ruleName), 0);
-    },
-
-    /* ---------------------------------------------------------- 规则卡交互(折叠/启用/摘要) */
-
-    cfgRuleKey(groupKey, ruleName) {
-      return `${groupKey}::${ruleName}`;
-    },
-    /* 规则卡缺省折叠(用户要求): 只显示摘要行(触发器 · 条件数 · 动作数)与风险提示, 展开是主动选择 */
-    cfgRuleCollapsed(groupKey, ruleName) {
-      return !this.cfg.openRules[this.cfgRuleKey(groupKey, ruleName)];
-    },
-    cfgRuleToggle(groupKey, ruleName) {
-      const k = this.cfgRuleKey(groupKey, ruleName);
-      this.cfg.openRules = { ...this.cfg.openRules, [k]: !this.cfg.openRules[k] };
-    },
     cfgRuleEnabled(groupKey, ruleName) {
       return this.cfgBool([...this.cfgRulePath(groupKey, ruleName), "enabled"], "true");
     },
@@ -254,15 +222,6 @@ window.CONFIG_RULES = {
 
     /* ---------------------------------------------------------- 条件/动作选择面板(单例) */
 
-    cfgPickerIsOpen(groupKey, ruleName, listName) {
-      const p = this.cfg.picker;
-      return !!p.open && p.groupKey === groupKey && p.ruleName === ruleName && p.list === listName;
-    },
-    cfgPickerOpen(groupKey, ruleName, listName) {
-      this.cfg.picker = this.cfgPickerIsOpen(groupKey, ruleName, listName) ?
-        { open: false, groupKey: "", ruleName: "", list: "" } :
-        { open: true, groupKey: groupKey, ruleName: ruleName, list: listName };
-    },
     cfgPickerClose() {
       this.cfg.picker = { open: false, groupKey: "", ruleName: "", list: "" };
     },

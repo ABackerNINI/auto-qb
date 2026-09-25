@@ -170,13 +170,8 @@ window.AQB_DIALOGS = {
         this.mgrBusy = false;
       }
     },
-    /* ---------------- 日志页(FE-2C): /api/log 只读 tail(等级过滤 + 行数选择 + 手动刷新, 不轮询) ---------------- */
-    async openLogs() {
-      // W4: 日志迁入设置页"运行日志"章节; 顶层 page 收敛为 groups/settings, 不再有 'logs'
-      await this.openSettings();
-      this.cfg.activeGroup = "__logs";
-      if (!this.logs.loaded) await this.loadLogs();
-    },
+    /* ---------------- 日志 tail(FE-2C): /api/log 只读(等级过滤 + 行数选择 + 手动刷新, 不轮询);
+         入口在 Console Hub「运行日志」分区, 顶层 page 只有 groups/settings ---------------- */
     async loadLogs() {
       this.logs.loading = true;
       this.logs.error = "";

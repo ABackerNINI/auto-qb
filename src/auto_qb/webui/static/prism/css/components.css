@@ -364,8 +364,6 @@
   margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0;
   background: var(--bg-sunken); color: var(--fg-muted); }
 .ce-unit-group .ce-unit-select:focus { position: relative; z-index: 1; }
-.ce-inline-input { flex: 0 0 auto; width: 130px; min-width: 0; max-width: none; }
-.ce-inline-select { flex: 0 0 auto; width: auto; min-width: 150px; max-width: 260px; }
 .ce-unit { font-size: 12px; color: var(--fg-dim); }
 
 .ce-switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; }
@@ -404,31 +402,6 @@
 .ce-list-sum { font-size: 11.5px; color: var(--fg-dim); }
 .ce-list-body { padding-top: 4px; }
 
-.ce-add-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
-  padding: 8px 12px; border-radius: var(--radius-sm); border: 1px dashed var(--border-strong);
-  background: transparent; color: var(--fg-muted); font-size: 12.5px; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.ce-add-btn:hover { border-color: var(--accent); color: var(--fg); background: var(--accent-soft); }
-.ce-add-btn .ico { color: var(--green); opacity: .85; }
-.ce-add-btn:hover .ico, .ce-add-btn.open .ico { opacity: 1; }
-.ce-add-btn.open { border-style: solid; border-color: var(--accent); color: var(--fg); background: var(--accent-soft); }
-.ce-add-btn.inline { width: auto; padding: 4px 10px; font-size: 12px; }
-.ce-add-form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px;
-  border-radius: var(--radius-sm); background: var(--bg-sunken); border: 1px solid var(--border); }
-.ce-add-form .ce-input { flex: 1 1 auto; width: 100%; max-width: none; }
-.ce-add-form-actions { display: flex; justify-content: flex-end; gap: 6px; }
-
-.ce-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px;
-  padding: 10px; border-radius: var(--radius); background: var(--bg-sunken); border: 1px solid var(--border); }
-.ce-picker-item { display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; text-align: left;
-  border-radius: var(--radius-sm); border: 1px solid var(--border-soft); background: var(--surface-1);
-  color: var(--fg); font-size: 12.5px; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
-.ce-picker-item:hover { border-color: var(--accent); background: var(--accent-soft); }
-.ce-picker-item.danger:hover { border-color: var(--error); background: var(--error-soft); }
-.ce-picker-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
-.ce-picker-help { color: var(--fg-dim); font-size: 11.5px; line-height: 1.45; }
-
 .ce-risk { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: var(--radius-sm);
   background: var(--warn-soft); color: var(--warn); font-size: 10.5px; white-space: nowrap; }
 .ce-risk .ico { width: 11px; height: 11px; }
@@ -437,13 +410,9 @@
   border: 1px solid var(--error-line); color: var(--fg-soft); font-size: 12px; line-height: 1.5; }
 .ce-risk-line .ico { flex: 0 0 auto; margin-top: 1px; color: var(--error); }
 .ce-help { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--fg-dim); line-height: 1.5; }
-.ce-hint { font-style: normal; font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
-.ce-empty-hint { flex-basis: 100%; margin: 0; padding: 8px 12px; border-radius: var(--radius-sm);
-  background: var(--surface-1); color: var(--fg-dim); font-size: 12.5px; }
 .ce-tag { font-size: 10.5px; padding: 1px 6px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--fg-dim); }
 .ce-req { color: var(--error); }
 .ce-spacer { flex: 1; }
-.ce-pseudo { font-size: 12.5px; color: var(--warn); }
 
 /* 顶栏搜索框 */
 .top-search { display: flex; align-items: center; gap: 8px; }
@@ -462,20 +431,20 @@
 /* 按下反馈(可点元素统一轻微回缩) */
 .tabs button:active, .table-tool:active, .dist-chip:active, .filter-btn:active,
 .ce-btn:active, .ce-icon:active, .ctx-item:active, .pop-item:active, .col-menu-item:active,
-.ce-side-item:active, .ce-master-item:active, .ce-picker-item:active, .theme-item:active { transform: scale(.975); }
+.theme-item:active { transform: scale(.975); }
 .ce-icon:active, .ctx-item:active { transform: scale(.96); }
 
 /* 设置页下拉外观统一(仍为原生 select, 仅外观) */
-select.ce-input, .ce-inline-select, .ce-select, .ce-unit-group .ce-unit-select {
+select.ce-input, .ce-select, .ce-unit-group .ce-unit-select {
   appearance: none; -webkit-appearance: none; -moz-appearance: none;
   padding-right: 30px; border-radius: var(--radius-sm); cursor: pointer; text-overflow: ellipsis;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23808f9f' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.3 6.3 8 10l3.7-3.7'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 9px center; background-size: 12px 12px;
 }
-select.ce-input:hover, .ce-inline-select:hover, .ce-select:hover, .ce-unit-group .ce-unit-select:hover {
+select.ce-input:hover, .ce-select:hover, .ce-unit-group .ce-unit-select:hover {
   border-color: var(--border-strong);
 }
-select.ce-input:focus, .ce-inline-select:focus, .ce-select:focus, .ce-unit-group .ce-unit-select:focus {
+select.ce-input:focus, .ce-select:focus, .ce-unit-group .ce-unit-select:focus {
   border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); outline: none;
 }
 .ce-unit-group .ce-unit-select {
@@ -598,7 +567,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .prio-btn:hover { border-color: var(--accent); color: var(--accent); }
 .prio-btn.skipped { color: var(--fg-dim); }
 
-
 /* ================= 统计面板对话框(FE-2C) —— 复用 .modal/.add-dialog 视觉语言(仅引用 tokens) =================
  * server_state 字段直取, 缺失显示 —; 键值行斑马纹, 右值用 mono 数据字体。
  */
@@ -679,7 +647,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .ctx-sub.flip-x { left: auto; right: calc(100% + 4px); }
 /* 点位图标: 统计 / 运行日志(章节入口) 此前同样无颜色 */
 .ico-chart { color: var(--cyan); }
-.ico-log { color: var(--pink); }
 .ico-risk { color: var(--warn); }   /* 风险标识(RFB-02 件2: 紧凑图标替代文字徽标) */
 
 /* ================= CTX-02 触发源强调 =================

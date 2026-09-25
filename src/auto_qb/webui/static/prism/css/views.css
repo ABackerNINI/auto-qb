@@ -142,7 +142,6 @@
   background: transparent; border-radius: 2px; }
 .h-cell:hover .resizer::after { background: var(--accent); }
 
-
 /* P0-3 乐观 UI: pending 行 = 本地已按预期改过、还没拿到服务端确认。
    半透明 + 轻微动效表示"进行中"; 回执失败会回滚原值(见 app.js resolveOptimistic),
    3s 未确认也会回落真值 —— 绝不允许停在假状态上。 */
@@ -347,66 +346,10 @@
   --ce-ctl-gap: 12px;     /* 标签列与控件列的间距 */
   --ce-row-pad-x: 12px;   /* 字段行左右内边距(与容器内边距折算后同层对齐) */
   --ce-input-max: 720px;  /* 输入控件/说明文字的最大宽度(页面利用率) */ }
-.ce-grid { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 18px; align-items: start; }
 .ce-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px;
   text-align: center; color: var(--fg-dim); padding: 56px 20px; }
 .ce-placeholder.loading { animation: loading-glow 1.8s ease-in-out infinite; }
 
-.ce-side { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 3px; padding: 6px;
-  border-radius: var(--radius); background: var(--surface-1); border: 1px solid var(--border-soft); }
-.ce-master-title { display: flex; align-items: center; gap: 6px; padding: 6px 10px 8px;
-  font-size: 11.5px; font-weight: 600; letter-spacing: .06em; color: var(--fg-dim); text-transform: uppercase; }
-.ce-master-title .ce-spacer { flex: 1; }
-.ce-master-title .ce-icon, .ce-master-title .ce-icon:hover { color: var(--green); }
-.ce-side-item { display: flex; align-items: center; gap: 9px; text-align: left;
-  background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--fg-muted);
-  padding: 9px 12px; font-size: 13px; cursor: pointer;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.ce-side-item .ico { opacity: .9; transition: opacity var(--dur) var(--ease); }
-.ce-side-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ce-side-item:hover { background: var(--surface-2); color: var(--fg); }
-.ce-side-item:hover .ico { opacity: 1; }
-.ce-side-item.active { background: var(--accent-soft); color: var(--fg); font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--accent); }
-.ce-side-item.active .ico { opacity: 1; }
-.icog-basic { color: var(--blue); }
-.icog-logging { color: var(--indigo); }
-.icog-web { color: var(--cyan); }
-.icog-notify { color: var(--warn); }
-.icog-maintenance { color: var(--green); }
-.icog-speed { color: var(--violet); }
-.icog-trackers { color: var(--teal); }
-.icog-rules { color: var(--pink); }
-.ce-side-badge { font-size: 11px; padding: 1px 7px; border-radius: var(--radius-sm);
-  background: var(--surface-2); color: var(--fg-muted); }
-.ce-side-item.active .ce-side-badge { background: var(--accent-soft); color: var(--accent-hi); }
-
-.ce-main { min-width: 0; display: flex; flex-direction: column; gap: 14px; padding-bottom: 8px; }
-.ce-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.ce-head h2 { display: flex; align-items: center; gap: 8px; margin: 0;
-  font-size: 18px; font-weight: 600; letter-spacing: .01em; }
-.ce-head h2 .ico { opacity: .95; }
-.ce-sub { margin: 4px 0 0; color: var(--fg-dim); font-size: 12.5px; }
-.ce-head-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.ce-sync { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: var(--radius-sm);
-  background: var(--green-soft); color: var(--green); font-size: 11.5px; white-space: nowrap; }
-.ce-sync.on { background: var(--warn-soft); color: var(--warn); }
-.ce-sub-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 0; }
-.ce-sub-title { font-size: 13px; font-weight: 600; color: var(--fg); }
-
-.ce-card { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
-  border-radius: var(--radius); background: var(--bg-card); border: 1px solid var(--border);
-  box-shadow: var(--shadow-1);
-  transition: border-color var(--dur) var(--ease); }
-.ce-card:hover { border-color: var(--border-strong); }
-.ce-detail-title { font-size: 14.5px; letter-spacing: .01em; }
-
-.ce-banner { padding: 10px 14px; border-radius: var(--radius); font-size: 13px; border: 1px solid transparent; }
-.ce-banner.ok { background: var(--green-soft); color: var(--green); border-color: var(--green-line); }
-.ce-banner.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-line); }
-.ce-banner.error { background: var(--error-soft); color: var(--error); border-color: var(--error-line); }
-
-.ce-fields { display: flex; flex-direction: column; gap: 2px; }
 .ce-field { display: grid; grid-template-columns: var(--ce-label-w) minmax(0, 1fr); gap: var(--ce-ctl-gap); align-items: start;
   padding: 7px var(--ce-row-pad-x); border-radius: var(--radius); background: transparent; border: 1px solid transparent;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
@@ -419,7 +362,7 @@
 .ce-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 
 /* RFB-02 件4 展开/折叠密度: 头部内边距与段间距统一(折叠头行高一致);
- * 段间距 8px 与 .ce-main 的卡片间距 14px 拉开层级: 段内 < 段间 < 卡间 */
+ * 段间距 8px 与卡片间距 14px 拉开层级: 段内 < 段间 < 卡间 */
 .ce-group { margin: 8px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
   background: var(--surface-1); border-left: 3px solid var(--accent);
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
@@ -488,76 +431,12 @@
 .ce-note.error::before { background: var(--error); }
 .ce-ctl .ce-note { flex: 1 1 100%; }
 
-.ce-master-detail { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; align-items: start; }
-.ce-master { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 3px; padding: 6px;
-  border-radius: var(--radius); background: var(--surface-1); border: 1px solid var(--border-soft); }
-.ce-master-item { text-align: left; background: transparent; border: 0; border-radius: var(--radius-sm);
-  color: var(--fg-muted); padding: 8px 11px; font-size: 13px; cursor: pointer;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.ce-master-item:hover { background: var(--surface-2); color: var(--fg); }
-.ce-master-item.active { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
-.ce-detail { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.ce-detail-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-
-.ce-rule-card { position: relative; display: flex; flex-direction: column; gap: 8px;
-  padding: 10px 14px 12px 17px; border-radius: var(--radius);
-  background: var(--bg-card); border: 1px solid var(--border); }
-.ce-rule-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
-  border-radius: 999px; background: var(--accent); }
-.ce-rule-card.collapsed::before { background: var(--border-strong); }
-.ce-rule-card.collapsed { padding-bottom: 10px; }
-.ce-rule-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ce-rule-head .caret { color: var(--fg-dim); transition: transform var(--dur) var(--ease); }
-.ce-rule-card:not(.collapsed) .ce-rule-head .caret { transform: rotate(90deg); color: var(--accent); }
-.ce-rule-name { font-size: 14px; letter-spacing: .01em; }
-.ce-rule-meta { font-size: 11.5px; color: var(--fg-dim); }
-.ce-rule-body { display: flex; flex-direction: column; gap: 8px; }
-.ce-plugins { display: flex; flex-direction: column; gap: 8px; margin-top: 4px;
-  border-top: 1px dashed var(--border); padding-top: 10px; }
-.ce-plugins-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-dim); }
-.ce-plugins-title { display: flex; align-items: baseline; gap: 8px; flex: 1; color: var(--fg); font-weight: 600; }
-.ce-plugin-card { display: flex; flex-direction: column; gap: 4px; padding: 9px 11px;
-  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface-1); }
-.ce-plugin-bar { display: flex; align-items: center; gap: 8px; }
-.ce-ord { flex: 0 0 auto; display: inline-grid; place-items: center; width: 20px; height: 20px;
-  border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-hi);
-  font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
-
-.ce-curve { display: flex; flex-direction: column; gap: 12px; }
-.ce-curve-off { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
-.ce-curve-off .ce-help { flex: 1 1 320px; }
-.ce-curve-card { gap: 10px; }
-.ce-curve-card.collapsed { background: var(--bg-sunken); }
-.ce-curve-card .caret { color: var(--accent); opacity: .65; transform: rotate(0deg);
-  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
-.ce-curve-card .caret.open { transform: rotate(90deg); }
-.ce-curve-card .ce-icon.flat { padding: 2px; border-radius: var(--radius-sm); }
-.ce-curve-card .ce-icon.flat:hover { background: var(--surface-2); }
-.ce-curve-badge { flex: 0 0 auto; display: inline-grid; place-items: center; width: 22px; height: 22px;
-  border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-hi);
-  font-family: var(--font-mono); font-size: 12px; font-weight: 600; }
-.ce-curve-dir { display: flex; flex-direction: column; gap: 8px; padding: 10px;
-  border-radius: var(--radius); background: var(--bg-sunken); border: 1px solid var(--border-soft); }
-.ce-curve-dir-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg); font-weight: 600; }
-.ce-curve-dir.d-up .ce-curve-dir-head > .ico { color: var(--green); }
-.ce-curve-dir.d-down .ce-curve-dir-head > .ico { color: var(--blue); }
-.ce-curve-points { display: flex; flex-direction: column; gap: 5px; }
-.ce-curve-point-head, .ce-curve-point { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px;
-  gap: 8px; align-items: center; }
-.ce-curve-point-head { font-size: 11.5px; color: var(--fg-dim); }
-.ce-curve-point .ce-input { flex: 1 1 auto; max-width: none; }
-
 .ce-chart { position: relative; margin: 4px 0; padding: 10px 12px 6px; border-radius: var(--radius);
   background: var(--bg); border: 1px solid var(--border-soft); cursor: crosshair; }
 .ce-chart-svg { display: block; width: 100%; height: auto; aspect-ratio: 560 / 210; }
 .ce-chart-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round;
   vector-effect: non-scaling-stroke; }
 .ce-chart-area { fill: var(--accent-soft); stroke: none; }
-.ce-curve-dir.d-up .ce-chart-line { stroke: var(--green); }
-.ce-curve-dir.d-up .ce-chart-area { fill: var(--green-soft); }
-.ce-curve-dir.d-down .ce-chart-line { stroke: var(--blue); }
-.ce-curve-dir.d-down .ce-chart-area { fill: var(--blue-soft); }
 .ce-grid-lines line { stroke: var(--border-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .ce-chart-tick { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3;
   vector-effect: non-scaling-stroke; }
@@ -574,16 +453,6 @@
 .ce-chart-legend { display: flex; gap: 12px; padding: 4px 2px 0; font-size: 11px; color: var(--fg-dim); }
 .ce-chart-legend .ce-lg-x, .ce-chart-legend .ce-lg-y { white-space: nowrap; }
 .ce-chart-legend .ce-lg-note { margin-left: auto; }
-
-.ce-preview { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.ce-preview-body { width: 100%; max-height: 440px; overflow: auto; margin: 0; padding: 14px 16px;
-  border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-sunken);
-  font: 12.5px/1.65 var(--font-mono); color: var(--fg-soft);
-  white-space: pre; tab-size: 2; }
-
-.ce-actions { position: sticky; bottom: 0; z-index: 6; display: flex; align-items: center;
-  justify-content: flex-end; gap: 10px; margin-top: 14px; padding: 12px 4px;
-  background: linear-gradient(transparent, var(--bg) 42%); }
 
 /* ---------------- 历史流量弹层 ---------------- */
 .hist-modal { width: var(--modal-w-add); max-width: 100%; }
@@ -648,8 +517,6 @@
   .ce-page { padding: 12px 12px 24px; }
   .status-strip { padding: 7px 12px; overflow-x: auto; align-items: flex-start; }
   .dist-bar { flex-basis: 120px; }
-  .ce-grid, .ce-master-detail { grid-template-columns: 1fr; }
-  .ce-side, .ce-master { position: static; flex-direction: row; flex-wrap: wrap; }
   .group-head, .group-row { min-width: 1180px; }
 }
 
@@ -716,29 +583,7 @@
 .drawer-raw { margin-top: 6px; }
 .drawer-raw summary { cursor: pointer; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 8px; }
 
-/* ================= 运行日志(W4) —— 原顶层日志页整体迁入设置页 [运行日志] 章节 =================
- * 不再是顶层 page; 作为 .ce-main 内的一个特殊章节渲染, 无自动轮询(仅引用 tokens)。
- * mono 等宽原始行; 章节头含等级/行数选择与手动刷新, 正文独立滚动。
- */
-.logs-embed { display: flex; flex-direction: column; flex: 1; min-height: 0;
-  height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h, 34px) - 250px); }
-.logs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.logs-head-text h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; }
-.logs-head-text h2 .ico { color: var(--accent); }
-.logs-head-text .ce-sub { max-width: 56vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.logs-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.logs-ctl { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 12px; }
-.logs-ctl select { padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border);
-  background: var(--bg-card); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
-.logs-ctl select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.logs-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;
-  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-sunken); }
-.logs-body .ce-placeholder { flex: 1; }
-.logs-pre { flex: 1; margin: 0; padding: 10px 12px; overflow: auto;
-  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;
-  color: var(--fg-muted); white-space: pre-wrap; word-break: break-all; }
-
-/* M4: HR 站点状态章节 —— 骨架复用 .logs-embed/.logs-head/.logs-body, 这里只管内容排版 */
+/* M4: HR 站点状态(2026-09-25 起并入 Console Hub「HR 在线核实」分区页尾) —— 这里只管内容排版 */
 .hrs-channel { margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
   background: var(--bg-card); color: var(--fg-muted); font-size: 12.5px; }
 .hrs-list { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }

@@ -1,13 +1,13 @@
-/* auto-qb WEB UI · HR 站点级状态(设置页「HR 站点状态」章节)
+/* auto-qb WEB UI · HR 站点级状态(设置页「HR 在线核实」分区的页尾「站点状态」块)
  *
  * 数据来自只读端点 `/api/hr/status`, 字段口径单点在 `auto_qb/hr/status.py`(与 `--hr-status`
  * 同一层) —— 本文件**只做展示**: 不重算阈值、不重算新鲜度, 只把后端给的人话与数字摆出来
  * (前端重算 = 自定义阈值/周期一改就静默失效, 见 pitfalls: HR 判定前后端各写一遍)。
  *
- * ❗加载时机: 与日志页同款 —— 打开章节时拉一次, 之后手动刷新(不轮询: 站点数据的小时级节奏
- *   不需要前端高频拉, 而轮询会给 Web 线程添无谓负载)。
- * ❗两个入口都要有(与日志页同样两处): 经典设置页(`cfg.activeGroup === '__hr'`)与
- *   Console Hub(`hub.view === '__hr'`) —— 只加一处会让另一半用户找不到它。
+ * ❗加载时机: 打开「HR 在线核实」分区时拉一次(config_hub.js hubGo), 之后手动刷新
+ *   (不轮询: 站点数据的小时级节奏不需要前端高频拉, 而轮询会给 Web 线程添无谓负载)。
+ * ❗入口只有一个(2026-09-25 合并): Console Hub「HR 在线核实」分区页尾 —— 曾经的经典设置页
+ *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
  * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
  */
 window.AQB_HR_STATUS = {
@@ -28,12 +28,6 @@ window.AQB_HR_STATUS = {
     };
   },
   methods: {
-    /* 打开章节: 从设置页进入(与 openLogs 同款 —— 顶层 page 只有 groups/settings) */
-    async openHrStatus() {
-      await this.openSettings();
-      this.cfg.activeGroup = "__hr";
-      if (!this.hrs.loaded) await this.loadHrStatus();
-    },
     async loadHrStatus(force = false) {
       if (this.hrs.loading) return;
       if (this.hrs.loaded && !force) return;

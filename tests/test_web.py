@@ -2031,10 +2031,11 @@ def test_api_hr_status_names_the_blocking_step(web_env, tmp_path):
 
 
 def test_frontend_hr_status_fields_match_backend():
-    """前端 HR 状态章节引用的字段必须在后端快照里存在 —— 打错一个字段名就是**整段静默空白**
+    """前端 HR 状态块引用的字段必须在后端快照里存在 —— 打错一个字段名就是**整段静默空白**
 
-    四个入口都扫(两套 UI × 经典设置页 / Console Hub): 这类错误后端全绿、pytest 也全绿,
-    只有真打开页面才看得出来(与 `_scan_page_class_wiring` 的挂件类名同一类故障), 故机检。
+    两套 UI 各扫一个入口(2026-09-25 起 HR 站点状态并入 Console Hub「HR 在线核实」分区页尾,
+    经典设置页与其独立章节/卡片已移除): 这类错误后端全绿、pytest 也全绿, 只有真打开页面才
+    看得出来(与 `_scan_page_class_wiring` 的挂件类名同一类故障), 故机检。
     """
     from pathlib import Path
 
@@ -2046,25 +2047,24 @@ def test_frontend_hr_status_fields_match_backend():
         "pollInterval"
     }
     static = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "static"
-    # 锢点必须指向**章节自身**: 侧栏按钮里也有 `cfg.activeGroup === '__hr'`, 凭它取块会
-    # 扫到一片没有字段的模板区 ⇒ 守阵变成恒真(下面再加一道「必须扫到字段」兜住这个坑)
-    anchors = ('__hr\'" class="logs-embed"', 'hub.view === \'__hr')
+    # 锚点必须指向合并块自身: v-if 只在「站点状态」块这一处出现, 重复出现说明块被复制
+    anchor = "hub.view === 'hr_check'"
     for name in ("atlas/index.html", "prism/index.html"):
         html = (static / name).read_text(encoding="utf-8")
-        for anchor in anchors:
-            idx = html.find(anchor)
-            assert idx > 0, f"{name} 缺少锚点 {anchor} —— 两个入口都要有(否则一半用户找不到)"
-            block = html[idx:idx + 4000]
-            cut = block.find("<!-- 普通")
-            if cut > 0:
-                block = block[:cut]
-            used_site = set(re.findall(r"\bs\.([a-z_]+)\b(?!\()", block))
-            assert used_site, f"{name} · {anchor}: 没扫到任何字段 —— 锚点失效, 这个守阵现在是恒真的"
-            missing = sorted(used_site - site_keys)
-            assert not missing, f"{name} · {anchor}: 模板引用了后端快照里没有的字段 {missing}(会整段空白)"
-            used_hrs = set(re.findall(r"\bhrs\.([A-Za-z_]+)\b(?!\()", block))
-            missing_hrs = sorted(used_hrs - hrs_keys)
-            assert not missing_hrs, f"{name} · {anchor}: 模板引用了 hrs 状态里没有的字段 {missing_hrs}"
+        idx = html.find(anchor)
+        assert idx > 0, f"{name} 缺少锚点 {anchor} —— 合并进「HR 在线核实」的状态块丢失"
+        assert html.find(anchor, idx + 1) < 0, f"{name} 锚点出现多次 —— 状态块被复制了?"
+        block = html[idx:idx + 4000]
+        cut = block.find("</template>")
+        assert cut > 0, f"{name}: 状态块没有闭合标签 —— 模板结构被改坏"
+        block = block[:cut]
+        used_site = set(re.findall(r"\bs\.([a-z_]+)\b(?!\()", block))
+        assert used_site, f"{name}: 没扫到任何字段 —— 锚点失效, 这个守阵现在是恒真的"
+        missing = sorted(used_site - site_keys)
+        assert not missing, f"{name}: 模板引用了后端快照里没有的字段 {missing}(会整段空白)"
+        used_hrs = set(re.findall(r"\bhrs\.([A-Za-z_]+)\b(?!\()", block))
+        missing_hrs = sorted(used_hrs - hrs_keys)
+        assert not missing_hrs, f"{name}: 模板引用了 hrs 状态里没有的字段 {missing_hrs}"
 
 
 def test_build_group_view_hr_counts(tmp_path):

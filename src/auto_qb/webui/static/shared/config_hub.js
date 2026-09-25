@@ -5,13 +5,11 @@
  * 本文件只负责:
  *   ① Hub & Spoke 的视图状态(首页 / 分区二级页 / 面包屑);
  *   ② 把 schema 字段拆成「块 → 行」两层(取代旧页五种折叠容器);
- *   ③ 就近说明浮窗的内容与定位(富文案优先, 否则回退 schema 的 help / risk / default);
- *   ④ 新版与经典版的切换(持久化到 localStorage)。
+ *   ③ 就近说明浮窗的内容与定位(富文案优先, 否则回退 schema 的 help / risk / default)。
  *
  * 版式与控件外观见 shared/console_hub.css(样张 05-console-hub 的原样复刻)。
  * 分组文案取自样张第 9 节「文案改写对照」—— 说它做了什么, 不说它叫什么。
  */
-const HUB_MODE_KEY = "autoqb.settings.hub";
 
 /* 分区文案: 每条回答「它管什么 / 现在什么状态」; 缺省回退 schema 的 label / help */
 const HUB_GROUP_META = {
@@ -58,8 +56,8 @@ const HUB_GROUP_META = {
   },
   hr_check: {
     title: "HR 在线核实",
-    desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实。",
-    lede: "有些站点只有一部分种子受 H&R 约束，而且站点不告诉你哪些是 —— 只能上站查。开启后 auto-qb 会定期取「我的 H&R」清单、逐种子对账；没接入的站点行为完全不变。取数由浏览器扩展完成，cookie 不离开浏览器。",
+    desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实；分区页尾附各站点取数现状。",
+    lede: "有些站点只有一部分种子受 H&R 约束，而且站点不告诉你哪些是 —— 只能上站查。开启后 auto-qb 会定期取「我的 H&R」清单、逐种子对账；没接入的站点行为完全不变。取数由浏览器扩展完成，cookie 不离开浏览器。页尾的「站点状态」展示各站点取到哪一步、数据多新、现在为什么不放行。",
   },
 };
 
@@ -144,15 +142,8 @@ const HUB_OFF_KEYS = {
 
 window.CONFIG_HUB = {
   data() {
-    let mode = false;
-    try {
-      mode = localStorage.getItem(HUB_MODE_KEY) === "1";
-    } catch (e) {
-      mode = false;
-    }
     return {
       hub: {
-        mode: mode,        // true = 新版(Console Hub), false = 经典设置页
         view: "hub",       // "hub" | 分组 key | "__logs"
         query: "",         // 首页搜索框
         help: null,        // 浮窗内容 { t, k, tags, what, def, when, risk, rel }
@@ -193,21 +184,8 @@ window.CONFIG_HUB = {
         readout: this.logs && this.logs.file ? "已配置" : "日志文件未配置",
         badges: [],
       });
-      // M4: HR 站点状态(同样不在 schema 分组里 —— 它是**只读现状**, 不是配置项)。
-      // 未启用 hr_check 时不显示这张卡: 一张点进去只有「未启用」的卡比没有卡更烦人。
-      if (this.cfgBool(["config", "hr_check", "enabled"], "false")) {
-        cards.push({
-          key: "__hr",
-          icon: "i-hr",
-          title: "HR 站点状态",
-          label: "HR 站点状态",
-          desc: "各站点取到哪一步了：数据新鲜度、索引回填进度、配额与熔断。",
-          lede: "看每个站点的 HR 数据现状：取数通道通不通、数据多新、索引回填了多少、为什么现在不放行。只读，不会触发任何取数。",
-          led: "ok",
-          readout: this.hrs && this.hrs.loaded ? `${this.hrs.sites.length} 个站点` : "未读取",
-          badges: [],
-        });
-      }
+      // HR 站点状态不再单列一张卡(2026-09-25 合并): 它是只读现状不是配置项,
+      // 并进「HR 在线核实」分区页尾, 打开分区时随 hubGo 拉一次 /api/hr/status。
       return cards;
     },
     /* 等宽读数: 「N 个分区 · 共 M 项 · K 项尚未保存」 */
@@ -299,20 +277,7 @@ window.CONFIG_HUB = {
     },
   },
   methods: {
-    /* ---------------------------------------------------------- 模式切换 */
-    async hubSetMode(on) {
-      this.hub.mode = !!on;
-      try {
-        localStorage.setItem(HUB_MODE_KEY, on ? "1" : "0");
-      } catch (e) {
-        /* 持久化失败不影响当次使用 */
-      }
-      this.hubCloseHelp();
-      if (on) {
-        this.hub.view = "hub";
-        if (!this.cfg.schema) await this.cfgLoad();
-      }
-    },
+    /* ---------------------------------------------------------- 视图跳转(首页 ↔ 二级页) */
     hubGo(key) {
       this.hubCloseHelp();
       this.hub.view = key;
@@ -325,7 +290,8 @@ window.CONFIG_HUB = {
         this.cfg.ruleGroupKey = names.length ? names[0] : null;
       }
       if (key === "__logs" && !this.logs.loaded) this.loadLogs();
-      if (key === "__hr" && !this.hrs.loaded) this.loadHrStatus();
+      // HR 站点状态已并入 hr_check 分区页尾: 打开分区时拉一次, 之后手动刷新(小时级节奏不轮询)
+      if (key === "hr_check" && !this.hrs.loaded) this.loadHrStatus();
       window.scrollTo({ top: 0 });
     },
     hubBack() {

@@ -352,7 +352,6 @@
 }
 .hb-sec h1 { margin: 0; font: 600 21px/1.25 var(--hb-font-display); letter-spacing: .005em; }
 .hb-sec .sh-lede { margin: 5px 0 0; font-size: 13.5px; color: var(--fg-muted); max-width: 72ch; }
-.hb-sec .sh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
 
 /* 块: ⚠ 不设 overflow: hidden(块自身的 clip-path 已经够了, 再加会把靠近块边缘那几个
    字段的聚焦发光多裁一条边) */

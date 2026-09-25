@@ -1056,579 +1056,11 @@
         </main>
       </div>
 
-      <!-- 设置页: 图形化配置(每项均可增删改, 无直接编辑 YAML 模式) -->
-      <main v-if="page==='settings' && !hub.mode" class="ce-page">
-        <div v-if="cfg.loading" class="ce-placeholder loading">正在加载配置…</div>
-        <div v-else-if="!cfg.schema" class="ce-placeholder">
-          <p class="error">{{ cfg.error || '配置加载失败' }}</p>
-          <button class="ce-btn" @click="cfgLoad()">重试</button>
-        </div>
-        <template v-else>
-          <div class="ce-grid">
-            <aside class="ce-side">
-              <button v-for="g in cfgGroups" :key="g.key" class="ce-side-item"
-                      :class="{ active: cfg.activeGroup === g.key }" @click="cfg.activeGroup = g.key">
-                <svg class="ico ico-sm" :class="'icog-' + g.key" viewBox="0 0 16 16"><use :href="'#' + g.icon"></use></svg>
-                <span class="ce-side-label">{{ g.label }}</span>
-                <span v-if="g.badge" class="ce-side-badge">{{ g.badge }}</span>
-              </button>
-              <!-- W4: 运行日志章节(原顶栏日志页迁入, schema 分组之外的特殊章节) -->
-              <button class="ce-side-item" :class="{ active: cfg.activeGroup === '__logs' }" @click="openLogs()">
-                <svg class="ico ico-sm ico-log" viewBox="0 0 16 16"><use href="#i-list"></use></svg>
-                <span class="ce-side-label">运行日志</span>
-              </button>
-              <!-- M4: HR 站点级状态(只读; 与 --hr-status 同一口径) —— 同样在 schema 分组之外 -->
-              <button class="ce-side-item" :class="{ active: cfg.activeGroup === '__hr' }" @click="openHrStatus()">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hr"></use></svg>
-                <span class="ce-side-label">HR 站点状态</span>
-              </button>
-            </aside>
-
-            <section class="ce-main">
-              <!-- W4: __logs 章节时隐藏配置页头(同步状态/YAML 预览属配置上下文), 标题由 logs-head 提供;
-                   M4 的 __hr 章节同理(它也是只读现状章节) -->
-              <header v-if="cfg.activeGroup !== '__logs' && cfg.activeGroup !== '__hr'" class="ce-head">
-                <div class="ce-head-text">
-                  <h2>
-                    <svg class="ico ico-sm" :class="'icog-' + cfgActive.key" viewBox="0 0 16 16"><use :href="'#' + (cfgActive.icon || 'i-settings')"></use></svg>
-                    {{ cfgActive.label }}
-                  </h2>
-                  <p v-if="cfgActive.help" class="ce-sub">{{ cfgActive.help }}</p>
-                </div>
-                <div class="ce-head-actions">
-                  <!-- 同步状态与 YAML 预览都属"全局上下文", 放在页头(页脚留给保存/放弃两个动作) -->
-                  <span class="ce-sync" :class="{ on: cfgDirty }">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16">
-                      <use :href="cfgDirty ? '#i-warn' : '#i-check-circle'"></use>
-                    </svg>
-                    {{ cfgDirty ? '有未保存的修改' : '已与磁盘同步' }}
-                  </span>
-                  <button class="ce-btn ghost small" :disabled="cfg.previewBusy" @click="cfgTogglePreview()">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-external"></use></svg>
-                    {{ cfg.previewOpen ? '收起 YAML' : (cfg.previewBusy ? '生成中…' : 'YAML 预览') }}
-                  </button>
-                  <!-- 新版设置页入口(Console Hub 样张): 两套并存期间由这里来回切, 选择存本地 -->
-                  <button class="ce-btn ghost small" title="切到新版设置页(卡片总览 + 就近说明浮窗)" @click="hubSetMode(true)">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>新版界面
-                  </button>
-                </div>
-              </header>
-
-              <div v-if="cfg.notice" class="ce-banner" :class="cfg.noticeKind">{{ cfg.notice }}</div>
-
-              <!-- 站点专段: 左列表 + 右详情 -->
-              <div v-if="cfg.activeGroup === 'trackers'" class="ce-master-detail">
-                <div class="ce-master">
-                  <div class="ce-master-title">
-                    <svg class="ico ico-sm icog-trackers" viewBox="0 0 16 16"><use href="#i-globe"></use></svg>
-                    站点配置
-                    <button class="ce-icon flat" title="新增站点配置"
-                            :class="{ open: cfg.addOpen === 'tracker' }" @click="cfgAddStart('tracker')">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
-                    </button>
-                  </div>
-                  <button v-for="name in cfgTrackerNames()" :key="name" class="ce-master-item"
-                          :class="{ active: cfg.trackerKey === name }" @click="cfg.trackerKey = name">{{ name }}</button>
-                  <div v-if="cfg.addOpen === 'tracker'" class="ce-add-form">
-                    <input ref="addInput" v-model="cfg.newTrackerName" class="ce-input" placeholder="站点配置名(如 HHan)"
-                           @keyup.enter="cfgTrackerAdd()" @keyup.esc="cfgAddCancel()">
-                    <div class="ce-add-form-actions">
-                      <button class="ce-btn small" @click="cfgAddCancel()">取消</button>
-                      <button class="ce-btn small primary" @click="cfgTrackerAdd()">添加</button>
-                    </div>
-                  </div>
-                </div>
-                <div v-if="cfg.trackerKey" class="ce-detail">
-                  <div class="ce-card">
-                    <div class="ce-detail-bar">
-                      <strong class="ce-detail-title">{{ cfg.trackerKey }}</strong>
-                      <span class="ce-spacer"></span>
-                      <button class="ce-icon" title="重命名该站点配置" @click="cfgTrackerRename(cfg.trackerKey)">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>
-                      </button>
-                      <button class="ce-icon danger" title="删除该站点配置" @click="cfgTrackerRemove(cfg.trackerKey)">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                      </button>
-                    </div>
-                    <div class="ce-fields">
-                      <ce-field v-for="item in cfgTrackerItems()" :key="item.path.join('.')" :item="item"></ce-field>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="ce-placeholder">暂无站点配置, 请在左侧新增</div>
-              </div>
-
-              <!-- 规则集专段: 规则集列表 + 规则卡(条件/动作) -->
-              <div v-else-if="cfg.activeGroup === 'rules'" class="ce-master-detail">
-                <div class="ce-master">
-                  <div class="ce-master-title">
-                    <svg class="ico ico-sm icog-rules" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
-                    规则集
-                    <button class="ce-icon flat" title="新增规则集"
-                            :class="{ open: cfg.addOpen === 'ruleGroup' }" @click="cfgAddStart('ruleGroup')">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
-                    </button>
-                  </div>
-                  <button v-for="name in cfgRuleGroupNames()" :key="name" class="ce-master-item"
-                          :class="{ active: cfg.ruleGroupKey === name }" @click="cfg.ruleGroupKey = name">{{ name }}</button>
-                  <div v-if="cfg.addOpen === 'ruleGroup'" class="ce-add-form">
-                    <input ref="addInput" v-model="cfg.newRuleGroupName" class="ce-input" placeholder="规则集名(自动补 _rules)"
-                           @keyup.enter="cfgRuleAddGroup()" @keyup.esc="cfgAddCancel()">
-                    <div class="ce-add-form-actions">
-                      <button class="ce-btn small" @click="cfgAddCancel()">取消</button>
-                      <button class="ce-btn small primary" @click="cfgRuleAddGroup()">添加</button>
-                    </div>
-                  </div>
-                </div>
-                <div v-if="cfg.ruleGroupKey" class="ce-detail">
-                  <div class="ce-card">
-                    <div class="ce-detail-bar">
-                      <strong class="ce-detail-title">{{ cfg.ruleGroupKey }}</strong>
-                      <span class="ce-spacer"></span>
-                      <button class="ce-icon danger" title="删除该规则集(含其中全部规则)" @click="cfgRuleRemoveGroup(cfg.ruleGroupKey)">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                      </button>
-                    </div>
-                    <p class="ce-help">规则按列表顺序执行; 每条规则内「条件全部满足」才执行「动作」(按顺序)。</p>
-                  </div>
-
-                  <div v-for="rn in cfgRuleNames(cfg.ruleGroupKey)" :key="rn" class="ce-rule-card"
-                       :class="{ collapsed: cfgRuleCollapsed(cfg.ruleGroupKey, rn) }">
-                    <div class="ce-rule-head">
-                      <button class="ce-icon flat" :title="cfgRuleCollapsed(cfg.ruleGroupKey, rn) ? '展开' : '收起'"
-                              @click="cfgRuleToggle(cfg.ruleGroupKey, rn)">
-                        <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-                      </button>
-                      <strong class="ce-rule-name">{{ rn }}</strong>
-                      <span class="ce-rule-meta">{{ cfgRuleSummary(cfg.ruleGroupKey, rn) }}</span>
-                      <span class="ce-spacer"></span>
-                      <label class="ce-switch" title="启用/停用该规则">
-                        <input type="checkbox" :checked="cfgRuleEnabled(cfg.ruleGroupKey, rn)"
-                               @change="cfgRuleSetEnabled(cfg.ruleGroupKey, rn, $event.target.checked)">
-                        <span class="ce-slider"></span>
-                      </label>
-                      <button class="ce-icon" title="重命名该规则" @click="cfgRuleRename(cfg.ruleGroupKey, rn)">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>
-                      </button>
-                      <button class="ce-icon danger" title="删除规则" @click="cfgRuleRemove(cfg.ruleGroupKey, rn)">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                      </button>
-                    </div>
-                    <p v-if="cfgRuleRisk(cfg.ruleGroupKey, rn)" class="ce-risk-line">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
-                      <span>{{ cfgRuleRisk(cfg.ruleGroupKey, rn) }}</span>
-                    </p>
-
-                    <div v-show="!cfgRuleCollapsed(cfg.ruleGroupKey, rn)" class="ce-rule-body">
-                      <div class="ce-fields">
-                        <ce-field v-for="item in cfgRuleItems(cfg.ruleGroupKey, rn)" :key="item.path.join('.')" :item="item"></ce-field>
-                      </div>
-
-                    <div class="ce-plugins">
-                      <div class="ce-plugins-head">
-                        <span class="ce-plugins-title">条件<em class="ce-hint">全部满足才执行动作</em></span>
-                        <button class="ce-add-btn inline" :class="{ open: cfgPickerIsOpen(cfg.ruleGroupKey, rn, 'conditions') }"
-                                @click="cfgPickerOpen(cfg.ruleGroupKey, rn, 'conditions')">
-                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加条件
-                        </button>
-                      </div>
-                      <!-- 选项面板: 列出全部可用条件及其说明(替代不透明的下拉框) -->
-                      <div v-if="cfgPickerIsOpen(cfg.ruleGroupKey, rn, 'conditions')" class="ce-picker">
-                        <button v-for="p in cfgConditionOptions()" :key="p.name" class="ce-picker-item"
-                                @click="cfgPluginAdd(cfg.ruleGroupKey, rn, 'conditions', p.name); cfgPickerClose()">
-                          <span class="ce-picker-name">{{ p.label }}</span>
-                          <span v-if="p.help" class="ce-picker-help">{{ p.help }}</span>
-                        </button>
-                      </div>
-                      <div v-for="(entry, i) in cfgPluginList(cfg.ruleGroupKey, rn, 'conditions')" :key="i" class="ce-plugin-card">
-                        <div class="ce-plugin-bar">
-                          <span class="ce-ord">{{ i + 1 }}</span>
-                          <select class="ce-input ce-inline-select" :value="cfgPluginName(entry)"
-                                  @change="cfgPluginReplace(cfg.ruleGroupKey, rn, 'conditions', i, $event.target.value)">
-                            <option v-for="p in cfgConditionOptions()" :key="p.name" :value="p.name">{{ p.label }}</option>
-                          </select>
-                          <span class="ce-spacer"></span>
-                          <button class="ce-icon" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, -1)">
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>
-                          </button>
-                          <button class="ce-icon" title="下移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, 1)">
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>
-                          </button>
-                          <button class="ce-icon danger" title="删除该条件" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'conditions', i)">
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                          </button>
-                        </div>
-                        <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).help" class="ce-help">{{ cfgPluginMeta(entry).help }}</p>
-                        <div class="ce-fields">
-                          <ce-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'conditions', i)"
-                                    :key="item.path.join('.')" :item="item"></ce-field>
-                        </div>
-                      </div>
-                      <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'conditions').length" class="ce-empty-hint">
-                        未配置条件 = 对所有匹配该规则的种子执行动作
-                      </p>
-                    </div>
-
-                    <div class="ce-plugins">
-                      <div class="ce-plugins-head">
-                        <span class="ce-plugins-title">动作<em class="ce-hint">按序号顺序执行</em></span>
-                        <button class="ce-btn ghost small" @click="cfgIgnoreNextAdd(cfg.ruleGroupKey, rn)">+ 忽略下个动作错误</button>
-                        <button class="ce-add-btn inline" :class="{ open: cfgPickerIsOpen(cfg.ruleGroupKey, rn, 'actions') }"
-                                @click="cfgPickerOpen(cfg.ruleGroupKey, rn, 'actions')">
-                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加动作
-                        </button>
-                      </div>
-                      <div v-if="cfgPickerIsOpen(cfg.ruleGroupKey, rn, 'actions')" class="ce-picker">
-                        <button v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" class="ce-picker-item"
-                                :class="{ danger: !!p.risk }"
-                                @click="cfgPluginAdd(cfg.ruleGroupKey, rn, 'actions', p.name); cfgPickerClose()">
-                          <span class="ce-picker-name">
-                            {{ p.label }}
-                            <span v-if="p.risk" class="ce-risk" title="该动作存在风险">
-                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
-                            </span>
-                          </span>
-                          <span v-if="p.help" class="ce-picker-help">{{ p.help }}</span>
-                        </button>
-                      </div>
-                      <div v-for="(entry, i) in cfgPluginList(cfg.ruleGroupKey, rn, 'actions')" :key="i" class="ce-plugin-card">
-                        <div v-if="isIgnoreNext(entry)" class="ce-plugin-bar">
-                          <span class="ce-pseudo">忽略下一个动作的错误</span>
-                          <span class="ce-spacer"></span>
-                          <select class="ce-input ce-inline-select" :value="cfgScalar(entry.ignore_next_action_error)"
-                                  @change="cfgSetPath(cfgRulePath(cfg.ruleGroupKey, rn).concat(['actions', i, 'ignore_next_action_error']), $event.target.value)">
-                            <option value="true">启用</option>
-                            <option value="false">停用</option>
-                          </select>
-                          <button class="ce-icon danger" title="删除" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                          </button>
-                        </div>
-                        <template v-else>
-                          <div class="ce-plugin-bar">
-                            <span class="ce-ord">{{ i + 1 }}</span>
-                            <select class="ce-input ce-inline-select" :value="cfgPluginName(entry)"
-                                    @change="cfgPluginReplace(cfg.ruleGroupKey, rn, 'actions', i, $event.target.value)">
-                              <option v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" :value="p.name">{{ p.label }}</option>
-                            </select>
-                            <span v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).risk" class="ce-risk" title="该动作存在风险">
-                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>风险
-                            </span>
-                            <span class="ce-spacer"></span>
-                            <button class="ce-icon" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">
-                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>
-                            </button>
-                            <button class="ce-icon" title="下移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, 1)">
-                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>
-                            </button>
-                            <button class="ce-icon danger" title="删除该动作" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">
-                              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                            </button>
-                          </div>
-                          <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).help" class="ce-help">{{ cfgPluginMeta(entry).help }}</p>
-                          <p v-if="cfgPluginMeta(entry) && cfgPluginMeta(entry).risk" class="ce-risk-line">
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
-                            <span>{{ cfgPluginMeta(entry).risk }}</span>
-                          </p>
-                          <div class="ce-fields">
-                            <ce-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'actions', i)"
-                                      :key="item.path.join('.')" :item="item"></ce-field>
-                          </div>
-                        </template>
-                      </div>
-                      <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'actions').length" class="ce-empty-hint">
-                        未配置动作 = 规则只做条件判断, 不会执行任何操作
-                      </p>
-                    </div>
-                    </div>
-                  </div>
-
-                  <div class="ce-sub-head">
-                    <span class="ce-sub-title">规则</span>
-                    <span class="ce-hint">{{ cfgRuleNames(cfg.ruleGroupKey).length }} 条</span>
-                    <span class="ce-spacer"></span>
-                    <button class="ce-btn ghost small" :class="{ open: cfg.addOpen === 'rule' }" @click="cfgAddStart('rule')">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>新增规则
-                    </button>
-                  </div>
-                  <div v-if="cfg.addOpen === 'rule'" class="ce-add-form">
-                    <input ref="addInput" v-model="cfg.newRuleName" class="ce-input" placeholder="规则名(如 auto-skip-checking)"
-                           @keyup.enter="cfgRuleAdd(cfg.ruleGroupKey)" @keyup.esc="cfgAddCancel()">
-                    <div class="ce-add-form-actions">
-                      <button class="ce-btn small" @click="cfgAddCancel()">取消</button>
-                      <button class="ce-btn small primary" @click="cfgRuleAdd(cfg.ruleGroupKey)">添加</button>
-                    </div>
-                  </div>
-                </div>
-                <div v-else class="ce-placeholder">暂无规则集, 请在左侧新增</div>
-              </div>
-
-              <!-- 限速曲线专段: 每条曲线一张卡(周期 + 阶梯折线预览 + 档位表) -->
-              <div v-else-if="cfg.activeGroup === 'speed'" class="ce-curve">
-                <div v-if="!cfgCurveEnabled()" class="ce-card ce-curve-off">
-                  <p class="ce-help">
-                    未启用。启用后读取 Traffic Monitor 数据, 按累计流量自动分档设置 qB 全局限速(0 = 该档不限速)。
-                  </p>
-                  <button class="ce-btn primary" @click="cfgCurveEnable()">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>启用限速曲线
-                  </button>
-                </div>
-                <template v-else>
-                  <div class="ce-card">
-                    <div class="ce-detail-bar">
-                      <strong class="ce-detail-title">曲线设置</strong>
-                      <span class="ce-spacer"></span>
-                      <span class="ce-hint">多条曲线同时命中时取最严限速</span>
-                      <button class="ce-btn ghost small" @click="cfgCurveAddPeriod()">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>添加曲线
-                      </button>
-                    </div>
-                    <div class="ce-fields">
-                      <ce-field v-for="item in cfgCurveItems()" :key="item.path.join('.')" :item="item"></ce-field>
-                    </div>
-                  </div>
-
-                  <div v-for="(c, i) in cfgCurveList()" :key="i" class="ce-card ce-curve-card"
-                       :class="{ collapsed: !cfgCurveOpen(i) }">
-                    <div class="ce-detail-bar">
-                      <button class="ce-icon flat" :title="cfgCurveOpen(i) ? '收起' : '展开'" @click="cfgCurveToggle(i)">
-                        <svg class="ico ico-sm caret" :class="{ open: cfgCurveOpen(i) }" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
-                      </button>
-                      <span class="ce-curve-badge">{{ i + 1 }}</span>
-                      <input class="ce-input ce-inline-input" :value="cfgCurvePeriod(i).period || ''"
-                             placeholder="DAY / MONTH / 7D"
-                             @input="cfgSetPath(cfgCurvePeriodPath(i).concat(['period']), $event.target.value)">
-                      <span class="ce-hint">{{ cfgCurvePeriodHint(i) }}</span>
-                      <span class="ce-hint" v-if="!cfgCurveOpen(i)">
-                        · 上传 {{ cfgCurvePoints(i, 'upload_curve').length }} 档 · 下载 {{ cfgCurvePoints(i, 'download_curve').length }} 档
-                      </span>
-                      <span class="ce-spacer"></span>
-                      <button class="ce-icon danger" title="删除该曲线" @click="cfgCurveRemovePeriod(i)">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                      </button>
-                    </div>
-
-                    <div v-show="cfgCurveOpen(i)" class="ce-curve-body">
-                    <div v-for="dir in ['upload_curve', 'download_curve']" :key="dir" class="ce-curve-dir"
-                         :class="dir === 'upload_curve' ? 'd-up' : 'd-down'">
-                      <div class="ce-curve-dir-head">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16">
-                          <use :href="dir === 'upload_curve' ? '#i-upload' : '#i-download'"></use>
-                        </svg>
-                        <span>{{ dir === 'upload_curve' ? '上传档位' : '下载档位' }}</span>
-                        <span class="ce-hint">
-                          {{ cfgCurvePoints(i, dir).length ? cfgCurvePoints(i, dir).length + ' 档' : '未配置 = 不管理该方向' }}
-                        </span>
-                        <span class="ce-spacer"></span>
-                        <button class="ce-btn ghost small" @click="cfgCurvePointAdd(i, dir)">+ 添加档位</button>
-                      </div>
-
-                      <!-- 阶梯折线预览: 横轴累计流量(SPD-02: 按档位边界分段等宽, 末档边界后为 ∞ 提示区),
-                           纵轴限速(阈值为区间上限, 末档持续到无穷); 鼠标移入显示该位置所属档位的 (累计流量, 限速) -->
-                      <div v-if="cfgCurveChartOf(i, dir)" class="ce-chart"
-                           @mousemove="cfgChartHover($event, i, dir)" @mouseleave="cfgChartLeave()">
-                        <!-- [ch] 别名技巧: 无构建链下避免把 chOf(i,dir) 重复写十几次 -->
-                        <template v-for="ch in [cfgCurveChartOf(i, dir)]" :key="'ch' + i + dir">
-                          <!-- viewBox 必须用**动态绑定**(v-bind 对象): 静态写法会被模板编译器小写成
-                               `viewbox`(SVG 属性大小写敏感, 浏览器直接忽略) -> 坐标系不缩放, 内容溢出容器 -->
-                          <svg class="ce-chart-svg" v-bind="{ viewBox: ch.viewBox }">
-                            <g class="ce-grid-lines">
-                              <line v-for="(tk, k) in ch.yTicks" :key="'gy' + k"
-                                    :x1="ch.padL" :x2="ch.w - ch.padR" :y1="tk.pos" :y2="tk.pos"></line>
-                            </g>
-                            <path class="ce-chart-area" :d="ch.area"></path>
-                            <line v-for="(tl, j) in ch.tierLines" :key="'tk' + j" class="ce-chart-tick"
-                                  :x1="tl.x" :x2="tl.x"
-                                  :y1="ch.padT" :y2="ch.baseY"></line>
-                            <path class="ce-chart-line" :d="ch.line"></path>
-                            <g v-if="cfgChartHovered(i, dir)">
-                              <line class="ce-chart-cross" :x1="cfg.chartHover.x" :x2="cfg.chartHover.x"
-                                    :y1="ch.padT" :y2="ch.baseY"></line>
-                              <line class="ce-chart-cross" :x1="ch.padL" :x2="ch.w - ch.padR"
-                                    :y1="cfg.chartHover.y" :y2="cfg.chartHover.y"></line>
-                              <circle class="ce-chart-dot" :cx="cfg.chartHover.x" :cy="cfg.chartHover.y" r="4"></circle>
-                            </g>
-                            <g class="ce-axis-labels">
-                              <text v-for="(tk, k) in ch.yTicks" :key="'ly' + k"
-                                    :x="ch.padL - 7" :y="tk.pos + 3.5" text-anchor="end">{{ tk.label }}</text>
-                              <text v-for="(tk, k) in ch.xTicks" :key="'lx' + k"
-                                    :x="tk.pos" :y="ch.h - 10" text-anchor="middle">{{ tk.label }}</text>
-                            </g>
-                          </svg>
-                          <div v-if="cfgChartHovered(i, dir)" class="ce-chart-tip"
-                               :class="{ flip: cfg.chartHover.leftPct > 62 }"
-                               :style="{ left: cfg.chartHover.leftPct + '%', top: cfg.chartHover.topPct + '%' }">
-                            <b>第 {{ cfg.chartHover.index }} 档</b>
-                            <span>累计流量 {{ cfg.chartHover.tLabel }}</span>
-                            <span>限速 {{ cfg.chartHover.sLabel }}</span>
-                          </div>
-                          <div class="ce-chart-legend">
-                            <span class="ce-lg-x">横轴: 累计流量(每档等宽)</span>
-                            <span class="ce-lg-y">纵轴: 限速</span>
-                            <span class="ce-lg-note">{{ ch.note }}</span>
-                          </div>
-                        </template>
-                      </div>
-                      <p v-if="cfgCurveInvalid(i, dir)" class="ce-risk-line">
-                        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>
-                        <span>{{ cfgCurveInvalid(i, dir) }} 个档位无法解析(需形如 10GiB / 6MiB/s), 保存时后端会拒绝</span>
-                      </p>
-
-                      <div v-if="cfgCurvePoints(i, dir).length" class="ce-curve-points">
-                        <div class="ce-curve-point-head">
-                          <span>累计流量低于</span><span>限速</span><span></span>
-                        </div>
-                        <div v-for="(p, j) in cfgCurvePoints(i, dir)" :key="j" class="ce-curve-point">
-                          <input class="ce-input" :value="cfgCurveThreshold(i, dir, j)" placeholder="10GiB"
-                                 @input="cfgCurvePointSet(i, dir, j, $event.target.value)">
-                          <input class="ce-input" :value="cfgCurveSpeed(i, dir, j)" placeholder="6MiB/s"
-                                 @input="cfgCurvePointSet(i, dir, j, undefined, $event.target.value)">
-                          <button class="ce-icon danger" title="删除该档位" @click="cfgCurvePointRemove(i, dir, j)">
-                            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    </div>
-                  </div>
-
-                  <div class="ce-card">
-                    <button class="ce-btn danger" @click="cfgCurveDisable()">关闭并移除曲线配置</button>
-                  </div>
-                </template>
-              </div>
-
-              <!-- 运行日志(W4): 原顶层日志页(FE-2C)整体迁入设置页章节; 等级/行数变更与刷新均
-                   手动触发(无自动轮询); 顶层 page 不再有 'logs', 列宽重实体化由 watch(page) 兜底 -->
-              <div v-else-if="cfg.activeGroup === '__logs'" class="logs-embed">
-                <header class="logs-head">
-                  <div class="logs-head-text">
-                    <h2><svg class="ico ico-sm ico-log" viewBox="0 0 16 16"><use href="#i-list"></use></svg>运行日志</h2>
-                    <p v-if="logs.file" class="ce-sub" :title="logs.file">{{ logs.file }}</p>
-                    <p v-else class="ce-sub">日志文件未配置(config.logging.file)</p>
-                  </div>
-                  <div class="logs-actions">
-                    <label class="logs-ctl">等级
-                      <select v-model="logs.level" @change="loadLogs()">
-                        <option value="">全部</option>
-                        <option value="INFO">INFO</option>
-                        <option value="WARNING">WARNING</option>
-                        <option value="ERROR">ERROR</option>
-                      </select>
-                    </label>
-                    <label class="logs-ctl">行数
-                      <select v-model.number="logs.num" @change="loadLogs()">
-                        <option :value="200">200</option>
-                        <option :value="300">300</option>
-                        <option :value="500">500</option>
-                        <option :value="1000">1000</option>
-                        <option :value="2000">2000</option>
-                      </select>
-                    </label>
-                    <button class="ce-btn ghost small" :disabled="logs.loading" @click="loadLogs()">
-                      <svg class="ico ico-sm" :class="{ spin: logs.loading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
-                    </button>
-                  </div>
-                </header>
-                <div class="logs-body">
-                  <p v-if="logs.note" class="logs-note">{{ logs.note }}</p>
-                  <div v-if="logs.loading && !logs.loaded" class="ce-placeholder loading">正在加载日志…</div>
-                  <div v-else-if="logs.error" class="ce-placeholder">
-                    <p class="error">{{ logs.error }}</p>
-                    <button class="ce-btn" @click="loadLogs()">重试</button>
-                  </div>
-                  <div v-else-if="!logs.lines.length" class="ce-placeholder">
-                    {{ logs.file ? '日志文件暂无内容' : '日志文件未配置, 无法读取日志' }}
-                  </div>
-                  <pre v-else class="logs-pre">{{ logs.lines.join('\n') }}</pre>
-                </div>
-              </div>
-
-              <!-- M4: HR 站点级状态(只读端点 /api/hr/status; 字段口径与 --hr-status 同一层)。
-                   与日志页同款: 打开时拉一次, 之后手动刷新(站点数据是小时级节奏, 不轮询) -->
-              <div v-else-if="cfg.activeGroup === '__hr'" class="logs-embed">
-                <header class="logs-head">
-                  <div class="logs-head-text">
-                    <h2><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-hr"></use></svg>HR 站点状态</h2>
-                    <p class="ce-sub">数据新鲜度 · 索引进度 · 配额与熔断 · 现在为什么不放行(只读)</p>
-                  </div>
-                  <div class="logs-actions">
-                    <span v-if="hrsPollText()" class="logs-ctl">{{ hrsPollText() }}</span>
-                    <button class="ce-btn ghost small" :disabled="hrs.loading" @click="loadHrStatus(true)">
-                      <svg class="ico ico-sm" :class="{ spin: hrs.loading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
-                    </button>
-                  </div>
-                </header>
-                <div class="logs-body">
-                  <p v-if="hrs.note" class="logs-note">{{ hrs.note }}</p>
-                  <p v-if="hrs.loaded && hrs.enabled" class="hrs-channel">{{ hrsChannelText() }}</p>
-                  <div v-if="hrs.loading && !hrs.loaded" class="ce-placeholder loading">正在读取站点状态…</div>
-                  <div v-else-if="hrs.error" class="ce-placeholder">
-                    <p class="error">{{ hrs.error }}</p>
-                    <button class="ce-btn" @click="loadHrStatus(true)">重试</button>
-                  </div>
-                  <div v-else-if="!hrs.sites.length" class="ce-placeholder">
-                    {{ hrs.enabled ? '还没有站点配置 hr_check 或取数线程未启动' : 'HR 在线核实未启用(配置里打开后这里会显示各站点现状)' }}
-                  </div>
-                  <div v-else class="hrs-list">
-                    <article v-for="s in hrs.sites" :key="s.site" class="hrs-site">
-                      <div class="hrs-site-head">
-                        <span class="hrs-site-name">{{ s.site }}</span>
-                        <span class="hrs-tag">{{ s.mode }}</span>
-                        <span class="hrs-tag" :class="hrsStateClass(s)">{{ hrsStateText(s) }}</span>
-                        <span class="hrs-tag">通道 {{ s.channel_text }}</span>
-                        <span v-if="s.stale" class="hrs-tag warn">数据已过期</span>
-                        <span v-if="s.fuse.active" class="hrs-tag error">熔断中</span>
-                      </div>
-                      <p class="hrs-line">{{ s.fresh_text }}</p>
-                      <p class="hrs-line">
-                        索引 {{ s.index_total }} 条(活跃 {{ s.index_active }}) · 档位 {{ hrsLaneText(s) }} ·
-                        受管束 {{ s.managed }} 个 · 待回填 {{ s.pending_infohash }} 条({{ hrsPct(s.backfill_ratio) }})
-                      </p>
-                      <p class="hrs-line">
-                        已取种子 {{ s.downloaded }} · 取种子失败 {{ s.fails }} · 放行记录 {{ s.verified }}
-                      </p>
-                      <p class="hrs-line">{{ s.quota.text }}</p>
-                      <p class="hrs-line">熔断: {{ s.fuse.text }} · 时间窗: {{ s.allow_window || '不限' }}</p>
-                      <p v-if="s.reason" class="hrs-line warn">最近一次刷新不完备: {{ s.reason }}</p>
-                      <p v-if="s.blocking" class="hrs-line warn">现在不放行: {{ s.blocking }}</p>
-                      <p v-if="s.read_error" class="hrs-line error">站点文件: {{ s.read_error }}</p>
-                    </article>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 普通字段分组(卡片化) -->
-              <div v-else class="ce-card">
-                <div class="ce-fields">
-                  <ce-field v-for="item in cfgActive.items" :key="item.path.join('.')" :item="item"></ce-field>
-                </div>
-              </div>
-
-              <!-- 只读 YAML 预览(与即将写入磁盘的内容同源; 开关按钮在页头) -->
-              <div v-if="cfg.previewOpen || cfg.previewError" class="ce-preview">
-                <p v-if="cfg.previewError" class="error">{{ cfg.previewError }}</p>
-                <pre v-if="cfg.previewOpen" class="ce-preview-body">{{ cfg.previewText }}</pre>
-              </div>
-            </section>
-          </div>
-
-          <footer class="ce-actions">
-            <button class="ce-btn ghost" @click="cfgDiscard()">放弃修改</button>
-            <button class="ce-btn primary" :disabled="cfg.saving || !cfgDirty" @click="cfgSave()">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
-              {{ cfg.saving ? '保存中…' : '保存并热重载' }}
-            </button>
-          </footer>
-        </template>
-      </main>
-
       <!-- ================================================================
-           设置页 · 新版(Console Hub): 首页卡片总览 → 二级页分区, 说明走就近浮窗。
-           与上面经典页**共用同一棵配置树和同一套 cfg* 读写**, 只是版式与说明的呈现不同;
-           两套并存期间由页头的「新版界面 / 经典界面」互相切换(选择存 localStorage)。
+           设置页(Console Hub): 首页卡片总览 → 二级页分区, 说明走就近浮窗。
+           经典设置页已移除(2026-09-25), 本页是唯一设置页; 与 cfg* 读写共用同一棵配置树。
            ================================================================ -->
-      <main v-if="page==='settings' && hub.mode" class="ce-page hub-page">
+      <main v-if="page==='settings'" class="ce-page hub-page">
         <div v-if="cfg.loading" class="ce-placeholder loading">正在加载配置…</div>
         <div v-else-if="!cfg.schema" class="ce-placeholder">
           <p class="error">{{ cfg.error || '配置加载失败' }}</p>
@@ -1691,9 +1123,6 @@
                 </button>
               </div>
 
-              <div class="hb-pills" style="margin-top:18px">
-                <button class="hb-pill" @click="hubSetMode(false)">切回经典界面</button>
-              </div>
             </div>
 
             <!-- ============ 二级页: 一个分区只做一件事 ============ -->
@@ -1712,9 +1141,6 @@
                   <h1>{{ hubNow.title }}</h1>
                   <p class="sh-lede">{{ hubNow.lede }}</p>
                 </div>
-                <span class="sh-r">
-                  <button class="hb-btn ghost sm" @click="hubSetMode(false)">经典界面</button>
-                </span>
               </header>
 
               <!-- 站点: 二级页内用切角小标签切换, 不再做左右主从两栏 -->
@@ -1980,53 +1406,7 @@
                 </div>
               </template>
 
-              <!-- M4: HR 站点状态(只读端点 /api/hr/status; 与 --hr-status 同一口径) -->
-              <template v-else-if="hub.view === '__hr'">
-                <div class="hb-blk hb-cut">
-                  <div class="hb-blk-hd">
-                    <span class="bh-t">HR 站点状态</span>
-                    <span class="bh-n">数据新鲜度 · 索引进度 · 配额与熔断 · 现在为什么不放行</span>
-                    <span class="bh-r">
-                      <span v-if="hrsPollText()" class="bh-n">{{ hrsPollText() }}</span>
-                      <button class="hb-btn ghost sm" :disabled="hrs.loading" @click="loadHrStatus(true)">刷新</button>
-                    </span>
-                  </div>
-                  <div style="padding:12px 14px">
-                    <p v-if="hrs.note" class="logs-note">{{ hrs.note }}</p>
-                    <p v-if="hrs.loaded && hrs.enabled" class="hrs-channel">{{ hrsChannelText() }}</p>
-                    <p v-if="hrs.loading && !hrs.loaded" class="hb-hp">正在读取站点状态…</p>
-                    <p v-else-if="hrs.error" class="hb-hp error">{{ hrs.error }}</p>
-                    <p v-else-if="!hrs.sites.length" class="hb-hp">
-                      {{ hrs.enabled ? '还没有站点配置 hr_check 或取数线程未启动' : 'HR 在线核实未启用(配置里打开后这里会显示各站点现状)' }}
-                    </p>
-                    <div v-else class="hrs-list">
-                      <article v-for="s in hrs.sites" :key="s.site" class="hrs-site">
-                        <div class="hrs-site-head">
-                          <span class="hrs-site-name">{{ s.site }}</span>
-                          <span class="hrs-tag">{{ s.mode }}</span>
-                          <span class="hrs-tag" :class="hrsStateClass(s)">{{ hrsStateText(s) }}</span>
-                          <span class="hrs-tag">通道 {{ s.channel_text }}</span>
-                          <span v-if="s.stale" class="hrs-tag warn">数据已过期</span>
-                          <span v-if="s.fuse.active" class="hrs-tag error">熔断中</span>
-                        </div>
-                        <p class="hrs-line">{{ s.fresh_text }}</p>
-                        <p class="hrs-line">
-                          索引 {{ s.index_total }} 条(活跃 {{ s.index_active }}) · 档位 {{ hrsLaneText(s) }} ·
-                          受管束 {{ s.managed }} 个 · 待回填 {{ s.pending_infohash }} 条({{ hrsPct(s.backfill_ratio) }})
-                        </p>
-                        <p class="hrs-line">
-                          已取种子 {{ s.downloaded }} · 取种失败 {{ s.fails }} · 放行记录 {{ s.verified }}
-                        </p>
-                        <p class="hrs-line">{{ s.quota.text }}</p>
-                        <p class="hrs-line">熔断: {{ s.fuse.text }} · 时间窗: {{ s.allow_window || '不限' }}</p>
-                        <p v-if="s.reason" class="hrs-line warn">最近一次刷新不完备: {{ s.reason }}</p>
-                        <p v-if="s.blocking" class="hrs-line warn">现在不放行: {{ s.blocking }}</p>
-                        <p v-if="s.read_error" class="hrs-line error">站点文件: {{ s.read_error }}</p>
-                      </article>
-                    </div>
-                  </div>
-                </div>
-              </template>
+
 
               <!-- 普通分区: 块 → 行(取代旧页的五种折叠容器) -->
               <template v-else>
@@ -2046,6 +1426,55 @@
                     <hub-field v-for="row in b.rows" :key="hubKey(row.path)" :item="row"></hub-field>
                   </template>
                 </div>
+                <!-- M4+合并(2026-09-25): HR 站点状态(只读端点 /api/hr/status) 并入「HR 在线核实」分区页尾,
+                     不再单列首页卡片; 打开分区时拉一次(config_hub.js hubGo), 之后手动刷新
+                     (站点数据小时级节奏, 不轮询) -->
+                <template v-if="hub.view === 'hr_check'">
+                  <div class="hb-blk hb-cut">
+                    <div class="hb-blk-hd">
+                      <span class="bh-t">站点状态</span>
+                      <span class="bh-n">数据新鲜度 · 索引进度 · 配额与熔断 · 现在为什么不放行</span>
+                      <span class="bh-r">
+                        <span v-if="hrsPollText()" class="bh-n">{{ hrsPollText() }}</span>
+                        <button class="hb-btn ghost sm" :disabled="hrs.loading" @click="loadHrStatus(true)">刷新</button>
+                      </span>
+                    </div>
+                    <div style="padding:12px 14px">
+                      <p v-if="hrs.note" class="logs-note">{{ hrs.note }}</p>
+                      <p v-if="hrs.loaded && hrs.enabled" class="hrs-channel">{{ hrsChannelText() }}</p>
+                      <p v-if="hrs.loading && !hrs.loaded" class="hb-hp">正在读取站点状态…</p>
+                      <p v-else-if="hrs.error" class="hb-hp error">{{ hrs.error }}</p>
+                      <p v-else-if="!hrs.sites.length" class="hb-hp">
+                        {{ hrs.enabled ? '还没有站点配置 hr_check 或取数线程未启动' : 'HR 在线核实未启用(配置里打开后这里会显示各站点现状)' }}
+                      </p>
+                      <div v-else class="hrs-list">
+                        <article v-for="s in hrs.sites" :key="s.site" class="hrs-site">
+                          <div class="hrs-site-head">
+                            <span class="hrs-site-name">{{ s.site }}</span>
+                            <span class="hrs-tag">{{ s.mode }}</span>
+                            <span class="hrs-tag" :class="hrsStateClass(s)">{{ hrsStateText(s) }}</span>
+                            <span class="hrs-tag">通道 {{ s.channel_text }}</span>
+                            <span v-if="s.stale" class="hrs-tag warn">数据已过期</span>
+                            <span v-if="s.fuse.active" class="hrs-tag error">熔断中</span>
+                          </div>
+                          <p class="hrs-line">{{ s.fresh_text }}</p>
+                          <p class="hrs-line">
+                            索引 {{ s.index_total }} 条(活跃 {{ s.index_active }}) · 档位 {{ hrsLaneText(s) }} ·
+                            受管束 {{ s.managed }} 个 · 待回填 {{ s.pending_infohash }} 条({{ hrsPct(s.backfill_ratio) }})
+                          </p>
+                          <p class="hrs-line">
+                            已取种子 {{ s.downloaded }} · 取种失败 {{ s.fails }} · 放行记录 {{ s.verified }}
+                          </p>
+                          <p class="hrs-line">{{ s.quota.text }}</p>
+                          <p class="hrs-line">熔断: {{ s.fuse.text }} · 时间窗: {{ s.allow_window || '不限' }}</p>
+                          <p v-if="s.reason" class="hrs-line warn">最近一次刷新不完备: {{ s.reason }}</p>
+                          <p v-if="s.blocking" class="hrs-line warn">现在不放行: {{ s.blocking }}</p>
+                          <p v-if="s.read_error" class="hrs-line error">站点文件: {{ s.read_error }}</p>
+                        </article>
+                      </div>
+                    </div>
+                  </div>
+                </template>
               </template>
             </div>
           </div>

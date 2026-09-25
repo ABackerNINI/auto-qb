@@ -182,7 +182,6 @@ button { font-family: inherit; }
 .ico-f-hr { color: var(--hr-pending); }
 /* CTX-01 彩色图标集(波次三 W2): 统计/运行日志等"点位图标"此前继承 --fg-dim, 观感上没有颜色 */
 .ico-chart { color: var(--cyan); }         /* 统计 */
-.ico-log { color: var(--pink); }           /* 运行日志 */
 .ico-risk { color: var(--warn); }          /* 风险标识(RFB-02 件2: 紧凑图标替代文字徽标) */
 /* 旋转(索引构建中/刷新): 唯一持续的旋转动画, 只在明确的"进行中"语义下使用 */
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -461,7 +460,6 @@ button { font-family: inherit; }
 .group-head.col-dragging .h-cell, .detail-head.col-dragging .h-cell { cursor: col-resize; }
 .col-drop-line { position: absolute; top: 0; height: 100%; width: 2px; border-radius: 1px;
   background: var(--accent); box-shadow: 0 0 6px var(--accent-line); pointer-events: none; z-index: 3; }
-
 
 /* P0-3 乐观 UI: pending 行 = 本地已按预期改过、还没拿到服务端确认。
    半透明 + 轻微动效表示"进行中"; 回执失败会回滚原值(见 app.js resolveOptimistic),
@@ -765,78 +763,18 @@ button { font-family: inherit; }
 /* ============ 图形化配置编辑器(设置页) ============ */
 /* 说明: 编辑器令牌已并入顶部全局 :root(--radius/--radius-sm/--ring), 此处不再重复声明, 避免两处调色不一致。 */
 
-.ce-grid { display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 18px; align-items: start; }
 .ce-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px;
   text-align: center; color: var(--fg-dim); padding: 56px 20px; }
 /* 加载态: 柔和呼吸(比静态文本更有"进行中"的感知); 仅加载分支挂 .loading, 不影响空态文案 */
 @keyframes loading-glow { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
 .ce-placeholder.loading { animation: loading-glow 1.8s ease-in-out infinite; }
 
-/* 左侧章节导航(卡片化, 激活项用左侧色条 + 柔和高亮; 每项带图标) */
-.ce-side { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 3px; padding: 6px;
-  border-radius: var(--radius-lg); background: var(--surface-1); border: 1px solid var(--border-soft); }
-.ce-master-title { display: flex; align-items: center; gap: 6px; padding: 6px 10px 8px;
-  font-size: 11.5px; font-weight: 600; letter-spacing: .06em; color: var(--fg-dim); text-transform: uppercase; }
-.ce-master-title .ce-spacer { flex: 1; }
-/* 列表右上角的"新增"按钮: 绿色 (增) 与删除的红色形成语义对照 */
-.ce-master-title .ce-icon, .ce-master-title .ce-icon:hover { color: var(--green); }
-.ce-side-item { display: flex; align-items: center; gap: 9px; text-align: left;
-  background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--fg-muted);
-  padding: 9px 12px; font-size: 13px; cursor: pointer;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-/* 分区图标: 每个配置分组一个专属色相(.icog-<分组key>), hover/激活时逐级提亮 */
-.ce-side-item .ico { opacity: .9; transition: opacity var(--dur) var(--ease); }
-.ce-side-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ce-side-item:hover { background: var(--surface-2); color: var(--fg); }
-.ce-side-item:hover .ico { opacity: 1; }
-.ce-side-item.active { background: var(--accent-soft); color: #fff; font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--accent); }
-.ce-side-item.active .ico { opacity: 1; }
-/* 配置分组专属色相(左导航 / 页头 h2 / master 列表标题共用同一映射, 调色只改这里) */
-.icog-basic { color: var(--blue); }
-.icog-logging { color: var(--indigo); }
-.icog-web { color: var(--cyan); }
-.icog-notify { color: var(--warn); }
-.icog-maintenance { color: var(--green); }
-.icog-speed { color: var(--violet); }
-.icog-trackers { color: var(--teal); }
-.icog-rules { color: var(--pink); }
-.ce-side-badge { font-size: 11px; padding: 1px 7px; border-radius: 999px;
-  background: var(--surface-2); color: var(--fg-muted); }
-.ce-side-item.active .ce-side-badge { background: rgba(59, 130, 246, .25); color: var(--accent-hi); }
-
-/* 主区 */
-.ce-main { min-width: 0; display: flex; flex-direction: column; gap: 14px; padding-bottom: 8px; }
-.ce-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.ce-head h2 { display: flex; align-items: center; gap: 8px; margin: 0;
-  font-size: 18px; font-weight: 600; letter-spacing: .1px; }
-.ce-head h2 .ico { opacity: .95; }  /* 颜色由 .icog-<分组key> 提供 */
-.ce-sub { margin: 4px 0 0; color: var(--fg-dim); font-size: 12.5px; }
-/* 页头右侧: 同步状态 + YAML 预览(都属"全局上下文", 与页脚的两个动作分开) */
-.ce-head-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.ce-sync { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
-  background: var(--green-soft); color: var(--green); font-size: 11.5px; white-space: nowrap; }
-.ce-sync.on { background: var(--warn-soft); color: var(--warn); }
-/* 规则列表的小标题行(携带"新增规则"按钮) */
-.ce-sub-head { display: flex; align-items: center; gap: 8px; padding: 2px 2px 0; }
-.ce-sub-title { font-size: 13px; font-weight: 600; color: var(--fg); }
-
-/* 内容卡片: 设置页主区的统一容器(分组标题 -> 卡片 -> 卡片, 层次清晰) */
-.ce-card { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
-  border-radius: var(--radius-lg); background: var(--bg-card); border: 1px solid var(--border);
-  box-shadow: inset 0 1px 0 var(--hairline), var(--shadow-1);
-  transition: border-color var(--dur) var(--ease); }
-.ce-card:hover { border-color: var(--border-strong); }
-.ce-detail-title { font-size: 14.5px; letter-spacing: .2px; }
-
-/* 字段区(行底基本透明, hover 才浮出表面 —— 减少大量字段堆叠时的视觉噪声) */
-.ce-fields { display: flex; flex-direction: column; gap: 2px; }
 /* 普通 object 段(group): 默认折叠的整体容器(同 section 思路)。
  * 折叠态 = 标题行 + 摘要; 展开才显示子字段 —— 设置页字段很多, 让"展开"成为用户主动选择。
  * 同组多段循环色(.ceg-0..5)给标题左侧 3px 色条, 一眼分辨"是哪种类型的配置段";
  * 文字色保持 --fg 高对比(色条只做识别, 不损可读性) —— 与 ai/08"对比色留给 HR/错误"原则一致。 */
 /* 展开/折叠密度: 头部内边距与段间距用同一套数值(折叠头行高一致, 视觉密度统一);
- * 段间距 8px 与 .ce-main 的卡片间距 14px 拉开层级: 段内 < 段间 < 卡间 */
+ * 段间距 8px 与卡片间距 14px 拉开层级: 段内 < 段间 < 卡间 */
 .ce-group { margin: 8px 0; border-radius: var(--radius); border: 1px solid var(--border-soft);
   background: var(--surface-1); border-left: 3px solid var(--accent);
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
@@ -863,9 +801,6 @@ button { font-family: inherit; }
 .ce-group-body { overflow: hidden; padding: 2px 9px 10px; }
 .ce-group-body[style*="display: none"] { padding: 0; }
 .ce-inline-help { font-weight: 400; font-size: 12px; color: var(--fg-dim); }
-.ce-hint { font-style: normal; font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
-.ce-empty-hint { flex-basis: 100%; margin: 0; padding: 8px 12px; border-radius: var(--radius-sm);
-  background: var(--surface-1); color: var(--fg-dim); font-size: 12.5px; }
 
 /* pattern_list 折叠头(delete_tags/delete_tags_if_has_no_torrents 自动命中):
    同 group/section 的"折叠 = 主动展开"原则; str_list 不折叠(无 .is-pattern class, head 不渲染) */
@@ -964,8 +899,6 @@ button { font-family: inherit; }
   margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0;
   background: var(--bg-sunken); color: var(--fg-muted); }
 .ce-unit-group .ce-unit-select:focus { position: relative; z-index: 1; }
-.ce-inline-input { flex: 0 0 auto; width: 130px; min-width: 0; max-width: none; }
-.ce-inline-select { flex: 0 0 auto; width: auto; min-width: 150px; max-width: 260px; }
 .ce-unit { font-size: 12px; color: var(--fg-dim); }
 
 /* 开关 */
@@ -1017,97 +950,7 @@ button { font-family: inherit; }
 .ce-btn.small { padding: 5px 10px; font-size: 12px; }
 .ce-btn:disabled { opacity: .45; cursor: not-allowed; }
 
-/* "新增"按钮: 虚线框 + 就地展开输入框(比"输入框 + 按钮"并排更清爽, 也不占常驻空间) */
-.ce-add-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
-  padding: 8px 12px; border-radius: var(--radius-sm); border: 1px dashed var(--border-strong);
-  background: transparent; color: var(--fg-muted); font-size: 12.5px; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.ce-add-btn:hover { border-color: var(--accent); color: var(--fg); background: var(--accent-soft); }
-.ce-add-btn .ico { color: var(--green); opacity: .85; }
-.ce-add-btn:hover .ico, .ce-add-btn.open .ico { opacity: 1; }
-.ce-add-btn.open { border-style: solid; border-color: var(--accent); color: var(--fg); background: var(--accent-soft); }
-.ce-add-btn.inline { width: auto; padding: 4px 10px; font-size: 12px; }
-.ce-add-form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 8px;
-  border-radius: var(--radius-sm); background: var(--bg-sunken); border: 1px solid var(--border); }
-.ce-add-form .ce-input { flex: 1 1 auto; width: 100%; max-width: none; }
-.ce-add-form-actions { display: flex; justify-content: flex-end; gap: 6px; }
-
-/* 条件/动作选择面板: 平铺候选 + 每个候选自带说明(替代不知道含义的下拉框) */
-.ce-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px;
-  padding: 10px; border-radius: var(--radius); background: var(--bg-sunken); border: 1px solid var(--border); }
-.ce-picker-item { display: flex; flex-direction: column; gap: 2px; padding: 7px 10px; text-align: left;
-  border-radius: var(--radius-sm); border: 1px solid var(--border-soft); background: var(--surface-1);
-  color: var(--fg); font-size: 12.5px; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
-.ce-picker-item:hover { border-color: var(--accent); background: var(--accent-soft); }
-.ce-picker-item.danger:hover { border-color: var(--error); background: var(--error-soft); }
-.ce-picker-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
-.ce-picker-help { color: var(--fg-dim); font-size: 11.5px; line-height: 1.45; }
-
-/* 主从编辑器(站点/规则集) */
-.ce-master-detail { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; align-items: start; }
-.ce-master { position: sticky; top: 74px; display: flex; flex-direction: column; gap: 3px; padding: 6px;
-  border-radius: var(--radius); background: var(--surface-1); border: 1px solid var(--border-soft); }
-.ce-master-item { text-align: left; background: transparent; border: 0; border-radius: var(--radius-sm);
-  color: var(--fg-muted); padding: 8px 11px; font-size: 13px; cursor: pointer;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.ce-master-item:hover { background: var(--surface-2); color: var(--fg); }
-.ce-master-item.active { background: var(--accent-soft); color: #fff; font-weight: 600; }
-.ce-detail { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.ce-detail-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ce-spacer { flex: 1; }
-
-/* 规则卡: 左侧色条标记"这是一条规则"; 卡头固定(折叠后仍可见名称/摘要/启用开关) */
-.ce-rule-card { position: relative; display: flex; flex-direction: column; gap: 8px;
-  padding: 10px 14px 12px 17px; border-radius: var(--radius);
-  background: var(--bg-card); border: 1px solid var(--border); }
-.ce-rule-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
-  border-radius: 999px; background: linear-gradient(180deg, var(--accent-hi), #2563eb); }
-.ce-rule-card.collapsed::before { background: var(--border-strong); }
-.ce-rule-card.collapsed { padding-bottom: 10px; }
-.ce-rule-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ce-rule-head .caret { color: var(--fg-dim); transition: transform var(--dur) var(--ease); }
-.ce-rule-card:not(.collapsed) .ce-rule-head .caret { transform: rotate(90deg); color: var(--accent); }
-.ce-rule-name { font-size: 14px; letter-spacing: .2px; }
-.ce-rule-meta { font-size: 11.5px; color: var(--fg-dim); }
-.ce-rule-body { display: flex; flex-direction: column; gap: 8px; }
-.ce-plugins { display: flex; flex-direction: column; gap: 8px; margin-top: 4px;
-  border-top: 1px dashed var(--border); padding-top: 10px; }
-.ce-plugins-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-dim); }
-.ce-plugins-title { display: flex; align-items: baseline; gap: 8px; flex: 1; color: var(--fg); font-weight: 600; }
-.ce-plugin-card { display: flex; flex-direction: column; gap: 4px; padding: 9px 11px;
-  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface-1); }
-.ce-plugin-bar { display: flex; align-items: center; gap: 8px; }
-/* 序号: 让"动作按顺序执行"这件事一眼可见 */
-.ce-ord { flex: 0 0 auto; display: inline-grid; place-items: center; width: 20px; height: 20px;
-  border-radius: 6px; background: var(--accent-soft); color: var(--accent-hi); font-size: 11px; font-weight: 600; }
-.ce-pseudo { font-size: 12.5px; color: var(--warn); }
-
-/* 限速曲线: 每条曲线一张卡, 方向区含阶梯图预览 + 档位表 */
-.ce-curve { display: flex; flex-direction: column; gap: 12px; }
-.ce-curve-off { flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
-.ce-curve-off .ce-help { flex: 1 1 320px; }
-.ce-curve-card { gap: 10px; }
-/* 折叠态: 隐藏 ce-curve-body(主区只留 header + 档位数摘要); 展开 = 完整折线 + 档位表 */
-.ce-curve-card.collapsed { background: var(--bg-sunken); }
-.ce-curve-card .caret { color: var(--accent); opacity: .65; transform: rotate(0deg);
-  transition: transform var(--dur) var(--ease-spring), opacity var(--dur) var(--ease); }
-.ce-curve-card .caret.open { transform: rotate(90deg); }
-.ce-curve-card .ce-icon.flat { padding: 2px; border-radius: var(--radius-sm); }
-.ce-curve-card .ce-icon.flat:hover { background: var(--surface-2); }
-.ce-curve-badge { flex: 0 0 auto; display: inline-grid; place-items: center; width: 22px; height: 22px;
-  border-radius: 7px; background: var(--accent-soft); color: var(--accent-hi); font-size: 12px; font-weight: 600; }
-.ce-curve-dir { display: flex; flex-direction: column; gap: 8px; padding: 10px;
-  border-radius: var(--radius); background: var(--bg-sunken); border: 1px solid var(--border-soft); }
-.ce-curve-dir-head { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg); font-weight: 600; }
-.ce-curve-dir.d-up .ce-curve-dir-head > .ico { color: var(--green); }
-.ce-curve-dir.d-down .ce-curve-dir-head > .ico { color: var(--blue); }
-.ce-curve-points { display: flex; flex-direction: column; gap: 5px; }
-.ce-curve-point-head, .ce-curve-point { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 30px;
-  gap: 8px; align-items: center; }
-.ce-curve-point-head { font-size: 11.5px; color: var(--fg-dim); }
-.ce-curve-point .ce-input { flex: 1 1 auto; max-width: none; }
 
 /* 阶梯折线预览: 尺寸加大 + XY 刻度/网格/十字线/tooltip(旧版仅 320×96 无坐标可读性差) */
 .ce-chart { position: relative; margin: 4px 0; padding: 10px 12px 6px; border-radius: var(--radius);
@@ -1120,10 +963,6 @@ button { font-family: inherit; }
 .ce-chart-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round;
   vector-effect: non-scaling-stroke; }
 .ce-chart-area { fill: var(--accent-soft); stroke: none; }
-.ce-curve-dir.d-up .ce-chart-line { stroke: var(--green); }
-.ce-curve-dir.d-up .ce-chart-area { fill: var(--green-soft); }
-.ce-curve-dir.d-down .ce-chart-line { stroke: var(--blue); }
-.ce-curve-dir.d-down .ce-chart-area { fill: var(--blue-soft); }
 /* 网格线/档位阈值线/十字线: 都极淡, 只做读数辅助 */
 .ce-grid-lines line { stroke: var(--border-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .ce-chart-tick { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3;
@@ -1143,19 +982,6 @@ button { font-family: inherit; }
 .ce-chart-legend { display: flex; gap: 12px; padding: 4px 2px 0; font-size: 11px; color: var(--fg-dim); }
 .ce-chart-legend .ce-lg-x, .ce-chart-legend .ce-lg-y { white-space: nowrap; }
 .ce-chart-legend .ce-lg-note { margin-left: auto; }
-
-/* 只读预览(等宽 + 下沉底色 + 行号 gutter 效果由内边距营造) */
-.ce-preview { margin-top: 8px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.ce-preview-body { width: 100%; max-height: 440px; overflow: auto; margin: 0; padding: 14px 16px;
-  border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-sunken);
-  font: 12.5px/1.65 ui-monospace, Consolas, "Courier New", monospace; color: #cfe0f7;
-  white-space: pre; tab-size: 2; }
-
-/* 底部操作条(吸底; 用背景渐变而非纯色, 滚动内容不会被硬切)
- * PERF-01: 摘掉 backdrop-filter —— 渐变本身已把下层"淡出", 模糊是白付的一层回读 */
-.ce-actions { position: sticky; bottom: 0; z-index: 6; display: flex; align-items: center;
-  justify-content: flex-end; gap: 10px; margin-top: 14px; padding: 12px 4px;
-  background: linear-gradient(transparent, var(--bg) 42%); }
 
 button.primary { background: var(--accent); }
 
@@ -1186,8 +1012,7 @@ button.primary { background: var(--accent); }
  */
 /* 按下反馈: 可点元素统一轻微回缩(纯视觉, 不影响可访问性) */
 .tabs button:active, .table-tool:active, .dist-chip:active, .filter-btn:active,
-.ce-btn:active, .ce-icon:active, .ctx-item:active, .pop-item:active, .col-menu-item:active,
-.ce-side-item:active, .ce-master-item:active, .ce-picker-item:active { transform: scale(.975); }
+.ce-btn:active, .ce-icon:active, .ctx-item:active, .pop-item:active, .col-menu-item:active { transform: scale(.975); }
 .ce-icon:active, .ctx-item:active { transform: scale(.96); }
 /* hover 抬升: 仅限卡片类元素(行本身已有 translateY(-1px), 不重复) */
 .badge, .tag-chip, .site-chip, .cat-chip, .pop-item {
@@ -1270,16 +1095,16 @@ button.primary { background: var(--accent); }
 /* 选择器列表中的 `.ce-unit-group .ce-unit-select` 是必需的: 该控件另有 `background: var(--bg-sunken)`
  * 简写规则(specificity 0,2,0)会把 background-image 重置掉, 必须用同等以上强度重新声明 caret
  */
-select.ce-input, .ce-inline-select, .ce-select, .ce-unit-group .ce-unit-select {
+select.ce-input, .ce-select, .ce-unit-group .ce-unit-select {
   appearance: none; -webkit-appearance: none; -moz-appearance: none;
   padding-right: 30px; border-radius: var(--radius-sm); cursor: pointer; text-overflow: ellipsis;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2393a7c4' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.3 6.3 8 10l3.7-3.7'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 9px center; background-size: 12px 12px;
 }
-select.ce-input:hover, .ce-inline-select:hover, .ce-select:hover, .ce-unit-group .ce-unit-select:hover {
+select.ce-input:hover, .ce-select:hover, .ce-unit-group .ce-unit-select:hover {
   border-color: var(--border-strong);
 }
-select.ce-input:focus, .ce-inline-select:focus, .ce-select:focus, .ce-unit-group .ce-unit-select:focus {
+select.ce-input:focus, .ce-select:focus, .ce-unit-group .ce-unit-select:focus {
   border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); outline: none;
 }
 /* 单位下拉与数值框拼接(右侧保持方角), caret 位置相应内收。
@@ -1321,16 +1146,16 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* 进度条填充: 数值变化平滑过渡, 不再瞬间跳变 */
 .m-progress .bar > i { transition: width var(--dur-slow) var(--ease-out); }
 /* 可折叠箭头的展开回弹 */
-.g-name .caret, .ce-subcard-head .ico, .ce-rule-head .caret {
+.g-name .caret, .ce-subcard-head .ico {
   transition: transform var(--dur) var(--ease-spring), color var(--dur) var(--ease); }
 /* 可点击控件的按下反馈(补上 transform 过渡, 否则 :active 缩放会瞬跳) */
-.ce-btn, .ce-icon, .dist-chip, .tabs button, .ce-side-item, .ce-master-item {
+.ce-btn, .ce-icon, .dist-chip, .tabs button {
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
     color var(--dur) var(--ease), filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease-out); }
 .ce-btn:active:not(:disabled), .ce-icon:active:not(:disabled), .dist-chip:active,
-.tabs button:active, .ce-side-item:active, .ce-master-item:active { transform: scale(.97); }
+.tabs button:active { transform: scale(.97); }
 /* 浮层出现节奏统一(内容仍各自定义, 这里只统一缓动) */
-.detail, .ctx-menu, .toast, .modal, .ce-picker { animation-timing-function: var(--ease-out); }
+.detail, .ctx-menu, .toast, .modal { animation-timing-function: var(--ease-out); }
 
 /* ---------------- 响应式(窄屏: 折行 + 单列, 表格横向滚动) ---------------- */
 @media (max-width: 900px) {
@@ -1340,9 +1165,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
   .ce-page { padding: 12px 12px 24px; }
   .status-strip { padding: 7px 12px; overflow-x: auto; }
   .dist-bar { flex-basis: 120px; }
-  /* 设置页: 侧栏与主从列表转横排, 主区占满宽度 */
-  .ce-grid, .ce-master-detail { grid-template-columns: 1fr; }
-  .ce-side, .ce-master { position: static; flex-direction: row; flex-wrap: wrap; }
   /* 分组表: 保持列宽语义, 容器横向滚动 */
   .group-head, .group-row { min-width: 1180px; }
   .status-strip { align-items: flex-start; }
@@ -1834,25 +1656,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
  */
 .logs-page { display: flex; flex-direction: column; padding: 16px 12px 18px;
   height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h) - 20px); animation: page-in .2s var(--ease-out); }
-/* W4: 日志迁入设置页后的嵌入式容器(原 .logs-page 视口高度公式不再适用, 取视口扣除设置页头部/底部动作区的余量) */
-.logs-embed { display: flex; flex-direction: column; gap: 0;
-  height: calc(100vh - var(--head-h, 100px) - var(--statusbar-h) - 250px); min-height: 300px; }
-.logs-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.logs-head-text h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; }
-.logs-head-text h2 .ico { color: var(--accent); }
-.logs-head-text .ce-sub { max-width: 56vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.logs-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.logs-ctl { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-dim); font-size: 12px; }
-.logs-ctl select { padding: 5px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border);
-  background: var(--bg-card); color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
-.logs-ctl select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.logs-body { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;
-  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-sunken); }
-.logs-body .ce-placeholder { flex: 1; }
-.logs-pre { flex: 1; margin: 0; padding: 10px 12px; overflow: auto;
-  font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 11.5px; line-height: 1.6;
-  color: var(--fg-muted); white-space: pre-wrap; word-break: break-all; }
-/* M4: HR 站点状态章节 —— 骨架复用 .logs-embed/.logs-head/.logs-body, 这里只管内容排版 */
+/* M4: HR 站点状态(2026-09-25 起并入 Console Hub「HR 在线核实」分区页尾) —— 这里只管内容排版 */
 .hrs-channel { margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--bg-card); color: var(--fg-muted); font-size: 12.5px; }
 .hrs-list { flex: 1; min-height: 0; overflow: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }

@@ -5,12 +5,13 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
-- WEB UI 设置页 **新版(Console Hub)** 落地 (2026-09-21, 与经典页并存): 样张 `resources/settings-page-templates/05-console-hub.html` 的原样复刻 —— 首页卡片总览(分段 LED 三态 + 等宽读数 + 按配置项名搜索直跳) → 二级页「块 → 行」两层级 + 行尾 `?` 就近说明浮窗; 站点/规则/限速/日志 四个专段。
-  · **不替换经典页**: 两套共用同一棵 YAML 树与全部 `cfg*` 读写(零重复编辑逻辑), 由 `localStorage autoqb.settings.hub` 切换, 入口为经典页页头「新版界面」与新版页的「经典界面」。
+- WEB UI **设置页合一: 移除经典设置页 + HR 站点状态并入「HR 在线核实」** (2026-09-25, 本 clone 待提交; 明细见 activeContext 切片 `26-09-25-0845-webui-settings-unify`): ①经典页整块删除(`hub.mode`/`hubSetMode`/localStorage 切换一并移除, `page==='settings'` 只渲染 hub)。②「HR 站点状态」不再单列卡片: 只读状态块并入「HR 在线核实」分区页尾, 两套 UI 成对改。③顺带清掉只被旧页引用的死代码(JS 16 成员含级联 + 两主题 ce-* 旧页选择器与媒体查询残留; 既有死代码按范围守恒不动)。④机检: HR 字段锚点四入口 → 两入口(`hub.view === 'hr_check'` 唯一性)。**验证**: 全量 1597 passed + 1 skipped(与新基线一致; 曾恒红的 2 条 GBK 假红已随远端 a760da0 修复) + 双主题真浏览器冒烟(真实 create_app + 假 manager): 卡片/分区/搜索直达/运行日志/HR 状态块(含熔断·过期异常态)渲染正常, `main.ce-page` 恰 1 个、无「经典」按钮。
+- WEB UI 设置页 **新版(Console Hub)** 落地 (2026-09-21, ~~与经典页并存~~ 2026-09-25 起成为唯一设置页, 见上条): 样张 `resources/settings-page-templates/05-console-hub.html` 的原样复刻 —— 首页卡片总览(分段 LED 三态 + 等宽读数 + 按配置项名搜索直跳) → 二级页「块 → 行」两层级 + 行尾 `?` 就近说明浮窗; 站点/规则/限速/日志 四个专段。
+  · ~~**不替换经典页**: 两套共用同一棵 YAML 树与全部 `cfg*` 读写(零重复编辑逻辑), 由 `localStorage autoqb.settings.hub` 切换, 入口为经典页页头「新版界面」与新版页的「经典界面」。~~(切换已随经典页移除, 共树共读写的设计保留)
   · 新增 `shared/config_hub.js`(`window.CONFIG_HUB` mixin + `window.HUB_FIELD_COMPONENT`, 后者继承 `ce-field` 全部读写仅换模板) + `shared/console_hub.css`(626 行, 两套 UI 共用)。
   · **版式硬知识**(写进 CSS 头部注释, 别改回去): 派生变量必须声明在使用 `--tone` 的那一层元素上(写进 `:root` 会被固化 → danger 档描边青/发光青); 发光用负 spread(正 spread 让边缘更亮, 实测 76% vs 18%); 切角与发光是死敌,`clip-path` 会整圈裁掉 `box-shadow`, 故切角只留大面。
   · 验证: 无浏览器环境下的替代手段 —— 用 vendored Vue 编译器 + 假 DOM(含浏览器实体解码器)把 hub 主区 / `tpl-hub-field` / 两套 UI 整页 `#app` 全部编译通过; 再用 `scripts/ui_harness.py` + playwright-core / chromium-1243 真机截图(prism/atlas 各 4 张), 0 console 错误。单测 **1098 passed** 不退化。
-  · ⚠ 计划外发现(未修): 经典页 `setUnitNum` 调 `this.unitParts()` 而 `unitParts` 是 computed 拿到对象非函数 → 改「数值+单位」字段的数字会 throw; 新版已直接调 `ce.cfgSetUnit(path, num, unit)` 绕开, 经典页带病。
+  · ⚠ 计划外发现(未修): 经典页 `setUnitNum` 调 `this.unitParts()` 而 `unitParts` 是 computed 拿到对象非函数 → 改「数值+单位」字段的数字会 throw; 新版已直接调 `ce.cfgSetUnit(path, num, unit)` 绕开, ~~经典页带病~~(该隐患已随经典页移除, 2026-09-25)。
 
 > 注意区分: 下表部分功能作者在 README 中标注 🚧 = "已实现但未严格测试(实盘验证)", 如规则引擎的条件/动作/checking/去重语义等 — 有单测但作者尚不认为经过严格验证; 此类 🚧 ≠ 未实现, 勿移除 (语义详见 pitfalls.md)。
 - WEB UI 追剧页 剧/集右键「打开目标文件夹」报"种子不存在" (2026-09-19, 已入库 `c888fba`): 用户报追剧页**剧右键与集右键**失败, 种子右键正常。**真因**: 后端 shows 视图的 `members` 是 **hash 数组**, 前端 `decoratedShows` 把它换成**成员对象**, 而 `openShowEpMenu`/`openShowMenu` 直接把 members 当 hash 用 ⇒ 拼进 URL/JSON 时字符串化成 `[object Object]` ⇒ 后端 404。**同一根因还让整集/整剧的开始/暂停/强制汇报报 Not Found、删除静默无反应**(用户尚未察觉)。**修法**: `shared/app.js` 新增 `memberHashesOf(list)`(两种形态都收)统一取 hash, 菜单与选中态(`_showHashes`/`_epUnits`/`epSelState`)一律走它; 双 UI 共用该文件 ⇒ 一次修两处。**验证**: 用 node 桩掉 `Vue.createApp`/`window`/`document` 直接加载**真 app.js** 断言产出是字符串 hash —— 新版 9/9 通过, 旧版挂 5 项(**红绿双验**); 守阵固化进 `tests/test_web.py::test_frontend_static_bundle_health` 第 7 项; 端到端冒烟(桩服务 + 无头浏览器)同样红绿验证。基线 1041 不变。
