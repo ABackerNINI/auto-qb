@@ -13,7 +13,7 @@ commands run test.one -- tests/test_grouping.py          # 单文件
 commands run test.one -- tests/test_checking.py -k skip  # 按关键词
 ```
 
-- **当前基线数字(唯一手改处)** → [baseline.md](baseline.md); **逐次增量流水** → [baseline-history.md](baseline-history.md)。
+- **当前基线数字** → [baseline.md](baseline.md)(口径段; 看数字 `commands run kb.baseline`); **逐次增量流水** → `testing/baselines/` 切片。
 - `pytest.ini`: `pythonpath = src`(env.sync 也会把项目 editable 装入 venv, 双保险), `testpaths = tests`, addopts 含覆盖率。
 
 ## ⚠️ `TMPDIR` 已内置在 task 里 —— 不要再手工加前缀

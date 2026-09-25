@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
+from ..infra.versioning import CURRENT_VERSIONS
 from .impact import LEVEL_R, ConfigChange, diff_config_impacts
 from .loaders import load_config
 
@@ -101,6 +102,19 @@ def unmask_tree(tree: Dict[str, Any], old_tree: Dict[str, Any]) -> Dict[str, Any
     return tree
 
 
+def _stamp_schema_version(tree: Dict[str, Any]) -> None:
+    """写回侧打标(计划 26-09-26-0506): 把 config.schema_version 盖成当前版本
+
+    该键是文件格式标记, 由程序统一维护 —— WebUI 保存/预览时无条件盖章, 用户手编配置不需要
+    写它(加载时缺失 = v1)。值必须是 int 而不是字符串: _sync_mapping 对「值未变化」的键跳过
+    赋值以保留注释/引号形态, 树里的 int 与磁盘 ruamel 解析出的 int 才能判等 —— 盖成字符串
+    会把无引号的 1 重写成带引号的 '1', 白白改变文件可读性。
+    """
+    cfg = tree.get(ROOT_KEY)
+    if isinstance(cfg, dict):
+        cfg["schema_version"] = CURRENT_VERSIONS["config"]
+
+
 def write_tree(config_path: str, tree: Dict[str, Any], old_config, backup_path: str) -> WriteResult:
     """校验并写回配置树
 
@@ -110,6 +124,7 @@ def write_tree(config_path: str, tree: Dict[str, Any], old_config, backup_path: 
     校验失败抛 `ConfigError`(由调用方转 400 且不触碰磁盘); 结构非法抛 `ValueError`。
     """
     changes, restart_required = _prepare(config_path, tree, old_config)
+    _stamp_schema_version(tree)
     _backup(config_path, backup_path)
     _dump_roundtrip(config_path, tree)
     return WriteResult(changes=changes, restart_required=restart_required)
@@ -122,6 +137,7 @@ def preview_tree(config_path: str, tree: Dict[str, Any], old_config) -> str:
     校验失败同样抛 ConfigError。
     """
     _prepare(config_path, tree, old_config)
+    _stamp_schema_version(tree)
     buf = StringIO()
     _build_yaml().dump(_build_doc(config_path, tree), buf)
     return buf.getvalue()

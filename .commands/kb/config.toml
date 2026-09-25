@@ -14,17 +14,24 @@ when    = "收尾回写知识库后重建索引（不要手改 _index.md）"
 note    = "❗四条必须与 my-commit-flow 的 `memory-bank/` 闸门**同集**: 闸门能判红的生成物, 这里就得有重建入口 —— 2026-09-24 实测漏了后两条, 于是 _doc-map.md 的报错文案指过来跑完仍红"
 
 [tasks."kb.active"]
-run     = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py"]
+run     = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py <args>"]
 timeout = 60
 when    = "看会话滚动状态（在办专题切片，按最后活动倒序）"
-note    = "只打印不写文件；加 --check 变成只校验"
+note    = "只打印不写文件；<args> 可传 --check 只校验（已挂进 kb.check）"
+
+[tasks."kb.baseline"]
+run     = ["python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py <args>"]
+timeout = 60
+when    = "看测试基线 / 最新数字 / 历史基线排障（默认列最近 3 条）"
+note    = "只打印不写文件；<args> 可传 --all 或 -n N 看全量/改条数、--check 只校验（--check 已同时挂进 kb.check）"
 
 [tasks."kb.check"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_docs_index.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
-           "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check"]
+           "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check",
+           "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。集合与 kb.index + 切片校验一致"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。集合与 kb.index + activeContext/基线切片校验一致"

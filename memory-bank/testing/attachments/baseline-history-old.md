@@ -6,8 +6,8 @@
 > 外迁说明(2026-09-23): `baseline-history.md` 的 `log` 档 cap 是 24,000 字符, 新增一条后实测
 > 24,466 越线(该文件此前只剩 170 字符余量) ⇒ 按轮转策略(`_common.LOG_ROTATE_KEEP`, **触顶即切约 1/3**)
 > 把**最老一段**原样搬到这里 —— 本次恰好 1 条, 但它 ≈ 1/3 容量;
-> ❌ 策略不是「只搬最老一条」, 那会让下次追加立刻再触顶。当前数字见 [../baseline.md](../baseline.md), 近期流水见
-> [../baseline-history.md](../baseline-history.md)。
+> ❌ 策略不是「只搬最老一条」, 那会让下次追加立刻再触顶。当前数字见 [../baseline.md](../baseline.md), 历史流水已切片化为
+> testing/baselines/(见 baseline.md 口径段)。
 
 > 本目录是 `attachments/`: 不被 `iter_topic_files`(非递归 glob) 扫到, 因此不计入 cap 检查,
 > 也不需要三行头之外的元数据。

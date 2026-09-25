@@ -25,7 +25,7 @@
 
 | 用途 | 固定路径 |
 |---|---|
-| 测试临时目录 | `R:/Temp/auto-qb/tests` —— 跑测试前 `TMPDIR=R:/Temp/auto-qb/tests`(耗时数字以 [testing/baseline.md](testing/baseline.md) 为准, 此处不抄) |
+| 测试临时目录 | `R:/Temp/auto-qb/tests` —— 跑测试前 `TMPDIR=R:/Temp/auto-qb/tests`(耗时数字以 `testing/baselines/` 最新切片为准, 见 `commands run kb.baseline`; 此处不抄) |
 | 运行验证的独立配置 + data_dir | `R:/Temp/auto-qb/run-<名>/`(用后清理; 禁止用生产 `config.yml` / `auto-qb-data/`) |
 | `.git` 备份(高风险 git 操作前 `cp -a .git`) | `R:/Temp/auto-qb/git-backup-<YYYY-MM-DD>`(`.git` 仅 17M, 备份成本可忽略) |
 | 打包 / 抓取 / 归档前的一次性大产物 | `R:/Temp/auto-qb/<名>/` |

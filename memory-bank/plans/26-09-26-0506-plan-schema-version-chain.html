@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>落盘文件 schema 版本号与逐级升级链 · 工程计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="backend-schema-version-chain">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-26-0506">
+<meta name="doc-updated" content="26-09-26-0625">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a6b3bf;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #211b13;
+    --bad: #d98a8a;
+    --good: #8fc9a0;
+    --code-bg: #171e26;
+    --mark: #141c24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: #16232a; color: var(--accent-ink); border: 1px solid #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border: 1px solid var(--hair-soft); overflow-x: auto; margin-bottom: 14px; max-width: 86ch; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td .yes { color: var(--good); font-weight: 600; }
+  td .no { color: var(--bad); }
+  .callout { background: var(--mark); border: 1px solid var(--hair); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 86ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  .steps { counter-reset: step; list-style: none; margin-left: 0; }
+  .steps li { counter-increment: step; position: relative; padding-left: 40px; margin-bottom: 10px; max-width: 78ch; }
+  .steps li::before { content: counter(step, decimal-leading-zero); position: absolute; left: 0; top: 1px; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>背景与目标</a>
+    <a href="#s2"><span class="no">02</span>落盘点盘点与范围</a>
+    <a href="#s3"><span class="no">03</span>升级链框架设计</a>
+    <a href="#s4"><span class="no">04</span>三类文件集成点</a>
+    <a href="#s5"><span class="no">05</span>故障语义与一致性</a>
+    <a href="#s6"><span class="no">06</span>测试计划</a>
+    <a href="#s7"><span class="no">07</span>实施步骤</a>
+    <a href="#s8"><span class="no">08</span>范围外与关联</a>
+    <a href="#s9"><span class="no">09</span>变更记录</a>
+    <div class="toc-foot">doc-topic:<br>backend-schema-version-chain</div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 工程计划 · backend</div>
+    <h1>落盘文件 schema 版本号与逐级升级链</h1>
+    <p class="lede">给程序落盘的结构化数据文件引入 <code>schema_version</code> 字段，并建立「每个版本只写 N→N+1 迁移函数、加载时沿链逐级执行」的升级框架。覆盖 state.json、hr/&lt;site&gt;.json、config.yml 三类；其余落盘点逐项豁免并记录理由。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span> 已实施 · 26-09-26</div></div>
+      <div class="item"><div class="k">立项</div><div class="v">26-09-26 05:06</div></div>
+      <div class="item"><div class="k">证据基线</div><div class="v">develop @ 2712804f</div></div>
+      <div class="item"><div class="k">范围</div><div class="v">仅方案，不含代码改动</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>背景与目标</h2>
+    <h3>现状</h3>
+    <ul>
+      <li><strong>state.json（核心状态）没有任何版本字段</strong>——顶层键形状散在多个写点，读回只有 <code>_load_state</code> 单入口（<code>core/mixins/rule_engine.py:70</code>）。结构演化目前完全靠读点 <code>.get(默认值)</code> / 写点 <code>setdefault</code> 隐式兜底，破坏性变更（键改名、结构重组）无从表达。</li>
+      <li><strong>hr/&lt;site&gt;.json 已有 <code>SCHEMA_VERSION = 1</code></strong>（<code>hr/model.py:13</code>），但版本不符一律报错拒绝（<code>hr/store.py:125-127</code>）——只「挡」不「迁」。挡是对的（未来版本不猜），缺的是旧版本向前迁移的能力。</li>
+      <li><strong>config.yml 无版本概念</strong>。校验入口 <code>validate_config</code> 只认当前键集；将来任何键级重构（改名 / 拆分 / 挪段）都只能靠「未知键报错」硬着陆，用户旧配置直接 fail。</li>
+      <li>程序自身版本号与文件格式无关，且已有双源漂移（<code>pyproject.toml</code> 0.1.0 vs <code>__version__</code> 0.2.0，见 <a href="26-09-22-2318-version-management-plan.html">软件版本管理方案</a>，专题 In Progress）——文件 schema 版本必须与之解耦，独立递增。</li>
+    </ul>
+    <h3>目标（用户口径）</h3>
+    <blockquote style="border-left:1px solid var(--hair); padding-left:14px; color:var(--dim); margin-bottom:14px; max-width:78ch;">
+      所有落盘的文件需要增加版本号以及升级脚本；升级脚本只考虑从低一个版本的文件升级到下一个版本，形成升级链。
+    </blockquote>
+    <h3>方案解读（本计划的两个关键转译）</h3>
+    <ul>
+      <li><strong>「升级脚本」= 代码内置的迁移函数</strong>，随加载自动执行，不另设需人工调用的独立脚本。取舍：自动链消灭「忘跑脚本」这一类事故；迁移函数是纯函数，照样可以单测、可以单独调用，人工介入通道并不丢失。</li>
+      <li><strong>「只考虑相邻版本」= 迁移表按 from_version 索引</strong>，每个注册项恰好 +1 级；跨多级升级由执行器沿链串行完成（v1→v2→v3），任何一级都不感知更早的历史。</li>
+      <li>文件 <code>schema_version</code> 与程序版本（<code>__version__</code>）完全解耦：文件结构变一次就 +1，程序发版不迁文件；反之亦然。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>落盘点盘点与范围</h2>
+    <p>全仓落盘点已逐一核查（证据基线 develop @ 2712804f）。判据：<strong>程序会读回、且结构会演化的持久化文件才纳入版本链</strong>——版本号的价值在于「旧数据能被新代码读懂」，不满足这两条的文件加版本是纯开销。</p>
+    <h3>2.1 纳入（3 类）</h3>
+    <table>
+      <tr><th>文件</th><th>kind</th><th>版本字段</th><th>现状</th></tr>
+      <tr><td><code>&lt;data_dir&gt;/state.json</code>（核心状态：执行历史 / 上传快照 / 跳检去重等）</td><td><code>state</code></td><td>顶层 <code>schema_version</code></td><td><span class="no">无版本字段</span>；读写双单点（<code>rule_engine.py:70</code> / <code>:133</code>）</td></tr>
+      <tr><td><code>&lt;data_dir|shared_dir&gt;/hr/&lt;site&gt;.json</code>（HR 站点账号级状态）</td><td><code>hr_site</code></td><td><code>schema_version</code></td><td>已有 <code>SCHEMA_VERSION=1</code>，版本不符只拒绝不迁移（<code>hr/store.py:125-127</code>）</td></tr>
+      <tr><td><code>config.yml</code>（用户手编 + WebUI 写回 + --export-yaml 模板）</td><td><code>config</code></td><td><code>config.schema_version</code></td><td><span class="no">无版本字段</span>；校验单点 <code>load_config</code>（<code>config/loaders.py:335</code>）</td></tr>
+    </table>
+    <div class="callout">config 的版本键放在 <code>config:</code> 块内而不是根节点——根节点校验只放行 <code>{"config"}</code> 一个键（<code>config/validation/core.py:171</code>），另开根键要动根级校验与全部文档口径，收益为零。</div>
+    <h3>2.2 豁免清单（逐项记录理由，不悄悄略过）</h3>
+    <table>
+      <tr><th>落盘点</th><th>豁免理由</th></tr>
+      <tr><td><code>web.token</code> / <code>hr.token</code></td><td>无结构（随机串 / 端口号）；丢失自动重建，无「旧数据读不懂」问题</td></tr>
+      <tr><td><code>ui.port</code></td><td>单进程生命周期的 IPC 临时文件，退出即删（<code>tray/app.py:110</code>）</td></tr>
+      <tr><td><code>state.lock.meta.json</code></td><td>单次运行的诊断伴生文件，写后只读一次，生命周期 = 一次运行</td></tr>
+      <tr><td><code>*.bak</code> / <code>*.bad-&lt;ts&gt;</code></td><td>主文件的原子写备份 / 隔离快照，内容随主文件同版本走，不独立编版本</td></tr>
+      <tr><td><code>skip-check-backup/&lt;hash&gt;.torrent</code></td><td>外部 bencode 格式，程序从不读回，供人工 / qB 恢复用</td></tr>
+      <tr><td><code>logs/auto-qb.log(.1~.5)</code></td><td>append 流式输出，无结构演化语义</td></tr>
+      <tr><td><code>--export-torrents_info</code> 的 <code>torrents.txt</code></td><td>一次性人工消费的纯文本列表，程序不读回</td></tr>
+      <tr><td>自启注册（注册表 / LaunchAgents plist / .desktop）</td><td>平台标准格式，非程序演化数据</td></tr>
+      <tr><td>浏览器扩展设置（chrome.storage）</td><td>不落程序磁盘，超出本计划管辖</td></tr>
+    </table>
+    <p class="hint">「所有落盘的文件」按上述判据收窄为三类结构化数据文件；豁免项若未来长出结构（如 token 文件开始携带元数据），届时按本框架补注册即可——框架的接入成本是每文件一行 kind。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>升级链框架设计</h2>
+    <p>新模块 <code>src/auto_qb/infra/versioning.py</code>（文件格式基础设施与 atomic_write / locking 同层，不依赖任何业务模块）：</p>
+<pre><code>CURRENT_VERSIONS = {"state": 1, "hr_site": 1, "config": 1}
+
+# MIGRATIONS[kind][from_version] = fn(data: dict) -> dict
+# 纪律: 每个注册项恰好 +1 级; 纯函数(dict→dict, 无 IO);
+#       原子写 / 备份等 IO 语义一律留在调用方。
+MIGRATIONS: dict[str, dict[int, Callable[[dict], dict]]] = {
+    "state":    {},   # 首个破坏性结构变更出现时, 在此注册 migrate_state_1_2
+    "hr_site":  {},
+    "config":   {},
+}
+
+def detect_version(kind: str, data: dict) -> int:
+    """schema_version 缺失 → 1(存量文件口径);
+    非 int / &lt; 1 / &gt; CURRENT_VERSIONS[kind] → SchemaVersionError"""
+
+def migrate(kind: str, data: dict) -> tuple[dict, str]:
+    """从检测出的版本沿链逐级 apply 到 CURRENT;
+    已是最新则原样返回; 返回 (数据, "v1→v3" 形式的描述供日志)"""</code></pre>
+    <ul>
+      <li><strong><code>SchemaVersionError(AutoQbError)</code></strong>：新错误类型（<code>infra/errors.py</code>），复用 CLI 既有 AutoQbError 干净出口（stderr + 退出码 1）。</li>
+      <li><strong>迁移函数集中注册在 versioning.py</strong>：当前三表皆空（三文件现行结构即 v1），首批真实迁移函数出现时若数量膨胀，再拆 <code>migrations/</code> 子包——先不定死。</li>
+      <li><strong>版本检测的口径</strong>：字段缺失 = v1。这意味着本次改造对存量文件零迁移成本——state.json 现行结构定义为 v1，第一次<em>破坏性</em>结构变更才诞生 v2 与第一个迁移函数。</li>
+    </ul>
+    <div class="callout warn"><strong>为什么本次不造一个假 v2 来「演示链」</strong>：为补字段动作凭空造版本，会让所有存量文件平白走一次迁移写盘，换来的是演示价值。链式执行的正确性由单测里的临时注册验证（测试内注册假 v2/v3），不落生产。</div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>三类文件集成点</h2>
+    <h3>4.1 state.json —— 读写双单点，改动最小</h3>
+    <table>
+      <tr><th>位置</th><th>改动</th></tr>
+      <tr><td><code>_load_state</code>（<code>rule_engine.py:70</code>）</td><td>读回 dict 后过 <code>migrate("state", …)</code>；<code>.bak</code> 回退分支同样过链——备份与主文件同版本，链是幂等重放，重复执行无副作用</td></tr>
+      <tr><td><code>save_state</code>（<code>:133</code>）与 <code>_write_back_recovered</code>（<code>:93</code>）</td><td>写前统一打 <code>schema_version = CURRENT["state"]</code>（收敛为一个小助手函数，两处共用）</td></tr>
+      <tr><td><code>run()</code> 持锁后加载完成处（<code>core/qbmanager.py:370</code> 附近）</td><td>磁盘文件版本 &lt; CURRENT 时立即落盘一次物化 + INFO 日志「state.json 已从 vN 升级到 vM」；沿用 <code>_cleanup_orphan_tmp</code> 先例——<em>持锁后才写盘</em></td></tr>
+      <tr><td><code>__init__</code> 早期加载（<code>qbmanager.py:195</code>）</td><td>只做内存迁移，不落盘（此时尚未持锁，写盘违背单一写线程判据）</td></tr>
+    </table>
+    <h3>4.2 hr/&lt;site&gt;.json —— 把「只挡」升级为「旧迁新拒」</h3>
+    <ul>
+      <li><code>_parse</code>（<code>hr/store.py:125-127</code>）：版本 &lt; CURRENT → <code>migrate("hr_site", raw)</code> 后继续 <code>from_json</code>；版本 &gt; CURRENT → 维持现有「不符即拒」报错（未来版本不猜的既有判例不动）。</li>
+      <li><code>_write</code>（<code>:224</code>）已打版本，不动。迁移结果随下次 <code>HrLockSession.commit</code> 物化——revision 心跳机制天然保证写回一致。</li>
+      <li>多实例共存语义：老实例读到新版本文件 → 报错拒绝（现状保持）；这正是版本字段对 HR 共享目录场景的核心价值。</li>
+    </ul>
+    <h3>4.3 config.yml —— 校验前迁移，写回时打标</h3>
+    <ul>
+      <li><code>load_config</code>（<code>config/loaders.py:335</code>）：YAML 解析后读 <code>config.schema_version</code>（缺失=1）→ <code>migrate("config", data)</code> → 再进 <code>validate_config</code>；未来版本 → <code>ConfigError</code> 聚合报错风格报出（「配置 schema 版本 3 高于本程序支持的 1」）。</li>
+      <li><code>schema_version</code> 作为新配置键走<strong>六处同步</strong>（黄金法则 4，守卫测试带路）：<code>KNOWN_CONFIG_KEYS</code>（<code>validation/core.py:9</code>）+ int ≥ 1 校验 + <code>config/schema</code> 包 Field（标记不可编辑，参照 R 级字段先例）+ impact 分级 + models / 文档。该键是文件格式标记而非行为配置，<strong>不进</strong> <code>Config</code> dataclass——loaders 在迁移分派后即消费掉。</li>
+      <li>写回侧打标：<code>write_tree</code>（<code>config/writer.py</code>，WebUI 保存）与 <code>--export-yaml</code>（<code>core/exporter.py:97</code> <code>export_yaml_template</code>）写出时补 <code>config.schema_version</code>。</li>
+      <li><strong>运行期不主动写回 config.yml</strong>：磁盘物化发生在下一次 WebUI 保存；启动检测到旧版本时日志提示一次。用户手编配置永远不需要手写这个键。</li>
+    </ul>
+    <div class="callout warn"><strong>红线</strong>：本机 <code>config.yml</code> 与 <code>auto-qb-data/</code> 是生产文件，实施全程只改代码，不碰这两个文件本身；验证用 <code>minimal.yml</code> / <code>test_yamls/</code> 与临时目录。</div>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>故障语义与一致性</h2>
+    <table>
+      <tr><th>情形</th><th>行为</th><th>依据</th></tr>
+      <tr><td>文件无 <code>schema_version</code></td><td>视为 v1，正常加载</td><td>存量文件口径，零迁移成本</td></tr>
+      <tr><td>版本 &lt; 当前支持</td><td>沿链逐级迁移，INFO 日志留痕，按 kind 各自的物化时机落盘</td><td>本计划新增能力</td></tr>
+      <tr><td>版本 &gt; 当前支持（文件比程序新）</td><td><strong>fail-fast 启动失败</strong>，报错说明两个版本号；不静默清空、不回退 .bak</td><td>备份里也是同一个新版本，回退无意义——<code>hr/store.py:107</code> 既有判例；回退旧版程序读新 state 同样被拦，防静默降级写坏</td></tr>
+      <tr><td>版本字段非 int / &lt; 1</td><td><code>SchemaVersionError</code>，与损坏文件区别对待（不算 <code>_CORRUPT</code>）</td><td>版本问题不是内容损坏，混进三态模型会触发错误的 .bak 回退</td></tr>
+      <tr><td>迁移后、写回前崩溃</td><td>文件保持旧版本完整内容；下次启动从旧版本重放同一条链</td><td><strong>幂等性</strong>（黄金法则 1）：链的输入是磁盘上的真实版本，重放天然幂等</td></tr>
+      <tr><td>dry-run 模式</td><td>迁移仅内存，不落盘</td><td>与现有 dry-run 落盘口径一致（<code>qbmanager.py:450-451</code>）</td></tr>
+      <tr><td>.bak 的角色</td><td>不变：仍是「上次成功写盘」的副本；迁移链<strong>不依赖</strong> .bak</td><td>备份与主文件同版本，「从备份猜」没有意义（既有决策）</td></tr>
+    </table>
+    <div class="callout"><strong>单一写线程（黄金法则 5）</strong>：迁移执行只出现在启动序列（主线程、持锁后物化）；运行期不重读 state 覆盖内存态——<code>issue 26-09-21-1347</code> 的守阵 <code>test_apply_new_config_l2_preserves_runtime_state</code> 会拦。写点纪律（迁移函数纯函数、无 IO）让这条约束结构性成立。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>测试计划</h2>
+    <ul>
+      <li><strong>新增 <code>tests/test_versioning.py</code></strong>（docstring 带「## 测试计划」清单，机检要求）：
+        <ul>
+          <li><code>test_detect_version_*</code>：缺失→1 / 合法 int / 非 int 报错 / 负数报错 / 未来版本报错；</li>
+          <li><code>test_migrate_chain</code>：临时注册假 v2→v3 迁移，断言逐级执行顺序与中间态不被跳过；</li>
+          <li><code>test_migrate_idempotent</code>：对已迁移数据重复 apply 无二次变更；</li>
+          <li><code>test_migrate_noop</code>：已是最新版本时原样返回（不触发任何注册项）。</li>
+        </ul>
+      </li>
+      <li><strong><code>tests/test_rule_engine.py</code> 扩展</strong>（沿用 <code>tempfile.TemporaryDirectory</code> + <code>make_manager</code> 既有模式）：
+        <ul>
+          <li>无字段旧文件加载成功，save 后带 <code>schema_version</code>；</li>
+          <li>未来版本 fail-fast：抛 SchemaVersionError，且<strong>不触碰 .bak</strong>；</li>
+          <li>.bak 回退路径同样过链；</li>
+          <li>持锁后物化写回：磁盘版本 &lt; CURRENT 时 run() 启动即落盘新版本。</li>
+        </ul>
+      </li>
+      <li><strong>hr / config 侧</strong>：hr 旧版本走迁移（临时假迁移）、未来版本维持拒绝（现有测试守阵不回归）；config 的 <code>schema_version</code> 校验聚合报错、旧配置无键加载成功；<code>test_config_schema.py</code> 守阵同步（键集一致性）。</li>
+      <li><strong>回归</strong>：<code>commands run test.full</code> 全量，实测数字记入 <code>testing/baseline.md</code>；改动文件过 <code>commands run dev.fmt</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>实施步骤</h2>
+    <ol class="steps">
+      <li><strong>开工</strong>：<code>commands run my-commit-flow.sync</code> 自检通过；立档 <code>memory-bank/tasks/</code>（跨会话专题，按 memory-bank skill 阈值）。</li>
+      <li><strong>框架</strong>：<code>infra/versioning.py</code>（CURRENT_VERSIONS / MIGRATIONS / detect_version / migrate）+ <code>infra/errors.py</code> 增加 <code>SchemaVersionError</code>。</li>
+      <li><strong>state 集成</strong>：<code>rule_engine.py</code> 读路径过链 + 写路径打标 + run() 持锁后物化。</li>
+      <li><strong>hr 集成</strong>：<code>store.py:_parse</code> 旧版本走迁移、未来版本维持拒绝。</li>
+      <li><strong>config 集成</strong>：loaders 迁移分派 + 六处同步 + writer / exporter 打标。</li>
+      <li><strong>测试</strong>：新增与扩展用例，全量 <code>test.full</code> 记 baseline，<code>dev.fmt</code>。</li>
+      <li><strong>文档回写</strong>：<code>config-reference/keys.md</code>（state 结构行补 schema_version、新增 config.schema_version 行）、<code>systemPatterns/client-and-state.md</code>（升级链设计节）；踩到新坑按动作写 <code>pitfalls/&lt;类&gt;/</code> 并重跑 <code>kb.index</code>。</li>
+      <li><strong>收尾 DoD</strong>：activeContext 已完成条目迁出 progress；实机 <code>commands run dev.run -- minimal.yml --dry-run</code> 冒烟（读真机不写盘口径先确认）。</li>
+      <li><strong>提交 / 推送</strong>：等显式指令（「提交」= commit + push，走 ship.commit / ship.push）。</li>
+    </ol>
+    <p class="hint">预估量：框架 + state 一天内可完成并带测试；config 六处同步是最大不确定性，占总量约三分之一。三步之间无依赖，可分波合入（state 先行即可独立产生价值）。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>范围外与关联</h2>
+    <h3>范围外（只记录，本次不修）</h3>
+    <ul>
+      <li><code>pyproject.toml</code> 0.1.0 vs <code>__version__</code> 0.2.0 双源漂移——属软件版本管理专题（该方案 In Progress），与文件 schema 版本解耦后互不影响。</li>
+      <li><code>web.token</code> / <code>hr.token</code> 直写非原子（<code>common.py:56</code> / <code>channel.py:100</code>）——一次性生成文件，影响面为零，不入本计划。</li>
+      <li>前端 localStorage 的 LEGACY_COLS_KEYS 迁移（<code>webui/static/shared/app.js:154</code>）——已是「相邻版本逐级回退」的先例，机制健康，不重构，本框架仅在设计上对齐其语义。</li>
+    </ul>
+    <h3>关联文档</h3>
+    <ul>
+      <li><a href="26-09-22-2318-version-management-plan.html">auto-qb 软件版本管理方案</a>（In Progress）——程序发版的版本号 / Tag / CHANGELOG；本计划的 schema 版本与其解耦。</li>
+      <li><a href="26-09-22-1912-backend-state-periodic-flush-plan.html">运行期状态周期落盘</a>（Done）——本计划沿其写点语义与「周期兜底对未来新增写点同样生效」的取舍。</li>
+      <li><code>memory-bank/systemPatterns/client-and-state.md</code>——三态损坏判定 / .bak 自愈 / 内存态即真相的单点；实施时新增「版本迁移」小节。</li>
+      <li><code>memory-bank/config-reference/keys.md:83</code>——state.json 实测结构行，实施后回写。</li>
+    </ul>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>变更记录</h2>
+    <table>
+      <tr><th>时间</th><th>变更</th></tr>
+      <tr><td>26-09-26-0506</td><td>初版：范围盘点（3 纳入 / 9 豁免）、versioning.py 框架、三类集成点、故障语义、测试与实施步骤。仅落盘方案，暂缓实施。</td></tr>
+      <tr><td>26-09-26-0625</td><td>实施完成（档案 <a href="../tasks/26-09-26-schema-version-chain.md">26-09-26-schema-version-chain</a>）：infra/versioning.py 框架 + SchemaVersionError；state 读写过链盖章 + run() 持锁后物化；hr 旧迁新拒（_write 改动态读版本表）；config 校验前迁移分派 + 六处同步 + writer/exporter 盖章。测试 1664 passed + 1 skipped / 92%（+24 条），baseline 已记。</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/plans · doc-topic: backend-schema-version-chain · 证据基线 develop @ 2712804f · 本文档是「方案与取舍」的唯一权威，实施进度见 tasks/ 档案
+  </footer>
+</div>
+</body>
+</html>

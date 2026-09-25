@@ -18,7 +18,7 @@
 ### 粒度小而多, 名字用中文 / 英文短语描述场景
 
 - **触发**: 拆用例。
-- **判别**: 当前规模见 [baseline.md](baseline.md)(Windows 收集数)。
+- **判别**: 当前规模见 `commands run kb.baseline`(Windows 收集数)。
 - **处置**: 保持"小而多", 不要写成一个大用例。
 
 ### 平台相关测试必须以 `monkeypatch` 固定平台

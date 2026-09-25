@@ -38,6 +38,8 @@
 - test_validate_tracker_groups: 站点 groups 非列表/空串项报错(fail-fast)
 - test_load_tracker_groups: groups 解析回填 TrackerConfig, 未配置默认空列表
 - test_validate_state_save_interval: state_save_interval 0(关闭)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)
+- test_config_schema_version_load_and_migrate_dispatch: schema_version 缺失=v1 加载成功; 非法/未来版本经迁移分派报 ConfigError(报清两个版本号)
+- test_validate_schema_version_shape: validate_config 形状校验(须为整数/须>=1, 防御层)
 - test_example_minimal_yml_passes_fail_fast: minimal.yml 过 fail-fast 校验 + 钉 README 开箱语义(web/集数标签默认开) —— 示例文件无 schema 守卫会静默漂移(pitfalls/docs/drift.md)
 - test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关(无桌面会话)/ grouping.check_missing_files 关(读宿主磁盘, 不关会误暂停整组 + 打 MISSING 标签) —— compose.yaml 的端口映射与 healthcheck 依赖)
 """
@@ -1191,3 +1193,41 @@ def test_example_docker_config_yml_passes_fail_fast():
     assert config.notify.enabled is False  # 容器无桌面会话, 平台通知预期不可用
     # 缺文件扫描读的是 qB 报回的宿主保存路径 —— 容器内恒"不存在" ⇒ 误暂停整组 + 打 MISSING 标签(真实写 qB)
     assert config.grouping.check_missing_files is False
+
+
+def test_config_schema_version_load_and_migrate_dispatch(td=None):
+    """schema 版本链(计划 26-09-26-0506): 无键=v1 存量口径加载成功; 非法/未来版本 ConfigError 报清两个版本号
+
+    用最小配置(仅 trackers 必填)直载: _load_errors 走的就是 load_config 完整路径(含迁移分派)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # 无键(存量口径)与显式 v1 都正常加载
+        cfg = load_config(_write_raw(td, "config:\n  trackers:\n    T1:\n      domains:\n        - a.com\n"))
+        assert cfg.trackers["T1"].domains == ["a.com"]
+        cfg = load_config(
+            _write_raw(td, "config:\n  schema_version: 1\n  trackers:\n    T1:\n      domains:\n        - a.com\n")
+        )
+        assert cfg.trackers["T1"].domains == ["a.com"]
+
+        # 未来版本: fail-fast 且同时说清文件版本与程序支持版本
+        err = _load_errors(td, "config:\n  schema_version: 9\n  trackers:\n    T1:\n      domains:\n        - a.com\n")
+        assert "schema_version=9" in err and "支持的 1" in err, f"未来版本须报两个版本号: {err}"
+
+        # 非整数 / < 1: 同样经迁移分派的 SchemaVersionError -> ConfigError
+        err = _load_errors(
+            td, "config:\n  schema_version: abc\n  trackers:\n    T1:\n      domains:\n        - a.com\n"
+        )
+        assert "必须是整数" in err
+        err = _load_errors(td, "config:\n  schema_version: 0\n  trackers:\n    T1:\n      domains:\n        - a.com\n")
+        assert ">= 1" in err
+
+
+def test_validate_schema_version_shape():
+    """validate_config 形状校验(防御层): schema_version 非整数/负值聚合报错"""
+    from auto_qb.config.validation import validate_config
+
+    errors = validate_config({"config": {"schema_version": "abc"}})
+    assert any("须为整数" in e for e in errors)
+    errors = validate_config({"config": {"schema_version": "-3"}})
+    assert any("须 >= 1" in e for e in errors)
+    assert validate_config({"config": {"schema_version": "1"}}) == []

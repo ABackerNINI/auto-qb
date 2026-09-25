@@ -12,6 +12,7 @@
 覆盖: 占位符展开(四种 + 展开失败) / 闸门分类与执行(红 → STOP、--no-auto 不执行) /
       配置体检(未知键与 timeout 非法 → STOP) / each_limit 上限 /
       开工自检分类 classify_sync(齐平 / 落后 / 分叉 / 本地领先 / 离线 / 空仓库 / 远端对象缺失) /
+      落后行 behind_rows(commit/push 两阶段都 STOP + 同步路径配方, 2026-09-26 废除 commit 阶段 WARN 放行) /
       合流预判 classify_merge_probe 返回三元组 / 落后判据禁读 refs/remotes 快照(会被静默丢弃)。
 """
 
@@ -263,6 +264,39 @@ class SyncRecipeTest(unittest.TestCase):
         self.assertIn("已分叉", detail)
         self.assertIn("pipeline.md", detail)
         self.assertNotIn("apply --3way", detail, "分叉不走机械配方")
+
+
+class BehindRowsTest(unittest.TestCase):
+    """behind_rows: 落后 >0 的检查表行 —— commit / push 两阶段都 STOP(2026-09-26 起 commit 阶段
+    废除旧 WARN 放行: 那会让收尾回写落在陈旧基线上, 合并时 baseline/切片必撞)。"""
+
+    FETCH = "git fetch gitee develop"
+
+    def test_commit_phase_is_stop_with_recipe(self):
+        rows = preflight.behind_rows(2, 0, "commit", 0, [], self.FETCH)
+        self.assertTrue(any(r[0] == preflight.STOP and r[1] == "落后主线" and "先合并远端" in r[2] for r in rows))
+        self.assertTrue(any(r[1] == "同步路径" and "--ff-only" in r[2] for r in rows))
+
+    def test_commit_phase_stop_names_the_hot_write_points(self):
+        rows = preflight.behind_rows(1, 0, "commit", 3, [], self.FETCH)
+        detail = next(r[2] for r in rows if r[1] == "落后主线")
+        self.assertIn("回写", detail)
+        self.assertIn("baseline", detail)
+
+    def test_push_phase_is_stop(self):
+        rows = preflight.behind_rows(3, 0, "push", 0, [], self.FETCH)
+        self.assertTrue(any(r[0] == preflight.STOP and "别等 push 被拒" in r[2] for r in rows))
+
+    def test_dirty_recipe_included(self):
+        rows = preflight.behind_rows(1, 0, "commit", 4, [], self.FETCH)
+        recipe = next(r for r in rows if r[1] == "同步路径")
+        self.assertIn("apply --3way", recipe[2])
+
+    def test_diverged_points_at_pipeline(self):
+        rows = preflight.behind_rows(1, 2, "commit", 0, [], self.FETCH)
+        recipe = next(r for r in rows if r[1] == "同步路径")
+        self.assertIn("已分叉", recipe[2])
+        self.assertIn("pipeline.md", recipe[2])
 
 
 class SummarizeGatesTest(unittest.TestCase):

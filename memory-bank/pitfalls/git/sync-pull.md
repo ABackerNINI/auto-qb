@@ -39,3 +39,9 @@
 - **触发**: 按本文件旧版「同步上游」流程第 ① 步照抄 `git diff > 备份.patch`(2026-09-22 实测, 工具 shell)。
 - **判别**: PowerShell 的 `>` 是先解码再编码 —— git 的 UTF-8 字节被按控制台编码(本机 GBK)解码后写 UTF-16: 中文行变 mojibake 且出现 `?` 替换符(不可逆), 部分行被并进相邻行, 9 个 `diff --git` 头只剩 5 个; `git apply` 报 `corrupt patch` / `No valid patches in input`。本次错误在施回前被 `git apply` 拦下 —— 若直接施回会把 mojibake 写进工作区; 即便把 UTF-16 转回 UTF-8 也救不回内容。
 - **处置**: 出仓补丁一律用 git 自带输出参数 `git diff --output=<路径> [<路径>...]`(字节原样, 不经控制台编码); 高风险同步前照例 `cp -a .git` 备份。本次靠会话内编辑记录逐文件重建, 重建后用 `git diff --stat` 与改前数字逐项对账(8 files, +82/-43)确认无缺漏后再提交。
+
+### 收尾回写落在陈旧基线上 → 合并时 baseline/切片必撞 (多 clone 最热写点)
+
+- **触发**: 多 clone 并行下收到「提交」, 直接按收尾 DoD 回写 (基线切片 / activeContext 切片 / 各 _index) 再提交 —— 开工时同步过, 但会话期间别的 clone 已推进 develop (2026-09-26 用户点名: "baseline 总是撞")。
+- **判别**: 回写前 `git ls-remote gitee develop` 对比本地 HEAD (别信 `status -sb` 快照) —— 不齐平就是在陈旧基线上动手; 撞车现场是 push 被拒后已分叉, `apply --3way` 在 baseline.md / 切片上报冲突 (两边都在文件尾追加)。
+- **处置**: 收到「提交」先 `commands run my-commit-flow.sync` 预检 → 落后按「同步路径」合并远端 → **然后**才收尾回写 → `ship.commit` (落后被 `--phase commit` 预检 STOP, 2026-09-26 起废除旧 WARN 放行) → `ship.push`。流程单点: `.commands/my-commit-flow/references/pipeline.md`。

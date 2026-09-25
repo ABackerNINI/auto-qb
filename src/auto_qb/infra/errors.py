@@ -11,3 +11,12 @@ class AutoQbError(Exception):
 
     其它异常(程序 bug)不在此列, 照常抛出保留堆栈。
     """
+
+
+class SchemaVersionError(AutoQbError):
+    """落盘文件 schema 版本问题(比程序新 / 非法值 / 迁移表缺项)
+
+    与「文件内容损坏」区别对待: 版本问题**不做** .bak 回退 —— 备份与主文件同版本,
+    回退没有意义(hr/store 的既有判例); 报错说明两个版本号, fail-fast 启动失败。
+    所以各读点不得把它折进损坏三态(_CORRUPT), 要直接放出去走 CLI 干净出口。
+    """

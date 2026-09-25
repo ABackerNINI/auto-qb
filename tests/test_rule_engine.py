@@ -35,6 +35,11 @@
 - test_maybe_flush_state_disabled_zero: state_save_interval=0(关闭)恒不落盘 —— 旧行为逃生口
 - test_dirty_exit_keeps_exec_history_after_periodic_flush: 验收阵: 模拟脏退出(不走 finally), 周期落盘已把 exec_history 写上盘
 - test_dirty_exit_interval_zero_loses_runtime_state: 对照: 关闭周期落盘时脏退出丢运行期状态(0 = 旧行为)
+- test_load_state_no_version_field_then_save_stamps: schema 版本链: 旧格式文件(无字段)加载成功, save 后带版本章
+- test_load_state_future_version_fails_fast_keeps_bak: 未来版本 fail-fast 抛 SchemaVersionError(不算 _CORRUPT), 不触碰 .bak
+- test_load_state_bak_recovery_passes_migration_chain: .bak 回退路径同样过迁移链, 写回文件带新版本章
+- test_materialize_state_migration: 物化方法: 无迁移/描述为空不落盘, dry-run 仅内存, 正常路径落盘新版本
+- test_state_migration_materialize_is_wired_in_run: 接线守阵: 物化必须挂在 run() 的 _load_state() 之后
 """
 import json
 import os
@@ -44,8 +49,9 @@ from unittest import mock
 
 import pytest
 
-from auto_qb.infra import utils
+from auto_qb.infra import utils, versioning
 from auto_qb.core.mixins import rule_engine
+from auto_qb.infra.errors import SchemaVersionError
 from auto_qb.rules.base import Rule
 from auto_qb.core.taskqueue import FINISHED, REQUEUE, Task
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
@@ -105,7 +111,8 @@ def test_load_state_corrupt_falls_back_to_bak():
         mgr.save_state()  # 第一版: state.json=first, 无 .bak(无旧文件不凭空造)
         mgr.state = {"exec_history": {"r:h": {"ts": 2.0}}, "skip_check_day": "2026-09-21"}
         mgr.save_state()  # 第二版: .bak=first, state.json=second
-        assert json.loads(open(bak_file, encoding="utf-8").read()) == first
+        # save_state 写前盖 schema_version 章(计划 26-09-26-0506), 两版文件都带版本标记
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == {**first, "schema_version": 1}
 
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")  # 模拟磁盘/外部改写造成的损坏
@@ -113,12 +120,12 @@ def test_load_state_corrupt_falls_back_to_bak():
              mock.patch.object(rule_engine.logger, "info") as info:
             got = mgr._load_state()
 
-        assert got == first, "损坏时应回退到 .bak 的内容, 而不是静默清空"
+        assert got == {**first, "schema_version": 1}, "损坏时应回退到 .bak 的内容, 而不是静默清空"
         assert any("损坏" in c[0][0] for c in warn.call_args_list), "损坏必须留 WARNING(此前是完全静默)"
         assert any("备份" in c[0][0] for c in info.call_args_list), "用了备份要记 INFO 便于事后核对"
-        # 自愈: 主文件已修好, 且 .bak 仍是那份好备份(没被损坏内容盖掉)
-        assert json.loads(open(state_file, encoding="utf-8").read()) == first
-        assert json.loads(open(bak_file, encoding="utf-8").read()) == first
+        # 自愈: 主文件已修好(带版本章), 且 .bak 仍是那份好备份(没被损坏内容盖掉)
+        assert json.loads(open(state_file, encoding="utf-8").read()) == {**first, "schema_version": 1}
+        assert json.loads(open(bak_file, encoding="utf-8").read()) == {**first, "schema_version": 1}
 
 
 def test_load_state_corrupt_without_backup_warns():
@@ -162,8 +169,91 @@ def test_load_state_recovered_writeback_failure_is_nonfatal():
         with mock.patch.object(rule_engine.utils, "atomic_write", side_effect=OSError("disk full")), \
              mock.patch.object(rule_engine.logger, "warning") as warn:
             got = mgr._load_state()
-        assert got == {"exec_history": {"r:h": {"ts": 1.0}}}, "写回失败不能把已恢复出的状态也搭进去"
+        assert got == {"exec_history": {"r:h": {"ts": 1.0}}, "schema_version": 1}, \
+            "写回失败不能把已恢复出的状态也搭进去(.bak 由 save_state 写出, 自带版本章)"
         assert any("写回" in c[0][0] for c in warn.call_args_list), "写回失败要留痕"
+
+
+def test_load_state_no_version_field_then_save_stamps():
+    """schema 版本链(计划 26-09-26-0506): 旧格式文件(无字段)按 v1 加载成功; save 后文件带版本章"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}}, f)  # 存量文件: 无 schema_version
+        mgr = make_manager(state_file)
+        assert mgr._load_state() == {"exec_history": {"k": 1}}, "字段缺失 = v1, 正常加载"
+        mgr.state = {"exec_history": {"k": 1}}
+        mgr.save_state()
+        assert json.loads(open(state_file, encoding="utf-8").read()) == {
+            "exec_history": {
+                "k": 1
+            },
+            "schema_version": 1,
+        }, "写点统一盖版本章"
+
+
+def test_load_state_future_version_fails_fast_keeps_bak():
+    """未来版本 fail-fast: 抛 SchemaVersionError(不算 _CORRUPT, 不触发 .bak 回退), 现场保留"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr.state = {"exec_history": {"k": 1}}
+        mgr.save_state()
+        mgr.state = {"exec_history": {"k": 2}}
+        mgr.save_state()  # 造出 .bak
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump({"schema_version": 99, "exec_history": {"k": 9}}, f)
+        with pytest.raises(SchemaVersionError):
+            mgr._load_state()
+        # 主文件原样保留(留证); .bak 未被"回退"写坏 —— 备份里也是同一体系, 回退没有意义
+        assert json.loads(open(state_file, encoding="utf-8").read())["schema_version"] == 99
+        assert json.loads(open(state_file + utils.BACKUP_SUFFIX, encoding="utf-8").read())["schema_version"] == 1
+
+
+def test_load_state_bak_recovery_passes_migration_chain(monkeypatch):
+    """.bak 回退路径同样过迁移链: 备份是旧版本 -> 内存迁移 + 写回的新文件带新版本章"""
+    def step_1_2(d):
+        return {**d, "v2": True}
+
+    monkeypatch.setitem(versioning.CURRENT_VERSIONS, "state", 2)
+    monkeypatch.setitem(versioning.MIGRATIONS, "state", {1: step_1_2})
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")  # 主文件损坏
+        with open(bak_file, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}}, f)  # 备份是旧版本(无字段 = v1)
+        mgr = make_manager(state_file)
+        got = mgr._load_state()
+        assert got["v2"] is True and got["schema_version"] == 2, "备份恢复出的状态也必须过链"
+        assert json.loads(open(state_file, encoding="utf-8").read())["schema_version"] == 2, "自愈写回带新版本章"
+
+
+def test_materialize_state_migration():
+    """物化方法: 描述为空(无迁移)不落盘; dry-run 仅内存生效; 正常路径落盘并带版本章"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr._materialize_state_migration(dry_run=False)
+        assert not os.path.exists(state_file), "无迁移不得落盘(启动即无意义重写)"
+        mgr._state_migration_desc = "v1→v2"
+        mgr._materialize_state_migration(dry_run=True)
+        assert not os.path.exists(state_file), "dry-run 仅内存生效, 不落盘"
+        mgr._materialize_state_migration(dry_run=False)
+        assert json.loads(open(state_file, encoding="utf-8").read())["schema_version"] == 1
+
+
+def test_state_migration_materialize_is_wired_in_run():
+    """接线守阵: 物化必须挂在 run() 的 `self.state = self._load_state()` 之后 —— 加载才有迁移描述"""
+    import inspect
+
+    from auto_qb.core.qbmanager import QbManager
+
+    src = inspect.getsource(QbManager.run)
+    i_load = src.find("self._load_state()")
+    i_mat = src.find("_materialize_state_migration")
+    assert i_load >= 0 and i_mat > i_load, "物化必须在加载之后(run() 内, 已持锁)"
 
 
 def test_cleanup_orphan_tmp_removes_only_state_leftovers():

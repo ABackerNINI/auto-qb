@@ -17,12 +17,15 @@
 - test_corrupt_file_without_backup_warns_once: 无备份 -> 空数据 + 同一坏文件只告警一次
 - test_repeated_read_failure_does_not_rewarn: 坏文件挪不走(被占用)时也不逐轮重报(降 DEBUG)
 - test_schema_mismatch_is_not_quarantined: schema 不符是版本迁移, 不挪走也不从备份猜
+- test_schema_version_old_migrates_and_materializes_on_commit: 旧版本沿链迁移(旧迁新拒), 随下次 commit 物化新版本
+- test_schema_migration_logs_once: 迁移 INFO 只报一次(读路径含无锁只读, 防通知轰炸)
 """
 import json
 import logging
 
 import pytest
 
+from auto_qb.infra import versioning
 from auto_qb.hr.model import (
     HrDownloaded,
     HrDlFail,
@@ -293,3 +296,36 @@ def test_schema_mismatch_is_not_quarantined(tmp_path):
         assert session.data.index == {}
     assert (tmp_path / "old.json").exists()
     assert not list(tmp_path.glob("old.json.bad-*"))
+
+
+def test_schema_version_old_migrates_and_materializes_on_commit(tmp_path, monkeypatch):
+    """旧版本沿链迁移(计划 26-09-26-0506「旧迁新拒」): 内存生效, 随下次 commit 物化新版本"""
+    def step_1_2(raw):
+        assert raw["schema_version"] == 1, "迁移函数拿到的版本章还是旧级别(框架逐级盖章)"
+        return {**raw, "index": raw.get("index") or []}
+
+    monkeypatch.setitem(versioning.CURRENT_VERSIONS, "hr_site", 2)
+    monkeypatch.setitem(versioning.MIGRATIONS, "hr_site", {1: step_1_2})
+    (tmp_path / "old.json").write_text(json.dumps({"schema_version": 1, "index": []}), encoding="utf-8")
+    store = HrSiteStore("old", str(tmp_path))
+    with store.hold() as session:
+        assert session.read_error is None, "旧版本应迁移后正常解析, 不再报「不符即拒」"
+        assert session.commit(now=1000.0) == "written"
+    data, err = store.read_unlocked()
+    assert err is None and data.schema_version == 2, "迁移结果随 commit 物化(文件已升级到新版本)"
+    assert json.loads((tmp_path / "old.json").read_text(encoding="utf-8"))["schema_version"] == 2
+
+
+def test_schema_migration_logs_once(tmp_path, monkeypatch, caplog):
+    """迁移完成 INFO 只报一次 —— 无锁只读路径也会解析旧文件, 逐轮重报等于通知轰炸"""
+
+    monkeypatch.setitem(versioning.CURRENT_VERSIONS, "hr_site", 2)
+    monkeypatch.setitem(versioning.MIGRATIONS, "hr_site", {1: lambda raw: {**raw, "index": []}})
+    (tmp_path / "old.json").write_text(json.dumps({"schema_version": 1, "index": []}), encoding="utf-8")
+    store = HrSiteStore("old", str(tmp_path))
+    with caplog.at_level(logging.INFO, logger="auto_qb.hr.store"):
+        for _ in range(3):
+            data, err = store.read_unlocked()
+            assert err is None
+    infos = [r for r in caplog.records if r.levelno == logging.INFO and "已迁移" in r.getMessage()]
+    assert len(infos) == 1, f"迁移 INFO 只报一次: {[i.getMessage() for i in infos]}"

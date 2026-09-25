@@ -3,7 +3,7 @@
 > 摘要: `baseline-history.md` 触顶后外迁的**较老一段**流水(append-only, 内容逐字未改); 新条目仍追加到主文件。
 > 触发: 基线历史增量, 这个数字是怎么来的, 老流水归档
 
-> 主文件: [../baseline-history.md](../baseline-history.md)(只保留最近 ≤ 16,000 字符)
+> 主文件: [../baseline.md](../baseline.md)(原 baseline-history.md 已切片化为 testing/baselines/)
 > 本文件 = **较新那一段**归档; 更老的见 [baseline-history-old.md](baseline-history-old.md)。
 > ❗链接已在切切时重写过一遍(`attachments/` 前缀已去掉) —— 否则在当前目录就是坏链。
 

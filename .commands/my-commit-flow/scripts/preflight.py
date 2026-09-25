@@ -156,7 +156,7 @@ def sync_recipe(behind: int, ahead: int, dirty: int, overlap: list[str], fetch_c
         return (
             WARN,
             "同步路径",
-            f"已分叉(本地独有 {ahead} / 远端新 {behind}) —— 提交后按 `references/pipeline.md` 的替代路径同步, "
+            f"已分叉(本地独有 {ahead} / 远端新 {behind}) —— 按 `references/pipeline.md` 的替代路径同步合流, "
             "**别硬合**(非快进合并前先把工作区弄干净)",
         )
     ff = f"`{fetch_cmd}` + `git merge --ff-only FETCH_HEAD`"
@@ -178,6 +178,32 @@ def sync_recipe(behind: int, ahead: int, dirty: int, overlap: list[str], fetch_c
         f"③{ff} ④`git apply --3way --ignore-whitespace <patch>` ⑤`git reset -q` 变回未暂存; "
         "施回后按 `git diff --stat` 与快进前的数字逐项对账",
     )
+
+
+def behind_rows(
+    behind: int, ahead: int, phase: str, dirty: int, overlap: list[str], fetch_cmd: str
+) -> list[tuple[str, str, str]]:
+    """落后 >0 时「落后主线」相关的检查表行(纯函数, 便于自测); 合流预判要跑 git, 不在这里。
+
+    commit / push 两阶段**都是 STOP**(2026-09-26 起 commit 阶段废除旧 WARN 放行): 旧口径
+    「先提交再合流」会让收尾回写落在陈旧基线上 —— baseline.md / activeContext 切片 / 各 _index
+    是全体 clone 收尾 DoD 都要写的最热写点, 陈旧基线上写, 合并时必撞(「baseline 总是撞」的根因)。
+    """
+    if phase == "commit":
+        rows: list[tuple[str, str, str]] = [
+            (
+                STOP,
+                "落后主线",
+                f"落后 {behind} 个提交 —— **先合并远端, 再收尾回写、后提交**(回写件是全体 clone 的最热写点, "
+                "在陈旧基线上写, 合并时 baseline/切片必撞)",
+            )
+        ]
+    else:
+        rows = [(STOP, "落后主线", f"落后 {behind} 个提交 —— 先同步合流(**工作区必须干净**); 别等 push 被拒才发现")]
+    recipe = sync_recipe(behind, ahead, dirty, overlap, fetch_cmd)
+    if recipe:
+        rows.append(recipe)
+    return rows
 
 
 def remotes() -> dict[str, str]:
@@ -423,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         "--phase",
         choices=("commit", "push"),
         default="push",
-        help="commit 阶段: 落后主线只 WARN(本地提交可以, 推送前必须先同步合流); push 阶段: STOP"
+        help="commit 阶段: 落后主线也 STOP(先合并远端再提交, 收尾回写必须落在合并后的基线上); push 阶段: STOP"
     )
     parser.add_argument("--config", default=None, help=f"指定配置文件(默认 <仓库根>/{CONFIG_NAME})")
     parser.add_argument("--init", action="store_true", help="生成外置配置初稿(按仓库特征猜, 需人工确认)")
@@ -576,10 +602,13 @@ def main(argv: list[str] | None = None) -> int:
         except (RuntimeError, ValueError):
             pass  # 本地没有远端 tip 的对象(fetch 失败?) —— 保持 -1, 下面如实报"没能算出"
     if behind > 0:
-        if args.phase == "commit":
-            rows.append((WARN, "落后主线", f"落后 {behind} 个提交 —— 本地提交可以, 但**推送前必须先同步合流**(工作区要干净)"))
-        else:
-            rows.append((STOP, "落后主线", f"落后 {behind} 个提交 —— 先同步合流(**工作区必须干净**); 别等 push 被拒才发现"))
+        # 同步路径配方与 --check-started 同一份: 树干净直接快进 / 树脏走「移出→快进→施回」/
+        # 与远端改动重叠或已分叉则停下报告 —— commit 阶段也要给: 新流程要求先合并远端再收尾回写。
+        overlap: list[str] = []
+        if changed:
+            remote_files = set(git("diff", "--name-only", "HEAD", remote_sha, check=False).splitlines())
+            overlap = sorted(set(changed) & remote_files)
+        rows.extend(behind_rows(behind, ahead, args.phase, len(changed), overlap, f"git fetch {MAIN} {BRANCH}"))
         # 合流预判(只读): 把「撞不撞」提前到提交前 —— 本环境非快进合并 + 脏工作区 = 必炸,
         # 提前知道才好决定"先留备份 / 先弄干净工作区"。merge-tree 只在对象库里算合并树, 不写工作区/ref/index。
         # 对象不在库里(如 fetch 失败)时按"无法预判"处理 —— merge-tree 非 0 还有"对象缺失"这种失败模式,
@@ -627,14 +656,21 @@ def main(argv: list[str] | None = None) -> int:
     if warn:
         rows.append((WARN, "高危文件", "、".join(warn) + " —— 确认是不是用户自己的在途改动"))
 
-    # 9 闸门 —— auto = true 的直接跑(先展开、再执行), 其余列出来给人跑
+    # 9 闸门 —— auto = true 的直接跑(先展开、再执行), 其余列出来给人跑;
+    # 落后未合流时**不跑**: 合并远端后反正要重跑提交预检, 现在跑全量测试纯属白跑。
     hits = gates_for(changed, cfg["gates"])
-    gate_rows, manual, tails = run_auto_gates(hits, ctx, execute=not args.no_auto, verbose=args.verbose)
-    rows.extend(gate_rows)
-    if not hits:
-        rows.append((PASS, "提交前闸门", "未命中配置里的闸门(仍按改动面自行判断)"))
-    elif args.no_auto:
-        rows.append((WARN, "提交前闸门", f"命中 {len(hits)} 条闸门, --no-auto 只列不跑"))
+    gate_rows: list[tuple[str, str, str]] = []
+    manual: list[str] = []
+    tails: list[tuple[str, str]] = []
+    if behind > 0:
+        rows.append((WARN, "提交前闸门", f"命中 {len(hits)} 条闸门但落后未合流, 先不跑 —— 按「同步路径」合并远端后重跑"))
+    else:
+        gate_rows, manual, tails = run_auto_gates(hits, ctx, execute=not args.no_auto, verbose=args.verbose)
+        rows.extend(gate_rows)
+        if not hits:
+            rows.append((PASS, "提交前闸门", "未命中配置里的闸门(仍按改动面自行判断)"))
+        elif args.no_auto:
+            rows.append((WARN, "提交前闸门", f"命中 {len(hits)} 条闸门, --no-auto 只列不跑"))
 
     # 10 平台差异
     if any(h in " ".join(changed) for h in HINTS):

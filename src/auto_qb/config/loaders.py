@@ -9,7 +9,9 @@ from typing import List, Optional
 import yaml
 
 from ..core import curves
+from ..infra.errors import SchemaVersionError
 from ..infra.utils import MatchPattern, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
+from ..infra.versioning import migrate
 from .errors import ConfigError
 from .models import (
     AddEpisodeTagsConfig,
@@ -332,6 +334,32 @@ def _parse_curve_points(raw_list, direction_key: str) -> List[CurvePoint]:
     return points
 
 
+def _migrate_config_schema(data: dict, config_path: str) -> None:
+    """配置 schema 版本迁移分派(计划 26-09-26-0506): 校验前沿链迁到当前版本, 就地生效
+
+    版本键在 config: 块内(config.schema_version), 缺失 = v1 存量口径 —— 存量配置零迁移成本。
+    BaseLoader 标量全为字符串, 先归一成 int 再进版本检测(归一失败保留原值, 由 detect_version
+    报「必须是整数」)。比程序新的版本 -> ConfigError 报出两个版本号(与校验聚合同一干净出口);
+    迁移只改内存数据, **运行期不主动写回** —— 磁盘物化发生在下一次 WebUI 保存(writer 统一盖章)。
+    """
+    if not isinstance(data, dict):
+        return  # 空文件/根节点非字典: 交给 validate_config 报错
+    cfg = data.get("config")
+    if not isinstance(cfg, dict):
+        return
+    if "schema_version" in cfg:
+        try:
+            cfg["schema_version"] = int(str(cfg["schema_version"]).strip())
+        except (TypeError, ValueError):
+            pass  # 保留原值: detect_version 会以原值的形状报错
+    try:
+        cfg, desc = migrate("config", cfg)
+    except SchemaVersionError as e:
+        raise ConfigError(f"配置 schema 版本问题({config_path}): {e}") from e
+    if desc:
+        logging.getLogger(__name__).info(f"配置 schema 已迁移 {desc}(内存生效, 下次 WebUI 保存时写回)")
+
+
 def load_config(config_path: str) -> Config:
     """加载并解析配置文件; 任何配置问题统一抛 ConfigError(文件读取/YAML 解析/校验失败)"""
     try:
@@ -344,6 +372,7 @@ def load_config(config_path: str) -> Config:
 
     # 显式留空的键视为未配置(走默认值), 再全量校验(聚合全部错误一次性反馈, fail-fast)
     data = _strip_none(data)
+    _migrate_config_schema(data, config_path)
     errors = validate_config(data)
     if errors:
         detail = "\n".join(f"  [{i + 1}] {e}" for i, e in enumerate(errors))

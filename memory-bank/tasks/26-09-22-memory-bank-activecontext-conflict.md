@@ -71,7 +71,7 @@ v1.1 与初稿的三处差异(2026-09-23 与用户确议, 理由见计划 §04):
     它们原本都教「读 activeContext.md 并往里写状态」, 不改就是决策点与生效点错位(库里记过的反模式)。
   - **实测**: 全量 `1189 passed + 1 skipped + 1 failed` / 91% / 143.77s; 那条 failed 是**既有红**
     (`tasks/_index.md` 12,261 > 12,000, 本轮未碰该文件), 已按范围守恒保留并记进
-    [testing/baseline.md](../testing/baseline.md) 与 [baseline-history.md](../testing/baseline-history.md)。
+    [testing/baseline.md](../testing/baseline.md) 与 [baseline-history.md(已切片化为 baselines/)](../testing/baseline.md)。
     闸门全绿: `gen_kb_index --check` / `gen_tasks_index --check` / `check_doc_links.py` /
     `check_context_caps.py` / `check_kb_structure.py`(仅上述既有红那 1 项)。
   - **新坑**: 改单文件 HTML 计划文档时字符串替换吞掉 `</p>`(浏览器静默容错) →

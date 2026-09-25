@@ -131,7 +131,14 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"本地没有远端 tip({remote_tip[:8]})的对象(fetch 失败?) —— 无法判断是否落后, 不推。\n")
         return 1
     if int(behind_ahead[0]) > 0:
-        sys.stderr.write(f"落后远端 {behind_ahead[0]} 个提交 —— 先 `git merge --ff-only` 同步合流(工作区必须干净), 不推。\n")
+        behind_n, ahead_n = int(behind_ahead[0]), int(behind_ahead[1])
+        if ahead_n > 0:  # 本地已有提交 → 快进必然失败, 别把人引去撞墙
+            sys.stderr.write(
+                f"已分叉(本地领先 {ahead_n} / 远端新 {behind_n}) —— `merge --ff-only` 必然失败, "
+                f"按 references/pipeline.md 的替代路径合流后重新提交, 不推。\n"
+            )
+        else:
+            sys.stderr.write(f"落后远端 {behind_n} 个提交 —— 先 `git merge --ff-only` 同步合流(工作区必须干净), 不推。\n")
         return 1
     print(f"  远端 {remote_tip[:8]}: 齐平(本地领先 {behind_ahead[1]} 个)")
 

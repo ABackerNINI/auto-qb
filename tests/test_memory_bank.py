@@ -31,7 +31,7 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 `scripts/check_doc_links.py`)
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
-- test_kb_scripts_import_cleanly: skill 的 5 个脚本都能 import
+- test_kb_scripts_import_cleanly: skill 的 6 个脚本都能 import
 - test_gen_cmd_hints_name_real_tasks: 生成物的"怎么重建"提示必须指向真能重建它的命令(`gen_cmd` 按脚本查表 + `kb.index` 覆盖面 ⊇ 闸门判红的生成物集合; 2026-09-24 `_doc-map.md` 报错文案指错命令的机检)
 """
 
@@ -375,10 +375,12 @@ def test_doc_links_are_not_broken() -> None:
 
 
 def test_kb_scripts_import_cleanly() -> None:
-    """skill 的 5 个脚本都能被 import —— 模块级错误在这里当场红, 不必等闸门跑 `--help`。"""
+    """skill 的 6 个脚本都能被 import —— 模块级错误在这里当场红, 不必等闸门跑 `--help`。"""
     if str(SKILL_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SKILL_SCRIPTS))
-    for name in ("_common", "gen_tasks_index", "gen_kb_index", "check_kb_structure", "gen_active_recent"):
+    for name in (
+        "_common", "gen_tasks_index", "gen_kb_index", "check_kb_structure", "gen_active_recent", "gen_baseline_recent"
+    ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
         __import__(name)

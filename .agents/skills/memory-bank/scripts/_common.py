@@ -37,8 +37,11 @@ CAP_POLICY: dict[str, int] = {
     "volatile": 12000,  # 易变层 (activeContext.md) —— 会话开始必读, 硬顶
     # 目录化后原位置只留 ≤1 KB 存根, 到时这一档要降到 1,000 —— 见计划 W1, 别提前改 (会让现有文件当场报红)
     "slice": 6000,  # activeContext/ 会话切片 —— per-会话 / per-专题, 天然比整份易变层小
+    # testing/baselines/ 基线切片 —— 不可变的一次性快照, 单条本就该短; 超了说明把逐轮流水又堆回来了
+    # (明细下沉对应任务档案, 不是调 cap)。
+    "baseline-slice": 4000,
     "task": 24000,  # 任务档案
-    # append-only 历史流水 (如 `testing/baseline-history.md`) —— **只增不改**, 每次改动追一条。
+    # append-only 历史流水 (如 `*-history.md`) —— **只增不改**, 每次改动追一条。
     # 与任务档案同档: 它按设计就会一直长, 给一个"涨到多少该轮转"的上限, 而不是假装它是一屏文档。
     # 轮转策略见下方 `LOG_ROTATE_KEEP` —— 触顶后按它切, 不要只搬"最老的一条"。
     "log": 24000,
@@ -179,6 +182,7 @@ GEN_CMD_BY_SCRIPT = {
     "gen_docs_index.py": "commands run kb.index",
     # 只校验不写文件的脚本 —— 它的"重跑"是校验命令, 不是重建命令
     "gen_active_recent.py": "commands run kb.active --check",
+    "gen_baseline_recent.py": "commands run kb.baseline --check",
 }
 
 
@@ -252,6 +256,8 @@ def role_of(rel: str) -> str:
         return "volatile"
     if rel.startswith(f"memory-bank/{SLICE_DIR}/"):
         return "slice"
+    if rel.startswith("memory-bank/testing/baselines/"):
+        return "baseline-slice"
     if rel.startswith("memory-bank/tasks/"):
         return "task"
     if rel.endswith("-history.md"):

@@ -368,6 +368,9 @@ class QbManager(
                     return
                 logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
             self.state = self._load_state()
+            # schema 迁移物化(计划 26-09-26-0506): 磁盘版本 < CURRENT 时立即落盘一次新版本。
+            # 此处已持锁(与 __init__ 的 _cleanup_orphan_tmp 同判据); __init__ 的早期加载只做内存迁移。
+            self._materialize_state_migration(dry_run)
             # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
             self._next_state_flush_at = time.time() + max(self.config.state_save_interval, 0.0)
             self._load_rules()

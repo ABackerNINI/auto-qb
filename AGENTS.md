@@ -15,7 +15,7 @@
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
 - **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `git fetch gitee develop` (远端与分支名**必须写**; 远端名不同先 `git remote -v` 确认 Gitee 主线); 落后与否只认 `git ls-remote gitee develop` 对比本地 HEAD (`status -sb` 的 ahead/behind 是快照, 会给假绿灯); 纯落后且工作区干净 → `git merge --ff-only FETCH_HEAD` 快进; 树脏 → **停下报告, 禁止自行清理**; 已分叉 (本地有独有提交) → 直接开工, 提交时按 my-commit-flow 合流; **禁止在落后分支上改代码** (机检: 开工自检 `commands run my-commit-flow.sync` —— 只读, 结果贴进回复; 提交/推送时跑完整 preflight)。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
-- **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext 切片(已完成条目**迁出**到 progress) / 达阈值则立档 + `commands run kb.index` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `commands run test.full` 并把实测数字记进 `testing/baseline.md` / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `commands run kb.index`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
+- **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext 切片(已完成条目**迁出**到 progress) / 达阈值则立档 + `commands run kb.index` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `commands run test.full` 并新建基线切片记实测数字(`testing/baselines/`, 体例见 `testing/baseline.md` 口径段) / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `commands run kb.index`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 
 ## 产出口径
@@ -55,7 +55,7 @@ PATH 那份用户级、跨 clone 共享 —— 装过一次就一直命中, 多�
 按 SKILL.md 的收录协议自己 `add` 进包 —— 命令集靠这个长大, 不是靠人维护。
 
 ```text
-commands run test.full    # 全量测试 (基线数字见 memory-bank/testing/baseline.md 顶部)
+commands run test.full    # 全量测试 (最新基线: commands run kb.baseline 列最近 3 条; 排障 --all)
 commands run test.quick   # 快速迭代, 跳过覆盖率报表
 commands run dev.run -- config.yml --dry-run   # 真机跑主程序 (需真实 qB; 一律先 --dry-run)
 commands run dev.fmt -- <改过的 .py>           # 格式化 (.style.yapf: facebook, 列宽 120)
@@ -88,12 +88,11 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## 提交 / PR
 
-> **步骤与机检一律走 task id**(不是文档): 开工同步 `my-commit-flow.sync` → 逐路径暂存并提交 `ship.commit`
-> (**内含预检 + 闸门 + 提交后核 ref 三处**, 所以**不要再单独跑一遍 preflight**; 只有"闸门要跑在回写知识库之前"这一条才需先单独跑)→ 推 Gitee `ship.push`(内含推送前预检 + 核远端 ref + 一次 GitHub 镜像尝试)→ 查幽灵 diff。**本节只留口径, 不重复命令**; 原理与完整判据在包内 `references/`(排障才读)。
+> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①预检 `my-commit-flow.sync`, **远端有更新先按「同步路径」合并远端** → ②收尾回写文档(落在合并后的新基线上 —— 回写件是全体 clone 最热写点, 陈旧基线上写合并必撞) → ③`ship.commit`(**内含预检 + 闸门 + 核 ref 三处**; 落后未合流被预检 STOP) → ④推 Gitee `ship.push`(推送前预检 + 核远端 ref + 一次 GitHub 镜像尝试) → ⑤查幽灵 diff。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
 
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令**, "继续 / 接着做 / ok / 你看着办"一律不算。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。
 - **推送顺序固定**: 先推 Gitee (必须成功) → 核远端 ref == 本地 → 再**尝试一次** GitHub 直连; 失败**只如实报告一次**, 不重试 / 不换代理 / 不改走 SSH / 不回滚改写 Gitee 已完成的推送。
 - **提交信息 = gitmoji + 中文**: 首行 `<gitmoji> <中文一句话概述>`, 空一行后写动机 / 取舍 / 影响面 / 实测数字; 小改只写首行。**数字必须是提交那一刻实测的**。选哪个 emoji 走 [gitmoji skill](.agents/skills/gitmoji/SKILL.md)。
-- **提交前先收尾**: 收到"提交"先按「会话协议 · 收尾」跑完, 回写文件**随主提交一并暂存** —— 不推完再补一笔 (已推送的提交不能 amend + 强推)。
+- **先合并远端, 再收尾** (2026-09-26 定稿, 治「baseline 总是撞」): 收尾回写 (基线切片 / activeContext 切片 / 各 _index) 必须落在**合并远端之后**的新基线上 —— 预检落后即按「同步路径」合并, 再进入收尾; 回写文件**随主提交一并暂存**, 不推完再补一笔 (已推送的提交不能 amend + 强推)。
 - **红线与闸门清单外置在 `.commands/my-commit-flow/.my-commit-flow.toml`** (包脚本强制读取, 缺了就停手引导生成)。
