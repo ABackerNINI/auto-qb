@@ -385,6 +385,14 @@
 .hb-blk-hd .bh-n { font-size: 11.5px; color: var(--fg-dim); }
 .hb-blk-hd .bh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 
+/* 段内嵌套块(section 可选段 / group object 段 / subcard 相关设置子卡): 由 hub-field 递归渲染,
+   比外层块缩进一级以表达从属关系。
+   ⚠ 2026-09-25: 这三个分支曾随经典设置页模板一起被删, 段项于是落进叶子字段的 <input v-else>,
+   值被 String(对象) 成 "[object Object]" —— 嵌套块要靠这条 margin 才看得出是外层块的下级。 */
+.hb-blk.hb-sub { margin: 10px 14px 12px; }
+.hb-blk.hb-sub.hb-inactive { opacity: .55; }
+.hb-blk-hd.hb-sub-toggle { cursor: pointer; user-select: none; }
+
 /* 行: 标签 | 控件 | ?(说明浮窗触发点) */
 .hb-row {
   display: grid;

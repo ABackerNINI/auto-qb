@@ -84,6 +84,7 @@
 - test_api_state_view_scoped_payload: P1-1 按视图回传(只回当前视图数组; 未知 view 回全部; 增量门控优先)
 - test_build_speed_totals_covers_ungrouped: 速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups(漏未归组实测少算 88.7%)
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
+- test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcBadge/hrDurTitle、两套 CSS 的 hr-unk/hr-src/bulk-hr-warn 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
@@ -1458,6 +1459,55 @@ def test_frontend_expand_state_survives_view_switch():
     win = m.group(1)
     assert "if (this.expandedKey) return" not in win, ("groupWin 仍只按 expandedKey 非空退避 —— 过期的键会让行窗口永久退化成全量渲染")
     assert "this.expandedKey" in win and ".some(" in win, ("groupWin 的退避判据必须带上'展开的组确实在可见集合里'这一条")
+
+
+def test_frontend_hub_field_covers_non_leaf_items():
+    """hub-field 必须覆盖 cfgFlatten 产出的**全部**项类型 —— 缺了非叶子那三支就显示 `[object Object]`
+
+    现象与定性(2026-09-25 用户报「设置页部分设置项显示 [object Object]」):
+    `cfgFlatten` 把嵌套 object 展开成 **四种** item.type —— field(叶子) / section(可选段) /
+    group(普通 object 段) / subcard(父字段的相关设置子卡)。`tpl-hub-field` 的控件分支
+    (bool / enum / list / rules_ref / keyed_list / 数值+单位) 末尾是一个**无条件**的 `<input v-else>`,
+    值取 `cfgInputValue` → `cfgScalar` → `String(value)`: 叶子字段存的是标量没问题, 而
+    section / group / subcard 这条路径上存的是**对象**(如 `config.trackers.<站点>.hr`),
+    `String({...})` 恰好是 "[object Object]" ⇒ 站点页「HR 规则」「HR 在线核实」与规则页
+    checking 的 with_reference / without_reference 两个分支整行都显示这个串; 更糟的是**随手一改
+    就把配置写成这个字符串**, 保存时后端校验才报错。
+
+    根因: 经典设置页的 `tpl-ce-field` 有这三支, 清理死代码时随模板一起被删, 而 `cfgFlatten`
+    仍会产出这三类项, 站点 / 规则两个专段又把扁平结果直接交给 hub-field(普通分区页的
+    `hubBlocks` 只挑 `type === "field"`, 所以只有这两个专段暴露出来)。
+
+    守阵两条:
+    ① 两套皮肤的模板都必须**逐个**判 `item.type === '<非叶子类型>'`, 类型名单从 config_editor.js
+       的 cfgFlatten 实读(将来新增类型忘了加分支 → 立刻红, 不靠人记);
+    ② 叶子分支必须是链尾的 `v-else` —— 否则非叶子项会有绕回兜底 input 的路径。
+    """
+    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    kinds = set(re.findall(r'type:\s*"(field|section|group|subcard)"', editor))
+    assert "field" in kinds, "config_editor.js 里找不到 cfgFlatten 的 type: \"field\"(改名/挪走了? 同步本守阵)"
+    non_leaf = sorted(k for k in kinds if k != "field")
+    assert non_leaf, ("config_editor.js 的 cfgFlatten 不再产出任何非叶子项类型 —— "
+                      "若嵌套段真的取消了, 本守阵该跟着撤, 别让它空转")
+
+    for skin in ("prism", "atlas"):
+        html = open(os.path.join(STATIC_ROOT, skin, "index.html"), encoding="utf-8").read()
+        m = re.search(r'<script type="text/x-template" id="tpl-hub-field">(.*?)\n  </script>', html, re.S)
+        assert m, f"{skin}/index.html 找不到 tpl-hub-field 模板(改名/挪走了? 同步本守阵)"
+        tpl = m.group(1)
+        for kind in non_leaf:
+            assert f"item.type === '{kind}'" in tpl, (
+                f"{skin} 的 tpl-hub-field 缺 `item.type === '{kind}'` 分支 —— 该类项会落进叶子字段的"
+                "兜底 <input>, 值被 String(对象) 成 '[object Object]'(且一改就把配置写成这个串)"
+            )
+            assert "item.items" in tpl, f"{skin} 的 tpl-hub-field 未递归渲染 item.items —— 段内子字段会整段消失"
+        assert re.search(
+            r'<div\s+v-else\s+class="hb-row"', tpl
+        ), (f"{skin} 的 tpl-hub-field 叶子分支不是链尾的 <div v-else class=\"hb-row\"> —— "
+            "非叶子项仍有掉进兜底 input 的路径")
+        assert 'v-if="item.type === \'section\'"' in tpl, (
+            f"{skin} 的 tpl-hub-field 首个分支必须带 v-if(链头), 否则 v-else-if 链不成立"
+        )
 
 
 def test_frontend_statusbar_speed_reads_server_totals():
