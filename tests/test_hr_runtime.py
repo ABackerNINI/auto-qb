@@ -30,6 +30,7 @@
 - test_restart_after_stop_works: 关停再启动能重新正常工作(叫停标记不得残留)
 - test_start_stop_messages_are_info_not_warning: 启动/关闭类消息一律 INFO(它们会被 notify 推成系统通知)
 - test_apply_remount_message_is_info: 热重载重挂端点也是预期动作, 同样只记 INFO
+- test_site_origins_served_live_for_extension: /api/hr/sites 按配置现派生授权清单, 热加站点即生效且 mode=off 不出现
 """
 import logging
 import socket
@@ -451,3 +452,35 @@ def test_judge_passes_completed_age_limit(tmp_path):
     assert got is not None and got.identity is HrIdentity.EXEMPT and got.is_hr is False
     normal = runtime.judge("pt.example.com", (H1, ""), anchor=old, now=now)
     assert normal.identity is HrIdentity.HR, "缺省 0 = 关闭, 老种子照常按清单命中判"
+
+
+def test_site_origins_served_live_for_extension(tmp_path):
+    """扩展的「勾选站点」数据源: /api/hr/sites 按配置现派生站点授权清单, 热加站点不用重绑端点"""
+    from auto_qb.hr.channel import TOKEN_HEADER
+    runtime = make_runtime(tmp_path, enabled=True, channel=True, port=0)
+    runtime.start()
+    try:
+        assert runtime._site_origins() == [("pt.example.com", "https://pt.example.com/*")]
+        # 热重载加站点不改端点监听身份(不重绑) => 清单必须每次现读, 否则新站点漏在授权清单外
+        runtime.config.trackers["pt2.example.com"] = TrackerConfig(
+            name="pt2.example.com",
+            domains=["pt2.example.com"],
+            hr_check=SiteHrCheckConfig(mode="all", hr_page_url="http://pt2.example.com/myhr.php"),
+        )
+        got = dict(runtime._site_origins())
+        assert got == {
+            "pt.example.com": "https://pt.example.com/*",
+            "pt2.example.com": "http://pt2.example.com/*",
+        }
+        # 走端点路由同样拿到(鉴权/白名单由 server 层自己钉, 这里只验数据接上了)
+        status, _headers, body = runtime.endpoint.route("GET", "/api/hr/sites", {TOKEN_HEADER: runtime.token})
+        import json as _json
+        assert status == 200
+        payload = _json.loads(body)
+        assert payload["error"] == ""
+        assert {s["site"] for s in payload["sites"]} == {"pt.example.com", "pt2.example.com"}
+        # mode=off 的站点不该出现在授权清单里(扩展取不到它, 也不需要它的权限)
+        runtime.config.trackers["pt2.example.com"].hr_check.mode = "off"
+        assert [s for s, _o in runtime._site_origins()] == ["pt.example.com"]
+    finally:
+        runtime.stop()

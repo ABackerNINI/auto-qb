@@ -16,6 +16,9 @@
 - test_protocol_matches_backend: 端点路径 / 鉴权头 / 回传字段名与 `hr.channel` + `HrResult` 一致(改一边漏改另一边必红)
 - test_options_normalizes_before_browser_api: 站点源与端点先归一化再进权限/存储 API(本次报错的形态)
 - test_options_rejections_are_always_handled: 选项页不得留下裸 Promise 拒绝(兜底 unhandledrejection + 逐个 catch)
+- test_options_site_fetch_matches_backend: 站点授权清单走 GET /api/hr/sites, 路径/鉴权头与 hr.channel 同源
+- test_options_swiss_wiring: 瑞士网格终态(风格选型 A)接线齐全(两表/表单授权/折叠排障区), 三档共存机制不回潮
+- test_background_events_ring_dual_write: 真跑 background.js —— 六类场景双写结构化事件环, tag/host/kind/ms/bytes 契约钉死
 - test_page_fetch_is_headless_when_html_looks_fine: 直取能拿到页面时**不得开任何窗口/标签**(用户实报两轮)
 - test_page_fetch_renders_offscreen_only_when_needed: 只在内容不像页面时才升级, 且用**离屏 popup 窗口**
 - test_page_fetch_renders_when_direct_fetch_hits_login_page: 直取拿到登录页也要升级(SameSite 安全网)
@@ -41,7 +44,7 @@ import subprocess
 
 import pytest
 
-from auto_qb.hr.channel import API_RESULT, API_TASKS, TOKEN_HEADER, HrChannelError, HrResult
+from auto_qb.hr.channel import API_RESULT, API_SITES, API_TASKS, TOKEN_HEADER, HrChannelError, HrResult
 
 EXT_DIR = pathlib.Path(__file__).resolve().parents[1] / "extensions" / "hr-fetch-proxy"
 MANIFEST = EXT_DIR / "manifest.json"
@@ -255,6 +258,41 @@ def test_options_rejections_are_always_handled():
     assert "unhandledrejection" in text, "要有兜底: 漏网的拒绝也得落到状态栏"
     assert text.count(".catch(") >= 5, "四个按钮 + 初始 load 都要 catch"
     assert "try {" in text, "授权/自测这类浏览器 API 调用必须包 try(它们会同步抛)"
+
+
+def test_options_site_fetch_matches_backend():
+    """站点授权清单走 GET /api/hr/sites: 路径与鉴权头必须与 hr.channel 同源(改一边漏改另一边必红)"""
+    js = _read(OPTIONS_JS)
+    assert f'const API_SITES = "{API_SITES}"' in js, "选项页的站点清单路径常量要与后端 hr.channel.API_SITES 一致"
+    assert "X-Hr-Token" in js, "拉站点清单要带与拉任务同款的鉴权头"
+
+
+def test_options_swiss_wiring():
+    """瑞士网格终态(风格选型 A)的接线: 两表 + 表单授权 + 折叠排障区齐全, 容器在脚本之前
+
+    2026-09-26 用户澄清「三模板」是三套独立风格选一套实施(非共存)—— 选定 A 后本条守阵随之改钉
+    单一风格终态, 并钉住「共存实现不回潮」(三档切换机制不得再出现)。
+    """
+    html = _read(OPTIONS_HTML)
+    js = _read(OPTIONS_JS)
+    for el in (
+        "siteTable", "eventTable", "siteChecks", "fetchSites", "selectAllSites", "grantChecked", "instList",
+        "addInstance", "newInstance", "manualOrigins", "origins", "instances", "advLogs", "logView", "logMax",
+        "logLevel", "logFilter", "caps", "status", "enabled"
+    ):
+        assert el in html, f"选项页缺 {el}"
+    for el in ("siteTable", "eventTable", "advLogs", "logView", "origins", "instances"):
+        assert html.index(el) < html.index("options.js"), f"{el} 容器要在脚本之前"
+    for el in (
+        "refreshTables", "renderSiteStatus", "renderEvents", "scheduleTablesRender", "fetchSites", "grantChecked",
+        "API_SITES", "SITE_CAPS"
+    ):
+        assert el in js, f"options.js 缺 {el} 的落点(按钮点了没反应)"
+    # 单一风格定案: 三档共存的机制(uiTemplate/模板切换)不得回潮
+    assert "uiTemplate" not in js and "tplSimple" not in html and "tplStandard" not in html, \
+        "风格已选定 A(瑞士网格), 三档共存机制不该再回来"
+    # 两表数据源是后台双写的结构化事件环, 不是解析日志文案
+    assert "events" in js and "siteLedger" in js
 
 
 # ---------- 页面取数: 不打扰用户(实报两轮: 先「开新标签」后「开新窗口」) ----------
@@ -634,6 +672,93 @@ def test_extension_torrent_login_page_detected():
     assert payload.get("ok") is False
     assert payload.get("kind") == "login-page", f"必须标成登录页让后端免计失败: {payload}"
     assert "登录" in payload.get("error", ""), payload.get("error")
+
+
+#: 事件环(选项页两表的数据源)守阵: 真跑 background.js 走六类场景 —— 页面成功×2 / HTTP 失败 /
+#: .torrent 成功 / .torrent 登录页 / 配额让位 —— 断言每类都双写出结构化事件且字段齐全。
+_NODE_RUN_EVENTS = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const PAGE_URL = 'https://pt.example.com/myhr.php?hrtype=A';
+const DL_URL = 'https://pt.example.com/download.php?id=313852';
+const PAGE_WITH_TABLE = '<html><body><table class="main"><tr><td>HR</td></tr></table></body></html>';
+const LOGIN_HTML = '<!doctype html><html><body><form><input type="password"></form></body></html>';
+const BIN = new Uint8Array(2048).fill(65);
+let mode = 'page-ok';
+const store = {};
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
+  permissions: { onAdded: noop },
+  storage: { onChanged: noop, local: {   // onChanged: background.js 顶层注册了「设置联动 / 外部清空采纳」监听
+    get: (defaults) => {
+      const out = {};
+      for (const key of Object.keys(defaults || {})) out[key] = (key in store) ? store[key] : defaults[key];
+      return Promise.resolve(out);
+    },
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+};
+const sandbox = {
+  chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL, btoa,
+  TextDecoder, TextEncoder,
+  fetch: async () => {
+    if (mode === 'http-403') return { ok: false, status: 403 };
+    if (mode === 'torrent-ok') {
+      return { ok: true, status: 200, headers: { get: () => 'application/x-bittorrent' }, arrayBuffer: async () => BIN.buffer };
+    }
+    if (mode === 'torrent-login') {
+      const bytes = new TextEncoder().encode(LOGIN_HTML);
+      return { ok: true, status: 200, headers: { get: () => 'text/html' }, arrayBuffer: async () => bytes.buffer };
+    }
+    return { ok: true, status: 200, text: async () => PAGE_WITH_TABLE, json: async () => ({}) };
+  },
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+(async () => {
+  await sandbox.runTask({ id: 'p1', kind: 'page', url: PAGE_URL });    // ok(计 1 次访问)
+  await sandbox.runTask({ id: 'p2', kind: 'page', url: PAGE_URL });    // ok(计 2)
+  mode = 'http-403';
+  await sandbox.runTask({ id: 'p3', kind: 'page', url: PAGE_URL });    // error(计 3)
+  mode = 'torrent-ok';
+  await sandbox.runTask({ id: 't1', kind: 'torrent', url: DL_URL });   // ok(下种计数独立)
+  mode = 'torrent-login';
+  await sandbox.runTask({ id: 't2', kind: 'torrent', url: DL_URL });   // login
+  mode = 'page-ok';
+  for (let i = 0; i < 7; i++) await sandbox.requireAllowance('page', PAGE_URL);  // 计满本时访问额度(3+7=10)
+  const quota = await sandbox.runTask({ id: 'p4', kind: 'page', url: PAGE_URL }); // 第 11 次 → quota
+  await sandbox.flushEvents();
+  process.stdout.write(JSON.stringify({ quotaPayload: quota.payload, events: store.events || [] }));
+})();
+"""
+
+
+def test_background_events_ring_dual_write():
+    """选项页两张表的数据源: 后台与日志**同源双写**结构化事件环 —— 成功/失败/让位/登录页都进表
+
+    解析日志文案做表太脆, 故钉字段级契约: tag 分类(ok/quota/login/error) + host/kind/ms/bytes。
+    """
+    node = _node()
+    if not node:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    proc = _run_node([node, "-e", _NODE_RUN_EVENTS, str(BACKGROUND_JS), str(SITE_CAPS_JS)])
+    assert proc.returncode == 0, f"node 跑 background.js 的事件环场景失败: {proc.stderr.strip()}"
+    out = json.loads(proc.stdout)
+    assert out["quotaPayload"].get("kind") == "ext-quota", "第 11 次页面访问要被扩展侧硬上限挡下(场景前提)"
+    events = out["events"]
+    assert [e.get("tag") for e in events] == ["ok", "ok", "error", "ok", "login", "quota"], \
+        f"六类场景各记一条且顺序正确: {events}"
+    assert [e.get("kind") for e in events] == ["page", "page", "page", "torrent", "torrent", "page"]
+    assert all(e.get("host") == "pt.example.com" for e in events), "host 要从 URL 派生(表一按站点聚合的键)"
+    ok1 = events[0]
+    assert ok1.get("status") == 200 and ok1.get("bytes", 0) > 0 and ok1.get("ms", 0) >= 0, \
+        f"成功事件要带 HTTP/字节/耗时(表二的列): {ok1}"
+    assert "403" in events[2].get("note", ""), "失败事件要能把原因带进 note"
+    assert "HTML" in events[4].get("note", ""), "登录页事件要能看出来是要人工登录"
+    assert "本小时" in events[5].get("note", ""), "让位事件要能看出来是配额原因"
 
 
 # ---------- 运行日志(分级 + 环形上限 + 落 storage) ----------

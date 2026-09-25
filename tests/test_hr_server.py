@@ -10,6 +10,10 @@
 - test_route_rejects_wrong_token: token 不符 -> 401(常数时间比较)
 - test_route_rejects_web_origin: 普通网页 origin -> 403 且不给 CORS 头(纵深防御)
 - test_route_tasks_returns_batch_with_token: 带 token GET 拿到任务清单 + CORS 回显 origin
+- test_route_sites_lists_configured_sites: 带 token GET /api/hr/sites 拿到站点授权清单(空 origin 条目丢弃)
+- test_route_sites_same_gates_as_tasks: 站点清单与任务清单同一道门(无 token 401 / 网页 origin 403 / 不算接触)
+- test_route_sites_survives_sites_fn_error: sites_fn 抛异常 -> 200 + 空清单 + error(不打死端点线程)
+- test_route_sites_empty_when_no_sites_fn: 未接 sites_fn 时空清单不报错(向后兼容)
 - test_route_result_accepted_and_wakes_waiter: 带 token POST 结果 -> 唤醒等待方
 - test_route_result_unknown_task_is_400: 未派发过的任务 -> 400 且不入任何状态(防伪造注入)
 - test_route_result_malformed_is_400: 畸形 JSON / 畸形结果 -> 400 不崩
@@ -37,7 +41,7 @@ from http.client import HTTPConnection
 
 import pytest
 
-from auto_qb.hr.channel import API_RESULT, API_TASKS, TOKEN_HEADER, HrChannelBindError
+from auto_qb.hr.channel import API_RESULT, API_SITES, API_TASKS, TOKEN_HEADER, HrChannelBindError
 from auto_qb.hr.queue import HrTaskQueue
 from auto_qb.hr.server import HrChannelServer
 
@@ -47,13 +51,14 @@ URL = "https://pt.example.com/myhr.php?hrtype=A"
 DL = "https://pt.example.com/download.php?id=313852"
 
 
-def make_server(*, queue=None, token=TOKEN, extension_id="", now_fn=time.time):
+def make_server(*, queue=None, token=TOKEN, extension_id="", now_fn=time.time, sites_fn=None):
     return HrChannelServer(
         queue=queue or HrTaskQueue(),
         token=token,
         port=0,
         extension_id=extension_id,
         now_fn=now_fn,
+        sites_fn=sites_fn,
     )
 
 
@@ -104,6 +109,45 @@ def test_route_tasks_returns_batch_with_token():
     assert payload["tasks"][1]["tid"] == 313852
     assert payload["next_poll_s"] > 0
     assert server.last_contact_ts > 0, "鉴权通过才算接触"
+
+
+def test_route_sites_lists_configured_sites():
+    """站点授权清单: 带 token GET /api/hr/sites 拿到 sites_fn 给的 (站点, 匹配模式) 对"""
+    server = make_server(sites_fn=lambda: [("BTSchool", "https://pt.btschool.club/*"), ("禁用的", "")])
+    status, headers, body = server.route("GET", API_SITES, {TOKEN_HEADER: TOKEN, "Origin": ORIGIN})
+    assert status == 200 and headers["Access-Control-Allow-Origin"] == ORIGIN
+    payload = json.loads(body)
+    # 空 origin 的条目丢弃(没法授权), 其余原样下发
+    assert payload["sites"] == [{"site": "BTSchool", "origin": "https://pt.btschool.club/*"}]
+    assert payload["error"] == ""
+
+
+def test_route_sites_same_gates_as_tasks():
+    """站点清单与任务清单同一道门: 无 token 401、普通网页 origin 403、且都不算接触"""
+    server = make_server(sites_fn=lambda: [("s", "https://x.example/*")])
+    assert server.route("GET", API_SITES, {})[0] == 401
+    status, headers, _ = server.route("GET", API_SITES, {TOKEN_HEADER: TOKEN, "Origin": "https://evil.example.com"})
+    assert status == 403 and "Access-Control-Allow-Origin" not in headers
+    assert server.last_contact_ts == 0.0
+
+
+def test_route_sites_survives_sites_fn_error():
+    """sites_fn 抛异常(配置热重载窗口)不打死端点: 200 + 空清单 + error 原样带回"""
+    def boom():
+        raise RuntimeError("配置正在重载")
+
+    server = make_server(sites_fn=boom)
+    status, _h, body = server.route("GET", API_SITES, {TOKEN_HEADER: TOKEN})
+    assert status == 200
+    payload = json.loads(body)
+    assert payload["sites"] == [] and "站点清单生成失败" in payload["error"] and "配置正在重载" in payload["error"]
+
+
+def test_route_sites_empty_when_no_sites_fn():
+    """没接 sites_fn(旧构造方)时清单为空但不报错 —— 选项页据此引导用户走手动兜底"""
+    server = make_server()
+    status, _h, body = server.route("GET", API_SITES, {TOKEN_HEADER: TOKEN})
+    assert status == 200 and json.loads(body)["sites"] == []
 
 
 def test_route_result_accepted_and_wakes_waiter():

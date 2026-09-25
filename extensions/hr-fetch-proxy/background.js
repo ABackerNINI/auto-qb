@@ -191,6 +191,68 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+// ---------- 结构化事件环(选项页「站点现状 / 最近取数明细」两张表的数据源) ----------
+//
+// 与运行日志**同源双写**: 日志是给人排障的逐条叙述(文案会改), 这份是给表格渲染的结构化记录 ——
+// 解析日志文案做表太脆。字段收敛到表格要用的几个: 时间/站点/类型/结果分类(tag)/HTTP/耗时/字节/备注。
+// 只增删内存数组 + 防抖整份写回(与 logs 同一套纪律, 唯一写入口在后台); 上限 50 条 ——
+// 表格本就只展示最近一段, 更早的完整经过在折叠的运行日志里。
+const EVENT_KEY = 'events';
+const EVENT_CAP = 50;
+const EVENT_FLUSH_MS = 300;
+let eventBuf = null;
+let eventInitPromise = null;
+let eventFlushTimer = null;
+let eventFlushChain = Promise.resolve();
+
+function initEventBuffer() {
+  return chrome.storage.local
+    .get({ [EVENT_KEY]: [] })
+    .then((got) => {
+      eventBuf = Array.isArray(got[EVENT_KEY]) ? got[EVENT_KEY] : [];
+      if (eventBuf.length > EVENT_CAP) eventBuf.splice(0, eventBuf.length - EVENT_CAP);
+    })
+    .catch(() => {
+      eventBuf = eventBuf || []; // 读不到就当空: 丢一段表格数据可以接受, 取数主流程不能被它卡住
+    });
+}
+
+/**
+ * 记一条取数事件(fire-and-forget, 返回值仅供测试 await): 绝不让它反噬取数主流程。
+ * tag: ok=成功 | quota=扩展侧硬上限让位 | login=登录页 | error=取数失败
+ */
+function pushEvent(ev) {
+  if (!eventInitPromise) eventInitPromise = initEventBuffer();
+  return eventInitPromise.then(() => {
+    eventBuf.push(
+      Object.assign({ t: Date.now(), host: '', kind: '', ok: false, status: 0, ms: 0, bytes: 0, tag: 'error', note: '' }, ev)
+    );
+    if (eventBuf.length > EVENT_CAP) eventBuf.splice(0, eventBuf.length - EVENT_CAP);
+    scheduleEventFlush();
+  }).catch(() => {});
+}
+
+function scheduleEventFlush() {
+  if (eventFlushTimer) return;
+  eventFlushTimer = setTimeout(() => {
+    eventFlushTimer = null;
+    flushEvents();
+  }, EVENT_FLUSH_MS);
+}
+
+/** 整份写回(与 flushLogs 同一套串行化纪律); pollAll 收尾会一并 await, 「立即拉取」一返回表格就新鲜 */
+function flushEvents() {
+  if (!eventInitPromise) return Promise.resolve();
+  const prev = eventFlushChain;
+  const p = eventInitPromise.then(() =>
+    prev.then(() => chrome.storage.local.set({ [EVENT_KEY]: eventBuf }).catch((e) => {
+      console.warn('事件环落盘失败(等下一笔再试):', e);
+    }))
+  );
+  eventFlushChain = p.catch(() => {});
+  return p;
+}
+
 function schedule() {
   // ❗delayInMinutes 别小于 0.5 分钟: Chrome 对 alarm 有最小间隔限制(非 unpacked 时更严),
   // 违规会直接抛错 —— 那会在安装/启动路径上变成一个看不懂的未捕获异常。
@@ -264,7 +326,7 @@ async function pollAll(trigger) {
     }
     await noteStatus({ text: lines.join('; ') || '无事可做' });
   } finally {
-    await flushLogs(); // 本轮立刻落盘: 「立即拉取」一返回, 选项页就能刷出全程日志
+    await Promise.all([flushLogs(), flushEvents()]); // 本轮立刻落盘: 「立即拉取」一返回, 选项页日志与两表都新鲜
   }
 }
 
@@ -500,6 +562,7 @@ async function fetchText(url) {
   const text = await res.text();
   if (!text) throw new Error('返回内容为空');
   log('info', '请求', `页面直取成功(${text.length} 字符)`, reqDetail('页面直取', url, t0, { HTTP: '200', 字符数: String(text.length) }));
+  pushEvent({ host: hostOf(url), kind: 'page', ok: true, status: 200, ms: Date.now() - t0, bytes: text.length, tag: 'ok' });
   return text;
 }
 
@@ -520,6 +583,7 @@ function hasTable(html) {
 }
 
 async function runTask(task) {
+  const t0 = Date.now();
   log('debug', '任务', `开始执行 id=${task.id}(kind=${task.kind})`, { 站点: hostOf(task.url), url: task.url });
   try {
     if (task.kind === 'page') {
@@ -536,6 +600,15 @@ async function runTask(task) {
         url: task.url,
       });
     }
+    // 事件环与日志同源双写: quota/login/error 三类失败都进表(让位不是故障, 但用户要能在表里看到)
+    pushEvent({
+      host: hostOf(task.url),
+      kind: task.kind,
+      ok: false,
+      ms: Date.now() - t0,
+      tag: e instanceof ExtQuotaError ? 'quota' : e instanceof LoginPageError ? 'login' : 'error',
+      note: String(e && e.message ? e.message : e),
+    });
     const payload = { id: task.id, ok: false, url: task.url, error: String(e && e.message ? e.message : e) };
     if (e instanceof ExtQuotaError) {
       // 扩展侧硬上限: 让后端能把它与「取数失败」区分开(前者只让位, 后者才计失败/熔断)
@@ -576,6 +649,8 @@ async function pageSnapshot(url) {
     const html = frames && frames[0] ? frames[0].result : '';
     if (!html) throw new Error('页面为空(未授予站点权限?)');
     log('info', '请求', `渲染取到 DOM(${html.length} 字符)`, reqDetail('页面渲染(离屏窗口)', url, t0, { 字符数: String(html.length) }));
+    // 渲染是同一任务的**第二次**真实站点访问(计额也第二次), 事件里标注出来便于对账用量
+    pushEvent({ host: hostOf(url), kind: 'page', ok: true, status: 200, ms: Date.now() - t0, bytes: html.length, tag: 'ok', note: '离屏渲染' });
     return html;
   } finally {
     await chrome.windows.remove(win.id).catch(() => {}); // 连窗口带标签一起删: 不留脏窗口
@@ -637,6 +712,7 @@ async function fetchBinary(url) {
     throw new LoginPageError('download.php 返回 HTML(疑似登录页/未登录 —— 请在浏览器里登录该站点)');
   }
   log('info', '请求', `种子下载成功(${buf.length} 字节)`, reqDetail('种子下载', url, t0, { HTTP: '200', 字节数: String(buf.length) }));
+  pushEvent({ host: hostOf(url), kind: 'torrent', ok: true, status: 200, ms: Date.now() - t0, bytes: buf.length, tag: 'ok' });
   return toBase64(buf);
 }
 

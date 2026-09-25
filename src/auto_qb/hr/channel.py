@@ -29,9 +29,10 @@ logger = logging.getLogger(__name__)
 
 # ---------- 端点契约 ----------
 
-#: 扩展拉清单(GET) / 回传结果(POST)
+#: 扩展拉清单(GET) / 回传结果(POST) / 拉需要授权的站点清单(GET, 选项页配置辅助)
 API_TASKS = "/api/hr/tasks"
 API_RESULT = "/api/hr/result"
+API_SITES = "/api/hr/sites"
 #: 鉴权头(扩展逐实例填自己的 token)
 TOKEN_HEADER = "X-Hr-Token"
 ORIGIN_HEADER = "Origin"
@@ -367,6 +368,7 @@ def describe_token_source(configured: str, data_dir: str) -> str:
 
 __all__ = [
     "API_RESULT",
+    "API_SITES",
     "API_TASKS",
     "DEFAULT_POLL_HINT",
     "EXTENSION_ID_RE",

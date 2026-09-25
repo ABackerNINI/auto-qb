@@ -6,6 +6,130 @@
 本文件是 [../26-09-22-backend-partial-hr-verify.md](../26-09-22-backend-partial-hr-verify.md) 的附件;
 最近的纪要仍在档案本体里。以下按原顺序(最近在上)。
 
+- **2026-09-25 (M4 多站点与打磨)** — 用户「继续 M4」令实施计划的最后一块。
+  ① **先盘点**(子代理只读调研): 得到的关键结论是「站点隔离的工程骨架与 CLI 可观测性**已经具备**
+  (站点分文件 / 每站点一把锁 / 每站点配额与熔断 / 站点级视图 / per-site adapter 工厂 / `--hr-status` 全摊开),
+  真缺口只有三处: 非 NexusPHP adapter 要写代码、站点级状态**在界面上一个出口都没有**、四类事件只有级别没有语义」。
+  ② **四类事件语文化**(`hr/events.py` 新模块): 告警文案收口到一处并加标签前缀(`[HR 登录失效]` / `[HR 熔断]` /
+  `[HR 页面改版]` / `[HR 通道静默]`), 用户可直接 grep。**登录失效从熔断里摘出来**(新 `HrLoginExpired`):
+  与 `HrChannelStopped`/`HrChannelQuota` 同一套判据 —— **能不能靠重试解决**。登录失效重试一万次也一样,
+  算成失败会把「去登录」这个动作要求掩盖成「站点坏了」, 而且熔断冷却会让用户登录完还要白等; 故**不计失败、
+  不推熔断**, 只报一次 WARNING(文案直接给动作), 原因写进站点文件 `refresh.reason`(失败路径里唯一持久可见的痕迹,
+  `--hr-status` 与视图 notes 都读它) —— 但**绝不动** fetched_at / 覆盖证明 / 新鲜度基准(那会变成「登录失效反而
+  给了新背书」)。通道静默是**端点级**事件 ⇒ 告警里列出受影响站点。
+  ③ **站点级状态单点**(`hr/status.py`): `site_status()` 把「站点文件 + 视图」折成纯数据快照(含新派生量:
+  下次刷新时刻 / 回填进度比例 / `blocking`「现在为什么不放行」); `report.py` 改为消费它(CLI 文本口径逐字未变,
+  `test_hr_report.py` 13 条全绿就是证据) —— 这样 CLI 与界面**不可能**出现「报告说待回填 2 条、界面说 3 条」。
+  ④ **WebUI 出口**: 只读端点 `GET /api/hr/status`(路由金清单 +1 条 ⇒ 同步 `test_web.py` 的 60→61) +
+  设置页「HR 站点状态」章节。**两个入口都要有**(经典 `cfg.activeGroup === '__hr'` 与 Console Hub `hub.view === '__hr'`),
+  两套 UI 成对改 —— 与日志页同款: 打开时拉一次, 手动刷新, 不轮询。新增**前端字段一致性守阵**:
+  扫模板里的 `s.<字段>` / `hrs.<字段>` 引用, 断言它们都在后端快照键里(字段名打错 = 整段静默空白,
+  pytest 全绿、后端也全绿, 只有真打开页面才看得出来)。
+  ⑤ **多站点守阵**(`tests/test_hr_multisite.py` 5 条): 「第二/第三个 NexusPHP 站点**只改配置**就能用」不是文档承诺,
+  而是钉死的断言 —— 第二站点各自文件 / 各自锁 / 各自配额与熔断 / 索引与已取记录不串味。顺手确认了一个语义:
+  **配额是按请求记的**(页面与 `.torrent` 都算) —— 一轮三页 + 一次下载 = 4 次。
+  ⑥ **本轮挖到的两个测试坑**(已回写 `pitfalls/testing/assertions.md`): (a) 守阵的取值锚点命中了**侧栏按钮**
+  里的同名短串 ⇒ 扫到空块、断言**恒真**(守阵失效不报错); 修法是锚点选块独有的形态 + 加「必须扫到字段」兜底。
+  (b) 红验的篡改用了大写字母(`fresh_textX`)⇒ `\b` 在 `t|X` 之间没有词边界 ⇒ 正则**根本看不见**它 ⇒ 红验假绿。
+  ⑦ 测试 **+20 条**(events 7 · service 3 · worker 1 · web 4 · multisite 5), ★红验: 字段守阵(改错名 ⇒ 红),
+  登录失效与静默文案断言也各自验过。全量 **1561 passed + 1 skipped**(TOTAL 91% / 10831 / 786 / 3556 / 321,
+  并行 18.1 / 18.1 / 19.2s), sidefx 越界 0; `kb.check` / `doc.links` / `doc.caps` / `doc.drift` 全绿。
+  文档: `docs/configuration.md`(接第二个站点要做什么 + 四类事件标签表 + 界面入口) · 根 `README.md`(M4 状态)。
+  下一步: **真机走查**(装扩展 → `--hr-once` + 主程序跑一轮), 已在下方「未完成」保留; 非 NexusPHP 形态站点
+  要写 adapter 时按 `adapters/__init__.py` 的注册协议加(本仓无该形态站点样本, 不猜着写)。
+
+- **2026-09-25 (实报修复: 下载被饿死 + 扩展第二道闸)** — 用户贴 `--hr-status` 与 `BTSchool.json` 报
+  「种子似乎没有下载成功」, 并授权修 P1/P2/P3 + 给扩展加硬上限(暂定 访问 10/时·50/天, 下种 50/时·200/天)。
+  ① **先定位**: 报告里 `已取种子 0 条 / 取种子失败 0 条 / 待回填 infohash 1 条 / 受管束种子 0 个`
+  = `.torrent` **一次都没取过**(不是失败), 扩展只被派了一个页面任务(扩展侧日志「取 1 条(成功 1; 全部直取)」)
+  ⇒ 责任在后端的频控与流水线顺序, 不在扩展。
+  ② **三个真缺陷**: (a) `_Budget` 的口径是「相邻两次**请求**间隔 >= 90s」, 而 `_do_fetch` 先抓 A/B/C
+  页面再取 .torrent ⇒ 每个窗口唯一的名额总被页面吃掉; 不完备刷新只给 60s 有效期 ⇒ 下一轮又从页面开始,
+  本小时 11 次配额全烧在重抓页面上。(b) 生产路径 `sleeper=None`(计划 §8 本意是在锁内等满) ⇒ 一次刷新
+  只能发出第一个请求, `scopes_done=[A]` / `complete=False` ⇒ **永远没有安全放行**。(c) 索引 0 个 infohash 时
+  所有种子落「未核实」⇒ 按 `unknown_policy=hr` **整站种子集体按受管束打标**。
+  ③ **修法与守阵**: 复用轮只补下载(`_backfill_on_reuse`) · 门面提供可中断的锁内等待 + 单次/本轮两道上限 ·
+  `has_lookup_keys` 为假时 `judge_record` 返回 None(回落本地, `mode: all` 不受影响) · 扩展 `site-caps.js`
+  独立计数 + 超限拒发(`kind=ext-quota`, 后端 `HrChannelQuota` ⇒ ACTION_WAITING, 不计失败不推熔断, 只报一次 WARNING)。
+  ④ **测试 +15 条**, ★**红验 4 处**(关掉补下载 / 关掉等待 / 关掉无键闸门 / 关掉扩展拒发 ⇒ 对应守阵全红)。
+  合流后全量 **1541 passed + 1 skipped**(本分支合流前 1534); 坑已回写 `pitfalls/backend/high-risk-ops.md` 与 `behavior-core.md`; 
+  文档: 扩展 README(第二道闸章节 + 修正「间隔受限不是故障」的旧口径) · 根 README · docs/configuration.md。
+  ⚠ 仍待用户真机确认: 取 .torrent 后索引是否长出键、三态在 WebUI 上是否正确(以及那 2 次 `fuse.failures` 的来源)。
+
+- **2026-09-25 (M3 落地)** — 用户「继续 M3」令实施判定联动:
+  ① **判定收口**: `hr/resolve.py::judge_record(view, infohashes, anchor=, now=, unknown_policy=)` —— 两个 infohash
+  取**更保守**结论(命中 > 恒受管束 > 已放行 > 未核实), 返回 `HrJudgement`(身份 / 最终布尔 / 依据 / 站点侧达标结论 /
+  `HrSiteFacts` 站点侧展示值); 站点未接入或 `mode=off` 返回 **None = 本模块不适用**(调用方走既有本地逻辑)。
+  门面入口 `HrRuntime.judge()` 只查**总开关**(站点级开关由记录侧先挡 —— 它手里就有 `tracker_conf`,
+  不必每调用一次就遍历一遍配置)。
+  ② **落点(计划 §9 的「稳定引用 + 读取时现算」)**: 记录加 `hr_link`(判定桥) / `hr_judgement()` / `hr_anchor()`;
+  `check_hr_condition` 与 `check_hr_satisfied` 先问站点侧、站点没给再回落本地。**四个消费点(打标 / WEB 视图 /
+  `hr` 规则条件 / `tor.hr_*` 表达式)调用点一行未动** —— 改的是它们共同调用的那两个方法。判定桥 = `QbManager.hr`
+  门面的稳定引用(热重载不换对象), 由 `TorrentStore` 在记录构建/变更时挂上(`hr_link is not link` 才赋值),
+  读取时现算 ⇒ **锚点漂移与视图更新都不需要记录置脏**, 也不做全库重写。
+  ③ **零静默变更两道门**(缺一即回落本地): 站点配了 `hr_check` 且 `mode != off` + 全局 `hr_check.enabled`。
+  当前用户配置无 `hr_check` 段 ⇒ 行为与之前逐字一致(既有测试全绿就是这个口径的回归)。
+  ④ **锚点提供者**: `QbManager._hr_anchors()` 按站点给出 `{infohash: HrAnchor}`(只读遍历 `store.all()` 快照,
+  取数线程经 `anchors_fn` 异步要), 与 `HrWorker._collect_anchors` 的形状/站点键同源。
+  ⑤ **WebUI 可观测性**: 字段加 `hr_state` / `hr_state_text` / `hr_reason` / `hr_satisfied_src` +
+  站点侧值(档位 / 还需做种 / 剩余达标 / 分享率 / 站点下载量), 详情抽屉加两行(三态·依据 / 站点侧值),
+  安全放行用**中性色条**(不能把放行渲染成告警)。
+  ⑥ **两处实现期拍板**(计划未覆盖的边界, 已写进计划 v2.3): (a) 站点**还没发布过视图**时回落本地而不按
+  「未核实」算 —— 若按 policy 算, `mode: all` 站点会在启动窗口里让整站种子集体触发打标(千级标签风暴);
+  (b) 站点行**缺达标字段 ≠ 未达标**(新 `HrEntry.satisfied_verdict` 的 None 语义) —— 不知道就回落本地。
+  ⑦ **测试 +15 条**(收口判定 7 / 门面 3 / 记录接入 4 / 锚点 1 / WebUI 三态 1), 另把替身对齐真实模型:
+  `FakeTracker` 补 `hr_check`(缺它会让「站点未接入」路径在测试里 AttributeError 而非走本地逻辑),
+  `FakeTorrent` 补 `hr_judgement` / `hr_anchor`。★**红验已跑**(2 处反证, 共 4 红, 回滚后 89 绿):
+  ① 临时旁路判定桥(`check_hr_condition` 无视 `judged`) ⇒ `test_record_hr_follows_site_judgement` /
+  `test_record_hr_released_by_site_view` 变红; ② 站点未接入/无视图改成返回判定而非 `None` ⇒
+  `test_judge_record_not_applicable_when_site_off` / `test_judge_without_published_view_falls_back` 变红。
+  全量 **1519 passed + 1 skipped**(TOTAL 91% / 10534 / 779 / 3494 / 310~311; 并行 18.3 / 18.9 / 19.3s),
+  sidefx 越界 0。
+  下一步: **M4 多站点与打磨** + M0/真机走查(需用户装扩展)。
+
+- **2026-09-25 03:10** — 用户接着报「现在是打开新窗口而不是后台抓取」(上一版刚改的隐藏窗口):
+  ① **根因**: `state:'minimized'` 不是灵药 —— 在用户平台上新建窗口仍会先显示一下, 用户看到的就是「弹出一个新窗口」。
+  ② **口径定型为分层**: **零界面优先** —— 页面用扩展后台的 `fetch(credentials:'include')` 直取
+  (站点侧页面本来就是服务端渲染的表格), 不开标签也不开窗口; 只有两个**通用结构信号**才升级到渲染通道:
+  【拿到内容没 `<table>`】或【页面里有密码输入框(=看到登录页)】; 渲染兜底改为 **离屏 popup 窗口**
+  (`left/top=-32000` + `type:'popup'` + `focused:false`, 三段式降级尝试), 用完连窗口一起删, 并保留焦点守卫。
+  ③ **顺手补的 SameSite 安全网(重要)**: 无 `SameSite` 属性的 cookie 按 Lax 对待, 而扩展发起的 fetch 算
+  **跨站请求** ⇒ 可能不带 cookie 而拿到**登录页**; 登录页确实有 `<table>`, 若只看表格判据就会被当成正常页面
+  ⇒ 后端读成「表头缺失/疑似改版」, **把排查引到错误方向**。所以升级判据必须包含「有密码输入框」。
+  ④ 守阵: 扩展侧改为「一次 node 跑四个场景」(直取零界面 / 内容不像页面 ⇒ 离屏 popup / 登录页也得升级 /
+  焦点被抢后还回去), 共 **12 条**; ★红验: 强制走渲染通道 ⇒ `test_page_fetch_is_headless_when_html_looks_fine` 变红。
+  ⑤ 全量 **1503 passed + 1 skipped**(TOTAL 91% / 10425 / 778 / 3446 / 308), sidefx 越界 0;
+  manifest 描述 / 扩展 README / 坑文件 / 计划 v2.2 均已同步。
+  下一步仍是 **M3 判定联动**; 仍待定: `config.yml` 明文凭据入库。
+
+- **2026-09-25 02:10** — 用户实报「抓数据时会打开新的标签而不是后台抓取」, 修:
+  ① **根因**: `chrome.tabs.create({active:false})` **只**保证「不是那个窗口的活动标签」, **不保证窗口不被
+  抬到前台** —— 扩展被 alarm 唤醒时用户往往正在别的程序里, Chrome 会把窗口连同新标签一起显示出来。
+  ② **修法**: 页面取数一律在**扩展自己的窗口**里做 —— `windows.create({focused:false, state:'minimized'})`
+  + `tabs.create({windowId, active:false})`, 用完删标签、窗口空闲 2 分钟自动关(不长期挂一个窗口);
+  再加一道**焦点守卫**(取数前记下原聚焦窗口, 取完还回去); 若最小化让页面延迟脚本变慢则取消最小化
+  (**仍不聚焦**)并重试一次。manifest 描述 / 扩展 README / 切片与计划 v2.1 变更行同步口径。
+  ③ **守阵**: `tests/test_extension_proxy.py` 新增 2 条 —— **用假 chrome API 真跑 background.js**,
+  记下每一次窗口/标签调用并断言(自建最小化窗口 / 每个标签必带 `windowId` 且 `active:false` / 取完删标签 /
+  空闲删窗口 / 焦点被抢后还回去); ★红验: 去掉 `tabs.create` 的 `windowId` ⇒ 当场变红。
+  ④ 全量 **1501 passed + 1 skipped / 22.90–23.18s**(TOTAL 91% / 10425 语句 / 778 未覆盖 / 3446 分支 / 308 partial),
+  sidefx ≈2430 / 越界 0; 新坑补进 [pitfalls/web-ui/extension-bridge.md](../../pitfalls/web-ui/extension-bridge.md)
+  (「后台标签」≠「不影响用户」); 基线已回写。
+  下一步仍是 **M3 判定联动**; 仍待定: `config.yml` 明文凭据入库。
+
+- **2026-09-25 01:10** — 用户点名修两件: ①`service._do_fetch` 的**取数失败分支漏了 `persist` 判断**
+  (成功分支有、失败分支没) ⇒ `--hr-once` 声称「不写文件」但一撞上取数失败就把熔断/失败计数写进站点文件,
+  而那份文件是**正式实例共用**的 ⇒ 只读口令偷改了取数节奏。修法: 失败分支同样按 `persist` 走,
+  `persisted` 口径与成功分支统一(`status == "written"`), 并在调用点写明「失败计数/熔断同属持久状态」;
+  守阵双向钉住(只读失败不落盘 / 正式失败必须落盘), ★红验: 临时恢复旧实现即当场变红。
+  坑入库 [pitfalls/backend/high-risk-ops.md](../../pitfalls/backend/high-risk-ops.md)
+  「只读口径是开关, 新加的写盘分支必须逐条带上它」。
+  ②README 两处**坏字符**(存成了 U+FFFD): `HR 在线核实` 标题补回 🔍, `辅种管理` 去掉坏字节保留 👯;
+  全仓扫过 U+FFFD, 其余均为乱码示例的刻意引用(`pitfalls/ops/console-encoding.md` 等), 不动。
+  ③ 全量 **1499 passed + 1 skipped / 17.90–22.91s**(TOTAL 91% / 10425 语句 / 778 未覆盖 / 3446 分支 / 308 partial),
+  sidefx ≈2430 / 越界 0; 基线已回写。
+  下一步仍是 **M3 判定联动**; 仍待定: `config.yml` 明文凭据入库。
+
 - **2026-09-22 22:04** — 可行性分析完成, 计划 v1 产出 ([../plans/26-09-22-2204-partial-hr-site-verify-plan.html](../../plans/26-09-22-2204-partial-hr-site-verify-plan.html))。读路由: config-reference (keys / loading-and-write) · systemPatterns (taskqueue / web-runtime / client-and-state) · modules/overview · conventions/webui; 源码锚点: TorrentRecord.check_hr_* / mixins/tags._add_hr_tag_or_category / mixins/web_view._hr_view_fields / rules (conditions + expr/env) / qbmanager._create_global_tasks; 外部事实两条经 web_search 核实。立档 (阈值 #4: 产出计划文档)。下一步: 等开放问题拍板 → M0。
 - **2026-09-22 22:10** — 全量闸门首跑红 1 条 (`test_doc_links_are_not_broken`): 本档案内链接深度误写 `../docs` (`memory-bank/tasks/` 到根 `docs/` 应为 `../../docs`), 修正后重跑全绿 (1189 passed + 1 skipped, TOTAL 91%, 与基线稳态一致)。该坑已有守阵 (test_memory_bank.py 链接机检) 兜住, 不另立 pitfalls 条目。
 - **2026-09-22 23:00** — 用户指令: 同步远端 + 在 scripts/ 实现独立实验程序 (用现有 cookie 下载 HR 种子)。
