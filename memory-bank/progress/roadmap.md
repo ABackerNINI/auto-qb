@@ -94,3 +94,4 @@
 - 插件系统: 直接支持自定义 Python plugin
 - 根据流量接入更多数据源 (traffic_source 当前仅 traffic_monitor 单源, 代码已按列表预留)
 - 与 PTD-cli 合作: 自动分析 HR 标签 / 暂停低分享率非免费种子 (想法.md 标注"需可行性验证")
+- WEBUI 报表 §08 第 7 项(节拍对齐, 需先拍板方向)及同类端点的同样改法(低优先; 相关 Open issue [issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html](../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 原 activeContext 切片 26-09-19-0000-docs-plan-review-wrapup 于 2026-09-26 蒸馏并入此行)

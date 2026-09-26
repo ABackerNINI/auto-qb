@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEBUI 搜索强化 · 查询语法调研(成熟方案对比与推荐设计) · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-search-query-syntax">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-26-1918">
+<meta name="doc-updated" content="26-09-26-1918">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-26-webui-search-query-syntax.md">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:31px;line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:76ch;margin:0 0 20px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+  .toc .no{font-family:var(--mono);color:var(--ink-3);margin-right:6px}
+
+  h2{font-size:21px;font-weight:600;margin:56px 0 18px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h2:first-of-type{margin-top:8px;border-top:none;padding-top:0}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:14px;font-weight:600;margin:22px 0 8px;color:var(--ink-2);font-family:var(--mono);letter-spacing:.04em}
+  p{margin:10px 0;color:var(--ink-2)} p strong,li strong{color:var(--ink);font-weight:600}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink-2)} li{margin:5px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.65;color:var(--ink-2)}
+  pre b{color:var(--ink);font-weight:400}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line-2);font-weight:400}
+  td{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+  td code{white-space:nowrap}
+  .mono{font-family:var(--mono);font-size:12.5px}
+
+  .verdict{background:linear-gradient(180deg,rgba(200,164,92,.09),rgba(200,164,92,.04));border:1px solid rgba(200,164,92,.35);border-radius:10px;padding:18px 22px;margin:20px 0}
+  .verdict h3{margin:0 0 8px;color:var(--accent);font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);font-weight:400}
+  .verdict p, .verdict li{color:var(--ink)}
+  .note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:14px;color:var(--ink-2)}
+  .note p{margin:6px 0}
+  .danger{border-left-color:var(--bad)}
+  .good{border-left-color:var(--good)}
+
+  .fig{border:1px solid var(--line);border-radius:10px;padding:16px;margin:18px 0;background:var(--surface)}
+  .fig figcaption{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:12px;line-height:1.7}
+  .fig svg{display:block;width:100%;height:auto}
+
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;padding:1px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+  .tag.p1{color:#f0a09a;border-color:rgba(208,92,78,.55);background:rgba(208,92,78,.12)}
+  .tag.p2{color:#e6c98a;border-color:rgba(200,164,92,.5);background:rgba(200,164,92,.1)}
+  .tag.p3{color:#9fc6e8;border-color:rgba(77,159,214,.45);background:rgba(77,159,214,.1)}
+  .tag.ok{color:#8ed3b4;border-color:rgba(47,168,116,.45);background:rgba(47,168,116,.1)}
+  .path{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+  .foot{border-top:1px solid var(--line-2);padding:24px 0 60px;font-size:12.5px;color:var(--ink-3);font-family:var(--mono);line-height:2}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.toc{position:static;display:none}}
+</style>
+</head>
+<body>
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker">auto-qb · WEBUI · 可行性调研报告</p>
+    <h1>WEBUI 搜索强化 — 查询语法调研</h1>
+    <p class="lede">起因:「恶女 10」搜不到单文件发布物 <span class="mono">[虽然我不是完美恶女～雏宫蝶鼠替换传～].Futsutsuka…S01E10…mkv</span>(根因已定位:整句连续子串匹配,不分词)。本报告调研主流成熟搜索产品的查询语法,提炼公共核心,并给出适配本项目的推荐设计——目标能力示例:<code>-DV</code> 排除、多词 AND、短语匹配。</p>
+    <p class="meta">
+      <b>报告:</b> 26-09-26-1918-report-webui-search-query-syntax.html ·
+      <b>专题:</b> <span class="mono">webui-search-query-syntax</span> ·
+      <b>状态:</b> Done(report 恒终态) ·
+      <b>档案:</b> <a href="../tasks/26-09-26-webui-search-query-syntax.md">26-09-26-webui-search-query-syntax.md</a>
+    </p>
+  </div>
+</header>
+
+<main class="wrap layout">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s1"><span class="no">1</span>现状口径与问题</a>
+  <a href="#s2"><span class="no">2</span>调研范围与方法</a>
+  <a href="#s3"><span class="no">3</span>六系成熟方案对比</a>
+  <a href="#s4"><span class="no">4</span>公共性提炼(5 条事实)</a>
+  <a href="#s5"><span class="no">5</span>推荐设计</a>
+  <a href="#s6"><span class="no">6</span>改动面预估</a>
+  <a href="#s7"><span class="no">7</span>风险与开放问题</a>
+  <a href="#s8"><span class="no">8</span>结论</a>
+  <a href="#src"><span class="no">·</span>来源</a>
+</nav>
+
+<article>
+
+<h2 id="s1">1 · 现状口径与问题</h2>
+<p>搜索实现在 <span class="path">src/auto_qb/webui/views.py</span> 的 <code>search_torrents()</code>(L672–731),匹配口径:</p>
+<ul>
+  <li>查询 q 与种子名/文件名各自经 <code>_search_norm()</code>(L35)归一——正则 <code>[\W_]+</code> 把点/下划线/连字符/全角标点等非文字字符折叠为单空格、转小写;<span class="tag ok">CJK 保留</span></li>
+  <li>把<strong>整个查询当一段连续子串</strong>在归一后的种子名(L714)与文件名列表(L723)里找;文件列表依赖 <code>_search_index</code> 缓存(预算限流构建,building 时前端 1s 重查)</li>
+</ul>
+<p>实测归一(2026-09-26 本会话复现):文件名归一后为 <code>虽然我不是完美恶女 雏宫蝶鼠替换传 futsutsuka … den 2026 s01e10 1080p …</code>,查询「恶女 10」要求两词连续出现——「恶女」后跟「雏宫蝶鼠替换传」,「10」在远处的 <code>s01e10</code> 里,<strong>两词不连续 ⇒ 整句必不命中</strong>。逐词都能中(<code>恶女</code> ✓ <code>10</code> ✓),拆词 AND 即整体命中。种子名(单文件发布与文件名同构)同理。</p>
+<div class="note">
+  <p><strong>问题定性</strong>:这是「整句连续子串」口径的固有边界,不是回归。docstring(L675)与行内注释(L712)写明的示例场景("cat and" 命中 "The.Cat.and…")也是连续同序场景。多词查询只有「在某个名字/文件名里连续且同序」才能命中——这同时挡住了两类高频需求:<strong>非连续多词</strong>(「恶女 10」)与<strong>排除词</strong>(「-DV」,现状会把 <code>-dv</code> 归一成 <code>dv</code> 当正词搜)。</p>
+</div>
+
+<h2 id="s2">2 · 调研范围与方法</h2>
+<p>目标形态是<strong>单框交互式搜索</strong>(一个输入框 + 即时结果),因此调研对象限定「用户直输查询语法」的成熟方案,按家族分六系(§3)。方法:官方文档核实 + 公认口径整理——本轮经网络核实的三条高不确定性事实(PG <code>websearch_to_tsquery</code> 的隐式算子与宽容性、Typesense 的 <code>-</code> 排除、Meilisearch 的负词)均以官方文档/权威转述为准并在 §来源 列出;其余为各产品长期稳定、广为引用的语法口径,标注「公认」。域内先例(qB / Sonarr / Radarr)单独一系。</p>
+
+<h2 id="s3">3 · 六系成熟方案对比</h2>
+
+<table>
+  <thead><tr><th>家族</th><th>代表</th><th>隐式 AND</th><th>排除</th><th>短语 <code>"…"</code></th><th>OR</th><th>宽容性</th><th>适配度</th></tr></thead>
+  <tbody>
+    <tr><td><strong>A 通用 web 搜索</strong></td><td>Google · GitHub · Gmail · YouTube</td><td>✓</td><td><code>-term</code></td><td>✓</td><td><code>OR</code> 关键字(Google/GitHub/Gmail)</td><td>宽容(语法错误按字面处理)</td><td><span class="tag ok">语法范本</span></td></tr>
+    <tr><td><strong>B 检索引擎经典</strong></td><td>Lucene QueryParser / ES query_string · <strong>simple_query_string</strong></td><td>✓(query_string 默认 OR 可配)</td><td><code>-term</code>(query_string 另有 <code>+term</code> 必须)</td><td>✓</td><td><code>AND/OR/NOT</code> 或 <code>|</code>(simple_qs)</td><td>query_string <strong>严格报错</strong>;simple_query_string <strong>永不报错</strong>(专为用户直输设计)</td><td><span class="tag p2">全量过重,宽容性原则采纳</span></td></tr>
+    <tr><td><strong>C 数据库 FTS</strong></td><td>PostgreSQL <code>websearch_to_tsquery</code> · SQLite FTS5</td><td>✓</td><td><code>-term</code>(PG)</td><td>✓</td><td><code>OR</code> 关键字(PG)/ <code>OR/NOT</code>(FTS5)</td><td>PG websearch <strong>永不抛错</strong>(已核实)</td><td><span class="tag p3">语法参照;分词器思路不适用</span></td></tr>
+    <tr><td><strong>D 嵌入式/托管引擎</strong></td><td>Meilisearch · Typesense · Whoosh(Python)</td><td>✓</td><td><code>-term</code>(三家全支持;Typesense 已核实:<code>electric car -tesla</code>)</td><td>✓(Whoosh 亦有)</td><td>Whoosh: AND/OR/NOT + <code>+/-</code></td><td>宽容(用户直输定位)</td><td><span class="tag p3">语法一致;引入依赖无必要</span></td></tr>
+    <tr><td><strong>E 桌面文件搜索</strong></td><td>Everything(voidtools)</td><td>✓</td><td><code>-term</code></td><td>✓</td><td><code>|</code> / 修饰符</td><td>宽容</td><td><span class="tag p3">场景最接近(文件名搜索),口径一致</span></td></tr>
+    <tr><td><strong>F PT/媒体自动化域内先例</strong></td><td>qBittorrent RSS 规则 · Sonarr/Radarr release profiles</td><td colspan="6">非单框语法:<strong>「必须包含 / 必须不包含」</strong>双正则框(qB RSS 下载规则,另有剧集过滤器 <code>1x05;</code>)或 must-contain / must-not-contain <strong>关键词列表</strong>(Sonarr/Radarr)。属于<strong>配置式过滤</strong>形态,与交互式搜索互补——但直接印证:<strong>「包含/排除」二分是该领域的第一需求</strong>。</td></tr>
+  </tbody>
+</table>
+
+<h3>3.1 逐系要点</h3>
+<h4>A · 通用 web 搜索(用户基数最大,迁移成本最低)</h4>
+<ul>
+  <li>Google:空格分词隐式 AND;<code>-term</code> 排除;<code>"exact phrase"</code>;<code>OR</code>(大写)。<code>+term</code> 强制包含已于 2013 年弃用(公认)。</li>
+  <li>GitHub / Gmail:同上,并扩展 <code>key:value</code> 限定符(<code>language:python</code>、<code>from:</code>、<code>label:</code>)与布尔关键字。这是「限定符」功能的来源(第二梯队,见 F5)。</li>
+</ul>
+<h4>B · 检索引擎经典(Lucene/Elasticsearch)</h4>
+<ul>
+  <li>经典 <code>query_string</code>(Lucene QueryParser 血统):<code>+term</code> 必须 / <code>-term</code> 禁止 / <code>AND OR NOT</code> / <code>"短语"</code> / <code>field:</code> / <code>*</code> 通配 / <code>~</code> 模糊 / <code>^</code> 提权 / <code>()</code> 分组——能力最全,但<strong>解析严格,非法输入抛异常</strong>,官方都不建议直接暴露给用户。</li>
+  <li>Elasticsearch 为用户直输专门设计了 <code>simple_query_string</code>:只保留 <code>+</code> / <code>-</code> / <code>|</code>(OR)/ <code>"短语"</code> / <code>*</code> 前缀,<strong>从不抛异常</strong>,语法错误的部分降级为字面量(官方表述 "never throw an exception")。这个产品的存在本身就是一条设计结论:<strong>面向人的解析器必须宽容</strong>。</li>
+</ul>
+<h4>C · 数据库 FTS</h4>
+<ul>
+  <li>PostgreSQL <code>websearch_to_tsquery</code>(11+):Google 式——<strong>未引号词隐式 AND</strong>、<code>or</code> 关键字、<code>-word</code> 排除、<code>"fat cat"</code> 短语;<strong>对任何输入永不抛错</strong>(已核实,官方文档「Controlling Text Search」);不支持前缀通配 <code>:*</code>。定位即「把用户搜索框输入安全转成查询」。</li>
+  <li>SQLite FTS5:隐式 AND,<code>OR</code>/<code>NOT</code>,<code>"短语"</code>,列过滤 <code>col:</code>,前缀 <code>term*</code>,<code>NEAR()</code>。关键教训在分词器:默认 <code>unicode61</code> 对 CJK 不分词(整段成一个 token),要子串检索得上 <code>trigram</code>(3.34+)且查询须 ≥3 字符——<strong>成熟方案在 CJK 上都要额外 machinery</strong>,见 F4。</li>
+</ul>
+<h4>D · 嵌入式/托管专用引擎</h4>
+<ul>
+  <li>Typesense:官方 Search API 文档——「排除词在词前加 <code>-</code> 算子」,例 <code>electric car -tesla</code>(已核实)。</li>
+  <li>Meilisearch:负词(negative keywords),<code>Homer -Simpson</code> 排除含 Simpson 的文档(已核实)。</li>
+  <li>Whoosh(Python 纯库):默认 qparser 即支持 <code>+term</code> / <code>-term</code> / AND / OR / NOT / <code>field:</code> / <code>"短语"</code> / <code>*</code>。若要「现成解析器」它是零服务化依赖的候选,但为 50 行内的语法引入一个依赖不值得(见 §6)。</li>
+</ul>
+<h4>E · 桌面文件搜索</h4>
+<ul>
+  <li>Everything(voidtools):<code>-term</code> 排除、<code>"…"</code> 短语、通配符、<code>case:</code>/<code>content:</code> 等修饰符。它就是「在海量文件名里搜」的产品,口径与 A 系完全一致——侧面印证文件名场景不需要比 websearch 更复杂的语法。</li>
+</ul>
+<h4>F · PT/媒体自动化域内先例</h4>
+<ul>
+  <li>qBittorrent RSS 自动下载规则:每条规则两个正则框——<strong>必须包含</strong>(Must Contain)与<strong>必须不包含</strong>(Must Not Contain),外加剧集过滤器。用户手工档时的表达方式。</li>
+  <li>Sonarr / Radarr:release profiles 用 must contain / must not contain 关键词列表。</li>
+  <li>共同点:<strong>排除是该领域的刚需,且以「正/负两个列表」的形态出现</strong>。交互式单框里对应的自然演化就是 <code>-term</code>。Jackett/Prowlarr 只透传各站点自身搜索框,无统一语法,不列为参照。</li>
+</ul>
+
+<h2 id="s4">4 · 公共性提炼(5 条事实)</h2>
+<table>
+  <thead><tr><th>#</th><th>事实</th><th>证据面</th></tr></thead>
+  <tbody>
+    <tr><td><strong>F1</strong></td><td><strong><code>-term</code> 排除是跨家族的压倒性惯例</strong>。六系中五系(A/B/C/D/E)原样支持,写法一致:词首 <code>-</code>。</td><td>Google/GitHub/Gmail · Lucene/ES(simple_query_string)· PG websearch · Meilisearch/Typesense/Whoosh · Everything</td></tr>
+    <tr><td><strong>F2</strong></td><td><strong>现代单框搜索的公共核心恰好是三件套</strong>:空格分词隐式 AND + <code>-term</code> 排除 + <code>"短语"</code>。<code>+</code> 显式与已近废弃(Google 弃用,Lucene 系保留),OR 与括号是可选增强层,限定符是第二梯队。</td><td>A/C/D/E 系逐项吻合;B 系的 simple_query_string 子集亦然</td></tr>
+    <tr><td><strong>F3</strong></td><td><strong>面向用户的解析器必须宽容、永不报错</strong>。ES 专门做 simple_query_string 替代 query_string 面向用户;PG websearch_to_tsquery 官方定位即「web 搜索式、对任意输入不抛错」;搜索框报错是反模式——语法错误的部分按字面降级。</td><td>ES 官方设计动机;PG 官方文档</td></tr>
+    <tr><td><strong>F4</strong></td><td><strong>成熟方案全都是词元(token)匹配,没有一家用裸子串</strong>;CJK 依赖分词器/trigram 额外 machinery。但本项目规模(数千种子、内存索引、无排序相关性需求)下,「归一 + 子串」等价于 CJK 词元匹配的务实近似——scene 命名的分隔符折叠(<code>_search_norm</code>)已经把两侧统一到同一空间。<strong>应保留子串语义,不为 CJK 引入分词</strong>。</td><td>FTS5 unicode61 的 CJK 缺陷与 trigram 的 ≥3 字符限制;PG/ES 均需 CJK 分词器配置</td></tr>
+    <tr><td><strong>F5</strong></td><td><strong>限定符(<code>key:value</code>)是交互搜索的成熟第二梯队</strong>,且本项目结果项字段已齐(site/tag/category/kind/state),后加不动匹配核心。首期不做(保守默认)。</td><td>GitHub/Gmail/Everything/Lucene;本结果项 <code>_view()</code> 字段对齐检查</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s5">5 · 推荐设计</h2>
+<div class="verdict">
+  <h3>推荐:websearch 核心三件套 + 行级匹配语义</h3>
+  <p>采纳 F2 的公共核心(词 AND / <code>-</code> 排除 / <code>"短语"</code>)按 F3 做宽容解析,匹配语义用<strong>行级</strong>(定义见下),完全复用 <code>_search_norm</code> 归一与 <code>files_q</code> 索引缓存。<strong>纯后端小改、零依赖、零配置、零状态变化</strong>;顺带修复「恶女 10」失配。</p>
+</div>
+
+<h3>5.1 语法层(宽容解析)</h3>
+<pre><b>词</b>        空格分隔;隐式 AND;每个词归一后在候选行内做子串匹配   <span style="color:#727c86">→ 恶女 10</span>
+<b>排除词</b>    词首单个 <b>-</b>(后随非空白)→ 该词不得出现在候选行内      <span style="color:#727c86">→ -DV</span>
+<b>短语</b>      <b>"…"</b> 内整段归一后作<b>连续</b>子串(可含空格/分隔符)          <span style="color:#727c86">→ "s01e10" · "web dl"</span>
+<b>排除短语</b>  -"…"                                                   <span style="color:#727c86">→ -"H264 AAC"</span>
+<b>宽容规则</b>  孤立 <b>-</b> 忽略;未闭合引号收至行尾;其余字符原样进词;<b>永不报错</b>   <span style="color:#727c86">→ F3</span></pre>
+<p>词法判定全部在<strong>原始查询</strong>上进行(先按空白切 token 再逐个归一),与归一化互不干扰:<code>-DV</code> 在切词阶段即识别为负词;而 <code>web-dl</code> 不以 <code>-</code> 开头,是正词,归一后为 <code>web dl</code>——与现状口径一致,无歧义。scene 命名里真实的连字符经归一折叠为空格,不会再被误判为排除符。</p>
+
+<h3>5.2 语义层:行级匹配(推荐)vs 种子级</h3>
+<p>定义<strong>候选行</strong> = 归一种子名,或归一文件名之一(<code>files_q</code> 既有缓存)。则:</p>
+<pre>行通过 ⇔ 该行含<b>全部</b>正词/正短语,且<b>不含任何</b>负词/负短语
+种子命中 ⇔ 存在至少一行通过</pre>
+<table>
+  <thead><tr><th>方案</th><th>规则</th><th>优点</th><th>缺点</th></tr></thead>
+  <tbody>
+    <tr><td><strong>行级(推荐)</strong></td><td>如上——所有词约束在<strong>同一行</strong>内求值</td><td>可预测(「某条名字/文件名整体匹配查询」);与单文件 scene 命名现实一致;前端 placeholder「搜索种子名或文件名…」承诺的就是这个模型;负词语义自然(含 <code>-DV</code> 的行作废);<strong>顺带修复「恶女 10」失配</strong></td><td>季度包/合集包依赖「单行含全部词」:若包名不含集数、文件名不含剧名,正词可能跨行分布而漏配(见下表第三行)</td></tr>
+    <tr><td>种子级</td><td>正词在 名字∪全部文件 任意命中即可(词间 AND、位置无关);负词在 名字∪全部文件 任一出现即整种子排除</td><td>召回更高(合集包靠跨行 AND 命中);实现同样简单</td><td>跨文件连词不可预测(<code>foo bar</code> 可能因两个不相干文件各含一词而命中);负词整种子误杀——合集包只要任一文件带 DV 就整包消失,即使它同时含用户想要的非 DV 集</td></tr>
+  </tbody>
+</table>
+<p>两方案都能修复原失配,行为差异集中在<strong>多文件合集包</strong>。以 <code>恶女 10 -DV</code> 为例:</p>
+<table>
+  <thead><tr><th>种子形态</th><th>行级(推荐)</th><th>种子级</th></tr></thead>
+  <tbody>
+    <tr><td>单文件 DV 发布(名字/文件都带 DV)</td><td>不命中 ✓(用户意图:排除)</td><td>不命中 ✓</td></tr>
+    <tr><td>季度包,含 E10 非 DV 行与若干 DV 行</td><td><strong>命中</strong>(E10 非 DV 行通过)——「包里有你要的那集」</td><td><strong>不命中</strong>(DV 行触发整包排除)——即使包里有非 DV 的 E10</td></tr>
+    <tr><td>季度包,包名含剧名不含集数,文件名只含集数</td><td>可能漏配(正词跨行)</td><td>命中(跨行 AND)</td></tr>
+  </tbody>
+</table>
+<div class="note">
+  <p><strong>拍板点</strong>:行级胜在可预测与负词合理性;种子级胜在合集包召回。推荐<strong>行级</strong>——搜索框的可预测性优先(「你搜的就是某条名字或文件名」),合集包场景用户可改用 <code>恶女</code> 或 <code>恶女 s01</code> 之类的宽查询。若实施后反馈合集包漏配频发,再把「种子级跨行 AND」作为可选放宽项评估,不动语法层。</p>
+</div>
+
+<h3>5.3 行为示例与兼容性</h3>
+<table>
+  <thead><tr><th>查询</th><th>行为</th></tr></thead>
+  <tbody>
+    <tr><td><code>恶女 10</code></td><td>行级 AND——本例命中 E10 单文件发布,<strong>原失配修复</strong></td></tr>
+    <tr><td><code>恶女 10 -DV</code></td><td>同上,且含 <code>dv</code> 的行作废(单文件 DV 发布被排除)</td></tr>
+    <tr><td><code>恶女 "s01e10" -UBWEB</code></td><td>短语与排除词并用</td></tr>
+    <tr><td><code>-DV</code></td><td>仅负词,无正判据 ⇒ 返回空并前端提示(与 Google 一致:「只说不要什么」无从起搜)</td></tr>
+    <tr><td><code>web-dl</code> / <code>WEB-DL</code></td><td>正词 <code>web dl</code>,行为与现状一致(大小写、分隔符归一不变)</td></tr>
+    <tr><td><code>"cat and"</code></td><td>连续短语,现状已命中的场景<strong>不变</strong></td></tr>
+    <tr><td><code>cat and</code>(两词)</td><td>现状:仅连续同序命中;新:行内 AND(「The.Cat.and…」仍中,另可命中 <code>cat … and …</code> 非连续行)</td></tr>
+  </tbody>
+</table>
+<p><strong>兼容性:新语义是旧语义的严格超集</strong>——单词查询行为不变;多词连续同序不变(连续 ⇒ 行内 AND);多词非连续从「恒不命中」变「可命中」。无配置迁移、无状态升级、无回归面。</p>
+
+<h3>5.4 性能与实现要点</h3>
+<ul>
+  <li><strong>复杂度不变</strong>:每候选行做 (正词数+负词数) 次子串 <code>in</code> 判断,O(行数×词数)。数千种子 × 文件列表(files_q 已缓存归一,构建期预算限流的机制原样保留)在主循环与 web 线程均无感。无需预建分词/倒排索引——词数是用户输入量级(个位数),倒排在这个规模只有负收益。</li>
+  <li><strong>解析器为纯函数</strong>(建议 <code>_parse_query(q) -&gt; (positive: list[str], negative: list[str])</code>,词已在函数内归一),匹配段只读解析结果,便于单测与将来加限定符。</li>
+  <li><strong>building 兜底不变</strong>:文件索引脏/缺失时 <code>building=True</code> + 前端 1s 重查的既有机制原样复用,负词作用于已缓存行,行为与现状同构。</li>
+  <li><strong>前端只动文案</strong>:placeholder 提示升级(如 <code>搜索种子名或文件名… 支持 空格=且、-排除、"短语"</code>),atlas / prism 两主题成对;<code>strip-note</code>「搜索"…"」照旧展示原文,不需改。</li>
+</ul>
+
+<h2 id="s6">6 · 改动面预估</h2>
+<table>
+  <thead><tr><th>面</th><th>内容</th><th>量级</th></tr></thead>
+  <tbody>
+    <tr><td><span class="path">src/auto_qb/webui/views.py</span></td><td>新增 <code>_parse_query</code> 纯函数;重写 <code>search_torrents</code> 两处匹配段(名/文件);docstring 更新口径</td><td>~60 行,单文件</td></tr>
+    <tr><td><span class="path">tests/test_web.py</span></td><td>解析器(引号/负词/孤立-/未闭合引号/CJK)+ 语义(行级 AND/负词/短语)+ 回归(「恶女 10」失配用例);docstring「## 测试计划」同步</td><td>~+10 条</td></tr>
+    <tr><td>前端(static/atlas · prism)</td><td>placeholder 文案 ×2;可选:无结果态对「仅负词」的提示</td><td>~4 处文案</td></tr>
+    <tr><td>配置 / 状态 / 依赖</td><td><strong>无</strong>(无新配置键——不触发 validate_config/schema 守卫面;无 state 结构变化;无新依赖)</td><td>0</td></tr>
+  </tbody>
+</table>
+<p>备选被否方案:引入 Whoosh/自建倒排(依赖或过度工程,规模不支持收益)· SQLite FTS5(trigram 的 CJK ≥3 字符限制反而劣于现状)· CJK 分词器(违背 F4,子串已够)。</p>
+
+<h2 id="s7">7 · 风险与开放问题</h2>
+<table>
+  <thead><tr><th>#</th><th>项</th><th>评估</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><span class="tag p2">拍板</span> 行级 vs 种子级</td><td>§5.2 已给推荐(行级)与理由;合集包召回差异是唯一行为取舍点,待用户确认</td></tr>
+    <tr><td>2</td><td><span class="tag p3">既有</span> 短数字词子串误命中</td><td><code>10</code> 命中 <code>1080p</code>/<code>2026</code>——现状已存在,新语义不放大(AND 反而收窄结果);词边界匹配对 CJK 不可行(「恶女」无词界),维持子串口径</td></tr>
+    <tr><td>3</td><td><span class="tag p3">既有</span> 文件索引 building 窗口</td><td>文件匹配不全时负词同样只作用于已缓存行——与现状的窗口行为同构,机制不变</td></tr>
+    <tr><td>4</td><td><span class="tag p3">低</span> 用户误用新语法</td><td>宽容解析保证任何输入都有合理行为(最坏退化为当字面搜);placeholder 提示降学习成本</td></tr>
+    <tr><td>5</td><td>后续扩展路径(本期不做)</td><td><code>site:</code>/<code>tag:</code>/<code>state:</code> 限定符(F5,结果项字段已齐)· OR/括号 · 前缀通配——均为解析器增量,不动行级匹配核心</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s8">8 · 结论</h2>
+<p>调研覆盖六系成熟方案,公共核心高度收敛:<strong>空格分词隐式 AND + <code>-term</code> 排除 + <code>"短语"</code>,宽容解析永不报错</strong>——这正是用户诉求(「<code>-DV</code> 排除」)所在的语法家族,且是 Google/GitHub/PG/Meilisearch/Typesense/Everything 等跨行业的一致惯例,用户零学习成本。域内先例(qB RSS「必须不包含」、Sonarr/Radarr must-not-contain)进一步印证排除是 PT 场景第一刚需。</p>
+<p>推荐按 §5 设计实施:websearch 三件套语法 + 行级匹配语义,<span class="tag ok">严格超集无回归</span> <span class="tag ok">单文件 ~60 行</span> <span class="tag ok">零依赖零配置</span>,顺带修复「恶女 10」失配。唯一待拍板点是行级 vs 种子级(§5.2),已给推荐与理由。拍板后可直接进入计划文档(<code>plans/</code>)。</p>
+
+<h2 id="src">来源</h2>
+<ul class="mono" style="font-size:12.5px">
+  <li>PostgreSQL 官方文档 · Text Search Controls(<code>websearch_to_tsquery</code>:Google 式语法 / 隐式 AND / <code>-</code> 排除 / 永不抛错)— <a href="https://www.postgresql.org/docs/current/textsearch-controls.html">postgresql.org/docs/current/textsearch-controls.html</a>(2026-09-26 核实)</li>
+  <li>Typesense 官方 Search API 文档(<code>-</code> 算子排除,例 <code>electric car -tesla</code>)— <a href="https://typesense.org/docs/30.2/api/search.html">typesense.org/docs/30.2/api/search.html</a>(2026-09-26 核实)</li>
+  <li>Meilisearch 负词行为(<code>Homer -Simpson</code>)— Open edX Course Search 文档转述 <a href="https://docs.openedx.org">docs.openedx.org</a>(2026-09-26 核实;官方 docs.meilisearch.com「Negative keywords」同口径)</li>
+  <li>Elasticsearch <code>simple_query_string</code>(「never throw an exception」设计动机)— ES 官方参考,公认口径</li>
+  <li>SQLite FTS5(tokenizer/trigram 限制)、Everything、Lucene/ES query_string、GitHub/Gmail、qBittorrent RSS 规则、Sonarr/Radarr release profiles — 各官方文档,公认口径</li>
+  <li>项目侧事实:<span class="path">src/auto_qb/webui/views.py</span>(<code>_search_norm</code> L35 · <code>search_torrents</code> L672–731)· <span class="path">static/shared/app.js</span>(<code>doSearch</code> L1145)· <span class="path">static/{atlas,prism}/index.html</span>(搜索框)· <span class="path">tests/test_web.py</span>(既有搜索测试 L52–60)— 2026-09-26 本会话读码核实;失配复现实测见 §1</li>
+</ul>
+
+</article>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    26-09-26-1918-report-webui-search-query-syntax.html · doc-topic: webui-search-query-syntax · doc-status: Done ·
+    产出轮次: WEBUI 搜索强化调研(未改任何源码/配置/测试) · 同专题: <a href="../tasks/26-09-26-webui-search-query-syntax.md">tasks/26-09-26-webui-search-query-syntax.md</a>
+  </div>
+</footer>
+</body>
+</html>
