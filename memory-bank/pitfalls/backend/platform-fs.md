@@ -71,9 +71,9 @@
 
 ### Windows 长路径必须加 `\\?\` 前缀
 
-- **触发**: 访问深路径文件。
-- **判别**: 超过 MAX_PATH 的路径在 Windows 上直接失败。
-- **处置**: 磁盘文件检查走 `add_long_path_prefix_for_win`(`\\?\` 前缀); **新文件访问走同一工具**。
+> 已**独立成篇**(2026-09-26 拆分: 本文件已到 cap, 且该专题长成了四条): 见 [windows-long-path.md](windows-long-path.md) ——
+> 前缀 / "同一路径两种写法" / 打开层 Shell PIDL / `shutil.rmtree` 前缀, 四处坑 + 复发记录。
+> 一句话底线不变: 磁盘文件检查走 `add_long_path_prefix_for_win`(`\\?\` 前缀), **新文件访问走同一工具**。
 
 ### NTFS 稀疏文件: 只有 `FSCTL_SET_SPARSE` → `SetEndOfFile` 才是稀疏的
 

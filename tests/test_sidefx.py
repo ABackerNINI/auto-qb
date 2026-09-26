@@ -112,22 +112,31 @@ def test_sidefx_rmtree_dir_fd_entries_not_flagged(tmp_path):
 def test_sidefx_launch_entry_points_wrapped():
     """LAUNCH 类入口确实接进了记账器 —— **只验证包装关系, 不真调用**
 
-    真调 `os.startfile`/`webbrowser.open`/`os.system` 就是真弹资源管理器/浏览器/起 shell,
-    那本身就是越界副作用(会让会话夹具报错)。所以这里只装一层记账器、看入口是否已被包装。
+    真调 `os.startfile`/`webbrowser.open`/`os.system`/`utils._win_shell_open` 就是真弹
+    资源管理器/浏览器/起 shell, 那本身就是越界副作用(会让会话夹具报错)。所以这里只装一层记账器、
+    看入口是否已被包装。
+
+    ❗`utils._win_shell_open` 是 ctypes 直调 shell32 的 PIDL 路线, **不经过任何 stdlib 入口** ——
+    它是否被包装与宿主平台无关, 所以这里**不做平台跳过**(漏包装 = 守阵盲区, 任何宿主都得查)。
     """
     import webbrowser
 
+    from auto_qb.infra import utils
+
     original_browser_open = webbrowser.open
     original_startfile = getattr(os, "startfile", None)
+    original_shell_open = utils._win_shell_open
     recorder = sidefx.SideFxRecorder()
     recorder.install()
     try:
         assert webbrowser.open is not original_browser_open, "webbrowser.open 应被包装"
         if original_startfile is not None:  # 非 Windows 上 os.startfile 不存在, 跳过
             assert os.startfile is not original_startfile, "os.startfile 应被包装"
+        assert utils._win_shell_open is not original_shell_open, "utils._win_shell_open 应被包装"
     finally:
         recorder.uninstall()
     assert webbrowser.open is original_browser_open, "uninstall 必须还原"
+    assert utils._win_shell_open is original_shell_open, "uninstall 必须还原 _win_shell_open"
 
 
 def test_sidefx_connect_entry_points_wrapped():

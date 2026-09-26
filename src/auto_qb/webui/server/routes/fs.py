@@ -9,7 +9,7 @@ import os
 from typing import List
 from fastapi import HTTPException
 
-from ....infra.utils import path_normalize
+from ....infra.utils import add_long_path_prefix_for_win, path_normalize
 from .. import common
 from ..common import group_key_param as _group_key_param
 
@@ -17,6 +17,48 @@ from fastapi import APIRouter
 from ..context import WebContext
 
 logger = logging.getLogger("auto_qb.web")  # noqa: F401  (mkdir 记录)
+
+
+def _bare(p: str) -> str:
+    """剥掉 Windows 扩展长度前缀 `\\\\?\\`(`\\\\?\\UNC\\` 还原成 `\\\\`), 非 Windows/无前缀原样返回
+
+    `\\\\?\\` 会让同一个路径**有两种写法**, 而比较与返回都只认一种:
+    - `os.path.normcase` **不会**剥它 ⇒ 前缀差异会被当成"不同路径"(见 `_fs_real`);
+    - `path_normalize` 更危险: 它先把 `\\` 折成 `/` 再压重复斜杠 ⇒ `\\\\?\\H:\\a` 变成
+      `/?/H:/a`(**损坏**) ⇒ 所以必须先剥再规范化。
+
+    放在模块级(而非 `build_router` 闭包内)是为了能在**任何平台**上单测这条归一契约 ——
+    真前缀只在 Windows 上出现, 留在闭包里就只剩 Windows 上才守得住(见 test_web 的对应用例)。
+    """
+    if p.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + p[8:]
+    return p[4:] if p.startswith("\\\\?\\") else p
+
+
+def _fs(p: str) -> str:
+    """**本地文件系统调用**用路径: 规范化分隔符 + Windows 长路径前缀(非 Windows 是空操作)。
+
+    长路径(>MAX_PATH 260)在未开长路径支持的机器上裸路径一律失败(`isdir` 给假 /
+    `scandir` 抛 WinError 3 / `mkdir` 抛 OSError) ⇒ 所有真实 syscall 都必须过这里。
+    ⚠ 前缀**只用于本地调用**: 返回值仍取未加前缀的 `target`, 否则前端会把前缀回传、
+    甚至写进 save_path。入参先过 `_bare` ⇒ 本函数**幂等**(重复加前缀不会叠加/损坏)。
+    """
+    return add_long_path_prefix_for_win(path_normalize(_bare(p)))
+
+
+def _fs_real(p: str) -> str:
+    """规范化到可比较的绝对真实路径(realpath 解符号链接, normcase 在 Windows 上统一大小写/斜杠)
+
+    ❗必须**先剥 `\\\\?\\` 前缀**: 比较双方可能一侧带前缀(如 `os.scandir(_fs(target))` 给出的
+    `entry.path`)、一侧不带(如允许根) —— 不剥就会因前缀差异被判成"越界", 实测后果是
+    **子目录被全部过滤掉**(目录树恒空)。realpath 是否保留前缀**与路径长度有关**
+    (实测短路径保留、长路径剥掉), 不能依赖它。
+
+    ⚠ 已知限制(实测, 本次不改): `os.path.realpath` 对 >MAX_PATH 的路径**静默退化成 abspath**
+    (不抛错) ⇒ 长路径上的符号链接/junction 解析不可用, 逃逸防护退化为词法比较。
+    两侧都过 normcase, 大小写差异不会误判。
+    """
+    return os.path.normcase(os.path.realpath(_bare(p)))
 
 
 def build_router(ctx: WebContext) -> APIRouter:
@@ -48,10 +90,6 @@ def build_router(ctx: WebContext) -> APIRouter:
         """
         roots = {path_normalize(rec.save_path or "") for rec in manager.store.by_hash.values() if rec.save_path}
         return sorted(r for r in roots if r)
-
-    def _fs_real(p: str) -> str:
-        """规范化到可比较的绝对真实路径(realpath 解符号链接, normcase 在 Windows 上统一大小写/斜杠)"""
-        return os.path.normcase(os.path.realpath(p))
 
     def _within_roots(target: str, roots: List[str]) -> bool:
         """目标是否落在某个允许根内(相等或为其子目录) —— 越界一律拒绝"""
@@ -87,11 +125,11 @@ def build_router(ctx: WebContext) -> APIRouter:
         if not _within_roots(path, roots):
             raise HTTPException(status_code=403, detail="路径不在允许的保存路径范围内")
         target = os.path.realpath(path)
-        if not os.path.isdir(target):
+        if not os.path.isdir(_fs(target)):
             raise HTTPException(status_code=404, detail="目录不存在或不可访问")
         dirs = []
         try:
-            with os.scandir(target) as it:
+            with os.scandir(_fs(target)) as it:
                 for entry in it:
                     if not entry.is_dir() or not _within_roots(entry.path, roots):
                         continue
@@ -125,15 +163,15 @@ def build_router(ctx: WebContext) -> APIRouter:
         if not parent or not _within_roots(parent, roots):
             raise HTTPException(status_code=403, detail="路径不在允许的保存路径范围内")
         base = os.path.realpath(parent)
-        if not os.path.isdir(base):
+        if not os.path.isdir(_fs(base)):
             raise HTTPException(status_code=404, detail="目录不存在或不可访问")
         target = os.path.join(base, name)
-        if os.path.exists(target):
-            if os.path.isdir(target):
+        if os.path.exists(_fs(target)):
+            if os.path.isdir(_fs(target)):
                 return {"created": path_normalize(target), "existed": True}
             raise HTTPException(status_code=409, detail="同名文件已存在")
         try:
-            os.mkdir(target)
+            os.mkdir(_fs(target))
         except OSError as e:
             raise HTTPException(status_code=400, detail=f"新建失败: {e.strerror or e}")
         logger.info(f"WEB 新建目录: {target}")
@@ -165,7 +203,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         elif kind == "torrent":
             rec = _require_torrent(str(b.get("hash") or "").strip())
             content = path_normalize(rec.content_path or "")
-            if content and not os.path.isdir(content):
+            if content and not os.path.isdir(_fs(content)):
                 target, select = content, True  # 单文件种子: 定位选中, 不降级成"只打开父目录"
             else:
                 target = content or path_normalize(rec.save_path or "")
@@ -173,9 +211,9 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=400, detail="kind 必须是 group 或 torrent")
         target = path_normalize(target)
         if select:
-            if not os.path.isfile(target):
+            if not os.path.isfile(_fs(target)):
                 raise HTTPException(status_code=404, detail="目标文件不存在或不可访问")
-        elif not target or not os.path.isdir(target):
+        elif not target or not os.path.isdir(_fs(target)):
             raise HTTPException(status_code=404, detail="目标目录不存在或不可访问")
         common.open_path(target, select=select)
         return {"opened": target, "select": select}

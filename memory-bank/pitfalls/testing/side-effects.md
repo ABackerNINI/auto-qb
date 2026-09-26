@@ -9,7 +9,12 @@
 - **判别**: 七类记账: `POPEN` / `LAUNCH` / `REG` / `REGVAL` / `FSDEL` / `SYMLINK` / `BIND` / `CONNECT`,
   回环与临时目录放行。要点:
   - **`POPEN` / `LAUNCH` 放行清单为空** ⇒ 测试里出现 `subprocess` / `os.system` / `os.startfile` /
-    `webbrowser.open` 会被判越界。典型症状是"**单独跑绿、全量跑 ERROR**"(报错出现在**收尾**而非断言处)。
+    `webbrowser.open` / `utils._win_shell_open` 会被判越界。典型症状是"**单独跑绿、全量跑 ERROR**"
+    (报错出现在**收尾**而非断言处)。
+  - ❗**新增"不走 stdlib 入口"的副作用入口必须同步登记**: `utils._win_shell_open` 是 **ctypes 直调 shell32**
+    (Shell PIDL 长路径路线), `POPEN` 与上面几个都抓不到 —— 不登记就是**守阵盲区**
+    (等于用一个守阵看不见的 API 换掉它看得见的 API)。记账器对它的包装**只在 `is_windows()` 为真时记账**
+    (POSIX 上它是空转, 记了就是假阳性 —— 实测把"直接调它验证非 Windows 返回 False"的单测判成越界)。
     守卫要改成**进程内**加载脚本模块, **零子进程**。
   - **唯一曾被漏掉的真问题是 AUMID 注册表键**(构造 `PlatformChannel("win32")` 时真写 HKCU 且**不清理**;
     autostart 的 Run 键自清理)。conftest 的两道会话级守卫细节: 让写入**静默成功而不是抛异常**

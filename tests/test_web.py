@@ -63,6 +63,8 @@
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
 - test_api_fs_dirs_case_sibling_is_outside_whitelist: **仅 Linux** —— 大小写兄弟目录(/x/Media 与 /x/media)必须判为越界, 白名单归一不得做 NTFS 式折叠(折叠 => 越界放行, fail-open)
 - test_api_fs_mkdir_endpoint: POST /api/fs/mkdir 新建目录(R10-11) —— 正常创建/重名目录幂等/重名文件 409/名字含分隔符或点为 400/白名单外 403/父目录不存在 404/鉴权/不投命令
+- test_fs_endpoints_route_fs_calls_through_long_path_prefix: fs 三端点的文件系统调用必须过 add_long_path_prefix_for_win(Windows 长路径 >MAX_PATH 否则 isdir 给假/scandir 抛错 ⇒ 误报 404)
+- test_fs_path_helpers_strip_long_path_prefix_before_compare: _bare/_fs_real 比较前剥长路径前缀(否则同一条路径的两种写法被判越界, 子目录全被过滤)
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
@@ -3303,6 +3305,74 @@ def test_api_fs_mkdir_endpoint(web_env, tmp_path):
     # ⑥ 鉴权 + 不入命令队列(不绕过单一写线程: 只建目录)
     assert client.post("/api/fs/mkdir", json={"path": norm(root), "name": "x"}).status_code == 401
     assert mgr.web_commands.empty()
+
+
+def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path, monkeypatch):
+    """fs 三端点的**文件系统调用**必须过 `add_long_path_prefix_for_win`(本次报障的核心)
+
+    Windows 上 >MAX_PATH 的裸路径 `isdir` 给假 / `scandir` 抛 WinError 3 ⇒ 不加前缀时端点会
+    误报 404, 而前端只看到"目录不存在或不可访问"。这里把前缀 helper 换成 spy, 逐端点钉住
+    "确实调了它"。
+
+    ⚠ 测的是**路由**而不是平台效果: 真 Windows 行为在 Linux CI 上无法复现(平台固定约定见
+    testing/file-conventions.md), 故宿主上前缀是恒等(前缀对 POSIX 路径无意义); 前缀本身的
+    正确性与打开层分支另由 `test_exists_dir_file_apply_long_path_prefix` /
+    `test_open_path_windows_*` 覆盖。
+    """
+    from auto_qb.infra.utils import add_long_path_prefix_for_win as real_prefix
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    root = tmp_path / "root"
+    (root / "sub").mkdir(parents=True)
+    norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
+    mgr.store.groups = {(norm(root), ("a.mkv", )): ["HA"]}
+    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
+    mgr.store.get = lambda h: mgr.store.by_hash.get(h)
+
+    calls = []
+
+    def spy(p):
+        calls.append(p)
+        return real_prefix(p)
+
+    monkeypatch.setattr("auto_qb.webui.server.routes.fs.add_long_path_prefix_for_win", spy)
+
+    # ① 目录浏览
+    assert client.get("/api/fs/dirs", headers=auth, params={"path": norm(root)}).status_code == 200
+    assert norm(root) in calls, f"fs/dirs 的文件系统调用未过前缀 helper: {calls}"
+    # ② 新建目录
+    calls.clear()
+    assert client.post("/api/fs/mkdir", json={"path": norm(root), "name": "new"}, headers=auth).status_code == 200
+    assert norm(root) in calls, f"fs/mkdir 的文件系统调用未过前缀 helper: {calls}"
+    # ③ 打开目标文件夹(open_path 必须 mock —— 真调会弹资源管理器, 守阵判越界)
+    calls.clear()
+    with mock.patch("auto_qb.webui.server.common.open_path"):
+        assert client.post("/api/open-path", json={"kind": "torrent", "hash": "HA"}, headers=auth).status_code == 200
+    assert norm(root) in calls, f"open-path 的文件系统调用未过前缀 helper: {calls}"
+
+
+def test_fs_path_helpers_strip_long_path_prefix_before_compare():
+    """`_bare` / `_fs_real`: **比较前必须剥掉 `\\\\?\\` 前缀** —— 否则同一条路径的两种写法被判"越界"
+
+    实测后果(Windows 真机): `os.scandir(_fs(target))` 给出的 `entry.path` **带前缀**, 而允许根
+    不带 ⇒ `_within_roots` 恒 False ⇒ **子目录被全部过滤掉**(目录树恒空)。
+    `os.path.realpath` 是否保留前缀**与路径长度有关**(实测短路径保留、长路径剥掉), 不能依赖它,
+    故必须在比较前显式剥掉。
+
+    本条是纯路径归一, **与宿主平台无关** ⇒ Linux CI 上也守得住(这正是把三个 helper 提到模块级
+    而不是留在 `build_router` 闭包里的原因)。
+    """
+    from auto_qb.webui.server.routes import fs as fs_mod
+
+    bare = os.path.abspath("x")
+    assert fs_mod._bare("\\\\?\\" + bare) == bare
+    assert fs_mod._bare(bare) == bare, "无前缀原样返回"
+    assert fs_mod._bare("\\\\?\\UNC\\server\\share") == "\\\\server\\share", "UNC 形态还原"
+    # 带前缀与不带前缀必须归一到同一个可比较形式
+    assert fs_mod._fs_real("\\\\?\\" + bare) == fs_mod._fs_real(bare)
+    # _fs 幂等: 已是带前缀形态再传进去不得叠加 —— path_normalize 会把 `\\?\` 折坏成 `/?/`
+    assert fs_mod._fs(fs_mod._fs(bare)) == fs_mod._fs(bare)
 
 
 # ---------- Web 命令执行(主循环侧 _drain_web_commands) ----------

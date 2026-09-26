@@ -516,27 +516,149 @@ def replace_vars(text: str, tracker_conf) -> str:
     return str(text).replace("${required_seeding_time}", hr_conf.required_seeding_time_raw)
 
 
+# Windows MAX_PATH: 不含结尾 NUL 的最大字符数 —— 超过它, 裸路径在未开长路径支持的机器上
+# 一律失败(`isdir` 给假 / `scandir` 抛 WinError 3), 必须走 `\\?\` 前缀或 Shell PIDL 路线。
+WIN_MAX_PATH = 260
+
+# CoInitializeEx 的单元模型与成功返回值(Windows Shell PIDL 路线用; S_OK 与 S_FALSE 均需配对 CoUninitialize)
+_COINIT_APARTMENTTHREADED = 0x2
+_COINIT_OK = (0, 1)
+
+
+def _exists_dir(path: str) -> bool:
+    """目录判定(Windows 长路径经 `\\\\?\\` 前缀; 非 Windows 是空操作 —— 见 add_long_path_prefix_for_win)"""
+    return os.path.isdir(add_long_path_prefix_for_win(path))
+
+
+def _exists_file(path: str) -> bool:
+    """文件判定(同上, 长路径必须加前缀, 否则超长文件恒判不存在)"""
+    return os.path.isfile(add_long_path_prefix_for_win(path))
+
+
+def _win_shell_open(path: str) -> bool:
+    """Windows 专用: 经 Shell 命名空间 PIDL 打开路径, **支持 >MAX_PATH 的长路径**。
+
+    为何另起一条路线: `os.startfile` 与 `explorer /select,` 都是**字符串路径**入口, 实测对
+    314 字符裸路径分别抛 `FileNotFoundError(WinError 2)` 与**静默打开"桌面"**(误导性失败);
+    加 `\\\\?\\` 前缀也不行 —— ShellExecute 系不吃该前缀(实测 `SHParseDisplayName` 对它返回
+    `0x80070057 E_INVALIDARG`)。PIDL 路线绕开字符串: `SHParseDisplayName(裸路径)` ->
+    `SHOpenFolderAndSelectItems(pidl)`。传**目录** pidl = 打开该目录; 传**文件** pidl =
+    打开父目录并选中该文件(正是 R10-10 的"定位选中"语义)。
+
+    实测约束(勿改):
+    - `SHParseDisplayName` **只认反斜杠**, 正斜杠与 `\\\\?\\` 前缀都判 E_INVALIDARG;
+    - WebUI 同步端点跑在 uvicorn/anyio 的线程池 worker 里, 而 Python 线程默认**不初始化 COM**
+      —— 实测 worker 里不初始化时本调用返回 `0x800401F0 CO_E_NOTINITIALIZED` ⇒ 每次都得配一次
+      `CoInitializeEx`(`S_OK`/`S_FALSE` 均需配对 `CoUninitialize`; `RPC_E_CHANGED_MODE`
+      表示已被别处以 MTA 初始化, 不配对卸载, 此时若 Shell 调用失败由调用方降级兜住)。
+
+    返回 True = 已交给 Shell; False = 本路线不可用, 调用方降级。**绝不抛错**。
+
+    跨平台: 只在 `is_windows()` 为真时进入, 且 ctypes **惰性取用** —— `ctypes.windll` 在
+    Linux/macOS 上不存在, 顶层引用会让 CI 直接 ImportError(见 testing/file-conventions.md)。
+    """
+    if not is_windows():
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        shell32 = ctypes.windll.shell32
+        ole32 = ctypes.windll.ole32
+    except (ImportError, AttributeError, OSError):
+        return False
+
+    shell32.SHParseDisplayName.argtypes = [
+        wintypes.LPCWSTR, ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_void_p), wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD)
+    ]
+    shell32.SHParseDisplayName.restype = ctypes.c_long
+    shell32.SHOpenFolderAndSelectItems.argtypes = [ctypes.c_void_p, wintypes.UINT, ctypes.c_void_p, wintypes.DWORD]
+    shell32.SHOpenFolderAndSelectItems.restype = ctypes.c_long
+    shell32.ILFree.argtypes = [ctypes.c_void_p]
+
+    target = os.path.normpath(path).replace("/", "\\")
+    if target.startswith("\\\\?\\"):  # 前缀与 PIDL 路线互斥, 传进去必 E_INVALIDARG
+        target = target[4:]
+
+    try:
+        hr = ole32.CoInitializeEx(None, _COINIT_APARTMENTTHREADED)
+    except (AttributeError, OSError):
+        return False
+    pidl = ctypes.c_void_p()
+    try:
+        sfgao = wintypes.DWORD()
+        if shell32.SHParseDisplayName(target, None, ctypes.byref(pidl), 0, ctypes.byref(sfgao)) != 0:
+            logger.debug(f"Shell PIDL 解析失败, 退回字符串路线: {path}")
+            return False
+        if shell32.SHOpenFolderAndSelectItems(pidl, 0, None, 0) != 0:
+            logger.debug(f"Shell PIDL 打开失败, 退回字符串路线: {path}")
+            return False
+        return True
+    except (AttributeError, OSError) as e:  # pragma: no cover - 防御: Shell 异常不该逃逸
+        logger.debug(f"Shell PIDL 路线异常, 退回字符串路线: {path} ({e})")
+        return False
+    finally:
+        if pidl:
+            shell32.ILFree(pidl)
+        if hr in _COINIT_OK:
+            ole32.CoUninitialize()
+
+
+def _win_string_open(path: str, select: bool) -> None:
+    """Windows 字符串路线(`os.startfile` / `explorer /select,`) —— PIDL 不可用时的兜底。
+
+    超长路径上两者都不可靠(`os.startfile` 抛 `FileNotFoundError` 即使目录确实存在;
+    `explorer /select,` **静默打开"桌面"**) ⇒ 先上溯到长度 < `WIN_MAX_PATH` 的祖先再打开,
+    让用户至少落到正确分支的某层目录; 其它失败保持原样抛出, 不掩盖既有错误语义。
+
+    `cand` 经上溯后必 < MAX_PATH ⇒ 这里的判定**无需前缀**, 裸路径即可。
+    """
+    cand = os.path.normpath(path)
+    while len(cand) >= WIN_MAX_PATH and os.path.dirname(cand) != cand:
+        cand = os.path.dirname(cand)
+    if select and os.path.isfile(cand):
+        subprocess.run(["explorer", "/select,", cand], check=False)
+    else:
+        os.startfile(cand)  # noqa: S606  仅 Windows 存在
+
+
 def open_path(path: str, select: bool = False) -> None:
     """用系统默认方式打开文件/目录(跨平台: Windows 资源管理器 / macOS open / Linux xdg-open)
 
     R10-10: `select=True` 表示"打开所在文件夹并**定位选中**该文件"(单文件种子: 用户要在
     文件夹里看到那一个文件, 而不是被丢进一个装了上百个种子的目录):
-    - Windows: `explorer /select,<file>` 打开父目录并高亮选中该文件;
+    - Windows: Shell PIDL 传**文件** pidl -> 资源管理器打开父目录并高亮选中该文件
+      (长路径唯一可行; 见 `_win_shell_open`);
     - macOS: `open -R <file>`(Reveal in Finder);
     - Linux: 无通用"选中"语义(依赖具体文件管理器), 退化为打开父目录 —— 明确比静默丢弃好。
     目标不是已存在文件(或平台不支持)时退化为普通打开该路径, 不抛错(动作类工具的容错优先)。
+
+    长路径(>MAX_PATH, Windows): 字符串路线对超长路径一个抛错、一个静默开错地方, 故
+    **目录**与**定位选中**两种语义改走 Shell PIDL; 目录判定一律经 `_exists_dir`(带前缀)。
+    macOS/Linux 无 260 限制(PATH_MAX 1024 / 4096), 分支**逐字保持改动前行为**。
+
+    ❗`_win_shell_open` 只在 `is_windows()` 分支内调用 —— 它在 POSIX 上是空转, 而测试期副作用
+    记账器把该入口整体计入 LAUNCH(放行清单为空), 无谓调用会变成假阳性。
     """
-    if select and os.path.isfile(path):
-        if sys.platform.startswith("win32"):
-            subprocess.run(["explorer", "/select,", os.path.normpath(path)], check=False)
+    if is_windows():
+        if select and _exists_file(path):
+            if _win_shell_open(path):  # 文件 pidl -> 打开父目录并选中该文件
+                return
+            _win_string_open(path, select=True)
             return
-        if sys.platform.startswith("darwin"):
+        if _exists_dir(path) and _win_shell_open(path):  # 目录 pidl -> 打开该目录
+            return
+        _win_string_open(path, select=False)
+        return
+    # ---- macOS / Linux: 以下与改动前逐字一致 ----
+    if select and os.path.isfile(path):
+        if is_mac():
             subprocess.run(["open", "-R", path], check=False)
             return
         path = os.path.dirname(path)  # Linux: 退化到父目录
-    if sys.platform.startswith("win32"):
-        os.startfile(path)  # noqa: S606  仅 Windows 存在
-    elif sys.platform.startswith("darwin"):
+    if is_mac():
         subprocess.run(["open", path], check=False)
     else:
         subprocess.run(["xdg-open", path], check=False)
