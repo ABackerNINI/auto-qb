@@ -42,7 +42,7 @@
 - **webui-hr-safety-display** (2) — 计划 [26-09-25-1823](plans/26-09-25-1823-plan-webui-hr-safety-display.html) `Done` · 档案 [26-09-25](tasks/26-09-25-webui-hr-safety-display.md) `In Progress`
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) `Done` · issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) `Open`
 
-## 单件专题 (仅登记, 66 个)
+## 单件专题 (仅登记, 67 个)
 
 - appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commands-unified-command-surface · commands-unified-surface
 - commit-gate-auto-run · config-value-range-validation · cross-group-file-conflict · dependency-lock · docs-readme-modules-drift · docs-restructure
@@ -54,7 +54,7 @@
 - webui-appjs-split · webui-button-system · webui-cols-store-version · webui-component-libraries · webui-config-health-warning
 - webui-ctx-menu-multi-select · webui-ctx-submenu · webui-error-reason · webui-ext-hr-logging · webui-filter-data-and-color-flicker
 - webui-fix-plan-round10 · webui-fix-plan-round9 · webui-fix-round10 · webui-fix-round11 · webui-fix-round9 · webui-hot-endpoints-jsonable-encoder
-- webui-hr-popup · webui-hr-popup-t1 · webui-hr-popup-t2 · webui-hr-popup-t3 · webui-log-level-filter · webui-naming · webui-page-location-persist
-- webui-polish-and-redesign · webui-redesign · webui-settings-unsaved-changes · webui-sites-import · webui-speed-refresh-fix
-- webui-torrent-meta-edit
+- webui-hr-popup · webui-hr-popup-t1 · webui-hr-popup-t2 · webui-hr-popup-t3 · webui-keyboard-shortcuts · webui-log-level-filter · webui-naming
+- webui-page-location-persist · webui-polish-and-redesign · webui-redesign · webui-settings-unsaved-changes · webui-sites-import
+- webui-speed-refresh-fix · webui-torrent-meta-edit
 - webui-view-rebuild

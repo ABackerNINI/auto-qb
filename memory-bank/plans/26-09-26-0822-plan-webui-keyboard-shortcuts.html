@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-keyboard-shortcuts">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-26-0822">
+<meta name="doc-updated" content="26-09-26-0822">
+<title>计划 · WEB UI 键盘快捷键（可自定义）· 可行性分析与实施计划</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --fg: #e8eaed;
+    --muted: #9aa3ad;
+    --dim: #6b7480;
+    --line: rgba(255,255,255,.08);
+    --line-2: rgba(255,255,255,.14);
+    --accent: #5ea3d8;
+    --ok: #58b58f;
+    --warn: #d89a5e;
+    --danger: #d8746e;
+    --card: #141920;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 400 15.5px/1.65 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 32px 80px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: var(--mono); font-size: .88em; background: var(--card);
+    border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
+  kbd {
+    display: inline-block; font-family: var(--mono); font-size: 12px; line-height: 1.5;
+    color: var(--fg); background: var(--card); border: 1px solid var(--line-2);
+    border-bottom-width: 2px; border-radius: 3px; padding: 1px 6px; white-space: nowrap;
+  }
+
+  header.cover { border-bottom: 1px solid var(--line); padding-bottom: 28px; margin-bottom: 36px; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--dim); margin-bottom: 14px; }
+  h1 { font-size: 30px; font-weight: 600; letter-spacing: -.01em; line-height: 1.25; margin-bottom: 10px; }
+  .lede { color: var(--muted); max-width: 64ch; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 28px; margin-top: 20px;
+    font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .meta-row b { color: var(--muted); font-weight: 500; }
+
+  nav.toc { border: 1px solid var(--line); background: var(--card); padding: 18px 22px; margin-bottom: 44px; }
+  nav.toc .kicker { margin-bottom: 8px; }
+  nav.toc ol { list-style: none; columns: 2; column-gap: 40px; }
+  nav.toc li { font-size: 13.5px; padding: 3px 0; break-inside: avoid; }
+  nav.toc li span { font-family: var(--mono); color: var(--dim); font-size: 11px; margin-right: 8px; }
+
+  section { margin-bottom: 48px; }
+  h2 { font-size: 20px; font-weight: 600; letter-spacing: -.005em; padding-top: 18px;
+    border-top: 1px solid var(--line); margin-bottom: 16px; }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 400;
+    margin-right: 10px; vertical-align: 2px; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 22px 0 10px; }
+  h4 { font-size: 13.5px; font-weight: 600; color: var(--muted); margin: 18px 0 8px;
+    font-family: var(--mono); letter-spacing: .02em; }
+  p { margin: 10px 0; max-width: 78ch; }
+  p.note { color: var(--muted); font-size: 13.5px; }
+  ul, ol { margin: 10px 0 10px 22px; max-width: 78ch; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--dim); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 8px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
+    font-weight: 500; border-bottom: 1px solid var(--line-2); }
+  td.k { white-space: nowrap; }
+  td.m { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  tbody tr:hover { background: rgba(255,255,255,.02); }
+  .grp { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--accent); margin: 26px 0 2px; }
+  .grp-first { margin-top: 14px; }
+
+  .box { border: 1px solid var(--line); border-left: 2px solid var(--line-2);
+    background: var(--card); padding: 14px 18px; margin: 16px 0; max-width: 84ch; }
+  .box .t { font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+  .box p { margin: 6px 0; max-width: 76ch; }
+  .box.warn { border-left-color: var(--warn); }
+  .box.stop { border-left-color: var(--danger); }
+
+  .verdict { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); margin: 18px 0 24px; }
+  .verdict div { flex: 1 1 200px; padding: 16px 18px; border-right: 1px solid var(--line); }
+  .verdict div:last-child { border-right: 0; }
+  .verdict .big { font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+  .verdict .sub { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 4px; }
+
+  .steps { list-style: none; margin-left: 0; }
+  .steps > li { border-bottom: 1px solid var(--line); padding: 12px 0 14px; }
+  .steps .hd { font-weight: 600; }
+  .steps .hd em { font-family: var(--mono); font-style: normal; font-size: 11px;
+    color: var(--accent); margin-right: 10px; letter-spacing: .04em; }
+  .steps .bd { color: var(--muted); font-size: 13.5px; margin-top: 3px; max-width: 82ch; }
+  .steps .bd b { color: var(--fg); font-weight: 500; }
+
+  footer.colophon { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 48px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">Feasibility &amp; Plan · auto-qb WEB UI</div>
+  <h1>键盘快捷键：可行性分析与实施计划</h1>
+  <p class="lede">
+    给两套 WEB UI（星图 / 棱镜）加一层键盘操作：能上下键走列表、能对光标行或选中集合直接下命令，
+    每个键位都可以在界面里自己改。本文件先钉可行性结论与四个技术难点的判据，再给完整的键位表与分步实施。
+  </p>
+  <div class="meta-row">
+    <span><b>专题</b> webui-keyboard-shortcuts</span>
+    <span><b>日期</b> 2026-09-26</span>
+    <span><b>状态</b> Open（待拍板 §10）</span>
+    <span><b>来源</b> 想法.md TODO「键盘快捷键」</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="kicker">目录</div>
+  <ol>
+    <li><span>01</span>结论：可行，且分三段落地</li>
+    <li><span>02</span>现状盘点（代码事实）</li>
+    <li><span>03</span>四个技术难点与判据</li>
+    <li><span>04</span>架构设计</li>
+    <li><span>05</span>快捷键详细表（58 条）</li>
+    <li><span>06</span>自定义面板设计</li>
+    <li><span>07</span>实施步骤 W1–W7</li>
+    <li><span>08</span>测试计划</li>
+    <li><span>09</span>风险与不做的事</li>
+    <li><span>10</span>待确认决策点</li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <h2><span class="no">01</span>结论：可行，且分三段落地</h2>
+  <p>
+    可行。现有前端是「无构建链的 Vue 3 全局版 + 按域拆分的 <code>window.AQB_*</code> mixin 包」，
+    动作入口已经是语义方法（<code>bulkAct</code> / <code>act</code> / <code>actTorrent</code> /
+    <code>_deleteFlow</code> …），偏好持久化也有现成范式（localStorage + 跨标签 <code>storage</code> 同步）。
+    快捷键是<b>挂在既有动作上的一层输入映射</b>，不需要动后端、不需要动 <code>config.yml</code>。
+  </p>
+  <div class="verdict">
+    <div><div class="big">可行</div><div class="sub">无需后端改动 / 无新增依赖</div></div>
+    <div><div class="big">4 处</div><div class="sub">需要与既有机制对齐的技术难点</div></div>
+    <div><div class="big">58 条</div><div class="sub">键位（52 条有默认键 / 6 条待绑定）</div></div>
+    <div><div class="big">7 步</div><div class="sub">W1–W7，每步独立可验收</div></div>
+  </div>
+  <p>
+    唯一需要新增的<b>概念</b>是「光标行」：现在点击行不产生选中（<code>onMemberClick</code> 普通点击
+    直接 return），选中只由 Ctrl / Shift 修饰键产生 —— 也就是说界面里根本没有"当前行"，
+    而上下键导航必须有一个。这是本次真正的设计增量，其余都是接线。
+  </p>
+  <div class="box">
+    <div class="t">建议的落地顺序</div>
+    <p>
+      <b>第一段（必做）</b>：键盘引擎 + 光标模型 + 高频动作键位（约 30 条），先让"能用"落地。<br>
+      <b>第二段</b>：自定义面板（录制 / 冲突检测 / 重置 / 跨标签同步）。<br>
+      <b>第三段（可选）</b>：抽屉内、设置页内、文件优先级等局部作用域键位。
+    </p>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="no">02</span>现状盘点（代码事实）</h2>
+  <p>以下每条都指向当前代码，实施时以代码为准；若与本文不符，改本文。</p>
+  <table>
+    <thead><tr><th style="width:22%">事实</th><th style="width:34%">位置</th><th>对本计划的含义</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>两套 UI 共用一份逻辑</td>
+        <td class="m">static/atlas/index.html:2484<br>static/prism/index.html:2542</td>
+        <td>新增片段文件必须<b>两边都挂</b> <code>&lt;script&gt;</code>；否则守阵 <code>_scan_mixin_wiring</code>
+          报"漏挂 → 整块功能静默消失"（tests/test_web.py:700）。</td>
+      </tr>
+      <tr>
+        <td>片段范式</td>
+        <td class="m">shared/*.js 挂 window.AQB_*<br>app.js 末尾 app.mixin()</td>
+        <td>新文件 <code>shared/shortcuts.js</code> 必须排在 <b>app.js 之前</b>，且不得与既有片段成员重名
+          （mixin 合并是"后者覆盖前者"，不报错、只静默失效）。</td>
+      </tr>
+      <tr>
+        <td>Esc 已有一条退栈链</td>
+        <td class="m">shared/app.js:671</td>
+        <td>确认框 → 添加对话框 → 统计 → 限速 → 管理 → 元信息 → 文件优先级 → 抽屉 → 弹层 → 右键菜单
+          → 清选择 → 收起展开。<b>键盘引擎必须排在这条链之后接管</b>，且 Esc 列为不可改的固定键。</td>
+      </tr>
+      <tr>
+        <td>没有"当前行"概念</td>
+        <td class="m">shared/selection.js:53-69<br>（普通点击不选中）</td>
+        <td>需新增光标状态；选中态（<code>selGroups</code>/<code>selMembers</code>，两者互斥）保持不动，
+          光标与选中是两套视觉（虚线描边 vs 选中底色）。</td>
+      </tr>
+      <tr>
+        <td>行是窗口化渲染的</td>
+        <td class="m">shared/columns.js:240 <code>_rowWindow</code><br>ROW_WIN_MIN=200（app.js:216）</td>
+        <td>光标行<b>可能根本没渲染</b>。要滚到它，得先有"第 i 行的 y 偏移"——现有前缀和
+          <code>pre[]</code> 算完就丢，需要留一份。</td>
+      </tr>
+      <tr>
+        <td>数据每轮轮询刷新</td>
+        <td class="m">shared/app.js:1019 <code>startPolling</code></td>
+        <td>排序/筛选变化会让第 i 行换人 ⇒ 光标<b>按身份记</b>（组 key / 种子 hash），不按下标记；
+          目标消失时就近回落。</td>
+      </tr>
+      <tr>
+        <td>动作入口读菜单状态</td>
+        <td class="m">commands.js:426 <code>act()</code> 读 menu.key<br>commands.js:563 <code>actTorrent()</code> 读 menu.hash</td>
+        <td>键盘不能借道 menu（那是右键菜单的 UI 状态）。需抽 <code>_actCore(action, targets)</code>
+          供两条路径共用 —— 两份实现当前 90% 重复，是本次唯一的代码重构。</td>
+      </tr>
+      <tr>
+        <td>删除已有统一内核</td>
+        <td class="m">delete_flow.js:137 <code>_deleteFlow({keys, hashes, …})</code></td>
+        <td>键盘删除直接传目标集合即可，四个入口（右键/批量/整集/整剧）已经是同一条链。</td>
+      </tr>
+      <tr>
+        <td>偏好持久化先例</td>
+        <td class="m">columns.js（COLS_STORE_KEY + storage 同步）<br>prism/js/theme.js:13（autoqb.ui.theme）<br>menu.js:71（时间口径）</td>
+        <td>沿用同一范式：localStorage <code>autoqb.ui.keys</code> + <code>storage</code> 事件整份采纳。
+          ⚠ localStorage 按 <b>origin</b> 隔离（换地址/端口 = 另一份），与列偏好同一限制，页面上要说明。</td>
+      </tr>
+      <tr>
+        <td>限速浮层已考虑键盘</td>
+        <td class="m">dialogs.js:434 <code>openSpeedAt(ev, dir)</code><br>注释："无点击坐标时锚在视口右侧（…键盘触发路径）"</td>
+        <td>键盘可直接 <code>openSpeedAt(null, dir)</code>，零改造。</td>
+      </tr>
+      <tr>
+        <td>静态守阵已很密</td>
+        <td class="m">tests/test_web.py（6200 行）</td>
+        <td>新增必过：片段挂载、node 语法校验、<code>&lt;main&gt;</code> 挂件类必须有 CSS 规则、
+          .bt 变体两套模板成对。前端改动的机械底线已存在，只需补快捷键专属断言。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s3">
+  <h2><span class="no">03</span>四个技术难点与判据</h2>
+
+  <h3>难点一 · 光标行可能没渲染（虚拟化）</h3>
+  <p>
+    <code>_rowWindow()</code> 每轮算一次前缀和 <code>pre[]</code>（行高逐行实测，<code>_rowHs</code>），
+    用它切出 <code>[start, end)</code> 渲染窗口，算完即弃。要让"↓ 按到第 300 行"能真的看到，
+    需要先知道第 300 行的 y，再滚动到那儿。
+  </p>
+  <div class="box">
+    <div class="t">方案</div>
+    <p>
+      ① 在 <code>_rowWindow()</code> 末尾把 <code>pre</code> 存进 <code>this._rowPre[kind]</code>（与
+      <code>_rowHs</code> 同级，不落盘）；② 新增 <code>_kbScrollToRow(kind, idx)</code>：取
+      <code>pre[idx]</code> + <code>_winTop[kind]</code>，<code>window.scrollTo</code> 到"刚好露出"的位置
+      （目标已在视口内则不动，避免每次按键都跳）；③ 窗口未启用（<code>rowWin=false</code> / 行数 &lt; 200 /
+      尚未量齐）时退化为 <code>querySelector('[data-hash="…"]')</code> + <code>scrollIntoView({block:'nearest'})</code>。
+    </p>
+    <p class="note"><b>判据</b>：3000 行库下连按 ↓ 到底部，光标不丢失、不出现空白窗口、末行可达。
+      这条只能真机量（静态守阵测不到），进 §8 走查清单。</p>
+  </div>
+
+  <h3>难点二 · 输入态与中文输入法</h3>
+  <p>
+    单个字母键做快捷键，最大的坑是"用户正在打字"。三段屏蔽，缺一不可：
+  </p>
+  <ul>
+    <li><code>e.isComposing</code> 为真（或 <code>e.keyCode === 229</code>）→ <b>直接放行</b>，一个键都不吃；</li>
+    <li>事件目标是 <code>input</code> / <code>textarea</code> / <code>select</code> /
+      <code>contenteditable</code> → 只放行白名单（<code>Esc</code> 关窗 / <code>Ctrl+Enter</code> 提交 /
+      设置页 <code>Ctrl+S</code>），其余一律交回浏览器；</li>
+    <li>有模态层（确认框 / 添加 / 统计 / 限速 / 抽屉 / 管理 / 元信息）打开时 → 只放行该层白名单，
+      列表动作全部失效（否则会在看不见列表的地方删种子）。</li>
+  </ul>
+  <p class="note">
+    <b>判据</b>：在搜索框里输入拼音（如 "zhongzi"）时，不能触发任何快捷键、不能吞字；
+    输入法候选框弹出期间按 <code>/</code> 应落在输入框里。
+  </p>
+
+  <h3>难点三 · 键位冲突（浏览器 / 系统 / 输入法）</h3>
+  <p>
+    浏览器保留键是拦不住的那部分（<code>Ctrl+T/W/N</code>、<code>F5/F11/F12</code>、
+    <code>Ctrl+Shift+N/I/J/C</code>、<code>Ctrl+P/F/R</code>、<code>Ctrl+Alt+Del</code>、mac 的
+    <code>Cmd</code> 系与 <code>Ctrl+↑</code> Mission Control）。自定义面板必须能<b>当场认出</b>并提示，
+    而不是等用户发现"按了没反应"。
+  </p>
+  <div class="box warn">
+    <div class="t">判定口径</div>
+    <p>
+      <b>匹配基准用 <code>e.code</code>（物理键位）+ 修饰位，不用 <code>e.key</code></b>：
+      <code>e.key</code> 随键盘布局与输入法变化（mac 上 <code>Option+P</code> 打出的是 π），
+      <code>e.code</code> 不变。显示层再走 <code>code → 标签</code> 映射（<code>KeyP→P</code> /
+      <code>Slash→/</code> / <code>Digit1→1</code> / <code>BracketLeft→[</code>）。
+      功能键（<code>Arrow*</code> / <code>Escape</code> / <code>Enter</code> / <code>Space</code> /
+      <code>Home</code> / <code>End</code> / <code>PageUp</code> / <code>PageDown</code> / <code>F1–F12</code>）
+      仍用 <code>e.code</code>，两者本就一致。
+    </p>
+  </div>
+
+  <h3>难点四 · 行位置随刷新漂移</h3>
+  <p>
+    列表每轮轮询（<code>lastRid</code>）重排，排序方向、筛选、搜索都会让"第 i 行"换人。
+    光标记身份不记下标：每轮渲染后按 id 在新列表里重新定位；找不到就落到"原下标裁剪后的最近一行"；
+    列表空则光标为空（此时动作键提示"先选一行或选种子"）。
+  </p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">04</span>架构设计</h2>
+
+  <h4>文件与接线</h4>
+  <ul>
+    <li>新增 <code>src/auto_qb/webui/static/shared/shortcuts.js</code> ——
+      挂 <code>window.AQB_SHORTCUTS</code>（mixin：状态 + 方法）+ <code>window.AQB_KEYS</code>（注册表常量）。
+      <b>两处 index.html 都要挂，且排在 app.js 之前。</b></li>
+    <li>新增 <code>shared/shortcuts.css</code>（光标行描边、快捷键面板、录制态）——
+      走现有 CSS 令牌族；新挂件类必须能被 <code>_scan_page_class_wiring</code> 找到规则。</li>
+    <li>面板模板放两份 index.html（与列选择器同款：模板在 HTML，逻辑在 shared）。</li>
+    <li><code>commands.js</code> 内抽 <code>_actCore(action, {keys, hashes})</code>，
+      <code>act()</code> / <code>actTorrent()</code> 各自退化为薄包装。<b>仅此一处重构</b>，
+      其余文件不改行为。</li>
+  </ul>
+
+  <h4>注册表（单一事实源）</h4>
+  <div class="box">
+    <div class="t">SHORTCUTS 条目形状</div>
+    <p class="mono">
+      { id, group, label, def, scope, danger?, fixed?, run(vm) }
+    </p>
+    <p>
+      <code>def</code> 是默认键位（<code>"KeyP"</code> / <code>"Ctrl+Shift+KeyL"</code> /
+      <code>""</code> = 默认不绑定）；<code>scope</code> ∈ <code>global / list / drawer / settings / modal</code>；
+      <code>danger</code> 的条目（删除类）在面板里标红且不允许绑到无修饰的单键；
+      <code>fixed</code> 只有 Esc（退栈链硬编码，不给改）。
+      键位表、面板列表、冲突检测、守阵断言<b>全部读这一张表</b> —— 表外无键位。
+    </p>
+  </div>
+
+  <h4>匹配与存储</h4>
+  <ul>
+    <li>归一化：<code>mods = (ctrl?"" )+(alt)+(shift)+(meta)</code>，顺序固定
+      <code>Ctrl+Alt+Shift+Meta+&lt;code&gt;</code>；meta 与 ctrl 在 mac/Win 上分别归一，避免"两边都要按"。</li>
+    <li>存储：<code>localStorage["autoqb.ui.keys"] = { "&lt;id&gt;": "&lt;归一化串&gt;" }</code>。
+      缺键 = 用默认；空串 = 显式禁用；<code>storage</code> 事件整份采纳（与列偏好同机制，跨标签一致）。</li>
+    <li>冲突：同一串被两条占用 → 后写的顶掉先写的，并 toast 提示"已从 X 移交给 Y"；
+      命中保留键黑名单 → 面板内拒绝并给出"浏览器占用，换一个"。</li>
+    <li>重置：单条"恢复默认" + 全局"全部恢复默认"（清 localStorage 键）。</li>
+  </ul>
+
+  <h4>光标与选中（两套状态，不合并）</h4>
+  <table>
+    <thead><tr><th style="width:16%">状态</th><th style="width:34%">取值</th><th>语义</th></tr></thead>
+    <tbody>
+      <tr><td>选中（既有）</td><td class="m">selGroups[] / selMembers[]</td>
+        <td>互斥的两类口径，批量动作的目标集合。<b>不动。</b></td></tr>
+      <tr><td>光标（新增）</td><td class="m">kbCursor = {kind, id}</td>
+        <td>kind ∈ group / member / torrent / show / ep；id = 组 key 或种子 hash。
+          视觉 = 1px 虚线描边（与选中底色的语义不同，别复用）。</td></tr>
+      <tr><td>目标解析</td><td class="m">_kbTargets()</td>
+        <td><b>有选中 → 用选中集合</b>（走 bulk 链路，与批量浮条同口径）；
+        <b>无选中 → 用光标行</b>（组行展开为成员 hashes / 种子行单 hash）。</td></tr>
+    </tbody>
+  </table>
+  <p class="note">
+    为什么要"有选中就用选中"：右键菜单已经这么判（<code>menu.js:_ctxMulti</code>），
+    键盘沿用同一口径才不会出现"我明明选了 3 行，按 p 却只暂停光标那一行"。
+  </p>
+</section>
+
+<section id="s5">
+  <h2><span class="no">05</span>快捷键详细表（58 条）</h2>
+  <p class="note">
+    表头说明：<b>作用域</b> — 全局 = 任何非输入态；列表 = 三个数据视图（辅种/种子/追剧），
+    且无模态层打开；抽屉 / 设置 = 对应层打开时。<b>目标</b>列是<b>现有方法</b>（键盘只做映射，不另写实现）；
+    标 ⚠ 的表示该方法的入参或前置需要一处小改动。<b>固定</b> = 不允许改键。
+  </p>
+
+  <div class="grp grp-first">A · 视图与全局导航（10）</div>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:20%">动作</th><th style="width:15%">默认键</th>
+      <th style="width:9%">作用域</th><th style="width:26%">目标（现有方法）</th><th style="width:6%">固定</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>A1</td><td>切到辅种页</td><td class="k"><kbd>1</kbd></td><td>全局</td>
+        <td class="m">goView('groups')</td><td>—</td><td>与顶栏一级导航三态等价</td></tr>
+      <tr><td>A2</td><td>切到种子页</td><td class="k"><kbd>2</kbd></td><td>全局</td>
+        <td class="m">goView('torrents')</td><td>—</td><td></td></tr>
+      <tr><td>A3</td><td>切到追剧页</td><td class="k"><kbd>3</kbd></td><td>全局</td>
+        <td class="m">goView('shows')</td><td>—</td><td></td></tr>
+      <tr><td>A4</td><td>打开设置</td><td class="k"><kbd>Ctrl</kbd>+<kbd>,</kbd></td><td>全局</td>
+        <td class="m">openSettings()</td><td>—</td><td>mac 浏览器占用 <kbd>Cmd</kbd>+<kbd>,</kbd>；命中时提示改键</td></tr>
+      <tr><td>A5</td><td>添加种子</td><td class="k"><kbd>N</kbd></td><td>列表</td>
+        <td class="m">openAddTorrent()</td><td>—</td><td>与 <kbd>Ctrl</kbd>+<kbd>N</kbd>（新窗口）不冲突</td></tr>
+      <tr><td>A6</td><td>聚焦搜索框</td><td class="k"><kbd>/</kbd></td><td>列表</td>
+        <td class="m">⚠ 搜索框加 ref 后 focus()</td><td>—</td><td>Firefox 的"/"是快速查找，需 preventDefault 实测确认</td></tr>
+      <tr><td>A7</td><td>统计面板</td><td class="k"><kbd>\</kbd></td><td>全局</td>
+        <td class="m">openStats()</td><td>—</td><td>状态栏入口的键盘等价物</td></tr>
+      <tr><td>A8</td><td>历史流量</td><td class="k"><kbd>Shift</kbd>+<kbd>\</kbd></td><td>全局</td>
+        <td class="m">openHistory()</td><td>—</td><td>即 <kbd>|</kbd></td></tr>
+      <tr><td>A9</td><td>限速（下载方向）</td><td class="k"><kbd>L</kbd></td><td>列表</td>
+        <td class="m">openSpeedAt(null,'down')</td><td>—</td><td>已支持无坐标调用（注释里就写着键盘路径）</td></tr>
+      <tr><td>A10</td><td>限速（上传方向）</td><td class="k"><kbd>Shift</kbd>+<kbd>L</kbd></td><td>列表</td>
+        <td class="m">openSpeedAt(null,'up')</td><td>—</td><td></td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">B · 光标与导航（9）</div>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:20%">动作</th><th style="width:15%">默认键</th>
+      <th style="width:9%">作用域</th><th style="width:26%">目标（现有方法）</th><th style="width:6%">固定</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>B1</td><td>光标上移一行</td><td class="k"><kbd>↑</kbd></td><td>列表</td>
+        <td class="m">⚠ 新增 _kbMove(-1)</td><td>—</td>
+        <td>辅种页走"组行 → 展开组的成员行"串成的线性链；种子页走 filteredTorrents；追剧走 剧/集 单元</td></tr>
+      <tr><td>B2</td><td>光标下移一行</td><td class="k"><kbd>↓</kbd></td><td>列表</td>
+        <td class="m">⚠ 新增 _kbMove(+1)</td><td>—</td><td>用户原始诉求："浏览种子详细信息时上下键切换种子"</td></tr>
+      <tr><td>B3</td><td>展开当前行</td><td class="k"><kbd>→</kbd></td><td>列表</td>
+        <td class="m">toggleExpand / toggleShow / toggleShowEp</td><td>—</td><td>已展开则无动作（不跳到子行）</td></tr>
+      <tr><td>B4</td><td>收起当前行</td><td class="k"><kbd>←</kbd></td><td>列表</td>
+        <td class="m">同上（反向）</td><td>—</td><td></td></tr>
+      <tr><td>B5</td><td>跳到首行</td><td class="k"><kbd>Home</kbd></td><td>列表</td>
+        <td class="m">_kbMoveTo(0)</td><td>—</td><td>preventDefault 阻止页面滚动</td></tr>
+      <tr><td>B6</td><td>跳到末行</td><td class="k"><kbd>End</kbd></td><td>列表</td>
+        <td class="m">_kbMoveTo(n-1)</td><td>—</td><td></td></tr>
+      <tr><td>B7</td><td>上翻一屏</td><td class="k"><kbd>PgUp</kbd></td><td>列表</td>
+        <td class="m">_kbMove(-rowsInView)</td><td>—</td><td>行数按 _rowH[kind] 估</td></tr>
+      <tr><td>B8</td><td>下翻一屏</td><td class="k"><kbd>PgDn</kbd></td><td>列表</td>
+        <td class="m">_kbMove(+rowsInView)</td><td>—</td><td></td></tr>
+      <tr><td>B9</td><td>打开当前行详情</td><td class="k"><kbd>Enter</kbd></td><td>列表</td>
+        <td class="m">openTorrentDrawer(hash) / toggleExpand</td><td>—</td>
+        <td>种子/成员行开抽屉；组行改为展开明细（与鼠标左键同语义）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">C · 选择（5）</div>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:20%">动作</th><th style="width:15%">默认键</th>
+      <th style="width:9%">作用域</th><th style="width:26%">目标（现有方法）</th><th style="width:6%">固定</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>C1</td><td>切换当前行选中</td><td class="k"><kbd>Space</kbd></td><td>列表</td>
+        <td class="m">toggleGroupSel / toggleMemberSel / _toggleUnit</td><td>—</td>
+        <td>需 preventDefault 阻止页面滚动；追剧页按"整单元"切换，与鼠标 Ctrl+点击同语义</td></tr>
+      <tr><td>C2</td><td>向上扩展选择</td><td class="k"><kbd>Shift</kbd>+<kbd>↑</kbd></td><td>列表</td>
+        <td class="m">shiftGroupSel / shiftMemberSel / _extendUnit</td><td>—</td><td>锚点语义沿用现有实现（不随扩展更新）</td></tr>
+      <tr><td>C3</td><td>向下扩展选择</td><td class="k"><kbd>Shift</kbd>+<kbd>↓</kbd></td><td>列表</td>
+        <td class="m">同上</td><td>—</td><td></td></tr>
+      <tr><td>C4</td><td>全选当前视图</td><td class="k"><kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>列表</td>
+        <td class="m">⚠ 新增 _kbSelectAll()</td><td>—</td>
+        <td>浏览器"全选文本"需 preventDefault；输入框内必须放行</td></tr>
+      <tr><td>C5</td><td>清除选择 / 逐层退栈</td><td class="k"><kbd>Esc</kbd></td><td>全局</td>
+        <td class="m">app.js:671 退栈链末尾 clearSelection()</td><td><b>固定</b></td>
+        <td>已有实现，键盘引擎接在它之后；不给改键</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">D · 一级动作（右键菜单一级那四个 + 常用三个）（8）</div>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:20%">动作</th><th style="width:15%">默认键</th>
+      <th style="width:9%">作用域</th><th style="width:26%">目标（现有方法）</th><th style="width:6%">固定</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>D1</td><td>暂停</td><td class="k"><kbd>P</kbd></td><td>列表</td>
+        <td class="m">⚠ _actCore('pause', targets)</td><td>—</td><td>有选中走批量合单；无选中走光标行</td></tr>
+      <tr><td>D2</td><td>开始</td><td class="k"><kbd>S</kbd></td><td>列表</td>
+        <td class="m">_actCore('resume', …)</td><td>—</td><td></td></tr>
+      <tr><td>D3</td><td>强制汇报</td><td class="k"><kbd>F</kbd></td><td>列表</td>
+        <td class="m">_actCore('reannounce', …)</td><td>—</td>
+        <td>结果在远端，无乐观补丁；会走 30s 等待 + sticky toast，与右键完全一致</td></tr>
+      <tr><td>D4</td><td>重新校验</td><td class="k"><kbd>C</kbd></td><td>列表</td>
+        <td class="m">_actCore('recheck', …)</td><td>—</td><td></td></tr>
+      <tr><td>D5</td><td>详细信息（抽屉）</td><td class="k"><kbd>I</kbd></td><td>列表</td>
+        <td class="m">openTorrentDrawer(hash)</td><td>—</td><td>与 B9(<kbd>Enter</kbd>) 同目标两个入口</td></tr>
+      <tr><td>D6</td><td>标签 / 分类…</td><td class="k"><kbd>M</kbd></td><td>列表</td>
+        <td class="m">openMetaDialog(hash｜null)</td><td>—</td><td>有选中传 null（整集合），与批量浮条同口径</td></tr>
+      <tr><td>D7</td><td>打开目标文件夹</td><td class="k"><kbd>O</kbd></td><td>列表</td>
+        <td class="m">openTargetPath(kind, id)</td><td>—</td><td>路径由服务端派生，前端只传 kind+标识（安全口径不变）</td></tr>
+      <tr><td>D8</td><td>删除…</td><td class="k"><kbd>D</kbd></td><td>列表</td>
+        <td class="m">_deleteFlow({keys, hashes, …})</td><td>—</td>
+        <td><b>危险动作</b>：必须走确认框（含 HR 风险点名）；面板内禁止绑到无修饰单键以外的误触组合</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">E · 次要动作（Shift 族，对应「更多操作」与一级次要项）（7）</div>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:20%">动作</th><th style="width:15%">默认键</th>
+      <th style="width:9%">作用域</th><th style="width:26%">目标（现有方法）</th><th style="width:6%">固定</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>E1</td><td>移动位置…</td><td class="k"><kbd>Shift</kbd>+<kbd>V</kbd></td><td>列表</td>
+        <td class="m">editMove(hash)</td><td>—</td><td>已接受 hash 入参，键盘零改造</td></tr>
+      <tr><td>E2</td><td>重命名…</td><td class="k"><kbd>Shift</kbd>+<kbd>R</kbd></td><td>列表</td>
+        <td class="m">editRename(hash)</td><td>—</td><td></td></tr>
+      <tr><td>E3</td><td>导出 .torrent</td><td class="k"><kbd>Shift</kbd>+<kbd>E</kbd></td><td>列表</td>
+        <td class="m">exportTorrent()</td><td>—</td><td>读 menu.hash ⇒ 需改为按目标解析（⚠）</td></tr>
+      <tr><td>E4</td><td>复制名称</td><td class="k"><kbd>Shift</kbd>+<kbd>C</kbd></td><td>列表</td>
+        <td class="m">copyTorrentInfo('name')</td><td>—</td><td>同上（⚠）；剪贴板失败降级逻辑已内置</td></tr>
+      <tr><td>E5</td><td>复制哈希</td><td class="k"><kbd>Shift</kbd>+<kbd>H</kbd></td><td>列表</td>
+        <td class="m">copyTorrentInfo('hash')</td><td>—</td><td></td></tr>
+      <tr><td>E6</td><td>复制 magnet</td><td class="k"><kbd>Shift</kbd>+<kbd>G</kbd></td><td>列表</td>
+        <td class="m">copyTorrentInfo('magnet')</td><td>—</td><td></td></tr>
+      <tr><td>E7</td><td>列选择器（显示/隐藏列）</td><td class="k"><kbd>K</kbd></td><td>列表</td>
+        <td class="m">toggleColMenu(ev)</td><td>—</td><td>⚠ 无坐标时锚在视口右侧（与限速浮层同款兜底）</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">F · 队列与开关（低频，走「更多操作」那层）（6）</div>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:20%">动作</th><th style="width:15%">默认键</th>
+      <th style="width:9%">作用域</th><th style="width:26%">目标（现有方法）</th><th style="width:6%">固定</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>F1</td><td>队列上移</td><td class="k"><kbd>Ctrl</kbd>+<kbd>↑</kbd></td><td>列表</td>
+        <td class="m">torrentCmd('queue',{action:'up'})</td><td>—</td>
+        <td>mac 上 <kbd>Ctrl</kbd>+<kbd>↑</kbd> 是 Mission Control（系统级，拦不住）⇒ mac 提示改键</td></tr>
+      <tr><td>F2</td><td>队列下移</td><td class="k"><kbd>Ctrl</kbd>+<kbd>↓</kbd></td><td>列表</td>
+        <td class="m">torrentCmd('queue',{action:'down'})</td><td>—</td><td>同上</td></tr>
+      <tr><td>F3</td><td>队列置顶</td><td class="k"><kbd>Ctrl</kbd>+<kbd>Home</kbd></td><td>列表</td>
+        <td class="m">torrentCmd('queue',{action:'top'})</td><td>—</td><td>浏览器"滚到页顶"需 preventDefault</td></tr>
+      <tr><td>F4</td><td>队列置底</td><td class="k"><kbd>Ctrl</kbd>+<kbd>End</kbd></td><td>列表</td>
+        <td class="m">torrentCmd('queue',{action:'bottom'})</td><td>—</td><td></td></tr>
+      <tr><td>F5</td><td>自动种子管理（TMM）切换</td><td class="k"><kbd>Shift</kbd>+<kbd>T</kbd></td><td>列表</td>
+        <td class="m">autoTmmToggle()</td><td>—</td><td>读 menu.hash ⇒ ⚠ 改为按目标解析</td></tr>
+      <tr><td>F6</td><td>强制开始切换</td><td class="k"><kbd>Shift</kbd>+<kbd>F</kbd></td><td>列表</td>
+        <td class="m">torrentCmd('force-start',{enable:…})</td><td>—</td><td>需先读当前种子的 force_start ⇒ ⚠</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">G · 抽屉内（4）与设置页内（2）</div>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:20%">动作</th><th style="width:15%">默认键</th>
+      <th style="width:9%">作用域</th><th style="width:26%">目标（现有方法）</th><th style="width:6%">固定</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>G1</td><td>抽屉 · 常规页</td><td class="k"><kbd>Alt</kbd>+<kbd>1</kbd></td><td>抽屉</td>
+        <td class="m">drawerTab('general')</td><td>—</td><td rowspan="4" style="vertical-align:middle">
+          <kbd>Alt</kbd>+数字在 Windows/Linux 浏览器无默认行为；mac 上 <kbd>Option</kbd> 会改变
+          <code>e.key</code>（打出特殊字符），这正是匹配用 <code>e.code</code> 的理由</td></tr>
+      <tr><td>G2</td><td>抽屉 · Tracker 页</td><td class="k"><kbd>Alt</kbd>+<kbd>2</kbd></td><td>抽屉</td>
+        <td class="m">drawerTab('trackers')</td><td>—</td></tr>
+      <tr><td>G3</td><td>抽屉 · 用户页</td><td class="k"><kbd>Alt</kbd>+<kbd>3</kbd></td><td>抽屉</td>
+        <td class="m">drawerTab('peers')</td><td>—</td></tr>
+      <tr><td>G4</td><td>抽屉 · 内容页</td><td class="k"><kbd>Alt</kbd>+<kbd>4</kbd></td><td>抽屉</td>
+        <td class="m">drawerTab('content')</td><td>—</td></tr>
+      <tr><td>G5</td><td>设置页 · 保存配置</td><td class="k"><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>设置</td>
+        <td class="m">cfgSave()</td><td>—</td><td>浏览器"保存网页"需 preventDefault；与 config.yml 红线无关（写的是同一套既有保存链路）</td></tr>
+      <tr><td>G6</td><td>设置页 · 放弃改动</td><td class="k">（不绑定）</td><td>设置</td>
+        <td class="m">cfgDiscard()</td><td>—</td><td>危险且无撤销，默认留给鼠标；用户可自己绑</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">H · 面板本身（2）</div>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:20%">动作</th><th style="width:15%">默认键</th>
+      <th style="width:9%">作用域</th><th style="width:26%">目标（现有方法）</th><th style="width:6%">固定</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>H1</td><td>打开快捷键面板</td><td class="k"><kbd>?</kbd>（<kbd>Shift</kbd>+<kbd>/</kbd>）</td><td>全局</td>
+        <td class="m">⚠ 新增 kbPanelOpen = true</td><td>—</td><td>同时作为可发现性入口（见 §6）</td></tr>
+      <tr><td>H2</td><td>关闭面板 / 取消录制</td><td class="k"><kbd>Esc</kbd></td><td>面板</td>
+        <td class="m">接在退栈链最前</td><td><b>固定</b></td><td>录制中按 Esc = 放弃本次录制，不关面板</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">I · 默认不绑定、但可自定义（6）</div>
+  <p class="note">
+    这些是低频或需要上下文的动作，给空默认位 —— 注册表里有条目（所以能绑、能被面板列出），
+    不占默认键位，免得一级键位表膨胀。
+  </p>
+  <table>
+    <thead><tr><th style="width:4%">#</th><th style="width:24%">动作</th><th style="width:12%">默认键</th>
+      <th style="width:32%">目标（现有方法）</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>I1</td><td>超级做种切换</td><td class="k">（空）</td>
+        <td class="m">torrentCmd('super-seeding',{enable:…})</td><td>qB 通用低频能力</td></tr>
+      <tr><td>I2</td><td>分享率限制…</td><td class="k">（空）</td>
+        <td class="m">editShareLimits(hash)</td><td>已接受 hash 入参</td></tr>
+      <tr><td>I3</td><td>文件优先级：最高 / 高 / 正常 / 不下载</td><td class="k">（空 ×4）</td>
+        <td class="m">setFilePriority(7 / 6 / 1 / 0)</td><td>需要"当前文件行"这个第二层光标，复杂度不划算</td></tr>
+      <tr><td>I4</td><td>按某列排序</td><td class="k">（空）</td>
+        <td class="m">setSort(key, scope)</td><td>14 列 × 3 张表，绑键不现实；留给表头右键</td></tr>
+      <tr><td>I5</td><td>清除全部筛选</td><td class="k">（空）</td>
+        <td class="m">clearFilters()</td><td>可绑；默认不给，避免与 <kbd>Esc</kbd> 语义打架</td></tr>
+      <tr><td>I6</td><td>反选当前视图</td><td class="k">（空）</td>
+        <td class="m">⚠ 需新增 _kbInvertSel()</td><td>大库上反选 = 选中几千个，默认不给</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grp">J · 保留键黑名单（面板内拒绝绑定）</div>
+  <table>
+    <thead><tr><th style="width:24%">类别</th><th style="width:44%">键位</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>标签页 / 窗口</td><td class="m">Ctrl+T / Ctrl+W / Ctrl+N / Ctrl+Tab / Ctrl+Shift+N / Ctrl+Shift+T / Ctrl+Shift+W / Ctrl+1–8</td>
+        <td>浏览器接管，preventDefault 无效</td></tr>
+      <tr><td>页面 / 查找 / 打印</td><td class="m">Ctrl+P / Ctrl+F / Ctrl+G / Ctrl+R / F5 / Ctrl+U / Ctrl+D / Ctrl+H / Ctrl+J / Ctrl+L / Ctrl+O</td>
+        <td>同上</td></tr>
+      <tr><td>开发者工具</td><td class="m">F12 / Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C</td><td>同上</td></tr>
+      <tr><td>系统级</td><td class="m">Ctrl+Alt+Del / Win 系 / F11 / Ctrl+Shift+Esc / mac Cmd 全族 / mac Ctrl+↑↓</td>
+        <td>OS 先于浏览器拿到</td></tr>
+      <tr><td>可拦但需显式确认</td><td class="m">Ctrl+S / Ctrl+A / /（Firefox 快速查找）/ Ctrl+Home / Ctrl+End</td>
+        <td>preventDefault 通常有效；面板标"可能仍被浏览器抢走"，真机实测后再决定是否留在默认表里</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s6">
+  <h2><span class="no">06</span>自定义面板设计</h2>
+
+  <h4>入口（三处，互为冗余）</h4>
+  <ul>
+    <li><b>快捷键 <kbd>?</kbd></b> —— 主入口，任何非输入态可达；</li>
+    <li><b>设置页「常规」分区页尾的一个块</b> —— 与"运行日志 / HR 在线核实"同款（那两块已并入分区页尾，
+      是现成的"客户端只读块"先例）；</li>
+    <li><b>顶栏不新增按钮</b>（右侧已有 设置 + 棱镜 + 状态徽章，再加会挤）——
+      若后面觉得不够显眼，再按 R11 的图标语义类补一个，属另一轮。</li>
+  </ul>
+
+  <h4>面板形态</h4>
+  <ul>
+    <li>与统计/限速同层：无遮罩 modal 会挡住列表，键盘场景下更该用带遮罩的居中弹窗（录制态要吃所有按键，
+      遮罩能明确"现在在录"）；关闭走 <kbd>Esc</kbd> / 点遮罩 / 关闭按钮。</li>
+    <li>列表按注册表 <code>group</code> 分组：全局导航 / 光标与选择 / 一级动作 / 次要动作 / 队列与开关 /
+      局部（抽屉·设置）/ 未绑定。每行 = 动作名 + 当前键位（<kbd>chip</kbd>）+ 「改键」「清除」「默认」。</li>
+    <li>顶部一行：搜索框（按动作名或键位过滤）+ 「全部恢复默认」。</li>
+    <li>底部一行说明：偏好按 <b>浏览器 + 站点地址</b> 存（localStorage 的 origin 隔离），
+      换机器/换端口不跟着走 —— 这条必须写出来，否则又是一次"改了没生效"的报障。</li>
+  </ul>
+
+  <h4>改键（录制）交互</h4>
+  <ol>
+    <li>点「改键」→ 该行进入录制态（chip 变成"按下新的组合键…"，<kbd>Esc</kbd> 取消，点别处也取消）；</li>
+    <li>捕获<b>第一个</b> keydown：<code>stopPropagation</code> + <code>preventDefault</code>，
+      <code>isComposing</code> 时不收；单修饰键（只按 Ctrl）不收，等真键；</li>
+    <li>三种结果：① 命中黑名单 → 行内红字"浏览器占用，换一个"，留在录制态；
+      ② 命中已有条目 → 提示"会从 X 移交给 Y"，确认后 X 置空；
+      ③ 空闲 → 写入并即时生效；</li>
+    <li>写 localStorage + toast；同标签即时生效，其它标签靠 <code>storage</code> 事件整份采纳。</li>
+  </ol>
+  <p class="note">
+    危险动作（D8 删除）额外一档：绑到无修饰单键时二次确认一次 —— 默认 <kbd>D</kbd> 本身就是这个形态，
+    所以面板里对 danger 条目显示的是"⚠ 单键触发（有确认框）"，不禁止（禁止会让默认表自相矛盾）。
+  </p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">07</span>实施步骤 W1–W7</h2>
+  <ol class="steps">
+    <li>
+      <div class="hd"><em>W1</em>键位引擎（只接线，不绑动作）</div>
+      <div class="bd">
+        新增 <code>shared/shortcuts.js</code> + <code>shortcuts.css</code>；两处 index.html 挂脚本（排在 app.js 前）。
+        实现归一化、作用域判定（输入态 / IME / 模态层）、保留键黑名单、localStorage 读写与 <code>storage</code> 同步。
+        先只注册 3 条调试键位。<b>验收</b>：<code>test_frontend_static_bundle_health</code> 绿；控制台能打印匹配到的键位串；
+        搜索框内打拼音不触发任何键位。
+      </div>
+    </li>
+    <li>
+      <div class="hd"><em>W2</em>光标模型 + 滚动进视口</div>
+      <div class="bd">
+        新增 <code>kbCursor</code> 与 <code>_kbMove</code> / <code>_kbScrollToRow</code>；
+        在 <code>_rowWindow()</code> 末尾留 <code>this._rowPre[kind]</code>；行模板挂 <code>data-hash/data-key</code>
+        与 <code>.kb-cursor</code>；轮询刷新后按身份重定位。<b>验收</b>：3000 行库连按 ↓ 到底，光标不丢、不露白；
+        改排序/筛选后光标仍跟住同一种子。
+      </div>
+    </li>
+    <li>
+      <div class="hd"><em>W3</em>目标解析 + 命令核抽取</div>
+      <div class="bd">
+        <code>commands.js</code> 抽 <code>_actCore(action, {keys, hashes})</code>，<code>act</code> /
+        <code>actTorrent</code> 退化为薄包装（行为不变，右键菜单走原路径）；
+        新增 <code>_kbTargets()</code>：有选中用选中、无选中用光标。
+        <b>验收</b>：右键菜单四个动作逐个回归一遍（暂停/开始/强制汇报/删除）与改前完全一致。
+      </div>
+    </li>
+    <li>
+      <div class="hd"><em>W4</em>绑定 A–D 组（30 条）</div>
+      <div class="bd">
+        按 §05 的 A/B/C/D 表逐条接线；D 组全部走 <code>_actCore</code> / <code>_deleteFlow</code>。
+        <b>验收</b>：每张表逐键真机走一遍；删除必须弹确认框且 HR 风险点名照旧。
+      </div>
+    </li>
+    <li>
+      <div class="hd"><em>W5</em>绑定 E–H 组 + 局部作用域</div>
+      <div class="bd">
+        Shift 族、队列族、抽屉 <kbd>Alt</kbd>+数字、设置页 <kbd>Ctrl</kbd>+<kbd>S</kbd>、
+        面板 <kbd>?</kbd>；把引擎接在 app.js Esc 退栈链之后。<b>验收</b>：Esc 逐层退栈顺序与改前一致
+        （这是最容易静默改坏的地方，逐层手工数一遍）。
+      </div>
+    </li>
+    <li>
+      <div class="hd"><em>W6</em>自定义面板</div>
+      <div class="bd">
+        面板模板（两处 index.html）+ 录制交互 + 冲突检测 + 单条/全局重置 + 设置页「常规」页尾入口块。
+        <b>验收</b>：改键后即时生效；冲突与黑名单都能当场挡下；刷新后保持；开两个标签页互相同步。
+      </div>
+    </li>
+    <li>
+      <div class="hd"><em>W7</em>守阵与文档回写</div>
+      <div class="bd">
+        补 §08 的静态断言；<code>conventions/webui.md</code> 增一节「键盘快捷键」（作用域判定口径、
+        光标与选中不合并、匹配用 <code>e.code</code>、默认键位以注册表为准）；实测数字进
+        <code>testing/baseline.md</code>。<b>验收</b>：<code>test.full</code> 绿且 skipped = 0。
+      </div>
+    </li>
+  </ol>
+</section>
+
+<section id="s8">
+  <h2><span class="no">08</span>测试计划</h2>
+  <h4>新增静态守阵（tests/test_web.py，与既有前端守阵同风格）</h4>
+  <ul>
+    <li><b>① 单一事实源</b>：模板 / 面板 / 文档里出现的键位字面量，必须能在 <code>SHORTCUTS</code> 注册表里找到
+      （防"面板写 A、实际绑 B"）。</li>
+    <li><b>② 默认键位无重复</b>：<code>def</code> 非空条目两两不同（重复即静默覆盖）。</li>
+    <li><b>③ 默认键位不碰黑名单</b>：逐条比对保留键表。</li>
+    <li><b>④ 每个 id 都能解析到方法</b>：<code>run(vm)</code> 里调用的 <code>this.XXX</code> 必须在 bundle
+      的成员表里存在（防改名后键位静默失效）。</li>
+    <li><b>⑤ 两套 UI 成对</b>：面板模板在 atlas / prism 两份 index.html 里都存在且条目数相等
+      （与 <code>.bt</code> 成对守阵同思路）。</li>
+    <li><b>⑥ Esc 不可改</b>：<code>fixed</code> 标记存在且面板模板里该行没有「改键」按钮。</li>
+  </ul>
+  <h4>真机走查（静态测不到的那部分）</h4>
+  <ul>
+    <li>3000 行库：↓ 连按到底 / <kbd>End</kbd> / <kbd>PgDn</kbd>，量"有没有露白、末行够不够得着"。</li>
+    <li>输入法：中文全拼输入期间，逐一按 A–H 全部单键，确认一个都不触发。</li>
+    <li>Esc 退栈：从"抽屉 + 抽屉内文件优先级菜单"开始按 4 次 Esc，顺序与改前一致。</li>
+    <li>批量：选 3 行按 <kbd>P</kbd>，确认暂停 3 行（不是光标 1 行）；清空选择后按 <kbd>P</kbd>，只暂停光标行。</li>
+    <li>删除：按 <kbd>D</kbd>，确认框内容、HR 点名、勾选删除文件三项与右键一致。</li>
+    <li>跨标签：A 标签改键 → B 标签即时生效；刷新后保持。</li>
+    <li>两套 UI（星图 / 棱镜）各走一遍上面全部条目。</li>
+  </ul>
+</section>
+
+<section id="s9">
+  <h2><span class="no">09</span>风险与不做的事</h2>
+  <div class="box stop">
+    <div class="t">风险</div>
+    <p>
+      <b>① 光标被当成选中</b> —— 两套状态视觉若做得像，用户会以为"光标行 = 已选"，按 <kbd>P</kbd> 就只暂停一行。
+      缓解：光标用 1px 虚线描边（不铺底），选中保持现有底色铺底 + 左侧条；首次出现光标时 toast 一句。
+    </p>
+    <p>
+      <b>② 浏览器抢键</b> —— <kbd>/</kbd>（Firefox）、<kbd>Ctrl</kbd>+<kbd>S</kbd>、<kbd>Ctrl</kbd>+<kbd>Home/End</kbd>
+      可能被浏览器先拿走。缓解：真机实测后，抢不过的那几条从默认表里摘掉（改成空默认位，由用户自定）。
+    </p>
+    <p>
+      <b>③ 大库上的性能</b> —— 光标移动会触发一次滚动 + 一次窗口重算。缓解：滚动进视口只在"目标不在视口内"时执行，
+      不在每次按键都滚；前缀和复用现成的，不另算。
+    </p>
+    <p>
+      <b>④ 文档漂移</b> —— 键位表写进文档就会过期。缓解：文档只写口径，键位以注册表为唯一事实源，
+      W7 的守阵 ① 兜住。
+    </p>
+  </div>
+  <div class="box">
+    <div class="t">本轮不做</div>
+    <p>
+      序列键（如 <kbd>G</kbd> 然后 <kbd>S</kbd>）—— 需要超时状态机，收益不抵复杂度；
+      Vim 风格 <kbd>J</kbd>/<kbd>K</kbd> —— 与"上下键"重复；
+      服务端持久化（写进 config.yml）—— 那是用户生产配置（红线文件），且 UI 偏好属于"这台浏览器"，
+      与列偏好 / 主题 / 时间口径同一档，一律 localStorage；
+      手机/平板触屏手势 —— 无键盘可谈。
+    </p>
+  </div>
+</section>
+
+<section id="s10">
+  <h2><span class="no">10</span>待确认决策点</h2>
+  <table>
+    <thead><tr><th style="width:5%">#</th><th style="width:26%">决策</th><th style="width:37%">选项 A</th><th>选项 B</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>默认键位风格</td>
+        <td><b>无修饰单键为主</b>（P/S/F/C/D…），上手快，与输入法/输入态冲突需要 §3 的三段屏蔽兜住</td>
+        <td>全部 <kbd>Alt</kbd>+键 —— 更安全但难按，且 Firefox 会唤起菜单栏</td></tr>
+      <tr><td>2</td><td>光标是否跨进成员行</td>
+        <td><b>串成一条线性链</b>（组行 → 该组展开的成员行 → 下一组），符合"上下键切换种子"的原始诉求</td>
+        <td>只在组行间移动，进成员行要按 <kbd>→</kbd> 先展开再切焦点</td></tr>
+      <tr><td>3</td><td>Shift 族是否保留</td>
+        <td><b>保留</b>：<kbd>Shift</kbd>+<kbd>C</kbd>（复制名称）与 <kbd>C</kbd>（重新校验）是两条动作，
+          靠修饰位区分</td>
+        <td>次要动作一律不给默认键，只留空位（默认表更短，但开箱即用度低）</td></tr>
+      <tr><td>4</td><td>面板入口</td>
+        <td><b>只做 <kbd>?</kbd> + 设置页页尾块</b>（顶栏不加按钮）</td>
+        <td>再加一个顶栏 ⌨ 图标钮（更容易被发现，但顶栏右侧已挤）</td></tr>
+      <tr><td>5</td><td>本期范围</td>
+        <td><b>一次性做到 W6</b>（含自定义面板）</td>
+        <td>先做 W1–W4（能用、不可改），面板放下一轮</td></tr>
+    </tbody>
+  </table>
+  <p class="note">
+    上面 5 条定完即可开工；未定也能先做 W1（引擎骨架），因为 W1 与这些选择都不冲突。
+  </p>
+</section>
+
+<footer class="colophon">
+  auto-qb · WEB UI 键盘快捷键可行性分析与实施计划 · 2026-09-26<br>
+  事实来源：src/auto_qb/webui/static/{shared,atlas,prism} · tests/test_web.py · 想法.md TODO
+</footer>
+
+</div>
+</body>
+</html>
