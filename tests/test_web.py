@@ -64,7 +64,8 @@
 - test_search_torrents_negative_only_empty: 仅负词/空查询返回空 + negative_only 标记, 不投递索引构建
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
-- test_frontend_search_syntax_wiring: 搜索语法前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/种子页解析匹配单点在 filters.js 且 hr.js 旧整句实现已删/归一须 Unicode 词字符(\W 折叠掉 CJK)/filteredTorrents 接线 + searching 守卫(仅负词返回空); 有 node 时行为级校验并与 views.py 逐项对账
+- test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
+- test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + 行级负词不整种子误杀 —— 三页同源(26-09-26 单点化)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
 - test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
@@ -1171,50 +1172,26 @@ def test_frontend_button_system_paired():
             assert tok in tcss, f"棱镜主题 {tf} 缺 {tok}(五主题须成对)"
 
 
-# filters.js 搜索解析行为校验的 node 脚本(不落盘): 用 vm 沙箱跑 filters.js(它只做
-# window.AQB_FILTERS 赋值), 从 methods 里直接取三个纯函数 —— 不做脆弱的文本摘取。
-# 用例与服务端 _parse_query/search_torrents 行为同表(见 test_parse_query_tokens 等),
-# 输出 JSON 由 Python 侧与 views.py 的同名实现逐项对账(跨语言口径漂移即红)。
-_NODE_SEARCH_BEHAVIOR = (
-    "const fs=require('fs'),vm=require('vm');"
-    "const sandbox={window:{}};vm.createContext(sandbox);"
-    "vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox,{filename:'filters.js'});"
-    "const F=sandbox.window.AQB_FILTERS.methods;"
-    "const P=q=>F._parseSearchQuery.call(F,q);"
-    "const N=s=>F._searchNorm.call(F,s);"
-    "const M=(t,m)=>F._torrentTextMatch.call(F,m,P(t));"
-    "const tr={name:'[虽然我不是完美恶女～雏宫蝶鼠替换传～].Futsutsuka.na.Akujo.dewa.Gozaimasu.ga."
-    "Suuguu.Chouso.Torikae.Den.2026.S01E10.1080p.CR.WEB-DL.H264.AAC-UBWEB.mkv',"
-    "site:'MDCx',category:'动漫',save_path:'D:/media/shows',tags:['2026']};"
-    "console.log(JSON.stringify({"
-    "norm:N('The.Cat.and_the_Dog-1024p'),"
-    "p_and:P('恶女 10 -DV'),p_dash:P('-'),"
-    "r_and:M('恶女 10',tr),r_neg:M('恶女 10 -UBWEB',tr),"
-    "r_negonly:M('-dv',tr),r_dash:M('-',tr),"
-    "r_phrase:M('\\\"akujo dewa\\\"',tr),r_phrase_ord:M('\\\"dewa akujo\\\"',tr),"
-    "r_site:M('MDCx',tr),r_tag:M('2026',tr),r_webdl:M('web-dl',tr)}));"
-)
-
-
 def test_frontend_search_syntax_wiring():
-    """搜索查询语法的前端接线守阵(2026-09-26 报障双修)
+    """搜索匹配**服务端单点**的前端接线守阵(2026-09-26 统一, 治"同一语义修三遍")
 
-    两类"pytest 全绿但交互废掉"的故障形态, 一律机械钉住:
+    两类"pytest 全绿但交互废掉 / 前端再长出第二套匹配实现"的故障形态, 一律机械钉住:
     ① 顶栏搜索清除钮必须挂 @mousedown.prevent —— 缺了它, 按下瞬间输入框失焦收窄
       (focus 时 240→300px 的宽度过渡回退), 绝对定位在右沿的按钮随收窄移出光标,
       click 落空 => "有焦点时点 x 清不掉, 无焦点正常"; 两套 index.html 成对断言。
-    ② 种子页搜索是**客户端**过滤(filters.js, 不依赖服务端 searchHits): 解析/匹配单点在
-      _parseSearchQuery/_searchNorm/_torrentTextMatch, hr.js 的旧整句 includes 版必须已删
-      (防双实现漂移 —— 它就是"词 AND/-排除 失效"的根因); 归一折叠必须用 Unicode 词字符
-      ([^\\p{L}\\p{N}]+/gu, 下划线同 Python [\W_] 口径一并折叠) —— JS \\w 仅 ASCII, 退回 \\W 会把
-      CJK 整段当分隔符折叠掉;
-      filteredTorrents 必须经解析 + searching 守卫接线(仅负词返回空, 与服务端 negative_only
-      口径一致)。有 node 时另做行为级校验并与 views.py 逐项对账, 无 node 静默跳过
-      (不引入 pytest skip, 基线 0 skipped)。
+    ② 三页(辅种/种子/追剧)搜索命中一律消费服务端 searchHits(views.py::search_torrents 的
+      行级裁决, 候选行 = 名字/站点/分类/路径/标签/文件名): 前端**不得再出现**任何文本匹配
+      实现 —— 26-09-26 统一前 filters.js(_parseSearchQuery/_searchNorm/_torrentTextMatch)、
+      hr.js(更早的整句 includes)、shows.js(剧名整句 includes)各持一份, 同一语义
+      (恶女 10 / 季包"cat 12")前后端修了三遍; 复活任何一个即与单点漂移, 直接红。
+      语法(词 AND/-排除/短语/归一)行为级用例在服务端侧: test_parse_query_tokens /
+      test_search_torrents_*(对账守阵已无对象 —— 客户端没有解析器了)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     filters_js = open(os.path.join(shared, "filters.js"), encoding="utf-8").read()
     hr_js = open(os.path.join(shared, "hr.js"), encoding="utf-8").read()
+    app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    shows_js = open(os.path.join(shared, "shows.js"), encoding="utf-8").read()
 
     # ① 清除钮 mousedown.prevent 成对(两套模板的 search-clear 按钮逐个检查)
     for theme in ("atlas", "prism"):
@@ -1225,50 +1202,16 @@ def test_frontend_search_syntax_wiring():
         assert "@mousedown.prevent" in tag, f"{theme} search-clear 缺 @mousedown.prevent(焦点态清除失灵回归)"
         assert '@click="clearSearch"' in tag, f"{theme} search-clear 缺 clearSearch 接线"
 
-    # ② 解析/匹配单点在 filters.js; hr.js 旧实现已删
-    for name in ("_parseSearchQuery", "_searchNorm", "_torrentTextMatch"):
-        assert re.search(rf"^\s*{name}\(", filters_js, re.M), f"filters.js 缺 {name}(搜索语法单点被移走?)"
+    # ② 前端无第二匹配实现(反漂移: 任何一个复活即红); 三页接线走 searchHits
+    # (注释里允许引用旧函数名讲历史, 故断言"名字+括号"—— 定义或调用才算复活)
+    for name in ("_parseSearchQuery", "_searchNorm", "_torrentTextMatch", "_torrentSearchPass"):
+        assert not re.search(rf"{name}\s*\(", filters_js), \
+            f"filters.js 复活了客户端匹配 {name}(搜索匹配单点在 views.py, 复活即漂移)"
     assert "_torrentTextMatch" not in hr_js, "hr.js 不得再留 _torrentTextMatch 旧整句实现(双实现漂移)"
-
-    # 归一折叠必须 Unicode 词字符 + u 旗标(\W 会折叠掉 CJK; 下划线须折叠 —— Python [\W_] 口径);
-    # filteredTorrents 接线完整
-    assert "[^\\p{L}\\p{N}]+/gu" in filters_js, "filters.js _searchNorm 未用 Unicode 词字符折叠(CJK 会被 \\W 折叠掉)"
-    assert "_parseSearchQuery((this.searchQuery" in filters_js, \
-        "filteredTorrents 未走 _parseSearchQuery(退回整句子串匹配, 词 AND/-排除 失效)"
-    assert "searching && !this._torrentTextMatch(" in filters_js, \
-        "filteredTorrents 缺 searching 守卫(仅负词不会返回空, 与服务端 negative_only 口径漂移)"
-
-    # 行为级校验: 与 views.py 的解析/归一逐项对账(无 node 跳过)
-    node = shutil.which("node")
-    if not node:
-        return
-    from auto_qb.webui.views import _parse_query, _search_norm
-
-    proc = subprocess.run(
-        [node, "-e", _NODE_SEARCH_BEHAVIOR, os.path.join(shared, "filters.js")],
-        capture_output=True,
-        text=True,
-    )
-    assert proc.returncode == 0, f"node 行为校验脚本报错: {proc.stderr.strip() or proc.stdout.strip()}"
-    got = json.loads(proc.stdout.strip().splitlines()[-1])
-
-    assert got["norm"] == _search_norm("The.Cat.and_the_Dog-1024p"), "JS/Python 归一口径漂移"
-    pos, neg = _parse_query("恶女 10 -DV")
-    assert got["p_and"] == {"pos": pos, "neg": neg}, "JS/Python 解析口径漂移(词 AND + -排除)"
-    assert got["p_dash"] == {"pos": [], "neg": []}, "孤立 - 应被忽略"
-    # 行为用例: 词 AND 命中 / 负词排除 / 仅负词与孤立 - 返回空 / 短语词序敏感 / 字段行覆盖
-    for key, want in (
-        ("r_and", True),
-        ("r_neg", False),
-        ("r_negonly", False),
-        ("r_dash", False),
-        ("r_phrase", True),
-        ("r_phrase_ord", False),
-        ("r_site", True),
-        ("r_tag", True),
-        ("r_webdl", True),
-    ):
-        assert got[key] is want, f"客户端匹配行为漂移: {key} 期望 {want} 实得 {got[key]}"
+    assert 'searchHitsQ' not in app_js, "app.js 残留 searchHitsQ(客户端匹配时代的陈旧守卫, 已随单点化删除)"
+    assert "hits.has(r.hash)" in filters_js, "filteredTorrents 未消费 searchHits(种子页搜索断线)"
+    assert "(s.name || \"\").toLowerCase().includes(q)" not in shows_js, \
+        "shows.js 复活了剧名整句 includes 旧匹配(剧名命中应来自服务端名字行)"
 
 
 def test_frontend_hr_safety_wiring():
@@ -3196,6 +3139,45 @@ def test_search_torrents_negative_term():
         assert [x["hash"] for x in mgr.search_torrents("show 10 -\"web dl\"")["results"]] == ["HA", "HB"]
 
 
+def test_search_torrents_facet_rows():
+    """search_torrents 候选行覆盖全部文本面(26-09-26 单点化): 站点/分类/保存路径/标签行即时匹配
+
+    行级语义不变(任一行通过即命中, 负词按行作废): 服务端此前的候选行只有 名字/文件, 搜站点/
+    标签只在种子页(旧客户端行)能搜到而分组/追剧页搜不到 —— 跨页不一致; 单点化后三页同源,
+    用 by 定位首个通过的行类别(前端不消费, 测试定位用)。
+    """
+    from helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        site = FakeTracker("MDCx")
+        site.tags = []  # tracker_name 取 conf.name(FakeTracker 默认 tags=["HHan"] 会顶掉站点名)
+        t1 = FakeTorrent(
+            hash="HA",
+            name="Alpha.S01E01",
+            state="stalledUP",
+            save_path="D:/media/anime",
+            category="动漫",
+            tags="HDCT, 2026",
+            tracker_conf=site,
+        )
+        t2 = FakeTorrent(hash="HB", name="Beta.S01E02", state="stalledUP")
+        seed_store(mgr, [t1, t2])
+        mgr._build_search_index()
+
+        # 站点/分类/标签/路径行: 各词只落在 HA 的对应行, 不在任何名字/文件里
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("MDCx")["results"]] == [("HA", "site")]
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("动漫")["results"]] == [("HA", "category")]
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("HDCT")["results"]] == [("HA", "tag")]
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("media anime")["results"]] == [("HA", "path")]
+        # 行级负词不整种子误杀: "anime -hdct" 的负词只作废 HA 的标签行, 路径行干净仍命中
+        assert [x["hash"] for x in mgr.search_torrents("anime -hdct")["results"]] == ["HA"]
+        # 负词作废唯一含该词的行: "anime -media" 路径行被作废, 其余行不含 anime → 整种子不命中
+        assert mgr.search_torrents("anime -media")["results"] == []
+
+
 def test_search_torrents_phrase():
     """search_torrents 短语: "…" 整段归一为**连续**子串(可含分隔符), 词序敏感 —— 与行级 AND 的区分用例"""
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store
@@ -3273,9 +3255,16 @@ def test_search_torrents_file_match():
         from helpers import _fake_file
         client.files_map["HA"] = [_fake_file("movie.mkv", 0)]
         client.files_map["HB"] = [_fake_file("soundtrack.flac", 0)]
+        # 季包回归(26-09-26 报障): 包名不含集号 "12", 查询词只在集文件名里 —— 文件行必须命中
+        client.files_map["HC"] = [
+            _fake_file("The.Cat.and.the.Dragon.S01E12.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb.mkv", 0),
+        ]
         t1 = FakeTorrent(hash="HA", name="Alpha", state="stalledUP")
         t2 = FakeTorrent(hash="HB", name="Beta", state="stalledUP")
-        seed_store(mgr, [t1, t2])
+        t3 = FakeTorrent(
+            hash="HC", name="The.Cat.and.the.Dragon.S01.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb", state="stalledUP"
+        )
+        seed_store(mgr, [t1, t2, t3])
         mgr._build_search_index()  # 先构建索引
 
         # 文件命中: soundtrack 只在 HB 的文件里, 不在任何种子名中
@@ -3284,6 +3273,10 @@ def test_search_torrents_file_match():
         assert hashes == ["HB"], f"文件匹配应命中 HB: {r}"
         assert r["results"][0]["by"] == "file"
         assert r["building"] is False, "索引已就绪不应 building"
+
+        # 季包: 名行含 cat 不含 12(行级 AND 失败), 集文件行同含两词 → 文件命中(HC 名行先行命中不了)
+        r = mgr.search_torrents("cat 12")
+        assert [(x["hash"], x["by"]) for x in r["results"]] == [("HC", "file")], f"季包集文件应命中: {r}"
 
 
 def test_search_torrents_building_triggers():

@@ -83,9 +83,11 @@
   「不要再手工加前缀」, 读了没照做); `cmd //c` 嵌套引号挑子集 ⇒ 路径/`-k` 表达式被原样传进 pytest。
   ⇒ 只走 `commands run test.*`; 挑子集 `test.one -- '<路径> -k "<表达式>"'`(整串加引号);
   bash 前缀 `TMPDIR='R:/Temp/auto-qb/tests'` 亦有效。
-- **复发**: 4→8 —— 2026-09-25/26 共五踩, 同一根因: **把"单跑一条 / 单文件小跑"当轻量例外而绕开引擎**
+- **复发**: 4→9 —— 2026-09-25/26 共六踩, 同一根因: **把"单跑一条 / 单文件小跑"当轻量例外而绕开引擎**
   (裸跑 `uv run pytest <文件>` 三次、手拼 `TMPDIR=… uv run pytest <单测>` 两次) ⇒ 默认 `H:\Temp` 收尾同崩
-  `PermissionError … pytest-current`(一次碰巧没崩, 但同属绕开引擎)。**为什么没命中**: 多为"读了没照做" ——
+  `PermissionError … pytest-current`(一次碰巧没崩, 但同属绕开引擎)。2026-09-26 又一踩: 修搜索报障时
+  裸跑 `uv run pytest tests/test_web.py -k search` 崩 + 手拼 `TMPDIR=/tmp/...` 前缀(POSIX 前缀本 shell 不生效)
+  + `--basetemp=.pytest-tmp` 指进仓库内(即上上条的"仓内 basetemp"坑)。**为什么没命中**: "读了没照做" ——
   AGENTS.md 与本文件都写着「一律走 `test.*`」, 动手时仍裸跑。⇒ **任何 pytest 一律**
   `commands run test.one -- '<路径> [-k "…"]'`; 带全新 `TMPDIR` 的裸跑仅作兜底。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——

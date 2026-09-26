@@ -79,56 +79,11 @@ window.AQB_FILTERS = {
       this.searchQuery = "";
       this.resetSearch();
     },
-    /* 搜索归一(客户端单点): 与服务端 views.py::_search_norm 同一口径 —— 分隔符折叠为单空格 +
-     * 小写 + 去首尾空。❗不能用 \W: JS 的 \w 仅 ASCII, CJK 会被整段当分隔符折叠掉(搜不出中文);
-     * 折叠集 = Unicode 字母/数字之外的一切(含下划线 —— Python 端 [\W_] 显式并入下划线), 取反书写。 */
-    _searchNorm(s) {
-      return (s || "").replace(/[^\p{L}\p{N}]+/gu, " ").toLowerCase().trim();
-    },
-    /* 搜索查询解析(客户端单点, 与服务端 views.py::_parse_query 同一语法口径, 2026-09-26):
-     * 空格分词隐式 AND; 词首单个 `-`(后随非空白)为排除; `"…"` 短语整段归一为连续子串;
-     * 其余宽容 —— 孤立 `-` 忽略、未闭合引号收至行尾、纯标点 token 丢弃。
-     * 返回 { pos: [词], neg: [词] }, 词均为 _searchNorm 归一后的子串口径。 */
-    _parseSearchQuery(q) {
-      const pos = [];
-      const neg = [];
-      const s = q || "";
-      let i = 0;
-      while (i < s.length) {
-        if (/\s/.test(s[i])) { i++; continue; }
-        const negative = s[i] === "-" && i + 1 < s.length && !/\s/.test(s[i + 1]);
-        if (negative) i++;
-        let raw;
-        if (s[i] === '"') {
-          const j = s.indexOf('"', i + 1);
-          raw = s.slice(i + 1, j === -1 ? s.length : j);
-          i = j === -1 ? s.length : j + 1;
-        } else {
-          let j = i;
-          while (j < s.length && !/\s/.test(s[j])) j++;
-          raw = s.slice(i, j);
-          i = j;
-        }
-        const term = this._searchNorm(raw);
-        if (term) (negative ? neg : pos).push(term);
-      }
-      return { pos, neg };
-    },
-    /* 种子页客户端文本过滤(R1A): 名称/站点/分类/保存路径/每个标签各为一**候选行**(任一字段
-     * 单独通过即保留, 与服务端行级语义一致 —— 负词只作废所在字段行, 不整种子误杀);
-     * 行通过 ⇔ 含全部正词/短语且不含任何负词。q 为 _parseSearchQuery 的解析结果。
-     * 仅负词(无正判据)恒 false —— 与服务端 negative_only 返回空的口径一致(拍板 D6)。 */
-    _torrentTextMatch(m, parsed) {
-      if (!parsed.pos.length) return false;
-      const rows = [m.name, m.site, m.category, m.save_path, ...(m.tags || [])];
-      for (const row of rows) {
-        const norm = this._searchNorm(row);
-        if (!norm) continue;
-        if (parsed.neg.some((t) => norm.includes(t))) continue;
-        if (parsed.pos.every((t) => norm.includes(t))) return true;
-      }
-      return false;
-    },
+    /* ❗本文件**不得**再出现任何搜索文本匹配实现(归一/解析/行匹配): 26-09-26 起搜索匹配
+     * 收敛为服务端单点(views.py::search_torrents, 候选行 = 名字/站点/分类/路径/标签/文件名),
+     * 三页(辅种/种子/追剧)统一消费 searchHits。此前客户端自持 _searchNorm/_parseSearchQuery/
+     * _torrentTextMatch 与服务端平行演化, 同一语义(恶女 10 / 季包"cat 12")前后端修了三遍;
+     * 语法升级只改服务端一处, 前端删了旧实现防其复活。 */
   },
   computed: {
     /* 筛选器选项的取数面(**单点**): 必须与当前视图真正在筛的那一行集合一致 ——
@@ -245,17 +200,18 @@ window.AQB_FILTERS = {
     },
     /* 种子页(R1A, 原 R08 单种子视图升级): 数据源 = state.torrents 全量平铺数组(SEED_ITEM),
      * 每个种子独立过同一套筛选(与分组视图的"组内任一命中保留整组"语义不同: 这里逐种子判定);
-     * 搜索为**客户端文本过滤**(名称/站点/分类/标签/保存路径, 与服务端同一查询语法: 词 AND +
-     * `-排除` + "短语" + 分隔符归一, 见 _parseSearchQuery/_torrentTextMatch), 不依赖服务端
-     * 文件搜索结果 —— 文件命中(searchHits)仅用作高亮; 排序独立(三态同分组表)。
-     * 仅负词(无正词)返回空列表 —— 与服务端 negative_only 口径一致(拍板 D6); 空查询不过滤(全量)。 */
+     * 搜索命中 = 服务端裁决 searchHits(与辅种/追剧页同一套, 见 views.py::search_torrents 的
+     * 行级口径), 前端不持有文本匹配实现 —— 输入新词到响应返回之间沿用上一查询的命中集
+     * (标准 search-as-you-type, 与 filteredGroups 同节奏); 仅负词/无命中服务端返回空 ⇒ 空列表。
+     * facets(状态/标签/分类/站点/路径下拉)仍是纯客户端即时过滤(_memberPass), 与文本搜索叠加。
+     * 排序独立(三态同分组表)。 */
     filteredTorrents() {
-      const parsed = this._parseSearchQuery((this.searchQuery || "").trim());
-      const searching = !!(parsed.pos.length || parsed.neg.length);
+      const q = (this.searchQuery || "").trim();
+      const hits = this.searchHits;
       const out = [];
       for (const r of this.torrents) {
         if (!this._memberPass(r)) continue;
-        if (searching && !this._torrentTextMatch(r, parsed)) continue;
+        if (q && !hits.has(r.hash)) continue;
         /* ❗刻意**不复制**成 { ...r, hit }: 每条 74 个字段, 复制要经一遍响应式代理的 get 陷阱
          * (3000 条 = 22 万次), 实测**仅这一句就 68ms** —— 比整个窗口渲染还贵。
          * 命中高亮改由模板问 searchHits(见 isHit), 语义不变; 顺带每轮少建 3000 个临时对象。 */

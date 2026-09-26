@@ -489,7 +489,7 @@ const app = createApp({
       pollTimer: null,     // setTimeout 链式轮询句柄(上一轮结束后再计时, 不堆叠请求)
       lastRid: null,       // 已持有的分组视图版本(服务端 rid); null = 尚未取到(强制全量)
       searchQuery: "",       // 搜索关键字
-      searchHits: new Set(),  // 命中种子 hash 集合(名称/文件匹配)
+      searchHits: new Set(),  // 命中种子 hash 集合(服务端行级裁决: 名字/站点/分类/路径/标签/文件)
       searchUncovered: [],    // 未归组的命中种子(分组未启用/文件列表不可读), 以虚拟行兜底展示
       searchBuilding: false,  // 文件索引构建中(增量限流可能多轮, 需稍后重查)
       searchNegativeOnly: false,  // 查询只含排除词(无正判据, 服务端返回空, 前端据此提示)

@@ -172,14 +172,16 @@ window.AQB_SHOWS = {
   },
   computed: {
     /* 追剧视图(R10): 后端已按剧→季→集聚合并算好聚合层; 前端只做 筛选/搜索(任一成员命中
-     * 保留整集) + 剧级搜索命中(剧名含关键字保留全剧) + 排序。showHit 与 epHit 分开:
-     * 剧名命中高亮整剧行, 集命中高亮集行(与分组视图"组内任一命中保留整组"同语义) */
+     * 保留整集) + 排序。搜索命中一律来自服务端 searchHits(与辅种/种子页同一套行级裁决,
+     * 见 views.py::search_torrents), 前端不持有文本匹配实现 —— 旧版此处还有一个剧名整句
+     * includes 快捷命中, 已删: 剧名本就是成员种子名解析出的标题(tvshows.parse_release),
+     * 服务端名字行命中天然覆盖。剧行高亮 hit = 搜索中该剧**全部集**都保留(≈ 整剧命中,
+     * 集级部分命中只亮集行)。 */
     decoratedShows() {
-      const q = (this.searchQuery || "").trim().toLowerCase();
+      const q = (this.searchQuery || "").trim();
       const hits = this.searchHits;
       const out = [];
       for (const s of this.shows.list) {
-        let showHit = !!(q && (s.name || "").toLowerCase().includes(q));
         let keptEps = 0;
         let keptMembers = 0;
         const seasons = [];
@@ -195,16 +197,15 @@ window.AQB_SHOWS = {
             if (!members.length) continue;
             if (!members.some((m) => this._memberPass(m))) continue;
             const epHit = members.some((m) => m.hit);
-            if (q && !showHit && !epHit) continue;
+            if (q && !epHit) continue;
             keptEps += 1;
             keptMembers += members.length;
             eps.push({ ...e, members, hit: epHit, epKeyStr: e.key.join("-") });
           }
           if (eps.length) seasons.push({ ...sn, episodes: eps });
         }
-        if (showHit || seasons.length) {
-          if (showHit) keptEps = s.episode_count;
-          out.push({ ...s, seasons, hit: showHit, keptEps, keptMembers });
+        if (seasons.length) {
+          out.push({ ...s, seasons, hit: !!(q && keptEps === s.episode_count), keptEps, keptMembers });
         }
       }
       const key = this.showSortKey;

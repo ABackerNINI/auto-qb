@@ -1,16 +1,17 @@
-# WEBUI 搜索强化: 行级语义 + 真机回访双修已全绿, 随本提交入库
+# WEBUI 搜索: 语法强化 → 真机双修 → 季包修复 → **匹配收敛服务端单点**
 
-> 摘要: 调研报告(26-09-26-1918)→ 用户拍板**行级** → 已实施: `views.py` `_parse_query`(websearch 宽容词法: 词 AND / `-排除` / `"短语"`) + `search_torrents` 行级匹配(候选行=名字或单文件, 行含全部正词且无负词即命中; 仅负词返回空 + negative_only)+ 前端两主题 placeholder/空态提示。真机回访双修: ①种子页 `filteredTorrents` 旧整句客户端过滤 → 同语法升级(filters.js `_parseSearchQuery`/`_searchNorm`/`_torrentTextMatch` 单点, 与 views.py 行为级对账守阵, 对账抓到 `_` 折叠漂移); ②清除钮有焦点点不动 → 两主题 `@mousedown.prevent`。+7 测试累计, 全量 **1680 passed + 1 skipped / 0 failed**(TOTAL 91%, 基线切片 26-09-26-2121)。档案 `tasks/26-09-26-webui-search-query-syntax.md`。
-> 最后活动: 2026-09-26 21:21
+> 摘要: 调研报告(26-09-26-1918)→ 行级拍板 → 实施(`views.py` `_parse_query` websearch 宽容词法 + `search_torrents` 行级匹配 + 前端 placeholder/空态)→ 真机回访双修(种子页客户端语法升级 + 清除钮 mousedown.prevent)→ 季包"cat 12"修复(客户端行并入服务端文件命中)→ **同日统一(用户拍板「统一, 治本, 实施」)**: 匹配收敛为服务端单点 —— `search_torrents` 候选行扩到 名字/站点/分类/路径/标签/文件名(前三类即时, 文件行走索引), 三页统一消费 searchHits; filters.js 四函数/shows.js 剧名 includes/app.js searchHitsQ 全删(前端零文本匹配代码), 守阵改**反漂移**(复活即红) + 新增 `test_search_torrents_facet_rows`。顺带治了"搜站点/标签在分组·追剧页搜不到"的跨页不一致。全量 **1684 passed + 1 skipped / 0 failed**(TOTAL 91%, 实测 16.4s)。
+> 最后活动: 2026-09-26 23:40
 
 ## 已完成
 
-- 根因定位 + 实测复现(第一问); 六系调研 + 报告落盘(第二问); 行级拍板
-- 实施: 后端 views.py(解析器 + 行级匹配 + docstring)/ 测试 +6 与测试计划同步 / 前端 app.js + atlas/prism 成对
-- 真机回访双修: 种子页客户端查询语法补齐(含 JS/Python 对账守阵)+ 清除钮 mousedown.prevent 两主题成对
-- 闸门: 全量 1680 绿(TOTAL 91%, 基线 26-09-26-2121); progress/implemented-webui 置顶条目已更新; 坑 `pitfalls/web-ui/search-syntax.md`
+- 根因定位 + 实测复现; 六系调研 + 报告落盘; 行级拍板; 后端解析器/行级匹配 + 前端语法提示
+- 真机回访双修: 种子页客户端查询语法(现随单点化删除)+ 清除钮 mousedown.prevent
+- 季包"cat 12"修复(中间态: 客户端行 ∪ 服务端文件命中 + searchHitsQ 守卫, 已被单点化取代)
+- **单点化统一(终态)**: 服务端候选行全覆盖 + 三页消费 searchHits + 前端匹配代码清零 + 反漂移守阵
+- 回写: pitfalls/web-ui/search-views.md(三处实现收敛单点)/ progress/implemented-webui 置顶 / 模块头测试计划
 
 ## 待办
 
-- ✅ **随本提交入库**: 代码 5 文件(filters.js / hr.js / 两主题 index.html / test_web.py)+ 知识库回写件随车
-- 真机复测: 种子页「恶女 10」「恶女 10 -DV」与仅负词空态; 分组/追剧视图回归; 清除钮焦点态清除
+- 用户提交后真机复测: 三页搜「cat 12」(季包)、「恶女 10 -DV」、搜站点名/标签(此前分组/追剧页搜不到)、仅负词空态、清除钮、building 渐进出现
+- 已知边界(接受): 种子页文本命中节奏 = 防抖 400ms + 往返(不再即时); 输入新词到响应返回间沿用上一查询命中集(三页同节奏); 搜索期间新到的种子待下轮重查入集; 剧行高亮 = "全部集保留"代理

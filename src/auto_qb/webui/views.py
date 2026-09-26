@@ -705,21 +705,28 @@ class WebviewMixin:
             self.web.mark_dirty()
 
     def search_torrents(self, q: str) -> dict:
-        """WEB 线程调用: 按 q(种子名 + 文件列表)搜索种子。
+        """WEB 线程调用: 按 q 搜索种子 —— **全站唯一文本匹配点**(辅种/种子/追剧三页统一消费其结果)。
 
         匹配口径(**行级**, 拍板 2026-09-26, 调研报告 26-09-26-1918 §5): q 经 _parse_query 解析为
-        正/负词(词已是归一后的子串口径); **候选行** = 归一种子名或归一文件名之一, 行通过 ⇔
-        含全部正词/短语且不含任何负词/负短语; 种子命中 ⇔ 任一候选行通过。与单文件 scene 命名
-        现实一致, 负词按行作废(合集包里非 DV 行仍可命中), 且多词 AND 约束在同一行内 ——
-        旧口径「整句连续子串」的「恶女 10」失配(两词不连续必不中)由此修复。
+        正/负词(词已是归一后的子串口径); **候选行** = 种子名/站点/分类/保存路径/每个标签/每个
+        文件名 各归一为一行, 行通过 ⇔ 含全部正词/短语且不含任何负词/负短语; 种子命中 ⇔ 任一
+        候选行通过。负词按行作废(合集包里非 DV 行仍可命中), 多词 AND 约束在同一行内 —— 旧口径
+        「整句连续子串」的「恶女 10」失配(两词不连续必不中)由此修复。
 
-        种子名匹配即时遍历 store.by_hash(无 qB API); 文件列表匹配依赖 _search_index 缓存。
+        候选行 26-09-26 起**收敛为服务端单点**并覆盖全部文本面: 此前种子页(名字/站点/分类/
+        路径/标签的客户端过滤)与追剧页(剧名整句 includes)各持一份匹配实现, 同一语义(恶女 10 /
+        季包"cat 12")前后端修了三遍; 现在前端三页一律消费本结果的 hash 集合(searchHits),
+        不再持有任何文本匹配代码。站点/分类/路径/标签行只读 store(无 qB API, 与名字行同轮
+        即时); 文件行依赖 _search_index 缓存。剧名不单设候选行 —— 追剧视图的展示名本就是
+        成员种子名解析出的标题(tvshows.parse_release), 名字行命中天然覆盖。
+
         返回 {"results": [..], "building": bool, "negative_only": bool}——building 为 True 表示文件
-        索引已过期/缺失, 已投递构建命令, 前端应稍后重查以获取完整文件匹配结果; negative_only 为
-        True 表示查询只含排除词(无正判据, 「只说不要什么」无从起搜, 与 Google 一致返回空,
-        前端据此前端提示)。结果项含完整明细字段(与分组成员视图对齐): hash/name/site/kind/
-        error_reason/dlspeed/upspeed/uploaded/size/progress/seeding_time/ratio/save_path/tags/
-        category/by, 供前端完整展示命中种子信息。
+        索引已过期/缺失(只影响**文件行**命中), 已投递构建命令, 前端应稍后重查以获取完整文件
+        匹配结果; negative_only 为 True 表示查询只含排除词(无正判据, 「只说不要什么」无从起搜,
+        与 Google 一致返回空, 前端据此前端提示)。结果项含完整明细字段(与分组成员视图对齐):
+        hash/name/site/kind/error_reason/dlspeed/upspeed/uploaded/size/progress/seeding_time/
+        ratio/save_path/tags/category/by, 供前端完整展示命中种子信息(by = 首个通过的行类别,
+        供测试定位, 前端不消费)。
         """
         def _view(rec, by):
             return {
@@ -751,13 +758,30 @@ class WebviewMixin:
         def _row_passes(row: str) -> bool:
             return all(t in row for t in pos) and not any(t in row for t in neg)
 
+        def _instant_by(rec):
+            """即时候选轮(只读 store, 不依赖文件索引): 名字/站点/分类/保存路径/每个标签各归一为一行,
+            返回首个通过的行类别, 全不通过返回 None。空值字段不构成候选行。"""
+            for by, raw in (
+                ("name", rec.name),
+                ("site", rec.tracker_name),
+                ("category", rec.category),
+                ("path", rec.save_path),
+                *(("tag", t) for t in rec.tags_set),
+            ):
+                if not raw:
+                    continue
+                if _row_passes(_search_norm(raw)):
+                    return by
+            return None
+
         results = []
         seen = set()
-        # 种子名行匹配(即时, 归一口径: "cat and" 命中 "The.Cat.and…", 两词无需连续)
+        # 即时轮: 名字/站点/分类/路径/标签行(归一口径: "cat and" 命中 "The.Cat.and…", 两词无需连续)
         for h, rec in self.store.by_hash.items():
-            if _row_passes(_search_norm(rec.name)):
+            by = _instant_by(rec)
+            if by is not None:
                 seen.add(h)
-                results.append(_view(rec, "name"))
+                results.append(_view(rec, by))
         # 文件列表行匹配(依赖缓存索引, 行 = 构建期归一好的 files_q)
         idx = self.web.search_index
         if idx is not None:

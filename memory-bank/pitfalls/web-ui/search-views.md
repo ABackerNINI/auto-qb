@@ -111,13 +111,19 @@
 - **处置**: 清除钮加 `@mousedown.prevent`(按下不夺焦, 宽度不动, click 照常) —— 两主题成对,
   守阵 `test_web.py::test_frontend_search_syntax_wiring` ①段钉住。
 
-### 查询语法 JS/Python 双实现: 归一口径必须**行为级对账**, 静态看码盯不住
+### 搜索匹配曾三处各持一份实现, 同一语义修三遍 —— 已收敛服务端单点, 前端复活即红
 
-- **触发**: 服务端 `views.py::_parse_query`/`_search_norm` 与客户端 `filters.js`
-  (`_parseSearchQuery`/`_searchNorm`/`_torrentTextMatch`, 种子页过滤不走服务端 searchHits)各持一份同语法实现。
-- **判别**: 两类已实漂移, 手工用例都盯不住: ①JS `\w` 仅 ASCII, 折叠集写 `\W` 会把 **CJK 整段当
-  分隔符折叠掉**(中文全搜不出); ②Python `[\W_]` 显式折叠下划线, JS 首版照 `\w` 语义保留 `_`
-  ⇒ 同一名字两侧归一不同(对账守阵首跑即抓到)。任一侧改动都可能再漂。
-- **处置**: 守阵 `test_web.py::test_frontend_search_syntax_wiring` 行为段: vm 沙箱真跑 filters.js
-  三个纯函数与 Python 同输入**逐项对账**(有 node 才跑, 无 node 静默跳过); 归一正则单点钉死
-  `[^\p{L}\p{N}]+/gu`(不能用 `\W`)。改任一侧词法/归一, 先跑这条。
+- **触发**: 改搜索匹配 / 想在前端加"本地快速过滤" / 改种子页或追剧页的搜索逻辑。
+- **判别**: 26-09-26 前同一查询语法有三份实现 —— 服务端 `views.py::_parse_query`+行级匹配、
+  种子页 filters.js 客户端行过滤(_searchNorm/_parseSearchQuery/_torrentTextMatch)、追剧页剧名
+  整句 includes。双实现漂移曾实锤三例: ①JS `\w` 仅 ASCII, 折叠集写 `\W` 把 CJK 整段折叠掉;
+  ②Python `[\W_]` 显式折叠下划线而 JS 首版保留 `_`(对账守阵首跑即抓到); ③季包"cat 12"种子页
+  搜不到(客户端无文件行, 26-09-26 晚报障)。对账守阵盯得住 JS/Python 漂移, 盯不住第三处。
+- **处置**: 2026-09-26 收敛: 匹配单点在 `views.py::search_torrents`(候选行 = 名字/站点/分类/
+  路径/标签/文件名, 行级 AND + 负词按行作废; 站点/分类/路径/标签行即时, 文件行依赖索引),
+  三页统一消费 searchHits。前端**禁止**再出现任何文本匹配实现 —— 反漂移守阵
+  `test_web.py::test_frontend_search_syntax_wiring` ②段按"函数名+括号(定义或调用)"断言即红。
+  剧名不单设候选行: 追剧展示名是成员种子名解析出的标题(tvshows.parse_release), 名字行天然覆盖。
+  代价(已接受): 种子页文本命中从"每键即时"变为"防抖 400ms + 往返", 输入新词到响应返回间沿用
+  上一查询命中集(与组视图同节奏); 搜索期间新到的种子待下轮重查入集。
+  改语法/候选行**只改 views.py 一处**, 改完跑 `test_search_torrents_*` 全套。
