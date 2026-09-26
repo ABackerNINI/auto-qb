@@ -14,10 +14,10 @@
 /* 分区文案: 每条回答「它管什么 / 现在什么状态」; 缺省回退 schema 的 label / help */
 const HUB_GROUP_META = {
   basic: {
-    // 标题用「常规」而非「连接 qBittorrent」: 本组除 qB 连接外还有主循环节奏 / 数据目录等常规项
+    // 标题用「常规」而非「连接 qBittorrent」: 本组除 qB 连接外还有运行节奏 / 数据目录 / WebUI / 日志 / 通知等常规项
     title: "常规",
-    desc: "连上 qBittorrent 的 Web UI，再定好 auto-qb 自己的运行节奏和数据放在哪。",
-    lede: "上半部分是连接 qBittorrent：把地址和登录信息填对，auto-qb 就能接管种子管理。下半部分是 auto-qb 自己的常规设置：多久检查一次、一轮最多干多少活、运行状态和日志存在哪个目录。每行末尾的「?」可以看这一项的完整说明。",
+    desc: "连上 qBittorrent 的 Web UI，再定好 auto-qb 自己的运行节奏、界面、日志和通知。",
+    lede: "上半部分是连接 qBittorrent：把地址和登录信息填对，auto-qb 就能接管种子管理。下面是 auto-qb 自己的常规设置：多久检查一次、一轮最多干多少活、运行状态和日志存在哪个目录，以及 WebUI 的开关与监听、日志落盘和系统通知。每行末尾的「?」可以看这一项的完整说明。",
   },
   maintenance: {
     title: "自动化",
@@ -39,21 +39,6 @@ const HUB_GROUP_META = {
     desc: "「当满足条件时执行动作」的自动化规则，按规则集分组管理。",
     lede: "一条规则就是「当满足条件时，执行这些动作」。条件要全部满足才会执行，动作按从上到下的顺序执行。",
   },
-  notify: {
-    title: "通知",
-    desc: "出错或有风险操作时，用电脑的系统通知提醒你。",
-    lede: "出错或者做了有风险的操作时，用电脑的系统通知提醒你。走的是系统自己的通知中心，不用装插件、也不用配微信邮件之类。",
-  },
-  web: {
-    title: "界面",
-    desc: "这个浏览器界面怎么开、谁能访问。",
-    lede: "你现在用的这个浏览器界面怎么开、谁能访问。改监听地址会让局域网里的其它设备也能操作种子。",
-  },
-  logging: {
-    title: "日志",
-    desc: "日志记在哪、留多久、记多细。",
-    lede: "auto-qb 把运行日志记在哪、单个文件多大、留几个旧文件。日常用 INFO，排查问题时再开 DEBUG。",
-  },
   hr_check: {
     title: "HR 在线核实",
     desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实；分区页尾附各站点取数现状。",
@@ -71,7 +56,7 @@ const HUB_HELP = {
     what: "qBittorrent 的 Web UI 监听在哪个端口。auto-qb 就是从这个端口去读种子、改种子的。",
     def: "8080",
     when: ["你在 qB 里把 Web UI 端口改过（以 qB 里显示的为准）。", "一台机器上跑多个 qB 实例，端口被占用。"],
-    rel: [["界面 → 端口", "auto-qb 自己的界面端口，不是 qB 的"], ["常规 → 主机", "端口填对了但主机写错，一样连不上"]],
+    rel: [["常规 → 监听端口", "auto-qb 自己的界面端口，不是 qB 的"], ["常规 → 主机", "端口填对了但主机写错，一样连不上"]],
   },
   "web.host": {
     tags: ["字符串"],
@@ -79,7 +64,7 @@ const HUB_HELP = {
     def: "127.0.0.1",
     when: ["想从局域网里另一台设备（比如手机、NAS）打开这个界面。"],
     risk: "改成 0.0.0.0 会暴露给局域网。这个界面能暂停和删除种子，局域网里任何设备都能操作。",
-    rel: [["界面 → 访问密钥", "对外暴露时密钥是唯一防线"], ["界面 → 跳过本机验证", "只对 127.0.0.1 生效，对外仍强制鉴权"]],
+    rel: [["常规 → 访问密钥", "对外暴露时密钥是唯一防线"], ["常规 → 跳过本地验证", "只对 127.0.0.1 生效，对外仍强制鉴权"]],
   },
   "main_tick": {
     tags: ["时间", "不能为 0"],
@@ -101,7 +86,7 @@ const HUB_HELP = {
     def: "（全天）",
     when: ["站点对夜间访问敏感，想避开高峰。", "自己常在白天用网，取数挑凌晨做。"],
     rel: [
-      ["通知 → 免打扰时段", "❗语义正好相反：那个是「这段时间不要发通知」，本项是「只在这段时间取数」"],
+      ["常规 → 免打扰时段", "❗语义正好相反：那个是「这段时间不要发通知」，本项是「只在这段时间取数」"],
       ["HR 在线核实 → 请求最小间隔", "两者一起决定对站点的访问频度"],
     ],
   },
@@ -132,10 +117,9 @@ const HUB_TONE = {
   "web.skip_local_verify": "important",
 };
 
-/* 分区「是否启用」判定: 未启用 -> LED 灰(不抢注意力), 由各处主开关决定 */
+/* 分区「是否启用」判定: 未启用 -> LED 灰(不抢注意力), 由各处主开关决定
+ * (web/notify 已并入 basic, 无独立卡片也就不再各自判 off —— basic 恒为核心分区) */
 const HUB_OFF_KEYS = {
-  web: ["config", "web", "enabled"],
-  notify: ["config", "notify", "enabled"],
   maintenance: ["config", "grouping", "enabled"],
   hr_check: ["config", "hr_check", "enabled"],
 };
@@ -156,7 +140,7 @@ window.CONFIG_HUB = {
   data() {
     return {
       hub: {
-        view: initialHubView(),  // "hub" | 分组 key | "__logs"(持久化, 见 initialHubView)
+        view: initialHubView(),  // "hub" | 分组 key(持久化, 见 initialHubView; 旧版 "__logs" 由 hubRestore 映射进 basic)
         query: "",         // 首页搜索框
         help: null,        // 浮窗内容 { t, k, tags, what, def, when, risk, rel }
         helpKey: "",       // 当前打开的浮窗对应的字段路径(再点一次 = 关闭)
@@ -193,19 +177,8 @@ window.CONFIG_HUB = {
           badges: this.hubBadges(g.key),
         };
       });
-      // 运行日志不在 schema 分组里(原顶栏日志页迁入), 单独补一张卡
-      cards.push({
-        key: "__logs",
-        icon: "i-list",
-        title: "运行日志",
-        label: "运行日志",
-        desc: "在这里直接看最新日志，不用去翻文件。",
-        lede: "直接看 auto-qb 的运行日志，不用去翻文件。改了选项要手动刷新才会重新读取。",
-        led: "ok",
-        readout: this.logs && this.logs.file ? "已配置" : "日志文件未配置",
-        badges: [],
-      });
-      // HR 站点状态不再单列一张卡(2026-09-25 合并): 它是只读现状不是配置项,
+      // 运行日志不再单列首页卡(2026-09-26 并入「常规」分区页尾, 随分区模板渲染);
+      // HR 站点状态同理(2026-09-25 合并): 它是只读现状不是配置项,
       // 并进「HR 在线核实」分区页尾, 打开分区时随 hubGo 拉一次 /api/hr/status。
       return cards;
     },
@@ -232,15 +205,6 @@ window.CONFIG_HUB = {
     hubNow() {
       const schema = this.cfg.schema;
       if (!schema) return { key: "", title: "", lede: "", icon: "i-settings" };
-      if (this.hub.view === "__logs") {
-        return {
-          key: "__logs",
-          label: "运行日志",
-          icon: "i-list",
-          title: "运行日志",
-          lede: "直接看 auto-qb 的运行日志，不用去翻文件。改了选项要手动刷新才会重新读取。",
-        };
-      }
       const g = schema.groups.find((x) => x.key === this.hub.view);
       if (!g) return { key: "", title: "", lede: "", icon: "i-settings" };
       const meta = HUB_GROUP_META[g.key] || {};
@@ -310,7 +274,8 @@ window.CONFIG_HUB = {
         const names = this.cfgRuleGroupNames();
         this.cfg.ruleGroupKey = names.length ? names[0] : null;
       }
-      if (key === "__logs" && !this.logs.loaded) this.loadLogs();
+      // 运行日志已并入「常规」分区页尾: 打开分区时拉一次, 之后手动刷新(不自动轮询)
+      if (key === "basic" && !this.logs.loaded) this.loadLogs();
       // HR 站点状态已并入 hr_check 分区页尾: 打开分区时拉一次, 之后手动刷新(小时级节奏不轮询)
       if (key === "hr_check" && !this.hrs.loaded) this.loadHrStatus();
       window.scrollTo({ top: 0 });
@@ -334,9 +299,10 @@ window.CONFIG_HUB = {
      * 采用时复用 hubGo: trackers / rules 的默认选中项与日志 / HR 的懒加载都在那条路径里,
      * 自己重写一遍就会漏掉其中一半。由 cfgLoad 成功后调用(那一刻 schema 才到手)。 */
     hubRestore() {
-      const v = this.hub.view;
+      let v = this.hub.view;
+      if (v === "__logs") v = "basic"; // 旧版「运行日志」分区已并入常规(2026-09-26), 存量偏好映射过去
       if (!v || v === "hub") return;
-      const known = v === "__logs" || !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
+      const known = !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
       if (!known) {
         this.hub.view = "hub";
         return;
@@ -367,7 +333,7 @@ window.CONFIG_HUB = {
       if (key === "rules" && !this.cfgRuleGroupNames().length) return "off";
       const offPath = HUB_OFF_KEYS[key];
       if (offPath && !this.cfgBool(offPath, "true")) return "off";
-      if (key === "web" && this.cfgText(["config", "web", "host"], "127.0.0.1") !== "127.0.0.1") return "warn";
+      if (key === "basic" && this.cfgText(["config", "web", "host"], "127.0.0.1") !== "127.0.0.1") return "warn";
       const risk = this.hubRiskList;
       if (risk.some((r) => r.group === key)) return "warn";
       return "ok";
@@ -377,14 +343,6 @@ window.CONFIG_HUB = {
       switch (key) {
         case "basic":
           return `${this.cfgText(["config", "qbittorrent", "host"], "127.0.0.1")}:${this.cfgText(["config", "qbittorrent", "port"], "8080")}`;
-        case "web":
-          return this.cfgText(["config", "web", "host"], "127.0.0.1") === "127.0.0.1" ?
-            `仅本机 · ${this.cfgText(["config", "web", "port"], "8080")}` :
-            `对外暴露 · ${this.cfgText(["config", "web", "port"], "8080")}`;
-        case "notify":
-          return this.cfgText(["config", "notify", "quiet_hours"], "") || "全天都弹";
-        case "logging":
-          return this.cfgText(["config", "logging", "level"], "INFO");
         case "maintenance":
           return this.cfgBool(["config", "grouping", "enabled"], "true") ? "辅种分组已启用" : "辅种分组未启用";
         case "hr_check": {

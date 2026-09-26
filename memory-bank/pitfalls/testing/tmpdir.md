@@ -86,6 +86,7 @@
 - **复发**: 4+5 —— 2026-09-25 两踩同因: 裸跑 `uv run pytest <单文件>` 与手工设 TMPDIR(POSIX 前缀 / `cmd //c` 直写)都绕开引擎 ⇒ 默认 `H:\Temp` 收尾同崩 `PermissionError … pytest-current`。
   **为什么没命中**: 把"单文件小跑"当例外 + 禁令开工扫过、动手没重读 ⇒ 临时排查也一律 `commands run test.one -- '<路径> [-k "…"]'`; 带全新 `TMPDIR` 的裸跑可兜底。
 - **复发**: 6 —— 2026-09-26: 图快裸跑 `uv run pytest <三文件>` ⇒ 收尾同崩。**为什么没命中**: 本会话刚读过仍绕开引擎 —— 收口只在 `commands run test.*` 路径上。
+- **复发**: 7 —— 2026-09-26: 单守阵复跑手拼 `TMPDIR=… uv run pytest <单测>`(碰巧没崩, 但同属绕开引擎; 本次是收尾回写踩的已记坑)。**为什么没命中**: 把"补跑一条守阵"当轻量例外 —— 修档案链接的单跑也一律 `commands run test.one -- '<路径>'`。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——
   `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` 成功
   (改名只作用于**目录项**, 不需能读那个重解析点), 之后在**默认 TMPDIR** 下跑

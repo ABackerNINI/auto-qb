@@ -361,7 +361,7 @@ window.AQB_DIALOGS = {
       }
     },
     /* ---------------- 日志 tail(FE-2C): /api/log 只读(等级过滤 + 行数选择 + 手动刷新, 不轮询);
-         入口在 Console Hub「运行日志」分区, 顶层 page 只有 groups/settings ---------------- */
+         入口在 Console Hub「常规」分区页尾(2026-09-26 由独立「运行日志」分区并入), 顶层 page 只有 groups/settings ---------------- */
     async loadLogs() {
       this.logs.loading = true;
       this.logs.error = "";

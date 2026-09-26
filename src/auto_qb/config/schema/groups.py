@@ -8,7 +8,7 @@ GROUPS: Tuple[Group, ...] = (
     Group(
         "basic",
         "基础",
-        "qBittorrent 连接与主循环节奏",
+        "qB 连接、运行节奏与 WebUI / 日志 / 通知",
         fields=(
             Field(
                 "qbittorrent",
@@ -109,19 +109,12 @@ GROUPS: Tuple[Group, ...] = (
                 help="配置文件格式版本标记(升级链, 计划 26-09-26-0506): 旧版本配置加载时自动逐级迁移, 无需手写",
                 risk="文件格式标记, 程序保存时自动盖章 —— 请勿手改",
             ),
-        ),
-        icon="i-settings",
-    ),
-    Group(
-        "logging",
-        "日志",
-        "落盘轮转与格式",
-        fields=(
+            # ↓ 日志 / WEB UI / 通知 三个短段并入常规组(2026-09-26 用户要求: 设置首页少几张卡, 设置页不再单列)
             Field(
                 "log",
                 "日志设置",
                 "object",
-                open=True,  # 短段不折叠(用户要求: 日志/WEB UI/通知平铺)
+                open=True,  # 短段不折叠(用户要求: 日志/WebUI/通知平铺)
                 fields=(
                     Field(
                         "level",
@@ -149,17 +142,9 @@ GROUPS: Tuple[Group, ...] = (
                     ),
                 )
             ),
-        ),
-        icon="i-list",
-    ),
-    Group(
-        "web",
-        "WEB UI",
-        "图形界面的监听与鉴权",
-        fields=(
             Field(
                 "web",
-                "WEB UI",
+                "WebUI",
                 "object",
                 open=True,  # 短段不折叠
                 fields=(
@@ -173,39 +158,25 @@ GROUPS: Tuple[Group, ...] = (
                         risk="改成 0.0.0.0 会把可暂停/删除种子的管理界面暴露给局域网其他设备",
                     ),
                     Field(
-                        "port",
-                        "监听端口",
-                        "int",
-                        default="8080",
-                        min=1,
-                        max=65535,
-                        help="Web UI 的端口; 若与 qB Web UI 相同请改开一个"
+                        "port", "监听端口", "int", default="8080", min=1, max=65535, help="WebUI 的端口; 若与 qB Web UI 相同请改开一个"
                     ),
                     Field(
                         "token",
                         "访问密钥",
                         "password",
                         default="",
-                        help="登录 Web UI 用的密钥; 留空 = 首次启动随机生成(存到 data_dir/web.token, 启动日志只提示文件路径, 密钥内容不打印)"
+                        help="登录 WebUI 用的密钥; 留空 = 首次启动随机生成(存到 data_dir/web.token, 启动日志只提示文件路径, 密钥内容不打印)"
                     ),
                     Field(
                         "skip_local_verify",
                         "跳过本地验证",
                         "bool",
                         default="false",
-                        help="本机(127.0.0.1)打开 Web UI 免输入访问密钥; 远程访问仍需密钥",
+                        help="本机(127.0.0.1)打开 WebUI 免输入访问密钥; 远程访问仍需密钥",
                         risk="仅对本机连接生效, 对外暴露(host 非本机)仍强制鉴权; 开启弱化本机安全边界",
                     ),
                 )
             ),
-        ),
-        icon="i-monitor",
-    ),
-    Group(
-        "notify",
-        "通知",
-        "WARNING 及以上日志推送平台原生通知",
-        fields=(
             Field(
                 "notify",
                 "主动通知",
@@ -260,7 +231,7 @@ GROUPS: Tuple[Group, ...] = (
                 )
             ),
         ),
-        icon="i-bell",
+        icon="i-settings",
     ),
     Group(
         "maintenance",

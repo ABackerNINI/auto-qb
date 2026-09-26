@@ -142,7 +142,7 @@
             <span class="ver">v{{ status.version || '—' }}</span>
           </div>
           <!-- W4 导航 IA: 左侧一级导航 = 分组/种子/追剧(page 恒为 groups, 切的是 viewMode 三态,
-               与表格区视图开关两处入口等价); 设置移右侧独立组; 统计入口在底部状态栏, 日志在设置"运行日志"章节 -->
+               与表格区视图开关两处入口等价); 设置移右侧独立组; 统计入口在底部状态栏, 日志在设置"常规"章节页尾 -->
           <nav class="tabs" aria-label="视图导航">
             <button :class="{ active: page === 'groups' && viewMode === 'groups' }" :title="`按${l10nGroup}展示`" @click="goView('groups')">
               <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>{{ l10nGroup }}
@@ -1392,36 +1392,8 @@
                 </template>
               </template>
 
-              <!-- 运行日志(W4 迁入): 等级/行数变更与刷新均手动触发, 不自动轮询 -->
-              <template v-else-if="hub.view === '__logs'">
-                <div class="hb-blk hb-cut">
-                  <div class="hb-blk-hd">
-                    <span class="bh-t">运行日志</span>
-                    <span class="bh-n">{{ logs.file || '日志文件未配置(config.logging.file)' }}</span>
-                    <span class="bh-r">
-                      <select class="hb-select" v-model="logs.level" @change="loadLogs()">
-                        <option value="">全部级别</option>
-                        <option value="INFO">INFO</option>
-                        <option value="WARNING">WARNING</option>
-                        <option value="ERROR">ERROR</option>
-                      </select>
-                      <select class="hb-select" v-model.number="logs.num" @change="loadLogs()">
-                        <option :value="200">200 行</option>
-                        <option :value="300">300 行</option>
-                        <option :value="500">500 行</option>
-                        <option :value="1000">1000 行</option>
-                        <option :value="2000">2000 行</option>
-                      </select>
-                      <button class="hb-btn ghost sm" :disabled="logs.loading" @click="loadLogs()">刷新</button>
-                    </span>
-                  </div>
-                  <div style="padding:12px 14px">
-                    <p v-if="logs.note" class="logs-note">{{ logs.note }}</p>
-                    <pre v-if="logs.lines.length" class="hb-logs-pre">{{ logs.lines.join('\n') }}</pre>
-                    <p v-else class="hb-hp">{{ logs.loading ? '正在加载日志…' : (logs.error || '日志文件暂无内容') }}</p>
-                  </div>
-                </div>
-              </template>
+              <!-- 运行日志(2026-09-26 并入「常规」分区页尾, 不再单列首页卡/独立分区):
+                   等级/行数变更与刷新均手动触发, 不自动轮询; 打开常规分区时拉一次(config_hub.js hubGo) -->
 
 
 
@@ -1489,6 +1461,37 @@
                           <p v-if="s.read_error" class="hrs-line error">站点文件: {{ s.read_error }}</p>
                         </article>
                       </div>
+                    </div>
+                  </div>
+                </template>
+
+                <!-- 运行日志: 随「常规」分区页尾渲染(hub.view === 'basic'), 不自动轮询 -->
+                <template v-if="hub.view === 'basic'">
+                  <div class="hb-blk hb-cut">
+                    <div class="hb-blk-hd">
+                      <span class="bh-t">运行日志</span>
+                      <span class="bh-n">{{ logs.file || '日志文件未配置(config.log.file)' }}</span>
+                      <span class="bh-r">
+                        <select class="hb-select" v-model="logs.level" @change="loadLogs()">
+                          <option value="">全部级别</option>
+                          <option value="INFO">INFO</option>
+                          <option value="WARNING">WARNING</option>
+                          <option value="ERROR">ERROR</option>
+                        </select>
+                        <select class="hb-select" v-model.number="logs.num" @change="loadLogs()">
+                          <option :value="200">200 行</option>
+                          <option :value="300">300 行</option>
+                          <option :value="500">500 行</option>
+                          <option :value="1000">1000 行</option>
+                          <option :value="2000">2000 行</option>
+                        </select>
+                        <button class="hb-btn ghost sm" :disabled="logs.loading" @click="loadLogs()">刷新</button>
+                      </span>
+                    </div>
+                    <div style="padding:12px 14px">
+                      <p v-if="logs.note" class="logs-note">{{ logs.note }}</p>
+                      <pre v-if="logs.lines.length" class="hb-logs-pre">{{ logs.lines.join('\n') }}</pre>
+                      <p v-else class="hb-hp">{{ logs.loading ? '正在加载日志…' : (logs.error || '日志文件暂无内容') }}</p>
                     </div>
                   </div>
                 </template>

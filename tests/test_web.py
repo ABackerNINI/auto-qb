@@ -1921,9 +1921,9 @@ def test_config_schema_endpoint(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
     data = client.get("/api/config/schema", headers=auth).json()
-    assert [g["key"] for g in data["groups"]] == [
-        "basic", "logging", "web", "notify", "maintenance", "hr_check", "speed", "trackers", "rules"
-    ]
+    # 2026-09-26: 日志/WebUI/通知 三个短段并入 basic(设置页不再单列三张卡)
+    assert [g["key"] for g in data["groups"]] == ["basic", "maintenance", "hr_check", "speed", "trackers", "rules"]
+    assert [f["key"] for f in data["groups"][0]["fields"]][-3:] == ["log", "web", "notify"]
     assert {p["name"] for p in data["plugins"]["condition"]} >= {"size", "tags", "state", "freespace"}
     assert {p["name"] for p in data["plugins"]["action"]} >= {"add_tags", "checking", "reannounce"}
     # 热重载级别与 impact 同源(R 级字段前端需标"需重启")

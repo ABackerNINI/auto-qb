@@ -4,7 +4,7 @@
 - fields.py     Field/Group/Plugin 数据类 + 控件 kind 与选项常量(零依赖)
 - trackers.py   站点段字段(HR 输出字段/站点 hr/站点字段)
 - rules.py      规则字段 + 条件/动作插件表
-- groups.py     GROUPS 顶层分组表(左导航 8 分组)
+- groups.py     GROUPS 顶层分组表(左导航 6 分组; 日志/WebUI/通知 已并入 basic, 2026-09-26)
 - __init__.py   访问函数(config_fields/schema_payload 等) + 全量重导出
 
 职责:
