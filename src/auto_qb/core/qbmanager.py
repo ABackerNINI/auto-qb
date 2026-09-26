@@ -237,6 +237,10 @@ class QbManager(
         # 缺文件扫描轮内去重: 移动种子等场景同一轮会命中多个触发源(状态转移+路径变化),
         # 同组 key 同轮只扫一次(_refresh_torrents 每轮开始清空)
         self._missing_scanned_keys: set = set()
+        # 限速曲线手动保护的日志节流: {方向: (手动值 KiB/s, 上次记 INFO 时刻)} —— 手动值是持续状态,
+        # 逐轮 INFO 会刷屏, 故状态变化才报 + 周期提醒(见 SpeedCurveMixin._log_manual_skip);
+        # 退出手动保护时清键, 下次再进入重新说明白。
+        self._curve_manual_log: dict = {}
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
         self._lock = None
         if not no_lock:

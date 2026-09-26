@@ -36,8 +36,12 @@
 - test_speed_curve_success_logs_period_stats: 设置成功按各 period 输出累计上传/下载(今日/七日/本月/三十日)
 - test_speed_curve_format_helpers: 日志格式化辅助(_fmt_bytes/_cn_number/_period_label/_fmt_global_limit)
 - test_qbapi_global_speed_limit_normalization: qbapi KiB<->bytes/s 换算与读写
+- test_speed_curve_manual_log_throttled_same_state: 手动保护同状态逐轮不刷屏(仅首轮 INFO, 次轮降 DEBUG)
+- test_speed_curve_manual_log_periodic_reminder_and_value_change: 超周期提醒一次 / 手动值变化立即重报
+- test_speed_curve_manual_log_resets_after_release: 退出手动保护后清记忆, 再次进入重新报
 """
 import copy
+import io
 import logging
 import os
 from datetime import date, timedelta
@@ -48,7 +52,9 @@ import yaml
 from auto_qb.core import curves
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve, load_config
 from auto_qb.config import ConfigError
-from auto_qb.core.mixins.speed_curve import _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
+from auto_qb.core.mixins.speed_curve import (
+    _MANUAL_REMIND_GAP, _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
+)
 from auto_qb.core.taskqueue import Task
 from helpers import FakeClient, make_manager
 
@@ -138,6 +144,39 @@ def _make_mgr(tmp_path, gslc, with_app: bool = True):
     client = _fake_client() if with_app else FakeClient()
     mgr.client = client
     return mgr, client
+
+
+class _CurveLogCapture:
+    """捕获 speed_curve 模块 logger 输出(供断言手动保护的日志节流)
+
+    注: QbManager 构造时 setup_logging 清空 root handlers(caplog 捕获失效), 故直接给模块
+    logger 挂 StringIO handler; 默认 DEBUG 级 —— 被去重的轮次降 DEBUG, 也要看得见。
+    """
+    def __init__(self, level=logging.DEBUG):
+        self._level = level
+        self.buf = io.StringIO()
+
+    def __enter__(self):
+        self._lg = logging.getLogger("auto_qb.core.mixins.speed_curve")
+        self._handler = logging.StreamHandler(self.buf)
+        self._handler.setLevel(self._level)
+        self._old_level = self._lg.level
+        self._lg.setLevel(self._level)  # 模块 logger 无 handlers 时 effective level 取自 root, 需显式提升
+        self._lg.addHandler(self._handler)
+        return self
+
+    def __exit__(self, *exc):
+        self._lg.removeHandler(self._handler)
+        self._lg.setLevel(self._old_level)
+        return False
+
+    def info_count(self) -> int:
+        """INFO 档的手动保护条数(INFO 文案含"本轮不覆盖", DEBUG 文案不含 -> 按此区分)"""
+        return self.buf.getvalue().count("本轮不覆盖")
+
+    @property
+    def text(self) -> str:
+        return self.buf.getvalue()
 
 
 # ---------- 配置解析 / fail-fast ----------
@@ -992,3 +1031,80 @@ def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
     assert _run_curve(mgr) is True
     assert mgr._traffic_view["state"] == "stale"
     assert mgr._traffic_view["limit"]["reasons"][0]["code"] == "dat_empty"
+
+
+# ---------- 手动保护的日志节流(持续状态不逐轮刷屏) ----------
+def test_speed_curve_manual_log_throttled_same_state(tmp_path):
+    """手动保护同状态逐轮不刷屏: 首轮每方向一条 INFO, 次轮降 DEBUG(但快照 reasons 照旧)"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.transfer.limits["upload_limit"] = 2001 * 1024  # 奇数: 手动
+    client.transfer.limits["download_limit"] = 10265 * 1024  # 奇数: 手动(用户实报的值)
+
+    with _CurveLogCapture() as cap:
+        assert _run_curve(mgr)
+        assert cap.info_count() == 2  # 上传 + 下载 各一条
+        assert _run_curve(mgr)
+        assert cap.info_count() == 2  # 同状态第二轮不再记 INFO
+        assert "同状态不重复记" in cap.text  # 降 DEBUG: 排障仍看得见每轮在等什么
+
+    assert client.transfer.calls == []  # 两方向都被保护, 一次都不写
+    # 去重不丢信号: Web UI 快照的 reasons 照旧逐轮带 code=manual(前端锁图标的数据源)
+    assert [r["code"] for r in mgr._traffic_view["limit"]["reasons"]] == ["manual", "manual"]
+
+
+def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path, monkeypatch):
+    """超 _MANUAL_REMIND_GAP 再提醒一次; 手动值变化(仍是奇数)立即重报, 不等周期"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 5 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.transfer.limits["upload_limit"] = 2001 * 1024
+
+    clock = {"now": 1_000_000.0}
+    monkeypatch.setattr("auto_qb.core.mixins.speed_curve.time.time", lambda: clock["now"])
+
+    with _CurveLogCapture() as cap:
+        assert _run_curve(mgr)
+        assert cap.info_count() == 1  # 首次进入该状态 -> 说明白一次
+        clock["now"] += 61.0  # 远小于提醒周期
+        assert _run_curve(mgr)
+        assert cap.info_count() == 1  # 同状态不重复
+        clock["now"] += _MANUAL_REMIND_GAP  # 越过一个提醒周期 -> 再说明白一次
+        assert _run_curve(mgr)
+        assert cap.info_count() == 2
+        # 手动值变化(2001 -> 2003, 仍是奇数): 状态指纹变了 -> 立即重报
+        client.transfer.limits["upload_limit"] = 2003 * 1024
+        assert _run_curve(mgr)
+        assert cap.info_count() == 3
+        assert "2003KiB/s" in cap.text
+
+
+def test_speed_curve_manual_log_resets_after_release(tmp_path):
+    """退出手动保护(改成偶数被正常覆盖)后清记忆 -> 再次进入手动状态重新报一条"""
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 5 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    client.transfer.limits["upload_limit"] = 2001 * 1024
+
+    with _CurveLogCapture() as cap:
+        assert _run_curve(mgr)
+        assert cap.info_count() == 1
+        assert "up" in mgr._curve_manual_log  # 节流记忆已建立
+        assert _run_curve(mgr)
+        assert cap.info_count() == 1  # 同状态不重复
+
+        # 用户取消手动(改成偶数) -> 曲线接管并清记忆
+        client.transfer.limits["upload_limit"] = 2000 * 1024
+        assert _run_curve(mgr)
+        assert client.transfer.limits["upload_limit"] == 6144 * 1024  # 5GiB -> 首档 6MiB/s
+        assert "up" not in mgr._curve_manual_log
+        assert cap.info_count() == 1  # 释放本身不额外刷日志(可见性由"设置全局限速"那条承载)
+
+        # 再次手动设置(奇数) -> 重新说明白
+        client.transfer.limits["upload_limit"] = 2001 * 1024
+        assert _run_curve(mgr)
+        assert cap.info_count() == 2
