@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR 在线核实 · 触发模型 / 访问节奏 / 安全可靠性 · 设计审查报告 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-26-1628">
+<meta name="doc-updated" content="26-09-26-1842">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:31px;line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:76ch;margin:0 0 20px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+  .toc .no{font-family:var(--mono);color:var(--ink-3);margin-right:6px}
+
+  h2{font-size:21px;font-weight:600;margin:56px 0 18px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h2:first-of-type{margin-top:8px;border-top:none;padding-top:0}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:14px;font-weight:600;margin:22px 0 8px;color:var(--ink-2);font-family:var(--mono);letter-spacing:.04em}
+  p{margin:10px 0;color:var(--ink-2)} p strong,li strong{color:var(--ink);font-weight:600}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink-2)} li{margin:5px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.65;color:var(--ink-2)}
+  pre b{color:var(--ink);font-weight:400}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line-2);font-weight:400}
+  td{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+  td code{white-space:nowrap}
+  .mono{font-family:var(--mono);font-size:12.5px}
+
+  .verdict{background:linear-gradient(180deg,rgba(200,164,92,.09),rgba(200,164,92,.04));border:1px solid rgba(200,164,92,.35);border-radius:10px;padding:18px 22px;margin:20px 0}
+  .verdict h3{margin:0 0 8px;color:var(--accent);font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);font-weight:400}
+  .verdict p, .verdict li{color:var(--ink)}
+  .note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:14px;color:var(--ink-2)}
+  .note p{margin:6px 0}
+  .danger{border-left-color:var(--bad)}
+  .good{border-left-color:var(--good)}
+
+  .fig{border:1px solid var(--line);border-radius:10px;padding:16px;margin:18px 0;background:var(--surface)}
+  .fig figcaption{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:12px;line-height:1.7}
+  .fig svg{display:block;width:100%;height:auto}
+
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;padding:1px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+  .tag.p1{color:#f0a09a;border-color:rgba(208,92,78,.55);background:rgba(208,92,78,.12)}
+  .tag.p2{color:#e6c98a;border-color:rgba(200,164,92,.5);background:rgba(200,164,92,.1)}
+  .tag.p3{color:#9fc6e8;border-color:rgba(77,159,214,.45);background:rgba(77,159,214,.1)}
+  .tag.ok{color:#8ed3b4;border-color:rgba(47,168,116,.45);background:rgba(47,168,116,.1)}
+  .path{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+  .foot{border-top:1px solid var(--line-2);padding:24px 0 60px;font-size:12.5px;color:var(--ink-3);font-family:var(--mono);line-height:2}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.toc{position:static;display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Design Review · auto-qb · hr 在线核实</p>
+  <h1>HR 在线核实 · 触发模型 / 访问节奏 / 安全可靠性<br>设计审查报告</h1>
+  <p class="lede">四问四答的合并定稿: ①哪些种子会触发在线核实 ②各情况下的站点访问间隔 ③设计是否安全可靠、有哪些漏洞 ④是否每次都翻所有页。
+  总体判断: <strong>安全方向（宁可多管）设计扎实, 漏洞集中在反方向 —— 误放行 ⇒ 漏管 ⇒ 真吃 H&amp;R</strong>;
+  且已定位一个 latent 结构缺口（无断点续翻）会让大清单站点的在线核实功能自废。</p>
+  <p class="meta">审查基线 <b>develop @ a06732b</b> (与 Gitee 主线齐平) · 审查时间 <b>2026-09-26 16:28</b> · 追加 <b>17:01 (§7 三案 + §8 排序假设)</b> · 修正 <b>17:16 (§7.1 配额口径分歧 / §7.3 判据成立)</b> · 追加 <b>17:57 (§9 方案 v2 / §10 配额模型 / §11 校验失败处置)</b> · 定稿 <b>18:24–18:42 (信号分级: 排序违反与缺字段均为强信号 ⇒ 早停+判失败; 可比行 ≥2; 已抓行保留)</b> · 性质 <b>只读代码审查, 未改任何文件/配置</b> · 依据 <b>源码现场 + config.yml 实测值 + 既有测试与档案</b></p>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s0"><span class="no">0</span>结论速览</a>
+  <a href="#s1"><span class="no">1</span>触发模型: 哪些种子会核实</a>
+  <a href="#s2"><span class="no">2</span>访问节奏: 间隔全景</a>
+  <a href="#s3"><span class="no">3</span>翻页模型: 每轮全量重翻</a>
+  <a href="#s4"><span class="no">4</span>安全可靠性审计</a>
+  <a href="#s5"><span class="no">5</span>漏洞清单与修复方向</a>
+  <a href="#s6"><span class="no">6</span>未定案点</a>
+  <a href="#s7"><span class="no">7</span>候选方案可行性(三案)</a>
+  <a href="#s8"><span class="no">8</span>排序假设与校验要求</a>
+  <a href="#s9"><span class="no">9</span>方案 v2(滚动窗口+三早停)</a>
+  <a href="#s10"><span class="no">10</span>配额模型重新设计</a>
+  <a href="#s11"><span class="no">11</span>校验失败的处置(停用)</a>
+  <a href="#s12"><span class="no">12</span>变更记录</a>
+</nav>
+
+<main>
+
+<h2 id="s0">0 · 结论速览</h2>
+
+<div class="verdict">
+<h3>四问四答</h3>
+<ol>
+  <li><strong>哪些种子触发</strong>: <strong>与 qB 种子状态无关</strong> —— 没有 downloading / seeding / paused / checking 之类闸门。
+  触发由「站点接入状态 + 种子在站点侧的 HR 身份」决定; 真正联网的是<strong>站点级</strong>取数线程, 本地种子只通过「锚点」与「完成时间」两个口子反向影响它。</li>
+  <li><strong>访问间隔</strong>: 两道闸 —— 后端每站点独立计数（相邻请求 ≥90s, 抖动只向上 ⇒ 90~112.5s; 12/时 · 60/天; 连续失败 3 次熔断 12H）,
+  扩展独立计数（HR 页 10/时·50/天, .torrent 50/时·200/天）。你的 <code>config.yml</code> 只写了开关, 这些全是默认值。</li>
+  <li><strong>安全可靠性</strong>: 保守方向（fail-safe 到「受管束」）做得很扎实, 9 条防线可逐条指认;
+  但反方向有 <strong>1 个 P1 + 3 个 P2 + 3 个 P3</strong> 缺口, 全部指向「误放行 ⇒ 界面显示可删 ⇒ 真吃 H&amp;R」。</li>
+  <li><strong>是否每轮翻所有页</strong>: <strong>是</strong>。每个档位每轮都从 <code>page=1</code> 全量重翻, 上限 5 页; 没有增量、<strong>没有断点续翻</strong>。</li>
+</ol>
+</div>
+
+<div class="note danger">
+<p><strong>最值得马上看的两个结论</strong></p>
+<p>① <strong>P1</strong>: 「完整刷新」的成立条件太脆（鉴别器只有 <code>header_found</code> 一条）—— 三条触发路径中的任意一条都会让整站种子被误判「安全放行」。</p>
+<p>② <strong>无断点续翻</strong>: 当「档位数 × 每档页数」超出单轮可发请求数或 5 页上限时, <code>complete</code> 永远不成立 ⇒ 永不产生放行 ⇒ 在线核实功能自废, 且每小时白烧 12 次配额。BTSchool 现在只有 3 页所以未暴露。</p>
+</div>
+
+<div class="note">
+<p><strong>追加（26-09-26 17:01, 用户三案; 17:16 修正）</strong>: 用户提出三个减少翻页的方案 —— 单轮翻所有页 / 已覆盖本地全部种子即停 / 剩余达标时间为 0 连续 5 个即停。
+可行性评估见 <a href="#s7">§7</a>（结论: ①不可行 —— 拦路石是扩展 10 页/时 + 本轮等待 900s, 不是配额; ②仅可作节流阀; ③<strong>判据成立</strong> —— 在"考核期恒定"前提下与 v2.9 完成时间早停同构, 推荐自动推导 P 喂给 <code>completed_age_limit</code>）;
+用户要求"务必记下"的<strong>页面排序假设</strong>与由此要求的<strong>运行时排序校验 + 告警</strong>设计见 <a href="#s8">§8</a>。§7.1 另记一处<strong>配额口径分歧</strong>（现状每请求 1 配额 vs 用户口径"单轮 1 配额"）待确认。</p>
+<p><strong>17:57 追加</strong>: <a href="#s9">§9 方案 v2</a>（滚动窗口 + 三早停 + 双豁免; 含"滚动窗口不能证明不在清单"这条边界 —— <code>complete</code> 只在"末页 or 早停"时成立）·
+<a href="#s10">§10 配额模型重新设计</a>（<strong>页面访问与种子下载彻底分开</strong> + 双令牌桶 + 双间隔）·
+<a href="#s11">§11 校验失败的处置</a>（三级防抖: 抖动不停站 / 大面积告警 / 连续 K 轮<strong>停用该站</strong>, 且判定链必须同步回落本地）。</p>
+<p><strong>18:42 定稿（信号分级 + 落计划）</strong>: 排序违反（<strong>哪怕只 1 处</strong>）与<strong>缺字段</strong>都是<strong>强信号</strong> —— 立即早停 + <strong>判本轮拉取失败</strong> + 保留命中（不置 <code>complete</code>）+ 告警, <strong>不分面积</strong>; <strong>可比行 ≥ 2</strong> 即判定; 连续 K 轮 ⇒ 停站（<code>suspended</code>, 人工恢复）。
+取数失败/页面不完整为<strong>噪声</strong> —— 排序判定本轮弃用, 不计停站计数（防误停站）。详见 <a href="#s8">§8.2/§8.3</a> 与 <a href="#s11">§11.2</a>。
+本报告的全部结论已落到主计划 <strong><a href="../plans/26-09-22-2204-partial-hr-site-verify-plan.html#s14">§14 在线核实 v2 方案</a></strong>（v3.5, 待实施）。</p>
+</div>
+
+<h2 id="s1">1 · 触发模型: 哪些种子会触发在线核实</h2>
+
+<h3>1.1 判定入口不看种子状态</h3>
+<p>判定收口在 <code>TorrentRecord.check_hr_condition</code> / <code>check_hr_satisfied</code>
+(<span class="path">src/auto_qb/torrents/record.py:317 / :347</span>) —— 通读这两个方法<strong>没有任何</strong>
+<code>is_downloading / is_uploading / is_paused / is_checking</code> 判断, 只认「种子匹配到哪个 tracker」+「该站 <code>hr_check</code> 配置」。
+四个消费点（打标 <span class="path">core/mixins/tags.py:135</span> · 规则条件 <code>hr</code> <span class="path">rules/conditions.py:141</span> · 表达式 <code>tor.hr_*</code> · WebUI 视图 <span class="path">webui/views.py:230</span>）全部经它, 所以「状态是否参与」只需看这一处。</p>
+
+<h3>1.2 真正联网的是站点级取数线程</h3>
+<p>取数线程 <span class="path">src/auto_qb/hr/worker.py:227-257</span> 按 <code>hr_check.poll_interval</code>（默认 1M）自己轮询;
+<code>hr.wake()</code> 目前<strong>没有任何调用点</strong>（<span class="path">core/qbmanager.py:217-218</span> 注释明写「留给主循环的可选叫醒口, 当前无调用点」）。
+它发的请求只有两类: HR 页面, 以及<strong>站点索引里缺 infohash 的条目</strong>对应的 <code>.torrent</code>
+(<span class="path">hr/service.py:622 _fill_infohashes</span>)。</p>
+<p>本地种子只在两处影响在线核实:</p>
+<ul>
+  <li><strong>锚点</strong> <code>_hr_anchors</code>(<span class="path">core/qbmanager.py:696</span>) —— 只用于作废「本实例又下载了」的放行记录（辅助信号, 覆盖不到别的客户端）;</li>
+  <li><strong>本地完成时间</strong> <code>completion_on</code> —— 超龄豁免的判据。</li>
+</ul>
+
+<h3>1.3 判定链（三道闸门 → 三种结论）</h3>
+
+<figure class="fig">
+<svg viewBox="0 0 680 676" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>HR 在线核实的触发判定链</title>
+<desc>从每颗种子每 tick 的判定入口，经站点接入、超龄、可查键三道闸门，到清单命中、放行有效、未核实三种结论的流程图。</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+<g>
+<rect x="60" y="40" width="280" height="56" rx="8" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="200" y="58" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#d3d1c7">每颗匹配到站点的种子</text>
+<text x="200" y="76" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#a8b0b9">每 tick 现算 · 不看 qB 状态</text>
+</g>
+<path d="M200 96 L200 146" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="60" y="152" width="280" height="56" rx="8" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="200" y="170" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#d3d1c7">站点接入闸门</text>
+<text x="200" y="188" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#a8b0b9">mode=off 或总开关关</text>
+</g>
+<path d="M340 180 L374 180" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M200 208 L200 258" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="380" y="158" width="260" height="44" rx="8" fill="#14301f" stroke="#2fa874" stroke-width="0.5"/>
+<text x="510" y="180" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" fill="#8ed3b4">不核实 · 原样走本地逻辑</text>
+</g>
+<g>
+<rect x="60" y="264" width="280" height="56" rx="8" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="200" y="282" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#d3d1c7">本地完成时间</text>
+<text x="200" y="300" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#a8b0b9">超 completed_age_limit？</text>
+</g>
+<path d="M340 292 L374 292" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M200 320 L200 370" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="380" y="270" width="260" height="44" rx="8" fill="#14301f" stroke="#2fa874" stroke-width="0.5"/>
+<text x="510" y="292" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" fill="#8ed3b4">不核实 · 超龄豁免</text>
+</g>
+<g>
+<rect x="60" y="376" width="280" height="56" rx="8" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="200" y="394" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#d3d1c7">站点侧可查键</text>
+<text x="200" y="412" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#a8b0b9">mode≠all 且索引无键？</text>
+</g>
+<path d="M340 404 L374 404" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M200 432 L200 482" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="380" y="382" width="260" height="44" rx="8" fill="#14301f" stroke="#2fa874" stroke-width="0.5"/>
+<text x="510" y="404" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="13" fill="#8ed3b4">不核实 · 回落本地字段</text>
+</g>
+<g>
+<rect x="60" y="488" width="280" height="56" rx="8" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="200" y="506" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#d3d1c7">查 infohash v1 / v2</text>
+<text x="200" y="524" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#a8b0b9">清单 → 放行记录 → 未列出</text>
+</g>
+<path d="M200 544 L200 574 L130 574 L130 594" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M200 544 L200 574 L340 574 L340 594" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M200 544 L200 574 L550 574 L550 594" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow)"/>
+<g>
+<rect x="40" y="600" width="180" height="56" rx="8" fill="#33191a" stroke="#d05c4e" stroke-width="0.5"/>
+<text x="130" y="618" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#f0a09a">清单命中 A/B/C</text>
+<text x="130" y="636" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#d05c4e">受管束 · 触发</text>
+</g>
+<g>
+<rect x="250" y="600" width="180" height="56" rx="8" fill="#14301f" stroke="#2fa874" stroke-width="0.5"/>
+<text x="340" y="618" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#8ed3b4">放行在有效期内</text>
+<text x="340" y="636" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#2fa874">已核实 · 不触发</text>
+</g>
+<g>
+<rect x="460" y="600" width="180" height="56" rx="8" fill="#33191a" stroke="#d05c4e" stroke-width="0.5"/>
+<text x="550" y="618" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#f0a09a">未核实</text>
+<text x="550" y="636" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#d05c4e">policy=hr ⇒ 触发</text>
+</g>
+</svg>
+<figcaption>判定链（<span class="path">hr/resolve.py::judge_record</span>）。三道闸门任一条命中即「不核实」; 右侧三框是最终结论。
+「未核实」框按默认 <code>unknown_policy=hr</code> 计为触发 —— 若配成 <code>not-hr</code> 则不触发（等于自愿放弃一重保证）。</figcaption>
+</figure>
+
+<h3>1.4 会被判成「触发 HR」的情形（<code>is_hr=True</code>）</h3>
+<table>
+<thead><tr><th>情形</th><th>依据</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>站点清单命中 A/B/C 档</td><td><span class="path">resolve.py:232</span></td><td>三档都算受管束, 只是达标结论不同（A 考察中 / B 已达标 / C 未达标）</td></tr>
+<tr><td>未核实 + <code>unknown_policy=hr</code>（默认）</td><td><span class="path">resolve.py:99</span></td><td>保守方向: 漏 HR 的代价远大于多打一个标签</td></tr>
+<tr><td>新鲜度闸门: 本实例 <code>added_on</code> 晚于最近一次完整刷新</td><td><span class="path">resolve.py:253-259</span></td><td><code>forced=True</code>, <strong>policy 绕不过</strong>（专治「刚下载的种子还没进站点清单」）</td></tr>
+<tr><td><code>mode: all</code> 下未核实</td><td><span class="path">resolve.py:267</span></td><td>用户显式要的「全站受管束」, 不看索引现状</td></tr>
+<tr><td>infohash 缺位（v1/v2 都没回填）</td><td><span class="path">resolve.py:229</span></td><td>落「未核实」⇒ 默认触发</td></tr>
+</tbody>
+</table>
+
+<h3>1.5 压根不进在线核实的情形</h3>
+<ul>
+  <li><strong>站点没接入</strong>: <code>mode=off</code> / 未配 <code>hr_check</code> / 总开关 <code>hr_check.enabled=false</code> ⇒ <code>judge()</code> 返回 <code>None</code>, 原样走本地逻辑（零静默变更闸门）。</li>
+  <li><strong>超龄豁免</strong>: 配了 <code>completed_age_limit</code> 且本地完成时间超线 ⇒ 第四态 <code>EXEMPT</code>(<span class="path">resolve.py:326</span>), <strong>压过清单命中</strong>; 取数侧也不入索引、不回填。</li>
+  <li><strong>站点侧一个可查键都没有</strong>且 <code>mode≠all</code> ⇒ 回落本地字段(<span class="path">resolve.py:336</span>)。这是刻意设计: 索引还没回填出第一个 infohash 时, 不把「不知道」当「受管束」, 否则整站种子会被集体打上 HR 标（2026-09-25 实测过）。</li>
+  <li><strong>放行仍在有效期</strong>: 放行记录 <code>verified_ttl</code> 内且锚点未漂移; 或「完整刷新未列出」且新鲜度 ok。</li>
+</ul>
+
+<h3>1.6 未接入站点的传统触发语义（本地兜底）</h3>
+<p><span class="path">record.py:335-345</span>: <code>dlratio</code>（下载量/种子体积 ≥ 阈值）、<code>dlsize</code>（下载量 ≥ 阈值）满足其一,
+或兜底「下载量 ≥ 种子大小」; <code>downloaded=0</code> 的纯辅种不触发。这就是「哪些种子会触发 HR」的传统语义。</p>
+
+<h2 id="s2">2 · 访问节奏: 各情况下的站点访问间隔</h2>
+
+<h3>2.1 你的实际配置 = 全默认值</h3>
+<p><code>config.yml</code> 的 <code>hr_check</code> 段只写了 <code>enabled: true</code> 与 <code>channel</code>（enabled / port 18788 / token）,
+频控相关键<strong>一个都没写</strong> ⇒ 下表数字即当前生效值（默认值定义在 <span class="path">config/schema/hr.py</span>）。</p>
+
+<h3>2.2 后端第一道闸（每站点独立计数, <span class="path">hr/ratelimit.py</span>）</h3>
+<table>
+<thead><tr><th>场景</th><th>机制</th><th>默认值</th></tr></thead>
+<tbody>
+<tr><td>相邻两次<strong>站点请求</strong>硬下限</td><td><code>min_torrent_interval</code>, 抖动<strong>只向上</strong> +0~25%(<span class="path">jittered_interval</span>) ⇒ 实测 90~112.5s</td><td class="mono">90S</td></tr>
+<tr><td>小时配额（页面 + <code>.torrent</code> 合并计数）</td><td>到顶即停, 不报错</td><td class="mono">12/时</td></tr>
+<tr><td>天配额</td><td>同上</td><td class="mono">60/天</td></tr>
+<tr><td>刷新周期（数据有效期内不重抓页面）</td><td><code>refresh_interval</code>; 也是放行有效期默认值</td><td class="mono">12H</td></tr>
+<tr><td>连续失败熔断</td><td>达阈值 ⇒ 冷却期<strong>零请求</strong>; <code>Retry-After</code> 以冷却时长封顶</td><td class="mono">3 次 / 12H</td></tr>
+<tr><td>允许取数时段</td><td><code>allow_window</code>, 空 = 全天（❗与 notify 免打扰语义相反）</td><td class="mono">未配</td></tr>
+<tr><td>取数线程<strong>醒来检查</strong>节奏</td><td><code>poll_interval</code>, 多数轮次空手而回, <strong>不等于</strong>访问间隔</td><td class="mono">1M</td></tr>
+<tr><td>一轮刷新内的等待上限</td><td>单次 ≤300s、本轮累计 ≤900s, 超了放弃本轮（不持锁干等）</td><td class="mono">300s / 900s</td></tr>
+<tr><td>不完备刷新后的数据有效期</td><td><code>min(max(120s, 2×poll), refresh_interval)</code></td><td class="mono">120s</td></tr>
+</tbody>
+</table>
+<p>配额窗口按<strong>本地时区整点/零点</strong>重置, 靠窗口键幂等 —— 重启进程不会把计数清零(<span class="path">ratelimit.py:63-69</span>)。</p>
+
+<h3>2.3 扩展第二道闸（独立计数, <span class="path">extensions/hr-fetch-proxy/site-caps.js</span>）</h3>
+<ul>
+  <li>HR 页访问 <strong>10/时 · 50/天</strong>; <code>.torrent</code> 下载 <strong>50/时 · 200/天</strong>（按 host 分别计数）;</li>
+  <li>超限扩展直接拒发并回 <code>kind=ext-quota</code> + <code>retry_after</code>, 后端记成「本轮让位」—— <strong>不计失败、不推进熔断</strong>（避免把「后端频控失效」误报成「站点故障」）;</li>
+  <li>后端 12/时是<strong>合并计数</strong>, 比扩展的「页 10/时」更紧 ⇒ 正常碰不到这道闸; 真碰到会 WARNING 一次。</li>
+</ul>
+
+<h3>2.4 各情况下的实际访问间隔</h3>
+<table>
+<thead><tr><th>情况</th><th>站点请求</th></tr></thead>
+<tbody>
+<tr><td>稳态</td><td>每 12H 一次完整刷新; 一轮内每个请求间隔 ≥90s, 且受 12/时 限制 ⇒ 页面多时一轮抓不完, 判「刷新不完备」（不产生放行）, 其余分到后续小时继续。平均上限: 60/12 = 每 5 分钟最多一次</td></tr>
+<tr><td>数据有效期内（复用轮）</td><td><strong>不发任何页面请求</strong>, 只补 <code>.torrent</code> 回填, 每轮至少推进一条（受同一套间隔/配额闸门）</td></tr>
+<tr><td>刚做完不完备刷新</td><td>120s 内都走复用轮; 120s 后才可能再抓页面</td></tr>
+<tr><td>熔断中</td><td>12H 内零请求</td></tr>
+<tr><td>登录失效</td><td>本轮立刻停, 不计失败、不推进熔断、也不动 <code>fetched_at</code>; 下轮仍会试并命中登录页（只报一次警）—— 见 P3</td></tr>
+<tr><td>配额到顶 / 未到间隔</td><td><code>ACTION_WAITING</code>, 一次请求都不发; 日志走 INFO 而非 WARNING（防通知轰炸）</td></tr>
+<tr><td>多实例</td><td>每站点一把文件锁 + 有效期复用 ⇒ <strong>访问频率由数据有效期决定, 不随实例数增加</strong>（前提: <code>shared_dir</code> 配好, 见 P2）</td></tr>
+<tr><td><code>--hr-once</code> 走查</td><td>单次等待上限放宽到 600s、本轮总等待不限, 其余闸门不变</td></tr>
+</tbody>
+</table>
+
+<h3>2.5 不碰站点的时序常量（别和访问间隔混）</h3>
+<p>扩展每 <strong>1 分钟</strong>轮询一次本地端点（<code>POLL_MINUTES = 1</code>, <span class="path">extensions/hr-fetch-proxy/background.js:25</span>, 只打 loopback）;
+后端等回传上限 <code>request_timeout = 180S</code>; 扩展侧页面加载超时 60s; <code>DEFAULT_POLL_HINT = 60</code>(<span class="path">hr/channel.py:49</span>)。
+空轮询不碰站点。</p>
+
+<div class="note good">
+<p><strong>实测参照</strong>: 2026-09-25 用户取证 —— 当天对 BTSchool 共 5 次请求 = 3 页 + 2 个 <code>.torrent</code>, 全在频控内
+（当时被误读为「短时间大量下载」, 已澄清: <code>downloaded[]</code> 是「已取 .torrent」凭据, 不是 qB 下载）。</p>
+</div>
+
+<h2 id="s3">3 · 翻页模型: 每轮从第一页全量重翻</h2>
+
+<h3>3.1 结构</h3>
+<p><span class="path">hr/service.py:387-443</span> 的循环是: 对每个档位（默认 A/B/C）, 从 <code>page=1</code> 开始逐页取,
+直到 <code>has_next=False</code>（到底）或达到 <code>max_pages_per_refresh</code>（默认 5）。
+<strong>没有增量、没有断点续翻</strong>; 索引合并也是全量覆盖语义（<code>complete</code> 时先把全部条目置 <code>inactive</code> 再置本批命中为 <code>active</code>, <span class="path">service.py:574-576</span>）。</p>
+
+<figure class="fig">
+<svg viewBox="0 0 680 250" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>每轮全量重翻 与 断点续翻 的对比</title>
+<desc>上图：现状每轮都从第一页重新抓，配额耗尽后下一轮又从第一页开始；下图：断点续翻从上次中断的页码继续，到底才判完成。</desc>
+<defs>
+<marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+<text x="40" y="30" font-family="monospace" font-size="11.5" fill="#727c86">现状 · 每轮从 page=1 重来</text>
+<g>
+<rect x="40" y="42" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="70" y="59" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p1</text>
+<rect x="108" y="42" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="138" y="59" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p2</text>
+<rect x="176" y="42" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="206" y="59" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p3</text>
+<rect x="244" y="42" width="60" height="34" rx="6" fill="#33191a" stroke="#d05c4e" stroke-width="0.5"/>
+<text x="274" y="59" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#f0a09a">配额尽</text>
+<rect x="330" y="42" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="360" y="59" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p1</text>
+<rect x="398" y="42" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="428" y="59" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p2</text>
+<rect x="466" y="42" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="496" y="59" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p3</text>
+<rect x="534" y="42" width="106" height="34" rx="6" fill="#33191a" stroke="#d05c4e" stroke-width="0.5"/>
+<text x="587" y="59" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#f0a09a">永远到不了底</text>
+</g>
+<path d="M304 59 L324 59" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow2)"/>
+<text x="40" y="112" font-family="monospace" font-size="11.5" fill="#727c86">断点续翻 · 从断点继续（建议）</text>
+<g>
+<rect x="40" y="124" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="70" y="141" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p1</text>
+<rect x="108" y="124" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="138" y="141" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p2</text>
+<rect x="176" y="124" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="206" y="141" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p3</text>
+<rect x="244" y="124" width="60" height="34" rx="6" fill="#33191a" stroke="#d05c4e" stroke-width="0.5"/>
+<text x="274" y="141" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#f0a09a">配额尽</text>
+<rect x="330" y="124" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="360" y="141" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p4</text>
+<rect x="398" y="124" width="60" height="34" rx="6" fill="#1b1e23" stroke="#4a4f57" stroke-width="0.5"/>
+<text x="428" y="141" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#e3e5e8">p5</text>
+<rect x="466" y="124" width="174" height="34" rx="6" fill="#14301f" stroke="#2fa874" stroke-width="0.5"/>
+<text x="553" y="141" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-size="12" fill="#8ed3b4">到底 ⇒ complete ⇒ 放行</text>
+</g>
+<path d="M304 141 L324 141" fill="none" stroke="#727c86" stroke-width="1.5" marker-end="url(#arrow2)"/>
+<text x="40" y="196" font-family="sans-serif" font-size="13" fill="#a8b0b9">三个"少翻"的口子都不是增量: ①数据有效期内不抓页面（完整 12H / 不完备 120s, 复用轮只补下载）</text>
+<text x="40" y="218" font-family="sans-serif" font-size="13" fill="#a8b0b9">②超龄早停（需 completed_age_limit 开启 + 整页超龄 + 倒序证据成立）③预算耗尽中途放弃（⇒ 判不完备）</text>
+</svg>
+<figcaption>唯一真正的省流设计是 <code>.torrent</code> 的永久层 <code>hr_downloaded</code>（取过绝不重下, <span class="path">service.py:640-650</span>）; 页面永远全量重抓。</figcaption>
+</figure>
+
+<h3>3.2 三个「少翻」的口子</h3>
+<ol>
+  <li><strong>数据有效期内不抓页面</strong>: 完整刷新后 <code>expires_at = now + 12H</code>; 不完备后仅 120s。有效期内走 <code>ACTION_REUSED</code>, <strong>只补 <code>.torrent</code></strong>(<span class="path">service.py:238-248 / _backfill_on_reuse:306</span>) —— 2026-09-25 修「下载被页面饿死」的专用通道。</li>
+  <li><strong>超龄早停</strong>: 仅当 <code>completed_age_limit</code> 开启, 且整页每行都有可解析完成时间、全部超龄、页内与跨页都呈完成时间倒序 ⇒ 停翻后续页（覆盖证明<strong>照常成立</strong>, <span class="path">service.py:597-620</span>）。倒序证据不成立就继续翻 —— 错误方向只是多花配额。</li>
+  <li><strong>预算耗尽中途放弃</strong>: 每个请求过 <code>_Budget.take()</code>; 单次等待 &gt;300s 或本轮累计 &gt;900s 即放弃剩余 ⇒ 判不完备(<span class="path">service.py:859-872</span>)。</li>
+</ol>
+
+<h3>3.3 隐患: 翻不完就永远翻不完（latent P2）</h3>
+<p>翻页进度<strong>不落地</strong> —— <code>HrRefreshMeta</code> 只有 <code>scopes_done</code> / <code>pages_fetched</code>, <strong>没有 per-scope 的页码游标</strong>
+(<span class="path">hr/model.py:262-269</span>)。于是:</p>
+<ul>
+  <li>某轮抓到一半配额/页数上限用尽 ⇒ 不完备;</li>
+  <li>下一轮（120s 后）<strong>又从 page=1 开始</strong>;</li>
+  <li>若「档位数 × 每档页数」&gt; 单轮可发请求数, 或某档页数 &gt; <code>max_pages_per_refresh=5</code>, 就<strong>永远翻不到底</strong>。</li>
+</ul>
+<p><strong>后果</strong>: <code>complete</code> 永远不成立 ⇒ <strong>永远不产生放行</strong> ⇒ 全部种子恒「未核实」⇒ 默认按 HR 管束。
+方向保守（不会误放行、不会吃 H&amp;R）, 但等于在线核实功能自废, 且每小时白烧 12 次配额重复抓前几页。
+BTSchool 当前 3 页未暴露; <strong>清单变长就会踩</strong>。</p>
+
+<h2 id="s4">4 · 安全可靠性审计</h2>
+
+<h3>4.1 做对的部分（可逐条指认, 不建议动）</h3>
+<table>
+<thead><tr><th>#</th><th>防线</th><th>依据</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>默认全保守: <code>unknown_policy=hr</code>; 不完备刷新<strong>不产生放行</strong>; 不完备<strong>不推进</strong> <code>last_success_ts</code>; 新鲜度闸门 <code>forced</code> 绕不过 policy</td><td><span class="path">service.py:706 / :529</span> · <span class="path">resolve.py:99</span></td></tr>
+<tr><td>2</td><td>登录失效<strong>不动</strong> <code>fetched_at</code> / 覆盖证明 / 新鲜度基准（不得变成新的放行背书）</td><td><span class="path">service.py:464-480</span></td></tr>
+<tr><td>3</td><td>放行有效期 <code>verified_ttl</code> 默认 = 该站刷新周期 ⇒ 超期未获新背书即回落未核实</td><td><span class="path">service.py:177-180</span></td></tr>
+<tr><td>4</td><td>锚点漂移作废（删种重加 / 文件重下 / 本实例二次下载）</td><td><span class="path">resolve.py:61-73</span></td></tr>
+<tr><td>5</td><td>配额窗口幂等（窗口键判定, 重启不重置、重放不重复消耗）</td><td><span class="path">ratelimit.py:63-69</span></td></tr>
+<tr><td>6</td><td>站点锁 + 原子替换 + 读坏不抛（如实带 <code>read_error</code> 出去）</td><td><span class="path">hr/store.py</span> · <span class="path">status.py:275-287</span></td></tr>
+<tr><td>7</td><td>端点纵深: 仅听回环 + <code>secrets.compare_digest</code> 常数时间比较 + 401 前不写任何状态 + 非扩展 origin 403 + SSRF URL 白名单 + 任务 id 绑定与域名校验</td><td><span class="path">server.py:270-272</span> · <span class="path">channel.py:114-127</span> · <span class="path">queue.py:137-156</span></td></tr>
+<tr><td>8</td><td>扩展第二道闸（后端写错/配置改坏也打不爆站点）</td><td><span class="path">site-caps.js</span></td></tr>
+<tr><td>9</td><td>配置期 fail-fast: <code>mode≠off</code> 必配 <code>hr</code> 段 / <code>hr_page_url</code> 必填且须 http(s) 绝对地址 / <code>hr_page_scopes</code> <strong>必含 A+B+C</strong>（少抓一档会在完整刷新里「未列出」而误放行）/ <code>download_path</code> 必含 <code>{id}</code></td><td><span class="path">config/validation/sections.py:279-302</span></td></tr>
+</tbody>
+</table>
+
+<h3>4.2 漏洞清单</h3>
+<table>
+<thead><tr><th>级别</th><th>问题</th><th>触发条件</th><th>后果</th></tr></thead>
+<tbody>
+<tr>
+  <td><span class="tag p1">P1</span></td>
+  <td>「完整刷新」的鉴别器只有 <code>header_found</code> 一条</td>
+  <td>① 改版使首列非纯数字（<span class="path">nexusphp.py:98</span> 直接 <code>break</code> ⇒ 0 行但 <code>header_found=True</code>）<br>② 英文/非中文 NexusPHP: <code>has_next_page</code> 只认中文「下一页」(<span class="path">parse.py:222</span>) ⇒ 永远判「翻到底」<br>③ 站点临时返回空表</td>
+  <td><code>complete=True</code> ⇒ <code>_refresh_verified</code> 把 <code>data.downloaded</code> 全部记成「未列出」放行(<span class="path">service.py:723-728</span>) ⇒ <strong>整站种子显示「在线·已核实, 安全放行」、界面判可删</strong></td>
+</tr>
+<tr>
+  <td><span class="tag p2">P2</span></td>
+  <td>放行记录取消不了</td>
+  <td>清单命中但该行 infohash 还没回填 —— <code>listed</code> 只收已有 hash 的键(<span class="path">service.py:717</span>)</td>
+  <td>种子重回 HR 清单也收不回放行, 漏管窗口 ≤ <code>verified_ttl</code>(12H)</td>
+</tr>
+<tr>
+  <td><span class="tag p2">P2</span></td>
+  <td>多实例未配 <code>shared_dir</code></td>
+  <td>配额账本各存一份（各实例自己的 <code>data_dir</code>）</td>
+  <td>站点访问翻倍（2×12/时）; <code>channel.enabled</code> 的 help 文案「多通道不会双倍访问站点」<strong>有前提</strong></td>
+</tr>
+<tr>
+  <td><span class="tag p2">P2</span></td>
+  <td>无断点续翻（见 §3.3）</td>
+  <td>档位数 × 每档页数 超出单轮预算或 5 页上限</td>
+  <td>永不 <code>complete</code> ⇒ 永不产生放行（功能自废）+ 每小时白烧配额</td>
+</tr>
+<tr>
+  <td><span class="tag p3">P3</span></td>
+  <td>登录失效期持续发请求</td>
+  <td>不计失败、不熔断（设计如此）, 但每轮照发（<code>fetched_at</code> 不前进 ⇒ 不进入有效期复用）</td>
+  <td>站点侧看到大量未登录访问, 白烧配额（≤12/时）</td>
+</tr>
+<tr>
+  <td><span class="tag p3">P3</span></td>
+  <td>本机端点纵深偏弱</td>
+  <td><code>config.yml</code> 里 <code>token: 123456</code> + <code>extension_id</code> 空 ⇒ 放行任意扩展 origin(<span class="path">channel.py:125</span>)</td>
+  <td>本机进程猜到 token 后可伪造「未列出」回传制造放行 / 领取任务 URL</td>
+</tr>
+<tr>
+  <td><span class="tag p3">P3</span></td>
+  <td>超龄豁免压过清单命中（<strong>已知取舍</strong>）</td>
+  <td>开了 <code>completed_age_limit</code></td>
+  <td>站点仍在管的超龄种子会漏管, 且界面显示「安全」—— 需配置者确认接受</td>
+</tr>
+</tbody>
+</table>
+
+<h3>4.3 一处文档与实现矛盾（改之前要先定口径）</h3>
+<div class="note danger">
+<p><span class="path">hr/adapters/base.py:8-9</span> 的 docstring 写「HTTP 200 但解析出 0 条…由 service 转成<strong>覆盖证明不成立</strong> + 熔断告警, <strong>绝不把空结果当真</strong>入库」;</p>
+<p>而实现与测试恰恰相反 —— <code>complete</code> 的判据不看条目数, <span class="path">tests/test_hr_service.py:995 test_empty_listing_is_complete</span> 明确断言「表头在但 0 行 = 合法空结果, 覆盖证明仍成立」。</p>
+<p>两边必有一边要改: 要么承认「空表即完整」并把 docstring 改对, 要么加骤降保护并改测试。这是 P1 修复的前置决策。</p>
+</div>
+
+<h2 id="s5">5 · 修复方向建议</h2>
+
+<h4>① 骤降保护（治 P1 的 ①③）</h4>
+<p>本轮条目数为 0（或低于上轮 X%）且上轮有条目 ⇒ 判<strong>不完备</strong>, 不产生放行。一行判据即可堵死最危险的路径; 需同步改 <code>test_empty_listing_is_complete</code> 与 base.py docstring。</p>
+
+<h4>② 翻页到底的交叉验证（治 P1 的 ②）</h4>
+<p><code>parse.page_javascript_marks</code> 已经能拿到 <code>maxpage / currentpage</code>，目前<strong>只用于报告</strong>。让 <code>currentpage &lt; maxpage</code> ⇒ 视为未到底; 或把「下一页」判据扩成中英双语 + 图标兜底。</p>
+
+<h4>③ 断点续翻（治 P2 的 latent 缺口）</h4>
+<p><code>HrRefreshMeta</code> 加 per-scope 页码游标并持久化: 本轮从断点继续, 翻到底才把该 scope 记进 <code>scopes_done</code>, 全部到底才判 <code>complete</code>。这是让「大清单站点」真正拿到放行的唯一路径（配合 12/时 的配额现实）。</p>
+
+<h4>④ 多实例引导升级（治 P2 的 shared_dir 一条）</h4>
+<p>检测到「多实例 + <code>shared_dir</code> 为空 + 各自启用 channel」时, 把现在的 INFO 引导升级为 WARNING
+（<code>runtime._advise_shared_dir</code> 已有一处 INFO 落点）。<code>hr_page_scopes</code> 的 A+B+C 已由配置期 fail-fast 拦住, 无需再动。</p>
+
+<h4>⑤ 纵深与退避（治 P3）</h4>
+<p>token 留空让程序生成到 <code>&lt;data_dir&gt;/hr.token</code> + 填 <code>extension_id</code>; 登录失效后给重试加指数退避（现在每轮都打）。</p>
+
+<h2 id="s6">6 · 未定案点（需用户拍板）</h2>
+<ul>
+  <li><strong>是否入池 / 出修复计划</strong>: 本报告只做只读审查, 未建 issue、未出计划、未改任何代码与配置。P1 / P2 是否入池、是否走 <code>plans/</code> 出方案, 待用户指令。</li>
+  <li><strong>空表口径归谁</strong>: 「表头在但 0 行 = 合法空结果」是现行实现与测试的口径, 与 base.py docstring 相反 —— 修 P1 前必须先定这一条。</li>
+  <li><strong>超龄豁免是否继续接受</strong>: 它是「站点仍在管的超龄种子会漏 HR」的显式取舍, 且界面会显示「安全」。</li>
+  <li><strong>P1 的 P1 级判定依据</strong>: 三条触发路径都依赖「站点页面形态变化」, 未在真机复现（需 BTSchool 真机走查 + 构造空表样本验证后果链）—— 若要升级为 issue, 建议先补一条真机/构造样本的复现记录。</li>
+</ul>
+
+<h2 id="s7">7 · 候选方案可行性评估（用户三案）</h2>
+
+<div class="verdict">
+<h3>三案结论</h3>
+<ul>
+  <li><strong>① 单轮翻所有页</strong> —— <strong>仍判不可行, 但拦路石要换</strong>: 配额口径存在分歧（现状实现是<strong>每请求消耗 1 个配额</strong>, <code>service.py:870</code> 的 <code>try_consume(..., 1)</code> 逐请求调用; 用户口径是"单轮 1 配额 + 单轮上限 20", 仓库内查不到此口径）。<strong>两种口径下都不可行</strong> —— 真正的硬墙是「扩展 10 页/时」与「本轮累计等待 900s」, 二者都独立于配额语义（见 7.1）。</li>
+  <li><strong>② 已覆盖现存所有种子即停</strong> —— <strong>部分可行, 仅可作节流阀</strong>。判定只对本地种子做, 所以"本地种子都已被抓到"确实够支撑"这些种子被正确分类";
+  但<strong>绝不能据此置 <code>complete</code></strong>（否则与 P1 同类误放行）, 且"已覆盖"本身无法严格判定（见 7.2）。</li>
+  <li><strong>③ 剩余达标时间为 0 连续 5 个即停</strong> —— <strong>判据成立（修正）</strong>。用户给定前提"考核期对每个种子是固定的" ⇒ <code>remain==0 ⟺ now−done ≥ P</code> ⇒ 与 v2.9 的完成时间早停<strong>数学同构</strong>, 早停跳过的行正是判定侧会豁免的行 ⇒ 自洽。
+  推荐落地形态不是另造 remain 判据, 而是<strong>自动推导考核期 P 并喂给 <code>completed_age_limit</code></strong>（显式开关 + 排序校验 + 不一致告警, 见 7.3）。</li>
+</ul>
+</div>
+
+<h3>7.1 方案 ①: 单轮最大翻页 = 所有页</h3>
+
+<h4>先澄清配额口径（一处实现与用户口径的分歧）</h4>
+<table>
+<thead><tr><th>口径</th><th>内容</th><th>证据</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>现状实现</strong></td>
+  <td><strong>每请求消耗 1 个配额</strong>（页面与 <code>.torrent</code> 合并计数）</td>
+  <td><code>service.py:870</code> <code>_Budget.take()</code> 内 <code>try_consume(self._data.quota, self._limits, now, 1)</code>, 每个请求前调一次; <code>mark()</code> 每请求后记一次</td>
+</tr>
+<tr>
+  <td><strong>用户口径</strong></td>
+  <td>"单轮只占一个配额, 单轮硬上限 20"</td>
+  <td class="mono">仓库内查无此口径（计划 §7 / keys.md / schema / site-caps.js 均无"20"或"按轮计配额"）—— 待确认是"新设计意图"还是我误读了现有口径</td>
+</tr>
+</tbody>
+</table>
+<p>这个分歧值得单独定: 若改成"按轮计", 单轮内的请求数就只剩 <code>min_torrent_interval</code>（90s）约束 —— 而 90s 间隔本身就是 40 请求/时 的上限, <strong>比现在的 12/时 配额更松</strong>。也就是说: <strong>现状的真正瓶颈是"配额按请求计", 不是节奏</strong>。</p>
+
+<h4>两种口径下的拦路石</h4>
+<table>
+<thead><tr><th>口径</th><th>能否"一轮翻完 N 页"</th><th>先撞上什么</th></tr></thead>
+<tbody>
+<tr>
+  <td>现状（每请求 1 配额）</td>
+  <td>不能（N &gt; ~10）</td>
+  <td>① 后端 12/时 ② 本轮累计等待 900s ÷ 90s ⇒ 一轮最多约 10 个请求（<code>.torrent</code> 还抢同一份配额）</td>
+</tr>
+<tr>
+  <td>用户口径（单轮 1 配额 + 上限 20 页）</td>
+  <td><strong>仍不能</strong></td>
+  <td>
+    ① <strong>扩展侧硬上限「HR 页 10/时」</strong>（<span class="path">site-caps.js</span>）—— 单轮第 11 个页面请求必被拒（<code>ext-quota</code> ⇒ 让位）; 这是用户自己点名设的"防后端出错"兜底, 与"单轮 20 页"<strong>直接互斥</strong>;<br>
+    ② <code>PROD_ROUND_WAIT_MAX = 900s</code>（代码常量, 非配置键）⇒ 20 页 × 90~112.5s ≈ 1700~2100s 的等待会在 900s 处被放弃;<br>
+    ③ 单轮 20 页 ≈ 30 分钟<strong>全程持站点锁</strong>（多实例时别人拿不到锁）
+  </td>
+</tr>
+</tbody>
+</table>
+<p>⇒ 要让"单轮翻完"成立, 需要<strong>同时</strong>放宽三处: 扩展 caps（≥ 总页数/时）、本轮等待上限、持锁时长接受度。而前两条都直接撞"账号安全 / 多实例可用性"这条原始需求。**并且**: 若清单页数 &gt; 单轮上限（20）, 方案 ① 依旧无能为力 ⇒ <strong>它不能替代断点续翻</strong>。</p>
+<div class="note danger">
+<p><strong>仍然成立的关键纠正</strong>: 方案 ① 想买的是"准确性", 而准确性来自「<strong>覆盖证明完整</strong>」（完整扫完一次清单）, <strong>不要求一轮内完成</strong>。
+跨轮扫掠（断点续翻）给出的是同一个覆盖证明, 且不需要放宽扩展 caps / 不需要 30 分钟持锁 ⇒ 方案 ① 的目标由它更便宜地达成。</p>
+</div>
+
+<h3>7.2 方案 ②: 结果已覆盖现存所有种子则不往下翻</h3>
+<p>出发点是对的: 判定只对<strong>本地种子</strong>做（<code>judge_record</code> 由 <code>TorrentRecord</code> 调用）, 所以"本地种子都已出现在已抓页里"确实够支撑"这些种子被正确分类"。但有三个洞:</p>
+<ol>
+  <li><strong>绝不能据此置 <code>complete</code></strong>: 未抓到的页里的条目会被判「未列出 ⇒ 安全放行」, 而本地种子可能正躺在那几页里 ⇒ 与 P1 同类误放行。
+  安全形态只能是「<strong>提前停 = 放弃本轮的放行能力, 只收命中</strong>」—— 命中的行照常按 A/B/C 精确分类, 未命中照旧落「未核实 ⇒ 默认按 HR 管束」（保守）。</li>
+  <li><strong>"已覆盖所有种子"不可严格判定</strong>: 缺 infohash 的行无法按 hash 比对（要比对就得先下 <code>.torrent</code>, 又占配额）; 按 name 比对需把本地 name 集合跨线程交接, 而站点可能截断长名 / qB 改名 ⇒ 只能算<strong>高置信疑似覆盖</strong>, 不能算证明。</li>
+  <li><strong>判据是瞬时的</strong>: 本地种子随时新增, 下一秒就可能不成立 ⇒ 只能当"本轮停止"的依据, 不能当"完成"。</li>
+</ol>
+<p><strong>结论</strong>: 定位为<strong>节流阀 + 提示</strong>（把配额让给别的档位 / 下一轮）, <strong>不能作为覆盖证明</strong>。若用它来产生放行, 就是拿准确性换配额 —— 不建议。</p>
+
+<h3>7.3 方案 ③: 剩余达标时间为 0 连续 5 个即停 —— 判据成立（本节已修正）</h3>
+<p>用户给定前提: <strong>考核期 P 对每个种子是固定的</strong>。在此前提下:</p>
+<pre>remain = done + P − now   ⇒   remain == 0  ⟺  now − done ≥ P</pre>
+<p>即"剩余达标时间归零"<strong>等价于"完成时间超过 P"</strong> —— 与 v2.9 的 <code>completed_age_limit</code> 判据<strong>数学同构</strong>（把豁免线取成 P 就是同一批行）。因此:</p>
+<ul>
+  <li>页面按完成时间单调排序时, 一旦出现 <code>remain==0</code>, 后续行只会更老 ⇒ 全部 <code>remain==0</code> ⇒ 早停成立;</li>
+  <li>更关键的是<strong>自洽性</strong>: 早停跳过的行 = 判定侧会豁免的行（同一个 P）⇒ 不会出现"跳过的行本该显示 C 档红色警示、却被判成安全放行" —— 上一版判它"数学不安全"正是缺这个前提, 在恒定前提下该问题消失。</li>
+</ul>
+<div class="note good">
+<p><strong>推荐落地形态: 不另造一套 remain 早停, 而是"自动推导 P → 喂给 <code>completed_age_limit</code>"</strong></p>
+<p>理由: 复用 v2.9 已验证的三件套（判定侧豁免 + 取数侧行过滤 + 早停）, 判定与取数天然同源; 用户不必手工配 365D, 站点改考核期时自动跟随。</p>
+<p>推导方法: 已抓行里 <code>done_iso</code> 与 <code>remain_seconds</code> 都有 ⇒ <code>P ≈ done + remain − now</code>, 多行取一致值; 误差只来自"页面生成 → 解析"的秒级差, 对"天"级 P 可忽略。</p>
+<p>❗<strong>必须是显式开关</strong>（如站点级 <code>auto_age_limit</code>, 默认关闭）—— 它把 v2.9 的"用户显式配置才豁免"变成默认行为, 违反「零静默变更」黄金法则。</p>
+</div>
+<p><strong>仍需保留的三道保险</strong>:</p>
+<ol>
+  <li><strong>排序校验 + 告警</strong>（用户要求, 见 §8）: 排序假设不成立时, 早停会漏掉活跃行 ⇒ 必须禁用早停并立即告警;</li>
+  <li><strong>P 的一致性校验</strong>: 参与判据的行反算出的 P 若彼此差异超容差 ⇒ 说明"考核期恒定"这个前提不成立（或解析有误）⇒ 告警 + 不早停。这条把用户给定的前提变成<strong>可机检的运行时断言</strong>, 而不是文档承诺;</li>
+  <li><strong>连续 5 个</strong>（用户的稳健性余量）: 单行可能因解析/边界抖动误判（如 <code>0天00:00:01</code> 被解析成 0）⇒ 用连续 N 行做证据强度阈值。建议做成常量或可配 <code>age_stop_streak</code>, 并写明取 5 的理由。</li>
+</ol>
+<p><strong>与隐患的关系</strong>: 它砍掉"已到期堆积"的页数（这类行在长清单里往往占大头）⇒ 对缓解"永远翻不完"贡献明显, 但仍<strong>不能替代断点续翻</strong>（A 档本身页数多时与它无关）。</p>
+
+<h3>7.4 修正后的建议组合</h3>
+<ol>
+  <li><strong>断点续翻</strong>（跨轮扫掠）—— 解隐患的正解, 不动配额, 方案 ① 的目标由它达成;</li>
+  <li><strong>排序校验 + 告警</strong>（§8）—— 为一切早停立地基, 也是用户的明确要求;</li>
+  <li><strong>自动推导考核期 P → <code>completed_age_limit</code></strong>（7.3 推荐形态, 显式开关 + P 一致性校验）—— 砍掉"已到期堆积"页数;</li>
+  <li><strong><code>maxpage/currentpage</code> 交叉验证</strong>（§3 提过）—— 补"翻到底"判据, 顺带堵 P1 的英文站缺口;</li>
+  <li><strong>方案 ②</strong> 只作节流阀（提前停 = 放弃本轮放行能力, 只收命中）; <strong>方案 ①</strong> 放弃（若坚持, 需同时放宽扩展 caps / 本轮等待上限 / 接受 30 分钟持锁, 且页数超上限时仍需续翻）;</li>
+  <li>另需定: <strong>配额口径</strong>是继续"每请求 1 个"还是改"按轮 1 个"（7.1 的分歧）—— 影响的是"单轮能发多少请求", 与覆盖证明的正确性无关。</li>
+</ol>
+<p class="path">⚠ 本节(v1 三案)已被 <a href="#s9">§9 方案 v2</a> 取代: v2 用"滚动窗口 + 三早停 + 双豁免"的形态吸收了 ①②③ 的可用部分, 并把断点续翻降级为可选兜底。配额口径的分歧也在 §10 用"双令牌桶 + 页面/下载彻底分开"给出了完整答案。</p>
+
+<h2 id="s8">8 · 页面排序假设与校验要求（务必记下）</h2>
+
+<h3>8.1 假设内容与当前状态</h3>
+<table>
+<thead><tr><th>项</th><th>内容</th></tr></thead>
+<tbody>
+<tr><td><strong>假设</strong></td><td>站点 HR 页的条目按<strong>完成时间</strong>（等价地: 剩余达标时间）<strong>单调排序, 最新在前</strong></td></tr>
+<tr><td>谁依赖它</td><td>v2.9 的 <code>completed_age_limit</code> 早停（倒序证据成立才停）; 本报告 §7.3 提议的 remain 早停; 任何"看到某类行就停翻"的优化</td></tr>
+<tr><td><strong>验证状态</strong></td><td><strong>未经验证的假设</strong> —— NexusPHP <code>myhr.php</code> 的排序在 M0 四项实测里<strong>未收口</strong>（activeContext 待实测清单明确列着「HR 页排序是否按完成时间倒序」）</td></tr>
+<tr><td><strong>不能假定所有站一致</strong></td><td>不同 NexusPHP 版本 / 主题 / 插件都可改默认排序 ⇒ <strong>不得把该假设写进配置或文档当事实</strong>, 只能作为"待运行时校验的假设"</td></tr>
+<tr><td><strong>配套假设②（用户给定）</strong></td><td><strong>考核期 P 对每个种子是固定的</strong> ⇒ <code>remain==0 ⟺ now−done ≥ P</code>（7.3 的同构性依赖它）</td></tr>
+<tr><td>配套假设②的状态</td><td><strong>用户给定, 但同样要做运行时断言</strong>: 用 <code>P ≈ done + remain − now</code> 反算, 各行 P 差异超容差 ⇒ 告警 + 不早停（不靠文档承诺, 见 8.2）</td></tr>
+<tr><td>排序键的选择</td><td>取 <strong>完成时间</strong>（客观时间）; <code>remain</code> 在 P 恒定时与之等价, 故排序校验只需钉一个键, 但两个字段都要能被解析</td></tr>
+</tbody>
+</table>
+
+<h3>8.2 校验与告警设计（落点）</h3>
+<ul>
+  <li><strong>纯函数</strong>: <code>hr/parse.py</code> 新增 <code>order_violations(entries, key)</code>（<code>key ∈ done_epoch / remain_seconds</code>）—— 返回逆序对数量与首处位置; 缺字段的行<strong>不计入比较</strong>（不猜）, 但计入"证据不足"。</li>
+  <li><strong>调用点</strong>: <code>service._do_fetch</code> 每页解析后校验<strong>页内</strong>顺序, 并与上一页比对<strong>跨页</strong>顺序（复用 v2.9 已有的 <code>prev_page_dones</code> 思路）。</li>
+  <li><strong>方向推断</strong>: 由首两行定方向（升 / 降）, 之后必须单调; 方向翻转 ⇒ 视为逆序。</li>
+  <li><strong>命中后果（用户定稿: 强信号, 不分面积）</strong>: 出现<strong>任何</strong>逆序（页内或跨页）⇒ ① <strong>立即停止本轮翻页</strong>（不再发请求）;
+  ② <strong>判本轮拉取失败</strong>（<code>ACTION_ERROR</code> + 不产生放行）; ③ 计入失败并启动"连续轮次"停站观察（§11.2）;
+  ④ 立即告警（<code>reason</code> 写「排序假设不成立（疑似改版或该站排序不同）」, 经 <code>worker._note</code> 的 WARNING 分支, 按 <code>channel_silence_warn</code> 节流）。</li>
+  <li><strong>强信号: 缺字段</strong>（2026-09-26 18:42 用户定稿）: 成因可能是<strong>网络波动</strong>（影响小）也可能是<strong>改版</strong>（致命）—— 不论哪种都
+  <strong>早停 + 判拉取失败 + 不带错执行</strong>（与 S1 同级处置, 只是告警文案分开）; 缺失行仍<strong>不计入逆序比较</strong>（避免把"缺字段"重复算成"排序违反"）。</li>
+  <li><strong>噪声隔离（防误停站）</strong>: 本轮只要出现取数失败（超时 / 中断 / 挑战页 / 登录页 / 行数异常）⇒ <strong>排序判定结果本轮弃用</strong>,
+  不计入停站计数 —— 页面本身不完整时的"逆序"是假象。</li>
+  <li><strong>顺带补强 v2.9</strong>: 现在"倒序证据不成立"是<strong>静默降级</strong>（不早停但不告警）—— 用户这条要求正好把它变成显式信号（<code>completed_age_limit</code> 也吃这份校验）。</li>
+  <li><strong>P 一致性校验（配套假设②）</strong>: 参与早停判据的行反算 <code>P ≈ done + remain − now</code>; 若彼此差异超容差（建议 ±1 天）⇒ <code>reason</code> 写「考核期不恒定（或字段解析有误）」+ 告警 + <strong>禁用自动豁免与早停</strong>。这条把用户给定的前提变成可机检的断言。</li>
+  <li><strong>诊断出口</strong>: <code>--hr-status</code> 增一行「排序: 按完成时间倒序 ✓ / 不成立（档位 A 第 2 页起）」+ 考核期 P 的分布（既是 §7.3 的启用依据, 也是"假设是否成立"的现场证据）。</li>
+</ul>
+
+<h3>8.3 守阵清单（落码时同步）</h3>
+<ul>
+  <li><strong>页内逆序（哪怕只 1 处）⇒ 立即早停 + 判失败 + 告警</strong>（不分面积 —— 局部违反即代表根本假设失效）;</li>
+  <li><strong>跨页逆序 ⇒ 同上</strong>; 方向翻转（先升后降）⇒ 同上;</li>
+  <li><strong>取数失败优先</strong>: 本轮有超时/中断/挑战页/登录页/行数异常 ⇒ 排序判定本轮弃用, 不计停站计数, 不告警"排序"（走各自的既有告警）;</li>
+  <li><strong>可比行 ≥ 2 即做排序判定</strong>（2026-09-26 18:42 用户定稿, 原建议的「≥ 5」作废）; 可比行 &lt; 2 ⇒ 证据不足, 不判定、不告警;</li>
+  <li><strong>缺字段（强信号）⇒ 同样早停 + 判失败 + 告警</strong>, 但<strong>不计入逆序比较</strong>（避免重复计数）;</li>
+  <li>排序正常 ⇒ 无告警且早停照常（回归保护）;</li>
+  <li><strong>停站计数清零规则</strong>: 任何一轮"干净且无违反"⇒ 计数清零（只认连续）;</li>
+  <li>告警节流: 同站同档位持续不成立时按 <code>channel_silence_warn</code> 只报一次;</li>
+  <li>考核期不恒定 ⇒ 自动豁免与早停直接禁用（机检, 见 8.2 的 P 一致性校验）。</li>
+</ul>
+
+<h2 id="s9">9 · 方案 v2（用户提案 + 滚动窗口 + 三早停 + 双豁免）</h2>
+
+<div class="note">
+<p><strong>前情</strong>: 用户澄清 §7 里的"单轮 1 配额 / 上限 20"是<strong>改动提案</strong>而非代码实情, 并给出 v2:
+单轮每档最多 10 页（可配）+ 翻页间隔略降 + 配额只占一次 + 两个早停（覆盖本地全部种子 / remain 归零连续 5 个）
++ 超龄豁免改为"本地做种时长 ≥ 要求 5 倍（可配）" + 扩展侧上限可让步。本节是评估后的定稿形态。</p>
+</div>
+
+<h3>9.1 v1 三案在 v2 里的定位</h3>
+<table>
+<thead><tr><th>v1 提案</th><th>v2 定位</th><th>理由</th></tr></thead>
+<tbody>
+<tr><td>① 单轮翻所有页</td><td>降级为<strong>滚动窗口</strong>: 每轮都从第 1 页起, 只翻前 N 页, 不追求翻完</td><td>清单按完成时间倒序 ⇒ 新增只落在顶部 ⇒ 窗口覆盖"两轮之间所有新增"; 且不需要放宽配额/间隔</td></tr>
+<tr><td>② 已覆盖现存所有种子即停</td><td>保留, 但改成<strong>严格版</strong>: <code>pending_infohash == 0</code>（可判定）+ 本站本地种子 infohash ⊆ 已抓行 infohash</td><td>严格版不依赖 name 模糊匹配（站点会截断长名、qB 可能改名）</td></tr>
+<tr><td>③ remain==0 连续 5 个即停</td><td>保留为<strong>早停②</strong>, 配 P 一致性机检 + 排序校验（§8）</td><td>在"考核期恒定"前提下与 v2.9 完成时间早停同构（§7.3）</td></tr>
+<tr><td>（新）本地做种 ≥ 5× 要求</td><td><strong>判定侧豁免</strong>, <strong>不能</strong>当翻页早停</td><td>本地事实无法映射到页面行（未回填的行没有 infohash, 定位不到本地种子）; 且与页面排序无单调关系 ⇒ 推不出后续页</td></tr>
+</tbody>
+</table>
+
+<h3>9.2 滚动窗口的正确性边界（本节最关键的一条）</h3>
+<p>滚动窗口能证明的与不能证明的, 必须分清:</p>
+<table>
+<thead><tr><th>结论</th><th>滚动窗口能否支撑</th><th>说明</th></tr></thead>
+<tbody>
+<tr>
+  <td>"这个种子<strong>在清单里</strong>（受管束）"</td>
+  <td><span class="tag ok">能</span></td>
+  <td>窗口内出现即命中 ⇒ A/B/C 精确分类。用户"两轮之间新增 ≤ N 页就不会漏"的论证成立（依赖排序假设）</td>
+</tr>
+<tr>
+  <td>"这个种子<strong>不在清单里</strong>（可放行）"</td>
+  <td><span class="tag p1">不能</span></td>
+  <td>"前 N 页没看到"推不出"不在清单" —— 它可能在第 N+1 页。放行必须另有依据</td>
+</tr>
+</tbody>
+</table>
+<div class="verdict">
+<h3>因此 <code>complete</code> 的判据改为</h3>
+<p><strong>每档满足「翻到末页」或「翻到已到期段（早停成立）」⇒ 本轮覆盖证明成立;</strong>
+否则本轮只是<strong>部分覆盖</strong>: 命中的照常精确分类, 未命中一律落「未核实 ⇒ 保守按 HR 管束」。</p>
+<p>这个规则把"准确性"从"翻完所有页"<strong>解耦</strong>成"翻到豁免段" —— 而豁免段（最老的条目）永远在清单尾部。
+于是<strong>每轮实际翻多少页取决于"活跃（未到期）条目的页数", 而不是清单总页数</strong>: 500 条清单里若只有 20 条活跃, 第 1~2 页就能早停。</p>
+</div>
+<p><strong>连带结论</strong>: 在这个形态下 <strong>断点续翻从"必需"降级为"可选兜底"</strong> —— 活跃条目 ≤ N 页时滚动窗口 + 早停就够了;
+超过 N 页时退化成"尾部永不放行"（方向保守, 不会误放行）。§3.3 那个"永远翻不完"的隐患由此消解。</p>
+
+<h3>9.3 参数必须先自洽（速率硬顶是间隔, 不是配额）</h3>
+<pre>轮数/时 × 页数/轮  ≤  3600 / min_interval</pre>
+<p>90s ⇒ 上限 <b>40 请求/时</b>。用户设想的 12 轮 × 30 页 = <b>360 页/时</b> ⇒ 需要 10s 间隔 —— 那正是要防的"每 10 秒打一次站点"。</p>
+<table>
+<thead><tr><th>间隔</th><th>请求上限</th><th>自洽组合</th><th>站点观感</th></tr></thead>
+<tbody>
+<tr><td>90s（现状）</td><td>40/h</td><td>4 轮 × 10 页, 或 12 轮 × 3.3 页</td><td>每 1.5 分钟一次（保守）</td></tr>
+<tr><td>60s</td><td>60/h</td><td>6 轮 × 10 页</td><td>每分钟一次</td></tr>
+<tr><td>30s</td><td>120/h</td><td>12 轮 × 10 页</td><td>每 30 秒一次（账号风险明显）</td></tr>
+</tbody>
+</table>
+<p>另外现状 <code>PROD_ROUND_WAIT_MAX = 900s</code>（<strong>代码常量, 非配置键</strong>）⇒ 单轮最多约 9~10 个请求 ⇒
+"每档 10 页（共 30 页）"<strong>一轮翻不完</strong>。两条出路: ① 单轮页数上限取<strong>总量</strong> 8~10（留 2 个名额给 <code>.torrent</code>）;
+② 把 900s 提成配置键并放宽（代价: 单轮持锁时长）。推荐 ①, 因为它不动间隔。</p>
+
+<h3>9.4 判定侧豁免与早停的配对表</h3>
+<table>
+<thead><tr><th>取数侧（省页）</th><th>判据</th><th>判定侧配对</th><th>残留风险</th></tr></thead>
+<tbody>
+<tr><td>翻到末页</td><td><code>has_next</code> + <code>maxpage/currentpage</code> 交叉验证</td><td>无（真正完整覆盖）</td><td>无</td></tr>
+<tr><td>早停② 已到期段</td><td>remain==0 连续 5 行 + P 一致性 + 排序校验</td><td><strong>自动推导 P 喂给 <code>completed_age_limit</code></strong>（显式开关）</td><td>站点其实还在管 ⇒ 漏 HR（配置者显式接受, 同 v2.9）</td></tr>
+<tr><td>早停① 覆盖本地</td><td>严格版 infohash 子集（前提 <code>pending_infohash == 0</code>）</td><td>无（只停"不影响本地判定"的部分）</td><td>需先付回填成本</td></tr>
+<tr><td>（不参与早停）本地做种 ≥ 5× 要求</td><td>本地 <code>seeding_time</code></td><td><strong>判定侧豁免</strong>: 义务已超额完成 ⇒ 可删</td><td>5× 余量吸收 qB 与站点"有效做种时长"的口径差; 建议与完成时间豁免<strong>并存</strong>（一个管"太老不想管", 一个管"义务已超额"）</td></tr>
+</tbody>
+</table>
+<p class="path">落地成本: <code>HrAnchor</code> 目前只有 added_on / downloaded / completion_on / progress, <strong>没有 seeding_time</strong> ⇒ 需加字段（或沿用 <code>completed_age_limit</code> 那样由 record 侧把参数带进 <code>judge_record</code>）。</p>
+
+<h2 id="s10">10 · 配额模型重新设计（页面访问 / 种子下载彻底分开）</h2>
+
+<h3>10.1 现状口径与它的两个毛病</h3>
+<ul>
+  <li><strong>合并计数</strong>: 页面与 <code>.torrent</code> 共用一个账本（<code>service.py:870</code> 的 <code>try_consume(..., 1)</code> 逐请求扣）⇒ 下载多就挤掉页面配额 ⇒ <strong>种子配置影响 HR 核实</strong>（正是用户要消除的耦合）;</li>
+  <li><strong>固定小时窗口（整点重置）</strong> + 单轮一次性把 12 次用掉 ⇒ <strong>整点突发</strong>: 整点刚过打 10 次, 之后 50 分钟安静 —— 与"单轮访问多可接受、但不能每轮都多"的诉求相反。</li>
+</ul>
+
+<h3>10.2 目标模型: 双令牌桶 + 天级硬顶 + 双间隔</h3>
+<table>
+<thead><tr><th>键</th><th>语义</th><th>建议默认</th></tr></thead>
+<tbody>
+<tr><td><code>page_rate_per_hour</code></td><td>页面请求的<strong>恢复速率</strong>（令牌/小时）</td><td class="mono">40（= 90s 间隔的理论上限）</td></tr>
+<tr><td><code>page_burst</code></td><td>页面请求的<strong>桶容量</strong>（单轮最多突发几个）</td><td class="mono">10</td></tr>
+<tr><td><code>torrent_rate_per_hour</code></td><td><code>.torrent</code> 下载的恢复速率</td><td class="mono">20（可慢, 不挤页面）</td></tr>
+<tr><td><code>torrent_burst</code></td><td>下载桶容量</td><td class="mono">5</td></tr>
+<tr><td><code>max_pages_per_day</code> / <code>max_torrents_per_day</code></td><td>天级硬顶（零点重置, 兜底防长跑超量）</td><td class="mono">400 / 200</td></tr>
+<tr><td><code>min_page_interval</code> / <code>min_torrent_interval</code></td><td>两套请求级节流（下载可以慢, 页面按节奏）</td><td class="mono">90s / 60s</td></tr>
+</tbody>
+</table>
+<p><strong>为什么令牌桶而不是固定窗口</strong>: ① 直接实现"单轮可多（消耗 burst）、不能每轮都多（等 rate 恢复）";
+② 天然幂等 —— 靠"上次补充时刻 + 速率"计算, 不依赖窗口键翻篇, 重启也不重置;
+③ 消除整点突发。天级仍用窗口键（它的作用只是总量保险, 不需要平滑）。</p>
+<div class="note good">
+<p><strong>数值示例（page: rate 40/h + burst 10）</strong>: 单轮翻 10 页 ✓（吃满桶）; 紧接着第二轮只能翻 0 页（桶空, 要 ~15 分钟回满）;
+连续 4 轮各 10 页 = 40/时 ⇒ 恰好压住间隔理论上限。这正是"单轮多可接受、每轮都多不可接受"的量化落点。</p>
+</div>
+
+<h3>10.3 迁移路径（可以不抬 schema 版本）</h3>
+<p><code>HrQuota</code> 结构若直接改会造成破坏性变更（需抬 <code>hr_site</code> 版本 + 写迁移）。
+更省的做法是<strong>加字段而非改字段</strong>: 保留现有 <code>quota</code> 作为<strong>页面账本</strong>, 新增 <code>torrent_quota</code>;
+旧站点文件缺 <code>torrent_quota</code> ⇒ <code>from_json</code> 取默认零值即可（与 §7 提过的"可选字段无需迁移"同一条路径）。
+代价: 旧数据里 <code>quota</code> 含下载计数 ⇒ 短期内略微高估页面用量（保守方向, 可接受）。</p>
+
+<h3>10.4 下载不再阻塞页面轮次</h3>
+<p>现状同一轮里"先页面后下载"（<code>_do_fetch</code> 末尾 <code>_guarded_backfill</code>），且两者抢同一份配额与间隔 ⇒
+下载把页面饿死过（2026-09-25 实报, 已用"复用轮只补下载"缓解）。分开之后建议<strong>进一步分工</strong>:
+<strong>页面只在"新轮"做, 下载只在"复用轮"做</strong>（<code>_backfill_on_reuse</code> 已是现成机制, 每 ~120s 补几条）——
+"种子可以慢慢下载"由此落地, 单轮持锁时长也一并缩短。</p>
+
+<h3>10.5 受影响的展示面与配置面</h3>
+<ul>
+  <li><code>--hr-status</code> 与 WebUI 设置页: 两套额度分别显示（<code>QuotaStatus</code> 需拆成 page/torrent 两组）;</li>
+  <li>配置: 全局新增上表 6 个键; 站点级覆盖（现状只有 <code>max_torrents_per_hour</code> 可被站点覆盖, 且<strong>间隔不可覆盖</strong> ⇒ 想站点级调间隔要新增键）;</li>
+  <li>扩展侧 caps 已按 page / torrent 分开（<span class="path">site-caps.js</span>）⇒ 后端拆开后口径终于对齐; 建议扩展保持 <strong>≥ 后端 × 1.5</strong>（它的价值是"后端写错时仍拦得住", 不要提到同一量级）。</li>
+</ul>
+
+<h2 id="s11">11 · 排序 / 一致性校验失败的处置（停用该站 + 防抖）</h2>
+
+<h3>11.1 为什么在 v2 架构下它是致命错误</h3>
+<p>在 v1 里"排序不成立"只是<strong>失去省页优化</strong>（不早停、照常翻到底 ⇒ 仍能完整覆盖）。但在 v2 的<strong>滚动窗口</strong>下, 排序假设是
+<strong>正确性基石</strong>: 窗口只翻前 N 页, 若新增/活跃条目可能落在中间或尾部, 窗口就会漏掉它们 ——
+漏掉的条目若曾有放行记录, 就会<strong>继续被放行</strong>（真漏管）。⇒ 用户"直接停止该站的在线核实"的判断在 v2 架构下成立。</p>
+
+<h3>11.2 信号分级与处置（用户定稿: 局部违反也是强信号）</h3>
+<table>
+<thead><tr><th>信号</th><th>强度</th><th>处置</th></tr></thead>
+<tbody>
+<tr>
+  <td><strong>S1 排序违反</strong>（页内或跨页逆序, <strong>哪怕只 1 处</strong>）</td>
+  <td><span class="tag p1">强 · 根本假设失效</span></td>
+  <td>① <strong>立即停止本轮翻页</strong>（不再发请求）; ② <strong>判本轮拉取失败</strong>（<code>ACTION_ERROR</code>, 不产生放行）;
+  ③ 计入失败 + 累计"连续违反轮数"; ④ WARNING 告警（文案含动作）。<strong>不分面积、不设比例阈值</strong></td>
+</tr>
+<tr>
+  <td><strong>S2 缺字段</strong></td>
+  <td><span class="tag p1">强 (18:42 定稿)</span></td>
+  <td>成因可能是网络波动（影响小）或改版（致命）—— <strong>不论哪种都早停 + 判本轮拉取失败 + 不带错执行</strong>;
+  与 S1 同级处置, 只是告警文案分开（「必填字段缺失」vs「排序假设不成立」）; 缺失行<strong>不计入逆序比较</strong>（避免把同一现象算两次）</td>
+</tr>
+<tr>
+  <td><strong>S3 取数失败 / 页面不完整</strong></td>
+  <td><span class="tag ok">噪声 · 不是信号</span></td>
+  <td>走既有路径: 超时/中断 ⇒ 让位或计失败; 登录页 ⇒ <code>HrLoginExpired</code>（不计失败不熔断）; 挑战页 ⇒ <code>HrFetchError</code>;
+  <strong>绝不上报为排序违反</strong></td>
+</tr>
+</tbody>
+</table>
+
+<h4>防误停站的三道隔离（用户明确要求）</h4>
+<ol>
+  <li><strong>判定前置条件</strong>: 只有"本轮页面成功取回 + 解析出表头 + <strong>可比行数 ≥ 2</strong>"才做排序判定（2026-09-26 18:42 用户定稿）;</li>
+  <li><strong>失败优先</strong>: 本轮只要出现任何取数失败（超时 / 中断 / 挑战 / 登录 / 行数异常）⇒ <strong>排序判定本轮弃用</strong>, 不累计停站计数 —— 页面不完整时的"逆序"是假象;</li>
+  <li><strong>只认连续</strong>: 任何一轮"干净且无违反"⇒ 停站计数<strong>清零</strong>; 达 K 轮（建议 3）才升级停站。</li>
+</ol>
+
+<h4>与既有熔断的分工（两者不是一回事）</h4>
+<table>
+<thead><tr><th>机制</th><th>触发</th><th>恢复</th><th>适用</th></tr></thead>
+<tbody>
+<tr><td><code>fuse</code> 熔断（既有）</td><td>连续失败达 <code>failure_threshold</code>（默认 3）</td><td><strong>自动</strong>（<code>failure_cooldown</code> 默认 12H 到期）</td><td>网络抖动 / 站点临时故障</td></tr>
+<tr><td><code>suspended</code> 停用（§11.3 新增）</td><td>S1 连续 K 轮</td><td><strong>人工</strong>（改配置或显式清除）</td><td>根本假设失效（改版 / 该站排序不同）—— 冷却到期也不该自动恢复</td></tr>
+</tbody>
+</table>
+<p>两者可以同时存在: S1 累计达 <code>failure_threshold</code> 会先进熔断（12H 自动冷却, 先止血）;
+而达到 K 轮时写 <code>suspended</code> ⇒ <strong>熔断到期后也不恢复取数</strong>, 直到人工确认。这正是"致命错误"与"临时故障"的分界。</p>
+
+<h4>本轮已抓到的行怎么处理</h4>
+<p>建议<strong>保留命中</strong>（合并进索引, 但不置 <code>complete</code>）: 命中是站点侧事实, 保留只会让种子往"受管束"方向偏（保守、无害）;
+而"没抓到的页"本来就不会被当成"未列出"（<code>complete=False</code>）。整轮判失败 + 不产生放行, 已足够。若担心列错位导致字段错配, 可加开关改成"整轮丢弃"。</p>
+
+<h3>11.3 "停用"的落地形态（必须同时影响判定链）</h3>
+<ul>
+  <li><strong>站点级状态</strong>: 新增 <code>suspended: {reason, since, evidence, rounds}</code>（<strong>不复用 fuse</strong> —— fuse 会自动恢复, 而致命错误必须人工确认后恢复）;</li>
+  <li><strong>取数侧</strong>: <code>refresh_site</code> 见 suspended ⇒ 直接返回"已停用"（零请求）;</li>
+  <li><strong>判定侧（关键）</strong>: <code>HrRuntime.judge()</code> 见 suspended ⇒ 返回 <code>None</code> ⇒ <strong>回落本地逻辑</strong>。
+  ❗若只停取数不停判定, 就会拿越来越旧的视图继续放行 —— 比不停更危险;</li>
+  <li><strong>恢复</strong>: 人工动作（<code>--hr-status</code> 打印恢复指引; 或改配置后自动清除 suspended）; <strong>熔断到期不自动恢复</strong>（见 11.2 分工表）;</li>
+  <li><strong>通知</strong>: WARNING + 动作文案, 单点在 <code>hr/events.py</code>（与"登录失效"同款, 首见即报、持续不刷屏）。</li>
+</ul>
+
+<h2 id="s12">12 · 变更记录</h2>
+<table>
+<thead><tr><th>时间</th><th>变更</th><th>触发</th></tr></thead>
+<tbody>
+<tr>
+  <td class="mono">26-09-26-1628</td>
+  <td>初版: 触发模型 / 访问节奏 / 安全可靠性审计 / 翻页模型 四问合一 + 漏洞清单 + 修复方向</td>
+  <td>用户「落盘完整的分析报告, 从"分析: 哪些状态的种子会触发HR在线核实"开始的所有结论」</td>
+</tr>
+<tr>
+  <td class="mono">26-09-26-1701</td>
+  <td>追加 §7 候选方案可行性（用户三案: 单轮翻所有页 / 已覆盖本地种子即停 / remain 归零连续 5 个即停）;
+  新增 §8 <strong>页面排序假设与校验要求</strong>（用户要求"务必记下"该假设, 并要求增加排序检查 + 不成立时立即告警）; 抬 <code>doc-updated</code></td>
+  <td>用户「分析以下方案可行性: 1… 2… 3… 这点务必记下… 为验证假设, 需增加检查, 检查排序方式, 如果不是按此排的…需要立即警告。分析完后更新报告」</td>
+</tr>
+<tr>
+  <td class="mono">26-09-26-1716</td>
+  <td><strong>修正两处结论</strong>（用户反馈驱动）: ① §7.1 补"配额口径分歧" —— 现状实现是<strong>每请求 1 配额</strong>（<code>service.py:870</code>）, 用户口径为"单轮 1 配额 + 单轮上限 20"（仓库查无此口径, 待确认）;
+  两种口径下"单轮翻所有页"仍不可行, 但拦路石改为「扩展 10 页/时」+「本轮累计等待 900s」+ 30 分钟持锁（配额不再是唯一解释）。② §7.3 结论<strong>由"判据数学上不安全"改为"判据成立"</strong> —— 前提是用户给定的"考核期对每个种子固定",
+  此时 <code>remain==0 ⟺ now−done ≥ P</code>, 与 v2.9 完成时间早停同构; 推荐落地形态改为<strong>自动推导 P 喂给 <code>completed_age_limit</code></strong>（显式开关 + P 一致性机检 + 连续 5 个证据阈值）。
+  §8.1 增列"考核期恒定"配套假设与状态; §8.2 增 P 一致性校验; §7.4 组合建议同步</td>
+  <td>用户「1单轮翻所有页 —— 不可行: 单轮只占一个配额, 单轮硬上限20, 3remain==0 连续 5 个即停 —— 机制可行, 但判据数学上不安全: 网站考核期对每个种子是固定的。重新分析」</td>
+</tr>
+<tr>
+  <td class="mono">26-09-26-1757</td>
+  <td><strong>新增 §9 方案 v2</strong>（滚动窗口 + 三早停 + 双豁免, 含"滚动窗口不能证明不在清单"这条边界与参数自洽表）·
+  <strong>新增 §10 配额模型重新设计</strong>（页面访问与种子下载<strong>彻底分开</strong> + 双令牌桶 + 双间隔 + 天级硬顶;
+  含"不抬 schema 版本的迁移路径"与"下载只在复用轮做"）·
+  <strong>新增 §11 校验失败处置</strong>（L1 抖动不停站 / L2 大面积告警 / L3 连续 K 轮<strong>停用该站</strong> + 判定链必须同步回落本地）·
+  变更记录由 §9 移为 §12</td>
+  <td>用户「一致性机检 + 排序校验不成立则告警 + 应该是直接停止该站的在线核实, 这代表这致命错误, 但要排除访问出错抖动。同时有一个安全取舍: 单轮访问多可接受, 但不能每轮都访问多。配额模型需重新设计以适应方案以及安全取舍。将页面访问与种子下载配额彻底分开, 这样做的好处是种子配置不会影响HR核实, 种子可以慢慢下载。更新报告」</td>
+</tr>
+<tr>
+  <td class="mono">26-09-26-1824</td>
+  <td><strong>按用户定稿改信号分级</strong>: 排序违反（哪怕只 1 处）升级为<strong>强信号</strong> —— 立即早停 + <strong>判本轮拉取失败</strong> + 告警, <strong>不分面积/不设比例阈值</strong>（原 L1/L2 的"局部违反只记 INFO"取消）;
+  连续 K 轮违反 ⇒ 停站。新增<strong>防误停站三道隔离</strong>（判定前置条件 / 取数失败优先弃用判定 / 只认连续）与 <strong><code>fuse</code> 熔断 vs <code>suspended</code> 停用的分工表</strong>（前者自动恢复、后者须人工）;
+  缺字段定为<strong>弱信号</strong>（不失败、只计数, 连续 K 轮 ⇒ 「疑似改版」WARNING）。§8.2/§8.3 同步</td>
+  <td>用户「"单轮内局部违反"算是一个强信号, 代表根本假设失效, 应当作错误及时早停且判拉取失败, 不分面积, 连续违反停站, 但要区分网页访问失败/不完整等情况防止误停站。缺字段算稍弱信号, 也可能代表着网站改版。更新报告」</td>
+</tr>
+<tr>
+  <td class="mono">26-09-26-1842</td>
+  <td><strong>定稿两处并落到计划</strong>: ① <strong>可比行 ≥ 2</strong> 即做排序判定（原建议 ≥ 5 作废）; ② <strong>缺字段升级为强信号</strong> —— 成因是网络波动还是改版<strong>都要早停 + 判拉取失败 + 不带错执行</strong>（原"弱信号只计数不失败"作废, 缺失行仍不计入逆序比较）;
+  ③ 违反时<strong>已抓到的行保留命中</strong>（但不置 <code>complete</code>）。同步落到主计划 <strong>§14 在线核实 v2 方案</strong>（v3.5, 待实施: 滚动窗口 + 新 <code>complete</code> 判据 + 三早停双豁免 + 双令牌桶配额 + 信号分级与停用, 分 M5.1–M5.5 五步, 含参数自洽约束与待拍板项）; 计划变更记录加 v3.5 行、封面与 colophon 抬版本</td>
+  <td>用户「可比行数 ≥ 2就需要做排序判定, 缺字段可能代表网络波动(影响小)或改版(致命影响), 不过不管哪种都应该早停, 算拉取失败, 不带错执行, 违反时已抓到的行怎么处理可保留, 更新计划」</td>
+</tr>
+</tbody>
+</table>
+<p class="mono" style="color:var(--ink-3)">报告仍为 <code>doc-status=Done</code>（快照完成即终态）; 本次为同文件追加, 不新开文件（doc-forms 的"一篇一件事"）。</p>
+
+</main>
+</div>
+
+<footer class="foot">
+  审查基线 develop @ a06732b（与 Gitee 主线齐平）· 报告时间 26-09-26-1628 · 只读审查, 未改任何文件<br>
+  依据现场: <span class="path">src/auto_qb/hr/{resolve,service,ratelimit,parse,model,channel,server,queue,worker}.py</span> ·
+  <span class="path">src/auto_qb/hr/adapters/{base,nexusphp}.py</span> ·
+  <span class="path">src/auto_qb/{torrents/record,core/qbmanager,core/mixins/tags,rules/conditions,config/schema/hr,config/validation/sections}.py</span> ·
+  <span class="path">extensions/hr-fetch-proxy/{site-caps,background}.js</span> · <span class="path">config.yml</span> · <span class="path">tests/test_hr_*.py</span><br>
+  同专题: <a href="../plans/26-09-22-2204-partial-hr-site-verify-plan.html">计划 · 部分站点 HR 在线核实</a> ·
+  <a href="../tasks/26-09-22-backend-partial-hr-verify.md">档案 · backend-partial-hr-verify</a> ·
+  <a href="../activeContext/26-09-22-2204-backend-partial-hr-verify.md">activeContext 切片</a>
+</footer>
+
+</div>
+</body>
+</html>

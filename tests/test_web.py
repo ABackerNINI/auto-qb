@@ -56,6 +56,12 @@
 - test_search_torrents_name_match: 种子名匹配(即时/大小写不敏感)
 - test_search_torrents_file_match: 文件列表匹配(依赖已建索引)
 - test_search_torrents_separator_normalized: 分隔符归一匹配 —— 空格查询词命中点/下划线/连字符分隔的名与文件(回归 "cat and" 搜不到 The.Cat.and… 名)
+- test_parse_query_tokens: 查询解析词法 —— 正/负词/短语 + 宽容边界(孤立-/未闭合引号/纯标点/--dv/web-dl)
+- test_search_torrents_row_level_and: 行级 AND —— 多词约束在同一候选行(名字或单个文件名)内, 跨行连词不命中(拍板 26-09-26)
+- test_search_torrents_negative_term: 负词按行作废 —— 单文件 DV 发布被排除, 合集包非 DV 行仍可命中(不整种子误杀)
+- test_search_torrents_phrase: 短语 "…" 整段归一为连续子串, 词序敏感(terms-AND 命中而短语不命中的区分用例)
+- test_search_torrents_regression_envnv10: 回归(26-09-26 报障)——「恶女 10」命中单文件发布物, -ubweb 可排除
+- test_search_torrents_negative_only_empty: 仅负词/空查询返回空 + negative_only 标记, 不投递索引构建
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
@@ -63,6 +69,8 @@
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
 - test_api_fs_dirs_case_sibling_is_outside_whitelist: **仅 Linux** —— 大小写兄弟目录(/x/Media 与 /x/media)必须判为越界, 白名单归一不得做 NTFS 式折叠(折叠 => 越界放行, fail-open)
 - test_api_fs_mkdir_endpoint: POST /api/fs/mkdir 新建目录(R10-11) —— 正常创建/重名目录幂等/重名文件 409/名字含分隔符或点为 400/白名单外 403/父目录不存在 404/鉴权/不投命令
+- test_fs_endpoints_route_fs_calls_through_long_path_prefix: fs 三端点的文件系统调用必须过 add_long_path_prefix_for_win(Windows 长路径 >MAX_PATH 否则 isdir 给假/scandir 抛错 ⇒ 误报 404)
+- test_fs_path_helpers_strip_long_path_prefix_before_compare: _bare/_fs_real 比较前剥长路径前缀(否则同一条路径的两种写法被判越界, 子目录全被过滤)
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
@@ -3003,15 +3011,154 @@ def test_search_torrents_separator_normalized():
         assert [x["hash"] for x in r["results"]] == ["HA", "HB"], f"空格查询词应命中点号分隔名: {r}"
         assert [x["by"] for x in r["results"]] == ["name", "file"]
         assert [x["hash"] for x in mgr.search_torrents("web dl")["results"]] == ["HA"], "连字符分隔应命中"
-        # 对称: 点号查询词同样归一, 仍命中; 词序不同/纯分隔符不命中(子串语义本身未放宽)
+        # 对称: 点号查询词同样归一, 仍命中; 纯分隔符不命中(解析即丢弃, 等价空查询)
         assert [x["hash"] for x in mgr.search_torrents("cat.and")["results"]] == ["HA", "HB"]
-        assert mgr.search_torrents("dragon cat")["results"] == []
+        # 行级 AND(26-09-26 拍板): 词序无关的行内同现 —— 旧口径 "dragon cat" 因连续子串序敏感不命中;
+        # HA 名行与 HB 的下划线文件行均同含两词, 两路各按行命中
+        assert [x["hash"] for x in mgr.search_torrents("dragon cat")["results"]] == ["HA", "HB"]
         assert mgr.search_torrents("...")["results"] == []
 
         # 文件命中: 下划线分隔的文件名按同一口径(HA 名与文件均不含该子串, 排除 seen 去重干扰)
         r = mgr.search_torrents("and dragon e02")
         assert [x["hash"] for x in r["results"]] == ["HB"], f"下划线文件名应命中: {r}"
         assert r["results"][0]["by"] == "file"
+
+
+def test_parse_query_tokens():
+    """_parse_query: 词法 —— 正/负词、短语、宽容边界(孤立 -/未闭合引号/纯标点/--dv/web-dl/词中引号)"""
+    from auto_qb.webui.views import _parse_query
+
+    # 基本分词 + 负词(词首 - 后随非空白); 归一小写
+    assert _parse_query("恶女 10 -DV") == (["恶女", "10"], ["dv"])
+    # 短语整段归一为连续子串(保留空格); 排除短语
+    assert _parse_query('"s01e10" 恶女 -"H264 AAC"') == (["s01e10", "恶女"], ["h264 aac"])
+    # 宽容: 孤立 - 忽略 / 未闭合引号收至行尾 / 纯标点 token 丢弃 / --dv 等价 -dv / web-dl 是正词
+    assert _parse_query("-") == ([], [])
+    assert _parse_query('foo "bar') == (["foo", "bar"], [])
+    assert _parse_query("...") == ([], [])
+    assert _parse_query("--dv") == ([], ["dv"])
+    assert _parse_query("WEB-DL") == (["web dl"], [])
+    # 词中引号无特殊含义(随归一折叠); 空查询
+    assert _parse_query('foo"bar baz"') == (["foo bar", "baz"], [])
+    assert _parse_query("") == ([], [])
+
+
+def test_search_torrents_row_level_and():
+    """search_torrents 行级 AND: 多词约束在**同一候选行**(名字或单个文件名)内, 跨行连词不命中
+
+    拍板(26-09-26 报告 §5.2): 行通过 ⇔ 行含全部正词且无负词; 种子命中 ⇔ 任一行通过。
+    「A 词在名字、B 词只在另一文件」的跨行 AND 不命中 —— 这是行级与种子级的分界, 此处钉死。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="HA", name="Alpha.Beta.S01", state="stalledUP")
+        t2 = FakeTorrent(hash="HB", name="Gamma", state="stalledUP")
+        client.files_map["HB"] = [_fake_file("delta.mkv", 0), _fake_file("Gamma.E03.mkv", 1)]
+        seed_store(mgr, [t1, t2])
+        mgr._build_search_index()
+
+        # 同行 AND: 名字行同含 alpha/beta/s01 → 命中; "gamma e03" 在 HB 的单个文件行内同现 → 命中
+        assert [x["hash"] for x in mgr.search_torrents("alpha s01")["results"]] == ["HA"]
+        assert [x["hash"] for x in mgr.search_torrents("gamma e03")["results"]] == ["HB"]
+        # 跨行 AND 不命中: gamma 在名字行、delta 只在另一文件行(种子级语义会误命中, 行级钉死不命中)
+        assert mgr.search_torrents("gamma delta")["results"] == []
+        # 单词行为不变
+        assert [x["hash"] for x in mgr.search_torrents("delta")["results"]] == ["HB"]
+
+
+def test_search_torrents_negative_term():
+    """search_torrents 负词: 含负词的**行**作废 —— 单文件 DV 发布被排除; 合集包非 DV 行仍可命中(不整种子误杀)"""
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="HA", name="Show.S01E10.DV.1080p", state="stalledUP")
+        t2 = FakeTorrent(hash="HB", name="Show.S01.Complete", state="stalledUP")
+        client.files_map["HB"] = [_fake_file("Show.S01E09.DV.mkv", 0), _fake_file("Show.S01E10.1080p.mkv", 1)]
+        t3 = FakeTorrent(hash="HC", name="Show.S01E10.1080p.CR.WEB-DL", state="stalledUP")
+        seed_store(mgr, [t1, t2, t3])
+        mgr._build_search_index()
+
+        # "show 10 -dv": HA 名行含 dv 作废; HB 的 E09.DV 行作废但 E10 行干净 → 文件轮命中; HC 无 dv → 名字轮命中
+        # (名字轮先于文件轮, 故顺序 [HC, HB])
+        r = mgr.search_torrents("show 10 -dv")
+        assert [(x["hash"], x["by"]) for x in r["results"]] == [("HC", "name"), ("HB", "file")], f"负词按行作废: {r}"
+        # 不带负词: HA 也命中(名字轮 [HA, HC] 先于文件轮 HB, 旧口径下 -dv 会把 dv 当正词搜, 这里顺带验证解析)
+        assert [x["hash"] for x in mgr.search_torrents("show 10")["results"]] == ["HA", "HC", "HB"]
+        # 排除短语: "web dl" 作为短语排除 HC
+        assert [x["hash"] for x in mgr.search_torrents("show 10 -\"web dl\"")["results"]] == ["HA", "HB"]
+
+
+def test_search_torrents_phrase():
+    """search_torrents 短语: "…" 整段归一为**连续**子串(可含分隔符), 词序敏感 —— 与行级 AND 的区分用例"""
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="HA", name="Cat.Dog.And.Bird", state="stalledUP")
+        seed_store(mgr, [t1])
+
+        # 行级 AND: cat 与 and 同行即命中(不要求相邻)
+        assert [x["hash"] for x in mgr.search_torrents("cat and")["results"]] == ["HA"]
+        # 短语: 要求归一后连续出现 —— "cat and" 在 "cat dog and" 里不连续 → 不命中; "dog and" 连续 → 命中
+        assert mgr.search_torrents('"cat and"')["results"] == []
+        assert [x["hash"] for x in mgr.search_torrents('"dog and"')["results"]] == ["HA"]
+        # 短语可跨 scene 分隔符: "cat dog" 命中点号分隔的连续两词
+        assert [x["hash"] for x in mgr.search_torrents('"cat dog"')["results"]] == ["HA"]
+
+
+def test_search_torrents_regression_envnv10():
+    """search_torrents 回归(26-09-26 用户报障): 「恶女 10」须命中单文件发布物; -排除词生效
+
+    旧口径整句连续子串匹配: 「恶女 10」要求两词连续, 而文件名里「恶女」后跟「雏宫蝶鼠替换传」、
+    「10」在远处的 s01e10 里 —— 必不命中。行级 AND(拍板 26-09-26)修复。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        name = (
+            "[虽然我不是完美恶女～雏宫蝶鼠替换传～].Futsutsuka.na.Akujo.dewa.Gozaimasu.ga."
+            "Suuguu.Chouso.Torikae.Den.2026.S01E10.1080p.CR.WEB-DL.H264.AAC-UBWEB.mkv"
+        )
+        t1 = FakeTorrent(hash="HA", name=name, state="stalledUP")
+        seed_store(mgr, [t1])
+
+        r = mgr.search_torrents("恶女 10")
+        assert [x["hash"] for x in r["results"]] == ["HA"], f"报障回归: 恶女 10 应命中: {r}"
+        assert r["results"][0]["by"] == "name"
+        # 短语与排除词: "s01e10" 连续命中; -ubweb 排除该发布组
+        assert [x["hash"] for x in mgr.search_torrents('"s01e10"')["results"]] == ["HA"]
+        assert mgr.search_torrents("恶女 10 -ubweb")["results"] == []
+
+
+def test_search_torrents_negative_only_empty():
+    """search_torrents 仅负词/空查询: 无正判据返回空 + negative_only 标记(前端提示依据), 不投递索引构建"""
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(hash="HA", name="Alpha", state="stalledUP")
+        seed_store(mgr, [t1])
+
+        r = mgr.search_torrents("-dv")
+        assert r == {"results": [], "building": False, "negative_only": True}
+        assert mgr.web_commands.empty(), "仅负词无从起搜, 不应投递构建命令"
+        # 空查询: 同样空结果, 但 negative_only=False(前端按普通空态处理)
+        r2 = mgr.search_torrents("")
+        assert r2 == {"results": [], "building": False, "negative_only": False}
 
 
 def test_search_torrents_file_match():
@@ -3303,6 +3450,74 @@ def test_api_fs_mkdir_endpoint(web_env, tmp_path):
     # ⑥ 鉴权 + 不入命令队列(不绕过单一写线程: 只建目录)
     assert client.post("/api/fs/mkdir", json={"path": norm(root), "name": "x"}).status_code == 401
     assert mgr.web_commands.empty()
+
+
+def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path, monkeypatch):
+    """fs 三端点的**文件系统调用**必须过 `add_long_path_prefix_for_win`(本次报障的核心)
+
+    Windows 上 >MAX_PATH 的裸路径 `isdir` 给假 / `scandir` 抛 WinError 3 ⇒ 不加前缀时端点会
+    误报 404, 而前端只看到"目录不存在或不可访问"。这里把前缀 helper 换成 spy, 逐端点钉住
+    "确实调了它"。
+
+    ⚠ 测的是**路由**而不是平台效果: 真 Windows 行为在 Linux CI 上无法复现(平台固定约定见
+    testing/file-conventions.md), 故宿主上前缀是恒等(前缀对 POSIX 路径无意义); 前缀本身的
+    正确性与打开层分支另由 `test_exists_dir_file_apply_long_path_prefix` /
+    `test_open_path_windows_*` 覆盖。
+    """
+    from auto_qb.infra.utils import add_long_path_prefix_for_win as real_prefix
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    root = tmp_path / "root"
+    (root / "sub").mkdir(parents=True)
+    norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
+    mgr.store.groups = {(norm(root), ("a.mkv", )): ["HA"]}
+    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
+    mgr.store.get = lambda h: mgr.store.by_hash.get(h)
+
+    calls = []
+
+    def spy(p):
+        calls.append(p)
+        return real_prefix(p)
+
+    monkeypatch.setattr("auto_qb.webui.server.routes.fs.add_long_path_prefix_for_win", spy)
+
+    # ① 目录浏览
+    assert client.get("/api/fs/dirs", headers=auth, params={"path": norm(root)}).status_code == 200
+    assert norm(root) in calls, f"fs/dirs 的文件系统调用未过前缀 helper: {calls}"
+    # ② 新建目录
+    calls.clear()
+    assert client.post("/api/fs/mkdir", json={"path": norm(root), "name": "new"}, headers=auth).status_code == 200
+    assert norm(root) in calls, f"fs/mkdir 的文件系统调用未过前缀 helper: {calls}"
+    # ③ 打开目标文件夹(open_path 必须 mock —— 真调会弹资源管理器, 守阵判越界)
+    calls.clear()
+    with mock.patch("auto_qb.webui.server.common.open_path"):
+        assert client.post("/api/open-path", json={"kind": "torrent", "hash": "HA"}, headers=auth).status_code == 200
+    assert norm(root) in calls, f"open-path 的文件系统调用未过前缀 helper: {calls}"
+
+
+def test_fs_path_helpers_strip_long_path_prefix_before_compare():
+    """`_bare` / `_fs_real`: **比较前必须剥掉 `\\\\?\\` 前缀** —— 否则同一条路径的两种写法被判"越界"
+
+    实测后果(Windows 真机): `os.scandir(_fs(target))` 给出的 `entry.path` **带前缀**, 而允许根
+    不带 ⇒ `_within_roots` 恒 False ⇒ **子目录被全部过滤掉**(目录树恒空)。
+    `os.path.realpath` 是否保留前缀**与路径长度有关**(实测短路径保留、长路径剥掉), 不能依赖它,
+    故必须在比较前显式剥掉。
+
+    本条是纯路径归一, **与宿主平台无关** ⇒ Linux CI 上也守得住(这正是把三个 helper 提到模块级
+    而不是留在 `build_router` 闭包里的原因)。
+    """
+    from auto_qb.webui.server.routes import fs as fs_mod
+
+    bare = os.path.abspath("x")
+    assert fs_mod._bare("\\\\?\\" + bare) == bare
+    assert fs_mod._bare(bare) == bare, "无前缀原样返回"
+    assert fs_mod._bare("\\\\?\\UNC\\server\\share") == "\\\\server\\share", "UNC 形态还原"
+    # 带前缀与不带前缀必须归一到同一个可比较形式
+    assert fs_mod._fs_real("\\\\?\\" + bare) == fs_mod._fs_real(bare)
+    # _fs 幂等: 已是带前缀形态再传进去不得叠加 —— path_normalize 会把 `\\?\` 折坏成 `/?/`
+    assert fs_mod._fs(fs_mod._fs(bare)) == fs_mod._fs(bare)
 
 
 # ---------- Web 命令执行(主循环侧 _drain_web_commands) ----------

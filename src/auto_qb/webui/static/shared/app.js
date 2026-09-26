@@ -492,6 +492,7 @@ const app = createApp({
       searchHits: new Set(),  // 命中种子 hash 集合(名称/文件匹配)
       searchUncovered: [],    // 未归组的命中种子(分组未启用/文件列表不可读), 以虚拟行兜底展示
       searchBuilding: false,  // 文件索引构建中(增量限流可能多轮, 需稍后重查)
+      searchNegativeOnly: false,  // 查询只含排除词(无正判据, 服务端返回空, 前端据此提示)
       searchError: "",        // 搜索请求失败提示(不再静默)
       searchTimer: null,      // 防抖 + 索引构建自动重查定时器
       kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)
@@ -1140,6 +1141,7 @@ const app = createApp({
       this.searchHits = new Set();
       this.searchUncovered = [];
       this.searchBuilding = false;
+      this.searchNegativeOnly = false;
       this.searchError = "";
       this.expandedKey = null;
     },
@@ -1158,6 +1160,7 @@ const app = createApp({
         for (const g of this.groups) for (const m of g.members) grouped.add(m.hash);
         this.searchUncovered = results.filter((r) => !grouped.has(r.hash));
         this.searchBuilding = !!data.building;
+        this.searchNegativeOnly = !!data.negative_only;
         this.searchError = "";
         if (this.searchBuilding) {
           // 文件索引构建中(增量限流可能需多轮): 1s 后自动重查, 直至 building 消除

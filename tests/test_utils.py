@@ -44,7 +44,13 @@
 - test_is_manual_speed_limit: 奇数KiB手动限速保护(0/偶数不命中)
 - test_replace_vars: ${required_seeding_time} 占位替换(有hr/无hr/tracker_conf=None 留原文)
 - test_parse_bool_invalid: 非法布尔值 -> ValueError
-- test_open_path_select_file_per_platform: open_path(select=True) 单文件定位选中(win explorer /select, · mac open -R · linux 退化父目录 · 非文件退化为普通打开)
+- test_open_path_select_file_per_platform: open_path(select=True) 单文件定位选中(PIDL 不可用时 win explorer /select, · mac open -R · linux 退化父目录 · 非文件退化为普通打开)
+- test_open_path_windows_long_path_uses_shell_pidl: Windows 长路径目录/定位选中走 Shell PIDL, 绝不触达 os.startfile 与 explorer
+- test_open_path_windows_falls_back_to_string_route: PIDL 返回 False 时退回字符串路线(不静默什么都不做)
+- test_open_path_non_windows_never_calls_shell_pidl: 非 Windows 平台绝不触达 PIDL 路线(防守阵假阳性)
+- test_win_shell_open_non_windows_returns_false: 非 Windows 上 _win_shell_open 前置返回 False, 不碰 ctypes
+- test_win_string_open_degrades_long_path_to_ancestor: 字符串路线遇超长路径上溯到最近的可达祖先
+- test_exists_dir_file_apply_long_path_prefix: _exists_dir/_exists_file 对判定过长路径前缀 helper
 - test_sanitize_tracker_url: tracker URL 脱敏只留主地址(query/path/fragment 整段丢, 任意凭据参数名都覆盖; udp 端口/userinfo 处理)
 - test_sanitize_tracker_url_unparseable: 空/非字符串/解析不出 host -> 占位串且不抛异常(日志路径不得打断业务)
 - test_display_host: 展示地址(回环 IPv4/IPv6/IPv4-mapped -> localhost, 对外地址与大小写原样, 异常入参不炸)
@@ -488,20 +494,33 @@ def test_fmt_size_invalid():
     assert utils.fmt_size(None) == "-"
 
 
+def _fake_windows(monkeypatch):
+    """把宿主伪装成 Windows: 固定 `sys.platform` 并**中和长路径前缀**。
+
+    宿主是 POSIX 时 `add_long_path_prefix_for_win` 会把 `\\\\?\\` 拼到 POSIX 路径上, 于是
+    `os.path.isdir` 恒为 False —— 被测的是"平台分支逻辑"而不是"真在 Windows 上跑", 所以前缀
+    在这里置成恒等(前缀本身的正确性由 `test_add_long_path_prefix_*` 三条单独覆盖)。
+    """
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(utils, "add_long_path_prefix_for_win", lambda p: p)
+
+
 def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
-    """open_path(select=True) 跨平台(R10-10): win explorer /select, · mac open -R · linux 退化父目录
+    """open_path(select=True) 跨平台(R10-10): PIDL 不可用时 win explorer /select, · mac open -R · linux 退化父目录
 
     平台行为必须 monkeypatch sys.platform(CI 跑 Linux 而本项目以 Windows 为主);
-    Windows 分支还要 patch os.startfile —— 该属性在非 Windows 解释器上不存在, 故用 create=True。
+    Windows 分支还要 patch `_win_shell_open`(PIDL 路线, 真调会弹资源管理器)与 `os.startfile`
+    —— 后者在非 Windows 解释器上不存在, 故用 create=True。
     非文件目标 / 不存在目标一律退化为普通打开(动作类工具容错优先, 不抛错)。
     """
     f = tmp_path / "a.mkv"
     f.write_bytes(b"x")
     missing = tmp_path / "nope.mkv"
 
-    # Windows: 打开父目录并选中该文件(不是打开文件本身)
-    monkeypatch.setattr(sys, "platform", "win32")
-    with mock.patch.object(utils.os, "startfile", create=True) as sfile, \
+    # Windows: PIDL 路线不可用时退回 explorer /select,(打开父目录并选中该文件, 不是打开文件本身)
+    _fake_windows(monkeypatch)
+    with mock.patch.object(utils, "_win_shell_open", return_value=False), \
+            mock.patch.object(utils.os, "startfile", create=True) as sfile, \
             mock.patch.object(utils.subprocess, "run") as run:
         utils.open_path(str(f), select=True)
         assert sfile.call_count == 0
@@ -510,11 +529,11 @@ def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
         run.reset_mock()
         utils.open_path(str(tmp_path), select=True)
         assert run.call_count == 0
-        sfile.assert_called_once_with(str(tmp_path))
+        sfile.assert_called_once_with(os.path.normpath(str(tmp_path)))
         # 目标文件不存在 -> 退化为普通打开(避免"点了没反应"还报错)
         sfile.reset_mock()
         utils.open_path(str(missing), select=True)
-        sfile.assert_called_once_with(str(missing))
+        sfile.assert_called_once_with(os.path.normpath(str(missing)))
 
     # macOS: open -R(Reveal in Finder)
     monkeypatch.setattr(sys, "platform", "darwin")
@@ -531,6 +550,110 @@ def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
     with mock.patch.object(utils.subprocess, "run") as run:
         utils.open_path(str(f), select=True)
         run.assert_called_once_with(["xdg-open", os.path.dirname(str(f))], check=False)
+
+
+def test_open_path_windows_long_path_uses_shell_pidl(tmp_path, monkeypatch):
+    """Windows 长路径: 目录 / 定位选中走 Shell PIDL, **绝不触达** os.startfile 与 explorer
+
+    本次修复的核心断言 —— 实测超长路径下 `os.startfile` 抛 `FileNotFoundError`、
+    `explorer /select,` **静默打开"桌面"**, 所以这两条路径对长路径必须完全不被触达。
+    存在性判定与 PIDL 入口都 mock 掉(真调会弹资源管理器; 长路径在 POSIX 宿主上也不成立)。
+    """
+    _fake_windows(monkeypatch)
+    long_dir = str(tmp_path) + "/" + "d" * 150 + "/" + "e" * 150
+    long_file = long_dir + "/a.mkv"
+    assert len(long_dir) >= utils.WIN_MAX_PATH, "用例前提: 目标确实是超长路径"
+
+    with mock.patch.object(utils, "_win_shell_open", return_value=True) as pidl, \
+            mock.patch.object(utils, "_exists_dir", return_value=True), \
+            mock.patch.object(utils.os, "startfile", create=True) as sfile, \
+            mock.patch.object(utils.subprocess, "run") as run:
+        utils.open_path(long_dir)  # 目录 -> 打开该目录
+        pidl.assert_called_once_with(long_dir)
+        assert sfile.call_count == 0, "长路径目录不得退回 os.startfile"
+        assert run.call_count == 0, "长路径目录不得退回 explorer"
+
+    with mock.patch.object(utils, "_win_shell_open", return_value=True) as pidl, \
+            mock.patch.object(utils, "_exists_file", return_value=True), \
+            mock.patch.object(utils.os, "startfile", create=True) as sfile, \
+            mock.patch.object(utils.subprocess, "run") as run:
+        utils.open_path(long_file, select=True)  # 单文件种子 -> 打开父目录并选中
+        pidl.assert_called_once_with(long_file)
+        assert sfile.call_count == 0
+        assert run.call_count == 0
+
+
+def test_open_path_windows_falls_back_to_string_route(tmp_path, monkeypatch):
+    """PIDL 路线返回 False 时, Windows 退回字符串路线 —— 不能静默什么都不做"""
+    _fake_windows(monkeypatch)
+    d = str(tmp_path)
+    with mock.patch.object(utils, "_win_shell_open", return_value=False), \
+            mock.patch.object(utils, "_exists_dir", return_value=True), \
+            mock.patch.object(utils, "_win_string_open") as fallback:
+        utils.open_path(d)
+        fallback.assert_called_once_with(d, select=False)
+    with mock.patch.object(utils, "_win_shell_open", return_value=False), \
+            mock.patch.object(utils, "_exists_file", return_value=True), \
+            mock.patch.object(utils, "_win_string_open") as fallback:
+        utils.open_path(d + "/a.mkv", select=True)
+        fallback.assert_called_once_with(d + "/a.mkv", select=True)
+
+
+def test_open_path_non_windows_never_calls_shell_pidl(tmp_path, monkeypatch):
+    """非 Windows 平台绝不触达 PIDL 路线
+
+    守阵意义: 测试期副作用记账器把 `_win_shell_open` **整体计入 LAUNCH**(放行清单为空) ——
+    若 POSIX 分支也去调它(哪怕它自己空转返回 False), 每次 `open_path` 都会记一条假阳性越界。
+    """
+    f = tmp_path / "a.mkv"
+    f.write_bytes(b"x")
+    for plat in ("linux", "darwin"):
+        monkeypatch.setattr(sys, "platform", plat)
+        with mock.patch.object(utils, "_win_shell_open") as pidl, \
+                mock.patch.object(utils.subprocess, "run"):
+            utils.open_path(str(f))
+            utils.open_path(str(tmp_path), select=True)
+            assert pidl.call_count == 0, f"{plat} 不得触达 PIDL 路线"
+
+
+def test_win_shell_open_non_windows_returns_false(monkeypatch):
+    """非 Windows 上 `_win_shell_open` 前置返回 False
+
+    必须靠 `is_windows()` 早返回, 而不是靠捕获 `AttributeError` —— `ctypes.windll` 在 POSIX 上
+    根本不存在, 让行为依赖"恰好抛了异常"会让 Linux CI 变成偶然通过。
+    """
+    for plat in ("linux", "darwin"):
+        monkeypatch.setattr(sys, "platform", plat)
+        assert utils._win_shell_open("/tmp/whatever") is False
+
+
+def test_win_string_open_degrades_long_path_to_ancestor(monkeypatch):
+    """字符串路线遇超长路径上溯到最近的可达祖先
+
+    否则 `os.startfile` 对超长路径必抛 `FileNotFoundError`(即使目录确实存在) —— 上溯后长度
+    < `WIN_MAX_PATH`, 故判定用裸路径即可(无需前缀)。
+    """
+    monkeypatch.setattr(sys, "platform", "win32")
+    long_path = "C:/" + "/".join(["d" * 40] * 8)
+    assert len(os.path.normpath(long_path)) >= utils.WIN_MAX_PATH, "用例前提: 入参超长"
+    with mock.patch.object(utils.os, "startfile", create=True) as sfile:
+        utils._win_string_open(long_path, select=False)
+        opened = sfile.call_args.args[0]
+        assert len(opened) < utils.WIN_MAX_PATH, "必须上溯到长度 < MAX_PATH 的祖先"
+        assert os.path.normpath(long_path).startswith(opened), "上溯结果必须是原路径的祖先"
+
+
+def test_exists_dir_file_apply_long_path_prefix(tmp_path, monkeypatch):
+    """`_exists_dir` / `_exists_file` 的判定必须过 `add_long_path_prefix_for_win`
+
+    长路径判定不前缀化会恒为 False(实测 `isdir` 给假) ⇒ 端点误报 404。这里用 spy 钉住
+    "确实调了前缀 helper", 而不是断言真实 Windows 行为(CI 跑在 Linux)。
+    """
+    spy = mock.Mock(side_effect=lambda p: p)
+    monkeypatch.setattr(utils, "add_long_path_prefix_for_win", spy)
+    assert utils._exists_dir(str(tmp_path)) is True
+    assert utils._exists_file(str(tmp_path / "x")) is False
+    assert spy.call_args_list == [mock.call(str(tmp_path)), mock.call(str(tmp_path / "x"))]
 
 
 # ---------------------------------------------------------------- 原子写

@@ -7,14 +7,14 @@
 > [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) ·
 > [issues/_index.md](issues/_index.md) · [tasks/_index.md](tasks/_index.md)。
 
-## 跨形态专题 (≥2 件) —— 32 个
+## 跨形态专题 (≥2 件) —— 33 个
 
 - **webui-optimistic-ui** (8) — issue [26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html) `Done` · issue [26-09-19-1959](issues/26-09-19-1959-bug-webui-show-row-no-pending.html) `Done` · issue [26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html) `Done` · issue [26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) `Done` · 计划 [26-09-19-2245](plans/26-09-19-2245-webui-optimistic-settle-plan.html) `Done` · 计划 [26-09-20-2139](plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html) `Done` · 报告 [26-09-20-1806](reports/26-09-20-1806-optimistic-ui-half-fix-report.html) `Done` · 报告 [26-09-20-2131](reports/26-09-20-2131-optimistic-ui-event-driven-feasibility.html) `Done`
 - **backend-state-persistence** (5) — issue [26-09-21-1347](issues/26-09-21-1347-bug-backend-hot-reload-l2-state-rollback.html) `Done` · issue [26-09-21-1347](issues/26-09-21-1347-bug-backend-state-save-only-on-exit.html) `Done` · issue [26-09-21-1347](issues/26-09-21-1347-bug-web-token-non-atomic-write.html) `Open` · 计划 [26-09-22-1912](plans/26-09-22-1912-backend-state-periodic-flush-plan.html) `Done` · 报告 [26-09-21-1329](reports/26-09-21-1329-backend-crash-safety-report.html) `Done`
 - **webui-column-prefs** (5) — issue [26-09-20-1800](issues/26-09-20-1800-bug-webui-column-prefs-reset.html) `Done` · 计划 [26-09-20-1836](plans/26-09-20-1836-webui-column-prefs-sync-plan.html) `Done` · 计划 [26-09-21-1551](plans/26-09-21-1551-column-prefs-intent-redesign-plan.html) `Done` · 报告 [26-09-21-1248](reports/26-09-21-1248-column-prefs-fix-failure-analysis.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-column-prefs-reset.md) `Done`
+- **backend-partial-hr-verify** (4) — 计划 [26-09-22-2204](plans/26-09-22-2204-partial-hr-site-verify-plan.html) `Open` · 计划 [26-09-26-0031](plans/26-09-26-0031-plan-hr-ext-options-style.html) `In Progress` · 报告 [26-09-26-1628](reports/26-09-26-1628-report-hr-online-verify-audit.html) `Done` · 档案 [26-09-22](tasks/26-09-22-backend-partial-hr-verify.md) `Open`
 - **webui-qb-replacement** (4) — 计划 [26-09-16-0123](plans/26-09-16-0123-webui-qb-replacement-plan.html) `Done` · 计划 [26-09-16-1128](plans/26-09-16-1128-webui-qb-replace-wave3-plan.html) `Done` · 计划 [26-09-17-0346](plans/26-09-17-0346-webui-qb-replace-wave3-handover.html) `Done` · 档案 [26-09-15](tasks/26-09-15-webui-qb-replacement.md) `In Progress`
 - **webui-statusbar** (4) — issue [26-09-20-1646](issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html) `Done` · issue [26-09-20-1840](issues/26-09-20-1840-bug-webui-statusbar-traffic-icon.html) `Done` · 计划 [26-09-20-1702](plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-statusbar-speed.md) `In Progress`
-- **backend-partial-hr-verify** (3) — 计划 [26-09-22-2204](plans/26-09-22-2204-partial-hr-site-verify-plan.html) `Open` · 计划 [26-09-26-0031](plans/26-09-26-0031-plan-hr-ext-options-style.html) `In Progress` · 档案 [26-09-22](tasks/26-09-22-backend-partial-hr-verify.md) `Open`
 - **backend-qb-move-dot-qb** (3) — issue [26-09-21-0219](issues/26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html) `In Progress` · 计划 [26-09-22-2038](plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) `In Progress` · 档案 [26-09-22](tasks/26-09-22-backend-qb-move-missing-tolerance.md) `In Progress`
 - **deps-version-management** (3) — issue [26-09-21-1408](issues/26-09-21-1408-chore-version-dual-source.html) `Open` · 计划 [26-09-22-2318](plans/26-09-22-2318-version-management-plan.html) `In Progress` · 档案 [26-09-22](tasks/26-09-22-deps-version-management.md) `In Progress`
 - **memory-bank-git-rules** (3) — issue [26-09-19-2359](issues/26-09-19-2359-docs-memory-bank-push-rule-drift.html) `Done` · 档案 [26-09-19](tasks/26-09-19-memory-bank-session-git-rules-sync.md) `Done` · 档案 [26-09-22](tasks/26-09-22-memory-bank-sync-rule-rework-check-started.md) `Done`
@@ -41,8 +41,9 @@
 - **webui-decoupling** (2) — 计划 [26-09-20-0234](plans/26-09-20-0234-webui-decoupling-plan.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-decoupling.md) `Done`
 - **webui-hr-safety-display** (2) — 计划 [26-09-25-1823](plans/26-09-25-1823-plan-webui-hr-safety-display.html) `Done` · 档案 [26-09-25](tasks/26-09-25-webui-hr-safety-display.md) `In Progress`
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) `Done` · issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) `Open`
+- **webui-search-query-syntax** (2) — 报告 [26-09-26-1918](reports/26-09-26-1918-report-webui-search-query-syntax.html) `Done` · 档案 [26-09-26](tasks/26-09-26-webui-search-query-syntax.md) `Done`
 
-## 单件专题 (仅登记, 67 个)
+## 单件专题 (仅登记, 68 个)
 
 - appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commands-unified-command-surface · commands-unified-surface
 - commit-gate-auto-run · config-value-range-validation · cross-group-file-conflict · dependency-lock · docs-readme-modules-drift · docs-restructure
@@ -54,7 +55,7 @@
 - webui-appjs-split · webui-button-system · webui-cols-store-version · webui-component-libraries · webui-config-health-warning
 - webui-ctx-menu-multi-select · webui-ctx-submenu · webui-error-reason · webui-ext-hr-logging · webui-filter-data-and-color-flicker
 - webui-fix-plan-round10 · webui-fix-plan-round9 · webui-fix-round10 · webui-fix-round11 · webui-fix-round9 · webui-hot-endpoints-jsonable-encoder
-- webui-hr-popup · webui-hr-popup-t1 · webui-hr-popup-t2 · webui-hr-popup-t3 · webui-keyboard-shortcuts · webui-log-level-filter · webui-naming
-- webui-page-location-persist · webui-polish-and-redesign · webui-redesign · webui-settings-unsaved-changes · webui-sites-import
-- webui-speed-refresh-fix · webui-torrent-meta-edit
+- webui-hr-popup · webui-hr-popup-t1 · webui-hr-popup-t2 · webui-hr-popup-t3 · webui-keyboard-shortcuts · webui-log-level-filter
+- webui-long-path-open · webui-naming · webui-page-location-persist · webui-polish-and-redesign · webui-redesign · webui-settings-unsaved-changes
+- webui-sites-import · webui-speed-refresh-fix · webui-torrent-meta-edit
 - webui-view-rebuild

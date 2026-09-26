@@ -120,14 +120,15 @@
 ### 测试期真实系统副作用有常驻守卫(`tests/sidefx.py`)
 
 - **触发**: 加任何会触达真实副作用的代码。
-- **判别**: 记账器全程记录七类真实副作用(`POPEN` 外部进程 / **`LAUNCH`** `os.startfile`·`os.system`·`webbrowser.open` /
+- **判别**: 记账器全程记录七类真实副作用(`POPEN` 外部进程 / **`LAUNCH`** `os.startfile`·`os.system`·`webbrowser.open`·`utils._win_shell_open` /
   `REG`+`REGVAL` 注册表 / `FSDEL` 文件删除 / `SYMLINK` 建链 / `BIND` 监听 / **`CONNECT`** 出站连接),
   由会话级 autouse 夹具安装, **收尾按放行清单判定 —— 有越界项直接让本次 pytest 失败**(报告含分类计数与逐条明细)。
   **实测测试全部走回环、零外网连接。**
   台账在**每次** pytest 收尾打印(`pytest_terminal_summary`, 全量约 **1742 条 / 越界 0**)—— 没有越界时守卫本来完全静默,
   不打印就没人知道它在工作, 久了会被当死代码删掉。
   `LAUNCH` 单列是因为它们**不走 `subprocess`**(`POPEN` 抓不到)却同样会弹窗口(资源管理器 / 浏览器 / shell)——
-  `utils.open_path()` 在 Windows 上走 `os.startfile`, `/api/open-path` 能触达; 这类放行清单**为空**。
+  `utils.open_path()` 在 Windows 上走 `utils._win_shell_open`(Shell PIDL 长路径路线, **ctypes 直调 shell32**),
+  该路线失败才退回 `os.startfile`; `/api/open-path` 能触达全部入口; 这类放行清单**为空**。
   **放行清单**(只有确实必需的副作用才登记): `node` 子进程(前端静态守阵的 `node --check`) /
   autostart 的 HKCU Run 键及其 `auto-qb` 值(用例在 `finally` 自清理) / 临时目录内的删除与建链 / 回环地址监听。
 - **处置**: 判定策略本身有单测 `tests/test_sidefx.py`(含"临时目录判定必须剥掉 `\\?\` 前缀"这一回归点 ——

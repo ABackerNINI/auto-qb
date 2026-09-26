@@ -17,11 +17,15 @@ r"""测试期"真实系统副作用"**记账器与判定策略**(2026-09-18 普�
 | `SYMLINK` | `os.symlink` | 路径落在临时目录(同上) |
 | `BIND` | `socket.socket.bind` | 地址为回环 |
 | `CONNECT` | `socket.socket.connect` / `socket.create_connection` | 目标为回环(测试不得连外网) |
-| `LAUNCH` | `os.startfile` / `os.system` / `webbrowser.open` | **无** —— 一律越界 |
+| `LAUNCH` | `os.startfile` / `os.system` / `webbrowser.open` / `utils._win_shell_open` | **无** —— 一律越界 |
 
 `LAUNCH` 是单列的一类: 它们**不走 `subprocess`**(所以 `POPEN` 抓不到), 但同样会"弹个窗口"
 (资源管理器 / 浏览器 / shell), 和用户最初报的"测试时弹出系统通知框"是同一族问题。
-`open_path()` 在 Windows 上就走 `os.startfile`, `/api/open-path` 能触达它。
+`open_path()` 在 Windows 上走 `utils._win_shell_open`(Shell PIDL 长路径路线), 该路线失败才退回
+`os.startfile`; `/api/open-path` 能触达两者。
+❗`_win_shell_open` 是 **ctypes 直调 shell32**, 不经过任何 stdlib 入口 —— 所以它必须像
+`os.startfile` 一样**单列进 LAUNCH**, 否则"长路径打开"这条新路线在守阵里是**盲区**:
+用一个守阵看不见的 API 换掉它看得见的 API, 等于把守卫废掉。
 (`subprocess.call/check_output/run` 内部都会走到 `Popen`, 由 `POPEN` 覆盖, 不必单列。)
 
 **不做什么**: ①**不阻断**任何操作(只记账, 语义不变); ②不记录只读操作
@@ -290,6 +294,25 @@ class SideFxRecorder:
             return orig_open_browser(url, *a, **kw)
 
         patch(webbrowser, "open", open_browser)
+
+        # ①c Shell PIDL 长路径路线(本项目自己的打开入口): ctypes 直调 shell32, **不走任何
+        #     stdlib 入口** ⇒ POPEN 与上面几个都抓不到, 必须单列(理由见模块 docstring 的 LAUNCH 段)
+        try:
+            from auto_qb.infra import utils as _aq_utils
+        except ImportError:  # pragma: no cover - auto_qb 是本仓源码, 正常必在
+            _aq_utils = None
+        if _aq_utils is not None and hasattr(_aq_utils, "_win_shell_open"):
+            orig_shell_open = _aq_utils._win_shell_open
+
+            def shell_open(path, *a, **kw):
+                # 只在 Windows 上记账: 该函数在 POSIX 上是**空转**(前置 return False), 与
+                # os.startfile 在非 Windows 上"根本不存在"同理 —— 没有真实副作用就不该记,
+                # 否则单测直接调它验证"非 Windows 返回 False"会被判成越界假阳性。
+                if _aq_utils.is_windows():
+                    recorder.records.append(("LAUNCH", path))
+                return orig_shell_open(path, *a, **kw)
+
+            patch(_aq_utils, "_win_shell_open", shell_open)
 
         # ② 注册表(非 Windows 无 winreg, 跳过)
         try:

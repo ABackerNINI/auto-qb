@@ -15,7 +15,7 @@
 import logging
 import re
 import time
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from qbittorrentapi import TorrentState, TrackerStatus
 
@@ -35,6 +35,41 @@ _SEARCH_SEP_RE = re.compile(r"[\W_]+")
 def _search_norm(s: str) -> str:
     """搜索匹配归一: 分隔符折叠为单空格 + 小写 + 去首尾空 —— 查询词与种子名/文件名配对使用"""
     return _SEARCH_SEP_RE.sub(" ", s).lower().strip()
+
+
+def _parse_query(q: str) -> Tuple[List[str], List[str]]:
+    """搜索查询解析(宽容, 永不报错): 返回 (正词, 负词), 词均为 _search_norm 归一后的子串口径。
+
+    语法(websearch 惯例, 调研报告 26-09-26-1918 §5): 空格分词隐式 AND; 词首单个 `-`(后随非空白)
+    为排除; `"…"` 短语整段归一为**连续**子串(可含空格), `-"…"` 排除短语; 其余宽容 —— 孤立 `-`
+    忽略, 未闭合引号收至行尾, 词中引号无特殊含义(随归一折叠), 纯标点 token 丢弃。
+    词法判定在**原始查询**上进行, 与归一化互不干扰: `-DV` 切词阶段即识别为负词; `web-dl` 不以
+    `-` 开头是正词(scene 命名里的连字符经归一折叠为空格, 不会被误判成排除符)。
+    """
+    pos: List[str] = []
+    neg: List[str] = []
+    i, n = 0, len(q)
+    while i < n:
+        if q[i].isspace():
+            i += 1
+            continue
+        negative = q[i] == "-" and i + 1 < n and not q[i + 1].isspace()
+        if negative:
+            i += 1
+        if i < n and q[i] == '"':
+            j = q.find('"', i + 1)
+            raw = q[i + 1:(n if j == -1 else j)]
+            i = n if j == -1 else j + 1
+        else:
+            j = i
+            while j < n and not q[j].isspace():
+                j += 1
+            raw = q[i:j]
+            i = j
+        term = _search_norm(raw)
+        if term:
+            (neg if negative else pos).append(term)
+    return pos, neg
 
 
 # 错误原因(状态列"错误"背后的具体原因)刷新: qB torrents/info **不含**错误文本, 原因只能从
@@ -672,14 +707,19 @@ class WebviewMixin:
     def search_torrents(self, q: str) -> dict:
         """WEB 线程调用: 按 q(种子名 + 文件列表)搜索种子。
 
-        匹配口径: q 与种子名/文件名都经 _search_norm 归一(分隔符折叠为空格 + 小写)后做子串匹配,
-        所以空格查询词能命中点/下划线/连字符分隔的 scene 命名, 反之亦然。
+        匹配口径(**行级**, 拍板 2026-09-26, 调研报告 26-09-26-1918 §5): q 经 _parse_query 解析为
+        正/负词(词已是归一后的子串口径); **候选行** = 归一种子名或归一文件名之一, 行通过 ⇔
+        含全部正词/短语且不含任何负词/负短语; 种子命中 ⇔ 任一候选行通过。与单文件 scene 命名
+        现实一致, 负词按行作废(合集包里非 DV 行仍可命中), 且多词 AND 约束在同一行内 ——
+        旧口径「整句连续子串」的「恶女 10」失配(两词不连续必不中)由此修复。
 
         种子名匹配即时遍历 store.by_hash(无 qB API); 文件列表匹配依赖 _search_index 缓存。
-        返回 {"results": [..], "building": bool}——building 为 True 表示文件索引已过期/缺失,
-        已投递构建命令, 前端应稍后重查以获取完整文件匹配结果。
-        结果项含完整明细字段(与分组成员视图对齐): hash/name/site/kind/error_reason/dlspeed/upspeed/
-        uploaded/size/progress/seeding_time/ratio/save_path/tags/category/by, 供前端完整展示命中种子信息。
+        返回 {"results": [..], "building": bool, "negative_only": bool}——building 为 True 表示文件
+        索引已过期/缺失, 已投递构建命令, 前端应稍后重查以获取完整文件匹配结果; negative_only 为
+        True 表示查询只含排除词(无正判据, 「只说不要什么」无从起搜, 与 Google 一致返回空,
+        前端据此前端提示)。结果项含完整明细字段(与分组成员视图对齐): hash/name/site/kind/
+        error_reason/dlspeed/upspeed/uploaded/size/progress/seeding_time/ratio/save_path/tags/
+        category/by, 供前端完整展示命中种子信息。
         """
         def _view(rec, by):
             return {
@@ -704,23 +744,27 @@ class WebviewMixin:
                 "by": by,
             }
 
-        q = _search_norm(q or "")
-        if not q:
-            return {"results": [], "building": False}
+        pos, neg = _parse_query(q or "")
+        if not pos:
+            return {"results": [], "building": False, "negative_only": bool(neg)}
+
+        def _row_passes(row: str) -> bool:
+            return all(t in row for t in pos) and not any(t in row for t in neg)
+
         results = []
         seen = set()
-        # 种子名匹配(即时, 分隔符归一口径: "cat and" 命中 "The.Cat.and…")
+        # 种子名行匹配(即时, 归一口径: "cat and" 命中 "The.Cat.and…", 两词无需连续)
         for h, rec in self.store.by_hash.items():
-            if q in _search_norm(rec.name):
+            if _row_passes(_search_norm(rec.name)):
                 seen.add(h)
                 results.append(_view(rec, "name"))
-        # 文件列表匹配(依赖缓存索引, 命中构建期归一好的 files_q)
+        # 文件列表行匹配(依赖缓存索引, 行 = 构建期归一好的 files_q)
         idx = self.web.search_index
         if idx is not None:
             for h, entry in idx.items():
                 if h in seen:
                     continue
-                if any(q in fq for fq in entry["files_q"]):
+                if any(_row_passes(fq) for fq in entry["files_q"]):
                     rec = self.store.by_hash.get(h)
                     if rec is None:
                         continue
@@ -728,7 +772,7 @@ class WebviewMixin:
         building = self.web.search_index_dirty
         if building:
             self.web.post_command("build_search_index")
-        return {"results": results, "building": building}
+        return {"results": results, "building": building, "negative_only": False}
 
     def _group_hashes(self, key: tuple) -> List[str]:
         return [h for h in self.store.groups.get(key, []) if h in self.store.by_hash]

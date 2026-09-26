@@ -8,7 +8,7 @@
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-09-22-2204">
-<meta name="doc-updated" content="26-09-25-1710">
+<meta name="doc-updated" content="26-09-26-1842">
 <meta name="doc-refs" content="memory-bank/tasks/26-09-22-backend-partial-hr-verify.md,memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html,memory-bank/tasks/26-09-25-webui-hr-safety-display.md">
 <style>
   :root {
@@ -182,7 +182,7 @@
     <p class="dek">对「部分种子 HR」站点: 由<strong>浏览器扩展</strong>(打包形态无关, 跑在<strong>日常浏览器</strong>里, 不需要专用浏览器)以真实登录态取 HR 统计页与 .torrent, 后端算 infohash、与本地做种库对账, 建按 (站点, tid) 的 HR 索引。判定是三态 —— <strong>受管束 / 已核实不受管束 (安全放行) / 未核实</strong>, 且<strong>站点数据是权威</strong>: 触发与达标都看站点侧, 本地 qB 字段降为兜底与展示 (转移种子 / 多客户端下本地字段会骗人)。多实例<strong>共享站点数据</strong>: 站点分文件 + <strong>每站点一把锁</strong>, <strong>持锁期间完成读/抓/写全程</strong>, 有效期内直接复用; 取数节奏与主循环 tick 解耦, 只在数据变化时更新。首批站点 <strong>BTSchool</strong>。(cookie 全程不离开浏览器)</p>
     <div class="meta-row">
       <div><b>日期</b>2026-09-22 22:04 · v3.0 修订 2026-09-25 17:10 (达标判定来源优先级) · v3.4 重新梳理 2026-09-26 (状态模型: 三个终态都已结束 + 同日 D 档已免罪来源单列落地)</div>
-      <div><b>状态</b>M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已交付 (2026-09-24/25) · v2.6 通道时序与饿死残留修复 + v2.7 增量落盘 + v2.8 明细表改版与逐文件 ts + v2.9 超龄豁免与翻页早停 + v3.0 达标判定来源优先级 (2026-09-25, 均已落地) + v3.4 状态模型重新梳理 + D 档已免罪来源单列 (2026-09-26, 已落地) · 余真机走查</div>
+      <div><b>状态</b>M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已交付 (2026-09-24/25) · v2.6 通道时序与饿死残留修复 + v2.7 增量落盘 + v2.8 明细表改版与逐文件 ts + v2.9 超龄豁免与翻页早停 + v3.0 达标判定来源优先级 (2026-09-25, 均已落地) + v3.4 状态模型重新梳理 + D 档已免罪来源单列 (2026-09-26, 已落地) · <strong>v3.5 在线核实 v2 方案 (§14, 待实施)</strong> · 余真机走查</div>
       <div><b>影响面</b>取数通道 (扩展) · 判定语义 (三态·站点侧权威) · 取数线程与共享站点数据 · TorrentRecord</div>
       <div><b>任务档案</b>tasks/26-09-22-backend-partial-hr-verify.md</div>
     </div>
@@ -206,7 +206,8 @@
         <a href="#s11">11 分阶段实施</a>
         <a href="#s12">12 测试与验收</a>
         <a href="#s13">13 决策记录</a>
-        <a href="#s14">14 变更记录</a>
+        <a href="#s14">14 在线核实 v2 方案</a>
+        <a href="#s15">15 变更记录</a>
       </nav>
     </aside>
 
@@ -806,9 +807,154 @@ trackers:
       </div>
     </section>
 
-    <!-- ============ 14 变更记录 ============ -->
+    <!-- ============ 14 在线核实 v2 方案 ============ -->
     <section id="s14">
       <div class="sec-no">§ 14</div>
+      <h2>在线核实 v2 方案 (滚动窗口 + 双令牌桶配额 + 信号分级)</h2>
+      <p class="muted">本节由 2026-09-26 的设计审查驱动 (报告 <a href="../reports/26-09-26-1628-report-hr-online-verify-audit.html">26-09-26-1628</a> §3.3 / §8 / §9 / §10 / §11)。
+      <strong>状态: 待实施</strong> —— 设计与取舍已定稿, 参数默认值与两项前置实测待用户拍板 (§14.9)。</p>
+
+      <h3>14.1 为什么要 v2 (三个已定位的问题)</h3>
+      <ol>
+        <li><strong>「永远翻不完」</strong> (报告 §3.3): 现状每轮都从 <code>page=1</code> 重来, 而单轮受 <code>PROD_ROUND_WAIT_MAX=900s</code> (≈10 个请求) 与小时配额 12 夹住 ⇒ 只要「总页数 &gt; 单轮可发请求数」或「某档页数 &gt; <code>max_pages_per_refresh=5</code>」, 最后一页永远抓不到 ⇒ <code>complete</code> 恒假 ⇒ <strong>永不产生放行</strong>, 且剩余配额被用来重复抓前几页。</li>
+        <li><strong>排序假设从未被校验</strong> (报告 §8): v2.9 的早停依赖「页面按完成时间倒序」, 而该假设在 M0 实测里<strong>未收口</strong>, 且<strong>不得假定所有站一致</strong> (NexusPHP 版本/主题/插件都可改默认排序)。</li>
+        <li><strong>配额口径耦合</strong> (报告 §10.1): 页面与 <code>.torrent</code> <strong>合并计数</strong> (<code>service.py:870</code> 逐请求 <code>try_consume(..., 1)</code>) ⇒ 下载多就挤掉页面配额 (种子配置影响 HR 核实); 且<strong>固定小时窗口整点重置</strong> ⇒ 单轮一口气打满 12 次, 之后 50 分钟安静 —— 与「单轮访问多可接受、但不能每轮都多」正好相反。</li>
+      </ol>
+
+      <h3>14.2 核心设计变更: 滚动窗口 + 新的 <code>complete</code> 判据</h3>
+      <p><strong>取数形态改为滚动窗口</strong>: 每轮都<strong>从第 1 页起</strong>翻前 N 页 (N 可配, 建议默认 10), 档位顺序 A→B→C, <strong>不追求一轮翻完</strong>。</p>
+      <table>
+        <thead><tr><th style="width:34%">要证明的结论</th><th style="width:14%">滚动窗口能否支撑</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>「该种子<strong>在清单里</strong>」(受管束)</td><td class="ok"><strong>能</strong></td><td>窗口内出现即命中 ⇒ A/B/C 精确分类。清单按完成时间倒序 ⇒ 新增只落在顶部 ⇒ 只要「两轮之间新增 ≤ N 页」就不会漏掉新增</td></tr>
+          <tr><td>「该种子<strong>不在清单里</strong>」(可放行)</td><td><strong>不能</strong></td><td>「前 N 页没看到」推不出「不在清单」—— 它可能在第 N+1 页</td></tr>
+        </tbody>
+      </table>
+      <p><strong>因此 <code>complete</code> 判据改为</strong>: 每档满足「<strong>翻到末页</strong>」或「<strong>翻到已到期段 (早停成立)</strong>」⇒ 本轮覆盖证明成立;
+      否则本轮只是<strong>部分覆盖</strong> —— 命中的照常精确分类, <strong>未命中一律落「未核实 ⇒ 保守按 HR 管束」</strong>。</p>
+      <p class="muted">这个规则把「准确性」从「翻完所有页」<strong>解耦</strong>成「翻到豁免段」, 而豁免段 (最老的条目) 永远在清单尾部 ⇒
+      每轮实际翻多少页取决于「<strong>活跃 (未到期) 条目的页数</strong>」而不是清单总页数 (500 条清单里若只有 20 条活跃, 第 1~2 页就能早停)。
+      <strong>连带结论</strong>: 「跨轮断点续翻」由必需<strong>降级为可选兜底</strong> (活跃条目 ≤ N 页时滚动窗口 + 早停已足够; 超出时退化成「尾部永不放行」, 方向保守)。</p>
+
+      <h3>14.3 三早停 + 双豁免</h3>
+      <table>
+        <thead><tr><th style="width:20%">项</th><th style="width:34%">判据</th><th>与判定侧的配对</th></tr></thead>
+        <tbody>
+          <tr><td>早停① 末页</td><td><code>has_next</code> + <code>maxpage/currentpage</code> 交叉验证</td><td>无 (真正完整覆盖)</td></tr>
+          <tr><td>早停② 已到期段</td><td><code>remain==0</code> 连续 5 行 (可配) + <strong>P 一致性机检</strong> + 排序校验</td><td><strong>自动推导考核期 P 喂给 <code>completed_age_limit</code></strong> (站点级显式开关, 默认关)</td></tr>
+          <tr><td>早停③ 覆盖本地</td><td>严格版: <code>pending_infohash == 0</code> + 本站本地种子 infohash ⊆ 已抓行 infohash</td><td>无 (只停「不影响本地判定」的部分)</td></tr>
+          <tr><td>判定侧豁免 A</td><td>完成时间超过 P (自动推导; 与早停②同源)</td><td>取数侧早停②</td></tr>
+          <tr><td>判定侧豁免 B</td><td><strong>本地做种时长 ≥ 要求时长 × 5</strong> (可配倍数)</td><td><strong>不参与早停</strong> —— 本地事实无法映射到页面行 (未回填的行没有 infohash), 且与页面排序无单调关系。5× 余量正好吸收 qB <code>seeding_time</code> 与站点「有效做种时长」的口径差; 与豁免 A <strong>并存</strong> (一个管「太老不想管」, 一个管「义务已超额完成」)</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">早停② 的同构性: <code>remain = done + P − now</code> ⇒ <code>remain==0 ⟺ now − done ≥ P</code> ⇒ 与 v2.9 的完成时间判据是同一批行;
+      早停跳过的行<strong>正是判定侧会豁免的行</strong> ⇒ 不会出现「跳过的行本该显示 C 档红色警示却被判安全放行」。
+      落地成本: <code>HrAnchor</code> 现无 <code>seeding_time</code>, 需加字段或沿用「由 record 侧把参数带进 <code>judge_record</code>」的既有做法。</p>
+
+      <h3>14.4 配额模型重新设计: 页面访问 / 种子下载彻底分开</h3>
+      <table>
+        <thead><tr><th style="width:30%">键</th><th style="width:30%">语义</th><th>建议默认</th></tr></thead>
+        <tbody>
+          <tr><td><code>page_rate_per_hour</code></td><td>页面请求<strong>恢复速率</strong> (令牌/小时)</td><td class="mono">40 (= 90s 间隔的理论上限)</td></tr>
+          <tr><td><code>page_burst</code></td><td>页面请求<strong>桶容量</strong> (单轮最多突发几页)</td><td class="mono">10</td></tr>
+          <tr><td><code>torrent_rate_per_hour</code></td><td><code>.torrent</code> 下载恢复速率</td><td class="mono">20</td></tr>
+          <tr><td><code>torrent_burst</code></td><td>下载桶容量</td><td class="mono">5</td></tr>
+          <tr><td><code>max_pages_per_day</code> / <code>max_torrents_per_day</code></td><td>天级硬顶 (零点重置, 兜底防长跑超量)</td><td class="mono">400 / 200</td></tr>
+          <tr><td><code>min_page_interval</code> / <code>min_torrent_interval</code></td><td>两套请求级节流 (下载可慢, 页面按节奏)</td><td class="mono">90s / 60s</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li><strong>为什么令牌桶</strong>: ① 直接实现「单轮可多 (消耗 burst)、不能每轮都多 (等 rate 恢复)」; ② <strong>天然幂等</strong> —— 靠「上次补充时刻 + 速率」计算, 不依赖窗口键翻篇, 重启不重置; ③ 消除整点突发。天级仍用窗口键 (只作总量保险, 不需要平滑)。</li>
+        <li><strong>数值示例</strong> (page: rate 40/h + burst 10): 单轮翻 10 页 ✓; 紧接着第二轮只能翻 0 页 (桶空, 约 15 分钟回满); 连续 4 轮各 10 页 = 40/时, 恰好压住间隔理论上限。</li>
+        <li><strong>迁移路径 (不抬 schema 版本)</strong>: 保留现有 <code>quota</code> 作为<strong>页面账本</strong>, 新增 <code>torrent_quota</code> —— 旧站点文件缺该字段时 <code>from_json</code> 取零值即可 (「可选字段缺省即旧行为」)。代价: 旧数据里 <code>quota</code> 含下载计数 ⇒ 短期略高估页面用量 (保守方向)。</li>
+        <li><strong>下载不再阻塞页面轮次</strong>: 进一步分工为「<strong>页面只在新轮做, 下载只在复用轮做</strong>」(<code>_backfill_on_reuse</code> 是现成机制, 每 ~120s 补几条) —— 「种子可以慢慢下载」落地, 单轮持锁时长也一并缩短。</li>
+        <li><strong>扩展侧</strong>: caps 早已按 page / torrent 分开 (<code>site-caps.js</code>), 后端拆开后口径终于对齐; 保持 <strong>扩展 ≥ 后端 × 1.5</strong> (它的价值是「后端写错时仍拦得住」, 不要提到同一量级)。</li>
+      </ul>
+
+      <h3>14.5 信号分级与处置 (2026-09-26 18:24 / 18:42 用户定稿)</h3>
+      <table>
+        <thead><tr><th style="width:22%">信号</th><th style="width:16%">强度</th><th>处置</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>S1 排序违反</strong> (页内或跨页逆序, <strong>哪怕只 1 处</strong>)</td>
+            <td>强 · 根本假设失效</td>
+            <td>① <strong>立即停止本轮翻页</strong> (不再发请求); ② <strong>判本轮拉取失败</strong> (<code>ACTION_ERROR</code>, 不产生放行); ③ 计入失败 + 累计连续违反轮数; ④ WARNING 告警。<strong>不分面积、不设比例阈值</strong></td>
+          </tr>
+          <tr>
+            <td><strong>S2 缺字段</strong></td>
+            <td>强 (用户 18:42 定稿)</td>
+            <td>成因可能是网络波动 (影响小) 或改版 (致命) —— <strong>不论哪种都早停 + 判拉取失败 + 不带错执行</strong>; 与 S1 同级处置, 只是告警文案分开 (「必填字段缺失」vs「排序假设不成立」)</td>
+          </tr>
+          <tr>
+            <td><strong>S3 取数失败 / 页面不完整</strong></td>
+            <td>噪声 · 不是信号</td>
+            <td>走既有路径: 超时/中断 ⇒ 让位或计失败; 登录页 ⇒ <code>HrLoginExpired</code> (不计失败不熔断); 挑战页 ⇒ <code>HrFetchError</code>; <strong>绝不上报为排序违反</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      <h4>判定前置条件与防误停站隔离</h4>
+      <ul>
+        <li><strong>可比行 ≥ 2 即做排序判定</strong> (2026-09-26 18:42 用户定稿; 原建议的「≥5」作废);</li>
+        <li><strong>失败优先</strong>: 本轮只要出现任何取数失败 (超时 / 中断 / 挑战 / 登录 / 行数异常) ⇒ 排序判定<strong>本轮弃用</strong>, 不累计停站计数 —— 页面不完整时的「逆序」是假象;</li>
+        <li><strong>只认连续</strong>: 任何一轮「干净且无违反」⇒ 停站计数<strong>清零</strong>; 达 K 轮 (建议 3) 才升级停站。</li>
+      </ul>
+      <h4>违反/失败时本轮已抓到的行</h4>
+      <p><strong>保留命中</strong> (2026-09-26 18:42 用户定稿): 合并进索引但<strong>不置 <code>complete</code></strong> —— 命中是站点侧事实, 保留只会让种子往「受管束」方向偏 (保守无害);
+      「没抓到的页」本来就不会被当成「未列出」。整轮判失败 + 不产生放行已足够。</p>
+      <h4>熔断 vs 停用 (两者不是一回事)</h4>
+      <table>
+        <thead><tr><th style="width:26%">机制</th><th style="width:26%">触发</th><th style="width:16%">恢复</th><th>适用</th></tr></thead>
+        <tbody>
+          <tr><td><code>fuse</code> 熔断 (既有)</td><td>连续失败达 <code>failure_threshold</code> (默认 3)</td><td><strong>自动</strong> (12H 冷却到期)</td><td>网络抖动 / 站点临时故障</td></tr>
+          <tr><td><code>suspended</code> 停用 (新增)</td><td>S1/S2 连续 K 轮</td><td><strong>人工</strong> (改配置或显式清除)</td><td>根本假设失效 (改版 / 该站排序不同) —— 冷却到期也不该自动恢复</td></tr>
+        </tbody>
+      </table>
+      <p><strong>停用的落地形态</strong>: 站点级 <code>suspended: {reason, since, evidence, rounds}</code> (不复用 <code>fuse</code>);
+      取数侧 <code>refresh_site</code> 见 suspended ⇒ 零请求; <strong>判定侧 <code>HrRuntime.judge()</code> 见 suspended ⇒ 返回 <code>None</code> ⇒ 回落本地逻辑</strong>
+      (❗只停取数不停判定 = 拿越来越旧的视图继续放行, 比不停更危险); 恢复靠人工动作 (<code>--hr-status</code> 打印指引); 告警文案单点在 <code>hr/events.py</code>。</p>
+
+      <h3>14.6 分阶段实施 (M5)</h3>
+      <table>
+        <thead><tr><th style="width:10%">步骤</th><th style="width:34%">内容</th><th>为什么可以独立交付</th></tr></thead>
+        <tbody>
+          <tr><td>M5.1</td><td><strong>判据与观测</strong>: <code>parse.order_violations(entries, key)</code> 纯函数 + 每页页内/跨页校验 (可比行 ≥ 2) + <code>maxpage/currentpage</code> 交叉验证 + <code>--hr-status</code> 增「排序 ✓/✗」与考核期 P 分布</td><td><strong>不改任何判定语义</strong> —— 只加校验与展示, 先拿到真机证据</td></tr>
+          <tr><td>M5.2</td><td><strong>信号处置与停用</strong>: S1/S2 ⇒ 立即早停 + 判失败 + 保留命中 + 告警; 连续 K 轮 ⇒ <code>suspended</code>; 判定链回落; 熔断/停用分工</td><td>与 M5.1 同一套判据; 默认阈值下只在真出问题时生效</td></tr>
+          <tr><td>M5.3</td><td><strong>配额模型拆分</strong>: 双令牌桶 + 双间隔 + 天级硬顶; <code>torrent_quota</code> 新增字段 (不抬版本); 页面只在新轮、下载只在复用轮; <code>QuotaStatus</code> 与 <code>--hr-status</code>/WebUI 两套展示</td><td>纯配额口径变更, 不碰判定与解析</td></tr>
+          <tr><td>M5.4</td><td><strong>早停与豁免</strong>: 滚动窗口 (每档 N 页可配) + 新的 <code>complete</code> 判据 + 早停②(自动 P) + 早停③(覆盖本地严格版) + 判定侧豁免 B (做种 5×, 显式开关)</td><td>依赖 M5.1 的校验地基; 早停/豁免均有显式开关, 默认行为不变</td></tr>
+          <tr><td>M5.5</td><td><strong>收尾</strong>: 配置键进 <code>schema</code>/<code>validation</code>/<code>impact</code>/<code>keys.md</code> + 守阵 (§14.7) + 文档 + 真机走查</td><td>——</td></tr>
+        </tbody>
+      </table>
+      <p class="muted">贯穿原则: <strong>零静默变更</strong> —— 新键默认关闭/默认取旧值; 早停与自动豁免必须显式开关; 判定语义在 M5.4 之前一行不改。</p>
+
+      <h3>14.7 测试与守阵 (落码时同步 §12)</h3>
+      <ul>
+        <li><strong>排序校验</strong>: 页内逆序 (1 处即红) / 跨页逆序 / 方向翻转 / <strong>可比行 = 2 时仍判定</strong> / 可比行 &lt; 2 ⇒ 证据不足不判定 / 取数失败优先 ⇒ 判定弃用 / 干净轮 ⇒ 停站计数清零;</li>
+        <li><strong>信号处置</strong>: S1/S2 ⇒ 早停 + <code>ACTION_ERROR</code> + 不产生放行 + 命中行仍在索引 (且未置 complete) / 连续 K 轮 ⇒ <code>suspended</code> / suspended ⇒ <code>judge()</code> 返回 None (判定回落本地) / 熔断到期但 suspended 仍在 ⇒ 不恢复取数;</li>
+        <li><strong>配额</strong>: 页面桶与下载桶互不影响 (下载打满不影响页面) / burst 用尽后同轮不再发 / rate 恢复后可用 / 天级硬顶 / 令牌桶跨重启不重置 / 旧站点文件 (无 <code>torrent_quota</code>) 可正常读取;</li>
+        <li><strong>窗口与早停</strong>: 滚动窗口只翻 N 页 / <code>complete</code> 只在「末页 or 早停」成立 / 早停② 的 P 一致性失败 ⇒ 告警 + 不早停 / 早停③ 的严格版判据 / 判定侧豁免 B 的显式开关;</li>
+        <li><strong>回归保护</strong>: 未配新键的站点行为与现状<strong>逐字节一致</strong> (零静默变更的机检)。</li>
+      </ul>
+
+      <h3>14.8 参数自洽约束 (硬约束, 配置期可机检)</h3>
+      <pre>轮数/时 × 页数/轮  ≤  3600 / min_page_interval</pre>
+      <p>90s ⇒ 上限 <b>40 请求/时</b>。示例: 4 轮 × 10 页 (90s) / 6 轮 × 10 页 (60s) / 12 轮 × 10 页 (30s, 站点观感风险明显)。
+      另: <code>PROD_ROUND_WAIT_MAX = 900s</code> 是<strong>代码常量</strong> ⇒ 单轮最多约 9~10 个请求; 两条出路 —— ① 单轮页数上限取<strong>总量</strong> 8~10 (留 2 个名额给下载, 推荐);
+      ② 把 900s 提成配置键并放宽 (代价: 单轮持锁时长)。</p>
+
+      <h3>14.9 待拍板项与前置实测</h3>
+      <ol>
+        <li><strong>间隔</strong>: 取 90s (不动, 推荐) 还是 60s?</li>
+        <li><strong>单轮页数</strong>: 总量 8~10 (推荐) 还是放宽 <code>PROD_ROUND_WAIT_MAX</code>?</li>
+        <li><strong>桶参数默认值</strong>: <code>page_rate=40</code> / <code>page_burst=10</code> / <code>torrent_rate=20</code> / <code>torrent_burst=5</code> 是否照用?</li>
+        <li><strong>自动豁免</strong>: 「自动推导 P 喂给 <code>completed_age_limit</code>」与「本地做种 ≥ 5× 要求」两个显式开关的默认值 (建议都关)?</li>
+        <li><strong>前置实测 (M0 遗留, 决定早停能否启用)</strong>: ① 页面是否按完成时间倒序; ② 考核期 P 是否对每个种子恒定 (用 <code>P ≈ done + remain − now</code> 反算分布); ③ <code>?page=N</code> 真实参数名与英文站形态 (影响 <code>has_next</code> 判据)。</li>
+      </ol>
+      <p class="muted">前三项是纯参数, 定了就能开工 M5.1; 第 5 项不阻塞 M5.1/M5.2 (校验与告警本身就要先拿到真机证据), 但阻塞 M5.4 的早停启用。</p>
+    </section>
+
+    <!-- ============ 15 变更记录 ============ -->
+    <section id="s15">
+      <div class="sec-no">§ 15</div>
       <h2>变更记录</h2>
       <table>
         <thead><tr><th style="width:14%">版本</th><th style="width:16%">日期</th><th>改了什么 / 为什么</th></tr></thead>
@@ -835,13 +981,14 @@ trackers:
           <tr><td>v2.9</td><td>2026-09-25 (新需求落地)</td><td><strong>超龄豁免: 完成时间超线的种子不再核实、不再翻页</strong> —— 用户指令「忽略下载时间超过一定期限的种子, 比如完成时间超过一年的种子没有必要验证 HR, 甚至也没有必要往下翻页」。<br>① <strong>判定侧</strong> (§9): 新站点级键 <code>trackers.&lt;站&gt;.hr_check.completed_age_limit</code> (0 = 关闭, 默认行为不变; 开启时 1D~3650D, 单位写错配置期拦下); <code>judge_record</code> 对锚点里<strong>本地完成时刻</strong>超线的种子直接给第四态 <code>EXEMPT</code>「超龄豁免」—— 排在「无可查键回落本地」闸门<strong>之前</strong> (豁免是 qB 侧事实, 不依赖索引建到哪), <strong>压过清单命中</strong>与 <code>unknown_policy</code>, <code>mode: all</code> 也认 (配置者的显式取舍); 参数由记录侧从 <code>tracker_conf</code> 带进 (不多一次配置遍历)。<br>② <strong>取数侧</strong> (§4): 页面行超龄的<strong>不入索引、不回填 .torrent</strong> (省下配额; 完成时间不可解析的行保留 —— 不猜); 当前页整页超龄且<strong>页内 + 跨页都呈完成时间倒序</strong>才允许早停 —— 后续页只会更老, 本档位在豁免线内的清单已全覆盖, <strong>覆盖证明照常成立</strong> (complete 可达 ⇒ 放行照常产生); 倒序证据不成立就照常翻到底 (错误方向是多花配额, 不是漏判), 早停在 <code>refresh.reason</code> 留痕 (<code>--hr-status</code> 可见)。<br>③ <strong>测试 +17 条</strong> (判定 7 · 取数 8 · 门面透传 1 · 配置 1), ★红验 3 处 10 条守阵全红后还原; 全量 <strong>1593 passed + 1 skipped</strong> (TOTAL 91% / 10849 / 791 / 3598 / 327; 本 shell 2 条 GBK 假红按既有记载复测通过)。文档: configuration.md「超龄豁免」节 · config-reference/keys.md · testing/baseline.md。</td></tr>
           <tr><td>v3.0</td><td>2026-09-25 17:10<br>(落地 17:37)</td><td><strong>达标判定来源优先级: 档位即结论</strong> (2026-09-25 用户指令; 计划收口 17:10, <strong>已落地</strong> 17:37) —— 「是否达标」的数据来源钉死为 <strong>在线信息.考察中(A) &gt; 在线信息.已达标(B) &gt; 在线信息.未达标(C) &gt; 本地信息</strong>:<br>① <strong>§9 新增「达标判定的来源优先级」节</strong>: 命中 A/B/C 任一档位即为站点的达标结论 (A 恒未达标 / B 已达标 / C 未达标), 不再看页面数值字段、不回落本地; <strong>废除「A/D 档看 remain_seconds==0 ⇒ 已达标、缺字段回落本地」的路径</strong> (含 v2.3「缺字段不给结论就回落本地」拍板) —— v2.8 已实证「剩余达标时间」是考核窗口倒计时, 归零 = 考核到期而非已达标, 以它推导达标方向是反的; 且 A 档缺字段回落本地会让本地值越权推翻站点的明确结论。<br>② 页面数值字段 (剩余达标时间 / 还需做种时间) 降为 WebUI 展示与进度参照; 本地字段仅在清单未命中 / 站点不可查时兜底 (标注「来源: 本地」)。<br>③ 多 infohash 双命中 (hybrid 两 hash 映两个 tid) 按 A &gt; B &gt; C 取达标结论 (原实现按 infohash 迭代序取首命中, 无档位序); 三态判定与「A/B/C 命中 ⇒ 受管束」一字不变。<br>④ 支撑件: §2 判定边界补句 · §4 流量字段行改口径 · §9 三态表受管束行改写 · M3 落地实况拍板②标注取代 · §12 守阵更新 · §13 决策记录补行。<br>⑤ <strong>落地实况 (17:37)</strong>: <code>hr/model.py::satisfied_verdict</code> 改三档全档位即结论 (A/C ⇒ False · B ⇒ True · D/未知档位才 None; 删 remain 推导), <code>satisfied_by_site</code> docstring 同步; <code>hr/resolve.py::judge_record</code> 双命中改按 <code>(判定档位, 达标档位序)</code> 取更保守者 (新增 <code>_lane_rank</code>, 删「首命中即 break」), docstring 同步; <code>torrents/record.py::check_hr_satisfied</code> docstring 同步 (分支逻辑不变 —— site_satisfied 非 None 即采纳)。§12 新守阵 2 条 (<code>test_lane_verdict_ignores_remain_and_local</code> / <code>test_judge_record_double_hit_prefers_lane_order</code>) + 改写 1 条 (<code>test_judge_record_carries_site_satisfied_verdict</code>), <strong>红验 3 条全红</strong> (临时还原旧实现) 后还原; 测试 <strong>+2</strong>, 全量 <strong>1601 passed + 1 skipped</strong> (TOTAL 91% / 10950 / 791 / 3594 / 326; HR 包 93%: 2814 / 147 / 774 / 93)。测试计划 docstring 与 test_hr_parse 注释同步。</td></tr>
           <tr><td>v3.4</td><td>2026-09-26<br>(重新梳理 +<br>同日缺口落地)</td><td><strong>状态模型重新梳理: 考察中是唯一的进行中, 三个终态都已结束</strong> (2026-09-26 用户指令) —— 把散落在展示层档案 (webui-hr-safety-display 修正轮 / webui-hr-popup) 与代码注释里的终态语义收口进 §9:<br>① <strong>§9 新增「状态模型」节</strong> (置于 v3.0 优先级之前, 先模型后用法): 档位按「考核期是否已过」分组 —— <strong>A 考察中 = 进行中</strong> (唯一非终态, danger 橙 / 「不能删」桶 / 删除点名); <strong>最终态 = 已达标(B) | 未达标(C) | 已免罪(D), 三个状态都代表结束状态</strong> (B ⇒ safe 绿「可删」; C ⇒ failed 独立红档、桶名「考核未通过」、不进删除点名; D ⇒ 安全放行, CLI 明细表显示「已免罪」)。判定链两组用法一致 (命中即采纳, v3.0), 重新梳理本身无判定变更。<br>② <strong>记录展示缺口</strong>: WebUI 来源徽标曾把 D 档折进「在线·已核实，安全放行」(<code>SRC_SITE_RELEASED</code>), 与「完整刷新未列出」(缺席证据) 共用 token。<br>③ <strong>落地实况 (同日, 用户令「修复缺口」)</strong>: <code>hr/resolve.py</code> 新增 <code>SRC_SITE_EXEMPT</code>(「在线·已免罪」), <code>HrResolution.released_src</code> / <code>HrJudgement.verified_source</code> 透传 D 档放行出处, <code>safety_display</code> 据此分流 (缺席式放行原样走 <code>SRC_SITE_RELEASED</code>); 前端 <code>shared/hr.js</code> 两张映射表各 +1 键 (徽标「在线」/ 来源桶「在线核实」, 无新 CSS)。测试 <strong>+2</strong> (透传 / 分流各一) + test_web 字段级 D 档断言块; 守阵 SRC_* 常量数 8→9; <strong>红验 3 条全红</strong> (临时还原旧分支) 后还原; 全量 <strong>1637 passed + 1 skipped</strong> (TOTAL 92% / 10998 / 787 / 3644 / 328)。<br>④ 版本注: v3.1+v3.2 (扩展配置面) 与 v3.3 (选项页风格) 记录于各自档案 (26-09-26-0031 等), 不在本表。</td></tr>
+          <tr><td>v3.5</td><td>2026-09-26 18:42<br>(<strong>待实施</strong>)</td><td><strong>新增 §14 在线核实 v2 方案: 滚动窗口 + 双令牌桶配额 + 信号分级</strong> (由同日设计审查驱动, 报告 <a href="../reports/26-09-26-1628-report-hr-online-verify-audit.html">26-09-26-1628</a>) —— <strong>本节只立方案, 代码未动</strong>:<br>① <strong>滚动窗口与新的 <code>complete</code> 判据</strong>: 每轮从第 1 页起翻前 N 页 (不追求翻完); 滚动窗口<strong>能</strong>证明「在清单里」, <strong>不能</strong>证明「不在清单里」⇒ <code>complete</code> 只在「每档 末页 or 早停成立」时成立, 否则本轮只收命中、未命中一律保守 ⇒ 每轮页数取决于「活跃条目页数」而非清单总页数 ⇒ <strong>「跨轮断点续翻」由必需降级为可选兜底</strong> (治 §3.3「永远翻不完」)。<br>② <strong>三早停 + 双豁免</strong>: 早停① 末页 (配 <code>maxpage/currentpage</code> 交叉验证) / 早停② <code>remain==0</code> 连续 5 行 + P 一致性机检 + 排序校验 (与 v2.9 完成时间判据<strong>同构</strong>: <code>remain==0 ⟺ now−done ≥ P</code>, 早停行正是判定侧会豁免的行) / 早停③ 覆盖本地 (严格版 infohash 子集, 前提 <code>pending_infohash==0</code>); 判定侧豁免 A = 自动推导 P 喂 <code>completed_age_limit</code> (显式开关), 豁免 B = <strong>本地做种 ≥ 要求 × 5</strong> (可配) —— 后者<strong>不能当早停</strong> (本地事实无法映射到页面行, 且与页面排序无单调关系), 与 A 并存。<br>③ <strong>配额模型重新设计</strong>: 页面访问与种子下载<strong>彻底分开</strong> (治「种子配置影响 HR 核实」+「下载挤页面」), 改<strong>双令牌桶</strong> (rate + burst, 直接实现「单轮可多、不能每轮都多」) + 天级硬顶 + <strong>双间隔</strong>; 令牌桶天然幂等 (靠时间戳不靠窗口键) 且消除整点突发; <strong>迁移不抬 schema 版本</strong> (保留 <code>quota</code> 作页面账本 + 新增 <code>torrent_quota</code>, 缺字段取零); 进一步「页面只在新轮做、下载只在复用轮做」⇒ 单轮持锁时长缩短。<br>④ <strong>信号分级与停用</strong> (用户 18:24/18:42 定稿): 排序违反 (哪怕 1 处) 与缺字段<strong>都是强信号</strong> ⇒ 立即早停 + <strong>判本轮拉取失败</strong> + 保留命中但不置 complete + 告警, <strong>不分面积</strong>; 判定前置 = 可比行 ≥ 2; 取数失败/页面不完整为<strong>噪声</strong> (排序判定本轮弃用, 防误停站); 连续 K 轮 ⇒ <code>suspended</code> <strong>停用该站</strong> (不复用 <code>fuse</code>: 熔断自动恢复, 致命错误须人工), 且<strong>判定链必须同步回落本地</strong>。<br>⑤ <strong>实施分五步</strong> (M5.1 判据与观测 → M5.2 信号处置与停用 → M5.3 配额拆分 → M5.4 早停与豁免 → M5.5 收尾), 贯穿「零静默变更」: 新键默认旧值、早停/自动豁免显式开关、M5.4 前判定语义一行不改。待拍板 4 项参数 + 3 项 M0 前置实测 (页面排序 / 考核期是否恒定 / 分页形态)。</td></tr>
         </tbody>
       </table>
-      <p class="muted">下一段是 M0 的待实测清单 (§13)。</p>
+      <p class="muted">M0 的待实测清单在 §13。v3.5 的「在线核实 v2 方案」见 §14 (待实施; 参数与前置实测见 §14.9)。</p>
     </section>
 
     <div class="colophon">
-      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v3.4 — 2026-09-22 22:04 (v3.4 重新梳理 2026-09-26: 状态模型 —— 考察中是唯一的进行中, 已达标 | 未达标 | 已免罪 三个终态都已结束; 同日用户令「修复缺口」, D 档已免罪来源单列 SRC_SITE_EXEMPT「在线·已免罪」已落地; v3.0 修订 2026-09-25: 达标判定来源优先级 —— 在线考察中 &gt; 在线已达标 &gt; 在线未达标 &gt; 本地, 档位即结论, 已落地; v2.9 超龄豁免与翻页早停; v2.8 --hr-status 明细表改版; v2.7 增量落盘; v2.6 通道时序修复; M1-M4 均已落地, 余真机走查) · auto-qb-clone2<br>
+      auto-qb · 部分种子 HR 在线核实 · 可行性分析与实施计划 v3.5 — 2026-09-22 22:04 (v3.5 新增 §14 在线核实 v2 方案 2026-09-26: 滚动窗口 + 新的 complete 判据 + 三早停双豁免 + 双令牌桶配额 (页面/下载彻底分开) + 信号分级与停用, 待实施; v3.4 重新梳理 2026-09-26: 状态模型 —— 考察中是唯一的进行中, 已达标 | 未达标 | 已免罪 三个终态都已结束; 同日用户令「修复缺口」, D 档已免罪来源单列 SRC_SITE_EXEMPT「在线·已免罪」已落地; v3.0 修订 2026-09-25: 达标判定来源优先级 —— 在线考察中 &gt; 在线已达标 &gt; 在线未达标 &gt; 本地, 档位即结论, 已落地; v2.9 超龄豁免与翻页早停; v2.8 --hr-status 明细表改版; v2.7 增量落盘; v2.6 通道时序修复; M1-M4 均已落地, 余真机走查) · auto-qb-clone2<br>
       依据: memory-bank 路由 (config-reference / systemPatterns / modules / conventions) 与源码锚点 (TorrentRecord.check_hr_* · core/mixins/tags · webui/views.py::_hr_view_fields · webui/server/routes/torrent_detail.py · rules/conditions · rules/expr/env · qbmanager._create_global_tasks · webui/server/lifecycle.py · config/validation/core.py · config/impact.py); 既有实验 <code>scripts/hr_fetch_experiment.py</code>; 外部事实两条已核实见脚注。
     </div>
 
