@@ -4,6 +4,10 @@
 执行者只需要回答"现在该调哪个", 命令怎么拼不归它管。
 
 退出码: 0 成功 · 1 STOP(配置写错 / 占位符展不开 / 前置不满足) · 3 命令本身非 0
+
+输出契约(2026-09-27 P1, 计划 26-09-26-2345): 包脚本可用 RESULT: / WHY: / NEXT: / EVIDENCE:
+协议行收尾(语义单点在脚本); 引擎保证协议行不被摘要截掉, 失败时紧跟 [FAIL] 行转述。
+文本输出**不出现裸 rc 数字** —— 退出码只走进程通道, 语义只在协议行, 免得调用方去查码表。
 """
 
 from __future__ import annotations
@@ -30,6 +34,8 @@ ANOMALY_MAX = 8  # 额外保留的异常行上限
 FAILURE_LINES = 40  # 失败时最多回多少行(要细节, 但也不是整段)
 # 异常行判据: 只认工具自己的分级标记与大写关键字 —— 小写的 "warnings"/"error" 是正常输出的一部分。
 _ANOMALY = re.compile(r"\[(?:WARN|STOP|FAIL)\]|\b(?:FAILED|ERROR|Traceback)\b")
+# 协议行判据(输出契约): 与异常行同权必保 —— 成功证据不再靠"恰好落在末 N 行"的运气存活。
+_RESULT = re.compile(r"^\s*(?:RESULT|WHY|NEXT|EVIDENCE):")
 
 # 子进程必须说 UTF-8。Windows 上 Python 子进程的 stdout 一旦被管道接住, 编码取的是
 # **本地码页**(本机 cp936) —— 中文按 GBK 出去, 而本引擎按 UTF-8 解, 结果是一串 U+FFFD:
@@ -46,28 +52,41 @@ def cmd_run(args: argparse.Namespace) -> int:
     extra = _extra(args)
     cmds = C.task_commands(task, tree.root, extra)
 
-    # 详略随风险自适应: 带前置检查或标了高风险的, 先自证"将要跑什么"再跑
+    # 详略随风险自适应: 带前置检查或标了高风险的, 先自证"将要跑什么"再跑。
+    # 只打首条 + 条数 —— 全量展开串每轮提交都重复, 是常规路径上的纯 token 税; 要看全量: show <id>。
     if task.requires or task.risky:
         print(f"[自证] {task.id} 将要执行:")
-        for cmd in cmds:
+        for cmd in cmds[:1]:
             print(f"  {cmd}")
+        if len(cmds) > 1:
+            print(f"  …(共 {len(cmds)} 条, 全量: show {task.id})")
 
     for check in task.requires:
-        ok, out = _shell(C.expand(check, tree.root, extra), task.timeout)
+        ok, out = _shell(C.expand(check, tree.root, C.args_text(extra)), task.timeout)
         if not ok:
             print(f"[STOP] 前置不满足: {check}")
             if out.strip():
                 print(out.rstrip())
+            print(f"  NEXT: 处理后重跑 commands run {task.id}; 定义: show {task.id}")
             return STOP
         print(f"[前置] ok: {check}")
 
     for cmd in cmds:
         started = time.time()
-        ok, out = _shell(cmd, task.timeout, env=C.pack_env(task))
+        try:
+            ok, out = _shell(cmd, task.timeout, env=C.pack_env(task))
+        except subprocess.TimeoutExpired:
+            # 超时必须指名卡住的是哪条命令 —— 多命令 task 里"哪条卡死"本身就是排障结论
+            print(f"[FAIL] {task.id} 超时({task.timeout}s) —— 卡住的命令: {cmd}")
+            return FAILED
         spent = time.time() - started
         if not ok:
-            print(f"[FAIL] {task.id} rc!=0 ({spent:.1f}s)")
-            _emit(out, task.id, limit=FAILURE_LINES)
+            print(f"[FAIL] {task.id} ({spent:.1f}s)")
+            proto = _protocol_lines(out)
+            body = _strip_protocol(out) if proto else out
+            for ln in proto:  # 协议行紧跟 [FAIL] —— 语义单点在脚本, 引擎只负责让它可见
+                print(f"  {ln}")
+            _emit(body, task.id, limit=FAILURE_LINES)
             return FAILED
         print(f"[ok] {task.id} ({spent:.1f}s)")
         _emit(out, task.id)
@@ -158,11 +177,13 @@ def _pick(tree: C.Tree, name: str) -> C.Task:
     return task
 
 
-def _extra(args: argparse.Namespace) -> str:
+def _extra(args: argparse.Namespace) -> list[str]:
+    """调用方给的额外参数, 以 **argv 列表**直达脚本(2026-09-27 P2) —— 不再 join 成字符串,
+    免得后面 `split()` 把含空格的路径拆碎; 引号由调用方 shell 层负责。"""
     extra = list(getattr(args, "extra", None) or [])
     if extra and extra[0] == "--":
         extra = extra[1:]
-    return " ".join(extra)
+    return extra
 
 
 def _shell(cmd: str, timeout: int, env: dict[str, str] | None = None) -> tuple[bool, str]:
@@ -210,6 +231,16 @@ def _decode(raw: bytes | None) -> str:
     return data.decode("utf-8", errors="replace")
 
 
+def _protocol_lines(out: str) -> list[str]:
+    """输出里的协议行(RESULT / WHY / NEXT / EVIDENCE), 原样保序 —— 失败转述用。"""
+    return [ln for ln in out.splitlines() if _RESULT.match(ln)]
+
+
+def _strip_protocol(out: str) -> str:
+    """剥掉协议行后的正文 —— 失败路径已把协议行转述在 [FAIL] 后, 摘要里不再重复它们。"""
+    return "\n".join(ln for ln in out.splitlines() if not _RESULT.match(ln))
+
+
 def _digest(out: str, limit: int = SUMMARY_LINES) -> tuple[list[str], int]:
     """把输出压成"结论 + 异常行", 返回 (要打印的行, 被略过的行数)。
 
@@ -225,7 +256,7 @@ def _digest(out: str, limit: int = SUMMARY_LINES) -> tuple[list[str], int]:
     for i, line in enumerate(lines):
         if len(keep) >= limit + ANOMALY_MAX:
             break
-        if _ANOMALY.search(line):
+        if _ANOMALY.search(line) or _RESULT.match(line):
             keep.add(i)
     picked = [lines[i] for i in sorted(keep)]
     return picked, len(lines) - len(picked)

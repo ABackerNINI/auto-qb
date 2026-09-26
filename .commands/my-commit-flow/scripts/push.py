@@ -1,5 +1,8 @@
 """推送 —— **顺序固定**: 先推主线远端(必须成功), 再尝试一次镜像直连(失败只报一次)。
 
+ship.commit 成功后**默认同进程续跑本脚本**(emit_result=False, 统一结论由 commit 的 RESULT 行出);
+独立调用用于补推 / 重验。输出末尾按契约给出 RESULT: / WHY: / NEXT: 协议行(引擎保证可见)。
+
 用法:
     python <包>/scripts/push.py [--skip-mirror] [--skip-preflight]
 
@@ -91,7 +94,18 @@ def remotes() -> dict[str, str]:
     return out
 
 
-def main(argv: list[str] | None = None) -> int:
+def _result(emit: bool, line: str, why: str = "", nxt: str = "") -> None:
+    """输出契约行 —— commit.py 链跑时 emit=False, 统一结论由 commit 的 RESULT 行承载。"""
+    if not emit:
+        return
+    print(f"RESULT: {line}")
+    if why:
+        print(f"WHY: {why}")
+    if nxt:
+        print(f"NEXT: {nxt}")
+
+
+def main(argv: list[str] | None = None, emit_result: bool = True) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-mirror", action="store_true", help="不尝试镜像远端")
     parser.add_argument("--skip-preflight", action="store_true", help="跳过推送前的预检(与 commit.py 同名开关对齐)")
@@ -115,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         # 闸门会改工作区, 而且刚在 commit 阶段跑过, 这里再跑一遍只会把全量测试做两遍。
         if preflight_main(["--phase", "push", "--no-auto"]) != 0:
             sys.stderr.write("预检有 STOP, 未推送。\n")
+            _result(emit_result, "STOP 预检有 STOP, 未推送", "见上方检查表的 STOP 行", "处理后重跑 commands run ship.push")
             return 1
 
     print("=== 推送前再核一次远端真值(判据 = ls-remote 现查; refs/remotes/* 的写入在本环境会被静默丢弃, 快照会给假\"落后\") ===")
@@ -125,10 +140,17 @@ def main(argv: list[str] | None = None) -> int:
             f"取不到远端真值(ls-remote 两次都空/失败) —— 无法判断是否落后, 不推。\n"
             f"联网后重试; 或手工核对 `git ls-remote {MAIN} {BRANCH}` 对比本地 HEAD。\n"
         )
+        _result(
+            emit_result,
+            "FAIL 取不到远端真值, 无法判断是否落后, 不推",
+            "ls-remote 两次都空/失败 —— 离线或链路抖动",
+            f"联网后重试 commands run ship.push; 或手工核对 git ls-remote {MAIN} {BRANCH}",
+        )
         return 1
     behind_ahead = git("rev-list", "--left-right", "--count", f"{remote_tip}...HEAD").stdout.split()
     if len(behind_ahead) != 2:
         sys.stderr.write(f"本地没有远端 tip({remote_tip[:8]})的对象(fetch 失败?) —— 无法判断是否落后, 不推。\n")
+        _result(emit_result, "FAIL 本地没有远端 tip 的对象, 无法判断是否落后, 不推", "fetch 未落稳", "联网后重试 commands run ship.push")
         return 1
     if int(behind_ahead[0]) > 0:
         behind_n, ahead_n = int(behind_ahead[0]), int(behind_ahead[1])
@@ -139,6 +161,12 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             sys.stderr.write(f"落后远端 {behind_n} 个提交 —— 先 `git merge --ff-only` 同步合流(工作区必须干净), 不推。\n")
+        _result(
+            emit_result,
+            f"STOP 落后远端 {behind_n} 个提交(已分叉: 本地领先 {ahead_n}), 不推",
+            "收尾回写必须落在合并后的新基线上; 已分叉时 merge --ff-only 必然失败",
+            "按「同步路径」合并远端后重跑 commands run ship.push(已分叉走 references/pipeline.md 替代路径)",
+        )
         return 1
     print(f"  远端 {remote_tip[:8]}: 齐平(本地领先 {behind_ahead[1]} 个)")
 
@@ -156,6 +184,12 @@ def main(argv: list[str] | None = None) -> int:
     print((proc.stdout + proc.stderr).strip())
     if proc.returncode != 0:
         sys.stderr.write("主线推送失败 —— 镜像不再尝试, 先解决主线。\n")
+        _result(
+            emit_result,
+            "FAIL 主线推送失败 —— 镜像不再尝试, 先解决主线",
+            "推送非 0(明细见上); 链路层间歇失败脚本已自动重试过一次",
+            "联网后重试 commands run ship.push",
+        )
         return 5
 
     print("\n=== 核对远端 ===")
@@ -164,11 +198,30 @@ def main(argv: list[str] | None = None) -> int:
         # 取不到 ≠ 推送失败: 别把网络抖动报成"不一致", 那会让执行者重复推或惊慌
         print(f"  **取不到远端 ref**(ls-remote 两次都空/失败) —— 推送命令本身已成功, 请手工确认:")
         print(f"     git ls-remote {MAIN} {BRANCH}   # 期望看到 {head}")
+        _result(
+            emit_result,
+            "FAIL 推送命令已成功, 但取不到远端 ref, 无法核实",
+            "ls-remote 两次都空/失败 —— 网络抖动, 不等于推送失败",
+            "稍后手工核对上方 ls-remote 命令; 或重跑 commands run ship.push(齐平则无事发生)",
+        )
         return 6
     ok = remote_sha == head
     print(f"  远端 {remote_sha}\n  本地 {head}  →  {'一致' if ok else '**不一致**'}")
 
+    def _verdict(note: str = "") -> None:
+        """终局协议行 —— 独立调用时给调用方一个统一结论(链跑时由 commit 出)。"""
+        if not emit_result:
+            return
+        if ok:
+            print(f"RESULT: OK 已推送 {MAIN}/{BRANCH}, 远端与本地一致{note}")
+            print(f"EVIDENCE: remote={remote_sha} local={head}")
+        else:
+            print("RESULT: FAIL 远端 ref 与本地不一致 —— 推送可能没落稳")
+            print(f"EVIDENCE: remote={remote_sha} local={head}")
+            print("NEXT: 核对链路后重跑 commands run ship.push")
+
     if args.skip_mirror:
+        _verdict(" (--skip-mirror)")
         return 0 if ok else 5
 
     print(f"\n=== 尝试一次镜像直连({MIRROR or '未找到镜像远端'}) ===")
@@ -178,15 +231,18 @@ def main(argv: list[str] | None = None) -> int:
         # 提前返回, 平时碰不到)。改回正确名字, 并由 test_preflight.py 的静态检查兜住。
         hint = f"git remote add <名字> {MIRROR_URL_NOW}" if MIRROR_URL_NOW else "补一个镜像远端即可(镜像允许滞后)"
         print(f"  没找到镜像远端; 需要时: {hint}")
+        _verdict(" (无镜像远端)")
         return 0 if ok else 5
     # 代理禁用参数从 git config 读, 不写死 key/端口; 没配代理则为空
     proc = git(*proxy_disable_args(MIRROR_URL_NOW), "push", MIRROR, BRANCH)
     out = (proc.stdout + proc.stderr).strip()
     if proc.returncode == 0:
         print(f"  镜像已推: {out.splitlines()[-1] if out else 'ok'}")
+        _verdict("; 镜像已推")
     else:
         # 只如实报告一次: 不重试 / 不换代理 / 不改 SSH / 不回滚主线
         print(f"  镜像直连失败(不重试, 镜像允许滞后): {out.splitlines()[-1] if out else '无输出'}")
+        _verdict("; 镜像失败(允许滞后)")
 
     return 0 if ok else 5
 

@@ -1,6 +1,6 @@
 # Git 推送
 
-> 摘要: 推送前必须先设 `TMPDIR`(否则闸门必红); 判"推没推上"的唯一依据是 `ls-remote`, 不是 push 的输出。
+> 摘要: 提交闸门依赖 `TMPDIR` 约定(默认盘会假红); 判"推没推上"只认 `ls-remote` 对比本地 HEAD —— 该核对已由 ship 脚本机检(输出末尾 RESULT 行), 手动 ls-remote 仅在报「取不到远端 ref」时。
 > 触发: push, 推送, 提交闸门, 推没推上, Gitee, GitHub, 镜像, CI action
 
 ### 提交闸门(`preflight.py` / `commit.py`)在工具 shell 的默认 `TMPDIR` 下必红
@@ -20,7 +20,9 @@
   ⚠ **命令报失败 ≠ 没推上** ⇒ **判定"推没推上"的唯一依据是 `git ls-remote <远端> <分支>`**
   (它自己也会瞬时失败, 重试 2~3 次再下结论)。
   ❗`git push --dry-run` **不能**用来判断 —— 它只做 ref 协商, 不发包, 永远"成功"。
-- **处置**: 主线**可重试一次**; GitHub 镜像仍守"尝试一次, 失败只报一次"(不重试 / 不换代理 / 不改走 SSH /
+- **处置**: `ship.commit` / `ship.push` 已内置「瞬时失败重试一次 + `ls-remote` 核对 + RESULT 行」
+  (2026-09-27 起) —— 看 RESULT 行即可, 别手动重跑核对; 手工裸跑 `git push` 时仍守:
+  主线**可重试一次**; GitHub 镜像"尝试一次, 失败只报一次"(不重试 / 不换代理 / 不改走 SSH /
   不回滚主线已完成的推送)。
 
 ### GitHub Actions: `astral-sh/setup-uv` 没有浮动大版本标签

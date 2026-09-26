@@ -44,11 +44,12 @@
 
 ## 命令
 
-**命令一律经 `commands` 引擎调, 不在文档里抄** —— `commands run <task>` 里的 `<task>` 是包里的一条命令
+**命令默认经 `commands` 引擎调: 想跑测试 / 格式化 / 提交 / 推送 / 包内脚本, 第一步找 task id, 不是拼裸命令 —— 等价物裸跑(`uv run pytest` / `git push` …)会丢掉包里单点定义的环境陷阱**。
+`commands run <task>` 里的 `<task>` 是包里的一条命令
 (映射表在 [.commands/](.commands/) 各包的 `config.toml`, 引擎是 [commands skill](.agents/skills/commands/SKILL.md))。
 ❗`commands run <task>` **先直接试跑**, 报 command not found 才装一次 wrapper(幂等, 生成物已 gitignore):
 `uv run python .agents/skills/commands/scripts/install_wrapper.py`(落仓库根 + PATH 目录,
-PATH 那份用户级、跨 clone 共享 —— 装过一次就一直命中, 多数会话免装); 没装时也可展开
+PATH 那份跨 clone 共享, 多数会话免装); 没装时也可展开
 `uv run python .agents/skills/commands/scripts/run.py run <task>`。
 `<task>` 用 `list` 里的 id(子包可写 `ship.commit`, 也可写全 `包/子包.<task>`)。
 不知道调哪个就 `list` 逐级下钻(一级只出包 + 常显命令)。遇到**反复要跑 / 难拼 / 有陷阱写法**的命令,
@@ -63,8 +64,7 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 ```
 
 - 依赖统一走 `uv` (`pyproject.toml` + `uv.lock`)。
-- ⚠ `TMPDIR` 已内置在 `test.*` 里, **不要再手工加前缀** —— POSIX 的 `TMPDIR=x cmd` 在本 shell 不生效
-  (实测 rc=1), 加了还会盖掉包里那个正确的值。判据见 [pitfalls/testing/tmpdir.md](memory-bank/pitfalls/testing/tmpdir.md)。
+- ⚠ `TMPDIR` 已内置在 `test.*` 里, **别再手工加前缀**(会盖掉包里正确的值); 判据见 [pitfalls/testing/tmpdir.md](memory-bank/pitfalls/testing/tmpdir.md)。
 - 新增测试必须同步该文件头部 docstring 的 "## 测试计划" 清单。
 
 ## ⚠️ 环境硬约束: Git 操作 (AI 工具 shell 特有)
@@ -88,7 +88,7 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## 提交 / PR
 
-> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①预检 `my-commit-flow.sync`, **远端有更新先按「同步路径」合并远端** → ②收尾回写文档(落在合并后的新基线上 —— 回写件是全体 clone 最热写点, 陈旧基线上写合并必撞) → ③`ship.commit`(**内含预检 + 闸门 + 核 ref 三处**; 落后未合流被预检 STOP) → ④推 Gitee `ship.push`(推送前预检 + 核远端 ref + 一次 GitHub 镜像尝试) → ⑤查幽灵 diff。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
+> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①预检 `my-commit-flow.sync`, **远端有更新先按「同步路径」合并远端** → ②收尾回写文档(落在合并后的新基线上 —— 回写件是全体 clone 最热写点, 陈旧基线上写合并必撞) → ③消息写进 `.git/COMMIT_MSG_AI.txt` 后 `commands run ship.commit`: 零参数全量提交 + 核 ref + 推 Gitee + 核远端 + 镜像一次; 看 **RESULT 行**(PARTIAL=已提交未推送→补 `ship.push`), 不查 rc、不手动 ls-remote。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
 
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令**, "继续 / 接着做 / ok / 你看着办"一律不算。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。

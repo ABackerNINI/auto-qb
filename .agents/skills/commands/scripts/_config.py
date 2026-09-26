@@ -299,10 +299,8 @@ def _load_task(tid: str, raw: object, pack: Pack, cfg_path: Path) -> Task:
         doc_path = base / doc
         # 指针指空 = 静默失效: 想看细节的人读不到, 只能回头整读包内 README —— 正是 doc 要防的事
         if not doc_path.is_file():
-            raise ConfigError(
-                f"[STOP] {cfg_path}: tasks.{tid} 的 doc 指向的文件不存在: {doc_path}"
-                " —— 深读指针必须指向包内真实文件"
-            )
+            raise ConfigError(f"[STOP] {cfg_path}: tasks.{tid} 的 doc 指向的文件不存在: {doc_path}"
+                              " —— 深读指针必须指向包内真实文件")
 
     return Task(
         id=tid,
@@ -361,15 +359,20 @@ def expand(text: str, root: Path, args: str = "", strict: bool = True) -> str:
     return out
 
 
-def task_commands(task: Task, root: Path, args: str = "", strict: bool = True) -> list[str]:
+def task_commands(task: Task, root: Path, args: list[str] | None = None, strict: bool = True) -> list[str]:
     """把一条 task 变成**可直接执行**的命令行数组(占位符已展开)。
 
+    `args` 是 **argv 列表**, 不再经 join→split 往返(2026-09-27 P2): 旧链路把含空格的路径
+    拆成两半, `_quote` 补在 split 之后救不回来。脚本类把列表原样接到 argv 末尾;
+    命令类(`<args>` 占位符)在文本替换前对每个元素统一 `_quote`。
+
     `args` 非空却**无处可去**时 STOP —— 静默丢掉调用方给的参数, 就是让"看起来跑过了"悄悄发生
-    (与引擎其余判据同源: 不静默降级)。脚本类不吃这条: 额外参数会直接接到 argv 末尾。
+    (与引擎其余判据同源: 不静默降级)。
     """
+    args = list(args or [])
     if args and not _takes_args(task):
         raise ConfigError(
-            f"[STOP] {task.id} 不接参数(run 里没有 <args> 占位符), 但传入了: {args}"
+            f"[STOP] {task.id} 不接参数(run 里没有 <args> 占位符), 但传入了: {args_text(args)}"
             " —— 要么去掉参数, 要么在包里给这条 run 补上 <args>"
         )
     if task.script:
@@ -378,8 +381,9 @@ def task_commands(task: Task, root: Path, args: str = "", strict: bool = True) -
         script_path = task.scripts_dir / task.script
         if not script_path.exists():
             raise ConfigError(f"[STOP] {task.id}: 脚本不存在: {script_path}")
-        return [" ".join(_quote(x) for x in _script_argv(script_path, task, args, strict))]
-    return [expand(c, root, args, strict) for c in task.run]
+        return [args_text(_script_argv(script_path, task, args, strict))]
+    text = args_text(args)
+    return [expand(c, root, text, strict) for c in task.run]
 
 
 def _takes_args(task: Task) -> bool:
@@ -387,13 +391,17 @@ def _takes_args(task: Task) -> bool:
     return bool(task.script) or any("<args>" in cmd for cmd in task.run)
 
 
-def _script_argv(script_path: Path, task: Task, args: str, strict: bool) -> list[str]:
+def _script_argv(script_path: Path, task: Task, args: list[str], strict: bool) -> list[str]:
     import sys
     argv = [sys.executable, str(script_path)]
-    argv += [expand(a, find_root(), args, strict) for a in task.args]
-    if args:
-        argv += args.split()
+    argv += [expand(a, find_root(), args_text(args), strict) for a in task.args]
+    argv += args  # 调用方 shell 层已处理过引号, 这里原样直达 —— 不拆不拼
     return argv
+
+
+def args_text(args: list[str]) -> str:
+    """argv 列表 → 拼进 shell 命令串的形态: 含空格的元素统一加引号。"""
+    return " ".join(_quote(x) for x in args)
 
 
 def _quote(text: str) -> str:

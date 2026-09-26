@@ -11,13 +11,13 @@ confirmed = true
 script = "commit.py"
 pin    = true
 risky  = true
-when   = "用户显式说「提交」：逐路径暂存 + 提交 + 自动核 ref（落后未合流会被内含预检 STOP —— 先按「同步路径」合并远端再回来）"
-note   = "参数经 <args> 传: -- <--message-file 文件> <路径...>; 直接拒绝 -A / . / *; 红线文件直接拒交"
+when   = "用户显式说「提交」：暂存 + 提交 + 核 ref + 自动续推（落后未合流会被内含预检 STOP —— 先按「同步路径」合并远端再回来）"
+note   = "零参数缺省 = 全量提交本次改动(红线照拦) + 核 ref + 自动续推(--no-push 只提交); 消息缺省读 <root>/.git/COMMIT_MSG_AI.txt; RESULT: PARTIAL=已提交未推送, 补跑 ship.push; 拒 -A / . / *"
 doc    = "references/pipeline.md"
 
 [tasks."ship.push"]
 script = "push.py"
 risky  = true
-when   = "提交之后推主线（必须成功）→ 核对远端 ref → 尝试一次镜像"
+when   = "补推 / 单独推送（ship.commit 已默认续推; 本条用于推送未完成后补推, 或远端无法核实的重验）→ 核对远端 ref → 尝试一次镜像"
 note   = "镜像失败只报一次：不重试 / 不换代理 / 不改走 SSH / 不回滚主线"
 doc    = "references/pipeline.md"

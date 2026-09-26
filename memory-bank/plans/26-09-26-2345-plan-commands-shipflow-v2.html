@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>commands × my-commit-flow v2 — 输出契约与零参数化设计</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-26">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1113;
+    --term-bg: #0a0c0e;
+    --ink: #e3e6ea;
+    --ink-dim: #a8b0b9;
+    --ink-faint: #737d88;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.18);
+    --accent: #d8a657;
+    --ok: #96bd77;
+    --fail: #de8071;
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, "SFMono-Regular", ui-monospace, monospace;
+    --sans: "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    --disp: "Bahnschrift", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1080px; margin: 0 auto; padding: 56px 40px 96px; }
+
+  /* ---------- 封面 ---------- */
+  .meta-row {
+    display: flex; gap: 28px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ink-faint);
+    border-bottom: 1px solid var(--hairline); padding-bottom: 18px;
+  }
+  .meta-row .acc { color: var(--accent); }
+  h1 {
+    font-family: var(--disp); font-weight: 650;
+    font-size: clamp(38px, 5.4vw, 58px); line-height: 1.12;
+    letter-spacing: -0.02em; margin: 44px 0 10px;
+  }
+  .sub {
+    font-family: var(--disp); font-weight: 400;
+    font-size: 19px; color: var(--ink-dim); letter-spacing: .01em;
+    margin-bottom: 36px;
+  }
+  .lede {
+    font-size: 16.5px; color: var(--ink-dim); max-width: 66ch;
+    border-left: 2px solid var(--hairline-strong); padding-left: 20px;
+    margin-bottom: 20px;
+  }
+  .lede b { color: var(--ink); font-weight: 550; }
+
+  /* ---------- 目录 ---------- */
+  nav.toc { margin: 52px 0 8px; }
+  .toc-k {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 16px;
+  }
+  .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 44px; }
+  .toc-grid a {
+    display: flex; gap: 14px; align-items: baseline;
+    color: var(--ink-dim); text-decoration: none; padding: 5px 0;
+    border-bottom: 1px solid var(--hairline); font-size: 14.5px;
+  }
+  .toc-grid a:hover { color: var(--ink); }
+  .toc-grid .n { font-family: var(--mono); font-size: 12px; color: var(--accent); min-width: 26px; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-top: 84px; }
+  .sec-head {
+    display: flex; align-items: baseline; gap: 18px;
+    border-top: 1px solid var(--hairline-strong);
+    padding-top: 22px; margin-bottom: 26px;
+  }
+  .sec-head .no {
+    font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: .06em;
+  }
+  h2 { font-family: var(--disp); font-weight: 620; font-size: 27px; letter-spacing: -0.01em; }
+  h3 {
+    font-family: var(--disp); font-weight: 560; font-size: 18px;
+    margin: 40px 0 12px; color: var(--ink);
+  }
+  h3 .tag {
+    font-family: var(--mono); font-weight: 400; font-size: 11px; letter-spacing: .1em;
+    color: var(--ink-faint); margin-left: 10px; text-transform: uppercase;
+  }
+  p { max-width: 72ch; margin-bottom: 14px; color: var(--ink); }
+  p.dim { color: var(--ink-dim); }
+  .m { font-family: var(--mono); font-size: 0.88em; color: var(--ink-dim); }
+  .m.acc { color: var(--accent); }
+  .keep { -webkit-text-size-adjust: none; }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 22px 0 8px; font-size: 14px; }
+  th {
+    font-family: var(--mono); font-weight: 400; font-size: 11px;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint);
+    text-align: left; padding: 8px 12px 10px;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td { padding: 11px 12px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  td .m { font-size: 12px; }
+  .num { font-family: var(--mono); font-size: 13px; }
+
+  /* ---------- 终端块 ---------- */
+  .term {
+    background: var(--term-bg); border: 1px solid var(--hairline);
+    border-radius: 3px; padding: 15px 18px; margin: 18px 0 8px;
+    font-family: var(--mono); font-size: 12.8px; line-height: 1.62;
+    overflow-x: auto; white-space: pre;
+  }
+  .term .cmd { color: var(--ink-dim); }
+  .term .cmd::before { content: "$ "; color: var(--ink-faint); }
+  .t-ok   { color: var(--ok); }
+  .t-fail { color: var(--fail); }
+  .t-acc  { color: var(--accent); }
+  .t-dim  { color: var(--ink-faint); }
+  .t-ink  { color: var(--ink); }
+  .cap {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 26px 0 0;
+  }
+  .pair { display: grid; grid-template-columns: 1fr; gap: 6px; margin-bottom: 20px; }
+
+  /* ---------- 规范框 ---------- */
+  .spec {
+    border: 1px solid var(--hairline-strong); padding: 20px 24px;
+    margin: 24px 0; max-width: 780px;
+  }
+  .spec .lab {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 12px;
+  }
+  .spec p { margin-bottom: 10px; font-size: 14.5px; }
+  .spec p:last-child { margin-bottom: 0; }
+  .spec .term { margin: 12px 0 0; border-color: var(--hairline); }
+
+  ul.plain { list-style: none; max-width: 72ch; margin: 0 0 14px; }
+  ul.plain li { padding: 7px 0 7px 22px; border-bottom: 1px solid var(--hairline); position: relative; }
+  ul.plain li::before { content: "—"; position: absolute; left: 0; color: var(--ink-faint); }
+  ol.steps { max-width: 72ch; margin: 0 0 14px 0; padding-left: 0; list-style: none; counter-reset: st; }
+  ol.steps li {
+    counter-increment: st; position: relative; padding: 8px 0 8px 44px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  ol.steps li::before {
+    content: counter(st, decimal-leading-zero);
+    position: absolute; left: 0; top: 10px;
+    font-family: var(--mono); font-size: 12px; color: var(--accent);
+  }
+
+  footer {
+    margin-top: 96px; border-top: 1px solid var(--hairline-strong);
+    padding-top: 20px; font-family: var(--mono); font-size: 11.5px;
+    color: var(--ink-faint); letter-spacing: .04em; line-height: 2;
+  }
+
+  @media (max-width: 760px) {
+    .page { padding: 32px 20px 64px; }
+    .toc-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="meta-row">
+    <span class="acc">auto-qb · engineering plan</span>
+    <span>2026-09-26</span>
+    <span>范围: .commands / .agents/skills/commands / AGENTS.md</span>
+    <span>状态: 待评审</span>
+  </div>
+
+  <h1>让命令自己出示证据</h1>
+  <div class="sub">commands 引擎 × my-commit-flow v2 —— 输出契约 · 零参数 · 一次调用走完提交与推送</div>
+
+  <p class="lede">
+    这套命令系统的根本目的从来不是「把命令收进包里」，而是<b>减少手写命令的出错面、压低每轮会话的 token 消耗</b>。
+    现状离这个目的差一层：调用方（AI 会话）要替脚本抄写它自己一查就知道的事实（改动文件清单），要替脚本复述它自己已经做过的核对（push 后查远端），
+    出错时还要去读脚本源码才能理解退出码的含义。本方案用一层<b>输出契约</b>把这三件事全部反转回脚本侧。
+  </p>
+
+  <nav class="toc">
+    <div class="toc-k">目录</div>
+    <div class="toc-grid">
+      <a href="#s1"><span class="n">01</span>诊断 — 痛点逐条对应到机制根源</a>
+      <a href="#s2"><span class="n">02</span>设计原则</a>
+      <a href="#s3"><span class="n">03</span>方案总览 — 四层修复</a>
+      <a href="#s4"><span class="n">04</span>L1 输出契约 — RESULT 协议</a>
+      <a href="#s5"><span class="n">05</span>L2 零参数化 — ship.commit 不再收路径</a>
+      <a href="#s6"><span class="n">06</span>L3 编排合一 — 提交即推送</a>
+      <a href="#s7"><span class="n">07</span>L4 错误导航 — 每个失败都有下一步</a>
+      <a href="#s8"><span class="n">08</span>守阵 — 防止设计回退</a>
+      <a href="#s9"><span class="n">09</span>迁移路径 — 三步，每步可独立提交</a>
+      <a href="#s10"><span class="n">10</span>取舍与风险</a>
+      <a href="#s11"><span class="n">11</span>token 账</a>
+    </div>
+  </nav>
+
+  <!-- ================= 1 诊断 ================= -->
+  <section id="s1">
+    <div class="sec-head"><span class="no">01</span><h2>诊断 — 痛点逐条对应到机制根源</h2></div>
+    <p class="dim">四个痛点不是四个独立 bug，而是同一条根因的四个切面：<b>脚本知道的事，被要求由调用方转述；脚本做过的核对，被要求由调用方重做</b>。下面逐条定位到文件与行号。</p>
+
+    <h3>痛点 ① 改动文件一多就要一一传参<span class="tag">多次出错</span></h3>
+    <ul class="plain">
+      <li><span class="m">commit.py:46</span> — <span class="m">paths</span> 是必传参数（<span class="m">nargs="+"</span>），而权威的改动清单 <span class="m">changed_files()</span> 就在同包 <span class="m">preflight.py:218</span> 里，脚本自己一查就有，却要 AI 先跑 <span class="m">git status</span> 抄一遍再拼进命令行。</li>
+      <li><span class="m">_config.py:395</span> — 引擎参数链是 <span class="m">" ".join(extra) → args.split()</span>：路径先被拼成字符串再按空格拆开，<b>含空格的路径必碎</b>；<span class="m">_quote</span> 加引号发生在 split 之后，顺序倒了，救不回来。</li>
+      <li><span class="m">commit.py:47</span> — <span class="m">--message-file</span> 必传但<b>路径无约定</b>：写到仓内有红线误伤风险，写到系统临时目录则随平台漂移，「提交消息文件不存在」（<span class="m">commit.py:65</span>）这类错就是这么来的。</li>
+      <li>漏传比错传更隐蔽：某个文件忘了写进参数，它就<b>静默不进本次提交</b>——没有任何告警，产生「提交不完整」这类事后很难追认的事故。</li>
+    </ul>
+
+    <h3>痛点 ② push 之后还要手动检查<span class="tag">本该脚本直接做</span></h3>
+    <p><span class="m">push.py:161-169</span> 其实已经做了远端核对（<span class="m">ls-remote</span> 现查、本地远端 SHA 比对、瞬时失败重试一次），问题出在核对结果的<b>可见性没有契约保障</b>：</p>
+    <ul class="plain">
+      <li>证据行 <span class="m">本地 &lt;sha&gt; → 一致</span> 后面还跟着镜像段的两行输出——它恰好卡在引擎摘要「末 3 行」（<span class="m">run.py:28</span> <span class="m">SUMMARY_LINES = 3</span>）的保留线边缘，<b>靠行数运气存活</b>。镜像输出多一行，证据就被挤掉。</li>
+      <li>摘要的异常行正则（<span class="m">run.py:32</span> <span class="m">_ANOMALY</span>）只认 <span class="m">[WARN]/[STOP]/[FAIL]/FAILED/ERROR/Traceback</span>——<b>不认 PASS，也不认任何成功证据</b>。协议只保护失败，不保护成功。</li>
+      <li><span class="m">AGENTS.md:91</span> 第⑤步「查幽灵 diff」在 <span class="m">references/pipeline.md</span> 里<b>没有定义、没有机检承载</b>——一个只存在于引导文档里的口头规程，每轮会话由 AI 自行发挥实现，实现方式就是再跑一遍手动核对。</li>
+      <li><span class="m">pitfalls/git/push.md</span> 的口径「判推没推上的唯一依据是 ls-remote，不是 push 的输出」写于脚本吸收核对之前，<b>没有随实现更新</b>——AI 被这条旧规则训练成连脚本自己的核对也不信任。</li>
+      <li>远端真值取不到时（<span class="m">push.py:165</span>，rc=6）脚本主动要求「请手工确认」——这合理，但它是目前唯一被显式定义的核对出口。</li>
+    </ul>
+
+    <h3>痛点 ③ 出错要深挖命令是怎么写的<span class="tag">rc 语义被压扁</span></h3>
+    <ul class="plain">
+      <li>引擎把一切非零退出码压成一行 <span class="m">[FAIL] task rc!=0</span>（<span class="m">run.py:69</span>）。而脚本各自的退出码语义是精心设计的：<span class="m">push.py</span> 的 1/5/6（落后/推送失败/核对不到）、<span class="m">commit.py</span> 的 1/4/5、<span class="m">verify_ref.py</span> 的 2/3——<b>全部在传递中丢失</b>，语义只活在 docstring 里。「想知道 rc=4 是什么意思」的唯一办法是去读脚本源码。</li>
+      <li>脚本内部其实写了大量高质量指引（<span class="m">preflight.py</span> 的「同步路径」配方、<span class="m">verify_ref.py:34</span> 的 <span class="m">FIX_HINT</span>），但格式不统一、不保证出现在输出末尾，可能被失败摘要的 40 行截断线（<span class="m">run.py:30</span>）吃掉中段。</li>
+      <li>引擎自己的三类失败——<span class="m">requires</span> 前置不满足、占位符展不开、超时——都<b>只报现象不给下一步</b>；超时甚至不说是哪条命令超的时。</li>
+    </ul>
+
+    <h3>痛点 ④ 其它命令的共性问题<span class="tag">同根</span></h3>
+    <ul class="plain">
+      <li>成功时的结论可见性靠「末 3 行」猜：pytest 的末行恰好是 <span class="m">N passed</span> 所以 test.* 运气好；检查表类输出结论在中段就只能靠异常行正则捞——捞到的也只是带 <span class="m">[WARN]</span> 的<b>首行</b>，多行详情仍被截。</li>
+      <li><span class="m">risky</span> 任务的「自证」每次全量打印展开命令（<span class="m">run.py:50-53</span>）——每轮提交固定多花一份 token 重复已知信息。</li>
+      <li><b>引擎本体零测试覆盖</b>：<span class="m">test.pkg</span> 只收集 <span class="m">.commands/**</span>，而 <span class="m">run.py / _config.py</span> 在 <span class="m">.agents/</span> 下——改动引擎没有任何机检兜底，这也是「其它命令也出现很多问题」改一次坏一次的结构性原因。</li>
+    </ul>
+
+    <table>
+      <thead><tr><th style="width:30%">痛点</th><th>机制根源</th><th style="width:26%">位置</th></tr></thead>
+      <tbody>
+        <tr><td>逐路径传参，多次出错</td><td>清单让调用方手抄 + 参数链 join→split 拆碎空格路径 + 消息文件路径无约定</td><td class="m">commit.py:46 · _config.py:395 · commit.py:47</td></tr>
+        <tr><td>push 后手动核对</td><td>核对证据无契约保障（卡在摘要保留线边缘）+ 「查幽灵 diff」无定义无机检 + 旧口径未随实现更新</td><td class="m">run.py:28,32 · AGENTS.md:91 · pitfalls/git/push.md</td></tr>
+        <tr><td>出错要读源码</td><td>rc 语义在引擎层被压扁 + 指引格式不统一可能被截 + 引擎级失败无下一步</td><td class="m">run.py:69 · run.py:57-58</td></tr>
+        <tr><td>其它命令的各种问题</td><td>成功证据无协议 + 自证全量打印 + 引擎零测试覆盖</td><td class="m">run.py:28-32 · run.py:50-53 · test.pkg 收集面</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= 2 原则 ================= -->
+  <section id="s2">
+    <div class="sec-head"><span class="no">02</span><h2>设计原则</h2></div>
+    <p class="dim">五条原则，后面每一层设计都能回指到其中一条；实现评审时拿它们当判据。</p>
+    <ol class="steps">
+      <li><b>能推导的不传参</b> —— 改动清单、分支、远端、消息路径，这些仓库状态脚本一查就有；凡是让调用方手抄的参数，都是一次出错机会。</li>
+      <li><b>证据自持</b> —— 每条命令的结论必须自带证据行（sha / 数字 / 比对结果），且引擎以协议保证证据行永不被摘要截掉——不靠行数运气。</li>
+      <li><b>失败可导航</b> —— 失败输出必须是「现象 + 根因 + 可直接执行的下一步」，下一步本身就是一条命令或 task id，而不是一段描述。</li>
+      <li><b>编排进脚本，判断留给人</b> —— 固定顺序的步骤串（预检→暂存→提交→核 ref→推→核远端→镜像）塌缩成一次调用；该停的 STOP 点一个不少。</li>
+      <li><b>每个机制配守阵</b> —— 没有测试锚定的约定必然回退；引擎本体顺带补齐测试收集面。</li>
+    </ol>
+  </section>
+
+  <!-- ================= 3 总览 ================= -->
+  <section id="s3">
+    <div class="sec-head"><span class="no">03</span><h2>方案总览 — 四层修复</h2></div>
+    <table>
+      <thead><tr><th style="width:16%">层</th><th style="width:34%">做什么</th><th>治哪个痛点</th><th style="width:28%">主要改动点</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="num acc">L1</td>
+          <td><b>输出契约</b>：RESULT 协议 + 引擎摘要「证据行必保」</td>
+          <td>② push 核对看不见 · ④ 成功结论靠猜</td>
+          <td class="m">run.py (_digest / _emit) + 各包脚本</td>
+        </tr>
+        <tr>
+          <td class="num acc">L2</td>
+          <td><b>零参数化</b>：commit 缺省全量改动 + 消息路径约定 + 引擎参数链修复</td>
+          <td>① 逐路径传参</td>
+          <td class="m">commit.py · _config.py (args 直传)</td>
+        </tr>
+        <tr>
+          <td class="num acc">L3</td>
+          <td><b>编排合一</b>：ship.commit 一次调用走完 提交→核 ref→推→核远端→镜像</td>
+          <td>② 手动核对 · ④ 编排出错面</td>
+          <td class="m">commit.py (续跑 push) · AGENTS.md:91 瘦身</td>
+        </tr>
+        <tr>
+          <td class="num acc">L4</td>
+          <td><b>错误导航</b>：失败转述 + 引擎级 NEXT + 自证压缩</td>
+          <td>③ 出错要读源码</td>
+          <td class="m">run.py (cmd_run 失败路径)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="dim">L1 是横向基建，先行；L2/L3 是 my-commit-flow 的行为变更；L4 与 L1 同属引擎但独立可验。实施顺序与依赖见 <a href="#s9" style="color:var(--accent);text-decoration:none">§09</a>。</p>
+  </section>
+
+  <!-- ================= 4 L1 ================= -->
+  <section id="s4">
+    <div class="sec-head"><span class="no">04</span><h2>L1 输出契约 — RESULT 协议</h2></div>
+
+    <p>整套 v2 的单点发明。script 型 task（<span class="m">commit / push / preflight / verify_ref</span> 及未来一切包脚本）的输出末尾必须以协议行收尾；引擎则承诺<b>协议行与异常行同权，永不被摘要截掉</b>。至此「命令正常时反馈简单直接、出错时指引下一步」不再是各脚本的自觉，而是引擎强制。</p>
+
+    <div class="spec">
+      <div class="lab">RESULT 协议 · 规范</div>
+      <div class="term"><span class="t-ok">RESULT: OK</span><span class="t-ink"> &lt;一句话结论，含关键 sha / 数字&gt;</span>
+<span class="t-acc">EVIDENCE:</span><span class="t-dim"> (可选) 证据行，≤3 行：比对结果 / 计数 / 耗时</span>
+<span class="t-fail">RESULT: FAIL</span><span class="t-ink"> &lt;语义化失败名&gt; | </span><span class="t-fail">RESULT: STOP</span><span class="t-ink"> &lt;同&gt; | </span><span class="t-acc">RESULT: PARTIAL</span><span class="t-ink"> &lt;前段成功后段失败&gt;</span>
+<span class="t-acc">WHY:</span><span class="t-dim">  (FAIL/STOP/PARTIAL 必填) 根因，一句人话</span>
+<span class="t-acc">NEXT:</span><span class="t-dim">  (FAIL/STOP/PARTIAL 必填) 可直接执行的一条命令或 task id；确无则写「无——报告用户」</span></div>
+      <p>四态语义：<span class="m t-ok">OK</span> 全部完成；<span class="m t-acc">PARTIAL</span> 前段成功后段失败（如已提交未推送——重推即可，不重提交）；<span class="m t-fail">FAIL</span> 动作失败；<span class="m t-fail">STOP</span> 前置拦截未执行。PARTIAL 是新增的关键状态——它让「提交已落、推送没走」这类中间态不再需要人肉分辨。</p>
+      <p>适用面只限 <b>script 型 task</b>：run 型任务（pytest 等）末行本就是结论，不强加。引擎对没有协议行的输出<b>退回现有摘要行为，不报错</b>——协议是渐进采纳的，不会因旧脚本炸掉。</p>
+    </div>
+
+    <p class="cap">引擎侧改动</p>
+    <ul class="plain">
+      <li><span class="m">_digest</span>（<span class="m">run.py:213</span>）：新增正则 <span class="m">^(RESULT|WHY|NEXT|EVIDENCE):</span>，命中行与异常行同权保留——成功证据不再依赖「恰好落在末 3 行」。</li>
+      <li><span class="m">cmd_run</span> 失败路径（<span class="m">run.py:69</span>）：<span class="m">[FAIL] task rc!=0</span> 改为 <span class="m">[FAIL] task (&lt;耗时&gt;)</span>——<b>文本输出不再出现裸 rc 数字</b>。退出码只走进程通道（wrapper / CI 可编程消费），语义只走 RESULT / WHY / NEXT 文本通道（脚本承载，引擎不翻译、不二写 rc 表）。裸数字除了诱导调用方去查码表——恰是本方案要消灭的「深挖命令怎么写」——没有信息量。</li>
+    </ul>
+
+    <p class="cap">效果对照（示意，ship.push 成功路径）</p>
+    <div class="pair">
+      <div class="term"><span class="cmd">commands run ship.push</span>   <span class="t-dim">← 现状：证据行卡在保留线边缘，镜像输出多一行就被挤掉</span>
+<span class="t-ok">[ok] ship.push (11.2s)</span>
+  === 推送前再核一次远端真值 … ===
+  远端 8e930239: 齐平(本地领先 1 个)
+  <span class="t-dim">…(略过 9 行; 要看全文: show ship.push 拿到命令后直接跑)</span>   <span class="t-dim">← 想看核对结果？手动重跑 ls-remote</span></div>
+      <div class="term"><span class="cmd">commands run ship.push</span>   <span class="t-dim">← v2：证据行由协议保证可见</span>
+<span class="t-ok">[ok] ship.push (11.2s)</span>
+  推送 gitee/develop; 远端 8e9302a 与本地一致
+  镜像 github: 失败(不重试, 允许滞后)
+  <span class="t-acc">RESULT: OK</span><span class="t-ink"> develop 已推送 gitee, 远端与本地一致(8e9302a); 镜像失败已如实记录</span>
+  <span class="t-acc">EVIDENCE: remote=8e9302a local=8e9302a</span></div>
+    </div>
+  </section>
+
+  <!-- ================= 5 L2 ================= -->
+  <section id="s5">
+    <div class="sec-head"><span class="no">05</span><h2>L2 零参数化 — ship.commit 不再收路径</h2></div>
+
+    <h3>paths 从必传变缺省全量</h3>
+    <p><span class="m">commit.py</span> 的 <span class="m">paths</span> 改为可选（<span class="m">nargs="*"</span>）。缺省时脚本自己调 <span class="m">changed_files()</span> 取全量改动（与预检同一权威单点），红线 / 高危三道闸（<span class="m">BULK</span> 拒绝、<span class="m">red_lines</span> STOP、<span class="m">warn_lines</span> 警告）<b>原样保留</b>，暂存清单显式打印后再动 <span class="m">git add</span>。传路径仍合法——语义变为「子集提交」，且脚本补一行「未纳入 N 个文件」提示，治「漏传静默不提交」。</p>
+    <p class="dim">人因论证：抄对 N 个路径的出错率远高于核对 N 行打印出来的清单——把「审清单」从命令行参数侧挪到输出侧，正是这套系统该做的事。</p>
+
+    <h3>消息文件路径约定单点</h3>
+    <p><span class="m">--message-file</span> 缺省指向 <span class="m">.git/COMMIT_MSG_AI.txt</span>：<span class="m">.git</span> 内文件永不入库（不触红线）、多 clone 天然隔离（各自写各自的 <span class="m">.git</span>）、路径跨平台恒定。调用方只剩「写消息文件 → 跑一条命令」两个动作，路径不再有自由度。</p>
+
+    <h3>引擎参数链修复</h3>
+    <p><span class="m">_extra</span>（<span class="m">run.py:161</span>）不再 join 成字符串：script 型 task 的额外参数<b>以 argv 列表直达</b>（调用方 shell 层已处理过引号，引擎不拆不拼）；run 型任务的 <span class="m">&lt;args&gt;</span> 文本替换保持现状，但拼回命令串时对每个含空格的元素统一 <span class="m">_quote</span>。<span class="m">commands.cmd</span> wrapper 的引号透传行为在实施时一并核对（cmd.exe 的 <span class="m">%*</span> 引号半残是已知坑）。</p>
+
+    <p class="cap">调用形态对照</p>
+    <div class="pair">
+      <div class="term"><span class="cmd">commands run ship.commit -- --message-file /tmp/msg.txt src/a.py src/b.py tests/test_a.py tests/test_b.py memory-bank/plans/x.html memory-bank/plans/_index.md</span>
+<span class="t-dim">← 现状：6 个文件手抄 + 消息路径自定 + -- 分隔符；任一环节拼错即重来</span></div>
+      <div class="term"><span class="t-dim"># 步骤 1: 把提交消息写进约定路径 (Write 工具一步)</span>
+<span class="cmd">.git/COMMIT_MSG_AI.txt</span>   <span class="t-dim">← 新约定：.git 内，永不入库</span>
+<span class="t-dim"># 步骤 2:</span>
+<span class="cmd">commands run ship.commit</span>   <span class="t-dim">← 零参数：全量改动 + 缺省消息路径</span></div>
+    </div>
+  </section>
+
+  <!-- ================= 6 L3 ================= -->
+  <section id="s6">
+    <div class="sec-head"><span class="no">06</span><h2>L3 编排合一 — 提交即推送</h2></div>
+
+    <p><span class="m">ship.commit</span> 在 ref 三处核对通过后，<b>同进程续跑 push 全流程</b>（含推送前 <span class="m">--no-auto</span> 预检、远端核对、一次镜像尝试），<span class="m">--no-push</span> 才停在提交。这不是新发明——<span class="m">commit.py</span> 已经 import <span class="m">verify_ref</span> 续跑，把 <span class="m">push.main</span> 加进同一条链即可。</p>
+
+    <p>收益是把口径与实现finally对齐：<span class="m">AGENTS.md</span> 早就定义「用户说提交 = commit + push 一次走完」，但实现层是两个 task，靠 AI 记得接着跑第二步、记得跑完再核对。<b>固定顺序的步骤串交给脚本，STOP 点一个不少</b>（落后照旧拦、闸门照旧红），判断全部保留在人（AI）这一侧。</p>
+
+    <p class="cap">AGENTS.md:91 提交节塌缩对照</p>
+    <div class="pair">
+      <div class="term"><span class="t-dim"># 现状：AI 要编排并复述 5 步</span>
+① my-commit-flow.sync → ② 收尾回写 → ③ ship.commit(手动传参) → ④ ship.push → ⑤ 查幽灵 diff<span class="t-dim">(无定义)</span></div>
+      <div class="term"><span class="t-dim"># v2：3 步，⑤ 由 RESULT 行取代</span>
+① my-commit-flow.sync → ② 收尾回写 → ③ ship.commit<span class="t-dim">(提交+核 ref+推送+核远端+镜像, 一次调用)</span></div>
+    </div>
+
+    <p class="cap">全流程成功输出（示意）</p>
+    <div class="term"><span class="cmd">commands run ship.commit</span>
+<span class="t-ok">[ok] ship.commit (48.6s)</span>
+  <span class="t-dim">暂存 6 个(红线 0 / 高危 0); 预检无 STOP</span>
+  <span class="t-dim">提交 8e9302a; ref 三处一致</span>
+  <span class="t-dim">推送 gitee/develop; 远端与本地一致</span>
+  <span class="t-dim">镜像 github: 失败(不重试, 允许滞后)</span>
+  <span class="t-acc">RESULT: OK</span><span class="t-ink"> 8e9302a 已提交并推送 gitee/develop(远端一致); 镜像失败已记录</span></div>
+
+    <div class="term"><span class="t-dim"># 推送失败时的 PARTIAL —— 中间态不再靠人分辨：</span>
+<span class="t-fail">[FAIL] ship.commit (44.0s)</span>
+  <span class="t-dim">提交 8e9302a; ref 三处一致; 主线推送失败</span>
+  <span class="t-acc">RESULT: PARTIAL</span><span class="t-ink"> 8e9302a 已提交, 推送 gitee/develop 失败</span>
+  <span class="t-acc">WHY:</span> <span class="t-ink">主线瞬时连接失败, 重试一次仍失败</span>
+  <span class="t-acc">NEXT:</span> <span class="t-ink">commands run ship.push  (提交已落, 只需补推)</span></div>
+  </section>
+
+  <!-- ================= 7 L4 ================= -->
+  <section id="s7">
+    <div class="sec-head"><span class="no">07</span><h2>L4 错误导航 — 每个失败都有下一步</h2></div>
+
+    <p>原则 3 的落地：失败输出的三行结构（RESULT / WHY / NEXT）由脚本产出，引擎负责两件它擅长的事——<b>保证这三行不被截掉</b>（L1 已定），以及<b>给自己的三类失败补上 NEXT</b>。退出码维持脚本现状、只走进程通道；文本输出不出现裸 rc——语义只由 RESULT / WHY / NEXT 承载，引擎不做 rc 翻译表（那是配置二写）。</p>
+
+    <table>
+      <thead><tr><th style="width:34%">触发</th><th>NEXT 行内容</th><th style="width:24%">承载者</th></tr></thead>
+      <tbody>
+        <tr><td>落后 / 分叉主线</td><td>fetch + <span class="m">merge --ff-only</span> 配方，或树脏时的「移出→快进→施回」五步（现成的 <span class="m">sync_recipe</span> 挪进 NEXT 行）</td><td class="m">preflight.py（已有，改格式）</td></tr>
+        <tr><td>闸门红</td><td>修复后 <span class="m">commands run my-commit-flow.preflight</span></td><td class="m">preflight.py</td></tr>
+        <tr><td>ref 三处不一致</td><td><span class="m">FIX_HINT</span> 收进 NEXT（内容现成，改格式）</td><td class="m">verify_ref.py（已有）</td></tr>
+        <tr><td>主线推送失败</td><td><span class="m">commands run ship.push</span>（补推）</td><td class="m">commit.py / push.py</td></tr>
+        <tr><td>消息文件缺失</td><td>写 <span class="m">.git/COMMIT_MSG_AI.txt</span> 后重跑</td><td class="m">commit.py</td></tr>
+        <tr><td>引擎前置不满足 / 占位符展不开 / 参数不接</td><td><span class="m">show &lt;task&gt;</span> 或对应修复动作</td><td class="m">run.py（引擎补默认 NEXT）</td></tr>
+        <tr><td>超时</td><td>指名超时的那条命令（多命令 task 时逐条计时已有，差在输出）</td><td class="m">run.py / preflight.py</td></tr>
+      </tbody>
+    </table>
+
+    <p class="cap">自证压缩（token 项）</p>
+    <p><span class="m">risky</span> 任务的「将要执行」从全量打印改为首条 + <span class="m">(共 N 条, 全量: show &lt;id&gt;)</span>——自证的价值在「知道将要跑什么」，不在每次复述全部展开串。</p>
+  </section>
+
+  <!-- ================= 8 守阵 ================= -->
+  <section id="s8">
+    <div class="sec-head"><span class="no">08</span><h2>守阵 — 防止设计回退</h2></div>
+    <p class="dim">引擎本体零覆盖是这次一并修的结构债：测试<b>贴着被测代码放</b>——新增 <span class="m">.agents/skills/commands/scripts/test_engine.py</span>（引擎独立于 my-commit-flow，测试跟着引擎走；冒烟闸门对它跑 <span class="m">--help</span> 无害，模块顶层无副作用），并把 <span class="m">test.pkg</span> 收集面从 <span class="m">pytest .commands</span> 扩成 <span class="m">pytest .commands .agents/skills/commands</span>。这同时修掉一个现存缺口：引擎改动本就会触发 test.pkg 闸门（<span class="m">.my-commit-flow.toml</span> 的 match 已含 <span class="m">.agents/skills/commands/</span>），但收集面却收不到引擎的任何测试——<b>闸门在空转</b>。以下用例全部挂进去。</p>
+    <table>
+      <thead><tr><th style="width:38%">用例</th><th>锚定什么</th></tr></thead>
+      <tbody>
+        <tr><td class="m">test_digest_keeps_result_lines</td><td>喂 30 行样例输出，断言 RESULT / WHY / NEXT / EVIDENCE 行在摘要中存活（L1 契约本体）</td></tr>
+        <tr><td class="m">test_extra_argv_passthrough</td><td>含空格路径经 <span class="m">_extra → _script_argv</span> 后仍是完整单元素（L2 引擎修复）</td></tr>
+        <tr><td class="m">test_commit_defaults_to_full_changed</td><td>mock <span class="m">git status</span>，断言缺省暂存清单 = 全量改动且红线被拒</td></tr>
+        <tr><td class="m">test_commit_chains_push</td><td>mock <span class="m">push.main</span>，断言提交成功后续跑、<span class="m">--no-push</span> 不跑、推送失败回 PARTIAL</td></tr>
+        <tr><td class="m">test_fail_output_carries_next</td><td>cmd_run 失败路径断言转述含 NEXT 行、文本输出<b>不含裸 rc 数字</b>；无协议行时退回旧摘要不炸</td></tr>
+        <tr><td class="m">test_scripts_speak_result</td><td>静态扫描：所有 script 型 task 的脚本文件必须含 <span class="m">RESULT:</span>（新脚本不守约直接红）</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= 9 迁移 ================= -->
+  <section id="s9">
+    <div class="sec-head"><span class="no">09</span><h2>迁移路径 — 三步，每步可独立提交</h2></div>
+    <table>
+      <thead><tr><th style="width:14%">步</th><th style="width:40%">内容</th><th>验收</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="num acc">P1<br><span class="m" style="font-size:11px">契约层</span></td>
+          <td><span class="m">run.py</span>: _digest 协议行必保 + 失败转述（无裸 rc）+ 自证压缩 + 超时指名；<span class="m">test.pkg</span> 收集面扩至 <span class="m">.agents/skills/commands</span> + 新增引擎测试档（贴着引擎放）</td>
+          <td>手跑 <span class="m">ship.push</span>，核对证据行稳定可见；<span class="m">test.pkg</span> 绿。纯引擎改动，对现有脚本零破坏，先止血</td>
+        </tr>
+        <tr>
+          <td class="num acc">P2<br><span class="m" style="font-size:11px">零参数</span></td>
+          <td><span class="m">commit.py</span>: paths 缺省全量 + 消息约定路径；<span class="m">_config.py</span>: argv 直传；<span class="m">commands.cmd</span> 引号核对</td>
+          <td>零参数走通一次真实提交；含空格路径提交成功；消息缺失时的 NEXT 指引出现</td>
+        </tr>
+        <tr>
+          <td class="num acc">P3<br><span class="m" style="font-size:11px">合一</span></td>
+          <td><span class="m">commit.py</span> 续跑 push + PARTIAL 状态；<span class="m">AGENTS.md:91</span> 五步改三步并瘦身；<span class="m">pipeline.md</span> 收编「幽灵 diff」词条（由 RESULT 行取代）；<span class="m">pitfalls/git/push.md</span> 口径更新（脚本核对已机检，手动 ls-remote 仅 rc=6 时）</td>
+          <td>一次调用走完提交→推送→镜像；<span class="m">doc.caps</span> 过（AGENTS.md 净减字符）；协议行全部可见</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="dim">顺序不可换：P3 的 RESULT 行依赖 P1 的契约保证；P2 的 argv 直传独立但与 P1 同触 <span class="m">_config.py</span>，建议相邻提交。每步跑 <span class="m">commands run test.pkg</span> + <span class="m">doc.caps</span>。</p>
+  </section>
+
+  <!-- ================= 10 取舍 ================= -->
+  <section id="s10">
+    <div class="sec-head"><span class="no">10</span><h2>取舍与风险</h2></div>
+    <ul class="plain">
+      <li><b>缺省全量 vs 逐路径纪律</b>：逐路径的本意是防误交红线、防混入不相干改动。三道闸原样保留 + 暂存清单显式打印，且子集传参仍可用——纪律的<b>意图</b>全保留，被替换掉的只是「手抄路径」这个最易错的实现载体。</li>
+      <li><b>RESULT 协议是新约定</b>：只约束 script 型 task；run 型不强加；无协议行时引擎退回现有行为——渐进采纳，不产生一次性大爆炸迁移。</li>
+      <li><b>.git/COMMIT_MSG_AI.txt</b>：<span class="m">git clean</span> 不清 <span class="m">.git</span> 内文件、会跨提交残留——残留无害（下次提交直接覆盖），体积可忽略。</li>
+      <li><b>ship.push 保留为独立 task</b>：合一后它仍是补推 / rc=6 重验的入口，不是被删除，只是不再是常规路径的必经步。</li>
+      <li><b>引擎行为变更波及既有用例</b>：<span class="m">test_preflight.py</span> 现有 47 条中若有锚定旧参数行为的，随 P2 同步修正——已在守阵清单内，不是范围外改动。</li>
+      <li><b>rc 语义不进引擎、也不进文本</b>：退出码维持现状（0-6），只走进程通道供 wrapper / CI 可编程消费；文本通道只出 RESULT / WHY / NEXT。没有裸数字，调用方就没有「rc=5 是什么意思」的查询钩子——省 token，也少一条误入歧途的路。</li>
+      <li><b>调用面 hook 闸门（原 L5/P4 案）已评审否决（2026-09-27）</b>：PreToolUse 拦裸命令只覆盖 ZCode 单工具（跨工具无效），且命令写出后拦截徒增一轮重写往返——对策为<b>写前引导口径</b>（AGENTS.md 命令节缺省动作 + SKILL.md 缺省规则与触发描述）；若未来重提机检，先解决「写前引导」而非「执行前拦截」。</li>
+    </ul>
+  </section>
+
+  <!-- ================= 11 token 账 ================= -->
+  <section id="s11">
+    <div class="sec-head"><span class="no">11</span><h2>token 账</h2></div>
+    <table>
+      <thead><tr><th style="width:34%">环节（一轮「提交」）</th><th style="width:30%">现状</th><th>v2</th></tr></thead>
+      <tbody>
+        <tr><td>AI 侧工具调用次数</td><td class="num">~6–8 次（sync / 写消息 / commit 长参数 / push / 手动 ls-remote / 幽灵 diff 自查）</td><td class="num acc">3 次（sync / 写消息 / ship.commit）</td></tr>
+        <tr><td>手写参数</td><td class="num">N 个路径 + 消息路径 + -- 分隔符</td><td class="num">0</td></tr>
+        <tr><td>推送核对</td><td class="num">手动 1–2 次（每次一轮工具调用往返）</td><td class="num">0（RESULT 行内含）</td></tr>
+        <tr><td>单命令输出</td><td class="num">tail 猜测，成功证据不保，失败 rc 无语义</td><td class="num">≤6 行，证据与下一步必有</td></tr>
+      </tbody>
+    </table>
+    <p class="dim">以上为<b>结构估算</b>（按 §01 的机制推演，非实测数字）。实施完成后按 <span class="m">testing/baseline.md</span> 口径立新基线切片记录实测调用次数与输出行数，回写本档。</p>
+  </section>
+
+  <footer>
+    auto-qb · memory-bank/plans · 2026-09-26 · 产出口径: delivery-artifact / native · dark<br>
+    关联: .commands/my-commit-flow/references/pipeline.md · AGENTS.md「提交 / PR」节 · memory-bank/pitfalls/git/push.md · 前案 26-09-23-2008-commands-plan.html
+  </footer>
+
+</div>
+</body>
+</html>

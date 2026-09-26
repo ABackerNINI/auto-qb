@@ -29,8 +29,7 @@ WARN（放行"先提交后合流"），**2026-09-26 起改为 STOP** —— 那�
 2. 清空工作区 git restore --source=HEAD -- <改动文件>
 3. 快进       git fetch <主线> <分支> && git merge --ff-only FETCH_HEAD   ← 快进，不是 rebase
 4. 施回改动   git apply --3way --ignore-whitespace <patch> → git reset -q 变回未暂存
-5. 提交       commands run ship.commit ...   # 内部用 --phase commit 预检：落后只报 WARN，不挡提交
-6. 推送       commands run ship.push
+5. 提交并推送  commands run ship.commit   # 内含 --phase commit 预检(落后 STOP) + 推送 + 核远端 + 一次镜像
 ```
 
 ❗**别把第 3 步挪到提交之后**：本地一旦有了提交，它就不在远端 tip 的祖先链上，
@@ -61,7 +60,7 @@ S0 my-commit-flow.sync 预检（只读）  → 落后 / 分叉即按「同步路
 S1/S2 手动 preflight（闸门①）       → 必须在回写之前
    ── 收尾回写（落在合并后的新基线上）──
 S3 ship.commit 内部（--phase commit）→ 真跑 ②；落后未合流在此 STOP（闸门也随之不跑）
-S6 ship.push 内部（--phase push）    → 落后在此 STOP（已分叉走替代路径）
+S4 ship.commit 自动续跑推送（--phase push）→ 落后在此 STOP（已分叉走替代路径）；--no-push 才停在提交
 ```
 
 - 回写件**属于本次提交的一部分**，要在 S3 暂存前做完并一起暂存；不推完再补一笔
@@ -78,7 +77,7 @@ S0 my-commit-flow.sync（--check-started）  → 只读，不跑闸门；落后�
 S1/S2 手动 preflight                      → 真跑 ①   ← 必须在回写知识库 / 文档之前
    ── 回写知识库 / 文档 ──
 S3 ship.commit 内部（--phase commit）      → 真跑 ②（落后未合流 → STOP 且闸门不跑，合并后重跑）
-S6 ship.push 内部（--phase push --no-auto）→ 不跑闸门，只核状态
+S4 ship.commit 续跑推送（--phase push --no-auto）→ 不跑闸门，只核状态（补推走 ship.push, 同款）
 ```
 
 ① 必须在**改文档之前**：测试里带着文档 / 知识库守卫（会读 `memory-bank/`），放到回写之后跑
@@ -91,13 +90,28 @@ S6 ship.push 内部（--phase push --no-auto）→ 不跑闸门，只核状态
   必须重新 `add`（S2 在 S3 前天然安全，但不能靠顺序巧合）。
 - 测试必须在回写知识库 / 文档**之前**跑一次。
 
+## 输出契约：RESULT 行（「查幽灵 diff」的机检替身）
+
+旧口径要求推送后人工「查幽灵 diff」（远端 ref 对比本地 HEAD）—— 该核对早已被 push.py 吸收，
+2026-09-27 起进一步成为**输出契约**：ship 脚本以协议行收尾，引擎保证它不被摘要截掉。
+
+```
+RESULT: OK|PARTIAL|FAIL|STOP <一句话结论>
+WHY:  <失败/拦截时: 根因, 一句人话>
+NEXT: <失败/拦截时: 可直接执行的命令或 task id>
+```
+
+- PARTIAL = 提交已落、推送未完成 —— 补跑 `commands run ship.push` 即可，**不要重新提交**。
+- **文本输出不出现裸 rc** —— 语义只在协议行，别去查码表。
+- 手动 `git ls-remote` 只在脚本报「取不到远端 ref」时才需要（网络抖动 ≠ 推送失败）。
+
 ## 脚本
 
 | 脚本 | 职责 | 退出码 |
 |---|---|---|
 | `<包>/scripts/preflight.py` | 预检（+ 一次安全 fetch）：配置 / 远端 / 上游 / 落后 / **合流预判(`merge-tree`, 只读)** / 脏 / 红线 / staged 异常，并**执行 `auto = true` 的闸门**；`--init` 生成配置初稿、`--show-config` 看生效值、`--no-auto` 只列不跑、`--verbose` 闸门明细逐条列（默认只回"N 条全过 + 总耗时"）、`--check-started` 开工自检（只读：同步状态 / 合流预判 / **同步路径**） | 0 可继续 · 1 有 STOP（缺配置、闸门红、配置写错皆为 1） |
-| `<包>/scripts/commit.py` | 逐路径 `add` + `commit -F` + 提交后自动核 ref（内部先跑一次 `--phase commit` 预检，闸门在这一步真跑） | 4 参数/红线 · 5 git 失败 · 2 ref 不一致 |
+| `<包>/scripts/commit.py` | 零参数全量提交（红线照拦）+ 逐路径 `add` + `commit -F` + 核 ref + **自动续跑推送**（`--no-push` 停在提交） | 0 提交成功（推送未完成 → RESULT: PARTIAL, 补推即可）· 1 预检 STOP · 4 参数/红线/消息缺失 · 5 git 失败 · 2 ref 不一致 |
 | `<包>/scripts/verify_ref.py [sha]` | ref 三处一致核对 | 0 一致 · 2 不一致 · 3 staged 暴增 |
-| `<包>/scripts/push.py [--skip-mirror] [--skip-preflight]` | 内嵌一次 `--no-auto` 预检 → fetch → 推主线 → 核对远端 → 尝试一次镜像 | 0 主线成功 · 1 落后 / 预检有 STOP · 5 主线失败 · 6 取不到远端 ref |
+| `<包>/scripts/push.py [--skip-mirror] [--skip-preflight]` | **补推 / 单独推送**（ship.commit 已默认续推）：内嵌一次 `--no-auto` 预检 → fetch → 推主线 → 核对远端 → 尝试一次镜像；输出 RESULT 协议行 | 0 主线成功 · 1 落后 / 预检有 STOP · 5 主线失败 · 6 取不到远端 ref |
 
 `<包>` = 本包目录（`<仓库根>/.commands/my-commit-flow`）；先用 Glob 定位（`**/my-commit-flow/scripts/*.py`），别照抄路径。
