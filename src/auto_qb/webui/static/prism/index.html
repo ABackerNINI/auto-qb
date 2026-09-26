@@ -160,7 +160,8 @@
               <svg class="ico ico-sm ico-find" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
               <input v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
                      placeholder="搜索种子名或文件名…(空格=且, -词排除, “短语”)" autocomplete="off" />
-              <button v-if="searchQuery" class="search-clear" title="清除搜索" @click="clearSearch">
+              <!-- mousedown.prevent: 按下瞬间不触发失焦 —— 否则输入框收窄动画把按钮移出光标, click 落空(焦点存在时清除失灵) -->
+              <button v-if="searchQuery" class="search-clear" title="清除搜索" @mousedown.prevent @click="clearSearch">
                 <svg class="ico" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
               </button>
             </div>

@@ -64,6 +64,7 @@
 - test_search_torrents_negative_only_empty: 仅负词/空查询返回空 + negative_only 标记, 不投递索引构建
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
+- test_frontend_search_syntax_wiring: 搜索语法前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/种子页解析匹配单点在 filters.js 且 hr.js 旧整句实现已删/归一须 Unicode 词字符(\W 折叠掉 CJK)/filteredTorrents 接线 + searching 守卫(仅负词返回空); 有 node 时行为级校验并与 views.py 逐项对账
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
 - test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
@@ -1168,6 +1169,106 @@ def test_frontend_button_system_paired():
         for tf in os.listdir(themes):
             tcss = open(os.path.join(themes, tf), encoding="utf-8").read()
             assert tok in tcss, f"棱镜主题 {tf} 缺 {tok}(五主题须成对)"
+
+
+# filters.js 搜索解析行为校验的 node 脚本(不落盘): 用 vm 沙箱跑 filters.js(它只做
+# window.AQB_FILTERS 赋值), 从 methods 里直接取三个纯函数 —— 不做脆弱的文本摘取。
+# 用例与服务端 _parse_query/search_torrents 行为同表(见 test_parse_query_tokens 等),
+# 输出 JSON 由 Python 侧与 views.py 的同名实现逐项对账(跨语言口径漂移即红)。
+_NODE_SEARCH_BEHAVIOR = (
+    "const fs=require('fs'),vm=require('vm');"
+    "const sandbox={window:{}};vm.createContext(sandbox);"
+    "vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox,{filename:'filters.js'});"
+    "const F=sandbox.window.AQB_FILTERS.methods;"
+    "const P=q=>F._parseSearchQuery.call(F,q);"
+    "const N=s=>F._searchNorm.call(F,s);"
+    "const M=(t,m)=>F._torrentTextMatch.call(F,m,P(t));"
+    "const tr={name:'[虽然我不是完美恶女～雏宫蝶鼠替换传～].Futsutsuka.na.Akujo.dewa.Gozaimasu.ga."
+    "Suuguu.Chouso.Torikae.Den.2026.S01E10.1080p.CR.WEB-DL.H264.AAC-UBWEB.mkv',"
+    "site:'MDCx',category:'动漫',save_path:'D:/media/shows',tags:['2026']};"
+    "console.log(JSON.stringify({"
+    "norm:N('The.Cat.and_the_Dog-1024p'),"
+    "p_and:P('恶女 10 -DV'),p_dash:P('-'),"
+    "r_and:M('恶女 10',tr),r_neg:M('恶女 10 -UBWEB',tr),"
+    "r_negonly:M('-dv',tr),r_dash:M('-',tr),"
+    "r_phrase:M('\\\"akujo dewa\\\"',tr),r_phrase_ord:M('\\\"dewa akujo\\\"',tr),"
+    "r_site:M('MDCx',tr),r_tag:M('2026',tr),r_webdl:M('web-dl',tr)}));"
+)
+
+
+def test_frontend_search_syntax_wiring():
+    """搜索查询语法的前端接线守阵(2026-09-26 报障双修)
+
+    两类"pytest 全绿但交互废掉"的故障形态, 一律机械钉住:
+    ① 顶栏搜索清除钮必须挂 @mousedown.prevent —— 缺了它, 按下瞬间输入框失焦收窄
+      (focus 时 240→300px 的宽度过渡回退), 绝对定位在右沿的按钮随收窄移出光标,
+      click 落空 => "有焦点时点 x 清不掉, 无焦点正常"; 两套 index.html 成对断言。
+    ② 种子页搜索是**客户端**过滤(filters.js, 不依赖服务端 searchHits): 解析/匹配单点在
+      _parseSearchQuery/_searchNorm/_torrentTextMatch, hr.js 的旧整句 includes 版必须已删
+      (防双实现漂移 —— 它就是"词 AND/-排除 失效"的根因); 归一折叠必须用 Unicode 词字符
+      ([^\\p{L}\\p{N}]+/gu, 下划线同 Python [\W_] 口径一并折叠) —— JS \\w 仅 ASCII, 退回 \\W 会把
+      CJK 整段当分隔符折叠掉;
+      filteredTorrents 必须经解析 + searching 守卫接线(仅负词返回空, 与服务端 negative_only
+      口径一致)。有 node 时另做行为级校验并与 views.py 逐项对账, 无 node 静默跳过
+      (不引入 pytest skip, 基线 0 skipped)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    filters_js = open(os.path.join(shared, "filters.js"), encoding="utf-8").read()
+    hr_js = open(os.path.join(shared, "hr.js"), encoding="utf-8").read()
+
+    # ① 清除钮 mousedown.prevent 成对(两套模板的 search-clear 按钮逐个检查)
+    for theme in ("atlas", "prism"):
+        html = open(os.path.join(STATIC_ROOT, theme, "index.html"), encoding="utf-8").read()
+        m = re.search(r'<button[^>]*class="search-clear"[^>]*>', html)
+        assert m, f"{theme} 模板找不到 search-clear 按钮"
+        tag = m.group(0)
+        assert "@mousedown.prevent" in tag, f"{theme} search-clear 缺 @mousedown.prevent(焦点态清除失灵回归)"
+        assert '@click="clearSearch"' in tag, f"{theme} search-clear 缺 clearSearch 接线"
+
+    # ② 解析/匹配单点在 filters.js; hr.js 旧实现已删
+    for name in ("_parseSearchQuery", "_searchNorm", "_torrentTextMatch"):
+        assert re.search(rf"^\s*{name}\(", filters_js, re.M), f"filters.js 缺 {name}(搜索语法单点被移走?)"
+    assert "_torrentTextMatch" not in hr_js, "hr.js 不得再留 _torrentTextMatch 旧整句实现(双实现漂移)"
+
+    # 归一折叠必须 Unicode 词字符 + u 旗标(\W 会折叠掉 CJK; 下划线须折叠 —— Python [\W_] 口径);
+    # filteredTorrents 接线完整
+    assert "[^\\p{L}\\p{N}]+/gu" in filters_js, "filters.js _searchNorm 未用 Unicode 词字符折叠(CJK 会被 \\W 折叠掉)"
+    assert "_parseSearchQuery((this.searchQuery" in filters_js, \
+        "filteredTorrents 未走 _parseSearchQuery(退回整句子串匹配, 词 AND/-排除 失效)"
+    assert "searching && !this._torrentTextMatch(" in filters_js, \
+        "filteredTorrents 缺 searching 守卫(仅负词不会返回空, 与服务端 negative_only 口径漂移)"
+
+    # 行为级校验: 与 views.py 的解析/归一逐项对账(无 node 跳过)
+    node = shutil.which("node")
+    if not node:
+        return
+    from auto_qb.webui.views import _parse_query, _search_norm
+
+    proc = subprocess.run(
+        [node, "-e", _NODE_SEARCH_BEHAVIOR, os.path.join(shared, "filters.js")],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, f"node 行为校验脚本报错: {proc.stderr.strip() or proc.stdout.strip()}"
+    got = json.loads(proc.stdout.strip().splitlines()[-1])
+
+    assert got["norm"] == _search_norm("The.Cat.and_the_Dog-1024p"), "JS/Python 归一口径漂移"
+    pos, neg = _parse_query("恶女 10 -DV")
+    assert got["p_and"] == {"pos": pos, "neg": neg}, "JS/Python 解析口径漂移(词 AND + -排除)"
+    assert got["p_dash"] == {"pos": [], "neg": []}, "孤立 - 应被忽略"
+    # 行为用例: 词 AND 命中 / 负词排除 / 仅负词与孤立 - 返回空 / 短语词序敏感 / 字段行覆盖
+    for key, want in (
+        ("r_and", True),
+        ("r_neg", False),
+        ("r_negonly", False),
+        ("r_dash", False),
+        ("r_phrase", True),
+        ("r_phrase_ord", False),
+        ("r_site", True),
+        ("r_tag", True),
+        ("r_webdl", True),
+    ):
+        assert got[key] is want, f"客户端匹配行为漂移: {key} 期望 {want} 实得 {got[key]}"
 
 
 def test_frontend_hr_safety_wiring():
