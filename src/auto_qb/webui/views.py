@@ -707,14 +707,18 @@ class WebviewMixin:
     def search_torrents(self, q: str) -> dict:
         """WEB 线程调用: 按 q 搜索种子 —— **全站唯一文本匹配点**(辅种/种子/追剧三页统一消费其结果)。
 
-        匹配口径(**正词行级 AND + 负词种子级**, 拍板 2026-09-27): q 经 _parse_query 解析为正/负词
+        匹配口径(**正词逐词跨行 AND + 负词种子级**, 拍板 2026-09-27): q 经 _parse_query 解析为正/负词
         (词已是归一后的子串口径); **候选行** = 种子名/站点/分类/保存路径/每个标签/每个文件名 各
         归一为一行。**负词优先级高于正词, 按「单个种子」统一计算**: 该种子的任一候选行(名字/
         站点/分类/路径/标签/文件行, 单个种子内包含的合集即季包文件统一计算)含任一负词 ⇒ 整颗
         种子直接排除 —— 「-mteam」类站点/标签排除、「cat and -11」类名字/路径排除都必须在这一层
         生效; 辅种组/追剧页等多种子集合里的**每个种子单独计算**(带负词的种子被排除, 干净种子
-        留下, 组/剧不连带)。种子命中 ⇔ 无任何负词命中 且 存在一行含全部正词/短语(行级 AND,
-        多词须同行 —— 旧「整句连续子串」口径的「恶女 10」失配由此修复)。
+        留下, 组/剧不连带)。正词**逐词跨行 AND**: 每个正词/短语命中任一候选行即可、行可不同 ——
+        「minions mteam」(标题在名字行、站点/标签在标签行)与「delta 03」(包名 Gamma.Delta 在
+        名字行、集号 03 只在集文件行)类跨字段查询由此命中; 26-09-26 的「多词须同行、文件行不
+        参与跨行」口径随 26-09-27 实测报障作废(已知代价: 季包文件行多, 附加词可被包内任一
+        文件名吸收)。排序两层: 全称行全覆盖的在前, 需文件行补词的以 file 兜底排后; 旧「整句
+        连续子串」口径的「恶女 10」失配修复保持不变。
 
         候选行 26-09-26 起**收敛为服务端单点**并覆盖全部文本面: 此前种子页(名字/站点/分类/
         路径/标签的客户端过滤)与追剧页(剧名整句 includes)各持一份匹配实现, 同一语义(恶女 10 /
@@ -730,8 +734,8 @@ class WebviewMixin:
         表示查询只含排除词(无正判据, 「只说不要什么」无从起搜, 与 Google 一致返回空, 前端据此前端
         提示)。结果项含完整明细字段(与分组成员视图对齐):
         hash/name/site/kind/error_reason/dlspeed/upspeed/uploaded/size/progress/seeding_time/
-        ratio/save_path/tags/category/by, 供前端完整展示命中种子信息(by = 首个通过的行类别,
-        供测试定位, 前端不消费)。
+        ratio/save_path/tags/category/by, 供前端完整展示命中种子信息(by = 首个含正词的全称行类别,
+        文件行兜底命中时为 file; 供测试定位, 前端不消费)。
         """
         def _view(rec, by):
             return {
@@ -759,10 +763,6 @@ class WebviewMixin:
         pos, neg = _parse_query(q or "")
         if not pos:
             return {"results": [], "building": False, "negative_only": bool(neg)}
-
-        def _row_passes(row: str) -> bool:
-            """行级正词 AND(负词已在种子级统一否决, 到达这里的行判定只看正词)"""
-            return all(t in row for t in pos)
 
         def _instant_rows(rec: TorrentRecord) -> List[Tuple[str, str]]:
             """即时候选行(只读 store, 不依赖文件索引): 名字/站点/分类/保存路径/每个标签各归一为一行;
@@ -792,10 +792,14 @@ class WebviewMixin:
                     for _, row in rows) or any(any(t in fq for t in neg) for fq in file_rows)
             ):
                 continue
-            by = next((b for b, row in rows if _row_passes(row)), None)
-            if by is not None:
-                results.append(_view(rec, by))
-            elif any(_row_passes(fq) for fq in file_rows):
+            # 正词逐词跨行 AND(2026-09-27 二次定案, 推翻 26-09-26「多词须同行、文件行不参与跨行」):
+            # 每个正词命中任一候选行(全称行或文件行)即可, 行可不同 —— 「minions mteam」(名字×
+            # 标签)与「delta 03」(包名在名字行、集号只在集文件行)类跨字段查询都命中; 已知代价
+            # (季包文件行多, 附加词可被包内任一文件名吸收)由用户知情拍板接受。全称行全覆盖的
+            # 排前(by 定位首个含正词的全称行), 需文件行补词的以 file 兜底排后。
+            if all(any(t in row for _, row in rows) for t in pos):
+                results.append(_view(rec, next(b for b, row in rows if any(t in row for t in pos))))
+            elif all(any(t in row for _, row in rows) or any(t in fq for fq in file_rows) for t in pos):
                 file_hits.append(_view(rec, "file"))
         results.extend(file_hits)
         building = self.web.search_index_dirty

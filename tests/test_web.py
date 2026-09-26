@@ -57,7 +57,7 @@
 - test_search_torrents_file_match: 文件列表匹配(依赖已建索引)
 - test_search_torrents_separator_normalized: 分隔符归一匹配 —— 空格查询词命中点/下划线/连字符分隔的名与文件(回归 "cat and" 搜不到 The.Cat.and… 名)
 - test_parse_query_tokens: 查询解析词法 —— 正/负词/短语 + 宽容边界(孤立-/未闭合引号/纯标点/--dv/web-dl)
-- test_search_torrents_row_level_and: 行级 AND —— 多词约束在同一候选行(名字或单个文件名)内, 跨行连词不命中(拍板 26-09-26)
+- test_search_torrents_cross_row_and: 正词逐词跨行 AND(拍板 26-09-27 二次定案, 推翻 26-09-26 文件行隔离)—— 每个正词命中任一候选行(全称行/文件行)即可: 「minions mteam」名字×标签、「delta 03」名字×集文件跨行命中; 负词种子级不变
 - test_search_torrents_negative_term: 负词种子级(26-09-27 定案)—— 任一候选行含负词 ⇒ 该种子整体排除: 单种子内季包文件统一计算(任一文件带负词整包排除), 多种子集合逐个算
 - test_search_torrents_negative_torrent_veto: 负词种子级回归 —— 名字/保存路径/站点行含负词 ⇒ 整种子排除, 优先于一切正词命中(「cat and -11」+「-mteam」两轮报障回归)
 - test_search_torrents_phrase: 短语 "…" 整段归一为连续子串, 词序敏感(terms-AND 命中而短语不命中的区分用例)
@@ -3058,7 +3058,7 @@ def test_search_torrents_separator_normalized():
         assert [x["hash"] for x in mgr.search_torrents("web dl")["results"]] == ["HA"], "连字符分隔应命中"
         # 对称: 点号查询词同样归一, 仍命中; 纯分隔符不命中(解析即丢弃, 等价空查询)
         assert [x["hash"] for x in mgr.search_torrents("cat.and")["results"]] == ["HA", "HB"]
-        # 行级 AND(26-09-26 拍板): 词序无关的行内同现 —— 旧口径 "dragon cat" 因连续子串序敏感不命中;
+        # 同行同现: 词序无关 —— 旧口径 "dragon cat" 因连续子串序敏感不命中;
         # HA 名行与 HB 的下划线文件行均同含两词, 两路各按行命中
         assert [x["hash"] for x in mgr.search_torrents("dragon cat")["results"]] == ["HA", "HB"]
         assert mgr.search_torrents("...")["results"] == []
@@ -3088,12 +3088,14 @@ def test_parse_query_tokens():
     assert _parse_query("") == ([], [])
 
 
-def test_search_torrents_row_level_and():
-    """search_torrents 行级 AND: 多词约束在**同一候选行**(名字或单个文件名)内, 跨行连词不命中
+def test_search_torrents_cross_row_and():
+    """search_torrents 正词逐词跨行 AND(拍板 26-09-27 二次定案): 每个正词命中任一候选行即可, 行可不同
 
-    行通过 ⇔ 行含全部正词(负词另有双轨口径: 身份/元数据行整种子否决、文件行按行作废, 见
-    negative_term / negative_torrent_veto); 种子命中 ⇔ 任一行通过。
-    「A 词在名字、B 词只在另一文件」的跨行 AND 不命中 —— 这是行级与种子级的分界, 此处钉死。
+    26-09-26 曾拍板「多词须同行, 文件行不参与跨行」(防季包吸词); 26-09-27 用户实测推翻 ——
+    「种子名 Gamma.Delta + 集文件 Gamma.E01-E03」搜「delta 03」须命中(标题在名字行、集号只在
+    集文件行), 召回优先, 吸词代价(附加词可被包内任一文件名吸收)知情接受。负词种子级否决不变
+    (见 negative_term / negative_torrent_veto); 全称行全覆盖的命中排前, 需文件行补词的以 file
+    兜底排后。
     """
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
 
@@ -3101,19 +3103,36 @@ def test_search_torrents_row_level_and():
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        t1 = FakeTorrent(hash="HA", name="Alpha.Beta.S01", state="stalledUP")
+        t1 = FakeTorrent(hash="HA", name="Alpha.Beta.S01", state="stalledUP", tags="MTeam")
         t2 = FakeTorrent(hash="HB", name="Gamma", state="stalledUP")
         client.files_map["HB"] = [_fake_file("delta.mkv", 0), _fake_file("Gamma.E03.mkv", 1)]
-        seed_store(mgr, [t1, t2])
+        # 26-09-27 报障原型: 包名 Gamma.Delta 在名字行, 集号 03 只在集文件行
+        t3 = FakeTorrent(hash="HC", name="Gamma.Delta.S01", state="stalledUP")
+        client.files_map["HC"] = [
+            _fake_file("Gamma.E01.mkv", 0),
+            _fake_file("Gamma.E02.mkv", 1),
+            _fake_file("Gamma.E03.mkv", 2)
+        ]
+        seed_store(mgr, [t1, t2, t3])
         mgr._build_search_index()
 
-        # 同行 AND: 名字行同含 alpha/beta/s01 → 命中; "gamma e03" 在 HB 的单个文件行内同现 → 命中
-        assert [x["hash"] for x in mgr.search_torrents("alpha s01")["results"]] == ["HA"]
-        assert [x["hash"] for x in mgr.search_torrents("gamma e03")["results"]] == ["HB"]
-        # 跨行 AND 不命中: gamma 在名字行、delta 只在另一文件行(种子级语义会误命中, 行级钉死不命中)
-        assert mgr.search_torrents("gamma delta")["results"] == []
-        # 单词行为不变
-        assert [x["hash"] for x in mgr.search_torrents("delta")["results"]] == ["HB"]
+        # 同行 AND 照常; 全称行跨行(名字×标签)照常(「minions mteam」同型)
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("alpha s01")["results"]] == [("HA", "name")]
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("alpha mteam")["results"]] == [("HA", "name")]
+        # 报障回归: delta 在名字行、03 只在集文件行 → file 兜底命中(HB 的 delta 则只在文件行)
+        assert [(x["hash"], x["by"])
+                for x in mgr.search_torrents("delta 03")["results"]] == [("HB", "file"), ("HC", "file")]
+        # 26-09-26 的「跨行不命中」断言全部翻转: 词落不同行也命中
+        assert [(x["hash"], x["by"])
+                for x in mgr.search_torrents("gamma delta")["results"]] == [("HC", "name"), ("HB", "file")]
+        assert [(x["hash"], x["by"])
+                for x in mgr.search_torrents("gamma e03")["results"]] == [("HB", "file"), ("HC", "file")]
+        assert [(x["hash"], x["by"])
+                for x in mgr.search_torrents("e03 delta")["results"]] == [("HB", "file"), ("HC", "file")]
+        # 单词行为不变; AND 不退化为 OR(alpha 与 delta 无一颗种子同有 → 空)
+        assert [(x["hash"], x["by"])
+                for x in mgr.search_torrents("delta")["results"]] == [("HC", "name"), ("HB", "file")]
+        assert mgr.search_torrents("alpha delta")["results"] == []
 
 
 def test_search_torrents_negative_term():
@@ -3188,7 +3207,8 @@ def test_search_torrents_negative_torrent_veto():
 def test_search_torrents_facet_rows():
     """search_torrents 候选行覆盖全部文本面(26-09-26 单点化): 站点/分类/保存路径/标签行即时匹配
 
-    行级正词语义不变(任一行通过即命中); 负词种子级(26-09-27): facet 行含负词 ⇒ 整种子排除。
+    正词逐词跨行(拍板 26-09-27 二次定案): 每个正词命中任一候选行(全称行/文件行)即可; 负词
+    种子级(26-09-27): facet 行含负词 ⇒ 整种子排除。
     服务端此前的候选行只有 名字/文件, 搜站点/标签只在种子页(旧客户端行)能搜到而分组/追剧页
     搜不到 —— 跨页不一致; 单点化后三页同源, 用 by 定位首个通过的行类别(前端不消费, 测试定位用)。
     """
@@ -3226,7 +3246,7 @@ def test_search_torrents_facet_rows():
 
 
 def test_search_torrents_phrase():
-    """search_torrents 短语: "…" 整段归一为**连续**子串(可含分隔符), 词序敏感 —— 与行级 AND 的区分用例"""
+    """search_torrents 短语: "…" 整段归一为**连续**子串(可含分隔符), 词序敏感 —— 与词间 AND 的区分用例"""
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
@@ -3236,7 +3256,7 @@ def test_search_torrents_phrase():
         t1 = FakeTorrent(hash="HA", name="Cat.Dog.And.Bird", state="stalledUP")
         seed_store(mgr, [t1])
 
-        # 行级 AND: cat 与 and 同行即命中(不要求相邻)
+        # 词间 AND: cat 与 and 同行即命中(不要求相邻)
         assert [x["hash"] for x in mgr.search_torrents("cat and")["results"]] == ["HA"]
         # 短语: 要求归一后连续出现 —— "cat and" 在 "cat dog and" 里不连续 → 不命中; "dog and" 连续 → 命中
         assert mgr.search_torrents('"cat and"')["results"] == []
@@ -3249,7 +3269,7 @@ def test_search_torrents_regression_envnv10():
     """search_torrents 回归(26-09-26 用户报障): 「恶女 10」须命中单文件发布物; -排除词生效
 
     旧口径整句连续子串匹配: 「恶女 10」要求两词连续, 而文件名里「恶女」后跟「雏宫蝶鼠替换传」、
-    「10」在远处的 s01e10 里 —— 必不命中。行级 AND(拍板 26-09-26)修复。
+    「10」在远处的 s01e10 里 —— 必不命中。现行逐词跨行 AND 口径下两词同行照常命中。
     """
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
@@ -3321,7 +3341,7 @@ def test_search_torrents_file_match():
         assert r["results"][0]["by"] == "file"
         assert r["building"] is False, "索引已就绪不应 building"
 
-        # 季包: 名行含 cat 不含 12(行级 AND 失败), 集文件行同含两词 → 文件命中(HC 名行先行命中不了)
+        # 季包: 名行含 cat 不含 12(12 不在任何全称行), 集文件行同含两词 → file 兜底命中
         r = mgr.search_torrents("cat 12")
         assert [(x["hash"], x["by"]) for x in r["results"]] == [("HC", "file")], f"季包集文件应命中: {r}"
 
