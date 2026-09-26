@@ -75,23 +75,10 @@
   ⚠ 该写法是 **cmd.exe** 的: 预检用 `subprocess.run(shell=True)`, Windows 上解析到 COMSPEC → cmd.exe,
   POSIX 的 `TMPDIR=x cmd` 前缀**不生效**(实测 rc=1); 且**引号不能省** ——
   `set VAR=value && cmd` 会把 `&&` 前的空格并进 value(实测变成 `'R:/Temp/auto-qb/tests '`, 带尾随空格)。
-- **复发**: 1 —— 2026-09-23 走提交流水线时, 预检的 pytest 闸门**没带 TMPDIR**, 又抛
-  `PermissionError [WinError 5] … pytest-current`(rc=1)⇒ STOP。**为什么没命中**: 读过也知道要设,
-  但只给**自己手工跑**的测试带了, 没意识到**闸门是配置里的另一条执行路径** —— 坑里记了
-  "跑测试时要设", 没写"闸门也是跑测试"。⇒ 收口即上面的配置改动: **改配置比改记忆可靠**。
-- **复发**: 2+3 —— 2026-09-25 两踩: `TMPDIR="$(cygpath -w /tmp)"` 前缀 ⇒ 指回 `H:\Temp` 照崩(AGENTS.md 已写
-  「不要再手工加前缀」, 读了没照做); `cmd //c` 嵌套引号挑子集 ⇒ 路径/`-k` 表达式被原样传进 pytest。
-  ⇒ 只走 `commands run test.*`; 挑子集 `test.one -- '<路径> -k "<表达式>"'`(整串加引号);
-  bash 前缀 `TMPDIR='R:/Temp/auto-qb/tests'` 亦有效。
-- **复发**: 4→9 —— 2026-09-25/26 共六踩, 同一根因: **把"单跑一条 / 单文件小跑"当轻量例外而绕开引擎**
-  (裸跑 `uv run pytest <文件>` 三次、手拼 `TMPDIR=… uv run pytest <单测>` 两次) ⇒ 默认 `H:\Temp` 收尾同崩
-  `PermissionError … pytest-current`(一次碰巧没崩, 但同属绕开引擎)。2026-09-26 又一踩: 修搜索报障时
-  裸跑 `uv run pytest tests/test_web.py -k search` 崩 + 手拼 `TMPDIR=/tmp/...` 前缀(POSIX 前缀本 shell 不生效)
-  + `--basetemp=.pytest-tmp` 指进仓库内(即上上条的"仓内 basetemp"坑)。**为什么没命中**: "读了没照做" ——
-  AGENTS.md 与本文件都写着「一律走 `test.*`」, 动手时仍裸跑。⇒ **任何 pytest 一律**
-  `commands run test.one -- '<路径> [-k "…"]'`; 带全新 `TMPDIR` 的裸跑仅作兜底。
+- **复发**: 累计 12 —— 更早的逐条流水(1 / 2+3 / 4→9, 共九踩)已外迁: [attachments/tmpdir-recurrence-history.md](attachments/tmpdir-recurrence-history.md)(2026-09-27)
 - **复发**: 11 —— 2026-09-26: 为拿引擎截掉的覆盖率表, `cmd //c` 复刻闸门 `set "TMPDIR=…"` ⇒ 引号
   转义使 `set` 失效回落 `H:\Temp` 同崩(rc=1)。没命中: 只读前 30 行。⇒ 兜底同上(bash 前缀, rc=0)。
+- **复发**: 12 —— 2026-09-27 同一根因(裸跑 `uv run pytest <两条 doc 守卫>`)再踩同崩。⇒ 任何 pytest 一律走 `test.one`。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——
   `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` 成功
   (改名只作用于**目录项**, 不需能读那个重解析点), 之后在**默认 TMPDIR** 下跑

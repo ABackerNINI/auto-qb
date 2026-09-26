@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>规则系统可行性实验 · 「禁止 IYUU辅种 分类的种子开始下载」 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="rule-iyuu-stop-guard">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-27-0047">
+<meta name="doc-updated" content="26-09-27-0047">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-27-rule-iyuu-stop-guard.md">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:31px;line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:76ch;margin:0 0 20px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+  .toc .no{font-family:var(--mono);color:var(--ink-3);margin-right:6px}
+
+  h2{font-size:21px;font-weight:600;margin:56px 0 18px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h2:first-of-type{margin-top:8px;border-top:none;padding-top:0}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:14px;font-weight:600;margin:22px 0 8px;color:var(--ink-2);font-family:var(--mono);letter-spacing:.04em}
+  p{margin:10px 0;color:var(--ink-2)} p strong,li strong{color:var(--ink);font-weight:600}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink-2)} li{margin:5px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.65;color:var(--ink-2)}
+  pre b{color:var(--ink);font-weight:400}
+  pre .c{color:var(--ink-3)}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line-2);font-weight:400}
+  td{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+  td code{white-space:nowrap}
+  .mono{font-family:var(--mono);font-size:12.5px}
+  .hit{color:#8ed3b4} .miss{color:#f0a09a} .skip{color:var(--ink-3)}
+
+  .verdict{background:linear-gradient(180deg,rgba(200,164,92,.09),rgba(200,164,92,.04));border:1px solid rgba(200,164,92,.35);border-radius:10px;padding:18px 22px;margin:20px 0}
+  .verdict h3{margin:0 0 8px;color:var(--accent);font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);font-weight:400}
+  .verdict p, .verdict li{color:var(--ink)}
+  .note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:14px;color:var(--ink-2)}
+  .note p{margin:6px 0}
+  .danger{border-left-color:var(--bad)}
+  .good{border-left-color:var(--good)}
+  .warnbox{border-left-color:var(--warn)}
+
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;padding:1px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+  .tag.ok{color:#8ed3b4;border-color:rgba(47,168,116,.45);background:rgba(47,168,116,.1)}
+  .tag.no{color:#f0a09a;border-color:rgba(208,92,78,.55);background:rgba(208,92,78,.12)}
+  .tag.mid{color:#e6c98a;border-color:rgba(200,164,92,.5);background:rgba(200,164,92,.1)}
+  .path{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+  .foot{border-top:1px solid var(--line-2);padding:24px 0 60px;font-size:12.5px;color:var(--ink-3);font-family:var(--mono);line-height:2}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.toc{position:static;display:none}}
+</style>
+</head>
+<body>
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker">auto-qb · 规则系统 · 可行性实验报告</p>
+    <h1>「禁止带 IYUU辅种 分类的种子开始下载」— 现行规则系统可行性实验</h1>
+    <p class="lede">问题来自 <span class="mono">想法.md</span> L298「实验规则是否支持: 禁止带"IYUU辅种"分类的种子开始下载」。实验分两步: <b>配置期</b>校验候选规则 spec 是否合法, <b>行为级</b>用内存 Fake(qB 桩)跑 <code>Rule.process</code> 观测各状态下的实际动作。结论: <b>条件侧完全支持</b>, <b>动作侧只有 <code>stop</code></b> —— 可以表达「永远不处于下载方向状态」的<b>持续压制</b>, 但不是「禁止开始下载」的<b>预防保证</b>。</p>
+    <p class="meta">
+      <b>报告:</b> 26-09-27-0047-report-rule-iyuu-stop-guard.html ·
+      <b>专题:</b> <span class="mono">rule-iyuu-stop-guard</span> ·
+      <b>状态:</b> Done(report 恒终态) ·
+      <b>档案:</b> <a href="../tasks/26-09-27-rule-iyuu-stop-guard.md">26-09-27-rule-iyuu-stop-guard.md</a> ·
+      <b>代码基线:</b> <span class="mono">38918da8</span>(gitee/develop)
+    </p>
+  </div>
+</header>
+
+<main class="wrap layout">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s1"><span class="no">1</span>结论</a>
+  <a href="#s2"><span class="no">2</span>实验方法</a>
+  <a href="#s3"><span class="no">3</span>状态矩阵(实测)</a>
+  <a href="#s4"><span class="no">4</span>去重与触发语义</a>
+  <a href="#s5"><span class="no">5</span>可用写法</a>
+  <a href="#s6"><span class="no">6</span>前提与副作用</a>
+  <a href="#s7"><span class="no">7</span>真正闭环的缺口</a>
+  <a href="#s8"><span class="no">8</span>附注: 口径不一致</a>
+  <a href="#s9"><span class="no">·</span>证据索引</a>
+</nav>
+
+<article>
+
+<h2 id="s1">1 · 结论</h2>
+
+<div class="verdict">
+  <h3>Verdict</h3>
+  <ul>
+    <li><b>条件侧: 完全支持</b> —— <code>category: ["IYUU辅种"]</code>(精确匹配, 支持 <code>regex:</code> / <code>:ignore_case</code>)或 <code>expr: 'tor.category == "IYUU辅种"'</code> 都能选中目标集合。</li>
+    <li><b>动作侧: 只有 <code>stop</code>(暂停)</b> —— 12 个动作里没有任何「禁止下载」类开关; qB WebAPI 也没有这个开关。语义只能写成「<b>发现它处于下载方向状态就立刻暂停</b>」= 持续压制(reactive), 不是预防(preventive)。</li>
+    <li><b>有一条不可消除的竞态窗口</b> —— 种子由 IYUU 等外部工具直接加入 qB, 本程序只能在同步节拍上事后发现(<code>sync_interval</code> 默认 1.5s / 主 tick 2.0s), 窗口内 qB 已经开始下载。所以能保证「长期不处于下载状态」, <b>不能保证「一字节都不下载」</b>。</li>
+    <li><b>条件必须带状态限定</b> —— 只按分类写会误伤做种(实测 uploading / stalledUP 被暂停); 加 <code>state: ["is_downloading"]</code> 后只落在下载方向状态, 但该状态集<b>含 <code>checkingDL</code> / <code>metaDL</code></b> ⇒ 会连带挡住校验与拉元数据(见 §6.3)。</li>
+  </ul>
+</div>
+
+<h2 id="s2">2 · 实验方法</h2>
+
+<h3>2.1 配置期: spec 合法性(fail-fast)</h3>
+<p>把候选规则集塞进一份完整配置字典, 直接调 <code>auto_qb.config.validation.validate_config(data)</code>, 看错误列表。结论: 三种写法(纯 <code>category</code> / <code>category + state</code> / <code>expr</code>)全部通过; 同时实测到两条取值约束:</p>
+<ul>
+  <li>规则里<b>显式写 <code>interval: 0S</code> 被拒</b> —— <span class="mono">"必须为正时间: 0S"</span>(<span class="path">config/validation/rules.py:102-104</span>)。想「每 tick 跑」必须<b>省略</b> <code>interval</code>(缺省 0S 才归一化为每 tick)。</li>
+  <li><code>state</code> 条件只接受 <code>is_*</code> 类别名 —— 写 <code>downloading</code> 报 <span class="mono">"非法状态属性 'downloading'"</span>(<span class="path">config/validation/rules.py:136-149</span>)。</li>
+</ul>
+
+<h3>2.2 行为级: 内存 Fake 跑真 <code>Rule.process</code></h3>
+<p>用仓库自带测试替身(<span class="path">tests/helpers.py</span> 的 <code>FakeConfig</code> / <code>FakeTracker</code> / <code>FakeTorrent</code> / <code>FakeClient</code> / <code>make_ctx</code> + <code>QbManager(config=cfg, no_lock=True)</code>)装配 manager, 让规则经真实绑定链(tracker <code>rules: ["@规则集"]</code>)加载, 然后对同一批状态逐个执行 <code>Rule.process(ctx)</code>, 观测 <code>client.calls</code> 里有没有 <code>stop</code>。全程不写仓库文件、不连真实 qB。</p>
+<p>关键 harness 片段(其余为配置装配):</p>
+<pre>cfg = FakeConfig(); cfg.trackers = {"HHan": FakeTracker("HHan", rules=["@iyuu_guard_rules"], hr=_hr_rule())}
+cfg.rules_config = RULES
+mgr = QbManager("", config=cfg, no_lock=True); mgr._load_rules(); mgr.client = client
+tor = FakeTorrent(hash="H1", <b>category="IYUU辅种"</b>, <b>state="stalledDL"</b>)
+make_ctx(mgr, tor, client)                      <span class="c"># 副作用: 完成 tracker_conf 匹配</span>
+for rule in mgr._rules_for_torrent(tor):        <span class="c"># 真实绑定链取的规则列表</span>
+    client.calls.clear(); rule.process(make_ctx(mgr, tor, client))
+    print(rule.name, ("stop", None) in client.calls)</pre>
+<div class="note">
+  <p><strong>替身语义说明</strong>: <code>FakeClient.torrents_stop</code> 会把种子状态改写为 <code>pausedDL</code>(<span class="path">tests/helpers.py:288</span>)—— 与 qB 实际语义一致。因此「同一状态连跑两轮」时第二轮会走 <code>stop</code> 动作的「已停止 → skip」分支, 这是正确行为而非漏判; 本报告 §4 用「每轮前把状态重置回下载方向」模拟「又被重新开始」。</p>
+</div>
+
+<h2 id="s3">3 · 状态矩阵(实测)</h2>
+<p>三种规则形态 × 八种种子状态, 单元格 = 是否发出 <code>stop</code> 调用:</p>
+<table>
+  <thead><tr><th>种子状态(qB)</th><th>① 只按分类</th><th>② 分类 + <code>state:["is_downloading"]</code></th><th>③ <code>expr</code> 等价写法</th></tr></thead>
+  <tbody>
+    <tr><td><code>stalledDL</code> 缺数据等下载</td><td class="hit">暂停</td><td class="hit">暂停</td><td class="hit">暂停</td></tr>
+    <tr><td><code>queuedDL</code> 排队</td><td class="hit">暂停</td><td class="hit">暂停</td><td class="hit">暂停</td></tr>
+    <tr><td><code>metaDL</code> 拉元数据</td><td class="hit">暂停</td><td class="hit">暂停</td><td class="hit">暂停</td></tr>
+    <tr><td><code>checkingDL</code> 下载方向校验</td><td class="hit">暂停</td><td class="hit">暂停</td><td class="hit">暂停</td></tr>
+    <tr><td><code>uploading</code> 做种中</td><td class="miss">暂停(误伤)</td><td class="skip">不动</td><td class="skip">不动</td></tr>
+    <tr><td><code>stalledUP</code> 做种无活动</td><td class="miss">暂停(误伤)</td><td class="skip">不动</td><td class="skip">不动</td></tr>
+    <tr><td><code>pausedUP</code> 已暂停做种</td><td class="skip">不动</td><td class="skip">不动</td><td class="skip">不动</td></tr>
+    <tr><td>其它分类 + <code>stalledDL</code></td><td class="skip">不动</td><td class="skip">不动</td><td class="skip">不动</td></tr>
+  </tbody>
+</table>
+<p><b>读法</b>: ① 证明「只按分类」会连做种一起按下去; ②③ 是推荐的等价形态(行为逐格一致)。②③ 命中的集合正是 <code>state_enum.is_downloading</code>(<span class="path">qbittorrentapi.TorrentState</span> 类别属性, 项目侧口径见 <a href="../rule-system/conditions-and-actions.md">rule-system/conditions-and-actions.md</a> 状态映射表: 含 <code>downloading/forcedDL/metaDL/forcedMetaDL/checkingDL/queuedDL/stalledDL/pausedDL/stoppedDL</code>)。</p>
+
+<h2 id="s4">4 · 去重与触发语义</h2>
+<p>「禁止开始下载」是个<b>不变量</b>, 要求每次被重新开始都能再次按下。实测两种去重配置(每轮前把状态重置回 <code>stalledDL</code>, 模拟外部/用户又把它 resume):</p>
+<table>
+  <thead><tr><th>配置</th><th>第 1 轮</th><th>第 2 轮</th><th>第 3 轮</th></tr></thead>
+  <tbody>
+    <tr><td><code>execute_once: never</code>(缺省)</td><td class="hit">暂停</td><td class="hit">暂停</td><td class="hit">暂停</td></tr>
+    <tr><td><code>execute_once: once</code></td><td class="hit">暂停</td><td class="miss">漏过</td><td class="miss">漏过</td></tr>
+  </tbody>
+</table>
+<p>⇒ 这条规则<b>不能配 <code>execute_once: once/daily</code></b>(跑过一次后 <code>exec_history</code> 就去重掉, 之后被重新开始也不再拦)。<code>stop</code> 动作在已停止时返回 <code>skip("已停止")</code> 天然幂等, 每 tick 跑无副作用(<span class="path">rules/actions/basic.py:121-131</span>)。</p>
+
+<h3>触发路径的先后</h3>
+<ul>
+  <li><b><code>trigger: on_torrent_added</code></b> —— 在同步线 <code>_refresh_torrents</code> 内<b>同步即时</b>分派(<span class="path">core/qbmanager.py:779</span>), 早于本程序自有动作; 只对「匹配到 tracker 配置」的新增种子触发。</li>
+  <li><b><code>trigger: interval</code>(缺省)</b> —— 种子级任务「加入队列即立即到期, 下一 tick 执行」(<span class="path">core/qbmanager.py:824</span>), 且此后每 tick 重入队 ⇒ 兜底压制(也覆盖程序启动时已存在的种子、以及热重载首轮被抑制的事件)。</li>
+  <li>两者叠加 = 「发现即按 + 持续按」, 是本次推荐形态。单用事件触发则之后被 resume 无人管; 单用 interval 则首次压制晚一个任务线节拍。</li>
+</ul>
+
+<h2 id="s5">5 · 可用写法</h2>
+<pre>config:
+    iyuu_guard_rules:
+        block_on_add:                  <span class="c"># 新增种子被发现时立即压制</span>
+            enabled: true
+            trigger: on_torrent_added
+            conditions:
+                - category: ["IYUU辅种"]
+                - state: ["is_downloading"]
+            actions:
+                - stop: true
+            stop_following_rules_if: never
+        keep_stopped:                  <span class="c"># 兜底: 每 tick 压制, 防被重新开始</span>
+            enabled: true
+            <span class="c"># trigger 缺省 = interval; interval 缺省 = 0S(每 tick) —— 显式写 0S 会被校验拒绝</span>
+            execute_once: never        <span class="c"># 不能配 once/daily</span>
+            conditions:
+                - category: ["IYUU辅种"]
+                - state: ["is_downloading"]
+            actions:
+                - stop: true
+            stop_following_rules_if: never
+    trackers:
+        &lt;每个相关站点&gt;:
+            rules:
+                - "@iyuu_guard_rules"  <span class="c"># 绑定: 规则只对引用它的站点种子生效</span>
+                <span class="c"># ...原有引用照旧</span></pre>
+<p>等价单条写法(实测行为一致, 少一条规则): <code>- expr: '(tor.category == "IYUU辅种") and (tor.is_downloading)'</code>。注意 YAML 里含 <code>*</code> / <code>&amp;</code> / <code>#</code> / <code>{}</code> / <code>: </code> 的表达式必须加引号。</p>
+<p>规则可在 WEB UI 的配置编辑器里加(规则编辑 + 表达式试算), 也可直接写 YAML; 改动后 <code>validate_config</code> 会 fail-fast 拦住非法名/非法状态属性。</p>
+
+<h2 id="s6">6 · 前提与副作用</h2>
+
+<h3>6.1 竞态窗口: 「压制」不是「预防」</h3>
+<p>IYUU 把种子直接加进 qB, 本程序只能在同步线上看到它(<code>sync_interval</code> 默认 1.5s, <span class="path">config/models.py:267</span>; 主 tick 2.0s, <span class="path">:266</span>)。窗口内 qB 按自己的策略开始下载 —— seedbox 带宽下 1~2 秒可能就是数 MB~数十 MB。<b>要「零字节」只能在加入端解决</b>(IYUU/添加方配「添加时暂停」), 规则系统管不到添加动作。</p>
+
+<h3>6.2 绑定前提: 规则只对配置过的站点生效</h3>
+<p>规则经 <code>tracker.rules: ["@规则集"]</code> 引用绑定(<span class="path">core/mixins/rule_engine.py:248-274</span>), 未匹配 tracker 配置的种子<b>不建任务、事件也不分派</b>, 只留一条 <code>WARNING</code>(<span class="path">core/qbmanager.py:774</span>)。<code>IYUU辅种</code> 分类里若混有未配置站点的种子, 规则对它们完全无效 —— 要全覆盖, 得在<b>每一个</b>相关站点上引用这条规则集。</p>
+
+<h3>6.3 副作用: <code>is_downloading</code> 含校验与元数据阶段</h3>
+<p>按 §3 的推荐条件, 该分类的种子在 <code>checkingDL</code>(新加种子重新校验)与 <code>metaDL</code>(拉元数据)阶段也会被按下暂停。<b>如果这个分类的种子本来是「数据已完整、只等校验完做种」的辅种, 规则会把校验一并挡住, 它就永远进不了做种</b>。现有动作集没有「只禁下载、允许校验/做种」的粒度; 只能靠 <code>expr</code> 排除(如再加 <code>and (not tor.is_checking)</code>)自己取舍 —— 代价是校验期间的下载也不再被拦。</p>
+
+<h3>6.4 与跳检动作的 auto_start 会互相拉扯</h3>
+<p><code>checking</code> 动作的 <code>skip_checking.auto_start</code> 段在跳检完成后会 <code>torrents_start</code>(<span class="path">rules/actions/skip_checking.py:115-120</span>)。同一种子上同时挂跳检规则与本压制规则, 两者会来回拉扯(跳检 start ↔ 本规则 stop)。<b>别在同一批种子上同时配这两者。</b></p>
+
+<h3>6.5 限速动作不能当「禁止」用</h3>
+<p><code>download_speed_limit</code> 只能把速度压低: qB 限速语义里 0 = 不限速, 而设成奇数 KiB/s(如 1KiB/s = 1024B/s)会被项目自己的「单数值保护」视为用户手动设置而不再覆盖(<span class="path">infra/utils.py:479-484</span>)。无论哪种都不等于「不下载」。</p>
+
+<h2 id="s7">7 · 真正闭环的缺口</h2>
+<ul>
+  <li><b>qB 层唯一能表达「不下载」的手段是文件优先级 0</b>(逐文件; 把种子全部文件置 0)。本仓库 WEB UI 已有手动入口(<code>_cmd_set_file_priority</code>, <span class="path">webui/commands.py:424</span>; 前端抽屉 0=跳过), 但<b>规则动作集里没有对应动作</b> —— 这是「现行规则系统不支持」的准确边界: 能力在 qB 侧存在, 未规则化。</li>
+  <li><b>加入端暂停</b>是唯一能做到「连一字节都不下」的路径(qB <code>torrents_add(is_stopped=True)</code> 一类的添加参数), 但施加点在 IYUU/添加方, 不在本程序。</li>
+  <li>若目标其实是「缺数据时不要下载」, 更贴合现成能力的是 <code>checking</code> 跳检(数据完整才跳检, 部分下载被前置闸门拒绝) —— 但语义不同: 跳检要删除重加、需参考种子、且默认可能 auto_start。</li>
+</ul>
+<p>要不要补一个「整种子文件优先级置 0」的动作插件属于改代码的决定, 本报告不落方案; 「现行系统能不能接近表达」的答案已在 §1/§3/§5 给出。</p>
+
+<h2 id="s8">8 · 附注: 实验期间发现的口径不一致(计划外, 未修)</h2>
+<div class="note warnbox">
+  <p><b>现象</b>: 规则 spec 的已知键是 <code>{enabled, trigger, interval, execute_once, cooldown, conditions, actions, stop_following_rules_if}</code>(<span class="path">config/validation/rules.py:11-12</span>), 写 <code>log_level</code> 会被判未知键 —— 实测 <span class="mono">config.sample_rules.rule: 未知键 ['log_level'], 可用键: [...]</span>。而 <code>test_yamls/test_actions/</code> 下五个样例配置<b>都写着 <code>log_level: info</code></b>(<code>test_stop.yml</code> / <code>test_start.yml</code> / <code>test_up_dl_limit.yml</code> / 两个 checking 样例), 且 <code>AGENTS.md</code> 与 <span class="path">config-reference/keys.md:93</span> 都把 <code>test_yamls/</code> 当作可运行示例指引。</p>
+  <p><b>影响判定</b>: 这些 YAML 若真的走 <code>dev.run</code> 会在 <code>load_config</code> 的校验阶段直接失败。属计划外文档/样例漂移, 按范围守恒<b>本轮一行未改</b>, 仅在此留证(是否入池由用户定)。</p>
+</div>
+
+<h2 id="s9">证据索引</h2>
+<table>
+  <thead><tr><th>事实</th><th>代码位置</th></tr></thead>
+  <tbody>
+    <tr><td><code>stop</code> 动作: 已停止 → skip, 否则 <code>torrents_stop</code></td><td><span class="path">src/auto_qb/rules/actions/basic.py:121-131</span></td></tr>
+    <tr><td><code>start</code> 动作(镜像语义)</td><td><span class="path">src/auto_qb/rules/actions/basic.py:108-118</span></td></tr>
+    <tr><td><code>category</code> 条件(或关系 / 精确 / <code>regex:</code>)</td><td><span class="path">src/auto_qb/rules/conditions.py:76-85</span></td></tr>
+    <tr><td><code>expr</code> 名字表: <code>tor.is_*</code> 类别属性</td><td><span class="path">src/auto_qb/rules/expr/env.py:46, 297-298</span></td></tr>
+    <tr><td>动作全集(12 个, 无「禁止下载」)</td><td><span class="path">src/auto_qb/rules/actions/{basic,transfer,checking,full_checking,skip_checking}.py</span></td></tr>
+    <tr><td>规则 spec 已知键 / <code>interval</code> 须为正 / <code>state</code> 只收 <code>is_*</code></td><td><span class="path">src/auto_qb/config/validation/rules.py:11-12, 102-104, 136-149</span></td></tr>
+    <tr><td>规则绑定: <code>_rules_for_torrent</code> / 事件规则交集</td><td><span class="path">src/auto_qb/core/mixins/rule_engine.py:248-274, 368-370</span></td></tr>
+    <tr><td>新增种子: 事件即时分派 + 建任务</td><td><span class="path">src/auto_qb/core/qbmanager.py:765-788, 818-826</span></td></tr>
+    <tr><td>未匹配 tracker 配置的种子 → 无任何规则</td><td><span class="path">src/auto_qb/core/qbmanager.py:774</span></td></tr>
+    <tr><td>节拍默认值: <code>main_tick</code> 2.0s / <code>sync_interval</code> 1.5s</td><td><span class="path">src/auto_qb/config/models.py:266-267</span></td></tr>
+    <tr><td>去重: <code>execute_once</code> / <code>cooldown</code> 判定</td><td><span class="path">src/auto_qb/rules/base.py:292-310</span></td></tr>
+    <tr><td>跳检 <code>auto_start</code> 完成后 <code>torrents_start</code></td><td><span class="path">src/auto_qb/rules/actions/skip_checking.py:115-120</span></td></tr>
+    <tr><td>单数值保护(奇数 KiB/s = 用户已设置)</td><td><span class="path">src/auto_qb/infra/utils.py:479-484</span></td></tr>
+    <tr><td>qB 文件优先级 0 = 不下载(WEB UI 手动命令)</td><td><span class="path">src/auto_qb/webui/commands.py:422-433</span></td></tr>
+  </tbody>
+</table>
+<p class="path">实验代码基线: gitee/develop <span class="mono">38918da8</span>(工作区干净, <code>my-commit-flow.sync</code> PASS); 行为级实验全部在内存 Fake 内完成, 未连接真实 qB、未改任何源码/配置。</p>
+
+</article>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    auto-qb · memory-bank/reports/26-09-27-0047-report-rule-iyuu-stop-guard.html<br>
+    report 出厂即冻结(证据快照) · 后续进展与结论更新写档案 memory-bank/tasks/26-09-27-rule-iyuu-stop-guard.md
+  </div>
+</footer>
+</body>
+</html>

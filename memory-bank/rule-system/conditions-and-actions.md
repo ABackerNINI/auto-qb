@@ -1,7 +1,7 @@
 # 条件与动作 (含 expr 速查)
 
 > 摘要: 17 种条件 + `expr` 速查 + 12 种动作 + 限速单数值保护 + 状态映射表 + 变量替换。
-> 触发: 条件, 动作, expr, 表达式, 状态映射, 变量替换, 限速保护
+> 触发: 条件, 动作, expr, 表达式, 状态映射, 变量替换, 限速保护, 禁止下载, stop 压制
 
 ## 17 种条件 (conditions.py, 全部 `match(ctx) -> bool`, 组内与组间逻辑见各条)
 
@@ -64,6 +64,8 @@ conditions:
 | `upload_speed_limit` | `"1000KiB/s"` | 见下"限速保护" |
 | `download_speed_limit` | 同上 | 同上 |
 | `print_torrent_details` | `true` | **只读留档动作** (2026-09-12): 读取 `ctx.torrent` 快照字段 + tracker 派生信息, logger.info 输出单行详情; 纯读取无副作用, dry-run 照常打印, 恒 success。种子已删除时 `ctx.torrent` 回退删除前快照副本 (snapshot), 仍可打印 — 是 `on_torrent_deleted` 白名单里唯一允许的动作 |
+
+> ⚠️ **没有「禁止下载」类动作**: 能影响下载方向的只有 `stop`(暂停 —— 需**反复压制**, 且对 `checkingDL`/`metaDL` 同样生效)与 `download_speed_limit`(限速 ≠ 禁止)。故「禁止某分类的种子开始下载」只能近似表达为「发现即暂停(**条件须带 `state: ["is_downloading"]`**, 否则会误伤做种)+ 缺省 interval 每 tick 兜底」, 且**不能**配 `execute_once: once/daily` —— 完整状态矩阵 / 去重实测 / 竞态与绑定前提见 [报告 26-09-27-0047](../reports/26-09-27-0047-report-rule-iyuu-stop-guard.html)。
 
 ### 限速的"单数值保护" (tracker.py 与 actions.py 同逻辑)
 

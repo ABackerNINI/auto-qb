@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-09-27-0047] [规则系统可行性实验 · 「禁止 IYUU辅种 分类的种子开始下载」 · auto-qb](26-09-27-0047-report-rule-iyuu-stop-guard.html) — `rule-iyuu-stop-guard`
 - [26-09-26-1918] [WEBUI 搜索强化 · 查询语法调研(成熟方案对比与推荐设计) · auto-qb](26-09-26-1918-report-webui-search-query-syntax.html) — `webui-search-query-syntax`
 - [26-09-26-1628] [HR 在线核实 · 触发模型 / 访问节奏 / 安全可靠性 · 设计审查报告 · auto-qb](26-09-26-1628-report-hr-online-verify-audit.html) — `backend-partial-hr-verify`
 - [26-09-25-0853] [full-checking 误报「校验未通过」与批量不触发 · 故障取证分析 · auto-qb](26-09-25-0853-report-full-checking-verdict-poison.html) — `full-checking-verdict`

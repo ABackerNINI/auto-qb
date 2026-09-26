@@ -1,7 +1,7 @@
 # 编辑与工具陷阱 (git / 文本)
 
-> 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。
-> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠
+> 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一、文本模式写回双重换行(`\r\r\n`)、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。
+> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 双重换行, write_text, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 
@@ -31,6 +31,18 @@
 - **处置**: 改 html/css/md 一律**按字节读写**(`open(p,"rb")` + `bytes.replace`), 或写回时补
   `.replace(b"\n", b"\r\n")`; 复核用 `b.count(b"\r\n")` ——
   git bash 里 `grep -c $'\r' file` 会给**假结果**(实测计数等于总行数), 别信。
+
+### 用 Python 文本模式**写回已含 CRLF 的内容**会写出 `\r\r\n`(双重转换)
+
+- **触发**: 用 `Path.write_text(...)` / `open(p, "w")` 写回**刚从 CRLF 文件读出的内容**(Windows)。
+- **判别**: 文本模式默认 `newline=None` ⇒ 每个 `\n` 再翻一次成 `\r\n`, 内容里本就有的 `\r\n`
+  于是变 `\r\r\n` —— **每行多一个裸 `\r`**。编辑器多半吞掉, 肉眼正常, 只有逐字节比对才现形
+  (实测一份 90 行的坑文档写出后 `裸CR = CRLF = 90`)。
+  连带效应很阴: 各 cap 按**原始字符数**算, 虚高的 90 字符会把文件"顶到 cap" —— 实测该文件因此报
+  6,084(真值 5,980), 差 104 = 行数, 看着像内容真超限。
+- **处置**: 写回一律 `Path(p).write_bytes(text.encode("utf-8"))`; 复核
+  `b.count(b"\r\n")` 与 `b.count(b"\r") - b.count(b"\r\n")`(后者必须 0); 已写坏的用
+  `text.replace("\r\r\n", "\r\n")` 修回。
 
 ### `core.autocrlf=true` 下编辑会归一整文件行尾
 

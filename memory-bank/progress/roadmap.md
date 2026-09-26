@@ -95,3 +95,5 @@
 - 根据流量接入更多数据源 (traffic_source 当前仅 traffic_monitor 单源, 代码已按列表预留)
 - 与 PTD-cli 合作: 自动分析 HR 标签 / 暂停低分享率非免费种子 (想法.md 标注"需可行性验证")
 - WEBUI 报表 §08 第 7 项(节拍对齐, 需先拍板方向)及同类端点的同样改法(低优先; 相关 Open issue [issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html](../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 原 activeContext 切片 26-09-19-0000-docs-plan-review-wrapup 于 2026-09-26 蒸馏并入此行)
+- 分组/辅种安全: 跨组文件交叉紧急处置 —— 分组键不拦跨组文件交叉(部分重叠文件列表 / 大小写不同文件名 / junction·symlink 别名路径), 现有三条防线(组内大小一致性 / 同组下载冲突 / 缺文件扫描)全以同组为边界; 建议方向 = 全局物理路径映射检测 + 警告暂停, 细节开工拍板(Open issue [issues/26-09-22-2221-feat-cross-group-file-conflict.html](../issues/26-09-22-2221-feat-cross-group-file-conflict.html) — 原 activeContext 切片 26-09-22-2221-backend-cross-group-file-conflict 于 2026-09-27 蒸馏并入此行)
+- 规则系统可选增强(待拍板): 新增「阻断下载」动作(整种子文件优先级置 0) —— qB 层已有该手段且 WEB UI 有手动入口, 规则动作集没有; 可行性实验见 [reports/26-09-27-0047-report-rule-iyuu-stop-guard.html](../reports/26-09-27-0047-report-rule-iyuu-stop-guard.html)
