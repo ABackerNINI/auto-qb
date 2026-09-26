@@ -94,7 +94,7 @@
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
 - test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
-- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcBadge/hrDurTitle、两套 CSS 的 hr-unk/hr-src/bulk-hr-warn 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
+- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcBadge/hrPopEnter 触发 + 弹窗单例 DOM 每套 UI 恰一份、两套 CSS 的 hr-unk/hr-src/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -1169,8 +1169,10 @@ def test_frontend_hr_safety_wiring():
     ① hr.js 的 token 映射表(HR_SRC_BADGES / HR_SRC_BUCKETS)必须与后端 resolve.py 的 SRC_* 常量
       逐字一致 —— 来源档位是前后端契约, 打错字徽标静默消失;
     ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + 挂 hrSrcBadge/
-      hrDurTitle —— 漏一处那一列就不显示安全档位;
+      hrPopEnter 触发 —— 漏一处那一列就不显示安全档位/悬停弹窗; 弹窗单例 DOM(teleport body)
+      每套 UI 恰一份(26-09-26-webui-hr-popup 起 :title 换成悬停弹窗触发);
     ③ hr-unk / hr-fail / hr-src / bulk-hr-warn 新样式必须两套 CSS 成对定义(改这里时同步另一套的纪律);
+      hr-pop 弹窗规则(浮层/箭头/双轨)同理成对;
     ④ 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
       M4 设置页守阵同款思路)。
     """
@@ -1196,25 +1198,39 @@ def test_frontend_hr_safety_wiring():
     for name in ("HR_SAFETY_CLASSES", "HR_SAFETY_BUCKETS"):
         assert _map_keys(name) == {"danger", "failed", "safe", "unknown"}, f"{name} 键集应为四个安全档位"
 
-    # ② 做种时长列换绑: 两套 UI 各 3 处
+    # ② 做种时长列换绑 + 弹窗单例: 两套 UI 各 3 处触发 / 各 1 份弹窗 DOM
     for ui in ("atlas", "prism"):
         html = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
         for needle, want in (
             (':class="hrDurClass(m)"', 3),
             ('v-if="hrSrcBadge(m)"', 3),
-            (':title="hrDurTitle(m) || null"', 3),
+            ('@mouseenter="hrPopEnter($event, m)"', 3),
+            ('@mouseleave="hrPopLeave"', 4),  # 3 处触发面 + 弹窗自身(移入弹窗不隐藏)
+            ('<teleport to="body">', 1),
+            ('ref="hrPop"', 1),
         ):
             got = html.count(needle)
             assert got == want, f"{ui} 里 `{needle}` 应出现 {want} 处, 实测 {got}"
         # 旧绑定不得残留(换绑遗漏的形态)
         assert ':class="hrTimeClass(m)"' not in html, f"{ui} 仍有做种时长列挂着旧 hrTimeClass —— 漏换绑"
+        assert "hrDurTitle" not in html, f"{ui} 仍有做种时长列挂原生 :title —— 应已换悬停弹窗触发"
 
     # ③ 新样式两套 CSS 成对
     atlas_css = open(os.path.join(STATIC_ROOT, "atlas", "style.css"), encoding="utf-8").read()
     prism_css = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
     for css, name in ((atlas_css, "atlas/style.css"), (prism_css, "prism/css/views.css")):
-        for rule in (".m-pair.hr-unk", ".m-pair.hr-fail", ".m-pair .hr-src", ".bulk-hr-warn"):
+        for rule in (
+            ".m-pair.hr-unk",
+            ".m-pair.hr-fail",
+            ".m-pair .hr-src",
+            ".bulk-hr-warn",
+            ".hr-pop",
+            ".hp-arrow",
+            ".hp-gauge",
+            ".hp-badge",
+        ):
             assert rule in css, f"{name} 缺 {rule} 规则 —— 两套 UI 必须成对定义"
+        assert "z-index: 140" in css, f"{name} 缺弹窗 z-index: 140(须高于 ctx-menu 100 与 speed-pop 131)"
 
     # ④ 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
     from auto_qb.core.qbmanager import QbManager

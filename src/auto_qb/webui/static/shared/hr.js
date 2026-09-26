@@ -28,7 +28,27 @@ const HR_SRC_BUCKETS = {
   policy: "策略", local: "本地兜底", local_exempt: "本地兜底", unverified: "",
 };
 
+/* ---------------- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ----------------
+ * 做种时长单元格的原生 title(一大段文字)换成悬停小弹窗。渲染规则以
+ * plans/26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html 页脚「实现说明」为单点:
+ * 结论短语已含来源与进行中状态 ⇒ 不出「来源章/考核中章」, 生命周期 chip 仅终态标「已结束」;
+ * 双轨进度 = 本地粗轨(已做种/要求) + 站点细轨(还需/要求, 仅站点给出 need 端点时出现);
+ * 角标只在结论没说时出现(还需 X / 已超出 X / 考核期已过); 数值条仅站点侧值(本地值表格行可见);
+ * 无时长要求(身份层放行 / 未核实 / 未配时长)时轨道收起换状态徽记, 不留空轨。
+ * 前端只做比例呈现与着色, 判定与阈值仍全部消费后端算好字段(hr.resolve / _hr_view_fields), 不重算。
+ * 单例浮层 teleport 到 body 级(脱离列表容器, 同 .speed-pop 的 overflow/特异性教训);
+ * prism 主题令牌挂在 html[data-theme], body 级自动继承, 弹窗无需拷贝主题。 */
+
+/* 弹窗调度定时器(模块级, 不进响应式 —— hover 链路不为计时器付整树重渲染) */
+let hrPopShowT = 0, hrPopHideT = 0;
+/* 全局一次性监听(ESC / 滚动 / 缩放关弹窗)是否已挂 */
+let hrPopGlobalsHooked = false;
+
 window.AQB_HR = {
+  data() {
+    /* 弹窗单例状态(唯一进响应式的部分; 位置/箭头直接写 style, 不付重渲染) */
+    return { hrPop: { open: false, above: false, data: null } };
+  },
   methods: {
     /* ---------------- HR 展示辅助(布尔/阈值均由后端算好, 前端只做比较与着色) ----------------
      * hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
@@ -67,10 +87,142 @@ window.AQB_HR = {
     hrSrcBadge(m) {
       return m.hr_safety ? (HR_SRC_BADGES[m.hr_safety_src] || "") : "";
     },
-    /* 做种时长列悬停全文: 含来源的完整短语 + 依据原文 + 站点侧值对照(与详情抽屉同源) */
-    hrDurTitle(m) {
-      if (!m.hr_safety) return "";
-      return [m.hr_safety_text, m.hr_reason, this.hrSiteLine(m)].filter(Boolean).join(" · ");
+    /* ---------------- HR 悬停弹窗: 触发调度 + 数据组装(渲染规则单点见文件头) ---------------- */
+
+    /* 触发面 = 做种时长单元格整体(来源徽标在其内, 不单独绑): enter 120ms 后显示,
+     * leave 160ms 宽限后隐藏, 移入弹窗不隐藏(可选中复制); ESC/页面滚动/窗口缩放即时关闭。
+     * trg 必须在事件回调里同步捕获(timer 里 currentTarget 已失效)。 */
+    hrPopEnter(ev, m) {
+      const trg = ev && ev.currentTarget;
+      if (!trg) return;
+      this._hrPopGlobals();
+      clearTimeout(hrPopHideT);
+      clearTimeout(hrPopShowT);
+      const d = this.hrPopData(m);
+      if (!d) return;  // 无档位行(未触发/未接入)不触发, 且顺带取消前一行挂起的显示
+      hrPopShowT = setTimeout(() => this._hrPopShow(d, trg), 120);
+    },
+    hrPopLeave() {
+      clearTimeout(hrPopShowT);
+      clearTimeout(hrPopHideT);
+      hrPopHideT = setTimeout(() => this.hrPopHideNow(), 160);
+    },
+    /* 鼠标移入弹窗本身: 取消宽限隐藏(可悬停选中复制) */
+    hrPopKeepOpen() {
+      clearTimeout(hrPopHideT);
+    },
+    hrPopHideNow() {
+      clearTimeout(hrPopShowT);
+      clearTimeout(hrPopHideT);
+      if (this.hrPop.open) this.hrPop.open = false;
+    },
+    _hrPopShow(d, trg) {
+      this.hrPop.data = d;
+      this.hrPop.open = true;
+      this.$nextTick(() => {
+        const el = this.$refs.hrPop;
+        if (!el || !this.hrPop.open) return;
+        this._hrPopPlace(el, trg);
+      });
+    },
+    /* position:fixed 锚定触发矩形: 优先上方(间距 10px), 上方空间不足翻下方, 横向夹取视口(8px 边距),
+     * 下方也放不下则贴底; 箭头指向触发矩形中心并随翻转换向。行已被轮询重建(windowing/刷新)时矩形
+     * 为零 → 视为悬停目标已消失, 直接收弹窗(否则会钉在视口左上角)。 */
+    _hrPopPlace(el, trg) {
+      const r = trg.getBoundingClientRect();
+      if (!r.width && !r.height) {
+        this.hrPopHideNow();
+        return;
+      }
+      const pw = el.offsetWidth, ph = el.offsetHeight;
+      const vw = window.innerWidth, vh = window.innerHeight, gap = 10, margin = 8;
+      const left = Math.max(margin, Math.min(vw - pw - margin, r.left + r.width / 2 - pw / 2));
+      const below = r.top - gap - ph < margin;
+      let top = below ? r.bottom + gap : r.top - gap - ph;
+      if (below && top + ph > vh - margin) top = Math.max(margin, vh - margin - ph);
+      el.style.left = Math.round(left) + "px";
+      el.style.top = Math.round(top) + "px";
+      this.hrPop.above = !below;
+      const arrow = el.querySelector(".hp-arrow");
+      if (arrow) {
+        arrow.style.left = Math.round(Math.max(14, Math.min(pw - 14, r.left + r.width / 2 - left)) - 5) + "px";
+      }
+    },
+    _hrPopGlobals() {
+      if (hrPopGlobalsHooked) return;
+      hrPopGlobalsHooked = true;
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") this.hrPopHideNow();
+      });
+      window.addEventListener("scroll", () => this.hrPopHideNow(), true);
+      window.addEventListener("resize", () => this.hrPopHideNow());
+    },
+    /* 弹窗数据组装(全为后端算好字段的展示映射; null = 不弹):
+     * lane ← hr_safety(danger 橙=考察中 / failed 红=考核未通过终态 / safe 绿 / unknown 灰),
+     * verdict ← hr_safety_text, 依据 ← hr_reason, 站点侧值 ← hr_site_*(与详情抽屉 hrSiteLine 同源),
+     * 本地值 ← seeding_time / hr_req_time(与表格列同口径)。
+     * "none" = 不适用(站点未接入且未触发), 与无字段行同等不弹。 */
+    hrPopData(m) {
+      if (!m.hr_safety || m.hr_safety === "none") return null;
+      const lane = m.hr_safety;
+      const src = m.hr_safety_src;
+      const need = m.hr_site_need, remain = m.hr_site_remain;
+      const seeded = m.seeding_time || 0, req = m.hr_req_time || 0;
+      /* 生命周期 chip: 仅考核期已过的终态标「已结束」(考察中的短语已含进行中, 不重复) */
+      const ended = ["site_satisfied", "site_unsatisfied", "site_released", "site_exempt", "local_exempt"].includes(src);
+      /* 数值条 = 站点侧值专用(站点分享率/站点下载; 格式化与 hrSiteLine 同口径); 无站点侧值整条不渲染 */
+      const kv = [];
+      if (m.hr_site_ratio !== "") kv.push(["站点分享率", Number(m.hr_site_ratio).toFixed(2)]);
+      if (m.hr_site_dl !== "") kv.push(["站点下载", this.fmtSize(m.hr_site_dl)]);
+      let gauge = null, badge = "";
+      if (["site_released", "site_exempt", "local_exempt", "unverified"].includes(src) || !(req > 0)) {
+        /* 无时长要求(身份层放行/超龄豁免/未核实/未配时长): 轨道收起换状态徽记; 未核实用虚线盾 */
+        badge = lane === "unknown" ? "dash" : "check";
+      } else {
+        /* 角标只在结论短语没说时出现: 考察中 = 还需 X(站点 need 优先, 缺了回落本地差值) /
+         * 本地兜底 = 已超出 X 或还需 X / 终态未达标 = 考核期已过; 已达标不重复出角标(站点轨满格自明) */
+        let tag = null;
+        if (src === "site_unsatisfied") {
+          tag = { tone: "failed", text: "考核期已过" };
+        } else if (src === "site_scope") {
+          if (need !== "" && need > 0) tag = { tone: "danger", text: `还需 ${this.fmtDuration(need)}` };
+          else if (need === "" && remain !== 0 && req - seeded > 0) {
+            tag = { tone: "danger", text: `还需 ${this.fmtDuration(req - seeded)}` };
+          }
+        } else if (src === "local") {
+          if (seeded - req > 0) tag = { tone: "safe", text: `已超出 ${this.fmtDuration(seeded - req)}` };
+          else if (req - seeded > 0) tag = { tone: "danger", text: `还需 ${this.fmtDuration(req - seeded)}` };
+        } else if (src === "policy" && req - seeded > 0) {
+          tag = { tone: "danger", text: `还需 ${this.fmtDuration(req - seeded)}` };
+        }
+        /* 站点细轨(半透明填充区分): 仅站点给出数值端点时出现 —— 考察中按 还需/要求 画剩余占比
+         * (与本地已做种占比互补, 两轨并排可见分歧); 已达标满格自明; 终态未达标不画(倒计时已随考核期结束) */
+        let site = null;
+        if (src === "site_satisfied") {
+          site = { tone: "safe", pct: 100 };
+        } else if (src === "site_scope" && req > 0) {
+          if (need !== "") site = { tone: "danger", pct: Math.max(0, Math.min(100, (need / req) * 100)) };
+          else if (remain === 0) site = { tone: "danger", pct: 100 };
+        }
+        gauge = {
+          tag,
+          seeded: this.fmtDuration(seeded),
+          req: this.fmtDuration(req),
+          pct: Math.max(0, Math.min(100, (seeded / req) * 100)),
+          site,
+        };
+      }
+      return {
+        lane,
+        verdict: m.hr_safety_text || m.hr_safety,
+        ended,
+        gauge,
+        badge,
+        kv,
+        reason: m.hr_reason || "",
+        /* 站点值滞后一个刷新周期: 有站点侧数据(数值条/站点轨)才提示 */
+        lag: kv.length > 0 || !!(gauge && gauge.site),
+      };
     },
     /* H&R 筛选档位(2026-09-25 起四桶: 不能删/考核未通过/可删/未核实): 组级消费组内成员档位集合、
      * 成员级消费 hr_safety; 旧服务端(无 hr_safety 字段)回落本地布尔, 词汇映射进新档位。

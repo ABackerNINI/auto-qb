@@ -478,7 +478,7 @@
                     <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                   </span>
                   <!-- 做种时长/分享率: 口径单点化(FX-02/04) -->
-                  <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
+                  <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
                     {{ cellSeedingTime(m) }}
                     <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
                     <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
@@ -587,7 +587,7 @@
                 <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="numTone(m.dl_limit, m.dl_limit)">{{ fmtLimitBytes(m.dl_limit) }}</div>
                 <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
                 <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
-                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
+                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
                   {{ cellSeedingTime(m) }}
                   <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
                   <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
@@ -768,7 +768,7 @@
                             <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                             <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                           </span>
-                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" :title="hrDurTitle(m) || null">
+                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
                             {{ cellSeedingTime(m) }}
                             <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
                             <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
@@ -2339,6 +2339,54 @@
         <span>.torrent 文件或 magnet / URL 链接</span>
       </div>
     </div>
+
+    <!-- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup): 单例浮层, 触发面 = 做种时长单元格(6 处绑定)。
+         teleport 到 body 级 —— 脱离列表容器的 overflow/特异性纠缠(同 .speed-pop 的教训);
+         数据组装/调度/定位单点在 shared/hr.js(hrPop*), prism 主题令牌挂 html[data-theme] 自动继承。 -->
+    <teleport to="body">
+      <div v-show="hrPop.open" ref="hrPop" class="hr-pop" :class="hrPop.above ? 'above' : 'below'"
+           role="tooltip" @mouseenter="hrPopKeepOpen" @mouseleave="hrPopLeave">
+        <template v-if="hrPop.data">
+          <i class="hp-arrow" aria-hidden="true"></i>
+          <div class="hp-head">
+            <i class="hp-dot" :class="hrPop.data.lane" aria-hidden="true"></i>
+            <span class="hp-verdict" :class="hrPop.data.lane">{{ hrPop.data.verdict }}</span>
+            <span v-if="hrPop.data.ended" class="hp-cyc ended">已结束</span>
+          </div>
+          <div v-if="hrPop.data.gauge" class="hp-gauge">
+            <div class="hg-top">
+              <span class="hg-legend"><i class="hg-dot" :class="hrPop.data.lane" aria-hidden="true"></i>本地</span>
+              <span v-if="hrPop.data.gauge.tag" class="hg-tag" :class="hrPop.data.gauge.tag.tone">{{ hrPop.data.gauge.tag.text }}</span>
+            </div>
+            <div class="hg-track">
+              <span class="hg-end">{{ hrPop.data.gauge.seeded }}</span>
+              <span class="hg-rail"><i class="fill" :class="hrPop.data.lane" :style="{ width: hrPop.data.gauge.pct + '%' }"></i></span>
+              <span class="hg-end">{{ hrPop.data.gauge.req }}</span>
+            </div>
+            <div v-if="hrPop.data.gauge.site" class="hg-site">
+              <span class="hg-legend"><i class="hg-dot hollow" :class="hrPop.data.gauge.site.tone" aria-hidden="true"></i>站点</span>
+              <span class="hg-rail site"><i class="fill" :class="hrPop.data.gauge.site.tone" :style="{ width: hrPop.data.gauge.site.pct + '%' }"></i></span>
+            </div>
+          </div>
+          <div v-else-if="hrPop.data.badge" class="hp-badge" :class="hrPop.data.lane">
+            <svg v-if="hrPop.data.badge === 'check'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l7 2.8v5.4c0 4.5-3 7.6-7 9.8-4-2.2-7-5.3-7-9.8V5.8z"/><path d="M9 12l2.2 2.2L15.5 9.7"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l7 2.8v5.4c0 4.5-3 7.6-7 9.8-4-2.2-7-5.3-7-9.8V5.8z" stroke-dasharray="3.2 2.6"/><path d="M10.2 9.4a1.9 1.9 0 1 1 2.9 1.6c-.7.5-1.1.9-1.1 1.7"/><path d="M12 15.7h.01"/>
+            </svg>
+            <span>无时长要求</span>
+          </div>
+          <div v-if="hrPop.data.kv.length" class="hp-kv">
+            <span v-for="p in hrPop.data.kv" :key="p[0]" class="kv"><i>{{ p[0] }}</i><b>{{ p[1] }}</b></span>
+          </div>
+          <div class="hp-foot">
+            <div class="hp-reason"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg><span>{{ hrPop.data.reason }}</span></div>
+            <div v-if="hrPop.data.lag" class="hp-lag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>站点值滞后一个刷新周期</span></div>
+          </div>
+        </template>
+      </div>
+    </teleport>
   </div>
 
   <script type="text/x-template" id="tpl-hub-field">

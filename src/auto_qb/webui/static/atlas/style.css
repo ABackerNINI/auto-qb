@@ -1635,3 +1635,86 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .ce-page { padding: 16px 12px calc(24px + var(--statusbar-h)); display: flex; flex-direction: column;
   --ce-input-max: 720px;  /* 输入控件/说明文字的最大宽度(页面利用率) */
 }
+
+/* ============ HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ============
+ * 单例浮层由 Vue teleport 到 body 级(脱离列表容器的 overflow/特异性纠缠), 触发/定位/数据
+ * 组装单点在 shared/hr.js(hrPop*)。z-index 140: 高于 ctx-menu(100) 与 speed-pop(131)。
+ * 令牌全部取自 :root 真实令牌 —— 颜色不散写, 主题调色只动 :root。 */
+.hr-pop { position: fixed; left: 0; top: 0; z-index: 140; width: 300px; padding: 12px 13px;
+  color: var(--fg); background: var(--bg-card); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); box-shadow: var(--shadow-3);
+  animation: hrpop-in var(--dur) var(--ease); }
+@keyframes hrpop-in { from { opacity: 0; transform: translateY(4px) scale(.98); } }
+@media (prefers-reduced-motion: reduce) { .hr-pop { animation: none; } }
+/* 指向箭头: 方向随上下翻转换边 */
+.hp-arrow { position: absolute; width: 10px; height: 10px; background: var(--bg-card);
+  transform: rotate(45deg); display: none; }
+.hr-pop.above .hp-arrow { display: block; bottom: -5.5px;
+  border-right: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
+.hr-pop.below .hp-arrow { display: block; top: -5.5px;
+  border-left: 1px solid var(--border-strong); border-top: 1px solid var(--border-strong); }
+/* ① 结论行: 档位色结论短语 + 生命周期 chip(紧凑, 不占大块; 来源章不渲染 —— 短语已含来源) */
+.hp-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.hp-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.hp-dot.danger { background: var(--hr-pending); }
+.hp-dot.failed { background: var(--error); }
+.hp-dot.safe { background: var(--green); }
+.hp-dot.unknown { background: var(--paused); }
+.hp-verdict { font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
+.hp-verdict.danger { color: var(--hr-pending); }
+.hp-verdict.failed { color: var(--error); }
+.hp-verdict.safe { color: var(--green); }
+.hp-verdict.unknown { color: var(--paused); }
+.hp-cyc { font-size: 10px; line-height: 1.5; border: 1px solid transparent; border-radius: 3px;
+  padding: 0 5px; white-space: nowrap; }
+.hp-cyc.ended { color: var(--fg-muted); background: var(--surface-1); border-color: var(--border-soft); }
+/* ② 进度轨道: 本地粗轨(6px, 已做种/要求) + 站点细轨(3px, 还需/要求); 已过段 = 档位色, 未达段 = 轨道底色 */
+.hp-gauge { margin-top: 11px; display: grid; gap: 5px; }
+.hg-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hg-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--fg-dim); }
+.hg-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.hg-dot.danger { background: var(--hr-pending); }
+.hg-dot.failed { background: var(--error); }
+.hg-dot.safe { background: var(--green); }
+.hg-dot.unknown { background: var(--paused); }
+.hg-dot.hollow.danger { background: transparent; border: 1.5px solid var(--hr-pending); }
+.hg-dot.hollow.failed { background: transparent; border: 1.5px solid var(--error); }
+.hg-dot.hollow.safe { background: transparent; border: 1.5px solid var(--green); }
+.hg-dot.hollow.unknown { background: transparent; border: 1.5px solid var(--paused); }
+.hg-tag { font-size: 10.5px; line-height: 1.5; padding: 1px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.hg-tag.danger { color: var(--hr-pending); background: var(--hr-pending-soft); }
+.hg-tag.failed { color: var(--error); background: var(--error-soft); }
+.hg-tag.safe { color: var(--green); background: var(--green-soft); }
+.hg-track { display: flex; align-items: center; gap: 8px; }
+.hg-end { flex: 0 0 auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 11px; color: var(--fg-muted); }
+.hg-rail { position: relative; flex: 1; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.hg-rail.site { height: 3px; }
+.hg-rail .fill { position: absolute; top: 0; bottom: 0; left: 0; display: block; border-radius: inherit; }
+.fill.danger { background: var(--hr-pending); }
+.fill.failed { background: var(--error); }
+.fill.safe { background: var(--green); }
+.fill.unknown { background: var(--paused); }
+.hg-rail.site .fill { opacity: .55; }
+.hg-site { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
+/* ②' 档位徽记: 无时间要求(身份层放行/未核实/未配时长)时轨道收起, 不留空轨 */
+.hp-badge { margin-top: 11px; display: flex; width: max-content; align-items: center; gap: 7px;
+  padding: 6px 10px; border-radius: var(--radius-sm); font-size: 11.5px; font-weight: 600; }
+.hp-badge svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.hp-badge.danger { color: var(--hr-pending); background: var(--hr-pending-soft); border: 1px solid var(--hr-pending-line); }
+.hp-badge.failed { color: var(--error); background: var(--error-soft); border: 1px solid var(--error-line); }
+.hp-badge.safe { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-line); }
+.hp-badge.unknown { color: var(--fg-muted); background: var(--surface-1); border: 1px solid var(--border-soft); }
+/* ③ 数值条: mono 紧排 kv(仅站点侧值 —— 本地值表格行可见, 不上弹窗) */
+.hp-kv { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px 6px; }
+.kv { display: inline-flex; align-items: baseline; gap: 5px; padding: 2.5px 8px;
+  border-radius: var(--radius-sm); background: var(--surface-1); }
+.kv i { font-style: normal; font-size: 10.5px; color: var(--fg-dim); white-space: nowrap; }
+.kv b { font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 600; font-size: 11.5px; color: var(--fg-soft); white-space: nowrap; }
+/* ④ 底部: 依据原文 + 站点滞后角注 */
+.hp-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-soft); display: grid; gap: 3px; }
+.hp-reason, .hp-lag { display: flex; align-items: flex-start; gap: 6px; }
+.hp-reason svg, .hp-lag svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: 2px; color: var(--fg-dim); }
+.hp-reason { font-size: 11px; line-height: 1.55; color: var(--fg-muted); overflow-wrap: anywhere; }
+.hp-lag { font-size: 10.5px; line-height: 1.5; color: var(--fg-dim); }
