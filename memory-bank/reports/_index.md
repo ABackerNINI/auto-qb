@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-09-26-1628] [HR 在线核实 · 触发模型 / 访问节奏 / 安全可靠性 · 设计审查报告 · auto-qb](26-09-26-1628-report-hr-online-verify-audit.html) — `backend-partial-hr-verify`
 - [26-09-25-0853] [full-checking 误报「校验未通过」与批量不触发 · 故障取证分析 · auto-qb](26-09-25-0853-report-full-checking-verdict-poison.html) — `full-checking-verdict`
 - [26-09-21-1329] [后端崩溃安全性调查报告 · auto-qb](26-09-21-1329-backend-crash-safety-report.html) — `backend-state-persistence`
 - [26-09-21-1248] [列设置重置 · 历次修复复盘与失败原因分析](26-09-21-1248-column-prefs-fix-failure-analysis.html) — `webui-column-prefs`
