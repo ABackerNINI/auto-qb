@@ -1,4 +1,4 @@
-# WebUI 打开超长路径文件夹(Windows MAX_PATH 260) — 已实施, 待提交
+# WebUI 打开超长路径文件夹(Windows MAX_PATH 260) — 已入库 db0993c
 
 > 摘要: 用户报障「WEBUI 打不开路径过长的文件夹」。根因单一: **WebUI 的 fs 路由没加 `\\?\` 长路径前缀, 而核心程序加了** ⇒ 核心扫得到 >260 的 save_path 并写进 store, WebUI 却打不开它(误报 404)。命中已记坑 ⇒ **复发**。已实施两层修复: ①检查层 `isdir/isfile/scandir/mkdir` 全过前缀 helper(`_fs()` 单点); ②打开层 Windows 改走 **Shell PIDL**(`SHParseDisplayName` + `SHOpenFolderAndSelectItems`), 因实测 `os.startfile` 对长路径抛 `WinError 2`、`explorer /select,` **静默打开"桌面"**。跨平台约束已守: helper 非 Windows 空操作、PIDL 段惰性 import 收在 `is_windows()` 内、macOS/Linux 分支逐字未动。档案 `tasks/26-09-26-webui-long-path-open.md`; 坑单点 `pitfalls/backend/windows-long-path.md`(新建)。
 > 最后活动: 2026-09-26 19:30
@@ -30,9 +30,8 @@
 
 ## 下一步
 
-- **唯一遗留**: 本专题的**任务档案**与生成索引 `tasks/_index.md` / `_doc-map.md` **未提交** ——
-  索引必然引用**同 clone 并发会话**的 `webui-search-query-syntax` 件, 单独提交会让索引指向不存在的
-  文件 ⇒ 等那批件(4 个)一起入库时再带上这三个。**这不是缺陷, 是刻意的提交边界。**
+- ✅ **原「唯一遗留」已闭**: 任务档案与生成索引 `tasks/_index.md` / `_doc-map.md` 已随**并发会话那批件**
+  一起入库(`05d223a`) —— 正是当初设计的那个「一起带上」的时点, 索引与文件现双向一致。
 - 已知限制(已写进代码注释与坑文档, 本次**未改**): `os.path.realpath` 对 >MAX_PATH 路径静默退化成词法比较
   ⇒ 长路径上的符号链接/junction **逃逸防护失效**。改它要 `nt._getfinalpathname`(实测带前缀能真解析),
   但在无建链权限的机器上**写不出守阵**(symlink 实测 WinError 1314), 故留作独立事项待授权。
