@@ -58,14 +58,15 @@
 - test_search_torrents_separator_normalized: 分隔符归一匹配 —— 空格查询词命中点/下划线/连字符分隔的名与文件(回归 "cat and" 搜不到 The.Cat.and… 名)
 - test_parse_query_tokens: 查询解析词法 —— 正/负词/短语 + 宽容边界(孤立-/未闭合引号/纯标点/--dv/web-dl)
 - test_search_torrents_row_level_and: 行级 AND —— 多词约束在同一候选行(名字或单个文件名)内, 跨行连词不命中(拍板 26-09-26)
-- test_search_torrents_negative_term: 负词按行作废 —— 单文件 DV 发布被排除, 合集包非 DV 行仍可命中(不整种子误杀)
+- test_search_torrents_negative_term: 负词种子级(26-09-27 定案)—— 任一候选行含负词 ⇒ 该种子整体排除: 单种子内季包文件统一计算(任一文件带负词整包排除), 多种子集合逐个算
+- test_search_torrents_negative_torrent_veto: 负词种子级回归 —— 名字/保存路径/站点行含负词 ⇒ 整种子排除, 优先于一切正词命中(「cat and -11」+「-mteam」两轮报障回归)
 - test_search_torrents_phrase: 短语 "…" 整段归一为连续子串, 词序敏感(terms-AND 命中而短语不命中的区分用例)
 - test_search_torrents_regression_envnv10: 回归(26-09-26 报障)——「恶女 10」命中单文件发布物, -ubweb 可排除
 - test_search_torrents_negative_only_empty: 仅负词/空查询返回空 + negative_only 标记, 不投递索引构建
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
-- test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + 行级负词不整种子误杀 —— 三页同源(26-09-26 单点化)
+- test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + facet 行负词整种子排除 —— 三页同源(26-09-26 单点化; 负词种子级 26-09-27 定案)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
 - test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
@@ -3090,7 +3091,8 @@ def test_parse_query_tokens():
 def test_search_torrents_row_level_and():
     """search_torrents 行级 AND: 多词约束在**同一候选行**(名字或单个文件名)内, 跨行连词不命中
 
-    拍板(26-09-26 报告 §5.2): 行通过 ⇔ 行含全部正词且无负词; 种子命中 ⇔ 任一行通过。
+    行通过 ⇔ 行含全部正词(负词另有双轨口径: 身份/元数据行整种子否决、文件行按行作废, 见
+    negative_term / negative_torrent_veto); 种子命中 ⇔ 任一行通过。
     「A 词在名字、B 词只在另一文件」的跨行 AND 不命中 —— 这是行级与种子级的分界, 此处钉死。
     """
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
@@ -3115,7 +3117,8 @@ def test_search_torrents_row_level_and():
 
 
 def test_search_torrents_negative_term():
-    """search_torrents 负词: 含负词的**行**作废 —— 单文件 DV 发布被排除; 合集包非 DV 行仍可命中(不整种子误杀)"""
+    """search_torrents 负词种子级(2026-09-27 定案): 任一候选行含负词 ⇒ 该种子整体排除 —— 单个
+    种子内包含的合集(季包文件)统一计算; 多种子集合(辅种组/追剧)里的每个种子单独计算"""
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
 
     with tempfile.TemporaryDirectory() as td:
@@ -3123,28 +3126,71 @@ def test_search_torrents_negative_term():
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="HA", name="Show.S01E10.DV.1080p", state="stalledUP")
+        # 单种子内包含的合集(季包): E09 文件带 DV ⇒ 统一计算, 整包排除(E10 行干净也救不回)
         t2 = FakeTorrent(hash="HB", name="Show.S01.Complete", state="stalledUP")
         client.files_map["HB"] = [_fake_file("Show.S01E09.DV.mkv", 0), _fake_file("Show.S01E10.1080p.mkv", 1)]
+        # 多种子集合里的另一颗单集种子: 干净 ⇒ 留下
         t3 = FakeTorrent(hash="HC", name="Show.S01E10.1080p.CR.WEB-DL", state="stalledUP")
         seed_store(mgr, [t1, t2, t3])
         mgr._build_search_index()
 
-        # "show 10 -dv": HA 名行含 dv 作废; HB 的 E09.DV 行作废但 E10 行干净 → 文件轮命中; HC 无 dv → 名字轮命中
-        # (名字轮先于文件轮, 故顺序 [HC, HB])
+        # "show 10 -dv": HA 名行含 dv ⇒ 排除; HB 的 E09.DV 文件行含 dv ⇒ 整包排除; HC 干净 ⇒ 名字命中
         r = mgr.search_torrents("show 10 -dv")
-        assert [(x["hash"], x["by"]) for x in r["results"]] == [("HC", "name"), ("HB", "file")], f"负词按行作废: {r}"
-        # 不带负词: HA 也命中(名字轮 [HA, HC] 先于文件轮 HB, 旧口径下 -dv 会把 dv 当正词搜, 这里顺带验证解析)
+        assert [(x["hash"], x["by"]) for x in r["results"]] == [("HC", "name")], f"负词种子级: {r}"
+        # 不带负词: 三颗都命中(即时命中 [HA, HC] 先于文件命中 HB; 旧口径 -dv 会把 dv 当正词搜, 顺带验证解析)
         assert [x["hash"] for x in mgr.search_torrents("show 10")["results"]] == ["HA", "HC", "HB"]
-        # 排除短语: "web dl" 作为短语排除 HC
+        # 排除短语: "web dl" 作为短语只排除 HC(HA/HB 不含该短语)
         assert [x["hash"] for x in mgr.search_torrents("show 10 -\"web dl\"")["results"]] == ["HA", "HB"]
+
+
+def test_search_torrents_negative_torrent_veto():
+    """search_torrents 负词种子级(2026-09-27 定案): 任一候选行(名字/站点/分类/路径/标签/文件行)
+    含负词 ⇒ 整种子排除, 优先于一切正词命中
+
+    两轮实机报障的收口: ①「cat and -11」(26-09-26) —— E11 单文件的种子名行含 "11" 被行级作废,
+    却被不含 "11" 的保存路径行整颗捞回; ②「-mteam」(27-09-27) —— 站点/标签行负词拦不住名字行
+    正词命中。负词必须是种子级才有可预测的排除语义; 文件行同入种子级否决(见 negative_term)。
+    """
+    from helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store, _fake_file
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        t1 = FakeTorrent(
+            hash="HA",
+            name="The.Cat.and.the.Dragon.S01E11.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb.mkv",
+            state="stalledUP",
+            save_path="D:/TV/The.Cat.and.the.Dragon.S01",
+        )
+        site = FakeTracker("MTeam")
+        site.tags = []  # tracker_name 取 conf.name(默认 tags 会顶掉站点名)
+        t2 = FakeTorrent(hash="HB", name="Alpha.S01", state="stalledUP", tracker_conf=site)
+        # 名字含负词、文件行干净的种子: 文件轮也须受身份行否决约束
+        t3 = FakeTorrent(hash="HC", name="E11.REPACK", state="stalledUP")
+        client.files_map["HC"] = [_fake_file("Show.1080p.mkv", 0)]
+        seed_store(mgr, [t1, t2, t3])
+        mgr._build_search_index()
+
+        # 报障①回归: HA 名字行含 "11" ⇒ 整种子否决, 保存路径行("cat and" 齐、无 "11")不得捞回
+        assert mgr.search_torrents("cat and -11")["results"] == []
+        # 无负词时 HA 照常命中(名字行) —— 否决只由负词触发
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("cat and")["results"]] == [("HA", "name")]
+        # 报障②: HB 名字行通过 "alpha", 但站点行含 "mteam" ⇒ 整种子排除; 去负词后名字行照常命中
+        assert mgr.search_torrents("alpha -mteam")["results"] == []
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("alpha")["results"]] == [("HB", "name")]
+        # 文件轮同受身份行否决: HC 名字行含 "repack" ⇒ 排除, 唯一文件行(Show.1080p.mkv)干净也救不回
+        assert mgr.search_torrents("show -repack")["results"] == []
+        # 对照: 去掉负词后 HC 靠文件行命中("show" 只落在文件行)
+        assert [(x["hash"], x["by"]) for x in mgr.search_torrents("show")["results"]] == [("HC", "file")]
 
 
 def test_search_torrents_facet_rows():
     """search_torrents 候选行覆盖全部文本面(26-09-26 单点化): 站点/分类/保存路径/标签行即时匹配
 
-    行级语义不变(任一行通过即命中, 负词按行作废): 服务端此前的候选行只有 名字/文件, 搜站点/
-    标签只在种子页(旧客户端行)能搜到而分组/追剧页搜不到 —— 跨页不一致; 单点化后三页同源,
-    用 by 定位首个通过的行类别(前端不消费, 测试定位用)。
+    行级正词语义不变(任一行通过即命中); 负词种子级(26-09-27): facet 行含负词 ⇒ 整种子排除。
+    服务端此前的候选行只有 名字/文件, 搜站点/标签只在种子页(旧客户端行)能搜到而分组/追剧页
+    搜不到 —— 跨页不一致; 单点化后三页同源, 用 by 定位首个通过的行类别(前端不消费, 测试定位用)。
     """
     from helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store
 
@@ -3172,9 +3218,10 @@ def test_search_torrents_facet_rows():
         assert [(x["hash"], x["by"]) for x in mgr.search_torrents("动漫")["results"]] == [("HA", "category")]
         assert [(x["hash"], x["by"]) for x in mgr.search_torrents("HDCT")["results"]] == [("HA", "tag")]
         assert [(x["hash"], x["by"]) for x in mgr.search_torrents("media anime")["results"]] == [("HA", "path")]
-        # 行级负词不整种子误杀: "anime -hdct" 的负词只作废 HA 的标签行, 路径行干净仍命中
-        assert [x["hash"] for x in mgr.search_torrents("anime -hdct")["results"]] == ["HA"]
-        # 负词作废唯一含该词的行: "anime -media" 路径行被作废, 其余行不含 anime → 整种子不命中
+        # facet 行负词 = 整种子排除(2026-09-27 双轨定案): "anime -hdct" 标签行含负词 ⇒ 整种子排除,
+        # 路径行干净也救不回(26-09-26 的「负词只作废该行」口径在此类行上被推翻)
+        assert mgr.search_torrents("anime -hdct")["results"] == []
+        # 同口径: "anime -media" 路径行含负词 ⇒ 整种子排除, 其余行不含 anime → 空结果
         assert mgr.search_torrents("anime -media")["results"] == []
 
 

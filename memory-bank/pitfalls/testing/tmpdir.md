@@ -90,6 +90,8 @@
   + `--basetemp=.pytest-tmp` 指进仓库内(即上上条的"仓内 basetemp"坑)。**为什么没命中**: "读了没照做" ——
   AGENTS.md 与本文件都写着「一律走 `test.*`」, 动手时仍裸跑。⇒ **任何 pytest 一律**
   `commands run test.one -- '<路径> [-k "…"]'`; 带全新 `TMPDIR` 的裸跑仅作兜底。
+- **复发**: 11 —— 2026-09-26: 为拿引擎截掉的覆盖率表, `cmd //c` 复刻闸门 `set "TMPDIR=…"` ⇒ 引号
+  转义使 `set` 失效回落 `H:\Temp` 同崩(rc=1)。没命中: 只读前 30 行。⇒ 兜底同上(bash 前缀, rc=0)。
 - ✅ **治本解 (2026-09-22 实测): 把整个 pytest 临时根 rename 走, 默认路径就恢复** ——
   `os.rename(r"H:\Temp\pytest-of-11059", r"H:\Temp\pytest-of-11059-broken")` 成功
   (改名只作用于**目录项**, 不需能读那个重解析点), 之后在**默认 TMPDIR** 下跑
