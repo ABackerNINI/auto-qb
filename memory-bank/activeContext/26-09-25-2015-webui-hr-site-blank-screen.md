@@ -1,6 +1,6 @@
 # 26-09-25-2015-webui-hr-site-blank-screen — 站点接入数据白屏修复
 
-> 摘要: 用户报「webui 无任何显示」, 定位为 441ffe4 踩中 `hr.js::hrSiteLine` 三处裸调用 `fmtDuration`/`fmtSize`(漏 `this.`)—— 未接入站点时分支恒提前返回 + 冒烟替身恒 None, 雷埋两轮不响; BTSchool 站点接入后随 `hrDurTitle` 挂进列表每行 title, 生产首屏渲染 ReferenceError, Vue 3 卸整树 = 全页白屏。修复 = 补三处 `this.`; 桩服务新增 `--hr-site` 站点判定注入开关堵替身盲区。**修复已验证, 待用户提交**。
+> 摘要: 用户报「webui 无任何显示」, 定位为 441ffe4 踩中 `hr.js::hrSiteLine` 三处裸调用 `fmtDuration`/`fmtSize`(漏 `this.`)—— 未接入站点时分支恒提前返回 + 冒烟替身恒 None, 雷埋两轮不响; BTSchool 站点接入后随 `hrDurTitle` 挂进列表每行 title, 生产首屏渲染 ReferenceError, Vue 3 卸整树 = 全页白屏。修复 = 补三处 `this.`; 桩服务新增 `--hr-site` 站点判定注入开关堵替身盲区。**修复已验证, 已入库 `c00fc94`**。
 
 ## 已完成
 
@@ -12,4 +12,4 @@
 
 ## 待办
 
-- 用户确认后提交(修复 + harness 开关 + 两处 pitfalls + 本切片)。
+- ✅ 提交已完成 `c00fc94`(修复 + `--hr-site` harness 开关 + 两处 pitfalls + 本切片) —— 无遗留。

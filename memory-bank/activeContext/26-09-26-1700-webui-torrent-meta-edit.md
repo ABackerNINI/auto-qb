@@ -7,7 +7,7 @@
 
 - 功能一次落地全绿(11 文件): 后端 2(commands.py 4 参 lambda + extra / 路由透传 tags/category) + 前端 shared 3(app.js meta* 字段 / dialogs.js 对话框逻辑 / commands.js ctxMeta) + 模板 2(atlas/prism 三处入口 + metaOpen 对话框) + CSS 3(atlas 补 .opt-pill 与 .ico-tag / prism 两处) + 测试 1(+3 条)。
 - 浏览器冒烟(harness 桩): 加/删标签、设分类、分类不一致提示、三种入口全通过(atlas + prism 截图确认)。
-- 收尾: 档案 [tasks/26-09-26-webui-torrent-meta-edit](../tasks/26-09-26-webui-torrent-meta-edit.md) / baseline 顶部 / progress/implemented-webui / pitfalls/testing/stubs-sim.md(+1 新坑: harness 命令泵不执行 handler) / webui-static-contract(.opt-pill 两套都有) / README 批量操作行。**未提交 —— 等用户显式指令**。
+- 收尾: 档案 [tasks/26-09-26-webui-torrent-meta-edit](../tasks/26-09-26-webui-torrent-meta-edit.md) / baseline 顶部 / progress/implemented-webui / pitfalls/testing/stubs-sim.md(+1 新坑: harness 命令泵不执行 handler) / webui-static-contract(.opt-pill 两套都有) / README 批量操作行。**已入库 `d0c39bf`**。
 
 ## 正在进行
 

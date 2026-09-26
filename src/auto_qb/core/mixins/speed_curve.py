@@ -9,6 +9,10 @@ global 任务按 config.interval 周期执行: 读取 history_traffic.dat, 按�
 - 档位速度 0 = 不限速; 目标与当前均为 0 时幂等不写
 - 不覆盖用户手动全局限速: 当前值为正奇数 KiB(如 2001KiB/s)时跳过该方向
   (每轮重读当前值, 手动取消后自动恢复接管)
+- 手动保护的**日志节流**: 手动值是持续状态(用户不改就一直命中), 故进入该状态(或手动值变了)
+  记一条 INFO, 之后同一状态每 `_MANUAL_REMIND_GAP` 才再提醒一次, 被去重的轮次降 DEBUG ——
+  逐轮 INFO 会刷屏(判据见 pitfalls/ops/alert-levels.md ②④); 可见性另由 Web UI 的
+  `reasons`(code=manual)承载, 不依赖这行日志
 - 数据源文件缺失/整体无法解析 -> warning, 本轮不动限速(任务保留);
   dat 有行但当前 period 窗口内无数据(如今天行尚未写入) -> 累计视为 0, 自动回落放宽
 - dry_run: 只计算并输出日志, 不读当前、不写 qB
@@ -25,6 +29,10 @@ from ..taskqueue import REQUEUE, Task
 logger = logging.getLogger(__name__)
 
 _CN_DIGITS = "零一二三四五六七八九"
+
+#: 手动保护命中的**周期提醒**间隔(秒): 同一状态在此期间只说明白一次, 其余轮次降 DEBUG。
+#: 固定常量而非配置键 —— 这是日志节流, 不是行为开关(判据见 pitfalls/ops/alert-levels.md ④)。
+_MANUAL_REMIND_GAP = 3600.0
 
 
 def _fmt_bytes(n: int) -> str:
@@ -135,7 +143,7 @@ class SpeedCurveMixin:
                 continue  # 该方向无曲线, 不管理
             cur = current[cur_key]
             if utils.is_manual_speed_limit(cur * 1024):  # 奇数 KiB: 疑似用户手动设置
-                logger.info(f"限速曲线 | {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置, 本轮不覆盖")
+                self._log_manual_skip(dir_key, label, cur)
                 reasons.append(
                     {
                         "dir": dir_key,
@@ -144,6 +152,8 @@ class SpeedCurveMixin:
                     }
                 )
                 continue
+            # 已退出手动保护(用户取消 / 改成偶数): 忘掉节流记忆 —— 下次再进入要重新说明白
+            self._curve_manual_log.pop(dir_key, None)
             if cur == kib:
                 continue  # 幂等: 目标 == 当前(含均不限速), 不写
             apply_kwargs["upload_kib" if cur_key == "upload_limit" else "download_kib"] = kib
@@ -182,6 +192,24 @@ class SpeedCurveMixin:
             history=history,
         )
         return REQUEUE
+
+    def _log_manual_skip(self, dir_key: str, label: str, cur: int) -> None:
+        """手动保护命中时的日志(状态变化 / 周期提醒, 其余轮次降 DEBUG)
+
+        手动值是**持续状态** —— 用户不改 qB 里那个奇数限速就会一直命中, 逐轮记 INFO 等于同一行
+        刷屏(实测 `interval: 10M` 下每天上百条, 且永远不停)。判据见 pitfalls/ops/alert-levels.md
+        ②「同一根因只说明白一次」与 ④「持续状态不静默消失: 按周期再提醒, 被去重的轮次留 DEBUG」:
+        进入该状态(或手动值变了)立即记一条 INFO, 之后同一状态每 `_MANUAL_REMIND_GAP` 再提醒一次。
+
+        可见性不依赖这行日志: Web UI 的 `reasons`(code=manual)已显示锁图标与"命中/实际"两值。
+        """
+        now = time.time()
+        prev = self._curve_manual_log.get(dir_key)
+        if prev is None or prev[0] != cur or now - prev[1] >= _MANUAL_REMIND_GAP:
+            self._curve_manual_log[dir_key] = (cur, now)
+            logger.info(f"限速曲线 | {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置, 本轮不覆盖")
+        else:
+            logger.debug(f"限速曲线 | {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置(同状态不重复记)")
 
     def _record_curve_state(self, today: date, upload_kib: Optional[int], download_kib: Optional[int], dry_run: bool):
         """记录当日曲线计算结果到 state(供调试; 落盘走周期 save_state + 优雅退出)"""

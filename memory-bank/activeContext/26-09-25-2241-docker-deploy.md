@@ -1,4 +1,4 @@
-# Docker 部署 (真机验收通过 + 缺陷修复 + 文档重写, 待提交)
+# Docker 部署 (真机验收通过 + 缺陷修复 + 文档重写) — 已入库 5fe4530
 
 > 摘要: 真机验收(Docker Desktop · Windows, 全功能关闭冒烟配置连真实 qB 127.0.0.1:16585)**全部通过**: build 223s/252MB(重建 9s)、up→healthy 12~21s、`/api/status` connected:true+91 种子、stop 退出码 0(state.json mtime==停止日志瞬间)、双开拒锁退出码 1、WebUI token/401/写回(.bak 落 /data)/热重载/状态续接全过, **91 种子库零写入**(前后快照 tags/category 零差异); 计划 §5 的「未实测项」全部实测回填(数字单点: docs/deployment.md §14)。验收揪出并修复三件: ①非托管首连失败退出码 0≠文档承诺的 1 → `QbConnectError` 干净退出(qbmanager.py, 托管模式不变, behavior-core 的 `or` 有意语义未动; 测试 +2 改 2); ②「WEB UI 已启动」「配置热重载完成」WARNING→INFO(alert-levels 契约; 守阵 +2 —— ⚠ 抓日志要用挂目标 logger 的 Grab handler, caplog 挂 root 会被 setup_logging 清掉); ③`config/` 部署凭据目录补进 .gitignore。docs/deployment.md 重写为 14 节手册(含 web.enabled↔healthcheck 耦合、退出码契约表、Git Bash `MSYS_NO_PATHCONV=1` 坑 → 已记 pitfalls/ops/msys-container-path.md)。全量 **1619 collected: 1618 passed + 1 skipped, 92%**(baseline.md 顶部)。任务档案 `tasks/26-09-25-deps-docker-deploy.md`(进度日志 2026-09-26 01:33 条)。现场已清(down -v, 容器/卷/网络无残留; config/config.yml 留作即用配置, 已 gitignore)。
 > 最后活动: 2026-09-26 04:09

@@ -264,14 +264,6 @@ window.AQB_HR = {
       }
       return out;
     },
-    /* 种子页客户端文本过滤(R1A): 名称/站点/分类/标签/保存路径任一命中即保留(不区分大小写) */
-    _torrentTextMatch(m, q) {
-      return (m.name || "").toLowerCase().includes(q)
-        || (m.site || "").toLowerCase().includes(q)
-        || (m.category || "").toLowerCase().includes(q)
-        || (m.save_path || "").toLowerCase().includes(q)
-        || (m.tags || []).some((t) => t.toLowerCase().includes(q));
-    },
     hrGroupTitle(g) {
       if (!g.hr_triggered) return `该${L10N_GROUP}没有成员触发 HR 条件`;
       if (!g.hr_pending) return `已触发 HR 的 ${g.hr_triggered} 个成员均已满足做种时长/分享率要求`;

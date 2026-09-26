@@ -101,3 +101,23 @@
   易踩点: 可选整段靠 `Field.optional` **显式声明**(**不能用 `default=None` 判定**);
   前端登出必须 `cfgReset()` 清空配置树。
 - **处置**: ⚠ schema 是**模块级常量**, 改完**必须重启进程**才看得到。
+
+### 顶栏搜索清除钮: focus 宽度过渡会把绝对定位的清除钮"移出光标", click 落空
+
+- **触发**: 输入框有 `:focus { width: … }` + transition 且清除钮 `position: absolute` 锚右沿
+  (2026-09-26 用户报: 有焦点点 x 清不掉, 无焦点正常 —— "只在焦点态失灵"即此坑)。
+- **判别**: 按下清除钮瞬间 input 失焦 ⇒ 宽度过渡回退, 按钮随右沿**移出光标**, mouseup 落在别处,
+  click(mousedown+mouseup 同元素才触发)落空。无焦点时宽度不变所以正常。
+- **处置**: 清除钮加 `@mousedown.prevent`(按下不夺焦, 宽度不动, click 照常) —— 两主题成对,
+  守阵 `test_web.py::test_frontend_search_syntax_wiring` ①段钉住。
+
+### 查询语法 JS/Python 双实现: 归一口径必须**行为级对账**, 静态看码盯不住
+
+- **触发**: 服务端 `views.py::_parse_query`/`_search_norm` 与客户端 `filters.js`
+  (`_parseSearchQuery`/`_searchNorm`/`_torrentTextMatch`, 种子页过滤不走服务端 searchHits)各持一份同语法实现。
+- **判别**: 两类已实漂移, 手工用例都盯不住: ①JS `\w` 仅 ASCII, 折叠集写 `\W` 会把 **CJK 整段当
+  分隔符折叠掉**(中文全搜不出); ②Python `[\W_]` 显式折叠下划线, JS 首版照 `\w` 语义保留 `_`
+  ⇒ 同一名字两侧归一不同(对账守阵首跑即抓到)。任一侧改动都可能再漂。
+- **处置**: 守阵 `test_web.py::test_frontend_search_syntax_wiring` 行为段: vm 沙箱真跑 filters.js
+  三个纯函数与 Python 同输入**逐项对账**(有 node 才跑, 无 node 静默跳过); 归一正则单点钉死
+  `[^\p{L}\p{N}]+/gu`(不能用 `\W`)。改任一侧词法/归一, 先跑这条。
