@@ -78,7 +78,7 @@ const DETAIL_COLUMNS = [
 ];
 /* 种子页列模型(前端第一轮 R1A, 原 R08 单种子视图扩列升级): name 锁定; 数据源 = SEED_ITEM
  * 平铺数组(/api/state.torrents, 全量种子)。默认可见列 = 种子页核心口径(名称/大小/进度/状态/
- * 站点/做种/用户/下载/上传/ETA/分享率/总上传/分类/标签/添加于); SEED_ITEM 其余扩展字段
+ * 站点/做种/用户/下载/上传/剩余时间/分享率/总上传/分类/标签/添加于); SEED_ITEM 其余扩展字段
  * (已下载/剩余量/可用性/做种时长/活跃时间/最近活动/完成于/限速/Hash v1/tracker/保存路径/Hash)
  * 全部进列选择器按需开启。列宽按列 key 记忆在独立 page 名 "torrent" 下 —— 新增 page 属向后
  * 兼容扩展, 旧存储缺该 page 时 loadColState 返回空, 无需升 COLS_STORE_KEY 版本 */
@@ -92,7 +92,8 @@ const TORRENT_COLUMNS = [
   { key: "num_leechs", label: "用户", tpl: "92px", sortable: true, align: "right" },
   { key: "dlspeed", label: "下载", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传", tpl: "minmax(88px, 1fr)", sortable: true, align: "right" },
-  { key: "eta", label: "ETA", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
+  // 2026-09-26 用户要求: 表头文案改中文「剩余时间」(列 key 仍是 eta —— 列宽/隐/序按 key 存, 改名不影响既有偏好)
+  { key: "eta", label: "剩余时间", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
   // 2026-09-26 用户要求: 与明细表同口径(见 DETAIL_COLUMNS 的 ratio 注释) —— 分享率左对齐
   { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true, align: "left" },
   { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
