@@ -37,7 +37,7 @@
 | 外置配置 / 占位符 / `auto`·`timeout`·`each_limit` / 探测规则 | `references/config.md` |
 | 反模式全集 | `references/anti-patterns.md` |
 
-本环境专属的 git 事实(判"推没推上"只看 `git ls-remote`、ref 三处核对)单点在
+本环境专属的 git 事实(refs/remotes 写入静默丢弃; 同步/推送核验与 ref 三处核对已内联进脚本)单点在
 `memory-bank/pitfalls/git/_index.md` —— 换仓库要重新确认, 本包不复制一份。
 
 > 路径约定：`<包>` = 本包目录（`<仓库根>/.commands/my-commit-flow`），先用 Glob 定位，别照抄路径。

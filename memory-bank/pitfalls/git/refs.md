@@ -1,13 +1,13 @@
 # Git ref 核对
 
-> 摘要: 提交后必查 ref 三处(只看 commit 输出会被骗); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃。
+> 摘要: ref 三处核对已内联进 `ship.commit`(静默通过; 只看 commit 输出会被骗, 由脚本兜住); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃 —— sync/push 脚本判据因此只认 ls-remote 现查真值。
 > 触发: 提交后核对, ref, packed-refs, 分支被回退, staged 暴增, 上游未设置, 领先落后算不出
 
-### 提交后必查 ref 三处: `HEAD` == `refs/heads/<branch>` == packed-refs
+### ref 三处核对已内联进 ship.commit: `HEAD` == `refs/heads/<branch>` == packed-refs
 
-- **触发**: 每次提交之后。
-- **判别**: **只看 `git commit` 的输出会被骗** —— ref 更新可能被拦截层静默丢弃。
-- **处置**: 用 `my-commit-flow/scripts/verify_ref.py` 核三处; 不一致按脚本打印的步骤修。
+- **触发**: 每次提交之后(脚本自动做, 静默通过)。
+- **判别**: **只看 `git commit` 的输出会被骗** —— ref 更新可能被拦截层静默丢弃; 脚本核对不一致会给失败行。
+- **处置**: 排障 / 手工复核用 `commands run my-commit-flow.verify-ref`; 不一致按它打印的步骤修。
 
 ### 「分支 ref 被回退」的判别法: 提交后突然冒出成百上千 staged
 
@@ -33,5 +33,4 @@
   **只有 `origin/*`** ⇒ 随后 `git status -sb` 显示 `[gitee/develop: gone]`、
   `git log HEAD..gitee/develop` 直接报 unknown revision。
   ⇒ **不是远端没了、也不是分支坏**。
-- **处置**: 判领先/落后与"推没推上"一律走 `git ls-remote <远端> <分支>`, **不要依赖远端跟踪 ref**;
-  `push.py` 走的正是这条路, 所以**推送本身不受影响** —— 那两行 WARN 可以放心跳过。
+- **处置**: 脚本判领先/落后与"推没推上"一律走 `git ls-remote <远端> <分支>` 现查真值(内联在 sync/push 里), **不依赖远端跟踪 ref** —— 执行者**不需要手工核验**; 仅在脚本报「无法核实」时按其给出的 ls-remote 命令手工核对。

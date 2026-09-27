@@ -7,14 +7,14 @@
 
 > **「按任务读哪份文档」的单点在 [memory-bank/README.md](memory-bank/README.md) 的细路由表** —— 本文件不复述, 免得两处各自演化。三条动作级提示:
 > - **改代码前**: 读 [pitfalls/_index.md](memory-bank/pitfalls/_index.md) —— 7 类 (git · web-ui · backend · testing · ops · kb · docs), 按动作选类再进类索引。
-> - **跑 git 命令前**: 必读 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md) —— ref 静默丢弃 / 推送只认 `ls-remote` 等本机硬约束单点在里面 (旧 rebase/merge/stash 毁库禁令已随拦截层修复于 2026-09-25 解除)。
+> - **跑 git 命令前**: 必读 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md) —— ref 静默丢弃等本机硬约束单点在里面 (同步 / 推送核验已内联进 ship 脚本; 旧 rebase/merge/stash 毁库禁令已随拦截层修复于 2026-09-25 解除)。
 > - **检索纪律**: 先索引、后 grep、**禁止整读**任一目录; 不确定关键词时 `grep -rn "<词>" memory-bank/` 兜底。
 
 ## 会话协议
 
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `commands run my-commit-flow.sync`: 自动 fetch + 快进 / 分叉自动 rebase(保线性, 拍板 2026-09-28), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑, **禁止在落后分支上改代码**。判据 = ls-remote 现查远端真值(`status -sb` 与 refs/remotes 快照不可信, 单点 [pitfalls/git/refs.md](memory-bank/pitfalls/git/refs.md))。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `commands run my-commit-flow.sync`: 自动 fetch + 快进 / 分叉自动 rebase(保线性, 拍板 2026-09-28), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑, **禁止在落后分支上改代码**。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext 切片(已完成条目**迁出**到 progress) / 达阈值则立档 + `commands run kb.index` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `commands run test.full` 并新建基线切片记实测数字(`testing/baselines/`, 体例见 `testing/baseline.md` 口径段) / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `commands run kb.index`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 
@@ -73,8 +73,7 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 > **完整判据与事故档案单点在 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md)**; 本节只留最容易致命的几条:
 
 - ✅ **rebase / merge / stash 禁令已解除** (2026-09-25): 历史上删除拦截层会在这几类操作写入 `.git` 时批量删对象 (3 次事故), 该问题已修复, 恢复可用 —— 高风险历史整合前仍建议先 `cp -a .git <备份>`。落后 / 分叉一律 `commands run my-commit-flow.sync` (自动快进 / rebase 保线性; 树脏会给失败行, 先提交或 stash 再重跑)。
-- **提交后必查 ref 三处**: `HEAD` == `refs/heads/<branch>` == loose/packed-refs, 用 `commands run my-commit-flow.verify-ref` 并按它打印的步骤修。**不要只看 commit 输出**。
-- **判"推没推上"只看 `git ls-remote <远端> <分支>`** —— 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃, 且 `git push --dry-run` 永远"成功"。
+- **ref 三处核对与推送核验已内联进 ship 脚本**: `HEAD` == `refs/heads/<branch>` == loose/packed、推完 `ls-remote` 现查远端真值, 全部由 `ship.commit` / `ship.push` / `my-commit-flow.sync` 自动做 —— **不要手工核验**; 不一致 / 「无法核实」会出现在失败行里, 排障用 `commands run my-commit-flow.verify-ref`。(本 shell 里 `refs/remotes/*` 写入被静默丢弃、`git push --dry-run` 永远"成功", 都不可信 —— 详单点 [pitfalls/git/refs.md](memory-bank/pitfalls/git/refs.md)。)
 - 机检与停手点一律走 **task id**: `commands run ship.commit` / `ship.push` / `my-commit-flow.sync` / `my-commit-flow.verify-ref`(排障)(`list my-commit-flow/ship` 看全流程, `show <task>` 看展开的命令与深读指针)。**包内 README 与 `references/` 只在排障 / 迁移时读** —— 日常整读它, 等于把"读整份文档找命令"的成本又搬回来。
 
 ## 🔴 跨仓库操作: 绝对禁止 (需显式强授权)

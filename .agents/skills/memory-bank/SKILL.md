@@ -11,7 +11,7 @@ user-invocable: true
 
 ## 会话开始 (4 步)
 
-1. **先同步分支(硬性; 问答/只读轮次跳过, 首个执行动作前必须完成)**: `commands run my-commit-flow.sync` —— 自动 fetch + 快进 / 分叉自动 rebase(保线性, 2026-09-28 拍板), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑。**禁止在落后的分支上改代码**; 判据是 ls-remote 现查远端真值(`status -sb` / refs/remotes 快照不可信) —— 见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」。
+1. **先同步分支(硬性; 问答/只读轮次跳过, 首个执行动作前必须完成)**: `commands run my-commit-flow.sync` —— 自动 fetch + 快进 / 分叉自动 rebase(保线性, 2026-09-28 拍板), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑。**禁止在落后的分支上改代码** —— 见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」。
    - 完整步骤见 [my-commit-flow 包](../../.commands/my-commit-flow/README.md)。
 2. 看会话滚动状态: `commands run kb.active` —— 扫 `memory-bank/activeContext/` 的时间戳切片, 按「最后活动」倒序输出一行摘要 + 陈旧标记。
    - ⚠ **activeContext 不含长青职能**: 「下一步」看 `想法.md` + `progress/roadmap.md`, 定案口径看 `AGENTS.md`/`conventions/`/`pitfalls/` —— 走 `memory-bank/README.md` 细路由。
