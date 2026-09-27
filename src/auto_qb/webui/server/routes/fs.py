@@ -56,6 +56,19 @@ def _fs_real(p: str) -> str:
     return file_access.get_file_access().realpath_lexical(p)
 
 
+def _determinable(value, detail: str):
+    """三态存在性消费单点: UNDETERMINED → 语义化 404, 其余原样透传
+
+    UNDETERMINED 禁止布尔化(隐式真值判断抛 TypeError = 裸 500)。Mapped 模式下白名单内
+    但未命中 fs.path_map 映射的路径会走到本路由 —— 必须在此显式分流成带原因的 404
+    (「不可判定」不冒充「不存在」也不炸 500, 报告 §05; Local 实现永不产生
+    UNDETERMINED, 本helper恒零开销透传)。
+    """
+    if value is file_access.UNDETERMINED:
+        raise HTTPException(status_code=404, detail=detail)
+    return value
+
+
 def build_router(ctx: WebContext) -> APIRouter:
     manager = ctx.manager
     _require_torrent = ctx.require_torrent
@@ -128,7 +141,7 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=403, detail="路径不在允许的保存路径范围内")
         fa = file_access.get_file_access()
         target = path_normalize(_bare(path))  # 逻辑路径基准(保大小写, 不解析符号链接)
-        if not fa.isdir(target):
+        if not _determinable(fa.isdir(target), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
             raise HTTPException(status_code=404, detail="目录不存在或不可访问")
         try:
             entries = fa.scandir(target)
@@ -171,10 +184,10 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=403, detail="路径不在允许的保存路径范围内")
         fa = file_access.get_file_access()
         base = path_normalize(_bare(parent))
-        if not fa.isdir(base):
+        if not _determinable(fa.isdir(base), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
             raise HTTPException(status_code=404, detail="目录不存在或不可访问")
         target = os.path.join(base, name)
-        if fa.exists(target):
+        if _determinable(fa.exists(target), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
             if fa.isdir(target):
                 return {"created": path_normalize(target), "existed": True}
             raise HTTPException(status_code=409, detail="同名文件已存在")
@@ -222,7 +235,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         elif kind == "torrent":
             rec = _require_torrent(str(b.get("hash") or "").strip())
             content = path_normalize(rec.content_path or "")
-            if content and not fa.isdir(content):
+            if content and not _determinable(fa.isdir(content), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
                 target, select = content, True  # 单文件种子: 定位选中, 不降级成"只打开父目录"
             else:
                 target = content or path_normalize(rec.save_path or "")
@@ -230,9 +243,9 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=400, detail="kind 必须是 group 或 torrent")
         target = path_normalize(target)
         if select:
-            if not fa.isfile(target):
+            if not _determinable(fa.isfile(target), "路径不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
                 raise HTTPException(status_code=404, detail="目标文件不存在或不可访问")
-        elif not target or not fa.isdir(target):
+        elif not target or not _determinable(fa.isdir(target), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
             raise HTTPException(status_code=404, detail="目标目录不存在或不可访问")
         try:
             common.open_path(target, select=select)

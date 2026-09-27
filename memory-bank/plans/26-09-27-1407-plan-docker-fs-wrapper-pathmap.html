@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="docker-deploy">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-09-27-1407">
-<meta name="doc-updated" content="26-09-27-1600">
+<meta name="doc-updated" content="26-09-27-1712">
 <meta name="doc-refs" content="memory-bank/reports/26-09-27-1352-report-docker-fs-wrapper-pathmap.html,memory-bank/plans/26-09-25-2241-plan-docker-deploy.html,memory-bank/pitfalls/ops/docker-host-features.md">
 <title>计划 · 文件访问层包装 + 下载目录只读挂载 + 路径映射(docker 兼容)</title>
 <style>
@@ -265,6 +265,7 @@ class MappedFileAccess(FileAccess): # 容器: path_map 前缀表(casefold, / 折
     <li><span class="num">26-09-27-1423</span> — 拍板放宽取舍③: mkdir 由"docker 实现恒 NotSupported"改为<strong>按挂载点可写探测放行</strong>(真实执行, EROFS/EACCES 语义化拒绝; 启动自检加只读预告; compose 示例默认仍 <code>:ro</code>)。同步修订: §01 边界 · §02 接口草图 · W2 测试 · W3 实现 · W5 验收⑥双态。</li>
     <li><span class="num">26-09-27-1442</span> — 问答轮预演验证结论补进(§04 头部 verdict 块): 逐消费方 dry-run 确认映射机制成立, 唯一残留 = drvfs disk_usage/getsize 实测(W5); 落地两条实现细节 —— 前缀 <code>/</code> 边界强制 + 尾斜杠归一(W2 测试 / W3 校验), 部署前提 Docker Desktop 文件共享(W4 文档)。<code>fs.path_map</code> 归属口径确认: config.yml(§03 不变) —— from 侧是运行时才知道的 qB 视角路径, compose 写不出也读不到。</li>
     <li><span class="num">26-09-27-1600</span> — <strong>W1–W4 实施落地</strong>(doc-status → In Progress): 新增 <code>infra/file_access.py</code>(UNDETERMINED 哨兵不可作布尔值 / FileAccessError 继承 OSError 兼容既有 except 兜底) + 全部消费方切包装层; <code>fs.path_map</code> 配置全链 + Mapped 实现 + 启动自检挂首轮全量同步后; W4 文档与 docker 交付物同步。实施口径两处微调: ①Local 的 <code>realpath_lexical</code> 保留 realpath(保住目录浏览符号链接逃逸防护与既有 Linux 用例), 仅 Mapped 纯词法; ②schema 的 path_map 用 text kind 降级登记(改动面不含前端, WebUI 编辑在 help 指向 YAML)。W5 真机验收待执行。</li>
+    <li><span class="num">26-09-27-1712</span> — <strong>审查修复两处 P2</strong>(独立审查轮, 交叉验证 1352 报告与全量触点): ①<code>map_to_container</code> 按 casefold 后前缀长度硬切原串 —— 变长折叠字符(ß→ss、İ)进 <code>from</code> 前缀时切片错位 ⇒ 容器路径错误 ⇒ <code>exists</code> 误判「不存在」(红线 §05 的窄条件重演面); 修复 = 新增 <code>_fold_prefix_len</code> 沿原串逐码点累加折叠定位边界, 余量按原串码点切割(精确根 / <code>/</code> 边界语义不变, 既有用例零改动全绿); ②fs.py 五处两态布尔消费(<code>not fa.isdir</code> / <code>if fa.exists</code> / <code>not fa.isfile</code>), Mapped miss 返回 UNDETERMINED 时 <code>__bool__</code> 抛 TypeError ⇒ 裸 500(部分映射或配错时浏览/新建/打开全炸); 修复 = 新增 <code>_determinable</code> 三态消费单点 → 带原因的语义化 404「目录不可判定(未命中 fs.path_map 映射…)」, Local 恒零开销透传。回归 +2(<code>test_mapped_casefold_expanding_prefix</code> / <code>test_fs_endpoints_unmapped_root_semantic_404</code>, 两测试文件计划头同步); 全量 <strong>1725 passed + 1 skipped / 91%</strong>(11546 语句, test.full 16.0s)。SEC-1(Mapped 容器侧 realpath 防符号链接逃逸 —— 逻辑空间做不了但容器空间做得了)未纳入, 建议随 W5; W5 真机验收仍待执行。</li>
   </ul>
 </section>
 

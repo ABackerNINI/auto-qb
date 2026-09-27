@@ -108,6 +108,24 @@ def _norm_logical(p: str) -> str:
     return utils.path_normalize(_strip_win_prefix(p))
 
 
+def _fold_prefix_len(lp: str, folded_prefix: str) -> int:
+    """原串 lp 中折叠后恰等于 folded_prefix 的前缀的**码点长度**; 不命中返回 -1
+
+    casefold 是逐码点映射却可能变长(ß→ss、İ→i̇), 折叠串与原串长度不对齐 —— 拿折叠
+    前缀的长度硬切原串会切错位(容器路径丢字符 → exists 误判「不存在」→ 重演误暂停
+    事故, 报告 §05 红线)。故沿原串逐码点累加折叠定位边界: 累加折叠长度严格单调递增,
+    与目标等值至多命中一次; 累加结果不再是目标前缀时提前退出(后续只会更长)。
+    """
+    acc = ""
+    for i, ch in enumerate(lp):
+        acc += ch.casefold()
+        if acc == folded_prefix:
+            return i + 1
+        if not folded_prefix.startswith(acc):
+            return -1
+    return -1
+
+
 # ---------------------------------------------------------------- 抽象基座
 
 
@@ -213,14 +231,20 @@ class MappedFileAccess(FileAccess):
         ]
 
     def map_to_container(self, path: str) -> Optional[str]:
-        """逻辑路径 → 容器路径; **None = miss**(fail-safe 判定点, 调用方据此走三态)"""
+        """逻辑路径 → 容器路径; **None = miss**(fail-safe 判定点, 调用方据此走三态)
+
+        匹配在 casefold 空间进行, 边界定位回原串: 前缀余量必须按**原串**码点切割
+        (casefold 可能变长, 折叠长度 ≠ 原串长度, 见 _fold_prefix_len)。
+        """
         lp = _norm_logical(path)
-        low = lp.casefold()
-        for src, dst in self._table:
-            if low == src:
-                return dst
-            if low.startswith(src + "/"):
-                return dst + lp[len(src):]
+        for src_folded, dst in self._table:
+            n = _fold_prefix_len(lp, src_folded)
+            if n < 0:
+                continue
+            if n == len(lp):
+                return dst  # 根本身命中(目录浏览首屏允许根 = save_path 本身)
+            if lp[n] == "/":  # `/` 边界(D:/Downloads 不得命中 D:/Downloads2)
+                return dst + lp[n:]
         return None
 
     def _require_mapped(self, path: str) -> str:

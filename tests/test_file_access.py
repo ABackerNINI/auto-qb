@@ -10,6 +10,7 @@
   getsize/disk_usage -> FileAccessError)
 - test_mapped_matching_rules: casefold + 分隔符折叠 + `\\\\?\\` 前缀剥离 + 尾斜杠归一 + 精确根
 - test_mapped_prefix_boundary: `/` 边界强制(D:/Downloads 不得命中 D:/Downloads2)
+- test_mapped_casefold_expanding_prefix: casefold 变长字符(ß→ss)出现在映射前缀 —— 边界按原串码点定位、余量不错位(回归: 旧实现按折叠长度硬切原串, 容器路径丢字符 → exists 误判「不存在」重演误暂停)
 - test_mapped_scandir_logical_space: scandir entry 译回逻辑空间(白名单消费方零改动的前提)
 - test_mapped_mkdir_real_and_miss: mkdir 挂载点可写即真实执行; miss 报 FileAccessError(不可判定)
 - test_mapped_realpath_lexical: Mapped realpath_lexical 纯词法(normcase+normpath, 不解析符号链接)
@@ -190,6 +191,27 @@ def test_mapped_prefix_boundary(tmp_path):
     fa = _mapped(tmp_path, src="D:/Downloads")
     assert fa.map_to_container("D:/Downloads2/a.bin") is None
     assert fa.exists("D:/Downloads2/a.bin") is UNDETERMINED
+
+
+def test_mapped_casefold_expanding_prefix(tmp_path):
+    """casefold 变长字符(ß→ss)在映射前缀里: 边界必须按原串码点定位, 不得按折叠长度切片
+
+    回归: 旧实现拿折叠前缀长度硬切原串 —— ß 折叠成 ss 使折叠串比原串长 1, 切片错位
+    丢字符 ⇒ 容器路径错误 ⇒ exists 误判「不存在」⇒ 缺文件扫描重演误暂停(报告 §05 红线)。
+    """
+    fa = _mapped(tmp_path, src="D:/Straße")
+    (tmp_path / "x.bin").write_bytes(b"x")
+    mount = str(tmp_path).replace(os.sep, "/")
+    # 命中: 原样写法与「展开变体」大写写法都命中, 余量按原串切割不错位(含余量也带 ß 的情形)
+    assert fa.exists("D:/Straße/x.bin") is True
+    assert fa.exists("D:/STRASSE/x.bin") is True
+    assert fa.map_to_container("D:/Straße/sub") == mount + "/sub"
+    assert fa.map_to_container("D:/Straße/ß-dir") == mount + "/ß-dir"
+    assert fa.map_to_container("D:/STRASSE") == mount  # 展开变体写法的根本身也命中
+    assert fa.exists("D:/Straße") is True
+    # 边界仍强制: D:/Straße2 不命中(D:/Straße 不得命中 D:/Straße2)
+    assert fa.map_to_container("D:/Straße2/a") is None
+    assert fa.exists("D:/Straße2/x.bin") is UNDETERMINED
 
 
 def test_mapped_scandir_logical_space(tmp_path):

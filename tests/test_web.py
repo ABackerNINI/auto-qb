@@ -74,6 +74,7 @@
 - test_api_fs_dirs_case_sibling_is_outside_whitelist: **仅 Linux** —— 大小写兄弟目录(/x/Media 与 /x/media)必须判为越界, 白名单归一不得做 NTFS 式折叠(折叠 => 越界放行, fail-open)
 - test_api_fs_mkdir_endpoint: POST /api/fs/mkdir 新建目录(R10-11) —— 正常创建/重名目录幂等/重名文件 409/名字含分隔符或点为 400/白名单外 403/父目录不存在 404/鉴权/不投命令
 - test_fs_endpoints_route_fs_calls_through_long_path_prefix: fs 三端点的文件系统调用必须过 add_long_path_prefix_for_win(Windows 长路径 >MAX_PATH 否则 isdir 给假/scandir 抛错 ⇒ 误报 404)
+- test_fs_endpoints_unmapped_root_semantic_404: Mapped 模式下白名单内但未命中 fs.path_map 的路径 -> fs 三端点语义化 404「不可判定」而非裸 500(BUG 回归: UNDETERMINED 禁止布尔化, 路由五处两态消费收进 _determinable 单点)
 - test_fs_path_helpers_strip_long_path_prefix_before_compare: _bare/_fs_real 比较前剥长路径前缀(否则同一条路径的两种写法被判越界, 子目录全被过滤)
 - test_drain_web_commands_group_actions: 组级暂停/开始/汇报/删除命令执行并作用于整组 hash
 - test_drain_web_commands_torrent_actions: 单种子命令作用于该 hash; 种子不在快照 -> 跳过(删除守阵)
@@ -3879,6 +3880,46 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
     with mock.patch("auto_qb.webui.server.common.open_path"):
         assert client.post("/api/open-path", json={"kind": "torrent", "hash": "HA"}, headers=auth).status_code == 200
     assert norm(root) in calls, f"open-path 的文件系统调用未过前缀 helper: {calls}"
+
+
+def test_fs_endpoints_unmapped_root_semantic_404(web_env, tmp_path):
+    """Mapped 模式下白名单内但未命中映射 -> 三端点语义化 404「不可判定」, 不是裸 500(BUG 回归)
+
+    回归: fs 路由曾有五处两态布尔消费(not fa.isdir / if fa.exists / not fa.isfile),
+    Mapped miss 时包装层返回 UNDETERMINED, 其 __bool__ 抛 TypeError ⇒ FastAPI 裸 500。
+    收进 _determinable 单点分流后: 未命中 fs.path_map 的允许根 浏览/新建/打开 都返回
+    带原因的 404(「不可判定」不冒充「不存在」, 报告 §05)。
+    """
+    from auto_qb.config import PathMapEntry
+
+    mgr, client = web_env
+    saved = file_access.get_file_access()
+    file_access._instance = file_access.MappedFileAccess(
+        (PathMapEntry(src="D:/Downloads", dst=str(tmp_path / "mnt")), )
+    )
+    try:
+        auth = {"Authorization": f"Bearer {mgr._web_token}"}
+        unmapped = tmp_path / "unmapped"
+        unmapped.mkdir()  # 宿主真实存在, 但前缀不在映射表里 -> 逻辑空间不可判定
+        norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
+        mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(unmapped), content_path="")}
+        mgr.store.groups = {(norm(unmapped), ("a.mkv", )): ["HA"]}
+        mgr.store.get = lambda h: mgr.store.by_hash.get(h)
+        # ① 目录浏览: 白名单内(是已知保存路径)但未命中映射 -> 404 不可判定
+        r = client.get("/api/fs/dirs", headers=auth, params={"path": norm(unmapped)})
+        assert r.status_code == 404 and "不可判定" in r.json()["detail"], r.text
+        # ② 新建文件夹: 父目录未命中映射 -> 404 不可判定
+        r = client.post("/api/fs/mkdir", json={"path": norm(unmapped), "name": "x"}, headers=auth)
+        assert r.status_code == 404 and "不可判定" in r.json()["detail"], r.text
+        # ③ 打开路径(torrent): content_path 缺失回退 save_path(未命中) -> 404 不可判定
+        r = client.post("/api/open-path", json={"kind": "torrent", "hash": "HA"}, headers=auth)
+        assert r.status_code == 404 and "不可判定" in r.json()["detail"], r.text
+        # ④ 打开路径(组): 组键首元未命中映射 -> 404 不可判定
+        key = encode_group_key((norm(unmapped), ("a.mkv", )))
+        r = client.post("/api/open-path", json={"kind": "group", "key": key}, headers=auth)
+        assert r.status_code == 404 and "不可判定" in r.json()["detail"], r.text
+    finally:
+        file_access._instance = saved
 
 
 def test_fs_path_helpers_strip_long_path_prefix_before_compare():
