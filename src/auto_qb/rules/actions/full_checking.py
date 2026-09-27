@@ -32,7 +32,7 @@ CHECK_START_GIVEUP = 600.0
 
 
 def _recheck_fail_count(manager, hash: str) -> int:
-    """同一种子当日连续校验失败次数(按自然日重置, 与 upload_size_today 口径一致)"""
+    """同一种子当日连续校验失败次数(按自然日重置)"""
     rec = manager.state.get("recheck_fails", {}).get(hash)
     if rec and rec.get("date") == date.today().isoformat():
         return rec.get("count", 0)

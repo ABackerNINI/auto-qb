@@ -25,15 +25,28 @@ from .errors import SchemaVersionError
 VERSION_KEY = "schema_version"
 
 CURRENT_VERSIONS: Dict[str, int] = {
-    "state": 1,  # <data_dir>/state.json 顶层 schema_version
+    "state": 2,  # <data_dir>/state.json 顶层 schema_version
     "hr_site": 1,  # hr/<site>.json 的 schema_version(hr/model.SCHEMA_VERSION 是它的别名)
     "config": 1,  # config.schema_version(YAML 的 config: 块内, 不占根键)
 }
 
+
+def _migrate_state_1_2(data: dict) -> dict:
+    """v1→v2: 移除 upload_snapshots(按种子周期上传量快照)。
+
+    配套的 upload_size* 条件与 begin_round 统计底座已整体移除(计划
+    26-09-27-1232), 该键不再有读写点与消费者, 纯清底。
+    """
+    data.pop("upload_snapshots", None)
+    return data
+
+
 # MIGRATIONS[kind][from_version] = fn(data: dict) -> dict
 # 纪律见模块 docstring; 首个破坏性结构变更出现时, 在对应表注册 migrate_<kind>_<n>_<n+1>。
 MIGRATIONS: Dict[str, Dict[int, Callable[[dict], dict]]] = {
-    "state": {},
+    "state": {
+        1: _migrate_state_1_2
+    },
     "hr_site": {},
     "config": {},
 }

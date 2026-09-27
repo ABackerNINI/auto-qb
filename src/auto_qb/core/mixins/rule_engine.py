@@ -5,7 +5,7 @@
 import json
 import logging
 import os
-from datetime import date, datetime
+from datetime import datetime
 from typing import Any, List, Optional
 from qbittorrentapi import Client
 
@@ -101,7 +101,13 @@ class RuleEngineMixin:
         return {}
 
     def _migrate_state_dict(self, data: dict) -> dict:
-        """加载出的状态过 schema 升级链; 迁移描述记入 _state_migration_desc(供物化点与测试)"""
+        """加载出的状态过 schema 升级链; 迁移描述记入 _state_migration_desc(供物化点与测试)
+
+        空 dict(首启 / 非 dict JSON 兜底)直接原样返回: 无内容可迁移, 若走链会被盖章成
+        "已迁移", 诱发首启无意义落盘, 也破坏"首启静默返回 {}"语义。
+        """
+        if not data:
+            return data
         data, desc = migrate("state", data)
         if desc:
             self._state_migration_desc = desc
@@ -219,29 +225,6 @@ class RuleEngineMixin:
 
     def get_exec_record(self, rule_name: str, hash: str):
         return self.state.get("exec_history", {}).get(f"{rule_name}:{hash}")
-
-    def begin_round(self, torrents: List[TorrentRecord]):
-        """维护上传量快照(按自然日/周/月, 周期切换时重建基线) — 由 refresh 任务调用, 幂等"""
-        snaps = self.state.setdefault("upload_snapshots", {})
-        today = date.today()
-        buckets = {
-            "daily": today.isoformat(),
-            "weekly": f"{today.isocalendar().year}-W{today.isocalendar().week:02d}",
-            "monthly": today.strftime("%Y-%m"),
-        }
-        for kind, key in buckets.items():
-            bucket = snaps.setdefault(kind, {})
-            if bucket.get("key") != key:
-                bucket.clear()
-                bucket["key"] = key
-                bucket["baseline"] = {t.hash: t.uploaded for t in torrents}
-
-    def upload_delta(self, torrent: TorrentRecord, kind: str) -> int:
-        """周期上传增量: 当前 uploaded - 周期开始时快照, 下限 0(防种子重加/客户端重启归零)"""
-        bucket = self.state.get("upload_snapshots", {}).get(kind, {})
-        baseline = bucket.get("baseline", {})
-        base = baseline.get(torrent.hash, 0)
-        return max(0, torrent.uploaded - base)
 
     # ---------- 规则: 种子级任务 ----------
 

@@ -14,8 +14,6 @@
 - test_date_time_condition: 日期时间条件
 - test_seedtime_condition: 做种时间条件
 - test_upload_ratio_condition: 上传分享率条件
-- test_upload_size_condition: 上传量条件
-- test_upload_delta_conditions: 上传增量条件(本轮-上轮)
 - test_freespace_no_path: FreespaceCondition 无 path 不触发; 空 amount 构造抛 ValueError
 - test_freespace_triggered: 磁盘剩余空间低于阈值 -> 触发
 - test_freespace_not_triggered: 空间充足 -> 不触发
@@ -56,10 +54,6 @@ from auto_qb.rules.conditions import (
     TrackerGroupCondition,
     TrackersCondition,
     UploadRatioCondition,
-    UploadSizeCondition,
-    UploadSizeThisMonthCondition,
-    UploadSizeThisWeekCondition,
-    UploadSizeTodayCondition,
 )
 from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager
 
@@ -335,30 +329,6 @@ def test_upload_ratio_condition():
         ctx = _ctx(mgr, FakeTorrent(ratio=2.0))
         assert UploadRatioCondition(">1.5").match(ctx)
         assert UploadRatioCondition("<1.5").match(ctx) is False
-
-
-def test_upload_size_condition():
-    """总上传大小条件"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        ctx = _ctx(mgr, FakeTorrent(uploaded=11 * 1024**3))
-        assert UploadSizeCondition(">10GiB").match(ctx)
-        assert UploadSizeCondition(">12GiB").match(ctx) is False
-
-
-def test_upload_delta_conditions():
-    """周期上传增量条件: 基于 manager.upload_delta"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        tor = FakeTorrent(uploaded=0)
-        client = FakeClient()
-        # 直接 mock upload_delta 返回值
-        mgr.upload_delta = lambda t, kind: 5 * 1024**2
-        ctx = make_ctx(mgr, tor, client)
-        assert UploadSizeTodayCondition(">1MiB").match(ctx)
-        assert UploadSizeThisWeekCondition(">1MiB").match(ctx)
-        assert UploadSizeThisMonthCondition(">1MiB").match(ctx)
-        assert UploadSizeTodayCondition(">10MiB").match(ctx) is False
 
 
 def test_freespace_no_path():

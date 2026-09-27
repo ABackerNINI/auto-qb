@@ -51,7 +51,7 @@ process(ctx) -> (handled: bool, stop: bool)
 - `execute_once: never`(默认) 且 `cooldown: 0S` → 每次条件满足都执行, **只适合幂等动作** (加/删标签、设分类)。
 - 非幂等动作 (校验/开始/强制汇报/限速) 必须配 `execute_once: once/daily/hourly` 或 `cooldown`。
 - `cooldown` 优先于 `execute_once` 粒度: 距上次执行成功不足 cooldown 则跳过。
-- 记录键: `state["exec_history"]["{rule_name}:{hash}"] = {ts, date, hour}`; `daily` 按自然日切换 (与 upload_size_today 口径一致), `hourly` = 同日同小时。
+- 记录键: `state["exec_history"]["{rule_name}:{hash}"] = {ts, date, hour}`; `daily` 按自然日切换, `hourly` = 同日同小时。
 - 另有**独立于规则去重的兜底**: `CheckAction` 跳检自带同日去重 (每规则每种子每天最多跳检一次)。
 
 ### ActionResult 四态

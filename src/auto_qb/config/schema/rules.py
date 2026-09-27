@@ -115,10 +115,6 @@ CONDITION_PLUGINS: Tuple[Plugin, ...] = (
     ),
     Plugin("seedtime", "做种时长", "condition", "str", "按已做种时长比较", placeholder="<24H"),
     Plugin("upload_ratio", "分享率", "condition", "str", "按种子当前分享率比较", placeholder=">1.5"),
-    Plugin("upload_size", "总上传量", "condition", "str", "按种子累计上传量比较", placeholder=">10GiB"),
-    Plugin("upload_size_today", "今日上传量", "condition", "str", "今天累计的上传量(按自然日统计, 重启也不丢)", placeholder=">10GiB"),
-    Plugin("upload_size_this_week", "本周上传量", "condition", "str", "本周(周一起算)累计的上传量", placeholder=">10GiB"),
-    Plugin("upload_size_this_month", "本月上传量", "condition", "str", "本月 1 号起累计的上传量", placeholder=">10GiB"),
     Plugin(
         "expr",
         "表达式",

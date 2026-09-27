@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · 暂时移除不成熟的限速统计设计 (upload_size 四条件 + begin_round)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-27">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-topic" content="remove-upload-stats">
+<meta name="doc-added" content="2026-09-27">
+<meta name="doc-updated" content="2026-09-27">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101113;
+    --bg-raise: #16181b;
+    --ink: #e8e6e1;
+    --ink-dim: #a3a09a;
+    --ink-faint: #6f6d68;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #d9a441;
+    --accent-dim: rgba(217,164,65,.14);
+    --err: #c96a5b;
+    --err-dim: rgba(201,106,91,.12);
+    --ok: #7fae7a;
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1180px; margin: 0 auto; padding: 0 40px; }
+
+  .cover { padding: 72px 0 40px; border-bottom: 1px solid var(--hairline); }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 28px;
+  }
+  .kicker b { color: var(--accent); font-weight: 400; }
+  h1 {
+    font-size: 40px; font-weight: 590; line-height: 1.15;
+    letter-spacing: -.02em; max-width: 900px;
+  }
+  .lede { margin-top: 20px; max-width: 760px; color: var(--ink-dim); font-size: 16px; }
+  .meta-row {
+    margin-top: 36px; display: flex; flex-wrap: wrap; gap: 32px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint);
+    letter-spacing: .04em;
+  }
+  .meta-row span b { color: var(--ink-dim); font-weight: 400; }
+
+  .body-grid { display: grid; grid-template-columns: 208px 1fr; gap: 56px; padding: 48px 0 24px; }
+  nav.toc { position: sticky; top: 32px; align-self: start; }
+  nav.toc .toc-head {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-faint); text-decoration: none;
+    font-size: 13px; line-height: 1.4; padding: 5px 0 5px 14px;
+    border-left: 1px solid var(--hairline-soft);
+  }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+  nav.toc a .n { font-family: var(--font-mono); font-size: 11px; margin-right: 8px; }
+
+  main { min-width: 0; }
+  section { margin-bottom: 72px; }
+  .sec-rule {
+    display: flex; align-items: baseline; gap: 16px;
+    border-top: 1px solid var(--hairline); padding-top: 18px; margin-bottom: 22px;
+  }
+  .folio { font-family: var(--font-mono); font-size: 12px; color: var(--accent); letter-spacing: .08em; }
+  h2 { font-size: 23px; font-weight: 590; letter-spacing: -.01em; }
+  h3 { font-size: 16px; font-weight: 550; margin: 28px 0 12px; }
+  p { color: var(--ink-dim); max-width: 76ch; margin-bottom: 12px; }
+  p strong, li strong { color: var(--ink); font-weight: 550; }
+  code {
+    font-family: var(--font-mono); font-size: .86em;
+    background: var(--bg-raise); padding: 1px 5px; border-radius: 3px;
+    color: var(--ink); border: 1px solid var(--hairline-soft);
+  }
+  ul, ol { color: var(--ink-dim); max-width: 76ch; padding-left: 22px; margin-bottom: 12px; }
+  li { margin-bottom: 6px; }
+
+  .tbl-wrap { margin: 18px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  caption {
+    caption-side: top; text-align: left;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-faint); padding-bottom: 10px;
+  }
+  th {
+    text-align: left; font-weight: 550; font-size: 12px; color: var(--ink-faint);
+    border-bottom: 1px solid var(--hairline); padding: 8px 12px 8px 0;
+    letter-spacing: .02em; white-space: nowrap;
+  }
+  td {
+    border-bottom: 1px solid var(--hairline-soft);
+    padding: 9px 12px 9px 0; vertical-align: top; color: var(--ink-dim);
+  }
+  td.loc { font-family: var(--font-mono); font-size: 12px; color: var(--ink); white-space: nowrap; }
+  td.msg { color: var(--ink); }
+
+  .chip {
+    display: inline-block; font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: .1em; padding: 2px 7px; border-radius: 3px;
+    border: 1px solid var(--hairline); color: var(--ink-dim); white-space: nowrap;
+  }
+  .chip.rm { color: var(--err); border-color: rgba(201,106,91,.4); background: var(--err-dim); }
+  .chip.keep { color: var(--ok); border-color: rgba(127,174,122,.4); }
+
+  .note {
+    border: 1px solid var(--hairline); border-left: 2px solid var(--accent);
+    padding: 14px 18px; margin: 18px 0; max-width: 76ch;
+    color: var(--ink-dim); font-size: 14px;
+  }
+  .note b { color: var(--ink); }
+
+  footer { border-top: 1px solid var(--hairline); padding: 24px 0 56px; }
+  footer p { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); letter-spacing: .06em; }
+
+  @media (max-width: 900px) {
+    .body-grid { grid-template-columns: 1fr; }
+    nav.toc { position: static; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<header class="cover">
+  <div class="kicker">MEMORY BANK / PLANS / <b>26-09-27-1232</b></div>
+  <h1>暂时移除不成熟的限速统计设计</h1>
+  <p class="lede">移除规则引擎中的 <code>upload_size</code> / <code>upload_size_today</code> / <code>upload_size_this_week</code> / <code>upload_size_this_month</code> 四个条件，及其配套的 <code>begin_round</code> / <code>upload_delta</code> / <code>state["upload_snapshots"]</code> 统计底座；以 feature issue 承接将来的重新设计（TODO.md「暂时移除不成熟的限速设计」条目的落地）。</p>
+  <div class="meta-row">
+    <span>DATE <b>2026-09-27</b></span>
+    <span>SCOPE <b>仅 A（统计底座）</b></span>
+    <span>STATE <b>todo → done</b></span>
+    <span>RISK <b>低（配置零引用）</b></span>
+  </div>
+</header>
+
+<div class="body-grid">
+<nav class="toc">
+  <div class="toc-head">目录</div>
+  <a href="#s1"><span class="n">01</span>背景与边界</a>
+  <a href="#s2"><span class="n">02</span>移除清单 · 代码</a>
+  <a href="#s3"><span class="n">03</span>state v2 迁移</a>
+  <a href="#s4"><span class="n">04</span>测试更新</a>
+  <a href="#s5"><span class="n">05</span>文档回写</a>
+  <a href="#s6"><span class="n">06</span>feature issue</a>
+  <a href="#s7"><span class="n">07</span>影响面与风险评估</a>
+  <a href="#s8"><span class="n">08</span>执行顺序</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <div class="sec-rule"><span class="folio">01</span><h2>背景与边界</h2></div>
+  <p>TODO.md 裁决意向：这套「按种子周期上传量」统计设计不成熟 —— 只记上传不记下载、口径单薄，暂时移除，将来重设计时或改 <code>global_*</code> 全局口径。用户已确认本次边界 <strong>仅 A</strong>：四个规则条件 + 统计底座。</p>
+  <p>限速相关共有三套独立机制，本次<strong>只动统计</strong>，其余全部保留：</p>
+  <div class="tbl-wrap">
+    <table>
+      <caption>机制盘点与裁决</caption>
+      <tr><th>机制</th><th>位置</th><th>裁决</th></tr>
+      <tr><td class="msg">A · upload_size 四条件 + begin_round 统计底座</td><td class="loc">rules/conditions.py · rule_engine mixin</td><td><span class="chip rm">本次移除</span></td></tr>
+      <tr><td class="msg">B · 逐种限速动作插件 (Upload/DownloadSpeedLimitAction)</td><td class="loc">rules/actions/transfer.py</td><td><span class="chip keep">保留</span></td></tr>
+      <tr><td class="msg">C · 全局限速曲线 + 站点级单种限速</td><td class="loc">core/curves.py · speed_curve mixin · tracker mixin</td><td><span class="chip keep">保留</span></td></tr>
+    </table>
+  </div>
+  <div class="note"><b>前提已核实</b>：生产 <code>config.yml</code>、<code>minimal.yml</code>、<code>test_yamls/</code> 对这四个条件<strong>零引用</strong>；Web UI 不暴露 <code>upload_snapshots</code>（种子列表展示的 <code>uploaded</code> 是 qB 原生累计值，与本机制无关）；<code>sys.upload_today</code> / <code>sys.download_today</code> / <code>sys.upload_month</code> 表达式名走独立的 <code>traffic_source</code> 数据源（Traffic Monitor dat），与统计底座无关，<strong>保留</strong>。</div>
+</section>
+
+<section id="s2">
+  <div class="sec-rule"><span class="folio">02</span><h2>移除清单 · 代码</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <caption>7 个代码触点</caption>
+      <tr><th>文件</th><th>位置</th><th>动作</th></tr>
+      <tr><td class="loc">src/auto_qb/rules/conditions.py</td><td class="loc">:214-256</td><td class="msg">删 <code>UploadSizeCondition</code>、<code>_UploadDeltaCondition</code> 及三个子类；注册走 <code>@register_condition</code> 装饰器，删类即退注册；改模块 docstring(:2)</td></tr>
+      <tr><td class="loc">src/auto_qb/rules/expr/env.py</td><td class="loc">:112-116 · :304-305</td><td class="msg">删 <code>_upload_delta</code> 工厂与 <code>tor.upload_today/week/month</code> 三个表达式名</td></tr>
+      <tr><td class="loc">src/auto_qb/core/mixins/rule_engine.py</td><td class="loc">:223-244</td><td class="msg">删 <code>begin_round()</code> 与 <code>upload_delta()</code></td></tr>
+      <tr><td class="loc">src/auto_qb/core/qbmanager.py</td><td class="loc">:815 · :87</td><td class="msg">删 <code>begin_round(...)</code> 调用点；改 :87 注释引用</td></tr>
+      <tr><td class="loc">src/auto_qb/config/schema/rules.py</td><td class="loc">:118-121</td><td class="msg">删 4 条条件 Plugin 元数据（WebUI 设置页数据驱动渲染，前端无需改）</td></tr>
+      <tr><td class="loc">src/auto_qb/rules/actions/full_checking.py</td><td class="loc">:35</td><td class="msg">docstring「与 upload_size_today 口径一致」引用改写</td></tr>
+      <tr><td class="loc">src/auto_qb/infra/versioning.py</td><td class="loc">:28</td><td class="msg">state 升级链：版本 1→2 + v1→v2 迁移（见 03 节）</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="s3">
+  <div class="sec-rule"><span class="folio">03</span><h2>state v2 迁移</h2></div>
+  <p><code>state["upload_snapshots"]</code> 是 state.json 顶层常驻键（全功能关闭时是唯一底座，~16KB）。按项目「落盘文件一律版本号 + 升级链」约定（TODO.md 已完成项）：</p>
+  <ul>
+    <li><code>CURRENT_VERSIONS["state"]</code> 1 → <strong>2</strong>；</li>
+    <li>注册 v1→v2 迁移：<code>pop("upload_snapshots", None)</code> —— 旧 state 读入即清键、盖 v2 版本章落盘；</li>
+    <li>数据语义：快照丢失 → 基线重建为当前值（保守方向），且移除后无任何消费者，无信息损失。</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <div class="sec-rule"><span class="folio">04</span><h2>测试更新</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <caption>测试触点</caption>
+      <tr><th>文件</th><th>位置</th><th>动作</th></tr>
+      <tr><td class="loc">tests/test_rule_engine.py</td><td class="loc">:422-442 · :21</td><td class="msg">删 <code>test_begin_round_and_upload_delta</code> + docstring 条目</td></tr>
+      <tr><td class="loc">tests/test_conditions.py</td><td class="loc">:340 · :349-356 · :17-18</td><td class="msg">删 <code>test_upload_size_condition</code>、<code>test_upload_delta_conditions</code> + docstring 条目</td></tr>
+      <tr><td class="loc">tests/test_expr_eval.py</td><td class="loc">:94 · :303-305 · :5</td><td class="msg">删 <code>tor.upload_today</code> 无基线断言、条件↔表达式等价表三行 + docstring 条目</td></tr>
+      <tr><td class="loc">tests/test_config_schema.py</td><td class="loc">:127-128</td><td class="msg">schema↔registry 数据驱动一致性断言，双侧同删<strong>不需改</strong></td></tr>
+    </table>
+  </div>
+  <p>收尾 <code>commands run test.quick</code> 兜底扫尾（<code>test_versioning</code> / <code>test_state_matrix</code> 若断言 state 版本号则同步），最终 <code>test.full</code> 记新基线。新增/删除测试同步对应文件头部「## 测试计划」清单。</p>
+</section>
+
+<section id="s5">
+  <div class="sec-rule"><span class="folio">05</span><h2>文档回写</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <caption>文档触点</caption>
+      <tr><th>文件</th><th>位置</th><th>动作</th></tr>
+      <tr><td class="loc">docs/configuration.md</td><td class="loc">:376-379 · :450-453 · :476</td><td class="msg">条件示例、条件表 4 行、口径引用 —— 删/改写</td></tr>
+      <tr><td class="loc">docs/deployment.md</td><td class="loc">:327</td><td class="msg">state.json 内容描述去掉 upload_snapshots</td></tr>
+      <tr><td class="loc">memory-bank/rule-system/conditions-and-actions.md</td><td class="loc">:43-46</td><td class="msg">条件对照表删 4 行</td></tr>
+      <tr><td class="loc">memory-bank/rule-system/rules-and-triggers.md</td><td class="loc">:54</td><td class="msg">口径引用改写</td></tr>
+      <tr><td class="loc">memory-bank/systemPatterns/main-loop.md</td><td class="loc">:89</td><td class="msg">主循环第 7 步 begin_round 移除</td></tr>
+      <tr><td class="loc">memory-bank/systemPatterns/client-and-state.md</td><td class="loc">:31</td><td class="msg">快照结构说明移除</td></tr>
+      <tr><td class="loc">memory-bank/modules/mixins.md</td><td class="loc">:12</td><td class="msg">rule_engine mixin 职责表更新</td></tr>
+      <tr><td class="loc">memory-bank/config-reference/keys.md</td><td class="loc">:84</td><td class="msg">state.json 实测 schema 更新</td></tr>
+      <tr><td class="loc">TODO.md</td><td class="loc">:135</td><td class="msg">标记已移除 + feature issue 编号</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="s6">
+  <div class="sec-rule"><span class="folio">06</span><h2>feature issue</h2></div>
+  <p>走 create-issue skill 入池（用户已显式要求）：类型 <strong>feature</strong>，HTML 落 <code>memory-bank/issues/</code> 并在 <code>_index.md</code> 登记。要点：</p>
+  <ul>
+    <li>重新设计「单种周期上传/下载量统计」：补下载量口径、或改 <code>global_*</code> 全局口径；</li>
+    <li>记录本次移除的全部接口面（4 条件 / 3 表达式名 / <code>begin_round</code> / <code>upload_delta</code> / state v2 迁移），供将来直接开工。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <div class="sec-rule"><span class="folio">07</span><h2>影响面与风险评估</h2></div>
+  <ul>
+    <li><strong>不受影响</strong>：规则引擎本体（其余 11 条件、动作、表达式、事件分派）、move / reannounce / HR 动作、逐种与站点级限速、全局限速曲线、WebUI 流量视图、通知系统。</li>
+    <li><strong>行为变化（唯一）</strong>：旧 state.json 读入后 schema_version 升 2、<code>upload_snapshots</code> 键被迁移清掉 —— 该数据本就无消费者。</li>
+    <li><strong>配置兼容</strong>：所有现存配置对被删条件零引用，无校验失败风险；若用户手写含这四条件的规则将因未注册条件名在 <code>validate_config</code> fail-fast 报错 —— 符合「配置显式声明」设计。</li>
+    <li><strong>回滚</strong>：单提交原子回滚即可；state v1 文件不受 v2 迁移反向影响（旧版本程序读 v2 文件会被版本闸拦下，属预期）。</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <div class="sec-rule"><span class="folio">08</span><h2>执行顺序</h2></div>
+  <ol>
+    <li>会话同步（已完成：本地 HEAD == Gitee develop @ 835b62c，树干净）；</li>
+    <li>本计划文件（本文档）；</li>
+    <li>代码移除（02/03 节）→ 测试更新（04 节）→ <code>test.quick</code>；</li>
+    <li>文档回写（05 节）+ TODO.md；</li>
+    <li>feature issue 入池 + <code>kb.index</code>；</li>
+    <li>收尾 DoD：<code>dev.fmt</code> → activeContext 切片 → <code>test.full</code> 新基线切片 → 汇报；<strong>不自动提交</strong>，等用户显式指令。</li>
+  </ol>
+</section>
+
+</main>
+</div>
+
+<footer>
+  <p>AUTO-QB · MEMORY-BANK/PLANS/26-09-27-1232-PLAN-REMOVE-UPLOAD-STATS.HTML · DARK · 单文件自包含</p>
+</footer>
+
+</div>
+</body>
+</html>
