@@ -45,7 +45,7 @@
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) `Done` · issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) `Open`
 - **webui-search-query-syntax** (2) — 报告 [26-09-26-1918](reports/26-09-26-1918-report-webui-search-query-syntax.html) `Done` · 档案 [26-09-26](tasks/26-09-26-webui-search-query-syntax.md) `Done`
 
-## 单件专题 (仅登记, 78 个)
+## 单件专题 (仅登记, 79 个)
 
 - appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commands-shipflow-v2 · commands-unified-command-surface
 - commands-unified-surface · commit-gate-auto-run · config-hr-binding-mapping · config-value-range-validation · cross-group-file-conflict
@@ -57,7 +57,7 @@
 - skip-checking-readd-no-backup-window · src-layout-restructure · state-load-corrupt-silent-reset · test-sidefx-guard · test-suite-perf
 - torrent-traffic-stats · tracker-url-source-sanitize · tray-join-timeout-abandons-save · type-annotations-mypy · web-runtime-host-protocol
 - web-tracker-url-passkey-log · webui-appjs-split · webui-button-system · webui-cols-store-version · webui-component-libraries
-- webui-config-health-warning · webui-ctx-menu-multi-select · webui-ctx-submenu · webui-error-reason · webui-ext-hr-logging
+- webui-config-health-warning · webui-ctx-menu-multi-select · webui-ctx-submenu · webui-curve-chart · webui-error-reason · webui-ext-hr-logging
 - webui-filter-data-and-color-flicker · webui-fix-plan-round10 · webui-fix-plan-round9 · webui-fix-round10 · webui-fix-round11 · webui-fix-round9
 - webui-hot-endpoints-jsonable-encoder · webui-hr-popup · webui-hr-popup-t1 · webui-hr-popup-t2 · webui-hr-popup-t3 · webui-keyboard-shortcuts
 - webui-log-level-filter · webui-long-path-open · webui-naming · webui-page-location-persist · webui-polish-and-redesign · webui-redesign

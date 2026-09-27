@@ -392,8 +392,7 @@
   vector-effect: non-scaling-stroke; }
 .ce-chart-area { fill: var(--accent-soft); stroke: none; }
 .ce-grid-lines line { stroke: var(--border-soft); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.ce-chart-tick { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3;
-  vector-effect: non-scaling-stroke; }
+.ce-chart-tick { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; vector-effect: non-scaling-stroke; }
 .ce-chart-cross { stroke: var(--fg-dim); stroke-width: 1; stroke-dasharray: 3 3;
   vector-effect: non-scaling-stroke; opacity: .85; }
 .ce-chart-dot { fill: var(--fg); stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }

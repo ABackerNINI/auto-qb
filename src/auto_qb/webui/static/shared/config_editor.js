@@ -76,7 +76,7 @@ window.CONFIG_EDITOR = {
       const list = this.cfgCurveList();
       for (let i = 0; i < list.length; i++) {
         for (const dir of ["upload_curve", "download_curve"]) {
-          const chart = this._curveChart(i, dir);
+          const chart = this._buildCurveChart(i, dir);
           if (chart) out[`${i}:${dir}`] = chart;
         }
       }
@@ -766,15 +766,12 @@ window.CONFIG_EDITOR = {
     /* 阶梯折线数据(纯展示)
      *
      * 语义与 curves.curve_speed 一致: 阈值是区间**上限**, 末档之后一直沿用末档速度。
-     * 输出包含: 曲线 path、面积 path、X/Y 轴刻度与档位边界参考线、悬停标记点几何 —— 全部由前端算,
+     * 输出包含: 曲线 path、面积 path、X/Y 轴刻度与档位边界参考线、∞ 区水印、悬停标记点几何 —— 全部由前端算,
      * 图尺寸足够大可读(PAD 留出轴标签空间)。合法性/解析失败仍只提示不阻断(后端把关)。
-     * SPD-02: x 轴改为**按档位边界分段等宽**(每档固定宽度, 末档边界后只留 ∞ 提示区),
-     * 不再按流量线性映射 —— 否则末档区间远宽于前面档位时最后一档占位超 80%, 各档形状不可读。
+     * x 轴按各档**实际流量长度**比例分段(2026-09-27 重构, 取代旧"每档等宽"): t_1..t_{n-1} 把
+     * [0, 末档下限] 切成 n-1 个有限区间按长度分摊 70% 宽度; 末档与后端语义一致(X ≥ 末档下限后
+     * 一直沿用末档速度, 末档阈值不改变速度函数)显示为 ∞ 区、占宽不超过 30%(仅 1 档时整图即 ∞, 独占全宽)。
      */
-    _curveChart(i, direction) {
-      return this._buildCurveChart(i, direction);
-    },
-    /* 可复用(图表 + 悬停共用同一几何), 故单独成型 */
     _buildCurveChart(i, direction) {
       const raw = this.cfgCurvePoints(i, direction);
       const points = [];
@@ -788,48 +785,44 @@ window.CONFIG_EDITOR = {
       points.sort((a, b) => a.t - b.t);
 
       // 几何: 左侧留 Y 轴标签, 底部留 X 轴标签; 图体明显放大(旧版 320×96 太小)
-      const W = 560, H = 210, PAD_L = 58, PAD_R = 14, PAD_T = 12, PAD_B = 30;
+      const W = 560, H = 210, PAD_L = 58, PAD_R = 14, PAD_T = 12, PAD_B = 30, TICK_GAP = 46;
       const usableW = W - PAD_L - PAD_R;
       const maxS = Math.max(...points.map((p) => p.s), 1);
       const y = (s) => H - PAD_B - (H - PAD_B - PAD_T) * (s / maxS);
 
-      // SPD-02: x 轴按档位边界分段等宽 —— 每档固定 segW 宽, 末档边界之后只留半档宽的"∞"提示区,
-      // 不再按流量线性延伸(否则末档区间远宽于前面档位时, 最后一档占位超 80%)。
+      // 末档 ∞ 区占图体 ≤30%(封顶防其它档被挤没); 其余有限区间按流量长度比例分摊剩余宽度
       const n = points.length;
-      const segW = usableW / (n + 0.5);  // n 档 + 半档 ∞ 区
-      // t -> px: t 落在 [b(j-1), b(j)](b(-1)=0)时在第 j 段内线性插值; 超出末档边界贴右缘
-      const x = (t) => {
-        if (t <= 0) return PAD_L;
-        for (let j = 0; j < n; j++) {
-          if (t <= points[j].t) {
-            const lo = j === 0 ? 0 : points[j - 1].t;
-            const f = points[j].t > lo ? (t - lo) / (points[j].t - lo) : 1;
-            return PAD_L + segW * (j + f);
-          }
-        }
-        return PAD_L + usableW;
-      };
+      const W_inf = n === 1 ? usableW : usableW * 0.3;
+      const W_finite = usableW - W_inf;
+      const span = n > 1 ? points[n - 2].t : 0;  // 最后一个有限断点(= 末档下限)
+      const x = (t) => PAD_L + (span > 0 ? (t / span) * W_finite : 0);
 
+      // 阶梯线: 断点 t_k 处速度 s_k -> s_{k+1}; 末档平线一直延伸到右缘(∞)
       let line = `M ${x(0).toFixed(1)} ${y(points[0].s).toFixed(1)}`;
-      for (let k = 1; k < n; k++) {
-        line += ` L ${x(points[k - 1].t).toFixed(1)} ${y(points[k - 1].s).toFixed(1)}`;
-        line += ` L ${x(points[k - 1].t).toFixed(1)} ${y(points[k].s).toFixed(1)}`;
+      for (let k = 0; k < n - 1; k++) {
+        line += ` L ${x(points[k].t).toFixed(1)} ${y(points[k].s).toFixed(1)}`;
+        line += ` L ${x(points[k].t).toFixed(1)} ${y(points[k + 1].s).toFixed(1)}`;
       }
-      const lastS = points[n - 1].s;
-      line += ` L ${(PAD_L + usableW).toFixed(1)} ${y(lastS).toFixed(1)}`;
-      const area = `${line} L ${(PAD_L + usableW).toFixed(1)} ${y(0).toFixed(1)} L ${x(0).toFixed(1)} ${y(0).toFixed(1)} Z`;
+      line += ` L ${(PAD_L + usableW).toFixed(1)} ${y(points[n - 1].s).toFixed(1)}`;
+      const area = `${line} L ${(PAD_L + usableW).toFixed(1)} ${y(0).toFixed(1)} L ${PAD_L.toFixed(1)} ${y(0).toFixed(1)} Z`;
 
-      // 刻度: X 取档位边界(分段等宽后等距刻度不再对应整齐的流量值), 右缘标 ∞; Y 仍取 5 个等距限速
-      const xTicks = [{ pos: PAD_L, label: "0" }];
-      for (let j = 0; j < n; j++) xTicks.push({ pos: x(points[j].t), label: this._fmtBytes(points[j].t) });
-      xTicks.push({ pos: PAD_L + usableW, label: "∞" });
+      // 刻度: X 取 0 + 各有限断点 + 右缘 ∞(相邻标签过近时省略, 参考线仍画); Y 取 5 个等距限速
+      const xTicksRaw = [{ pos: PAD_L, label: "0" }];
+      for (let k = 0; k < n - 1; k++) xTicksRaw.push({ pos: x(points[k].t), label: this._fmtBytes(points[k].t) });
+      xTicksRaw.push({ pos: PAD_L + usableW, label: "∞" });
+      const xTicks = [xTicksRaw[0]];
+      for (let k = 1; k < xTicksRaw.length - 1; k++) {
+        if (xTicksRaw[k].pos - xTicks[xTicks.length - 1].pos >= TICK_GAP) xTicks.push(xTicksRaw[k]);
+      }
+      xTicks.push(xTicksRaw[xTicksRaw.length - 1]);
       const yTicks = [];
       for (let k = 0; k <= 4; k++) {
         const s = (maxS * k) / 4;
         yTicks.push({ pos: y(s), label: this._fmtSpeed(s) });
       }
-      // 档位边界竖参考线(预计算像素位置, 模板不再按线性比例折算)
-      const tierLines = points.map((p) => ({ x: x(p.t) }));
+      // 档位边界竖参考线: 只画真正改变速度的断点(末档阈值不改变速度函数, 不画)
+      const tierLines = [];
+      for (let k = 0; k < n - 1; k++) tierLines.push({ x: x(points[k].t) });
       return {
         viewBox: `0 0 ${W} ${H}`,
         w: W,
@@ -844,28 +837,45 @@ window.CONFIG_EDITOR = {
         yTicks: yTicks,
         tierLines: tierLines,
         baseY: y(0),
-        // 悬停换算所需的数据域: segW(每档宽) + points(各档边界/限速)
-        segW: segW,
+        // 悬停换算所需的数据域: 有限区宽/总跨度 + 各档边界/限速
+        span: span,
+        W_finite: W_finite,
+        W_inf: W_inf,
         maxS: maxS,
         points: points,
-        note: `${n} 档 · 最严 ${this._fmtSpeed(maxS)}`,
+        note: `${n} 档 · 纵轴上限 ${this._fmtSpeed(maxS)}`,
       };
     },
-    /* 鼠标在图上移动: 把像素位置换算回 (累计流量, 限速) 并高亮该档(阶梯: 找所属区间) */
+    /* 鼠标在图上移动: 把像素位置换算回 (累计流量, 限速) 并高亮该档(阶梯: 找所属区间)
+     *
+     * 按 SVG 实际渲染缩放换算(preserveAspectRatio 居中) —— 任凭 CSS 把图改宽改窄都不偏移,
+     * 修掉旧版"假设 SVG 铺满容器"在高度被压扁时的映射错位; tooltip 位置同样用真实渲染像素
+     * 还原成相对容器的百分比, 不再受容器 padding 影响。
+     */
     cfgChartHover(event, i, direction) {
       const chart = this.cfgCurveChartOf(i, direction);
       if (!chart) return;
       const svg = event.currentTarget.querySelector("svg");
       const rect = svg.getBoundingClientRect();
-      const px = ((event.clientX - rect.left) / rect.width) * chart.w;
+      const box = event.currentTarget.getBoundingClientRect();
+      const scale = Math.min(rect.width / chart.w, rect.height / chart.h);
+      const offX = (rect.width - chart.w * scale) / 2;
+      const offY = (rect.height - chart.h * scale) / 2;
+      const px = (event.clientX - rect.left - offX) / scale;
       const rel = Math.max(0, Math.min(chart.w - chart.padR, px) - chart.padL);
-      // SPD-02 分段等宽: 第 j 段固定 segW 宽; 末档之后的 ∞ 提示区仍属末档(阈值为其上限)
+      // 第 j 档: 有限区内按流量线性映射找区间(阈值为区间上限); ∞ 区整段归末档
       const n = chart.points.length;
-      const j = Math.min(n - 1, Math.floor(rel / chart.segW));
-      const f = Math.min(1, Math.max(0, (rel - chart.segW * j) / chart.segW));
-      const lo = j === 0 ? 0 : chart.points[j - 1].t;
-      const t = lo + (chart.points[j].t - lo) * f;
-      // 阶梯语义: 该累计流量落入哪一档(阈值为区间上限) -> 用该档的限速
+      let j, tLabel;
+      if (chart.span <= 0 || rel >= chart.W_finite) {
+        j = n - 1;
+        tLabel = "∞";
+      } else {
+        const t = (rel / chart.W_finite) * chart.span;
+        j = 0;
+        while (j < n - 1 && t >= chart.points[j].t) j++;
+        tLabel = this._fmtBytes(t);
+      }
+      // 阶梯语义: 该累计流量落入哪一档 -> 用该档的限速
       const speed = chart.points[j].s;
       const hx = chart.padL + rel;
       const hy = chart.h - chart.padB - (chart.h - chart.padB - chart.padT) * (speed / chart.maxS);
@@ -873,12 +883,12 @@ window.CONFIG_EDITOR = {
         key: `${i}:${direction}`,
         x: hx,
         y: hy,
-        tLabel: rel > chart.segW * n ? "∞" : this._fmtBytes(t),
+        tLabel: tLabel,
         sLabel: this._fmtSpeed(speed),
         index: j + 1,
-        // tooltip 位置(用百分比定位在容器内)
-        leftPct: (hx / chart.w) * 100,
-        topPct: (hy / chart.h) * 100,
+        // tooltip 位置: SVG 内绘制坐标还原到屏幕像素, 再换算成相对容器的百分比
+        leftPct: ((rect.left - box.left + offX + hx * scale) / box.width) * 100,
+        topPct: ((rect.top - box.top + offY + hy * scale) / box.height) * 100,
       };
     },
     cfgChartLeave() {

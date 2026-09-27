@@ -609,7 +609,9 @@
 .hb-curve-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); }
 .hb-curve-bd { padding: 13px 14px; }
 .hb-chart { position: relative; margin-bottom: 4px; }
-.hb-chart svg { width: 100%; height: 128px; display: block; }
+/* svg 尺寸由各主题 .ce-chart-svg(width:100% + aspect-ratio 560/210)统一决定;
+   这里不再写 height —— 旧 height:128px 会压过 aspect-ratio 把图压扁(绘制区 letterbox 居中,
+   图看着偏窄、悬停映射整体错位), 2026-09-27 随曲线图重构删除 */
 /* 档位: 每一档做成**一个整体**的小格(「流量低于 X → 限速 Y」), 而不是两个并排的独立输入框 */
 .hb-tiers { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .hb-tier-head, .hb-tier {
