@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [annotations-lazy-eval.md](annotations-lazy-eval.md) | Python 3.14 起 PEP 649 让注解默认惰性求值 —— 模块级注解引用未导入的 typing 名字(如 Dict)在导入期**不报错**, 只在 ≤3.13 的解释器上炸; import-all 守卫必须显式 `inspect.get_annotations(obj, eval_str=True)` 强制求值才能跨版本抓住, 且守卫对已注入的 bug 还可能**假绿灯**(守卫写完必须红验)。 | Dict, typing, 注解, NameError, import 报错, 3.14, PEP 649, 惰性求值, import-all, 守卫, 假绿灯, 红验 |
 | [assertions.md](assertions.md) | 恒真 / 恒红 / 安慰剂 / 量错对象 —— 断言失去意义的所有已知形态(含"样本与配置脱节"), 以及红验与 A/B 归因的纪律。 | 写断言, 红验, 反向对照, 阈值, 恒真, 摆设断言, 顺序断言, 冒烟失败归因, flaky, 反查表长度, infohash v1 v2, 手写样本, 配置没被读到 |
 | [browser-verify-iab.md](browser-verify-iab.md) | 本机没有 node 时 `ui_smoke.cjs` 链路不可用, 可用 ZCode IAB 浏览器 + evaluate 替代 —— 但 evaluate 返回嵌套对象是序列化假象 `{}`。 | 浏览器验证, IAB, evaluate, 无 node, 冒烟跑不了, 序列化, 假空对象, cfgRaw, 绑定状态 |
 | [corpus-capture.md](corpus-capture.md) | `scripts/qb_capture.py` 实施时实测的一批坑 —— 代理、rid 序列、秒分辨率时钟、伪名化撞车、判据空壳。 | 抓语料, 脱敏, qb_capture, 代理, rid, 伪名化, 等价类判据, 红验, argparse |

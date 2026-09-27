@@ -4,7 +4,7 @@
 默认值单一来源 = models 中的 dataclass 字段默认。
 """
 import logging
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import yaml
 
