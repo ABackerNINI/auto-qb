@@ -129,11 +129,12 @@ def render(items: list[dict], head: str) -> str:
 
 def build(root: Path, mb: Path) -> str:
     cmd = gen_cmd(root, "gen_doc_map.py")
+    # 头部固定文案须压着写: 专题数稳定增长, index-auto cap 已三连触顶(见 pitfalls/kb/cap-counting.md
+    # 「两个出口」条) —— 这里每省 1 字符都是给内容行的余量
     head = f"""# 文档形态总览 (按专题)
 
 > **本文件是生成物, 不要手改** —— 由 `{cmd}` 扫描四形态的 `doc-topic` / `**Topics:**` 与状态生成;
-> 新增制品或改状态后重跑即可。
-> 协议与四形态索引见 [conventions/doc-forms.md](conventions/doc-forms.md)。
+> 协议与索引见 [doc-forms.md](conventions/doc-forms.md)。
 """
     return render(collect(mb), head)
 

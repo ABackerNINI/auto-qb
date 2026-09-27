@@ -109,12 +109,14 @@ GROUPS: Tuple[Group, ...] = (
                 help="配置文件格式版本标记(升级链, 计划 26-09-26-0506): 旧版本配置加载时自动逐级迁移, 无需手写",
                 risk="文件格式标记, 程序保存时自动盖章 —— 请勿手改",
             ),
-            # ↓ 日志 / WEB UI / 通知 三个短段并入常规组(2026-09-26 用户要求: 设置首页少几张卡, 设置页不再单列)
+            # ↓ 日志 / WEB UI / 通知 三个短段并入常规组(2026-09-26 用户要求: 设置首页少几张卡, 设置页不再单列);
+            #   不声明 open —— 三段在「常规」分区页里经 hubBlocks 各自成块、永远展开(2026-09-28 用户要求:
+            #   分类名要显性, 「常规/日志」而不是并入「常规/常规」; 不折叠保持 2026-09-15 平铺诉求)
             Field(
                 "log",
-                "日志设置",
+                "日志",
                 "object",
-                open=True,  # 短段不折叠(用户要求: 日志/WebUI/通知平铺)
+                help="落盘轮转与格式",
                 fields=(
                     Field(
                         "level",
@@ -146,7 +148,7 @@ GROUPS: Tuple[Group, ...] = (
                 "web",
                 "WebUI",
                 "object",
-                open=True,  # 短段不折叠
+                help="图形界面的监听与鉴权",
                 fields=(
                     Field("enabled", "启用", "bool", default="false", help="启用后可在浏览器打开 主机:端口 管理种子与配置(默认关闭)"),
                     Field(
@@ -179,9 +181,9 @@ GROUPS: Tuple[Group, ...] = (
             ),
             Field(
                 "notify",
-                "主动通知",
+                "通知",
                 "object",
-                open=True,  # 短段不折叠
+                help="WARNING 及以上日志推送平台原生通知",
                 fields=(
                     Field("enabled", "启用", "bool", default="false", help="开启后程序消息(出错/危险情况等)按系统原生通知推送, 无需额外配置"),
                     Field(

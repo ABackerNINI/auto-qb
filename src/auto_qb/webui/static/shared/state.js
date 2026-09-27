@@ -222,6 +222,7 @@ window.AQB_STATE = {
       logs: {
         loading: false, error: "", loaded: false,
         lines: [], file: "",
+        open: false,          // 「常规」页尾运行日志块默认折叠(2026-09-28), 首次展开才拉数据
         note: "",             // 后端"筛不了"的说明(格式无等级字段 / 已存行与格式不符)
         level: "",            // ""=全部 | INFO | WARNING | ERROR(后端按配置格式串定位等级字段)
         num: 300,             // tail 行数(后端钳制 10..2000)

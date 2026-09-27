@@ -268,21 +268,30 @@ window.CONFIG_HUB = {
       walk(this.cfgFlatten(g.fields, ["config"], 0), root);
       return rootUsed ? [root].concat(blocks) : blocks;
     },
-    /* 搜索: 按配置项名直跳(不用记它在哪个分区) */
+    /* 搜索: 按配置项名直跳(不用记它在哪个分区)。
+     * 递归进 object 段(块)内部找叶子字段 —— 2026-09-28 起日志/WebUI/通知在「常规」页各自成块,
+     * 其字段不再是 cfgFlatten 的顶层项 */
     hubHits() {
       const q = (this.hub.query || "").trim().toLowerCase();
       if (!q || !this.cfg.schema || !this.cfg.tree) return [];
       const out = [];
-      for (const g of this.cfg.schema.groups) {
-        const meta = HUB_GROUP_META[g.key] || {};
-        for (const it of this.cfgFlatten(g.fields, ["config"], 0)) {
-          if (it.type !== "field") continue;
+      const collect = (items, g, meta) => {
+        for (const it of items || []) {
+          if (it.type !== "field") {
+            collect(it.items, g, meta);
+            continue;
+          }
           const f = it.field;
           const hay = `${f.label} ${f.key} ${f.help || ""}`.toLowerCase();
           if (hay.indexOf(q) < 0) continue;
           out.push({ key: this.hubKey(it.path), label: f.label, group: g.key, groupLabel: meta.title || g.label });
-          if (out.length >= 10) return out;
+          if (out.length >= 10) return;
         }
+      };
+      for (const g of this.cfg.schema.groups) {
+        const meta = HUB_GROUP_META[g.key] || {};
+        collect(this.cfgFlatten(g.fields, ["config"], 0), g, meta);
+        if (out.length >= 10) break;
       }
       return out;
     },
@@ -348,9 +357,8 @@ window.CONFIG_HUB = {
         const names = this.cfgRuleGroupNames();
         this.cfg.ruleGroupKey = names.length ? names[0] : null;
       }
-      // 运行日志已并入「常规」分区页尾: 打开分区时拉一次, 之后手动刷新(不自动轮询)
-      if (key === "basic" && !this.logs.loaded) this.loadLogs();
-      // HR 站点状态已并入 hr_check 分区页尾: 打开分区时拉一次, 之后手动刷新(小时级节奏不轮询)
+      // 运行日志已并入「常规」分区页尾且默认折叠(2026-09-28): 首次展开才拉一次,
+      // 之后手动刷新(不自动轮询); 分区打开本身不再预取
       if (key === "hr_check" && !this.hrs.loaded) this.loadHrStatus();
       window.scrollTo({ top: 0 });
     },
@@ -369,9 +377,20 @@ window.CONFIG_HUB = {
         if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
       });
     },
+    /* 运行日志块(「常规」页尾): 默认折叠(2026-09-28 用户要求), 首次展开才拉一次 /api/log,
+     * 之后手动刷新不轮询 —— 折叠态不预取, 省掉打开分区就背一次最多 2000 行 tail 的请求 */
+    hubLogsToggle() {
+      this.logs.open = !this.logs.open;
+      if (this.logs.open && !this.logs.loaded) this.loadLogs();
+    },
+    /* 折叠态下动等级 / 行数 / 刷新 = 明确想看日志: 顺手展开再拉 */
+    hubLogsLoad() {
+      this.logs.open = true;
+      this.loadLogs();
+    },
     /* 从存储恢复的分区 key 必须**在 schema 里还认得出**才允许采用 —— schema 是模块级常量,
      * 版本升级后分区可能改名 / 删除, 不校验就会让刷新停在空白分区(且页面上没有任何提示)。
-     * 采用时复用 hubGo: trackers / rules 的默认选中项与日志 / HR 的懒加载都在那条路径里,
+     * 采用时复用 hubGo: trackers / rules 的默认选中项与 HR 的懒加载都在那条路径里,
      * 自己重写一遍就会漏掉其中一半。由 cfgLoad 成功后调用(那一刻 schema 才到手)。 */
     hubRestore() {
       let v = this.hub.view;
@@ -397,9 +416,14 @@ window.CONFIG_HUB = {
     hubFieldCount() {
       if (!this.cfg.schema) return 0;
       let n = 0;
-      for (const g of this.cfg.schema.groups) {
-        for (const it of this.cfgFlatten(g.fields, ["config"], 0)) if (it.type === "field") n += 1;
-      }
+      // 递归进 object 段(块)内部: 同 hubHits, 块内叶子字段不再是 cfgFlatten 顶层项(2026-09-28)
+      const count = (items) => {
+        for (const it of items || []) {
+          if (it.type !== "field") count(it.items);
+          else n += 1;
+        }
+      };
+      for (const g of this.cfg.schema.groups) count(this.cfgFlatten(g.fields, ["config"], 0));
       return n;
     },
     hubLedOf(key) {
