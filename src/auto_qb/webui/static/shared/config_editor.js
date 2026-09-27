@@ -44,6 +44,7 @@ window.CONFIG_EDITOR = {
         openSections: {},  // 可选段展开态 { "<路径>": true }; **缺省 = 折叠**(设置页字段多, 展开应是主动选择)
         openGroups: {},  // 普通 object 段(group)展开态 { "<路径 join>": true }; 缺省 = 折叠(同 section)
         openLists: {},  // pattern_list 字段 list 区展开态 { "<路径 join>": true }; 缺省 = 折叠
+        openCurves: {},  // 限速曲线条目展开态 { "<序号>": true }; 缺省 = 折叠(2026-09-28 用户要求)
         picker: { open: false, groupKey: "", ruleName: "", list: "" },  // 条件/动作选择面板(单例)
         chartHover: null,  // 限速曲线鼠标取值: { chartKey, x, y, tLabel, sLabel } | null
       },
@@ -696,12 +697,27 @@ window.CONFIG_EDITOR = {
     cfgCurveAddPeriod() {
       const list = [...this.cfgCurveList(), { curve: { period: "1D" } }];
       this.cfgSetPath([...this.cfgCurvePath(), "curves"], list);
+      // 新曲线顺手展开(默认折叠是给已有条目的, 新加的下一步就是编辑它)
+      this.cfg.openCurves = { ...this.cfg.openCurves, [list.length - 1]: true };
     },
     cfgCurveRemovePeriod(i) {
       const list = [...this.cfgCurveList()];
       list.splice(i, 1);
       if (list.length) this.cfgSetPath([...this.cfgCurvePath(), "curves"], list);
       else this.cfgDelPath([...this.cfgCurvePath(), "curves"]);
+      // 展开态按序号记录: 删中间一条后其后各条序号前移, 同步搬移保住各条的展开态
+      const open = {};
+      for (const [k, v] of Object.entries(this.cfg.openCurves)) {
+        const idx = Number(k);
+        if (idx !== i) open[idx > i ? idx - 1 : idx] = v;
+      }
+      this.cfg.openCurves = open;
+    },
+    cfgCurveOpen(i) {
+      return !!this.cfg.openCurves[i];
+    },
+    cfgCurveToggle(i) {
+      this.cfg.openCurves = { ...this.cfg.openCurves, [i]: !this.cfg.openCurves[i] };
     },
     /* 档位列表: direction 为 "upload_curve" | "download_curve" */
     cfgCurvePoints(i, direction) {

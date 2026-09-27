@@ -29,18 +29,21 @@
                       <span class="hb-dim">上传 {{ cfgCurvePoints(i, 'upload_curve').length }} 档 ·
                         下载 {{ cfgCurvePoints(i, 'download_curve').length }} 档</span>
                       <span style="margin-left:auto">
+                        <button class="hb-btn ghost sm" @click="cfgCurveToggle(i)">{{ cfgCurveOpen(i) ? '收起' : '展开' }}</button>
                         <button class="hb-btn danger sm" @click="cfgCurveRemovePeriod(i)">删除曲线</button>
                       </span>
                     </div>
-                    <div class="hb-curve-bd">
+                    <div v-if="cfgCurveOpen(i)" class="hb-curve-bd">
                       <div v-for="dir in ['upload_curve', 'download_curve']" :key="dir">
                         <div class="hb-flow-grp-hd" style="margin-top:6px">
+                          <span class="ce-dir-dot" :class="dir === 'upload_curve' ? 'up' : 'down'" aria-hidden="true"></span>
                           {{ dir === 'upload_curve' ? '上传档位' : '下载档位' }}
                           <span class="fg-hint">
                             {{ cfgCurvePoints(i, dir).length ? cfgCurvePoints(i, dir).length + ' 档' : '未配置 = 不管理该方向' }}
                           </span>
                         </div>
                         <div v-if="cfgCurveChartOf(i, dir)" class="ce-chart hb-chart"
+                             :class="dir === 'upload_curve' ? 'ce-chart-up' : 'ce-chart-down'"
                              @mousemove="cfgChartHover($event, i, dir)" @mouseleave="cfgChartLeave()">
                           <template v-for="ch in [cfgCurveChartOf(i, dir)]" :key="'ch' + i + dir">
                             <svg class="ce-chart-svg" v-bind="{ viewBox: ch.viewBox }">
@@ -74,6 +77,7 @@
                               <span>限速 {{ cfg.chartHover.sLabel }}</span>
                             </div>
                             <div class="ce-chart-legend">
+                              <span class="ce-lg-dir" :class="dir === 'upload_curve' ? 'up' : 'down'">{{ dir === 'upload_curve' ? '上传' : '下载' }}</span>
                               <span class="ce-lg-x">横轴: 累计流量(按各档实际长度, 末档 ∞)</span>
                               <span class="ce-lg-y">纵轴: 限速</span>
                               <span class="ce-lg-note">{{ ch.note }}</span>

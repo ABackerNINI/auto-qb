@@ -430,6 +430,20 @@
 .ce-chart-legend { display: flex; gap: 12px; padding: 4px 2px 0; font-size: 11px; color: var(--fg-dim); }
 .ce-chart-legend .ce-lg-x, .ce-chart-legend .ce-lg-y { white-space: nowrap; }
 .ce-chart-legend .ce-lg-note { margin-left: auto; }
+/* 上传/下载曲线配色区分(2026-09-28): 覆盖默认 accent —— 上传暖色(warn) / 下载冷色(blue) */
+.ce-chart-up .ce-chart-line { stroke: var(--warn); }
+.ce-chart-up .ce-chart-area { fill: var(--warn-soft); }
+.ce-chart-down .ce-chart-line { stroke: var(--blue); }
+.ce-chart-down .ce-chart-area { fill: var(--blue-soft); }
+.ce-chart-legend .ce-lg-dir { color: var(--fg-muted); white-space: nowrap; }
+.ce-chart-legend .ce-lg-dir::before { content: ""; display: inline-block; width: 12px;
+  border-top: 2px solid currentColor; vertical-align: middle; margin-right: 5px; }
+.ce-chart-legend .ce-lg-dir.up { color: var(--warn); }
+.ce-chart-legend .ce-lg-dir.down { color: var(--blue); }
+.ce-dir-dot { display: inline-block; width: 12px; border-top: 2px solid currentColor;
+  vertical-align: middle; margin-right: 6px; }
+.ce-dir-dot.up { color: var(--warn); }
+.ce-dir-dot.down { color: var(--blue); }
 
 /* ---------------- 历史流量弹层 ---------------- */
 .hist-modal { width: var(--modal-w-add); max-width: 100%; }

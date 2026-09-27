@@ -409,3 +409,20 @@ select option { background: var(--bg-elev); color: var(--fg); }
   background: var(--bg-elev); border: 1px solid var(--accent-line); box-shadow: var(--shadow-2);
   color: var(--fg); font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
 
+
+/* ---------------- 限速曲线预览: 上传/下载配色区分(2026-09-28) ----------------
+ * 覆盖 components.css 的默认 accent —— 上传暖色(warn) / 下载冷色(blue);
+ * 放 views.css 而非 components.css: 后者 700 行体量守阵已贴顶(699 行) */
+.ce-chart-up .ce-chart-line { stroke: var(--warn); }
+.ce-chart-up .ce-chart-area { fill: var(--warn-soft); }
+.ce-chart-down .ce-chart-line { stroke: var(--blue); }
+.ce-chart-down .ce-chart-area { fill: var(--blue-soft); }
+.ce-chart-legend .ce-lg-dir { color: var(--fg-muted); white-space: nowrap; }
+.ce-chart-legend .ce-lg-dir::before { content: ""; display: inline-block; width: 12px;
+  border-top: 2px solid currentColor; vertical-align: middle; margin-right: 5px; }
+.ce-chart-legend .ce-lg-dir.up { color: var(--warn); }
+.ce-chart-legend .ce-lg-dir.down { color: var(--blue); }
+.ce-dir-dot { display: inline-block; width: 12px; border-top: 2px solid currentColor;
+  vertical-align: middle; margin-right: 6px; }
+.ce-dir-dot.up { color: var(--warn); }
+.ce-dir-dot.down { color: var(--blue); }
