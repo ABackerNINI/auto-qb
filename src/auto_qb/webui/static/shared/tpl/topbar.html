@@ -112,8 +112,13 @@
               <svg class="ico ico-sm ico-config" viewBox="0 0 16 16"><use href="#i-settings"></use></svg>设置
             </button>
           </nav>
-          <!-- 棱镜专属: 主题切换器 + 界面互切(纯 DOM, theme.js 委托绑定, 不进 Vue 状态) -->
+          <!-- 单一语义模板的「UI 差异口」(plans/26-09-26-2233 W3 收敛定案):
+               模板级 UI 差异只允许写成 `<template v-if="ui === 'atlas'|'prism'">` 条件块,
+               且块前必须带 `ui-diff:` 注释说明原因 —— 守阵收集全部条件块作为「活差异清单」,
+               新增差异 = 加一个条件块 + ui-diff 注释, 不许另开分片副本 -->
           <div class="ui-tools">
+            <!-- ui-diff: 主题引擎为棱镜专属(prism/js/theme.js + css/themes/*.css), 星图无此设施 -->
+            <template v-if="ui === 'prism'">
             <div class="theme-pop">
               <button type="button" id="theme-btn" class="table-tool theme-btn" title="界面主题">
                 <svg class="ico ico-sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/></svg>
@@ -128,7 +133,8 @@
                 <button type="button" class="theme-item" data-theme="orbit" style="--td-a:#3fa87e;--td-b:#122019"><i class="td"></i>品牌轨道<span class="t-kind">暗</span></button>
               </div>
             </div>
-            <a class="ui-link" href="/atlas/" title="切换到星图界面(经典深色仪表盘, 可随时切回)"><svg class="ico ico-sm"><use href="#i-orbit"></use></svg>星图</a>
+            </template>
+            <a class="ui-link" :href="uiSwitchTarget.href" :title="uiSwitchTarget.title"><svg class="ico ico-sm"><use :href="uiSwitchTarget.icon"></use></svg>{{ uiSwitchTarget.label }}</a>
           </div>
           <!-- 统计/速度槽已迁至底部状态栏(TBL-08); 顶栏只留全局状态徽章 -->
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">

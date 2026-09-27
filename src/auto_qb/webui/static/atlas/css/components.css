@@ -559,12 +559,7 @@
 .modal-input { width: 100%; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--bg); color: var(--fg); font-size: 13.5px; margin-bottom: 18px; }
 .modal-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-/* 确认框内的额外选项勾选框(如删除时"同时删除磁盘文件"): 危险操作里的可选附加项, 单独一行 */
-.modal-check { display: flex; align-items: center; gap: 8px; margin: -6px 0 16px; padding: 9px 11px;
-  border-radius: var(--radius-sm); background: var(--surface-1); border: 1px solid var(--border-soft);
-  font-size: 13px; color: var(--fg-soft); cursor: pointer; }
-.modal-check:hover { border-color: var(--border-strong); }
-.modal-check input { accent-color: var(--error); width: 15px; height: 15px; flex: 0 0 auto; }
+/* 确认框内的额外选项: FX-24 起改 .opt-pill 切换胶囊(单一语义模板统一件, 勾选框族已退役) */
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; }
 
 /* ============ 图形化配置编辑器(设置页) ============ */
@@ -677,4 +672,29 @@
 .group-row.search-hit { border-color: rgba(59, 130, 246, .45);
   background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row); }
 .member-row.search-hit { background: linear-gradient(90deg, var(--accent-soft), transparent 42%); }
+
+/* 单一语义模板统一件(26-09-27 收敛): 与棱镜 components.css 同名同规则原样移植(令牌面已同面)。
+ * .ui-tools/.ui-link = 界面互切(app.js uiSwitchTarget 参数化); .opt-pill 族 = FX-20/24 切换胶囊(星图跟进,
+ * 替代退役的 .modal-check/.add-dialog-check 勾选框族)。⚠ 两套 CSS 成对改。 */
+.ui-tools { display: flex; align-items: center; gap: 8px; }
+.ui-link { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
+  font-size: 12px; text-decoration: none; cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.ui-link:hover { background: var(--surface-2); color: var(--fg); border-color: var(--border-strong); }
+.opt-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border-soft); background: var(--surface-1);
+  color: var(--fg-muted); font: inherit; font-size: 12.5px; cursor: pointer; user-select: none;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.opt-pill:hover { border-color: var(--border-strong); color: var(--fg); }
+.opt-pill .opt-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 2px;
+  border: 1px solid var(--border-strong); background: transparent;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.opt-pill.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--fg); font-weight: 600; }
+.opt-pill.on .opt-dot { background: var(--accent); border-color: var(--accent); }
+/* 危险项(如"同时删除磁盘文件"): 选中时走错误色, 与普通选中的 accent 语义区分 */
+.opt-pill.danger.on { background: var(--error-soft); border-color: var(--error-line); }
+.opt-pill.danger.on .opt-dot { background: var(--error); border-color: var(--error); }
+.opt-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.modal-opts { display: flex; flex-direction: column; gap: 8px; margin: -6px 0 16px; }
 

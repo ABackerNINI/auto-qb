@@ -525,7 +525,7 @@ def test_static_assets_disable_heuristic_cache(web_env):
     """
     mgr, client = web_env
     for path in (
-        "/atlas/", "/atlas/style.css", "/atlas/tpl/topbar.html", "/prism/", "/shared/app.js", "/shared/boot.js",
+        "/atlas/", "/atlas/style.css", "/shared/tpl/topbar.html", "/prism/", "/shared/app.js", "/shared/boot.js",
         "/shared/vendor/vue.global.prod.js"
     ):
         resp = client.get(path)
@@ -593,7 +593,7 @@ def _ui_aggregate(ui):
     """
     chunks = [_ui_shell_inline(ui)]
     for part in _ui_manifest(ui)["parts"]:
-        text = open(os.path.join(STATIC_ROOT, ui, part["src"]), encoding="utf-8").read()
+        text = open(_tpl_path(part["src"], ui), encoding="utf-8").read()
         chunks.append(text.rstrip("\n"))
     return "\n".join(chunks)
 
@@ -1209,29 +1209,66 @@ def test_frontend_static_bundle_health():
     assert not problems, "前端静态资源问题: " + "; ".join(problems)
 
 
-def test_frontend_template_split_wiring():
-    """模板分片接线守阵(2026-09-26 W1, plans/26-09-26-2233): shell + tpl/*.html 的清单完整性与聚合配平
+def _tpl_path(src, ui):
+    """清单分片 src -> 盘上路径: /shared/... = 单一语义源(收敛后唯一形态); 相对路径按 <ui>/ 解析(兼容)"""
+    if src.startswith("/"):
+        return os.path.join(STATIC_ROOT, *src.lstrip("/").split("/"))
+    return os.path.join(STATIC_ROOT, ui, *src.split("/"))
 
-    模板拆分后新增两类"pytest 全绿但页面半残"的静默形态(与 JS 片段的 _scan_mixin_wiring 同源):
+
+def _scan_ui_diff_registry(problems):
+    """收集 shared/tpl 里的 UI 差异口(`v-if="ui === ...'"`) —— 「活差异清单」的机械面
+
+    收敛定案(plans/26-09-26-2233 W3): 单一语义模板后, 模板级 UI 差异只允许写成
+    `<template v-if="ui === 'atlas'|'prism'">` 条件块, 且块前必须带 `ui-diff:` 注释说明原因;
+    新增差异走这个口, **不许另开分片副本**(双模板副本的复发形态就是绕开这个口私拷一份)。
+    """
+    registry = []
+    shared_dir = os.path.join(STATIC_ROOT, "shared", "tpl")
+    if not os.path.isdir(shared_dir):
+        problems.append("缺 shared/tpl 单一语义分片目录(模板分裂回潮?)")
+        return registry
+    for name in sorted(os.listdir(shared_dir)):
+        if not name.endswith(".html"):
+            continue
+        lines = open(os.path.join(shared_dir, name), encoding="utf-8").read().split("\n")
+        for i, ln in enumerate(lines):
+            m = re.search(r"v-if=\"ui\s*===\s*'(\w+)'\"", ln)
+            if not m:
+                continue
+            side = m.group(1)
+            if side not in ("atlas", "prism"):
+                problems.append(f"shared/tpl/{name}:{i + 1} UI 条件取值非法: {side!r}(只认 atlas|prism)")
+            if "ui-diff:" not in "\n".join(lines[max(0, i - 3):i + 1]):
+                problems.append(f"shared/tpl/{name}:{i + 1} ui 条件块缺 `ui-diff:` 注释(差异口必须写明原因)")
+            registry.append(f"{name}:{i + 1}:{side}")
+    return registry
+
+
+def test_frontend_template_split_wiring():
+    """模板分片接线守阵(2026-09-26 W1; 26-09-27 收敛后 = 单一语义源 shared/tpl): 清单完整性 + 差异口 + 聚合配平
+
+    模板拆分/收敛后的静默故障形态(与 JS 片段的 _scan_mixin_wiring 同源):
       ① 分片文件在盘上但清单漏挂 —— boot 不注入, 该页面区整块消失(零报错);
-      ② 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位。
-    另钉四条结构纪律: 双 UI 分片名单同名同序(同构纪律的机械面)、聚合标签配平(切割边界错位的兜底,
-    分片本身因 wrapper 跨片允许不配平)、shell ≤200 行 / 单分片 ≤400 行(体量目标, 防"拆了又长回去")、
-    清单脚本序(Vue vendor 在首, app.js 收尾)。
+      ② 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
+      ③ 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
+      ④ 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤200 行 / 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
-    lists = {}
+    manifests = {}
     for ui in ("atlas", "prism"):
         shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
         udir = os.path.join(STATIC_ROOT, ui)
         mf = _ui_manifest(ui)
+        manifests[ui] = mf
         n_shell = shell.count("\n") + (0 if shell.endswith("\n") else 1)
         if n_shell > 200:
             problems.append(f"{ui}/index.html {n_shell} 行, shell 体量上限 200(拆了又长回去?)")
         assert '<script src="/shared/boot.js"></script>' in shell, f"{ui} shell 缺 boot.js 引用(分片无人注入)"
         names = []
         for part in mf["parts"]:
-            path = os.path.join(udir, part["src"])
+            path = _tpl_path(part["src"], ui)
             names.append(os.path.basename(part["src"]))
             if not os.path.isfile(path):
                 problems.append(f"{ui}: 清单挂了不存在的分片 {part['src']}(boot fetch 404 = 整页停在错误占位)")
@@ -1242,12 +1279,8 @@ def test_frontend_template_split_wiring():
             if part.get("into") not in ("app", "body"):
                 problems.append(f"{ui}/{part['src']} into 非法: {part.get('into')!r}(boot 只认 app|body)")
         tpl_dir = os.path.join(udir, "tpl")
-        if not os.path.isdir(tpl_dir):
-            problems.append(f"{ui}: 缺 tpl/ 分片目录")
-        else:
-            for f in sorted(os.listdir(tpl_dir)):
-                if f.endswith(".html") and f not in names:
-                    problems.append(f"{ui}: 分片 tpl/{f} 在盘上但清单漏挂(boot 不注入 = 该页面区整块消失)")
+        if os.path.isdir(tpl_dir):
+            problems.append(f"{ui}: 残留 {ui}/tpl/ 目录(收敛后唯一源是 shared/tpl, 双副本必须删除)")
         assert mf["scripts"], f"{ui} 清单缺 scripts(逻辑脚本无人放行)"
         assert mf["scripts"][0].endswith("vue.global.prod.js"), f"{ui} 清单首个脚本必须是 Vue vendor"
         assert mf["scripts"][-1].endswith("/app.js"), (f"{ui} 清单末个脚本必须是 app.js(它末尾才 createApp, 且启动时要读 window.AQB_*)")
@@ -1262,11 +1295,21 @@ def test_frontend_template_split_wiring():
                 n = open(p, encoding="utf-8").read().count("\n")
                 if n > 700:
                     problems.append(f"{os.path.relpath(p, STATIC_ROOT)} {n} 行, 超 700 行单 CSS 体量上限")
-        lists[ui] = names
-    assert lists["atlas"] == lists["prism"], (
-        f"两套 UI 分片名单不成对(模板本就同构, 分片必须同名同序): "
-        f"atlas={lists.get('atlas')} / prism={lists.get('prism')}"
+    # 单一语义模板: 两套 shell 清单必须逐项相等 —— 漂移 = 偷偷分裂出第二份模板(收敛前态回潮)
+    assert manifests["atlas"] == manifests["prism"], (
+        "两套 shell 的 tpl-manifest 不一致 —— 单一语义模板下清单漂移 = 模板分裂回潮, 必须逐项对齐: "
+        f"atlas={manifests.get('atlas')} / prism={manifests.get('prism')}"
     )
+    # 盘上孤儿分片: shared/tpl 存在但清单漏挂
+    shared_dir = os.path.join(STATIC_ROOT, "shared", "tpl")
+    listed = {os.path.basename(p["src"]) for p in manifests["atlas"]["parts"]}
+    if os.path.isdir(shared_dir):
+        for f in sorted(os.listdir(shared_dir)):
+            if f.endswith(".html") and f not in listed:
+                problems.append(f"shared/tpl/{f} 在盘上但清单漏挂(boot 不注入 = 该页面区整块消失)")
+    # UI 差异口注册表(活差异清单): 条件块只认 atlas|prism 且必须带 ui-diff 注释
+    registry = _scan_ui_diff_registry(problems)
+    assert registry, "UI 差异口注册表为空 —— 该机制是收敛后新增模板级差异的唯一入口; 若确已全部消除, 同步本守阵"
     assert not problems, "模板分片接线问题: " + "; ".join(problems)
     # 聚合配平放最后: 切割边界错位(半个元素切进相邻分片)在这里现形
     for ui in ("atlas", "prism"):

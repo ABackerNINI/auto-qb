@@ -400,3 +400,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
 }
 .unrecognized-row .m-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-size: 12.5px; }
 
+/* ---------------- 列头拖动虚影(FX-25, 26-09-27 单一语义模板收敛时自棱镜移植) ----------------
+ * JS 侧(共层 columns.js 的 colGhost 状态)星图本就具备, 此前只有棱镜渲染了这块 —— 收敛后两 UI 同享。
+ * 必须渲染在 #app 层(不能放进 .group-head: 它的 will-change/transform 会另建包含块,
+ * fixed 定位会相对表头而非视口)。字体令牌两套不同名: 星图无 --font-mono, 用内联等宽栈等价替代。 */
+.col-ghost { position: fixed; z-index: 120; pointer-events: none; transform: translate(10px, 12px);
+  padding: 3px 10px; border-radius: var(--radius-sm);
+  background: var(--bg-elev); border: 1px solid var(--accent-line); box-shadow: var(--shadow-2);
+  color: var(--fg); font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+
