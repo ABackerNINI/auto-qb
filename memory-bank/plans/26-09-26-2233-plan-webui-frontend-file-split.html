@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-frontend-file-split">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-09-26-2233">
-<meta name="doc-updated" content="26-09-27-1130">
+<meta name="doc-updated" content="26-09-27-1356">
 <title>计划 · WEB UI 前端大文件拆分</title>
 <style>
   :root {
@@ -228,7 +228,7 @@
     <p class="sub">两套 <span class="path">index.html</span> 各约 2,600 行是当前最大的维护负担。本计划在<strong>零构建链</strong>约束下,把根模板拆成按页面区命名的分片文件,并把拆分纳入既有守阵体系 —— 每一步都可机检、可回滚。</p>
     <div class="meta">
       <div>日期<b>2026-09-26</b></div>
-      <div>状态<b>实施中 · W1 已落地(2026-09-27)</b></div>
+      <div>状态<b>Done · 五波全落地(模板/样式/内核拆分 + 单一语义收敛, 1a11085)</b></div>
       <div>领域<b>webui</b></div>
       <div>前置实测<b>test.full 1665+1 · TOTAL 92%</b></div>
     </div>

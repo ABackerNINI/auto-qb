@@ -1,12 +1,12 @@
-# WEB UI 前端大文件拆分(W2b 内核拆分落地, W4 收口中)
+# WEB UI 前端大文件拆分(计划 Done · 全部入库)
 
-> 摘要: W2b 落地 —— app.js 1281→411 行, 拆出 state.js/lifecycle.js(经 `...window.X` 展开进根组件选项, ❗不能走 app.mixin 否则波及 hub-field 实例)+ auth/polling/view 三个全局 mixin 方法域; 前置补齐真 API stub 冒烟工装, **渲染 DOM 改造前后双 UI 逐字节等价**(atlas/prism 28126/29696 字符)。收敛(shared/tpl + 差异口)同轮全绿复验。W4: 基线切片已入库(26-09-27-1305, TOTAL 91%), 知识库回写完成。实测 test.full 口径 1688 passed + 1 skipped + 0 failed。未提交。
-> 触发: 内核拆分, app.js, 根选项展开, state.js, lifecycle.js, 真 API stub, DOM 等价, 基线切片
-> 最后活动: 2026-09-27 13:10
+> 摘要: plans/26-09-26-2233 五波全部落地并入库 —— W1 模板分片(shared/tpl 单一语义源 14 分片 + boot.js)+ W2a 样式分层 + 单一语义收敛(差异口机制)+ W2b 内核拆分(app.js 1281→411, state/lifecycle 根选项 + auth/polling/view 方法域)+ W4 基线/回写/提交(`1a11085`)。双模板副本消灭, 单文件全部达体量目标。实测 test.full 口径 1688+1(TOTAL 91%, 基线 26-09-27-1305); 合并 fbbd74d 后 1691+1。唯一留待: 用户真机 qB 侧五主题走查。
+> 触发: 前端拆分, 模板分片, 差异口, 内核拆分, 根选项展开, 聚合读法, 计划收口
+> 最后活动: 2026-09-27 13:56
 
 ## 状态
 
-- **已完成**: W0 守阵迁移 / W1 模板分片 + boot.js / W2a 样式分层 / 单一语义模板收敛(shared/tpl + 差异口)/ **W2b 内核拆分**(5 片段 + 瘦身 + 守阵形态④ + 整包聚合读法)/ **W4 基线切片入库**。
-- **待办**: 用户真机 qB 侧冒烟(五主题) / 提交(等指令)。
-- **关键决策**: ①data/watch/生命周期走根选项展开、方法域走全局 mixin(hub-field 隔离是硬理由, app.js 头注释三条硬约束); ②等价验证 = 改造前后真 app.js stub 冒烟渲染 DOM 逐字节比对(强于快照); ③守阵成员查找一律整包聚合(_app_bundle_text/_bundle_iter)。
-- **范围外发现**: prism/css/components.css:247-251 死规则 .modal-check 族(FX-24 遗留), 建议下次 prism CSS 波次清理。
+- **已完成(全部入库)**: W0 守阵迁移 / W1 模板分片 + boot.js(`6fd1331`)/ W2a 样式分层(同上)/ W3 评估报告 + 收敛实施(`aeca1fb`)/ W2b 内核拆分 + W4 基线与回写(`1a11085`); 计划 doc-status 已翻 Done。
+- **留待**: 用户真机 qB 侧双 UI × 五主题走查(stub 冒烟已证真 app.js 运行时等价, 差异口有机检兜底; 如实报告未在真机复验)。
+- **落成的长青事实**: 守阵口径与拆分纪律在 `pitfalls/web-ui/frontend-split.md`; 模块表现在 `modules/core-domain.md` 的 web_ui/static 行; 契约速查指针在 app.js 头注释三条硬约束。
+- **范围外遗留(登记未修)**: 无 —— prism 死 CSS 已随手清(`.modal-check` 族)。
