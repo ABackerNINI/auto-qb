@@ -242,11 +242,14 @@ window.AQB_DIALOGS = {
       };
       const [cats, tags] = await Promise.all([
         safe("/api/categories", (r) => Object.keys(r.categories || {}).sort((a, b) => a.localeCompare(b))),
-        safe("/api/tags", (r) => (r.tags || []).slice().sort((a, b) => a.localeCompare(b))),
+        // exclude_auto=1: 候选剔除程序自动维护的标签(站点名/HR/集数等, 判定在后端)
+        safe("/api/tags?exclude_auto=1", (r) => (r.tags || []).slice().sort((a, b) => a.localeCompare(b))),
       ]);
       if (this.metaOpen) {  // 仅对话框仍开着时回填(慢响应不得污染下一次打开)
         this.metaCategories = cats;
-        this.metaTags = tags;
+        // 选中种子共同携带的标签必须并回候选: 胶囊是这类标签唯一的摘除入口, 藏了就摘不掉
+        // (编辑场景可见性口径同 _metaCommonTags 注释); 其余程序标签只影响"新增候选"的干净度
+        this.metaTags = [...new Set([...tags, ...this.metaCommonTags])].sort((a, b) => a.localeCompare(b));
       }
     },
     /* bulk 投递统一走这里: 与 bulkAct 同链路(api + waitCmd + toast 三态), 但目标集合用

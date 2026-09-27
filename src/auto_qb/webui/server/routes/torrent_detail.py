@@ -7,6 +7,7 @@
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, Response
 
+from ....infra.utils import auto_managed_tag_rules, is_auto_managed_tag
 from ..common import content_disposition
 
 from fastapi import APIRouter
@@ -79,10 +80,17 @@ def build_router(ctx: WebContext) -> APIRouter:
         return {"categories": _cached_read("categories", lambda: manager.api.torrents_categories())}
 
     @router.get("/api/tags")
-    def api_tags_list():
-        """全部标签(读 store 缓存)"""
+    def api_tags_list(exclude_auto: bool = False):
+        """全部标签(读 store 缓存); exclude_auto=1 剔除程序自动维护的标签(判定口径
+        utils.auto_managed_tag_rules: 站点/HR 精确集 + 集数模板形状) —— 添加种子窗口与
+        「标签/分类…」弹窗的候选源用本参, 避免站点名等程序标签刷屏; 标签管理对话框不带
+        本参保持全量。选中种子已携带的标签由前端并回候选(胶囊是唯一摘除入口, 不能藏)。"""
         manager.touch_web_client()
-        return {"tags": _cached_read("tags", lambda: manager.api.torrents_tags())}
+        tags = _cached_read("tags", lambda: manager.api.torrents_tags())
+        if exclude_auto:
+            exact, patterns = auto_managed_tag_rules(manager.config)
+            tags = [t for t in tags if not is_auto_managed_tag(t, exact, patterns)]
+        return {"tags": tags}
 
     @router.post("/api/categories")
     def api_category_create(body: dict = None):

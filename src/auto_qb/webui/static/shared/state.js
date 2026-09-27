@@ -199,7 +199,7 @@ window.AQB_STATE = {
       addFirstLast: false,    // 首末块优先
       addTmm: false,          // 自动种子管理(TMM)
       addCatOptions: [],      // DLG-03: 分类候选(GET /api/categories, 打开窗口时拉取)
-      addTagOptions: [],      // DLG-03: 标签候选(GET /api/tags, 打开窗口时拉取)
+      addTagOptions: [],      // DLG-03: 标签候选(GET /api/tags?exclude_auto=1 剔程序标签, 打开窗口时拉取)
       addCatMenu: false,      // 分类下拉展开态
       addTagMenu: false,      // 标签下拉展开态
       addCatHi: -1,           // 分类下拉键盘高亮
@@ -256,7 +256,7 @@ window.AQB_STATE = {
       metaTargets: { groupKeys: [], memberHashes: [] },  // 打开时刻锁定的目标(groupKeys 为 URL 编码态)
       metaCount: 0,          // 打开时刻的目标种子数(展示用)
       metaCategories: [],    // 分类候选(GET /api/categories, 打开时拉)
-      metaTags: [],          // 标签候选(GET /api/tags, 打开时拉 + 输入的新标签并入)
+      metaTags: [],          // 标签候选(GET /api/tags?exclude_auto=1 剔程序标签 + 共同携带的并回 + 输入的新标签并入)
       metaCommonTags: [],    // 打开时刻选中集合的**共同标签**(胶囊勾选态基准; 不过滤站点同名标签)
       metaCat: "",           // 打开时刻的共同分类("" = 无分类)
       metaCatDiff: false,    // 选中集合分类不一致(混合态: 输入框置空 + 提示覆盖语义)

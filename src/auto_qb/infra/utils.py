@@ -428,6 +428,51 @@ def match_tag_patterns(tag: str, patterns: List[str]) -> bool:
     return match_value(tag, patterns)
 
 
+_EPISODE_PLACEHOLDERS = ("${episode_first}", "${episode_last}")
+
+
+def auto_managed_tag_rules(config) -> "tuple[set, tuple]":
+    """程序自动维护标签的识别规则: (精确集, 模板正则元组)
+
+    WEB UI 标签候选过滤用(/api/tags?exclude_auto=1): 程序会自动打上的标签不进手动候选,
+    免得站点名等刷屏。口径(2026-09-28 拍板):
+    - 精确集 = 各站点 tags 全部 + HR 输出标签(add_tag / add_tag_for_satisfied 按该站点
+      经 replace_vars 展开, 与维护路径同语义)
+    - 模板正则 = 集数标签(值无界, 只能按形状匹配): add_episode_tags 启用时把单/多集模板的
+      ${episode_*} 占位换成 \\d+、字面部分 re.escape
+    - **不含** grouping.missing_tag / skip_checking_tag 等事件标记(程序只打不摘, 候选里
+      留着才有摘除补救路径)与规则 add_tag 动作的输出(用户自己的自动化, 无固定清单)
+    config 鸭子类型读字段(真实 Config 与测试替身通用)。
+    """
+    exact: set = set()
+    for tracker in (getattr(config, "trackers", None) or {}).values():
+        exact.update(t for t in (getattr(tracker, "tags", None) or []) if t)
+        hr = getattr(tracker, "hr", None)
+        if hr is not None:
+            for key in ("add_tag", "add_tag_for_satisfied"):
+                tag = replace_vars(getattr(hr, key, "") or "", tracker)
+                if tag:
+                    exact.add(tag)
+
+    patterns = []
+    episode_cfg = getattr(config, "add_episode_tags", None)
+    if episode_cfg is not None and getattr(episode_cfg, "enabled", False):
+        for key in ("add_tag_single", "add_tag_multi"):
+            template = getattr(episode_cfg, key, "") or ""
+            if not template:
+                continue
+            literal = re.escape(template)
+            for ph in _EPISODE_PLACEHOLDERS:
+                literal = literal.replace(re.escape(ph), r"\d+")
+            patterns.append(re.compile(literal))
+    return exact, tuple(patterns)
+
+
+def is_auto_managed_tag(tag: str, exact: set, patterns: tuple) -> bool:
+    """tag 是否命中 auto_managed_tag_rules 的任一规则(精确集或模板形状)"""
+    return tag in exact or any(p.fullmatch(tag) for p in patterns)
+
+
 def path_normalize(p: str) -> str:
     """
     路径规范化：仅统一分隔符并压缩冗余斜杠。

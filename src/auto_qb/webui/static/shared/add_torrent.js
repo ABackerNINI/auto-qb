@@ -63,7 +63,8 @@ window.AQB_ADD = {
       };
       const [cats, tags, paths] = await Promise.all([
         safe("/api/categories", (r) => Object.keys(r.categories || {}).sort((a, b) => a.localeCompare(b))),
-        safe("/api/tags", (r) => (r.tags || []).slice().sort((a, b) => a.localeCompare(b))),
+        // exclude_auto=1: 剔除程序自动维护的标签(站点名/HR/集数等, 判定在后端), 候选只留用户可挑的
+        safe("/api/tags?exclude_auto=1", (r) => (r.tags || []).slice().sort((a, b) => a.localeCompare(b))),
         safe("/api/paths", (r) => r.paths || []),
       ]);
       if (this.addOpen) {  // 仅窗口仍开着时回填(慢响应不得污染下一次打开)

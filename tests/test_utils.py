@@ -12,6 +12,7 @@
 - test_extract_tracker_hostnames: 提取 tracker hostname
 - test_match_tracker_confs: tracker 配置匹配
 - test_match_tag_patterns: 标签模式匹配
+- test_auto_managed_tag_rules: 程序自动维护标签识别规则(站点/HR 精确集 + 集数模板形状; 事件标记/用户标签不在口径)
 - test_match_path_patterns: 路径模式匹配
 - test_match_pattern_parse: MatchPattern.parse 统一语法解析(regex: 前缀/:ignore_case 后缀/body/suffix)
 - test_match_value_normalize: match_value 核心(normalize 规范化语义, 空模式跳过)
@@ -425,6 +426,50 @@ def test_match_tracker_confs_invalid_url(monkeypatch):
 def test_match_tag_patterns_empty_pattern():
     """模式列表含空串 -> 跳过继续匹配后续模式"""
     assert utils.match_tag_patterns("HHan", ["", "HHan"])
+
+
+def test_auto_managed_tag_rules():
+    """程序自动维护标签识别: 站点/HR 精确集 + 集数模板形状; 事件标记与用户标签不在口径内
+
+    口径(2026-09-28 拍板): MISSING / zSkipChecked 等事件标记程序只打不摘, 留在候选才有
+    摘除补救路径; 规则 add_tag 输出属用户自己的自动化 —— 两者都不进排除集。"""
+    from auto_qb.config.models import AddEpisodeTagsConfig, Config, HRRule, TrackerConfig
+
+    cfg = Config()
+    cfg.trackers = {
+        "HHan":
+            TrackerConfig(
+                name="HHan",
+                domains=["d.com"],
+                tags=["HHan", "常驻"],
+                hr=HRRule(add_tag="HR-${required_seeding_time}", required_seeding_time_raw="3D"),
+            ),
+        "MTeam":
+            TrackerConfig(name="MTeam", domains=["m.com"], tags=[]),
+    }
+    cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
+    exact, patterns = utils.auto_managed_tag_rules(cfg)
+
+    assert exact == {"HHan", "常驻", "HR-3D"}  # 站点 tags 全部 + HR 标签按站点展开(与维护路径同语义)
+    assert utils.is_auto_managed_tag("HHan", exact, patterns)
+    assert utils.is_auto_managed_tag("HR-3D", exact, patterns)
+    assert utils.is_auto_managed_tag("zE1", exact, patterns)  # 单集模板形状
+    assert utils.is_auto_managed_tag("zE1-12", exact, patterns)  # 多集模板形状
+    assert not utils.is_auto_managed_tag("zE1-2-3", exact, patterns)  # 形状不合
+    assert not utils.is_auto_managed_tag("zEa", exact, patterns)
+    assert not utils.is_auto_managed_tag("MISSING", exact, patterns)  # 事件标记: 留候选
+    assert not utils.is_auto_managed_tag("zSkipChecked", exact, patterns)
+    assert not utils.is_auto_managed_tag("4K", exact, patterns)  # 普通用户标签
+
+    # 集数标签关闭: 无模板正则, zE* 不再命中
+    cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=False)
+    exact2, patterns2 = utils.auto_managed_tag_rules(cfg)
+    assert patterns2 == ()
+    assert not utils.is_auto_managed_tag("zE1", exact2, patterns2)
+
+    # 全默认配置: 无 trackers 且集数标签关 -> 空规则, 任何标签都不算程序维护
+    exact3, patterns3 = utils.auto_managed_tag_rules(Config())
+    assert exact3 == set() and patterns3 == ()
 
 
 def test_path_normalize_empty():

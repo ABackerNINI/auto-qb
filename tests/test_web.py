@@ -133,6 +133,7 @@
 - test_api_log_level_filter_keeps_multiline_record: 多行日志(整段 traceback)折行后跟随其记录的等级, 筛 ERROR 不丢栈
 - test_api_log_note_when_level_unfilterable: 筛不了(格式无等级字段 / 已存行与格式不符)回全部行 + note, 不静默给空
 - test_api_category_tag_list_endpoints: GET /api/categories 与 /api/tags 列表端点(store 缓存数据源)
+- test_api_tags_exclude_auto: /api/tags?exclude_auto=1 剔除程序自动维护标签(站点/HR 精确集 + 集数模板形状; 事件标记保留, 不带参全量)
 - test_seed_flat_view_fields_and_gating: 种子平铺视图(SEED_ITEM)字段契约齐全 + ensure_group_state 同门控回传
 - test_flat_view_refreshed_by_main_loop_tick: 种子页速度随主循环刷新(回归: 平铺视图曾被"饿死"停在旧快照)
 - test_rebuild_views_single_entry_point: rebuild_views 唯一重建入口(四视图 + 版本号 + 脏标记一次完成)
@@ -6509,6 +6510,32 @@ def test_api_category_tag_list_endpoints(web_env):
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
     assert client.get("/api/categories", headers=auth).json() == {"categories": {"mv": {"save_path": "R:/mv"}}}
     assert client.get("/api/tags", headers=auth).json() == {"tags": ["4K", "HDR"]}
+
+
+def test_api_tags_exclude_auto(web_env):
+    """/api/tags?exclude_auto=1: 剔除程序自动维护的标签(站点/HR 精确集 + 集数模板形状)
+
+    添加种子窗口与「标签/分类…」弹窗的候选源; 事件标记(MISSING/zSkipChecked)与普通
+    用户标签保留(2026-09-28 拍板); 不带参仍全量 —— 标签管理对话框数据源不受影响。"""
+    from types import SimpleNamespace
+
+    mgr, client = web_env
+    mgr.config.trackers["HHan"].hr = SimpleNamespace(
+        add_tag="HR-${required_seeding_time}",
+        add_tag_for_satisfied="",
+        required_seeding_time_raw="3D",
+    )
+    mgr.config.add_episode_tags = SimpleNamespace(
+        enabled=True,
+        add_tag_single="zE${episode_first}",
+        add_tag_multi="zE${episode_first}-${episode_last}",
+    )
+    mgr.api = SimpleNamespace(torrents_tags=lambda: ["4K", "HHan", "HR-3D", "zE1", "zE1-12", "zE1x", "MISSING"], )
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    assert client.get("/api/tags?exclude_auto=1", headers=auth).json() == {"tags": ["4K", "zE1x", "MISSING"]}
+    assert client.get("/api/tags", headers=auth).json() == {
+        "tags": ["4K", "HHan", "HR-3D", "zE1", "zE1-12", "zE1x", "MISSING"]
+    }
 
 
 def _log_lines(fmt, recs):
