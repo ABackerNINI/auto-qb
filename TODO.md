@@ -1,82 +1,156 @@
 # TODO
 
-> 待办与已知缺陷清单。**只记"还没做/还没修"的事** —— 已完成项请走 `memory-bank/progress.md` 与各任务档案。
-> 冲突裁决同 `AGENTS.md`: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`。
-> 本文件不是红线文件, 但**不要在提交时顺手带上用户的未提交改动**(`想法.md` 属高危, `config.yml` 是红线)。
-> 仿真测试**怎么跑 / 怎么判 / 怎么回溯**见 [docs/sim-client-test-howto.md](docs/sim-client-test-howto.md)。
+## KNOWN BUGS
 
----
+* (已分析:结论是多个核心功能受影响,需要兼容性重构) 详细分析使用docker部署后哪些功能会失效,已知webui右键打开目标文件夹
+  * 将文件访问层包装到一起,所有对外部的(非运行data/config目录)都通过该包装,方便后续对docker进行支持
+  * 下载目录只读挂载(需要分析,目前对种子文件是只读的,所有其它操作都通过qb),同时检测到docker环境时使用特殊文件访问层,将路径映射到正确的位置
+  * 或者使用/mnt/?
 
-## 已知缺陷 (未修)
+* WEBUI添加种子后新种子下一个tick才会显示出来, 可以考虑与暂停/开始的乐观UI解决方式
+* 删除类似标签 全局/站点单设置 没有分清, 比如点击开启后就无法切换到全局设置了
+* 删除种子(同时删除文件)会引起缺文件WARNING
+* 辅种界面添加所有适合的字段, 分组列主要展示种子的共同信息, 详细列主要展示种子的不同信息, 比如分组列可以添加进度, 取进度最高的, 先分析适合添加哪些字段
+* WEBUI添加新站点热重载后不会触发种子的内置维护任务
+* 状态栏上传下载速度前添加切换至备用速度按钮,只图标按钮,需要确定qb是否有相关接口,同时也需要支持修改备用速度(支持的方式需要取舍: 主速度/备用速度同窗口,或者切换后单独窗口), qb是主速度/备用速度同窗口
+* () 拆分webui的大文件js/css
 
-### BUG-01 · qB 短暂断连后 auto-qb 无法自愈, 永久停在断连态
+* WEBUI添加/删除标签时会触发桌面通知WARNING, 分类可能也会触发, 同时对新增的标签在添加标签弹窗中没有勾选, 调大"标签与分类"弹窗, 目前布局很局促
+* WEBUI批量操作似乎都会引起WARNING发送桌面通知
+* 将真正的危险情况log等级调为ERROR, 桌面通知默认ERROR级
+* WEBUI将多项移入"常规"的更改丢失了分类, 比如之前的"日志"也并入了"常规/常规"中,应该是"常规/日志"中.运行日志需要默认折叠
 
-- **发现**: 2026-09-19, 5000 种子仿真测试的 S5 断连降级场景(独立仿真服务端 + 真实 auto-qb 子进程)。
-- **严重度**: 高 —— 断连 10 秒是 PT 场景常见抖动(qB 重启 / 网络闪断), 目前后果是**程序静默失去同步、必须人工重启**;
-  且期间每 tick 一条 ERROR + 完整异常栈, 会淹没真正的错误。
+* (已完成但效果不满意) WEBUI大部分的按钮风格与UI不符, 比如各种弹窗中的确认按钮, 添加种子的取消/添加按钮, 需要彻底重构
 
-**现象**(`--abort-after 12 --abort-duration 10`, 断 10 秒后恢复):
+* 任务触发时机: 某字段发生变化, 比如tags变了才执行维护任务, trigger:??
+* HR在线核实同步修改HR标签/分类
+* WEBUI搜索框需添加帮助按钮, 显示高级用法, 先设计3版简单模板以供挑选后再应用, 包含添加的位置,文案,风格,帮助按钮类型,弹出框或其它形式,尽量做到小而精美,与UI契合
 
-| 观测 | 结果 |
-|---|---|
-| 断连期间写请求 | `0`(符合预期, 没误删、没写风暴) |
-| 恢复后是否重新同步 | **否** —— 直到运行结束一直是断连态 |
-| 每 tick 日志 | `主循环异常: 'NoneType' object has no attribute 'torrents_info'` + 完整异常栈(30 秒 **28 条栈**) |
-| sync 轮次 | 常态 ~22 → **5** |
-| `sync_full_rounds` | 停在 **1**(rid 全量自愈从未发生) |
+* (已修复) WEBUI搜索"minions mteam" 无法匹配  "Minions.&.Monsters.2026.2160p.UHD.Blu-ray.HEVC.Atmos.TrueHD7.1-DiY@HDHome" 其中mteam是站点名也是标签, 单独搜"mteam"可以匹配
+* (已修复) WEBUI搜索"cat and -11"错误匹配"The.Cat.and.the.Dragon.S01E11.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb.mkv"
+* (已修复) WEBUI搜索"cat 12"不匹配"The.Cat.and.the.Dragon.S01E12.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb.mkv"
+* (已修复) WEBUI设置页搜索无法返回正确匹配项
+* (已修复) 重复的"INFO - 限速曲线 | 下载限速当前 10265KiB/s 为奇数, 疑似用户手动设置, 本轮不覆盖"LOG过多 —— 手动保护是**持续状态**, 原实现却逐轮打 INFO(`interval: 10M` 下每天上百条且永不停); 改为「进入状态/手动值变化才报 + 每 1h 提醒一次, 其余轮次降 DEBUG」, 退出手动保护清记忆
+* (已修复) 重复的"INFO - 限速曲线 | 下载限速当前 10265KiB/s 为奇数, 疑似用户手动设置, 本轮不覆盖"LOG过多
+* (已修复) WEBUI搜索框在焦点存在时(搜索框变长)点击"x"无法清除输入词, 没焦点时正常
+* (已修复) WEBUI搜索的"-term"无法正常工作, 表现为输入"-"后无法匹配任何项, 默认的词AND也不正常
+* (已修复) WEBUI搜索"恶女 10"无法匹配"[虽然我不是完美恶女～雏宫蝶鼠替换传～].Futsutsuka.na.Akujo.dewa.Gozaimasu.ga.Suuguu.Chouso.Torikae.Den.2026.S01E10.1080p.CR.WEB-DL.H264.AAC-UBWEB.mkv"
+* (已修复) WEBUI无法打开路径过长的文件夹
+* (已修复) 设置页部分设置项显示"[object Object]"
+* (已修复) 分享率栏左对齐
+* (已修复) 将webui已启动log"WEB UI 已启动: http://127.0.0.1:38080"改为localhost, 使用127.0.0.1地址可能触发浏览器自动删除localStorage的问题(BUG?), 同时查看哪些地方还提示使用127.0.0.1一并修改
+* (已修复) full-checking校验时误触发WARNING: "2026-09-25 06:25:10,218 - WARNING - 规则[skip_checking_rules.r_rule] '种子名' [HDFans] (0b23c9d4) | 校验未通过(第1次, progress=0.0)"
+* (已修复) full-checking有概率不触发, 一批辅种同时加入时, 部分种子成功触发full-checking, 部分没有触发(无相关log), 手动强制校验成功. 重启程序依然不触发, 怀疑是同组种子校验失败(误判)且文件映射一致(同一物理数据), 不再校验冷却相关造成的, 待调查.
+* (已修复) 辅种界面切换到种子界面再切回辅种界面时展开的分组会收起来
+* (已修复) 种子详细信息窗口对部分种子会消失, 表现为: 双击种子窗口出现后几百毫秒自动消失, 部分种子正常
+* (已修复) 设置页站点设置中"从已有规则集/规则中选择"按钮过高
+* (已修复) 设置页中的"启用"按钮稍微调小一点, 同时"未启用"状态色与"启用"状态色相近, 不能一眼分辨
+* (已修复) 设置页刷新会回到种子页
+* (已修复) "The.Cat.and.the.Dragon.S01.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb" 搜索词"cat and" 不匹配
+* (已修复) WEBUI右键二级菜单图标在鼠标hover在菜单上时变灰, 同时二级菜单在鼠标移出时不会消失
+* (已修复) 将鼠标右键复制二级菜单移入更多操作
+* (已修复) 新版设置中运行日志按等级查看失败, 选"WARNING"级显示"日志文件暂无内容"
+* (已修复) 新版设置中第一页是"连接qBittorrent", 实际包含了常规设置, 将"连接qBittorrent"改为"常规"
+* (已修复) 多选右键菜单应该对所有选择的种子生效
+* (未计划) --tray模式下ctrl+c无法关闭
+* (已修复) WEBUI添加种子时显示添加失败, 桌面弹窗WARNING, 但实际添加成功, 另外"添加后开始"选项也未生效
+* (已修复) 选择种子/组后会出现"已选 0 组 · 1 个种子 开始 暂停 ..."栏高度不匹配, 导致导航栏跳动
+* (已定位·非代码bug) 浏览器重启后localStorage重置 —— 真因是浏览器**站点级**「关闭窗口时清除 Cookie 和站点数据」(Edge/Chrome 里 127.0.0.1 各有一条 cookie 例外, setting=4/SESSION_ONLY): 关浏览器时该 host 所有端口的 localStorage 一起被清, 与应用无关; 已删掉 Edge 那条例外(Chrome 那条还在), 并把这条通道写进 WebUI 空存储提示与知识库(2026-09-24)
+* (已修复) 历史流量显示卡顿
+* (未解决) 当前任务栏图标为python图标 —— 五轮尝试均无效(详见 memory-bank/modules.md 图标结论): BMP 帧 ico + AUMID(注册表/lnk)+ 纯 iconbitmap 等组合在作者环境仍 python; 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮未解决, 待定位
+* (已修复) 修改配置保存并热重载后报错
+* (已修复) 当前下载完成的种子重新校验发现文件缺失时同组不会暂停, 重新下载时会触发同组文件同时存在已完成和正在下载的冲突导致下载暂停 —— 缺文件扫描触发路径补全"种子进入错误状态(重校验发现缺失)"; 下载冲突中已带 MISSING 标签的完成成员不计入"已完成", 重新下载不被拦停; 缺文件扫描代表种放宽为已完成或错误状态成员(全组同时出错也能扫描)
+* (已修复) 当前当HR触发条件为下载量时, 对于小于触发量的种子, 下载完成不会视为触发 —— 增加完全下载即触发边界(is_fully_downloaded); 兜底语义两轮修正后定为: 下载量 >= 种子大小(完整下载完)即触发 —— downloaded=0 的纯辅种(添加时数据已完整)与部分下载(如仅 1B)均不触发
+* (已修复) 当前当qb关闭或崩溃时, 会输出大量重复无法连接的log
+* (已修复) 当前同组的full-checking会一起触发, 应该等待同组其它种子校验完成, 根据结果处理
+* (已修复) 新加的种子无法触发skip-checking
+* (已修复) "[素描总动员].Sketch.2024.2160p.HamiVideo.WEB-DL.H264.DD5.1-UBWEB.mkv" 会被打上zE1标签, 暂时禁用bare number匹配
+* (已修复) "[情圣3].Love.is.Hard.2025.2160p.WEB-DL.H265.AAC-UBWEB.mp4" 会被打上zE3标签, 同上
+* (已修复) 当前配置中开启通知, UI显示未开启 —— Switch 初始态晚于 handler 挂载(时序), 轮询按 handler 实际状态补正
+* (已修复) 当前移到组内种子至其它地方会触发两次缺文件检测 —— 移动同轮同时命中状态转移+路径变化两个触发源, _check_missing_files 增组 key 轮内去重(跨轮不抑制)
+* (已修复) 断开连接后不会恢复显示已连接 —— connect() 仅启动时调用一次, 恢复只能在 tick 成功后翻转 _last_conn_ok
+* (已修复) 断开连接时会输出大量重试信息
 
-**根因**(`src/auto_qb/qbmanager.py` 的 `run()` 主循环):
+* WEBUI
+    * 辅种管理
+        * 再次调大删除种子确认框, 移除删除确认框中下方的分站点种子详细信息
+        * 多选时"删除整组"应改为"删除??个组", 多选种子时改为"删除??个种子", 修改逻辑以符合对应语义
+        * 为分组表/明细表增加所有适用的信息栏
+    * 其它
+        * 限速档位默认将最后一档当作无限大档位, 以防出现超过档位反而解除限速的情况, 同时调整设置中的限速曲线预览图, 减小最后一档显示比例, 当前预览图最后一档占位超80%
+        * 为限速曲线添加折叠, 默认折叠, 比如第一条曲线, 第二条曲线
 
-```python
-except APIConnectionError as e:
-    if self._last_conn_ok is not False:
-        logger.error(f"连接 qBittorrent 失败: {e}")
-        self._last_conn_ok = False
-    self.client = None                       # ← ① 置 None
-    if self._reconnect_due(main_tick):       # ← ② 重连只在**本分支**里触发
-        self.connect()
-except Exception as e:
-    logger.error(f"主循环异常: {e}", exc_info=True)   # ← ③ 只打日志, 不重连
-```
+* WEBUI
+    * [x] 种子详细窗口中的内容页中, 将目录与文件添加合适的颜色, 颜色需不同 — R10-15: 目录 = `--fg-soft`+加粗, 文件 = `--fg-muted`
+    * [x] 目前"打开目标文件夹"资源管理器有概率不弹出至顶层
+    * [x] 所有弹窗对超长种子名/超长url等超长文本的处理: 截断, 加tooltip和可复制按钮 — R10-13: 值行统一"单行省略 + title 全文 + 复制按钮"(wide 行保留 3 行块行)
 
-1. 重连只在 `except APIConnectionError` 分支里做, 而该分支第一步就是 `self.client = None`;
-2. client 一旦为 None, 下一次 `api.sync_maindata()` 抛的是 **`AttributeError`**, 不再是 `APIConnectionError`;
-3. 于是落进 `except Exception` —— 这条分支**不重连**, 只打日志。死循环形成:
+* WEBUI
+    * [x] 导航栏追剧/添加种子图标无颜色 — R11: 挂 `ico-tv`/`ico-add` 语义类(两套 UI 同源)
+    * [x] 状态栏空间剩余/限制速度图标无颜色 — R11: `.ico-disk` → indigo, `.sb-limit .ico` → `--limit-hit`
+    * [x] 移除状态栏"历史"文字, 仅保留图标 — R11: 两 UI 去文本 + 图标改 today-up 色(否则只剩灰点)
+    * [x] 辅种页明细表无法点击排序 — R11: 独立 `detailSortKey/Dir` + 表头三态排序(14 列可排)
+    * [x] 辅种表加保存路径, 明细表取消保存路径 — R11: 列模型迁移(组级取首成员值)
+    * [x] 会出现两个横向滚动条 — R11: 表头撑页(clip) + `.detail` 自成滚动(去 inner overflow) + fr 逐列取整(行/表头改定宽 100%)
+    * [x] 分类/标签颜色暂无意义, 改为状态色 — R11: 芯片跟随行状态语义色, HR 标签保留自身语义色
 
-   ```
-   tick k   : APIConnectionError → client=None → _reconnect_due() 未到期则不 connect()
-   tick k+1 : client is None → AttributeError → except Exception(只打日志)
-   tick k+2 … : 同上, 永远停在这里 —— 只能重启进程
-   ```
+* WEBUI
+    * [x] 种子页筛选器无数据
+    * 辅种组暂定整组后颜色变灰,变绿,再变灰
 
-退避逻辑 `_reconnect_due`(2s → 4s → 8s → … → 30s 上限)本身是对的, 但它被放在了一个**再也进不去的分支**里。
-这就是"异常处理器改了状态、而这个状态又决定了下次抛什么异常"导致的**异常类型漂移**。
+    * 添加tracker error/warning状态, 同时可设置忽略错误或警告
 
-**复现**:
+## TODO
 
-```bash
-uv run python scripts/sim_run.py --scenario S5 --n 300 --duration 45 \
-    --abort-after 12 --abort-duration 10 --web-port 18111
-# 期望: verdict OK
-# 实际: verdict FAIL —— LOG.tracebacks=28 / S5.full_update_after_recover / S5.outage_survived 全红
-```
+* WEBUI优化tooltip为类似设置中的发光按钮, 边框/发光颜色和背景颜色字体颜色需要与UI风格匹配
+* (已分析) 分析: 哪些状态的种子会触发HR在线核实
+* () 去掉commit的文件参数, 先由agent git add文件, 然后commit自动提交
+* 将常用的git命令添加到commands中
+* webui自定义站点名/分类/标签字体颜色
+* (扩展已完成, webui未完成) webui与扩展需要HR在线核实详情表, 将冗长的log总结成表格的形式, 扩展log需要收起来, 仅排障时使用, 一目了然, 先计划两张表要展示哪些信息
+* 扩展需要增加版本号, 为了简化, 主程序仅支持固定版本的扩展
+  * 扩展高度可参数化, 最大限度保证不用升级, 复杂度交给后端
+* 键盘快捷键
+  * 浏览种子详细信息时支持键盘上下键切换种子
+* 现场重建, 防止意外如硬盘损坏/qb损坏后难以重建的问题
+* passkey脱敏, 将其作为一个可配置项 [计划](memory-bank/plans/26-09-22-1801-tracker-url-source-sanitize-plan.html)
+* 新版设置中站点页支持查找站点
+* () 实验现行规则系统是否支持语义: 禁止带"IYUU辅种"分类的种子开始下载
+* 整组迁移. 目前qb一次设定多个种子位置时会依次移动, 同组的多个种子随机丢失进度, 需要解决这个问题
+* 拆分大文件
+* 种子未变动时不触发内置维护任务
+* 版本管理
+* 窗口日志显示可选择等级
+* 对命中的限速曲线强调显示, 限速时可选择配置弹窗提醒
+* 重新梳理ignore_next_action_error/stop_following_rules_if
+* 插件系统
 
-**修复方向**(二选一, 均需红绿验证: 先用上面这条 S5 场景跑出红, 再验绿):
+* (待取舍) webui流量历史图
+* (可行性存疑) 基于搜索的辅种方式
+* (需要可行性分析) 兼容tr
+* (低优先级) 支持多语言
+* (待考量) 未达到HR触发条件的种子是否要纳入到HR管理中? 防止转移种子没有HR. (转移种子通常为已完成种子)
+* (存疑) 将配置切分, 比如站点配置, 每个站点保存一个
 
-- **A(推荐)** 把"已断连"做成显式状态位: 断连期间**跳过 `_tick`**, 由**独立分支**按退避重连 ——
-  语义最清楚, 也顺带消掉断连期间的日志刷屏。
-- **B** 让 `QbApi` 在 `self._client is None` 时抛 `APIConnectionError` 而不是 `AttributeError`,
-  保证异常类型始终能表达"连接不可用" —— 改动最小, 但断连期间仍会每 tick 打一条日志。
+* ?? 暂时移除不成熟的限速设计, 包括: upload_size/upload_size_today/upload_size_this_week/upload_size_this_month, 或可改为global_upload_size/...; 包括: 记录单种上传下载量(begin_round)
 
-**验证判据**(不只是"断连期间不崩"): 必须是 **"断连 N 秒后能自愈"** ——
-恢复后 sync 轮次回到常态、`sync_full_rounds` 出现第二次(全量自愈)、`LOG.tracebacks == 0`。
+* config 取值范围: 缺省 `0S`(= 每 tick 级别)是否收紧 —— 属**行为变更**, 待拍板(原 activeContext 切片 26-09-22-1937-config-value-range-validation 于 2026-09-26 蒸馏并入本行)
+* qB 移动 .!qB 过渡态误判缺文件: 修复计划已出(过渡态容忍 + 连续 3 次上限, 不加配置键), **待过目后实施** —— issue 26-09-21-0219 已认领; [计划](memory-bank/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) / [档案](memory-bank/tasks/26-09-22-backend-qb-move-missing-tolerance.md)(原 activeContext 切片 26-09-22-2038-backend-qb-move-dot-qb 于 2026-09-26 蒸馏并入本行)
 
-**证据**:
-`memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html` 第 09 节;
-`memory-bank/pitfalls.md`「仿真驱动器: 又四类"测假"陷阱 + 一个真缺陷」第 ⑨ 条;
-运行产物 `R:\auto-qb-sim\runs\20260919-165128-S5\`。
-
----
+* (已完成:默认不用加前缀直接写如"cat mteam") WEBUI种子搜索扩展路径 site: / tag: / state:
+* (已添加:但不完善) 添加追剧视图: 按同一部剧组织分组 (如何判定是否是同一部剧需要调研和头脑风暴), 分组中按第几季第几集排序, 多站点辅种不分开显示, 类似辅种视图
+* (已完成:expr语法) 规则筛选器添加非逻辑
+* (已完成) 将种子页"ETA"栏改为"剩余时间"
+* (已完成) 所有落盘的文件需要增加版本号以及升级脚本, 升级脚本只考虑从低一个版本的文件升级到下一个版本, 形成升级链
+* (已完成) HR在线核实在界面上应该有体现, 优先级: 在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息
+* (已完成) HR在线核实重新梳理, 优先级: 在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息, 最终态: 已达标 | 未达标 | 已免罪 3个状态都代表着结束状态
+* (已完成) 将设置页中的日志/界面(改为WebUI)/通知/运行日志放到常规中
+* (已完成) webui缺少添加/删除标签功能, 缺少设置分类功能
+* (已完成) webui缺少一键导入站点功能
+* (已完成) HR在线核实插件配置需要简化, 尽量做到自动
+* (已完成) 拖拽添加种子
+* (已完成) 自定义规则触发时机: on_torrent_state_changed/on_torrent_added/on_torrent_deleted
+* (已完成) 统一正则匹配与忽略大小写匹配
 
 ## 性能发现 (观测结论, 未动代码)
 
@@ -109,29 +183,3 @@ uv run python scripts/sim_run.py --scenario S5 --n 300 --duration 45 \
   但值得给 `max_tasks_per_tick` 做自适应(候选已列入 W5)。
 - **已按观测项处理**: 灌入期的漂移记为 `P2.drift_max_s`(BASELINE), 不用稳态阈值判红 ——
   否则会把"灌入期跟不上"这个结论埋掉。
-
----
-
-## 待办 (按波次)
-
-仿真测试计划(`TASK018`)的剩余波次, 详见
-[memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html](memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html)。
-
-- **W3 安全矩阵** — ✅ 已跑完。S1/S2 每次运行都判(全绿)、S3 已由 W4 固化阈值、
-  S4 由 D5 两相运行覆盖、**S5 = BUG-01(实测 FAIL, 待修)**、S6/S7/S8 ✅ 全绿。
-  - [x] **S6 数据面只读**: `data_dir` 跑前后快照对比, 只允许 `state.json` / 日志 / `web.token` / 锁(实测 0 越界)。
-  - [x] **S7 WEB 并发只读**: 并发轮询 500 次, 4xx/5xx = 0, p95 见 PERF-01。
-  - [x] **S8 限速保护**: 30 个奇数 KiB/s 手设限速**一个没被改写**, `setUploadLimit` 命中 0。
-- **W4 性能矩阵** — ✅ 已跑齐 P1–P7 并固化阈值到
-  `memory-bank/plans/26-09-19-1433-sim-client-5000.baseline.json`(`sim_run.py` 启动时自动读取;
-  不存在时相关项记 BASELINE)。当前阈值:
-  `P1.first_round_s ≤ 22.68` / `S3.write_rate_per_min ≤ 6210.49` / `S7.p95_ms ≤ 1218.4` /
-  `SYNC.drift_max_s ≤ 1.0`(纯主循环; 灌入期与带 WEB 轮询的漂移另记 `P2.drift_max_s` 观测)。
-  - [x] P1 首轮灌入 14.4 s / P2 渐进灌入 2.7 s(见 PERF-02) / P3 churn tick2 14.2 s /
-        P3b tick1.5 13.5 s / P4 steady 14.4 s / P6 WEB 并发(见 PERF-01) / P7 删除风暴 9.6 s
-  - [ ] **P5 任务吞吐** 尚未单独出数: 需观测"队列深度 / 任务实际执行周期 vs 名义 interval",
-        现有外部观测只能拿到"写台账收敛时间", 建议留到 W5 归因一并做。
-- **W5 归因(只出结论, 不动代码)** — 候选: `torrents/files` 拉取预算、**WEB 全量视图(PERF-01)**、
-  `max_tasks_per_tick` 自适应(PERF-02)、批量打标签(实测 `qbittorrent-api` 每次写请求前额外查一次
-  `app/webapiVersion` ⇒ 写请求量翻倍, 而 qB 的 `addTags` 支持一次传多个 hash)。
-- **W6 收尾** — 基线写入 `memory-bank/testing.md`; 新坑入 `pitfalls.md`(W3b 的 ⑤–⑧ 与本轮的 ⑩–⑫ 已入)。
