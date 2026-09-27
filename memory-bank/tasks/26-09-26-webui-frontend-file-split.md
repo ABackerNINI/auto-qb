@@ -28,9 +28,9 @@ W0 守阵迁移方案+harness 基线(0.5 轮) → W1 根模板分片(2 轮,由�
 | 1 | 现状量测 + 计划文档产出 + 自检 | ✅ |
 | 2 | W0 守阵迁移方案 + 等价性基线 | ✅ (守阵迁移清单落地; 等价性基线改用「聚合字节等价 + 无头 Edge stub 冒烟」替代, 见进度日志 26-09-27) |
 | 3 | W1 根模板分片(两套 UI + boot.js + 守阵升级) | ✅ |
-| 4 | W2 atlas/style.css 分层 + app.js 续拆 | ◐ CSS 分层 ✅(style.css 留根 + css/{components,views,dialogs}.css, 字节等价); **app.js 续拆延后**(见进度日志 26-09-27 第 2 条) |
-| 5 | W3 双模板差异评估报告(可选) | ✅ reports/26-09-27-1143-report-webui-template-diff.html —— 语义同一性 98.1%, 皮肤类名差异 0, 收敛高度可行, 待用户拍板是否实施 |
-| 6 | W4 收口(基线/回写/真机冒烟/提交) | ⬜ (基线切片留待 W4; 本轮实测 test.full 口径 1686+1 全绿, TOTAL 91%) |
+| 4 | W2 atlas/style.css 分层 + app.js 续拆 | ✅ CSS 分层(style.css 留根 + css/{components,views,dialogs}.css, 字节等价); app.js 1281→411 行(state/lifecycle 根选项 + auth/polling/view 方法域, 渲染 DOM 等价证明, 见进度日志 26-09-27 13:10) |
+| 5 | W3 双模板差异评估报告(可选) | ✅ reports/26-09-27-1143-report-webui-template-diff.html; **用户已拍板收敛, 单一语义模板已落地**(shared/tpl + 差异口, 见 12:40 条) |
+| 6 | W4 收口(基线/回写/真机冒烟/提交) | ◐ 基线切片已入库(testing/baselines/26-09-27-1305, TOTAL 91%)+ 回写完成; 真机 qB 侧五主题冒烟留待用户环境; 提交待用户指令 |
 
 ## 进度日志
 
@@ -54,3 +54,14 @@ W0 守阵迁移方案+harness 基线(0.5 轮) → W1 根模板分片(2 轮,由�
   - **守阵升级**(test_frontend_template_split_wiring): ①双 shell 清单必须逐项相等(漂移=模板分裂回潮) ②残留 <ui>/tpl/ 目录=红 ③shared/tpl 孤儿分片=红 ④差异口注册表(取值只认 atlas|prism + ui-diff 注释必须存在, 注册表为空=红)。`_ui_aggregate`/守阵路径解析支持 /shared/ 绝对 src。
   - **实测**: test_web 173 passed; test.quick 1686 passed + 1 skipped + 0 failed; 无头 Edge 冒烟双 UI 全项通过 —— **两 UI #app 顶层节点 17/17 完全一致**(atlas 因 col-ghost 双端生效 16→17, 即统一的直接体现), 差异口条件块/xtpl/footer/toast/sticky/hub 全部在位, 无错误占位。
   - **发现未修(范围外)**: prism/css/components.css:247-251 残留死规则 .modal-check 族(prism FX-24 切胶囊时遗留, 统一模板零引用) —— 属棱镜侧既有死代码, 按范围守卫不入本波; 建议随下次 prism CSS 波次清理。**未提交**(等用户说提交)。
+- **2026-09-27 13:10 第四轮(用户: 继续后续任务) —— W2b 内核拆分落地 + W4 基线入库**:
+  - **前置补齐: 真 API stub 冒烟工装**(临时目录不入仓库, 按坑条目): 静态 + 最小 API stub(/api/config/public 免鉴权标志、/api/state 定态快照、/api/events SSE 即回即关、/api/speed/mode 404 走错误路径)+ createApp 包装注入(拦截 /shared/app.js 响应前贴 wrapper, 捕 mount 返回值)→ 无头 Edge dump-dom。**改造前先抓 DOM 基线**(双 UI, 真 app.js 渲染真分组行/成员/状态徽标)。
+  - **W2b 拆分**: app.js 1281→411 行(常量单点 + 接线); 拆出 5 片段 —— state.js(294: data/computed/watch)与 lifecycle.js(191: created/mounted/unmounted/updated)经 `...window.X` 展开进**根组件选项**; auth.js(141: api/_request/_logout/bootstrap/saveToken/retryAuth)、polling.js(155: startEvents→refresh 轮询推送链)、view.js(122: search/setViewMode/展开态跨视图记忆)走既有全局 mixin 方法域。**关键架构决策**: data/watch/生命周期不许走 app.mixin —— 全局 mixin 波及 hub-field 等组件实例(watch/mounted 双份执行), 根选项只命中根; 接线守阵补形态④(`...window.X` 只认 app.js 内展开)。成员逐行原样搬运(切点锚断言 + 多重集完整性自验)。中途实测踩坑一次: 切分脚本把原 `const app = createApp({` 残留在瘦身件里造成双重声明(冒烟 mounted=False 现形), 删孤儿行即愈 —— stub 冒烟的价值实证。
+  - **验证链全绿**: node 语法(套件内) + test_web 173 passed + test.quick/test.full 1688 passed + 1 skipped + 0 failed + **渲染 DOM 等价: 改造前基线 vs 拆分后双 UI 逐字节一致**(atlas/prism 28126/29696 字符, 归一口径 = 相对时间/SSE token/脚本清单)。守阵成员查找 6 处改整包聚合读法(_app_bundle_text/_bundle_iter)。
+  - **W4 基线入库**: testing/baselines/26-09-27-1305-webui-kernel-split.md(TOTAL 91%)。真机五主题冒烟: stub 冒烟已覆盖真 app.js 运行时等价, 真实 qB 侧冒烟留待用户环境(程序本就在真机跑), 如实报告。
+  - app.js 头注释重写(2026-09-20 旧架构描述已过时 → 三条硬约束含根选项/mixin 分界)。**未提交**(等用户说提交)。
+- **2026-09-27 13:40 第五轮(用户三项指令: 死 CSS/issue 状态/W4 回写) —— 全部完成**:
+  - **prism 死 CSS 已清**: `css/components.css` 的 `.modal-check` 族 3 规则(FX-24 遗留)删除, 留一行墓碑注释; 全语料剥注释核查零引用, `--fg-soft` 令牌仍有 3 处活引用非孤儿; 墓碑注释里的类名提及符合死类判定口径(判定前剥注释)。
+  - **issue 26-09-27-1153 无需动作**: 核实发现对方 clone 已置 Done(meta+badge 两处一致), 状态日志记了修法(`6fd1331` +4 meta)与验证(test_docs_forms 34 passed), 索引一致(kb.check 过)。
+  - **W4 回写三件完成**: ①`progress/implemented-webui.md` 迁入本轮总条目(置顶); 触发 cap 守卫(10,947>10,000)后按既有轮转惯例把四条 09-25 旧条目外迁 history(18.9k/24k), 守卫复绿 ②新坑 `pitfalls/web-ui/frontend-split.md`(template-render 已 7,009 超 6k cap, 按协议另立主题文件): 四节 —— 聚合读法单点/差异口纪律/根选项 vs app.mixin 分界/拆分等价性验证方法 ③`modules/core-domain.md` 的 `web_ui/static/` 模块表行重写(4,094→1,377 字符): 拆分前架构描述 → 三层现状(模板单一源+差异口/样式分层/内核片段+根选项展开)+契约不变式+守阵口径指针。
+  - 实测: test.quick **1688 passed + 1 skipped + 0 failed**; test_memory_bank 24 passed; kb.check 6/6。**未提交**(等用户说提交)。

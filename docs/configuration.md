@@ -373,10 +373,6 @@ config:
                     time: 10:00-23:00
                 - seedtime: "<24H"                 # 做种时长 🚧
                 - upload_ratio: ">1.5"             # 上传比率 🚧
-                - upload_size: ">10GiB"            # 总上传大小 🚧
-                - upload_size_today: ">10GiB"      # 今日上传大小 🚧
-                - upload_size_this_week: ">10GiB"  # 本周上传大小 🚧
-                - upload_size_this_month: ">10GiB" # 本月上传大小 🚧
                 - freespace:                       # 剩余空间 🚧
                     path: "R:/"
                     amount: "<100GiB"
@@ -432,7 +428,7 @@ config:
 
 `interval` 触发的规则未显式配置 `interval` 时，默认每个主循环 tick 检查一次（等价 `0S`，既有行为）；显式配置时必须 > 0。
 
-### 筛选条件（16 种）
+### 筛选条件（12 种）
 
 | 条件                     | 说明                                                                                      |
 |--------------------------|-------------------------------------------------------------------------------------------|
@@ -447,10 +443,6 @@ config:
 | `date_time`              | 日期时间：`day_of_month` / `day_of_week` / `time`                                          |
 | `seedtime`               | 做种时长                                                                                  |
 | `upload_ratio`           | 上传比率                                                                                  |
-| `upload_size`            | 总上传大小                                                                                |
-| `upload_size_today`      | 今日上传大小：按自然日增量统计，同一天多次重启运行也有效                                    |
-| `upload_size_this_week`  | 本周上传大小                                                                              |
-| `upload_size_this_month` | 本月上传大小                                                                              |
 | `freespace`              | 指定路径剩余空间                                                                          |
 
 ### 动作（12 种）
@@ -473,7 +465,7 @@ config:
 - 非幂等动作（校验、开始、强制汇报、限速）**必须**配置 `execute_once` 或 `cooldown`，否则会在条件成立期间反复触发
 - `execute_once` 取值：`never` / `once`（每种子仅一次）/ `daily`（每种子每天最多一次）/ `hourly`（每种子每小时最多一次）
 - `cooldown` 可覆盖 `execute_once` 粒度，如 `execute_once: never` + `cooldown: 10M`
-- 执行历史保存在数据目录的状态文件中，按 `规则名 + 种子 + 时间窗口(日/小时)` 记录；`daily` 按自然日切换，与 `upload_size_today` 口径一致
+- 执行历史保存在数据目录的状态文件中，按 `规则名 + 种子 + 时间窗口(日/小时)` 记录；`daily` 按自然日切换
 - 跳检另有独立兜底：同一种子当日只跳检一次（跨规则生效）+ 全量校验连续失败 3 次当日冷却（防损坏文件反复校验死循环，次日重置）+ 强制汇报运行时最小间隔 10M（不依赖规则去重）
 
 ### 动作结果与错误处理

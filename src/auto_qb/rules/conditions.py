@@ -1,5 +1,5 @@
 """内置条件插件: path, size, tags, category, trackers, state, hr, date_time, seedtime,
-upload_ratio, upload_size, upload_size_today/this_week/this_month, freespace, expr(表达式)"""
+upload_ratio, freespace, expr(表达式)"""
 import shutil
 from datetime import datetime
 
@@ -209,51 +209,6 @@ class UploadRatioCondition(BaseCondition):
 
     def match(self, ctx: RuleContext):
         return utils.compare(self.op, ctx.torrent.ratio, self.value)
-
-
-@register_condition
-class UploadSizeCondition(BaseCondition):
-    """总上传大小条件, 如 '>10GiB'"""
-    name = "upload_size"
-
-    def __init__(self, spec):
-        self.op, self.value = utils.parse_compare(str(spec), utils.parse_fsize)
-
-    def match(self, ctx: RuleContext):
-        return utils.compare(self.op, ctx.torrent.uploaded, self.value)
-
-
-class _UploadDeltaCondition(BaseCondition):
-    """周期上传增量条件基类: 基于 QbManager 维护的快照, 取 max(0, 增量)"""
-    kind = ""  # daily / weekly / monthly
-
-    def __init__(self, spec):
-        self.op, self.value = utils.parse_compare(str(spec), utils.parse_fsize)
-
-    def match(self, ctx: RuleContext):
-        delta = ctx.manager.upload_delta(ctx.torrent, self.kind)
-        return utils.compare(self.op, delta, self.value)
-
-
-@register_condition
-class UploadSizeTodayCondition(_UploadDeltaCondition):
-    """今日上传大小条件(自然日)"""
-    name = "upload_size_today"
-    kind = "daily"
-
-
-@register_condition
-class UploadSizeThisWeekCondition(_UploadDeltaCondition):
-    """本周上传大小条件(ISO周)"""
-    name = "upload_size_this_week"
-    kind = "weekly"
-
-
-@register_condition
-class UploadSizeThisMonthCondition(_UploadDeltaCondition):
-    """本月上传大小条件"""
-    name = "upload_size_this_month"
-    kind = "monthly"
 
 
 @register_condition

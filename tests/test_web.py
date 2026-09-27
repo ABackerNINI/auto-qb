@@ -770,6 +770,17 @@ def _app_bundle_files():
     return out
 
 
+def _app_bundle_text():
+    """app.js + 内核片段(清单序)聚合文本 —— W2b 拆分后成员按域存放, 守阵找成员一律读聚合"""
+    return "\n".join(open(p, encoding="utf-8").read() for p, _rel in _app_bundle_files())
+
+
+def _bundle_iter():
+    """(rel, text) 对迭代: 整包按清单序 —— 「恰好只在一处」类不变量改整包扫描用"""
+    for p, rel in _app_bundle_files():
+        yield rel, open(p, encoding="utf-8").read()
+
+
 def _section_members(text, section):
     """取片段文件 / app.js 里 `methods: {` 或 `computed: {` 块的成员名(4 空格缩进的 `name(` / `name:`)"""
     names, in_block = [], False
@@ -823,8 +834,12 @@ def _scan_mixin_wiring(problems):
     #      但成员确实在跑 ⇒ 不该报"定义了没注入"。
     #      ⚠ 只认 `Object.assign({}, window.X` 这一种形态(本项目唯一的复用写法), 不要放宽成"出现即算"。
     #      (2026-09-25: 经典设置页移除后 ce-field 组件与 tpl-ce-field 模板删除, 基座随之改名去组件化。)
+    #   ④ **根选项展开** —— `...window.X` 展开进 createApp 根组件选项(W2b: state.js 的 data/computed/watch
+    #      与 lifecycle.js 的生命周期)。❗这类成员**不许**走 app.mixin: 全局 mixin 会波及 hub-field 等
+    #      组件实例(watch/mounted 双份执行)。只认 app.js 里 `...window.X` 展开形态, 不放宽。
     registered = set(re.findall(r"app\.mixin\(window\.(\w+)\)", app_text))
     registered |= set(re.findall(r"app\.component\(\s*\"[^\"]+\"\s*,\s*window\.(\w+)\)", app_text))
+    registered |= set(re.findall(r"\.\.\.window\.(\w+)", app_text))
     for path, _rel in bundle:
         registered |= set(re.findall(r"Object\.assign\(\{\},\s*window\.(\w+)", open(path, encoding="utf-8").read()))
     seen = {}
@@ -1636,7 +1651,7 @@ def test_frontend_cols_store_single_setitem_site():
     散写回潮 = 本守阵红。
     """
     hits = []
-    for name in ("shared/columns.js", "shared/app.js"):
+    for name, text in _bundle_iter():
         text = open(os.path.join(STATIC_ROOT, name), encoding="utf-8").read()
         for i, ln in enumerate(text.splitlines(), 1):
             code = ln.split("//")[0]
@@ -1678,7 +1693,7 @@ def test_frontend_col_manual_flag_not_revived():
     永远成对同步, 任何一侧失配 = "列设置被重置"复发(issue 26-09-20-1800 全史)。
     v5 删除该标志; 连注释里也不得出现该标识, 防止有人照着历史注释"顺手加回来"。
     """
-    for name in ("shared/columns.js", "shared/app.js"):
+    for name, text in _bundle_iter():
         text = open(os.path.join(STATIC_ROOT, name), encoding="utf-8").read()
         assert "colManual" not in text, (
             f"{name} 出现 colManual —— manual 标志位在双轨模型(v5)下已删除, "
@@ -1740,7 +1755,7 @@ def test_frontend_page_location_persisted():
     ③ 恢复的分区 key 必须**对 schema 校验** —— 分区会随版本改名/删除, 否则停在空白分区;
     ④ 恢复走 `hubGo`(懒加载与默认选中项都在那条路径里, 自己重写必漏一半)。
     """
-    app = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    app = _app_bundle_text()
     m = re.search(r"function initialPage\(\)\s*\{(.*?)\n\}", app, re.S)
     assert m, "app.js 找不到 initialPage()(改名或挪走了? 同步本守阵)"
     assert "autoqb.ui.page" in m.group(1), "initialPage 未读 autoqb.ui.page —— 页面位置没有持久化"
@@ -1792,7 +1807,7 @@ def test_frontend_expand_state_survives_view_switch():
     ② `groupWin` 的退避判据必须同步成"**当前真的有面板**" —— 只判 `expandedKey` 非空的话,
        一个过期的键会让行窗口永久退避(大库上 = 悄悄关掉 P1-2 优化, 界面看着完全正常, 只是滚动变卡)。
     """
-    app = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    app = _app_bundle_text()
     m = re.search(r"setViewMode\(mode\)\s*\{(.*?)\n    \},", app, re.S)
     assert m, "app.js 找不到 setViewMode(mode)(改名或挪走了? 同步本守阵)"
     body = m.group(1)
@@ -2044,7 +2059,7 @@ def test_frontend_add_torrent_drag_drop_wiring():
     assert "text/plain" not in takes, ("_addDragTakes 不得认 text/plain —— 会误拦页面内拖选中文本/拖词进输入框的原生行为(DND-01)")
 
     # ④ app.js 状态 + 双 UI 遮罩成对
-    app_js = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    app_js = _app_bundle_text()
     assert "addDragOver: false" in app_js, "app.js 缺 addDragOver 状态(遮罩显隐没有数据源)"
     for ui in ("atlas", "prism"):
         html = _ui_aggregate(ui)
@@ -2109,7 +2124,7 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
         assert needle in m.group(1), f"{name} 必须走 {needle}(延迟收起/撤销挂起), 实现漂移了"
     delay = re.search(r"const SUB_CLOSE_DELAY_MS = (\d+);", menu)
     assert delay and int(delay.group(1)) > 0, "SUB_CLOSE_DELAY_MS 必须为正整数(0 = 同步收起, 进不去子面板)"
-    app = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    app = _app_bundle_text()
     assert "_subCloseTimer: 0," in app, "app.js data 必须声明 _subCloseTimer(未声明的属性不进响应式, 且易漂移)"
     assert re.search(r'"menu\.visible"\(v\) \{\n(?:.*\n){0,4}?.*this\.keepSub\(\);',
                      app), ("menu.visible 关闭时必须 keepSub() 撤掉挂起的收起 —— 否则一级关掉后定时器还会再触发一次")

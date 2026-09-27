@@ -40,24 +40,25 @@
 - **web-auth-hardening** (2) — issue [26-09-21-1408](issues/26-09-21-1408-bug-web-auth-hardening-minors.html) `Open` · issue [26-09-21-1408](issues/26-09-21-1408-bug-web-skip-local-verify-csrf.html) `Open`
 - **web-create-app** (2) — issue [26-09-21-1408](issues/26-09-21-1408-refactor-web-create-app-monolith.html) `Done` · 计划 [26-09-22-1857](plans/26-09-22-1857-web-create-app-split-plan.html) `Done`
 - **webui-decoupling** (2) — 计划 [26-09-20-0234](plans/26-09-20-0234-webui-decoupling-plan.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-decoupling.md) `Done`
-- **webui-frontend-file-split** (2) — 计划 [26-09-26-2233](plans/26-09-26-2233-plan-webui-frontend-file-split.html) `In Progress` · 报告 [26-09-27-1143](reports/26-09-27-1143-report-webui-template-diff.html) `Done`
+- **webui-frontend-file-split** (2) — 计划 [26-09-26-2233](plans/26-09-26-2233-plan-webui-frontend-file-split.html) `Done` · 报告 [26-09-27-1143](reports/26-09-27-1143-report-webui-template-diff.html) `Done`
 - **webui-hr-safety-display** (2) — 计划 [26-09-25-1823](plans/26-09-25-1823-plan-webui-hr-safety-display.html) `Done` · 档案 [26-09-25](tasks/26-09-25-webui-hr-safety-display.md) `In Progress`
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) `Done` · issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) `Open`
 - **webui-search-query-syntax** (2) — 报告 [26-09-26-1918](reports/26-09-26-1918-report-webui-search-query-syntax.html) `Done` · 档案 [26-09-26](tasks/26-09-26-webui-search-query-syntax.md) `Done`
 
-## 单件专题 (仅登记, 71 个)
+## 单件专题 (仅登记, 73 个)
 
 - appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commands-shipflow-v2 · commands-unified-command-surface
 - commands-unified-surface · commit-gate-auto-run · config-value-range-validation · cross-group-file-conflict · dependency-lock
 - docs-readme-modules-drift · docs-restructure · duplicate-test-name-shadowed-guard · fakeconfig-shared-state-order-pollution · full-checking-verdict
 - git-ship-skill-proposal · hot-reload-l2-state-rollback-fix · issue-typing · log-level-notify-error · memory-bank-migration · memory-bank-task-id
-- memory-bank-trigger-fix · my-commit-flow-merge-first-writeback · plan-shipflow-v2-missing-meta · rule-conditions-expression · seed-group-status
-- skill-user-md-write-conflict · skill-vetter · skip-checking-readd-no-backup-window · src-layout-restructure · state-load-corrupt-silent-reset
-- test-sidefx-guard · test-suite-perf · tracker-url-source-sanitize · tray-join-timeout-abandons-save · type-annotations-mypy
-- web-runtime-host-protocol · web-tracker-url-passkey-log · webui-appjs-split · webui-button-system · webui-cols-store-version
-- webui-component-libraries · webui-config-health-warning · webui-ctx-menu-multi-select · webui-ctx-submenu · webui-error-reason
-- webui-ext-hr-logging · webui-filter-data-and-color-flicker · webui-fix-plan-round10 · webui-fix-plan-round9 · webui-fix-round10 · webui-fix-round11
-- webui-fix-round9 · webui-hot-endpoints-jsonable-encoder · webui-hr-popup · webui-hr-popup-t1 · webui-hr-popup-t2 · webui-hr-popup-t3
-- webui-keyboard-shortcuts · webui-log-level-filter · webui-long-path-open · webui-naming · webui-page-location-persist · webui-polish-and-redesign
-- webui-redesign · webui-settings-unsaved-changes · webui-sites-import · webui-speed-refresh-fix · webui-torrent-meta-edit
+- memory-bank-trigger-fix · my-commit-flow-merge-first-writeback · plan-shipflow-v2-missing-meta · remove-upload-stats · rule-conditions-expression
+- seed-group-status · skill-user-md-write-conflict · skill-vetter · skip-checking-readd-no-backup-window · src-layout-restructure
+- state-load-corrupt-silent-reset · test-sidefx-guard · test-suite-perf · torrent-traffic-stats · tracker-url-source-sanitize
+- tray-join-timeout-abandons-save · type-annotations-mypy · web-runtime-host-protocol · web-tracker-url-passkey-log · webui-appjs-split
+- webui-button-system · webui-cols-store-version · webui-component-libraries · webui-config-health-warning · webui-ctx-menu-multi-select
+- webui-ctx-submenu · webui-error-reason · webui-ext-hr-logging · webui-filter-data-and-color-flicker · webui-fix-plan-round10
+- webui-fix-plan-round9 · webui-fix-round10 · webui-fix-round11 · webui-fix-round9 · webui-hot-endpoints-jsonable-encoder · webui-hr-popup
+- webui-hr-popup-t1 · webui-hr-popup-t2 · webui-hr-popup-t3 · webui-keyboard-shortcuts · webui-log-level-filter · webui-long-path-open · webui-naming
+- webui-page-location-persist · webui-polish-and-redesign · webui-redesign · webui-settings-unsaved-changes · webui-sites-import
+- webui-speed-refresh-fix · webui-torrent-meta-edit
 - webui-view-rebuild

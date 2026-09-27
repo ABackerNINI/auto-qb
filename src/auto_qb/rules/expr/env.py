@@ -109,13 +109,6 @@ def _hr(method: str):
     return get
 
 
-def _upload_delta(kind: str):
-    def get(ctx):
-        return ctx.manager.upload_delta(ctx.torrent, kind)
-
-    return get
-
-
 def _age(ctx):
     return datetime.now().timestamp() - (ctx.torrent.added_on or 0)
 
@@ -300,8 +293,6 @@ def _build_name_table() -> Dict[str, NameInfo]:
     table["tor.tags_count"] = NameInfo("tor.tags_count", NUM, lambda ctx: len(ctx.torrent.tags_set))
     table["tor.hr_condition_met"] = NameInfo("tor.hr_condition_met", BOOL, _hr("check_hr_condition"))
     table["tor.hr_satisfied"] = NameInfo("tor.hr_satisfied", BOOL, _hr("check_hr_satisfied"))
-    for suffix, kind in (("today", "daily"), ("week", "weekly"), ("month", "monthly")):
-        table[f"tor.upload_{suffix}"] = NameInfo(f"tor.upload_{suffix}", NUM, _upload_delta(kind))
     table["tor.age"] = NameInfo("tor.age", NUM, _age)
     table["tor.idle"] = NameInfo("tor.idle", NUM, _idle)
 

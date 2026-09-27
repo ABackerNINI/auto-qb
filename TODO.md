@@ -141,6 +141,8 @@
 * (待考量) 未达到HR触发条件的种子是否要纳入到HR管理中? 防止转移种子没有HR. (转移种子通常为已完成种子)
 * (存疑) 将配置切分, 比如站点配置, 每个站点保存一个
 
+* (已完成:移除) 暂时移除不成熟的限速设计, 包括: upload_size/upload_size_today/upload_size_this_week/upload_size_this_month, 或可改为global_upload_size/...; 包括: 记录单种上传下载量(begin_round) —— [计划](memory-bank/plans/26-09-27-1232-plan-remove-upload-stats.html); 重设计待办已入 feature issue (memory-bank/issues/)
+
 * config 取值范围: 缺省 `0S`(= 每 tick 级别)是否收紧 —— 属**行为变更**, 待拍板(原 activeContext 切片 26-09-22-1937-config-value-range-validation 于 2026-09-26 蒸馏并入本行)
 * qB 移动 .!qB 过渡态误判缺文件: 修复计划已出(过渡态容忍 + 连续 3 次上限, 不加配置键), **待过目后实施** —— issue 26-09-21-0219 已认领; [计划](memory-bank/plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) / [档案](memory-bank/tasks/26-09-22-backend-qb-move-missing-tolerance.md)(原 activeContext 切片 26-09-22-2038-backend-qb-move-dot-qb 于 2026-09-26 蒸馏并入本行)
 

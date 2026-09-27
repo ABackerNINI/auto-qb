@@ -86,4 +86,4 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 4. **删除种子**: `apply_sync` 返回的 removed 里, 删除前先保留各种子快照副本 (供 `on_torrent_deleted` 规则经 `ctx.torrent`/`snapshot` 读取); `task_queue.remove_torrent(hash)` 移除该种子全部任务 (含让位任务/在途校验标记); grouping 启用时 `_handle_removed_torrents` → 组内缺文件扫描; `_dispatch_events` 的 deleted 分支随后触发 `on_torrent_deleted` 规则。
 5. **分组事件处理** (grouping.enabled): `_handle_save_path_changes` (重归组+两侧扫描)、`_check_download_conflicts` (每轮)。
 6. `store.update_state_snapshot()` 保存本轮状态快照 (由 `by_hash` 派生 `state_enum` 枚举对象, 跨 qB 版本; 自有动作经 QbApi 同步过的状态同样计入)。
-7. `begin_round(...)` 维护上传量快照基线 (daily/weekly/monthly, 周期切换重建基线)。
+7. ~~`begin_round(...)` 维护上传量快照基线~~ — 已随计划 26-09-27-1232 移除 (upload_size 四条件 + 统计底座整体下线, 见 feature issue 重设计待办)。

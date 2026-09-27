@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_seed_fields: tor.* 快照字段取值(大小/名称/标签集合/状态类别/标签数)与类型
-- test_derived_values: 派生值(progress_pct / age / idle 哨兵 / upload_today / hr 缺省)
+- test_derived_values: 派生值(progress_pct / age / idle 哨兵 / hr 缺省)
 - test_tracker_values: tracker.name 未匹配站点 = "Unknown"、groups = 空列表(有定义的缺省, 不报错)
 - test_sys_time_and_counts: sys 时间类与全局计数
 - test_server_state_unavailable: server_state 未同步 -> ExprError(绝不返回假 0)
@@ -43,10 +43,6 @@ from auto_qb.rules.conditions import (
     TrackerGroupCondition,
     TrackersCondition,
     UploadRatioCondition,
-    UploadSizeCondition,
-    UploadSizeThisMonthCondition,
-    UploadSizeThisWeekCondition,
-    UploadSizeTodayCondition,
 )
 from auto_qb.rules.expr import compile_expr, evaluate, validate
 from auto_qb.rules.expr.errors import ExprError, ExprSyntaxError
@@ -91,7 +87,6 @@ def test_seed_fields():
 def test_derived_values():
     _, tor, ctx = _setup()
     assert _val("tor.progress_pct", ctx) == tor.progress * 100
-    assert _val("tor.upload_today", ctx) == tor.uploaded  # 无基线时增量 = 累计上传
     assert _val("tor.age", ctx) > 0
     # last_activity = -1(从未传输) -> idle 为无穷大(从未活动即无限久)
     tor.last_activity = -1
@@ -290,7 +285,6 @@ def test_legacy_condition_equivalence(monkeypatch):
             (SizeCondition(">=100MiB"), "tor.size >= 100MiB"),
             (SeedtimeCondition("<24H"), "tor.seeding_time < 24H"),
             (UploadRatioCondition(">1.5"), "tor.ratio > 1.5"),
-            (UploadSizeCondition(">10GiB"), "tor.uploaded > 10GiB"),
             (StateCondition("is_complete&is_uploading"), "tor.is_complete and tor.is_uploading"),
             (TagsCondition(["a,b", "c"]), '(("a" in tor.tags) and ("b" in tor.tags)) or ("c" in tor.tags)'),
             (CategoryCondition(["regex:^HR"]), 'tor.category ~ "regex:^HR"'),
@@ -300,9 +294,6 @@ def test_legacy_condition_equivalence(monkeypatch):
             (HrCondition("satisfied"), "tor.hr_satisfied"),
             (HrCondition("condition-not-met"), "not tor.hr_condition_met"),
             (PathCondition("/data/x"), '(tor.save_path ~ "/data/x") or (tor.content_path ~ "/data/x")'),
-            (UploadSizeTodayCondition(">1GiB"), "tor.upload_today > 1GiB"),
-            (UploadSizeThisWeekCondition(">1GiB"), "tor.upload_week > 1GiB"),
-            (UploadSizeThisMonthCondition(">1GiB"), "tor.upload_month > 1GiB"),
             (
                 DateTimeCondition({
                     "day_of_week": "1-7",
@@ -315,6 +306,6 @@ def test_legacy_condition_equivalence(monkeypatch):
                 "amount": "<100GiB"
             }), 'freespace("R:/") < 100GiB'),
         ]
-        assert len(pairs) == 18
+        assert len(pairs) == 14
         for old, text in pairs:
             assert old.match(ctx) == _val(text, ctx), f"不等价: {old!r} vs {text}"

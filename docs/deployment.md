@@ -324,4 +324,4 @@ services:
 | 连不上 qB 时 | 退出码 1, 约 1s; Docker 退避重启上限 1 次/分钟 |
 | Web UI 密钥 | 64 位, 持久化 `/data/web.token`, 跨重启复用 |
 | 配置写回 | round-trip 保留注释; `.bak` 落 `<data_dir>/<配置名>.bak`; L0/L1/L2 热重载即时生效, R 级(data_dir/state_file)需重启 |
-| 全功能关闭时 state.json | 仅 `upload_snapshots`(~16KB); 91 种子库全程零写入实测通过 |
+| 全功能关闭时 state.json | 基础结构(原常驻的 `upload_snapshots` 已随计划 26-09-27-1232 移除, state schema 升 v2); 91 种子库全程零写入实测通过 |

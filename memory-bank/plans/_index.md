@@ -9,7 +9,7 @@
 
 ## In Progress
 
-- [26-09-26-2233] [计划 · WEB UI 前端大文件拆分](26-09-26-2233-plan-webui-frontend-file-split.html) — `webui-frontend-file-split`
+- [26-09-27-1232] [计划 · 暂时移除不成熟的限速统计设计 (upload_size 四条件 + begin_round)](26-09-27-1232-plan-remove-upload-stats.html) — `remove-upload-stats`
 - [26-09-26-0031] [HR 取数代理 · 选项页风格选型(三选一)](26-09-26-0031-plan-hr-ext-options-style.html) — `backend-partial-hr-verify`
 - [26-09-25-2241] [auto-qb · Docker 部署方案](26-09-25-2241-plan-docker-deploy.html) — `docker-deploy`
 - [26-09-25-2043] [HR 悬停弹窗模板 · T1 档案卡 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html) — `webui-hr-popup-t1`
@@ -30,6 +30,7 @@
 
 - [26-09-27-1126] [计划 · 日志等级整改 — 危险情况归 ERROR，通知默认只推 ERROR](26-09-27-1126-plan-log-level-notify-error.html) — `log-level-notify-error`
 - [26-09-26-2345] [commands × my-commit-flow v2 — 输出契约与零参数化设计](26-09-26-2345-plan-commands-shipflow-v2.html) — `commands-shipflow-v2`
+- [26-09-26-2233] [计划 · WEB UI 前端大文件拆分](26-09-26-2233-plan-webui-frontend-file-split.html) — `webui-frontend-file-split`
 - [26-09-26-0538] [auto-qb WEB UI · 按钮体系重构 · 3 组方案模板(供挑选)](26-09-26-0538-plan-webui-button-3-proposals.html) — `webui-button-system`
 - [26-09-26-0529] [测试基线切片化 · 单文件改每条一档](26-09-26-0529-plan-baseline-slice-per-file.html) — `baseline-slice-per-file`
 - [26-09-26-0506] [落盘文件 schema 版本号与逐级升级链 · 工程计划](26-09-26-0506-plan-schema-version-chain.html) — `backend-schema-version-chain`

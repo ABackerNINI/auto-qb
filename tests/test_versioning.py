@@ -9,6 +9,7 @@
 - test_detect_version_future_rejected: 高于 CURRENT 报错, 且报错同时说清两个版本号
 - test_detect_version_unknown_kind_rejected: 未注册 kind 报错
 - test_migrate_noop: 已是最新版本原样返回(不触发任何注册项, 也不打版本章)
+- test_migrate_state_v1_v2_strips_upload_snapshots: 生产迁移 v1→v2 清 upload_snapshots 且保留其余键
 - test_migrate_chain_runs_stepwise: 临时注册 v1→v2→v3, 断言沿链逐级执行、中间态不被跳过
 - test_migrate_stamps_version_each_step: 每完成一级由框架盖 schema_version 章(迁移函数不必自己改)
 - test_migrate_idempotent: 对已迁移数据重复 apply 无二次变更(崩溃后重放同一条链即幂等)
@@ -57,7 +58,7 @@ def test_detect_version_future_rejected():
     with pytest.raises(SchemaVersionError) as ei:
         detect_version("state", {"schema_version": 99})
     msg = str(ei.value)
-    assert "schema_version=99" in msg and "支持的 1" in msg
+    assert "schema_version=99" in msg and "支持的 2" in msg
 
 
 def test_detect_version_unknown_kind_rejected():
@@ -68,10 +69,36 @@ def test_detect_version_unknown_kind_rejected():
 
 def test_migrate_noop():
     """已是最新版本: 原样返回, 不触发任何注册项, 也不打版本章(盖章是写点的职责)"""
-    data = {"exec_history": {"k": 1}}
+    data = {"schema_version": versioning.CURRENT_VERSIONS["state"], "exec_history": {"k": 1}}
     out, desc = migrate("state", data)
     assert out is data and desc == ""
-    assert "schema_version" not in out
+    assert out["schema_version"] == versioning.CURRENT_VERSIONS["state"]
+
+
+def test_migrate_state_v1_v2_strips_upload_snapshots():
+    """生产迁移 v1→v2: 清掉 upload_snapshots(统计底座已随计划 26-09-27-1232 移除), 其余键原样保留"""
+    data = {
+        "exec_history": {
+            "r:h": {
+                "ts": 1.0,
+                "date": "2026-09-27",
+                "hour": 12
+            }
+        },
+        "upload_snapshots": {
+            "daily": {
+                "key": "2026-09-27",
+                "baseline": {
+                    "H1": 100
+                }
+            }
+        },
+    }
+    out, desc = migrate("state", data)
+    assert desc == "v1→v2"
+    assert out["schema_version"] == 2
+    assert "upload_snapshots" not in out
+    assert out["exec_history"] == data["exec_history"]
 
 
 def test_migrate_chain_runs_stepwise(monkeypatch):

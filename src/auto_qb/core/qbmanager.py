@@ -84,8 +84,8 @@ def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
     非托管模式(CLI 默认无 stop_event)走 time.sleep —— **必须真实睡眠**。
 
     ❗回归背景(2026-09-14): 主循环曾写成 `if stop_event is not None and stop_event.wait(main_tick)`,
-    非托管模式下被 `and` 短路 -> 完全不阻塞 -> 空转。由 begin_round + update_state_snapshot 的
-    每 tick 固定成本反推约 2800 tick/s, 是 main_tick=2s 设计值的约 5500 倍: CPU 打满, 且把
+    非托管模式下被 `and` 短路 -> 完全不阻塞 -> 空转。由每 tick 固定成本(update_state_snapshot 等)
+    反推约 2800 tick/s, 是 main_tick=2s 设计值的约 5500 倍: CPU 打满, 且把
     sync/maindata 请求量同步放大 5500 倍(连带 requests 每次请求的 netrc/代理/注册表解析一并放大)。
     任何"简化 stop_event 判断"的改动都必须保持本函数语义(非托管 -> time.sleep)。
     """
@@ -811,8 +811,6 @@ class QbManager(
         # 事件分派(on_torrent_state_enum_changed)依赖此上一轮快照对比, 故不局限于 grouping 启用时
         self.store.update_state_snapshot()
 
-        # 上传量快照(按自然日/周/月, 周期切换时重建基线) — 幂等
-        self.begin_round(list(self.store.by_hash.values()))
         self._suppress_events = False  # 事件抑制仅覆盖热重载后的首轮全量重建
 
     def _create_torrent_tasks(self, hash: str):

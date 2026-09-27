@@ -244,11 +244,7 @@
 .modal-input { width: 100%; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border);
   background: var(--bg-row); color: var(--fg); font-size: 13.5px; margin-bottom: 18px; }
 .modal-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
-.modal-check { display: flex; align-items: center; gap: 8px; margin: -6px 0 16px; padding: 9px 11px;
-  border-radius: var(--radius-sm); background: var(--surface-1); border: 1px solid var(--border-soft);
-  font-size: 13px; color: var(--fg-soft); cursor: pointer; }
-.modal-check:hover { border-color: var(--border-strong); }
-.modal-check input { accent-color: var(--error); width: 15px; height: 15px; flex: 0 0 auto; }
+/* (.modal-check 勾选框族已随 FX-24 切胶囊退役删除 —— 统一模板零引用, 26-09-27 死类清理) */
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; }
 /* 待删目标信息区(值可复制)
  * R10-13: 长文本口径统一为"**单行省略 + title 全文 + 复制按钮**" —— 旧写法 overflow-wrap:

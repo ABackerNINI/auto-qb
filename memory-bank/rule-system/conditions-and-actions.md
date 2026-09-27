@@ -40,10 +40,6 @@ conditions:
 | `date_time` | `{day_of_month: 1-31, day_of_week: 1-7, time: "10:00-23:00"}` | 全部可省略(省略=不检查); 区间 `a-b` 或单值; time 支持跨午夜; day_of_week 用 isoweekday (1=周一) |
 | `seedtime` | `"<24H"` | 比较 seeding_time (秒) |
 | `upload_ratio` | `">1.5"` | 比较 ratio |
-| `upload_size` | `">10GiB"` | 比较 uploaded (总) |
-| `upload_size_today` | `">10GiB"` | 基于 state_file 基线的自然日增量 (`upload_delta(kind=daily)`) |
-| `upload_size_this_week` | 同上 | ISO 周增量 |
-| `upload_size_this_month` | 同上 | 自然月增量 |
 | `freespace` | `{path: "R:/", amount: "<100GiB"}` | shutil.disk_usage; path 为空/OSError → False |
 
 比较表达式统一: `> < >= <= == = !=` 前缀, 缺省 `==`; 值解析失败在构造时抛 (fail-fast)。
