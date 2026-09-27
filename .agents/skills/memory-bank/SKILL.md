@@ -65,8 +65,8 @@ user-invocable: true
 
 | 角色 | 上限 (字符) |
 |---|---|
-| `<文档>/_index.md` 与 `memory-bank/README.md` | 3,000 |
-| `tasks/_index.md` / `issues/_index.md`(自动生成) | 12,000 |
+| `memory-bank/README.md`(手写) | 3,000 |
+| `*/_index.md`(自动生成, 含 tasks / issues / 各目录) | 12,000 |
 | `pitfalls/*` 条目集(「扫描找一条」比通读更贵) | 6,000 |
 | 常青主题(叙述型) | 10,000 |
 | 参考速查(`config-reference/` · `rule-system/`) | 12,000 |

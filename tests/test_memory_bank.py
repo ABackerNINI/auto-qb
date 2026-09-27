@@ -52,7 +52,9 @@ SKILL = ROOT / ".agents" / "skills" / "memory-bank" / "SKILL.md"
 STATUSES = ("In Progress", "Open", "Done", "Dropped")
 
 # `memory-bank/activeContext/` 切片数上限 —— 切片无界增长是这个方案的已知代价, 给个可判定的收口线
-SLICE_COUNT_LIMIT = 40
+# 48 = 14 天蒸馏窗口 × 实际日均 ~3.4 篇(2026-09-27 校准: 40 在 5 天就被打满, 而窗口内全部切片
+# 都活跃(有待拍板/未完成项)无可归档 —— 上限须 ≥ 14 天节奏, 否则守卫必红逼人违规归档)
+SLICE_COUNT_LIMIT = 48
 REQUIRED_SECTIONS = ("## 原始请求", "## 思考过程与决策", "## 实现计划", "## 子任务状态表", "## 进度日志")
 
 DATE_PREFIX_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-")

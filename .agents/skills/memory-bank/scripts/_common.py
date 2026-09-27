@@ -250,8 +250,13 @@ def role_of(rel: str) -> str:
         "memory-bank/reports/_index.md", "memory-bank/_doc-map.md"
     ):
         return "index-auto"
-    if rel.endswith(INDEX_NAME) or rel == "memory-bank/README.md":
+    if rel == "memory-bank/README.md":
         return "index"
+    # 目录级 _index.md 全部是生成物(check_index_regenerated 逐目录守卫"索引 == 生成结果"),
+    # 行数随主题文档数增长且一行一条已是极简 —— 与 tasks/issues 同性质, 同属 index-auto。
+    # (2026-09-27 校准: pitfalls/testing/_index 3,147 字符在 3,000 档常红, 15 个主题无收缩路径)
+    if rel.endswith(INDEX_NAME):
+        return "index-auto"
     if rel == "memory-bank/activeContext.md":
         return "volatile"
     if rel.startswith(f"memory-bank/{SLICE_DIR}/"):

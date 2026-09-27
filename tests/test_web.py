@@ -5199,21 +5199,13 @@ def test_start_web_server_started_message_is_info(tmp_path):
 
     启动是程序按配置做的动作, WARNING 会被 notify 推成系统通知 —— 每次启动弹一条,
     即用户实报的「一开就弹 warning」。监听地址在消息文本里, 暴露面信息不丢。
-    日志抓取用挂在目标 logger 上的 Grab handler(caplog 挂 root, 会被 setup_logging 清掉)。
+    日志抓取走 _grab_web_logger: caplog 挂 root, 而 root 级别/handlers 是跨测试全局状态
+    (root 出厂 WARNING 会把 INFO 拦成 no-op, test_logging 的 setup_logging 测试还会清
+    root handlers), xdist 下同 worker 邻居每次不同, 依赖它就偶发落空。
     """
-    import logging as std_logging
-
     from auto_qb.webui import start_web_server, stop_web_server
 
-    grabbed = []
-
-    class Grab(std_logging.Handler):
-        def emit(self, record):
-            grabbed.append(record)
-
-    grab = Grab()
-    web_logger = std_logging.getLogger("auto_qb.web")
-    web_logger.addHandler(grab)
+    grabbed, restore = _grab_web_logger()
     try:
         cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
         mgr = _make_web_manager(tmp_path, cfg_text)
@@ -5223,12 +5215,12 @@ def test_start_web_server_started_message_is_info(tmp_path):
             assert h.started, "服务应监听成功"
             started = [r for r in grabbed if "WEB UI 已启动" in r.getMessage()]
             assert started, "启动应留一行日志(含监听地址与密钥路径)"
-            assert started[-1].levelno == std_logging.INFO, \
+            assert started[-1].levelno == logging.INFO, \
                 f"启动是预期动作, 应记 INFO(实为 {started[-1].levelname})"
         finally:
             stop_web_server(h)
     finally:
-        web_logger.removeHandler(grab)
+        restore()
 
 
 def test_apply_web_config_skips_restart_when_bind_unchanged(monkeypatch):
@@ -5257,7 +5249,7 @@ def test_apply_web_config_skips_restart_when_bind_unchanged(monkeypatch):
         assert mgr._web_token == "新密钥", "密钥变更应即时刷新(无需重启)"
 
 
-def test_start_web_server_reports_failure_when_port_taken(tmp_path, caplog):
+def test_start_web_server_reports_failure_when_port_taken(tmp_path):
     """端口被占用: 句柄未就绪且记 ERROR —— 不再静默失败、不再假报"已启动"
 
     uvicorn 启动失败走 sys.exit(3), 而 SystemExit 在非主线程被 threading 静默吞掉,
@@ -5273,11 +5265,43 @@ def test_start_web_server_reports_failure_when_port_taken(tmp_path, caplog):
         holder.listen(1)
         mgr = _make_web_manager(tmp_path, cfg_text)
         mgr.config.web.port = holder.getsockname()[1]
-        with caplog.at_level(logging.ERROR, logger="auto_qb.web"):
+        grabbed, restore = _grab_web_logger(logging.ERROR)
+        try:
             handle = start_web_server(mgr)
-        assert handle.started is False, "端口被占用时不应报告就绪"
-        assert any("WEB UI 启动失败" in r.message for r in caplog.records), "失败必须记 ERROR"
+            assert handle.started is False, "端口被占用时不应报告就绪"
+            assert any("WEB UI 启动失败" in r.getMessage() for r in grabbed), "失败必须记 ERROR"
+        finally:
+            restore()
         stop_web_server(handle)
+
+
+def _grab_web_logger(min_level=logging.INFO):
+    """挂在 auto_qb.web 模块 logger 上的日志采集器: 对全局日志状态自足; 用完必须调 restore
+
+    ❗这组测试不要用 caplog 断言: caplog 的采集 handler 挂在 root 上, 而 root 的级别与
+    handlers 是**跨测试全局状态** —— root 出厂 level 是 WARNING(auto_qb.web 未显式设级时
+    INFO 调用被拦成 no-op), test_logging 的 setup_logging 测试还会清空/重置 root。
+    xdist 动态调度下同 worker 邻居每次不同, 依赖全局状态的断言就**偶发落空**(CI 实测:
+    噪音日志测试抓到 0 条)。挂模块 logger + 显式 setLevel 才自足。
+    返回 (records, restore); restore 恢复该 logger 原 level 与 handlers。
+    """
+    grabbed = []
+
+    class _Grab(logging.Handler):
+        def emit(self, record):
+            grabbed.append(record)
+
+    grab = _Grab(level=min_level)
+    web_logger = logging.getLogger("auto_qb.web")
+    saved = (web_logger.level, list(web_logger.handlers))
+    web_logger.setLevel(min_level)
+    web_logger.addHandler(grab)
+
+    def restore():
+        web_logger.setLevel(saved[0])
+        web_logger.handlers = saved[1]
+
+    return grabbed, restore
 
 
 def _noise_loop():
@@ -5292,7 +5316,7 @@ def _reset_noise_state():
     return lc
 
 
-def test_web_loop_exception_handler_downgrades_connection_reset(caplog):
+def test_web_loop_exception_handler_downgrades_connection_reset():
     """网络波动(WinError 10054 对端强迫关闭): 降级为一行 INFO, 不再 ERROR + traceback(2026-09-24 实测)
 
     Windows ProactorEventLoop 下客户端(关页面 / SSE 重连 / 抖动)断开时, asyncio 自己的回调
@@ -5305,43 +5329,51 @@ def test_web_loop_exception_handler_downgrades_connection_reset(caplog):
         "message": "Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)",
         "exception": ConnectionResetError(10054, "远程主机强迫关闭了一个现有的连接。"),
     }
-    with caplog.at_level(logging.INFO, logger="auto_qb.web"):
+    grabbed, restore = _grab_web_logger()
+    try:
         lc._web_loop_exception_handler(loop, context)
+    finally:
+        restore()
 
-    noise = [r for r in caplog.records if "WEB 连接被对端中断" in r.message]
-    assert len(noise) == 1 and noise[0].levelno == logging.INFO, "断连应记为一行 INFO"
-    assert not any(r.levelno >= logging.ERROR for r in caplog.records), "不得再出现 ERROR"
+    assert len(grabbed) == 1 and grabbed[0].levelno == logging.INFO, "断连应记为一行 INFO"
+    assert not any(r.levelno >= logging.ERROR for r in grabbed), "不得再出现 ERROR"
     loop.default_exception_handler.assert_not_called(), "波动型异常不应交给默认处理器"
 
 
-def test_web_loop_noise_log_throttled_in_window(caplog):
+def test_web_loop_noise_log_throttled_in_window():
     """断连日志按窗口节流: 窗口内只记首条, 出窗口时附被抑制条数(SSE 重连会成串刷屏)"""
     lc = _reset_noise_state()
     loop = _noise_loop()
     context = {"exception": ConnectionResetError(10054, "远程主机强迫关闭了一个现有的连接。")}
-    with caplog.at_level(logging.INFO, logger="auto_qb.web"):
+    grabbed, restore = _grab_web_logger()
+    try:
         lc._web_loop_exception_handler(loop, context)
         lc._web_loop_exception_handler(loop, context)
-        assert len([r for r in caplog.records if "WEB 连接被对端中断" in r.message]) == 1, "窗口内只记一条"
+        assert len(grabbed) == 1, "窗口内只记一条"
 
         lc._noise_state["at"] -= lc.NET_NOISE_WINDOW  # 推进到窗口外
         lc._web_loop_exception_handler(loop, context)
+    finally:
+        restore()
 
-    msgs = [r.message for r in caplog.records if "WEB 连接被对端中断" in r.message]
-    assert len(msgs) == 2, "出窗口后应再记一条"
-    assert "另有 1 条" in msgs[-1], "被抑制的条数要带出来, 不能静默丢"
+    assert len(grabbed) == 2, "出窗口后应再记一条"
+    assert "另有 1 条" in grabbed[-1].getMessage(), "被抑制的条数要带出来, 不能静默丢"
     loop.default_exception_handler.assert_not_called()
 
 
-def test_web_loop_exception_handler_delegates_real_bug(caplog):
+def test_web_loop_exception_handler_delegates_real_bug():
     """反向守阵: 非网络波动的异常(真 bug)一律不吞, 交回 asyncio 默认处理器"""
     lc = _reset_noise_state()
     loop = _noise_loop()
     context = {"message": "Task exception was never retrieved", "exception": ValueError("真 bug")}
-    lc._web_loop_exception_handler(loop, context)
+    grabbed, restore = _grab_web_logger()
+    try:
+        lc._web_loop_exception_handler(loop, context)
+    finally:
+        restore()
 
     loop.default_exception_handler.assert_called_once_with(context), "真 bug 必须照旧走默认处理器(ERROR)"
-    assert not [r for r in caplog.records if "WEB 连接被对端中断" in r.message], "不得被误判成网络波动"
+    assert not grabbed, "不得被误判成网络波动"
 
 
 def test_is_network_fluctuation_matrix():
