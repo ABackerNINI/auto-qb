@@ -28,8 +28,10 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
 (scope 参数/档位映射/表头/列名可注入), 配置 `adapter: "carpt"` 即接入; fetcher/report `_scope_of`
 兼容 `status=`; 测试 +5, 全量 1693 passed + 1 skipped(TOTAL 91%)。
 **只差真机走查**(M0 四项实测 + 装扩展后跑一轮真实取数 + v3.1 新配置面走查) —— 计划见 memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html (§13 决策记录与 M0 实测清单)。
+**在线核实 v2 修改计划已产出 (2026-09-27, 审计报告转化, 代码未动)**: 见 plans/26-09-27-1815-plan-hr-verify-audit-fixes.html ——
+P1/P2/P3 修复落点 + 主计划 §14 的 M5.1–M5.5 实施拆解, 10 项待拍板 (D1–D10) + 3 项前置实测; M5.1 观测步可即刻开工。
 **Topics:** backend-partial-hr-verify
-**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html
+**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html
 
 ## 原始请求
 
@@ -67,197 +69,64 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
 | v2.9 超龄豁免 (判定侧豁免 + 翻页早停) | **Done** | 2026-09-25: 用户指令「完成时间超过一年(可配)的种子没有必要验证 HR, 甚至也没有必要往下翻页」⇒ 新站点级键 `completed_age_limit`(0=关闭, 1D~3650D): 判定收口 `judge_record` 对本地完成时刻超线的种子给第四态 `EXEMPT`(排在「无可查键回落本地」之前, 压过清单命中与 unknown_policy, mode=all 也认); 取数侧超龄行不入索引/不回填 + 整页超龄且页内跨页倒序成立才早停(覆盖证明照常成立)。判定 7 + 取数 8 + 门面 1 + 配置 1 = 17 条测试, 红验 10 条全红; 全量 **1593 passed + 1 skipped**。计划 v2.9 (§4/§7/§9/§13/§14) |
 | v3.0 达标判定来源优先级 (档位即结论) | **Done** | 2026-09-25 17:37: 用户指令「在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息」⇒ 计划 v3.0 (17:10) 收口后当轮落地 —— ① `hr/model.py::satisfied_verdict` 三档全档位即结论 (A/C ⇒ False · B ⇒ True · D/未知档位才 None), 删「A/D 档看 remain_seconds==0 ⇒ 已达标」推导 (v2.8 已实证该字段是考核窗口倒计时, 方向相反) 与缺字段回落本地; ② `hr/resolve.py::judge_record` 双命中改按 (判定档位, 达标档位序) 取更保守者 (新增 `_lane_rank`, 删「首命中即 break」); ③ `check_hr_satisfied` 分支逻辑不变 (site_satisfied 非 None 即采纳), 仅 docstring 同步。测试 +2 (`test_lane_verdict_ignores_remain_and_local` / `test_judge_record_double_hit_prefers_lane_order`) + 改写 1, 红验 3 条全红; 全量 **1601 passed + 1 skipped**。计划 v3.0 (§9/§12/§13/§14) |
 | v3.5 CarPT 站点接入 (adapter 变体参数化) | **Done** | 2026-09-27: 用户令「HR在线核实添加支持站点: CarPT」(样张: 用户提供的 CarPT `myhr.php` 空表页, 2026-09-27)。样张核对: 状态参数 `?status=N`(1 考察中/2 已达标/3 未达标/4 已免罪), 表头 `td.colhead` 十列, 首列「H&R ID」, 「下载完成时间/剩余考察时间」列名, 末尾多备注/操作两列, 分页仍 nexus-pagination。实现: `NexusPhpMyhrAdapter` 构造参数化(`scope_param`/`scope_values`/`header_key`/`column_names`, 标准形态行为不变, `REQUIRED_COLUMNS` 兼容导出保留) + 新 `adapters/carpt.py`(`CarPtMyhrAdapter` 薄子类, 登录页识别换本站表头锚点) + 注册名 `"carpt"` + schema 帮助文案; `fetcher.py`/`report.py` 的 `_scope_of` 兼容 `status=`(排障展示与离线走查文件名)。测试 +5(CarPT fixture ×2: 数据页/空表样张结构) — 全量 **1693 passed + 1 skipped**(TOTAL 91% / 11227 / 815 / 3720 / 330), 基线 `26-09-27-1235` 已记。**待真机**: 数据行单元格形态(样张为空表)与 `download.php?id=` 实参(H&R ID 还是种子 id)待首刷核对 |
+| 在线核实 v2 修改计划产出 (审计报告转化) | **Done** | 2026-09-27: 报告 26-09-26-1628 → [plans/26-09-27-1815](../plans/26-09-27-1815-plan-hr-verify-audit-fixes.html) (doc-status Open) —— 承接主计划 §14 M5.1–M5.5 骨架展开成文件级修改项 + 补齐 §14 未吸收的 P1 骤降保护/空表口径、P2 放行对账撤销/多实例引导、P3 登录退避/端点纵深; 新增配额激活门 / 单轮预算轮转 / 扩展 caps 上调三个设计点; 汇总 D1–D10 十项拍板 + 3 项前置实测; 产出时现场复核 (cbc4b80) 报告符号引用全部成立。**代码未动** |
+| M5.1–M5.5 实施 (在线核实 v2) | **Done** (代码侧) | 2026-09-27 22:18: 用户令「实施计划 26-09-27-1815, 拍板按推荐」⇒ 五步全部落地, 每步独立全量绿 + 一红验 (M5.1 1763 → M5.2 1774 → M5.3 1787 → M5.4 1795 → 收尾 1796 passed + 3 skipped, 91%)。要点与三个实施决策见进度日志 2026-09-27 22:18 条; **余真机走查 + M0 前置实测三项**(阻塞早停②/豁免 A 的启用, 不阻塞代码) |
 
 ## 进度日志
 
-- **2026-09-27 12:54 (提交轮: 合并远端 + 合并树重测零漂移)** — 用户令「提交」。预检发现远端在 `aeca1fb`
-  (webui 模板共享化), 按「移出改动 → `merge --ff-only` 快进 → 施回改动」合流; 回写件无冲突。
-  合并树重测 **1693 passed + 1 skipped**(TOTAL 91% / 11238 / 816 / 3728 / 331) 与 `26-09-27-1246`
-  完全一致 —— 合并只动 webui 静态层, 不触碰 hr; 基线 `26-09-27-1254-post-merge-hr-carpt` 已记。
+- **2026-09-27 22:18 (M5.1–M5.5 全部落地 —— 在线核实 v2 代码侧完成)** — 用户令「实施计划
+  plans/26-09-27-1815, 拍板按推荐」。开工先同步: 远端 045ea27 比本地 cbc4b80 新两笔且纯落后
+  (本地未提交的 10 个 memory-bank 文档与远端零重叠) ⇒ `merge --ff-only` 快进后再动代码。
+  **五步各全量绿 + 一红验**:
+  ① **M5.1 判据与观测** (1763 passed): `parse.order_violations` 纯函数(方向自适应由首两可比行推断,
+  翻转视同逆序, 缺字段行不计比较但计「证据不足」)+ `cross_page_violation` 跨页证据; service 页内/跨页/
+  方向翻转三路接线(判定前置 = 成功取回 + 表头 + 可比行 ≥ 2)+ `maxpage/currentpage` 进翻页判据**并集**
+  (堵 P1 英文站「下一页」只认中文的缺口)+ 轮级骤降观测(`plunge_suspect`, 基线 = 最近结构完好且非零轮,
+  可疑轮不计入 —— 堵「0 vs 0」自愈洞)+ `--hr-status` 观测面四行(排序 ✓/✗/未判定 · 考核期 P 分布 ·
+  骤降观测 · 档位计数「上轮→本轮」)+ HrRefreshMeta 观测字段(order_ok/order_detail/entry_baseline/
+  plunge_suspect/plunge_rounds/scope_counts/prev_scope_counts, 不抬 schema 版本)。
+  ② **M5.2 信号处置与停用** (1774): S1 排序违反 / S2 必填字段缺失(均**不设阈值**, 2026-09-26 定稿)
+  ⇒ `_SignalAbort` 停翻 + `ACTION_ERROR`(不产生放行)+ 计入熔断失败 + `signal_rounds` 累计
+  (干净轮清零 = 三道隔离之三); 处置文案 S1/S2 分开(`events.order_broken` / `field_missing`, 节流共用);
+  连续 3 轮(`SUSPEND_ROUNDS`)⇒ `HrSuspension` 停站: 取数侧**零请求**(连复用轮下载也让位)、
+  判定侧 `judge_record` 返回 None **回落本地逻辑**(❗只停取数不停判定 = 拿旧清单继续放行, 比不停更危险)、
+  恢复 = 新 CLI `--hr-resume <站点>`(锁内清 suspended + reason 留痕), 熔断到期不自动恢复;
+  骤降保护生效(判不完备不产生放行, `accept_empty_listing` 站点级口子默认关; 持续 3 轮零 + 结构完好
+  ⇒ WARNING 指引, 刻意不自动接受); 回填/清单**双路对账撤销放行**(P2: `_retract_on_backfill` 新算出/
+  永久层复用 + `_retract_on_listing` 行重回清单 hash 继承的兜底, partial 轮即时收放行);
+  登录失效指数退避(2^(n-1)×poll 封顶 refresh_interval, 退避期零请求/不计失败/不动 fetched_at,
+  登录恢复清零); 多实例引导补「配额翻倍(2×12/时)」后果(D3=a)。
+  ③ **M5.3 配额拆分** (1787): 激活门 `quota_model` 站点级默认 legacy(逐字节一致)+ 双令牌桶
+  (HrLimits 扩展 split 字段 + `split_next_allowed_at`/`split_try_consume`; tokens/refill_ts 持久化,
+  按「上次补充时刻+速率」恢复 —— 幂等跨重启消除整点突发; tokens=None ⇒ 首次满桶)+ 站点文件
+  `torrent_quota`(不抬 schema 版本; 旧数据 quota 含下载计数 ⇒ split 初期页面用量高估, 保守方向)+
+  页面只在新轮/下载只在复用轮(§3.4)+ `--hr-status` 页面/下载两组展示 + 速率×间隔自洽机检(3.6)+
+  扩展 caps 上调 60/时·600/天(D6)+ `max_torrents_per_day` Optional 化(未配置按模型取 legacy 60 /
+  split 200)。实施决策: 站点覆盖键 page_rate_per_hour/torrent_rate_per_hour 新增, 旧键
+  max_torrents_per_hour 在 split 下映射为下载桶速率覆盖(已有配置不失效)。
+  ④ **M5.4 早停与豁免** (1795): 预算**轮转起点**(D9=b: 上轮未完成档位优先, 跨轮语义不变)+
+  单轮页面总量 `max_pages_per_round=9`(D5=a, 全局键, 0=不限)+ 早停② `remain==0` 连续 5 行
+  (`AGE_STOP_STREAK`) + P 一致性机检(±1 天容差, 不过 ⇒ 告警 + 早停②/豁免 A 双禁用, 机检不是文档承诺)
+  + 早停③ 覆盖本地严格版(本地种子 ⊆ 已抓行且索引无待回填 ⇒ 本档停翻但**绝不置 complete**)+
+  豁免 A `auto_age_limit`(取数侧反算 P 喂豁免线, 判定与早停②同源, 默认关)+ 豁免 B
+  `seeding_exempt_ratio`(本地做种 ≥ 要求 × 倍数 ⇒ 「义务已超额完成」, 压过清单命中, 默认关,
+  不参与早停; `HrAnchor` 加 `seeding_time`, record.hr_anchor() 带出)。**实施决策与勘误**:
+  滚动窗口收口 = `max_pages_per_refresh` 即窗口页数不另设键; P 反算公式**勘误**(三份制品同源笔误
+  「P ≈ done + remain − now」数学上恒为负偏移 —— 正确 P = (now − done) + remain, 已按唯一正确方向
+  实现, 主计划 §15 v3.6 注明); P 参与行 = remain>0 的行(已到期行 remain 被站点截 0, 反算负值不参与)。
+  ⑤ **M5.5 收尾** (1796): 新键全链路(schema/validate/impact L0/keys.md/configuration.md)+
+  端点纵深提示(extension_id 留空启动 WARNING —— 有意推通知, 配好即不再出现; 文档写明 token 自动生成
+  与 config.yml 由用户手改, 红线不动)+ 扩展 README caps 表更新 + 零静默变更回归
+  (legacy 站点行为逐字节一致独立守阵)。红验 ×4(翻页判据并集 / 骤降保护 / 激活门 / 早停②,
+  临时还原 ⇒ 对应守阵红, 还原后全绿)。**最终 test.full 1796 passed + 3 skipped(91%)**,
+  基线切片 26-09-27-2035; 主计划 §15 v3.6 + 计划 1815 v1.2 已回写。**未提交**(等用户显式指令);
+  真机走查 + M0 前置实测三项(排序倒序 / P 恒定 / 英文站分页)仍开放。
 
-- **2026-09-27 12:46 (v3.5 补验: 已达标样张验证通过 + 挖出并修掉「双 id 空间」真缺陷)** — 用户补交
-  CarPT `?status=2` 已达标页样张(17 行数据)令「验证是否正确」。
-  ① **验证通过的部分**: 十列表头锚定 / H&R ID 纯数字 / 完成时间 "YYYY-MM-DD HH:MM" 无秒形态
-  (parse_datetime 已认) / B 档 `satisfied_verdict=True` / 翻页判据(灰色下一页) / 序列化 roundtrip;
-  B 档「还需做种时间/剩余考察时间」显示 `---` —— 非空白不计字段缺失, parse 成 None(展示层不显示),
-  语义正确。
-  ② **挖出真缺陷**: 种子名称列详情链接 `details.php?id=173107` 与该行 H&R ID `8017746` **不同空间**
-  ⇒ 标准 `download_url(tid)` 拿 H&R ID 下载必然取错/取不到 —— 上一轮「待真机核对」的第②项提前由样张
-  实证, 且答案是否定的。
-  ③ **修复**: `HrEntry` 新增 `dl_id`(可选, to_json/from_json 同步); 基类 `_map_row` 经 `_dl_id_of`
-  从行内链接提取(download.php 优先 / details.php 兜底 —— 标准 NexusPHP 两 id 同空间, dl_id==tid
-  行为不变); `service._backfill` 下载改 `adapter.download_url(entry.dl_id or tid)`。
-  真样张回归: 17 行 dl_id 全部正确, 下载地址落 `download.php?id=173107` 等种子 id。
-  ④ 测试: fixture 改为真实双 id 空间结构(名称列 details 链接用种子 id / 操作列空), 标准 + CarPT 两侧
-  各加 dl_id 断言; 全量 **1693 passed + 1 skipped**(TOTAL 91% / 11238 / 816 / 3728 / 331), 基线
-  `26-09-27-1246-hr-carpt-dlid` 已记。**仍待真机**: A 考察中页(数据行含还需做种/剩余考察实值)与
-  操作列是否有下载链接(A 页形态未知, dl_id 提取已有 details 兜底不依赖它); 未提交。
-
-- **2026-09-27 (v3.5 CarPT 站点接入)** — 用户令「HR在线核实添加支持站点: CarPT」, 样张为用户提供的
-  CarPT `myhr.php` 已登录页(空表, 2026-09-27 存档)。
-  ① **样张核对**: 与 BTSchool 标准形态的差异 = 状态参数 `?status=N`(1 考察中 / 2 已达标 / 3 未达标 /
-  4 已免罪, tab 文字逐一核对) 而非 `?hrtype=A/B/C/D`; 表头格是 `<td class="colhead">` 十列, 首列锚点
-  「H&R ID」(非「HR编号」), 列名「下载完成时间/剩余考察时间」, 末尾多「备注/操作」两列; 分页仍
-  nexus-pagination(`?page=N`), 服务端渲染无异步取数。样张为空表 ⇒ 数据行形态按 NexusPHP 惯例
-  假设, 待首刷核对。
-  ② **实现取向**: 不复制解析逻辑 —— `NexusPhpMyhrAdapter` 构造参数化(`scope_param`/`scope_values`/
-  `header_key`/`column_names`, 语义列键 `tid/name/.../remain` 单点), 标准形态零行为变化;
-  新 `adapters/carpt.py` 只是薄子类(登录页识别换本站表头锚点), 注册名 `"carpt"`。判定/取数/频道
-  上游全部无感 —— `build_adapter` 工厂注入后, `page_url`/`parse_page` 走同一套代码。
-  ③ **连带兼容**: `fetcher.py`/`report.py` 的 `_scope_of`(排障展示与离线走查 `<档位>.html` 文件名)
-  兼容 `status=`; schema 的 `adapter` 帮助文案列明 carpt; `config-reference/keys.md` 同步。
-  ④ **测试**: +5(URL 档位映射/数据行解析/空表样张结构/改版识别/登录识别), fixture ×2 按真实样张
-  结构构造(数据行 NexusPHP 惯例补齐, 已注明); 首版 fixture「下一页」误用 `<b class="next">`,
-  与 `has_next_page` 正则不符红一次, 改回标准 `<b>` 形态绿。
-  ⑤ 全量 **1693 passed + 1 skipped**(TOTAL 91% / 11227 / 815 / 3720 / 330; test.full 18.1s),
-  基线 `26-09-27-1235-hr-carpt-adapter` 已记。**未提交**(等用户显式指令)。
-
-- **2026-09-26 (v3.4 状态模型重新梳理: 三个终态都已结束 —— 纯文档)** — 用户指令: 「HR在线核实计划重新梳理,
-  优先级: 在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息, 最终态: 已达标 | 未达标 | 已免罪,
-  3 个状态都代表着结束状态」。
-  ① **优先级链核查**: 与 v3.0 落地口径逐字一致 (`judge_record` 档位即结论 + `_lane_rank` A>B>C>本地兜底),
-  无实现缺口。
-  ② **终态语义收口**: 「已达标/未达标/已免罪是考核期已过的终态」此前只散在展示层档案
-  (webui-hr-safety-display 修正轮 / webui-hr-popup) 与代码注释 (`resolve.py` SAFETY_* 段), 主计划 §9
-  **零处提及「终态」** —— 本轮在 §9 v3.0 优先级节之前新增「状态模型」节: A 考察中 = 唯一进行中;
-  B/C/D = 三个终态 (各自展示落点: safe 绿 / failed 红·考核未通过 / 安全放行)。
-  ③ **记录展示缺口**: WebUI 来源徽标把 D 档已免罪折进「在线·已核实，安全放行」(`SRC_SITE_RELEASED`),
-  与「完整刷新未列出」共用 token —— 终态模型下应分开呈现, 拟随 webui-hr-popup 落码轮补
-  `SRC_SITE_EXEMPT`, **待用户确认**。
-  ④ 计划封面 / 页脚 / §14 变更记录补 v3.4 (版本注: v3.1-v3.3 记于各自档案); 本档案与 activeContext 切片
-  同步; webui-hr-popup 档案落码行挂缺口备忘。
-  ⑤ **落地实况 (同日, 用户令「修复缺口」)**: `hr/resolve.py` 新增 `SRC_SITE_EXEMPT`("site_exempt",
-  「在线·已免罪」), `HrResolution.released_src` / `HrJudgement.verified_source` 透传 D 档放行出处,
-  `safety_display` 据此分流(D 档 ⇒ site_exempt; 缺席式放行 ⇒ site_released 原样); 前端 `shared/hr.js`
-  两张映射表各 +1 键(徽标「在线」/ 来源桶「在线核实」; 徽标 class 固定 hr-src, 无新 CSS)。
-  测试 **+2**(`test_judge_record_carries_verified_source` 透传 / `test_safety_display_site_exempt_split_from_released`
-  分流) + test_web 字段级 D 档断言块; 守阵 SRC_* 常量数 8→9; ★**红验 3 条全红**(临时还原旧分支)后还原;
-  全量 **1637 passed + 1 skipped**(TOTAL 92% / 10998 / 787 / 3644 / 328); 基线已回写。
-  **已入库 `a497fba`**: 合并远端 4 笔(docker 部署 / 种子级标签分类编辑 / 分享率列对齐 / 切片回写)后经
-  合并提交 `d72a538` 推送, 合并树重测 **1640 passed + 1 skipped**(TOTAL 92% / 11013 / 787 / 3656 / 331),
-  baseline 已记合并条目。
-
-- **2026-09-26 01:30 (v3.3 落地: 选项页终态实施 —— 风格 A 瑞士网格 + 两表 + 日志收起)** — 用户令「实施」
-  (前情: 三套风格选型定 A, 见上一条选型结论)。用户另令「扩展需要 HR 在线核实详情表, 把冗长 log 总结成表格,
-  log 收起仅排障用; 先计划两张表展示哪些信息, 更新模板 A」—— 两表规划已并入选型文档后一并实施。
-  ① **后台事件环**(`background.js`): 新增 `events` 结构化环形缓冲(上限 50, 防抖整份写回, 与日志同源双写
-  但各记各的 —— 日志给人排障, 事件环给表格渲染, 解析日志文案做表太脆), 字段
-  `{t, host, kind(page/torrent), ok, status, ms, bytes, tag(ok/quota/login/error), note}`;
-  五个事件点: 页面直取成功 / 离屏渲染成功(标「离屏渲染」—— 同一任务第二次真实访问, 便于用量对账) /
-  种子下载成功 / runTask 失败(含 quota 与 login-page 分类); `pollAll` 收尾与日志一并落盘。
-  ② **选项页重写**(`options.html`/`options.js`, 按样张 A): 自上而下 ①连接端点(表单, 存入即生效, 多实例列表
-  保留) ②站点权限(自动拉清单勾选 + 一键授权, 手动兜底收进折叠 details) ③**站点现状表**(一行一站:
-  最近活动/动作与结果/用量(本时·本日 访问·下种 —— 阈值从 `SITE_CAPS` 取不写死)/状态(正常·受限·登录失效·异常,
-  由该站最近一条事件的 tag 定)) ④**最近取数明细表**(环形 50 条: 时间/站点/类型/结果/耗时/大小) → 状态行 +
-  自测/拉取按钮 → **折叠区**(运行日志全套[过滤/清空/限渲染原样保留] + 硬上限展示 + 高级 JSON + 保存);
-  「清空日志」只清日志不动两表; 两表随后台落盘经 `storage.onChanged` 防抖自动刷新。
-  ③ **守阵**: `test_background_events_ring_dual_write`(真跑 background.js 六类场景钉事件契约) +
-  `test_options_swiss_wiring`(替掉三档接线守阵, 钉单一风格终态 + 共存机制不回潮)。
-  ④ 全量 **1624 passed + 1 skipped**(TOTAL 92% / 10952 / 786 / 3636 / 327; 含远端 443a785 的 docker +6);
-  基线已回写; README §2 改为终态口径; 制品 meta/认领链(计划 ↔ 档案双向引用)已按守阵要求闭环。
-  待真机: reload 扩展后核两表在真实取数下的可读性。
-
-- **2026-09-26 00:15 (v3.2 修正: 三模板改为**整页**三档)** — 用户纠偏「三种模板指的是整个扩展设置页面 3 个模板,
-  不是实例端点的模板」。重做选项页结构: 页顶「页面模板」三卡 **极简 / 标准 / 完整**, 选择持久化到新键
-  `uiTemplate`(首次默认: 有存量实例 → 标准, 全新安装 → 极简)。极简 = 粘 token + 自动拉站点 + 一键授权,
-  收起多实例管理(`multiTools`)/手动兜底/硬上限展示/运行日志; 标准 = 极简 + 那些区块; 完整 = 标准 +
-  「表单 / JSON 直接编辑」切换(旧 JSON 文本域原样保留, `setMode` 双向互导不变)。
-  上一轮的「实例端点三模板」按钮撤销, 换成表单常驻 + 全新安装自动按本机默认预填。
-  实现细节: 切档靠 `[hidden]`, 但 `div.row` 的 display:flex 等作者样式会盖过 UA 的 `[hidden]` ⇒
-  加全局 `[hidden]{display:none!important}` 兜底(守阵钉住); 极简档多实例时亮提示行(`multiNote`),
-  实例数据不动、轮询全部生效。守阵 `test_options_templates_and_site_checks_wiring` 改钉新接线
-  (三卡/两模式按钮/区块 id/`uiTemplate`/`[hidden]` 兜底); 全量 **1617 passed + 1 skipped**(TOTAL 91% /
-  10942 / 792 / 3636 / 329; 含远端 c46e67e 的 full-checking +3), 基线已回写; README §2 改为整页三模板口径。
-  **选型结论(2026-09-26)**: 用户澄清三模板是三套独立风格、选一套实施 —— 出三套样张
-  ([26-09-26-0031-plan-hr-ext-options-style.html](../plans/26-09-26-0031-plan-hr-ext-options-style.html)),
-  **选定 A · 瑞士网格, 实施暂缓**;工作区「三档共存」实现如何处置待用户定(站点勾选授权半边是原始需求、应保留)。
-
-- **2026-09-25 23:43 (v3.1 落地: 扩展配置简化 —— 三模板 + 站点勾选一键授权)** — 用户指令「HR 在线核实插件配置
-  需要简化, 尽量做到自动: 站点权限可直接勾选已支持的站点 / 配置好后端后只需申请权限; 实例端点改为点击或输入,
-  先做三个简单的模板供选择」。
-  ① **端点新增只读 `GET /api/hr/sites`**(`channel.py::API_SITES` + `server.py::route/_sites_response`):
-  与 `tasks`/`result` 同一道门(token + origin 白名单, 401 前不写任何状态), 返回
-  `{sites: [{site, origin}], error, server_time}`; `sites_fn` 由 `runtime._site_origins` 提供 —— **每次请求现读
-  配置**(热重载加站点不改端点监听身份、不重绑, 构造期快照会把新站点漏在授权清单外), 从各站点
-  `hr_page_url` 派生 `scheme://host/*`(与 UrlPolicy 同源), `mode=off`/空 URL 不出现; `sites_fn` 抛异常
-  (配置重载窗口)回 200 + 空清单 + error, 不打死端点线程。
-  ② **扩展选项页重构**(`options.html`/`options.js`): 实例端点改**表单**(地址默认 `127.0.0.1:8788` 只粘 token;
-  「存入实例列表」**即时落盘**, 列表可载入/删除, 同地址覆盖; 高级 JSON 保留为可切入口 —— 该轮先做成
-  「实例端点三模板」, 次轮 v3.2 按用户纠偏改为**整页**三档, 见上一条)。
-  ②站点权限改**从后端拉清单勾选**: 进页面自动拉一次(失败保持安静), 「全选」+「申请勾选站点的权限」一键授权
-  (合并手动兜底条目并去重; 授权窗前**无 await** 保持用户手势), 勾选状态持久化到新键 `siteSelections`;
-  手动填域名降级为 `<details>` 兜底, `siteOrigins` 键语义不变(后台本就不消费它, 权限真门是 Chrome)。
-  归一化守则不动(先 normalize 再进浏览器 API)、日志区不动。
-  ③ **测试 +7**: `test_hr_server.py` 4 条(清单下发/同门 401·403/sites_fn 异常不炸/无 sites_fn 向后兼容) +
-  `test_extension_proxy.py` 2 条(`API_SITES` 与 `hr.channel` 同源钉死 / 三模板与勾选面接线齐全) +
-  `test_hr_runtime.py::test_site_origins_served_live_for_extension`(现读派生 + 热加站点即生效 + mode=off 不出现)。
-  ④ 全量 **1614 passed + 1 skipped / 18.6s**(TOTAL 91% / 10920 语句 / 792 未覆盖 / 3626 分支 / 327 partial),
-  sidefx 越界 0; 基线已回写; 扩展 README §2 改写为新配置面。
-  待真机: 扩展 reload 后走一遍「模板一 → 粘 token → 自动拉站点 → 一键授权 → 立即拉取」。
-
-- **2026-09-25 17:37 (v3.0 落地: 达标判定来源优先级 —— 档位即结论)** — 接上一条计划收口, 用户令「修复问题, 落地」。
-  ① `hr/model.py::satisfied_verdict`: A/B/C 三档**全部档位即结论** (A 考察中 / C 未达标 ⇒ False, B 已达标 ⇒ True),
-  删「A/D 档看 remain_seconds == 0 ⇒ 已达标」推导 (v2.8 已实证该字段是考核窗口倒计时, 归零 = 考核到期, 方向
-  相反) 与「缺字段回落本地」路径 (本地值不得越级推翻站点清单结论); D 已免罪不进命中清单, 未知档位才 None。
-  ② `hr/resolve.py::judge_record`: 双命中 (hybrid 两 hash 映两个 tid) 改按 `(判定档位, 达标档位序)`
-  取更保守者 —— 新增 `_lane_rank` (A=3 > B=2 > C=1), 删「首命中即 break」; 与键序无关。
-  ③ `torrents/record.py::check_hr_satisfied` 分支逻辑不变 (site_satisfied 非 None 即采纳; mode=all 未核实的
-  None 仍回落本地), 仅 docstring 同步; 四个消费点调用点零改动。
-  ④ 测试 **+2** (`test_lane_verdict_ignores_remain_and_local`: A 档命中 + remain 归零/缺失都 ⇒ False, 本地
-  不可越级; `test_judge_record_double_hit_prefers_lane_order`: B+A 双命中取 A、C+B 取 B, 两键序同结论)
-  + 改写 1 (`test_judge_record_carries_site_satisfied_verdict`: A 档期望 None → False); test_hr_parse 注释与
-  测试计划 docstring 同步。★**红验 3 条全红** (临时还原旧实现: A 档回落 None + 去档位序) 后还原全绿。
-  ⑤ 全量 **1601 passed + 1 skipped / 18.6·18.1s** (TOTAL 91% / 10950 / 791 / 3594 / 326; HR 包 93%:
-  2814 / 147 / 774 / 93); 基线已回写; 计划 v3.0 标记已落地 (§14 落地实况⑤)。
-
-- **2026-09-25 17:10 (计划 v3.0: 达标判定来源优先级 —— 仅计划修订, 代码待落地)** — 用户指令: 「HR在线核实优先级:
-  在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息」。核查现行实现, 两处与该优先级冲突:
-  ① `hr/model.py::satisfied_verdict` 对 A/D 档用「剩余达标时间 == 0 ⇒ 已达标」推导 —— v2.8 已实证该字段是
-  **考核窗口倒计时**, 归零 = 考核到期(方向相反); ② A 档缺字段时 None 回落本地, 本地值越权推翻站点的明确清单结论。
-  计划 v3.0 收口: §9 新增「达标判定的来源优先级」节(档位即结论: A 恒未达标 / B 已达标 / C 未达标, 命中即停,
-  数值字段降为展示与进度参照; 本地仅在清单未命中 / 站点不可查时兜底; hybrid 双命中按 A>B>C 取);
-  §2 判定边界补句 / §4 流量字段行改口径 / §9 三态表受管束行改写 / M3 落地实况拍板②标注取代 /
-  §12 守阵更新(A 档命中+本地够线⇒仍未达标 · 双命中取序 · remain 退出推导) / §13 决策记录补行 /
-  §14 变更记录 v3.0 / 封面元信息与 colophon。**纯文档修订, 无代码变更, 测试基线不变**;
-  落地时改 `satisfied_verdict` + `judge_record` 并补 §12 新守阵。
-
-- **2026-09-25 (v2.9: 超龄豁免 —— 判定侧豁免 + 翻页早停)** — 用户指令: 「忽略下载时间超过一定期限的种子,
-  比如完成时间超过一年的种子没有必要验证 HR, 甚至也没有必要往下翻页」。同步: 本 clone 落后 Gitee
-  develop 51 提交(本地 master 齐平 origin/master 但 develop 已前进), 备份 .git 后 `merge --ff-only`
-  快进到 1516bd6 —— M1–M4 与 v2.6~v2.8 修复均已由其它 clone 交付, 本轮在现实现上加功能。
-  ① **判定侧**: 新站点级键 `trackers.<站>.hr_check.completed_age_limit`(0 = 关闭, 默认行为不变;
-  开启时 1D~3650D, 单位写错如 365S 配置期拦下 —— 按秒配等于把刚完成的种子集体豁免)。
-  `judge_record` 对锚点里**本地完成时刻**超线的种子直接给第四态 `HrIdentity.EXEMPT`「超龄豁免」:
-  排在「无可查键回落本地」闸门**之前**(豁免是 qB 侧事实, 不依赖索引建到哪), **压过清单命中**
-  与 unknown_policy, `mode: all` 也认 —— 都是配置者显式取舍, 写进 schema help 与 §13。
-  参数由记录侧 `hr_judgement()` 从 `tracker_conf` 带进, 门面只透传(不多一次配置遍历)。
-  WebUI 沿用 `state_text` 单点显示「超龄豁免」, 前端零改动。
-  ② **取数侧**: 页面上超龄的行**不入索引、不回填 .torrent**(判定会豁免它们, 索引行留着只会白烧
-  下载配额; 完成时间不可解析的行保留 —— 不猜); 当前页整页超龄且**页内 + 跨页都呈完成时间倒序**
-  才允许早停 —— 后续页只会更老, 本档位在豁免线内的清单已全覆盖, **覆盖证明照常成立**
-  (complete 可达 ⇒ 放行照常产生; 若把早停算成「不完备」, 清单长过豁免线的站点会永远没有放行,
-  功能自废)。倒序证据不成立(页内升序 / 跨页倒序链断裂 / 缺完成时间)就照常翻到底 ——
-  错误方向是多花配额, 不是漏判; 早停在 `refresh.reason` 留痕(`--hr-status` 可见)。
-  ③ **测试 +17**(判定 7: 压过清单命中 / 线内不豁免 / 0 关闭 / completion_on 缺位不猜 /
-  无可查键仍豁免 / mode=all 认 / 边界含等号; 取数 8: 关闭不变 / 行过滤不回填 / 早停跳页 /
-  线内行阻止早停 / 页内升序不早停 / 跨页断链不早停 / 缺完成时间不早停 / 上页无时刻不早停;
-  门面透传 1; 配置 1), ★红验 3 处(豁免短路 / 早停 / 行过滤停用 ⇒ 10 条守阵全红, 还原后全绿)。
-  全量 **1593 passed + 1 skipped**(TOTAL 91% / 10849 / 791 / 3598 / 327; 并行 19.9s +
-  一次 36.8s 负载离群; 本 shell 2 条 GBK 假红按 pitfalls/testing/patching.md 复测通过)。
-  基线已回写(baseline.md + history)。文档: 计划 v2.9(封面/§4 早停 note/§7 键/§9 两表/§13 决策行/§14) ·
-  docs/configuration.md「超龄豁免」节 · config-reference/keys.md。
-  待真机确认: BTSchool 页面排序是否完成时间倒序(决定早停是否实际生效; 不倒序只是不省配额, 不会错)。
- (第七批: 取证误读修复 —— `--hr-status` 明细表改版 + 已取记录逐文件 ts)** —
-  用户拿 `hr/BTSchool.json` 取证问「是否短时间产生了大量种子下载」(分析结论: 无 —— 当天对站点仅 5 次请求
-  = 3 页 + 2 个 .torrent, 全在频控内; `downloaded[]` 是「已取 .torrent」凭据不是 qB 下载), 顺带点出两处真问题:
-  ① `hr_downloaded[].ts` **整批共用开始时刻**(同批两条微秒级相同 ⇒ 看着像瞬间批量下载, 取证误读);
-  ② `--hr-status` 明细的「剩余达标」列(9d21h)会被读成「还要做种 9 天」—— 它实际是**考核窗口**
-  (9d21h 内要完成做种要求), 真正的「还需做种时间」只有 16h57m。
-  修: ① `_fill_infohashes` 的 ts 改记**各 .torrent 自己的取回时刻**(顺带同源的 `fail.last_ts` 一并修准);
-  ② 明细表列 = tid / 档位(考察中·已达标·未达标·已免罪, 单点 `status.LANE_TEXTS`) / 上传量 / 下载量 / 分享率 /
-  还需做种(镜像站点书写形态 HH:MM:SS·「N天HH:MM:SS」) / 名称(按**显示格宽**截断 40) / infohash;
-  **剩余达标时间不再显示**; 列对齐走自写 `_dwidth/_pad`(str.format 按字符数对齐, CJK 双宽会错位)。
-  测试 +2(service 1 钉逐文件 ts / report 1 钉 CJK 对齐·截断·列改版), 全量
-  **1573 passed + 1 skipped**(TOTAL 91% / 10905 / 789 / 3582 / 327; HR 包 93%: 2782 / 143 / 766 / 91)。
-
+- **2026-09-27 18:15 (v2 修改计划产出: 审计报告 26-09-26-1628 转化为 plans/26-09-27-1815 —— 纯文档,
+  代码未动; 含承接不重证 / P1-P3 缺口补齐 / 三个实施设计点 / D1-D10 拍板汇总 / 认领链踩坑复发 +1 /
+  v1.1 骤降判据细化)** — 原文已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md]
+  (attachments/26-09-22-backend-partial-hr-verify-log.md)(档案触顶处置); 摘要见 activeContext 切片。
+- **2026-09-27 12:54 (提交轮: 合并远端 + 合并树重测零漂移) 与 12:46 (v3.5 补验: 已达标样张验证 + 「双 id 空间」真缺陷修复
+  —— H&R ID 与种子 id 是两个空间, dl_id 落地) 两条日志已外迁**: [attachments/26-09-22-backend-partial-hr-verify-log.md]
+  (attachments/26-09-22-backend-partial-hr-verify-log.md)(档案触顶处置); 摘要见 activeContext 切片「已交付 · v3.5」。
 - （本段更早的进度纪要已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md) —— 触顶处置见 `.agents/skills/memory-bank/scripts/_common.py` 的 `TASK_LOG_CAP`）

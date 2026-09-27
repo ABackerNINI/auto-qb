@@ -94,7 +94,7 @@ OLD_TS = -3000.0  # 连 positive 都不满足的最早期时间戳
 H1, H2, H3 = "aa" * 20, "bb" * 20, "cc" * 20
 
 
-def _view(*, mode="partial", complete=True, last_success_ts=OK_TS, ttl=TTL, listed=(), verified=()):
+def _view(*, mode="partial", complete=True, last_success_ts=OK_TS, ttl=TTL, listed=(), verified=(), suspended=False):
     """构造判定视图; listed: [(infohash, tid, lane)]; verified: [HrVerified]"""
     by_infohash = {h: HrEntry(tid=tid, infohash_v1=h, lane=lane) for h, tid, lane in listed}
     return HrSiteView(
@@ -103,6 +103,7 @@ def _view(*, mode="partial", complete=True, last_success_ts=OK_TS, ttl=TTL, list
         complete=complete,
         last_success_ts=last_success_ts,
         verified_ttl=ttl,
+        suspended=suspended,
         by_infohash=by_infohash,
         verified={v.infohash: v
                   for v in verified},
@@ -607,3 +608,118 @@ def test_safety_display_local_fallback_when_judged_none():
     assert "已达标" in safe.text
     none = safety_display(None, triggered=False, satisfied=False)
     assert (none.safety, none.src, none.text) == (SAFETY_NONE, "", ""), "不适用 = 无色无徽标无短语"
+
+
+def test_suspended_view_falls_back_to_local():
+    """judge_record 见 suspended ⇒ None 回落本地逻辑(计划 26-09-27-1815 §2 2.3)
+
+    ❗判定必须随停用一起停 —— 只停取数不停判定 = 拿越来越旧的清单继续放行「不在清单里」,
+    比不停更危险; 停用本身就是因为数据可信度崩了, 回落本地字段逻辑是保守方向。
+    """
+    view = _view(complete=True, listed=((H1, 1, "A"), ), verified=[HrVerified(infohash=H2, tid=2, verified_ts=OK_TS)])
+    assert judge_record(view, [H1], now=NOW) is not None, "前提: 停用前判定正常工作"
+    frozen = _view(
+        complete=True,
+        listed=((H1, 1, "A"), ),
+        verified=[HrVerified(infohash=H2, tid=2, verified_ts=OK_TS)],
+        suspended=True
+    )
+    assert judge_record(frozen, [H1], now=NOW) is None
+    assert judge_record(frozen, [H2], now=NOW) is None, "放行记录键同样回落 —— 整站回到本地字段逻辑"
+
+
+# ---------- 豁免 A / 豁免 B(计划 26-09-27-1815 §2 4.5/4.7, D7 默认全关) ----------
+
+
+def test_auto_age_limit_exempts_by_probed_period():
+    """豁免 A: auto_age_limit 开启 + 反算 P 通过机检 ⇒ 以 P 为豁免线超龄豁免(判定与早停②同源)"""
+    from auto_qb.hr.resolve import HrAnchor
+
+    now = 1_800_000_000.0  # 真实量级时刻(completion_on > 0 的防御才放行)
+    view = HrSiteView(
+        site="s",
+        mode="partial",
+        complete=True,
+        last_success_ts=now - 60.0,
+        verified_ttl=TTL,
+        probe_period_days=30.0,
+        period_consistent=True,
+    )
+    anchor = HrAnchor(completion_on=int(now - 40 * 86400))
+    got = judge_record(view, [H1], anchor=anchor, now=now, auto_age_limit=True)
+    assert got is not None and got.identity is HrIdentity.EXEMPT
+    assert "反算考核期 P" in got.reason
+
+    # 默认关(零静默变更): 不开 auto_age_limit ⇒ 不豁免(该种子无查键 ⇒ 回落本地, 即 None)
+    # —— 40 天前的种子在关闭豁免 A 时的正确去向是本地字段逻辑, 不是站点侧豁免
+    got2 = judge_record(view, [H1], anchor=anchor, now=now)
+    assert got2 is None, "未开豁免且无查键 ⇒ 回落本地(None), 绝不产生站点侧豁免"
+
+
+def test_auto_age_limit_requires_consistency_check():
+    """豁免 A 机检(§2 4.4): P 不可用(probe=0 或机检不过)⇒ 不豁免 —— 机检不是文档承诺"""
+    from auto_qb.hr.resolve import HrAnchor
+
+    now = 1_800_000_000.0
+    anchor = HrAnchor(completion_on=int(now - 40 * 86400))
+    # 视图带一个放行键(过 has_lookup_keys 闸门), 隔离验证「机检不过 ⇒ 不豁免」本身
+    _vkey = "dd" * 20
+    verified = {_vkey: HrVerified(infohash=_vkey, tid=102, verified_ts=now - 60)}
+    view = HrSiteView(
+        site="s",
+        mode="partial",
+        complete=True,
+        last_success_ts=now - 60.0,
+        verified_ttl=TTL,
+        probe_period_days=30.0,
+        period_consistent=False,
+        verified=verified,
+    )
+    got = judge_record(view, [H1], anchor=anchor, now=now, auto_age_limit=True)
+    assert got is not None and got.identity is not HrIdentity.EXEMPT, "机检不过 ⇒ 禁用"
+    view2 = HrSiteView(
+        site="s",
+        mode="partial",
+        complete=True,
+        last_success_ts=now - 60.0,
+        verified_ttl=TTL,
+        probe_period_days=0.0,
+        period_consistent=True,
+        verified=verified,
+    )
+    got2 = judge_record(view2, [H1], anchor=anchor, now=now, auto_age_limit=True)
+    assert got2 is not None and got2.identity is not HrIdentity.EXEMPT, "无 P 探测 ⇒ 禁用"
+
+
+def test_seeding_exempt_ratio_grants_overfulfilment():
+    """豁免 B: 本地做种时长 >= 要求时长 × 倍数 ⇒ 「义务已超额完成」豁免(压过清单命中)"""
+    from auto_qb.hr.resolve import HrAnchor
+
+    view = _view(complete=True, listed=((H1, 101, "A"), ))  # 清单命中中
+    anchor = HrAnchor(seeding_time=int(600 * 86400))  # 做种 600 天
+    got = judge_record(
+        view,
+        [H1],
+        anchor=anchor,
+        now=NOW,
+        required_seeding_time=100 * 86400.0,
+        seeding_exempt_ratio=5.0,
+    )
+    assert got is not None and got.identity is HrIdentity.EXEMPT
+    assert "义务已超额完成" in got.reason and got.is_hr is False
+
+    # 倍数默认 0 = 关(零静默变更): 不传 ⇒ 清单命中照常受管束
+    got2 = judge_record(view, [H1], anchor=anchor, now=NOW)
+    assert got2 is not None and got2.identity is HrIdentity.HR
+
+    # 做种不足(400 天 < 100 天 × 5)⇒ 不豁免
+    short = HrAnchor(seeding_time=int(400 * 86400))
+    got3 = judge_record(
+        view,
+        [H1],
+        anchor=short,
+        now=NOW,
+        required_seeding_time=100 * 86400.0,
+        seeding_exempt_ratio=5.0,
+    )
+    assert got3 is not None and got3.identity is HrIdentity.HR

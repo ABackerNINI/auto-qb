@@ -102,6 +102,29 @@ HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
     Field("refresh_interval", "刷新周期", "time", default="12H", unit_default="H", help="HR 页抓取周期; 放行有效期默认跟着它"),
     Field("max_pages_per_refresh", "单次翻页上限", "int", default="5", help="一次刷新最多翻几页; 到上限仍未到底 -> 本次覆盖证明不成立"),
     Field(
+        "quota_model",
+        "配额模型",
+        "enum",
+        default="legacy",
+        options=("legacy", "split"),
+        help="legacy = 页面与下载共用现行合并账本(默认, 行为不变); split = 页面/下载双令牌桶"
+        "(页面 40/时·下载 20/时, 「种子可以慢慢下载」)。❗split 比legacy 松, 确认站点可承受再开",
+    ),
+    Field(
+        "page_rate_per_hour",
+        "页面桶速率(站点覆盖)",
+        "int",
+        default="",
+        help="仅 quota_model=split 生效; 留空 = 回退全局 config.hr_check.page_rate_per_hour",
+    ),
+    Field(
+        "torrent_rate_per_hour",
+        "下载桶速率(站点覆盖)",
+        "int",
+        default="",
+        help="仅 quota_model=split 生效; 留空 = 回退全局 torrent_rate_per_hour, 再回落站点 max_torrents_per_hour 覆盖",
+    ),
+    Field(
         "completed_age_limit",
         "超龄豁免线",
         "time",
@@ -110,6 +133,32 @@ HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
         help="完成时间超过该时长的种子视为超龄: 判定侧直接豁免(不受管束、不再在线核实), 取数侧也不再为它"
         "翻页/存索引/取 .torrent。0 = 关闭(默认)。❗豁免优先于清单命中 —— 站点其实还在管的超龄种子会漏 HR, "
         "自愿接受后才开启; 页面按完成时间倒序时翻页早停才成立(乱序页面自动放弃早停, 只多花配额)",
+    ),
+    Field(
+        "accept_empty_listing",
+        "接受空清单(人工确认)",
+        "bool",
+        default="false",
+        help="账号确实没有 HR 种子时(清单连续多轮为 0 且页面结构完好), 后端默认仍判「覆盖证明不成立」防改版"
+        "空表被当真; 排查确认后开启本键才接受空清单为合法 complete。❗改版也能造出「结构完好的空表」, "
+        "确认前不要开 —— 误开的代价是改版期间整站误放行",
+    ),
+    Field(
+        "auto_age_limit",
+        "自动考核期豁免(豁免 A)",
+        "bool",
+        default="false",
+        help="用取数侧反算的考核期 P(需通过 ±1 天一致性机检)作超龄豁免线 —— 判定与到期段早停同源, "
+        "无需手配 completed_age_limit。0 机检不过即自动禁用。❗默认关(显式开启才生效): 反算出错时"
+        "会把还在考核期的种子误豁免",
+    ),
+    Field(
+        "seeding_exempt_ratio",
+        "做种超额豁免倍数(豁免 B)",
+        "float",
+        default="0",
+        help="本地做种时长 >= 站点要求时长 × 该倍数 ⇒ 「义务已超额完成」豁免(不再在线核实)。"
+        "0 = 关闭(默认); 建议 5。❗豁免压过清单命中 —— 站点仍要求的超做种种子会漏 HR, 自愿接受后再开",
     ),
     Field(
         "max_torrents_per_hour",
@@ -134,10 +183,69 @@ HR_CHECK_FIELDS: Tuple[Field, ...] = (
         "time",
         default="90S",
         unit_default="S",
-        help="相邻两次站点请求的最小间隔; 抖动只向上(+0~25%), 故实测间隔恒 >= 本值。访问频度是账号安全的第一条防线",
+        help="相邻两次站点请求的最小间隔; 抖动只向上(+0~25%), 故实测间隔恒 >= 本值。访问频度是账号安全的第一条防线。"
+        "❗quota_model=split 的站点本键只管 .torrent 下载间隔(页面间隔用 min_page_interval)",
     ),
-    Field("max_torrents_per_hour", "每小时配额", "int", default="12", help="站点级独立计数; 到顶即停, 不报错"),
-    Field("max_torrents_per_day", "每天配额", "int", default="60", help="站点级独立计数; 翻页与取 .torrent 同样计入"),
+    Field("max_torrents_per_hour", "每小时配额", "int", default="12", help="站点级独立计数; 到顶即停, 不报错; split 站点不使用(速率由下载桶承担)"),
+    Field(
+        "max_torrents_per_day",
+        "每天配额",
+        "int",
+        default="",
+        help="站点级独立计数; 翻页与取 .torrent 同样计入; 留空 = 按配额模型取默认(legacy 60 / split 200)。"
+        "❗split 站点本键改义为「仅 .torrent 下载天顶」(页面天顶用 max_pages_per_day)",
+    ),
+    Field(
+        "page_rate_per_hour",
+        "页面桶速率",
+        "int",
+        default="40",
+        help="仅 quota_model=split 消费: HR 页访问的令牌补充速率(个/时); 桶容量 page_burst, 最小间隔 min_page_interval",
+    ),
+    Field(
+        "page_burst",
+        "页面桶容量",
+        "int",
+        default="10",
+        help="仅 quota_model=split 消费: 页面令牌桶容量(允许的短时突发上限); 令牌按速率连续补充, 跨重启不重置",
+    ),
+    Field(
+        "torrent_rate_per_hour",
+        "下载桶速率",
+        "int",
+        default="20",
+        help="仅 quota_model=split 消费: .torrent 下载的令牌补充速率(个/时)",
+    ),
+    Field(
+        "torrent_burst",
+        "下载桶容量",
+        "int",
+        default="5",
+        help="仅 quota_model=split 消费: 下载令牌桶容量",
+    ),
+    Field(
+        "max_pages_per_day",
+        "页面天级硬顶",
+        "int",
+        default="400",
+        help="仅 quota_model=split 消费: HR 页访问的日上限(令牌桶之外的总量保险)",
+    ),
+    Field(
+        "min_page_interval",
+        "页面最小间隔",
+        "time",
+        default="90S",
+        unit_default="S",
+        help="仅 quota_model=split 消费: 相邻两次 HR 页请求的最小间隔(下载间隔仍用 min_torrent_interval)",
+    ),
+    Field(
+        "max_pages_per_round",
+        "单轮页面总量上限",
+        "int",
+        default="9",
+        help="单轮刷新最多发出的页面请求数(D5 拍板 8~10; 0 = 不限)。单轮持锁时长的页数维度兜底,"
+        "与时间维度上限(代码常量 900s)并行生效",
+    ),
     Field("failure_threshold", "连续失败熔断阈值", "int", default="3", help="连续失败达该次数 -> 该站进入冷却"),
     Field("failure_cooldown", "熔断冷却时长", "time", default="12H", unit_default="H", help="冷却期间零请求"),
     Field(

@@ -12,7 +12,9 @@ config/site_presets.py); web 域与 announce 域是两个命名空间, **永不�
 (现网 BTSchool 旧键形态不改一字, 加载即被迁移链自动搬到新位置)。
 
 ## 测试计划(每个测试函数一条)
-- test_defaults_when_absent: 整段缺省 -> 全默认(功能关闭), 不报错
+- test_defaults_when_absent: 整段缺省 -> 全默认(功能关闭), 不报错(max_torrents_per_day=None 按模型取默认)
+- test_quota_model_and_split_keys_validated: quota_model 枚举与 split 覆盖键校验
+- test_split_rate_interval_consistency_check: 桶速率 × 最小间隔自洽机检(§2 3.6)
 - test_global_section_parsed: 全局段解析(时间串 -> 秒 / 枚举归一 / channel 子段)
 - test_verified_ttl_default_is_none: verified_ttl 缺省为 None(由站点 refresh_interval 解算, 不在此处固化)
 - test_sites_entry_parsed: sites 条目解析 + 绑定派生(scope 归一 / 微调覆盖 / 档案四键来自档案 / 派生 tracker 回填)
@@ -95,7 +97,7 @@ def test_defaults_when_absent(tmp_path):
     cfg = load_config(_write(tmp_path, {"trackers": {"s": {"domains": ["a.example"]}}}))
     assert cfg.hr_check.enabled is False
     assert cfg.hr_check.min_torrent_interval == 90.0
-    assert cfg.hr_check.max_torrents_per_day == 60
+    assert cfg.hr_check.max_torrents_per_day is None, "未配置 = None, 按配额模型取默认(legacy 60 / split 200)"
     assert cfg.hr_check.unknown_policy == "hr"
     assert cfg.hr_check.channel.enabled is False
     assert cfg.hr_check.channel.port == 8788
@@ -972,3 +974,41 @@ def test_config_error_message_points_to_section(tmp_path):
             )
         )
     assert "config.trackers.s.hr_check" in str(excinfo.value)
+
+
+# ---------- M5.3 配额模型拆分(计划 26-09-27-1815 §2 3.1/3.6) ----------
+
+
+def test_quota_model_and_split_keys_validated():
+    """quota_model 枚举与 split 覆盖键校验: 非法值报错, 合法值通过"""
+    ok = _validate({"hr_check": {"sites": {"btschool": {"mode": "partial", "quota_model": "split"}}}})
+    assert ok == []
+    bad = _validate({"hr_check": {"sites": {"btschool": {"mode": "partial", "quota_model": "turbo"}}}})
+    assert any("quota_model" in e for e in bad)
+    bad2 = _validate({"hr_check": {"sites": {"btschool": {"mode": "partial", "page_rate_per_hour": 0}}}})
+    assert any("page_rate_per_hour" in e for e in bad2)
+    ok2 = _validate(
+        {
+            "hr_check":
+                {
+                    "sites": {
+                        "btschool": {
+                            "mode": "partial",
+                            "quota_model": "split",
+                            "torrent_rate_per_hour": 15
+                        }
+                    },
+                }
+        }
+    )
+    assert ok2 == []
+
+
+def test_split_rate_interval_consistency_check():
+    """参数自洽机检(§2 3.6): 桶速率超过最小间隔允许的物理上限 => 聚合报错"""
+    bad = _validate({"hr_check": {"page_rate_per_hour": 60, "min_page_interval": "90S"}})
+    assert any("page_rate_per_hour" in e and "上限" in e for e in bad), bad
+    ok = _validate({"hr_check": {"page_rate_per_hour": 40, "min_page_interval": "90S"}})
+    assert ok == [], "40/时 恰好 = 3600/90 的物理上限 => 自洽"
+    bad2 = _validate({"hr_check": {"torrent_rate_per_hour": 60, "min_torrent_interval": "90S"}})
+    assert any("torrent_rate_per_hour" in e for e in bad2)

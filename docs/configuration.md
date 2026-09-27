@@ -178,16 +178,26 @@ config:
   `channel`(仅监听 `127.0.0.1`)。默认全关(保守默认)。
 - **取数通道** `hr_check.channel`: `enabled`(本实例是否装了扩展)、`port`(默认 8788; **同机多实例必须各不相同**,
   被占则启动直接报错)、`token`(留空 = 随机生成到 `<data_dir>/hr.token`, 扩展侧逐实例填)、
-  `extension_id`(可选: 填了就只放行该扩展 id, 留空 = 靠 token 鉴权)、
+  `extension_id`(可选: 填了就只放行该扩展 id, 留空 = 靠 token 鉴权; ❗留空时任意扩展 origin 都能带上
+  正确 token 调用端点 —— 启动时会记一条 WARNING 提示, 建议把扩展的固定 id 填进来作第二道防线)、
   `request_timeout`(默认 180S: 等扩展回传的上限, 超时计一次失败)。
   安装与配置步骤见 [扩展说明](../extensions/hr-fetch-proxy/README.md)。
 - **站点接入** `hr_check.sites.<站点>`(计划 26-09-27-1318 收敛后**唯一站点配置源**): 键 = 内置站点档案 id
   (见下方「已支持站点」), 值 = `mode`(`off` 不启用 / `partial` 在线核实 / `all` 站点侧驱动 + 未核实恒受管束) +
   微调项(`hr_page_scopes` 默认 `[A, B, C]` / `refresh_interval` / `max_pages_per_refresh` /
-  `completed_age_limit` / `max_torrents_per_hour`)。页面地址、解析器、种子下载路径、翻页参数这些
-  **程序已知、人易配错**的内容由内置档案自动填充, 配置里不写也不再接受。
+  `completed_age_limit` / `max_torrents_per_hour` / `accept_empty_listing` / `auto_age_limit` /
+  `seeding_exempt_ratio` / `quota_model` / `page_rate_per_hour` / `torrent_rate_per_hour`)。页面地址、解析器、
+  种子下载路径、翻页参数这些**程序已知、人易配错**的内容由内置档案自动填充, 配置里不写也不再接受。
   旧键 `trackers.<站点>.hr_check` 兼容接受并等价迁移(见下节), 建议迁移到新位置。
   可选的 `completed_age_limit`(超龄豁免线)见下节。
+- **保护性处置**(计划 26-09-27-1815): 页面排序假设崩塌(哪怕 1 处逆序)或必填字段缺失 ⇒ 本轮判失败不产生放行,
+  连续 3 轮 ⇒ **站点停用(suspended)**——取数零请求、判定回落本地逻辑, 须人工排查后 `--hr-resume <站点>` 恢复
+  (熔断到期**不会**自动恢复停用); 清单骤降(合计 < 基线 30% 或归零)⇒ 判不完备, 持续 3 轮零 + 结构完好 ⇒
+  WARNING 提示人工确认(确属空清单才配站点级 `accept_empty_listing: true`); 登录失效进入指数退避(期间零请求,
+  不计失败); `--hr-status` 会摊开排序 / 考核期 P 分布 / 骤降观测 / 档位计数对比等现场证据。
+- **配额模型** `quota_model`(站点级, 默认 `legacy`): `split` = 页面/下载双令牌桶(页面 40/时·下载 20/时,
+  「种子可以慢慢下载」—— 下载只在复用轮做), 显式开启才生效; 全局键 `page_rate_per_hour` / `page_burst` /
+  `torrent_rate_per_hour` / `torrent_burst` / `max_pages_per_day` / `min_page_interval` 仅 split 站点消费。
 
 配置期会直接报错的规则(都是为了不让人踩到「保护静默失效」):
 

@@ -111,6 +111,12 @@ def main():
         metavar="N",
         help="搭配 --hr-status: 每站点最多显示多少行明细(默认 10)",
     )
+    parser.add_argument(
+        "--hr-resume",
+        metavar="SITE",
+        help="人工确认后恢复被停用(suspended)站点的取数, 逗号分隔多个; "
+        "先排查该站 HR 页确认无改版再执行(--hr-status 会打印停用原因)",
+    )
     args = parser.parse_args()
 
     if args.tray and (args.export_yaml or args.export_torrents_info):
@@ -125,12 +131,25 @@ def main():
         parser.error("--hr-status 与 --hr-once 互斥(前者读已有数据, 后者真去抓一轮)")
     if args.hr_status_rows < 1:
         parser.error("--hr-status-rows 需为正整数")
+    if args.hr_resume and (
+        args.tray or args.export_yaml or args.export_torrents_info or args.hr_once or args.hr_status
+    ):
+        parser.error("--hr-resume 与其它 HR 模式互斥(它本身是写操作, 单独执行)")
 
     # 容器/服务化场景: SIGTERM 转入 Ctrl+C 同款优雅关闭(所有模式一致; KeyboardInterrupt 统一在下面捕获)
     _install_sigterm_handler()
 
     manager = None
     try:
+        # 人工恢复停用站点: 唯一的写文件 HR 模式(清 suspended), 与正常实例靠站点锁互斥
+        if args.hr_resume:
+            from .hr.report import run_hr_resume
+
+            sites = [s.strip() for s in args.hr_resume.replace("，", ",").split(",") if s.strip()]
+            if not sites:
+                parser.error("--hr-resume 需要至少一个站点名")
+            return run_hr_resume(load_config(args.config), sites)
+
         # HR 在线核实现状: 连站点文件都不写, 更不连 qB —— 可与正常实例并发安全运行
         if args.hr_status:
             from .hr.report import run_hr_status

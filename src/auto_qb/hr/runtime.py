@@ -111,6 +111,7 @@ class HrRuntime:
         self._advise_shared_dir()
         self._build()
         if self.fetch_enabled:
+            self._advise_endpoint_depth()
             assert self.endpoint is not None
             self.endpoint.start()
         if self.worker is not None:
@@ -121,6 +122,23 @@ class HrRuntime:
         # 程序自己决定要发生的事 —— 用 WARNING 只会让用户每次重启吃三条通知(2026-09-24 用户实报)。
         logger.info(f"HR 在线核实已启动({mode}): 站点 {sites}; 站点文件目录 {self._sites_dir()}")
         return True
+
+    def _advise_endpoint_depth(self) -> None:
+        """端点纵深提示(计划 26-09-27-1815 §2 5.2, P3): extension_id 留空 ⇒ 第二道防线缺席
+
+        ❗有意用 WARNING(会推系统通知): 与 shared_dir 的引导不同, 这是一条**需要用户行动**的
+        安全提示 —— 配好 extension_id 后就不再出现; 「每次启动提醒」正是让用户去配的机制。
+        token 留空自动生成(M2 已实现)与 token: 123456 应改由用户手改的口径写进 configuration.md,
+        config.yml 是用户生产配置(红线), 程序侧只提示不代改。
+        """
+        if self.global_conf.channel.extension_id:
+            return
+        logger.warning(
+            "HR 取数端点的 extension_id 未配置: 任意扩展 origin 都能携带正确 token 调用本实例端点"
+            "(token 是第一道鉴权, 本项是第二道)。建议在浏览器扩展管理页复制本扩展的固定 id 填入 "
+            "hr_check.channel.extension_id; 若配置里写了示例 token(如 123456), 请改为留空让程序自动生成到 "
+            "<data_dir>/hr.token 并把新值填进扩展"
+        )
 
     def stop(self) -> None:
         """停取数线程 -> 停端点
@@ -193,6 +211,9 @@ class HrRuntime:
         anchor: Optional[HrAnchor] = None,
         now: float = 0.0,
         completed_age_limit: float = 0.0,
+        auto_age_limit: bool = False,
+        required_seeding_time: float = 0.0,
+        seeding_exempt_ratio: float = 0.0,
     ) -> Optional[HrJudgement]:
         """站点侧三态判定(M3 四个消费点的唯一入口; 返回 None = 本模块不适用 ⇒ 走本地逻辑)
 
@@ -200,7 +221,9 @@ class HrRuntime:
         **无状态、无写、无 API、零等待** —— 主循环与 Web 线程都会调它。
         站点级开关(mode=off)由调用方事先挡掉(它手里有 tracker_conf, 不必回查配置迭代),
         这里只检查**总开关**: 关掉它 = 全体回到既有本地行为(零静默变更的另一个方向)。
-        `completed_age_limit` 同理由调用方从站点配置带进(超龄豁免线, 0 = 关闭)。
+        `completed_age_limit` / `auto_age_limit` / `seeding_exempt_ratio` 同理由调用方从站点配置
+        带进(超龄豁免线 0 = 关闭; 豁免 A 默认关; 豁免 B 倍数 0 = 关), `required_seeding_time`
+        从站点 hr 规则带(要求做种时长, 秒)。
         """
         conf = self.global_conf
         if not conf.enabled:
@@ -212,6 +235,9 @@ class HrRuntime:
             now=now,
             unknown_policy=conf.unknown_policy,
             completed_age_limit=completed_age_limit,
+            auto_age_limit=auto_age_limit,
+            required_seeding_time=required_seeding_time,
+            seeding_exempt_ratio=seeding_exempt_ratio,
         )
 
     @property
@@ -313,9 +339,13 @@ class HrRuntime:
     def _advise_shared_dir(self) -> None:
         if self.config.hr_check.shared_dir:
             return
+        # D3 拍板(计划 26-09-27-1815 §2 2.7): 维持 INFO 但补「配额翻倍」后果 —— 多实例未配
+        # shared_dir 时各实例的配额账本各一份, 同一账号的站点访问翻倍; WARNING 需要可靠的
+        # 「多实例」判据, 程序无法可靠判断(主计划 §7 已注明), 强行升级会对全部单实例用户告警。
         logger.info(
             "hr_check.shared_dir 未配置: HR 站点文件落在 <data_dir>/hr/(单实例足够)。"
-            "多实例共享同一账号时, 请把它指向所有实例都能看到的同一目录(网络盘可以, 云同步盘不可用 —— "
+            "❗若同一账号还跑了其它实例而没共享目录, 各实例的配额账本各一份 ⇒ 站点访问翻倍(2×12/时); "
+            "多实例共享时请把它指向所有实例都能看到的同一目录(网络盘可以, 云同步盘不可用 —— "
             "锁与原子替换都不保证), 并让各实例用不同的 hr_check.channel.port"
         )
 

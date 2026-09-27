@@ -15,6 +15,7 @@
 """
 import logging
 import time
+from statistics import median
 from dataclasses import dataclass, replace
 from typing import Callable, Dict, List, Mapping, Optional, Tuple
 
@@ -42,9 +43,20 @@ from .model import (
     HrEntry,
     HrRefreshMeta,
     HrSiteData,
+    HrSuspension,
     HrVerified,
 )
-from .ratelimit import HrLimits, fuse_active, next_allowed_at, record_failure, record_success, try_consume
+from .parse import cross_page_violation, order_violations, page_javascript_marks
+from .ratelimit import (
+    HrLimits,
+    fuse_active,
+    next_allowed_at,
+    record_failure,
+    record_success,
+    split_next_allowed_at,
+    split_try_consume,
+    try_consume,
+)
 from .resolve import HrAnchor, HrSiteView, build_site_view
 from .store import HrLockBusy, HrSiteStore, hr_dir
 
@@ -59,6 +71,7 @@ ACTION_WAITING = "waiting"  # 未到可取时刻(间隔 / 配额 / 熔断 / 时�
 ACTION_LOCKED = "skipped-locked"
 ACTION_NO_CHANNEL = "no-channel"
 ACTION_ERROR = "error"
+ACTION_SUSPENDED = "suspended"  # 站点已停用(计划 26-09-27-1815 §2 2.3): 零请求, 人工恢复
 
 # 本轮「没跑完」的原因分类(告警分级与报告展示用)。
 # ❗被**自己的频控**拦下 ≠ 故障: 那是设计如此(保守不产生放行), 而且会持续几小时;
@@ -77,6 +90,48 @@ PROD_ROUND_WAIT_MAX = 900.0
 
 #: 走查(--hr-once)单次最多等待的秒数: 防配置误设(如间隔 1H)把走查挂死
 DIAGNOSTIC_MAX_WAIT = 600.0
+
+#: 轮级骤降线(D1 拍板, 计划 26-09-27-1815 §5): 本轮合计 < 可信基线 × 30% 即骤降可疑。
+#: 判据单位 = 全轮合计(所有抓取档位的解析行数和) —— 单档清零属站点正常语义(毕业迁移 /
+#: 旧达标清除), 只有轮级合计崩塌才可疑; 基线 = 最近一次「结构完好且非零」轮, 可疑轮不计入。
+PLUNGE_RATIO = 0.30
+
+#: S1/S2 强信号连续 K 轮 ⇒ suspended(D1 同款直觉, 计划 §5: 持续零确认阈值与停用同款 3)
+SUSPEND_ROUNDS = 3
+
+#: 清单持续为零的告警升级阈值(计划 §2 2.2): 连续 K 轮零且结构完好 ⇒ 升级 WARNING + 人工确认口子
+ZERO_LISTING_ROUNDS = 3
+
+#: 早停② 的「已到期段」判定(计划 §2 4.4): 剩余达标时间为 0 的**连续**行数(跨页延续)达此值
+#: 且考核期 P 一致 ⇒ 后续页只会是已到期种子, 本档在到期线内的清单已覆盖, 可停翻
+AGE_STOP_STREAK = 5
+
+#: 考核期 P 一致性容差(计划 §2 4.4): 反算 P 的离散超 ±1 天 ⇒ 告警 + 早停②/豁免 A 双双禁用
+P_TOLERANCE_DAYS = 1.0
+
+
+def plunge_suspect(total: int, baseline: int) -> bool:
+    """轮级骤降判据(计划 §2 1.4): 合计归零或低于基线 30% ⇒ 可疑
+
+    baseline <= 0 = 尚无可信基线(首刷 / 此前从未结构完好地跑完一轮)⇒ 不判 —— 首刷空表
+    按现有口径是合法 complete, 骤降保护只对「有过可信基线之后的崩塌」生效。
+    """
+    if baseline <= 0:
+        return False
+    return total == 0 or total < baseline * PLUNGE_RATIO
+
+
+class _SignalAbort(Exception):
+    """S1/S2 强信号的轮内跳转(计划 §2 2.1): 停止本轮翻页, 折成 ACTION_ERROR
+
+    用异常而非标志位: 处置要立刻跳出**两层**循环(页循环 + 档位循环), 已抓到的行在循环内
+    已增量合并/落盘, 异常路径只负责记账(计失败 / 累计违反轮数 / 告警 / 写 meta)。
+    """
+    def __init__(self, kind: str, where: str, missing_rate: float = 0.0) -> None:
+        super().__init__(where)
+        self.kind = kind  # "order" = S1 排序违反 | "fields" = S2 必填字段缺失
+        self.where = where
+        self.missing_rate = missing_rate  # S2 的缺失率(告警文案用)
 
 
 @dataclass(slots=True)
@@ -103,6 +158,10 @@ class HrRefreshResult:
     lock_ok: bool = True
     persisted: bool = False
     elapsed_s: float = 0.0
+    #: 本轮排序校验是否发现违反(计划 §2 1.2/2.1; M5.1 只观测告警, M5.2 起消费为强信号处置)
+    order_violated: bool = False
+    #: 违反首处的人话位置(如「档位 A 第 2 页 页内逆序 1 处」; 告警与 --hr-status 展示共用)
+    order_detail: str = ""
     #: 本轮结束时的**内存快照**(仅供走查/报告预览; 生产消费方读已发布的只读视图, 不读它)
     snapshot: Optional[HrSiteData] = None
 
@@ -154,6 +213,9 @@ class HrRefreshService:
         #: 「登录失效」(M4 四类事件之一)已告警过的站点: 登录态没恢复前每轮都会命中登录页,
         #: 每轮一条 WARNING 就是刷屏(而且它是**人工事件**, 报一次就够) —— 登录恢复后重置。
         self._login_warned: set = set()
+        #: 「排序假设不成立」上一次告警时刻(站 -> 时刻): 排序违反往往持续多轮(页面真改版),
+        #: 逐轮 WARNING 会刷屏 —— 按 channel_silence_warn 节流(计划 §2 1.6/2.1)。
+        self._order_warned_at: Dict[str, float] = {}
 
     # ---------- 基础访问 ----------
 
@@ -235,6 +297,21 @@ class HrRefreshService:
         limits = self.limits_for(site)
         now = self._now()
 
+        if data.suspended is not None:
+            # 站点停用(计划 §2 2.3): 取数侧**零请求**(连复用轮的下载也让位) —— 数据是什么样
+            # 就保持什么样, 直到人工排查后恢复。判定侧的回落语义见 resolve.judge_record。
+            result.action = ACTION_SUSPENDED
+            result.reason = f"站点已停用(suspended): {data.suspended.reason}(人工恢复, 见 --hr-status 指引)"
+            return
+
+        if data.login_backoff_until > now:
+            # 登录失效指数退避(计划 §2 2.6): 退避期零请求 —— 登录没恢复前每轮照发只是白烧配额。
+            # 不计失败、不推进熔断、不动 fetched_at(维持既有语义); 告警维持首见即报。
+            result.action = ACTION_WAITING
+            remain = data.login_backoff_until - now
+            result.reason = f"登录失效退避中(还差 {remain:.0f}s, 期间零请求): 需人工在浏览器登录 {site}"
+            return
+
         if data.fetched_at > 0 and data.expires_at > now:
             # 有效期内的数据直接采用(可能是别的实例刚抓的): 站点访问频率由数据有效期决定
             result.action = ACTION_REUSED
@@ -257,7 +334,10 @@ class HrRefreshService:
             result.reason = f"站点熔断中(至 {data.fuse.until_ts:.0f}): {data.fuse.reason}"
             return
 
-        due, why = next_allowed_at(data.quota, limits, data.fuse, now)
+        if limits.split:
+            due, why = split_next_allowed_at(data.quota, limits, data.fuse, now, "page")
+        else:
+            due, why = next_allowed_at(data.quota, limits, data.fuse, now)
         if due > now:
             result.action = ACTION_WAITING
             result.reason = f"未到可取时刻({why}, 还差 {due - now:.0f}s)"
@@ -345,8 +425,9 @@ class HrRefreshService:
 
         待回填清单来自**已持久化的索引**(不依赖本轮页面), 页面失败不该把下载的名额一起带走。
         预算闸门照常生效: 熔断(刚失败可能刚推到冷却)/ 配额 / 间隔任一不满足就自然空手而回。
+        split 站点跳过(下载只在复用轮做, §2 3.4): 页面失败轮的复用窗口(≥120s)内自会轮到下载。
         """
-        if not self.allow_fetch:
+        if not self.allow_fetch or limits.split:
             return
         data = session.data
         pending = {tid: entry for tid, entry in data.index.items() if not (entry.infohash_v1 or entry.infohash_v2)}
@@ -383,13 +464,41 @@ class HrRefreshService:
         parse_problem = False
         #: 超龄豁免线(0 = 关闭): 开启时页面行按完成时间过滤 + 支持翻页早停(见 _apply_age_window)
         age_limit = site_conf.completed_age_limit
+        # 预算轮转起点(D9=b, 计划 §2 4.3): 每轮从「上轮未完成」的档位起翻 —— 固定 A→B→C 在紧
+        # 预算下会饿尾档(长清单吃光预算 ⇒ complete 恒假, §3.3「功能自废」换形态复发);
+        # 跨轮语义不变(仍每档从第 1 页起翻), 只换档位间的先后。
+        prev_done = set(data.refresh.scopes_done)
+        scopes = [s for s in scopes if s not in prev_done] + [s for s in scopes if s in prev_done]
+        #: 单轮页面总量上限(D5=a: 8~10 取 9; 0 = 不限) —— 单轮持锁时长的页数维度兜底
+        pages_left_round = (self.global_conf.max_pages_per_round if self.global_conf.max_pages_per_round > 0 else None)
+        round_pages_exhausted = False
+        #: 早停② 状态(§2 4.4): 以已见最后一行结尾的连续 remain==0 行数(跨页延续)+ P 一致性
+        zero_remain_streak = 0
+        period_ok = True  # False = P 离散超容差 ⇒ 早停②禁用(豁免 A 由轮尾 meta 禁用)
+        period_values: List[float] = []
+        #: 排序观测(计划 26-09-27-1815 §2 1.2; M5.1 只记录不改判定): 判定前置 = 页面成功取回 +
+        #: 表头解析出 + 可比行 ≥ 2(2026-09-26 用户定稿)。None = 证据不足未判定。
+        order_verdict: Optional[bool] = None
+        order_direction = ""  #: 轮级方向(由首个可推断的页推断; 之后翻转视同违反)
+        order_where = ""  #: 首处违反的人话位置(告警与 --hr-status 共用)
+        prev_order_dones: List[float] = []  #: 上一页可比完成时刻(跨页证据; age 过滤前)
+        scope_counts: Dict[str, int] = {}  #: 本轮各档解析行数(观测「A: 37 → 0」用, age 过滤前)
+        covered_local_any = False  #: 早停③是否命中(仅观测; 不改变判定语义)
 
         try:
             for scope in scopes:
                 got_all_pages = True
                 prev_page_dones: Optional[List[float]] = None  # 上一页的完成时刻(跨页倒序证据; None = 首页)
                 for page in range(1, max(1, site_conf.max_pages_per_refresh) + 1):
-                    allowed, why = budget.take()
+                    # ---- 单轮页面总量(D5=a, §2 4.3): 超限 ⇒ 本轮剩余档位停止(不持锁干等) ----
+                    if pages_left_round is not None and pages_left_round <= 0:
+                        notes.append(f"达到单轮页面总量上限({self.global_conf.max_pages_per_round}), 本轮剩余档位停止")
+                        budget_limited = True
+                        got_all_pages = False
+                        reached_last = False
+                        round_pages_exhausted = True
+                        break
+                    allowed, why = budget.take("page")
                     if not allowed:
                         notes.append(f"配额/间隔受限({why})")
                         budget_limited = True
@@ -397,7 +506,9 @@ class HrRefreshService:
                         reached_last = False
                         break
                     html = self.fetcher.get_text(adapter.page_url(scope, page))
-                    budget.mark()
+                    budget.mark("page")
+                    if pages_left_round is not None:
+                        pages_left_round -= 1
                     if adapter.looks_like_login(html):
                         # 登录失效 → 专用异常(见 HrLoginExpired): 不计失败、不推进熔断, 要的是人去看一眼
                         raise HrLoginExpired(f"命中登录页(档位 {scope} 第 {page} 页): 登录态失效, 需人工处理")
@@ -412,6 +523,53 @@ class HrRefreshService:
                         reached_last = False
                         break
                     max_missing = max(max_missing, parsed.missing_field_rate)
+                    # ---- 排序观测(§2 1.2; 基于 age 过滤前的原始行序) ----
+                    scope_counts[scope] = scope_counts.get(scope, 0) + len(parsed.entries)
+                    dones = [e.done_epoch for e in parsed.entries if e.done_epoch is not None]
+                    check = order_violations(dones)
+                    page_bad = ""
+                    if check.ok:
+                        if not order_direction:
+                            order_direction = check.direction
+                        elif check.direction != order_direction:
+                            page_bad = f"方向翻转(本页 {check.direction}, 轮级 {order_direction})"
+                    if not page_bad and check.inversions > 0:
+                        page_bad = f"页内逆序 {check.inversions} 处"
+                    if not page_bad and cross_page_violation(prev_order_dones, dones, order_direction):
+                        page_bad = "跨页乱序"
+                    if page_bad:
+                        order_verdict = False
+                        if not order_where:
+                            order_where = f"档位 {scope} 第 {page} 页 {page_bad}"
+                        # S1 强信号处置(计划 §2 2.1, 2026-09-26 用户定稿): 哪怕 1 处 ⇒ 立即停止
+                        # 本轮翻页并判失败 —— 排序假设崩塌时「未列出」不再可信, 继续翻只会白烧配额。
+                        raise _SignalAbort("order", order_where)
+                    if check.comparable >= 2 and order_verdict is None:
+                        order_verdict = True
+                    # S2 强信号处置: 必填字段缺失**不设比例阈值** —— 行数据读不全 = 页面形态变了,
+                    # 与改版同罪; 旧缺失率阈值(0.5)会放走「缺一半」的页面, 那正是 P1 的形态。
+                    if parsed.missing_field_rate > 0:
+                        where = f"档位 {scope} 第 {page} 页必填字段缺失率 {parsed.missing_field_rate:.0%}"
+                        raise _SignalAbort("fields", where, parsed.missing_field_rate)
+                    prev_order_dones = dones
+                    # ---- P 一致性机检(§2 4.4): 参与行反算 P, 离散超 ±1 天 ⇒ 禁用早停②(告警一次) ----
+                    for e in parsed.entries:
+                        # 参与行 = 还在线内的行(remain > 0; 已到期行 remain 被截 0, 反算为负不参与)
+                        # ❗公式勘误(计划 26-09-27-1815 §2 4.4 三份制品同源的笔误): P = (now − done) + remain
+                        # (考核期 = 已考核时长 + 剩余时长); 计划写成的 done + remain − now 在数学上恒为
+                        # 负偏移量, 与 P 的物理定义矛盾 —— 按唯一正确方向实现, 回写时注明。
+                        if e.done_epoch is not None and e.remain_seconds and e.remain_seconds > 0:
+                            period_values.append((self._now() - e.done_epoch) + e.remain_seconds)
+                    if period_values:
+                        med_p = median(period_values)
+                        if max(abs(v - med_p) for v in period_values) > P_TOLERANCE_DAYS * 86400.0:
+                            if period_ok:
+                                logger.warning(
+                                    events.period_inconsistent(
+                                        site, (max(period_values) - min(period_values)) / 86400.0
+                                    )
+                                )
+                            period_ok = False
                     kept, early_stop, page_dones = self._apply_age_window(
                         parsed.entries, age_limit, self._now(), prev_page_dones
                     )
@@ -424,6 +582,20 @@ class HrRefreshService:
                     self._merge_index(data, entries_seen, self._now(), False, self.global_conf.index_retention)
                     if self.persist:
                         session.commit(self._now())
+                    # ---- 早停③ 覆盖本地(§2 4.6 严格版): 本地种子全部已见 + 索引无待回填 ⇒ 停翻 ----
+                    # 只停「不影响本地判定」的部分: 本档不进 scopes_done ⇒ 不置 complete(绝不放行)。
+                    # 基于本轮 merge 后的状态(hash 继承自旧 entry / 本轮回填), 故必须在 merge 之后检查。
+                    if anchors:
+                        local_hashes = {h for h in anchors if h}
+                        seen_hashes = {h for e in entries_seen.values() for h in (e.infohash_v1, e.infohash_v2) if h}
+                        pending_now = sum(
+                            1 for e in data.index.values() if e.active and not e.infohash_v1 and not e.infohash_v2
+                        )
+                        if local_hashes and local_hashes <= seen_hashes and pending_now == 0:
+                            notes.append("早停: 本站本地种子已全部出现在已抓行中(严格版), 本档停翻(不产生覆盖证明)")
+                            covered_local_any = True
+                            got_all_pages = False
+                            break
                     if early_stop:
                         # 后续页只会更老 ⇒ 本档位在豁免线内的清单已全覆盖; 没翻到的页不值得再花配额
                         if parsed.has_next:
@@ -432,8 +604,35 @@ class HrRefreshService:
                                 "早停翻页(后续页不再取)"
                             )
                         break
+                    # ---- 早停② 已到期段(§2 4.4): 连续 remain==0 达阈值且 P 一致 ⇒ 本档覆盖证明成立 ----
+                    # 「活跃条目页数」取代「清单总页数」成为覆盖证明的分母(P1 断点续翻问题的消解):
+                    # 到期段之后的页全是已到期种子, 不会再有线内清单行, 翻完只是白烧配额。
+                    tail_zero = 0
+                    for e in reversed(parsed.entries):
+                        if e.remain_seconds == 0:
+                            tail_zero += 1
+                        else:
+                            break
+                    if parsed.entries and tail_zero == len(parsed.entries):
+                        zero_remain_streak += tail_zero  # 整页全 0: 延续上一页尾部
+                    elif tail_zero:
+                        zero_remain_streak = tail_zero  # 页首延续(尾部段从本页某行起)
+                    else:
+                        zero_remain_streak = 0
+                    if period_ok and zero_remain_streak >= AGE_STOP_STREAK and parsed.has_next:
+                        notes.append(
+                            f"档位 {scope} 第 {page} 页命中已到期段(连续 {zero_remain_streak} 行剩余达标时间为 0), "
+                            "早停翻页(覆盖证明按已覆盖活跃段成立)"
+                        )
+                        break  # got_all_pages 保持 True ⇒ 本档 done(§2 4.2「翻到已到期段」)
                     prev_page_dones = page_dones
-                    if not parsed.has_next:
+                    # 翻页判据并集(§2 1.3): 「下一页」真实链接与 maxpage/currentpage 脚本标记,
+                    # **任一说还有下一页就继续翻**(保守方向) —— 顺带堵 P1 的英文站缺口
+                    # (has_next_page 只认中文「下一页」的问题由第二判据兜住)。
+                    marks = page_javascript_marks(html)
+                    cur_mark, max_mark = marks.get("currentpage"), marks.get("maxpage")
+                    marks_says_next = cur_mark is not None and max_mark is not None and cur_mark < max_mark
+                    if not parsed.has_next and not marks_says_next:
                         break
                 else:
                     # for-else: 到页数上限仍有下一页 ⇒ 没抓到底
@@ -443,6 +642,49 @@ class HrRefreshService:
                     reached_last = False
                 if got_all_pages:
                     scopes_done.append(scope)
+                if round_pages_exhausted:
+                    break  # 单轮页面总量耗尽: 剩余档位本轮不再发请求
+        except _SignalAbort as sig:
+            # S1/S2 强信号处置(计划 §2 2.1): ① 停止本轮翻页(异常即出, 不再发请求)
+            # ② 判本轮拉取失败(ACTION_ERROR, 不产生放行) ③ 计入失败 + 累计连续违反轮数
+            # ④ WARNING 告警(文案分开: order_broken / field_missing)。
+            # 已抓到的行保留命中(循环内已增量合并/落盘, 不置 complete) —— 命中是站点侧事实,
+            # 保留只会往受管束方向偏(保守无害)。
+            now = self._now()
+            record_failure(data.fuse, limits, now)
+            signal_rounds = data.refresh.signal_rounds + 1
+            if sig.kind == "order":
+                order_verdict = False
+                result.order_violated = True
+                result.order_detail = sig.where
+                self._warn_order(site, sig.where)
+            else:
+                self._warn_field(site, sig.where, sig.missing_rate)
+            data.refresh = replace(
+                data.refresh,
+                complete=False,
+                reason=f"{sig.where}; 强信号处置: 本轮判失败, 不产生放行",
+                order_ok=order_verdict,
+                order_detail=sig.where if sig.kind == "order" else data.refresh.order_detail,
+                signal_rounds=signal_rounds,
+            )
+            result.action = ACTION_ERROR
+            result.reason = sig.where
+            result.alerted = True  # 告警已由 _warn_* 发出 ⇒ worker 不重复
+            if signal_rounds >= SUSPEND_ROUNDS and data.suspended is None:
+                data.suspended = HrSuspension(
+                    reason=sig.where,
+                    since=now,
+                    evidence=f"连续 {signal_rounds} 轮 {'排序违反' if sig.kind == 'order' else '字段缺失'}强信号",
+                    rounds=signal_rounds,
+                )
+                logger.error(events.suspended(site, signal_rounds, sig.where))
+            if self.persist:
+                status = session.commit(now)
+                result.persisted = status == "written"
+            else:
+                result.reason = f"{result.reason}; 只读模式, 未写盘"
+            return
         except HrChannelStopped as e:
             # 关停 / 热重挂时被叫停: 既不是「没通道」也不是故障 ⇒ 不告警、不计失败(不推进熔断),
             # 本轮直接让位(下轮自会重来)。
@@ -471,6 +713,12 @@ class HrRefreshService:
             result.reason = str(e)
             result.alerted = True  # 下面这条 WARNING 已含原因与动作 ⇒ 状态记录只记 INFO
             data.refresh = replace(data.refresh, reason=events.login_expired_note(site, e))
+            # 指数退避(计划 §2 2.6): 2^(n-1) × poll_interval, 上限 = refresh_interval ——
+            # 登录没恢复前每轮照发只是白烧配额(≤12/时)。仍不计失败、不推进熔断、不动 fetched_at。
+            streak = data.login_expired_streak + 1
+            data.login_expired_streak = streak
+            backoff = min(self.global_conf.poll_interval * (2.0**(streak - 1)), site_conf.refresh_interval)
+            data.login_backoff_until = self._now() + backoff
             if self.persist:
                 status = session.commit(self._now())
                 result.persisted = status == "written"
@@ -500,16 +748,56 @@ class HrRefreshService:
             return
 
         record_success(data.fuse)
+        # 登录恢复(完整跑完一轮 = 登录态肯定回来了): 清零退避与连续失效计数(计划 §2 2.6)
+        data.login_expired_streak = 0
+        data.login_backoff_until = 0.0
+        # 骤降观测(§2 1.4; M5.1 只记录, M5.2 起消费为「判不完备」): 轮级合计 vs 可信基线。
+        # 基线只取「结构完好且完整跑完(无 budget 截断)、非零、非可疑」的轮 —— budget 截断轮的
+        # 合计偏小(作基线会误伤后续轮), 可疑轮不计入(堵「0 vs 0」自愈洞), 排序违反轮可能是改版轮。
+        total_now = len(entries_seen)
+        suspect = plunge_suspect(total_now, data.refresh.entry_baseline)
+        # 人工确认口子(D1, 计划 §2 2.2): 空清单 + 站点显式 accept_empty_listing ⇒ 接受为合法
+        # (即使基线存在)。只豁免「零」这一形态 —— 非零骤降(改版丢行)不适用; 前提仍是本轮结构完好。
+        if suspect and total_now == 0 and site_conf.accept_empty_listing and not parse_problem:
+            suspect = False
+        new_baseline = data.refresh.entry_baseline
+        if not parse_problem and not budget_limited and total_now > 0 and not suspect \
+                and order_verdict is not False:
+            new_baseline = total_now
+        new_plunge_rounds = data.refresh.plunge_rounds + 1 if suspect else 0
         self._no_channel_warned.discard(site)  # 通道恢复: 下次真的没通道时再报一次
         self._ext_quota_warned.discard(site)  # 恢复正常: 下次再超限时重新报一次
         self._login_warned.discard(site)  # 登录恢复: 下次真的又失效时再报一次
         entries_new = sum(1 for tid in entries_seen if tid not in data.downloaded)
-        dl_note = self._guarded_backfill(site, adapter, data, entries_seen, budget, result, session=session)
+        if limits.split:
+            # 页面/下载分工(计划 §2 3.4): split 站点**页面只在新轮做、下载只在复用轮做** ——
+            # 「种子可以慢慢下载」落地, 单轮持锁时长缩短; 复用轮(_backfill_on_reuse)已现成。
+            dl_note = ""
+        else:
+            dl_note = self._guarded_backfill(site, adapter, data, entries_seen, budget, result, session=session)
         if dl_note:
             notes.append(dl_note)
         complete = bool(scopes) and len(scopes_done) == len(scopes) and reached_last and max_missing <= \
-            self.global_conf.parse_missing_rate_max
+            self.global_conf.parse_missing_rate_max and not suspect
+        # M5.2 骤降保护(计划 §2 2.2): 骤降可疑 ⇒ 判不完备, 不产生放行, 保留命中 ——
+        # 一次性批量清除/迁移在下一轮以新基线自愈(代价 = 一轮刷新的放行延迟, 不完备轮后 120s 即重试)。
+        if suspect and complete is False and not notes:
+            notes.append(f"骤降可疑(本轮合计 {total_now} vs 基线 {data.refresh.entry_baseline}), 判不完备")
+        # 持续零告警升级(计划 §2 2.2): 合计连续 K 轮为零且本轮结构完好 ⇒ WARNING + 人工确认口子指引。
+        # 刻意不自动接受: 持续零 + 结构完好同样可由改版造出, 自动接受等于重开 P1 灾难面。
+        if suspect and total_now == 0 and not parse_problem \
+                and data.refresh.plunge_rounds + 1 >= ZERO_LISTING_ROUNDS:
+            self._warn_zero_listing(site, data.refresh.plunge_rounds + 1)
+        # M5.1 观测口径: 排序违反**不改判定**(处置在 M5.2), 只如实进 notes / meta / 告警
+        if order_verdict is False:
+            notes.append(f"排序假设不成立({order_where})")
+            self._warn_order(site, order_where)
         self._merge_index(data, entries_seen, self._now(), complete, self.global_conf.index_retention)
+        # 清单命中对账兜底(§2 2.5): 行重回清单时 hash 常从旧 entry 继承(回填循环会跳过),
+        # 在 merge 后对「命中行名下已知 hash」统一对账 —— partial 轮也即时收放行, 不等下一次完整刷新。
+        retracted = self._retract_on_listing(data, entries_seen)
+        if retracted:
+            logger.info(f"HR 站点 {site} | 清单对账: 撤销 {retracted} 条放行记录(种子已在清单, listed-late)")
         result.entries = len(data.index)
         result.entries_new = entries_new
 
@@ -534,7 +822,18 @@ class HrRefreshService:
             missing_field_rate=max_missing,
             complete=complete,
             reason="; ".join(notes),
+            order_ok=order_verdict,
+            order_detail=order_where,
+            probe_period_days=(median(period_values) / 86400.0 if period_values and period_ok else 0.0),
+            period_consistent=bool(period_values) and period_ok,
+            entry_baseline=new_baseline,
+            plunge_suspect=suspect,
+            plunge_rounds=new_plunge_rounds,
+            scope_counts=scope_counts,
+            prev_scope_counts=dict(data.refresh.scope_counts),
         )
+        result.order_violated = order_verdict is False
+        result.order_detail = order_where
         data.fetched_at = now
         # 有效期只由刷新周期决定; 不完备刷新不续放行(放行有效期仍以各记录的 verified_ts 计)。
         # ❗不完备窗口必须盖过取数线程的**下一轮**(2026-09-25 实报修复): 窗口 60s == poll_interval 60s,
@@ -634,28 +933,37 @@ class HrRefreshService:
         ③ 失败按 max_download_retries 计数, 达上限后冷却。二进制默认不落盘(只算 infohash)。
         `session` 给了就**每个结果落盘一次**(2026-09-25 实报): hr_downloaded 是「永不重取」的
         凭据、fails 是防烧配额的记账 —— 中途被杀不该丢, 丢了就是白烧配额重下。
+
+        回填顺序按 first_seen **新行优先**(计划 §2 2.5): 新进的清单行先拿到 infohash,
+        「放行收不回」的对账撤销就早一分钟发生(窗口从 ≤ verified_ttl 收缩到 ≤ 回填时延)。
         """
         fetched = failed = 0
         cooldown = self.global_conf.failure_cooldown
-        for tid, entry in entries.items():
+        ordered = sorted(entries.items(), key=lambda kv: kv[1].first_seen or 0.0, reverse=True)
+        for tid, entry in ordered:
             if entry.infohash_v1 or entry.infohash_v2:
                 continue
             got = data.downloaded.get(tid)
             if got is not None and (got.infohash_v1 or got.infohash_v2):
                 entry.infohash_v1, entry.infohash_v2 = got.infohash_v1, got.infohash_v2
+                # 永久层复用同样算「infohash 回填成功」: 对账撤销照跑(§2 2.5) —— 行重回清单时
+                # 该 hash 的放行依据「未列出」已失效, 不管 hash 是刚下载算出还是从永久层恢复。
+                if self._retract_on_backfill(data, got.infohash_v1, got.infohash_v2):
+                    logger.info(f"HR 站点 {adapter.site} | tid={tid} 回填对账(永久层复用): 撤销放行记录"
+                                "(种子已回清单, listed-late)")
                 continue
             fail = data.fails.get(tid)
             if fail is not None and fail.count >= self.global_conf.max_download_retries and \
                     self._now() - fail.last_ts < cooldown:
                 continue
-            allowed, _why = budget.take()
+            allowed, _why = budget.take("torrent")
             if not allowed:
                 break
             try:
                 # dl_id: 行内链接提取的下载用种子 id(CarPT 等站点 H&R ID 与种子 id 两个空间);
                 # None = 同空间站点, 回落 tid
                 blob = self.fetcher.get_bytes(adapter.download_url(entry.dl_id or tid))
-                budget.mark()
+                budget.mark("torrent")
             except (HrChannelStopped, HrChannelQuota, HrLoginExpired):
                 # 让位 / 人工事件, 不是「这个种子取失败」: 计数会烧掉 max_download_retries 额度,
                 # 把「程序要关了 / 扩展限流 / 该去登录」伪装成「种子坏了」。原样上抛,
@@ -680,6 +988,12 @@ class HrRefreshService:
                 logger.warning(f"HR 站点 {adapter.site} | tid={tid} 返回内容不是合法 .torrent: {e}")
                 continue
             entry.infohash_v1, entry.infohash_v2 = v1, v2
+            retracted = self._retract_on_backfill(data, v1, v2)
+            if retracted:
+                logger.info(
+                    f"HR 站点 {adapter.site} | tid={tid} 回填对账: 撤销 {retracted} 条放行记录"
+                    "(种子已回清单, 放行依据「未列出」失效; listed-late)"
+                )
             # ts 是这一份 .torrent 自己的取回时刻 —— 一批里各条互不相同(整批共用开始时刻会让取证误读)
             data.downloaded[tid] = HrDownloaded(
                 tid=tid, ts=self._now(), name=torrent_display_name(info) or entry.name, infohash_v1=v1, infohash_v2=v2
@@ -693,6 +1007,37 @@ class HrRefreshService:
         """增量落盘的统一口(只在正式口径下写; 走查 persist=False 不落盘)。"""
         if session is not None and self.persist:
             session.commit(self._now())
+
+    @staticmethod
+    def _retract_on_backfill(data: HrSiteData, v1: str, v2: str) -> int:
+        """回填对账撤销(计划 26-09-27-1815 §2 2.5, P2「放行收不回」修复)
+
+        infohash 回填成功时与现有放行记录对账: 该 (站点, infohash) 若已有放行 ⇒ 说明种子其实
+        已回清单, 放行依据「本次未列出」已失效 —— 命中即作废(listed-late), 未命中不动。
+        撤销只发生在 hash **精确对上**时(无误伤面); 返回撤销条数(供日志)。
+        """
+        retracted = 0
+        for h in (v1, v2):
+            if h and h in data.verified:
+                del data.verified[h]
+                retracted += 1
+        return retracted
+
+    @staticmethod
+    def _retract_on_listing(data: HrSiteData, entries: Mapping[int, HrEntry]) -> int:
+        """清单命中行对账兜底(§2 2.5): 命中行名下**已知** hash 对上放行 ⇒ 撤销
+
+        与 _retract_on_backfill 的分工: 那个管「hash 刚到账」(新算出 / 永久层复用, 复用轮也走),
+        这个管「行重回清单时 hash 从旧 entry 继承」—— merge 保留旧 hash 后回填循环会跳过,
+        兜底撤销只能在 merge 后做。完整刷新的批量对账在 _refresh_verified(complete 路径)。
+        """
+        retracted = 0
+        for entry in entries.values():
+            for h in (entry.infohash_v1, entry.infohash_v2):
+                if h and h in data.verified:
+                    del data.verified[h]
+                    retracted += 1
+        return retracted
 
     def _refresh_verified(
         self, data: HrSiteData, entries_seen: Mapping[int, HrEntry], complete: bool, now: float,
@@ -793,6 +1138,47 @@ class HrRefreshService:
         self._login_warned.add(site)
         logger.error(events.login_expired(site, err))
 
+    def _warn_order(self, site: str, detail: str) -> None:
+        """排序假设不成立告警(计划 26-09-27-1815 §2 1.6/2.1): WARNING 按 channel_silence_warn 节流
+
+        M5.1 观测期只告证不改判定(不早停、不判失败、不计停站计数); M5.2 起同轮由强信号处置
+        (判失败 / 停站计数)接管, **文案不变** —— 真机观测期直接对文案排查。"""
+        warn_gap = max(60.0, float(self.global_conf.channel_silence_warn))
+        now = self._now()
+        if now - self._order_warned_at.get(site, 0.0) < warn_gap:
+            logger.info(f"HR 站点 {site} | 排序假设仍不成立(节流期内不重复告警): {detail}")
+            return
+        self._order_warned_at[site] = now
+        logger.warning(events.order_broken(site, detail))
+
+    def _warn_field(self, site: str, detail: str, rate: float) -> None:
+        """必填字段缺失告警(S2, 计划 §2 2.1): 文案与排序违反**分开**, 节流窗口与 S1 共用
+
+        (S1/S2 同属 parse 类信号且不会同轮同时发生 —— 先触发者先处置; 共用一个时间戳字典
+        避免同一站点在同一天内两类告警各刷一条系统通知。)
+        """
+        warn_gap = max(60.0, float(self.global_conf.channel_silence_warn))
+        now = self._now()
+        if now - self._order_warned_at.get(site, 0.0) < warn_gap:
+            logger.info(f"HR 站点 {site} | 必填字段缺失(节流期内不重复告警): {detail}")
+            return
+        self._order_warned_at[site] = now
+        logger.warning(events.field_missing(site, rate))
+
+    def _warn_zero_listing(self, site: str, rounds: int) -> None:
+        """清单持续为零的告警升级(计划 §2 2.2): K 轮零且结构完好 ⇒ WARNING + 人工确认口子指引
+
+        刻意不自动接受空清单 —— 持续零 + 结构完好同样可由改版造出, 自动接受等于重开 P1 灾难面;
+        误要人工确认的代价只是终态场景多敲一次确认, 方向不对称故保守优先。
+        """
+        warn_gap = max(60.0, float(self.global_conf.channel_silence_warn))
+        now = self._now()
+        if now - self._order_warned_at.get(site, 0.0) < warn_gap:
+            logger.info(f"HR 站点 {site} | 清单仍为 0(第 {rounds} 轮, 节流期内不重复告警)")
+            return
+        self._order_warned_at[site] = now
+        logger.warning(events.zero_listing(site, rounds))
+
     def _warn_ext_quota(self, site: str, err: Exception) -> None:
         """扩展侧硬上限告警: 同样**只报一次**(超限会持续到下一个窗口)
 
@@ -806,7 +1192,7 @@ class HrRefreshService:
         self._ext_quota_warned.add(site)
         logger.warning(
             f"HR 站点 {site} | 扩展侧硬上限挡下取数(第二道闸): 多半是后端频控失效(检查 hr_check 的间隔/配额配置"
-            "与日志), 也可能是扩展上限本就低于后端配额(10/时·50/天 vs 后端 12/时·60/天, 属正常优先)"
+            "与日志), 也可能是扩展上限本就低于后端配额(60/时·600/天 vs 后端 12~40/时, 属正常优先)"
         )
 
 
@@ -858,7 +1244,14 @@ class _Budget:
         """本轮已等掉的总秒数(供排障 / 断言) """
         return self._waited
 
-    def take(self) -> Tuple[bool, str]:
+    def take(self, kind: str = "page") -> Tuple[bool, str]:
+        """申请一次请求名额; kind ∈ {page, torrent}(split 模型分开记账, legacy 忽略 kind)
+
+        split(计划 26-09-27-1815 §2 3.2): 页面走 quota 桶、下载走 torrent_quota 桶,
+        门槛 = 该类请求的最小间隔 + 令牌补充 + 天级硬顶; legacy 走合并账本(行为不变)。
+        """
+        if self._limits.split:
+            return self._take_split(kind)
         now = self._now()
         due, why = next_allowed_at(self._data.quota, self._limits, self._data.fuse, now)
         if due > now:
@@ -873,8 +1266,30 @@ class _Budget:
             return False, "配额已用尽"
         return True, ""
 
-    def mark(self) -> None:
-        """请求已发出: 记下配额消耗时刻, 作为下一次间隔门槛的基准"""
+    def _take_split(self, kind: str) -> Tuple[bool, str]:
+        quota = self._data.quota if kind == "page" else self._data.torrent_quota
+        now = self._now()
+        due, why = split_next_allowed_at(quota, self._limits, self._data.fuse, now, kind)
+        if due > now:
+            wait = due - now
+            if self._sleeper is None or wait > self._sleep_max or \
+                    (self._round_wait_max > 0 and self._waited + wait > self._round_wait_max):
+                return False, f"{why}: 还差 {wait:.0f}s"
+            self._sleeper(wait)
+            self._waited += wait
+            now = self._now()
+        if not split_try_consume(quota, self._limits, now, kind):
+            return False, f"{'页面' if kind == 'page' else '下载'}桶令牌不足"
+        return True, ""
+
+    def mark(self, kind: str = "page") -> None:
+        """请求已发出: 记下配额消耗时刻, 作为下一次间隔门槛的基准
+
+        split 模型由 split_try_consume 在消费时推进对应桶的 refill_ts(等待后的时刻已正确),
+        这里无需再记。
+        """
+        if self._limits.split:
+            return
         self._data.quota.last_fetch_ts = self._now()
 
 
@@ -886,6 +1301,7 @@ __all__ = [
     "ACTION_PARTIAL",
     "ACTION_REFRESHED",
     "ACTION_REUSED",
+    "ACTION_SUSPENDED",
     "ACTION_WAITING",
     "HrRefreshResult",
     "HrRefreshService",

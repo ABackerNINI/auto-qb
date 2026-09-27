@@ -27,7 +27,12 @@ JITTER_RATIO = 0.25
 
 @dataclass(frozen=True, slots=True)
 class HrLimits:
-    """一个站点的有效频控参数(全局默认与站点覆盖合并后的结果)"""
+    """一个站点的有效频控参数(全局默认与站点覆盖合并后的结果)
+
+    legacy 字段(min_interval/max_per_hour/max_per_day)在 quota_model=legacy 下语义不变;
+    split 字段(page_*/torrent_*)只在 quota_model=split 下消费(计划 26-09-27-1815 §2 3.2):
+    页面桶与下载桶独立令牌桶, min_interval(legacy 键)在 split 下改义为「仅 .torrent 下载间隔」。
+    """
 
     min_interval: float
     max_per_hour: int
@@ -35,18 +40,55 @@ class HrLimits:
     failure_threshold: int
     failure_cooldown: float
     allow_window: str = ""
+    #: 激活门(计划 §2 3.2, D6): 站点级显式 opt-in split 才切双桶; 默认 legacy 行为逐字节一致
+    quota_model: str = "legacy"
+    page_rate_per_hour: int = 40
+    page_burst: int = 10
+    torrent_rate_per_hour: int = 20
+    torrent_burst: int = 5
+    pages_per_day_max: int = 400
+    torrents_per_day_max: int = 200
+    page_min_interval: float = 90.0
+
+    @property
+    def split(self) -> bool:
+        return self.quota_model == "split"
 
     @classmethod
     def merge(cls, global_conf, site_conf) -> "HrLimits":
-        """全局默认 + 站点覆盖(站点 max_torrents_per_hour 为 None 时回退全局)"""
+        """全局默认 + 站点覆盖(站点 max_torrents_per_hour 为 None 时回退全局)
+
+        split 激活门: site_conf.quota_model 显式配 split 才切双桶; 站点覆盖键在 split 下的映射 ——
+        max_torrents_per_hour(现键)⇒ 下载桶速率覆盖(用户已有配置不失效),
+        page_rate_per_hour / torrent_rate_per_hour(新键)⇒ 页面/下载桶速率覆盖。
+        天级上限不提供站点覆盖(与现状一致)。
+        """
         per_hour = site_conf.max_torrents_per_hour
+        model = getattr(site_conf, "quota_model", "legacy") or "legacy"
+        torrent_rate = None
+        if model == "split":
+            torrent_rate = site_conf.torrent_rate_per_hour if site_conf.torrent_rate_per_hour is not None else per_hour
+        # 下载天顶: 全局未显式配置时按模型取默认(legacy 60 / split 200, 计划 §2 3.1)
+        day_raw = global_conf.max_torrents_per_day
+        day_max = day_raw if day_raw is not None else (200 if model == "split" else 60)
         return cls(
             min_interval=global_conf.min_torrent_interval,
             max_per_hour=global_conf.max_torrents_per_hour if per_hour is None else per_hour,
-            max_per_day=global_conf.max_torrents_per_day,
+            max_per_day=day_max,
             failure_threshold=global_conf.failure_threshold,
             failure_cooldown=global_conf.failure_cooldown,
             allow_window=global_conf.allow_window,
+            quota_model=model,
+            page_rate_per_hour=(
+                global_conf.page_rate_per_hour
+                if getattr(site_conf, "page_rate_per_hour", None) is None else site_conf.page_rate_per_hour
+            ),
+            torrent_rate_per_hour=(global_conf.torrent_rate_per_hour if torrent_rate is None else torrent_rate),
+            page_burst=global_conf.page_burst,
+            torrent_burst=global_conf.torrent_burst,
+            pages_per_day_max=global_conf.max_pages_per_day,
+            torrents_per_day_max=day_max,
+            page_min_interval=global_conf.min_page_interval,
         )
 
 
@@ -174,6 +216,100 @@ def next_allowed_at(quota: HrQuota,
     if due <= now:  # 各门槛都已满足: 立即可取, 原因不适用
         return now, ""
     return due, reason
+
+
+# ---------- split 模型(计划 26-09-27-1815 §2 M5.3): 页面 / 下载双令牌桶 ----------
+# 激活门(D6): 只有站点显式 quota_model=split 才走这组函数; legacy 路径一行不改。
+# 令牌桶状态 (tokens, refill_ts) 持久化在站点文件里: 补充按「上次补充时刻 + 速率」现算 ——
+# 天然幂等(同一时刻重复计算结果一致)、跨重启不重置、消除整点突发(补充是连续的, 不按整点归零)。
+
+
+def _bucket_of(quota: HrQuota, limits: HrLimits, kind: str) -> Tuple[Optional[float], float, int, int, int, float]:
+    """(tokens, refill_ts, burst, rate, day_count, day_max) —— kind ∈ {page, torrent}
+
+    页面账本 = quota(站点文件的 quota 字段), 下载账本 = torrent_quota(调用方传对账本即可);
+    本函数只按 kind 取 limits 侧参数与账本上的桶状态。
+    """
+    if kind == "page":
+        return quota.tokens, quota.refill_ts, limits.page_burst, limits.page_rate_per_hour, \
+            quota.day_count, limits.pages_per_day_max
+    return quota.tokens, quota.refill_ts, limits.torrent_burst, limits.torrent_rate_per_hour, \
+        quota.day_count, limits.torrents_per_day_max
+
+
+def bucket_left(quota: HrQuota, limits: HrLimits, now: float, kind: str) -> float:
+    """当前桶里的令牌数(view 语义, 不修改状态) —— 展示层与 --hr-status 用"""
+    tokens, refill_ts, burst, rate, _day, _max = _bucket_of(quota, limits, kind)
+    if tokens is None:
+        return float(burst)
+    if refill_ts <= 0:
+        return float(burst)
+    return min(float(burst), tokens + max(0.0, now - refill_ts) * rate / 3600.0)
+
+
+def split_next_allowed_at(
+    quota: HrQuota,
+    limits: HrLimits,
+    fuse: HrFuse,
+    now: float,
+    kind: str,
+    rng: Optional[random.Random] = None
+) -> Tuple[float, str]:
+    """split 模型下一次允许发起 kind 类请求的时刻 + 原因
+
+    门槛取最晚: ① 该类请求的最小间隔(min_page_interval / min_torrent_interval) ② 桶令牌不足时
+    的补充等待 ③ 天级硬顶重置 ④ 熔断冷却 ⑤ allow_window。tokens 未初始化(None)按满桶计。
+    """
+    candidates: List[Tuple[float, str]] = []
+    if kind == "page":
+        interval = limits.page_min_interval
+        day_max = limits.pages_per_day_max
+    else:
+        interval = limits.min_interval
+        day_max = limits.torrents_per_day_max
+    if interval > 0 and quota.refill_ts > 0:
+        candidates.append((quota.refill_ts + jittered_interval(interval, rng), "间隔"))
+    if fuse_active(fuse, now):
+        candidates.append((fuse.until_ts, "熔断冷却"))
+    _roll_windows(quota, now)
+    if quota.day_count >= day_max:
+        candidates.append((next_day_reset(now), "日配额"))
+    if limits.allow_window and not time_in_range(datetime.fromtimestamp(now).time(), limits.allow_window):
+        candidates.append((window_start_on(now, limits.allow_window), "时间窗"))
+    tokens, refill_ts, burst, rate, _day, _dmax = _bucket_of(quota, limits, kind)
+    if rate > 0:
+        # 按**补充后**的桶量判断(消费/等待发生时都会先补充, 门槛判断必须同口径)
+        current = bucket_left(quota, limits, now, kind)
+        if current < 1.0:
+            need = (1.0 - current) * 3600.0 / rate
+            candidates.append((now + need, "令牌补充"))
+    if not candidates:
+        return now, ""
+    due, reason = max(candidates, key=lambda item: item[0])
+    if due <= now:
+        return now, ""
+    return due, reason
+
+
+def split_try_consume(quota: HrQuota, limits: HrLimits, now: float, kind: str, count: int = 1) -> bool:
+    """split 模型尝试消耗 kind 桶的 1 个令牌 + 天级硬顶记账; 到顶返回 False(不报错)
+
+    天顶复用 day_window/day_count(窗口键幂等); 令牌桶按连续速率补充, 消费即把 refill_ts
+    推进到 now(它同时是下一发的间隔门槛基准, 与 legacy 的 last_fetch_ts 同一角色)。
+    """
+    _roll_windows(quota, now)
+    _tokens, _refill, burst, rate, _day, day_max = _bucket_of(quota, limits, kind)
+    if quota.day_count + count > day_max:
+        return False
+    tokens = burst if quota.tokens is None else min(float(burst), quota.tokens)
+    if quota.refill_ts > 0:
+        tokens = min(float(burst), tokens + max(0.0, now - quota.refill_ts) * rate / 3600.0)
+    if tokens < count:
+        return False
+    quota.tokens = tokens - count
+    quota.refill_ts = now
+    quota.day_count += count
+    return True
 
 
 def now_ts() -> float:

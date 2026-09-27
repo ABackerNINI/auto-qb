@@ -19,6 +19,10 @@
   实际意思 / 还需做种镜像站点形态(HH:MM:SS)/ 剩余达标时间不再显示 —— 它是「考核窗口」不是
   「还需做种的量」, 摆出来会被读成后者(2026-09-25 实报: 9d21h 被当成还要做种 9 天)
 - test_run_hr_status_survives_broken_file: 站点文件坏掉时如实标 ⚠, 报告仍出得来
+- test_run_hr_status_shows_observation_lines: 观测面四行(排序/P 分布/骤降/档位对比)
+- test_run_hr_status_shows_order_violation: 排序违反轮的 ✗ + 首处位置
+- test_period_stats_consistency_and_gap: P 反算一致率与离散(前置实测②的证据口径)
+- test_run_hr_resume_clears_suspension: --hr-resume 清停用 + 记恢复痕迹; 未停用如实说明
 """
 import io
 import pathlib
@@ -26,10 +30,12 @@ import re
 import time
 import unicodedata
 
+import pytest
+
 from auto_qb.config.models import Config, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.fetcher import HrChannelUnavailable, NullFetcher
 from auto_qb.hr.ratelimit import day_key
-from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_once, run_hr_status
+from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_once, run_hr_resume, run_hr_status
 from auto_qb.hr.service import HrRefreshService
 from auto_qb.hr.store import HrSiteStore
 
@@ -360,3 +366,132 @@ def test_run_hr_status_survives_broken_file(tmp_path):
     assert f"{SITE}.json" in text
     assert "⚠" in text
     assert "索引条目 0" in text
+
+
+# ---------- 观测面(计划 26-09-27-1815 §2 1.5) ----------
+
+
+def test_run_hr_status_shows_observation_lines(tmp_path):
+    """观测面四行: 排序结论 / 考核期 P 分布 / 骤降观测 / 档位计数对比 —— 「假设是否成立」的现场证据"""
+    _seed(
+        tmp_path,
+        FakeFetcher(
+            pages={
+                "A": myhr_page([row(101, done="2026-09-25 10:00:00"),
+                                row(102, done="2026-09-24 10:00:00")]),
+                "B": EMPTY_TABLE_PAGE,
+                "C": EMPTY_TABLE_PAGE,
+            },
+            blobs={
+                101: torrent_blob("a.bin"),
+                102: torrent_blob("b.bin")
+            },
+        ),
+    )
+    buf = io.StringIO()
+
+    code = run_hr_status(_config(tmp_path, data_dir=tmp_path), out=buf)
+
+    text = buf.getvalue()
+    assert code == 0
+    assert "排序: ✓" in text
+    assert "考核期 P: P ≈" in text
+    assert "骤降观测: 本轮合计 2 vs 基线 2, 正常" in text
+    assert "档位计数(上轮→本轮): A: 0 → 2" in text, "首轮没有上轮快照, 上轮按 0 显示"
+
+
+def test_run_hr_status_shows_order_violation(tmp_path):
+    """排序违反轮的报告: 排序 ✗ + 首处位置(告警与报告对同一份 order_detail)"""
+    _seed(
+        tmp_path,
+        FakeFetcher(
+            pages={
+                "A":
+                    myhr_page(
+                        [
+                            row(101, done="2026-09-25 10:00:00"),
+                            row(102, done="2026-09-24 10:00:00"),
+                            row(103, done="2026-09-26 10:00:00"),  # 乱序行
+                        ]
+                    ),
+                "B":
+                    EMPTY_TABLE_PAGE,
+                "C":
+                    EMPTY_TABLE_PAGE,
+            },
+            blobs={
+                101: torrent_blob("a.bin"),
+                102: torrent_blob("b.bin"),
+                103: torrent_blob("c.bin")
+            },
+        ),
+    )
+    buf = io.StringIO()
+
+    code = run_hr_status(_config(tmp_path, data_dir=tmp_path), out=buf)
+
+    text = buf.getvalue()
+    assert code == 0
+    assert "排序: ✗ 不成立(档位 A 第 1 页" in text
+
+
+def test_period_stats_consistency_and_gap():
+    """P 反算: 恒定考核期一致率 100%; 离散超 ±1 天时如实反映; 无可比行返回 0"""
+    from auto_qb.hr.model import HrEntry, HrSiteData
+    from auto_qb.hr.status import period_stats
+
+    now = 1_789_000_000.0
+    data = HrSiteData()
+    # P = (now − done) + remain(考核期 = 已考核时长 + 剩余时长): 两行都是「完成于 10 天前, 还剩 20 天」⇒ P = 30 天
+    for i, (done_days_ago, remain) in enumerate([(10.0, 20.0 * 86400), (11.0, 19.0 * 86400)]):
+        data.index[i] = HrEntry(
+            tid=i,
+            active=True,
+            done_iso=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - done_days_ago * 86400)),
+            remain_seconds=int(remain),
+        )
+    p_min, p_max, rate, n = period_stats(data, now)
+    assert n == 2
+    assert rate == 1.0
+    assert p_max - p_min <= 1.0
+
+    # 一行 P 相差 10 天(完成于 10 天前, 还剩 30 天 ⇒ P = 40 天): 一致率跌到 2/3
+    data.index[9] = HrEntry(
+        tid=9,
+        active=True,
+        done_iso=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 10.0 * 86400)),
+        remain_seconds=int(30.0 * 86400),
+    )
+    p_min, p_max, rate, n = period_stats(data, now)
+    assert n == 3
+    assert p_max - p_min >= 9.0
+    assert rate == pytest.approx(2 / 3)
+
+    assert period_stats(HrSiteData(), now) == (None, None, 0.0, 0)
+
+
+def test_run_hr_resume_clears_suspension(tmp_path):
+    """--hr-resume: 清除停用状态 + 记恢复痕迹(计划 26-09-27-1815 §2 2.3 恢复口子)"""
+    from auto_qb.hr.model import HrSiteData, HrSuspension
+    from auto_qb.hr.store import HrSiteStore
+
+    store = HrSiteStore(SITE, str(tmp_path / "hr"))
+    with store.hold() as session:
+        session.data.suspended = HrSuspension(reason="档位 A 第 1 页 页内逆序 1 处", since=1700000000.0, rounds=3)
+        session.commit(1700000000.0)
+
+    cfg = _config(tmp_path, data_dir=tmp_path)
+    buf = io.StringIO()
+    code = run_hr_resume(cfg, [SITE], out=buf)
+
+    text = buf.getvalue()
+    assert code == 0
+    assert "已恢复取数" in text and "页内逆序" in text
+    data, err = store.read_unlocked()
+    assert err is None and data.suspended is None, "停用状态被清除"
+    assert "人工确认后恢复" in data.refresh.reason, "站点文件里留下可查的恢复痕迹"
+
+    # 再次恢复: 未停用 ⇒ 如实说明, 不报错
+    buf2 = io.StringIO()
+    assert run_hr_resume(cfg, [SITE], out=buf2) == 0
+    assert "未处于停用状态" in buf2.getvalue()

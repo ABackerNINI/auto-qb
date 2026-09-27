@@ -174,6 +174,7 @@ def load_hr_check_config(spec) -> HrCheckConfig:
         lock_timeout=_get(spec, "lock_timeout", d.lock_timeout, parse_time),
         poll_interval=_get(spec, "poll_interval", d.poll_interval, parse_time),
         parse_missing_rate_max=_get(spec, "parse_missing_rate_max", d.parse_missing_rate_max, float),
+        max_pages_per_round=_get(spec, "max_pages_per_round", d.max_pages_per_round, int),
         channel=channel,
         sites=sites,
     )
@@ -199,7 +200,15 @@ def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
         page_param=_get(spec, "page_param", d.page_param),
         refresh_interval=_get(spec, "refresh_interval", d.refresh_interval, parse_time),
         max_pages_per_refresh=_get(spec, "max_pages_per_refresh", d.max_pages_per_refresh, int),
+        auto_age_limit=_get(spec, "auto_age_limit", d.auto_age_limit, parse_bool),
+        seeding_exempt_ratio=_get(spec, "seeding_exempt_ratio", d.seeding_exempt_ratio, float),
         completed_age_limit=_get(spec, "completed_age_limit", d.completed_age_limit, parse_time),
+        accept_empty_listing=_get(spec, "accept_empty_listing", d.accept_empty_listing, parse_bool),
+        quota_model=_get(spec, "quota_model", d.quota_model, lambda v: str(v).strip().lower()),
+        page_rate_per_hour=(_get(spec, "page_rate_per_hour", None, int) if "page_rate_per_hour" in spec else None),
+        torrent_rate_per_hour=(
+            _get(spec, "torrent_rate_per_hour", None, int) if "torrent_rate_per_hour" in spec else None
+        ),
         max_torrents_per_hour=(
             _get(spec, "max_torrents_per_hour", None, int) if "max_torrents_per_hour" in spec else None
         ),
@@ -285,6 +294,12 @@ def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, Track
             refresh_interval=site_conf.refresh_interval,
             max_pages_per_refresh=site_conf.max_pages_per_refresh,
             completed_age_limit=site_conf.completed_age_limit,
+            accept_empty_listing=site_conf.accept_empty_listing,
+            auto_age_limit=site_conf.auto_age_limit,
+            seeding_exempt_ratio=site_conf.seeding_exempt_ratio,
+            quota_model=site_conf.quota_model,
+            page_rate_per_hour=site_conf.page_rate_per_hour,
+            torrent_rate_per_hour=site_conf.torrent_rate_per_hour,
             max_torrents_per_hour=site_conf.max_torrents_per_hour,
         )
 

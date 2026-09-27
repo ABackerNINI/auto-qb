@@ -32,6 +32,12 @@ KNOWN_HR_CHECK_KEYS = {
     "min_torrent_interval",
     "max_torrents_per_hour",
     "max_torrents_per_day",
+    "page_rate_per_hour",
+    "page_burst",
+    "torrent_rate_per_hour",
+    "torrent_burst",
+    "max_pages_per_day",
+    "min_page_interval",
     "failure_threshold",
     "failure_cooldown",
     "allow_window",
@@ -44,6 +50,7 @@ KNOWN_HR_CHECK_KEYS = {
     "lock_timeout",
     "poll_interval",
     "parse_missing_rate_max",
+    "max_pages_per_round",
     "channel",
     "sites",
 }
@@ -58,11 +65,20 @@ KNOWN_HR_SITE_KEYS = {
     "refresh_interval",
     "max_pages_per_refresh",
     "completed_age_limit",
+    "accept_empty_listing",
+    "auto_age_limit",
+    "seeding_exempt_ratio",
+    "quota_model",
+    "page_rate_per_hour",
+    "torrent_rate_per_hour",
     "max_torrents_per_hour",
 }
 
 #: 站点模式: off = 不启用 | partial = 在线核实 | all = 站点侧驱动 + 未核实恒受管束
 HR_CHECK_MODES = ("off", "partial", "all")
+
+#: 配额模型(计划 26-09-27-1815 §2 3.2 激活门): legacy = 合并账本(默认, 行为不变) | split = 双令牌桶
+HR_QUOTA_MODELS = ("legacy", "split")
 #: Chrome 扩展 id 形态(32 位 a~p) —— 语义与 `hr.channel.EXTENSION_ID_RE` 一致。
 #: 此处**故意不复用** hr 包的那个常量: config 是被 hr 依赖的下层, 反向 import 会形成环;
 #: 两处等价性由 tests/test_hr_channel.py 的对照用例钉死。
@@ -179,12 +195,45 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
     # 间隔下限 5s: HR 站点的访问频度是账号安全的第一条防线, 过小等于「根本限不住」
     if "min_torrent_interval" in spec:
         _try_time(spec["min_torrent_interval"], "config.hr_check.min_torrent_interval", errors, min_s=5, max_s=86400)
+    # split 模型键(计划 26-09-27-1815 §2 3.1): 页面/下载双令牌桶; 只在站点 opt-in split 后消费
+    if "min_page_interval" in spec:
+        _try_time(spec["min_page_interval"], "config.hr_check.min_page_interval", errors, min_s=5, max_s=86400)
     for key, where in (
         ("max_torrents_per_hour", "时"),
         ("max_torrents_per_day", "天"),
+        ("page_rate_per_hour", "时"),
+        ("page_burst", "burst"),
+        ("torrent_rate_per_hour", "时"),
+        ("torrent_burst", "burst"),
+        ("max_pages_per_day", "天"),
     ):
         if key in spec:
             _try_number(spec[key], f"config.hr_check.{key}(须为正整数, {where}配额)", errors, integer=True, min=1, max=10000)
+    # 参数自洽机检(计划 §2 3.6, §14.8): 桶速率不得超过最小间隔允许的物理速率 ——
+    # 3600/min_interval = 该间隔下每小时最多能发出的请求数; 违例说明配置在自相矛盾(间隔定 90s
+    # 又要 60 请求/时), fail-fast 在配置期拦下, 而不是让令牌桶永远空转。
+    _intervals = {}
+    for key in ("min_torrent_interval", "min_page_interval"):
+        if key in spec:
+            try:
+                _intervals[key] = parse_time(spec[key])
+            except ValueError:
+                pass  # 已由上面的 _try_time 报过
+    for rate_key, interval_key, label in (
+        ("page_rate_per_hour", "min_page_interval", "页面桶速率"),
+        ("torrent_rate_per_hour", "min_torrent_interval", "下载桶速率"),
+    ):
+        if rate_key in spec and interval_key in _intervals and _intervals[interval_key] > 0:
+            cap = 3600 // _intervals[interval_key]
+            try:
+                rate = int(spec[rate_key])
+            except (TypeError, ValueError):
+                continue  # 已由上面的 _try_number 报过
+            if rate > cap:
+                errors.append(
+                    f"config.hr_check.{rate_key}: {label} {rate}/时 超过最小间隔允许的上限 "
+                    f"{cap}/时(3600 / {interval_key}={_intervals[interval_key]:g}s) —— 放宽间隔或调低速率"
+                )
     if "failure_threshold" in spec:
         _try_number(
             spec["failure_threshold"], "config.hr_check.failure_threshold", errors, integer=True, min=1, max=100
@@ -230,6 +279,10 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
         _try_time(spec["poll_interval"], "config.hr_check.poll_interval", errors, positive=True, min_s=5, max_s=3600)
     if "parse_missing_rate_max" in spec:
         _try_number(spec["parse_missing_rate_max"], "config.hr_check.parse_missing_rate_max", errors, min=0, max=1)
+    if "max_pages_per_round" in spec:
+        _try_number(
+            spec["max_pages_per_round"], "config.hr_check.max_pages_per_round", errors, integer=True, min=0, max=100
+        )
     if "token" in spec and not isinstance(spec["token"], str):
         errors.append("config.hr_check.token: 必须是字符串")
     if "shared_dir" in spec and not isinstance(spec["shared_dir"], str):
@@ -407,6 +460,21 @@ def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
         _try_number(
             spec["max_torrents_per_hour"], f"{where}.max_torrents_per_hour", errors, integer=True, min=1, max=10000
         )
+    if "page_rate_per_hour" in spec:
+        _try_number(spec["page_rate_per_hour"], f"{where}.page_rate_per_hour", errors, integer=True, min=1, max=10000)
+    if "torrent_rate_per_hour" in spec:
+        _try_number(
+            spec["torrent_rate_per_hour"], f"{where}.torrent_rate_per_hour", errors, integer=True, min=1, max=10000
+        )
+    if "quota_model" in spec:
+        if str(spec["quota_model"]).strip().lower() not in HR_QUOTA_MODELS:
+            errors.append(f"{where}.quota_model: 须为 {'/'.join(HR_QUOTA_MODELS)} 之一: '{spec['quota_model']}'")
+    if "accept_empty_listing" in spec:
+        _try(parse_bool, spec["accept_empty_listing"], f"{where}.accept_empty_listing", errors)
+    if "auto_age_limit" in spec:
+        _try(parse_bool, spec["auto_age_limit"], f"{where}.auto_age_limit", errors)
+    if "seeding_exempt_ratio" in spec:
+        _try_number(spec["seeding_exempt_ratio"], f"{where}.seeding_exempt_ratio", errors, min=0, max=100)
 
 
 def _validate_grouping(spec, errors: List[str]) -> None:

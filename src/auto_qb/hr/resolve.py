@@ -51,12 +51,15 @@ class HrAnchor:
 
     它只能提前让**本实例**的放行失效(本实例二次下载 / 文件被删重下 / 删种重加), 覆盖不到
     别的客户端; 故放行判定 = 「刷新背书(必需) + 锚点未漂移(本实例辅助)」。
+    seeding_time: 本实例做种时长(秒, qB 快照) —— 豁免 B「义务已超额完成」(计划
+    26-09-27-1815 §2 4.7)的判据; 0 = 未知(旧锚点/快照缺字段 ⇒ 豁免 B 不生效, 保守)。
     """
 
     added_on: int = 0
     downloaded: int = 0
     completion_on: int = -1
     progress: float = 0.0
+    seeding_time: int = 0
 
     def drift_reason(self, ver: HrVerified) -> str:
         """与放行记录里的锚点比对, 漂移返回人话原因, 未漂移返回空串"""
@@ -171,6 +174,11 @@ class HrSiteView:
     refresh_interval: float = 0.0
     channel_state: str = CHANNEL_DISABLED
     generated_at: float = 0.0
+    #: 站点停用中(计划 26-09-27-1815 §2 2.3): 判定侧见它 ⇒ 整体回落本地逻辑(见 judge_record)
+    suspended: bool = False
+    #: 取数侧反算的考核期 P(天, 中位数; 0 = 不可用/未测)+ 是否通过 ±1 天一致性机检(§2 4.4/4.5)
+    probe_period_days: float = 0.0
+    period_consistent: bool = False
     by_infohash: Mapping[str, HrEntry] = field(default_factory=dict)
     verified: Mapping[str, HrVerified] = field(default_factory=dict)
     notes: str = ""
@@ -305,6 +313,9 @@ def judge_record(
     now: float = 0.0,
     unknown_policy: str = POLICY_HR,
     completed_age_limit: float = 0.0,
+    auto_age_limit: bool = False,
+    required_seeding_time: float = 0.0,
+    seeding_exempt_ratio: float = 0.0,
 ) -> Optional[HrJudgement]:
     """给 TorrentRecord 用的收口判定(四个消费点唯一入口; 读取时现算)。
 
@@ -320,17 +331,45 @@ def judge_record(
     时刻**超过该线的种子直接超龄豁免 —— 不查索引、不看 unknown_policy、也**压过清单命中**
     (站点真还在管的超龄种子会漏 HR, 这是配置者显式接受的风险, 见模块 docstring「不变量」)。
     它排在「无可查键回落本地」的闸门**之前**: 豁免是 qB 侧事实, 不依赖站点索引建到哪了。
+
+    豁免 A(计划 §2 4.5, auto_age_limit 显式开关默认关): completed_age_limit 未配置时, 用
+    **取数侧反算的考核期 P**(view.probe_period_days, 经 ±1 天一致性机检)作为豁免线 ——
+    判定与早停②天然同源。P 不可用(probe=0 / 机检不过)⇒ 豁免与早停双双禁用(机检, 不是承诺)。
+
+    豁免 B(计划 §2 4.7, seeding_exempt_ratio 显式配置才生效, 默认 0=关): 本地做种时长
+    (anchor.seeding_time)≥ 站点要求时长(required_seeding_time, 调用方从 hr 规则带)× 倍数
+    ⇒ 「义务已超额完成」豁免 —— 同样压过清单命中, 与豁免 A 并存(一个管太老, 一个管超额)。
+    不参与早停(本地事实映射不到页面行)。
     """
     if view is None or view.mode == "off":
         return None
-    if completed_age_limit > 0 and anchor is not None and anchor.completion_on > 0 and \
-            now - anchor.completion_on >= completed_age_limit:
-        age_days = (now - anchor.completion_on) / 86400
+    if view.suspended:
+        # 站点停用(计划 26-09-27-1815 §2 2.3): 判定侧见 suspended ⇒ 返回 None 回落本地逻辑。
+        # ❗判定必须随停用一起停 —— 只停取数不停判定 = 拿越来越旧的清单继续放行「不在清单里」,
+        # 比不停更危险(停用本身就是因为数据可信度崩了); 回落本地字段逻辑是保守方向。
+        return None
+    if seeding_exempt_ratio > 0 and required_seeding_time > 0 and anchor is not None and \
+            anchor.seeding_time >= required_seeding_time * seeding_exempt_ratio:
         return HrJudgement(
             identity=HrIdentity.EXEMPT,
             is_hr=False,
-            reason=f"超龄豁免(本地完成于 {age_days:.0f} 天前, 超过豁免线 {completed_age_limit / 86400:.0f} 天, "
-            "不再在线核实)",
+            reason=f"义务已超额完成(做种 {anchor.seeding_time / 86400:.1f} 天 >= 要求 "
+            f"{required_seeding_time / 86400:.1f} 天 × {seeding_exempt_ratio:g}, 不再在线核实)",
+            site=view.site,
+        )
+    # 豁免线: 显式 completed_age_limit 优先; 未配置且开了 auto_age_limit 时用反算 P(机检通过才生效)
+    effective_age_limit = completed_age_limit
+    if effective_age_limit <= 0 and auto_age_limit and view.probe_period_days > 0 and view.period_consistent:
+        effective_age_limit = view.probe_period_days * 86400.0
+    if effective_age_limit > 0 and anchor is not None and anchor.completion_on > 0 and \
+            now - anchor.completion_on >= effective_age_limit:
+        age_days = (now - anchor.completion_on) / 86400
+        origin = "配置豁免线" if completed_age_limit > 0 else f"反算考核期 P ≈ {view.probe_period_days:.1f} 天"
+        return HrJudgement(
+            identity=HrIdentity.EXEMPT,
+            is_hr=False,
+            reason=f"超龄豁免(本地完成于 {age_days:.0f} 天前, 超过豁免线 {effective_age_limit / 86400:.0f} 天"
+            f"[{origin}], 不再在线核实)",
             site=view.site,
         )
     if view.mode != "all" and not view.has_lookup_keys:
@@ -472,6 +511,9 @@ def build_site_view(
         refresh_interval=refresh_interval,
         channel_state=channel_state,
         generated_at=generated_at,
+        suspended=data.suspended is not None,
+        probe_period_days=data.refresh.probe_period_days,
+        period_consistent=data.refresh.period_consistent,
         by_infohash=by_infohash,
         verified=dict(data.verified),
         notes=data.refresh.reason,

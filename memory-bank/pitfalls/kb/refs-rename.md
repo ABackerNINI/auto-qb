@@ -25,3 +25,4 @@
 - **触发**: 新件按协议声明 `doc-refs`(HTML meta)或 `**Refs:**`(档案)—— 从 `reports/` 指向 `tasks/` 时凭直觉写 `../tasks/…`(HTML `href` 也是这么写, 会"看起来对")。
 - **判别**: `test_docs_forms.py::test_claim_chain_is_bidirectional` 用 `ROOT / ref` 判存在 ⇒ 文件相对路径报「引用的目标不存在」, 且反向声明也因此配不上, 一错报两条; 报错文本**不提示解析基准**, 容易往"文件名拼错"方向排查。
 - **处置**: 引用值一律写**仓库根相对**(`memory-bank/tasks/<file>.md`); HTML 正文 `<a href>` 才用文件相对 —— meta 与 href 是两套口径, 各写各的。
+- **复发**: 1 —— 2026-09-27 (auto-qb-clone1): 新计划 `26-09-27-1815` 的 doc-refs 首版写成文件相对 (`../reports/…`), 认领链守卫红; 且反向声明缺口连带把 Done 报告与主计划也拖进修复面。未命中原因: 写制品前只读了 `conventions/doc-forms.md`(措辞只说「相对路径」没写解析基准), 没路由到本文件 —— 产出/修改带 `doc-refs` 的制品前应先过一遍本条。

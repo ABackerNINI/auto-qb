@@ -174,6 +174,8 @@ def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> Non
         print(f"    最近一次刷新不完备的原因: {st.reason}", file=out)
     if st.blocking:
         print(f"    现在为什么不放行: {st.blocking}", file=out)
+    if st.suspended_text:
+        print(f"    {st.suspended_text}", file=out)
 
     lanes = st.lanes
     print(
@@ -187,9 +189,29 @@ def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> Non
         f"待回填 infohash {st.pending_infohash} 条(进度 {st.backfill_ratio:.0%})  放行记录 {st.verified} 条",
         file=out
     )
-    print(f"    配额: {st.quota.text}", file=out)
+    if st.page_quota is not None:
+        print(f"    配额: {st.page_quota.text}", file=out)
+        print(f"    配额: {st.torrent_quota.text}", file=out)
+    else:
+        print(f"    配额: {st.quota.text}", file=out)
     print(f"    熔断: {st.fuse.text}  时间窗: {st.allow_window or '不限'}", file=out)
+    _print_observations(st, out)
     _print_status_rows(data, limit, out)
+
+
+def _print_observations(st: SiteStatus, out) -> None:
+    """观测面(计划 26-09-27-1815 §2 1.5): 排序 / 考核期 P / 骤降 / 档位对比 —— 「假设是否成立」的现场证据"""
+    if st.order_ok is True:
+        order_line = "    排序: ✓(整轮单调成立)"
+    elif st.order_ok is False:
+        order_line = f"    排序: ✗ 不成立({st.order_detail})"
+    else:
+        order_line = "    排序: 未判定(证据不足 —— 需页面成功取回 + 表头出 + 可比行 ≥ 2)"
+    print(order_line, file=out)
+    print(f"    考核期 P: {st.period_text}", file=out)
+    print(f"    骤降观测: {st.plunge_text}", file=out)
+    if st.scope_delta_text:
+        print(f"    档位计数(上轮→本轮): {st.scope_delta_text}", file=out)
 
 
 def _print_status_rows(data: HrSiteData, limit: int, out) -> None:
@@ -267,6 +289,65 @@ def _ellipsis(text: str, width: int) -> str:
         out.append(ch)
         used += w
     return "".join(out) + "…"
+
+
+def run_hr_resume(config: Config, sites: List[str], out=None) -> int:
+    """`--hr-resume <站点>`: 人工确认后清除站点停用状态(计划 26-09-27-1815 §2 2.3 的恢复口子)
+
+    锁内写站点文件: 清 suspended、在 refresh.reason 记一笔恢复痕迹, 其余数据原样保留。
+    ❗这是**唯一**的恢复途径 —— 熔断冷却到期不会自动恢复停用(致命错误必须人看过才放行)。
+    """
+    import sys
+    from dataclasses import replace as dc_replace
+
+    from .store import HrLockBusy
+
+    out = out or sys.stdout
+    if not config.hr_check.enabled:
+        print("hr_check.enabled=false: HR 在线核实未启用, 没有可恢复的站点。", file=out)
+        return 1
+    service = HrRefreshService(
+        data_dir=config.data_dir,
+        global_conf=config.hr_check,
+        site_confs={},
+        fetcher=NullFetcher("恢复操作不取数"),
+        owner=instance_id(),
+        persist=True,
+        allow_fetch=False,
+    )
+    code = 0
+    for site in sites:
+        try:
+            with service.store(site).hold() as session:
+                data = session.data
+                if data.suspended is None:
+                    print(f"[{site}] 未处于停用状态, 无需恢复。", file=out)
+                    continue
+                susp = data.suspended
+                data.suspended = None
+                note = f"; 人工确认后恢复(--hr-resume, 此前停用原因: {susp.reason})"
+                data.refresh = dc_replace(data.refresh, reason=(data.refresh.reason or "") + note)
+                status = session.commit(time.time())
+                if status == "written":
+                    print(
+                        f"[{site}] 已恢复取数(停用于 {stamp_text_ts(susp.since)}, 原因: {susp.reason})。"
+                        "若页面确实改版, 请尽快复核配置与页面结构。",
+                        file=out,
+                    )
+                else:
+                    code = 1
+                    print(f"[{site}] 锁自检失败(只读退化), 未写盘 —— 请检查共享目录/文件权限后重试。", file=out)
+        except HrLockBusy as e:
+            code = 1
+            print(f"[{site}] 站点锁被占用(正常实例可能正持锁刷新), 稍后再试: {e}", file=out)
+        except FileNotFoundError:
+            code = 1
+            print(f"[{site}] 没有站点文件(从未取过数), 无可恢复的停用状态。", file=out)
+    return code
+
+
+def stamp_text_ts(ts: float) -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)) if ts and ts > 0 else "-"
 
 
 def _print_channel(config: Config, service: HrRefreshService, out) -> None:

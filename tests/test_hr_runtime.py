@@ -58,14 +58,25 @@ class _FakeManager:
 
 
 def make_config(
-    tmp_path, *, enabled=True, channel=False, port=0, shared_dir="", mode="partial", poll=60.0, request_timeout=180.0
+    tmp_path,
+    *,
+    enabled=True,
+    channel=False,
+    port=0,
+    shared_dir="",
+    mode="partial",
+    poll=60.0,
+    request_timeout=180.0,
+    extension_id="a" * 32,
 ):
+    # extension_id 默认填一个合法值: 端点纵深提示(extension_id 留空 = WARNING, 见
+    # test_extension_id_empty_warns)不应打扰「测生命周期消息是 INFO」这类无关用例
     config = Config()
     config.data_dir = str(tmp_path)
     config.state_file = str(tmp_path / "state.json")
     config.hr_check = HrCheckConfig(
         enabled=enabled,
-        channel=HrChannelConfig(enabled=channel, port=port, request_timeout=request_timeout),
+        channel=HrChannelConfig(enabled=channel, port=port, request_timeout=request_timeout, extension_id=extension_id),
         shared_dir=shared_dir,
         poll_interval=poll,
     )
@@ -176,7 +187,7 @@ def test_start_stop_messages_are_info_not_warning(tmp_path, caplog):
         runtime.stop()
 
     noisy = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    assert not noisy, f"生命周期消息不得用 WARNING: {noisy}"
+    assert not noisy, f"生命周期消息不得用 WARNING: {noisy}"  # extension_id 已填 ⇒ 也不触发纵深提示
     assert any("已启动" in r.getMessage() and r.levelno == logging.INFO for r in caplog.records)
     assert any("端点已启动" in r.getMessage() and r.levelno == logging.INFO for r in caplog.records)
 
@@ -252,6 +263,32 @@ def test_apply_stops_when_disabled(tmp_path):
         assert runtime.worker is None and runtime.endpoint is None
     finally:
         runtime.stop()
+
+
+def test_extension_id_empty_warns(tmp_path, caplog):
+    """端点纵深提示(计划 26-09-27-1815 §2 5.2, P3): extension_id 留空 ⇒ 启动 WARNING(不阻断启动)
+
+    有意用 WARNING(会推系统通知): 这是**需要用户行动**的安全提示, 配好即不再出现 ——
+    与「生命周期动作只记 INFO」的口径不冲突(它不是程序自己决定要发生的事)。
+    """
+    runtime = make_runtime(tmp_path, enabled=True, channel=True, extension_id="")
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.runtime"):
+        runtime.start()
+    try:
+        warns = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("extension_id 未配置" in w for w in warns), warns
+    finally:
+        runtime.stop()
+
+    caplog.clear()  # 清掉第一段的记录, 隔离验证「配了就不再提示」
+    filled = make_runtime(tmp_path, enabled=True, channel=True)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.runtime"):
+        filled.start()
+    try:
+        warns = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+        assert not any("extension_id" in w for w in warns), "配了 extension_id 就不再提示"
+    finally:
+        filled.stop()
 
 
 def test_shared_dir_guidance_logged(tmp_path, caplog):

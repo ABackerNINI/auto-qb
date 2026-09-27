@@ -20,6 +20,14 @@
 - test_carpt_adapter_empty_table: 真实样张的空表结构 = 合法空结果, 不是改版
 - test_carpt_adapter_revised_page_reports_header_missing: CarPT 页改版(无 H&R ID 表头) -> header_found False
 - test_carpt_adapter_detects_login: 登录页识别按 CarPT 表头锚点(基类锚的是标准「HR编号」)
+- test_order_violations_desc_holds: 完成时间倒序整列成立 -> 0 违反
+- test_order_violations_single_inversion_is_flagged: 页内逆序 1 处即记违反 + 首处位置
+- test_order_violations_direction_flip_counts_as_violation: 方向翻转视同逆序
+- test_order_violations_asc_also_valid: 方向不预设(校验单调稳定, 不是必须倒序)
+- test_order_violations_missing_fields_not_compared: 缺字段行不计入比较但计入 total
+- test_order_violations_insufficient_evidence: 可比行 < 2 = 证据不足不判
+- test_order_violations_all_equal_no_direction: 全相等不算违反但方向推不出
+- test_cross_page_violation_desc_and_asc: 跨页证据判据(desc/asc/方向未知/上页空)
 """
 import pytest
 
@@ -28,8 +36,10 @@ from auto_qb.hr.adapters.nexusphp import REQUIRED_COLUMNS
 from auto_qb.hr.parse import (
     cell_text,
     column_index,
+    cross_page_violation,
     extract_table,
     has_next_page,
+    order_violations,
     parse_datetime,
     parse_duration,
     parse_ratio,
@@ -307,3 +317,75 @@ def test_carpt_adapter_detects_login():
     adapter = _carpt_adapter()
     assert adapter.looks_like_login(LOGIN_PAGE) is True
     assert adapter.looks_like_login(load_fixture(CARPT_PAGE1)) is False
+
+
+# ---------- 排序校验(计划 26-09-27-1815 §2 1.1) ----------
+
+
+def test_order_violations_desc_holds():
+    """完成时间倒序(降序)整列成立 -> 0 违反, 方向 desc"""
+    check = order_violations([1000.0, 900.0, 800.0, 700.0])
+    assert check.ok is True
+    assert check.direction == "desc"
+    assert check.inversions == 0
+    assert check.first_at == -1
+    assert check.comparable == 4
+
+
+def test_order_violations_single_inversion_is_flagged():
+    """页内逆序哪怕 1 处也记违反, 且给出首处位置(乱序行序号)"""
+    check = order_violations([1000.0, 900.0, 950.0, 800.0])
+    assert check.ok is False
+    assert check.direction == "desc"
+    assert check.inversions == 1
+    assert check.first_at == 2  # 950 > 900 的乱序行
+
+
+def test_order_violations_direction_flip_counts_as_violation():
+    """方向翻转视同逆序: 先升后降(或反向)记违反"""
+    check = order_violations([100.0, 200.0, 300.0, 250.0])
+    assert check.ok is False
+    assert check.direction == "asc"
+    assert check.inversions == 1
+
+
+def test_order_violations_asc_also_valid():
+    """方向不预设: 升序整列同样成立(校验的是「单调稳定」, 不是「必须倒序」)"""
+    check = order_violations([100.0, 200.0, 300.0])
+    assert check.ok is True
+    assert check.direction == "asc"
+
+
+def test_order_violations_missing_fields_not_compared():
+    """缺字段行不计入比较(避免重复算违反), 但计入 total 供证据判断"""
+    check = order_violations([1000.0, None, 900.0, 800.0])
+    assert check.ok is True
+    assert check.comparable == 3
+    assert check.total == 4
+
+
+def test_order_violations_insufficient_evidence():
+    """可比行 < 2 = 证据不足: 不判违反、方向为空(判定前置条件, 2026-09-26 用户定稿)"""
+    for values in ([], [None, None], [100.0]):
+        check = order_violations(values)
+        assert check.insufficient is True
+        assert check.direction == ""
+        assert check.inversions == 0
+
+
+def test_order_violations_all_equal_no_direction():
+    """全相等: 单调恒成立不算违反, 但方向推不出(跨页校验没有基准)"""
+    check = order_violations([100.0, 100.0, 100.0])
+    assert check.ok is False
+    assert check.direction == ""
+    assert check.inversions == 0
+
+
+def test_cross_page_violation_desc_and_asc():
+    """跨页证据: desc 下本页最大 > 上页最小 = 乱序; asc 反之; 方向未知不判"""
+    assert cross_page_violation([900.0, 800.0], [750.0, 700.0], "desc") is False
+    assert cross_page_violation([900.0, 800.0], [850.0, 700.0], "desc") is True  # 850 > 800 比上页最老行还新
+    assert cross_page_violation([100.0, 200.0], [250.0, 300.0], "asc") is False
+    assert cross_page_violation([100.0, 200.0], [150.0, 300.0], "asc") is True  # 150 < 200 比上页最小行还小
+    assert cross_page_violation([900.0], [950.0], "") is False  # 方向未知 = 证据不足不判
+    assert cross_page_violation([], [950.0], "desc") is False  # 上页没有可比行

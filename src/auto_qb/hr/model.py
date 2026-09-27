@@ -263,6 +263,12 @@ class HrRefreshMeta:
     """覆盖证明: 「安全放行」的唯一依据(计划 §4)
 
     只有 complete 为真时, 本次未命中才敢判「不受管束」; 否则一律未核实(保守)。
+
+    观测字段(计划 26-09-27-1815 §2 M5.1, 只加字段不抬 schema 版本; 旧文件缺键取默认值):
+    - order_ok / order_detail: 本轮排序校验结论(None = 证据不足未判定)与首处位置;
+    - entry_baseline: 轮级合计的可信基线(最近一次结构完好且非零轮; 骤降可疑轮不计入);
+    - plunge_suspect / plunge_rounds: 本轮是否骤降可疑 + 连续可疑轮数;
+    - scope_counts / prev_scope_counts: 本轮 / 上一轮各档解析行数(观测「A: 37 → 0」用)。
     """
 
     last_success_ts: float = 0.0
@@ -273,6 +279,19 @@ class HrRefreshMeta:
     missing_field_rate: float = 0.0
     complete: bool = False
     reason: str = ""
+    order_ok: Optional[bool] = None
+    order_detail: str = ""
+    entry_baseline: int = 0
+    plunge_suspect: bool = False
+    plunge_rounds: int = 0
+    #: 连续 S1/S2 强信号违反轮数(计划 26-09-27-1815 §2 2.1/2.4): 干净轮清零, 达 SUSPEND_ROUNDS ⇒ suspended
+    signal_rounds: int = 0
+    #: 考核期 P 探测(计划 §2 4.4/4.5): 本轮参与行反算 P 的中位数(天; 0 = 不可用/无参与行)
+    #: + 是否通过 ±1 天一致性机检(不过 ⇒ 自动豁免与早停双双禁用, 机检不是文档承诺)
+    probe_period_days: float = 0.0
+    period_consistent: bool = False
+    scope_counts: Dict[str, int] = field(default_factory=dict)
+    prev_scope_counts: Dict[str, int] = field(default_factory=dict)
 
     def to_json(self) -> Dict[str, Any]:
         return {
@@ -284,10 +303,21 @@ class HrRefreshMeta:
             "missing_field_rate": self.missing_field_rate,
             "complete": self.complete,
             "reason": self.reason,
+            "order_ok": self.order_ok,
+            "order_detail": self.order_detail,
+            "entry_baseline": self.entry_baseline,
+            "plunge_suspect": self.plunge_suspect,
+            "plunge_rounds": self.plunge_rounds,
+            "signal_rounds": self.signal_rounds,
+            "probe_period_days": self.probe_period_days,
+            "period_consistent": self.period_consistent,
+            "scope_counts": dict(self.scope_counts),
+            "prev_scope_counts": dict(self.prev_scope_counts),
         }
 
     @classmethod
     def from_json(cls, raw: Dict[str, Any]) -> "HrRefreshMeta":
+        order_ok = raw.get("order_ok")
         return cls(
             last_success_ts=_as_float(raw.get("last_success_ts")),
             scopes_done=[str(s) for s in (raw.get("scopes_done") or [])],
@@ -297,18 +327,44 @@ class HrRefreshMeta:
             missing_field_rate=_as_float(raw.get("missing_field_rate")),
             complete=bool(raw.get("complete")),
             reason=str(raw.get("reason") or ""),
+            order_ok=(None if order_ok is None else bool(order_ok)),
+            order_detail=str(raw.get("order_detail") or ""),
+            entry_baseline=_as_int(raw.get("entry_baseline")),
+            plunge_suspect=bool(raw.get("plunge_suspect")),
+            plunge_rounds=_as_int(raw.get("plunge_rounds")),
+            signal_rounds=_as_int(raw.get("signal_rounds")),
+            probe_period_days=_as_float(raw.get("probe_period_days")),
+            period_consistent=bool(raw.get("period_consistent")),
+            scope_counts={
+                str(k): _as_int(v)
+                for k, v in (raw.get("scope_counts") or {}).items()
+            },
+            prev_scope_counts={
+                str(k): _as_int(v)
+                for k, v in (raw.get("prev_scope_counts") or {}).items()
+            },
         )
 
 
 @dataclass(slots=True)
 class HrQuota:
-    """频控账本: 小时/天两级窗口(窗口键变化即重置, 重启不重置 —— 幂等靠窗口键而非进程状态)"""
+    """频控账本: 小时/天两级窗口(窗口键变化即重置, 重启不重置 —— 幂等靠窗口键而非进程状态)
+
+    同一结构两用(计划 26-09-27-1815 §2 M5.3):
+    - **legacy**(quota_model=legacy, 默认): 合并账本, hour/day 窗口计**全部**请求;
+    - **split**: 站点文件里 quota 作**页面**账本、torrent_quota 作**下载**账本 —— 各自的天级硬顶
+      复用 day_window/day_count, 令牌桶用 tokens/refill_ts(按「上次补充时刻 + 速率」恢复,
+      天然幂等、跨重启不重置、消除整点突发); 小时窗口字段在 split 下不使用(速率由桶承担)。
+    tokens=None = 未初始化(旧文件/首次) ⇒ 首次按满桶(burst)计, 不饿死。
+    """
 
     hour_window: str = ""
     hour_count: int = 0
     day_window: str = ""
     day_count: int = 0
     last_fetch_ts: float = 0.0
+    tokens: Optional[float] = None
+    refill_ts: float = 0.0
 
     def to_json(self) -> Dict[str, Any]:
         return {
@@ -317,16 +373,21 @@ class HrQuota:
             "day_window": self.day_window,
             "day_count": self.day_count,
             "last_fetch_ts": self.last_fetch_ts,
+            "tokens": self.tokens,
+            "refill_ts": self.refill_ts,
         }
 
     @classmethod
     def from_json(cls, raw: Dict[str, Any]) -> "HrQuota":
+        tokens = raw.get("tokens")
         return cls(
             hour_window=str(raw.get("hour_window") or ""),
             hour_count=_as_int(raw.get("hour_count")),
             day_window=str(raw.get("day_window") or ""),
             day_count=_as_int(raw.get("day_count")),
             last_fetch_ts=_as_float(raw.get("last_fetch_ts")),
+            tokens=(None if tokens is None else _as_float(tokens)),
+            refill_ts=_as_float(raw.get("refill_ts")),
         )
 
 
@@ -355,6 +416,36 @@ class HrFuse:
 
 
 @dataclass(slots=True)
+class HrSuspension:
+    """站点停用(计划 26-09-27-1815 §2 2.3): S1/S2 强信号连续 K 轮 ⇒ 停止取数, **人工恢复**
+
+    ❗不复用熔断 —— 熔断冷却到期自动恢复, 而致命错误(页面改版把数据判成安全)必须人看过才放行;
+    熔断到期**不会**自动清除本状态。恢复途径: `--hr-resume <站点>`(排查页面后人工确认)。
+    """
+
+    reason: str = ""  #: 首次触发停用的原因(S1 排序 / S2 缺字段 + 首处位置)
+    since: float = 0.0  #: 停用起始时刻
+    evidence: str = ""  #: 证据串(各轮细节摘要, 供 --hr-status 摊开)
+    rounds: int = 0  #: 触发时的累计违反轮数
+
+    @property
+    def active(self) -> bool:
+        return self.rounds > 0
+
+    def to_json(self) -> Dict[str, Any]:
+        return {"reason": self.reason, "since": self.since, "evidence": self.evidence, "rounds": self.rounds}
+
+    @classmethod
+    def from_json(cls, raw: Dict[str, Any]) -> "HrSuspension":
+        return cls(
+            reason=str(raw.get("reason") or ""),
+            since=_as_float(raw.get("since")),
+            evidence=str(raw.get("evidence") or ""),
+            rounds=_as_int(raw.get("rounds")),
+        )
+
+
+@dataclass(slots=True)
 class HrSiteData:
     """一个站点的全部账号级状态(站点文件的内容)"""
 
@@ -370,7 +461,16 @@ class HrSiteData:
     verified: Dict[str, HrVerified] = field(default_factory=dict)  # infohash -> 放行记录
     refresh: HrRefreshMeta = field(default_factory=HrRefreshMeta)
     quota: HrQuota = field(default_factory=HrQuota)
+    #: 下载账本(计划 26-09-27-1815 §2 3.3): 仅 quota_model=split 使用 —— quota 转为页面账本,
+    #: 下载计数全部记到这里。旧文件缺该键取默认零值: split 激活初期下载用量视为空(多放一次),
+    #: 而旧 quota 里含下载计数 ⇒ 页面用量初期略**高估**(保守方向, 可接受)。
+    torrent_quota: HrQuota = field(default_factory=HrQuota)
     fuse: HrFuse = field(default_factory=HrFuse)
+    #: 站点停用(计划 §2 2.3): 非 None ⇒ 取数侧零请求、判定侧回落本地逻辑; 人工恢复
+    suspended: Optional[HrSuspension] = None
+    #: 登录失效指数退避(计划 §2 2.6): 退避期零请求; 不计失败、不推进熔断、不动 fetched_at
+    login_backoff_until: float = 0.0
+    login_expired_streak: int = 0  #: 连续登录失效次数(算 2^n 退避用; 登录恢复即清零)
 
     # ---------- 读写 ----------
 
@@ -409,7 +509,11 @@ class HrSiteData:
             "verified": [v.to_json() for v in self.verified.values()],
             "refresh": self.refresh.to_json(),
             "quota": self.quota.to_json(),
+            "torrent_quota": self.torrent_quota.to_json(),
             "fuse": self.fuse.to_json(),
+            "suspended": self.suspended.to_json() if self.suspended is not None else None,
+            "login_backoff_until": self.login_backoff_until,
+            "login_expired_streak": self.login_expired_streak,
         }
 
     @classmethod
@@ -424,6 +528,7 @@ class HrSiteData:
             writer_heartbeat=_as_float(writer.get("heartbeat") or raw.get("writer_heartbeat")),
             refresh=HrRefreshMeta.from_json(raw.get("refresh") or {}),
             quota=HrQuota.from_json(raw.get("quota") or {}),
+            torrent_quota=HrQuota.from_json(raw.get("torrent_quota") or {}),
             fuse=HrFuse.from_json(raw.get("fuse") or {}),
         )
         for item in raw.get("index") or []:
@@ -439,4 +544,8 @@ class HrSiteData:
             ver = HrVerified.from_json(item)
             if ver.infohash and ver.verified_ts > 0:
                 data.verified[ver.infohash] = ver
+        if raw.get("suspended"):
+            data.suspended = HrSuspension.from_json(raw["suspended"])
+        data.login_backoff_until = _as_float(raw.get("login_backoff_until"))
+        data.login_expired_streak = _as_int(raw.get("login_expired_streak"))
         return data

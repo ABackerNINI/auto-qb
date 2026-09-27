@@ -288,6 +288,7 @@ class TorrentRecord:
             downloaded=self.downloaded,
             completion_on=self.completion_on,
             progress=self.progress,
+            seeding_time=self.seeding_time,
         )
 
     def hr_judgement(self) -> Optional[HrJudgement]:
@@ -312,6 +313,12 @@ class TorrentRecord:
             now=time.time(),
             # 超龄豁免线也是站点级配置: 完成时间超过它的种子在判定收口处直接豁免(0 = 关闭)
             completed_age_limit=site_conf.completed_age_limit,
+            # 豁免 A(计划 26-09-27-1815 §2 4.5, 默认关)/ 豁免 B(做种超额, 倍数 0 = 关):
+            # 都由站点配置显式开启才生效; 要求时长从站点 hr 规则带(与 check_hr_condition 同口径)
+            auto_age_limit=site_conf.auto_age_limit,
+            required_seeding_time=(conf.hr.required_seeding_time +
+                                   conf.hr.extra_seeding_time) if conf.hr is not None else 0.0,
+            seeding_exempt_ratio=site_conf.seeding_exempt_ratio,
         )
 
     def check_hr_condition(self) -> bool:

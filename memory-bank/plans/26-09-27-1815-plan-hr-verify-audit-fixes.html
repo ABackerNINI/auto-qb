@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR 在线核实 · 审计修复 + v2 方案实施 · 修改计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-27-1815">
+<meta name="doc-updated" content="26-09-27-2035">
+<meta name="doc-refs" content="memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html,memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html,memory-bank/tasks/26-09-22-backend-partial-hr-verify.md">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:31px;line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:78ch;margin:0 0 20px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+  .toc .no{font-family:var(--mono);color:var(--ink-3);margin-right:6px}
+
+  h2{font-size:21px;font-weight:600;margin:56px 0 18px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h2:first-of-type{margin-top:8px;border-top:none;padding-top:0}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:14px;font-weight:600;margin:22px 0 8px;color:var(--ink-2);font-family:var(--mono);letter-spacing:.04em}
+  p{margin:10px 0;color:var(--ink-2)} p strong,li strong{color:var(--ink);font-weight:600}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink-2)} li{margin:5px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.65;color:var(--ink-2)}
+  pre b{color:var(--ink);font-weight:400}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line-2);font-weight:400}
+  td{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+  td code{white-space:nowrap}
+  .mono{font-family:var(--mono);font-size:12.5px}
+
+  .verdict{background:linear-gradient(180deg,rgba(200,164,92,.09),rgba(200,164,92,.04));border:1px solid rgba(200,164,92,.35);border-radius:10px;padding:18px 22px;margin:20px 0}
+  .verdict h3{margin:0 0 8px;color:var(--accent);font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);font-weight:400}
+  .verdict p, .verdict li{color:var(--ink)}
+  .note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:14px;color:var(--ink-2)}
+  .note p{margin:6px 0}
+  .danger{border-left-color:var(--bad)}
+  .good{border-left-color:var(--good)}
+
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;padding:1px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+  .tag.p1{color:#f0a09a;border-color:rgba(208,92,78,.55);background:rgba(208,92,78,.12)}
+  .tag.p2{color:#e6c98a;border-color:rgba(200,164,92,.5);background:rgba(200,164,92,.1)}
+  .tag.p3{color:#9fc6e8;border-color:rgba(77,159,214,.45);background:rgba(77,159,214,.1)}
+  .tag.ok{color:#8ed3b4;border-color:rgba(47,168,116,.45);background:rgba(47,168,116,.1)}
+  .tag.mut{color:var(--ink-3)}
+  .path{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+  .foot{border-top:1px solid var(--line-2);padding:24px 0 60px;font-size:12.5px;color:var(--ink-3);font-family:var(--mono);line-height:2}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.toc{position:static;display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Modification Plan · auto-qb · hr online verify</p>
+  <h1>HR 在线核实 · 审计修复 + v2 方案实施<br>修改计划</h1>
+  <p class="lede">由设计审查报告 <a href="../reports/26-09-26-1628-report-hr-online-verify-audit.html">26-09-26-1628</a> 转化而来:
+  把报告的 1×P1 + 3×P2 + 3×P3 漏洞清单、§7–§11 方案定稿, 连同主计划
+  <a href="26-09-22-2204-partial-hr-site-verify-plan.html">§14 在线核实 v2 方案</a> (v3.5, 待实施) 一起,
+  落成一份可执行的修改清单 —— 文件级落点、分步交付纪律、测试守阵、待拍板项。
+  设计取舍的权威在主计划 §14 (本计划只引用不重证); 证据的权威在审查报告; 「做到哪了」的权威在
+  <a href="../tasks/26-09-22-backend-partial-hr-verify.md">任务档案</a>。</p>
+  <p class="meta">基线 <b>develop @ 045ea27</b> (实施开工前已 merge --ff-only 至 Gitee 主线) ·
+  建立 <b>2026-09-27 18:15</b> · 性质 <b>实施计划 (M5.1–M5.5 已于 2026-09-27 全部落地, 见 §8 v1.2)</b> ·
+  状态 <b>Implemented —— 拍板 D1–D10 全按推荐执行; 余真机走查 + M0 前置实测三项 (阻塞早停②/豁免 A 的启用, 不阻塞代码)</b></p>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s0"><span class="no">0</span>范围与裁定</a>
+  <a href="#s1"><span class="no">1</span>现状与依据: 漏洞 → 修复映射</a>
+  <a href="#s2"><span class="no">2</span>修改项总表 (M5.1–M5.5)</a>
+  <a href="#s3"><span class="no">3</span>实施顺序与依赖</a>
+  <a href="#s4"><span class="no">4</span>测试与守阵</a>
+  <a href="#s5"><span class="no">5</span>待拍板项</a>
+  <a href="#s6"><span class="no">6</span>风险与回滚</a>
+  <a href="#s7"><span class="no">7</span>关联制品</a>
+  <a href="#s8"><span class="no">8</span>变更记录</a>
+</nav>
+
+<main>
+
+<h2 id="s0">0 · 范围与裁定</h2>
+
+<div class="verdict">
+<h3>本计划是什么 / 不是什么</h3>
+<ul>
+  <li><strong>是</strong>: 报告 → 计划的转化产物。把「审计发现了什么」翻成「改哪些文件、怎么分步、怎么验、哪些要用户拍板」—— 四层制品各守其位:
+  <strong>报告</strong> (26-09-26-1628, Done, 证据快照) → <strong>主计划 §14</strong> (v3.5, 设计定稿与取舍权威) → <strong>本计划</strong> (实施拆解权威: 落点 / 顺序 / 守阵) → <strong>任务档案</strong> (执行滚动唯一更新点)。</li>
+  <li><strong>不是</strong>: 设计重证。§14 已定稿的取舍 (滚动窗口、双令牌桶、信号分级、<code>suspended</code>) 本计划照单全收, 只做实施展开; 实施中发现设计矛盾时<strong>停下回报</strong>, 回主计划改版, 不在本计划里私自改设计。</li>
+  <li><strong>不碰</strong>: <code>config.yml</code> 与 <code>auto-qb-data/</code> (红线)。审计指出的「token: 123456 + extension_id 空」属用户配置面, 本计划只做代码侧引导 (§2 M5.5) + 文档, 配置由用户手改。</li>
+</ul>
+</div>
+
+<h3>0.1 范围内 / 范围外</h3>
+<table>
+  <thead><tr><th style="width:50%">范围内 (本计划排期)</th><th>范围外 (去向)</th></tr></thead>
+  <tbody>
+    <tr><td>P1「完整刷新判据太脆」三路径的修复 (骤降保护 + <code>maxpage</code> 交叉验证 + 信号处置与停站)</td><td rowspan="5">· <strong>真机走查</strong> — 仍是档案「未完成」首项, 与本计划并行推进<br>· <strong>M0 前置实测三项</strong> — 排序 / 考核期恒定 / 英文站分页形态, 只阻塞 M5.4 早停启用 (§5)<br>· <strong>非 NexusPHP 第三站点</strong> — 拿到样本另立专题<br>· <strong>config.yml 端点纵深整改</strong> — 用户手动 (token 留空自动生成代码已支持)</td></tr>
+    <tr><td>P2「放行收不回」修复 + P2「多实例配额翻倍」引导升级</td></tr>
+    <tr><td>P3「登录失效期照发请求」退避 + P3「端点纵深」代码侧提示</td></tr>
+    <tr><td>主计划 §14 全部 M5 步骤的实施展开 (滚动窗口 / 三早停双豁免 / 双令牌桶配额 / <code>suspended</code>)</td></tr>
+    <tr><td>空表口径矛盾 (报告 §4.3) 的定案与落地 —— P1 修复的前置决策</td></tr>
+  </tbody>
+</table>
+
+<h3>0.2 贯穿原则 (全程硬约束)</h3>
+<ul>
+  <li><strong>零静默变更</strong>: 新配置键默认关闭 / 默认取旧值; 配额模型切换必须站点级显式 opt-in (§2 M5.3); <strong>正常路径的判定语义在 M5.4 之前一行不改</strong> —— M5.2 新增的处置全部只挂在异常信号路径上, 未触发 ⇒ 行为与现状逐字节一致 (守阵机检, §4)。</li>
+  <li><strong>fail-fast</strong>: 所有新配置键进 <code>validate_config</code> + <code>config/schema/hr.py</code> + <code>config-reference/keys.md</code> (黄金法则 4, 守卫会查)。</li>
+  <li><strong>每步独立交付</strong>: 一步一全量绿 + 一红验 + 一笔可独立提交; 步骤间无未完成依赖。</li>
+</ul>
+
+<h2 id="s1">1 · 现状与依据: 漏洞 → 修复映射</h2>
+
+<h3>1.1 现状基线 (2026-09-27)</h3>
+<p>M1–M4 + 七批实报修复 + v2.9 超龄豁免 + v3.0 达标来源优先级 + v3.3 选项页终态 + v3.4 状态模型梳理 + v3.5 CarPT 站点接入
+<strong>均已落地</strong>; 只差真机走查。测试基线 <strong>1693 passed + 1 skipped</strong> (TOTAL 91%, 基线切片 <code>26-09-27-1246-hr-carpt-dlid</code>)。
+在线核实的防线与频控全景见报告 §1–§2 (与现状一致, 未被后续提交改动)。</p>
+
+<h3>1.2 报告漏洞清单 → 本计划修复落点</h3>
+<table>
+  <thead><tr><th style="width:8%">级别</th><th style="width:30%">审计发现 (报告 §4.2 / §3.3)</th><th style="width:40%">修复落点</th><th>归属</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="tag p1">P1</span></td>
+      <td>「完整刷新」鉴别器只有 <code>header_found</code> 一条, 三条路径都把整站误判安全放行: ① 改版致 0 行 ② 英文站 <code>has_next_page</code> 只认中文「下一页」 ③ 站点临时空表</td>
+      <td>① <strong>骤降保护</strong> (对照上轮条目数, 判据 1.4 / 处置 2.2) ② <code>maxpage/currentpage</code> 交叉验证接进翻页判据 (1.3) ③ 触发即强信号处置 + 连续 K 轮 <code>suspended</code> 停站 (2.1 / 2.3)</td>
+      <td class="mono">M5.1 + M5.2</td>
+    </tr>
+    <tr>
+      <td><span class="tag p2">P2</span></td>
+      <td>放行记录取消不了 —— 清单命中但该行 infohash 未回填, <code>_refresh_verified</code> 的 <code>listed</code> 只收已有 hash 的键, 种子重回清单也收不回放行 (漏管窗口 ≤ <code>verified_ttl</code> 12H)</td>
+      <td><strong>回填对账撤销</strong>: infohash 回填成功时与现有放行记录对账, 命中即作废 (写 <code>reason</code>); 新出现清单行优先回填 (2.5)</td>
+      <td class="mono">M5.2</td>
+    </tr>
+    <tr>
+      <td><span class="tag p2">P2</span></td>
+      <td>多实例未配 <code>shared_dir</code> ⇒ 配额账本各一份, 站点访问翻倍; <code>channel.enabled</code> 帮助文案「不会双倍访问」有前提</td>
+      <td>引导升级 (INFO 文案补「配额翻倍」后果 + <code>hr.once</code> 自检已有); WARNING 需可靠的「多实例」判据 —— 主计划 §7 已注明无法可靠判定, 升不升级见拍板项 D3 (2.7)</td>
+      <td class="mono">M5.2</td>
+    </tr>
+    <tr>
+      <td><span class="tag p2">P2</span></td>
+      <td>无断点续翻 —— 档位数 × 页数超单轮预算 ⇒ <code>complete</code> 恒假 ⇒ 永不放行 (功能自废), BTSchool 3 页未暴露, 清单变长即踩</td>
+      <td>由主计划 §14.2 <strong>滚动窗口 + 新 <code>complete</code> 判据</strong>消解 (每轮页数取决于活跃条目页数而非清单总页数); 断点续翻降级为可选兜底, <strong>默认不排期</strong> (4.8)</td>
+      <td class="mono">M5.4</td>
+    </tr>
+    <tr>
+      <td><span class="tag p3">P3</span></td>
+      <td>登录失效期持续发请求 (不计失败不熔断是设计, 但每轮照发白烧配额 ≤12/时)</td>
+      <td>登录失效后站点级<strong>指数退避</strong> (2.6)</td>
+      <td class="mono">M5.2</td>
+    </tr>
+    <tr>
+      <td><span class="tag p3">P3</span></td>
+      <td>本机端点纵深偏弱 (<code>token: 123456</code> + <code>extension_id</code> 空 ⇒ 放行任意扩展 origin)</td>
+      <td>token 留空自动生成到 <code>&lt;data_dir&gt;/hr.token</code> <strong>M2 已实现</strong>; 余下: <code>extension_id</code> 留空启动 WARNING 提示 + 文档引导; <code>config.yml</code> 由用户手改 (红线) (5.2)</td>
+      <td class="mono">M5.5</td>
+    </tr>
+    <tr>
+      <td><span class="tag p3">P3</span></td>
+      <td>超龄豁免 (v2.9) 压过清单命中 ⇒ 站点仍在管的超龄种子漏管且界面显示「安全」—— 已知取舍</td>
+      <td>不改代码; 维持取舍需用户复确认一次 (拍板项 D8)</td>
+      <td class="mono">拍板项</td>
+    </tr>
+    <tr>
+      <td><span class="tag mut">前置</span></td>
+      <td>空表口径矛盾 (报告 §4.3): <span class="path">hr/adapters/base.py</span> docstring 说「绝不把空结果当真」, 实现与 <code>test_empty_listing_is_complete</code> 恰恰相反 —— 两边必有一边要改, 是 P1 修复的前置决策</td>
+      <td>推荐「<strong>对照上轮</strong>」双判据一次性收口双方: 稳定空表 (上轮也空) = 合法 complete; 骤降 (上轮有、本轮 0/骤降) = 不完备。docstring 改对 + 测试拆两条 (2.2, 拍板项 D1)</td>
+      <td class="mono">M5.2</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>1.3 报告 §7 三案在本计划里的归宿</h3>
+<p>报告 §7.4 与 §9 已定案: ①「单轮翻所有页」<strong>放弃</strong> (滚动窗口以更低价达成同一覆盖证明); ②「已覆盖本地种子即停」降级为早停③的<strong>严格版</strong> (infohash 子集); ③「remain==0 连续 5 个即停」<strong>成立</strong>, 落地为早停② + 自动推导 P (判定侧豁免 A)。本计划不再重复论证, 直接进 §2 的 M5.4。</p>
+
+<h2 id="s2">2 · 修改项总表 (M5.1–M5.5)</h2>
+<p class="path">落点一律写「文件 + 符号」—— 行号以报告 26-09-26-1628 (基线 a06732b) 为准, 实施时以符号定位 (产出本计划时已在 cbc4b80 复核: 下列符号全部存在且语义未漂)。</p>
+
+<h3>2.1 M5.1 判据与观测 —— <span class="tag ok">不改任何判定语义</span></h3>
+<p>只加校验函数与观测面, 先拿到真机证据; 全部处置在 M5.2 才生效。</p>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:24%">修改项</th><th style="width:30%">落点</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">1.1</td><td>排序校验纯函数 <code>order_violations(entries, key)</code></td><td class="path">hr/parse.py 新增</td><td><code>key ∈ {done_epoch, remain_seconds}</code>; 返回 (逆序对数, 首处位置, 可比行数, 方向)。方向由首两可比行推断, 之后翻转视同逆序; <strong>缺字段行不计入比较</strong> (避免把缺字段重复算成排序违反), 但计入「证据不足」</td></tr>
+    <tr><td class="mono">1.2</td><td>页内 + 跨页校验接线</td><td class="path">hr/service.py::_do_fetch</td><td>每页解析后校验页内, 并与上一页比对跨页 (复用 v2.9 的 <code>prev_page_dones</code> 思路)。<strong>判定前置条件</strong>: 本轮页面成功取回 + 表头解析出 + <strong>可比行 ≥ 2</strong> (2026-09-26 18:42 用户定稿); 结果记入 refresh meta 供 <code>--hr-status</code> 展示</td></tr>
+    <tr><td class="mono">1.3</td><td><code>maxpage/currentpage</code> 交叉验证</td><td class="path">hr/parse.py::page_javascript_marks + service 翻页循环</td><td>数据已有、目前只用于报告 —— 接进翻页判据: <code>currentpage &lt; maxpage</code> ⇒ 未到底。与 <code>has_next_page</code> 取<strong>并集</strong> (任一说「还有下一页」就继续翻), 保守方向; 顺带堵 P1 的英文站缺口 (「下一页」只认中文的问题被第二判据兜住)</td></tr>
+    <tr><td class="mono">1.4</td><td>骤降判据纯函数 (观测, <strong>轮级</strong>)</td><td class="path">hr/service.py</td><td><strong>判据单位 = 全轮合计</strong> (所有抓取档位的合计条目数), 不是单档 —— 毕业迁移与站点清除只改变单档计数, 轮级合计守恒或缓变, 单档清零属站点正常语义 (2026-09-27 用户点出「考核通过移去已达标页」「旧已达标被清除」两个误判场景后确立, §8 v1.1)。<strong>对比基线 = 最近一次「结构完好且非零」轮的合计</strong>, 可疑轮不计入基线 (堵「0 vs 0」自愈洞: 否则持续性改版只被挡一轮)。本轮合计 0 (或 &lt; 基线 X%) 且基线存在 ⇒ 骤降可疑; M5.1 阶段只记录 + 展示, 不改行为 (处置 2.2)。首刷 (尚无可信基线) 不判骤降</td></tr>
+    <tr><td class="mono">1.5</td><td><code>--hr-status</code> 观测面</td><td class="path">hr/report.py + hr/status.py</td><td>增一行「排序: 按完成时间倒序 ✓ / 不成立 (首处: 档位 A 第 2 页)」+ 考核期 P 分布 (<code>P ≈ done + remain − now</code> 反算的 min/max/一致率) + 骤降观测 (轮级合计 vs 可信基线) + <strong>各档计数与上轮对比</strong> (「A: 37 → 0」—— 毕业/清除/改版由人看趋势判定, <strong>档位级只观测不判据</strong>); 既是 §7.3 自动豁免的启用依据, 也是「假设是否成立」的现场证据</td></tr>
+    <tr><td class="mono">1.6</td><td>观测期告警</td><td class="path">hr/worker.py::_note</td><td>M5.1 阶段排序违反只 WARNING 观证 (不早停、不判失败、不计停站计数) —— M5.2 合入后切换为强信号处置; 告警文案与 2.1 一致, 便于真机阶段直接对文案</td></tr>
+  </tbody>
+</table>
+
+<h3>2.2 M5.2 信号处置与停用 —— <span class="tag p1">P1 收口 + 三个 P2/P3 修复</span></h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:24%">修改项</th><th style="width:30%">落点</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">2.1</td><td>S1/S2 强信号处置 (2026-09-26 18:24/18:42 用户定稿)</td><td class="path">hr/service.py::_do_fetch</td><td><strong>S1 排序违反</strong> (页内/跨页/方向翻转, 哪怕 1 处) 与 <strong>S2 缺字段</strong>都是强信号, <strong>不分面积、不设比例阈值</strong>: ① 立即停止本轮翻页 (不再发请求) ② 判本轮拉取失败 (<code>ACTION_ERROR</code>, 不产生放行) ③ 计入失败 + 累计连续违反轮数 ④ WARNING 告警 (文案分开: 「排序假设不成立」/「必填字段缺失」), 按 <code>channel_silence_warn</code> 节流。<strong>已抓到的行保留命中</strong> (合并进索引, 不置 <code>complete</code>) —— 命中是站点侧事实, 保留只会往受管束方向偏 (保守无害)</td></tr>
+    <tr><td class="mono">2.2</td><td>骤降保护生效 + 空表口径定案落地</td><td class="path">hr/service.py + hr/adapters/base.py + tests/test_hr_service.py</td><td>骤降可疑 (轮级合计 0 或 &lt; 基线 X%, 判据见 1.4) ⇒ 判<strong>不完备</strong>, 不产生放行, 保留命中; 一次性批量清除/迁移在下一轮以新基线<strong>自愈</strong> (代价 = 一轮刷新的放行延迟, 不完备轮后 120s 即重试)。<strong>持续零不自动放行</strong>: 合计连续 K 轮为零且页面结构完好 (表头锚 + 分页 marks 都在) ⇒ 升级 WARNING + <code>--hr-status</code> 显式行 (「清单已 N 轮为 0: 全部毕业/被清除? 还是改版?」) + <strong>人工确认口子</strong> (站点级显式配置, 默认关), 确认后才接受空清单为合法 complete —— 刻意不做「K 轮后自动接受」: 持续零 + 结构完好同样可由改版造出, 自动接受等于重开 P1 灾难面; 误要人工确认的代价只是终态场景多敲一次确认, 方向不对称故保守优先。首刷空表按现有口径 = 合法 complete。同步: <code>base.py</code> docstring 改写 + <code>test_empty_listing_is_complete</code> 拆分 (按 D1 执行)。<span class="path">残余风险如实注明: 单档改版 (仅行内首列格式变, 表头/分页 marks 完好) 轮级合计降而不归零, X% 线只挡一轮; 误放行面有界 (≤ verified_ttl 12H, 下轮重算), 由 1.5 的档位观测行亮给人看</span></td></tr>
+    <tr><td class="mono">2.3</td><td><code>suspended</code> 停用</td><td class="path">hr/model.py (站点状态加 <code>suspended</code>) + hr/service.py::refresh_site + hr/runtime.py::judge</td><td>S1/S2 <strong>连续 K 轮</strong> (默认 3) ⇒ 写 <code>suspended: {reason, since, evidence, rounds}</code>。<strong>不复用 fuse</strong> —— fuse 自动恢复, 致命错误须人工。取数侧见 suspended ⇒ 零请求; <strong>判定侧 <code>judge()</code> 见 suspended ⇒ 返回 <code>None</code> 回落本地逻辑</strong> (❗只停取数不停判定 = 拿越来越旧的视图继续放行, 比不停更危险)。恢复 = 人工 (<code>--hr-status</code> 打印指引 / 改配置清除); 熔断到期<strong>不</strong>自动恢复 suspended</td></tr>
+    <tr><td class="mono">2.4</td><td>防误停站三道隔离</td><td class="path">hr/service.py</td><td>① 判定前置 = 成功取回 + 表头 + 可比行 ≥ 2; ② <strong>失败优先</strong>: 本轮任何取数失败 (超时/中断/挑战页/登录页/行数异常) ⇒ 排序判定本轮<strong>弃用</strong>, 不计停站计数 —— 页面不完整时的「逆序」是假象; ③ <strong>只认连续</strong>: 任何一轮「干净且无违反」⇒ 停站计数清零</td></tr>
+    <tr><td class="mono">2.5</td><td>放行收不回修复 (P2)</td><td class="path">hr/service.py::_refresh_verified + _fill_infohashes / _backfill</td><td><strong>回填对账撤销</strong> (推荐, 拍板项 D2): infohash 回填成功时, 查该 (站点, infohash) 是否对上现有放行记录 ⇒ 命中即作废该放行 (记 <code>reason=listed-late</code>), 未命中不动。增强: 新出现的清单行优先回填 (缩小窗口)。备选 c「<code>pending_infohash&gt;0</code> 就不产生放行」<strong>否决</strong> —— 新行持续进清单, 等于放行功能自废。窗口从 ≤12H 收缩到 ≤ 回填时延</td></tr>
+    <tr><td class="mono">2.6</td><td>登录失效指数退避 (P3)</td><td class="path">hr/service.py + hr/model.py + hr/worker.py</td><td><code>HrLoginExpired</code> 后该站进入退避 (2^n × <code>poll_interval</code>, 上限 = <code>refresh_interval</code>), 退避期零请求; 仍<strong>不计失败、不推进熔断、不动 <code>fetched_at</code></strong> (维持既有语义); 告警维持首见即报。与 <code>session_epxired</code> 类既有事件状态复用同处落点, 实施时对齐 <code>hr/events.py</code> 文案</td></tr>
+    <tr><td class="mono">2.7</td><td>多实例引导升级 (P2)</td><td class="path">hr/runtime.py::_advise_shared_dir</td><td>INFO 文案补「配额账本各一份 ⇒ 站点访问翻倍 (2×12/时)」后果; <strong>WARNING 需可靠的「多实例」判据</strong> —— 主计划 §7 已注明「程序无法可靠判断多实例」, 强行升级会对全部单实例用户每启动告警 (还会推系统通知)。判据候选与推荐见拍板项 D3</td></tr>
+  </tbody>
+</table>
+
+<h3>2.3 M5.3 配额模型拆分 —— <span class="tag p2">页面访问 / 种子下载彻底分开</span></h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:24%">修改项</th><th style="width:30%">落点</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">3.1</td><td>新配置键 (7 个)</td><td class="path">config/schema/hr.py + config/validation/sections.py</td><td><code>page_rate_per_hour=40</code> / <code>page_burst=10</code> / <code>torrent_rate_per_hour=20</code> / <code>torrent_burst=5</code> / <code>max_pages_per_day=400</code> / <code>max_torrents_per_day=200</code> / <code>min_page_interval=90S</code>。现状 <code>min_torrent_interval</code> (90S, 全部请求) 在 split 模型下<strong>改义为「仅 .torrent 下载」</strong>、建议默认 60S —— 语义迁移必须写进 help 与 keys.md; 站点级覆盖键同步提供 (现状仅 <code>max_torrents_per_hour</code> 可被站点覆盖)</td></tr>
+    <tr><td class="mono">3.2</td><td>双令牌桶 + <strong>激活门</strong></td><td class="path">hr/ratelimit.py</td><td>页面桶与下载桶独立, rate+burst 按「上次补充时刻 + 速率」恢复 —— 天然幂等、跨重启不重置、消除整点突发; 天级硬顶仍用窗口键 (总量保险)。<strong>激活门 (本计划新增的设计点, §14 未显式展开)</strong>: 站点级 <code>quota_model</code> (默认 <code>legacy</code>) —— 未显式配置 ⇒ 沿用现行合并账本 (<code>max_torrents_per_hour=12</code> / <code>max_torrents_per_day=60</code> / <code>min_torrent_interval=90S</code> 语义不变), 行为逐字节一致; 任一站点显式 opt-in <code>split</code> 才切双桶。原因: 40/时 比 12/时 <strong>松</strong>, 直接改默认违反「保守默认」黄金法则</td></tr>
+    <tr><td class="mono">3.3</td><td>站点文件迁移 (不抬 schema 版本)</td><td class="path">hr/model.py (HrQuota)</td><td>保留 <code>quota</code> 作页面账本 + 新增 <code>torrent_quota</code>; <code>from_json</code> 缺字段取默认零值。代价: 旧数据 <code>quota</code> 含下载计数 ⇒ split 激活初期略<strong>高估</strong>页面用量 (保守方向, 可接受)</td></tr>
+    <tr><td class="mono">3.4</td><td>页面 / 下载分工</td><td class="path">hr/service.py</td><td><strong>页面只在新轮做, 下载只在复用轮做</strong> (<code>_backfill_on_reuse</code> 现成机制) —— 「种子可以慢慢下载」落地, 单轮持锁时长缩短。<code>PROD_ROUND_WAIT_MAX=900s</code> 维持代码常量不动 (拍板项 D5 推荐出路①), 单轮页数上限取<strong>总量</strong> 8~10 (留 2 个名额给下载)</td></tr>
+    <tr><td class="mono">3.5</td><td>展示拆分</td><td class="path">hr/status.py (QuotaStatus) + hr/report.py + webui 设置页</td><td><code>QuotaStatus</code> 拆 page / torrent 两组; <code>--hr-status</code> 与 WebUI 设置页分别显示两套额度与间隔</td></tr>
+    <tr><td class="mono">3.6</td><td>参数自洽机检 (§14.8)</td><td class="path">config/validation/sections.py</td><td>配置期校验: <code>轮数/时 × 页数/轮 ≤ 3600 / min_page_interval</code> (90s ⇒ 40 请求/时); 违例聚合报错 (fail-fast)</td></tr>
+    <tr><td class="mono">3.7</td><td>扩展 caps 对齐</td><td class="path">extensions/hr-fetch-proxy/site-caps.js</td><td>现状 page 10/时·50/天 是按旧后端 12/时 设的; 后端拆分后页面桶 rate 40/时, 扩展维持 <strong>≥ 后端 × 1.5</strong> 口径需上调 (建议 ≥60/时 · ≥600/天) —— 它的价值是「后端写错时仍拦得住」, 不提到同一量级。新数值随拍板项 D6 一并确认</td></tr>
+  </tbody>
+</table>
+
+<h3>2.4 M5.4 早停与豁免 —— <span class="tag p2">依赖 M5.1 校验地基 + 前置实测</span></h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:24%">修改项</th><th style="width:30%">落点</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">4.1</td><td>滚动窗口</td><td class="path">hr/service.py 翻页循环</td><td>每档从第 1 页起翻前 N 页 (<code>window_pages</code>, 站点级可配, 建议 10), 档位顺序 A→B→C, 不追求一轮翻完; 与 <code>max_pages_per_refresh</code> 的关系 (取代 / 共存) 实施时收口</td></tr>
+    <tr><td class="mono">4.2</td><td>新 <code>complete</code> 判据 (§14.2)</td><td class="path">hr/service.py</td><td>每档满足「<strong>翻到末页</strong>」(1.3 双判据) 或「<strong>翻到已到期段 (早停成立)</strong>」⇒ 本轮覆盖证明成立; 否则部分覆盖 —— 命中的照常精确分类, 未命中一律落「未核实 ⇒ 保守按 HR 管束」。滚动窗口能证明「在清单里」, <strong>不能</strong>证明「不在清单里」</td></tr>
+    <tr><td class="mono">4.3</td><td>单轮预算分配 (本计划新增设计点)</td><td class="path">hr/service.py</td><td>单轮预算总量 8~10 请求 ÷ 三档, 固定 A→B→C 顺序会<strong>饿尾档</strong>: A 档长清单把预算吃光 ⇒ C 恒翻不到末页/早停段 ⇒ <code>complete</code> 恒假 —— §3.3「功能自废」换形态复发。候选: <strong>轮转起点</strong> (每轮从最久未完成的档位起翻, 滚动窗口的跨轮语义不变)。推荐轮转, 见拍板项 D9</td></tr>
+    <tr><td class="mono">4.4</td><td>早停② 已到期段</td><td class="path">hr/service.py</td><td><code>remain==0 连续 5 行</code> (<code>age_stop_streak</code>, 常量起步) + <strong>P 一致性机检</strong> (参与行反算 <code>P ≈ done + remain − now</code>, 差异超 ±1 天容差 ⇒ 告警「考核期不恒定」+ 禁用自动豁免与早停) + 排序校验成立 ⇒ 停; 任一不成立 ⇒ 继续翻 (多花配额, 不会错)</td></tr>
+    <tr><td class="mono">4.5</td><td>判定侧豁免 A: 自动推导 P</td><td class="path">config/schema/hr.py + hr/resolve.py::judge_record</td><td>站点级 <code>auto_age_limit</code> <strong>显式开关, 默认关</strong> (它把 v2.9「显式配置才豁免」变成默认行为就违反零静默变更); 开启后 P 由取数侧反算喂给 <code>completed_age_limit</code> 语义, 判定与早停天然同源; P 不一致 ⇒ 豁免与早停双双禁用 (机检, 不是文档承诺)</td></tr>
+    <tr><td class="mono">4.6</td><td>早停③ 覆盖本地 (严格版)</td><td class="path">hr/service.py + hr/runtime.py</td><td><code>pending_infohash == 0</code> 且 本站本地种子 infohash ⊆ 已抓行 infohash ⇒ 可停 (只停「不影响本地判定」的部分, <strong>绝不置 complete</strong>)。本地种子集合经只读视图快照跨线程交接 (不碰单一写线程约束), 细节实施时收口</td></tr>
+    <tr><td class="mono">4.7</td><td>判定侧豁免 B: 做种 5×</td><td class="path">hr/model.py (HrAnchor) + hr/resolve.py</td><td>本地 <code>seeding_time ≥ 要求时长 × 5</code> (倍数可配) ⇒ 豁免「义务已超额完成」; <strong>显式开关默认关</strong>; <strong>不参与早停</strong> (本地事实映射不到页面行, 与页面排序无单调关系)。落地形态: <code>HrAnchor</code> 加 <code>seeding_time</code> 字段, 或沿用 v2.9「record 侧把参数带进 <code>judge_record</code>」做法 (推荐后者, 不动锚点结构)。与豁免 A 并存 (一个管「太老不想管」, 一个管「义务已超额」)</td></tr>
+    <tr><td class="mono">4.8</td><td>断点续翻兜底 —— <span class="tag mut">默认不排期</span></td><td class="path">hr/model.py (HrRefreshMeta 加 per-scope 页码游标)</td><td>活跃条目 ≤ N 页时滚动窗口 + 早停已足够; 超出时退化成「尾部永不放行」(方向保守)。真机数据证明活跃页数常态超预算再立项 (拍板项 D10)</td></tr>
+  </tbody>
+</table>
+
+<h3>2.5 M5.5 收尾</h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:24%">修改项</th><th style="width:30%">落点</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">5.1</td><td>配置全链路 + 文档</td><td class="path">config/schema/hr.py · validation/sections.py · impact.py · config-reference/keys.md · docs/configuration.md</td><td>全部新键进 schema + validate_config (守卫会查) + impact 热重载级别标注 (<code>hr_check.*</code> L0 / <code>channel.*</code> L1, 沿用 <code>HR_CHECK_FIELD_LEVELS</code>); keys.md 与接入指南同步; 扩展 README 更新 caps 口径</td></tr>
+    <tr><td class="mono">5.2</td><td>端点纵深代码侧提示 (P3)</td><td class="path">hr/runtime.py + 扩展 README</td><td><code>channel.extension_id</code> 留空 ⇒ 启动记一条 WARNING (提示伪造回传风险与固定 id 的做法, 不阻断启动); 文档写明「token 留空自动生成到 <code>&lt;data_dir&gt;/hr.token</code>」(M2 已实现) 与「<code>token: 123456</code> 应改由用户手改」—— config.yml 红线不动</td></tr>
+    <tr><td class="mono">5.3</td><td>守阵全量 + 零静默变更回归</td><td class="path">tests/test_hr_*.py</td><td>§4 守阵清单全量落码; 「未配新键行为与现状逐字节一致」作为独立回归组</td></tr>
+    <tr><td class="mono">5.4</td><td>文档回写</td><td class="path">主计划 §14/§15 · 任务档案 · activeContext 切片</td><td>每步合入时在主计划 §15 加变更行 (v3.6 起) + 档案进度日志 + 切片更新 —— 回写落在合并远端之后的新基线上 (2026-09-26 定稿口径)</td></tr>
+    <tr><td class="mono">5.5</td><td>真机走查</td><td class="path">——</td><td>M0 三项前置实测收口 (排序倒序 / 考核期 P 恒定 / <code>?page=N</code> 英文站形态) + BTSchool 与 CarPT 全链路各走一轮 + <code>--hr-status</code> 新观测面核对。三项实测<strong>阻塞 M5.4 的早停启用</strong>, 不阻塞 M5.1/M5.2</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s3">3 · 实施顺序与依赖</h2>
+
+<pre>
+M5.1 判据与观测 ──► M5.2 信号处置与停用 ──► M5.4 早停与豁免 ──► M5.5 收尾
+  (可即刻开工)          (需 D1/D2/D3 拍板)      (需前置实测三项)
+        │                    │
+        │                    └──► M5.3 配额拆分 (独立, 可与 M5.2 并行; 需 D4/D5/D6 拍板)
+        └────────────────────────────────────┘
+</pre>
+
+<ul>
+  <li><strong>M5.1 → M5.2</strong>: 处置消费 1.1–1.4 的判据函数; M5.1 合入后即可在真机上观测排序与骤降 (1.5/1.6), 其证据反过来支撑 D1 拍板。</li>
+  <li><strong>M5.3 独立</strong>: 纯配额口径, 不碰判定与解析; 激活门 (3.2) 保证与任何一步都不冲突, 可与 M5.2 并行排期。</li>
+  <li><strong>M5.4 依赖</strong>: M5.1 的校验地基 (排序校验是滚动窗口正确性的基石 —— 报告 §11.1) + M5.3 的窗口预算口径; <strong>前置实测三项</strong> (§5) 阻塞早停②与豁免 A 的启用, 不阻塞代码合入 (开关默认关)。</li>
+  <li><strong>交付纪律</strong>: 每步 = 全量绿 + 红验 (临时还原旧实现 ⇒ 对应守阵全红, 还原后全绿) + 一笔独立提交; M5.4 之前正常路径判定语义零改动, 步骤可随时停在任意边界 (每一步本身是安全终态)。</li>
+</ul>
+
+<h2 id="s4">4 · 测试与守阵</h2>
+<p>主计划 §14.7 的守阵清单全部继承, 此处列<strong>增量与组织方式</strong>; 落码时同步主计划 §12 与各测试文件头 docstring 的「测试计划」。</p>
+<table>
+  <thead><tr><th style="width:22%">守阵组</th><th>条目 (新增部分加粗)</th><th style="width:14%">归属</th></tr></thead>
+  <tbody>
+    <tr><td>排序校验</td><td>页内逆序 1 处即红 / 跨页逆序 / 方向翻转 / 可比行 = 2 仍判定 / 可比行 &lt; 2 不判定 / 取数失败优先 ⇒ 判定弃用 / 干净轮 ⇒ 停站计数清零</td><td class="mono">M5.1/2</td></tr>
+    <tr><td>信号处置</td><td>S1/S2 ⇒ 早停 + <code>ACTION_ERROR</code> + 不产生放行 + 命中行仍在索引且未置 complete / 连续 K 轮 ⇒ <code>suspended</code> / suspended ⇒ <code>judge()</code> 返回 None (回落本地) / 熔断到期但 suspended 仍在 ⇒ 不恢复取数 / <strong>告警文案 S1 与 S2 分开</strong></td><td class="mono">M5.2</td></tr>
+    <tr><td><strong>骤降与空表</strong></td><td><strong>毕业迁移 (A→B, 轮级合计守恒) 不触发 / 单档清零 (毕业或站点清除) 不触发 / 轮级合计归零或低于基线 X% ⇒ 判不完备且不产生放行 / 可疑轮不计入基线 (连续两轮 0: 第二轮仍拦 —— 堵「0 vs 0」自愈) / 一次性清除后恢复 ⇒ 下一轮以新基线自愈 / 首刷 (无基线) 空表按现有口径 complete / 持续 K 轮零 + 结构完好 ⇒ 告警 + 人工确认口子, 确认前不放行, 确认后空清单 complete</strong></td><td class="mono">M5.2</td></tr>
+    <tr><td><strong>放行对账</strong></td><td><strong>回填命中现有放行 ⇒ 撤销并留 reason / 回填未命中 ⇒ 放行不动 / 新行优先回填顺序</strong></td><td class="mono">M5.2</td></tr>
+    <tr><td><strong>登录退避</strong></td><td><strong>退避期零请求 / 首见即报持续不刷屏 / 退避不计失败不推进熔断 / 退避上限 = refresh_interval</strong></td><td class="mono">M5.2</td></tr>
+    <tr><td>配额</td><td>页面桶与下载桶互不影响 / burst 用尽后同轮不再发 / rate 恢复后可用 / 天级硬顶 / 令牌桶跨重启不重置 / 旧站点文件 (无 <code>torrent_quota</code>) 可正常读取 / <strong>激活门: 全新键未配 ⇒ legacy 行为逐字节一致; opt-in split 后旧账本语义迁移正确</strong></td><td class="mono">M5.3</td></tr>
+    <tr><td>窗口与早停</td><td>滚动窗口只翻 N 页 / <code>complete</code> 只在「末页 or 早停」成立 / 早停② P 一致性失败 ⇒ 告警 + 不早停 / 早停③ 严格版判据 / 豁免 A/B 显式开关默认关 / <strong>预算轮转下三档都能推进</strong></td><td class="mono">M5.4</td></tr>
+    <tr><td>回归保护</td><td>未配新键的站点行为与现状<strong>逐字节一致</strong> (零静默变更机检, 独立成组); <code>maxpage/currentpage</code> 交叉验证与中文「下一页」判据的并集语义</td><td class="mono">全步</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s5">5 · 待拍板项</h2>
+<div class="note">
+<p><strong>拍板与开工的关系</strong>: M5.1 不消费任何拍板项, 可即刻开工; D1–D3 拍板后开工 M5.2; D4–D6 拍板后开工 (或并行) M5.3; 前置实测三项只阻塞 M5.4 的<strong>早停启用</strong> (代码合入与开关默认关不受阻)。</p>
+</div>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:20%">决策</th><th style="width:34%">选项</th><th style="width:26%">推荐</th><th>阻塞</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">D1</td><td>空表口径 + 骤降判据参数 (报告 §4.3; v1.1 细化)</td><td>a. 承认「空表即完整」, 只改 docstring / b. <strong>轮级骤降判据 + 持续零人工确认</strong>: 判据在轮级合计 (单档清零属站点正常语义 —— 毕业迁移 / 旧达标清除), 基线 = 最近可信非零轮, 归零/骤降 ⇒ 不完备 + 下一轮自愈; 连续 K 轮零 + 结构完好 ⇒ 告警 + 人工确认后才接受空清单 (不自动接受)</td><td><strong>b</strong>, 并定 3 个小参数: 骤降线 X (建议合计 &lt; 基线 30%)、持续零确认阈值 K (建议 3, 与 suspended 同款直觉)、人工确认口子形态 (建议站点级键 <code>accept_empty_listing</code>, 默认关)</td><td class="mono">M5.2</td></tr>
+    <tr><td class="mono">D2</td><td>放行收不回 (P2)</td><td>a. <strong>回填对账撤销 + 新行优先回填</strong> / b. 不修 (接受 ≤12H 漏管窗口) / c. pending&gt;0 就不产生放行</td><td><strong>a</strong> —— c 会把放行功能自废 (新行持续进清单)</td><td class="mono">M5.2</td></tr>
+    <tr><td class="mono">D3</td><td>多实例引导升级</td><td>a. <strong>维持 INFO, 文案补「配额翻倍」后果</strong> / b. 升 WARNING (需要可靠「多实例」判据, 现无 —— 误报会推系统通知)</td><td><strong>a</strong>; 若用户掌握可靠判据 (如固定两实例端口清单) 再升 b</td><td class="mono">M5.2</td></tr>
+    <tr><td class="mono">D4</td><td>请求间隔</td><td>90s 不动 (保守) / 60s (60 请求/时)</td><td><strong>90s</strong> (主计划 §14.9 同)</td><td class="mono">M5.3</td></tr>
+    <tr><td class="mono">D5</td><td>单轮页数上限</td><td>a. <strong>总量 8~10, <code>PROD_ROUND_WAIT_MAX</code> 不动</strong> / b. 把 900s 提成配置键放宽 (代价: 单轮持锁时长)</td><td><strong>a</strong> (主计划 §14.8 同)</td><td class="mono">M5.3</td></tr>
+    <tr><td class="mono">D6</td><td>激活门 + 桶默认值 + 扩展 caps</td><td>激活门: 站点级 <code>quota_model</code> 默认 legacy / 桶默认 40/10/20/5 / 扩展 page caps 上调到 ≥60/时·≥600/天</td><td><strong>照左执行</strong> (激活门是本计划新增 —— 40/时比 12/时松, 不设门违反保守默认)</td><td class="mono">M5.3</td></tr>
+    <tr><td class="mono">D7</td><td>自动豁免开关默认值</td><td>豁免 A (<code>auto_age_limit</code>) 与豁免 B (做种 5×) 默认</td><td><strong>都关</strong> (显式开启才生效)</td><td class="mono">M5.4</td></tr>
+    <tr><td class="mono">D8</td><td>超龄豁免取舍复确认</td><td>维持 v2.9 (超龄压过清单命中, 漏管由配置者接受) / 收回</td><td><strong>维持</strong> (2026-09-25 用户指令已定; 报告列为已知取舍, 复确认一次即可)</td><td class="mono">不阻塞</td></tr>
+    <tr><td class="mono">D9</td><td>单轮预算分配</td><td>a. A→B→C 固定顺序 / b. <strong>轮转起点</strong> (每轮从最久未完成档位起)</td><td><strong>b</strong> —— 固定顺序在紧预算下会饿尾档, <code>complete</code> 恒假 (§2 4.3)</td><td class="mono">M5.4</td></tr>
+    <tr><td class="mono">D10</td><td>断点续翻兜底</td><td>a. <strong>不排期</strong> (活跃页数常态 ≤ N 时不需要) / b. 立项 (HrRefreshMeta 加 per-scope 游标)</td><td><strong>a</strong>, 真机数据证明需要再立项</td><td class="mono">M5.4</td></tr>
+  </tbody>
+</table>
+
+<h4>前置实测三项 (M0 遗留, §13 决策记录)</h4>
+<ol>
+  <li>HR 页是否按完成时间倒序 (排序假设 —— 一切早停与滚动窗口正确性的基石, 报告 §8: <strong>不得当作事实写进配置或文档</strong>, 只能作为待运行时校验的假设);</li>
+  <li>考核期 P 是否对每个种子恒定 (用 <code>P ≈ done + remain − now</code> 反算分布, 1.5 的观测面直接产出证据);</li>
+  <li><code>?page=N</code> 真实参数名与英文站分页形态 (影响 <code>has_next</code> 判据与 1.3 交叉验证)。</li>
+</ol>
+
+<h2 id="s6">6 · 风险与回滚</h2>
+<table>
+  <thead><tr><th style="width:14%">步骤</th><th style="width:44%">主要风险</th><th>缓解与回滚</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">M5.1</td><td>几乎无 —— 只读观测</td><td>回滚 = 移除观测代码; 真机证据反而降低后续步骤风险</td></tr>
+    <tr><td class="mono">M5.2</td><td>误停站 (排序误报把好站停掉) / 放行撤销误伤</td><td>三道隔离内建 (前置条件 / 失败优先 / 只认连续); suspended 误触发走人工恢复 (<code>--hr-status</code> 指引); 撤销只发生在「hash 精确对上」时 (无误伤面); 回滚 = revert 单笔提交</td></tr>
+    <tr><td class="mono">M5.3</td><td>split 模型比 legacy 松 (40/时 vs 12/时) / 迁移期账本口径混用</td><td>激活门默认 legacy (不 opt-in 一行不改); 迁移期页面用量高估方向保守; 回滚 = 站点切回 <code>quota_model: legacy</code> 即旧行为</td></tr>
+    <tr><td class="mono">M5.4</td><td>早停/豁免在排序假设不成立时漏管</td><td>前置条件链 (排序校验 + P 一致性 + 连续 5 行) 任一失败即禁用并告警; 全部开关默认关, 关闭即 v2.9 行为; 前置实测未收口前不建议开启</td></tr>
+    <tr><td class="mono">整体</td><td>多 clone 并行写冲突</td><td>站点文件 schema 只加字段不抬版本 (向后兼容); 每步独立提交可单独 revert; 回写件落在合并远端之后的新基线上</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s7">7 · 关联制品</h2>
+<ul>
+  <li><strong>证据快照 (Done)</strong>: <a href="../reports/26-09-26-1628-report-hr-online-verify-audit.html">report · 26-09-26-1628 HR 在线核实设计审查</a> —— 触发模型 / 访问节奏 / 漏洞清单 / §7–§11 方案定稿;</li>
+  <li><strong>设计定稿</strong>: <a href="26-09-22-2204-partial-hr-site-verify-plan.html">plan · 26-09-22-2204 部分种子 HR 在线核实</a> §14 (v3.5, 待实施) —— 本计划承接其 M5 骨架, 落地时该计划 §15 加变更行;</li>
+  <li><strong>执行滚动</strong>: <a href="../tasks/26-09-22-backend-partial-hr-verify.md">task · 26-09-22-backend-partial-hr-verify</a> —— 子任务状态表与进度日志的唯一更新点;</li>
+  <li><strong>同专题近邻</strong>: <a href="26-09-27-1318-plan-hr-check-site-presets.html">plan · 26-09-27-1318 HR 检查站点预设</a> ·
+  <a href="../activeContext/26-09-22-2204-backend-partial-hr-verify.md">activeContext 切片</a> ·
+  <a href="26-09-25-1823-plan-webui-hr-safety-display.html">plan · 26-09-25-1823 WebUI HR 安全展示</a>;</li>
+  <li><strong>实施时必读</strong>: <span class="path">memory-bank/pitfalls/backend/_index.md</span> (改代码前路由) ·
+  <span class="path">memory-bank/pitfalls/testing/_index.md</span> (红验与 TMPDIR 口径) ·
+  <span class="path">memory-bank/modules/overview.md</span> (模块分工)。</li>
+</ul>
+
+<h2 id="s8">8 · 变更记录</h2>
+<table>
+  <thead><tr><th style="width:16%">版本</th><th style="width:18%">时间</th><th>改了什么 / 为什么</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="mono">v1.0</td>
+      <td class="mono">2026-09-27 18:15</td>
+      <td>初版: 把审查报告 26-09-26-1628 转化为修改计划 —— ① 承接主计划 §14 的 M5.1–M5.5 骨架并展开成文件级修改项; ② 补齐 §14 未吸收的审计结论 (P1 骤降保护与空表口径 / P2 放行对账撤销与多实例引导 / P3 登录退避与端点纵深提示); ③ 新增三个实施设计点 (配额激活门 3.2 / 单轮预算分配 4.3 / 扩展 caps 上调 3.7) 并列入拍板; ④ 汇总 10 项待拍板 (D1–D10) + 3 项前置实测。产出时已在 cbc4b80 现场复核报告全部符号引用仍然成立。</td>
+    </tr>
+    <tr>
+      <td class="mono">v1.2</td>
+      <td class="mono">2026-09-27 20:35</td>
+      <td><strong>实施完成</strong>: 用户令「实施本计划, 拍板按推荐」⇒ M5.1–M5.5 逐步落地 (每步独立全量绿 + 一红验): M5.1 判据与观测 (1763 passed) → M5.2 信号处置与停用 (1774; 新增 <code>--hr-resume</code> CLI 恢复口子) → M5.3 配额拆分 (1787; <code>max_torrents_per_day</code> Optional 化区分 legacy 60 / split 200) → M5.4 早停与豁免 (1795) → M5.5 收尾 (1796; keys.md / configuration.md / 扩展 README / 端点纵深 WARNING)。实施中的三个收口/勘误决策: ① 滚动窗口收口 = <code>max_pages_per_refresh</code> 即窗口页数, 不另设 <code>window_pages</code> 键; ② 单轮页面总量落地为全局键 <code>max_pages_per_round=9</code> (D5); ③ <strong>P 反算公式勘误</strong> —— 三份制品同源的「P ≈ done + remain − now」数学上不成立 (恒为负偏移), 正确公式 P = (now − done) + remain, 已按唯一正确方向实现并在主计划 §15 v3.6 注明。全部新键默认关/旧值, legacy 行为逐字节一致 (守阵 + 红验 ×4)。最终 test.full <strong>1796 passed + 3 skipped (91%)</strong>, 基线切片 26-09-27-2035。</td>
+    </tr>
+    <tr>
+      <td class="mono">v1.1</td>
+      <td class="mono">2026-09-27 19:38</td>
+      <td>骤降判据细化 (用户点出两个误判场景: 「考核通过会从考核中页移到已达标页」「旧的已达标可能被站点移除」): ① 判据粒度由未指明确立为<strong>轮级合计</strong> —— 单档清零属站点正常语义, 档位级只做观测 (1.4 / 1.5 / 2.2); ② 对比基线改为「最近一次结构完好且非零轮」, 可疑轮不计入 —— 堵「0 vs 0」自愈洞 (否则持续性改版只被挡一轮); ③ 持续零改为「告警 + 人工确认」, 不做 K 轮自动接受 —— 持续零 + 结构完好同样可由改版造出, 自动接受等于重开 P1 灾难面; ④ D1 与骤降守阵组同步。残余风险 (单档改版下 X% 线只挡一轮) 在 2.2 如实注明。</td>
+    </tr>
+  </tbody>
+</table>
+
+</main>
+</div>
+
+<footer class="foot">
+  基线 develop @ cbc4b80 (Gitee 主线齐平) · 计划时间 26-09-27-1815 · 纯计划文档, 未改任何代码<br>
+  依据现场: <span class="path">src/auto_qb/hr/{service,parse,model,ratelimit,resolve,worker,runtime,status,report,channel,events}.py</span> ·
+  <span class="path">src/auto_qb/hr/adapters/{base,nexusphp,carpt}.py</span> ·
+  <span class="path">src/auto_qb/{torrents/record,config/schema/hr,config/validation/sections}.py</span> ·
+  <span class="path">extensions/hr-fetch-proxy/site-caps.js</span> · <span class="path">tests/test_hr_*.py</span><br>
+  专题视图: doc-topic <code>backend-partial-hr-verify</code> ·
+  <a href="../reports/26-09-26-1628-report-hr-online-verify-audit.html">报告</a> ·
+  <a href="26-09-22-2204-partial-hr-site-verify-plan.html">主计划</a> ·
+  <a href="../tasks/26-09-22-backend-partial-hr-verify.md">档案</a> ·
+  <a href="../activeContext/26-09-22-2204-backend-partial-hr-verify.md">切片</a>
+</footer>
+
+</div>
+</body>
+</html>

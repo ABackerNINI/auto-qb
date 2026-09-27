@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from html.parser import HTMLParser
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 # ---------- 数值容错 ----------
 
@@ -252,3 +252,82 @@ def page_javascript_marks(html: str) -> Dict[str, int]:
         if m:
             out[key] = int(m.group(1))
     return out
+
+
+# ---------- 排序校验(计划 26-09-27-1815 §2 1.1) ----------
+# 页面排序(按完成时间倒序)是**假设不是事实**(审计报告 §8: 不得当作事实写进配置或文档) ——
+# 早停与覆盖证明都依赖它, 故做成可校验的纯函数: 方向**不预设**, 由首两可比行推断,
+# 之后翻转视同逆序。缺字段行不计入比较(避免把缺字段重复算成排序违反), 但计入 total 供「证据不足」。
+
+
+@dataclass(frozen=True, slots=True)
+class OrderViolation:
+    """一列数值的排序校验结果
+
+    first_at 是**乱序行**在其可比序列中的序号(从 0 起; 即违反处的后一行), 无违反 = -1。
+    direction 为空 = 可比行不足两行或全相等, 推不出方向 —— 此时**不判违反**(证据不足,
+    误报的代价是把好站停掉, 保守方向是宁可放过多花配额)。
+    """
+
+    inversions: int = 0
+    first_at: int = -1
+    comparable: int = 0
+    total: int = 0
+    direction: str = ""
+
+    @property
+    def insufficient(self) -> bool:
+        """证据是否不足以判定排序(可比行 < 2 —— 判定前置条件之一, 2026-09-26 用户定稿)"""
+        return self.comparable < 2
+
+    @property
+    def ok(self) -> bool:
+        """排序成立: 方向可推断且无违反"""
+        return self.direction != "" and self.inversions == 0
+
+
+def order_violations(values: Sequence[Optional[float]]) -> OrderViolation:
+    """对一列「可缺字段」的数值做单调性校验(方向自适应, 见 OrderViolation 说明)
+
+    用于 HR 页行序校验: done_epoch(完成时间倒序假设)与 remain_seconds(剩余达标时间,
+    早停② 的「remain==0 连续段」也依赖页序稳定)都传得进来。
+    """
+    seq = [v for v in values if v is not None]
+    if len(seq) < 2:
+        return OrderViolation(comparable=len(seq), total=len(values))
+    direction = ""
+    for i in range(len(seq) - 1):
+        if seq[i] > seq[i + 1]:
+            direction = "desc"
+            break
+        if seq[i] < seq[i + 1]:
+            direction = "asc"
+            break
+    if not direction:  # 全相等: 单调恒成立, 但方向推不出(后续跨页校验没有基准)
+        return OrderViolation(comparable=len(seq), total=len(values))
+    inversions = 0
+    first_at = -1
+    for i in range(len(seq) - 1):
+        violated = seq[i] < seq[i + 1] if direction == "desc" else seq[i] > seq[i + 1]
+        if violated:
+            inversions += 1
+            if first_at < 0:
+                first_at = i + 1
+    return OrderViolation(
+        inversions=inversions, first_at=first_at, comparable=len(seq), total=len(values), direction=direction
+    )
+
+
+def cross_page_violation(prev_values: Sequence[float], cur_values: Sequence[float], direction: str) -> bool:
+    """跨页排序证据(计划 §2 1.2, 复用 v2.9 prev_page_dones 思路的通用化)
+
+    方向应由**轮级首处推断**传入; 方向未知("")不判 —— 证据不足不误报。
+    边界(相邻值相等)不算违反: 同一秒完成的多行跨页分布是合法形态。
+    """
+    if not prev_values or not cur_values:
+        return False
+    if direction == "desc":
+        return max(cur_values) > min(prev_values)
+    if direction == "asc":
+        return min(cur_values) < max(prev_values)
+    return False

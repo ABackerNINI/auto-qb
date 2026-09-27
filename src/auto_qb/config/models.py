@@ -92,9 +92,22 @@ class HrCheckConfig:
     """
 
     enabled: bool = False
-    min_torrent_interval: float = 90.0  # 相邻两次站点请求最小间隔(秒); 抖动只向上 +0~25%
-    max_torrents_per_hour: int = 12  # 小时配额(站点级独立计数)
-    max_torrents_per_day: int = 60  # 日配额(站点级独立计数)
+    min_torrent_interval: float = 90.0  # 相邻两次站点请求最小间隔(秒); 抖动只向上 +0~25%。
+    #   ❗quota_model=split 的站点本键改义为「仅 .torrent 下载间隔」(页面间隔看 min_page_interval)
+    max_torrents_per_hour: int = 12  # 小时配额(站点级独立计数); split 站点不使用(速率由下载桶承担)
+    # 日配额(站点级独立计数); split 站点本键改义为「仅 .torrent 下载天顶」。
+    # None = 未显式配置 ⇒ 按模型取默认(legacy 60 / split 200, 计划 26-09-27-1815 §2 3.1)。
+    max_torrents_per_day: Optional[int] = None
+    # ---- split 模型键(计划 26-09-27-1815 §2 3.1, D4/D6 拍板) ----
+    # 页面桶: 40/时 · burst 10; 下载桶: 20/时 · burst 5; 天级硬顶: 页面 400 / 下载 200。
+    # 只在站点显式 quota_model=split 时消费(激活门, 保守默认)。
+    page_rate_per_hour: int = 40
+    page_burst: int = 10
+    torrent_rate_per_hour: int = 20
+    torrent_burst: int = 5
+    max_pages_per_day: int = 400
+    min_page_interval: float = 90.0
+    max_pages_per_round: int = 9  # 单轮页面请求总量上限(D5=a: 8~10 取 9; 0 = 不限); 单轮持锁时长的页数兜底
     failure_threshold: int = 3  # 连续失败 N 次 => 该站熔断
     failure_cooldown: float = 12 * 3600.0  # 熔断冷却时长(秒)
     allow_window: str = ""  # 仅该时段取数 "HH:MM-HH:MM"(可跨午夜); 空 = 全天。❗与 notify.quiet_hours 语义相反
@@ -145,6 +158,23 @@ class SiteHrCheckConfig:
     # 取数侧也不再为它翻页 / 存索引 / 回填 .torrent; 0 = 关闭。保守默认: 豁免等于自愿接受
     # 「站点其实还在管」的漏 HR 风险, 故只在站点级显式开启, 不设全局默认。
     completed_age_limit: float = 0.0
+    # 人工确认口子(计划 26-09-27-1815 §2 2.2, D1 拍板): 空清单且基线存在时, 默认仍判不完备
+    # (防改版空表被当真); 用户排查确认「账号确实没有 HR 种子」后才显式开启本键接受空清单。
+    # 默认 False(保守默认)—— 持续零 + 结构完好同样可由改版造出, 自动接受等于重开 P1 灾难面。
+    accept_empty_listing: bool = False
+    # 配额模型激活门(计划 §2 3.2, D6): legacy = 现行合并账本(行为逐字节一致, 默认);
+    # split = 页面/下载双令牌桶(40+20/时), 显式 opt-in 才生效 —— 40/时比 12/时松, 不设门违反保守默认。
+    quota_model: str = "legacy"
+    # 豁免 A(计划 26-09-27-1815 §2 4.5, D7 默认关): 用取数侧反算的考核期 P 作超龄豁免线
+    # (判定与早停②同源); P 一致性机检不过 ⇒ 自动禁用(机检不是文档承诺)。
+    auto_age_limit: bool = False
+    # 豁免 B(§2 4.7, D7 默认关): 本地做种时长 >= 站点要求时长 × 该倍数 ⇒ 「义务已超额完成」豁免。
+    # 0 = 关闭; 建议 5。不参与早停(本地事实映射不到页面行)。
+    seeding_exempt_ratio: float = 0.0
+    # split 模型的站点覆盖键(可选): None = 回退全局。torrent_rate_per_hour 留空时还接受
+    # 既有 max_torrents_per_hour 作为下载桶速率覆盖(用户已有配置不失效)。
+    page_rate_per_hour: Optional[int] = None
+    torrent_rate_per_hour: Optional[int] = None
 
     @property
     def enabled(self) -> bool:

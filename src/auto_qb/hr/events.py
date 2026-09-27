@@ -22,6 +22,7 @@ EVENT_LOGIN = "login"
 EVENT_FUSE = "fuse"
 EVENT_PARSE = "parse"
 EVENT_SILENCE = "silence"
+EVENT_SUSPENDED = "suspended"
 
 #: 事件 -> 中文标签(日志前缀用; 也是用户 grep 的锚点)
 LABELS = {
@@ -29,6 +30,7 @@ LABELS = {
     EVENT_FUSE: "熔断",
     EVENT_PARSE: "页面改版",
     EVENT_SILENCE: "通道静默",
+    EVENT_SUSPENDED: "站点停用",
 }
 
 
@@ -67,6 +69,54 @@ def page_changed(site: str, action: str, detail: str) -> str:
     return f"{prefix(EVENT_PARSE)} 站点 {site} | {action}: {detail}(覆盖证明不成立 ⇒ 本轮不产生新放行; 请核对站点 HR 页是否改版)"
 
 
+def order_broken(site: str, detail: str) -> str:
+    """排序假设不成立(计划 26-09-27-1815 §2 1.6/2.1): 页面行序与单调假设矛盾 ⇒ 覆盖证据不可信
+
+    文案与处置文案是**同一个**(观测期 1.6 与强信号 2.1 共用, 便于真机阶段直接对文案)。
+    """
+    return (f"{prefix(EVENT_PARSE)} 站点 {site} | 排序假设不成立({detail}): 页面行序与单调假设矛盾, "
+            "覆盖证据不可信 —— 请核对 HR 页是否改版")
+
+
+def field_missing(site: str, rate: float) -> str:
+    """必填字段缺失(S2 强信号, 计划 §2 2.1 文案): 与排序违反分开措辞, 便于对文案定位问题
+
+    S2 **不设比例阈值**(2026-09-26 用户定稿): 行数据读不全 = 页面形态变了, 哪怕 1 处也是强信号。
+    """
+    return (f"{prefix(EVENT_PARSE)} 站点 {site} | 必填字段缺失(缺失率 {rate:.0%}): "
+            "页面字段读不全, 覆盖证据不可信 —— 请核对 HR 页是否改版")
+
+
+def suspended(site: str, rounds: int, detail: str) -> str:
+    """站点停用进入(计划 26-09-27-1815 §2 2.3): 强信号连续 K 轮, 须人工确认后恢复
+
+    ❗熔断冷却到期**不会**自动恢复停用 —— 文案里必须把恢复动作写明, 否则用户只看到「不取数了」。
+    """
+    return (
+        f"{prefix(EVENT_SUSPENDED)} 站点 {site} | 连续 {rounds} 轮强信号(排序/字段异常), 已停用该站取数: {detail} | "
+        f"恢复: 排查站点 HR 页确认无改版后跑 --hr-resume {site}(熔断到期不会自动恢复停用)"
+    )
+
+
+def period_inconsistent(site: str, spread_days: float) -> str:
+    """考核期 P 不恒定(计划 26-09-27-1815 §2 4.4): 自动豁免与早停②双双禁用(机检)"""
+    return (
+        f"{prefix(EVENT_PARSE)} 站点 {site} | 考核期 P 不恒定(离散 {spread_days:.1f} 天, 超 ±1 天容差): "
+        "自动豁免与到期段早停已禁用 —— 请核对站点考核期规则是否变化"
+    )
+
+
+def zero_listing(site: str, rounds: int) -> str:
+    """清单持续为零(计划 §2 2.2): 表头在但合计连续 K 轮 0 —— 全部毕业/被清除? 还是改版?
+
+    刻意不自动接受: 持续零 + 结构完好同样可由改版造出, 自动接受等于重开 P1 灾难面。
+    """
+    return (
+        f"{prefix(EVENT_PARSE)} 站点 {site} | 清单已连续 {rounds} 轮为 0: 全部毕业/被清除? 还是改版? | "
+        "若确认是账号的合法空清单, 在该站点配置 accept_empty_listing: true 后空表才被接受为合法覆盖证明"
+    )
+
+
 def channel_silent(hours: float, where: str, sites: Sequence[str], note: str = "") -> str:
     """通道静默: 端点级事件(扩展没来联系**就没有任何站点能取数**) ⇒ 文案里点出受影响站点"""
     affected = ", ".join(sites) if sites else "(无启用中的站点)"
@@ -87,13 +137,19 @@ __all__ = [
     "EVENT_LOGIN",
     "EVENT_PARSE",
     "EVENT_SILENCE",
+    "EVENT_SUSPENDED",
     "LABELS",
     "channel_silent",
     "fetch_failed",
+    "field_missing",
     "fuse_opened",
     "login_expired",
     "login_expired_note",
+    "order_broken",
     "page_changed",
+    "period_inconsistent",
     "prefix",
     "summarize_sites",
+    "suspended",
+    "zero_listing",
 ]

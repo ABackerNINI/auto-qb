@@ -232,7 +232,18 @@ class _StubLink:
         self.judged = judged
         self.calls = []
 
-    def judge(self, site, infohashes, *, anchor=None, now=0.0, completed_age_limit=0.0):
+    def judge(
+        self,
+        site,
+        infohashes,
+        *,
+        anchor=None,
+        now=0.0,
+        completed_age_limit=0.0,
+        auto_age_limit=False,
+        required_seeding_time=0.0,
+        seeding_exempt_ratio=0.0
+    ):
         self.calls.append((site, tuple(infohashes), anchor, completed_age_limit))
         return self.judged
 
