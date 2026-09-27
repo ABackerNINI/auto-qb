@@ -1,0 +1,191 @@
+/* auto-qb WEB UI · 控制台皮肤(Console Hub 仪表台语言; 第三套皮肤, 与 atlas/prism 并列)
+ *
+ * 设计语言单点(与 resources/main-ui-templates/ 评审定稿 + shared/console_hub.css 实测微调值同源):
+ *   方角控件(radius 0, 不切角 —— clip-path 会裁掉 box-shadow 发光) / 切角 14px 只给大面(卡/弹窗/投放区,
+ *   内边距 ≥ 14px 护住内部控件聚焦发光) / 负 spread 发光配方(--glow·--glow-soft) / 语义三档静息描边即语义色 /
+ *   数值·路径·列头一律 --font-mono / 状态指示统一分段 LED(repeating-linear-gradient 5px 亮 + 3px 隙)。
+ * 令牌与 prism/css/themes/ocean.css(深海机房)同源, V1 固定单主题; 五主题切换仍属棱镜 ui-diff 口。
+ * 类名与 DOM 结构受 JS 耦合(.group-head/.detail-head 供列宽拖拽、gridStyle 生成列数须与 rows 一致、
+ * .search-hit/.ctx-menu 供逻辑挂钩) —— 只换视觉不改名(与 atlas/style.css 头部同一纪律)。
+ */
+:root {
+  /* 字体三族(控制台语言核心): 界面 / 仪表台展示(Bahnschrift) / 等宽读数(Cascadia Code) */
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+
+  /* 背景分层: 页底 → 卡片 → 行底 → 悬浮 → 下沉(明细/代码块分区) —— 与 ocean 主题同源 */
+  --bg: #0d1724;
+  --bg-card: #15233a;
+  --bg-row: #112034;
+  --bg-hover: #1c3050;
+  --bg-sunken: rgba(5, 12, 24, .5);
+
+  /* 前景三级 */
+  --fg: #e9eff7;
+  --fg-muted: #9cadc6;
+  --fg-dim: #6e84a3;
+
+  /* 品牌与语义色(附各自柔和底色与描边, 供 chip/徽章/横幅/发光统一取用) */
+  --accent: #3aa6a6;
+  --accent-hi: #5cc3c3;
+  --accent-soft: rgba(58, 166, 166, .15);
+  --ring: rgba(58, 166, 166, .45);
+  /* 按钮体系派生令牌(与 atlas/prism 成对声明): 实心 accent / 实心 error 底上的前景色。
+   * 控制台按钮走"描边 + 发光"语言不铺实心, 但 danger-solid 变体(危险·实心)仍需要 on-error。 */
+  --on-accent: #0d1724;
+  --on-accent-ink: #0d1724;
+  --on-error: #2b0d0d;
+  --green: #3fd699;
+  --green-soft: rgba(63, 214, 153, .15);
+  --blue: #4cc3f7;
+  --blue-soft: rgba(76, 195, 247, .15);
+  --warn: #f5bb42;
+  --warn-soft: rgba(245, 187, 66, .15);
+  --error: #f3766f;
+  --error-soft: rgba(243, 118, 111, .15);
+
+  /* 描边与表面(半透明表面用于 hover/分区, 不破坏底色的层次) */
+  --border: #23395a;
+  --border-strong: #34507c;
+  --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03);
+  --surface-2: rgba(255, 255, 255, .06);
+
+  /* 浮层与次级前景 */
+  --bg-elev: #1b2d4b;
+  --fg-soft: #bccadd;
+
+  /* 扩展语义色: 与状态色同族但互相可区分(筛选 chip/图例/标记共用) */
+  --violet: #ab8ffa;
+  --violet-soft: rgba(171, 143, 250, .16);
+  --pink: #f472b6;
+  --pink-soft: rgba(244, 114, 182, .16);
+  --teal: #2fd4bf;
+  --teal-soft: rgba(47, 212, 191, .16);
+  /* 分级补充色(第 4~6 色位): 分类/列/搜索/路径等图标与徽章可区分 */
+  --indigo: #8b93f8;
+  --indigo-soft: rgba(139, 147, 248, .16);
+  --cyan: #22d3ee;
+  --cyan-soft: rgba(34, 211, 238, .16);
+  --lime: #a3e635;
+
+  /* HR 标记: pending = 已触发但未达标(最醒目), done = 已达标(镇静的冷暖对照色) */
+  --hr-pending: #ff8f45;
+  --hr-pending-soft: rgba(255, 143, 69, .18);
+  --hr-done: #5eead4;
+  --hr-done-soft: rgba(94, 234, 212, .14);
+
+  /* 语义色三态描边(徽章与横幅统一取用) */
+  --accent-line: rgba(58, 166, 166, .45);
+  --green-line: rgba(63, 214, 153, .42);
+  --blue-line: rgba(76, 195, 247, .42);
+  --warn-line: rgba(245, 187, 66, .45);
+  --error-line: rgba(243, 118, 111, .45);
+  --hr-pending-line: rgba(255, 143, 69, .5);
+  --hr-done-line: rgba(94, 234, 212, .38);
+
+  /* 暂停/其它状态的中性中间调令牌族(与 atlas/prism 同口径) */
+  --paused: var(--fg-muted);
+  --paused-soft: transparent;
+  --paused-line: var(--border-strong);
+
+  /* 衍生语义色(HR 栏 / 限速对照 / 今日流量) */
+  --hr-hit: #ff8f45;
+  --limit-hit: var(--violet);
+  --limit-actual: var(--blue);
+  --today-up: var(--teal);
+  --today-down: var(--indigo);
+  --today-ico: var(--lime);
+
+  /* 表面工程: 玻璃底色(顶栏) / 极淡分隔线 —— 不透明实色(PERF-01: 吸顶条禁毛玻璃) */
+  --glass: #111e31;
+  --hairline: rgba(255, 255, 255, .055);
+
+  /* 状态栏专用底色 */
+  --statusbar-bg: #17273c;
+
+  /* 选中态专用令牌族(靖蓝族, 与"做种中"的绿族分开) */
+  --sel-bg: rgba(139, 147, 248, .16);
+  --sel-line: rgba(139, 147, 248, .45);
+  --sel-bar: #8b93f8;
+
+  /* 几何/阴影/动效: 方角语言 = 三档圆角令牌全部归零(胶囊态由组件层显式覆盖) */
+  --radius-lg: 0px;
+  --radius: 0px;
+  --radius-sm: 0px;
+  /* ---- 弹窗尺寸族: 与 atlas/prism 同族同值(03=860 宽档 / 04=920 宽档) ---- */
+  --modal-w-narrow: 460px;
+  --modal-w-base: 520px;
+  --modal-w-form: 560px;
+  --modal-w-add: 860px;
+  --modal-wide-w: 920px;
+  --statusbar-h: 34px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .16);
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, .22);
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, .3);
+  --ease: cubic-bezier(.2, .8, .3, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+  --dur-fast: 100ms;
+  --dur: 160ms;
+  --dur-slow: 280ms;
+}
+* { box-sizing: border-box; }
+[v-cloak] { display: none; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.6 var(--font-ui); -webkit-font-smoothing: antialiased; }
+::selection { background: var(--accent-soft); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button { font-family: inherit; }
+
+/* 滚动条(细窄方角, 与仪表台语言一致) */
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--border-strong); border: 3px solid transparent;
+  background-clip: content-box; border-radius: 0; }
+*::-webkit-scrollbar-thumb:hover { background: #46679a; background-clip: content-box; }
+*::-webkit-scrollbar-corner, *::-webkit-scrollbar-track { background: transparent; }
+
+/* 数值列等宽对齐(仪表台读数纪律: 所有数值/路径/哈希一律 mono) */
+.g-stat, .g-count, .g-hr, .m-stat, .m-hash, .sb-item .val, .sb-spd .val, .sb-spd .lim {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* 内联图标(sprite symbol 复用, 无外部图标库依赖) */
+.ico { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: currentColor;
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.ico-sm { width: 13px; height: 13px; }
+.icon-sprite { display: none; }
+
+/* 图标语义着色(单一来源, 与 atlas 同一张映射表) */
+.ico-up { color: var(--green); }
+.ico-down { color: var(--blue); }
+.ico-group { color: var(--violet); }
+.ico-store { color: var(--teal); }
+.ico-limit { color: var(--limit-hit); }
+.ico-today { color: var(--today-ico, var(--lime)); }
+.ico-hr-pending { color: var(--hr-pending); }
+.ico-hr-done { color: var(--hr-done); }
+.ico-refresh { color: var(--blue); }
+.ico-seed { color: var(--green); }
+.ico-tv { color: var(--violet); }
+.ico-add { color: var(--green); }
+.ico-config { color: var(--violet); }
+.ico-find { color: var(--cyan); }
+.ico-cols { color: var(--indigo); }
+.ico-clear { color: var(--fg-muted); }
+.ico-f-tag { color: var(--violet); }
+.ico-f-category { color: var(--indigo); }
+.ico-f-site { color: var(--teal); }
+.ico-f-path { color: var(--warn); }
+.ico-f-hr { color: var(--hr-pending); }
+.ico-chart { color: var(--cyan); }
+.ico-risk { color: var(--warn); }
+/* 旋转(索引构建中/刷新) */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .9s linear infinite; }
+@keyframes soft-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}

@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="ocean">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>02 · 种子页 — Console Hub 风格模板</title>
+<!-- 设计溯源: 参照 resources/settings-page-templates/05-console-hub.html + 落地版 console_hub.css 微调值。
+     设计思维四问: 目的=值守时一眼读出"谁在下/谁在做种/谁卡住"; 语调=仪表台读数(数值全等宽、
+     状态全 LED 分段条、行 hover 即点亮); 约束=结构沿用现有 DOM 骨架(topbar/status-strip/表格/statusbar),
+     只换皮肤不换信息架构; 差异点=分布条变 LED 段光带、进度条变分段 LED、选中语言仍是"左色条+柔底"。 -->
+<style>
+/* ============ 主题令牌(与 prism tokens.css + ocean.css 同源) ============ */
+:root {
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+  --radius-sm: 4px;
+  --shadow-2: 0 6px 18px rgba(0, 0, 0, .22); --shadow-3: 0 14px 40px rgba(0, 0, 0, .3);
+  --ease: cubic-bezier(.2, .8, .3, 1); --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --dur: 160ms; --dur-slow: 280ms;
+  --statusbar-h: 34px;
+}
+:root[data-theme="ocean"] { color-scheme: dark;
+  --bg: #0d1724; --bg-card: #15233a; --bg-row: #112034; --bg-hover: #1c3050;
+  --bg-sunken: rgba(5, 12, 24, .5); --bg-elev: #1b2d4b; --glass: #111e31;
+  --fg: #e9eff7; --fg-muted: #9cadc6; --fg-dim: #6e84a3; --fg-soft: #bccadd;
+  --accent: #3aa6a6; --accent-hi: #5cc3c3; --accent-soft: rgba(58, 166, 166, .15); --accent-line: rgba(58, 166, 166, .45);
+  --green: #3fd699; --green-soft: rgba(63, 214, 153, .15); --green-line: rgba(63, 214, 153, .42);
+  --blue: #4cc3f7; --blue-soft: rgba(76, 195, 247, .15); --blue-line: rgba(76, 195, 247, .42);
+  --warn: #f5bb42; --warn-soft: rgba(245, 187, 66, .15); --warn-line: rgba(245, 187, 66, .45);
+  --error: #f3766f; --error-soft: rgba(243, 118, 111, .15); --error-line: rgba(243, 118, 111, .45);
+  --violet: #ab8ffa; --violet-soft: rgba(171, 143, 250, .16);
+  --teal: #2fd4bf; --teal-soft: rgba(47, 212, 191, .16);
+  --indigo: #8b93f8; --indigo-soft: rgba(139, 147, 248, .16);
+  --border: #23395a; --border-strong: #34507c; --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03); --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+  --statusbar-bg: #17273c;
+  --sel-bg: rgba(139, 147, 248, .16); --sel-line: rgba(139, 147, 248, .45); --sel-bar: #8b93f8;
+  --paused: var(--fg-muted); --paused-line: var(--border-strong);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; font: 14px/1.6 var(--font-ui); background: var(--bg); color: var(--fg);
+  display: flex; flex-direction: column; overflow: hidden; }
+
+/* ============ Console Hub 组件层(console_hub.css 微调值) ============ */
+.hb-cut { --hb-cut: 14px; clip-path: polygon(var(--hb-cut) 0, 100% 0, 100% calc(100% - var(--hb-cut)), calc(100% - var(--hb-cut)) 100%, 0 100%, 0 var(--hb-cut)); }
+.hb-mark.hb-cut { --hb-cut: 8px; }
+.hb-input, .hb-btn, .hb-search, .hb-mark {
+  --tone-line: color-mix(in srgb, var(--tone) 45%, transparent);
+  --glow: inset 0 0 0 1px var(--tone), 0 0 22px -6px color-mix(in srgb, var(--tone) 80%, transparent);
+  --glow-soft: inset 0 0 0 1px color-mix(in srgb, var(--tone) 50%, transparent),
+      0 0 16px -8px color-mix(in srgb, var(--tone) 60%, transparent);
+}
+.hb-input { --tone: var(--accent); padding: 8px 12px 8px 30px; background-color: var(--bg-sunken); color: var(--fg);
+  border: 1px solid var(--tone-line); border-radius: 0; font-size: 13px; width: 280px;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.hb-input::placeholder { color: var(--fg-dim); opacity: 1; }
+.hb-input:hover, .hb-input:focus { outline: none; border-color: var(--tone); box-shadow: var(--glow); }
+.hb-btn { --tone: var(--fg-dim); white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 7px 13px; background: var(--bg-elev); color: var(--fg);
+  border: 1px solid var(--tone-line); border-radius: 0;
+  font: 600 13px/1.4 var(--font-ui); letter-spacing: .02em; cursor: pointer; clip-path: none;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+      color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.hb-btn:hover { background: var(--bg-hover); border-color: var(--tone); box-shadow: var(--glow-soft); }
+.hb-btn:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; box-shadow: var(--glow-soft); }
+.hb-btn.primary { --tone: var(--accent); background: transparent; border-color: var(--tone-line); color: var(--accent-hi); }
+.hb-btn.primary:hover { background: var(--accent-soft); border-color: var(--accent-hi); color: var(--accent-hi); box-shadow: var(--glow); }
+.hb-btn.danger { --tone: var(--error); background: transparent; border-color: var(--tone-line); color: var(--error); }
+.hb-btn.danger:hover { background: var(--error-soft); border-color: var(--error); box-shadow: var(--glow-soft); }
+.hb-btn.ghost { --tone: transparent; --tone-line: transparent; background: transparent; border-color: transparent; color: var(--fg-muted); }
+.hb-btn.ghost:hover { background: transparent; color: var(--accent-hi); box-shadow: none; }
+.hb-btn.sm { padding: 4px 10px; font-size: 12.5px; }
+
+.led { display: inline-block; width: 34px; height: 7px; flex: none;
+  background: repeating-linear-gradient(90deg, var(--fg-dim) 0 5px, transparent 5px 8px); opacity: .55; }
+.led.ok { background: repeating-linear-gradient(90deg, var(--green) 0 5px, transparent 5px 8px); opacity: 1; }
+.led.warn { background: repeating-linear-gradient(90deg, var(--warn) 0 5px, transparent 5px 8px); opacity: 1; }
+.hb-ico { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.hb-ico.sm { width: 13px; height: 13px; }
+.mono { font-family: var(--font-mono); }
+
+/* ============ 顶栏 ============ */
+.topbar { position: relative; z-index: 31; display: flex; align-items: center; gap: 14px; padding: 9px 16px;
+  background: var(--glass); border-bottom: 1px solid var(--border-soft); }
+.brand { display: flex; align-items: center; gap: 9px; font: 600 17px/1 var(--font-display); letter-spacing: .02em; }
+.hb-mark { --tone: var(--accent); flex: none; width: 28px; height: 28px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-hi); border: 1px solid var(--accent-line); }
+.brand .ver { padding: 1px 7px; border: 1px solid var(--border-soft); background: var(--surface-1);
+  color: var(--fg-dim); font: 500 11px/1.5 var(--font-mono); }
+/* 页签: 方形分段, 激活 = accent 柔底 + 内描边(沿用现有语言, 加 hover 点亮) */
+.tabs { display: flex; gap: 2px; padding: 2px; background: var(--bg-sunken); border: 1px solid var(--border-soft); }
+.tabs button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 0;
+  background: transparent; color: var(--fg-muted); font: 500 13px/1.4 var(--font-ui); cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.tabs button:hover { color: var(--fg); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.tabs button.active { background: var(--accent-soft); color: var(--accent-hi); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.hb-search { --tone: var(--accent); position: relative; }
+.hb-search .hb-ico { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--fg-dim); }
+.spacer { flex: 1; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; font-size: 12px; font-weight: 600; }
+.badge.ok { background: var(--green-soft); color: var(--green); box-shadow: inset 0 0 0 1px var(--green-line); }
+.badge .dot { width: 7px; height: 7px; background: currentColor; }
+
+/* ============ 状态分布条 + 筛选器 + 批量段 ============ */
+.status-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 8px 16px;
+  background: var(--bg); border-bottom: 1px solid var(--border-soft); }
+/* 分布条: 仪表台化 —— 分段 LED 段光带(每段 5px 亮 + 3px 隙), 每种状态一段宽度 */
+.dist-bar { display: flex; flex: 0 1 240px; height: 7px; background: var(--surface-2); }
+.dist-bar > span { height: 100%; transition: width .35s var(--ease);
+  background: repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 8px); }
+.dist-legend { display: flex; flex-wrap: wrap; gap: 5px; }
+.dist-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+  border: 1px solid var(--border-soft); background: transparent; color: var(--fg-muted); font-size: 11.5px;
+  cursor: pointer; transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.dist-chip:hover { background: var(--surface-2); }
+.dist-chip.active { border-color: currentColor; background: var(--surface-2); font-weight: 600; }
+.dist-chip .swatch { width: 8px; height: 8px; background: currentColor; }
+.dist-chip b { font-family: var(--font-mono); font-weight: 500; }
+.k-seeding { color: var(--green); } .k-downloading { color: var(--blue); }
+.k-paused { color: var(--fg-muted); } .k-hr { color: #ff8f45; }
+.strip-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.filter-btn { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border: 1px solid var(--border-soft); background: transparent; color: var(--fg-muted); font-size: 12px;
+  cursor: pointer; transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), color var(--dur) var(--ease); }
+.filter-btn:hover { border-color: var(--accent); color: var(--fg); box-shadow: 0 0 16px -8px color-mix(in srgb, var(--accent) 60%, transparent); }
+.filter-count { min-width: 16px; text-align: center; padding: 0 4px; background: var(--accent-soft);
+  color: var(--accent-hi); font: 500 10.5px/1.5 var(--font-mono); }
+/* 批量操作条(V2 重设计): 悬浮指令条 —— 出现在底部状态栏上方居中, 切角大面 + 静息微光,
+   把"选中了什么/有什么风险/能做什么"收进一条, 不再挤在分布条一行里推动布局 */
+.bulk-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--statusbar-h) + 14px);
+  z-index: 40; display: flex; align-items: center; gap: 8px; padding: 9px 12px 9px 14px;
+  background: var(--bg-elev); border: 1px solid var(--border-strong);
+  background-image: linear-gradient(135deg, var(--surface-1), transparent 46%);
+  box-shadow: var(--shadow-3), 0 0 24px -8px color-mix(in srgb, var(--sel-bar) 45%, transparent);
+  animation: bulk-in .18s var(--ease-out); }
+@keyframes bulk-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.bulk-info { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--fg-muted); white-space: nowrap; }
+.bulk-info .hb-ico { color: var(--sel-bar); }
+.bulk-info b { font-family: var(--font-mono); font-weight: 500; color: var(--fg); }
+/* HR 风险随行: 点名不能删的数量(warn 内嵌光条小签) */
+.bulk-hr { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; white-space: nowrap;
+  font: 500 11.5px/1.7 var(--font-mono); background: var(--warn-soft); color: var(--warn);
+  box-shadow: inset 2px 0 0 var(--warn); }
+.bulk-sep { width: 1px; height: 18px; background: var(--border-soft); }
+
+/* ============ 种子表 ============ */
+.table-wrap { flex: 1; overflow: auto; position: relative; }
+.t-head { position: sticky; top: 0; z-index: 5; display: grid;
+  background: var(--surface-2); border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(6px); }
+.t-head > div { padding: 7px 10px; font: 600 11px/1.4 var(--font-mono); letter-spacing: .06em;
+  color: var(--fg-dim); text-transform: uppercase; white-space: nowrap; overflow: hidden; }
+.t-row { display: grid; align-items: center; border-bottom: 1px solid var(--hairline);
+  cursor: default; transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.t-row:hover { background: var(--surface-1); }
+.t-row.selected { background: var(--sel-bg); box-shadow: inset 3px 0 0 var(--sel-bar); }
+.t-row > div { padding: 6px 10px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t-name { font-size: 13px; color: var(--fg); }
+/* 状态: LED 小条 + 文本(等宽读数风格) */
+.t-state { display: flex; align-items: center; gap: 8px; font: 500 12px/1.4 var(--font-ui); }
+.t-state .led { width: 26px; height: 6px; }
+.t-state.st-seeding { color: var(--green); } .t-state.st-downloading { color: var(--blue); }
+.t-state.st-paused { color: var(--paused); } .t-state.st-hr { color: #ff8f45; }
+.t-state.st-stalled { color: var(--fg-muted); }
+/* 站点 chip: 切角小签(大面语言下放一级, 3px 切角), 柔底 + 同族字色 */
+.site-chip { display: inline-block; padding: 1px 7px; font: 500 11px/1.6 var(--font-mono);
+  clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%, 0 3px); }
+.site-hds { background: var(--accent-soft); color: var(--accent-hi); }
+.site-pt { background: var(--violet-soft); color: var(--violet); }
+.site-spr { background: var(--teal-soft); color: var(--teal); }
+.site-kg { background: var(--blue-soft); color: var(--blue); }
+/* 标签 chip: 中性, HR 标签橙 */
+.tag-chip { display: inline-block; padding: 1px 7px; margin-right: 4px; font-size: 11px;
+  border: 1px solid var(--border); background: var(--surface-1); color: var(--fg-muted); }
+.tag-chip.hr { border-color: var(--warn-line); background: var(--warn-soft); color: var(--warn); }
+/* 数值读数: 一律等宽; 速度为零降透明 */
+.t-num { font: 500 12.5px/1.4 var(--font-mono); }
+.t-num.zero { color: var(--fg-dim); opacity: .6; }
+.t-num.down { color: var(--blue); } .t-num.up { color: var(--teal); }
+/* 进度: 分段 LED 填充条 + mono 百分比 */
+.t-progress { display: flex; align-items: center; gap: 8px; }
+.t-progress .bar { flex: 1; height: 7px; background: var(--surface-2); position: relative; }
+.t-progress .bar i { position: absolute; inset: 0 auto 0 0;
+  background: repeating-linear-gradient(90deg, currentColor 0 5px, transparent 5px 8px); }
+.t-progress .val { font: 500 11.5px/1 var(--font-mono); color: var(--fg-dim); width: 44px; text-align: right; }
+.p-seeding { color: var(--green); } .p-downloading { color: var(--blue); } .p-paused { color: var(--fg-dim); }
+.t-hr { display: inline-flex; align-items: center; gap: 5px; padding: 0 7px;
+  font: 600 10.5px/1.7 var(--font-mono); letter-spacing: .05em;
+  background: var(--warn-soft); color: #ff8f45; box-shadow: inset 2px 0 0 #ff8f45; }
+
+/* ============ 底部状态栏 ============ */
+.statusbar { display: flex; align-items: center; gap: 14px; height: var(--statusbar-h); padding: 0 16px;
+  background: var(--statusbar-bg); border-top: 1px solid var(--border-soft);
+  font: 500 12px/1 var(--font-mono); color: var(--fg-dim); }
+.sb-item { display: inline-flex; align-items: center; gap: 6px; }
+.sb-item .val { color: var(--fg-muted); }
+.sb-item .val.down { color: var(--indigo); } .sb-item .val.up { color: var(--teal); }
+.sb-sep { width: 1px; height: 16px; background: var(--border-soft); }
+.sb-spacer { flex: 1; }
+.sb-spd { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 0;
+  background: transparent; color: var(--fg-muted); font: inherit; cursor: pointer;
+  transition: color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.sb-spd:hover { color: var(--fg); box-shadow: inset 0 -2px 0 -1px var(--accent); }
+.sb-spd .val { color: var(--fg); } .sb-spd .lim { color: var(--fg-dim); }
+.sb-state { display: inline-flex; align-items: center; gap: 8px; color: var(--green); }
+</style>
+</head>
+<body>
+<svg aria-hidden="true" style="display:none">
+  <symbol id="i-orbit" viewBox="0 0 16 16"><path d="M4.9 3.6A5.4 5.4 0 1 0 11.1 3.6" fill="none"/><circle cx="11.1" cy="3.6" r="1.7" fill="var(--green)" stroke="none"/><circle cx="8" cy="8" r="2.1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.4v9.2M3.4 8h9.2"/></symbol>
+  <symbol id="i-columns" viewBox="0 0 16 16"><rect x="2.2" y="3" width="3.4" height="10"/><rect x="6.3" y="3" width="3.4" height="10"/><rect x="10.4" y="3" width="3.4" height="10"/></symbol>
+  <symbol id="i-cards" viewBox="0 0 16 16"><path d="M8 2.6 13.6 5.6 8 8.6 2.4 5.6z"/><path d="M2.4 8.6 8 11.6l5.6-3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.4v7.8M4.9 7.1 8 10.2l3.1-3.1M3.2 12.9h9.6"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.8V3M4.9 6.1 8 3l3.1 3.1M3.2 12.9h9.6"/></symbol>
+  <symbol id="i-tv" viewBox="0 0 16 16"><path d="M2.5 5.4h11v7h-11z"/><path d="M5.6 2.4 8 4.8l2.4-2.4"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24" stroke-width="1.9"><path d="M10.3 4.3c.4-1.8 2.9-1.8 3.4 0a1.7 1.7 0 0 0 2.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.6c1.8.4 1.8 2.9 0 3.3a1.7 1.7 0 0 0-1 2.6c.9 1.5-.8 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.4 1.8-2.9 1.8-3.3 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 0 0-1-2.6c-1.8-.4-1.8-2.9 0-3.3a1.7 1.7 0 0 0 1-2.6c-.9-1.5.8-3.3 2.4-2.4a1.7 1.7 0 0 0 2.5-1.1z"/><circle cx="12" cy="12" r="3.1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5.2 3.3 12.4 8l-7.2 4.7z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.8 3.6v8.8M10.2 3.6v8.8"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.55-3.6"/><path d="M13.3 2.8v2.7h-2.7"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 16 16"><path d="M3 7.8V3.2h4.6L13 8.6 8.6 13z"/><path d="M5.6 5.7v.01"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.9 2.3 4.3 9.1h3L6.1 13.7 11.6 7h-3z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.6 8.4 6.6 11.4 12.6 4.8"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M3.4 5h9.2M6.4 5V3.5h3.2V5M5 5l.6 8h4.8L11 5"/></symbol>
+  <symbol id="i-select-all" viewBox="0 0 16 16"><rect x="2.4" y="2.4" width="11.2" height="11.2"/><path d="M5.5 8.2 7.3 10l3.4-3.9"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></symbol>
+  <symbol id="i-traffic" viewBox="0 0 16 16"><path d="M5.4 3.2v9.6" style="stroke:var(--indigo)"/><path d="M3.2 10.6 5.4 12.8l2.2-2.2" style="stroke:var(--indigo)"/><path d="M10.6 12.8V3.2" style="stroke:var(--teal)"/><path d="M8.4 5.4 10.6 3.2l2.2 2.2" style="stroke:var(--teal)"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 16 16"><path d="M2.7 2.6v10.8h10.7"/><path d="M5.3 10.9 8 7.5l2 1.8 2.9-4.2"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M8 4.7V8l2.3 1.6"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 16 16"><path d="M8 3.4v9M4.4 8.8 8 12.4l3.6-3.6"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 16 16"><path d="M8 12.6V3.6M4.4 7.2 8 3.6l3.6 3.6"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 16 16"><path d="M4.3 2.5h7.4M4.3 13.5h7.4"/><path d="M5.2 2.5v2.3L8 8l-2.8 3.2v2.3M10.8 2.5v2.3L8 8l2.8 3.2v2.3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M2.6 8h10.8"/><path d="M8 2.4c1.5 1.6 2.3 3.5 2.3 5.6S9.5 12 8 13.6C6.5 12 5.7 10.1 5.7 8S6.5 4 8 2.4z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2.4 12.7V4.1h3.9l1.3 1.7h6v6.9z"/><path d="M2.4 7.6h11.2"/></symbol>
+</svg>
+
+<!-- ============ 顶栏 ============ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="hb-mark hb-cut"><svg class="hb-ico" viewBox="0 0 16 16"><use href="#i-orbit"/></svg></span>
+    <span>auto-qb</span>
+    <span class="ver">v1.4.2</span>
+  </div>
+  <nav class="tabs">
+    <button>分组</button>
+    <button class="active"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-download"/></svg>种子</button>
+    <button><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-tv"/></svg>追剧</button>
+  </nav>
+  <div class="hb-search">
+    <svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-search"/></svg>
+    <input class="hb-input" placeholder="搜索种子名或文件名…(空格=且, -词排除)">
+  </div>
+  <button class="hb-btn primary"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-plus"/></svg>添加种子</button>
+  <button class="hb-btn"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-columns"/></svg>列</button>
+  <div class="spacer"></div>
+  <nav class="tabs">
+    <button><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-settings"/></svg>设置</button>
+  </nav>
+  <span class="badge ok"><i class="dot"></i>qB 已连接</span>
+</header>
+
+<!-- 批量操作条(V2): 悬浮指令条 —— 选中即浮现于状态栏上方; 左=选中读数+HR风险点名,
+     右=动作组(图标齐全), 删除单独 danger 档靠最右, 清除退到 ghost 最末 -->
+<div class="bulk-bar hb-cut">
+  <span class="bulk-info">
+    <svg class="hb-ico" viewBox="0 0 16 16"><use href="#i-select-all"/></svg>
+    已选 <b>2 个辅种 · 3 个种子</b>
+  </span>
+  <span class="bulk-hr"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-hourglass"/></svg>含 1 个不能删</span>
+  <span class="bulk-sep"></span>
+  <button class="hb-btn sm"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-play"/></svg>开始</button>
+  <button class="hb-btn sm"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-pause"/></svg>暂停</button>
+  <button class="hb-btn sm"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-bolt"/></svg>强制汇报</button>
+  <button class="hb-btn sm"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-check"/></svg>校验</button>
+  <button class="hb-btn sm"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-tag"/></svg>标签/分类</button>
+  <span class="bulk-sep"></span>
+  <button class="hb-btn sm danger"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-trash"/></svg>删除…</button>
+  <button class="hb-btn sm ghost"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-close"/></svg>清除</button>
+</div>
+
+<!-- ============ 状态分布 + 筛选器 ============ -->
+<div class="status-strip">
+  <div class="dist-bar">
+    <span class="k-seeding" style="width:46%"></span>
+    <span class="k-downloading" style="width:24%"></span>
+    <span class="k-hr" style="width:12%"></span>
+    <span class="k-paused" style="width:18%"></span>
+  </div>
+  <div class="dist-legend">
+    <button class="dist-chip k-seeding"><span class="swatch"></span>做种 <b>37</b></button>
+    <button class="dist-chip k-downloading active"><span class="swatch"></span>下载中 <b>19</b></button>
+    <button class="dist-chip k-hr"><span class="swatch"></span>H&R <b>9</b></button>
+    <button class="dist-chip k-paused"><span class="swatch"></span>暂停 <b>14</b></button>
+  </div>
+  <div class="strip-tools">
+    <button class="filter-btn"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-tag"/></svg>标签 <span class="filter-count">2</span></button>
+    <button class="filter-btn"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-globe"/></svg>站点</button>
+    <button class="filter-btn"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-folder"/></svg>路径</button>
+  </div>
+</div>
+
+<!-- ============ 种子表 ============ -->
+<main class="table-wrap">
+  <div class="t-head" style="grid-template-columns: 150px minmax(260px,1fr) 84px 190px 90px 150px 96px 96px 88px">
+    <div>状态</div><div>名称</div><div>站点</div><div>标签</div><div style="text-align:right">大小</div>
+    <div>进度</div><div style="text-align:right">↓ 速度</div><div style="text-align:right">↑ 速度</div><div style="text-align:right">剩余</div>
+  </div>
+  <div class="t-row" style="grid-template-columns: 150px minmax(260px,1fr) 84px 190px 90px 150px 96px 96px 88px">
+    <div class="t-state st-downloading"><span class="led ok"></span>下载中</div>
+    <div class="t-name" title="Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.H.265-HDS">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.H.265-HDS</div>
+    <div><span class="site-chip site-hds">HDS</span></div>
+    <div><span class="tag-chip">movie</span><span class="tag-chip hr">H&R</span></div>
+    <div class="t-num" style="text-align:right">21.3 GiB</div>
+    <div class="t-progress p-downloading"><span class="bar"><i style="width:64%"></i></span><span class="val">64.0%</span></div>
+    <div class="t-num down" style="text-align:right">12.4 MiB/s</div>
+    <div class="t-num zero" style="text-align:right">0 B/s</div>
+    <div class="t-num" style="text-align:right">00:41:12</div>
+  </div>
+  <div class="t-row" style="grid-template-columns: 150px minmax(260px,1fr) 84px 190px 90px 150px 96px 96px 88px">
+    <div class="t-state st-downloading"><span class="led ok"></span>下载中</div>
+    <div class="t-name">The.Studio.S01E05.1080p.WEB-DL.DDP5.1.H.264-PTer</div>
+    <div><span class="site-chip site-pt">PTer</span></div>
+    <div><span class="tag-chip">tv</span></div>
+    <div class="t-num" style="text-align:right">2.1 GiB</div>
+    <div class="t-progress p-downloading"><span class="bar"><i style="width:28.5%"></i></span><span class="val">28.5%</span></div>
+    <div class="t-num down" style="text-align:right">4.8 MiB/s</div>
+    <div class="t-num zero" style="text-align:right">0 B/s</div>
+    <div class="t-num" style="text-align:right">01:12:40</div>
+  </div>
+  <div class="t-row selected" style="grid-template-columns: 150px minmax(260px,1fr) 84px 190px 90px 150px 96px 96px 88px">
+    <div class="t-state st-seeding"><span class="led ok"></span>做种中</div>
+    <div class="t-name">Blade.Runner.2049.2017.2160p.UHD.BluRay.REMUX.HDR.HEVC-HDS</div>
+    <div><span class="site-chip site-hds">HDS</span></div>
+    <div><span class="tag-chip">keep</span></div>
+    <div class="t-num" style="text-align:right">48.7 GiB</div>
+    <div class="t-progress p-seeding"><span class="bar"><i style="width:100%"></i></span><span class="val">100%</span></div>
+    <div class="t-num zero" style="text-align:right">0 B/s</div>
+    <div class="t-num up" style="text-align:right">31.2 MiB/s</div>
+    <div class="t-num" style="text-align:right">∞</div>
+  </div>
+  <div class="t-row selected" style="grid-template-columns: 150px minmax(260px,1fr) 84px 190px 90px 150px 96px 96px 88px">
+    <div class="t-state st-seeding"><span class="led ok"></span>做种中</div>
+    <div class="t-name">Oppenheimer.2023.1080p.BluRay.x264.DTS-KPS</div>
+    <div><span class="site-chip site-spr">普特</span></div>
+    <div><span class="tag-chip">keep</span><span class="tag-chip">free</span></div>
+    <div class="t-num" style="text-align:right">11.9 GiB</div>
+    <div class="t-progress p-seeding"><span class="bar"><i style="width:100%"></i></span><span class="val">100%</span></div>
+    <div class="t-num zero" style="text-align:right">0 B/s</div>
+    <div class="t-num up" style="text-align:right">2.6 MiB/s</div>
+    <div class="t-num" style="text-align:right">∞</div>
+  </div>
+  <div class="t-row" style="grid-template-columns: 150px minmax(260px,1fr) 84px 190px 90px 150px 96px 96px 88px">
+    <div class="t-state st-hr"><span class="led warn"></span>H&R 考察中</div>
+    <div class="t-name">Severance.S02.2160p.AppleTV.WEB-DL.DDP5.1.H.265-FraMeSToR <span class="t-hr">HR · 12d/14d</span></div>
+    <div><span class="site-chip site-kg">KGrad</span></div>
+    <div><span class="tag-chip hr">H&R</span></div>
+    <div class="t-num" style="text-align:right">38.2 GiB</div>
+    <div class="t-progress p-downloading"><span class="bar"><i style="width:91%"></i></span><span class="val">91.2%</span></div>
+    <div class="t-num down" style="text-align:right">860 KiB/s</div>
+    <div class="t-num up" style="text-align:right">5.1 MiB/s</div>
+    <div class="t-num" style="text-align:right">03:20:05</div>
+  </div>
+  <div class="t-row" style="grid-template-columns: 150px minmax(260px,1fr) 84px 190px 90px 150px 96px 96px 88px">
+    <div class="t-state st-stalled"><span class="led"></span>等待中</div>
+    <div class="t-name">A.Complete.Unknown.2024.1080p.WEB-DL.DDP5.1.H.264-HDS</div>
+    <div><span class="site-chip site-hds">HDS</span></div>
+    <div><span class="tag-chip">movie</span></div>
+    <div class="t-num" style="text-align:right">9.8 GiB</div>
+    <div class="t-progress p-downloading"><span class="bar"><i style="width:3%"></i></span><span class="val">3.1%</span></div>
+    <div class="t-num zero" style="text-align:right">0 B/s</div>
+    <div class="t-num zero" style="text-align:right">0 B/s</div>
+    <div class="t-num" style="text-align:right">--:--:--</div>
+  </div>
+  <div class="t-row" style="grid-template-columns: 150px minmax(260px,1fr) 84px 190px 90px 150px 96px 96px 88px">
+    <div class="t-state st-paused"><span class="led"></span>已暂停</div>
+    <div class="t-name">Shogun.S01.2160p.Hulu.WEB-DL.DDP5.1.Atmos.H.265-NOSIV</div>
+    <div><span class="site-chip site-kg">KGrad</span></div>
+    <div><span class="tag-chip hr">H&R</span><span class="tag-chip">tv</span></div>
+    <div class="t-num" style="text-align:right">52.4 GiB</div>
+    <div class="t-progress p-paused"><span class="bar"><i style="width:47%"></i></span><span class="val">47.0%</span></div>
+    <div class="t-num zero" style="text-align:right">0 B/s</div>
+    <div class="t-num zero" style="text-align:right">0 B/s</div>
+    <div class="t-num" style="text-align:right">--:--:--</div>
+  </div>
+</main>
+
+<!-- ============ 底部状态栏 ============ -->
+<footer class="statusbar">
+  <span class="sb-item"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-traffic"/></svg>今日
+    <span class="val down"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-arrow-down"/></svg>18.2 GiB</span>
+    <span class="val up"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-arrow-up"/></svg>42.7 GiB</span>
+  </span>
+  <span class="sb-sep"></span>
+  <span class="sb-state"><span class="led ok"></span>已连接 · 79 个种子</span>
+  <button class="sb-spd"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-chart"/></svg>完整统计</button>
+  <span class="sb-spacer"></span>
+  <button class="sb-spd"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-download"/></svg><span class="val">17.3 MiB/s</span><span class="lim">/ 不限</span></button>
+  <span class="sb-sep"></span>
+  <button class="sb-spd"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-upload"/></svg><span class="val">38.9 MiB/s</span><span class="lim">/ 50 MiB/s</span></button>
+</footer>
+
+<script>
+/* 最小交互演示: 点行 = 选中/取消(选中语言: 左靛蓝色条 + 柔底) */
+document.querySelectorAll(".t-row").forEach((r) => r.addEventListener("click", () => r.classList.toggle("selected")));
+</script>
+</body>
+</html>

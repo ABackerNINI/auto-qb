@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="ocean">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>03 · 添加种子弹窗 — Console Hub 风格模板</title>
+<!-- 设计溯源: 参照 05-console-hub + 落地版 console_hub.css 微调值。
+     设计思维四问: 目的=让"把种子交给 auto-qb 接管"这一步可预期(来源/落点/选项/接管后果四段);
+     语调=表单也保持仪表台纪律(控件方角、读数等宽、发光只给可交互物);
+     约束=结构沿用现有添加对话框五段式(来源/字段/选项/预览/动作), 尺寸走 --modal-w-add: 860px;
+     差异点=弹窗大面切角 + 内边距 20px(护住内部控件聚焦发光不被 clip-path 裁掉, 硬知识①)。 -->
+<style>
+:root {
+  --font-ui: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+  --shadow-3: 0 14px 40px rgba(0, 0, 0, .3);
+  --ease: cubic-bezier(.2, .8, .3, 1); --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --dur: 160ms; --modal-w-add: 860px;
+}
+:root[data-theme="ocean"] { color-scheme: dark;
+  --bg: #0d1724; --bg-card: #15233a; --bg-row: #112034; --bg-hover: #1c3050;
+  --bg-sunken: rgba(5, 12, 24, .5); --bg-elev: #1b2d4b;
+  --fg: #e9eff7; --fg-muted: #9cadc6; --fg-dim: #6e84a3;
+  --accent: #3aa6a6; --accent-hi: #5cc3c3; --accent-soft: rgba(58, 166, 166, .15); --accent-line: rgba(58, 166, 166, .45);
+  --warn: #f5bb42; --warn-soft: rgba(245, 187, 66, .15); --warn-line: rgba(245, 187, 66, .45);
+  --error: #f3766f; --error-soft: rgba(243, 118, 111, .15); --error-line: rgba(243, 118, 111, .45);
+  --green: #3fd699;
+  --border: #23395a; --border-strong: #34507c; --border-soft: rgba(255, 255, 255, .07);
+  --surface-1: rgba(255, 255, 255, .03); --surface-2: rgba(255, 255, 255, .06);
+  --hairline: rgba(255, 255, 255, .055);
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; font: 14px/1.6 var(--font-ui); background: var(--bg); color: var(--fg); }
+
+/* ============ Console Hub 组件层 ============ */
+.hb-cut { --hb-cut: 10px; clip-path: polygon(var(--hb-cut) 0, 100% 0, 100% calc(100% - var(--hb-cut)), calc(100% - var(--hb-cut)) 100%, 0 100%, 0 var(--hb-cut)); }
+.hb-input, .hb-btn, .opt-pill, .hb-ask, .hb-mark {
+  --tone-line: color-mix(in srgb, var(--tone) 45%, transparent);
+  --glow: inset 0 0 0 1px var(--tone), 0 0 22px -6px color-mix(in srgb, var(--tone) 80%, transparent);
+  --glow-soft: inset 0 0 0 1px color-mix(in srgb, var(--tone) 50%, transparent),
+      0 0 16px -8px color-mix(in srgb, var(--tone) 60%, transparent);
+}
+.hb-input { --tone: var(--accent); padding: 9px 13px; background-color: var(--bg-sunken); color: var(--fg);
+  border: 1px solid var(--tone-line); border-radius: 0; font-size: 13px; width: 100%;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.hb-input::placeholder { color: var(--fg-dim); opacity: 1; }
+.hb-input:hover { border-color: var(--tone); box-shadow: var(--glow-soft); }
+.hb-input:focus { outline: none; border-color: var(--tone); box-shadow: var(--glow); }
+.hb-btn { --tone: var(--fg-dim);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 8px 15px; background: var(--bg-elev); color: var(--fg);
+  border: 1px solid var(--tone-line); border-radius: 0;
+  font: 600 13px/1.4 var(--font-ui); letter-spacing: .02em; cursor: pointer; clip-path: none;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+      color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.hb-btn:hover { background: var(--bg-hover); border-color: var(--tone); box-shadow: var(--glow-soft); }
+.hb-btn.primary { --tone: var(--accent); background: transparent; border-color: var(--tone-line); color: var(--accent-hi); }
+.hb-btn.primary:hover { background: var(--accent-soft); border-color: var(--accent-hi); color: var(--accent-hi); box-shadow: var(--glow); }
+.hb-btn.ghost { --tone: transparent; --tone-line: transparent; background: transparent; border-color: transparent; color: var(--fg-muted); }
+.hb-btn.ghost:hover { background: transparent; color: var(--accent-hi); box-shadow: none; }
+.hb-mark { --tone: var(--accent); flex: none; width: 30px; height: 30px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-hi); border: 1px solid var(--accent-line); }
+.hb-ico { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.hb-ico.sm { width: 13px; height: 13px; }
+.mono { font-family: var(--font-mono); }
+
+/* ============ 弹窗骨架 ============ */
+.modal-mask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(4, 9, 18, .62); backdrop-filter: blur(3px); }
+/* 弹窗 = 大面 → 切角 + 1px 描边 + 左上方向光; 内边距 ≥ 20px, 内部控件发光不出切角区 */
+.modal { width: var(--modal-w-add); max-width: calc(100vw - 32px); max-height: calc(100vh - 48px);
+  display: flex; flex-direction: column;
+  background: var(--bg-card); border: 1px solid var(--border-strong);
+  background-image: linear-gradient(135deg, var(--surface-1), transparent 46%);
+  box-shadow: var(--shadow-3); }
+.modal-title { display: flex; align-items: center; gap: 10px; padding: 14px 20px;
+  border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.modal-title .tt { font: 600 15px/1.3 var(--font-display); letter-spacing: .01em; flex: 1; }
+.modal-title .meta { font: 500 11px/1.4 var(--font-mono); color: var(--fg-dim); letter-spacing: .04em; }
+.hb-ask { --tone: var(--fg-dim); flex: none; width: 22px; height: 22px; display: grid; place-items: center;
+  border: 1px solid var(--border); background: transparent; color: var(--fg-dim); cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.hb-ask:hover { color: var(--fg); border-color: var(--tone); background: var(--surface-2); box-shadow: var(--glow-soft); }
+.modal-body { padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; padding: 13px 20px;
+  border-top: 1px solid var(--border); background: var(--surface-2); }
+
+/* ============ 表单段 ============ */
+.f-label { display: block; margin-bottom: 7px; font: 600 11px/1.4 var(--font-mono);
+  letter-spacing: .07em; color: var(--fg-dim); }
+.f-label i { font-style: normal; color: var(--fg-muted); font-family: var(--font-ui); letter-spacing: 0; }
+/* 来源: 切角大面投放区(虚线感用内侧 hairline 表达), hover 点亮 */
+.source-row { display: flex; gap: 9px; align-items: stretch; }
+.filepick { flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 13px; cursor: pointer; color: var(--fg-muted); font-size: 13px;
+  background: var(--bg-sunken); border: 1px solid var(--border); transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease); }
+.filepick:hover { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-hi); }
+.file-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.file-chip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 9px;
+  font: 500 11.5px/1.6 var(--font-mono); background: var(--surface-2); border: 1px solid var(--border); color: var(--fg); }
+.file-chip .x { color: var(--fg-dim); cursor: pointer; }
+.file-chip .x:hover { color: var(--error); }
+.f-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px; }
+.path-row { display: flex; gap: 7px; }
+.path-row .hb-btn { flex: none; }
+.count-hint { margin: 7px 0 0; font: 500 11.5px/1.5 var(--font-mono); color: var(--fg-dim); }
+/* 选项: 方角切换胶囊(左色块点亮), danger 档静息即红描边 */
+.opt-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.opt-pill { --tone: var(--accent); display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 12px; cursor: pointer; user-select: none; font: 500 12.5px/1.4 var(--font-ui); color: var(--fg-dim);
+  background: transparent; border: 1px solid var(--border);
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease), background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.opt-pill .dot { width: 8px; height: 8px; background: var(--border-strong); transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
+.opt-pill:hover { border-color: var(--tone-line); color: var(--fg); }
+.opt-pill.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-hi); }
+.opt-pill.on .dot { background: var(--accent); box-shadow: 0 0 8px -2px var(--accent); }
+.opt-pill.danger { --tone: var(--error); }
+.opt-pill.danger.on { border-color: var(--error-line); background: var(--error-soft); color: var(--error); }
+.opt-pill.danger.on .dot { background: var(--error); box-shadow: 0 0 8px -2px var(--error); }
+/* 警告行: 常驻占位 + on 控制可见(勾选前后窗口高度不变, 沿用现有实现) */
+.warn-hint { display: flex; gap: 8px; align-items: baseline; padding: 8px 11px;
+  background: var(--warn-soft); border: 1px solid var(--warn-line); box-shadow: inset 3px 0 0 var(--warn);
+  font-size: 12.3px; color: var(--fg); visibility: hidden; }
+.warn-hint.on { visibility: visible; }
+.warn-hint b { color: var(--warn); }
+/* 接管预览: 内嵌块(hb-blk 语言) —— mono 叙述 + 关键词提亮 */
+.preview { padding: 11px 14px; background: var(--bg-sunken); border: 1px solid var(--border); }
+.preview-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 7px;
+  font: 600 11px/1.4 var(--font-mono); letter-spacing: .07em; color: var(--accent-hi); }
+.preview p { margin: 3px 0; font: 400 12.3px/1.7 var(--font-mono); color: var(--fg-muted); }
+.preview b { color: var(--fg); font-weight: 500; }
+.preview .dim { color: var(--fg-dim); }
+</style>
+</head>
+<body>
+<svg aria-hidden="true" style="display:none">
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.4v9.2M3.4 8h9.2"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></symbol>
+  <symbol id="i-folder-open" viewBox="0 0 16 16"><path d="M2.5 12.4V4.3h3.6l1.2 1.6h4.2v1.4"/><path d="M2.5 12.4l1.9-5.1h9.1l-1.9 5.1z"/></symbol>
+  <symbol id="i-link" viewBox="0 0 16 16"><path d="M6.5 9.5 9.5 6.5"/><path d="M6.9 4.7l.8-.8a2.3 2.3 0 0 1 3.3 3.3l-.8.8M9.1 11.3l-.8.8a2.3 2.3 0 0 1-3.3-3.3l.8-.8"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.9 2.3 4.3 9.1h3L6.1 13.7 11.6 7h-3z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 3.1 14.2 13.2H1.8z"/><path d="M8 6.6v3.1M8 11.4v.7"/></symbol>
+</svg>
+
+<div class="modal-mask">
+  <div class="modal hb-cut" role="dialog" aria-modal="true" aria-label="添加种子">
+    <div class="modal-title">
+      <span class="hb-mark hb-cut"><svg class="hb-ico" viewBox="0 0 16 16"><use href="#i-plus"/></svg></span>
+      <span class="tt">添加种子</span>
+      <span class="meta">ADD_TORRENT · 860</span>
+      <button class="hb-ask" title="关闭"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-close"/></svg></button>
+    </div>
+    <div class="modal-body">
+
+      <div>
+        <label class="f-label">来源 <i>— .torrent 文件与链接可混合</i></label>
+        <div class="source-row">
+          <label class="filepick hb-cut">
+            <svg class="hb-ico" viewBox="0 0 16 16"><use href="#i-folder-open"/></svg>
+            <span>选择 .torrent 文件(可多选)…</span>
+          </label>
+          <button type="button" class="hb-btn ghost"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-link"/></svg>添加链接</button>
+        </div>
+        <div class="file-chips">
+          <span class="file-chip">Dune.Part.Two.2024.torrent <span class="x"><svg class="hb-ico sm" style="width:11px;height:11px" viewBox="0 0 16 16"><use href="#i-close"/></svg></span></span>
+          <span class="file-chip">The.Studio.S01E05.torrent <span class="x"><svg class="hb-ico sm" style="width:11px;height:11px" viewBox="0 0 16 16"><use href="#i-close"/></svg></span></span>
+        </div>
+        <p class="count-hint">已选 2 个文件 · 0 条链接</p>
+      </div>
+
+      <div class="f-grid">
+        <div>
+          <label class="f-label">保存路径 <i>— 留空 = qB 默认</i></label>
+          <div class="path-row">
+            <input class="hb-input" type="text" placeholder="如 D:\Torrents" spellcheck="false">
+            <button type="button" class="hb-btn ghost">选择位置…</button>
+          </div>
+        </div>
+        <div>
+          <label class="f-label">分类 <i>— 可空</i></label>
+          <input class="hb-input" type="text" placeholder="下拉选择或自由输入">
+        </div>
+        <div>
+          <label class="f-label">标签 <i>— 逗号分隔, 可空</i></label>
+          <input class="hb-input" type="text" placeholder="如 HR, Keep">
+        </div>
+      </div>
+
+      <div>
+        <label class="f-label">选项</label>
+        <div class="opt-row">
+          <button type="button" class="opt-pill on"><span class="dot"></span>添加后开始</button>
+          <button type="button" class="opt-pill danger on" id="skip"><span class="dot"></span>跳过校验</button>
+          <button type="button" class="opt-pill"><span class="dot"></span>顺序下载</button>
+          <button type="button" class="opt-pill"><span class="dot"></span>首末块优先</button>
+          <button type="button" class="opt-pill"><span class="dot"></span>自动种子管理</button>
+        </div>
+        <div class="warn-hint on" style="margin-top:8px">
+          <svg class="hb-ico sm" style="flex:none;color:var(--warn)" viewBox="0 0 16 16"><use href="#i-warn"/></svg>
+          <span>已勾选<b>跳过校验</b>: 添加后 auto-qb 的校验策略将被跳过, 可能损坏辅种</span>
+        </div>
+      </div>
+
+      <div class="preview hb-cut">
+        <div class="preview-hd"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-bolt"/></svg>AUTO-QB 接管预览</div>
+        <p>添加后 auto-qb 将自动: 按 <b>保存路径 + 文件列表</b> 归组 → <b>站点打标 / 分类</b> → 按规则执行<b>校验策略</b>。</p>
+        <p class="dim">保存路径下已有 <b>4</b> 个辅种组(前缀匹配, 供参考)</p>
+      </div>
+
+    </div>
+    <div class="modal-actions">
+      <button class="hb-btn ghost">取消</button>
+      <button class="hb-btn primary"><svg class="hb-ico sm" viewBox="0 0 16 16"><use href="#i-plus"/></svg>添加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* 最小交互演示: 选项胶囊点击切换; 跳过校验联动警告行显隐 */
+document.querySelectorAll(".opt-pill").forEach((p) => p.addEventListener("click", () => {
+  p.classList.toggle("on");
+  document.querySelector(".warn-hint").classList.toggle("on", document.getElementById("skip").classList.contains("on"));
+}));
+</script>
+</body>
+</html>

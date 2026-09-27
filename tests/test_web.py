@@ -528,7 +528,7 @@ def test_static_assets_disable_heuristic_cache(web_env):
     mgr, client = web_env
     for path in (
         "/atlas/", "/atlas/style.css", "/shared/tpl/topbar.html", "/prism/", "/shared/app.js", "/shared/boot.js",
-        "/shared/vendor/vue.global.prod.js"
+        "/shared/vendor/vue.global.prod.js", "/console/", "/console/css/components.css"
     ):
         resp = client.get(path)
         assert resp.status_code == 200, f"{path} 应可访问"
@@ -559,6 +559,10 @@ def test_ui_root_and_legacy_newui_redirect(web_env):
 STATIC_ROOT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "auto_qb", "webui", "static"
 )
+
+# 全部 UI(皮肤)清单: 目录即 UI(static/<名>/index.html, 后端零注册表)。
+# 新增皮肤 = 加一档, 全文件"成对改"守阵随本常量自动扩档; 单独点名的守阵(令牌对账/CSS 链接序)另行核对。
+_UI_ALL = ("atlas", "prism", "console")
 
 
 def _ui_manifest(ui):
@@ -812,7 +816,7 @@ def _scan_mixin_wiring(problems):
     refs = {rel for _p, rel in bundle}
     # boot.js 走 shell 静态 <script src>(它自己负责按清单放行其余脚本, 不在清单内), 两张 shell 的
     # 静态引用同样算"已接线"
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
         refs |= {m.lstrip("/") for m in re.findall(r'<script src="(/shared/[^"]+\.js)"></script>', shell)}
     for dirpath, _dirs, files in os.walk(os.path.join(STATIC_ROOT, "shared")):
@@ -1091,11 +1095,11 @@ def _scan_backdrop_filter(problems):
 
     两层断言(缺一不可):
     ①**位置**: 上述六类元素一律不许出现 backdrop-filter(不论哪套 UI、哪份 CSS);
-    ②**数量**: 星图与棱镜各自的声明数必须相等 —— 防"只在星图侧加回来"这类单边改动
-      (shared/console_hub.css 是共用层, 两边同担, 不计入各自计数)。
+    ②**数量**: 各套 UI 自己的声明数必须相等 —— 防"只在某一侧加回来"这类单边改动
+      (shared/console_hub.css 是共用层, 各边同担, 不计入各自计数)。
     扫描前先剥 `/* ... */`, 否则本文件里解释这段历史的注释会被当成真实声明(实测会误报)。
     """
-    counts = {"atlas": 0, "prism": 0}
+    counts = {ui: 0 for ui in _UI_ALL}
     for dirpath, _dirs, files in os.walk(STATIC_ROOT):
         for name in sorted(files):
             if not name.endswith(".css") or "/vendor/" in f"/{dirpath}/{name}":
@@ -1108,10 +1112,9 @@ def _scan_backdrop_filter(problems):
                 if "{" in line:
                     sel = (sel + " " + line.split("{", 1)[0]).strip()
                 if re.search(r"backdrop-filter\s*:", line):
-                    if rel.startswith("atlas/"):
-                        counts["atlas"] += 1
-                    elif rel.startswith("prism/"):
-                        counts["prism"] += 1
+                    for ui in _UI_ALL:
+                        if rel.startswith(ui + "/"):
+                            counts[ui] += 1
                     for bad in _PERF_BACKDROP_BANNED:
                         if re.search(r"\.%s\b" % re.escape(bad), sel):
                             problems.append(
@@ -1121,10 +1124,11 @@ def _scan_backdrop_filter(problems):
                             )
                 if "}" in line:
                     sel = ""
-    if counts["atlas"] != counts["prism"]:
+    if len(set(counts.values())) != 1:
         problems.append(
-            f"两套 UI 的 backdrop-filter 声明数不对齐: 星图 {counts['atlas']} 处 / 棱镜 {counts['prism']} 处 —— "
-            f"单边加毛玻璃会让星图重新变卡(棱镜 .modal-mask 从不带 backdrop-filter, 见 PERF-01)"
+            f"各套 UI 的 backdrop-filter 声明数不对齐: "
+            f"{' / '.join(f'{ui} {n} 处' for ui, n in counts.items())} —— "
+            f"单边加毛玻璃会重新引入嵌套模糊卡顿(遮罩类从不带 backdrop-filter, 见 PERF-01)"
         )
 
 
@@ -1254,8 +1258,8 @@ def _scan_ui_diff_registry(problems):
             if not m:
                 continue
             side = m.group(1)
-            if side not in ("atlas", "prism"):
-                problems.append(f"shared/tpl/{name}:{i + 1} UI 条件取值非法: {side!r}(只认 atlas|prism)")
+            if side not in _UI_ALL:
+                problems.append(f"shared/tpl/{name}:{i + 1} UI 条件取值非法: {side!r}(只认 {'|'.join(_UI_ALL)})")
             if "ui-diff:" not in "\n".join(lines[max(0, i - 3):i + 1]):
                 problems.append(f"shared/tpl/{name}:{i + 1} ui 条件块缺 `ui-diff:` 注释(差异口必须写明原因)")
             registry.append(f"{name}:{i + 1}:{side}")
@@ -1274,7 +1278,7 @@ def test_frontend_template_split_wiring():
     """
     problems = []
     manifests = {}
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
         udir = os.path.join(STATIC_ROOT, ui)
         mf = _ui_manifest(ui)
@@ -1301,22 +1305,24 @@ def test_frontend_template_split_wiring():
         assert mf["scripts"], f"{ui} 清单缺 scripts(逻辑脚本无人放行)"
         assert mf["scripts"][0].endswith("vue.global.prod.js"), f"{ui} 清单首个脚本必须是 Vue vendor"
         assert mf["scripts"][-1].endswith("/app.js"), (f"{ui} 清单末个脚本必须是 app.js(它末尾才 createApp, 且启动时要读 window.AQB_*)")
-        # W2 CSS 分层(atlas): 链接顺序即级联序; 单文件 ≤700 行体量守阵
+        # W2 CSS 分层(atlas/console): 链接顺序即级联序; 单文件 ≤700 行体量守阵
         css_files = _ui_css_files(ui)
-        if ui == "atlas":
+        if ui in ("atlas", "console"):
             rels = [os.path.relpath(p, STATIC_ROOT).replace(os.sep, "/") for p in css_files]
             assert rels == [
-                "atlas/style.css", "atlas/css/components.css", "atlas/css/views.css", "atlas/css/dialogs.css"
-            ], (f"atlas CSS 链接顺序漂移: {rels}(级联序 = link 序; 拆分是连续字节切片, 重排顺序前先核对视觉等价)")
+                f"{ui}/style.css", f"{ui}/css/components.css", f"{ui}/css/views.css", f"{ui}/css/dialogs.css"
+            ], (f"{ui} CSS 链接顺序漂移: {rels}(级联序 = link 序; 拆分是连续字节切片, 重排顺序前先核对视觉等价)")
             for p in css_files:
                 n = open(p, encoding="utf-8").read().count("\n")
                 if n > 700:
                     problems.append(f"{os.path.relpath(p, STATIC_ROOT)} {n} 行, 超 700 行单 CSS 体量上限")
-    # 单一语义模板: 两套 shell 清单必须逐项相等 —— 漂移 = 偷偷分裂出第二份模板(收敛前态回潮)
-    assert manifests["atlas"] == manifests["prism"], (
-        "两套 shell 的 tpl-manifest 不一致 —— 单一语义模板下清单漂移 = 模板分裂回潮, 必须逐项对齐: "
-        f"atlas={manifests.get('atlas')} / prism={manifests.get('prism')}"
-    )
+    # 单一语义模板: 各套 shell 清单必须逐项相等 —— 漂移 = 偷偷分裂出第二份模板(收敛前态回潮)
+    base_mf = manifests[_UI_ALL[0]]
+    for ui in _UI_ALL[1:]:
+        assert manifests[ui] == base_mf, (
+            f"{ui} 的 tpl-manifest 与 {_UI_ALL[0]} 不一致 —— 单一语义模板下清单漂移 = 模板分裂回潮, 必须逐项对齐: "
+            f"{_UI_ALL[0]}={base_mf} / {ui}={manifests.get(ui)}"
+        )
     # 盘上孤儿分片: shared/tpl 存在但清单漏挂
     shared_dir = os.path.join(STATIC_ROOT, "shared", "tpl")
     listed = {os.path.basename(p["src"]) for p in manifests["atlas"]["parts"]}
@@ -1324,12 +1330,12 @@ def test_frontend_template_split_wiring():
         for f in sorted(os.listdir(shared_dir)):
             if f.endswith(".html") and f not in listed:
                 problems.append(f"shared/tpl/{f} 在盘上但清单漏挂(boot 不注入 = 该页面区整块消失)")
-    # UI 差异口注册表(活差异清单): 条件块只认 atlas|prism 且必须带 ui-diff 注释
+    # UI 差异口注册表(活差异清单): 条件块只认 _UI_ALL 内的皮肤名且必须带 ui-diff 注释
     registry = _scan_ui_diff_registry(problems)
     assert registry, "UI 差异口注册表为空 —— 该机制是收敛后新增模板级差异的唯一入口; 若确已全部消除, 同步本守阵"
     assert not problems, "模板分片接线问题: " + "; ".join(problems)
     # 聚合配平放最后: 切割边界错位(半个元素切进相邻分片)在这里现形
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         _assert_tags_balanced(_ui_aggregate(ui), f"{ui} 聚合模板")
 
 
@@ -1369,7 +1375,11 @@ def test_frontend_button_system_paired():
 
     # ② .bt 体系块与变体在两套 CSS 成对定义
     variants = ["primary", "ghost", "danger", "danger-solid", "icon", "sm"]
-    for css, name in ((atl_css, "atlas css 聚合(link 序)"), (pri_css, "prism/css/components.css")):
+    for css, name in (
+        (atl_css, "atlas css 聚合(link 序)"),
+        (pri_css, "prism/css/components.css"),
+        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
+    ):
         assert re.search(r"^\.bt \{", css, re.M), f"{name} 缺 .bt 体系块"
         for v in variants:
             assert re.search(rf"^\.bt\.{re.escape(v)} \{{", css, re.M), f"{name} 缺 .bt.{v} 变体"
@@ -1423,7 +1433,7 @@ def test_frontend_search_syntax_wiring():
     shows_js = open(os.path.join(shared, "shows.js"), encoding="utf-8").read()
 
     # ① 清除钮 mousedown.prevent 成对(两套模板的 search-clear 按钮逐个检查)
-    for theme in ("atlas", "prism"):
+    for theme in _UI_ALL:
         html = _ui_aggregate(theme)
         m = re.search(r'<button[^>]*class="search-clear"[^>]*>', html)
         assert m, f"{theme} 模板找不到 search-clear 按钮"
@@ -1480,7 +1490,7 @@ def test_frontend_hr_safety_wiring():
         assert _map_keys(name) == {"danger", "failed", "safe", "unknown"}, f"{name} 键集应为四个安全档位"
 
     # ② 做种时长列换绑 + 弹窗单例: 两套 UI 各 3 处触发 / 各 1 份弹窗 DOM
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         html = _ui_aggregate(ui)
         for needle, want in (
             (':class="hrDurClass(m)"', 3),
@@ -1524,7 +1534,7 @@ def test_frontend_hr_safety_wiring():
     for name in sorted(os.listdir(shared)):
         if name.endswith(".js"):
             used |= set(re.findall(r"\bm\.(hr_[a-z_]+)", open(os.path.join(shared, name), encoding="utf-8").read()))
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         used |= set(re.findall(r"\bm\.(hr_[a-z_]+)", _ui_aggregate(ui)))
     unknown = used - keys
     assert not unknown, f"前端引用了后端不存在的 HR 字段: {sorted(unknown)}(字段打错 = 页面静默空白)"
@@ -1861,7 +1871,7 @@ def test_frontend_hub_field_covers_non_leaf_items():
     assert non_leaf, ("config_editor.js 的 cfgFlatten 不再产出任何非叶子项类型 —— "
                       "若嵌套段真的取消了, 本守阵该跟着撤, 别让它空转")
 
-    for skin in ("prism", "atlas"):
+    for skin in _UI_ALL:
         html = _ui_aggregate(skin)
         m = re.search(r'<script type="text/x-template" id="tpl-hub-field">(.*?)\n  </script>', html, re.S)
         assert m, f"{skin}/index.html 找不到 tpl-hub-field 模板(改名/挪走了? 同步本守阵)"
@@ -1937,7 +1947,7 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
 
     # ② 两套 UI 的批量分支成对且逐项一致
     branches = {}
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         text = _ui_aggregate(ui)
         m = re.search(r'<template v-if="menu\.multi">(.*?)</template>', text, re.S)
         assert m, (
@@ -1981,7 +1991,7 @@ def test_frontend_meta_dialog_paired():
          模板用到的类在 CSS 无定义 = 静默裸样式(挂件类名错配的变体)。
     """
     # ① 双 UI 成对: metaOpen 对话框 + 三处入口(批量浮条 / 批量菜单 ctxMeta / 单种子菜单)
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         text = _ui_aggregate(ui)
         assert 'v-if="metaOpen"' in text, f"{ui}/index.html 缺少标签/分类对话框(双 UI 必须成对改)"
         assert text.count('openMetaDialog(null)'
@@ -2006,13 +2016,14 @@ def test_frontend_meta_dialog_paired():
     assert m, "shared/commands.js 找不到 ctxMeta(改名或挪走了? 同步本守阵)"
     assert "this.menu.visible = false" in m.group(1), ("ctxMeta 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)")
     assert "openMetaDialog(null)" in m.group(1), ("ctxMeta 必须复用 openMetaDialog 打开对话框 —— 目标集合口径单点在它里面")
-    # ③ CSS 成对: .meta-dialog 与 .opt-pill 两套 UI 都要有定义
+    # ③ CSS 成对: .meta-dialog 与 .opt-pill 各套 UI 都要有定义
     for name, t in (
         ("atlas css 聚合(link 序)", _ui_css_aggregate("atlas")),
         (
             "prism/css/components.css",
             open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read()
         ),
+        ("console css 聚合(link 序)", _ui_css_aggregate("console")),
     ):
         assert ".meta-dialog" in t, f"{name} 缺少 .meta-dialog 定义"
         assert ".opt-pill" in t, f"{name} 缺少 .opt-pill 定义(atlas 此前没有该组件, 易漏)"
@@ -2063,7 +2074,7 @@ def test_frontend_add_torrent_drag_drop_wiring():
     # ④ app.js 状态 + 双 UI 遮罩成对
     app_js = _app_bundle_text()
     assert "addDragOver: false" in app_js, "app.js 缺 addDragOver 状态(遮罩显隐没有数据源)"
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         html = _ui_aggregate(ui)
         assert 'class="add-drop-mask"' in html and 'v-if="addDragOver"' in html, (
             f"{ui}/index.html 缺拖拽落点遮罩(.add-drop-mask + v-if=\"addDragOver\")—— "
@@ -2088,6 +2099,7 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
     css = {
         "atlas": _ui_css_aggregate("atlas"),
         "prism": open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read(),
+        "console": _ui_css_aggregate("console"),
     }
     for ui, text in css.items():
         assert ".ctx-item:where(:hover) > .ico" in text, (
@@ -2098,7 +2110,7 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
                              text), (f"{ui} 仍存在后代写法的 `.ctx-item:hover .ico` —— hover 父项会连子面板图标一起变灰(CTX-04)")
 
     # ② 两套 UI 的次级菜单: 一级只有一个入口, 复制三项在面板内
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         text = _ui_aggregate(ui)
         m = re.search(r'<div class="ctx-item has-sub".*?\n            </div>\n', text, re.S)
         assert m, f"{ui}/index.html 找不到次级菜单父项(改名或挪走了? 同步本守阵)"
@@ -2440,7 +2452,7 @@ def test_frontend_sites_import_wiring():
     hub_js = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
     assert "async hubImportSites()" in hub_js, "config_hub.js 缺 hubImportSites 方法"
     assert "this.hub.importing" in hub_js, "缺防重入标志 hub.importing"
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         html = _ui_aggregate(ui)
         assert "hubImportSites()" in html, f"{ui} 站点分区缺导入按钮"
         assert "导入缺失站点" in html, f"{ui} 缺导入按钮文案"
@@ -2972,7 +2984,7 @@ def test_frontend_hr_status_fields_match_backend():
     # 锚点必须指向合并块自身: v-if 只在「HR 在线核实」分区模板块这一处出现, 重复出现说明块被复制
     # (2026-09-27 起块内含「站点接入」+「站点状态」两个块, 扫描窗放大到 8000 字符)
     anchor = "hub.view === 'hr_check'"
-    for ui in ("atlas", "prism"):
+    for ui in _UI_ALL:
         html = _ui_aggregate(ui)
         idx = html.find(anchor)
         assert idx > 0, f"{ui} 缺少锚点 {anchor} —— 合并进「HR 在线核实」的状态块丢失"

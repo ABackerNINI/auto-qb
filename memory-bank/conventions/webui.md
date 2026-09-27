@@ -20,13 +20,13 @@
 - **状态色族**(`--green/--blue/--error/--warn` + `--paused-*`): 表达**种子/行状态**。只染有语义的状态; 0 值/
   "—"占位不染; 芯片(站点/标签/分类)保持自身语义色不跟随行色(决策 D6-A —— 芯片表达**成员级**语义, 跟随行色会抹平这层信息)。
   `--paused` 是唯一"无色相"的成员, 取值 = `--fg-muted`(中性中间调), 配 `--paused-soft: transparent` + `--paused-line: var(--border-strong)`
-  —— **暂停/其它一律"不铺底 + 中性描边"**, 不许落回 `--surface-2`(暗底 = 白 6%, 读作"太白/没颜色")。该族**两套 UI 各声明一处**
+  —— **暂停/其它一律"不铺底 + 中性描边"**, 不许落回 `--surface-2`(暗底 = 白 6%, 读作"太白/没颜色")。该族**各套 UI 各声明一处**(atlas/prism/console)
   (星图 `:root` / 棱镜 `themes/*.css` 五主题), 改值必须两处同改。
 - **选中态族**(`--sel-bg/--sel-line/--sel-bar`, 五主题均取**非绿**的靖蓝族): 只用于"用户选中"语义; **不得**再引用
   `--accent`/`--accent-soft` —— 品牌主题(orbit)下 `--accent` 与做种 `--green` 同族且明度接近, 用户分不出"选中"与"做种"。
 - **表面/底色族**: 状态栏用专用 `--statusbar-bg`(与页底形成可见层级); **不要改 `--glass`** —— 它同时管顶栏,
   改它会连带改顶栏。
-- **尺寸族**: 弹窗宽度取 `--modal-w-narrow/base/form/add`/`--modal-wide-w`(两套 UI 同值同族); 新增弹窗只选档,
+- **尺寸族**: 弹窗宽度取 `--modal-w-narrow/base/form/add`/`--modal-wide-w`(各套 UI 同值同族); 新增弹窗只选档,
   不写新数字(这正是此前"第 N 次调大"的成因)。
 - **单点口径原则(通用)**: 同一数据/口径在两个以上地方出现时, 收成 computed/method 单点(如 `speedLimitBytes`
   限速取数、`cellSeedingTime/cellRatio/cellPeers/cellAvailability/cellTime` 单元格口径、`_deleteDetails` 删除详情行、`colAlignCss` 列对齐),
@@ -34,7 +34,7 @@
 
 ## WEB UI 按钮体系 .bt (2026-09-26 第十一轮)
 
-全部动作按钮收敛一族 `.bt`, 两套 UI 同一套语义类名、外观各按其设计语言(方案定案与全状态陈列见 `plans/26-09-26-0538-plan-webui-button-3-proposals.html`):
+全部动作按钮收敛一族 `.bt`, 各套 UI 同一套语义类名、外观各按其设计语言(方案定案与全状态陈列见 `plans/26-09-26-0538-plan-webui-button-3-proposals.html`):
 
 - **语义变体**: `.bt`(次钮, 默认) / `.bt.primary`(主) / `.bt.ghost`(幽灵) / `.bt.danger`(危险·描边) / `.bt.danger-solid`(危险·实心, 用于确认框的危险确认) / `.bt.icon`(图标钮) / `.bt.sm`(小档 28px)。标准档: 星图/棱镜均 34px。
 - **两套配方**: 星图 B(胶囊 999px, 主钮=品牌渐变+inset 高光, hover 泛 accent 柔光) / 棱镜 C(圆角 5px 强声明, 主钮=实心 accent+深色字, 按下 scale(.98))。

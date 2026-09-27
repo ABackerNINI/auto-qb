@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="ocean">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>auto-qb · 辅种管理 · 控制台</title>
+  <link rel="icon" type="image/png" href="/shared/icon.png">
+  <!-- 控制台(第三套皮肤, Console Hub 仪表台语言): 令牌+基线留根 style.css, 链接顺序即级联序
+       (components → views → dialogs); 设置页继续吃 shared/console_hub.css(与另两套同源)。
+       主题: V1 固定深海机房单主题(与 prism themes/ocean.css 同源令牌), 五主题切换仍属棱镜 ui-diff 口。 -->
+  <link rel="stylesheet" href="/console/style.css">
+  <link rel="stylesheet" href="/console/css/components.css">
+  <link rel="stylesheet" href="/console/css/views.css">
+  <link rel="stylesheet" href="/console/css/dialogs.css">
+  <link rel="stylesheet" href="/shared/console_hub.css">
+</head>
+<body>
+  <!-- 图标 sprite: 与 atlas/prism 同一份清单(brand 仍用 i-orbit 轨道符号, 皮肤差异只在 CSS 层) -->
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></symbol>
+    <symbol id="i-close" viewBox="0 0 16 16"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></symbol>
+    <symbol id="i-caret" viewBox="0 0 16 16"><path d="M6.5 3.8 11 8l-4.5 4.2"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 16 16"><path d="M5.8 3.6v8.8M10.2 3.6v8.8"/></symbol>
+    <symbol id="i-play" viewBox="0 0 16 16"><path d="M5.2 3.3 12.4 8l-7.2 4.7z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.55-3.6"/><path d="M13.3 2.8v2.7h-2.7"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 16 16"><path d="M3.4 5h9.2M6.4 5V3.5h3.2V5M5 5l.6 8h4.8L11 5"/></symbol>
+    <symbol id="i-trash-x" viewBox="0 0 16 16"><path d="M3.4 5h9.2M6.4 5V3.5h3.2V5M5 5l.6 8h4.8L11 5M11.6 10.6l3 3M14.6 10.6l-3 3"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 16 16"><path d="M2.8 9.6 5 4.2h6l2.2 5.4v2.2H2.8z"/><path d="M2.8 9.6h3l.7 1.4h3l.7-1.4h3"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 3.1 14.2 13.2H1.8z"/><path d="M8 6.6v3.1M8 11.4v.7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.6 8.4 6.6 11.4 12.6 4.8"/></symbol>
+    <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.4"/><path d="M8 7.4v3.4M8 5.3v.7"/></symbol>
+    <!-- 品牌: orbit 轨道(330° 轨道弧 + 绿色种子点 + 中心圆), 与 favicon / assets/icons 设计一致 -->
+    <symbol id="i-orbit" viewBox="0 0 16 16"><path d="M4.9 3.6A5.4 5.4 0 1 0 11.1 3.6" fill="none"/><circle cx="11.1" cy="3.6" r="1.7" fill="var(--green)" stroke="none"/><circle cx="8" cy="8" r="2.1"/></symbol>
+    <symbol id="i-prism" viewBox="0 0 16 16"><path d="M8 2.8 12.6 13.2H3.4z"/><path d="M1.6 6.8 6 7.6 12.8 12.6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.4v7.8M4.9 7.1 8 10.2l3.1-3.1M3.2 12.9h9.6"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.8V3M4.9 6.1 8 3l3.1 3.1M3.2 12.9h9.6"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 16 16"><path d="M3 7.8V3.2h4.6L13 8.6 8.6 13z"/><path d="M5.6 5.7v.01"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2.4 12.7V4.1h3.9l1.3 1.7h6v6.9z"/><path d="M2.4 7.6h11.2"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.4v9.2M3.4 8h9.2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 16 16"><path d="M3 5.4h10M3 10.6h10"/><circle cx="6.2" cy="5.4" r="1.6"/><circle cx="10.2" cy="10.6" r="1.6"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 16 16"><path d="M2.8 12.1a5.6 5.6 0 1 1 10.4 0"/><path d="M8 8.7 11.4 6"/><circle cx="8" cy="9.4" r="1.2" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-width="1.9"/><circle cx="12" cy="12" r="3.1" stroke-width="1.9"/></symbol>
+    <symbol id="i-list" viewBox="0 0 16 16"><path d="M3 4.4h10M3 8h10M3 11.6h6.2"/></symbol>
+    <symbol id="i-tv" viewBox="0 0 16 16"><path d="M2.5 5.4h11v7h-11z"/><path d="M5.6 2.4 8 4.8l2.4-2.4"/></symbol>
+    <symbol id="i-cards" viewBox="0 0 16 16"><path d="M8 2.6 13.6 5.6 8 8.6 2.4 5.6z"/><path d="M2.4 8.6 8 11.6l5.6-3"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 16 16"><path d="M6.2 12.8h3.6"/><path d="M8 3a3.1 3.1 0 0 0-3.1 3.1v2.7L3.9 11h8.2l-1-2.2V6.1A3.1 3.1 0 0 0 8 3z"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 2.4 12.8 4.3v3.9c0 3-2.1 5.2-4.8 6.1-2.7-.9-4.8-3.1-4.8-6.1V4.3z"/><path d="M8 6.1v2.7M8 10.6v.5"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M8 4.7V8l2.3 1.6"/></symbol>
+    <symbol id="i-hdd" viewBox="0 0 16 16"><path d="M2.8 9.3h10.4v3.2H2.8z"/><path d="M5 9.3 5.6 4h4.8l.6 5.3"/><path d="M11.1 11.1v.01M9 11.1v.01"/></symbol>
+    <symbol id="i-link" viewBox="0 0 16 16"><path d="M6.5 9.5 9.5 6.5"/><path d="M6.9 4.7l.8-.8a2.3 2.3 0 0 1 3.3 3.3l-.8.8M9.1 11.3l-.8.8a2.3 2.3 0 0 1-3.3-3.3l.8-.8"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.9 2.3 4.3 9.1h3L6.1 13.7 11.6 7h-3z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 16 16"><path d="M2.6 4h10.8v6.9H2.6z"/><path d="M6.4 13.2h3.2M8 10.9v2.3"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M2.6 8h10.8"/><path d="M8 2.4c1.5 1.6 2.3 3.5 2.3 5.6S9.5 12 8 13.6C6.5 12 5.7 10.1 5.7 8S6.5 4 8 2.4z"/></symbol>
+    <!-- 操作/编辑类图标(阶段 1 新增: 筛选/列选择/显隐/重命名/复制/折叠/排序等) -->
+    <symbol id="i-filter" viewBox="0 0 16 16"><path d="M2.3 3.4h11.4L9.4 8.5v4.3l-2.8-1.4V8.5z"/></symbol>
+    <symbol id="i-columns" viewBox="0 0 16 16"><rect x="2.2" y="3" width="3.4" height="10" rx="1"/><rect x="6.3" y="3" width="3.4" height="10" rx="1"/><rect x="10.4" y="3" width="3.4" height="10" rx="1"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.7 8S4.3 4.2 8 4.2 14.3 8 14.3 8 11.7 11.8 8 11.8 1.7 8 1.7 8z"/><circle cx="8" cy="8" r="1.9"/></symbol>
+    <symbol id="i-eye-off" viewBox="0 0 16 16"><path d="M6.3 4.4A6.9 6.9 0 0 1 8 4.2c3.7 0 6.3 3.8 6.3 3.8a12.6 12.6 0 0 1-2.1 2.5"/><path d="M4.3 5.6A12.8 12.8 0 0 0 1.7 8s2.6 3.8 6.3 3.8a6.6 6.6 0 0 0 2.3-.4"/><path d="M3.3 3.3 12.7 12.7"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 16 16"><path d="M11.1 3.1l1.8 1.8-7 7-2.4.7.6-2.4z"/><path d="M9.9 4.3l1.8 1.8"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.7" y="5.7" width="7.9" height="7.9" rx="1.4"/><path d="M10.3 5.7V4a1.4 1.4 0 0 0-1.4-1.4H4A1.4 1.4 0 0 0 2.6 4v4.9A1.4 1.4 0 0 0 4 10.3h1.7"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 16 16"><path d="M4.3 6.3 8 10l3.7-3.7"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 16 16"><path d="M2.9 8a5.1 5.1 0 1 0 1.6-3.7"/><path d="M2.6 2.7V5.4h2.7"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 16 16"><path d="M5 6.3 8 3.2l3 3.1"/><path d="M5 9.7 8 12.8l3-3.1"/></symbol>
+    <symbol id="i-hash" viewBox="0 0 16 16"><path d="M6.5 2.6 5.1 13.4M10.9 2.6 9.5 13.4M2.8 5.9h10.4M2.6 10.1h10.4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 16 16"><path d="M2.7 2.6v10.8h10.7"/><path d="M5.3 10.9 8 7.5l2 1.8 2.9-4.2"/></symbol>
+    <!-- 2026-09-20 新增: 今日流量专用图标 —— 上下行箭头(左箭向下 = 下载 / 右箭向上 = 上传), 与右侧数值同序。
+         双色: 左半取 --today-down / 右半取 --today-up, 与后面两个数值同族 —— 颜色写在 path 的内联 style 里,
+         靠 CSS 变量穿越 <use> 影子树生效(外部选择器进不去 use 内部);
+         此前复用柱状图 i-chart: 13px 下笔画碎, 且与 ↑ 数值同令牌, 会被读成数值的一部分;
+         i-chart 仍归「统计 / 历史」语义。 -->
+    <symbol id="i-traffic" viewBox="0 0 16 16"><path d="M5.4 3.2v9.6" style="stroke: var(--today-down, var(--indigo))"/><path d="M3.2 10.6 5.4 12.8l2.2-2.2" style="stroke: var(--today-down, var(--indigo))"/><path d="M10.6 12.8V3.2" style="stroke: var(--today-up, var(--teal))"/><path d="M8.4 5.4 10.6 3.2l2.2 2.2" style="stroke: var(--today-up, var(--teal))"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 16 16"><path d="M8 2.4l5.8 3L8 8.4 2.2 5.4z"/><path d="M2.2 8.7 8 11.7l5.8-3"/><path d="M2.2 11.4 8 14.4l5.8-3"/></symbol>
+    <symbol id="i-x-circle" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.7"/><path d="M6.1 6.1l3.8 3.8M9.9 6.1l-3.8 3.8"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.7"/><path d="M5.5 8.2 7.2 10l3.4-3.9"/></symbol>
+    <symbol id="i-external" viewBox="0 0 16 16"><path d="M9 3.3h3.7v3.7"/><path d="M12.7 3.3 7.5 8.5"/><path d="M12 9.7v2.5a1.6 1.6 0 0 1-1.6 1.6H4.3a1.6 1.6 0 0 1-1.6-1.6V6.1a1.6 1.6 0 0 1 1.6-1.6h2.5"/></symbol>
+    <symbol id="i-pulse" viewBox="0 0 16 16"><path d="M1.8 8.3h2.6l1.7-4.3 2.5 8.1 1.7-3.8h2.9"/></symbol>
+    <symbol id="i-folder-open" viewBox="0 0 16 16"><path d="M2.5 12.4V4.3h3.6l1.2 1.6h4.2v1.4"/><path d="M2.5 12.4l1.9-5.1h9.1l-1.9 5.1z"/></symbol>
+    <symbol id="i-drag" viewBox="0 0 16 16"><circle cx="6.1" cy="4.6" r=".95" fill="currentColor" stroke="none"/><circle cx="9.9" cy="4.6" r=".95" fill="currentColor" stroke="none"/><circle cx="6.1" cy="8" r=".95" fill="currentColor" stroke="none"/><circle cx="9.9" cy="8" r=".95" fill="currentColor" stroke="none"/><circle cx="6.1" cy="11.4" r=".95" fill="currentColor" stroke="none"/><circle cx="9.9" cy="11.4" r=".95" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 16 16"><path d="M8 12.6V3.6M4.4 7.2 8 3.6l3.6 3.6"/></symbol>
+    <symbol id="i-arrow-down" viewBox="0 0 16 16"><path d="M8 3.4v9M4.4 8.8 8 12.4l3.6-3.6"/></symbol>
+    <!-- HR/限速/流量类图标(2026-09-14 打磨新增): 沿用 16×16 + stroke 1.7 约定,
+         颜色一律由 CSS 令牌提供(不在此写死), 见 style.css 的 .ico-* 语义色映射 -->
+    <symbol id="i-hr" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6"/><path d="M8 4.6V8l2.4 1.5"/><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3"/></symbol>
+    <symbol id="i-percent" viewBox="0 0 16 16"><path d="M12.4 3.6 3.6 12.4"/><circle cx="4.7" cy="4.7" r="1.6"/><circle cx="11.3" cy="11.3" r="1.6"/></symbol>
+    <symbol id="i-hourglass" viewBox="0 0 16 16"><path d="M4.3 2.5h7.4M4.3 13.5h7.4"/><path d="M5.2 2.5v2.3L8 8l-2.8 3.2v2.3M10.8 2.5v2.3L8 8l2.8 3.2v2.3"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 16 16"><rect x="2.6" y="3.7" width="10.8" height="9.5" rx="1.6"/><path d="M2.6 6.7h10.8M5.7 2.4v2.5M10.3 2.4v2.5"/></symbol>
+    <symbol id="i-timer" viewBox="0 0 16 16"><circle cx="8" cy="9" r="4.9"/><path d="M8 6.3V9l1.9 1.3M6.3 1.7h3.4M8 1.7v2.2"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.7" y="7.2" width="8.6" height="6.1" rx="1.6"/><path d="M5.7 7.2V5.5a2.3 2.3 0 0 1 4.6 0v1.7"/></symbol>
+    <symbol id="i-ellipsis" viewBox="0 0 16 16"><circle cx="3.7" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.15" fill="currentColor" stroke="none"/><circle cx="12.3" cy="8" r="1.15" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-chevron-up" viewBox="0 0 16 16"><path d="M4.3 9.7 8 6l3.7 3.7"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 16 16"><path d="M8 2.2 9.3 6.4 13.5 7.7 9.3 9 8 13.2 6.7 9 2.5 7.7 6.7 6.4z"/></symbol>
+    <!-- 历史/多选图标(2026-09-15 优化新增): 历史流量入口(时钟+回溯箭头, 与今日流量的上下行箭头 i-traffic 语义区分)与批量全选 -->
+    <symbol id="i-history" viewBox="0 0 16 16"><path d="M2.9 8a5.1 5.1 0 1 0 1.5-3.6"/><path d="M2.6 2.7v2.9h2.9"/><path d="M8 5.2V8l2 1.4"/></symbol>
+    <symbol id="i-select-all" viewBox="0 0 16 16"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="2"/><path d="M5.5 8.2 7.3 10l3.4-3.9"/></symbol>
+    <!-- 第八轮新增: 信息栏模式切换(侧栏/顶栏布局轮廓) -->
+    <symbol id="i-panel" viewBox="0 0 16 16"><rect x="2.2" y="3" width="11.6" height="10" rx="1.6"/><path d="M6.8 3v10"/></symbol>
+  </svg>
+
+  <div id="app" v-cloak>
+    <!-- 密钥输入(未授权时): 遮罩仅由 authRequired 把守, 验证通过前主界面 DOM 不渲染(防错误密钥闪现)。
+         本地已有密钥时验证过程显示"验证中"加载态而非输入表单(修复刷新时闪现输入密钥界面)
+         —— 结构与 atlas/prism 同一份, 控制台皮肤只换视觉(console/css/components.css 登录段) -->
+    <div v-if="authRequired" class="login-mask">
+      <div v-if="bootstrapping" class="login-card login-loading">
+        <div class="brand">
+          <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
+          <span>auto-qb</span>
+        </div>
+        <svg class="ico spin" viewBox="0 0 16 16"><use href="#i-orbit"></use></svg>
+        <p class="muted">正在验证本地密钥…</p>
+      </div>
+      <form v-else class="login-card" @submit.prevent="saveToken">
+        <div class="brand">
+          <span class="brand-mark"><img class="brand-img" src="/shared/icon.png" alt=""></span>
+          <span>auto-qb</span>
+        </div>
+        <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
+        <input v-model="tokenInput" type="password" placeholder="访问密钥" autocomplete="current-password" required>
+        <button type="submit" class="bt primary" :disabled="!tokenInput.trim() || authPending">{{ authPending ? '验证中…' : '进入' }}</button>
+        <button v-if="authErrorKind === 'unavailable'" type="button" class="bt ghost"
+                @click="retryAuth" :disabled="authPending">重试连接</button>
+        <p v-if="authError" class="error">{{ authError }}</p>
+      </form>
+    </div>
+
+  </div>
+
+  <script type="application/json" id="tpl-manifest">
+  {
+    "parts": [
+      {"src": "/shared/tpl/topbar.html", "into": "app"},
+      {"src": "/shared/tpl/groups.html", "into": "app"},
+      {"src": "/shared/tpl/torrents.html", "into": "app"},
+      {"src": "/shared/tpl/shows.html", "into": "app"},
+      {"src": "/shared/tpl/ctx-menus.html", "into": "app"},
+      {"src": "/shared/tpl/settings.html", "into": "app"},
+      {"src": "/shared/tpl/settings-detail.html", "into": "app"},
+      {"src": "/shared/tpl/statusbar.html", "into": "app"},
+      {"src": "/shared/tpl/overlays.html", "into": "app"},
+      {"src": "/shared/tpl/drawer.html", "into": "app"},
+      {"src": "/shared/tpl/dialogs.html", "into": "app"},
+      {"src": "/shared/tpl/dialogs-mgr.html", "into": "app"},
+      {"src": "/shared/tpl/popovers.html", "into": "app"},
+      {"src": "/shared/tpl/xtpl.html", "into": "body"}
+    ],
+    "scripts": [
+      "/shared/vendor/vue.global.prod.js",
+      "/shared/config_editor.js",
+      "/shared/config_rules.js",
+      "/shared/config_hub.js",
+      "/shared/ui_feedback.js",
+      "/shared/filters.js",
+      "/shared/columns.js",
+      "/shared/format.js",
+      "/shared/decorate.js",
+      "/shared/hr.js",
+      "/shared/hr_status.js",
+      "/shared/sort.js",
+      "/shared/menu.js",
+      "/shared/commands.js",
+      "/shared/add_torrent.js",
+      "/shared/selection.js",
+      "/shared/shows.js",
+      "/shared/delete_flow.js",
+      "/shared/drawer.js",
+      "/shared/dialogs.js",
+      "/shared/state.js",
+      "/shared/lifecycle.js",
+      "/shared/auth.js",
+      "/shared/polling.js",
+      "/shared/view.js",
+      "/shared/app.js"
+    ]
+  }
+  </script>
+  <script src="/shared/boot.js"></script>
+</body>
+</html>

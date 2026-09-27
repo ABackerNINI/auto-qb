@@ -9,7 +9,7 @@
 - rules/                规则框架(条件/动作插件 + expr 表达式引擎)
 - torrents/             种子数据层(增量同步/记录/视图契约)
 - webui/                WEB 表现层: runtime(门面) / views+commands(构建器+命令处理器) /
-                        server/(FastAPI 路由) / static/(atlas·prism 前端资产)
+                        server/(FastAPI 路由) / static/(atlas·prism·console 前端资产)
 - tray/                 桌面托盘表现层(CustomTkinter + pystray)
 """
 from .config import Config, ConfigError, TrackerConfig, QbittorrentConfig, load_config

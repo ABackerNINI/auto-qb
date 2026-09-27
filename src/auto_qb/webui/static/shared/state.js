@@ -2,6 +2,13 @@
  * ⚠ 不是 app.mixin!经 app.js 的 `...window.AQB_STATE` 展开进**根组件选项** ——
  * 全局 mixin 会波及 hub-field 等组件实例(watch/mounted 双份执行), 根选项只命中根。
  * 成员逐行原样搬运, 语义与拆分前一致; 接线形态④由 _scan_mixin_wiring 钉住。 */
+/* 皮肤判定单点: URL 首段路径 == 皮肤目录名(static/<名>/index.html, 目录即 UI, 后端零注册表)。
+ * 未识别段回落 atlas(如直接以 / 访问时的边缘路径)。加第四套 UI 在这里扩一档。 */
+function _aqbDetectUi() {
+  const seg = location.pathname.split("/")[1];
+  return seg === "prism" ? "prism" : seg === "console" ? "console" : "atlas";
+}
+
 window.AQB_STATE = {
   data() {
     return {
@@ -18,9 +25,10 @@ window.AQB_STATE = {
       // 现在守卫一律看 authMode: "local" = 本机免鉴权(直接放行, 且不发空 Bearer), "token" = 密钥流程。
       authMode: "token",
       page: initialPage(),  // 顶层页面: "groups" | "settings"(持久化, 见 initialPage)
-      // 单一语义模板的皮肤开关(26-09-27 收敛, plans/26-09-26-2233 W3): 两套 UI 共用 shared/tpl 一份分片,
-      // 模板级差异只允许 `v-if="ui === 'atlas'|'prism'"` 条件块(带 ui-diff 注释, 守阵收集为活差异清单)。
-      ui: location.pathname.split("/")[1] === "prism" ? "prism" : "atlas",
+      // 单一语义模板的皮肤开关(26-09-27 收敛, plans/26-09-26-2233 W3): 各套 UI 共用 shared/tpl 一份分片,
+      // 模板级差异只允许 `v-if="ui === '...'"` 条件块(带 ui-diff 注释, 守阵收集为活差异清单)。
+      // 皮肤判定: URL 首段路径(目录即 UI); 2026-09-27 起第三套 console(控制台)并列, 未识别段回落 atlas。
+      ui: _aqbDetectUi(),
       groups: [],
       singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供搜索兜底/总数回退)
       torrents: [],           // 种子页数据源: 全量种子平铺数组(SEED_ITEM, 与 groups 同门控回传)
@@ -244,12 +252,15 @@ window.AQB_STATE = {
     };
   },
   computed: {
-    /* 界面互切链接目标(单一语义模板的参数化差异): 模板统一后两 UI 共用一个 <a>,
-     * 各自指向对方 —— 加第四种 UI 时在这里扩一分支, 不在模板里写第二份链接。 */
+    /* 界面互切链接目标(单一语义模板的参数化差异): 模板统一后各 UI 共用一个 <a>,
+     * 三套 UI 环形互切(atlas → prism → console → atlas) —— 加第四套 UI 在这里扩环, 不在模板里写第二份链接。 */
     uiSwitchTarget() {
-      return this.ui === "atlas"
-        ? { href: "/prism/", icon: "#i-prism", label: "棱镜", title: "切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" }
-        : { href: "/atlas/", icon: "#i-orbit", label: "星图", title: "切换到星图界面(经典深色仪表盘, 可随时切回)" };
+      const ring = {
+        atlas: { href: "/prism/", icon: "#i-prism", label: "棱镜", title: "切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" },
+        prism: { href: "/console/", icon: "#i-gauge", label: "控制台", title: "切换到控制台界面(Console Hub 仪表台皮肤, 可随时切回)" },
+        console: { href: "/atlas/", icon: "#i-orbit", label: "星图", title: "切换到星图界面(经典深色仪表盘, 可随时切回)" },
+      };
+      return ring[this.ui] || ring.atlas;
     },
     pollLabel() {
       // 顶栏展示当前轮询间隔(自适应: 按种子量分档 + 服务不可达时退避)
