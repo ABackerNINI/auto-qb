@@ -32,7 +32,9 @@ CAP_POLICY: dict[str, int] = {
     # (一行一条, 已是最简)。故单列一档 —— 有守卫防无限膨胀, 但不假装它们是一屏索引。
     # 12,000 -> 12,100 (2026-09-27): sites-page-search 专题入册后 _doc-map.md 实测 12,006,
     # 单件专题清单已是最简形态, 涨 cap 一档。
-    "index-auto": 12100,
+    # 12,100 -> 12,200 (2026-09-28): ext-log-noise-suppress + node 守阵修复专题入册后实测 12,137,
+    # 仍是最简形态, 再涨一档。
+    "index-auto": 12200,
     "pitfall": 6000,  # pitfalls/* 条目集 —— 读法是「扫描找一条」, 比通读更贵
     "evergreen": 10000,  # 常青主题 (叙述型) —— ≈4k token, 一次通读可接受
     "reference": 12000,  # 参考速查 (config-reference / rule-system) —— 查表不是通读

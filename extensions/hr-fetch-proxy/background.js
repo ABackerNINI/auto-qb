@@ -45,8 +45,12 @@ async function noteStatus(patch, lvl) {
   const prev = await chrome.storage.local.get({ status: {} });
   const status = Object.assign({}, prev.status, patch, { at: Date.now() });
   await chrome.storage.local.set({ status });
-  // 状态栏只留**最后一句**, 同样的内容同步进运行日志(level 由调用方给: 配额/异常要标 warn/error)
-  if (patch && patch.text) log(lvl || 'info', '状态', patch.text);
+  // 状态栏只留**最后一句**, 同样的内容同步进运行日志(level 由调用方给: 配额/异常要标 warn/error)。
+  // 同文重复降为 debug: 轮询 1 分钟一轮, 连败期/闲轮期每轮都是同一句话, 原样刷 info 会把日志环
+  // 灌成复读机; 状态栏本身每轮照常刷新(时间戳/文案), 不受影响。
+  if (patch && patch.text) {
+    log(prev.status && prev.status.text === patch.text ? 'debug' : lvl || 'info', '状态', patch.text);
+  }
 }
 
 // ---------- 运行日志(分级 + 环形上限, 落 chrome.storage.local) ----------
@@ -361,6 +365,48 @@ function explainFetchError(url, e) {
   return msg;
 }
 
+// ---------- 连接失败降噪(故障期只打头尾, 2026-09-28 用户实报) ----------
+//
+// ❗为什么需要: 轮询 1 分钟一轮, 后端不在跑时每轮都打一条**全量排查清单** ERROR —— 日志环
+// (默认 1000 条)几小时就被同一句话灌满, 有用的历史全被冲掉。故按「故障期」记连败轮数:
+//   · 首次失败: 全量 ERROR(排查清单照旧);
+//   · 连败期: 降为 debug 短句(默认记录级别 info 下不落盘), 每连败 30 轮(约半小时)重打一次全量,
+//     防「彻底失联无感」;
+//   · 恢复(端点给出**任何** HTTP 应答, 含 401/5xx —— 应答即连接已通): INFO 一句恢复 + 连败轮数。
+// 连败数必须落 storage.local: MV3 的 SW 随时被回收, 内存态活不过一次回收, 落内存等于没降噪。
+const NET_FAIL_KEY = 'netFailStreak';
+const NET_FAIL_REMIND_EVERY = 30;
+
+/** 连败轮数 +1 并落盘(键=任务清单 URL), 返回最新连败轮数; storage 不可用就退化为现状(每轮全量) */
+async function bumpNetFailStreak(key) {
+  let n = 1;
+  try {
+    const got = await chrome.storage.local.get({ [NET_FAIL_KEY]: {} });
+    const all = got[NET_FAIL_KEY] || {};
+    n = ((all[key] && all[key].n) || 0) + 1;
+    all[key] = { n: n };
+    await chrome.storage.local.set({ [NET_FAIL_KEY]: all });
+  } catch (e) {
+    // 存不进去就不降噪: 宁可日志回到复读机, 也不为降噪赌主流程
+  }
+  return n;
+}
+
+/** 故障期结束(端点应答了): 清连败计数并返回此前轮数(0=本来就没在故障期, 无需打恢复) */
+async function clearNetFailStreak(key) {
+  let prev = 0;
+  try {
+    const got = await chrome.storage.local.get({ [NET_FAIL_KEY]: {} });
+    const all = got[NET_FAIL_KEY] || {};
+    prev = (all[key] && all[key].n) || 0;
+    if (prev) {
+      delete all[key];
+      await chrome.storage.local.set({ [NET_FAIL_KEY]: all });
+    }
+  } catch (e) {}
+  return prev;
+}
+
 // ---------- 扩展侧硬上限(第二道闸: 后端出错时的兜底) ----------
 //
 // ❗为什么扩展也要限: 后端有自己的频控(间隔 + 两级配额 + 熔断), 但那是**同一个进程里的代码**。
@@ -485,8 +531,22 @@ async function pollInstance(inst) {
   try {
     res = await fetch(tasksUrl, { headers: headers(inst) });
   } catch (e) {
-    log('error', '请求', `拉任务清单失败: ${explainFetchError(tasksUrl, e)}`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label }));
-    return `${label}: ${explainFetchError(tasksUrl, e)}`;
+    const reason = explainFetchError(tasksUrl, e);
+    const detail = reqDetail('拉任务清单', tasksUrl, t0, { 实例: label });
+    const streak = await bumpNetFailStreak(tasksUrl);
+    if (streak === 1) {
+      log('error', '请求', `拉任务清单失败: ${reason}`, detail); // 首报: 全量排查清单
+    } else if (streak % NET_FAIL_REMIND_EVERY === 0) {
+      log('error', '请求', `拉任务清单失败(已连续 ${streak} 轮): ${reason}`, detail);
+    } else {
+      log('debug', '请求', `拉任务清单失败(已连续 ${streak} 轮, 降噪: 排查清单见首报)`, detail);
+    }
+    return `${label}: ${reason}`;
+  }
+  // 端点给了应答(含 401/5xx —— 应答即连接已通): 关故障期; 之前挂着故障就补一句恢复
+  const prevFail = await clearNetFailStreak(tasksUrl);
+  if (prevFail > 0) {
+    log('info', '请求', `端点恢复(此前连续失败 ${prevFail} 轮)`, reqDetail('拉任务清单', tasksUrl, t0, { 实例: label }));
   }
   if (res.status === 401) {
     // 该实例没启用取数通道 / token 不匹配 —— 属正常路径, **不重试**(后端会自己告警)

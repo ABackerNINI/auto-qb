@@ -30,6 +30,9 @@
   回传 kind=login-page, 让后端按「HR 登录失效」处置而不烧 .torrent 重试额度(2026-09-25 实报)
 - test_logger_levels_ring_truncation_and_clear: 真跑 background.js —— 运行日志分级(低于记录级别直接丢)、
   环形上限(丢最旧)、超长字段截断(页面 HTML 整份进日志会撑爆 storage 配额)、清空后落盘为空数组
+- test_connection_failure_logs_head_tail_only: 真跑 background.js —— 连不上时只打「头尾」: 首报全量
+  排查清单 ERROR; 连败期降 debug(默认记录级别下不落盘), 每 30 轮重提一次全量; 恢复补一句 INFO 并清
+  连败计数(计数落 storage, SW 回收也不丢); 状态栏同文复读降 debug(2026-09-28 用户实报每轮复读)
 - test_log_ui_wiring_and_escape: 选项页日志面 —— 清空走 clear-logs 协议(两边一致, 直接改 storage
   会被后台内存缓冲盖回)、渲染过 esc 转义(明细含站点 URL/页面片段)、限渲染条数、
   storage.onChanged 自动刷新、日志容器在脚本之前
@@ -485,8 +488,10 @@ def test_page_fetch_hands_focus_back_when_window_steals_it():
 # ---------- 扩展侧硬上限(第二道闸: 后端出错时的兜底, 2026-09-25 用户指定) ----------
 
 #: 用**真** storage(内存)真跑 background.js: 台账必须真存真读, 否则「计数」是自欺欺人。
-#: 四个场景一次跑完: ①页面上限 10/时(第 11 次被拒且**不发请求**) ②下载有独立额度(页面用满照样能下)
-#: ③窗口键过期 ⇒ 计数归零 ④日上限 50 ⇒ 拒发且 retry_after 指向次日
+#: 四个场景一次跑完: ①页面上限(第 cap+1 次被拒且**不发请求**) ②下载有独立额度(页面用满照样能下)
+#: ③窗口键过期 ⇒ 计数归零 ④日上限 ⇒ 拒发且 retry_after 指向次日。
+#: ❗阈值一律从 site-caps.js 现值动态取(SITE_CAPS), 场景与断言**不许硬编码魔法数字** ——
+#: 09d4109(配额双桶)把 10/50 提到 60/600·50/200 时, 硬编码守阵红了一天没人看见(本机无 node 静默跳过)。
 _NODE_RUN_QUOTA = """
 const fs = require('fs');
 const vm = require('vm');
@@ -533,12 +538,14 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
 vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
 const LEDGER = vm.runInContext('SITE_LEDGER_KEY', sandbox);
+const CAPS = JSON.parse(vm.runInContext('JSON.stringify(SITE_CAPS)', sandbox));   // 阈值动态取: 不硬编码(漂移教训)
 const HOST = 'pt.example.com';
 const page = (id) => sandbox.runTask({ id: id, kind: 'page', url: PAGE_URL }).then((r) => r.payload);
 const torrent = (id) => sandbox.runTask({ id: id, kind: 'torrent', url: DL_URL }).then((r) => r.payload);
 (async () => {
   const out = { pages: [], torrent: null, afterRollover: null, dayRefusal: null, ledgerKey: LEDGER };
-  for (let i = 1; i <= 11; i += 1) out.pages.push(await page('p' + i));
+  for (let i = 1; i <= CAPS.page.perHour + 1; i += 1) out.pages.push(await page('p' + i));
+  out.pageHourCap = CAPS.page.perHour;
   out.fetchesAfterPages = fetches;
   out.torrent = await torrent('t1');            // 下载与访问分开计数: 页面用满不影响它
   out.fetchesAfterTorrent = fetches;
@@ -551,8 +558,9 @@ const torrent = (id) => sandbox.runTask({ id: id, kind: 'torrent', url: DL_URL }
     hk: vm.runInContext('hourKey(Date.now())', sandbox),
     dk: vm.runInContext('dayKey(Date.now())', sandbox),
     hour: 1,
-    day: 50,                                    // 日上限已到
+    day: CAPS.page.perDay,                      // 日上限已到
   };
+  out.pageDayCap = CAPS.page.perDay;
   store[LEDGER] = led2;
   out.dayRefusal = await page('p13');
   out.fetchesAtEnd = fetches;
@@ -587,7 +595,8 @@ def quota_trace() -> dict:
 def test_extension_quota_caps_and_refuses():
     """超限即**拒发**: 不发请求 + 回传 kind=ext-quota + retry_after(后端据此让位, 不计失败)
     ❗这条闸的意义在「后端出错时」: 后端频控写错 / 配置被改坏 / 有人手工灌任务时, 浏览器仍然
-    打不爆站点。所以断言要看两件事: ①第 11 次被拒 ②**它真的没有发出请求**(只看回传字段不算数)。
+    打不爆站点。所以断言要看两件事: ①第 cap+1 次被拒 ②**它真的没有发出请求**(只看回传字段不算数)。
+    阈值动态取 site-caps.js 现值, 不硬编码(09d4109 阈值上提时硬编码守阵漂移, 见基线 26-09-28-0041)。
     """
     trace = quota_trace()
     if not trace:
@@ -595,14 +604,15 @@ def test_extension_quota_caps_and_refuses():
     pages = trace["pages"]
     ok_pages = [p for p in pages if p.get("ok")]
     refused = [p for p in pages if not p.get("ok")]
-    assert len(ok_pages) == 10, f"本小时访问上限 10 次: {[p.get('error') for p in pages]}"
-    assert len(refused) == 1, "第 11 次必须被拒"
+    cap = trace["pageHourCap"]
+    assert len(ok_pages) == cap, f"本小时访问上限 {cap} 次: {[p.get('error') for p in pages]}"
+    assert len(refused) == 1, "超限那次必须被拒"
     assert refused[0].get("kind") == "ext-quota", f"要能被后端识别成配额让位: {refused[0]}"
     assert refused[0].get("retry_after", 0) > 0, "要告诉后端下一个窗口还有多久"
     assert "本小时" in refused[0].get("error", ""), refused[0].get("error")
-    assert trace["fetchesAfterPages"] == 10, f"被拒的那次**不得发出请求**(发出去就白算安全网): {trace}"
+    assert trace["fetchesAfterPages"] == cap, f"被拒的那次**不得发出请求**(发出去就白算安全网): {trace}"
     assert trace["torrent"].get("ok") is True, "下载与访问分开计数: 页面用满不该挡住 .torrent"
-    assert trace["fetchesAfterTorrent"] == 11
+    assert trace["fetchesAfterTorrent"] == cap + 1
 
 
 def test_extension_quota_windows_roll_over():
@@ -728,8 +738,9 @@ vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // backgro
   mode = 'torrent-login';
   await sandbox.runTask({ id: 't2', kind: 'torrent', url: DL_URL });   // login
   mode = 'page-ok';
-  for (let i = 0; i < 7; i++) await sandbox.requireAllowance('page', PAGE_URL);  // 计满本时访问额度(3+7=10)
-  const quota = await sandbox.runTask({ id: 'p4', kind: 'page', url: PAGE_URL }); // 第 11 次 → quota
+  const CAPS = JSON.parse(vm.runInContext('JSON.stringify(SITE_CAPS)', sandbox));  // 阈值动态取: 不硬编码(漂移教训)
+  for (let i = 0; i < CAPS.page.perHour - 3; i += 1) await sandbox.requireAllowance('page', PAGE_URL);  // 计满本时访问额度(3+fill=cap)
+  const quota = await sandbox.runTask({ id: 'p4', kind: 'page', url: PAGE_URL }); // 超限那次 → quota
   await sandbox.flushEvents();
   process.stdout.write(JSON.stringify({ quotaPayload: quota.payload, events: store.events || [] }));
 })();
@@ -747,7 +758,7 @@ def test_background_events_ring_dual_write():
     proc = _run_node([node, "-e", _NODE_RUN_EVENTS, str(BACKGROUND_JS), str(SITE_CAPS_JS)])
     assert proc.returncode == 0, f"node 跑 background.js 的事件环场景失败: {proc.stderr.strip()}"
     out = json.loads(proc.stdout)
-    assert out["quotaPayload"].get("kind") == "ext-quota", "第 11 次页面访问要被扩展侧硬上限挡下(场景前提)"
+    assert out["quotaPayload"].get("kind") == "ext-quota", "页面访问超限那次要被扩展侧硬上限挡下(场景前提)"
     events = out["events"]
     assert [e.get("tag") for e in events] == ["ok", "ok", "error", "ok", "login", "quota"], \
         f"六类场景各记一条且顺序正确: {events}"
@@ -836,6 +847,99 @@ def test_logger_levels_ring_truncation_and_clear():
     assert got["ringLen"] == 10 and got["ringFirst"] == "行 16" and got["ringLast"] == "行 25", f"环形缓冲要丢最旧的: {got}"
     assert got["debugKept"] and got["infoDropped"], f"记录级别要实时生效: {got}"
     assert got["afterClear"], f"清空后 storage 里应是空数组: {got}"
+
+
+#: 连不上时的降噪场景(2026-09-28 用户实报: 后端不在跑时每轮一条全量排查清单 ERROR + 状态栏同文,
+#: 日志环被复读机灌满)。真跑 background.js 的 pollAll 五步: ①首报全量 ②连败降 debug ③第 30 轮重提
+#: ④恢复补 INFO 并清计数 ⑤恢复后再挂重新首报。记录级别预置 debug —— 连败期的 debug 短句要看得见;
+#: normalize.js 也要真载入(safeEndpoint 要用 normalizeEndpoint)。
+_NODE_RUN_NOISE = """
+const fs = require('fs');
+const vm = require('vm');
+const noop = { addListener() {} };
+const EP = 'http://127.0.0.1:18788';
+const TASKS_URL = EP + '/api/hr/tasks';
+const store = { enabled: true, logLevel: 'debug', instances: [{ name: '本机', endpoint: EP, token: 't' }] };
+let down = true;
+const chrome = {
+  alarms: { create() {}, onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop },
+  permissions: { onAdded: noop },
+  storage: { onChanged: noop, local: {   // onChanged: background.js 顶层注册了「设置联动 / 外部清空采纳」监听
+    get: (defaults) => {
+      const out = {};
+      for (const key of Object.keys(defaults || {})) out[key] = (key in store) ? store[key] : defaults[key];
+      return Promise.resolve(out);
+    },
+    set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+  } },
+};
+const sandbox = { chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL,
+  fetch: async () => {
+    if (down) throw new TypeError('Failed to fetch');
+    return { ok: true, status: 200, text: async () => '', json: async () => ({ tasks: [] }) };
+  } };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8'), sandbox);   // normalize.js(safeEndpoint 要用)
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // site-caps.js(模拟 importScripts)
+vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), sandbox);   // background.js
+const delta = async (fn) => {   // 只取本轮新增的日志行(级别|类别|文案)
+  const before = (store.logs || []).length;
+  await fn();
+  return (store.logs || []).slice(before).map((e) => e.lvl + '|' + e.cat + '|' + e.msg);
+};
+(async () => {
+  const out = {};
+  out.r1 = await delta(() => sandbox.pollAll('定时'));            // 第 1 轮: 首报全量
+  out.r2 = await delta(() => sandbox.pollAll('定时'));            // 第 2 轮: 连败降噪
+  out.r3 = await delta(() => sandbox.pollAll('定时'));            // 第 3 轮: 同上
+  out.streak = JSON.parse(JSON.stringify(store.netFailStreak || {}));   // 深拷贝快照: 活引用会被后续轮次原地变异
+  store.netFailStreak = { [TASKS_URL]: { n: 29 } };                     // 造「已连败 29 轮」
+  out.r30 = await delta(() => sandbox.pollAll('定时'));                  // 第 30 轮: 重提全量
+  down = false;
+  out.rOk = await delta(() => sandbox.pollAll('定时'));                  // 恢复: 补一句 INFO + 清计数
+  out.streakAfterOk = JSON.parse(JSON.stringify(store.netFailStreak || {}));
+  down = true;
+  out.rAgain = await delta(() => sandbox.pollAll('定时'));        // 恢复后再挂: 重新首报
+  process.stdout.write(JSON.stringify(out));
+})();
+"""
+
+
+def test_connection_failure_logs_head_tail_only():
+    """连不上时只打「头尾」(2026-09-28 用户实报: 后端不在跑时每轮一条全量排查清单 ERROR +
+    状态栏同文复读, 日志环被灌满): 首报全量 ERROR; 连败期降 debug(默认记录级别下不落盘),
+    每 30 轮重提一次全量; 恢复补一句 INFO 并清连败计数; 状态栏同文复读降 debug。
+    """
+    node = _node()
+    if not node:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    proc = _run_node([node, "-e", _NODE_RUN_NOISE, str(BACKGROUND_JS), str(NORMALIZE_JS), str(SITE_CAPS_JS)])
+    assert proc.returncode == 0, f"node 跑 background.js 的降噪场景失败: {proc.stderr.strip()}"
+    got = json.loads(proc.stdout)
+
+    def has(lines, prefix):
+        return any(l.startswith(prefix) for l in lines)
+
+    # 首报: 全量排查清单照旧(error), 状态栏文本变化记 info
+    assert len(got["r1"]) == 3, got["r1"]
+    assert has(got["r1"], "info|轮询|轮询开始(定时): 1 个实例"), got["r1"]
+    assert has(got["r1"], "error|请求|拉任务清单失败: 连不上") and any("逐条确认" in l for l in got["r1"]), got["r1"]
+    assert has(got["r1"], "info|状态|"), got["r1"]
+    # 连败期: 不再打 error, 降为 debug 短句; 状态栏同文复读也降 debug
+    for rnd, n in ((got["r2"], 2), (got["r3"], 3)):
+        assert all(not l.startswith("error|") for l in rnd), rnd
+        assert has(rnd, f"debug|请求|拉任务清单失败(已连续 {n} 轮, 降噪: 排查清单见首报)"), rnd
+        assert has(rnd, "debug|状态|"), rnd
+    assert list(got["streak"].values())[0]["n"] == 3, f"连败数要真落 storage(SW 回收也不丢): {got['streak']}"
+    # 第 30 轮: 重提全量(防彻底失联无感)
+    assert any(l.startswith("error|请求|拉任务清单失败(已连续 30 轮): 连不上") and "逐条确认" in l for l in got["r30"]), got["r30"]
+    # 恢复: 一句 INFO + 计数清空 + 状态栏文本变化恢复 info
+    assert has(got["rOk"], "info|请求|端点恢复(此前连续失败 30 轮)"), got["rOk"]
+    assert got["streakAfterOk"] == {}, f"恢复后连败计数要清掉: {got['streakAfterOk']}"
+    assert has(got["rOk"], "info|状态|本机: 无任务"), got["rOk"]
+    # 恢复后再挂: 重新首报全量
+    assert any(l.startswith("error|请求|拉任务清单失败: 连不上") and "逐条确认" in l for l in got["rAgain"]), got["rAgain"]
 
 
 def test_log_ui_wiring_and_escape():
