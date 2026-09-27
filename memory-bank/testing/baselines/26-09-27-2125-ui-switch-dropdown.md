@@ -8,7 +8,7 @@
 > `uiSwitchTarget`; 开合挂 lifecycle.js 既有「window 点空白关闭链 + Esc 退栈」。评审模板:
 > resources/navbar-right-template.html(三皮肤令牌面板, 可交互)。设计源模板评审 + 三套皮肤真机截图
 > (星图/棱镜/控制台)全部通过; 棱镜主题引擎(theme.js)零影响, 控制台无主题按钮不变。
-> 基线时间: 2026-09-27。
+> 基线时间: 2026-09-27 21:25(取落库提交时间 3d0d1d2)。
 
 - **测试**: 1752 passed + 3 skipped(远端 b080086 合入 HR 绑定映射制后在新基线复测; 本次改动零新增测试
   —— 守阵 `test_frontend_template_split_wiring`(分片体量/差异口/聚合配平)、`test_frontend_static_bundle_health`
