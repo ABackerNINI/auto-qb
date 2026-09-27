@@ -122,3 +122,89 @@ window.AQB_FEEDBACK = {
     },
   },
 };
+
+/* ==========================================================================
+   全局悬浮提示(.aq-tip): 原生 title 的自绘替代 —— 视觉复刻设置页发光按钮配方
+ * --------------------------------------------------------------------------
+ * 触发面 = 一切带 title 的元素(模板里 130+ 处 title / :title 绑定零改动全量受益)。
+ * 机制: document 级委托 mouseover / focusin, 命中 [title] 即**摘除原属性**(浏览器
+ * 原生气泡无法换肤且固定延迟 ~1s)+ 350ms 后弹自绘浮层; 离开 / 失焦即还原 title ——
+ * 还原前用 hasAttribute 探测: 悬浮期间 Vue patch 若已写入新值则保留新值, :title 绑定不受影响。
+ * 浮层单例挂 body 级 —— 脱离列表容器的 overflow / clip-path(同 hr-pop 与 .speed-pop 的教训);
+ * 样式单点在 shared/console_hub.css 的 .aq-tip 段(三套皮肤同载, 颜色走皮肤令牌)。
+ * 本块是纯 DOM 行为层, 不进 Vue mixin(不占 methods 命名空间, 也无重名风险)。
+ * ========================================================================== */
+(function () {
+  "use strict";
+  const SHOW_DELAY_MS = 350; // 与原生 tooltip 的迟滞感对齐, 掠过不闪
+  const GAP = 6;             // 浮层与锚点的间距
+  const EDGE = 8;            // 视口边缘留白(同 _menuOverflowsRight 口径)
+  let tip = null;            // 单例浮层(懒建: 登录页等无 title 场景零 DOM 成本)
+  let cur = null;            // 当前悬浮的 [title] 元素
+  let timer = 0;
+
+  function tipEl() {
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "aq-tip";
+      tip.setAttribute("role", "tooltip");
+      document.body.appendChild(tip);
+    }
+    return tip;
+  }
+
+  function restore(el) {
+    if (!el.__aqTitle) return;
+    if (!el.hasAttribute("title")) el.setAttribute("title", el.__aqTitle);
+    el.__aqTitle = null;
+  }
+
+  function hide() {
+    if (timer) { clearTimeout(timer); timer = 0; }
+    if (cur) { restore(cur); cur = null; }
+    if (tip) tip.classList.remove("on");
+  }
+
+  function show(anchor) {
+    const text = anchor.__aqTitle;
+    if (!text || !text.trim()) { hide(); return; }
+    const t = tipEl();
+    t.textContent = text;      // title 一律按纯文本渲染, 不吃 HTML 注入
+    t.classList.add("on");     // 先 display 再量测(display: none 量不到尺寸)
+    const r = anchor.getBoundingClientRect();
+    const w = t.offsetWidth, h = t.offsetHeight;
+    let x = Math.min(Math.max(EDGE, r.left + r.width / 2 - w / 2), window.innerWidth - w - EDGE);
+    let y = r.top - h - GAP;   // 默认上方居中
+    if (y < EDGE) y = r.bottom + GAP; // 上方放不下转下方
+    if (y + h > window.innerHeight - EDGE) y = Math.max(EDGE, window.innerHeight - h - EDGE);
+    t.style.left = Math.round(x) + "px";
+    t.style.top = Math.round(y) + "px";
+  }
+
+  function enter(target) {
+    if (target === cur) return; // 锚点内部子元素间移动: 不重置延迟
+    hide();
+    if (!target) return;
+    cur = target;
+    target.__aqTitle = target.getAttribute("title");
+    target.removeAttribute("title"); // 原属性在手上, 原生气泡就无从弹出
+    timer = setTimeout(() => show(cur), SHOW_DELAY_MS);
+  }
+
+  document.addEventListener("mouseover", (ev) => {
+    enter(ev.target instanceof Element ? ev.target.closest("[title]") : null);
+  }, true);
+  document.addEventListener("mouseout", (ev) => {
+    // 只在真正离开当前锚点时收起; 锚点内部移动由 mouseover 判重兜住
+    if (cur && (!(ev.relatedTarget instanceof Element) || !cur.contains(ev.relatedTarget))) hide();
+  }, true);
+  // 键盘可达性: Tab 聚焦到带 title 的控件同样出提示, 移走即收
+  document.addEventListener("focusin", (ev) => {
+    enter(ev.target instanceof Element ? ev.target.closest("[title]") : null);
+  }, true);
+  document.addEventListener("focusout", hide, true);
+  // 点击(往往接着开菜单 / 弹窗)与滚动(锚点位移)时立即收起, 浮层不悬在旧位置
+  document.addEventListener("mousedown", hide, true);
+  window.addEventListener("scroll", hide, true);
+  window.addEventListener("blur", hide);
+})();

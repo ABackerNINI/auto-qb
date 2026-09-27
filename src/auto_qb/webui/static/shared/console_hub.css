@@ -699,6 +699,36 @@
   font-size: 11.6px; line-height: 1.65; color: var(--fg-dim); }
 
 /* ==========================================================================
+   全局悬浮提示(.aq-tip): 原生 title 的自绘替代(调度单点在 shared/ui_feedback.js)
+   三套皮肤共用本层, 颜色一律走皮肤令牌; 视觉复刻设置页发光按钮配方:
+   描边 = accent 45%(同 .hb-btn 静息 tone-line), 发光 = 负 spread 微光(同
+   .hb-card 静息 --glow-soft, 0 0 16px -8px + 60% alpha, 文件头硬知识②), 底 --bg-elev 字 --fg。
+   圆角随 --radius-sm —— 控制台皮肤自动落到方角, 与该皮肤控件语言一致。
+   ⚠ 发光配方直接在 .aq-tip 本层用 --accent 现算: 硬知识③ —— .hb-* 那组 --glow-soft
+   只声明在 hub 控件上, body 级单例继承不到, 不能"顺手"引用。
+   ========================================================================== */
+.aq-tip {
+  position: fixed;
+  z-index: 90; /* 高于 .hb-pop(60)/抽屉(80), 低于确认框一族(100+): 提示不盖住点开的上层 */
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 7px 11px;
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent),
+      0 0 16px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+  font-size: 12.3px;
+  line-height: 1.55;
+  white-space: pre-line; /* title 里的换行按真实断行渲染(老数据有内嵌 \n 的写法) */
+  overflow-wrap: break-word;
+  pointer-events: none;  /* 浮层不拦鼠标: 移入即触发下层 mouseover, 不会在边缘抖动 */
+  display: none;
+}
+.aq-tip.on { display: block; animation: aq-tip-in .12s var(--ease-out); }
+@keyframes aq-tip-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+
+/* ==========================================================================
    规则: 「当…做…」两栏
    ========================================================================== */
 .hb-rule { background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; }
@@ -828,5 +858,5 @@
   .hb-tr-split.on { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hb-view.on, .hb-pop.on { animation: none; }
+  .hb-view.on, .hb-pop.on, .aq-tip.on { animation: none; }
 }
