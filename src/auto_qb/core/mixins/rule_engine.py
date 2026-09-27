@@ -97,7 +97,7 @@ class RuleEngineMixin:
             bak = self._migrate_state_dict(bak)
             self._write_back_recovered(bak)
             return bak
-        logger.warning(f"备份 {bak_path} 也不可用 -> 状态从空开始: 规则执行历史与跨日去重记录会丢失(同一天可能重复跳检)")
+        logger.error(f"备份 {bak_path} 也不可用 -> 状态从空开始: 规则执行历史与跨日去重记录会丢失(同一天可能重复跳检)")
         return {}
 
     def _migrate_state_dict(self, data: dict) -> dict:
@@ -170,7 +170,7 @@ class RuleEngineMixin:
                 keep_backup=True,
             )
         except OSError as e:
-            logger.warning(f"保存状态文件失败: {e}")
+            logger.error(f"保存状态文件失败: {e}")
 
     def _materialize_state_migration(self, dry_run: bool) -> None:
         """启动序列的迁移物化: 磁盘状态文件版本 < CURRENT 时立即落盘一次新版本(计划 26-09-26-0506)
@@ -290,7 +290,7 @@ class RuleEngineMixin:
         try:
             handled, _stop = rule.process(ctx)
         except Exception as e:
-            logger.warning(f"任务[{task.log_tag}] | 规则执行异常: {e}", exc_info=True)
+            logger.error(f"任务[{task.log_tag}] | 规则执行异常: {e}", exc_info=True)
             return REQUEUE
         # 有未消费断点(pending 等待子任务恢复) -> 本轮不重入; 否则周期重入队
         return FINISHED if task.has_breakpoint else REQUEUE
@@ -389,7 +389,7 @@ class RuleEngineMixin:
         try:
             rule.process(ctx)
         except Exception as e:
-            logger.warning(f"事件规则[{rule.name}] {hash[:8]} | 执行异常: {e}", exc_info=True)
+            logger.error(f"事件规则[{rule.name}] {hash[:8]} | 执行异常: {e}", exc_info=True)
         return task
 
     def _handle_event_rule(self, rule: Rule, task: Task, snapshot, dry_run: bool) -> bool:
@@ -406,7 +406,7 @@ class RuleEngineMixin:
         try:
             rule.process(ctx)
         except Exception as e:
-            logger.warning(f"事件规则[{rule.name}] {task.hash[:8]} | 续跑异常: {e}", exc_info=True)
+            logger.error(f"事件规则[{rule.name}] {task.hash[:8]} | 续跑异常: {e}", exc_info=True)
         return FINISHED
 
     # ---------- tracker 引用 ----------

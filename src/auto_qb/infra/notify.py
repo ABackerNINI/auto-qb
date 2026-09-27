@@ -210,7 +210,7 @@ class NotifyHandler(logging.Handler):
     DEDUP_PREFIX_LEN = 80
 
     def __init__(self, config: NotifyConfig, channel: PlatformChannel, now: Callable[[], datetime] = None):
-        super().__init__(level=getattr(logging, config.min_level, logging.WARNING))
+        super().__init__(level=getattr(logging, config.min_level, logging.ERROR))
         self.channel = channel
         self.enabled = True  # 运行时热开关(UI Switch/托盘勾选共用; bool 赋值原子, 无需锁)
         self.throttle = NotifyThrottle(config.max_per_hour, config.dedup_window)

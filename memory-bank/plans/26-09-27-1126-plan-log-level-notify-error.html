@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · 日志等级整改 — 危险情况归 ERROR，通知默认只推 ERROR</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-27">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="log-level-notify-error">
+<meta name="doc-added" content="2026-09-27">
+<meta name="doc-updated" content="2026-09-27">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101113;
+    --bg-raise: #16181b;
+    --ink: #e8e6e1;
+    --ink-dim: #a3a09a;
+    --ink-faint: #6f6d68;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #d9a441;
+    --accent-dim: rgba(217,164,65,.14);
+    --err: #c96a5b;
+    --err-dim: rgba(201,106,91,.12);
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1180px; margin: 0 auto; padding: 0 40px; }
+
+  /* ── 封面 ─────────────────────────── */
+  .cover { padding: 72px 0 40px; border-bottom: 1px solid var(--hairline); }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 28px;
+  }
+  .kicker b { color: var(--accent); font-weight: 400; }
+  h1 {
+    font-size: 40px; font-weight: 590; line-height: 1.15;
+    letter-spacing: -.02em; max-width: 900px;
+  }
+  .lede { margin-top: 20px; max-width: 720px; color: var(--ink-dim); font-size: 16px; }
+  .meta-row {
+    margin-top: 36px; display: flex; flex-wrap: wrap; gap: 32px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint);
+    letter-spacing: .04em;
+  }
+  .meta-row span b { color: var(--ink-dim); font-weight: 400; }
+
+  /* ── 布局：sticky TOC + 正文 ───────── */
+  .body-grid { display: grid; grid-template-columns: 208px 1fr; gap: 56px; padding: 48px 0 24px; }
+  nav.toc { position: sticky; top: 32px; align-self: start; }
+  nav.toc .toc-head {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-faint); text-decoration: none;
+    font-size: 13px; line-height: 1.4; padding: 5px 0 5px 14px;
+    border-left: 1px solid var(--hairline-soft);
+  }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+  nav.toc a .n { font-family: var(--font-mono); font-size: 11px; margin-right: 8px; }
+
+  main { min-width: 0; }
+  section { margin-bottom: 72px; }
+  .sec-rule {
+    display: flex; align-items: baseline; gap: 16px;
+    border-top: 1px solid var(--hairline); padding-top: 18px; margin-bottom: 22px;
+  }
+  .folio { font-family: var(--font-mono); font-size: 12px; color: var(--accent); letter-spacing: .08em; }
+  h2 { font-size: 23px; font-weight: 590; letter-spacing: -.01em; }
+  h3 { font-size: 16px; font-weight: 550; margin: 28px 0 12px; }
+  p { color: var(--ink-dim); max-width: 76ch; margin-bottom: 12px; }
+  p strong, li strong { color: var(--ink); font-weight: 550; }
+  code {
+    font-family: var(--font-mono); font-size: .86em;
+    background: var(--bg-raise); padding: 1px 5px; border-radius: 3px;
+    color: var(--ink); border: 1px solid var(--hairline-soft);
+  }
+
+  /* ── 表格 ─────────────────────────── */
+  .tbl-wrap { margin: 18px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  caption {
+    caption-side: top; text-align: left;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--ink-faint); padding-bottom: 10px;
+  }
+  th {
+    text-align: left; font-weight: 550; font-size: 12px; color: var(--ink-faint);
+    border-bottom: 1px solid var(--hairline); padding: 8px 12px 8px 0;
+    letter-spacing: .02em; white-space: nowrap;
+  }
+  td {
+    border-bottom: 1px solid var(--hairline-soft);
+    padding: 9px 12px 9px 0; vertical-align: top; color: var(--ink-dim);
+  }
+  td.loc { font-family: var(--font-mono); font-size: 12px; color: var(--ink); white-space: nowrap; }
+  td.msg { color: var(--ink); }
+
+  .chip {
+    display: inline-block; font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: .1em; padding: 2px 7px; border-radius: 3px;
+    border: 1px solid var(--hairline); color: var(--ink-dim); white-space: nowrap;
+  }
+  .chip.to-err { color: var(--err); border-color: rgba(201,106,91,.4); background: var(--err-dim); }
+  .chip.to-info { color: var(--ink-dim); }
+  .chip.keep { color: var(--ink-faint); }
+  .chip.acc { color: var(--accent); border-color: rgba(217,164,65,.4); background: var(--accent-dim); }
+
+  .num { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
+
+  /* ── 口径表专用 ────────────────────── */
+  .verdict { font-family: var(--font-mono); font-size: 12px; white-space: nowrap; }
+  .v-yes { color: var(--err); }
+  .v-no { color: var(--ink-faint); }
+
+  /* ── callout：直角 hairline，非圆角彩边 ── */
+  .note {
+    border: 1px solid var(--hairline); background: var(--bg-raise);
+    padding: 14px 18px; margin: 16px 0; max-width: 76ch; font-size: 13.5px; color: var(--ink-dim);
+  }
+  .note b { color: var(--accent); font-weight: 550; }
+
+  ol.steps { counter-reset: step; list-style: none; max-width: 80ch; }
+  ol.steps li {
+    counter-increment: step; position: relative; padding: 14px 0 14px 52px;
+    border-bottom: 1px solid var(--hairline-soft); color: var(--ink-dim);
+  }
+  ol.steps li::before {
+    content: "P" counter(step); position: absolute; left: 0; top: 16px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--accent); letter-spacing: .06em;
+  }
+  ol.steps li b { color: var(--ink); font-weight: 550; }
+
+  footer.colophon {
+    border-top: 1px solid var(--hairline); margin-top: 24px; padding: 28px 0 56px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint);
+    letter-spacing: .05em; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+  }
+
+  @media (max-width: 900px) {
+    .body-grid { grid-template-columns: 1fr; }
+    nav.toc { position: static; margin-bottom: 32px; }
+    nav.toc a { display: inline-block; border-left: none; border-bottom: 1px solid var(--hairline-soft); margin-right: 14px; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+  <!-- ═══ 封面 ═══ -->
+  <header class="cover">
+    <div class="kicker">计划文档 · <b>auto-qb</b> · 待评审</div>
+    <h1>日志等级整改：真正危险的情况归 ERROR，桌面通知默认只推 ERROR</h1>
+    <p class="lede">现状是「WARNING 即通知」——设计内动作、用户操作审计、可自愈降级全部直推桌面弹窗，真危险被淹没。本计划做三件事：① 把数据丢失 / 写盘失败 / 任务停摆 / 认证失败等真正危险的情况升为 ERROR；② 桌面通知默认阈值从 WARNING 提到 ERROR；③ WARNING 收窄为纯排障等级。附全量调用点处置表（88 处 WARNING + 16 处 ERROR 逐条定级）。</p>
+    <div class="meta-row">
+      <span>日期 <b>2026-09-27</b></span>
+      <span>基线 <b>develop @ c4bb0fa2</b></span>
+      <span>范围 <b>src 34 文件内 37 处改级 + 配置默认值 + 测试守阵</b></span>
+      <span>前置 <b>无（独立改动）</b></span>
+    </div>
+  </header>
+
+  <div class="body-grid">
+    <nav class="toc">
+      <div class="toc-head">目录</div>
+      <a href="#s1"><span class="n">01</span>背景与根因</a>
+      <a href="#s2"><span class="n">02</span>新等级语义口径</a>
+      <a href="#s3"><span class="n">03</span>通知默认值改动</a>
+      <a href="#s4"><span class="n">04</span>表 A · 升级 ERROR</a>
+      <a href="#s5"><span class="n">05</span>表 B · 降级 INFO</a>
+      <a href="#s6"><span class="n">06</span>表 C · 保留 WARNING</a>
+      <a href="#s7"><span class="n">07</span>表 D · 反向调整</a>
+      <a href="#s8"><span class="n">08</span>实施步骤</a>
+      <a href="#s9"><span class="n">09</span>测试守阵影响</a>
+      <a href="#s10"><span class="n">10</span>文档回写清单</a>
+      <a href="#s11"><span class="n">11</span>风险与回滚</a>
+    </nav>
+
+    <main>
+
+    <!-- ═══ 01 背景与根因 ═══ -->
+    <section id="s1">
+      <div class="sec-rule"><span class="folio">01</span><h2>背景与根因</h2></div>
+      <p>通知链路 100% 依赖日志等级：<code>NotifyHandler</code>（<code>src/auto_qb/infra/notify.py:202</code>）挂在 <code>auto_qb</code> logger 上拦截日志，<code>min_level</code> 及以上的记录自动派发桌面通知（urgent 判据 = <code>levelno &gt;= ERROR</code>，<code>notify.py:242</code>）。生产 <code>config.yml</code> 的 <code>notify.min_level</code> 当前为 <code>WARNING</code>，且模型默认值也是 <code>WARNING</code>（<code>config/models.py:216</code>）——即<b>每一条 WARNING 都弹窗</b>。</p>
+      <p>全仓盘点：WARNING 88 处（src 86 + scripts 2）、ERROR 16 处、CRITICAL 0 处。其中约 23 处 WARNING 是「设计如此」的信息性 / 审计消息（删除种子审计、配置变更告知、限速覆盖等），与可自愈降级、重试中、真危险混在同一等级里，通知降噪无从下手。根因是等级语义过宽（现行约定「WARNING = 回退 / 风险 / 数据异常」），本次一并收窄。</p>
+      <div class="note"><b>口径冲突声明</b>：本计划改写 <code>memory-bank/conventions/code-style.md:67</code> 的既有等级语义，并在收尾回写该文档与 <code>pitfalls/ops/alert-levels.md</code>——先改约定再动代码，避免守阵与文档各说各话。</div>
+    </section>
+
+    <!-- ═══ 02 新等级语义 ═══ -->
+    <section id="s2">
+      <div class="sec-rule"><span class="folio">02</span><h2>新等级语义口径</h2></div>
+      <p>整改后四级各自只有一个问句能回答「该不该用」：</p>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 0 · 等级语义（旧 → 新）</caption>
+          <thead><tr><th>等级</th><th>旧口径</th><th>新口径</th><th>默认进桌面通知</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">DEBUG</td><td>例行检查 + skipped</td><td>不变——例行细节、逐种子排障轨迹</td><td class="verdict v-no">否</td></tr>
+            <tr><td class="loc">INFO</td><td>动作成功 / 状态变化</td><td>扩：+ 用户操作审计、生命周期告知（启动 / 停止 / 配置变更）</td><td class="verdict v-no">否</td></tr>
+            <tr><td class="loc">WARNING</td><td>回退 / 风险 / 数据异常</td><td><strong>收窄为纯排障</strong>：可自愈降级、重试中、保护性动作、性能细节——「值得在日志里看，不值得弹窗」</td><td class="verdict v-no">否</td></tr>
+            <tr><td class="loc">ERROR</td><td>未预期异常（exc_info）</td><td><strong>扩为真正危险</strong>：数据丢失 / 状态写盘失败 / 任务停摆需人工 / 认证失败 / 未预期异常</td><td class="verdict v-yes">是（urgent）</td></tr>
+            <tr><td class="loc">CRITICAL</td><td>校验允许，全仓未用</td><td>不启用（无调用点，不加戏）</td><td class="verdict v-no">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>判别口诀：<strong>弹窗测试</strong>——「这条出现时，用户是否需要立刻放下手头的事？」是 → ERROR；「只是排查问题时想 grep 到」→ WARNING；「事后审计想留痕」→ INFO。</p>
+    </section>
+
+    <!-- ═══ 03 通知默认值 ═══ -->
+    <section id="s3">
+      <div class="sec-rule"><span class="folio">03</span><h2>通知默认值改动</h2></div>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 1 · 配置面改动点</caption>
+          <thead><tr><th>项</th><th>位置</th><th>现值</th><th>改为</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td>NotifyConfig.min_level 默认</td><td class="loc">config/models.py:216</td><td><code>"WARNING"</code></td><td><code>"ERROR"</code></td><td>数据模型默认</td></tr>
+            <tr><td>WebUI schema 默认</td><td class="loc">config/schema/groups.py:189</td><td><code>"WARNING"</code></td><td><code>"ERROR"</code></td><td>notify 组 min_level 枚举默认</td></tr>
+            <tr><td>Handler fallback 常量</td><td class="loc">infra/notify.py:213</td><td><code>logging.WARNING</code></td><td><code>logging.ERROR</code></td><td><code>getattr</code> 失败时的兜底，与默认对齐</td></tr>
+            <tr><td>NOTIFY_LEVELS 可选集</td><td class="loc">config/validation/sections.py:69</td><td>INFO / WARNING / ERROR</td><td>不变</td><td>全仓无 CRITICAL 调用，不加</td></tr>
+            <tr><td>urgent 判据</td><td class="loc">infra/notify.py:242</td><td><code>&gt;= ERROR</code></td><td>不变</td><td>已是目标语义</td></tr>
+            <tr><td>生产 config.yml</td><td class="loc">config.yml:36</td><td><code>min_level: WARNING</code></td><td>用户自行改</td><td><strong>红线</strong>：生产配置 AI 不动；交付时明确提示用户改成 ERROR</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>显式配置过 <code>min_level</code> 的用户不受默认值改动影响——所以生产配置那一行必须由用户亲手改，否则本计划的降噪在该环境不生效。节流参数（<code>max_per_hour=20</code>、<code>dedup_window=600s</code>）不动，作为 ERROR 弹窗的防刷兜底。</p>
+    </section>
+
+    <!-- ═══ 04 表 A ═══ -->
+    <section id="s4">
+      <div class="sec-rule"><span class="folio">04</span><h2>表 A · WARNING → ERROR 升级清单（真正危险）</h2></div>
+      <p>20 处。共同特征：数据丢失、状态写盘失败、线程 / 通道停摆需人工介入、认证失败、未预期异常（原 <code>exc_info</code> 惯例本就该 ERROR）。</p>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 A · 升级 20 处</caption>
+          <thead><tr><th>#</th><th>位置</th><th>消息摘要</th><th>为什么是真正危险</th></tr></thead>
+          <tbody>
+            <tr><td class="num">A1</td><td class="loc">core/mixins/rule_engine.py:100</td><td class="msg">备份也不可用 → 状态从空开始：规则执行历史与跨日去重记录会丢失</td><td>数据丢失已成事实</td></tr>
+            <tr><td class="num">A2</td><td class="loc">core/mixins/rule_engine.py:173</td><td class="msg">保存状态文件失败</td><td>跨轮次状态写盘失败，幂等性根基受损</td></tr>
+            <tr><td class="num">A3</td><td class="loc">core/mixins/rule_engine.py:293</td><td class="msg">任务规则执行异常（exc_info）</td><td>未预期异常</td></tr>
+            <tr><td class="num">A4</td><td class="loc">core/mixins/rule_engine.py:392</td><td class="msg">事件规则执行异常（exc_info）</td><td>未预期异常</td></tr>
+            <tr><td class="num">A5</td><td class="loc">core/mixins/rule_engine.py:409</td><td class="msg">事件规则续跑异常（exc_info）</td><td>未预期异常</td></tr>
+            <tr><td class="num">A6</td><td class="loc">rules/base.py:252</td><td class="msg">规则「动作失败」：{result.message}</td><td>动作管线统一失败出口。实施时先核对 <code>result.message</code> 来源：软性拒绝（如 skipped 类结果）走 INFO，仅真失败升 ERROR</td></tr>
+            <tr><td class="num">A7</td><td class="loc">rules/base.py:179</td><td class="msg">含 reannounce 动作但未配置 execute_once / cooldown，高频触发有封号风险</td><td>配置错误 + 账号级风险；启动期一次性，无刷屏问题</td></tr>
+            <tr><td class="num">A8</td><td class="loc">rules/actions/checking.py:193</td><td class="msg">自定义校验程序执行异常</td><td>未预期异常</td></tr>
+            <tr><td class="num">A9</td><td class="loc">rules/actions/full_checking.py:149</td><td class="msg">校验轮询异常（exc_info）</td><td>未预期异常</td></tr>
+            <tr><td class="num">A10</td><td class="loc">rules/actions/full_checking.py:227</td><td class="msg">组内校验等待异常</td><td>未预期异常</td></tr>
+            <tr><td class="num">A11</td><td class="loc">hr/server.py:153</td><td class="msg">HR 取数通道端点在 Ns 内未退出</td><td>线程停摆</td></tr>
+            <tr><td class="num">A12</td><td class="loc">hr/server.py:206</td><td class="msg">鉴权失败（method path），已拒绝</td><td>认证失败。局域网白名单服务，合法流量几乎不会触发</td></tr>
+            <tr><td class="num">A13</td><td class="loc">hr/server.py:245</td><td class="msg">生成站点授权清单失败（exc_info）</td><td>未预期异常</td></tr>
+            <tr><td class="num">A14</td><td class="loc">hr/service.py:220</td><td class="msg">HR 站点刷新异常（exc_info）</td><td>未预期异常</td></tr>
+            <tr><td class="num">A15</td><td class="loc">hr/service.py:494</td><td class="msg">events.fuse_opened：连续失败达阈值，冷却至…</td><td>该站点在线核实已停摆</td></tr>
+            <tr><td class="num">A16</td><td class="loc">hr/service.py:792</td><td class="msg">events.login_expired：登录态失效，请人工登录</td><td>停摆且明确需人工</td></tr>
+            <tr><td class="num">A17</td><td class="loc">hr/store.py:232</td><td class="msg">文件锁疑似不生效，已退化为只读以免双写</td><td>多实例双写风险保护被触发</td></tr>
+            <tr><td class="num">A18</td><td class="loc">hr/worker.py:200</td><td class="msg">HR 取数线程在 Ns 内未退出（可能仍在等扩展回传）</td><td>线程停摆嫌疑</td></tr>
+            <tr><td class="num">A19</td><td class="loc">hr/worker.py:352</td><td class="msg">events.channel_silent：端点已静默 N h，受影响站点…</td><td>取数通道整体停摆</td></tr>
+            <tr><td class="num">A20</td><td class="loc">webui/server/lifecycle.py:202</td><td class="msg">旧服务在 Ns 内未退出，仍尝试重启</td><td>端口占用 / 进程停摆</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="note"><b>不升级的两处「危险感」消息</b>：<code>rules/actions/skip_checking.py:102</code>（无参考跳检高风险）——设计内动作、每个种子触发一次，升 ERROR 会变成高频弹窗，风险由配置保守默认开关把关，留 WARNING（表 C）；<code>webui/server/auth.py:68</code>（WEB 鉴权失败）——浏览器带错密钥的常规访问也会触发，与 <code>hr/server.py:206</code> 的白名单内低频场景不同，留 WARNING。</div>
+    </section>
+
+    <!-- ═══ 05 表 B ═══ -->
+    <section id="s5">
+      <div class="sec-rule"><span class="folio">05</span><h2>表 B · WARNING → INFO 降级清单（信息性 / 审计）</h2></div>
+      <p>13 处。全是「设计如此」的用户操作审计与生命周期告知——正是 <code>pitfalls/ops/alert-levels.md</code> 点名不许用 WARNING 的那类。降 INFO 后在默认配置下不再弹窗，日志留痕不变。</p>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 B · 降级 13 处</caption>
+          <thead><tr><th>#</th><th>位置</th><th>消息摘要</th><th>降级理由</th></tr></thead>
+          <tbody>
+            <tr><td class="num">B1</td><td class="loc">core/qbmanager.py:531</td><td class="msg">以下配置需重启进程才能生效</td><td>生命周期告知</td></tr>
+            <tr><td class="num">B2</td><td class="loc">core/qbmanager.py:553</td><td class="msg">应用结构级配置变更：重建任务队列 / 规则</td><td>设计动作</td></tr>
+            <tr><td class="num">B3</td><td class="loc">core/qbmanager.py:595</td><td class="msg">WEB UI 已停止（web.enabled=false）</td><td>生命周期告知</td></tr>
+            <tr><td class="num">B4</td><td class="loc">webui/commands.py:251</td><td class="msg">强制汇报整组（N 个种子），等待 tracker 确认</td><td>用户操作审计</td></tr>
+            <tr><td class="num">B5</td><td class="loc">webui/commands.py:257</td><td class="msg">删除整组（N 个种子，delete_files=…）</td><td>用户操作审计（删种子留痕降档，不删日志）</td></tr>
+            <tr><td class="num">B6</td><td class="loc">webui/commands.py:278</td><td class="msg">强制汇报种子 hash</td><td>用户操作审计</td></tr>
+            <tr><td class="num">B7</td><td class="loc">webui/commands.py:300</td><td class="msg">删除种子 hash（delete_files=…）</td><td>用户操作审计</td></tr>
+            <tr><td class="num">B8</td><td class="loc">webui/commands.py:359</td><td class="msg">种子移动保存路径 → …（消息自注「属预期」）</td><td>消息自己已承认是预期行为</td></tr>
+            <tr><td class="num">B9</td><td class="loc">webui/commands.py:542</td><td class="msg">批量 action（N 个种子）：msg</td><td>用户操作审计</td></tr>
+            <tr><td class="num">B10</td><td class="loc">webui/commands.py:546</td><td class="msg">批量 action（N 个，delete_files=…）</td><td>用户操作审计</td></tr>
+            <tr><td class="num">B11</td><td class="loc">webui/commands.py:563</td><td class="msg">删除分类</td><td>用户操作审计</td></tr>
+            <tr><td class="num">B12</td><td class="loc">webui/commands.py:571</td><td class="msg">删除标签</td><td>用户操作审计</td></tr>
+            <tr><td class="num">B13</td><td class="loc">webui/commands.py:577</td><td class="msg">全局限速手动覆盖</td><td>用户操作审计</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>先例：<code>webui/commands.py:646</code> 附近「添加成功」已按同样理由从 WARNING 改 INFO（<code>tests/test_web.py:5616</code> 有守阵断言），本次是把同一判据补齐到其余审计消息。</p>
+    </section>
+
+    <!-- ═══ 06 表 C ═══ -->
+    <section id="s6">
+      <div class="sec-rule"><span class="folio">06</span><h2>表 C · 保留 WARNING 清单（排障语义）</h2></div>
+      <p>51 处（src 49 + scripts 2）。全部符合新口径「值得 grep、不值得弹窗」。默认 <code>min_level=ERROR</code> 后它们不再打扰，但排障时把 min_level 调低即全部可见。<strong>本轮不改这 51 处的等级</strong>，只在此登记处置结论，防止后人再次「顺手清理」。</p>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 C · 保留 51 处（按模块归并）</caption>
+          <thead><tr><th>模块</th><th>位置</th><th>保留理由</th></tr></thead>
+          <tbody>
+            <tr><td>主循环</td><td class="loc">core/qbmanager.py:373（连接失败 Ns 后重试）</td><td>重试中，可自愈</td></tr>
+            <tr><td>主循环</td><td class="loc">core/qbmanager.py:774（种子未匹配 tracker 配置）</td><td>配置缺口排障，种子已被保守跳过</td></tr>
+            <tr><td>规则状态</td><td class="loc">core/mixins/rule_engine.py:93 / 126 / 143 / 154</td><td>已有备份回退链 / 可重试 / 自愈清理跳过</td></tr>
+            <tr><td>辅种组</td><td class="loc">core/mixins/grouping.py:180 / 252 / 257 / 261 / 270 / 339 / 341</td><td>保护性暂停整组是设计动作；单文件异常属数据排障</td></tr>
+            <tr><td>限速曲线</td><td class="loc">core/mixins/speed_curve.py:89 / 94 / 98 / 179</td><td>「本轮不动」式降级，性能 / 数据排障</td></tr>
+            <tr><td>增量同步</td><td class="loc">torrents/store.py:99（qB 不支持 sync/maindata 降级）</td><td>API 能力降级，可自愈</td></tr>
+            <tr><td>跳检</td><td class="loc">rules/actions/checking.py:151 / 159</td><td>降级到保守路径的前置排障</td></tr>
+            <tr><td>跳检</td><td class="loc">rules/actions/skip_checking.py:102（无参考跳检高风险） / 114 / 256</td><td>102 为设计内高风险动作、高频触发（见表 A 注）；114 / 256 可自愈</td></tr>
+            <tr><td>全量校验</td><td class="loc">rules/actions/full_checking.py:110 / 126 / 136 / 213 / 218</td><td>外部状态 / 重试保护 / 保护性恢复重判</td></tr>
+            <tr><td>HR 服务</td><td class="loc">hr/service.py:496 / 668 / 678 / 780 / 805</td><td>距熔断还有余量的重试中 / 数据排障 / 降级轮空</td></tr>
+            <tr><td>HR 存储</td><td class="loc">hr/store.py:212（站点文件读坏，同文本只报一次）</td><td>已有只读保护 + 去重，排障定位用</td></tr>
+            <tr><td>HR 线程</td><td class="loc">hr/worker.py:272 / 328</td><td>自愈忽略 / 页面改版疑似需事后核对（非停摆）</td></tr>
+            <tr><td>HR 队列</td><td class="loc">hr/queue.py:146 / 149（丢弃未派发 / 域名不符回传）</td><td>一致性保护丢弃，排障定位用</td></tr>
+            <tr><td>HR 服务</td><td class="loc">hr/server.py:190（拒绝非白名单 origin）</td><td>外部扫描常见，升 ERROR 会刷屏</td></tr>
+            <tr><td>WEBUI</td><td class="loc">webui/server/auth.py:68（密钥不匹配）</td><td>浏览器错配 / 扫描常见（见表 A 注）</td></tr>
+            <tr><td>WEBUI</td><td class="loc">webui/runtime.py:240 / 290 / 340 / 363 / 481 / 502</td><td>未知命令 / 消息转发 / 性能降级排障</td></tr>
+            <tr><td>托盘</td><td class="loc">tray/app.py:144 / 161（AppUserModelID）</td><td>通知来源显示退化，不影响功能</td></tr>
+            <tr><td>离线工具</td><td class="loc">scripts/qb_capture.py:616 / 1318</td><td>非主程序，不动</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══ 07 表 D ═══ -->
+    <section id="s7">
+      <div class="sec-rule"><span class="folio">07</span><h2>表 D · 反向调整：ERROR → WARNING</h2></div>
+      <p>1 处。按新口径反过来检查现有 16 处 ERROR，发现一处语义不符：</p>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 D · 降档 1 处</caption>
+          <thead><tr><th>#</th><th>位置</th><th>消息摘要</th><th>调整理由</th></tr></thead>
+          <tbody>
+            <tr><td class="num">D1</td><td class="loc">core/mixins/tracker.py:32</td><td class="msg"><span class="chip">现 ERROR</span> → <span class="chip keep">改 WARNING</span>　种子匹配到多个 tracker 配置，使用第一个</td><td>配置歧义的自动降级决策（「使用第一个」是既定策略），不是未预期异常；符合新 WARNING 排障口径</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>其余 15 处 ERROR（cli.py×2、qbmanager.py×3、taskqueue.py、tags.py×2、rules/base.py:276、hr/server.py:309、hr/worker.py:236、webui/server/lifecycle.py:145/188、webui/runtime.py:244）逐条核对后全部符合「真正危险 / 未预期异常」，不动。</p>
+    </section>
+
+    <!-- ═══ 08 实施步骤 ═══ -->
+    <section id="s8">
+      <div class="sec-rule"><span class="folio">08</span><h2>实施步骤</h2></div>
+      <ol class="steps">
+        <li><b>改等级语义约定（先行）</b>：改写 <code>memory-bank/conventions/code-style.md:67</code> 等级语义为表 0 新口径，<code>pitfalls/ops/alert-levels.md</code> 四判据同步。约定先行，代码与守阵才有裁决依据。</li>
+        <li><b>通知默认值（P1）</b>：按表 1 改 <code>config/models.py:216</code>、<code>config/schema/groups.py:189</code>、<code>infra/notify.py:213</code>。<code>NOTIFY_LEVELS</code> 与 <code>_validate_notify</code> 不动。跑 <code>commands run test.quick</code> 验证 test_config / test_notify。</li>
+        <li><b>调用点整改（P2）</b>：按表 A 升级 20 处、表 B 降级 13 处、表 D 降档 1 处，共 34 处改级。A6（rules/base.py:252）实施前先核对 <code>result.message</code> 来源再定级。全部改动仅换等级常量，不动消息文本与骨架。</li>
+        <li><b>测试守阵更新（P3）</b>：按第 09 节清单同步 caplog 断言，并新增两个用例——① <code>test_config</code>：默认 min_level == "ERROR"；② <code>test_notify</code>：默认配置下 WARNING 不通知、ERROR 通知。跑 <code>commands run test.quick</code>。</li>
+        <li><b>收尾（P4）</b>：文档回写（第 10 节清单）→ <code>commands run test.full</code> 建基线切片（记实测数字）→ 新坑写 pitfalls → 提交走 <code>ship.commit</code>。提交信息含实测：升级 / 降级 / 保留 / 反向四类条数与 test.full 通过数。</li>
+      </ol>
+      <p>涉及源文件（12 个）：<code>config/models.py</code>、<code>config/schema/groups.py</code>、<code>infra/notify.py</code>、<code>core/qbmanager.py</code>、<code>core/mixins/rule_engine.py</code>、<code>core/mixins/tracker.py</code>、<code>rules/base.py</code>、<code>rules/actions/checking.py</code>、<code>rules/actions/full_checking.py</code>、<code>hr/server.py</code>、<code>hr/service.py</code>、<code>hr/store.py</code>、<code>hr/worker.py</code>、<code>webui/server/lifecycle.py</code>、<code>webui/commands.py</code>（表 B 集中在此）。</p>
+    </section>
+
+    <!-- ═══ 09 测试守阵 ═══ -->
+    <section id="s9">
+      <div class="sec-rule"><span class="folio">09</span><h2>测试守阵影响</h2></div>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 2 · caplog / 通知断言逐个处置</caption>
+          <thead><tr><th>测试文件:行</th><th>现状</th><th>处置</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">tests/test_notify.py:110-141</td><td>min_level=WARNING 时 INFO 不通知 / WARNING 通知；ERROR 带 urgent</td><td>显式传参用例不改；<strong>新增默认值用例</strong>（默认 min_level 下 WARNING 不通知）</td></tr>
+            <tr><td class="loc">tests/test_notify.py:344-407</td><td>节流 / 去重 / 开关用例，显式传 min_level</td><td>不改</td></tr>
+            <tr><td class="loc">tests/test_ui.py:198</td><td>NotifyConfig(min_level="WARNING") 显式构造</td><td>不改</td></tr>
+            <tr><td class="loc">tests/test_rule_engine.py:124</td><td>状态损坏「必须留 WARNING」</td><td>核对覆盖路径：仅 :93 回退路径 → 不改；若覆盖 :100 / :173 → 断言改 ERROR</td></tr>
+            <tr><td class="loc">tests/test_rule_engine.py:151</td><td>首次启动无 WARNING</td><td>不改</td></tr>
+            <tr><td class="loc">tests/test_hr_runtime.py:178-193</td><td>启停消息必须 INFO 非 WARNING</td><td>不改（与表 B 方向一致）</td></tr>
+            <tr><td class="loc">tests/test_hr_store.py:266 / 285 / 330</td><td>store 相关等级断言</td><td>:232 升 ERROR → 覆盖该路径的断言改 ERROR</td></tr>
+            <tr><td class="loc">tests/test_hr_service.py:521 / 544 / 845-846 / 880</td><td>service 相关等级断言</td><td>:494（熔断）改 ERROR；:496（重试中）保留 → 对应断言不动</td></tr>
+            <tr><td class="loc">tests/test_hr_worker.py:150 / 163 / 190-195 / 257-260</td><td>worker 相关等级断言</td><td>:200 / :352 升 ERROR → 对应断言改</td></tr>
+            <tr><td class="loc">tests/test_web.py:5616 / 5633</td><td>添加成功必须 INFO / 失败必须 WARNING</td><td>不改</td></tr>
+            <tr><td class="loc">tests/test_web.py:390-445 / 5065 / 5226 / 5312 / 6285</td><td>慢命令必须 WARNING</td><td>不改（排障语义保留）</td></tr>
+            <tr><td class="loc">tests/test_web.py:2084</td><td>注释引用「默认 min_level=WARNING ⇒ 密钥被推到通知」</td><td>更新注释为默认 ERROR</td></tr>
+            <tr><td class="loc">tests/test_web.py — commands 审计消息</td><td>表 B 13 处若被 caplog 断言 WARNING</td><td>改 INFO；<code>commands.py:257/300</code> 删种子审计若有「必须 WARNING」断言需同步改</td></tr>
+            <tr><td class="loc">tests/test_speed_curve.py</td><td>手动日志守阵</td><td>不改（保留 WARNING）</td></tr>
+            <tr><td class="loc">tests/test_config.py:647-689 / 1033-1193</td><td>notify 段校验 / 解析断言</td><td>默认值断言（若断言默认 WARNING）改 ERROR；:685 显式 "ERROR" 解析用例不改；<strong>新增默认值断言</strong></td></tr>
+            <tr><td class="loc">tests/helpers.py:824</td><td>构造 level="WARNING" 日志配置</td><td>显式构造，不改</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══ 10 文档回写 ═══ -->
+    <section id="s10">
+      <div class="sec-rule"><span class="folio">10</span><h2>文档回写清单</h2></div>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 3 · 回写点</caption>
+          <thead><tr><th>文档</th><th>改动</th></tr></thead>
+          <tbody>
+            <tr><td class="loc">memory-bank/conventions/code-style.md:67</td><td>等级语义整段改写为表 0 新口径</td></tr>
+            <tr><td class="loc">memory-bank/pitfalls/ops/alert-levels.md</td><td>四判据与新口径对齐；「WARNING 即通知」时代的历史判据补注当前默认</td></tr>
+            <tr><td class="loc">memory-bank/config-reference/keys.md:23</td><td>notify.min_level 默认值 WARNING → ERROR</td></tr>
+            <tr><td class="loc">memory-bank/productContext.md:38</td><td>「WARNING 及以上日志推送平台原生通知」→「默认 ERROR 及以上（min_level 可配）」</td></tr>
+            <tr><td class="loc">memory-bank/techContext.md:11</td><td>核对 notify 描述是否提及默认等级，提及则同步</td></tr>
+            <tr><td class="loc">根 README.md</td><td>grep 通知 / 日志等级描述，有则同步（收尾时以 grep 实证为准）</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══ 11 风险与回滚 ═══ -->
+    <section id="s11">
+      <div class="sec-rule"><span class="folio">11</span><h2>风险与回滚</h2></div>
+      <div class="tbl-wrap">
+        <table>
+          <caption>表 4 · 风险登记</caption>
+          <thead><tr><th>风险</th><th>对策</th></tr></thead>
+          <tbody>
+            <tr><td>用户生产 config.yml 显式 min_level=WARNING，默认值改动对其不生效</td><td>红线不允许 AI 改生产配置；交付时向用户明确提示手改 <code>config.yml:36</code></td></tr>
+            <tr><td>hr/server.py:206 鉴权失败升 ERROR 后，客户端持续错配会反复弹窗</td><td>既有节流（max_per_hour=20 + dedup_window=600s）兜底；局域网白名单下合法流量几乎不触发</td></tr>
+            <tr><td>rules/base.py:252 的 result.message 可能含软性结果，升 ERROR 后误弹</td><td>实施 P2 前先 grep result.message 的产生点，软性拒绝改走 INFO 再升级</td></tr>
+            <tr><td>caplog 守阵漏改导致 test.full 红</td><td>fail-fast 兜底：表 2 已逐条列出，跑全量即暴露；改级本身就是机械替换</td></tr>
+            <tr><td>托盘日志窗（tray/app.py:175 UiLogHandler）不过滤等级，改级后 [WARNING]/[ERROR] 标签分布变化</td><td>预期行为，不处理；如需按等级着色属后续独立需求，不入本轮</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>回滚</strong>：全部改动是日志等级常量、两个默认值字符串与测试断言，无 state 迁移、无 schema 版本变更，单提交 <code>git revert</code> 即可完整回滚。</p>
+      <div class="note"><b>范围守卫</b>：本计划只动等级常量、通知默认值与对应守阵。消息文本措辞、节流策略、UiLogHandler 着色等「顺手想改」的相邻项一律不入池不改，撞见即记 issues。</div>
+    </section>
+
+    </main>
+  </div>
+
+  <footer class="colophon">
+    <span>auto-qb · 计划文档 · 日志等级整改</span>
+    <span>develop @ c4bb0fa2 · 2026-09-27 · 待评审，批准后按 P1→P4 执行</span>
+  </footer>
+</div>
+</body>
+</html>

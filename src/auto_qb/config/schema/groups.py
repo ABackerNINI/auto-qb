@@ -188,10 +188,10 @@ GROUPS: Tuple[Group, ...] = (
                         "min_level",
                         "最低通知级别",
                         "enum",
-                        default="WARNING",
+                        default="ERROR",
                         options=NOTIFY_LEVELS,
                         grey_if=("enabled", "true"),
-                        help="日志达到该级别才推送(WARNING = 只推警告和错误)",
+                        help="日志达到该级别才推送(默认 ERROR = 只推真正危险; 排障时可临时调低)",
                     ),
                     Field(
                         "quiet_hours",

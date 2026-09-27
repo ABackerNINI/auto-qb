@@ -4,6 +4,7 @@
 - test_notify_throttle_hourly_cap: 每小时上限, 超出丢弃, 窗口滑出后恢复
 - test_notify_throttle_dedup: 同键去重窗口内丢弃, 窗口外放行; dedup_window=0 不去重
 - test_notify_handler_level_filter: 低于 min_level 的日志不通知(经 logger 全链路)
+- test_notify_default_min_level_is_error: 默认 min_level=ERROR, INFO/WARNING 不通知、ERROR 派发(等级整改 26-09-27-1126)
 - test_notify_handler_dispatch: WARNING/ERROR 日志入队并由后台线程派发, ERROR 标记 urgent
 - test_notify_handler_self_loop_guard: auto_qb.infra.notify 来源的记录被忽略(防自环)
 - test_notify_handler_quiet_hours: 免打扰时段(含跨午夜)跳过发送, 时段外照常
@@ -117,6 +118,25 @@ def test_notify_handler_level_filter():
         assert _wait_for(lambda: len(channel.sent) == 1), f"应仅派发 WARNING: {channel.sent}"
         assert channel.sent[0][0] == "auto-qb WARNING"
         assert channel.sent[0][1] == "应当通知的 WARNING"
+    finally:
+        test_logger.removeHandler(handler)
+
+
+def test_notify_default_min_level_is_error():
+    """默认 min_level=ERROR: INFO/WARNING 不再弹窗(仅排障), ERROR 才派发(等级整改 26-09-27-1126)"""
+    cfg = NotifyConfig(enabled=True)
+    assert cfg.min_level == "ERROR", "通知默认阈值必须是 ERROR(真正危险才弹窗)"
+    handler, channel = _make_handler(min_level=cfg.min_level)
+    test_logger = logging.getLogger("auto_qb.test_notify.default")
+    test_logger.addHandler(handler)
+    test_logger.setLevel(logging.DEBUG)
+    try:
+        test_logger.info("默认配置下不通知的 INFO")
+        test_logger.warning("默认配置下不通知的 WARNING(仅排障)")
+        assert not channel.sent, f"默认配置下 INFO/WARNING 均不应通知: {channel.sent}"
+        test_logger.error("默认配置下应当通知的 ERROR")
+        assert _wait_for(lambda: len(channel.sent) == 1), f"默认配置下 ERROR 应派发: {channel.sent}"
+        assert channel.sent[0][1] == "默认配置下应当通知的 ERROR"
     finally:
         test_logger.removeHandler(handler)
 

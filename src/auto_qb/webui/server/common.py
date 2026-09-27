@@ -57,8 +57,9 @@ def ensure_web_token(manager) -> str:
     fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="ascii") as f:
         f.write(token)
-    # 密钥内容**不进日志**: 记 WARNING 会被 notify 处理器(min_level 默认 WARNING)推到系统
-    # 通知, 且落到日志文件后 /api/log 可读回 —— 拿到密钥即等于拿到改配置/删种子的能力。
+    # 密钥内容**不进日志**: 记 WARNING 及以上会被 notify 处理器(min_level 默认 ERROR,
+    # 排障调低后会更高频)推到系统通知, 且落到日志文件后 /api/log 可读回 ——
+    # 拿到密钥即等于拿到改配置/删种子的能力。
     # 改为 INFO 只提示文件路径: 用户打开 web.token 即可, 或配置 web.token 使用固定密钥。
     logger.info(f"WEB 访问密钥已生成: {token_file}(密钥内容只存该文件、不打印到日志, 需查看请打开它)")
     return token

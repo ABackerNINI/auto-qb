@@ -528,7 +528,7 @@ class QbManager(
         changes = diff_config_impacts(self.config, config)
         restart_required = [c.path for c in changes if c.level == "R"]
         if restart_required:
-            logger.warning(f"以下配置需重启进程才能生效: {restart_required}")
+            logger.info(f"以下配置需重启进程才能生效: {restart_required}")
         levels = sorted({c.level for c in changes if c.level != "R"})
         # L1 分支需对比新旧 web 段(替换后旧对象不可达)
         old_web = self.config.web
@@ -550,7 +550,7 @@ class QbManager(
             self._apply_web_config(old_web)
             self.hr.apply(old_hr_check)
         if "L2" in levels:
-            logger.warning("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
+            logger.info("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
             self.task_queue = TaskQueue()
             self.store.reset_runtime()
             # 不重读磁盘 state: state 平时不落盘, 磁盘上只有上次退出的旧版, 重读 = 回滚
@@ -592,7 +592,7 @@ class QbManager(
         if enabled:
             self.web.handle = start_web_server(self)
         else:
-            logger.warning("WEB UI 已停止(web.enabled=false)")
+            logger.info("WEB UI 已停止(web.enabled=false)")
 
     def _sync_line(self, dry_run: bool, flush: bool = True, force: bool = False) -> None:
         """同步线(sync_interval 节拍): 拉 qB 增量 -> 推进快照/事件/分组 -> 视图惰性重建

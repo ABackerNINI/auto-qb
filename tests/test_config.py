@@ -28,6 +28,7 @@
 - test_validate_condition_and_remove_tags_regex: tags/category/trackers 条件与 remove_tags 动作非法 regex: fail-fast
 - test_validate_notify: notify 段校验(未知键/min_level/quiet_hours/max_per_hour/dedup_window/channels)
 - test_load_notify_config: notify 段解析(默认 platform 渠道/min_level 归一/dedup_window 时间解析)
+- test_notify_min_level_default_is_error: 未配置 min_level 时默认 ERROR(等级整改 26-09-27-1126)
 - test_validate_gslc: global_speed_limit_curve 原生校验器聚合错误
 - test_validate_gslc_enabled_key: global_speed_limit_curve.enabled 总开关(缺省 True/false/true 解析/非布尔报错)
 - test_validate_empty_file: 空文件/非字典根节点报错
@@ -55,6 +56,7 @@ from auto_qb.config import (
     Config,
     ConfigError,
     HRRule,
+    NotifyConfig,
     QbittorrentConfig,
     TrackerConfig,
     load_config,
@@ -687,6 +689,15 @@ def test_load_notify_config():
         assert cfg.notify.max_per_hour == 5
         assert cfg.notify.dedup_window == 60.0
         assert cfg.notify.channels == ["platform"]  # 未显式配置 -> 默认启用平台渠道
+
+
+def test_notify_min_level_default_is_error():
+    """未配置 notify.min_level 时默认 ERROR(等级整改 26-09-27-1126: 只有真正危险才弹窗)"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_config(td, notify={"enabled": "true"}))
+        assert cfg.notify.min_level == "ERROR", "notify.min_level 默认必须是 ERROR"
+        # 数据模型直构默认值同口径(NotifyConfig() 不经 YAML)
+        assert NotifyConfig().min_level == "ERROR"
 
 
 def test_validate_gslc():

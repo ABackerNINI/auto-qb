@@ -229,8 +229,8 @@ class HrSiteStore:
         if self._unsafe_warned:
             return
         self._unsafe_warned = True
-        logger.warning(f"HR 站点 {self.site} | 文件锁疑似在该目录不生效({why}), 已退化为只读以免双写; "
-                       f"共享目录需支持文件锁且各实例看到同一份文件(云同步盘不可用)")
+        logger.error(f"HR 站点 {self.site} | 文件锁疑似在该目录不生效({why}), 已退化为只读以免双写; "
+                     f"共享目录需支持文件锁且各实例看到同一份文件(云同步盘不可用)")
 
     def _write(self, data: HrSiteData, now: float, *, keep_backup: bool = True) -> None:
         """原子替换写入(含 revision 抬升与写者心跳); 默认把上一版留为 `.bak`

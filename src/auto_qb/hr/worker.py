@@ -197,7 +197,7 @@ class HrWorker:
         if not alive:
             logger.info("HR 取数线程已停止")
         else:
-            logger.warning(f"HR 取数线程在 {timeout:g}s 内未退出(可能仍在等扩展回传)")
+            logger.error(f"HR 取数线程在 {timeout:g}s 内未退出(可能仍在等扩展回传)")
         return not alive
 
     def wake(self) -> None:
@@ -349,7 +349,7 @@ class HrWorker:
             return  # 已提醒过, 本周期内不重复(防通知轰炸)
         self._silence_warned_at = now
         where = "启动以来" if last <= 0 else "上次联系后"
-        logger.warning(events.channel_silent(silent / 3600, where, self.service.enabled_sites()))
+        logger.error(events.channel_silent(silent / 3600, where, self.service.enabled_sites()))
 
 
 __all__ = ["HrViewPublisher", "HrWorker", "view_signature"]

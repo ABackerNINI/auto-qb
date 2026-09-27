@@ -64,10 +64,10 @@
 
 - **种子标识唯一入口** = `torrent.log_repr` (`'name' [站点] (hash8)`); 仅种子已从客户端消失时退化为 `hash[:8]`
 - **ActionResult.message = 纯详情** (不含动词与 log_repr, 例: `['HHan', 'seed-3D']`), 动作名由管线日志统一携带
-- **等级**: DEBUG=例行检查 + skipped 动作; INFO=动作成功/状态变化; WARNING=回退/风险/数据异常; ERROR=未预期异常 (`exc_info=True` 保留, 运行期 bug 需要堆栈; 配置错误走 ConfigError 无堆栈)
+- **等级** (2026-09-27 收窄, 单点口径): DEBUG=例行检查 + skipped 动作; INFO=动作成功/状态变化 + **用户操作审计/生命周期告知**; WARNING=**纯排障** (可自愈降级/重试中/保护性动作/性能细节 —— 值得 grep 不值得弹窗); ERROR=**真正危险** (数据丢失/状态写盘失败/任务停摆需人工/认证失败/未预期异常 —— `exc_info=True` 保留, 运行期 bug 需要堆栈; 配置错误走 ConfigError 无堆栈)。判别口诀「弹窗测试」: 这条出现时用户需立刻放下手头的事 → ERROR; 只是排查问题时想 grep 到 → WARNING; 事后审计想留痕 → INFO。定级单点: `memory-bank/plans/26-09-27-1126-plan-log-level-notify-error.html` 表 A–D。
 - **全中文**; 默认 `log.format` 含 `%(name)s` (来源模块): `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
 - **凭据脱敏** (2026-09-22, issue 26-09-21-1408): 任何**可能内嵌凭据的 URL**(首当其冲是 tracker announce URL)进日志前必须过 `utils.sanitize_tracker_url()`, 只留主地址 `scheme://host[:port]`; **不按参数名黑名单剥** —— 私站凭据参数名是任意的(passkey 只是最常见的一种, 还有 authkey/token/uid 等), 黑名单每漏一个名字就漏一个站, 所以 path/query/fragment 整段丢弃。日志会落盘(含轮转备份)、可经 `/api/log` 读回, 且经通知联动(下条)直推系统通知, 泄露面远不止"读一次"
-- **通知联动** (2026-09-12): `notify.enabled` 时 NotifyHandler 挂在 `auto_qb` logger 上, 达到 `notify.min_level` 的日志自动推送平台原生通知 —— 因此**日志级别/骨架即通知语义**, 新增 WARNING/ERROR 日志点无需单独接入通知; 免打扰时段与节流在 notify.py 过滤, 消息内容直接复用日志消息(遵守本骨架); `--tray` 模式下 UiLogHandler 同样直挂 `auto_qb` logger, 窗口日志视图实时跟随本骨架输出
+- **通知联动** (2026-09-12; 2026-09-27 默认改 ERROR): `notify.enabled` 时 NotifyHandler 挂在 `auto_qb` logger 上, 达到 `notify.min_level` 的日志自动推送平台原生通知 —— 因此**日志级别/骨架即通知语义**, 新增 ERROR 日志点无需单独接入通知; **min_level 默认 ERROR**, 即默认只有真正危险才弹窗, WARNING 仅排障 (想看时把 min_level 调低); 免打扰时段与节流在 notify.py 过滤, 消息内容直接复用日志消息(遵守本骨架); `--tray` 模式下 UiLogHandler 同样直挂 `auto_qb` logger, 窗口日志视图实时跟随本骨架输出
 
 ## 格式化 (yapf, .style.yapf)
 - based_on_style=facebook, indent=4, column_limit=**120**, spaces_before_comment=2, split_before_logical_operator=false, allow_split_before_default_or_named_assigns=false

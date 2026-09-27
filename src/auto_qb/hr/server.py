@@ -150,7 +150,7 @@ class HrChannelServer:
         if ok:
             logger.info("HR 取数通道端点已停止")
         else:
-            logger.warning(f"HR 取数通道端点在 {timeout:g}s 内未退出")
+            logger.error(f"HR 取数通道端点在 {timeout:g}s 内未退出")
         return ok
 
     @property
@@ -203,7 +203,7 @@ class HrChannelServer:
 
         if not self._token_ok(_header(headers, TOKEN_HEADER)):
             # ❗401 之前不写任何状态(不记接触、不入队、不落盘)
-            logger.warning(f"HR 取数通道 | 鉴权失败({method} {route_path}), 已拒绝且未写任何状态")
+            logger.error(f"HR 取数通道 | 鉴权失败({method} {route_path}), 已拒绝且未写任何状态")
             return 401, {**cors, "WWW-Authenticate": "X-Hr-Token"}, _json({"error": "unauthorized"})
 
         self._note_contact(origin)
@@ -242,7 +242,7 @@ class HrChannelServer:
                     if site and origin:
                         sites.append({"site": site, "origin": origin})
             except Exception as e:
-                logger.warning(f"HR 取数通道 | 生成站点授权清单失败: {e}", exc_info=True)
+                logger.error(f"HR 取数通道 | 生成站点授权清单失败: {e}", exc_info=True)
                 error = f"站点清单生成失败: {e}"
         return _json({"sites": sites, "error": error, "server_time": round(self._now(), 3)})
 

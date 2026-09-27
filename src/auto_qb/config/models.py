@@ -201,10 +201,11 @@ class WebConfig:
 
 @dataclass
 class NotifyConfig:
-    """主动通知配置: 程序 ERROR/WARNING 日志经平台原生通知推送(notify 模块, 零第三方依赖)
+    """主动通知配置: 程序 ERROR 日志经平台原生通知推送(notify 模块, 零第三方依赖)
 
     enabled: 总开关 (False 时不挂载日志 handler, 保守默认)
-    min_level: 通知最低日志级别 (INFO/WARNING/ERROR, 大小写不敏感)
+    min_level: 通知最低日志级别 (INFO/WARNING/ERROR, 大小写不敏感; 默认 ERROR = 只有
+      真正危险才弹窗, WARNING 仅排障 —— 想看排障消息时手动调低)
     quiet_hours: 免打扰时段 "HH:MM-HH:MM" (支持跨午夜, 如 "23:00-08:00"); 空 = 不启用;
       时段内跳过发送(含 ERROR, 仅 DEBUG 记录) —— 全屏/演示场景由 OS 专注助手管理,
       本项面向睡眠时段
@@ -213,7 +214,7 @@ class NotifyConfig:
     channels: 渠道列表, v1 仅支持单一 platform 渠道(平台原生, 按运行平台自动分派); 默认即 platform
     """
     enabled: bool = False
-    min_level: str = "WARNING"
+    min_level: str = "ERROR"
     quiet_hours: str = ""
     max_per_hour: int = 20
     dedup_window: float = 600.0  # 秒; YAML 原始缺省 "10M"

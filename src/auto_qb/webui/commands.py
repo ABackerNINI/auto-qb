@@ -248,13 +248,13 @@ class WebCommandsMixin:
             # 发送仅是"已下发指令"; 成功回执由 tracker 确认跟踪器在后续 tick 写入
             baseline = self._trackers_baseline(hashes)
             self._register_reannounce_pending(cmd_id, hashes, baseline)
-            logger.warning(f"WEB UI | 强制汇报整组({len(hashes)}个种子), 等待 tracker 确认")
+            logger.info(f"WEB UI | 强制汇报整组({len(hashes)}个种子), 等待 tracker 确认")
 
     def _cmd_delete_group(self, key: tuple, delete_files: bool = False):
         hashes = self._group_hashes(key)
         if hashes:
             self.api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files)
-            logger.warning(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
+            logger.info(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
 
     def _cmd_pause_torrent(self, hash: str):
         if self.store.get(hash) is not None:
@@ -275,7 +275,7 @@ class WebCommandsMixin:
         self.api.torrents_reannounce(torrent_hashes=[hash])
         baseline = self._trackers_baseline([hash])
         self._register_reannounce_pending(cmd_id, [hash], baseline)
-        logger.warning(f"WEB UI | 强制汇报种子 {hash[:8]}, 等待 tracker 确认")
+        logger.info(f"WEB UI | 强制汇报种子 {hash[:8]}, 等待 tracker 确认")
 
     def _register_reannounce_pending(self, cmd_id: str, hashes: List[str], baseline: dict) -> None:
         """登记汇报确认跟踪: 全部种子出结论(成功/失败/超时)后聚合写该 cmd_id 的回执"""
@@ -297,7 +297,7 @@ class WebCommandsMixin:
     def _cmd_delete_torrent(self, hash: str, delete_files: bool = False):
         if self.store.get(hash) is not None:
             self.api.torrents_delete(torrent_hashes=[hash], delete_files=delete_files)
-            logger.warning(f"WEB UI | 删除种子 {hash[:8]}(delete_files={delete_files})")
+            logger.info(f"WEB UI | 删除种子 {hash[:8]}(delete_files={delete_files})")
 
     def _cmd_recheck_torrent(self, hash: str):
         if self.store.get(hash) is not None:
@@ -356,7 +356,7 @@ class WebCommandsMixin:
             raise ValueError("location 不能为空")
         self.api.torrents_set_location(torrent_hashes=[hash], location=location)
         # 组键含 save_path: 移动后下轮同步会按新 save_path 重归组(旧组解散/新组建立), 属预期行为
-        logger.warning(f"WEB UI | 种子 {hash[:8]} 移动保存路径 -> {location}(将按新路径重归组, 属预期)")
+        logger.info(f"WEB UI | 种子 {hash[:8]} 移动保存路径 -> {location}(将按新路径重归组, 属预期)")
 
     def _cmd_rename_torrent(self, hash: str, name: str = ""):
         if self.store.get(hash) is None:
@@ -539,11 +539,11 @@ class WebCommandsMixin:
             msg = "; ".join(msgs)
             if cmd_id:
                 self._set_web_result(cmd_id, "error", msg)
-            logger.warning(f"WEB UI | 批量 {action}({len(known)}个种子): {msg}")
+            logger.info(f"WEB UI | 批量 {action}({len(known)}个种子): {msg}")
         else:
             if cmd_id:
                 self._set_web_result(cmd_id, "ok")
-            logger.warning(f"WEB UI | 批量 {action}({len(known)}个种子, delete_files={delete_files})")
+            logger.info(f"WEB UI | 批量 {action}({len(known)}个种子, delete_files={delete_files})")
 
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)
@@ -560,7 +560,7 @@ class WebCommandsMixin:
 
     def _cmd_remove_categories(self, names=None):
         self.api.torrents_remove_categories(categories=names)
-        logger.warning(f"WEB UI | 删除分类: {', '.join(names)}")
+        logger.info(f"WEB UI | 删除分类: {', '.join(names)}")
 
     def _cmd_create_tags(self, tags=None):
         self.api.torrents_create_tags(tags=tags)
@@ -568,13 +568,13 @@ class WebCommandsMixin:
 
     def _cmd_delete_tags(self, tags=None):
         self.api.torrents_delete_tags(tags=tags)
-        logger.warning(f"WEB UI | 删除标签: {', '.join(tags)}")
+        logger.info(f"WEB UI | 删除标签: {', '.join(tags)}")
 
     def _cmd_speed_override(self, upload_kib: int = 0, download_kib: int = 0):
         """全局限速手动覆盖(D2): 曲线启用时为"临时覆盖"——曲线任务下一档位切换写回目标值;
         曲线停用即常态设置。不做"暂停曲线接管"状态。"""
         self.api.set_global_speed_limits(upload_kib=int(upload_kib or 0), download_kib=int(download_kib or 0))
-        logger.warning(f"WEB UI | 全局限速手动覆盖: 上 {upload_kib} / 下 {download_kib} KiB/s")
+        logger.info(f"WEB UI | 全局限速手动覆盖: 上 {upload_kib} / 下 {download_kib} KiB/s")
 
     def _cmd_add_torrents(
         self,

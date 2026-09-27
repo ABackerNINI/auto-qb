@@ -1146,7 +1146,7 @@ def test_checking_full_checking_send_error():
     client.recheck_error = RuntimeError("simulated recheck failure")
     t = make_target()
     t0 = time.time()
-    with patch("auto_qb.rules.base.logger.warning") as mw:
+    with patch("auto_qb.rules.base.logger.error") as mw:
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
         assert handled, "发送失败应返回失败结果(动作已执行)"
         assert any("发送 recheck 失败" in str(c) for c in mw.call_args_list), \

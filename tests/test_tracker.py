@@ -84,8 +84,8 @@ def test_match_tracker_no_substring_match():
         assert mgr._match_tracker_conf(tor) is None
 
 
-def test_match_tracker_conf_multi_match_error_log():
-    """匹配到多个 tracker 配置: 返回第一个并打印 ERROR 日志
+def test_match_tracker_conf_multi_match_warning_log():
+    """匹配到多个 tracker 配置: 返回第一个并打印 WARNING 日志(等级整改 26-09-27-1126 表 D1: 自动降级属排障语义)
 
     注: QbManager 构造时 setup_logging 清空 root handlers(caplog 捕获失效),
     故直接给模块 logger 挂 StringIO 捕获 handler(同 test_speed_curve 模式)。
@@ -111,7 +111,8 @@ def test_match_tracker_conf_multi_match_error_log():
             lg.removeHandler(handler)
         assert conf is not None and conf.name == "HHan"  # 返回配置序中第一个
         text = buf.getvalue()
-        assert "ERROR" in text and "多个 tracker 配置" in text, f"缺少 ERROR 日志: {text}"
+        # 等级整改 26-09-27-1126 表 D1: 配置歧义自动降级是排障语义, ERROR -> WARNING
+        assert "WARNING" in text and "多个 tracker 配置" in text, f"缺少 WARNING 日志: {text}"
         assert "HHan" in text and "HHanTracker" in text  # 日志列出所有命中配置
 
 

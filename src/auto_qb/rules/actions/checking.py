@@ -190,5 +190,5 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
             logger.info(f"自定义校验判定非参考({candidate.hash[:8]}): rc={r.returncode} {r.stderr.strip()[:200]}")
             return False
         except Exception as e:
-            logger.warning(f"自定义校验程序执行异常({candidate.hash[:8]}): {e}")
+            logger.error(f"自定义校验程序执行异常({candidate.hash[:8]}): {e}")
             return False

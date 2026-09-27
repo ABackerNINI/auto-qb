@@ -217,7 +217,7 @@ class HrRefreshService:
             result.action = ACTION_ERROR
             result.reason = f"{type(e).__name__}: {e}"
             result.alerted = True  # 上面这条 WARNING 就是本轮对它的告警, worker 不再重复
-            logger.warning(f"HR 站点 {site} | 刷新异常: {e}", exc_info=True)
+            logger.error(f"HR 站点 {site} | 刷新异常: {e}", exc_info=True)
         result.elapsed_s = max(0.0, self._now() - started)
         return result
 
@@ -491,7 +491,7 @@ class HrRefreshService:
             else:
                 result.reason = f"{result.reason}; 只读模式, 未写盘"
             if newly:
-                logger.warning(events.fuse_opened(site, data.fuse.until_ts, e))
+                logger.error(events.fuse_opened(site, data.fuse.until_ts, e))
             else:
                 logger.warning(events.fetch_failed(site, data.fuse.failures, limits.failure_threshold, e))
             # 页面失败**不带走下载的名额**(2026-09-25 实报饿死残留): 待回填清单在已持久化的索引里,
@@ -789,7 +789,7 @@ class HrRefreshService:
             logger.info(f"HR 站点 {site} | 登录态仍未恢复(已告警过, 本轮不做在线核实): {err}")
             return
         self._login_warned.add(site)
-        logger.warning(events.login_expired(site, err))
+        logger.error(events.login_expired(site, err))
 
     def _warn_ext_quota(self, site: str, err: Exception) -> None:
         """扩展侧硬上限告警: 同样**只报一次**(超限会持续到下一个窗口)

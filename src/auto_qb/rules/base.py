@@ -176,7 +176,7 @@ class Rule:
         # 高风险动作静态提醒: reannounce 高频触发会被 tracker 封号, 未配去重时给出告警
         # (动作内另有最小间隔运行时保护兜底)
         if any(a.name == "reannounce" for a in self.actions) and self.execute_once == "never" and self.cooldown <= 0:
-            logger.warning(f"规则[{self.name}] 含 reannounce 动作但未配置 execute_once/cooldown, 高频触发有封号风险")
+            logger.error(f"规则[{self.name}] 含 reannounce 动作但未配置 execute_once/cooldown, 高频触发有封号风险")
 
     def matches(self, ctx: RuleContext) -> bool:
         """所有条件必须全部满足(AND)"""
@@ -249,7 +249,7 @@ class Rule:
             elif result.is_failed:
                 executed = True
                 failed = True
-                logger.warning(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
+                logger.error(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
                 if not action.ignore_error:
                     break
             elif result.is_skipped:

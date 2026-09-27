@@ -129,17 +129,19 @@ def test_load_state_corrupt_falls_back_to_bak():
 
 
 def test_load_state_corrupt_without_backup_warns():
-    """主文件损坏且备份不可用 -> 仍是空状态(不阻塞启动), 但两条 WARNING 留痕"""
+    """主文件损坏且备份不可用 -> 仍是空状态(不阻塞启动); 损坏留 WARNING, 后果(状态丢失)升 ERROR(等级整改 26-09-27-1126 表 A1)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")
-        with mock.patch.object(rule_engine.logger, "warning") as warn:
+        with mock.patch.object(rule_engine.logger, "warning") as warn, \
+             mock.patch.object(rule_engine.logger, "error") as err:
             assert mgr._load_state() == {}
-        msgs = [c[0][0] for c in warn.call_args_list]
-        assert any("损坏" in m for m in msgs), "损坏必须有告警(修复前静默清空, 无任何线索)"
-        assert any("备份" in m and "不可用" in m for m in msgs), "备份也不可用时必须说清后果"
+        warn_msgs = [c[0][0] for c in warn.call_args_list]
+        err_msgs = [c[0][0] for c in err.call_args_list]
+        assert any("损坏" in m for m in warn_msgs), "损坏必须有告警(修复前静默清空, 无任何线索)"
+        assert any("备份" in m and "不可用" in m for m in err_msgs), "备份也不可用=状态丢失, 是真正危险, 必须升 ERROR"
 
 
 def test_load_state_missing_file_is_silent():

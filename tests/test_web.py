@@ -2245,8 +2245,8 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
     """生成的访问密钥不得出现在任何日志里
 
     原实现用 `logger.warning(f"WEB UI 访问密钥: {token}")`: notify 处理器的级别取
-    config.min_level(默认 WARNING) ⇒ 密钥被推到系统通知; 落日志文件后已登录者可经
-    /api/log 读回。拿到密钥即等于拿到改配置/删种子的能力。改为只提示文件路径。
+    config.min_level(早期默认 WARNING, 26-09-27 等级整改后默认 ERROR) ⇒ 密钥被推到系统
+    通知; 落日志文件后已登录者可经 /api/log 读回。拿到密钥即等于拿到改配置/删种子的能力。改为只提示文件路径。
     """
     from auto_qb.webui import ensure_web_token
 

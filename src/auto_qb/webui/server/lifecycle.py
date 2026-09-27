@@ -199,5 +199,5 @@ def stop_web_server(handle: WebServerHandle, timeout: float = WEB_STOP_TIMEOUT) 
     handle.stop()
     if handle.wait(timeout):
         return True
-    logger.warning(f"WEB UI 旧服务在 {timeout:g}s 内未退出, 仍尝试重启(监听套接字通常已释放)")
+    logger.error(f"WEB UI 旧服务在 {timeout:g}s 内未退出, 仍尝试重启(监听套接字通常已释放)")
     return False

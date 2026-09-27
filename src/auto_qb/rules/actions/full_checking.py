@@ -146,7 +146,7 @@ class FullCheckingMixin:
                     return REQUEUE
                 return FINISHED  # 轮询子任务消亡(释放在途登记)
             except Exception as e:
-                logger.warning(f"规则[{rule_name}] {hash[:8]} | 校验轮询异常: {e}")
+                logger.error(f"规则[{rule_name}] {hash[:8]} | 校验轮询异常: {e}")
                 if origin is not None:
                     tq.add_task(origin)  # 默认重置: 重走完整决策链
                 return FINISHED
@@ -224,7 +224,7 @@ class FullCheckingMixin:
                 revive()
                 return FINISHED
             except Exception as e:
-                logger.warning(f"规则[{rule_name}] {hash[:8]} | 组内校验等待异常: {e}")
+                logger.error(f"规则[{rule_name}] {hash[:8]} | 组内校验等待异常: {e}")
                 revive()
                 return FINISHED
 

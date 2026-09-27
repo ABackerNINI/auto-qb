@@ -28,6 +28,7 @@
 
 ## Done
 
+- [26-09-27-1126] [计划 · 日志等级整改 — 危险情况归 ERROR，通知默认只推 ERROR](26-09-27-1126-plan-log-level-notify-error.html) — `log-level-notify-error`
 - [26-09-26-2345] [commands × my-commit-flow v2 — 输出契约与零参数化设计](26-09-26-2345-plan-commands-shipflow-v2.html) — `commands-shipflow-v2`
 - [26-09-26-0538] [auto-qb WEB UI · 按钮体系重构 · 3 组方案模板(供挑选)](26-09-26-0538-plan-webui-button-3-proposals.html) — `webui-button-system`
 - [26-09-26-0529] [测试基线切片化 · 单文件改每条一档](26-09-26-0529-plan-baseline-slice-per-file.html) — `baseline-slice-per-file`
