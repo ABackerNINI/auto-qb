@@ -1,9 +1,9 @@
 # Git 推送
 
-> 摘要: 提交闸门依赖 `TMPDIR` 约定(默认盘会假红); 判"推没推上"只认 `ls-remote` 对比本地 HEAD —— 该核对已由 ship 脚本机检(输出末尾 RESULT 行), 手动 ls-remote 仅在报「取不到远端 ref」时。
+> 摘要: 提交闸门依赖 `TMPDIR` 约定(默认盘会假红); 判"推没推上"只认 `ls-remote` 对比本地 HEAD —— 该核对已内联进 ship 脚本(成功一行「提交成功 <hash>」), 手动 ls-remote 仅在报「无法核实」时; 镜像允许滞后, 成败都不提(26-09-28 定调)。
 > 触发: push, 推送, 提交闸门, 推没推上, Gitee, GitHub, 镜像, CI action
 
-### 提交闸门(`preflight.py` / `commit.py`)在工具 shell 的默认 `TMPDIR` 下必红
+### 提交闸门(`_pipeline.py` 闸门引擎 / `commit.py` 编排)在工具 shell 的默认 `TMPDIR` 下必红
 
 - **触发**: 跑预检 / 提交 / 推送。
 - **判别**: 闸门跑的是 `commands run test.quick`, 而工具 shell 的 `TMPDIR` 默认指向 `H:\Temp` ⇒
@@ -20,10 +20,10 @@
   ⚠ **命令报失败 ≠ 没推上** ⇒ **判定"推没推上"的唯一依据是 `git ls-remote <远端> <分支>`**
   (它自己也会瞬时失败, 重试 2~3 次再下结论)。
   ❗`git push --dry-run` **不能**用来判断 —— 它只做 ref 协商, 不发包, 永远"成功"。
-- **处置**: `ship.commit` / `ship.push` 已内置「瞬时失败重试一次 + `ls-remote` 核对 + RESULT 行」
-  (2026-09-27 起) —— 看 RESULT 行即可, 别手动重跑核对; 手工裸跑 `git push` 时仍守:
-  主线**可重试一次**; GitHub 镜像"尝试一次, 失败只报一次"(不重试 / 不换代理 / 不改走 SSH /
-  不回滚主线已完成的推送)。
+- **处置**: `ship.commit` / `ship.push` 已内置「瞬时失败重试一次 + `ls-remote` 核对」——
+  成功一行「提交成功 <hash>」, 失败一行含原因与下一步(v3 契约, 2026-09-28 起), 别手动重跑核对;
+  手工裸跑 `git push` 时仍守: 主线**可重试一次**; GitHub 镜像尝试一次且**成败都不提**
+  (允许滞后; 不重试 / 不换代理 / 不改走 SSH / 不回滚主线已完成的推送)。
 
 ### GitHub Actions: `astral-sh/setup-uv` 没有浮动大版本标签
 

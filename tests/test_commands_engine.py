@@ -9,7 +9,7 @@
 - test_digest_caps_anomaly_lines: 异常行也要封顶(病态输出不能把上下文灌满)
 - test_digest_ignores_lowercase_noise: 小写 warnings/error 是正常输出的一部分, 不算异常行
 - test_emit_prints_truncation_note: 有省略时必须打印一行"略过 N 行 + 怎么看全文", 不能静默截断
-- test_pick_accepts_pack_qualified_id: 包路径限定写法(`包/子包.<task>`)与短 id 等价 —— 只认一种会在"看起来对"的另一种上 STOP
+- test_pick_accepts_pack_qualified_id: 包路径限定写法(`包/子包.<task>` 与 `包.<task>`)与短 id 等价 —— 只认一种会在"看起来对"的另一种上 STOP
 - test_pick_unknown_id_stops_with_howto: 未知 id → STOP 且提示里给出可解析的写法(不是只说"没有这个 task")
 - test_wrapper_bodies_are_platform_specific: POSIX 只给 `commands`, Windows 多一份 `commands.cmd`(cmd/PowerShell 按 PATHEXT 解析)
 - test_wrapper_bodies_carry_ownership_marker: 两份内容都带归属标记 —— 没标记就不敢覆盖同名文件
@@ -127,7 +127,7 @@ def test_pick_accepts_pack_qualified_id():
     tree = mod.C.load_tree()
     assert mod._pick(tree, "my-commit-flow/ship.commit").id == "ship.commit"
     assert mod._pick(tree, "ship.commit").id == "ship.commit"
-    assert mod._pick(tree, "my-commit-flow.preflight").id == "my-commit-flow.preflight"
+    assert mod._pick(tree, "my-commit-flow.sync").id == "my-commit-flow.sync"
 
 
 def test_pick_unknown_id_stops_with_howto():

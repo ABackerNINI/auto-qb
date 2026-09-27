@@ -14,7 +14,7 @@
 
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `git fetch gitee develop` (远端与分支名**必须写**; 远端名不同先 `git remote -v` 确认 Gitee 主线); 落后与否只认 `git ls-remote gitee develop` 对比本地 HEAD (`status -sb` 的 ahead/behind 是快照, 会给假绿灯); 纯落后且工作区干净 → `git merge --ff-only FETCH_HEAD` 快进; 树脏 → **停下报告, 禁止自行清理**; 已分叉 (本地有独有提交) → 直接开工, 提交时按 my-commit-flow 合流; **禁止在落后分支上改代码** (机检: 开工自检 `commands run my-commit-flow.sync` —— 只读, 结果贴进回复; 提交/推送时跑完整 preflight)。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `commands run my-commit-flow.sync`: 自动 fetch + 快进 / 分叉自动 rebase(保线性, 拍板 2026-09-28), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑, **禁止在落后分支上改代码**。判据 = ls-remote 现查远端真值(`status -sb` 与 refs/remotes 快照不可信, 单点 [pitfalls/git/refs.md](memory-bank/pitfalls/git/refs.md))。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext 切片(已完成条目**迁出**到 progress) / 达阈值则立档 + `commands run kb.index` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `commands run test.full` 并新建基线切片记实测数字(`testing/baselines/`, 体例见 `testing/baseline.md` 口径段) / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `commands run kb.index`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 
@@ -72,10 +72,10 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 > **工作区模式: 多 clone 并行** (2026-09-20 用户决定, **已弃用 git worktree**): 每个 AI 实例用**一份独立克隆**, 跨 clone 同步一律走 Gitee `develop`。细则见 [conventions/collaboration.md](memory-bank/conventions/collaboration.md)「协作约定」。
 > **完整判据与事故档案单点在 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md)**; 本节只留最容易致命的几条:
 
-- ✅ **rebase / merge / stash 禁令已解除** (2026-09-25): 历史上删除拦截层会在这几类操作写入 `.git` 时批量删对象 (3 次事故), 该问题已修复, 恢复可用 —— 高风险历史整合前仍建议先 `cp -a .git <备份>`。落后主线首选「移出改动 → `merge --ff-only` 快进 → 施回改动 → 提交」(先同步后提交, 推送即快进)。
+- ✅ **rebase / merge / stash 禁令已解除** (2026-09-25): 历史上删除拦截层会在这几类操作写入 `.git` 时批量删对象 (3 次事故), 该问题已修复, 恢复可用 —— 高风险历史整合前仍建议先 `cp -a .git <备份>`。落后 / 分叉一律 `commands run my-commit-flow.sync` (自动快进 / rebase 保线性; 树脏会给失败行, 先提交或 stash 再重跑)。
 - **提交后必查 ref 三处**: `HEAD` == `refs/heads/<branch>` == loose/packed-refs, 用 `commands run my-commit-flow.verify-ref` 并按它打印的步骤修。**不要只看 commit 输出**。
 - **判"推没推上"只看 `git ls-remote <远端> <分支>`** —— 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃, 且 `git push --dry-run` 永远"成功"。
-- 机检与停手点一律走 **task id**: `commands run my-commit-flow.preflight` / `ship.commit` / `ship.push` / `my-commit-flow.verify-ref`(`list my-commit-flow/ship` 看全流程, `show <task>` 看展开的命令与深读指针)。**包内 README 与 `references/` 只在排障 / 迁移时读** —— 日常整读它, 等于把"读整份文档找命令"的成本又搬回来。
+- 机检与停手点一律走 **task id**: `commands run ship.commit` / `ship.push` / `my-commit-flow.sync` / `my-commit-flow.verify-ref`(排障)(`list my-commit-flow/ship` 看全流程, `show <task>` 看展开的命令与深读指针)。**包内 README 与 `references/` 只在排障 / 迁移时读** —— 日常整读它, 等于把"读整份文档找命令"的成本又搬回来。
 
 ## 🔴 跨仓库操作: 绝对禁止 (需显式强授权)
 
@@ -88,11 +88,11 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## 提交 / PR
 
-> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①预检 `my-commit-flow.sync`, **远端有更新先按「同步路径」合并远端** → ②收尾回写文档(落在合并后的新基线上 —— 回写件是全体 clone 最热写点, 陈旧基线上写合并必撞) → ③消息写进 `.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后 `commands run ship.commit`: 零参数全量提交 + 核 ref + 推 Gitee + 核远端 + 镜像一次; 看 **RESULT 行**(PARTIAL=已提交未推送→补 `ship.push`), 不查 rc、不手动 ls-remote。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
+> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①`commands run my-commit-flow.sync`(远端有更新自动快进 / rebase 合流) → ②收尾回写文档(落在合并后的新基线上 —— 回写件是全体 clone 最热写点, 陈旧基线上写合并必撞) → ③消息写进 `.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后 `commands run ship.commit`: 内部同步 + 闸门 + 暂存 + 提交 + 核 ref + 推 Gitee 全自动; 成功一行「提交成功 <hash>」, 推送未完成不改退出码(补 `ship.push`)。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
 
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令**, "继续 / 接着做 / ok / 你看着办"一律不算。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。
-- **推送顺序固定**: 先推 Gitee (必须成功) → 核远端 ref == 本地 → 再**尝试一次** GitHub 直连; 失败**只如实报告一次**, 不重试 / 不换代理 / 不改走 SSH / 不回滚改写 Gitee 已完成的推送。
+- **推送顺序固定**: 先推 Gitee (必须成功) → 核远端 ref == 本地 → 再**尝试一次** GitHub 镜像 —— **全程静默**(26-09-28 定调: 允许滞后, 成败都不提; 不重试 / 不换代理 / 不改走 SSH / 不回滚 Gitee 已完成的推送)。
 - **提交信息 = gitmoji + 中文**: 首行 `<gitmoji> <中文一句话概述>`, 空一行后写动机 / 取舍 / 影响面 / 实测数字; 小改只写首行。**数字必须是提交那一刻实测的**。选哪个 emoji 走 [gitmoji skill](.agents/skills/gitmoji/SKILL.md)。
-- **先合并远端, 再收尾** (2026-09-26 定稿, 治「baseline 总是撞」): 收尾回写 (基线切片 / activeContext 切片 / 各 _index) 必须落在**合并远端之后**的新基线上 —— 预检落后即按「同步路径」合并, 再进入收尾; 回写文件**随主提交一并暂存**, 不推完再补一笔 (已推送的提交不能 amend + 强推)。
+- **先合并远端, 再收尾** (2026-09-26 定稿, 治「baseline 总是撞」): 收尾回写 (基线切片 / activeContext 切片 / 各 _index) 必须落在**合并远端之后**的新基线上 —— 落后即先 `commands run my-commit-flow.sync`(自动合流)再收尾; 回写文件**随主提交一并暂存**, 不推完再补一笔 (已推送的提交不能 amend + 强推)。
 - **红线与闸门清单外置在 `.commands/my-commit-flow/.my-commit-flow.toml`** (包脚本强制读取, 缺了就停手引导生成)。

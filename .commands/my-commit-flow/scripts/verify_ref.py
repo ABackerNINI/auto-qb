@@ -1,27 +1,27 @@
-"""提交后核对分支 ref —— 某些环境下 ref 更新会静默丢失(提交命令照样打印成功), **不要只看 commit 输出**。
+"""提交后核对分支 ref 三处一致 —— 某些环境下 ref 更新会静默丢失(提交命令照样打印成功),
+**不要只看 commit 输出**。ship.commit 已内置这一核对(静默通过); 本任务是排障 / 手工复核入口。
 
-用法(**不要写死包的安装路径**, `<包>` = 本包目录(`<仓库根>/.commands/my-commit-flow`)):
-    python <包>/scripts/verify_ref.py [期望的 sha]
+用法: python <包>/scripts/verify_ref.py [期望的 sha 前缀]
 
-判据(三者必须一致):
-    HEAD == refs/heads/<branch> == loose ref / packed-refs
+判据(三者必须一致): HEAD == refs/heads/<branch> == loose ref / packed-refs
 
-退出码: 0 一致 · 2 不一致(打印修复命令) · 3 出现「staged 数量暴增」(分支 ref 被回退的信号)
+输出契约 v3(计划 26-09-28-0157): 通过一行「ref 一致 <hash>」; 不一致保留完整处置步骤
+(它本来就是排障工具, 细节是它的价值)。staged 数量暴增 = 分支 ref 被回退的信号, 同样停。
+退出码: 0 一致 · 1 不一致 / staged 暴增(输出自带处置步骤)
 """
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
-# Windows GBK 控制台兑底(与 commit.py 同根): 打印含 emoji/非常用字符时 GBK 编不出来会
-# UnicodeEncodeError, 核对结果被打印中断。强制 stdout/stderr 走 UTF-8, 编不出时降级 replace。
+# Windows GBK 控制台兑底(与包内其它脚本同根)
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _pipeline import git  # noqa: E402
 from _ship_config import KEY_DEFAULTS, find_root, load_config, resolve_branch  # noqa: E402
 
 REPO = find_root()  # 向上找 .git, 不按 skill 安装深度反推
@@ -39,11 +39,6 @@ FIX_HINT = """处置(按 pitfalls「分支 ref 被回退」条目):
   **不要**用 git add -A / 全量提交去"解决"那批 staged —— 那是别人的在途改动。"""
 
 
-def git(*args: str) -> str:
-    proc = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return proc.stdout.strip() if proc.returncode == 0 else ""
-
-
 def packed_ref(branch: str) -> str:
     packed = REPO / ".git" / "packed-refs"
     if not packed.exists():
@@ -59,42 +54,56 @@ def loose_ref(branch: str) -> str:
     return path.read_text(encoding="utf-8").strip() if path.exists() else ""
 
 
-def main(argv: list[str] | None = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
-    # 闸门自检契约(.my-commit-flow.toml): `verify_ref.py --help` 期望 rc=0; 手工解析下
-    # 不拦的话 --help 会被当成期望 sha, 退出码 2 让闸门假红(实测 2026-09-22)。
-    if "--help" in argv or "-h" in argv:
-        print(__doc__.strip())
-        return 0
-    expect = argv[0] if argv else ""
+def check_refs(expect: str = "") -> tuple[bool, list[str]]:
+    """核对三处; 返回 (ok, 失败时的明细行)。成功只给一行结论, 失败给全量处置细节。"""
     head = git("rev-parse", "HEAD")
     branch_ref = git("rev-parse", f"refs/heads/{BRANCH}")
     loose = loose_ref(BRANCH)
     packed = packed_ref(BRANCH)
 
-    print(f"  HEAD              {head}")
-    print(f"  refs/heads/{BRANCH}".ljust(28) + branch_ref)
-    print(f"  loose ref         {loose or '(无 loose 文件)'}")
-    print(f"  packed-refs       {packed or '(未 pack)'}")
-
     staged = [l for l in git("status", "--porcelain").splitlines() if l[:1] not in (" ", "?", "")]
     if len(staged) > STAGED_PANIC:
-        print(f"\n[STOP] staged {len(staged)} 个(阈值 {STAGED_PANIC}) —— 分支 ref 可能被别的会话回退。\n{FIX_HINT}")
-        return 3
+        return False, [
+            f"[STOP] staged {len(staged)} 个(阈值 {STAGED_PANIC}) —— 分支 ref 可能被别的会话回退。",
+            FIX_HINT,
+        ]
 
     values = {v for v in (head, branch_ref, loose) if v}
     ok = bool(head) and len(values) == 1 and (not packed or packed == head)
     if expect:
         ok = ok and head.startswith(expect)
-
     if ok:
-        print("\n[PASS] ref 三处一致(未 pack 时以 loose 为准)。")
-        return 0
+        return True, []
 
-    print(f"\n[STOP] ref 不一致 —— 提交可能没落稳。\n{FIX_HINT}")
-    print(f"\n强制写回(确认无他人操作后):  git update-ref refs/heads/{BRANCH} {head or '<sha>'}")
-    return 2
+    detail = [
+        f"  HEAD         {head}",
+        f"  refs/heads/{BRANCH}".ljust(28) + branch_ref,
+        f"  loose ref    {loose or '(无 loose 文件)'}",
+        f"  packed-refs  {packed or '(未 pack)'}",
+        "",
+        "[STOP] ref 不一致 —— 提交可能没落稳。",
+        FIX_HINT,
+        f"\n强制写回(确认无他人操作后):  git update-ref refs/heads/{BRANCH} {head or '<sha>'}",
+    ]
+    return False, detail
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # 闸门自检契约(.my-commit-flow.toml): `verify_ref.py --help` 期望 rc=0; 手工解析下
+    # 不拦的话 --help 会被当成期望 sha, 退出码非 0 让闸门假红(实测 2026-09-22)。
+    if "--help" in argv or "-h" in argv:
+        print(__doc__.strip())
+        return 0
+    expect = argv[0] if argv else ""
+    ok, detail = check_refs(expect)
+    if ok:
+        print(f"ref 一致 {git('rev-parse', 'HEAD')[:8]}")
+        return 0
+    for line in detail:
+        print(line)
+    return 1
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

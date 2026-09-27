@@ -1,250 +1,97 @@
-"""推送 —— **顺序固定**: 先推主线远端(必须成功), 再尝试一次镜像直连(失败只报一次)。
+"""补推 / 单独推送 —— 顺序固定: 先同步核对 → 推主线 → 核对远端 → 镜像(全程静默)。
 
-ship.commit 成功后**默认同进程续跑本脚本**(emit_result=False, 统一结论由 commit 的 RESULT 行出);
-独立调用用于补推 / 重验。输出末尾按契约给出 RESULT: / WHY: / NEXT: 协议行(引擎保证可见)。
+输出契约 v3(计划 26-09-28-0157): 成功一行「推送成功 <hash>」; 失败一行「推送失败: <原因> —— <下一步>」。
+ship.commit 成功后默认**同进程内联续推**(run_push, 输出由 commit 统一编排), 本任务是补推 / 重验入口。
 
-用法:
-    python <包>/scripts/push.py [--skip-mirror] [--skip-preflight]
+- 先跑一次 sync(run_sync): 齐平则无事发生; 落后自动快进; 分叉自动 rebase(树净才动) ——
+  刚提交完的树通常干净, 不给「先手动同步」这道手工步骤。
+- 推主线瞬时连接失败(Recv failure / Connection was reset)自动重试**一次**;
+  不重试第二次 / 不换代理 / 不改走 SSH。
+- 推送核对只用 ls-remote 现查远端真值(refs/remotes 快照在本环境不可信); 取不到 ≠ 推送失败,
+  如实说「无法核实」, 别把网络抖动报成不一致。
+- 镜像(github)仍自动尝试一次, 但**成功失败都不提**(26-09-28 用户定调: 允许滞后, 提了纯属噪音);
+  失败不重试 / 不回滚主线上已完成的推送。
 
-流程:
-  0. **先跑一次预检(`--phase push --no-auto`)** —— 原先是让人在推送前手动跑一遍, 现收进脚本:
-     本脚本自己会 fetch + 判落后, 但**不查**工作区脏 / 上游 / 红线又被改出来 / 镜像远端是否存在,
-     这四项靠预检补上。闸门不重复跑(它们刚在提交前跑过, 且会改工作区), 故固定 `--no-auto`。
-  1. 再 `git fetch` + `ls-remote` 看是否落后 —— 落后就 STOP(不自动合流, 由执行者按判据手动跑);
-     判据 = ls-remote 现查的远端 tip 对比本地 HEAD, **不读 refs/remotes**(其写入在本环境会被静默丢弃)
-  2. `git push <main> <branch>`; 失败原样输出并退出(主线瞬时 reset 可重试一次)
-  3. 核对远端 ref == 本地 HEAD(`git ls-remote`);`git status -sb` 不应再有 ahead
-  4. 镜像: `git <禁用 per-URL 代理的 -c> push <mirror> <branch>` —— **只尝试一次**,
-     失败如实报告一次, 不重试 / 不换代理 / 不改走 SSH / 不回滚主线上已完成的推送
-
-主线 / 镜像 / 分支 / 代理 **全部运行期探测**(见 `_ship_config.py`), 不写死任何 URL。
-
-退出码: 0 主线推送成功(镜像失败不影响) · 1 落后远端 / 取不到远端真值无法判落后 / 预检有 STOP · 5 主线推送失败 · 6 推送后核对取不到远端 ref
+用法: python <包>/scripts/push.py   (无旗标)
+退出码: 0 推送成功 · 1 失败(输出自带原因)
 """
 
 from __future__ import annotations
 
-import argparse
-import subprocess
 import sys
 import time
 from pathlib import Path
 
-# Windows GBK 控制台兑底(与 commit.py 同根): git push 的远端输出/ls-remote 结果含 emoji 时,
-# GBK 编不出来会让 print 直接 UnicodeEncodeError —— 推送明明已成功, 脚本却崩在打印,
-# 执行者会被骗去重推。强制 stdout/stderr 走 UTF-8, 编不出时降级 replace 显示。
+# Windows GBK 控制台兑底(与包内其它脚本同根)
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _ship_config import (  # noqa: E402
-    KEY_DEFAULTS,
-    load_config,
-    proxy_disable_args,
-    resolve_branch,
-    resolve_main_remote,
-    resolve_mirror_remote,
-)
+from _pipeline import git, git_run  # noqa: E402
+from _ship_config import ConfigMissing, load_config, proxy_disable_args, resolve_branch, resolve_main_remote, resolve_mirror_remote  # noqa: E402
+from sync import remote_sha_with_retry, run_sync  # noqa: E402
 
 
-def git(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+def _git_reason(proc) -> str:
+    lines = [l.strip() for l in (proc.stderr or "").splitlines() if l.strip() and not l.startswith("hint:")]
+    return lines[-1] if lines else "git 非 0"
 
 
-def resolve(cfg: dict):
-    """(分支, 主线名, 主线 URL, 镜像名, 镜像 URL)"""
+def run_push() -> tuple[bool, str]:
+    """核心动作。返回 (ok, line): 成功时 line = 「推送成功 <hash>」;
+    失败时 line 是「推送失败」的**后缀**(同步类失败沿用 sync 的后缀, 含冲突模板)。"""
+    ok, line = run_sync()
+    if not ok:
+        return False, line
+
+    try:
+        cfg, _src = load_config()
+    except ConfigMissing as exc:
+        return False, str(exc)
     branch = resolve_branch(cfg)
-    main, main_url = resolve_main_remote(cfg)
-    mirror, mirror_url = resolve_mirror_remote(cfg)
-    return branch, main, main_url, mirror, mirror_url
+    main, _url = resolve_main_remote(cfg)
+    if not main:
+        return False, "找不到主线远端 —— git remote -v 核对后改配置"
 
-
-# 缺配置时先记下错误, 到 main 里打印引导再退出 —— 别在 import 阶段抛栈
-try:
-    _CFG, _SRC = load_config()
-    _ERR = None
-except Exception as exc:  # ConfigMissing / tomllib 缺失
-    _CFG, _SRC, _ERR = dict(KEY_DEFAULTS), None, str(exc)
-
-BRANCH, MAIN, MAIN_URL, MIRROR, MIRROR_URL_NOW = resolve(_CFG)
-
-
-def remote_sha_with_retry(name: str, branch: str) -> str:
-    """取远端 ref —— **主线瞬时失败可重试一次**(网络抖动常见, 见项目 pitfalls 的对应条目)。
-
-    取不到(空)与"取到了但不一致"必须区分: 前者是网络, 后者才是推送没落。
-    """
+    head = git("rev-parse", "HEAD")
+    proc = None
     for attempt in range(2):
-        proc = git("ls-remote", name, branch)
-        if proc.returncode == 0 and proc.stdout.strip():
-            return proc.stdout.split()[0]
-        if attempt == 0:
-            time.sleep(1)
-    return ""
-
-
-def remotes() -> dict[str, str]:
-    out: dict[str, str] = {}
-    proc = git("remote", "-v")
-    for line in proc.stdout.splitlines():
-        parts = line.split()
-        if len(parts) >= 3 and parts[2] == "(push)":
-            out[parts[0]] = parts[1]
-    return out
-
-
-def _result(emit: bool, line: str, why: str = "", nxt: str = "") -> None:
-    """输出契约行 —— commit.py 链跑时 emit=False, 统一结论由 commit 的 RESULT 行承载。"""
-    if not emit:
-        return
-    print(f"RESULT: {line}")
-    if why:
-        print(f"WHY: {why}")
-    if nxt:
-        print(f"NEXT: {nxt}")
-
-
-def main(argv: list[str] | None = None, emit_result: bool = True) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--skip-mirror", action="store_true", help="不尝试镜像远端")
-    parser.add_argument("--skip-preflight", action="store_true", help="跳过推送前的预检(与 commit.py 同名开关对齐)")
-    parser.add_argument("--config", default=None, help="指定配置文件(默认 <包>/.my-commit-flow.toml)")
-    args = parser.parse_args(argv)
-
-    global BRANCH, MAIN, MAIN_URL, MIRROR, MIRROR_URL_NOW, _ERR
-    if args.config:  # 允许临时换一份配置
-        _CFG2, _ = load_config(explicit=args.config)
-        BRANCH, MAIN, MAIN_URL, MIRROR, MIRROR_URL_NOW = resolve(_CFG2)
-        _ERR = None
-    if _ERR:
-        print(_ERR)
-        return 1
-
-    if not args.skip_preflight:
-        from preflight import main as preflight_main  # noqa: E402
-
-        print("=== 预检(--phase push --no-auto: 闸门已在提交前跑过, 这里只核状态) ===")
-        # 保留手动那一遍的价值(脏 / 上游 / 红线 / 镜像), 但不再重复跑闸门 ——
-        # 闸门会改工作区, 而且刚在 commit 阶段跑过, 这里再跑一遍只会把全量测试做两遍。
-        if preflight_main(["--phase", "push", "--no-auto"]) != 0:
-            sys.stderr.write("预检有 STOP, 未推送。\n")
-            _result(emit_result, "STOP 预检有 STOP, 未推送", "见上方检查表的 STOP 行", "处理后重跑 commands run ship.push")
-            return 1
-
-    print("=== 推送前再核一次远端真值(判据 = ls-remote 现查; refs/remotes/* 的写入在本环境会被静默丢弃, 快照会给假\"落后\") ===")
-    git("fetch", MAIN, BRANCH)  # 只为把远端 tip 的对象拉进对象库; refs/remotes/* 写没写成功不重要, 判据不读它
-    remote_tip = remote_sha_with_retry(MAIN, BRANCH)
-    if not remote_tip:
-        sys.stderr.write(
-            f"取不到远端真值(ls-remote 两次都空/失败) —— 无法判断是否落后, 不推。\n"
-            f"联网后重试; 或手工核对 `git ls-remote {MAIN} {BRANCH}` 对比本地 HEAD。\n"
-        )
-        _result(
-            emit_result,
-            "FAIL 取不到远端真值, 无法判断是否落后, 不推",
-            "ls-remote 两次都空/失败 —— 离线或链路抖动",
-            f"联网后重试 commands run ship.push; 或手工核对 git ls-remote {MAIN} {BRANCH}",
-        )
-        return 1
-    behind_ahead = git("rev-list", "--left-right", "--count", f"{remote_tip}...HEAD").stdout.split()
-    if len(behind_ahead) != 2:
-        sys.stderr.write(f"本地没有远端 tip({remote_tip[:8]})的对象(fetch 失败?) —— 无法判断是否落后, 不推。\n")
-        _result(emit_result, "FAIL 本地没有远端 tip 的对象, 无法判断是否落后, 不推", "fetch 未落稳", "联网后重试 commands run ship.push")
-        return 1
-    if int(behind_ahead[0]) > 0:
-        behind_n, ahead_n = int(behind_ahead[0]), int(behind_ahead[1])
-        if ahead_n > 0:  # 本地已有提交 → 快进必然失败, 别把人引去撞墙
-            sys.stderr.write(
-                f"已分叉(本地领先 {ahead_n} / 远端新 {behind_n}) —— `merge --ff-only` 必然失败, "
-                f"按 references/pipeline.md 的替代路径合流后重新提交, 不推。\n"
-            )
-        else:
-            sys.stderr.write(f"落后远端 {behind_n} 个提交 —— 先 `git merge --ff-only` 同步合流(工作区必须干净), 不推。\n")
-        _result(
-            emit_result,
-            f"STOP 落后远端 {behind_n} 个提交(已分叉: 本地领先 {ahead_n}), 不推",
-            "收尾回写必须落在合并后的新基线上; 已分叉时 merge --ff-only 必然失败",
-            "按「同步路径」合并远端后重跑 commands run ship.push(已分叉走 references/pipeline.md 替代路径)",
-        )
-        return 1
-    print(f"  远端 {remote_tip[:8]}: 齐平(本地领先 {behind_ahead[1]} 个)")
-
-    head = git("rev-parse", "HEAD").stdout.strip()
-    print(f"\n=== 推主线 {MAIN}/{BRANCH} ===")
-    # 主线瞬时连接失败(Recv failure / reset)可重试一次;
-    # 镜像不重试(旧规: 尝试一次, 失败只报一次)
-    for attempt in range(2):
-        proc = git("push", MAIN, BRANCH)
+        proc = git_run("push", main, branch)
         if proc.returncode == 0:
             break
-        if attempt == 0 and ("Recv failure" in proc.stderr or "Connection was reset" in proc.stderr):
-            print("  主线瞬时连接失败, 重试一次 …")
-            time.sleep(1)
-    print((proc.stdout + proc.stderr).strip())
+        err = proc.stderr or ""
+        if attempt == 0 and ("Recv failure" in err or "Connection was reset" in err):
+            time.sleep(1)  # 主线瞬时连接失败, 重试一次
+            continue
     if proc.returncode != 0:
-        sys.stderr.write("主线推送失败 —— 镜像不再尝试, 先解决主线。\n")
-        _result(
-            emit_result,
-            "FAIL 主线推送失败 —— 镜像不再尝试, 先解决主线",
-            "推送非 0(明细见上); 链路层间歇失败脚本已自动重试过一次",
-            "联网后重试 commands run ship.push",
-        )
-        return 5
+        return False, f"主线推送未通过 —— {_git_reason(proc)}; 联网后重跑"
 
-    print("\n=== 核对远端 ===")
-    remote_sha = remote_sha_with_retry(MAIN, BRANCH)
+    remote_sha = remote_sha_with_retry(main, branch)
     if not remote_sha:
-        # 取不到 ≠ 推送失败: 别把网络抖动报成"不一致", 那会让执行者重复推或惊慌
-        print(f"  **取不到远端 ref**(ls-remote 两次都空/失败) —— 推送命令本身已成功, 请手工确认:")
-        print(f"     git ls-remote {MAIN} {BRANCH}   # 期望看到 {head}")
-        _result(
-            emit_result,
-            "FAIL 推送命令已成功, 但取不到远端 ref, 无法核实",
-            "ls-remote 两次都空/失败 —— 网络抖动, 不等于推送失败",
-            "稍后手工核对上方 ls-remote 命令; 或重跑 commands run ship.push(齐平则无事发生)",
-        )
-        return 6
-    ok = remote_sha == head
-    print(f"  远端 {remote_sha}\n  本地 {head}  →  {'一致' if ok else '**不一致**'}")
+        # 取不到 ≠ 推送失败: 别把网络抖动报成「不一致」, 那会让执行者重复推
+        return False, (f"推送命令已执行但取不到远端 ref, 无法核实 —— 稍后手工核对 "
+                       f"git ls-remote {main} {branch} (期望 {head[:8]})")
+    if remote_sha != head:
+        return False, f"远端 ref 与本地不一致 (远端{remote_sha[:8]} 本地{head[:8]}) —— 核对链路后重跑"
 
-    def _verdict(note: str = "") -> None:
-        """终局协议行 —— 独立调用时给调用方一个统一结论(链跑时由 commit 出)。"""
-        if not emit_result:
-            return
-        if ok:
-            print(f"RESULT: OK 已推送 {MAIN}/{BRANCH}, 远端与本地一致{note}")
-            print(f"EVIDENCE: remote={remote_sha} local={head}")
-        else:
-            print("RESULT: FAIL 远端 ref 与本地不一致 —— 推送可能没落稳")
-            print(f"EVIDENCE: remote={remote_sha} local={head}")
-            print("NEXT: 核对链路后重跑 commands run ship.push")
+    # 镜像: 只尝试一次, 全程静默(D2) —— 成功失败都不提, 允许滞后
+    mirror, mirror_url = resolve_mirror_remote(cfg)
+    if mirror:
+        git_run(*proxy_disable_args(mirror_url), "push", mirror, branch)
+    return True, f"推送成功 {head[:8]}"
 
-    if args.skip_mirror:
-        _verdict(" (--skip-mirror)")
-        return 0 if ok else 5
 
-    print(f"\n=== 尝试一次镜像直连({MIRROR or '未找到镜像远端'}) ===")
-    if not MIRROR:
-        # 注意变量名是 MIRROR_URL_NOW(解析出的镜像 URL); 早年这里写成 MIRROR_URL,
-        # 而它从未定义 —— 只有走到"没找到镜像远端"这个分支才会 NameError(主线推送失败时
-        # 提前返回, 平时碰不到)。改回正确名字, 并由 test_preflight.py 的静态检查兜住。
-        hint = f"git remote add <名字> {MIRROR_URL_NOW}" if MIRROR_URL_NOW else "补一个镜像远端即可(镜像允许滞后)"
-        print(f"  没找到镜像远端; 需要时: {hint}")
-        _verdict(" (无镜像远端)")
-        return 0 if ok else 5
-    # 代理禁用参数从 git config 读, 不写死 key/端口; 没配代理则为空
-    proc = git(*proxy_disable_args(MIRROR_URL_NOW), "push", MIRROR, BRANCH)
-    out = (proc.stdout + proc.stderr).strip()
-    if proc.returncode == 0:
-        print(f"  镜像已推: {out.splitlines()[-1] if out else 'ok'}")
-        _verdict("; 镜像已推")
-    else:
-        # 只如实报告一次: 不重试 / 不换代理 / 不改 SSH / 不回滚主线
-        print(f"  镜像直连失败(不重试, 镜像允许滞后): {out.splitlines()[-1] if out else '无输出'}")
-        _verdict("; 镜像失败(允许滞后)")
+def main(argv: list[str] | None = None) -> int:
+    import argparse
 
-    return 0 if ok else 5
+    # ❗argparse 必须在动作之前: 冒烟闸门会跑 `push.py --help` —— 没有 argparse 就会
+    # **真的执行一次推送**。(教训: verify_ref.py 2026-09-22 同款问题, sync.py 2026-09-28 复踩)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.parse_args(argv or [])  # 显式空表: main() 裸调(测试)不吃 sys.argv 杂音
+    ok, line = run_push()
+    print(line if ok or line.startswith("[STOP]") else f"推送失败: {line}")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

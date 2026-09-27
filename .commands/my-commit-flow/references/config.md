@@ -5,10 +5,10 @@
 > `staged_panic`。**缺这个文件就停手并引导生成**（不猜默认值 —— 猜错比停下来更贵）。
 
 ```bash
-python <包>/scripts/preflight.py --init          # 按仓库特征生成初稿(confirmed = false)
+python <包>/scripts/_pipeline.py --init         # 按仓库特征生成初稿(confirmed = false)
 # 打开逐项确认/修改: red_lines 必须手填; [[gates]] 看注释里的"判据"是否判对; 然后 confirmed = true
-python <包>/scripts/preflight.py --show-config    # 看生效值与来源
-python <包>/scripts/preflight.py --config <路径>  # 临时用另一份配置
+python <包>/scripts/_pipeline.py --show-config  # 看生效值与来源
+python <包>/scripts/_pipeline.py --config <路径> # 临时用另一份配置
 ```
 
 **初稿不是成品**：`--init` 只做两件安全的事 —— 红线**只给候选不代填**（靠猜的红线会漏掉最要命的那条），

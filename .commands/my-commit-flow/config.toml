@@ -2,7 +2,7 @@
 name        = "my-commit-flow"
 when        = "git 协作：开工同步 / 提交 / 推送"
 origin      = "my-commit-flow"  # 从 skill 降为包，名字不变
-version     = "1.0.0"
+version     = "2.0.0"
 confirmed   = true
 scripts_dir = "scripts"
 
@@ -12,23 +12,18 @@ scripts_dir = "scripts"
 [packs.ship]
 enabled = true
 
-[tasks."my-commit-flow.sync"]
-script = "preflight.py"
-args   = ["--check-started"]
-pin    = true
-when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前；以及收到「提交」后的第一步（收尾回写之前）"
-note   = "只读。落后即按「同步路径」合并远端 —— 禁止在落后基线上改代码 / 回写文档。结果贴进回复"
-doc    = "references/pipeline.md"
+# v3 输出契约(计划 26-09-28-0157): 成功一行, 失败一行(原因 + 下一步); 检查项内联进 ship 编排。
+# v2 的独立 preflight 任务已移除(闸门引擎收编进 _pipeline.py, 由 ship.commit 内部调用)。
 
-[tasks."my-commit-flow.preflight"]
-script  = "preflight.py"
-timeout = 900
-when    = "提交前完整预检（含真的跑 auto = true 的闸门）"
-note    = "闸门很贵（全量测试 / 索引自洽），有 STOP 先处理"
-doc     = "references/pipeline.md"
+[tasks."my-commit-flow.sync"]
+script = "sync.py"
+pin    = true
+when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前；以及收到「提交」后的第一步（收尾回写之前）。自动 fetch + 快进/rebase(分叉保线性)"
+note   = "成功一行: 已同步/同步成功 <hash>; 失败一行含原因与步骤(冲突已自动回滚); 结果贴进回复"
+doc    = "references/pipeline.md"
 
 [tasks."my-commit-flow.verify-ref"]
 script = "verify_ref.py"
-when   = "提交后核对 ref 三处一致（HEAD / refs/heads / packed-refs）"
-note   = "不要只看 commit 输出 —— ref 更新可能没落稳"
+when   = "排障：核对 ref 三处一致（HEAD / refs/heads / packed-refs）—— ship.commit 已内置静默核对"
+note   = "通过一行; 不一致给处置步骤"
 doc    = "references/pipeline.md"

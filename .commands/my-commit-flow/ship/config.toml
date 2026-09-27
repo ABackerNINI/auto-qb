@@ -10,14 +10,12 @@ confirmed = true
 [tasks."ship.commit"]
 script = "commit.py"
 pin    = true
-risky  = true
-when   = "用户显式说「提交」：暂存 + 提交 + 核 ref + 自动续推（落后未合流会被内含预检 STOP —— 先按「同步路径」合并远端再回来）"
-note   = "零参数缺省 = 全量提交本次改动(红线照拦) + 核 ref + 自动续推(--no-push 只提交); 消息缺省读 <root>/.git/COMMIT_MSG_AI.txt, 提交落稳后脚本自动删除(消费即删, 下次提交前必须重写); RESULT: PARTIAL=已提交未推送, 补跑 ship.push; 拒 -A / . / *"
+when   = "用户显式说「提交」：内部同步(自动快进/rebase 保线性) + 闸门 + 暂存 + 提交 + 核 ref + 内联推送，全程静默"
+note   = "零参数 = 全量提交本次改动(红线照拦); 成功一行「提交成功 <hash>」; 推送未完成不改退出码, 补跑 ship.push; 消息缺省读 <root>/.git/COMMIT_MSG_AI.txt(消费即删); 拒 -A / . / *"
 doc    = "references/pipeline.md"
 
 [tasks."ship.push"]
 script = "push.py"
-risky  = true
-when   = "补推 / 单独推送（ship.commit 已默认续推; 本条用于推送未完成后补推, 或远端无法核实的重验）→ 核对远端 ref → 尝试一次镜像"
-note   = "镜像失败只报一次：不重试 / 不换代理 / 不改走 SSH / 不回滚主线"
+when   = "补推 / 单独推送（ship.commit 已默认内联续推）→ 同步核对 + 推主线 + 核对远端 + 镜像(全程静默)"
+note   = "成功一行「推送成功 <hash>」; 镜像允许滞后, 成败都不提; 瞬时连接失败自动重试一次"
 doc    = "references/pipeline.md"

@@ -1,0 +1,343 @@
+"""my-commit-flow 的自测(v3) —— 闸门引擎 / 占位符展开 / 静态检查 / 配置体检。stdlib `unittest`, 零依赖。
+
+为什么放在包目录而不是项目的 `tests/`: 这份包是**跨项目资产**, 绑进某个仓库的 `tests/`
+会把两边耦合起来; 它依赖的是包自己的脚本, 不是那个仓库的 `src/`。
+(本项目 `pytest.ini` 的 `testpaths = tests` 也不会收集到它 —— 正合预期; 提交闸门 test.pkg 会跑。)
+
+跑法:
+    python <包>/scripts/test_pipeline.py
+    uv run pytest .commands -q --no-cov   (test.pkg 的口径)
+
+v3(计划 26-09-28-0157)收掉的旧面: 检查表分类(classify_sync / sync_recipe / behind_rows /
+classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_sync.py 用**真实临时仓库**测。
+
+## 测试计划
+- GlobMatchTest                <changed:>/<each:> 的 GLOB 语义(**/ 跨目录)
+- ExpandTest                   占位符四类 + 展开失败 + each_limit + 空格引号
+- RunGatesTest                 闸门执行: 全过静默 / 失败留末 20 行 / 超时 / 人工闸门不执行 /
+                               展开失败不降级 / 无匹配**静默**跳过(v2 的那条 WARN 已废)
+- ShortTest                    失败明细里的根路径压缩
+- NoTrackingRefTest            判落后一律 ls-remote 真值 —— 静态扫描禁止 refs/remotes 快照与 status -sb
+- StaticNameTest               AST 找未定义名(冷门分支 NameError, push.py 曾潜伏过一例)
+- ConfigProblemsTest           未知键 / timeout 非法 → STOP
+"""
+
+from __future__ import annotations
+
+import ast
+import builtins
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _pipeline  # noqa: E402
+from _ship_config import config_problems, find_root, load_config  # noqa: E402
+
+PY = sys.executable
+
+
+def ctx(root: Path, changed: list[str], each_limit: int = 99) -> dict:
+    return {"root": root, "changed": changed, "each_limit": each_limit}
+
+
+class GlobMatchTest(unittest.TestCase):
+    def test_star_matches_across_dirs(self) -> None:
+        self.assertTrue(_pipeline._glob_match("src/auto_qb/a.py", "*.py"))
+        self.assertFalse(_pipeline._glob_match("src/auto_qb/a.py", "*.md"))
+
+    def test_double_star_with_prefix(self) -> None:
+        pat = ".agents/skills/**/scripts/*.py"
+        self.assertTrue(_pipeline._glob_match(".agents/skills/my-commit-flow/scripts/sync.py", pat))
+        self.assertTrue(_pipeline._glob_match(".agents/skills/a/b/scripts/x.py", pat))
+        self.assertFalse(_pipeline._glob_match(".agents/skills/a/b/x.py", pat))
+
+
+class ExpandTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / ".agents" / "skills" / "create-issue").mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_root_placeholder(self) -> None:
+        cmds, skip = _pipeline.expand_run("python <root>/scripts/x.py", ctx(self.root, []))
+        self.assertIsNone(skip)
+        self.assertEqual(cmds, [f"python {self.root}/scripts/x.py"])
+
+    def test_changed_placeholder(self) -> None:
+        cmds, skip = _pipeline.expand_run("yapf -i <changed:*.py>", ctx(self.root, ["src/b.py", "src/a.py", "a.md"]))
+        self.assertIsNone(skip)
+        self.assertEqual(cmds, ["yapf -i src/a.py src/b.py"])  # 排序后拼接
+
+    def test_changed_no_match_is_skipped(self) -> None:
+        cmds, skip = _pipeline.expand_run("yapf -i <changed:*.py>", ctx(self.root, ["a.md"]))
+        self.assertEqual(cmds, [])
+        self.assertIn("无匹配文件", skip or "")
+
+    def test_each_placeholder_fan_out(self) -> None:
+        cmds, skip = _pipeline.expand_run(
+            "python <each:.agents/skills/**/scripts/*.py> --help",
+            ctx(self.root, [".agents/skills/a/scripts/x.py", ".agents/skills/b/scripts/y.py"])
+        )
+        self.assertIsNone(skip)
+        self.assertEqual(len(cmds), 2)
+        self.assertTrue(all(c.endswith("--help") for c in cmds))
+
+    def test_each_limit_exceeded(self) -> None:
+        files = [f".agents/skills/s{i}/scripts/x.py" for i in range(3)]
+        with self.assertRaises(_pipeline.ExpandError) as raised:
+            _pipeline.expand_run("python <each:*.py> --help", ctx(self.root, files, each_limit=2))
+        self.assertIn("each_limit", str(raised.exception))
+
+    def test_skill_dir_placeholder(self) -> None:
+        cmds, skip = _pipeline.expand_run("python <skill-dir:create-issue>/scripts/gen.py --check", ctx(self.root, []))
+        self.assertIsNone(skip)
+        found = _pipeline.find_skill_dir("create-issue", self.root)
+        self.assertEqual(cmds, [f"python {found}/scripts/gen.py --check"])
+
+    def test_skill_dir_missing_is_error(self) -> None:
+        with self.assertRaises(_pipeline.ExpandError) as raised:
+            _pipeline.expand_run("python <skill-dir:create-issues>/x.py", ctx(self.root, []))
+        self.assertIn("找不到 skill 目录", str(raised.exception))
+
+    def test_unknown_placeholder_is_error(self) -> None:
+        with self.assertRaises(_pipeline.ExpandError) as raised:
+            _pipeline.expand_run("yapf -i <改过的 py 文件>", ctx(self.root, []))
+        self.assertIn("无法展开", str(raised.exception))
+
+    def test_quotes_paths_with_spaces(self) -> None:
+        cmds, _ = _pipeline.expand_run("yapf -i <changed:*.py>", ctx(self.root, ["src/a b.py"]))
+        self.assertEqual(cmds, ['yapf -i "src/a b.py"'])
+
+
+class RunGatesTest(unittest.TestCase):
+    """v3 契约: 闸门全过**静默**(没有 PASS 行), 失败才说话; 无匹配文件是按设计跳过, 不是 WARN。"""
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _gate(self, cmd: str, auto: bool = True, timeout: int = 60) -> dict:
+        return {"match": [""], "run": [cmd], "auto": auto, "timeout": timeout, "note": "测试闸门"}
+
+    def test_passing_gate_is_silent(self) -> None:
+        failures, manual, ran = _pipeline.run_gates([self._gate(f'"{PY}" -c "pass"')], ctx(self.root, []))
+        self.assertEqual(failures, [])
+        self.assertEqual(manual, [])
+        self.assertEqual(ran, 1)
+
+    def test_failing_gate_reports_note_rc_tail(self) -> None:
+        failures, _, ran = _pipeline.run_gates(
+            [self._gate(f'"{PY}" -c "import sys; print(\'boom\'); sys.exit(3)"')], ctx(self.root, [])
+        )
+        self.assertEqual(len(failures), 1)
+        note, cmd, rc, secs, tail = failures[0]
+        self.assertEqual((note, rc), ("测试闸门", 3))
+        self.assertIn("boom", tail)  # 失败输出要留末 20 行供定位
+        self.assertGreater(secs, 0)
+        self.assertEqual(ran, 1)
+
+    def test_timeout_is_failure(self) -> None:
+        failures, _, _ = _pipeline.run_gates(
+            [self._gate(f'"{PY}" -c "import time; time.sleep(5)"', timeout=1)], ctx(self.root, [])
+        )
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0][2], -1)
+        self.assertIn("超时", failures[0][4])
+
+    def test_manual_gate_is_not_executed(self) -> None:
+        cmd = f'"{PY}" -c "import sys; sys.exit(3)"'
+        failures, manual, ran = _pipeline.run_gates([self._gate(cmd, auto=False)], ctx(self.root, []))
+        self.assertEqual((failures, ran), ([], 0))
+        self.assertEqual(manual, [cmd])
+
+    def test_expand_failure_of_auto_gate_is_failure(self) -> None:
+        failures, manual, _ = _pipeline.run_gates([self._gate("python <nope:x>")], ctx(self.root, []))
+        self.assertEqual(len(failures), 1)
+        self.assertEqual(failures[0][2], -2)  # 展开失败: 不是 git 的码, 但必须停
+        self.assertEqual(manual, [])  # 不降级成打印
+
+    def test_no_match_skip_is_silent(self) -> None:
+        gate = {"match": [""], "run": ["python <each:src/**/*.py> --help"], "auto": True, "note": "t"}
+        failures, _, ran = _pipeline.run_gates([gate], ctx(self.root, ["docs/a.md"]))
+        self.assertEqual((failures, ran), ([], 0))  # 按设计跳过, 连 WARN 都没有
+
+    def test_gates_for_empty_match_hits_everything(self) -> None:
+        gates = [{"match": [""], "run": ["x"], "auto": True}]
+        self.assertEqual(len(_pipeline.gates_for(["src/a.py"], gates)), 1)
+        self.assertEqual(_pipeline.gates_for(["src/a.py"], [{"match": ["docs/"], "run": ["x"]}]), [])
+
+
+class ShortTest(unittest.TestCase):
+    def test_short_strips_root_prefix(self):
+        root = Path("C:/repo")
+        self.assertEqual(_pipeline._short("python C:/repo/a.py", root), "python a.py")
+        self.assertEqual(_pipeline._short(r"python C:\repo\a.py", root), "python a.py")
+
+
+class NoTrackingRefTest(unittest.TestCase):
+    """落后/领先判据一律走 ls-remote 现查的远端真值 —— 本工具 shell 里 refs/remotes/* 的
+    写入会被静默丢弃, 跟踪 ref 是陈年快照, 曾据此报出假"落后 5"; status -sb 同理。"""
+
+    SCRIPTS = ("sync.py", "push.py", "commit.py")
+
+    def test_ahead_behind_never_reads_tracking_ref(self) -> None:
+        here = Path(__file__).resolve().parent
+        for name in self.SCRIPTS:
+            for i, line in enumerate((here / name).read_text(encoding="utf-8").splitlines(), 1):
+                if "--left-right" in line:
+                    self.assertNotIn(
+                        "{MAIN}/{BRANCH}",
+                        line,
+                        f"{name}:{i} 在用 refs/remotes 快照算 ahead/behind —— 该写入会被静默丢弃, "
+                        "判据必须是 ls-remote 拿到的远端 tip 对比本地 HEAD",
+                    )
+                self.assertNotIn('"-sb"', line, f"{name}:{i} 在用 status -sb 的快照判据")
+
+
+SPECIALS = {"__name__", "__file__", "__doc__", "__package__", "__spec__", "__loader__", "__builtins__", "__debug__"}
+
+
+def _bound(node: ast.AST) -> set[str]:
+    """某个作用域里**被绑定**的名字 —— 赋值 / 参数 / for / with / except / 推导 / 嵌套定义 / import。"""
+    names: set[str] = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            names.add(n.id)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(n.name)
+        elif isinstance(n, ast.arg):
+            names.add(n.arg)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            for alias in n.names:
+                names.add((alias.asname or alias.name).split(".")[0])
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            names.add(n.name)
+        elif isinstance(n, ast.Global):
+            names.update(n.names)
+        elif isinstance(n, ast.alias):
+            names.add((n.asname or n.name).split(".")[0])
+    return names
+
+
+def _loaded(node: ast.AST) -> set[str]:
+    return {n.id for n in ast.walk(node) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+
+
+def undefined_names(path: Path) -> set[str]:
+    """静态找出"用了但从未定义"的名字 —— 冷门分支里的 NameError 只有靠这个才抓得到。
+
+    push.py 曾把 `MIRROR_URL_NOW` 写成 `MIRROR_URL`: 那个分支只有"没找到镜像远端"时才走,
+    平时主线推送失败会提前 return, 于是这个未定义名在真机上潜伏到被人踩到为止。
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    module_bound = _bound(tree) | set(dir(builtins)) | SPECIALS
+    bad: set[str] = set()
+
+    def walk(node: ast.AST, inherited: set[str]) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                own = _bound(child)
+                scope = inherited | own
+                bad.update(_loaded(child) - scope)
+                walk(child, scope)  # 闭包: 外层绑定的名字对内层可见
+            else:
+                walk(child, inherited)
+
+    bad.update(_loaded(tree) - module_bound)
+    walk(tree, module_bound)
+    return bad
+
+
+class StaticNameTest(unittest.TestCase):
+    SCRIPTS = ["_ship_config.py", "_pipeline.py", "sync.py", "push.py", "commit.py", "verify_ref.py"]
+    # memory-bank skill 的脚本同属"改了就可能留下未定义名"的资产, 一并纳入
+    # (2026-09-22 目录化重构新增了 4 个; 之前只扫本包自己那 5 个)。
+    OTHER_SCRIPTS = (
+        ".agents/skills/memory-bank/scripts/_common.py",
+        ".agents/skills/memory-bank/scripts/gen_tasks_index.py",
+        ".agents/skills/memory-bank/scripts/gen_kb_index.py",
+        ".agents/skills/memory-bank/scripts/check_kb_structure.py",
+    )
+
+    def test_no_undefined_names_in_other_skill_scripts(self) -> None:
+        root = find_root()
+        missing = [rel for rel in self.OTHER_SCRIPTS if not (root / rel).is_file()]
+        self.assertFalse(missing, f"清单里的脚本不存在(改名了? 同步本清单): {missing}")
+        bad = [f"{rel}: {', '.join(sorted(undefined_names(root / rel)))}" for rel in self.OTHER_SCRIPTS]
+        bad = [b for b in bad if not b.endswith(": ")]
+        self.assertFalse(bad, "memory-bank skill 脚本里有未定义名:\n" + "\n".join(bad))
+
+    def test_no_undefined_names_in_scripts(self) -> None:
+        bad = [
+            f"{name}: {', '.join(sorted(undefined_names(Path(__file__).resolve().parent / name)))}"
+            for name in self.SCRIPTS
+        ]
+        bad = [line for line in bad if not line.endswith(": ")]
+        self.assertEqual(bad, [], "存在未定义的名字(拼写错 / 改名漏改), 会在冷门分支上 NameError")
+
+    def test_checker_actually_catches_undefined_names(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as fh:
+            fh.write("def f():\n    return MIRROR_URL\n")
+            tmp = Path(fh.name)
+        try:
+            self.assertEqual(undefined_names(tmp), {"MIRROR_URL"})
+        finally:
+            tmp.unlink()
+
+    def test_checker_is_not_fooled_by_closure(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as fh:
+            fh.write("def outer():\n    x = 1\n    def inner():\n        return x\n    return inner\n")
+            tmp = Path(fh.name)
+        try:
+            self.assertEqual(undefined_names(tmp), set())  # 闭包变量不算未定义
+        finally:
+            tmp.unlink()
+
+
+class ConfigProblemsTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / ".my-commit-flow.toml"
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def _problems(self, text: str) -> list[tuple[str, str]]:
+        self.path.write_text(text, encoding="utf-8")
+        cfg, _ = load_config(explicit=str(self.path))
+        return config_problems(cfg, self.path)
+
+    BASE = 'confirmed = true\nred_lines = ["a"]\n'
+
+    def test_unknown_gate_key_is_stop(self) -> None:
+        problems = self._problems(self.BASE + '[[gates]]\nmatch = ["src/"]\nrun = ["x"]\nauto_run = true\n')
+        self.assertTrue(any(lvl == "STOP" and "auto_run" in msg for lvl, msg in problems))
+
+    def test_unknown_top_key_is_stop(self) -> None:
+        problems = self._problems(self.BASE + "staged_panicc = 5\n")
+        self.assertTrue(any(lvl == "STOP" and "staged_panicc" in msg for lvl, msg in problems))
+
+    def test_bad_timeout_is_stop(self) -> None:
+        problems = self._problems(self.BASE + '[[gates]]\nmatch = ["src/"]\nrun = ["x"]\ntimeout = 0\n')
+        self.assertTrue(any(lvl == "STOP" and "timeout" in msg for lvl, msg in problems))
+
+    def test_valid_config_has_no_stop(self) -> None:
+        problems = self._problems(self.BASE + '[[gates]]\nmatch = ["src/"]\nrun = ["x"]\nauto = true\ntimeout = 60\n')
+        self.assertFalse([p for p in problems if p[0] == "STOP"])
+
+    def test_unconfirmed_draft_is_warn(self) -> None:
+        problems = self._problems('confirmed = false\nred_lines = ["a"]\n')
+        self.assertTrue(any(lvl == "WARN" and "初稿" in msg for lvl, msg in problems))
+
+
+if __name__ == "__main__":
+    raise SystemExit(0 if unittest.main(exit=False, verbosity=2).result.wasSuccessful() else 1)

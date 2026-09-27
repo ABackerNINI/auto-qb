@@ -1,0 +1,49 @@
+# 26-09-28-commands-shipflow-output-contract — my-commit-flow 输出契约 v3 (沉默即成功)
+
+**Status:** In Progress
+**Added:** 2026-09-28
+**Updated:** 2026-09-28 02:03
+**Summary:** 用户判定 my-commit-flow 输出背离设计初衷(少手写错误/少 token/复杂藏背后), 实贴 sync 失败态 10 行 + ship.commit 成功态 76 行全数标注多余。计划 26-09-28-0157 已全量实施: 成功一行/失败=原因+下一步/退出码 0/1; sync 自动 fetch+快进/rebase 保线性(D1); commit 编排合一; 镜像静默(D2); preflight 收编 _pipeline.py(D3); 引擎 FAILED 3→1(D4); warn_lines 保留一行(D5); 顺带修 issue 26-09-28-0128。全量 1816 passed / 0 failed。待真机提交验收(等「提交」)。
+
+## 原始请求
+
+用户实贴 `commands run my-commit-flow.sync`(失败态)与 `ship.commit`(成功态)的输出并逐行标注(「多余」「这是什么???」「居然输出了两次」), 判定 my-commit-flow **完全背离设计初衷: 减少手写命令错误、减少 token、将复杂隐藏在背后**。指令: sync 输出只留「同步成功 <hash>」/「同步失败需解决冲突 本地<hash> 远端<hash> <步骤>」; commit 成功只留「提交成功 <hash>」, 失败说清原因; 镜像允许滞后无需提。要求**推翻重构, 先写一个新 my-commit-flow 计划**。
+
+## 思考过程与决策
+
+- **诊断(逐条对到代码)**: 「Exit code 3」=引擎 `FAILED=3`(run.py:31); `[自证] 将要执行+绝对路径`=ship 任务 `risky=true`(ship/config.toml:13)触发 run.py:57-62; WARN 翻倍=commit.py:152 与 push.py:127 **各跑一遍完整预检**; 「从未 fetch?」=sync 被设计成只读不自愈(preflight.py:27); 「略过 61 行」=脚本原始 76 行触发引擎摘要器。根因: v2 计划(26-09-26-2345)的 L1「让命令自己出示证据」把证据当成了默认输出——方向反了。
+- **v3 取舍**: 继承 v2 的 L2 零参数化与 L3 编排合一; 推翻 L1 为「沉默即成功」; L4 错误导航收成失败行「原因+下一步」各一句。
+- **sync 从只读改自动**(fetch+ls-remote 真值+auto ff-only): 树脏交 git 裁决(无重叠自然成功/重叠 git 拒绝→翻译成失败行), 删 sync_recipe 自算配方 60 行; 分叉走 merge-tree 只读预判(D1 拍板自动 merge 或只报)。
+- **行为变化的边界**: 内部检查一个不删(ref 三处/ls-remote 真值/staged 暴增/红线/11 闸门/消费即删/GBK 兜底/PARTIAL 语义), 删的只有检查项里的摆设(上游名/平台关键词提示)与全部常规路径输出。
+- **顺带修复**: issue 26-09-28-0128(逐路径 add 撞已暂存删除)在重写 commit.py 时按文件存在性分流 `git rm --cached` 一并落掉。
+
+## 实现计划
+
+计划文档单点: [memory-bank/plans/26-09-28-0157-plan-commands-shipflow-v3.html](../plans/26-09-28-0157-plan-commands-shipflow-v3.html)(输出契约总表/行为规格/保全清单/验证矩阵/token 账)。
+
+- **M1 脚本与配置**: preflight.py→`_pipeline.py`(闸门/展开/changed_files/红线/--init); 新增 sync.py; 重写 commit.py/push.py(一行契约); verify_ref.py 收一行; config.toml 删 preflight 任务+ship 去 risky; 测试重写(含「成功输出 ≤2 行」契约断言 + issue 0128 回归用例)。
+- **M2 文档回写**: AGENTS.md(会话协议①/提交节, 跑 doc.caps 查 8000 上限)、memory-bank SKILL.md:15、conventions/collaboration.md、包 README+references/pipeline.md 重写、pitfalls/git/push.md 措辞、kb.index。
+- **M3 引擎微调**(D4 拍板后): run.py `FAILED 3→1` + test_engine + docstring。
+- **验证**: 临时 clone 场景矩阵(齐平/落后/树脏±重叠/分叉±冲突/离线/红线/闸门红/staged 删除), 只在系统临时目录建 throwaway 副本(跨仓库红线); 真机验收等用户说「提交」。
+
+## 子任务状态表
+
+| 子任务 | 状态 | 备注 |
+|---|---|---|
+| 摸底现状(包脚本/引擎/引用面/陷阱索引) | ✅ 完成 | 本轮, 全部 file:line 已核 |
+| 计划文档 26-09-28-0157 | ✅ 完成 | status Open, 待拍板 |
+| D1 拍板: sync 对分叉怎么合流 | ✅ 已拍板 | 26-09-28 用户: rebase 保线性 → 分叉自动 rebase(树净, 冲突即 abort), merge 方案与替代舞蹈淘汰 |
+| D2–D5 拍板(镜像静默/preflight 移除/引擎退出码/warn_lines) | ✅ 已拍板 | 26-09-28 用户「其余按推荐」: 镜像全程静默 / preflight 移除 / 退出码统一 0/1 / warn_lines 保留一行 |
+| M1 脚本与配置重写 | ✅ 完成 | sync.py 新增; commit/push 重写; _pipeline.py 收编; verify-ref 收一行; 测试重写(57 项) |
+| M2 文档回写(AGENTS.md 等 7 处) | ✅ 完成 | AGENTS/SKILL/包 README/pipeline/config/anti-patterns/push.md; doc.caps 与坏链绿 |
+| M3 引擎退出码统一 | ✅ 完成 | run.py FAILED 3→1; test_commands_engine 的 preflight id 断言随改 |
+| 场景矩阵验证 | ✅ 完成 | test_sync.py 11 场景(真实临时仓库) + 真机 sync 成功/失败双路径冒烟 |
+| 真机提交验收 | ⬜ 待用户 | 等用户说「提交」, 走一次真实 ship.commit(含推送与镜像静默) |
+| doc-map 容量触顶(收尾时发现, 计划外) | ➡ 已入池 | [issue 26-09-28-0219](../issues/26-09-28-0219-question-kb-doc-map-cap.html), 待用户定调, 本轮不改 |
+
+## 进度日志
+
+- **2026-09-28 02:03** 计划落盘(基线 635693f, 与 gitee/develop 齐平)。诊断表 11 条实贴症状全部对到 file:line; 输出契约 v3 定稿(成功 ≤2 行/失败=原因+下一步/退出码 0/1); 引擎侧只做 E1(config 去 risky, 零引擎改动)+E2(FAILED 3→1); RESULT 协议机制保留不动(范围守恒)。等待用户拍板 D1-D5。
+- **2026-09-28 02:20** 收尾回写完成(档案/切片/基线切片 26-09-28-0220/issue 26-09-28-0219)。test.full: 1814 passed / 3 skipped / 1 failed——唯一红 = doc-map cap 触顶(12259/12200), 取证: HEAD 源重生成即 12153(余 47 字符), 合规「计划+档案」对固定占 ~106 字符, 任何立档会话必破; 实测 topic 收口合并反而增大(12259→13181 字节档), 已回退到最小足迹并入池待定调。本轮未改任何源码; 排查中踩「守阵按字符数、wc -c 按字节数」的坑(中文 ×3), 已写进 issue 0219 备注。
+- **2026-09-28 02:38** 用户拍板 D1: 「rebase 禁令已移除, 必要时可使用 rebase 保持提交历史线性」→ 计划 D1 定稿为**分叉自动 rebase**(树净才动, 冲突即 --abort 回滚 + 失败行, 只改写未推送提交); 原推荐 A(merge, 非线性)否决, pipeline.md 的 reset --hard + format-patch 替代舞蹈在 M2 一并淘汰。计划文档已同步修订(§3.1/§06/§07/§09/页脚), D2–D5 仍待拍板。
+- **2026-09-28 03:21** 用户拍板 D2–D5(「其余按推荐」)并下令实施 → **M1–M3 全量落地**: ①M1: preflight.py 删(检查表式预检退役), 共享件收编 `_pipeline.py`(闸门引擎/展开/changed_files/红线/`--init`); 新增 `sync.py`(fetch+快进/rebase, 一行契约); 重写 `commit.py`(编排合一: 内部同步→闸门→逐路径暂存[按存在性分流修 issue 0128]→提交→核 ref→消费即删→内联推送)、`push.py`(同步核对→推主线[瞬时重试一次]→核远端→镜像**全程静默**)、`verify_ref.py`(PASS 一行/失败保留处置细节, 退出码 0/1); 配置×2(task 树 4 入口, ship 去 risky=[自证]消失); 测试重写 test_pipeline(改编)+test_sync(11 场景真实临时仓库)+test_commit(重写)。②M3: run.py FAILED 3→1。③M2: AGENTS.md(会话协议①/硬约束/提交节×3)/memory-bank SKILL.md(连带修掉过时的「rebase/stash 一律禁用」)/包 README+pipeline.md 全重写/config.md 脚本名/anti-patterns 合流与镜像条/pitfalls/git/push.md 摘要与处置。④坑两枚: 新测试用 tmp_path 夹具踩 TMPDIR 假红(修 test.pkg 定义加前缀, 原「不建临时目录」说法过时); sync/push 无 argparse 时 `--help` 被忽略会**真执行同步/推送**(冒烟闸门雷, 补 argparse 前置)。⑤全量 1816 passed / 3 skipped / 0 failed, 覆盖率 91%; 基线切片 26-09-28-0321。⑥远端两次快进合流(7efcc8f/9dc7a1b2, 生成文件恢复→ff→kb.index 无损路径); issue 0219 被上游 gen_doc_map 渲染收口取代(Superseded)。**待真机提交验收(等「提交」)**。

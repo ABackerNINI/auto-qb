@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>沉默即成功 — my-commit-flow 输出契约 v3 (26-09-28-0157)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-28">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-topic" content="commands-shipflow-v3">
+<meta name="doc-added" content="2026-09-28">
+<meta name="doc-updated" content="2026-09-28">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1218;
+    --bg-card: #151b24;
+    --bg-row: #111722;
+    --bg-hover: #1c2534;
+    --fg: #e7ebf1;
+    --fg-muted: #96a2b5;
+    --fg-dim: #6c7a8e;
+    --accent: #3b82f6;
+    --accent-hi: #60a5fa;
+    --accent-soft: rgba(59, 130, 246, .16);
+    --green: #34d399;
+    --green-soft: rgba(52, 211, 153, .12);
+    --red: #f87171;
+    --red-soft: rgba(248, 113, 113, .10);
+    --warn: #fbbf24;
+    --border: rgba(255, 255, 255, .08);
+    --border-soft: rgba(255, 255, 255, .05);
+    --font: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font); font-size: 15px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .canvas { max-width: 1080px; margin: 0 auto; padding: 0 32px 96px; }
+
+  header { padding: 56px 0 30px; border-bottom: 1px solid var(--border); }
+  .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: .09em; color: var(--accent-hi); text-transform: uppercase; }
+  .kicker .sep { color: var(--fg-dim); margin: 0 6px; }
+  h1 { font-size: 33px; font-weight: 600; letter-spacing: -.01em; margin: 14px 0 10px; line-height: 1.22; }
+  .lede { color: var(--fg-muted); max-width: 66ch; margin: 0; }
+  .lede strong { color: var(--fg); font-weight: 550; }
+  .meta-row { display: flex; gap: 26px; margin-top: 22px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; color: var(--fg-dim); }
+  .meta-row b { color: var(--fg-muted); font-weight: 500; }
+
+  section { padding: 42px 0 6px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 4px; }
+  .sec-no { font-family: var(--mono); font-size: 12px; color: var(--fg-dim); }
+  h2 { font-size: 21px; font-weight: 600; margin: 0; letter-spacing: -.005em; }
+  .sec-sub { color: var(--fg-dim); font-size: 13.5px; margin: 0 0 20px; max-width: 72ch; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 26px 0 8px; color: var(--fg); }
+  p { color: var(--fg-muted); max-width: 76ch; margin: 8px 0; }
+  p strong, li strong { color: var(--fg); font-weight: 550; }
+  code {
+    font-family: var(--mono); font-size: .87em; color: var(--accent-hi);
+    background: rgba(59, 130, 246, .09); padding: 1px 5px; border-radius: 3px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 12px 0 6px; }
+  th {
+    text-align: left; font-weight: 550; color: var(--fg-dim);
+    font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase;
+    padding: 8px 14px 8px 0; border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--border-soft); vertical-align: top; color: var(--fg-muted); }
+  td:first-child { font-family: var(--mono); font-size: 12.5px; color: var(--fg); }
+  td .mono, .mono { font-family: var(--mono); font-size: 12.5px; }
+
+  /* 终端对照块 */
+  .term-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 16px 0 8px; }
+  @media (max-width: 900px) { .term-wrap { grid-template-columns: 1fr; } }
+  .term { border: 1px solid var(--border); background: #0a0e14; padding: 0; min-width: 0; }
+  .term .bar {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em; padding: 7px 12px;
+    color: var(--fg-dim); border-bottom: 1px solid var(--border-soft); display: flex; justify-content: space-between;
+  }
+  .term .bar .bad { color: var(--red); } .term .bar .good { color: var(--green); }
+  .term pre {
+    margin: 0; padding: 12px 14px; font-family: var(--mono); font-size: 12px; line-height: 1.62;
+    color: var(--fg-muted); overflow-x: auto; white-space: pre;
+  }
+  .term pre .hl { color: var(--fg); }
+  .term pre .okln { color: var(--green); }
+  .term pre .erln { color: var(--red); }
+  .term pre .dimln { color: var(--fg-dim); }
+  .term pre .wrln { color: var(--warn); }
+
+  .note {
+    border: 1px solid var(--border); border-left: 2px solid var(--accent);
+    background: var(--bg-row); padding: 12px 16px; margin: 14px 0; max-width: none;
+    color: var(--fg-muted); font-size: 13.5px;
+  }
+  .note strong { color: var(--fg); }
+
+  ul.decide { list-style: none; padding: 0; margin: 0; }
+  ul.decide li { padding: 14px 0 14px 26px; border-bottom: 1px solid var(--border-soft); position: relative; color: var(--fg-muted); }
+  ul.decide li::before {
+    content: ""; position: absolute; left: 4px; top: 22px;
+    width: 7px; height: 7px; border: 1.5px solid var(--accent); border-radius: 50%;
+  }
+  .pill {
+    display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 8px;
+    border: 1px solid var(--border); border-radius: 3px; white-space: nowrap; color: var(--fg-muted);
+  }
+  .pill.rec { color: var(--green); border-color: rgba(52, 211, 153, .35); }
+  .pill.alt { color: var(--fg-dim); }
+
+  .flow { font-family: var(--mono); font-size: 12.5px; color: var(--fg-muted); line-height: 2.0; margin: 10px 0; }
+  .flow .st { color: var(--fg); }
+  .flow .arr { color: var(--fg-dim); padding: 0 6px; }
+  .flow .cm { color: var(--fg-dim); }
+
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--fg-dim); font-size: 12px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+<header>
+  <div class="kicker">PLAN<span class="sep">/</span>26-09-28-0157<span class="sep">/</span>取代 26-09-26-2345 (shipflow-v2)</div>
+  <h1>沉默即成功 — my-commit-flow 输出契约 v3</h1>
+  <p class="lede">v2 的方向是「让命令自己出示证据」，结果<strong>证据成了默认输出</strong>：一次成功提交刷出 76 行原始输出、摘要后仍有 16 行 WARN。本计划推翻 v2 的输出层，回到工具的三条设计初衷——<strong>少手写命令错误、少 token、复杂藏在背后</strong>。成功只给一行结论，失败才出示证据。</p>
+  <div class="meta-row">
+    <span><b>状态</b> In Progress · M1–M3 已落地(26-09-28), 待真机提交验收</span>
+    <span><b>范围</b> .commands/my-commit-flow + 引擎两处微调 + 文档回写</span>
+    <span><b>基线</b> 635693f (与 gitee/develop 齐平)</span>
+  </div>
+</header>
+
+<!-- ============================================================ S1 诊断 -->
+<section>
+  <div class="sec-head"><span class="sec-no">01</span><h2>诊断 — 用户实贴输出逐条对到机制根源</h2></div>
+  <p class="sec-sub">所有被标注「多余 / 这是什么」的行都有明确代码出处；没有一行是意外，全是设计出来的噪音。</p>
+
+  <table>
+    <tr><th style="width:44%">实贴症状</th><th>机制根源</th></tr>
+    <tr><td>「Exit code 3 ← 会引导 agent 查 code3 是什么意思」</td><td>引擎把「task 脚本非 0」映射为退出码 3（run.py:31 <span class="mono">FAILED = 3</span>），且失败输出不自解释 → E2 统一为 0/1，失败行自带语义</td></tr>
+    <tr><td>「开工自检(--check-started, 全程只读) ← 多余」</td><td>preflight.py:543 的检查表表头</td></tr>
+    <tr><td>「远端在 e8978704，本地没有它的对象(从未 fetch?) ← fetch 不是脚本该干的事吗」</td><td>sync 被设计成<strong>只读不自愈</strong>（preflight.py:27「连 fetch 都不做」:130）——它只报告缺什么，把动作推回给调用方</td></tr>
+    <tr><td>「[WARN] 工作区 树脏(与主线齐平, 不影响开工) ← 多余」</td><td>preflight.py:540，齐平时也打工作区行</td></tr>
+    <tr><td>「退出码 0=可开工, 1=需先处理 ← 退出码多余」</td><td>preflight.py:546 的口径脚注</td></tr>
+    <tr><td>「[自证] ship.commit 将要执行: + 完整 python 绝对路径 ← 这是什么??」</td><td>run.py:57-62：任务标了 <span class="mono">risky = true</span>（ship/config.toml:13）就回显展开后的首条命令——E1 去掉该标记即可，零引擎改动</td></tr>
+    <tr><td>「[WARN] 上游 / 镜像远端 居然输出了两次!!」</td><td>commit.py:152 跑一遍预检(--phase commit)，续跑 push.py:127 <strong>再跑一遍</strong>(--phase push)——每遍都打整张检查表，WARN 自然成对出现</td></tr>
+    <tr><td>「[WARN] 闸门 跳过(无匹配文件)…不是闸门失效 ← 这是什么???」</td><td>preflight.py:391-393：&lt;each:&gt; 无匹配时特意打一行「按设计跳过」——v2 怕人误会，结果人人误会</td></tr>
+    <tr><td>「[WARN] 镜像远端 没找到…可不管 ← 多余」×2 +「=== 尝试一次镜像直连 === ← 多余」</td><td>preflight.py:681 + push.py:227-244：镜像状态在两个阶段各报一次</td></tr>
+    <tr><td>「RESULT: OK 0e52b4f 已提交(9 个文件)并推送; 远端与本地一致; 镜像结果见上 ← 多余」</td><td>commit.py:226 的 v2 协议行——信息重复且啰嗦</td></tr>
+    <tr><td>「…(略过 61 行; 要看全文…) ← 这是什么???」</td><td>run.py:265-271 的摘要器；它存在的原因正是脚本自己打了 76 行——输出降到 1-2 行后这行自然消失</td></tr>
+  </table>
+
+  <div class="note"><strong>根因一句话：</strong>v2 计划（26-09-26-2345）四层设计里，L1「输出契约 RESULT 协议」把「出示证据」当成了<strong>默认路径</strong>——每次成功都打检查表、打清单、打协议行。方向反了。L2 零参数化、L3 编排合一是对的，v3 继承；L1 推翻为「沉默即成功」；L4 错误导航保留，但收成失败行的「原因 + 下一步」各一句。</div>
+</section>
+
+<!-- ============================================================ S2 输出契约 -->
+<section>
+  <div class="sec-head"><span class="sec-no">02</span><h2>输出契约 v3</h2></div>
+  <p class="sec-sub">判定标准只有三条，全部来自设计初衷：① 成功路径的可见输出 ≤ 2 行（含引擎自己的 [ok] 行）；② 任何失败输出自成解释，不需要查码表、不需要重跑拿全文；③ 任务内部步骤数不设限——复杂必须藏起来，而不是省掉。</p>
+
+  <h3>契约总表</h3>
+  <table>
+    <tr><th style="width:19%">任务</th><th style="width:27%">成功输出（≤2 行）</th><th>失败输出</th><th style="width:8%">退出码</th></tr>
+    <tr>
+      <td>my-commit-flow.sync</td>
+      <td><span class="mono okln">已同步 &lt;hash&gt;</span>（齐平）<br><span class="mono okln">同步成功 &lt;hash&gt;</span>（快进/合流后）</td>
+      <td><span class="mono erln">同步失败需解决冲突 本地&lt;x&gt; 远端&lt;y&gt; —— &lt;步骤&gt;</span><br><span class="mono erln">同步失败: &lt;原因&gt; —— &lt;下一步&gt;</span>（离线等）</td>
+      <td>0 / 1</td>
+    </tr>
+    <tr>
+      <td>ship.commit</td>
+      <td><span class="mono okln">提交成功 &lt;hash&gt;</span></td>
+      <td><span class="mono erln">提交失败: &lt;原因&gt; —— &lt;下一步&gt;</span>；闸门红时附失败闸门名 + 输出末 20 行</td>
+      <td>0 / 1</td>
+    </tr>
+    <tr>
+      <td>ship.commit<br>(推送未完成)</td>
+      <td><span class="mono okln">提交成功 &lt;hash&gt;</span><br><span class="mono wrln">推送未完成: &lt;原因&gt; —— 补推: commands run ship.push</span></td>
+      <td>提交已落稳，退出码仍 0（PARTIAL 语义保留，不再造词）</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td>ship.push</td>
+      <td><span class="mono okln">推送成功 &lt;hash&gt;</span></td>
+      <td><span class="mono erln">推送失败: &lt;原因&gt; —— &lt;下一步&gt;</span></td>
+      <td>0 / 1</td>
+    </tr>
+    <tr>
+      <td>my-commit-flow.verify-ref<br><span class="pill">排障保留</span></td>
+      <td><span class="mono okln">ref 一致 &lt;hash&gt;</span></td>
+      <td>三处值 + 处置步骤（保留现状的详细输出——它本来就是排障工具）</td>
+      <td>0 / 1</td>
+    </tr>
+  </table>
+
+  <h3>前后对照（用户实贴 vs 目标）</h3>
+  <div class="term-wrap">
+    <div class="term">
+      <div class="bar"><span>sync · 失败态 · 现状</span><span class="bad">10 行 / 引擎退出 3</span></div>
+      <pre><span class="dimln">Exit code 3</span>
+<span class="erln">[FAIL] my-commit-flow.sync (0.7s)</span>
+  <span class="dimln">开工自检(--check-started, 全程只读):</span>
+  <span class="wrln">[WARN] 同步状态  远端在 e8978704, 本地没有它的对象(从未 fetch?)</span>
+  <span class="wrln">        —— 先 fetch 主线分支再重跑本自检</span>
+  <span class="wrln">[WARN] 工作区   未暂存 25 / 已暂存 0 —— 树脏(与主线齐平, 不影响开工)</span>
+  <span class="dimln">远端基准: gitee/develop @ e8978704; 退出码 0=可开工, 1=需先处理</span>
+<span class="dimln">  …(略过 1 行; 要看全文: show my-commit-flow.sync …)</span></pre>
+    </div>
+    <div class="term">
+      <div class="bar"><span>sync · 同场景 · v3（自动快进成功）</span><span class="good">2 行</span></div>
+      <pre><span class="hl">[ok] my-commit-flow.sync (1.4s)</span>
+<span class="okln">同步成功 e897870</span>
+<span class="dimln"># 拿不到远端时: 同步失败: 拿不到远端 gitee/develop (离线?) —— 联网后重跑</span>
+<span class="dimln"># 分叉冲突时:   同步失败需解决冲突 本地635693f 远端e897870 —— 见 pipeline.md「同步路径」</span></pre>
+    </div>
+    <div class="term">
+      <div class="bar"><span>ship.commit · 成功态 · 现状</span><span class="bad">可见 15 行 + 略过 61 行</span></div>
+      <pre><span class="dimln">[自证] ship.commit 将要执行:</span>
+<span class="dimln">  C:\…\.venv\Scripts\python.exe C:\…\commit.py</span>
+<span class="hl">[ok] ship.commit (29.2s)</span>
+  <span class="wrln">[WARN] 上游    origin/develop(期望 gitee/develop; …)</span>
+  <span class="wrln">[WARN] 工作区   未暂存 9 个 / 已暂存 0 个 —— …</span>
+  <span class="wrln">[WARN] 闸门    跳过(gate「脚本冒烟: …」): 无匹配文件: …</span>
+  <span class="wrln">[WARN] 镜像远端  没找到镜像远端; 镜像允许滞后, 可不管</span>
+  <span class="wrln">[WARN] 上游     origin/develop(…)   ← 第二遍</span>
+  <span class="wrln">[WARN] 镜像远端   没找到镜像远端; …  ← 第二遍</span>
+  <span class="dimln">=== 尝试一次镜像直连(未找到镜像远端) ===</span>
+  <span class="dimln">RESULT: OK 0e52b4f 已提交(9 个文件)并推送; …</span>
+<span class="dimln">  …(略过 61 行; 要看全文: show ship.commit …)</span></pre>
+    </div>
+    <div class="term">
+      <div class="bar"><span>ship.commit · 成功态 · v3</span><span class="good">2 行</span></div>
+      <pre><span class="hl">[ok] ship.commit (29.2s)</span>
+<span class="okln">提交成功 0e52b4f</span>
+<span class="dimln"># 推送未完成时(退出码仍 0):</span>
+<span class="dimln">#   提交成功 0e52b4f</span>
+<span class="dimln">#   推送未完成: 主线推送失败 —— 补推: commands run ship.push</span></pre>
+    </div>
+  </div>
+
+  <div class="note"><strong>引擎侧不动摘要器</strong>：run.py 的 [ok]/[FAIL] 行与「压缩超长输出」机制保留——它们是对所有包的兜底。v3 让 my-commit-flow 的原始输出天然 ≤ 2 行，摘要器从此无事可做；「(略过 N 行)」提示行随原始输出变短自然消失，无需改引擎。</div>
+</section>
+
+<!-- ============================================================ S3 行为规格 -->
+<section>
+  <div class="sec-head"><span class="sec-no">03</span><h2>行为规格 — 每个任务做什么、沉默时做什么</h2></div>
+  <p class="sec-sub">沉默 ≠ 没查。现有内部检查一个不删，只是不再逐项汇报；行为变化集中在 sync（从只读报告变为自动完成）与预检的归并。</p>
+
+  <h3>3.1 sync 重构：从「报告缺什么」到「直接做完」<span class="pill" style="margin-left:8px">行为变化最大</span></h3>
+  <p>现状 sync = preflight.py --check-started，只读、不 fetch、不合并，把「先 fetch」「先快进」写进 WARN 让调用方自己动手——这正是被点名的「fetch 不是脚本该干的事情吗」。v3 的 sync 自己做完：</p>
+  <div class="flow">
+    <span class="st">fetch gitee develop</span><span class="arr">→</span>ls-remote 取远端真值(绝不读 refs/remotes)<span class="arr">→</span><span class="st">对比本地 HEAD</span><br>
+    齐平<span class="arr">→</span><span class="st">已同步 &lt;hash&gt;</span><span class="cm">　·　纯落后<span class="arr">→</span>git merge --ff-only FETCH_HEAD<span class="arr">→</span>同步成功</span><br>
+    <span class="cm">分叉(树净)<span class="arr">→</span>自动 rebase 保持线性(D1 已拍板)　·　冲突即 abort<span class="arr">→</span>失败行　·　离线<span class="arr">→</span>失败行</span>
+  </div>
+  <ul class="decide">
+    <li><strong>树脏交 git 裁决，不再自算重叠配方</strong>：改动文件与远端新提交无重叠时 <code>merge --ff-only</code> 本来就会成功；有重叠时 git 自己拒绝（"local changes would be overwritten"）。脚本把 git 的拒绝翻译成一行失败输出 + 步骤指针（pipeline.md「同步路径」），删掉自算 overlap 的 60 行配方逻辑（preflight.py:143-180 sync_recipe）。</li>
+    <li><strong>分叉（本地有独有提交）→ 自动 rebase（D1 已拍板，2026-09-28 用户定调：rebase 禁令已移除，必要时用 rebase 保持提交历史线性）</strong>：树净时 <code>git rebase &lt;远端tip&gt;</code>——只改写按定义未推送的本地独有提交，历史保持线性，取代 v2 时代因禁令而生的「reset --hard + format-patch」替代舞蹈；中途冲突 → <code>git rebase --abort</code> 全量自动回滚 + 失败行（跑前后仓库指纹一致）；树脏 → rebase 无法进行，直接失败行（先提交或 stash——stash 已解禁，但脚本不代做，沿用「树脏停下报告」纪律）。rebase 自动留 ORIG_HEAD + reflog 底。</li>
+    <li><strong>合流失败一律自动回滚现场</strong>（rebase --abort / merge --abort / ff 失败 git 本身自回滚），保证 sync 失败后仓库状态与跑之前一致——写状态的命令必须比只读的更干净地失败。</li>
+  </ul>
+
+  <h3>3.2 ship.commit 重写：编排不变，输出归零</h3>
+  <div class="flow">
+    内部 sync(齐平才继续)<span class="arr">→</span>闸门(auto=true 真跑, 静默)<span class="arr">→</span>算暂存计划(红线拦)<span class="arr">→</span>逐路径 add<br>
+    <span class="arr">→</span>commit -F 消息文件<span class="arr">→</span>ref 三处核对(静默)<span class="arr">→</span>消费即删消息文件(静默)<span class="arr">→</span>内联推送<span class="arr">→</span><span class="st">提交成功 &lt;hash&gt;</span>
+  </div>
+  <ul class="decide">
+    <li><strong>预检只跑一遍</strong>：现状 commit 阶段(--phase commit)与 push 阶段(--phase push)各跑一遍完整检查表，是 WARN 翻倍的根源。v3 没有检查表，push 复用同一套内部函数只做「落后核对」，不再重复任何输出。</li>
+    <li><strong>闸门静默通过</strong>：11 条闸门机制、配置、展开器（&lt;changed:&gt;/&lt;each:&gt;/&lt;skill-dir:&gt;/&lt;root&gt;）原样保留；全过时一行不打。闸门红 = 失败输出里给<strong>闸门名 + 末 20 行输出</strong>（现状行为保留，只是从检查表行变成失败块）。&lt;each:&gt; 无匹配 → 静默跳过，不再解释「不是闸门失效」。</li>
+    <li><strong>删除的检查项</strong>：上游核对（preflight.py:578-583——ahead/behind 判定早已走 ls-remote 真值，上游名纯属摆设）、平台关键词提示（preflight.py:676-677——改动面是否要跨平台复现是 agent 的判断，不是固定 WARN）、配置来源行（preflight.py:555）。</li>
+    <li><strong>顺带修复已入池 issue 26-09-28-0128</strong>：逐路径 <code>git add</code> 撞「已暂存的删除」——工作区里已不存在的路径改走 <code>git rm --cached -- &lt;path&gt;</code>（按文件存在性分流），重写 commit.py 时一并落掉，该 issue 在实施时认领关闭。</li>
+    <li><strong>保留的拒绝语义</strong>（失败行化）：拒批量 add（-A / . / *）、红线文件拒提交（config.yml / auto-qb-data/）、消息文件缺失（提示写到 .git/COMMIT_MSG_AI.txt）、无可提交改动。</li>
+  </ul>
+
+  <h3>3.3 ship.push / verify-ref</h3>
+  <ul class="decide">
+    <li><strong>ship.push</strong>（补推/重验）：ls-remote 核对齐平（落后时树必净——刚提交完——直接走同一套 sync 快进）→ 推主线（瞬时连接失败自动重试一次，保留）→ 核远端 ref == 本地 → <span class="mono">推送成功 &lt;hash&gt;</span>。</li>
+    <li><strong>镜像</strong>：仍自动尝试一次（保持 GitHub 新鲜度），但<strong>全程静默</strong>——成功不打、失败不打、没有镜像远端也不打（D2）。AGENTS.md「镜像失败只如实报告一次」口径随之修改。</li>
+    <li><strong>verify-ref</strong>：排障工具，保留任务入口；PASS 收成一行，FAIL 保留现有详细处置步骤（format-patch 留底 → update-ref 防 GC → reset --soft）。</li>
+  </ul>
+
+  <h3>3.4 preflight 公开任务移除（D3）</h3>
+  <p><span class="mono">my-commit-flow.preflight</span> 的全部价值（闸门执行、红线、落后核对）被 commit 内部化；独立入口只剩排障时让人困惑的第三条提交路径。处理：preflight.py 改名收编为共享模块 <span class="mono">_pipeline.py</span>（闸门引擎 + 占位符展开 + changed_files + 红线 + --init/--show-config），config.toml 删掉该任务。AGENTS.md 的 <span class="mono">my-commit-flow.preflight</span> 引用同步清理。</p>
+</section>
+
+<!-- ============================================================ S4 保住清单 -->
+<section>
+  <div class="sec-head"><span class="sec-no">04</span><h2>沉默 ≠ 没查 — 内部检查保全清单</h2></div>
+  <p class="sec-sub">重构最容易犯的错是连检查一起删。下表逐项声明去向；这是本计划的验收清单之一。</p>
+  <table>
+    <tr><th style="width:38%">内部检查 / 硬约束</th><th>去向</th></tr>
+    <tr><td>判落后只用 ls-remote 真值，绝不读 refs/remotes、不信 status -sb</td><td>原样保留（本环境 refs/remotes 写入会被静默丢弃，pitfalls/git/refs.md）</td></tr>
+    <tr><td>提交后 ref 三处核对（HEAD == refs/heads == loose/packed）</td><td>保留，静默；不一致 → 失败行 + 处置步骤</td></tr>
+    <tr><td>staged 数量暴增检测（分支 ref 被回退的信号，阈值 200）</td><td>保留 → 失败行（不许用 add -A "解决"）</td></tr>
+    <tr><td>红线 / warn_lines（config.yml、auto-qb-data/、想法.md…）</td><td>红线 → 拒绝 + 失败行；warn_lines 命中 → 见 D5</td></tr>
+    <tr><td>11 条闸门（fmt / test.quick / test.pkg / 索引自洽 / 坏链 / 冒烟 / skill 同步 / caps / 漂移）</td><td>机制与配置不动；静默通过，失败给闸门名 + 末 20 行</td></tr>
+    <tr><td>格式化闸门必须在暂存之前（fmt 会改文件，add 后要重暂存）</td><td>编排顺序保留</td></tr>
+    <tr><td>消息文件 .git/COMMIT_MSG_AI.txt 消费即删</td><td>保留，静默</td></tr>
+    <tr><td>推送瞬时失败自动重试一次；镜像只试一次</td><td>保留；镜像结果静默（D2）</td></tr>
+    <tr><td>PARTIAL（提交已落 / 推送未完）不许重提交，只补推</td><td>保留，第二行明说</td></tr>
+    <tr><td>Windows GBK 控制台 UTF-8 兜底（gitmoji 提交不再崩在打印）</td><td>原样保留</td></tr>
+    <tr><td>「先合并远端再收尾回写」顺序（治 baseline 必撞）</td><td>保留——commit 内部第一步就是 sync</td></tr>
+    <tr><td>退出码语义极简</td><td>全包统一 0 / 1（失败行自带原因，码表不复存在）</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ S5 引擎侧 -->
+<section>
+  <div class="sec-head"><span class="sec-no">05</span><h2>引擎侧 — 只做两件小事，都不碰摘要器</h2></div>
+  <table>
+    <tr><th style="width:14%">项</th><th>内容</th><th style="width:26%">改动面</th></tr>
+    <tr>
+      <td>E1</td>
+      <td><strong>去掉 ship 任务的 <span class="mono">risky = true</span></strong>（ship/config.toml）——[自证] 回显（run.py:57-62）由该标记触发，去掉后「将要执行: + 绝对路径」整段消失。risky 机制本身保留给未来真正的高危任务。</td>
+      <td>仅 config.toml，<strong>零引擎改动</strong></td>
+    </tr>
+    <tr>
+      <td>E2</td>
+      <td><strong>引擎退出码统一 0/1</strong>：run.py <span class="mono">FAILED = 3 → 1</span> + docstring 同步 + test_engine 断言更新。动机：失败输出已自解释，退出码通道不再承载语义，「Exit code 3 → 去查码表」的反射没有存在价值。已核实全库无任何脚本消费 rc=3。</td>
+      <td>run.py 1 行 + 测试，影响所有包（行为仅是失败码数值变化）</td>
+    </tr>
+    <tr>
+      <td>不做</td>
+      <td>RESULT/WHY/NEXT 协议机制（run.py:38, 234-241）在新契约下成为死代码，但它是 v2 刚落地的引擎公共设施、其它包未来可能用——<strong>保留不动</strong>（范围守恒：删死代码不解决本计划的任何痛点）。</td>
+      <td>无</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ============================================================ S6 待拍板 -->
+<section>
+  <div class="sec-head"><span class="sec-no">06</span><h2>拍板台 — D1–D5 全部拍板, 已落地</h2></div>
+  <ul class="decide">
+    <li><strong>D1 · sync 对「分叉」怎么合流？</strong> <span class="pill rec">已拍板 2026-09-28</span><br>
+      <strong>C. 自动 rebase，保持提交历史线性</strong>（用户定调：rebase 禁令已移除，必要时可用 rebase 保线性）：树净 → <span class="mono">git rebase &lt;远端tip&gt;</span>，只改写未推送的本地独有提交；冲突即 <span class="mono">rebase --abort</span> 自动回滚 + 失败行；树脏 → 失败行（先提交或 stash）。原推荐 A（merge commit，非线性）否决；v2 因禁令而生的「reset --hard + format-patch」替代舞蹈一并淘汰。</li>
+    <li><strong>D2 · 镜像输出</strong><br>
+      <span class="pill rec">已拍板 · 已落地</span> <strong>A. 全程静默</strong>（成功/失败/无远端都不提）——「镜像允许滞后就无需提」；AGENTS.md「失败只如实报告一次」口径同步删除。<br>
+      <span class="pill alt">B</span> 失败时保留一行（可发现 GitHub 长期失联）。</li>
+    <li><strong>D3 · preflight 公开任务</strong><br>
+      <span class="pill rec">已拍板 · 已落地</span> <strong>A. 移除</strong>（收编为 _pipeline.py 共享模块），列表里只剩 sync / commit / push / verify-ref 四个入口。<br>
+      <span class="pill alt">B</span> 保留为排障口（--verbose 出完整检查表）——多一个入口多一分被误用的概率。</li>
+    <li><strong>D4 · 引擎退出码统一 0/1（E2）</strong><br>
+      <span class="pill rec">已拍板 · 已落地</span> 1 行改动，消灭「Exit code 3」这个查码表钩子。<br>
+      <span class="pill alt">不做</span> 则失败时 harness 仍显示 Exit code 3（文本自解释后危害有限）。</li>
+    <li><strong>D5 · warn_lines 命中时（如 想法.md 进了暂存清单）</strong><br>
+      <span class="pill rec">已拍板 · 已落地</span> <span class="mono">⚠ 已包含: 想法.md —— 确认是有意的</span>（跟在「提交成功」后）。这是唯一的成功路径例外：静默提交用户个人文件的风险大于破一次「一行纪律」，且命中极罕见。<br>
+      <span class="pill alt">严格一行</span> 完全静默——风险是误提交永远无人发现。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ S7 迁移 -->
+<section>
+  <div class="sec-head"><span class="sec-no">07</span><h2>迁移路径 — 三步，每步独立可提交</h2></div>
+  <table>
+    <tr><th style="width:12%">步</th><th>内容</th></tr>
+    <tr>
+      <td>M1</td>
+      <td><strong>脚本与配置</strong>：preflight.py → <span class="mono">_pipeline.py</span>（闸门/展开/changed_files/红线/--init）；新增 <span class="mono">sync.py</span>；重写 <span class="mono">commit.py</span>（编排 + 一行契约 + issue 26-09-28-0128 修复）、<span class="mono">push.py</span>；verify_ref.py 收一行；config.toml 删 preflight 任务、ship 去 risky；测试重写（test_sync.py + 契约测试：成功输出 ≤2 行断言）。</td>
+    </tr>
+    <tr>
+      <td>M2</td>
+      <td><strong>文档回写</strong>：AGENTS.md（会话协议①改为一条命令 + 一行结果语义；提交节去 RESULT/preflight 口径、镜像改静默；「落后主线首选」句补 rebase 保线性口径；跑 doc.caps 查 8000 上限，预期净减）；memory-bank SKILL.md:15；conventions/collaboration.md 同步路径节；包 README.md 与 references/pipeline.md 重写（v3 流程 + 契约；其中「已经分叉…替代路径」的 reset --hard + format-patch 舞蹈整段替换为 rebase 口径）；pitfalls/git/push.md 措辞；kb.index 重建。</td>
+    </tr>
+    <tr>
+      <td>M3</td>
+      <td><strong>引擎微调（D4 拍板后）</strong>：run.py FAILED 3→1 + test_engine + docstring。</td>
+    </tr>
+  </table>
+
+  <h3>验证矩阵 — 临时 clone 场景测试</h3>
+  <p>在系统临时目录从本地仓库 <span class="mono">git clone</span> 出 throwaway 副本（远端指回本地 bare 仓库以模拟 push/fetch），<strong>不触碰任何其它工作 clone</strong>（跨仓库红线）：</p>
+  <table>
+    <tr><th style="width:26%">场景</th><th>期望</th></tr>
+    <tr><td>齐平 → sync</td><td><span class="mono">已同步 &lt;hash&gt;</span>，跑前后 HEAD/工作区指纹不变</td></tr>
+    <tr><td>纯落后 + 树净 → sync</td><td><span class="mono">同步成功 &lt;hash&gt;</span>，HEAD == 远端 tip</td></tr>
+    <tr><td>落后 + 树脏无重叠 → sync</td><td><span class="mono">同步成功 &lt;hash&gt;</span>，未暂存改动原样保留</td></tr>
+    <tr><td>落后 + 树脏重叠 → sync</td><td>失败行（含重叠原因与步骤指针），仓库状态与跑前一致</td></tr>
+    <tr><td>分叉可干净重放 → sync</td><td><span class="mono">同步成功 &lt;新hash&gt;</span>，历史线性（rebase 到远端 tip 上），提交内容不变</td></tr>
+    <tr><td>分叉同文件冲突 → sync</td><td><span class="mono">同步失败需解决冲突 本地&lt;x&gt; 远端&lt;y&gt;</span>，rebase --abort 后无残留 rebase 状态、指纹与跑前一致</td></tr>
+    <tr><td>分叉 + 树脏 → sync</td><td>失败行（rebase 需净树）：先提交或 stash 后重跑</td></tr>
+    <tr><td>离线 → sync</td><td><span class="mono">同步失败: 拿不到远端…</span>，退出码 1</td></tr>
+    <tr><td>红线文件在改动清单 → ship.commit</td><td><span class="mono">提交失败: 红线文件…</span>，零 git 写操作</td></tr>
+    <tr><td>闸门红（改 src 引入失败测试）→ ship.commit</td><td>失败块 = 闸门名 + 末 20 行，未产生提交</td></tr>
+    <tr><td>已暂存的删除 → ship.commit</td><td>提交成功（issue 26-09-28-0128 回归用例）</td></tr>
+    <tr><td>真机全流程</td><td>实施完成后等用户说「提交」，以真实一笔提交验收（含推送与镜像静默）</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ S8 token 账 -->
+<section>
+  <div class="sec-head"><span class="sec-no">08</span><h2>token 账 — 以用户实贴为基线</h2></div>
+  <table>
+    <tr><th>路径</th><th style="width:30%">现状（实测，用户实贴）</th><th style="width:26%">v3 目标</th><th>降幅</th></tr>
+    <tr><td>ship.commit 成功</td><td>原始 76 行（可见 15 + 略过 61），摘要后 ~16 行 ≈ 0.9 KB</td><td>2 行 ≈ 0.05 KB</td><td>≈ 95%</td></tr>
+    <tr><td>sync 失败态</td><td>10 行 ≈ 0.5 KB（另加引擎 Exit code 行）</td><td>失败 1-2 行 ≈ 0.08 KB</td><td>≈ 84%</td></tr>
+    <tr><td>sync 成功态</td><td>6 行 ≈ 0.35 KB（PASS 检查表 + 脚注）</td><td>2 行 ≈ 0.04 KB</td><td>≈ 89%</td></tr>
+    <tr><td>一次收尾（sync + commit）</td><td>≈ 1.4 KB 可见输出</td><td>≈ 0.1 KB</td><td>≈ 93%</td></tr>
+  </table>
+  <p>未计入的大头：WARN 引发的排障推理——实贴里 6 个「多余/这是什么」标注，每一个在真实会话里都是一轮查证。实施后以真实提交实测回填任务档案，替换本表估算。</p>
+</section>
+
+<!-- ============================================================ S9 风险 -->
+<section>
+  <div class="sec-head"><span class="sec-no">09</span><h2>风险与回退</h2></div>
+  <table>
+    <tr><th style="width:30%">风险</th><th>对策</th></tr>
+    <tr><td>sync 从只读变为写状态（fetch + 快进/rebase）</td><td>合流失败一律自动回滚现场（abort / git 自回滚）；验证矩阵含「跑前后指纹不变」断言；ff / merge / rebase 都是拦截层修复（2026-09-25）后已解禁的操作</td></tr>
+    <tr><td>分叉自动 rebase 改写本地提交 hash</td><td>只改写按定义未推送的独有提交（已推送的必在远端链上，不会被触及）；ORIG_HEAD + reflog 自动留底；冲突即 --abort 全量回滚；验证矩阵含「跑前后指纹一致」与「提交内容不变」断言</td></tr>
+    <tr><td>引擎退出码改动波及其它包</td><td>已核实无脚本消费 rc=3；仅 harness 显示的数字变化；独立成 M3 可单独回退</td></tr>
+    <tr><td>闸门静默后「跑没跑过」不可见</td><td>失败输出含闸门名与末 20 行（该路径可见性不降）；成功与否由「提交成功」背书——提交成功必然闸门全过，这正是编排合一的语义</td></tr>
+    <tr><td>回退</td><td>整个重构落在一笔提交内（M1-M3 可拆但同分支），<span class="mono">git revert</span> 即回 v2；包目录自包含，无外部状态</td></tr>
+  </table>
+</section>
+
+<footer>26-09-28-0157 · plan · status In Progress · D1–D5 全部拍板 · M1–M3 已落地(26-09-28 03:1x) · 待真机提交验收</footer>
+</div>
+</body>
+</html>
