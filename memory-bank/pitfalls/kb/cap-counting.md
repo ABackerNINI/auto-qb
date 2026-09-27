@@ -103,3 +103,6 @@
   12,144→12,118/12,200, 零信息损失); ②`CAP_POLICY` 上调是**最后手段**
   (动 `_common.py` 须同步 SKILL.md cap 表 + `test_skill_cap_table_matches_cap_policy` 守阵,
   且 cap 放水是单向棘轮)。
+- **复发**: 1 —— 2026-09-28 settings-categorize-logs 专题又触顶(12,226 > 12,200, 只超 26):
+  按处置①再压 gen_doc_map.py 头部两行(~52 字符)→12,194, 未动 cap。教训: 立档/补章节后
+  **提交前**先跑 kb.index + KB 守卫, 本轮拖到 ship.commit 闸门才红。

@@ -344,9 +344,10 @@ window.CONFIG_EDITOR = {
             const subs = this.cfgFlatten(f.fields, path, depth + 1, basePath);
             items.push({ type: "section", field: f, path: path, depth: depth, items: subs });
           } else if (f.open) {
-            // 平铺段(schema 声明 open, 如 日志/WEB UI/通知 这类短段): **不渲染折叠头**,
-            // 子字段以同级 depth 直接并入(2026-09-15 用户要求移除这三段的折叠;
-            // 旧 cfgGroupToggle 对 open 段写不出显式 false 的三态 bug 也因此不再触达渲染层)
+            // 平铺段(schema 声明 open): **不渲染折叠头**, 子字段以同级 depth 直接并入。
+            // 曾服务日志/WebUI/通知三短段(2026-09-15 用户要求平铺; 2026-09-28 三段并入「常规」
+            // 后改回成块展示, 不再声明 open) —— 现仅 hr_check.optional 段经 section 分支用 open 定初值,
+            // 本分支保留为 schema 的通用能力
             const subs = this.cfgFlatten(f.fields, path, depth, basePath);
             items.push(...subs);
           } else {
@@ -419,7 +420,7 @@ window.CONFIG_EDITOR = {
       return Array.isArray(path) ? path.join(".") : String(path);
     },
     /* 普通 object 段(group)展开/折叠: 三态 —— 用户点过以本地图为准; 未点过跟随 schema 声明
-     * (Field.open, 如 日志/WEB UI/通知 短段声明平铺不折叠), 两者都未定则缺省折叠 */
+     * (Field.open), 两者都未定则缺省折叠 */
     cfgGroupOpen(path, field) {
       const key = this.cfgPathKey(path);
       if (key in this.cfg.openGroups) return !!this.cfg.openGroups[key];

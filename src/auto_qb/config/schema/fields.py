@@ -96,7 +96,7 @@ class Field:
     group_of: str = ""
     risk: str = ""
     unit_default: str = ""
-    open: bool = False  # object 段缺省展开态(True = 不折叠, 如 日志/WEB UI/通知 这类短段)
+    open: bool = False  # object 段缺省展开态(True = 平铺不渲染折叠头; 现 schema 仅 hr_check 段在用)
 
 
 @dataclass(frozen=True)

@@ -2233,6 +2233,10 @@ def test_config_schema_endpoint(web_env):
     # 2026-09-26: 日志/WebUI/通知 三个短段并入 basic(设置页不再单列三张卡)
     assert [g["key"] for g in data["groups"]] == ["basic", "maintenance", "hr_check", "speed", "trackers", "rules"]
     assert [f["key"] for f in data["groups"][0]["fields"]][-3:] == ["log", "web", "notify"]
+    # 2026-09-28: 三段在「常规」页必须各自成块展示分类名(「常规/日志」而非并入「常规/常规」) ——
+    # 成块的前提是不声明 open(open 段被 cfgFlatten 平铺成无标题同级字段, 正是本次回归的根因)
+    for f in data["groups"][0]["fields"][-3:]:
+        assert f["kind"] == "object" and not f.get("open"), f["key"]
     assert {p["name"] for p in data["plugins"]["condition"]} >= {"size", "tags", "state", "freespace"}
     assert {p["name"] for p in data["plugins"]["action"]} >= {"add_tags", "checking", "reannounce"}
     # 热重载级别与 impact 同源(R 级字段前端需标"需重启")

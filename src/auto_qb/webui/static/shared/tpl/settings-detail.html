@@ -113,8 +113,8 @@
                 </template>
               </template>
 
-              <!-- 运行日志(2026-09-26 并入「常规」分区页尾, 不再单列首页卡/独立分区):
-                   等级/行数变更与刷新均手动触发, 不自动轮询; 打开常规分区时拉一次(config_hub.js hubGo) -->
+              <!-- 运行日志(2026-09-26 并入「常规」分区页尾, 不再单列首页卡/独立分区; 2026-09-28 起默认折叠):
+                   等级/行数变更与刷新均手动触发, 不自动轮询; 首次展开才拉一次(config_hub.js hubLogsToggle) -->
 
 
 
@@ -221,30 +221,33 @@
                   </div>
                 </template>
 
-                <!-- 运行日志: 随「常规」分区页尾渲染(hub.view === 'basic'), 不自动轮询 -->
+                <!-- 运行日志: 随「常规」分区页尾渲染(hub.view === 'basic'), 不自动轮询;
+                     默认折叠(2026-09-28), 首次展开才拉一次(config_hub.js hubLogsToggle) -->
                 <template v-if="hub.view === 'basic'">
                   <div class="hb-blk hb-cut">
                     <div class="hb-blk-hd">
                       <span class="bh-t">运行日志</span>
                       <span class="bh-n">{{ logs.file || '日志文件未配置(config.log.file)' }}</span>
                       <span class="bh-r">
-                        <select class="hb-select" v-model="logs.level" @change="loadLogs()">
+                        <select class="hb-select" v-model="logs.level" @change="hubLogsLoad()">
                           <option value="">全部级别</option>
                           <option value="INFO">INFO</option>
                           <option value="WARNING">WARNING</option>
                           <option value="ERROR">ERROR</option>
                         </select>
-                        <select class="hb-select" v-model.number="logs.num" @change="loadLogs()">
+                        <select class="hb-select" v-model.number="logs.num" @change="hubLogsLoad()">
                           <option :value="200">200 行</option>
                           <option :value="300">300 行</option>
                           <option :value="500">500 行</option>
                           <option :value="1000">1000 行</option>
                           <option :value="2000">2000 行</option>
                         </select>
-                        <button class="hb-btn ghost sm" :disabled="logs.loading" @click="loadLogs()">刷新</button>
+                        <button class="hb-btn ghost sm" :disabled="logs.loading" @click="hubLogsLoad()">刷新</button>
+                        <button class="hb-btn ghost sm" :aria-expanded="logs.open"
+                                @click="hubLogsToggle()">{{ logs.open ? '收起' : '展开' }}</button>
                       </span>
                     </div>
-                    <div style="padding:12px 14px">
+                    <div v-show="logs.open" style="padding:12px 14px">
                       <p v-if="logs.note" class="logs-note">{{ logs.note }}</p>
                       <pre v-if="logs.lines.length" class="hb-logs-pre">{{ logs.lines.join('\n') }}</pre>
                       <p v-else class="hb-hp">{{ logs.loading ? '正在加载日志…' : (logs.error || '日志文件暂无内容') }}</p>
