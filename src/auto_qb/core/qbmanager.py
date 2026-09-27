@@ -29,6 +29,7 @@ from typing import List, Optional
 from qbittorrentapi import APIConnectionError, Client
 
 from ..config import Config, WebConfig, load_config
+from ..infra import file_access
 from ..infra.errors import AutoQbError
 from ..infra.locking import SingleInstanceLock
 from .mixins import (
@@ -181,6 +182,10 @@ class QbManager(
     def __init__(self, config_path: str, config: Config = None, no_lock: bool = False):
         self.config_path = config_path
         self.config = config or load_config(config_path)
+        # 文件访问层单点(plan 26-09-27-1407): 下载数据目录的全部本地访问经此包装;
+        # fs 段 R 级热重载 —— 单例在此按配置构建一次, 运行期不切换
+        file_access.init_file_access(self.config)
+        self._fs_path_map_checked = False  # 映射自检一次性闸门(首轮全量同步后跑, 见 _refresh_torrents)
         self._setup_logging()
         # 种子信息数据层: 增量同步 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
         # 每 main_tick 只拉变化部分(sync/maindata)后, 本 tick 内所有读取操作都只通过 self.store 接口访问
@@ -736,6 +741,11 @@ class QbManager(
         added, removed = self.store.apply_sync(self.api)
         if self.store.need_validate:
             self._validate_torrent_schema(self.store.validate_sample)
+            # fs.path_map 映射自检(非 fail-fast, 只记日志): 首轮全量同步后跑一次 ——
+            # 挂载点存在性/可写探测 + save_path 命中率要等 store 有种子才有意义
+            if not self._fs_path_map_checked:
+                self._fs_path_map_checked = True
+                file_access.path_map_selfcheck([rec.save_path for rec in self.store.by_hash.values()])
         # 分组视图过期由 store.view_changed 精确驱动(仅视图字段/成员变化时置脏), 不再每轮无条件置脏
         # 种子集变化(新增/删除) -> 搜索索引需反映新/删种子, 标记脏(Web 搜索时重建)
         if added or removed:

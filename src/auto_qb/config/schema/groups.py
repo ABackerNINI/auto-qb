@@ -278,6 +278,28 @@ GROUPS: Tuple[Group, ...] = (
                 )
             ),
             Field(
+                "fs",
+                "文件访问(容器部署)",
+                "object",
+                default=None,
+                optional=True,
+                help="下载目录路径映射(fs.path_map, plan 26-09-27-1407): 容器部署且挂载点与 qB 报回的保存路径不一致时配置; "
+                "宿主直跑 / Linux 同路径挂载留空 = 完全现状。修改后需重启进程才生效",
+                fields=(
+                    Field(
+                        "path_map",
+                        "路径映射表",
+                        "text",
+                        default="",
+                        help="在 config.yml 按 YAML 列表编辑(WebUI 暂不提供逐条编辑): 每条 {from: qB 报回的宿主路径前缀, "
+                        "to: 本容器挂载点}, 如 from: \"D:/Downloads\" / to: \"/mnt/downloads\"。配好映射后缺文件扫描/跳检前置/"
+                        "exists()/disk_*()/目录浏览恢复可用, 详见 docs/deployment.md §11.5; 映射 miss 一律「不可判定」,"
+                        "绝不误判「不存在」",
+                        risk="修改后需重启进程才生效",
+                    ),
+                )
+            ),
+            Field(
                 "add_episode_tags",
                 "集数标签",
                 "object",

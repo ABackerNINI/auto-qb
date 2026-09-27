@@ -9,6 +9,7 @@
 
 ## In Progress
 
+- [26-09-27-1407] [计划 · 文件访问层包装 + 下载目录只读挂载 + 路径映射(docker 兼容)](26-09-27-1407-plan-docker-fs-wrapper-pathmap.html) — `docker-deploy`
 - [26-09-27-1232] [计划 · 暂时移除不成熟的限速统计设计 (upload_size 四条件 + begin_round)](26-09-27-1232-plan-remove-upload-stats.html) — `remove-upload-stats`
 - [26-09-26-0031] [HR 取数代理 · 选项页风格选型(三选一)](26-09-26-0031-plan-hr-ext-options-style.html) — `backend-partial-hr-verify`
 - [26-09-25-2241] [auto-qb · Docker 部署方案](26-09-25-2241-plan-docker-deploy.html) — `docker-deploy`

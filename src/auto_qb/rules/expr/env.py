@@ -14,14 +14,12 @@
 昂贵标记(expensive): 有系统调用 / API 调用 / 遍历全库的取值, 求值侧按 ctx 缓存(见 eval.py),
 并靠 and/or 短路避免无谓调用。时间类名字也标昂贵 —— 缓存后同一规则执行内时间一致。
 """
-import os
-import shutil
 from dataclasses import dataclass, fields as dc_fields
 from datetime import datetime
 from typing import Any, Callable, Dict, Tuple
 
 from ...core import curves
-from ...infra import utils
+from ...infra import file_access, utils
 from ...torrents import TorrentRecord
 from ...torrents.compat import _SNAPSHOT_FIELDS
 from .errors import ExprError, ExprSyntaxError
@@ -197,7 +195,9 @@ def _traffic(period: str, index: int):
 def _freespace(ctx, args):
     path = str(args[0])
     try:
-        return shutil.disk_usage(path).free
+        return file_access.get_file_access().disk_usage(path).free
+    except file_access.FileAccessError as e:
+        raise ExprError(str(e)) from e  # 映射 miss: 「不可判定」显式报错(报告 §05), 不静默
     except (OSError, ValueError) as e:
         raise ExprError(f"磁盘不可用: '{path}': {e}") from e
 
@@ -205,7 +205,9 @@ def _freespace(ctx, args):
 def _disk_total(ctx, args):
     path = str(args[0])
     try:
-        return shutil.disk_usage(path).total
+        return file_access.get_file_access().disk_usage(path).total
+    except file_access.FileAccessError as e:
+        raise ExprError(str(e)) from e  # 映射 miss: 「不可判定」显式报错(报告 §05), 不静默
     except (OSError, ValueError) as e:
         raise ExprError(f"磁盘不可用: '{path}': {e}") from e
 
@@ -213,13 +215,20 @@ def _disk_total(ctx, args):
 def _disk_used(ctx, args):
     path = str(args[0])
     try:
-        return shutil.disk_usage(path).used
+        return file_access.get_file_access().disk_usage(path).used
+    except file_access.FileAccessError as e:
+        raise ExprError(str(e)) from e  # 映射 miss: 「不可判定」显式报错(报告 §05), 不静默
     except (OSError, ValueError) as e:
         raise ExprError(f"磁盘不可用: '{path}': {e}") from e
 
 
 def _exists(ctx, args):
-    return os.path.exists(str(args[0]))
+    """存在性: 经文件访问层(容器映射三态; Local 实现顺带补齐 Windows 长路径前缀语义,
+    原先裸 os.path.exists 对 >MAX_PATH 路径恒 False)"""
+    value = file_access.get_file_access().exists(str(args[0]))
+    if value is file_access.UNDETERMINED:
+        raise ExprError(f"路径不可判定(未命中 fs.path_map 映射): '{args[0]}'")
+    return value
 
 
 def _file_count(ctx, args):

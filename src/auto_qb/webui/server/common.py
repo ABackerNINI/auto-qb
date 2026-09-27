@@ -14,7 +14,8 @@ from urllib.parse import quote
 
 from fastapi import HTTPException
 
-from ...infra.utils import decode_group_key, open_path  # noqa: F401  (open_path 供 open-path 端点经 common.open_path 调用 —— patch 地址稳定, test_api_open_path_endpoint 钉此处)
+from ...infra.file_access import get_file_access
+from ...infra.utils import decode_group_key
 
 logger = logging.getLogger("auto_qb.web")
 
@@ -32,6 +33,17 @@ def app_version() -> str:
     """
     from auto_qb import __version__
     return __version__
+
+
+def open_path(path: str, select: bool = False) -> None:
+    """经文件访问层打开路径(plan 26-09-27-1407)。
+
+    原先是 `from infra.utils import open_path` 的再导出; 改走包装层后容器(Mapped)实现
+    抛 NotSupported -> open-path 端点语义化 501, 宿主直跑(Local)行为不变。
+    ❗保留本模块入口名: open-path 端点与 test_api_open_path_endpoint 都以
+    `common.open_path` 为 patch 地址(拆分时定下的稳定点), 不动。
+    """
+    get_file_access().open_path(path, select=select)
 
 
 def config_backup_path(manager) -> str:

@@ -28,6 +28,7 @@ from .rules import (
 from .sections import (
     HR_CHECK_MODES,
     HR_CHECK_UNKNOWN_POLICIES,
+    KNOWN_FS_KEYS,
     KNOWN_GROUPING_KEYS,
     KNOWN_HR_CHANNEL_KEYS,
     KNOWN_HR_CHECK_KEYS,
@@ -49,6 +50,7 @@ __all__ = [
     "KNOWN_LOG_KEYS",
     "KNOWN_QBITTORRENT_KEYS",
     "KNOWN_GROUPING_KEYS",
+    "KNOWN_FS_KEYS",
     "KNOWN_WEB_KEYS",
     "KNOWN_NOTIFY_KEYS",
     "NOTIFY_CHANNELS",

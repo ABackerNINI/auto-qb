@@ -166,6 +166,7 @@ uv run auto-qb --tray
 ### Docker 部署
 
 不想装 Python 环境也可以用 Docker:`docker compose up -d --build` 一条命令起服务,状态跨重启续接。
+挂载下载目录并配置 `fs.path_map` 可在容器里恢复缺文件扫描 / 跳检前置 / 目录浏览等能力(Windows 宿主也支持)。
 构建 / 配置 / 升级 / 排障见 **[部署文档](docs/deployment.md)**。
 
 ## 命令行参数

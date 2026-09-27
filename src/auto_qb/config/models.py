@@ -270,6 +270,29 @@ class GlobalSpeedLimitCurve:
     enabled: bool = True  # False = 整体停用(任务短路: 不读 dat 不写 qB, 不按曲线调档)
 
 
+@dataclass(frozen=True)
+class PathMapEntry:
+    """fs.path_map 单条映射(容器部署): 逻辑空间前缀 -> 容器挂载点
+
+    src: qB 报回的宿主保存路径前缀(YAML 键 `from`, 如 "D:/Downloads")
+    dst: 本容器的挂载点(YAML 键 `to`, 如 "/mnt/downloads", 对应 compose -v ...:/mnt/downloads)
+    """
+    src: str
+    dst: str
+
+
+@dataclass
+class FsConfig:
+    """文件访问(fs 段, plan 26-09-27-1407): 下载数据目录的容器部署路径映射
+
+    path_map: 映射表; 空(默认) = 完全现状(宿主直跑 / Linux 同路径挂载), 保守默认。
+    非空时文件访问层切换为 Mapped 实现: qB 报回的宿主路径前缀译成容器挂载路径再做
+    syscall(映射 miss 一律「不可判定」, 绝不判「不存在」—— 见 infra/file_access.py)。
+    热重载 R 级(与 data_dir 同档): 修改后需重启进程。
+    """
+    path_map: tuple = ()  # Tuple[PathMapEntry, ...]
+
+
 @dataclass
 class Config:
     """配置聚合根: 全字段默认(= Config() 即全默认实例), 由 load_config 按 YAML 覆盖构造"""
@@ -307,6 +330,8 @@ class Config:
     delete_tags_if_has_no_torrents: List[str] = field(default_factory=list)
 
     grouping: GroupingConfig = field(default_factory=GroupingConfig)  # 种子分组管理(辅种管理)
+
+    fs: FsConfig = field(default_factory=FsConfig)  # 文件访问(容器部署路径映射, 空 = 现状)
 
     web: WebConfig = field(default_factory=WebConfig)  # WEB UI(辅种管理)
 

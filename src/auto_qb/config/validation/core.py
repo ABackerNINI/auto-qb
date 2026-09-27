@@ -24,6 +24,7 @@ KNOWN_CONFIG_KEYS = {
     "delete_tags",
     "delete_tags_if_has_no_torrents",
     "grouping",
+    "fs",
     "notify",
     "web",
     "hr_check",
@@ -155,6 +156,7 @@ def validate_config(data) -> List[str]:
     from .rules import _validate_rules
     from .sections import (
         _validate_add_episode_tags,
+        _validate_fs,
         _validate_global_hr,
         _validate_grouping,
         _validate_hr_check,
@@ -225,6 +227,7 @@ def validate_config(data) -> List[str]:
     _validate_qbittorrent(cfg.get("qbittorrent"), errors)
     _validate_global_hr(cfg.get("hr"), errors)
     _validate_grouping(cfg.get("grouping"), errors)
+    _validate_fs(cfg.get("fs"), errors)
     _validate_notify(cfg.get("notify"), errors)
     _validate_web(cfg.get("web"), errors)
     _validate_hr_check(cfg.get("hr_check"), errors)

@@ -32,7 +32,7 @@ from typing import Any, Dict, Optional
 from qbittorrentapi import Client
 
 from ...config import Config
-from ...infra import utils
+from ...infra import file_access, utils
 from ...torrents import TorrentStore, TorrentRecord
 
 logger = logging.getLogger(__name__)
@@ -245,15 +245,22 @@ class GroupingMixin:
         self._missing_scanned_keys.add(key)
 
         logger.debug(f"辅种组({len(members)}个) | 检查文件丢失(代表种: {rep.log_repr})")
+        fa = file_access.get_file_access()
         missing = False
         for fname, fsize in sizes.get(rep.hash, {}).items():
-            full_path = utils.add_long_path_prefix_for_win(os.path.normpath(os.path.join(rep.save_path, fname)))
-            if not os.path.exists(full_path):
+            full_path = os.path.normpath(os.path.join(rep.save_path, fname))
+            exists = fa.exists(full_path)
+            if exists is file_access.UNDETERMINED:
+                # 映射 miss: 存在性不可判定 —— 跳过该组, 不暂停不打标(报告 §05 红线:
+                # 配错映射时宁可功能退化, 不能照常返回 False 重演误暂停事故)
+                logger.warning(f"辅种组 | 路径不可判定: '{full_path}'(未命中 fs.path_map 映射), 跳过本组缺文件扫描")
+                return
+            if not exists:
                 logger.warning(f"辅种组 | 文件缺失: '{full_path}'")
                 missing = True
                 break
             try:
-                if os.path.getsize(full_path) != fsize:
+                if fa.getsize(full_path) != fsize:
                     logger.warning(f"辅种组 | 文件大小不一致: '{full_path}', 期望 {fsize}")
                     missing = True
                     break

@@ -17,6 +17,7 @@ from .models import (
     AddEpisodeTagsConfig,
     Config,
     CurvePoint,
+    FsConfig,
     GlobalSpeedLimitCurve,
     GroupingConfig,
     HRRule,
@@ -24,6 +25,7 @@ from .models import (
     HrCheckConfig,
     LoggingConfig,
     NotifyConfig,
+    PathMapEntry,
     SiteHrCheckConfig,
     WebConfig,
     PeriodCurve,
@@ -201,6 +203,21 @@ def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
             _get(spec, "max_torrents_per_hour", None, int) if "max_torrents_per_hour" in spec else None
         ),
     )
+
+
+def load_fs_config(spec) -> FsConfig:
+    """解析 config.fs 段(仅转换, 结构与值合法性由 validate_config._validate_fs 保证)
+
+    path_map: list[{from: 宿主路径前缀, to: 容器挂载点}] -> tuple[PathMapEntry, ...]
+    """
+    d = FsConfig()
+    if not isinstance(spec, dict):
+        return d
+    entries = [
+        PathMapEntry(src=str(item["from"]).strip(), dst=str(item["to"]).strip())
+        for item in (spec.get("path_map") or [])
+    ]
+    return FsConfig(path_map=tuple(entries))
 
 
 def load_tracker_config(
@@ -500,6 +517,7 @@ def load_config(config_path: str) -> Config:
         delete_tags=delete_tags,
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,
         grouping=load_grouping_config(_get(cfg, "grouping", {})),
+        fs=load_fs_config(_get(cfg, "fs", {})),
         notify=load_notify_config(_get(cfg, "notify", {})),
         web=load_web_config(_get(cfg, "web", {})),
         hr_check=hr_check,

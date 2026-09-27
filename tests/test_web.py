@@ -174,6 +174,7 @@ import pytest
 
 from auto_qb import __version__
 from auto_qb.config.models import HrCheckConfig
+from auto_qb.infra import file_access
 from auto_qb.infra.utils import decode_group_key, encode_group_key
 from auto_qb.webui import create_app
 
@@ -3843,7 +3844,9 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
     ⚠ 测的是**路由**而不是平台效果: 真 Windows 行为在 Linux CI 上无法复现(平台固定约定见
     testing/file-conventions.md), 故宿主上前缀是恒等(前缀对 POSIX 路径无意义); 前缀本身的
     正确性与打开层分支另由 `test_exists_dir_file_apply_long_path_prefix` /
-    `test_open_path_windows_*` 覆盖。
+    `test_open_path_windows_*` 覆盖。26-09-27: 前缀单点收编进文件访问层(infra/file_access,
+    plan 26-09-27-1407) —— spy 地址随单点迁到 `auto_qb.infra.utils.add_long_path_prefix_for_win`,
+    断言意图不变(全部本地 syscall 过单点)。
     """
     from auto_qb.infra.utils import add_long_path_prefix_for_win as real_prefix
 
@@ -3862,7 +3865,7 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
         calls.append(p)
         return real_prefix(p)
 
-    monkeypatch.setattr("auto_qb.webui.server.routes.fs.add_long_path_prefix_for_win", spy)
+    monkeypatch.setattr("auto_qb.infra.utils.add_long_path_prefix_for_win", spy)
 
     # ① 目录浏览
     assert client.get("/api/fs/dirs", headers=auth, params={"path": norm(root)}).status_code == 200
@@ -3881,13 +3884,16 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
 def test_fs_path_helpers_strip_long_path_prefix_before_compare():
     """`_bare` / `_fs_real`: **比较前必须剥掉 `\\\\?\\` 前缀** —— 否则同一条路径的两种写法被判"越界"
 
-    实测后果(Windows 真机): `os.scandir(_fs(target))` 给出的 `entry.path` **带前缀**, 而允许根
+    实测后果(Windows 真机): `os.scandir` 家族给出的 entry 路径**带前缀**, 而允许根
     不带 ⇒ `_within_roots` 恒 False ⇒ **子目录被全部过滤掉**(目录树恒空)。
     `os.path.realpath` 是否保留前缀**与路径长度有关**(实测短路径保留、长路径剥掉), 不能依赖它,
     故必须在比较前显式剥掉。
 
     本条是纯路径归一, **与宿主平台无关** ⇒ Linux CI 上也守得住(这正是把三个 helper 提到模块级
     而不是留在 `build_router` 闭包里的原因)。
+    26-09-27: 前缀剥离/加前缀单点迁入文件访问层(infra/file_access, plan 26-09-27-1407),
+    `_fs` 帮手随之删除(包装层内部自理) —— 剥前缀契约改在 file_access 单点断言, `_bare`
+    保留薄委托供路由侧钉住。
     """
     from auto_qb.webui.server.routes import fs as fs_mod
 
@@ -3895,10 +3901,12 @@ def test_fs_path_helpers_strip_long_path_prefix_before_compare():
     assert fs_mod._bare("\\\\?\\" + bare) == bare
     assert fs_mod._bare(bare) == bare, "无前缀原样返回"
     assert fs_mod._bare("\\\\?\\UNC\\server\\share") == "\\\\server\\share", "UNC 形态还原"
-    # 带前缀与不带前缀必须归一到同一个可比较形式
+    # 带前缀与不带前缀必须归一到同一个可比较形式(_fs_real 委托包装层, 内部先剥再规范化)
     assert fs_mod._fs_real("\\\\?\\" + bare) == fs_mod._fs_real(bare)
-    # _fs 幂等: 已是带前缀形态再传进去不得叠加 —— path_normalize 会把 `\\?\` 折坏成 `/?/`
-    assert fs_mod._fs(fs_mod._fs(bare)) == fs_mod._fs(bare)
+    # 前缀单点幂等: 已是带前缀形态再进包装层不得叠加 —— path_normalize 会把 `\\?\\` 折坏成 `/?/`
+    fa = file_access.LocalFileAccess()
+    assert fa._pref(fa._pref(bare)) == fa._pref(bare)
+    assert file_access._norm_logical(file_access._norm_logical("\\\\?\\" + bare)) == file_access._norm_logical(bare)
 
 
 # ---------- Web 命令执行(主循环侧 _drain_web_commands) ----------

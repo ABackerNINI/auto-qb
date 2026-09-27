@@ -15,6 +15,10 @@ services:
     volumes:
       - ./config:/config # config.yml 所在; 必须可写(Web UI 保存写回 + 自动 .bak, 挂只读会废掉配置能力)
       - auto-qb-data:/data # data_dir: state.json / 单实例锁 / 日志 / web.token / hr/ / 跳检备份
+      # 下载目录挂载示例(plan 26-09-27-1407): 配合 config.yml 的 fs.path_map(样例见 docker/config.example.yml)。
+      # Windows 宿主(Docker Desktop 部署前提: Settings → Resources → File Sharing 须包含该盘, WSL2 后端默认可用):
+      # - D:\Downloads:/mnt/downloads:ro   # 默认 :ro 即可救回缺文件扫描/跳检前置/exists()/disk_*()/目录浏览; 要「新建文件夹」才改 :rw
+      # Linux 宿主最简做法是同路径挂载(免配 fs.path_map): - /volume1/downloads:/volume1/downloads:ro
     # qB 跑在 Linux 宿主机时, 容器内访问 host.docker.internal 靠这条; Docker Desktop(Windows/macOS)自带, 免
     extra_hosts:
       - "host.docker.internal:host-gateway"

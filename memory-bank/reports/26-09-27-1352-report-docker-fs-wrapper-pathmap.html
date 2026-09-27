@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="docker-deploy">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-27-1352">
+<meta name="doc-updated" content="26-09-27-1352">
+<meta name="doc-refs" content="memory-bank/plans/26-09-27-1407-plan-docker-fs-wrapper-pathmap.html,memory-bank/plans/26-09-25-2241-plan-docker-deploy.html,memory-bank/pitfalls/ops/docker-host-features.md">
+<title>报告 · 「文件访问层包装 + 下载目录只读挂载 + 路径映射」可行性验证</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f0f0f;
+    --ink: #f0f0f0;
+    --ink-2: #b8b8b2;
+    --ink-3: #8a8a84;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-soft: rgba(255, 255, 255, 0.05);
+    --accent: #6fc7b6;
+    --accent-dim: rgba(111, 199, 182, 0.14);
+    --warn: #d8a657;
+    --bad: #e07a6a;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+    --sans: "Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15.5px; line-height: 1.62; -webkit-font-smoothing: antialiased; }
+  .canvas { max-width: 1120px; margin: 0 auto; padding: 0 48px 96px; }
+  .measure { max-width: 820px; }
+  .cover { padding: 80px 0 48px; border-bottom: 1px solid var(--line); }
+  .cover .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.09em; color: var(--accent); text-transform: uppercase; }
+  .cover h1 { font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin: 18px 0 14px; }
+  .cover .sub { font-size: 16.5px; color: var(--ink-2); max-width: 720px; }
+  .cover .meta { margin-top: 34px; display: flex; gap: 40px; flex-wrap: wrap; }
+  .cover .meta div { font-size: 12.5px; color: var(--ink-3); }
+  .cover .meta b { display: block; font-family: var(--mono); font-size: 13px; font-weight: 400; color: var(--ink-2); margin-top: 3px; }
+  main section { margin-bottom: 64px; padding-top: 40px; }
+  .folio { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.08em; margin-bottom: 10px; }
+  main h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+  main h3 { font-size: 16.5px; font-weight: 600; margin: 28px 0 10px; }
+  main p { color: var(--ink-2); margin-bottom: 13px; }
+  main p strong, main li strong { color: var(--ink); font-weight: 590; }
+  main ul, main ol { padding-left: 20px; margin-bottom: 13px; }
+  main li { color: var(--ink-2); margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 0.86em; background: rgba(255,255,255,0.055); padding: 1.5px 5px; border-radius: 3px; color: var(--ink); }
+  pre { background: rgba(255,255,255,0.04); border: 1px solid var(--line-soft); border-radius: 6px; padding: 16px 18px; overflow-x: auto; margin: 16px 0; }
+  pre code { background: none; padding: 0; font-size: 12.8px; line-height: 1.55; color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 22px; font-size: 13.5px; }
+  th { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 400; text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); vertical-align: top; }
+  td .n, .num { font-family: var(--mono); }
+  .ok { color: var(--accent); font-weight: 590; }
+  .no { color: var(--bad); font-weight: 590; }
+  .part { color: var(--warn); font-weight: 590; }
+  .verdict { border: 1px solid var(--accent-dim); background: rgba(111, 199, 182, 0.06); padding: 18px 22px; margin: 18px 0 8px; }
+  .verdict b { color: var(--accent); }
+  .verdict p { margin-bottom: 8px; }
+  .verdict.warn { border-color: rgba(216, 166, 87, 0.35); background: rgba(216, 166, 87, 0.06); }
+  .verdict.warn b { color: var(--warn); }
+  .note { border-left: 1px solid var(--line); padding: 2px 0 2px 18px; margin: 16px 0; color: var(--ink-3); font-size: 13.5px; }
+  .note b { color: var(--ink-2); font-weight: 590; }
+  .colophon { border-top: 1px solid var(--line); padding-top: 24px; font-size: 12.5px; color: var(--ink-3); }
+  .colophon .row { display: flex; gap: 48px; flex-wrap: wrap; }
+  .colophon b { color: var(--ink-2); font-weight: 590; }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+<header class="cover">
+  <div class="kicker">Report · docker-deploy</div>
+  <h1>「文件访问层包装 + 下载目录只读挂载 + 路径映射」可行性验证</h1>
+  <p class="sub">承接 2026-09-26 的容器化功能影响面分析(deployment.md §11 / pitfalls/ops/docker-host-features.md), 对拟定方案的救回能力做逐触点代码级验证。只分析, 未改代码。</p>
+  <div class="meta">
+    <div>Added<b>2026-09-27 13:52</b></div>
+    <div>依据<b>src/ 全量触点检索 + 既有实测记录</b></div>
+    <div>状态<b>Done(快照)</b></div>
+    <div>专题<b>docker-deploy</b></div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ 01 结论 ============ -->
+<section id="verdict">
+  <div class="folio">01 / 结论</div>
+  <h2>结论: 方案成立, 是当前唯一能同时救回 A 类能力并打通 Windows 宿主的路径; 但有 1 个必须处理的坑和 2 条安全红线</h2>
+  <div class="verdict">
+    <p><b>✅ 成立。</b>「包装层 + 只读挂载 + 路径映射」能救回 <strong>§11 矩阵里全部 A 类(宿主路径不可见)只读触点</strong>: 缺文件扫描、跳检前置检查、规则 <code>exists()</code> / <code>disk_*()</code>、<code>freespace</code> 条件、目录浏览。其中「缺文件扫描」是唯一会写坏 qB 的一条, 救回它的安全收益最大。</p>
+    <p><b>✅ 推翻一条旧结论。</b>§11.5 写的「Windows 宿主无解」只在「同路径挂载」方案下成立。引入<strong>映射层</strong>后, Windows 宿主有解: <code>-v D:\Downloads:/mnt/downloads</code> + 映射 <code>D:/Downloads → /mnt/downloads</code>。这是本方案相对 §11.5 的核心增量。</p>
+    <p><b>❌ 救不回的维持原判:</b> 打开文件夹(缺 xdg-open + 无文件管理器, B/C 类)、桌面通知、托盘、时区/网络身份(D 类)与映射层无关, 处置不变。</p>
+    <p><b>⚠️ 两个必须写进设计的前提:</b> ①包装层必须做到<strong>「逻辑路径进、逻辑路径出」</strong>——映射只发生在 syscall 边界, 否则组 key / 规则匹配 / 回传 qB 的路径全部错位(§04); ②映射 miss 时<strong>「宁可报不可判定, 不可判缺失」</strong>——映射配错不能复刻「误暂停整组」事故(§05)。</p>
+    <p><b>「/mnt/?」的回答:</b> 挂载点叫什么不重要(映射表消化任意前缀), 建议固定约定如 <code>/mnt/downloads</code>; 若宿主是 Linux 且能同路径挂载, §11.5 的零代码方案仍然更优, 映射层是给 Windows 宿主与异路径部署的通用解(§06)。</p>
+  </div>
+</section>
+
+<!-- ============ 02 前提验证 ============ -->
+<section id="premise">
+  <div class="folio">02 / 前提验证</div>
+  <h2>「下载目录目前只读、其它操作都走 qB」—— 前提成立</h2>
+  <div class="measure">
+    <p>对 <code>src/</code> 全量检索确认, 程序对<strong>下载目录</strong>(qB 报回的 <code>save_path</code> / <code>content_path</code> 派生路径)的全部本地访问只有 4 类, <strong>读为主, 唯一的写是 WebUI 新建文件夹</strong>:</p>
+    <table>
+      <tr><th>访问类型</th><th>调用点</th><th>说明</th></tr>
+      <tr><td><span class="ok">只读</span> 存在性/大小</td><td class="n">grouping.py:250-256 · checking.py:25-29 · expr/env.py:221</td><td><code>os.path.exists</code> + <code>os.path.getsize</code>, 不打开文件内容</td></tr>
+      <tr><td><span class="ok">只读</span> 目录列举/磁盘</td><td class="n">routes/fs.py:128-136 · expr/env.py:197-219 · conditions.py:252</td><td><code>os.scandir</code> / <code>shutil.disk_usage</code></td></tr>
+      <tr><td><span class="no">写</span> 新建目录</td><td class="n">routes/fs.py:174</td><td><code>os.mkdir</code> —— 全项目对下载目录<strong>唯一</strong>的本地写</td></tr>
+      <tr><td><span class="no">外部进程</span></td><td class="n">infra/utils.py:627 open_path · checking.py:178 _run_custom_check</td><td>起子进程, 不直接读写盘</td></tr>
+    </table>
+    <p>其余所有路径访问都派生自 <code>data_dir</code>(state / 锁 / 日志 / token / HR / 跳检备份 / 配置 .bak), 在容器里落 <code>/data</code> <code>/config</code>, 与本方案无关 —— 与「包装范围 = 仅下载数据目录」的口径互洽。</p>
+    <p><strong>凡是要改动 qB 侧数据的动作</strong>(暂停/标签/分类/限速/移动/删除/重加种/<code>set_location</code>(qbapi.py:152)/<code>edit_category</code>(qbapi.py:292)/导出 .torrent)<strong>全部经 qB API</strong>, qB 自己是路径的裁判 —— 这些调用点必须继续使用 qB 报回的原始宿主路径字符串, 见 §04。</p>
+    <div class="note"><b>推论:</b> 「下载目录只读挂载」的前提成立 —— <code>:ro</code> 覆盖除「新建文件夹」外的全部触点; 若放弃 #4(新建文件夹), 容器部署可以永远保持 <code>:ro</code>, 与「所有其它操作都通过 qB」的既有设计完全一致。</div>
+  </div>
+</section>
+
+<!-- ============ 03 逐触点判定 ============ -->
+<section id="matrix">
+  <div class="folio">03 / 逐触点判定</div>
+  <h2>方案实施后, §11 矩阵各项的预期状态</h2>
+  <table>
+    <tr><th>#</th><th>功能(§11 编号)</th><th>现在</th><th>包装+映射后</th><th>:ro 够吗</th></tr>
+    <tr><td class="n">6</td><td><strong>缺文件扫描</strong>(grouping.py:250)</td><td class="no">❌ 误暂停+MISSING</td><td class="ok">✅ 救回(exists/getsize 走映射, 结果恢复真值)</td><td>够</td></tr>
+    <tr><td class="n">7</td><td>跳检前置 check_filelist(checking.py:25)</td><td class="no">❌ 恒"文件缺失", 跳检永不执行</td><td class="ok">✅ 救回(同上)</td><td>够</td></tr>
+    <tr><td class="n">8</td><td>规则 <code>exists()</code>(env.py:221)</td><td class="no">⚠️ 恒 False 静默</td><td class="ok">✅ 救回</td><td>够</td></tr>
+    <tr><td class="n">9</td><td><code>disk_total/used/freespace</code>(env.py:197-219 · conditions.py:252)</td><td class="no">❌ ExprError</td><td class="ok">✅ 救回(bind mount 即同一块盘, 数值正确; Windows 宿主 WSL2/drvfs 挂载的数值需实测确认)</td><td>够</td></tr>
+    <tr><td class="n">3</td><td>目录浏览 <code>/api/fs/dirs</code>(fs.py:103)</td><td class="no">❌ 403/404</td><td class="part">⚠️ 可救回, 但必须解决双路径空间混用, 见 §04(否则复刻"目录树恒空")</td><td>够</td></tr>
+    <tr><td class="n">4</td><td>新建文件夹 <code>/api/fs/mkdir</code>(fs.py:174)</td><td class="no">❌ 403</td><td class="part">⚠️ 挂载改 <code>:rw</code> 才可救; 建议 <code>:ro</code> 保持并在 docker 包装层语义化拒绝(§06)</td><td><span class="no">不够</span>(唯一写)</td></tr>
+    <tr><td class="n">1/2</td><td>打开目标文件夹(fs.py:180 → utils.open_path:627)</td><td class="no">❌ 404 → 挂载后 500</td><td class="no">❌ 救不回(缺 xdg-open 更缺文件管理器, B/C 类根因)。建议改为 docker 包装层显式"不支持"(§05)</td><td>—</td></tr>
+    <tr><td class="n">5</td><td>保存位置下拉 <code>/api/paths</code></td><td class="part">⚠️ 返回宿主路径, 手填可用</td><td class="ok">✅ 行为不变(纯字符串聚合, 不碰盘)—— 逻辑空间继续存宿主路径, 前端手填 qB 侧合法路径照常加种</td><td>—</td></tr>
+    <tr><td class="n">10</td><td><code>basic_check: custom</code>(checking.py:178)</td><td class="no">❌ 程序不在镜像, WARNING 刷屏</td><td class="part">⚠️ 半救: 包装层可把 save_path 参数映射成容器路径(救回"路径不可见"一半); "程序缺失"要镜像里装程序。程序若按宿主路径语义编写, 行为会变 —— 建议容器文档维持"不用 custom"</td><td>—</td></tr>
+    <tr><td class="n">11/12</td><td>桌面通知 / 托盘</td><td class="no">❌</td><td class="no">❌ 与本方案无关, 维持 enabled:false / 禁用 --tray</td><td>—</td></tr>
+    <tr><td class="n">13-16</td><td>时区 / qB 地址 / web.host / 单实例锁</td><td class="part">⚠️/✅</td><td class="ok">与本方案无关, 维持 §11.4 配置口径</td><td>—</td></tr>
+  </table>
+  <p>汇总: §11 的 A 类 6 项(含 #5 的不变项)<strong>5 项救回、1 项(#4)取决于挂载读写模式</strong>; B/C/D 类 18 项中 17 项不受影响也不该由本方案背, 唯 #1 建议顺手从"两层根因的 404/500"改成"显式不支持"。</p>
+</section>
+
+<!-- ============ 04 关键设计坑 ============ -->
+<section id="pitfalls">
+  <div class="folio">04 / 关键设计坑</div>
+  <h2>双路径空间: 状态与接口必须永远存"逻辑路径", 映射只准发生在 syscall 边界</h2>
+  <div class="measure">
+    <p>引入映射后系统里同时存在两个空间: <strong>逻辑空间</strong>(qB 报回的宿主路径, 如 <code>D:/Downloads/x</code>)与<strong>容器空间</strong>(挂载点路径, 如 <code>/mnt/downloads/x</code>)。全库检索确认, 逻辑空间路径被以下消费方<strong>以字符串形态</strong>使用, 一旦被映射污染即出错:</p>
+    <ul>
+      <li><strong>分组 key</strong>: <code>store.groups</code> 的 key 首元 = <code>path_normalize(save_path)</code>(fs.py:82, grouping 归组) —— 映射污染会导致同盘异名两套组、触发器全部失配;</li>
+      <li><strong>回传 qB 的动作</strong>: <code>set_location</code>(qbapi.py:152)、<code>edit_category</code>(qbapi.py:292)、重加种 save_path(qbapi Facade 写方法同步 store)—— qB 认的是宿主路径;</li>
+      <li><strong>跳检备份元数据</strong>(skip_checking.py:277-281): <code>state.skip_check_backup[hash].save_path</code> 记录宿主路径供人工恢复, 必须保持可读的宿主语义;</li>
+      <li><strong>规则路径匹配 / freespace 配置</strong>: <code>conditions.py</code> 的 <code>path</code> 是用户写的宿主路径(<code>R:\</code>), 规则匹配是纯字符串比较;</li>
+      <li><strong><code>/api/paths</code> 与 <code>/api/open-path</code> 的对外契约</strong>: 前端拿到/回传的都是逻辑路径。</li>
+    </ul>
+    <p>因此包装层的 API 契约必须是<strong>「逻辑路径进 → 内部映射 → syscall → 结果翻译回逻辑空间再返回」</strong>。这不是可选优化, 是硬约束。</p>
+    <h3>fs.py 里已经埋着一个具体的坑</h3>
+    <p><code>/api/fs/dirs</code> 的白名单判定 <code>_within_roots</code>(fs.py:94-101)拿 <code>os.scandir</code> 返回的 <code>entry.path</code> 与宿主路径 roots 比较(fs.py:134)。若包装层只映射"进"不映射"出", <code>entry.path</code> 是容器空间 <code>/mnt/downloads/...</code>, 与逻辑空间 roots <code>D:/Downloads/...</code> <strong>永远撞不上 ⇒ 所有子目录被白名单过滤 ⇒ 目录树恒空</strong> —— 与 fs.py:53-58 已记录的"前缀差异导致子目录全部被过滤"是同一失效机制。同理 <code>os.path.realpath</code>(fs.py:61,127)在逻辑空间路径上做不了(路径不存在), 符号链接逃逸防护退化为 <code>normcase + normpath</code> 词法比较(与 fs.py:57-59 既有已知限制同口径, 可接受但必须写明)。</p>
+    <h3>Windows 映射的三个细节</h3>
+    <ul>
+      <li><strong>大小写不敏感</strong>: 前缀匹配须 casefold(nomcase 语义), 否则 <code>d:/downloads</code> vs <code>D:/Downloads</code> 配不上;</li>
+      <li><strong>分隔符</strong>: 映射在 <code>path_normalize</code>(折叠 <code>\</code>→<code>/</code>)之后做即可统一两种写法;</li>
+      <li><strong><code>\\?\</code> 长路径前缀</strong>: 现在 <code>add_long_path_prefix_for_win</code> 散在 grouping.py:250 / checking.py:25 / fs.py 等调用点, 容器(Linux)里它是空操作。包装化时应把"加前缀"收进包装层单点, 调用点只交逻辑路径 —— 调用点反而变简单。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 05 安全红线 ============ -->
+<section id="safety">
+  <div class="folio">05 / 安全红线</div>
+  <h2>映射 miss 必须 fail-safe: 「宁可报不可判定, 不可判缺失」</h2>
+  <div class="verdict warn">
+    <p><b>事故链重演风险:</b> 缺文件扫描的逻辑是 <code>exists == False ⇒ 判缺失 ⇒ 暂停整组 + MISSING 标签</code>(真实写 qB, §11.3)。若用户映射表配错(前缀大小写/盘符/尾斜杠不匹配), <code>exists</code> 会<strong>再次恒 False</strong> —— 方案自身复刻它要修的事故, 且这次用户以为已经修好了, 更难排查。</p>
+    <p><b>红线:</b> 包装层对<strong>任何无法映射到容器空间的路径</strong>, 不得返回"不存在", 必须向上返回「不可判定」。具体语义: <code>check_filelist</code> 返回"路径不可判定(未命中映射)"而非"文件缺失"; 缺文件扫描遇到不可判定跳过该组并 WARNING(不暂停、不打标); <code>exists()</code> 表达式抛 <code>ExprError</code>(显式报错优于静默 False, 与 <code>disk_*</code> 现状口径一致)。</p>
+  </div>
+  <div class="measure">
+    <h3>配套的启动期自检</h3>
+    <ul>
+      <li>启动时校验每条映射的<strong>目标</strong>(容器侧挂载点)<code>isdir</code> 存在, 不存在则 WARNING 提示"检查 compose volumes"(进 §13 排障表);</li>
+      <li>校验映射<strong>源</strong>与现存种子的 save_path 前缀命中率, 零命中则 WARNING —— 提示映射表可能写错;</li>
+      <li>Docker 环境检测建议<strong>显式配置键</strong>(如 <code>fs.path_map</code> 映射表, 空 = 功能关, 保守默认), 不建议 <code>/.dockerenv</code> 自动探测 —— 自动探测命中即改变核心行为, 违反黄金法则 2; 新键必须进 <code>validate_config</code> + <code>config/schema.py</code>(黄金法则 4)。</li>
+    </ul>
+    <h3>open_path 的处置: 不是修好, 是优雅降级</h3>
+    <p>现在 <code>/api/open-path</code> 的失败是两层根因叠加(未挂载 404 → 挂载后 xdg-open 缺失 500, 实测见 pitfall 文件)。docker 包装层接手 <code>open_path</code> 后应<strong>直接返回"容器环境不支持"</strong>(501 + toast 引导用「复制路径」), 把两层根因收敛成一句话 —— 这是包装层顺手能拿掉的排障负担。</p>
+  </div>
+</section>
+
+<!-- ============ 06 挂载与 /mnt ============ -->
+<section id="mount">
+  <div class="folio">06 / 挂载策略</div>
+  <h2>只读挂载覆盖全部读触点; 挂载点选 /mnt/ 还是哪里, 由映射表消化</h2>
+  <div class="measure">
+    <table>
+      <tr><th>部署形态</th><th>挂载方式</th><th>映射表</th><th>说明</th></tr>
+      <tr><td>Linux 宿主, 可控挂载点</td><td class="n">-v /volume1/downloads:/volume1/downloads:ro</td><td>空(同路径直通)</td><td>§11.5 零代码方案, 仍是最优选; 映射层不启用</td></tr>
+      <tr><td>Windows 宿主(Docker Desktop / WSL2)</td><td class="n">-v D:\Downloads:/mnt/downloads:ro</td><td class="n">D:/Downloads → /mnt/downloads</td><td><strong>推翻 §11.5 "Windows 无解"旧结论</strong>; drvfs 挂载的 disk_usage 数值需实测</td></tr>
+      <tr><td>qB 也在容器里(NAS 常见)</td><td class="n">两个容器挂同一 volume, 各自路径可不同</td><td class="n">qB 内路径 → 本容器挂载点</td><td>同路径能对齐则退化到第一行</td></tr>
+    </table>
+    <ul>
+      <li><strong>挂载点命名(/mnt/?)</strong>: 无功能性差别 —— 映射表消费任意前缀。建议固定约定(如 <code>/mnt/downloads</code>)并写进 compose 示例, 减少示例配置的组合爆炸;</li>
+      <li><strong>:ro vs :rw</strong>: 只读覆盖全部读触点(§02); 唯一写「新建文件夹」需要 :rw。建议默认 <code>:ro</code>(保守默认黄金法则), docker 包装层对 <code>mkdir</code> 直接语义化拒绝(403「容器只读挂载不支持新建」), 不让 OS 抛 EROFS 变 400 乱码; 用户确需新建再换 :rw, 无需改代码;</li>
+      <li><strong>:ro 的额外收益</strong>: 从文件系统层杜绝 auto-qb 误写下载数据(与"所有写操作都通过 qB"的设计互为保险);</li>
+      <li><strong>qB 侧不变</strong>: qB 继续按宿主(或自己的容器)视角写数据, auto-qb 的 :ro 挂载对它零影响 —— 两进程共享同一物理目录, 只是一个只读视角。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 07 实施草图 ============ -->
+<section id="sketch">
+  <div class="folio">07 / 实施草图(仅设计, 本轮未改代码)</div>
+  <h2>包装层最小接口与改动面</h2>
+  <div class="measure">
+    <pre><code># 新模块: infra/file_access.py (命名待定)
+class FileAccess:            # 逻辑路径进 → 逻辑路径出
+    def exists / isdir / isfile / getsize(path) -> bool|int|..."不可判定"哨兵
+    def disk_usage(path) -> (total, used, free)
+    def scandir(path) -> [LogicalEntry(name, path)]   # entry.path 已译回逻辑空间
+    def mkdir(path)                                   # docker 只读实现: 语义化拒绝
+    def realpath_lexical(path)                        # 词法规范化(不做符号链接解析)
+    def open_path(path, select)                       # docker 实现: NotSupported
+    def map_to_container(p) -> str|None               # None = 映射 miss (fail-safe 入口)
+
+class LocalFileAccess(FileAccess):   # 现状直通: syscalls + 长路径前缀(收编散点)
+class MappedFileAccess(FileAccess):  # docker: 前缀映射表 + miss 时 fail-safe</code></pre>
+    <table>
+      <tr><th>改动点</th><th>内容</th><th>量级</th></tr>
+      <tr><td class="n">infra/file_access.py</td><td>新模块 + 两实现 + 单例注入</td><td>新增</td></tr>
+      <tr><td class="n">grouping.py:250 / checking.py:25</td><td>exists/getsize 换包装层; 删除本地 add_long_path_prefix_for_win 调用</td><td>2 处×2</td></tr>
+      <tr><td class="n">expr/env.py:197-223 · conditions.py:247-259</td><td>exists/disk_*/freespace 走包装层 + 不可判定→ExprError</td><td>4 处</td></tr>
+      <tr><td class="n">routes/fs.py</td><td>isdir/scandir/mkdir/realpath 换包装层; 白名单比较保持逻辑空间</td><td>~10 处</td></tr>
+      <tr><td class="n">config</td><td><code>fs.path_map</code>(或 docker 段)进 validate_config + schema.py + 示例配置</td><td>1 键</td></tr>
+      <tr><td class="n">docs / pitfalls</td><td>§11 矩阵重排(Windows 行改写) + §11.5 改写 + 必调配置表更新</td><td>3 份</td></tr>
+    </table>
+    <p>测试要点(供未来实施轮参考): 映射命中/miss 的 fail-safe 三态(存在/缺失/<strong>不可判定</strong>)、大小写与分隔符变体、<code>\\?\</code> 前缀路径、scandir 返回值回到逻辑空间后白名单命中、组 key 零污染(映射开启前后组快照一致)、mkdir 在 :ro 语义化拒绝、Windows 宿主真机(Docker Desktop + drvfs)disk_usage 实测。</p>
+  </div>
+</section>
+
+<!-- ============ 08 遗留 ============ -->
+<section id="leftover">
+  <div class="folio">08 / 遗留与边界</div>
+  <h2>本方案不背的包(维持原处置)与待实测项</h2>
+  <ul>
+    <li><strong>B/C/D 类 17 项</strong>(通知、托盘、时区、网络身份等)与本方案无关, 维持 deployment.md §11.4 配置口径;</li>
+    <li><strong>Windows 宿主 drvfs 挂载的 <code>disk_usage</code> 数值正确性</strong>与 <code>getsize</code> 在 9p/drvfs 上的性能 —— 代码级可判定, 数值/性能需真机实测(实施轮第一件事);</li>
+    <li><strong>同实例双跑</strong>: 宿主实例与容器实例共用 data_dir 时锁互挡不住(msvcrt ↔ fcntl, §11.2 #16)—— 与本方案正交, 维持警示;</li>
+    <li><strong>映射配置错误的过渡期风险</strong>: 上线映射功能本身不引入新事故面(默认空表 = 现状), 但开启后配错的 fail-safe 靠 §05 红线兜底 —— 该语义必须先于功能落地, 不能后补;</li>
+    <li>本报告为<strong>纯分析</strong>, 未改任何代码/配置/文档; 实施时按上述草图另行立项(plan)并走完整收尾 DoD。</li>
+  </ul>
+  <div class="colophon">
+    <div class="row">
+      <div><b>方法</b>src/ 全量宿主依赖触点检索(exists/getsize/scandir/disk_usage/subprocess/startfile)逐个定性 + 既有容器实测记录(deployment.md §11 / pitfalls/ops/docker-host-features.md)比对</div>
+      <div><b>关联</b>plans/26-09-25-2241-plan-docker-deploy · docs/deployment.md §11 · pitfalls/ops/docker-host-features.md · activeContext/26-09-25-2241-docker-deploy.md</div>
+    </div>
+  </div>
+</section>
+
+</main>
+</div>
+</body>
+</html>

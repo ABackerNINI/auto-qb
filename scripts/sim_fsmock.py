@@ -1,12 +1,11 @@
 """进程内 FS mock —— 让 auto-qb 在**不物化任何文件**的前提下, 看到"真机录制下来的磁盘状态"。
 
 语料计划 26-09-21-0024 §07 的定案: 磁盘事实来源默认走 mock(不是稀疏文件物化真树)。
-auto-qb 碰磁盘的入口收敛在 4 个调用点, 全部经 `os.path.*` / `shutil.disk_usage`:
+auto-qb 碰磁盘的入口经 `os.path.*` / `shutil.disk_usage`(2026-09-27 起收进
+infra/file_access.py 单点, plan 26-09-27-1407; grouping/checking/env 经 get_file_access() 间接调用):
 
-    mixins/grouping.py:239 · :244   缺文件扫描(头号, D4)      os.path.exists + os.path.getsize
-    mixins/checking.py:26 · :29     跳检前完整性检查           os.path.exists + os.path.getsize
-    rules/expr/env.py:228           表达式取值 exists(path)   os.path.exists
-    rules/expr/env.py:219           表达式取值 disk_used(path) shutil.disk_usage
+    infra/file_access.py  Local/Mapped 两实现   os.path.exists + os.path.getsize + shutil.disk_usage
+    (消费方: 缺文件扫描 grouping.py / 跳检前检查 checking.py / 表达式 exists()·disk_*() env.py)
 
 三条硬条件(不满足就会出错):
   ① **按路径前缀限定作用域** —— 默认放行, 只有命中语料树(<fs-root> 之下)才拦。否则会把
@@ -42,12 +41,9 @@ __all__ = ["FsMock", "install", "MockCoverage"]
 
 # 本模块覆盖的 FS 调用点(静态守阵 CORPUS.fs_mock_coverage 的期望值)
 MockCoverage = {
-    "os.path.exists":
-        "src/auto_qb/mixins/grouping.py:239, src/auto_qb/mixins/checking.py:26, src/auto_qb/rules/expr/env.py:228",
-    "os.path.getsize":
-        "src/auto_qb/mixins/grouping.py:244, src/auto_qb/mixins/checking.py:29",
-    "shutil.disk_usage":
-        "src/auto_qb/rules/expr/env.py:219",
+    "os.path.exists": "src/auto_qb/infra/file_access.py(Local.exists + Mapped.exists; 2026-09-27 收编单点)",
+    "os.path.getsize": "src/auto_qb/infra/file_access.py(Local.getsize + Mapped.getsize)",
+    "shutil.disk_usage": "src/auto_qb/infra/file_access.py(Local.disk_usage + Mapped.disk_usage)",
 }
 
 

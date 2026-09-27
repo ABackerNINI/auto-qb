@@ -32,6 +32,9 @@ SECTION_LEVELS = {
     "grouping": LEVEL_L0,
     "add_episode_tags": LEVEL_L0,
     "hr_check": LEVEL_L0,  # 字段级见表 HR_CHECK_FIELD_LEVELS(取数线程每轮从 self.config 现读)
+    # R: 文件访问层单例按 fs.path_map 在 QbManager 构造时构建一次(plan 26-09-27-1407),
+    #    与 data_dir 同档 —— 热重载拒绝该项, 修改后需重启
+    "fs": LEVEL_R,
     # L1: 轻量应用
     "logging": LEVEL_L1,
     "notify": LEVEL_L1,

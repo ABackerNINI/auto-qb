@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="docker-deploy">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-09-27-1407">
+<meta name="doc-updated" content="26-09-27-1600">
+<meta name="doc-refs" content="memory-bank/reports/26-09-27-1352-report-docker-fs-wrapper-pathmap.html,memory-bank/plans/26-09-25-2241-plan-docker-deploy.html,memory-bank/pitfalls/ops/docker-host-features.md">
+<title>计划 · 文件访问层包装 + 下载目录只读挂载 + 路径映射(docker 兼容)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f0f0f;
+    --ink: #f0f0f0;
+    --ink-2: #b8b8b2;
+    --ink-3: #8a8a84;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-soft: rgba(255, 255, 255, 0.05);
+    --accent: #6fc7b6;
+    --accent-dim: rgba(111, 199, 182, 0.14);
+    --warn: #d8a657;
+    --bad: #e07a6a;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+    --sans: "Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15.5px; line-height: 1.62; -webkit-font-smoothing: antialiased; }
+  .canvas { max-width: 1120px; margin: 0 auto; padding: 0 48px 96px; }
+  .measure { max-width: 820px; }
+  .cover { padding: 80px 0 48px; border-bottom: 1px solid var(--line); }
+  .cover .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.09em; color: var(--accent); text-transform: uppercase; }
+  .cover h1 { font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin: 18px 0 14px; }
+  .cover .sub { font-size: 16.5px; color: var(--ink-2); max-width: 720px; }
+  .cover .meta { margin-top: 34px; display: flex; gap: 40px; flex-wrap: wrap; }
+  .cover .meta div { font-size: 12.5px; color: var(--ink-3); }
+  .cover .meta b { display: block; font-family: var(--mono); font-size: 13px; font-weight: 400; color: var(--ink-2); margin-top: 3px; }
+  main section { margin-bottom: 64px; padding-top: 40px; }
+  .folio { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.08em; margin-bottom: 10px; }
+  main h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+  main h3 { font-size: 16.5px; font-weight: 600; margin: 28px 0 10px; }
+  main p { color: var(--ink-2); margin-bottom: 13px; }
+  main p strong, main li strong { color: var(--ink); font-weight: 590; }
+  main ul, main ol { padding-left: 20px; margin-bottom: 13px; }
+  main li { color: var(--ink-2); margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 0.86em; background: rgba(255,255,255,0.055); padding: 1.5px 5px; border-radius: 3px; color: var(--ink); }
+  pre { background: rgba(255,255,255,0.04); border: 1px solid var(--line-soft); border-radius: 6px; padding: 16px 18px; overflow-x: auto; margin: 16px 0; }
+  pre code { background: none; padding: 0; font-size: 12.8px; line-height: 1.55; color: var(--ink-2); }
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 22px; font-size: 13.5px; }
+  th { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 400; text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); vertical-align: top; }
+  td .n, .num { font-family: var(--mono); }
+  .ok { color: var(--accent); font-weight: 590; }
+  .no { color: var(--bad); font-weight: 590; }
+  .part { color: var(--warn); font-weight: 590; }
+  .verdict { border: 1px solid var(--accent-dim); background: rgba(111, 199, 182, 0.06); padding: 18px 22px; margin: 18px 0 8px; }
+  .verdict b { color: var(--accent); }
+  .verdict p { margin-bottom: 8px; }
+  .verdict.warn { border-color: rgba(216, 166, 87, 0.35); background: rgba(216, 166, 87, 0.06); }
+  .verdict.warn b { color: var(--warn); }
+  .note { border-left: 1px solid var(--line); padding: 2px 0 2px 18px; margin: 16px 0; color: var(--ink-3); font-size: 13.5px; }
+  .note b { color: var(--ink-2); font-weight: 590; }
+  .wave { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 18px; }
+  .wave .tag { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--accent); }
+  .colophon { border-top: 1px solid var(--line); padding-top: 24px; font-size: 12.5px; color: var(--ink-3); }
+  .colophon .row { display: flex; gap: 48px; flex-wrap: wrap; }
+  .colophon b { color: var(--ink-2); font-weight: 590; }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+<header class="cover">
+  <div class="kicker">Plan · docker-deploy</div>
+  <h1>文件访问层包装 + 下载目录只读挂载 + 路径映射</h1>
+  <p class="sub">把对下载数据目录的全部本地访问收进单一包装层; 容器部署时用映射表把 qB 报回的宿主路径译成容器挂载路径, 挂载默认 :ro。救回缺文件扫描 / 跳检前置 / exists() / disk_*() / 目录浏览, 打通 Windows 宿主。可行性依据: reports/26-09-27-1352(结论: 成立, 含 1 个设计坑 + 2 条安全红线)。</p>
+  <div class="meta">
+    <div>Added<b>2026-09-27 14:07</b></div>
+    <div>状态<b>Open(待拍板)</b></div>
+    <div>波次<b>W1–W5, 每波独立可入库</b></div>
+    <div>预计改动面<b>新增 2 文件 · 修改 6 文件 · 文档 4 份</b></div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ 01 目标与边界 ============ -->
+<section id="goal">
+  <div class="folio">01 / 目标与边界</div>
+  <h2>目标: A 类能力救回 + Windows 宿主打通; 不背 B/C/D 类的包</h2>
+  <div class="measure">
+    <table>
+      <tr><th>做</th><th>不做(维持原处置)</th></tr>
+      <tr><td>①新增 <code>infra/file_access.py</code> 包装层, 收编下载数据目录的全部本地 syscall(含散点的 <code>add_long_path_prefix_for_win</code>); ②三态语义(存在/缺失/<strong>不可判定</strong>)落地; ③新配置键 <code>fs.path_map</code>(空=关, 保守默认); ④docker 包装实现: 路径映射 + mkdir 按挂载点可写探测放行 + open_path 显式不支持; ⑤启动期映射自检; ⑥docker 交付物与文档同步</td><td>桌面通知 / 托盘 / 时区 / 网络身份(D 类)—— 配置口径不变; <code>basic_check: custom</code> 在容器维持"不用"(只救路径参数, 不往镜像装程序); 打开文件夹不做真打开, 只做 501 显式降级; WebUI mkdir 在 Mapped 实现下按<strong>挂载点可写探测</strong>放行(挂载 <code>:rw</code> 即可用), 只读挂载上语义化拒绝</td></tr>
+    </table>
+    <div class="note"><b>范围口径(用户已定):</b> 包装只覆盖<strong>下载数据目录</strong>访问(qB save_path/content_path 派生); 派生自 <code>data_dir</code> 的路径(state/锁/日志/token/HR/跳检备份/配置 .bak)在容器里本就落 /data /config, <strong>不进包装层</strong>。</div>
+  </div>
+</section>
+
+<!-- ============ 02 方案核心 ============ -->
+<section id="core">
+  <div class="folio">02 / 方案核心</div>
+  <h2>逻辑路径进 → syscall 边界映射 → 逻辑路径出; miss 一律"不可判定"</h2>
+  <div class="measure">
+    <pre><code># 新模块 src/auto_qb/infra/file_access.py
+UNDetermined = ...                       # "不可判定"哨兵(缺失≠不可判定)
+
+class FileAccess:                        # 全部方法: 逻辑路径进 → 逻辑路径出
+    def exists(path) -> bool | UNDetermined
+    def isdir / isfile(path) -> bool | UNDetermined
+    def getsize(path) -> int             # 不存在/不可判定 raise FileAccessError
+    def disk_usage(path) -> (total, used, free)
+    def scandir(path) -> [Entry(name, logical_path)]   # entry 译回逻辑空间
+    def mkdir(path)                      # Mapped 实现: 挂载点可写即放行(真实 mkdir),
+                                         # 只读挂载(EROFS/EACCES)语义化拒绝
+    def realpath_lexical(path) -> str    # normcase+normpath, 不做符号链接解析
+    def open_path(path, select=False)    # Mapped 实现: raise NotSupported
+    def map_to_container(p) -> str|None  # None = miss(fail-safe 判定点)
+
+class LocalFileAccess(FileAccess):  # 宿主直跑现状: 直通 syscall + 长路径前缀(收编散点)
+class MappedFileAccess(FileAccess): # 容器: path_map 前缀表(casefold, / 折叠后匹配);
+                                    # miss → UNDetermined/NotSupported, 绝不返回"不存在"</code></pre>
+    <ul>
+      <li><strong>单例与注入</strong>: 模块级 <code>get_file_access()</code> 按配置构建(空表 → Local; 非空 → Mapped), 热重载不切换(进 R 级"需重启", 与 data_dir 同档, 文档写明); 单一写线程假设不受影响(包装层无状态, mkdir 除外且本就只在 Web 请求线程)。</li>
+      <li><strong>三态的判定语义</strong>(安全红线, report §05): 映射 miss → <code>exists</code> 返回 UNDetermined 而非 False。<code>check_filelist</code> 把 UNDetermined 翻译为「路径不可判定: '<code>path</code>'」; 缺文件扫描跳过该组 + WARNING(不暂停不打标); <code>exists()</code> 表达式把 UNDetermined 翻译为 <code>ExprError</code>(显式报错优于静默 False, 与 <code>disk_*</code> 现状同口径)。</li>
+      <li><strong>映射匹配规则</strong>: 入参先 <code>path_normalize</code>(折叠 <code>\</code>→<code>/</code>), 源前缀 casefold 比较, 命中后替换前缀得容器路径; <code>\\?\</code> 前缀在匹配前剥掉(容器是 Linux, 前缀本不会出现, 防御性处理)。</li>
+    </ul>
+    <div class="verdict warn">
+      <p><b>既有坑的对治(report §04):</b> <code>routes/fs.py:134</code> 拿 <code>scandir</code> 的 <code>entry.path</code> 与逻辑空间白名单比较 —— 包装层把 entry 译回逻辑空间后该处<strong>不改语义</strong>; 白名单比较改用 <code>realpath_lexical</code>(逻辑路径上做不了 realpath, 逃逸防护退化为词法比较, 与 fs.py:57-59 既有已知限制同口径, 注释写明)。组 key / qbapi 回传 / 跳检备份元数据<strong>零改动</strong>(它们消费的字符串从未经过包装层)。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 配置设计 ============ -->
+<section id="config">
+  <div class="folio">03 / 配置设计</div>
+  <h2>新键 <code>fs.path_map</code>: 空 = 完全现状; 校验进 fail-fast</h2>
+  <div class="measure">
+    <pre><code>fs:
+  path_map:                    # 逻辑空间前缀 → 容器挂载点(容器部署才配; 宿主直跑留空)
+    - from: "D:/Downloads"     # qB 报回的宿主保存路径前缀(写法不限, 内部折叠比较)
+      to:   "/mnt/downloads"   # 本容器挂载点(compose: -v D:\Downloads:/mnt/downloads:ro)</code></pre>
+    <table>
+      <tr><th>落点</th><th>内容</th></tr>
+      <tr><td class="n">config/models.py</td><td>新 <code>fs</code> 段 dataclass: <code>path_map: tuple[PathMapEntry, ...] = ()</code>(entry: from/to 非空 str)</td></tr>
+      <tr><td class="n">config/schema/groups.py</td><td>注册 <code>fs</code> Group(示例配置同步: <code>minimal.yml</code> 注释说明 / <code>docker/config.example.yml</code> 给带映射的注释样例, 默认仍留空表 + 注释)</td></tr>
+      <tr><td class="n">config/loaders.py</td><td>解析: 接受 list[{from,to}]; 未知键报错(与既有 fail-fast 风格一致)</td></tr>
+      <tr><td class="n">config/validation/core.py</td><td>聚合校验: from/to 非空且为绝对路径(<code>from</code> 带盘符或以 <code>/</code> 开头); from/to <strong>尾斜杠归一</strong>后再比较; 前缀互不为对方前缀(避免歧义命中); to 必须以 <code>/</code> 开头; 重复 from 报错</td></tr>
+      <tr><td class="n">守阵测试</td><td>docker/config.example.yml 校验用例追加 fs 段断言(沿用 <code>test_example_docker_config_yml_passes_fail_fast</code> 模式)</td></tr>
+    </table>
+    <div class="note"><b>为什么显式配置键而非 /.dockerenv 自动探测(取舍):</b> 自动探测命中即改变核心判定行为(缺文件扫描从"恒缺失"变"真值"), 违反保守默认(黄金法则 2); 且无法表达"映射到哪", 表本身就必须配置 —— 探测只能省一次填写, 不值得引入隐式开关。</div>
+  </div>
+</section>
+
+<!-- ============ 04 波次 ============ -->
+<section id="waves">
+  <div class="folio">04 / 波次拆分</div>
+  <h2>W1 等价收编 → W2 调用点切换 → W3 映射实现 → W4 文档交付物 → W5 真机验收</h2>
+  <div class="verdict">
+    <p><b>预演验证(2026-09-27, 问答轮 dry-run):</b> 以「Windows 宿主 qB + Docker Desktop 挂 <code>D:\Downloads:/mnt/downloads:ro</code>」逐消费方推演, 映射机制<strong>成立</strong>: 缺文件扫描/跳检前置(exists+getsize 字节数无偏差)、<code>exists()</code>、目录浏览(entry 译回逻辑空间后白名单/父目录自洽, 前端全程只见逻辑路径)、mkdir 双态、组 key/回传零污染全部通过; 映射 miss 退化到三态兜底(与今日"无挂载"行为等价, 不会误判缺失)。唯一残留不确定点 = drvfs/9p/virtiofs 上 <code>disk_usage</code> 数值与 <code>getsize</code> 性能(W5 第一项实测)。部署前提: Docker Desktop 文件共享须包含该盘(WSL2 后端默认可用) → W4 写进 deployment.md。实现细节两条: 前缀匹配强制 <code>/</code> 边界(<code>D:/Downloads</code> 不得命中 <code>D:/Downloads2</code>)、from/to 两侧尾斜杠归一。</p>
+  </div>
+
+  <div class="wave">
+    <h3><span class="tag">W1</span> 基础设施: LocalFileAccess 行为等价收编(零行为变化)</h3>
+    <ul>
+      <li>新建 <code>infra/file_access.py</code>: 抽象 + Local 实现 + <code>get_file_access()</code>(暂按"非 Windows 即 Local, Windows 即 Local"全量 Local, 不读配置); Local 内部统一做 <code>add_long_path_prefix_for_win</code>。</li>
+      <li>改 <code>grouping.py:250</code>、<code>checking.py:25</code>: <code>os.path.exists/getsize</code> → 包装层; 删两处本地前缀调用。</li>
+      <li>改 <code>expr/env.py:221</code>(<code>_exists</code> 原生 <code>os.path.exists</code>, 无前缀 —— 顺手补齐长路径语义, 单测写明)、<code>env.py:197-219</code>、<code>conditions.py:247-259</code>(freespace) → 包装层。</li>
+      <li>本波不含 fs.py(留 W2 一并处理白名单)、不含配置键。全量测试必须与改动前通过集合一致 —— 这是"等价收编"的验收线。</li>
+    </ul>
+  </div>
+
+  <div class="wave">
+    <h3><span class="tag">W2</span> 三态语义落地 + fs 路由切换</h3>
+    <ul>
+      <li><code>UNDetermined</code> 哨兵 + <code>FileAccessError/NotSupported</code> 异常; Local 实现永远不产生 UNDetermined(行为不变)。</li>
+      <li><code>checking.py::check_filelist</code> 追加 UNDeterminate 分支(返回「路径不可判定」错误串); <code>grouping.py::_check_missing_files</code> UNDeterminate → 跳过该组 + WARNING; <code>_exists</code>/<code>disk_*</code>/<code>freespace</code> UNDeterminate → ExprError。</li>
+      <li><code>routes/fs.py</code>: <code>isdir/isfile/exists/scandir/mkdir</code> 换包装层; <code>_fs_real</code> 的 realpath 换 <code>realpath_lexical</code>; <code>common.open_path</code> 调用点包 <code>NotSupported</code> → 501「容器环境不支持打开文件夹, 请使用复制路径」。</li>
+      <li>测试: 三态矩阵(存在/缺失/不可判定)、映射大小写与分隔符变体、<strong>前缀 <code>/</code> 边界</strong>(<code>D:/Downloads</code> 不命中 <code>D:/Downloads2</code>)、<strong>尾斜杠归一</strong>(from 带不带尾斜杠同判)、<code>\\?\</code> 前缀路径、scandir entry 逻辑空间回译后白名单命中、映射开启前后<strong>组 key 快照零差异</strong>、mkdir 的只读拒绝(:ro)/放行(:rw 模拟)两态与 open_path 501。</li>
+    </ul>
+  </div>
+
+  <div class="wave">
+    <h3><span class="tag">W3</span> MappedFileAccess + fs.path_map 配置 + 启动自检</h3>
+    <ul>
+      <li>按 §03 落配置键(models/schema/loaders/validation + 示例 + 守阵); R 级需重启写进文档。</li>
+      <li>Mapped 实现: 前缀映射(casefold + 折叠); miss → UNDetermined; <code>open_path</code> → NotSupported(恒, B/C 类根因与挂载无关); <code>mkdir</code> <strong>真实执行</strong>(挂载点可写即成功), OSError 的 EROFS/EACCES → 语义化拒绝(403「下载目录挂载为只读, 无法新建」)。</li>
+      <li>启动自检(非 fail-fast, WARNING 级): 每条 to 在容器内 <code>isdir</code> 不存在 → 提示查 compose volumes; 现存种子 save_path 对映射源前缀命中率 0% → 提示映射表可能写错; 每条挂载点做<strong>可写探测</strong>(建删临时目录), 只读结果记 INFO 并提示"mkdir 将不可用, 需要 :rw 挂载"。探测只是预告, 运行期以真实 syscall 结果为准。自检结果进日志, 不阻塞启动。</li>
+      <li>测试: 校验聚合报错各分支、命中/miss、自检两条 WARNING 的触发与不触发。</li>
+    </ul>
+  </div>
+
+  <div class="wave">
+    <h3><span class="tag">W4</span> docker 交付物与文档同步</h3>
+    <ul>
+      <li><code>docker/docker-compose.yml</code>: 注释掉的示例挂载行 <code># - D:\Downloads:/mnt/downloads:ro</code> + 说明; <code>docker/config.example.yml</code>: fs 段注释样例。</li>
+      <li><code>docs/deployment.md</code>: §11.5 重写(同路径零代码方案保留为首选; 新增映射表方案; <strong>删除「Windows 宿主无解」</strong>改为「无解的是同路径挂载, 映射层方案有解」); §11.2 矩阵 #1/3/4/6/7/8/9/10 状态改写(标注"配好映射后"); §11.4 必调表改为"不配映射时才必调"; §13 排障表加两条(映射未命中 / 挂载点不存在); §4/§11.5 补部署前提「Docker Desktop 文件共享须包含下载盘(WSL2 后端默认可用, Hyper-V 后端需勾选 File Sharing)」。</li>
+      <li><code>docs/configuration.md</code>: fs.path_map 三处容器警示收敛为指向 deployment.md §11.5。</li>
+      <li><code>pitfalls/ops/docker-host-features.md</code>: 处置段补"映射方案已落地"与"缺文件扫描在映射 miss 时不再误判, 但映射配错仍需看自检 WARNING"; 复发计数按实际情况。</li>
+      <li><code>memory-bank/</code> 回写: progress/implemented-core.md 补条目; 本计划 doc-status 抬 In Progress → Done。</li>
+    </ul>
+  </div>
+
+  <div class="wave">
+    <h3><span class="tag">W5</span> 真机验收(数字回填本计划与 docs/deployment.md §14)</h3>
+    <ul>
+      <li><strong>Windows 宿主 + Docker Desktop</strong>(本机现状部署): qB 宿主直跑(127.0.0.1), 容器挂 <code>D:\Downloads(实际下载盘):/mnt/downloads:ro</code> + path_map; 验收: ①缺文件扫描开 → 对真库零误暂停(快照对比 tags/category); ②构造缺文件组 → 正确暂停+MISSING; ③<code>/api/fs/dirs</code> 目录树完整(白名单命中); ④<code>disk_total()</code>/<code>freespace</code> 数值 vs 宿主 <code>fsutil</code>/资源管理器一致(drvfs 实测数字); ⑤open-path → 501 语义化 toast; ⑥mkdir 双态: <code>:ro</code> 挂载 → 403 语义化提示 + 启动自检 INFO"只读"; 换 <code>:rw</code> 重建 → 新建成功且 qB 能在该目录加种; ⑦跳检前置 + 触发一次真跳检。</li>
+      <li><strong>Linux 同路径对照</strong>(或 WSL2 内 docker): 不配 path_map, 同路径 :ro 挂载 → 零代码路径回归确认(§11.5 旧行为不劣化)。</li>
+      <li>性能抽测: 91 种子库一轮耗时与基线差异(drvfs 上 getsize 逐文件的开销实测)。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 05 取舍记录 ============ -->
+<section id="tradeoffs">
+  <div class="folio">05 / 取舍记录</div>
+  <h2>四个已定的取舍(拍板时如推翻, 在此追加变更记录)</h2>
+  <div class="measure">
+    <ol>
+      <li><strong>显式配置键, 不自动探测容器</strong> —— 探测命中即改变核心行为, 违反保守默认; 映射表本身就必须配置(§03 note)。</li>
+      <li><strong>三态 fail-safe 优先于功能完整性</strong> —— 映射 miss 宁可"功能退化为报错/跳过", 不可返回"不存在"去重演误暂停事故(report §05 红线); 代价是配错的用户会看到 ExprError/WARNING, 这是想要的行为。</li>
+      <li><strong>mkdir 按挂载点可写探测放行(2026-09-27 拍板放宽)</strong> —— Mapped 实现真实执行 mkdir, 不在代码层一刀切; 只读挂载由 EROFS/EACCES 语义化拒绝兜底, 启动自检预告可写性。与"所有写操作都通过 qB"的设计张力由 :ro 默认挂载兜住(compose 示例仍写 <code>:ro</code>, :rw 是用户的显式选择)。</li>
+      <li><strong>挂载点约定 /mnt/downloads</strong> —— 映射表消化任意前缀, 约定只为示例配置不爆炸; 不做自动推断。</li>
+    </ol>
+    <h3>风险与回退</h3>
+    <ul>
+      <li><strong>回退面</strong>: path_map 空 = Local 全量直通 = 现状; W1/W2 合并看也是"调用点换皮", 出问题 git revert 单波即可。</li>
+      <li><strong>最大残余风险</strong>: drvfs(Windows→WSL2)挂载上 <code>getsize</code> 逐文件的性能与 <code>disk_usage</code> 数值正确性 —— W5 第一项实测, 若数值不可信, disk_* 表达式在文档标注"Windows 宿主容器部署不保证"并维持救回其余触点。</li>
+      <li><strong>兼容性</strong>: 状态文件零新增(映射表不进 state); state schema 不动; 组 key 逻辑空间不变 ⇒ 与宿主直跑的实例互换挂同一 qB 无缝。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 06 改动面清单 ============ -->
+<section id="surface">
+  <div class="folio">06 / 改动面清单</div>
+  <h2>逐文件: 新增 2 · 修改 6 · 文档 4</h2>
+  <table>
+    <tr><th>文件</th><th>改动</th><th>波次</th></tr>
+    <tr><td class="n">infra/file_access.py</td><td>新增: 抽象 + Local + Mapped + UNDetermined/异常 + get_file_access()</td><td class="n">W1/W2/W3</td></tr>
+    <tr><td class="n">tests/test_file_access.py</td><td>新增: §04 各波测试要点 + 文件头「## 测试计划」清单</td><td class="n">W1–W3</td></tr>
+    <tr><td class="n">core/mixins/grouping.py:250</td><td>exists/getsize → 包装层; UNDeterminate 跳过; 删本地前缀调用</td><td class="n">W1/W2</td></tr>
+    <tr><td class="n">core/mixins/checking.py:25</td><td>同上 + 「路径不可判定」返回串</td><td class="n">W1/W2</td></tr>
+    <tr><td class="n">rules/expr/env.py:197-223 · rules/conditions.py:247-259</td><td>exists/disk_*/freespace → 包装层; UNDeterminate → ExprError</td><td class="n">W1/W2</td></tr>
+    <tr><td class="n">webui/server/routes/fs.py</td><td>syscall 换包装层; _fs_real → realpath_lexical; open_path 501</td><td class="n">W2</td></tr>
+    <tr><td class="n">config/{models,loaders}.py · config/schema/groups.py · config/validation/core.py</td><td>fs.path_map 键 + fail-fast 校验 + 示例 + 守阵</td><td class="n">W3</td></tr>
+    <tr><td class="n">docker/docker-compose.yml · docker/config.example.yml</td><td>挂载示例行 + fs 段样例</td><td class="n">W4</td></tr>
+    <tr><td class="n">docs/{deployment,configuration}.md · pitfalls/ops/docker-host-features.md · memory-bank/progress</td><td>§11.5 重写 / 矩阵改写 / 排障两条 / 处置段更新</td><td class="n">W4</td></tr>
+  </table>
+  <div class="colophon">
+    <div class="row">
+      <div><b>依据</b>reports/26-09-27-1352(可行性验证, 结论成立) · docs/deployment.md §11 · pitfalls/ops/docker-host-features.md</div>
+      <div><b>拍板后</b>status → In Progress, 认领进 tasks/ 档案; 计划本体冻结, 修订走下方「变更记录」</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 变更记录 ============ -->
+<section id="changelog">
+  <div class="folio">Changelog</div>
+  <h2>变更记录</h2>
+  <ul>
+    <li><span class="num">26-09-27-1423</span> — 拍板放宽取舍③: mkdir 由"docker 实现恒 NotSupported"改为<strong>按挂载点可写探测放行</strong>(真实执行, EROFS/EACCES 语义化拒绝; 启动自检加只读预告; compose 示例默认仍 <code>:ro</code>)。同步修订: §01 边界 · §02 接口草图 · W2 测试 · W3 实现 · W5 验收⑥双态。</li>
+    <li><span class="num">26-09-27-1442</span> — 问答轮预演验证结论补进(§04 头部 verdict 块): 逐消费方 dry-run 确认映射机制成立, 唯一残留 = drvfs disk_usage/getsize 实测(W5); 落地两条实现细节 —— 前缀 <code>/</code> 边界强制 + 尾斜杠归一(W2 测试 / W3 校验), 部署前提 Docker Desktop 文件共享(W4 文档)。<code>fs.path_map</code> 归属口径确认: config.yml(§03 不变) —— from 侧是运行时才知道的 qB 视角路径, compose 写不出也读不到。</li>
+    <li><span class="num">26-09-27-1600</span> — <strong>W1–W4 实施落地</strong>(doc-status → In Progress): 新增 <code>infra/file_access.py</code>(UNDETERMINED 哨兵不可作布尔值 / FileAccessError 继承 OSError 兼容既有 except 兜底) + 全部消费方切包装层; <code>fs.path_map</code> 配置全链 + Mapped 实现 + 启动自检挂首轮全量同步后; W4 文档与 docker 交付物同步。实施口径两处微调: ①Local 的 <code>realpath_lexical</code> 保留 realpath(保住目录浏览符号链接逃逸防护与既有 Linux 用例), 仅 Mapped 纯词法; ②schema 的 path_map 用 text kind 降级登记(改动面不含前端, WebUI 编辑在 help 指向 YAML)。W5 真机验收待执行。</li>
+  </ul>
+</section>
+
+</main>
+</div>
+</body>
+</html>

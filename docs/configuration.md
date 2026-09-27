@@ -86,10 +86,19 @@ config:
     # 种子分组管理(辅种管理)
     grouping:
         enabled: true             # 启用种子分组
-        check_missing_files: true # 启用缺文件检查(❗容器部署必须设为 false: 程序读 qB 报回的宿主保存路径,
-                                  #   容器里看不到那块盘 ⇒ 恒判定"文件缺失" ⇒ 误暂停整组并打 MISSING 标签。
-                                  #   详见 docs/deployment.md §11.3)
+        check_missing_files: true # 启用缺文件检查(❗容器部署且未配 fs.path_map 时必须设为 false:
+                                  #   程序读 qB 报回的宿主保存路径, 容器里看不到那块盘 ⇒ 误暂停整组;
+                                  #   配好映射后可保持 true —— 见 docs/deployment.md §11.3/§11.5)
         missing_tag: MISSING      # 文件丢失时整组添加的标签
+
+    # 下载目录路径映射(容器部署, plan 26-09-27-1407): qB 报回的宿主路径前缀 -> 本容器挂载点。
+    # 留空(默认)= 完全现状(宿主直跑 / Linux 同路径挂载不需要); 配好映射后缺文件扫描/跳检前置/
+    # exists()/disk_*()/目录浏览恢复可用, 映射 miss 一律判「不可判定」不误判缺失。
+    # 完整说明与 Windows 宿主样例: docs/deployment.md §11.5
+    fs:
+        path_map: []
+        # - from: "D:/Downloads"   # qB 报回的宿主保存路径前缀
+        #   to: "/mnt/downloads"   # 本容器挂载点(compose -v D:\Downloads:/mnt/downloads:ro)
 
     # 全局自动彻底删除标签
     delete_tags:                        # 彻底删除的标签格式，支持正则

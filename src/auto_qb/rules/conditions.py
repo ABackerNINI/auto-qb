@@ -1,9 +1,8 @@
 """内置条件插件: path, size, tags, category, trackers, state, hr, date_time, seedtime,
 upload_ratio, freespace, expr(表达式)"""
-import shutil
 from datetime import datetime
 
-from ..infra import utils
+from ..infra import file_access, utils
 from .base import BaseCondition, RuleContext
 from .expr import compile_expr, evaluate, validate
 from .expr.errors import ExprError
@@ -249,7 +248,11 @@ class FreespaceCondition(BaseCondition):
         if not self.path:
             return False
         try:
-            free = shutil.disk_usage(self.path).free
+            free = file_access.get_file_access().disk_usage(self.path).free
+        except file_access.FileAccessError as e:
+            # 映射 miss: 「不可判定」显式报错优于静默 False(报告 §05, 与 disk_* 表达式同口径;
+            # ExprError 由 Rule.process 兜成「不匹配 + 停后续规则」)
+            raise ExprError(str(e)) from e
         except OSError:
             return False
         return utils.compare(self.op, free, self.value)

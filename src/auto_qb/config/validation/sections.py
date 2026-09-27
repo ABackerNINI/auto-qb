@@ -14,6 +14,12 @@ KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password"}
 
 KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag"}
 
+# fs(文件访问, plan 26-09-27-1407): 容器部署路径映射, 空表 = 现状(保守默认)
+KNOWN_FS_KEYS = {"path_map"}
+
+# path_map 条目的合法键(YAML 空间): from = qB 报回的宿主路径前缀, to = 容器挂载点
+KNOWN_PATH_MAP_ENTRY_KEYS = {"from", "to"}
+
 KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify"}
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
@@ -419,6 +425,78 @@ def _validate_grouping(spec, errors: List[str]) -> None:
     for key in ("enabled", "check_missing_files"):
         if key in spec:
             _try(parse_bool, spec[key], f"config.grouping.{key}", errors)
+
+
+def _norm_prefix(p: str) -> str:
+    """映射前缀的归一口径(与 infra/file_access.MappedFileAccess 的匹配规则同源):
+    折叠分隔符(`\\`→`/`)+ 压缩重复斜杠 + 去尾斜杠; 大小写折叠由调用方按需叠加"""
+    from ...infra.utils import path_normalize
+    return path_normalize(p).rstrip("/")
+
+
+def _validate_fs(spec, errors: List[str]) -> None:
+    """fs 段(文件访问, plan 26-09-27-1407): path_map 映射表
+
+    from 必须是绝对路径(带盘符 / UNC / 以 / 开头); to 必须以 / 开头(容器挂载点);
+    两侧尾斜杠归一后再比较; from 重复(大小写/尾斜杠归一后)报错;
+    两条 from 互不为对方前缀(带 `/` 边界)报错 —— 否则命中顺序依赖表序, 语义歧义。
+    """
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.fs: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_FS_KEYS, "config.fs", errors)
+    raw = spec.get("path_map")
+    if raw is None:
+        return
+    where = "config.fs.path_map"
+    if not isinstance(raw, list):
+        errors.append(f"{where}: 必须是列表")
+        return
+    seen: dict = {}  # casefold 后的 from 归一形 -> 条目序号(重复检测)
+    normed: List[tuple] = []  # (归一形, 原始值, 序号) 供前缀歧义检查
+    for i, item in enumerate(raw):
+        w = f"{where}[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{w}: 必须是字典 {{from, to}}")
+            continue
+        _check_unknown_keys(item, KNOWN_PATH_MAP_ENTRY_KEYS, w, errors)
+        src = str(item.get("from", "") or "").strip()
+        dst = str(item.get("to", "") or "").strip()
+        if not src:
+            errors.append(f"{w}.from: 不能为空")
+        elif not (re.match(r"^[A-Za-z]:[\\/]", src) or src.startswith(("/", "\\\\"))):
+            errors.append(f"{w}.from: 必须是绝对路径(带盘符如 D:/Downloads、UNC 或以 / 开头): {src}")
+        if not dst:
+            errors.append(f"{w}.to: 不能为空")
+        elif not dst.startswith("/"):
+            errors.append(f"{w}.to: 必须是以 / 开头的容器挂载点(如 /mnt/downloads): {dst}")
+        if not src or not dst:
+            continue
+        src_n = _norm_prefix(src)
+        dst_n = _norm_prefix(dst)
+        if not src_n:
+            errors.append(f"{w}.from: 归一后为空: {src}")
+            continue
+        if not dst_n:
+            errors.append(f"{w}.to: 归一后为空(不能只是根 /): {dst}")
+            continue
+        key = src_n.casefold()
+        if key in seen:
+            errors.append(f"{w}.from: 与第 {seen[key]} 条重复(尾斜杠/大小写/分隔符归一后): {src}")
+        else:
+            seen[key] = i
+        normed.append((src_n, src, i))
+    # 前缀歧义: 任一 from 互不为对方前缀(带 / 边界, 如 D:/Downloads 不得歧义命中 D:/Downloads2;
+    # 而 D:/Downloads 与 D:/Downloads/sub 会按表序决定翻译结果 —— 一并拦下)
+    for ai, (a, a_raw, _i) in enumerate(normed):
+        for bi, (b, b_raw, _j) in enumerate(normed):
+            if ai == bi:
+                continue
+            if (a.casefold() + "/").startswith(b.casefold() + "/"):
+                errors.append(f"{where}[{_i}].from: 是第 {_j} 条 from 的前缀(尾斜杠/大小写归一后), 命中有歧义: '{a_raw}' vs '{b_raw}'")
+                break
 
 
 def _validate_tag_lists(cfg: dict, errors: List[str]) -> None:

@@ -2,14 +2,20 @@
 
 端点体逐字平移(plan 26-09-22-1857 W4); 仅 @app.* → @router.* 与共享件别名(原闭包名不变)。
 鉴权由 factory 的全局 dependencies 单点覆盖, 本模块不另挂依赖。
-日志命名空间见包 __init__(K3)。"""
+日志命名空间见包 __init__(K3)。
+26-09-27: 本地 syscall 全部改经文件访问层(infra/file_access, plan 26-09-27-1407) ——
+Windows 长路径前缀收编进 Local 实现单点, 容器映射(Mapped)在此透明生效;
+白名单比较保持在**逻辑空间**(与组 key/回传 qB 同空间, 见报告 §04)。
+"""
 
+import errno
 import logging
 import os
 from typing import List
 from fastapi import HTTPException
 
-from ....infra.utils import add_long_path_prefix_for_win, path_normalize
+from ....infra import file_access
+from ....infra.utils import path_normalize
 from .. import common
 from ..common import group_key_param as _group_key_param
 
@@ -27,38 +33,27 @@ def _bare(p: str) -> str:
     - `path_normalize` 更危险: 它先把 `\\` 折成 `/` 再压重复斜杠 ⇒ `\\\\?\\H:\\a` 变成
       `/?/H:/a`(**损坏**) ⇒ 所以必须先剥再规范化。
 
-    放在模块级(而非 `build_router` 闭包内)是为了能在**任何平台**上单测这条归一契约 ——
-    真前缀只在 Windows 上出现, 留在闭包里就只剩 Windows 上才守得住(见 test_web 的对应用例)。
+    单点实现在 file_access._strip_win_prefix(调用点只交逻辑路径后由包装层自理) ——
+    这里保留薄委托是为了让既有归一契约测试(test_web)继续钉在路由模块上。
     """
-    if p.startswith("\\\\?\\UNC\\"):
-        return "\\\\" + p[8:]
-    return p[4:] if p.startswith("\\\\?\\") else p
-
-
-def _fs(p: str) -> str:
-    """**本地文件系统调用**用路径: 规范化分隔符 + Windows 长路径前缀(非 Windows 是空操作)。
-
-    长路径(>MAX_PATH 260)在未开长路径支持的机器上裸路径一律失败(`isdir` 给假 /
-    `scandir` 抛 WinError 3 / `mkdir` 抛 OSError) ⇒ 所有真实 syscall 都必须过这里。
-    ⚠ 前缀**只用于本地调用**: 返回值仍取未加前缀的 `target`, 否则前端会把前缀回传、
-    甚至写进 save_path。入参先过 `_bare` ⇒ 本函数**幂等**(重复加前缀不会叠加/损坏)。
-    """
-    return add_long_path_prefix_for_win(path_normalize(_bare(p)))
+    return file_access._strip_win_prefix(p)
 
 
 def _fs_real(p: str) -> str:
-    """规范化到可比较的绝对真实路径(realpath 解符号链接, normcase 在 Windows 上统一大小写/斜杠)
+    """规范化到可比较的绝对路径(经文件访问层)
 
-    ❗必须**先剥 `\\\\?\\` 前缀**: 比较双方可能一侧带前缀(如 `os.scandir(_fs(target))` 给出的
-    `entry.path`)、一侧不带(如允许根) —— 不剥就会因前缀差异被判成"越界", 实测后果是
-    **子目录被全部过滤掉**(目录树恒空)。realpath 是否保留前缀**与路径长度有关**
-    (实测短路径保留、长路径剥掉), 不能依赖它。
+    Local 实现: realpath 解符号链接 + normcase 统一大小写/斜杠(路径真实存在, 可解析);
+    Mapped 实现: 纯词法 normcase + normpath —— 逻辑路径在容器里不真实存在, realpath 只会
+    把它拼坏(符号链接逃逸防护退化为词法比较, 与下方 >MAX_PATH 已知限制同口径)。
 
-    ⚠ 已知限制(实测, 本次不改): `os.path.realpath` 对 >MAX_PATH 的路径**静默退化成 abspath**
-    (不抛错) ⇒ 长路径上的符号链接/junction 解析不可用, 逃逸防护退化为词法比较。
-    两侧都过 normcase, 大小写差异不会误判。
+    ❗实现内部先剥 `\\\\?\\` 前缀: 比较双方可能一侧带前缀(如 `os.scandir` 家族返回值)、
+    一侧不带 —— 不剥就会因前缀差异被判成"越界", 实测后果是**子目录被全部过滤掉**
+    (目录树恒空)。
+
+    ⚠ 已知限制(沿用): 对 >MAX_PATH 的路径 realpath **静默退化成 abspath**(不抛错)
+    ⇒ 长路径上的符号链接/junction 解析不可用, 逃逸防护退化为词法比较。
     """
-    return os.path.normcase(os.path.realpath(_bare(p)))
+    return file_access.get_file_access().realpath_lexical(p)
 
 
 def build_router(ctx: WebContext) -> APIRouter:
@@ -87,6 +82,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         """目录浏览的**允许根**集合(R10-11): 与 /api/paths 同源的已知保存路径。
 
         白名单只由服务端从自己的快照派生, 不接受客户端传参 —— 这是文件系统读端点的第一道闸门。
+        ❗roots 恒为**逻辑空间**路径(qB 报回的 save_path) —— 与映射无关, 见报告 §04。
         """
         roots = {path_normalize(rec.save_path or "") for rec in manager.store.by_hash.values() if rec.save_path}
         return sorted(r for r in roots if r)
@@ -110,11 +106,17 @@ def build_router(ctx: WebContext) -> APIRouter:
 
         **安全边界**(本项目唯一新增的文件系统读能力, 后续改动必须保持):
         ① 只列**目录**, 绝不返回文件条目、不读文件内容;
-        ② 允许根白名单 = 已知保存路径(与 /api/paths 同源); 路径经 realpath 规范化后必须落在
-           某个根之内(相等或为子目录), 否则 403 —— 同时挡掉 `..` 穿越;
-        ③ 逐条子目录同样过白名单 -> 指向根外的符号链接/junction 不会出现在列表里(逃逸防护);
+        ② 允许根白名单 = 已知保存路径(与 /api/paths 同源, 逻辑空间); 路径经 _fs_real 规范化后
+           必须落在某个根之内(相等或为子目录), 否则 403 —— 同时挡掉 `..` 穿越;
+        ③ 逐条子目录同样过白名单 -> 指向根外的符号链接/junction 不会出现在列表里(逃逸防护;
+           Local 实现靠 realpath 解析符号链接, Mapped 实现退化为词法比较 —— 容器里 bind mount
+           的下载目录内通常没有符号链接, 且逻辑路径上本就做不了 realpath);
         ④ 鉴权沿用全局 require_token 依赖(本机免鉴权同样放行, 与其它端点一致)。
         path 为空 = 返回允许根列表(前端首屏入口)。
+
+        扫描与子路径构造全程在**逻辑空间**进行(包装层把 entry 译回逻辑空间, 报告 §04):
+        旧实现先 realpath 再扫描, 现改为词法基准 + 逐条白名单 realpath, 对无符号链接的
+        普通目录行为一致。
         """
         manager.touch_web_client()
         roots = _browse_roots()
@@ -124,18 +126,20 @@ def build_router(ctx: WebContext) -> APIRouter:
             return {"path": "", "parent": "", "roots": roots, "dirs": [{"name": r, "path": r} for r in roots]}
         if not _within_roots(path, roots):
             raise HTTPException(status_code=403, detail="路径不在允许的保存路径范围内")
-        target = os.path.realpath(path)
-        if not os.path.isdir(_fs(target)):
+        fa = file_access.get_file_access()
+        target = path_normalize(_bare(path))  # 逻辑路径基准(保大小写, 不解析符号链接)
+        if not fa.isdir(target):
             raise HTTPException(status_code=404, detail="目录不存在或不可访问")
-        dirs = []
         try:
-            with os.scandir(_fs(target)) as it:
-                for entry in it:
-                    if not entry.is_dir() or not _within_roots(entry.path, roots):
-                        continue
-                    dirs.append({"name": entry.name, "path": path_normalize(os.path.join(target, entry.name))})
+            entries = fa.scandir(target)
         except OSError as e:
             raise HTTPException(status_code=404, detail=f"目录不可读: {e.strerror or e}")
+        dirs = [
+            {
+                "name": e.name,
+                "path": path_normalize(e.path)
+            } for e in entries if e.is_dir and _within_roots(e.path, roots)
+        ]
         dirs.sort(key=lambda d: d["name"].lower())
         parent = os.path.dirname(target)
         return {
@@ -153,6 +157,9 @@ def build_router(ctx: WebContext) -> APIRouter:
         不接受任何路径成分; ② 已存在同名目录直接返回(幂等), 同名**文件**报 409;
         ③ 这是本项目唯一的文件系统**写**能力, 不扩展到重命名/删除/递归。
         不触碰任务队列与 state_file -> 不违反单一写线程假设。
+
+        容器(Mapped)实现下 mkdir 真实执行: 挂载点可写(:rw)即成功, 只读挂载由 OS 的
+        EROFS/EACCES 冒泡后在此语义化为 403(不让裸 strerror 变乱码)。
         """
         b = body or {}
         name = str(b.get("name") or "").strip()
@@ -162,17 +169,25 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=400, detail="文件夹名不合法")
         if not parent or not _within_roots(parent, roots):
             raise HTTPException(status_code=403, detail="路径不在允许的保存路径范围内")
-        base = os.path.realpath(parent)
-        if not os.path.isdir(_fs(base)):
+        fa = file_access.get_file_access()
+        base = path_normalize(_bare(parent))
+        if not fa.isdir(base):
             raise HTTPException(status_code=404, detail="目录不存在或不可访问")
         target = os.path.join(base, name)
-        if os.path.exists(_fs(target)):
-            if os.path.isdir(_fs(target)):
+        if fa.exists(target):
+            if fa.isdir(target):
                 return {"created": path_normalize(target), "existed": True}
             raise HTTPException(status_code=409, detail="同名文件已存在")
         try:
-            os.mkdir(_fs(target))
+            fa.mkdir(target)
+        except file_access.NotSupported:
+            raise HTTPException(status_code=501, detail="当前运行环境不支持新建文件夹")
         except OSError as e:
+            if e.errno in (errno.EACCES, errno.EPERM, errno.EROFS):
+                raise HTTPException(
+                    status_code=403,
+                    detail="下载目录挂载为只读, 无法新建(容器部署默认 :ro; 确需新建请改 :rw 挂载)",
+                )
             raise HTTPException(status_code=400, detail=f"新建失败: {e.strerror or e}")
         logger.info(f"WEB 新建目录: {target}")
         return {"created": path_normalize(target), "existed": False}
@@ -190,11 +205,15 @@ def build_router(ctx: WebContext) -> APIRouter:
         —— 打开所在目录并**定位选中**该文件(R10-10 用户诉求: "没有创建文件夹的要在文件夹中
         选中相关文件"), 否则取 content_path, 都缺则回退 save_path。
         只读: 不投命令、不写 state —— 单一写线程假设不受影响。
+
+        容器(Mapped)实现 open_path 恒 NotSupported —— 优雅降级为 501 + 引导「复制路径」
+        (把原先 404/500 两层根因收敛成一句话, 报告 §05)。
         """
         manager.touch_web_client()
         b = body or {}
         kind = str(b.get("kind") or "").strip()
         select = False
+        fa = file_access.get_file_access()
         if kind == "group":
             key = _group_key_param(str(b.get("key") or ""))
             if key not in manager.store.groups:
@@ -203,7 +222,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         elif kind == "torrent":
             rec = _require_torrent(str(b.get("hash") or "").strip())
             content = path_normalize(rec.content_path or "")
-            if content and not os.path.isdir(_fs(content)):
+            if content and not fa.isdir(content):
                 target, select = content, True  # 单文件种子: 定位选中, 不降级成"只打开父目录"
             else:
                 target = content or path_normalize(rec.save_path or "")
@@ -211,11 +230,14 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=400, detail="kind 必须是 group 或 torrent")
         target = path_normalize(target)
         if select:
-            if not os.path.isfile(_fs(target)):
+            if not fa.isfile(target):
                 raise HTTPException(status_code=404, detail="目标文件不存在或不可访问")
-        elif not target or not os.path.isdir(_fs(target)):
+        elif not target or not fa.isdir(target):
             raise HTTPException(status_code=404, detail="目标目录不存在或不可访问")
-        common.open_path(target, select=select)
+        try:
+            common.open_path(target, select=select)
+        except file_access.NotSupported:
+            raise HTTPException(status_code=501, detail="容器环境不支持打开文件夹, 请使用「复制路径」")
         return {"opened": target, "select": select}
 
     return router

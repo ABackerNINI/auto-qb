@@ -248,22 +248,21 @@ def test_fsmock_disk_usage_uses_recorded_free_space():
 # ---- 静态守阵: 计划 §09 CORPUS.fs_mock_coverage(必须做红绿双验) ----
 # 语料相关的 FS 探测点必须是**被 mock 覆盖的那三个函数**; 换成 pathlib / os.stat 会让 mock 静默失效
 # => 判据变假绿(最坏的一种失败)。故这里把"期望的探测点"钉死。
+# 26-09-27 文件访问层收编(plan 26-09-27-1407): 三个探测函数从 grouping/checking/env 收进
+# infra/file_access.py 单点 —— 消费方经 get_file_access() 间接调用; mock 按模块属性
+# (os.path.exists / os.path.getsize / shutil.disk_usage)打桩, 包装层内部仍是属性访问 ⇒ 覆盖不变。
 _EXPECTED_PROBES = {
-    "core/mixins/grouping.py": {
-        "os.path.exists": 1,
-        "os.path.getsize": 1
-    },
-    "core/mixins/checking.py": {
-        "os.path.exists": 1,
-        "os.path.getsize": 1
-    },
-    "rules/expr/env.py": {
-        "os.path.exists": 1,
-        "shutil.disk_usage": 3
-    },
+    "infra/file_access.py":
+        {
+            "os.path.exists": 2,  # Local + Mapped 两实现各 1
+            "os.path.getsize": 2,
+            "shutil.disk_usage": 2,
+        },
 }
 # 不被 mock 覆盖的探测写法: 出现在上述文件里即视为守阵失败
-_UNMOCKED_PATTERNS = ("os.stat(", "Path(", "pathlib", ".is_file(", ".is_dir(")
+# (pathlib 由 "Path(" / "pathlib" 两个模式兜住 —— .is_dir(/.is_file( 会误伤 os.scandir 的
+#  DirEntry 元数据访问(file_access.scandir, 26-09-27 起), 它与 scandir 同属语料外的列举语义, 不在 mock 范围)
+_UNMOCKED_PATTERNS = ("os.stat(", "Path(", "pathlib", ".is_file(")
 
 
 def scan_fs_probes(src_root: Path) -> dict:
@@ -311,9 +310,9 @@ def test_fs_mock_coverage_red_on_pathlib(tmp_path):
         )
     # 正确形态: 只有 shutil.disk_usage 次数不匹配会红, 这里先只看 violations
     assert not scan_fs_probes(tmp_path)["violations"]
-    # 换成 pathlib: 必须被 violations 抓住
-    (tmp_path / "auto_qb" / "core" / "mixins" /
-     "grouping.py").write_text("from pathlib import Path\nPath('x').exists()\n", encoding="utf-8")
+    # 换成 pathlib: 必须被 violations 抓住(26-09-27 探测点已收进 file_access 单点, 写它)
+    (tmp_path / "auto_qb" / "infra" /
+     "file_access.py").write_text("from pathlib import Path\nPath('x').exists()\n", encoding="utf-8")
     res = scan_fs_probes(tmp_path)
     assert res["violations"], "换成 pathlib 后守阵必须变红(否则 mock 静默失效 => 假绿)"
 

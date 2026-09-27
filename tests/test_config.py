@@ -1204,6 +1204,8 @@ def test_example_docker_config_yml_passes_fail_fast():
     assert config.notify.enabled is False  # 容器无桌面会话, 平台通知预期不可用
     # 缺文件扫描读的是 qB 报回的宿主保存路径 —— 容器内恒"不存在" ⇒ 误暂停整组 + 打 MISSING 标签(真实写 qB)
     assert config.grouping.check_missing_files is False
+    # fs.path_map(plan 26-09-27-1407): 容器示例默认空表 = 映射关(保守默认); 带映射的注释样例在文件内
+    assert config.fs.path_map == ()
 
 
 def test_config_schema_version_load_and_migrate_dispatch(td=None):

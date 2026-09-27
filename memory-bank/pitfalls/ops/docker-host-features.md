@@ -1,7 +1,9 @@
 # 容器化后, 一切"读宿主磁盘 / 调宿主程序 / 用桌面"的能力都会静默降级
 
-> 摘要: 程序读的是 **qB 报回来的宿主保存路径**(如 `D:\Downloads\x`), 而容器里没有这块盘 ⇒ `os.path.exists` 恒 False、`realpath` 被拼成 `/app/D:/Downloads`; slim 镜像又缺 `xdg-open` / `notify-send` ⇒ 打开文件夹 404(挂了盘则 500)、通知静默返回 False。**最危险的是缺文件扫描**: 它把"看不见"当成"文件没了", 直接 `torrents_stop` 暂停整组 + 打 `MISSING` 标签 —— 真实写入 qB, 而 `check_missing_files` 默认 `true`、事件触发(非每轮) ⇒ 表现为"时不时一批种子被无故暂停"。
+> 摘要: 程序读的是 **qB 报回来的宿主保存路径**(如 `D:\Downloads\x`), 而容器里没有这块盘 ⇒ `os.path.exists` 恒 False、`realpath` 被拼成 `/app/D:/Downloads`; slim 镜像又缺 `xdg-open` / `notify-send` ⇒ 打开文件夹 404(挂了盘则 500)、通知静默返回 False。**最危险的是缺文件扫描**: 它把"看不见"当成"文件没了", 直接 `torrents_stop` 暂停整组 + 打 `MISSING` 标签 —— 真实写入 qB, 而 `check_missing_files` 默认 `true`、事件触发(非每轮) ⇒ 表现为"时不时一批种子被无故暂停"。26-09-27 起映射方案已落地(fs.path_map + 文件访问层), 映射 miss 不再误判缺失。
 > 触发: docker, 容器, compose, 打开目标文件夹, open-path, 目录浏览, fs/dirs, mkdir, 缺文件, MISSING 标签, 跳检, check_filelist, exists(), disk_total, notify-send, xdg-open, 托盘, TZ, host.docker.internal
+
+**Refs:** memory-bank/plans/26-09-27-1407-plan-docker-fs-wrapper-pathmap.html,memory-bank/reports/26-09-27-1352-report-docker-fs-wrapper-pathmap.html,memory-bank/plans/26-09-25-2241-plan-docker-deploy.html
 
 ## 判别
 
@@ -31,9 +33,10 @@ PlatformChannel()                                  ->  _build_linux ; send() -> 
 
 ## 处置
 
-- **容器部署的强制项**: `grouping.check_missing_files: false`(示例已关 + 守阵钉住);`notify.enabled: false`;`basic_check` 不用 `custom`;规则里不写 `exists()` / `disk_*()`;不用 `--tray`。
-- **想救回磁盘类能力**: 把下载目录挂到**与 qB 完全相同的绝对路径**(`-v /volume1/downloads:/volume1/downloads:ro`)—— 只读即可救回缺文件扫描 / 跳检前置 / `exists()` / `disk_*()` / 目录浏览;要「新建文件夹」才需可写。**Windows 宿主无解**(盘符路径无法作为 Linux 挂载点), 只能关功能。
-- **打开文件夹救不回来**: 它是"外部程序缺失"而非"路径不可见", 装 `xdg-open` 也没有文件管理器可开。替代方案走前端「复制路径」。
-- 新增任何读盘 / 起子进程的能力时, 先问一句"容器里这条路径存在吗 / 这个程序在吗", 并在 `docs/deployment.md` §11 矩阵里补一行。
+- **容器部署的强制项(不配映射时)**: `grouping.check_missing_files: false`(示例已关 + 守阵钉住);`notify.enabled: false`;`basic_check` 不用 `custom`;规则里不写 `exists()` / `disk_*()`;不用 `--tray`。
+- **想救回磁盘类能力**: ① 首选同路径挂载(`-v /volume1/downloads:/volume1/downloads:ro`, 零配置); ② 挂载点与 qB 路径不一致(典型 Windows 宿主)用映射表 —— `fs.path_map` + 文件访问层(plan 26-09-27-1407 已落地, 见 `infra/file_access.py`): 逻辑路径进 → syscall 边界映射 → 逻辑路径出, **"Windows 宿主无解"旧结论已废除**(无解的只是同路径挂载这一种做法)。
+- **映射 miss 不再误判缺失(26-09-27 起)**: 缺文件扫描对不可判定**跳过该组 + WARNING**(不暂停不打标), `exists()`/`disk_*()` 显式报「路径不可判定」—— 映射配错不会重演误暂停事故, 但功能等于失效, 要看启动自检 WARNING(`fs.path_map 自检 | ...`)把映射修对; 挂载点不存在 / save_path 命中率 0% / 挂载只读都有对应自检日志。
+- **打开文件夹救不回来**: 它是"外部程序缺失"而非"路径不可见", 装 `xdg-open` 也没有文件管理器可开。26-09-27 起容器实现直接 501 显式降级并引导前端「复制路径」。
+- 新增任何读盘 / 起子进程的能力时, 先问一句"容器里这条路径存在吗 / 这个程序在吗", 并在 `docs/deployment.md` §11 矩阵里补一行; **读下载数据目录的新代码一律走 `infra/file_access.get_file_access()`**, 不要再裸调 `os.path.*`(映射与长路径前缀都收在包装层单点)。
 
 > 完整矩阵与逐项根因: [docs/deployment.md](../../../docs/deployment.md) §11(与宿主直跑的差异 / 四类根因 / 24 项清单)。

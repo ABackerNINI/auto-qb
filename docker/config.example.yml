@@ -31,11 +31,23 @@ config:
     # 种子分组管理(辅种管理)
     grouping:
         enabled: true # 启用种子分组管理
-        # ❗容器场景必须 false: 缺文件扫描读的是 qB 报回的**宿主**保存路径, 容器内看不见那块盘
-        #   ⇒ 恒判定"文件缺失" ⇒ 误暂停整组 + 打 MISSING 标签(真实写 qB)。默认 true, 不显式关就会踩。
-        #   想保留该功能: 把下载目录挂到与 qB 完全相同的绝对路径后再开(见 docs/deployment.md §11.5)
+        # ❗容器场景默认 false: 缺文件扫描读的是 qB 报回的**宿主**保存路径, 容器内看不见那块盘
+        #   ⇒ 恒判定"文件缺失" ⇒ 误暂停整组 + 打 MISSING 标签(真实写 qB)。
+        #   配好 fs.path_map(下方样例)把下载目录挂进容器后可改回 true 恢复该功能(§11.5);
+        #   映射 miss 时一律判「不可判定」跳过, 不再误暂停(plan 26-09-27-1407)。
         check_missing_files: false
         missing_tag: MISSING # 文件丢失时整组添加的标签
+
+    # 下载目录路径映射(plan 26-09-27-1407): qB 报回的宿主保存路径前缀 -> 本容器挂载点。
+    # 空表 = 映射关(完全现状); 配好映射 + compose 挂载(见 compose.yaml 注释行)后,
+    # 缺文件扫描 / 跳检前置 / exists() / disk_*() / 目录浏览恢复可用 —— 详见 docs/deployment.md §11.5。
+    # Windows 宿主示例(compose: -v D:\Downloads:/mnt/downloads:ro):
+    # fs:
+    #     path_map:
+    #         - from: "D:/Downloads"   # qB 报回的宿主保存路径前缀(写法不限, 内部折叠比较)
+    #           to: "/mnt/downloads"   # 本容器挂载点
+    fs:
+        path_map: [] # 留空 = 不启用映射(宿主直跑 / Linux 同路径挂载同理)
 
     # 全局标签清理(作为两个独立任务周期执行, 支持正则 regex: 前缀):
     delete_tags: # 彻底删除的标签格式(从所有种子移除并删除标签定义)

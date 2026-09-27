@@ -91,9 +91,13 @@ docker exec auto-qb cat /data/web.token
 
 其余功能开关(集数标签 / 标签清理 / 限速曲线 / 站点列表)与容器无关, 语义同
 [configuration.md](configuration.md)。**例外: 分组的 `check_missing_files` 与容器强相关** ——
-它要读真实磁盘, 容器里不关会误暂停种子并打 `MISSING` 标签, 详见 §11.3 / §11.4。
+它要读真实磁盘, 容器里不关会误暂停种子并打 `MISSING` 标签, 详见 §11.3 / §11.4;
+配好 `fs.path_map`(§11.5)把下载目录挂进容器后可改回 `true` 恢复。
 `trackers:` 留空 = 不匹配任何种子 = 不做任何管理动作
 (全功能关闭的冒烟配置即以此保证对 qB 零写入)。
+
+> **部署前提(Windows 宿主挂载下载目录时)**: Docker Desktop 的文件共享须包含下载盘
+> (Settings → Resources → File Sharing; WSL2 后端默认可用, Hyper-V 后端需手动勾选)。
 
 ## 5. 启动验证清单
 
@@ -207,16 +211,16 @@ interval: 30s / timeout: 5s / retries: 3 / start_period: 15s
 
 | # | 功能 | 状态 | 容器内实际表现 |
 |---|---|---|---|
-| 1 | 右键「**打开目标文件夹**」(`POST /api/open-path`) | ❌ | 弹 toast「打开目标文件夹失败: 目标目录不存在或不可访问」(**404**) —— 宿主路径在容器内 `isdir` 为 False。即使把下载目录挂成**可见**, 也会变成 **500**: 走 Linux 分支 `xdg-open`(B 类缺失) ⇒ `FileNotFoundError: 'xdg-open'` 未被捕获(实测 `open_path('/tmp')` 直接抛) |
+| 1 | 右键「**打开目标文件夹**」(`POST /api/open-path`) | ❌ → **501 显式降级**(26-09-27 起) | 不再是摸不清的 404/500: 文件访问层对容器实现直接返回「容器环境不支持打开文件夹, 请使用「复制路径」」(501) —— 缺 `xdg-open` 更缺文件管理器(B/C 类根因), 与挂载/映射无关 |
 | 2 | 抽屉路径行「打开目录」 | ❌ | 同上, 同一端点 |
-| 3 | 添加种子「**浏览目录**」(`GET /api/fs/dirs`) | ❌ | **404/403**。允许根 = qB 报回的宿主保存路径, `realpath` 后不落在任何根内 ⇒ 403「路径不在允许的保存路径范围内」 |
-| 4 | 添加种子「**新建文件夹**」(`POST /api/fs/mkdir`) | ❌ | **403**(同上白名单判据) |
+| 3 | 添加种子「**浏览目录**」(`GET /api/fs/dirs`) | ❌ → ✅ **配好映射后** | 默认 403/404。配好 `fs.path_map`(§11.5)后恢复: 白名单/父目录判定全程在逻辑空间进行, 包装层把目录条目译回逻辑空间 |
+| 4 | 添加种子「**新建文件夹**」(`POST /api/fs/mkdir`) | ❌ → ⚠️ **取决于挂载读写** | 默认 403。映射配好后挂载 `:rw` 即可用(真实创建); `:ro` 挂载语义化 403「下载目录挂载为只读, 无法新建」, 启动自检会预告只读状态 |
 | 5 | 添加种子「保存位置」下拉 (`GET /api/paths`) | ⚠️ | **仍返回宿主路径**(纯字符串聚合, 不校验存在性)。手填一个 qB 侧合法路径照常能加种 —— qB 才是路径的裁判; 只是不能"浏览着选" |
-| 6 | **缺文件扫描**(`grouping.check_missing_files`, **默认 true**) | ❌ **会误伤** | 见 §11.3 —— 这是唯一会**写坏 qB**的一条 |
-| 7 | 跳检前置文件完整性检查(`checking` 动作 / `check_filelist`) | ❌ | 恒返回「文件缺失: xxx」⇒ `ActionResult.skip("全量校验前置检查未通过: ...")` ⇒ **跳检永不执行**。保守降级, 不破坏数据 |
-| 8 | 规则表达式 `exists(path)` | ⚠️ **静默** | 恒返回 False ⇒ 依赖它的条件**恒不成立**, 不报错、不告警, 规则看着"没触发" |
-| 9 | 规则表达式 `disk_total(path)` / `disk_used(path)` | ❌ | `shutil.disk_usage` 抛 `OSError` ⇒ 表达式报 `ExprError: 磁盘不可用: '<路径>'`(显式报错, 不静默) |
-| 10 | `basic_check: custom` 自定义校验程序 | ❌ | 程序不在镜像里 ⇒ `FileNotFoundError` 被 `except Exception` 吞掉 ⇒ 每个候选一条 WARNING「自定义校验程序执行异常」⇒ **全部判为非参考**。日志洪水风险 |
+| 6 | **缺文件扫描**(`grouping.check_missing_files`, **默认 true**) | ❌ **会误伤** → ✅ **配好映射后** | 默认行为见 §11.3 —— 唯一会**写坏 qB** 的一条。配好映射后恢复真值; 映射 miss 时判「不可判定」**跳过该组 + WARNING**(不暂停不打标, 不会重演误暂停) |
+| 7 | 跳检前置文件完整性检查(`checking` 动作 / `check_filelist`) | ❌ → ✅ **配好映射后** | 默认恒「文件缺失」⇒ 跳检永不执行。配好映射后恢复; 映射 miss 返回「路径不可判定」(显式, 不误报缺失) |
+| 8 | 规则表达式 `exists(path)` | ⚠️ **静默** → ✅ **配好映射后** | 默认恒 False ⇒ 条件恒不成立不报错。配好映射后恢复真值; 映射 miss 抛 `ExprError: 路径不可判定`(显式报错优于静默 False) |
+| 9 | 规则表达式 `disk_total(path)` / `disk_used(path)` | ❌ → ✅ **配好映射后** | 默认 `ExprError: 磁盘不可用`。配好映射后恢复(bind mount 即同一块盘); Windows 宿主 WSL2/drvfs 挂载的**数值正确性待真机实测**(§14)。映射 miss 报「路径不可判定」 |
+| 10 | `basic_check: custom` 自定义校验程序 | ❌ | 程序不在镜像里 ⇒ 每个候选一条 WARNING「自定义校验程序执行异常」⇒ 全部判为非参考。**容器里维持不用**(映射只救路径参数, 不往镜像装程序) |
 | 11 | 桌面通知(`notify.*`) | ❌ **静默** | Linux 分支调 `notify-send`(缺失) ⇒ `send()` 返回 **False** 且只 DEBUG 一条。示例配置已 `enabled: false` |
 | 12 | `--tray` 托盘模式 | ❌ | 无显示环境; 托盘菜单里的 `webbrowser.open` 同样无处可开。**不要在容器里用** |
 | 13 | 时区相关(HR 窗口 / 每日限速曲线 / 日志时间戳 / `notify.quiet_hours`) | ⚠️ | 按**容器**本地时间。compose 默认 `TZ: Asia/Shanghai`, 按需改后 `docker compose up -d` 重建生效 |
@@ -247,24 +251,31 @@ if not os.path.exists(full_path):   # 容器里恒 False(A 类)
   所以表现为"时不时有一批种子被无故暂停 + 打 MISSING", 比必现更难排查。
 - **默认开着**: `check_missing_files` 默认 `true` ⇒ **不显式关就会踩**。容器示例 `docker/config.example.yml`
   已自 2026-09-26 起显式写 `false`(§4 表格第五项, 有守阵测试钉住); **自己手搓的容器配置仍要记得关**。
-- **处置**: 容器部署**必须**显式写 `grouping.check_missing_files: false`(或按 §11.5 把下载目录挂进去再开)。
+- **处置**: 不配映射时容器部署**必须**显式写 `grouping.check_missing_files: false`;
+  或按 §11.5 挂下载目录 + 配 `fs.path_map` 后保持 `true`(映射恢复真值)。
+- **26-09-27 起的双重保险**: 即使映射配错(前缀大小写/盘符不匹配), 新逻辑对映射 miss
+  一律判「不可判定」→ **跳过该组 + WARNING**, 不再误暂停整组 —— 但功能等于失效,
+  要看启动自检的 WARNING(§13)把映射修对。
 - 不关也没有替代告警: 它只写 WARNING 日志, 而容器里通知是哑的(第 11 项) ⇒ 用户只能从 `docker compose logs` 里发现。
 
 ### 11.4 必调 / 建议的配置项
 
 | 键 | 容器取值 | 为什么 |
 |---|---|---|
-| `grouping.check_missing_files` | **`false`** | §11.3, 不关会误暂停 + 误打 MISSING 标签(真实写 qB) |
+| `grouping.check_missing_files` | **`false`**(不配映射时) | §11.3, 不关会误暂停 + 误打 MISSING 标签(真实写 qB); **配好 `fs.path_map` 后可保持 `true`** |
 | `notify.enabled` | `false` | C 类, 示例已写死 |
 | `qbittorrent.host` | `host.docker.internal` | D 类 |
 | `web.host` | `0.0.0.0` | D 类 |
 | `data_dir` | `/data` | 对齐 named volume |
 | `basic_check` | 不要用 `custom` | B 类, 自定义程序不在镜像里, 且失败会刷 WARNING |
-| 规则里 `exists()` / `disk_*()` | 不要写 | A 类, 一个恒 False、一个直接报错 |
+| 规则里 `exists()` / `disk_*()` | 不配映射时不要写 | A 类, 一个恒 False、一个直接报错; **配好映射后可用**(miss 时显式报「路径不可判定」) |
+| `fs.path_map` | 留空 / 按需配 | 容器挂载点与 qB 报回路径不一致时才需要(§11.5); 空 = 完全现状 |
 
-### 11.5 想救回 A 类能力: 把下载目录挂进容器(仅 Linux 宿主可行)
+### 11.5 想救回 A 类能力: 把下载目录挂进容器(同路径零代码 / 映射表两条路)
 
-A 类(除 #1 外)全部是"路径看不见"造成的 —— 把下载目录挂到**与 qB 完全相同的绝对路径**即可救回:
+A 类(除 #1 外)全部是"路径看不见"造成的。两条救回路径:
+
+**方案一(首选, 零代码): 同路径挂载** —— Linux 宿主把下载目录挂到**与 qB 完全相同的绝对路径**:
 
 ```yaml
 services:
@@ -277,12 +288,44 @@ services:
 
 - **只读 `:ro` 即可**救回: 缺文件扫描(#6)、跳检前置检查(#7)、`exists()`(#8)、`disk_*()`(#9)、目录浏览(#3)。
   要「新建文件夹」(#4)才需要可写。
-- **Windows 宿主无解**: qB 报回的是 `D:\Downloads\...` 盘符路径, 在 Linux 容器里无法作为挂载点存在
-  (`realpath` 只会把它拼成 `/app/D:/Downloads`)。这类部署**只能**按 §11.4 关掉相关功能。
-- **打开文件夹(#1)挂了也没用**: 它是 B 类(缺 `xdg-open`), 不是 A 类 —— 除非把下载目录挂进去
-  **并且**在镜像里装 `xdg-open`, 但容器里没有文件管理器可开, 装了也是空转。**结论: 容器内该功能不可用**,
-  替代做法是用抽屉里的「复制路径」按钮拿到路径, 再回到宿主资源管理器打开。
 - 挂载后 `/api/fs/dirs` 的允许根白名单(派生自 `save_path`)就能命中, 目录浏览与新建自然恢复。
+- `fs.path_map` 保持空表(同路径无需映射)。
+
+**方案二(通用解, plan 26-09-27-1407): 映射表** —— 挂载点与 qB 路径不一致时(典型: **Windows 宿主**,
+qB 报回 `D:\Downloads\...` 盘符路径, Linux 容器里挂载点只能是 `/mnt/...`), 配 `fs.path_map`
+把 qB 视角的前缀在**文件访问层内部**译成容器挂载路径(逻辑路径进 → syscall 边界映射 → 逻辑路径出):
+
+```yaml
+services:
+  auto-qb:
+    volumes:
+      - ./config:/config
+      - auto-qb-data:/data
+      - D:\Downloads:/mnt/downloads:ro             # Windows 宿主(Docker Desktop 文件共享须包含该盘, 见 §4)
+```
+
+```yaml
+# config.yml
+config:
+  fs:
+    path_map:
+      - from: "D:/Downloads"     # qB 报回的宿主保存路径前缀(写法不限, 内部折叠大小写/分隔符/尾斜杠)
+        to: "/mnt/downloads"     # 本容器挂载点
+  grouping:
+    check_missing_files: true    # 映射配好后可恢复
+```
+
+- **救回范围与方案一相同**(缺文件扫描 / 跳检前置 / `exists()` / `disk_*()` / 目录浏览), 另含
+  qB 也在容器里但两容器挂载路径不同的 NAS 场景。
+- **fail-safe 红线**: 映射 miss(配错前缀)时存在性一律判「**不可判定**」—— 缺文件扫描跳过该组 +
+  WARNING、`exists()`/`disk_*()` 抛显式错误, **绝不判「不存在」**重演误暂停事故; 取值类访问
+  (getsize/disk_usage)抛带「不可判定」文案的错误。启动自检会对挂载点存在性 / save_path 命中率 /
+  挂载可写性各给一条日志(§13)。
+- **mkdir(新建文件夹)**: 映射配好后真实执行 —— 挂载 `:rw` 即可用, `:ro` 挂载 403 语义化拒绝。
+- 旧结论「**Windows 宿主无解**」已废除: 无解的只是**同路径挂载**这一种做法, 映射层方案有解。
+- 打开文件夹(#1)救不回: B/C 类根因(缺 `xdg-open` 更缺文件管理器), 与映射无关 —— 现在直接
+  501 显式降级并引导「复制路径」。
+- ⚠ Windows 宿主 WSL2/drvfs 挂载上 `disk_*()` 的**数值正确性**与 `getsize` 性能待真机实测(§14)。
 
 ## 12. 安全提示
 
@@ -306,11 +349,15 @@ services:
 | HR 窗口/每日曲线时间不对 | `TZ` 与宿主不一致: 改 compose environment 后 `docker compose up -d` 重建容器 |
 | 配置校验失败(列 N 处) | fail-fast 聚合报错, 按日志逐条改 config.yml; 示例配置可直接对照 |
 | 想验证配置又不想起容器 | 见 §3 第 0 步的本地校验一行 |
-| 右键「打开目标文件夹」报「目标目录不存在或不可访问」 | **预期失效(不是故障)**: 宿主保存路径在容器内不可见 ⇒ 404。挂下载目录也救不回来(缺 `xdg-open`), 用「复制路径」代替(§11.2 #1) |
-| 添加种子点「浏览目录」报「路径不在允许的保存路径范围内」 | 同上, 允许根是宿主路径。手填路径可用; 想恢复浏览按 §11.5 挂下载目录(§11.2 #3/#4) |
-| 一批种子被无故暂停并打上 `MISSING` 标签 | ❗缺文件扫描误判(§11.3): 立刻把 `grouping.check_missing_files` 设为 `false` 并重启; 已打的标签需手工清理 |
+| 右键「打开目标文件夹」报「目标目录不存在或不可访问」→ 现为「容器环境不支持打开文件夹」 | **预期行为(不是故障)**: B/C 类根因(缺 xdg-open 更缺文件管理器), 与挂载/映射无关 —— 直接 501 显式降级, 用「复制路径」代替(§11.2 #1) |
+| 添加种子点「浏览目录」报「路径不在允许的保存路径范围内」 | 允许根是宿主路径(逻辑空间)。手填路径可用; 想恢复浏览按 §11.5 挂下载目录(同路径挂载免配映射; Windows 宿主走映射表) |
+| 日志报 `fs.path_map 自检 \| 现存种子的 save_path 无一命中映射源前缀` | ❗映射表可能写错: 逐条核对 `from` 与 qB 实际报回的 save_path(盘符/大小写/分隔符/尾斜杠; 匹配内部折叠, 但盘符写错救不了)。修好后重启(fs 段 R 级热重载) |
+| 日志报 `fs.path_map 自检 \| 挂载点不存在: '<to>'` | compose volumes 漏挂或 `to` 路径写错: 核对 `docker compose exec auto-qb ls /mnt/downloads`(Git Bash 前缀 `MSYS_NO_PATHCONV=1`) |
+| 日志报 `fs.path_map 自检 \| 挂载点只读: '<to>'` | 预告「新建文件夹」将不可用(`:ro` 挂载): 需要该功能时改 `:rw` 挂载并重建容器; 只读够用时无需处理(运行期 mkdir 会 403 语义化拒绝) |
+| 规则报 `路径不可判定(未命中 fs.path_map 映射)` | 该路径没命中任何映射源前缀: 检查规则里的路径前缀是否配进 `path_map`; 修复前依赖该路径的判定保持「不可判定」的显式报错(不会静默) |
+| 一批种子被无故暂停并打上 `MISSING` 标签 | ❗缺文件扫描误判(§11.3, 不配映射时): 立刻把 `grouping.check_missing_files` 设为 `false` 并重启; 已打的标签需手工清理。**26-09-27 起配了映射的实例映射 miss 只会跳过 + WARNING, 不再整组误停** |
 | 日志刷「自定义校验程序执行异常」 | `basic_check: custom` 的外部程序不在镜像里 ⇒ 全判非参考。容器里改用 `filelist` / `piecehashes`(§11.2 #10) |
-| 规则一直不触发且不报错 | 检查条件里是否用了 `exists()` —— 容器内恒 False(§11.2 #8); `disk_total()` 则会显式报「磁盘不可用」 |
+| 规则一直不触发且不报错 | 检查条件里是否用了 `exists()` —— 不配映射时容器内恒 False(§11.2 #8); 配了映射时 miss 会显式报「路径不可判定」, 不会静默 |
 | Git Bash 里 `docker exec auto-qb cat /data/web.token` 报找不到文件 | Git Bash 把**容器内路径**也按 POSIX→Windows 转换了(`/data/...` → `D:/Program Files/Git/data/...`); 前缀 `MSYS_NO_PATHCONV=1` 即可 |
 | `docker compose run` 传配置路径报「配置文件读取失败: D:/Program Files/Git/...」 | 同上, `MSYS_NO_PATHCONV=1 docker compose run --rm auto-qb /config/xxx.yml` |
 
@@ -325,3 +372,4 @@ services:
 | Web UI 密钥 | 64 位, 持久化 `/data/web.token`, 跨重启复用 |
 | 配置写回 | round-trip 保留注释; `.bak` 落 `<data_dir>/<配置名>.bak`; L0/L1/L2 热重载即时生效, R 级(data_dir/state_file)需重启 |
 | 全功能关闭时 state.json | 基础结构(原常驻的 `upload_snapshots` 已随计划 26-09-27-1232 移除, state schema 升 v2); 91 种子库全程零写入实测通过 |
+| fs.path_map 映射(26-09-27 代码级) | 缺文件扫描/跳检前置/exists()/disk_*()/目录浏览在映射命中时取真值, miss 一律「不可判定」; **Windows 宿主 + Docker Desktop 真机验收(drvfs disk_usage 数值 / getsize 性能 / :ro·:rw mkdir 双态)待 §11.5 方案二部署后回填** |
