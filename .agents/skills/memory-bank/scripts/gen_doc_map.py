@@ -129,9 +129,7 @@ def build(root: Path, mb: Path) -> str:
 > **本文件是生成物, 不要手改** —— 由 `{cmd}` 扫描四形态 (plans / reports / issues / tasks) 的
 > `doc-topic` / `**Topics:**` 与各自状态生成; 新增制品或改状态后重跑即可, 合并冲突也只需重跑。
 > **一行一专题**: 该专题名下的 issue / 计划 / 报告 / 档案与各自状态 —— 「一件事的全部材料」的唯一入口。
-> 协议与决策树见 [conventions/doc-forms.md](conventions/doc-forms.md); 各形态索引见
-> [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) ·
-> [issues/_index.md](issues/_index.md) · [tasks/_index.md](tasks/_index.md)。
+> 协议与决策树见 [conventions/doc-forms.md](conventions/doc-forms.md); 四形态索引在各自 `_index.md`。
 """
     return render(collect(mb), head)
 

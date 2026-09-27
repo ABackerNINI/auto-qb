@@ -1,90 +1,44 @@
 # 部分种子 HR 在线核实
-> 摘要: **M1-M4 + 七批实报修复 + v2.9/v3.0 + v3.5 CarPT 已落地; 2026-09-27 M5.1–M5.5(在线核实 v2)代码侧全部完成(审计 P1/P2/P3 全部修复), 余真机走查 + M0 前置实测三项**。核心链路: 浏览器扩展代取(登录态不出浏览器) →
-后端解析算 infohash → (站点, tid) 索引对账 → 三态判定(受管束/安全放行/未核实 + 超龄豁免, 站点侧权威)进四个消费点。
-站点分文件 + 每站一把锁 + 频控(90s 间隔 · 12/时 · 60/天) + 扩展侧第二道闸(访问 10/时·50/天, 下种 50/时·200/天)。
-> 触发: 部分种子, HR 核实, 浏览器扩展, 三态判定, 达标来源优先级, 档位即结论, 带锁访问, 共享站点数据, 转移种子, 多客户端, BTSchool, hr_check, hr_once, hr-status, 取数通道, 本地端点, 取数线程, 告警级别, 站点文件损坏, 多站点, 站点状态, 四类事件, 登录失效, 轮询周期, request_timeout, 复用轮, 回填, 明细表, 超龄豁免, completed_age_limit, 翻页早停
-> 最后活动: 2026-09-27 22:18 (M5.1–M5.5 全部落地: S1/S2 强信号处置 + suspended 停站与 --hr-resume + 骤降保护 + 回填对账撤销 + 登录退避 + 双令牌桶激活门 + 早停②③ + 豁免 A/B; test.full 1796 passed, 基线 26-09-27-2035)
+> 摘要: **M1-M4 + 七批实报修复 + v2.9/v3.0/v3.5 + M5.1-M5.5(在线核实 v2)代码侧全部落地; 2026-09-28 完成 v2 实施核对与安全/稳定性审计(报告 26-09-28-0030): 33 项修改全部落地, 发现 F1(P2 早停② P 机检空真+C 档形态假设)/F2(P3 跨页 S1 零容忍误停站场景)/F3(P3 parse_missing_rate_max 架空)/F4(P4 注释漂移+死变量), 均未改代码待拍板**。核心链路: 浏览器扩展代取(登录态不出浏览器) → 后端解析算 infohash → (站点, tid) 索引对账 → 三态判定+超龄豁免(站点侧权威)。频控: legacy 合并 90s 间隔·12/时·60/天(默认) | split 双令牌桶 页面 40/时·下载 20/时(站点显式 opt-in); 扩展第二道闸 页面 60/时·600/天, 下载 50/时·200/天。
+> 触发: 部分种子, HR 核实, 浏览器扩展, 三态判定, 档位即结论, 站点文件, 多实例, BTSchool, CarPT, hr_check, hr_once, hr_status, hr_resume, 取数通道, 本地端点, 取数线程, 登录失效, 复用轮, 回填, 超龄豁免, completed_age_limit, 早停, 骤降保护, suspended, 配额双桶, quota_model, 限流
+> 最后活动: 2026-09-28 01:09 (v2 实施核对+安全/稳定性审计: 报告 reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html, 33 项全落地; F1-F4 未改代码待拍板; 提交轮 ff 合并 aef2462 后复跑 test.full 1812+3 与最新基线 0014 逐位一致)
 
 ## 状态
 
-### 已交付(明细都在[档案](../tasks/26-09-22-backend-partial-hr-verify.md)进度日志与[计划](../plans/26-09-22-2204-partial-hr-site-verify-plan.html)变更行, 此处只留结论)
-
-- **M1 核心管道 + M2 取数通道**(2026-09-24): 离线管道(bencode 原始切片 · NexusPHP 解析 · 站点分文件+锁 ·
-  频控 · 三态判定) / 本地端点+取数线程+MV3 扩展 / 端点与凭据安全(token·origin·URL 白名单·凭据归零)。
-  两条配置期 fail-fast 仍在生效: `mode != off` 必配 `hr` 段 / scopes 必含 A+B+C。
-- **M3 判定联动**(2026-09-25): 收口 `hr/resolve.py::judge_record`, 门面 `HrRuntime.judge()`;
-  **四个消费点(打标/视图/规则条件/表达式)调用点一行未动**, 站点侧优先、缺字段回落本地;
-  判定桥稳定引用 + 读取时现算(不置脏)。零静默变更两道门。实现期拍板: 站点没发布过视图 ⇒ 回落本地;
-  站点行缺达标字段 ≠ 未达标。
-- **M4 多站点与打磨**(2026-09-25): 四类事件语文化 `hr/events.py`(登录失效从熔断摘出); 站点级状态单点
-  `hr/status.py::site_status()`(CLI 与 WebUI 同一套数); WebUI 出口 `GET /api/hr/status` + 设置页章节
-  + 前端字段守阵; 多站点守阵 `test_hr_multisite.py`。
-- **七批实报修复**(2026-09-24/25, 详见档案): 告警分级归属(节流态 INFO 按根因去重) / 站点文件自愈(.bak) /
-  `--hr-status` 现状报告 / 取数改扩展隐藏窗口→无界面直取 / 下载被页面饿死(复用轮只补下载) + 生产不等间隔
-  (可中断锁内等待) + 无索引键整站打标(回落本地) + 扩展侧第二道闸 `site-caps.js`(让位不计失败) /
-  通道时序错配(扩展轮询 5→1 分钟) + 复用轮 60s/60s 竞速 + 页面失败跳过回填 + 让位异常计 tid 失败 /
-  增量落盘(每页每 .torrent 当场提交, 治「Ctrl+C 后才落盘」)。
-- **第七批: 取证误读修复**(2026-09-25 05:01): ① `hr_downloaded[].ts` 改记**各 .torrent 自己的取回时刻**
-  (原整批共用开始时刻, 同批微秒级相同 ⇒ 取证误读为瞬间批量下载); ② `--hr-status` 明细表改版 ——
-  列 = tid/档位(考察中等实际意思, `status.LANE_TEXTS`)/上传量/下载量/分享率/还需做种(镜像站点
-  HH:MM:SS 形态)/名称(按显示格宽截断)/infohash, **剩余达标时间不再显示**(它是考核窗口 9d21h,
-  会被误读成还需做种 9 天); CJK 双宽对齐走自写 `_dwidth/_pad`。测试 +2, 全量 1573 passed + 1 skipped。
-- **v2.9 超龄豁免**(2026-09-25, clone2): 用户指令「完成时间超过一年(可配)的种子不必验证 HR, 也不必再翻页」⇒
-  新站点级键 `completed_age_limit`(0=关闭, 1D~3650D): 判定收口给第四态 `EXEMPT`「超龄豁免」
-  (压过清单命中与 unknown_policy, mode=all 也认, 排在「无可查键回落本地」之前); 取数侧超龄行不入索引/
-  不回填, 整页超龄且页内+跨页倒序成立才早停(覆盖证明照常成立; 证据不全照常翻 —— 错误方向是多花配额)。
-  测试 +17, 红验 10 条全红; 全量 1593 passed + 1 skipped。待真机确认: BTSchool 页面排序是否完成时间倒序。
-
-- **v3.0 达标判定来源优先级: 档位即结论**(2026-09-25 17:37, clone2): 用户指令钉死「在线考察中 > 在线已达标 >
-  在线未达标 > 本地」⇒ `hr/model.py::satisfied_verdict` A/B/C 三档**全部档位即结论**(A/C ⇒ 未达标,
-  B ⇒ 已达标), 删「A/D 档看剩余达标时间归零 ⇒ 已达标」推导(v2.8 已实证该字段是考核窗口倒计时, 方向相反)
-  与缺字段回落本地(本地不得越级推翻站点清单结论); `hr/resolve.py::judge_record` 双命中(hybrid 两 hash)
-  改按达标档位序取(A>B>C, 新增 `_lane_rank`, 删「首命中即 break」); `check_hr_satisfied` 分支逻辑不变
-  (site_satisfied 非 None 即采纳), 四个消费点调用点零改动。测试 +2 + 改写 1, 红验 3 条全红; 全量
-  1601 passed + 1 skipped。
-
-- **v3.1–v3.4 扩展配置与状态模型**(2026-09-25/26, clone3, 明细见[档案](../tasks/26-09-22-backend-partial-hr-verify.md)
-  与[主计划](../plans/26-09-22-2204-partial-hr-site-verify-plan.html)变更行): v3.1/v3.2 = 端点只读
-  `GET /api/hr/sites` + 扩展选项页「粘 token → 自动拉站点 → 一键授权」三步接入 + v3.3 风格 A 瑞士网格终态;
-  v3.4 = 状态模型梳理(考察中是唯一进行中, 已达标|未达标|已免罪三终态)+ D 档已免罪来源单列 SRC_SITE_EXEMPT;
-  v3.5 = CarPT 站点接入(adapter 变体参数化, `?status=N`/十列表头/双 id 空间 `dl_id`)。
+**在线核实 v2 (M5.1-M5.5) 代码侧完成 + 独立审计完成** —— 实施明细与数字的唯一权威在
+[任务档案](../tasks/26-09-22-backend-partial-hr-verify.md)进度日志; 审计证据 (逐项 file:line 核对 +
+安全性/稳定性评估 + 配置全表/默认节奏/限流全景) 在
+[报告 26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html)。
+实施计划 [26-09-27-1815](../plans/26-09-27-1815-plan-hr-verify-audit-fixes.html) doc-status Implemented;
+设计定稿在主计划 §14 ([26-09-22-2204](../plans/26-09-22-2204-partial-hr-site-verify-plan.html))。
 
 ## 未完成
 
-- **真机走查**(需用户装扩展): ❗先在 chrome://extensions **reload 扩展**(v2.6 的 1 分钟轮询与登录页检测要重载生效;
-  v3.1 的新选项页也要 reload 后才见), 再跑 `--hr-once` + 主程序一轮, 并走一遍新配置面
-  「模板一 → 粘 token → 自动拉站点 → 一键授权 → 立即拉取」, 确认取到 `.torrent` 后索引长出 infohash 键、
-  三态在 WebUI 与日志上对得上; 之前 `fuse.failures=2` 已定位 = 5 分钟轮询 vs 180s 窗口错配超时(v2.6 已修)。
-- **非 NexusPHP 形态的第三个站点**(需站点样本): 只啃过 NexusPHP `myhr.php` 九列表形态;
-  有更便宜来源(JSON 接口/逐种标记)按 `adapters/__init__.py` 注册协议加 adapter —— **不拿到真实样本不猜着写**。
-- ⛔ **待用户定**: `config.yml` 被 git 跟踪且含明文 qB 凭据 —— 入不入池 issue。
-- **M0 前置实测三项**(2026-09-27 设计审查遗留, **阻塞早停②/豁免 A 的启用**, 不阻塞代码):
-  ① HR 页是否按完成时间倒序(排序假设 —— 一切早停与滚动窗口正确性的基石, **不得当事实写进配置/文档**);
-  ② 考核期 P 是否恒定(用 `P = (now − done) + remain` 反算分布, `--hr-status` 观测面直接产出证据);
-  ③ `?page=N` 真实参数名与英文站分页形态。收口后按站点开早停②/`auto_age_limit`。
-- ✅ **审计修复已完成 (2026-09-27 22:18)**: 报告 [26-09-26-1628](../reports/26-09-26-1628-report-hr-online-verify-audit.html)
-  的 1×P1 + 3×P2 + 3×P3 已由 M5.1–M5.5 全部修复(计划 [26-09-27-1815](../plans/26-09-27-1815-plan-hr-verify-audit-fixes.html)
-  doc-status Implemented; 主计划 §15 v3.6); D8(超龄豁免取舍维持 v2.9)按拍板维持。
+- **F1-F4 处置 (2026-09-28 审计发现, 待用户拍板)**: ① F1 P2 —— 早停② 的 P 一致性机检在「无 remain>0
+  参与行」时空真放行, 且 B/C 档 remain 展示形态未验证 (0→早停截断 C 档覆盖⇒误放行链; 空白→S2 停站),
+  建议加 period_values 非空前置或限 A 档 + M0 补第④项实测; ② F2 P3 —— 跨页 S1 对轮内清单顶端插入
+  (≥2 新完成) 零容忍 ⇒ 活跃账号可能连续 3 轮误停站, 与 2026-09-26「哪怕 1 处」定稿有张力, 需单独拍板;
+  ③ F3 P3 —— parse_missing_rate_max 被 S2 零容忍架空 (死配置+keys.md 旧语义); ④ F4 P4 ——
+  status.py 两处旧公式注释 + covered_local_any 死变量。全部只记录未改代码 (范围守恒)。
+- **真机走查**(需用户装扩展): 先 chrome://extensions **reload 扩展** (1 分钟轮询/登录页检测/新选项页要重载生效),
+  再 `--hr-once` + 主程序一轮 + 配置面「模板一 → 粘 token → 自动拉站点 → 一键授权 → 立即拉取」全链路。
+- **M0 前置实测三项 (+审计提议第④项)**(**阻塞早停②/豁免 A 的启用**, 不阻塞代码): ① HR 页完成时间倒序;
+  ② 考核期 P 恒定 (`--hr-status` 观测面直接产证据); ③ `?page=N` 真实参数名与英文站分页形态;
+  ④ (新) B/C 档「剩余达标时间」展示形态 (0/空白/非零 → 分别对应 F1 的三条分支)。
+- **非 NexusPHP 第三站点**(需样本): 有更便宜来源 (JSON 接口/逐种标记) 按 `adapters/__init__.py` 注册 —— 不拿到样本不猜。
+- ⛔ **待用户定**: config.yml 含明文 qB 凭据入不入池 issue; 选项页风格档案 26-09-26-0031 doc-status 是否改 Done。
+- **配置面两件事 (程序只提示不代改)**: `hr_check.channel.extension_id` 留空 (启动 WARNING 提示中) +
+  `config.yml` 的 `token: 123456` 改留空自动生成 —— 详见报告 §3 残余风险表。
 
-- **v3.3 已落地**(2026-09-26 01:30, clone3): 风格 A 瑞士网格终态实施完成 —— 后台 events 事件环双写 +
-  选项页两表(③站点现状 / ④取数明细) + 日志收进折叠区; 三档共存实现已被样张 A 终态**替换**;
-  全量 1624 passed + 1 skipped。待真机: reload 扩展核两表可读性。
-- ⛔ **待用户定**: 选项页风格选型档案([26-09-26-0031](../plans/26-09-26-0031-plan-hr-ext-options-style.html))
-  doc-status 仍为 In Progress —— 实施已落地, 是否改为 Done 由用户定(连同 v3.1+v3.2 未提交改动的处置)。
+## 指针
 
-## 待实测(计划 §13, 不阻塞)
-
-~~download URL 形态~~ ✅ 已收口: `https://pt.btschool.club/download.php?id=<tid>`; 余:
-BTSchool 各档语义与分页到底判据 / **HR 页排序是否按完成时间倒序**(v2.9 翻页早停的实际生效前提,
-不倒序只是不省配额不会错判) / **后台取数是否被站点在线时长识别或 CF 挑战** / 共享目录 filelock 真互斥。
-结构类判据已由 fixture 钉死(灰色「下一页」/ 免罪链接 / 九列表头)。
-
-- [计划](../plans/26-09-22-2204-partial-hr-site-verify-plan.html) · [档案](../tasks/26-09-22-backend-partial-hr-verify.md) ·
+- [计划 26-09-27-1815 (v2 实施)](../plans/26-09-27-1815-plan-hr-verify-audit-fixes.html) ·
+  [审计报告 26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) ·
+  [上轮设计审查 26-09-26-1628](../reports/26-09-26-1628-report-hr-online-verify-audit.html) ·
+  [主计划 §14](../plans/26-09-22-2204-partial-hr-site-verify-plan.html) ·
+  [任务档案](../tasks/26-09-22-backend-partial-hr-verify.md) ·
   [扩展说明](../../extensions/hr-fetch-proxy/README.md)
+- 实测: 离线 fixture + 真回环在 `tests/test_hr_*.py` (18 个文件); 全量数字只认
+  [testing/baseline.md](../testing/baseline.md) 单点; **真机链路仍未实测**。
 
-## 实测
-
-离线样本(脱敏 fixture 取自真实样张结构) + 真回环 HTTP 往返在 `tests/test_hr_*.py`;
-全量测试数字只认单点 [testing/baseline.md](../testing/baseline.md)(本切片不复述)。
-扩展侧已不止语法校验: `tests/test_extension_proxy.py` 用假 `chrome` API **真跑** `background.js` 与 `normalize.js`;
-**真机链路仍未实测**(需用户装扩展 → M3 的真机 `hr.once` 走查)。
+**Refs:** memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html

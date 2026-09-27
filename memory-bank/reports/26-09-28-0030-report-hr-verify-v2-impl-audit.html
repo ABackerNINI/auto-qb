@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR 在线核实 v2 · 实施核对 + 安全/稳定性审计 · 审查报告 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-28-0030">
+<meta name="doc-updated" content="26-09-28-0109">
+<meta name="doc-refs" content="memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html,memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html,memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html,memory-bank/tasks/26-09-22-backend-partial-hr-verify.md,memory-bank/activeContext/26-09-22-2204-backend-partial-hr-verify.md">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:31px;line-height:1.2;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:78ch;margin:0 0 20px}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+  .toc .no{font-family:var(--mono);color:var(--ink-3);margin-right:6px}
+
+  h2{font-size:21px;font-weight:600;margin:56px 0 18px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h2:first-of-type{margin-top:8px;border-top:none;padding-top:0}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:14px;font-weight:600;margin:22px 0 8px;color:var(--ink-2);font-family:var(--mono);letter-spacing:.04em}
+  p{margin:10px 0;color:var(--ink-2)} p strong,li strong{color:var(--ink);font-weight:600}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink-2)} li{margin:5px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.65;color:var(--ink-2)}
+  pre b{color:var(--ink);font-weight:400}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;padding:8px 12px;border-bottom:1px solid var(--line-2);font-weight:400}
+  td{padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
+  td code{white-space:nowrap}
+  .mono{font-family:var(--mono);font-size:12.5px}
+
+  .verdict{background:linear-gradient(180deg,rgba(200,164,92,.09),rgba(200,164,92,.04));border:1px solid rgba(200,164,92,.35);border-radius:10px;padding:18px 22px;margin:20px 0}
+  .verdict h3{margin:0 0 8px;color:var(--accent);font-size:13px;letter-spacing:.1em;text-transform:uppercase;font-family:var(--mono);font-weight:400}
+  .verdict p, .verdict li{color:var(--ink)}
+  .note{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:12px 16px;margin:16px 0;font-size:14px;color:var(--ink-2)}
+  .note p{margin:6px 0}
+  .danger{border-left-color:var(--bad)}
+  .good{border-left-color:var(--good)}
+
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;padding:1px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+  .tag.p1{color:#f0a09a;border-color:rgba(208,92,78,.55);background:rgba(208,92,78,.12)}
+  .tag.p2{color:#e6c98a;border-color:rgba(200,164,92,.5);background:rgba(200,164,92,.1)}
+  .tag.p3{color:#9fc6e8;border-color:rgba(77,159,214,.45);background:rgba(77,159,214,.1)}
+  .tag.p4{color:var(--ink-3)}
+  .tag.ok{color:#8ed3b4;border-color:rgba(47,168,116,.45);background:rgba(47,168,116,.1)}
+  .tag.mut{color:var(--ink-3)}
+  .path{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+  .foot{border-top:1px solid var(--line-2);padding:24px 0 60px;font-size:12.5px;color:var(--ink-3);font-family:var(--mono);line-height:2}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.toc{position:static;display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Audit Report · auto-qb · hr online verify · implementation review</p>
+  <h1>HR 在线核实 v2<br>实施核对 + 安全/稳定性审计 + 配置与限流现状</h1>
+  <p class="lede">对计划 <a href="../plans/26-09-27-1815-plan-hr-verify-audit-fixes.html">26-09-27-1815</a> (M5.1–M5.5, 审计修复 + v2 方案) 的实施情况逐项核对: 每个修改项以「文件:行号」证据对到当前代码; 在此之上做一轮独立的安全/稳定性/BUG 审查 (发现 1×P2 + 2×P3 + 1×P4, 本轮<strong>未改任何代码</strong>); 并按用户要求盘点 HR 在线核实的运行现状 —— 配置全表、默认配置下的访问节奏、限流措施全景。</p>
+  <p class="meta">基线 <b>develop @ c7dfbd2</b> (审计现场; 提交前按「先同步后提交」ff 合并远端 aef2462 —— 纯 webui 站点页搜索, <code>hr/</code> 逐字节未动) ·
+  建立 <b>2026-09-28 00:30</b> (doc-updated 01:09 随合并基线校数) ·
+  测试 <b>test.full 1812 passed + 3 skipped (TOTAL 91%)</b> @ 合并基线 aef2462 实测 ·
+  性质 <b>证据快照 (代码未动)</b></p>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s0"><span class="no">0</span>结论</a>
+  <a href="#s1"><span class="no">1</span>实施核对 M5.1–M5.5</a>
+  <a href="#s2"><span class="no">2</span>发现清单 (F1–F4)</a>
+  <a href="#s3"><span class="no">3</span>安全性评估</a>
+  <a href="#s4"><span class="no">4</span>稳定性评估</a>
+  <a href="#s5"><span class="no">5</span>运行现状详解</a>
+  <a href="#s6"><span class="no">6</span>建议与待办</a>
+</nav>
+
+<main>
+
+<h2 id="s0">0 · 结论</h2>
+
+<div class="verdict">
+<h3>三句话</h3>
+<ul>
+  <li><strong>实施核对: 全部落地, 与计划一致</strong> —— M5.1–M5.5 共 33 个修改项逐项对到代码无缺席; 三个实施期收口决策 (滚动窗口即 <code>max_pages_per_refresh</code> / 单轮总量 <code>max_pages_per_round=9</code> / P 反算公式勘误) 均在代码证实。「零静默变更」成立: split 激活门默认 legacy, 全部新键默认关/旧值。</li>
+  <li><strong>安全面扎实, 残余在配置面</strong> —— 回环绑定 + token 常数时间比较 + origin 白名单 + SSRF URL 白名单 + 回传双道校验 + 凭据归零, 全部代码证实; 剩余风险 (extension_id 空 / 弱 token) 属用户配置, 代码侧 WARNING 已按 M5.5 就位。</li>
+  <li><strong>发现 1 个值得收口的正确性缺口</strong> —— 早停②的 P 一致性机检在「无参与行」时空真放行, 且对 B/C 档页面形态存在未验证假设, 理论上存在 C 档(未达标)覆盖截断→误放行链 (F1); 另有跨页排序校验对轮内清单自然插入零容忍的误停站场景 (F2)。均为保守方向失效 (fail-safe 不破), 本轮只记录不改。</li>
+</ul>
+</div>
+
+<p>测试基线: 合并远端 aef2462 后 <code>commands run test.full</code> 实测 <strong>1812 passed + 3 skipped, TOTAL 91%</strong> (12355 语句 / 914 未覆盖), 与最新基线切片 26-09-28-0014 逐位一致, 全绿。被审计的 <code>hr/</code> 代码在 c7dfbd2 与 aef2462 间逐字节相同 (aef2462 仅动 webui 静态文件与其测试), 证据行号对两个基线同样成立。</p>
+
+<h2 id="s1">1 · 实施核对 (计划 26-09-27-1815 §2 → 当前代码)</h2>
+<p class="path">核对方式: 计划每一条修改项, 以符号定位到当前 HEAD 的文件:行号, 逐条确认语义未漂。✓ = 落地且与计划一致; ⚠ = 落地但有本报告 §2 的发现。</p>
+
+<h3>M5.1 判据与观测 (6/6 ✓)</h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:30%">修改项</th><th>代码落点与核对</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">1.1</td><td>排序校验纯函数 <code>order_violations</code></td><td><span class="path">hr/parse.py:289-318</span> ✓ 方向自适应 (首个不等对推断, 之后翻转视同逆序); 缺字段行不计比较只计「证据不足」(<code>insufficient</code>); 全相等推不出方向时不判违反</td></tr>
+    <tr><td class="mono">1.2</td><td>页内 + 跨页校验接线</td><td><span class="path">hr/service.py:526-546</span> ✓ 每页解析后页内校验 + <code>cross_page_violation</code> (<span class="path">parse.py:321-333</span>) 跨页比对; 判定前置 = 表头出 + 可比行 ≥ 2 (<span class="path">service.py:547</span>)</td></tr>
+    <tr><td class="mono">1.3</td><td><code>maxpage/currentpage</code> 交叉验证</td><td><span class="path">parse.py:247-254</span> + <span class="path">service.py:629-636</span> ✓ 与「下一页」链接取<strong>并集</strong> (任一说有就继续翻) —— P1 英文站缺口被第二判据兜住</td></tr>
+    <tr><td class="mono">1.4</td><td>轮级骤降判据 (观测)</td><td><span class="path">service.py:94-121</span> ✓ <code>PLUNGE_RATIO=0.30</code>, 判据单位 = 全轮合计; 基线 ≤ 0 (首刷) 不判; 基线更新只认「结构完好 + 非截断 + 非可疑」轮 (<span class="path">service.py:764-766</span>)</td></tr>
+    <tr><td class="mono">1.5</td><td><code>--hr-status</code> 观测面</td><td><span class="path">hr/report.py:203-214</span> + <span class="path">hr/status.py:138-236</span> ✓ 排序 ✓/✗/未判定 · 考核期 P 分布 · 骤降观测 · 档位计数「上轮→本轮」四行俱全</td></tr>
+    <tr><td class="mono">1.6</td><td>观测期告警 (节流)</td><td><span class="path">service.py:1141-1166</span> ✓ S1/S2 文案分开 (<code>events.order_broken</code> / <code>field_missing</code>), 按 <code>channel_silence_warn</code> 节流共用时间戳</td></tr>
+  </tbody>
+</table>
+
+<h3>M5.2 信号处置与停用 (7/7 ✓)</h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:30%">修改项</th><th>代码落点与核对</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">2.1</td><td>S1/S2 强信号处置</td><td><span class="path">service.py:124-134</span> (<code>_SignalAbort</code> 跳出双层循环) + <span class="path">:544-553</span> (1 处即中止, S2 无阈值) + <span class="path">:647-687</span> (折 <code>ACTION_ERROR</code> + 计失败 + 累计轮数 + 告警; 已抓行保留不置 complete) ✓</td></tr>
+    <tr><td class="mono">2.2</td><td>骤降保护生效 + 空表口径定案</td><td><span class="path">service.py:758-790</span> ✓ 骤降可疑 ⇒ 判不完备不产生放行; <code>accept_empty_listing</code> 站点级人工口子默认关 (<span class="path">:761-763</span>); 持续 3 轮零 + 结构完好 ⇒ 升级告警不自动接受; <code>base.py</code> docstring 已按 D1 改写</td></tr>
+    <tr><td class="mono">2.3</td><td><code>suspended</code> 停用</td><td><span class="path">model.py:418-445</span> + <span class="path">service.py:300-305</span> (取数侧零请求, 连复用轮下载也让位) + <span class="path">resolve.py:346-350</span> (判定侧返回 None 回落本地) + <span class="path">report.py:294</span> (<code>--hr-resume</code> 人工恢复, CLI 互斥校验 <span class="path">cli.py:134-151</span>) ✓ 熔断到期不自动恢复</td></tr>
+    <tr><td class="mono">2.4</td><td>防误停站三道隔离</td><td>① 前置可比行 ≥ 2 (<span class="path">service.py:547</span>); ② 失败优先 —— 取数异常路径不产生排序判定, 不计停站; ③ 只认连续 —— 干净轮重建 <code>HrRefreshMeta</code> 时 <code>signal_rounds</code> 回默认 0 (<span class="path">model.py:288</span>, <span class="path">service.py:815</span>) ✓</td></tr>
+    <tr><td class="mono">2.5</td><td>放行收不回修复 (P2 对账撤销)</td><td><span class="path">service.py:1011-1024</span> (<code>_retract_on_backfill</code>: 新算出 + 永久层复用两路) + <span class="path">:1026-1040</span> (<code>_retract_on_listing</code>: merge 后 hash 继承兜底, partial 轮即时收) + 回填新行优先 <span class="path">:942</span> ✓</td></tr>
+    <tr><td class="mono">2.6</td><td>登录失效指数退避 (P3)</td><td><span class="path">service.py:307-313</span> (退避期零请求) + <span class="path">:706-727</span> (<code>2^(n-1)×poll_interval</code> 封顶 refresh_interval; 不计失败/不推熔断/不动 fetched_at) + <span class="path">:752-753</span> (登录恢复清零) ✓</td></tr>
+    <tr><td class="mono">2.7</td><td>多实例引导升级 (P2)</td><td><span class="path">runtime.py:339-350</span> ✓ 维持 INFO, 文案补「配额账本各一份 ⇒ 站点访问翻倍 (2×12/时)」(D3=a)</td></tr>
+  </tbody>
+</table>
+
+<h3>M5.3 配额模型拆分 (7/7 ✓)</h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:30%">修改项</th><th>代码落点与核对</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">3.1</td><td>新配置键 ×7</td><td><span class="path">config/models.py:104-110</span> + <span class="path">validation/sections.py:30-56</span> ✓ 全部进 schema + validate_config (守卫会查)</td></tr>
+    <tr><td class="mono">3.2</td><td>双令牌桶 + 激活门</td><td><span class="path">hr/ratelimit.py:221-312</span> (<code>split_next_allowed_at</code>/<code>split_try_consume</code>, tokens/refill_ts 持久化按速率连续恢复, tokens=None 首次满桶) + <span class="path">:57-92</span> (<code>HrLimits.merge</code>: 站点显式 <code>quota_model=split</code> 才切双桶, 默认 legacy) ✓</td></tr>
+    <tr><td class="mono">3.3</td><td>站点文件迁移 (不抬版本)</td><td><span class="path">model.py:464-467</span> ✓ 新增 <code>torrent_quota</code>, 旧文件缺键取零值; 旧 quota 含下载计数 ⇒ split 初期页面用量高估 (保守)</td></tr>
+    <tr><td class="mono">3.4</td><td>页面/下载分工</td><td><span class="path">service.py:772-777</span> ✓ split 站点页面只在新轮、下载只在复用轮 (<code>_backfill_on_reuse</code> <span class="path">:386-421</span> 现成机制)</td></tr>
+    <tr><td class="mono">3.5</td><td>展示拆分</td><td><span class="path">hr/status.py</span> QuotaStatus 页面/下载两组 + <code>--hr-status</code>/WebUI 分别显示 ✓</td></tr>
+    <tr><td class="mono">3.6</td><td>参数自洽机检</td><td><span class="path">validation/sections.py:212-236</span> ✓ <code>rate ≤ 3600 / min_interval</code> 配置期聚合报错 (fail-fast)</td></tr>
+    <tr><td class="mono">3.7</td><td>扩展 caps 对齐</td><td><span class="path">extensions/hr-fetch-proxy/site-caps.js:17-20</span> ✓ page 60/时·600/天 (维持 ≥ 后端 ×1.5), torrent 50/时·200/天</td></tr>
+  </tbody>
+</table>
+
+<h3>M5.4 早停与豁免 (8/8 ✓, 其中 4.4 带 ⚠)</h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:30%">修改项</th><th>代码落点与核对</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">4.1</td><td>滚动窗口</td><td><span class="path">service.py:492</span> ✓ 实施收口①: <code>max_pages_per_refresh</code> 即窗口页数 (站点级, 默认 5), 不另设 <code>window_pages</code>; 跨轮仍每档从第 1 页起翻</td></tr>
+    <tr><td class="mono">4.2</td><td>新 complete 判据</td><td><span class="path">service.py:643-644</span> (翻到末页或翻到已到期段 ⇒ 本档进 <code>scopes_done</code>) + <span class="path">:780-781</span> (全档 done + reached_last + 缺失率 + 非骤降 ⇒ complete) ✓</td></tr>
+    <tr><td class="mono">4.3</td><td>单轮预算分配 (轮转)</td><td><span class="path">service.py:467-471</span> ✓ D9=b: 上轮未完成档位优先起翻, 跨轮语义不变</td></tr>
+    <tr><td class="mono">4.4</td><td>早停② 已到期段</td><td><span class="path">service.py:105-110</span> (<code>AGE_STOP_STREAK=5</code>, 容差 ±1 天) + <span class="path">:607-627</span> ⚠ 机制落地, 但 P 一致性机检存在「空真」缺口与档位语义假设 —— 见 <a href="#f1">F1</a></td></tr>
+    <tr><td class="mono">4.5</td><td>豁免 A (auto_age_limit)</td><td><span class="path">models.py:168-170</span> (默认关) + <span class="path">resolve.py:360-363</span> ✓ 反算 P 经机检 (<code>period_consistent</code>) 才生效; P 反算公式勘误已按唯一正确方向实现 (<span class="path">service.py:556-562</span>: <code>P = (now − done) + remain</code>)</td></tr>
+    <tr><td class="mono">4.6</td><td>早停③ 覆盖本地 (严格版)</td><td><span class="path">service.py:585-598</span> ✓ 本地种子 ⊆ 已抓行且索引无待回填 ⇒ 只停翻, <strong>绝不置 complete</strong>; 观测变量死代码见 <a href="#f4">F4</a></td></tr>
+    <tr><td class="mono">4.7</td><td>豁免 B (做种 5×)</td><td><span class="path">models.py:171-173</span> (默认 0=关) + <span class="path">resolve.py:351-359</span> ✓ 沿用 record 侧带参做法, <code>HrAnchor</code> 加 <code>seeding_time</code> (<span class="path">resolve.py:62</span>); 压过清单命中, 不参与早停</td></tr>
+    <tr><td class="mono">4.8</td><td>断点续翻兜底 (不排期)</td><td>确认无 per-scope 游标代码 ✓ 符合 D10=a 拍板</td></tr>
+  </tbody>
+</table>
+
+<h3>M5.5 收尾 (4/5 ✓, 真机走查开放)</h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:30%">修改项</th><th>代码落点与核对</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">5.1</td><td>配置全链路 + 文档</td><td><span class="path">sections.py</span> 全键 + <span class="path">memory-bank/config-reference/keys.md:30,60</span> ✓ 新键与语义迁移 (min_torrent_interval 在 split 下改义) 均已登记</td></tr>
+    <tr><td class="mono">5.2</td><td>端点纵深代码侧提示 (P3)</td><td><span class="path">runtime.py:126-141</span> ✓ <code>extension_id</code> 留空 ⇒ 启动 WARNING (有意推系统通知, 配好即不再现); 文档写明 token 留空自动生成到 <code>&lt;data_dir&gt;/hr.token</code></td></tr>
+    <tr><td class="mono">5.3</td><td>守阵全量 + 零静默变更回归</td><td>test.full 1812 passed + 3 skipped (91%, 合并基线实测); 档案记红验 ×4 (翻页并集 / 骤降 / 激活门 / 早停②) ✓</td></tr>
+    <tr><td class="mono">5.4</td><td>文档回写</td><td>计划 1815 v1.2 + 主计划 §15 v3.6 + 档案 2026-09-27 22:18 条 ✓</td></tr>
+    <tr><td class="mono">5.5</td><td>真机走查</td><td><span class="tag p2">开放</span> 与 M0 前置实测三项一起, 仍阻塞早停②/豁免 A 的启用 (不阻塞代码) —— 见 §6</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s2">2 · 发现清单 (本轮未改代码, 处置建议见各条)</h2>
+
+<h3 id="f1"><span class="tag p2">P2</span> F1 · 早停② 的 P 机检「空真」+ B/C 档语义假设未验证 ⇒ C 档存在误放行链</h3>
+<p><strong>证据</strong>: <span class="path">service.py:477</span> <code>period_ok = True</code> 起始; <span class="path">:561-572</span> 只有 <code>remain_seconds &gt; 0</code> 的行参与 P 反算 (已到期行被站点截 0, 不参与); <span class="path">:622</span> 早停②闸门是 <code>if period_ok and zero_remain_streak &gt;= 5 and parsed.has_next</code> —— <strong>整页 remain 全为 0 时 <code>period_values</code> 为空, 机检从未运行却被当作通过</strong>。对比轮尾 meta: <span class="path">service.py:828</span> <code>period_consistent = bool(period_values) and period_ok</code> (空 = False) —— 判定侧豁免 A 因此被正确禁用, <strong>取数侧早停②却没有同等闸门</strong>, 两道机检口径不一致。</p>
+<p><strong>触发链</strong> (需要两个未验证的站点形态假设同时成立):</p>
+<ol>
+  <li>计划注释自己写明「已到期行 remain 被站点截 0」(<span class="path">service.py:557</span>) —— 若 C 档(未达标)行的「剩余达标时间」恰以可解析的 0 展示 (考核期已过 = remain 归零, 语义上自洽);</li>
+  <li>C 档第 1 页 ≥5 行且还有第 2 页 (<code>has_next</code>) ⇒ 早停②在第 1 页即触发, <code>got_all_pages</code> 保持 True ⇒ C 档「覆盖证明成立」;</li>
+  <li>complete=True 后, C 第 2 页起的种子不在索引里 ⇒ 判定侧反应式路径 (<span class="path">resolve.py:260-273</span>) 按「完整刷新未列出」<strong>放行</strong> ⇒ 用户删除 ⇒ H&amp;R 惩罚。C = 未达标 = 站点明确终态「不能删」, 这是<strong>漏管方向</strong>的失效。</li>
+</ol>
+<p><strong>缓解因素</strong>: B 档同形态误停翻无害 (B=已达标=本就可删, 两条路径殊途同归「安全」); A 档才是早停②的设计目标场景; C 行 remain 也可能是空白/文本 (不可解析 → <code>None</code>, <code>== 0</code> 不成立 → 不触发)。但注意<strong>另一种形态也不安全</strong>: remain 列若为空白, 它是必填字段 (<code>REQUIRED_KEYS = name/need_seed/remain</code>, <span class="path">adapters/nexusphp.py:57</span>) ⇒ S2 零容忍中止, 连续 3 轮 ⇒ suspended 误停站。即 C 档 remain 只有「可解析的非零值」这一种形态是全安全的 —— 而这恰是 M0/真机走查尚未覆盖的假设。</p>
+<p><strong>建议</strong>: ① 早停②闸门加 <code>period_values</code> 非空前置 (与 meta 的 <code>period_consistent</code> 口径对齐, 约一行改动); ② 或把早停②限定在 A 档生效; ③ M0 前置实测补第④项「B/C 档 remain 列展示形态」。方向: 建议入池 issue 或并入下轮计划, 由用户拍板。</p>
+
+<h3 id="f2"><span class="tag p3">P3</span> F2 · 跨页 S1 校验对「轮内清单顶端插入」零容忍 ⇒ 活跃账号可能误停站</h3>
+<p><strong>证据</strong>: <span class="path">parse.py:329-330</span> desc 方向的跨页判据是 <code>max(cur) &gt; min(prev)</code> 即违反; <span class="path">service.py:538-546</span> 一处即 <code>_SignalAbort</code> ⇒ 本轮失败 + 计入熔断失败; 连续 3 轮 (<code>SUSPEND_ROUNDS</code>) ⇒ 12H 熔断 + <code>suspended</code> 人工恢复 (<span class="path">service.py:674-681</span>)。</p>
+<p><strong>触发链</strong>: 轮内相邻两页请求间隔 90~113s, 一轮 9 页约 15 分钟。若其间该站有 ≥2 个新种子完成下载、进入清单顶端 (按完成时间倒序), 则下一页首行会比上一页末行「新」(<code>max(cur) &gt; min(prev)</code>) ⇒ 判「跨页乱序」。清单是活的: 活跃账号 15 分钟内进来 2 个新完成并不罕见 —— 这与「页面改版」是两种机制, 但共享同一个零容忍处置。</p>
+<p><strong>影响</strong>: 数据安全方向无损 (fail-safe: 本轮不放行); 代价是可用性 —— 单次发生浪费当轮剩余预算, 连续 3 轮各遇一次 ⇒ 停站等人工 (<code>--hr-resume</code>)。</p>
+<p><strong>建议</strong>: 给跨页判据加边界容差 (如改比 <code>min(cur) &gt; max(prev)</code> 的方向性反转, 或忽略 cur 页首 k 行), 或把跨页证据降级为告警、不参与停站计数。❗这与用户 2026-09-26「哪怕 1 处即中止」的定稿存在张力 —— 该定稿针对页面真改版, 轮内自然插入是否纳入零容忍值得单独拍板, 故只报告不改。</p>
+
+<h3 id="f3"><span class="tag p3">P3</span> F3 · <code>parse_missing_rate_max</code> 已被 S2 零容忍架空 (死配置 + 文档漂移)</h3>
+<p><strong>证据</strong>: <span class="path">service.py:551-553</span> S2 对任何缺失率 &gt; 0 立即中止 (M5.2 定稿, 无阈值); 该中止发生在 <span class="path">:806</span> <code>if max_missing &gt; parse_missing_rate_max</code> 之前 —— 能走到 806 的轮必然 <code>max_missing == 0</code>, 该分支不可达; complete 条件里的缺失率项 (<span class="path">:780</span>) 恒真。而配置键仍在 schema/validate 里, <span class="path">keys.md:30</span> 仍写旧语义「超过则判『页面可能改版』不产生放行」。</p>
+<p><strong>影响</strong>: 无行为风险 (S2 比旧阈值更严); 但配置面有一把「假的锁」—— 用户调它以为在调阈值, 实际无效。</p>
+<p><strong>建议</strong>: keys.md 与 schema 帮助文案改注「已被 S2 零容忍取代, 仅展示用途」, 或走配置键废弃流程移除。</p>
+
+<h3 id="f4"><span class="tag p4">P4</span> F4 · 注释漂移 ×2 + 死变量 ×1 (无行为影响)</h3>
+<ul>
+  <li><strong>旧公式注释</strong>: <span class="path">hr/status.py:143</span> 与 <span class="path">:190</span> 的 docstring/注释仍写勘误前公式「P ≈ done + remain − now」—— 实现是正确的 (<span class="path">status.py:202-203</span> 与 service 同步用了 <code>(now − done) + remain</code>), 但注释与三份制品同源的笔误仍会误导后来人 (读注释对不出实现)。</li>
+  <li><strong>死变量</strong>: <span class="path">service.py:486,596</span> <code>covered_local_any</code> 置 True 后无任何消费点 —— 早停③的证据经 notes 落进 <code>refresh.reason</code> 不丢失, 变量本身是死代码; 可清理或接进 <code>--hr-status</code> 观测行。</li>
+</ul>
+
+<h3>已核实无误的关键防护 (抽查清单)</h3>
+<ul>
+  <li><strong>Retry-After 封顶</strong>: 站点/扩展回传的 Retry-After 以本站 <code>failure_cooldown</code> 封顶 (<span class="path">ratelimit.py:164-181</span>) —— 畸形值不能把熔断推到天荒地老;</li>
+  <li><strong>只读口径不落盘</strong>: 失败计数/熔断在 dry-run 与 <code>--hr-once</code> 下同样不写盘 (<span class="path">service.py:734-740</span> 注释 + 分支), 走查不会污染正式实例的取数节奏;</li>
+  <li><strong>幂等窗口键 + 跨重启令牌桶</strong>: 小时/天窗口键比较 (<span class="path">ratelimit.py:95-111</span>), split 令牌按 <code>refill_ts + 速率</code> 现算 (<span class="path">:294-312</span>), 重启不重置;</li>
+  <li><strong>预算消耗在请求前</strong>: 取数失败也计配额 (保守方向); <code>mark</code> 在 legacy 于请求后记账、split 由 <code>split_try_consume</code> 在消费时推进 —— 两模型语义各自自洽;</li>
+  <li><strong>登录退避与熔断解耦</strong>: 退避期零请求、不计失败、登录恢复即清零, 且不动 <code>fetched_at</code> (登录失效不产生新的放行背书)。</li>
+</ul>
+
+<h2 id="s3">3 · 安全性评估</h2>
+<p>后端<strong>零 cookie、零直连站点</strong>: 抓取由浏览器扩展在真实登录态完成, 后端只经本地端点收数据; 协议里没有 cookie/passkey 字段 (<span class="path">channel.py</span> 模块 docstring)。安全边界逐道核对:</p>
+<table>
+  <thead><tr><th style="width:22%">边界</th><th style="width:52%">机制 (落点)</th><th>核对</th></tr></thead>
+  <tbody>
+    <tr><td>网络面</td><td>端点只绑 <code>127.0.0.1</code> (<span class="path">server.py:49-66</span>); 端口被占启动即报错 (<code>HrChannelBindError</code>), <code>allow_reuse_address=False</code> 防 Windows 抢绑让占用检测失效</td><td><span class="tag ok">✓</span></td></tr>
+    <tr><td>真鉴权 = token</td><td>留空自动生成 32 字节随机值持久化 <code>&lt;data_dir&gt;/hr.token</code> (0600, 内容不进日志, <span class="path">channel.py:90-108</span>); 比较用 <code>secrets.compare_digest</code> 常数时间 (<span class="path">server.py:270-272</span>); <strong>401 前不写任何状态</strong> (不记接触/不入队, <span class="path">server.py:204-207</span>)</td><td><span class="tag ok">✓</span></td></tr>
+    <tr><td>origin 第二道</td><td>非 <code>chrome-extension://</code> origin 一律 403 (普通网页 JS 拒); 配了 <code>extension_id</code> 则钉死唯一 origin (<span class="path">channel.py:114-127</span>); 拒绝时不给 CORS 头, 浏览器也读不回响应 (<span class="path">server.py:184-194</span>)</td><td><span class="tag ok">✓</span></td></tr>
+    <tr><td>SSRF 白名单</td><td>任务 URL 只能由后端按配置拼出, 下发前过 <code>UrlPolicy</code> (host + path + scheme 白名单, <span class="path">channel.py:130-173</span>); 端点不接受任何 URL 入参 —— 端点不会变成「带登录态的任意站代理」</td><td><span class="tag ok">✓</span></td></tr>
+    <tr><td>回传防伪造</td><td>双道校验: 只收「确实派发过且未回过」的任务 id + 回传域名与派发任务一致 (<span class="path">queue.py:137-156</span>); 全部不匹配回 400 不入任何状态 (<span class="path">server.py:249-266</span>)</td><td><span class="tag ok">✓</span></td></tr>
+    <tr><td>体量/资源</td><td>请求体上限 12MB 双层检查; 单次拉清单 ≤16 条 (<code>MAX_BATCH</code>); 任务 TTL 240s 过期作废; 每请求 <code>Connection: close</code>; 端点线程单请求异常不退出 (<span class="path">server.py:300-311</span>)</td><td><span class="tag ok">✓</span></td></tr>
+  </tbody>
+</table>
+
+<h4>残余风险 (均已在制品中如实注明)</h4>
+<table>
+  <thead><tr><th style="width:30%">项</th><th>口径</th></tr></thead>
+  <tbody>
+    <tr><td><code>extension_id</code> 默认空</td><td>任意扩展 origin 都能携正确 token 调端点 (token 是第一道, 本项是第二道)。M5.5 已加启动 WARNING 提示 (<span class="path">runtime.py:126-141</span>); 需用户在扩展管理页复制固定 id 填入 —— <strong>用户配置面, 待办</strong></td></tr>
+    <tr><td><code>token: 123456</code></td><td>用户生产 config.yml 的现状 (红线不代改); 代码侧提示已写明「改留空自动生成」;<strong> 用户手改, 待办</strong></td></tr>
+    <tr><td>空 Origin 放行</td><td>设计取舍: 扩展 service worker 未必带 Origin, 真鉴权是 token (<span class="path">channel.py:114-127</span> 注释)</td></tr>
+    <tr><td>本机恶意进程</td><td>能读 <code>hr.token</code> 的本地进程本就在本地信任边界内; 端点能力被 token + origin + URL 白名单三重限制在「取已登记站点的 HR 页」</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s4">4 · 稳定性评估</h2>
+<table>
+  <thead><tr><th style="width:18%">维度</th><th>机制与证据</th></tr></thead>
+  <tbody>
+    <tr><td>存储自愈链</td><td>原子替换写 (临时文件 + os.replace) + 每次写留 <code>.bak</code> + 坏文件挪 <code>.bad-&lt;ts&gt;</code> 留证<strong>再</strong>试备份恢复 (顺序不能反, <span class="path">store.py:252-294</span>); 主文件坏时不盖备份 (<span class="path">:235-247</span>); 取证串区分「空文件」与「写坏内容」(<span class="path">:152-166</span>); schema 版本沿迁移链, 未来版本不猜</td></tr>
+    <tr><td>多实例一致性</td><td>账号级状态不进 state_file, 落 <code>&lt;shared_dir|data_dir&gt;/hr/&lt;site&gt;.json</code> 由实例共享; 每站一把 filelock, <strong>全程在锁内读-判-抓-写</strong>, 拿不到锁等下轮不排队 (<code>lock_timeout=0</code>); 写者心跳自检: revision 回退/心跳被覆盖 ⇒ 锁不生效 ⇒ <strong>退化只读防双写</strong> (<span class="path">store.py:215-233</span>); 恢复后重置自检基线防「自愈变砖」(<span class="path">:196-204</span>)</td></tr>
+    <tr><td>崩溃恢复</td><td>每抓一页/每取一个 .torrent <strong>增量落盘</strong> (<span class="path">service.py:582-584</span>, <code>_persist_step</code>) —— Ctrl+C/断电最多丢当前页; <code>hr_downloaded</code> 永久层防重复下载烧配额</td></tr>
+    <tr><td>停机路径</td><td>stop 先 <code>cancel_all</code> 叫停取数通道再 join (<span class="path">worker.py:186-210</span>) + 锁内频控睡眠可中断 (1s 切片查停止位, <span class="path">runtime.py:249-263</span>) —— 关停不等 180s 回传超时/睡完间隔; 被打断折 <code>HrChannelStopped</code> 不计失败</td></tr>
+    <tr><td>失败遏制</td><td>单站点异常不外抛 (<span class="path">service.py:278-282</span>); 单轮异常不打死取数线程 (<span class="path">worker.py:244-245</span>); 端点线程单请求异常回 500 不退出</td></tr>
+    <tr><td>告警纪律</td><td>三档分级: 节流态 (间隔/配额/时间窗) 只 INFO 且按根因去重; 页面/字段/翻页问题与取数失败 WARNING; 通道静默周期提醒 —— 同一状态不逐轮刷屏, 系统通知不被淹没 (<span class="path">worker.py:42-74, 292-339</span>; 各 <code>_warn_*</code> 均有单次/节流口径)</td></tr>
+  </tbody>
+</table>
+<p>结论: 稳定性设计在「防双写 / 防丢数据 / 防卡死 / 防告警疲劳」四个方向都有实打实的机制与守阵; F1/F2 是保守方向内部的两处「过严可能反噬可用性」与「闸门口径不一致」, 不动摇整体结构。</p>
+
+<h2 id="s5">5 · HR 在线核实运行现状详解</h2>
+
+<h3>5.1 架构与数据流</h3>
+<pre>
+浏览器扩展(真实登录态)                本地端点(127.0.0.1:8788)           取数线程(每 60s 自唤醒)              主循环/WebUI
+┌─────────────────────┐   拉任务   ┌──────────────────┐   队列   ┌───────────────────────────┐   只读视图   ┌──────────────┐
+│ GET /api/hr/tasks   │◄──────────│ token+origin 鉴权 │◄────────►│ 持站点锁: 读→判有效期→抓  │────────────►│ 打标/视图/规则│
+│ fetch 页面/.torrent │           │ UrlPolicy 白名单  │          │ →解析→算 infohash→落盘    │             │ /表达式 四消费点│
+│ POST /api/hr/result │──────────►│ 回传双道校验      │          │ →发布不可变判定视图        │             │ (judge_record)│
+└─────────────────────┘  回传结果  └──────────────────┘          └───────────────────────────┘             └──────────────┘
+        ▲ 站点 HR 统计页(myhr.php?hrtype=A/B/C) + download.php —— 后端自己不发请求、不持 cookie
+</pre>
+<p>启用口径: <code>hr_check.enabled=true</code> + 至少一个站点 <code>mode != off</code> ⇒ 起取数线程; 再满足 <code>channel.enabled=true</code> 才起端点 (能力即角色: 无扩展的实例只读共享数据)。账号级状态落 <code>&lt;shared_dir 或 data_dir&gt;/hr/&lt;site&gt;.json</code> 多实例共享, 不进 state_file。站点档案目前内置 <code>btschool</code> 与 <code>carpt</code> 两个 (adapter/页面 URL 等页面事实由档案派生, 配置不接)。</p>
+
+<h3>5.2 配置全表 (键 / 默认值 / 说明)</h3>
+<h4>全局 <code>hr_check.*</code> (config/models.py:87-126)</h4>
+<table>
+  <thead><tr><th style="width:26%">键</th><th style="width:14%">默认</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">enabled</td><td class="mono">false</td><td>总开关, 保守默认关</td></tr>
+    <tr><td class="mono">min_torrent_interval</td><td class="mono">90S</td><td>相邻站点请求最小间隔; <strong>split 站点改义为「仅 .torrent 下载间隔」</strong>; 抖动只向上 +0~25% (实测 90~113s)</td></tr>
+    <tr><td class="mono">max_torrents_per_hour</td><td class="mono">12</td><td>小时配额 (legacy 合并账本, 站点级独立计数); split 站点不使用</td></tr>
+    <tr><td class="mono">max_torrents_per_day</td><td class="mono">留空</td><td>天配额; 留空按模型取默认: legacy 60 / split 200</td></tr>
+    <tr><td class="mono">page_rate_per_hour</td><td class="mono">40</td><td>split 页面桶速率 (仅站点 opt-in split 后消费)</td></tr>
+    <tr><td class="mono">page_burst</td><td class="mono">10</td><td>split 页面桶容量</td></tr>
+    <tr><td class="mono">torrent_rate_per_hour</td><td class="mono">20</td><td>split 下载桶速率</td></tr>
+    <tr><td class="mono">torrent_burst</td><td class="mono">5</td><td>split 下载桶容量</td></tr>
+    <tr><td class="mono">max_pages_per_day</td><td class="mono">400</td><td>split 页面天级硬顶</td></tr>
+    <tr><td class="mono">min_page_interval</td><td class="mono">90S</td><td>split 页面请求最小间隔</td></tr>
+    <tr><td class="mono">max_pages_per_round</td><td class="mono">9</td><td>单轮页面请求总量上限 (0=不限); 单轮持锁时长的页数兜底 (D5=a)</td></tr>
+    <tr><td class="mono">failure_threshold</td><td class="mono">3</td><td>连续失败 N 次 ⇒ 该站熔断</td></tr>
+    <tr><td class="mono">failure_cooldown</td><td class="mono">12H</td><td>熔断冷却时长; Retry-After 采信但以它封顶</td></tr>
+    <tr><td class="mono">allow_window</td><td class="mono">""</td><td>仅该时段取数 "HH:MM-HH:MM" (可跨午夜); 空=全天。❗与 notify.quiet_hours 语义相反</td></tr>
+    <tr><td class="mono">unknown_policy</td><td class="mono">hr</td><td>未核实种子按 hr (保守) | not-hr; 新鲜度闸门恒按 hr 不受影响</td></tr>
+    <tr><td class="mono">verified_ttl</td><td class="mono">留空</td><td>放行有效期; 留空跟随站点 refresh_interval (默认即 12H)</td></tr>
+    <tr><td class="mono">index_retention</td><td class="mono">30D</td><td>页面快照条目保留时长 (非活跃超时淘汰); hr_downloaded 永不淘汰</td></tr>
+    <tr><td class="mono">max_download_retries</td><td class="mono">3</td><td>单个 .torrent 失败重试上限, 达到后冷却 (防烧配额)</td></tr>
+    <tr><td class="mono">channel_silence_warn</td><td class="mono">6H</td><td>通道静默/持续状态的告警节流周期</td></tr>
+    <tr><td class="mono">shared_dir</td><td class="mono">""</td><td>空=落 &lt;data_dir&gt;/hr/; 多实例共享指向同一目录 (云同步盘不可用)</td></tr>
+    <tr><td class="mono">lock_timeout</td><td class="mono">0S</td><td>抢锁等待; 0=拿不到直接等下轮 (不排队轰炸)</td></tr>
+    <tr><td class="mono">poll_interval</td><td class="mono">1M</td><td>取数线程自唤醒节奏; 也是登录退避的基数</td></tr>
+    <tr><td class="mono">parse_missing_rate_max</td><td class="mono">0.5</td><td>⚠ 已被 S2 零容忍架空 (见 F3), 现仅展示用途</td></tr>
+    <tr><td class="mono">channel{...}</td><td class="mono">见下</td><td>本地取数通道段</td></tr>
+    <tr><td class="mono">sites{...}</td><td class="mono">{}</td><td>站点接入唯一配置源 (键 = 内置档案 id)</td></tr>
+  </tbody>
+</table>
+
+<h4><code>hr_check.channel.*</code> (models.py:64-83)</h4>
+<table>
+  <thead><tr><th style="width:26%">键</th><th style="width:14%">默认</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">enabled</td><td class="mono">false</td><td>本实例是否有浏览器扩展可驱动; false = 只读共享数据</td></tr>
+    <tr><td class="mono">port</td><td class="mono">8788</td><td>仅听 127.0.0.1; 同机多实例必须错开 (被占 = 启动报错)</td></tr>
+    <tr><td class="mono">token</td><td class="mono">""</td><td>留空 = 首启随机生成到 &lt;data_dir&gt;/hr.token (0600)</td></tr>
+    <tr><td class="mono">extension_id</td><td class="mono">""</td><td>填了则 CORS 钉死该扩展 id; 留空 = 任意扩展 origin (启动 WARNING 提示)</td></tr>
+    <tr><td class="mono">request_timeout</td><td class="mono">180S</td><td>等扩展回传上限; 超时计一次失败进退避熔断</td></tr>
+  </tbody>
+</table>
+
+<h4><code>hr_check.sites.&lt;档案id&gt;.*</code> (models.py:130-177)</h4>
+<table>
+  <thead><tr><th style="width:26%">键</th><th style="width:14%">默认</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">mode</td><td class="mono">off</td><td>off=不启用 | partial=在线核实 | all=未核实恒受管束; ❗mode≠off 时该站点 hr 段必填 (配置期拦)</td></tr>
+    <tr><td class="mono">tracker</td><td class="mono">""</td><td>显式映射 trackers 条目名; 留空用档案默认 announce 域映射</td></tr>
+    <tr><td class="mono">hr_page_scopes</td><td class="mono">[A,B,C]</td><td>抓取档位; ❗必须含 A/B/C (少抓一档会被「未列出」误放行, 配置期拦); D 可选</td></tr>
+    <tr><td class="mono">refresh_interval</td><td class="mono">12H</td><td>HR 页抓取周期 = 完整数据有效期; 也是登录退避上限</td></tr>
+    <tr><td class="mono">max_pages_per_refresh</td><td class="mono">5</td><td>每档单次刷新最多翻页数 (= 滚动窗口页数)</td></tr>
+    <tr><td class="mono">completed_age_limit</td><td class="mono">0</td><td>超龄豁免线; 0=关, 开启时 1D~3650D (压过清单命中, 已知取舍 D8 维持)</td></tr>
+    <tr><td class="mono">accept_empty_listing</td><td class="mono">false</td><td>人工确认口子: 空清单且基线存在时接受为合法 complete (D1, 默认关)</td></tr>
+    <tr><td class="mono">auto_age_limit</td><td class="mono">false</td><td>豁免 A: 用反算考核期 P 作豁免线 (P 一致性机检不过即禁用); 默认关</td></tr>
+    <tr><td class="mono">seeding_exempt_ratio</td><td class="mono">0</td><td>豁免 B: 本地做种 ≥ 要求时长 × 倍数 ⇒ 豁免 (建议 5); 默认关</td></tr>
+    <tr><td class="mono">quota_model</td><td class="mono">legacy</td><td>配额激活门: legacy=合并账本 (逐字节旧行为) | split=页面/下载双令牌桶 (显式 opt-in)</td></tr>
+    <tr><td class="mono">page_rate_per_hour / torrent_rate_per_hour / max_torrents_per_hour</td><td class="mono">留空</td><td>站点级覆盖; 留空回退全局 (torrent_rate 再回落 max_torrents_per_hour)</td></tr>
+  </tbody>
+</table>
+
+<h3>5.3 默认配置下的访问节奏 (回答「多久访问一次 / 每次多少页」)</h3>
+<p>前提: <code>hr_check.enabled=true</code>、站点 <code>mode=partial</code>、<code>channel.enabled=true</code>, 其余全部默认值 (legacy 配额模型, 12H 刷新周期):</p>
+<ul>
+  <li><strong>稳态节奏</strong>: 数据完整有效期 = <code>refresh_interval</code> = <strong>12 小时</strong> —— 每 12H 才有一个抓取轮; 完整刷新后整段静默, 与实例数无关 (站点访问频率由数据有效期决定, 谁抓的都一样)。</li>
+  <li><strong>一个抓取轮抓多少</strong>: 档位顺序 A(考察中)→B(已达标)→C(未达标), 上轮未完成的档位优先起翻 (预算轮转); <strong>每档最多 5 页</strong> (<code>max_pages_per_refresh</code>), <strong>单轮总量硬顶 9 页</strong> (<code>max_pages_per_round</code>)。每页行数由站点页面自然行数决定 (不在配置面)。翻页终止 = 「下一页」链接与 <code>maxpage/currentpage</code> 脚本标记的<strong>并集</strong>; 另有三路早停 (整页超龄 / 连续 5 行已到期段 / 本地种子全覆盖)。</li>
+  <li><strong>请求间隔</strong>: 相邻请求 ≥ <strong>90s + 0~25% 只向上抖动</strong> (90~113s) ⇒ 一轮 9 页约 12~17 分钟, 全程持该站点锁。</li>
+  <li><strong>配额硬顶</strong>: legacy 合并账本 = <strong>12 次/小时、60 次/天</strong> (页面与 .torrent 下载同一个账本!) —— 90s 间隔理论上允许 40 次/时, 实际先撞 12/时; 隐含效果是「每小时窗口最多 9 页 + 3 个下载」。</li>
+  <li><strong>不完备轮的自愈节奏</strong>: 预算截断/改版可疑 ⇒ 数据有效期降为 <strong>120s</strong> ⇒ 60s 节拍下先插一个「复用轮」只补 .torrent 下载, 再进下一个抓取轮。一个 15 页的清单 (3 档 × 5 页) 典型 2~3 个抓取轮 (~1~2 小时) 收敛到 complete; 之后回到 12H 静默。</li>
+  <li><strong>单请求上限</strong>: 等扩展回传最多 180s (<code>request_timeout</code>); 频控等待单次 &gt;300s 或单轮累计 &gt;900s 即放弃剩余请求 (不持锁干等)。</li>
+  <li><strong>split 站点</strong> (站点显式 <code>quota_model: split</code> 才生效): 页面桶 <strong>40/时 · burst 10 · 400/天 · 间隔 90s</strong>, 下载桶 <strong>20/时 · burst 5 · 200/天 · 间隔 90s</strong>; 页面只在新轮、下载只在复用轮 —— 治「下载被页面挤占」的 legacy 痛点, 但默认不开 (40/时比 12/时松, 激活门保守)。</li>
+  <li><strong>扩展侧节奏</strong>: 扩展每 1 分钟拉一次任务清单 (<code>DEFAULT_POLL_HINT=60</code>, 必须小于 180s 回传窗口, v2.6 定版)。</li>
+</ul>
+
+<h3>5.4 限流措施全景 (当前生效的每一道)</h3>
+<table>
+  <thead><tr><th style="width:6%">#</th><th style="width:24%">措施</th><th>机制与默认值</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">1</td><td>数据有效期</td><td>访问频率第一决定者: 完整 12H / 不完备 120s (min(max(120, 2×poll), refresh_interval)) —— 有效期内直接复用, 零请求</td></tr>
+    <tr><td class="mono">2</td><td>最小间隔 + 抖动</td><td>相邻请求 ≥90s, 抖动<strong>只向上</strong> +0~25% (实测 ≥ 配置下限); split 下页面/下载各自 90s</td></tr>
+    <tr><td class="mono">3</td><td>小时/天配额 (legacy)</td><td>合并账本 12/时 · 60/天, 窗口键幂等 (本地时区整点/零点滚动, 重启不重置)</td></tr>
+    <tr><td class="mono">4</td><td>双令牌桶 (split, opt-in)</td><td>页面 40/时·burst10·400/天; 下载 20/时·burst5·200/天; 令牌按「上次补充时刻+速率」连续恢复, 跨重启不重置、消除整点突发; 速率×间隔自洽机检配置期拦矛盾配置</td></tr>
+    <tr><td class="mono">5</td><td>翻页页数上限</td><td>每档 ≤5 页 (<code>max_pages_per_refresh</code>) + 单轮总量 ≤9 页 (<code>max_pages_per_round</code>)</td></tr>
+    <tr><td class="mono">6</td><td>等待上限</td><td>锁内等满间隔再发, 但单次等待 &gt;300s / 单轮累计 &gt;900s 即放弃 (配额窗口/熔断/时间窗这类分钟级等待不持锁干等)</td></tr>
+    <tr><td class="mono">7</td><td>熔断</td><td>连续失败 ≥3 ⇒ 冷却 12H (Retry-After 采信但封顶 12H); 成功即清零; 冷却期零请求</td></tr>
+    <tr><td class="mono">8</td><td>登录失效退避</td><td>命中登录页不计失败不推熔断, 指数退避 <code>2^(n-1)×60s</code> 封顶 12H, 退避期零请求; 登录恢复清零</td></tr>
+    <tr><td class="mono">9</td><td>停用 (suspended)</td><td>S1/S2 强信号连续 3 轮 ⇒ 停站: 取数零请求、判定回落本地; 熔断到期也不自动恢复, 仅 <code>--hr-resume</code></td></tr>
+    <tr><td class="mono">10</td><td>时间窗</td><td><code>allow_window</code> 限时段取数 (默认全天)</td></tr>
+    <tr><td class="mono">11</td><td>扩展侧第二道闸</td><td>独立计数 (chrome.storage 窗口键, 与后端口径同套): 页面 <strong>60/时·600/天</strong>, 下载 <strong>50/时·200/天</strong>; 超限拒发并回传 <code>ext-quota</code> ⇒ 后端「让位」不计失败 —— 后端频控写错时浏览器这层仍拦得住</td></tr>
+    <tr><td class="mono">12</td><td>站点锁不排队</td><td><code>lock_timeout=0</code>: 拿不到锁等下轮, 多实例不排队轰炸</td></tr>
+    <tr><td class="mono">13</td><td>下载重试上限</td><td>单个 .torrent 失败 ≥3 次 ⇒ 冷却 12H 不再取 (防烧配额); <code>hr_downloaded</code> 永久层「永不重取」</td></tr>
+    <tr><td class="mono">14</td><td>任务队列 TTL</td><td>任务派发 240s 未回传作废, 晚到回传拒收; 单次拉清单 ≤16 条</td></tr>
+  </tbody>
+</table>
+
+<h3>5.5 状态持久化 (站点文件 &lt;dir&gt;/hr/&lt;site&gt;.json)</h3>
+<p>原子替换写 + revision 抬升 + 写者心跳 + <code>.bak</code> 上一版; 不进 state_file (账号级状态须多实例共享)。字段全集 (<span class="path">model.py:496-517</span>):</p>
+<table>
+  <thead><tr><th style="width:22%">字段</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">index[]</td><td>清单快照 (主键 tid): 档位/上传下载量/分享率/还需做种/完成时间/剩余达标/infohash v1+v2/first_seen/active</td></tr>
+    <tr><td class="mono">downloaded[]</td><td>永久层「永不重取」凭据: tid + 取回时刻 + infohash —— 索引淘汰也不重下</td></tr>
+    <tr><td class="mono">verified[]</td><td>放行记录: infohash + verified_ts + 来源 (D 档已免罪 | 完整刷新未列出) + 锚点四字段 (漂移即提前作废)</td></tr>
+    <tr><td class="mono">refresh{}</td><td>覆盖证明 meta: complete / last_success_ts / scopes_done / 排序结论 order_ok+detail / 可信基线 entry_baseline / 骤降 plunge_* / 强信号轮数 signal_rounds / 考核期 P 探测 / 各档计数上轮→本轮</td></tr>
+    <tr><td class="mono">quota + torrent_quota</td><td>两本配额账本 (窗口键计数 + 令牌桶 tokens/refill_ts); legacy 只用前者</td></tr>
+    <tr><td class="mono">fuse / suspended</td><td>熔断 (failures/until_ts/reason) 与停用 (reason/since/evidence/rounds, 人工恢复)</td></tr>
+    <tr><td class="mono">login_backoff_until</td><td>登录失效指数退避截止时刻 + 连续失效计数</td></tr>
+  </tbody>
+</table>
+
+<h3>5.6 错误处理分类 (谁计失败、谁让位、谁停站)</h3>
+<table>
+  <thead><tr><th style="width:24%">事件</th><th style="width:38%">处置</th><th>依据</th></tr></thead>
+  <tbody>
+    <tr><td>回传超时 / HTTP 失败 / 空回传</td><td>计一次失败 → 连续 3 次熔断 12H (Retry-After 采信封顶)</td><td class="path">fetcher.py:133-150 · ratelimit.py:164-181</td></tr>
+    <tr><td>命中登录页 (页面或 .torrent)</td><td><code>HrLoginExpired</code>: 不计失败不推熔断, 每站报一次 ERROR (文案直接给「去浏览器登录」), 指数退避零请求</td><td class="path">service.py:706-727</td></tr>
+    <tr><td>Cloudflare 挑战页</td><td>计一次失败 (与其它取数失败同路)</td><td class="path">service.py:515-516</td></tr>
+    <tr><td>S1 排序违反 / S2 必填缺失</td><td>强信号: 停翻 + 本轮判失败不产生放行 + 计停站计数; 连续 3 轮 ⇒ suspended (人工恢复)</td><td class="path">service.py:544-553, 647-687</td></tr>
+    <tr><td>轮级合计骤降 (&lt;基线 30% / 归零)</td><td>判不完备不产生放行; 持续 3 轮零 + 结构完好 ⇒ 升级告警 + 人工口子指引 (不自动接受)</td><td class="path">service.py:754-790</td></tr>
+    <tr><td>扩展侧硬上限 (ext-quota)</td><td>让位: 不计失败不推熔断 (否则把配置问题掩盖成站点坏了), 报一次 WARNING</td><td class="path">service.py:694-700</td></tr>
+    <tr><td>通道被叫停 (关停/重挂)</td><td>让位: 不告警不计失败, 下轮自会重来</td><td class="path">service.py:688-693</td></tr>
+    <tr><td>无可用通道</td><td>每站报一次 WARNING, 恢复后重置; 期间判定回落本地 (绝不静默直连站点)</td><td class="path">fetcher.py:77-87 · service.py:1121-1127</td></tr>
+    <tr><td>站点文件损坏</td><td>隔离留证 → .bak 恢复 → 保守空数据; 锁不生效 ⇒ 退化只读防双写</td><td class="path">store.py:252-294</td></tr>
+  </tbody>
+</table>
+
+<h3>5.7 观测与恢复口子</h3>
+<ul>
+  <li><code>--hr-status</code>: 全量现状 —— 运行时自检 (端点/token 来源/锁) + 每站配额两组 (页面/下载) + 观测面四行 (排序 ✓/✗/未判定 · 考核期 P 分布 · 骤降观测 · 档位计数上轮→本轮) + 清单明细表 (档位/量/名称/infohash) + suspended 恢复指引;</li>
+  <li><code>--hr-once</code>: 真机只读走查 —— 真发请求出报告, <strong>不写盘不联动 qB</strong> (熔断/配额也不落盘), 单次等待上限 600s;</li>
+  <li><code>--hr-resume &lt;站点&gt;</code>: suspended 的人工恢复口子 (锁内清除, 此前停用原因留痕进 reason); 与其它 HR 模式互斥 (它本身是写操作);</li>
+  <li><code>GET /api/hr/status</code>: WebUI 只读出口, 与 CLI 同一套数 (<code>status.site_status()</code> 单点)。</li>
+</ul>
+
+<h2 id="s6">6 · 建议与待办</h2>
+<table>
+  <thead><tr><th style="width:8%">优先</th><th style="width:34%">项</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><span class="tag p2">P2</span></td><td>F1 收口 (早停② P 机检空真)</td><td>建议: 早停②闸门加 <code>period_values</code> 非空前置 (与 <code>period_consistent</code> 口径对齐) 或限 A 档生效; <strong>M0 前置实测补第④项: B/C 档「剩余达标时间」列的真实展示形态</strong> (0 / 空白 / 非零 —— 三种形态分别对应早停②截断 / S2 停站 / 安全)。收口前早停②/豁免 A 本就默认关, 无存量风险</td></tr>
+    <tr><td><span class="tag p3">P3</span></td><td>F2 拍板 (跨页零容忍 vs 轮内插入)</td><td>需用户决断: 维持 2026-09-26「哪怕 1 处」定稿 (接受活跃账号偶发误停站, <code>--hr-resume</code> 可恢复), 或给跨页判据加边界容差</td></tr>
+    <tr><td><span class="tag p3">P3</span></td><td>真机走查 + M0 前置实测三项 (既有开放项)</td><td>① HR 页完成时间倒序 ② 考核期 P 恒定 ③ <code>?page=N</code> 英文站分页形态 —— 收口后按站点开早停②/<code>auto_age_limit</code>; 走查前先 chrome://extensions reload 扩展</td></tr>
+    <tr><td><span class="tag p3">P3</span></td><td>F3 文档/配置修正</td><td><code>parse_missing_rate_max</code> 在 keys.md/schema 帮助文案改注「已被 S2 零容忍取代」或走废弃流程</td></tr>
+    <tr><td><span class="tag p4">P4</span></td><td>F4 清理</td><td>status.py:143/190 两处旧公式注释更正; <code>covered_local_any</code> 死变量清理或接进观测行</td></tr>
+    <tr><td><span class="tag mut">配置面</span></td><td>extension_id / token (用户手改)</td><td>浏览器扩展管理页复制固定 id 填 <code>hr_check.channel.extension_id</code>; <code>config.yml</code> 的 <code>token: 123456</code> 改留空自动生成并同步进扩展 —— 程序只提示不代改 (红线)</td></tr>
+  </tbody>
+</table>
+<div class="note">
+  <p><strong>范围声明</strong>: 本报告是证据快照, 本轮<strong>未改任何代码/文档</strong> (范围守恒)。F1/F2 是否入池 issue、F3/F4 何时修, 由用户决定; 处置路径建议: F1+F2 拍板后并入下轮 HR 计划, F3/F4 可随任意一轮顺带。</p>
+</div>
+
+</main>
+</div>
+
+<footer class="foot">
+  依据现场: src/auto_qb/hr/{service,parse,model,resolve,ratelimit,fetcher,channel,queue,server,worker,store,runtime,status,report,events}.py ·
+  src/auto_qb/hr/adapters/{base,nexusphp}.py · src/auto_qb/config/{models.py,validation/sections.py} ·
+  extensions/hr-fetch-proxy/site-caps.js · memory-bank/config-reference/keys.md<br>
+  行号对应 develop @ c7dfbd2 (hr/ 与提交基线 aef2462 逐字节相同) · test.full 1812 passed + 3 skipped (TOTAL 91%) 实测于 2026-09-28 01:05 ·
+  专题视图 doc-topic <code>backend-partial-hr-verify</code> ·
+  <a href="../plans/26-09-27-1815-plan-hr-verify-audit-fixes.html">实施计划</a> ·
+  <a href="../reports/26-09-26-1628-report-hr-online-verify-audit.html">上轮设计审查</a> ·
+  <a href="../plans/26-09-22-2204-partial-hr-site-verify-plan.html">主计划</a> ·
+  <a href="../tasks/26-09-22-backend-partial-hr-verify.md">任务档案</a>
+</footer>
+
+</div>
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 **Status:** Open
 **Added:** 2026-09-22
-**Updated:** 2026-09-27
+**Updated:** 2026-09-28
 **Summary:** 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
 (2026-09-24/25): M1 = 新包 `src/auto_qb/hr/` 离线管道 + 配置全链路 + `--hr-once`; M2 = 本地端点
 (`/api/hr/tasks` + `/api/hr/result`, token + origin + URL 白名单) + 取数线程 (`hr/worker.py`) + 只读视图发布 +
@@ -30,8 +30,12 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
 **只差真机走查**(M0 四项实测 + 装扩展后跑一轮真实取数 + v3.1 新配置面走查) —— 计划见 memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html (§13 决策记录与 M0 实测清单)。
 **在线核实 v2 修改计划已产出 (2026-09-27, 审计报告转化, 代码未动)**: 见 plans/26-09-27-1815-plan-hr-verify-audit-fixes.html ——
 P1/P2/P3 修复落点 + 主计划 §14 的 M5.1–M5.5 实施拆解, 10 项待拍板 (D1–D10) + 3 项前置实测; M5.1 观测步可即刻开工。
+**v2 实施核对 + 安全/稳定性审计完成 (2026-09-28, 代码未动)**: 报告 reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html
+逐项核对 33 个修改项全部落地且与计划一致; 独立发现 F1(P2: 早停② P 机检空真 + B/C 档 remain 形态假设 ⇒ C 档
+误放行链)/F2(P3: 跨页 S1 对轮内清单插入零容忍 ⇒ 误停站场景)/F3(P3: parse_missing_rate_max 被 S2 架空)/
+F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 复验与基线 26-09-27-2326 逐位一致。
 **Topics:** backend-partial-hr-verify
-**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html
+**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html, memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html
 
 ## 原始请求
 
@@ -71,8 +75,46 @@ P1/P2/P3 修复落点 + 主计划 §14 的 M5.1–M5.5 实施拆解, 10 项待�
 | v3.5 CarPT 站点接入 (adapter 变体参数化) | **Done** | 2026-09-27: 用户令「HR在线核实添加支持站点: CarPT」(样张: 用户提供的 CarPT `myhr.php` 空表页, 2026-09-27)。样张核对: 状态参数 `?status=N`(1 考察中/2 已达标/3 未达标/4 已免罪), 表头 `td.colhead` 十列, 首列「H&R ID」, 「下载完成时间/剩余考察时间」列名, 末尾多备注/操作两列, 分页仍 nexus-pagination。实现: `NexusPhpMyhrAdapter` 构造参数化(`scope_param`/`scope_values`/`header_key`/`column_names`, 标准形态行为不变, `REQUIRED_COLUMNS` 兼容导出保留) + 新 `adapters/carpt.py`(`CarPtMyhrAdapter` 薄子类, 登录页识别换本站表头锚点) + 注册名 `"carpt"` + schema 帮助文案; `fetcher.py`/`report.py` 的 `_scope_of` 兼容 `status=`(排障展示与离线走查文件名)。测试 +5(CarPT fixture ×2: 数据页/空表样张结构) — 全量 **1693 passed + 1 skipped**(TOTAL 91% / 11227 / 815 / 3720 / 330), 基线 `26-09-27-1235` 已记。**待真机**: 数据行单元格形态(样张为空表)与 `download.php?id=` 实参(H&R ID 还是种子 id)待首刷核对 |
 | 在线核实 v2 修改计划产出 (审计报告转化) | **Done** | 2026-09-27: 报告 26-09-26-1628 → [plans/26-09-27-1815](../plans/26-09-27-1815-plan-hr-verify-audit-fixes.html) (doc-status Open) —— 承接主计划 §14 M5.1–M5.5 骨架展开成文件级修改项 + 补齐 §14 未吸收的 P1 骤降保护/空表口径、P2 放行对账撤销/多实例引导、P3 登录退避/端点纵深; 新增配额激活门 / 单轮预算轮转 / 扩展 caps 上调三个设计点; 汇总 D1–D10 十项拍板 + 3 项前置实测; 产出时现场复核 (cbc4b80) 报告符号引用全部成立。**代码未动** |
 | M5.1–M5.5 实施 (在线核实 v2) | **Done** (代码侧) | 2026-09-27 22:18: 用户令「实施计划 26-09-27-1815, 拍板按推荐」⇒ 五步全部落地, 每步独立全量绿 + 一红验 (M5.1 1763 → M5.2 1774 → M5.3 1787 → M5.4 1795 → 收尾 1796 passed + 3 skipped, 91%)。要点与三个实施决策见进度日志 2026-09-27 22:18 条; **余真机走查 + M0 前置实测三项**(阻塞早停②/豁免 A 的启用, 不阻塞代码) |
+| v2 实施核对 + 安全/稳定性审计 | **Done** (纯审计, 代码未动) | 2026-09-28 00:30: 报告 [26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) —— M5.1-M5.5 共 33 项逐条以 file:line 核对全落地; 安全面五道边界/稳定性六维度全核对; 新发现 F1(P2)/F2(P3)/F3(P3)/F4(P4) 见报告 §2 与切片「未完成」; 处置待用户拍板 |
 
 ## 进度日志
+
+- **2026-09-28 00:30 (v2 实施核对 + 安全/稳定性审计 —— 纯审计轮, 代码/文档零改动)** — 用户令「分析
+  plans/26-09-27-1815 实施情况, 重点是安全性/稳定性/BUG, 并写报告含 HR 在线核实现状 (配置/默认节奏/
+  限流)」。开工预检 `my-commit-flow.sync` PASS (与主线齐平 c7dfbd20)。产出:
+  [reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html)。
+  **核对结论**: M5.1-M5.5 共 33 个修改项逐条以 file:line 对到当前代码, 全部落地无缺席; 三个实施期收口
+  (滚动窗口=max_pages_per_refresh / max_pages_per_round=9 / P 公式勘误) 均证实; 零静默变更成立
+  (激活门 legacy 默认 + 新键全默认关/旧值)。**新发现 (均未改代码, 待拍板)**:
+  ① **F1 (P2)**: 早停② 的 P 一致性机检空真 —— `period_ok` 初始 True 且只有 remain>0 的行参与反算
+  (service.py:477/561-572), 整页 remain==0 时机检从未运行却被当作通过; 轮尾 meta 的
+  `period_consistent=bool(period_values) and period_ok` (service.py:828) 却是 False —— 两道机检口径
+  不一致。触发链: C 档(未达标)行 remain 若以可解析 0 展示 (实现注释自认「已到期行被站点截 0」) ⇒
+  C 第 1 页即早停 ⇒ complete=True ⇒ C 第 2 页起种子走反应式「完整刷新未列出」放行 (resolve.py:260-273)
+  ⇒ 漏管。B 档同形态无害 (本就可删); remain 空白形态则触发 S2 停站 (remain 是必填字段)。收口建议:
+  早停②加 period_values 非空前置或限 A 档 + M0 补第④项实测 B/C 档 remain 形态。
+  ② **F2 (P3)**: 跨页 S1 判据 `max(cur) > min(prev)` (parse.py:329-330) 对「轮内清单顶端插入」零容忍
+  —— 相邻两页间隔 90~113s, 其间 ≥2 个新完成进清单顶端 ⇒ 判「跨页乱序」⇒ 本轮失败计熔断失败,
+  连续 3 轮 ⇒ 12H 熔断 + suspended 人工恢复。fail-safe 方向无损, 是可用性风险; 与 2026-09-26
+  「哪怕 1 处」定稿 (针对页面改版) 存在张力, 需单独拍板。
+  ③ **F3 (P3)**: `parse_missing_rate_max` 被 S2 零容忍架空 —— service.py:551 任何缺失率>0 即中止,
+  :806 的阈值分支不可达; keys.md:30 仍是旧语义 (死配置+文档漂移)。
+  ④ **F4 (P4)**: status.py:143/190 注释仍写勘误前公式 (实现已正确); `covered_local_any`
+  (service.py:486/596) 只写不读。
+  **安全/稳定性结论**: 端点五道边界 (loopback/token 常数时间+0600 生成/origin/SSRF 白名单/回传双道校验)、
+  存储自愈链 (.bad 留证→.bak→锁失效只读退化)、增量落盘、可中断停机、告警三档分级全部代码证实;
+  残余在配置面 (extension_id 空 / token:123456, M5.5 WARNING 已就位)。
+  **现状盘点** (报告 §5): 配置全表 3 张 (全局 23 键 + channel 5 键 + 站点 13 键含默认值) /
+  默认节奏 (legacy: 12H 完整有效期, 抓取轮 ≤9 页·每档 ≤5 页·间隔 90~113s·配额 12/时·60/天 合并,
+  15 页站点典型 2~3 轮 ~1-2h 收敛; split opt-in: 页面 40/时·下载 20/时双桶) / 限流全景 14 道 /
+  站点文件字段 / 错误处理九分类 / 观测口子 (--hr-status/--hr-once/--hr-resume)。
+  **基线复验与同步**: 分析轮开工时与主线齐平 c7dfbd2, test.full = 1811+3 (91%) 与切片 26-09-27-2326
+  逐位一致; 提交轮预检发现远端进 aef2462 (webui 站点页搜索, hr/ 未动) ⇒ 按先同步后提交弃生成物
+  _doc-map 后 ff 快进, 合并基线复跑 test.full = **1812 passed + 3 skipped (TOTAL 91%)** 与最新切片
+  26-09-28-0014 逐位一致, 不新建重复切片。收尾动作: 报告按认领链协议补 5 处反向声明 (1815/2204/
+  1628/档案/切片); _doc-map 因本报告入图超 cap —— 先按守卫指引收口**生成器头部说明** (省 147 字符),
+  远端同期把 index-auto cap 提至 12100, 两相叠加后 12881 字节 (~11.5K 字符) 达标; activeContext 切片
+  同轮蒸馏回 cap 内 (9579 → ~4.4K, 已完成明细沉降本档案)。
 
 - **2026-09-27 22:18 (M5.1–M5.5 全部落地 —— 在线核实 v2 代码侧完成)** — 用户令「实施计划
   plans/26-09-27-1815, 拍板按推荐」。开工先同步: 远端 045ea27 比本地 cbc4b80 新两笔且纯落后
