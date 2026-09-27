@@ -7,12 +7,15 @@
 红线照拦、暂存清单显式打印。传路径 = 子集提交(会提示"未纳入"数量, 治「漏传文件静默不提交」)。
 消息文件缺省读约定路径 `<root>/.git/COMMIT_MSG_AI.txt` —— .git 内永不入库(不触红线)、
 多 clone 各自隔离、路径跨平台恒定; 调用方只剩「写消息 → 跑一条命令」两个动作。
+**消费即删**: 提交落稳(ref 三处核对通过)后脚本自动删除约定路径的消息文件 ——
+文件存在 = 有待提交的消息, 提交后不残留旧消息(固定路径 + 跨提交残留会让回看者把
+旧消息当现状), 下次提交前必须重写; 显式 --message-file 指向非约定路径的文件归调用方管, 不删。
 
 流程:
   1. 跑 preflight(**--phase commit**: 落后主线即 STOP —— 先合并远端, 收尾回写也要落在合并后的新基线上)
   2. 逐路径 `git add`(拒绝 -A / . / *)
   3. `git commit -F <消息文件>`(中文首行 + 空行 + 细节; 规模数字要提交那一刻实测)
-  4. verify_ref 核对 ref 三处, 不一致给处置步骤
+  4. verify_ref 核对 ref 三处, 不一致给处置步骤; 通过后**删除消息文件**(消费即删)
   5. **同进程续跑 push 全流程**(--no-auto 预检 → 推主线 → 核对远端 → 一次镜像; `--no-push` 停在提交);
      推送未通过 ≠ 提交失败 —— RESULT: PARTIAL, 补跑 ship.push 即可, 别重新提交
   6. 末行按输出契约收尾(RESULT: / WHY: / NEXT:) —— 引擎保证协议行不被摘要截掉
@@ -53,6 +56,21 @@ def default_message_path(root: Path) -> Path:
     return root / DEFAULT_MESSAGE_REL
 
 
+def consume_message_file(msg_file: Path, root: Path) -> None:
+    """消费即删 —— 提交落稳后删除约定路径的消息文件, 防旧消息残留被回看者当现状。
+
+    只删约定路径: 显式 --message-file 指向别处的文件归调用方管。删除失败只警告
+    不影响退出码 —— 提交已成功, 别让收尾环节的失败骗执行者重跑(同 stdout 编码兜底的教训)。
+    """
+    if msg_file != default_message_path(root):
+        return
+    try:
+        msg_file.unlink()
+        print(f"消息文件已消费删除: {msg_file}(下次提交前必须重写)")
+    except OSError as exc:
+        print(f"⚠ 消息文件删除失败({exc}); 请手动删除 {msg_file}, 避免下次提交误读旧消息")
+
+
 def resolve_stage_plan(paths: list[str], red_lines: list[str]) -> tuple[list[str], list[str], str | None]:
     """算暂存计划, 返回 (to_stage, omitted, refuse); refuse 非 None 即拒绝执行。
 
@@ -81,7 +99,9 @@ def resolve_stage_plan(paths: list[str], red_lines: list[str]) -> tuple[list[str
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="*", help="要暂存的路径(缺省 = 全部改动); 传了即子集提交")
-    parser.add_argument("--message-file", default=None, help=f"提交消息文件(缺省 <root>/{DEFAULT_MESSAGE_REL})")
+    parser.add_argument(
+        "--message-file", default=None, help=f"提交消息文件(缺省 <root>/{DEFAULT_MESSAGE_REL}; 提交落稳后约定路径的会被自动删除)"
+    )
     parser.add_argument("--skip-preflight", action="store_true", help="跳过预检(已跑过时用)")
     parser.add_argument("--no-push", action="store_true", help="只提交不推送(补推: commands run ship.push)")
     parser.add_argument("--config", default=None, help="指定配置文件(默认 <包>/.my-commit-flow.toml)")
@@ -121,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     if not msg_file.exists():
         sys.stderr.write(
             f"RESULT: FAIL 提交消息文件不存在: {msg_file}\n"
-            "WHY: 提交消息是必需要素; 缺省约定在 <root>/.git/ 下(永不入库, 多 clone 各自隔离)\n"
+            "WHY: 提交消息是必需要素; 约定文件消费即删(上次提交落稳后已删除), 每次提交前都要重写\n"
             f"NEXT: 把提交消息(中文首行 + 空行 + 动机/取舍/影响面/实测数字)写入 {msg_file} 后重跑 commands run ship.commit\n"
         )
         return 4
@@ -186,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
             "NEXT: 确认无他人操作 .git 后按处置步骤处理; 复核: commands run my-commit-flow.verify-ref\n"
         )
         return rc
+
+    consume_message_file(msg_file, root)
 
     if args.no_push:
         print(f"\nRESULT: OK {sha} 已提交({len(staged)} 个文件, --no-push 未推送); 下一步: commands run ship.push")

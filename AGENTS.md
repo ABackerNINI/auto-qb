@@ -88,7 +88,7 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## 提交 / PR
 
-> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①预检 `my-commit-flow.sync`, **远端有更新先按「同步路径」合并远端** → ②收尾回写文档(落在合并后的新基线上 —— 回写件是全体 clone 最热写点, 陈旧基线上写合并必撞) → ③消息写进 `.git/COMMIT_MSG_AI.txt` 后 `commands run ship.commit`: 零参数全量提交 + 核 ref + 推 Gitee + 核远端 + 镜像一次; 看 **RESULT 行**(PARTIAL=已提交未推送→补 `ship.push`), 不查 rc、不手动 ls-remote。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
+> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①预检 `my-commit-flow.sync`, **远端有更新先按「同步路径」合并远端** → ②收尾回写文档(落在合并后的新基线上 —— 回写件是全体 clone 最热写点, 陈旧基线上写合并必撞) → ③消息写进 `.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后 `commands run ship.commit`: 零参数全量提交 + 核 ref + 推 Gitee + 核远端 + 镜像一次; 看 **RESULT 行**(PARTIAL=已提交未推送→补 `ship.push`), 不查 rc、不手动 ls-remote。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
 
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令**, "继续 / 接着做 / ok / 你看着办"一律不算。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。

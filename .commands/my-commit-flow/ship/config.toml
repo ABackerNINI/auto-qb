@@ -12,7 +12,7 @@ script = "commit.py"
 pin    = true
 risky  = true
 when   = "用户显式说「提交」：暂存 + 提交 + 核 ref + 自动续推（落后未合流会被内含预检 STOP —— 先按「同步路径」合并远端再回来）"
-note   = "零参数缺省 = 全量提交本次改动(红线照拦) + 核 ref + 自动续推(--no-push 只提交); 消息缺省读 <root>/.git/COMMIT_MSG_AI.txt; RESULT: PARTIAL=已提交未推送, 补跑 ship.push; 拒 -A / . / *"
+note   = "零参数缺省 = 全量提交本次改动(红线照拦) + 核 ref + 自动续推(--no-push 只提交); 消息缺省读 <root>/.git/COMMIT_MSG_AI.txt, 提交落稳后脚本自动删除(消费即删, 下次提交前必须重写); RESULT: PARTIAL=已提交未推送, 补跑 ship.push; 拒 -A / . / *"
 doc    = "references/pipeline.md"
 
 [tasks."ship.push"]
