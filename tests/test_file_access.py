@@ -14,6 +14,12 @@
 - test_mapped_scandir_logical_space: scandir entry 译回逻辑空间(白名单消费方零改动的前提)
 - test_mapped_mkdir_real_and_miss: mkdir 挂载点可写即真实执行; miss 报 FileAccessError(不可判定)
 - test_mapped_realpath_lexical: Mapped realpath_lexical 纯词法(normcase+normpath, 不解析符号链接)
+- test_mapped_symlink_escape_treated_as_miss: SEC-1 逃逸加固 —— 挂载内符号链接指向挂载外按
+  miss 处理(存在性 UNDETERMINED / 取值 FileAccessError / map_to_container None / scandir 剔除);
+  挂载内合法符号链接不受影响
+- test_mapped_escape_containment_logic: SEC-1 逃逸判定逻辑(非 symlink 环境可跑) —— 容器侧
+  realpath 解析跳出挂载根 -> 按 miss, 仍在根内 -> 正常
+- test_mapped_mount_root_via_symlink: 挂载根本身经符号链接到达 -> 按解析后的真实根比较不误伤
 - test_mapped_open_path_not_supported: 容器 open_path 恒 NotSupported(B/C 类根因, 优雅降级)
 - test_init_file_access_by_config: 空表 -> Local; 非空 -> Mapped(单例构建, R 级热重载不切换)
 - test_selfcheck_mount_missing_and_readonly: 挂载点不存在 WARNING; 只读探测 INFO; 命中率 0% WARNING; Local 空转
@@ -239,11 +245,100 @@ def test_mapped_mkdir_real_and_miss(tmp_path):
 
 def test_mapped_realpath_lexical(tmp_path):
     """Mapped realpath_lexical 纯词法: normcase + normpath, 不做符号链接解析
-    (逻辑路径在容器里不真实存在, realpath 只会拼坏; 逃逸防护退化为词法比较)"""
+    (逻辑路径在容器里不真实存在, realpath 只会拼坏; 逃逸防护在包装层做, 见 SEC-1)"""
     fa = _mapped(tmp_path)
     out = fa.realpath_lexical("d:/Downloads/./a/../b")
     assert out == os.path.normcase("d:/Downloads/b")
     assert "realpath" not in out
+
+
+def _dir_symlink_or_skip(link, target):
+    """建目录符号链接; 无权限时跳过用例(Windows 需开发者模式/管理员, 逃逸校验依赖真实 symlink)"""
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip(f"无法创建目录符号链接(权限不足): {link} -> {target}")
+
+
+def test_mapped_symlink_escape_treated_as_miss(tmp_path):
+    """SEC-1 逃逸加固: 挂载内符号链接指向挂载外 -> 按 miss 处理 —— 存在性 UNDETERMINED /
+    取值 FileAccessError / map_to_container None / scandir 剔除; 挂载内合法链接不受影响
+
+    回归锚点: 修复前 Mapped 只做词法映射, 逃逸路径照常 syscall —— 挂载外的内容可被
+    存在性探测/读取/新建触达(fs.py 目录浏览「词法退化」已知限制)。
+    """
+    outside = tmp_path.parent / (tmp_path.name + "-outside")
+    outside.mkdir()
+    (outside / "secret.bin").write_bytes(b"s")
+    (tmp_path / "real").mkdir()
+    (tmp_path / "real" / "a.bin").write_bytes(b"x" * 3)
+    fa = _mapped(tmp_path)
+    _dir_symlink_or_skip(tmp_path / "jail", outside)
+    # 逃逸: 一律按 miss —— 绝不透出挂载外的任何信息(不判「不存在」, 也不给真值)
+    assert fa.map_to_container("D:/Downloads/jail") is None
+    assert fa.exists("D:/Downloads/jail") is UNDETERMINED
+    assert fa.isdir("D:/Downloads/jail") is UNDETERMINED
+    assert fa.exists("D:/Downloads/jail/secret.bin") is UNDETERMINED
+    with pytest.raises(FileAccessError, match="不可判定"):
+        fa.getsize("D:/Downloads/jail/secret.bin")
+    with pytest.raises(FileAccessError, match="不可判定"):
+        fa.mkdir("D:/Downloads/jail/sub")
+    # scandir: 逃逸条目剔除, 挂载内条目照常(一个坏链接不炸整个目录浏览)
+    assert {e.name for e in fa.scandir("D:/Downloads")} == {"real"}
+    # 挂载内的符号链接(指向挂载内)不受影响; 普通路径语义不变
+    _dir_symlink_or_skip(tmp_path / "in-link", tmp_path / "real")
+    assert fa.exists("D:/Downloads/in-link/a.bin") is True
+    assert fa.exists("D:/Downloads/real/a.bin") is True
+
+
+def test_mapped_mount_root_via_symlink(tmp_path):
+    """SEC-1: 挂载根本身经符号链接到达(如 /mnt/downloads -> /srv/data)-> 根与目标都取
+    realpath 按解析后基准比较, 不误伤(根缓存存的是解析后的真实路径)"""
+    real = tmp_path / "realroot"
+    real.mkdir()
+    (real / "x.bin").write_bytes(b"x")
+    link = tmp_path / "linkroot"
+    _dir_symlink_or_skip(link, real)
+    fa = MappedFileAccess((PathMapEntry(src="D:/Downloads", dst=str(link).replace(os.sep, "/")), ))
+    assert fa.map_to_container("D:/Downloads") == str(link).replace(os.sep, "/")
+    assert fa.exists("D:/Downloads/x.bin") is True
+    assert fa.getsize("D:/Downloads/x.bin") == 1
+
+
+def test_mapped_escape_containment_logic(tmp_path, monkeypatch):
+    """SEC-1 逃逸判定逻辑(不依赖 symlink 特权, 任何环境可跑): realpath 桩把 jail/* 解析到
+    挂载外 -> 一律按 miss; 解析后仍在根内 -> 正常。真实符号链接端到端见上一用例。"""
+    (tmp_path / "real").mkdir()
+    (tmp_path / "real" / "a.bin").write_bytes(b"x" * 3)
+    outside = tmp_path.parent / (tmp_path.name + "-outside")
+    outside.mkdir()
+    (outside / "secret.bin").write_bytes(b"s")
+    jail = tmp_path / "jail"
+    jail.mkdir()  # 扮演「符号链接占位」—— 解析行为由 realpath 桩接管
+    real_realpath = os.path.realpath
+    jail_prefix = str(jail)
+
+    def fake_realpath(p, **kw):
+        rp = str(real_realpath(p))
+        if rp == jail_prefix or rp.startswith(jail_prefix + os.sep):
+            return str(real_realpath(outside)) + rp[len(jail_prefix):]
+        return rp
+
+    monkeypatch.setattr(os.path, "realpath", fake_realpath)
+    fa = _mapped(tmp_path)
+    # 逃逸: 按 miss —— 存在性 UNDETERMINED(绝不错判「不存在」), 取值 FileAccessError
+    assert fa.map_to_container("D:/Downloads/jail") is None
+    assert fa.exists("D:/Downloads/jail") is UNDETERMINED
+    assert fa.exists("D:/Downloads/jail/secret.bin") is UNDETERMINED
+    with pytest.raises(FileAccessError, match="不可判定"):
+        fa.getsize("D:/Downloads/jail/secret.bin")
+    with pytest.raises(FileAccessError, match="不可判定"):
+        fa.mkdir("D:/Downloads/jail/sub")
+    # scandir: 逃逸条目剔除, 挂载内条目照常
+    assert {e.name for e in fa.scandir("D:/Downloads")} == {"real"}
+    # 根内路径语义不变
+    assert fa.exists("D:/Downloads/real/a.bin") is True
+    assert fa.exists("D:/Downloads/real/ghost.bin") is False
 
 
 def test_mapped_open_path_not_supported(tmp_path):

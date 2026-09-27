@@ -44,14 +44,16 @@ def _fs_real(p: str) -> str:
 
     Local 实现: realpath 解符号链接 + normcase 统一大小写/斜杠(路径真实存在, 可解析);
     Mapped 实现: 纯词法 normcase + normpath —— 逻辑路径在容器里不真实存在, realpath 只会
-    把它拼坏(符号链接逃逸防护退化为词法比较, 与下方 >MAX_PATH 已知限制同口径)。
+    把它拼坏。符号链接逃逸防护**不在**本函数做: Mapped 下由包装层的挂载根逃逸校验承担
+    (infra/file_access SEC-1: 容器侧 realpath 跳出挂载根按 miss → 三态消费点语义化 404,
+    scandir 逃逸条目直接剔除), 本函数只负责逻辑空间白名单比较的归一。
 
     ❗实现内部先剥 `\\\\?\\` 前缀: 比较双方可能一侧带前缀(如 `os.scandir` 家族返回值)、
     一侧不带 —— 不剥就会因前缀差异被判成"越界", 实测后果是**子目录被全部过滤掉**
     (目录树恒空)。
 
-    ⚠ 已知限制(沿用): 对 >MAX_PATH 的路径 realpath **静默退化成 abspath**(不抛错)
-    ⇒ 长路径上的符号链接/junction 解析不可用, 逃逸防护退化为词法比较。
+    ⚠ 已知限制(沿用, 仅 Local): 对 >MAX_PATH 的路径 realpath **静默退化成 abspath**(不抛错)
+    ⇒ 长路径上的符号链接/junction 解析不可用, 逃逸防护退化为词法比较(Mapped 无此限制)。
     """
     return file_access.get_file_access().realpath_lexical(p)
 
@@ -122,8 +124,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         ② 允许根白名单 = 已知保存路径(与 /api/paths 同源, 逻辑空间); 路径经 _fs_real 规范化后
            必须落在某个根之内(相等或为子目录), 否则 403 —— 同时挡掉 `..` 穿越;
         ③ 逐条子目录同样过白名单 -> 指向根外的符号链接/junction 不会出现在列表里(逃逸防护;
-           Local 实现靠 realpath 解析符号链接, Mapped 实现退化为词法比较 —— 容器里 bind mount
-           的下载目录内通常没有符号链接, 且逻辑路径上本就做不了 realpath);
+           Local 实现靠 realpath 解析符号链接, Mapped 实现由包装层剔除容器侧逃逸挂载根的
+           条目(SEC-1) —— 下载目录内指向挂载外的符号链接既不出现、点进去也按「不可判定」404);
         ④ 鉴权沿用全局 require_token 依赖(本机免鉴权同样放行, 与其它端点一致)。
         path 为空 = 返回允许根列表(前端首屏入口)。
 

@@ -5,12 +5,13 @@
 
 ## 已实现 (✅, 有单测覆盖)
 - **文件访问层 + 下载目录路径映射 (2026-09-27, 计划 26-09-27-1407)**: 新增 `infra/file_access.py` 单点收编
-  下载数据目录全部本地访问(四大消费方统一走包装层); 新配置键
-  `fs.path_map`(空 = 现状, R 级热重载)驱动 Mapped 实现 —— 逻辑路径进 → syscall 边界映射 → 逻辑路径出,
-  **miss 一律「不可判定」绝不判缺失**(缺文件扫描跳过组 / exists()·disk_*() 显式 ExprError), Windows 宿主
-  docker 部署由此打通; mkdir 按挂载点真实执行(只读 → 403), open_path 容器恒 501, 启动自检非 fail-fast。
-  依据 [reports/26-09-27-1352](../reports/26-09-27-1352-report-docker-fs-wrapper-pathmap.html);
-  测试 `tests/test_file_access.py` 22 条; W5 待回填。
+  下载数据目录全部本地访问; 新配置键 `fs.path_map`(空 = 现状, R 级热重载)驱动 Mapped 实现
+  (逻辑路径进 → 容器映射 → 逻辑路径出), **miss 一律「不可判定」绝不判缺失**(扫描跳过 / 表达式
+  ExprError), docker 部署由此打通; mkdir 真实执行(只读 403), open_path 容器 501,
+  自检不阻塞。审查修复(1712/1737, 细节见
+  [fs-pathmap-tristate.md](../pitfalls/backend/fs-pathmap-tristate.md)): casefold 变长前缀按原串
+  定位边界 / 三态消费单点 / SEC-1 挂载根逃逸校验(逃逸按 miss)。依据
+  [26-09-27-1352](../reports/26-09-27-1352-report-docker-fs-wrapper-pathmap.html); 测试 26 条; W5 待回填。
 
 - **落盘文件 schema 版本号与逐级升级链 (2026-09-26, 计划 26-09-26-0506)**: state.json / hr/<site>.json / config.yml
   带 `schema_version`; 单点 `infra/versioning.py`(版本表 + 相邻迁移表 + detect/migrate) + `SchemaVersionError`。

@@ -13,6 +13,10 @@
    翻译成暂停整组 + MISSING 标签(真实写 qB); 映射配错时若照常返回 False 会重演
    误暂停事故 —— 故 miss 时存在性语义返回 UNDETERMINED 哨兵、取值语义抛
    FileAccessError, 让功能显式退化为报错/跳过(显式报错优于静默假值)。
+3. **容器侧挂载根逃逸校验(SEC-1)**: 映射命中的容器路径经 realpath 解析后必须仍落在
+   挂载根的真实路径内, 逃逸按 miss 处理 —— 下载目录内的符号链接指向挂载外时,
+   存在性探测/读取/新建/目录列举一概触达不了挂载外(Local 实现的 realpath 逃逸
+   防护在容器侧的等价补齐)。
 
 包装范围口径: 只收编**下载数据目录**访问(qB save_path/content_path 派生);
 派生自 data_dir 的路径(state/锁/日志/token/HR/跳检备份/配置 .bak)在容器里本就落
@@ -216,12 +220,15 @@ class MappedFileAccess(FileAccess):
     - 匹配口径: 入参先 _norm_logical(折叠分隔符 + 剥前缀), 源前缀 casefold 比较,
       强制 `/` 边界(`D:/Downloads` 不得命中 `D:/Downloads2`), 尾斜杠归一后匹配;
     - miss: 存在性 → UNDETERMINED; 取值 → FileAccessError —— 绝不返回「不存在」;
+    - 逃逸加固(SEC-1): 命中映射的容器路径经容器侧 realpath 解析后必须仍落在挂载根的
+      真实路径内(下载目录内的符号链接指向挂载外 → 按 miss 处理) —— Local 的
+      realpath 逃逸防护在容器侧等价补齐, fs.py 目录浏览不再「词法退化」;
     - mkdir: **真实执行**(挂载点可写即成功); 只读挂载由 OS 的 EROFS/EACCES 冒泡,
       调用方语义化拒绝; miss 抛 FileAccessError;
     - open_path: NotSupported(恒) —— 容器缺 xdg-open 更缺文件管理器, 与挂载无关;
     - realpath_lexical: 纯词法(normcase + normpath) —— 逻辑路径在容器里不真实存在,
-      realpath 只会把它拼坏; 逃逸防护退化为词法比较(与 fs.py 既有 >MAX_PATH 已知
-      限制同口径, 目录浏览注释写明)。
+      realpath 只会把它拼坏; 逻辑空间白名单比较保持词法, 符号链接逃逸防护由本层的
+      挂载根校验承担(见上)。
     """
     def __init__(self, path_map: Tuple):
         # entries 保留原始声明(自检/展示用); _table 为匹配用折叠表(源/目标都去尾斜杠 + casefold)
@@ -229,12 +236,33 @@ class MappedFileAccess(FileAccess):
         self._table: List[Tuple[str, str]] = [
             (_norm_logical(e.src).rstrip("/").casefold(), _norm_logical(e.dst).rstrip("/")) for e in self.entries
         ]
+        # 挂载根真实路径缓存(dst → realpath+normcase): 映射/挂载根 R 级运行期不切换(与
+        # 单例同生命周期), 根解析结果稳定可缓存; 惰性填充, 首次访问才做 syscall
+        self._root_real = {}
 
-    def map_to_container(self, path: str) -> Optional[str]:
-        """逻辑路径 → 容器路径; **None = miss**(fail-safe 判定点, 调用方据此走三态)
+    def _root_contained(self, dst: str, cp: str) -> bool:
+        """容器路径 cp 经 realpath 解析后是否仍落在挂载根 dst 的真实路径内(SEC-1 判定单点)
+
+        根与目标**都**取 realpath: 挂载根本身经符号链接到达(如 /mnt/downloads → /srv/data)
+        时按解析后的共同基准比较, 不会误伤; 下载目录内的符号链接指到挂载外时解析结果跳出
+        根前缀 → False(逃逸)。normcase 使 Windows 宿主测试的大小写差异不误判(POSIX 恒等)。
+        """
+        root = self._root_real.get(dst)
+        if root is None:
+            root = os.path.normcase(os.path.realpath(dst))
+            self._root_real[dst] = root
+        rp = os.path.normcase(os.path.realpath(cp))
+        if rp == root:
+            return True
+        prefix = root if root.endswith(os.sep) else root + os.sep
+        return rp.startswith(prefix)
+
+    def _match(self, path: str) -> Optional[Tuple[str, str]]:
+        """映射匹配核心: 返回 (挂载根, 容器路径); **None = miss(含逃逸)** —— fail-safe 判定点
 
         匹配在 casefold 空间进行, 边界定位回原串: 前缀余量必须按**原串**码点切割
-        (casefold 可能变长, 折叠长度 ≠ 原串长度, 见 _fold_prefix_len)。
+        (casefold 可能变长, 折叠长度 ≠ 原串长度, 见 _fold_prefix_len)。命中后过挂载根
+        逃逸校验, 逃逸与未命中同样返回 None —— 调用方据此统一走三态。
         """
         lp = _norm_logical(path)
         for src_folded, dst in self._table:
@@ -242,10 +270,22 @@ class MappedFileAccess(FileAccess):
             if n < 0:
                 continue
             if n == len(lp):
-                return dst  # 根本身命中(目录浏览首屏允许根 = save_path 本身)
+                return dst, dst  # 根本身命中(目录浏览首屏允许根 = save_path 本身), 恒在根内
             if lp[n] == "/":  # `/` 边界(D:/Downloads 不得命中 D:/Downloads2)
-                return dst + lp[n:]
+                cp = dst + lp[n:]
+                if not self._root_contained(dst, cp):
+                    logger.debug(f"fs.path_map 逃逸拦截 | '{path}' -> '{cp}' 经 realpath 解析落在挂载根 '{dst}' 之外, 按 miss 处理")
+                    return None
+                return dst, cp
         return None
+
+    def map_to_container(self, path: str) -> Optional[str]:
+        """逻辑路径 → 容器路径; **None = miss 或逃逸**(fail-safe 判定点, 调用方据此走三态)
+
+        匹配见 _match; 逃逸(映射命中但容器侧 realpath 跳出挂载根)与未命中同判 None。
+        """
+        m = self._match(path)
+        return None if m is None else m[1]
 
     def _require_mapped(self, path: str) -> str:
         cp = self.map_to_container(path)
@@ -272,9 +312,26 @@ class MappedFileAccess(FileAccess):
         return shutil.disk_usage(self._require_mapped(path))
 
     def scandir(self, path: str) -> List[DirEntry]:
+        """列目录(仅一层, 不读文件内容); entry.path 已译回逻辑空间
+
+        逃逸条目(容器内符号链接解析后跳出挂载根)**剔除**而非报错: 一个坏链接不该让
+        整个目录浏览 404, 而挂载外的目标也不该出现在列表里(与 exists/取值的逃逸=miss
+        口径一致, fs.py 逐条白名单因此无需自行做容器侧 realpath)。
+        """
         lp = _norm_logical(path)
-        with os.scandir(self._require_mapped(lp)) as it:
-            return [DirEntry(name=e.name, path=f"{lp}/{e.name}", is_dir=e.is_dir()) for e in it]
+        m = self._match(lp)
+        if m is None:
+            raise FileAccessError(f"路径不可判定(未命中 fs.path_map 映射): '{path}'")
+        dst, cp = m
+        out: List[DirEntry] = []
+        with os.scandir(cp) as it:
+            for e in it:
+                ecp = f"{cp}/{e.name}"
+                if not self._root_contained(dst, ecp):
+                    logger.debug(f"fs.path_map 逃逸剔除 | '{lp}/{e.name}' -> '{ecp}' 落在挂载根 '{dst}' 之外, 不进目录列表")
+                    continue
+                out.append(DirEntry(name=e.name, path=f"{lp}/{e.name}", is_dir=e.is_dir()))
+        return out
 
     def mkdir(self, path: str) -> None:
         os.mkdir(self._require_mapped(path))
