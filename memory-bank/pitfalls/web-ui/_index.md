@@ -20,6 +20,7 @@
 | [layout-css.md](layout-css.md) | 行宽口径、表头吸顶、sticky 层叠、flex 挤压、特异性之争 —— 前端版式类的固定判据。 | 改 CSS, 布局, 表格, 滚动条, 表头吸顶, sticky, flex, flex-basis, 省略号, 媒体查询, 颜色不对, 按钮, 控件变形过高, 控件尺寸, 两态分不出, UA 默认色 |
 | [overlays.md](overlays.md) | 弹层 / 浮层 / 遮罩 / 多选与命令回执 —— "点了没反应"这类症状的固定排查顺序。 | 浮层, 弹层, 右键菜单, 遮罩, 点了没反应, 多选, 命令回执, 强制汇报 |
 | [perf-cadence.md](perf-cadence.md) | 主循环节拍、缓存边界、埋点与相对时间 —— 改热路径 / 改节拍 / 加埋点前必读。 | 性能, 热路径, jsonable_encoder, 节拍, 刷新, 轮询, 缓存, 埋点, 相对时间, 时间列, yapf |
+| [progress-bar.md](progress-bar.md) | `.m-progress` 是 flex 行 —— 条 `flex: 1 1 auto` 吃剩余空间, 右侧百分比 `.val` 只占自身文本宽, 「100.0%」比「5.2%」宽 ⇒ 同列各行条的长度/起点随文本宽逐行漂移。处置 = **数值盒** `min-width: 4em` + `text-align: right`(不是把条定宽), 条长即与文本解耦。 | 改进度条, 进度条长度不一致, 条宽漂移, 条长不一致, m-progress, 进度列, 数值盒, flex 条宽, 百分比文本 |
 | [search-views.md](search-views.md) | 搜索不是虚拟分组、负词种子级排除、脏标记是共享状态、鉴权不能靠"凭证串非空"、配置写盘按 BaseLoader 语义。 | 改搜索, 改视图脏标记, 改鉴权, 改登录, 改设置页, 改配置写盘, rid 门控 |
 | [svg-chart-mapping.md](svg-chart-mapping.md) | 内联 SVG 图表(viewBox + aspect-ratio)的鼠标坐标换算若假设"SVG 铺满容器", 一旦 CSS 把高度压扁(preserveAspectRatio 居中 letterbox)映射整体错位; 共享 CSS 里残留的固定 height 会以特异性压过主题的 aspect-ratio 静默复现此症。 | 改图表悬停, 改 SVG 尺寸, 改图表 CSS, 图表 tooltip 不跟手, 十字线偏移, 图看起来偏窄, letterbox |
 | [template-render.md](template-render.md) | 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖)与"两套 UI 必须成对改"的纪律。 | 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS |

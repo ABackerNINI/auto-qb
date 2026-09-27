@@ -1225,6 +1225,44 @@ def _scan_column_cells_paired(problems):
         problems.append("app.js loadColState 未消费列定义 hide 标志(hide 列默认隐藏失灵)")
 
 
+def _scan_progress_val_parity(problems):
+    """进度条数值盒守阵: 三套皮肤的 `.m-progress .val` 都必须恰 1 条且带 min-width 定宽(2026-09-28)
+
+    现象(用户报"种子页进度条长度不一致, 似乎受后面的进度文本长度影响"): `.m-progress` 是
+    flex 行, `.bar { flex: 1 1 auto }` 吃剩余空间, `.val` 只占自身文本宽 —— 「100.0%」比
+    「5.2%」宽, 同一列各行条的起点/长度随百分比文本宽度逐行漂移。处置 = 数值盒
+    `min-width: 4em`(容纳最宽的「100.0%」, 三套皮肤字号 11.5-12px 下实测文本 ≈3.5em 以内)
+    + `text-align: right`, 条长即与文本解耦; 本守阵防"只在某一侧加 / 新皮肤漏带"。
+    """
+    hits = {ui: 0 for ui in _UI_ALL}
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for name in sorted(files):
+            if not name.endswith(".css") or "/vendor/" in f"/{dirpath}/{name}":
+                continue
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
+            ui = next((u for u in _UI_ALL if rel.startswith(u + "/")), None)
+            if ui is None:
+                continue
+            text = re.sub(r"/\*.*?\*/", "", open(path, encoding="utf-8").read(), flags=re.S)
+            lines = text.splitlines()
+            for idx, line in enumerate(lines):
+                if not re.match(r"^\s*\.m-progress \.val\s*\{", line):
+                    continue
+                hits[ui] += 1
+                body = line.split("{", 1)[1]
+                j = idx
+                while "}" not in body and j + 1 < len(lines):
+                    j += 1
+                    body += lines[j]
+                if not re.search(r"min-width\s*:", body):
+                    problems.append(f"{rel} `.m-progress .val` 缺 min-width 定宽 —— 条吃剩余空间, "
+                                    "数值盒不定宽时条长随百分比文本宽度逐行漂移")
+    for ui, n in hits.items():
+        if n != 1:
+            problems.append(f"{ui} 皮肤的 `.m-progress .val` 基础规则数 = {n}(应恰 1 条且带 min-width 定宽)")
+
+
 def _scan_frontend_assets():
     """扫描 webui/static 返回问题清单(空 = 健康)
 
@@ -1268,6 +1306,10 @@ def _scan_frontend_assets():
        代码态垃圾, 浏览器按错误恢复把紧跟的规则整条静默丢弃(2026-09-28 实测: console 皮肤
        进度条注释 `(s-*/member-row 族)` 吞掉 `.m-progress { display: flex }`, 三处表格
        进度条只剩百分比没有条)。
+
+    16. 三套皮肤的 `.m-progress .val` 基础规则必须恰 1 条且带 min-width 定宽(见
+       _scan_progress_val_parity) —— 条吃剩余空间, 数值盒不定宽时进度条长度随百分比
+       文本宽度逐行漂移(2026-09-28 实测: 「100.0%」的行比「5.2%」的行条短)。
 
 
     ⚠ 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
@@ -1318,6 +1360,7 @@ def _scan_frontend_assets():
     _scan_page_class_wiring(problems)
     _scan_backdrop_filter(problems)
     _scan_column_cells_paired(problems)
+    _scan_progress_val_parity(problems)
     return problems
 
 
