@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-09-27-1547] [报告 · plans / reports 实施状态清点与漂移审计 — auto-qb](26-09-27-1547-report-docs-implementation-audit.html) — `docs-implementation-audit`
 - [26-09-27-1143] [报告 · 双模板逐片差异评估(W3) — 单一语义模板收敛可行性](26-09-27-1143-report-webui-template-diff.html) — `webui-frontend-file-split`
 - [26-09-27-0047] [规则系统可行性实验 · 「禁止 IYUU辅种 分类的种子开始下载」 · auto-qb](26-09-27-0047-report-rule-iyuu-stop-guard.html) — `rule-iyuu-stop-guard`
 - [26-09-26-1918] [WEBUI 搜索强化 · 查询语法调研(成熟方案对比与推荐设计) · auto-qb](26-09-26-1918-report-webui-search-query-syntax.html) — `webui-search-query-syntax`

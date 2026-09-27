@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="docs-implementation-audit">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-27-1547">
+<meta name="doc-updated" content="26-09-27-1547">
+<title>报告 · plans / reports 实施状态清点与漂移审计 — auto-qb</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 24px 64px;
+    background: #101318; color: #d6dce5;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    font-size: 14px; line-height: 1.65;
+  }
+  header { border-bottom: 1px solid #2a3140; padding: 28px 0 18px; margin-bottom: 24px; }
+  h1 { font-size: 22px; margin: 0 0 10px; color: #f0f3f8; }
+  h2 { font-size: 17px; color: #f0f3f8; border-left: 3px solid #4c8dff; padding-left: 10px; margin: 36px 0 12px; }
+  h3 { font-size: 15px; color: #dbe3ee; margin: 22px 0 8px; }
+  .meta { color: #8b95a7; font-size: 12.5px; }
+  .meta code { color: #9fb3d1; }
+  a { color: #6ea8ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { background: #1a2029; border: 1px solid #2a3140; border-radius: 4px; padding: 1px 5px; font-size: 12.5px; color: #c9d6e8; font-family: Consolas, "Courier New", monospace; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 13px; }
+  th, td { border: 1px solid #2a3140; padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #171c24; color: #aeb9ca; font-weight: 600; white-space: nowrap; }
+  tr:nth-child(even) td { background: #141922; }
+  .st-act { color: #ffb454; font-weight: 600; white-space: nowrap; }   /* 真实待办 */
+  .st-drift { color: #ff7a90; font-weight: 600; white-space: nowrap; } /* 漂移 */
+  .st-ok { color: #5fd39a; font-weight: 600; white-space: nowrap; }    /* 一致/完成 */
+  .st-warn { color: #e8d268; font-weight: 600; }
+  .num { display: inline-block; background: #171c24; border: 1px solid #2a3140; border-radius: 8px; padding: 10px 16px; margin: 4px 10px 4px 0; }
+  .num b { display: block; font-size: 22px; color: #f0f3f8; }
+  .num span { color: #8b95a7; font-size: 12px; }
+  .callout { background: #171c24; border: 1px solid #2a3140; border-left: 3px solid #e8d268; border-radius: 6px; padding: 10px 14px; margin: 14px 0; }
+  .small { color: #8b95a7; font-size: 12.5px; }
+  ul { margin: 6px 0 12px; padding-left: 22px; }
+  li { margin: 4px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>报告 · plans / reports 实施状态清点与漂移审计</h1>
+  <div class="meta">
+    核对基线: <code>gitee/develop @ b19eb4a</code> (2026-09-27, 快进同步后) · 审计时间: 2026-09-27 15:47 ·<br>
+    范围: <code>memory-bank/plans/</code> 61 份 HTML + <code>memory-bank/reports/</code> 13 份 HTML, 与代码 / git 历史 / task 档案 / activeContext 切片交叉核对 ·<br>
+    方法: 索引状态 (<code>doc-status</code> meta) 为起点, 逐份用提交记录 (<code>git log</code>)、源码 grep、task 档案与切片互相印证; 较早的 Done 计划按提交抽查, 未逐份深挖。
+  </div>
+</header>
+
+<h2>§1 结论摘要 (TL;DR)</h2>
+
+<div>
+  <span class="num"><b>7</b><span>计划真实未完成</span></span>
+  <span class="num"><b>6</b><span>计划已实施但索引状态漂移</span></span>
+  <span class="num"><b>48</b><span>计划状态与事实一致<br>(46 Done + 2 Superseded)</span></span>
+  <span class="num"><b>2</b><span>报告有实质遗留<br>(共 13 份, 其余已消化)</span></span>
+</div>
+
+<ul>
+  <li><b>真实未完成 7 份计划</b>中: <b>3 份完全未开工</b>（tracker-url 源头脱敏、.!qB 过渡态容忍、键盘快捷键——前两份计划已定稿等用户过目/批准, 快捷键等拍板）; <b>1 份拍板后阶段全未动</b>（版本管理）; <b>1 份代码完成只差真机走查</b>（HR 在线核实）; <b>2 份实质完成只剩可选项</b>（Docker P4、activeContext 冲突治理 W4）。</li>
+  <li><b>状态漂移 6 份</b>: 代码早已落地并提交, 但 <code>doc-status</code> 仍挂 In Progress——限速统计移除 (fbbd74d)、HR 扩展选项页风格 (v3.3)、HR 弹窗 T3 落码 (08b2a63)、commands 统一调用面 W1–W7 全量、以及 T1/T2 两份候选模板未随 T3 定稿翻 Superseded。详见 §3, <b>本报告未代改</b>（改 meta 属修复动作, 待授权）。</li>
+  <li><b>报告侧</b>: 报告按协议恒为 Done 终态, 「未实施」看其推荐是否落地——只有 rule-iyuu-stop-guard（闭环新动作未立项）与 HR 在线核实审查（真机走查未做, 与计划共享同一条）有实质遗留; 搜索查询语法报告的推荐已全部实施。</li>
+  <li>次级漂移（非 plans/reports 本体）: 7 份 task 档案状态陈旧、commands 专题 doc-topic 键分裂成两个、版本管理档案未反映 tag 环境已变。见 §5。</li>
+</ul>
+
+<h2>§2 表 A · 计划真实未完成（按剩余工作量排序）</h2>
+
+<table>
+  <tr>
+    <th>#</th><th>计划</th><th>索引状态</th><th>实际状态</th><th>关键证据</th><th>剩余工作</th>
+  </tr>
+  <tr>
+    <td>A1</td>
+    <td><a href="../plans/26-09-26-0822-plan-webui-keyboard-shortcuts.html">26-09-26-0822 键盘快捷键（可自定义）</a><br><span class="small">webui-keyboard-shortcuts</span></td>
+    <td class="st-act">Open</td>
+    <td class="st-act">完全未实施（方案待拍板）</td>
+    <td>提交 <code>a06732b</code> 仅入库计划（58 条键位表）; <code>webui/static/</code> grep 无快捷键系统（仅 ESC / 弹窗收口类零散 keydown）。</td>
+    <td>用户拍板方案 → 落码 + 守阵。</td>
+  </tr>
+  <tr>
+    <td>A2</td>
+    <td><a href="../plans/26-09-22-1801-tracker-url-source-sanitize-plan.html">26-09-22-1801 tracker URL 源头脱敏</a><br><span class="small">tracker-url-source-sanitize</span></td>
+    <td class="st-act">In Progress</td>
+    <td class="st-act">完全未开工（计划已定稿两轮更新）</td>
+    <td>切片 <code>26-09-23-1915</code> 明确「计划已产出并入库 (19fa6ee), 未开工」; 波次 W1 归一化 → W2 详情 API 收口 → W3 编辑下线 → W4 守阵均未动。<br><span class="small">⚠ 易误判: <code>infra/utils.py</code> 的 <code>sanitize_tracker_url</code> 是更早「日志端脱敏」issue 的产物, 不属本计划（本计划是拉取即脱敏 + mask 形态 + 写路径瞬时原文）。</span></td>
+    <td>决策点 4（是否先做 W1+W2 止血）待用户批 → W1–W4 实施。顺带堵 <code>GET /api/torrents/{hash}/trackers</code> 完整 URL 直发浏览器的第二泄露面。</td>
+  </tr>
+  <tr>
+    <td>A3</td>
+    <td><a href="../plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html">26-09-22-2038 qB 移动 .!qB 过渡态容忍修复</a><br><span class="small">backend-qb-move-dot-qb</span></td>
+    <td class="st-act">In Progress</td>
+    <td class="st-act">完全未实施（计划待用户过目）</td>
+    <td>档案 <code>26-09-22-backend-qb-move-missing-tolerance.md</code>: 守阵 T1–T6 与代码实施「待开始」; <code>src/auto_qb</code> grep <code>!qB</code> 零命中; issue <code>26-09-21-0219</code> 仍 In Progress（已认领）。</td>
+    <td>用户过目计划 → 守阵红验 → 代码（utils 纯函数 + store 计数 + grouping 判定）→ 全量回归 → DEBUG 真机取证 → issue 置 Fixed。</td>
+  </tr>
+  <tr>
+    <td>A4</td>
+    <td><a href="../plans/26-09-22-2318-version-management-plan.html">26-09-22-2318 软件版本管理方案</a><br><span class="small">deps-version-management</span></td>
+    <td class="st-act">In Progress</td>
+    <td class="st-act">拍板后阶段 0/1/2 全未实施</td>
+    <td>3 个决策点待拍板（档案 2026-09-22 停更）; 实测: 根目录无 <code>CHANGELOG.md</code>、<code>cli.py</code> 无 <code>--version</code>、hatch 动态版本未接线、pyproject <code>0.1.0</code> vs <code>__init__.__version__</code> <code>0.2.0</code> 双源漂移仍在。<br><span class="small">⚠ 环境已变: 现已有 <code>v0.1.0</code> / <code>v0.2.0</code> 两个 tag（v0.2.0 → ce92ca2, 2026-09-25）, 方案「0 tag、打 v0.2.0 基线」的前提过时, 决策点①需按新事实重议。关联 issue <code>26-09-21-1408-chore-version-dual-source</code> 仍 Open。</span></td>
+    <td>拍板 3 决策点（基线 tag 时机 / 版本载体 / CHANGELOG 档位）→ 阶段 0（CHANGELOG + tag + 约定回写, 不涉码）→ 阶段 1（<code>__init__</code> 单源接线 + <code>--version</code>）→ 阶段 2 按需。</td>
+  </tr>
+  <tr>
+    <td>A5</td>
+    <td><a href="../plans/26-09-22-2204-partial-hr-site-verify-plan.html">26-09-22-2204 部分种子 HR 在线核实</a><br><span class="small">backend-partial-hr-verify</span></td>
+    <td class="st-act">Open</td>
+    <td class="st-warn">代码级全部完成, 只差真机走查</td>
+    <td>档案（更新至 09-27）: M1–M4 全落地 + v2.9 超龄豁免 + v3.0 判定优先级 + v3.1/v3.2 扩展配置简化 + v3.3 选项页 + v3.5 CarPT（<code>56c04e0</code>）+ 站点档案收敛（<code>b19eb4a</code>）。</td>
+    <td>真机走查三件: M0 四项实测（含 Firefox cookies.sqlite 验证）、装扩展跑一轮真实取数、v3.1 新配置面走查。</td>
+  </tr>
+  <tr>
+    <td>A6</td>
+    <td><a href="../plans/26-09-25-2241-plan-docker-deploy.html">26-09-25-2241 Docker 部署方案</a><br><span class="small">docker-deploy</span></td>
+    <td class="st-act">In Progress</td>
+    <td class="st-warn">实质完成, 仅剩可选 P4</td>
+    <td>P1–P3 + 真机验收 + 三轮修复全部入库（<code>443a785</code> / <code>162c04b</code> / <code>5fe4530</code>）; <code>docs/deployment.md</code> 已含实测基线（build 223s / 252MB / healthy 12~21s / stop 退出码 0）。</td>
+    <td>仅 P4 可选项（CI build / GHCR / GUI 依赖瘦身 6.9MB / 非 root）, 计划明示可延后、不阻塞交付。</td>
+  </tr>
+  <tr>
+    <td>A7</td>
+    <td><a href="../plans/26-09-22-2350-activecontext-conflict-plan.html">26-09-22-2350 activeContext 多 clone 冲突治理</a><br><span class="small">memory-bank-activecontext-conflict</span></td>
+    <td class="st-act">In Progress</td>
+    <td class="st-warn">W1–W3 完成, W4 大半已由旁路交付</td>
+    <td>档案: W1 结构拆分 / W2 阅读脚本 / W3 协议接线全 Completed; W4（可选）的 merge-tree 合流预判已实现在 <code>.commands/my-commit-flow/scripts/preflight.py</code>（<code>merge-tree --write-tree</code> 合流预判）; <code>rerere</code> 实测未启用。</td>
+    <td>仅剩 rerere（可选）。建议评估直接收口置 Done, 剩余项并入 git 操作约定维护。</td>
+  </tr>
+</table>
+
+<h2>§3 表 B · 已实施但状态漂移（代码已落地, 索引仍挂未完成）</h2>
+
+<div class="callout">
+  以下 6 份的 <b>实质工作已全部完成并提交</b>, 卡在 <code>doc-status</code> meta 没翻——索引（<code>plans/_index.md</code>）是生成物, 状态源在各自 HTML 的 meta 里。本报告按范围守恒<b>未代改</b>, 修正建议如下, 待授权后一并改 meta + 重跑 <code>kb.index</code>。
+</div>
+
+<table>
+  <tr>
+    <th>#</th><th>计划</th><th>现状态</th><th>建议状态</th><th>证据（已实施的事实）</th>
+  </tr>
+  <tr>
+    <td>B1</td>
+    <td><a href="../plans/26-09-27-1232-plan-remove-upload-stats.html">26-09-27-1232 暂时移除限速统计设计</a><br><span class="small">remove-upload-stats</span></td>
+    <td class="st-drift">In Progress</td>
+    <td class="st-ok">Done</td>
+    <td>提交 <code>fbbd74d</code> 全量落地: 代码 7 触点 + state v1→v2 迁移 + 测试改版 + 文档回写 9 处; 合并树重测 1691 passed + 1 skipped; 后续重设计已入 feature issue <code>26-09-27-1248</code>。activeContext 切片停在「等待提交」而提交实际已完成——切片与计划 meta 双陈旧。</td>
+  </tr>
+  <tr>
+    <td>B2</td>
+    <td><a href="../plans/26-09-26-0031-plan-hr-ext-options-style.html">26-09-26-0031 HR 取数代理 · 选项页风格选型（三选一）</a><br><span class="small">backend-partial-hr-verify</span></td>
+    <td class="st-drift">In Progress</td>
+    <td class="st-ok">Done</td>
+    <td>HR 主档案载明: 风格选型定 A（瑞士网格, 样张即本计划三套之一）后 v3.3 选项页终态已落地（2026-09-26 01:30, 后台事件环 + 站点现状/取数明细两表, 全量 1624 passed + 1 skipped）。选型与实施两个环节都闭环。</td>
+  </tr>
+  <tr>
+    <td>B3</td>
+    <td><a href="../plans/26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html">26-09-25-2043 HR 悬停弹窗 · T3 进度仪表</a><br><span class="small">webui-hr-popup-t3</span></td>
+    <td class="st-drift">In Progress</td>
+    <td class="st-ok">Done</td>
+    <td>提交 <code>08b2a63</code>（T3 落码: 做种时长原生 title 换进度仪表浮层）; task 档案 <code>26-09-26-webui-hr-popup.md</code> Status 已是 Done（落码 + 冒烟 + 提交轮完成, 随笔入库）。</td>
+  </tr>
+  <tr>
+    <td>B4</td>
+    <td><a href="../plans/26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html">26-09-25-2043 HR 悬停弹窗 · T1 档案卡</a><br><span class="small">webui-hr-popup-t1</span></td>
+    <td class="st-drift">In Progress</td>
+    <td class="st-ok">Superseded</td>
+    <td>候选模板之一, 用户定稿选了 T3; 档案明确「T1/T2 留档不删」。按状态词表「被取代 = Superseded」归档（若倾向「未采纳」也可用 Dropped, 二选一即可, 建议 Superseded 保留可溯性）。</td>
+  </tr>
+  <tr>
+    <td>B5</td>
+    <td><a href="../plans/26-09-25-2043-plan-webui-hr-popup-t2-verdict-card.html">26-09-25-2043 HR 悬停弹窗 · T2 结论卡</a><br><span class="small">webui-hr-popup-t2</span></td>
+    <td class="st-drift">In Progress</td>
+    <td class="st-ok">Superseded</td>
+    <td>同 B4。</td>
+  </tr>
+  <tr>
+    <td>B6</td>
+    <td><a href="../plans/26-09-23-2008-commands-plan.html">26-09-23-2008 commands · 项目命令统一调用面</a><br><span class="small">commands-unified-command-surface</span></td>
+    <td class="st-drift">In Progress</td>
+    <td class="st-ok">Done</td>
+    <td>档案 + 切片（活动至 09-25）: <b>W1–W5 全部实施并提交</b> + 09-24 优化轮（SKILL.md 硬上限 / pin 守卫 / 闸门去双写）+ W6 会话噪音治理 + W7 wrapper 入口; 后续 v2 输出契约另案 <a href="../plans/26-09-26-2345-plan-commands-shipflow-v2.html">26-09-26-2345</a> 已 Done（<code>0f98e7a</code>）。<br><span class="small">⚠ 附带漂移: 本计划 <code>doc-updated</code> 停在 26-09-23, 而 v1.7 / v1.8 修订（切片有载）未回写 meta; 档案 <code>26-09-23-commands-unified-surface.md</code> 的 Status 也仍挂 Open。</span></td>
+  </tr>
+</table>
+
+<h2>§4 表 C · 报告侧（13 份全标 Done; 「未实施」= 推荐未落地）</h2>
+
+<table>
+  <tr>
+    <th>#</th><th>报告</th><th>推荐 / 后续动作</th><th>实施状态</th><th>遗留</th>
+  </tr>
+  <tr>
+    <td>C1</td>
+    <td><a href="../reports/26-09-27-0047-report-rule-iyuu-stop-guard.html">26-09-27-0047 规则可行性实验 · 禁止 IYUU辅种 分类种子开始下载</a></td>
+    <td>结论「近似支持」: 推荐 <code>on_torrent_added</code> 立即压制 + 缺省 interval 兜底两条规则同配, 条件必须带 <code>state:["is_downloading"]</code>; 真正闭环需新动作（整种子文件优先级置 0）或加入端暂停。</td>
+    <td class="st-act">实验完成, 推荐未落地</td>
+    <td>① 推荐的两条规则属用户生产配置（<code>config.yml</code> 红线, 未代配）; ② 闭环新动作未立项（未入池）; ③ 计划外发现 <code>test_yamls/</code> 五份样例 <code>log_level</code> 漂移按范围守恒留证未修未入池。</td>
+  </tr>
+  <tr>
+    <td>C2</td>
+    <td><a href="../reports/26-09-26-1628-report-hr-online-verify-audit.html">26-09-26-1628 HR 在线核实 · 设计审查报告</a></td>
+    <td>触发模型 / 访问节奏 / 安全可靠性审查, 派生 v3.5 在线核实 v2 方案（CarPT adapter 等）。</td>
+    <td class="st-warn">v3.5 已实施, 走查未做</td>
+    <td>CarPT 已落地（<code>56c04e0</code>）; 遗留与表 A#5 同一条——真机走查（M0 实测 / 扩展真实取数 / v3.1 配置面）。</td>
+  </tr>
+  <tr>
+    <td>C3</td>
+    <td><a href="../reports/26-09-26-1918-report-webui-search-query-syntax.html">26-09-26-1918 WEBUI 搜索查询语法调研</a></td>
+    <td>查询语法推荐设计（词 AND + −排除 + "短语"）。</td>
+    <td class="st-ok">已全部实施</td>
+    <td>无。<code>05d223a</code> 落地 + 三笔跟进修复（<code>5935e91</code> 负词语义 / <code>f187904</code> 服务端单点 / <code>ab0c61c</code> 逐词跨行 AND）, 档案 Done。</td>
+  </tr>
+  <tr>
+    <td>C4</td>
+    <td>其余 10 份（乐观 UI ×2 · 崩溃安全 · 列设置复盘 · 依赖锁定 · 语料回放审查 · 辅种组状态映射 · 项目审计 · skill-vetter · full-checking 取证 · 双模板差异评估）</td>
+    <td>—</td>
+    <td class="st-ok">均已被消化</td>
+    <td>分别由对应 Done 计划 / 修复切片承接（如 26-09-20-2139 · 26-09-22-1912 · 26-09-21-1551 · deps-env-modernization · 26-09-21-0024 · 26-09-25-2348 修复切片等）。项目审计与 skill-vetter 的残余动作已转入 issues 池（部分 Open, 属 issue 侧非本报告范围）。</td>
+  </tr>
+</table>
+
+<h2>§5 次级发现（plans / reports 之外的漂移, 一并留证）</h2>
+
+<ul>
+  <li><b>task 档案状态陈旧 7 份</b>（对应计划均已 Done / 工作已完成, 档案 Status 未收口）: <code>26-09-23-commands-unified-surface.md</code>（Open, 实际 W1–W7 全实施）、<code>26-09-25-webui-hr-safety-display.md</code>、<code>26-09-22-memory-bank-dir-refactor.md</code>、<code>26-09-19-sim-client-5000.md</code>、<code>26-09-20-webui-statusbar-speed.md</code>、<code>26-09-19-webui-responsiveness.md</code>、<code>26-09-15-webui-qb-replacement.md</code>（后五者 In Progress）。</li>
+  <li><b>doc-topic 键分裂</b>: commands 专题, 计划 26-09-23-2008 用 <code>commands-unified-command-surface</code>, 档案用 <code>commands-unified-surface</code> → <code>_doc-map.md</code> 把同一专题拆成两个「单件专题」, 跨形态视图断链。修法: 统一键（改档案 <code>**Topics:**</code> 或计划 meta）+ 重跑 <code>kb.index</code>。</li>
+  <li><b>meta 协议外字段</b>: 计划 26-09-27-1232 带非标 <code>doc-date</code> meta（守卫只查已知键, 不拦, 但属协议外冗余）。</li>
+  <li><b>档案未反映环境变化</b>: 版本管理档案 / 切片停在 09-22「0 tag」结论, 实际 <code>v0.1.0</code> / <code>v0.2.0</code> 已于 09-25 前出现（v0.2.0 → ce92ca2）, 决策点①的前提需要重核（见 A4）。</li>
+  <li><b>activeContext 切片陈旧 1 份</b>: <code>26-09-27-1250-remove-upload-stats.md</code> 停在「等待用户说提交（提交中）」, 实际 <code>fbbd74d</code> 已入库——切片应在收口时蒸馏为完成态。</li>
+</ul>
+
+<h2>§6 核对口径与未尽事项</h2>
+
+<ul>
+  <li><b>状态真值优先级</b>: 代码与 git 提交 &gt; task 档案 / activeContext 切片 &gt; 计划 meta。表 B 的判定全部有提交哈里斯或档案 Status 背书, 不凭印象。</li>
+  <li><b>抽查而非全量复验</b>: 46 份 Done 计划中, 近一周的（hr-check-site-presets / shipflow-v2 / frontend-file-split / button-system / baseline-slice / schema-chain / hr-safety-display / log-level 等）逐一与提交对上; 09-23 以前的旧件按「完成时点已有提交 + 收尾回写」惯例采信, 未逐份重挖代码。</li>
+  <li><b>本报告未做的动作</b>: ① 未代改任何漂移 meta / 档案状态（表 B + §5 的修正清单待授权）; ② 未入池任何 issue（含 C1 的闭环新动作与 test_yamls 漂移）; ③ 未提交——本文件与随附收尾件在工作区, 等显式「提交」指令。</li>
+  <li><b>复核入口</b>: 状态总览看 <a href="../_doc-map.md">_doc-map.md</a>（一行一专题）; 计划索引 <a href="../plans/_index.md">plans/_index.md</a> · 报告索引 <a href="../reports/_index.md">reports/_index.md</a>（均为生成物, 改 meta 后重跑 <code>commands run kb.index</code>）。</li>
+</ul>
+
+</body>
+</html>
