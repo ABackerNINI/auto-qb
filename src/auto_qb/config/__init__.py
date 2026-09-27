@@ -15,6 +15,7 @@
 - 规则集 spec 的条件/动作名称经 registry 延迟导入校验(避免模块循环依赖)
 """
 from .errors import ConfigError
+from . import migrations  # noqa: F401  # import 即注册 config schema 迁移链(早于任何 load_config)
 from .models import (
     DEFAULT_CONFIG_FILE,
     UNLIMITED_SPEED,

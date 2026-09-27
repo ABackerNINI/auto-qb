@@ -140,9 +140,9 @@
                      不再单列首页卡片; 打开分区时拉一次(config_hub.js hubGo), 之后手动刷新
                      (站点数据小时级节奏, 不轮询) -->
                 <template v-if="hub.view === 'hr_check'">
-                  <!-- 站点接入(计划 26-09-27-1318): 启用的唯一入口 —— 卡片键来自内置站点档案
-                       (schema.constants.hr_check_site_presets), 点选启用 + 微调, 零 URL/路径/参数填写;
-                       绑定状态前端先行提示(同口径), fail-fast 仍在后端校验兜底 -->
+                  <!-- 站点接入(计划 26-09-27-1318; 绑定改映射制见 26-09-27-1930): 启用的唯一入口 ——
+                       卡片键来自内置站点档案(schema.constants.hr_check_site_presets), 点选启用 + 微调,
+                       零 URL/路径/参数填写; 绑定状态前端按映射口径先行提示, fail-fast 仍在后端校验兜底 -->
                   <div class="hb-blk hb-cut">
                     <div class="hb-blk-hd">
                       <span class="bh-t">站点接入</span>
@@ -155,9 +155,9 @@
                           <div class="hrs-site-head">
                             <span class="hrs-site-name">{{ p.id }}</span>
                             <span class="hrs-tag">解析器 {{ p.adapter }}</span>
-                            <span class="hrs-tag" :class="hrSiteBindClass(p)">{{ hrSiteBindText(p) }}</span>
+                            <span class="hrs-tag" :class="hrSiteBinding(p).cls">{{ hrSiteBinding(p).text }}</span>
                           </div>
-                          <p class="hrs-line">HR 页 {{ p.page_path }} · 种子下载 {{ p.download_path }} · 翻页参数 ?{{ p.page_param }}=N(档案内置, 无需填写)</p>
+                          <p class="hrs-line">HR 页 https://{{ p.web_domain }}{{ p.page_path }} · 种子下载 {{ p.download_path }} · 翻页参数 ?{{ p.page_param }}=N(档案内置, 无需填写)</p>
                           <div class="hrs-line" style="display:flex;align-items:center;gap:10px">
                             <span>启用</span>
                             <select class="hb-select" :value="hrSiteMode(p.id)" @change="hrSiteSetMode(p.id, $event.target.value)">

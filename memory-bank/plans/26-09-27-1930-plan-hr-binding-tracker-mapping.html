@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · HR 在线核实绑定改映射制: 档案双域硬编码 + 已知映射零配置 + 旧键迁移 v1→v2</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-27">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="hr-binding-tracker-mapping">
+<meta name="doc-added" content="2026-09-27">
+<meta name="doc-updated" content="2026-09-27">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-27-config-hr-binding-mapping.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101113;
+    --bg-raise: #16181b;
+    --ink: #e8e6e1;
+    --ink-dim: #a3a09a;
+    --ink-faint: #6f6d68;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #d9a441;
+    --accent-dim: rgba(217,164,65,.14);
+    --err: #c96a5b;
+    --err-dim: rgba(201,106,91,.12);
+    --ok: #7fae7a;
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1180px; margin: 0 auto; padding: 0 40px; }
+
+  .cover { padding: 72px 0 40px; border-bottom: 1px solid var(--hairline); }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 28px;
+  }
+  .kicker b { color: var(--accent); font-weight: 400; }
+  h1 {
+    font-size: 40px; font-weight: 590; line-height: 1.15;
+    letter-spacing: -.02em; max-width: 900px;
+  }
+  .lede { margin-top: 20px; max-width: 780px; color: var(--ink-dim); font-size: 16px; }
+  .meta-row {
+    margin-top: 36px; display: flex; flex-wrap: wrap; gap: 32px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint);
+    letter-spacing: .04em;
+  }
+  .meta-row span b { color: var(--ink-dim); font-weight: 400; }
+
+  .body-grid { display: grid; grid-template-columns: 208px 1fr; gap: 56px; padding: 48px 0 24px; }
+  nav.toc { position: sticky; top: 32px; align-self: start; }
+  nav.toc .toc-head {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-faint); text-decoration: none;
+    font-size: 13px; line-height: 1.4; padding: 5px 0 5px 14px;
+    border-left: 1px solid var(--hairline-soft);
+  }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+  nav.toc a .n { font-family: var(--font-mono); font-size: 11px; margin-right: 8px; }
+
+  main { min-width: 0; }
+  section { margin-bottom: 72px; }
+  .sec-rule {
+    display: flex; align-items: baseline; gap: 16px;
+    border-top: 1px solid var(--hairline); padding-top: 18px; margin-bottom: 22px;
+  }
+  .folio {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+    color: var(--accent);
+  }
+  h2 { font-size: 24px; font-weight: 590; letter-spacing: -.01em; }
+  h3 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; }
+  p { margin: 10px 0; max-width: 780px; color: var(--ink-dim); }
+  p b, li b { color: var(--ink); font-weight: 600; }
+  ul, ol { margin: 10px 0 10px 22px; color: var(--ink-dim); max-width: 760px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: var(--font-mono); font-size: 13px;
+    background: var(--bg-raise); padding: 1px 6px; border-radius: 3px;
+    color: var(--ink); border: 1px solid var(--hairline-soft);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .tbl-wrap { margin: 18px 0; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; max-width: 860px; font-size: 13.5px; white-space: nowrap; }
+  td {
+    border-bottom: 1px solid var(--hairline-soft);
+    padding: 9px 14px 9px 0; vertical-align: top; color: var(--ink-dim);
+    white-space: normal;
+  }
+  td.msg { color: var(--ink); }
+  td.loc { font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; }
+
+  .chip {
+    display: inline-block; font-family: var(--font-mono); font-size: 11px;
+    padding: 2px 9px; border-radius: 3px; letter-spacing: .05em; white-space: nowrap;
+  }
+  .chip.rm { background: var(--err-dim); color: var(--err); }
+  .chip.keep { background: var(--accent-dim); color: var(--accent); }
+  .chip.add { background: rgba(127,174,122,.14); color: var(--ok); }
+  .chip.mv { background: rgba(140,150,220,.16); color: #9aa3d6; }
+
+  .note {
+    border: 1px solid var(--hairline); background: var(--bg-raise);
+    padding: 14px 18px; margin: 16px 0; max-width: 780px;
+    font-size: 14px; color: var(--ink-dim);
+  }
+  .note b { color: var(--accent); font-weight: 600; }
+  .note.warn { border-color: rgba(201,106,91,.35); }
+  .note.warn b { color: var(--err); }
+
+  pre {
+    font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55;
+    background: var(--bg-raise); border: 1px solid var(--hairline-soft);
+    padding: 14px 18px; overflow-x: auto; margin: 14px 0; color: var(--ink-dim);
+    max-width: 860px;
+  }
+  pre b { color: var(--accent); font-weight: 400; }
+
+  @media (max-width: 900px) {
+    .body-grid { grid-template-columns: 1fr; }
+    nav.toc { position: static; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<header class="cover">
+  <div class="kicker">MEMORY BANK / PLANS / <b>26-09-27-1930</b> · 修订 <b><a href="26-09-27-1318-plan-hr-check-site-presets.html">26-09-27-1318</a></b> §3.3</div>
+  <h1>HR 在线核实绑定改映射制: 档案双域硬编码 + 已知映射零配置 + 旧键迁移 v1→v2</h1>
+  <p class="lede">站点绑定从「域名交集比对」整体改为<b>映射制</b>: 站点的 web 域与 tracker(announce) 域是两个命名空间, <b>永不互相比对</b>。档案把两域都硬编码(web 域派生 HR 页 URL; announce 域作<b>已知映射</b>自动绑定 tracker 配置, 用户零绑定配置); 档案默认映射未命中时用显式键 <code>hr_check.sites.&lt;id&gt;.tracker</code> 兜底。旧键 <code>trackers.&lt;名&gt;.hr_check</code> 不设常驻兼容层 —— 注册配置 schema 迁移链 <code>v1→v2</code>(计划 26-09-26-0506 机制的首个 config 落地), 旧结构一次性自动改写到新位置, 存量配置<b>零手工迁移</b>。</p>
+  <div class="meta-row">
+    <span>DATE <b>2026-09-27</b></span>
+    <span>BASE <b>26-09-27-1318 REV2(绑定机制本章重写, 其余沿用)</b></span>
+    <span>SCOPE <b>site_presets + models/schema + loaders/validation + webui</b></span>
+    <span>STATE <b>done(2026-09-27 实施落地, 全量测试 1752 passed)</b></span>
+    <span>RISK <b>低-中(校验口径重写 + 首个 config schema 迁移 v1→v2 落地)</b></span>
+  </div>
+</header>
+
+<div class="body-grid">
+<nav class="toc">
+  <div class="toc-head">目录</div>
+  <a href="#s1"><span class="n">01</span>背景与问题</a>
+  <a href="#s2"><span class="n">02</span>目标与非目标</a>
+  <a href="#s3"><span class="n">03</span>设计: 三命名空间与映射制</a>
+  <a href="#s4"><span class="n">04</span>改动清单 · 代码</a>
+  <a href="#s5"><span class="n">05</span>校验规则与报错文案</a>
+  <a href="#s6"><span class="n">06</span>Web UI 改动</a>
+  <a href="#s7"><span class="n">07</span>测试计划</a>
+  <a href="#s8"><span class="n">08</span>用户侧迁移效果</a>
+  <a href="#s9"><span class="n">09</span>不做的事</a>
+  <a href="#s10"><span class="n">10</span>执行顺序与 DoD</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <div class="sec-rule"><span class="folio">01</span><h2>背景与问题</h2></div>
+  <p>计划 <a href="26-09-27-1318-plan-hr-check-site-presets.html">26-09-27-1318</a> 落地的绑定机制是: 档案 <code>domains</code>(存 web 域) 与各 <code>trackers.&lt;名&gt;.domains</code>(存 announce 域) 做<b>小写精确交集</b>, 恰好命中一个 tracker 配置才算绑定成功(<code>site_presets.match_trackers</code>, 校验/loader/前端三处同口径)。CarPT 实测踩雷: 用户站点只配了 <code>tracker.carpt.net</code>(announce 域), 档案存 <code>carpt.net</code>(web 域), 交集为空, 前端报「未绑定: 没有站点的域名包含 carpt.net」。</p>
+  <p>根因不是「精确匹配不够容错」, 而是<b>设计层面把两个命名空间拉郎配</b>:</p>
+  <ul>
+    <li><b>web 域</b>(用户浏览器访问的站点主机) 与 <b>announce 域</b>(种子内 tracker 服务器主机) 是两个独立事实, 可能是主域与子域(Announce 域恰为 Web 域子域, 如 BTSchool / CarPT), 也可能<b>毫无从属关系</b>(web 是 foo.net、announce 是 bar.cc);</li>
+    <li>现行机制要求用户把 web 域塞进 <code>trackers.*.domains</code> —— 该列表本义是 announce 域名空间(供种子侧 <code>match_tracker_confs</code> 匹配 tracker URL), 塞入 web 域是语义污染, 且在「两域无关」的站点上用户根本无从猜起;</li>
+    <li>档案侧 <code>page_domain</code> 字段虽预埋了「web 域硬编码覆盖」, 但绑定键仍走比对, 两套语义纠缠在同一份 <code>domains</code> 字段上。</li>
+  </ul>
+  <div class="note"><b>用户裁决(2026-09-27, 三轮收敛的定稿口径)</b>: ① web 域与 tracker 域是两个东西, <b>不能比对, 只能映射</b> —— 一切跨命名空间匹配(含后缀容错方案)全部否决; ② <b>不做旧设置兼容</b>, 免维护负担; ③ <b>已知映射直接硬编码进档案</b>(BTSchool 对应哪个 announce 域是程序已知事实), 用户不自行绑定。</div>
+</section>
+
+<section id="s2">
+  <div class="sec-rule"><span class="folio">02</span><h2>目标与非目标</h2></div>
+  <h3>目标</h3>
+  <ul>
+    <li><b>绑定 = 映射</b>: 程序内不存在任何「web 域 vs announce 域」的比对; 唯一允许的匹配发生在 <b>announce 命名空间内部</b>(档案硬编码的已知 announce 域 vs 用户 <code>trackers.*.domains</code>), 这是同一命名空间内的「已知值查表」;</li>
+    <li><b>零绑定配置</b>: 启用 CarPT 只需 <code>hr_check.sites.carpt.mode</code> 一个键 —— 档案已知它的 announce 域是 <code>tracker.carpt.net</code>, 自动绑定到用户配置里含该域的站点条目;</li>
+    <li><b>显式兜底</b>: 默认映射未命中(用户 domains 写法特殊 / 一站多 announce 域 / 歧义)时, <code>hr_check.sites.&lt;id&gt;.tracker</code> 填 trackers 键名直接指定;</li>
+    <li><b>web 域彻底档案化</b>: <code>hr_page_url</code> 只由档案硬编码的 web 域派生, 与用户 domains 的写法完全无关;</li>
+    <li><b>旧键一次性自动迁移</b>: <code>trackers.&lt;名&gt;.hr_check</code> 不设常驻兼容层; 注册配置 schema 迁移 <code>v1→v2</code>(26-09-26-0506 版本链机制), 加载时把旧结构改写到 <code>hr_check.sites</code>, 存量配置零手工动作、config.yml 零修改;</li>
+    <li><b>生产 config.yml 零修改照常工作</b>(红线不触碰): CarPT 靠已知映射自动绑定, BTSchool 旧键靠迁移链自动搬家。</li>
+  </ul>
+  <h3>非目标</h3>
+  <ul>
+    <li>HR 运行链路(service / channel / parse / 锚点)零改动 —— 仍只读派生好的 <code>TrackerConfig.hr_check</code>;</li>
+    <li>不新增站点 / 不写 adapter; 档案数据除字段重组外事实不变;</li>
+    <li>全局 <code>hr_check</code> 其余项(总开关 / 频控 / 取数通道)口径不变;</li>
+    <li>生产 <code>config.yml</code> 全程不动(红线) —— BTSchool 旧键由迁移链自动改写, 用户无手工动作(见 §8)。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <div class="sec-rule"><span class="folio">03</span><h2>设计: 三命名空间与映射制</h2></div>
+
+  <h3>3.1 三个命名空间, 各归各位</h3>
+  <div class="tbl-wrap">
+    <table>
+      <tr><td class="loc">命名空间</td><td class="loc">例(CarPT / BTSchool)</td><td class="loc">事实来源</td><td class="msg">用途与纪律</td></tr>
+      <tr>
+        <td class="loc">web 域</td>
+        <td class="loc">carpt.net / pt.btschool.club</td>
+        <td class="loc">档案硬编码 <code>web_domain</code></td>
+        <td class="msg">仅派生 <code>hr_page_url</code> 与前端展示; <b>永不参与任何匹配</b></td>
+      </tr>
+      <tr>
+        <td class="loc">announce 域</td>
+        <td class="loc">tracker.carpt.net / pt.btschool.club</td>
+        <td class="loc">档案硬编码 <code>tracker_domain</code>(已知映射) + 用户 <code>trackers.*.domains</code></td>
+        <td class="msg"><b>唯一允许匹配的空间</b>: 默认绑定 = 已知值在同命名空间查表</td>
+      </tr>
+      <tr>
+        <td class="loc">tracker 条目名</td>
+        <td class="loc">tracker_carpt_net / BTSchool</td>
+        <td class="loc">用户配置的键名</td>
+        <td class="msg">显式覆盖键 <code>tracker</code> 按<b>字符串相等</b>引用; 无任何匹配语义</td>
+      </tr>
+    </table>
+  </div>
+
+  <h3>3.2 档案模型修订(<code>site_presets.py</code>)</h3>
+  <p><code>SiteHrPreset</code> 字段重组 —— 原 <code>domains: Tuple</code>(语义含混: 既是绑定键又兜底 web 主机) 与 <code>page_domain</code>(web 覆盖) 两字段, 拆成职责单一的两个单值字段:</p>
+  <div class="tbl-wrap">
+    <table>
+      <tr><td class="loc">字段</td><td class="loc">变更</td><td class="msg">说明</td></tr>
+      <tr><td class="loc">web_domain</td><td><span class="chip add">新增</span> <span class="chip rm">替代 domains + page_domain</span></td><td class="msg">web 命名空间, 档案硬编码; <code>page_url()</code> 改<b>无参</b>: <code>https://{web_domain}{page_path}</code></td></tr>
+      <tr><td class="loc">tracker_domain</td><td><span class="chip add">新增</span></td><td class="msg">announce 命名空间的<b>已知映射</b>(该站公开 tracker 主域); 默认绑定的查表键</td></tr>
+      <tr><td class="loc">domains</td><td><span class="chip rm">删除</span></td><td class="msg">跨命名空间比对的载体, 连同 <code>preset_for_domains</code>(旧键迁移反向查找)一起退役</td></tr>
+      <tr><td class="loc">match_trackers</td><td><span class="chip keep">保留·改口径</span></td><td class="msg">口径改为: 用户域名 t 命中档案 <code>tracker_domain</code> d 当且仅当 <code>t == d or t.endswith("." + d) or d.endswith("." + t)</code>(同命名空间的双向子域容错, 兼容用户配主域或 tracker 子域两种写法); 命中 0 个或 ≥2 个交校验层, 本函数只查不报</td></tr>
+      <tr><td class="loc">preset_id / adapter / page_path / download_path / page_param</td><td><span class="chip keep">不变</span></td><td class="msg">页面事实照旧</td></tr>
+    </table>
+  </div>
+  <p>档案数据(首发两站, 事实均已在 adapter docstring / 生产配置里核实):</p>
+  <pre>btschool:  web_domain = <b>"pt.btschool.club"</b>   tracker_domain = <b>"pt.btschool.club"</b>   (两域同值)
+carpt:     web_domain = <b>"carpt.net"</b>          tracker_domain = <b>"tracker.carpt.net"</b>  (两域无关, 映射制的价值所在)</pre>
+
+  <h3>3.3 绑定解析: 默认映射优先, 显式键兜底</h3>
+  <p>每个 <code>mode != off</code> 的 <code>hr_check.sites.&lt;id&gt;</code> 条目, 解析顺序(loader 与校验同口径, 判定单点仍在 <code>site_presets</code>):</p>
+  <ol>
+    <li><b>显式映射</b>: 条目 <code>tracker</code> 非空 → 按 trackers 键名<b>直取</b>; 键不存在 → 配置期报错;</li>
+    <li><b>默认映射</b>: <code>tracker</code> 为空 → <code>match_trackers</code> 用档案 <code>tracker_domain</code> 查表; 恰好 1 个 → 自动绑定(<b>用户零配置</b>); 0 个 → 报错(文案附档案已知 announce 域, 指引补域名或显式指定); ≥2 个 → 报歧义错, 要求显式指定;</li>
+    <li><b>唯一性</b>: 同一 tracker 条目被两个启用中的站点绑定(无论显式还是默认) → 报错;</li>
+    <li><b>hr 段必填</b>: 最终绑定的 tracker 条目必须有 <code>hr</code> 段(沿用 1318 计划的静默失效防线)。</li>
+  </ol>
+  <p>派生填充不变: 绑定结果写 <code>TrackerConfig.hr_check</code>(adapter / <code>hr_page_url</code> / 路径 / 参数来自档案, mode / 微调来自配置), 下游零感知。派生视图的 <code>tracker</code> 字段回填解析出的条目名, 供报告与前端展示。</p>
+
+  <h3>3.4 旧键处理: 走 schema 迁移链 <code>v1→v2</code>, 不设常驻兼容层</h3>
+  <p>「不兼容旧设置」与「用户零手工迁移」并不冲突: <b>兼容</b>是校验/loader 里常驻的旧键接受层(每次加载都要伺候旧结构, 维护负担的源头); <b>迁移</b>是版本链上的一次性纯函数变换 —— 翻完旧结构即不存在, 程序里不再有任何伺候旧键的代码。项目已有现成机制(计划 <a href="26-09-26-0506-plan-schema-version-chain.html">26-09-26-0506</a>: <code>infra/versioning.py</code> 版本链 + <code>loaders._migrate_config_schema</code> 分派), config kind 目前 v1、迁移表为空, 本章是它的<b>首个生产落地</b>:</p>
+  <ul>
+    <li><b>版本推进</b>: <code>CURRENT_VERSIONS["config"]</code> 1 → 2; 注册 <code>MIGRATIONS["config"][1]</code>。存量配置缺失 <code>schema_version</code> = v1, 加载时沿链迁移(幂等, 重放同链即可), 磁盘物化发生在下一次 WebUI 保存(writer 统一盖章) —— 迁移即时生效, 落盘自动完成;</li>
+    <li><b>落点与依赖纪律</b>: 迁移函数是纯函数(dict→dict), 但需要 <code>SITE_PRESETS</code> 做档案定位, 不能进 infra(versioning 只依赖 .errors)。落 config 层(<code>config/site_presets.py</code> 或新建 <code>config/migrations.py</code>), 在 config 包加载时注册进 <code>MIGRATIONS["config"]</code>(import 即注册, 早于任何 <code>load_config</code>); infra 的版本表只抬号;</li>
+    <li><b>档案定位用同命名空间比对</b>: 旧键自带 <code>hr_page_url</code>, 其 host 与档案 <code>web_domain</code> 同属 web 命名空间 —— <code>preset_for_web_host(host)</code> 精确匹配定位档案(小写归一), 不触碰 tracker 域名; 映射目标不迁移(交给档案默认映射自动绑定);</li>
+    <li><b>改写规则</b>: 对每个 <code>trackers.&lt;名&gt;.hr_check</code>: ① <code>mode=off</code> 或非字典 → 直接删除(新口径下 off = 键不存在); ② mode != off 且按 host 定位到档案 → 在 <code>hr_check.sites.&lt;档案 id&gt;</code> 建/并入条目(搬 <code>mode</code> 与微调项 scopes/interval/翻页上限/超龄线/配额, 页面事实四键 adapter/hr_page_url/download_path/page_param 丢弃 —— 值一律以档案为准), 然后<b>删除旧键</b>; 新旧并存时新位置获胜; ③ 定位不到档案(缺 hr_page_url / host 陌生) → 旧键原地保留, 交给校验层报错(见 §5)。</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <div class="sec-rule"><span class="folio">04</span><h2>改动清单 · 代码</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <tr><td class="loc">文件</td><td class="loc">变更</td><td class="msg">内容</td></tr>
+      <tr><td class="loc">config/site_presets.py</td><td><span class="chip mv">重组</span></td><td class="msg">§3.2 全部: 双域字段、<code>page_url()</code> 无参化、<code>match_trackers</code> 改口径、删 <code>preset_for_domains</code>; 新增 <code>preset_for_web_host(host)</code>(web↔web 同命名空间定位, 供迁移用); docstring 重写(三命名空间纪律)</td></tr>
+      <tr><td class="loc">infra/versioning.py</td><td><span class="chip mv">抬号</span></td><td class="msg"><code>CURRENT_VERSIONS["config"]</code> 1 → 2(仅版本表; 迁移函数在 config 层注册, infra 依赖纪律不破)</td></tr>
+      <tr><td class="loc">config 层迁移函数</td><td><span class="chip add">新增</span></td><td class="msg"><code>_migrate_config_1_2</code>(落 <code>site_presets.py</code> 或新建 <code>config/migrations.py</code>, §3.4 规则), import 时注册进 <code>MIGRATIONS["config"][1]</code> —— 版本链首个 config 生产迁移</td></tr>
+      <tr><td class="loc">config/models.py</td><td><span class="chip add">加键</span></td><td class="msg"><code>SiteHrCheckConfig.tracker: str = ""</code>(显式映射目标, 配置源在 sites 条目); docstring 同步「映射制」口径</td></tr>
+      <tr><td class="loc">config/schema/hr.py</td><td><span class="chip add">加键</span></td><td class="msg"><code>HR_CHECK_SITES_FIELDS</code> 加 <code>tracker</code> 字段(排 mode 之后; help 写清映射语义与默认映射行为); <code>mode</code> 的 help 里「按域名交集自动完成」改为映射说法(黄金法则 4: 新键同步 validate 口径)</td></tr>
+      <tr><td class="loc">config/schema/__init__.py</td><td><span class="chip mv">改常量</span></td><td class="msg"><code>hr_check_site_presets</code> 条目 <code>domains</code> → <code>web_domain</code> + <code>tracker_domain</code>(前端卡片数据源)</td></tr>
+      <tr><td class="loc">config/schema/trackers.py</td><td><span class="chip rm">清注</span></td><td class="msg">头注「hr_check 字段已移除」补一句: 兼容层一并废除(26-09-27-1930)</td></tr>
+      <tr><td class="loc">config/validation/sections.py</td><td><span class="chip mv">重写</span></td><td class="msg"><code>_validate_hr_site_bindings</code> 按 §3.3 映射口径重写; 旧键兼容分支(<code>:564</code> 一带)删除, 换成兜底报废除错(正常流迁移链已把旧键迁走, 该分支只拦「手改 schema_version≥2 却仍写旧键」的配置); <code>KNOWN_HR_SITE_KEYS</code> 加 <code>tracker</code></td></tr>
+      <tr><td class="loc">config/loaders.py</td><td><span class="chip mv">重写</span></td><td class="msg"><code>_resolve_hr_site_bindings</code>: 删常驻旧键迁移块与 <code>load_site_hr_check_config(tdata.get("hr_check"))</code> 调用点(迁移职责整体移交 schema 迁移链); 绑定改「显式直取 &gt; 默认查表」; 删从 <code>tc.domains</code> 抠命中域名的推导行(URL 主机来自档案)</td></tr>
+      <tr><td class="loc">webui/static/shared/config_hub.js</td><td><span class="chip mv">重写</span></td><td class="msg">绑定状态三函数(<code>:438-453</code>)改映射口径, 消费 <code>tracker_domain</code> / <code>web_domain</code>(见 §6)</td></tr>
+    </table>
+  </div>
+  <div class="note"><b>零改动面</b>: <code>hr/</code> 包全部(service / fetcher / channel / adapters / resolve / runtime / store)只消费派生模型, 对绑定机制搬家零感知; <code>TrackerConfig</code> 结构不变。</div>
+</section>
+
+<section id="s5">
+  <div class="sec-rule"><span class="folio">05</span><h2>校验规则与报错文案</h2></div>
+  <p>全部在 <code>validate_config</code> 聚合口径内, 文案给<b>可执行的下一步</b>:</p>
+  <div class="tbl-wrap">
+    <table>
+      <tr><td class="loc">场景</td><td class="msg">报错(示意)</td></tr>
+      <tr><td class="loc">默认映射 0 命中</td><td class="msg"><code>config.hr_check.sites.carpt: 已启用但档案默认映射未命中 —— 档案已知该站 announce 域为 tracker.carpt.net, 请确认目标站点的 domains 含该域(或其子域); 也可在该条目显式填 tracker 指定</code></td></tr>
+      <tr><td class="loc">默认映射 ≥2 命中</td><td class="msg"><code>config.hr_check.sites.carpt: 默认映射命中多个站点(A、B) —— 请在该条目显式填 tracker 指定其一</code></td></tr>
+      <tr><td class="loc">显式 tracker 键不存在</td><td class="msg"><code>config.hr_check.sites.carpt.tracker: 站点配置 'xxx' 不存在 —— 须为 trackers 下的条目名</code></td></tr>
+      <tr><td class="loc">同一 tracker 被绑两次</td><td class="msg"><code>config.hr_check.sites.&lt;id&gt;: 站点配置 X 已被条目 Y 绑定 —— 一个站点配置只能服务一个站点档案</code></td></tr>
+      <tr><td class="loc">绑定站点缺 hr 段</td><td class="msg">沿用现文案(要求在「站点」分区补 HR 规则)</td></tr>
+      <tr><td class="loc">旧键出现</td><td class="msg"><code>config.trackers.X.hr_check: 该键已于 schema v2 废除 —— 存量配置应由迁移链自动改写; 出现本错误说明文件被手改过版本号或迁移无法定位档案, 请在 config.hr_check.sites.&lt;档案 id&gt; 重新配置(已支持: btschool / carpt)</code>(兜底分支: 正常流走 §3.4 迁移, 校验器看不到旧键)</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="s6">
+  <div class="sec-rule"><span class="folio">06</span><h2>Web UI 改动</h2></div>
+  <p>「HR 在线核实」分区的站点接入卡片(键集仍来自 schema 常量, 交互不变), 绑定状态展示改映射口径 —— <code>config_hub.js</code> 的 <code>hrSiteBoundTrackers</code> / <code>hrSiteBindText</code> / <code>hrSiteBindClass</code> 合并为单一 <code>hrSiteBinding(preset)</code>:</p>
+  <ul>
+    <li>显式 <code>tracker</code> 已填且存在 → 「已映射: X」(正常色);</li>
+    <li>显式已填但键不存在 → 警告色「映射目标 X 不存在 —— 保存后校验会报错」;</li>
+    <li>未填 + 默认映射恰 1 命中 → 「已自动绑定: X(档案默认映射)」;</li>
+    <li>未填 + 0 命中 → 警告色「未绑定: 档案已知 announce 域(tracker_domain)未命中任何站点配置 —— 请补域名或显式指定 tracker」;</li>
+    <li>未填 + ≥2 命中 → 警告色「默认映射歧义: A、B 都命中 —— 请显式指定 tracker」。</li>
+  </ul>
+  <p>卡片展示的站点网址改用 <code>web_domain</code>; <code>tracker</code> 微调字段经 <code>hrSiteTuningFields</code> 自动出现在卡上(那张表排除 mode 后全量渲染 schema 字段表), 无需另做控件。</p>
+</section>
+
+<section id="s7">
+  <div class="sec-rule"><span class="folio">07</span><h2>测试计划</h2></div>
+  <p><code>tests/test_hr_config.py</code>: 域名交集类用例删除/改写, 换映射类; 文件头「测试计划」清单同步。新增/改写用例:</p>
+  <ul>
+    <li><b>默认映射·恰一</b>: btschool 精确命中; carpt 用户配 <code>tracker.carpt.net</code> 命中, 配 <code>carpt.net</code> 也命中(双向子域容错) —— 两写法都自动绑定且<b>派生 URL 恒为档案 web 域</b>(<code>https://carpt.net/myhr.php</code>, 与用户 domains 写法无关, 即本次 CarPT 场景回归);</li>
+    <li><b>默认映射·零</b>: 报错文案含档案 announce 域与两条出路;</li>
+    <li><b>默认映射·歧义</b>: ≥2 命中报错要求显式;</li>
+    <li><b>显式映射</b>: 直取成功且优先于默认; 键不存在报错; <code>tracker</code> 未进 KNOWN 键白名单前先验证 schema 通过;</li>
+    <li><b>唯一性</b>: 两站点条目(显式/默认混合)绑到同一 tracker 报错;</li>
+    <li><b>hr 段必填</b>: 绑定站点缺 <code>hr</code> 段报错(沿用);</li>
+    <li><b>旧键迁移(v1→v2 迁移函数单测)</b>: BTSchool 生产形态(mode=partial + hr_page_url + 微调项)→ 正确生成 <code>hr_check.sites.btschool</code> 且旧键删除、页面事实四键丢弃; mode=off 旧键直接删除; 新旧并存新位置获胜; host 定位不到档案的旧键原地保留(校验器随后报废除错); 迁移幂等(同输入重放同输出); <code>schema_version</code> 盖章由框架负责(函数体不碰);</li>
+    <li><b>兜底分支</b>: 手写 schema_version=2 且带旧键的配置 → 校验报废除错;</li>
+    <li><b>派生视图</b>: 解析出的条目名回填派生 <code>tracker</code> 字段。</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <div class="sec-rule"><span class="folio">08</span><h2>用户侧迁移效果</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <tr><td class="loc">站点</td><td class="msg">落地后的启用方式</td></tr>
+      <tr><td class="loc">CarPT</td><td class="msg">config.yml 只写 <code>hr_check.sites.carpt: {mode: partial}</code>(tracker 不填) —— 档案已知 announce 域 <code>tracker.carpt.net</code> 自动绑定到现有 <code>tracker_carpt_net</code> 条目, <b>该条目 domains 不用补任何域名</b>, 本轮报错场景就此消失</td></tr>
+      <tr><td class="loc">BTSchool(存量旧键)</td><td class="msg"><b>零手工迁移</b>: 现有 <code>trackers.&lt;BTSchool 条目&gt;.hr_check</code>(config.yml:484)在首次加载时由迁移链 v1→v2 自动改写为 <code>hr_check.sites.btschool</code>(host 定位档案, 微调项随迁, 旧键删除), 内存即时生效; 下一次 WebUI 保存时写回磁盘并盖 <code>schema_version: 2</code> 章。用户唯一可感知的变化: 保存后的 config.yml 里旧键消失、新位置出现等价配置</td></tr>
+    </table>
+  </div>
+  <div class="note"><b>红线提示</b>: <code>config.yml</code> 是生产文件, 本计划的实现不触碰它 —— 上表 CarPT 一行是用户启用动作, BTSchool 一行完全自动。生产文件在存量状态下加载即正确, 无需任何预先编辑。</div>
+</section>
+
+<section id="s9">
+  <div class="sec-rule"><span class="folio">09</span><h2>不做的事</h2></div>
+  <ul>
+    <li><b>不做常驻旧键兼容层</b>(用户裁决, 与迁移不矛盾): 现行「兼容接受 + 每次加载等价迁移」的常驻代码全部删除 —— 旧结构只在 schema 迁移链 v1→v2 里被处理一次, 翻完即不存在, 程序内不再有任何伺候旧键的分支;</li>
+    <li><b>不做跨命名空间比对</b>: 后缀容错绑定方案(修订稿 v1)一并否决 —— 它仍是「web 域 vs announce 域」的比对, 只是放宽了容差;</li>
+    <li><b>不做 tracker 下拉选择控件</b>: <code>tracker</code> 先以微调字段(文本)形态出; 下拉(候选 = cfgTrackerNames)留作后续 UX 增强, 不在本章范围;</li>
+    <li><b>不支持一站多 announce 域</b>: 档案 <code>tracker_domain</code> 暂为单值; 真出现多 announce 域的站点时再扩成 Tuple + 显式键兜底, 现在不过度设计。</li>
+  </ul>
+</section>
+
+<section id="s10">
+  <div class="sec-rule"><span class="folio">10</span><h2>执行顺序与 DoD</h2></div>
+  <ol>
+    <li><code>site_presets.py</code>(双域模型 + 新口径 + <code>preset_for_web_host</code> + 迁移函数注册) → 2. <code>infra/versioning.py</code> 抬号 + <code>models.py</code> + <code>schema/</code> 三处 → 3. <code>loaders.py</code> → 4. <code>sections.py</code> → 5. <code>config_hub.js</code> → 6. 测试改写并全绿 → 7. 回写(<code>memory-bank/</code> 1318 计划标注「绑定机制被 1930 取代」、相关 pitfalls 若有新坑)。</li>
+  </ol>
+  <p><b>DoD</b>: <code>commands run test.full</code> 全绿并新建基线切片(记实测数字); CarPT 场景回归用例绿(用户 domains 不含 web 域也能绑定); <b>config.yml 全程零改动且加载正确</b>(BTSchool 旧键被迁移链自动改写, 用 --dry-run 走查验证); 收尾按 memory-bank skill 五步走。</p>
+</section>
+
+</main>
+</div>
+
+</div>
+</body>
+</html>

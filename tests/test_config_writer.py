@@ -374,7 +374,7 @@ def test_write_tree_stamps_schema_version(tmp_path):
     write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
-    assert "schema_version: 1" in text, "写回必须带当前版本章"
+    assert "schema_version: 2" in text, "写回必须带当前版本章"
     assert "'1'" not in text, "版本章必须是 int —— 盖成字符串会被 ruamel 写成带引号的 '1'"
 
 
@@ -384,4 +384,4 @@ def test_preview_tree_stamps_schema_version(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     text = preview_tree(path, tree, old)
-    assert "schema_version: 1" in text
+    assert "schema_version: 2" in text

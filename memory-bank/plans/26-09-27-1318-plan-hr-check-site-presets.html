@@ -256,7 +256,7 @@
   </div>
   <p><code>mode != off</code> 需要该站有 <code>hr</code> 规则段(要求做种时长等)的既有约束<b>保留</b>, 但校验点随绑定移动: 见 3.3。</p>
 
-  <h3>3.3 站点 ↔ 配置绑定: 域名交集自动完成</h3>
+  <h3>3.3 站点 ↔ 配置绑定: 域名交集自动完成 <b>(⚠本章绑定机制已被 26-09-27-1930 整体重写为映射制 —— web 域与 announce 域两命名空间永不互相比对; CarPT 实测暴露设计缺陷后废案, 现行口径见该计划 §3)</b></h3>
   <ul>
     <li>档案 <code>domains</code> 与 <code>trackers.&lt;站点&gt;.domains</code> 有交集 → <code>sites.&lt;id&gt;</code> 绑定到该 tracker; 用户<b>零引用配置</b>(不用填 tracker 名, 不用填域名);</li>
     <li>启用(<code>mode != off</code>)但<b>没有</b>任何 tracker 域名命中 → 报错: <code>hr_check.sites.btschool: 已启用但没有站点的 domains 包含 pt.btschool.club —— 请在对应站点的域名里补上该域名</code>;</li>
@@ -265,7 +265,7 @@
     <li><code>hr_page_url</code> 推算 = <code>https://{命中的域名}{page_path}</code>: 生产实证可行 —— 现网 BTSchool 的 <code>domains[0]</code> 就是 <code>pt.btschool.club</code>, 与其旧 <code>hr_page_url</code> 主机一致。若某站 web 域与 tracker 域不同, 档案里加 <code>page_domain</code> 覆盖(档案级, 不是用户级, 见 §08)。</li>
   </ul>
 
-  <h3>3.4 兼容策略(生产 config.yml 零修改)</h3>
+  <h3>3.4 兼容策略(生产 config.yml 零修改) <b>(⚠本章常驻兼容层已被 26-09-27-1930 废除 —— 旧键改走 schema 迁移链 config v1→v2 一次性改写)</b></h3>
   <ul>
     <li>旧键 <code>trackers.&lt;站点&gt;.hr_check</code> <b>兼容接受并等价迁移</b>: loader 读到 <code>mode != off</code> → 按域名交集找档案, 命中则<b>视为等价于</b> <code>hr_check.sites.&lt;id&gt;: {mode: …}</code>(微调项若旧配置里写了也一并搬) —— 现网 BTSchool(<code>mode: partial</code> + <code>hr_page_url</code>)不改一字, 加载结果与现在完全相同;</li>
     <li>旧键里的 <code>adapter</code> / <code>hr_page_url</code> / <code>download_path</code> / <code>page_param</code> 四键: 读取后<b>丢弃</b>, 值一律以档案为准 —— 配置里写对写错行为一致, 这正是本次要消灭的易错面;</li>

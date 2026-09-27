@@ -2,6 +2,8 @@
 
 hr_check 字段已移除(计划 26-09-27-1318 REV2): HR 在线核实的站点配置整体上收到
 config.hr_check.sites(「HR 在线核实」分区的站点接入卡片), 站点分区只保留 HR 规则段。
+旧键兼容层亦已废除(计划 26-09-27-1930): trackers.*.hr_check 由 schema 迁移链 v1→v2
+一次性改写, 程序里不再有任何伺候旧键的分支(出现即校验报废除错)。
 """
 from typing import Tuple
 from .fields import Field

@@ -1,9 +1,18 @@
-"""内置 HR 站点档案表(计划 26-09-27-1318 REV2 §3.1)
+"""内置 HR 站点档案表(计划 26-09-27-1318 REV2 §3.1; 绑定机制被 26-09-27-1930 重写为映射制)
 
-站点 -> (adapter, 页面路径, 种子下载路径, 翻页参数名, 域名) 的**代码写死**档案: 程序已知、
-人易配错的内容(页面形态 / 必须是登录后可达的 myhr 页 / 下载路径须含 {id} / 翻页参数站点各不相同)
-不再进配置 —— 用户只在「HR 在线核实」分区点选启用 + 微调, 页面事实以 adapter docstring 的
-样张核对记录为准(scope 参数 / 表头名 / 列名等仍由 adapter 类自带, 档案只存 adapter 名)。
+站点 -> (adapter, web 域, announce 域, 页面路径, 种子下载路径, 翻页参数名) 的**代码写死**档案:
+程序已知、人易配错的内容(页面形态 / 必须是登录后可达的 myhr 页 / 下载路径须含 {id} / 翻页参数
+站点各不相同)不再进配置 —— 用户只在「HR 在线核实」分区点选启用 + 微调。
+
+❗三命名空间纪律(计划 26-09-27-1930 §3.1, 本模块是判定单点):
+- **web 域**(web_domain): 用户浏览器访问的站点主机, 仅派生 hr_page_url 与前端展示,
+  **永不参与任何匹配**;
+- **announce 域**(tracker_domain): 该站公开 tracker 主域(已知映射), 是**唯一允许匹配的空间** ——
+  默认绑定 = 这个已知值在用户 trackers.*.domains(同命名空间)里查表;
+- **tracker 条目名**: 用户配置的键名, 显式覆盖键 hr_check.sites.<id>.tracker 按字符串相等引用,
+  无任何匹配语义。
+一切「web 域 vs announce 域」的比对都是设计错误 —— 两域可能毫无从属关系(CarPT: web=carpt.net,
+announce=tracker.carpt.net)。
 
 落在 config 层而不是 hr 包: hr/adapters 依赖 config.models, config 是被依赖的下层,
 反向 import 会成环(与 validation/sections.py 故意不复用 EXTENSION_ID_RE 同一先例)。hr 层只读它。
@@ -12,7 +21,7 @@
 hr/adapters/__init__.py docstring「新增站点的四种情形」)。
 """
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional
 
 
 @dataclass(frozen=True)
@@ -21,18 +30,15 @@ class SiteHrPreset:
 
     preset_id: str
     adapter: str  # hr/adapters.ADAPTERS 里登记的解析器名
-    domains: Tuple[str, ...]  # 与 trackers.<站点>.domains 求交集做绑定匹配(小写)
-    page_path: str  # HR 名单页路径(myhr 形态); 拼在命中的站点域名后
+    web_domain: str  # web 命名空间: 浏览器访问的站点主机; 仅派生 hr_page_url, 永不参与匹配
+    tracker_domain: str  # announce 命名空间: 已知映射(该站公开 tracker 主域); 默认绑定的查表键
+    page_path: str  # HR 名单页路径(myhr 形态); 拼在 web 域后
     download_path: str  # 种子下载路径(须含 {id} 占位)
     page_param: str  # 翻页查询参数名
-    # web 域 != tracker 域的站点用它覆盖 URL 主机(档案级硬编码, 不对用户暴露);
-    # 空 = 用命中的 tracker 域名(首发两站均同域, BTSchool 有生产实证)
-    page_domain: str = ""
 
-    def page_url(self, tracker_domain: str) -> str:
-        """HR 页绝对地址 = https://{web 域}{page_path}; web 域缺省取命中的 tracker 域名"""
-        host = self.page_domain or tracker_domain.strip().lower()
-        return f"https://{host}{self.page_path}"
+    def page_url(self) -> str:
+        """HR 页绝对地址 = https://{web 域}{page_path}; 与用户 domains 的写法完全无关"""
+        return f"https://{self.web_domain}{self.page_path}"
 
 
 #: 页面事实来源: btschool = nexusphp adapter docstring(2026-09-22 BTSchool 样张);
@@ -43,7 +49,8 @@ SITE_PRESETS: Dict[str, SiteHrPreset] = {
         SiteHrPreset(
             preset_id="btschool",
             adapter="nexusphp",
-            domains=("pt.btschool.club", ),
+            web_domain="pt.btschool.club",
+            tracker_domain="pt.btschool.club",  # 两域同值(announce 域恰为 web 域)
             page_path="/myhr.php",
             download_path="/download.php?id={id}",
             page_param="page",
@@ -52,7 +59,8 @@ SITE_PRESETS: Dict[str, SiteHrPreset] = {
         SiteHrPreset(
             preset_id="carpt",
             adapter="carpt",
-            domains=("carpt.net", ),
+            web_domain="carpt.net",
+            tracker_domain="tracker.carpt.net",  # 两域无关 —— 映射制存在的理由
             page_path="/myhr.php",
             download_path="/download.php?id={id}",
             page_param="page",
@@ -70,20 +78,31 @@ def _norm_domains(domains: Iterable[str]) -> List[str]:
 
 
 def match_trackers(preset: SiteHrPreset, domains_by_tracker: Mapping[str, Iterable[str]]) -> List[str]:
-    """档案域名与各站点 domains 求交集(小写精确匹配), 返回命中的 tracker 名(按名字排序)
+    """默认映射查表(计划 26-09-27-1930 §3.2): 档案已知 announce 域在用户 domains(同一命名空间)里
+    查表, 返回命中的 tracker 名(按名字排序)
 
-    绑定规则(计划 §3.3): 恰好命中一个 = 绑定成功; 零个/多个由 validate_config fail-fast,
-    本函数只做查找不报错(校验与 loader 两处共用同一判定, 不留第二份口径)。
+    命中规则: 用户域名 t 命中档案 tracker_domain d 当且仅当
+    `t == d or t.endswith("." + d) or d.endswith("." + t)` —— 同命名空间内的双向子域容错,
+    兼容用户配主域或 tracker 子域两种写法。命中 0 个或 >=2 个交校验层, 本函数只查不报
+    (校验与 loader 两处共用同一判定, 不留第二份口径)。
     """
-    want = set(preset.domains)
-    return sorted(name for name, doms in domains_by_tracker.items() if want & set(_norm_domains(doms or ())))
+    d = preset.tracker_domain.strip().lower()
+    return sorted(
+        name for name, doms in domains_by_tracker.items()
+        if any(t == d or t.endswith("." + d) or d.endswith("." + t) for t in _norm_domains(doms or ()))
+    )
 
 
-def preset_for_domains(domains: Iterable[str]) -> Optional[SiteHrPreset]:
-    """反向查找: 站点 domains 交集命中的档案(旧键 trackers.*.hr_check 等价迁移用)
+def preset_for_web_host(host: str) -> Optional[SiteHrPreset]:
+    """按 web 主机精确定位档案(小写归一; 旧键 v1→v2 迁移用)
 
-    多个档案同时命中时返回 None —— 歧义由校验层报错, loader 只在无歧义时迁移。
+    旧键 trackers.*.hr_check 自带 hr_page_url, 其 host 与档案 web_domain 同属 web 命名空间,
+    同空间精确比对定位档案 —— 不触碰 tracker 域名(计划 26-09-27-1930 §3.4)。
     """
-    have = set(_norm_domains(domains))
-    hits = [p for p in SITE_PRESETS.values() if set(p.domains) & have]
-    return hits[0] if len(hits) == 1 else None
+    h = str(host).strip().lower()
+    if not h:
+        return None
+    for preset in SITE_PRESETS.values():
+        if preset.web_domain == h:
+            return preset
+    return None

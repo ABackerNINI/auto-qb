@@ -350,16 +350,12 @@ window.CONFIG_HUB = {
         case "maintenance":
           return this.cfgBool(["config", "grouping", "enabled"], "true") ? "辅种分组已启用" : "辅种分组未启用";
         case "hr_check": {
-          // 站点接入卡片(hr_check.sites)与旧键 trackers.*.hr_check 都算数: 旧配置还没迁移时
-          // 也能显示真实接入数(loaders 加载后两者本就等价)
+          // 站点接入卡片(hr_check.sites)的启用数; 旧键 trackers.*.hr_check 已随 schema v2 废除
+          // (迁移链自动改写), 不再计数
           const enabled = Object.values(this.hrSiteEntries()).filter(
             (e) => e && String(e.mode || "off") !== "off"
           ).length;
-          const legacy = this.cfgTrackerNames().filter(
-            (n) => this.cfgText(["config", "trackers", n, "hr_check", "mode"], "off") !== "off"
-          ).length;
-          const total = enabled + legacy;
-          return total ? `${total} 个站点在线核实` : "未配置站点";
+          return enabled ? `${enabled} 个站点在线核实` : "未配置站点";
         }
         case "speed": {
           if (!this.cfgCurveEnabled()) return "未启用";
@@ -416,7 +412,8 @@ window.CONFIG_HUB = {
     /* ---------------------------------------------------------- 站点接入卡片(计划 26-09-27-1318) */
     /* HR 在线核实分区的唯一启用入口: 卡片键集合来自 schema.constants.hr_check_site_presets
      * (内置站点档案, 与配置里已存在的键无关), 点选启用即写 hr_check.sites.<id>.mode。
-     * 绑定状态由前端按「站点 domains ∩ 档案 domains」先行提示(与后端同口径), fail-fast 仍由后端兜底 */
+     * 绑定状态由前端按映射制口径先行提示(计划 26-09-27-1930 §6: 显式 tracker 直取 > 档案已知
+     * announce 域默认映射查表, 与后端同口径), fail-fast 仍由后端校验兜底 */
     hrSitePresets() {
       const c = this.cfg.schema && this.cfg.schema.constants;
       return (c && c.hr_check_site_presets) || [];
@@ -435,22 +432,35 @@ window.CONFIG_HUB = {
       if (mode === "off" && !this.cfgExists(["config", "hr_check", "sites", id])) return; // 未配置 = 本就关闭, 不写垃圾键
       this.cfgSetPath(["config", "hr_check", "sites", id, "mode"], mode);
     },
-    hrSiteBoundTrackers(preset) {
-      const doms = (preset.domains || []).map((d) => String(d).trim().toLowerCase());
-      return this.cfgTrackerNames().filter((n) => {
+    /* 绑定状态(映射制, 计划 26-09-27-1930 §6): 返回 {text, cls}; cls = "warn" 表示保存后校验会报错。
+     * web 域与 tracker 域永不互相比对 —— 自动绑定只在 announce 命名空间内查表(双向子域容错,
+     * 与 site_presets.match_trackers 同口径); 显式 tracker 按条目名直取 */
+    hrSiteBinding(preset) {
+      const trackerDomain = String(preset.tracker_domain || "").trim().toLowerCase();
+      const entry = this.hrSiteEntries()[preset.id];
+      const explicit =
+        entry && entry.tracker !== undefined && entry.tracker !== null ? String(entry.tracker).trim() : "";
+      const names = this.cfgTrackerNames();
+      if (explicit) {
+        if (!names.includes(explicit)) {
+          return { cls: "warn", text: `映射目标 ${explicit} 不存在 —— 保存后校验会报错` };
+        }
+        return { cls: "", text: `已映射: ${explicit}` };
+      }
+      const hits = names.filter((n) => {
         const ds = this.cfgRaw(["config", "trackers", n, "domains"]);
-        return Array.isArray(ds) && ds.some((d) => doms.includes(String(d).trim().toLowerCase()));
+        return Array.isArray(ds) &&
+          ds.some((d) => {
+            const t = String(d).trim().toLowerCase();
+            return t && (t === trackerDomain || t.endsWith("." + trackerDomain) || trackerDomain.endsWith("." + t));
+          });
       });
-    },
-    hrSiteBindText(preset) {
-      const hits = this.hrSiteBoundTrackers(preset);
-      if (hits.length === 1) return `已绑定站点: ${hits[0]}`;
-      if (hits.length > 1) return `绑定不唯一: ${hits.join("、")} 的域名都命中 —— 保存后校验会报错`;
-      return `未绑定: 没有站点的域名包含 ${(preset.domains || []).join(" / ")} —— 保存后校验会报错, 请在对应站点补域名`;
-    },
-    hrSiteBindClass(preset) {
-      const n = this.hrSiteBoundTrackers(preset).length;
-      return n === 1 ? "" : "warn";
+      if (hits.length === 1) return { cls: "", text: `已自动绑定: ${hits[0]}（档案默认映射）` };
+      if (hits.length > 1) return { cls: "warn", text: `默认映射歧义: ${hits.join("、")} 都命中 —— 请显式指定 tracker` };
+      return {
+        cls: "warn",
+        text: `未绑定: 档案已知 announce 域(${trackerDomain})未命中任何站点配置 —— 请补域名或显式指定 tracker`,
+      };
     },
     /* 微调字段表: 从 schema 里 hr_check -> sites 字段的子字段表取(数据驱动), mode 已由卡片点选承担 */
     hrSiteTuningFields() {

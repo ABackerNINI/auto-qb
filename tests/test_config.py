@@ -1224,7 +1224,7 @@ def test_config_schema_version_load_and_migrate_dispatch(td=None):
 
         # 未来版本: fail-fast 且同时说清文件版本与程序支持版本
         err = _load_errors(td, "config:\n  schema_version: 9\n  trackers:\n    T1:\n      domains:\n        - a.com\n")
-        assert "schema_version=9" in err and "支持的 1" in err, f"未来版本须报两个版本号: {err}"
+        assert "schema_version=9" in err and "支持的 2" in err, f"未来版本须报两个版本号: {err}"
 
         # 非整数 / < 1: 同样经迁移分派的 SchemaVersionError -> ConfigError
         err = _load_errors(

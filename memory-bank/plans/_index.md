@@ -29,6 +29,7 @@
 
 ## Done
 
+- [26-09-27-1930] [计划 · HR 在线核实绑定改映射制: 档案双域硬编码 + 已知映射零配置 + 旧键迁移 v1→v2](26-09-27-1930-plan-hr-binding-tracker-mapping.html) — `hr-binding-tracker-mapping`
 - [26-09-27-1438] [计划 · 字段变化触发时机 on_torrent_field_changed 与维护任务 tags 迁移](26-09-27-1438-plan-field-changed-trigger.html) — `field-changed-trigger`
 - [26-09-27-1318] [计划 · HR 在线核实配置收敛: 内置站点档案 + 配置全部上收「HR 在线核实」分区](26-09-27-1318-plan-hr-check-site-presets.html) — `hr-check-site-presets`
 - [26-09-27-1126] [计划 · 日志等级整改 — 危险情况归 ERROR，通知默认只推 ERROR](26-09-27-1126-plan-log-level-notify-error.html) — `log-level-notify-error`

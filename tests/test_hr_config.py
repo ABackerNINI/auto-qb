@@ -3,30 +3,42 @@
 配置是 fail-fast 的第一道闸门: 站点启用(mode != off)却没配 hr 段时, 保护会**静默失效**
 (check_hr_condition 第一行 `if not self.tracker_conf.hr: return False`), 故必须在配置期拦下。
 
-站点配置收敛(计划 26-09-27-1318 REV2)后: 站点启用与微调的唯一配置源是 `hr_check.sites.<档案 id>`
-(键 = 内置站点档案 id, 见 config/site_presets.py); 旧键 `trackers.<站点>.hr_check` 兼容接受并
-等价迁移 —— 本文件同时是**生产兼容回归锚**(现网 BTSchool 旧键形态不改一字, 加载结果与迁移前一致)。
+站点配置收敛(计划 26-09-27-1318 REV2; 绑定机制被 26-09-27-1930 重写为**映射制**)后:
+站点启用与微调的唯一配置源是 `hr_check.sites.<档案 id>`(键 = 内置站点档案 id, 见
+config/site_presets.py); web 域与 announce 域是两个命名空间, **永不互相比对** —— 默认绑定 =
+档案已知 announce 域(tracker_domain)在用户 domains(同命名空间)查表, 未命中/歧义用显式键
+`tracker` 按 trackers 条目名直取。旧键 `trackers.<站点>.hr_check` 由 schema 迁移链 v1→v2
+(config/migrations.py)一次性改写, 无常驻兼容层 —— 本文件同时是**生产兼容回归锚**
+(现网 BTSchool 旧键形态不改一字, 加载即被迁移链自动搬到新位置)。
 
 ## 测试计划(每个测试函数一条)
 - test_defaults_when_absent: 整段缺省 -> 全默认(功能关闭), 不报错
 - test_global_section_parsed: 全局段解析(时间串 -> 秒 / 枚举归一 / channel 子段)
 - test_verified_ttl_default_is_none: verified_ttl 缺省为 None(由站点 refresh_interval 解算, 不在此处固化)
-- test_sites_entry_parsed: sites 条目解析 + 绑定派生(scope 归一 / 微调覆盖 / 档案四键来自档案)
-- test_page_url_derived_from_preset: HR 页地址按命中域名 + 档案 page_path 推算(btschool / carpt 两档)
+- test_sites_entry_parsed: sites 条目解析 + 绑定派生(scope 归一 / 微调覆盖 / 档案四键来自档案 / 派生 tracker 回填)
+- test_page_url_derived_from_web_domain: HR 页地址恒为档案 web 域派生, 与用户 domains 写法无关
+- test_carpt_default_mapping_binds_without_web_domain: CarPT 回归锚 —— domains 只配 announce 域也能绑定(双向子域容错)
 - test_completed_age_limit_range: 超龄豁免线 0(关闭)或 1D~3650D; 单位写错配置期拦下
 - test_scopes_restricted_to_known_lanes: 档位只允许 A/B/C/D 且不能为空
 - test_scopes_minimum_is_a_b_c: A+B+C 是最小合法集合(少抓一档 = 该档会被误放行), D 可加可不加
 - test_preset_id_must_be_registered: 未登记档案 id 报错 + 文案含已支持清单
-- test_unbound_site_errors: 已启用但域名绑不上任何站点 -> 报错并指路
-- test_binding_must_be_unique: 域名重叠绑到多个站点 -> 报错
-- test_bound_site_requires_hr_section: 新位置启用但绑定站点缺 hr 段 -> 报错
-- test_legacy_mode_requires_hr_section: 旧键 mode != off 且缺 hr 段 -> 同口径报错(兼容路径)
-- test_mode_off_does_not_require_hr_section: mode=off 时不要求 hr 段(两个位置都不要求)
-- test_legacy_equivalent_migration: 生产兼容回归锚 —— 现网 BTSchool 旧键形态加载结果与迁移前一致
-- test_legacy_preset_keys_are_discarded: 旧键四个档案键读取后丢弃, 值一律以档案为准
-- test_new_position_wins_over_legacy: 新旧并存 -> 新位置获胜
-- test_legacy_unsupported_site_errors: 旧键启用但域名绑不上档案 -> 报未支持 + 已支持清单
-- test_legacy_unknown_subkeys_accepted: 旧键未知子键兼容接受(仅校 mode)
+- test_default_mapping_zero_hits_errors: 默认映射零命中 -> 报错并附档案 announce 域与两条出路
+- test_default_mapping_ambiguous: 默认映射 >=2 命中 -> 报歧义错, 要求显式指定
+- test_binding_uniqueness_conflict: 两个站点条目绑到同一 tracker -> 报唯一性错
+- test_explicit_tracker_mapping_direct_and_wins: 显式 tracker 直取成功且优先于默认映射
+- test_explicit_tracker_missing_key_errors: 显式 tracker 键不存在 -> 报错
+- test_bound_site_requires_hr_section: 绑定站点缺 hr 段 -> 报错
+- test_legacy_migrated_entry_requires_hr_section: 旧键经迁移函数搬入新位置后, 缺 hr 段同口径报错
+- test_mode_off_does_not_require_hr_section: mode=off 时不要求 hr 段(旧键 off 形态被迁移链删除)
+- test_legacy_equivalent_migration: 生产兼容回归锚 —— 现网 BTSchool 旧键形态不改一字, 加载即迁移且结果与迁移前一致
+- test_legacy_preset_keys_are_discarded: 旧键档案键迁移时丢弃(adapter/download_path/page_param 写错也以档案为准; hr_page_url 的 host 承担迁移定位)
+- test_migration_moves_legacy_key_to_sites: v1→v2 迁移单测 —— 旧键搬入 sites(微调随迁/四键与未知键丢弃/旧键删除)
+- test_migration_drops_off_and_malformed_legacy_keys: 迁移单测 —— off/非字典旧键直接删除
+- test_migration_new_position_wins: 迁移单测 —— 新旧并存时新位置获胜
+- test_migration_keeps_unlocatable_legacy_key: 迁移单测 —— host 定位不到档案的旧键原地保留(交校验报废除错)
+- test_migration_idempotent_and_no_version_stamp: 迁移单测 —— 幂等, 函数体不碰 schema_version(盖章归框架)
+- test_orphan_legacy_key_rejected: 定位不到档案的旧键走完加载 -> 校验报废除错(附已支持清单)
+- test_legacy_key_with_v2_stamp_is_rejected: 手写 schema_version=2 且带旧键 -> 校验报废除错
 - test_unknown_keys_aggregated: hr_check / channel / sites 条目的未知键一次性报错
 - test_unknown_policy_enum: unknown_policy 只允许 hr / not-hr
 - test_ranges_and_formats: 间隔下限 / 端口范围 / 时间窗格式 / 缺失率范围等聚合报错
@@ -39,6 +51,7 @@
 - test_impact_site_hr_check_is_l0: 派生站点 hr_check 变更 -> trackers.<站点>.hr_check 一条 L0
 - test_config_error_message_points_to_section: 校验失败经 ConfigError 抛出, 消息里带具体路径
 """
+import copy
 import os
 
 import pytest
@@ -46,6 +59,7 @@ import yaml
 
 from auto_qb.config import ConfigError, load_config
 from auto_qb.config.impact import LEVEL_L0, LEVEL_L1, diff_config_impacts
+from auto_qb.config.migrations import _migrate_config_1_2
 from auto_qb.config.models import Config
 from auto_qb.config.validation import validate_config
 
@@ -189,9 +203,12 @@ def test_sites_entry_parsed(tmp_path):
     assert site.hr_page_url == "https://pt.btschool.club/myhr.php"
     assert site.download_path == "/download.php?id={id}"
     assert site.page_param == "page"
+    # 派生视图的 tracker 字段回填解析出的条目名(默认映射命中)
+    assert site.tracker == "btschool"
     # 配置真相在 hr_check.sites, trackers.*.hr_check 只是派生视图
     assert set(cfg.hr_check.sites) == {"btschool"}
     assert cfg.hr_check.sites["btschool"].mode == "partial"
+    assert cfg.hr_check.sites["btschool"].tracker == ""
 
     # 未配微调项时走字段默认: max_torrents_per_hour None(回退全局) / completed_age_limit 0(关闭)
     cfg2 = load_config(
@@ -214,8 +231,8 @@ def test_sites_entry_parsed(tmp_path):
     assert cfg2.trackers["btschool"].hr_check.completed_age_limit == 0.0
 
 
-def test_page_url_derived_from_preset(tmp_path):
-    """HR 页地址 = https://{命中域名}{档案 page_path}; carpt 档案带出 carpt adapter"""
+def test_page_url_derived_from_web_domain(tmp_path):
+    """HR 页地址 = https://{档案 web_domain}{page_path}, 与用户 domains 写法完全无关(26-09-27-1930 §3.2)"""
     cfg = load_config(
         _write(
             tmp_path, {
@@ -234,32 +251,38 @@ def test_page_url_derived_from_preset(tmp_path):
     )
     assert cfg.trackers["btschool"].hr_check.hr_page_url == "https://pt.btschool.club/myhr.php"
 
-    # 站点域名精确命中后, carpt 档案的 adapter / 页面地址随之而来
-    cfg2 = load_config(
-        _write(
-            tmp_path, {
-                "hr_check": {
-                    "sites": {
+
+def test_carpt_default_mapping_binds_without_web_domain(tmp_path):
+    """本轮 CarPT 事故回归锚: 用户 domains 只配 announce 域(tracker.carpt.net, 不含 web 域)也能自动绑定;
+    配主域 carpt.net 同样命中(同命名空间双向子域容错) —— 两种写法 URL 恒为档案 web 域派生值"""
+    for domains in (["tracker.carpt.net"], ["carpt.net"]):
+        cfg = load_config(
+            _write(
+                tmp_path, {
+                    "hr_check": {
+                        "sites": {
+                            "carpt": {
+                                "mode": "all"
+                            }
+                        }
+                    },
+                    "trackers": {
                         "carpt": {
-                            "mode": "all"
+                            "domains": domains,
+                            "hr": {
+                                "required_seeding_time": "3D"
+                            }
                         }
-                    }
-                },
-                "trackers": {
-                    "carpt": {
-                        "domains": ["carpt.net"],
-                        "hr": {
-                            "required_seeding_time": "3D"
-                        }
-                    }
-                },
-            }
+                    },
+                }
+            )
         )
-    )
-    carpt = cfg2.trackers["carpt"].hr_check
-    assert carpt.mode == "all"
-    assert carpt.adapter == "carpt"
-    assert carpt.hr_page_url == "https://carpt.net/myhr.php"
+        carpt = cfg.trackers["carpt"].hr_check
+        assert carpt is not None, domains
+        assert carpt.mode == "all"
+        assert carpt.tracker == "carpt", domains
+        assert carpt.adapter == "carpt"
+        assert carpt.hr_page_url == "https://carpt.net/myhr.php", "URL 恒为档案 web 域, 不随用户 domains 写法变化"
 
 
 def test_completed_age_limit_range():
@@ -306,8 +329,8 @@ def test_preset_id_must_be_registered():
     assert "btschool" in text and "carpt" in text, "文案必须给出已支持清单"
 
 
-def test_unbound_site_errors():
-    """已启用但没有任何站点的 domains 命中档案域名 -> 报错并指路(补域名)"""
+def test_default_mapping_zero_hits_errors():
+    """默认映射零命中 -> 报错并附档案已知 announce 域 + 两条出路(补域名 / 显式指定)"""
     errors = _validate({
         "hr_check": {
             "sites": {
@@ -322,11 +345,13 @@ def test_unbound_site_errors():
     })
     text = "\n".join(errors)
     assert "config.hr_check.sites.btschool" in text, text
-    assert "pt.btschool.club" in text, "文案必须给出档案域名"
+    assert "默认映射未命中" in text, text
+    assert "pt.btschool.club" in text, "文案必须给出档案已知 announce 域"
+    assert "tracker" in text, "文案必须给出显式指定的出路"
 
 
-def test_binding_must_be_unique():
-    """域名重叠导致绑到多个站点 -> 报错(绑定必须唯一)"""
+def test_default_mapping_ambiguous():
+    """默认映射 >=2 命中(两站点 domains 都含档案 announce 域) -> 报歧义错, 要求显式指定"""
     errors = _validate(
         {
             "hr_check": {
@@ -349,12 +374,96 @@ def test_binding_must_be_unique():
         }
     )
     text = "\n".join(errors)
-    assert "绑定必须唯一" in text, text
-    assert "x" in text and "y" in text, "文案必须指出重叠的两个站点名"
+    assert "默认映射命中多个站点" in text, text
+    assert "x" in text and "y" in text, "文案必须指出命中的两个站点名"
+    assert "显式填 tracker" in text, text
+
+
+def test_binding_uniqueness_conflict():
+    """同一 tracker 条目被两个启用中的站点绑定(显式/默认混合) -> 报唯一性错"""
+    errors = _validate(
+        {
+            "hr_check": {
+                "sites": {
+                    "btschool": {
+                        "mode": "partial"
+                    },
+                    "carpt": {
+                        "mode": "partial",
+                        "tracker": "x",
+                    },
+                }
+            },
+            "trackers": {
+                "x": {
+                    "domains": ["pt.btschool.club"],
+                    "hr": {
+                        "required_seeding_time": "3D"
+                    }
+                },
+            },
+        }
+    )
+    text = "\n".join(errors)
+    assert "站点配置 x 已被条目 btschool 绑定" in text, text
+
+
+def test_explicit_tracker_mapping_direct_and_wins(tmp_path):
+    """显式 tracker 直取成功且优先于默认映射; 派生视图 tracker 回填显式条目名"""
+    cfg = load_config(
+        _write(
+            tmp_path, {
+                "hr_check": {
+                    "sites": {
+                        "btschool": {
+                            "mode": "partial",
+                            "tracker": "alt",
+                        }
+                    }
+                },
+                "trackers":
+                    {
+                        "alt": {
+                            "domains": ["other.example"],
+                            "hr": {
+                                "required_seeding_time": "3D"
+                            }
+                        },
+                        "bts": _bts_site(),
+                    },
+            }
+        )
+    )
+    assert cfg.trackers["alt"].hr_check is not None, "显式指定胜过默认映射(alt 域名并不命中档案)"
+    assert cfg.trackers["alt"].hr_check.tracker == "alt"
+    assert cfg.trackers["alt"].hr_check.hr_page_url == "https://pt.btschool.club/myhr.php"
+    assert cfg.trackers["bts"].hr_check is None, "默认映射可命中的站点未被占用(显式优先, 不再查表)"
+
+
+def test_explicit_tracker_missing_key_errors():
+    """显式 tracker 指向不存在的条目名 -> 报错并指路"""
+    errors = _validate(
+        {
+            "hr_check": {
+                "sites": {
+                    "btschool": {
+                        "mode": "partial",
+                        "tracker": "ghost",
+                    }
+                }
+            },
+            "trackers": {
+                "s": _site()
+            },
+        }
+    )
+    text = "\n".join(errors)
+    assert "config.hr_check.sites.btschool.tracker" in text, text
+    assert "站点配置 'ghost' 不存在" in text, text
 
 
 def test_bound_site_requires_hr_section():
-    """新位置启用但绑定站点缺 hr 段 -> 报错(原「mode != off 必须配 hr 段」约束随绑定搬家)"""
+    """绑定站点(默认映射)缺 hr 段 -> 报错(原「mode != off 必须配 hr 段」约束随绑定保留)"""
     errors = _validate(
         {
             "hr_check": {
@@ -375,48 +484,52 @@ def test_bound_site_requires_hr_section():
     assert "config.hr_check.sites.btschool" in text and "hr 段" in text, text
 
 
-def test_legacy_mode_requires_hr_section():
-    """旧键 mode != off 且缺 hr 段 -> 同口径报错(兼容路径上防线不松)"""
-    errors = _validate(
-        {
-            "trackers":
-                {
-                    "s":
-                        {
-                            "domains": ["pt.btschool.club"],
-                            "hr_check": {
-                                "mode": "partial",
-                                "hr_page_url": "https://pt.btschool.club/myhr.php"
-                            },
+def test_legacy_migrated_entry_requires_hr_section():
+    """旧键经迁移函数搬入新位置后, 缺 hr 段同口径报错(迁移不放松任何防线)"""
+    cfg = {
+        "trackers":
+            {
+                "s":
+                    {
+                        "domains": ["pt.btschool.club"],
+                        "hr_check": {
+                            "mode": "partial",
+                            "hr_page_url": "https://pt.btschool.club/myhr.php",
                         },
-                },
-        }
-    )
+                    },
+            },
+    }
+    errors = validate_config({"config": _migrate_config_1_2(cfg)})
     assert any("hr 段" in e for e in errors), errors
 
 
-def test_mode_off_does_not_require_hr_section():
-    """mode=off 时不要求 hr 段(两个位置都不要求)"""
-    assert _validate(
-        {
-            "hr_check": {
-                "sites": {
-                    "btschool": {
-                        "mode": "off"
+def test_mode_off_does_not_require_hr_section(tmp_path):
+    """mode=off 时不要求 hr 段; 旧键 off 形态被迁移链直接删除(新口径下 off = 键不存在)"""
+    cfg = load_config(
+        _write(
+            tmp_path, {
+                "hr_check": {
+                    "sites": {
+                        "btschool": {
+                            "mode": "off"
+                        }
                     }
-                }
-            },
-            "trackers": {
-                "s": _site(),
-                "b": _bts_site(hr_check={"mode": "off"})
-            },
-        }
-    ) == []
+                },
+                "trackers": {
+                    "s": _site(),
+                    "b": _bts_site(hr_check={"mode": "off"}),
+                },
+            }
+        )
+    )
+    assert cfg.trackers["b"].hr_check is None
+    assert cfg.trackers["s"].hr_check is None
+    assert cfg.hr_check.sites["btschool"].mode == "off"
 
 
 def test_legacy_equivalent_migration(tmp_path):
-    """生产兼容回归锚: 现网 BTSchool 旧键形态(mode partial + hr_page_url)不改一字,
-    加载结果与迁移前一致 —— mode / URL / 微调项逐一对照, 并等价并入 hr_check.sites"""
+    """生产兼容回归锚: 现网 BTSchool 旧键形态(mode partial + hr_page_url)不改一字, 加载即被
+    迁移链 v1→v2 自动搬到 hr_check.sites.btschool, 派生结果与迁移前一致 —— mode / URL / 微调项"""
     old_url = "https://pt.btschool.club/myhr.php"
     cfg = load_config(
         _write(
@@ -444,22 +557,25 @@ def test_legacy_equivalent_migration(tmp_path):
     site = cfg.trackers["BTSchool"].hr_check
     assert site is not None
     assert site.mode == "partial"
-    assert site.hr_page_url == old_url, "推算 URL 必须与旧配置写的值一致(生产实证)"
+    assert site.hr_page_url == old_url, "档案 web 域派生的 URL 必须与旧配置写的值一致(生产实证)"
     assert site.refresh_interval == 6 * 3600.0, "旧键微调项原样搬进派生值"
     assert site.adapter == "nexusphp"
     assert site.download_path == "/download.php?id={id}"
-    # 等价迁移: 配置真相已并入 hr_check.sites(域名交集找档案)
+    assert site.tracker == "BTSchool", "派生视图回填解析出的条目名"
+    # 迁移: 配置真相已并入 hr_check.sites(旧键按 hr_page_url 的 host 定位档案)
     assert set(cfg.hr_check.sites) == {"btschool"}
     assert cfg.hr_check.sites["btschool"].mode == "partial"
     assert cfg.hr_check.sites["btschool"].refresh_interval == 6 * 3600.0
-    # 兼容迁移不报错(校验层放行)
+    # 迁移后的内存结构全量合法(直接校验旧键会报废除错, 见 test_legacy_key_with_v2_stamp_is_rejected)
     with open(str(tmp_path / "config.yml"), encoding="utf-8") as f:
-        assert validate_config(yaml.safe_load(f)) == []
+        raw = yaml.safe_load(f)
+    assert validate_config({"config": _migrate_config_1_2(raw["config"])}) == []
 
 
 def test_legacy_preset_keys_are_discarded(tmp_path):
-    """旧键四个档案键(adapter/hr_page_url/download_path/page_param)读取后丢弃 —— 值一律以档案为准,
-    配置里写对写错行为一致(这正是本次收敛要消灭的易错面)"""
+    """旧键档案键迁移时丢弃 —— adapter/download_path/page_param 写对写错行为一致(值一律以档案为准,
+    这正是档案化要消灭的易错面); hr_page_url 例外: 它的 host 承担迁移定位(26-09-27-1930 §3.4),
+    指到别的站会定位不到档案而报废除错(见 test_orphan_legacy_key_rejected)"""
     cfg = load_config(
         _write(
             tmp_path,
@@ -473,7 +589,7 @@ def test_legacy_preset_keys_are_discarded(tmp_path):
                                     {
                                         "mode": "partial",
                                         "adapter": "carpt",  # 写错: 值以档案为准
-                                        "hr_page_url": "https://wrong.example.com/myhr.php",  # 指到别的站: 以档案为准
+                                        "hr_page_url": "https://pt.btschool.club/myhr.php",  # host 定位档案
                                         "download_path": "/get.php",  # 缺 {id}: 以档案为准
                                         "page_param": "p",
                                     },
@@ -489,39 +605,166 @@ def test_legacy_preset_keys_are_discarded(tmp_path):
     assert site.page_param == "page"
 
 
-def test_new_position_wins_over_legacy(tmp_path):
-    """新旧并存(同站既写旧键又写 sites.<id>) -> 新位置获胜, 旧键忽略"""
-    cfg = load_config(
-        _write(
-            tmp_path, {
-                "hr_check": {
-                    "sites": {
-                        "btschool": {
-                            "mode": "all"
-                        }
-                    }
-                },
-                "trackers":
+def test_migration_moves_legacy_key_to_sites():
+    """v1→v2 迁移单测: 旧键搬入 hr_check.sites.<档案 id> —— mode/微调项直搬, 页面事实四键与
+    未知键丢弃, 旧键删除; host 按档案 web 域(web↔web 同命名空间)定位, 不触碰 tracker 域"""
+    cfg = {
+        "trackers":
+            {
+                "BTSchool":
                     {
-                        "BTSchool":
+                        "domains": ["pt.btschool.club"],
+                        "hr": {
+                            "required_seeding_time": "3D"
+                        },
+                        "hr_check":
                             {
-                                **_bts_site(),
-                                "hr_check": {
-                                    "mode": "partial",
-                                    "hr_page_url": "https://pt.btschool.club/myhr.php"
-                                },
+                                "mode": "partial",
+                                "adapter": "nexusphp",
+                                "hr_page_url": "https://pt.btschool.club/myhr.php",
+                                "download_path": "/download.php?id={id}",
+                                "page_param": "page",
+                                "refresh_interval": "6H",
+                                "max_torrents_per_hour": "3",
+                                "bogus": "1",
                             },
                     },
+            },
+    }
+    out = _migrate_config_1_2(cfg)
+    assert out["hr_check"]["sites"] == {
+        "btschool": {
+            "mode": "partial",
+            "refresh_interval": "6H",
+            "max_torrents_per_hour": "3",
+        }
+    }, "微调项随迁, 页面事实四键与未知键丢弃"
+    assert "hr_check" not in out["trackers"]["BTSchool"], "旧键删除"
+
+
+def test_migration_drops_off_and_malformed_legacy_keys():
+    """v1→v2 迁移单测: mode=off 与非字典形状的旧键直接删除(新口径下 off = 键不存在)"""
+    cfg = {
+        "trackers":
+            {
+                "a": {
+                    "domains": ["x.example"],
+                    "hr_check": {
+                        "mode": "off"
+                    },
+                },
+                "b": {
+                    "domains": ["x.example"],
+                    "hr_check": "junk",
+                },
+            },
+    }
+    out = _migrate_config_1_2(cfg)
+    assert all("hr_check" not in t for t in out["trackers"].values())
+    assert "hr_check" not in out
+
+
+def test_migration_new_position_wins():
+    """v1→v2 迁移单测: 新旧并存(同档案已写 sites 条目)时新位置获胜, 旧键仅删除不并入"""
+    cfg = {
+        "hr_check": {
+            "sites": {
+                "btschool": {
+                    "mode": "all"
+                }
             }
+        },
+        "trackers":
+            {
+                "BTSchool":
+                    {
+                        "domains": ["pt.btschool.club"],
+                        "hr_check":
+                            {
+                                "mode": "partial",
+                                "hr_page_url": "https://pt.btschool.club/myhr.php",
+                                "refresh_interval": "6H",
+                            },
+                    },
+            },
+    }
+    out = _migrate_config_1_2(cfg)
+    assert out["hr_check"]["sites"]["btschool"] == {"mode": "all"}
+    assert "hr_check" not in out["trackers"]["BTSchool"]
+
+
+def test_migration_keeps_unlocatable_legacy_key():
+    """v1→v2 迁移单测: 缺 hr_page_url / host 陌生的旧键原地保留 —— 交给校验层报废除错,
+    迁移函数不做任何猜测(宁可报错也不迁错站)"""
+    for legacy in (
+        {
+            "mode": "partial"
+        },
+        {
+            "mode": "partial",
+            "hr_page_url": "https://pt.example.com/myhr.php",
+        },
+    ):
+        cfg = {"trackers": {"s": {"domains": ["pt.example.com"], "hr_check": dict(legacy)}}}
+        out = _migrate_config_1_2(cfg)
+        assert out["trackers"]["s"]["hr_check"] == legacy, legacy
+        assert "hr_check" not in out
+
+
+def test_migration_idempotent_and_no_version_stamp():
+    """v1→v2 迁移单测: 同输入重放同输出(幂等); schema_version 盖章由框架负责, 函数体不碰"""
+    cfg = {
+        "trackers":
+            {
+                "BTSchool":
+                    {
+                        "domains": ["pt.btschool.club"],
+                        "hr_check":
+                            {
+                                "mode": "partial",
+                                "hr_page_url": "https://pt.btschool.club/myhr.php",
+                                "refresh_interval": "6H",
+                            },
+                    },
+            },
+    }
+    once = _migrate_config_1_2(copy.deepcopy(cfg))
+    twice = _migrate_config_1_2(copy.deepcopy(once))
+    assert twice == once
+    assert "schema_version" not in twice
+
+
+def test_orphan_legacy_key_rejected(tmp_path):
+    """host 定位不到档案的旧键走完加载 -> 校验报废除错, 文案附已支持清单与新位置指路"""
+    with pytest.raises(ConfigError) as exc:
+        load_config(
+            _write(
+                tmp_path, {
+                    "trackers":
+                        {
+                            "s":
+                                {
+                                    **_site(),
+                                    "hr_check": {
+                                        "mode": "partial",
+                                        "hr_page_url": "https://pt.example.com/myhr.php",
+                                    },
+                                },
+                        },
+                }
+            )
         )
-    )
-    assert cfg.trackers["BTSchool"].hr_check.mode == "all"
+    text = str(exc.value)
+    assert "schema v2 废除" in text, text
+    assert "btschool" in text and "carpt" in text, "文案必须给出已支持清单"
+    assert "config.hr_check.sites" in text, "文案必须指路到新位置"
 
 
-def test_legacy_unsupported_site_errors():
-    """旧键启用但域名绑不上档案 -> 报未支持 + 已支持清单 + 迁移指路"""
+def test_legacy_key_with_v2_stamp_is_rejected():
+    """兜底分支: 手写 schema_version=2 却仍写旧键 -> 校验报废除错(正常流迁移链已把旧键迁走)"""
     errors = _validate(
         {
+            "schema_version": "2",
             "trackers":
                 {
                     "s":
@@ -529,7 +772,7 @@ def test_legacy_unsupported_site_errors():
                             **_site(),
                             "hr_check": {
                                 "mode": "partial",
-                                "hr_page_url": "https://pt.example.com/myhr.php"
+                                "hr_page_url": "https://pt.btschool.club/myhr.php",
                             },
                         },
                 },
@@ -537,25 +780,8 @@ def test_legacy_unsupported_site_errors():
     )
     text = "\n".join(errors)
     assert "config.trackers.s.hr_check" in text, text
+    assert "schema v2 废除" in text, text
     assert "btschool" in text and "carpt" in text, "文案必须给出已支持清单"
-
-
-def test_legacy_unknown_subkeys_accepted():
-    """旧键未知子键兼容接受(仅校 mode)—— 迁移语义: 值以档案为准, 不为新键集卡存量配置"""
-    assert _validate(
-        {
-            "trackers": {
-                "s": {
-                    **_site(),
-                    "hr_check": {
-                        "mode": "off",
-                        "bogus": "1",
-                        "adapter": "nexusphp"
-                    },
-                },
-            },
-        }
-    ) == []
 
 
 def test_unknown_keys_aggregated():

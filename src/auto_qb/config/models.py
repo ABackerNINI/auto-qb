@@ -122,15 +122,19 @@ class SiteHrCheckConfig:
     ❗mode != off 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None, check_hr_condition 恒 False,
       整站保护静默失效(配置期 fail-fast 拦下)。
 
-    配置源在 hr_check.sites.<档案 id>(mode + 微调项); adapter / hr_page_url / download_path /
-    page_param 四个页面事实由内置站点档案(config/site_presets.py)填充, 任何配置位置都不再接受。
-    loaders 按域名交集把档案条目派生填充到命中的 TrackerConfig.hr_check, 下游(service / channel /
-    parse / 锚点)只读本模型, 对配置搬家零感知。
+    配置源在 hr_check.sites.<档案 id>(mode + tracker 显式映射 + 微调项); adapter / hr_page_url /
+    download_path / page_param 四个页面事实由内置站点档案(config/site_presets.py)填充,
+    任何配置位置都不再接受。loaders 按「显式 tracker 直取 > 档案已知 announce 域默认映射查表」
+    (计划 26-09-27-1930 §3.3)把档案条目派生填充到命中的 TrackerConfig.hr_check, 下游(service /
+    channel / parse / 锚点)只读本模型, 对配置搬家零感知。
     """
 
     mode: str = "off"
+    # 显式映射目标: 配置源在 hr_check.sites.<id>.tracker, 填 trackers 下的条目名(字符串相等引用,
+    # 无匹配语义); 留空 = 用档案默认映射(已知 announce 域查表)。派生视图回填解析出的条目名。
+    tracker: str = ""
     adapter: str = "nexusphp"  # 由站点档案填充(配置不再接受)
-    hr_page_url: str = ""  # 由站点档案按命中域名推算(配置不再接受)
+    hr_page_url: str = ""  # 由站点档案按 web 域派生(配置不再接受)
     hr_page_scopes: List[str] = field(default_factory=lambda: ["A", "B", "C"])
     download_path: str = "/download.php?id={id}"  # 由站点档案填充(配置不再接受); passkey 由取数通道在页面上下文补
     page_param: str = "page"  # 由站点档案填充(配置不再接受)

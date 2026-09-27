@@ -151,14 +151,16 @@ def schema_payload() -> Dict[str, Any]:
                     list(STATE_ATTRS),
                 "deleted_allowed_actions":
                     list(DELETED_ALLOWED_ACTIONS),
-                # 内置 HR 站点档案(计划 26-09-27-1318): 「HR 在线核实」分区站点接入卡片的数据源 ——
-                # 卡片键集合来自这里(而非配置里已存在的键), 点选启用即写入 hr_check.sites.<id>
+                # 内置 HR 站点档案(计划 26-09-27-1318; 双域字段见 26-09-27-1930 §3.2): 「HR 在线核实」
+                # 分区站点接入卡片的数据源 —— 卡片键集合来自这里(而非配置里已存在的键), 点选启用即
+                # 写入 hr_check.sites.<id>; web_domain 只派生页面地址, tracker_domain 供默认映射展示
                 "hr_check_site_presets":
                     [
                         {
                             "id": p.preset_id,
                             "adapter": p.adapter,
-                            "domains": list(p.domains),
+                            "web_domain": p.web_domain,
+                            "tracker_domain": p.tracker_domain,
                             "page_path": p.page_path,
                             "download_path": p.download_path,
                             "page_param": p.page_param,

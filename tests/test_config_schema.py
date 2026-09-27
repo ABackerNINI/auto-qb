@@ -247,6 +247,7 @@ def test_schema_payload_is_complete():
         "triggers", "execute_once", "stop_if", "checking_modes", "hr_modes", "state_attrs", "hr_check_site_presets"
     ):
         assert payload["constants"][name], f"constants 缺少 {name}"
-    # 内置站点档案: 卡片渲染的数据源, 每条须含 id/adapter/domains(HR 分区绑定状态行依赖 domains)
+    # 内置站点档案: 卡片渲染的数据源, 每条须含 id/adapter/双域(26-09-27-1930: web_domain 派生
+    # 页面地址, tracker_domain 供映射制绑定状态行展示)
     presets = payload["constants"]["hr_check_site_presets"]
-    assert all({"id", "adapter", "domains"} <= set(p) for p in presets), presets
+    assert all({"id", "adapter", "web_domain", "tracker_domain"} <= set(p) for p in presets), presets

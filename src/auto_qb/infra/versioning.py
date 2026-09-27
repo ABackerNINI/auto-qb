@@ -27,7 +27,7 @@ VERSION_KEY = "schema_version"
 CURRENT_VERSIONS: Dict[str, int] = {
     "state": 3,  # <data_dir>/state.json 顶层 schema_version
     "hr_site": 1,  # hr/<site>.json 的 schema_version(hr/model.SCHEMA_VERSION 是它的别名)
-    "config": 1,  # config.schema_version(YAML 的 config: 块内, 不占根键)
+    "config": 2,  # config.schema_version(YAML 的 config: 块内, 不占根键); v2 = HR 站点绑定改映射制(迁移函数在 config/migrations.py)
 }
 
 

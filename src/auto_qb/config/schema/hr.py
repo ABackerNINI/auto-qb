@@ -67,10 +67,10 @@ HR_CHECK_CHANNEL_FIELDS: Tuple[Field, ...] = (
     ),
 )
 
-#: hr_check.sites.<档案 id> 条目字段(计划 26-09-27-1318 REV2): mode + 微调项。
-#: 页面事实(adapter/页面路径/下载路径/翻页参数)由内置站点档案(config/site_presets.py)填充,
-#: 不再是可配置项 —— 「站点接入」卡片的键来自 schema.constants.hr_check_site_presets,
-#: 卡片按这里的字段表渲染微调项。先于 HR_CHECK_FIELDS 定义(后者的 sites 字段引用本表)
+#: hr_check.sites.<档案 id> 条目字段(计划 26-09-27-1318 REV2; 绑定改映射制见 26-09-27-1930):
+#: mode + tracker 显式映射 + 微调项。页面事实(adapter/页面路径/下载路径/翻页参数)由内置站点档案
+#: (config/site_presets.py)填充, 不再是可配置项 —— 「站点接入」卡片的键来自
+#: schema.constants.hr_check_site_presets, 卡片按这里的字段表渲染微调项。先于 HR_CHECK_FIELDS 定义
 HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
     Field(
         "mode",
@@ -80,7 +80,16 @@ HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
         options=HR_CHECK_MODES,
         help="off = 该站不启用; partial = 在线核实(未核实按全局 unknown_policy); "
         "all = 站点侧驱动 + 未核实恒受管束(全站 HR)。❗mode != off 时该站点必须配 HR 规则段"
-        "(要求做种时长等) —— 绑定关系按站点域名与档案域名的交集自动完成, 无需手填引用",
+        "(要求做种时长等) —— 绑定按档案已知 announce 域自动映射完成, 未命中时用 tracker 显式指定",
+    ),
+    Field(
+        "tracker",
+        "绑定站点(显式指定)",
+        "str",
+        default="",
+        help="填「站点」分区里的站点条目名, 直接指定本档案映射到哪个站点配置; 留空 = 自动映射"
+        "(档案已知该站 announce 域, 在各站点 domains 里查表, 恰好一个命中即绑定)。"
+        "自动映射未命中/有歧义时保存会报错, 此时必须显式填写",
     ),
     Field(
         "hr_page_scopes",
