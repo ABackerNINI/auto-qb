@@ -139,8 +139,11 @@
 /* 选项区(.opt-pill 流式) */
 .add-dialog-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 .add-dialog-hint { margin-top: 7px; color: var(--fg-dim); font-size: 11.5px; }
-.add-dialog-hint-warn { color: var(--error); visibility: hidden; }
-.add-dialog-hint-warn.on { visibility: visible; }
+/* FX-21(2026-09-28 改口径): 警告行不再常驻占位 —— 未勾选时整行塌缩(max-height/margin-top 归零 + 透明),
+ * 勾选"跳过校验"后展开, 下方内容随过渡动画平滑下移。节点仍常驻: 高度过渡用真实文本量高, 不人工估高。 */
+.add-dialog-hint.add-dialog-hint-warn { color: var(--error); max-height: 0; opacity: 0; margin-top: 0; overflow: hidden;
+  transition: max-height .22s var(--ease), opacity .18s var(--ease), margin-top .22s var(--ease); }
+.add-dialog-hint.add-dialog-hint-warn.on { max-height: 4.5em; opacity: 1; margin-top: 7px; }
 
 /* ---------------- DND-01 全局拖拽落点提示 ---------------- */
 .add-drop-mask { position: fixed; inset: 0; z-index: 132; display: flex; align-items: center; justify-content: center;

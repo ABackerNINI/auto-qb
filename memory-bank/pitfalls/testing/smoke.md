@@ -1,12 +1,12 @@
 # 浏览器冒烟 (Windows 上可做, 长期能力)
 
-> 摘要: `ui_harness.py` + `ui_smoke.cjs` 是本仓库唯一能覆盖前端渲染的手段; 这里是它的环境坑与验证手法。
+> 摘要: `ui_harness.py` + `ui_smoke.cjs` 是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法。
 > 触发: 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, NODE_PATH, npx 缓存
 
 ### 能力与定位
 
 - **触发**: 改任何前端渲染逻辑。
-- **判别**: 能力 = `ui_harness.py`(真 `create_app`+`QbManager`+`FakeClient`+合成种子+命令泵)
+- **判别**: 能力 = `ui_harness.py`(真 create_app+QbManager+FakeClient+合成种子+命令泵)
   + `ui_smoke.cjs`(Playwright, 双 UI 断言 + 内置 A/B)。前端渲染**pytest 覆盖不到** ⇒ **改前端必做冒烟**。
 - **处置**: `ok`(看正向)与 `--expect-cmd error`(看回滚)两种模式都要跑。
 
@@ -23,17 +23,17 @@
 
 - **触发**: 起 `scripts/ui_harness.py` 后跑 `ui_smoke.cjs`, 报
   `冒烟整体执行 — page.waitForFunction: Timeout 30000ms exceeded`(或 `ERR_CONNECTION_REFUSED`)。
-- **判别**: 冒烟第一条断言是"`.group-row` 出现", 桩服务没服务到当前代码时它会超时, 症状与
-  "前端模板写错导致白屏"**完全同形**, 极易误判成自己的改动炸了。两种成因都实测到过:
-  ①**端口被占** —— uvicorn 只打一行 `[Errno 10048] …每个套接字地址只允许使用一次` 就退出,
-  而**旧进程仍在服务旧代码**(旧代码可能连 `/prism/` 路由都没有 ⇒ 页面是 `{"detail":"Not Found"}`,
-  `curl /api/...` 却仍 200 ⇒ 看着"服务是好的");
+- **判别**: 冒烟第一条断言是"`.group-row` 出现", 桩没服务到当前代码它就超时, 症状与
+  "前端模板写错导致白屏"**完全同形**, 极易误判成自己改炸了。两种成因都实测到过:
+  ①**端口被占** —— uvicorn 只打一行 `[Errno 10048] …地址只允许使用一次` 就退出,
+  而**旧进程仍在服务旧代码**(页面可能 `Not Found` 但 `curl /api/...` 仍 200 ⇒ 像"服务是好的");
   ②**后台进程随 shell 调用结束被杀** —— 用 `(cmd &)` 起的服务在本次 Bash 调用返回后就没了,
-  下一轮冒烟是 `ERR_CONNECTION_REFUSED`(而 `curl` 在**同一次调用内**是通的, 于是误以为服务活着)。
-- **处置**: ①起桩服务用**常驻后台任务**(`run_in_background`)—— `ui_harness.py` 是**长驻**的(uvicorn.run 阻塞),
+  下一轮冒烟 `ERR_CONNECTION_REFUSED`(而 `curl` 在**同一次调用内**是通的, 误以为服务活着)。
+- **处置**: ①起桩服务用**常驻后台任务**(`run_in_background`)—— `ui_harness.py` **长驻**(uvicorn.run 阻塞),
   别指望 `dev.harness` 会返回; 不要 `(cmd &)`;
-  ②起完**立刻看 harness 日志第一行**(它会打印实际监听地址与种子/组数), 端口被占就换端口;
-  ③怀疑服务不对时先 `curl <base>/prism/` —— 必须 200(只 `curl /api/...` 会被旧进程蒙过去)。
+  ②起完**立刻看 harness 日志首行**(打印监听地址与种子/组数), 端口被占就换端口;
+  ③怀疑服务不对先 `curl <base>/prism/` 必须 200(只 `curl /api/...` 会被旧进程蒙过去)。
+  复发: 1 —— 2026-09-28 多 clone 下 8099 被别会话残留 harness 占用, 换 `--port` 即过(路由没到本文件); 勿杀占用进程。
 
 ### 页面 hidden 态(VS Code 内置页 / 未 bringToFront)
 

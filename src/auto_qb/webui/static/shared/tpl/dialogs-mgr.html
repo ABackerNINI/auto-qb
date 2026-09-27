@@ -137,7 +137,8 @@
                 <span class="opt-dot"></span><span>自动种子管理</span>
               </button>
             </div>
-            <!-- FX-21: 警告行**常驻占位**(class on 控制可见性, 不摘除节点) -> 勾选前后窗口高度不变 -->
+            <!-- FX-21(2026-09-28 改口径): 警告行默认整行塌缩, 勾选"跳过校验"后带过渡动画展开(下方内容平滑下移);
+                 节点仍常驻(class on 控制塌缩/展开, 不摘除), 高度过渡用真实文本量高 -->
             <div class="add-dialog-hint add-dialog-hint-warn" :class="{ on: addSkipCheck }" :aria-hidden="!addSkipCheck">
               已勾选跳过校验: 添加后 auto-qb 的校验策略将被跳过, 可能损坏辅种
             </div>

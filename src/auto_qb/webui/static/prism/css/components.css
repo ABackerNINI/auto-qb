@@ -246,7 +246,7 @@
   background: var(--bg-row); color: var(--fg); font-size: 13.5px; margin-bottom: 18px; }
 .modal-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 /* (.modal-check 勾选框族已随 FX-24 切胶囊退役删除 —— 统一模板零引用, 26-09-27 死类清理) */
-.modal-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
 /* 待删目标信息区(值可复制)
  * R10-13: 长文本口径统一为"**单行省略 + title 全文 + 复制按钮**" —— 旧写法 overflow-wrap:
  * anywhere 会把超长 tracker URL / hash 换成很多行, 把弹窗顶高、且右边缘参差不齐。
@@ -451,10 +451,11 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* FX-20: 选项区改胶囊容器的横排流式布局(与原 .add-dialog-checks 同位) */
 .add-dialog-opts { display: flex; flex-wrap: wrap; gap: 8px; }
 .add-dialog-hint { margin-top: 7px; color: var(--fg-dim); font-size: 11.5px; }
-/* FX-21: 警告行**常驻占位** —— 勾选"跳过校验"前后窗口高度不变。
- * 用 visibility(而非 opacity)是为了让占位高度由真实文本决定, 不依赖人工估高。 */
-.add-dialog-hint-warn { color: var(--error); visibility: hidden; }
-.add-dialog-hint-warn.on { visibility: visible; }
+/* FX-21(2026-09-28 改口径): 警告行不再常驻占位 —— 未勾选时整行塌缩(max-height/margin-top 归零 + 透明),
+ * 勾选"跳过校验"后展开, 下方内容随过渡动画平滑下移。节点仍常驻: 高度过渡用真实文本量高, 不人工估高。 */
+.add-dialog-hint.add-dialog-hint-warn { color: var(--error); max-height: 0; opacity: 0; margin-top: 0; overflow: hidden;
+  transition: max-height .22s var(--ease), opacity .18s var(--ease), margin-top .22s var(--ease); }
+.add-dialog-hint.add-dialog-hint-warn.on { max-height: 4.5em; opacity: 1; margin-top: 7px; }
 
 /* ---------------- DND-01 全局拖拽落点提示(遮罩在 index.html 尾部) ----------------
  * 只做"这里是落点"的视觉提示: pointer-events:none 不接事件(dragenter/over/leave/drop

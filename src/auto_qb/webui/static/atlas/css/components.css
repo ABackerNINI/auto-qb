@@ -560,7 +560,7 @@
   background: var(--bg); color: var(--fg); font-size: 13.5px; margin-bottom: 18px; }
 .modal-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--ring); }
 /* 确认框内的额外选项: FX-24 起改 .opt-pill 切换胶囊(单一语义模板统一件, 勾选框族已退役) */
-.modal-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
 
 /* ============ 图形化配置编辑器(设置页) ============ */
 /* 说明: 编辑器令牌已并入顶部全局 :root(--radius/--radius-sm/--ring), 此处不再重复声明, 避免两处调色不一致。 */

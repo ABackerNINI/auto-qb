@@ -466,7 +466,7 @@
 .modal-input:focus { outline: none; border-color: var(--accent);
   box-shadow: inset 0 0 0 1px var(--accent), 0 0 22px -6px color-mix(in srgb, var(--accent) 80%, transparent); }
 /* 确认框内的额外选项: .opt-pill 切换胶囊(统一件) */
-.modal-actions { display: flex; justify-content: flex-end; gap: 9px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
 
 /* ============ 图形化配置编辑器(设置页; 设置页版式由 shared/console_hub.css 承担) ============ */
 .ce-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px;
