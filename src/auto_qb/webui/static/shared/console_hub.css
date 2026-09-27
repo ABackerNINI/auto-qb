@@ -430,6 +430,13 @@
 }
 .hb-ask:hover { color: var(--accent-hi); border-color: var(--tone); background: var(--accent-soft); box-shadow: var(--glow-soft); }
 .hb-ask.on { color: var(--accent-hi); border-color: var(--tone); background: var(--accent-soft); box-shadow: var(--glow-soft); }
+/* 语调变体(2026-09-28 用户报「?」配色与选项不一致): 危险/重要选项的行内「?」沿用选项的语义色
+   —— 静息描边走 tone-line(与 .hb-input.danger 同一配方), hover / 打开时描边 + 发光整组转语义色。
+   语调类由模板经 ce.hubToneOf(item) 挂到按钮上(与控件同一来源), 非语义行不加类保持中性灰 */
+.hb-ask.important { --tone: var(--warn); border-color: var(--tone-line); }
+.hb-ask.danger { --tone: var(--error); border-color: var(--tone-line); }
+.hb-ask.important:hover, .hb-ask.important.on { color: var(--warn); background: var(--warn-soft); }
+.hb-ask.danger:hover, .hb-ask.danger.on { color: var(--error); background: var(--error-soft); }
 
 /* 搜索命中行(整行可点, 跳到该配置项所在的分区) */
 .hb-row-hit {
@@ -732,7 +739,14 @@
    限速: 阶梯图 + 档位
    ========================================================================== */
 .hb-curve { background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 12px; overflow: hidden; }
-.hb-curve-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); }
+/* 标题栏整栏可点折叠(2026-09-28): 可点性直接写在 .hb-curve-hd 上 —— 复用 .hb-sub-toggle 会漏
+   (既有选择器是 .hb-blk-hd.hb-sub-toggle, 曲线标题栏不带 hb-blk-hd, 命中不了) */
+.hb-curve-hd { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface-1); cursor: pointer; user-select: none; }
+.hb-curve-hd:hover { background: var(--surface-2); }
+/* 折叠状态图标: 收起 = 箭头朝右(-90°), 展开 = 朝下(0°), 随 .filter-caret 同一套旋转约定 */
+.hb-curve-caret { color: var(--fg-dim); transition: transform var(--dur) var(--ease); flex: none; }
+.hb-curve-caret.open { transform: rotate(0); }
+.hb-curve-caret:not(.open) { transform: rotate(-90deg); }
 .hb-curve-bd { padding: 13px 14px; }
 .hb-chart { position: relative; margin-bottom: 4px; }
 /* svg 尺寸由各主题 .ce-chart-svg(width:100% + aspect-ratio 560/210)统一决定;
@@ -754,7 +768,10 @@
 .hb-tier .t-arrow { text-align: center; color: var(--accent-hi); font: 600 14px/1 var(--hb-font-mono); }
 .hb-tier .hb-input { width: 100%; min-width: 0; padding: 6px 10px; font-size: 12.5px; }
 .hb-tier .hb-btn.ghost { padding: 2px 6px; font-size: 12px; }
-.hb-tier-add { margin-top: 9px; }
+/* margin-bottom 撑开「添加档位」与下一组「下载档位」标题的间距(2026-09-28 用户报过近:
+   原先按钮下缘到下一组标题只隔标题的 margin-top 6px, 视觉上挤成一团); 末组后面接的是
+   读法说明 p.hb-hp(margin-top 10px), 间距被抬到 18px, 可接受 */
+.hb-tier-add { margin-top: 9px; margin-bottom: 12px; }
 
 /* ==========================================================================
    底部动作条: 让位给底部状态栏(--statusbar-h)

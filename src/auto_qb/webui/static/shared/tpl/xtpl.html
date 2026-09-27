@@ -132,7 +132,7 @@
           </label>
         </div>
 
-        <button class="hb-ask" :class="{ on: ce.hub.helpKey === ce.hubKey(path) }"
+        <button class="hb-ask" :class="[ce.hubToneOf(item), { on: ce.hub.helpKey === ce.hubKey(path) }]"
                 :aria-label="f.label + ' 说明'" @click.stop="ce.hubAsk(item, $event)">?</button>
       </div>
     </div>

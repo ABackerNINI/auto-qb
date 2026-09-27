@@ -20,17 +20,23 @@
                   </div>
 
                   <div v-for="(c, i) in cfgCurveList()" :key="i" class="hb-curve hb-cut">
-                    <div class="hb-curve-hd">
+                    <!-- 折叠交互(2026-09-28): 整条标题栏可点(不再单设「展开/收起」按钮), 箭头图标指示状态;
+                         周期输入框与删除按钮 @click.stop, 避免误触发折叠 -->
+                    <div class="hb-curve-hd" role="button" tabindex="0"
+                         :title="cfgCurveOpen(i) ? '点击收起' : '点击展开'"
+                         @click="cfgCurveToggle(i)" @keyup.enter="cfgCurveToggle(i)">
+                      <svg class="ico ico-sm hb-curve-caret" :class="{ open: cfgCurveOpen(i) }" viewBox="0 0 16 16"
+                           aria-hidden="true"><use href="#i-chevron"></use></svg>
                       <span class="bh-t">第 {{ i + 1 }} 条曲线</span>
                       <span class="hb-badge on">{{ cfgCurvePeriod(i).period || '—' }}</span>
                       <input class="hb-input hb-mono" style="width:110px" :value="cfgCurvePeriod(i).period || ''"
                              placeholder="DAY / MONTH / 7D"
+                             @click.stop
                              @input="cfgSetPath(cfgCurvePeriodPath(i).concat(['period']), $event.target.value)">
                       <span class="hb-dim">上传 {{ cfgCurvePoints(i, 'upload_curve').length }} 档 ·
                         下载 {{ cfgCurvePoints(i, 'download_curve').length }} 档</span>
                       <span style="margin-left:auto">
-                        <button class="hb-btn ghost sm" @click="cfgCurveToggle(i)">{{ cfgCurveOpen(i) ? '收起' : '展开' }}</button>
-                        <button class="hb-btn danger sm" @click="cfgCurveRemovePeriod(i)">删除曲线</button>
+                        <button class="hb-btn danger sm" @click.stop="cfgCurveRemovePeriod(i)">删除曲线</button>
                       </span>
                     </div>
                     <div v-if="cfgCurveOpen(i)" class="hb-curve-bd">

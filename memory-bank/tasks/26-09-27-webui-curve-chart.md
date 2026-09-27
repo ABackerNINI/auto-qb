@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-09-27
-**Updated:** 2026-09-27
+**Updated:** 2026-09-28
 **Summary:** 用户报预览图三宗罪: 各档等宽不反映真实流量长度、悬停映射错位、图宽度不对。重构 `_buildCurveChart`: X 轴改**按各档实际流量长度比例分段**(取代 SPD-02 等宽), 末档与后端语义一致(`curves.py` X ≥ 末档下限后一直沿用末档速度, 末档阈值不改变速度函数)显示为 **∞ 区且占宽 ≤30%**(仅 1 档时独占全宽), 有限档分摊其余 70%; 末档阈值不再出现在几何里(无刻度/参考线)。悬停换算按 SVG 实际渲染缩放(letterbox 安全), tooltip 用真实像素定位; 根因之一是共享 `console_hub.css` 残留 `height:128px` 以特异性压过主题 aspect-ratio 把图压扁 —— 已删。流程按用户要求「先做模板调整好再应用」: 独立模板 5 用例浏览器实测全部验收点后, 再移植进真实代码并用真实 config_editor.js + vendor Vue 集成冒烟(含故意压扁容器的悬停回归用例)。test.full 1752 passed + 3 skipped / 91%, 与前基线持平零回归。未提交(等用户指令)。
 **Topics:** webui-curve-chart
 **Refs:** resources/curve-chart-template.html, resources/curve-chart-smoke.html
@@ -38,8 +38,12 @@
 | 集成冒烟(真实 JS + Vue, 压扁回归用例) | Done | 旧算法会答错的探针点新代码答对 |
 | test.full + 基线切片 + kb 回写 | Done | 1752 passed 零回归; 坑入 pitfalls/web-ui/svg-chart-mapping.md |
 | 真机设置页肉眼走查 | Open | 冒烟页已覆盖真实 JS 路径; 用户下次开设置页顺眼一扫即可 |
+| 曲线标题栏整栏可点折叠 + 图标指示(09-28) | Done | 删「收起/展开」钮; 周期输入框/删除钮 @click.stop; `#i-chevron` 旋转指示; 光标修进 `.hb-curve-hd` |
+| 「添加档位」与「下载档位」间距(09-28) | Done | 6px → 18px(`.hb-tier-add` margin-bottom 12px), 浏览器实测 |
+| 设置页行内「?」按钮语调色对齐选项(09-28) | Done | xtpl 挂 `hubToneOf` 类 + console_hub.css 两变体; danger 实测边框/发光/底/字全红 |
 
 ## 进度日志
 
 - 2026-09-27 21:38 全部落地: 模板实测 → 应用(6 文件) → 集成冒烟 → test.quick(1752 passed) → test.full(与上基线持平) → 收尾回写。未提交, 等用户「提交」指令。
 - 2026-09-27 22:05 按用户反馈**取消 ∞ 水印**(大号半透明 ∞ 装饰字): 模板/冒烟页/`settings-detail.html` 元素、`_buildCurveChart` 的 infMark 字段、三主题 `.ce-chart-inf-mark` 规则全部撤除(死类连 CSS 一起清); ∞ 语义仍由 X 轴右缘刻度 + 图例「末档 ∞」表达。复验(浏览器 infMarks=0 + 渲染正常)与 test.quick 全绿。
+- 2026-09-28 05:49 用户两条新反馈落地(同专题追加): ①曲线**标题栏整栏可点**折叠(删「收起/展开」独立钮), 状态由 `#i-chevron` 旋转指示(收起朝右/展开朝下, 160ms 过渡); 周期输入框与「删除曲线」`@click.stop` 防误触, 支持 Tab+Enter。坑: 可点手型光标既有选择器 `.hb-blk-hd.hb-sub-toggle` 命中不了 `.hb-curve-hd` —— `cursor` 直接写进 `.hb-curve-hd` 并实测。②「添加档位」→「下载档位」间距 6px → 18px(`.hb-tier-add` margin-bottom:12px)。③同轮附带: 设置页行内「?」按钮语调色对齐选项 —— `xtpl.html` 叶子行「?」挂 `hubToneOf(item)` 类, `console_hub.css` 加 `.hb-ask.important/.danger` 变体(静息描边 `--tone-line` 与输入框同配方, hover/打开整组转语义色)。验证: dev.harness 桩 + 真浏览器逐项量测(折叠/图标/键盘/间距像素/?「on」态全红), test.full 见基线 26-09-28。
