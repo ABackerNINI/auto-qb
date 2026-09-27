@@ -29,6 +29,7 @@
 
 ## Done
 
+- [26-09-27-2252] [计划 · config schema 迁移物化重构: 加载即迁移 + 版本号备份 + 立即落盘](26-09-27-2252-plan-config-migration-materialize.html) — `config-hr-binding-mapping`
 - [26-09-27-1930] [计划 · HR 在线核实绑定改映射制: 档案双域硬编码 + 已知映射零配置 + 旧键迁移 v1→v2](26-09-27-1930-plan-hr-binding-tracker-mapping.html) — `hr-binding-tracker-mapping`
 - [26-09-27-1815] [HR 在线核实 · 审计修复 + v2 方案实施 · 修改计划 · auto-qb](26-09-27-1815-plan-hr-verify-audit-fixes.html) — `backend-partial-hr-verify`
 - [26-09-27-1438] [计划 · 字段变化触发时机 on_torrent_field_changed 与维护任务 tags 迁移](26-09-27-1438-plan-field-changed-trigger.html) — `field-changed-trigger`

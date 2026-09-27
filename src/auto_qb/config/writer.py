@@ -3,6 +3,10 @@
 职责与边界(与 memory-bank/conventions.md 的约定一致):
 - **校验唯一入口仍是 `load_config`**(先把树落到临时文件, 走与程序启动完全相同的路径),
   本模块不自建任何正确性规则
+- **写回版本闸门**(计划 26-09-27-2252): 提交树 schema 版本低于当前(含缺失)直接拒绝 ——
+  多为程序升级前打开的页签, 指路刷新; 迁移修补只发生在启动物化单点, 保存路径不做迁移
+- **启动物化单点**: `materialize_schema_migration` 在 run() 开头把落后磁盘改写到当前版本
+  (版本号备份先行 -> 校验复核 -> 原子写), 幂等、常态零 IO(2026-09-27 生产事故的两道防线)
 - **R 级字段(state_file/data_dir)不可热切换**: 树中对应值回退为磁盘旧值(旧行为不变),
   其余级别字段照常写入并热重载
 - **ruamel round-trip 写盘**: 已存在键的注释保留; 列表项与新增键无注释(设计取舍, 见计划)
@@ -21,9 +25,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
-from ..infra.versioning import CURRENT_VERSIONS
+from ..infra.errors import SchemaVersionError
+from ..infra.versioning import CURRENT_VERSIONS, VERSION_KEY, detect_version
+from .errors import ConfigError
 from .impact import LEVEL_R, ConfigChange, diff_config_impacts
-from .loaders import load_config
+from .loaders import load_config, migrate_config_schema, normalize_schema_version
 
 # 树根键(与 validate_config 的"根节点仅允许 config"一致)
 ROOT_KEY = "config"
@@ -143,11 +149,66 @@ def preview_tree(config_path: str, tree: Dict[str, Any], old_config) -> str:
     return buf.getvalue()
 
 
+def materialize_schema_migration(config_path: str, backup_dir: str, *, write: bool = True) -> Tuple[str, str]:
+    """启动物化单点(计划 26-09-27-2252): 磁盘版本落后则迁移 -> 校验复核 -> 版本号备份 -> 原子写回
+
+    QbManager.run() 开头调用(单实例锁内、日志就绪后、先于 WebUI 对外服务): 磁盘恒被改写到
+    当前版本, WebUI 编辑器任何时刻看到的都是当前结构, 「保存时才发现迁移问题」不复存在。
+    已是当前版本时零 IO 直接返回("", "") —— 幂等, 常态零开销。write=False 供 dry-run 探测:
+    只迁移内存副本报告 desc, 不校验不备份不写盘。
+
+    迁移只认磁盘真实状态(自己 read_tree 重读, 不信任调用方内存副本 —— 两读之间文件被手改
+    也不至于写错); 落盘前 _validate_tree 复核(写什么校验什么), 不过则抛 ConfigError 且磁盘
+    一字未动。文件不存在(配置由调用方直接注入的测试/非常规构造)无事可做, 原样返回 ("", "")。
+    返回 (迁移描述, 备份路径); 无迁移 = ("", "")。
+    """
+    if not os.path.exists(config_path):
+        return "", ""
+    tree = read_tree(config_path)
+    cfg = tree.get(ROOT_KEY)
+    if not isinstance(cfg, dict):
+        return "", ""
+    normalize_schema_version(cfg)  # read_tree 标量全为字符串, 先归一才能 detect
+    try:
+        from_version = detect_version("config", cfg)
+    except SchemaVersionError as e:
+        raise ConfigError(f"配置 schema 版本问题({config_path}): {e}") from e
+    desc = migrate_config_schema(tree, config_path)
+    if not desc:
+        return "", ""
+    if not write:
+        return desc, ""
+    _validate_tree(tree)  # 写什么校验什么: 迁移结果复核, 不过则抛错且磁盘未动
+    backup_path = backup_versioned(config_path, backup_dir, from_version)
+    _dump_roundtrip(config_path, tree)
+    return desc, backup_path
+
+
+def backup_versioned(config_path: str, backup_dir: str, from_version: int) -> str:
+    """迁移前原样的版本号备份(计划 26-09-27-2252): <backup_dir>/<名>.v<m>.bak, 返回备份路径
+
+    与每次保存覆盖写的 <名>.bak 不同名 —— 迁移备份不会被其他操作覆盖。同版本重入(如用户把
+    备份恢复回去再启)覆盖写, 内容仍是「本次迁移前原样」, 刻意不做「已存在则跳过」—— 那会让
+    陈旧备份冒充本次状态。备份本身走 atomic_write: 中断不留半截文件。
+    """
+    backup_path = os.path.join(backup_dir, f"{os.path.basename(config_path)}.v{from_version}.bak")
+    parent = os.path.dirname(backup_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(config_path, "r", encoding="utf-8") as src:
+        content = src.read()
+    from ..infra import utils
+
+    utils.atomic_write(backup_path, lambda f: f.write(content))
+    return backup_path
+
+
 def _prepare(config_path: str, tree: Dict[str, Any], old_config) -> Tuple[List[ConfigChange], List[str]]:
-    """写盘/预览的公共前置: 结构自检 -> 校验 -> R 级字段回退(就地修改 tree)"""
+    """写盘/预览的公共前置: 结构自检 -> 版本闸门 -> 校验 -> R 级字段回退(就地修改 tree)"""
     if not isinstance(tree, dict) or not isinstance(tree.get(ROOT_KEY), dict):
         raise ValueError(f"配置树必须是含 {ROOT_KEY} 段的对象")
 
+    _reject_stale_version(tree)  # 旧版树直接拒绝(页签过期); 迁移修补只发生在启动物化单点
     new_config = _validate_tree(tree)
     old_tree = read_tree(config_path)
     changes = diff_config_impacts(old_config, new_config)
@@ -155,6 +216,36 @@ def _prepare(config_path: str, tree: Dict[str, Any], old_config) -> Tuple[List[C
     if restart_required:
         _fallback_restart_fields(tree, old_tree, changes)
     return changes, restart_required
+
+
+def _reject_stale_version(tree: Dict[str, Any]) -> None:
+    """写回版本闸门(计划 26-09-27-2252 §10 D-C 用户裁决): 提交树版本低于当前 = 直接拒绝
+
+    启动物化后磁盘恒为当前版本, GET 发出的树必带当前版本章; 提交树版本落后只可能是程序升级
+    前打开的页签(或手造数据)。**不做迁移修补** —— 静默把用户没见过的结构写进磁盘等于替用户
+    做主; 拒绝并指路刷新, 未保存改动由用户自行取舍。版本缺失按 v1 存量口径同样拒绝(物化后
+    磁盘必带版本章, 缺失即旧树/手造); 非整数形状与比程序新的版本不在此拦 —— 交给
+    _validate_tree 走 load_config 报精确错(「必须是整数」/「高于本程序支持」)。
+    """
+    cfg = tree.get(ROOT_KEY)
+    raw = cfg.get(VERSION_KEY) if isinstance(cfg, dict) else None
+    current = CURRENT_VERSIONS["config"]
+    if raw is None:
+        raise ConfigError(
+            f"提交的配置树缺少 schema_version(按 v1 存量口径, 当前程序为 v{current}) —— "
+            "多为浏览器页签在程序升级前打开所致, 请刷新配置页重新加载后再保存"
+            "(刷新会丢弃页面上未保存的改动, 需要保留请先自行复制)"
+        )
+    try:
+        version = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return  # 非整数形状: 交给校验层报精确错
+    if version < current:
+        raise ConfigError(
+            f"提交的配置树 schema 版本(v{version})低于当前程序(v{current}) —— "
+            "多为浏览器页签在程序升级前打开所致, 请刷新配置页重新加载后再保存"
+            "(刷新会丢弃页面上未保存的改动, 需要保留请先自行复制)"
+        )
 
 
 def _validate_tree(tree: Dict[str, Any]) -> Any:

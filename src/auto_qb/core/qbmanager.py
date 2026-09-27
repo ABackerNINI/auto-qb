@@ -29,6 +29,7 @@ from typing import List, Optional
 from qbittorrentapi import APIConnectionError, Client
 
 from ..config import Config, WebConfig, load_config
+from ..config.writer import materialize_schema_migration
 from ..infra import file_access
 from ..infra.errors import AutoQbError
 from ..infra.locking import SingleInstanceLock
@@ -346,6 +347,14 @@ class QbManager(
           据此判失败; 容器里配合 restart 策略由 Docker 自带退避接管, qB 恢复后下一轮自动接上)
         """
         self._pause_event = pause_event
+        # 启动物化(计划 26-09-27-2252): 磁盘版本落后则「版本号备份 -> 迁移 -> 校验 -> 原子写回」。
+        # 放 run() 不进 __init__: 锁已持有 + 日志已就绪 + dry_run 已知三个前提在此齐备, 且先于
+        # WebUI 对外服务 —— 与保存请求无并发窗口。dry-run 只探测提示不落盘(与 state 迁移同口径)。
+        desc, backup = materialize_schema_migration(self.config_path, self.config.data_dir, write=not dry_run)
+        if desc and dry_run:
+            logger.info(f"磁盘配置 schema 落后({desc}), dry-run 仅内存生效不落盘")
+        elif desc:
+            logger.info(f"配置 schema 已迁移 {desc} 并落盘(迁移前备份: {backup})")
         logger.info(f"启动 qB 管理器: 主循环 {self.config.main_tick}s, 默认任务间隔 {self.config.interval}s")
         # 主动通知: 启用后全项目 WARNING/ERROR 日志推送平台原生通知(notify.py);
         # dry_run 判定在调用点(项目约定: dry-run 只打日志), 内部检查 enabled, 未启用返回 None

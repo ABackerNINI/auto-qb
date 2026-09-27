@@ -15,7 +15,7 @@
 | `interval` | `"60s"` | 默认任务间隔 (maintenance/全局任务), 从上一轮结束起算 |
 | `data_dir` | `"auto-qb-data"` | 运行时数据主目录; state/锁/日志/跳检备份默认均派生其下 (显式配 `state_file`/`log.file` 优先; 留空走默认) |
 | `state_file` | `<data_dir>/state.json` | 状态文件; 未显式配置时由 data_dir 派生 (显式配置优先), 须可写 |
-| `schema_version` | `1` | 配置文件格式版本标记(升级链, 计划 26-09-26-0506): **文件格式标记, 非行为配置** —— 不进 `Config` dataclass; 加载时缺失=v1, 落后则沿链迁移(运行期不写回, 下次 WebUI 保存时由 writer 盖章), 高于程序支持报 ConfigError; WebUI 保存/`--export-yaml` 自动盖章, 用户手编无需写 |
+| `schema_version` | `2` | 配置文件格式版本标记(升级链, 计划 26-09-26-0506): **文件格式标记, 非行为配置** —— 不进 `Config` dataclass; 加载时缺失=v1, 落后则沿链迁移(内存); 磁盘由 `run()` 开头的启动物化单点改写到当前版本(版本号备份 `<名>.v<m>.bak` 后原子写, 计划 26-09-27-2252), WebUI 保存不做迁移 —— 提交树版本低于当前直接 400 指路刷新, 高于程序支持报 ConfigError; WebUI 保存/`--export-yaml` 自动盖章, 用户手编无需写 |
 | `log` | | `{file, level, max_bytes, format}`; `file` 未配置时默认 `<data_dir>/logs/auto-qb.log` 落盘 (显式配置优先; 留空/空串=未配置=默认落盘, 无法用空串表达仅控制台); RotatingFileHandler 5 备份 |
 | `remove_similar_tags` | false | 全局默认, 站点可覆盖 |
 | `maintenance_tag_mode` | `"interval"` | **维护 tags 节奏** (计划 26-09-27-1438): 站点 tags 维护(`_add_tags`/`_remove_tags`/`_remove_similar_tags`)的执行时机。`interval` = 每个内置任务间隔执行(默认 = 迁移前行为); `on_change` = 种子添加时执行一次, 之后仅当该种子 tags 被**程序之外**改动时重检(登记消费一次; 热重载 L2 后首轮全量收敛), 无变化轮跳过 —— 每轮每种子省一次 qB 读写往返。HR 标签/分类部分**不受影响**, 恒按周期执行(达标状态随时间演化, tags 变化捕捉不到)。取值限 `interval\|on_change`; 未列入 SECTION_LEVELS → L2 保守重建 |

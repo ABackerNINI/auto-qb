@@ -7,7 +7,7 @@
 > [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) ·
 > [issues/_index.md](issues/_index.md) · [tasks/_index.md](tasks/_index.md)。
 
-## 跨形态专题 (≥2 件) —— 35 个
+## 跨形态专题 (≥2 件) —— 36 个
 
 - **webui-optimistic-ui** (8) — issue [26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html) `Done` · issue [26-09-19-1959](issues/26-09-19-1959-bug-webui-show-row-no-pending.html) `Done` · issue [26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html) `Done` · issue [26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) `Done` · 计划 [26-09-19-2245](plans/26-09-19-2245-webui-optimistic-settle-plan.html) `Done` · 计划 [26-09-20-2139](plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html) `Done` · 报告 [26-09-20-1806](reports/26-09-20-1806-optimistic-ui-half-fix-report.html) `Done` · 报告 [26-09-20-2131](reports/26-09-20-2131-optimistic-ui-event-driven-feasibility.html) `Done`
 - **backend-partial-hr-verify** (5) — 计划 [26-09-22-2204](plans/26-09-22-2204-partial-hr-site-verify-plan.html) `Open` · 计划 [26-09-26-0031](plans/26-09-26-0031-plan-hr-ext-options-style.html) `In Progress` · 计划 [26-09-27-1815](plans/26-09-27-1815-plan-hr-verify-audit-fixes.html) `Done` · 报告 [26-09-26-1628](reports/26-09-26-1628-report-hr-online-verify-audit.html) `Done` · 档案 [26-09-22](tasks/26-09-22-backend-partial-hr-verify.md) `Open`
@@ -29,6 +29,7 @@
 - **backend-schema-version-chain** (2) — 计划 [26-09-26-0506](plans/26-09-26-0506-plan-schema-version-chain.html) `Done` · 档案 [26-09-26](tasks/26-09-26-schema-version-chain.md) `Done`
 - **backend-torrentrecord-fields** (2) — 计划 [26-09-15-1302](plans/26-09-15-1302-record-full-fields-plan.html) `Done` · 档案 [26-09-15](tasks/26-09-15-backend-torrentrecord-fields.md) `Done`
 - **baseline-slice-per-file** (2) — 计划 [26-09-26-0529](plans/26-09-26-0529-plan-baseline-slice-per-file.html) `Done` · 档案 [26-09-26](tasks/26-09-26-memory-bank-baseline-slice-per-file.md) `Done`
+- **config-hr-binding-mapping** (2) — 计划 [2026-09-27](plans/26-09-27-2252-plan-config-migration-materialize.html) `Done` · 档案 [26-09-27](tasks/26-09-27-config-hr-binding-mapping.md) `Done`
 - **deps-env-modernization** (2) — 报告 [26-09-15-1150](reports/26-09-15-1150-report-dependency-lock.html) `Done` · 档案 [26-09-15](tasks/26-09-15-deps-env-modernization.md) `Done`
 - **memory-bank-activecontext-conflict** (2) — 计划 [26-09-22-2350](plans/26-09-22-2350-activecontext-conflict-plan.html) `In Progress` · 档案 [26-09-22](tasks/26-09-22-memory-bank-activecontext-conflict.md) `In Progress`
 - **memory-bank-dir-refactor** (2) — 计划 [26-09-22-1248](plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) `Done` · 档案 [26-09-22](tasks/26-09-22-memory-bank-dir-refactor.md) `In Progress`
@@ -45,11 +46,11 @@
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) `Done` · issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) `Open`
 - **webui-search-query-syntax** (2) — 报告 [26-09-26-1918](reports/26-09-26-1918-report-webui-search-query-syntax.html) `Done` · 档案 [26-09-26](tasks/26-09-26-webui-search-query-syntax.md) `Done`
 
-## 单件专题 (仅登记, 79 个)
+## 单件专题 (仅登记, 78 个)
 
 - appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commands-shipflow-v2 · commands-unified-command-surface
-- commands-unified-surface · commit-gate-auto-run · config-hr-binding-mapping · config-value-range-validation · cross-group-file-conflict
-- dependency-lock · docs-implementation-audit · docs-readme-modules-drift · docs-restructure · duplicate-test-name-shadowed-guard
+- commands-unified-surface · commit-gate-auto-run · config-value-range-validation · cross-group-file-conflict · dependency-lock
+- docs-implementation-audit · docs-readme-modules-drift · docs-restructure · duplicate-test-name-shadowed-guard
 - fakeconfig-shared-state-order-pollution · field-changed-trigger · full-checking-verdict · git-ship-skill-proposal
 - hot-reload-l2-state-rollback-fix · hr-binding-tracker-mapping · hr-check-site-presets · issue-typing · log-level-notify-error
 - memory-bank-migration · memory-bank-task-id · memory-bank-trigger-fix · my-commit-flow-merge-first-writeback · plan-shipflow-v2-missing-meta

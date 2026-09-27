@@ -20,16 +20,24 @@
 - test_preview_tree_does_not_create_backup: 预览不产生任何备份文件
 - test_mask_tree_hides_sensitive_scalars: 敏感键(键名含 password/passkey/token)的非空标量被掩码; 空值与普通键不受影响; 原树不被就地修改
 - test_unmask_tree_restores_from_disk: 提交树里的掩码哨兵按磁盘旧值还原 —— 前端"未改密码"原样保存不会把密码写成占位串
+- test_write_tree_rejects_stale_version_tree: 版本闸门(计划 26-09-27-2252 用户裁决): 提交树版本低于当前(含缺失)直接拒绝, 磁盘一字不动
+- test_write_tree_rejects_v2_tree_with_legacy_key: 已盖 v2 章仍带旧键(手改/事故残留) -> 报废除错且磁盘一字不动(无常驻兼容层)
+- test_preview_tree_rejects_stale_version_tree: 预览同口径被闸门拦截
+- test_materialize_migrates_and_backups: 启动物化: 版本号备份(迁移前原样) + 磁盘落当前版本新结构 + 返回 desc 与备份路径
+- test_materialize_idempotent_and_noop: 已是当前版本零 IO; 二次调用幂等, 不产生新备份
+- test_materialize_invalid_aborts_without_touching_disk: 迁移后校验不过(旧键定位不到档案) -> 不备份不落盘
+- test_materialize_dry_run_probe: write=False(dry-run 探测)只报 desc, 不校验不备份不落盘
 """
+import copy
 import os
 
 import pytest
 
 from auto_qb.config.errors import ConfigError
 from auto_qb.config.loaders import load_config
-from auto_qb.config.writer import preview_tree, read_tree, write_tree
+from auto_qb.config.writer import materialize_schema_migration, preview_tree, read_tree, write_tree
 
-BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
+BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 2\n"
 
 
 def _make(tmp_path, text: str) -> str:
@@ -102,6 +110,7 @@ def test_write_tree_preserves_comments_and_plain_scalars(tmp_path):
     """round-trip 写盘: 已有键注释保留, 未修改标量保持原书写风格(数字/布尔不加引号)"""
     path = _make(
         tmp_path, "config:\n"
+        "  schema_version: 2\n"
         "  # 连接设置\n"
         "  qbittorrent:\n"
         "    host: h\n"
@@ -291,7 +300,7 @@ def test_preview_tree_does_not_create_backup(tmp_path):
 
 def test_preview_tree_does_not_touch_disk(tmp_path):
     """预览不落盘; 内容含将写入的新值与已有注释"""
-    path = _make(tmp_path, "config:\n  # 注释\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+    path = _make(tmp_path, "config:\n  schema_version: 2\n  # 注释\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
     before = _text(path)
     old = load_config(path)
     tree = read_tree(path)
@@ -385,3 +394,134 @@ def test_preview_tree_stamps_schema_version(tmp_path):
     tree = read_tree(path)
     text = preview_tree(path, tree, old)
     assert "schema_version: 2" in text
+
+
+# ------------------------------------------------- 写回版本闸门 + 启动物化(计划 26-09-27-2252)
+
+# schema v1 存量形态(BTSchool 旧键未迁移, 无版本章), 与 test_hr_config.test_legacy_equivalent_migration
+# 的生产锚点同构 —— 程序升级前打开的页签 GET 到的就是这棵树
+LEGACY_V1 = (
+    "config:\n"
+    "  qbittorrent:\n"
+    "    host: h\n"
+    "    port: 1\n"
+    "    username: u\n"
+    "    password: p\n"
+    "  trackers:\n"
+    "    BTSchool:\n"
+    "      domains: [pt.btschool.club]\n"
+    "      hr:\n"
+    "        required_seeding_time: 3D\n"
+    "      hr_check:\n"
+    "        mode: partial\n"
+    "        adapter: nexusphp\n"
+    "        hr_page_url: https://pt.btschool.club/myhr.php\n"
+    "        refresh_interval: 6H\n"
+)
+
+
+def test_write_tree_rejects_stale_version_tree(tmp_path):
+    """版本闸门(用户裁决): 提交树版本低于当前(含缺失)直接拒绝 —— 不迁移不修补, 磁盘一字不动。
+
+    静默把用户没见过的结构写进磁盘等于替用户做主; 拒绝并指路刷新, 未保存改动由用户取舍。
+    程序升级前打开的页签 GET 到的树没有版本章(物化前磁盘无此键), 显式 v1 章同样算落后。
+    """
+    path = _make(tmp_path, LEGACY_V1)
+    stale = read_tree(path)  # 页签在升级前 GET: 树无版本章
+    stale["config"]["main_tick"] = "5s"  # 即便用户真改了字段也照拒(改动随刷新丢弃, 报错文案已提示)
+    with pytest.raises(ConfigError) as ei:
+        write_tree(path, stale, load_config(path), _bak(tmp_path))
+    assert "刷新" in str(ei.value)
+    assert _text(path) == LEGACY_V1, "拒绝写盘, 磁盘一字不动"
+    assert not os.path.exists(_bak(tmp_path)), "备份也不产生(写盘动作根本没发生)"
+
+    stamped_text = LEGACY_V1 + "  schema_version: 1\n"  # 显式 v1 章同样算落后
+    stamped = _make(tmp_path, stamped_text)
+    with pytest.raises(ConfigError):
+        write_tree(stamped, read_tree(stamped), load_config(stamped), _bak(tmp_path))
+    assert _text(stamped) == stamped_text
+
+
+def test_write_tree_rejects_v2_tree_with_legacy_key(tmp_path):
+    """已盖 v2 章仍带旧键(手改版本号/事故残留): 写盘前校验报废除错, 磁盘一字不动 —— 不设常驻
+    兼容层, 迁移链只在版本推进时运行"""
+    old = load_config(_make(tmp_path, BASE))
+    corrupt = LEGACY_V1 + "  schema_version: 2\n"
+    path = _make(tmp_path, corrupt)  # 同名路径覆写为「v2 章 + 旧键」的事故残留形态
+    tree = read_tree(path)
+
+    with pytest.raises(ConfigError) as ei:
+        write_tree(path, tree, old, _bak(tmp_path))
+    assert "废除" in str(ei.value)
+    assert _text(path) == corrupt, "拒绝写盘, 磁盘一字不动"
+    assert not os.path.exists(_bak(tmp_path)), "备份也不产生(写盘动作根本没发生)"
+
+
+def test_preview_tree_rejects_stale_version_tree(tmp_path):
+    """预览与保存同口径: 旧版树在预览阶段就被闸门拦截(UI 看不到迁移后的预览)"""
+    path = _make(tmp_path, LEGACY_V1)
+    with pytest.raises(ConfigError):
+        preview_tree(path, read_tree(path), load_config(path))
+    assert _text(path) == LEGACY_V1
+
+
+def test_materialize_migrates_and_backups(tmp_path):
+    """启动物化: v1 磁盘 -> 版本号备份(迁移前原样) + 磁盘落成当前版本新结构 + 返回 desc 与路径"""
+    data_dir = tmp_path / "data"
+    path = _make(tmp_path, LEGACY_V1)
+
+    desc, backup = materialize_schema_migration(path, str(data_dir))
+
+    assert desc == "v1→v2"
+    assert backup == str(data_dir / "config.yml.v1.bak")
+    with open(backup, encoding="utf-8") as f:
+        assert f.read() == LEGACY_V1, "备份 = 迁移前原样(字节级)"
+    text = _text(path)
+    assert "schema_version: 2" in text, "磁盘落当前版本章"
+    assert "hr_page_url" not in text, "旧键随迁移消失"
+    cfg = load_config(path)  # 物化后的磁盘必须能原样通过加载
+    assert cfg.trackers["BTSchool"].hr_check is not None
+    assert cfg.hr_check.sites["btschool"].mode == "partial"
+
+
+def test_materialize_idempotent_and_noop(tmp_path):
+    """已是当前版本: 零 IO 幂等 —— 二次调用与干净 v2 文件都返回空, 不产生新备份"""
+    data_dir = tmp_path / "data"
+    path = _make(tmp_path, LEGACY_V1)
+    desc, _ = materialize_schema_migration(path, str(data_dir))
+    assert desc == "v1→v2"
+    text_after = _text(path)
+
+    desc2, backup2 = materialize_schema_migration(path, str(data_dir))
+    assert (desc2, backup2) == ("", "")
+    assert _text(path) == text_after, "二次调用零改动"
+    assert len(list(data_dir.iterdir())) == 1, "只有首次迁移的那一个备份"
+
+    path = _make(tmp_path, BASE)  # 天生当前版本的干净文件: 同样零 IO
+    assert materialize_schema_migration(path, str(data_dir)) == ("", "")
+    assert len(list(data_dir.iterdir())) == 1
+
+
+def test_materialize_invalid_aborts_without_touching_disk(tmp_path):
+    """迁移后校验不过(旧键 host 定位不到档案): 抛错且不备份不落盘 —— 写什么校验什么"""
+    data_dir = tmp_path / "data"
+    bad = LEGACY_V1.replace("https://pt.btschool.club/myhr.php", "https://example.com/myhr.php")
+    path = _make(tmp_path, bad)
+
+    with pytest.raises(ConfigError):
+        materialize_schema_migration(path, str(data_dir))
+
+    assert _text(path) == bad, "校验不过, 磁盘一字不动"
+    assert not data_dir.exists(), "备份也未产生(写盘动作根本没发生)"
+
+
+def test_materialize_dry_run_probe(tmp_path):
+    """write=False(dry-run 探测): 只报 desc, 不校验不备份不落盘 —— 与 state 迁移同口径"""
+    data_dir = tmp_path / "data"
+    path = _make(tmp_path, LEGACY_V1)
+
+    desc, backup = materialize_schema_migration(path, str(data_dir), write=False)
+
+    assert desc == "v1→v2" and backup == ""
+    assert _text(path) == LEGACY_V1, "dry-run 不落盘"
+    assert not data_dir.exists()

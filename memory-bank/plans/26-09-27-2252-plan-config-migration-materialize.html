@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · config schema 迁移物化重构: 加载即迁移 + 版本号备份 + 立即落盘</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-27">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="config-hr-binding-mapping">
+<meta name="doc-added" content="2026-09-27">
+<meta name="doc-updated" content="2026-09-27">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-27-config-hr-binding-mapping.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101113;
+    --bg-raise: #16181b;
+    --ink: #e8e6e1;
+    --ink-dim: #a3a09a;
+    --ink-faint: #6f6d68;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #d9a441;
+    --accent-dim: rgba(217,164,65,.14);
+    --err: #c96a5b;
+    --err-dim: rgba(201,106,91,.12);
+    --ok: #7fae7a;
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1180px; margin: 0 auto; padding: 0 40px; }
+
+  .cover { padding: 72px 0 40px; border-bottom: 1px solid var(--hairline); }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 28px;
+  }
+  .kicker b { color: var(--accent); font-weight: 400; }
+  h1 {
+    font-size: 40px; font-weight: 590; line-height: 1.15;
+    letter-spacing: -.02em; max-width: 900px;
+  }
+  .lede { margin-top: 20px; max-width: 780px; color: var(--ink-dim); font-size: 16px; }
+  .meta-row {
+    margin-top: 36px; display: flex; flex-wrap: wrap; gap: 32px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint);
+    letter-spacing: .04em;
+  }
+  .meta-row span b { color: var(--ink-dim); font-weight: 400; }
+
+  .body-grid { display: grid; grid-template-columns: 208px 1fr; gap: 56px; padding: 48px 0 24px; }
+  nav.toc { position: sticky; top: 32px; align-self: start; }
+  nav.toc .toc-head {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-faint); text-decoration: none;
+    font-size: 13px; line-height: 1.4; padding: 5px 0 5px 14px;
+    border-left: 1px solid var(--hairline-soft);
+  }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+  nav.toc a .n { font-family: var(--font-mono); font-size: 11px; margin-right: 8px; }
+
+  main { min-width: 0; }
+  section { margin-bottom: 72px; }
+  .sec-rule {
+    display: flex; align-items: baseline; gap: 16px;
+    border-top: 1px solid var(--hairline); padding-top: 18px; margin-bottom: 22px;
+  }
+  .folio {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+    color: var(--accent);
+  }
+  h2 { font-size: 24px; font-weight: 590; letter-spacing: -.01em; }
+  h3 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; }
+  p { margin: 10px 0; max-width: 780px; color: var(--ink-dim); }
+  p b, li b { color: var(--ink); font-weight: 600; }
+  ul, ol { margin: 10px 0 10px 22px; color: var(--ink-dim); max-width: 760px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: var(--font-mono); font-size: 13px;
+    background: var(--bg-raise); padding: 1px 6px; border-radius: 3px;
+    color: var(--ink); border: 1px solid var(--hairline-soft);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .tbl-wrap { margin: 18px 0; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; max-width: 860px; font-size: 13.5px; white-space: nowrap; }
+  td {
+    border-bottom: 1px solid var(--hairline-soft);
+    padding: 9px 14px 9px 0; vertical-align: top; color: var(--ink-dim);
+    white-space: normal;
+  }
+  td.msg { color: var(--ink); }
+  td.loc { font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; }
+
+  .chip {
+    display: inline-block; font-family: var(--font-mono); font-size: 11px;
+    padding: 2px 9px; border-radius: 3px; letter-spacing: .05em; white-space: nowrap;
+  }
+  .chip.rm { background: var(--err-dim); color: var(--err); }
+  .chip.keep { background: var(--accent-dim); color: var(--accent); }
+  .chip.add { background: rgba(127,174,122,.14); color: var(--ok); }
+  .chip.mv { background: rgba(140,150,220,.16); color: #9aa3d6; }
+
+  .note {
+    border: 1px solid var(--hairline); background: var(--bg-raise);
+    padding: 14px 18px; margin: 16px 0; max-width: 780px;
+    font-size: 14px; color: var(--ink-dim);
+  }
+  .note b { color: var(--accent); font-weight: 600; }
+  .note.warn { border-color: rgba(201,106,91,.35); }
+  .note.warn b { color: var(--err); }
+
+  pre {
+    font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55;
+    background: var(--bg-raise); border: 1px solid var(--hairline-soft);
+    padding: 14px 18px; overflow-x: auto; margin: 14px 0; color: var(--ink-dim);
+    max-width: 860px;
+  }
+  pre b { color: var(--accent); font-weight: 400; }
+
+  @media (max-width: 900px) {
+    .body-grid { grid-template-columns: 1fr; }
+    nav.toc { position: static; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<header class="cover">
+  <div class="kicker">MEMORY BANK / PLANS / <b>26-09-27-2252</b> · 推翻 <a href="26-09-27-1930-plan-hr-binding-tracker-mapping.html"><b>26-09-27-1930</b></a> §3.4 物化口径</div>
+  <h1>config schema 迁移物化重构: 加载即迁移 + 版本号备份 + 立即落盘</h1>
+  <p class="lede">现行口径是<b>延迟物化</b>——加载时迁移只在内存生效, 磁盘等下一次 WebUI 保存才改写。它与另外两个缺陷(写回侧校验/落盘数据分裂、启动期迁移日志被吞)在 2026-09-27 生产事故里合流: 保存把未迁移的 v1 树带上 v2 章直接落盘, 坏文件让 reload 与重启双双报废, 且日志全程看不到一次可信的迁移记录。本章按用户裁决重构: <b>加载即迁移(保留)、迁移前做带版本号的备份、迁移完成立即落盘、延迟语义全部退场</b>。</p>
+  <div class="meta-row">
+    <span>DATE <b>2026-09-27</b></span>
+    <span>BASE <b>26-09-27-1930 + 写回事故追补(本轮部分推翻)</b></span>
+    <span>SCOPE <b>writer + qbmanager + loaders(日志) + 文档回写</b></span>
+    <span>STATE <b>已实施(2026-09-27; D-C 裁决为拒绝式版本闸门, D-A/D-B 采纳建议)</b></span>
+    <span>RISK <b>低(物化单函数 + 版本号备份 + 全量守卫既有)</b></span>
+  </div>
+</header>
+
+<div class="body-grid">
+<nav class="toc">
+  <div class="toc-head">目录</div>
+  <a href="#s1"><span class="n">01</span>背景与事故链</a>
+  <a href="#s2"><span class="n">02</span>目标口径(硬需求)</a>
+  <a href="#s3"><span class="n">03</span>设计: 物化单点与挂载点</a>
+  <a href="#s4"><span class="n">04</span>备份策略</a>
+  <a href="#s5"><span class="n">05</span>日志口径</a>
+  <a href="#s6"><span class="n">06</span>保留 / 修改 / 移除清单</a>
+  <a href="#s7"><span class="n">07</span>测试计划</a>
+  <a href="#s8"><span class="n">08</span>上线与生产恢复</a>
+  <a href="#s9"><span class="n">09</span>风险与回滚</a>
+  <a href="#s10"><span class="n">10</span>待决策点</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <div class="sec-rule"><span class="folio">01</span><h2>背景与事故链</h2></div>
+  <p>三个独立缺陷叠加成同一起事故。前两个是本次重构的对象, 第三个顺带修复:</p>
+  <div class="tbl-wrap"><table>
+    <tr><td class="loc">缺陷</td><td class="msg">机制</td><td class="msg">后果</td></tr>
+    <tr>
+      <td class="loc">延迟物化<br>(26-09-26-0506 定稿)</td>
+      <td class="msg">加载时迁移只改内存; 磁盘物化被推迟到「下一次 WebUI 保存」</td>
+      <td class="msg">磁盘版本与内存结构长期分叉; 配置编辑器(round-trip 读磁盘原文)永远拿到旧结构</td>
+    </tr>
+    <tr>
+      <td class="loc">写回数据分裂<br>(1930 实施引入)</td>
+      <td class="msg"><code>writer._validate_tree</code> 把树落到临时文件校验(迁移在临时副本上生效), 真正落盘的却是浏览器往返的<b>未迁移原树</b>, 且先被盖上当前版本章</td>
+      <td class="msg">磁盘落成「v2 章 + v1 旧键」——写完的 reload 当场撞废除校验(500), 重启也进不来(2026-09-27 生产事故)</td>
+    </tr>
+    <tr>
+      <td class="loc">启动迁移日志被吞</td>
+      <td class="msg"><code>QbManager.__init__</code> 里 <code>load_config</code>(:184)先于 <code>_setup_logging</code>(:189)执行, 迁移 INFO 发出时 root logger 无 handler, stdlib 只放行 WARNING+</td>
+      <td class="msg">启动迁移完全不可见, 排障时证据全部指向「没迁移」, 误导取证(本轮排障实录)</td>
+    </tr>
+  </table></div>
+  <p>事故后的第一版修复(写回侧先迁移后盖章)堵住了 #2 的表现, 但 #1 的分叉窗口与 #3 的日志黑洞仍在——只要延迟物化还在, 「编辑器看到旧结构」「保存时才发现问题」的形态就会重现。用户裁决: 整体改<b>启动物化</b>口径; 复审中进一步裁决写回路径<b>不做迁移修补</b>, 改为版本闸门直接拒绝旧树(§10 D-C)。</p>
+</section>
+
+<section id="s2">
+  <div class="sec-rule"><span class="folio">02</span><h2>目标口径(硬需求)</h2></div>
+  <ul>
+    <li><b>R1 加载即迁移</b>: <code>load_config</code> 校验前沿链迁到当前版本 —— 现状保留, 是一切的前提(只读模式、首次物化都靠它)。</li>
+    <li><b>R2 迁移前版本号备份</b>: 磁盘文件被迁移改写前, 先把<b>迁移前原样</b>备份为带版本号的文件; 与每次保存都覆盖写的 <code>config.yml.bak</code> <b>不同名</b>, 不被其他操作覆盖。</li>
+    <li><b>R3 迁移完成立即落盘</b>: 版本落后的磁盘文件在启动路径上立即改写为当前版本(校验通过后), 不再等 WebUI 保存。</li>
+    <li><b>R4 延迟语义退场</b>: 「内存生效, 下次 WebUI 保存时写回」的日志语义、docstring、文档表述全部移除; 写回路径不做迁移 —— 提交树版本落后由版本闸门直接拒绝(§06, D-C 用户裁决)。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <div class="sec-rule"><span class="folio">03</span><h2>设计: 物化单点与挂载点</h2></div>
+
+  <h3>3.1 物化单点(新增, 落 writer.py —— 配置 IO 的既有归属)</h3>
+  <pre>def materialize_schema_migration(config_path: str, backup_dir: str) -> str:
+    """磁盘版本落后时: 迁移 -> 校验 -> 版本号备份 -> 原子落盘; 返回迁移描述(无迁移 = "")"""
+    tree = read_tree(config_path)                    # 磁盘原文(BaseLoader 树, 保注释的 merge 源)
+    desc  = migrate_config_schema(tree, config_path) # 沿链迁移 + 框架盖章(纯内存); 空 = 已是当前版本
+    if not desc:
+        return ""                                    # <b>常态路径: 零 IO 零开销, 幂等</b>
+    _validate_tree(tree)                             # 写什么校验什么: 迁移结果复核, 不过则抛错不碰磁盘
+    backup_versioned(config_path, backup_dir, from_version)   # 迁移前原样 → <名>.v&lt;m&gt;.bak(§04)
+    _dump_roundtrip(config_path, tree)               # ruamel round-trip + atomic_write(保注释, 与保存同通道)
+    return desc</pre>
+  <p>要点: 物化<b>只认磁盘真实状态</b>(自己 <code>read_tree</code> 重读, 不信任启动时的内存副本 —— 两读之间文件被手改也不至于写错); 校验不过(如旧键定位不到档案)就抛 <code>ConfigError</code> 中止启动, 磁盘一字不动; <code>from_version</code> 在迁移前先 <code>detect_version</code> 取得, 用于备份命名。</p>
+
+  <h3>3.2 挂载点: <code>run()</code> 开头, 不进 <code>__init__</code></h3>
+  <p>物化的三个前提只有到 <code>run()</code> 才同时成立: <b>单实例锁已持有</b>(<code>__init__</code>:253, 并发写免疫)、<b>日志已就绪</b>(<code>__init__</code>:189, 物化 INFO 可见)、<b>dry_run 已知</b>(run 参数)。且必须先于 WebUI 对外服务 —— 物化与保存请求不存在并发窗口。</p>
+  <pre>def run(self, dry_run=False):
+    if not dry_run:
+        desc = materialize_schema_migration(self.config_path, self.config.data_dir)
+        if desc:
+            logging.getLogger(__name__).info(f"配置 schema 已迁移 {desc} 并落盘(迁移前备份: {bak})")
+    elif detect_version("config", read_tree(...)["config"]) < CURRENT:   # dry-run 只提示不动手
+        logging.getLogger(__name__).info("磁盘配置 schema 落后, dry-run 仅内存生效不落盘")</pre>
+
+  <h3>3.3 各加载路径的行为矩阵</h3>
+  <div class="tbl-wrap"><table>
+    <tr><td class="loc">路径</td><td class="msg">内存迁移</td><td class="msg">立即落盘</td></tr>
+    <tr><td class="loc">正常 run / 托盘(经 run)</td><td class="msg">✓(load_config)</td><td class="msg"><b>✓ 物化单点</b></td></tr>
+    <tr><td class="loc">dry-run</td><td class="msg">✓</td><td class="msg">✗(INFO 说明, 与 state 迁移同口径)</td></tr>
+    <tr><td class="loc">--export-yaml / --export-torrents-info(no_lock 只读)</td><td class="msg">✓</td><td class="msg">✗(只读承诺, 不进 run)</td></tr>
+    <tr><td class="loc">--hr-once / --hr-status(只读走查)</td><td class="msg">✓</td><td class="msg">✗(「不写任何文件」承诺保持)</td></tr>
+    <tr><td class="loc">WebUI 保存 / 预览(writer)</td><td class="msg">—(磁盘已当前, 常态零迁移)</td><td class="msg">保存自带写盘; 旧版树被<b>版本闸门</b>直接拒绝(§06)</td></tr>
+    <tr><td class="loc">reload_config(热重载)</td><td class="msg">磁盘已当前</td><td class="msg">—</td></tr>
+  </table></div>
+</section>
+
+<section id="s4">
+  <div class="sec-rule"><span class="folio">04</span><h2>备份策略</h2></div>
+  <ul>
+    <li><b>命名</b>: <code>&lt;data_dir&gt;/&lt;配置文件名&gt;.v&lt;m&gt;.bak</code>, m = 迁移前版本 —— 例: <code>auto-qb-data/config.yml.v1.bak</code>。名字即「这个文件是 config.yml 在 v1 时刻的原样」。</li>
+    <li><b>不与保存备份撞名</b>: 每次保存覆盖写的 <code>config.yml.bak</code> 与版本号备份互不干扰 —— 迁移备份<b>不会被其他操作覆盖</b>(R2)。</li>
+    <li><b>时机与内容</b>: 校验通过后、落盘前, 字节级拷贝当前磁盘文件(迁移前原样)。</li>
+    <li><b>重入</b>: 同一版本再次迁移(如用户把 v1 备份恢复回去再启)会覆盖同名备份 —— 内容仍是「迁移前原样」, 语义无损。刻意不做「已存在则跳过」: 跳过会让陈旧备份冒充本次迁移前状态。</li>
+    <li><b>数量</b>: 每次版本推进至多一个新名字, 文件数 = 版本跃迁次数, 天然可控。</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <div class="sec-rule"><span class="folio">05</span><h2>日志口径(顺带修启动日志黑洞)</h2></div>
+  <div class="tbl-wrap"><table>
+    <tr><td class="loc">位置</td><td class="msg">现状</td><td class="msg">改为</td></tr>
+    <tr>
+      <td class="loc">loaders.load_config<br>(内存迁移)</td>
+      <td class="msg">INFO「内存生效, 随下一次写盘物化」—— 启动期注定被丢弃, 语义还错</td>
+      <td class="msg">降 <b>DEBUG</b>(排障开 DEBUG 可见), 文案去物化承诺</td>
+    </tr>
+    <tr>
+      <td class="loc">writer.materialize<br>(启动物化, 新增)</td>
+      <td class="msg">—</td>
+      <td class="msg"><b>INFO</b>「配置 schema 已迁移 v1→v2 并落盘(迁移前备份: auto-qb-data/config.yml.v1.bak)」—— 启动期权威记录, 日志黑洞就此关闭</td>
+    </tr>
+    <tr>
+      <td class="loc">writer._prepare<br>(版本闸门, 新增)</td>
+      <td class="msg">—(第一版「迁移后写回」补丁)</td>
+      <td class="msg">提交树版本低于当前(含缺失)直接 <b>ConfigError/400</b>, 文案指路刷新; 无迁移发生(§10 D-C 用户裁决)</td>
+    </tr>
+  </table></div>
+  <p>为此 <code>migrate_config_schema</code> 签名改为返回 <code>str</code>(desc, 无迁移返回 "") —— 调用方各自决定记什么, 不再由 loaders 越权代言物化时机。</p>
+</section>
+
+<section id="s6">
+  <div class="sec-rule"><span class="folio">06</span><h2>保留 / 修改 / 移除清单</h2></div>
+  <h3>保留 <span class="chip keep">keep</span></h3>
+  <ul>
+    <li><code>load_config</code> 校验前迁移 —— R1 本体; 只读模式与首次物化都依赖它。</li>
+    <li><b>writer._prepare 版本闸门</b>(§10 D-C 用户裁决): 提交树版本低于当前(含缺失)直接拒绝、指路刷新 —— 静默把用户没见过的结构写进磁盘等于替用户做主; 与启动物化构成两道防线, 覆盖入口不同(启动 vs 任意保存请求)。</li>
+    <li>写回路径的迁移修补补丁(本轮第一版修复)<b>被闸门取代并移除</b>; test_config_writer 的迁移用例改写为闸门用例(拒绝旧树/磁盘不动)。</li>
+  </ul>
+  <h3>修改 <span class="chip mv">mv</span></h3>
+  <ul>
+    <li><span class="chip add">add</span> <code>writer.materialize_schema_migration</code> + <code>backup_versioned</code>(物化单点 + 版本号备份)。</li>
+    <li><code>migrate_config_schema</code>: 返回 desc(str); 日志降 DEBUG; docstring 改物化新口径。</li>
+    <li><span class="chip add">add</span> <code>QbManager.run()</code> 开头挂物化调用(dry-run 分支只提示)。</li>
+    <li>文档回写: <code>systemPatterns/client-and-state.md</code>、<code>config-reference/keys.md</code> 的「随下次保存物化」→「启动即物化(版本号备份后原子写)」; <code>infra/versioning.py</code> 模块 docstring 的物化点表同步; 计划 1930 §3.4 的追补注改指向本章; <code>pitfalls/backend/schema-stamp-writeback.md</code> 处置段改「主防线 = 启动物化, 写回 = 版本闸门拒绝旧树」; writer 侧迁移补丁的文案随之退场。</li>
+  </ul>
+  <h3>移除 <span class="chip rm">rm</span></h3>
+  <ul>
+    <li>「内存生效, 下次 WebUI 保存时写回」语义与全部文案(loaders / writer / 文档)。</li>
+    <li>延迟物化的设计表述(26-09-26-0506 对 config kind 的物化时点描述)。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <div class="sec-rule"><span class="folio">07</span><h2>测试计划</h2></div>
+  <p>改写 + 新增(test_config_writer.py 为主, 测试计划头同步登记; 第一版的 3 条「迁移后写回」用例随闸门裁决删除):</p>
+  <ul>
+    <li><code>test_write_tree_rejects_stale_version_tree</code>: 版本闸门 —— 缺失/显式 v1 章的提交树直接拒绝, 磁盘一字不动、备份不产生。</li>
+    <li><code>test_preview_tree_rejects_stale_version_tree</code>: 预览同口径被拦。</li>
+    <li><code>test_materialize_migrates_and_backups</code>: v1 文件 → 生成 <code>config.yml.v1.bak</code>(内容 = 迁移前原样) + 磁盘变 v2 新结构 + 返回 desc「v1→v2」。</li>
+    <li><code>test_materialize_idempotent</code>: 第二次调用返回 "" 且磁盘与备份零变化(常态零 IO)。</li>
+    <li><code>test_materialize_invalid_aborts</code>: 迁移后校验不过(旧键定位不到档案) → 抛 ConfigError, 不备份不落盘。</li>
+    <li><code>test_materialize_current_version_noop</code>: 已是 v2 的干净文件 → 无备份文件产生。</li>
+    <li><code>test_materialize_dry_run_probe</code>: write=False 只探测报 desc, 不校验不备份不落盘(manager 层挂载由既有 run() 用例覆盖)。</li>
+    <li>既有 <code>test_write_tree_rejects_v2_tree_with_legacy_key</code> 保留(v2 章 + 旧键仍报废除错)。</li>
+  </ul>
+  <p>回归: 既有 hr 迁移 5 条 + writer 迁移 4 条不动; <code>commands run test.full</code> 全绿后落基线切片。注意点: 部分以 <code>QbManager</code>+tmp 配置跑 <code>run()</code> 的既有测试会开始触发物化写盘 —— 落点全在 TMPDIR 内(副作用台账判白), 断言若钉了 config 原文需按新行为修。</p>
+</section>
+
+<section id="s8">
+  <div class="sec-rule"><span class="folio">08</span><h2>上线与生产恢复</h2></div>
+  <ol>
+    <li><b style="color:var(--err)">前置</b>: 用户生产 config.yml(D:\Projects\auto-qb)已被事故写坏(v2 章 + 旧键)。本重构<b>不自动治它</b>——启动校验即失败, 物化根本不会执行。必须先用 <code>&lt;data_dir&gt;/config.yml.bak</code>(事故保存前的自动备份, v1 形态)覆盖回 <code>config.yml</code>。</li>
+    <li>同步新代码后启动: <code>load_config</code> 内存迁移 → <code>run()</code> 物化: 生成 <code>config.yml.v1.bak</code> + 磁盘落成干净的 v2。</li>
+    <li>此后每次版本推进自动完成「带版本号备份 → 立即落盘」; WebUI 编辑器任何时刻看到的都是当前结构; 「保存时才发现迁移问题」的形态不复存在。</li>
+    <li>DoD: 实施 → test.full 全绿 + 基线切片 → 文档回写 → <code>kb.index</code> → 待「提交」指令。</li>
+  </ol>
+</section>
+
+<section id="s9">
+  <div class="sec-rule"><span class="folio">09</span><h2>风险与回滚</h2></div>
+  <ul>
+    <li><b>启动期写 config.yml</b>: 三重保险 —— 校验先行(不过不写)、版本号备份(永远可回迁移前)、<code>atomic_write</code>(无半截文件)。最坏情况: 从 <code>.v&lt;m&gt;.bak</code> 恢复, 与今天从 <code>.bak</code> 恢复同级。</li>
+    <li><b>与保存/其它实例并发</b>: 物化在单实例锁内且先于 WebUI 服务启动; 保存走同一 writer 通道。</li>
+    <li><b>行为面变化</b>: dry-run/只读模式不落盘(口径表 §3.3); 测试面变化见 §07 注意点。</li>
+    <li><b>回滚</b>: 单 commit revert 即回到现状; 版本号备份文件留存无害。</li>
+  </ul>
+</section>
+
+<section id="s10">
+  <div class="sec-rule"><span class="folio">10</span><h2>待决策点</h2></div>
+  <div class="tbl-wrap"><table>
+    <tr><td class="loc">决策</td><td class="msg">选项与建议</td></tr>
+    <tr>
+      <td class="loc">D-A dry-run 是否落盘</td>
+      <td class="msg"><b>建议不落盘</b>(§3.3): 与 state 迁移「dry-run 只内存生效」同口径, dry-run 的本质是预演; INFO 提示磁盘落后。若要 dry-run 也物化请明示。</td>
+    </tr>
+    <tr>
+      <td class="loc">D-B 同名版本号备份重复迁移</td>
+      <td class="msg"><b>建议覆盖</b>(§04): 内容始终是「本次迁移前原样」, 语义无损; 「已存在则跳过」会让陈旧备份冒充本次状态, 刻意不做。</td>
+    </tr>
+    <tr>
+      <td class="loc">D-C 写回旧树处置 <b>(已裁决)</b></td>
+      <td class="msg"><b>用户裁决(2026-09-27): 拒绝式版本闸门</b> —— 后端校验提交树版本号, 低于当前直接拒绝(不做迁移修补); 已按此实施(§06/§07)。</td>
+    </tr>
+  </table></div>
+</section>
+
+</main>
+</div>
+</div>
+</body>
+</html>
