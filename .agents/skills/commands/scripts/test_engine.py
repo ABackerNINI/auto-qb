@@ -7,6 +7,12 @@ test.pkg 收集面 = .commands + .agents/skills/commands, 改引擎必被收到(
 ## 测试计划
 - test_digest_keeps_result_lines         摘要必保 RESULT/WHY/NEXT/EVIDENCE 协议行
 - test_digest_fallback_without_protocol  无协议行 → 维持"末 N 行 + 异常行"旧行为
+- test_digest_keeps_conclusion_line      W2: 结论行(N passed / TOTAL)无条件必保, 警告明细挤不掉
+- test_digest_conclusion_patterns_are_anchored  结论判据钉锚(行中 passed 不算)
+- test_silent_success_flag_parsed_from_config   W2-4: test.full/quick 从配置解析 silent_success 旗标
+- test_silent_success_suppresses_hint_and_keeps_conclusions  成功只出结论行, 略过提示不给
+- test_silent_success_falls_back_when_no_conclusion  无结论形态 → 退回末 N 行不变盲
+- test_info_command_keeps_truncation_hint  信息类命令的有损摘要提示必须保留
 - test_run_failure_transcribes_protocol  失败路径: [FAIL] 行后转述协议行, 文本无裸 rc
 - test_run_failure_without_protocol      失败且无协议行 → 退回旧摘要, 不炸
 - test_run_success_keeps_evidence        成功路径协议行(证据)存活
@@ -47,6 +53,75 @@ def test_digest_fallback_without_protocol():
     assert "[WARN] 中段的警告内容" in text  # 异常行照旧保留
     assert "noise 29" in text  # 末 N 行照旧
     assert skipped == 30 - len(picked)
+
+
+def test_digest_keeps_conclusion_line():
+    """W2(计划 §10): pytest 警告明细打在结论行之后 —— 末 N 行必须挤不掉 'N passed' / 'TOTAL'。"""
+    lines = [f"coverage row {i:02d}" for i in range(20)]
+    lines[2] = "1818 passed, 3 skipped, 6 warnings in 20.09s"  # 结论在 coverage 表之前
+    lines[-1] = "src\\auto_qb\\webui\\views.py  305  6  130  3  97%"  # 末行是表尾噪音
+    lines[6] = "TOTAL 12504 914 4204 388 91%"
+    picked, _ = engine._digest("\n".join(lines), limit=3)
+    text = "\n".join(picked)
+    assert "1818 passed" in text  # 结论行无条件必保, 不与异常行竞争
+    assert "TOTAL 12504" in text
+    assert "views.py" in text  # 末 N 行照旧
+
+
+def test_digest_conclusion_patterns_are_anchored():
+    """结论判据钉锚: 表格中段含 'passed' 字样的行不算结论, 免得摘要被撑爆。"""
+    lines = [f"noise {i:02d}" for i in range(30)]
+    lines[10] = "  it passed the sanity check of module x"  # 行中 passed, 非结论形态
+    picked, _ = engine._digest("\n".join(lines), limit=3)
+    assert "it passed the sanity check" not in "\n".join(picked)
+
+
+def test_silent_success_flag_parsed_from_config():
+    """W2-4: test.full/test.quick 声明了 silent_success —— 引擎从真实包配置解析出该旗标。"""
+    mod = engine
+    tree = mod.C.load_tree()
+    assert tree.tasks["test.full"].silent_success is True
+    assert tree.tasks["test.quick"].silent_success is True
+    assert tree.tasks["kb.index"].silent_success is False  # 信息类不声明, 有损摘要靠提示兜底
+
+
+def test_silent_success_suppresses_hint_and_keeps_conclusions(monkeypatch, capsys):
+    out = "\n".join(
+        [
+            "=" * 40, "1818 passed, 3 skipped in 20.17s", "TOTAL 12512 914 4204 388 91%",
+            *(f"cov row {i}" for i in range(30))
+        ]
+    )
+    monkeypatch.setattr(engine, "_shell", _shell_returning(True, out))
+    rc = engine.cmd_run(argparse.Namespace(task="test.full", extra=[]))
+    captured = capsys.readouterr().out
+    assert rc == 0
+    assert "[ok] test.full" in captured
+    assert "1818 passed" in captured and "TOTAL 12512" in captured  # 结论行在
+    assert "略过" not in captured  # 成功静默: 位置提示不给
+    assert "cov row" not in captured  # 明细不上屏
+
+
+def test_silent_success_falls_back_when_no_conclusion(monkeypatch, capsys):
+    """旗标任务输出形态变了(一条结论都没有) → 退回末 N 行, 不让输出彻底变盲; 提示仍不打。"""
+    out = "\n".join(f"plain line {i}" for i in range(10))
+    monkeypatch.setattr(engine, "_shell", _shell_returning(True, out))
+    rc = engine.cmd_run(argparse.Namespace(task="test.full", extra=[]))
+    captured = capsys.readouterr().out
+    assert rc == 0
+    assert "plain line 9" in captured  # 末 N 行兜底
+    assert "plain line 0" not in captured
+    assert "略过" not in captured
+
+
+def test_info_command_keeps_truncation_hint(monkeypatch, capsys):
+    """未声明旗标的信息类命令: 有损摘要的「略过 N 行」提示必须保留(kb.active 依赖它)。"""
+    out = "\n".join(f"slice {i}" for i in range(30))
+    monkeypatch.setattr(engine, "_shell", _shell_returning(True, out))
+    rc = engine.cmd_run(argparse.Namespace(task="kb.index", extra=[]))
+    captured = capsys.readouterr().out
+    assert rc == 0
+    assert "略过" in captured  # 信息类不许静默丢内容
 
 
 def test_run_failure_transcribes_protocol(monkeypatch, capsys):

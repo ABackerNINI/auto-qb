@@ -36,6 +36,10 @@ FAILURE_LINES = 40  # 失败时最多回多少行(要细节, 但也不是整段)
 _ANOMALY = re.compile(r"\[(?:WARN|STOP|FAIL)\]|\b(?:FAILED|ERROR|Traceback)\b")
 # 协议行判据(输出契约): 与异常行同权必保 —— 成功证据不再靠"恰好落在末 N 行"的运气存活。
 _RESULT = re.compile(r"^\s*(?:RESULT|WHY|NEXT|EVIDENCE):")
+# 结论行判据(W2, 计划 26-09-28-0157 §10): pytest 的 "N passed…" 与覆盖率的 "TOTAL …" 是任务
+# 的存在意义本身, 但 pytest 的警告明细可能打在它们之后 —— 末 N 行会被噪音挤掉结论(实测
+# test.full: 可见区只剩 RequestsDependencyWarning)。结论行无条件必保, 不参与 break 竞争。
+_CONCLUSION = re.compile(r"^\s*\d+ (?:passed|failed)\b|^\s*TOTAL\s|^\s*no tests ran\b")
 
 # 子进程必须说 UTF-8。Windows 上 Python 子进程的 stdout 一旦被管道接住, 编码取的是
 # **本地码页**(本机 cp936) —— 中文按 GBK 出去, 而本引擎按 UTF-8 解, 结果是一串 U+FFFD:
@@ -89,7 +93,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             _emit(body, task.id, limit=FAILURE_LINES)
             return FAILED
         print(f"[ok] {task.id} ({spent:.1f}s)")
-        _emit(out, task.id)
+        _emit(out, task.id, silent_success=task.silent_success)
     return 0
 
 
@@ -241,18 +245,30 @@ def _strip_protocol(out: str) -> str:
     return "\n".join(ln for ln in out.splitlines() if not _RESULT.match(ln))
 
 
-def _digest(out: str, limit: int = SUMMARY_LINES) -> tuple[list[str], int]:
+def _digest(out: str, limit: int = SUMMARY_LINES, conclusions_only: bool = False) -> tuple[list[str], int]:
     """把输出压成"结论 + 异常行", 返回 (要打印的行, 被略过的行数)。
 
     ❗**只取末 N 行是错的**: 检查表这类输出的末几行是"无 STOP; 2 项 WARN"这类**结论**,
     而 WARN 的**内容**在中段 —— 截掉之后调用方只能把整条命令重跑一遍才能看到,
     省下的几行换来一整次重跑(实测: 预检被跑了两遍)。异常行必须留下。
     行序保持原样 —— 摘要是"挑行", 不是"重排"。
+    ❗结论行(N passed / TOTAL)无条件必保, 不与异常行竞争 break 名额 —— pytest 的警告
+    明细打在结论行之后, 末 N 行会把结论挤成"略过"(W2 实测)。
+    `conclusions_only`(对应任务旗标 silent_success): 成功输出只留结论行 —— 一条没中
+    (输出形态变了)就退回末 N 行, 不让输出彻底变盲; 配合 _emit 不打略过提示。
     """
     lines = [ln.rstrip() for ln in out.splitlines() if ln.strip()]
     if len(lines) <= limit:
         return lines, 0
+    if conclusions_only:
+        picked = [ln for ln in lines if _CONCLUSION.match(ln)]
+        if picked:
+            return picked, len(lines) - len(picked)
+        return lines[-limit:], len(lines) - limit
     keep = set(range(len(lines) - limit, len(lines)))
+    for i, line in enumerate(lines):
+        if _CONCLUSION.match(line):
+            keep.add(i)
     for i, line in enumerate(lines):
         if len(keep) >= limit + ANOMALY_MAX:
             break
@@ -262,11 +278,13 @@ def _digest(out: str, limit: int = SUMMARY_LINES) -> tuple[list[str], int]:
     return picked, len(lines) - len(picked)
 
 
-def _emit(out: str, task_id: str, limit: int = SUMMARY_LINES) -> None:
-    picked, skipped = _digest(out, limit)
+def _emit(out: str, task_id: str, limit: int = SUMMARY_LINES, silent_success: bool = False) -> None:
+    """silent_success(W2-4): 成功路径只出结论行、不打「略过 N 行」提示 —— 给"成功即静默"的任务
+    (test.full / test.quick)声明; 信息类命令(kb.active 等)不加旗标, 有损摘要的提示照旧兜底。"""
+    picked, skipped = _digest(out, limit, conclusions_only=silent_success)
     for line in picked:
         print(f"  {line}")
-    if skipped:
+    if skipped and not silent_success:
         print(f"  …(略过 {skipped} 行; 要看全文: show {task_id} 拿到命令后直接跑)")
 
 

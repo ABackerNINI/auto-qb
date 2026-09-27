@@ -1,15 +1,15 @@
 # commands-shipflow-output-contract — my-commit-flow 输出契约 v3
 
-> 摘要: 用户判定 my-commit-flow 输出全属噪音(sync 失败态 10 行/commit 成功态 76 行), 推翻 v2 的「出示证据」方向。计划 26-09-28-0157 **已全量实施**(26-09-28): 成功一行、失败=原因+下一步、退出码 0/1; sync 自动 fetch+快进/rebase 保线性(D1); commit 编排合一(内部同步→闸门→逐路径暂存→提交→核 ref→内联推送); 镜像全程静默(D2); preflight 收编 _pipeline.py(D3); 引擎 FAILED 3→1(D4); warn_lines 保留一行(D5); 顺带修 issue 26-09-28-0128。任务树 4 入口: sync / ship.commit / ship.push / verify-ref。全量 1816 passed / 0 failed(基线 26-09-28-0321)。**待真机提交验收(等用户说「提交」)**。
-> 最后活动: 2026-09-28 03:21
+> 摘要: v3(成功一行/失败=原因+下一步/退出码 0/1)已实施并真机验收(提交 4ba6cb7f)。**W2 推广四件已全部落地(计划 §10 Done)**: W2-1 根治 charset_normalizer 半装损坏(授权普查 7 个 auto-qb 目录, clone1 修复/clone2 待其进程退出后重跑/其余 5 处正常); W2-2 引擎 `_digest` 结论行(N passed/TOTAL)无条件必保; W2-3 警告 6→0(test_web.py docstring \p 转义修 + starlette/anyio 按消息前缀过滤进 pytest.ini); **W2-4 silent_success 旗标**(test.full/quick 成功只出结论行不打略过提示, 信息类不加)。真机验收: test.full = [ok]+TOTAL+passed 三行, test.quick 两行; 全量 1818 passed / 0 failed / 0 warnings(基线切片 26-09-28-0445)。
+> 最后活动: 2026-09-28 04:45
 
 ## 正在进行
 
-- 等用户说「提交」→ 走一次真实 ship.commit 验收(成功一行 + 推送 + 镜像静默), 然后计划 doc-status 抬 Done。
-- 遗留观察: 新测试用 tmp_path 后 test.pkg 需 TMPDIR 前缀(已修定义); doc-map 余压由 pitfalls/kb/cap-counting.md「两个出口」跟踪。
+- 无。计划 26-09-28-0157 全章节 Done; 收尾文档(本切片/档案/计划状态/基线)待随下次「提交」入库。
+- 遗留观察: clone2 的 cd.pyd 混态(纯美容, 进程退出后按档案 04:19 条的定向重装配方在 clone2 重跑一遍即彻底修复); doc-map 余压由 pitfalls/kb/cap-counting.md「两个出口」跟踪。
 
 ## 已完成
 
-- v3 全量落地(任务档案 26-09-28-commands-shipflow-output-contract.md 进度日志 03:21 条有完整清单)。
-- 诊断: 实贴 11 条症状逐条对到 file:line; 根因=v2 计划 L1「出示证据」成了默认输出。
-- 计划文档: memory-bank/plans/26-09-28-0157-plan-commands-shipflow-v3.html(status In Progress)。
+- v3 全量落地 + 真机验收(4ba6cb7f): 档案进度日志 03:21/03:30 条。
+- W2 推广(含 W2-4 成功静默): 档案进度日志 04:07/04:19/04:32/04:45 条。
+- 计划文档: memory-bank/plans/26-09-28-0157-plan-commands-shipflow-v3.html(status Done)。

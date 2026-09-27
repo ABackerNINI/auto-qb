@@ -6,7 +6,7 @@
 <title>沉默即成功 — my-commit-flow 输出契约 v3 (26-09-28-0157)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-date" content="2026-09-28">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-topic" content="commands-shipflow-v3">
 <meta name="doc-added" content="2026-09-28">
 <meta name="doc-updated" content="2026-09-28">
@@ -128,7 +128,7 @@
   <h1>沉默即成功 — my-commit-flow 输出契约 v3</h1>
   <p class="lede">v2 的方向是「让命令自己出示证据」，结果<strong>证据成了默认输出</strong>：一次成功提交刷出 76 行原始输出、摘要后仍有 16 行 WARN。本计划推翻 v2 的输出层，回到工具的三条设计初衷——<strong>少手写命令错误、少 token、复杂藏在背后</strong>。成功只给一行结论，失败才出示证据。</p>
   <div class="meta-row">
-    <span><b>状态</b> In Progress · M1–M3 已落地(26-09-28), 待真机提交验收</span>
+    <span><b>状态</b> Done · M1–M3 真机验收(4ba6cb7f) + W2 推广落地(04:32)</span>
     <span><b>范围</b> .commands/my-commit-flow + 引擎两处微调 + 文档回写</span>
     <span><b>基线</b> 635693f (与 gitee/develop 齐平)</span>
   </div>
@@ -416,7 +416,41 @@
   </table>
 </section>
 
-<footer>26-09-28-0157 · plan · status In Progress · D1–D5 全部拍板 · M1–M3 已落地(26-09-28 03:1x) · 待真机提交验收</footer>
+<!-- ============================================================ S10 推广波次 -->
+<section>
+  <div class="sec-head"><span class="sec-no">10</span><h2>W2 推广波次 — 其余命令的同款噪音(2026-09-28 用户补报)</h2></div>
+  <p class="sec-sub">v3 治完了 my-commit-flow, 但契约的价值在全体命令 —— 用户在 clone2 实贴 test.full 成功输出: 结论行被警告明细夹住 + 「略过 169 行」提示。同根问题, 按同契约治理。</p>
+
+  <h3>证据(实贴)与机制定位</h3>
+  <div class="term" style="max-width:640px">
+    <div class="bar"><span>test.full · 成功态 · 现状(clone2 实贴)</span><span class="bad">结论被挤位 + 环境噪音</span></div>
+    <pre><span class="hl">[ok] test.full (20.6s)</span>
+  1818 passed, 3 skipped, 10 warnings in 20.09s
+  <span class="wrln">D:\...\site-packages\requests\__init__.py:92: RequestsDependencyWarning: …</span>
+  <span class="wrln">    warnings.warn(</span>
+<span class="dimln">  …(略过 169 行; 要看全文: show test.full 拿到命令后直接跑)</span></pre>
+  </div>
+  <table>
+    <tr><th style="width:30%">症状</th><th>机制根源</th></tr>
+    <tr><td>RequestsDependencyWarning 两行漏进可见区</td><td>venv 的 <span class="mono">charset_normalizer</span> 安装损坏(<span class="mono">api</span> 模块缺失)且无 <span class="mono">chardet</span> → requests 每次导入必发警告; pytest.ini 无 <span class="mono">filterwarnings</span>, 警告明细原样进输出末尾</td></tr>
+    <tr><td>结论行(1818 passed)被挤出末 3 行</td><td>引擎摘要(run.py _digest)按「末 3 行 + 异常行」取行 —— pytest 的警告明细打在结论行之后, 末 3 行捞到的是噪音; 结论行不在异常行判据里</td></tr>
+    <tr><td>「略过 169 行」提示行</td><td>覆盖率报表本质就长(169 行明细) —— 提示行本身合理, 但它出现的前提是结论区干净; 结论被噪音占据时它只是第三行噪音</td></tr>
+  </table>
+
+  <h3>W2 处方(W2-1..3 + 追补 W2-4, 已全部落地 04:45)</h3>
+  <ul class="decide">
+    <li><strong>W2-1 · 根治警告源</strong>：<span class="pill rec">已落地 · 04:19 授权跨 clone</span><br>
+      原方案: <span class="mono">env.sync</span> 重装修复损坏的 charset_normalizer(实测 <span class="mono">import charset_normalizer.api</span> 即 ModuleNotFoundError —— 半装状态); 修不掉再兜底: pytest.ini 加 <span class="mono">filterwarnings</span> 精确忽略 requests 的该条 UserWarning。<br>
+      <strong>执行结果</strong>: ①裸 <span class="mono">uv sync</span> 对半装包**假绿**("Checked 39 packages" 直接跳过)——须 <span class="mono">uv sync --reinstall-package charset-normalizer</span>(3.5.1 重装后 requests 导入 <span class="mono">-W error</span> 干净, test.quick warnings 10→6, RequestsDependencyWarning 0 次)。②授权普查 D:\Projects 下 7 个 auto-qb 目录: **损伤只在 clone1 / clone2 两处**, clone3/4/5/long-seeding/auto-qb 本体均正常(跳过未动)。③**clone2 未能修复**: <span class="mono">cd.cp313-win_amd64.pyd</span> 被占用(拒绝访问, clone2 内有活进程加载着它)——待其退出后在 clone2 重跑同命令即可, 不越权杀进程。</li>
+    <li><strong>W2-2 · 引擎摘要「结论行必保」</strong>：<span class="pill rec">已落地</span> run.py 的 <span class="mono">_digest</span> 在「末 N 行 + 异常行」之外, 必保匹配结论形态的行(<span class="mono">N passed / failed / TOTAL</span>)——摘要的使命是「结论 + 异常」, 结论行不该靠排位运气存活。改动 ~3 行 + test_engine 用例。</li>
+    <li><strong>W2-3 · 逐命令盘点</strong>：<span class="pill rec">已落地</span> 其余包(test / dev / kb / doc / env)按 v3 契约过一遍——成功 ≤3 行正文(引擎 [ok] 行 + 结论), 失败 = 原因 + 下一步; kb.* 系已基本达标(1–2 行), dev.run / env.sync 实施时实测定账。</li>
+    <li><strong>W2-4 · 成功静默(用户追补 04:45)</strong>：<span class="pill rec">已落地</span> test.full 成功时连「略过 149 行」位置提示也不要 —— 做成**任务级显式旗标** <span class="mono">silent_success = true</span>(test.full / test.quick 声明): 引擎成功路径只出结论行(_digest <span class="mono">conclusions_only</span> 模式, 无结论形态时退回末 N 行不变盲), 提示不打。❗信息类命令(kb.active 等)**不加旗标** —— 它们的有损摘要全靠提示兜底, 一刀切会把 47 行切片清单静默吞掉。+4 引擎用例(旗标解析 / 提示抑制 / 无结论兜底 / 信息类保提示)。</li>
+  </ul>
+
+  <div class="note"><strong>结果(04:45, 全部落地)</strong>：test.full 可见输出 = <span class="mono">[ok]</span> + TOTAL + passed(三行, 零提示零警告明细)；test.quick = [ok] + passed 两行。落地明细：W2-1 见上条；W2-2 = run.py <span class="mono">_digest</span> 加 <span class="mono">_CONCLUSION</span> 判据(N passed/failed、TOTAL、no tests ran)，无条件必保、不参与异常行的 break 竞争；W2-3 = 盘点 6 条警告 → 自家 1 条(test_web.py docstring <span class="mono">\p</span> 转义 SyntaxWarning，改 <span class="mono">\\p</span>) + 第三方 2 类(starlette 警告类别是 <span class="mono">UserWarning</span> 子类，按类别匹配落空——pytest.ini 改**消息前缀**精确过滤；anyio 同款) → warnings 6→0；W2-4 见上条。其余命令盘点：动作类(env.sync/version、doc.links、kb.index、dev.fmt)成功全部 ≤2 行，信息类(kb.active / kb.baseline / doc.caps)按设计保留明细由摘要兜底。</div>
+</section>
+
+<footer>26-09-28-0157 · plan · status Done · M1–M3 真机验收(4ba6cb7f) · W2 推广落地(04:32)</footer>
 </div>
 </body>
 </html>

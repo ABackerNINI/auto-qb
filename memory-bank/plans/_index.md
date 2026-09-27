@@ -9,7 +9,6 @@
 
 ## In Progress
 
-- [26-09-28-0157] [沉默即成功 — my-commit-flow 输出契约 v3 (26-09-28-0157)](26-09-28-0157-plan-commands-shipflow-v3.html) — `commands-shipflow-v3`
 - [26-09-27-1407] [计划 · 文件访问层包装 + 下载目录只读挂载 + 路径映射(docker 兼容)](26-09-27-1407-plan-docker-fs-wrapper-pathmap.html) — `docker-deploy`
 - [26-09-27-1232] [计划 · 暂时移除不成熟的限速统计设计 (upload_size 四条件 + begin_round)](26-09-27-1232-plan-remove-upload-stats.html) — `remove-upload-stats`
 - [26-09-26-0031] [HR 取数代理 · 选项页风格选型(三选一)](26-09-26-0031-plan-hr-ext-options-style.html) — `backend-partial-hr-verify`
@@ -31,6 +30,7 @@
 ## Done
 
 - [26-09-28-0201] [auto-qb WEB UI · 搜索框帮助按钮 · 3 版模板(供挑选)](26-09-28-0201-plan-search-help-button-3-proposals.html) — `webui-search-query-syntax`
+- [26-09-28-0157] [沉默即成功 — my-commit-flow 输出契约 v3 (26-09-28-0157)](26-09-28-0157-plan-commands-shipflow-v3.html) — `commands-shipflow-v3`
 - [26-09-28-0037] [备用速度切换按钮 · 三套设计模板 (26-09-28-0037)](26-09-28-0037-plan-alt-speed-toggle.html) — `webui-alt-speed-toggle`
 - [26-09-27-2252] [计划 · config schema 迁移物化重构: 加载即迁移 + 版本号备份 + 立即落盘](26-09-27-2252-plan-config-migration-materialize.html) — `config-hr-binding-mapping`
 - [26-09-27-1930] [计划 · HR 在线核实绑定改映射制: 档案双域硬编码 + 已知映射零配置 + 旧键迁移 v1→v2](26-09-27-1930-plan-hr-binding-tracker-mapping.html) — `hr-binding-tracker-mapping`

@@ -8,7 +8,7 @@ user-invocable: true
 
 项目命令的**统一调用面**:要跑命令时不去文档里抄,先按层级定位再调。
 
-❗**缺省规则 —— 先 task id, 后裸命令**: 想跑 pytest / yapf / git commit / git push / 依赖同步 / 包内脚本, 第一步找 task id; 等价物裸跑会丢包里单点的环境陷阱(TMPDIR / cmd.exe 写法 / 红线拦截); 一次性调试(未收录)直接跑。
+❗**缺省规则 —— 先 task id, 后裸命令**: pytest / yapf / git commit / 依赖同步 / 包内脚本, 第一步找 task id; 裸跑会丢包里单点的环境陷阱(TMPDIR / cmd.exe 写法 / 红线拦截); 一次性调试直接跑。
 
 > `<skill-dir>` = 本 skill 目录(先 Glob 定位 `**/commands/scripts/run.py`); 项目解释器跑: `uv run python <路径> run <task>`。
 
@@ -37,14 +37,12 @@ user-invocable: true
 | `add` | 收录一条命令进包(默认 dry-run) |
 
 `run` 默认只回摘要;`requires`/`risky` 任务先自证**首条**命令(共 N 条, 全量 `show`)再跑。
-摘要 = **末几行结论 + 异常行**(`[WARN]`/`[FAIL]`/`Traceback`,封顶 8 行)—— ❗**只取末几行是错的**: 检查表的 WARN 内容在中段,截掉它调用方只能重跑。协议行 `RESULT:`/`WHY:`/`NEXT:`/`EVIDENCE:` 与异常行**同权必保**, 失败时紧跟 `[FAIL]` 转述; **文本无裸 rc** —— 语义只在协议行。
+摘要 = **末几行结论 + 异常行**(`[WARN]`/`[FAIL]`/`Traceback`,封顶 8 行)—— ❗检查表的 WARN 内容在中段, 只取末几行等于逼调用方重跑。协议行 `RESULT/WHY/NEXT/EVIDENCE:` 与异常行**同权必保**, 失败时紧跟 `[FAIL]` 转述; **文本无裸 rc**。
+结论行(`N passed`/`TOTAL`)**无条件必保**(警告明细可能打在其后)。`silent_success = true`(test.full/quick): 成功只出结论行、无略过提示; 信息类不加, 有损摘要靠提示兜底。
 
 ## 引导:按当前任务逐级下钻
 
-- **不知道调哪个** → `list`:包 + 各自管的事 + 常显命令(`★`)
-- **按任务选包** → `list <包>`;未定位再下钻 `list <包>/<子包>`
-- **已知 id** → `run <id>`;要看细节 → `show <id>` 的 `doc` 指针
-- **排障** → `list --all` 全树(含被禁用的)
+- **定位** → 不知道调哪个 `list`,未定位再 `list <包>[/<子包>]`; 已知 id `run`; 细节 `show` 的 `doc` 指针; 排障 `list --all`。
 
 包内 README 与 `references/` 是**包私有**(引擎不读):按 `doc` 指针按需读,**不要整读**。
 
@@ -59,7 +57,7 @@ user-invocable: true
 ## 停手点
 
 - **STOP(rc=1)**:配置写错 / 占位符展不开 / 参数给了不接参的 task / `requires` 前置非 0 / task id 重复 / 包名≠目录名 / `doc` 指针落空 —— **不静默降级**, 静默失效比报错坏得多。
-- **命令非 0(rc=3)**:先读输出末尾的 RESULT / WHY / NEXT 三行 —— 语义在那, 不在 rc 数字; 不要照着重跑。
+- **命令非 0(rc=1)**:失败输出自带「原因 + 下一步」—— 语义在那, 不在 rc 数字; 不要盲目照着重跑。
 
 ## 反模式
 

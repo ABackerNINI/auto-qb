@@ -17,13 +17,15 @@ run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q']
 timeout = 900
 pin     = true
 when    = "改完代码要验一遍（带覆盖率；提交闸门跑的是 test.quick）"
-note    = "必须 cmd.exe 写法 + 引号不能省，理由见本文件顶部"
+note    = "必须 cmd.exe 写法 + 引号不能省，理由见本文件顶部; silent_success: 成功只出结论行(TOTAL/passed), 覆盖率明细按需 show"
+silent_success = true
 
 [tasks."test.quick"]
 run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov']
 timeout = 900
 when    = "只要结论、不要覆盖率报表（快约 7s；提交闸门用这条）"
-note    = "同上必须 cmd.exe 写法；--no-cov 只跳报表，不影响通过与否"
+note    = "同上必须 cmd.exe 写法; silent_success: 成功只出结论行"
+silent_success = true
 
 [tasks."test.pkg"]
 run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest .commands .agents/skills/commands -q --no-cov -n 0']
