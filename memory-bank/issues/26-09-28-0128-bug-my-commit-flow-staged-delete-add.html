@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="my-commit-flow-staged-delete-add">
+<meta name="issue-stamp" content="26-09-28-0128">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="my-commit-flow-staged-delete-add">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="commit.py 逐路径 git add 撞「已暂存删除」路径必败">
+<meta name="issue-summary" content="ship.commit 逐路径 add 对已暂存删除(D )路径 pathspec 落空直接 FAIL; workaround=退回未暂存( D)后重跑即过, 根修应对删除路径改用 git rm --cached 口径">
+<title>commit.py 逐路径 git add 撞「已暂存删除」路径必败 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>commit.py 逐路径 git add 撞「已暂存删除」路径必败</h1>
+    <p class="lede">ship.commit 逐路径 add 对已暂存删除(D )路径 pathspec 落空直接 FAIL; workaround=退回未暂存( D)后重跑即过, 根修应对删除路径改用 git rm --cached 口径</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-28-0128-bug-my-commit-flow-staged-delete-add</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-28 01:28</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">my-commit-flow</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>ALT-01 提交轮(plan 26-09-28-0037, commit 6c85ff4)中, 按收尾 DoD 删除了一个已跟踪文件(activeContext 切片蒸馏), 首跑 <code>commands run ship.commit</code> 在「暂存(逐路径)」步骤直接 <code>RESULT: FAIL</code>, 提交未发生。与平台/配置无关 —— 任何"本轮删除过已跟踪文件"的提交都会触发。</p>
+  </section>
+
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+<pre><code># 取证 2026-09-28 01:11 (ship.commit 首跑输出)
+RESULT: FAIL git add 失败: memory-bank/activeContext/26-09-23-1959-memory-bank-doc-forms.md
+WHY: fatal: pathspec 'memory-bank/activeContext/26-09-23-1959-memory-bank-doc-forms.md' did not match any files
+
+# 当时 porcelain 形态(删除已随失败留在暂存区):
+D  memory-bank/activeContext/26-09-23-1959-memory-bank-doc-forms.md   # 首列 D = 已暂存删除 -&gt; 必败
+ D ...                                                                # 空格 D = 未暂存删除 -&gt; git add 正常</code></pre>
+    <p>workaround 已验证(2026-09-28 01:30): <code>git restore --staged &lt;path&gt;</code> 退回未暂存态后重跑 ship.commit 一次通过(commit 6c85ff4, 27 文件)。</p>
+  </section>
+
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>本轮含已跟踪文件的删除, 且删除已进暂存区(首跑失败后删除留在暂存区, 重跑继续踩) —— 必现</td></tr>
+      <tr><td>影响范围</td><td>ship.commit / commit.py 暂存步骤; 不影响已提交内容, 只是提交被拦</td></tr>
+      <tr><td>严重度</td><td>中 —— 每次含文件删除的提交首跑必败, 靠手工 workaround 绕过; 脚本自身无数据损坏风险</td></tr>
+    </table>
+  </section>
+
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>.commands/my-commit-flow/scripts/commit.py:162-167</code>(取证 2026-09-28 01:28)· 暂存循环 <code>for path in to_stage: git("add", "--", path)</code> · grep 关键词 <code>逐路径</code> / <code>git add 失败</code></li>
+      <li><code>to_stage</code> 清单构建在其上游(同文件, grep <code>to_stage</code>) —— 疑似把 porcelain 的 <code>D </code> 路径也列入逐路径 add, 未区分删除形态(待查)</li>
+      <li>关联坑条: <code>memory-bank/pitfalls/git/ship-commit-staged-delete.md</code>(触发/判别/处置三段, 含 workaround 口径)</li>
+    </ul>
+  </section>
+
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">机制已明确(非猜测): 逐路径 <code>git add -- &lt;path&gt;</code> 的 pathspec 同时匹配工作区与索引; 「已暂存删除」的路径在工作区与索引里都不复存在, 无处匹配即 fatal。未修的深层问题(待查): <code>to_stage</code> 清单为何把该形态路径照常下发, 以及脚本对删除路径应选用哪种登记口径。</div>
+  </section>
+
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <ul>
+      <li>方向 A(小改): 暂存循环对 porcelain 首列为 <code>D</code>/<code>&nbsp;</code>的删除路径改走 <code>git rm --cached -- &lt;path&gt;</code> 口径(已暂存删除时为幂等登记), 其余路径维持 <code>git add --</code>。</li>
+      <li>方向 B(更省): 对含删除的路径统一 <code>git add -A -- &lt;path&gt;</code>(单路径限定的 -A 不违背「禁 -A / . / *」的防误交本意 —— 那条禁令拦的是全仓通配, 不是单路径语义; 需在包 README 写清口径)。</li>
+      <li>配套: 两方向都应补守阵(临时目录造已跟踪文件删除 + 断言 ship.commit 暂存步骤通过)。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-28 01:28 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-09-28-0128-bug-my-commit-flow-staged-delete-add.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
