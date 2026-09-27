@@ -9,7 +9,7 @@
 - test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+hide 默认隐藏接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+hide 默认隐藏接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤200 行/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
@@ -703,6 +703,53 @@ def _scan_css_blocks(path, rel, problems):
         problems.append(f"{rel} 花括号未配平(差 {depth})")
 
 
+def _scan_css_comments(path, rel, problems):
+    """CSS 注释提前终止守阵: 注释体内的 `*/` 会把注释砍断, 尾巴落成代码态的孤立垃圾 ——
+    浏览器按错误恢复丢弃到下一个 `}` 为止, **紧跟的那条规则整条静默消失**(无任何报错)。
+
+    (2026-09-28 实测: console/css/components.css 进度条注释写了 `(s-*/member-row 族)`,
+    `s-*` 后的 `*/` 提前闭合注释, 紧随其后的 `.m-progress { display: flex; … }` 被整条吞掉
+    —— 三处表格(辅种/种子/追剧明细)进度条只剩百分比没有条。判据 = 浏览器同款注释语义
+    (字符串感知)扫一遍: 正常文件的所有 `*/` 都应消费在注释态里, 代码态出现孤立 `*/` 即中招。)
+    """
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    i, n = 0, len(text)
+    in_comment = False
+    str_ch = None
+    while i < n:
+        c = text[i]
+        if in_comment:
+            if c == "*" and i + 1 < n and text[i + 1] == "/":
+                in_comment = False
+                i += 2
+                continue
+            i += 1
+            continue
+        if str_ch:
+            if c == "\\":
+                i += 2
+                continue
+            if c == str_ch:
+                str_ch = None
+            i += 1
+            continue
+        if c in "\"'":
+            str_ch = c
+            i += 1
+            continue
+        if c == "/" and i + 1 < n and text[i + 1] == "*":
+            in_comment = True
+            i += 2
+            continue
+        if c == "*" and i + 1 < n and text[i + 1] == "/":
+            line = text.count("\n", 0, i) + 1
+            problems.append(f"{rel}:{line} 注释被体内 `*/` 提前终止(其后规则被浏览器整条丢弃)")
+            i += 2
+            continue
+        i += 1
+
+
 def _scan_template_transitions(path, rel, problems):
     """模板 `<transition>` 结构守阵: 必须配对, 且弹窗不得落在 `<transition>` 内
 
@@ -1217,6 +1264,11 @@ def _scan_frontend_assets():
        模板漏写分支无任何报错(表头在、列选择器可勾、值永远空白); 明细列两份模板
        (groups.html/shows.html)必须成对; loadColState 必须消费 hide 标志(默认隐藏列注入单点)。
 
+    15. CSS 注释体内不得出现 `*/`(见 _scan_css_comments) —— 注释被提前终止后, 尾巴落成
+       代码态垃圾, 浏览器按错误恢复把紧跟的规则整条静默丢弃(2026-09-28 实测: console 皮肤
+       进度条注释 `(s-*/member-row 族)` 吞掉 `.m-progress { display: flex }`, 三处表格
+       进度条只剩百分比没有条)。
+
 
     ⚠ 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测)。
@@ -1246,6 +1298,7 @@ def _scan_frontend_assets():
                             problems.append(f"{rel}:{i + 1} 注释块已闭合后仍有续行(会造成整包 SyntaxError)")
                 elif name.endswith(".css"):
                     _scan_css_blocks(path, rel, problems)
+                    _scan_css_comments(path, rel, problems)
                 elif name.endswith(".html"):
                     _scan_template_transitions(path, rel, problems)
             for ref in re.findall(r'(?:src|href)="(/[^"]+)"', "\n".join(lines)):

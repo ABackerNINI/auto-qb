@@ -364,7 +364,7 @@
 .m-hash { color: var(--fg-dim); font-size: 12px; }
 
 /* 进度: 分段 LED 填充条(纯 CSS 替换, 不动 JS 数据结构) + mono 百分比
- * 填充色取 currentColor: 行状态色规则已把 .m-progress 的色随行染(s-*/member-row 族) */
+ * 填充色取 currentColor: 行状态色规则已把 .m-progress 的色随行染(s-* / member-row 族) */
 .m-progress { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .m-progress .bar { flex: 1 1 auto; height: 7px; min-width: 22px;
   background: var(--surface-2); overflow: hidden; }
