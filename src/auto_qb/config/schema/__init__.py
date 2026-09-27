@@ -50,7 +50,7 @@ from .fields import (
 )
 from .groups import GROUPS
 from .hr import HR_CHECK_CHANNEL_FIELDS, HR_CHECK_FIELDS, HR_CHECK_MODES, HR_CHECK_SCOPES, \
-    HR_CHECK_UNKNOWN_POLICIES, SITE_HR_CHECK_FIELDS
+    HR_CHECK_SITES_FIELDS, HR_CHECK_UNKNOWN_POLICIES
 from .rules import ACTION_PLUGINS, CHECKING_SECTION_FIELDS, CONDITION_PLUGINS, RULE_FIELDS
 from .trackers import HR_OUTPUT_FIELDS, TRACKER_FIELDS, TRACKER_HR_FIELDS
 
@@ -81,7 +81,7 @@ __all__ = [
     "TRACKER_FIELDS",
     "HR_CHECK_FIELDS",
     "HR_CHECK_CHANNEL_FIELDS",
-    "SITE_HR_CHECK_FIELDS",
+    "HR_CHECK_SITES_FIELDS",
     "HR_CHECK_MODES",
     "HR_CHECK_UNKNOWN_POLICIES",
     "HR_CHECK_SCOPES",
@@ -120,6 +120,8 @@ def plugins_by_kind(kind: str) -> Dict[str, Plugin]:
 
 def schema_payload() -> Dict[str, Any]:
     """给 /api/config/schema 的完整载荷(热重载级别不在此, 由 API 层合并)"""
+    from ..site_presets import SITE_PRESETS  # 延迟导入: schema 模块加载期不依赖具体档案数据
+
     return {
         "groups": GROUPS,
         "tracker_fields": TRACKER_FIELDS,
@@ -127,16 +129,40 @@ def schema_payload() -> Dict[str, Any]:
         "plugins": plugin_table(),
         "constants":
             {
-                "log_levels": list(LOG_LEVELS),
-                "notify_levels": list(NOTIFY_LEVELS),
-                "notify_channels": list(NOTIFY_CHANNELS),
-                "execute_once": list(EXECUTE_ONCE),
-                "stop_if": list(STOP_IF),
-                "triggers": list(TRIGGERS),
-                "checking_basic": list(CHECKING_BASIC),
-                "checking_modes": list(CHECKING_MODES),
-                "hr_modes": list(HR_MODES),
-                "state_attrs": list(STATE_ATTRS),
-                "deleted_allowed_actions": list(DELETED_ALLOWED_ACTIONS),
+                "log_levels":
+                    list(LOG_LEVELS),
+                "notify_levels":
+                    list(NOTIFY_LEVELS),
+                "notify_channels":
+                    list(NOTIFY_CHANNELS),
+                "execute_once":
+                    list(EXECUTE_ONCE),
+                "stop_if":
+                    list(STOP_IF),
+                "triggers":
+                    list(TRIGGERS),
+                "checking_basic":
+                    list(CHECKING_BASIC),
+                "checking_modes":
+                    list(CHECKING_MODES),
+                "hr_modes":
+                    list(HR_MODES),
+                "state_attrs":
+                    list(STATE_ATTRS),
+                "deleted_allowed_actions":
+                    list(DELETED_ALLOWED_ACTIONS),
+                # 内置 HR 站点档案(计划 26-09-27-1318): 「HR 在线核实」分区站点接入卡片的数据源 ——
+                # 卡片键集合来自这里(而非配置里已存在的键), 点选启用即写入 hr_check.sites.<id>
+                "hr_check_site_presets":
+                    [
+                        {
+                            "id": p.preset_id,
+                            "adapter": p.adapter,
+                            "domains": list(p.domains),
+                            "page_path": p.page_path,
+                            "download_path": p.download_path,
+                            "page_param": p.page_param,
+                        } for p in SITE_PRESETS.values()
+                    ],
             },
     }

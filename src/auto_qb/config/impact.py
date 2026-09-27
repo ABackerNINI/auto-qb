@@ -93,6 +93,9 @@ HR_CHECK_FIELD_LEVELS = {
     "poll_interval": LEVEL_L0,
     "parse_missing_rate_max": LEVEL_L0,
     "channel": LEVEL_L1,
+    # 站点接入(计划 26-09-27-1318 REV2): 站点条目派生进 trackers.*.hr_check, 而后者是 L0
+    # (取数线程每轮现读) —— sites 变更经派生字段同路径生效, 与 TRACKER_FIELD_LEVELS.hr_check 同级
+    "sites": LEVEL_L0,
 }
 
 

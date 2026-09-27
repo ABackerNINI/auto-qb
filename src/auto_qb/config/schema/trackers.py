@@ -1,7 +1,10 @@
-"""schema 站点段: 站点字段表与站点 hr 子段(HR 输出字段全局/站点共用)"""
+"""schema 站点段: 站点字段表与站点 hr 子段(HR 输出字段全局/站点共用)
+
+hr_check 字段已移除(计划 26-09-27-1318 REV2): HR 在线核实的站点配置整体上收到
+config.hr_check.sites(「HR 在线核实」分区的站点接入卡片), 站点分区只保留 HR 规则段。
+"""
 from typing import Tuple
 from .fields import Field
-from .hr import SITE_HR_CHECK_FIELDS
 
 HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
     Field(
@@ -116,18 +119,9 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "object",
         default=None,
         optional=True,
-        help="未配置该段 = 该站点不做 HR 管理(不打 HR 标签/分类)",
+        help="未配置该段 = 该站点不做 HR 管理(不打 HR 标签/分类)。"
+        "HR 在线核实的启用已上收至「HR 在线核实」分区的站点接入卡片, 不在本分区",
         fields=TRACKER_HR_FIELDS
-    ),
-    Field(
-        "hr_check",
-        "HR 在线核实",
-        "object",
-        default=None,
-        optional=True,
-        help="部分种子 HR 站点: 逐种子在线核实(取 HR 统计页 + 对账建索引); 未配置 = 该站不启用, 行为不变。"
-        "❗mode != off 时必须同时配置上面的 HR 规则段",
-        fields=SITE_HR_CHECK_FIELDS,
     ),
     Field(
         "rules",

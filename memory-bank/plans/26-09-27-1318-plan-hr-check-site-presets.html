@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · HR 在线核实配置收敛: 内置站点档案 + 配置全部上收「HR 在线核实」分区</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-27">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="hr-check-site-presets">
+<meta name="doc-added" content="2026-09-27">
+<meta name="doc-updated" content="2026-09-27">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101113;
+    --bg-raise: #16181b;
+    --ink: #e8e6e1;
+    --ink-dim: #a3a09a;
+    --ink-faint: #6f6d68;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #d9a441;
+    --accent-dim: rgba(217,164,65,.14);
+    --err: #c96a5b;
+    --err-dim: rgba(201,106,91,.12);
+    --ok: #7fae7a;
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1180px; margin: 0 auto; padding: 0 40px; }
+
+  .cover { padding: 72px 0 40px; border-bottom: 1px solid var(--hairline); }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 28px;
+  }
+  .kicker b { color: var(--accent); font-weight: 400; }
+  h1 {
+    font-size: 40px; font-weight: 590; line-height: 1.15;
+    letter-spacing: -.02em; max-width: 900px;
+  }
+  .lede { margin-top: 20px; max-width: 780px; color: var(--ink-dim); font-size: 16px; }
+  .meta-row {
+    margin-top: 36px; display: flex; flex-wrap: wrap; gap: 32px;
+    font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint);
+    letter-spacing: .04em;
+  }
+  .meta-row span b { color: var(--ink-dim); font-weight: 400; }
+
+  .body-grid { display: grid; grid-template-columns: 208px 1fr; gap: 56px; padding: 48px 0 24px; }
+  nav.toc { position: sticky; top: 32px; align-self: start; }
+  nav.toc .toc-head {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-faint); text-decoration: none;
+    font-size: 13px; line-height: 1.4; padding: 5px 0 5px 14px;
+    border-left: 1px solid var(--hairline-soft);
+  }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+  nav.toc a .n { font-family: var(--font-mono); font-size: 11px; margin-right: 8px; }
+
+  main { min-width: 0; }
+  section { margin-bottom: 72px; }
+  .sec-rule {
+    display: flex; align-items: baseline; gap: 16px;
+    border-top: 1px solid var(--hairline); padding-top: 18px; margin-bottom: 22px;
+  }
+  .folio {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+    color: var(--accent);
+  }
+  h2 { font-size: 24px; font-weight: 590; letter-spacing: -.01em; }
+  h3 { font-size: 16px; font-weight: 600; margin: 28px 0 10px; }
+  p { margin: 10px 0; max-width: 780px; color: var(--ink-dim); }
+  p b, li b { color: var(--ink); font-weight: 600; }
+  ul, ol { margin: 10px 0 10px 22px; color: var(--ink-dim); max-width: 760px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: var(--font-mono); font-size: 13px;
+    background: var(--bg-raise); padding: 1px 6px; border-radius: 3px;
+    color: var(--ink); border: 1px solid var(--hairline-soft);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .tbl-wrap { margin: 18px 0; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  caption {
+    text-align: left; font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-faint); padding-bottom: 10px;
+  }
+  th {
+    text-align: left; font-weight: 600; color: var(--ink-faint);
+    font-size: 12px; letter-spacing: .06em;
+    border-bottom: 1px solid var(--hairline); padding: 8px 14px 8px 0;
+    white-space: nowrap;
+  }
+  td {
+    border-bottom: 1px solid var(--hairline-soft);
+    padding: 9px 14px 9px 0; vertical-align: top; color: var(--ink-dim);
+  }
+  td.msg { color: var(--ink); }
+  td.loc { font-family: var(--font-mono); font-size: 12.5px; white-space: nowrap; }
+
+  .chip {
+    display: inline-block; font-family: var(--font-mono); font-size: 11px;
+    padding: 2px 9px; border-radius: 3px; letter-spacing: .05em; white-space: nowrap;
+  }
+  .chip.rm { background: var(--err-dim); color: var(--err); }
+  .chip.keep { background: var(--accent-dim); color: var(--accent); }
+  .chip.add { background: rgba(127,174,122,.14); color: var(--ok); }
+  .chip.mv { background: rgba(140,150,220,.16); color: #9aa3d6; }
+
+  .note {
+    border: 1px solid var(--hairline); background: var(--bg-raise);
+    padding: 14px 18px; margin: 16px 0; max-width: 780px;
+    font-size: 14px; color: var(--ink-dim);
+  }
+  .note b { color: var(--accent); font-weight: 600; }
+  .note.warn { border-color: rgba(201,106,91,.35); }
+  .note.warn b { color: var(--err); }
+
+  pre {
+    font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55;
+    background: var(--bg-raise); border: 1px solid var(--hairline-soft);
+    padding: 14px 18px; overflow-x: auto; margin: 14px 0; color: var(--ink-dim);
+    max-width: 860px;
+  }
+  pre b { color: var(--accent); font-weight: 400; }
+
+  @media (max-width: 900px) {
+    .body-grid { grid-template-columns: 1fr; }
+    nav.toc { position: static; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<header class="cover">
+  <div class="kicker">MEMORY BANK / PLANS / <b>26-09-27-1318</b> · <b>REV2</b></div>
+  <h1>HR 在线核实配置收敛: 内置站点档案 + 站点配置全部上收「HR 在线核实」分区</h1>
+  <p class="lede">两步收敛: ①新增内置站点档案表, <code>adapter</code> / 页面地址 / 下载路径 / 翻页参数等程序已知、人易配错的内容代码写死; ②站点级配置不再挂在 <code>trackers.&lt;站点&gt;.hr_check</code> —— <b>「站点」设置分区不保留任何 HR 在线核实配置</b>, 全部上收到新段 <code>config.hr_check.sites.&lt;站点&gt;</code>, 在「HR 在线核实」分区点选启用 + 微调。未入档案的站点不允许启用, 配置期 fail-fast。</p>
+  <div class="meta-row">
+    <span>DATE <b>2026-09-27</b></span>
+    <span>REV2 <b>站点段整体上收(替代 v1 的「站点段就地瘦身」)</b></span>
+    <span>SCOPE <b>hr 配置面 + loaders/validation + webui 分区</b></span>
+    <span>STATE <b>done</b></span>
+    <span>RISK <b>中(配置结构迁移, 含生产兼容)</b></span>
+  </div>
+</header>
+
+<div class="body-grid">
+<nav class="toc">
+  <div class="toc-head">目录</div>
+  <a href="#s1"><span class="n">01</span>背景与问题</a>
+  <a href="#s2"><span class="n">02</span>目标与非目标</a>
+  <a href="#s3"><span class="n">03</span>方案设计</a>
+  <a href="#s4"><span class="n">04</span>改动清单 · 代码</a>
+  <a href="#s5"><span class="n">05</span>Web UI 改动</a>
+  <a href="#s6"><span class="n">06</span>测试更新</a>
+  <a href="#s7"><span class="n">07</span>文档回写</a>
+  <a href="#s8"><span class="n">08</span>风险与开放问题</a>
+  <a href="#s9"><span class="n">09</span>执行顺序与 DoD</a>
+</nav>
+
+<main>
+
+<section id="s1">
+  <div class="sec-rule"><span class="folio">01</span><h2>背景与问题</h2></div>
+  <p>HR 在线核实(计划 <a href="26-09-22-2204-partial-hr-site-verify-plan.html">26-09-22-2204</a> 落地, CarPT adapter 已于 56c04e0 接入)的站点级配置现挂在 <code>trackers.&lt;站点&gt;.hr_check</code>(9 个字段, <code>src/auto_qb/config/schema/hr.py:169</code>)。四个问题:</p>
+  <ul>
+    <li><b>填写项过多</b>: 启用一个站点要填 URL、路径、翻页参数等, 而其中绝大多数对已支持形态是<b>唯一确定值</b>, 不是用户该做的选择;</li>
+    <li><b>易配错</b>: <code>adapter</code>(页面形态)、<code>hr_page_url</code>(必须是登录后可达的 myhr 页)、<code>download_path</code>(须含 <code>{id}</code> 占位)、<code>page_param</code>(站点各不相同) —— 校验层只能拦部分(如缺 <code>{id}</code>), 拦不住「值合法但语义错」(URL 指到别的站、page_param 写成 <code>p</code>);</li>
+    <li><b>未支持站点无防护</b>: 任何站点都能自由启用 <code>mode != off</code>, 写错配置要到运行期才发现(adapter 未登记只是该站跳过, 原因埋在 HR 状态里);</li>
+    <li><b>配置位置割裂</b>(REV2 新增裁决): 启用/微调一个站点要在「站点」分区里逐站翻找, 而 HR 在线核实的总开关、频控、取数通道在「HR 在线核实」分区 —— 同一件事的两半分居两处, 站点越多越难对账。</li>
+  </ul>
+  <p>事实依据: adapter 工厂(<code>src/auto_qb/hr/adapters/__init__.py</code>)里, 一个 adapter 名对应一组<b>完全由代码确定</b>的页面事实(scope_param / scope_values / 表头名 / 列名), 配置里唯一真正「每站不同」的只有主机名与页面路径 —— 而主机名就是用户已在 <code>domains</code> 里维护的站点域名。</p>
+  <div class="note"><b>REV2 修订说明</b>: v1 方案是站点段就地瘦身(四键移出配置、其余留在 <code>trackers.*.hr_check</code>)。用户裁决改为<b>站点段整体上收</b>: 「站点」分区不保留任何 HR 在线核实配置, 启用与微调全部进「HR 在线核实」分区点选完成。本文按 REV2 重写 §3 起, v1 的档案表与 URL 推算设计保留并沿用。</div>
+</section>
+
+<section id="s2">
+  <div class="sec-rule"><span class="folio">02</span><h2>目标与非目标</h2></div>
+  <h3>目标</h3>
+  <ul>
+    <li>新增<b>内置站点档案表</b>: 站点 → (adapter, 页面路径, 种子下载路径, 翻页参数名, 域名), 代码写死, 随版本发布; 首发 btschool·nexusphp 与 carpt 两档;</li>
+    <li>站点级配置<b>整体上收</b>: 新段 <code>config.hr_check.sites.&lt;档案 id&gt;</code>(mode + 微调项), <code>trackers.&lt;站点&gt;</code> 下 <code>hr_check</code> 键<b>废除</b>——「站点」分区的配置模式与 UI 一并移除;</li>
+    <li>「HR 在线核实」分区成为唯一入口: 总开关 / 频控 / 取数通道(现状) + <b>站点接入卡片(新增)</b>——每张卡 = 一个已支持站点, 点选启用 + 微调, 卡上显示绑定到的站点配置与绑定状态;</li>
+    <li>绑定自动化: <code>hr_check.sites.&lt;id&gt;</code> 与 trackers 的关联按<b>域名交集</b>自动完成, 用户不填任何引用; 绑不上 / 绑到多个 → <code>validate_config</code> fail-fast;</li>
+    <li>生产 <code>config.yml</code> <b>零修改照常工作</b>(红线文件不许动; 旧键兼容接受、语义等价迁移)。</li>
+  </ul>
+  <h3>非目标</h3>
+  <ul>
+    <li>全局 <code>config.hr_check</code> 其余 17 项(总开关 / 频控 / 通道)口径不变, 仍在原分区原地; 变的只是<b>站点子段的位置</b>;</li>
+    <li>不新增站点 / 不写新 adapter;</li>
+    <li>不改 HR 运行链路的数据流 —— <code>SiteHrCheckConfig</code> 模型与 <code>TrackerConfig.hr_check</code> 派生字段保留, service / channel / parse / 锚点路径零感知(见 §3.5)。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <div class="sec-rule"><span class="folio">03</span><h2>方案设计</h2></div>
+
+  <h3>3.1 内置站点档案表(沿 v1)</h3>
+  <p>落在 <b>config 层</b>(<code>src/auto_qb/config/site_presets.py</code>, 纯数据), 不放 hr 包 —— hr/adapters 依赖 config.models, 反向 import 成环(config 是下层; 与 <code>sections.py:59</code> 不复用 <code>EXTENSION_ID_RE</code> 同一先例)。hr 层只读它。</p>
+  <div class="tbl-wrap">
+    <table>
+      <caption>SITE_PRESETS 首发两站(页面事实来自 adapter docstring 的样张核对)</caption>
+      <tr><th>键</th><th>btschool</th><th>carpt</th></tr>
+      <tr><td class="loc">preset id(= sites 键名)</td><td class="msg">btschool</td><td class="msg">carpt</td></tr>
+      <tr><td class="loc">adapter</td><td class="msg">nexusphp</td><td class="msg">carpt</td></tr>
+      <tr><td class="loc">domains(绑定匹配用)</td><td class="msg">pt.btschool.club</td><td class="msg">carpt.net</td></tr>
+      <tr><td class="loc">page_path</td><td class="msg">/myhr.php</td><td class="msg">/myhr.php</td></tr>
+      <tr><td class="loc">download_path</td><td class="msg">/download.php?id={id}</td><td class="msg">/download.php?id={id}</td></tr>
+      <tr><td class="loc">page_param</td><td class="msg">page(标「待在线实测」, 与 nexusphp docstring 注记一致)</td><td class="msg">page(样张已核)</td></tr>
+      <tr><td class="loc">scope 形态</td><td class="msg">hrtype=A/B/C/D(adapter 默认)</td><td class="msg">status=1/2/3/4(CarPT adapter 自带)</td></tr>
+    </table>
+  </div>
+  <p>每条档案 = <code>SiteHrPreset</code> dataclass; scope 参数 / 表头名 / 列名等页面事实仍由 adapter 类自带(档案只存 adapter 名, 不重复存), 衔接仍走现有 <code>build_adapter</code>。</p>
+
+  <h3>3.2 配置面: 站点子段上收为新段 <code>config.hr_check.sites</code></h3>
+  <pre>hr_check:
+  enabled: true                 # 总开关(不变)
+  channel: { … }                # 取数通道(不变)
+  min_torrent_interval: …       # 全局频控默认值(不变)
+  <b>sites:</b>                        # ★ 新增: 站点接入, 键 = 内置档案 id
+    <b>btschool:</b>
+      mode: partial             # off / partial / all —— 点选启用
+      hr_page_scopes: [A, B, C] # ┐
+      refresh_interval: 12H     # │ 微调项(全有默认, 可不写)
+      max_pages_per_refresh: 5  # │
+      completed_age_limit: 0    # │
+      max_torrents_per_hour:    # ┘ 留空回退全局配额</pre>
+  <div class="tbl-wrap">
+    <table>
+      <caption>站点级字段裁决(REV2: 整体搬家, 不是就地瘦身)</caption>
+      <tr><th>字段</th><th>裁决</th><th>说明</th></tr>
+      <tr><td class="loc">trackers.&lt;站点&gt;.hr_check(整个键)</td><td><span class="chip rm">废除</span></td><td class="msg">YAML 兼容接受并<b>等价迁移</b>(见 3.4); schema / UI / 文档全部移除</td></tr>
+      <tr><td class="loc">hr_check.sites.&lt;id&gt;.mode</td><td><span class="chip mv">上收 · 主开关</span></td><td class="msg">语义不变(off/partial/all); 键名必须是档案 id(未登记 → 报错 + 已支持清单)</td></tr>
+      <tr><td class="loc">sites.&lt;id&gt;.hr_page_scopes / refresh_interval / max_pages_per_refresh / completed_age_limit / max_torrents_per_hour</td><td><span class="chip mv">上收 · 微调</span></td><td class="msg">默认值与校验原样搬运(scopes 必含 A/B/C、age_limit 0 或 1D~3650D 等)</td></tr>
+      <tr><td class="loc">adapter / hr_page_url / download_path / page_param</td><td><span class="chip rm">移出配置</span></td><td class="msg">档案填充, 任何配置位置都不再接受(v1 旧键例外见 3.4)</td></tr>
+    </table>
+  </div>
+  <p><code>mode != off</code> 需要该站有 <code>hr</code> 规则段(要求做种时长等)的既有约束<b>保留</b>, 但校验点随绑定移动: 见 3.3。</p>
+
+  <h3>3.3 站点 ↔ 配置绑定: 域名交集自动完成</h3>
+  <ul>
+    <li>档案 <code>domains</code> 与 <code>trackers.&lt;站点&gt;.domains</code> 有交集 → <code>sites.&lt;id&gt;</code> 绑定到该 tracker; 用户<b>零引用配置</b>(不用填 tracker 名, 不用填域名);</li>
+    <li>启用(<code>mode != off</code>)但<b>没有</b>任何 tracker 域名命中 → 报错: <code>hr_check.sites.btschool: 已启用但没有站点的 domains 包含 pt.btschool.club —— 请在对应站点的域名里补上该域名</code>;</li>
+    <li>命中<b>多个</b> tracker(域名重叠配置) → 报错: 绑定必须唯一, 提示重叠的两个站点名;</li>
+    <li>绑定的 tracker 无 <code>hr</code> 段 → 报错(原「mode != off 必须配 hr 段」约束的搬家版, 文案同步指向新位置);</li>
+    <li><code>hr_page_url</code> 推算 = <code>https://{命中的域名}{page_path}</code>: 生产实证可行 —— 现网 BTSchool 的 <code>domains[0]</code> 就是 <code>pt.btschool.club</code>, 与其旧 <code>hr_page_url</code> 主机一致。若某站 web 域与 tracker 域不同, 档案里加 <code>page_domain</code> 覆盖(档案级, 不是用户级, 见 §08)。</li>
+  </ul>
+
+  <h3>3.4 兼容策略(生产 config.yml 零修改)</h3>
+  <ul>
+    <li>旧键 <code>trackers.&lt;站点&gt;.hr_check</code> <b>兼容接受并等价迁移</b>: loader 读到 <code>mode != off</code> → 按域名交集找档案, 命中则<b>视为等价于</b> <code>hr_check.sites.&lt;id&gt;: {mode: …}</code>(微调项若旧配置里写了也一并搬) —— 现网 BTSchool(<code>mode: partial</code> + <code>hr_page_url</code>)不改一字, 加载结果与现在完全相同;</li>
+    <li>旧键里的 <code>adapter</code> / <code>hr_page_url</code> / <code>download_path</code> / <code>page_param</code> 四键: 读取后<b>丢弃</b>, 值一律以档案为准 —— 配置里写对写错行为一致, 这正是本次要消灭的易错面;</li>
+    <li>新旧并存(同站既写了旧键又写了 <code>sites.&lt;id&gt;</code>) → <b>新位置获胜</b>, 旧键忽略; 校验层无警告通道(errors-only), 迁移语义写进文档与 schema help, 不做运行期告警;</li>
+    <li>旧键 <code>mode != off</code> 但域名绑不上档案 → 与新位置同口径报错(未支持站点)。</li>
+  </ul>
+
+  <h3>3.5 数据流(改动后; 下游零感知的关键 = 派生字段)</h3>
+  <pre>config.yml
+  hr_check.sites.&lt;id&gt;: { mode, 微调项… }        ← 新唯一配置源
+  trackers.&lt;站点&gt;.hr_check: { … }(旧键, 兼容等价迁移)
+    │ loaders(load_config 后处理)
+    │   ├─ sites.&lt;id&gt; 校验档案 id + mode/微调项解析
+    │   ├─ 域名交集绑定: sites.&lt;id&gt; × trackers → 唯一命中
+    │   │    命中 tracker 的 <b>TrackerConfig.hr_check = SiteHrCheckConfig(派生填充)</b>
+    │   │    (adapter / hr_page_url / download_path / page_param 来自档案, mode/微调来自配置)
+    │   └─ 兼容: 旧键 mode != off → 等价并入 sites.&lt;id&gt; 后走同一绑定
+    ▼
+config 对象内: 配置真相在 hr_check.sites, trackers.*.hr_check 只是<b>绑定结果视图</b>
+    ▼
+HrRuntime.site_confs() {tracker_name: tc.hr_check} / _hr_anchors / check_hr_condition /
+build_adapter / hr.service / hr.channel —— <b>零改动</b>(site_confs 的推导点本就在 runtime,
+消费的也全是派生字段; 唯一变化是推导的输入从「用户配置」换成「绑定结果」)</pre>
+  <div class="note"><b>为什么不直接让下游读 hr_check.sites</b>: 每种子锚点(<code>qbmanager._hr_anchors</code>)与判定链路都经 <code>rec.tracker_conf</code> 定位站点 —— 保留派生字段意味着「配置搬家」对十几处消费点完全透明, 改动面收敛在 loader / validation / schema / UI 四处, 也天然继承现有 <code>mode != off</code> 需 hr 段的防线位置。</div>
+  <p>fail-fast 时机: 校验器(<code>validate_config</code>)看不到 loader 产物, 绑定类报错(绑不上 / 绑多个 / 缺 hr 段)在<b>校验层独立做一遍</b>(直接读 yaml spec + domains, 不依赖 loader), loader 不报错只填值 —— 与现有「合法性唯一入口是 validate_config」口径一致。</p>
+</section>
+
+<section id="s4">
+  <div class="sec-rule"><span class="folio">04</span><h2>改动清单 · 代码</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <caption>10 个代码触点</caption>
+      <tr><th>文件</th><th>动作</th></tr>
+      <tr><td class="loc">src/auto_qb/config/site_presets.py <span class="chip add">新增</span></td><td class="msg"><code>SiteHrPreset</code> dataclass + <code>SITE_PRESETS</code>(btschool / carpt 两档) + <code>find_preset(preset_id)</code> / <code>match_tracker(preset, trackers)</code> 域名交集查找; 页面事实以 adapter docstring 的样张核对记录为准</td></tr>
+      <tr><td class="loc">src/auto_qb/config/models.py</td><td class="msg"><code>HrCheckConfig</code> 增 <code>sites: Dict[str, SiteHrCheckConfig]</code>(默认空); <code>SiteHrCheckConfig</code> 四档案字段注释改「由内置站点档案填充」; <code>TrackerConfig.hr_check</code> 注释改「绑定结果视图, 配置源在 hr_check.sites」—— 字段本身都保留</td></tr>
+      <tr><td class="loc">src/auto_qb/config/loaders.py</td><td class="msg"><code>load_hr_check_config</code> 增 <code>sites</code> 子段解析(键=档案 id, 值=mode+微调); 新增绑定后处理: 域名交集 → 命中 tracker 填派生 <code>hr_check</code>(含档案四字段 + URL 推算); 旧键 <code>trackers.*.hr_check</code> 读取后等价迁移, 四档案键丢弃</td></tr>
+      <tr><td class="loc">src/auto_qb/config/validation/sections.py</td><td class="msg">①<code>_validate_hr_check</code> 增 <code>sites</code> 校验: 键必须 ∈ SITE_PRESETS(未登记 → 报错 + 已支持清单)、mode/微调项沿用原站点级规则; ②<code>_validate_trackers</code>: <code>hr_check</code> 键改为兼容模式(仅校 mode 合法 + 「绑不上档案报未支持」, 其余子键接受忽略); 删 <code>hr_page_url</code> 必填 / download_path / page_param / adapter 校验; ③绑定类校验(绑不上 / 绑多个 / 绑定 tracker 缺 hr 段)在此层独立实现</td></tr>
+      <tr><td class="loc">src/auto_qb/config/schema/hr.py</td><td class="msg">新增 <code>HR_CHECK_SITES_FIELDS</code>(mode + 五个微调项, help 按「点选启用 + 微调」口径重写); <code>SITE_HR_CHECK_FIELDS</code> 删除; <code>HR_CHECK_FIELDS</code> 增 <code>sites</code> object 字段; 模块 docstring 更新指向 site_presets</td></tr>
+      <tr><td class="loc">src/auto_qb/config/schema/trackers.py</td><td class="msg"><code>TRACKER_FIELDS</code> 删 <code>hr_check</code> 字段(站点分区不再渲染该块); <code>hr</code> 字段 help 补「HR 在线核实的启用已上收至 HR 分区」</td></tr>
+      <tr><td class="loc">src/auto_qb/config/schema/__init__.py</td><td class="msg">导出新字段表; <code>schema_payload()</code> constants 增 <code>hr_check_site_presets</code>(id / domains / adapter) —— HR 分区站点卡片与绑定提示的数据源</td></tr>
+      <tr><td class="loc">src/auto_qb/config/impact.py</td><td class="msg">核实 <code>hr_check.sites.*</code> 子树的热重载级别(应随 hr_check 走 L1 动态应用); 新键缺分级则补</td></tr>
+      <tr><td class="loc">src/auto_qb/hr/adapters/__init__.py</td><td class="msg">docstring「新增站点的三种情形」补第 4 步: 先在 <code>config/site_presets.py</code> 立档案(登记点单点化)</td></tr>
+      <tr><td class="loc">src/auto_qb/hr/runtime.py · core/qbmanager.py</td><td class="msg"><b>预期零改动</b>(消费派生字段); 实现时核实 <code>site_confs()</code> 推导与 <code>_hr_anchors</code> 行为不变, 仅更新注释里的配置源指向</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="s5">
+  <div class="sec-rule"><span class="folio">05</span><h2>Web UI 改动</h2></div>
+  <h3>「HR 在线核实」分区(唯一入口, 新增站点接入块)</h3>
+  <ul>
+    <li>分区尾部(站点状态块之前)新增<b>「站点接入」块</b>: 数据源 = <code>schema.constants.hr_check_site_presets</code>, 每个档案一张卡片;</li>
+    <li>卡片内容: 站点名(id) + <b>启用点选</b>(mode: 关闭 / 在线核实 / 全站 HR, 写 <code>hr_check.sites.&lt;id&gt;.mode</code>) + 微调字段(五项, schema 数据驱动, 折叠收起) + <b>绑定状态行</b>;</li>
+    <li>绑定状态行由前端计算: 遍历当前配置 <code>config.trackers</code>, 与档案 domains 求交集 → 「已绑定站点: BTSchool」/「未绑定: 没有站点的域名包含 pt.btschool.club, 保存后校验会报错」(与后端同口径的提示先行, fail-fast 仍在后端兜底);</li>
+    <li>卡片对未在 <code>sites</code> 里出现的档案也渲染(mode 显示默认 off)——「点选启用」即新增该键; 现有分区块渲染机制支持 schema object 字段, 需核实分组渲染对「键来自 constants 而非配置」的适配点(实现时落点: config_hub.js 分区块组装 + settings-detail.html hr_check 模板分支)。</li>
+  </ul>
+  <h3>「站点」分区(撤出)</h3>
+  <ul>
+    <li><code>TRACKER_FIELDS</code> 删 <code>hr_check</code> 后, 站点编辑器表单<b>自动</b>不再渲染该块(schema 数据驱动, <code>config_editor.js</code> <code>cfgTrackerItems()</code> 无硬编码字段清单, 已核对);</li>
+    <li>站点编辑器的 <code>hr</code>(HR 规则)块<b>保留</b> —— 要求做种时长 / 标签输出仍是站点语义, 只是「在线核实启用」上收; 其 help 指向 HR 分区;</li>
+    <li>config_hub.js <code>HUB_SECTIONS.hr_check</code> desc/lede 更新: 「启用方式: 本分区站点接入卡片点选; 页面地址/解析器等由内置站点档案自动处理」; 站点分区 lede 里「HR 设置」措辞同步改为「HR 规则」。</li>
+  </ul>
+</section>
+
+<section id="s6">
+  <div class="sec-rule"><span class="folio">06</span><h2>测试更新</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <caption>测试触点(实现时以 grep 实际落点为准)</caption>
+      <tr><th>文件</th><th>动作</th></tr>
+      <tr><td class="loc">tests/test_config_validation.py(或站点 hr_check 校验用例所在文件)</td><td class="msg">站点级用例整体迁移: 旧 <code>trackers.*.hr_check</code> 用例改写到 <code>hr_check.sites.*</code>; 增: 未登记档案 id 报错 + 文案含已支持清单 / 绑不上报错 / 绑定到多个 tracker 报错 / 绑定 tracker 缺 hr 段报错; 增: 旧键兼容等价迁移用例(生产回归锚, 见下)</td></tr>
+      <tr><td class="loc">tests/test_loaders.py(站点 hr_check 解析用例所在文件)</td><td class="msg"><b>生产兼容回归锚</b>: 现网 BTSchool 形态(trackers.BTSchool 带 mode+旧 hr_page_url, 无 sites 段)加载 → 派生 hr_check.mode=partial 且推算 URL 与旧值一致; sites 新位置配置 → 绑定正确 / adapter=carpt; 新旧并存 → 新位置获胜; 旧键四档案键值被丢弃</td></tr>
+      <tr><td class="loc">tests/test_hr_*(adapter / service / runtime)</td><td class="msg">直接构造 <code>SiteHrCheckConfig</code> 的用例不受影响(模型字段还在); 走 loader / 配置全链路的用例改新位置; <code>HrRuntime.site_confs()</code> 行为断言不变</td></tr>
+      <tr><td class="loc">tests/test_config_schema.py(字段一致性守阵)</td><td class="msg">schema↔validation 数据驱动断言: 双侧同步(删 SITE_HR_CHECK_FIELDS / 增 HR_CHECK_SITES_FIELDS)</td></tr>
+      <tr><td class="loc">webui 生命周期测试</td><td class="msg">schema payload 新 constants 键不破坏现有断言; 站点分区渲染不再含 hr_check 块; HR 分区站点卡片冒烟(有配置测试页可复用现有 hub 分区测试基建)</td></tr>
+    </table>
+  </div>
+  <p>新增/删改测试同步对应文件头部「## 测试计划」清单; 收尾跑 <code>commands run test.full</code> 记新基线切片。</p>
+</section>
+
+<section id="s7">
+  <div class="sec-rule"><span class="folio">07</span><h2>文档回写</h2></div>
+  <ul>
+    <li><code>docs/configuration.md</code> §「HR 在线核实」: 站点段章节重写为 <code>hr_check.sites</code>(新 YAML 示例 + 「已支持站点表」+ 绑定规则说明); trackers 站点段示例删 hr_check; 旧键标注「兼容等价迁移, 建议迁移到新位置」;</li>
+    <li><code>memory-bank/config-reference/keys.md</code>: <code>trackers.*.hr_check</code> 键移除 + <code>hr_check.sites.*</code> 键新增;</li>
+    <li>根 <code>README.md</code>: HR 功能描述若提及逐站配置 URL, 同步口径;</li>
+    <li><code>memory-bank/modules/</code> 或 systemPatterns 相应文档: 配置源与绑定派生的新数据流;</li>
+    <li>收尾按 memory-bank DoD: activeContext 切片 + plans/_index 状态推进 + kb.index 重建。</li>
+  </ul>
+</section>
+
+<section id="s8">
+  <div class="sec-rule"><span class="folio">08</span><h2>风险与开放问题</h2></div>
+  <ul>
+    <li><b>web 域 ≠ tracker 域的站点</b>: URL 取命中的 tracker 域名推算, 若某站 myhr 页不在该域会推错。对策已内建: 档案结构预留 <code>page_domain</code> 可选覆盖(档案级硬编码, 仍不对用户暴露); 首发两站均无此问题(BTSchool 生产实证, CarPT 样张同域)。</li>
+    <li><b>绑定随 domains 隐式变化</b>: 用户改某站点 <code>domains</code> 可能悄悄改变 HR 绑定(原配置模式下 hr_check 显式挂在站点下, 无此问题)。缓解: 绑定结果在 HR 分区卡片上可见 + 站点状态页本来就有每站取数现状; 校验期把「绑定变更」静默发生的场景压缩到「改域名」这一件事上。</li>
+    <li><b>旧键静默等价迁移</b>: 旧配置里的微调项会原样搬进派生值, 但四个档案键被丢弃 —— 有意为之(消灭易错面), 校验层无警告通道本轮不告警, 文档标注; 若日后要显性化走独立 issue。</li>
+    <li><b>page_param「待实测」</b>: nexusphp 形态 <code>?page=N</code> 的真实参数名 docstring 已注记待在线实测。档案先按 <code>page</code> 登记, 字段允许标「待实测」注记; 真机走查时一次核实, 错了改档案一行。</li>
+    <li><b>UI 适配点</b>: HR 分区站点卡片的键集合来自 constants(而非配置里已存在的键), 与现有「配置驱动渲染」的分组机制存在一次适配——实现 M2 时先落最小实现(卡片列表 + 点选 + 微调字段), 富说明浮窗复用现有 HUB_HELP 机制。</li>
+    <li><b>范围守恒</b>: 全局频控字段瘦身、HR 状态页信息密度等相邻诉求不在本次范围, 撞见即入池 issues 不顺手改。</li>
+  </ul>
+</section>
+
+<section id="s9">
+  <div class="sec-rule"><span class="folio">09</span><h2>执行顺序与 DoD</h2></div>
+  <h3>分批执行(每批独立可跑测试)</h3>
+  <ul>
+    <li><b>M1 · 后端收敛</b>: site_presets.py + models(sites 字段) + loaders(解析/绑定/兼容迁移) + validation(sites 校验 + 绑定校验 + 旧键兼容) + 单测(含生产兼容回归锚) —— 此批完成后生产配置行为与现状完全一致;</li>
+    <li><b>M2 · 配置面与 UI</b>: schema 删增字段 + schema_payload constants + impact 分级核实 + HR 分区「站点接入」卡片 + 站点分区撤出 + 守阵测试同步;</li>
+    <li><b>M3 · 文档与收尾</b>: docs/configuration.md / config-reference / README / modules 回写, test.full 记基线切片, activeContext 切片, kb.index 重建。</li>
+  </ul>
+  <h3>DoD</h3>
+  <ul>
+    <li>启用一个站点 = 「HR 在线核实」分区站点接入卡片点选 mode, <b>零 URL / 路径 / 参数 / 域名引用填写</b>; 微调只在卡片上做;</li>
+    <li>「站点」分区的配置模式与 UI 不再出现任何 HR 在线核实项(hr 规则段保留);</li>
+    <li>未登记档案 / 绑不上 / 绑多个 / 缺 hr 段 → <code>validate_config</code> 聚合报错, 文案含已支持清单或绑定诊断; CLI/WEB 配置端保存路径都能看到;</li>
+    <li>现网 config.yml(含 BTSchool 旧键)不改一字, 加载结果与改造前一致(回归锚用例证明);</li>
+    <li><code>test.full</code> 全绿记新基线; 新坑按动作写入 pitfalls。</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+</div>
+</body>
+</html>

@@ -140,6 +140,41 @@
                      不再单列首页卡片; 打开分区时拉一次(config_hub.js hubGo), 之后手动刷新
                      (站点数据小时级节奏, 不轮询) -->
                 <template v-if="hub.view === 'hr_check'">
+                  <!-- 站点接入(计划 26-09-27-1318): 启用的唯一入口 —— 卡片键来自内置站点档案
+                       (schema.constants.hr_check_site_presets), 点选启用 + 微调, 零 URL/路径/参数填写;
+                       绑定状态前端先行提示(同口径), fail-fast 仍在后端校验兜底 -->
+                  <div class="hb-blk hb-cut">
+                    <div class="hb-blk-hd">
+                      <span class="bh-t">站点接入</span>
+                      <span class="bh-n">点选启用; 页面地址/解析器/下载路径由内置站点档案自动处理, 微调可折叠</span>
+                    </div>
+                    <div style="padding:12px 14px">
+                      <p v-if="!hrSitePresets().length" class="hb-hp">当前版本没有内置站点档案(升级后这里会出现可接入的站点)</p>
+                      <div v-else class="hrs-list">
+                        <article v-for="p in hrSitePresets()" :key="p.id" class="hrs-site">
+                          <div class="hrs-site-head">
+                            <span class="hrs-site-name">{{ p.id }}</span>
+                            <span class="hrs-tag">解析器 {{ p.adapter }}</span>
+                            <span class="hrs-tag" :class="hrSiteBindClass(p)">{{ hrSiteBindText(p) }}</span>
+                          </div>
+                          <p class="hrs-line">HR 页 {{ p.page_path }} · 种子下载 {{ p.download_path }} · 翻页参数 ?{{ p.page_param }}=N(档案内置, 无需填写)</p>
+                          <div class="hrs-line" style="display:flex;align-items:center;gap:10px">
+                            <span>启用</span>
+                            <select class="hb-select" :value="hrSiteMode(p.id)" @change="hrSiteSetMode(p.id, $event.target.value)">
+                              <option value="off">关闭</option>
+                              <option value="partial">在线核实</option>
+                              <option value="all">全站 HR</option>
+                            </select>
+                          </div>
+                          <details v-if="hrSiteMode(p.id) !== 'off' || cfgExists(['config', 'hr_check', 'sites', p.id])" style="margin-top:6px">
+                            <summary class="bh-n">微调项(不改就用默认值)</summary>
+                            <hub-field v-for="row in hrSiteTuningItems(p.id)" :key="hubKey(row.path)" :item="row"></hub-field>
+                          </details>
+                        </article>
+                      </div>
+                    </div>
+                  </div>
+
                   <div class="hb-blk hb-cut">
                     <div class="hb-blk-hd">
                       <span class="bh-t">站点状态</span>

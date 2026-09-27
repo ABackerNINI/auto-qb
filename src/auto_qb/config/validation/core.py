@@ -158,6 +158,7 @@ def validate_config(data) -> List[str]:
         _validate_global_hr,
         _validate_grouping,
         _validate_hr_check,
+        _validate_hr_site_bindings,
         _validate_log,
         _validate_notify,
         _validate_qbittorrent,
@@ -229,6 +230,9 @@ def validate_config(data) -> List[str]:
     _validate_hr_check(cfg.get("hr_check"), errors)
     _validate_tag_lists(cfg, errors)
     _validate_trackers(cfg.get("trackers"), rules_config, errors)
+    # 站点绑定类校验(计划 26-09-27-1318 §3.3): 绑不上/绑多个/缺 hr 段 —— 要等 trackers 与
+    # sites 两段各自的结构校验完成后才能算域名交集, 故放在两者之后
+    _validate_hr_site_bindings(cfg, errors)
     # data(=cfg) 传给规则校验: expr 条件的"数据源门控"要看全局配置(如 traffic_source 有没有配)
     _validate_rules(rules_config, errors, cfg)
 

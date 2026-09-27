@@ -1,12 +1,15 @@
 """站点 adapter 注册表与工厂。
 
-新增站点的三种情形:
-1. **NexusPHP 标准形态**(`myhr.php` 九列表格)—— 只需在 trackers.<site>.hr_check 里配 URL / 路径即可,
-   不用写代码; 这是绝大多数 PT 站的形态。
+新增站点的四种情形:
+1. **NexusPHP 标准形态**(`myhr.php` 九列表格)—— 只需在 config/site_presets.py 立一条档案
+   (adapter=nexusphp + 域名 + 页面路径), 不用写代码; 这是绝大多数 PT 站的形态。
 2. **myhr 表格形态但状态参数 / 表头名不同的变体**(如 CarPT)—— 写一个薄 adapter 注入
-   scope_param / scope_values / header_key / column_names(见 carpt.py), 并在此登记。
+   scope_param / scope_values / header_key / column_names(见 carpt.py), 在此登记, 再立档案。
 3. **站点有更便宜的来源**(JSON 接口 / 逐种 HR 标记)—— 写一个 adapter 并在此登记, 接口不变,
-   且可跳过 §5 的 .torrent 下载成本。
+   且可跳过 §5 的 .torrent 下载成本; 同样要立档案。
+4. **登记点单点化**(计划 26-09-27-1318 REV2): 站点「可启用」的判定单点在内置站点档案表
+   `config/site_presets.py` 的 SITE_PRESETS —— 只在此登记 adapter 而不立档案的站点,
+   用户配置期就会被拒(未入档案的站点不允许启用)。
 """
 from typing import Callable, Dict, Optional, Tuple
 

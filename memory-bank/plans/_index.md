@@ -28,6 +28,7 @@
 
 ## Done
 
+- [26-09-27-1318] [计划 · HR 在线核实配置收敛: 内置站点档案 + 配置全部上收「HR 在线核实」分区](26-09-27-1318-plan-hr-check-site-presets.html) — `hr-check-site-presets`
 - [26-09-27-1126] [计划 · 日志等级整改 — 危险情况归 ERROR，通知默认只推 ERROR](26-09-27-1126-plan-log-level-notify-error.html) — `log-level-notify-error`
 - [26-09-26-2345] [commands × my-commit-flow v2 — 输出契约与零参数化设计](26-09-26-2345-plan-commands-shipflow-v2.html) — `commands-shipflow-v2`
 - [26-09-26-2233] [计划 · WEB UI 前端大文件拆分](26-09-26-2233-plan-webui-frontend-file-split.html) — `webui-frontend-file-split`

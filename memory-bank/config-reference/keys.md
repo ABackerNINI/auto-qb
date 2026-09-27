@@ -26,7 +26,7 @@
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |
 | `hr` | | 全局 HR 输出设置 (add_tag/add_category/overwrite_category/add_tag_for_satisfied/add_category_for_satisfied/overwrite_category_for_satisfied); 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--` |
 | `skip_checking_tag` | `"zSkipChecked"` | 跳检成功标签全局名; 带此标签的种子未经哈希校验, `_find_reference` 一律排除 (防"未验证"经参考链传播)。全局统一, **checking 动作 spec 不可配置同名键** (校验报未知键), 动作运行时经 ctx 读取; YAML 留空/空串被 `_strip_none` 视为未配置走默认 (与 log.file 同约定) |
-| `hr_check` | 默认关闭 | **HR 在线核实** (部分种子 HR 站点): `{enabled(false), min_torrent_interval("90S"), max_torrents_per_hour(12), max_torrents_per_day(60), failure_threshold(3), failure_cooldown("12H"), allow_window(""), unknown_policy(hr|not-hr), verified_ttl(留空=跟随站点 refresh_interval), index_retention("30D"), max_download_retries(3), channel_silence_warn("6H"), shared_dir(""), lock_timeout("0S"), poll_interval("1M"), parse_missing_rate_max(0.5), channel{enabled, port(8788), token, extension_id(""), request_timeout("180S")}}`。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」); `unknown_policy`/`verified_ttl` 调松等于自愿放大漏管窗口。**取数通道(M2 已落地)**: 端点仅听 `127.0.0.1`, 无 token ⇒ 401 **且不写任何状态**; 同机多实例 `channel.port` 必须错开(被占 = 启动即报错); `shared_dir` 与 `channel` 是 hr_check 里**仅有的两个 L1 字段**(需重挂端点/重建服务), 其余全 L0。设置页「HR 在线核实」分组 |
+| `hr_check` | 默认关闭 | **HR 在线核实** (部分种子 HR 站点): `{enabled(false), min_torrent_interval("90S"), max_torrents_per_hour(12), max_torrents_per_day(60), failure_threshold(3), failure_cooldown("12H"), allow_window(""), unknown_policy(hr|not-hr), verified_ttl(留空=跟随站点 refresh_interval), index_retention("30D"), max_download_retries(3), channel_silence_warn("6H"), shared_dir(""), lock_timeout("0S"), poll_interval("1M"), parse_missing_rate_max(0.5), channel{enabled, port(8788), token, extension_id(""), request_timeout("180S")}}`。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」); `unknown_policy`/`verified_ttl` 调松等于自愿放大漏管窗口。**取数通道(M2 已落地)**: 端点仅听 `127.0.0.1`, 无 token ⇒ 401 **且不写任何状态**; 同机多实例 `channel.port` 必须错开(被占 = 启动即报错); `shared_dir` 与 `channel` 是 hr_check 里**仅有的两个 L1 字段**(需重挂端点/重建服务), 其余全 L0(站点接入 `sites` 也是 L0)。**站点接入(26-09-27-1318 收敛)**: `sites` 子段是站点启用与微调的唯一配置源, 见下方「hr_check.sites」节; 旧键 `trackers.<站点>.hr_check` 兼容等价迁移。设置页「HR 在线核实」分组 |
 | `global_speed_limit_curve` | 无=不启用 | 见下 |
 | `trackers` | {} | 站点配置, 见下 |
 | `<任意>_rules` | {} | 规则集 (键名以 `_rules` 结尾), 见 04 |
@@ -42,10 +42,25 @@
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |
 | `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 |
-| `hr_check` | | **站点级在线核实**: `{mode(off|partial|all), adapter(nexusphp=标准九列 hrtype 形态 | carpt=CarPT 变体 ?status=N + H&R ID 十列), hr_page_url(启用时必填), hr_page_scopes([A,B,C]), download_path("/download.php?id={id}"), page_param(page), refresh_interval("12H"), max_pages_per_refresh(5), completed_age_limit(0=关闭; 开启时 1D~3650D), max_torrents_per_hour(留空=回退全局)}`。**超龄豁免(completed_age_limit)**: 完成时间超过该线的种子判定侧直接豁免(第四态 exempt「超龄豁免」, 压过清单命中、不受 unknown_policy 影响), 取数侧超龄行不入索引、不回填 .torrent, 整页超龄且页内+跨页呈完成时间倒序才早停翻页(证据不全就照常翻, 不漏判); ❗豁免 = 自愿接受「站点其实还在管」的漏 HR 风险。❗两条配置期 fail-fast: **① `mode != off` 时该站 `hr` 段必填** —— 否则 `check_hr_condition` 首行 `if not self.tracker_conf.hr` 恒 False, 整站保护**静默失效**; **② `hr_page_scopes` 必须含 A+B+C** —— 少抓一档会让该档种子在「完整刷新」里未列出而被**误放行**(漏 HR)。`download_path` 必须含 `{id}` 占位符(站点差异由 adapter 承担) |
+| `hr_check` | | **旧键(兼容保留, 26-09-27-1318 起不再是配置入口)**: 站点级在线核实已整体上收到 `hr_check.sites.<档案 id>` —— 本键仅为生产 config.yml 零修改而兼容接受: 仅校 `mode` 合法, 其余子键接受但忽略; `mode != off` 时按域名交集找内置档案等价迁移到新位置(adapter/hr_page_url/download_path/page_param 四键读取后丢弃, 值一律以档案为准), 新旧并存时新位置获胜; 绑不上档案(未支持站点)或缺 `hr` 段照旧配置期报错。迁移语义与 `hr_check.sites` 键集见下节 |
 | `rules` | | `["@规则集", "@规则集.规则"]`。**留空 = 该站点不执行任何规则**(无任何隐式回退; `_rules_for_torrent` 直接返回空列表) |
 | `groups` | | 站点分组列表 (可多个, 自由命名无需预定义); 配置层声明不写种子; 供规则 `tracker_group` 条件按分组筛选 (2026-09-15) |
 | `remove_similar_tags` | | 覆盖全局 |
+
+## hr_check.sites 站点接入(26-09-27-1318 REV2)
+
+站点启用与微调的唯一配置源; 键 = 内置站点档案 id(单点: `src/auto_qb/config/site_presets.py`, 首发两档):
+
+| 档案 id | adapter | 档案域名(绑定匹配) | HR 页 | 种子下载 | 翻页参数 |
+|---|---|---|---|---|---|
+| `btschool` | `nexusphp` | `pt.btschool.club` | `/myhr.php` | `/download.php?id={id}` | `page` |
+| `carpt` | `carpt` | `carpt.net` | `/myhr.php` | `/download.php?id={id}` | `page` |
+
+条目键集: `mode(off|partial|all)` + 微调项 `hr_page_scopes([A,B,C]) / refresh_interval("12H") / max_pages_per_refresh(5) / completed_age_limit(0=关闭; 开启时 1D~3650D) / max_torrents_per_hour(留空=回退全局)`。超龄豁免语义不变(见上一节 `hr_check` 旧键行内的说明)。
+
+- **绑定自动化**: 档案域名 ∩ 站点 `domains`(小写精确匹配)恰好命中一个 tracker 即绑定; HR 页地址按
+  `https://{命中域名}{page_path}` 推算。派生结果写入 `TrackerConfig.hr_check`(绑定结果视图), 下游 service/channel/parse 零感知。
+- **配置期 fail-fast**: 未登记档案 id(报错+已支持清单) / 启用但绑不上 / 绑到多个站点 / 绑定站点缺 `hr` 段 / `hr_page_scopes` 不含 A+B+C。
 
 ## global_speed_limit_curve 段
 

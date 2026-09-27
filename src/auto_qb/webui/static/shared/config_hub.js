@@ -31,8 +31,8 @@ const HUB_GROUP_META = {
   },
   trackers: {
     title: "站点",
-    desc: "按 tracker 域名识别站点，再套用这个站点的标签、限速和 HR 设置。",
-    lede: "用 tracker 域名判断种子来自哪个站点，然后套用这个站点的标签、限速和 HR 设置。没配置的站点完全不做任何管理。",
+    desc: "按 tracker 域名识别站点，再套用这个站点的标签、限速和 HR 规则。",
+    lede: "用 tracker 域名判断种子来自哪个站点，然后套用这个站点的标签、限速和 HR 规则。没配置的站点完全不做任何管理。HR 在线核实的启用不在这里 —— 去「HR 在线核实」分区的站点接入卡片点选。",
   },
   rules: {
     title: "规则",
@@ -41,8 +41,8 @@ const HUB_GROUP_META = {
   },
   hr_check: {
     title: "HR 在线核实",
-    desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实；分区页尾附各站点取数现状。",
-    lede: "有些站点只有一部分种子受 H&R 约束，而且站点不告诉你哪些是 —— 只能上站查。开启后 auto-qb 会定期取「我的 H&R」清单、逐种子对账；没接入的站点行为完全不变。取数由浏览器扩展完成，cookie 不离开浏览器。页尾的「站点状态」展示各站点取到哪一步、数据多新、现在为什么不放行。",
+    desc: "部分站点只有一部分种子受 H&R 约束，且站点不提供逐种标记 —— 逐种子在线核实；启用方式：本分区站点接入卡片点选；页面地址/解析器等由内置站点档案自动处理；分区页尾附各站点取数现状。",
+    lede: "有些站点只有一部分种子受 H&R 约束，而且站点不告诉你哪些是 —— 只能上站查。开启总开关后在下方「站点接入」卡片点选启用站点（零 URL/路径/参数填写，页面地址、解析器、下载路径、翻页参数由内置站点档案自动处理，只需站点域名能对上）；取数由浏览器扩展完成，cookie 不离开浏览器。页尾的「站点状态」展示各站点取到哪一步、数据多新、现在为什么不放行。",
   },
 };
 
@@ -226,6 +226,10 @@ window.CONFIG_HUB = {
             target.rows.push(it);
             continue;
           }
+          // hr_check.sites 不走通用分区块渲染: 它的键是内置站点档案 id(来自 constants 而非
+          // 配置里已存在的键), 通用行组装写不出正确路径 —— 由 hr_check 模板分支的「站点接入」
+          // 卡片单独渲染(计划 26-09-27-1318 §5)
+          if (this.hubKey(it.path) === "config.hr_check.sites") continue;
           const b = {
             key: this.hubKey(it.path),
             label: it.label || (it.field && it.field.label) || "相关设置",
@@ -346,10 +350,16 @@ window.CONFIG_HUB = {
         case "maintenance":
           return this.cfgBool(["config", "grouping", "enabled"], "true") ? "辅种分组已启用" : "辅种分组未启用";
         case "hr_check": {
-          const names = this.cfgTrackerNames().filter(
+          // 站点接入卡片(hr_check.sites)与旧键 trackers.*.hr_check 都算数: 旧配置还没迁移时
+          // 也能显示真实接入数(loaders 加载后两者本就等价)
+          const enabled = Object.values(this.hrSiteEntries()).filter(
+            (e) => e && String(e.mode || "off") !== "off"
+          ).length;
+          const legacy = this.cfgTrackerNames().filter(
             (n) => this.cfgText(["config", "trackers", n, "hr_check", "mode"], "off") !== "off"
-          );
-          return names.length ? `${names.length} 个站点在线核实` : "未配置站点";
+          ).length;
+          const total = enabled + legacy;
+          return total ? `${total} 个站点在线核实` : "未配置站点";
         }
         case "speed": {
           if (!this.cfgCurveEnabled()) return "未启用";
@@ -401,6 +411,64 @@ window.CONFIG_HUB = {
         }
         this.hubCollectRisk(it.items || [], group, out);
       }
+    },
+
+    /* ---------------------------------------------------------- 站点接入卡片(计划 26-09-27-1318) */
+    /* HR 在线核实分区的唯一启用入口: 卡片键集合来自 schema.constants.hr_check_site_presets
+     * (内置站点档案, 与配置里已存在的键无关), 点选启用即写 hr_check.sites.<id>.mode。
+     * 绑定状态由前端按「站点 domains ∩ 档案 domains」先行提示(与后端同口径), fail-fast 仍由后端兜底 */
+    hrSitePresets() {
+      const c = this.cfg.schema && this.cfg.schema.constants;
+      return (c && c.hr_check_site_presets) || [];
+    },
+    hrSiteEntries() {
+      const v = this.cfgRaw(["config", "hr_check", "sites"]);
+      return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+    },
+    hrSiteMode(id) {
+      const entry = this.hrSiteEntries()[id];
+      return entry && entry.mode !== undefined && entry.mode !== null && String(entry.mode).trim() !== ""
+        ? String(entry.mode).trim().toLowerCase()
+        : "off";
+    },
+    hrSiteSetMode(id, mode) {
+      if (mode === "off" && !this.cfgExists(["config", "hr_check", "sites", id])) return; // 未配置 = 本就关闭, 不写垃圾键
+      this.cfgSetPath(["config", "hr_check", "sites", id, "mode"], mode);
+    },
+    hrSiteBoundTrackers(preset) {
+      const doms = (preset.domains || []).map((d) => String(d).trim().toLowerCase());
+      return this.cfgTrackerNames().filter((n) => {
+        const ds = this.cfgRaw(["config", "trackers", n, "domains"]);
+        return Array.isArray(ds) && ds.some((d) => doms.includes(String(d).trim().toLowerCase()));
+      });
+    },
+    hrSiteBindText(preset) {
+      const hits = this.hrSiteBoundTrackers(preset);
+      if (hits.length === 1) return `已绑定站点: ${hits[0]}`;
+      if (hits.length > 1) return `绑定不唯一: ${hits.join("、")} 的域名都命中 —— 保存后校验会报错`;
+      return `未绑定: 没有站点的域名包含 ${(preset.domains || []).join(" / ")} —— 保存后校验会报错, 请在对应站点补域名`;
+    },
+    hrSiteBindClass(preset) {
+      const n = this.hrSiteBoundTrackers(preset).length;
+      return n === 1 ? "" : "warn";
+    },
+    /* 微调字段表: 从 schema 里 hr_check -> sites 字段的子字段表取(数据驱动), mode 已由卡片点选承担 */
+    hrSiteTuningFields() {
+      const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "hr_check");
+      const root = g && (g.fields || []).find((f) => f.key === "hr_check");
+      const sites = root && (root.fields || []).find((f) => f.key === "sites");
+      return ((sites && sites.fields) || []).filter((f) => f.key !== "mode");
+    },
+    /* 组装成 hub-field 组件可渲染的 item(路径指向具体档案条目) */
+    hrSiteTuningItems(id) {
+      return this.hrSiteTuningFields().map((f) => ({
+        type: "field",
+        field: f,
+        path: ["config", "hr_check", "sites", id, f.key],
+        depth: 1,
+        owner: ["config", "hr_check", "sites", id],
+        inline: [],
+      }));
     },
 
     /* ---------------------------------------------------------- 就近说明浮窗 */

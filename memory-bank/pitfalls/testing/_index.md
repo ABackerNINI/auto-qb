@@ -11,6 +11,7 @@
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
 | [assertions.md](assertions.md) | 恒真 / 恒红 / 安慰剂 / 量错对象 —— 断言失去意义的所有已知形态(含"样本与配置脱节"), 以及红验与 A/B 归因的纪律。 | 写断言, 红验, 反向对照, 阈值, 恒真, 摆设断言, 顺序断言, 冒烟失败归因, flaky, 反查表长度, infohash v1 v2, 手写样本, 配置没被读到 |
+| [browser-verify-iab.md](browser-verify-iab.md) | 本机没有 node 时 `ui_smoke.cjs` 链路不可用, 可用 ZCode IAB 浏览器 + evaluate 替代 —— 但 evaluate 返回嵌套对象是序列化假象 `{}`。 | 浏览器验证, IAB, evaluate, 无 node, 冒烟跑不了, 序列化, 假空对象, cfgRaw, 绑定状态 |
 | [corpus-capture.md](corpus-capture.md) | `scripts/qb_capture.py` 实施时实测的一批坑 —— 代理、rid 序列、秒分辨率时钟、伪名化撞车、判据空壳。 | 抓语料, 脱敏, qb_capture, 代理, rid, 伪名化, 等价类判据, 红验, argparse |
 | [corpus-fs-mock.md](corpus-fs-mock.md) | 脱敏要连"藏在 .gz 里的第二层 key"一起做; 窗口合并必须按序推进; 回放 config 的 tracker 段不能只信权威映射。 | 语料回放, disk.json, fs mock, 窗口合并, tracker 段, 脱敏 key, 反查表, group_exact |
 | [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |

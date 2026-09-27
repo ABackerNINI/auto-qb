@@ -30,6 +30,7 @@ from .models import (
     QbittorrentConfig,
     TrackerConfig,
 )
+from . import site_presets
 from .validation import _strip_none, validate_config
 
 
@@ -147,6 +148,13 @@ def load_hr_check_config(spec) -> HrCheckConfig:
         request_timeout=_get(channel_spec, "request_timeout", channel_default.request_timeout, parse_time)
         if isinstance(channel_spec, dict) else channel_default.request_timeout,
     )
+    # 站点接入(计划 26-09-27-1318 REV2): 键 = 内置站点档案 id; 值 = mode + 微调项。
+    # 合法性(档案 id 已登记 / 绑定唯一 / 缺 hr 段)由 validate_config 保证, 这里只转换。
+    sites_spec = spec.get("sites")
+    sites = {
+        str(preset_id): load_site_hr_check_config(entry)
+        for preset_id, entry in sites_spec.items()
+    } if isinstance(sites_spec, dict) else {}
     return HrCheckConfig(
         enabled=_get(spec, "enabled", d.enabled, parse_bool),
         min_torrent_interval=_get(spec, "min_torrent_interval", d.min_torrent_interval, parse_time),
@@ -165,11 +173,17 @@ def load_hr_check_config(spec) -> HrCheckConfig:
         poll_interval=_get(spec, "poll_interval", d.poll_interval, parse_time),
         parse_missing_rate_max=_get(spec, "parse_missing_rate_max", d.parse_missing_rate_max, float),
         channel=channel,
+        sites=sites,
     )
 
 
 def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
-    """解析 trackers.<site>.hr_check 段(站点级); 缺省 = mode off(该站不启用)"""
+    """解析站点级在线核实条目(两个入口共用): hr_check.sites.<档案 id>(新)与
+    trackers.<site>.hr_check(旧键兼容); 缺省 = mode off(该站不启用)
+
+    档案四键(adapter/hr_page_url/download_path/page_param)在新位置属未知键(校验层拦下)、
+    在旧键位置读取后丢弃 —— 值一律以档案为准(计划 26-09-27-1318 §3.4)。
+    """
     d = SiteHrCheckConfig()
     if not isinstance(spec, dict):
         return d
@@ -211,6 +225,61 @@ def load_tracker_config(
         # 站点未设置时回退全局值(运行参数, 非字段默认)
         remove_similar_tags=_get(spec, "remove_similar_tags", global_remove_similar, parse_bool),
     )
+
+
+def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, TrackerConfig]) -> None:
+    """HR 站点配置收敛(计划 26-09-27-1318 §3.4/§3.5): 就地改写 hr_check.sites 与 trackers.*.hr_check
+
+    1. 旧键兼容迁移: trackers.<站点>.hr_check(mode != off)按域名交集找档案, 命中且新位置没有
+       同 id 条目 -> 等价并入 hr_check.sites.<档案 id>(mode/微调项一并搬; adapter/hr_page_url/
+       download_path/page_param 四个档案键丢弃 —— 值一律以档案为准); 新旧并存时新位置获胜。
+    2. 域名交集绑定: 每个 mode != off 的 sites 条目在 trackers 里找唯一命中站点, 派生填充
+       TrackerConfig.hr_check(adapter/URL/路径/参数来自档案, mode/微调来自配置, URL 按
+       https://{命中域名}{page_path} 推算); mode=off 不绑定。配置真相在 hr_check.sites,
+       trackers.*.hr_check 只是绑定结果视图, 下游消费点零感知。
+
+    绑定类报错(绑不上/绑多个/缺 hr 段)由 validate_config 独立完成, 这里假定配置已合法。
+    """
+    # 1. 旧键等价迁移(读派生后的 tc.hr_check 即可: 档案键在此不参与绑定判定)
+    for tc in trackers.values():
+        legacy = tc.hr_check
+        if legacy is None or legacy.mode == "off":
+            continue
+        preset = site_presets.preset_for_domains(tc.domains)
+        if preset is not None and preset.preset_id not in hr_check.sites:
+            hr_check.sites[preset.preset_id] = SiteHrCheckConfig(
+                mode=legacy.mode,
+                hr_page_scopes=list(legacy.hr_page_scopes),
+                refresh_interval=legacy.refresh_interval,
+                max_pages_per_refresh=legacy.max_pages_per_refresh,
+                completed_age_limit=legacy.completed_age_limit,
+                max_torrents_per_hour=legacy.max_torrents_per_hour,
+            )
+    # 2. 域名交集绑定 -> 派生填充(每个档案最多命中一个站点; 歧义场景校验层已拦)
+    domains_by_tracker = {name: tc.domains for name, tc in trackers.items()}
+    for preset_id, site_conf in hr_check.sites.items():
+        if site_conf.mode == "off":
+            continue
+        preset = site_presets.find_preset(preset_id)
+        if preset is None:
+            continue  # 未登记档案: 校验层报错
+        matched = site_presets.match_trackers(preset, domains_by_tracker)
+        if len(matched) != 1:
+            continue  # 绑不上/绑多个: 校验层报错
+        tc = trackers[matched[0]]
+        domain = next(d for d in tc.domains if d.strip().lower() in preset.domains)
+        tc.hr_check = SiteHrCheckConfig(
+            mode=site_conf.mode,
+            adapter=preset.adapter,
+            hr_page_url=preset.page_url(domain),
+            hr_page_scopes=list(site_conf.hr_page_scopes),
+            download_path=preset.download_path,
+            page_param=preset.page_param,
+            refresh_interval=site_conf.refresh_interval,
+            max_pages_per_refresh=site_conf.max_pages_per_refresh,
+            completed_age_limit=site_conf.completed_age_limit,
+            max_torrents_per_hour=site_conf.max_torrents_per_hour,
+        )
 
 
 # TODO: optimize
@@ -386,12 +455,18 @@ def load_config(config_path: str) -> Config:
 
     global_remove_similar = _get(cfg, "remove_similar_tags", d.remove_similar_tags, parse_bool)
 
+    # HR 在线核实: 全局段(含 sites 站点接入)先解析; 绑定派生在 trackers 构建之后(计划 §3.5)
+    hr_check = load_hr_check_config(_get(cfg, "hr_check", {}))
+
     # Trackers 配置(校验已保证 trackers 为字典或未配置)
     trackers = {}
     for name, tdata in cfg.get("trackers", {}).items():
         hr = load_tracker_hr(tdata["hr"], cfg.get("hr") or {}) if "hr" in tdata else None
         site_hr_check = load_site_hr_check_config(tdata.get("hr_check")) if "hr_check" in tdata else None
         trackers[name] = load_tracker_config(name, tdata, hr, global_remove_similar, site_hr_check)
+
+    # 站点配置收敛(计划 26-09-27-1318): 旧键等价迁移 + 域名交集绑定 -> 派生 trackers.*.hr_check
+    _resolve_hr_site_bindings(hr_check, trackers)
 
     # 全局标签清理格式: @tracker_tags 引用展开为所有 tracker 配置的 tags 并集
     tracker_tags = sorted({t for tc in trackers.values() for t in tc.tags})
@@ -427,7 +502,7 @@ def load_config(config_path: str) -> Config:
         grouping=load_grouping_config(_get(cfg, "grouping", {})),
         notify=load_notify_config(_get(cfg, "notify", {})),
         web=load_web_config(_get(cfg, "web", {})),
-        hr_check=load_hr_check_config(_get(cfg, "hr_check", {})),
+        hr_check=hr_check,
         qbittorrent=load_qbittorrent_config(_get(cfg, "qbittorrent", {})),
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),

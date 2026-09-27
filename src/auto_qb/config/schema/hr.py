@@ -1,6 +1,9 @@
-"""schema: HR 在线核实段(全局 config.hr_check 与站点 trackers.<site>.hr_check)。
+"""schema: HR 在线核实段(全局 config.hr_check, 含 sites 站点接入子段)。
 
-对应 [memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html] 的 §7 配置设计。
+对应 [memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html] 的 §7 配置设计,
+站点段已按 [memory-bank/plans/26-09-27-1318-plan-hr-check-site-presets.html] REV2 上收:
+站点启用/微调的唯一配置源是 hr_check.sites.<档案 id>(键 = config/site_presets.py 的内置档案),
+页面事实(adapter/页面路径/下载路径/翻页参数)由档案填充, 不再是可配置项。
 本模块只管**展示元数据**; 合法性唯一入口仍是 config.validate_config, 级别唯一来源是 config/impact.py。
 
 ⚠注意两处语义容易配错, help 文案必须写明:
@@ -64,13 +67,57 @@ HR_CHECK_CHANNEL_FIELDS: Tuple[Field, ...] = (
     ),
 )
 
+#: hr_check.sites.<档案 id> 条目字段(计划 26-09-27-1318 REV2): mode + 微调项。
+#: 页面事实(adapter/页面路径/下载路径/翻页参数)由内置站点档案(config/site_presets.py)填充,
+#: 不再是可配置项 —— 「站点接入」卡片的键来自 schema.constants.hr_check_site_presets,
+#: 卡片按这里的字段表渲染微调项。先于 HR_CHECK_FIELDS 定义(后者的 sites 字段引用本表)
+HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
+    Field(
+        "mode",
+        "核实模式",
+        "enum",
+        default="off",
+        options=HR_CHECK_MODES,
+        help="off = 该站不启用; partial = 在线核实(未核实按全局 unknown_policy); "
+        "all = 站点侧驱动 + 未核实恒受管束(全站 HR)。❗mode != off 时该站点必须配 HR 规则段"
+        "(要求做种时长等) —— 绑定关系按站点域名与档案域名的交集自动完成, 无需手填引用",
+    ),
+    Field(
+        "hr_page_scopes",
+        "抓取档位",
+        "str_list",
+        default=["A", "B", "C"],
+        help="要抓的状态档位: A 考察中 / B 已达标 / C 未达标 / D 已免罪。"
+        "❗至少含 A+B+C —— 只抓 A 会把「已达标」的 HR 种子误当成非 HR(漏 HR); D 可加可不加(免罪视为放行)",
+    ),
+    Field("refresh_interval", "刷新周期", "time", default="12H", unit_default="H", help="HR 页抓取周期; 放行有效期默认跟着它"),
+    Field("max_pages_per_refresh", "单次翻页上限", "int", default="5", help="一次刷新最多翻几页; 到上限仍未到底 -> 本次覆盖证明不成立"),
+    Field(
+        "completed_age_limit",
+        "超龄豁免线",
+        "time",
+        default="0S",
+        unit_default="D",
+        help="完成时间超过该时长的种子视为超龄: 判定侧直接豁免(不受管束、不再在线核实), 取数侧也不再为它"
+        "翻页/存索引/取 .torrent。0 = 关闭(默认)。❗豁免优先于清单命中 —— 站点其实还在管的超龄种子会漏 HR, "
+        "自愿接受后才开启; 页面按完成时间倒序时翻页早停才成立(乱序页面自动放弃早停, 只多花配额)",
+    ),
+    Field(
+        "max_torrents_per_hour",
+        "每小时配额(站点覆盖)",
+        "int",
+        default="",
+        help="留空 = 回退全局 config.hr_check.max_torrents_per_hour",
+    ),
+)
+
 HR_CHECK_FIELDS: Tuple[Field, ...] = (
     Field(
         "enabled",
         "启用 HR 在线核实",
         "bool",
         default="false",
-        help="总开关; 默认关闭(保守默认)。开启后仍需逐站点配 trackers.<站点>.hr_check",
+        help="总开关; 默认关闭(保守默认)。开启后还需在下方「站点接入」卡片点选启用具体站点",
     ),
     Field(
         "min_torrent_interval",
@@ -164,68 +211,15 @@ HR_CHECK_FIELDS: Tuple[Field, ...] = (
         help="浏览器扩展拉取任务/回传数据的本地端点; 未配置 = 本实例不参与取数(只读共享数据)",
         fields=HR_CHECK_CHANNEL_FIELDS,
     ),
-)
-
-SITE_HR_CHECK_FIELDS: Tuple[Field, ...] = (
     Field(
-        "mode",
-        "核实模式",
-        "enum",
-        default="off",
-        options=HR_CHECK_MODES,
-        help="off = 该站不启用; partial = 在线核实(未核实按全局 unknown_policy); "
-        "all = 站点侧驱动 + 未核实恒受管束(全站 HR)。❗mode != off 时该站必须同时配 hr 段",
-    ),
-    Field(
-        "adapter",
-        "站点解析器",
-        "str",
-        default="nexusphp",
-        help="HR 统计页形态; nexusphp = 标准 myhr.php 九列表格(绝大多数 PT 站); "
-        "carpt = CarPT 变体(?status=N 状态参数 + H&R ID 表头)",
-    ),
-    Field(
-        "hr_page_url",
-        "HR 统计页地址",
-        "str",
-        default="",
-        required=True,
-        placeholder="https://pt.example.com/myhr.php",
-        help="HR 名单来源页(账号维度的「我的 H&R」清单); mode != off 时必填",
-    ),
-    Field(
-        "hr_page_scopes",
-        "抓取档位",
-        "str_list",
-        default=["A", "B", "C"],
-        help="要抓的状态档位: A 考察中 / B 已达标 / C 未达标 / D 已免罪。"
-        "❗至少含 A+B+C —— 只抓 A 会把「已达标」的 HR 种子误当成非 HR(漏 HR); D 可加可不加(免罪视为放行)",
-    ),
-    Field(
-        "download_path",
-        "种子下载路径",
-        "str",
-        default="/download.php?id={id}",
-        help="相对站点根, 用 {id} 代表种子编号; passkey 之类的页面参数由取数通道在页面上下文补, 不写进配置",
-    ),
-    Field("page_param", "翻页参数名", "str", default="page", help="翻页查询参数名(如 page -> ?hrtype=A&page=2)"),
-    Field("refresh_interval", "刷新周期", "time", default="12H", unit_default="H", help="HR 页抓取周期; 放行有效期默认跟着它"),
-    Field("max_pages_per_refresh", "单次翻页上限", "int", default="5", help="一次刷新最多翻几页; 到上限仍未到底 -> 本次覆盖证明不成立"),
-    Field(
-        "completed_age_limit",
-        "超龄豁免线",
-        "time",
-        default="0S",
-        unit_default="D",
-        help="完成时间超过该时长的种子视为超龄: 判定侧直接豁免(不受管束、不再在线核实), 取数侧也不再为它"
-        "翻页/存索引/取 .torrent。0 = 关闭(默认)。❗豁免优先于清单命中 —— 站点其实还在管的超龄种子会漏 HR, "
-        "自愿接受后才开启; 页面按完成时间倒序时翻页早停才成立(乱序页面自动放弃早停, 只多花配额)",
-    ),
-    Field(
-        "max_torrents_per_hour",
-        "每小时配额(站点覆盖)",
-        "int",
-        default="",
-        help="留空 = 回退全局 config.hr_check.max_torrents_per_hour",
+        "sites",
+        "站点接入",
+        "object",
+        default=None,
+        optional=True,
+        help="站点启用与微调的唯一配置入口(计划 26-09-27-1318): 键 = 内置站点档案 id,"
+        "在「站点接入」卡片点选启用; 页面地址/解析器/种子下载路径/翻页参数由档案自动处理,"
+        "配置里写这些值不再有意义。未入档案的站点不允许启用(校验期报错并给出已支持清单)",
+        fields=HR_CHECK_SITES_FIELDS,
     ),
 )

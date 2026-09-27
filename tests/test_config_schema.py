@@ -5,7 +5,7 @@
 - test_object_section_keys_match_validation: 各对象段子键集合 == 对应 KNOWN_*_KEYS
 - test_tracker_fields_match_validation: 站点字段集合 == KNOWN_TRACKER_KEYS
 - test_tracker_hr_fields_match_validation: 站点 hr 字段集合 == KNOWN_TRACKER_HR_KEYS
-- test_site_hr_check_fields_match_validation: 站点 hr_check 字段集合 == KNOWN_SITE_HR_CHECK_KEYS
+- test_hr_sites_fields_match_validation: hr_check.sites 条目字段集合 == KNOWN_HR_SITE_KEYS
 - test_hr_check_field_levels_cover_validation_keys: impact 的 hr_check 字段级别表覆盖全部已知键(漏登记 = 静默按 L2)
 - test_rule_fields_cover_rule_known_keys: 规则级字段(+conditions/actions 专段) == RULE_KNOWN_KEYS
 - test_condition_plugins_cover_registry / test_action_plugins_cover_registry: 插件表覆盖全部已注册插件
@@ -34,7 +34,7 @@ from auto_qb.config.validation import (
     KNOWN_LOG_KEYS,
     KNOWN_NOTIFY_KEYS,
     KNOWN_QBITTORRENT_KEYS,
-    KNOWN_SITE_HR_CHECK_KEYS,
+    KNOWN_HR_SITE_KEYS,
     KNOWN_TRACKER_HR_KEYS,
     KNOWN_TRACKER_KEYS,
     KNOWN_WEB_KEYS,
@@ -98,8 +98,12 @@ def test_object_section_keys_match_validation(top_key, known):
 
 
 def test_tracker_fields_match_validation():
-    """站点段字段集合 == KNOWN_TRACKER_KEYS"""
-    assert set(_field_map(schema.TRACKER_FIELDS)) == KNOWN_TRACKER_KEYS
+    """站点段字段集合 == KNOWN_TRACKER_KEYS
+
+    hr_check 例外: 旧键兼容保留在 KNOWN_TRACKER_KEYS(校验层接受但忽略), 但不再图形化 ——
+    站点配置已整体上收到 hr_check.sites(计划 26-09-27-1318 REV2)。
+    """
+    assert set(_field_map(schema.TRACKER_FIELDS)) | {"hr_check"} == KNOWN_TRACKER_KEYS
 
 
 def test_tracker_hr_fields_match_validation():
@@ -107,9 +111,9 @@ def test_tracker_hr_fields_match_validation():
     assert set(_field_map(schema.TRACKER_HR_FIELDS)) == KNOWN_TRACKER_HR_KEYS
 
 
-def test_site_hr_check_fields_match_validation():
-    """站点 hr_check 段字段集合 == KNOWN_SITE_HR_CHECK_KEYS"""
-    assert set(_field_map(schema.SITE_HR_CHECK_FIELDS)) == KNOWN_SITE_HR_CHECK_KEYS
+def test_hr_sites_fields_match_validation():
+    """hr_check.sites 条目字段集合 == KNOWN_HR_SITE_KEYS(站点接入卡片的数据驱动依据)"""
+    assert set(_field_map(schema.HR_CHECK_SITES_FIELDS)) == KNOWN_HR_SITE_KEYS
 
 
 def test_hr_check_field_levels_cover_validation_keys():
@@ -237,5 +241,10 @@ def test_schema_payload_is_complete():
     assert payload["plugins"]["condition"] == schema.CONDITION_PLUGINS
     assert payload["plugins"]["action"] == schema.ACTION_PLUGINS
     # 常量分区覆盖前端下拉所需的全部选项表
-    for name in ("triggers", "execute_once", "stop_if", "checking_modes", "hr_modes", "state_attrs"):
+    for name in (
+        "triggers", "execute_once", "stop_if", "checking_modes", "hr_modes", "state_attrs", "hr_check_site_presets"
+    ):
         assert payload["constants"][name], f"constants 缺少 {name}"
+    # 内置站点档案: 卡片渲染的数据源, 每条须含 id/adapter/domains(HR 分区绑定状态行依赖 domains)
+    presets = payload["constants"]["hr_check_site_presets"]
+    assert all({"id", "adapter", "domains"} <= set(p) for p in presets), presets

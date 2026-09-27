@@ -2967,14 +2967,15 @@ def test_frontend_hr_status_fields_match_backend():
         "loaded", "loading", "error", "enabled", "note", "sites", "channel", "fetchEnabled", "workerRunning",
         "pollInterval"
     }
-    # 锚点必须指向合并块自身: v-if 只在「站点状态」块这一处出现, 重复出现说明块被复制
+    # 锚点必须指向合并块自身: v-if 只在「HR 在线核实」分区模板块这一处出现, 重复出现说明块被复制
+    # (2026-09-27 起块内含「站点接入」+「站点状态」两个块, 扫描窗放大到 8000 字符)
     anchor = "hub.view === 'hr_check'"
     for ui in ("atlas", "prism"):
         html = _ui_aggregate(ui)
         idx = html.find(anchor)
         assert idx > 0, f"{ui} 缺少锚点 {anchor} —— 合并进「HR 在线核实」的状态块丢失"
         assert html.find(anchor, idx + 1) < 0, f"{ui} 锚点出现多次 —— 状态块被复制了?"
-        block = html[idx:idx + 4000]
+        block = html[idx:idx + 8000]
         cut = block.find("</template>")
         assert cut > 0, f"{ui}: 状态块没有闭合标签 —— 模板结构被改坏"
         block = block[:cut]

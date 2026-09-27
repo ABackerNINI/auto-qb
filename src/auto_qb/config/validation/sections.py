@@ -4,6 +4,7 @@ import re
 from typing import List
 
 from ...infra.utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed, parse_time
+from .. import site_presets
 from .core import _check_regex_patterns, _check_str_list, _check_unknown_keys, _try, _try_number, _try_time
 from .rules import _check_rule_refs
 
@@ -38,15 +39,16 @@ KNOWN_HR_CHECK_KEYS = {
     "poll_interval",
     "parse_missing_rate_max",
     "channel",
+    "sites",
 }
 
-KNOWN_SITE_HR_CHECK_KEYS = {
+# hr_check.sites.<档案 id> 条目键集(计划 26-09-27-1318 REV2): mode + 微调项。
+# adapter / hr_page_url / download_path / page_param 四个页面事实由内置站点档案
+# (config/site_presets.py)填充, 任何配置位置都不再接受(旧键 trackers.*.hr_check 例外: 兼容
+# 接受但读取后丢弃, 见 _validate_trackers 的兼容模式)
+KNOWN_HR_SITE_KEYS = {
     "mode",
-    "adapter",
-    "hr_page_url",
     "hr_page_scopes",
-    "download_path",
-    "page_param",
     "refresh_interval",
     "max_pages_per_refresh",
     "completed_age_limit",
@@ -260,28 +262,116 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
                     min_s=5,
                     max_s=3600
                 )
+    if "sites" in spec:
+        # 站点接入(计划 26-09-27-1318 REV2): 键必须是已登记的内置档案 id, 未登记 = 该站
+        # 没有 adapter 支撑, 放行到运行期只会「静默跳过」, 必须配置期拦下并给出已支持清单
+        sites = spec["sites"]
+        if not isinstance(sites, dict):
+            errors.append("config.hr_check.sites: 必须是字典(键 = 内置站点档案 id)")
+        else:
+            for preset_id, entry in sites.items():
+                preset = site_presets.find_preset(str(preset_id))
+                if preset is None:
+                    supported = " / ".join(sorted(site_presets.SITE_PRESETS))
+                    errors.append(
+                        f"config.hr_check.sites.{preset_id}: 未支持的站点档案 '{preset_id}'(已支持: {supported});"
+                        " 未入档案的站点不允许启用 HR 在线核实"
+                    )
+                    continue
+                _validate_hr_site_entry(entry, f"config.hr_check.sites.{preset_id}", errors)
 
 
-def _validate_site_hr_check(spec, where: str, errors: List[str]) -> None:
-    """校验 trackers.<site>.hr_check 段(站点级在线核实)
+def _validate_hr_site_bindings(cfg: dict, errors: List[str]) -> None:
+    """站点绑定类校验(计划 26-09-27-1318 §3.3): 绑不上 / 绑多个 / 绑定站点缺 hr 段
 
-    ❗fail-fast 重点: `mode != off` 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None,
-    `check_hr_condition` 恒 False, **整站保护静默失效**(且没有任何报错)。
+    校验器看不到 loader 产物, 故直接读 yaml spec + domains 独立做一遍(与 loader 的
+    _resolve_hr_site_bindings 同一判定口径, 单点在 site_presets.match_trackers);
+    loader 不报错只填值 —— 与「合法性唯一入口是 validate_config」口径一致。
+    """
+    trackers = cfg.get("trackers")
+    if not isinstance(trackers, dict):
+        return
+    domains_by_tracker: dict = {}
+    hr_sections: set = set()
+    for name, tdata in trackers.items():
+        if not isinstance(tdata, dict):
+            continue
+        if isinstance(tdata.get("domains"), list):
+            domains_by_tracker[name] = tdata["domains"]
+        if "hr" in tdata:
+            hr_sections.add(name)
+
+    # 新位置: hr_check.sites.<档案 id>(键合法性已在 _validate_hr_check 报过, 这里只管绑定)
+    hr_check = cfg.get("hr_check")
+    sites = hr_check.get("sites") if isinstance(hr_check, dict) else None
+    enabled_new: set = set()
+    if isinstance(sites, dict):
+        for preset_id, entry in sites.items():
+            preset = site_presets.find_preset(str(preset_id))
+            if preset is None or not isinstance(entry, dict):
+                continue
+            mode = str(entry.get("mode", "off")).strip().lower()
+            if mode not in HR_CHECK_MODES or mode == "off":
+                continue
+            where = f"config.hr_check.sites.{preset_id}"
+            matched = site_presets.match_trackers(preset, domains_by_tracker)
+            if not matched:
+                errors.append(
+                    f"{where}: 已启用(mode={mode})但没有站点的 domains 包含"
+                    f" {' / '.join(preset.domains)} —— 请在对应站点的域名里补上该域名"
+                )
+                continue
+            if len(matched) > 1:
+                errors.append(
+                    f"{where}: 绑定必须唯一, 站点 {'、'.join(matched)} 的 domains 都包含"
+                    f" {' / '.join(preset.domains)} —— 请去掉多余的域名或关闭其中一个站点的接入"
+                )
+                continue
+            enabled_new.add(preset.preset_id)
+            if matched[0] not in hr_sections:
+                errors.append(
+                    f"{where}: 已绑定站点 {matched[0]}, 但该站点未配置 hr 段(要求做种时长等参数)"
+                    " —— 请在「站点」分区的 HR 规则里补齐, 否则该站保护会静默失效"
+                )
+
+    # 旧键兼容: trackers.<站点>.hr_check(mode != off)等价迁移口径 —— 绑不上档案报未支持,
+    # 绑上了则与 sites 同口径要求 hr 段; 同档案已在新位置启用时旧键被忽略(新位置获胜)
+    for name, tdata in trackers.items():
+        if not isinstance(tdata, dict) or not isinstance(tdata.get("hr_check"), dict):
+            continue
+        legacy = tdata["hr_check"]
+        mode = str(legacy.get("mode", "off")).strip().lower()
+        if mode not in HR_CHECK_MODES or mode == "off":
+            continue
+        where = f"config.trackers.{name}.hr_check"
+        preset = site_presets.preset_for_domains(tdata.get("domains") or ())
+        if preset is None:
+            supported = " / ".join(sorted(site_presets.SITE_PRESETS))
+            errors.append(
+                f"{where}: 已启用(mode={mode})但没有内置站点档案匹配该站点的 domains"
+                f" —— 未入档案的站点不允许启用 HR 在线核实(已支持: {supported});"
+                " 启用方式已上收至 config.hr_check.sites, 建议迁移到新位置"
+            )
+        elif preset.preset_id in enabled_new:
+            continue  # 新旧并存: 新位置获胜, 旧键忽略(等价迁移语义见计划 §3.4)
+        elif name not in hr_sections:
+            errors.append(f"{where}: 已启用(mode={mode})的站点必须同时配置 hr 段(要求做种时长等参数),"
+                          " 否则该站保护会静默失效")
+
+
+def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
+    """校验 hr_check.sites.<档案 id> 条目(mode + 微调项; 计划 26-09-27-1318 REV2)
+
+    ❗fail-fast 重点: mode != off 时绑定站点的 `hr` 段必填 —— 由 _validate_hr_site_bindings
+    在绑定层检查(绑定关系要等域名交集算完才知道)。
     """
     if not isinstance(spec, dict):
         errors.append(f"{where}: 必须是字典")
         return
-    _check_unknown_keys(spec, KNOWN_SITE_HR_CHECK_KEYS, where, errors)
+    _check_unknown_keys(spec, KNOWN_HR_SITE_KEYS, where, errors)
     mode = str(spec.get("mode", "off")).strip().lower()
     if mode not in HR_CHECK_MODES:
         errors.append(f"{where}.mode: 须为 {'/'.join(HR_CHECK_MODES)} 之一: '{spec.get('mode')}'")
-        return
-    if mode == "off":
-        return
-    if not str(spec.get("hr_page_url", "") or "").strip():
-        errors.append(f"{where}.hr_page_url: 缺少必填键 hr_page_url(HR 统计页地址)")
-    elif not str(spec["hr_page_url"]).strip().lower().startswith(("http://", "https://")):
-        errors.append(f"{where}.hr_page_url: 须为 http(s) 绝对地址: {spec['hr_page_url']}")
     if "hr_page_scopes" in spec:
         scopes = spec["hr_page_scopes"]
         if not (isinstance(scopes, list) and scopes and all(isinstance(s, str) and s.strip() for s in scopes)):
@@ -294,12 +384,6 @@ def _validate_site_hr_check(spec, where: str, errors: List[str]) -> None:
                 f"{where}.hr_page_scopes: 必须包含 A/B/C(考察中/已达标/未达标) —— 少抓一档会让该档种子"
                 "在完整刷新里「未列出」而被误放行; D(已免罪)可加可不加"
             )
-    if "download_path" in spec:
-        path = str(spec["download_path"])
-        if "{id}" not in path:
-            errors.append(f"{where}.download_path: 必须包含 {{id}} 占位符(种子编号): {path}")
-    if "page_param" in spec and not str(spec["page_param"]).strip():
-        errors.append(f"{where}.page_param: 不能为空(不需要翻页参数时留空则无法翻页)")
     if "refresh_interval" in spec:
         _try_time(
             spec["refresh_interval"], f"{where}.refresh_interval", errors, positive=True, min_s=60, max_s=30 * 86400
@@ -323,8 +407,6 @@ def _validate_site_hr_check(spec, where: str, errors: List[str]) -> None:
         _try_number(
             spec["max_torrents_per_hour"], f"{where}.max_torrents_per_hour", errors, integer=True, min=1, max=10000
         )
-    if "adapter" in spec and not str(spec["adapter"]).strip():
-        errors.append(f"{where}.adapter: 不能为空")
 
 
 def _validate_grouping(spec, errors: List[str]) -> None:
@@ -403,13 +485,20 @@ def _validate_trackers(spec, rules_config: dict, errors: List[str]) -> None:
         if "hr" in tdata:
             _validate_tracker_hr(tdata["hr"], f"{where}.hr", errors)
         if "hr_check" in tdata:
-            _validate_site_hr_check(tdata["hr_check"], f"{where}.hr_check", errors)
-            # ❗mode != off 但没配 hr 段: check_hr_condition 恒 False(前置 `if not self.tracker_conf.hr`),
-            # 整站保护静默失效 —— 必须配置期拦下, 不能等到运行期悄无声息
-            mode = str(tdata["hr_check"].get("mode", "off")).strip().lower()
-            if mode != "off" and "hr" not in tdata:
-                errors.append(f"{where}: 配置了 hr_check(mode={mode}) 时必须同时配置 hr 段(要求做种时长等参数), "
-                              "否则该站保护会静默失效")
+            # 旧键兼容模式(计划 26-09-27-1318 §3.4): HR 在线核实的站点配置已整体上收到
+            # config.hr_check.sites, 本键只为生产 config.yml 零修改保留 —— 仅校 dict 形状与
+            # mode 合法, 其余子键(adapter/hr_page_url/download_path/page_param/微调项)接受
+            # 但忽略(值一律以档案为准); 绑定与「缺 hr 段」检查在 _validate_hr_site_bindings
+            hc = tdata["hr_check"]
+            if not isinstance(hc, dict):
+                errors.append(f"{where}.hr_check: 必须是字典(该键为兼容保留: 启用方式已上收至 config.hr_check.sites)")
+            else:
+                mode = str(hc.get("mode", "off")).strip().lower()
+                if mode not in HR_CHECK_MODES:
+                    errors.append(
+                        f"{where}.hr_check.mode: 须为 {'/'.join(HR_CHECK_MODES)} 之一: '{hc.get('mode')}'"
+                        "(该键为兼容保留: 启用方式已上收至 config.hr_check.sites, 建议迁移)"
+                    )
 
 
 def _validate_web(spec, errors: List[str]) -> None:

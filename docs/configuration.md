@@ -172,46 +172,74 @@ config:
   `extension_id`(可选: 填了就只放行该扩展 id, 留空 = 靠 token 鉴权)、
   `request_timeout`(默认 180S: 等扩展回传的上限, 超时计一次失败)。
   安装与配置步骤见 [扩展说明](../extensions/hr-fetch-proxy/README.md)。
-- **站点段** `trackers.<站点>.hr_check`: `mode`(`off` 不启用 / `partial` 在线核实 / `all` 站点侧驱动 +
-  未核实恒受管束)、`hr_page_url`(HR 统计页, 启用时必填)、`hr_page_scopes`(默认 `[A, B, C]`)、
-  `download_path`(须含 `{id}` 占位符)、`refresh_interval` 等。可选的 `completed_age_limit`(超龄豁免线)见下节。
+- **站点接入** `hr_check.sites.<站点>`(计划 26-09-27-1318 收敛后**唯一站点配置源**): 键 = 内置站点档案 id
+  (见下方「已支持站点」), 值 = `mode`(`off` 不启用 / `partial` 在线核实 / `all` 站点侧驱动 + 未核实恒受管束) +
+  微调项(`hr_page_scopes` 默认 `[A, B, C]` / `refresh_interval` / `max_pages_per_refresh` /
+  `completed_age_limit` / `max_torrents_per_hour`)。页面地址、解析器、种子下载路径、翻页参数这些
+  **程序已知、人易配错**的内容由内置档案自动填充, 配置里不写也不再接受。
+  旧键 `trackers.<站点>.hr_check` 兼容接受并等价迁移(见下节), 建议迁移到新位置。
+  可选的 `completed_age_limit`(超龄豁免线)见下节。
 
-两条配置期会直接报错的规则(都是为了不让人踩到「保护静默失效」):
+配置期会直接报错的规则(都是为了不让人踩到「保护静默失效」):
 
-1. **`mode != off` 的站点必须同时配 `hr` 段** —— 否则该站的 HR 判定前置条件恒为假, 整站保护不会有任何提示地失效。
-2. **`hr_page_scopes` 必须含 A / B / C** —— 少抓一档, 该档的种子会在「完整刷新」里表现为未列出而被**误放行**。
+1. **`sites` 的键必须是已登记的档案 id** —— 未入档案的站点不允许启用(运行期只会静默跳过, 必须配置期拦下);
+   报错文案会给出当前已支持清单。
+2. **启用(`mode != off`)的站点必须与某个 tracker 按域名绑定成功** —— 绑定按「站点 `domains` 与档案
+   `domains` 的交集」自动完成, 无需手填引用; 绑不上(没有站点域名包含档案域名)或绑到多个站点(域名重叠)
+   都直接报错。绑定的站点还必须配置 `hr` 段, 否则该站的 HR 判定前置条件恒为假, 整站保护不会有任何提示地失效。
+3. **`hr_page_scopes` 必须含 A / B / C** —— 少抓一档, 该档的种子会在「完整刷新」里表现为未列出而被**误放行**。
 
-### 接第二个站点要做什么
+### 已支持站点与绑定规则
 
-绝大多数 PT 站是 NexusPHP 的 `myhr.php`「我的 H&R」九列表 —— 这类站点**只改配置, 不用写代码**:
+启用一个站点 = 在 `hr_check.sites` 下点选(或手写)对应档案的 `mode`, **零 URL / 路径 / 参数 / 域名引用填写**:
 
 ```yaml
 config:
-    trackers:
-        第二站:
-            hr_check:
-                mode: partial                 # 该站是否真有部分种子 HR
-                hr_page_url: https://第二站.example/myhr.php
-                hr_page_scopes: [A, B, C]     # 站点四个档位(A 考察中 / B 已达标 / C 未达标 / D 已免罪)
-                download_path: /download.php?id={id}
-                page_param: page              # 翻页参数名(缺省 page)
+    hr_check:
+        sites:
+            btschool:
+                mode: partial             # off / partial / all
+                # ↓ 微调项全有默认, 可不写
+                hr_page_scopes: [A, B, C]
                 refresh_interval: 12H
                 max_pages_per_refresh: 5
-                completed_age_limit: 365D     # 可选: 超龄豁免线, 见下节; 不配 = 关闭
+                # completed_age_limit: 0   # 超龄豁免线, 见下节
+                # max_torrents_per_hour:  # 留空回退全局配额
 ```
+
+当前内置档案(随版本发布; 新站点/新 adapter 以 `src/auto_qb/config/site_presets.py` 为准):
+
+| 档案 id | 解析器 | 档案域名(绑定匹配用) | HR 页 | 种子下载 | 翻页参数 |
+|---|---|---|---|---|---|
+| `btschool` | `nexusphp` | `pt.btschool.club` | `/myhr.php` | `/download.php?id={id}` | `page` |
+| `carpt` | `carpt` | `carpt.net` | `/myhr.php` | `/download.php?id={id}` | `page` |
+
+- **绑定自动化**: 程序拿档案域名与各站点的 `domains` 求交集(小写精确匹配), 恰好命中一个站点即完成绑定;
+  HR 页地址按 `https://{命中域名}{page_path}` 推算(现网 BTSchool 实证一致)。
+- **旧键兼容**: `trackers.<站点>.hr_check`(含 `mode`/`hr_page_url` 等)仍能加载, `mode != off` 时按域名交集
+  找档案等价迁移到 `hr_check.sites`, 其中 `adapter` / `hr_page_url` / `download_path` / `page_param` 四键
+  **读取后丢弃**(值一律以档案为准 —— 写对写错行为一致); 新旧并存时新位置获胜。建议迁移到新位置。
+- **未支持站点**: 旧键启用但域名绑不上任何档案, 与新位置同口径报「未支持」。
+
+### 想接的站点不在档案里怎么办
+
+站点「可启用」的判定单点在内置档案表(`src/auto_qb/config/site_presets.py`), 未入档案的站点配置期就会被拒。
+新站点按三种情形接入(登记点单点化, 见 `src/auto_qb/hr/adapters/__init__.py` 模块说明):
+
+1. **NexusPHP 标准形态**(`myhr.php` 九列表, 绝大多数 PT 站): 不用写代码, 只在 `site_presets.py` 立一条档案
+   (adapter=`nexusphp` + 档案域名 + 页面路径), 随版本发布后即可在 `hr_check.sites` 点选启用。
+2. **页面形态变体**(状态参数/表头名不同, 如 CarPT): 写一个薄 adapter 并在 `hr/adapters/__init__.py` 登记名字, 再立档案。
+3. **有更便宜的来源**(JSON 接口 / 逐种 HR 标记, 可完全不下载 `.torrent`): 写一个 adapter, 接口不变, 再立档案。
 
 - 站点之间**完全隔离**: 各自一个站点文件(`<data_dir>/hr/<站点>.json`)、各自一把锁、各自一套配额账本与熔断 ——
   一个站点被熔断或正在慢速抓取, 不会影响另一个。
-- **需要写代码的只有「有更便宜的来源」的站点**(JSON 接口 / 逐种 HR 标记, 可以完全不下载 `.torrent`):
-  在 `src/auto_qb/hr/adapters/` 加一个实现, 并在 `adapters/__init__.py` 的 `ADAPTERS` 里登记名字,
-  然后在站点配置里写 `adapter: <名字>`。
-- `hr_page_url` 要填**登录后**能打开的那个页面; 后端不持有 cookie, 取数由浏览器扩展在登录态下完成。
-- 页数 / 档位名 / 下载路径这三样**拿不准就先跑一次走查**(`--hr-once`) —— 它会如实报「未找到 HR 表(疑似改版)」
+- 取数在**登录态下**由浏览器扩展完成(后端零 cookie); 档案里的页面事实(页数 / 档位参数 / 下载路径)
+  **拿不准就先跑一次走查**(`--hr-once`) —— 它会如实报「未找到 HR 表(疑似改版)」
   或「达到单次翻页上限仍未到底」, 而不是默默少抓。
 
 ### 超龄豁免 `completed_age_limit`(可选, 默认关闭)
 
-站点级配置 `trackers.<站>.hr_check.completed_age_limit`(0 = 关闭; 开启时 1D~3650D): 完成时间超过该
+站点级配置 `hr_check.sites.<档案 id>.completed_age_limit`(0 = 关闭; 开启时 1D~3650D): 完成时间超过该
 时长的种子视为**超龄**, 程序不再为它做任何 HR 核实 —— 这是「老种子站点早就不管了」的站点的省配额开关:
 
 - **判定侧**: 超龄种子直接豁免(界面三态显示「超龄豁免」), 不查索引、不受 `unknown_policy` 影响,

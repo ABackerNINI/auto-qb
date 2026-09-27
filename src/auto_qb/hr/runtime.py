@@ -86,6 +86,8 @@ class HrRuntime:
         return self.config.hr_check
 
     def site_confs(self) -> Mapping[str, SiteHrCheckConfig]:
+        """{站点名: 站点核实参数} —— 消费的是**绑定结果视图**(loaders 按域名交集派生填充,
+        配置源在 hr_check.sites.<档案 id>); 本方法推导逻辑不变, 只是输入从用户配置换成了派生结果"""
         return {name: tc.hr_check for name, tc in self.config.trackers.items() if tc.hr_check is not None}
 
     @property

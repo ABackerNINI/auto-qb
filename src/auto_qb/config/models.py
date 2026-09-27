@@ -108,24 +108,32 @@ class HrCheckConfig:
     poll_interval: float = 60.0  # 取数线程醒来检查的节奏(秒), 与主循环 tick 无关
     parse_missing_rate_max: float = 0.5  # 必填字段缺失率上限; 超过则判「页面可能改版」不产生放行
     channel: HrChannelConfig = field(default_factory=HrChannelConfig)
+    # 站点接入(计划 26-09-27-1318 REV2): 键 = 内置站点档案 id(config/site_presets.py),
+    # 值 = mode + 微调项; 站点启用/微调的唯一配置源。trackers.<站点>.hr_check 只是绑定结果视图。
+    sites: Dict[str, "SiteHrCheckConfig"] = field(default_factory=dict)
 
 
 @dataclass
 class SiteHrCheckConfig:
-    """站点级 hr_check 段(计划 §7)
+    """站点级在线核实参数(计划 26-09-22-2204 §7; 26-09-27-1318 REV2 收敛后为**派生模型**)
 
     mode: off = 该站不启用 | partial = 在线核实(未核实按 unknown_policy)
           | all = 站点侧驱动 + 未核实恒受管束(全站 HR, 不看 policy)
     ❗mode != off 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None, check_hr_condition 恒 False,
       整站保护静默失效(配置期 fail-fast 拦下)。
+
+    配置源在 hr_check.sites.<档案 id>(mode + 微调项); adapter / hr_page_url / download_path /
+    page_param 四个页面事实由内置站点档案(config/site_presets.py)填充, 任何配置位置都不再接受。
+    loaders 按域名交集把档案条目派生填充到命中的 TrackerConfig.hr_check, 下游(service / channel /
+    parse / 锚点)只读本模型, 对配置搬家零感知。
     """
 
     mode: str = "off"
-    adapter: str = "nexusphp"
-    hr_page_url: str = ""  # mode != off 时必填
+    adapter: str = "nexusphp"  # 由站点档案填充(配置不再接受)
+    hr_page_url: str = ""  # 由站点档案按命中域名推算(配置不再接受)
     hr_page_scopes: List[str] = field(default_factory=lambda: ["A", "B", "C"])
-    download_path: str = "/download.php?id={id}"  # 相对站点根; passkey 由取数通道在页面上下文补
-    page_param: str = "page"
+    download_path: str = "/download.php?id={id}"  # 由站点档案填充(配置不再接受); passkey 由取数通道在页面上下文补
+    page_param: str = "page"  # 由站点档案填充(配置不再接受)
     refresh_interval: float = 12 * 3600.0  # HR 页抓取周期(秒)
     max_pages_per_refresh: int = 5  # 单次刷新最多翻页数(翻页同样计配额)
     max_torrents_per_hour: Optional[int] = None  # 站点级覆盖; None = 回退全局
@@ -148,7 +156,9 @@ class TrackerConfig:
     upload_speed_limit: int = 0  # 字节/秒, 0 = 不限速; YAML 原始缺省 "0KiB/s"
     download_speed_limit: int = 0  # 字节/秒, 0 = 不限速
     hr: Optional[HRRule] = None  # HR 规则(已合并全局默认输出设置), None = 无 HR 配置
-    hr_check: Optional[SiteHrCheckConfig] = None  # HR 在线核实(站点级), None = 该站未接入
+    # HR 在线核实的**绑定结果视图**: 配置源在 hr_check.sites.<档案 id>, loaders 按域名交集派生填充;
+    # 旧 YAML 键 trackers.<站点>.hr_check 兼容接受并等价迁移(计划 26-09-27-1318 §3.4), 不再是配置入口
+    hr_check: Optional[SiteHrCheckConfig] = None
     rules: List[str] = field(default_factory=list)  # 规则引用列表, 如 ["@rule_set", "@rule_set.rule1"]
     groups: List[str] = field(default_factory=list)  # 站点分组(配置层声明, 不写种子); tracker_group 条件的匹配来源
     remove_similar_tags: bool = False  # 删除类似标签(站点覆盖全局后的值)
