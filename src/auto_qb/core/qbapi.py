@@ -370,3 +370,44 @@ class QbApi:
             self._client.transfer_set_upload_limit(limit=0 if upload_kib <= 0 else int(upload_kib) * 1024)
         if download_kib is not None:
             self._client.transfer_set_download_limit(limit=0 if download_kib <= 0 else int(download_kib) * 1024)
+
+    # ---------- 备用(替代)速度限制与模式切换(qB"乌龟"; ALT-01) ----------
+
+    def get_alt_speed_limits(self) -> dict:
+        """读取 qB 备用全局速度限制; 对外以 KiB/s 返回(<=0 归一为 0 = 不限)
+
+        qB 5.0 的端点迁移只动了**主速度**两个键(upload/download_limit -> transfer 端点),
+        备用速度 alt_dl_limit/alt_up_limit 仍在 app/preferences, 单位 bytes/s。
+        """
+        prefs = self._client.app_preferences() or {}
+
+        def _kib(limit_bytes) -> int:
+            b = int(limit_bytes or 0)
+            return b // 1024 if b > 0 else 0
+
+        return {
+            "upload_limit": _kib(prefs.get("alt_up_limit")),
+            "download_limit": _kib(prefs.get("alt_dl_limit")),
+        }
+
+    def set_alt_speed_limits(self, upload_kib: int = None, download_kib: int = None):
+        """设置 qB 备用全局速度限制(KiB/s); 0 = 不限速
+
+        app/setPreferences 是增量语义: 只传需要改的 alt_* 键, 其余偏好不动。
+        仅传非 None 的方向; 单位换算与主速度一致(KiB * 1024)。
+        """
+        prefs: dict = {}
+        if upload_kib is not None:
+            prefs["alt_up_limit"] = 0 if upload_kib <= 0 else int(upload_kib) * 1024
+        if download_kib is not None:
+            prefs["alt_dl_limit"] = 0 if download_kib <= 0 else int(download_kib) * 1024
+        if prefs:
+            self._client.app_set_preferences(json=prefs)
+
+    def get_speed_limits_mode(self) -> int:
+        """当前速度模式: 0 = 主速度 / 1 = 备用速度(transfer/speedLimitsMode)"""
+        return int(self._client.transfer_speed_limits_mode())
+
+    def toggle_speed_limits_mode(self):
+        """在主/备速度模式间切换(transfer/toggleSpeedLimitsMode; 切换后状态随主轮询回读)"""
+        self._client.transfer_toggle_speed_limits_mode()

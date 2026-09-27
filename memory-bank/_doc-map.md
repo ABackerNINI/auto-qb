@@ -1,11 +1,10 @@
 # 文档形态总览 (按专题)
 
-> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 扫描四形态 (plans / reports / issues / tasks) 的
-> `doc-topic` / `**Topics:**` 与各自状态生成; 新增制品或改状态后重跑即可, 合并冲突也只需重跑。
-> **一行一专题**: 该专题名下的 issue / 计划 / 报告 / 档案与各自状态 —— 「一件事的全部材料」的唯一入口。
-> 协议与决策树见 [conventions/doc-forms.md](conventions/doc-forms.md); 四形态索引在各自 `_index.md`。
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 扫描四形态的 `doc-topic` / `**Topics:**` 与状态生成;
+> 新增制品或改状态后重跑即可。
+> 协议与四形态索引见 [conventions/doc-forms.md](conventions/doc-forms.md)。
 
-## 跨形态专题 (≥2 件) —— 36 个
+## 跨形态专题 (≥2 件) —— 37 个
 
 - **webui-optimistic-ui** (8) — issue [26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html) `Done` · issue [26-09-19-1959](issues/26-09-19-1959-bug-webui-show-row-no-pending.html) `Done` · issue [26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html) `Done` · issue [26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) `Done` · 计划 [26-09-19-2245](plans/26-09-19-2245-webui-optimistic-settle-plan.html) `Done` · 计划 [26-09-20-2139](plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html) `Done` · 报告 [26-09-20-1806](reports/26-09-20-1806-optimistic-ui-half-fix-report.html) `Done` · 报告 [26-09-20-2131](reports/26-09-20-2131-optimistic-ui-event-driven-feasibility.html) `Done`
 - **(无主键)** (6) — 档案 [26-09-26](tasks/26-09-26-webui-button-system.md) `Done` · 档案 [26-09-26](tasks/26-09-26-webui-frontend-file-split.md) `In Progress` · 档案 [26-09-26](tasks/26-09-26-webui-settings-group-merge.md) `Done` · 档案 [26-09-27](tasks/26-09-27-backend-log-levels-notify.md) `Done` · 档案 [26-09-28](tasks/26-09-28-ext-log-noise-suppress.md) `Done` · 档案 [26-09-28](tasks/26-09-28-webui-sites-page-search.md) `Done`
@@ -38,6 +37,7 @@
 - **tracker-group** (2) — 计划 [26-09-15-1504](plans/26-09-15-1504-tracker-group-plan.html) `Done` · 档案 [26-09-15](tasks/26-09-15-rule-tracker-groups.md) `Done`
 - **web-auth-hardening** (2) — issue [26-09-21-1408](issues/26-09-21-1408-bug-web-auth-hardening-minors.html) `Open` · issue [26-09-21-1408](issues/26-09-21-1408-bug-web-skip-local-verify-csrf.html) `Open`
 - **web-create-app** (2) — issue [26-09-21-1408](issues/26-09-21-1408-refactor-web-create-app-monolith.html) `Done` · 计划 [26-09-22-1857](plans/26-09-22-1857-web-create-app-split-plan.html) `Done`
+- **webui-alt-speed-toggle** (2) — 计划 [2026-09-28](plans/26-09-28-0037-plan-alt-speed-toggle.html) `Done` · 档案 [26-09-28](tasks/26-09-28-webui-alt-speed-toggle.md) `Done`
 - **webui-decoupling** (2) — 计划 [26-09-20-0234](plans/26-09-20-0234-webui-decoupling-plan.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-decoupling.md) `Done`
 - **webui-frontend-file-split** (2) — 计划 [26-09-26-2233](plans/26-09-26-2233-plan-webui-frontend-file-split.html) `Done` · 报告 [26-09-27-1143](reports/26-09-27-1143-report-webui-template-diff.html) `Done`
 - **webui-hr-safety-display** (2) — 计划 [26-09-25-1823](plans/26-09-25-1823-plan-webui-hr-safety-display.html) `Done` · 档案 [26-09-25](tasks/26-09-25-webui-hr-safety-display.md) `In Progress`

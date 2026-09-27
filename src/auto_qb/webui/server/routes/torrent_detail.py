@@ -137,12 +137,24 @@ def build_router(ctx: WebContext) -> APIRouter:
             t = (view.get("limit") or {}).get("target") or {}
             target = {"upload_kib": t.get("up"), "download_kib": t.get("down")}
         current = None
+        alt_on = None
+        alt_current = None
         if manager.client is not None:
             try:
                 current = manager.api.get_global_speed_limits()
+                # ALT-01: 备用速度模式与备用限速值同窗取(限速浮层主/备双组的数据源);
+                # 读失败回 None(前端显示"未知"), 不拿旧缓存冒充
+                alt_on = bool(manager.api.get_speed_limits_mode())
+                alt_current = manager.api.get_alt_speed_limits()
             except Exception:
-                current = None
-        return {"curve_enabled": curve_enabled, "curve_target": target, "current": current}
+                pass
+        return {
+            "curve_enabled": curve_enabled,
+            "curve_target": target,
+            "current": current,
+            "alt_on": alt_on,
+            "alt_current": alt_current,
+        }
 
     @router.post("/api/speed/override")
     def api_speed_override(body: dict = None):
@@ -154,6 +166,22 @@ def build_router(ctx: WebContext) -> APIRouter:
                 "download_kib": int(b.get("download_kib") or 0),
             }
         )
+
+    @router.post("/api/speed/alt")
+    def api_speed_alt(body: dict = None):
+        """备用速度限制设置(ALT-01): app/setPreferences(alt_dl_limit/alt_up_limit), 两方向都必填, 0 = 不限"""
+        b = body or {}
+        return _enqueue(
+            "speed_alt_set", {
+                "upload_kib": int(b.get("upload_kib") or 0),
+                "download_kib": int(b.get("download_kib") or 0),
+            }
+        )
+
+    @router.post("/api/speed/alt/toggle")
+    def api_speed_alt_toggle():
+        """主/备速度模式切换(ALT-01): qB toggle 端点原生语义; 新状态以主轮询 server_state 回读为准"""
+        return _enqueue("speed_alt_toggle", {})
 
     @router.get("/api/torrents/{hash}/export")
     def api_torrent_export(hash: str):

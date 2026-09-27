@@ -227,8 +227,13 @@ window.AQB_STATE = {
         num: 300,             // tail 行数(后端钳制 10..2000)
       },
       // 限速托管状态(FE-2C D2): /api/speed/mode 展示 + /api/speed/override 临时覆盖
-      speedMode: { loaded: false, curveEnabled: false, target: null, current: null, error: "" },
+      // ALT-01: altOn/altCurrent 随同一端点回传(备用速度模式 + 备用限速值 KiB/s)
+      speedMode: { loaded: false, curveEnabled: false, target: null, current: null, altOn: false, altCurrent: null, error: "" },
       speedOverride: { up: "", down: "", busy: false },  // 两方向都必填数字(后端语义: 两方向都设置, 0=不限)
+      // ALT-01(计划 26-09-28-0037): 备用速度 —— 弹窗第二组输入(与主速 speedOverride 平行, 0=不限);
+      // altToggling = 状态栏乌龟按钮切换进行中(防重复点击 + 图标旋转)
+      speedAlt: { up: "", down: "", busy: false },
+      altToggling: false,
       speedOpen: false,  // SPD-04: 限速修改浮层(qB 式「点击限速 → 弹窗」, 表单从信息栏收进窗内)
       // FX-08: 浮层锚点 —— left 由点击坐标算出(状态栏"限制速度"按钮左缘 - 12), dir 为预聚焦方向
       speedAt: { left: 0, dir: "up" },

@@ -116,6 +116,8 @@
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
 - test_api_speed_mode_and_override: /api/speed/mode 曲线/停用两形态 + /api/speed/override 落 transfer 端点
+- test_api_speed_alt_and_toggle: ALT-01 备用速度 —— /api/speed/mode 增列 alt_on/alt_current + /api/speed/alt 落 setPreferences(alt_*) + /api/speed/alt/toggle 落 toggle 端点
+- test_qbapi_alt_speed_limits_normalization: ALT-01 QbApi 备用限速 KiB<->bytes/s 换算 + setPreferences 增量语义(只传非 None 方向) + 模式切换
 - test_api_speed_mode_curve_config_disabled: 曲线存在但 enabled=False -> curve_enabled=False(快照之上叠加配置判定)
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
@@ -150,7 +152,7 @@
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857): 61 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt): 63 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 - test_hr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
 - test_api_hr_status_disabled_returns_empty_state: 未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端空态, 不报错)
@@ -5827,6 +5829,84 @@ def test_api_speed_mode_and_override():
         assert ("transfer_set_download_limit", 1024 * 1024) in client.calls
 
 
+def test_api_speed_alt_and_toggle():
+    """ALT-01(计划 26-09-28-0037): 备用速度三端点 —— /api/speed/mode 增列 alt_on/alt_current(读失败回
+    None 不冒充); /api/speed/alt 命令落 app/setPreferences(alt_*, bytes/s); /api/speed/alt/toggle
+    命令落 transfer/toggleSpeedLimitsMode"""
+    from fastapi.testclient import TestClient
+
+    from helpers import FakeClient, make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        mgr._web_token = "t"
+        mgr._traffic_view = {"state": "disabled", "limit": {}}
+        tc = TestClient(create_app(mgr))
+        auth = {"Authorization": "Bearer t"}
+
+        # 初态: 主速度模式 + 备用限速 0
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["alt_on"] is False
+        assert data["alt_current"] == {"upload_limit": 0, "download_limit": 0}
+
+        # 备用限速设置: KiB -> bytes 落 setPreferences(alt_*)
+        cmd_id = tc.post("/api/speed/alt", json={
+            "upload_kib": 1024,
+            "download_kib": 512
+        }, headers=auth).json()["cmd_id"]
+        mgr._drain_web_commands()
+        assert mgr._web_results[cmd_id]["status"] == "ok"
+        assert client.alt_up_limit_value == 1024 * 1024
+        assert client.alt_dl_limit_value == 512 * 1024
+        assert ("app_set_preferences", ["alt_dl_limit", "alt_up_limit"]) in client.calls
+
+        # 模式切换: toggle 端点 0 -> 1, mode 读数联动
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["alt_current"] == {"upload_limit": 1024, "download_limit": 512}
+        cmd_id = tc.post("/api/speed/alt/toggle", headers=auth).json()["cmd_id"]
+        mgr._drain_web_commands()
+        assert mgr._web_results[cmd_id]["status"] == "ok"
+        assert client.speed_limits_mode_value == 1
+        data = tc.get("/api/speed/mode", headers=auth).json()
+        assert data["alt_on"] is True
+
+
+def test_qbapi_alt_speed_limits_normalization(tmp_path):
+    """ALT-01 QbApi Facade: 备用限速走 app/preferences alt_*(bytes/s, 0=不限) 对外 KiB;
+    setPreferences 增量语义(只传非 None 方向, 两方向全 None 不发请求); 模式读/切直透"""
+    from helpers import FakeClient, make_manager
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    api = mgr.api
+
+    assert api.get_alt_speed_limits() == {"upload_limit": 0, "download_limit": 0}  # 0 归一 0
+    client.alt_up_limit_value = 512 * 1024
+    client.alt_dl_limit_value = -1  # 负值同样归一为 0 = 不限
+    assert api.get_alt_speed_limits() == {"upload_limit": 512, "download_limit": 0}
+
+    api.set_alt_speed_limits(upload_kib=2048)  # 只传上行: 增量语义, 下行键不出现
+    assert client.alt_up_limit_value == 2048 * 1024
+    assert client.alt_dl_limit_value == -1
+    assert client.calls[-1] == ("app_set_preferences", ["alt_up_limit"])
+
+    api.set_alt_speed_limits(upload_kib=0, download_kib=3072)  # 0 = 不限 -> 写 0
+    assert client.alt_up_limit_value == 0
+    assert client.alt_dl_limit_value == 3072 * 1024
+
+    n_calls = len(client.calls)
+    api.set_alt_speed_limits()  # 两方向全 None: 不发请求
+    assert len(client.calls) == n_calls
+
+    assert api.get_speed_limits_mode() == 0
+    api.toggle_speed_limits_mode()
+    assert client.speed_limits_mode_value == 1
+    assert api.get_speed_limits_mode() == 1
+
+
 def test_api_speed_mode_curve_config_disabled():
     """曲线存在但 enabled=False -> /api/speed/mode 返回 curve_enabled=False(快照滞后也兑底); 对照 enabled=True 不影响"""
     from fastapi.testclient import TestClient
@@ -6850,6 +6930,7 @@ def test_cmd_trackers_log_sanitized(caplog):
 
 # 从拆分前的 web.py 用 AST 提取的全部路由(取证 2026-09-22, develop @ 975e146):
 # 57 个 /api 端点 + 3 个 UI 重定向(/, /newui, /newui/{rest:path})。拆分全程必须逐条保持。
+# (2026-09-28 ALT-01 增 POST /api/speed/alt 与 /api/speed/alt/toggle 两条, 计划 26-09-28-0037)
 _GOLDEN_ROUTES = {
     ("GET", "/"),
     ("GET", "/api/categories"),
@@ -6877,6 +6958,8 @@ _GOLDEN_ROUTES = {
     ("GET", "/api/search"),
     ("GET", "/api/speed/mode"),
     ("POST", "/api/speed/override"),
+    ("POST", "/api/speed/alt"),
+    ("POST", "/api/speed/alt/toggle"),
     ("GET", "/api/state"),
     ("GET", "/api/stats"),
     ("GET", "/api/status"),

@@ -17,6 +17,19 @@
 .speed-pop .add-dialog-body { display: flex; flex-direction: column; gap: 10px; overflow: visible; }
 .speed-pop .speed-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .speed-pop .modal-field input { width: 100%; }
+/* ALT-01: 限速浮层主/备同窗双组(TPL-C) —— 生效中的一组 ring 描边; 组头小盖 + "生效中"角标 */
+.speed-pop .pop-grp { display: flex; flex-direction: column; gap: 8px; padding: 9px 11px 11px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); }
+.speed-pop .pop-grp.live { border-color: var(--ring); }
+.speed-pop .grp-head { display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; letter-spacing: .07em; color: var(--fg-dim); }
+.speed-pop .grp-head .ico { color: var(--accent); }
+.speed-pop .grp-head .ico-turtle { color: var(--green); }
+.speed-pop .grp-head .grp-live { margin-left: auto; padding: 0 6px;
+  border: 1px solid var(--green-line, var(--border)); border-radius: var(--radius-sm);
+  color: var(--green); font-size: 10px; letter-spacing: .04em; }
+.speed-pop .speed-mode-line.alt .ico { color: var(--green); }
+
 
 /* ---------------- 列头拖动虚影(FX-25) ----------------
  * 跟随光标的列名胶囊。**不用 HTML5 draggable 的原生拖影**(它会与点击排序/列宽拖拽互相干扰),
@@ -64,6 +77,17 @@
 .sb-spd .slash { color: var(--fg-dim); }
 .sb-spd .lim { color: var(--fg); font-weight: 600; font-size: 12px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .sb-spd.off .lim { color: var(--fg-dim); font-weight: 500; }
+/* ALT-01(计划 26-09-28-0037): 备用速度切换按钮(qB"乌龟") —— 熄灭 = 主速度 / 亮绿 = 备用速度生效;
+ * 与 .sb-spd 同族(同 hover/圆角/过渡); 状态色用语义绿 + 软底(备用 = 慢速模式, 与上传方向色不冲突) */
+.sb-alt { display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0;
+  border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent;
+  color: var(--fg-dim); cursor: pointer; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-alt:hover { background: var(--surface-2); border-color: var(--border-soft); color: var(--fg); }
+.sb-alt.on { color: var(--green); background: var(--green-soft); border-color: var(--green-line, var(--border-soft)); }
+.sb-alt.on:hover { color: var(--green); filter: brightness(1.12); }
+
 /* 今日流量(FX-07): 数据源与连接/剩余不同(Traffic Monitor dat), 用竖线与右侧摘要区分。
  * R10-05: 历史入口已并入本组作子元素 -> 不再需要右边框与额外间距: 原先那道 1px 竖线
  * 正好在两者之间, 读作"两个不相干的块"(用户: "中间有隔断")。 */

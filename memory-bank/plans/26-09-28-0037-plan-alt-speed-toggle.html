@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>备用速度切换按钮 · 三套设计模板 (26-09-28-0037)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-28">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="webui-alt-speed-toggle">
+<meta name="doc-added" content="2026-09-28">
+<meta name="doc-updated" content="2026-09-28">
+<style>
+  /* 冷峻技术方向 · 深色 · 配色借本项目 atlas 令牌, mock 即真 */
+  :root {
+    color-scheme: dark;
+    --bg: #0e1218;
+    --bg-card: #151b24;
+    --bg-row: #111722;
+    --bg-hover: #1c2534;
+    --fg: #e7ebf1;
+    --fg-muted: #96a2b5;
+    --fg-dim: #6c7a8e;
+    --accent: #3b82f6;
+    --accent-hi: #60a5fa;
+    --accent-soft: rgba(59, 130, 246, .16);
+    --green: #34d399;
+    --green-soft: rgba(52, 211, 153, .16);
+    --border: rgba(255, 255, 255, .08);
+    --border-soft: rgba(255, 255, 255, .05);
+    --font: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--font); font-size: 15px; line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .canvas { max-width: 1120px; margin: 0 auto; padding: 0 32px 96px; }
+
+  /* ---------- header ---------- */
+  header { padding: 56px 0 28px; border-bottom: 1px solid var(--border); }
+  .kicker {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: .09em;
+    color: var(--accent-hi); text-transform: uppercase;
+  }
+  .kicker .sep { color: var(--fg-dim); margin: 0 6px; }
+  h1 { font-size: 34px; font-weight: 600; letter-spacing: -.01em; margin: 14px 0 10px; line-height: 1.2; }
+  .lede { color: var(--fg-muted); max-width: 62ch; margin: 0; }
+  .lede strong { color: var(--fg); font-weight: 550; }
+  .meta-row {
+    display: flex; gap: 28px; margin-top: 22px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+  }
+  .meta-row b { color: var(--fg-muted); font-weight: 500; }
+
+  /* ---------- 章节 ---------- */
+  section { padding: 40px 0 8px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .sec-no { font-family: var(--mono); font-size: 12px; color: var(--fg-dim); }
+  h2 { font-size: 21px; font-weight: 600; margin: 0; letter-spacing: -.005em; }
+  .sec-sub { color: var(--fg-dim); font-size: 13.5px; margin: 0 0 20px; max-width: 70ch; }
+  p { color: var(--fg-muted); max-width: 74ch; }
+  p strong, li strong { color: var(--fg); font-weight: 550; }
+  code {
+    font-family: var(--mono); font-size: .88em; color: var(--accent-hi);
+    background: rgba(59, 130, 246, .09); padding: 1px 5px; border-radius: 3px;
+  }
+
+  /* ---------- API 事实表 ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    text-align: left; font-weight: 550; color: var(--fg-dim);
+    font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase;
+    padding: 8px 14px 8px 0; border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--border-soft); vertical-align: top; color: var(--fg-muted); }
+  td:first-child { font-family: var(--mono); font-size: 12.5px; color: var(--fg); white-space: nowrap; }
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 7px;
+    border: 1px solid var(--border); border-radius: 3px; white-space: nowrap;
+  }
+  .tag.ok { color: var(--green); border-color: rgba(52, 211, 153, .35); }
+  .tag.todo { color: var(--warn, #fbbf24); border-color: rgba(251, 191, 36, .35); }
+  :root { --warn: #fbbf24; }
+
+  /* ---------- 公共决定列表 ---------- */
+  ul.decide { list-style: none; padding: 0; margin: 0; }
+  ul.decide li {
+    padding: 12px 0 12px 26px; border-bottom: 1px solid var(--border-soft);
+    position: relative; color: var(--fg-muted);
+  }
+  ul.decide li::before {
+    content: ""; position: absolute; left: 4px; top: 21px;
+    width: 7px; height: 7px; border: 1.5px solid var(--accent); border-radius: 50%;
+  }
+
+  /* ---------- 模板章节骨架 ---------- */
+  .tpl-head { display: flex; align-items: baseline; gap: 14px; margin: 8px 0 4px; }
+  .tpl-badge {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .06em;
+    color: var(--accent-hi); border: 1px solid rgba(59, 130, 246, .4);
+    padding: 2px 10px; border-radius: 3px;
+  }
+  .tpl-fit { font-size: 13.5px; color: var(--fg-dim); margin: 0 0 18px; }
+  .tpl-grid { display: grid; grid-template-columns: 1fr 300px; gap: 36px; align-items: start; }
+  .icon-spec h4, .pop-spec h4 {
+    margin: 0 0 10px; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--fg-dim); font-weight: 550;
+  }
+  .tradeoff {
+    margin-top: 22px; border: 1px solid var(--border); padding: 14px 18px;
+    font-size: 13.5px; color: var(--fg-muted);
+  }
+  .tradeoff b { color: var(--fg); font-weight: 550; }
+  .tradeoff .pro { color: var(--green); font-weight: 550; }
+  .tradeoff .con { color: #fbbf24; font-weight: 550; }
+
+  /* ---------- 状态栏 mock (复刻 atlas .statusbar, 34px) ---------- */
+  .mock-label { font-size: 11.5px; color: var(--fg-dim); letter-spacing: .06em; margin: 14px 0 8px; }
+  .mock-label .st { font-family: var(--mono); color: var(--fg-muted); }
+  .mockbar {
+    height: 34px; display: flex; align-items: center; gap: 14px; padding: 0 14px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    font-size: 12px; color: var(--fg-muted); user-select: none; overflow: hidden;
+  }
+  .mockbar .m-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .mockbar .m-item .arr-d { color: #38bdf8; }
+  .mockbar .m-item .arr-u { color: #34d399; }
+  .mockbar .m-btn {
+    display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px;
+    border: 1px solid var(--border); border-radius: 3px; white-space: nowrap;
+  }
+  .mockbar .m-spacer { flex: 1; }
+  .mockbar .m-speed { display: inline-flex; align-items: center; gap: 10px; }
+  .m-sep { width: 1px; height: 14px; background: var(--border); flex: 0 0 auto; }
+  .m-spd {
+    display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px;
+    border: 1px solid transparent; border-radius: 3px; background: none;
+    color: var(--fg-muted); font: inherit; white-space: nowrap; cursor: pointer;
+  }
+  .m-spd:hover { background: var(--bg-hover); }
+  .m-spd .val { color: var(--fg); font-weight: 600; font-family: var(--mono); font-size: 12.5px; }
+  .m-spd .slash { color: var(--fg-dim); }
+  .m-spd .lim { color: var(--fg); font-weight: 600; font-family: var(--mono); font-size: 12px; }
+  .ico { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; display: block; }
+
+  /* 切换按钮 · 模板 A: 单乌龟双态 */
+  .alt-a {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 3px;
+    background: none; color: var(--fg-dim); cursor: pointer; flex: 0 0 auto;
+  }
+  .alt-a:hover { background: var(--bg-hover); color: var(--fg-muted); }
+  .alt-a.alt-on { color: var(--green); background: var(--green-soft); }
+  /* 模板 B: 独立位 + 仪表+乌龟角标合成图标, 备速态 accent 描边 */
+  .alt-b {
+    display: inline-flex; align-items: center; justify-content: center; position: relative;
+    width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 3px;
+    background: none; color: var(--fg-dim); cursor: pointer; flex: 0 0 auto;
+  }
+  .alt-b:hover { background: var(--bg-hover); color: var(--fg-muted); }
+  .alt-b.alt-on { color: var(--accent-hi); background: var(--accent-soft); border-color: rgba(59, 130, 246, .4); }
+  .alt-b .corner {
+    position: absolute; right: 1px; bottom: 1px; width: 8px; height: 8px;
+    fill: none; stroke: currentColor; stroke-width: 2.2;
+  }
+  /* 模板 C: 双图标分段 */
+  .alt-c { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; flex: 0 0 auto; }
+  .alt-c button {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 20px; padding: 0; border: none; background: none;
+    color: var(--fg-dim); cursor: pointer;
+  }
+  .alt-c button:first-child { border-right: 1px solid var(--border); }
+  .alt-c button:hover { background: var(--bg-hover); }
+  .alt-c button.on { background: var(--accent-soft); color: var(--accent-hi); }
+  .alt-c button.turtle.on { background: var(--green-soft); color: var(--green); }
+
+  /* mock 内两态文本切换: .alt-on 显示备速值 */
+  .m-spd .lim .lim-main { display: inline; }
+  .m-spd .lim .lim-alt { display: none; color: var(--green); }
+  .mockwrap.alt-on .m-spd .lim .lim-main { display: none; }
+  .mockwrap.alt-on .m-spd .lim .lim-alt { display: inline; }
+  .mockbar .try-hint { font-size: 10.5px; color: var(--fg-dim); letter-spacing: .04em; }
+
+  /* ---------- 图标特写 ---------- */
+  .icon-plate {
+    display: flex; gap: 18px; align-items: center; padding: 16px;
+    background: var(--bg-row); border: 1px solid var(--border);
+  }
+  .icon-plate .big { width: 48px; height: 48px; stroke-width: 1.1; }
+  .icon-plate .pair { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .icon-plate .cap { font-family: var(--mono); font-size: 10.5px; color: var(--fg-dim); text-align: center; }
+  .icon-plate p { margin: 0; font-size: 12.5px; }
+  .state-dot { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 11px; }
+  .state-dot i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .state-dot .d-main { background: var(--fg-dim); }
+  .state-dot .d-alt { background: var(--green); }
+
+  /* ---------- 弹窗 mock (.speed-pop 复刻, 380px) ---------- */
+  .speed-pop {
+    width: 380px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px 12px; font-size: 13px;
+  }
+  .pop-title { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--fg); }
+  .pop-title .x {
+    margin-left: auto; width: 22px; height: 22px; display: inline-flex; align-items: center;
+    justify-content: center; border: none; background: none; color: var(--fg-dim); cursor: pointer;
+    border-radius: 3px;
+  }
+  .pop-title .x:hover { background: var(--bg-hover); }
+  .pop-body { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  .mode-line { display: flex; align-items: center; gap: 7px; color: var(--fg-muted); font-size: 12.5px; }
+  .grp-head {
+    font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--fg-dim); font-weight: 550; margin: 2px 0 -2px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .grp-head .live {
+    color: var(--green); font-size: 10px; border: 1px solid rgba(52, 211, 153, .35);
+    padding: 0 6px; border-radius: 3px; letter-spacing: .04em;
+  }
+  .fld-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fld label { display: block; font-size: 11.5px; color: var(--fg-dim); margin-bottom: 4px; }
+  .fld input {
+    width: 100%; padding: 5px 8px; background: var(--bg-row); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 3px; font-family: var(--mono);
+    font-size: 12.5px; outline: none;
+  }
+  .fld input:focus { border-color: rgba(59, 130, 246, .45); }
+  .pop-hint { color: var(--fg-dim); font-size: 11.5px; margin: 0; }
+  .pop-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .bt {
+    font: inherit; font-size: 12.5px; padding: 5px 14px; border-radius: 4px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .bt.ghost { background: none; border: 1px solid var(--border); color: var(--fg-muted); }
+  .bt.ghost:hover { color: var(--fg); }
+  .bt.primary { background: var(--accent); border: 1px solid var(--accent); color: #fff; font-weight: 550; }
+  .bt.primary:hover { background: var(--accent-hi); }
+  .mode-banner {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px;
+    border: 1px solid var(--border); color: var(--fg-muted);
+  }
+  .mode-banner .ico { color: var(--accent-hi); }
+  .mode-banner.alt { color: var(--green); border-color: rgba(52, 211, 153, .35); }
+  .mode-banner.alt .ico { color: var(--green); }
+  .pop-grp { border: 1px solid var(--border-soft); padding: 10px 12px; border-radius: 4px; }
+  .pop-grp.live { border-color: rgba(59, 130, 246, .5); }
+
+  /* ---------- 对比表 ---------- */
+  .cmp td:first-child { font-family: var(--font); font-size: 13px; white-space: normal; font-weight: 550; color: var(--fg); }
+  .cmp .best { color: var(--green); }
+  .verdict {
+    margin-top: 26px; border: 1px solid rgba(59, 130, 246, .4); padding: 16px 20px;
+    font-size: 14px; color: var(--fg-muted);
+  }
+  .verdict b { color: var(--fg); }
+  .verdict .rec { color: var(--accent-hi); font-weight: 600; }
+
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); }
+  footer p { font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim); margin: 0; }
+</style>
+</head>
+<body>
+<!-- SVG sprite: 乌龟为本设计新绘, i-gauge/i-download/i-upload 复刻自项目 atlas sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-turtle" viewBox="0 0 16 16">
+    <path d="M2.6 11a5.3 4.5 0 0 1 10.6 0"/>
+    <path d="M1.6 11h11.4"/>
+    <path d="M13 11c1 0 1.6-.6 1.6-1.5"/>
+    <path d="M4.6 11v1.7M9.4 11v1.7"/>
+  </symbol>
+  <symbol id="i-gauge" viewBox="0 0 16 16">
+    <path d="M2.8 12.1a5.6 5.6 0 1 1 10.4 0"/><path d="M8 8.7 11.4 6"/>
+    <circle cx="8" cy="9.4" r="1.2" fill="currentColor" stroke="none"/>
+  </symbol>
+  <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.4v7.8M4.9 7.1 8 10.2l3.1-3.1M3.2 12.9h9.6"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 13.6V5.8M4.9 8.9 8 5.8l3.1 3.1M3.2 3.1h9.6"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 16 16"><path d="M8 3.4v9M4.4 8.8 8 12.4l3.6-3.6"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 16 16"><path d="M8 12.6v-9M4.4 7.2 8 3.6l3.6 3.6"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 16 16"><path d="M2.5 13.5h11M4.5 13V8M8 13V4.5M11.5 13V6.5"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M8.8 1.8 3.5 9.2h3.4l-.7 5 5.3-7.4H8.1z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="m3.5 3.5 9 9m0-9-9 9"/></symbol>
+</svg>
+
+<div class="canvas">
+
+<header>
+  <div class="kicker">Plan<span class="sep">·</span>待挑选<span class="sep">·</span>WebUI 状态栏</div>
+  <h1>备用速度切换按钮 · 三套设计模板</h1>
+  <p class="lede">在状态栏右侧「上传/下载速度」前加一个<strong>纯图标按钮</strong>切换 qBittorrent 主速度 / 备用速度，并支持修改两套限速值 —— 弹窗采用<strong>主/备同窗</strong>（对齐 qBittorrent 客户端习惯）。本文档给出三套可挑选的方案：图标语言、按钮位置、弹窗布局各不相同，<strong>未动任何代码</strong>。</p>
+  <div class="meta-row">
+    <span><b>档案</b> 26-09-28-0037</span>
+    <span><b>状态</b> 设计模板 · 待挑选</span>
+    <span><b>范围</b> statusbar.html · dialogs.html · qbapi 后端透传</span>
+    <span><b>前提</b> qB API 已核实可用</span>
+  </div>
+</header>
+
+<!-- ============ 0 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-no">00</span><h2>接口核实结论：qB 有现成接口，不需要绕路</h2></div>
+  <p class="sec-sub">qBittorrent WebAPI 从 2.0 起就提供备用速度模式端点，备用限速值走 app/preferences。项目所依赖的 <code>qbittorrent-api 2026.8.1</code> 已全部封装。</p>
+  <table>
+    <tr><th>端点 / 字段</th><th>语义</th><th>项目侧现状</th></tr>
+    <tr>
+      <td>GET /api/v2/transfer/speedLimitsMode</td>
+      <td>返回 <code>0</code>（主速度）或 <code>1</code>（备用速度）</td>
+      <td><span class="tag todo">需新增透传</span> 后端暂未调用</td>
+    </tr>
+    <tr>
+      <td>POST /api/v2/transfer/toggleSpeedLimitsMode</td>
+      <td>在主/备之间切换（qB 4.5+ 亦可用 <code>setSpeedLimitsMode</code> 带 mode 精确指定）</td>
+      <td><span class="tag todo">需新增命令</span> 入命令队列走单一写线程</td>
+    </tr>
+    <tr>
+      <td>app/preferences: alt_dl_limit / alt_up_limit</td>
+      <td>备用下行/上行限速，单位 bytes/s，<code>0</code> = 不限（主速度另有 transfer 端点，与本项目 <code>qbapi.py</code> 现有单点一致）</td>
+      <td><span class="tag todo">需新增读写</span> <code>app_set_preferences()</code> 客户端已有</td>
+    </tr>
+    <tr>
+      <td>server_state.use_alt_speed_limits</td>
+      <td>当前是否备用速度生效，随 qB maindata 每轮下发</td>
+      <td><span class="tag ok">已在前端</span> 规则引擎 <code>sys.alt_speed_on</code> 已消费，前端可从 <code>statsServer</code> 直接读，<strong>无需新查询端点</strong></td>
+    </tr>
+  </table>
+  <p style="margin-top:16px">后端落点：切换命令在 <code>webui/commands.py</code> 注册并复用命令回执（<code>waitCmd</code>）模式；备用限速读写挂在 <code>core/qbapi.py</code> 现有全局限速方法旁。前端按钮的<strong>点亮态</strong>直接吃已有轮询，不引入新请求周期。</p>
+</section>
+
+<!-- ============ 1 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-no">01</span><h2>三套模板的公共决定</h2></div>
+  <p class="sec-sub">以下六条在三套模板里完全一致，挑选时只需比较「位置 × 图标 × 弹窗布局」的差异。</p>
+  <ul class="decide">
+    <li><strong>只放图标</strong> —— 按用户要求全部为纯图标按钮，语义靠 title 悬浮补全（与现有 .sb-spd 同一口径）。</li>
+    <li><strong>位置带</strong> —— 都在状态栏右侧速度区（.sb-speed）附近，不进左侧流量/统计区。</li>
+    <li><strong>弹窗主/备同窗</strong> —— 对齐 qBittorrent 客户端「速度设置一页含主+备」的习惯；落点为扩展现有 .speed-pop 就近浮层（380px），不新开居中 modal。</li>
+    <li><strong>写入通道分工</strong> —— 主速度沿用现有 speed override 通道；备用速度新增 setPreferences(alt_dl_limit/alt_up_limit) 命令。两组一次「应用」分别提交。</li>
+    <li><strong>图标体系</strong> —— 走各主题 index.html 内联 sprite：乌龟（备速）为本设计新绘 symbol，仪表 i-gauge 复活复用；atlas / prism / console 三份 sprite 同步加。</li>
+    <li><strong>与限速曲线的关系</strong> —— 曲线任务只写主速度（transfer 端点），不动 alt_*；备用速度独立。计划阶段需注明二者互不接管。</li>
+  </ul>
+</section>
+
+<!-- ============ A ============ -->
+<section>
+  <div class="sec-head"><span class="sec-no">02</span><h2>模板 A · 乌龟开关</h2></div>
+  <div class="tpl-head"><span class="tpl-badge">TPL-A</span><h2 style="font-size:17px">单图标双态 · 贴 qB 桌面心智 · 最小改动</h2></div>
+  <p class="tpl-fit">一只乌龟图标放在速度组最左：熄灭 = 主速度生效，点亮（绿）= 备用速度生效。单击切换。这正是 qBittorrent 桌面端/官方 WebUI 的心智模型（乌龟 = 备用限速），PT 老手零学习成本。</p>
+  <div class="tpl-grid">
+    <div>
+      <div class="mock-label">状态栏 mock · <span class="st">当前：主速度</span> —— 点乌龟按钮切换两态</div>
+      <div class="mockwrap" id="mockA">
+        <div class="mockbar">
+          <span class="m-item"><svg class="ico arr-d"><use href="#i-arrow-down"/></svg>4.2 GiB <svg class="ico arr-u"><use href="#i-arrow-up"/></svg>512 MiB</span>
+          <span class="m-item">连接 128 · 剩余 1.1 TiB</span>
+          <span class="m-btn"><svg class="ico"><use href="#i-chart"/></svg>完整统计</span>
+          <span class="m-spacer"></span>
+          <span class="m-speed">
+            <button class="alt-a" title="切换备用速度(乌龟亮 = 备用速度生效中)" onclick="toggleMock(this)"><svg class="ico"><use href="#i-turtle"/></svg></button>
+            <span class="m-sep"></span>
+            <button class="m-spd" title="下载 · 点击修改限速"><svg class="ico"><use href="#i-download"/></svg><span class="val">12.4 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-main">20 MiB/s</span><span class="lim-alt">5 MiB/s</span></span></button>
+            <span class="m-sep"></span>
+            <button class="m-spd" title="上传 · 点击修改限速"><svg class="ico"><use href="#i-upload"/></svg><span class="val">3.1 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-main">50 MiB/s</span><span class="lim-alt">8 MiB/s</span></span></button>
+          </span>
+        </div>
+        <div class="mock-label" style="margin-top:10px"><span class="st">→ 切换后（备用速度生效）</span> · 乌龟点亮绿色、限速值联动换成备用值</div>
+        <div class="mockbar">
+          <span class="m-item"><svg class="ico arr-d"><use href="#i-arrow-down"/></svg>4.2 GiB <svg class="ico arr-u"><use href="#i-arrow-up"/></svg>512 MiB</span>
+          <span class="m-item">连接 128 · 剩余 1.1 TiB</span>
+          <span class="m-spacer"></span>
+          <span class="m-speed">
+            <button class="alt-a alt-on" title="切换备用速度(点按回到主速度)"><svg class="ico"><use href="#i-turtle"/></svg></button>
+            <span class="m-sep"></span>
+            <button class="m-spd"><svg class="ico"><use href="#i-download"/></svg><span class="val">12.4 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-alt">5 MiB/s</span></span></button>
+            <span class="m-sep"></span>
+            <button class="m-spd"><svg class="ico"><use href="#i-upload"/></svg><span class="val">3.1 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-alt">8 MiB/s</span></span></button>
+          </span>
+        </div>
+      </div>
+      <div class="tradeoff">
+        <span class="pro">优点</span> — 改动最小：一个按钮 + 现有 .speed-pop 加一节；占宽仅一个图标位；qB 用户一眼懂。<br>
+        <span class="con">代价</span> — 备用限速<strong>数值</strong>不在状态栏露出（要点开弹窗才看得到备用值）；「乌龟不亮=主速」的灭/亮语义需要 title 兜底。
+      </div>
+    </div>
+    <div>
+      <div class="icon-spec">
+        <h4>图标设计 · 新增 i-turtle</h4>
+        <div class="icon-plate">
+          <div class="pair"><svg class="ico big" style="color:var(--fg-dim)"><use href="#i-turtle"/></svg><span class="cap">主速度<br>（熄灭态）</span></div>
+          <div class="pair"><svg class="ico big" style="color:var(--green)"><use href="#i-turtle"/></svg><span class="cap">备用速度<br>（点亮态 · 绿）</span></div>
+          <p>16px 单线、1.5px 笔画，与现有 sprite 同规格；壳拱 + 底线 + 伸头 + 两小腿，缩小到 14px 仍可辨。备速态用 <code>--green</code> + 软底，与速度区下载/上传的蓝/绿方向色无冲突（绿色在此表「慢速模式」而非上传方向）。</p>
+        </div>
+      </div>
+      <div class="pop-spec" style="margin-top:22px">
+        <h4>弹窗 · 主/备同窗（纵向两节）</h4>
+        <div class="speed-pop">
+          <div class="pop-title"><svg class="ico"><use href="#i-gauge"/></svg><span>限速</span><button class="x"><svg class="ico"><use href="#i-close"/></svg></button></div>
+          <div class="pop-body">
+            <div class="mode-line"><svg class="ico"><use href="#i-turtle"/></svg><span>当前：<b style="color:var(--green)">备用速度生效中</b>（qB 报告）</span></div>
+            <div class="grp-head"><svg class="ico"><use href="#i-gauge"/></svg>主速度</div>
+            <div class="fld-grid">
+              <div class="fld"><label>下行 KiB/s</label><input value="20480"></div>
+              <div class="fld"><label>上行 KiB/s</label><input value="51200"></div>
+            </div>
+            <div class="grp-head"><svg class="ico"><use href="#i-turtle"/></svg>备用速度</div>
+            <div class="fld-grid">
+              <div class="fld"><label>下行 KiB/s</label><input value="5120"></div>
+              <div class="fld"><label>上行 KiB/s</label><input value="8192"></div>
+            </div>
+            <p class="pop-hint">应用后分别写入 qB 全局限速与备用限速 · 0 = 不限 · 两节各自成对生效</p>
+          </div>
+          <div class="pop-actions"><button class="bt ghost">取消</button><button class="bt primary"><svg class="ico"><use href="#i-bolt"/></svg>应用</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ B ============ -->
+<section>
+  <div class="sec-head"><span class="sec-no">03</span><h2>模板 B · 角标合成图标</h2></div>
+  <div class="tpl-head"><span class="tpl-badge">TPL-B</span><h2 style="font-size:17px">仪表+乌龟角标 · 独立位 · 与"完整统计"同级</h2></div>
+  <p class="tpl-fit">按钮不挤进速度组，而是独立放在速度组之前（与左侧「完整统计」按钮同视觉级），一眼区分「切换」与「改速度」两种动作。图标 = 仪表盘主体 + 右下角乌龟角标：仪表态表示主速全开，角标亮起表示备速接管。</p>
+  <div class="tpl-grid">
+    <div>
+      <div class="mock-label">状态栏 mock · <span class="st">当前：主速度</span> —— 点按钮切换两态</div>
+      <div class="mockwrap" id="mockB">
+        <div class="mockbar">
+          <span class="m-item"><svg class="ico arr-d"><use href="#i-arrow-down"/></svg>4.2 GiB <svg class="ico arr-u"><use href="#i-arrow-up"/></svg>512 MiB</span>
+          <span class="m-item">连接 128 · 剩余 1.1 TiB</span>
+          <span class="m-spacer"></span>
+          <span class="m-speed">
+            <button class="alt-b" title="切换备用速度(角标亮 = 备用速度生效中)" onclick="toggleMock(this)"><svg class="ico"><use href="#i-gauge"/></svg><svg class="corner"><use href="#i-turtle"/></svg></button>
+            <span class="m-sep"></span>
+            <button class="m-spd"><svg class="ico"><use href="#i-download"/></svg><span class="val">12.4 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-main">20 MiB/s</span><span class="lim-alt">5 MiB/s</span></span></button>
+            <span class="m-sep"></span>
+            <button class="m-spd"><svg class="ico"><use href="#i-upload"/></svg><span class="val">3.1 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-main">50 MiB/s</span><span class="lim-alt">8 MiB/s</span></span></button>
+          </span>
+        </div>
+        <div class="mock-label" style="margin-top:10px"><span class="st">→ 切换后（备用速度生效）</span> · accent 软底 + 描边，与速度组拉开层级</div>
+        <div class="mockbar">
+          <span class="m-item"><svg class="ico arr-d"><use href="#i-arrow-down"/></svg>4.2 GiB <svg class="ico arr-u"><use href="#i-arrow-up"/></svg>512 MiB</span>
+          <span class="m-item">连接 128 · 剩余 1.1 TiB</span>
+          <span class="m-spacer"></span>
+          <span class="m-speed">
+            <button class="alt-b alt-on"><svg class="ico"><use href="#i-gauge"/></svg><svg class="corner"><use href="#i-turtle"/></svg></button>
+            <span class="m-sep"></span>
+            <button class="m-spd"><svg class="ico"><use href="#i-download"/></svg><span class="val">12.4 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-alt">5 MiB/s</span></span></button>
+            <span class="m-sep"></span>
+            <button class="m-spd"><svg class="ico"><use href="#i-upload"/></svg><span class="val">3.1 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-alt">8 MiB/s</span></span></button>
+          </span>
+        </div>
+      </div>
+      <div class="tradeoff">
+        <span class="pro">优点</span> — 动作语义最清晰（切模式 ≠ 改限速，两个位置两件事）；独立位不受速度组 hover 样式干扰；合图标在 16px 下仍有层次感。<br>
+        <span class="con">代价</span> — 仪表+角标是<strong>本项目独创隐喻</strong>，qB 老手首次需靠 title 建立「角标=乌龟=备速」联想；独立位多占一处视觉焦点。
+      </div>
+    </div>
+    <div>
+      <div class="icon-spec">
+        <h4>图标设计 · i-gauge + i-turtle 角标合成</h4>
+        <div class="icon-plate">
+          <div class="pair"><svg class="ico big" style="color:var(--fg-dim)"><use href="#i-gauge"/></svg><span class="cap">主速度<br>（仪表本体）</span></div>
+          <div class="pair"><svg class="ico big" style="color:var(--accent-hi)"><use href="#i-gauge"/></svg><span class="cap">+ 乌龟角标<br>（右下 8px）</span></div>
+          <p>复用已退役的 <code>i-gauge</code> symbol（仪表盘）作本体，乌龟缩小为右下角标；备速态整体转 accent 蓝 + 软底 + 细描边。角标笔画加粗到 2.2px 保证 8px 下可读。sprite 只新增乌龟一个 symbol，仪表零新增。</p>
+        </div>
+      </div>
+      <div class="pop-spec" style="margin-top:22px">
+        <h4>弹窗 · 主/备同窗（左右两列）</h4>
+        <div class="speed-pop">
+          <div class="pop-title"><svg class="ico"><use href="#i-gauge"/></svg><span>限速</span><button class="x"><svg class="ico"><use href="#i-close"/></svg></button></div>
+          <div class="pop-body">
+            <div class="mode-banner"><svg class="ico"><use href="#i-turtle"/></svg>备用速度生效中 · 切换用状态栏按钮</div>
+            <div class="fld-grid" style="grid-template-columns:1fr 1fr; gap:12px 16px">
+              <div>
+                <div class="grp-head"><svg class="ico"><use href="#i-gauge"/></svg>主速度</div>
+                <div class="fld" style="margin-top:6px"><label>下行 KiB/s</label><input value="20480"></div>
+                <div class="fld"><label>上行 KiB/s</label><input value="51200"></div>
+              </div>
+              <div>
+                <div class="grp-head" style="color:var(--green)"><svg class="ico"><use href="#i-turtle"/></svg>备用速度</div>
+                <div class="fld" style="margin-top:6px"><label>下行 KiB/s</label><input value="5120"></div>
+                <div class="fld"><label>上行 KiB/s</label><input value="8192"></div>
+              </div>
+            </div>
+            <p class="pop-hint">两列独立成对生效 · 0 = 不限 · 应用一次分别提交主/备两套限速</p>
+          </div>
+          <div class="pop-actions"><button class="bt ghost">取消</button><button class="bt primary"><svg class="ico"><use href="#i-bolt"/></svg>应用</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ C ============ -->
+<section>
+  <div class="sec-head"><span class="sec-no">04</span><h2>模板 C · 分段直切</h2></div>
+  <div class="tpl-head"><span class="tpl-badge">TPL-C</span><h2 style="font-size:17px">仪表|乌龟两段并排 · 状态零学习成本</h2></div>
+  <p class="tpl-fit">不做「一只图标变两态」，而是<strong>两段并排、当前段高亮</strong>：仪表段 = 主速度，乌龟段 = 备用速度。点另一段即切换。哪套在生效不看颜色联想、直接看高亮在哪段，认知负担最低。</p>
+  <div class="tpl-grid">
+    <div>
+      <div class="mock-label">状态栏 mock · <span class="st">当前：主速度</span> —— 点乌龟段切换两态</div>
+      <div class="mockwrap" id="mockC">
+        <div class="mockbar">
+          <span class="m-item"><svg class="ico arr-d"><use href="#i-arrow-down"/></svg>4.2 GiB <svg class="ico arr-u"><use href="#i-arrow-up"/></svg>512 MiB</span>
+          <span class="m-item">连接 128 · 剩余 1.1 TiB</span>
+          <span class="m-spacer"></span>
+          <span class="m-speed">
+            <span class="alt-c" role="group" title="速度模式: 仪表=主速度 乌龟=备用速度">
+              <button class="on" title="当前: 主速度"><svg class="ico"><use href="#i-gauge"/></svg></button>
+              <button class="turtle" title="切换到备用速度" onclick="toggleMock(this)"><svg class="ico"><use href="#i-turtle"/></svg></button>
+            </span>
+            <button class="m-spd"><svg class="ico"><use href="#i-download"/></svg><span class="val">12.4 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-main">20 MiB/s</span><span class="lim-alt">5 MiB/s</span></span></button>
+            <span class="m-sep"></span>
+            <button class="m-spd"><svg class="ico"><use href="#i-upload"/></svg><span class="val">3.1 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-main">50 MiB/s</span><span class="lim-alt">8 MiB/s</span></span></button>
+          </span>
+        </div>
+        <div class="mock-label" style="margin-top:10px"><span class="st">→ 切换后（备用速度生效）</span> · 乌龟段绿底高亮，仪表段熄灭</div>
+        <div class="mockbar">
+          <span class="m-item"><svg class="ico arr-d"><use href="#i-arrow-down"/></svg>4.2 GiB <svg class="ico arr-u"><use href="#i-arrow-up"/></svg>512 MiB</span>
+          <span class="m-item">连接 128 · 剩余 1.1 TiB</span>
+          <span class="m-spacer"></span>
+          <span class="m-speed">
+            <span class="alt-c" role="group">
+              <button title="切换到主速度"><svg class="ico"><use href="#i-gauge"/></svg></button>
+              <button class="turtle on" title="当前: 备用速度"><svg class="ico"><use href="#i-turtle"/></svg></button>
+            </span>
+            <button class="m-spd"><svg class="ico"><use href="#i-download"/></svg><span class="val">12.4 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-alt">5 MiB/s</span></span></button>
+            <span class="m-sep"></span>
+            <button class="m-spd"><svg class="ico"><use href="#i-upload"/></svg><span class="val">3.1 MiB/s</span><span class="slash">/</span><span class="lim"><span class="lim-alt">8 MiB/s</span></span></button>
+          </span>
+        </div>
+      </div>
+      <div class="tradeoff">
+        <span class="pro">优点</span> — 状态表达最直白（高亮在哪段，哪套生效），不需要 title 也能看懂；两态各有专属图标，色盲友好（位置信息 + 颜色双通道）。<br>
+        <span class="con">代价</span> — 占两个图标位（分段容器约 54px），状态栏最宽；「点一下就切」没有确认，误触成本比 A/B 略高（但切换本身可逆、低危）。
+      </div>
+    </div>
+    <div>
+      <div class="icon-spec">
+        <h4>图标设计 · i-gauge 与 i-turtle 并列</h4>
+        <div class="icon-plate">
+          <div class="pair"><svg class="ico big" style="color:var(--accent-hi)"><use href="#i-gauge"/></svg><span class="cap">仪表段<br>（主速度）</span></div>
+          <div class="pair"><svg class="ico big" style="color:var(--green)"><use href="#i-turtle"/></svg><span class="cap">乌龟段<br>（备用速度）</span></div>
+          <p>两段复用同一对 symbol，高亮态各自配色：主速段 accent 蓝软底、备速段绿软底 —— 分段控件里颜色作为<strong>第二信号</strong>（第一信号是高亮位置）。sprite 同样只新增乌龟。</p>
+        </div>
+      </div>
+      <div class="pop-spec" style="margin-top:22px">
+        <h4>弹窗 · 主/备同窗（双组 + 生效组高亮）</h4>
+        <div class="speed-pop">
+          <div class="pop-title"><svg class="ico"><use href="#i-gauge"/></svg><span>限速</span><button class="x"><svg class="ico"><use href="#i-close"/></svg></button></div>
+          <div class="pop-body">
+            <div class="mode-line"><svg class="ico"><use href="#i-turtle"/></svg><span>当前：<b style="color:var(--green)">备用速度生效中</b> · 模式切换请用状态栏分段按钮</span></div>
+            <div class="pop-grp">
+              <div class="grp-head"><svg class="ico"><use href="#i-gauge"/></svg>主速度</div>
+              <div class="fld-grid" style="margin-top:6px">
+                <div class="fld"><label>下行 KiB/s</label><input value="20480"></div>
+                <div class="fld"><label>上行 KiB/s</label><input value="51200"></div>
+              </div>
+            </div>
+            <div class="pop-grp live">
+              <div class="grp-head" style="color:var(--green)"><svg class="ico"><use href="#i-turtle"/></svg>备用速度<span class="live">生效中</span></div>
+              <div class="fld-grid" style="margin-top:6px">
+                <div class="fld"><label>下行 KiB/s</label><input value="5120"></div>
+                <div class="fld"><label>上行 KiB/s</label><input value="8192"></div>
+              </div>
+            </div>
+            <p class="pop-hint">生效中的组描边高亮 · 0 = 不限 · 应用一次分别提交两套限速</p>
+          </div>
+          <div class="pop-actions"><button class="bt ghost">取消</button><button class="bt primary"><svg class="ico"><use href="#i-bolt"/></svg>应用</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 05 ============ -->
+<section>
+  <div class="sec-head"><span class="sec-no">05</span><h2>横向对比与推荐</h2></div>
+  <p class="sec-sub">弹窗三套都是主/备同窗，差异只在布局（纵向两节 / 左右两列 / 双组+生效高亮），实现成本几乎相同；真正的取舍在状态栏按钮。</p>
+  <table class="cmp">
+    <tr><th>维度</th><th>A 乌龟开关</th><th>B 角标合成</th><th>C 分段直切</th></tr>
+    <tr><td>状态栏占宽</td><td class="best">最小（约 24px）</td><td>小（约 26px，但独立占位）</td><td>最大（约 54px）</td></tr>
+    <tr><td>状态可读性</td><td>靠灭/亮 + title</td><td>靠角标 + 软底</td><td class="best">最好（高亮位置直读）</td></tr>
+    <tr><td>贴 qB 心智</td><td class="best">最高（乌龟 = 备速是 qB 惯例）</td><td>独创隐喻，需学习</td><td>较高（乌龟仍在）</td></tr>
+    <tr><td>误触风险</td><td class="best">低（按钮小、语义单一）</td><td>低</td><td>略高（大热区、即点即切）</td></tr>
+    <tr><td>实现改动量</td><td class="best">最小：+1 按钮 + 浮层加一节</td><td>中：+1 独立按钮 + 合图标 + 浮层两列</td><td>中：+1 分段控件 + 浮层双组高亮</td></tr>
+  </table>
+  <div class="verdict">
+    <span class="rec">推荐 A（乌龟开关）</span> —— 满足「只图标按钮」前提下改动最小、与 qB 桌面/官方 WebUI 的乌龟隐喻完全对齐，占宽最省。若更看重<strong>不靠悬浮提示就看懂当前模式</strong>，选 C（分段直切）；B 的独立位适合未来还要挂「模式相关动作」（如定时切换入口）时再考虑。
+  </div>
+</section>
+
+<footer>
+  <p>26-09-28-0037 · plan-alt-speed-toggle · 设计模板（未动代码）· 数据通路: server_state.use_alt_speed_limits 已随 /api/state 下发</p>
+</footer>
+
+</div>
+
+<script>
+  // mock 交互: 点击切换按钮, 在最近的 mock 容器上切换 alt-on —— 仅演示两态联动
+  function toggleMock(btn) {
+    var wrap = btn.closest('.mockwrap') || btn.closest('.tpl-grid');
+    if (wrap) wrap.classList.toggle('alt-on');
+  }
+</script>
+</body>
+</html>

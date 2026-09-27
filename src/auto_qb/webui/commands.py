@@ -156,6 +156,8 @@ class WebCommandsMixin:
             "create_tags": self._cmd_create_tags,
             "delete_tags": self._cmd_delete_tags,
             "speed_override": self._cmd_speed_override,
+            "speed_alt_set": self._cmd_speed_alt_set,
+            "speed_alt_toggle": self._cmd_speed_alt_toggle,
             "add_torrents": self._cmd_add_torrents,
             "reload_config": self._cmd_reload_config,
             "build_search_index": self._cmd_build_search_index,
@@ -575,6 +577,18 @@ class WebCommandsMixin:
         曲线停用即常态设置。不做"暂停曲线接管"状态。"""
         self.api.set_global_speed_limits(upload_kib=int(upload_kib or 0), download_kib=int(download_kib or 0))
         logger.info(f"WEB UI | 全局限速手动覆盖: 上 {upload_kib} / 下 {download_kib} KiB/s")
+
+    def _cmd_speed_alt_set(self, upload_kib: int = 0, download_kib: int = 0):
+        """备用速度限制设置(ALT-01): app/setPreferences(alt_*), 与主速度覆盖互不触碰;
+        曲线任务只写主速度(transfer 端点), 备用速度无接管方。"""
+        self.api.set_alt_speed_limits(upload_kib=int(upload_kib or 0), download_kib=int(download_kib or 0))
+        logger.info(f"WEB UI | 备用速度限制设置: 上 {upload_kib} / 下 {download_kib} KiB/s")
+
+    def _cmd_speed_alt_toggle(self):
+        """主/备速度模式切换(ALT-01, 状态栏乌龟按钮): qB toggle 端点;
+        新状态由主轮询 server_state.use_alt_speed_limits 回读, 此处不回传。"""
+        self.api.toggle_speed_limits_mode()
+        logger.info("WEB UI | 速度模式已切换(主/备)")
 
     def _cmd_add_torrents(
         self,

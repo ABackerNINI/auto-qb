@@ -16,4 +16,5 @@
 | [package-move-imports.md](package-move-imports.md) | 移动/归拢包目录时 import 引用清点的漏网形态与守阵同步清单 —— 方案 C 实施实录 (W4a 五轮、W4b 三轮)。 | 目录迁移, 包移动, git mv, import 更新, 引用清点, 守阵路径, mock 字符串, logger 名 |
 | [push.md](push.md) | 提交闸门依赖 `TMPDIR` 约定(默认盘会假红); 判"推没推上"只认 `ls-remote` 对比本地 HEAD —— 该核对已由 ship 脚本机检(输出末尾 RESULT 行), 手动 ls-remote 仅在报「取不到远端 ref」时。 | push, 推送, 提交闸门, 推没推上, Gitee, GitHub, 镜像, CI action |
 | [refs.md](refs.md) | 提交后必查 ref 三处(只看 commit 输出会被骗); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃。 | 提交后核对, ref, packed-refs, 分支被回退, staged 暴增, 上游未设置, 领先落后算不出 |
+| [ship-commit-staged-delete.md](ship-commit-staged-delete.md) | commit.py 按纪律逐路径 `git add -- <path>`(禁 -A), 对**已暂存的删除**(`D `)必然 pathspec 落空 —— 删除一旦进暂存区, 该路径在工作区与索引里都不复存在, `git add` 无处匹配。 | ship.commit, git add 失败, pathspec did not match, 删除文件, 提交失败, 蒸馏切片 |
 | [sync-pull.md](sync-pull.md) | `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒; 双 UI 镜像线何时该重放。 | git fetch, git pull, 同步上游, 落后, 行尾, 快进合并被拒, keep 分支, 镜像线 |

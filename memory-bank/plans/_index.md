@@ -29,6 +29,7 @@
 
 ## Done
 
+- [26-09-28-0037] [备用速度切换按钮 · 三套设计模板 (26-09-28-0037)](26-09-28-0037-plan-alt-speed-toggle.html) — `webui-alt-speed-toggle`
 - [26-09-27-2252] [计划 · config schema 迁移物化重构: 加载即迁移 + 版本号备份 + 立即落盘](26-09-27-2252-plan-config-migration-materialize.html) — `config-hr-binding-mapping`
 - [26-09-27-1930] [计划 · HR 在线核实绑定改映射制: 档案双域硬编码 + 已知映射零配置 + 旧键迁移 v1→v2](26-09-27-1930-plan-hr-binding-tracker-mapping.html) — `hr-binding-tracker-mapping`
 - [26-09-27-1852] [计划 · 站点页搜索: 全字段匹配与多命中展示](26-09-27-1852-plan-sites-page-search.html) — `sites-page-search`

@@ -37,6 +37,12 @@
            R10-03: 三个文字标签去棹(同排已有图标 + 数值, 文字纯冗余), 完整语义由 title 补全。
            R10-04: 取值口径 = speedLimitBytes 单点(状态栏与速度染色分母同源)。 -->
       <span class="sb-speed" title="全部组下载/上传速度合计与 qB 当前限速; 点击任一方向可修改该方向限速">
+        <!-- ALT-01: 备用速度切换(计划 26-09-28-0037 TPL-A) —— qB 惯例"乌龟"隐喻:
+             熄灭 = 主速度生效, 亮绿 = 备用速度生效; 状态读主轮询的 statsServer.use_alt_speed_limits
+             (零新增请求), 单击经命令队列切 qB toggle 端点; 备用限速数值在限速浮层改。 -->
+        <button class="sb-alt" :class="{ on: sbAltOn }" :title="sbAltTitle" @click.stop="toggleAltSpeed()">
+          <svg class="ico ico-sm" :class="{ spin: altToggling }" viewBox="0 0 16 16"><use href="#i-turtle"></use></svg>
+        </button>
         <button class="sb-spd" :class="{ off: sbLimits.down === '不限' }"
                 :title="'下载 ' + fmtSpeed(totalDl) + ' / 限速 ' + sbLimits.down + ' · 点击修改(就近弹出)'"
                 @click.stop="openSpeedAt($event, 'down')">

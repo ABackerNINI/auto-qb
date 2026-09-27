@@ -392,6 +392,8 @@ window.AQB_DIALOGS = {
           curveEnabled: !!r.curve_enabled,
           target: r.curve_target || null,
           current: r.current || null,
+          altOn: !!r.alt_on,                 // ALT-01: 备用速度是否生效(浮层双组高亮)
+          altCurrent: r.alt_current || null, // ALT-01: 备用限速当前值(KiB/s)
           error: "",
         };
       } catch (e) {
@@ -439,10 +441,7 @@ window.AQB_DIALOGS = {
       this.speedAt = { left, dir: dir === "down" ? "down" : "up" };
       this.speedOpen = true;
       await this.loadSpeedMode(true);  // 开窗取当前值(强制刷新, 不吃缓存)
-      const c = this.speedMode.current || {};
-      const pick = (v) => (v === undefined || v === null ? "" : String(v));
-      this.speedOverride.up = pick(c.upload_limit);
-      this.speedOverride.down = pick(c.download_limit);
+      this._fillSpeedFields();
       this.$nextTick(() => {
         // 只在当前方向预聚焦(点击"限制速度"就是为改这一方向), 并全选便于直接覆写
         const inp = this.$refs.speedPop && this.$refs.speedPop.querySelector("#sp-" + this.speedAt.dir);
@@ -451,6 +450,16 @@ window.AQB_DIALOGS = {
           inp.select();
         }
       });
+    },
+    /* ALT-01: 用 /api/speed/mode 快照回填主/备两组输入(KiB/s; null -> 空串 = 未加载) */
+    _fillSpeedFields() {
+      const c = this.speedMode.current || {};
+      const a = this.speedMode.altCurrent || {};
+      const pick = (v) => (v === undefined || v === null ? "" : String(v));
+      this.speedOverride.up = pick(c.upload_limit);
+      this.speedOverride.down = pick(c.download_limit);
+      this.speedAlt.up = pick(a.upload_limit);
+      this.speedAlt.down = pick(a.download_limit);
     },
     /* 浮层内联定位: 只写 left(纵向由 CSS 锚定状态栏上缘), 并夹取到视口内 */
     speedPopStyle() {
@@ -466,8 +475,61 @@ window.AQB_DIALOGS = {
       this.speedAt = { left: 0, dir: "up" };
     },
     async submitSpeedDialog() {
-      const ok = await this.submitSpeedOverride();
-      if (ok) this.speedOpen = false;
+      const okMain = await this.submitSpeedOverride();
+      const okAlt = await this.submitAltLimits();
+      if (okMain && okAlt) {
+        this.speedOpen = false;
+        return;
+      }
+      // 任一组失败: 留在窗内重试 —— 主速成功时 speedOverride 已被清空, 必须重取 qB 当前值回填
+      await this.loadSpeedMode(true);
+      this._fillSpeedFields();
+    },
+    /* ---------------- ALT-01(计划 26-09-28-0037): 备用速度 ----------------
+     * 模式切换(乌龟按钮)与限速修改(弹窗)是两个独立动作; 备用限速走 /api/speed/alt
+     * (app/setPreferences alt_*), 与主速覆盖通道互不触碰。
+     */
+    async toggleAltSpeed() {
+      if (this.altToggling) return;
+      this.altToggling = true;
+      try {
+        const resp = await this.api("/api/speed/alt/toggle", { method: "POST", body: "{}" });
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) {
+          // toast 按切换前的状态措辞(sbAltOn 是旧值): 灭 -> 切到备用, 亮 -> 切回主速
+          this.toast(this.sbAltOn ? "已切回主速度" : "已切换到备用速度(乌龟)", "ok", 2500);
+        } else {
+          this.toast("速度模式切换失败: " + r.error, "error", 8000);
+        }
+      } catch (e) {
+        if (!e.auth) this.toast("切换请求发送失败: " + e.message, "error");
+      } finally {
+        this.altToggling = false;  // 新状态由主轮询 statsServer.use_alt_speed_limits 回读, 不本地预翻转
+      }
+    },
+    async submitAltLimits() {
+      const up = Math.max(0, Math.round(Number(this.speedAlt.up) || 0));
+      const down = Math.max(0, Math.round(Number(this.speedAlt.down) || 0));
+      const c = this.speedMode.altCurrent || {};
+      if (up === (c.upload_limit ?? -1) && down === (c.download_limit ?? -1)) return true;  // 未改动不下发
+      this.speedAlt.busy = true;
+      try {
+        const resp = await this.api("/api/speed/alt", {
+          method: "POST",
+          body: JSON.stringify({ upload_kib: up, download_kib: down }),
+        });
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) {
+          this.toast(`已更新备用限速: 上 ${this.fmtLimit(up) || "不限速"} / 下 ${this.fmtLimit(down) || "不限速"}`, "ok", 3000);
+          return true;
+        }
+        this.toast("备用限速设置失败: " + r.error, "error", 8000);
+      } catch (e) {
+        if (!e.auth) this.toast("备用限速发送失败: " + e.message, "error");
+      } finally {
+        this.speedAlt.busy = false;
+      }
+      return false;
     },
     /* ---------------- 历史流量弹层(今日流量面板入口; 天/月/年切换 + 悬停取值) ---------------- */
     async openHistory() {
@@ -612,6 +674,16 @@ window.AQB_DIALOGS = {
       const { down, up } = this.speedLimitBytes;
       const f = (v) => (v === null ? "—" : (v ? this.fmtSpeed(v) : "不限"));
       return { down: f(down), up: f(up) };
+    },
+    /* ALT-01: 备用速度是否生效 —— 单点读 statsServer.use_alt_speed_limits(qB server_state 随主轮询
+     * 逐轮下发, 与规则引擎 sys.alt_speed_on 同源同键), 状态栏乌龟按钮与限速浮层双组高亮都引这里。 */
+    sbAltOn() {
+      return !!(this.statsServer && this.statsServer.use_alt_speed_limits);
+    },
+    sbAltTitle() {
+      return this.sbAltOn
+        ? "备用速度生效中 · 点击切回主速度"
+        : "主速度生效中 · 点击切换到备用速度(qB 乌龟)";
     },
     /* 限速对照行: 每个受管方向一行(该方向无曲线则不显示该行);
      * mismatch = 实际值已知且与命中目标不同 -> 前端据此"显示两个 + 原因"

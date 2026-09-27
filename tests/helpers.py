@@ -84,6 +84,9 @@ class FakeClient:
         self.peers_calls = 0  # sync_torrent_peers 调用计数
         self.transfer_upload_limit_value = 0  # transfer/uploadLimit 读数(bytes/s)
         self.transfer_download_limit_value = 0
+        self.alt_up_limit_value = 0  # app/preferences alt_up_limit 读数(bytes/s, 0 = 不限)
+        self.alt_dl_limit_value = 0  # app/preferences alt_dl_limit 读数(bytes/s, 0 = 不限)
+        self.speed_limits_mode_value = 0  # transfer/speedLimitsMode 读数(0 = 主速度 / 1 = 备用)
         self.recheck_hashes_calls = []  # torrents_recheck 作用范围(hash 列表; calls 保持旧约定只记 None)
         self._sync_rid = 0  # 已发送的响应 ID(模拟 qB m_maindataLastSentID)
         self._sync_snapshot = {}  # 上次响应对应的全量数据(模拟 qB m_maindataSnapshot)
@@ -167,6 +170,25 @@ class FakeClient:
     def transfer_set_download_limit(self, limit=None, **kw):
         self.transfer_download_limit_value = int(limit or 0)
         self.calls.append(("transfer_set_download_limit", self.transfer_download_limit_value))
+
+    def app_preferences(self, **kw):
+        # 只暴露本测试关心的 alt_* 键(真实 qB 返回全量偏好, 调用方按键取用)
+        return {"alt_up_limit": self.alt_up_limit_value, "alt_dl_limit": self.alt_dl_limit_value}
+
+    def app_set_preferences(self, json=None, **kw):
+        prefs = json or {}
+        if "alt_up_limit" in prefs:
+            self.alt_up_limit_value = int(prefs["alt_up_limit"])
+        if "alt_dl_limit" in prefs:
+            self.alt_dl_limit_value = int(prefs["alt_dl_limit"])
+        self.calls.append(("app_set_preferences", sorted(prefs.keys())))
+
+    def transfer_speed_limits_mode(self, **kw):
+        return self.speed_limits_mode_value
+
+    def transfer_toggle_speed_limits_mode(self, **kw):
+        self.speed_limits_mode_value = 1 - int(self.speed_limits_mode_value)
+        self.calls.append(("transfer_toggle_speed_limits_mode", self.speed_limits_mode_value))
 
     def torrents_export(self, torrent_hashes=None, torrent_hash=None, **kw):
         self.calls.append(("export", torrent_hash if torrent_hash is not None else torrent_hashes))

@@ -56,24 +56,28 @@ def collect(mb: Path) -> list[dict]:
         for path in sorted((mb / kind).glob("*.html")):
             meta = dict(META_RE.findall(path.read_text(encoding="utf-8")))
             title = TITLE_RE.search(path.read_text(encoding="utf-8"))
-            items.append({
-                "form": form,
-                "topic": meta.get("doc-topic", ""),
-                "status": meta.get("doc-status", ""),
-                "stamp": meta.get("doc-added", "") or _stamp_of(path.name),
-                "title": title.group(1).strip() if title else path.stem,
-                "link": f"{kind}/{path.name}",
-            })
+            items.append(
+                {
+                    "form": form,
+                    "topic": meta.get("doc-topic", ""),
+                    "status": meta.get("doc-status", ""),
+                    "stamp": meta.get("doc-added", "") or _stamp_of(path.name),
+                    "title": title.group(1).strip() if title else path.stem,
+                    "link": f"{kind}/{path.name}",
+                }
+            )
     for path in sorted((mb / "issues").glob("*.html")):
         meta = dict(META_RE.findall(path.read_text(encoding="utf-8")))
-        items.append({
-            "form": "issue",
-            "topic": meta.get("doc-topic", ""),
-            "status": meta.get("issue-status", ""),
-            "stamp": meta.get("issue-stamp", "") or _stamp_of(path.name),
-            "title": meta.get("issue-title", path.stem),
-            "link": f"issues/{path.name}",
-        })
+        items.append(
+            {
+                "form": "issue",
+                "topic": meta.get("doc-topic", ""),
+                "status": meta.get("issue-status", ""),
+                "stamp": meta.get("issue-stamp", "") or _stamp_of(path.name),
+                "title": meta.get("issue-title", path.stem),
+                "link": f"issues/{path.name}",
+            }
+        )
     for path in sorted((mb / "tasks").glob("*.md")):
         if path.name.startswith("_"):
             continue
@@ -82,14 +86,17 @@ def collect(mb: Path) -> list[dict]:
         status = TASK_STATUS_RE.search(text)
         updated = TASK_UPDATED_RE.search(text)
         title = TASK_TITLE_RE.search(text)
-        items.append({
-            "form": "task",
-            "topic": topics.group(1).strip() if topics else "",
-            "status": status.group(1) if status else "",
-            "stamp": _task_stamp(path.name, updated.group(1) if updated else ""),
-            "title": title.group(2) if title else path.stem,
-            "link": f"tasks/{path.name}",
-        })
+        items.append(
+            {
+                "form": "task",
+                "topic": topics.group(1).strip() if topics else "",
+                "status": status.group(1) if status else "",
+                "stamp": _task_stamp(path.name,
+                                     updated.group(1) if updated else ""),
+                "title": title.group(2) if title else path.stem,
+                "link": f"tasks/{path.name}",
+            }
+        )
     return items
 
 
@@ -103,9 +110,7 @@ def render(items: list[dict], head: str) -> str:
     out = [head, f"## 跨形态专题 (≥2 件) —— {len(multi)} 个\n"]
     for topic in sorted(multi, key=lambda t: (-len(multi[t]), t)):
         group = sorted(multi[topic], key=lambda i: FORM_ORDER.index(i["form"]))
-        parts = [
-            f"{FORM_CN[i['form']]} [{i['stamp']}]({i['link']}) `{i['status']}`" for i in group
-        ]
+        parts = [f"{FORM_CN[i['form']]} [{i['stamp']}]({i['link']}) `{i['status']}`" for i in group]
         out.append(f"- **{topic}** ({len(group)}) — " + " · ".join(parts))
     out.append("")
     # 单件专题只列名: 它们没有跨形态材料要对照, 详细行在各自形态的 `_index.md`;
@@ -126,10 +131,9 @@ def build(root: Path, mb: Path) -> str:
     cmd = gen_cmd(root, "gen_doc_map.py")
     head = f"""# 文档形态总览 (按专题)
 
-> **本文件是生成物, 不要手改** —— 由 `{cmd}` 扫描四形态 (plans / reports / issues / tasks) 的
-> `doc-topic` / `**Topics:**` 与各自状态生成; 新增制品或改状态后重跑即可, 合并冲突也只需重跑。
-> **一行一专题**: 该专题名下的 issue / 计划 / 报告 / 档案与各自状态 —— 「一件事的全部材料」的唯一入口。
-> 协议与决策树见 [conventions/doc-forms.md](conventions/doc-forms.md); 四形态索引在各自 `_index.md`。
+> **本文件是生成物, 不要手改** —— 由 `{cmd}` 扫描四形态的 `doc-topic` / `**Topics:**` 与状态生成;
+> 新增制品或改状态后重跑即可。
+> 协议与四形态索引见 [conventions/doc-forms.md](conventions/doc-forms.md)。
 """
     return render(collect(mb), head)
 
