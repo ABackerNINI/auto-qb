@@ -26,6 +26,10 @@ const { createApp } = Vue;
  *  一旦支持隐藏列索引就会漂移。)
  *
  * locked: 不可隐藏(承载展开 caret / 组状态徽标 / 站点名, 隐藏后行就失去身份)
+ * hide:   默认隐藏 —— 首载时该页**从无任何偏好**(hidden/order/w 全缺)才按此注入 colHidden;
+ *         一旦该页有过任何偏好(哪怕用户清空过 hidden)一律以存储为准, 不再播种
+ *         (否则"刻意全开"的偏好会被默认值反复覆盖 —— 列偏好"时不时被重置"的同形陷阱)。
+ *         已隐藏的列仍在列选择器里勾选开启。
  * tpl:    默认列宽模板(minmax(最小px, 权重fr) 或 固定 px), 用于首次渲染与"恢复默认"
  * align:  对齐口径(R10-08) —— **表头与值单元格的唯一来源**, 由 colAlignCss 生成规则注入,
  *         不在模板里逐格挂类(67 个值单元格 × 4 视图 × 2 套 UI, 逐格挂必漏)。
@@ -41,6 +45,14 @@ const GROUP_COLUMNS = [
   { key: "uploaded", label: "总上传", tpl: "minmax(96px, 1fr)", sortable: true, align: "right" },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   { key: "total_size", label: "总大小", tpl: "minmax(100px, 1fr)", sortable: true, align: "right" },
+  // ---- 辅种扩列(2026-09-28): 组级聚合一律后端 _build_group_view 算好(派生值后端算约定) ----
+  // 聚合总原则: 组内成员指向同一份文件(磁盘只占一份) —— 字节量类取"单份"视角, 网络流量类才可求和。
+  // 进度 = 组内最高(最完整副本): "内容是否已完整到手"的信号, 与状态徽标互补
+  { key: "progress", label: "进度", tpl: "minmax(84px, 1fr)", sortable: true, align: "left" },
+  // 剩余时间 = 组内最小有效 eta(同组至多一个成员在下载 —— 下载冲突检查兜底; 后端排除哨兵)
+  { key: "eta", label: "剩余时间", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
+  // 已下载 = 全组求和: 多站切换下载的流量总消耗(recheck 承接不计入, 恰为真实网络成本)
+  { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   // 分类在标签之前(用户要求分组表/明细表口径一致); 列宽按**列 key**记忆 -> 换序不丢宽度
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)", align: "left" },
   { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)", align: "left" },
@@ -52,9 +64,20 @@ const GROUP_COLUMNS = [
   // DEFAULT_SORT 默认排序键本就是 added_on —— 补列后排序箭头有了落点
   // R10-08: 时间列由右改左(表头与值同源, 不会再出现"表头左、值右"的错位)
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
+  // 最近活动 = 组内最新(-1/0 = 从未 哨兵不参与); 判断组活跃度, 比"添加于"贴近现状
+  { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
   // 保存路径(用户 2026-09-17): 辅种表的路径取**首位成员**值(与路径筛选器同口径); 明细表
   // 相应取消该列 —— 组内成员路径本就一致(组 key 首元即规范化 save_path), 重复展示无信息量。
   { key: "save_path", label: "保存路径", tpl: "minmax(150px, 1.6fr)", sortable: true, align: "left" },
+  // ---- 以下为可选列(默认隐藏, hide: true; 表头名称与种子页同名列对齐) ----
+  // 剩余量 = 组内最小: 组内指向同一份文件, 补齐一份即可 —— 最完整成员还差的字节
+  { key: "amount_left", label: "剩余量", tpl: "minmax(92px, 1fr)", sortable: true, align: "right", hide: true },
+  // 做种时长 = 组内平均(最老/最新成员都不代表整组), 分钟取整
+  { key: "seeding_time", label: "做种时长", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left", hide: true },
+  // 可用性 = 组内最高(内容获取由最好的 swarm 决定); 全组未知(qB 负值)后端回 null
+  { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true, align: "right", hide: true },
+  // 组分享率 = 总上传 ÷ 单份大小(分母不能是 total_size —— N 份会稀释 N 倍)
+  { key: "ratio", label: "分享率", tpl: "minmax(92px, 1fr)", sortable: true, align: "left", hide: true },
 ];
 const DETAIL_COLUMNS = [
   { key: "site", label: "站点", tpl: "110px", sortable: true, locked: true, align: "left" },
@@ -63,10 +86,20 @@ const DETAIL_COLUMNS = [
   // sortable 标记与 TORRENT_COLUMNS 同字段对齐(明细表头已接排序, 2026-09-17)
   { key: "num_seeds", label: "做种", tpl: "92px", sortable: true, align: "right" },
   { key: "num_leechs", label: "用户", tpl: "92px", sortable: true, align: "right" },
+  // 做种(总)/用户(总): tracker 汇报的 swarm 全量(即"做种/用户"列括号里的那个数), 独立成列可按它排序
+  { key: "num_complete", label: "做种(总)", tpl: "92px", sortable: true, align: "right", hide: true },
+  { key: "num_incomplete", label: "用户(总)", tpl: "92px", sortable: true, align: "right", hide: true },
   { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  // 剩余时间: 只有下载中的成员有值(与组级"最小有效 eta"口径呼应); 表头名称与种子页对齐
+  { key: "eta", label: "剩余时间", tpl: "minmax(84px, 1fr)", sortable: true, align: "right" },
   { key: "uploaded", label: "总上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  // 已下载: 各站点切换下载时的真实网络消耗(组级"已下载"求和的分站点拆分)
+  { key: "downloaded", label: "已下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right", hide: true },
   { key: "size", label: "大小", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
+  // 限速: 每站点独立(0 = 不限速显示空白, fmtLimitBytes); 用户 2026-09-28 指定默认隐藏
+  { key: "up_limit", label: "限速上行", tpl: "minmax(96px, 1fr)", align: "right", hide: true },
+  { key: "dl_limit", label: "限速下行", tpl: "minmax(96px, 1fr)", align: "right", hide: true },
   // 与分组表同序: 分类在标签之前
   { key: "category", label: "分类", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },
   { key: "tags", label: "标签", tpl: "minmax(140px, 1.3fr)", sortable: true, align: "left" },
@@ -76,10 +109,21 @@ const DETAIL_COLUMNS = [
   // 2026-09-26 用户要求: 分享率列左对齐(与相邻数值列的右对齐不同, 值含 "实际 / HR 要求" 两段,
   // 左对齐起读更稳); 对齐单点在列模型, 由 colAlignCss 同时作用于表头与值(两套 UI 同源)
   { key: "ratio", label: "分享率", tpl: "minmax(104px, 1fr)", sortable: true, align: "left" },
+  // 可用性: swarm 健康度(组级取最高, 这里看最高值来自哪个站); 负数/暂停不显示(cellAvailability)
+  { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true, align: "right", hide: true },
+  // 见到完整副本: swarm 侧最近一次出现完整拷贝的时间(保种/HR 诊断); 文案与详情抽屉一致
+  { key: "seen_complete", label: "见到完整副本", tpl: "minmax(110px, 1fr)", sortable: true, align: "left", hide: true },
   // TBL-06: 添加于(_member_view 已透出), 与 Hash 同置表尾低频区
   // (保存路径列 2026-09-17 移出本表 -> 见 GROUP_COLUMNS: 组内路径天然一致, 只保留组级一处)
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
-  { key: "hash", label: "Hash", tpl: "80px", align: "left" },
+  // 完成于/最近活动/活跃时间: 成员差异时间列, 表头名称与种子页同名列对齐
+  { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true, align: "right", hide: true },
+  { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true, align: "left", hide: true },
+  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "right", hide: true },
+  // Tracker: 每站点各自 announce; Hash v2: v2 种子的信息哈希 —— 均成员各异(用户 2026-09-28 指定默认隐藏)
+  { key: "tracker", label: "Tracker", tpl: "minmax(150px, 1.4fr)", align: "left", hide: true },
+  { key: "hash", label: "Hash", tpl: "80px", align: "left", hide: true },
+  { key: "infohash_v2", label: "Hash v2", tpl: "90px", align: "left", hide: true },
 ];
 /* 种子页列模型(前端第一轮 R1A, 原 R08 单种子视图扩列升级): name 锁定; 数据源 = SEED_ITEM
  * 平铺数组(/api/state.torrents, 全量种子)。默认可见列 = 种子页核心口径(名称/大小/进度/状态/
@@ -277,7 +321,7 @@ function normalizeV5(raw) {
 
 /* 读列状态(归一化为 v5 形态): 当前键优先; 缺失/损坏时读旧键做**内存迁移** —— 不立即回写,
  * 首次意图动作经 persistPage(唯一写入口)落 v5; 期间每次加载重迁移, 成本可忽略。
- * 单点收口: loadColState 只管洗净, persistPage 只管写。 */
+ * 单点收口: loadColState 只管洗净 + hide 默认隐藏播种, persistPage 只管写。 */
 function readColStateRaw() {
   for (const key of [COLS_STORE_KEY, ...LEGACY_COLS_KEYS]) {
     try {
@@ -291,42 +335,55 @@ function readColStateRaw() {
 }
 
 function loadColState() {
+  // 空存储/坏数据也走完整流程: hide 播种对"该页从无偏好"的所有情形(全新浏览器/坏 JSON/
+  // 只定制过别的 page)都必须生效 —— 提前 return 会把默认隐藏列全部放出来(冒烟实测)。
+  let out = emptyColState();
   try {
     const raw = readColStateRaw();
-    if (!raw || typeof raw !== "object") return emptyColState();
-    const out = emptyColState();
-    for (const page of TABLE_PAGES) {
-      const keys = columnKeys(page);
-      const src = (raw.pages || {})[page] || {};
-      const w = src.w;
-      if (w && typeof w === "object") {
-        // 意图宽度白名单: 只收合法列 key 的 "<num>px"(非法/残留键丢弃); 洗完全空 = 全自动页
-        const clean = {};
-        for (const [k, v] of Object.entries(w)) {
-          if (keys.includes(k) && /^\d+px$/.test(v)) clean[k] = v;
+    if (raw && typeof raw === "object") {
+      for (const page of TABLE_PAGES) {
+        const keys = columnKeys(page);
+        const src = (raw.pages || {})[page] || {};
+        const w = src.w;
+        if (w && typeof w === "object") {
+          // 意图宽度白名单: 只收合法列 key 的 "<num>px"(非法/残留键丢弃); 洗完全空 = 全自动页
+          const clean = {};
+          for (const [k, v] of Object.entries(w)) {
+            if (keys.includes(k) && /^\d+px$/.test(v)) clean[k] = v;
+          }
+          if (Object.keys(clean).length) out.w[page] = clean;
         }
-        if (Object.keys(clean).length) out.w[page] = clean;
-      }
-      const h = src.hidden;
-      if (Array.isArray(h)) {
-        // locked 列即使被写进存储也忽略(列定义变更后可能残留)
-        out.hidden[page] = h.filter((k) => keys.includes(k) && !(columnDef(page, k) || {}).locked);
-      }
-      const o = src.order;
-      if (Array.isArray(o)) {
-        // 列序(TBL-05): 只收合法列 key 并去重; 缺失列(新增列)由 _visibleCols/_orderedKeys 按定义序补尾
-        const seen = new Set();
-        const clean = [];
-        for (const k of o) {
-          if (keys.includes(k) && !seen.has(k)) { seen.add(k); clean.push(k); }
+        const h = src.hidden;
+        if (Array.isArray(h)) {
+          // locked 列即使被写进存储也忽略(列定义变更后可能残留)
+          out.hidden[page] = h.filter((k) => keys.includes(k) && !(columnDef(page, k) || {}).locked);
         }
-        if (clean.length) out.order[page] = clean;
+        const o = src.order;
+        if (Array.isArray(o)) {
+          // 列序(TBL-05): 只收合法列 key 并去重; 缺失列(新增列)由 _visibleCols/_orderedKeys 按定义序补尾
+          const seen = new Set();
+          const clean = [];
+          for (const k of o) {
+            if (keys.includes(k) && !seen.has(k)) { seen.add(k); clean.push(k); }
+          }
+          if (clean.length) out.order[page] = clean;
+        }
       }
     }
-    return out;
   } catch {
-    return emptyColState();
+    /* 无存储 / 坏数据: out 保持空意图态, 下方 hide 播种照常发生 */
   }
+  // hide 列(默认隐藏)播种: 该页**从无任何偏好**(hidden/order/w 全缺)时按列定义注入默认
+  // 隐藏集。有任何已存偏好(哪怕空 hidden)一律不播 —— "刻意全开"是合法偏好, 被默认值反复
+  // 覆盖就是"列偏好时不时被重置"的同形陷阱(pitfalls web-ui/columns-persist)。
+  // 播种只进内存意图态, 随首次 persistPage 自然落盘; 用户之后显隐任何列都以存储为准。
+  for (const page of TABLE_PAGES) {
+    if (!out.hidden[page] && !out.order[page] && !out.w[page]) {
+      const defaults = TABLE_COLUMNS[page].filter((c) => c.hide).map((c) => c.key);
+      if (defaults.length) out.hidden[page] = defaults;
+    }
+  }
+  return out;
 }
 
 const initialColState = loadColState();  // 模块级只读一次(data() 的初值来源)

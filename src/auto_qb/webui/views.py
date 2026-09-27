@@ -118,6 +118,27 @@ def _ep_sort_key(nkey: tuple):
     return (1, 0, nkey[1])  # date
 
 
+# qB eta 哨兵: 8640000 = 无 ETA(与前端 format.js::fmtEta 口径一致); 时间点哨兵 -1/0 = 从未(fmtTs 空白)
+_ETA_SENTINEL = 8640000
+
+
+def _min_valid_eta(values) -> int:
+    """组级剩余时间聚合: 组内**最小有效 eta**。
+
+    依据: 下载冲突检查(_check_download_conflicts)保证同组至多一个成员在下载(两个同时下载 /
+    下载中与已完成并存都会被暂停整组), 它下完其余成员经 recheck 从同一份文件直接变完成 ——
+    故最小有效 eta 就是"全组下完"的时间。哨兵(8640000=无 ETA)与非正值不参与, 全无效回 0
+    (前端 fmtEta 对 0 显示空白)。"""
+    valid = [v for v in values if 0 < v < _ETA_SENTINEL]
+    return min(valid) if valid else 0
+
+
+def _max_valid_ts(values) -> int:
+    """组级时间点聚合("最近活动"): 取组内最新, 哨兵(-1/0 = 从未)不参与; 全组从未回 0(前端空白)"""
+    valid = [v for v in values if v and v > 0]
+    return max(valid) if valid else 0
+
+
 class WebviewMixin:
     @staticmethod
     def _state_kind(rec: TorrentRecord) -> str:
@@ -335,6 +356,21 @@ class WebviewMixin:
             "ratio": round(r.ratio, 3),
             # 添加时间(unix 秒): 组级默认排序取组内最大值(见下方组级 added_on)
             "added_on": r.added_on,
+            # ---- 辅种扩列(2026-09-28)成员透传段: 明细表新列的数据源, 口径与种子页 SEED_ITEM 一致 ----
+            # eta/time_active/last_activity 经 view_field_value 分钟量化(秒级递增字段, 同 seeding_time);
+            # 哨兵原样带过(eta 8640000 / 时间点 -1 = 从未), 前端 format.js 的 fmtEta/fmtTs 按哨兵显示空白
+            "eta": view_field_value("eta", r.eta),
+            "downloaded": r.downloaded,
+            "amount_left": r.amount_left,
+            "last_activity": view_field_value("last_activity", r.last_activity),
+            "time_active": view_field_value("time_active", r.time_active),
+            "completion_on": r.completion_on,
+            "availability": round(r.availability, 2),
+            "dl_limit": r.dl_limit,
+            "up_limit": r.up_limit,
+            "tracker": r.tracker,
+            "infohash_v2": r.infohash_v2,
+            "seen_complete": r.seen_complete,
             # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 _hr_view_fields
             **self._hr_view_fields(r),
             # 连接数快照(TorrentRecord 已有): 成员/未归组种子直接透出, 供前端种子页与成员列展示
@@ -354,26 +390,75 @@ class WebviewMixin:
             if not recs:
                 continue
             members_view = [self._member_view(r) for r in recs]
+            # 可用性组级值先算一次(dict 字面量里对生成器求两次 max 既难读又白费): 全组未知(负)回 None
+            avail_max = max(m["availability"] for m in members_view)
             view.append(
                 {
-                    "key": _utils.encode_group_key(key),
-                    "name": recs[0].name,
-                    "count": len(recs),
-                    "dlspeed": sum(m["dlspeed"] for m in members_view),
-                    "upspeed": sum(m["upspeed"] for m in members_view),
-                    "uploaded": sum(m["uploaded"] for m in members_view),
+                    "key":
+                        _utils.encode_group_key(key),
+                    "name":
+                        recs[0].name,
+                    "count":
+                        len(recs),
+                    "dlspeed":
+                        sum(m["dlspeed"] for m in members_view),
+                    "upspeed":
+                        sum(m["upspeed"] for m in members_view),
+                    "uploaded":
+                        sum(m["uploaded"] for m in members_view),
                     # size = **单种子**大小(同组文件列表相同, 取代表成员); total_size = 全组求和。
                     # 两者不等即说明组内大小不一致(前端据此提示风险), 而非显示重复信息
-                    "size": members_view[0]["size"],
-                    "total_size": sum(m["size"] for m in members_view),
+                    "size":
+                        members_view[0]["size"],
+                    "total_size":
+                        sum(m["size"] for m in members_view),
                     # 组级默认排序键 = 组内**最近添加**时间(前端 sortKey=added_on 降序);
                     # 用 max 而非 min: "刚补进来的那个辅种"才是用户最关心的新条目
-                    "added_on": max(m["added_on"] for m in members_view),
+                    "added_on":
+                        max(m["added_on"] for m in members_view),
                     # HR 栏: 分子 = 已触发但未达标(需关注), 分母 = 已触发 HR 的成员数;
                     # 在**后端**算好计数, 前端只负责显示(与 memory-bank/pitfalls.md 的"派生值后端算"约定一致)
-                    "hr_triggered": sum(1 for m in members_view if m["hr_triggered"]),
-                    "hr_pending": sum(1 for m in members_view if m["hr_triggered"] and not m["hr_satisfied"]),
-                    "members": members_view,
+                    "hr_triggered":
+                        sum(1 for m in members_view if m["hr_triggered"]),
+                    "hr_pending":
+                        sum(1 for m in members_view if m["hr_triggered"] and not m["hr_satisfied"]),
+                    # ---- 辅种扩列(2026-09-28)组级聚合段: 前端只渲染不计算(派生值后端算约定) ----
+                    # 聚合口径的总原则: 组内成员指向**同一份文件**(组 key 首元即规范化 save_path),
+                    # 磁盘只占一份 —— 字节量类取"单份"视角(min/单份分母), 只有逐成员真实发生的
+                    # 网络流量(速度/总上传/已下载)才可求和。
+                    # 进度 = 组内最高(最完整副本): "内容是否已完整到手"的信号, 与状态徽标互补
+                    # (徽标说"在下载", 进度说"内容其实已有")
+                    "progress":
+                        max(m["progress"] for m in members_view),
+                    # 剩余时间 = 组内最小有效 eta(依据见 _min_valid_eta: 同组至多一个成员在下载)
+                    "eta":
+                        _min_valid_eta(m["eta"] for m in members_view),
+                    # 已下载 = 全组求和: 多站切换下载的流量总消耗; recheck 从本地承接的字节不计入,
+                    # 恰好等于这份内容的真实网络成本(边界: 移除成员后其历史流量脱账)
+                    "downloaded":
+                        sum(m["downloaded"] for m in members_view),
+                    # 最近活动 = 组内最新(-1/0 = 从未 哨兵不参与)
+                    "last_activity":
+                        _max_valid_ts(m["last_activity"] for m in members_view),
+                    # 剩余量 = 组内最小: 补齐一份即可 —— 最完整成员还差的字节, 其余成员 recheck 即齐
+                    "amount_left":
+                        min(m["amount_left"] for m in members_view),
+                    # 组分享率 = 总上传 ÷ 单份大小。分母不能是 total_size(N 份会把比率稀释 N 倍);
+                    # 语义 = "这内容赚回几倍于一份自己的体量"。
+                    # 代表成员 progress 为 0 时按 0 处理(前端 cellRatio 对 0 进度不显示, 口径一致)
+                    "ratio":
+                        round(sum(m["uploaded"] for m in members_view) /
+                              members_view[0]["size"], 3) if members_view[0]["size"] else 0.0,
+                    # 做种时长 = 组内平均(最老/最新成员都不代表整组): 成员值已量化到分钟,
+                    # 平均后再取整到分钟, 避免组级值以秒粒度抖动
+                    "seeding_time":
+                        sum(m["seeding_time"] for m in members_view) // len(members_view) // 60 * 60,
+                    # 可用性 = 组内最高(内容获取由最好的 swarm 决定, 差站点不妨碍到手);
+                    # 全组未知(qB 负值)回 None —— 前端显示空白而非 -1.00
+                    "availability":
+                        avail_max if avail_max >= 0 else None,
+                    "members":
+                        members_view,
                 }
             )
         return view

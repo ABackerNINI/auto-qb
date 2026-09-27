@@ -9,7 +9,7 @@
 - test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
 - test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+hide 默认隐藏接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤200 行/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
@@ -47,6 +47,8 @@
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
 - test_views_published_atomically_when_rebuilt_concurrently: 并发重建(主循环线程 vs Web 线程)时四份视图与版本号必须**同一轮**发布, 不得出现"半新半旧"
 - test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
+- test_build_group_view_group_aggregates: 组视图组级聚合(辅种扩列 2026-09-28) —— 进度/可用性 max、eta 最小有效值(哨兵不参与)、剩余量 min、最近活动 max(-1 不参与)、已下载求和、做种时长平均、分享率=总上传÷单份大小; 全组无效值回 0/None
+- test_member_view_extended_fields: 成员视图透出辅种扩列字段(eta/time_active/last_activity 分钟量化 + downloaded/amount_left/completion_on/seen_complete/availability/限速/tracker/infohash_v2)
 - test_error_reason_from_tracker_msg: 错误种子的具体原因取 tracker 报错 msg(虚拟条目跳过)+ 视图透出 error_reason(取不到回退"错误"/非错误态为空)
 - test_error_reason_missing_files_without_api: missingFiles 的原因由状态本身给出("文件丢失"), 不发 tracker 请求
 - test_refresh_error_reasons_budget_and_ttl: 错误原因预取限流(单轮预算条数/TTL 内不重取/过期重取)
@@ -1137,6 +1139,45 @@ def _scan_backdrop_filter(problems):
         )
 
 
+def _extract_column_keys(app_js: str, const_name: str):
+    """从 app.js 提取列模型数组的 key 清单(缺该数组返回 None —— 列模型被改名/搬走的信号)"""
+    m = re.search(r"const %s = \[(.*?)\n\];" % const_name, app_js, re.S)
+    if not m:
+        return None
+    return re.findall(r'key: "(\w+)"', m.group(1))
+
+
+def _scan_column_cells_paired(problems):
+    """列模型每个列 key 必须在对应模板里有值单元格分支(辅种扩列 2026-09-28 守阵)
+
+    列模型(TABLE_COLUMNS)是表头/grid 模板/列选择器的单一来源 —— 但**值单元格**是模板里的
+    v-if/v-else-if 分支, 模板漏写某列的分支时没有任何报错: 表头照常渲染、列选择器照常可勾,
+    值格却永远空白, 且无法从"pytest 全绿"察觉。明细列还要**两处成对**(groups.html 辅种页
+    展开明细 + shows.html 追剧集成员 —— 两份模板共用同一列模型, 漏一处 = 该页该列空白)。
+    另钉住 loadColState 必须消费 `hide` 标志(默认隐藏列的注入单点, 漏消费 = hide 列全部
+    默认可见, 可选列设计失守)。
+    """
+    app_js = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    plans = (
+        ("GROUP_COLUMNS", ("tpl/groups.html", )),
+        ("DETAIL_COLUMNS", ("tpl/groups.html", "tpl/shows.html")),
+        ("TORRENT_COLUMNS", ("tpl/torrents.html", )),
+        ("SHOW_COLUMNS", ("tpl/shows.html", )),
+    )
+    for const, tpls in plans:
+        keys = _extract_column_keys(app_js, const)
+        if keys is None:
+            problems.append(f"app.js 缺少列模型 {const}(列模型单一来源被改名/搬走?)")
+            continue
+        for tpl in tpls:
+            text = open(os.path.join(STATIC_ROOT, "shared", tpl), encoding="utf-8").read()
+            for k in keys:
+                if f"col.key === '{k}'" not in text:
+                    problems.append(f"{const} 列 {k} 在 shared/{tpl} 没有值单元格分支(col.key === '{k}') —— 表头在、值永远空白")
+    if ".filter((c) => c.hide)" not in app_js:
+        problems.append("app.js loadColState 未消费列定义 hide 标志(hide 列默认隐藏失灵)")
+
+
 def _scan_frontend_assets():
     """扫描 webui/static 返回问题清单(空 = 健康)
 
@@ -1171,6 +1212,10 @@ def _scan_frontend_assets():
        (见 _scan_backdrop_filter) —— 嵌套毛玻璃会让"点状态栏历史流量"这类开弹层的动作明显卡顿,
        且**只在星图侧复现**(棱镜 .modal-mask 从不带 backdrop-filter), 属于"两边都能跑、一边更卡"
        的差异, 肉眼走查看不出来, 只能靠计数兜底。
+
+    14. 列模型每个列 key 必须在对应模板有值单元格分支(见 _scan_column_cells_paired) ——
+       模板漏写分支无任何报错(表头在、列选择器可勾、值永远空白); 明细列两份模板
+       (groups.html/shows.html)必须成对; loadColState 必须消费 hide 标志(默认隐藏列注入单点)。
 
 
     ⚠ 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
@@ -1219,11 +1264,12 @@ def _scan_frontend_assets():
     _scan_mixin_wiring(problems)
     _scan_page_class_wiring(problems)
     _scan_backdrop_filter(problems)
+    _scan_column_cells_paired(problems)
     return problems
 
 
 def test_frontend_static_bundle_health():
-    """前端静态资源守阵: 冲突残留/注释孤儿续行/node 语法校验/CSS 漏闭合/transition 吞弹窗/引用缺失/集成员取 hash/状态优先级表
+    """前端静态资源守阵: 冲突残留/注释孤儿续行/node 语法校验/CSS 漏闭合/transition 吞弹窗/引用缺失/集成员取 hash/状态优先级表/列单元格配对
 
     三个实测故障(2026-09-17)都是"pytest 全绿但界面废掉"的形态:
     ① app.js 注释续行留在已闭合的 `*/` 之后 -> 整包 SyntaxError -> Vue 不 mount -> 只剩背景色;
@@ -2684,6 +2730,126 @@ def test_build_group_view_member_num_seeds_fields(tmp_path):
     assert by_hash["HB"]["num_leechs"] == 5
     assert by_hash["HB"]["num_complete"] == 67
     assert by_hash["HB"]["num_incomplete"] == 8
+
+
+def test_build_group_view_group_aggregates(tmp_path):
+    """组视图组级聚合(辅种扩列 2026-09-28): "单份文件"语义下的口径单点
+
+    组内成员指向同一份文件(组 key 首元即规范化 save_path), 磁盘只占一份 —— 字节量类取
+    "单份"视角, 只有逐成员真实发生的网络流量才可求和:
+    - progress/availability 取 max(最完整副本 / 最好的 swarm)
+    - eta 取最小有效值(下载冲突检查保证同组至多一个在下载; 哨兵 8640000/非正不参与)
+    - amount_left 取 min(补齐一份即可 —— 最完整成员还差的字节, 其余成员 recheck 即齐)
+    - last_activity 取 max(-1/0 = 从未 哨兵不参与, 全组从未回 0)
+    - downloaded 求和(多站切换下载的真实网络流量, 逐成员可加)
+    - seeding_time 取平均(成员值已量化到分钟, 平均后再取整)
+    - ratio = 总上传 ÷ 单份大小(分母不能是 total_size, N 份会稀释 N 倍)
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.config.grouping.enabled = True
+    mgr.client = FakeClient()
+    size = 10000
+    t1 = FakeTorrent(
+        hash="HA",
+        name="Show",
+        save_path=r"R:/s",
+        size=size,
+        progress=0.5,
+        eta=7261,  # 成员视图量化到分钟 -> 7260
+        downloaded=100,
+        amount_left=500,
+        availability=1.5,
+        last_activity=1700000100,
+        seeding_time=3641,  # -> 3600(分钟量化)
+        uploaded=1024,
+        state="stalledUP",
+    )
+    t2 = FakeTorrent(
+        hash="HB",
+        name="Show",
+        save_path=r"R:/s",
+        size=size,
+        progress=1.0,
+        eta=8640000,  # 哨兵(无 ETA): 不参与 eta 聚合
+        downloaded=200,
+        amount_left=300,
+        availability=-1.0,  # qB 未知: 不参与 availability 聚合
+        last_activity=-1,  # 从未: 不参与 last_activity 聚合
+        seeding_time=7200,
+        uploaded=2048,
+        state="pausedUP",
+    )
+    # 全组无效值: eta 全哨兵/非正 -> 0, last_activity 全从未 -> 0, availability 全未知 -> None
+    t3 = FakeTorrent(
+        hash="HC", name="Alone", save_path=r"R:/x", eta=8640000, last_activity=-1, availability=-1.0, state="pausedUP"
+    )
+    t4 = FakeTorrent(
+        hash="HD", name="Alone", save_path=r"R:/x", eta=0, last_activity=0, availability=-1.0, state="pausedUP"
+    )
+    seed_store(mgr, [t1, t2, t3, t4])
+    key = ("R:/s", ("a.mkv", "b.mkv"))
+    mgr.store.groups[key] = ["HA", "HB"]
+    mgr.store.member_to_key["HA"] = key
+    mgr.store.member_to_key["HB"] = key
+    key2 = ("R:/x", ("c.mkv", ))
+    mgr.store.groups[key2] = ["HC", "HD"]
+    mgr.store.member_to_key["HC"] = key2
+    mgr.store.member_to_key["HD"] = key2
+
+    g = mgr._build_group_view()[0]
+    assert g["progress"] == 1.0
+    assert g["eta"] == 7260, "组 eta = 最小有效值(哨兵不参与)"
+    assert g["downloaded"] == 300
+    assert g["amount_left"] == 300
+    assert g["availability"] == 1.5
+    assert g["last_activity"] == 1700000100
+    assert g["seeding_time"] == 5400, "组做种时长 = 成员平均值(3600 与 7200 的均值)"
+    assert g["ratio"] == round(3072 / size, 3), "组分享率分母 = 单份大小而非 total_size"
+
+    g2 = {gg["name"]: gg for gg in mgr._build_group_view()}["Alone"]
+    assert g2["eta"] == 0 and g2["last_activity"] == 0 and g2["availability"] is None
+
+
+def test_member_view_extended_fields(tmp_path):
+    """成员视图透出辅种扩列字段(2026-09-28): 明细表新列与组级聚合的共同数据源
+
+    _member_view 是组视图 members 与 singles 未归组种子的共同投影 —— 明细表新增的
+    剩余时间/已下载/限速/Tracker/Hash v2 等列从这里取数。秒级递增字段(eta/time_active/
+    last_activity)必须经 view_field_value 分钟量化(与 store 重建判定同一步长, 否则做种中的
+    种子每轮置脏、惰性重建失效); 哨兵原样带过(负数不量化, 见 view_field_value)。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.client = FakeClient()
+    t = FakeTorrent(
+        hash="HA",
+        name="Show",
+        save_path=r"R:/s",
+        eta=7261,
+        time_active=3661,
+        last_activity=1700000123,
+        completion_on=1700000500,
+        seen_complete=1700000600,
+        availability=1.2345,
+        dl_limit=1024,
+        up_limit=2048,
+        tracker="https://tracker.example/announce",
+        infohash_v2="v2hash-abcd1234",
+        downloaded=123456,
+        amount_left=654321,
+    )
+    seed_store(mgr, [t])
+    v = mgr._member_view(mgr.store.by_hash["HA"])
+    assert v["eta"] == 7260 and v["time_active"] == 3660 and v["last_activity"] == 1700000100
+    assert v["downloaded"] == 123456 and v["amount_left"] == 654321
+    assert v["completion_on"] == 1700000500 and v["seen_complete"] == 1700000600
+    assert v["availability"] == 1.23
+    assert v["dl_limit"] == 1024 and v["up_limit"] == 2048
+    assert v["tracker"] == "https://tracker.example/announce"
+    assert v["infohash_v2"] == "v2hash-abcd1234"
 
 
 def _tracker_calls(client):

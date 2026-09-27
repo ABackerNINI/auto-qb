@@ -93,3 +93,16 @@
 - **触发**: 拖完列宽后表格被排序。
 - **判别**: mouseup 后浏览器仍会把按下→移动→释放合成 click 冒泡到 `.h-cell`。
 - **处置**: 在 move 里**累计位移**(阈值 3px), up 时在 `document` 注册**一次性 capture 阶段** click 拦截器。
+
+### ❗给 loadColState 这类"读取+初始化"函数加逻辑: 提前 return 会绕过尾部逻辑(空存储路径失守)
+
+- **触发**: 在 loadColState(或其它"try 读存储 + 空值提前 return"的初始化函数)里加新逻辑 ——
+  2026-09-28 辅种扩列给列定义加 `hide` 默认隐藏标志时踩到(档案 tasks/26-09-28-webui-group-columns)。
+- **判别**: 播种/派生块放进 per-page 循环里看着"每页都跑", 但函数开头 `if (!raw) return emptyColState()`
+  让**全新浏览器 / 坏 JSON / 只定制过别的 page** 直接短路 —— 静态守阵全绿(只查代码形态),
+  真浏览器里所有默认隐藏列全部可见, 用户感知是"加的可选列把表撑爆了"。
+- **处置**: 初始化播种逻辑放函数**尾部**(所有路径汇合处), 空存储/异常路径也要走完整流程;
+  改完必须跑真浏览器冒烟验证"空 localStorage 首载"场景(桩服务 `scripts/ui_harness.py --port <空端口>`
+  + Playwright 断言表头集合), 静态扫描兜不住这条。
+- **守阵**: `tests/test_web.py::_scan_column_cells_paired`(钉住 loadColState 消费 hide 标志 +
+  每列有模板分支) —— 但运行时行为(空存储路径)只能靠冒烟, 静态检查不是它的替代。

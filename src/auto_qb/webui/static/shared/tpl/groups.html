@@ -50,6 +50,15 @@
                   </span>
                 </div>
                 <div v-else-if="col.key === 'total_size'" class="g-stat" :class="{ zero: !g.total_size }">{{ fmtSizeOrDash(g.total_size) }}</div>
+                <!-- 辅种扩列(2026-09-28): 组级聚合后端算好。进度 = 组内最高(最完整副本), 复用明细同款进度条 -->
+                <div v-else-if="col.key === 'progress'" class="m-progress">
+                  <span class="bar"><i :style="{ width: Math.min(100, g.progress * 100) + '%' }"></i></span>
+                  <span class="val">{{ (g.progress * 100).toFixed(1) }}%</span>
+                </div>
+                <!-- 剩余时间 = 组内最小有效 eta(后端排除哨兵, 0 = 无下载活动); 口径与种子页 fmtEta 一致 -->
+                <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !g.eta || g.eta >= 8640000 }">{{ fmtEta(g.eta) }}</div>
+                <!-- 已下载求和 = 多站切换下载的流量总消耗 -->
+                <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, numTone(g.downloaded, g.size)]">{{ fmtSizeOrDash(g.downloaded) }}</div>
                 <div v-else-if="col.key === 'tags'" class="g-tags" :title="g.commonTags.list.join(', ')">
                   <span v-for="t in g.commonTags.list.slice(0, 3)" :key="t" class="tag-chip"
                         :class="tagClass(t, g.members[0])">{{ t }}</span>
@@ -81,8 +90,19 @@
                 <div v-else-if="col.key === 'count'" class="g-count">{{ g.count }}</div>
                 <!-- TBL-06: 组级"最近添加"(后端 _build_group_view 透出) -->
                 <div v-else-if="col.key === 'added_on'" class="g-stat" :title="cellTimeHint(g.added_on, 'added_on')">{{ cellTime(g.added_on, 'added_on') }}</div>
+                <!-- 最近活动 = 组内最新(0 = 全组从未 -> 空白); 与"添加于"同族时间列 -->
+                <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="cellTimeHint(g.last_activity, 'last_activity')">{{ cellTime(g.last_activity, 'last_activity') }}</div>
                 <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
                 <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="g.save_path">{{ g.save_path || '' }}</div>
+                <!-- 可选列(hide 默认隐藏): 表头名称与种子页同名列对齐 -->
+                <!-- 剩余量 = 组内最小(补齐一份即可 —— 最完整成员还差的字节) -->
+                <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !g.amount_left }">{{ fmtSizeOrDash(g.amount_left) }}</div>
+                <!-- 做种时长 = 组内平均(分钟取整) -->
+                <div v-else-if="col.key === 'seeding_time'" class="g-stat" :class="{ zero: !g.seeding_time }">{{ g.seeding_time ? fmtDuration(g.seeding_time) : '' }}</div>
+                <!-- 可用性 = 组内最高(null = 全组未知 -> 空白) -->
+                <div v-else-if="col.key === 'availability'" class="g-stat" :class="{ zero: !g.availability }">{{ g.availability == null || g.availability < 0 ? '' : g.availability.toFixed(2) }}</div>
+                <!-- 组分享率 = 总上传 ÷ 单份大小; 复用 cellRatio(组进度为 0 不显示, FX-04 同口径) -->
+                <div v-else-if="col.key === 'ratio'" class="g-stat" :class="{ zero: !g.ratio }">{{ cellRatio(g) }}</div>
               </template>
             </div>
 
@@ -118,10 +138,20 @@
                   <!-- 做种/用户: 口径单点化(FX-03) —— 暂停中的种子不显示; 同一函数也为种子页/追剧集明细服务 -->
                   <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</span>
                   <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !cellPeers(m, 'leechs') }">{{ cellPeers(m, 'leechs') }}</span>
+                  <!-- 做种(总)/用户(总): tracker 汇报的 swarm 全量(与"做种/用户"括号里的总数同源), 独立成列可排序 -->
+                  <span v-else-if="col.key === 'num_complete'" class="m-stat" :class="{ zero: !m.num_complete }">{{ m.num_complete }}</span>
+                  <span v-else-if="col.key === 'num_incomplete'" class="m-stat" :class="{ zero: !m.num_incomplete }">{{ m.num_incomplete }}</span>
                   <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ fmtSpeedOrDash(m.dlspeed) }}</span>
                   <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ fmtSpeedOrDash(m.upspeed) }}</span>
+                  <!-- 剩余时间: 只有下载中的成员有值(与组级"最小有效 eta"口径呼应) -->
+                  <span v-else-if="col.key === 'eta'" class="m-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</span>
                   <span v-else-if="col.key === 'uploaded'" class="m-stat" :class="{ zero: !m.uploaded }">{{ fmtSizeOrDash(m.uploaded) }}</span>
+                  <!-- 已下载: 该站点切换下载时的真实网络消耗(组级求和的分站点拆分) -->
+                  <span v-else-if="col.key === 'downloaded'" class="m-stat" :class="[{ zero: !m.downloaded }, numTone(m.downloaded, m.size)]">{{ fmtSizeOrDash(m.downloaded) }}</span>
                   <span v-else-if="col.key === 'size'" class="m-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</span>
+                  <!-- 限速: 每站点独立(0 = 不限速显示空白, fmtLimitBytes) -->
+                  <span v-else-if="col.key === 'up_limit'" class="m-stat">{{ fmtLimitBytes(m.up_limit) }}</span>
+                  <span v-else-if="col.key === 'dl_limit'" class="m-stat">{{ fmtLimitBytes(m.dl_limit) }}</span>
                   <span v-else-if="col.key === 'tags'" class="m-tags" :title="mTags(m).join(', ')">
                     <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
                     <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
@@ -145,8 +175,19 @@
                     {{ cellRatio(m) }}
                     <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                   </span>
+                  <!-- 可用性: 负数(qB 未知)/暂停不显示(cellAvailability), 口径与种子页一致 -->
+                  <span v-else-if="col.key === 'availability'" class="m-stat" :class="[{ zero: !cellAvailability(m) }, numTone(m.availability, 1)]">{{ cellAvailability(m) }}</span>
+                  <!-- 见到完整副本: swarm 侧最近一次出现完整拷贝(不在 TIME_FMT_KEYS, 无口径开关, 直接 fmtTs) -->
+                  <span v-else-if="col.key === 'seen_complete'" class="m-stat" :title="fmtRelTime(m.seen_complete)">{{ fmtTs(m.seen_complete) }}</span>
                   <!-- TBL-06: 添加于(_member_view 已透出); 保存路径列已移出明细表(见 GROUP_COLUMNS) -->
                   <span v-else-if="col.key === 'added_on'" class="m-stat" :title="cellTimeHint(m.added_on, 'added_on')">{{ cellTime(m.added_on, 'added_on') }}</span>
+                  <!-- 完成于/最近活动/活跃时间: 成员差异时间列(口径与种子页同名列一致) -->
+                  <span v-else-if="col.key === 'completion_on'" class="m-stat" :title="cellTimeHint(m.completion_on, 'completion_on')">{{ cellTime(m.completion_on, 'completion_on') }}</span>
+                  <span v-else-if="col.key === 'last_activity'" class="m-stat" :title="cellTimeHint(m.last_activity, 'last_activity')">{{ cellTime(m.last_activity, 'last_activity') }}</span>
+                  <span v-else-if="col.key === 'time_active'" class="m-stat">{{ fmtDuration(m.time_active) }}</span>
+                  <!-- Tracker: 每站点各自 announce; Hash v2: v2 种子信息哈希(均成员各异, 截断+悬停全文) -->
+                  <span v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</span>
+                  <span v-else-if="col.key === 'infohash_v2'" class="m-hash" :title="m.infohash_v2">{{ (m.infohash_v2 || '').slice(0, 8) }}</span>
                   <span v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</span>
                 </template>
               </div>
