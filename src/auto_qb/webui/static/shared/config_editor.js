@@ -208,6 +208,7 @@ window.CONFIG_EDITOR = {
       this.cfgPickerClose();
     },
     async openSettings() {
+      this.searchHelpOpen = false;  // 离开辅种页顶栏: 语法浮卡收起, 不带残留进设置页
       this.page = "settings";
       if (!this.cfg.schema) await this.cfgLoad();
     },

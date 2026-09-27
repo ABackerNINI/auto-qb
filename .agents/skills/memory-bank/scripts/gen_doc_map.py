@@ -50,6 +50,13 @@ def _task_stamp(name: str, updated: str) -> str:
     return d.group(1) if d else updated
 
 
+def _date_stamp(stamp: str) -> str:
+    """渲染口径收口(2026-09-28, 见 pitfalls/kb/cap-counting.md「两个出口」处置①): 计划/报告的
+    展示戳截到日期精度 —— 与任务档案行本就一致的口径; 时分仍留在链接指向的文件名里, 零信息损失,
+    每条省 5 字符。只在确为 `NN-NN-NN-NNNN` 形态时截断, 异常格式原样保留。"""
+    return stamp[:8] if re.fullmatch(r"\d{2}-\d{2}-\d{2}-\d{4}", stamp or "") else stamp
+
+
 def collect(mb: Path) -> list[dict]:
     items: list[dict] = []
     for kind, form in (("plans", "plan"), ("reports", "report")):
@@ -61,7 +68,7 @@ def collect(mb: Path) -> list[dict]:
                     "form": form,
                     "topic": meta.get("doc-topic", ""),
                     "status": meta.get("doc-status", ""),
-                    "stamp": meta.get("doc-added", "") or _stamp_of(path.name),
+                    "stamp": _date_stamp(meta.get("doc-added", "")) or _stamp_of(path.name),
                     "title": title.group(1).strip() if title else path.stem,
                     "link": f"{kind}/{path.name}",
                 }

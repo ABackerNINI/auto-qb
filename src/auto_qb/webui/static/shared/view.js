@@ -51,6 +51,18 @@ window.AQB_VIEW = {
         }
       }
     },
+    /* 搜索语法浮卡(计划 26-09-28-0201 方案A): 开合 + 示例回填。
+     * 语法语义单点在服务端 views.py::_parse_query —— 本卡只做入口, 不做任何匹配实现。 */
+    toggleSearchHelp() {
+      this.searchHelpOpen = !this.searchHelpOpen;
+    },
+    searchHelpFill(q) {
+      // 示例行点击: 填入即搜(不等防抖), 收起浮卡并把焦点还给输入框(方便继续改词)
+      this.searchHelpOpen = false;
+      this.searchQuery = q;
+      this.doSearch();
+      this.$nextTick(() => { if (this.$refs.searchInput) this.$refs.searchInput.focus(); });
+    },
     /* ---------------- 单种子视图交互(R08)与信息栏模式(R09) ---------------- */
     /* 顶层页面持久化(**唯一写入口**, 与列偏好同纪律): 只落"用户切到哪一页"这个意图,
      * 不落任何派生值; 读侧白名单在 initialPage()。写入失败(隐私模式/配额满)只影响
@@ -65,6 +77,7 @@ window.AQB_VIEW = {
      * 列宽重实体化契约由 watch(page) 与 setViewMode 内的 $nextTick 各自兜底, 路径与既有切页一致 */
     goView(mode) {
       if (this.page !== "groups") this.page = "groups";
+      this.searchHelpOpen = false;  // 离开搜索框所在顶栏态: 浮卡跟着收起, 不带残留到其它视图
       this.setViewMode(mode);
     },
     /* ---------------- 展开态的跨视图记忆 ----------------

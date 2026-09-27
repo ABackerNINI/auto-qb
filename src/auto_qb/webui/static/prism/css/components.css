@@ -365,7 +365,7 @@
 .top-search { display: flex; align-items: center; gap: 8px; }
 .search-box { position: relative; display: flex; align-items: center; }
 .search-box > .ico { position: absolute; left: 11px; color: var(--cyan); pointer-events: none; opacity: .85; }
-.top-search input { width: 240px; padding: 7px 32px 7px 33px; border-radius: var(--radius-sm);
+.top-search input { width: 240px; padding: 7px 52px 7px 33px; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--bg-sunken); color: var(--fg); font-size: 13px;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), width var(--dur) var(--ease); }
 .top-search input::placeholder { color: var(--fg-dim); }
@@ -374,6 +374,8 @@
   border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer; padding: 0; }
 .search-clear:hover { background: var(--surface-2); color: var(--fg); }
 .search-clear .ico { width: 12px; height: 12px; }
+/* 搜索语法浮卡(计划 26-09-28-0201 方案A): 挂件样式在三套 UI 共用层 shared/console_hub.css
+ * (与站点搜索 hb-tr-* 同层); 本文件只管 input 右内边距给「?」+ 清空钮留位。 */
 
 /* 按下反馈(可点元素统一轻微回缩; .bt 的按下态自成一体, 见按钮体系段) */
 .tabs button:active, .table-tool:active, .dist-chip:active, .filter-btn:active,

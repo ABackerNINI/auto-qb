@@ -29,12 +29,27 @@
           <div v-if="page === 'groups'" class="top-search">
             <div class="search-box">
               <svg class="ico ico-sm ico-find" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
-              <input v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
-                     placeholder="搜索种子名或文件名…(空格=且, -词排除, “短语”)" autocomplete="off" />
+              <input ref="searchInput" v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
+                     placeholder="搜索种子或文件名..." autocomplete="off" />
               <!-- mousedown.prevent: 按下瞬间不触发失焦 —— 否则输入框收窄动画把按钮移出光标, click 落空(焦点存在时清除失灵) -->
               <button v-if="searchQuery" class="search-clear" title="清除搜索" @mousedown.prevent @click="clearSearch">
                 <svg class="ico" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
               </button>
+              <!-- 搜索语法帮助(计划 26-09-28-0201 方案A): 框内幽灵「?」恒显(清空钮有词才出现在其右侧) + 锚定浮卡。
+                   语法语义单点在 views.py::_parse_query(站点页同构 config_hub.js::trackerParseQuery) —— 改语法先改后端注释, 再同步此卡文案 -->
+              <button class="search-help" :class="{ on: searchHelpOpen }" title="搜索语法帮助"
+                      aria-label="搜索语法帮助" :aria-expanded="searchHelpOpen ? 'true' : 'false'"
+                      @mousedown.prevent @click.stop="toggleSearchHelp">?</button>
+              <transition name="pop">
+              <div v-if="searchHelpOpen" class="search-help-pop" @click.stop>
+                <div class="shp-head"><span>搜索语法</span><span class="shp-hint">点示例直接填入</span></div>
+                <button class="shp-row" @click="searchHelpFill('4k hdr')"><code>词1 词2</code><span>空格分词, 全部包含(且)</span><i>4k hdr</i></button>
+                <button class="shp-row" @click="searchHelpFill('webdl -cam')"><code>-词</code><span>排除含该词的结果</span><i>webdl -cam</i></button>
+                <button class="shp-row" @click="searchHelpFill('&quot;web dl&quot;')"><code>"短语"</code><span>整段按连续子串匹配(可含空格)</span><i>"web dl"</i></button>
+                <button class="shp-row" @click="searchHelpFill('-&quot;内部组&quot;')"><code>-"短语"</code><span>排除该短语</span><i>-"内部组"</i></button>
+                <p class="shp-tip">不区分大小写; - . _ 等分隔符折叠后匹配(Web-DL 与 web dl 等价, 中文可搜); 引号未闭合按到行尾处理, 宽容不报错。</p>
+              </div>
+              </transition>
             </div>
             <span v-if="searchBuilding" class="muted"><svg class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg> 构建索引…</span>
             <span v-if="searchError" class="error">{{ searchError }}</span>

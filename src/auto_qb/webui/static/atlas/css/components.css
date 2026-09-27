@@ -657,7 +657,7 @@
 .search-box { position: relative; display: flex; align-items: center; }
 /* 搜索框前置图标: 用青色而非通用灰, 与"可输入"的语义对应 */
 .search-box > .ico { position: absolute; left: 11px; color: var(--cyan); pointer-events: none; opacity: .85; }
-.top-search input { width: 240px; padding: 7px 32px 7px 33px; border-radius: 999px;
+.top-search input { width: 240px; padding: 7px 52px 7px 33px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--bg-sunken); color: var(--fg); font-size: 13px;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), width var(--dur) var(--ease); }
 .top-search input::placeholder { color: var(--fg-dim); }
@@ -666,7 +666,8 @@
   border: 0; border-radius: 50%; background: transparent; color: var(--fg-dim); cursor: pointer; padding: 0; }
 .search-clear:hover { background: var(--surface-2); color: var(--fg); }
 .search-clear .ico { width: 12px; height: 12px; }
-
+/* 搜索语法浮卡(计划 26-09-28-0201 方案A): 挂件样式在共用层 shared/console_hub.css; 本文件只留星图 pill 差异(钮圆) */
+.search-help { border-radius: 50%; }
 /* 搜索命中高亮: 左侧强调 + 极淡渐变底(不用整框描边, 避免命中多时满屏方框) */
 .group-row.search-hit { border-color: rgba(59, 130, 246, .45);
   background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row); }

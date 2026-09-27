@@ -655,6 +655,41 @@
 }
 
 /* ==========================================================================
+   顶栏搜索语法浮卡(计划 26-09-28-0201 方案A): 框内幽灵「?」+ 锚定浮卡
+   三套皮肤共用本层, 颜色一律走皮肤令牌; 各皮肤只在 components.css 留差异
+   (星图 pill 钮圆)。mono 用 var(--font-mono, 内联栈) —— 星图无 --font-mono
+   令牌(views.css 先例), 回退栈兜底; 故 font 一律写 longhand, 不用 shorthand
+   (shorthand 遇未定义令牌会整条失效, 连 font-size 一起丢)。
+   ========================================================================== */
+.search-help { position: absolute; right: 27px; width: 18px; height: 18px; display: grid; place-items: center;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim);
+  font-family: var(--font-mono, ui-monospace, Consolas, "Cascadia Mono", monospace);
+  font-size: 12.5px; font-weight: 600; line-height: 1; cursor: pointer; padding: 0;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.search-help:hover { background: var(--surface-2); color: var(--accent-hi); }
+.search-help.on { background: var(--accent-soft); color: var(--accent-hi); }
+.search-help-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 40; width: 352px; padding: 8px;
+  border-radius: var(--radius); background: var(--bg-elev); border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-3); text-align: left; }
+.shp-head { display: flex; align-items: baseline; justify-content: space-between; padding: 4px 8px 7px;
+  font-size: 11.5px; font-weight: 600; color: var(--fg-dim); }
+.shp-hint { font-weight: 400; }
+.shp-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 6px 8px; border: 0;
+  border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted); font-size: 12.3px;
+  cursor: pointer; text-align: left; font-family: inherit;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.shp-row:hover { background: var(--surface-2); color: var(--fg); }
+.shp-row code { font-family: var(--font-mono, ui-monospace, Consolas, "Cascadia Mono", monospace);
+  font-size: 11.5px; font-weight: 500; line-height: 1.6; color: var(--accent-hi); background: var(--bg-sunken);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1px 7px; white-space: nowrap;
+  flex: none; min-width: 74px; text-align: center; }
+.shp-row i { margin-left: auto; font-family: var(--font-mono, ui-monospace, Consolas, "Cascadia Mono", monospace);
+  font-size: 10.5px; font-style: normal; color: var(--fg-dim); white-space: nowrap; }
+.shp-row:hover i { color: var(--accent-hi); }
+.shp-tip { margin: 7px 8px 2px; padding: 8px 9px 0; border-top: 1px solid var(--border);
+  font-size: 11.6px; line-height: 1.65; color: var(--fg-dim); }
+
+/* ==========================================================================
    规则: 「当…做…」两栏
    ========================================================================== */
 .hb-rule { background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; }

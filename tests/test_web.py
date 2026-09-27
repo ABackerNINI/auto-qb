@@ -42,6 +42,7 @@
 - test_sites_missing_api_failure_maps_502: 扫描中途 qB 调用失败 -> 502 带原因(不裸 500)
 - test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志
 - test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \p{L}\p{N}(u 标志, ASCII \W 折碎中文词) + Esc/离开分区两条清空路径 + pill 无键数徽标 + hb-tr-* 类 CSS 成对定义
+- test_frontend_search_help_wiring: 顶栏搜索语法浮卡接线守阵(计划 26-09-28-0201 方案A) —— 模板(「?」钮/浮卡/示例回填/简化占位符) + state 声明 + view.js 方法(回填即搜) + 点空白/Esc/导航三条收起路径 + 三皮肤 CSS 成对定义与 input 右内边距留位
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
 - test_views_published_atomically_when_rebuilt_concurrently: 并发重建(主循环线程 vs Web 线程)时四份视图与版本号必须**同一轮**发布, 不得出现"半新半旧"
@@ -2524,6 +2525,51 @@ def test_frontend_tracker_search_wiring():
         "hb-tr-hint",
     ):
         assert "." + cls in css, f"console_hub.css 缺少 .{cls} 定义(挂件类名错配 = 静默裸样式)"
+
+
+def test_frontend_search_help_wiring():
+    """顶栏搜索语法浮卡接线守阵(计划 26-09-28-0201 方案A) —— 模板(帮助钮/浮卡/示例回填/简化占位符)
+    + state 声明(漏声明 = 响应性缺失) + view.js 方法(回填即搜/焦点还给输入框)
+    + 三条收起路径(点空白/Esc/导航) + 三皮肤 CSS 成对定义(挂件类名错配 = 静默裸样式)"""
+    tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "topbar.html"), encoding="utf-8").read()
+    for token in (
+        'placeholder="搜索种子或文件名..."',  # 占位符简化(语法细节移交浮卡), 26-09-28 用户拍板
+        'class="search-help"',
+        "toggleSearchHelp",
+        'class="search-help-pop"',
+        "searchHelpFill('4k hdr')",
+        "searchHelpFill('&quot;web dl&quot;')",
+        "shp-row",
+        "shp-tip",
+        'ref="searchInput"',
+    ):
+        assert token in tpl, f"shared/tpl/topbar.html 缺少 {token}(搜索语法浮卡被改坏? 同步本守阵)"
+    # ② state 声明 + 方法单点(回填必须走 doSearch 即搜 + 焦点还输入框)
+    state = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
+    assert "searchHelpOpen: false" in state, "searchHelpOpen 必须在 state.js data 声明(漏声明 = 响应性缺失)"
+    view = open(os.path.join(STATIC_ROOT, "shared", "view.js"), encoding="utf-8").read()
+    for token in ("toggleSearchHelp()", "searchHelpFill(q)", "this.doSearch()", "this.$refs.searchInput"):
+        assert token in view, f"shared/view.js 缺少 {token}"
+    fill = re.search(r"searchHelpFill\(q\) \{(.*?)\n    \},", view, re.S)
+    assert fill and "this.searchHelpOpen = false" in fill.group(1), "searchHelpFill 必须先收起浮卡"
+    # ③ 收起路径: 点空白 + Esc(lifecycle 两条链), 以及 goView/openSettings 导航收起(不带残留跨页)
+    lc = open(os.path.join(STATIC_ROOT, "shared", "lifecycle.js"), encoding="utf-8").read()
+    assert lc.count("this.searchHelpOpen = false") >= 2, "浮卡必须挂 lifecycle 的点空白与 Esc 两条收起链"
+    assert "searchHelpOpen) this.searchHelpOpen = false" in lc, "Esc 退栈必须含浮卡(pop 层)"
+    goview = re.search(r"goView\(mode\) \{(.*?)\n    \},", view, re.S)
+    assert goview and "this.searchHelpOpen = false" in goview.group(1), "goView 导航必须收起浮卡"
+    ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    openst = re.search(r"async openSettings\(\) \{(.*?)\n    \},", ed, re.S)
+    assert openst and "this.searchHelpOpen = false" in openst.group(1), "openSettings 导航必须收起浮卡"
+    # ④ CSS 成对: 挂件类在共用层(console_hub.css, 三套 UI 同载), input 右内边距 52px 三皮肤各自留位
+    shared_css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
+    for cls in (".search-help", ".search-help-pop", ".shp-row", ".shp-tip"):
+        assert cls in shared_css, f"shared/console_hub.css 缺少 {cls} 定义(挂件类名错配 = 静默裸样式)"
+    atlas_css = open(os.path.join(STATIC_ROOT, "atlas", "css", "components.css"), encoding="utf-8").read()
+    assert re.search(r"\.search-help \{[^}]*border-radius: 50%", atlas_css), "星图 pill 差异丢失(「?」钮应圆)"
+    for rel in ("prism/css/components.css", "atlas/css/components.css", "console/css/components.css"):
+        css = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+        assert "padding: 7px 52px 7px 33px" in css, f"{rel} input 右内边距未给浮卡按钮留位(32px 旧值 = 「?」压住文字)"
 
 
 def test_group_key_codec_roundtrip():

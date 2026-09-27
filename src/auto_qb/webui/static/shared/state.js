@@ -140,6 +140,7 @@ window.AQB_STATE = {
       searchNegativeOnly: false,  // 查询只含排除词(无正判据, 服务端返回空, 前端据此提示)
       searchError: "",        // 搜索请求失败提示(不再静默)
       searchTimer: null,      // 防抖 + 索引构建自动重查定时器
+      searchHelpOpen: false,  // 搜索语法浮卡开合(计划 26-09-28-0201 方案A; 临时浮层, 点空白/Esc/导航收起)
       kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)
       // 多选筛选(组内任一成员命中任一选中值即保留该组; 同一筛选器内多选为"或")
       // pathFilter 与其它筛选器同形(数组多选) —— 四个筛选器共用一份 filterDefs 与渲染模板

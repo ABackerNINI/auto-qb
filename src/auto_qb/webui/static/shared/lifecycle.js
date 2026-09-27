@@ -33,6 +33,7 @@ window.AQB_LIFECYCLE = {
       this.colMenuOpen = false;
       this.filterMenu = "";
       this.uiMenuOpen = false;  // 顶栏界面切换下拉(与列选择器/筛选器同层的临时浮层)
+      this.searchHelpOpen = false;  // 搜索语法浮卡(触发钮自身 @click.stop 已拦截, 点空白 = 收起)
       this.filePrio.visible = false;
       this.addCatMenu = false;  // 添加种子对话框内浮层: 点空白处统一收起(触发元素自身已 @click.stop 拦截)
       this.addTagMenu = false;
@@ -55,6 +56,7 @@ window.AQB_LIFECYCLE = {
       else if (this.headMenu.visible) this.headMenu.visible = false;  // 表头右键菜单(TBL-05)
       else if (this.colMenuOpen) this.colMenuOpen = false;  // 列选择器弹层(pop)
       else if (this.uiMenuOpen) this.uiMenuOpen = false;  // 顶栏界面切换下拉(pop)
+      else if (this.searchHelpOpen) this.searchHelpOpen = false;  // 搜索语法浮卡(pop)
       else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
       else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
       else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)
