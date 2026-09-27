@@ -152,9 +152,9 @@ class ChannelFetcher:
 
 
 def _scope_of(url: str) -> str:
-    """从 URL 取档位(`hrtype=A`)—— 仅供排障展示, 解析不看它"""
+    """从 URL 取档位(`hrtype=A` / CarPT 等变体的 `status=1`)—— 仅供排障展示, 解析不看它"""
     for part in url.split("?", 1)[-1].split("&"):
-        if part.startswith("hrtype="):
+        if part.startswith("hrtype=") or part.startswith("status="):
             return part.split("=", 1)[1]
     return ""
 

@@ -63,6 +63,10 @@ class HrEntry:
     """HR 统计页的一行(站点侧事实)。刷新只更新字段, 不触发取数。"""
 
     tid: int
+    #: 下载用种子 id(页面行内链接提取): CarPT 等站点 H&R ID 与种子 id 是**两个 id 空间**
+    #: (实测 2026-09-27: H&R ID=8017746 的行, 详情链接是 details.php?id=173107),
+    #: 取 .torrent 必须用种子 id; None = 站点两者同空间(标准 NexusPHP), 回落 tid。
+    dl_id: Optional[int] = None
     name: str = ""
     lane: str = LANE_SCOPE
     uploaded_bytes: Optional[int] = None
@@ -120,6 +124,7 @@ class HrEntry:
     def to_json(self) -> Dict[str, Any]:
         return {
             "tid": self.tid,
+            "dl_id": self.dl_id,
             "name": self.name,
             "lane": self.lane,
             "uploaded_bytes": self.uploaded_bytes,
@@ -139,6 +144,7 @@ class HrEntry:
     def from_json(cls, raw: Dict[str, Any]) -> "HrEntry":
         return cls(
             tid=_as_int(raw.get("tid")),
+            dl_id=_opt_int(raw.get("dl_id")),
             name=str(raw.get("name") or ""),
             lane=str(raw.get("lane") or LANE_SCOPE),
             uploaded_bytes=_opt_int(raw.get("uploaded_bytes")),

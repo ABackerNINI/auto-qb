@@ -15,6 +15,11 @@
 - test_adapter_urls: page_url 首屏不带翻页参数/第二页带, download_url 按模板拼绝对地址
 - test_adapter_detects_login_and_challenge: 登录页与挑战页特征识别
 - test_page_javascript_marks: 页脚区间与 maxpage/currentpage 脚本标记(报告用)
+- test_carpt_adapter_urls: CarPT 变体的 status 状态参数 / 档位映射 / 翻页 / 下载地址
+- test_carpt_adapter_parse_first_page: CarPT 表头形态(十列 td.colhead)数据行全字段解析正确
+- test_carpt_adapter_empty_table: 真实样张的空表结构 = 合法空结果, 不是改版
+- test_carpt_adapter_revised_page_reports_header_missing: CarPT 页改版(无 H&R ID 表头) -> header_found False
+- test_carpt_adapter_detects_login: 登录页识别按 CarPT 表头锚点(基类锚的是标准「HR编号」)
 """
 import pytest
 
@@ -153,6 +158,8 @@ def test_adapter_parse_first_page():
     assert first.remain_seconds == 9 * 86400 + 6 * 3600 + 5 * 60 + 11
     assert second.tid == 313997
     assert second.ratio == 1.234
+    # 标准 NexusPHP: H&R 编号与种子 id 同空间(dl_id == tid), 回落路径不改变行为
+    assert first.dl_id == 313852
     # 站点侧达标结论(计划 §9 v3.0: 档位即结论): A 考察中 / C 未达标 ⇒ False, B 已达标 ⇒ True
     assert first.satisfied_by_site is False
     assert parsed.entries[0].infohash_v1 == ""
@@ -222,3 +229,81 @@ def test_page_javascript_marks():
     assert marks["maxpage"] == 1
     assert marks["currentpage"] == 0
     assert page_javascript_marks(REVISED_PAGE) == {}
+
+
+# ---------- CarPT 变体(myhr 表格 + status 参数 + H&R ID 表头) ----------
+
+CARPT_PAGE1 = "carpt_myhr_page1.html"
+CARPT_EMPTY = "carpt_myhr_empty.html"
+
+
+def _carpt_adapter(**overrides):
+    conf = site_conf(
+        adapter="carpt",
+        hr_page_url="https://carpt.net/myhr.php",
+        hr_page_scopes=["A", "B", "C", "D"],
+        **overrides,
+    )
+    adapter = build_adapter("carpt", conf)
+    assert adapter is not None
+    return adapter
+
+
+def test_carpt_adapter_urls():
+    """CarPT 的档位映射(status: 1考察中/2已达标/3未达标/4已免罪)与翻页 / 下载地址"""
+    adapter = _carpt_adapter()
+    assert adapter.page_url("A", 1) == "https://carpt.net/myhr.php?status=1"
+    assert adapter.page_url("B", 1) == "https://carpt.net/myhr.php?status=2"
+    assert adapter.page_url("D", 2) == "https://carpt.net/myhr.php?status=4&page=2"
+    assert adapter.download_url(40001) == "https://carpt.net/download.php?id=40001"
+    assert adapter.scopes == ("A", "B", "C", "D")
+
+
+def test_carpt_adapter_parse_first_page():
+    """CarPT 表头形态(十列 td.colhead)数据行全字段解析正确(列名差异: 下载完成时间/剩余考察时间)"""
+    parsed = _carpt_adapter().parse_page("A", load_fixture(CARPT_PAGE1))
+    assert parsed.header_found is True
+    assert parsed.has_next is True
+    assert parsed.row_count == 2
+    assert parsed.missing_field_rate == 0.0
+    first, second = parsed.entries
+    assert first.tid == 40001
+    assert first.lane == "A"
+    assert first.name.startswith("EXAMPLE MOVIE")
+    # CarPT 实证(2026-09-27 已达标样张): H&R ID 与种子 id 是两个 id 空间 ——
+    # 名称列详情链接的 id 必须提取进 dl_id(取 .torrent 用), 不能混用 tid
+    assert first.dl_id == 173107
+    assert first.dl_id != first.tid
+    assert first.uploaded_bytes == 0
+    assert first.downloaded_bytes == int(27.34 * 1024**3)
+    assert first.ratio == 0.0
+    assert first.need_seed_seconds == 2 * 3600 + 42 * 60 + 17
+    # 样张完成时间无秒("2026-09-25 04:34"), parse_datetime 补齐秒
+    assert first.done_iso == "2026-09-25 04:34:00"
+    assert first.remain_seconds == 9 * 86400 + 6 * 3600 + 5 * 60 + 11
+    assert second.tid == 40002
+    assert second.dl_id == 198349
+    assert second.ratio == 1.234
+
+
+def test_carpt_adapter_empty_table():
+    """真实样张的空表结构(表头在但 0 行) = 合法空结果, 不是改版"""
+    parsed = _carpt_adapter().parse_page("A", load_fixture(CARPT_EMPTY))
+    assert parsed.header_found is True
+    assert parsed.row_count == 0
+    assert parsed.entries == []
+    assert parsed.has_next is False
+
+
+def test_carpt_adapter_revised_page_reports_header_missing():
+    """CarPT 页改版(无 H&R ID 表头) -> header_found False(覆盖证明据此拒绝产生放行)"""
+    parsed = _carpt_adapter().parse_page("A", REVISED_PAGE)
+    assert parsed.header_found is False
+    assert parsed.row_count == 0
+
+
+def test_carpt_adapter_detects_login():
+    """登录页识别按 CarPT 表头锚点(基类锚的是标准「HR编号」, CarPT 页面没有这个词)"""
+    adapter = _carpt_adapter()
+    assert adapter.looks_like_login(LOGIN_PAGE) is True
+    assert adapter.looks_like_login(load_fixture(CARPT_PAGE1)) is False

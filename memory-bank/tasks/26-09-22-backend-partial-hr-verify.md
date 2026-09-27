@@ -2,7 +2,7 @@
 
 **Status:** Open
 **Added:** 2026-09-22
-**Updated:** 2026-09-25
+**Updated:** 2026-09-27
 **Summary:** 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
 (2026-09-24/25): M1 = 新包 `src/auto_qb/hr/` 离线管道 + 配置全链路 + `--hr-once`; M2 = 本地端点
 (`/api/hr/tasks` + `/api/hr/result`, token + origin + URL 白名单) + 取数线程 (`hr/worker.py`) + 只读视图发布 +
@@ -23,6 +23,10 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
 热重载加站点即生效); 扩展选项页**整页三模板**(极简 = 粘 token + 一键授权 / 标准 = + 多实例管理 + 手动兜底 +
 硬上限 + 日志 / 完整 = + JSON 直接编辑, 选择持久化 `uiTemplate`), 站点权限改后端拉清单勾选 + 一键申请
 (手动填域名降级兜底); 测试 +7, 全量 1617 passed + 1 skipped。
+**v3.5 CarPT 站点接入已落地 (2026-09-27)**: 新 adapter `carpt`(myhr 表格变体: `?status=1/2/3/4`
+状态参数 + `H&R ID` 十列表头, "下载完成时间/剩余考察时间"列名) —— `NexusPhpMyhrAdapter` 参数化
+(scope 参数/档位映射/表头/列名可注入), 配置 `adapter: "carpt"` 即接入; fetcher/report `_scope_of`
+兼容 `status=`; 测试 +5, 全量 1693 passed + 1 skipped(TOTAL 91%)。
 **只差真机走查**(M0 四项实测 + 装扩展后跑一轮真实取数 + v3.1 新配置面走查) —— 计划见 memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html (§13 决策记录与 M0 实测清单)。
 **Topics:** backend-partial-hr-verify
 **Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html
@@ -62,8 +66,51 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
 | M4 多站点与打磨 | **Done** | 2026-09-25: 四块一起交付 —— ①**四类事件语文化** `hr/events.py`(文案单点 + 标签前缀; **登录失效从熔断里摘出来**: 不计失败/不推熔断/只报一次并给动作, 原因仍写 `refresh.reason` 但**不碰** fetched_at 与新鲜度基准) + 通道静默告警补**受影响站点** ②**站点级状态单一点** `hr/status.py::site_status()`(CLI 与界面同一套数, 新增下次刷新/回填进度/「现在为什么不放行」) ③**WebUI 出口**: `GET /api/hr/status` + 设置页「HR 站点状态」章节(经典与 Hub 两入口 × 两套 UI) + **前端字段一致性守阵** ④**多站点**: `tests/test_hr_multisite.py` 5 条钉死「第二站点只改配置」与隔离(配额/熔断/锁/索引不串味) + `docs/configuration.md` 接入指南。全量 **1561 passed + 1 skipped** |
 | v2.9 超龄豁免 (判定侧豁免 + 翻页早停) | **Done** | 2026-09-25: 用户指令「完成时间超过一年(可配)的种子没有必要验证 HR, 甚至也没有必要往下翻页」⇒ 新站点级键 `completed_age_limit`(0=关闭, 1D~3650D): 判定收口 `judge_record` 对本地完成时刻超线的种子给第四态 `EXEMPT`(排在「无可查键回落本地」之前, 压过清单命中与 unknown_policy, mode=all 也认); 取数侧超龄行不入索引/不回填 + 整页超龄且页内跨页倒序成立才早停(覆盖证明照常成立)。判定 7 + 取数 8 + 门面 1 + 配置 1 = 17 条测试, 红验 10 条全红; 全量 **1593 passed + 1 skipped**。计划 v2.9 (§4/§7/§9/§13/§14) |
 | v3.0 达标判定来源优先级 (档位即结论) | **Done** | 2026-09-25 17:37: 用户指令「在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息」⇒ 计划 v3.0 (17:10) 收口后当轮落地 —— ① `hr/model.py::satisfied_verdict` 三档全档位即结论 (A/C ⇒ False · B ⇒ True · D/未知档位才 None), 删「A/D 档看 remain_seconds==0 ⇒ 已达标」推导 (v2.8 已实证该字段是考核窗口倒计时, 方向相反) 与缺字段回落本地; ② `hr/resolve.py::judge_record` 双命中改按 (判定档位, 达标档位序) 取更保守者 (新增 `_lane_rank`, 删「首命中即 break」); ③ `check_hr_satisfied` 分支逻辑不变 (site_satisfied 非 None 即采纳), 仅 docstring 同步。测试 +2 (`test_lane_verdict_ignores_remain_and_local` / `test_judge_record_double_hit_prefers_lane_order`) + 改写 1, 红验 3 条全红; 全量 **1601 passed + 1 skipped**。计划 v3.0 (§9/§12/§13/§14) |
+| v3.5 CarPT 站点接入 (adapter 变体参数化) | **Done** | 2026-09-27: 用户令「HR在线核实添加支持站点: CarPT」(样张: 用户提供的 CarPT `myhr.php` 空表页, 2026-09-27)。样张核对: 状态参数 `?status=N`(1 考察中/2 已达标/3 未达标/4 已免罪), 表头 `td.colhead` 十列, 首列「H&R ID」, 「下载完成时间/剩余考察时间」列名, 末尾多备注/操作两列, 分页仍 nexus-pagination。实现: `NexusPhpMyhrAdapter` 构造参数化(`scope_param`/`scope_values`/`header_key`/`column_names`, 标准形态行为不变, `REQUIRED_COLUMNS` 兼容导出保留) + 新 `adapters/carpt.py`(`CarPtMyhrAdapter` 薄子类, 登录页识别换本站表头锚点) + 注册名 `"carpt"` + schema 帮助文案; `fetcher.py`/`report.py` 的 `_scope_of` 兼容 `status=`(排障展示与离线走查文件名)。测试 +5(CarPT fixture ×2: 数据页/空表样张结构) — 全量 **1693 passed + 1 skipped**(TOTAL 91% / 11227 / 815 / 3720 / 330), 基线 `26-09-27-1235` 已记。**待真机**: 数据行单元格形态(样张为空表)与 `download.php?id=` 实参(H&R ID 还是种子 id)待首刷核对 |
 
 ## 进度日志
+
+- **2026-09-27 12:54 (提交轮: 合并远端 + 合并树重测零漂移)** — 用户令「提交」。预检发现远端在 `aeca1fb`
+  (webui 模板共享化), 按「移出改动 → `merge --ff-only` 快进 → 施回改动」合流; 回写件无冲突。
+  合并树重测 **1693 passed + 1 skipped**(TOTAL 91% / 11238 / 816 / 3728 / 331) 与 `26-09-27-1246`
+  完全一致 —— 合并只动 webui 静态层, 不触碰 hr; 基线 `26-09-27-1254-post-merge-hr-carpt` 已记。
+
+- **2026-09-27 12:46 (v3.5 补验: 已达标样张验证通过 + 挖出并修掉「双 id 空间」真缺陷)** — 用户补交
+  CarPT `?status=2` 已达标页样张(17 行数据)令「验证是否正确」。
+  ① **验证通过的部分**: 十列表头锚定 / H&R ID 纯数字 / 完成时间 "YYYY-MM-DD HH:MM" 无秒形态
+  (parse_datetime 已认) / B 档 `satisfied_verdict=True` / 翻页判据(灰色下一页) / 序列化 roundtrip;
+  B 档「还需做种时间/剩余考察时间」显示 `---` —— 非空白不计字段缺失, parse 成 None(展示层不显示),
+  语义正确。
+  ② **挖出真缺陷**: 种子名称列详情链接 `details.php?id=173107` 与该行 H&R ID `8017746` **不同空间**
+  ⇒ 标准 `download_url(tid)` 拿 H&R ID 下载必然取错/取不到 —— 上一轮「待真机核对」的第②项提前由样张
+  实证, 且答案是否定的。
+  ③ **修复**: `HrEntry` 新增 `dl_id`(可选, to_json/from_json 同步); 基类 `_map_row` 经 `_dl_id_of`
+  从行内链接提取(download.php 优先 / details.php 兜底 —— 标准 NexusPHP 两 id 同空间, dl_id==tid
+  行为不变); `service._backfill` 下载改 `adapter.download_url(entry.dl_id or tid)`。
+  真样张回归: 17 行 dl_id 全部正确, 下载地址落 `download.php?id=173107` 等种子 id。
+  ④ 测试: fixture 改为真实双 id 空间结构(名称列 details 链接用种子 id / 操作列空), 标准 + CarPT 两侧
+  各加 dl_id 断言; 全量 **1693 passed + 1 skipped**(TOTAL 91% / 11238 / 816 / 3728 / 331), 基线
+  `26-09-27-1246-hr-carpt-dlid` 已记。**仍待真机**: A 考察中页(数据行含还需做种/剩余考察实值)与
+  操作列是否有下载链接(A 页形态未知, dl_id 提取已有 details 兜底不依赖它); 未提交。
+
+- **2026-09-27 (v3.5 CarPT 站点接入)** — 用户令「HR在线核实添加支持站点: CarPT」, 样张为用户提供的
+  CarPT `myhr.php` 已登录页(空表, 2026-09-27 存档)。
+  ① **样张核对**: 与 BTSchool 标准形态的差异 = 状态参数 `?status=N`(1 考察中 / 2 已达标 / 3 未达标 /
+  4 已免罪, tab 文字逐一核对) 而非 `?hrtype=A/B/C/D`; 表头格是 `<td class="colhead">` 十列, 首列锚点
+  「H&R ID」(非「HR编号」), 列名「下载完成时间/剩余考察时间」, 末尾多「备注/操作」两列; 分页仍
+  nexus-pagination(`?page=N`), 服务端渲染无异步取数。样张为空表 ⇒ 数据行形态按 NexusPHP 惯例
+  假设, 待首刷核对。
+  ② **实现取向**: 不复制解析逻辑 —— `NexusPhpMyhrAdapter` 构造参数化(`scope_param`/`scope_values`/
+  `header_key`/`column_names`, 语义列键 `tid/name/.../remain` 单点), 标准形态零行为变化;
+  新 `adapters/carpt.py` 只是薄子类(登录页识别换本站表头锚点), 注册名 `"carpt"`。判定/取数/频道
+  上游全部无感 —— `build_adapter` 工厂注入后, `page_url`/`parse_page` 走同一套代码。
+  ③ **连带兼容**: `fetcher.py`/`report.py` 的 `_scope_of`(排障展示与离线走查 `<档位>.html` 文件名)
+  兼容 `status=`; schema 的 `adapter` 帮助文案列明 carpt; `config-reference/keys.md` 同步。
+  ④ **测试**: +5(URL 档位映射/数据行解析/空表样张结构/改版识别/登录识别), fixture ×2 按真实样张
+  结构构造(数据行 NexusPHP 惯例补齐, 已注明); 首版 fixture「下一页」误用 `<b class="next">`,
+  与 `has_next_page` 正则不符红一次, 改回标准 `<b>` 形态绿。
+  ⑤ 全量 **1693 passed + 1 skipped**(TOTAL 91% / 11227 / 815 / 3720 / 330; test.full 18.1s),
+  基线 `26-09-27-1235-hr-carpt-adapter` 已记。**未提交**(等用户显式指令)。
 
 - **2026-09-26 (v3.4 状态模型重新梳理: 三个终态都已结束 —— 纯文档)** — 用户指令: 「HR在线核实计划重新梳理,
   优先级: 在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息, 最终态: 已达标 | 未达标 | 已免罪,
@@ -212,38 +259,5 @@ CJK 格宽对齐/剩余达标不显示)且 `hr_downloaded[].ts` 改记逐文件�
   **剩余达标时间不再显示**; 列对齐走自写 `_dwidth/_pad`(str.format 按字符数对齐, CJK 双宽会错位)。
   测试 +2(service 1 钉逐文件 ts / report 1 钉 CJK 对齐·截断·列改版), 全量
   **1573 passed + 1 skipped**(TOTAL 91% / 10905 / 789 / 3582 / 327; HR 包 93%: 2782 / 143 / 766 / 91)。
-
-- **2026-09-25 03:50 (v2.7 实报修复: 增量落盘)** — 用户删 hr_check 数据重启实测:「BTSchool.lock 长期被持有 /
-  后端无落盘, Ctrl+C 后才落盘」。诊断(无死锁): v2.6 修好后一轮真实跨多个扩展轮询周期(3 页 + 回填, 中间夹
-  间隔等待, 分钟级、按 §5/§8 **持锁进行**), Ctrl+C 打断的是**派发前的间隔睡眠**(sleeper 可中断, 日志
-  「放弃本轮剩余的等待」即它), 轮次随即完成记账并落盘 —— 所以「Ctrl+C 后成功落盘」; 但落盘只在**轮尾**,
-  中途断电/Ctrl+C 会丢已抓页面与配额账本。修: **每抓到一页**(complete=False 语义合并, 只置命中为 active)
-  与**每个 .torrent 结果**(hr_downloaded 凭据 / fails 记账)当场提交; 轮尾仍按完整语义合并 + 写覆盖证明;
-  叫停备注改「下载阶段被叫停」(叫停≠一定在取 .torrent)。⚠ `<site>.lock` 文件在释放后仍存在属正常
-  (OS 级锁, 进程死即释放, 文件在 ≠ 被持有)。测试 +1, ★红验 1; 全量 **1571 passed + 1 skipped**(TOTAL 91% / HR 包 93%)。
-
-- **2026-09-25 (审查修复: 通道时序错配 + 饿死残留, 计划 v2.6)** — 用户令「审查计划实施情况」并点名
-  「种子下载不触发」, 中途补报 02:20 实测日志「tid=327727 取 .torrent 失败: 等待浏览器扩展取数超时(180s)」。
-  审查结论: M1-M4 落地与计划一致、安全面(token/origin/SSRF/任务绑定/凭据归零)无高危, 但「不触发」的根因链清晰:
-  ① **主因 = 通道时序错配**: 扩展 `chrome.alarms` 5 分钟轮询 vs 后端 `request_timeout=180s` ⇒ 轮询周期 300s >
-  等待窗口 180s, 每条任务约四成概率因轮询相位落窗外直接超时(烧配额 + 计失败 ⇒ 3 次页面失败 = 12h 熔断);
-  计划 §6 原是「批量清单」模型, 实现却是「派一条等一条」⇒ `MAX_BATCH=16` 永远只装得下 1 条。
-  修: 扩展 `POLL_MINUTES` 5 → **1**(空轮询只打 loopback), `DEFAULT_POLL_HINT` 300 → 60, §6 补时序硬约束。
-  ② **v2.4 P1 的饿死残留**: 不完备有效期 60s == poll 60s ⇒ 下一轮永远晚一个 ε ⇒ 复用轮补下载从不发生;
-  且页面取数失败的 `except HrFetchError` 分支直接 return ⇒ 回填被一起跳过。修: 有效期 `max(120s, 2×poll)`
-  (判定不读 expires_at, 拉长不产生放行) + `_backfill_on_page_failure`(页面失败后仍补一次下载, 待回填来自
-  已持久化索引)。
-  ③ **下载阶段异常语义**: `HrChannelStopped` / `HrChannelQuota` / `HrLoginExpired` 是 `HrFetchError` 子类,
-  曾被 `_fill_infohashes` 吞掉计成 tid 失败(关停三次 = 12h 冷却) ⇒ 原样上抛 + `_guarded_backfill` 折成备注;
-  扩展 fetchBinary 检测 download.php 返回 HTML(SameSite 剥 cookie 实测风险) ⇒ 新 `KIND_LOGIN_PAGE` ⇒
-  后端按 `HrLoginExpired` 处置(不计失败)。
-  ④ 展示与边角: 配额展示按窗口键折算(修「本小时 7/12 · 还能取 12 次」自相矛盾)、`--hr-status` 去掉
-  「v1/v2 各一」硬编码后缀、Retry-After 以 cooldown 封顶、ext-quota 告警文案补「扩展上限本就低于后端配额」、
-  qbmanager 死注释校准。
-  ⑤ M0 实测收口: 下载 URL = `https://pt.btschool.club/download.php?id=<tid>`(用户实测, 计划 §13 已标)。
-  测试 +11(service 7 / fetcher_channel 1 / ratelimit 1 / report 1 / extension_proxy 1), ★红验 7 条(还原旧实现
-  全红); 全量 **1570 passed + 1 skipped**(TOTAL 91% / HR 包 93%; 本 shell PYTHONUTF8=1 的 2 条 GBK 假红
-  单独复测通过)。扩展需在 chrome://extensions **reload 一次**才吃到 1 分钟轮询与登录页检测。
-  计划文档已按用户令直接改原文档(v2.6 变更行 / 封面 / §6 / §13 / 页脚); 基线已回写。
 
 - （本段更早的进度纪要已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md) —— 触顶处置见 `.agents/skills/memory-bank/scripts/_common.py` 的 `TASK_LOG_CAP`）

@@ -652,7 +652,9 @@ class HrRefreshService:
             if not allowed:
                 break
             try:
-                blob = self.fetcher.get_bytes(adapter.download_url(tid))
+                # dl_id: 行内链接提取的下载用种子 id(CarPT 等站点 H&R ID 与种子 id 两个空间);
+                # None = 同空间站点, 回落 tid
+                blob = self.fetcher.get_bytes(adapter.download_url(entry.dl_id or tid))
                 budget.mark()
             except (HrChannelStopped, HrChannelQuota, HrLoginExpired):
                 # 让位 / 人工事件, 不是「这个种子取失败」: 计数会烧掉 max_download_retries 额度,

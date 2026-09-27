@@ -51,7 +51,7 @@ class LocalPageFetcher:
 
 def _scope_of(url: str) -> str:
     for part in url.split("?", 1)[-1].split("&"):
-        if part.startswith("hrtype="):
+        if part.startswith("hrtype=") or part.startswith("status="):  # status= 是 CarPT 等变体站点的档位参数
             return part.split("=", 1)[1]
     return "?"
 

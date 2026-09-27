@@ -181,7 +181,8 @@ SITE_HR_CHECK_FIELDS: Tuple[Field, ...] = (
         "站点解析器",
         "str",
         default="nexusphp",
-        help="HR 统计页形态; nexusphp = 标准 myhr.php 九列表格(绝大多数 PT 站)",
+        help="HR 统计页形态; nexusphp = 标准 myhr.php 九列表格(绝大多数 PT 站); "
+        "carpt = CarPT 变体(?status=N 状态参数 + H&R ID 表头)",
     ),
     Field(
         "hr_page_url",
