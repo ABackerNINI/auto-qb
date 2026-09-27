@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-28">
+<meta name="doc-status" content="Open">
+<meta name="doc-topic" content="webui-keyboard-shortcuts">
+<meta name="doc-added" content="26-09-28-0354">
+<meta name="doc-updated" content="26-09-28-0354">
+<meta name="doc-refs" content="memory-bank/plans/26-09-26-0822-plan-webui-keyboard-shortcuts.html, memory-bank/tasks/26-09-28-webui-keyboard-shortcuts.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #14181d;
+    --ink: #e4e8ea;
+    --ink-dim: #99a2a8;
+    --ink-faint: #6b7378;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #63a6c4;
+    --accent-dim: rgba(99,166,196,.13);
+    --warn: #c99a63;
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 15px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+  .frame { max-width: 1140px; margin: 0 auto; padding: 0 44px; }
+
+  header.cover { padding: 72px 0 0; }
+  .kicker { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-size: 36px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; margin: 18px 0 0; max-width: 24em; }
+  .lede { margin-top: 18px; max-width: 62ch; color: var(--ink-dim); font-size: 16px; }
+  .meta-row { margin-top: 34px; padding: 12px 0; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); display: flex; flex-wrap: wrap; gap: 8px 42px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
+  .meta-row b { color: var(--ink-dim); font-weight: 500; }
+
+  .verdict { border: 1px solid var(--accent); background: var(--accent-dim); padding: 16px 20px; margin: 26px 0 6px; }
+  .verdict .v-cap { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  .verdict p { max-width: 80ch; margin: 0 0 6px; }
+  .verdict p:last-child { margin: 0; }
+  .verdict b { color: var(--accent); }
+
+  .layout { display: grid; grid-template-columns: 188px 1fr; gap: 56px; padding: 26px 0 0; }
+  nav.toc { position: sticky; top: 32px; align-self: start; padding-top: 26px; }
+  nav.toc .toc-cap { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px; }
+  nav.toc a { display: block; text-decoration: none; color: var(--ink-faint); font-size: 12.5px; line-height: 1.5; padding: 4.5px 0; }
+  nav.toc a .n { font-family: var(--font-mono); font-size: 10.5px; margin-right: 9px; }
+  nav.toc a:hover { color: var(--accent); }
+  main { padding-top: 26px; min-width: 0; }
+
+  section { margin-bottom: 64px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--hairline); margin-bottom: 22px; }
+  .sec-head .no { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
+  h3 { font-size: 15px; font-weight: 600; margin: 26px 0 10px; }
+  h3 .mono { font-family: var(--font-mono); font-size: .88em; }
+  p { max-width: 76ch; margin: 0 0 12px; color: var(--ink); }
+  p.dim { color: var(--ink-dim); }
+  .mono { font-family: var(--font-mono); font-size: .92em; }
+  code { font-family: var(--font-mono); font-size: .88em; background: var(--paper); border: 1px solid var(--hairline-soft); padding: 1px 6px; }
+  ul.plain { list-style: none; max-width: 78ch; }
+  ul.plain li { padding: 6px 0 6px 18px; position: relative; }
+  ul.plain li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 6px; height: 1px; background: var(--accent); }
+
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 20px; font-size: 13.5px; }
+  th { text-align: left; font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--hairline); }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--hairline-soft); vertical-align: top; }
+  td .mono { color: var(--accent); }
+  td .dim { color: var(--ink-dim); }
+  th.keep, td.keep { white-space: nowrap; }
+  td .yes { color: var(--accent); }
+  td .no { color: var(--warn); }
+
+  .callout { border: 1px solid var(--hairline); background: var(--paper); padding: 14px 18px; margin: 16px 0 20px; max-width: 78ch; }
+  .callout b { color: var(--accent); font-weight: 600; }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 8px; }
+  .callout.warn { border-color: rgba(201,154,99,.45); }
+  .callout.warn b { color: var(--warn); }
+
+  .kbd { display: inline-block; font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); border: 1px solid var(--hairline); background: var(--bg); padding: 1px 7px; border-radius: 3px; white-space: nowrap; vertical-align: 1px; }
+
+  .sup { display: inline-block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); border: 1px solid var(--hairline); padding: 1px 7px; vertical-align: 2px; }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<header class="cover">
+  <div class="kicker">Plan · webui-keyboard-shortcuts</div>
+  <h1>WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)</h1>
+  <p class="lede">为 auto-qb WEB UI 加全局键盘快捷键, 支持在设置页自定义。本计划补齐前案缺失的两块论证 —— 成熟产品的实现/存储横评, 与「后端独立文件 vs localStorage」的逐维对比 —— 并给出定案建议与修订后的实施波次。</p>
+  <div class="meta-row">
+    <span><b>状态</b> Open (待拍板 §08)</span>
+    <span><b>专题</b> webui-keyboard-shortcuts</span>
+    <span><b>前案</b> 26-09-26-0822 <span class="sup">Superseded</span></span>
+    <span><b>日期</b> 2026-09-28</span>
+    <span><b>性质</b> 只计划不改代码</span>
+  </div>
+
+  <div class="verdict">
+    <div class="v-cap">结论速览</div>
+    <p><b>引擎:</b> 不引第三方库, 自写 ~200 行 (前案 0822 的注册表 / e.code 归一化 / 作用域 / 输入态屏蔽设计全部沿袭)。<b>依据:</b> 调研横评显示, 满足「可自定义」的完整栈 (录制器 / 冲突检测 / 作用域 / 黑名单 / 存储) 没有任何现成库覆盖 —— 库只解决「按键→动作」派发这一层 (~30%), 且活跃库的匹配依据 (keyCode / event.key) 与本案 e.code 物理键位设计相抵; tinykeys (活跃, 1.1KB gzip) 作为实现细节参照。</p>
+    <p><b>存储:</b> 定案建议<b>后端独立文件</b> <span class="mono">auto-qb-data/webui-keys.json</span> + <span class="mono">GET/PUT /api/keys</span> 两端点。推翻前案 0822 的 localStorage 预选: 前案把「服务端持久化」等同于「写 config.yml 红线」, 是假二分 —— 独立文件两者都不沾。决定性证据: ①调研的所有成熟产品无一用 localStorage 作为快捷键正式存储 (JupyterLab=服务端用户文件, VS Code=本地文件, Gmail=账号服务端); ②本项目列偏好已被浏览器「关闭窗口时清除站点数据」静默清空过 (<span class="mono">pitfalls/web-ui/columns-persist.md</span>), localStorage 的失效通道是已验证的现实, 而快捷键是用户逐条录制的配置, 丢失代价远高于列宽; ③auto-qb-data 即备份单元 (Docker 卷), 自定义随 state 一起走。</p>
+    <p><b>自定义:</b> 设置页新增「快捷键」分区 (页尾块, 有「运行日志」先例) + <span class="kbd">?</span> 帮助浮层入口; 按下即录制的录制器, 冲突提示可交换, 浏览器保留键当场拒绑, 单条/全部重置。前案 5 个待拍板点全部补上建议案, 见 §08。</p>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <div class="toc-cap">目录</div>
+  <a href="#s1"><span class="n">01</span>背景与本轮增量</a>
+  <a href="#s2"><span class="n">02</span>现状事实 (代码调研)</a>
+  <a href="#s3"><span class="n">03</span>成熟方案调研</a>
+  <a href="#s4"><span class="n">04</span>存储定案: 后端文件 vs localStorage</a>
+  <a href="#s5"><span class="n">05</span>引擎与自定义面板设计</a>
+  <a href="#s6"><span class="n">06</span>实施波次 (修订)</a>
+  <a href="#s7"><span class="n">07</span>测试计划与真机走查</a>
+  <a href="#s8"><span class="n">08</span>待拍板决策点</a>
+  <a href="#s9"><span class="n">09</span>附录 · 调研来源</a>
+</nav>
+
+<main>
+
+<!-- ═══════════════ 01 ═══════════════ -->
+<section id="s1">
+  <div class="sec-head"><span class="no">01</span><h2>背景与本轮增量</h2></div>
+  <p>想法.md TODO: 「WEBUI 键盘快捷键」。前案 <span class="mono">26-09-26-0822</span> 已做过一轮可行性分析与实施计划 (状态 Open, 未实施), 完成了引擎侧的关键设计: 动作注册表单一事实源、e.code 物理键位归一化、作用域模型、输入态三段屏蔽、光标行模型。</p>
+  <p>本轮用户提出三点增量要求, 恰是前案没做透的:</p>
+  <ul class="plain">
+    <li><b>调研成熟的设计方案</b> —— 前案的选型是闭门推导, 没有外部产品与库的横评佐证;</li>
+    <li><b>自定义进设置页</b> —— 前案已有轮廓 (页尾块入口), 本轮落到具体交互规格;</li>
+    <li><b>存储二选一: 后端独立文件 or 前端 localStorage, 须对比优劣</b> —— 前案直接预选了 localStorage, 没有给出对比论证。</li>
+  </ul>
+  <p>因此本文是 0822 的<b>取代版</b> (0822 置为 Superseded): 引擎设计沿袭, 调研与存储论证重做, 实施波次因新增后端端点而修订。性质仍是只计划不改代码, 拍板后按 §06 波次开工。</p>
+</section>
+
+<!-- ═══════════════ 02 ═══════════════ -->
+<section id="s2">
+  <div class="sec-head"><span class="no">02</span><h2>现状事实 (代码调研, 2026-09-28)</h2></div>
+  <h3>前端栈与挂载纪律</h3>
+  <ul class="plain">
+    <li>Vue 3 全局构建版 (<span class="mono">shared/vendor/vue.global.prod.js</span>), <b>无构建链</b> (无 package.json / node_modules / 打包器); JS 按域拆片挂 <span class="mono">window.AQB_XXX</span>, 由 <span class="mono">app.js:388-414</span> 的 <span class="mono">app.mixin()</span> 依序注入同一根实例。</li>
+    <li>加载走三份 index.html (atlas / prism / console) 内嵌的 <span class="mono">tpl-manifest</span> 清单, <span class="mono">shared/boot.js</span> 按清单序保序加载 —— <b>新片段必须进三份清单且排在 app.js 之前</b> (app.js 读 <span class="mono">window.AQB_*</span>)。</li>
+    <li>三套 UI 共用层 <span class="mono">shared/console_hub.css</span> 是新挂件样式的去处 (atlas <span class="mono">components.css</span> 已贴 700 行单文件上限); 星图无 <span class="mono">--font-mono</span> 令牌, mono 需 longhand + 内联回退栈。</li>
+    <li>既有 localStorage 范式: 列偏好 / 主题 (<span class="mono">autoqb.ui.theme</span>) / 时间口径。</li>
+  </ul>
+  <h3>设置页与后端</h3>
+  <ul class="plain">
+    <li>设置页: <span class="mono">shared/config_editor.js</span> (<span class="mono">cfgLoad/cfgSave/cfgDiscard</span>) + <span class="mono">routes/config.py</span> 的 <span class="mono">GET/PUT /api/config</span> —— 全 UI 唯一「通用保存配置」端点, 掩码 / R 级回退 / 热重载语义齐备。</li>
+    <li>后端 FastAPI + uvicorn; <span class="mono">create_app</span> 薄装配守阵 (≤150 行禁内联路由); <b>路由金清单 63 条守阵</b> (<span class="mono">test_web_route_manifest_frozen</span>) —— 新增路由必须同步登记。</li>
+    <li>鉴权: Bearer token 全局依赖, 前端统一走 <span class="mono">this.api()</span> 封装 (自动带 token / 401 收口)。</li>
+    <li><span class="mono">auto-qb-data/</span> 已 gitignore, 内容 = state.json(+.bak) / state.lock / <b>web.token (非 state 小文件的既有先例)</b> / 日志 / 跳检备份; 小 JSON 落盘范式 = <span class="mono">infra/utils.py:61-94</span> <span class="mono">atomic_write(keep_backup=True)</span>。</li>
+  </ul>
+  <h3>键盘与测试现状</h3>
+  <ul class="plain">
+    <li>全 static 目录无任何快捷键系统; keydown 监听仅 4 处 Esc/方向键局部用途。<b><span class="mono">lifecycle.js:45-66</span> 的全局 Esc 退栈链 (FIX-07) 是必须尊重的既有秩序</b> —— 新引擎接在其链尾, Esc 为不可改固定键。</li>
+    <li><span class="kbd">Ctrl+A</span> / <span class="kbd">Delete</span> 目前无监听, 与上游 qB WebUI 习惯对齐后由本功能补齐。</li>
+    <li>测试: 无 JS 测试框架; 质量靠 pytest 静态守阵 (mixin 漏挂检测 / node 语法校验 / 挂件类 CSS 规则 / 搜索帮助守阵 <span class="mono">test_frontend_search_help_wiring</span> 等) + 真机走查。</li>
+    <li>列偏好被浏览器「关闭窗口时清除 Cookie 和站点数据」静默清空过 —— <span class="mono">pitfalls/web-ui/columns-persist.md</span> 记录在案, 是 localStorage 类存储在本项目的<b>应用外失效通道实证</b>。</li>
+  </ul>
+</section>
+
+<!-- ═══════════════ 03 ═══════════════ -->
+<section id="s3">
+  <div class="sec-head"><span class="no">03</span><h2>成熟方案调研</h2></div>
+  <p class="dim">调研方法: 库的版本号 / 发布时间 / 许可证取自 npm registry 元数据, 活跃度取自 GitHub API, 体积为下载 tarball 后对 dist 实测字节数, 匹配依据 / 序列 / 作用域等能力为解包直读源码确认 (非转述文档); 产品部分以官方支持页与文档为准。实测日期 2026-09-28, 来源清单见 §09。</p>
+
+  <h3>3.1 成熟产品怎么做、存哪里</h3>
+  <table>
+    <thead><tr><th>产品</th><th class="keep">可逐条自定义?</th><th>存储位置</th><th>跨设备/浏览器</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td><b>Gmail</b></td><td>是 (需先在 Advanced 设置启用)</td><td>账号设置 (服务端)</td><td>登录即一致</td><td class="dim">重映射入口藏在两跳设置之后</td></tr>
+      <tr><td><b>VS Code 桌面</b></td><td>是, 最完整</td><td><b>本地磁盘文件</b> <span class="mono">keybindings.json</span> (用户 profile)</td><td>可选 Settings Sync, <b>且按 OS 分别同步</b></td><td class="dim">用户规则追加在末尾故用户赢; 冲突可查 "Show Same Keybindings"</td></tr>
+      <tr><td><b>VS Code Web</b></td><td>同桌面</td><td>登录走同步; 未登录落浏览器 local storage (兜底, 非正式方案)</td><td>开 Sync 即一致</td><td class="dim">文档明列 Ctrl+N/W 等浏览器保留键不可用</td></tr>
+      <tr><td><b>JupyterLab</b></td><td>是</td><td><b>服务端用户家目录文件</b> <span class="mono">$HOME/.jupyter/lab/user-settings/</span> (JSON5)</td><td>跟随服务器</td><td class="dim">schema 必填 <span class="mono">selector</span> (作用域); 可选 <span class="mono">winKeys/macKeys/linuxKeys</span> 平台键槽</td></tr>
+      <tr><td>Overleaf</td><td>否 (仅 Default/Vim/Emacs 预设)</td><td>账号设置 (服务端)</td><td>是</td><td class="dim">—</td></tr>
+      <tr><td>GitHub</td><td>否 (可整体禁用字符键快捷键)</td><td>账号设置 (服务端)</td><td>是</td><td class="dim"><span class="kbd">?</span> 帮助浮层 (2018 重设计)</td></tr>
+      <tr><td>Figma / Slack / Trello / YouTube</td><td>否, 只读速查面板</td><td>—</td><td>—</td><td class="dim">重映射留给 OS 层工具 (Karabiner / PowerToys)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <p><b>横评结论:</b> 支持「逐条任意重映射」的只有 Gmail / VS Code / JupyterLab 三家, 存储分别是服务端账号 / 本地文件+可选同步 / 服务端用户文件 —— <b>没有任何一家把 localStorage 作为快捷键的正式存储</b> (vscode.dev 未登录的浏览器存储只是无账号时的兜底)。多数产品干脆不做全量重绑定, 只给只读面板 + 少数开关 —— 说明「全量可重绑 + 冲突检测 + 重置」是重功能, MVP 收敛到核心动作子集是业界常态。</p>
+    <p>与本案最同构的是 <b>JupyterLab</b>: 本地服务端 + 浏览器 UI + 单用户, 它把用户自定义放服务端文件, 设置目录纳入服务器侧的备份体系。</p>
+  </div>
+
+  <h3>3.2 JS 快捷键库横评 (2026-09 实测)</h3>
+  <table>
+    <thead><tr><th>库</th><th class="keep">状态</th><th class="keep">体积 (gzip)</th><th>匹配依据</th><th>关键能力</th><th>无构建经典 script</th></tr></thead>
+    <tbody>
+      <tr><td><span class="mono">tinykeys</span> 4.0.1</td><td><span class="yes">活跃</span> (2026-09-25 发版)</td><td class="keep">1.1 KB (UMD)</td><td><b>event.key 与 event.code 双匹配</b></td><td class="dim">序列 (1000ms 超时); 默认忽略输入框/contenteditable/isComposing/repeat; 返回 unsubscribe 可重绑</td><td><span class="yes">可</span> (UMD 全局)</td></tr>
+      <tr><td><span class="mono">hotkeys-js</span> 4.0.8</td><td><span class="yes">活跃</span> (2026-09-09)</td><td class="keep">3.6 KB</td><td><span class="no">keyCode 为主</span> (key/code 仅修正)</td><td class="dim">scope 体系; 输入框跳过 + keyCode 229 IME 守卫</td><td><span class="yes">可</span></td></tr>
+      <tr><td><span class="mono">@github/hotkey</span> 3.1.4</td><td><span class="yes">活跃</span></td><td class="keep">3.4 KB</td><td>event.key (含 macOS 符号层)</td><td class="dim">声明式 <span class="mono">data-hotkey</span>; 尊重 defaultPrevented</td><td><span class="no">不可</span> (仅 ESM)</td></tr>
+      <tr><td><span class="mono">Mousetrap</span> 1.6.5</td><td><span class="no">停更</span> (2020 发版 / 2023-03 后无 push)</td><td class="keep">2.3 KB</td><td><span class="no">keyCode/which</span></td><td class="dim">序列鼻祖; record 插件; stopCallback 输入过滤</td><td><span class="yes">可</span></td></tr>
+      <tr><td><span class="mono">keymaster</span> 1.6.2</td><td><span class="no">停更</span> (npm 2014 后未发版)</td><td class="keep">3.0 KB</td><td><span class="no">keyCode</span></td><td class="dim">scope; 输入过滤</td><td><span class="yes">可</span></td></tr>
+      <tr><td><span class="mono">react-hotkeys-hook</span> 5.3.3</td><td><span class="yes">活跃</span></td><td class="keep">3.4 KB</td><td>默认 event.code</td><td class="dim">scopes 体系; 表单默认禁用</td><td><span class="no">不可</span> (需 React + 打包/ESM)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <p><b>选型结论: 不引库, 自写引擎; tinykeys 作为实现细节参照。</b> 理由: ①「可自定义」要求的录制器、冲突检测、黑名单、作用域接线 (现有 Esc 退栈链)、存储适配, 没有库覆盖, 终究要自写 —— 库只解决派发层 ~40 行; ②活跃库里 keyCode 系 (hotkeys-js / Mousetrap / keymaster) 与前案已定的 e.code 物理键位设计相抵, 录制任意组合后的规范化序列化也与 keyCode 无法往返; ③双匹配且最干净的 tinykeys 是 ESM 优先, UMD 虽可用但其默认输入过滤/匹配语义要再包一层去迁就本案三段屏蔽; ④tinykeys 全部最佳实践要素 (序列超时 / 忽略表单 / isComposing / repeat / AltGraph / defaultPrevented / $mod 归一) 集中在 ~6.4KB 源码里, 作为参照抄「细节清单」比背依赖更稳 —— 自写 ~200 行匹配器本就是常见做法。</p>
+  </div>
+
+  <h3>3.3 引擎设计要点 (调研提炼)</h3>
+  <ul class="plain">
+    <li><b>规范化序列化</b>: 修饰键固定序 <span class="mono">Ctrl→Shift→Alt→Meta</span> (VS Code 展示序; tinykeys 归一序同族), 存「修饰键集合 + 主键」而非自由字符串, 比较时集合无序比对。</li>
+    <li><b>event.key vs event.code</b> (MDN): <span class="mono">key</span> 是布局相关字符 —— "Shift+2 在 US 键盘是 @, UK 键盘是 \""; <span class="mono">code</span> 是物理键 —— "KeyQ 在 Dvorak 上是 ', AZERTY 上是 A"。实践口径: 字符语义快捷键用 key, 要求物理位置稳定用 code。本案: 主匹配 e.code (位置语义, 录制/重绑稳定), 显示名由 code 映射人类键名; 布局差异的极端情况由「用户可重绑」兜底。</li>
+    <li><b>作用域系统</b>: VS Code 的 when 子句 / JupyterLab 的必填 selector 都是「上下文圈定」—— 本案用五值枚举 <span class="mono">scope ∈ global/list/drawer/settings/modal</span> + 优先级即可, 不需要表达式引擎。</li>
+    <li><b><span class="kbd">?</span> 帮助浮层是标配</b>: Gmail / GitHub / Trello / YouTube / Slack / JupyterLab 全都有。本案 <span class="kbd">?</span> 开快捷键面板, 与搜索框内的「?」幽灵按钮 (点击, 非按键) 无冲突。</li>
+    <li><b>输入抑制双保险</b>: 输入元素过滤 (INPUT/TEXTAREA/select/contenteditable) + <span class="mono">isComposing</span> 守卫; 中文输入法组合期间 keyCode 恒为 229 是浏览器实证行为 (hotkeys-js 源码有此守卫, MDN 未明文记载)。</li>
+    <li><b>Mac 归一</b>: Mousetrap 的 <span class="mono">mod</span> / tinykeys 的 <span class="mono">$mod</span> / @github/hotkey 的 "Mod localizes to Meta on mac, Control on Windows or Linux" —— 默认键表如涉 Ctrl 组合, 定义层留 mod 语义槽位即可 (本案用户环境以 Windows 为主, MVP 可不做平台分支, 见 §08-⑥)。</li>
+    <li><b>浏览器保留键边界</b>: Firefox 明确忽略页面对核心组合的 preventDefault (Mozilla bug 1052569); Chromium 区分 reserved accelerators (Ctrl+W 类) 与页面可处理项 (Ctrl+F 类); 唯一合法强捕通道 <span class="mono">navigator.keyboard.lock()</span> 仅限安全上下文+全屏场景。经验边界: <span class="kbd">Ctrl+S/F/P</span> 可拦, <span class="kbd">Ctrl+W/T/N/Q</span> 及其 Shift 变体不可拦 —— 黑名单以此为准。</li>
+    <li><b>录制器 UX</b>: VS Code "Define Keybinding" (⌘K ⌘K) = 按下即录制的只读输入框 + 人类可读键名 + Enter 落键; 叠加实践共识: 纯修饰键单击拒收、冲突警告、<span class="kbd">Esc</span> 取消。</li>
+  </ul>
+
+  <h3>3.4 坑清单 (调研 + 上游实证)</h3>
+  <table>
+    <thead><tr><th>坑</th><th>判据与对策</th></tr></thead>
+    <tbody>
+      <tr><td>IME / CJK 组合输入</td><td class="dim">组合期间 keydown 照发且 <span class="mono">isComposing=true</span>、keyCode 恒 229 —— 匹配器第一步就拦 <span class="mono">repeat || isComposing</span>, 双保险 (三段屏蔽之一)。</td></tr>
+      <tr><td>非 US 布局漂移</td><td class="dim"><span class="mono">key</span> 值随布局与 Shift 实时变; 用 e.code 规避, 显示名靠 code→键名映射; VS Code 在 Linux 上也要重启才能刷新布局缓存 —— 布局问题没有银弹, 可重绑是兜底。</td></tr>
+      <tr><td>长按自动重复</td><td class="dim">字符键 keydown 以 <span class="mono">repeat=true</span> 重复 —— 录制器与序列型绑定一律忽略 repeat。</td></tr>
+      <tr><td>纯修饰键</td><td class="dim">修饰键自身发 keydown —— 匹配器等非修饰键落定才判定; 录制器把「只按了 Shift」判无效。</td></tr>
+      <tr><td>preventDefault 与 passive</td><td class="dim">passive 默认仅限 wheel/touch 系挂在 window/document/body 上 —— keydown 不在其列, preventDefault 正常可用; 多 handler 礼仪: 先查 <span class="mono">event.defaultPrevented</span>。</td></tr>
+      <tr><td>keyCode 已废弃</td><td class="dim">MDN 明示 avoid —— 新实现一律 key/code, 这也是排除 keyCode 系库的根因之一。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.5 qBittorrent 上游现状</h3>
+  <p>上游 WebUI (develop <span class="mono">client.js</span>) 现有: <span class="kbd">Ctrl/Cmd+A</span> 全选、<span class="kbd">Delete</span> 删除所选 (<span class="kbd">Shift+Delete</span> 永久删)、<span class="kbd">Esc</span> 关弹窗、<span class="kbd">Ctrl/Cmd+F</span> 聚焦过滤框, 均带输入框守卫; 无自定义机制、无 <span class="kbd">?</span> 浮层。自定义快捷键的 feature request (#11930 / #10084) 在上游多年 open —— 本项目做此功能属先行, 无上游兼容包袱; 但默认键位应与上游习惯兼容 (全选/删除/聚焦搜索语义对齐), 降低肌肉记忆迁移成本。</p>
+</section>
+
+<!-- ═══════════════ 04 ═══════════════ -->
+<section id="s4">
+  <div class="sec-head"><span class="no">04</span><h2>存储定案: 后端独立文件 vs localStorage</h2></div>
+
+  <h3>4.1 候选盘点 (先排除两个伪候选)</h3>
+  <table>
+    <thead><tr><th>候选</th><th class="keep">裁定</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr><td>写进 <span class="mono">config.yml</span></td><td class="keep"><span class="no">排除</span></td><td class="dim">生产红线文件 (真实 PT 域名/凭据引用, AI 不动); 且 UI 偏好不是程序配置 —— 会污染 validate_config / schema / 热重载语义, 用户还可能手工编辑它。</td></tr>
+      <tr><td>并进 <span class="mono">state.json</span></td><td class="keep"><span class="no">排除</span></td><td class="dim">黄金法则 5: 主循环单线程是 state_file 唯一写者。快捷键保存在 web 线程发生 (PUT 请求), 走 state.json 就必须引跨线程写通道, 破坏单一写线程假设。</td></tr>
+      <tr><td><b>后端独立文件</b> <span class="mono">auto-qb-data/webui-keys.json</span></td><td class="keep"><span class="yes">候选 A</span></td><td class="dim">web 线程独占写, 与 state.json 互不干扰; <span class="mono">web.token</span> 已是「非 state 小文件」先例。</td></tr>
+      <tr><td><b>前端 localStorage</b> <span class="mono">autoqb.ui.keys</span></td><td class="keep"><span class="yes">候选 B</span></td><td class="dim">与列偏好/主题同范式, 零后端改动。</td></tr>
+      <tr><td>混合: 后端真值 + localStorage 镜像</td><td class="keep"><span class="dim">候选 C (缓议)</span></td><td class="dim">收益仅「跨标签活同步」; 见 4.5, MVP 不做, 保留后路。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.2 对比矩阵</h3>
+  <table>
+    <thead><tr><th>维度</th><th>B · localStorage</th><th>A · 后端独立文件</th></tr></thead>
+    <tbody>
+      <tr><td class="keep">跨浏览器 / 设备一致</td><td><span class="no">✗</span> <span class="dim">每浏览器一份, 换浏览器键位分叉且难察觉 ("为什么这台不生效?")</span></td><td><span class="yes">✓</span> <span class="dim">一份真值, 所有浏览器/设备一致</span></td></tr>
+      <tr><td class="keep">浏览器清站点数据</td><td><span class="no">✗</span> <span class="dim">静默全丢 —— 本项目列偏好已实际中招 (columns-persist 坑档), 通道被验证存在</span></td><td><span class="yes">✓</span> <span class="dim">与浏览器数据完全无关</span></td></tr>
+      <tr><td class="keep">备份 / 迁移 / Docker</td><td><span class="no">✗</span> <span class="dim">不在任何备份单元里; 换机 = 全部重录</span></td><td><span class="yes">✓</span> <span class="dim">auto-qb-data 即备份单元 (state 同目录), Docker 卷挂载随容器重建存活</span></td></tr>
+      <tr><td class="keep">与信息价值匹配</td><td><span class="no">✗</span> <span class="dim">快捷键是「用户逐条录制的配置」(录制+排冲突有真实人工成本), 丢 = 重录且记不得改过哪些</span></td><td><span class="yes">✓</span> <span class="dim">持久档位与配置类信息对称; 列宽/主题才是「低成本可重派生」的 localStorage 档位</span></td></tr>
+      <tr><td class="keep">实现成本</td><td><span class="yes">✓</span> <span class="dim">0 后端; 纯前端 + 静态守阵</span></td><td><span class="no">+2 端点</span> <span class="dim">+ 金清单 2 行 + 轻结构校验 + atomic_write + ~4 条守阵, 合计约 200 行 (含测试)</span></td></tr>
+      <tr><td class="keep">项目范式一致性</td><td><span class="yes">✓</span> <span class="dim">与列偏好/主题同范式</span></td><td><span class="dim">引入第二范式, 但 web.token 已有「auto-qb-data 下非 state 小文件」先例, 语义是「服务端持有的用户资产」而非程序状态</span></td></tr>
+      <tr><td class="keep">跨标签语义</td><td><span class="yes">✓</span> <span class="dim">storage 事件即时同步</span></td><td><span class="dim">改后其它标签刷新才见 —— 与 config 保存的既有语义完全一致 (设置类变更本就不跨标签活传, 有先例)</span></td></tr>
+      <tr><td class="keep">写路径校验</td><td><span class="no">✗</span> <span class="dim">无校验点, 脏数据静默进存储 (前端校验自嗨)</span></td><td><span class="yes">✓</span> <span class="dim">PUT 时后端校验结构 (fail-fast 精神); 读时校验 + 合并默认 + 未知 action 忽略</span></td></tr>
+      <tr><td class="keep">失效模式可测性</td><td><span class="no">✗</span> <span class="dim">静默回默认, 用户难以察觉与归因</span></td><td><span class="yes">✓</span> <span class="dim">损坏 → 用 .bak → 仍坏用默认表 + WARN 日志, 每级可测可查</span></td></tr>
+      <tr><td class="keep">成熟产品先例</td><td><span class="no">✗</span> <span class="dim">调研范围内无一用作快捷键正式存储</span></td><td><span class="yes">✓</span> <span class="dim">JupyterLab (服务端用户文件) / VS Code (本地文件) / Gmail (服务端账号)</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.3 定案</h3>
+  <div class="verdict">
+    <div class="v-cap">定案建议 · 待用户确认</div>
+    <p><b>后端独立文件</b> <span class="mono">auto-qb-data/webui-keys.json</span>, 前端经 <span class="mono">GET/PUT /api/keys</span> 读写。前案 0822 预选 localStorage 的论据是「服务端持久化 = 写 config.yml 红线」—— 这是假二分: 独立文件既不碰 config.yml 也不碰 state.json, 两个排除理由都不成立。而 localStorage 方案的三个真实代价 (每浏览器分叉 / 清站点数据即丢且已在本项目发生过 / 不进备份) 对「用户录制的配置」类信息是错档; 它唯一的实质优势 (零后端) 换算过来只有约 200 行含测试的代码。</p>
+    <p>localStorage 的正当性边界也说清楚: 列宽 / 主题 / 时间口径继续留在 localStorage 是对的 —— 那些是低成本可重派生的派生偏好。本定案不迁移它们, 只是为「信息价值更高」的快捷键选对档位; 两范式并存且各安其位, 不是破坏一致性而是补全分层。</p>
+  </div>
+
+  <h3>4.4 文件与接口规格</h3>
+  <ul class="plain">
+    <li><b>路径</b>: <span class="mono">&lt;state_file 同目录&gt;/webui-keys.json</span> (即 <span class="mono">auto-qb-data/webui-keys.json</span>, 与 web.token 同一寻址规则)。</li>
+    <li><b>结构</b>: <span class="mono">{ "schema_version": 1, "bindings": { "&lt;action_id&gt;": "&lt;归一化串 or 空=禁用&gt;" } }</span> —— 只存用户改过的条目, 未提及的 action 用注册表默认。</li>
+    <li><b>读时</b>: schema_version 校验 (沿 26-09-26-0506 版本链口径) → 结构校验 (dict[str,str] + 值正则) → 未知 action_id 忽略 (注册表前向兼容) → 与默认表合并后下发; 文件损坏 → WARN + 尝试 <span class="mono">.bak</span> → 仍坏用默认表 (atomic_write keep_backup=True 范式兜底)。</li>
+    <li><b>写时</b>: 面板保存才写 (PUT 整份替换); 后端重校验结构, 非法 422; 黑名单/冲突仍由前端面板拦截 (后端只做结构层, 键位语义归前端单一事实源)。</li>
+    <li><b>端点</b>: <span class="mono">GET /api/keys</span> (返回存盘 bindings + schema_version) / <span class="mono">PUT /api/keys</span>; 鉴权走全局 Bearer 依赖 (零额外工作); <b>金清单 +2 并同步 <span class="mono">test_web_route_manifest_frozen</span></b>。</li>
+    <li><b>前端适配器</b>: <span class="mono">AQB_KEYS.load()/save()</span> 单点封装 —— 启动拉取失败 → 默认表 + toast 提示; 保存失败 → 本地回滚 + 报错。引擎对其余代码只暴露这一对函数。</li>
+  </ul>
+
+  <h3>4.5 跨标签与多设备语义 (明示边界)</h3>
+  <p>保存即落盘并即时生效于当前标签; 其它标签在下次刷新后生效 —— 与「设置页改 config, 其它标签刷新才见」的既有语义一致, 不新增同步机制。混合方案 (候选 C: 后端真值 + localStorage 镜像做 storage 事件同步) 的唯一增益就是把「刷新才见」提前到「即时」, 对低频编辑场景不值一套双写一致性代码 —— <b>MVP 不做</b>; 适配器单点保证了将来要加是一个文件内的事。多设备键位差异 (如 Mac 的 Cmd) 若将来成为真需求, 按 JupyterLab 的 <span class="mono">winKeys/macKeys/linuxKeys</span> 键槽扩字段, schema_version 升 2。</p>
+
+  <h3>4.6 反悔路径</h3>
+  <p>引擎对存储介质无感知 (只认 <span class="mono">AQB_KEYS.load/save</span>)。若用户拍板后改主意要 localStorage: 删两个端点与守阵、把适配器换成 localStorage 实现 (含 storage 事件), 引擎与面板零改动 —— 决策可逆, 沉没成本只有已删的 ~200 行。</p>
+</section>
+
+<!-- ═══════════════ 05 ═══════════════ -->
+<section id="s5">
+  <div class="sec-head"><span class="no">05</span><h2>引擎与自定义面板设计 (沿袭 0822, 调研修订)</h2></div>
+
+  <h3>5.1 注册表与引擎</h3>
+  <ul class="plain">
+    <li><b>注册表单一事实源</b>: <span class="mono">shared/shortcuts.js</span> 内 <span class="mono">AQB_KEYS</span> 常量, 条目 <span class="mono">{id, group, label, def, scope, danger?, fixed?, run(vm)}</span>; 58 条 (52 有默认键 + 6 空位留给自定义)。挂 <span class="mono">window.AQB_SHORTCUTS</span> mixin, 进三份 index.html 的 tpl-manifest 且排 app.js 前。</li>
+    <li><b>匹配</b>: e.code 物理键位 + 固定修饰序归一化 (§3.3); <span class="mono">repeat</span> / <span class="mono">isComposing</span> / 纯修饰键三道前置拦截; 尊重 <span class="mono">event.defaultPrevented</span>。</li>
+    <li><b>作用域</b>: <span class="mono">global/list/drawer/settings/modal</span> 五值 + 优先级; 引擎 handler 挂 document keydown, 接在 lifecycle.js Esc 退栈链 (FIX-07) 之后 —— Esc 是唯一 <span class="mono">fixed</span> 键, 面板不可改。</li>
+    <li><b>输入态三段屏蔽</b>: ①isComposing/229 拦截 → ②输入元素白名单 (INPUT/TEXTAREA/select/contenteditable 内只放行显式标记 inputSafe 的绑定, 如 <span class="kbd">Ctrl+S</span> 保存) → ③模态层白名单 (modal 作用域内只响应模态键位)。</li>
+    <li><b>黑名单</b>: <span class="kbd">Ctrl+W/T/N/Q</span> 及 Shift 变体等浏览器不可拦组合, 面板内当场拒绑 (§3.3 边界)。</li>
+    <li><b>光标行</b>: <span class="mono">kbCursor={kind,id}</span> 按身份不按下标; MVP 组行线性链 + scrollIntoView (虚拟滚窗口径 <span class="mono">_rowWindow</span> 前缀和), 与选中态两套视觉不合并。</li>
+    <li><b>唯一重构点</b>: <span class="mono">commands.js</span> 抽 <span class="mono">_actCore(action, {keys, hashes})</span>, 快捷键与按钮/右键菜单共用同一动作出口 —— 不另起旁路。</li>
+  </ul>
+
+  <h3>5.2 自定义面板 (设置页)</h3>
+  <ul class="plain">
+    <li><b>入口</b>: ①设置页新增「快捷键」分区 (分区详情页尾块 —— 「运行日志」客户端只读块同款先例); ②任意页面 <span class="kbd">?</span> 打开帮助浮层 (只读速查, 附「前往设置自定义」链接)。顶栏不加按钮。</li>
+    <li><b>面板形态</b>: 带遮罩居中 modal, 按 group 分组列出; 每行 = 动作名 + 当前键位 chip + 录制钮 + 重置钮。</li>
+    <li><b>录制交互</b> (§3.3 VS Code 模式): 点录制 → 只读输入框「按下组合键…」→ 首个非修饰键落定即收 → 展示人类可读键名; 纯修饰键拒收; <span class="kbd">Esc</span> 取消 (引擎屏蔽层保证录制态不触发其它动作); 冲突 → 提示「已绑定为 X: 交换 / 覆盖(对方置空) / 取消」; 黑名单 → 当场拒绝并说明。</li>
+    <li><b>重置</b>: 单条重置回默认 / 全部重置; 空串 = 显式禁用该动作。</li>
+    <li><b>保存语义</b>: 面板改动先本地生效 (即时试用) → 「保存」PUT 落盘; 离开面板未保存 → 提示放弃或保存。面板底部注明: 键位存于服务端 <span class="mono">webui-keys.json</span>, 所有浏览器共享。</li>
+  </ul>
+</section>
+
+<!-- ═══════════════ 06 ═══════════════ -->
+<section id="s6">
+  <div class="sec-head"><span class="no">06</span><h2>实施波次 (修订)</h2></div>
+  <table>
+    <thead><tr><th class="keep">波次</th><th>内容</th><th>验收标准</th></tr></thead>
+    <tbody>
+      <tr><td class="keep">W1</td><td class="dim">引擎 + 注册表 + 适配器桩 (纯默认表可跑): 归一化 / 匹配 / 作用域 / 三段屏蔽 / 黑名单 / defaultPrevented 礼仪</td><td class="dim">默认键全活; 输入框内打字 (含中文 IME) 不误触; Esc 链序不回归</td></tr>
+      <tr><td class="keep">W2</td><td class="dim">光标模型 + 滚动进视口 (<span class="mono">_rowWindow</span> 前缀和)</td><td class="dim">3000 行库 ↑↓ 跟手且光标行始终可见</td></tr>
+      <tr><td class="keep">W3</td><td class="dim">目标解析 + <span class="mono">commands.js</span> 抽 <span class="mono">_actCore</span> (唯一重构点)</td><td class="dim">按钮 / 右键菜单 / 快捷键三入口行为等价, 既有测试全绿</td></tr>
+      <tr><td class="keep">W4</td><td class="dim">绑定 A-D 组 (切页 / 光标 / 选择 / 一级动作: P S F C D, 危险动作走确认框)</td><td class="dim">与上游 qB 习惯对齐 (Ctrl+A / Delete); 非焦点页不串扰</td></tr>
+      <tr><td class="keep">W5</td><td class="dim">绑定 E-H 组 + 局部作用域 (抽屉 Alt+1-4 / 设置页 Ctrl+S / 模态); 引擎接 Esc 链尾</td><td class="dim">模态内只响应模态键位; 抽屉页切换不与全局键冲突</td></tr>
+      <tr><td class="keep">W6</td><td class="dim">后端持久化 + 自定义面板: <span class="mono">webui-keys.json</span> / GET·PUT <span class="mono">/api/keys</span> / 金清单+2 / 面板与录制器 / 适配器接通</td><td class="dim">改键→保存→刷新仍生效; 换浏览器键位一致; 损坏文件兜底路径走通</td></tr>
+      <tr><td class="keep">W7</td><td class="dim">静态守阵 + 真机走查 + 文档回写 (progress / pitfalls 若踩新坑)</td><td class="dim">§07 清单全绿; test.full 数字入基线切片</td></tr>
+    </tbody>
+  </table>
+  <p class="dim">可拆口: W1-W4 先行交付「默认键位开箱即用」, W5-W6 作为第二波 (自定义能力)。每波独立可验收、可单独提交。</p>
+</section>
+
+<!-- ═══════════════ 07 ═══════════════ -->
+<section id="s7">
+  <div class="sec-head"><span class="no">07</span><h2>测试计划与真机走查</h2></div>
+  <h3>静态守阵 (pytest, 沿 test_web.py 既有范式)</h3>
+  <ul class="plain">
+    <li>键表单一事实源: id 唯一 / def 归一化串合法 / scope 合法 / run 方法在根实例存在。</li>
+    <li>默认键无冲突; 默认键不碰浏览器黑名单; <span class="mono">fixed</span> 集 (Esc) 不可被自定义覆盖 (后端 PUT 与前端面板双侧拦)。</li>
+    <li>三份 index.html 挂载成对: shortcuts.js 进三份 tpl-manifest、排 app.js 前; 对应 mixin 注册存在。</li>
+    <li>金清单 +2 与路由实现一致; PUT 结构校验 (非 dict / 非法值 → 422); 空串禁用语义保留。</li>
+    <li>读时兜底: 注入坏 JSON → GET 回默认表且服务不炸; 未知 action_id 被忽略; schema_version 不识别走升级链报错口径。</li>
+    <li>新增测试同步 tests/ 对应文件头部「## 测试计划」清单。</li>
+  </ul>
+  <h3>真机走查清单 (dev.run --dry-run + 真浏览器)</h3>
+  <ul class="plain">
+    <li>中文输入法在搜索框 / 设置输入框打字, 逐字母确认不触发任何单键快捷键 (IME 双保险)。</li>
+    <li>Esc 退栈链全序: 确认框 → 对话框 → … → 清选择, 快捷键引擎不抢先不漏接。</li>
+    <li>3000 行仿真库 ↑↓ / Space / Ctrl+A / Delete 流畅, 光标行滚动跟随。</li>
+    <li>录制器: 单修饰键拒收 / 冲突三选一 / 黑名单拒绑 / Esc 取消 / 重置单条与全部。</li>
+    <li>存储对照实验: 改键保存后 ①刷新生效 ②换浏览器生效 ③浏览器清站点数据后仍生效 (localStorage 方案下此项必然红 —— 定案的反向验证) ④手损 webui-keys.json → WARN + 默认表 + .bak 兜底。</li>
+    <li>浏览器保留键: 尝试绑 Ctrl+W/T/N 被面板拒绝; Ctrl+S 在设置页被拦截且不弹浏览器保存框。</li>
+  </ul>
+</section>
+
+<!-- ═══════════════ 08 ═══════════════ -->
+<section id="s8">
+  <div class="sec-head"><span class="no">08</span><h2>待拍板决策点 (前案 5 项 + 本轮 1 项)</h2></div>
+  <table>
+    <thead><tr><th class="keep">#</th><th>决策点</th><th>建议案</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td class="keep">①</td><td>默认键风格: 无修饰单键 vs 全 Alt+ 系</td><td><b>无修饰单键为主</b>, 危险动作 (删除) 走既有确认框</td><td class="dim">上游 qB / Gmail / GitHub 均用单键; 三段屏蔽已兜输入态</td></tr>
+      <tr><td class="keep">②</td><td>光标是否串进成员行</td><td><b>MVP 只走组行线性链</b>, 成员行 vNext</td><td class="dim">虚拟滚动前缀和成本可控, 成员行走查复杂度先摘除</td></tr>
+      <tr><td class="keep">③</td><td>Shift 族次要动作去留</td><td><b>本期砍掉</b>, 键表只留 52+6</td><td class="dim">MVP 收敛是业界常态 (§3.1); 需要时加条目不破架构</td></tr>
+      <tr><td class="keep">④</td><td>面板入口是否加顶栏按钮</td><td><b>不加</b>: <span class="kbd">?</span> 浮层 + 设置页分区</td><td class="dim">顶栏是全 UI 最挤的一条 (搜索帮助轮先例); 帮助浮层是标配入口</td></tr>
+      <tr><td class="keep">⑤</td><td>本期范围</td><td><b>W1-W7 一次做完</b>; 可拆 W1-W4 先行</td><td class="dim">W6 前后端本就一体 (面板是端点唯一消费方), 拆开反而留死代码窗口</td></tr>
+      <tr><td class="keep">⑥</td><td><b>存储定案 (本轮核心)</b></td><td><b>后端独立文件</b> <span class="mono">webui-keys.json</span> (§4.3)</td><td class="dim">§4.2 矩阵: 成熟产品零先例 / 失效通道已实证 / 信息价值错档 vs 仅 ~200 行成本</td></tr>
+    </tbody>
+  </table>
+  <p class="dim">拍板方式: 逐项确认或整体「按建议案」。①-⑤任一改向都不影响引擎架构; ⑥若改选 localStorage, 走 §4.6 反悔路径, 波次不变仅 W6 缩为面板+适配器换实现。</p>
+</section>
+
+<!-- ═══════════════ 09 ═══════════════ -->
+<section id="s9">
+  <div class="sec-head"><span class="no">09</span><h2>附录 · 调研来源</h2></div>
+  <p class="dim">库体积 / 版本 / 活跃度为 2026-09-28 npm tarball 解包与 GitHub API 实测; 产品行为以官方文档为准; 标注「推断」者未获官方明文。</p>
+  <h3>产品与规范</h3>
+  <ul class="plain">
+    <li>VS Code Keybindings: <span class="mono">code.visualstudio.com/docs/getstarted/keybindings</span> · Settings Sync (按 OS 分别同步): <span class="mono">code.visualstudio.com/docs/configure/settings-sync</span></li>
+    <li>JupyterLab commands / user-settings 目录 / shortcuts JSON Schema: <span class="mono">jupyterlab.readthedocs.io</span> (commands.html · directories.html) + <span class="mono">github.com/jupyterlab/jupyterlab .../shortcuts-extension/schema/shortcuts.json</span></li>
+    <li>Gmail 快捷键与自定义入口: <span class="mono">support.google.com/mail/answer/6594</span>; GitHub 无障碍快捷键开关: <span class="mono">github.blog/changelog 2021-11-15</span>; Overleaf 预设: <span class="mono">overleaf.com/learn/latex/Keyboard_shortcuts</span></li>
+    <li>MDN: KeyboardEvent.key / .code / .isComposing / .keyCode (deprecated) / Keyboard.lock() / addEventListener passive 语义 (<span class="mono">developer.mozilla.org</span>)</li>
+    <li>浏览器保留键: Mozilla bug 1052569 (core tab shortcuts 不可覆盖); Chromium browser_view.cc reserved accelerators</li>
+    <li>qBittorrent: WebUI client.js 全局 keydown (Ctrl+A / Delete / Esc / Ctrl+F); issues <span class="mono">#11930</span> <span class="mono">#10084</span> (自定义快捷键, 长期 open)</li>
+  </ul>
+  <h3>库 (npm / GitHub, 2026-09-28 实测)</h3>
+  <ul class="plain">
+    <li><span class="mono">github.com/jamiebuilds/tinykeys</span> (4.0.1, MIT, UMD 1.1KB gzip, key+code 双匹配) · <span class="mono">github.com/jaywcjlove/hotkeys</span> (hotkeys-js 4.0.8, MIT, keyCode 为主) · <span class="mono">github.com/github/hotkey</span> (3.1.4, MIT, 仅 ESM)</li>
+    <li><span class="mono">github.com/ccampbell/mousetrap</span> (1.6.5, Apache-2.0, 2020 后停更) · <span class="mono">github.com/madrobby/keymaster</span> (npm 2014 后未发版) · <span class="mono">github.com/JohannesKlauss/react-hotkeys-hook</span> (5.3.3, 需 React+构建)</li>
+  </ul>
+</section>
+
+</main>
+</div>
+</div>
+</body>
+</html>

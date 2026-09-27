@@ -114,19 +114,19 @@ def render(items: list[dict], head: str) -> str:
     multi = {t: v for t, v in by_topic.items() if len(v) > 1}
     single = {t: v for t, v in by_topic.items() if len(v) == 1}
 
-    out = [head, f"## 跨形态专题 (≥2 件) —— {len(multi)} 个\n"]
+    out = [head, f"## 跨形态专题 (≥2 件) · {len(multi)}\n"]
     for topic in sorted(multi, key=lambda t: (-len(multi[t]), t)):
         group = sorted(multi[topic], key=lambda i: FORM_ORDER.index(i["form"]))
-        parts = [f"{FORM_CN[i['form']]} [{i['stamp']}]({i['link']}) `{i['status']}`" for i in group]
-        out.append(f"- **{topic}** ({len(group)}) — " + " · ".join(parts))
+        parts = [f"{FORM_CN[i['form']]} [{i['stamp']}]({i['link']}) {i['status']}" for i in group]
+        out.append(f"- **{topic}** ({len(group)}) — " + " ".join(parts))
     out.append("")
     # 单件专题只列名: 它们没有跨形态材料要对照, 详细行在各自形态的 `_index.md`;
     # 这里保留一行紧凑清单是为了「覆盖 100%」可判定 (每个 topic 都出现在本文件里)。
-    out.append(f"## 单件专题 (仅登记, {len(single)} 个)\n")
+    out.append(f"## 单件专题 ({len(single)})\n")
     names = sorted(single)
-    line = " · ".join(names)
+    line = " ".join(names)
     while line:
-        cut = line.rfind(" · ", 0, 150)
+        cut = line.rfind(" ", 0, 150)
         cut = cut if cut > 0 else min(len(line), 150)
         out.append(f"- {line[:cut]}")
         line = line[cut:].lstrip(" ·")
@@ -140,8 +140,8 @@ def build(root: Path, mb: Path) -> str:
     # 「两个出口」条) —— 这里每省 1 字符都是给内容行的余量
     head = f"""# 文档形态总览 (按专题)
 
-> **本文件是生成物, 不要手改** —— 由 `{cmd}` 扫描四形态的 `doc-topic` / `**Topics:**` 与状态生成;
-> 协议与索引见 [doc-forms.md](conventions/doc-forms.md)。
+> 生成物, 不要手改 —— `{cmd}` 扫描四形态 `doc-topic` / `**Topics:**` 与状态生成;
+> 协议见 [doc-forms.md](conventions/doc-forms.md)。
 """
     return render(collect(mb), head)
 
