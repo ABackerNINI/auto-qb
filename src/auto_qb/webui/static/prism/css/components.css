@@ -62,13 +62,14 @@
 .badge.warn { background: var(--warn-soft); color: var(--warn); }
 .badge.warn.pending .dot { animation: dot-pulse 1.4s ease-in-out infinite; }
 
-/* 新 UI 专属: 主题切换器 + 返回旧版(纯 DOM, 由 theme.js 绑定, 不进 Vue 状态) */
-.ui-tools { display: flex; align-items: center; gap: 8px; }
+/* 顶栏右侧操作区: .ui-tools/.ui-link = 界面切换下拉(按钮 + 复用 .pop-menu 面板, state.js UI_HOME 单点);
+ * 主题切换器为棱镜专属(纯 DOM, 由 theme.js 绑定, 不进 Vue 状态) */
+.ui-tools { position: relative; display: flex; align-items: center; gap: 8px; }
 .ui-link { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: var(--radius-sm);
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
-  font-size: 12px; text-decoration: none; cursor: pointer;
+  font: inherit; font-size: 12px; text-decoration: none; cursor: pointer;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.ui-link:hover { background: var(--surface-2); color: var(--fg); border-color: var(--border-strong); }
+.ui-link:hover, .ui-link.open { background: var(--surface-2); color: var(--fg); border-color: var(--border-strong); }
 .theme-pop { position: relative; }
 .theme-btn .ico { color: var(--fg-muted); }
 .theme-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 190px; padding: 6px;
@@ -142,7 +143,7 @@
   padding: 4px 8px 6px; font-size: 11.5px; font-weight: 600; color: var(--fg-dim); }
 .pop-clear { border: 0; background: transparent; color: var(--accent-hi); font-size: 11.5px; cursor: pointer; }
 .pop-item { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: var(--radius-sm);
-  font-size: 12.5px; color: var(--fg-soft); cursor: pointer; position: relative; padding-left: 12px; }
+  font-size: 12.5px; color: var(--fg-soft); cursor: pointer; position: relative; padding-left: 12px; text-decoration: none; }
 .pop-item:hover { background: var(--surface-2); color: var(--fg); }
 .pop-item input { accent-color: var(--accent); width: 14px; height: 14px; flex: 0 0 auto; }
 .pop-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

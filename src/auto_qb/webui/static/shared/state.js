@@ -9,6 +9,14 @@ function _aqbDetectUi() {
   return seg === "prism" ? "prism" : seg === "console" ? "console" : "atlas";
 }
 
+/* 界面切换下拉的选项表(单一语义模板参数化差异的数据面): 三套 UI 全列, 键序即菜单序。
+ * 加第四套 UI = 这里加一档 + _aqbDetectUi 加一档判定, 模板零改动(旧「环形互切」已废, 2026-09-27)。 */
+const UI_HOME = {
+  atlas: { icon: "#i-orbit", label: "星图", desc: "经典深色仪表盘" },
+  prism: { icon: "#i-prism", label: "棱镜", desc: "工程仪器 · 五主题" },
+  console: { icon: "#i-gauge", label: "控制台", desc: "Console Hub 仪表台" },
+};
+
 window.AQB_STATE = {
   data() {
     return {
@@ -29,6 +37,7 @@ window.AQB_STATE = {
       // 模板级差异只允许 `v-if="ui === '...'"` 条件块(带 ui-diff 注释, 守阵收集为活差异清单)。
       // 皮肤判定: URL 首段路径(目录即 UI); 2026-09-27 起第三套 console(控制台)并列, 未识别段回落 atlas。
       ui: _aqbDetectUi(),
+      uiMenuOpen: false,  // 顶栏界面切换下拉的展开态(点空白/Esc 收起, 挂在 lifecycle.js 既有浮层关闭链)
       groups: [],
       singles: [],            // 未归组种子(后端与 groups 同快照同门控回传, 供搜索兜底/总数回退)
       torrents: [],           // 种子页数据源: 全量种子平铺数组(SEED_ITEM, 与 groups 同门控回传)
@@ -252,15 +261,13 @@ window.AQB_STATE = {
     };
   },
   computed: {
-    /* 界面互切链接目标(单一语义模板的参数化差异): 模板统一后各 UI 共用一个 <a>,
-     * 三套 UI 环形互切(atlas → prism → console → atlas) —— 加第四套 UI 在这里扩环, 不在模板里写第二份链接。 */
-    uiSwitchTarget() {
-      const ring = {
-        atlas: { href: "/prism/", icon: "#i-prism", label: "棱镜", title: "切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" },
-        prism: { href: "/console/", icon: "#i-gauge", label: "控制台", title: "切换到控制台界面(Console Hub 仪表台皮肤, 可随时切回)" },
-        console: { href: "/atlas/", icon: "#i-orbit", label: "星图", title: "切换到星图界面(经典深色仪表盘, 可随时切回)" },
-      };
-      return ring[this.ui] || ring.atlas;
+    /* 界面切换下拉(单一语义模板的参数化差异): 按钮档 uiCurrent + 菜单全档 uiOptions,
+     * 数据面 = UI_HOME 单点 —— 三套 UI 直选, 不再环切。 */
+    uiCurrent() {
+      return { id: this.ui, href: `/${this.ui}/`, ...(UI_HOME[this.ui] || UI_HOME.atlas) };
+    },
+    uiOptions() {
+      return Object.entries(UI_HOME).map(([id, o]) => ({ id, href: `/${id}/`, ...o }));
     },
     pollLabel() {
       // 顶栏展示当前轮询间隔(自适应: 按种子量分档 + 服务不可达时退避)

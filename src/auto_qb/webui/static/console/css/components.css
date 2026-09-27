@@ -124,7 +124,7 @@
   text-transform: uppercase; color: var(--fg-dim); }
 .pop-clear { border: 0; background: transparent; color: var(--accent-hi); font-size: 11.5px; cursor: pointer; }
 .pop-item { display: flex; align-items: center; gap: 7px; padding: 4px 8px;
-  font-size: 12.5px; color: var(--fg-soft); cursor: pointer; }
+  font-size: 12.5px; color: var(--fg-soft); cursor: pointer; text-decoration: none; }
 .pop-item:hover { background: var(--surface-2); color: var(--fg); }
 .pop-item input { accent-color: var(--accent); width: 14px; height: 14px; flex: 0 0 auto; }
 .pop-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -575,13 +575,14 @@
   background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row); }
 .member-row.search-hit { background: linear-gradient(90deg, var(--accent-soft), transparent 42%); }
 
-/* 单一语义模板统一件(与 atlas/prism 成对): .ui-tools/.ui-link = 界面互切; .opt-pill = 切换胶囊 */
-.ui-tools { display: flex; align-items: center; gap: 8px; }
+/* 单一语义模板统一件(与 atlas/prism 成对): .ui-tools/.ui-link = 界面切换下拉(复用 .pop-menu 面板,
+ * 选项表在 state.js UI_HOME 单点); .opt-pill = 切换胶囊 */
+.ui-tools { position: relative; display: flex; align-items: center; gap: 8px; }
 .ui-link { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px;
   border: 1px solid var(--border-soft); background: var(--surface-1); color: var(--fg-muted);
-  font-size: 12px; text-decoration: none; cursor: pointer;
+  font: inherit; font-size: 12px; text-decoration: none; cursor: pointer;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.ui-link:hover { background: var(--surface-2); color: var(--fg); border-color: var(--border-strong); }
+.ui-link:hover, .ui-link.open { background: var(--surface-2); color: var(--fg); border-color: var(--border-strong); }
 .opt-pill { display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px;
   border: 1px solid var(--border-soft); background: var(--surface-1);
   color: var(--fg-muted); font: inherit; font-size: 12.5px; cursor: pointer; user-select: none;

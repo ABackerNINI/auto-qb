@@ -134,7 +134,29 @@
               </div>
             </div>
             </template>
-            <a class="ui-link" :href="uiSwitchTarget.href" :title="uiSwitchTarget.title"><svg class="ico ico-sm"><use :href="uiSwitchTarget.icon"></use></svg>{{ uiSwitchTarget.label }}</a>
+            <!-- 界面切换下拉(2026-09-27 替代环形互切链接): 按钮显示当前 UI, 菜单三套直选。
+                 面板/行复用 .pop-menu/.pop-item 弹层族(与列选择器/筛选器同源, 省新增 CSS);
+                 flip-x 静态右对齐 —— 锚点恒在顶栏右缘, 不需要测量翻转; 选项表单点在 state.js UI_HOME;
+                 开合走 uiMenuOpen(点空白/Esc 收起挂在 lifecycle.js 既有浮层关闭链)。 -->
+            <button type="button" class="ui-link" :class="{ open: uiMenuOpen }" title="切换界面"
+                    @click.stop="uiMenuOpen = !uiMenuOpen">
+              <svg class="ico ico-sm"><use :href="uiCurrent.icon"></use></svg>{{ uiCurrent.label }}
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+            </button>
+            <transition name="pop">
+              <!-- 不挂 @click.stop: 行点击冒泡到 lifecycle 的 window 关闭链 —— 点当前项 preventDefault 后
+                   仅收起(有反馈), 点其它项整页跳转; 这与筛选器菜单(多选需常开)语义相反, 别照抄 -->
+              <div v-if="uiMenuOpen" class="pop-menu flip-x">
+                <a v-for="o in uiOptions" :key="o.id" class="pop-item" :class="{ on: o.id === ui }" :href="o.href"
+                   :title="o.id === ui ? '当前界面' : '切换到' + o.label + '界面(' + o.desc + ')'"
+                   @click="o.id === ui && $event.preventDefault()">
+                  <svg class="ico ico-sm"><use :href="o.icon"></use></svg>
+                  <span class="pop-value">{{ o.label }}</span>
+                  <span class="pop-count">{{ o.id === ui ? '当前' : o.desc }}</span>
+                  <svg v-if="o.id === ui" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+                </a>
+              </div>
+            </transition>
           </div>
           <!-- 统计/速度槽已迁至底部状态栏(TBL-08); 顶栏只留全局状态徽章 -->
           <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
