@@ -198,6 +198,7 @@ class QbManager(
         # 数据目录(state/锁/日志/跳检备份同处): 显式建目录, 不依赖日志文件配置(console-only 时无日志建目录)
         os.makedirs(os.path.dirname(self.state_file) or ".", exist_ok=True)
         self.state = self._load_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
+        self._bind_field_snapshots()  # 字段变化基线挂到 state 顶层键(计划 26-09-27-1438)
         # 周期落盘计时器(见 RuleEngineMixin._maybe_flush_state): run() 加载状态后重置为首个到期点
         self._next_state_flush_at: float = 0.0
         # 规则结构初始化(规则加载在 run() 中进行: --export-yaml 等只导出模式不需要)
@@ -377,6 +378,7 @@ class QbManager(
                     return
                 logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
             self.state = self._load_state()
+            self._bind_field_snapshots()  # state 被整体替换, 字段变化基线重新挂接
             # schema 迁移物化(计划 26-09-26-0506): 磁盘版本 < CURRENT 时立即落盘一次新版本。
             # 此处已持锁(与 __init__ 的 _cleanup_orphan_tmp 同判据); __init__ 的早期加载只做内存迁移。
             self._materialize_state_migration(dry_run)
@@ -746,6 +748,11 @@ class QbManager(
             if not self._fs_path_map_checked:
                 self._fs_path_map_checked = True
                 file_access.path_map_selfcheck([rec.save_path for rec in self.store.by_hash.values()])
+            # 全量轮兑现 reset_runtime 的契约: 热重载 L2 置空的 tracker_conf 在此重匹配
+            # (存量记录不走 added 分支, 事件分派/维护任务都依赖 conf 已就位)
+            for rec in self.store.by_hash.values():
+                if rec.tracker_conf is None:
+                    rec.tracker_conf = self._match_tracker_conf(rec)
         # 分组视图过期由 store.view_changed 精确驱动(仅视图字段/成员变化时置脏), 不再每轮无条件置脏
         # 种子集变化(新增/删除) -> 搜索索引需反映新/删种子, 标记脏(Web 搜索时重建)
         if added or removed:
@@ -763,7 +770,9 @@ class QbManager(
         # 状态快照更新之前同步即时执行(新增种子本轮不触发状态变化; added 事件在下方匹配后触发);
         # 热重载后首轮抑制(全量重建的 added 重放保护), 一轮后恢复
         if not self._suppress_events:
-            self._dispatch_events([], removed, dry_run, removed_snapshots=removed_snapshots, state_changed=True)
+            self._dispatch_events(
+                [], removed, dry_run, removed_snapshots=removed_snapshots, state_changed=True, field_changed=True
+            )
 
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
@@ -791,8 +800,8 @@ class QbManager(
             for h in matched_added:
                 torrent = self.store.get(h)
                 tracker_conf = torrent.tracker_conf
-                # 立即运行一次内置任务
-                self._handle_maintenance(torrent, dry_run)
+                # 立即运行一次内置任务(添加路径: tags 部分强制执行 —— on_change 模式的"添加时收敛一次")
+                self._handle_maintenance(torrent, dry_run, force_tags=True)
                 # tracker单种限速
                 self._apply_speed_limit(torrent, tracker_conf, dry_run)
                 # 创建种子级任务: 内置 maintenance + 所有符合条件的规则任务
@@ -820,6 +829,8 @@ class QbManager(
         # 更新状态快照(本轮 by_hash 的状态; 新增种子本轮不视为状态变化)
         # 事件分派(on_torrent_state_enum_changed)依赖此上一轮快照对比, 故不局限于 grouping 启用时
         self.store.update_state_snapshot()
+        # 字段变化基线同步刷新(事件分派 on_torrent_field_changed 的跨轮对比口径, 计划 26-09-27-1438)
+        self.store.update_field_snapshots()
 
         self._suppress_events = False  # 事件抑制仅覆盖热重载后的首轮全量重建
 
@@ -861,18 +872,30 @@ class QbManager(
     def _handle_maintenance_task_interface(self, task: Task, dry_run: bool) -> bool:
         return self._handle_maintenance(task.torrent, dry_run)
 
-    def _handle_maintenance(self, torrent: TorrentRecord, dry_run: bool) -> bool:
-        """内置种子级任务: 添加/删除/相似标签 + HR 标签分类"""
+    def _handle_maintenance(self, torrent: TorrentRecord, dry_run: bool, force_tags: bool = False) -> bool:
+        """内置种子级任务: 添加/删除/相似标签 + HR 标签分类
+
+        站点 tags 部分的节奏由 maintenance_tag_mode 决定(计划 26-09-27-1438):
+        - interval(默认): 每 interval 执行 —— 与迁移前逐字节等价;
+        - on_change: 仅 force_tags(添加路径)或该种子 tags 发生过**外部**变化时重检
+          (store.external_tag_changes, 消费一次); HR 部分不受影响 —— 达标状态随时间演化,
+          tags 变化捕捉不到, 恒按 interval 节奏。
+        """
         if torrent is None:
             return FINISHED
 
         tracker_conf = torrent.tracker_conf
 
+        on_change = getattr(self.config, "maintenance_tag_mode", "interval") == "on_change"
+        recheck_tags = force_tags or not on_change or torrent.hash in self.store.external_tag_changes
+        if recheck_tags and on_change:
+            self.store.external_tag_changes.discard(torrent.hash)  # 待重检登记消费一次
         handled = False
-        handled |= self._add_tags(torrent, tracker_conf.tags, dry_run)
-        handled |= self._remove_tags(torrent, tracker_conf.remove_tags, dry_run)
-        if tracker_conf.remove_similar_tags:  # 站点覆盖全局后的值
-            handled |= self._remove_similar_tags(torrent, tracker_conf.tags, dry_run)
+        if recheck_tags:
+            handled |= self._add_tags(torrent, tracker_conf.tags, dry_run)
+            handled |= self._remove_tags(torrent, tracker_conf.remove_tags, dry_run)
+            if tracker_conf.remove_similar_tags:  # 站点覆盖全局后的值
+                handled |= self._remove_similar_tags(torrent, tracker_conf.tags, dry_run)
         if tracker_conf.hr:  # 站点合并全局默认后的 HR 设置
             handled |= self._add_hr_tag_or_category(torrent, dry_run)
         # if handled:

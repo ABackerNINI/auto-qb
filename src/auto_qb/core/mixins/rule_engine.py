@@ -41,6 +41,9 @@ class RuleEngineMixin:
         """从 config 的 `*_rules` 段加载规则集(条件+动作插件); Rule 的 manager 即本对象
 
         幂等: 重复调用先清空(init 与 run 都会调用)。
+        收尾推导字段变化检测的监听集合(计划 26-09-27-1438): 所有 on_torrent_field_changed
+        规则的 watch_fields 并集 ∪ (maintenance on_change 模式的 tags) —— 单点注入 store,
+        无监听时 store 检测整体关闭(零基线、零对比开销)。
         """
         self.rules = []
         self.enabled_rules = []
@@ -52,6 +55,21 @@ class RuleEngineMixin:
         self.enabled_rules = [r for r in self.rules if r.enabled]
         if self.rules:
             logger.info(f"加载规则 {len(self.rules)} 条(启用 {len(self.enabled_rules)} 条)")
+        watch: set = set()
+        for r in self.rules:
+            if r.trigger == "on_torrent_field_changed":
+                watch.update(r.watch_fields)
+        if getattr(self.config, "maintenance_tag_mode", "interval") == "on_change":
+            watch.add("tags")  # maintenance B 路径: 外部 tags 变化检测不依赖任何规则配置(计划 §05)
+        self.store.set_watch_fields(watch)
+
+    def _bind_field_snapshots(self) -> None:
+        """把 store.field_snapshots 绑定到 state 顶层键(同一对象)
+
+        store 的 update_field_snapshots 原地更新该 dict —— 原地改即落盘内容, 不需要
+        每次落盘前回拷。每次 self.state 被整体替换(启动加载)后必须重新绑定。
+        """
+        self.store.field_snapshots = self.state.setdefault("field_snapshots", {})
 
     def _read_state_file(self, path: str):
         """读单个状态文件: dict(可用) / None(不存在) / _CORRUPT(存在但内容不是合法 dict)
@@ -285,7 +303,13 @@ class RuleEngineMixin:
         return [r for r in self.enabled_rules if r.trigger == trigger]
 
     def _dispatch_events(
-        self, added: list, removed: list, dry_run: bool, removed_snapshots=None, state_changed: bool = False
+        self,
+        added: list,
+        removed: list,
+        dry_run: bool,
+        removed_snapshots=None,
+        state_changed: bool = False,
+        field_changed: bool = False,
     ) -> list:
         """事件分派总入口: 同步执行各事件规则(即时, 不排队).
 
@@ -300,6 +324,10 @@ class RuleEngineMixin:
           收集的 (hash, 新枚举))对比上一轮 state_snapshot, 变化的种子触发(新增种子无上一轮
           记录, 不视为状态变化)。state_changed 为 False 时完全跳过 —— 故本方法可在同轮
           多处调用而只有一次负责状态变化分派。
+        - on_torrent_field_changed: 用 store.field_changed(增量应用时经 qB 增量 ∩ 监听字段
+          后与持久化基线对比的净变化)触发; 首见/无基线/自写抑制的已在 store 侧剔除。
+          field_changed 为 False 时完全跳过(同 state_changed 的"同轮多处调用只一次负责")。
+          规则侧再按 watch_fields ∩ 实际变化字段过滤 —— 只关心本次变化字段的规则才触发。
 
         规则执行经 _apply_event_rule 建 rule-event 一次性 Task 作 ctx.task: 遇 checking 返回
         pending 时, 该 Task 作 origin 由轮询子任务 add_task(origin, keep_progress=True) 重新
@@ -329,6 +357,18 @@ class RuleEngineMixin:
                 if tor is None or tor.tracker_conf is None:
                     continue
                 for rule in self._torrent_event_rules(tor, "on_torrent_state_enum_changed"):
+                    self._apply_event_rule(rule, h, dry_run=dry_run)
+                    triggered.append(h)
+
+        # on_torrent_field_changed: 本轮监听字段的净变化种子(store 侧已对比持久化基线, O(变化数))
+        if field_changed and self._rules_by_trigger("on_torrent_field_changed"):
+            for h, fields in self.store.field_changed:
+                tor = self.store.get(h)
+                if tor is None or tor.tracker_conf is None:
+                    continue
+                for rule in self._torrent_event_rules(tor, "on_torrent_field_changed"):
+                    if not set(rule.watch_fields) & fields:
+                        continue  # 本次变化字段与该规则监听的无关
                     self._apply_event_rule(rule, h, dry_run=dry_run)
                     triggered.append(h)
 

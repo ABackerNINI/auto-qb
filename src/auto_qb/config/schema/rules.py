@@ -10,7 +10,17 @@ RULE_FIELDS: Tuple[Field, ...] = (
         "enum",
         default="interval",
         options=TRIGGERS,
-        help="何时检查该规则: interval = 按扫描间隔周期检查; 其余为事件触发(种子新增/删除/状态变化时立即检查一次)",
+        help="何时检查该规则: interval = 按扫描间隔周期检查; 其余为事件触发(种子新增/删除/状态变化/"
+        "监听字段变化时立即检查一次)",
+    ),
+    Field(
+        "watch_fields",
+        "监听字段",
+        "str_list",
+        default=[],
+        show_if=("trigger", "on_torrent_field_changed"),
+        help="仅 on_torrent_field_changed 触发时生效且必填: 监听的种子字段(每行一个), 任一变化即检查该规则"
+        "(程序自身改动的不算, 防自触发); v1 支持 tags / category",
     ),
     Field(
         "interval",

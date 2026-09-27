@@ -246,6 +246,17 @@ GROUPS: Tuple[Group, ...] = (
                 help="自动清理仅大小写不同的重复标签(如 HHan 与 hhan 保留一个); 站点配置里可单独覆盖"
             ),
             Field(
+                "maintenance_tag_mode",
+                "维护 tags 节奏",
+                "enum",
+                default="interval",
+                options=("interval", "on_change"),
+                help="站点 tags 维护(补打站点标签/清理移除标签/相似标签清理)的执行时机: "
+                "interval = 每个内置任务间隔执行一次(默认, 行为不变); "
+                "on_change = 种子添加时执行一次, 之后仅在种子的 tags 被程序之外改动时重新检查 —— "
+                "省掉无变化轮次里的 qB 往返。HR 标签/分类部分不受此开关影响, 恒按周期执行"
+            ),
+            Field(
                 "skip_checking_tag",
                 "跳检标签名",
                 "str",

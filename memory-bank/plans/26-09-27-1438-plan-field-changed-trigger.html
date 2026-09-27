@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · 字段变化触发时机 on_torrent_field_changed 与维护任务 tags 迁移</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-27">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="field-changed-trigger">
+<meta name="doc-added" content="2026-09-27">
+<meta name="doc-updated" content="2026-09-27">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --bg-raise: #14181d;
+    --ink: #e4e8ea;
+    --ink-dim: #99a2a8;
+    --ink-faint: #626b71;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #63a6c4;
+    --accent-dim: rgba(99,166,196,.13);
+    --warn: #c99a63;
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1140px; margin: 0 auto; padding: 0 44px; }
+
+  /* ── 封面 ─────────────────────────────── */
+  header.cover { padding: 72px 0 0; }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    line-height: 1.18;
+    margin: 18px 0 0;
+    max-width: 21em;
+  }
+  h1 .mono { font-family: var(--font-mono); font-weight: 500; font-size: .82em; }
+  .lede {
+    margin-top: 18px;
+    max-width: 58ch;
+    color: var(--ink-dim);
+    font-size: 16px;
+  }
+  .meta-row {
+    margin-top: 34px;
+    padding: 12px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 42px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+  .meta-row b { color: var(--ink-dim); font-weight: 500; }
+
+  /* ── 双栏: TOC + 正文 ─────────────────── */
+  .layout { display: grid; grid-template-columns: 188px 1fr; gap: 56px; padding: 26px 0 0; }
+  nav.toc { position: sticky; top: 32px; align-self: start; padding-top: 26px; }
+  nav.toc .toc-cap {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block;
+    text-decoration: none;
+    color: var(--ink-faint);
+    font-size: 12.5px;
+    line-height: 1.5;
+    padding: 4.5px 0;
+  }
+  nav.toc a .n { font-family: var(--font-mono); font-size: 10.5px; margin-right: 9px; }
+  nav.toc a:hover { color: var(--accent); }
+  main { padding-top: 26px; min-width: 0; }
+
+  /* ── 章节 ─────────────────────────────── */
+  section { margin-bottom: 64px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 22px;
+  }
+  .sec-head .no { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 26px 0 10px;
+  }
+  h3 .mono { font-family: var(--font-mono); font-size: .88em; }
+  p { max-width: 76ch; margin: 0 0 12px; color: var(--ink); }
+  p.dim { color: var(--ink-dim); }
+  ul.plain { margin: 0 0 12px; padding-left: 1.3em; max-width: 74ch; }
+  ul.plain li { margin-bottom: 7px; }
+  ol.steps { margin: 0 0 12px; padding-left: 1.5em; max-width: 74ch; }
+  ol.steps li { margin-bottom: 9px; }
+  .mono { font-family: var(--font-mono); }
+  .path { font-family: var(--font-mono); font-size: .9em; color: var(--ink-dim); }
+  .key { font-family: var(--font-mono); font-size: .92em; color: var(--accent); }
+
+  /* ── 表格 ─────────────────────────────── */
+  .tbl-wrap { margin: 16px 0 20px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 7px 14px 7px 0;
+    border-bottom: 1px solid var(--hairline);
+    white-space: nowrap;
+  }
+  td {
+    padding: 8px 14px 8px 0;
+    border-bottom: 1px solid var(--hairline-soft);
+    vertical-align: top;
+    color: var(--ink-dim);
+  }
+  td:first-child { color: var(--ink); }
+  td .mono { font-size: .93em; }
+
+  /* ── 代码块 ───────────────────────────── */
+  pre {
+    background: var(--bg-raise);
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    padding: 15px 18px;
+    font-family: var(--font-mono);
+    font-size: 12.8px;
+    line-height: 1.62;
+    overflow-x: auto;
+    margin: 14px 0 20px;
+    color: var(--ink-dim);
+  }
+  pre .c { color: var(--ink-faint); }
+  pre .hl { color: var(--accent); }
+
+  /* ── 决策/红线块 (直角 + hairline) ────── */
+  .note {
+    border: 1px solid var(--hairline);
+    border-radius: 2px;
+    padding: 13px 17px;
+    margin: 14px 0 18px;
+    max-width: 78ch;
+  }
+  .note .tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: 6px;
+  }
+  .note p { margin: 0; font-size: 13.8px; color: var(--ink-dim); }
+  .note.red { border-color: rgba(201,154,99,.35); }
+  .note.red .tag { color: var(--warn); }
+
+  /* ── 验收清单 ─────────────────────────── */
+  ul.check { list-style: none; padding: 0; margin: 12px 0 6px; max-width: 76ch; }
+  ul.check li {
+    padding: 7px 0 7px 26px;
+    position: relative;
+    border-bottom: 1px solid var(--hairline-soft);
+    color: var(--ink-dim);
+  }
+  ul.check li::before {
+    content: "";
+    position: absolute;
+    left: 2px; top: 14px;
+    width: 11px; height: 11px;
+    border: 1px solid var(--ink-faint);
+    border-radius: 2px;
+  }
+
+  /* ── 收尾 ─────────────────────────────── */
+  footer.colophon {
+    margin-top: 20px;
+    padding: 18px 0 56px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 36px;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { display: none; }
+    h1 { font-size: 30px; }
+    .frame { padding: 0 22px; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<header class="cover">
+  <div class="kicker">实施计划 · auto-qb</div>
+  <h1>字段变化触发时机 <span class="mono">on_torrent_field_changed</span><br>与维护任务 tags 部分迁移</h1>
+  <p class="lede">为规则系统新增第五种触发时机——指定字段（v1: tags / category）发生变化时才执行；并以此为底座，把内置维护任务的站点 tags 部分从「每 interval 全量重打」迁移为「添加时执行 + 变化时重检」。</p>
+  <div class="meta-row">
+    <span>日期 <b>2026-09-27</b></span>
+    <span>状态 <b>Done · 已实施(2026-09-27)</b></span>
+    <span>专题 <b>field-changed-trigger</b></span>
+    <span>影响域 <b>规则引擎 / torrent store / state / config 校验</b></span>
+  </div>
+</header>
+
+<div class="layout">
+
+<nav class="toc">
+  <div class="toc-cap">目录</div>
+  <a href="#s01"><span class="n">01</span>背景与需求</a>
+  <a href="#s02"><span class="n">02</span>现状盘点与缺口</a>
+  <a href="#s03"><span class="n">03</span>方案总览</a>
+  <a href="#s04"><span class="n">04</span>触发语义设计</a>
+  <a href="#s05"><span class="n">05</span>检测与持久化底座</a>
+  <a href="#s06"><span class="n">06</span>配置校验与守卫</a>
+  <a href="#s07"><span class="n">07</span>维护任务迁移</a>
+  <a href="#s08"><span class="n">08</span>测试计划</a>
+  <a href="#s09"><span class="n">09</span>实施顺序与验收</a>
+  <a href="#s10"><span class="n">10</span>风险与边界</a>
+</nav>
+
+<main>
+
+<!-- ══════════ 01 ══════════ -->
+<section id="s01">
+  <div class="sec-head"><span class="no">01</span><h2>背景与需求</h2></div>
+  <p>需求原文（2026-09-27）:</p>
+  <div class="note">
+    <span class="tag">需求记录</span>
+    <p>新增任务触发时机：某字段发生变化时触发，比如 tags 变了才执行（<span class="mono">trigger:??</span>，语法待定）。同时维护任务部分场景可迁移——比如添加站点 tag 在种子添加时已执行，后续仅需在 tags 发生变化时重新检查。</p>
+  </div>
+  <p>拆成两件相互独立、但有依赖关系的事：</p>
+  <ul class="plain">
+    <li><b>A · 新触发时机</b>——规则可以声明「只在我关心的字段变化时执行」，替代当前唯一的替代方案「interval 周期轮询 + 条件判断」，消除无变化轮次的全量重扫。</li>
+    <li><b>B · 维护任务迁移</b>——内置 maintenance 的站点 tags 部分（add / remove / similar）是纯幂等收敛，种子 tags 未变且 tracker 配置未变时重跑没有收益；迁移为事件驱动后，每轮每种子省掉一轮 qB API 往返。</li>
+  </ul>
+  <p class="dim">B 复用 A 的字段变化检测底座，故实施顺序 A → B；但 B 的正确性不依赖 A 的持久化快照（见 §05）。</p>
+</section>
+
+<!-- ══════════ 02 ══════════ -->
+<section id="s02">
+  <div class="sec-head"><span class="no">02</span><h2>现状盘点与缺口</h2></div>
+
+  <h3>现有触发时机（4 种）</h3>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>取值</th><th>语义</th><th>代码单点</th></tr>
+    <tr><td><span class="mono">interval</span>（默认）</td><td>按 <span class="mono">interval</span> 周期入任务队列轮询</td><td class="path">rules/base.py:139-146</td></tr>
+    <tr><td><span class="mono">on_torrent_added</span></td><td>种子新出现时即时分派</td><td class="path">rule_engine.py:287-349</td></tr>
+    <tr><td><span class="mono">on_torrent_deleted</span></td><td>种子消失时分派（动作白名单受限）</td><td class="path">validation/rules.py:228 区</td></tr>
+    <tr><td><span class="mono">on_torrent_state_enum_changed</span></td><td>state 枚举跨轮变化时分派</td><td class="path">rule_engine.py:322-333</td></tr>
+  </table>
+  </div>
+  <p class="dim">取值域常量在 <span class="path">config/schema/fields.py:143</span> 与 <span class="path">config/validation/rules.py:20</span> 两处同源维护，WEB UI 下拉经 <span class="mono">schema_payload</span> 的 <span class="mono">constants.triggers</span> 自动获得。</p>
+
+  <h3>缺口：字段变化的「最后一公里」已铺好，但没有接上事件</h3>
+  <ul class="plain">
+    <li>qB 增量同步每轮已产出 <span class="mono">delta_fields</span>（<span class="path">torrents/store.py:60</span>，<span class="mono">apply_delta</span> :177-193）——tags / category 的外部变化<b>当轮可见</b>。</li>
+    <li>但 <span class="mono">delta_fields</span> 当轮消费即丢：<span class="mono">_CONFLICT_FIELDS</span>（:156，含 tags）只用于登记 <span class="mono">dirty_groups</span> 重算下载冲突，<b>不触发任何事件</b>。</li>
+    <li>跨轮对比目前只有 state 一个字段（<span class="mono">state_snapshot</span> :72 + <span class="mono">update_state_snapshot</span> <span class="path">qbmanager.py:811-812</span>），且仅存内存。</li>
+    <li>磁盘上没有任何种子字段快照——唯一按种子持久化的 <span class="mono">upload_snapshots</span> 已随计划 26-09-27-1232 整体移除（<span class="path">infra/versioning.py:34-40</span>，state 现为 v2）。</li>
+    <li>后果：规则想知道「tags 变没变」只能 interval 轮询 + conditions 判断，每轮全量评估；断电重启后「变化过」这一事实也无处可查。</li>
+  </ul>
+
+  <h3>维护任务现状</h3>
+  <ul class="plain">
+    <li>内置 <span class="mono">maintenance</span> 任务按 <span class="mono">config.interval</span>（默认 60S）对每个种子跑 <span class="mono">_handle_maintenance</span>（<span class="path">qbmanager.py:854-871</span>）：站点 tags 补打 / remove_tags / remove_similar_tags / HR tag-or-category。</li>
+    <li>新种子添加路径已立即跑一次 maintenance（<span class="path">qbmanager.py:785</span>）——即需求里「添加站点 tag 在种子添加时已执行」的现状，且这条链路不动。</li>
+  </ul>
+</section>
+
+<!-- ══════════ 03 ══════════ -->
+<section id="s03">
+  <div class="sec-head"><span class="no">03</span><h2>方案总览</h2></div>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>#</th><th>决策点</th><th>定案</th><th>理由 / 备选</th></tr>
+    <tr><td>D1</td><td>trigger 取值名</td><td><span class="mono">on_torrent_field_changed</span></td><td>与 <span class="mono">on_torrent_state_enum_changed</span> 前缀对齐；备选 <span class="mono">on_field_changed</span> 更短但破坏命名族一致性</td></tr>
+    <tr><td>D2</td><td>监听字段怎么声明</td><td>新规则键 <span class="mono">watch_fields</span>（列表）</td><td>一个规则可同时监听多字段；白名单常量 <span class="mono">FIELD_WATCH_ALLOWED</span>，v1 = (tags, category)</td></tr>
+    <tr><td>D3</td><td>跨轮基线放哪</td><td>state 新顶层键 <span class="mono">field_snapshots</span>，state v2→v3</td><td>重启不风暴、停机期变化可补捕；只存被监听字段控制体积（§05）</td></tr>
+    <tr><td>D4</td><td>程序自写是否触发</td><td>不触发（self-caused 抑制）</td><td>防「add_tags 自喂环」；同轮内外部变化不可区分时保守跳过（§04 细则 5）</td></tr>
+    <tr><td>D5</td><td>维护迁移开关</td><td>全局键 <span class="mono">maintenance_tag_mode: interval | on_change</span></td><td>默认 interval = 现状，保守默认（黄金法则 2）；HR 部分不迁移（§07）</td></tr>
+  </table>
+  </div>
+</section>
+
+<!-- ══════════ 04 ══════════ -->
+<section id="s04">
+  <div class="sec-head"><span class="no">04</span><h2>触发语义设计</h2></div>
+
+  <h3>配置写法（回答 <span class="mono">trigger:??</span>）</h3>
+  <pre><span class="c"># 规则集内（任意 *_rules 键）, 与现有规则完全同构:</span>
+add_drive_letter_tag_rules:
+  site_tag_recheck:
+    enabled: true
+    <span class="hl">trigger: on_torrent_field_changed</span>
+    <span class="hl">watch_fields: [tags]</span>      <span class="c"># 必填; v1 白名单: tags / category</span>
+    cooldown: 5M              <span class="c"># 可选, 语义与 interval 规则一致</span>
+    conditions: [ ... ]       <span class="c"># 语法不变, 现有 13 个条件插件原样可用</span>
+    actions: [ add_tags: ["R"] ]</pre>
+  <p class="dim">全局维护迁移开关（第二阶段，§07）：</p>
+  <pre><span class="hl">maintenance_tag_mode: on_change</span>   <span class="c"># 默认 interval (现状); 顶层键</span></pre>
+
+  <h3>语义细则</h3>
+  <ol class="steps">
+    <li><b>监听白名单</b>——<span class="mono">watch_fields</span> 仅在 <span class="mono">trigger: on_torrent_field_changed</span> 下允许出现（其它 trigger 下出现即校验报错，fail-fast）；值非空且逐项落在 <span class="mono">FIELD_WATCH_ALLOWED = ("tags", "category")</span>。v1 不含 state（已有专属 trigger）与 <span class="mono">amount_left</span>（高频变化，事件化即噪音）。</li>
+    <li><b>变化判定</b>——qB 增量 <span class="mono">delta_fields</span> 报告字段变化，再与持久化快照对比确认净变化；tags 比较前排序，消除 qB 返回顺序噪声。</li>
+    <li><b>首见不触发</b>——快照无该 hash 记录视为首见：只记基线，不分派（对齐 <span class="mono">on_torrent_state_enum_changed</span> 先例，<span class="path">tests/test_trigger_events.py:136</span>）。</li>
+    <li><b>重启 / 升级语义</b>——快照持久化后，重启后首轮对比：真实变化仍触发（受 cooldown 约束，风暴有界）；一致则静默刷新。state v2→v3 迁移后首次启动 <span class="mono">field_snapshots</span> 为空表 → 全部按首见处理，<b>升级零事件风暴</b>。</li>
+    <li><b>自触发抑制</b>——本程序自身的 <span class="mono">add_tags / remove_tags / set_category</span> 经 <span class="mono">update_torrent_fields</span>（<span class="path">store.py:319-374</span>）落内存快照时，同步登记「本轮 self-caused 字段变更集合」；当轮事件分派跳过这些 (hash, field)。同轮内外部变化与自写叠加无法区分时保守按自写处理（宁可漏一次、不可自喂环；漏掉的变化等下次变化自然补上）。</li>
+    <li><b>去重与节流</b>——<span class="mono">cooldown</span> / <span class="mono">execute_once</span> 直接复用 <span class="mono">exec_history</span>（<span class="path">base.py:262-263</span> → <span class="path">rule_engine.py:216-224</span>），机制零新增。</li>
+    <li><b>动作白名单</b>——不需要。事件分派时种子在场、上下文完整，对齐 <span class="path">validation/rules.py:266</span> 「现场完整，不设限」；仅 <span class="mono">on_torrent_deleted</span> 有白名单。</li>
+    <li><b>执行通道</b>——与现有事件一致：即时同步分派、不进 fast 队列、不计 <span class="mono">max_tasks_per_tick</span>（<span class="path">rule_engine.py:287-349</span>）；<span class="mono">_create_rule_task</span> 对非 interval 返回 None 的现有逻辑（:244-260）无需改动。</li>
+  </ol>
+</section>
+
+<!-- ══════════ 05 ══════════ -->
+<section id="s05">
+  <div class="sec-head"><span class="no">05</span><h2>检测与持久化底座</h2></div>
+
+  <h3>state 顶层键 <span class="mono">field_snapshots</span></h3>
+  <pre>field_snapshots:
+  <span class="c"># &lt;hash&gt;: { 仅存被监听字段的当前值 }</span>
+  "abcdef1234": { "tags": ["R", "HR"], "category": "pass" }</pre>
+  <ul class="plain">
+    <li><b>按需写入</b>——监听字段集合 = 所有 <span class="mono">on_torrent_field_changed</span> 规则的 <span class="mono">watch_fields</span> 并集，从配置推导；没有任何此类规则时不建快照、零写入开销。</li>
+    <li><b>更新点</b>——<span class="mono">_refresh_torrents</span> 轮末，与 <span class="mono">update_state_snapshot</span> 并列（<span class="path">qbmanager.py:811-812</span>，该处注释已写明此位置承担「上一轮快照对比」职责）。</li>
+    <li><b>落盘复用</b>——走既有 <span class="mono">_maybe_flush_state</span> 周期落盘 + 退出兜底（<span class="path">rule_engine.py:198-214</span>、<span class="path">qbmanager.py:457/500</span>），单写线程假设不破坏（黄金法则 5）。</li>
+    <li><b>版本迁移</b>——<span class="path">infra/versioning.py</span> schema_version 2→3：v2→v3 仅补 <span class="mono">field_snapshots: {}</span> 空表（比照 v1→v2 的最小迁移风格 :34-40）。</li>
+  </ul>
+
+  <h3>全量 refresh 降级路径（老 qB）</h3>
+  <p>旧版 qB 走 <span class="mono">torrents_info</span> 全量 <span class="mono">refresh</span>（<span class="path">store.py:133-143</span>），没有 rid 增量语义。设计约束：全量路径下同样「与持久化快照对比出净变化」，<b>禁止按「全变」处理</b>（否则每次全量刷新都是事件风暴）。delta 语义在 M1 实施时以测试钉住。</p>
+
+  <h3>为什么维护迁移（B）不依赖持久化快照</h3>
+  <p class="dim">on_change 模式运行期消费当轮 <span class="mono">delta_fields</span>；停机 / 重启场景走添加路径全量收敛一次（<span class="path">qbmanager.py:785</span> 现有行为），天然幂等。持久化快照只为事件规则（A）服务。</p>
+</section>
+
+<!-- ══════════ 06 ══════════ -->
+<section id="s06">
+  <div class="sec-head"><span class="no">06</span><h2>配置校验与守卫（fail-fast 清单）</h2></div>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>文件</th><th>改动</th></tr>
+    <tr><td class="path">config/schema/fields.py:143</td><td><span class="mono">TRIGGERS</span> 增补 <span class="mono">on_torrent_field_changed</span>；新增 <span class="mono">FIELD_WATCH_ALLOWED</span> 常量</td></tr>
+    <tr><td class="path">config/validation/rules.py</td><td><span class="mono">TRIGGER_VALUES</span> 同步（:20）；<span class="mono">RULE_KNOWN_KEYS</span> 增 <span class="mono">watch_fields</span>（:11-13）；新增校验：仅该 trigger 允许此键 / 非空 / 值在白名单</td></tr>
+    <tr><td class="path">config/schema/rules.py</td><td><span class="mono">RULE_FIELDS</span> 增 <span class="mono">watch_fields</span>（UI 元数据同源）</td></tr>
+    <tr><td class="path">rules/base.py:139-146</td><td>解析 <span class="mono">watch_fields</span>（合法性信任 config 校验，沿用「此处不自查」惯例）</td></tr>
+    <tr><td class="path">core/mixins/rule_engine.py</td><td><span class="mono">_dispatch_events</span> 增 field-change 分支（与 state_changed 分支 :322-333 同构）+ self-caused 集合过滤</td></tr>
+    <tr><td class="path">torrents/store.py</td><td><span class="mono">field_snapshots</span> 读写 / 监听字段推导 / <span class="mono">update_torrent_fields</span> 登记 self-caused</td></tr>
+    <tr><td class="path">infra/versioning.py</td><td>schema_version 3 + v2→v3 迁移</td></tr>
+    <tr><td class="path">config/models.py · loaders.py · validation/core.py · schema/groups.py · impact.py</td><td>顶层键 <span class="mono">maintenance_tag_mode</span> 五件套（KNOWN_CONFIG_KEYS / 加载 / 校验取值 / GROUPS / 热重载级别——未列入 SECTION_LEVELS 默认 L2 保守重建，可接受）</td></tr>
+  </table>
+  </div>
+  <p><b>守卫测试自动覆盖</b>：<span class="path">tests/test_config_schema.py</span> 的 <span class="mono">test_rule_fields_cover_rule_known_keys</span>（:120）、<span class="mono">test_top_level_keys_match_validation</span>（:67）、<span class="mono">test_schema_payload_is_complete</span>——新键漏改任意一处即红。</p>
+  <p><b>WEB UI</b>：trigger 下拉读 <span class="mono">constants.triggers</span>（<span class="path">webui/static/shared/config_rules.js:229</span>），<span class="mono">watch_fields</span> 输入由 RULE_FIELDS 渲染驱动——两者均为自动获得，计划内只做回归验证，不新写编辑器。</p>
+</section>
+
+<!-- ══════════ 07 ══════════ -->
+<section id="s07">
+  <div class="sec-head"><span class="no">07</span><h2>维护任务迁移（maintenance_tag_mode）</h2></div>
+
+  <h3>行为矩阵</h3>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>maintenance 组成</th><th>interval（默认 = 现状）</th><th>on_change</th></tr>
+    <tr><td>站点 tags 部分（<span class="mono">_add_tags</span> / <span class="mono">_remove_tags</span> / <span class="mono">_remove_similar_tags</span>）</td><td>每 interval 执行</td><td>添加路径立即执行一次（现状 <span class="path">qbmanager.py:785</span> 不变）＋ 仅当该种子当轮 tags 发生<b>外部</b>变化时重检；无变化跳过</td></tr>
+    <tr><td>HR 部分（<span class="mono">_add_hr_tag_or_category</span>）</td><td>每 interval 执行</td><td><b>不变</b>，仍每 interval 执行——HR 达标状态随时间演化，tags 变化捕捉不到，迁移会产生漏判</td></tr>
+    <tr><td>tracker 配置变更</td><td colspan="2">热重载全量重建 → 首轮全量收敛，两个模式行为一致，无需特判</td></tr>
+  </table>
+  </div>
+
+  <h3>为什么只能「部分」迁移</h3>
+  <ul class="plain">
+    <li>tags 部分是「tracker 配置 → 种子 tags」的幂等收敛：输入只有 tracker 配置与种子当前 tags，两者都没变时重跑输出不变，纯属浪费——这是可迁移的判据。</li>
+    <li>HR 部分的输入是种子做种时间 / 分享率等随时间流逝的状态，与 tags 是否变化无关——保留周期节奏。</li>
+    <li>省下的是每轮每种子一次 qB API 读写往返（<span class="mono">add_tags</span> 虽幂等跳过已有 tag，但读取与请求本身有成本），种子量大时收益显著。</li>
+  </ul>
+
+  <div class="note red">
+    <span class="tag">红线</span>
+    <p>生产 <span class="mono">config.yml</span> 由用户自行决定是否设置 <span class="mono">maintenance_tag_mode: on_change</span>，AI 不改动该文件（<span class="path">pitfalls/ops/prod-files.md</span>）。默认值 interval 保证升级后行为零变化（黄金法则 2 · 保守默认）。</p>
+  </div>
+</section>
+
+<!-- ══════════ 08 ══════════ -->
+<section id="s08">
+  <div class="sec-head"><span class="no">08</span><h2>测试计划</h2></div>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>文件</th><th>用例</th></tr>
+    <tr><td class="path">tests/test_trigger_events.py</td><td>① tags 外部变化 → 触发一次；② 首见种子只记基线不触发；③ 程序自写 add_tags 不自触发（self-caused 抑制）；④ category 变化触发 / 未监听字段变化不触发；⑤ 重启（重建 manager、state 保留）后无风暴且停机期变化补捕；⑥ cooldown 生效</td></tr>
+    <tr><td class="path">tests/test_config_schema.py</td><td>守卫自动覆盖新键；补 <span class="mono">watch_fields</span> 校验用例（错 trigger 下出现 / 空值 / 白名单外值 → 报错）</td></tr>
+    <tr><td class="path">versioning 测试（对齐 v1→v2 既有用例位置）</td><td>v2 state 迁移后含空 <span class="mono">field_snapshots</span>；v3 读写回环</td></tr>
+    <tr><td class="path">store 全量 refresh 降级路径</td><td>全量刷新 + 持久化快照 → 净变化判定正确（非「全变」）</td></tr>
+  </table>
+  </div>
+  <ul class="plain">
+    <li>新增测试同步所在文件头部 docstring 的「## 测试计划」清单（AGENTS.md 硬约束）。</li>
+    <li>收尾跑 <span class="mono">commands run test.full</span>，实测数字记入 <span class="path">testing/baselines/</span> 新基线切片。</li>
+  </ul>
+</section>
+
+<!-- ══════════ 09 ══════════ -->
+<section id="s09">
+  <div class="sec-head"><span class="no">09</span><h2>实施顺序与验收</h2></div>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>里程碑</th><th>范围</th><th>可独立交付</th></tr>
+    <tr><td><b>M1</b> 快照底座</td><td>store 层 <span class="mono">field_snapshots</span> + 监听字段推导 + state v3 迁移 + 全量降级路径核对（§05 两处核对点在此收口）</td><td>是——纯底座，无行为变化</td></tr>
+    <tr><td><b>M2</b> 事件链路</td><td>base.py 解析 / <span class="mono">_dispatch_events</span> 分派 / self-caused 抑制 / validation + schema + 守卫 / §08 前四项测试</td><td>是——新 trigger 完整可用</td></tr>
+    <tr><td><b>M3</b> 文档回写</td><td><span class="path">memory-bank/config-reference/keys.md</span> 增 <span class="mono">watch_fields</span>、<span class="mono">maintenance_tag_mode</span>、trigger 取值域；test.full 基线切片</td><td>是</td></tr>
+    <tr><td><b>M4</b> 维护迁移</td><td><span class="mono">maintenance_tag_mode</span> 五件套 + maintenance 分支行为 + 行为矩阵对应用例</td><td>是——独立开关，默认关</td></tr>
+  </table>
+  </div>
+
+  <h3>验收标准</h3>
+  <ul class="check">
+    <li>外部（人工 / 其它工具）改动种子 tags → 下一轮 sync 内 <span class="mono">on_torrent_field_changed</span> 规则触发且仅触发一次。</li>
+    <li>程序自身 add_tags / set_category → 不自触发（无自喂环）。</li>
+    <li>重启后无事件风暴；停机期间发生的外部变化在重启后首轮补捕（受 cooldown 约束）。</li>
+    <li>state v2 存量文件升级后正常加载，首轮全部按首见处理。</li>
+    <li><span class="mono">maintenance_tag_mode: on_change</span> 时站点 tags 维护只在添加 + tags 外部变化时执行，HR 部分节奏不变；默认 interval 行为与现状逐字节等价。</li>
+    <li>守卫测试覆盖全部新键；<span class="mono">test.full</span> 通过。</li>
+  </ul>
+</section>
+
+<!-- ══════════ 10 ══════════ -->
+<section id="s10">
+  <div class="sec-head"><span class="no">10</span><h2>风险与边界</h2></div>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>风险</th><th>应对</th></tr>
+    <tr><td>老 qB 全量 refresh 路径 delta 语义与增量不同</td><td>M1 以「全量 + 快照对比出净变化」为设计约束并用测试钉住（§05）</td></tr>
+    <tr><td>state.json 体积增长（数万种子 × tags 数组）</td><td>只存被监听字段；无监听规则零写入。M1 实施时用现网规模实测评估，过大再降级为存指纹（记录为核对点，默认存值——语义最直白）</td></tr>
+    <tr><td>self-caused 登记漏标 → 规则自喂环</td><td>抑制逻辑集中在 <span class="mono">update_torrent_fields</span> 单点；专项守卫测试（§08-③）钉住 add_tags 场景</td></tr>
+    <tr><td>同轮内外部变化与自写叠加不可区分</td><td>保守按自写跳过（宁漏勿环）；漏掉的变化待下次变化自然补捕，写入 keys.md 语义说明</td></tr>
+    <tr><td>tags 顺序 / 大小写噪声</td><td>排序后比较（qB API 返回顺序不保证）</td></tr>
+  </table>
+  </div>
+
+  <h3>明确不做（本期 scope 外）</h3>
+  <ul class="plain">
+    <li>webhook / qB 实时推送——qB Web API 无此能力，sync 增量轮询已够。</li>
+    <li>监听白名单扩展到 state（已有专属 trigger）、<span class="mono">amount_left</span>（高频噪音）。</li>
+    <li>旧值 / 变更字段暴露给 conditions / <span class="mono">expr</span>——按需后补，v1 不加新条件插件。</li>
+    <li>WEB UI 新编辑器——RULE_FIELDS / constants 驱动自动呈现，仅回归。</li>
+    <li>改动生产 <span class="mono">config.yml</span>——红线。</li>
+  </ul>
+</section>
+
+</main>
+</div>
+
+<footer class="colophon">
+  <span>26-09-27-1438 · plan · field-changed-trigger</span>
+  <span>status: Done · 已实施(2026-09-27)</span>
+  <span>实施摘要: M1-M4 全部落地, state v2→v3, self-caused 改值匹配口径; 基线 26-09-27-1723(1741+1, TOTAL 91%)</span>
+</footer>
+
+</div>
+</body>
+</html>

@@ -18,6 +18,7 @@
 | `schema_version` | `1` | 配置文件格式版本标记(升级链, 计划 26-09-26-0506): **文件格式标记, 非行为配置** —— 不进 `Config` dataclass; 加载时缺失=v1, 落后则沿链迁移(运行期不写回, 下次 WebUI 保存时由 writer 盖章), 高于程序支持报 ConfigError; WebUI 保存/`--export-yaml` 自动盖章, 用户手编无需写 |
 | `log` | | `{file, level, max_bytes, format}`; `file` 未配置时默认 `<data_dir>/logs/auto-qb.log` 落盘 (显式配置优先; 留空/空串=未配置=默认落盘, 无法用空串表达仅控制台); RotatingFileHandler 5 备份 |
 | `remove_similar_tags` | false | 全局默认, 站点可覆盖 |
+| `maintenance_tag_mode` | `"interval"` | **维护 tags 节奏** (计划 26-09-27-1438): 站点 tags 维护(`_add_tags`/`_remove_tags`/`_remove_similar_tags`)的执行时机。`interval` = 每个内置任务间隔执行(默认 = 迁移前行为); `on_change` = 种子添加时执行一次, 之后仅当该种子 tags 被**程序之外**改动时重检(登记消费一次; 热重载 L2 后首轮全量收敛), 无变化轮跳过 —— 每轮每种子省一次 qB 读写往返。HR 标签/分类部分**不受影响**, 恒按周期执行(达标状态随时间演化, tags 变化捕捉不到)。取值限 `interval\|on_change`; 未列入 SECTION_LEVELS → L2 保守重建 |
 | `add_episode_tags` | `{enabled: false, add_tag_single: "zE${episode_first}", add_tag_multi: "zE${episode_first}-${episode_last}"}` | 种子添加时加集数标签; `enabled` 总开关; `add_tag_single`/`add_tag_multi` 模板, 含 `${episode_first}`/`${episode_last}` 占位, 多集仅在集数连续时生成 |
 | `web` | 默认关闭 | `{enabled: bool, host: "127.0.0.1", port: 8080, token: "", skip_local_verify: false}`; WEB UI(辅种管理): 分组视图/组控制/**图形化配置编辑(每项可增删改 + 只读 YAML 预览)**; token 留空 = 首启随机生成持久化到 data_dir/web.token; host 默认仅本机(对外暴露需自行评估安全); `skip_local_verify=true` 时本机(loopback)访问 /api/* 免密钥鉴权直接进入, 对外暴露仍强制 |
 | `notify` | 默认关闭 | `{enabled: bool, min_level: "ERROR", quiet_hours: "", max_per_hour: 20, dedup_window: "10M", channels: [platform]}`; 主动通知(ERROR 及以上日志 -> 平台原生通知, 零依赖; 26-09-27 等级整改后默认只推真正危险, WARNING 仅排障, 想看排障消息手动调低); quiet_hours "HH:MM-HH:MM" 支持跨午夜, 时段内跳过发送(含 ERROR); channels v1 仅 platform(缺省即启用); 节流为内存态不进 state_file |
@@ -82,7 +83,9 @@ global_speed_limit_curve:
 
 ## 规则集段 (`*_rules`)
 
-见 [rule-system.md](../rule-system.md)。规则级键: `enabled`/`interval`/`trigger`/`execute_once`/`cooldown`/`conditions`/`actions`/`stop_following_rules_if`。`trigger` 默认 `interval` (周期轮询), 事件 trigger 见 04 触发时机表与 09 规划。
+见 [rule-system.md](../rule-system.md)。规则级键: `enabled`/`interval`/`trigger`/`watch_fields`/`execute_once`/`cooldown`/`conditions`/`actions`/`stop_following_rules_if`。`trigger` 默认 `interval` (周期轮询), 事件 trigger 见 04 触发时机表与 09 规划。
+
+**`trigger: on_torrent_field_changed` (第五种触发时机, 计划 26-09-27-1438)**: 指定字段变化时才检查该规则, 替代"interval 轮询 + 条件判断"。配套键 `watch_fields`(必填, 仅该 trigger 下允许, 校验期 fail-fast): 非空列表, v1 取值限 `tags`/`category`(state 有专属 trigger, `amount_left` 高频噪音)。语义: 外部(人工/其它工具)改动种子 tags/category → 下一轮 sync 内触发且仅触发一次(与持久化基线对比出净变化, tags 排序后比较消除 qB 顺序噪声); 程序自身 add_tags/remove_tags/set_category **不自触发**(self-caused 抑制, 单点在 store.update_torrent_fields: 上报值与自写期望一致才按自写处理); 首见种子只落基线不触发; 重启后停机期变化首轮补捕(受 cooldown 约束); `cooldown`/`execute_once` 复用 exec_history 机制。跨轮基线持久化于 state 顶层 `field_snapshots`(state v2→v3, 仅存被监听字段; 无监听规则时零写入)。已知取舍: 同轮内外部变化与自写叠加值不可区分时按值判定; 自写后值被覆盖的场景按外部变化放行。
 
 ## 变量与匹配语法速查
 
@@ -96,7 +99,7 @@ global_speed_limit_curve:
 
 | 文件 | 性质 |
 |------|------|
-| `auto-qb-data/state.json` | ★ 生产状态 (gitignore, 位于数据目录 auto-qb-data/)。实测结构: 顶层 `schema_version`(升级链版本章, 当前 v2; 缺失=v1 存量口径由迁移链升级, 计划 26-09-26-0506); `exec_history = {"{rule}:{hash}": {ts, date, hour}}`; `auto_categories = {hash: category}`; `speed_limit_curve = {"YYYY-MM-DD": {upload_kib, download_kib, dry_run}}`; `skip_check_backup = {hash: {path, save_path, category, tags, ts}}` (跳检删除前备份的元数据, 重加成功后移除); `reannounce_ts = {hash: 上次reannounce时间戳}`; `recheck_fails = {hash: {date, count}}`(当日连续校验失败); `skip_check_day = {hash: "YYYY-MM-DD"}`(跨规则同日跳检去重)。历史键 `upload_snapshots` 已在 v2 迁移清除(计划 26-09-27-1232) |
+| `auto-qb-data/state.json` | ★ 生产状态 (gitignore, 位于数据目录 auto-qb-data/)。实测结构: 顶层 `schema_version`(升级链版本章, 当前 v3; 缺失=v1 存量口径由迁移链升级, 计划 26-09-26-0506); `exec_history = {"{rule}:{hash}": {ts, date, hour}}`; `auto_categories = {hash: category}`; `speed_limit_curve = {"YYYY-MM-DD": {upload_kib, download_kib, dry_run}}`; `skip_check_backup = {hash: {path, save_path, category, tags, ts}}` (跳检删除前备份的元数据, 重加成功后移除); `reannounce_ts = {hash: 上次reannounce时间戳}`; `recheck_fails = {hash: {date, count}}`(当日连续校验失败); `skip_check_day = {hash: "YYYY-MM-DD"}`(跨规则同日跳检去重); `field_snapshots = {hash: {tags: [排序后], category}}`(字段变化触发的跨轮基线, 计划 26-09-27-1438, 仅存被监听字段; 无监听规则时恒空表零写入)。历史键 `upload_snapshots` 已在 v2 迁移清除(计划 26-09-27-1232), v2→v3 补空 `field_snapshots` |
 | `auto-qb-data/state.lock` / `state.lock.meta.json` | 单实例锁及伴生 meta (由 state_file 派生: 去扩展名 + `.lock`, meta 再加 `.meta.json`) |
 | `auto-qb-data/logs/auto-qb.log` | RotatingFileHandler, maxBytes 按 `log.max_bytes`, 5 备份 (log.file 未配置时默认落盘此路径, 显式配 `log.file` 优先; setup_logging 自动建 logs/ 子目录) |
 | `auto-qb-data/skip-check-backup/` | 跳检**删除前**落盘的 .torrent 备份 (由 dirname(state_file) 派生, 与状态同目录); 重加确认成功后由 `_clear_backup` 删除, 只有重加失败 / 缝隙内崩溃才会留下 |

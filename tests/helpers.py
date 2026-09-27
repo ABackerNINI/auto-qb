@@ -826,6 +826,7 @@ class FakeConfig:
     rules_config = {}  # 规则集原始配置(由 make_manager 设置)
     check_missing_files = False
     remove_similar_tags = False
+    maintenance_tag_mode = "interval"  # 维护 tags 节奏(计划 26-09-27-1438): interval = 现状; 测试按需改 on_change
     add_episode_tags = AddEpisodeTagsConfig()  # 默认 disabled; 测试按需赋值 AddEpisodeTagsConfig(enabled=True, ...)
     hr = HRRule()  # 全局 HR 默认输出设置
     skip_checking_tag = "zSkipChecked"  # 跳检成功标签默认名(与 Config 默认一致; 测试按需赋值, ""=禁用)

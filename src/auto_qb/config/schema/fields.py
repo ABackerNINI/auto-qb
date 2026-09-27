@@ -140,7 +140,19 @@ EXECUTE_ONCE = ("never", "once", "daily", "hourly")
 
 STOP_IF = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
 
-TRIGGERS = ("interval", "on_torrent_added", "on_torrent_deleted", "on_torrent_state_enum_changed")
+TRIGGERS = (
+    "interval",
+    "on_torrent_added",
+    "on_torrent_deleted",
+    "on_torrent_state_enum_changed",
+    "on_torrent_field_changed",
+)
+
+# on_torrent_field_changed 可监听字段(与 validation.FIELD_WATCH_ALLOWED 一致)
+FIELD_WATCH_ALLOWED = ("tags", "category")
+
+# maintenance_tag_mode 取值(维护任务站点 tags 部分的执行节奏, 计划 26-09-27-1438 D5)
+MAINTENANCE_TAG_MODES = ("interval", "on_change")
 
 CHECKING_BASIC = ("filelist", "piecehashes", "custom")
 

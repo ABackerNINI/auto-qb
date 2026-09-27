@@ -25,6 +25,7 @@
 | `on_torrent_added` | ✅ 已实现 | 事件触发 (一次性, 非周期); 新增种子匹配 tracker 后即时分派, 遇 checking 断点续跑 |
 | `on_torrent_state_enum_changed` | ✅ 已实现 | 事件触发; 对比上一轮 `state_snapshot` 与当前状态枚举, 变化的种子触发 (名字与 `TorrentState` 枚举对齐) |
 | `on_torrent_deleted` | ✅ 已实现 | 事件触发; 种子删除后无活现场, 仅 `print_torrent_details` 只读留档动作可用 (白名单拒绝需活种子的动作) |
+| `on_torrent_field_changed` | ✅ 已实现 | 事件触发 (计划 26-09-27-1438); 指定字段 (配套键 `watch_fields`, v1: tags/category) 发生**净变化**时触发: qB 增量 ∩ 监听字段后与持久化基线 (`state.field_snapshots`, state v3) 对比; 首见只落基线, 程序自写不自触发 (self-caused 值匹配抑制, 单点 store.update_torrent_fields), 重启停机期变化首轮补捕, cooldown/execute_once 复用 exec_history。全量 refresh 降级路径同判据(与基线对比, 非"全变") |
 
 `Rule.trigger` 从 `spec.get("trigger", "interval")` 解析 (base.py), 取值合法性由 config 校验保证 (见 05)。事件 trigger 的规则**不建周期任务** (`_create_rule_task` 返回 None): 由 `_refresh_torrents` 分派点即时执行 (同步), 遇 checking 时内部建 rule-event origin → 轮询子任务 → 断点续跑 (设计细节见 progress.md 事件触发规划)。
 

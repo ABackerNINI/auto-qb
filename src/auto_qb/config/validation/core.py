@@ -30,7 +30,12 @@ KNOWN_CONFIG_KEYS = {
     "hr_check",
     "trackers",
     "global_speed_limit_curve",
+    "maintenance_tag_mode",
 }
+
+# maintenance_tag_mode 取值域(与 schema.MAINTENANCE_TAG_MODES 一致): interval = 现状(默认),
+# on_change = 站点 tags 维护改为"添加时 + tags 外部变化时"(计划 26-09-27-1438 D5)
+MAINTENANCE_TAG_MODES = ("interval", "on_change")
 
 
 def _strip_none(value):
@@ -220,6 +225,13 @@ def validate_config(data) -> List[str]:
             errors.append("config.schema_version: 须 >= 1")
     if "remove_similar_tags" in cfg:
         _try(parse_bool, cfg["remove_similar_tags"], "config.remove_similar_tags", errors)
+    if "maintenance_tag_mode" in cfg:
+        mode = str(cfg["maintenance_tag_mode"]).strip().lower()
+        if mode not in MAINTENANCE_TAG_MODES:
+            errors.append(
+                f"config.maintenance_tag_mode: 取值非法: '{cfg['maintenance_tag_mode']}', "
+                f"可选: {'/'.join(MAINTENANCE_TAG_MODES)}"
+            )
     if "add_episode_tags" in cfg:
         _validate_add_episode_tags(cfg["add_episode_tags"], errors)
 

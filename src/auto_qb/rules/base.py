@@ -138,8 +138,12 @@ class Rule:
         self.manager = manager
         self.enabled = utils.parse_bool(spec.get("enabled", True))
         # 触发时机: interval(默认, 周期轮询) / on_torrent_added / on_torrent_deleted /
-        # on_torrent_state_enum_changed(事件触发, 一次性分派)。取值合法性由 config 校验保证, 此处不自查。
+        # on_torrent_state_enum_changed / on_torrent_field_changed(事件触发, 一次性分派)。
+        # 取值合法性由 config 校验保证, 此处不自查。
         self.trigger = str(spec.get("trigger", "interval"))
+        # 监听字段(on_torrent_field_changed 专用; 出现在其它 trigger 下 config 校验已拒绝):
+        # 非空字符串元组, 取值域 FIELD_WATCH_ALLOWED(v1: tags / category), 合法性同样信任校验。
+        self.watch_fields = tuple(str(f).strip() for f in (spec.get("watch_fields") or []) if str(f).strip())
         self.interval = utils.parse_time(str(spec.get("interval", "0S")))  # 规则扫描间隔, 0 = 每轮
         self.execute_once = str(spec.get("execute_once", "never"))
         self.cooldown = utils.parse_time(str(spec.get("cooldown", "0S")))

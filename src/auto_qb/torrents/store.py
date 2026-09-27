@@ -59,6 +59,23 @@ class TorrentStore:
         # 本轮变化集
         self.delta_fields: Dict[str, FrozenSet[str]] = {}
         self.state_changed: List[Tuple[str, Any]] = []
+        # 字段变化检测(计划 26-09-27-1438):
+        # watch_fields:   监听字段并集(规则 watch_fields ∪ maintenance on_change 的 tags), 空 = 检测关闭
+        # field_snapshots: 跨轮基线 {hash: {字段: 值}}, 持久化于 state.field_snapshots ——
+        #                  update_field_snapshots **原地更新**(与 state 是同一对象, 原地改即落盘内容);
+        #                  绑定点在 RuleEngineMixin._bind_field_snapshots
+        # field_changed:  本轮净变化 [(hash, 变化字段集)](qB 增量 ∩ 监听字段后与基线对比确认;
+        #                  首见/无基线/自写抑制的不进), 事件分派(_dispatch_events)按轮消费
+        # external_tag_changes: tags 外部变化待重检登记(maintenance on_change 模式消费)
+        # self_caused_fields: 本程序自身写后的待确认登记 {hash: {field: 期望值(归一化)}} ——
+        # qB 增量报告该字段且**上报值与期望一致**时按自写处理(不触发/不打重检标记)并消费登记,
+        # 防自喂环; 上报值不一致 = 写入后被外部覆盖, 按外部变化放行(计划 §04 细则 5 的保守口径
+        # 仅用于"值无法区分"的场景, 值可比对时以值为准, 避免吞掉同字段的后续外部变化)
+        self.watch_fields: FrozenSet[str] = frozenset()
+        self.field_snapshots: Dict[str, Dict[str, Any]] = {}
+        self.field_changed: List[Tuple[str, FrozenSet[str]]] = []
+        self.external_tag_changes: Set[str] = set()
+        self.self_caused_fields: Dict[str, Dict[str, Any]] = {}
         # 需重算下载冲突的组 key: 变化字段/成员增删/归组/自有停种打标时登记,
         # 由 GroupingMixin._check_download_conflicts 取出并复位(跨轮累积, 不随 _apply 清空)
         self.dirty_groups: Set[Any] = set()
@@ -168,6 +185,7 @@ class TorrentStore:
         if not full and not patches and not removed and not pending:
             self.delta_fields = {}
             self.state_changed = []
+            self.field_changed = []
             return [], []
         prev = self.by_hash
         by_hash = {} if full else dict(prev)  # 全量重建 / 增量: C 级浅拷贝, 未变化记录原样保留
@@ -176,6 +194,7 @@ class TorrentStore:
         view_changed = False
         delta_fields: Dict[str, FrozenSet[str]] = {}
         state_changed: List[Tuple[str, Any]] = []
+        field_changed: List[Tuple[str, FrozenSet[str]]] = []
         member_to_key = self.member_to_key
         hr_link = self.hr_link
         for h, src in patches.items():
@@ -183,6 +202,12 @@ class TorrentStore:
             if rec is None:
                 rec = TorrentRecord.from_torrent(src, hash=h)
                 added.append(h)
+                # 新增种子也过登记点: 有持久化基线(重启场景)时与基线对比 -> 停机期的外部变化
+                # 在重启后首轮补捕(计划 §04 细则 4); 无基线(真首见/升级首启)只落基线不触发。
+                # changed 传监听字段全集 ∪ tags: 与基线的差集才是真实变化, 不是"全变"。
+                net = self._register_field_changes(h, rec, self.watch_fields | {"tags"})
+                if net:
+                    field_changed.append((h, net))
             else:
                 changed = rec.apply_delta(src)
                 if changed:
@@ -195,6 +220,9 @@ class TorrentStore:
                         key = member_to_key.get(h)
                         if key is not None:
                             self.dirty_groups.add(key)
+                    net = self._register_field_changes(h, rec, changed)
+                    if net:
+                        field_changed.append((h, net))
             if hr_link is not None and rec.hr_link is not hr_link:
                 rec.hr_link = hr_link  # 只在需要时赋值: 反复过磅的静止种子不做无谓写
             by_hash[h] = rec
@@ -214,9 +242,13 @@ class TorrentStore:
             key = member_to_key.get(h)
             if key is not None:
                 self.dirty_groups.add(key)
+            # 已删种子的字段变化残留登记一并清掉(重加的同 hash 由后续轮重新检测)
+            self.external_tag_changes.discard(h)
+            self.self_caused_fields.pop(h, None)
         self.by_hash = by_hash
         self.delta_fields = delta_fields
         self.state_changed = state_changed
+        self.field_changed = field_changed
         if view_changed or added or changes:
             self.view_changed = True
         return added, changes
@@ -249,6 +281,86 @@ class TorrentStore:
         经 QbApi 同步过的状态同样计入, 故下轮不会被误判为外部状态变化。
         """
         self.state_snapshot = {h: r.state_enum for h, r in self.by_hash.items()}
+
+    def update_field_snapshots(self) -> None:
+        """轮末刷新字段变化基线(与 update_state_snapshot 并列, 仅主循环线程调用)
+
+        只存监听字段的当前值: 监听集合为空时清空基线(无规则监听 -> 零持久化开销);
+        已删种子的基线一并清掉。❗原地更新 —— field_snapshots 与 state["field_snapshots"]
+        是同一对象(见 _bind_field_snapshots), 原地改即等于改落盘内容; 不得整体换引用。
+        """
+        watch = self.watch_fields
+        if not watch:
+            if self.field_snapshots:
+                self.field_snapshots.clear()
+            return
+        snap = self.field_snapshots
+        for h in [h for h in snap if h not in self.by_hash]:
+            del snap[h]
+        for h, rec in self.by_hash.items():
+            snap[h] = {f: self._watch_value(rec, f) for f in watch}
+
+    # ---------- 字段变化检测(计划 26-09-27-1438) ----------
+
+    @staticmethod
+    def _watch_value(rec: Any, field: str) -> Any:
+        """监听字段的归一化当前值(基线与实时对比共用同一口径)
+
+        tags 排序后比较(qB API 返回顺序不保证, 顺序噪声不触发); category 原样(空即 "")。
+        """
+        if field == "tags":
+            return sorted(rec.tags_set)
+        return rec.category or ""
+
+    def set_watch_fields(self, fields) -> None:
+        """注入监听字段并集(由 _load_rules 从规则 watch_fields ∪ maintenance on_change 推导)
+
+        空 = 检测关闭: 不建基线、零对比开销(黄金法则: 无消费不付费)。
+        """
+        self.watch_fields = frozenset(f for f in fields if f)
+
+    def _register_field_changes(self, h: str, rec: Any, changed: FrozenSet[str]) -> FrozenSet[str]:
+        """qB 增量报告字段变化后的登记点(新增种子也走这里: 有持久化基线时补捕停机期变化)
+
+        返回与持久化基线对比后的**净变化**监听字段集(空 = 无事件候选); 入队 field_changed
+        由 _apply 统一完成。
+        1. 自写确认消费: 报告字段若在本程序自身写后登记过(self_caused_fields)且**上报值与
+           登记的期望值一致** -> 按自写处理(不打外部重检标记、不进事件候选)并消费登记;
+           上报值不一致 = 写入后被外部覆盖 -> 按外部变化放行。登记一律在报告时消费, 不残留。
+           (计划 §04 细则 5 的"同轮叠加保守按自写"仅适用于值无法区分的场景; 值可比对时以
+           值为准, 避免吞掉同字段的后续外部变化。)
+        2. tags 外部变化 -> external_tag_changes 登记(maintenance on_change 重检依据)。
+        3. 监听字段 ∩ 变化 -> 与持久化基线对比出**净变化**
+          (全量 refresh 降级路径同此判据: 与快照对比, 禁止按"全变"处理 —— 计划 §05)。
+        """
+        caused = self.self_caused_fields.get(h)
+        confirmed: Set[str] = set()
+        if caused:
+            for f in changed:
+                if f not in caused:
+                    continue
+                if self._watch_value(rec, f) == caused[f]:
+                    confirmed.add(f)  # 上报值与自写期望一致: 按自写处理
+                del caused[f]  # 登记已被报告消费(无论结论)
+            if not caused:
+                del self.self_caused_fields[h]
+        if "tags" in changed and "tags" not in confirmed:
+            # 仅当基线已存在才登记(真首见走添加路径强制维护, 无需标记; 重启全量轮基线在,
+            # 停机期/未知状态统一按待重检处理 -> 首轮全量收敛)
+            if self.field_snapshots.get(h) is not None:
+                self.external_tag_changes.add(h)
+        watch = self.watch_fields & changed
+        if not watch:
+            return frozenset()
+        snap = self.field_snapshots.get(h)
+        if snap is None:
+            return frozenset()  # 首见/无基线: 只待 update_field_snapshots 落基线, 不触发(对齐 state 先例)
+        net = {
+            f
+            for f in watch if f in snap and self._watch_value(rec, f) != snap[f]  # f 不在 snap = 新增监听字段, 无基线不触发
+        }
+        net -= confirmed
+        return frozenset(net)
 
     # ---------- 分组查询接口 ----------
 
@@ -313,6 +425,9 @@ class TorrentStore:
         self.invalidate_tags()
         self.invalidate_categories()
         self.view_changed = True  # 分组索引已清空, 视图必须重建
+        # 热重载全量重建: tracker 配置可能已变 -> 全部种子登记 tags 待重检
+        # (maintenance on_change 模式据此实现"首轮全量收敛", 两个模式行为一致 —— 计划 §07)
+        self.external_tag_changes |= set(self.by_hash)
         for rec in self.by_hash.values():
             rec.tracker_conf = None
 
@@ -333,6 +448,9 @@ class TorrentStore:
         由 QbApi Facade调用: 调用客户端 API 后立即更新内存快照, 保证同 tick 内
         后续读取(如 tag_usage / 分类判断 / 限速幂等)读到最新值; 下轮 refresh 校准。
         tags_add/tags_remove 合并式更新并失效 _tags_set, state 变化失效 _state_enum。
+        tags/category 的**实际变化**同步登记 self_caused_fields(计划 26-09-27-1438):
+        下轮 qB 增量报告同字段变化时保守按自写处理 —— 事件不自触发、maintenance on_change
+        不打重检标记(防自喂环, 单点收口在本方法)。
         """
         hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])
         tags_changed = tags_add is not None or tags_remove is not None
@@ -352,14 +470,22 @@ class TorrentStore:
                     self.dirty_groups.add(key)
             if tags_add is not None:
                 current = set(torrent.tags_set)
-                current.update(tags_add)
-                torrent.tags = ",".join(sorted(current))
+                merged = current | set(tags_add)
+                if merged != current:  # 幂等写不加标签: 不登记自写(qB 也不会报告变化, 登记必成残留)
+                    torrent.tags = ",".join(sorted(merged))
+                    torrent._tags_set = None
+                    self.self_caused_fields.setdefault(h, {})["tags"] = sorted(torrent.tags_set)
             if tags_remove is not None:
                 current = set(torrent.tags_set)
-                current.difference_update(tags_remove)
-                torrent.tags = ",".join(sorted(current))
+                remain = current - set(tags_remove)
+                if remain != current:
+                    torrent.tags = ",".join(sorted(remain))
+                    torrent._tags_set = None
+                    self.self_caused_fields.setdefault(h, {})["tags"] = sorted(torrent.tags_set)
             if category is not None:
-                torrent.category = category
+                if torrent.category != category:  # 同值写不登记(同上)
+                    torrent.category = category
+                    self.self_caused_fields.setdefault(h, {})["category"] = category
             if state is not None:
                 torrent.state = state
             if up_limit is not None:
@@ -368,8 +494,6 @@ class TorrentStore:
                 torrent.dl_limit = dl_limit
             if save_path is not None:
                 torrent.save_path = save_path
-            if tags_changed:
-                torrent._tags_set = None
             if state_changed:
                 torrent._state_enum = None
 

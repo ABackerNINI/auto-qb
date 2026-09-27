@@ -13,7 +13,7 @@
 - 值格式复用 utils.parse_*(时间/大小/速度/布尔)单一事实来源
 - 规则集 spec 的条件/动作名称经 registry 延迟导入校验(避免模块循环依赖)
 """
-from .core import KNOWN_CONFIG_KEYS, _strip_none, validate_config
+from .core import KNOWN_CONFIG_KEYS, MAINTENANCE_TAG_MODES, _strip_none, validate_config
 from .curves import _validate_curve_points, _validate_global_speed_limit_curve
 from .rules import (
     CHECKING_ACTION_KNOWN_KEYS,
@@ -21,6 +21,7 @@ from .rules import (
     CHECKING_VALID_MODES,
     DELETED_TRIGGER_ALLOWED_ACTIONS,
     EXECUTE_ONCE_VALUES,
+    FIELD_WATCH_ALLOWED,
     RULE_KNOWN_KEYS,
     STOP_IF_VALUES,
     TRIGGER_VALUES,
@@ -68,6 +69,8 @@ __all__ = [
     "EXECUTE_ONCE_VALUES",
     "STOP_IF_VALUES",
     "TRIGGER_VALUES",
+    "FIELD_WATCH_ALLOWED",
+    "MAINTENANCE_TAG_MODES",
     "DELETED_TRIGGER_ALLOWED_ACTIONS",
     "CHECKING_ACTION_KNOWN_KEYS",
     "CHECKING_VALID_BASIC",

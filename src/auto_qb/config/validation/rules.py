@@ -7,17 +7,36 @@ from qbittorrentapi import TorrentState
 from ...infra.utils import parse_bool
 from .core import _check_regex_patterns, _check_unknown_keys, _try, _try_time
 
-# 规则 spec 已知键(trigger 仅支持 interval, 其余触发时机规划中)
+# 规则 spec 已知键(watch_fields 仅 on_torrent_field_changed 触发时机下允许)
 RULE_KNOWN_KEYS = {
-    "enabled", "trigger", "interval", "execute_once", "cooldown", "conditions", "actions", "stop_following_rules_if"
+    "enabled",
+    "trigger",
+    "interval",
+    "execute_once",
+    "cooldown",
+    "conditions",
+    "actions",
+    "stop_following_rules_if",
+    "watch_fields",
 }
 
 EXECUTE_ONCE_VALUES = ("never", "once", "daily", "hourly")
 
 STOP_IF_VALUES = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
 
-# 触发时机: interval 周期轮询 / on_torrent_added / on_torrent_deleted / on_torrent_state_enum_changed 事件触发
-TRIGGER_VALUES = ("interval", "on_torrent_added", "on_torrent_deleted", "on_torrent_state_enum_changed")
+# 触发时机: interval 周期轮询 / on_torrent_added / on_torrent_deleted / on_torrent_state_enum_changed /
+# on_torrent_field_changed(监听字段变化)事件触发
+TRIGGER_VALUES = (
+    "interval",
+    "on_torrent_added",
+    "on_torrent_deleted",
+    "on_torrent_state_enum_changed",
+    "on_torrent_field_changed",
+)
+
+# on_torrent_field_changed 可监听的字段白名单(v1): state 已有专属触发时机, amount_left 高频变化
+# 事件化即噪音, 均不入列(计划 26-09-27-1438 D2)
+FIELD_WATCH_ALLOWED = ("tags", "category")
 
 # on_torrent_deleted 允许的动作白名单: 删除后种子无活现场, 现存动作几乎都对已删种子无意义,
 # 仅允许"不依赖活现场"的只读/记录类动作(如 print_torrent_details)。未来通知/记录类动作加入此集合。
@@ -115,6 +134,8 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
                 )
             if "trigger" in spec and spec["trigger"] not in TRIGGER_VALUES:
                 errors.append(f"{where}: trigger 取值非法: '{spec['trigger']}', 可选: {'/'.join(TRIGGER_VALUES)}")
+            if "watch_fields" in spec:
+                _validate_watch_fields(spec, where, errors)
             conds = spec.get("conditions")
             if conds is not None:
                 if not isinstance(conds, list):
@@ -131,6 +152,23 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
                         _validate_plugin_entry(a, f"{where}.actions[{i}]", registry.ACTIONS, "动作", errors, gate)
             # 触发时机 × 动作兼容白名单: 某触发器下不适用动作在 config 阶段直接拒绝(见 04 规则系统)
             _validate_trigger_action_compat(spec, where, errors)
+
+
+def _validate_watch_fields(spec: dict, where: str, errors: List[str]) -> None:
+    """watch_fields 校验(fail-fast 清单, 计划 26-09-27-1438 §06):
+    仅 trigger: on_torrent_field_changed 下允许出现(其它 trigger 下出现即报错);
+    必须是非空列表且逐项落在 FIELD_WATCH_ALLOWED。"""
+    if str(spec.get("trigger", "interval")) != "on_torrent_field_changed":
+        errors.append(
+            f"{where}: watch_fields 仅在 trigger: on_torrent_field_changed 下允许配置"
+            f"(当前 trigger: '{spec.get('trigger', 'interval')}')"
+        )
+    wf = spec["watch_fields"]
+    if (
+        not isinstance(wf, list) or not wf or
+        not all(isinstance(x, str) and x.strip() and x.strip() in FIELD_WATCH_ALLOWED for x in wf)
+    ):
+        errors.append(f"{where}: watch_fields 必须是非空列表, 取值限: {'/'.join(FIELD_WATCH_ALLOWED)}")
 
 
 def _validate_state_condition_spec(value, where: str, errors: List[str]) -> None:

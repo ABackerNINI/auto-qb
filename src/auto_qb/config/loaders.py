@@ -511,6 +511,9 @@ def load_config(config_path: str) -> Config:
         logging=load_logging_config(_get(cfg, "log", {}), default_file=default_log_file),
         rules_config=rules_config,
         remove_similar_tags=global_remove_similar,
+        maintenance_tag_mode=_get(
+            cfg, "maintenance_tag_mode", d.maintenance_tag_mode, lambda v: str(v).strip().lower()
+        ),
         add_episode_tags=_get_episode_tags(_get(cfg, "add_episode_tags", d.add_episode_tags)),
         hr=load_global_hr(_get(cfg, "hr", {})),
         skip_checking_tag=skip_checking_tag,

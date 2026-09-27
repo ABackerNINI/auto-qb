@@ -25,7 +25,7 @@ from .errors import SchemaVersionError
 VERSION_KEY = "schema_version"
 
 CURRENT_VERSIONS: Dict[str, int] = {
-    "state": 2,  # <data_dir>/state.json 顶层 schema_version
+    "state": 3,  # <data_dir>/state.json 顶层 schema_version
     "hr_site": 1,  # hr/<site>.json 的 schema_version(hr/model.SCHEMA_VERSION 是它的别名)
     "config": 1,  # config.schema_version(YAML 的 config: 块内, 不占根键)
 }
@@ -41,11 +41,22 @@ def _migrate_state_1_2(data: dict) -> dict:
     return data
 
 
+def _migrate_state_2_3(data: dict) -> dict:
+    """v2→v3: 补 field_snapshots 空表(字段变化触发时机的跨轮基线, 计划 26-09-27-1438)。
+
+    只在确无该键时补(setdefault, 幂等); 空表 = 全部种子按首见处理(只落基线不触发),
+    升级零事件风暴。基线仅在有监听规则时写入(按需付费), 无监听时恒为空表。
+    """
+    data.setdefault("field_snapshots", {})
+    return data
+
+
 # MIGRATIONS[kind][from_version] = fn(data: dict) -> dict
 # 纪律见模块 docstring; 首个破坏性结构变更出现时, 在对应表注册 migrate_<kind>_<n>_<n+1>。
 MIGRATIONS: Dict[str, Dict[int, Callable[[dict], dict]]] = {
     "state": {
-        1: _migrate_state_1_2
+        1: _migrate_state_1_2,
+        2: _migrate_state_2_3,
     },
     "hr_site": {},
     "config": {},
