@@ -1,0 +1,224 @@
+    <template v-else>
+      <div class="sticky-head">
+        <!-- 服务不可达横幅(程序退出/网络失败) -->
+        <div v-if="serviceDown" class="service-banner">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+          <span>无法连接 auto-qb 服务 —— 程序可能已退出或正在重启, 请确认程序运行后页面将自动恢复</span>
+        </div>
+        <!-- 顶栏 -->
+        <header class="topbar">
+          <div class="brand">
+            <span class="brand-mark"><svg class="ico brand-orbit" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-orbit"></use></svg></span>
+            <span class="brand-name">auto-<span class="qb">qb</span></span>
+            <span class="ver">v{{ status.version || '—' }}</span>
+          </div>
+          <!-- W4 导航 IA: 左侧一级导航 = 分组/种子/追剧(page 恒为 groups, 切的是 viewMode 三态,
+               与表格区视图开关两处入口等价); 设置移右侧独立组; 统计入口在底部状态栏, 日志在设置"常规"章节页尾 -->
+          <nav class="tabs" aria-label="视图导航">
+            <button :class="{ active: page === 'groups' && viewMode === 'groups' }" :title="`按${l10nGroup}展示`" @click="goView('groups')">
+              <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>{{ l10nGroup }}
+            </button>
+            <button :class="{ active: page === 'groups' && viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="goView('torrents')">
+              <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>种子
+            </button>
+            <button :class="{ active: page === 'groups' && viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="goView('shows')">
+              <svg class="ico ico-sm ico-tv" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
+            </button>
+          </nav>
+          <!-- 视图开关已退役(2026-09-17): 三态视图升为顶栏一级导航后, 页内重复的第二套"分组/种子/追剧"会让人重复看到两个同位切换器 -->
+          <div v-if="page === 'groups'" class="top-search">
+            <div class="search-box">
+              <svg class="ico ico-sm ico-find" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
+              <input v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
+                     placeholder="搜索种子名或文件名…(空格=且, -词排除, “短语”)" autocomplete="off" />
+              <!-- mousedown.prevent: 按下瞬间不触发失焦 —— 否则输入框收窄动画把按钮移出光标, click 落空(焦点存在时清除失灵) -->
+              <button v-if="searchQuery" class="search-clear" title="清除搜索" @mousedown.prevent @click="clearSearch">
+                <svg class="ico" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+              </button>
+            </div>
+            <span v-if="searchBuilding" class="muted"><svg class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg> 构建索引…</span>
+            <span v-if="searchError" class="error">{{ searchError }}</span>
+          </div>
+          <!-- 添加种子入口(R1B): 辅种页/种子页共用顶栏入口(搜索框右侧), 点击开添加对话框 -->
+          <button v-if="page === 'groups'" class="table-tool add-btn" title="添加种子(.torrent / magnet / URL)"
+                  @click="openAddTorrent">
+            <svg class="ico ico-sm ico-add" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
+            添加种子
+          </button>
+          <!-- 列选择器(紧邻搜索框, 见想法.md): 显示/隐藏列 + 列宽重置/适应窗口。 -->
+          <div v-if="page === 'groups'" class="col-picker">
+            <button class="table-tool" :class="{ active: colMenuOpen }" title="显示/隐藏列 · 列宽"
+                    @click.stop="toggleColMenu($event)">
+              <svg class="ico ico-sm ico-cols" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>
+              列
+            </button>
+            <transition name="pop">
+            <div v-if="colMenuOpen" class="col-menu" :class="{ 'flip-x': colFlip && !colMenuAt }" :style="colMenuStyle()" @click.stop>
+              <div class="col-menu-title">{{ l10nGroup }}表</div>
+              <div v-for="c in groupColumns" :key="c.key" class="pop-item col-menu-item"
+                   :class="{ locked: c.locked, on: colVisible('group', c.key) }"
+                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('group', c.key)"
+                   @click="!c.locked && toggleColumn('group', c.key)"
+                   @keyup.enter="!c.locked && toggleColumn('group', c.key)">
+                <span class="pop-value">{{ c.label }}</span>
+                <span v-if="c.locked" class="col-lock">必显</span>
+                <svg v-else-if="colVisible('group', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+              </div>
+              <div class="col-menu-title">明细表</div>
+              <div v-for="c in detailColumns" :key="c.key" class="pop-item col-menu-item"
+                   :class="{ locked: c.locked, on: colVisible('detail', c.key) }"
+                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('detail', c.key)"
+                   @click="!c.locked && toggleColumn('detail', c.key)"
+                   @keyup.enter="!c.locked && toggleColumn('detail', c.key)">
+                <span class="pop-value">{{ c.label }}</span>
+                <span v-if="c.locked" class="col-lock">必显</span>
+                <svg v-else-if="colVisible('detail', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+              </div>
+              <div class="col-menu-title">种子页</div>
+              <div v-for="c in torrentColumns" :key="c.key" class="pop-item col-menu-item"
+                   :class="{ locked: c.locked, on: colVisible('torrent', c.key) }"
+                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('torrent', c.key)"
+                   @click="!c.locked && toggleColumn('torrent', c.key)"
+                   @keyup.enter="!c.locked && toggleColumn('torrent', c.key)">
+                <span class="pop-value">{{ c.label }}</span>
+                <span v-if="c.locked" class="col-lock">必显</span>
+                <svg v-else-if="colVisible('torrent', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+              </div>
+              <div class="col-menu-title">追剧视图</div>
+              <div v-for="c in showColumns" :key="c.key" class="pop-item col-menu-item"
+                   :class="{ locked: c.locked, on: colVisible('show', c.key) }"
+                   role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible('show', c.key)"
+                   @click="!c.locked && toggleColumn('show', c.key)"
+                   @keyup.enter="!c.locked && toggleColumn('show', c.key)">
+                <span class="pop-value">{{ c.label }}</span>
+                <span v-if="c.locked" class="col-lock">必显</span>
+                <svg v-else-if="colVisible('show', c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+              </div>
+              <div class="col-menu-actions">
+                <button class="bt ghost sm" @click="resetAllColumnWidths('group'); resetAllColumnWidths('detail'); resetAllColumnWidths('torrent'); resetAllColumnWidths('show')">
+                  恢复默认列宽
+                </button>
+                <button class="bt ghost sm" @click="fitColumnsToWindow('group'); fitColumnsToWindow('detail'); fitColumnsToWindow('torrent'); fitColumnsToWindow('show')">
+                  适应窗口宽度
+                </button>
+              </div>
+            </div>
+            </transition>
+          </div>
+          <div class="spacer"></div>
+          <!-- W4: 设置移至顶栏右侧(与左侧视图导航分列); 复用 .tabs 保证 hover/active 态一致 -->
+          <nav class="tabs tabs-right" aria-label="页面导航">
+            <button :class="{ active: page === 'settings' }" @click="openSettings">
+              <svg class="ico ico-sm ico-config" viewBox="0 0 16 16"><use href="#i-settings"></use></svg>设置
+            </button>
+          </nav>
+          <a class="ui-switch" href="/prism/" title="切换到棱镜界面(工程仪器皮肤与五主题, 可随时切回)" style="display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:999px;border:1px solid var(--border-soft);background:var(--surface-1);color:var(--fg-muted);font-size:12px;text-decoration:none;cursor:pointer"><svg class="ico ico-sm"><use href="#i-prism"></use></svg>棱镜</a>
+          <!-- 统计/速度槽已迁至底部状态栏(TBL-08); 顶栏只留全局状态徽章 -->
+          <span class="badge" :class="[statusBadge.kind, { pending: statusBadge.kind === 'warn' }]">
+            <i class="dot"></i>{{ statusBadge.text }}
+          </span>
+        </header>
+        <!-- 状态分布条 + 筛选器(仅辅种页): 分布由已加载的 groups 前端聚合, 点击 chip 按状态筛选 -->
+        <div v-if="page === 'groups' && (distTotal || viewMode === 'torrents' || viewMode === 'shows' || selectedCount)" class="status-strip">
+          <div class="dist-bar" :title="distTitle">
+            <span v-for="s in distSegments" :key="s.kind" :class="'k-' + s.kind" :style="{ width: s.pct + '%' }"></span>
+          </div>
+          <div class="dist-legend">
+            <button v-for="s in distSegments" :key="s.kind" class="dist-chip"
+                    :class="['k-' + s.kind, { active: kindFilter === s.kind }]"
+                    :title="'仅显示' + s.text + '的' + l10nGroup" @click="toggleKindFilter(s.kind)">
+              <span class="swatch"></span>{{ s.text }} <b>{{ s.count }}</b>
+            </button>
+          </div>
+          <!-- 批量操作段(FIX-06): 位置按用户要求 = "做种数量统计后、筛选器前"(随状态图例之后同行展示);
+               有选中时行内出现(Ctrl/⌘+点击选中, Shift+点击范围选择), 无选中时完全不渲染;
+               同排插入/抽出不改变筛选行高度, 消除旧独立浮条造成的整页跳动 -->
+          <transition name="bulk">
+            <div v-if="selectedCount" class="bulk-inline">
+              <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
+              <span class="bulk-count">已选 <b>{{ bulkCountText() }}</b></span>
+              <span v-if="bulkHrWarnText()" class="bulk-hr-warn">⚠ {{ bulkHrWarnText() }}</span>
+              <span class="bulk-sep"></span>
+              <button class="bulk-btn" @click="bulkAct('resume')">
+                <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始
+              </button>
+              <button class="bulk-btn" @click="bulkAct('pause')">
+                <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停
+              </button>
+              <button class="bulk-btn" @click="bulkAct('reannounce')">
+                <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+              </button>
+              <button class="bulk-btn" @click="bulkAct('recheck')">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>校验
+              </button>
+              <button class="bulk-btn" @click="openMetaDialog(null)">
+                <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类
+              </button>
+              <button class="bulk-btn danger" @click="bulkDelete()">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>{{ bulkDeleteLabel() }}…
+              </button>
+              <button class="bulk-btn ghost" @click="clearSelection()">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除
+              </button>
+            </div>
+          </transition>
+          <!-- 当前筛选/搜索说明: 紧跟状态图例之后(无筛选时不占据任何空间) -->
+          <span v-if="filtersActive" class="strip-note">
+            <template v-if="searchQuery.trim()">搜索“{{ searchQuery.trim() }}” </template>
+            <template v-if="kindFilter">状态“{{ kindText(kindFilter) }}” </template>
+            <template v-if="tagFilter.length">标签“{{ tagFilter.join('/') }}” </template>
+            <template v-if="categoryFilter.length">分类“{{ categoryFilter.join('/') }}” </template>
+            <template v-if="siteFilter.length">站点“{{ siteFilter.join('/') }}” </template>
+            <template v-if="hrFilter.length">H&R“{{ hrFilter.join('/') }}” </template>
+            <template v-if="hrSrcFilter.length">HR 来源“{{ hrSrcFilter.join('/') }}” </template>
+            <template v-if="pathFilter.length">路径“{{ pathFilter.join(' / ') }}” </template>
+            → <b>{{ viewMode === 'torrents' ? filteredTorrents.length : viewMode === 'shows' ? showStats.eps : filteredGroups.length }}</b>{{ viewMode === 'torrents' ? ' 个种子' : viewMode === 'shows' ? ` 集(共 ${showStats.shows} 部剧)` : ` 个${l10nGroup}` }}<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
+            <template v-if="searchBuilding"> · 索引构建中…</template>
+          </span>
+          <div class="strip-tools">
+            <!-- 筛选器下拉(标签/分类/站点/路径): 定义见 app.js filterDefs, 四个共用一份模板;
+                 点击整行即选中/取消(不显示勾选框), 计数徽标绝对定位 -> 选中数不改变按钮宽度 -->
+            <div v-for="f in filterDefs" :key="f.kind" class="filter-pop">
+              <button class="filter-btn" :class="{ active: f.selected.length }"
+                      :title="'按' + f.label + '筛选' + l10nGroup + '(可多选)'"
+                      @click.stop="toggleFilterMenu(f.kind, $event)">
+                <svg class="ico ico-sm" :class="'ico-f-' + f.kind" viewBox="0 0 16 16"><use :href="'#' + f.icon"></use></svg>
+                {{ f.label }}
+                <span v-if="f.selected.length" class="filter-count">{{ f.selected.length }}</span>
+                <svg class="ico ico-sm filter-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              </button>
+              <transition name="pop">
+              <div v-if="filterMenu === f.kind" class="pop-menu" :class="{ 'flip-x': popFlip }" @click.stop>
+                <div class="pop-head">
+                  <span>{{ f.label }}</span>
+                  <button v-if="f.selected.length" class="pop-clear" @click="clearFilter(f.field)">清除</button>
+                </div>
+                <div v-for="o in f.options" :key="o.value" class="pop-item"
+                     :class="{ on: isFilterOn(f.field, o.value) }"
+                     role="button" tabindex="0" :aria-pressed="isFilterOn(f.field, o.value)"
+                     @click="toggleFilterValue(f.field, o.value)"
+                     @keyup.enter="toggleFilterValue(f.field, o.value)"
+                     @keyup.space.prevent="toggleFilterValue(f.field, o.value)">
+                  <span class="pop-value">{{ o.value || '(空)' }}</span>
+                  <span class="pop-count">{{ o.count }}</span>
+                </div>
+                <p v-if="!f.options.length" class="pop-empty">暂无数据</p>
+                <!-- 管理入口(FE-2C2): 标签/分类弹层底部直达管理对话框(sticky 吸底不随长列表滚走) -->
+                <button v-if="f.kind === 'tag' || f.kind === 'category'" class="pop-mgr-btn" @click="openMgr(f.kind)">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>管理{{ f.label }}…
+                </button>
+              </div>
+              </transition>
+            </div>
+            <!-- 清除筛选: **常驻占位**(无筛选时降透明度禁用, R02) —— 若用 v-if 会出现/消失,
+                 会把同一行的筛选器整组左右推动; 旧 visibility:hidden 占位策略留下过幽灵空位 -->
+            <button class="dist-chip clear" :class="{ 'is-off': !filtersActive }"
+                    :disabled="!filtersActive" @click="clearFilters()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除筛选
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 辅种分组页: 左栏信息栏已退役(TBL-08), 单列全宽表格 + 底部状态栏 -->

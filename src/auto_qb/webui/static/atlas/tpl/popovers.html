@@ -1,0 +1,132 @@
+    <!-- 历史流量弹层(今日流量面板入口): dat 按日行 -> 天/月/年聚合折线图(SVG, 容器级悬停取值) -->
+    <div v-if="historyOpen" class="modal-mask" @click.self="historyOpen = false">
+      <div class="modal hist-modal" role="dialog" aria-modal="true">
+        <div class="modal-title">
+          <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
+          <span>历史流量</span>
+          <span class="ce-spacer"></span>
+          <div class="hist-tabs">
+            <button v-for="g in ['day', 'month', 'year']" :key="g" :class="{ active: historyGran === g }"
+                    @click="historyGran = g">{{ { day: '天', month: '月', year: '年' }[g] }}</button>
+          </div>
+          <button class="bt icon" title="关闭" @click="historyOpen = false">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div v-if="historyLoading" class="hist-loading">加载中…</div>
+        <p v-else-if="historyError" class="error">{{ historyError }}</p>
+        <p v-else-if="!historyBuckets.length" class="hist-empty">暂无流量数据(数据源 history_traffic.dat 为空或不可用)</p>
+        <template v-else>
+          <!-- 折线图: 双系列(上传 teal / 下载 indigo, 与今日流量卡同色), 打开时一次 draw-in;
+               悬停事件挂在 .hist-chart 容器(mousemove)连续追踪 —— 修复旧逐桶 enter/leave
+               在桶间空隙的闪烁; viewBox/pathLength 用 v-bind 动态绑定(静态写法会被模板
+               编译器小写成 viewbox/pathlength, SVG 属性大小写敏感被浏览器忽略) -->
+          <div class="hist-chart" @mousemove="histMove" @mouseleave="histLeave">
+            <svg class="hist-svg" v-bind="{ viewBox: histViewBox }">
+              <g class="hist-grid">
+                <line v-for="(t, k) in histTicks" :key="'g' + k" :x1="histGeom.padL" :x2="histGeom.w - histGeom.padR"
+                      :y1="t.y" :y2="t.y"></line>
+              </g>
+              <g class="hist-axis">
+                <text v-for="(t, k) in histTicks" :key="'l' + k" :x="histGeom.padL - 7" :y="t.y + 3.5"
+                      text-anchor="end">{{ t.label }}</text>
+              </g>
+              <path class="hist-area up" :d="histAreaUp"></path>
+              <path class="hist-area down" :d="histAreaDown"></path>
+              <!-- pathLength 归一化后由 CSS dasharray 做 draw-in; 切换粒度时用 :key 重建重播 -->
+              <path class="hist-line up" v-bind="{ pathLength: 1000 }" :d="histPaths.up" :key="'lu' + historyGran"></path>
+              <path class="hist-line down" v-bind="{ pathLength: 1000 }" :d="histPaths.down" :key="'ld' + historyGran"></path>
+              <g v-if="histHover" class="hist-cross">
+                <line :x1="histHover.x" :x2="histHover.x" :y1="histGeom.padT"
+                      :y2="histGeom.padT + histGeom.chartH"></line>
+                <circle class="hist-dot up" :cx="histHover.up.x" :cy="histHover.up.y" r="3.5"></circle>
+                <circle class="hist-dot down" :cx="histHover.down.x" :cy="histHover.down.y" r="3.5"></circle>
+              </g>
+              <g class="hist-axis">
+                <text v-for="(b, i) in histXTicks" :key="'x' + i" :x="b.x" :y="histGeom.h - 8"
+                      text-anchor="middle">{{ b.label }}</text>
+              </g>
+            </svg>
+            <div v-if="histHover" class="hist-tip" :class="{ flip: histHover.leftPct > 62 }"
+                 :style="{ left: histHover.leftPct + '%', top: '0' }">
+              <b>{{ histHover.bucket.tip }}</b>
+              <span class="h-up">上传 {{ fmtSize(histHover.bucket.up) }}</span>
+              <span class="h-down">下载 {{ fmtSize(histHover.bucket.down) }}</span>
+              <span>合计 {{ fmtSize(histHover.bucket.up + histHover.bucket.down) }}</span>
+            </div>
+          </div>
+          <div class="hist-legend">
+            <span><i class="sw up"></i>上传</span>
+            <span><i class="sw down"></i>下载</span>
+            <span class="hist-hint">悬停查看详情</span>
+          </div>
+          <div class="hist-summary">
+            <span>窗口 <b>{{ historyBuckets.length }}{{ { day: '天', month: '月', year: '年' }[historyGran] }}</b></span>
+            <span>合计 <b>{{ fmtSize(historySummary.up + historySummary.down) }}</b></span>
+            <span>上传 <b class="h-up">{{ fmtSize(historySummary.up) }}</b></span>
+            <span>下载 <b class="h-down">{{ fmtSize(historySummary.down) }}</b></span>
+            <span>峰值 <b>{{ fmtSize(historySummary.peak) }}</b></span>
+            <span>均值 <b>{{ fmtSize(historySummary.avg) }}</b></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- DND-01 全局拖拽落点提示: 拖 .torrent 文件/链接进页面任意位置时点亮(addDragOver 由
+         window 级 dragenter/leave 的 depth 计数驱动, 见 add_torrent.js); pointer-events:none
+         不接事件也不产生自身 dragenter/leave 抖动, drop 统一由 window 收 -->
+    <div v-if="addDragOver" class="add-drop-mask" aria-hidden="true">
+      <div class="add-drop-box">
+        <svg class="ico" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
+        <p>松开以添加种子</p>
+        <span>.torrent 文件或 magnet / URL 链接</span>
+      </div>
+    </div>
+
+    <!-- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup): 单例浮层, 触发面 = 做种时长单元格(6 处绑定)。
+         teleport 到 body 级 —— 脱离列表容器的 overflow/特异性纠缠(同 .speed-pop 的教训);
+         数据组装/调度/定位单点在 shared/hr.js(hrPop*), prism 主题令牌挂 html[data-theme] 自动继承。 -->
+    <teleport to="body">
+      <div v-show="hrPop.open" ref="hrPop" class="hr-pop" :class="hrPop.above ? 'above' : 'below'"
+           role="tooltip" @mouseenter="hrPopKeepOpen" @mouseleave="hrPopLeave">
+        <template v-if="hrPop.data">
+          <i class="hp-arrow" aria-hidden="true"></i>
+          <div class="hp-head">
+            <i class="hp-dot" :class="hrPop.data.lane" aria-hidden="true"></i>
+            <span class="hp-verdict" :class="hrPop.data.lane">{{ hrPop.data.verdict }}</span>
+            <span v-if="hrPop.data.ended" class="hp-cyc ended">已结束</span>
+          </div>
+          <div v-if="hrPop.data.gauge" class="hp-gauge">
+            <div class="hg-top">
+              <span class="hg-legend"><i class="hg-dot" :class="hrPop.data.lane" aria-hidden="true"></i>本地</span>
+              <span v-if="hrPop.data.gauge.tag" class="hg-tag" :class="hrPop.data.gauge.tag.tone">{{ hrPop.data.gauge.tag.text }}</span>
+            </div>
+            <div class="hg-track">
+              <span class="hg-end">{{ hrPop.data.gauge.seeded }}</span>
+              <span class="hg-rail"><i class="fill" :class="hrPop.data.lane" :style="{ width: hrPop.data.gauge.pct + '%' }"></i></span>
+              <span class="hg-end">{{ hrPop.data.gauge.req }}</span>
+            </div>
+            <div v-if="hrPop.data.gauge.site" class="hg-site">
+              <span class="hg-legend"><i class="hg-dot hollow" :class="hrPop.data.gauge.site.tone" aria-hidden="true"></i>站点</span>
+              <span class="hg-rail site"><i class="fill" :class="hrPop.data.gauge.site.tone" :style="{ width: hrPop.data.gauge.site.pct + '%' }"></i></span>
+            </div>
+          </div>
+          <div v-else-if="hrPop.data.badge" class="hp-badge" :class="hrPop.data.lane">
+            <svg v-if="hrPop.data.badge === 'check'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l7 2.8v5.4c0 4.5-3 7.6-7 9.8-4-2.2-7-5.3-7-9.8V5.8z"/><path d="M9 12l2.2 2.2L15.5 9.7"/>
+            </svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l7 2.8v5.4c0 4.5-3 7.6-7 9.8-4-2.2-7-5.3-7-9.8V5.8z" stroke-dasharray="3.2 2.6"/><path d="M10.2 9.4a1.9 1.9 0 1 1 2.9 1.6c-.7.5-1.1.9-1.1 1.7"/><path d="M12 15.7h.01"/>
+            </svg>
+            <span>无时长要求</span>
+          </div>
+          <div v-if="hrPop.data.kv.length" class="hp-kv">
+            <span v-for="p in hrPop.data.kv" :key="p[0]" class="kv"><i>{{ p[0] }}</i><b>{{ p[1] }}</b></span>
+          </div>
+          <div class="hp-foot">
+            <div class="hp-reason"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg><span>{{ hrPop.data.reason }}</span></div>
+            <div v-if="hrPop.data.lag" class="hp-lag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>站点值滞后一个刷新周期</span></div>
+          </div>
+        </template>
+      </div>
+    </teleport>

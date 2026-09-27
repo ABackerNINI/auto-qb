@@ -1,0 +1,402 @@
+/* ============ 微交互(2026-09-14 打磨) ============
+ * 原则: 只做"手感"级动效 —— hover / 按下 / 浮层入场。
+ * **不做行入场动画与数字滚动**: 分组视图每 2s 可能整表重渲染, 那类动画会反复播放,
+ * 反而干扰阅读(详见 ai/08-pitfalls)。reduced-motion 由顶部媒体查询统一关停。
+ */
+/* 按下反馈: 可点元素统一轻微回缩(纯视觉, 不影响可访问性) */
+.tabs button:active, .table-tool:active, .dist-chip:active, .filter-btn:active,
+.ctx-item:active, .pop-item:active, .col-menu-item:active { transform: scale(.975); }
+.ctx-item:active { transform: scale(.96); }
+/* hover 抬升: 仅限卡片类元素(行本身已有 translateY(-1px), 不重复) */
+.badge, .tag-chip, .site-chip, .cat-chip, .pop-item {
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+}
+/* 排序箭头: 出现/切换时轻微淡入 + 下移, 避免换列时"跳一下" */
+.h-cell .arrow { display: inline-block; animation: arrow-in .14s var(--ease-out); }
+@keyframes arrow-in { from { opacity: 0; transform: translateY(-2px); } }
+/* 展开态的左侧强调已移除(第七轮分家: 左侧 accent 色条是选中态的专属语言);
+ * 仅保留"已展开的行不再抬升"(视觉上保持"已定位") */
+.group-row.expanded:hover { transform: none; }  /* 已展开的行不再抬升(视觉上保持"已定位") */
+/* 顶栏 tabs: 激活态已并入上方基础规则(柔底 + 亮字 + 内描边), 此处不再覆盖 */
+/* 吸顶/吸底表面统一用玻璃令牌(此前顶栏硬写 rgba) */
+.topbar { background: var(--glass); }
+
+/* 限速对照(命中 / 实际): 一致时常规文字; 不一致 = 暖色加粗(需关注); 手动设置 = 品牌色 + 锁图标 */
+.pill-limit .ico { opacity: .9; }
+.pill-limit.mismatch .lbl, .pill-limit.mismatch .val { color: var(--warn); }
+.pill-limit.mismatch .val { font-weight: 700; }
+.pill-limit.mismatch .ico { color: var(--warn); }
+.pill-limit.manual .lbl, .pill-limit.manual .val { color: var(--accent-hi); }
+.pill-limit.manual .ico { color: var(--accent-hi); }
+
+/* HR 栏: 未达标进度用暖色, 已全部达标用绿色 check;
+   第五轮: 改 inline-flex -> flex + justify-content:center, 让 HR 数值在列内居中(用户要求) */
+.g-hr { display: flex; align-items: center; justify-content: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.g-hr .hr-num { font-weight: 600; }
+.g-hr.pending { color: var(--hr-pending); }
+.g-hr.done { color: var(--green); }
+.g-hr .ico { opacity: .85; }
+/* 做种时长 / 分享率: 两列实际值各给一个专属色系(与其它纯数值列区分, 也互相区分);
+ * "要求值"(斜杠后的参考值)统一中性灰 —— 与实际值一眼区分, 且不与 HR 语义色抢权重;
+ * HR 状态色只覆盖**实际值**(未达标 = 暖色 / 已达标 = 绿色, 语义优先于装饰色)。
+ */
+.m-pair { display: inline-flex; align-items: baseline; gap: 3px; font-variant-numeric: tabular-nums; }
+.m-pair .req { color: var(--fg-dim); font-size: 11.5px; }
+.m-pair.m-dur { color: var(--teal); }
+.m-pair.m-ratio { color: var(--violet); }
+/* HR 状态对照(仅覆盖实际值): 未达 = 暖色提醒, 已达 = 绿色 */
+.m-pair.pending { color: var(--hr-pending); }
+.m-pair.reached { color: var(--green); }
+/* 删除安全档位(2026-09-25, 计划 webui-hr-safety-display): hr-unk = 未核实(中性灰, 与"不适用"
+ * 的默认 teal 区分); hr-fail = 未达标终态(2026-09-25 用户修正: 考核期已过、结果已成立,
+ * 独立醒目红档, 不与考察中的 pending 橙混用、也不是可删绿); hr-src = 来源徽标(结论来自
+ * 优先级链哪一档: 在线/本地/策略/未核, 2 字芯片)。
+ * 两套 UI 必须同口径 —— 改这里时同步 prism/css/views.css 的同名规则。 */
+.m-pair.hr-unk { color: var(--paused); }
+.m-pair.hr-fail { color: var(--error); }
+.m-pair .hr-src {
+  color: var(--fg-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  border: 1px solid var(--border-soft);
+  border-radius: 3px;
+  padding: 0 3px;
+  align-self: center;
+  white-space: nowrap;
+}
+/* 弹层内的多选行(新交互): 整行可点、无可见勾选框、选中用左侧色条 + 淡底 + 亮字。
+ * 焦点必须用 `:focus-visible` 而非 `:focus-within` —— 行本身带 tabindex, 鼠标点击也会聚焦它,
+ * `:focus-within` 会在点击选中的那一刻画出整圈 outline(用户反馈的"点击选中时的边框");
+ * `:focus-visible` 只在键盘操作时命中, 键盘可达性与可见焦点都保留。
+ */
+.pop-item { position: relative; padding-left: 12px; }
+.pop-item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+.pop-item.on::before { content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3px;
+  border-radius: 999px; background: var(--accent); }
+.pop-item.on .pop-count { color: var(--accent-hi); font-weight: 600; }
+.pop-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 固定宽度的筛选按钮: 计数徽标绝对定位 -> 选中数变化不再改变按钮宽度与后续元素位置 */
+.filter-btn { position: relative; min-width: 92px; justify-content: center; }
+.filter-btn .filter-count { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px;
+  display: inline-grid; place-items: center; padding: 0 4px; border-radius: 999px;
+  background: var(--accent); color: #fff; font-size: 10.5px; font-weight: 700;
+  box-shadow: 0 0 0 2px var(--bg-row); }
+.filter-caret { transition: transform var(--dur) var(--ease); }
+.filter-btn.active .filter-caret { transform: rotate(180deg); }
+
+/* ============ 响应式收敛(TBL-08 后更新) ============
+ * 左栏信息栏已退役: 顶栏只剩品牌/页签/搜索/列/状态徽章, 底部状态栏承载速度摘要/统计入口/全局状态。
+ * 窄屏仅收窄搜索框等控件, 表格区保持横向滚动。
+ */
+@media (max-width: 1320px) {
+  .top-search input { width: 168px; }
+  .top-search input:focus { width: 208px; }
+}
+@media (max-width: 900px) {
+  .layout { padding: 12px 12px calc(24px + var(--statusbar-h)); }
+}
+
+/* 原生下拉列表(popup)在深色主题下的底色(部分平台可生效, 比刺眼白底更协调) */
+select option { background: var(--bg-elev); color: var(--fg); }
+/* 列选择器弹层列多时可滚动(不再靠固定 380px 宽硬塞) */
+.col-menu { max-height: 70vh; overflow-y: auto; }.site-chip.search-hit { background: var(--accent-soft); color: var(--accent-hi); font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, .55); }
+
+/* ---------------- 微动效(统一节奏; 全局 prefers-reduced-motion 降级已在文件顶部声明) ----------------
+ *
+ * 原则: 只用 transform/opacity/颜色, 不触碰会引发重排的属性; 动效时长统一取令牌,
+ * 避免各组件各写一个 duration 导致"哪儿都差一点"的廉价感。
+ */
+/* 组状态色条已移除: 组级状态由 .g-status 徽标(图标 + .k-* 语义色)承载, 左侧再加一条色条
+ * 属于同一语义的重复表达, 反而增加视觉噪声。
+ */
+/* 校验中: 柔和呼吸(替代静态图标, 一眼看出"正在校验"而非"已完成") */
+.g-status.k-checking .ico, .member-row.checking .m-state .dot { animation: pulse-soft 1.6s ease-in-out infinite; }
+@keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: .32; } }
+/* chip / pill: 统一的悬浮反馈(含轻微上浮, 让"可交互"更明确) */
+.tag-chip, .cat-chip, .site-chip, .tag-more, .diff-mark, .topbar .ver {
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease-out); }
+.group-row:hover .site-chip, .member-row:hover .tag-chip, .member-row:hover .cat-chip {
+  transform: translateY(-1px); }
+/* 进度条填充: 数值变化平滑过渡, 不再瞬间跳变 */
+.m-progress .bar > i { transition: width var(--dur-slow) var(--ease-out); }
+/* 可折叠箭头的展开回弹 */
+.g-name .caret {
+  transition: transform var(--dur) var(--ease-spring), color var(--dur) var(--ease); }
+/* 可点击控件的按下反馈(补上 transform 过渡, 否则 :active 缩放会瞬跳)
+ * .bt 的过渡与按下态自成一体(见按钮体系段), 这里只管 chip / 页签 */
+.dist-chip, .tabs button {
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease-out); }
+.dist-chip:active, .tabs button:active { transform: scale(.97); }
+/* 浮层出现节奏统一(内容仍各自定义, 这里只统一缓动) */
+.detail, .ctx-menu, .toast, .modal { animation-timing-function: var(--ease-out); }
+
+/* ---------------- 响应式(窄屏: 折行 + 单列, 表格横向滚动) ---------------- */
+@media (max-width: 900px) {
+  /* 900px 以下顶栏换行(统计信息已在左栏, 顶栏不再有需要让位的统计槽) */
+  .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 12px; }
+  .topbar .spacer { display: none; }
+  .ce-page { padding: 12px 12px 24px; }
+  .status-strip { padding: 7px 12px; overflow-x: auto; }
+  .dist-bar { flex-basis: 120px; }
+  /* 分组表: 保持列宽语义, 容器横向滚动 */
+  .group-head, .group-row { min-width: 1180px; }
+  .status-strip { align-items: flex-start; }
+}
+
+/* ============ 2026-09-15 WEB UI 优化新增(多选/批量/历史流量/确认框扩展/登录加载态) ============ */
+
+/* 图标语义色(新增): 历史流量入口与批量选择 */
+.ico-history { color: var(--today-up); }
+.ico-select { color: var(--indigo); }
+
+/* 登录"验证中"加载态(本地密钥 bootstrap 期间显示, 修复刷新时闪现输入密钥界面) */
+.login-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 34px 32px 28px; }
+.login-loading .ico { width: 26px; height: 26px; color: var(--accent); }
+.login-loading p { margin: 0; }
+
+/* 多选选中态(R10-07): 改用**选中态专用令牌族**(--sel-bg/--sel-line/--sel-bar)。
+ * 原先选中态引用 --accent-soft/--accent, 品牌主题下与"做种中"的 --green 同属绿/青族且
+ * 明度接近 -> 用户反馈"不好分辨"; 现统一给非绿值(靖蓝族), 换主题不再撞色。 */
+.group-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
+.group-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); }
+.member-row.selected { background: var(--sel-bg, var(--accent-soft)); }
+/* FX-12 半选态(indeterminate): 派生集合只命中该行**部分**成员 —— 同款左色条但降透明 + 柔底,
+ * 与全选明确区分。 */
+.group-row.partial, .member-row.partial { background: var(--sel-bg, var(--accent-soft));
+  border-color: var(--sel-line, var(--accent-line)); }
+.member-row { position: relative; }
+.group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
+  top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--sel-bar, var(--accent)); opacity: .42; }
+.member-row.partial::before { top: 18%; bottom: 18%; }
+/* 选中行光标语义: 修饰键可切换选择 */
+.group-row, .member-row { cursor: pointer; }
+
+/* 批量操作段(FIX-06): 并入筛选行(.status-strip)行首 —— 不再是独立吸顶条, 无独立 top/
+ * z-index/margin; 无选中时完全不渲染, 有选中时在行内出现(同排不改变行高, 不再跳动)。
+ * 段内 flex-wrap 兜窄屏溢出; 出入场仍走 name="bulk" transition(滑入+淡入)
+ * FX-09(atlas 补齐, 与 prism 同口径): 高度必须锁死且 ≤ 27px(与 .dist-chip 自然高齐平) ——
+ * 靠"自然高度不超"实现同排不改变行高, 只压按钮 padding 不够: 段自身的 padding+border
+ * 也会超出, 所以段与按钮两处都锁死。 */
+.bulk-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; height: 27px;
+  padding: 0 10px 0 9px; border: 1px solid var(--accent-line); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(59, 130, 246, .1), transparent 70%), var(--bg-card); }
+.bulk-inline .bulk-count { font-size: 12.5px; line-height: 1; color: var(--fg-muted); white-space: nowrap; }
+.bulk-inline .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
+/* 批量条 HR 风险提示(P4): 选中目标含「不能删」种子时的暖色计数(与 HR 未达标同色族) */
+.bulk-inline .bulk-hr-warn { font-size: 11.5px; line-height: 1; color: var(--hr-pending); white-space: nowrap; }
+.bulk-sep { width: 1px; height: 16px; background: var(--border); }
+/* 批量浮条按钮(2026-09-26 并入 .bt 体系 B 方案): 胶囊 + 次钮配色语言(底 bg-row/描边 border-strong,
+ * hover 换 accent 描边); 高度保持 21px 紧凑档不动 —— .bulk-inline 容器 27px 与 .status-strip 的
+ * min-height 是实测锁定(FIX-06/FX-09), 浮条专属语义(图标语义色 / danger / ghost)保留在此 */
+.bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--bg-row); color: var(--fg);
+  font-size: 12px; line-height: 1; cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.bulk-btn:hover { background: var(--bg-hover); border-color: var(--accent-line); }
+.bulk-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.bulk-btn:disabled { opacity: .45; cursor: not-allowed; }
+.bulk-btn .ico-play { color: var(--green); }
+.bulk-btn .ico-pause { color: var(--warn); }
+.bulk-btn .ico-sync { color: var(--blue); }
+.bulk-btn.danger { color: var(--error); border-color: var(--error-line); }
+.bulk-btn.danger:hover { background: var(--error-soft); border-color: var(--error); }
+.bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }
+.bulk-btn.ghost:hover { border-color: transparent; background: var(--surface-2); color: var(--fg); }
+/* 操作段出入场(transition name="bulk"): 滑入 + 淡入 */
+.bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
+.bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
+
+/* 删除类确认框加宽形态(R05: 560 -> 720; W2-FE-2 DLG-01 再调大一档 720 -> 840 并令牌化,
+ * 成员明细区已移除, 宽度服务于目标摘要/选项的宽松可读) */
+.modal.wide { width: var(--modal-wide-w); }
+/* 确认框目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标);
+ * R10-13: 长值口径统一为**单行省略 + title 全文 + 复制按钮**(旧写法无限换行会把弹窗顶高);
+ * wide 行仍为块行(值独占一行冡 3 行), 给"必须看到全貌"的超长名/路径。 */
+.modal-details { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 14px;
+  padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  background: var(--surface-1); user-select: text; }
+.modal-detail-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; min-width: 0; }
+.modal-detail-row .ico { color: var(--fg-dim); flex: 0 0 auto; align-self: center; }
+.modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font-size: 11.5px; }
+.modal-detail-row .d-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; color: var(--fg-soft); font-weight: 500; }
+.modal-detail-row.wide { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "ico label copy" "value value value"; align-items: center; row-gap: 3px;
+  margin-bottom: 2px; }
+.modal-detail-row.wide > .ico { grid-area: ico; }
+.modal-detail-row.wide > .d-label { grid-area: label; flex: none; }
+.modal-detail-row.wide > .d-value { grid-area: value; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; overflow: hidden; white-space: normal; overflow-wrap: break-word; }
+.modal-detail-row.wide > .d-copy { grid-area: copy; align-self: center; }
+/* R10-13: 复制按钮**所有行都渲染**(窄行靠悬停才显形, 不抢视觉也不额外占宽) */
+.modal-detail-row .d-copy { width: 22px; height: 22px; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.modal-detail-row:hover .d-copy, .modal-detail-row .d-copy:focus-visible { opacity: .75; }
+.modal-detail-row .d-copy:hover { opacity: 1; }
+/* 成员明细(删除整组/批量删除): 逐行 站点 + 种子名 + 保存路径, 超高滚动 */
+.modal-members { margin: -4px 0 14px; max-height: 260px; overflow-y: auto; padding: 4px 12px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-sunken); }
+.modal-member-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12.5px; min-width: 0; }
+.modal-member-row + .modal-member-row { border-top: 1px solid var(--border-soft); }
+.modal-member-row .mm-site { flex: 0 0 auto; min-width: 58px; color: var(--fg-muted); font-weight: 600; font-size: 11.5px; }
+.modal-member-row .mm-name { flex: 1 1 40%; min-width: 0; color: var(--fg-soft); overflow-wrap: anywhere; }
+/* 保存路径(R04): 弱化色但完整可读(折行), 悬停 title 兕底 */
+.modal-member-row .mm-path { flex: 1 1 45%; min-width: 0; color: var(--fg-dim); font-size: 11.5px; overflow-wrap: anywhere; }
+/* ================= R10-11 路径选择器(服务端目录浏览) =================
+ * “选择位置”不再是自绘候选下拉: 由服务端给真实目录树(浏览器物理上拿不到绝对路径)。
+ * 宽度取尺寸令牌族的“**宽**”档(与添加窗口同档): 目录路径才是这个窗口的主体内容。 */
+.modal.dir-browse { width: var(--modal-w-add); max-width: 100%; display: flex; flex-direction: column; }
+.db-bar { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.db-bar > .bt { flex: 0 0 auto; white-space: nowrap; }
+/* R10-11 修订: 路径**必须看得见** —— 原先单行省略, 长路径只剩开头几个字符;
+ * 现改为最多 3 行换行(任意字符处断行), 盘符/多级目录一眼可读, 更长的仍可悬停看 title。 */
+.db-path { flex: 1; min-width: 0; padding: 5px 9px; border-radius: var(--radius-sm); background: var(--bg-sunken);
+  border: 1px solid var(--border-soft); color: var(--fg-soft);
+  font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 12px; line-height: 1.55;
+  word-break: break-all; }
+.db-list { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+  padding: 4px; border-radius: var(--radius-sm); background: var(--surface-1);
+  border: 1px solid var(--border-soft); }
+.db-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; border: 0;
+  border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted);
+  font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.db-row:hover { background: var(--surface-2); color: var(--fg); }
+.db-row .ico { color: var(--accent); flex: 0 0 auto; }
+.db-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-new { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.db-new .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+/* 按钮不许被输入框挤掉宽度(input 的 flex-basis = 100%, 不锁按钮会把"新建"压成两行) */
+.db-new > .bt { flex: 0 0 auto; white-space: nowrap; }
+
+/* 多选项与单选 checkbox 同视觉(删除前强制汇报 / 同时删除磁盘文件) */
+
+/* 历史流量弹层(第七轮加宽: 折线图 920×380) */
+.hist-modal { width: var(--modal-w-add); max-width: 100%; }
+.hist-modal .modal-title { margin-bottom: 12px; }
+.hist-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--border); }
+.hist-tabs button { padding: 3px 12px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--fg-muted); font-size: 12px; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.hist-tabs button:hover { color: var(--fg); }
+.hist-tabs button.active { background: var(--accent-soft); color: var(--accent-hi);
+  box-shadow: inset 0 0 0 1px var(--accent-line); }
+.hist-loading, .hist-empty { padding: 44px 0; text-align: center; color: var(--fg-dim); font-size: 13px; }
+/* 折线图(第七轮, 替代柱状图): 上传 teal / 下载 indigo(与今日流量卡 --today-up/--today-down 同源),
+ * 淡面积 + 双系列折线 + 悬停 crosshair/圆点; 打开时沿 pathLength=1000 一次 draw-in */
+.hist-chart { position: relative; }
+.hist-svg { display: block; width: 100%; height: auto; aspect-ratio: 920 / 380; }
+.hist-grid line { stroke: var(--hairline); }
+.hist-axis text { fill: var(--fg-dim); font-size: 10px; font-family: ui-monospace, Consolas, monospace; }
+.hist-area.up { fill: var(--today-up); opacity: .08; }
+.hist-area.down { fill: var(--today-down); opacity: .08; }
+.hist-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; stroke-dasharray: 1000; stroke-dashoffset: 1000;
+  animation: hist-draw .7s var(--ease-out) forwards; }
+.hist-line.up { stroke: var(--today-up); }
+.hist-line.down { stroke: var(--today-down); }
+@keyframes hist-draw { to { stroke-dashoffset: 0; } }
+.hist-cross line { stroke: var(--fg-dim); stroke-width: 1; stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke; opacity: .8; }
+.hist-dot { stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.hist-dot.up { fill: var(--today-up); }
+.hist-dot.down { fill: var(--today-down); }
+.hist-tip { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 11px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--bg-elev); box-shadow: var(--shadow-2); font-size: 11.5px; color: var(--fg-muted);
+  pointer-events: none; white-space: nowrap; z-index: 2; }
+.hist-tip.flip { transform: translateX(-100%); }
+.hist-tip b { color: var(--fg); font-size: 12px; }
+.hist-tip .h-up { color: var(--today-up); }
+.hist-tip .h-down { color: var(--today-down); }
+.hist-legend { display: flex; align-items: center; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--fg-muted); }
+.hist-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.hist-legend .sw.up { background: var(--today-up); }
+.hist-legend .sw.down { background: var(--today-down); }
+.hist-hint { margin-left: auto; color: var(--fg-dim); font-size: 11.5px; }
+.hist-summary { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--fg-dim); }
+.hist-summary b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hist-summary .h-up { color: var(--today-up); }
+.hist-summary .h-down { color: var(--today-down); }
+
+/* ============ 第八轮新增(修复落地 / 单种子视图 / 信息栏双模式 / 视觉刷新配套) ============ */
+
+/* 视图开关(R08)样式已随元素退役(2026-09-17): 三态视图升为顶栏一级导航后, 页内第二套切换器删除 */
+
+/* 单种子视图(R08): 状态文字弱化 / 保存路径列省略号(title 兜底)
+ * 状态文案在错误状态下是**具体原因**("文件丢失" / tracker 报错原文, 可能很长): 一律省略号
+ * 截断 + title 悬停给全文, 不撑破状态列(行内单元格 min-width:0 见上方 .member-row > * 规则)。
+ * .m-state 内的文本必须包一层 .state-text 才能拿到省略号 —— flex 容器的匿名文本项不可压缩。 */
+.state-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.torrent-row .state-text { font-size: 12px; color: var(--fg-muted); }
+.g-save-path { color: var(--fg-muted); font-size: 12px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+
+/* 视图切换/信息栏模式切换入场: 与 page-in 同族(只在元素重建时播一次, 数据轮询不重播) */
+.group-head, .group-table { animation: page-in .22s var(--ease-out); }
+
+/* 弹层关闭淡出(enter 仍走各弹层已有的 drop-in 动画; 配合 index.html 的 <transition name="pop">) */
+.pop-leave-active { transition: opacity var(--dur-fast) var(--ease); }
+.pop-leave-to { opacity: 0; }
+
+/* ================= 追剧视图(R10): 剧→季→集 层级 =================
+ * 复用 .group-row/.detail/.member-row 的既有样式; 这里只补层级结构件:
+ * 剧行(剧名加重) / 季子标题 / 集行(集号 chip + 版本徽标) / 缺集提示 / 未识别折叠区 */
+.show-row .show-name-text { font-weight: 600; }
+
+.season-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px 7px; margin-top: 2px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12px; letter-spacing: .06em;
+  color: var(--fg-muted); font-weight: 600;
+  position: sticky; top: 0; background: var(--bg-sunken);
+}
+.season-name { font-family: ui-monospace, Consolas, monospace; }
+
+.gap-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; border-radius: 999px;
+  background: var(--warn-soft); color: var(--warn);
+  font-size: 11.5px; font-weight: 600; cursor: help;
+}
+
+.ep-row .g-name .caret { opacity: .55; }
+.ep-row.expanded .caret { opacity: 1; }
+.ep-key {
+  font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; font-weight: 600;
+  padding: 1px 7px; border-radius: 4px;
+  background: var(--surface-1); border: 1px solid var(--border-soft);
+}
+.ep-pack {
+  font-size: 10.5px; padding: 0 5px; border-radius: 3px;
+  background: var(--surface-1); color: var(--fg-muted); border: 1px solid var(--border-soft);
+}
+.ep-site-count { font-size: 11.5px; color: var(--fg-dim); }
+.ep-row .state-text { font-size: 12px; color: var(--fg-muted); }
+
+.unrecognized { margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 8px; }
+.unrecognized-head {
+  display: flex; align-items: center; gap: 7px; width: 100%;
+  padding: 6px 14px; border: 0; background: none; cursor: pointer;
+  color: var(--fg-muted); font-size: 12.5px; font-weight: 600;
+  font-family: inherit; text-align: left;
+}
+.unrecognized-head:hover { color: var(--accent); }
+.unrecognized-head .caret { transition: transform var(--dur) var(--ease); }
+.unrecognized-head .caret.open { transform: rotate(90deg); }
+.unrecognized-hint { font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
+.unrecognized-body { padding: 2px 0 6px; }
+.unrecognized-row {
+  display: grid; grid-template-columns: 110px minmax(200px, 2.2fr) 76px 92px 92px;
+  gap: 10px; align-items: center; padding: 5px 14px;
+}
+.unrecognized-row .m-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-size: 12.5px; }
+

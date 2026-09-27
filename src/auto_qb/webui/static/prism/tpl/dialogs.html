@@ -1,0 +1,105 @@
+         复用 .modal/.add-dialog 视觉语言(.stats-dialog 仅调宽与行样式); 打开时取一次, 卡内可手动刷新 -->
+    <div v-if="statsOpen" class="modal-mask" @click.self="closeStats">
+      <div class="modal add-dialog stats-dialog" role="dialog" aria-modal="true" aria-label="qBittorrent 统计">
+        <div class="modal-title">
+          <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
+          <span>qBittorrent 统计</span>
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeStats">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <!-- FIX-04b 防闪烁: 骨架常驻 — 加载态不卸载字段列表(仅值区降透明), 刷新按钮自身 disabled+spin;
+               错误仅在无数据时占位重试, 有数据时顶部细条提示并保留上次结果 -->
+          <div v-if="statsError && !statsServer" class="ce-placeholder">
+            <p class="error">{{ statsError }}</p>
+            <button class="bt" @click="loadStats()">重试</button>
+          </div>
+          <!-- FIX-04 首开兜底: 无值分支必须兜住 loading 期 — 否则首开(statsServer 尚为 null)落入 v-else
+               字段列表分支, 模板解引用 null 直接渲染崩溃; 文案随加载态切换(加载中/暂无统计) -->
+          <div v-else-if="!statsServer" class="ce-placeholder" :class="{ loading: statsLoading }">{{ statsLoading ? "正在加载统计…" : "暂无统计(qB 未同步)" }}</div>
+          <template v-else>
+            <p v-if="statsError" class="error" style="margin: 0 0 8px; font-size: 12px;">{{ statsError }}(显示上次结果)</p>
+            <div class="stats-grid" :style="{ opacity: statsLoading ? 0.55 : 1, transition: 'opacity .15s ease' }">
+            <div class="stats-row">
+              <span class="lbl">会话下载</span>
+              <span class="val">{{ statVal(statsServer.dl_info_data, fmtSize) }}<template v-if="statsServer.dl_info_speed"> · 当前 {{ fmtSpeed(statsServer.dl_info_speed) }}</template></span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">会话上传</span>
+              <span class="val">{{ statVal(statsServer.up_info_data, fmtSize) }}<template v-if="statsServer.up_info_speed"> · 当前 {{ fmtSpeed(statsServer.up_info_speed) }}</template></span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">累计下载</span><span class="val">{{ statVal(statsServer.alltime_dl, fmtSize) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">累计上传</span><span class="val">{{ statVal(statsServer.alltime_ul, fmtSize) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">平均速度</span><span class="val" style="color: var(--fg-dim); font-weight: 500;">qB 不提供</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">DHT 节点</span><span class="val">{{ statVal(statsServer.dht_nodes) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">连接状态</span><span class="val">{{ connText(statsServer.connection_status) }}</span>
+            </div>
+            <div class="stats-row">
+              <span class="lbl">空闲空间</span><span class="val">{{ statVal(statsServer.free_space_on_disk, fmtSize) }}</span>
+            </div>
+            </div>
+          </template>
+        </div>
+        <div class="modal-actions">
+          <button class="bt ghost" :disabled="statsLoading" @click="loadStats()">
+            <svg class="ico ico-sm" :class="{ spin: statsLoading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
+          </button>
+          <button class="bt primary" @click="closeStats">关闭</button>
+        </div>
+      </div>
+    </div>
+    <!-- 限速浮层(SPD-04; FX-08 改为就近弹出): 点击状态栏"限制速度"向上弹出, 该方向输入框预聚焦。
+         ① 无遮罩(页面其余部分仍可操作), 点空白/Esc 关闭;
+         ② **必须是状态栏的兄弟节点** —— .statusbar 有 overflow: hidden, 嵌在里面时子元素溢出会被裁掉,
+           表现为"点了没反应"(与 pitfalls 里那条同源);
+         ③ 位置由 JS 写在 inline style 上(只写 left, 并夹取到视口内), 不写死在 CSS 里。 -->
+    <div v-if="speedOpen" ref="speedPop" class="speed-pop" :style="speedPopStyle()"
+         role="dialog" aria-label="限速" @click.stop>
+      <div class="modal-title">
+        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
+        <span>限速</span>
+        <button class="bt icon add-dialog-x" title="关闭" @click="closeSpeedDialog">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+        </button>
+      </div>
+      <div class="add-dialog-body">
+        <div class="speed-mode-line" :title="speedMode.error || speedModeLine">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="speedMode.curveEnabled ? '#i-gauge' : '#i-lock'"></use></svg>
+          <span>{{ speedMode.loaded ? speedModeLine : (speedMode.error || "正在加载状态…") }}</span>
+        </div>
+        <div class="speed-dialog-grid">
+          <label class="modal-field">
+            <span class="modal-field-label">上行 KiB/s</span>
+            <input id="sp-up" v-model="speedOverride.up" type="number" min="0" inputmode="numeric" placeholder="0 = 不限">
+          </label>
+          <label class="modal-field">
+            <span class="modal-field-label">下行 KiB/s</span>
+            <input id="sp-down" v-model="speedOverride.down" type="number" min="0" inputmode="numeric" placeholder="0 = 不限">
+          </label>
+        </div>
+        <p v-if="speedMode.curveEnabled" class="add-dialog-hint">曲线启用中: 覆盖为临时, 下一档位切换时恢复</p>
+        <p v-else class="add-dialog-hint">两方向都需填写 · 0 = 不限速</p>
+      </div>
+      <div class="modal-actions">
+        <button class="bt ghost" @click="closeSpeedDialog">取消</button>
+        <button class="bt primary" :disabled="!speedOvReady || speedOverride.busy"
+                title="临时覆盖 qB 全局限速(两方向都需填写, 0 = 不限)" @click="submitSpeedDialog">
+          <svg v-if="speedOverride.busy" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
+          <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
+          {{ speedOverride.busy ? '提交中…' : '应用' }}
+        </button>
+      </div>
+    </div>
+    <!-- 添加种子对话框(R1B/DLG-03): 来源 = .torrent 多选 + 「添加链接」按钮展开的 magnet/URL 文本域(可再收起) +
+         分类/标签 combobox(下拉候选 + 自由输入) + qB 添加选项(「添加后开始」默认不勾 = paused 添加;
+         跳过校验勾选后选项区下出警告行); DLG-04 保存路径 = 自由输入 + /api/paths 下拉推荐 + 「选择位置」面板;

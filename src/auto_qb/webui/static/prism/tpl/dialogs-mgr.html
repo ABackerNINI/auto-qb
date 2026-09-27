@@ -1,0 +1,252 @@
+         底部 D4 接管预览(静态说明 + 已有组前缀计数) -->
+    <div v-if="addOpen" class="modal-mask add-dialog-mask" @click.self="closeAddTorrent()">
+      <div class="modal add-dialog" role="dialog" aria-modal="true" aria-label="添加种子">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
+          <span>添加种子</span>
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeAddTorrent">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div class="add-dialog-field">
+            <label class="add-dialog-label">来源(.torrent 文件与链接可混合)</label>
+            <div class="add-dialog-source">
+              <label class="add-dialog-filepick">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+                <span>选择 .torrent 文件(可多选)…</span>
+                <input type="file" multiple accept=".torrent" @change="onAddFilePick">
+              </label>
+              <button type="button" class="bt ghost add-dialog-linkbtn" @click="toggleAddUrls">
+                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-link"></use></svg>
+                {{ addShowUrls ? '收起链接' : '添加链接' }}
+              </button>
+            </div>
+            <div v-if="addFiles.length" class="add-dialog-filelist">
+              <span v-for="(f, i) in addFiles" :key="f.name + f.size" class="add-dialog-filechip" :title="f.name">
+                {{ f.name }}
+                <button class="add-dialog-chipx" title="移除" @click="removeAddFile(i)">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+                </button>
+              </span>
+            </div>
+            <textarea v-if="addShowUrls" v-model="addUrls" class="add-dialog-textarea" rows="4"
+                      placeholder="magnet:?xt=… 或 http(s)://… 种子链接, 每行一条(可与文件混合)"></textarea>
+            <div class="add-dialog-hint">已选 {{ addFiles.length }} 个文件 · {{ addUrlCount() }} 条链接</div>
+          </div>
+
+          <div class="add-dialog-grid">
+            <div class="add-dialog-field add-dialog-pathfield">
+              <label class="add-dialog-label" for="ad-save-path">保存路径(留空 = qB 默认)</label>
+              <div class="add-dialog-pathrow">
+                <!-- FX-18: 浮层必须锚在**输入行**上(.add-input-row 有 position:relative)。
+                     旧写法把面板挂在 .add-dialog-pathrow 下, 而它没有定位祖先 -> 面板按
+                     .modal-mask(fixed; inset:0) 换算, 被渲染到视口下沿之外("点了没反应")。 -->
+                <div class="add-input-row">
+                  <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
+                         placeholder="如 D:\Torrents" autocomplete="off" spellcheck="false"
+                         @focus="openAddPathPop" @click.stop="openAddPathPop" @input="addPathHi = -1"
+                         @keydown="onAddPathKeydown($event)">
+                  <!-- FX-17: 原生 <datalist> + list= 退役 —— 它的建议浮层样式不受主题控制, 还会
+                       自行超时消失(即"下拉 2 秒后消失"), 并与自绘面板抢同一次交互。 -->
+                  <transition name="pop">
+                    <div v-if="addPathPop" class="pop-menu add-pop" @click.stop>
+                      <div class="pop-head"><span>选择保存位置</span><span class="pop-count">{{ addPathOptions.length }}</span></div>
+                      <div class="add-pop-list" ref="addPathList">
+                        <div v-for="(p, i) in addPathOptions" :key="p" class="pop-item add-pop-item"
+                             :class="{ on: i === addPathHi }" :data-hi="i === addPathHi ? '1' : '0'"
+                             @mousedown.prevent="pickAddPath(p)">
+                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+                          <span class="pop-value">{{ p }}</span>
+                        </div>
+                        <p v-if="!addPathOptions.length" class="pop-empty">暂无历史位置</p>
+                      </div>
+                    </div>
+                  </transition>
+                </div>
+                <!-- R10-11 决策 D2-A: "选择位置"改为**服务端目录浏览**(列目录 + 上溯 + 新建文件夹,
+                     回填绝对路径) —— 浏览器物理上拿不到本地绝对路径, 只能由服务端给;
+                     输入框聚焦仍弹已知历史路径候选(openAddPathPop, 两个入口互补)。 -->
+                <button type="button" class="bt ghost add-dialog-pathbtn" @click.stop="openDirBrowse()">选择位置…</button>
+              </div>
+            </div>
+            <div class="add-dialog-field add-dialog-combo">
+              <label class="add-dialog-label" for="ad-category">分类(可空)</label>
+              <!-- FX-18: 面板锚定"输入行"而非整个 field 盒(后者是 grid 项会被拉伸, 面板离输入框很远) -->
+              <div class="add-input-row">
+                <input id="ad-category" v-model="addCategory" class="add-dialog-input" type="text"
+                       placeholder="下拉选择或自由输入" autocomplete="off" spellcheck="false"
+                       @focus="openAddCatMenu" @click.stop="openAddCatMenu"
+                       @input="addCatHi = -1; addCatMenu = true" @keydown="onAddCatKeydown($event)">
+                <transition name="pop">
+                  <div v-if="addCatMenu" class="pop-menu add-pop" @click.stop ref="addCatList">
+                    <div v-for="(c, i) in addCatFiltered()" :key="c" class="pop-item add-pop-item"
+                         :class="{ on: i === addCatHi }" :data-hi="i === addCatHi ? '1' : '0'"
+                         @mousedown.prevent="pickAddCat(c)" @mouseenter="addCatHi = i">
+                      <span class="pop-value">{{ c }}</span>
+                    </div>
+                    <p v-if="!addCatFiltered().length" class="pop-empty">无匹配分类, 可直接自由输入</p>
+                  </div>
+                </transition>
+              </div>
+            </div>
+            <div class="add-dialog-field add-dialog-combo">
+              <label class="add-dialog-label" for="ad-tags">标签(逗号分隔, 可空)</label>
+              <div class="add-input-row">
+                <input id="ad-tags" v-model="addTags" class="add-dialog-input" type="text"
+                       placeholder="如 HR, Keep(可从下拉挑选)" autocomplete="off" spellcheck="false"
+                       @focus="openAddTagMenu" @click.stop="openAddTagMenu"
+                       @input="addTagHi = -1; addTagMenu = true" @keydown="onAddTagKeydown($event)">
+                <transition name="pop">
+                  <div v-if="addTagMenu" class="pop-menu add-pop" @click.stop ref="addTagList">
+                    <div v-for="(t, i) in addTagFiltered()" :key="t" class="pop-item add-pop-item"
+                         :class="{ on: i === addTagHi }" :data-hi="i === addTagHi ? '1' : '0'"
+                         @mousedown.prevent="pickAddTag(t)" @mouseenter="addTagHi = i">
+                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
+                      <span class="pop-value">{{ t }}</span>
+                    </div>
+                    <p v-if="!addTagFiltered().length" class="pop-empty">无匹配标签, 可直接自由输入</p>
+                  </div>
+                </transition>
+              </div>
+            </div>
+          </div>
+
+          <div class="add-dialog-field">
+            <label class="add-dialog-label">选项</label>
+            <!-- FX-20: 无勾选框的切换胶囊(左侧色块 + 柔底 + 亮字 = 已选); 5 项全保留, 一行放得下 -->
+            <div class="add-dialog-opts">
+              <button type="button" class="opt-pill" :class="{ on: addStart }" role="switch"
+                      :aria-checked="addStart" @click="addStart = !addStart">
+                <span class="opt-dot"></span><span>添加后开始</span>
+              </button>
+              <button type="button" class="opt-pill danger" :class="{ on: addSkipCheck }" role="switch"
+                      :aria-checked="addSkipCheck" @click="addSkipCheck = !addSkipCheck">
+                <span class="opt-dot"></span><span>跳过校验</span>
+              </button>
+              <button type="button" class="opt-pill" :class="{ on: addSequential }" role="switch"
+                      :aria-checked="addSequential" @click="addSequential = !addSequential">
+                <span class="opt-dot"></span><span>顺序下载</span>
+              </button>
+              <button type="button" class="opt-pill" :class="{ on: addFirstLast }" role="switch"
+                      :aria-checked="addFirstLast" @click="addFirstLast = !addFirstLast">
+                <span class="opt-dot"></span><span>首末块优先</span>
+              </button>
+              <button type="button" class="opt-pill" :class="{ on: addTmm }" role="switch"
+                      :aria-checked="addTmm" @click="addTmm = !addTmm">
+                <span class="opt-dot"></span><span>自动种子管理</span>
+              </button>
+            </div>
+            <!-- FX-21: 警告行**常驻占位**(class on 控制可见性, 不摘除节点) -> 勾选前后窗口高度不变 -->
+            <div class="add-dialog-hint add-dialog-hint-warn" :class="{ on: addSkipCheck }" :aria-hidden="!addSkipCheck">
+              已勾选跳过校验: 添加后 auto-qb 的校验策略将被跳过, 可能损坏辅种
+            </div>
+          </div>
+
+          <div class="add-dialog-preview">
+            <div class="add-dialog-preview-title">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
+              <span>auto-qb 接管预览</span>
+            </div>
+            <p class="add-dialog-preview-line">添加后 auto-qb 将自动: 按 <b>保存路径 + 文件列表</b> 归组 → <b>站点打标 / 分类</b> → 按规则执行<b>校验策略</b>。</p>
+            <p class="add-dialog-preview-line" :class="{ dim: !addPathGroupCount }">
+              <template v-if="addPathGroupCount">保存路径下已有 <b>{{ addPathGroupCount }}</b> 个辅种组(前缀匹配, 供参考)</template>
+              <template v-else>保存路径下暂无匹配的辅种组(计数 0: 路径为空或未命中已有组前缀)</template>
+            </p>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="bt ghost" :disabled="addSubmitting" @click="closeAddTorrent">取消</button>
+          <button class="bt primary" :disabled="!addCanSubmit" @click="submitAddTorrent">
+            <svg v-if="addSubmitting" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
+            {{ addSubmitting ? '提交中…' : '添加' }}
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- R10-11 路径选择器(决策 D2-A): 服务端目录浏览 —— 浏览器拿不到本地绝对路径(目录上传控件
+         只给相对路径), 所以"像选 .torrent 那样选目录"只能由服务端给路径。它也是本轮唯一新增的
+         文件系统读能力: 安全边界(允许根白名单 / .. 穿越 / 符号链接逃逸 / 只列目录)全在后端。 -->
+    <div v-if="dirBrowse.open" class="modal-mask dir-browse-mask" @click.self="closeDirBrowse">
+      <div class="modal dir-browse" role="dialog" aria-modal="true" aria-label="选择保存位置">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+          <span>选择保存位置</span>
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeDirBrowse">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div class="db-bar">
+            <button class="bt ghost sm" :disabled="!dirBrowse.parent" title="上一级(到允许根为止)" @click="dirUp()">
+              上一级
+            </button>
+            <span class="db-path" :title="dirBrowse.path || '起始位置'">{{ dirBrowse.path || "请选择起始目录(仅限已有保存路径)" }}</span>
+          </div>
+          <div v-if="dirBrowse.error" class="ce-note error">{{ dirBrowse.error }}</div>
+          <div class="db-list">
+            <button v-for="e in dirBrowse.dirs" :key="e.path" type="button" class="db-row"
+                    :title="e.path" @click="dirEnter(e.path)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
+              <span class="db-name">{{ e.name }}</span>
+            </button>
+            <p v-if="dirBrowse.loading" class="pop-empty">正在读取…</p>
+            <p v-else-if="!dirBrowse.dirs.length" class="pop-empty">该目录下没有子目录</p>
+          </div>
+          <div class="db-new">
+            <input v-model="dirBrowse.newName" class="add-dialog-input" type="text"
+                   placeholder="新建文件夹名" @keyup.enter="dirMkdir()">
+            <button class="bt ghost sm" :disabled="!dirBrowse.newName.trim() || dirBrowse.busy" @click="dirMkdir()">新建</button>
+          </div>
+          <p class="add-dialog-hint">只能浏览已有保存路径及其子目录(安全边界); 其它位置请直接在输入框填写。</p>
+        </div>
+        <div class="modal-actions">
+          <button class="bt ghost" @click="closeDirBrowse">取消</button>
+          <button class="bt primary" :disabled="!dirBrowse.path" @click="dirPick()">选择该文件夹</button>
+        </div>
+      </div>
+    </div>
+    <!-- 分类管理对话框(FE-2C2): 列表(名字+保存路径) + 新建行 + 行级改路径/删除; CRUD 走 /api/categories 系端点,
+         成功后重拉列表; 关闭后主列表随下一轮 rid 轮询自然更新。复用 .modal/.add-dialog 视觉体系(.mgr-dialog 调宽与行样式) -->
+    <div v-if="mgrOpen === 'category'" class="modal-mask" @click.self="closeMgr">
+      <div class="modal add-dialog mgr-dialog" role="dialog" aria-modal="true" aria-label="管理分类">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
+          <span>管理分类</span>
+          <button class="bt icon add-dialog-x" title="关闭" @click="closeMgr">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="add-dialog-body">
+          <div v-if="mgrLoading" class="ce-placeholder loading">正在加载分类…</div>
+          <div v-else-if="mgrError" class="ce-placeholder">
+            <p class="error">{{ mgrError }}</p>
+            <button class="bt" @click="loadMgr()">重试</button>
+          </div>
+          <template v-else>
+            <div class="mgr-list">
+              <div v-for="c in mgrCategories" :key="c.name" class="mgr-row">
+                <span class="mgr-name" :title="c.name">{{ c.name }}</span>
+                <span class="mgr-sub" :class="{ dim: !c.save_path }" :title="c.save_path || '未设置保存路径'">{{ c.save_path || '未设置保存路径' }}</span>
+                <span class="mgr-acts">
+                  <button class="bt ghost sm" :disabled="mgrBusy" @click="mgrEditCatPath(c.name)">改路径…</button>
+                  <button class="bt danger sm" :disabled="mgrBusy" @click="mgrDeleteCategory(c.name)">删除</button>
+                </span>
+              </div>
+              <p v-if="!mgrCategories.length" class="mgr-empty">暂无分类, 在下方新建</p>
+            </div>
+            <div class="mgr-new">
+              <input v-model="mgrNewCatName" class="add-dialog-input" type="text" placeholder="分类名称"
+                     autocomplete="off" spellcheck="false" @keyup.enter="submitMgrCategory">
+              <input v-model="mgrNewCatPath" class="add-dialog-input" type="text" placeholder="保存路径(可空)"
+                     autocomplete="off" spellcheck="false" @keyup.enter="submitMgrCategory">
+              <button class="bt primary" :disabled="!mgrNewCatName.trim() || mgrBusy" @click="submitMgrCategory">添加</button>
+            </div>
+          </template>
+        </div>
+        <div class="modal-actions">
+          <button class="bt primary" @click="closeMgr">关闭</button>
+        </div>
+      </div>
+    </div>

@@ -1,0 +1,101 @@
+        <template v-if="viewMode === 'torrents'">
+          <div class="group-head sticky-head" ref="torrentHead" data-table="torrent" :style="gridStyle('torrent')">
+            <div v-for="col in visibleTorrentCols" :key="col.key" class="h-cell"
+                 :class="['hc-' + col.key, { sortable: col.sortable, 'drag-src': colDrag && colDrag.page === 'torrent' && colDrag.key === col.key }]"
+                 @click="col.sortable && setSort(col.key)"
+                 @mousedown="startColDrag($event, 'torrent', col.key)"
+                 @contextmenu.prevent="openHeadMenu($event, 'torrent', col)">
+              <span>{{ col.label }}</span>
+              <span v-if="col.sortable" class="arrow">
+                <svg v-if="torrentSortKey === col.key" class="ico" viewBox="0 0 16 16">
+                  <use :href="torrentSortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use>
+                </svg>
+              </span>
+              <span class="resizer" title="拖拽调宽(Shift 拖 = 与相邻列互挤) · 双击按内容自适应"
+                    @mousedown.stop.prevent="startResize($event, 'torrent', col.key)"
+                    @dblclick.stop.prevent="autoFitColumn($event, 'torrent', col.key)"></span>
+            </div>
+            <span v-if="colDrag && colDrag.page === 'torrent'" class="col-drop-line" :style="colDropLineStyle('torrent')"></span>
+          </div>
+          <div class="group-table" ref="torrentTable" @scroll="syncTorrentHeadScroll">
+            <!-- P1-2 行窗口: 3000 行里只渲染视口附近那几十行; 上下占位撑住总高 -->
+            <div v-if="torrentPadTop" class="row-pad" :style="{ height: torrentPadTop + 'px' }" aria-hidden="true"></div>
+            <div v-for="m in visibleTorrents" :key="m.hash" class="group-row torrent-row" data-table="torrent" :data-hash="m.hash"
+                 :class="['s-' + m.kind, { 'search-hit': isHit(m), selected: isMemberSelected(m), 'is-pending': isPending(m.hash) }]"
+                 :style="gridStyle('torrent')"
+                 @click="onTorrentClick(m, $event)"
+                 @dblclick="openTorrentDrawer(m.hash)"
+                 @contextmenu.prevent="openMemberMenu($event, m)">
+              <template v-for="col in visibleTorrentCols" :key="col.key">
+                <div v-if="col.key === 'name'" class="g-name" :title="m.name">
+                  <span class="g-name-text">{{ m.name }}</span>
+                </div>
+                <div v-else-if="col.key === 'site'" class="g-sites">
+                  <span class="site-chip" :class="m.kind" :title="m.site">{{ m.site }}</span>
+                </div>
+                <div v-else-if="col.key === 'state'" class="g-cat">
+                  <span class="g-status" :class="'k-' + m.kind" :title="stateText(m)">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="kindIcon(m.kind)"></use></svg>
+                  </span>
+                  <span class="state-text" :title="stateText(m)">{{ stateText(m) }}</span>
+                </div>
+                <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, numTone(m.dlspeed, speedLimitBytes.down)]">{{ fmtSpeedOrDash(m.dlspeed) }}</div>
+                <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, numTone(m.upspeed, speedLimitBytes.up)]">{{ fmtSpeedOrDash(m.upspeed) }}</div>
+                <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, numTone(m.uploaded, m.size)]">{{ fmtSizeOrDash(m.uploaded) }}</div>
+                <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</div>
+                <div v-else-if="col.key === 'category'" class="g-cat">
+                  <span v-if="m.category" class="cat-chip" :title="m.category">{{ m.category }}</span>
+                  <span v-else class="zero"></span>
+                </div>
+                <div v-else-if="col.key === 'tags'" class="g-tags" :title="mTags(m).join(', ')">
+                  <span v-for="t in tagSlice(mTags(m), 3)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
+                  <span v-if="mTags(m).length > 3" class="tag-more">+{{ mTags(m).length - 3 }}</span>
+                  <span v-if="!mTags(m).length" class="zero"></span>
+                </div>
+                <div v-else-if="col.key === 'progress'" class="m-progress">
+                  <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
+                  <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
+                </div>
+                <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</div>
+                <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !cellPeers(m, 'leechs') }">{{ cellPeers(m, 'leechs') }}</div>
+                <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !m.eta || m.eta >= 8640000 }">{{ fmtEta(m.eta) }}</div>
+                <div v-else-if="col.key === 'added_on'" class="g-stat" :title="cellTimeHint(m.added_on, 'added_on')">{{ cellTime(m.added_on, 'added_on') }}</div>
+                <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !m.downloaded }, numTone(m.downloaded, m.size)]">{{ fmtSizeOrDash(m.downloaded) }}</div>
+                <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !m.amount_left }">{{ fmtSizeOrDash(m.amount_left) }}</div>
+                <!-- FX-26: 负数(-1 = qB 未知)与暂停中的种子不显示, 口径走 cellAvailability -->
+                <div v-else-if="col.key === 'availability'" class="g-stat" :class="[{ zero: !cellAvailability(m) }, numTone(m.availability, 1)]">{{ cellAvailability(m) }}</div>
+                <div v-else-if="col.key === 'time_active'" class="g-stat">{{ fmtDuration(m.time_active) }}</div>
+                <!-- FX-27/28: 相对时间(表头右键可切绝对); 另一种口径留作 title -->
+                <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="cellTimeHint(m.last_activity, 'last_activity')">{{ cellTime(m.last_activity, 'last_activity') }}</div>
+                <div v-else-if="col.key === 'completion_on'" class="g-stat" :title="cellTimeHint(m.completion_on, 'completion_on')">{{ cellTime(m.completion_on, 'completion_on') }}</div>
+                <div v-else-if="col.key === 'up_limit'" class="g-stat" :class="numTone(m.up_limit, m.up_limit)">{{ fmtLimitBytes(m.up_limit) }}</div>
+                <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="numTone(m.dl_limit, m.dl_limit)">{{ fmtLimitBytes(m.dl_limit) }}</div>
+                <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
+                <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
+                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
+                  {{ cellSeedingTime(m) }}
+                  <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                  <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
+                </div>
+                <div v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
+                  {{ cellRatio(m) }}
+                  <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
+                </div>
+                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '' }}</div>
+                <div v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</div>
+              </template>
+            </div>
+            <div v-if="torrentPadBottom" class="row-pad" :style="{ height: torrentPadBottom + 'px' }" aria-hidden="true"></div>
+            <div v-if="!filteredTorrents.length" class="empty">
+              <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
+              <span>
+                {{ searchQuery.trim() ? (searchNegativeOnly ? '只有排除词 — 请补一个要包含的词' : '无匹配种子')
+                   : (filtersActive ? '当前筛选下没有种子' : '暂无种子') }}
+              </span>
+            </div>
+          </div>
+        </template>
+
+        <!-- 追剧视图(R10): 全量种子按 剧→季→集 聚合(聚合层后端算好, 多站点同集归并成一行);
+             剧行展开后季子标题(含缺集提示) + 集行; 集行左键展开成员明细(复用明细列),
+             右键 = 整集操作(作用于该集全部版本); 无剧集标记的种子进底部未识别折叠区 -->

@@ -9,6 +9,7 @@
 
 ## In Progress
 
+- [26-09-26-2233] [计划 · WEB UI 前端大文件拆分](26-09-26-2233-plan-webui-frontend-file-split.html) — `webui-frontend-file-split`
 - [26-09-26-0031] [HR 取数代理 · 选项页风格选型(三选一)](26-09-26-0031-plan-hr-ext-options-style.html) — `backend-partial-hr-verify`
 - [26-09-25-2241] [auto-qb · Docker 部署方案](26-09-25-2241-plan-docker-deploy.html) — `docker-deploy`
 - [26-09-25-2043] [HR 悬停弹窗模板 · T1 档案卡 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html) — `webui-hr-popup-t1`
@@ -22,12 +23,12 @@
 
 ## Open
 
-- [26-09-26-2345] [commands × my-commit-flow v2 — 输出契约与零参数化设计](26-09-26-2345-plan-commands-shipflow-v2.html)
 - [26-09-26-0822] [计划 · WEB UI 键盘快捷键（可自定义）· 可行性分析与实施计划](26-09-26-0822-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
 - [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
 
 ## Done
 
+- [26-09-26-2345] [commands × my-commit-flow v2 — 输出契约与零参数化设计](26-09-26-2345-plan-commands-shipflow-v2.html) — `commands-shipflow-v2`
 - [26-09-26-0538] [auto-qb WEB UI · 按钮体系重构 · 3 组方案模板(供挑选)](26-09-26-0538-plan-webui-button-3-proposals.html) — `webui-button-system`
 - [26-09-26-0529] [测试基线切片化 · 单文件改每条一档](26-09-26-0529-plan-baseline-slice-per-file.html) — `baseline-slice-per-file`
 - [26-09-26-0506] [落盘文件 schema 版本号与逐级升级链 · 工程计划](26-09-26-0506-plan-schema-version-chain.html) — `backend-schema-version-chain`

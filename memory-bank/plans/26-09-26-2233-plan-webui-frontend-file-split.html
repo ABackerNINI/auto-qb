@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-frontend-file-split">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-09-26-2233">
+<meta name="doc-updated" content="26-09-27-1130">
+<title>计划 · WEB UI 前端大文件拆分</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f0f0f;
+    --ink: #f0f0f0;
+    --ink-2: #b8b8b2;
+    --ink-3: #8a8a84;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-soft: rgba(255, 255, 255, 0.05);
+    --accent: #6fc7b6;
+    --accent-dim: rgba(111, 199, 182, 0.14);
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+    --sans: "Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .canvas {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 48px 96px;
+  }
+  .measure { max-width: 720px; }
+
+  /* ---------- 封面 ---------- */
+  .cover { padding: 88px 0 56px; border-bottom: 1px solid var(--line); }
+  .cover .kicker {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.09em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .cover h1 {
+    font-size: 44px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin: 20px 0 14px;
+  }
+  .cover .sub { font-size: 17px; color: var(--ink-2); max-width: 640px; }
+  .cover .meta {
+    margin-top: 40px;
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+  .cover .meta div { font-size: 12.5px; color: var(--ink-3); }
+  .cover .meta b {
+    display: block;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ink-2);
+    margin-top: 3px;
+  }
+
+  /* ---------- 布局: 正文 + 侧栏 TOC ---------- */
+  .body-grid {
+    display: grid;
+    grid-template-columns: 208px 1fr;
+    gap: 56px;
+    padding-top: 40px;
+  }
+  nav.toc { position: sticky; top: 36px; align-self: start; }
+  nav.toc .toc-cap {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block;
+    font-size: 12.5px;
+    color: var(--ink-3);
+    text-decoration: none;
+    padding: 4.5px 0;
+    border-left: 1px solid transparent;
+    padding-left: 12px;
+    margin-left: -13px;
+  }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc a.on { color: var(--accent); border-left-color: var(--accent); }
+
+  main section { margin-bottom: 72px; }
+  .folio {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+  main h2 {
+    font-size: 25px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 24px;
+  }
+  main h3 {
+    font-size: 16.5px;
+    font-weight: 600;
+    margin: 30px 0 10px;
+  }
+  main p { color: var(--ink-2); margin-bottom: 13px; }
+  main p strong, main li strong { color: var(--ink); font-weight: 590; }
+  main ul, main ol { padding-left: 20px; margin-bottom: 13px; }
+  main li { color: var(--ink-2); margin-bottom: 6px; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: rgba(255, 255, 255, 0.055);
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+  .path { font-family: var(--mono); font-size: 0.84em; color: var(--ink-2); }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 22px; font-size: 13.5px; }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 400;
+    text-align: left;
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--line-soft);
+    color: var(--ink-2);
+    vertical-align: top;
+  }
+  td:first-child { white-space: nowrap; }
+  td .n { font-family: var(--mono); color: var(--ink); }
+  table.bleed { width: 100%; }
+  .num { font-family: var(--mono); }
+
+  /* ---------- 波次块 ---------- */
+  .wave {
+    border: 1px solid var(--line);
+    padding: 20px 24px 14px;
+    margin: 18px 0;
+  }
+  .wave-hd { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .wave-id {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .wave-hd b { font-size: 15.5px; font-weight: 600; }
+  .wave-hd .dur {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .wave p { font-size: 14px; margin-bottom: 9px; }
+  .wave .acc {
+    font-size: 12.5px;
+    color: var(--ink-3);
+    border-top: 1px solid var(--line-soft);
+    padding-top: 9px;
+    margin-top: 4px;
+  }
+  .wave .acc b { color: var(--ink-2); font-weight: 590; }
+
+  .note {
+    border-left: 1px solid var(--line);
+    padding: 2px 0 2px 18px;
+    margin: 16px 0;
+    color: var(--ink-3);
+    font-size: 13.5px;
+  }
+  .note b { color: var(--ink-2); font-weight: 590; }
+
+  /* ---------- colophon ---------- */
+  .colophon {
+    border-top: 1px solid var(--line);
+    padding-top: 24px;
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+  .colophon .row { display: flex; gap: 48px; flex-wrap: wrap; }
+  .colophon b { color: var(--ink-2); font-weight: 590; }
+
+  @media (max-width: 900px) {
+    .body-grid { grid-template-columns: 1fr; }
+    nav.toc { position: static; display: none; }
+    .canvas { padding: 0 24px 64px; }
+    .cover h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+
+  <header class="cover">
+    <div class="kicker">Plan · auto-qb · memory-bank/plans</div>
+    <h1>WEB UI 前端大文件拆分计划</h1>
+    <p class="sub">两套 <span class="path">index.html</span> 各约 2,600 行是当前最大的维护负担。本计划在<strong>零构建链</strong>约束下,把根模板拆成按页面区命名的分片文件,并把拆分纳入既有守阵体系 —— 每一步都可机检、可回滚。</p>
+    <div class="meta">
+      <div>日期<b>2026-09-26</b></div>
+      <div>状态<b>实施中 · W1 已落地(2026-09-27)</b></div>
+      <div>领域<b>webui</b></div>
+      <div>前置实测<b>test.full 1665+1 · TOTAL 92%</b></div>
+    </div>
+  </header>
+
+  <div class="body-grid">
+
+    <nav class="toc">
+      <div class="toc-cap">目录</div>
+      <a href="#s1">1 现状盘点</a>
+      <a href="#s2">2 问题定性</a>
+      <a href="#s3">3 约束与既有资产</a>
+      <a href="#s4">4 目标与非目标</a>
+      <a href="#s5">5 拆分设计</a>
+      <a href="#s6">6 波次计划</a>
+      <a href="#s7">7 风险与对策</a>
+      <a href="#s8">8 验收标准</a>
+    </nav>
+
+    <main>
+
+      <!-- ============ 1 ============ -->
+      <section id="s1">
+        <div class="folio">§ 01 / 现状</div>
+        <h2>现状盘点(2026-09-26 实测)</h2>
+        <p class="measure">后端在 2026-09-15 已按 <span class="path">backend-file-split-plan</span> 拆细(<span class="path">routes/</span> 单文件 ≤ 221 行);前端共享 JS 也已按域拆成 20 个文件。当前的单体集中在前端<strong>模板与样式</strong>三层:</p>
+        <table>
+          <thead><tr><th>文件</th><th>行数</th><th>构成与问题</th></tr></thead>
+          <tbody>
+            <tr><td><span class="path">atlas/index.html</span></td><td class="n">2,555</td><td>#app 根模板约 2,360 行(93 行起至 script 区),含全部页面区 + 少量 x-template</td></tr>
+            <tr><td><span class="path">prism/index.html</span></td><td class="n">2,613</td><td>与 atlas <strong>语义同构</strong>的平行副本(守阵原话:「模板本就同构」),改一处必须成对改</td></tr>
+            <tr><td><span class="path">atlas/style.css</span></td><td class="n">1,720</td><td>单文件设计令牌 + 全部组件规则;prism 侧同层已拆为 base / components / views 三件</td></tr>
+            <tr><td><span class="path">shared/app.js</span></td><td class="n">1,271</td><td>根 mixin(轮询 / 启动 / 页面切换 / 状态聚合),已是按域拆出的最大块,仍偏大</td></tr>
+            <tr><td><span class="path">shared/config_editor.js</span></td><td class="n">1,105</td><td>配置编辑器核心 mixin,域内聚度高,优先级低</td></tr>
+            <tr><td>其余 shared/*.js(18 个)</td><td class="n">≤ 773</td><td>粒度健康,不在本计划范围</td></tr>
+            <tr><td><span class="path">webui/views.py</span></td><td class="n">778</td><td>后端最大件,中等;若做属另一计划,本计划不动</td></tr>
+          </tbody>
+        </table>
+        <p class="measure">结论:<strong>真正的单体是两份根模板</strong> —— 体量最大、且互相构成「成对改」的重复劳动。CSS 与 app.js 是第二梯队。</p>
+      </section>
+
+      <!-- ============ 2 ============ -->
+      <section id="s2">
+        <div class="folio">§ 02 / 定性</div>
+        <h2>问题定性:为什么难维护</h2>
+        <div class="measure">
+          <h3>① 2,600 行文件里找不到「改哪儿」</h3>
+          <p>一个页面区的模板(如设置页二级页、追剧视图)平均只占根模板的 200–500 行,但每次定位都要在整个文件里上下文扫描;行号级 code review 与冲突合并都随文件体积平方级恶化。</p>
+          <h3>② 双份同构副本 ⇒ 成对改纪律靠人肉</h3>
+          <p>atlas 与 prism 的模板语义同构,差异只在皮肤类名与少量结构。坑库(web-ui/template-render.md)为此立了「两套 UI 必须成对改」纪律与计数守阵 —— 纪律本身说明<strong>结构有缺陷</strong>:同一份语义模板存两份,漏改靠守阵兜底而不是结构上不可能。</p>
+          <h3>③ 静态守阵绑死了文件位置</h3>
+          <p>test_web.py 约 10 处断言直接读取 index.html 全文(按钮体系用量、tpl-hub-field 存在性、挂件类名、页面位置持久化接线等)。这些守阵保证了质量,但也意味着<strong>任何拆分都必须连着守阵一起动</strong>,否则闸门红或守阵失效。</p>
+        </div>
+      </section>
+
+      <!-- ============ 3 ============ -->
+      <section id="s3">
+        <div class="folio">§ 03 / 约束</div>
+        <h2>约束与既有资产</h2>
+        <div class="measure">
+          <h3>硬约束</h3>
+          <ul>
+            <li><strong>零构建链</strong>:Vue 3 CDN 本地托管,无打包器;<span class="path">StaticFiles(html=True)</span> 目录即 URL,<span class="path">index.html</span> 必须仍是唯一入口。</li>
+            <li><strong><code>&lt;script type="text/x-template"&gt;</code> 不支持 src</strong>:浏览器不会为带 src 的 script 填充 innerHTML —— 模板分片不能直接改成 src 引用。</li>
+            <li><strong>模板内有 3 处 JS 模板字符串</strong>(反引号 + <code>${}</code>,atlas / prism 各 3–4 处,如 <code>:title="`按${l10nGroup}展示`"</code>)⇒ 分片若放进 JS 反引号字符串,这些位置必须转义,是持续性的新坑源头。<strong>此路不通,机制选型据此定案(§5)。</strong></li>
+            <li><strong>静态资源已有 no-cache</strong>(middleware),分片文件不会被启发式缓存咬到。</li>
+          </ul>
+          <h3>可直接复用的既有资产</h3>
+          <ul>
+            <li><strong>app.js 片段拆分先例</strong>:test_web.py:653–709 的 <code>_js_fragments()</code> 按 prism/index.html 的 script 加载顺序枚举片段,并断言「每个片段文件都被 script 引用,漏挂 = 整块功能静默消失」—— 拆分 + 加载顺序守阵的模式已验证过一轮。</li>
+            <li><strong>UI 冒烟工装</strong>(pitfalls/testing/ui-preview-harness.md):无头 Edge + 包装 createApp 捕获 <code>window.__VM</code>,可对拆分前后做渲染快照对比(等价性验证的机器兜底)。</li>
+            <li><strong>双向 class 覆盖检查</strong>与挂件类名守阵(<code>_scan_page_class_wiring</code>):拆分后跑同一套,只是扫描目标从 index.html 变为「分片聚合结果」。</li>
+            <li><strong>prism 的 CSS 分层结构</strong>(tokens / themes / base / components / views):atlas/style.css 拆分照此对齐,不另发明。</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============ 4 ============ -->
+      <section id="s4">
+        <div class="folio">§ 04 / 范围</div>
+        <h2>目标与非目标</h2>
+        <div class="measure">
+          <h3>目标</h3>
+          <ul>
+            <li>两套 index.html 瘦身为 ≤ 200 行的 shell(入口 + 有序资源清单),模板按页面区拆成分片文件,单分片 ≤ 400 行。</li>
+            <li>拆分过程每一步有守阵与渲染快照兜底,<strong>任何时刻可回滚到上一波次</strong>。</li>
+            <li>atlas/style.css 对齐 prism 分层;app.js 按域再拆一轮。</li>
+            <li>产出一份数据支撑的「双模板差异清单」,为是否进一步收敛(可选波次 W3)提供拍板依据。</li>
+          </ul>
+          <h3>非目标</h3>
+          <ul>
+            <li><strong>不引入构建链</strong>(不引入 Vite / 打包器 / node 依赖)。</li>
+            <li><strong>不改任何运行时行为</strong>:DOM 结构、类名、交互、URL 全部不变(守阵与快照按「拆分前后等价」验收)。</li>
+            <li>不动共享 JS 的 18 个健康粒度文件;不动后端;不做视觉改版。</li>
+            <li>双模板收敛(W3)<strong>只评估不默认实施</strong> —— 见 §6 波次说明。</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ============ 5 ============ -->
+      <section id="s5">
+        <div class="folio">§ 05 / 设计</div>
+        <h2>拆分设计</h2>
+        <div class="measure">
+          <h3>机制:分片 HTML + 启动胶水注入(定案)</h3>
+          <p>模板分片以<strong>纯 HTML 片段文件</strong>落盘(<span class="path">atlas/tpl/*.html</span>、<span class="path">prism/tpl/*.html</span>),由一段小胶水在 createApp 之前 fetch 注入:</p>
+          <ol>
+            <li><span class="path">index.html</span> 变 shell:<code>&lt;div id="app" v-cloak&gt;</code> 置空,顶部保留图标 sprite,底部是<strong>有序</strong>的胶水与逻辑 script 清单。</li>
+            <li>新增 <span class="path">shared/boot.js</span>(两套共用,约 60 行):按 shell 内声明的分片清单顺序 fetch,拼装进 #app,同时把 x-template 分片注入为对应 script 节点;全部成功后才放行 app.js 的 createApp(时序由 boot 统一收口,失败显示错误占位并停止 —— 与现有「配置加载失败 + 重试」同风格)。</li>
+            <li>v-cloak 语义保留:注入完成前 #app 为空,天然无闪烁;对比现状(整段模板在 HTML 里靠 v-cloak 藏)反而是改善。</li>
+          </ol>
+          <p><strong>为什么不是 JS 模板字符串</strong>:模板内已有 3 处反引号 + <code>${}</code>(§3),放 JS 字符串必须转义,且以后每次写模板都要记得 —— 转义错误是静默的(template-render 坑库整篇都在讲这类静默失效)。纯 HTML 分片零转义负担、编辑器高亮、diff 干净。</p>
+          <p><strong>为什么不是后端聚合端点</strong>:会让「目录即 URL、静态零逻辑」的部署模型多一个动态路由;且 boot.js 方案在 stub 冒烟工装下同样工作(注入点适配一次即可,坑条目已知)。</p>
+
+          <h3>分片边界(两套 UI 同一套清单)</h3>
+          <table>
+            <thead><tr><th>分片</th><th>内容</th><th>预估行数</th></tr></thead>
+            <tbody>
+              <tr><td><span class="path">topbar.html</span></td><td>顶栏导航 / 状态栏 / 搜索框</td><td class="n">~200</td></tr>
+              <tr><td><span class="path">groups.html</span></td><td>辅种分组视图(表格 / 展开明细 / 批量条)</td><td class="n">~450</td></tr>
+              <tr><td><span class="path">torrents.html</span></td><td>全部种子视图</td><td class="n">~250</td></tr>
+              <tr><td><span class="path">shows.html</span></td><td>追剧视图</td><td class="n">~350</td></tr>
+              <tr><td><span class="path">settings.html</span></td><td>Console Hub 首页卡 + 二级页(站点 / 规则 / 限速曲线 / HR 状态 / 运行日志)</td><td class="n">~700(可再二拆 settings-hub / settings-detail)</td></tr>
+              <tr><td><span class="path">dialogs.html</span></td><td>全部对话框 / 抽屉 / 浮层模板 + x-template 组件区</td><td class="n">~400</td></tr>
+              <tr><td>shell(index.html 保留)</td><td>sprite + #app 容器 + 分片清单与 script 顺序声明</td><td class="n">≤ 200</td></tr>
+            </tbody>
+          </table>
+          <p class="measure">上表行数为按现有模板比例的<strong>预估</strong>,W0 实测校准后以校准值为准。分片清单本身写进 shell 的一个 <code>&lt;meta name="tpl-parts"&gt;</code> 或 JS 常量,作为 boot 与守阵共用的单一来源。</p>
+        </div>
+      </section>
+
+      <!-- ============ 6 ============ -->
+      <section id="s6">
+        <div class="folio">§ 06 / 波次</div>
+        <h2>波次计划</h2>
+        <p class="measure">每波独立可提交、可回滚;波内先两套 UI 成对改,再跑守阵 + 冒烟。工作量以「轮」计(一轮 ≈ 一个专注会话)。</p>
+
+        <div class="wave">
+          <div class="wave-hd"><span class="wave-id">W0</span><b>机检先行:守阵迁移方案 + 等价性基线</b><span class="dur">0.5 轮</span></div>
+          <p>盘点 test_web.py 全部读取 index.html / style.css 的断言(已知约 10 处:按钮体系、tpl-hub-field、挂件类名、页面位置、键盘接线等),逐条给出「读聚合结果」的迁移写法;<code>_scan_page_class_wiring</code> 与 bt 计数守阵改为扫「shell + 分片聚合」。搭无头 harness 拆分前基线:两套 UI 各页 DOM 结构快照 + 关键交互(data-drv 标记)留档。</p>
+          <div class="acc"><b>验收:</b>守阵迁移方案成清单;快照基线可复现;<strong>不改动任何产品文件</strong>。</div>
+        </div>
+
+        <div class="wave">
+          <div class="wave-hd"><span class="wave-id">W1</span><b>根模板分片(最大收益波)</b><span class="dur">2 轮</span></div>
+          <p>实现 boot.js + shell 改造;按 §5 边界把两套根模板拆进 <span class="path">tpl/*.html</span>(顺序:dialogs → shows → torrents → groups → settings → topbar,由小到大练手);新增守阵:①分片清单完整性(清单里每个分片存在且被 boot 引用,漏挂 = 红,仿 <code>_js_fragments</code>);②双 UI 分片计数断言;③聚合后的既有内容断言全部通过。</p>
+          <div class="acc"><b>验收:</b>两套 index.html ≤ 200 行;守阵全绿;harness 快照与 W0 基线 DOM 等价;无控制台错误。</div>
+        </div>
+
+        <div class="wave">
+          <div class="wave-hd"><span class="wave-id">W2</span><b>样式与 app.js 续拆</b><span class="dur">1 轮</span></div>
+          <p>atlas/style.css 按 prism 分层结构拆(base / components / views / tokens 留根),link 顺序即加载顺序、挂守阵;app.js 按域再拆(轮询 / 启动引导 / 视图切换 / 状态聚合),沿用既有片段加载顺序守阵。</p>
+          <div class="acc"><b>验收:</b>单 CSS 文件 ≤ 700 行;app.js ≤ 500 行;守阵全绿;快照等价。</div>
+        </div>
+
+        <div class="wave">
+          <div class="wave-hd"><span class="wave-id">W3</span><b>双模板收敛评估(可选,默认只出报告)</b><span class="dur">0.5–2 轮</span></div>
+          <p>以 W1 的分片为单位做两套模板的逐片 diff,产出「语义差异清单」(差异 = 皮肤类名 / 结构分叉 / 逻辑分叉三类)。若皮肤类名占比 &gt; 90%,后续可评估「单一语义模板 + 皮肤差异表」把成对改纪律在结构上消掉 —— 这是治本,但风险最高,<strong>本计划只交付评估报告,是否实施另行拍板</strong>。</p>
+          <div class="acc"><b>验收:</b>差异清单数据完整、可判定;不实施时不改任何产品文件。</div>
+        </div>
+
+        <div class="wave">
+          <div class="wave-hd"><span class="wave-id">W4</span><b>收口</b><span class="dur">0.5 轮</span></div>
+          <p>test.full 落新基线切片;回写 memory-bank(progress / core-domain 模块表 / template-render 坑条目补「拆分后守阵口径」);真机冒烟;提交推送。</p>
+          <div class="acc"><b>验收:</b>闸门全绿;文档与代码事实一致;基线数字入库。</div>
+        </div>
+
+        <p class="measure">合计 <strong>4.5–6 轮</strong>(不含 W3 若实施)。每波提交独立,gitmoji 用 ♻️(无行为变化的重构);任一波次守阵红且当日修不掉 → 整体回滚该波,不留半拆状态。</p>
+      </section>
+
+      <!-- ============ 7 ============ -->
+      <section id="s7">
+        <div class="folio">§ 07 / 风险</div>
+        <h2>风险与对策</h2>
+        <table>
+          <thead><tr><th>风险</th><th>等级</th><th>对策</th></tr></thead>
+          <tbody>
+            <tr><td>boot fetch 注入引入启动时序缺陷(竞态 / 失败路径)</td><td>高</td><td>boot 单一收口、顺序 await、失败即显式占位;harness 驱动「分片 404」场景验证失败路径;计划内 W1 首日只做 boot + 单分片灰度</td></tr>
+            <tr><td>分片拆错边界 ⇒ 模板结构截断(静默白屏类坑)</td><td>高</td><td>拆分以「平衡标签块」为切割单位,用解析器校验每个分片标签配平;守阵聚合后跑既有全部内容断言</td></tr>
+            <tr><td>静态守阵漏迁移 ⇒ 闸门假绿</td><td>中</td><td>W0 盘点清单落档案,grep <code>index.html</code> 兜底复查;守阵聚合读法在 W1 前先红绿验证</td></tr>
+            <tr><td>stub 冒烟工装注入点失配</td><td>中</td><td>工装是临时目录产物不入仓库,按坑条目适配注入点;工装驱动不到的分支按坑条目「静态证据补位 + 如实报告」</td></tr>
+            <tr><td>并行 clone 同时改模板 ⇒ 合并冲突放大</td><td>中</td><td>分片后文件变小冲突反而收敛;W1 执行期间在档案声明占用区,提交前照常走 sync 预检</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- ============ 8 ============ -->
+      <section id="s8">
+        <div class="folio">§ 08 / 验收</div>
+        <h2>验收标准</h2>
+        <div class="measure">
+          <ul>
+            <li><strong>体量</strong>:两套 index.html 各 ≤ 200 行;模板分片单文件 ≤ 400 行;atlas 样式单文件 ≤ 700 行;app.js ≤ 500 行。</li>
+            <li><strong>等价</strong>:harness DOM 快照与 W0 基线结构等价;真机冒烟(双 UI、五主题)无控制台错误。</li>
+            <li><strong>守阵</strong>:test.full 全绿且守阵数量不减(迁移 ≠ 删除);新增 ①分片清单完整性 ②双 UI 分片计数 两条守阵。</li>
+            <li><strong>可维护性硬指标</strong>:此后改任一页面区,只碰对应分片 + shared 逻辑层;<strong>成对改纪律的执行成本下降</strong>(改模板时在两套同名分片间跳转,而非两份 2,600 行文件)。</li>
+            <li><strong>知识库</strong>:基线切片、progress 条目、坑条目(boot 时序 / 分片边界判定,若踩到)随 W4 入库。</li>
+          </ul>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer class="colophon">
+    <div class="row">
+      <div><b>产物</b>memory-bank/plans/26-09-26-2233-plan-webui-frontend-file-split.html</div>
+      <div><b>实测口径</b>test.full 1665 passed + 1 skipped · TOTAL 92%(26-09-26 基线)</div>
+      <div><b>决策点</b>§5 机制定案 · §6 W3 是否实施待拍板</div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  // TOC 高亮: 滚动到哪节, 侧栏亮到哪行(纯 IntersectionObserver, 无依赖)
+  (function () {
+    const links = Array.from(document.querySelectorAll("nav.toc a"));
+    const secs = links.map(a => document.querySelector(a.getAttribute("href")));
+    const pick = () => {
+      let idx = 0;
+      secs.forEach((s, i) => { if (s && s.getBoundingClientRect().top < 140) idx = i; });
+      links.forEach((a, i) => a.classList.toggle("on", i === idx));
+    };
+    document.addEventListener("scroll", pick, { passive: true });
+    pick();
+  })();
+</script>
+</body>
+</html>

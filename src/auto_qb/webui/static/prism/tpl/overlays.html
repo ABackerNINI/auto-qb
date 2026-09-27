@@ -1,0 +1,18 @@
+    <!-- 提示条与站内确认框: 全局单例(替代 alert/confirm/prompt, 视觉与主题一致) -->
+    <div class="toast-wrap">
+      <div v-for="t in toasts" :key="t.id" class="toast" :class="t.kind">
+        <svg class="ico ico-sm" :class="{ spin: t.kind === 'busy' }" viewBox="0 0 16 16">
+          <use :href="{ ok: '#i-check', error: '#i-warn', busy: '#i-refresh', timeout: '#i-clock' }[t.kind] || '#i-info'"></use>
+        </svg>
+        <span>{{ t.text }}</span>
+      </div>
+    </div>
+
+    <!-- 列头拖动虚影(FX-25): 跟随光标的列名胶囊。必须挂在 #app 根层 ——
+         放进 .group-head 会因它的 will-change/transform 另建包含块, fixed 定位变成相对表头。 -->
+    <div v-if="colGhost" class="col-ghost" :style="{ left: colGhost.x + 'px', top: colGhost.y + 'px' }">
+      {{ colGhost.label }}
+    </div>
+
+    <!-- 种子详情抽屉(R1B): WEB UI 替代 qB 界面的详情面板(常规/Tracker/用户/内容)。
+         W5-RFB-01 纯展示化: 抽屉头只留 标题+状态徽章+关闭, 全部操作走行右键菜单与批量条。

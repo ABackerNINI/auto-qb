@@ -1,0 +1,217 @@
+        <transition name="pop">
+        <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
+          <!-- CTX-03 批量菜单: 被右键的行属于当前选中集合时, 菜单升级为对**整个选中集合**生效
+               (与批量浮条同一套动作与链路, 见 menu.js _ctxMulti / commands.js ctxAct)。
+               这里刻意只放"批量有意义"的动作 —— 详细信息/限速/重命名/导出/复制等单目标项
+               不出现在批量菜单里(它们对 N 个目标没有明确语义); 要单目标操作请不选中任何行再右键。 -->
+          <template v-if="menu.multi">
+            <div class="ctx-item" @click="ctxAct('resume')">
+              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>批量开始
+            </div>
+            <div class="ctx-item" @click="ctxAct('pause')">
+              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>批量暂停
+            </div>
+            <div class="ctx-item" @click="ctxAct('reannounce')">
+              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="ctxAct('recheck')">
+              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
+            </div>
+            <div class="ctx-item" @click="ctxMeta()">
+              <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item danger" @click="ctxDelete()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>批量删除…
+            </div>
+          </template>
+          <template v-else-if="menu.episode">
+            <div class="ctx-item" @click="actEpisode('resume')">
+              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>{{ menu.episode.scope === 'show' ? '开始整剧' : '开始整集' }}
+            </div>
+            <div class="ctx-item" @click="actEpisode('pause')">
+              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>{{ menu.episode.scope === 'show' ? '暂停整剧' : '暂停整集' }}
+            </div>
+            <div class="ctx-item" @click="actEpisode('reannounce')">
+              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </div>
+            <div class="ctx-sep"></div>
+            <!-- FX-14: 整集/整剧的"打开目标文件夹"取首个成员; 同剧同集通常共用同一保存路径 -->
+            <div class="ctx-item" @click="openTargetPath('torrent', menu.episode.hashes[0])">
+              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item danger" @click="delEpisode()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>{{ menu.episode.scope === 'show' ? '删除整剧…' : '删除整集…' }}
+            </div>
+          </template>
+          <template v-else-if="menu.hash">
+            <div class="ctx-item" @click="actTorrent('resume')">
+              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始该种子
+            </div>
+            <div class="ctx-item" @click="actTorrent('pause')">
+              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停该种子
+            </div>
+            <div class="ctx-item" @click="actTorrent('reannounce')">
+              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="openTorrentDrawer(menu.hash)">
+              <svg class="ico ico-sm ico-info" viewBox="0 0 16 16"><use href="#i-info"></use></svg>详细信息
+            </div>
+            <div class="ctx-sep"></div>
+            <!-- 编辑(D 轮): 多字段编辑对话框, 预填当前值/空=不改, 回执 toast(见 app.js editLimits 等) -->
+            <div class="ctx-item" @click="editLimits()">
+              <svg class="ico ico-sm ico-gauge" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>限速…
+            </div>
+            <div class="ctx-item" @click="editMove()">
+              <svg class="ico ico-sm ico-move" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>移动…
+            </div>
+            <div class="ctx-item" @click="editRename()">
+              <svg class="ico ico-sm ico-rename" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>重命名…
+            </div>
+            <div class="ctx-item" @click="openMetaDialog(menu.hash)">
+              <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="torrentCmd('recheck', null, '重新校验')">
+              <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
+            </div>
+            <div class="ctx-item" @click="exportTorrent()">
+              <svg class="ico ico-sm ico-export" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
+            </div>
+            <div class="ctx-item" @click="openTargetPath('torrent', menu.hash)">
+              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
+            </div>
+            <div class="ctx-sep"></div>
+            <!-- FX-15 次级菜单(R10-14: 文案由"高级能力"改"更多操作" —— 装的都是 qB 常规种子控制,
+                 不是"高级"能力; 只改文案与语义, 子项集合不动); hover 与点击均可展开;
+                 CTX-06: 复制族(名称/哈希/magnet)由独立子面板并入本面板末尾 —— 一级只留这一个入口,
+                 两个"更多"并排会让"该进哪个"变成一次选择; 移出父项/面板后延迟收起(CTX-05) -->
+            <div class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }"
+                 @mouseenter="openSub('advanced', $event)" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub('advanced', $event)">
+              <svg class="ico ico-sm ico-tune" viewBox="0 0 16 16"><use href="#i-sliders"></use></svg>更多操作
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   @click.stop @mouseenter="keepSub()">
+                <div class="ctx-item" @click="torrentCmd('queue', { action: 'top' }, '队列置顶')">
+                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置顶
+                </div>
+                <div class="ctx-item" @click="torrentCmd('queue', { action: 'up' }, '队列上移')">
+                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列上移
+                </div>
+                <div class="ctx-item" @click="torrentCmd('queue', { action: 'down' }, '队列下移')">
+                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列下移
+                </div>
+                <div class="ctx-item" @click="torrentCmd('queue', { action: 'bottom' }, '队列置底')">
+                  <svg class="ico ico-sm ico-queue" viewBox="0 0 16 16"><use href="#i-sort"></use></svg>队列置底
+                </div>
+                <div class="ctx-sep"></div>
+                <div class="ctx-item" @click="torrentCmd('super-seeding', { enable: !menuTorrent().super_seeding }, menuTorrent().super_seeding ? '关闭超级做种' : '开启超级做种')">
+                  <svg class="ico ico-sm ico-super" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().super_seeding ? "关闭超级做种" : "开启超级做种" }}
+                </div>
+                <div class="ctx-item" @click="torrentCmd('force-start', { enable: !menuTorrent().force_start }, menuTorrent().force_start ? '取消强制开始' : '强制开始')">
+                  <svg class="ico ico-sm ico-force" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>{{ menuTorrent().force_start ? "取消强制开始" : "强制开始" }}
+                </div>
+                <div class="ctx-item" @click="autoTmmToggle()">
+                  <svg class="ico ico-sm ico-tmm" viewBox="0 0 16 16"><use href="#i-shield"></use></svg>{{ menuTorrent().auto_tmm ? "关闭自动种子管理" : "开启自动种子管理" }}
+                </div>
+                <div class="ctx-item" @click="editShareLimits()">
+                  <svg class="ico ico-sm ico-percent" viewBox="0 0 16 16"><use href="#i-percent"></use></svg>分享率限制…
+                </div>
+                <!-- CTX-06: 复制族并入「更多操作」(此前是并列的第二个子面板) -->
+                <div class="ctx-sep"></div>
+                <div class="ctx-item" @click="copyTorrentInfo('name')">
+                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制名称
+                </div>
+                <div class="ctx-item" @click="copyTorrentInfo('hash')">
+                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制哈希
+                </div>
+                <div class="ctx-item" @click="copyTorrentInfo('magnet')">
+                  <svg class="ico ico-sm ico-copy" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>复制 magnet
+                </div>
+              </div>
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item danger" @click="delTorrent()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该种子…
+            </div>
+          </template>
+          <template v-else>
+            <div class="ctx-item" @click="act('resume')">
+              <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始整组
+            </div>
+            <div class="ctx-item" @click="act('pause')">
+              <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停整组
+            </div>
+            <div class="ctx-item" @click="act('reannounce')">
+              <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
+            </div>
+            <div class="ctx-sep"></div>
+            <!-- FX-14: 组内成员 save_path 天然一致(组 key 首元即规范化 save_path) -->
+            <div class="ctx-item" @click="openTargetPath('group', menu.key)">
+              <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
+            </div>
+            <div class="ctx-sep"></div>
+            <div class="ctx-item danger" @click="delGroup()">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该{{ l10nGroup }}…
+            </div>
+          </template>
+        </div>
+        </transition>
+        <!-- 表头右键菜单(TBL-05): 针对**该列**的操作 —— "隐藏xxx"即隐藏这一列; 另给排序直达与完整列选择器入口 -->
+        <transition name="pop">
+        <div v-if="headMenu.visible" class="ctx-menu" :style="{left: headMenu.x+'px', top: headMenu.y+'px'}"
+             @click.stop @contextmenu.prevent>
+          <div class="ctx-item" :class="{ muted: headMenu.locked }" @click="headMenuHide()">
+            <svg class="ico ico-sm ico-hide" viewBox="0 0 16 16"><use href="#i-eye-off"></use></svg>
+            {{ headMenu.locked ? '「' + headMenu.label + '」为必显列' : '隐藏「' + headMenu.label + '」' }}
+          </div>
+          <template v-if="headMenu.sortable">
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="headMenuSort(-1)">
+              <svg class="ico ico-sm ico-sort" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>按「{{ headMenu.label }}」降序
+            </div>
+            <div class="ctx-item" @click="headMenuSort(1)">
+              <svg class="ico ico-sm ico-sort" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>按「{{ headMenu.label }}」升序
+            </div>
+          </template>
+          <!-- FX-28: 时间点列(见 TIME_FMT_KEYS)通用 —— 显示口径切换(勾 = 当前口径); 时长列不出现 -->
+          <template v-if="headTimeFmtAble()">
+            <div class="ctx-sep"></div>
+            <div class="ctx-item" @click="headMenuTimeFmt('rel')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-clock"></use></svg>相对时间(3分钟前)
+              <svg v-if="timeFmt[headMenu.key] === 'rel'" class="ico ico-sm col-tick ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+            </div>
+            <div class="ctx-item" @click="headMenuTimeFmt('abs')">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-calendar"></use></svg>绝对时间(09-20 20:56)
+              <svg v-if="timeFmt[headMenu.key] === 'abs'" class="ico ico-sm col-tick ctx-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
+            </div>
+          </template>
+          <div class="ctx-sep"></div>
+          <div class="ctx-item" @click="headMenuPicker()">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>显示/隐藏列…
+          </div>
+        </div>
+        </transition>
+        <!-- 文件优先级小菜单(详情抽屉内容页签): 复用 .ctx-menu 视觉, 锚定单元格, 视口吸附 -->
+        <transition name="pop">
+        <div v-if="filePrio.visible" class="ctx-menu" :style="{left: filePrio.x+'px', top: filePrio.y+'px'}" @click.stop>
+          <div class="ctx-item" @click="setFilePriority(0)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>跳过
+          </div>
+          <div class="ctx-item" @click="setFilePriority(1)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>普通
+          </div>
+          <div class="ctx-item" @click="setFilePriority(6)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>高
+          </div>
+          <div class="ctx-item" @click="setFilePriority(7)">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>最高
+          </div>
+        </div>
+        </transition>
+        </main>
+      </div>
