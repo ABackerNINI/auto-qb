@@ -29,6 +29,15 @@
   改完 topbar.html 后浏览器仍吐旧分片, 症状与"改了没生效"一模一样, 白查一轮。**为什么没命中**:
   注意力全在改动本身, 没意识到**自建静态服务也必须带 no-cache**(真机的 middleware 不是天然存在的)。
 
+### 自建冒烟桩缺 `/api/config/public` 会被登录遮罩挡死
+
+- **触发**: 自建桩挂静态 UI 做浏览器冒烟, 页面只渲染「请输入 WEB 访问密钥」, 主界面 DOM 完全不渲染。
+- **判别**: boot 先读 `/api/config/public`, 响应里 `web.skip_local_verify` 非 true 就走密钥表单分支 ——
+  纯静态桩不带这个端点 ⇒ 遮罩永不放行(`authRequired` 初值 true, 唯一放行点在验证成功/免鉴权标志)。
+- **处置**: 桩补 `GET /api/config/public → {"web": {"skip_local_verify": true}}`(再配最小
+  `/api/state` 形状); **有 `dev.harness` 就别自建桩** —— no-cache / 免鉴权 / state 形状它都带齐了,
+  自建前先 `commands list dev` 查现成 task id。
+
 ### 前端表达式错误只有浏览器能发现
 
 - **触发**: 改任何前端渲染逻辑。

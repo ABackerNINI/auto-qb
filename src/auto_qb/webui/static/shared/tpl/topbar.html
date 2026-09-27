@@ -35,9 +35,10 @@
               <button v-if="searchQuery" class="search-clear" title="清除搜索" @mousedown.prevent @click="clearSearch">
                 <svg class="ico" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
               </button>
-              <!-- 搜索语法帮助(计划 26-09-28-0201 方案A): 框内幽灵「?」恒显(清空钮有词才出现在其右侧) + 锚定浮卡。
+              <!-- 搜索语法帮助(计划 26-09-28-0201 方案A): 框内幽灵「?」恒显 + 锚定浮卡。
+                   有词时「?」让位到清空钮左侧(27px); 空框无清空钮时右移补位(6px, 2026-09-28 用户)。
                    语法语义单点在 views.py::_parse_query(站点页同构 config_hub.js::trackerParseQuery) —— 改语法先改后端注释, 再同步此卡文案 -->
-              <button class="search-help" :class="{ on: searchHelpOpen }" title="搜索语法帮助"
+              <button class="search-help" :class="{ on: searchHelpOpen, 'no-clear': !searchQuery }" title="搜索语法帮助"
                       aria-label="搜索语法帮助" :aria-expanded="searchHelpOpen ? 'true' : 'false'"
                       @mousedown.prevent @click.stop="toggleSearchHelp">?</button>
               <transition name="pop">
