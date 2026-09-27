@@ -1,0 +1,36 @@
+# 26-09-28-webui-sites-page-search — 站点页搜索: 全字段匹配与多命中展示
+
+**Status:** Done
+**Added:** 2026-09-28
+**Updated:** 2026-09-28 00:14
+**Summary:** 按计划 plans/26-09-27-1852 实施 trackers 二级页搜索: 名称/域名/标签/分组/删标/规则/限速/HR 全字段前端匹配, 语法照搬种子搜索(空格 AND / -词排除 / "短语"); 命中列表+详情左右分栏, chip 展示命中字段组与整值。纯前端零后端。
+
+## 原始请求
+
+实施计划 `memory-bank/plans/26-09-27-1852-plan-sites-page-search.html`(五项设计问题已于 26-09-27 拍板)。
+
+## 思考过程与决策
+
+- **数据源即已加载配置树**: 站点搜索是 facets 同族的纯内存筛选, 不碰文件系统, 与种子搜索「服务端化」决策(26-09-26)不冲突; 匹配函数收敛前端单点(trackerNorm / trackerParseQuery / trackerRows 各一处)。
+- **索引重建不用挂钩**: `hubTrackerIndex` 做成 Vue computed, 依赖遍历 cfg.tree 每站每键 —— 编辑/增删/重载天然触发重算, 不在 cfgLoad 上另挂重建钩子。
+- **详情卡复用而非重写**: 搜索态右栏直接复用非搜索态的 `hb-blk` 字段编辑块(重命名/删除/hub-field 行), 用 `display: block ↔ grid` 切换容器布局, 避免模板复制两份。
+- **选中态即 cfg.trackerKey**: 命中行点击 = 置 trackerKey(与 pill 一致), 左栏高亮 = `cfg.trackerKey === name` 的 class 绑定; 仅一命中自动选中走 `hubTrackerHits.hits` watcher(hits 不依赖 trackerKey, 无回环)。
+- **孤儿方法顺手清**: pill 键数徽标删除后 `hubCount()` 全仓零引用, 一并移除(计划内)。
+
+## 实现计划
+
+见 [plans/26-09-27-1852-plan-sites-page-search.html](../plans/26-09-27-1852-plan-sites-page-search.html) §04-§07(匹配算法 / 多命中显示 / 交互细节 / 实施落点), 本档案不复制。
+
+## 子任务状态表
+
+| # | 子任务 | 状态 |
+|---|---|---|
+| 1 | config_editor.js 声明 `trackerQuery` state | Done |
+| 2 | config_hub.js: norm/parse/rows 单点 + 索引/命中 computed + Esc·离开分区清空 + 单命中自动选中 | Done |
+| 3 | settings.html trackers 分支: 搜索行 + 命中列表 + 左右分栏 + pill 去键数徽标 | Done |
+| 4 | console_hub.css: hb-tr-* 样式(皮肤令牌, 三皮肤共用) | Done |
+| 5 | 守阵 test_frontend_tracker_search_wiring + test.full 全绿 | Done |
+
+## 进度日志
+
+- **2026-09-28 00:14 (Done)**: 实施完成。开工同步快进合并远端 7 笔(6262d3b→c7dfbd2), `_doc-map.md` stash 施回冲突已解决并由 kb.index 重建收敛。test.full **1812 passed + 3 skipped / 91%**(基线切片 [26-09-28-0014](../testing/baselines/26-09-28-0014-webui-sites-page-search.md))。新增守阵 1 条; `_common.CAP_POLICY["index-auto"]` 12000→12100(sites-page-search 专题入册后 12,006 超 cap) + SKILL.md cap 表同步。新坑入库: pitfalls/web-ui/cjk-regex-norm.md。

@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · 站点页搜索: 全字段匹配与多命中展示</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-27">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="sites-page-search">
+<meta name="doc-added" content="26-09-27-1852">
+<meta name="doc-updated" content="26-09-28-0014">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #14181d;
+    --ink: #e4e8ea;
+    --ink-dim: #99a2a8;
+    --ink-faint: #6b7378;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #63a6c4;
+    --accent-dim: rgba(99,166,196,.13);
+    --warn: #c99a63;
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1140px; margin: 0 auto; padding: 0 44px; }
+
+  /* ── 封面 ─────────────────────────────── */
+  header.cover { padding: 72px 0 0; }
+  .kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    line-height: 1.18;
+    margin: 18px 0 0;
+    max-width: 21em;
+  }
+  .lede { margin-top: 18px; max-width: 58ch; color: var(--ink-dim); font-size: 16px; }
+  .meta-row {
+    margin-top: 34px;
+    padding: 12px 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 42px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+  }
+  .meta-row b { color: var(--ink-dim); font-weight: 500; }
+
+  /* ── 双栏: TOC + 正文 ─────────────────── */
+  .layout { display: grid; grid-template-columns: 188px 1fr; gap: 56px; padding: 26px 0 0; }
+  nav.toc { position: sticky; top: 32px; align-self: start; padding-top: 26px; }
+  nav.toc .toc-cap {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 14px;
+  }
+  nav.toc a { display: block; text-decoration: none; color: var(--ink-faint); font-size: 12.5px; line-height: 1.5; padding: 4.5px 0; }
+  nav.toc a .n { font-family: var(--font-mono); font-size: 10.5px; margin-right: 9px; }
+  nav.toc a:hover { color: var(--accent); }
+  main { padding-top: 26px; min-width: 0; }
+
+  /* ── 章节 ─────────────────────────────── */
+  section { margin-bottom: 64px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 22px;
+  }
+  .sec-head .no { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
+  h3 { font-size: 15px; font-weight: 600; margin: 26px 0 10px; }
+  h3 .mono { font-family: var(--font-mono); font-size: .88em; }
+  p { max-width: 76ch; margin: 0 0 12px; color: var(--ink); }
+  p.dim { color: var(--ink-dim); }
+  .mono { font-family: var(--font-mono); font-size: .92em; }
+  code {
+    font-family: var(--font-mono);
+    font-size: .88em;
+    background: var(--paper);
+    border: 1px solid var(--hairline-soft);
+    padding: 1px 6px;
+  }
+  ul.plain { list-style: none; max-width: 76ch; }
+  ul.plain li { padding: 6px 0 6px 18px; position: relative; }
+  ul.plain li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 6px; height: 1px; background: var(--accent); }
+
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 20px; font-size: 13.5px; }
+  th {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  td { padding: 9px 12px 9px 0; border-bottom: 1px solid var(--hairline-soft); vertical-align: top; }
+  td .mono { color: var(--accent); }
+  td .dim { color: var(--ink-dim); }
+  th.keep, td.keep { white-space: nowrap; }
+
+  .callout { border: 1px solid var(--hairline); background: var(--paper); padding: 14px 18px; margin: 16px 0 20px; max-width: 76ch; }
+  .callout b { color: var(--accent); font-weight: 600; }
+  .callout p { margin: 0; }
+  .callout p + p { margin-top: 8px; }
+
+  /* ── 结果行解剖图 ─────────────────────── */
+  figure.anatomy { border: 1px solid var(--hairline); background: var(--paper); padding: 22px 22px 18px; margin: 18px 0 8px; }
+  figure.anatomy figcaption {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 16px;
+  }
+  .anatomy-list { list-style: none; margin-top: 16px; display: grid; gap: 6px; font-size: 13px; color: var(--ink-dim); }
+  .anatomy-list .k {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    border: 1px solid var(--hairline);
+    padding: 0 6px;
+    margin-right: 8px;
+  }
+
+  /* ── 示例模板 widget (仿 hb-* 版式) ───────── */
+  .widget { border: 1px solid var(--hairline); background: var(--paper); margin: 18px 0 8px; }
+  .w-chrome {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: .06em;
+  }
+  .w-body { padding: 20px 22px 24px; }
+  .w-crumb { font-size: 12px; color: var(--ink-faint); margin-bottom: 14px; }
+  .w-crumb b { color: var(--ink-dim); font-weight: 500; }
+  .w-sec { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+  .w-mark { width: 26px; height: 26px; border: 1px solid var(--hairline); flex: none; position: relative; }
+  .w-mark::after { content: ""; position: absolute; inset: 6px; background: var(--accent-dim); border: 1px solid var(--accent); }
+  .w-sec h3 { margin: 0; font-size: 16px; }
+  .w-sec p { margin: 0; font-size: 12px; color: var(--ink-faint); }
+  .w-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--hairline);
+    background: var(--bg);
+    padding: 0 12px;
+    height: 38px;
+    margin-bottom: 14px;
+  }
+  .w-search:focus-within { border-color: var(--accent); }
+  .w-search svg { width: 14px; height: 14px; stroke: var(--ink-faint); fill: none; stroke-width: 1.5; flex: none; }
+  .w-search input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--ink);
+    font: 13.5px/1 var(--font-sans);
+    min-width: 0;
+  }
+  .w-search input::placeholder { color: var(--ink-faint); }
+  .w-x {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--hairline);
+    background: none;
+    color: var(--ink-dim);
+    font: 12px/1 var(--font-mono);
+    cursor: pointer;
+  }
+  .w-x:hover { color: var(--ink); border-color: var(--accent); }
+  .w-count { flex: none; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; }
+  .w-count.warn { color: var(--warn); }
+
+  .w-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .w-pill {
+    border: 1px solid var(--hairline);
+    background: none;
+    color: var(--ink-dim);
+    font: 12.5px/1 var(--font-sans);
+    padding: 7px 12px;
+    cursor: pointer;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .w-pill:hover { color: var(--ink); border-color: var(--accent); }
+  .w-pill.on { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+  .w-pill .p-n { font-family: var(--font-mono); font-size: 10px; color: var(--ink-faint); }
+  .w-pill.ghost { color: var(--ink-faint); }
+
+  .w-hint { border: 1px solid var(--hairline); background: var(--bg); padding: 12px 16px; font-size: 13px; color: var(--ink-dim); }
+  .w-hint.warn { color: var(--warn); }
+
+  .tr-hit {
+    display: block;
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--hairline-soft);
+    border-top: none;
+    background: var(--bg);
+    padding: 10px 14px;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+  }
+  .tr-hit:first-of-type { border-top: 1px solid var(--hairline-soft); }
+  .tr-hit:hover { background: var(--paper); }
+  .tr-hit:hover .tr-hit-name { color: var(--accent); }
+  .tr-hit.on { background: var(--accent-dim); }
+  .tr-hit.on .tr-hit-name { color: var(--accent); }
+  .tr-hit-name { font-weight: 600; font-size: 13.5px; margin-right: 10px; }
+  .tr-hit-name.hit { color: var(--accent); }
+  .tr-hit-name .p-n { font-family: var(--font-mono); font-weight: 400; font-size: 10px; color: var(--ink-faint); margin-left: 7px; }
+  .chips { display: inline-flex; gap: 6px; flex-wrap: wrap; vertical-align: 1px; }
+  .chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    border: 1px solid var(--hairline);
+    border-radius: 3px;
+    padding: 2.5px 8px;
+    font-size: 11.5px;
+    color: var(--ink-dim);
+    background: var(--paper);
+  }
+  .chip i { font-style: normal; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .08em; color: var(--ink-faint); }
+  .chip.on { border-color: var(--accent); }
+  .chip.on em { font-style: normal; color: var(--accent); }
+  .chip.more { border-style: dashed; color: var(--ink-faint); background: none; }
+
+  .w-cols { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
+  .w-cols.split { grid-template-columns: 1.15fr 1fr; }
+
+  .w-detail { border: 1px solid var(--hairline); background: var(--bg); }
+  .w-cols:not(.split) .w-detail { margin-top: 14px; }
+  .w-detail-hd {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .w-detail-hd b { font-size: 13px; }
+  .w-detail-hd span { font-size: 11.5px; color: var(--ink-faint); }
+  .w-detail .frow { display: flex; gap: 14px; padding: 7px 14px; border-bottom: 1px solid var(--hairline-soft); font-size: 12.5px; }
+  .w-detail .frow:last-child { border-bottom: none; }
+  .w-detail .fk { flex: 0 0 96px; font-family: var(--font-mono); font-size: 11px; color: var(--accent); padding-top: 1px; }
+  .w-detail .fv { color: var(--ink-dim); word-break: break-all; }
+
+  .w-try { padding: 12px 22px 16px; border-top: 1px solid var(--hairline); font-size: 12px; color: var(--ink-faint); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .w-try button {
+    border: 1px solid var(--hairline);
+    background: none;
+    color: var(--ink-dim);
+    font: 11.5px/1 var(--font-mono);
+    padding: 5px 9px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .w-try button:hover { color: var(--accent); border-color: var(--accent); }
+  .w-try button b { color: var(--ink-faint); font-weight: 400; margin-left: 6px; font-family: var(--font-sans); }
+
+  footer.colophon { border-top: 1px solid var(--hairline); margin-top: 30px; padding: 20px 0 60px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
+
+  @media (max-width: 900px) {
+    .frame { padding: 0 20px; }
+    .layout { grid-template-columns: 1fr; }
+    nav.toc { position: static; display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="frame">
+
+  <header class="cover">
+    <p class="kicker">Plan · memory-bank/plans</p>
+    <h1>站点页搜索: 名称 / 域名 / 标签全字段匹配与多命中展示</h1>
+    <p class="lede">给 WebUI 设置「站点」二级页加一个搜索框, 匹配站点名、域名、标签、分组乃至全部配置字段; 匹配语义参照种子搜索方案, 多命中时逐站展示「命中字段 chip」。本文档内嵌可交互示例模板; 五个设计问题已于 26-09-27 拍板(见 08 节), 已于 26-09-28 实施(见 10 节变更记录)。</p>
+    <div class="meta-row">
+      <span><b>type</b> plan</span>
+      <span><b>status</b> Done · 已实施(26-09-28)</span>
+      <span><b>topic</b> sites-page-search</span>
+      <span><b>added</b> 26-09-27-1852</span>
+      <span><b>scope</b> 仅前端, 零后端改动</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="toc">
+      <div class="toc-cap">目录</div>
+      <a href="#s1"><span class="n">01</span>背景与目标</a>
+      <a href="#s2"><span class="n">02</span>参照: 种子搜索方案</a>
+      <a href="#s3"><span class="n">03</span>搜索范围: 字段清单</a>
+      <a href="#s4"><span class="n">04</span>匹配算法</a>
+      <a href="#s5"><span class="n">05</span>多命中显示方案</a>
+      <a href="#s6"><span class="n">06</span>交互细节</a>
+      <a href="#s7"><span class="n">07</span>实施落点</a>
+      <a href="#s8"><span class="n">08</span>拍板结果与验收清单</a>
+      <a href="#s9"><span class="n">09</span>示例模板(可交互)</a>
+      <a href="#s10"><span class="n">10</span>变更记录</a>
+    </nav>
+
+    <main>
+
+      <!-- ═══════════ 01 ═══════════ -->
+      <section id="s1">
+        <div class="sec-head"><span class="no">01</span><h2>背景与目标</h2></div>
+        <p>设置页「站点」分区(<span class="mono">hub.view === 'trackers'</span>)目前把全部站点平铺成一排 pill(站点名 + 配置键数), 没有任何筛选手段 —— 站点一多, 找某个站只能肉眼扫。设置首页虽然有一个搜索框(<span class="mono">hub.query</span>), 但它命中的是 <b>schema 字段元数据</b>(label + key + help, <span class="mono">config_hub.js:250-266</span>), 搜不到站点名、域名、标签这些<b>站点数据</b>。</p>
+        <p><b>目标</b>: 在站点二级页 pill 行上方加一个搜索框, 输入即筛 —— 命中站点保留, 未命中隐藏; 每个命中站点展示「哪些字段、什么值命中了」, 让用户一眼看出为什么这个站出现在结果里。</p>
+        <p class="dim">范围: 只动 trackers 分支; 三套皮肤(atlas / prism / console)共用同一份模板与 JS, 一处改动三皮肤同时生效。零后端、零 schema、零配置结构改动。</p>
+      </section>
+
+      <!-- ═══════════ 02 ═══════════ -->
+      <section id="s2">
+        <div class="sec-head"><span class="no">02</span><h2>参照: 种子搜索方案</h2></div>
+        <p>种子搜索是本仓库已定案的搜索范式, 语义直接沿用; 差异只有「跑在前端还是后端」一处:</p>
+        <table>
+          <tr><th class="keep">维度</th><th>种子搜索(参照)</th><th>站点搜索(本计划)</th></tr>
+          <tr><td class="keep">归一化</td><td><span class="mono">[\W_]+ → 空格 + lower</span> (<span class="mono">views.py:35-37</span>), 大小写 / 分隔符不敏感, CJK 可搜</td><td><b>同语义</b>; 前端实现须用 <span class="mono">[^\p{L}\p{N}]</span>(见 04 节的坑)</td></tr>
+          <tr><td class="keep">查询语法</td><td>空格分词隐式 AND; <span class="mono">-词</span> 排除; <span class="mono">"短语"</span> 连续子串 (<span class="mono">views.py:40-72</span>)</td><td><b>照搬同一套语法</b>, 用户零学习成本</td></tr>
+          <tr><td class="keep">匹配单位</td><td>「行」: 每个字段值归一为一行, 正词逐词跨行 AND, 负词任一行命中即整颗排除</td><td><b>同构</b>: 每个站点建一组行, 规则一致</td></tr>
+          <tr><td class="keep">匹配位置</td><td><b>服务端</b>单点 <span class="mono">views.py::search_torrents</span> — 因为文件名候选行需要扫盘建索引</td><td><b>前端</b>: 配置树已整棵在内存(<span class="mono">GET /api/config</span>), 与标签/分类 facets 筛选同模式; 服务端化无收益反增 API 面</td></tr>
+          <tr><td class="keep">防抖</td><td>400ms(服务端有成本)</td><td>即时计算 — 站点数通常 &lt; 100, 归一化行预建一次, 匹配可忽略</td></tr>
+          <tr><td class="keep">命中高亮</td><td>仅行级 <span class="mono">search-hit</span> 标记, 不做逐词片段高亮</td><td><b>同口径</b>: 命中字段值整值强调, 不做片段 mark(见 05 节)</td></tr>
+          <tr><td class="keep">状态持久化</td><td>不持久化, 刷新即清</td><td><b>一致</b>: 不持久化</td></tr>
+        </table>
+        <div class="callout">
+          <p><b>取舍说明</b> — 种子搜索 2026-09-26 收敛到服务端, 理由是「文件名候选行要扫盘建索引 + 前端禁止复活匹配代码」(<span class="mono">filters.js:82-86</span>)。站点搜索不碰文件系统, 数据源就是已加载的配置树, 属于 facets 同族的纯内存筛选, <b>不违反该决策</b>; 匹配函数仍收敛为前端单点(一处 <span class="mono">norm</span> / 一处 <span class="mono">parse</span> / 一处 <span class="mono">match</span>), 不在模板里散写。</p>
+        </div>
+      </section>
+
+      <!-- ═══════════ 03 ═══════════ -->
+      <section id="s3">
+        <div class="sec-head"><span class="no">03</span><h2>搜索范围: 字段清单</h2></div>
+        <p>站点 = <span class="mono">config.trackers.&lt;站点名&gt;</span> 的 dict, 合法键集合 <span class="mono">KNOWN_TRACKER_KEYS</span>(<span class="mono">validation/sections.py:88-99</span>)。每个键归入一个<b>字段组</b>, 字段组名就是命中 chip 上显示的中文标签:</p>
+        <table>
+          <tr><th class="keep">字段组(chip 标签)</th><th class="keep">来源键</th><th>取值方式</th><th class="keep">层级</th></tr>
+          <tr><td><b>名称</b></td><td class="mono">dict 键</td><td>站点名本身, 每站一行</td><td>内容 · 必搜</td></tr>
+          <tr><td><b>标签</b></td><td class="mono">tags</td><td>列表逐项一行(第一个标签即界面显示名)</td><td>内容 · 必搜</td></tr>
+          <tr><td><b>域名</b></td><td class="mono">domains</td><td>列表逐项一行(镜像域名全部可搜)</td><td>内容 · 必搜</td></tr>
+          <tr><td><b>分组</b></td><td class="mono">groups</td><td>列表逐项一行</td><td>内容 · 必搜</td></tr>
+          <tr><td><b>删标</b></td><td class="mono">remove_tags</td><td>模式串逐项一行(含 <span class="mono">regex:</span> 前缀原样可搜)</td><td>扩展</td></tr>
+          <tr><td><b>规则</b></td><td class="mono">rules</td><td>引用串逐项一行(<span class="mono">@规则集.规则名</span>)</td><td>扩展</td></tr>
+          <tr><td><b>上传限速 / 下载限速</b></td><td class="mono">upload/download_speed_limit</td><td>树内已是可读字符串(<span class="mono">"2MiB/s"</span>), 直接搜</td><td>扩展</td></tr>
+          <tr><td><b>HR</b></td><td class="mono">hr.*</td><td>子 dict 递归到叶子(<span class="mono">"3D"</span> / <span class="mono">"80%"</span> / 输出字段标签), 全挂「HR」组</td><td>扩展</td></tr>
+          <tr><td class="dim">不搜</td><td class="mono">remove_similar_tags</td><td class="dim">布尔, 无可读文本</td><td>—</td></tr>
+          <tr><td class="dim">不搜</td><td class="mono">hr_check</td><td class="dim">旧键(值以 HR 档案为准), 且不属于本页范围</td><td>—</td></tr>
+          <tr><td class="dim">不搜</td><td class="dim">掩码叶子</td><td class="dim">值 === 掩码哨兵 <span class="mono">********</span> 的行跳过 — 今天站点下无敏感键, 防的是未来新增键(如 rss passkey)把掩码串当内容</td><td>—</td></tr>
+        </table>
+        <p class="dim">序列化兜底口径(与树的真实形态解耦): 字符串原样 / 列表逐项 / 数字 <span class="mono">String()</span> / 布尔跳过 / dict 递归到叶子。用户诉求「所有配置字段」由「扩展 + HR」两层满足; 布尔与旧键除外(无文本可搜)。</p>
+      </section>
+
+      <!-- ═══════════ 04 ═══════════ -->
+      <section id="s4">
+        <div class="sec-head"><span class="no">04</span><h2>匹配算法</h2></div>
+        <h3><span class="mono">norm</span> — 归一化</h3>
+        <p>与 <span class="mono">views.py::_search_norm</span> 同语义: 折叠分隔符为单空格 + 小写 + 去首尾空格。命中判定全部在归一化文本上做子串包含。</p>
+        <div class="callout">
+          <p><b>⚠ 前端实现的坑</b> — Python 的 <span class="mono">\W</span> 是 Unicode 语义(CJK 算词字符); JS 的 <span class="mono">\W</span> 是 ASCII 语义, <span class="mono">s.replace(/[\W_]+/g,' ')</span> 会把整个中文词折成空格, 中文搜索直接废掉。前端必须写 <span class="mono">s.replace(/[^\p{L}\p{N}]+/gu, ' ').toLowerCase()</span>(u 标志必带)。这条拟在实施时按动作写入 <span class="mono">pitfalls/web-ui/</span>。</p>
+        </div>
+        <h3><span class="mono">parse</span> — 查询语法(照搬种子搜索)</h3>
+        <ul class="plain">
+          <li><b>空格分词 = 隐式 AND</b>: 每个正词都要命中(行可以不同)</li>
+          <li><b><span class="mono">-词</span> = 排除词</b>: 任一行含排除词, 整站出局; 只写排除词时不出结果, 改出提示「只有排除词 — 请补一个要包含的词」</li>
+          <li><b><span class="mono">"短语"</span> = 连续子串</b>; <span class="mono">-"短语"</span> = 排除短语</li>
+          <li>宽容容错: 孤立 <span class="mono">-</span> 忽略, 未闭合引号收到行尾(与种子搜索解析器同款行为)</li>
+        </ul>
+        <h3>执行顺序与预计算</h3>
+        <ul class="plain">
+          <li><b>负词优先</b>(任一行命中即整站排除), 再做正词逐词跨行 AND —— 与 <span class="mono">views.py:783-808</span> 主循环同构</li>
+          <li><b>预计算</b>: 配置加载后每站建一次归一化行(行携带字段组 + 原始值), 之后每次输入只跑匹配, 无防抖</li>
+          <li>配置保存 / 重载后重建索引行(挂在现有 <span class="mono">cfgLoad</span> 流程上)</li>
+        </ul>
+      </section>
+
+      <!-- ═══════════ 05 ═══════════ -->
+      <section id="s5">
+        <div class="sec-head"><span class="no">05</span><h2>多命中显示方案</h2></div>
+        <p>核心问题: 一个搜索词同时命中某站的名称、域名、标签多个字段时, 怎么呈现。定案(可调, 见 08 节待拍板):</p>
+        <ul class="plain">
+          <li><b>结果行制</b>: 搜索激活时 pill 行整体替换为「命中站点列表」, 未命中站点隐藏(不是置灰 —— 置灰在长列表里还是找不到目标)</li>
+          <li><b>命中字段 chip</b>: 每个命中字段一枚 chip = <span class="mono">字段组名 + 命中值</span>; 命中值整值强调(accent 色), <b>不做片段级 mark</b> —— 归一化匹配下片段反算要维护原文偏移映射, 种子搜索也停在行级强调, 收益不值</li>
+          <li><b>chip 上限 3</b>, 超出收进 <span class="mono">+n</span>; chip 顺序: 名称 → 标签 → 域名 → 分组 → 删标 / 规则 / 限速 / HR</li>
+          <li><b>站点排序 = 配置原序</b>: 不做相关性排序, 设置页要的是可预测; 名称命中的站点把名字染 accent 色即是视觉锚点</li>
+          <li><b>点击命中行 = 保留搜索, 右侧出详情</b>: 搜索态下命中列表居左、所选站点字段详情居右(左右分栏); 点其它命中行直接切换右侧, 不打断搜索; <span class="mono">Esc</span> 或 × 返回全量列表</li>
+          <li><b>左右联动</b>: 右栏正在显示的站点, 左侧对应命中行高亮(选中态)</li>
+          <li><b>仅一个命中 → 直接选中</b>: 搜索结果只有一站时自动选中, 右栏立即出该站详情, 无需再点</li>
+        </ul>
+        <figure class="anatomy">
+          <figcaption>命中行解剖</figcaption>
+          <div>
+            <span class="tr-hit-name hit">HHan</span>
+            <span class="chips">
+              <span class="chip on"><i>名称</i><em>HHan</em></span>
+              <span class="chip on"><i>标签</i><em>HHan</em></span>
+              <span class="chip on"><i>域名</i><em>tracker.hhanclub.net</em></span>
+              <span class="chip more">+1</span>
+            </span>
+          </div>
+          <ul class="anatomy-list">
+            <li><span class="k">a</span>站点名(26-09-27 起 pill 与命中行都不带配置键数徽标); 名称命中时染 accent</li>
+            <li><span class="k">b</span>命中字段 chip: 组名(mono 小字) + 命中值(整值强调, 非片段高亮)</li>
+            <li><span class="k">c</span>超 3 枚收 <span class="mono">+n</span>(本例: 分组「主力」被收起)</li>
+            <li><span class="k">d</span>整行可点 = 保留搜索, 右侧出该站字段详情(Esc / × 返回全量)</li>
+          </ul>
+        </figure>
+      </section>
+
+      <!-- ═══════════ 06 ═══════════ -->
+      <section id="s6">
+        <div class="sec-head"><span class="no">06</span><h2>交互细节</h2></div>
+        <table>
+          <tr><th class="keep">项</th><th>定案</th></tr>
+          <tr><td class="keep">输入框位置</td><td>站点二级页标题之下、pill 行之上, 独立一行; 左侧放大镜 inline SVG, 与首页 <span class="mono">hd-search</span> 同款视觉</td></tr>
+          <tr><td class="keep">placeholder</td><td><span class="mono">搜索站点…(空格=且, -词排除, "短语")</span> —— 语法在框上写明, 与种子搜索框同风格</td></tr>
+          <tr><td class="keep">结果计数</td><td>输入框右侧常驻 <span class="mono">命中 N / M 个站点</span>; 无查询时不显示</td></tr>
+          <tr><td class="keep">清空按钮</td><td><span class="mono">×</span>, 仅查询非空时显示; <span class="mono">mousedown.prevent</span> 防清空瞬间失焦(种子搜索同款, <span class="mono">topbar.html:34</span>); <b>Esc 键等效清空</b>(Q5 搜索常驻后的标准退出路径)</td></tr>
+          <tr><td class="keep">空态</td><td>「没有站点匹配"…"」; 有正词但 0 命中时追加一句「检查是否有排除词误伤」</td></tr>
+          <tr><td class="keep">仅排除词</td><td>提示「只有排除词 — 请补一个要包含的词」(种子搜索同文案)</td></tr>
+          <tr><td class="keep">pill 键数徽标</td><td><b>不显示</b>(26-09-27 调整): 站点 pill 与命中行都只显示站点名; 真实页 pill 现有的 <span class="mono">hubCount</span> 键数徽标一并去掉(<span class="mono">settings.html:98</span>)</td></tr>
+          <tr><td class="keep">搜索时的布局</td><td><b>左右分栏</b>(Q5 拍板): 命中列表居左, 所选站点字段详情卡居右; 点命中行只切右侧, 搜索词保持; <b>左栏对应行高亮联动</b>, <b>仅一个命中时自动选中</b>(26-09-27 补充); 所选站点不在命中里时, 右侧出提示引导点左侧</td></tr>
+          <tr><td class="keep">搜索时的其它元素</td><td>「＋ 新增站点」「⤓ 导入缺失站点」按钮隐藏(防止搜到一半误点); pill 行隐藏(命中列表取代)</td></tr>
+          <tr><td class="keep">离开分区</td><td>返回设置首页 / 跳其它分区时清空查询(避免残留状态)</td></tr>
+          <tr><td class="keep">持久化</td><td>不持久化(与种子搜索一致)</td></tr>
+          <tr><td class="keep">与首页搜索关系</td><td>互不影响: 首页 <span class="mono">hub.query</span> 搜配置项元数据, 本搜索搜站点数据, 键名分开(<span class="mono">trackerQuery</span>)</td></tr>
+        </table>
+      </section>
+
+      <!-- ═══════════ 07 ═══════════ -->
+      <section id="s7">
+        <div class="sec-head"><span class="no">07</span><h2>实施落点</h2></div>
+        <table>
+          <tr><th class="keep">文件</th><th class="keep">改动量</th><th>内容</th></tr>
+          <tr>
+            <td class="mono keep">shared/tpl/settings.html<br><span class="dim">:94-116 trackers 分支</span></td><td>~40 行</td>
+            <td>搜索行(输入框 + 计数 + 清空钮) + 命中列表 markup; <span class="mono">v-if</span> 按查询非空在「pill 行」与「命中列表」间切换; 搜索态下命中列表与详情卡包一层<b>左右分栏容器</b>; 站点 pill 去掉键数徽标(26-09-27, :98 的 <span class="mono">hubCount</span> 一并删)</td>
+          </tr>
+          <tr>
+            <td class="mono keep">shared/config_hub.js<br><span class="dim">邻近 hubHits :250</span></td><td>~90 行</td>
+            <td><span class="mono">norm / parseTrackerQuery / trackerRows</span> 单点函数 + 预计算索引 + computed <span class="mono">hubTrackerHits</span>; Esc 清空监听; 离开分区清空挂在 <span class="mono">hubBack / hubGo</span></td>
+          </tr>
+          <tr>
+            <td class="mono keep">shared/config_editor.js<br><span class="dim">:36 state 声明处</span></td><td>+1 行</td>
+            <td><span class="mono">trackerQuery: ''</span> 与 <span class="mono">trackerKey</span> 同处声明</td>
+          </tr>
+          <tr>
+            <td class="mono keep">shared/console_hub.css<br><span class="dim">三家共用版式层</span></td><td>~50 行</td>
+            <td>搜索行 / 命中行 / chip / 搜索态左右分栏(grid) 样式; 跟随各皮肤令牌(不用硬编码色值), 三皮肤同时生效</td>
+          </tr>
+        </table>
+        <p><b>不改</b>: 服务端路由、schema、配置结构、种子搜索的任何代码。前端无构建步骤, 改完刷新即生效。</p>
+        <p><b>测试与守阵</b>: <span class="mono">test.full</span> 全绿(纯前端静态资源, 预期零影响); 视现有前端守阵(test_frontend_* 的 grep 模式)可选加一条轻守阵 —— 断言 trackers 分支存在搜索输入框与 <span class="mono">trackerQuery</span> 绑定, 防后续重构静默丢失。</p>
+      </section>
+
+      <!-- ═══════════ 08 ═══════════ -->
+      <section id="s8">
+        <div class="sec-head"><span class="no">08</span><h2>拍板结果与验收清单</h2></div>
+        <h3>拍板结果(2026-09-27, 五项全定)</h3>
+        <ul class="plain">
+          <li><b>Q1 · 命中值强调</b>: <b>整值染色够</b>, 不做片段级 mark</li>
+          <li><b>Q2 · chip 上限</b>: <b>3 枚 + <span class="mono">+n</span> 合适</b></li>
+          <li><b>Q3 · 排序</b>: <b>保持配置原序</b></li>
+          <li><b>Q4 · 范围</b>: 限速 / HR 数值<b>纳入</b>搜索</li>
+          <li><b>Q5 · 点击行为</b>: <b>改定「保留搜索、右侧出详情」</b> —— 点命中行不再清空搜索, 搜索态下命中列表居左、所选站点字段详情居右; Esc / × 返回全量(示例模板已同步此交互)</li>
+        </ul>
+        <h3>验收清单</h3>
+        <ul class="plain">
+          <li>搜名称 / 标签 / 域名(含镜像) / 分组 / 规则引用 / 限速值 / HR 数值均能命中, 且 chip 显示对应字段组与命中值</li>
+          <li>大小写混输(<span class="mono">hh</span> vs <span class="mono">HH</span>)命中一致; 域名带点输入 <span class="mono">hhanclub.net</span> 命中(分隔符折叠后照样包含)</li>
+          <li><span class="mono">-词</span> 排除生效; 仅排除词出提示; 多词 AND 跨字段生效</li>
+          <li>计数 / 清空 / 空态文案正确; 点击命中行右侧出该站详情且搜索词保持; 左栏对应行高亮联动; 仅一个命中时自动选中; Esc / × 恢复全量列表</li>
+          <li>atlas / prism / console 三皮肤下布局与配色一致(共用版式层 + 皮肤令牌)</li>
+          <li>中文词命中正常(<span class="mono">\p{L}\p{N}</span> 归一化, 不是 ASCII <span class="mono">\W</span>)</li>
+          <li>pill 与命中行只显示站点名, 无配置键数徽标(26-09-27 调整)</li>
+        </ul>
+        <h3>待拍板(示例模板里都能直接体验)</h3>
+        <ul class="plain">
+          <li><b>Q1 · 值级强调够不够</b>: 命中值整值染色 vs 片段级 mark(后者要做原文偏移反算, 成本 ~30 行)</li>
+          <li><b>Q2 · chip 上限</b>: 3 枚 + <span class="mono">+n</span> 是否合适, 还是全展示</li>
+          <li><b>Q3 · 排序</b>: 保持配置原序(现方案) vs 名称命中优先的相关性排序</li>
+          <li><b>Q4 · 范围</b>: 限速 / HR 数值要不要纳入(现方案纳入; 若嫌噪声可降为仅内容四字段)</li>
+          <li><b>Q5 · 点击行为</b>: 点命中行 = 清空搜索并进入详情(现方案) vs 保留搜索、右侧出详情</li>
+        </ul>
+      </section>
+
+      <!-- ═══════════ 09 ═══════════ -->
+      <section id="s9">
+        <div class="sec-head"><span class="no">09</span><h2>示例模板(可交互)</h2></div>
+        <p>下面是按本方案做的可交互模板: 版式仿真实站点页(切角卡 / pill / 字段行做了简化), <b>匹配算法与计划完全同构</b>, 数据为 10 个样例站点。可以直接输入体验, 或点「试一试」里的样例词。</p>
+
+        <div class="widget">
+          <div class="w-chrome">示例模板 · trackers 二级页 · 数据为样例, 非真实配置</div>
+          <div class="w-body">
+            <div class="w-crumb">设置 / <b>站点</b></div>
+            <div class="w-sec">
+              <span class="w-mark"></span>
+              <div>
+                <h3>站点</h3>
+                <p>按 tracker 域名识别站点; pill 只显示站点名(26-09-27 调整: 不再显示配置键数)</p>
+              </div>
+            </div>
+            <div class="w-search">
+              <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+              <input id="wq" placeholder='搜索站点…(空格=且, -词排除, "短语")' autocomplete="off">
+              <button id="wclear" class="w-x" title="清空" hidden>×</button>
+              <span id="wcount" class="w-count"></span>
+            </div>
+            <div id="wmain" class="w-cols">
+              <div id="wlist"></div>
+              <div id="wdetail"></div>
+            </div>
+          </div>
+          <div class="w-try">
+            试一试:
+            <span id="wtry" style="display:contents"></span>
+          </div>
+        </div>
+        <p class="dim" style="font-size:12.5px">样例词覆盖: 名称 · 镜像域名 · 标签 · 分组+规则 AND · 短语 · HR 数值 · 排除词。Q1-Q5 已拍板(见 08 节), 本模板已同步定案交互; 下一步按 07 节落点实施真实代码。</p>
+      </section>
+
+      <!-- ═══════════ 10 ═══════════ -->
+      <section id="s10">
+        <div class="sec-head"><span class="no">10</span><h2>变更记录</h2></div>
+        <ul class="plain">
+          <li><b>26-09-28-0014 · 实施完成</b> — 按 07 节落点落地: settings.html(搜索行 + 命中列表 + 左右分栏 + pill 去键数徽标) / config_hub.js(trackerNorm·trackerParseQuery·trackerRows 单点 + hubTrackerIndex·hubTrackerHits computed + Esc·离开分区双清空路径 + 仅一命中自动选中) / config_editor.js(trackerQuery state) / console_hub.css(hb-tr-* 样式, 皮肤令牌)。新增守阵 test_frontend_tracker_search_wiring; test.full 1812 passed + 3 skipped(基线切片 26-09-28-0014)。</li>
+          <li><b>26-09-27-2008 · 模板调整</b> — 左右联动高亮(右栏所显站点的左侧命中行进选中态) + 仅一个命中站点时自动选中(右栏直接出详情); 05 / 06 / 08 节同步。</li>
+          <li><b>26-09-27-1957 · 模板调整</b> — 站点 pill 不显示配置键数(用户): 命中行同步去除「N 项」徽标, 真实页现有 pill 的 <span class="mono">hubCount</span> 徽标一并去掉并并入 07 节实施落点与验收清单。</li>
+          <li><b>26-09-27-1936 · 拍板</b> — Q1 值级整值染色 / Q2 chip 上限 3 + <span class="mono">+n</span> / Q3 配置原序 / Q4 限速与 HR 数值纳入: 维持原方案; <b>Q5 改定「保留搜索、右侧出详情」</b>(原「清空搜索进详情」), 随附 Esc 清空退出路径。05 / 06 / 07 / 08 各节与示例模板已同步, 示例模板真浏览器复验通过。</li>
+          <li><b>26-09-27-1852 · 初稿</b> — 计划 + 内嵌示例模板; 真浏览器冒烟(全样例词、边界态、点击链路)通过, 修 2 处: 纯空格查询中间态、误导性样例词。</li>
+        </ul>
+      </section>
+
+      <footer class="colophon">memory-bank/plans · 26-09-27-1852-plan-sites-page-search.html · doc-topic: sites-page-search · status: Done · 已实施 26-09-28</footer>
+    </main>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── 样例数据: 键集合与真实 KNOWN_TRACKER_KEYS 一致 ── */
+  var TRACKERS = {
+    HHan:       { domains: ['tracker.hhanclub.net'], tags: ['HHan'], groups: ['主力'],
+                  upload_speed_limit: '2MiB/s', download_speed_limit: '0KiB/s',
+                  hr: { required_seeding_time: '3D', required_share_ratio: 0, condition: '80%' },
+                  rules: ['@保种'], remove_similar_tags: false },
+    hdfans_org: { domains: ['pt.hdfans.org', 'pt.hdfans.xyz'], tags: ['HDFans'], groups: ['主力'],
+                  upload_speed_limit: '0KiB/s', download_speed_limit: '0KiB/s',
+                  rules: ['@保种', '@清理.大龄 free'] },
+    btschool:   { domains: ['pt.btschool.club'], tags: ['Btschool', '教育'], groups: ['辅助'],
+                  remove_tags: ['官方协会:*'], upload_speed_limit: '5MiB/s',
+                  hr: { required_seeding_time: '3D', condition: '80%' }, rules: [] },
+    carpt:      { domains: ['carpt.net'], tags: ['CarPT', '汽车'], groups: ['辅助'],
+                  hr: { required_seeding_time: '5D', condition: '80%' } },
+    hdsky:      { domains: ['pt.hdsky.me'], tags: ['HDSky'], groups: [],
+                  upload_speed_limit: '1MiB/s' },
+    pterclub:   { domains: ['pterclub.com', 'pt.eastgame.org'], tags: ['PTer'], groups: ['主力'],
+                  rules: ['@保种'] },
+    hdupt:      { domains: ['pt.hdupt.com'], tags: ['NEXT', '教育'], groups: ['辅助'] },
+    eastbay:    { domains: ['eastbay.cc'], tags: ['EastBay'], groups: [],
+                  remove_tags: ['类似标签'], remove_similar_tags: true },
+    joyhdl:     { domains: ['pt.joyhdl.net'], tags: ['JoyHD'], groups: ['影视'],
+                  hr: { required_seeding_time: '7D', condition: '100%' },
+                  rules: ['@清理.HR检查'] },
+    u2:         { domains: ['u2.dmhy.org'], tags: ['U2', '动漫'], groups: ['影视', '动漫'],
+                  download_speed_limit: '10MiB/s' }
+  };
+
+  /* ── 字段组: chip 标签 + 展示优先级 ── */
+  var GRP = { domains: '域名', tags: '标签', groups: '分组', remove_tags: '删标', rules: '规则',
+              upload_speed_limit: '上传限速', download_speed_limit: '下载限速', hr: 'HR' };
+  var PRI = { '名称': 0, '标签': 1, '域名': 2, '分组': 3, '删标': 4, '规则': 5, '上传限速': 6, '下载限速': 7, 'HR': 8 };
+  var MASK = '********';
+
+  /* ── 归一化: 与 views.py::_search_norm 同语义; JS 必须用 \p{L}\p{N} 才能保住 CJK ── */
+  function norm(s) {
+    return String(s).replace(/[^\p{L}\p{N}]+/gu, ' ').toLowerCase().trim();
+  }
+
+  /* ── 站点 → 归一化行(预计算一次); 序列化兜底: str 原样 / list 逐项 / num String / bool 跳过 / dict 递归 / 掩码跳过 ── */
+  function rowsFor(name, entry) {
+    var rows = [{ grp: '名称', raw: name, n: norm(name) }];
+    function walk(v, g) {
+      if (v === MASK) return;
+      if (typeof v === 'boolean') return;
+      if (typeof v === 'number') { rows.push({ grp: g, raw: String(v), n: norm(v) }); return; }
+      if (Array.isArray(v)) { v.forEach(function (x) { walk(x, g); }); return; }
+      if (v && typeof v === 'object') { Object.keys(v).forEach(function (k) { walk(v[k], g); }); return; }
+      rows.push({ grp: g, raw: String(v), n: norm(v) });
+    }
+    Object.keys(entry || {}).forEach(function (k) {
+      var g = GRP[k];
+      if (g) walk(entry[k], g);
+    });
+    return rows;
+  }
+
+  var INDEX = Object.keys(TRACKERS).map(function (name) {
+    var entry = TRACKERS[name];
+    return { name: name, entry: entry, rows: rowsFor(name, entry) };
+  });
+
+  /* ── 查询解析: 空格=AND, -词=排除, "短语"/-"短语"; 宽容容错 ── */
+  function parseQuery(q) {
+    var pos = [], neg = [], m;
+    var re = /(-?)(?:"([^"]*)"|(\S+))/g;
+    while ((m = re.exec(q))) {
+      var dash = m[1] === '-';
+      var term = m[2] !== undefined ? m[2] : m[3];
+      if (!term) continue;
+      var n = norm(term);
+      if (!n) continue;
+      (dash ? neg : pos).push(n);
+    }
+    return { pos: pos, neg: neg, negOnly: pos.length === 0 && neg.length > 0 };
+  }
+
+  /* ── 匹配: 负词优先整站排除 → 正词逐词跨行 AND → 收集命中行(供 chip) ── */
+  function search(q) {
+    var p = parseQuery(q);
+    if (p.negOnly) return { negOnly: true };
+    if (!p.pos.length && !p.neg.length) return { all: true };
+    var hits = [];
+    INDEX.forEach(function (site) {
+      for (var i = 0; i < p.neg.length; i++) {
+        if (site.rows.some(function (r) { return r.n.indexOf(p.neg[i]) !== -1; })) return;
+      }
+      for (var j = 0; j < p.pos.length; j++) {
+        if (!site.rows.some(function (r) { return r.n.indexOf(p.pos[j]) !== -1; })) return;
+      }
+      var nameHit = p.pos.some(function (w) { return site.rows[0].n.indexOf(w) !== -1; });
+      var chips = [];
+      site.rows.slice(1).forEach(function (r) {
+        if (p.pos.some(function (w) { return r.n.indexOf(w) !== -1; })) chips.push(r);
+      });
+      chips.sort(function (a, b) { return (PRI[a.grp] || 9) - (PRI[b.grp] || 9); });
+      hits.push({ site: site, nameHit: nameHit, chips: chips });
+    });
+    return { hits: hits };
+  }
+
+  /* ── 渲染 ── */
+  var $q = document.getElementById('wq'), $count = document.getElementById('wcount'),
+      $clear = document.getElementById('wclear'), $list = document.getElementById('wlist'),
+      $detail = document.getElementById('wdetail'), $try = document.getElementById('wtry'),
+      $main = document.getElementById('wmain');
+  var state = { q: '', sel: 'HHan' };
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function dedupe(chips) {
+    var seen = {};
+    return chips.filter(function (c) {
+      var k = c.grp + '|' + c.raw;
+      if (seen[k]) return false;
+      seen[k] = 1;
+      return true;
+    });
+  }
+
+  function chipHtml(c, on) {
+    return '<span class="chip' + (on ? ' on' : '') + '"><i>' + esc(c.grp) + '</i><em>' + esc(c.raw) + '</em></span>';
+  }
+
+  function render() {
+    var q = state.q;
+    var active = q.trim().length > 0;
+    $q.value = q;
+    $clear.hidden = !active;
+    $detail.innerHTML = '';
+    $main.classList.remove('split');
+
+    if (!active) {
+      $count.textContent = INDEX.length + ' 个站点';
+      $count.className = 'w-count';
+      var pills = INDEX.map(function (s) {
+        return '<button class="w-pill' + (state.sel === s.name ? ' on' : '') + '" data-sel="' + esc(s.name) + '">' +
+               esc(s.name) + '</button>';
+      }).join('');
+      pills += '<button class="w-pill ghost">＋ 新增站点</button><button class="w-pill ghost">⤓ 导入缺失站点</button>';
+      $list.innerHTML = '<div class="w-pills">' + pills + '</div>';
+      renderDetail(state.sel);
+      return;
+    }
+
+    var r = search(q);
+    if (r.negOnly) {
+      $count.textContent = '只有排除词';
+      $count.className = 'w-count warn';
+      $list.innerHTML = '<div class="w-hint warn">只有排除词 — 请补一个要包含的词</div>';
+      return;
+    }
+    if (!r.hits) { return; }
+
+    $count.textContent = '命中 ' + r.hits.length + ' / ' + INDEX.length + ' 个站点';
+    $count.className = 'w-count';
+    if (!r.hits.length) {
+      $list.innerHTML = '<div class="w-hint">没有站点匹配「' + esc(q) + '」— 试试更短的词, 或检查是否有排除词误伤</div>';
+      return;
+    }
+
+    $main.classList.add('split');
+
+    // 仅一个命中 → 直接选中(26-09-27 调整)
+    if (r.hits.length === 1) state.sel = r.hits[0].site.name;
+
+    $list.innerHTML = r.hits.map(function (h) {
+      var chips = dedupe(h.chips).slice(0, 3);
+      var more = dedupe(h.chips).length - chips.length;
+      var html = '<button class="tr-hit' + (state.sel === h.site.name ? ' on' : '') + '" data-sel="' + esc(h.site.name) + '">' +
+                 '<span class="tr-hit-name' + (h.nameHit ? ' hit' : '') + '">' + esc(h.site.name) + '</span>' +
+                 '<span class="chips">' +
+                 chips.map(function (c) { return chipHtml(c, true); }).join('');
+      if (more > 0) html += '<span class="chip more">+' + more + '</span>';
+      return html + '</span></button>';
+    }).join('');
+
+    // 右栏(Q5 拍板): 所选站点在命中里 → 出详情; 否则引导提示
+    var selIn = r.hits.some(function (h) { return h.site.name === state.sel; });
+    if (selIn) renderDetail(state.sel);
+    else $detail.innerHTML = '<div class="w-hint">当前选中站点不在命中里 — 点左侧任一命中行, 右侧出该站字段详情</div>';
+  }
+
+  function fmtVal(v) {
+    if (typeof v === 'boolean') return v ? '是' : '否';
+    if (Array.isArray(v)) return v.map(function (x) { return (x && typeof x === 'object') ? '{…}' : String(x); }).join(' · ') || '—';
+    if (v && typeof v === 'object') return Object.keys(v).map(function (k) { return k + ': ' + v[k]; }).join(' · ');
+    if (v === MASK) return '(掩码)';
+    return String(v);
+  }
+
+  function renderDetail(name) {
+    var site = INDEX.filter(function (s) { return s.name === name; })[0];
+    if (!site) { $detail.innerHTML = ''; return; }
+    var rows = Object.keys(site.entry).map(function (k) {
+      var label = GRP[k] || k;
+      return '<div class="frow"><span class="fk">' + esc(label) + '</span><span class="fv">' + esc(fmtVal(site.entry[k])) + '</span></div>';
+    }).join('');
+    $detail.innerHTML = '<div class="w-detail"><div class="w-detail-hd"><b>' + esc(name) + '</b>' +
+                        '<span>字段详情(真实页为可编辑字段行, 此处仅示意)</span></div>' + rows + '</div>';
+  }
+
+  /* ── 事件 ── */
+  $q.addEventListener('input', function () { state.q = $q.value; render(); });
+  $clear.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  $clear.addEventListener('click', function () { state.q = ''; render(); $q.focus(); });
+  $list.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-sel]');
+    if (!b) return;
+    state.sel = b.getAttribute('data-sel');
+    render();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && state.q.trim()) { state.q = ''; render(); }
+  });
+
+  /* ── 试一试 ── */
+  var TRIES = [
+    ['hhan', '名称'],
+    ['xyz', '镜像域名'],
+    ['教育', '标签'],
+    ['主力 保种', '分组 + 规则 AND'],
+    ['"大龄 free"', '短语(带空格)'],
+    ['80%', 'HR 数值'],
+    ['3d', 'HR 时长'],
+    ['-carpt hdf', '排除词 + AND']
+  ];
+  $try.innerHTML = TRIES.map(function (t, i) {
+    return '<button data-i="' + i + '">' + esc(t[0]) + '<b>' + t[1] + '</b></button>';
+  }).join('');
+  $try.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    state.q = TRIES[+b.getAttribute('data-i')][0];
+    render();
+    $q.focus();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

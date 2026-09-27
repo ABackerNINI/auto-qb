@@ -41,6 +41,7 @@
 - test_sites_missing_requires_connected_client: qB 断连 -> 503(不得拿空扫描冒充"没有缺失站点")
 - test_sites_missing_api_failure_maps_502: 扫描中途 qB 调用失败 -> 502 带原因(不裸 500)
 - test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志
+- test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \p{L}\p{N}(u 标志, ASCII \W 折碎中文词) + Esc/离开分区两条清空路径 + pill 无键数徽标 + hb-tr-* 类 CSS 成对定义
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
 - test_views_published_atomically_when_rebuilt_concurrently: 并发重建(主循环线程 vs Web 线程)时四份视图与版本号必须**同一轮**发布, 不得出现"半新半旧"
@@ -2458,6 +2459,65 @@ def test_frontend_sites_import_wiring():
         html = _ui_aggregate(ui)
         assert "hubImportSites()" in html, f"{ui} 站点分区缺导入按钮"
         assert "导入缺失站点" in html, f"{ui} 缺导入按钮文案"
+
+
+def test_frontend_tracker_search_wiring():
+    """站点页搜索接线守阵(静态防回潮, 计划 26-09-27-1852)
+
+    trackers 二级页搜索是纯前端实现, pytest 运行时看不见, 断链都是静默的:
+      ① 模板三件套(输入框绑定 / 清空钮 / 计数)与命中行结构缺一 = 搜索入口废;
+      ② 归一化必须用 [^\\p{L}\\p{N}](u 标志) —— JS 的 ASCII \\W 是 Unicode 语义的反面,
+         会把整个中文词折成空格, 中文搜索静默失效(Python \\W 的同语义直译陷阱);
+      ③ Esc 与离开分区(hubGo/hubBack)是 Q5 拍板的两条清空路径, 漏一个 = 状态残留;
+      ④ 站点 pill 不带配置键数徽标(26-09-27 拍板);
+      ⑤ 模板用到的 hb-tr-* 类必须在 console_hub.css 有定义(挂件类名错配变体)。
+    """
+    tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "settings.html"), encoding="utf-8").read()
+    for token in (
+        'v-model="cfg.trackerQuery"',
+        "hubTrackerClear()",
+        "hubTrackerCountText",
+        "hubTrackerHits.hits",
+        'class="hb-tr-split"',
+        'class="hb-tr-hits"',
+        'class="hb-tr-detail"',
+        "hb-tr-hit",
+        "hb-tr-chip",
+    ):
+        assert token in tpl, f"shared/tpl/settings.html 缺少 {token}(站点搜索模板被改坏? 同步本守阵)"
+    pills = re.search(r'v-if="!hubTrackerActive" class="hb-pills"(.*?)</div>', tpl, re.S)
+    assert pills, "trackers 非搜索态 pill 行找不到(结构改名? 同步本守阵)"
+    assert "hubCount" not in pills.group(1), "站点 pill 不应显示配置键数徽标(hubCount), 26-09-27 拍板"
+    # ② 逻辑层单点: CJK 安全归一化 + 解析 / 行索引 / 命中 / 清空
+    hub = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
+    assert re.search(r"replace\(/\[\^\\p\{L\}\\p\{N\}\]\+/gu",
+                     hub), ("站点归一化必须用 [^\\p{L}\\p{N}](u 标志): ASCII \\W 会把整个中文词折成空格")
+    for token in ("trackerParseQuery(q)", "trackerRows(name, entry)", "hubTrackerHits()", "hubTrackerClear()"):
+        assert token in hub, f"shared/config_hub.js 缺少 {token}"
+    # ③ 两条清空路径
+    onkey = re.search(r"hubOnKey\(e\) \{(.*?)\n    \},", hub, re.S)
+    assert onkey and "cfg.trackerQuery" in onkey.group(1), "Esc 必须清空站点搜索(Q5 退出路径)"
+    for fn in ("hubGo(key)", "hubBack()"):
+        body = re.search(rf"{re.escape(fn)} \{{(.*?)\n    \}},", hub, re.S)
+        assert body and 'this.cfg.trackerQuery = ""' in body.group(1), f"{fn} 必须清空站点搜索(离开分区不带残留)"
+    ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    assert 'trackerQuery: ""' in ed, "cfg.trackerQuery 必须在 config_editor.js state 声明(漏声明 = 响应性缺失)"
+    # ⑤ CSS 成对: 模板用到的 hb-tr-* 类都要有规则
+    css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
+    for cls in (
+        "hb-tr-search",
+        "hb-tr-x",
+        "hb-tr-count",
+        "hb-tr-split",
+        "hb-tr-hits",
+        "hb-tr-detail",
+        "hb-tr-hit",
+        "hb-tr-hit-name",
+        "hb-tr-chips",
+        "hb-tr-chip",
+        "hb-tr-hint",
+    ):
+        assert "." + cls in css, f"console_hub.css 缺少 .{cls} 定义(挂件类名错配 = 静默裸样式)"
 
 
 def test_group_key_codec_roundtrip():

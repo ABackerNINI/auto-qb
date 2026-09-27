@@ -92,26 +92,68 @@
 
               <!-- 站点: 二级页内用切角小标签切换, 不再做左右主从两栏 -->
               <template v-if="hub.view === 'trackers'">
-                <div class="hb-pills">
+                <!-- 搜索行: 名称/域名/标签/分组/规则/限速/HR 全字段匹配, 语法照搬种子搜索(计划 26-09-27-1852) -->
+                <div class="hb-tr-search">
+                  <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+                  <input class="hb-input" v-model="cfg.trackerQuery" autocomplete="off"
+                         placeholder='搜索站点…(空格=且, -词排除, "短语")'>
+                  <button v-if="cfg.trackerQuery.trim()" class="hb-tr-x" title="清空"
+                          @mousedown.prevent @click="hubTrackerClear()">×</button>
+                  <span v-if="hubTrackerCountText" class="hb-tr-count"
+                        :class="{ warn: hubTrackerHits.kind === 'negOnly' }">{{ hubTrackerCountText }}</span>
+                </div>
+
+                <!-- 非搜索态: pill 行(只显示站点名, 不带配置键数徽标) -->
+                <div v-if="!hubTrackerActive" class="hb-pills">
                   <button v-for="name in cfgTrackerNames()" :key="name" class="hb-pill"
                           :class="{ on: cfg.trackerKey === name }" @click="cfg.trackerKey = name">
-                    {{ name }}<span class="p-n">{{ hubCount(cfgTracker(name)) }}</span>
+                    {{ name }}
                   </button>
                   <button class="hb-pill" @click="hubAddTracker()">＋ 新增站点</button>
                   <button class="hb-pill" :disabled="hub.importing" @click="hubImportSites()">⤓ 导入缺失站点</button>
                 </div>
-                <div v-if="cfg.trackerKey" class="hb-blk hb-cut">
-                  <div class="hb-blk-hd">
-                    <span class="bh-t">{{ cfg.trackerKey }}</span>
-                    <span class="bh-r">
-                      <button class="hb-btn sm" @click="cfgTrackerRename(cfg.trackerKey)">重命名</button>
-                      <button class="hb-btn danger sm" @click="cfgTrackerRemove(cfg.trackerKey)">删除</button>
-                    </span>
+
+                <!-- 搜索态: 命中列表居左 + 所选站点详情居右; 点命中行只切右侧不清搜索, Esc / × 返回全量 -->
+                <div class="hb-tr-split" :class="{ on: hubTrackerActive }">
+                  <div v-if="hubTrackerActive" class="hb-tr-hits">
+                    <p v-if="hubTrackerHits.kind === 'negOnly'" class="hb-tr-hint warn">
+                      只有排除词 — 请补一个要包含的词
+                    </p>
+                    <p v-else-if="!hubTrackerHits.hits.length" class="hb-tr-hint">
+                      没有站点匹配「{{ cfg.trackerQuery.trim() }}」— 试试更短的词, 或检查是否有排除词误伤
+                    </p>
+                    <template v-else>
+                      <button v-for="h in hubTrackerHits.hits" :key="h.name" class="hb-tr-hit"
+                              :class="{ on: cfg.trackerKey === h.name }" @click="cfg.trackerKey = h.name">
+                        <span class="hb-tr-hit-name" :class="{ hit: h.nameHit }">{{ h.name }}</span>
+                        <span class="hb-tr-chips">
+                          <span v-for="c in h.chips" :key="c.grp + '|' + c.raw" class="hb-tr-chip">
+                            <i>{{ c.grp }}</i><em>{{ c.raw }}</em>
+                          </span>
+                          <span v-if="h.more" class="hb-tr-chip more">+{{ h.more }}</span>
+                        </span>
+                      </button>
+                    </template>
                   </div>
-                  <hub-field v-for="item in cfgTrackerItems()" :key="hubKey(item.path)" :item="item"></hub-field>
-                </div>
-                <div v-else class="hb-blk hb-cut">
-                  <div class="hb-blk-hd"><span class="bh-n">暂无站点配置, 点上面「＋ 新增站点」添加一个</span></div>
+
+                  <div class="hb-tr-detail">
+                    <div v-if="cfg.trackerKey && (!hubTrackerActive || hubTrackerSelIn)" class="hb-blk hb-cut">
+                      <div class="hb-blk-hd">
+                        <span class="bh-t">{{ cfg.trackerKey }}</span>
+                        <span class="bh-r">
+                          <button class="hb-btn sm" @click="cfgTrackerRename(cfg.trackerKey)">重命名</button>
+                          <button class="hb-btn danger sm" @click="cfgTrackerRemove(cfg.trackerKey)">删除</button>
+                        </span>
+                      </div>
+                      <hub-field v-for="item in cfgTrackerItems()" :key="hubKey(item.path)" :item="item"></hub-field>
+                    </div>
+                    <p v-else-if="hubTrackerActive" class="hb-tr-hint">
+                      当前选中站点不在命中里 — 点左侧任一命中行, 右侧出该站字段详情
+                    </p>
+                    <div v-else class="hb-blk hb-cut">
+                      <div class="hb-blk-hd"><span class="bh-n">暂无站点配置, 点上面「＋ 新增站点」添加一个</span></div>
+                    </div>
+                  </div>
                 </div>
               </template>
 

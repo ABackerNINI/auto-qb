@@ -34,6 +34,7 @@ window.CONFIG_EDITOR = {
         saving: false,
         error: "",  // 加载/保存错误(加载失败时整页替换; 保存失败走 toast)
         trackerKey: null,  // 站点编辑器当前选中站点
+        trackerQuery: "",  // 站点二级页搜索框(不持久化, 与首页 hub.query 互不影响; 逻辑在 config_hub.js)
         newTrackerName: "",
         ruleGroupKey: null,  // 规则集编辑器当前选中规则集
         newRuleGroupName: "",

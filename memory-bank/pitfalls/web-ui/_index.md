@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [cjk-regex-norm.md](cjk-regex-norm.md) | 把 Python 的 `[\W_]+ → 空格` 归一化直译成 JS `s.replace(/[\W_]+/g,' ')` 会静默废掉中文搜索 —— Python `\W` 是 Unicode 语义(CJK 算词字符), JS `\W` 是 ASCII 语义(整个中文词全是"非词字符"被折成空格)。前端必须写 `[^\p{L}\p{N}]+/gu`(u 标志必带)。 | 写前端搜索/过滤, 前端照抄服务端归一化语义, 中文词搜不到, \W, \p{L}, unicode 归一化 |
 | [columns-persist.md](columns-persist.md) | 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案(前四轮修复都栽在把意图与派生混在一个字段里); 另有一条**应用之外**的通道: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据"。 | 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths, 浏览器重启, 偏好全回默认, 关闭窗口时清除站点数据, SESSION_ONLY |
 | [contract-api.md](contract-api.md) | 前端不只是后端的镜像 —— 判"字段不一致"前必须沿派生链追到消费点; 跨视图裁剪与真值时序是两条反复出事的线。 | 字段不一致, 前后端契约, 视图回传, rid, 真值, 乐观 UI, 状态色, 占位符, HR 标签 |
 | [css-perf-parity.md](css-perf-parity.md) | 「星图卡、棱镜不卡」这类单边性能问题的定位路径 —— 差异只在 CSS(JS 是共享层), 且两套 CSS 里唯一有实质差异的昂贵属性是 backdrop-filter; 嵌套毛玻璃的成本与摘法。 | 卡顿, 掉帧, 不跟手, 两套 UI 性能差, 一边卡一边不卡, 毛玻璃, backdrop-filter, 弹层卡, 改 CSS 后变慢, 星图卡 |

@@ -566,6 +566,95 @@
 .hb-pill .p-n { font: 500 11px/1 var(--hb-font-mono); margin-left: 5px; opacity: .8; }
 
 /* ==========================================================================
+   站点搜索: 搜索行 + 命中列表 + 左右分栏(计划 26-09-27-1852)
+   三套皮肤共用本层, 颜色一律走皮肤令牌(同 hb- 其余控件), 不写硬编码色值
+   ========================================================================== */
+/* 搜索行: 与首页 hd-search 同款视觉(左放大镜 + 发光输入框), 计数 / 清空钮常驻右侧 */
+.hb-tr-search { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+.hb-tr-search .hb-ico {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--fg-dim);
+  pointer-events: none;
+}
+.hb-tr-search .hb-input { flex: 1 1 auto; width: auto; padding-left: 32px; }
+.hb-tr-x {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+  font: 500 13px/1 var(--hb-font-mono);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.hb-tr-x:hover { color: var(--accent-hi); border-color: var(--accent-line); }
+.hb-tr-count { flex: none; font: 500 11.5px/1 var(--hb-font-mono); color: var(--fg-dim); white-space: nowrap; }
+.hb-tr-count.warn { color: var(--warn); }
+
+/* 搜索态左右分栏: 非搜索态本容器只是详情卡的普通父级(display: block), 命中列表根本不渲染 */
+.hb-tr-split { display: block; }
+.hb-tr-split.on { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.hb-tr-hits { min-width: 0; }
+.hb-tr-detail { min-width: 0; }
+
+/* 命中行: 整行可点(点 = 选中该站, 搜索词保持); 选中态 = 左右联动高亮 */
+.hb-tr-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-top: 0;
+  padding: 9px 13px;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.hb-tr-hit:first-of-type { border-top: 1px solid var(--border); }
+.hb-tr-hit:hover { background: var(--bg-hover); }
+.hb-tr-hit:hover .hb-tr-hit-name { color: var(--accent-hi); }
+.hb-tr-hit.on { background: var(--accent-soft); border-color: var(--accent-line); }
+.hb-tr-hit-name { font-weight: 600; font-size: 13.5px; }
+.hb-tr-hit-name.hit { color: var(--accent-hi); }
+
+/* 命中字段 chip: 组名(mono 小字) + 命中值(整值 accent, 不做片段 mark, §05 Q1) */
+.hb-tr-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; vertical-align: 1.5px; margin-left: 9px; }
+.hb-tr-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 2px 8px;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+.hb-tr-chip i { font-style: normal; font: 500 9.5px/1.5 var(--hb-font-mono); letter-spacing: .08em; color: var(--fg-dim); }
+.hb-tr-chip em { font-style: normal; color: var(--accent-hi); word-break: break-all; }
+.hb-tr-chip.more { border-style: dashed; background: transparent; color: var(--fg-dim); }
+
+/* 空态 / 仅排除词 / 右栏引导提示 */
+.hb-tr-hint {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  font-size: 12.8px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+}
+.hb-tr-hint.warn {
+  color: var(--warn);
+  border-color: var(--warn-line, color-mix(in srgb, var(--warn) 45%, transparent));
+  background: var(--warn-soft);
+}
+
+/* ==========================================================================
    规则: 「当…做…」两栏
    ========================================================================== */
 .hb-rule { background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; }
@@ -682,6 +771,7 @@
   .hb-row .hb-ask { justify-self: end; margin-top: -26px; }
   .hb-hd .hd-search { margin-left: 0; width: 100%; }
   .hb-hd .hd-search .hb-input { width: 100%; }
+  .hb-tr-split.on { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hb-view.on, .hb-pop.on { animation: none; }

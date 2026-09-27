@@ -30,7 +30,9 @@ CAP_POLICY: dict[str, int] = {
     # `tasks/_index.md` / `issues/_index.md` 是**自动生成、行数随档案/issue 数增长**的索引:
     # 实测 10,790 / 6,937 字符 (2026-09-22), 套 3,000 档必然常红且没有可行的收缩路径
     # (一行一条, 已是最简)。故单列一档 —— 有守卫防无限膨胀, 但不假装它们是一屏索引。
-    "index-auto": 12000,
+    # 12,000 -> 12,100 (2026-09-27): sites-page-search 专题入册后 _doc-map.md 实测 12,006,
+    # 单件专题清单已是最简形态, 涨 cap 一档。
+    "index-auto": 12100,
     "pitfall": 6000,  # pitfalls/* 条目集 —— 读法是「扫描找一条」, 比通读更贵
     "evergreen": 10000,  # 常青主题 (叙述型) —— ≈4k token, 一次通读可接受
     "reference": 12000,  # 参考速查 (config-reference / rule-system) —— 查表不是通读

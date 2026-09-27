@@ -10,10 +10,10 @@
 ## 跨形态专题 (≥2 件) —— 36 个
 
 - **webui-optimistic-ui** (8) — issue [26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html) `Done` · issue [26-09-19-1959](issues/26-09-19-1959-bug-webui-show-row-no-pending.html) `Done` · issue [26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html) `Done` · issue [26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) `Done` · 计划 [26-09-19-2245](plans/26-09-19-2245-webui-optimistic-settle-plan.html) `Done` · 计划 [26-09-20-2139](plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html) `Done` · 报告 [26-09-20-1806](reports/26-09-20-1806-optimistic-ui-half-fix-report.html) `Done` · 报告 [26-09-20-2131](reports/26-09-20-2131-optimistic-ui-event-driven-feasibility.html) `Done`
+- **(无主键)** (5) — 档案 [26-09-26](tasks/26-09-26-webui-button-system.md) `Done` · 档案 [26-09-26](tasks/26-09-26-webui-frontend-file-split.md) `In Progress` · 档案 [26-09-26](tasks/26-09-26-webui-settings-group-merge.md) `Done` · 档案 [26-09-27](tasks/26-09-27-backend-log-levels-notify.md) `Done` · 档案 [26-09-28](tasks/26-09-28-webui-sites-page-search.md) `Done`
 - **backend-partial-hr-verify** (5) — 计划 [26-09-22-2204](plans/26-09-22-2204-partial-hr-site-verify-plan.html) `Open` · 计划 [26-09-26-0031](plans/26-09-26-0031-plan-hr-ext-options-style.html) `In Progress` · 计划 [26-09-27-1815](plans/26-09-27-1815-plan-hr-verify-audit-fixes.html) `Done` · 报告 [26-09-26-1628](reports/26-09-26-1628-report-hr-online-verify-audit.html) `Done` · 档案 [26-09-22](tasks/26-09-22-backend-partial-hr-verify.md) `Open`
 - **backend-state-persistence** (5) — issue [26-09-21-1347](issues/26-09-21-1347-bug-backend-hot-reload-l2-state-rollback.html) `Done` · issue [26-09-21-1347](issues/26-09-21-1347-bug-backend-state-save-only-on-exit.html) `Done` · issue [26-09-21-1347](issues/26-09-21-1347-bug-web-token-non-atomic-write.html) `Open` · 计划 [26-09-22-1912](plans/26-09-22-1912-backend-state-periodic-flush-plan.html) `Done` · 报告 [26-09-21-1329](reports/26-09-21-1329-backend-crash-safety-report.html) `Done`
 - **webui-column-prefs** (5) — issue [26-09-20-1800](issues/26-09-20-1800-bug-webui-column-prefs-reset.html) `Done` · 计划 [26-09-20-1836](plans/26-09-20-1836-webui-column-prefs-sync-plan.html) `Done` · 计划 [26-09-21-1551](plans/26-09-21-1551-column-prefs-intent-redesign-plan.html) `Done` · 报告 [26-09-21-1248](reports/26-09-21-1248-column-prefs-fix-failure-analysis.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-column-prefs-reset.md) `Done`
-- **(无主键)** (4) — 档案 [26-09-26](tasks/26-09-26-webui-button-system.md) `Done` · 档案 [26-09-26](tasks/26-09-26-webui-frontend-file-split.md) `In Progress` · 档案 [26-09-26](tasks/26-09-26-webui-settings-group-merge.md) `Done` · 档案 [26-09-27](tasks/26-09-27-backend-log-levels-notify.md) `Done`
 - **docker-deploy** (4) — 计划 [26-09-25-2241](plans/26-09-25-2241-plan-docker-deploy.html) `In Progress` · 计划 [26-09-27-1407](plans/26-09-27-1407-plan-docker-fs-wrapper-pathmap.html) `In Progress` · 报告 [26-09-27-1352](reports/26-09-27-1352-report-docker-fs-wrapper-pathmap.html) `Done` · 档案 [26-09-25](tasks/26-09-25-deps-docker-deploy.md) `In Progress`
 - **webui-qb-replacement** (4) — 计划 [26-09-16-0123](plans/26-09-16-0123-webui-qb-replacement-plan.html) `Done` · 计划 [26-09-16-1128](plans/26-09-16-1128-webui-qb-replace-wave3-plan.html) `Done` · 计划 [26-09-17-0346](plans/26-09-17-0346-webui-qb-replace-wave3-handover.html) `Done` · 档案 [26-09-15](tasks/26-09-15-webui-qb-replacement.md) `In Progress`
 - **webui-statusbar** (4) — issue [26-09-20-1646](issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html) `Done` · issue [26-09-20-1840](issues/26-09-20-1840-bug-webui-statusbar-traffic-icon.html) `Done` · 计划 [26-09-20-1702](plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html) `Done` · 档案 [26-09-20](tasks/26-09-20-webui-statusbar-speed.md) `In Progress`
@@ -46,7 +46,7 @@
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) `Done` · issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) `Open`
 - **webui-search-query-syntax** (2) — 报告 [26-09-26-1918](reports/26-09-26-1918-report-webui-search-query-syntax.html) `Done` · 档案 [26-09-26](tasks/26-09-26-webui-search-query-syntax.md) `Done`
 
-## 单件专题 (仅登记, 78 个)
+## 单件专题 (仅登记, 79 个)
 
 - appjs-split · architecture · auto-qb-project · ci-no-windows-runner · commands-shipflow-v2 · commands-unified-command-surface
 - commands-unified-surface · commit-gate-auto-run · config-value-range-validation · cross-group-file-conflict · dependency-lock
@@ -54,7 +54,7 @@
 - fakeconfig-shared-state-order-pollution · field-changed-trigger · full-checking-verdict · git-ship-skill-proposal
 - hot-reload-l2-state-rollback-fix · hr-binding-tracker-mapping · hr-check-site-presets · issue-typing · log-level-notify-error
 - memory-bank-migration · memory-bank-task-id · memory-bank-trigger-fix · my-commit-flow-merge-first-writeback · plan-shipflow-v2-missing-meta
-- remove-upload-stats · rule-conditions-expression · seed-group-status · skill-user-md-write-conflict · skill-vetter
+- remove-upload-stats · rule-conditions-expression · seed-group-status · sites-page-search · skill-user-md-write-conflict · skill-vetter
 - skip-checking-readd-no-backup-window · src-layout-restructure · state-load-corrupt-silent-reset · test-sidefx-guard · test-suite-perf
 - torrent-traffic-stats · tracker-url-source-sanitize · tray-join-timeout-abandons-save · type-annotations-mypy · web-runtime-host-protocol
 - web-tracker-url-passkey-log · webui-appjs-split · webui-button-system · webui-cols-store-version · webui-component-libraries

@@ -124,6 +124,23 @@ const HUB_OFF_KEYS = {
   hr_check: ["config", "hr_check", "enabled"],
 };
 
+/* 站点搜索(计划 26-09-27-1852): 键 -> 字段组(chip 上的中文标签), 不在表里的键不搜
+ * (remove_similar_tags 是布尔无可读文本; hr_check 是旧键, 值以 HR 档案为准) */
+const TRACKER_FIELD_GROUPS = {
+  domains: "域名",
+  tags: "标签",
+  groups: "分组",
+  remove_tags: "删标",
+  rules: "规则",
+  upload_speed_limit: "上传限速",
+  download_speed_limit: "下载限速",
+  hr: "HR",
+};
+/* 命中 chip 的展示顺序: 名称 -> 标签 -> 域名 -> 分组 -> 删标 / 规则 / 限速 / HR */
+const TRACKER_CHIP_ORDER = { 名称: 0, 标签: 1, 域名: 2, 分组: 3, 删标: 4, 规则: 5, 上传限速: 6, 下载限速: 7, HR: 8 };
+/* 掩码哨兵: R 级值在树里以 ******** 出现, 不能当可搜内容(防未来站点下新增敏感键) */
+const TRACKER_MASK = "********";
+
 /* 设置分区初值(持久化用户偏好): 刷新后回到上次看的分区, 而不是设置首页 ——
  * 只把顶层 page 持久化的话, 在「设置 → 站点」按 F5 会落到设置首页, 位置照样丢一半。
  * 这里只**取值**; 合法性等 schema 到手后由 hubRestore() 校验(分区 key 由 schema 定义,
@@ -157,6 +174,11 @@ window.CONFIG_HUB = {
       try {
         localStorage.setItem("autoqb.ui.hub", v || "hub");
       } catch { /* 写入失败: 本轮仍生效, 刷新后回设置首页 */ }
+    },
+    /* 仅一个命中 -> 直接选中(计划 §05): 搜索结果唯一时右栏立即出该站详情, 省一次点击。
+     * hits 不依赖 trackerKey, 此处回写不会成环 */
+    "hubTrackerHits.hits"(hits) {
+      if (hits && hits.length === 1) this.cfg.trackerKey = hits[0].name;
     },
   },
   computed: {
@@ -264,11 +286,59 @@ window.CONFIG_HUB = {
       }
       return out;
     },
+    /* 站点搜索: 每站一组归一化行(名称行在最前)。cfg.tree 是响应式代理 —— 本计算属性遍历了
+     * 每个站点条目的键与值, 编辑 / 增删站点 / 保存重载都会让它重算, 无需在 cfgLoad 上另行挂钩 */
+    hubTrackerIndex() {
+      const trackers = (this.cfgConfig() && this.cfgConfig().trackers) || {};
+      return Object.keys(trackers).map((name) => ({ name, rows: this.trackerRows(name, trackers[name]) }));
+    },
+    /* 站点搜索主入口: { active, kind, hits, total }。
+     * 匹配语义与种子搜索(views.py::search_torrents)同构: 负词任一行命中即整站排除(优先),
+     * 正词逐词跨行 AND; 命中行收集成 chip(去重 + 组序 + 上限 3, 见 §05) */
+    hubTrackerHits() {
+      const q = String(this.cfg.trackerQuery || "");
+      if (!q.trim()) return { active: false, kind: "", hits: [], total: this.cfgTrackerNames().length };
+      const p = this.trackerParseQuery(q);
+      if (p.negOnly) return { active: true, kind: "negOnly", hits: [], total: this.cfgTrackerNames().length };
+      const hits = [];
+      for (const site of this.hubTrackerIndex) {
+        const rows = site.rows;
+        if (p.neg.some((w) => rows.some((r) => r.n.indexOf(w) !== -1))) continue;
+        if (p.pos.length && !p.pos.every((w) => rows.some((r) => r.n.indexOf(w) !== -1))) continue;
+        const nameHit = p.pos.some((w) => rows[0].n.indexOf(w) !== -1);
+        const chips = [];
+        const seen = {};
+        for (const r of rows.slice(1)) {
+          if (!p.pos.some((w) => r.n.indexOf(w) !== -1)) continue;
+          const k = r.grp + "|" + r.raw;
+          if (seen[k]) continue;
+          seen[k] = 1;
+          chips.push({ grp: r.grp, raw: r.raw });
+        }
+        chips.sort((a, b) => (TRACKER_CHIP_ORDER[a.grp] ?? 9) - (TRACKER_CHIP_ORDER[b.grp] ?? 9));
+        hits.push({ name: site.name, nameHit, chips: chips.slice(0, 3), more: Math.max(0, chips.length - 3) });
+      }
+      return { active: true, kind: "hits", hits, total: this.cfgTrackerNames().length };
+    },
+    hubTrackerActive() {
+      return this.hubTrackerHits.active;
+    },
+    /* 右栏联动(§06): 左栏正在显示的站点必须是命中之一, 否则右栏出引导提示 */
+    hubTrackerSelIn() {
+      return this.hubTrackerHits.hits.some((h) => h.name === this.cfg.trackerKey);
+    },
+    hubTrackerCountText() {
+      const r = this.hubTrackerHits;
+      if (!r.active) return ""; // 无查询时不显示计数(§06)
+      if (r.kind === "negOnly") return "只有排除词";
+      return `命中 ${r.hits.length} / ${r.total} 个站点`;
+    },
   },
   methods: {
     /* ---------------------------------------------------------- 视图跳转(首页 ↔ 二级页) */
     hubGo(key) {
       this.hubCloseHelp();
+      this.cfg.trackerQuery = ""; // 离开分区即清空站点搜索, 不带残留状态(计划 §06)
       this.hub.view = key;
       if (key === "trackers" && !this.cfgTrackerNames().includes(this.cfg.trackerKey)) {
         const names = this.cfgTrackerNames();
@@ -286,6 +356,7 @@ window.CONFIG_HUB = {
     },
     hubBack() {
       this.hubCloseHelp();
+      this.cfg.trackerQuery = ""; // 同 hubGo: 返回首页不带站点搜索残留
       this.hub.view = "hub";
       window.scrollTo({ top: 0 });
     },
@@ -563,7 +634,74 @@ window.CONFIG_HUB = {
       this.hubCloseHelp();
     },
     hubOnKey(e) {
-      if (e.key === "Escape") this.hubCloseHelp();
+      if (e.key !== "Escape") return;
+      if (this.hub.help) {
+        this.hubCloseHelp();
+        return;
+      }
+      /* 站点搜索的退出路径(计划 §06 Q5): Esc 等效清空, 恢复全量 pill 列表 */
+      if (this.hub.view === "trackers" && String(this.cfg.trackerQuery || "").trim()) {
+        this.cfg.trackerQuery = "";
+      }
+    },
+
+    /* ---------------------------------------------------------- 站点搜索(计划 26-09-27-1852)
+     * 匹配函数收敛为前端单点: 一处 norm / 一处 parse / 一处 rows, 模板不散写。 */
+    /* 归一化: 与 views.py::_search_norm 同语义(分隔符折叠为单空格 + 小写)。
+     * ⚠ JS 必须用 [^\p{L}\p{N}](u 标志必带) —— ASCII \W 是 Unicode 语义的反面,
+     * 会把整个中文词折成空格, 中文搜索直接废掉(拟记 pitfalls/web-ui) */
+    trackerNorm(s) {
+      return String(s).replace(/[^\p{L}\p{N}]+/gu, " ").toLowerCase().trim();
+    },
+    /* 站点 -> 归一化行(名称行恒在最前, 供名称命中判定)。序列化兜底口径(§03):
+     * 字符串原样 / 列表逐项 / 数字 String() / 布尔跳过(无可读文本) / dict 递归到叶子 /
+     * 掩码哨兵跳过 / 空串跳过(不出空 chip) */
+    trackerRows(name, entry) {
+      const rows = [{ grp: "名称", raw: name, n: this.trackerNorm(name) }];
+      const walk = (v, grp) => {
+        if (v === TRACKER_MASK) return;
+        if (typeof v === "boolean") return;
+        if (typeof v === "number") {
+          rows.push({ grp, raw: String(v), n: this.trackerNorm(v) });
+          return;
+        }
+        if (Array.isArray(v)) {
+          v.forEach((x) => walk(x, grp));
+          return;
+        }
+        if (v && typeof v === "object") {
+          Object.keys(v).forEach((k) => walk(v[k], grp));
+          return;
+        }
+        const raw = String(v === undefined || v === null ? "" : v);
+        if (!raw.trim()) return;
+        rows.push({ grp, raw, n: this.trackerNorm(raw) });
+      };
+      for (const k of Object.keys(entry || {})) {
+        const grp = TRACKER_FIELD_GROUPS[k];
+        if (grp) walk(entry[k], grp);
+      }
+      return rows;
+    },
+    /* 查询解析(照搬种子搜索语法, 用户零学习成本): 空格分词 = 隐式 AND / -词 = 排除 /
+     * "短语" = 连续子串 / -"短语" = 排除短语; 宽容容错: 孤立 - 忽略, 未闭合引号收到行尾 */
+    trackerParseQuery(q) {
+      const pos = [];
+      const neg = [];
+      const re = /(-?)(?:"([^"]*)"|(\S+))/g;
+      let m;
+      while ((m = re.exec(String(q)))) {
+        const term = m[2] !== undefined ? m[2] : m[3];
+        if (!term) continue;
+        const n = this.trackerNorm(term);
+        if (!n) continue;
+        (m[1] ? neg : pos).push(n);
+      }
+      return { pos, neg, negOnly: !pos.length && neg.length > 0 };
+    },
+    /* × 清空钮: 配合模板 @mousedown.prevent —— 阻止按钮抢焦点, 输入框保持聚焦可继续输入 */
+    hubTrackerClear() {
+      this.cfg.trackerQuery = "";
     },
 
     /* ---------------------------------------------------------- 行 / 控件辅助 */
@@ -586,9 +724,6 @@ window.CONFIG_HUB = {
       if (["int", "time", "size", "speed"].indexOf(k) >= 0) return "hb-w-sm";
       if (k === "path") return "hb-w-lg";
       return "";
-    },
-    hubCount(value) {
-      return value && typeof value === "object" ? Object.keys(value).length : 0;
     },
     /* 条件 / 动作一行人话: 插件名 + 简短取值 */
     hubPluginText(entry) {
