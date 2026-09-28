@@ -169,14 +169,12 @@
                           </div>
                           <p class="hrs-line">HR 页 https://{{ p.web_domain }}{{ p.page_path }} · 种子下载 {{ p.download_path }} · 翻页参数 ?{{ p.page_param }}=N(档案内置, 无需填写)</p>
                           <div class="hrs-line" style="display:flex;align-items:center;gap:10px">
-                            <span>启用</span>
-                            <select class="hb-select" :value="hrSiteMode(p.id)" @change="hrSiteSetMode(p.id, $event.target.value)">
-                              <option value="off">关闭</option>
-                              <option value="partial">在线核实</option>
-                              <option value="all">全站 HR</option>
-                            </select>
+                            <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                              <input type="checkbox" :checked="hrSiteEnabled(p.id)" @change="hrSiteSetEnabled(p.id, $event.target.checked)">
+                              <span>启用在线核实</span>
+                            </label>
                           </div>
-                          <details v-if="hrSiteMode(p.id) !== 'off' || cfgExists(['config', 'hr_check', 'sites', p.id])" style="margin-top:6px">
+                          <details v-if="hrSiteEnabled(p.id) || cfgExists(['config', 'hr_check', 'sites', p.id])" style="margin-top:6px">
                             <summary class="bh-n">微调项(不改就用默认值)</summary>
                             <hub-field v-for="row in hrSiteTuningItems(p.id)" :key="hubKey(row.path)" :item="row"></hub-field>
                           </details>

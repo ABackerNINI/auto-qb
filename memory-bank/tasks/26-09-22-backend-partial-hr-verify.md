@@ -198,3 +198,11 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
   —— H&R ID 与种子 id 是两个空间, dl_id 落地) 两条日志已外迁**: [attachments/26-09-22-backend-partial-hr-verify-log.md]
   (attachments/26-09-22-backend-partial-hr-verify-log.md)(档案触顶处置); 摘要见 activeContext 切片「已交付 · v3.5」。
 - （本段更早的进度纪要已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md) —— 触顶处置见 `.agents/skills/memory-bank/scripts/_common.py` 的 `TASK_LOG_CAP`）
+
+- **2026-09-29 (v3 跟进修复: WEBUI 站点接入卡片 mode→enabled 口径)** — v3 重构(be83d61)把
+  `hr_check.sites.<档案>` 收敛为 `enabled/tracker/refresh_interval` 三键, 但设置页「站点接入」
+  卡片前端仍按旧三态写 `mode`, 保存即被 validate_config 拒(未知键 ['mode'], btschool/carpt 实报)。
+  修: config_hub.js `hrSiteMode/SetMode`→`hrSiteEnabled/SetEnabled`(布尔, 关闭且条目不存在时不写
+  垃圾键), 首页读数按 enabled 真值计数, 微调表改滤 enabled; settings-detail.html 三态下拉换
+  「启用在线核实」勾选框。纯前端两文件, node --check 通过; 存量 `mode` 由 `_migrate_config_2_3`
+  加载期自动转换, 无需手工改。

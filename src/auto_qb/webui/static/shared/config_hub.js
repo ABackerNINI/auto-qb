@@ -437,11 +437,13 @@ window.CONFIG_HUB = {
         case "maintenance":
           return this.cfgBool(["config", "grouping", "enabled"], "true") ? "辅种分组已启用" : "辅种分组未启用";
         case "hr_check": {
-          // 站点接入卡片(hr_check.sites)的启用数; 旧键 trackers.*.hr_check 已随 schema v2 废除
-          // (迁移链自动改写), 不再计数
-          const enabled = Object.values(this.hrSiteEntries()).filter(
-            (e) => e && String(e.mode || "off") !== "off"
-          ).length;
+          // 站点接入卡片(hr_check.sites)的启用数(v3: 条目 enabled 布尔); 旧键 trackers.*.hr_check
+          // 已随 schema v2 废除(迁移链自动改写), 不再计数
+          const enabled = Object.entries(this.hrSiteEntries()).filter(([id, e]) => {
+            if (!e) return false;
+            const v = e.enabled;
+            return typeof v === "boolean" ? v : ["true", "1", "yes", "on"].includes(String(v).trim().toLowerCase());
+          }).length;
           return enabled ? `${enabled} 个站点在线核实` : "未配置站点";
         }
         case "speed": {
@@ -498,7 +500,7 @@ window.CONFIG_HUB = {
 
     /* ---------------------------------------------------------- 站点接入卡片(计划 26-09-27-1318) */
     /* HR 在线核实分区的唯一启用入口: 卡片键集合来自 schema.constants.hr_check_site_presets
-     * (内置站点档案, 与配置里已存在的键无关), 点选启用即写 hr_check.sites.<id>.mode。
+     * (内置站点档案, 与配置里已存在的键无关), 勾选启用即写 hr_check.sites.<id>.enabled(v3 布尔口径)。
      * 绑定状态由前端按映射制口径先行提示(计划 26-09-27-1930 §6: 显式 tracker 直取 > 档案已知
      * announce 域默认映射查表, 与后端同口径), fail-fast 仍由后端校验兜底 */
     hrSitePresets() {
@@ -509,15 +511,15 @@ window.CONFIG_HUB = {
       const v = this.cfgRaw(["config", "hr_check", "sites"]);
       return v && typeof v === "object" && !Array.isArray(v) ? v : {};
     },
-    hrSiteMode(id) {
+    hrSiteEnabled(id) {
       const entry = this.hrSiteEntries()[id];
-      return entry && entry.mode !== undefined && entry.mode !== null && String(entry.mode).trim() !== ""
-        ? String(entry.mode).trim().toLowerCase()
-        : "off";
+      if (!entry) return false;
+      const v = entry.enabled;
+      return typeof v === "boolean" ? v : ["true", "1", "yes", "on"].includes(String(v).trim().toLowerCase());
     },
-    hrSiteSetMode(id, mode) {
-      if (mode === "off" && !this.cfgExists(["config", "hr_check", "sites", id])) return; // 未配置 = 本就关闭, 不写垃圾键
-      this.cfgSetPath(["config", "hr_check", "sites", id, "mode"], mode);
+    hrSiteSetEnabled(id, on) {
+      if (!on && !this.cfgExists(["config", "hr_check", "sites", id])) return; // 未配置 = 本就关闭, 不写垃圾键
+      this.cfgSetBool(["config", "hr_check", "sites", id, "enabled"], on);
     },
     /* 绑定状态(映射制, 计划 26-09-27-1930 §6): 返回 {text, cls}; cls = "warn" 表示保存后校验会报错。
      * web 域与 tracker 域永不互相比对 —— 自动绑定只在 announce 命名空间内查表(双向子域容错,
@@ -549,12 +551,12 @@ window.CONFIG_HUB = {
         text: `未绑定: 档案已知 announce 域(${trackerDomain})未命中任何站点配置 —— 请补域名或显式指定 tracker`,
       };
     },
-    /* 微调字段表: 从 schema 里 hr_check -> sites 字段的子字段表取(数据驱动), mode 已由卡片点选承担 */
+    /* 微调字段表: 从 schema 里 hr_check -> sites 字段的子字段表取(数据驱动), enabled 已由卡片勾选承担 */
     hrSiteTuningFields() {
       const g = this.cfg.schema && this.cfg.schema.groups.find((x) => x.key === "hr_check");
       const root = g && (g.fields || []).find((f) => f.key === "hr_check");
       const sites = root && (root.fields || []).find((f) => f.key === "sites");
-      return ((sites && sites.fields) || []).filter((f) => f.key !== "mode");
+      return ((sites && sites.fields) || []).filter((f) => f.key !== "enabled");
     },
     /* 组装成 hub-field 组件可渲染的 item(路径指向具体档案条目) */
     hrSiteTuningItems(id) {
