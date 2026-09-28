@@ -30,6 +30,7 @@
 
 ## Done
 
+- [26-09-29-0323] [站点搜索 × 列表交互 · 三方案(计划)](26-09-29-0323-plan-webui-sites-search-3-proposals.html) — `webui-sites-page-search`
 - [26-09-29-0003] [计划 · WEBUI 设置页「?」说明全面核对与改写](26-09-29-0003-plan-webui-settings-help-rewrite.html) — `webui-settings-help`
 - [26-09-28-1932] [HR 在线核实 · 模型推翻重建计划 · auto-qb](26-09-28-1932-plan-hr-verify-rebuild.html) — `backend-partial-hr-verify`
 - [26-09-28-1834] [计划 · 配置版本升级守卫: 键面基线冻结快照](26-09-28-1834-plan-config-version-guard.html) — `config-version-guard`

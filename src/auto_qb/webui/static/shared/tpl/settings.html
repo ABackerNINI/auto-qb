@@ -98,49 +98,82 @@
 
               <!-- 站点: 二级页内用切角小标签切换, 不再做左右主从两栏 -->
               <template v-if="hub.view === 'trackers'">
-                <!-- 搜索行: 名称/域名/标签/分组/规则/限速/HR 全字段匹配, 语法照搬种子搜索(计划 26-09-27-1852); 命中下拉锚定其下 -->
-                <div class="hb-tr-search">
-                  <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
-                  <input class="hb-input" v-model="cfg.trackerQuery" autocomplete="off"
-                         placeholder='搜索站点…(空格=且, -词排除, "短语")'>
-                  <button v-if="cfg.trackerQuery.trim()" class="hb-tr-x" title="清空"
-                          @mousedown.prevent @click="hubTrackerClear()">×</button>
-                  <span v-if="hubTrackerCountText" class="hb-tr-count"
-                        :class="{ warn: hubTrackerHits.kind === 'negOnly' }">{{ hubTrackerCountText }}</span>
+                <!-- 聚焦搜索层(方案C, 2026-09-29 拍板 plans/26-09-29-0323): 聚焦或有词即开层,
+                     列表/详情退隐成背景, 搜索行升为面板 + 下挂命中面板; 收层路径(点命中/Esc/点暗幕/点外)
+                     一律清词(跳转器拍板延续) -->
+                <div class="hb-tr-stage" :class="{ on: hubTrackerStageOpen }">
+                  <div class="hb-tr-veil" @click="hubTrackerStageClose(true)"></div>
+                  <div class="hb-tr-search">
+                    <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+                    <input ref="trackerSearchInput" class="hb-input" v-model="cfg.trackerQuery" autocomplete="off"
+                           placeholder='搜索站点…(空格=且, -词排除, "短语")'
+                           :aria-expanded="hubTrackerStageOpen ? 'true' : 'false'"
+                           @focus="hub.trackerSearchFocus = true"
+                           @keydown="hubTrackerKeydown($event)">
+                    <button v-if="cfg.trackerQuery.trim()" class="hb-tr-x" title="清空"
+                            @mousedown.prevent @click="hubTrackerClear()">×</button>
 
-                  <!-- 命中下拉: 锚定搜索框正下方(跳转器交互 2026-09-28: 点命中即清词收层 /
-                       点下拉外即收, 不赖着盖详情); 空态 / 仅排除词提示也收进浮层 -->
-                  <div v-if="hubTrackerActive" class="hb-tr-drop">
-                    <p v-if="hubTrackerHits.kind === 'negOnly'" class="hb-tr-hint warn">
-                      只有排除词 — 请补一个要包含的词
-                    </p>
-                    <p v-else-if="!hubTrackerHits.hits.length" class="hb-tr-hint">
-                      没有站点匹配「{{ cfg.trackerQuery.trim() }}」— 试试更短的词, 或检查是否有排除词误伤
-                    </p>
-                    <template v-else>
-                      <button v-for="h in hubTrackerHits.hits" :key="h.name" class="hb-tr-hit"
-                              :class="{ on: cfg.trackerKey === h.name }" @click="hubTrackerPick(h.name)">
-                        <span class="hb-tr-hit-name" :class="{ hit: h.nameHit }">{{ h.name }}</span>
-                        <span class="hb-tr-chips">
-                          <span v-for="c in h.chips" :key="c.grp + '|' + c.raw" class="hb-tr-chip">
-                            <i>{{ c.grp }}</i><em>{{ c.raw }}</em>
-                          </span>
-                          <span v-if="h.more" class="hb-tr-chip more">+{{ h.more }}</span>
-                        </span>
-                      </button>
-                    </template>
+                    <!-- 命中面板: 头(标签 + 命中数搬出输入框 + 键位) / 命中行(↑↓ 活动高亮) /
+                         尾(「新增站点「词」」快捷新增 + Esc 提示); 空态语法引导也在面板内 -->
+                    <div v-if="hubTrackerStageOpen" class="hb-tr-drop">
+                      <div class="hb-tr-drop-hd">
+                        <span class="p-t">站点搜索</span>
+                        <span v-if="hubTrackerCountText && hubTrackerHits.kind !== 'negOnly'" class="p-n">{{ hubTrackerCountText }}</span>
+                        <span class="p-k"><kbd>↑</kbd><kbd>↓</kbd> 选择 <kbd>Enter</kbd> 打开</span>
+                      </div>
+                      <div class="hb-tr-drop-list">
+                        <p v-if="!cfg.trackerQuery.trim()" class="hb-tr-hint">
+                          输入关键词, 名称 / 域名 / 标签 / 分组 / 规则 / 限速 / HR 全字段匹配。<br>
+                          语法: 空格 = 且 · -词 排除 · "短语" 连续匹配
+                        </p>
+                        <p v-else-if="hubTrackerHits.kind === 'negOnly'" class="hb-tr-hint warn">
+                          只有排除词 — 请补一个要包含的词
+                        </p>
+                        <p v-else-if="!hubTrackerHits.hits.length" class="hb-tr-hint">
+                          没有站点匹配「{{ cfg.trackerQuery.trim() }}」— 换更短的词, 或在下面直接新增
+                        </p>
+                        <template v-else>
+                          <button v-for="(h, i) in hubTrackerHits.hits" :key="h.name" class="hb-tr-hit"
+                                  :class="{ on: cfg.trackerKey === h.name, act: hub.trackerHitIdx === i }"
+                                  :style="{ animationDelay: (i * 24) + 'ms' }"
+                                  @click="hubTrackerPick(h.name)" @mouseenter="hub.trackerHitIdx = i">
+                            <span class="hb-tr-hit-name" :class="{ hit: h.nameHit }">{{ h.name }}</span>
+                            <span v-if="cfg.trackerKey === h.name" class="hb-tr-cur">当前</span>
+                            <span class="hb-tr-chips">
+                              <span v-for="c in h.chips" :key="c.grp + '|' + c.raw" class="hb-tr-chip">
+                                <i>{{ c.grp }}</i><em>{{ c.raw }}</em>
+                              </span>
+                              <span v-if="h.more" class="hb-tr-chip more">+{{ h.more }}</span>
+                            </span>
+                          </button>
+                        </template>
+                      </div>
+                      <div class="hb-tr-drop-ft">
+                        <button class="hb-btn dashed sm" @click="hubAddTracker(cfg.trackerQuery.trim())">
+                          <svg class="hb-ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>新增站点<span
+                              v-if="cfg.trackerQuery.trim() && hubTrackerHits.kind !== 'negOnly'">「{{ cfg.trackerQuery.trim() }}」</span>
+                        </button>
+                        <span class="ft-esc"><kbd>Esc</kbd> 退出搜索</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
 
-                <!-- 非搜索态: pill 行(只显示站点名, 不带配置键数徽标) -->
-                <div v-if="!hubTrackerActive" class="hb-pills">
-                  <button v-for="name in cfgTrackerNames()" :key="name" class="hb-pill"
-                          :class="{ on: cfg.trackerKey === name }" @click="cfg.trackerKey = name">
-                    {{ name }}
-                  </button>
-                  <button class="hb-pill" @click="hubAddTracker()">＋ 新增站点</button>
-                  <button class="hb-pill" :disabled="hub.importing" @click="hubImportSites()">⤓ 导入缺失站点</button>
-                </div>
+                  <!-- pill 行: 站点 pill + 行尾动作区(新增 = 虚线描边 / 导入 = 幽灵钮, 与站点 pill 形制分离);
+                       搜索态整行随聚焦层退隐变暗, 不再 v-if 隐藏(背景仍在) -->
+                  <div class="hb-pills">
+                    <button v-for="name in cfgTrackerNames()" :key="name" class="hb-pill"
+                            :class="{ on: cfg.trackerKey === name }" @click="cfg.trackerKey = name">
+                      {{ name }}
+                    </button>
+                    <span class="hb-pill-tail">
+                      <button class="hb-btn dashed sm" @click="hubAddTracker()">
+                        <svg class="hb-ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>新增站点
+                      </button>
+                      <button class="hb-btn ghost sm" :disabled="hub.importing" @click="hubImportSites()">
+                        <svg class="hb-ico" viewBox="0 0 16 16"><path d="M8 2v8M4.6 7 8 10.4 11.4 7M3 13h10"/></svg>导入缺失站点
+                      </button>
+                    </span>
+                  </div>
 
                 <!-- 详情: 整栏宽(不再左右分栏) -->
                 <div class="hb-tr-detail">
@@ -158,9 +191,10 @@
                     当前选中站点不在命中里 — 点上面下拉里的命中项选中站点
                   </p>
                   <div v-else class="hb-blk hb-cut">
-                    <div class="hb-blk-hd"><span class="bh-n">暂无站点配置, 点上面「＋ 新增站点」添加一个</span></div>
+                    <div class="hb-blk-hd"><span class="bh-n">暂无站点配置, 点上面「新增站点」添加一个</span></div>
                   </div>
                 </div>
+                </div><!-- /hb-tr-stage -->
               </template>
 
               <!-- 规则: 「条件 → 动作」两栏卡片 -->

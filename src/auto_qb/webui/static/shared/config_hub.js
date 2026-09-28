@@ -156,6 +156,8 @@ window.CONFIG_HUB = {
         pop: { left: 0, top: 0 },
         arrow: { left: 0, top: 0, place: "left" },
         focusKey: "",      // 搜索跳转后要高亮的行
+        trackerSearchFocus: false,  // 聚焦搜索层(方案C, plans/26-09-29-0323): 搜索框聚焦即开层
+        trackerHitIdx: -1,          // 命中面板键盘活动项(↑↓ 移动), -1 = 无
       },
     };
   },
@@ -171,6 +173,8 @@ window.CONFIG_HUB = {
      * hits 不依赖 trackerKey, 此处回写不会成环 */
     "hubTrackerHits.hits"(hits) {
       if (hits && hits.length === 1) this.cfg.trackerKey = hits[0].name;
+      /* 命中集合随查询词变化重建, 活动项重置回第一项(Enter 即开第一命中, 对齐拍板样机) */
+      this.hub.trackerHitIdx = hits && hits.length ? 0 : -1;
     },
   },
   computed: {
@@ -334,12 +338,17 @@ window.CONFIG_HUB = {
       if (r.kind === "negOnly") return "只有排除词";
       return `命中 ${r.hits.length} / ${r.total} 个站点`;
     },
+    /* 聚焦搜索层开合(方案C, 2026-09-29 拍板): 聚焦或有词即开层。收层路径全部清词
+     * (跳转器拍板 2026-09-28 延续), 故「有词但层收着」不存在, 开与 hubTrackerActive 同域 */
+    hubTrackerStageOpen() {
+      return this.hub.trackerSearchFocus || this.hubTrackerActive;
+    },
   },
   methods: {
     /* ---------------------------------------------------------- 视图跳转(首页 ↔ 二级页) */
     hubGo(key) {
       this.hubCloseHelp();
-      this.cfg.trackerQuery = ""; // 离开分区即清空站点搜索, 不带残留状态(计划 §06)
+      this.hubTrackerStageClose(false); // 离开分区即清空站点搜索并复位聚焦层, 不带残留状态(计划 §06 + 方案C)
       this.hub.view = key;
       if (key === "trackers" && !this.cfgTrackerNames().includes(this.cfg.trackerKey)) {
         const names = this.cfgTrackerNames();
@@ -356,7 +365,7 @@ window.CONFIG_HUB = {
     },
     hubBack() {
       this.hubCloseHelp();
-      this.cfg.trackerQuery = ""; // 同 hubGo: 返回首页不带站点搜索残留
+      this.hubTrackerStageClose(false); // 同 hubGo: 返回首页不带站点搜索残留
       this.hub.view = "hub";
       window.scrollTo({ top: 0 });
     },
@@ -650,22 +659,25 @@ window.CONFIG_HUB = {
       if (this.hub.help && !(e.target && e.target.closest && e.target.closest(".hb-pop"))) {
         this.hubCloseHelp();
       }
-      /* 站点搜索「点外即收」(跳转器交互 2026-09-28): 收层一律清词 —— 浮层盖着详情,
-       * 留词只会让下次点击又盖回来; 搜索行内点击(改词 / × / 计数)不算点外, 不收 */
-      if (this.hub.view === "trackers" && this.hubTrackerActive &&
-          !(e.target && e.target.closest && e.target.closest(".hb-tr-search"))) {
-        this.cfg.trackerQuery = "";
+      /* 聚焦搜索层「点外即收」(方案C 2026-09-29): 收层一律清词 —— 层开着时列表/详情都在暗幕底下,
+       * 留词只会让下次点击又盖回来; stage 内点击(搜索行 / 面板 / 暗幕自身除外)不算点外 */
+      if (this.hub.view === "trackers" && this.hubTrackerStageOpen &&
+          !(e.target && e.target.closest && e.target.closest(".hb-tr-stage"))) {
+        this.hubTrackerStageClose(true);
       }
     },
     hubOnKey(e) {
+      /* IME 组词中的 Esc/Enter 属于输入法(取消候选 / 确认上屏), 不劫持 —— 中文输入状态按 Esc
+       * 只该取消组词, 不该顺带关浮层/清搜索词/退首页 */
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key !== "Escape") return;
       if (this.hub.help) {
         this.hubCloseHelp();
         return;
       }
-      /* 站点搜索的退出路径(计划 §06 Q5): Esc 等效清空, 恢复全量 pill 列表 */
-      if (this.hub.view === "trackers" && String(this.cfg.trackerQuery || "").trim()) {
-        this.cfg.trackerQuery = "";
+      /* 站点搜索的退出路径: Esc = 清词收层退聚焦层(跳转器拍板延续 + 方案C) */
+      if (this.hub.view === "trackers" && this.hubTrackerStageOpen) {
+        this.hubTrackerStageClose(true);
         return;
       }
       /* 设置二级页 Esc 返回首页(方案三 2026-09-28): 排在说明浮窗/站点搜索之后, 不抢既有职责;
@@ -728,15 +740,42 @@ window.CONFIG_HUB = {
       }
       return { pos, neg, negOnly: !pos.length && neg.length > 0 };
     },
-    /* 点命中行(跳转器交互 2026-09-28): 选中即清词收层直达详情 —— 下拉盖着详情,
-     * 只选中不清词会把切站效果留在浮层底下看不见(原「保留搜索」是分栏语境的拍板, 随下拉退役) */
+    /* 点命中行(跳转器交互 2026-09-28, 方案C 延续): 选中即清词收层直达详情 —— 层盖着列表,
+     * 只选中不清词会把切站效果留在暗幕底下看不见; 焦点一并交还页面, 落到详情可直接编辑 */
     hubTrackerPick(name) {
       this.cfg.trackerKey = name;
-      this.cfg.trackerQuery = "";
+      this.hubTrackerStageClose(true);
     },
-    /* × 清空钮: 配合模板 @mousedown.prevent —— 阻止按钮抢焦点, 输入框保持聚焦可继续输入 */
+    /* 聚焦层收层单点(方案C): 清词 + 聚焦态/键盘活动项复位; blurInput 时把焦点从搜索框还回去 */
+    hubTrackerStageClose(blurInput) {
+      this.cfg.trackerQuery = "";
+      this.hub.trackerSearchFocus = false;
+      this.hub.trackerHitIdx = -1;
+      if (blurInput && this.$refs.trackerSearchInput) this.$refs.trackerSearchInput.blur();
+    },
+    /* × 清空钮: 配合模板 @mousedown.prevent —— 阻止按钮抢焦点, 输入框保持聚焦可继续输入
+     * (清词后聚焦层仍开着, 回到空态引导, 再敲字即搜) */
     hubTrackerClear() {
       this.cfg.trackerQuery = "";
+    },
+    /* 聚焦层键盘导航(方案C): ↑↓ 移动命中活动项, Enter 打开活动项(=点命中); IME 组词中不劫持。
+     * Esc 不在这里处理 —— 归 hubOnKey 的既有 Esc 链(帮助浮窗优先级在前), 避免双路径清词 */
+    hubTrackerKeydown(e) {
+      if (e.isComposing || e.keyCode === 229) return;
+      const hits = this.hubTrackerHits.hits;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (!hits.length) return;
+        e.preventDefault();
+        const n = hits.length, cur = this.hub.trackerHitIdx;
+        this.hub.trackerHitIdx = e.key === "ArrowDown"
+          ? (cur + 1) % n
+          : (cur < 0 ? n - 1 : (cur - 1 + n) % n);
+      } else if (e.key === "Enter") {
+        if (this.hub.trackerHitIdx >= 0 && hits[this.hub.trackerHitIdx]) {
+          e.preventDefault();
+          this.hubTrackerPick(hits[this.hub.trackerHitIdx].name);
+        }
+      }
     },
 
     /* ---------------------------------------------------------- 行 / 控件辅助 */
@@ -786,8 +825,9 @@ window.CONFIG_HUB = {
     },
 
     /* ---------------------------------------------------------- 站点 / 规则集 / 规则 增删 */
-    async hubAddTracker() {
-      const name = await this.promptDialog("新增站点配置", "", { placeholder: "站点名(如 HHan)", okText: "添加" });
+    async hubAddTracker(prefill) {
+      /* prefill: 聚焦搜索层面板尾的「新增站点「词」」把当前搜索词带进命名框(方案C, 搜不到就当场建) */
+      const name = await this.promptDialog("新增站点配置", prefill || "", { placeholder: "站点名(如 HHan)", okText: "添加" });
       if (name === null || name === undefined) return;
       const n = String(name).trim();
       if (!n) return;

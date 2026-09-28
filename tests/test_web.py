@@ -41,7 +41,7 @@
 - test_sites_missing_requires_connected_client: qB 断连 -> 503(不得拿空扫描冒充"没有缺失站点")
 - test_sites_missing_api_failure_maps_502: 扫描中途 qB 调用失败 -> 502 带原因(不裸 500)
 - test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志
-- test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \\p{L}\\p{N}(u 标志, ASCII \\W 折碎中文词) + 四条收起路径(Esc/离开分区/点外即收/点命中即收, 跳转器交互 2026-09-28) + pill 无键数徽标 + hb-tr-* 类 CSS 成对定义
+- test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \\p{L}\\p{N}(u 标志, ASCII \\W 折碎中文词) + 收层路径四条一律清词单点(点命中/Esc/点暗幕/点外即收; 方案C 聚焦层 2026-09-29 拍板) + 聚焦层开合/键盘导航/IME 守卫 + pill 无键数徽标 + 行尾动作区分形 + hb-tr-* 类 CSS 成对定义
 - test_frontend_search_help_wiring: 顶栏搜索语法浮卡接线守阵(计划 26-09-28-0201 方案A) —— 模板(「?」钮/浮卡/示例回填/简化占位符) + state 声明 + view.js 方法(回填即搜) + 点空白/Esc/导航三条收起路径 + 三皮肤 CSS 成对定义与 input 右内边距留位
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
@@ -2615,16 +2615,17 @@ def test_frontend_sites_import_wiring():
 
 
 def test_frontend_tracker_search_wiring():
-    """站点页搜索接线守阵(静态防回潮, 计划 26-09-27-1852)
+    """站点页搜索接线守阵(静态防回潮, 计划 26-09-27-1852; 方案C 聚焦搜索层 2026-09-29 拍板)
 
     trackers 二级页搜索是纯前端实现, pytest 运行时看不见, 断链都是静默的:
       ① 模板三件套(输入框绑定 / 清空钮 / 计数)与命中行结构缺一 = 搜索入口废;
       ② 归一化必须用 [^\\p{L}\\p{N}](u 标志) —— JS 的 ASCII \\W 是 Unicode 语义的反面,
          会把整个中文词折成空格, 中文搜索静默失效(Python \\W 的同语义直译陷阱);
-      ③ 收起路径四条(跳转器交互 2026-09-28): Esc / 离开分区 / 点外即收 / 点命中即收 ——
-         覆盖式浮层必须有退出路径, 漏一条 = 下拉赖着盖详情(「不主动消失」报障的根因);
-      ④ 站点 pill 不带配置键数徽标(26-09-27 拍板);
-      ⑤ 模板用到的 hb-tr-* 类必须在 console_hub.css 有定义(挂件类名错配变体)。
+      ③ 收层路径四条(点命中 / Esc / 点暗幕 / 点外即收)一律走 hubTrackerStageClose 清词单点 ——
+         漏一条 = 层赖着盖详情(「不主动消失」报障的根因);
+      ④ 聚焦层开合(聚焦或有词即开) + 键盘导航(↑↓ 移动 / Enter 打开) + IME 组词守卫(方案C);
+      ⑤ 站点 pill 不带配置键数徽标(26-09-27 拍板); 新增/导入收进行尾动作区与站点 pill 分形(P4);
+      ⑥ 模板用到的 hb-tr-* 类必须在 console_hub.css 有定义(挂件类名错配变体)。
     """
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "settings.html"), encoding="utf-8").read()
     for token in (
@@ -2632,51 +2633,90 @@ def test_frontend_tracker_search_wiring():
         "hubTrackerClear()",
         "hubTrackerCountText",
         "hubTrackerHits.hits",
-        'class="hb-tr-drop"',  # 26-09-28 命中列表改搜索框下挂下拉浮层(原 hb-tr-split 左右分栏已废)
+        'class="hb-tr-drop"',  # 命中面板(v-if hubTrackerStageOpen)仍挂搜索行下
         'class="hb-tr-detail"',
         "hb-tr-hit",
         "hb-tr-chip",
+        # 方案C 聚焦层结构: 舞台 + 暗幕 + 开合 + 键盘 + 面板头尾 + 行尾动作区
+        "hb-tr-stage",
+        "hubTrackerStageOpen",
+        "hb-tr-veil",
+        "hubTrackerStageClose(true)",
+        'ref="trackerSearchInput"',
+        "hub.trackerSearchFocus = true",
+        "hubTrackerKeydown($event)",
+        "hb-tr-drop-hd",
+        "hb-tr-drop-ft",
+        "hb-pill-tail",
+        "hubAddTracker(cfg.trackerQuery.trim())",  # 面板尾快捷新增把搜索词带进命名框
     ):
         assert token in tpl, f"shared/tpl/settings.html 缺少 {token}(站点搜索模板被改坏? 同步本守阵)"
-    pills = re.search(r'v-if="!hubTrackerActive" class="hb-pills"(.*?)</div>', tpl, re.S)
-    assert pills, "trackers 非搜索态 pill 行找不到(结构改名? 同步本守阵)"
+    pills = re.search(r'class="hb-pills"(.*?)</div>', tpl, re.S)
+    assert pills, "trackers pill 行找不到(结构改名? 同步本守阵)"
     assert "hubCount" not in pills.group(1), "站点 pill 不应显示配置键数徽标(hubCount), 26-09-27 拍板"
-    # ② 逻辑层单点: CJK 安全归一化 + 解析 / 行索引 / 命中 / 清空
+    assert "hb-pill-tail" in pills.group(1) and "hubImportSites()" in pills.group(1), \
+        "行尾动作区(新增/导入)必须留在 pill 行内(P4: 与站点 pill 分形分位)"
+    # ② 逻辑层单点: CJK 安全归一化 + 解析 / 行索引 / 命中 / 清空 / 收层 / 键盘
     hub = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
     assert re.search(r"replace\(/\[\^\\p\{L\}\\p\{N\}\]\+/gu",
                      hub), ("站点归一化必须用 [^\\p{L}\\p{N}](u 标志): ASCII \\W 会把整个中文词折成空格")
     for token in (
-        "trackerParseQuery(q)", "trackerRows(name, entry)", "hubTrackerHits()", "hubTrackerClear()",
-        "hubTrackerPick(name)"
+        "trackerParseQuery(q)",
+        "trackerRows(name, entry)",
+        "hubTrackerHits()",
+        "hubTrackerClear()",
+        "hubTrackerPick(name)",
+        "hubTrackerStageClose(blurInput)",
+        "hubTrackerKeydown(e)",
+        "trackerSearchFocus: false",
+        "trackerHitIdx: -1",
     ):
         assert token in hub, f"shared/config_hub.js 缺少 {token}"
-    # ③ 跳转器收起(2026-09-28): 点命中 = 选中+清词收层; 点浮层与搜索行以外 = 清词收层
+    keydown = re.search(r"hubTrackerKeydown\(e\) \{(.*?)\n    \},", hub, re.S)
+    assert keydown and "isComposing" in keydown.group(1) and "ArrowDown" in keydown.group(1) \
+        and "Enter" in keydown.group(1), "键盘导航必须含 ↑↓/Enter 且 IME 组词中不劫持(isComposing 守卫)"
+    # ③ 收层单点四条路径: 点命中 / Esc(hubOnKey) / 点暗幕(veil) / 点外即收(hubOnDocClick) —— 全部清词
     pick = re.search(r'@click="(hubTrackerPick\(h\.name\))"', tpl)
-    assert pick, "命中行 @click 必须接 hubTrackerPick —— 只选中不清词会把切站效果留在浮层底下(死锁)"
+    assert pick, "命中行 @click 必须接 hubTrackerPick —— 只选中不清词会把切站效果留在暗幕底下(死锁)"
+    veil = re.search(r'class="hb-tr-veil" @click="(hubTrackerStageClose\(true\))"', tpl)
+    assert veil, "暗幕 @click 必须接 hubTrackerStageClose(true) —— 点暗幕 = 清词收层退聚焦层"
     docclick = re.search(r"hubOnDocClick\(e\) \{(.*?)\n    \},", hub, re.S)
-    assert docclick and 'closest(".hb-tr-search")' in docclick.group(1), \
-        "hubOnDocClick 必须含点外即收(closest .hb-tr-search 豁免搜索行内点击)"
-    # ③ 两条清空路径
+    assert docclick and 'closest(".hb-tr-stage")' in docclick.group(1) \
+        and "hubTrackerStageClose(true)" in docclick.group(1), \
+        "hubOnDocClick 必须含点外即收(closest .hb-tr-stage 豁免 stage 内点击)"
     onkey = re.search(r"hubOnKey\(e\) \{(.*?)\n    \},", hub, re.S)
-    assert onkey and "cfg.trackerQuery" in onkey.group(1), "Esc 必须清空站点搜索(Q5 退出路径)"
+    assert onkey and "isComposing" in onkey.group(1), "hubOnKey 必须 IME 组词守卫(组词中 Esc 归输入法)"
+    assert onkey and "hubTrackerStageClose(true)" in onkey.group(1), "Esc 必须清词收层退聚焦层"
     for fn in ("hubGo(key)", "hubBack()"):
         body = re.search(rf"{re.escape(fn)} \{{(.*?)\n    \}},", hub, re.S)
-        assert body and 'this.cfg.trackerQuery = ""' in body.group(1), f"{fn} 必须清空站点搜索(离开分区不带残留)"
+        assert body and "hubTrackerStageClose(false)" in body.group(1), \
+            f"{fn} 必须走收层单点(离开分区不带搜索残留, 聚焦态一并复位)"
+    closefn = re.search(r"hubTrackerStageClose\(blurInput\) \{(.*?)\n    \},", hub, re.S)
+    assert closefn and 'this.cfg.trackerQuery = ""' in closefn.group(1) \
+        and "trackerSearchFocus = false" in closefn.group(1), \
+        "收层单点必须清词 + 复位聚焦态(跳转器拍板: 收层一律清词)"
     ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
     assert 'trackerQuery: ""' in ed, "cfg.trackerQuery 必须在 config_editor.js state 声明(漏声明 = 响应性缺失)"
-    # ⑤ CSS 成对: 模板用到的 hb-tr-* 类都要有规则
+    # ⑥ CSS 成对: 模板用到的 hb-tr-* 类都要有规则
     css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
     for cls in (
+        "hb-tr-stage",
+        "hb-tr-veil",
         "hb-tr-search",
         "hb-tr-x",
-        "hb-tr-count",
-        "hb-tr-drop",  # 26-09-28 命中下拉浮层(原 hb-tr-split/hb-tr-hits 分栏已废)
+        "hb-tr-drop",  # 命中面板(方案C: 头/列表/尾三段式)
+        "hb-tr-drop-hd",
+        "hb-tr-drop-list",
+        "hb-tr-drop-ft",
         "hb-tr-detail",
         "hb-tr-hit",
         "hb-tr-hit-name",
+        "hb-tr-cur",
         "hb-tr-chips",
         "hb-tr-chip",
         "hb-tr-hint",
+        "hb-pill-tail",
+        "hb-btn.dashed",
     ):
         assert "." + cls in css, f"console_hub.css 缺少 .{cls} 定义(挂件类名错配 = 静默裸样式)"
 

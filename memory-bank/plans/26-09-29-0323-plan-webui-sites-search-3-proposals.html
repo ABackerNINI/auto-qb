@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>站点搜索 × 列表交互 · 三方案(计划)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="webui-sites-page-search">
+<meta name="doc-added" content="26-09-29-0323">
+<meta name="doc-updated" content="26-09-29-0415">
+<!--
+  设计思维四问留痕:
+  · Purpose: PT 自动化工具的设置页「站点」分区 —— 单一维护者高频挑站/建站场景, 要一眼找到站、顺手加站。
+  · Tone: 延续产品既有 Ash Thorp 控制台语言(方角+切角+负 spread 发光+teal 单 accent+mono 点缀), 文档外壳同语系克制化。
+  · Constraints: 单文件离线可开; 三皮肤共用层只走令牌不写死色; 不引外部字体/图片; 过渡 160-280ms 全部有动机。
+  · Differentiation: 样机不是贴图 —— 三套方案全部真的可以敲键盘玩(过滤/↑↓/Enter/Esc/IME 守卫), 选择即体验。
+  字体说明: 沿用产品字体栈(Segoe UI/Microsoft YaHei + Cascadia Code/Consolas), 属于产品语言的一部分, 非默认随手选。
+  令牌来源: src/auto_qb/webui/static/console/style.css :root(2026-09-29 读值); 实现时回写为皮肤令牌。
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    /* 文档外壳 */
+    --paper: #0b1220;
+    --panel: #0e1626;
+    --ink: #e6edf6;
+    --mut: #9aabc4;
+    --dim: #7388a6;
+    --line: rgba(255, 255, 255, .08);
+    --acc: #3aa6a6;
+    --acc-hi: #5cc3c3;
+    --acc-soft: rgba(58, 166, 166, .13);
+    --warn: #f5bb42;
+    --err: #f3766f;
+    --mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.75 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { width: min(1260px, calc(100% - 48px)); margin: 0 auto; }
+  a { color: var(--acc-hi); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: var(--mono); font-size: .92em; background: var(--panel); border: 1px solid var(--line); padding: 1px 6px; }
+  kbd {
+    font: 500 11px/1 var(--mono); color: var(--mut);
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px;
+    padding: 2px 6px 3px; white-space: nowrap;
+  }
+  ::selection { background: var(--acc-soft); color: var(--ink); }
+
+  /* ---------- 文档外壳 ---------- */
+  .doc-hd { padding: 64px 0 26px; border-bottom: 1px solid var(--line); }
+  .kicker {
+    font: 500 11.5px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase;
+    color: var(--acc-hi); margin: 0 0 14px;
+  }
+  .kicker .st { color: var(--dim); }
+  h1 { font: 600 34px/1.25 var(--sans); letter-spacing: -.01em; margin: 0 0 10px; }
+  h1 small { font-size: 20px; color: var(--mut); font-weight: 400; letter-spacing: 0; }
+  .meta { font-size: 13px; color: var(--dim); }
+  .meta b { color: var(--mut); font-weight: 600; }
+  .usage {
+    margin-top: 22px; border: 1px solid var(--line); background: var(--panel);
+    padding: 14px 18px; font-size: 13.5px; color: var(--mut); display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  }
+  .usage .u-t { font: 600 12px/1 var(--mono); letter-spacing: .1em; color: var(--acc-hi); }
+
+  /* 痛点 */
+  .pains { padding: 30px 0 8px; }
+  .pains h2, .sec > h2, .compare h2, .decide h2 {
+    font: 600 21px/1.4 var(--sans); letter-spacing: .005em; margin: 0 0 6px;
+  }
+  .lede { margin: 0 0 18px; color: var(--mut); font-size: 14px; }
+  .pain-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 40px; }
+  @media (max-width: 860px) { .pain-grid { grid-template-columns: 1fr; } }
+  .pain { border-top: 1px solid var(--line); padding: 13px 0 15px; display: flex; gap: 14px; }
+  .pain .pn {
+    flex: none; font: 600 12px/22px var(--mono); color: var(--acc-hi);
+    border: 1px solid rgba(58,166,166,.4); width: 40px; height: 22px; text-align: center;
+  }
+  .pain b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+  .pain p { margin: 0; font-size: 13px; color: var(--mut); }
+
+  /* 方案切换条 */
+  .tabs {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    backdrop-filter: none; border-bottom: 1px solid var(--line);
+    display: flex; gap: 6px; align-items: center; padding: 12px 0; margin-top: 8px;
+  }
+  .tabs .tab {
+    appearance: none; border: 1px solid var(--line); background: transparent; color: var(--mut);
+    font: 600 13px/1 var(--sans); letter-spacing: .02em; padding: 10px 16px; cursor: pointer;
+    transition: color 160ms, border-color 160ms, background 160ms;
+  }
+  .tabs .tab i { font: 600 11px/1 var(--mono); font-style: normal; color: var(--dim); margin-right: 8px; }
+  .tabs .tab:hover { color: var(--ink); border-color: rgba(58,166,166,.45); }
+  .tabs .tab.on { color: var(--acc-hi); border-color: rgba(58,166,166,.55); background: var(--acc-soft); }
+  .tabs .tab.on i { color: var(--acc-hi); }
+  .tabs .t-hint { margin-left: auto; font: 500 11.5px/1 var(--mono); color: var(--dim); }
+  .tabs .t-link { font-size: 13px; color: var(--dim); padding: 0 8px; }
+  @media (max-width: 760px) {
+    .tabs { flex-wrap: wrap; }
+    .tabs .tab { padding: 8px 10px; font-size: 12px; }
+    .tabs .tab i { margin-right: 5px; }
+    .tabs .t-hint { display: none; }
+  }
+
+  .sec { display: none; padding: 34px 0 10px; }
+  .sec.show { display: block; animation: sec-in 220ms cubic-bezier(.2,.8,.3,1); }
+  @keyframes sec-in { from { opacity: 0; transform: translateY(6px); } }
+  .sec > .定位 { font-size: 14.5px; color: var(--mut); margin: 0 0 20px; max-width: 72ch; }
+  .sec > .定位 b { color: var(--ink); }
+
+  /* ---------- 产品样机外壳(mock): 令牌取自控制台皮肤真值 ---------- */
+  .m-frame { border: 1px solid var(--line); margin: 18px 0 26px; }
+  .m-frame-label {
+    display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap;
+    padding: 9px 16px; border-bottom: 1px solid var(--line);
+    font: 500 11.5px/1.6 var(--mono); color: var(--dim);
+  }
+  .m-frame-label .live { color: var(--acc-hi); letter-spacing: .1em; }
+  .mock {
+    /* 控制台皮肤 :root 真值(实现时走皮肤令牌, 三皮肤共用) */
+    --bg: #0d1724; --bg-card: #15233a; --bg-hover: #1c3050; --bg-elev: #1b2d4b;
+    --bg-sunken: rgba(5, 12, 24, .5);
+    --fg: #e9eff7; --fg-muted: #9cadc6; --fg-dim: #6e84a3;
+    --accent: #3aa6a6; --accent-hi: #5cc3c3; --accent-soft: rgba(58,166,166,.15);
+    --accent-line: rgba(58,166,166,.45);
+    --warn: #f5bb42; --warn-soft: rgba(245,187,66,.15); --warn-line: rgba(245,187,66,.45);
+    --error: #f3766f; --error-soft: rgba(243,118,111,.15);
+    --border: #23395a; --border-strong: #34507c;
+    --surface-1: rgba(255,255,255,.04); --surface-2: rgba(255,255,255,.06);
+    --hairline: rgba(255,255,255,.055);
+    --radius: 0px;
+    --shadow-3: 0 14px 40px rgba(0,0,0,.3);
+    --ease: cubic-bezier(.2,.8,.3,1); --ease-out: cubic-bezier(.16,1,.3,1);
+    --dur-fast: 100ms; --dur: 160ms; --dur-slow: 280ms;
+    --hb-font-display: var(--sans); --hb-font-mono: var(--mono);
+    background: var(--bg); padding: 22px 22px 26px; color: var(--fg);
+    font-size: 13px; line-height: 1.6;
+  }
+  /* 语调派生(照搬 console_hub.css: 描边与发光同源于 --tone) */
+  .mock .hb-input, .mock .hb-btn, .mock .hb-pill {
+    --tone: var(--accent);
+    --tone-line: color-mix(in srgb, var(--tone) 45%, transparent);
+    --glow: inset 0 0 0 1px var(--tone), 0 0 22px -6px color-mix(in srgb, var(--tone) 80%, transparent);
+    --glow-soft: inset 0 0 0 1px color-mix(in srgb, var(--tone) 50%, transparent),
+        0 0 16px -8px color-mix(in srgb, var(--tone) 60%, transparent);
+  }
+  .mock .hb-btn { --tone: var(--fg-dim); }
+  .mock .hb-btn.danger { --tone: var(--error); }
+
+  .mock .hb-ico { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; }
+  .mock .hb-input {
+    padding: 10px 14px; background-color: var(--bg-sunken); color: var(--fg);
+    border: 1px solid var(--tone-line); border-radius: var(--radius);
+    font: 13px/1.5 var(--sans); min-width: 0; width: 100%;
+    transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  }
+  .mock .hb-input::placeholder { color: var(--fg-dim); opacity: 1; }
+  .mock .hb-input:hover { border-color: var(--tone); box-shadow: var(--glow-soft); }
+  .mock .hb-input:focus { outline: none; border-color: var(--tone); box-shadow: var(--glow); }
+  .mock .hb-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 6px 12px; background: var(--bg-elev); color: var(--fg);
+    border: 1px solid var(--tone-line); border-radius: var(--radius);
+    font: 600 12.5px/1.4 var(--sans); letter-spacing: .02em; cursor: pointer;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+        color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  }
+  .mock .hb-btn:hover { background: var(--bg-hover); border-color: var(--tone); box-shadow: var(--glow-soft); }
+  .mock .hb-btn:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; }
+  .mock .hb-btn.ghost { background: transparent; border-color: transparent; color: var(--fg-muted); }
+  .mock .hb-btn.ghost:hover { background: transparent; border-color: transparent; color: var(--accent-hi); box-shadow: none; }
+  .mock .hb-btn.dashed { background: transparent; border: 1px dashed var(--tone-line); color: var(--fg-muted); }
+  .mock .hb-btn.dashed:hover { border-color: var(--tone); color: var(--accent-hi); box-shadow: var(--glow-soft); background: transparent; }
+  .mock .hb-btn.danger { color: var(--fg); border-color: var(--tone-line); }
+  .mock .hb-btn.danger:hover { background: var(--error-soft); border-color: var(--error); box-shadow: var(--glow-soft); }
+
+  .mock .hb-blk { background: var(--bg-card); border: 1px solid var(--border); }
+  .mock .hb-cut {
+    --hb-cut: 10px;
+    clip-path: polygon(var(--hb-cut) 0, 100% 0, 100% calc(100% - var(--hb-cut)),
+        calc(100% - var(--hb-cut)) 100%, 0 100%, 0 var(--hb-cut));
+  }
+  .mock .hb-blk-hd {
+    display: flex; align-items: center; gap: 9px; padding: 9px 14px;
+    background: var(--surface-2); border-bottom: 1px solid var(--border);
+  }
+  .mock .hb-blk-hd .bh-t { font: 600 13px/1.35 var(--hb-font-display); letter-spacing: .01em; }
+  .mock .hb-blk-hd .bh-n { font-size: 11.5px; color: var(--fg-dim); }
+  .mock .hb-blk-hd .bh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .mock .hb-row {
+    display: grid; grid-template-columns: 178px minmax(0, 1fr) 24px; gap: 12px;
+    padding: 10px 14px; align-items: start; border-top: 1px solid var(--hairline);
+  }
+  .mock .hb-blk > .hb-row:first-of-type { border-top: 0; }
+  .mock .hb-row:hover { background: var(--surface-1); }
+  .mock .hb-lb { font-size: 12.8px; color: var(--fg-muted); }
+  .mock .hb-ct { font-size: 13px; color: var(--fg); overflow-wrap: anywhere; }
+  .mock .hb-ct.mono { font-family: var(--hb-font-mono); font-size: 12.5px; }
+  .mock .hb-ct .masked { color: var(--fg-dim); font-size: 12px; }
+  @keyframes m-flash { 0% { background: var(--accent-soft); } 100% { background: transparent; } }
+  .mock .m-flash { animation: m-flash 900ms var(--ease); }
+
+  /* 搜索行(三案共用底座) */
+  .mock .hb-tr-search { position: relative; display: flex; align-items: center; gap: 8px; }
+  .mock .hb-tr-search .hb-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--fg-dim); pointer-events: none; }
+  .mock .hb-tr-search .hb-input { padding-left: 32px; padding-right: 34px; }
+  .mock .hb-tr-x {
+    position: absolute; right: 6px; width: 24px; height: 24px;
+    border: 0; background: transparent; color: var(--fg-dim); cursor: pointer;
+    font: 500 14px/1 var(--hb-font-mono); transition: color var(--dur) var(--ease);
+  }
+  .mock .hb-tr-x:hover { color: var(--accent-hi); }
+
+  /* pill 行 */
+  .mock .hb-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 13px; align-items: center; }
+  .mock .hb-pill {
+    padding: 7px 14px; border: 1px solid var(--tone-line); background: var(--bg-elev);
+    color: var(--fg-muted); font: 600 12.5px/1.4 var(--sans); letter-spacing: .02em;
+    cursor: pointer; border-radius: var(--radius);
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+        color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  }
+  .mock .hb-pill:hover { background: var(--bg-hover); color: var(--fg); border-color: var(--tone); box-shadow: var(--glow-soft); }
+  .mock .hb-pill.on { background: var(--accent-soft); border-color: var(--tone); color: var(--accent-hi); box-shadow: var(--glow-soft); }
+  .mock .hb-pill:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; }
+
+  /* 详情整栏 */
+  .mock .hb-tr-detail { min-width: 0; }
+  .mock .hb-tr-hint {
+    margin: 0; padding: 10px 14px; border: 1px solid var(--border); background: var(--bg-card);
+    font-size: 12.8px; line-height: 1.6; color: var(--fg-muted);
+  }
+
+  /* ---------- 方案A: 就地过滤 ---------- */
+  .pa-acts { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+  .pa-acts .pa-cap { font: 600 12px/1 var(--hb-font-mono); letter-spacing: .08em; color: var(--fg-dim); margin-right: auto; }
+  .pa-acts .pa-cap em { font-style: normal; color: var(--fg-muted); }
+  .pa-count {
+    display: flex; align-items: baseline; gap: 14px; margin: 0 0 9px;
+    font: 500 12px/1.5 var(--hb-font-mono); color: var(--fg-muted);
+  }
+  .pa-count[hidden] { display: none; }
+  .pa-count .pa-keys { margin-left: auto; color: var(--fg-dim); }
+  .pa-count.warn { color: var(--warn); }
+  .mock .hb-pill.off { opacity: .18; filter: saturate(.3); box-shadow: none; }
+  .mock .hb-pill.kb { outline: 2px solid var(--accent-line); outline-offset: 2px; color: var(--fg); }
+
+  /* ---------- 方案B/C: 命中面板(锚定下拉 / 聚焦层共用行样式) ---------- */
+  .px-drop {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 40;
+    background: var(--bg-elev); border: 1px solid var(--border-strong);
+    border-radius: var(--radius); box-shadow: var(--shadow-3);
+    opacity: 0; transform: translateY(-4px); pointer-events: none;
+    transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  }
+  .px-drop.on { opacity: 1; transform: none; pointer-events: auto; }
+  .px-hd {
+    display: flex; align-items: baseline; gap: 12px; padding: 8px 13px;
+    border-bottom: 1px solid var(--border); background: var(--surface-2);
+  }
+  .px-hd .px-t { font: 600 11px/1.4 var(--hb-font-mono); letter-spacing: .1em; color: var(--fg-dim); }
+  .px-hd .px-cnt { font: 600 12px/1.4 var(--hb-font-mono); color: var(--accent-hi); }
+  .px-hd .px-k { margin-left: auto; font: 500 11px/1.4 var(--hb-font-mono); color: var(--fg-dim); display: flex; gap: 10px; align-items: baseline; }
+  .px-hd .px-k kbd { border-color: var(--border); color: var(--fg-muted); }
+  .px-list { max-height: 300px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+  .px-hit {
+    display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+    background: transparent; border: 0; border-top: 1px solid var(--hairline);
+    padding: 9px 13px; cursor: pointer; color: var(--fg); font: 13px/1.5 var(--sans);
+    transition: background var(--dur-fast) var(--ease);
+  }
+  .px-hit:first-of-type { border-top: 0; }
+  .px-hit:hover, .px-hit.act { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+  .px-hit.act .px-name { color: var(--accent-hi); }
+  .px-name { font-weight: 600; font-size: 13.5px; flex: none; }
+  .px-name.hit { color: var(--accent-hi); }
+  .px-cur { font: 500 10px/1 var(--hb-font-mono); letter-spacing: .08em; color: var(--fg-dim); border: 1px solid var(--border); padding: 2px 5px; }
+  .px-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
+  .px-chip { display: inline-flex; align-items: baseline; gap: 6px; border: 1px solid var(--border); background: var(--surface-2); padding: 2px 8px; font-size: 11.5px; color: var(--fg-muted); }
+  .px-chip i { font-style: normal; font: 500 9.5px/1.5 var(--hb-font-mono); letter-spacing: .08em; color: var(--fg-dim); }
+  .px-chip em { font-style: normal; color: var(--accent-hi); word-break: break-all; }
+  .px-chip.more { border-style: dashed; background: transparent; color: var(--fg-dim); }
+  .px-ft {
+    display: flex; align-items: center; gap: 10px; padding: 7px 13px;
+    border-top: 1px solid var(--border); background: var(--surface-2);
+    font: 500 11px/1.5 var(--hb-font-mono); color: var(--fg-dim);
+  }
+  .px-ft .px-esc { margin-left: auto; display: inline-flex; gap: 6px; align-items: baseline; }
+  .px-ft kbd { border-color: var(--border); color: var(--fg-muted); }
+  .px-empty { padding: 14px 13px; font-size: 12.8px; color: var(--fg-muted); }
+  .px-empty.warn { color: var(--warn); }
+  @keyframes px-in { from { opacity: 0; transform: translateY(4px); } }
+  .px-hit.px-stagger { animation: px-in 200ms var(--ease-out) backwards; }
+
+  /* pill 行尾动作区(B/C): 与站点 pill 形制分离 */
+  .pb-tail { margin-left: auto; display: inline-flex; gap: 8px; align-items: center; }
+  .pb-tail .hb-btn { padding: 7px 13px; }
+
+  /* ---------- 方案C: 聚焦搜索层 ---------- */
+  .pc-stage { position: relative; }
+  .pc-veil {
+    position: absolute; inset: -12px -12px -16px; z-index: 30;
+    background: rgba(5, 12, 24, .55);
+    opacity: 0; pointer-events: none; transition: opacity var(--dur-slow) var(--ease);
+  }
+  .pc-stage.open .pc-veil { opacity: 1; pointer-events: auto; }
+  .pc-veiled { transition: opacity var(--dur-slow) var(--ease); }
+  .pc-stage.open .pc-veiled { opacity: .3; pointer-events: none; }
+  .pc-search {
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+        box-shadow var(--dur) var(--ease), padding var(--dur) var(--ease);
+    border: 1px solid transparent; padding: 0; margin: 0;
+  }
+  .pc-stage.open .pc-search {
+    position: relative; z-index: 40; padding: 10px 12px;
+    background: var(--bg-elev); border-color: var(--border-strong);
+    box-shadow: var(--shadow-3);
+  }
+  .pc-stage.open .pc-search .hb-ico { left: 22px; }
+  .pc-stage.open .pc-search .hb-tr-x { right: 18px; }
+
+  /* ---------- 方案说明区 ---------- */
+  .spec { border-top: 1px solid var(--line); }
+  .spec-row { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 20px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+  .spec-row .s-k { font: 600 12px/1.7 var(--mono); letter-spacing: .08em; color: var(--acc-hi); }
+  .spec-row .s-v { font-size: 13.5px; color: var(--mut); }
+  .spec-row .s-v b { color: var(--ink); font-weight: 600; }
+  .spec-row .s-v ul { margin: 0; padding-left: 18px; }
+  .spec-row .s-v li { margin: 3px 0; }
+  .spec-row .s-v .cost { font-family: var(--mono); color: var(--ink); }
+  @media (max-width: 720px) { .spec-row { grid-template-columns: 1fr; gap: 4px; } }
+
+  /* ---------- 对比表 ---------- */
+  .compare { padding: 40px 0 10px; border-top: 1px solid var(--line); }
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .cmp th, .cmp td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .cmp th { font: 600 12px/1.5 var(--mono); letter-spacing: .06em; color: var(--dim); }
+  .cmp td:first-child { color: var(--mut); width: 15%; }
+  .cmp td { color: var(--mut); }
+  .cmp td b { color: var(--ink); }
+  .cmp .win { color: var(--acc-hi); }
+
+  /* ---------- 拍板 ---------- */
+  .decide { padding: 34px 0 20px; border-top: 1px solid var(--line); margin-bottom: 40px; }
+  .pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+  @media (max-width: 860px) { .pick { grid-template-columns: 1fr; } }
+  .pick .opt { border: 1px solid var(--line); padding: 16px 18px; background: var(--panel); }
+  .pick .opt .o-t { font: 600 15px/1.4 var(--sans); color: var(--ink); }
+  .pick .opt .o-t i { font: 600 12px/1 var(--mono); font-style: normal; color: var(--acc-hi); margin-right: 8px; }
+  .pick .opt p { font-size: 12.8px; color: var(--mut); margin: 8px 0 0; }
+  .decide .how { margin-top: 18px; font-size: 13.5px; color: var(--mut); border: 1px dashed rgba(58,166,166,.4); padding: 13px 16px; }
+  .decide .how b { color: var(--acc-hi); }
+  .record { margin-top: 14px; font: 500 12px/1.8 var(--mono); color: var(--dim); }
+
+  footer.colophon { border-top: 1px solid var(--line); padding: 20px 0 48px; font-size: 12px; color: var(--dim); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="doc-hd wrap">
+  <p class="kicker">PLAN · WEBUI 站点设置 <span class="st">/ 待拍板 · 2026-09-29 03:23</span></p>
+  <h1>站点搜索 × 列表交互 · 三方案 <small>覆盖 · 键盘 · 命中数 · 按钮区分</small></h1>
+  <p class="meta">
+    <b>对象</b>: 设置页 → 站点 分区(trackers) 的搜索与站点列表 ·
+    <b>现状</b>: 跳转器交互(9667186, 命中下拉 + 点外即收) ·
+    <b>关联</b>: 计划 26-09-27-1852 / 档案 tasks/26-09-28-webui-sites-page-search ·
+    <b>样机</b>: 令牌取控制台皮肤真值, 实现走皮肤令牌(三皮肤共用)
+  </p>
+  <div class="usage">
+    <span class="u-t">怎么用</span>
+    <span>三套方案的样机<b style="color:var(--ink)">都能真的操作</b>: 点进搜索框敲字过滤, <kbd>↑</kbd><kbd>↓</kbd> 移动、<kbd>Enter</kbd> 选中、<kbd>Esc</kbd> 清空(中文输入法组词中不误触)。</span>
+    <span>顶部标签或 <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 切换方案。</span>
+  </div>
+</header>
+
+<section class="pains wrap">
+  <h2>现状四个痛点</h2>
+  <p class="lede">搜索本体(全字段匹配、语法)已入库且好使; 要解决的是它的「呈现与操作」层。</p>
+  <div class="pain-grid">
+    <div class="pain"><span class="pn">P1</span><div><b>命中下拉盖住站点设置, 视觉突兀</b><p>浮层与页面同底色同边框, 盖上来缺少「这是一层」的层次表达; 收层虽已修(点外即收), 覆盖瞬间的观感仍是硬伤。</p></div></div>
+    <div class="pain"><span class="pn">P2</span><div><b>不支持 ↑↓ / Enter</b><p>现在只有 Esc; 键盘用户必须鼠标点命中行, 高频挑站场景断手。</p></div></div>
+    <div class="pain"><span class="pn">P3</span><div><b>命中数挤在搜索框里</b><p>「命中 4 / 8 个站点」常驻输入框右侧, 框内拥挤、宽度被挤占, 一打字就更逼仄。</p></div></div>
+    <div class="pain"><span class="pn">P4</span><div><b>「新增站点 / 导入缺失站点」与站点 pill 同形同排</b><p>三个按钮共用 .hb-pill 一套皮, 动作和「对象」混在一行, 分不清哪个是站点哪个是操作。</p></div></div>
+  </div>
+</section>
+
+<div class="wrap">
+  <nav class="tabs" id="tabs">
+    <button class="tab on" data-t="pa"><i>1</i>方案A · 就地过滤</button>
+    <button class="tab" data-t="pb"><i>2</i>方案B · 锚定面板</button>
+    <button class="tab" data-t="pc"><i>3</i>方案C · 聚焦搜索层</button>
+    <a class="t-link" href="#compare">对比</a>
+    <a class="t-link" href="#decide">拍板</a>
+    <span class="t-hint">试输入: 云 · 教育 · -教育 · "电子书"</span>
+  </nav>
+</div>
+
+<main class="wrap">
+
+  <!-- ================================================== 方案A -->
+  <section class="sec show" id="pa">
+    <h2>方案A · 就地过滤(Live Filter)</h2>
+    <p class="定位"><b>一句话: 干脆不要浮层。</b>输入即过滤站点 pill 本身, 不匹配的变暗退后、匹配的原位待命 —— 没有「盖上来」这回事, 层次问题从根上消失; 命中数移出输入框落在列表上方一行, 新增/导入升格为独立动作条。</p>
+
+    <div class="m-frame">
+      <div class="m-frame-label"><span class="live">可交互样机 A</span><span>点搜索框试试: 「云」看名称命中 · 「教育」看跨字段 · 「-教育」看仅排除词 · ↓Enter 键盘直达</span></div>
+      <div class="mock" id="mockA">
+        <div class="pa-acts">
+          <span class="pa-cap">站点 · 共 <em id="paTotal">8</em> 个</span>
+          <button class="hb-btn dashed" type="button"><svg class="hb-ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>新增站点</button>
+          <button class="hb-btn ghost" type="button"><svg class="hb-ico" viewBox="0 0 16 16"><path d="M8 2v8M4.6 7 8 10.4 11.4 7M3 13h10"/></svg>导入缺失站点</button>
+        </div>
+        <div class="hb-tr-search">
+          <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+          <input class="hb-input" id="paInput" type="text" autocomplete="off"
+                 placeholder='搜索站点…(空格=且, -词排除, "短语")' aria-label="搜索站点">
+          <button class="hb-tr-x" id="paX" title="清空" hidden>×</button>
+        </div>
+        <p class="pa-count" id="paCount" aria-live="polite" hidden></p>
+        <div class="hb-pills" id="paPills" role="listbox" aria-label="站点列表"></div>
+        <div class="hb-tr-detail" id="paDetail"></div>
+      </div>
+    </div>
+
+    <div class="spec">
+      <div class="spec-row"><span class="s-k">设计要点</span><div class="s-v"><ul>
+        <li><b>过滤不挪位</b>: 不匹配的 pill 降为 18% 透明度 + 去饱和, <b>位置不动</b> —— 零回流跳动, 且保留「库里有谁」的上下文; 160ms 过渡。</li>
+        <li><b>命中数一行</b>: 「命中 4 / 8 个站点」落在搜索框与 pill 行之间(mono 小字淡入), 右侧顺手给 <kbd>↑</kbd><kbd>↓</kbd><kbd>Enter</kbd> 键位提示; 输入框里从此只有输入。</li>
+        <li><b>动作条独立</b>: 新增(虚线描边)与导入(幽灵钮)在搜索框上方右对齐, 左端「站点 · 共 N 个」计数抬头 —— 动作与对象彻底分行分形。</li>
+        <li><b>键盘</b>: <kbd>↓</kbd><kbd>↑</kbd> 在命中 pill 间移动(accent 描边指示), <kbd>Enter</kbd> 选中(选中即清词, 与现行跳转器拍板一致), <kbd>Esc</kbd> 清空。</li>
+        <li><b>零命中</b>: 计数行转 warn 色「没有命中」, 提示换更短的词; 上方「新增站点」动作条保持可用。</li>
+      </ul></div></div>
+      <div class="spec-row"><span class="s-k">实现落点</span><div class="s-v">
+        settings.html(pill 行绑过滤 class + 计数行; 删 hb-tr-drop 分支) · config_hub.js(保留 hubTrackerHits; 增键盘焦点索引, 删点外收层对浮层的依赖) · console_hub.css(.off/.kb 态 + 计数行) · 守阵 test_frontend_tracker_search_wiring 同步(下拉断言改过滤断言)。
+      </div></div>
+      <div class="spec-row"><span class="s-k">成本 / 风险</span><div class="s-v">
+        <span class="cost">低</span> —— 结构变化最小(做减法删浮层)。风险: 站点很多时「变暗保留」视觉噪声略高; 搜索语法提示从浮层移到计数行后, 首次使用者少了下拉里的引导语, 靠 placeholder 承接。
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ================================================== 方案B -->
+  <section class="sec" id="pb">
+    <h2>方案B · 锚定面板(Refined Dropdown)</h2>
+    <p class="定位"><b>一句话: 保留跳转器形态, 把「下拉」升格为名副其实的一层面板。</b>实底抬升面 + 面板头(命中数 + 键位) + 面板尾(Esc 提示) + 键盘活动项高亮与入场动画 —— 覆盖还在, 但它是<b>有清晰层级语义的覆盖</b>, 不再像页面自己长歪了一块。</p>
+
+    <div class="m-frame">
+      <div class="m-frame-label"><span class="live">可交互样机 B</span><span>点搜索框敲字 → 面板浮现 · <kbd>↑</kbd><kbd>↓</kbd> 移动 · <kbd>Enter</kbd> 打开 · <kbd>Esc</kbd> 收起 · 鼠标悬停即高亮</span></div>
+      <div class="mock" id="mockB">
+        <div class="hb-tr-search">
+          <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+          <input class="hb-input" id="pbInput" type="text" autocomplete="off"
+                 placeholder='搜索站点…(空格=且, -词排除, "短语")' aria-label="搜索站点" role="combobox" aria-expanded="false">
+          <button class="hb-tr-x" id="pbX" title="清空" hidden>×</button>
+          <div class="px-drop" id="pbDrop" role="listbox">
+            <div class="px-hd">
+              <span class="px-t">站点搜索</span>
+              <span class="px-cnt" id="pbCnt"></span>
+              <span class="px-k"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 打开</span></span>
+            </div>
+            <div class="px-list" id="pbList"></div>
+            <div class="px-ft"><span>点命中直达详情, 搜索词不保留</span><span class="px-esc"><kbd>Esc</kbd> 清空并收起</span></div>
+          </div>
+        </div>
+        <div class="hb-pills" id="pbPills"></div>
+        <div class="hb-tr-detail" id="pbDetail"></div>
+      </div>
+    </div>
+
+    <div class="spec">
+      <div class="spec-row"><span class="s-k">设计要点</span><div class="s-v"><ul>
+        <li><b>面板三段式</b>: 头(「站点搜索」标签 + <b>命中数搬到这里</b> + 键位提示)/ 列表 / 尾(<kbd>Esc</kbd> 提示) —— 命中数从输入框里请出去, 输入框只剩输入与清空。</li>
+        <li><b>分层面孔</b>: bg-elev 实底 + border-strong + shadow-3 + 入场 160ms 上浮淡入, 与 search-help-pop 同一浮层视觉口径 —— 盖住详情时「这是一层」一眼可读。</li>
+        <li><b>键盘活动项</b>: <kbd>↑</kbd><kbd>↓</kbd> 移动高亮(accent-soft 底 + 左缘 accent 竖条), 与「当前选中站」角标(<span style="color:var(--fg-dim)">当前</span>)分属两个语义; <kbd>Enter</kbd> = 点命中(选中即清词收层), IME 组词中不劫持回车。</li>
+        <li><b>动作区分离</b>: 站点 pill 行尾加动作区 —— 「＋ 新增站点」虚线描边、「⤓ 导入缺失站点」幽灵钮, 与实底站点 pill 一眼分层; 搜索态整行隐藏(维持现行行为)。</li>
+        <li><b>悬停即高亮</b>: 鼠标 hover 同步键盘活动位, 键鼠混用不打架。</li>
+      </ul></div></div>
+      <div class="spec-row"><span class="s-k">实现落点</span><div class="s-v">
+        settings.html(下拉容器改三段式结构 + pill 行尾动作区) · config_hub.js(命中索引 state + hubOnKey 扩 ↑↓/Enter, 现有 Esc/点外收层路径全保留) · console_hub.css(.px-* 面板头尾/活动条/入场动画, 视觉口径对齐 search-help-pop) · 守阵: 收起路径四条断言不变, 增键盘路径断言。
+      </div></div>
+      <div class="spec-row"><span class="s-k">成本 / 风险</span><div class="s-v">
+        <span class="cost">低-中</span> —— 现形态精修, 交互心智零迁移。风险: 覆盖详情的本质仍在(靠面板层次表达缓解); Enter 与中文输入法组词需 isComposing 守卫(三案通则); 面板限高内滚动与点外收层的边界要回归。
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ================================================== 方案C -->
+  <section class="sec" id="pc">
+    <h2>方案C · 聚焦搜索层(Focus Layer)</h2>
+    <p class="定位"><b>一句话: 搜索时让位 —— 整个分区退成背景, 搜索框升为主角。</b>聚焦或敲字时, 站点列表与详情一起退隐变暗, 搜索行升为带实底面板的浮层、下方展开结果与快捷动作; 收起时整体交还。覆盖不再是事故, 而是<b>主动的舞台调度</b>。</p>
+
+    <div class="m-frame">
+      <div class="m-frame-label"><span class="live">可交互样机 C</span><span>点搜索框(或敲字)进入搜索态 · <kbd>↑</kbd><kbd>↓</kbd><kbd>Enter</kbd> 同 B · <kbd>Esc</kbd> / 点暗处退出 · 注意结果尾部的「新增站点「词」」</span></div>
+      <div class="mock" id="mockC">
+        <div class="pc-stage" id="pcStage">
+          <div class="pc-veil" id="pcVeil"></div>
+          <div class="hb-tr-search pc-search">
+            <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+            <input class="hb-input" id="pcInput" type="text" autocomplete="off"
+                   placeholder='搜索站点…(空格=且, -词排除, "短语")' aria-label="搜索站点" role="combobox" aria-expanded="false">
+            <button class="hb-tr-x" id="pcX" title="清空" hidden>×</button>
+            <div class="px-drop" id="pcDrop" role="listbox">
+              <div class="px-hd">
+                <span class="px-t">站点搜索</span>
+                <span class="px-cnt" id="pcCnt"></span>
+                <span class="px-k"><span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 打开</span></span>
+              </div>
+              <div class="px-list" id="pcList"></div>
+              <div class="px-ft" id="pcFt"></div>
+            </div>
+          </div>
+          <div class="hb-pills pc-veiled" id="pcPills"></div>
+          <div class="hb-tr-detail pc-veiled" id="pcDetail"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="spec">
+      <div class="spec-row"><span class="s-k">设计要点</span><div class="s-v"><ul>
+        <li><b>舞台调度</b>: 进入搜索态, 列表与详情 280ms 退到 30% 透明度 + 暗幕垫底, 搜索行升为实底面板 —— 「谁在前台」由明暗直接回答, P1 的突兀感转为仪式感。</li>
+        <li><b>面板结构同 B</b>: 头(命中数在此)/ 列表 / 尾; 键盘行为与 B 完全一致, 学一次两处通用。</li>
+        <li><b>尾部快捷动作(方案C 独有)</b>: 搜索态面板尾常驻「<b>＋ 新增站点「词」</b>」虚线钮 —— 搜不到就当场建, 不用退出搜索再找新增; 这是「导入缺失站点」流程的天然入口位。</li>
+        <li><b>退出三路</b>: <kbd>Esc</kbd> / 点暗幕 / 选中命中, 都交还舞台(反向过渡同一组令牌); 焦点始终留在输入框, 不跳。</li>
+        <li><b>空态即引导</b>: 聚焦未输入时面板给语法速览(空格=且 · -词排除 · "短语"), 教学成本压进交互里。</li>
+      </ul></div></div>
+      <div class="spec-row"><span class="s-k">实现落点</span><div class="s-v">
+        同方案B 全部落点, 另加: config_hub.js(hub.searchFocus 状态 + 进入/退出方法, Esc 分支排进 hubOnKey 既有次序, 与 lifecycle escBusy 链核对) · console_hub.css(.pc-* 舞台/暗幕/退隐/升层) · settings.html(暗幕与面板结构) · 守阵增「进入/退出聚焦层」两条路径断言。
+      </div></div>
+      <div class="spec-row"><span class="s-k">成本 / 风险</span><div class="s-v">
+        <span class="cost">中</span> —— 状态机多一态, 但键盘/匹配层与 B 复用。风险: 聚焦层 z 序要与 aq-tip / hb-pop / 命令回执对表(浮层单点清单核对); 窄屏 + 输入法候选窗遮挡需真机实测; 暗幕不用 backdrop-filter(毛玻璃性能坑, pitfalls/web-ui/css-perf-parity)。
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ================================================== 对比 -->
+  <section class="compare" id="compare">
+    <h2>三案对照</h2>
+    <p class="lede">四条痛点全部解决是入场线, 差别在「结果呈现在哪」与状态复杂度。</p>
+    <table class="cmp">
+      <thead><tr><th>维度</th><th>A · 就地过滤</th><th>B · 锚定面板</th><th>C · 聚焦搜索层</th></tr></thead>
+      <tbody>
+        <tr><td>P1 覆盖突兀</td><td class="win"><b>根治</b> · 没有浮层</td><td><b>缓解</b> · 覆盖成为有层次的「一层」</td><td class="win"><b>根治</b> · 覆盖成为主动调度</td></tr>
+        <tr><td>P2 键盘</td><td>↑↓ 于 pill 间 · Enter 选中</td><td>↑↓ 于面板内 · Enter 打开</td><td>同 B(两处一套心智)</td></tr>
+        <tr><td>P3 命中数</td><td>列表上方独立一行</td><td>面板头</td><td>面板头</td></tr>
+        <tr><td>P4 按钮区分</td><td><b>独立动作条</b>(分行最彻底)</td><td>行尾动作区(虚线+幽灵)</td><td>行尾动作区 + 搜索态「新增「词」」快捷钮</td></tr>
+        <tr><td>搜索时看得到库</td><td class="win"><b>看得到</b>(变暗保留上下文)</td><td>看不到(整行隐藏)</td><td>看不到(退隐成背景)</td></tr>
+        <tr><td>与现状的心智距离</td><td>中(下拉→过滤, 有迁移)</td><td class="win"><b>零迁移</b>(现形态精修)</td><td>中(多一层舞台状态)</td></tr>
+        <tr><td>实现成本</td><td class="win">低</td><td>低-中</td><td>中</td></tr>
+        <tr><td>适合谁</td><td>站点多、以「扫一遍列表」为主</td><td>喜欢现在的跳转器, 只想让它体面</td><td>想要仪式感与「搜不到就建」闭环</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================================================== 拍板 -->
+  <section class="decide" id="decide">
+    <h2>拍板</h2>
+    <p class="lede">三案共用四条通则(拍板后不再逐条确认): ① 命中数移出输入框 ② ↑↓/Enter/Esc 全键盘 + IME 组词守卫 ③ 动作按钮与站点 pill 形制分离 ④ <kbd>/</kbd> 聚焦搜索框(对齐键盘快捷键计划 26-09-28-0354, 可剔除)。</p>
+    <div class="pick">
+      <div class="opt"><div class="o-t"><i>A</i>就地过滤</div><p>最简、零浮层; 选中即清词不变。适合「站点多、扫列表」的用法。</p></div>
+      <div class="opt"><div class="o-t"><i>B</i>锚定面板</div><p>现在的交互原样保留, 只把面板做体面 + 补全键盘。改动最稳。</p></div>
+      <div class="opt"><div class="o-t"><i>C</i>聚焦搜索层</div><p>表达力最强, 附带「搜不到就建」闭环; 状态最多、需要真机回归。</p></div>
+    </div>
+    <p class="how">在对话里回复 <b>选A / 选B / 选C</b>(或「C, 但去掉 / 快捷键」这类微调) —— 拍板后按所选方案出实施细节并入档施工。</p>
+    <p class="record">拍板记录: <b style="color:var(--acc-hi)">C · 聚焦搜索层</b>(2026-09-29, 用户在对话内拍板) → 已按方案C实施完毕(实施档案 tasks/26-09-29-webui-tracker-focus-layer.md; 合并远端 HR v3 后新基线实测 1736 passed / 90%), 待用户下「提交」指令入库; 通则④(/ 聚焦)剔除归键盘快捷键计划 26-09-28-0354。</p>
+  </section>
+
+</main>
+
+<footer class="colophon wrap">
+  样机数据为虚构样例(站名/域名均非真实); 令牌真值读自控制台皮肤(console/style.css), 实现时一律改写为皮肤令牌, 三皮肤共用层不得写死色值 · 本文档为单文件离线交付, 双击即开。
+</footer>
+
+<script>
+"use strict";
+/* ===== 样例数据(虚构) ===== */
+var SITES = [
+  { n: "晨风", url: "cf.example.cn",   tags: ["动漫", "教育"],      grp: "主力" },
+  { n: "云涧", url: "yj.example.tv",   tags: ["电子书", "教育"],    grp: "主力" },
+  { n: "北纬", url: "bw.example.org",  tags: ["纪录片"],            grp: "备用" },
+  { n: "琥珀", url: "hu.example.net",  tags: ["音乐"],              grp: "主力" },
+  { n: "星轨", url: "xg.example.io",   tags: ["动漫", "影视"],      grp: "教育" },
+  { n: "白鲸", url: "wh.example.cc",   tags: ["教育", "软件"],      grp: "主力" },
+  { n: "青柠", url: "qn.example.com",  tags: ["公开"],              grp: "备用" },
+  { n: "曙光", url: "sg.example.asia", tags: ["影视"],              grp: "备用" }
+];
+
+/* ===== 匹配语义: 与 config_hub.js 单点同构(⚠ \p{L}\p{N} + u, 勿改 \W) ===== */
+function N(s) { return String(s).replace(/[^\p{L}\p{N}]+/gu, " ").toLowerCase().trim(); }
+function rowsOf(s) {
+  return [["名称", s.n], ["域名", s.url]].concat(s.tags.map(function (t) { return ["标签", t]; }))
+    .concat([["分组", s.grp]])
+    .map(function (p) { return { g: p[0], r: p[1], n: N(p[1]) }; });
+}
+function parseQ(q) {
+  var pos = [], neg = [], re = /(-?)(?:"([^"]*)"|(\S+))/g, m;
+  while ((m = re.exec(String(q)))) {
+    var t = m[2] !== undefined ? m[2] : m[3];
+    if (!t) continue;
+    var n = N(t);
+    if (!n) continue;
+    (m[1] ? neg : pos).push(n);
+  }
+  return { pos: pos, neg: neg, negOnly: !pos.length && neg.length > 0 };
+}
+function searchSites(q) {
+  if (!N(q)) return { active: false, hits: [] };
+  var p = parseQ(q);
+  if (p.negOnly) return { active: true, negOnly: true, hits: [] };
+  var hits = [];
+  SITES.forEach(function (s) {
+    var rows = rowsOf(s);
+    if (p.neg.some(function (w) { return rows.some(function (r) { return r.n.indexOf(w) !== -1; }); })) return;
+    if (p.pos.length && !p.pos.every(function (w) { return rows.some(function (r) { return r.n.indexOf(w) !== -1; }); })) return;
+    var nameHit = p.pos.some(function (w) { return rows[0].n.indexOf(w) !== -1; });
+    var chips = [], seen = {};
+    rows.slice(1).forEach(function (r) {
+      if (!p.pos.some(function (w) { return r.n.indexOf(w) !== -1; })) return;
+      var k = r.g + "|" + r.r;
+      if (seen[k]) return;
+      seen[k] = 1;
+      chips.push({ g: r.g, r: r.r });
+    });
+    hits.push({ s: s, nameHit: nameHit, chips: chips.slice(0, 3), more: Math.max(0, chips.length - 3) });
+  });
+  return { active: true, negOnly: false, hits: hits };
+}
+
+/* ===== 共用渲染 ===== */
+function chipHTML(c) { return '<span class="px-chip"><i>' + c.g + '</i><em>' + c.r + "</em></span>"; }
+function hitHTML(h, act, cur) {
+  return '<button type="button" class="px-hit' + (act ? " act" : "") + (cur ? " cur" : "") + '" data-name="' + h.s.n + '">' +
+    '<span class="px-name' + (h.nameHit ? " hit" : "") + '">' + h.s.n + "</span>" +
+    (cur ? '<span class="px-cur">当前</span>' : "") +
+    '<span class="px-chips">' + h.chips.map(chipHTML).join("") + (h.more ? '<span class="px-chip more">+' + h.more + "</span>" : "") + "</span></button>";
+}
+function renderDetail(el, name, flash) {
+  var s = SITES.filter(function (x) { return x.n === name; })[0];
+  if (!s) { el.innerHTML = ""; return; }
+  el.innerHTML =
+    '<div class="hb-blk hb-cut m-flash"><div class="hb-blk-hd"><span class="bh-t">' + s.n + "</span>" +
+    '<span class="bh-r"><button type="button" class="hb-btn">重命名</button><button type="button" class="hb-btn danger">删除</button></span></div>' +
+    '<div class="hb-row"><span class="hb-lb">域名</span><span class="hb-ct mono">' + s.url + "</span><span></span></div>" +
+    '<div class="hb-row"><span class="hb-lb">标签</span><span class="hb-ct">' + s.tags.join(" · ") + "</span><span></span></div>" +
+    '<div class="hb-row"><span class="hb-lb">分组</span><span class="hb-ct">' + s.grp + "</span><span></span></div>" +
+    '<div class="hb-row"><span class="hb-lb">密钥 / Cookie</span><span class="hb-ct"><span class="masked">已隐藏(进入编辑才显示)</span></span><span></span></div></div>';
+  if (!flash) { var blk = el.firstElementChild; blk.classList.remove("m-flash"); }
+}
+function buildPills(el, onSelect, withTail) {
+  var html = SITES.map(function (s) {
+    return '<button type="button" class="hb-pill" role="option" data-name="' + s.n + '">' + s.n + "</button>";
+  }).join("");
+  if (withTail) {
+    html += '<span class="pb-tail">' +
+      '<button type="button" class="hb-btn dashed"><svg class="hb-ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>新增站点</button>' +
+      '<button type="button" class="hb-btn ghost"><svg class="hb-ico" viewBox="0 0 16 16"><path d="M8 2v8M4.6 7 8 10.4 11.4 7M3 13h10"/></svg>导入缺失站点</button></span>';
+  }
+  el.innerHTML = html;
+  el.querySelectorAll(".hb-pill").forEach(function (p) {
+    p.addEventListener("click", function () { onSelect(p.dataset.name); });
+  });
+}
+function markOn(container, sel) {
+  container.querySelectorAll(".hb-pill").forEach(function (p) {
+    p.classList.toggle("on", p.dataset.name === sel);
+  });
+}
+function ime(e) { return e.isComposing || e.keyCode === 229; }
+
+/* ===== 方案A: 就地过滤 ===== */
+(function () {
+  var input = document.getElementById("paInput"), x = document.getElementById("paX"),
+      cnt = document.getElementById("paCount"), pills = document.getElementById("paPills"),
+      detail = document.getElementById("paDetail");
+  var sel = "晨风", kb = -1;
+  function matchedPills() {
+    return Array.prototype.slice.call(pills.querySelectorAll(".hb-pill")).filter(function (p) { return !p.classList.contains("off"); });
+  }
+  function paintKb() {
+    pills.querySelectorAll(".hb-pill").forEach(function (p) { p.classList.remove("kb"); });
+    var m = matchedPills();
+    if (kb >= 0 && m[kb]) m[kb].classList.add("kb");
+  }
+  function pick(name) {
+    sel = name; input.value = ""; render();
+    markOn(pills, sel);
+    renderDetail(detail, sel, true);
+    input.focus();
+  }
+  function render() {
+    var q = input.value;
+    x.hidden = !q.trim();
+    var r = searchSites(q);
+    if (!r.active) {
+      cnt.hidden = true;
+      pills.querySelectorAll(".hb-pill").forEach(function (p) { p.classList.remove("off"); });
+      kb = -1; paintKb();
+      return;
+    }
+    cnt.hidden = false;
+    var names = {};
+    r.hits.forEach(function (h) { names[h.s.n] = 1; });
+    if (r.negOnly) {
+      cnt.className = "pa-count warn";
+      cnt.innerHTML = "<span>只有排除词 — 请补一个要包含的词</span>";
+    } else {
+      cnt.className = "pa-count" + (r.hits.length ? "" : " warn");
+      cnt.innerHTML = r.hits.length
+        ? "<span>命中 " + r.hits.length + " / " + SITES.length + " 个站点</span><span class='pa-keys'>↑↓ 选择 · Enter 打开</span>"
+        : "<span>没有站点匹配「" + q.trim() + "」— 试试更短的词, 或用上方动作条新增</span>";
+    }
+    pills.querySelectorAll(".hb-pill").forEach(function (p) { p.classList.toggle("off", !names[p.dataset.name]); });
+    kb = -1; paintKb();
+  }
+  buildPills(pills, pick, false);
+  markOn(pills, sel);
+  renderDetail(detail, sel, false);
+  input.addEventListener("input", render);
+  x.addEventListener("mousedown", function (e) { e.preventDefault(); });
+  x.addEventListener("click", function () { input.value = ""; render(); input.focus(); });
+  input.addEventListener("keydown", function (e) {
+    if (ime(e)) return;
+    var m = matchedPills();
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!m.length) return;
+      kb = e.key === "ArrowDown" ? (kb + 1) % m.length : (kb - 1 + m.length) % m.length;
+      paintKb();
+    } else if (e.key === "Enter") {
+      if (kb >= 0 && m[kb]) { e.preventDefault(); pick(m[kb].dataset.name); }
+    } else if (e.key === "Escape") {
+      if (input.value) { input.value = ""; render(); }
+    }
+  });
+})();
+
+/* ===== 方案B: 锚定面板 ===== */
+(function () {
+  var input = document.getElementById("pbInput"), x = document.getElementById("pbX"),
+      drop = document.getElementById("pbDrop"), list = document.getElementById("pbList"),
+      cnt = document.getElementById("pbCnt"), pills = document.getElementById("pbPills"),
+      detail = document.getElementById("pbDetail");
+  var sel = "晨风", kb = -1, hits = [];
+  function close() {
+    drop.classList.remove("on");
+    input.setAttribute("aria-expanded", "false");
+    kb = -1;
+  }
+  function pick(name) {
+    sel = name; input.value = ""; render(); close();
+    markOn(pills, sel);
+    renderDetail(detail, sel, true);
+  }
+  function paintKb() {
+    list.querySelectorAll(".px-hit").forEach(function (b, i) { b.classList.toggle("act", i === kb); });
+  }
+  function render() {
+    var q = input.value;
+    x.hidden = !q.trim();
+    var r = searchSites(q);
+    pills.style.display = r.active ? "none" : "";
+    if (!r.active) { close(); return; }
+    input.setAttribute("aria-expanded", "true");
+    if (r.negOnly) {
+      cnt.textContent = "";
+      list.innerHTML = '<p class="px-empty warn">只有排除词 — 请补一个要包含的词</p>';
+    } else if (!r.hits.length) {
+      cnt.textContent = "0 / " + SITES.length;
+      list.innerHTML = '<p class="px-empty">没有站点匹配「' + q.trim() + '」— 试试更短的词, 或检查是否有排除词误伤</p>';
+    } else {
+      cnt.textContent = r.hits.length + " / " + SITES.length;
+      hits = r.hits;
+      list.innerHTML = r.hits.map(function (h, i) {
+        return hitHTML(h, false, h.s.n === sel);
+      }).join("");
+      list.querySelectorAll(".px-hit").forEach(function (b, i) {
+        b.addEventListener("mouseenter", function () { kb = i; paintKb(); });
+        b.addEventListener("click", function () { pick(b.dataset.name); });
+      });
+      kb = 0; paintKb();
+    }
+    drop.classList.add("on");
+  }
+  buildPills(pills, function (n) {
+    sel = n; markOn(pills, sel); renderDetail(detail, sel, true);
+  }, true);
+  markOn(pills, sel);
+  renderDetail(detail, sel, false);
+  input.addEventListener("input", render);
+  input.addEventListener("focus", render);
+  x.addEventListener("mousedown", function (e) { e.preventDefault(); });
+  x.addEventListener("click", function () { input.value = ""; render(); close(); input.focus(); });
+  input.addEventListener("keydown", function (e) {
+    if (ime(e)) return;
+    var rows = list.querySelectorAll(".px-hit");
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!rows.length) return;
+      kb = e.key === "ArrowDown" ? (kb + 1) % rows.length : (kb - 1 + rows.length) % rows.length;
+      paintKb();
+    } else if (e.key === "Enter") {
+      if (kb >= 0 && rows[kb]) { e.preventDefault(); pick(rows[kb].dataset.name); }
+    } else if (e.key === "Escape") {
+      if (input.value || drop.classList.contains("on")) { input.value = ""; render(); close(); }
+    }
+  });
+  document.addEventListener("click", function (e) {
+    if (drop.classList.contains("on") && !(e.target.closest && e.target.closest(".hb-tr-search"))) close();
+  });
+})();
+
+/* ===== 方案C: 聚焦搜索层 ===== */
+(function () {
+  var input = document.getElementById("pcInput"), x = document.getElementById("pcX"),
+      stage = document.getElementById("pcStage"), drop = document.getElementById("pcDrop"),
+      list = document.getElementById("pcList"), cnt = document.getElementById("pcCnt"),
+      ft = document.getElementById("pcFt"), pills = document.getElementById("pcPills"),
+      detail = document.getElementById("pcDetail");
+  var sel = "晨风", kb = -1, open = false;
+  function footHTML(q) {
+    return '<button type="button" class="hb-btn dashed" id="pcAdd"><svg class="hb-ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>新增站点「' + (q || "…") + '」</button>' +
+      '<span class="px-esc"><kbd>Esc</kbd> 退出搜索</span>';
+  }
+  function openUp() {
+    if (open) return;
+    open = true;
+    stage.classList.add("open");
+    input.setAttribute("aria-expanded", "true");
+    render();
+  }
+  function close() {
+    if (!open) return;
+    open = false;
+    stage.classList.remove("open");
+    input.setAttribute("aria-expanded", "false");
+    drop.classList.remove("on");
+    kb = -1;
+  }
+  function pick(name) {
+    sel = name; input.value = "";
+    close(); render();
+    markOn(pills, sel);
+    renderDetail(detail, sel, true);
+  }
+  function paintKb() {
+    list.querySelectorAll(".px-hit").forEach(function (b, i) { b.classList.toggle("act", i === kb); });
+  }
+  function render() {
+    var q = input.value;
+    x.hidden = !q.trim();
+    if (!open) return;
+    var r = searchSites(q);
+    if (!q.trim()) {
+      cnt.textContent = "";
+      ft.innerHTML = footHTML("");
+      bindFoot();
+      list.innerHTML = '<p class="px-empty">输入关键词, 名称 / 域名 / 标签 / 分组 / 规则 / 限速 / HR 全字段匹配。<br>语法: 空格 = 且 · <b>-词</b> 排除 · <b>"短语"</b> 连续匹配</p>';
+      drop.classList.add("on");
+      return;
+    }
+    if (r.negOnly) {
+      cnt.textContent = "";
+      list.innerHTML = '<p class="px-empty warn">只有排除词 — 请补一个要包含的词</p>';
+    } else if (!r.hits.length) {
+      cnt.textContent = "0 / " + SITES.length;
+      list.innerHTML = '<p class="px-empty">没有站点匹配「' + q.trim() + '」— 换更短的词, 或在下面直接新增。</p>';
+    } else {
+      cnt.textContent = r.hits.length + " / " + SITES.length;
+      list.innerHTML = r.hits.map(function (h, i) {
+        return hitHTML(h, false, h.s.n === sel);
+      }).join("");
+      list.querySelectorAll(".px-hit").forEach(function (b, i) {
+        b.style.animationDelay = (i * 24) + "ms";
+        b.classList.add("px-stagger");
+        b.addEventListener("mouseenter", function () { kb = i; paintKb(); });
+        b.addEventListener("click", function () { pick(b.dataset.name); });
+      });
+      kb = 0; paintKb();
+    }
+    ft.innerHTML = footHTML(q.trim());
+    bindFoot();
+    drop.classList.add("on");
+  }
+  function bindFoot() {
+    var add = document.getElementById("pcAdd");
+    if (add) add.addEventListener("click", function () { add.style.color = "var(--accent-hi)"; });
+  }
+  buildPills(pills, function (n) {
+    sel = n; markOn(pills, sel); renderDetail(detail, sel, true);
+  }, true);
+  markOn(pills, sel);
+  renderDetail(detail, sel, false);
+  input.addEventListener("focus", openUp);
+  input.addEventListener("input", render);
+  x.addEventListener("mousedown", function (e) { e.preventDefault(); });
+  x.addEventListener("click", function () { input.value = ""; render(); input.focus(); });
+  input.addEventListener("keydown", function (e) {
+    if (ime(e)) return;
+    var rows = list.querySelectorAll(".px-hit");
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!rows.length) return;
+      kb = e.key === "ArrowDown" ? (kb + 1) % rows.length : (kb - 1 + rows.length) % rows.length;
+      paintKb();
+    } else if (e.key === "Enter") {
+      if (kb >= 0 && rows[kb]) { e.preventDefault(); pick(rows[kb].dataset.name); }
+    } else if (e.key === "Escape") {
+      input.value = ""; close(); render();
+      input.blur();
+    }
+  });
+  document.getElementById("pcVeil").addEventListener("click", close);
+  document.addEventListener("click", function (e) {
+    if (open && !(e.target.closest && e.target.closest(".pc-stage"))) close();
+  });
+})();
+
+/* ===== 方案切换(标签 + 1/2/3) ===== */
+(function () {
+  var tabs = document.querySelectorAll("#tabs .tab");
+  var secs = { pa: document.getElementById("pa"), pb: document.getElementById("pb"), pc: document.getElementById("pc") };
+  function show(t) {
+    tabs.forEach(function (b) { b.classList.toggle("on", b.dataset.t === t); });
+    Object.keys(secs).forEach(function (k) {
+      var on = k === t;
+      secs[k].classList.toggle("show", on);
+      if (on) { secs[k].classList.remove("show"); void secs[k].offsetWidth; secs[k].classList.add("show"); }
+    });
+  }
+  tabs.forEach(function (b) { b.addEventListener("click", function () { show(b.dataset.t); }); });
+  document.addEventListener("keydown", function (e) {
+    if (ime(e)) return;
+    var tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA") return;
+    if (e.key === "1") show("pa");
+    else if (e.key === "2") show("pb");
+    else if (e.key === "3") show("pc");
+  });
+})();
+</script>
+</body>
+</html>

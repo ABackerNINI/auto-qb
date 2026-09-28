@@ -173,6 +173,18 @@
   color: var(--fg-muted);
 }
 .hb-btn.ghost:hover { background: transparent; color: var(--accent-hi); box-shadow: none; }
+/* 虚线动作钮(站点页行尾动作区 / 聚焦面板尾快捷新增, 方案C): 与实底站点 pill 分形的「动作」形制 */
+.hb-btn.dashed {
+  background: transparent;
+  border-style: dashed;
+  color: var(--fg-muted);
+}
+.hb-btn.dashed:hover {
+  --tone: var(--accent); /* 描边与发光同源换 accent(同元素覆盖, 见文件头硬知识 ③) */
+  background: transparent;
+  color: var(--accent-hi);
+  box-shadow: var(--glow-soft);
+}
 
 /* ---- 开关 (Fathom · 方角 38×21 + 15px 纯白滑块, 行程 17px) ----
  * 2026-09-25 用户报两件事, 都在这里收口:
@@ -609,12 +621,46 @@
 .hb-pill .p-n { font: 500 11px/1 var(--hb-font-mono); margin-left: 5px; opacity: .8; }
 
 /* ==========================================================================
-   站点搜索: 搜索行 + 命中下拉浮层 + 整栏详情(计划 26-09-27-1852; 26-09-28 左右分栏改下拉)
-   三套皮肤共用本层, 颜色一律走皮肤令牌(同 hb- 其余控件), 不写硬编码色值
+   站点搜索: 聚焦搜索层(方案C, 2026-09-29 拍板 plans/26-09-29-0323) —— 舞台 + 暗幕 +
+   搜索行升层面板 + 命中面板三段式 + 键盘活动项。三套皮肤共用本层, 颜色一律走皮肤令牌
+   (同 hb- 其余控件); 唯一例外是暗幕的字面黑(与 --shadow-* 家族同口径, 与皮肤无关)
    ========================================================================== */
-/* 搜索行: 与首页 hd-search 同款视觉(左放大镜 + 发光输入框), 计数 / 清空钮常驻右侧;
-   position: relative 同时是命中下拉的锚定父级 */
-.hb-tr-search { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+/* 舞台: stage 是 relative 锚; 开层(.on)时暗幕浮现, 列表/详情退隐成背景(点击一并交还暗幕) */
+.hb-tr-stage { position: relative; }
+.hb-tr-veil {
+  position: absolute;
+  inset: -12px -14px -16px;
+  z-index: 30;
+  background: rgba(0, 0, 0, .45); /* 暗幕字面黑: 同 --shadow-3 的 rgba(0,0,0) 家族, 亮暗皮肤通用 */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-slow) var(--ease);
+}
+.hb-tr-stage.on .hb-tr-veil { opacity: 1; pointer-events: auto; }
+.hb-tr-stage .hb-pills,
+.hb-tr-stage .hb-tr-detail { transition: opacity var(--dur-slow) var(--ease); }
+.hb-tr-stage.on .hb-pills,
+.hb-tr-stage.on .hb-tr-detail { opacity: .3; pointer-events: none; }
+
+/* 搜索行: 与首页 hd-search 同款视觉(左放大镜 + 发光输入框); 开层时整行升为实底面板
+   (bg-elev + border-strong + shadow-3), position: relative 同时是命中面板的锚定父级 */
+.hb-tr-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 13px;
+  border: 1px solid transparent;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+      box-shadow var(--dur) var(--ease), padding var(--dur) var(--ease);
+}
+.hb-tr-stage.on .hb-tr-search {
+  z-index: 40;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-3);
+}
 .hb-tr-search .hb-ico {
   position: absolute;
   left: 10px;
@@ -623,6 +669,7 @@
   color: var(--fg-dim);
   pointer-events: none;
 }
+.hb-tr-stage.on .hb-tr-search .hb-ico { left: 22px; }
 .hb-tr-search .hb-input { flex: 1 1 auto; width: auto; padding-left: 32px; }
 .hb-tr-x {
   flex: none;
@@ -636,11 +683,9 @@
   transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 .hb-tr-x:hover { color: var(--accent-hi); border-color: var(--accent-line); }
-.hb-tr-count { flex: none; font: 500 11.5px/1 var(--hb-font-mono); color: var(--fg-dim); white-space: nowrap; }
-.hb-tr-count.warn { color: var(--warn); }
 
-/* 命中下拉: 锚定搜索框正下方的浮层, 视觉口径同 search-help-pop(--bg-elev + border-strong + shadow-3);
-   有查询才渲染(v-if), 弹出时遮住下方详情; 详情卡本身在浮层下整栏宽 */
+/* 命中面板: 三段式(头 = 标签 + 命中数搬出输入框 + 键位 / 列表 = 命中行内滚 / 尾 = 快捷新增 + Esc 提示),
+   视觉口径同 search-help-pop(--bg-elev + border-strong + shadow-3); v-if 重挂时播入场动画 */
 .hb-tr-detail { min-width: 0; }
 .hb-tr-drop {
   position: absolute;
@@ -648,18 +693,61 @@
   left: 0;
   right: 0;
   z-index: 40;
-  max-height: 320px;
-  overflow-y: auto;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background: var(--bg-elev);
   box-shadow: var(--shadow-3);
+  animation: hb-tr-drop-in var(--dur) var(--ease);
+}
+@keyframes hb-tr-drop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+.hb-tr-drop-hd {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 13px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.hb-tr-drop-hd .p-t { font: 600 11px/1.4 var(--hb-font-mono); letter-spacing: .1em; color: var(--fg-dim); }
+.hb-tr-drop-hd .p-n { font: 600 12px/1.4 var(--hb-font-mono); color: var(--accent-hi); }
+.hb-tr-drop-hd .p-k { margin-left: auto; font: 500 11px/1.4 var(--hb-font-mono); color: var(--fg-dim); }
+.hb-tr-drop kbd {
+  font: 500 10.5px/1 var(--hb-font-mono);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 2px 5px;
+}
+.hb-tr-drop-list { max-height: 300px; overflow-y: auto; }
+.hb-tr-drop-ft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 13px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+}
+.hb-tr-drop-ft .ft-esc {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font: 500 11px/1.5 var(--hb-font-mono);
+  color: var(--fg-dim);
 }
 
-/* 命中行: 整行可点(点 = 选中该站, 搜索词保持); 选中态 = 下拉内高亮,
-   行间用 border-top 分隔(浮层自带外框, 首行不再加) */
+/* pill 行尾动作区(方案C P4 拍板): 新增 = 虚线描边 / 导入 = 幽灵钮, 与实底站点 pill 分形分位 */
+.hb-pill-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+
+/* 命中行: 整行可点(点 = 选中该站即清词收层); ↑↓ 活动项与悬停同款高亮(accent-soft 底 + 左缘竖条),
+   「当前选中站」用行内「当前」小标记表达, 与活动项是两个语义; 行间用 border-top 分隔 */
 .hb-tr-hit {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   width: 100%;
   text-align: left;
   font: inherit;
@@ -669,17 +757,26 @@
   border-top: 1px solid var(--border);
   padding: 9px 13px;
   cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  animation: hb-tr-drop-in 200ms var(--ease-out) backwards; /* 逐行入场, 延迟由模板 :style 按 index 给 */
 }
 .hb-tr-hit:first-of-type { border-top: 0; }
-.hb-tr-hit:hover { background: var(--bg-hover); }
-.hb-tr-hit:hover .hb-tr-hit-name { color: var(--accent-hi); }
-.hb-tr-hit.on { background: var(--accent-soft); border-color: var(--accent-line); }
-.hb-tr-hit-name { font-weight: 600; font-size: 13.5px; }
+.hb-tr-hit:hover, .hb-tr-hit.act { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.hb-tr-hit.act .hb-tr-hit-name { color: var(--accent-hi); }
+.hb-tr-hit-name { font-weight: 600; font-size: 13.5px; flex: none; }
 .hb-tr-hit-name.hit { color: var(--accent-hi); }
+.hb-tr-cur {
+  flex: none;
+  font: 500 10px/1 var(--hb-font-mono);
+  letter-spacing: .08em;
+  color: var(--fg-dim);
+  border: 1px solid var(--border);
+  padding: 2px 5px;
+}
 
 /* 命中字段 chip: 组名(mono 小字) + 命中值(整值 accent, 不做片段 mark, §05 Q1) */
-.hb-tr-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; vertical-align: 1.5px; margin-left: 9px; }
+/* 命中字段 chip: 组名(mono 小字) + 命中值(整值 accent, 不做片段 mark, §05 Q1); 行内间距由 flex gap 给 */
+.hb-tr-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .hb-tr-chip {
   display: inline-flex;
   align-items: baseline;
@@ -905,7 +1002,7 @@
   .hb-row .hb-ask { justify-self: end; margin-top: -26px; }
   .hb-hd .hd-search { margin-left: 0; width: 100%; }
   .hb-hd .hd-search .hb-input { width: 100%; }
-  .hb-tr-drop { max-height: 55vh; }
+  .hb-tr-drop-list { max-height: 55vh; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hb-view.on, .hb-pop.on, .aq-tip.on { animation: none; }

@@ -2,7 +2,7 @@
 
 > 生成物, 勿改 —— `commands run kb.index` 扫四形态 meta 生成; 协议见 [doc-forms.md](conventions/doc-forms.md)。
 
-## 跨形态专题 (≥2 件) · 39
+## 跨形态专题 (≥2 件) · 40
 
 - **(无主键)** — 档案 [26-09-26](tasks/26-09-26-webui-button-system.md) Done 档案 [26-09-26](tasks/26-09-26-webui-frontend-file-split.md) In Progress 档案 [26-09-26](tasks/26-09-26-webui-settings-group-merge.md) Done 档案 [26-09-27](tasks/26-09-27-backend-log-levels-notify.md) Done 档案 [26-09-28](tasks/26-09-28-commands-shipflow-output-contract.md) Done 档案 [26-09-28](tasks/26-09-28-ext-log-noise-suppress.md) Done 档案 [26-09-28](tasks/26-09-28-webui-settings-categorize-logs.md) Done 档案 [26-09-28](tasks/26-09-28-webui-sites-page-search.md) Done 档案 [26-09-29](tasks/26-09-29-webui-column-alignment.md) Done
 - **webui-optimistic-ui** — issue [26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html) Done issue [26-09-19-1959](issues/26-09-19-1959-bug-webui-show-row-no-pending.html) Done issue [26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html) Done issue [26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) Done 计划 [26-09-19](plans/26-09-19-2245-webui-optimistic-settle-plan.html) Done 计划 [26-09-20](plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html) Done 报告 [26-09-20](reports/26-09-20-1806-optimistic-ui-half-fix-report.html) Done 报告 [26-09-20](reports/26-09-20-2131-optimistic-ui-event-driven-feasibility.html) Done
@@ -43,6 +43,7 @@
 - **webui-frontend-file-split** — 计划 [26-09-26](plans/26-09-26-2233-plan-webui-frontend-file-split.html) Done 报告 [26-09-27](reports/26-09-27-1143-report-webui-template-diff.html) Done
 - **webui-hr-safety-display** — 计划 [26-09-25](plans/26-09-25-1823-plan-webui-hr-safety-display.html) Done 档案 [26-09-25](tasks/26-09-25-webui-hr-safety-display.md) In Progress
 - **webui-polling** — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) Done issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) Open
+- **webui-sites-page-search** — 计划 [26-09-29](plans/26-09-29-0323-plan-webui-sites-search-3-proposals.html) Done 档案 [26-09-29](tasks/26-09-29-webui-tracker-focus-layer.md) Done
 
 ## 单件专题 (89)
 

@@ -34,7 +34,9 @@ CAP_POLICY: dict[str, int] = {
     # 单件专题清单已是最简形态, 涨 cap 一档。
     # 12,100 -> 12,200 (2026-09-28): ext-log-noise-suppress + node 守阵修复专题入册后实测 12,137,
     # 仍是最简形态, 再涨一档。
-    "index-auto": 12200,
+    # 12,200 -> 12,400 (2026-09-29): tracker-focus-layer 档案入册(webui-sites-page-search 专题
+    # 第二件)后实测 12,300, 仍是最简形态, 涨一档并留余量。
+    "index-auto": 12400,
     "pitfall": 6000,  # pitfalls/* 条目集 —— 读法是「扫描找一条」, 比通读更贵
     "evergreen": 10000,  # 常青主题 (叙述型) —— ≈4k token, 一次通读可接受
     "reference": 12000,  # 参考速查 (config-reference / rule-system) —— 查表不是通读
