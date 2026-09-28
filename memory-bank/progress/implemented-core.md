@@ -4,20 +4,14 @@
 > 触发: 做过没有, 主循环, 数据层, 任务队列, 托盘, 通知, 标签, HR, 分组, 单实例锁
 
 ## 已实现 (✅, 有单测覆盖)
-- **文件访问层 + 下载目录路径映射 (2026-09-27, 计划 26-09-27-1407)**: 新增 `infra/file_access.py` 单点收编
-  下载数据目录全部本地访问; 新配置键 `fs.path_map`(空 = 现状, R 级热重载)驱动 Mapped 实现
-  (逻辑路径进 → 容器映射 → 逻辑路径出), **miss 一律「不可判定」绝不判缺失**(扫描跳过 / 表达式
-  ExprError), docker 部署由此打通; mkdir 真实执行(只读 403), open_path 容器 501,
-  自检不阻塞。审查修复(1712/1737, 细节见
-  [fs-pathmap-tristate.md](../pitfalls/backend/fs-pathmap-tristate.md)): casefold 变长前缀按原串
-  定位边界 / 三态消费单点 / SEC-1 挂载根逃逸校验(逃逸按 miss)。依据
-  [26-09-27-1352](../reports/26-09-27-1352-report-docker-fs-wrapper-pathmap.html); 测试 26 条; W5 待回填。
 
-- **落盘文件 schema 版本号与逐级升级链 (2026-09-26, 计划 26-09-26-0506)**: state.json / hr/<site>.json / config.yml
-  带 `schema_version`; 单点 `infra/versioning.py`(版本表 + 相邻迁移表 + detect/migrate) + `SchemaVersionError`。
-  缺字段 = v1(零迁移), 落后沿链迁移, 比程序新 fail-fast(不回退 .bak); 集成: state 过链盖章 + 持锁后物化,
-  hr 旧迁新拒, config 校验前分派 + 键六处同步。+24 条(versioning 12); **1664 passed + 1 skipped / 92%**;
-  档案 [26-09-26-schema-version-chain](../tasks/26-09-26-schema-version-chain.md)。
+- **HR 在线核实 v3 波次模型重建 (2026-09-29, 计划 26-09-28-1932 M1–M5)**: 判定=四行判定表
+  (考察中管束/终态放行/无证据本地兜底硬编码, 12 格矩阵单测); 取数=单波型波次引擎(全量对账 +
+  A/B/C 轮流 + 三停翻条件 + 档位级截断有效性 + 失踪观察期 + 流转守恒/骤降/零行戳三道防伪 +
+  身份登记一次下载); 频控=单模型三键(熔断/停用/退避全删); 配置 40→14 键(config v2→v3 +
+  hr_site v1→v2 迁移, 档案 listing 字段); `--hr-resume` 删 / `--hr-confirm-empty` 增(含 WebUI
+  按钮)。HR 测试按新模型重写约 200 条; 全量 1743 passed + 3 skipped; 基线切片 26-09-29;
+  档案 [tasks/26-09-22-backend-partial-hr-verify.md](../tasks/26-09-22-backend-partial-hr-verify.md)。
 
 - **HR 状态模型重新梳理 + D 档已免罪来源单列 (2026-09-26, 计划 v3.4)**: 用户指令钉死「优先级
   在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息(= v3.0 已落码), 最终态

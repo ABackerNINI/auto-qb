@@ -189,33 +189,50 @@ class Clock:
 
 
 def site_conf(**overrides) -> SiteHrCheckConfig:
-    """站点级 hr_check 配置(测试默认: 三个 scope / 12H 周期 / 不限页数)"""
+    """站点级 hr_check 配置(测试默认: enabled / 清单型 / 12H 周期; 页面事实为派生字段)"""
     base = dict(
-        mode="partial",
+        enabled=True,
+        tracker="example",
         hr_page_url="https://pt.example.com/myhr.php",
         download_path="/download.php?id={id}",
-        hr_page_scopes=["A", "B", "C"],
+        page_param="page",
+        listing="list",
+        required_seeding_time=2 * 86400.0,
         refresh_interval=12 * 3600.0,
-        max_pages_per_refresh=5,
     )
     base.update(overrides)
     return SiteHrCheckConfig(**base)
 
 
 def global_conf(**overrides) -> HrCheckConfig:
-    """全局 hr_check 配置(测试默认: 零间隔 / 宽松配额, 便于在假时钟下推进)"""
+    """全局 hr_check 配置(测试默认: 零间隔 / 宽日额 / 大页上限, 便于在假时钟下推进)"""
     base = dict(
         enabled=True,
-        min_torrent_interval=0.0,
-        max_torrents_per_hour=100,
-        max_torrents_per_day=200,
-        failure_threshold=3,
-        failure_cooldown=3600.0,
-        verified_ttl=None,
-        index_retention=30 * 86400.0,
-        max_download_retries=3,
-        channel_silence_warn=6 * 3600.0,
-        parse_missing_rate_max=0.5,
+        min_interval=0.0,
+        max_requests_per_day=100000,
+        max_pages_per_wave=100,
     )
     base.update(overrides)
     return HrCheckConfig(**base)
+
+
+def anchor(
+    *,
+    added_on: float = 0.0,
+    downloaded: int = 1 << 30,
+    completion_on: float = -1,
+    progress: float = 1.0,
+    seeding_time: int = 0,
+    name: str = "",
+) -> "HrAnchor":
+    """本地种子锚点快捷构造(默认: 本机下载完成形态 —— completion_on 未设时按需覆盖)"""
+    from auto_qb.hr.resolve import HrAnchor
+
+    return HrAnchor(
+        added_on=int(added_on),
+        downloaded=downloaded,
+        completion_on=int(completion_on),
+        progress=progress,
+        seeding_time=seeding_time,
+        name=name,
+    )

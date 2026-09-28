@@ -127,11 +127,9 @@ def load_notify_config(spec: dict) -> NotifyConfig:
 
 
 def load_hr_check_config(spec) -> HrCheckConfig:
-    """解析 config.hr_check 段(全局: 功能开关 + 频控默认 + 本地取数通道)
+    """解析 config.hr_check 段(v3 14 键口径: 功能开关 + 单频控三键 + 本地取数通道 + 站点接入)
 
     整段缺省 = 空字典 => 全部走字段默认(功能关闭, 保守默认)。
-    verified_ttl 缺省为 None(而非 12H): 它的正确默认是**跟随该站的 refresh_interval**,
-    而那是站点级才知道的值, 故这里保留 None 由 HrRefreshService.verified_ttl_for 解算。
     """
     d = HrCheckConfig()
     if not isinstance(spec, dict):
@@ -150,7 +148,7 @@ def load_hr_check_config(spec) -> HrCheckConfig:
         request_timeout=_get(channel_spec, "request_timeout", channel_default.request_timeout, parse_time)
         if isinstance(channel_spec, dict) else channel_default.request_timeout,
     )
-    # 站点接入(计划 26-09-27-1318 REV2): 键 = 内置站点档案 id; 值 = mode + 微调项。
+    # 站点接入: 键 = 内置站点档案 id; 值 = enabled + tracker + refresh_interval。
     # 合法性(档案 id 已登记 / 绑定唯一 / 缺 hr 段)由 validate_config 保证, 这里只转换。
     sites_spec = spec.get("sites")
     sites = {
@@ -159,59 +157,30 @@ def load_hr_check_config(spec) -> HrCheckConfig:
     } if isinstance(sites_spec, dict) else {}
     return HrCheckConfig(
         enabled=_get(spec, "enabled", d.enabled, parse_bool),
-        min_torrent_interval=_get(spec, "min_torrent_interval", d.min_torrent_interval, parse_time),
-        max_torrents_per_hour=_get(spec, "max_torrents_per_hour", d.max_torrents_per_hour, int),
-        max_torrents_per_day=_get(spec, "max_torrents_per_day", d.max_torrents_per_day, int),
-        failure_threshold=_get(spec, "failure_threshold", d.failure_threshold, int),
-        failure_cooldown=_get(spec, "failure_cooldown", d.failure_cooldown, parse_time),
+        min_interval=_get(spec, "min_interval", d.min_interval, parse_time),
+        max_requests_per_day=_get(spec, "max_requests_per_day", d.max_requests_per_day, int),
+        max_pages_per_wave=_get(spec, "max_pages_per_wave", d.max_pages_per_wave, int),
         allow_window=_get(spec, "allow_window", d.allow_window),
-        unknown_policy=_get(spec, "unknown_policy", d.unknown_policy, lambda v: str(v).strip().lower()),
-        verified_ttl=_get(spec, "verified_ttl", d.verified_ttl, parse_time),
-        index_retention=_get(spec, "index_retention", d.index_retention, parse_time),
-        max_download_retries=_get(spec, "max_download_retries", d.max_download_retries, int),
-        channel_silence_warn=_get(spec, "channel_silence_warn", d.channel_silence_warn, parse_time),
         shared_dir=_get(spec, "shared_dir", d.shared_dir),
-        lock_timeout=_get(spec, "lock_timeout", d.lock_timeout, parse_time),
-        poll_interval=_get(spec, "poll_interval", d.poll_interval, parse_time),
-        parse_missing_rate_max=_get(spec, "parse_missing_rate_max", d.parse_missing_rate_max, float),
-        max_pages_per_round=_get(spec, "max_pages_per_round", d.max_pages_per_round, int),
         channel=channel,
         sites=sites,
     )
 
 
 def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
-    """解析站点级在线核实条目 hr_check.sites.<档案 id>(mode + tracker 显式映射 + 微调项);
-    缺省 = mode off(该站不启用)
+    """解析站点级在线核实条目 hr_check.sites.<档案 id>(enabled + tracker + refresh_interval);
+    缺省 = 不启用。
 
-    页面事实四键(adapter/hr_page_url/download_path/page_param)属未知键(校验层拦下) ——
-    值一律以档案为准(计划 26-09-27-1930 §3.2)。
+    页面事实五键(adapter/hr_page_url/download_path/page_param/listing)属未知键(校验层拦下) ——
+    值一律以档案为准(计划 26-09-27-1930 §3.2; listing 归档 v3)。
     """
     d = SiteHrCheckConfig()
     if not isinstance(spec, dict):
         return d
     return SiteHrCheckConfig(
-        mode=_get(spec, "mode", d.mode, lambda v: str(v).strip().lower()),
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
         tracker=_get(spec, "tracker", d.tracker, lambda v: str(v).strip()),
-        adapter=_get(spec, "adapter", d.adapter, lambda v: str(v).strip().lower()),
-        hr_page_url=_get(spec, "hr_page_url", d.hr_page_url),
-        hr_page_scopes=_get(spec, "hr_page_scopes", d.hr_page_scopes, lambda v: [str(s).strip().upper() for s in v]),
-        download_path=_get(spec, "download_path", d.download_path),
-        page_param=_get(spec, "page_param", d.page_param),
         refresh_interval=_get(spec, "refresh_interval", d.refresh_interval, parse_time),
-        max_pages_per_refresh=_get(spec, "max_pages_per_refresh", d.max_pages_per_refresh, int),
-        auto_age_limit=_get(spec, "auto_age_limit", d.auto_age_limit, parse_bool),
-        seeding_exempt_ratio=_get(spec, "seeding_exempt_ratio", d.seeding_exempt_ratio, float),
-        completed_age_limit=_get(spec, "completed_age_limit", d.completed_age_limit, parse_time),
-        accept_empty_listing=_get(spec, "accept_empty_listing", d.accept_empty_listing, parse_bool),
-        quota_model=_get(spec, "quota_model", d.quota_model, lambda v: str(v).strip().lower()),
-        page_rate_per_hour=(_get(spec, "page_rate_per_hour", None, int) if "page_rate_per_hour" in spec else None),
-        torrent_rate_per_hour=(
-            _get(spec, "torrent_rate_per_hour", None, int) if "torrent_rate_per_hour" in spec else None
-        ),
-        max_torrents_per_hour=(
-            _get(spec, "max_torrents_per_hour", None, int) if "max_torrents_per_hour" in spec else None
-        ),
     )
 
 
@@ -255,20 +224,21 @@ def load_tracker_config(
 def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, TrackerConfig]) -> None:
     """HR 站点绑定收敛(计划 26-09-27-1930 §3.3): 就地改写 trackers.*.hr_check 为派生视图
 
-    每个 mode != off 的 hr_check.sites 条目按「显式直取 > 默认查表」解析目标站点:
+    每个 enabled 的 hr_check.sites 条目按「显式直取 > 默认查表」解析目标站点:
     1. 显式映射: 条目 tracker 非空 -> 按 trackers 键名直取(无任何匹配语义);
     2. 默认映射: tracker 为空 -> match_trackers 用档案已知 announce 域在同命名空间查表,
        恰好 1 个命中即自动绑定(用户零配置);
-    解析结果派生填充 TrackerConfig.hr_check(adapter/URL/路径/参数来自档案, mode/微调来自配置,
-    URL = https://{档案 web_domain}{page_path}, 与用户 domains 写法无关); 派生视图的 tracker
-    字段回填解析出的条目名。mode=off 不绑定; 绑不上/绑多个/显式键不存在/唯一性/缺 hr 段
-    由 validate_config 独立完成, 这里假定配置已合法。
+    解析结果派生填充 TrackerConfig.hr_check(adapter/URL/路径/参数/listing 来自档案,
+    required_seeding_time 来自绑定站点的 hr 规则(required + extra, 超额线 3× 判据),
+    refresh_interval 来自配置, URL = https://{档案 web_domain}{page_path}, 与用户 domains
+    写法无关); 派生视图的 tracker 字段回填解析出的条目名。未启用不绑定; 绑不上/绑多个/
+    显式键不存在/唯一性/缺 hr 段由 validate_config 独立完成, 这里假定配置已合法。
 
-    旧键 trackers.*.hr_check 由 schema 迁移链 v1→v2(config/migrations.py)在更早的阶段一次性
+    旧键 trackers.*.hr_check 由 schema 迁移链(config/migrations.py)在更早的阶段一次性
     改写, 这里看不到也不处理旧键 —— 程序内不存在常驻兼容层。
     """
     for preset_id, site_conf in hr_check.sites.items():
-        if site_conf.mode == "off":
+        if not site_conf.enabled:
             continue
         preset = site_presets.find_preset(preset_id)
         if preset is None:
@@ -283,24 +253,19 @@ def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, Track
             if len(matched) != 1:
                 continue  # 绑不上/绑多个: 校验层报错
             name = matched[0]
+        hr_rule = trackers[name].hr
         trackers[name].hr_check = SiteHrCheckConfig(
-            mode=site_conf.mode,
+            enabled=True,
             tracker=name,
+            refresh_interval=site_conf.refresh_interval,
             adapter=preset.adapter,
             hr_page_url=preset.page_url(),
-            hr_page_scopes=list(site_conf.hr_page_scopes),
             download_path=preset.download_path,
             page_param=preset.page_param,
-            refresh_interval=site_conf.refresh_interval,
-            max_pages_per_refresh=site_conf.max_pages_per_refresh,
-            completed_age_limit=site_conf.completed_age_limit,
-            accept_empty_listing=site_conf.accept_empty_listing,
-            auto_age_limit=site_conf.auto_age_limit,
-            seeding_exempt_ratio=site_conf.seeding_exempt_ratio,
-            quota_model=site_conf.quota_model,
-            page_rate_per_hour=site_conf.page_rate_per_hour,
-            torrent_rate_per_hour=site_conf.torrent_rate_per_hour,
-            max_torrents_per_hour=site_conf.max_torrents_per_hour,
+            listing=preset.listing,
+            required_seeding_time=(
+                float(hr_rule.required_seeding_time + hr_rule.extra_seeding_time) if hr_rule is not None else 0.0
+            ),
         )
 
 

@@ -3,7 +3,7 @@
 主循环只见这个门面(与 `WebUIRuntime` 同款): 附属线程与文件句柄的生命周期不进核心域。
 
 启用口径:
-- `hr_check.enabled=true` 且至少一个站点 `mode != off` ⇒ 建立服务与取数线程;
+- `hr_check.enabled=true` 且至少一个站点 `sites.<id>.enabled=true` ⇒ 建立服务与取数线程;
 - 再满足 `channel.enabled=true` 才起**端点**(能力即角色) —— 没装扩展的实例仍然跑取数线程,
   但它 `allow_fetch=False`: 只读共享站点文件(别人抓的), 顺手把视图发布出来给主循环消费。
   这正是多实例分工(who 有浏览器谁抓), 也是「跨机器实例只能只读」的落地形态。
@@ -29,7 +29,7 @@ from .fetcher import HrChannelStopped, HrFetcher, NullFetcher, build_channel_fet
 from .queue import HrTaskQueue
 from .resolve import HrAnchor, HrJudgement, HrViewSet, judge_record
 from .server import HrChannelServer
-from .service import HrRefreshService
+from .service import POLL_INTERVAL, HrRefreshService
 from .store import hr_dir, instance_id
 from .worker import HrViewPublisher, HrWorker
 
@@ -106,7 +106,7 @@ class HrRuntime:
         """按配置启动; 返回是否真的启动了。端点端口被占 ⇒ 抛 HrChannelBindError(不静默降级)"""
         self.stop()
         if not self.enabled:
-            logger.debug("HR 在线核实未启用(总开关关或没有站点 mode != off), 不启动取数线程")
+            logger.debug("HR 在线核实未启用(总开关关或没有站点 enabled), 不启动取数线程")
             return False
         self._advise_shared_dir()
         self._build()
@@ -210,35 +210,20 @@ class HrRuntime:
         *,
         anchor: Optional[HrAnchor] = None,
         now: float = 0.0,
-        completed_age_limit: float = 0.0,
-        auto_age_limit: bool = False,
-        required_seeding_time: float = 0.0,
-        seeding_exempt_ratio: float = 0.0,
     ) -> Optional[HrJudgement]:
-        """站点侧三态判定(M3 四个消费点的唯一入口; 返回 None = 本模块不适用 ⇒ 走本地逻辑)
+        """站点侧三态判定(四个消费点的唯一入口; 返回 None = 本模块不适用 ⇒ 走本地逻辑)
 
         调用方是 `TorrentRecord`(它持本门面的**稳定引用**, 读取时现算): 故本方法必须
         **无状态、无写、无 API、零等待** —— 主循环与 Web 线程都会调它。
-        站点级开关(mode=off)由调用方事先挡掉(它手里有 tracker_conf, 不必回查配置迭代),
-        这里只检查**总开关**: 关掉它 = 全体回到既有本地行为(零静默变更的另一个方向)。
-        `completed_age_limit` / `auto_age_limit` / `seeding_exempt_ratio` 同理由调用方从站点配置
-        带进(超龄豁免线 0 = 关闭; 豁免 A 默认关; 豁免 B 倍数 0 = 关), `required_seeding_time`
-        从站点 hr 规则带(要求做种时长, 秒)。
+        站点级开关(enabled=false / listing=none 全站型)由调用方事先挡掉(它手里有
+        tracker_conf), 这里只检查**总开关**: 关掉它 = 全体回到既有本地行为(零静默变更)。
+        判定语义(v3 四行判定表)硬编码在 resolve.judge_record —— 无 unknown_policy /
+        豁免链等配置参数(计划 26-09-28-1932 §3/§6)。
         """
         conf = self.global_conf
         if not conf.enabled:
             return None
-        return judge_record(
-            self.view_set().get(site),
-            infohashes,
-            anchor=anchor,
-            now=now,
-            unknown_policy=conf.unknown_policy,
-            completed_age_limit=completed_age_limit,
-            auto_age_limit=auto_age_limit,
-            required_seeding_time=required_seeding_time,
-            seeding_exempt_ratio=seeding_exempt_ratio,
-        )
+        return judge_record(self.view_set().get(site), infohashes, anchor=anchor, now=now)
 
     @property
     def revision(self) -> int:
@@ -305,7 +290,7 @@ class HrRuntime:
             service=self.service,
             publisher=self.publisher,
             endpoint=self.endpoint,
-            poll_interval=conf.poll_interval,
+            poll_interval=POLL_INTERVAL,  # 常量化(v3, 计划 §6.2: 配置键 poll_interval 删除)
             anchors_fn=self._anchors,
         )
 
@@ -344,7 +329,7 @@ class HrRuntime:
         # 「多实例」判据, 程序无法可靠判断(主计划 §7 已注明), 强行升级会对全部单实例用户告警。
         logger.info(
             "hr_check.shared_dir 未配置: HR 站点文件落在 <data_dir>/hr/(单实例足够)。"
-            "❗若同一账号还跑了其它实例而没共享目录, 各实例的配额账本各一份 ⇒ 站点访问翻倍(2×12/时); "
+            "❗若同一账号还跑了其它实例而没共享目录, 各实例的频控账本各一份 ⇒ 站点访问翻倍; "
             "多实例共享时请把它指向所有实例都能看到的同一目录(网络盘可以, 云同步盘不可用 —— "
             "锁与原子替换都不保证), 并让各实例用不同的 hr_check.channel.port"
         )
@@ -379,7 +364,7 @@ class HrRuntime:
             writer=instance_id(),
             fetch_enabled=self.fetch_enabled,
             worker_running=bool(self.worker is not None and self.worker.started),
-            poll_interval=conf.poll_interval,
+            poll_interval=POLL_INTERVAL,
             view_revision=self.publisher.revision,
             channel=channel,
             token_path=token_path(self.config.data_dir),

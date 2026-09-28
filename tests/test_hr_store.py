@@ -30,11 +30,11 @@ from auto_qb.hr.model import (
     HrDownloaded,
     HrDlFail,
     HrEntry,
-    HrFuse,
-    HrQuota,
-    HrRefreshMeta,
+    HrLaneState,
+    HrRateLedger,
     HrSiteData,
     HrVerified,
+    HrWaveMeta,
 )
 from auto_qb.hr.store import HrLockBusy, HrSiteStore, hr_dir
 
@@ -59,37 +59,35 @@ def _sample() -> HrSiteData:
     data.verified["cc" * 20] = HrVerified(
         infohash="cc" * 20, tid=1, verified_ts=7.0, source="not-listed", anchor_added_on=100, anchor_downloaded=200
     )
-    data.refresh = HrRefreshMeta(
-        last_success_ts=7.0,
-        scopes_done=["A", "B"],
-        pages_fetched=3,
-        reached_last_page=True,
-        entry_count=1,
-        complete=True
+    data.wave = HrWaveMeta(
+        wave_ts=7.0,
+        healthy_ts=7.0,
+        lanes={"A": HrLaneState(lane="A", status="ok", pages=2, rows=1, full_depth=True)},
+        releases_enabled=True,
+        baseline_rows=1,
+        prev_a_tids={313852: "aa" * 20},
     )
-    data.quota = HrQuota(
-        hour_window="2026-09-24T20", hour_count=2, day_window="2026-09-24", day_count=5, last_fetch_ts=7.0
-    )
-    data.fuse = HrFuse(failures=1, until_ts=70.0, reason="连续失败")
+    data.rate = HrRateLedger(day_window="2026-09-24", day_count=5, last_fetch_ts=7.0)
+    data.empty_confirmed_at = 0.0
     return data
 
 
 def test_roundtrip_all_substructures(tmp_path):
     """索引/已取记录/失败记账/放行记录/覆盖证明/配额/熔断全量往返"""
+    sample = _sample()
     store = HrSiteStore("btschool", str(tmp_path))
     with store.hold() as session:
-        session.data.index = _sample().index
-        session.data.downloaded = _sample().downloaded
-        session.data.fails = _sample().fails
-        session.data.verified = _sample().verified
-        session.data.refresh = _sample().refresh
-        session.data.quota = _sample().quota
-        session.data.fuse = _sample().fuse
+        session.data.index = sample.index
+        session.data.downloaded = sample.downloaded
+        session.data.fails = sample.fails
+        session.data.verified = sample.verified
+        session.data.wave = sample.wave
+        session.data.rate = sample.rate
         assert session.commit(now=1000.0) == "written"
 
     data, err = HrSiteStore("btschool", str(tmp_path)).read_unlocked()
     assert err is None
-    assert data.schema_version == 1
+    assert data.schema_version == versioning.CURRENT_VERSIONS["hr_site"]
     assert data.revision == 1
     assert data.writer_heartbeat == 1000.0
     assert data.index[313852].name == "EXAMPLE S01"
@@ -97,9 +95,9 @@ def test_roundtrip_all_substructures(tmp_path):
     assert data.downloaded[313852].ts == 5.0
     assert data.fails[313997].count == 2
     assert data.verified["cc" * 20].anchor_downloaded == 200
-    assert data.refresh.complete is True and data.refresh.scopes_done == ["A", "B"]
-    assert data.quota.day_count == 5
-    assert data.fuse.until_ts == 70.0
+    assert data.wave.lanes["A"].full_depth is True and data.wave.releases_enabled is True
+    assert data.wave.prev_a_tids == {313852: "aa" * 20}
+    assert data.rate.day_count == 5
     # 反查表只在读取时现建, 且以 tid 为主键(不存双份)
     assert data.index_by_infohash() == {"aa" * 20: 313852, "bb" * 32: 313852}
 

@@ -24,6 +24,7 @@ window.AQB_HR_STATUS = {
         fetchEnabled: false,
         workerRunning: false,
         pollInterval: 0,
+        confirming: false,
       },
     };
   },
@@ -51,15 +52,31 @@ window.AQB_HR_STATUS = {
     },
     /* ---------------- 展示辅助(值全由后端算好, 这里只挑文案与配色) ---------------- */
     hrsStateText(s) {
-      return s.complete ? "覆盖证明成立" : "覆盖证明不成立";
+      if (s.listing === "none") return "全站型(本地兜底)";
+      return s.releases_enabled ? "放行签发开启" : "放行签发冻结";
     },
     hrsStateClass(s) {
-      return s.complete ? "ok" : "warn";
+      return s.listing === "none" || s.releases_enabled ? "ok" : "warn";
     },
     /* 档位计数(A 考察中 / B 已达标 / C 未达标 / D 已免罪) —— 顺序固定, 便于多站点横向对比 */
     hrsLaneText(s) {
-      const l = s.lanes || {};
+      const l = s.lane_counts || {};
       return `A=${l.A || 0} B=${l.B || 0} C=${l.C || 0} D=${l.D || 0}`;
+    },
+    /* 人工对账戳(§5.3): 零行波默认不签发放行, 确认账号清单确实为空后写一次性戳 */
+    async hrsConfirmEmpty(site) {
+      if (this.hrs.confirming) return;
+      if (!confirm(`确认站点 ${site} 的 HR 清单确实为空?
+确认后零行波可正常签发放行; 清单再现非零行时确认戳自动失效。`)) return;
+      this.hrs.confirming = true;
+      try {
+        await this.api("/api/hr/confirm-empty", { method: "POST", body: JSON.stringify({ site }) });
+        await this.loadHrStatus(true);
+      } catch (e) {
+        if (!e.auth) alert(e.message || "确认写入失败");
+      } finally {
+        this.hrs.confirming = false;
+      }
     },
     hrsPct(v) {
       return `${Math.round((v || 0) * 100)}%`;

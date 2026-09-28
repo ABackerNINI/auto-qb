@@ -102,7 +102,7 @@ def main():
     parser.add_argument(
         "--hr-status",
         action="store_true",
-        help="HR 在线核实现状: 把已落盘的站点数据摊开(档位/下载量/剩余达标/放行/配额/熔断), 只读不取数",
+        help="HR 在线核实现状: 把已落盘的站点数据摊开(各档波次/下载量/放行/频控), 只读不取数",
     )
     parser.add_argument(
         "--hr-status-rows",
@@ -112,10 +112,10 @@ def main():
         help="搭配 --hr-status: 每站点最多显示多少行明细(默认 10)",
     )
     parser.add_argument(
-        "--hr-resume",
+        "--hr-confirm-empty",
         metavar="SITE",
-        help="人工确认后恢复被停用(suspended)站点的取数, 逗号分隔多个; "
-        "先排查该站 HR 页确认无改版再执行(--hr-status 会打印停用原因)",
+        help="人工对账: 确认站点账号的 HR 清单确实为空后写一次性确认戳(逗号分隔多个), "
+        "之后结构完好的零行波可正常签发放行; 清单再现非零行时确认戳自动失效",
     )
     args = parser.parse_args()
 
@@ -131,24 +131,24 @@ def main():
         parser.error("--hr-status 与 --hr-once 互斥(前者读已有数据, 后者真去抓一轮)")
     if args.hr_status_rows < 1:
         parser.error("--hr-status-rows 需为正整数")
-    if args.hr_resume and (
+    if args.hr_confirm_empty and (
         args.tray or args.export_yaml or args.export_torrents_info or args.hr_once or args.hr_status
     ):
-        parser.error("--hr-resume 与其它 HR 模式互斥(它本身是写操作, 单独执行)")
+        parser.error("--hr-confirm-empty 与其它 HR 模式互斥(它本身是写操作, 单独执行)")
 
     # 容器/服务化场景: SIGTERM 转入 Ctrl+C 同款优雅关闭(所有模式一致; KeyboardInterrupt 统一在下面捕获)
     _install_sigterm_handler()
 
     manager = None
     try:
-        # 人工恢复停用站点: 唯一的写文件 HR 模式(清 suspended), 与正常实例靠站点锁互斥
-        if args.hr_resume:
-            from .hr.report import run_hr_resume
+        # 人工对账确认戳: 唯一的写文件 HR 模式(设 empty_confirmed_at), 与正常实例靠站点锁互斥
+        if args.hr_confirm_empty:
+            from .hr.report import run_hr_confirm_empty
 
-            sites = [s.strip() for s in args.hr_resume.replace("，", ",").split(",") if s.strip()]
+            sites = [s.strip() for s in args.hr_confirm_empty.replace("，", ",").split(",") if s.strip()]
             if not sites:
-                parser.error("--hr-resume 需要至少一个站点名")
-            return run_hr_resume(load_config(args.config), sites)
+                parser.error("--hr-confirm-empty 需要至少一个站点名")
+            return run_hr_confirm_empty(load_config(args.config), sites)
 
         # HR 在线核实现状: 连站点文件都不写, 更不连 qB —— 可与正常实例并发安全运行
         if args.hr_status:

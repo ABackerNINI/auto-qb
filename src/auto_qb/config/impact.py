@@ -80,32 +80,14 @@ TRACKER_FIELD_LEVELS = {
 #   挂载动作在 QbManager.apply_new_config 的 L1 分支 -> HrRuntime.apply()。
 HR_CHECK_FIELD_LEVELS = {
     "enabled": LEVEL_L0,
-    "min_torrent_interval": LEVEL_L0,
-    "max_torrents_per_hour": LEVEL_L0,
-    "max_torrents_per_day": LEVEL_L0,
-    # split 模型键(计划 26-09-27-1815 §2 3.1): 取数线程每轮现读, L0
-    "page_rate_per_hour": LEVEL_L0,
-    "page_burst": LEVEL_L0,
-    "torrent_rate_per_hour": LEVEL_L0,
-    "torrent_burst": LEVEL_L0,
-    "max_pages_per_day": LEVEL_L0,
-    "min_page_interval": LEVEL_L0,
-    "max_pages_per_round": LEVEL_L0,
-    "failure_threshold": LEVEL_L0,
-    "failure_cooldown": LEVEL_L0,
+    "min_interval": LEVEL_L0,
+    "max_requests_per_day": LEVEL_L0,
+    "max_pages_per_wave": LEVEL_L0,
     "allow_window": LEVEL_L0,
-    "unknown_policy": LEVEL_L0,
-    "verified_ttl": LEVEL_L0,
-    "index_retention": LEVEL_L0,
-    "max_download_retries": LEVEL_L0,
-    "channel_silence_warn": LEVEL_L0,
     "shared_dir": LEVEL_L1,
-    "lock_timeout": LEVEL_L0,
-    "poll_interval": LEVEL_L0,
-    "parse_missing_rate_max": LEVEL_L0,
     "channel": LEVEL_L1,
-    # 站点接入(计划 26-09-27-1318 REV2): 站点条目派生进 trackers.*.hr_check, 而后者是 L0
-    # (取数线程每轮现读) —— sites 变更经派生字段同路径生效, 与 TRACKER_FIELD_LEVELS.hr_check 同级
+    # 站点接入: 站点条目派生进 trackers.*.hr_check, 而后者是 L0(取数线程每轮现读) ——
+    # sites 变更经派生字段同路径生效, 与 TRACKER_FIELD_LEVELS.hr_check 同级
     "sites": LEVEL_L0,
 }
 

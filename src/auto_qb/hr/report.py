@@ -1,9 +1,9 @@
-"""HR 只读报告: `--hr-once` 真机走查 / `--hr-status` 数据现状(计划 §11 M2 / §12)。
+"""HR 只读报告: `--hr-once` 真机走查 / `--hr-status` 数据现状 / `--hr-confirm-empty` 人工对账戳(v3)。
 
-`--hr-once`(跑一遍刷新管道, 只出报告, **不写文件、不联动 qB**):
+`--hr-once`(跑一遍波次管道, 只出报告, **不写文件、不联动 qB**):
 - 它**不加锁也就不可能写盘**(`persist=False`), 因此可以在正常实例运行期间安全地跑
   (锁会被正常实例持有 → 报告里如实显示"锁被持有/跳过", 这本身就是有用的信息);
-- 它把「配置是否成立 / 站点文件落在哪 / 锁在该目录是否生效 / 解析是否还能读 / 覆盖证明是否成立」
+- 它把「配置是否成立 / 站点文件落在哪 / 锁在该目录是否生效 / 解析是否还能读 / 各档覆盖到哪」
   一次性摊开, 供用户确认多实例共享目录与站点改版;
 - ❗它**不绕过零 cookie 边界**: 取数仍然只能经 `HrFetcher`(浏览器扩展通道)。
   `--hr-html-dir` 只是给走查用的**离线页面替身**(把保存下来的页面按 `<档位>.html` 放进目录),
@@ -12,6 +12,11 @@
 `--hr-status`(把**已落盘的数据**摊开, 连取数都不试):
 - 回答「拉到的数据对不对 / 齐不齐 / 为什么没放行」—— 走查只能告诉你流程能通, 现状才能让你核对内容;
 - 同样不加锁、不写盘, 读的是原子替换后的完整快照(`read_unlocked`)。
+
+`--hr-confirm-empty <站点>`(写一次性人工对账戳, 计划 §5.3):
+- 结构完好的零行波默认不签发放行(防改版空表被当真); 用户排查确认「账号的 HR 清单确实为空」
+  后跑一次本命令写入确认戳, 之后零行波可正常签发放行;
+- 清单再现任何非零行 ⇒ 确认戳自动失效(账号真清空 HR 后的再次清零需重新确认一次)。
 """
 import logging
 import time
@@ -25,8 +30,8 @@ from .channel import API_TASKS, describe_token_source, token_path
 from .fetcher import HrChannelUnavailable, HrFetcher, NullFetcher
 from .model import HrEntry, HrSiteData
 from .service import DIAGNOSTIC_MAX_WAIT, HrRefreshResult, HrRefreshService
-from .status import CHANNEL_TEXTS, LANE_TEXTS, SiteStatus, ago_text, site_status
-from .store import instance_id
+from .status import CHANNEL_TEXTS, LANE_TEXTS, SiteStatus, ago_text, site_status, stamp_text
+from .store import HrLockBusy, instance_id
 
 logger = logging.getLogger(__name__)
 
@@ -63,18 +68,22 @@ def build_fetcher(html_dir: Optional[str]) -> HrFetcher:
     return NullFetcher("本实例未启用取数通道 (hr_check.channel.enabled=false 或取数通道未落地)")
 
 
+def _site_confs(config: Config) -> dict:
+    return {name: tc.hr_check for name, tc in config.trackers.items() if tc.hr_check is not None}
+
+
 def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int:
-    """跑一遍各站点的刷新走查并打印报告; 返回进程退出码(0 = 出报告成功)"""
+    """跑一遍各站点的波次走查并打印报告; 返回进程退出码(0 = 出报告成功)"""
     import sys
 
     out = out or sys.stdout
     if not config.hr_check.enabled:
         print("hr_check.enabled=false: HR 在线核实未启用, 无可走查内容。", file=out)
         return 1
-    site_confs = {name: tc.hr_check for name, tc in config.trackers.items() if tc.hr_check is not None}
+    site_confs = _site_confs(config)
     enabled = [name for name, conf in site_confs.items() if conf.enabled]
     if not enabled:
-        print("没有任何站点配置 hr_check(mode != off), 无可走查内容。", file=out)
+        print("没有任何站点启用 hr_check(sites.<id>.enabled=true), 无可走查内容。", file=out)
         return 1
 
     service = HrRefreshService(
@@ -85,9 +94,8 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
         owner=instance_id(),
         persist=False,  # 只读走查: 不写站点文件
         allow_fetch=True,
-        # 走查是「把一轮跑完给人看」: 遇到间隔/配额门槛等满而不是放弃(单次上限 DIAGNOSTIC_MAX_WAIT)。
-        # 单次最多等几分钟, 与「抓数据等几分钟可接受」一致; 总等待不限(0) —— 走查本来就慢, 要的是跑完;
-        # 配额到顶仍然会停(那要等到下一个整点, 超出单次上限 ⇒ 放弃本轮)。
+        # 走查是「把一波跑完给人看」: 遇到间隔/日额门槛等满而不是放弃(单次上限 DIAGNOSTIC_MAX_WAIT)。
+        # 单次最多等几分钟, 与「抓数据等几分钟可接受」一致; 总等待不限(0) —— 走查本来就慢, 要的是跑完。
         sleeper=time.sleep,
         sleep_max=DIAGNOSTIC_MAX_WAIT,
         round_wait_max=0.0,
@@ -100,7 +108,7 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
     started = time.time()
     results = service.refresh_all()
     for result in results:
-        # 走查不写盘 ⇒ 已落盘视图必然是旧的; 用本轮内存快照预览, 否则报告会误显示「覆盖证明不成立」
+        # 走查不写盘 ⇒ 已落盘视图必然是旧的; 用本轮内存快照预览, 否则报告会误显示「无可判数据」
         view = service.build_view_for(result.site, result.snapshot) if result.snapshot is not None else None
         _print_site(result, view, out)
     elapsed = time.time() - started
@@ -114,9 +122,9 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
 def run_hr_status(config: Config, limit: int = 10, out=None) -> int:
     """`--hr-status` 只读现状报告: **不取数、不加锁、不写盘、不联动 qB**; 返回退出码(0 = 出报告成功)
 
-    与 `--hr-once` 的分工: 走查证的是「流程能通」(它真去抓一轮), 现状证的是「**内容对不对**」——
-    把已落盘的站点文件摊开给人核对(档位分布 / 上传下载 / 分享率 / 还需做种 / 放行 / 配额 / 熔断),
-    以及回答「为什么没放行」(覆盖证明成不成立、最近一次刷新的 reason)。
+    与 `--hr-once` 的分工: 走查证的是「流程能通」(它真去抓一波), 现状证的是「**内容对不对**」——
+    把已落盘的站点文件摊开给人核对(档位分布 / 各档波次状态 / 上传下载 / 分享率 / 放行 / 频控),
+    以及回答「为什么没放行」(各档覆盖到哪、防伪结论、最近一波的 notes)。
     """
     import sys
 
@@ -124,10 +132,10 @@ def run_hr_status(config: Config, limit: int = 10, out=None) -> int:
     if not config.hr_check.enabled:
         print("hr_check.enabled=false: HR 在线核实未启用, 无可查看内容。", file=out)
         return 1
-    site_confs = {name: tc.hr_check for name, tc in config.trackers.items() if tc.hr_check is not None}
+    site_confs = _site_confs(config)
     enabled = [name for name, conf in site_confs.items() if conf.enabled]
     if not enabled:
-        print("没有任何站点配置 hr_check(mode != off), 无可查看内容。", file=out)
+        print("没有任何站点启用 hr_check(sites.<id>.enabled=true), 无可查看内容。", file=out)
         return 1
 
     service = HrRefreshService(
@@ -156,32 +164,75 @@ def run_hr_status(config: Config, limit: int = 10, out=None) -> int:
     return 0
 
 
+def run_hr_confirm_empty(config: Config, sites: List[str], out=None) -> int:
+    """`--hr-confirm-empty <站点>`: 写一次性人工对账戳(计划 §5.3)
+
+    锁内写站点文件: 设 empty_confirmed_at、在 wave.notes 记一笔确认痕迹, 其余数据原样保留。
+    之后结构完好的零行波可正常签发放行; 清单再现任何非零行 ⇒ 确认戳自动失效。
+    """
+    import sys
+
+    out = out or sys.stdout
+    if not config.hr_check.enabled:
+        print("hr_check.enabled=false: HR 在线核实未启用, 无需对账。", file=out)
+        return 1
+    service = HrRefreshService(
+        data_dir=config.data_dir,
+        global_conf=config.hr_check,
+        site_confs=_site_confs(config),
+        fetcher=NullFetcher("确认操作不取数"),
+        owner=instance_id(),
+        persist=True,
+        allow_fetch=False,
+    )
+    code = 0
+    for site in sites:
+        try:
+            with service.store(site).hold() as session:
+                data = session.data
+                data.empty_confirmed_at = time.time()
+                note = "; 人工对账: 确认账号 HR 清单为空(--hr-confirm-empty), 零行波恢复签发放行, 非零行自动失效"
+                data.wave.notes = ((data.wave.notes or "") + note).strip("; ")
+                status = session.commit(time.time())
+                if status == "written":
+                    print(f"[{site}] 已写入人工对账戳({stamp_text(data.empty_confirmed_at)})。", file=out)
+                    print("      之后结构完好的零行波可正常签发放行; 清单再现任何非零行时确认戳自动失效。", file=out)
+                else:
+                    code = 1
+                    print(f"[{site}] 锁自检失败(只读退化), 未写盘 —— 请检查共享目录/文件权限后重试。", file=out)
+        except HrLockBusy as e:
+            code = 1
+            print(f"[{site}] 站点锁被占用(正常实例可能正持锁取数), 稍后再试: {e}", file=out)
+    return code
+
+
 def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> None:
-    """单站点现状段: 刷新 / 数据 / 配额 / 熔断 / 明细(字段全来自 `status.site_status`)"""
+    """单站点现状段: 波次 / 数据 / 频控 / 明细(字段全来自 `status.site_status`)"""
     print(
-        f"[{st.site}] 模式={st.mode}  覆盖证明={'成立' if st.complete else '不成立'}  通道={st.channel_text}  "
-        f"数据版本={st.revision}",
+        f"[{st.site}] 形态={st.listing}  通道={st.channel_text}  数据版本={st.revision}  "
+        f"放行签发={'开' if st.releases_enabled else '冻结'}",
         file=out
     )
     print(f"    文件: {st.file_path}" + (f"  ⚠ {st.read_error}" if st.read_error else ""), file=out)
-    print(f"    刷新: {st.fresh_text}", file=out)
-    page = (
-        f"档位 {','.join(st.scopes_done) or '-'}  页数 {st.pages_fetched}  "
-        f"抓到 {st.entry_count} 行  缺字段 {st.missing_field_rate:.0%}"
-    )
-    print(f"    {page}  上次写入者 {st.writer_instance or '-'}(心跳 {ago_text(st.writer_heartbeat, st.now)})", file=out)
-    if st.reason:
-        print(f"    最近一次刷新不完备的原因: {st.reason}", file=out)
+    print(f"    取波: {st.fresh_text}", file=out)
+    print(f"    各档: {st.lanes_text or '-'}", file=out)
+    for lane in st.lanes:  # 逐档明细(截断/失效原因与连续失效都在 text 里)
+        print(f"      · {lane.text}", file=out)
+    if st.notes:
+        print(f"    最近一波备注: {st.notes}", file=out)
     if st.blocking:
-        print(f"    现在为什么不放行: {st.blocking}", file=out)
-    if st.suspended_text:
-        print(f"    {st.suspended_text}", file=out)
+        print(f"    现在为什么不签发放行: {st.blocking}", file=out)
+    print(f"    守恒: {st.retention_text}", file=out)
+    print(f"    骤降: {st.plunge_text}", file=out)
+    if st.zero_rows:
+        tail = "(已人工确认)" if st.empty_confirmed else "(未确认 —— 零行波不签发放行)"
+        print(f"    零行: 本波清单为 0{tail}", file=out)
 
-    lanes = st.lanes
+    lanes = st.lane_counts
     print(
         f"    数据: 索引条目 {st.index_total}(活跃 {st.index_active})  "
         f"档位 A={lanes.get('A', 0)} B={lanes.get('B', 0)} C={lanes.get('C', 0)} D={lanes.get('D', 0)}(免罪)  "
-        f"受管束种子 {st.managed} 个(infohash 键 {st.keys} 个)",
+        f"考察中命中 {st.managed} 个(键 {st.keys} 个)  观察期中 {st.observing} 个",
         file=out
     )
     print(
@@ -189,29 +240,8 @@ def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> Non
         f"待回填 infohash {st.pending_infohash} 条(进度 {st.backfill_ratio:.0%})  放行记录 {st.verified} 条",
         file=out
     )
-    if st.page_quota is not None:
-        print(f"    配额: {st.page_quota.text}", file=out)
-        print(f"    配额: {st.torrent_quota.text}", file=out)
-    else:
-        print(f"    配额: {st.quota.text}", file=out)
-    print(f"    熔断: {st.fuse.text}  时间窗: {st.allow_window or '不限'}", file=out)
-    _print_observations(st, out)
+    print(f"    频控: {st.quota.text}  时间窗: {st.allow_window or '不限'}", file=out)
     _print_status_rows(data, limit, out)
-
-
-def _print_observations(st: SiteStatus, out) -> None:
-    """观测面(计划 26-09-27-1815 §2 1.5): 排序 / 考核期 P / 骤降 / 档位对比 —— 「假设是否成立」的现场证据"""
-    if st.order_ok is True:
-        order_line = "    排序: ✓(整轮单调成立)"
-    elif st.order_ok is False:
-        order_line = f"    排序: ✗ 不成立({st.order_detail})"
-    else:
-        order_line = "    排序: 未判定(证据不足 —— 需页面成功取回 + 表头出 + 可比行 ≥ 2)"
-    print(order_line, file=out)
-    print(f"    考核期 P: {st.period_text}", file=out)
-    print(f"    骤降观测: {st.plunge_text}", file=out)
-    if st.scope_delta_text:
-        print(f"    档位计数(上轮→本轮): {st.scope_delta_text}", file=out)
 
 
 def _print_status_rows(data: HrSiteData, limit: int, out) -> None:
@@ -219,11 +249,11 @@ def _print_status_rows(data: HrSiteData, limit: int, out) -> None:
 
     列 = tid / 档位(实际意思) / 上传量 / 下载量 / 分享率 / 还需做种 / 名称 / infohash。
     「剩余达标时间」**不进表**: 它是「距考核截止还剩多少窗口」, 不是还需做种的量 ——
-    摆在表里会被读成后者(2026-09-25 实报误读: 9d21h 被当成还要做种 9 天, 实际只需 16h57m)。
+    摆在表里会被读成后者(2026-09-25 实报误读)。
     """
     rows = [e for e in data.index.values() if e.active]
     if not rows:
-        print("    明细: (还没有数据 —— 先跑 --hr-once 或让扩展抓一轮)", file=out)
+        print("    明细: (还没有数据 —— 先跑 --hr-once 或让扩展抓一波)", file=out)
         return
     rows.sort(key=lambda e: (e.lane, -(e.downloaded_bytes or 0)))
     print(f"    明细(活跃 {len(rows)} 行, 按档位·下载量排序, 最多显示 {limit} 行):", file=out)
@@ -241,9 +271,12 @@ def _print_status_rows(data: HrSiteData, limit: int, out) -> None:
 def _status_row_cells(entry: HrEntry) -> Tuple[str, ...]:
     """一行的各列文本(数值列右对齐由调用方按列位决定)"""
     ihash = entry.infohash_v1 or entry.infohash_v2
+    lane = LANE_TEXTS.get(entry.lane, entry.lane)
+    if entry.missing_streak > 0:
+        lane = f"{lane}(观察期{entry.missing_streak})"
     return (
         str(entry.tid),
-        LANE_TEXTS.get(entry.lane, entry.lane),
+        lane,
         fmt_size(entry.uploaded_bytes or 0),
         fmt_size(entry.downloaded_bytes or 0),
         "-" if entry.ratio is None else f"{entry.ratio:.3f}",
@@ -291,73 +324,18 @@ def _ellipsis(text: str, width: int) -> str:
     return "".join(out) + "…"
 
 
-def run_hr_resume(config: Config, sites: List[str], out=None) -> int:
-    """`--hr-resume <站点>`: 人工确认后清除站点停用状态(计划 26-09-27-1815 §2 2.3 的恢复口子)
-
-    锁内写站点文件: 清 suspended、在 refresh.reason 记一笔恢复痕迹, 其余数据原样保留。
-    ❗这是**唯一**的恢复途径 —— 熔断冷却到期不会自动恢复停用(致命错误必须人看过才放行)。
-    """
-    import sys
-    from dataclasses import replace as dc_replace
-
-    from .store import HrLockBusy
-
-    out = out or sys.stdout
-    if not config.hr_check.enabled:
-        print("hr_check.enabled=false: HR 在线核实未启用, 没有可恢复的站点。", file=out)
-        return 1
-    service = HrRefreshService(
-        data_dir=config.data_dir,
-        global_conf=config.hr_check,
-        site_confs={},
-        fetcher=NullFetcher("恢复操作不取数"),
-        owner=instance_id(),
-        persist=True,
-        allow_fetch=False,
-    )
-    code = 0
-    for site in sites:
-        try:
-            with service.store(site).hold() as session:
-                data = session.data
-                if data.suspended is None:
-                    print(f"[{site}] 未处于停用状态, 无需恢复。", file=out)
-                    continue
-                susp = data.suspended
-                data.suspended = None
-                note = f"; 人工确认后恢复(--hr-resume, 此前停用原因: {susp.reason})"
-                data.refresh = dc_replace(data.refresh, reason=(data.refresh.reason or "") + note)
-                status = session.commit(time.time())
-                if status == "written":
-                    print(
-                        f"[{site}] 已恢复取数(停用于 {stamp_text_ts(susp.since)}, 原因: {susp.reason})。"
-                        "若页面确实改版, 请尽快复核配置与页面结构。",
-                        file=out,
-                    )
-                else:
-                    code = 1
-                    print(f"[{site}] 锁自检失败(只读退化), 未写盘 —— 请检查共享目录/文件权限后重试。", file=out)
-        except HrLockBusy as e:
-            code = 1
-            print(f"[{site}] 站点锁被占用(正常实例可能正持锁刷新), 稍后再试: {e}", file=out)
-        except FileNotFoundError:
-            code = 1
-            print(f"[{site}] 没有站点文件(从未取过数), 无可恢复的停用状态。", file=out)
-    return code
-
-
 def stamp_text_ts(ts: float) -> str:
     return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)) if ts and ts > 0 else "-"
 
 
 def _print_channel(config: Config, service: HrRefreshService, out) -> None:
-    """通道自检段(计划 §7): 端点 / 密钥来源 / 共享目录 —— 都不含密钥内容"""
+    """通道自检段: 端点 / 密钥来源 / 共享目录 —— 都不含密钥内容"""
     conf = config.hr_check
     channel = conf.channel
     state = "启用" if channel.enabled else "未启用(本实例无取数能力, 只会读共享数据)"
     print(f"取数通道: {state}", file=out)
     print(
-        f"    端点: http://127.0.0.1:{channel.port}{API_TASKS}   轮询节奏: {conf.poll_interval:g}s   "
+        f"    端点: http://127.0.0.1:{channel.port}{API_TASKS}   轮询节奏: 60s(常量)   "
         f"等回传上限: {channel.request_timeout:g}s",
         file=out
     )
@@ -378,16 +356,15 @@ def _print_site(result: HrRefreshResult, view, out) -> None:
     print(f"[{result.site}] {result.action} — {result.reason or '正常'}", file=out)
     print(f"    文件: {result.path}    锁自检: {'可写' if result.lock_ok else '只读退化(锁疑似不生效)'}", file=out)
     print(
-        f"    档位: {','.join(result.scopes_done) or '-'}  页数: {result.pages_fetched}  "
-        f"条目: {result.entries}(新增 {result.entries_new})  取种子: {result.torrents_fetched} 失败: {result.torrents_failed}"
-        f"  放行记录: {result.verified_count}",
+        f"    各档: {result.lane_texts or '-'}  页数: {result.pages_fetched}  "
+        f"条目: {result.entries}  取种子: {result.torrents_fetched} 失败: {result.torrents_failed}"
+        f"  放行记录: {result.verified_count}  本波签发: {result.releases_signed}",
         file=out
     )
     if view is not None:
         channel = CHANNEL_TEXTS.get(view.channel_state, view.channel_state)
         print(
-            f"    视图: 模式={view.mode} 覆盖证明={'成立' if view.complete else '不成立'} "
-            f"最近成功刷新={view.last_success_ts:.0f} 受管束={len(view.by_infohash)} 放行={len(view.verified)} "
-            f"通道={channel}",
+            f"    视图: 形态={view.listing} 考察中命中={len(view.lane_a)} 终态命中={len(view.lane_terminal)} "
+            f"放行={len(view.verified)} 最近健康波={ago_text(view.healthy_ts, time.time())} 通道={channel}",
             file=out
         )

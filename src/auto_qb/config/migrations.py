@@ -74,3 +74,73 @@ def _migrate_config_1_2(cfg: dict) -> dict:
 
 # import 即注册(见模块 docstring); 注册表缺位 = 版本表与迁移表不同步, migrate() 会 fail-fast
 MIGRATIONS["config"][1] = _migrate_config_1_2
+
+#: v2→v3 删除的全局段键(计划 26-09-28-1932 §6.2 废弃键去向表; min_torrent_interval 改名保留)
+_V3_DROP_GLOBAL_KEYS = (
+    "max_torrents_per_hour",
+    "max_torrents_per_day",
+    "page_rate_per_hour",
+    "page_burst",
+    "torrent_rate_per_hour",
+    "torrent_burst",
+    "max_pages_per_day",
+    "min_page_interval",
+    "quota_model",
+    "failure_threshold",
+    "failure_cooldown",
+    "unknown_policy",
+    "verified_ttl",
+    "index_retention",
+    "max_download_retries",
+    "channel_silence_warn",
+    "lock_timeout",
+    "poll_interval",
+    "parse_missing_rate_max",
+    "max_pages_per_round",
+)
+
+
+def _migrate_config_2_3(cfg: dict) -> dict:
+    """v2→v3: HR 14 键口径(计划 26-09-28-1932 §6/§7.1)。
+
+    - 全局段: 删除 26 个废弃键; min_torrent_interval 改名 min_interval(语义接管页面间隔)。
+    - sites 条目: mode partial/all → enabled: true, mode off 条目整体删除; 无 mode 但带
+      enabled 的条目(v1 章缺失的新写法)原样保留 enabled —— 迁移是版本链上的一次性变换,
+      但「缺版本章 = 按 v1 处理」的存量口径意味着新写法也会走到这里, 不能误杀。
+      tracker / refresh_interval 原样保留。
+    - trackers.*.hr_check 残留直接删除(v2 迁移已收敛过一轮, 不再提供旧位置兼容)。
+    """
+    hr = cfg.get("hr_check")
+    if isinstance(hr, dict):
+        if "min_torrent_interval" in hr:
+            hr.setdefault("min_interval", hr["min_torrent_interval"])
+            del hr["min_torrent_interval"]
+        for key in _V3_DROP_GLOBAL_KEYS:
+            hr.pop(key, None)
+        sites = hr.get("sites")
+        if isinstance(sites, dict):
+            for preset_id, entry in list(sites.items()):
+                new_entry: Dict[str, object] = {}
+                if isinstance(entry, dict):
+                    mode = str(entry.get("mode", "")).strip().lower()
+                    if "enabled" in entry:
+                        new_entry["enabled"] = entry["enabled"]  # 已是新口径: 原样保留(loader 再 parse)
+                    elif mode in ("partial", "all"):
+                        new_entry["enabled"] = True
+                    if entry.get("tracker"):
+                        new_entry["tracker"] = entry["tracker"]
+                    if "refresh_interval" in entry:
+                        new_entry["refresh_interval"] = entry["refresh_interval"]
+                if new_entry:
+                    sites[preset_id] = new_entry
+                else:
+                    del sites[preset_id]
+    trackers = cfg.get("trackers")
+    if isinstance(trackers, dict):
+        for tdata in trackers.values():
+            if isinstance(tdata, dict):
+                tdata.pop("hr_check", None)
+    return cfg
+
+
+MIGRATIONS["config"][2] = _migrate_config_2_3

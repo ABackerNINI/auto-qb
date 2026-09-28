@@ -107,7 +107,7 @@ class NexusPhpMyhrAdapter(HrAdapter):
     def page_url(self, scope: str, page: int) -> str:
         """第 page 页地址; page <= 1 不带翻页参数(站点默认即第一页)
 
-        档位不在映射表里按字母原样传(校验层已把 hr_page_scopes 锁在 A/B/C/D)。
+        档位不在映射表里按字母原样传(波次引擎恒抓 A/B/C, D 已免罪不翻)。
         """
         value = self._scope_values.get(scope, scope)
         url = f"{self._hr_page_url}?{self._scope_param}={value}"

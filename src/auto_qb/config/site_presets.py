@@ -35,6 +35,9 @@ class SiteHrPreset:
     page_path: str  # HR 名单页路径(myhr 形态); 拼在 web 域后
     download_path: str  # 种子下载路径(须含 {id} 占位)
     page_param: str  # 翻页查询参数名
+    #: 站点形态(v3, 计划 §6.1): list 清单型(有 HR 清单页, 参与取数) | none 全站型(无清单页,
+    #: 不取数, 判定恒走行 4 本地兜底) —— partial/all 的 mode 分叉由它取代(站点事实, 非用户意愿)
+    listing: str = "list"
 
     def page_url(self) -> str:
         """HR 页绝对地址 = https://{web 域}{page_path}; 与用户 domains 的写法完全无关"""

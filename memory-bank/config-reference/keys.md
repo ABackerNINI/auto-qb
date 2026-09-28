@@ -28,7 +28,7 @@
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |
 | `hr` | | 全局 HR 输出设置 (`add_tag`/`add_category`/`overwrite_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`/`overwrite_category_for_satisfied`) + 排除表 `exclude_tags`/`exclude_categories`: 命中种子不纳入 HR 体系(不打标/不核实/规则按未触发, 压过 mode=all 等一切管束), 判定时现算, 不回撤存量, 与站点段并集(26-09-28-1805); 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--` |
 | `skip_checking_tag` | `"zSkipChecked"` | 跳检成功标签全局名; 带此标签的种子未经哈希校验, `_find_reference` 一律排除 (防"未验证"经参考链传播)。全局统一, **checking 动作 spec 不可配置同名键** (校验报未知键), 动作运行时经 ctx 读取; YAML 留空/空串被 `_strip_none` 视为未配置走默认 (与 log.file 同约定) |
-| `hr_check` | 默认关闭 | **HR 在线核实** (部分种子 HR 站点): `{enabled(false), min_torrent_interval("90S"; split 站点改义为「仅 .torrent 下载间隔」), max_torrents_per_hour(12; split 站点不使用), max_torrents_per_day(留空=按模型取默认: legacy 60 / split 200; split 下改义为「仅下载天顶」), page_rate_per_hour(40, 仅 split), page_burst(10, 仅 split), torrent_rate_per_hour(20, 仅 split), torrent_burst(5, 仅 split), max_pages_per_day(400, 仅 split), min_page_interval("90S", 仅 split), max_pages_per_round(9, 单轮页面总量, 0=不限), failure_threshold(3), failure_cooldown("12H"), allow_window(""), unknown_policy(hr|not-hr), verified_ttl(留空=跟随站点 refresh_interval), index_retention("30D"), max_download_retries(3), channel_silence_warn("6H"), shared_dir(""), lock_timeout("0S"), poll_interval("1M"), parse_missing_rate_max(0.5), channel{enabled, port(8788), token, extension_id(""), request_timeout("180S")}}`。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」); `unknown_policy`/`verified_ttl` 调松等于自愿放大漏管窗口。**取数通道(M2 已落地)**: 端点仅听 `127.0.0.1`, 无 token ⇒ 401 **且不写任何状态**; 同机多实例 `channel.port` 必须错开(被占 = 启动即报错); `shared_dir` 与 `channel` 是 hr_check 里**仅有的两个 L1 字段**(需重挂端点/重建服务), 其余全 L0(站点接入 `sites` 也是 L0)。站点接入 `sites` 见下方「hr_check.sites」节(旧键 `trackers.<站点>.hr_check` 已废除); 设置页「HR 在线核实」分组 |
+| `hr_check` | 默认关闭 | **HR 在线核实** (v3 波次模型, 计划 26-09-28-1932 §6.1, 全局 6 键): `{enabled(false), min_interval("90S"; 相邻请求最小间隔, 页面+.torrent 统一, 抖动只向上 +0~25%), max_requests_per_day(240; 站点级日额保险, 全部请求合计, 零点重置), max_pages_per_wave(30; 单波页数上限安全阀, 到顶该档截断), allow_window(""), shared_dir(""), channel{enabled, port(8788), token, extension_id(""), request_timeout("180S")}, sites{...}}`。判定语义硬编码(四行判定表: 命中考察中→管束 / 终态档 B·C·D 与移出未列出→放行(永续) / 无证据→本地兜底: 达标放行·未达标管束), **无撤退路径配置**。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」)。旧 v2 键 26 个(min_torrent_interval/max_torrents_per_hour/failure_*/unknown_policy/verified_ttl/quota_model 双桶六键/poll_interval 等)已随 **config v2→v3 迁移**删除或常量化; `shared_dir` 与 `channel` 是仅有的两个 L1 字段(需重挂端点/重建服务), 其余全 L0。**取数通道**: 端点仅听 `127.0.0.1`, 无 token ⇒ 401 **且不写任何状态**; 同机多实例 `channel.port` 必须错开(被占 = 启动即报错)。人工对账戳: `--hr-confirm-empty <站点>`(清单为 0 的一次性确认, 非零行自动失效)。设置页「HR 在线核实」分组 |
 | `global_speed_limit_curve` | 无=不启用 | 见下 |
 | `trackers` | {} | 站点配置, 见下 |
 | `<任意>_rules` | {} | 规则集 (键名以 `_rules` 结尾), 见 04 |
@@ -44,12 +44,12 @@
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |
 | `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 + 排除表 `exclude_tags`/`exclude_categories`(与全局并集, 26-09-28-1805) |
-| `hr_check` | | **旧键(已废除, 26-09-27-1930)**: 站点级在线核实的唯一入口是 `hr_check.sites.<档案 id>`。本键不再被任何代码接受 —— 加载时由 schema 迁移链 **config v1→v2**(单点 `config/migrations.py`)一次性改写: mode=off/非字典直接删除; mode != off 时按 `hr_page_url` 的 host(web 命名空间)定位档案, mode 与微调项搬入新位置(页面事实四键 adapter/hr_page_url/download_path/page_param 丢弃, 值一律以档案为准), 旧键删除; host 定位不到档案则旧键原地保留, 校验报废除错。迁移语义与 `hr_check.sites` 键集见下节 |
+| `hr_check` | | **旧键(已废除, 26-09-27-1930 起)**: 站点级在线核实的唯一入口是 `hr_check.sites.<档案 id>`。本键不再被任何代码接受 —— config v1→v2 迁移曾把它改写到新位置; **v3(config v2→v3)起出现即直接删除**(不再提供旧位置兼容)。站点接入键集见下节 |
 | `rules` | | `["@规则集", "@规则集.规则"]`。**留空 = 该站点不执行任何规则**(无任何隐式回退; `_rules_for_torrent` 直接返回空列表) |
 | `groups` | | 站点分组列表 (可多个, 自由命名无需预定义); 配置层声明不写种子; 供规则 `tracker_group` 条件按分组筛选 (2026-09-15) |
 | `remove_similar_tags` | | 覆盖全局 |
 
-## hr_check.sites 站点接入(26-09-27-1318 REV2)
+## hr_check.sites 站点接入(26-09-27-1318 REV2 上收; v3 收敛为三键)
 
 站点启用与微调的唯一配置源; 键 = 内置站点档案 id(单点: `src/auto_qb/config/site_presets.py`, 首发两档):
 
@@ -58,10 +58,10 @@
 | `btschool` | `nexusphp` | `pt.btschool.club` | `pt.btschool.club` | `/myhr.php` | `/download.php?id={id}` | `page` |
 | `carpt` | `carpt` | `carpt.net` | `tracker.carpt.net` | `/myhr.php` | `/download.php?id={id}` | `page` |
 
-条目键集: `mode(off|partial|all)` + 显式映射 `tracker(留空=默认映射; 非空=按 trackers 条目名直取)` + 微调项 `hr_page_scopes([A,B,C]) / refresh_interval("12H") / max_pages_per_refresh(5) / completed_age_limit(0=关闭; 开启时 1D~3650D) / accept_empty_listing(false; 人工确认口子——清单连续 3 轮为 0 且结构完好时的空清单接受开关) / auto_age_limit(false; 豁免 A——用反算考核期 P 作豁免线, P 一致性机检不过即禁用) / seeding_exempt_ratio(0=关闭; 豁免 B——本地做种时长 ≥ 要求时长 × 倍数即豁免, 建议 5) / quota_model(legacy|split; 激活门——split 才启用页面/下载双令牌桶) / page_rate_per_hour(留空=回退全局) / torrent_rate_per_hour(留空=回退全局, 再回落 max_torrents_per_hour) / max_torrents_per_hour(留空=回退全局)`。超龄豁免语义不变(见上一节 `hr_check` 旧键行内的说明)。
+条目键集(v3, 计划 26-09-28-1932 §6.1): `enabled(false; 启用即管, 无 mode 分叉)` + 显式映射 `tracker(留空=默认映射; 非空=按 trackers 条目名直取)` + `refresh_interval("12H"; 对账波周期, 失败档也按本周期自然重试)`。页面事实(adapter/页面路径/下载路径/翻页参数/清单形态 listing)由内置站点档案填充, **任何配置位置都不再接受**; v2 的九个微调键(mode/hr_page_scopes/max_pages_per_refresh/completed_age_limit/accept_empty_listing/auto_age_limit/seeding_exempt_ratio/quota_model/page_rate_per_hour 等)已随 config v2→v3 迁移删除 —— partial/all 差异归档案 `listing` 字段(站点事实), 超额豁免以常量 SEED_EXEMPT_RATIO=3(做种 ≥ 3×要求+extra 免对账, 被动命中考察中仍管束), 空清单走 `--hr-confirm-empty` 人工对账戳。
 
 - **绑定 = 映射(26-09-27-1930)**: web 域与 announce 域是两个命名空间, **永不互相比对**。每个 mode != off 的条目按「显式直取 > 默认查表」解析: 条目 `tracker` 非空 -> 按 trackers 条目名直取; 为空 -> 档案已知 announce 域(`tracker_domain`)在同命名空间(用户 `domains`)查表, 双向子域容错(`t == d or t.endswith("." + d) or d.endswith("." + t)`, 单点 `site_presets.match_trackers`), 恰好 1 个命中即自动绑定(**用户零配置**, CarPT 只配 announce 域也能绑)。HR 页地址恒为 `https://{档案 web_domain}{page_path}`, 与用户 domains 写法无关。派生结果写入 `TrackerConfig.hr_check`(绑定结果视图, `tracker` 字段回填解析出的条目名), 下游 service/channel/parse 零感知。
-- **配置期 fail-fast**: 未登记档案 id(报错+已支持清单) / 默认映射零命中(附档案 announce 域与两条出路) / 默认映射 >=2 命中歧义 / 显式 `tracker` 键不存在 / 同一 tracker 被两个条目绑定 / 绑定站点缺 `hr` 段 / `hr_page_scopes` 不含 A+B+C。
+- **配置期 fail-fast**: 未登记档案 id(报错+已支持清单) / 默认映射零命中(附档案 announce 域与两条出路) / 默认映射 >=2 命中歧义 / 显式 `tracker` 键不存在 / 同一 tracker 被两个条目绑定 / 绑定站点缺 `hr` 段。
 
 ## global_speed_limit_curve 段
 

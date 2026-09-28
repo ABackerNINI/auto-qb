@@ -1,14 +1,22 @@
 """HR 在线核实的持久化数据模型 (站点文件内的账号级状态)。
 
-设计要点(计划 §5):
+设计要点(v3 波次模型, 计划 26-09-28-1932 §7.2):
 - **主键是 (站点, tid)** —— 种子编号站点内唯一、跨站点绝不混用; infohash 在下载算出后回填。
   站点由文件本身承载, 故结构里不带站点名。
 - 这些状态**全部是账号级**(与实例数无关) ⇒ 不进 state_file, 落在站点文件里由实例共享。
 - 所有字段可 JSON 往返: 落盘一律走 to_json/from_json, 结构变更靠 schema_version 挡。
+
+v3 模型变化(相对 v2):
+- **证据无时效, 只有真伪**(§3.4): 两级证据年龄与整波「覆盖证明」退役, 换成**档位级数据
+  有效性**(HrLaneState: 截断式 —— 失效点之前的数据全部有效)。
+- **频控单模型**(§5.1): 双令牌桶/熔断/停用/登录退避全部删除; 账本只剩 day 窗口 +
+  last_fetch_ts(间隔基准); Retry-After 是站点明确指令, 单独存 retry_after_until。
+- **新增**: 行数基线高水位 / 上波 A 档 tid 集(证据防伪 §5.3) / 种子级 missing_streak
+  (失踪观察期 §3.4) / empty_confirmed_at(人工对账戳 §5.3)。
 """
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from ..infra.versioning import CURRENT_VERSIONS
 
@@ -23,9 +31,12 @@ LANE_SATISFIED = "B"
 LANE_UNSATISFIED = "C"
 LANE_EXEMPT = "D"
 ALL_LANES = (LANE_SCOPE, LANE_SATISFIED, LANE_UNSATISFIED, LANE_EXEMPT)
+#: 取数翻页的档位(D 已免罪不翻 —— 命中 D 与「未列出」同为放行, D 档没有增量信息, §4.1)
+FETCH_LANES = (LANE_SCOPE, LANE_SATISFIED, LANE_UNSATISFIED)
+#: 终态档位(命中即放行, 终态不可逆, §3.2)
+TERMINAL_LANES = (LANE_SATISFIED, LANE_UNSATISFIED, LANE_EXEMPT)
 
 
-# 档位语义: B 已达标(仍受管束, 只是落 satisfied 分支) / D 已免罪(明确不受管束 ⇒ 可作放行来源)
 def lane_is_satisfied(lane: str) -> bool:
     return lane == LANE_SATISFIED
 
@@ -34,9 +45,20 @@ def lane_is_exempt(lane: str) -> bool:
     return lane == LANE_EXEMPT
 
 
-# 放行来源
+def lane_is_terminal(lane: str) -> bool:
+    """终态档(B/C/D): 站点结论已定, 放行不可逆(§3.2 判定表行 2)"""
+    return lane in TERMINAL_LANES
+
+
+# 放行来源(verified.source)
 SOURCE_EXEMPT = "absent"  # D 档(已免罪)
-SOURCE_NOT_LISTED = "not-listed"  # 完整刷新未列出 A/B/C
+SOURCE_NOT_LISTED = "not-listed"  # 覆盖范围内未列出(移出/从未列出)
+SOURCE_SATISFIED = "satisfied"  # B 档毕业后移出清单(B 命中时的达标结论要留住)
+
+# 档位波次状态(§3.4 档位级数据有效性)
+LANE_IDLE = ""  # 从未跑过
+LANE_OK = "ok"  # 本波有效(覆盖完成或截断, 失效点之前数据有效)
+LANE_FAILED = "failed"  # 本波结构性失效(表头缺失/字段缺失, 第 1 页即截断)
 
 # 通道状态(视图层, 用于告警与展示)
 CHANNEL_OK = "ok"
@@ -79,19 +101,23 @@ class HrEntry:
     infohash_v2: str = ""
     first_seen: float = 0.0
     last_seen: float = 0.0
-    #: 是否出现在最近一次刷新的清单里。完整刷新会把全部条目置 False 再置 True 命中的;
-    #: 不完备刷新只置 True("没抓全"不能证明其它条目已消失) —— 判定只认 active 条目。
+    #: 是否仍被站点列出(最近一次见到的位置)。v3 语义: 命中即 True; 消失的处理分档 ——
+    #: A 档(考察中)失踪走观察期(missing_streak, 维持管束), 终态档消失且位置被证明才置 False
+    #: 并写放行记录(终态不可逆, §3.4)。
     active: bool = True
+    #: 失踪观察期计数(§3.4): 上波命中考察中、本波未重见且自身位置被覆盖 ⇒ +1;
+    #: 连续 MISSING_GRACE_WAVES(service 常量) 波 ⇒ 判「移出」放行。重见即清零。
+    missing_streak: int = 0
 
     @property
     def satisfied_verdict(self) -> Optional[bool]:
         """站点侧对「是否达标」的结论; None = 无档位结论(调用方本地兜底)。
 
-        计划 §9 v3.0(**档位即结论**, 命中即停): A 考察中 ⇒ 未达标(义务仍在) / B 已达标 ⇒ 已达标 /
-        C 未达标 ⇒ 未达标(站点明确判定考核未通过) —— 命中档位就是站点的权威结论, **不看页面数值
+        档位即结论: B 已达标 ⇒ 已达标 / C 未达标 ⇒ 未达标(站点明确判定考核未通过) /
+        A 考察中 ⇒ 未达标(义务仍在, 管束中)。命中档位就是站点的权威结论, **不看页面数值
         字段、不回落本地**(本地值不得越级推翻站点清单结论)。「剩余达标时间」是考核窗口倒计时
-        (v2.8 实证, 归零 = 考核到期而非已达标), 不参与达标推导, 只作展示。D 已免罪不进命中清单
-        (`resolve.build_site_view` 排除, 放行走 `hr_verified`), 未知档位才 None。
+        (v2.8 实证, 归零 = 考核到期而非已达标), 不参与达标推导, 只作展示。D 已免罪是放行
+        (终态), 不参与达标轴(satisfied = 本地达标 ∨ 命中 B)。
         """
         if self.lane == LANE_SATISFIED:
             return True
@@ -101,18 +127,15 @@ class HrEntry:
 
     @property
     def satisfied_by_site(self) -> bool:
-        """站点侧达标判据: 档位即结论(计划 §9 v3.0) —— B 已达标 True, A 考察中 / C 未达标 False。
-
-        「剩余达标时间」不参与推导(它是考核窗口倒计时, v2.8 实证); 无档位结论时由调用方本地兜底。
-        """
+        """站点侧达标判据: 档位即结论 —— B 已达标 True, A 考察中 / C 未达标 False。"""
         return self.satisfied_verdict is True
 
     @property
     def done_epoch(self) -> Optional[float]:
-        """完成时间的 epoch 秒; done_iso 缺失或不可解析返回 None(不猜 —— 超龄豁免判据依赖它)。
+        """完成时间的 epoch 秒; done_iso 缺失或不可解析返回 None(不猜 —— 覆盖判据依赖它)。
 
         naive 时刻按**本地时区**折算: 站点展示的是站点当地时刻, 与本机的时区偏差是小时级,
-        对以「天」为单位的超龄判据不构成影响。
+        对以「天」为单位的覆盖判据不构成影响。
         """
         if not self.done_iso:
             return None
@@ -138,6 +161,7 @@ class HrEntry:
             "first_seen": self.first_seen,
             "last_seen": self.last_seen,
             "active": self.active,
+            "missing_streak": self.missing_streak,
         }
 
     @classmethod
@@ -158,6 +182,7 @@ class HrEntry:
             first_seen=_as_float(raw.get("first_seen")),
             last_seen=_as_float(raw.get("last_seen")),
             active=bool(raw.get("active", True)),
+            missing_streak=_as_int(raw.get("missing_streak")),
         )
 
 
@@ -171,7 +196,10 @@ def _opt_float(value: Any) -> Optional[float]:
 
 @dataclass(slots=True)
 class HrDownloaded:
-    """已取记录: 「永不重取」的持久凭据(条目消失 / 翻页遗漏 / 快照淘汰都不重下)"""
+    """已取记录: 「永不重取」的持久凭据(条目消失 / 翻页遗漏 / 快照淘汰都不重下)
+
+    v3 下载语义(§4.5): 下载 = 给清单行**登记身份**(同 tid 永不重下), 状态追踪靠 tid 读页面。
+    """
 
     tid: int
     ts: float = 0.0
@@ -217,10 +245,11 @@ class HrDlFail:
 
 @dataclass(slots=True)
 class HrVerified:
-    """已核实「不受管束」的放行记录(计划 §9)
+    """「不受管束」的放行记录(§3.2 判定表行 2/3)
 
-    放行**不是永久状态**, 而是「最近一次完整核实」的有时效结论: 有效期 = min(下一次成功完整刷新,
-    verified_ts + verified_ttl)。锚点只用于**提前作废本实例**的放行(别的客户端下载本地看不见)。
+    v3: 放行**永续有效**(终态不可逆, §3.4) —— 不设过期、不需要每波重验; 反转必然伴随重新下载
+    (本机重下 ⇒ 锚点漂移作废; 非本机重下为接受的残余风险)。锚点只用于**提前作废本实例**的
+    放行(别的客户端下载本地看不见)。
     """
 
     infohash: str
@@ -259,189 +288,144 @@ class HrVerified:
 
 
 @dataclass(slots=True)
-class HrRefreshMeta:
-    """覆盖证明: 「安全放行」的唯一依据(计划 §4)
+class HrLaneState:
+    """单档位最近一波的取数状态(§3.4 档位级数据有效性, 截断式)
 
-    只有 complete 为真时, 本次未命中才敢判「不受管束」; 否则一律未核实(保守)。
-
-    观测字段(计划 26-09-27-1815 §2 M5.1, 只加字段不抬 schema 版本; 旧文件缺键取默认值):
-    - order_ok / order_detail: 本轮排序校验结论(None = 证据不足未判定)与首处位置;
-    - entry_baseline: 轮级合计的可信基线(最近一次结构完好且非零轮; 骤降可疑轮不计入);
-    - plunge_suspect / plunge_rounds: 本轮是否骤降可疑 + 连续可疑轮数;
-    - scope_counts / prev_scope_counts: 本轮 / 上一轮各档解析行数(观测「A: 37 → 0」用)。
+    **失效点之前的数据全部有效**(命中照常、覆盖范围内的「未列出」可判), 之后的一概不取:
+    - status=ok 且 full_depth: 覆盖证明达全深度(翻到末页 / ②到期段停翻 —— 深处全是到期行,
+      无论看到与否结论相同) ⇒ 该档对**任意位置**的缺席证明成立;
+    - status=ok 且非 full_depth(①完成时间覆盖 / ③本地全集停翻): 缺席证明只对
+      done >= cutoff_done 的位置成立(更深未翻, 不可判);
+    - status=ok 且是截断(预算/解析失效点截断): 同上按位置判, 截断点之前有效;
+    - status=failed: 结构性失效(第 1 页即无表头/字段缺失) ⇒ 本档无有效数据, 缺席不可判。
     """
 
-    last_success_ts: float = 0.0
-    scopes_done: List[str] = field(default_factory=list)
-    pages_fetched: int = 0
-    reached_last_page: bool = False
-    entry_count: int = 0
-    missing_field_rate: float = 0.0
-    complete: bool = False
-    reason: str = ""
-    order_ok: Optional[bool] = None
-    order_detail: str = ""
-    entry_baseline: int = 0
-    plunge_suspect: bool = False
-    plunge_rounds: int = 0
-    #: 连续 S1/S2 强信号违反轮数(计划 26-09-27-1815 §2 2.1/2.4): 干净轮清零, 达 SUSPEND_ROUNDS ⇒ suspended
-    signal_rounds: int = 0
-    #: 考核期 P 探测(计划 §2 4.4/4.5): 本轮参与行反算 P 的中位数(天; 0 = 不可用/无参与行)
-    #: + 是否通过 ±1 天一致性机检(不过 ⇒ 自动豁免与早停双双禁用, 机检不是文档承诺)
-    probe_period_days: float = 0.0
-    period_consistent: bool = False
-    scope_counts: Dict[str, int] = field(default_factory=dict)
-    prev_scope_counts: Dict[str, int] = field(default_factory=dict)
+    lane: str = ""
+    wave_ts: float = 0.0  #: 本档最近一波完成取的时刻(新鲜度闸门与展示用)
+    status: str = LANE_IDLE
+    pages: int = 0  #: 本波本档抓取页数(含截断页)
+    rows: int = 0  #: 本波本档有效行数
+    cutoff_done: float = 0.0  #: 已见最深行的完成时刻(epoch; 0 = 没有位置概念)
+    full_depth: bool = False  #: 覆盖证明是否达全深度(末页 / ②到期段停翻)
+    detail: str = ""  #: 截断/失效原因(展示与排障)
+    #: 连续失效波数(§5.2 告警升级: 连续 3 波同档失效 → ERROR 告警疑似改版; 干净波清零)
+    fail_streak: int = 0
+
+    @property
+    def ok(self) -> bool:
+        return self.status == LANE_OK
 
     def to_json(self) -> Dict[str, Any]:
         return {
-            "last_success_ts": self.last_success_ts,
-            "scopes_done": list(self.scopes_done),
-            "pages_fetched": self.pages_fetched,
-            "reached_last_page": self.reached_last_page,
-            "entry_count": self.entry_count,
-            "missing_field_rate": self.missing_field_rate,
-            "complete": self.complete,
-            "reason": self.reason,
-            "order_ok": self.order_ok,
-            "order_detail": self.order_detail,
-            "entry_baseline": self.entry_baseline,
-            "plunge_suspect": self.plunge_suspect,
-            "plunge_rounds": self.plunge_rounds,
-            "signal_rounds": self.signal_rounds,
-            "probe_period_days": self.probe_period_days,
-            "period_consistent": self.period_consistent,
-            "scope_counts": dict(self.scope_counts),
-            "prev_scope_counts": dict(self.prev_scope_counts),
+            "lane": self.lane,
+            "wave_ts": self.wave_ts,
+            "status": self.status,
+            "pages": self.pages,
+            "rows": self.rows,
+            "cutoff_done": self.cutoff_done,
+            "full_depth": self.full_depth,
+            "detail": self.detail,
+            "fail_streak": self.fail_streak,
         }
 
     @classmethod
-    def from_json(cls, raw: Dict[str, Any]) -> "HrRefreshMeta":
-        order_ok = raw.get("order_ok")
+    def from_json(cls, raw: Dict[str, Any]) -> "HrLaneState":
         return cls(
-            last_success_ts=_as_float(raw.get("last_success_ts")),
-            scopes_done=[str(s) for s in (raw.get("scopes_done") or [])],
-            pages_fetched=_as_int(raw.get("pages_fetched")),
-            reached_last_page=bool(raw.get("reached_last_page")),
-            entry_count=_as_int(raw.get("entry_count")),
-            missing_field_rate=_as_float(raw.get("missing_field_rate")),
-            complete=bool(raw.get("complete")),
-            reason=str(raw.get("reason") or ""),
-            order_ok=(None if order_ok is None else bool(order_ok)),
-            order_detail=str(raw.get("order_detail") or ""),
-            entry_baseline=_as_int(raw.get("entry_baseline")),
-            plunge_suspect=bool(raw.get("plunge_suspect")),
-            plunge_rounds=_as_int(raw.get("plunge_rounds")),
-            signal_rounds=_as_int(raw.get("signal_rounds")),
-            probe_period_days=_as_float(raw.get("probe_period_days")),
-            period_consistent=bool(raw.get("period_consistent")),
-            scope_counts={
-                str(k): _as_int(v)
-                for k, v in (raw.get("scope_counts") or {}).items()
-            },
-            prev_scope_counts={
-                str(k): _as_int(v)
-                for k, v in (raw.get("prev_scope_counts") or {}).items()
-            },
+            lane=str(raw.get("lane") or ""),
+            wave_ts=_as_float(raw.get("wave_ts")),
+            status=str(raw.get("status") or LANE_IDLE),
+            pages=_as_int(raw.get("pages")),
+            rows=_as_int(raw.get("rows")),
+            cutoff_done=_as_float(raw.get("cutoff_done")),
+            full_depth=bool(raw.get("full_depth")),
+            detail=str(raw.get("detail") or ""),
+            fail_streak=_as_int(raw.get("fail_streak")),
         )
 
 
 @dataclass(slots=True)
-class HrQuota:
-    """频控账本: 小时/天两级窗口(窗口键变化即重置, 重启不重置 —— 幂等靠窗口键而非进程状态)
+class HrWaveMeta:
+    """最近一波的波次元数据(波次引擎 §4 的状态面; 取代 v2 的 HrRefreshMeta 覆盖证明语义)"""
 
-    同一结构两用(计划 26-09-27-1815 §2 M5.3):
-    - **legacy**(quota_model=legacy, 默认): 合并账本, hour/day 窗口计**全部**请求;
-    - **split**: 站点文件里 quota 作**页面**账本、torrent_quota 作**下载**账本 —— 各自的天级硬顶
-      复用 day_window/day_count, 令牌桶用 tokens/refill_ts(按「上次补充时刻 + 速率」恢复,
-      天然幂等、跨重启不重置、消除整点突发); 小时窗口字段在 split 下不使用(速率由桶承担)。
-    tokens=None = 未初始化(旧文件/首次) ⇒ 首次按满桶(burst)计, 不饿死。
-    """
-
-    hour_window: str = ""
-    hour_count: int = 0
-    day_window: str = ""
-    day_count: int = 0
-    last_fetch_ts: float = 0.0
-    tokens: Optional[float] = None
-    refill_ts: float = 0.0
+    wave_ts: float = 0.0  #: 最近一波完成的时刻
+    healthy_ts: float = 0.0  #: 最近「健康波」时刻(至少一档有有效数据) —— 新鲜度闸门基准
+    lanes: Dict[str, HrLaneState] = field(default_factory=dict)  # 档位 -> 状态
+    #: 本波是否允许批量签发「未列出」放行(三档全有有效数据 + 防伪通过, §5.3)
+    releases_enabled: bool = False
+    zero_rows: bool = False  #: 本波全部档位 0 行(结构完好) —— 不签发放行, 除非人工确认戳
+    #: A 档流转守恒观测(§5.3): 上波 A 档行在本波 A/B/C 的留存率(0~1; -1 = 无上波 A 行不适用)
+    retention_ratio: float = -1.0
+    retention_ok: bool = True
+    prev_a_tids: Dict[int, str] = field(default_factory=dict)  # 上波 A 档 tid -> infohash(守恒校验用)
+    baseline_rows: int = 0  #: 行数基线高水位(历史健康波最大合计; 骤降校验用)
+    plunge: bool = False  #: 本波总行数骤降可疑(< 基线 30%)
+    notes: str = ""
 
     def to_json(self) -> Dict[str, Any]:
         return {
-            "hour_window": self.hour_window,
-            "hour_count": self.hour_count,
-            "day_window": self.day_window,
-            "day_count": self.day_count,
-            "last_fetch_ts": self.last_fetch_ts,
-            "tokens": self.tokens,
-            "refill_ts": self.refill_ts,
+            "wave_ts": self.wave_ts,
+            "healthy_ts": self.healthy_ts,
+            "lanes": {
+                k: v.to_json()
+                for k, v in self.lanes.items()
+            },
+            "releases_enabled": self.releases_enabled,
+            "zero_rows": self.zero_rows,
+            "retention_ratio": self.retention_ratio,
+            "retention_ok": self.retention_ok,
+            "prev_a_tids": {
+                str(k): v
+                for k, v in self.prev_a_tids.items()
+            },
+            "baseline_rows": self.baseline_rows,
+            "plunge": self.plunge,
+            "notes": self.notes,
         }
 
     @classmethod
-    def from_json(cls, raw: Dict[str, Any]) -> "HrQuota":
-        tokens = raw.get("tokens")
+    def from_json(cls, raw: Dict[str, Any]) -> "HrWaveMeta":
         return cls(
-            hour_window=str(raw.get("hour_window") or ""),
-            hour_count=_as_int(raw.get("hour_count")),
+            wave_ts=_as_float(raw.get("wave_ts")),
+            healthy_ts=_as_float(raw.get("healthy_ts")),
+            lanes={
+                str(k): HrLaneState.from_json(v)
+                for k, v in (raw.get("lanes") or {}).items()
+            },
+            releases_enabled=bool(raw.get("releases_enabled")),
+            zero_rows=bool(raw.get("zero_rows")),
+            retention_ratio=_as_float(raw.get("retention_ratio"), -1.0),
+            retention_ok=bool(raw.get("retention_ok", True)),
+            prev_a_tids={
+                _as_int(k): str(v)
+                for k, v in (raw.get("prev_a_tids") or {}).items()
+            },
+            baseline_rows=_as_int(raw.get("baseline_rows")),
+            plunge=bool(raw.get("plunge")),
+            notes=str(raw.get("notes") or ""),
+        )
+
+
+@dataclass(slots=True)
+class HrRateLedger:
+    """频控账本(单模型, §5.1): 日额窗口 + 上次请求时刻(最小间隔基准)
+
+    页面与 .torrent 下载统一记同一本账(不再有页面/下载双桶); 幂等靠窗口键 —— 重启不重置、
+    重放不重复消耗。
+    """
+
+    day_window: str = ""  # 自然日窗口键(如 "2026-09-28"; 变化即视为 0)
+    day_count: int = 0  # 本自然日已发请求数(页面 + 下载合计)
+    last_fetch_ts: float = 0.0  # 上次请求发出时刻(下一次间隔门槛的基准)
+
+    def to_json(self) -> Dict[str, Any]:
+        return {"day_window": self.day_window, "day_count": self.day_count, "last_fetch_ts": self.last_fetch_ts}
+
+    @classmethod
+    def from_json(cls, raw: Dict[str, Any]) -> "HrRateLedger":
+        return cls(
             day_window=str(raw.get("day_window") or ""),
             day_count=_as_int(raw.get("day_count")),
             last_fetch_ts=_as_float(raw.get("last_fetch_ts")),
-            tokens=(None if tokens is None else _as_float(tokens)),
-            refill_ts=_as_float(raw.get("refill_ts")),
-        )
-
-
-@dataclass(slots=True)
-class HrFuse:
-    """站点熔断: 连续失败达阈值后冷却, 期间零请求"""
-
-    failures: int = 0
-    until_ts: float = 0.0
-    reason: str = ""
-
-    @property
-    def active(self) -> bool:
-        return self.until_ts > 0.0
-
-    def to_json(self) -> Dict[str, Any]:
-        return {"failures": self.failures, "until_ts": self.until_ts, "reason": self.reason}
-
-    @classmethod
-    def from_json(cls, raw: Dict[str, Any]) -> "HrFuse":
-        return cls(
-            failures=_as_int(raw.get("failures")),
-            until_ts=_as_float(raw.get("until_ts")),
-            reason=str(raw.get("reason") or ""),
-        )
-
-
-@dataclass(slots=True)
-class HrSuspension:
-    """站点停用(计划 26-09-27-1815 §2 2.3): S1/S2 强信号连续 K 轮 ⇒ 停止取数, **人工恢复**
-
-    ❗不复用熔断 —— 熔断冷却到期自动恢复, 而致命错误(页面改版把数据判成安全)必须人看过才放行;
-    熔断到期**不会**自动清除本状态。恢复途径: `--hr-resume <站点>`(排查页面后人工确认)。
-    """
-
-    reason: str = ""  #: 首次触发停用的原因(S1 排序 / S2 缺字段 + 首处位置)
-    since: float = 0.0  #: 停用起始时刻
-    evidence: str = ""  #: 证据串(各轮细节摘要, 供 --hr-status 摊开)
-    rounds: int = 0  #: 触发时的累计违反轮数
-
-    @property
-    def active(self) -> bool:
-        return self.rounds > 0
-
-    def to_json(self) -> Dict[str, Any]:
-        return {"reason": self.reason, "since": self.since, "evidence": self.evidence, "rounds": self.rounds}
-
-    @classmethod
-    def from_json(cls, raw: Dict[str, Any]) -> "HrSuspension":
-        return cls(
-            reason=str(raw.get("reason") or ""),
-            since=_as_float(raw.get("since")),
-            evidence=str(raw.get("evidence") or ""),
-            rounds=_as_int(raw.get("rounds")),
         )
 
 
@@ -451,26 +435,21 @@ class HrSiteData:
 
     schema_version: int = SCHEMA_VERSION
     revision: int = 0
-    fetched_at: float = 0.0
-    expires_at: float = 0.0
+    fetched_at: float = 0.0  #: 上次**尝试**取数的时刻(失败也会前进 —— "上次动过是什么时候")
+    expires_at: float = 0.0  #: 数据复用窗口截止(多实例: 别的实例刚抓过就不再抓)
     writer_instance: str = ""
     writer_heartbeat: float = 0.0
     index: Dict[int, HrEntry] = field(default_factory=dict)
     downloaded: Dict[int, HrDownloaded] = field(default_factory=dict)
     fails: Dict[int, HrDlFail] = field(default_factory=dict)
     verified: Dict[str, HrVerified] = field(default_factory=dict)  # infohash -> 放行记录
-    refresh: HrRefreshMeta = field(default_factory=HrRefreshMeta)
-    quota: HrQuota = field(default_factory=HrQuota)
-    #: 下载账本(计划 26-09-27-1815 §2 3.3): 仅 quota_model=split 使用 —— quota 转为页面账本,
-    #: 下载计数全部记到这里。旧文件缺该键取默认零值: split 激活初期下载用量视为空(多放一次),
-    #: 而旧 quota 里含下载计数 ⇒ 页面用量初期略**高估**(保守方向, 可接受)。
-    torrent_quota: HrQuota = field(default_factory=HrQuota)
-    fuse: HrFuse = field(default_factory=HrFuse)
-    #: 站点停用(计划 §2 2.3): 非 None ⇒ 取数侧零请求、判定侧回落本地逻辑; 人工恢复
-    suspended: Optional[HrSuspension] = None
-    #: 登录失效指数退避(计划 §2 2.6): 退避期零请求; 不计失败、不推进熔断、不动 fetched_at
-    login_backoff_until: float = 0.0
-    login_expired_streak: int = 0  #: 连续登录失效次数(算 2^n 退避用; 登录恢复即清零)
+    wave: HrWaveMeta = field(default_factory=HrWaveMeta)
+    rate: HrRateLedger = field(default_factory=HrRateLedger)
+    #: 人工对账戳(§5.3): --hr-confirm-empty / WebUI 按钮写入; 零行波凭它才可签发放行;
+    #: 清单再现任何非零行自动清除。
+    empty_confirmed_at: float = 0.0
+    #: 站点明确要求的等待时刻(Retry-After, §5.2): 之前零请求; 不是退避机制 —— 是站点指令
+    retry_after_until: float = 0.0
 
     # ---------- 读写 ----------
 
@@ -507,13 +486,10 @@ class HrSiteData:
             "downloaded": [d.to_json() for d in self.downloaded.values()],
             "fails": [f.to_json() for f in self.fails.values()],
             "verified": [v.to_json() for v in self.verified.values()],
-            "refresh": self.refresh.to_json(),
-            "quota": self.quota.to_json(),
-            "torrent_quota": self.torrent_quota.to_json(),
-            "fuse": self.fuse.to_json(),
-            "suspended": self.suspended.to_json() if self.suspended is not None else None,
-            "login_backoff_until": self.login_backoff_until,
-            "login_expired_streak": self.login_expired_streak,
+            "wave": self.wave.to_json(),
+            "rate": self.rate.to_json(),
+            "empty_confirmed_at": self.empty_confirmed_at,
+            "retry_after_until": self.retry_after_until,
         }
 
     @classmethod
@@ -526,10 +502,10 @@ class HrSiteData:
             expires_at=_as_float(raw.get("expires_at")),
             writer_instance=str(writer.get("instance_id") or raw.get("writer_instance") or ""),
             writer_heartbeat=_as_float(writer.get("heartbeat") or raw.get("writer_heartbeat")),
-            refresh=HrRefreshMeta.from_json(raw.get("refresh") or {}),
-            quota=HrQuota.from_json(raw.get("quota") or {}),
-            torrent_quota=HrQuota.from_json(raw.get("torrent_quota") or {}),
-            fuse=HrFuse.from_json(raw.get("fuse") or {}),
+            wave=HrWaveMeta.from_json(raw.get("wave") or {}),
+            rate=HrRateLedger.from_json(raw.get("rate") or {}),
+            empty_confirmed_at=_as_float(raw.get("empty_confirmed_at")),
+            retry_after_until=_as_float(raw.get("retry_after_until")),
         )
         for item in raw.get("index") or []:
             entry = HrEntry.from_json(item)
@@ -544,8 +520,4 @@ class HrSiteData:
             ver = HrVerified.from_json(item)
             if ver.infohash and ver.verified_ts > 0:
                 data.verified[ver.infohash] = ver
-        if raw.get("suspended"):
-            data.suspended = HrSuspension.from_json(raw["suspended"])
-        data.login_backoff_until = _as_float(raw.get("login_backoff_until"))
-        data.login_expired_streak = _as_int(raw.get("login_expired_streak"))
         return data

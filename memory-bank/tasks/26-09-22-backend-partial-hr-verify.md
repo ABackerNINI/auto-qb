@@ -82,9 +82,28 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
 | v3.5 CarPT 站点接入 (adapter 变体参数化) | **Done** | 2026-09-27: 用户令「HR在线核实添加支持站点: CarPT」(样张: 用户提供的 CarPT `myhr.php` 空表页, 2026-09-27)。样张核对: 状态参数 `?status=N`(1 考察中/2 已达标/3 未达标/4 已免罪), 表头 `td.colhead` 十列, 首列「H&R ID」, 「下载完成时间/剩余考察时间」列名, 末尾多备注/操作两列, 分页仍 nexus-pagination。实现: `NexusPhpMyhrAdapter` 构造参数化(`scope_param`/`scope_values`/`header_key`/`column_names`, 标准形态行为不变, `REQUIRED_COLUMNS` 兼容导出保留) + 新 `adapters/carpt.py`(`CarPtMyhrAdapter` 薄子类, 登录页识别换本站表头锚点) + 注册名 `"carpt"` + schema 帮助文案; `fetcher.py`/`report.py` 的 `_scope_of` 兼容 `status=`(排障展示与离线走查文件名)。测试 +5(CarPT fixture ×2: 数据页/空表样张结构) — 全量 **1693 passed + 1 skipped**(TOTAL 91% / 11227 / 815 / 3720 / 330), 基线 `26-09-27-1235` 已记。**待真机**: 数据行单元格形态(样张为空表)与 `download.php?id=` 实参(H&R ID 还是种子 id)待首刷核对 |
 | 在线核实 v2 修改计划产出 (审计报告转化) | **Done** | 2026-09-27: 报告 26-09-26-1628 → [plans/26-09-27-1815](../plans/26-09-27-1815-plan-hr-verify-audit-fixes.html) (doc-status Open) —— 承接主计划 §14 M5.1–M5.5 骨架展开成文件级修改项 + 补齐 §14 未吸收的 P1 骤降保护/空表口径、P2 放行对账撤销/多实例引导、P3 登录退避/端点纵深; 新增配额激活门 / 单轮预算轮转 / 扩展 caps 上调三个设计点; 汇总 D1–D10 十项拍板 + 3 项前置实测; 产出时现场复核 (cbc4b80) 报告符号引用全部成立。**代码未动** |
 | M5.1–M5.5 实施 (在线核实 v2) | **Done** (代码侧) | 2026-09-27 22:18: 用户令「实施计划 26-09-27-1815, 拍板按推荐」⇒ 五步全部落地, 每步独立全量绿 + 一红验 (M5.1 1763 → M5.2 1774 → M5.3 1787 → M5.4 1795 → 收尾 1796 passed + 3 skipped, 91%)。要点与三个实施决策见进度日志 2026-09-27 22:18 条; **余真机走查 + M0 前置实测三项**(阻塞早停②/豁免 A 的启用, 不阻塞代码) |
+| v3 波次模型重建 (计划 26-09-28-1932 M1–M5) | **Done** (代码侧, 真机走查待) | 2026-09-29: 四行判定表重写 `hr/resolve.py`(HrIdentity: HR/RELEASED/NO_EVIDENCE, 12 格矩阵单测) + 波次引擎重写 `hr/service.py`(单波型 + A/B/C 轮流 + 三停翻条件①②③ + 档位级截断式有效性 + 失踪观察期 + 三道防伪 + 身份登记一次下载规则) + 单频控重写 `hr/ratelimit.py` + 熔断/停用/退避删除 + 配置 40→14 键 (config v2→v3 迁移 / hr_site v1→v2 迁移 / 档案 listing 字段) + `--hr-resume` 删 / `--hr-confirm-empty` 增 + WebUI 状态块重写与确认戳按钮 + keys.md 回写与键面基线重生成; 全量 1743 passed + 3 skipped; 真机走查(M0 剩余项 + 扩展 reload)仍开放 |
 | v2 实施核对 + 安全/稳定性审计 | **Done** (纯审计, 代码未动) | 2026-09-28 00:30: 报告 [26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) —— M5.1-M5.5 共 33 项逐条以 file:line 核对全落地; 安全面五道边界/稳定性六维度全核对; 新发现 F1(P2)/F2(P3)/F3(P3)/F4(P4) 见报告 §2 与切片「未完成」; 处置待用户拍板 |
 
 ## 进度日志
+
+- **2026-09-29 (v3 波次模型重建 M1–M5 全落地 —— 代码大改轮)** — 用户令「按照计划重构 HR 在线核实
+  26-09-28-1932」。五步一次落完: **M1** 判定重写(`resolve.py` 四行判定表, HrIdentity 收敛三态
+  HR/RELEASED/NO_EVIDENCE, `NO_EVIDENCE` 即判定表行 4 —— 本地兜底在调用方 `check_hr_condition` 合成;
+  satisfied 独立于受管束 —— 命中 B 毕业也达标; `record.py` 双入口重写, 消费点零接口变化); **M2**
+  波次引擎(`service.py` 重写: 对象集 = 未对账∪考察中现算, 三停翻条件, A 档行无条件下载 + 终态行
+  宽泛粗配触发(归一后完全相等也算疑似), 档位级截断(表头/字段/排序三种失效, 失效点前有效), 批量
+  「未列出」签发要过防伪三道闸, 失踪观察期独立推进与防伪解耦, 终态冻结落放行记录); **M3** 单频控
+  (`ratelimit.py` 重写, 账本 `HrRateLedger` 日窗口 + 间隔基准; Retry-After 单存 `retry_after_until`);
+  **M4** 配置(models/schema/loaders/validation/impact/migrations 五处同步, `_migrate_config_2_3`
+  删 26 废弃键 + mode→enabled + `enabled` 键原样保留(治「无版本章新配置被当 v1 误杀」), hr_site
+  v1→v2 迁移删双桶/熔断/停用账本, 档案 `listing` 字段 + `required_seeding_time` 派生); **M5**
+  status/report/worker/CLI/events/WebUI 波次视图(`--hr-confirm-empty` 新增 + `/api/hr/confirm-empty`
+  路由 + `--hr-resume` 删除)。**实施中修掉的真 bug**: 轮转循环「末页/停翻 break」吞掉同轮其它档位
+  取数机会(改 continue); 无版本章新配置在 v2→v3 迁移被清空 enabled。测试: HR 九文件按新模型重写
+  (resolve 35 / service 29 / ratelimit 8 / config 29 / report 18 / store 17 / runtime 28 / worker 21 /
+  multisite 5), 键面基线 `commands run test.keys-update` 重生成, keys.md 同步; 全量 **1743 passed +
+  3 skipped**(test.quick 实测; 基线切片另记)。**未提交**(等用户显式指令); 真机走查仍开放。
 
 - **2026-09-28 00:30 (v2 实施核对 + 安全/稳定性审计 —— 纯审计轮, 代码/文档零改动)** — 用户令「分析
   plans/26-09-27-1815 实施情况, 重点是安全性/稳定性/BUG, 并写报告含 HR 在线核实现状 (配置/默认节奏/

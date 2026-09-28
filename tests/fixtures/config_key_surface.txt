@@ -2,7 +2,7 @@
 # 再生成: commands run test.keys-update
 # 口径: 消失/改名 = 破坏性变更 -> 抬 CURRENT_VERSIONS['config'] + config/migrations.py 注册迁移;
 #       纯新增 = 非破坏, 直接重生成. schema_version 是版本章本身不入面; 动态段归一为通配.
-version: 2
+version: 3
 
 <任意>_rules
 <任意>_rules.*.actions.add_category
@@ -88,42 +88,15 @@ hr_check.channel.extension_id
 hr_check.channel.port
 hr_check.channel.request_timeout
 hr_check.channel.token
-hr_check.channel_silence_warn
 hr_check.enabled
-hr_check.failure_cooldown
-hr_check.failure_threshold
-hr_check.index_retention
-hr_check.lock_timeout
-hr_check.max_download_retries
-hr_check.max_pages_per_day
-hr_check.max_pages_per_round
-hr_check.max_torrents_per_day
-hr_check.max_torrents_per_hour
-hr_check.min_page_interval
-hr_check.min_torrent_interval
-hr_check.page_burst
-hr_check.page_rate_per_hour
-hr_check.parse_missing_rate_max
-hr_check.poll_interval
+hr_check.max_pages_per_wave
+hr_check.max_requests_per_day
+hr_check.min_interval
 hr_check.shared_dir
 hr_check.sites
-hr_check.sites.*.accept_empty_listing
-hr_check.sites.*.auto_age_limit
-hr_check.sites.*.completed_age_limit
-hr_check.sites.*.hr_page_scopes
-hr_check.sites.*.max_pages_per_refresh
-hr_check.sites.*.max_torrents_per_hour
-hr_check.sites.*.mode
-hr_check.sites.*.page_rate_per_hour
-hr_check.sites.*.quota_model
+hr_check.sites.*.enabled
 hr_check.sites.*.refresh_interval
-hr_check.sites.*.seeding_exempt_ratio
-hr_check.sites.*.torrent_rate_per_hour
 hr_check.sites.*.tracker
-hr_check.torrent_burst
-hr_check.torrent_rate_per_hour
-hr_check.unknown_policy
-hr_check.verified_ttl
 interval
 log
 log.file

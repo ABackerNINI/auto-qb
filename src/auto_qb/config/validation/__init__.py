@@ -27,8 +27,6 @@ from .rules import (
     TRIGGER_VALUES,
 )
 from .sections import (
-    HR_CHECK_MODES,
-    HR_CHECK_UNKNOWN_POLICIES,
     KNOWN_FS_KEYS,
     KNOWN_GROUPING_KEYS,
     KNOWN_HR_CHANNEL_KEYS,
@@ -62,8 +60,6 @@ __all__ = [
     "KNOWN_HR_CHECK_KEYS",
     "KNOWN_HR_CHANNEL_KEYS",
     "KNOWN_HR_SITE_KEYS",
-    "HR_CHECK_MODES",
-    "HR_CHECK_UNKNOWN_POLICIES",
     "KNOWN_WEB_KEYS",
     "RULE_KNOWN_KEYS",
     "EXECUTE_ONCE_VALUES",

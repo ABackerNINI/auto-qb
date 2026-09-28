@@ -35,7 +35,7 @@ import pytest
 from auto_qb.config.models import Config, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.fetcher import HrChannelUnavailable, NullFetcher
 from auto_qb.hr.ratelimit import day_key
-from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_once, run_hr_resume, run_hr_status
+from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_confirm_empty, run_hr_once, run_hr_status
 from auto_qb.hr.service import HrRefreshService
 from auto_qb.hr.store import HrSiteStore
 
@@ -44,28 +44,32 @@ from hr_helpers import EMPTY_TABLE_PAGE, FakeFetcher, global_conf, myhr_page, ro
 SITE = "example"
 
 
-def _config(tmp_path, html_dir=None, *, enabled=True, site_mode="partial", data_dir=None) -> Config:
+def _config(tmp_path, html_dir=None, *, enabled=True, site_enabled=True, data_dir=None) -> Config:
     cfg = Config()
     cfg.data_dir = str(data_dir or tmp_path / "data")
-    # 间隔设 0: 走查会真的按 min_torrent_interval 等待, 测试不必真等 90s
-    # (「等满而不放弃」的行为由 test_hr_service.test_diagnostic_sleeper_waits_instead_of_giving_up 覆盖)
-    cfg.hr_check = HrCheckConfig(enabled=enabled, min_torrent_interval=0.0)
+    # 间隔设 0: 走查会真的按 min_interval 等待, 测试不必真等 90s
+    cfg.hr_check = HrCheckConfig(enabled=enabled, min_interval=0.0)
     cfg.trackers[SITE] = TrackerConfig(
         name=SITE,
         domains=["pt.example.com"],
-        hr_check=SiteHrCheckConfig(mode=site_mode, hr_page_url="https://pt.example.com/myhr.php"),
+        hr_check=SiteHrCheckConfig(
+            enabled=site_enabled,
+            tracker=SITE,
+            hr_page_url="https://pt.example.com/myhr.php",
+            required_seeding_time=86400.0,
+        ),
     )
     return cfg
 
 
-def _seed(tmp_path, fetcher, *, site=None) -> None:
+def _seed(tmp_path, fetcher, *, site=None, gconf=None) -> None:
     """用真服务把一份数据落到 <tmp_path>/hr/<site>.json —— 现状报告读的就是它
 
-    刻意不打钟(用真时钟): 报告里的「x 前 / 有效期至」才有意义。
+    刻意不打钟(用真时钟): 报告里的「x 前 / 复用窗至」才有意义。
     """
     HrRefreshService(
         data_dir=str(tmp_path),
-        global_conf=global_conf(),
+        global_conf=gconf or global_conf(),
         site_confs={
             SITE: site or site_conf()
         },
@@ -129,7 +133,7 @@ def test_run_hr_once_hints_when_no_site(tmp_path):
     cfg.trackers["s"] = TrackerConfig(name="s", domains=["a.example"])
     buf = io.StringIO()
     assert run_hr_once(cfg, out=buf) == 1
-    assert "没有任何站点配置 hr_check" in buf.getvalue()
+    assert "没有任何站点启用 hr_check" in buf.getvalue()
 
 
 def test_run_hr_once_reports_without_writing(tmp_path):
@@ -151,7 +155,7 @@ def test_run_hr_once_reports_without_writing(tmp_path):
     assert "只读, 不写盘" in text
     assert "example.json" in text
     assert "锁自检: 可写" in text
-    assert "覆盖证明=成立" in text
+    assert "各档:" in text, "波次视图要摊出各档状态"
     assert "本次未写入任何文件" in text
     assert not (tmp_path / "data" / "hr" / "example.json").exists()
 
@@ -188,7 +192,7 @@ def test_run_hr_status_hints_when_no_site(tmp_path):
     cfg.trackers["s"] = TrackerConfig(name="s", domains=["a.example"])
     buf = io.StringIO()
     assert run_hr_status(cfg, out=buf) == 1
-    assert "没有任何站点配置 hr_check" in buf.getvalue()
+    assert "没有任何站点启用 hr_check" in buf.getvalue()
 
 
 def test_run_hr_status_reports_data_without_fetching(tmp_path):
@@ -217,10 +221,10 @@ def test_run_hr_status_reports_data_without_fetching(tmp_path):
     text = buf.getvalue()
     assert code == 0
     assert "只读: 不取数 / 不加锁 / 不写盘" in text
-    assert "覆盖证明=成立" in text
-    assert "数据: 索引条目 2" in text and "受管束种子 2 个" in text
+    assert "放行签发=开" in text
+    assert "数据: 索引条目 2" in text and "考察中命中 1 个" in text
     assert "档位 A=1 B=1" in text
-    assert "配额: 本小时" in text and "熔断: 正常" in text
+    assert "频控: 今天" in text
     assert "已达标" in text, "站点点明已达标的那行(B 档)要看得见"
     assert "上传量" in text and "还需做种" in text, "明细要摊出站点侧上传量与还需做种时间"
     assert "剩余达标" not in text, "剩余达标时间是「考核窗口」不是「还需做种的量」, 不再显示"
@@ -237,7 +241,7 @@ def test_run_hr_status_shows_incomplete_reason_and_pending(tmp_path):
             "B": EMPTY_TABLE_PAGE,
             "C": EMPTY_TABLE_PAGE
         }),
-        site=site_conf(max_pages_per_refresh=1),  # 翻页上限挡住 => partial
+        gconf=global_conf(max_pages_per_wave=3),  # 3 页被三档均分 => A 截断(没翻到第 2 页)
     )
     buf = io.StringIO()
 
@@ -245,36 +249,31 @@ def test_run_hr_status_shows_incomplete_reason_and_pending(tmp_path):
 
     text = buf.getvalue()
     assert code == 0
-    assert "覆盖证明=不成立" in text
-    assert "最近一次刷新不完备的原因: 档位 A 达到单次翻页上限(1)仍未到底" in text
+    assert "达到单波页数上限" in text, "截断原因要在各档明细里可见"
+    assert "待回填 infohash 1 条" in text or True
     assert "待回填 infohash 1 条" in text
     assert "取种子失败 1 条" in text, "没有 .torrent 的站点应如实记失败次数"
     assert "101" in text
 
 
 def test_run_hr_status_quota_text_rolls_stale_windows(tmp_path):
-    """配额展示按窗口键折算: 窗口键翻篇后旧计数按 0 计, 与「还能取 N 次」同源一致"""
+    """日额展示按窗口键折算: 昨天的窗口键翻篇后旧计数按 0 计, 与「还能取 N 次」同源一致"""
     now = time.time()
     store = HrSiteStore(SITE, str(tmp_path / "hr"), owner="tester")
     with store.hold() as session:
-        session.data.quota.hour_window = "2000-01-01T00"  # 上一小时的窗口键(计数还挂着 7)
-        session.data.quota.hour_count = 7
-        session.data.quota.day_window = day_key(now)  # 天窗口仍是今天(计数有效)
-        session.data.quota.day_count = 18
+        session.data.rate.day_window = "2000-01-01"  # 昨天的窗口键(计数还挂着 50)
+        session.data.rate.day_count = 50
         session.commit(now)
     cfg = _config(tmp_path, data_dir=tmp_path)
-    cfg.hr_check = HrCheckConfig(
-        enabled=True, min_torrent_interval=0.0, max_torrents_per_hour=12, max_torrents_per_day=60
-    )
+    cfg.hr_check = HrCheckConfig(enabled=True, min_interval=0.0, max_requests_per_day=240)
     buf = io.StringIO()
 
     code = run_hr_status(cfg, out=buf)
 
     text = buf.getvalue()
     assert code == 0
-    assert "本小时 0/12" in text, "上一小时的计数不得标成「本小时」"
-    assert "本天 18/60" in text
-    assert "还能取 12 次" in text, "与展示的已用数同源: min(12-0, 60-18)=12"
+    assert "今天 0/240" in text, "昨天的计数不得标成「今天」"
+    assert "还能取 240 次" in text
 
 
 def test_run_hr_status_rows_limit(tmp_path):
@@ -368,17 +367,16 @@ def test_run_hr_status_survives_broken_file(tmp_path):
     assert "索引条目 0" in text
 
 
-# ---------- 观测面(计划 26-09-27-1815 §2 1.5) ----------
+# ---------- 防伪观测面(v3, 计划 26-09-28-1932 §5.3) ----------
 
 
-def test_run_hr_status_shows_observation_lines(tmp_path):
-    """观测面四行: 排序结论 / 考核期 P 分布 / 骤降观测 / 档位计数对比 —— 「假设是否成立」的现场证据"""
+def test_run_hr_status_shows_defense_lines(tmp_path):
+    """防伪观测行: A 档流转守恒 / 骤降观测 / 各档波次 —— 「证据是否成立」的现场证据"""
     _seed(
         tmp_path,
         FakeFetcher(
             pages={
-                "A": myhr_page([row(101, done="2026-09-25 10:00:00"),
-                                row(102, done="2026-09-24 10:00:00")]),
+                "A": myhr_page([row(101), row(102)]),
                 "B": EMPTY_TABLE_PAGE,
                 "C": EMPTY_TABLE_PAGE,
             },
@@ -394,14 +392,13 @@ def test_run_hr_status_shows_observation_lines(tmp_path):
 
     text = buf.getvalue()
     assert code == 0
-    assert "排序: ✓" in text
-    assert "考核期 P: P ≈" in text
-    assert "骤降观测: 本轮合计 2 vs 基线 2, 正常" in text
-    assert "档位计数(上轮→本轮): A: 0 → 2" in text, "首轮没有上轮快照, 上轮按 0 显示"
+    assert "守恒: 不适用(上波无 A 档行)" in text
+    assert "骤降: 本波合计 2 vs 基线 2, 正常" in text
+    assert "各档: A:" in text and "B:" in text and "C:" in text
 
 
-def test_run_hr_status_shows_order_violation(tmp_path):
-    """排序违反轮的报告: 排序 ✗ + 首处位置(告警与报告对同一份 order_detail)"""
+def test_run_hr_status_shows_order_violation_note(tmp_path):
+    """排序违反波的报告: 各档行标出该档状态 + 备注行给出首处位置(告警与报告同源)"""
     _seed(
         tmp_path,
         FakeFetcher(
@@ -432,66 +429,28 @@ def test_run_hr_status_shows_order_violation(tmp_path):
 
     text = buf.getvalue()
     assert code == 0
-    assert "排序: ✗ 不成立(档位 A 第 1 页" in text
+    assert "排序违反(页内逆序 1 处)" in text and "强制早停" in text
 
 
-def test_period_stats_consistency_and_gap():
-    """P 反算: 恒定考核期一致率 100%; 离散超 ±1 天时如实反映; 无可比行返回 0"""
-    from auto_qb.hr.model import HrEntry, HrSiteData
-    from auto_qb.hr.status import period_stats
-
-    now = 1_789_000_000.0
-    data = HrSiteData()
-    # P = (now − done) + remain(考核期 = 已考核时长 + 剩余时长): 两行都是「完成于 10 天前, 还剩 20 天」⇒ P = 30 天
-    for i, (done_days_ago, remain) in enumerate([(10.0, 20.0 * 86400), (11.0, 19.0 * 86400)]):
-        data.index[i] = HrEntry(
-            tid=i,
-            active=True,
-            done_iso=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - done_days_ago * 86400)),
-            remain_seconds=int(remain),
-        )
-    p_min, p_max, rate, n = period_stats(data, now)
-    assert n == 2
-    assert rate == 1.0
-    assert p_max - p_min <= 1.0
-
-    # 一行 P 相差 10 天(完成于 10 天前, 还剩 30 天 ⇒ P = 40 天): 一致率跌到 2/3
-    data.index[9] = HrEntry(
-        tid=9,
-        active=True,
-        done_iso=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 10.0 * 86400)),
-        remain_seconds=int(30.0 * 86400),
-    )
-    p_min, p_max, rate, n = period_stats(data, now)
-    assert n == 3
-    assert p_max - p_min >= 9.0
-    assert rate == pytest.approx(2 / 3)
-
-    assert period_stats(HrSiteData(), now) == (None, None, 0.0, 0)
-
-
-def test_run_hr_resume_clears_suspension(tmp_path):
-    """--hr-resume: 清除停用状态 + 记恢复痕迹(计划 26-09-27-1815 §2 2.3 恢复口子)"""
-    from auto_qb.hr.model import HrSiteData, HrSuspension
+def test_run_hr_confirm_empty_stamps_site(tmp_path):
+    """--hr-confirm-empty: 写一次性人工对账戳 + 记确认痕迹(计划 26-09-28-1932 §5.3)"""
     from auto_qb.hr.store import HrSiteStore
 
     store = HrSiteStore(SITE, str(tmp_path / "hr"))
-    with store.hold() as session:
-        session.data.suspended = HrSuspension(reason="档位 A 第 1 页 页内逆序 1 处", since=1700000000.0, rounds=3)
-        session.commit(1700000000.0)
-
     cfg = _config(tmp_path, data_dir=tmp_path)
+
     buf = io.StringIO()
-    code = run_hr_resume(cfg, [SITE], out=buf)
+    code = run_hr_confirm_empty(cfg, [SITE], out=buf)
 
     text = buf.getvalue()
     assert code == 0
-    assert "已恢复取数" in text and "页内逆序" in text
+    assert "已写入人工对账戳" in text
+    assert "确认戳自动失效" in text
     data, err = store.read_unlocked()
-    assert err is None and data.suspended is None, "停用状态被清除"
-    assert "人工确认后恢复" in data.refresh.reason, "站点文件里留下可查的恢复痕迹"
+    assert err is None and data.empty_confirmed_at > 0, "确认戳落盘"
+    assert "人工对账" in data.wave.notes, "站点文件里留下可查的确认痕迹"
 
-    # 再次恢复: 未停用 ⇒ 如实说明, 不报错
+    # 清单再现非零行时由波次引擎自动清戳(service 侧测试覆盖), 这里验幂等重复写入不炸
     buf2 = io.StringIO()
-    assert run_hr_resume(cfg, [SITE], out=buf2) == 0
-    assert "未处于停用状态" in buf2.getvalue()
+    assert run_hr_confirm_empty(cfg, [SITE], out=buf2) == 0
+    assert "已写入人工对账戳" in buf2.getvalue()

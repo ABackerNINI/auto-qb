@@ -90,100 +90,69 @@ class HrChannelConfig:
 
 @dataclass
 class HrCheckConfig:
-    """HR 在线核实的全局段: 功能开关 + 频控默认值(计划 §7)
+    """HR 在线核实全局段(v3 波次模型 14 键口径, 计划 26-09-28-1932 §6.1)
 
     整段缺省 = 功能关闭; 总开关 enabled 默认 false(保守默认, 黄金法则 2)。
     所有新键都必须进 validate_config 并同步 config/schema(守卫测试会查)。
+    v3 删除的键(26 个): 频控双模型键(quota_model/page_rate_per_hour/page_burst/
+    torrent_rate_per_hour/torrent_burst/max_pages_per_day/min_page_interval/
+    max_torrents_per_hour/max_torrents_per_day/min_torrent_interval 改名)、
+    max_pages_per_round/round 上限、failure_threshold/failure_cooldown(熔断删除)、
+    unknown_policy(行 4 硬编码)、verified_ttl(放行永续)、index_retention/
+    max_download_retries/channel_silence_warn/poll_interval/lock_timeout(常量化)、
+    parse_missing_rate_max(S2 零容忍)、sites 条目的 mode/hr_page_scopes/
+    max_pages_per_refresh/completed_age_limit/accept_empty_listing/auto_age_limit/
+    seeding_exempt_ratio 等。
     """
 
     enabled: bool = False
-    min_torrent_interval: float = 90.0  # 相邻两次站点请求最小间隔(秒); 抖动只向上 +0~25%。
-    #   ❗quota_model=split 的站点本键改义为「仅 .torrent 下载间隔」(页面间隔看 min_page_interval)
-    max_torrents_per_hour: int = 12  # 小时配额(站点级独立计数); split 站点不使用(速率由下载桶承担)
-    # 日配额(站点级独立计数); split 站点本键改义为「仅 .torrent 下载天顶」。
-    # None = 未显式配置 ⇒ 按模型取默认(legacy 60 / split 200, 计划 26-09-27-1815 §2 3.1)。
-    max_torrents_per_day: Optional[int] = None
-    # ---- split 模型键(计划 26-09-27-1815 §2 3.1, D4/D6 拍板) ----
-    # 页面桶: 40/时 · burst 10; 下载桶: 20/时 · burst 5; 天级硬顶: 页面 400 / 下载 200。
-    # 只在站点显式 quota_model=split 时消费(激活门, 保守默认)。
-    page_rate_per_hour: int = 40
-    page_burst: int = 10
-    torrent_rate_per_hour: int = 20
-    torrent_burst: int = 5
-    max_pages_per_day: int = 400
-    min_page_interval: float = 90.0
-    max_pages_per_round: int = 9  # 单轮页面请求总量上限(D5=a: 8~10 取 9; 0 = 不限); 单轮持锁时长的页数兜底
-    failure_threshold: int = 3  # 连续失败 N 次 => 该站熔断
-    failure_cooldown: float = 12 * 3600.0  # 熔断冷却时长(秒)
+    min_interval: float = 90.0  # 相邻两次站点请求最小间隔(秒), 页面 + 下载统一; 抖动只向上 +0~25%
+    max_requests_per_day: int = 240  # 站点级日额保险(全部请求合计, 零点重置); 只防长跑超量
+    max_pages_per_wave: int = 30  # 单波页数上限(安全阀: 防改版/异常导致翻页失控); 到顶该档截断
     allow_window: str = ""  # 仅该时段取数 "HH:MM-HH:MM"(可跨午夜); 空 = 全天。❗与 notify.quiet_hours 语义相反
-    unknown_policy: str = "hr"  # 未核实种子按 hr(保守) | not-hr; ❗新鲜度闸门恒按 hr, 不受本项影响
-    verified_ttl: Optional[float] = None  # 放行有效期(秒); None = 跟随站点 refresh_interval。❗调大 = 放大「别的客户端下载」的漏管窗口
-    index_retention: float = 30 * 86400.0  # 页面快照条目保留时长(秒); 已取记录 hr_downloaded 不淘汰
-    max_download_retries: int = 3  # 单个 .torrent 取数失败重试上限, 达到后冷却(防烧配额)
-    channel_silence_warn: float = 6 * 3600.0  # 通道静默多久告警(秒)
     shared_dir: str = ""  # 空 = 多实例不共享(站点文件落 <data_dir>/hr/); 多实例互通时指向同一目录
-    lock_timeout: float = 0.0  # 抢锁等待(秒); 0 = 不等(拿不到锁直接等下一轮)
-    poll_interval: float = 60.0  # 取数线程醒来检查的节奏(秒), 与主循环 tick 无关
-    parse_missing_rate_max: float = 0.5  # 必填字段缺失率上限; 超过则判「页面可能改版」不产生放行
     channel: HrChannelConfig = field(default_factory=HrChannelConfig)
     # 站点接入(计划 26-09-27-1318 REV2): 键 = 内置站点档案 id(config/site_presets.py),
-    # 值 = mode + 微调项; 站点启用/微调的唯一配置源。trackers.<站点>.hr_check 只是绑定结果视图。
+    # 值 = enabled + tracker 显式映射 + refresh_interval; 站点启用/微调的唯一配置源。
+    # trackers.<站点>.hr_check 只是绑定结果视图。
     sites: Dict[str, "SiteHrCheckConfig"] = field(default_factory=dict)
 
 
 @dataclass
 class SiteHrCheckConfig:
-    """站点级在线核实参数(计划 26-09-22-2204 §7; 26-09-27-1318 REV2 收敛后为**派生模型**)
+    """站点级在线核实参数(v3: enabled + tracker + refresh_interval 三键; 计划 §6.1)
 
-    mode: off = 该站不启用 | partial = 在线核实(未核实按 unknown_policy)
-          | all = 站点侧驱动 + 未核实恒受管束(全站 HR, 不看 policy)
-    ❗mode != off 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None, check_hr_condition 恒 False,
+    enabled: 启用即管 —— 判定语义硬编码(命中考察中管束 / 终态放行 / 无证据本地兜底),
+    不再有 mode 分叉与 unknown_policy 撤退路径。partial/all 差异是站点事实(有没有清单页),
+    归档案 listing 字段: 全站型(listing=none)不取数, 判定恒走行 4 本地兜底。
+    ❗enabled 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None, check_hr_condition 恒 False,
       整站保护静默失效(配置期 fail-fast 拦下)。
 
-    配置源在 hr_check.sites.<档案 id>(mode + tracker 显式映射 + 微调项); adapter / hr_page_url /
-    download_path / page_param 四个页面事实由内置站点档案(config/site_presets.py)填充,
-    任何配置位置都不再接受。loaders 按「显式 tracker 直取 > 档案已知 announce 域默认映射查表」
-    (计划 26-09-27-1930 §3.3)把档案条目派生填充到命中的 TrackerConfig.hr_check, 下游(service /
-    channel / parse / 锚点)只读本模型, 对配置搬家零感知。
+    配置源在 hr_check.sites.<档案 id>; adapter / hr_page_url / download_path / page_param /
+    listing 五个页面事实由内置站点档案(config/site_presets.py)填充, required_seeding_time
+    由绑定站点的 hr 规则派生(超额线 3× 判据), 任何配置位置都不再接受。loaders 按
+    「显式 tracker 直取 > 档案已知 announce 域默认映射查表」把档案条目派生填充到命中的
+    TrackerConfig.hr_check, 下游(service / channel / parse / 锚点)只读本模型。
     """
 
-    mode: str = "off"
+    enabled: bool = False
     # 显式映射目标: 配置源在 hr_check.sites.<id>.tracker, 填 trackers 下的条目名(字符串相等引用,
     # 无匹配语义); 留空 = 用档案默认映射(已知 announce 域查表)。派生视图回填解析出的条目名。
     tracker: str = ""
-    adapter: str = "nexusphp"  # 由站点档案填充(配置不再接受)
-    hr_page_url: str = ""  # 由站点档案按 web 域派生(配置不再接受)
-    hr_page_scopes: List[str] = field(default_factory=lambda: ["A", "B", "C"])
-    download_path: str = "/download.php?id={id}"  # 由站点档案填充(配置不再接受); passkey 由取数通道在页面上下文补
-    page_param: str = "page"  # 由站点档案填充(配置不再接受)
-    refresh_interval: float = 12 * 3600.0  # HR 页抓取周期(秒)
-    max_pages_per_refresh: int = 5  # 单次刷新最多翻页数(翻页同样计配额)
-    max_torrents_per_hour: Optional[int] = None  # 站点级覆盖; None = 回退全局
-    # 超龄豁免线(秒): 完成时间早于该线的种子不再在线核实、不受管束(判定侧直接豁免),
-    # 取数侧也不再为它翻页 / 存索引 / 回填 .torrent; 0 = 关闭。保守默认: 豁免等于自愿接受
-    # 「站点其实还在管」的漏 HR 风险, 故只在站点级显式开启, 不设全局默认。
-    completed_age_limit: float = 0.0
-    # 人工确认口子(计划 26-09-27-1815 §2 2.2, D1 拍板): 空清单且基线存在时, 默认仍判不完备
-    # (防改版空表被当真); 用户排查确认「账号确实没有 HR 种子」后才显式开启本键接受空清单。
-    # 默认 False(保守默认)—— 持续零 + 结构完好同样可由改版造出, 自动接受等于重开 P1 灾难面。
-    accept_empty_listing: bool = False
-    # 配额模型激活门(计划 §2 3.2, D6): legacy = 现行合并账本(行为逐字节一致, 默认);
-    # split = 页面/下载双令牌桶(40+20/时), 显式 opt-in 才生效 —— 40/时比 12/时松, 不设门违反保守默认。
-    quota_model: str = "legacy"
-    # 豁免 A(计划 26-09-27-1815 §2 4.5, D7 默认关): 用取数侧反算的考核期 P 作超龄豁免线
-    # (判定与早停②同源); P 一致性机检不过 ⇒ 自动禁用(机检不是文档承诺)。
-    auto_age_limit: bool = False
-    # 豁免 B(§2 4.7, D7 默认关): 本地做种时长 >= 站点要求时长 × 该倍数 ⇒ 「义务已超额完成」豁免。
-    # 0 = 关闭; 建议 5。不参与早停(本地事实映射不到页面行)。
-    seeding_exempt_ratio: float = 0.0
-    # split 模型的站点覆盖键(可选): None = 回退全局。torrent_rate_per_hour 留空时还接受
-    # 既有 max_torrents_per_hour 作为下载桶速率覆盖(用户已有配置不失效)。
-    page_rate_per_hour: Optional[int] = None
-    torrent_rate_per_hour: Optional[int] = None
+    refresh_interval: float = 12 * 3600.0  # 对账波周期(秒)
+    # ---- 以下全部由档案/绑定派生(配置不再接受) ----
+    adapter: str = "nexusphp"  # 由站点档案填充
+    hr_page_url: str = ""  # 由站点档案按 web 域派生
+    download_path: str = "/download.php?id={id}"  # 由站点档案填充; passkey 由取数通道在页面上下文补
+    page_param: str = "page"  # 由站点档案填充
+    listing: str = "list"  # 由站点档案填充: list 清单型(取数) | none 全站型(不取数, 恒行 4 本地兜底)
+    #: 要求做种时长(秒, required + extra; 由绑定站点的 hr 规则派生) —— 超额线(常量 3×)判据
+    required_seeding_time: float = 0.0
 
     @property
-    def enabled(self) -> bool:
-        return self.mode != "off"
+    def fetchable(self) -> bool:
+        """本站是否参与取数(清单型才翻页; 全站型不取数)"""
+        return self.enabled and self.listing == "list"
 
 
 @dataclass

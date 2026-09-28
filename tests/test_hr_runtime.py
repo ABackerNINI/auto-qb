@@ -64,8 +64,7 @@ def make_config(
     channel=False,
     port=0,
     shared_dir="",
-    mode="partial",
-    poll=60.0,
+    site_enabled=True,
     request_timeout=180.0,
     extension_id="a" * 32,
 ):
@@ -78,7 +77,6 @@ def make_config(
         enabled=enabled,
         channel=HrChannelConfig(enabled=channel, port=port, request_timeout=request_timeout, extension_id=extension_id),
         shared_dir=shared_dir,
-        poll_interval=poll,
     )
     config.trackers = {
         "pt.example.com":
@@ -86,8 +84,10 @@ def make_config(
                 name="pt.example.com",
                 domains=["pt.example.com"],
                 hr_check=SiteHrCheckConfig(
-                    mode=mode,
+                    enabled=site_enabled,
+                    tracker="pt.example.com",
                     hr_page_url="https://pt.example.com/myhr.php",
+                    required_seeding_time=2 * 86400.0,
                 ),
             )
     }
@@ -239,15 +239,16 @@ def test_apply_remounts_on_channel_change(tmp_path):
 
 
 def test_apply_keeps_endpoint_on_l0_change(tmp_path):
-    runtime = make_runtime(tmp_path, enabled=True, channel=True, poll=60.0)
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
     runtime.start()
     try:
         same = runtime.endpoint
         old = runtime.global_conf
-        runtime.config.hr_check = make_config(tmp_path, enabled=True, channel=True, poll=30.0).hr_check
+        runtime.config.hr_check = make_config(tmp_path, enabled=True, channel=True).hr_check
+        runtime.config.trackers["pt.example.com"].hr_check.refresh_interval = 6 * 3600.0
         runtime.apply(old)
         assert runtime.endpoint is same, "只改 L0 字段不该白重绑端口"
-        assert runtime.service.global_conf.poll_interval == 30.0, "服务要用新配置重建"
+        assert runtime.service.site_confs["pt.example.com"].refresh_interval == 6 * 3600.0, "服务要用新配置重建"
         assert runtime.worker is not None and runtime.worker.started
     finally:
         runtime.stop()
@@ -335,18 +336,20 @@ def test_view_snapshot_and_wake_are_safe_when_not_started(tmp_path):
 
 
 def test_apply_l0_rebuilds_service_without_worker_running(tmp_path):
-    runtime = make_runtime(tmp_path, enabled=True, channel=True, poll=60.0)
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
     old = runtime.global_conf
-    runtime.config.hr_check = make_config(tmp_path, enabled=True, channel=True, poll=15.0).hr_check
+    runtime.config.hr_check = make_config(tmp_path, enabled=True, channel=True).hr_check
+    runtime.config.trackers["pt.example.com"].hr_check.refresh_interval = 3 * 3600.0
     runtime.apply(old)
-    assert runtime.service is not None and runtime.service.global_conf.poll_interval == 15.0
+    assert runtime.service is not None
+    assert runtime.service.site_confs["pt.example.com"].refresh_interval == 3 * 3600.0
     assert runtime.worker is None or not runtime.worker.started, "从未启动过就不该被 apply 拉起来"
 
 
 def test_judge_is_none_when_disabled(tmp_path):
     """总开关关 -> judge 返回 None = 消费方回落既有本地判断(零静默变更的另一个方向)"""
     runtime = make_runtime(tmp_path, enabled=False, channel=False)
-    runtime.publisher.publish(HrViewSet(views={"pt.example.com": HrSiteView(site="pt.example.com", mode="partial")}))
+    runtime.publisher.publish(HrViewSet(views={"pt.example.com": HrSiteView(site="pt.example.com", listing="list")}))
     assert runtime.judge("pt.example.com", (H1, ), now=1.0) is None
 
 
@@ -355,13 +358,13 @@ def test_judge_reads_published_view(tmp_path):
     runtime = make_runtime(tmp_path, enabled=True, channel=False)
     view = HrSiteView(
         site="pt.example.com",
-        mode="partial",
-        by_infohash={H1: HrEntry(tid=7, infohash_v1=H1, lane="B")},
+        listing="list",
+        lane_terminal={H1: HrEntry(tid=7, infohash_v1=H1, lane="B")},
     )
     runtime.publisher.publish(HrViewSet(views={"pt.example.com": view}))
     got = runtime.judge("pt.example.com", (H1, ""), anchor=HrAnchor(added_on=1, downloaded=0), now=1.0)
-    assert got is not None and got.is_hr is True
-    assert got.identity is HrIdentity.HR and got.site_satisfied is True
+    assert got is not None and got.is_hr is False
+    assert got.identity is HrIdentity.RELEASED and got.site_satisfied is True
 
 
 def test_judge_without_published_view_falls_back(tmp_path):
@@ -369,7 +372,7 @@ def test_judge_without_published_view_falls_back(tmp_path):
 
     若把"没数据"当"未核实", mode=all 站点会在启动窗口里让整站种子集体触发打标(千级标签风暴)。
     """
-    runtime = make_runtime(tmp_path, enabled=True, channel=False, mode="all")
+    runtime = make_runtime(tmp_path, enabled=True, channel=False, site_enabled=False)
     assert runtime.judge("pt.example.com", (H1, ), now=1.0) is None
 
 
@@ -478,17 +481,13 @@ def test_restart_after_stop_works(tmp_path):
         runtime.stop()
 
 
-def test_judge_passes_completed_age_limit(tmp_path):
-    """超龄豁免线从调用方透传到判定收口: 老种子 -> exempt; 缺省 0 -> 正常判定(零静默变更)"""
+def test_judge_site_view_lane_a_managed(tmp_path):
+    """判定收口: 命中考察中 -> 管束(判定语义硬编码, 无豁免配置参数)"""
     runtime = make_runtime(tmp_path, enabled=True, channel=False)
-    view = HrSiteView(site="pt.example.com", mode="partial", by_infohash={H1: HrEntry(tid=7, infohash_v1=H1, lane="A")})
+    view = HrSiteView(site="pt.example.com", listing="list", lane_a={H1: HrEntry(tid=7, infohash_v1=H1, lane="A")})
     runtime.publisher.publish(HrViewSet(views={"pt.example.com": view}))
-    now = 1_800_000_000.0
-    old = HrAnchor(added_on=1, completion_on=now - 400 * 86400.0)
-    got = runtime.judge("pt.example.com", (H1, ""), anchor=old, now=now, completed_age_limit=365 * 86400.0)
-    assert got is not None and got.identity is HrIdentity.EXEMPT and got.is_hr is False
-    normal = runtime.judge("pt.example.com", (H1, ""), anchor=old, now=now)
-    assert normal.identity is HrIdentity.HR, "缺省 0 = 关闭, 老种子照常按清单命中判"
+    got = runtime.judge("pt.example.com", (H1, ""), anchor=HrAnchor(added_on=1, downloaded=0), now=1.0)
+    assert got is not None and got.identity is HrIdentity.HR and got.is_hr is True
 
 
 def test_site_origins_served_live_for_extension(tmp_path):
@@ -502,7 +501,9 @@ def test_site_origins_served_live_for_extension(tmp_path):
         runtime.config.trackers["pt2.example.com"] = TrackerConfig(
             name="pt2.example.com",
             domains=["pt2.example.com"],
-            hr_check=SiteHrCheckConfig(mode="all", hr_page_url="http://pt2.example.com/myhr.php"),
+            hr_check=SiteHrCheckConfig(
+                enabled=True, tracker="pt2.example.com", hr_page_url="http://pt2.example.com/myhr.php"
+            ),
         )
         got = dict(runtime._site_origins())
         assert got == {
@@ -516,8 +517,8 @@ def test_site_origins_served_live_for_extension(tmp_path):
         payload = _json.loads(body)
         assert payload["error"] == ""
         assert {s["site"] for s in payload["sites"]} == {"pt.example.com", "pt2.example.com"}
-        # mode=off 的站点不该出现在授权清单里(扩展取不到它, 也不需要它的权限)
-        runtime.config.trackers["pt2.example.com"].hr_check.mode = "off"
+        # disabled 的站点不该出现在授权清单里(扩展取不到它, 也不需要它的权限)
+        runtime.config.trackers["pt2.example.com"].hr_check.enabled = False
         assert [s for s, _o in runtime._site_origins()] == ["pt.example.com"]
     finally:
         runtime.stop()

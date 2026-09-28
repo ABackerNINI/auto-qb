@@ -905,7 +905,9 @@ def test_hr_anchors_from_store():
         assert mgr._hr_anchors() == {}, "站点未接入 hr_check -> 不上交任何锚点"
 
         site = mgr.config.trackers["HHan"]
-        site.hr_check = SiteHrCheckConfig(mode="partial", hr_page_url="https://hhan/myhr.php")
+        site.hr_check = SiteHrCheckConfig(
+            enabled=True, tracker="hhan", hr_page_url="https://hhan/myhr.php", required_seeding_time=86400.0
+        )
         # 用真记录(store.refresh), 不用 seed_store 的对象身份注入: 锚点由 record.hr_anchor() 派生
         mgr.store.refresh([FakeTorrent(hash="H1"), FakeTorrent(hash="H2")])
         got = mgr.store.get("H1")
@@ -915,7 +917,8 @@ def test_hr_anchors_from_store():
         got.downloaded = 123
         anchors = mgr._hr_anchors()  # H2 未匹配 tracker_conf -> 不进锚点
         assert set(anchors) == {"HHan"} and set(anchors["HHan"]) == {"aa" * 20}
-        assert anchors["HHan"]["aa" * 20] == HrAnchor(added_on=11, downloaded=123, completion_on=-1, progress=0.0)
+        assert anchors["HHan"]["aa" * 20
+                              ] == HrAnchor(added_on=11, downloaded=123, completion_on=-1, progress=0.0, name="Test")
 
-        site.hr_check = SiteHrCheckConfig(mode="off")  # 站点关掉 -> 同样不上交
+        site.hr_check = SiteHrCheckConfig(enabled=False)  # 站点关掉 -> 同样不上交
         assert mgr._hr_anchors() == {}

@@ -1,725 +1,338 @@
-"""test_hr_resolve 测试计划: 三态判定(受管束 / 已核实不受管束 / 未核实)与不可变视图
-
-判定表逐行覆盖(计划 §9): 两个方向上的取舍都要钉住 —— 首要不漏 HR, 其次让确认为非 HR 的真的放行。
+"""test_hr_resolve 测试计划: v3 四行判定表 + 12 格矩阵(计划 26-09-28-1932 §3.1/§3.2)
 
 ## 测试计划(每个测试函数一条)
-- test_listed_entry_is_managed: 清单命中(A/B/C) -> 受管束(不看本地 downloaded)
-- test_unlisted_with_complete_refresh_is_released: 完整刷新未列出 + 未过期 -> 安全放行
-- test_release_requires_fresh_backing: 超 verified_ttl 无新刷新背书 -> 回落未核实
-- test_verified_record_backs_release: 有逐种放行记录时按记录时刻算有效期(D 档与未列出两种来源)
-- test_verified_record_expired_is_unknown: 放行记录超期 -> 未核实
-- test_freshness_gate_forces_hr: 本实例 added_on 晚于最近一次完整刷新 -> 恒受管束
-- test_freshness_gate_not_applied_before_first_success: 从未成功刷新走 unknown_policy, 不是闸门
-- test_unknown_policy_is_conservative_by_default: 未核实默认按 hr(保守)
-- test_unknown_policy_not_hr_releases: unknown_policy=not-hr 时未核实按非 HR 对待
-- test_incomplete_refresh_produces_no_release: 覆盖证明不成立 -> 未核实(不产生放行)
-- test_mode_all_unknown_is_managed: mode=all 站点未核实恒受管束(不看 policy)
-- test_anchor_drift_invalidates_release: 锚点四种漂移各一条 -> 放行立即作废
-- test_anchor_intact_keeps_release: 反向用例 —— 锚点未漂移且未过期时放行保持(防误杀)
-- test_missing_infohash_is_unknown: 身份缺位(infohash 未回填) -> 未核实
-- test_site_not_activated_is_unknown: 站点未接入 hr_check -> 未核实
-- test_build_site_view_filters_lane_and_active: 视图只收「受管束且最近一次刷新仍列出」的条目
-- test_judge_record_not_applicable_when_site_off: 站点未接入 / mode=off -> None(调用方走本地字段逻辑)
-- test_judge_record_hit_any_hash_wins: 两个 infohash 有一个命中清单 -> 受管束(命中即站点事实)
-- test_judge_record_prefers_conservative_over_release: 一键放行 + 一键恒受管束 -> 取恒受管束(policy 绕不过)
-- test_judge_record_carries_site_satisfied_verdict: 命中行的达标结论(档位即结论, 计划 §9 v3.0): B -> True / A -> False / C -> False
-- test_lane_verdict_ignores_remain_and_local: A 档命中即未达标 —— 剩余达标时间归零 / 缺失都不改变结论(退出达标推导), 本地值不得越级
-- test_judge_record_double_hit_prefers_lane_order: hybrid 双命中取达标结论档位序更靠前者(A > B > C), 与键序无关; 受管束结论不变
-- test_judge_record_missing_hash_goes_through_policy: 两个 infohash 都空 -> 未核实(仍走 policy, 不是"不适用")
-- test_judge_record_mode_all_unlisted_is_managed: mode=all 未列出 -> 受管束
-- test_judge_record_without_any_lookup_key_falls_back: 站点侧一个可查键都没有(索引没回填出 infohash)
-  -> None(回落本地), **不**把「不知道」当受管束(2026-09-25 实报: 否则整站打标); mode=all 不受此闸门影响
-- test_judge_record_carries_site_facts: 命中行带出站点侧值并**拷成不可变对象**(WebUI 两套值对账的数据源)
-- test_judge_record_age_exempt_overrides_listing: 完成时间超豁免线 -> 超龄豁免, **压过清单命中**
-  (用户显式声明这类种子不再核实/管束)
-- test_judge_record_within_age_not_exempt: 完成时间在线内 -> 正常判定, 豁免不掺和
-- test_judge_record_age_limit_zero_disables: 豁免线 0(默认) -> 老种子也走正常判定(零静默变更守门)
-- test_judge_record_age_exempt_requires_known_completion: completion_on 缺位(0/负)或无锚点 -> 不豁免
-- test_judge_record_age_exempt_works_without_lookup_keys: 豁免排在「无可查键回落本地」闸门之前
-  (豁免是 qB 侧事实, 不依赖索引建到哪)
-- test_judge_record_age_exempt_applies_on_mode_all: mode=all 也认豁免(显式配置压过恒受管束)
-- test_judge_record_age_exempt_boundary_is_inclusive: 恰好等于豁免线 -> 豁免; 差一秒 -> 不豁免
-- test_safety_display_site_lanes_map_to_verdict: 站点命中档位即删除安全结论(A 考察中=danger 橙·不能删 /
-  C 未达标=failed 红·考核未通过(2026-09-25 用户修正: 终态独立醒目档, 移出不能删桶) / B 可删), 来源记「在线」
-- test_safety_display_identity_layers: 身份层结论 —— 放行/超龄豁免恒可删; mode=all 未命中与新鲜度闸门落「策略」桶; 宽松 policy 未核实
-- test_judge_record_carries_verified_source: 放行来源透传(v3.4) —— D 档已免罪记录 => SOURCE_EXEMPT, 缺席式放行 => 空串
-- test_safety_display_site_exempt_split_from_released: D 档已免罪(站点明确终态)与「未列出」(缺席证据)分开编码 ——
-  同为 safe, 来源 site_exempt·「在线·已免罪」 vs site_released·「在线·已核实，安全放行」(2026-09-26 用户指令)
-- test_safety_display_local_fallback_when_judged_none: judged None(未接入/无键) => 本地兜底, 未触发 = 不适用
+- test_row1_scope_hit_is_hr: 行 1 命中考察中 → 管束, site_satisfied=False
+- test_row1_hit_revokes_release_semantics_in_view_builder: 命中优先于旧放行记录
+- test_row2_terminal_hit_releases: 行 2 终态档 B/C/D → 放行(B satisfied / C 未达标终态 / D 免罪)
+- test_row2_c_is_terminal_not_managed: 「网站显示未达标是终态」—— 本地未达标也放行
+- test_row3_release_record_releases: 行 3 放行记录放行
+- test_row3_release_permanent_no_expiry: 放行永续有效(一年前签发仍有效, 无 verified_ttl)
+- test_row3_anchor_drift_invalidates_to_local_fallback: 锚点漂移 → 行 4 本地兜底
+- test_row3_exempt_source_keeps_label: D 免罪来源标签保留
+- test_row4_no_evidence: 无证据 → NO_EVIDENCE(行 4, is_hr 恒 False 由调用方合成)
+- test_row4_missing_infohash: infohash 缺位 → 行 4
+- test_row4_local_satisfied_hint_not_judged_here: 行 4 达标判据在调用方, 本模块不代答
+- test_none_when_view_missing: 站点未接入 → None
+- test_none_when_listing_none: 全站型(listing=none) → None(恒行 4 本地兜底)
+- test_dual_hash_conservative_merge_hr_wins: 双 hash 保守合并 —— 命中压过放行
+- test_dual_hash_conservative_merge_released_wins_over_unknown: 双 hash 保守合并 —— 放行压过无证据
+- test_matrix_local_satisfied: 12 格矩阵本地已达标行(A 管束, 其余放行)
+- test_matrix_local_unsatisfied: 12 格矩阵本地未达标行(A 与无证据管束, 终态放行)
+- test_matrix_counts: 管束恰好三格(管束只发生在三格的不变量)
+- test_safety_display_local_fallback: 本地兜底展示(satisfied 决定 danger/safe)
+- test_safety_display_site_scope_danger: 考察中 → danger/site_scope
+- test_safety_display_site_unsatisfied_failed: C 终态 → failed/site_unsatisfied(独立红档)
+- test_safety_display_released_safe: 放行记录 → safe/site_released
+- test_safety_display_no_evidence: 行 4 → 本地兜底 / 未核实展示
 """
+from typing import Optional
+
 import pytest
 
 from auto_qb.hr.model import (
     LANE_EXEMPT,
+    LANE_SATISFIED,
+    LANE_SCOPE,
+    LANE_UNSATISFIED,
     SOURCE_EXEMPT,
     SOURCE_NOT_LISTED,
+    SOURCE_SATISFIED,
     HrEntry,
-    HrRefreshMeta,
-    HrSiteData,
     HrVerified,
 )
 from auto_qb.hr.resolve import (
-    POLICY_HR,
-    POLICY_NOT_HR,
     HrAnchor,
     HrIdentity,
-    HrJudgement,
-    HrSiteFacts,
     HrSiteView,
-    SAFETY_DANGER,
-    SAFETY_FAILED,
-    SAFETY_NONE,
-    SAFETY_SAFE,
-    SAFETY_UNKNOWN,
-    SRC_LOCAL,
-    SRC_LOCAL_EXEMPT,
-    SRC_POLICY,
-    SRC_SITE_EXEMPT,
-    SRC_SITE_RELEASED,
-    SRC_SITE_SATISFIED,
-    SRC_SITE_SCOPE,
-    SRC_SITE_UNSATISFIED,
-    SRC_UNVERIFIED,
-    build_site_view,
     judge_record,
-    resolve_identity,
     safety_display,
 )
 
-NOW = 2000.0
-TTL = 3600.0
-OK_TS = 1000.0  # 有效期内(1000 + 3600 = 4600 > 2000)
-STALE_NOW = 5000.0  # 在 OK_TS + TTL 之后: 放行已过期
-OLD_TS = -3000.0  # 连 positive 都不满足的最早期时间戳
-H1, H2, H3 = "aa" * 20, "bb" * 20, "cc" * 20
+NOW = 1_700_000_000.0
+TID = 101
 
 
-def _view(*, mode="partial", complete=True, last_success_ts=OK_TS, ttl=TTL, listed=(), verified=(), suspended=False):
-    """构造判定视图; listed: [(infohash, tid, lane)]; verified: [HrVerified]"""
-    by_infohash = {h: HrEntry(tid=tid, infohash_v1=h, lane=lane) for h, tid, lane in listed}
+def make_view(
+    *,
+    entry: Optional[HrEntry] = None,
+    verified: Optional[HrVerified] = None,
+    listing: str = "list",
+) -> HrSiteView:
+    lane_a = {}
+    lane_terminal = {}
+    if entry is not None:
+        target = lane_a if entry.lane == LANE_SCOPE else lane_terminal
+        for h in (entry.infohash_v1, entry.infohash_v2):
+            if h:
+                target.setdefault(h, entry)
+    verified_map = {verified.infohash: verified} if verified is not None else {}
     return HrSiteView(
-        site="s",
-        mode=mode,
-        complete=complete,
-        last_success_ts=last_success_ts,
-        verified_ttl=ttl,
-        suspended=suspended,
-        by_infohash=by_infohash,
-        verified={v.infohash: v
-                  for v in verified},
+        site="example",
+        listing=listing,
+        lane_a=lane_a,
+        lane_terminal=lane_terminal,
+        verified=verified_map,
+        healthy_ts=NOW - 60,
     )
 
 
-def _verified(ts=OK_TS, source=SOURCE_NOT_LISTED, **anchor) -> HrVerified:
-    return HrVerified(infohash=H1, tid=101, verified_ts=ts, source=source, **anchor)
+def make_entry(lane: str, infohash: str = "h1", *, remain: Optional[int] = 3600) -> HrEntry:
+    return HrEntry(tid=TID, name=f"EXAMPLE {TID}", lane=lane, infohash_v1=infohash, remain_seconds=remain)
 
 
-def test_listed_entry_is_managed():
-    """清单命中 -> 受管束; 本地 downloaded=0 的转移副本与真辅种一视同仁(站点数据是权威)"""
-    view = _view(listed=[(H1, 101, "A")])
-    got = resolve_identity(view, H1, anchor=HrAnchor(added_on=1, downloaded=0), now=NOW)
-    assert got.identity is HrIdentity.HR
-    assert "档位 A" in got.reason
-    assert got.is_hr(POLICY_NOT_HR) is True  # policy 对已命中的条目不适用
+def make_verified(
+    infohash: str = "h1",
+    source: str = SOURCE_NOT_LISTED,
+    *,
+    anchor_downloaded: int = 1 << 30,
+    anchor_added_on: int = 100
+) -> HrVerified:
+    return HrVerified(
+        infohash=infohash,
+        tid=TID,
+        verified_ts=NOW - 60,
+        source=source,
+        anchor_added_on=anchor_added_on,
+        anchor_downloaded=anchor_downloaded,
+        anchor_completion_on=-1,
+        anchor_progress=1.0,
+    )
 
 
-def test_unlisted_with_complete_refresh_is_released():
-    """完整刷新未列出 + 未过期 -> 安全放行(这就是本功能的主要收益)"""
-    got = resolve_identity(_view(), H1, anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.identity is HrIdentity.VERIFIED_NON_HR
-    assert got.is_hr(POLICY_HR) is False
+def anchor(**kw) -> HrAnchor:
+    base = dict(added_on=100, downloaded=1 << 30, completion_on=-1, progress=1.0, seeding_time=0, name="EXAMPLE")
+    base.update(kw)
+    return HrAnchor(**base)
 
 
-def test_release_requires_fresh_backing():
-    """超 verified_ttl 无新刷新背书 -> 回落未核实(通道静默期不得无限放行)"""
-    got = resolve_identity(_view(last_success_ts=OK_TS), H1, anchor=HrAnchor(added_on=1), now=STALE_NOW)
-    assert got.identity is HrIdentity.UNKNOWN
-    assert "放行已过期" in got.reason
-    assert got.is_hr(POLICY_HR) is True
+# ---------------- 行 1: 命中考察中(A) → 管束 ----------------
 
 
-def test_verified_record_backs_release():
-    """有逐种放行记录时按**记录时刻**算有效期(而不是最近刷新时刻)"""
-    got = resolve_identity(_view(verified=[_verified()]), H1, anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.identity is HrIdentity.VERIFIED_NON_HR
-    assert "完整刷新未列出" in got.reason
-
-    exempt = _view(verified=[_verified(source=SOURCE_EXEMPT)])
-    got = resolve_identity(exempt, H1, anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.identity is HrIdentity.VERIFIED_NON_HR
-    assert "D 档已免罪" in got.reason
+def test_row1_scope_hit_is_hr():
+    view = make_view(entry=make_entry(LANE_SCOPE))
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.HR
+    assert j.is_hr is True
+    assert j.site_satisfied is False  # A 考察中: 义务仍在
+    assert j.facts is not None and j.facts.lane == LANE_SCOPE
 
 
-def test_verified_record_expired_is_unknown():
-    """放行记录超期 -> 未核实"""
-    got = resolve_identity(_view(verified=[_verified(ts=OLD_TS)]), H1, anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.identity is HrIdentity.UNKNOWN
-    assert "放行已过期" in got.reason
+def test_row1_hit_revokes_release_semantics_in_view_builder():
+    """命中 A 的条目在视图里进 lane_a —— 即便它同时还有旧放行记录, 命中优先(管束)"""
+    view = make_view(entry=make_entry(LANE_SCOPE), verified=make_verified())
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.HR
 
 
-def test_freshness_gate_forces_hr():
-    """新鲜度闸门: 本实例 added_on 晚于最近一次完整刷新 -> 恒受管束, 不可被 policy 绕过"""
-    got = resolve_identity(_view(), H1, anchor=HrAnchor(added_on=int(OK_TS) + 10), now=NOW)
-    assert got.identity is HrIdentity.UNKNOWN
-    assert got.forced is True
-    assert "新鲜度闸门" in got.reason
-    # ❗关键: 即使显式配了 not-hr, 闸门命中时也必须按 HR(否则新种子会漏管)
-    assert got.is_hr(POLICY_NOT_HR) is True
-
-
-def test_freshness_gate_not_applied_before_first_success():
-    """从未成功刷新走 unknown_policy(与「刷新不完备」同类); 闸门需要一次成功刷新做基准"""
-    view = _view(complete=False, last_success_ts=0.0)
-    got = resolve_identity(view, H1, anchor=HrAnchor(added_on=99999), now=NOW)
-    assert got.identity is HrIdentity.UNKNOWN
-    assert got.forced is False
-    assert got.is_hr(POLICY_NOT_HR) is False
-
-
-def test_unknown_policy_is_conservative_by_default():
-    """未核实默认按 hr 保守(唯一能保证「不漏 HR」的默认值)"""
-    got = resolve_identity(_view(complete=False), H1, anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.identity is HrIdentity.UNKNOWN
-    assert got.is_hr() is True
-    assert got.is_hr(POLICY_HR) is True
-
-
-def test_unknown_policy_not_hr_releases():
-    """unknown_policy=not-hr 时未核实按非 HR 对待(等于自愿放弃第一重保证, 配置文案要写清)"""
-    got = resolve_identity(_view(complete=False), H1, anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.is_hr(POLICY_NOT_HR) is False
-
-
-def test_incomplete_refresh_produces_no_release():
-    """覆盖证明不成立(分页未到底 / scope 失败 / 解析可疑)-> 未核实, 不产生放行"""
-    view = _view(complete=False, last_success_ts=OK_TS)
-    got = resolve_identity(view, H1, anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.identity is HrIdentity.UNKNOWN
-    assert got.is_hr(POLICY_HR) is True
-
-
-def test_mode_all_unknown_is_managed():
-    """mode=all 站点未核实恒受管束(全站 HR 的保守默认; 与 partial 的唯一差别)"""
-    got = resolve_identity(_view(mode="all", complete=False), H1, anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.identity is HrIdentity.HR
-    assert "mode=all" in got.reason
+# ---------------- 行 2: 终态档 B/C/D → 放行(终态不可逆) ----------------
 
 
 @pytest.mark.parametrize(
-    "anchor,needle",
-    [
-        (HrAnchor(added_on=2, downloaded=1, completion_on=500, progress=0.8), "added_on"),
-        (HrAnchor(added_on=1, downloaded=0, completion_on=500, progress=0.8), "downloaded 变小"),
-        (HrAnchor(added_on=1, downloaded=5, completion_on=500, progress=0.8), "downloaded 增长"),
-        (HrAnchor(added_on=1, downloaded=1, completion_on=500, progress=0.4), "progress 退回"),
-    ],
+    "lane,src,satisfied", [
+        (LANE_SATISFIED, SOURCE_SATISFIED, True),
+        (LANE_UNSATISFIED, "", False),
+        (LANE_EXEMPT, SOURCE_EXEMPT, None),
+    ]
 )
-def test_anchor_drift_invalidates_release(anchor, needle):
-    """锚点漂移(本实例二次下载 / 文件被删重下 / 删种重加)-> 放行立即作废"""
-    rec = _verified(anchor_added_on=1, anchor_downloaded=1, anchor_completion_on=500, anchor_progress=0.8)
-    got = resolve_identity(_view(verified=[rec]), H1, anchor=anchor, now=NOW)
-    assert got.identity is HrIdentity.UNKNOWN
-    assert "锚点漂移" in got.reason and needle in got.reason
-
-
-def test_anchor_intact_keeps_release():
-    """反向用例: 锚点未漂移且未过期 -> 放行保持(防误杀, 收益所在)"""
-    rec = _verified(anchor_added_on=1, anchor_downloaded=1, anchor_completion_on=500, anchor_progress=0.8)
-    view = _view(verified=[rec])
-    intact = HrAnchor(added_on=1, downloaded=1, completion_on=500, progress=0.8)
-    assert resolve_identity(view, H1, anchor=intact, now=NOW).identity is HrIdentity.VERIFIED_NON_HR
-    # 无锚点(别的客户端下载的种子)时仍按刷新背书放行
-    assert resolve_identity(view, H1, now=NOW).identity is HrIdentity.VERIFIED_NON_HR
-
-
-def test_missing_infohash_is_unknown():
-    """身份缺位(infohash 未回填 / 站点未匹配)-> 未核实"""
-    got = resolve_identity(_view(), "", anchor=HrAnchor(added_on=1), now=NOW)
-    assert got.identity is HrIdentity.UNKNOWN
-    assert "身份缺位" in got.reason
-
-
-def test_site_not_activated_is_unknown():
-    """站点未接入 hr_check(mode=off / 视图缺失)-> 未核实(既有逻辑不受影响)"""
-    assert resolve_identity(None, H1, now=NOW).identity is HrIdentity.UNKNOWN
-    assert resolve_identity(_view(mode="off"), H1, now=NOW).identity is HrIdentity.UNKNOWN
-
-
-def test_build_site_view_filters_lane_and_active():
-    """视图只收「受管束且最近一次刷新仍列出」的条目; D 档与非 active 都不进受管束集合"""
-    data = HrSiteData()
-    data.index[1] = HrEntry(tid=1, lane="A", infohash_v1=H1, active=True)
-    data.index[2] = HrEntry(tid=2, lane=LANE_EXEMPT, infohash_v1=H2, active=True)
-    data.index[3] = HrEntry(tid=3, lane="C", infohash_v1=H3, active=False)
-    data.refresh = HrRefreshMeta(last_success_ts=OK_TS, complete=True, scopes_done=["A"])
-    data.verified[H2] = HrVerified(infohash=H2, tid=2, verified_ts=OK_TS, source=SOURCE_EXEMPT)
-
-    view = build_site_view(
-        "s", "partial", data, verified_ttl=TTL, refresh_interval=TTL, channel_state="ok", generated_at=NOW
-    )
-
-    assert set(view.by_infohash) == {H1}
-    assert view.complete is True and view.last_success_ts == OK_TS
-    assert view.revision == data.revision
-    assert resolve_identity(view, H2, now=NOW).identity is HrIdentity.VERIFIED_NON_HR  # D 档免罪
-    assert resolve_identity(view, H3, now=NOW).identity is HrIdentity.VERIFIED_NON_HR  # 未列出 = 放行
-
-
-# ---------- judge_record: 四个消费点的收口入口(record 拿到的就是它) ----------
-
-
-def test_judge_record_not_applicable_when_site_off():
-    """站点未接入 / mode=off -> None = 「本模块不适用」, 调用方必须继续走本地字段逻辑
-
-    这是「零静默变更」的闸门: 返回 False 会让未接入站点全体变成不触发 HR(静默改行为)。
-    """
-    assert judge_record(None, (H1, ""), now=NOW) is None
-    assert judge_record(_view(mode="off"), (H1, ""), now=NOW) is None
-
-
-def test_judge_record_hit_any_hash_wins():
-    """两个 infohash 有一个命中清单 -> 受管束(v2-only 页面同样成立); 达标结论随命中行"""
-    view = _view(listed=[(H2, 102, "C")])
-    got = judge_record(view, (H1, H2), anchor=HrAnchor(added_on=1, downloaded=0), now=NOW)
-    assert got is not None and got.is_hr is True
-    assert got.identity is HrIdentity.HR and "清单命中" in got.reason
-    assert got.site == "s"
-
-
-def test_judge_record_prefers_conservative_over_release():
-    """一个键已核实放行 + 另一个键撞上新鲜度闸门 -> 取更保守的(恒受管束), policy 也绕不过"""
-    view = _view(verified=[_verified()])
-    anchor = HrAnchor(added_on=int(OK_TS) + 10)  # > last_success_ts: H2 走闸门(恒受管束)
-    got = judge_record(view, (H1, H2), anchor=anchor, now=NOW, unknown_policy=POLICY_NOT_HR)
-    assert got is not None
-    assert got.identity is HrIdentity.UNKNOWN and "新鲜度闸门" in got.reason
-    assert got.is_hr is True, "恒受管束不可被 unknown_policy=not-hr 绕过"
-
-
-def test_judge_record_carries_site_satisfied_verdict():
-    """命中行的达标结论原样带出(档位即结论, 计划 §9 v3.0): B -> True / A -> False / C -> False
-
-    A 档(考察中)恒未达标 —— 本地字段再够线也不得越级推翻站点清单结论; 「剩余达标时间」退出推导。
-    """
-    anchor = HrAnchor(added_on=1, downloaded=0)
-    done = judge_record(_view(listed=[(H1, 101, "B")]), (H1, ""), anchor=anchor, now=NOW)
-    scope = judge_record(_view(listed=[(H1, 101, "A")]), (H1, ""), anchor=anchor, now=NOW)
-    undone = judge_record(_view(listed=[(H1, 101, "C")]), (H1, ""), anchor=anchor, now=NOW)
-    assert done.site_satisfied is True and done.state_text == "受管束"
-    assert scope.site_satisfied is False, "考察中 = 站点说义务仍在, 恒未达标(不看数值字段)"
-    assert undone.site_satisfied is False
-
-
-def test_lane_verdict_ignores_remain_and_local():
-    """A 档命中即未达标: 剩余达标时间归零 / 缺失都不改变结论(remain 退出达标推导)
-
-    旧实现(已废除)用「remain_seconds == 0 ⇒ 已达标」推导 —— v2.8 实证该字段是考核窗口倒计时,
-    归零 = 考核到期(方向相反); 「缺字段回落本地」则让本地值越权推翻站点的明确清单结论。
-    """
-    anchor = HrAnchor(added_on=1, downloaded=0)
-    # _view 构造的条目 remain_seconds=None(旧实现此时回落本地): 新语义下 A 档直接 False
-    missing = judge_record(_view(listed=[(H1, 101, "A")]), (H1, ""), anchor=anchor, now=NOW)
-    assert missing.site_satisfied is False, "缺字段 ≠ 站点没给结论: 档位本身就是结论"
-    entry = HrEntry(tid=101, infohash_v1=H1, lane="A", remain_seconds=0)
-    view = HrSiteView(site="s", mode="partial", by_infohash={H1: entry})
-    zero = judge_record(view, (H1, ""), anchor=anchor, now=NOW)
-    assert zero.site_satisfied is False, "剩余达标时间归零 = 考核到期, 不是已达标"
-
-
-def test_judge_record_double_hit_prefers_lane_order():
-    """hybrid 双命中取达标结论档位序更靠前者(计划 §9 v3.0: A 考察中 > B 已达标 > C 未达标)
-
-    旧实现按 infohash 迭代序取首命中, 无档位序; 受管束结论不受影响(任一命中即受管束)。
-    """
-    anchor = HrAnchor(added_on=1, downloaded=0)
-    view = _view(listed=[(H1, 101, "B"), (H2, 102, "A")])
-    # v1 -> B(已达标) / v2 -> A(考察中): 取 A, 恒未达标 —— 两个键序都得同一结论
-    got = judge_record(view, (H1, H2), anchor=anchor, now=NOW)
-    assert got.is_hr is True and got.facts.lane == "A" and got.site_satisfied is False
-    got = judge_record(view, (H2, H1), anchor=anchor, now=NOW)
-    assert got.is_hr is True and got.facts.lane == "A" and got.site_satisfied is False
-    # B > C: v1 -> C / v2 -> B, 取 B(已达标)
-    view = _view(listed=[(H1, 101, "C"), (H2, 102, "B")])
-    got = judge_record(view, (H2, H1), anchor=anchor, now=NOW)
-    assert got.is_hr is True and got.facts.lane == "B" and got.site_satisfied is True
-
-
-def test_judge_record_missing_hash_goes_through_policy():
-    """两个 infohash 都空 -> 未核实(**不是**「不适用」): 该按 policy 保守处理, 不能静默放行
-
-    前提: 站点侧**有**可查的键(否则走 `test_judge_record_without_any_lookup_key_falls_back` 那道闸门)。
-    """
-    view = _view(listed=[(H3, 103, "A")])  # 视图里有键, 只是这个种子自己没有 infohash
-    got = judge_record(view, ("", ""), now=NOW)
-    assert got is not None
-    assert got.identity is HrIdentity.UNKNOWN and got.is_hr is True
-    assert "身份缺位" in got.reason
-    relaxed = judge_record(view, ("", ""), now=NOW, unknown_policy=POLICY_NOT_HR)
-    assert relaxed.is_hr is False, "policy=not-hr 时未核实才放行(用户显式选的取舍)"
-
-
-def test_judge_record_mode_all_unlisted_is_managed():
-    """mode=all 站点未列出 -> 恒受管束(与 policy 无关)"""
-    got = judge_record(_view(mode="all", complete=False), (H1, ""), now=NOW, unknown_policy=POLICY_NOT_HR)
-    assert got is not None and got.is_hr is True
-    assert "mode=all" in got.reason
-
-
-def test_judge_record_carries_site_facts():
-    """命中行带出站点侧值(档位/还需做种/剩余达标/分享率/下载量)—— WebUI 两套值对账的数据源
-
-    拷成不可变对象是刻意的: 视图里的行对象会被取数线程复用改写, 直接带引用会读到半新半旧的行。
-    """
-    entry = HrEntry(
-        tid=101,
-        infohash_v1=H1,
-        lane="C",
-        need_seed_seconds=3600,
-        remain_seconds=0,
-        ratio=1.25,
-        downloaded_bytes=4096,
-    )
-    view = HrSiteView(site="s", mode="partial", by_infohash={H1: entry})
-    got = judge_record(view, (H1, ""), anchor=HrAnchor(added_on=1, downloaded=0), now=NOW)
-    assert got is not None and got.facts is not None
-    assert got.facts.lane == "C" and got.facts.need_seed_seconds == 3600
-    assert got.facts.remain_seconds == 0 and got.facts.ratio == 1.25 and got.facts.downloaded_bytes == 4096
-    entry.remain_seconds = 99  # 取数线程复用行对象: 已拷出的判定结果不得跟着变
-    assert got.facts.remain_seconds == 0
-    assert judge_record(_view(mode="all", complete=False), (H1, ""), now=NOW).facts is None, "未命中无站点侧值"
-
-
-def test_judge_record_without_any_lookup_key_falls_back():
-    """站点侧**一个可查键都没有** ⇒ None(回落本地), 而不是「未核实 ⇒ unknown_policy=hr ⇒ 全站受管束」
-
-    2026-09-25 用户实报: 取数通道刚接通时索引还没有任何 infohash(下载被频控饿死), 而按「未核实」判会
-    让该站**全部**种子集体触发打标。判据取「有没有可查的键」而不是「有没有抓过页面」: 抓过但一个键都
-    回填不出来时, 这个视图对判定同样没有信息量。
-    """
-    empty = _view(complete=True, last_success_ts=OK_TS)  # 抓得完整, 但索引里 0 个 infohash / 0 条放行
-    assert empty.has_lookup_keys is False
-    assert judge_record(empty, (H1, ""), now=NOW) is None
-    # 一旦有了键(哪怕只是一条放行记录), 闸门就打开, 回到正常判定
-    assert judge_record(_view(verified=[_verified()]), (H1, ""), now=NOW) is not None
-    # mode=all 是用户显式要的「全站受管束」: 不看索引现状
-    forced = judge_record(_view(mode="all", complete=False), (H1, ""), now=NOW)
-    assert forced is not None and forced.is_hr is True
-
-
-# ---------- 超龄豁免(completed_age_limit; 计划 §9 增补) ----------
-# 独立时钟: 本文件顶部的 NOW=2000 是「秒级」小时间, 而豁免线以天计 —— 完成时刻必须为正
-# (completion_on > 0 守卫), 故这组用例统一用「第 N 天」的绝对时刻表达。
-
-AGE_LIMIT = 365 * 86400.0
-AGE_NOW = 400 * 86400.0  # 这组用例的「现在」: 第 400 天
-AGE_FRESH_TS = AGE_NOW - 60.0  # 刚刚完整刷新过(放行在有效期内)
-OLD_COMPLETION = 10 * 86400.0  # 第 10 天完成: 距今 390 天, 超过豁免线
-NEW_COMPLETION = AGE_NOW - 10 * 86400.0  # 10 天前完成: 线内
-
-
-def test_judge_record_age_exempt_overrides_listing():
-    """完成时间超豁免线 -> 超龄豁免(**压过清单命中**): 用户显式声明这类种子不再核实/管束
-
-    站点哪怕还列着 C 档(未达标)也一样 —— 这是配置者自愿接受的漏 HR 风险(schema help 与计划 §13 写明)。
-    """
-    view = _view(listed=[(H1, 101, "C")])
-    got = judge_record(
-        view,
-        (H1, ""),
-        anchor=HrAnchor(added_on=1, completion_on=OLD_COMPLETION),
-        now=AGE_NOW,
-        completed_age_limit=AGE_LIMIT,
-    )
-    assert got is not None and got.identity is HrIdentity.EXEMPT
-    assert got.is_hr is False and got.state_text == "超龄豁免"
-    assert "超龄豁免" in got.reason
-
-
-def test_judge_record_within_age_not_exempt():
-    """完成时间在线内 -> 正常判定(清单命中照旧受管束), 豁免不掺和"""
-    view = _view(listed=[(H1, 101, "A")])
-    got = judge_record(
-        view,
-        (H1, ""),
-        anchor=HrAnchor(added_on=1, completion_on=NEW_COMPLETION),
-        now=AGE_NOW,
-        completed_age_limit=AGE_LIMIT,
-    )
-    assert got.identity is HrIdentity.HR and got.is_hr is True
-
-
-def test_judge_record_age_limit_zero_disables():
-    """豁免线 0(默认) -> 老种子也走正常判定: 没显式配置就一个字的行为都不变(零静默变更守门)"""
-    view = _view(listed=[(H1, 101, "A")])
-    got = judge_record(view, (H1, ""), anchor=HrAnchor(added_on=1, completion_on=OLD_COMPLETION), now=AGE_NOW)
-    assert got.identity is HrIdentity.HR and got.is_hr is True
-
-
-def test_judge_record_age_exempt_requires_known_completion():
-    """completion_on 缺位(0/负 = 从未完成)或没有锚点 -> 不豁免, 走正常判定(不猜)"""
-    # 视图带一条新鲜放行记录(让「正常判定」有明确落点: 已核实不受管束), 豁免线开着但没触发
-    view = _view(verified=[_verified(ts=AGE_FRESH_TS)])
-    for anchor in (HrAnchor(added_on=1, completion_on=0), HrAnchor(added_on=1, completion_on=-1), None):
-        got = judge_record(view, (H1, ""), anchor=anchor, now=AGE_NOW, completed_age_limit=AGE_LIMIT)
-        assert got is not None and got.identity is HrIdentity.VERIFIED_NON_HR
-
-
-def test_judge_record_age_exempt_works_without_lookup_keys():
-    """豁免排在「无可查键回落本地」闸门**之前**: 索引还没长出任何键, 老种子照样豁免
-
-    豁免是 qB 侧事实, 不依赖站点索引建到哪 —— 否则首刷前老种子会被当「不适用」落回本地逻辑。
-    """
-    empty = _view(complete=True, last_success_ts=AGE_FRESH_TS)
-    assert empty.has_lookup_keys is False
-    got = judge_record(
-        empty,
-        (H1, ""),
-        anchor=HrAnchor(added_on=1, completion_on=OLD_COMPLETION),
-        now=AGE_NOW,
-        completed_age_limit=AGE_LIMIT,
-    )
-    assert got is not None and got.identity is HrIdentity.EXEMPT and got.is_hr is False
-
-
-def test_judge_record_age_exempt_applies_on_mode_all():
-    """mode=all 也认豁免: 显式配置的豁免线压过「未核实恒受管束」(配置者的显式取舍)"""
-    got = judge_record(
-        _view(mode="all", complete=False),
-        (H1, ""),
-        anchor=HrAnchor(completion_on=OLD_COMPLETION),
-        now=AGE_NOW,
-        completed_age_limit=AGE_LIMIT,
-    )
-    assert got is not None and got.identity is HrIdentity.EXEMPT and got.is_hr is False
-
-
-def test_judge_record_age_exempt_boundary_is_inclusive():
-    """恰好等于豁免线 -> 豁免(>= 判据); 差一秒不到 -> 不豁免"""
-    view = _view(verified=[_verified(ts=AGE_FRESH_TS)])
-    edge = judge_record(
-        view, (H1, ""), anchor=HrAnchor(completion_on=AGE_NOW - AGE_LIMIT), now=AGE_NOW, completed_age_limit=AGE_LIMIT
-    )
-    assert edge.identity is HrIdentity.EXEMPT
-    inside = judge_record(
-        view, (H1, ""),
-        anchor=HrAnchor(completion_on=AGE_NOW - AGE_LIMIT + 1),
-        now=AGE_NOW,
-        completed_age_limit=AGE_LIMIT
-    )
-    assert inside.identity is HrIdentity.VERIFIED_NON_HR
-
-
-# ---------------- 删除安全档位 × 来源档位(计划 webui-hr-safety-display §3) ----------------
-
-
-def test_safety_display_site_lanes_map_to_verdict():
-    """站点命中行的档位即删除安全结论(v3.0 口径): A -> 不能删·danger(橙, 进行中),
-    C -> 考核未通过·failed(红, 考核期已过的终态 —— 2026-09-25 用户修正: 独立醒目档,
-    删除无新增惩罚, 移出「不能删」桶), B -> 可删; 来源都是「在线」
-
-    这是 WEB UI 「一眼分清能不能删」的判定源: 档位即结论, 不看页面数值字段。
-    """
-    for lane, safety, src, keyword in (
-        ("A", SAFETY_DANGER, SRC_SITE_SCOPE, "考察中"),
-        ("B", SAFETY_SAFE, SRC_SITE_SATISFIED, "已达标"),
-        ("C", SAFETY_FAILED, SRC_SITE_UNSATISFIED, "未达标"),
-    ):
-        got = safety_display(
-            HrJudgement(HrIdentity.HR, True, facts=HrSiteFacts(lane=lane)),
-            triggered=True,
-            satisfied=lane == "B",
-        )
-        assert (got.safety, got.src) == (safety, src), f"档位 {lane} => {safety}/{src}"
-        assert "在线" in got.text and keyword in got.text, "人话短语要含来源与档位关键词"
-
-
-def test_safety_display_identity_layers():
-    """身份层结论: 放行 / 超龄豁免恒可删(来源分在线/本地); 管束但不来自档位的落「策略」桶
-
-    - VERIFIED_NON_HR(完整核实未列出) -> 可删·在线·已核实
-    - EXEMPT(本地超龄豁免) -> 可删·本地
-    - mode=all 未命中(恒受管束, 无 facts) 与 新鲜度闸门(UNKNOWN+triggered) -> 不能删·策略
-    - 宽松 policy 下未核实(UNKNOWN 未被管束) -> 未核实·unverified
-    """
-    released = safety_display(HrJudgement(HrIdentity.VERIFIED_NON_HR, False), triggered=False, satisfied=False)
-    assert (released.safety, released.src) == (SAFETY_SAFE, SRC_SITE_RELEASED)
-    exempt = safety_display(HrJudgement(HrIdentity.EXEMPT, False), triggered=False, satisfied=False)
-    assert (exempt.safety, exempt.src) == (SAFETY_SAFE, SRC_LOCAL_EXEMPT)
-    mode_all = safety_display(
-        HrJudgement(HrIdentity.HR, True, reason="mode=all 且未核实 ⇒ 恒受管束"), triggered=True, satisfied=False
-    )
-    assert (mode_all.safety, mode_all.src) == (SAFETY_DANGER, SRC_POLICY)
-    gate = safety_display(HrJudgement(HrIdentity.UNKNOWN, True), triggered=True, satisfied=False)
-    assert (gate.safety, gate.src) == (SAFETY_DANGER, SRC_POLICY), "新鲜度闸门也是「管束不来自档位」"
-    loose = safety_display(HrJudgement(HrIdentity.UNKNOWN, False), triggered=False, satisfied=False)
-    assert (loose.safety, loose.src) == (SAFETY_UNKNOWN, SRC_UNVERIFIED)
-
-
-def test_judge_record_carries_verified_source():
-    """放行来源透传(v3.4, 计划 §9 状态模型): D 档已免罪记录 => verified_source=SOURCE_EXEMPT,
-    缺席式放行(逐种未列出记录 / 反应式「完整刷新未列出」) => 空串 —— 展示层据此分开编码
-
-    终态模型下「已免罪」是站点的明确结论, 不得与「没看见」混在一个 token 里。
-    """
-    exempt_j = judge_record(_view(verified=[_verified(source=SOURCE_EXEMPT)]), (H1, ""), now=NOW)
-    assert exempt_j.identity is HrIdentity.VERIFIED_NON_HR
-    assert exempt_j.verified_source == SOURCE_EXEMPT, "D 档放行要带上 SOURCE_EXEMPT 出处"
-    per_seed = judge_record(_view(verified=[_verified()]), (H1, ""), now=NOW)
-    assert per_seed.identity is HrIdentity.VERIFIED_NON_HR
-    assert per_seed.verified_source == "", "逐种未列出记录是缺席证据, 不带出处"
-    reactive = judge_record(_view(listed=[(H2, 2, "B")], verified=()), (H1, ""), now=NOW)
-    assert reactive.identity is HrIdentity.VERIFIED_NON_HR
-    assert reactive.verified_source == "", "反应式放行(完整刷新未列出)也是缺席证据"
-
-
-def test_safety_display_site_exempt_split_from_released():
-    """D 档已免罪与「未列出」分开呈现(v3.4, 2026-09-26 用户指令): 判定层同为 VERIFIED_NON_HR +
-    safe 可删, 但来源档位不同 —— 站点明确终态结论 site_exempt·「在线·已免罪」 vs
-    缺席证据 site_released·「在线·已核实，安全放行」
-    """
-    exempt = safety_display(
-        HrJudgement(HrIdentity.VERIFIED_NON_HR, False, verified_source=SOURCE_EXEMPT),
-        triggered=False,
-        satisfied=False,
-    )
-    assert (exempt.safety, exempt.src, exempt.text) == (SAFETY_SAFE, SRC_SITE_EXEMPT, "在线·已免罪")
-    released = safety_display(
-        HrJudgement(HrIdentity.VERIFIED_NON_HR, False, reason="完整刷新未列出"),
-        triggered=False,
-        satisfied=False,
-    )
-    assert (released.safety, released.src, released.text) == (
-        SAFETY_SAFE,
-        SRC_SITE_RELEASED,
-        "在线·已核实，安全放行",
-    )
-
-
-def test_safety_display_local_fallback_when_judged_none():
-    """judged None(站点未接入 / mode=off / 无可查键) => 来源记「本地·兜底」; 从未触发 = 不适用
-
-    此时 triggered/satisfied 就是本地字段逻辑的结论 —— WebUI 呈现口径与打标流程同源。
-    """
-    danger = safety_display(None, triggered=True, satisfied=False)
-    assert (danger.safety, danger.src) == (SAFETY_DANGER, SRC_LOCAL)
-    assert "本地" in danger.text and "未达标" in danger.text
-    safe = safety_display(None, triggered=True, satisfied=True)
-    assert (safe.safety, safe.src) == (SAFETY_SAFE, SRC_LOCAL)
-    assert "已达标" in safe.text
-    none = safety_display(None, triggered=False, satisfied=False)
-    assert (none.safety, none.src, none.text) == (SAFETY_NONE, "", ""), "不适用 = 无色无徽标无短语"
-
-
-def test_suspended_view_falls_back_to_local():
-    """judge_record 见 suspended ⇒ None 回落本地逻辑(计划 26-09-27-1815 §2 2.3)
-
-    ❗判定必须随停用一起停 —— 只停取数不停判定 = 拿越来越旧的清单继续放行「不在清单里」,
-    比不停更危险; 停用本身就是因为数据可信度崩了, 回落本地字段逻辑是保守方向。
-    """
-    view = _view(complete=True, listed=((H1, 1, "A"), ), verified=[HrVerified(infohash=H2, tid=2, verified_ts=OK_TS)])
-    assert judge_record(view, [H1], now=NOW) is not None, "前提: 停用前判定正常工作"
-    frozen = _view(
-        complete=True,
-        listed=((H1, 1, "A"), ),
-        verified=[HrVerified(infohash=H2, tid=2, verified_ts=OK_TS)],
-        suspended=True
-    )
-    assert judge_record(frozen, [H1], now=NOW) is None
-    assert judge_record(frozen, [H2], now=NOW) is None, "放行记录键同样回落 —— 整站回到本地字段逻辑"
-
-
-# ---------- 豁免 A / 豁免 B(计划 26-09-27-1815 §2 4.5/4.7, D7 默认全关) ----------
-
-
-def test_auto_age_limit_exempts_by_probed_period():
-    """豁免 A: auto_age_limit 开启 + 反算 P 通过机检 ⇒ 以 P 为豁免线超龄豁免(判定与早停②同源)"""
-    from auto_qb.hr.resolve import HrAnchor
-
-    now = 1_800_000_000.0  # 真实量级时刻(completion_on > 0 的防御才放行)
-    view = HrSiteView(
-        site="s",
-        mode="partial",
-        complete=True,
-        last_success_ts=now - 60.0,
-        verified_ttl=TTL,
-        probe_period_days=30.0,
-        period_consistent=True,
-    )
-    anchor = HrAnchor(completion_on=int(now - 40 * 86400))
-    got = judge_record(view, [H1], anchor=anchor, now=now, auto_age_limit=True)
-    assert got is not None and got.identity is HrIdentity.EXEMPT
-    assert "反算考核期 P" in got.reason
-
-    # 默认关(零静默变更): 不开 auto_age_limit ⇒ 不豁免(该种子无查键 ⇒ 回落本地, 即 None)
-    # —— 40 天前的种子在关闭豁免 A 时的正确去向是本地字段逻辑, 不是站点侧豁免
-    got2 = judge_record(view, [H1], anchor=anchor, now=now)
-    assert got2 is None, "未开豁免且无查键 ⇒ 回落本地(None), 绝不产生站点侧豁免"
-
-
-def test_auto_age_limit_requires_consistency_check():
-    """豁免 A 机检(§2 4.4): P 不可用(probe=0 或机检不过)⇒ 不豁免 —— 机检不是文档承诺"""
-    from auto_qb.hr.resolve import HrAnchor
-
-    now = 1_800_000_000.0
-    anchor = HrAnchor(completion_on=int(now - 40 * 86400))
-    # 视图带一个放行键(过 has_lookup_keys 闸门), 隔离验证「机检不过 ⇒ 不豁免」本身
-    _vkey = "dd" * 20
-    verified = {_vkey: HrVerified(infohash=_vkey, tid=102, verified_ts=now - 60)}
-    view = HrSiteView(
-        site="s",
-        mode="partial",
-        complete=True,
-        last_success_ts=now - 60.0,
-        verified_ttl=TTL,
-        probe_period_days=30.0,
-        period_consistent=False,
-        verified=verified,
-    )
-    got = judge_record(view, [H1], anchor=anchor, now=now, auto_age_limit=True)
-    assert got is not None and got.identity is not HrIdentity.EXEMPT, "机检不过 ⇒ 禁用"
-    view2 = HrSiteView(
-        site="s",
-        mode="partial",
-        complete=True,
-        last_success_ts=now - 60.0,
-        verified_ttl=TTL,
-        probe_period_days=0.0,
-        period_consistent=True,
-        verified=verified,
-    )
-    got2 = judge_record(view2, [H1], anchor=anchor, now=now, auto_age_limit=True)
-    assert got2 is not None and got2.identity is not HrIdentity.EXEMPT, "无 P 探测 ⇒ 禁用"
-
-
-def test_seeding_exempt_ratio_grants_overfulfilment():
-    """豁免 B: 本地做种时长 >= 要求时长 × 倍数 ⇒ 「义务已超额完成」豁免(压过清单命中)"""
-    from auto_qb.hr.resolve import HrAnchor
-
-    view = _view(complete=True, listed=((H1, 101, "A"), ))  # 清单命中中
-    anchor = HrAnchor(seeding_time=int(600 * 86400))  # 做种 600 天
-    got = judge_record(
-        view,
-        [H1],
-        anchor=anchor,
-        now=NOW,
-        required_seeding_time=100 * 86400.0,
-        seeding_exempt_ratio=5.0,
-    )
-    assert got is not None and got.identity is HrIdentity.EXEMPT
-    assert "义务已超额完成" in got.reason and got.is_hr is False
-
-    # 倍数默认 0 = 关(零静默变更): 不传 ⇒ 清单命中照常受管束
-    got2 = judge_record(view, [H1], anchor=anchor, now=NOW)
-    assert got2 is not None and got2.identity is HrIdentity.HR
-
-    # 做种不足(400 天 < 100 天 × 5)⇒ 不豁免
-    short = HrAnchor(seeding_time=int(400 * 86400))
-    got3 = judge_record(
-        view,
-        [H1],
-        anchor=short,
-        now=NOW,
-        required_seeding_time=100 * 86400.0,
-        seeding_exempt_ratio=5.0,
-    )
-    assert got3 is not None and got3.identity is HrIdentity.HR
+def test_row2_terminal_hit_releases(lane, src, satisfied):
+    view = make_view(entry=make_entry(lane, remain=0))
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+    assert j.is_hr is False
+    assert j.released_src == src
+    assert j.site_satisfied is satisfied
+
+
+def test_row2_c_is_terminal_not_managed():
+    """「网站显示未达标是终态」(20:43 定稿): 考核结论已定, 即便本地未达标也放行"""
+    view = make_view(entry=make_entry(LANE_UNSATISFIED, remain=0))
+    j = judge_record(view, ("h1", ), anchor=anchor(seeding_time=0), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+    assert j.is_hr is False
+
+
+# ---------------- 行 3: 放行记录(未列出 / D 免罪) → 放行; 锚点漂移作废 ----------------
+
+
+def test_row3_release_record_releases():
+    view = make_view(verified=make_verified())
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+    assert j.is_hr is False
+
+
+def test_row3_release_permanent_no_expiry():
+    """终态不可逆: 放行记录远超任何旧 verified_ttl 仍有效(v3 无时效概念)"""
+    ver = make_verified()
+    ver.verified_ts = NOW - 365 * 86400  # 一年前的放行
+    view = make_view(verified=ver)
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+
+
+def test_row3_anchor_drift_invalidates_to_local_fallback():
+    """本机重下(锚点漂移) ⇒ 放行作废 → 行 4 本地兜底(调用方会把未达标种子管住)"""
+    view = make_view(verified=make_verified())
+    j = judge_record(view, ("h1", ), anchor=anchor(downloaded=2 << 30), now=NOW)  # downloaded 增长
+    assert j.identity is HrIdentity.NO_EVIDENCE
+
+
+def test_row3_exempt_source_keeps_label():
+    view = make_view(verified=make_verified(source=SOURCE_EXEMPT))
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+    assert j.released_src == SOURCE_EXEMPT
+
+
+# ---------------- 行 4: 无证据 → 本地兜底(NO_EVIDENCE) ----------------
+
+
+def test_row4_no_evidence():
+    view = make_view()
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.NO_EVIDENCE
+    assert j.is_hr is False  # 行 4 由调用方本地判据兜底; is_hr 只表达站点侧明确结论
+
+
+def test_row4_missing_infohash():
+    view = make_view(entry=make_entry(LANE_SCOPE))
+    j = judge_record(view, ("", ), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.NO_EVIDENCE
+
+
+def test_row4_local_satisfied_hint_not_judged_here():
+    """行 4 的「达标放行」判据在调用方(本地字段), 本模块只交回 NO_EVIDENCE"""
+    view = make_view()
+    j = judge_record(view, ("h1", ), anchor=anchor(seeding_time=100 * 86400), now=NOW)
+    assert j.identity is HrIdentity.NO_EVIDENCE
+
+
+# ---------------- 不适用(None): 未接入 / 全站型 ----------------
+
+
+def test_none_when_view_missing():
+    assert judge_record(None, ("h1", ), anchor=anchor(), now=NOW) is None
+
+
+def test_none_when_listing_none():
+    """全站型(listing=none)不取数, 判定恒行 4 本地兜底 —— 与未接入同效(返回 None)"""
+    view = make_view(entry=make_entry(LANE_SCOPE), listing="none")
+    assert judge_record(view, ("h1", ), anchor=anchor(), now=NOW) is None
+
+
+# ---------------- 双 infohash 保守合并 ----------------
+
+
+def test_dual_hash_conservative_merge_hr_wins():
+    """v1 命中考察中 / v2 未列出放行 → 取更保守者(管束)"""
+    entry = make_entry(LANE_SCOPE, "h1")
+    ver = make_verified("h2")
+    view = make_view(entry=entry, verified=ver)
+    j = judge_record(view, ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.HR
+
+
+def test_dual_hash_conservative_merge_released_wins_over_unknown():
+    """v1 无证据 / v2 放行记录 → 放行"""
+    ver = make_verified("h2")
+    view = make_view(verified=ver)
+    j = judge_record(view, ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+
+
+# ---------------- §3.2 十二格情形矩阵(逐格参数化) ----------------
+# 本地轴用 satisfied_local 模拟调用方行 4 的本地判据(达标=seeding_time 超额);
+# 网站轴用视图内容模拟。断言 = (站点侧 identity, 最终 is_hr —— 行 4 由本地兜底合成)。
+
+
+def _final(view, *, seeding_time: int) -> bool:
+    """模拟 record.check_hr_condition 的行 4 合成: 达标放行 / 未达标管束(行 1/2/3 直接按站点)"""
+    j = judge_record(view, ("h1", ), anchor=anchor(seeding_time=seeding_time), now=NOW)
+    if j.identity is HrIdentity.NO_EVIDENCE:
+        return not (seeding_time >= 3 * 86400)  # 未达标 → 管束
+    return j.is_hr
+
+
+def _view_for(site_state: str) -> HrSiteView:
+    if site_state == "A":
+        return make_view(entry=make_entry(LANE_SCOPE))
+    if site_state == "B":
+        return make_view(entry=make_entry(LANE_SATISFIED, remain=0))
+    if site_state == "C":
+        return make_view(entry=make_entry(LANE_UNSATISFIED, remain=0))
+    if site_state == "D":
+        return make_view(entry=make_entry(LANE_EXEMPT, remain=0))
+    if site_state == "not-listed":
+        return make_view(verified=make_verified())
+    if site_state == "none":
+        return make_view()
+    raise ValueError(site_state)
+
+
+@pytest.mark.parametrize("site_state", ["A", "B", "C", "D", "not-listed", "none"])
+def test_matrix_local_satisfied(site_state):
+    """本地已达标行: × A 管束(绝对权威); 其余全放行"""
+    view = _view_for(site_state)
+    is_hr = _final(view, seeding_time=10 * 86400)  # 本地达标(超额)
+    expected = site_state == "A"
+    assert is_hr is expected, f"本地已达标 × {site_state}"
+
+
+@pytest.mark.parametrize("site_state", ["A", "B", "C", "D", "not-listed", "none"])
+def test_matrix_local_unsatisfied(site_state):
+    """本地未达标行: × A 管束; × 无证据管束(兜底); 其余放行(终态不可逆)"""
+    view = _view_for(site_state)
+    is_hr = _final(view, seeding_time=0)
+    expected = site_state in ("A", "none")
+    assert is_hr is expected, f"本地未达标 × {site_state}"
+
+
+def test_matrix_counts():
+    """管束恰好三格(2×6 矩阵): A×达标 / A×未达标 / 无证据×未达标"""
+    managed = 0
+    for local_ok in (True, False):
+        for site_state in ("A", "B", "C", "D", "not-listed", "none"):
+            view = _view_for(site_state)
+            if _final(view, seeding_time=10 * 86400 if local_ok else 0):
+                managed += 1
+    assert managed == 3
+
+
+# ---------------- safety_display 转译 ----------------
+
+
+def test_safety_display_local_fallback():
+    d = safety_display(None, triggered=True, satisfied=False)
+    assert (d.safety, d.src) == ("danger", "local")
+    d = safety_display(None, triggered=True, satisfied=True)
+    assert (d.safety, d.src) == ("safe", "local")
+
+
+def test_safety_display_site_scope_danger():
+    view = make_view(entry=make_entry(LANE_SCOPE))
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    d = safety_display(j, triggered=True, satisfied=False)
+    assert (d.safety, d.src) == ("danger", "site_scope")
+
+
+def test_safety_display_site_unsatisfied_failed():
+    view = make_view(entry=make_entry(LANE_UNSATISFIED, remain=0))
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    d = safety_display(j, triggered=True, satisfied=False)
+    assert (d.safety, d.src) == ("failed", "site_unsatisfied")
+
+
+def test_safety_display_released_safe():
+    view = make_view(verified=make_verified())
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    d = safety_display(j, triggered=False, satisfied=False)
+    assert (d.safety, d.src) == ("safe", "site_released")
+
+
+def test_safety_display_no_evidence():
+    view = make_view()
+    j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
+    d = safety_display(j, triggered=True, satisfied=False)
+    assert (d.safety, d.src) == ("danger", "local")
+    d = safety_display(j, triggered=False, satisfied=False)
+    assert (d.safety, d.src) == ("unknown", "unverified")

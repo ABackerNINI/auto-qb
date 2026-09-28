@@ -37,7 +37,7 @@
 - test_record_hr_falls_back_without_link: 未注入判定桥 / 站点未接入 / 桥返回 None -> 行为与既有本地逻辑完全一致(零静默变更)
 - test_record_hr_excluded_blocks_all_entries: HR 排除命中标签 -> 三入口全短路且判定桥不被打扰
 - test_record_hr_excluded_category_and_regex: HR 排除的分类命中与 regex:/ :ignore_case 格式
-- test_record_hr_excluded_beats_site_all_mode: 排除优先级最高, mode=all 也压不过用户显式排除
+- test_record_hr_excluded_beats_site_judgement: 排除优先级最高, 站点接入(enabled)也压不过用户显式排除
 - test_record_hr_excluded_table_empty_is_noop: 排除表未命中 -> 行为与无排除一致(零静默变更)
 - test_store_attaches_hr_link: 注入的判定桥挂到新记录上(未注入时不引入 HR 依赖)
 - test_snapshot_fields_match_record_slots: 守卫: _SNAPSHOT_FIELDS ↔ record 声明字段一一对应, REQUIRED ⊆ SNAPSHOT
@@ -243,12 +243,8 @@ class _StubLink:
         *,
         anchor=None,
         now=0.0,
-        completed_age_limit=0.0,
-        auto_age_limit=False,
-        required_seeding_time=0.0,
-        seeding_exempt_ratio=0.0
     ):
-        self.calls.append((site, tuple(infohashes), anchor, completed_age_limit))
+        self.calls.append((site, tuple(infohashes), anchor))
         return self.judged
 
 
@@ -266,7 +262,9 @@ def _hr_record(*, downloaded=0, total_size=100 * 1024**2, mode="partial"):
         name="X", domains=["d.com"], hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7))
     )
     if mode is not None:
-        conf.hr_check = SiteHrCheckConfig(mode=mode, hr_page_url="https://x.com/myhr.php")
+        conf.hr_check = SiteHrCheckConfig(
+            enabled=(mode != "off"), tracker="x", hr_page_url="https://x.com/myhr.php", required_seeding_time=86400.0
+        )
     rec.tracker_conf = conf
     return rec
 
@@ -276,22 +274,23 @@ def test_record_hr_follows_site_judgement():
     from auto_qb.hr.resolve import HrIdentity, HrJudgement
 
     rec = _hr_record(downloaded=0)  # 本地看是纯辅种, 站点侧却是清单命中
-    link = _StubLink(HrJudgement(identity=HrIdentity.HR, is_hr=True, reason="清单命中(档位 A)"))
+    link = _StubLink(HrJudgement(identity=HrIdentity.HR, reason="清单命中(档位 A)"))
     rec.hr_link = link
     assert rec.check_hr_condition() is True, "名单命中即受管束, 与本地 downloaded=0 无关"
-    site, hashes, anchor, age_limit = link.calls[0]
+    site, hashes, anchor = link.calls[0]
     assert site == "X" and hashes == (rec.infohash_v1, rec.infohash_v2)
     assert anchor == rec.hr_anchor() and anchor.added_on == 1000
-    assert age_limit == 0.0, "未配置豁免线时透传 0(关闭), 豁免永不触发"
 
-    link.judged = HrJudgement(identity=HrIdentity.HR, is_hr=True, site_satisfied=True)
-    assert rec.check_hr_satisfied() is True, "站点侧 B 档/剩余 0 => 直接达标"
-    link.judged = HrJudgement(identity=HrIdentity.HR, is_hr=True, site_satisfied=False)
+    link.judged = HrJudgement(identity=HrIdentity.RELEASED, site_satisfied=True)
+    assert rec.check_hr_satisfied() is True, "站点侧 B 档(终态放行) => 直接达标"
+    link.judged = HrJudgement(identity=HrIdentity.RELEASED, site_satisfied=False)
     assert rec.check_hr_satisfied() is False, "站点侧 C 档 => 直接未达标"
-    link.judged = HrJudgement(identity=HrIdentity.HR, is_hr=True, site_satisfied=None)
+    link.judged = HrJudgement(identity=HrIdentity.RELEASED, site_satisfied=None)
     assert rec.check_hr_satisfied() is False, "站点没给达标字段 => 回落本地(做种不足)"
     rec.seeding_time = 3 * 86400 + 12 * 3600
     assert rec.check_hr_satisfied() is True, "回落本地时做种时长达标仍算达标(不能因缺字段误报)"
+    link.judged = HrJudgement(identity=HrIdentity.HR)
+    assert rec.check_hr_satisfied() is False, "命中考察中 => 义务仍在, 恒未达标"
 
 
 def test_record_hr_released_by_site_view():
@@ -300,7 +299,7 @@ def test_record_hr_released_by_site_view():
 
     rec = _hr_record(downloaded=100 * 1024**2)
     assert rec.check_hr_condition() is True, "前置: 本地口径下它确实触发(对照用)"
-    rec.hr_link = _StubLink(HrJudgement(identity=HrIdentity.VERIFIED_NON_HR, is_hr=False, reason="完整刷新未列出"))
+    rec.hr_link = _StubLink(HrJudgement(identity=HrIdentity.RELEASED, reason="覆盖范围内未列出"))
     assert rec.check_hr_condition() is False
     assert rec.check_hr_satisfied() is False
 
@@ -319,7 +318,7 @@ def test_record_hr_falls_back_without_link():
     asked = len(link.calls)
     assert rec.hr_judgement() is None and rec.check_hr_condition() is True
     assert len(link.calls) == asked, "站点未接入时不该读判定桥"
-    rec.tracker_conf.hr_check = SiteHrCheckConfig(mode="off")
+    rec.tracker_conf.hr_check = SiteHrCheckConfig(enabled=False)
     assert rec.hr_judgement() is None and len(link.calls) == asked, "mode=off 不该打扰判定桥"
 
 
@@ -335,7 +334,7 @@ def test_record_hr_excluded_blocks_all_entries():
     assert rec.check_hr_condition() is True and rec.hr_excluded() is False, "对照: 未配排除时照常触发"
     rec.tracker_conf.hr.exclude_tags = ["noHR"]
     assert rec.hr_excluded() is True
-    link = _StubLink(HrJudgement(identity=HrIdentity.HR, is_hr=True, reason="清单命中(档位 A)"))
+    link = _StubLink(HrJudgement(identity=HrIdentity.HR, reason="清单命中(档位 A)"))
     rec.hr_link = link
     asked = len(link.calls)
     assert rec.hr_judgement() is None, "排除种子连站点侧判定都不发起"
@@ -358,10 +357,10 @@ def test_record_hr_excluded_category_and_regex():
     assert rec.hr_excluded() is True
 
 
-def test_record_hr_excluded_beats_site_all_mode():
-    """排除优先级最高: mode=all(未核实恒受管束)也压不过用户显式排除"""
-    rec = _hr_record(downloaded=70 * 1024**2, mode="all")
-    assert rec.tracker_conf.hr_check.mode == "all"
+def test_record_hr_excluded_beats_site_judgement():
+    """排除优先级最高: 站点接入(enabled)也压不过用户显式排除"""
+    rec = _hr_record(downloaded=70 * 1024**2, mode="enabled")
+    assert rec.tracker_conf.hr_check.enabled is True
     rec.tags = "noHR"
     rec.tracker_conf.hr.exclude_tags = ["noHR"]
     assert rec.check_hr_condition() is False and rec.check_hr_satisfied() is False

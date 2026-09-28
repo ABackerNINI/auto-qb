@@ -31,7 +31,8 @@ from auto_qb.hr.fetcher import NullFetcher
 from auto_qb.hr.model import CHANNEL_OK, CHANNEL_SILENT
 from auto_qb.hr.resolve import HrSiteView, HrViewSet
 from auto_qb.hr.service import ACTION_ERROR, ACTION_NO_CHANNEL, ACTION_PARTIAL, ACTION_REFRESHED, ACTION_REUSED, \
-    REASON_BUDGET, HrRefreshResult, HrRefreshService
+    ACTION_WAITING, REASON_BUDGET, HrRefreshResult, HrRefreshService
+import auto_qb.hr.worker as worker_module
 from auto_qb.hr.worker import HrViewPublisher, HrWorker, stable_key, view_signature
 from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, \
     torrent_blob
@@ -63,7 +64,7 @@ def _service(tmp_path, fetcher, *, global_overrides=None, persist=True, allow_fe
 
 
 def _view(revision=1, channel_state=CHANNEL_OK) -> HrSiteView:
-    return HrSiteView(site="pt.example.com", mode="partial", revision=revision, channel_state=channel_state)
+    return HrSiteView(site="pt.example.com", listing="list", revision=revision, channel_state=channel_state)
 
 
 def _wait_until(pred, timeout: float = 3.0) -> bool:
@@ -123,8 +124,8 @@ def test_run_once_refreshes_and_publishes(tmp_path):
     assert publisher.revision == 1
     view = publisher.latest().get("pt.example.com")
     assert view is not None
-    # 反查表同时收 v1/v2(同一个种子最多两个键), 所以按 tid 集合断言而不是计数
-    assert {e.tid for e in view.by_infohash.values()} == {TID_A}
+    # 行同时在 A/B/C 三档页出现 → 波内逐档覆盖, 最终档位取最后一次见到(C, 终态)
+    assert {e.tid for e in view.lane_terminal.values()} == {TID_A}
     assert worker.rounds == 1 and worker.last_run_ts > 0
 
 
@@ -152,14 +153,14 @@ def test_run_once_logs_no_channel_once_per_state(tmp_path, caplog):
     assert [r.action for r in worker.last_results] == [ACTION_NO_CHANNEL]
 
 
-def test_run_once_warns_on_partial_refresh(tmp_path, caplog):
-    # 三个档位都返回「没有 HR 表」的页面: 覆盖证明不成立 => partial(疑似改版), service 不报这条
+def test_run_once_warns_on_parse_breakdown(tmp_path, caplog):
+    # 三个档位都返回「没有 HR 表」的页面: 全档失效 => error(疑似改版), service 侧已告警一次
     pages = {"A": REVISED_PAGE, "B": REVISED_PAGE, "C": REVISED_PAGE}
     service = _service(tmp_path, FakeFetcher(pages=pages))
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
-    with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
+    with caplog.at_level(logging.WARNING, logger="auto_qb.hr"):
         worker.run_once()
-    assert [r.action for r in worker.last_results] == [ACTION_PARTIAL]
+    assert [r.action for r in worker.last_results] == [ACTION_ERROR]
     assert any(r.levelno >= logging.WARNING for r in caplog.records), "改版信号必须告警"
 
 
@@ -171,21 +172,20 @@ def test_pacing_partial_is_info_not_warning_and_not_repeated(tmp_path, caplog):
     同一个「等间隔」在轮次间会分别表现为 partial(首页抓到、第二页被拦)与 waiting。
     """
     clock = Clock()
-    pages = {"A": myhr_page([row(TID_A)], has_next=True), "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE}
-    service = _service(
-        tmp_path,
-        FakeFetcher(pages=pages, blobs=_blobs(TID_A)),
-        clock=clock,
-        global_overrides={"min_torrent_interval": 3600.0},
-    )
+    service = _service(tmp_path, FakeFetcher(pages={}, blobs={}), clock=clock)
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+    pacing = HrRefreshResult(
+        site="pt.example.com", action=ACTION_PARTIAL, reason="配额/间隔受限(间隔: 还差 104s)", reason_kind=REASON_BUDGET
+    )
+    waiting = HrRefreshResult(
+        site="pt.example.com", action=ACTION_WAITING, reason="未到可取时刻(间隔, 还差 51s)", reason_kind=REASON_BUDGET
+    )
 
     with caplog.at_level(logging.DEBUG, logger="auto_qb.hr.worker"):
-        worker.run_once()  # 第一页抓到、第二页被自己的间隔拦住 => partial(budget, 根因=间隔)
-        clock.advance(121.0)  # 过掉截断轮次的不完备窗口(2×poll=120s, v2.6 起 ≥ 2×poll_interval)
-        worker.run_once()  # 未到可取时刻 => waiting(同一根因)
+        worker._note("pt.example.com", pacing)  # partial(根因=间隔)
+        worker._note("pt.example.com", waiting)  # waiting(同一根因)
         clock.advance(1.0)
-        worker.run_once()  # 同上(倒计时数字变了, 抹掉后同键)
+        worker._note("pt.example.com", waiting)  # 倒计时数字变了, 抹掉后同键
 
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING], \
         f"频控截断不是故障, 不得 WARNING: {[(r.levelname, r.getMessage()) for r in caplog.records]}"
@@ -199,22 +199,16 @@ def test_pacing_partial_is_info_not_warning_and_not_repeated(tmp_path, caplog):
 def test_pacing_state_reminds_once_per_window(tmp_path, caplog):
     """节流态持续时按 channel_silence_warn 周期提醒一次(既不满屏也不静默消失)"""
     clock = Clock()
-    pages = {"A": myhr_page([row(TID_A)], has_next=True), "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE}
-    service = _service(
-        tmp_path,
-        FakeFetcher(pages=pages, blobs=_blobs(TID_A)),
-        clock=clock,
-        global_overrides={
-            "min_torrent_interval": 3600.0,
-            "channel_silence_warn": 120.0
-        },
-    )
+    service = _service(tmp_path, FakeFetcher(pages={}, blobs={}), clock=clock)
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+    pacing = HrRefreshResult(
+        site="pt.example.com", action=ACTION_PARTIAL, reason="配额/间隔受限(间隔: 还差 104s)", reason_kind=REASON_BUDGET
+    )
 
     with caplog.at_level(logging.INFO, logger="auto_qb.hr.worker"):
-        worker.run_once()  # partial(根因=间隔)
-        clock.advance(121.0)  # 超过一个提醒窗口
-        worker.run_once()  # waiting(同根因, 但到点了 => 再提醒一次)
+        worker._note("pt.example.com", pacing)  # 说一次
+        clock.advance(6 * 3600 + 1)  # 超过一个提醒窗口(v3 常量 CHANNEL_SILENCE_WARN = 6H)
+        worker._note("pt.example.com", pacing)  # 同根因但到点了 => 再提醒一次
 
     notes = [r for r in caplog.records if "节流中" in r.getMessage()]
     assert len(notes) == 2, f"超过一个提醒窗口后应再记一次: {[n.getMessage() for n in notes]}"
@@ -267,14 +261,10 @@ def test_stable_key_erases_countdowns():
     assert stable_key("a") != stable_key("b")
 
 
-def test_silence_reminder_is_throttled(tmp_path, caplog):
+def test_silence_reminder_is_throttled(tmp_path, caplog, monkeypatch):
     clock = Clock()
-    service = _service(
-        tmp_path,
-        FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)),
-        clock=clock,
-        global_overrides={"channel_silence_warn": 3600.0}
-    )
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
 
     class _Endpoint:
         last_contact_ts = 0.0
@@ -295,19 +285,14 @@ def test_silence_reminder_is_throttled(tmp_path, caplog):
     assert len(quiet) == 2, f"每个 warn_gap 只提醒一次: {quiet}"
 
 
-def test_silence_warning_names_affected_sites(tmp_path, caplog):
-    """通道静默是**端点级**事件 ⇒ 文案里要列出受影响站点(M4 四类事件)
+def test_silence_warning_names_affected_sites(tmp_path, caplog, monkeypatch):
+    """通道静默是**端点级**事件 ⇒ 文案里要列出受影响站点(只有它能判断后果)
 
-    只说「通道静默」而不说「哪些站点的数据在变旧」, 用户没法判断该不该管它 —— 而这条告警
-    在单实例多站点的部署里恰恰可能只影响其中一个站点的预期节奏。
+    只说「通道静默」而不说「哪些站点的数据在变旧」, 用户没法判断该不该管它。
     """
     clock = Clock()
-    service = _service(
-        tmp_path,
-        FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)),
-        clock=clock,
-        global_overrides={"channel_silence_warn": 3600.0}
-    )
+    monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
+    service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
 
     class _Endpoint:
         last_contact_ts = 0.0
@@ -360,7 +345,7 @@ def test_anchors_provider_failure_is_ignored(tmp_path, caplog):
 
 def test_no_sites_publishes_empty_view(tmp_path):
     service = _service(tmp_path, FakeFetcher(pages={}))
-    service.site_confs["pt.example.com"] = site_conf(mode="off")
+    service.site_confs["pt.example.com"] = site_conf(enabled=False)
     publisher = HrViewPublisher()
     worker = HrWorker(service=service, publisher=publisher, poll_interval=60.0)
     assert worker.run_once() == []
@@ -401,4 +386,5 @@ def test_revision_bumps_when_data_changes(tmp_path):
     fetcher.pages = _pages(TID_A, TID_B)
     worker.run_once()
     assert publisher.revision == 2, "数据实质变化(新增一条) => 版本抬升"
-    assert {e.tid for e in publisher.latest().get("pt.example.com").by_infohash.values()} == {TID_A, TID_B}
+    view = publisher.latest().get("pt.example.com")
+    assert {e.tid for e in view.lane_terminal.values()} == {TID_A, TID_B}

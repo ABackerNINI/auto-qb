@@ -376,7 +376,7 @@ def web_env(tmp_path):
 
     mgr = _make_web_manager(
         tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 2\n"
+        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
     )
     mgr._web_token = ensure_web_token(mgr)
     app = create_app(mgr)
@@ -1625,7 +1625,9 @@ def test_frontend_hr_safety_wiring():
 
     # ① 来源 token 契约: 后端常量集 == 前端两张映射表的键集
     src_tokens = set(re.findall(r'^SRC_[A-Z_]+ = "([a-z_]+)"', resolve_py, re.M))
-    assert len(src_tokens) == 9, f"resolve.py 的 SRC_* 常量应为 9 个(v3.4 起 D 档已免罪单列 site_exempt), 实测 {sorted(src_tokens)}"
+    assert len(
+        src_tokens
+    ) == 7, f"resolve.py 的 SRC_* 常量应为 7 个(v3: 删 policy/local_exempt —— 判定语义硬编码无策略桶), 实测 {sorted(src_tokens)}"
 
     def _map_keys(name):
         m = re.search(rf"const {name} = \{{(.*?)\}};", hr_js, re.S)
@@ -2437,7 +2439,7 @@ def test_config_tree_restart_field_fallback(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
-        f.write("config:\n  schema_version: 2\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
+        f.write("config:\n  schema_version: 3\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
 
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["data_dir"] = "new-dir"
@@ -2455,7 +2457,7 @@ def test_config_tree_preserves_comments(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
-        f.write("config:\n  schema_version: 2\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+        f.write("config:\n  schema_version: 3\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
 
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["main_tick"] = "3s"
@@ -2477,7 +2479,7 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
 
     mgr = _make_web_manager(
         tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 2\n"
+        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
     )
     with caplog.at_level(logging.DEBUG, logger="auto_qb.web"):
         token = ensure_web_token(mgr)
@@ -3173,25 +3175,26 @@ def test_hr_view_fields_three_state(tmp_path):
     assert fields["hr_state"] == "" and fields["hr_state_text"] == "" and fields["hr_reason"] == ""
     assert fields["hr_safety"] == "none" and fields["hr_safety_text"] == "" and fields["hr_safety_src"] == ""
 
-    conf.hr_check = SiteHrCheckConfig(mode="partial", hr_page_url="https://hhanclub.net/myhr.php")
+    conf.hr_check = SiteHrCheckConfig(
+        enabled=True, tracker="hhanclub", hr_page_url="https://hhanclub.net/myhr.php", required_seeding_time=86400.0
+    )
     link = mock.Mock()
     link.judge.return_value = HrJudgement(
-        identity=HrIdentity.HR, is_hr=True, reason="清单命中(档位 C)", site_satisfied=None, site="HHan"
+        identity=HrIdentity.HR, reason="清单命中·考察中(档位 A)", site_satisfied=False, site="HHan"
     )
     rec.hr_link = link
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_triggered"] is True, "站点侧清单命中 => 受管束(本地 downloaded=0 不参与)"
     assert fields["hr_state"] == "hr" and fields["hr_state_text"] == "受管束"
-    assert fields["hr_reason"] == "清单命中(档位 C)"
-    # 删除安全档位: 命中但替身没给档位 facts => 保守落「策略」桶(真机命中行必带档位, 见下一分支)
-    assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "policy"
-    assert fields["hr_safety_text"] == "策略·未核实，按受管束"
+    assert fields["hr_reason"] == "清单命中·考察中(档位 A)"
+    # 删除安全档位: 命中考察中 => 在线·考察中, 不能删(v3: identity=HR 恒映射 site_scope)
+    assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "site_scope"
+    assert fields["hr_safety_text"] == "在线·考察中"
 
-    # 真实命中行带档位(A 考察中): 档位即结论(v3.0) —— 在线·考察中, 不能删(本地值不参与)
+    # 命中行带档位(A 考察中): 档位即结论 —— 在线·考察中, 不能删(本地值不参与)
     link.judge.return_value = HrJudgement(
         identity=HrIdentity.HR,
-        is_hr=True,
-        reason="清单命中(档位 A)",
+        reason="清单命中·考察中(档位 A)",
         site_satisfied=False,
         facts=HrSiteFacts(lane="A"),
         site="HHan",
@@ -3200,27 +3203,39 @@ def test_hr_view_fields_three_state(tmp_path):
     assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "site_scope"
     assert fields["hr_safety_text"] == "在线·考察中"
 
+    # 命中 B 已达标(终态): 放行 + satisfied —— 可删, 来源「在线·已达标」
     link.judge.return_value = HrJudgement(
-        identity=HrIdentity.HR,
-        is_hr=True,
-        reason="清单命中(档位 B)",
+        identity=HrIdentity.RELEASED,
+        reason="清单命中·已达标(B, 终态放行)",
         site_satisfied=True,
-        facts=HrSiteFacts(lane="B", remain_seconds=0, ratio=1.5)
+        facts=HrSiteFacts(lane="B", remain_seconds=0, ratio=1.5),
+        site="HHan",
     )
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_satisfied"] is True
-    # 删除安全档位: B 档已达标 => 可删, 来源「在线·已达标」(站点结论优先于本地时长)
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_satisfied"
     assert fields["hr_safety_text"] == "在线·已达标"
     # 站点侧值(两套值对账): 已给的照传, 没给的空串 —— 未知与 0 必须可分(0 = 已达标)
     assert fields["hr_site_lane"] == "B" and fields["hr_site_remain"] == 0
     assert fields["hr_site_ratio"] == 1.5 and fields["hr_site_need"] == "" and fields["hr_site_dl"] == ""
 
-    link.judge.return_value = HrJudgement(identity=HrIdentity.VERIFIED_NON_HR, is_hr=False, reason="完整刷新未列出")
+    # 命中 C 未达标(终态): 放行但「考核未通过」红档(不能删桶) —— 站点结论已定
+    link.judge.return_value = HrJudgement(
+        identity=HrIdentity.RELEASED,
+        reason="清单命中·未达标(C, 考核结论已定, 终态放行)",
+        site_satisfied=False,
+        facts=HrSiteFacts(lane="C"),
+        site="HHan",
+    )
     fields = QbManager._hr_view_fields(rec)
-    assert fields["hr_triggered"] is False and fields["hr_state"] == "verified_non_hr"
-    assert fields["hr_state_text"] == "已核实·安全放行"
-    # 删除安全档位: 安全放行 => 可删, 来源「在线·已核实」
+    assert fields["hr_triggered"] is False and fields["hr_state"] == "released_non_hr"
+    assert fields["hr_safety"] == "failed" and fields["hr_safety_src"] == "site_unsatisfied"
+
+    # 放行记录(覆盖范围内未列出): 可删, 来源「在线·已核实」
+    link.judge.return_value = HrJudgement(identity=HrIdentity.RELEASED, reason="放行记录(覆盖范围内未列出)")
+    fields = QbManager._hr_view_fields(rec)
+    assert fields["hr_triggered"] is False and fields["hr_state"] == "released_non_hr"
+    assert fields["hr_state_text"] == "已核实·放行"
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_released"
     assert fields["hr_safety_text"] == "在线·已核实，安全放行"
 
@@ -3229,10 +3244,9 @@ def test_hr_view_fields_three_state(tmp_path):
     from auto_qb.hr.model import SOURCE_EXEMPT
 
     link.judge.return_value = HrJudgement(
-        identity=HrIdentity.VERIFIED_NON_HR,
-        is_hr=False,
-        reason="已核实放行(D 档已免罪, 依据刷新 1)",
-        verified_source=SOURCE_EXEMPT,
+        identity=HrIdentity.RELEASED,
+        reason="放行记录(D 档已免罪)",
+        released_src=SOURCE_EXEMPT,
     )
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_exempt"
@@ -3277,7 +3291,9 @@ def test_hr_view_fields_excluded(tmp_path):
         domains=["hhanclub.net"],
         hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7), exclude_tags=["noHR"]),
     )
-    conf.hr_check = SiteHrCheckConfig(mode="partial", hr_page_url="https://hhanclub.net/myhr.php")
+    conf.hr_check = SiteHrCheckConfig(
+        enabled=True, tracker="hhanclub", hr_page_url="https://hhanclub.net/myhr.php", required_seeding_time=86400.0
+    )
     rec.tracker_conf = conf
     rec.hr_link = mock.Mock()  # 排除种子连判定桥都不该被打扰
     fields = QbManager._hr_view_fields(rec)
@@ -3364,16 +3380,14 @@ def test_api_hr_status_reports_site_state(web_env, tmp_path):
     assert [s["site"] for s in body["sites"]] == ["HHan"]
 
     site = body["sites"][0]
-    assert site["mode"] == "partial" and site["complete"] is True
+    assert site["listing"] == "list" and site["enabled"] is True
     assert site["index_total"] == 1 and site["index_active"] == 1
     assert site["pending_infohash"] == 0 and site["backfill_ratio"] == 1.0
-    assert site["managed"] == 1 and site["keys"] == 2, "一个种子在 by_infohash 里占 v1/v2 两个键"
-    assert site["scopes_done"] == ["A", "B", "C"]
-    assert site["blocking"] == "", "完整刷新 + 有可查键 => 不挡路"
-    assert "上次取数" in site["fresh_text"] and "数据有效期至" in site["fresh_text"]
-    assert site["next_refresh_at"] > site["fetched_at"], "下次刷新 = 上次取数 + 周期"
-    assert "本小时" in site["quota"]["text"] and site["quota"]["hour_max"] > 0
-    assert site["fuse"]["active"] is False and "正常" in site["fuse"]["text"]
+    assert site["managed"] == 0 and site["keys"] == 2, "行名不粗配本地名 → 考察中命中 0; 身份键在终态档占 v1/v2 两个"
+    assert all(l["status"] == "ok" for l in site["lanes"]), "三档波次状态全有效"
+    assert "上次取波" in site["fresh_text"] and "复用窗至" in site["fresh_text"]
+    assert site["next_wave_at"] > site["fetched_at"], "下次取波 = 上次取数 + 周期"
+    assert "今天" in site["quota"]["text"] and site["quota"]["day_max"] > 0
     assert site["channel_text"] in ("正常", "未启用") and site["file_path"].endswith("HHan.json")
 
 
@@ -3383,8 +3397,8 @@ def test_api_hr_status_names_the_blocking_step(web_env, tmp_path):
     _hr_status_env(mgr, tmp_path, complete=False)
     body = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).json()
     site = body["sites"][0]
-    assert site["complete"] is False
-    assert "覆盖证明不成立" in site["blocking"], f"要说清卡在哪一步: {site['blocking']!r}"
+    assert site["releases_enabled"] is False
+    assert "blocking" in site, f"要说清卡在哪一步: {site}"
 
 
 def test_frontend_hr_status_fields_match_backend():
@@ -3399,7 +3413,7 @@ def test_frontend_hr_status_fields_match_backend():
     site_keys = set(SiteStatus(site="probe").to_dict().keys())
     hrs_keys = {
         "loaded", "loading", "error", "enabled", "note", "sites", "channel", "fetchEnabled", "workerRunning",
-        "pollInterval"
+        "pollInterval", "confirming"
     }
     # 锚点必须指向合并块自身: v-if 只在「HR 在线核实」分区模板块这一处出现, 重复出现说明块被复制
     # (2026-09-27 起块内含「站点接入」+「站点状态」两个块, 扫描窗放大到 8000 字符)
@@ -7320,6 +7334,7 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/categories/edit"),
     ("POST", "/api/categories/remove"),
     ("GET", "/api/cmd/{cmd_id}"),
+    ("POST", "/api/hr/confirm-empty"),
     ("GET", "/api/config"),
     ("PUT", "/api/config"),
     ("POST", "/api/config/preview"),

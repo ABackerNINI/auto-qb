@@ -223,7 +223,7 @@ class QbManager(
         # 同 WebUIRuntime 的思路 —— 附属线程与文件句柄的生命周期不进核心域, 主循环只见门面:
         # 取数线程按 poll_interval 自唤醒, 主循环与判定路径只读视图(hr.view_set(), 零等待、
         # 读取时现算三态); hr.wake() 是留给主循环的**可选**叫醒口(非阻塞, 当前无调用点)。
-        # 未启用(总开关关 / 无站点 mode != off)时它什么都建, 也不会起任何线程。
+        # 未启用(总开关关 / 无站点 enabled)时它什么都建, 也不会起任何线程。
         self.hr = HrRuntime(self)
         # 判定桥: 记录持有门面的**稳定引用**(热重载不换对象), 读取时现算三态 ——
         # 故锚点漂移/站点视图更新都不需要"记录置脏"或全库重建记录(计划 §9)。
@@ -729,7 +729,7 @@ class QbManager(
             if conf is None:
                 continue
             site_conf = conf.hr_check
-            if site_conf is None or site_conf.mode == "off":
+            if site_conf is None or not site_conf.enabled:
                 continue
             anchor = rec.hr_anchor()
             site = out.setdefault(conf.name, {})

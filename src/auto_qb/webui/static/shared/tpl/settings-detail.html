@@ -206,23 +206,29 @@
                         <article v-for="s in hrs.sites" :key="s.site" class="hrs-site">
                           <div class="hrs-site-head">
                             <span class="hrs-site-name">{{ s.site }}</span>
-                            <span class="hrs-tag">{{ s.mode }}</span>
+                            <span class="hrs-tag">{{ s.listing === 'none' ? '全站型' : '清单型' }}</span>
                             <span class="hrs-tag" :class="hrsStateClass(s)">{{ hrsStateText(s) }}</span>
                             <span class="hrs-tag">通道 {{ s.channel_text }}</span>
-                            <span v-if="s.stale" class="hrs-tag warn">数据已过期</span>
-                            <span v-if="s.fuse.active" class="hrs-tag error">熔断中</span>
+                            <span v-if="s.stale" class="hrs-tag warn">复用窗已过</span>
+                            <span v-if="s.zero_rows && !s.empty_confirmed" class="hrs-tag warn">零行未确认</span>
                           </div>
                           <p class="hrs-line">{{ s.fresh_text }}</p>
+                          <p class="hrs-line">各档波次: {{ s.lanes_text || '-' }}</p>
                           <p class="hrs-line">
                             索引 {{ s.index_total }} 条(活跃 {{ s.index_active }}) · 档位 {{ hrsLaneText(s) }} ·
-                            受管束 {{ s.managed }} 个 · 待回填 {{ s.pending_infohash }} 条({{ hrsPct(s.backfill_ratio) }})
+                            考察中命中 {{ s.managed }} 个 · 观察期 {{ s.observing }} 个 ·
+                            待回填 {{ s.pending_infohash }} 条({{ hrsPct(s.backfill_ratio) }})
                           </p>
                           <p class="hrs-line">
                             已取种子 {{ s.downloaded }} · 取种失败 {{ s.fails }} · 放行记录 {{ s.verified }}
                           </p>
                           <p class="hrs-line">{{ s.quota.text }}</p>
-                          <p class="hrs-line">熔断: {{ s.fuse.text }} · 时间窗: {{ s.allow_window || '不限' }}</p>
-                          <p v-if="s.reason" class="hrs-line warn">最近一次刷新不完备: {{ s.reason }}</p>
+                          <p class="hrs-line">守恒: {{ s.retention_text }} · 骤降: {{ s.plunge_text }}</p>
+                          <p class="hrs-line">时间窗: {{ s.allow_window || '不限' }}
+                            <button v-if="s.zero_rows && !s.empty_confirmed" class="hb-btn ghost sm"
+                                    :disabled="hrs.confirming" @click="hrsConfirmEmpty(s.site)">确认空清单</button>
+                          </p>
+                          <p v-if="s.notes" class="hrs-line warn">最近一波备注: {{ s.notes }}</p>
                           <p v-if="s.blocking" class="hrs-line warn">现在不放行: {{ s.blocking }}</p>
                           <p v-if="s.read_error" class="hrs-line error">站点文件: {{ s.read_error }}</p>
                         </article>

@@ -7,7 +7,8 @@ M4 的结论必须是**配出来的**, 不是"文档里说可以": 本文件把�
 ## 测试计划(每个测试函数一条)
 - test_second_nexusphp_site_needs_config_only: 第二个 NexusPHP 站点**只改配置**就能用(同一 adapter
   工厂按站点构造, 各自的页面 URL / 下载路径 / 刷新周期互不影响)
-- test_sites_do_not_share_quota_or_fuse: 站点 A 连续失败熔断, B 照常取数(配额账本与熔断都在各自站点文件里)
+- test_sites_do_not_share_quota_or_failure: 站点 A 连续失败截断, B 照常取数(频控账本在各自站点文件里;
+  v3 无熔断 —— 失败只是档位截断 + 周期自然重试, 不再有 fuse/suspended 状态)
 - test_sites_hold_independent_locks: A 持锁时 B 仍能刷新(锁粒度 = 站点; 拿不到锁只跳该站)
 - test_same_infohash_keeps_independent_identity_per_site: 同一内容在两站身份独立(已取记录与索引不跨站)
 - test_status_covers_every_site: 站点现状快照逐站点各一条(`--hr-status` 与 `/api/hr/status` 的共同层)
@@ -99,28 +100,30 @@ def test_second_nexusphp_site_needs_config_only(tmp_path):
     assert len(alpha_calls) == 3 and len(beta_calls) == 3, f"串域名了: {fetcher.text_calls}"
 
 
-def test_sites_do_not_share_quota_or_fuse(tmp_path):
-    """站点 A 连续失败熔断, B 照常取数: 配额账本与熔断都落在各自的站点文件里(不串味)"""
+def test_sites_do_not_share_quota_or_failure(tmp_path):
+    """站点 A 连续失败截断, B 照常取数: 频控账本落在各自的站点文件里(不串味); v3 无熔断"""
     clock = Clock()
     confs = {ALPHA: _conf(ALPHA), BETA: _conf(BETA)}
     pages = _pages_for(BETA, (201, ), confs[BETA])
     fetcher = _ByUrlFetcher(pages, {201: torrent_blob("b201.bin")}, fail_prefix="https://alpha.example.com/")
     svc = _service(tmp_path, fetcher, clock, confs)
 
-    for _ in range(3):  # 连续失败达阈值
+    for _ in range(3):  # alpha 每轮 A 档首页即失败(该档截断, v3 无熔断不推任何状态)
         assert svc.refresh_site(ALPHA).action == ACTION_ERROR
     clock.advance(60)
     beta = svc.refresh_site(BETA)
 
-    assert beta.action == ACTION_REFRESHED, "A 熔断不该挡住 B"
+    assert beta.action == ACTION_REFRESHED, "A 的失败不该挡住 B"
     a_data = svc.store(ALPHA).read_unlocked()[0]
     b_data = svc.store(BETA).read_unlocked()[0]
-    assert a_data.fuse.failures >= 3 and a_data.fuse.until_ts > clock.now
-    assert b_data.fuse.failures == 0 and b_data.fuse.until_ts == 0.0
-    # 配额按**请求**记(页面与 .torrent 都算): alpha 三轮各发一个请求就失败 = 3;
+    # v3: 数据上不存在熔断状态 —— 失败只留在各档 fail_streak / detail 里
+    assert "fuse" not in a_data.to_json() and "suspended" not in a_data.to_json()
+    assert a_data.wave.lanes["A"].fail_streak == 3 and a_data.wave.lanes["A"].status == "failed"
+    assert b_data.wave.lanes["A"].fail_streak == 0 and b_data.wave.lanes["A"].status == "ok"
+    # 频控按**请求**记(页面与 .torrent 都算, 各站一本账): alpha 三轮 × 三档各一请求全失败 = 9;
     # beta 一轮 A/B/C 三页 + 一次下载 = 4 —— 两侧各记各的, 没有互相叠加
-    assert a_data.quota.hour_count == 3, f"alpha 配额: {a_data.quota}"
-    assert b_data.quota.hour_count == 4, f"beta 配额: {b_data.quota}"
+    assert a_data.rate.day_count == 9, f"alpha 账本: {a_data.rate}"
+    assert b_data.rate.day_count == 4, f"beta 账本: {b_data.rate}"
 
 
 def test_sites_hold_independent_locks(tmp_path):
@@ -154,8 +157,10 @@ def test_same_infohash_keeps_independent_identity_per_site(tmp_path):
     views = svc.build_views()
     a_view, b_view = views[ALPHA], views[BETA]
     assert a_view.site == ALPHA and b_view.site == BETA
-    assert set(a_view.by_infohash) and set(a_view.by_infohash) == set(b_view.by_infohash), \
-        "同一内容在两站各自都有键(身份独立但内容相同)"
+    # 同一内容在两站各自都有身份键(身份独立但内容相同): 行不粗配本地名 → B/C 档零命中,
+    # 身份在 downloaded 永久层与 index 条目上登记, lane_terminal 键集同源
+    assert set(a_view.lane_terminal) == set(b_view.lane_terminal) and set(a_view.lane_terminal)
+    assert a_data.downloaded[101].infohash_v1 == b_data.downloaded[201].infohash_v1
 
 
 def test_status_covers_every_site(tmp_path):
@@ -170,5 +175,5 @@ def test_status_covers_every_site(tmp_path):
     rows = build_site_statuses(svc, clock.now)
 
     assert [s.site for s in rows] == [ALPHA, BETA], "两个站点都要有自己的一条(不是只报第一个)"
-    assert all(s.complete and s.index_total == 1 and s.blocking == "" for s in rows)
-    assert all(s.quota.hour > 0 for s in rows)
+    assert all(s.index_total == 1 and s.quota.day > 0 for s in rows)
+    assert all(s.lanes and all(l.status == "ok" for l in s.lanes) for s in rows)

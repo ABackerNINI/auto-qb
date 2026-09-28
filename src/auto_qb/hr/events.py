@@ -1,36 +1,34 @@
-"""HR **四类事件**的通知文案单点(计划 §11 M4)。
+"""HR 事件通知文案单点(v3)。
 
-为什么要集中: 这四类事件是「用户需要做点什么」的信号, 文案必须**一眼可辨**(各自带
+为什么要集中: 这些事件是「用户需要做点什么」的信号, 文案必须**一眼可辨**(各自带
 标签前缀 `[HR 登录失效]` 等), 而原先它们散落在各调用点的 f-string 里 —— 改一处措辞就得
 翻三个文件, 更糟的是**同类事件在两端各写一遍**(service 报一次 / worker 又报一次, 措辞不同),
 排查时看着像两件事。
 
-四类事件(计划定义):
+事件(v3, 计划 26-09-28-1932 §5.2「告警升级, 行为不变」):
 - `login`    **登录失效**: 页面变成登录页 ⇒ 必须有人去浏览器登录; **不可重试解决**;
-- `fuse`     **熔断**: 连续取数失败达阈值 ⇒ 退避冷却(重试可解决, 但要先看站点/通道是否正常);
-- `parse`    **页面改版**: 表头找不到 / 分页到底判据变了 ⇒ 覆盖证明不成立, 需人工核对页面;
+- `parse`    **页面改版**: 表头找不到 / 字段缺失 / 排序崩塌 / 防伪不过 ⇒ 该档截断, 需人工核对页面;
 - `silence`  **通道静默**: 端点长期没被扩展联系 ⇒ 浏览器没开 / 扩展停用 / 端口或 token 配错。
 
-口径: 本模块只出**文案**(日志文本), 不做判断、不分级 —— 级别仍由调用点决定(见 `worker._note`
-的三档分级说明)。标签前缀也让用户在日志里 `grep "[HR 熔断]"` 就能捞出这一类事件。
+被删除的旧事件: `fuse`(熔断)与 `suspended`(停用)随模型删除 —— v3 的失败处置是
+「档位截断 + 周期自然重试」, 无独立熔断/停用机制; 失败档连续多波失效升级为
+`lane_persistent_failure`(ERROR, 只提示人, 不改变取数与判定行为)。
+
+口径: 本模块只出**文案**(日志文本), 不做判断、不分级 —— 级别仍由调用点决定。标签前缀也让
+用户在日志里 `grep "[HR 页面改版]"` 就能捞出这一类事件。
 """
+import time
 from typing import Iterable, Sequence
 
-import time
-
 EVENT_LOGIN = "login"
-EVENT_FUSE = "fuse"
 EVENT_PARSE = "parse"
 EVENT_SILENCE = "silence"
-EVENT_SUSPENDED = "suspended"
 
 #: 事件 -> 中文标签(日志前缀用; 也是用户 grep 的锚点)
 LABELS = {
     EVENT_LOGIN: "登录失效",
-    EVENT_FUSE: "熔断",
     EVENT_PARSE: "页面改版",
     EVENT_SILENCE: "通道静默",
-    EVENT_SUSPENDED: "站点停用",
 }
 
 
@@ -43,77 +41,70 @@ def login_expired(site: str, detail: str) -> str:
     """登录失效告警: 必须给出**动作**(去哪个浏览器登录哪个站点) —— 否则用户只看到「失败了」"""
     return (
         f"{prefix(EVENT_LOGIN)} 站点 {site} | 页面是登录页 ⇒ 本实例的浏览器登录态已失效, "
-        f"**请在该浏览器里登录 {site} 后无需其它操作**(在此之前不会产生新放行, 老数据照旧保守回落) | 原始: {detail}"
+        f"**请在该浏览器里登录 {site} 后无需其它操作**(在此之前不会产生新放行, 无证据种子按本地判据兜底) | 原始: {detail}"
     )
 
 
 def login_expired_note(site: str, detail: str) -> str:
-    """写进站点文件 `refresh.reason` 的短句(报告与 WebUI 的 notes 都读它 —— 失败路径里唯一持久可见的痕迹)"""
-    return f"{prefix(EVENT_LOGIN)} 本轮未发起刷新(页面是登录页, 需人工登录 {site}): {detail}"
+    """写进站点文件 `wave.notes` 的短句(报告与 WebUI 的 notes 都读它 —— 失败路径里唯一持久可见的痕迹)"""
+    return f"{prefix(EVENT_LOGIN)} 本波未继续(页面是登录页, 需人工登录 {site}): {detail}"
 
 
 def fetch_failed(site: str, failures: int, threshold: int, detail: str) -> str:
-    """取数失败(未达熔断阈值): 仍归熔断类 —— 用户关心的后续动作是「等着看会不会熔断」"""
-    left = max(0, threshold - failures)
-    return f"{prefix(EVENT_FUSE)} 站点 {site} | 取数失败({failures} 次, 距熔断还差 {left} 次): {detail}"
-
-
-def fuse_opened(site: str, until_ts: float, detail: str) -> str:
-    """熔断进入: 退避冷却(重试可解决, 但先看站点能不能访问 / 扩展正不正常)"""
-    when = time.strftime("%m-%d %H:%M:%S", time.localtime(until_ts)) if until_ts > 0 else "-"
-    return f"{prefix(EVENT_FUSE)} 站点 {site} | 连续失败达阈值, 冷却至 {when}(期间不再请求该站点): {detail}"
+    """页面取数失败: 该档证据在此截断, 下周期自然重试(§5.2)"""
+    return f"{prefix(EVENT_PARSE)} 站点 {site} | 页面取数失败(本波第 {failures} 次): {detail}(该档截断, 下周期自然重试)"
 
 
 def page_changed(site: str, action: str, detail: str) -> str:
-    """页面改版疑似: 覆盖证明不成立 ⇒ 不复用旧放行(保守), 需人工核对 HR 页结构"""
-    return f"{prefix(EVENT_PARSE)} 站点 {site} | {action}: {detail}(覆盖证明不成立 ⇒ 本轮不产生新放行; 请核对站点 HR 页是否改版)"
+    """页面改版疑似: 表头缺失/字段缺失等结构性失效 ⇒ 需人工核对 HR 页结构"""
+    return f"{prefix(EVENT_PARSE)} 站点 {site} | {action}: {detail}(请核对站点 HR 页是否改版)"
 
 
 def order_broken(site: str, detail: str) -> str:
-    """排序假设不成立(计划 26-09-27-1815 §2 1.6/2.1): 页面行序与单调假设矛盾 ⇒ 覆盖证据不可信
-
-    文案与处置文案是**同一个**(观测期 1.6 与强信号 2.1 共用, 便于真机阶段直接对文案)。
-    """
-    return (f"{prefix(EVENT_PARSE)} 站点 {site} | 排序假设不成立({detail}): 页面行序与单调假设矛盾, "
-            "覆盖证据不可信 —— 请核对 HR 页是否改版")
+    """排序假设不成立(§3.4 强制早停): 页面行序与单调假设矛盾 ⇒ 该档立即停翻, 深处不可信"""
+    return (f"{prefix(EVENT_PARSE)} 站点 {site} | 排序假设不成立({detail}): 该档强制早停"
+            "(失效点之前数据有效) —— 请核对 HR 页是否改版")
 
 
-def field_missing(site: str, rate: float) -> str:
-    """必填字段缺失(S2 强信号, 计划 §2 2.1 文案): 与排序违反分开措辞, 便于对文案定位问题
-
-    S2 **不设比例阈值**(2026-09-26 用户定稿): 行数据读不全 = 页面形态变了, 哪怕 1 处也是强信号。
-    """
-    return (f"{prefix(EVENT_PARSE)} 站点 {site} | 必填字段缺失(缺失率 {rate:.0%}): "
-            "页面字段读不全, 覆盖证据不可信 —— 请核对 HR 页是否改版")
-
-
-def suspended(site: str, rounds: int, detail: str) -> str:
-    """站点停用进入(计划 26-09-27-1815 §2 2.3): 强信号连续 K 轮, 须人工确认后恢复
-
-    ❗熔断冷却到期**不会**自动恢复停用 —— 文案里必须把恢复动作写明, 否则用户只看到「不取数了」。
-    """
+def lane_persistent_failure(site: str, lane: str, streak: int, detail: str) -> str:
+    """连续多波同档失效(§5.2 告警升级): 疑似改版, 建议走查"""
     return (
-        f"{prefix(EVENT_SUSPENDED)} 站点 {site} | 连续 {rounds} 轮强信号(排序/字段异常), 已停用该站取数: {detail} | "
-        f"恢复: 排查站点 HR 页确认无改版后跑 --hr-resume {site}(熔断到期不会自动恢复停用)"
+        f"{prefix(EVENT_PARSE)} 站点 {site} | 档位 {lane} 已连续 {streak} 波失效: {detail} | "
+        f"疑似改版 —— 建议跑 --hr-once 走查核对页面结构(期间该档维持原状态, 命中照常)"
     )
 
 
-def period_inconsistent(site: str, spread_days: float) -> str:
-    """考核期 P 不恒定(计划 26-09-27-1815 §2 4.4): 自动豁免与早停②双双禁用(机检)"""
+#: 流转守恒下限(与 service.LANE_RETENTION_MIN 同值; 文案模块不反依赖 service, 就地声明)
+LANE_RETENTION_MIN = 0.7
+
+
+def plunge_suspected(site: str, total: int, baseline: int) -> str:
+    """总行数骤降(§5.3 粗保险): 批量「未列出」签发冻结"""
     return (
-        f"{prefix(EVENT_PARSE)} 站点 {site} | 考核期 P 不恒定(离散 {spread_days:.1f} 天, 超 ±1 天容差): "
-        "自动豁免与到期段早停已禁用 —— 请核对站点考核期规则是否变化"
+        f"{prefix(EVENT_PARSE)} 站点 {site} | 本波合计 {total} 行 vs 基线 {baseline}(低于 30%): "
+        "批量「未列出」签发已冻结 —— 全部毕业/被清除? 还是改版吞行?"
+    )
+    return (
+        f"{prefix(EVENT_PARSE)} 站点 {site} | 本波合计 {total} 行 vs 基线 {baseline}(低于 30%): "
+        "批量「未列出」签发已冻结 —— 全部毕业/被清除? 还是改版吞行?"
     )
 
 
-def zero_listing(site: str, rounds: int) -> str:
-    """清单持续为零(计划 §2 2.2): 表头在但合计连续 K 轮 0 —— 全部毕业/被清除? 还是改版?
-
-    刻意不自动接受: 持续零 + 结构完好同样可由改版造出, 自动接受等于重开 P1 灾难面。
-    """
+def retention_violation(site: str, ratio: float) -> str:
+    """A 档流转守恒不达标(§5.3 首要防伪): 上波考察中行在本波留存率过低"""
     return (
-        f"{prefix(EVENT_PARSE)} 站点 {site} | 清单已连续 {rounds} 轮为 0: 全部毕业/被清除? 还是改版? | "
-        "若确认是账号的合法空清单, 在该站点配置 accept_empty_listing: true 后空表才被接受为合法覆盖证明"
+        f"{prefix(EVENT_PARSE)} 站点 {site} | A 档流转守恒不达标(上波考察中行本波留存率 {ratio:.0%} < "
+        f"{int(LANE_RETENTION_MIN * 100)}%): 批量「未列出」签发已冻结(防 A 段定向吞行); "
+        "失踪个体维持管束走观察期"
+    )
+
+
+def zero_listing(site: str) -> str:
+    """结构完好的零行波(§5.3): 不签发放行; 人工对账一次(确认戳)后零行波才可正常签发"""
+    return (
+        f"{prefix(EVENT_PARSE)} 站点 {site} | 清单为 0(结构完好): 不签发放行 —— 全部毕业/被清除? 还是改版空表? | "
+        f"若确认账号的 HR 清单确实为空, 跑 --hr-confirm-empty {site}(或用 WebUI 站点卡片按钮)写一次性确认戳; "
+        "清单再现非零行时确认戳自动失效"
     )
 
 
@@ -132,24 +123,24 @@ def summarize_sites(sites: Iterable[str]) -> str:
     return ", ".join(sorted(sites))
 
 
+#: 流转守恒下限(与 service.LANE_RETENTION_MIN 同值; 文案模块不反依赖 service, 就地声明)
+LANE_RETENTION_MIN = 0.7
+
 __all__ = [
-    "EVENT_FUSE",
     "EVENT_LOGIN",
     "EVENT_PARSE",
     "EVENT_SILENCE",
-    "EVENT_SUSPENDED",
     "LABELS",
     "channel_silent",
     "fetch_failed",
-    "field_missing",
-    "fuse_opened",
+    "lane_persistent_failure",
     "login_expired",
     "login_expired_note",
     "order_broken",
     "page_changed",
-    "period_inconsistent",
+    "plunge_suspected",
     "prefix",
+    "retention_violation",
     "summarize_sites",
-    "suspended",
     "zero_listing",
 ]

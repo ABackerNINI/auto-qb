@@ -24,12 +24,14 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 from . import events
 from .resolve import HrSiteView, HrViewSet
 from .service import (
+    CHANNEL_SILENCE_WARN,
     ACTION_ERROR,
     ACTION_NO_CHANNEL,
     ACTION_PARTIAL,
     ACTION_REFRESHED,
     ACTION_REUSED,
     ACTION_WAITING,
+    POLL_INTERVAL,
     REASON_BUDGET,
     HrRefreshResult,
     HrRefreshService,
@@ -42,13 +44,11 @@ _DIGITS = re.compile(r"\d+")
 #: 节流原因类别(按此次序匹配第一个命中): 同一根因不论本轮返回 partial 还是 waiting 都算**同一种状态**
 _PACING_CLASSES = (
     ("间隔", "间隔"),
-    ("配额", "配额"),
+    ("日配额", "日配额"),
+    ("Retry-After", "Retry-After"),
     ("时间窗", "时间窗"),
-    ("熔断", "熔断"),
-    ("有效期", "有效期"),
+    ("复用窗", "复用窗"),
     ("只读", "只读"),
-    ("suspended", "停用"),
-    ("退避", "退避"),
 )
 
 
@@ -77,19 +77,19 @@ def pacing_class(text: str) -> str:
 def view_signature(views: HrViewSet) -> Tuple:
     """视图的**实质内容**指纹(不含 generated_at 这类每轮都变的展示字段)
 
-    参与指纹的每一项都可能改变判定结果: 文件 revision(数据变了) / 覆盖证明 / 通道状态 /
-    最近成功刷新时刻 / 清单与放行规模 / 模式。
+    参与指纹的每一项都可能改变判定结果: 文件 revision(数据变了) / 通道状态 /
+    最近健康波时刻 / 清单与放行规模 / 站点形态。
     """
     return tuple(
         sorted(
             (
                 site,
                 view.revision,
-                view.mode,
-                view.complete,
+                view.listing,
                 view.channel_state,
-                round(view.last_success_ts, 3),
-                len(view.by_infohash),
+                round(view.healthy_ts, 3),
+                len(view.lane_a),
+                len(view.lane_terminal),
                 len(view.verified),
             ) for site, view in views.views.items()
         )
@@ -138,7 +138,7 @@ class HrWorker:
         service: HrRefreshService,
         publisher: HrViewPublisher,
         endpoint: Any = None,
-        poll_interval: float = 60.0,
+        poll_interval: float = POLL_INTERVAL,
         now_fn: Callable[[], float] = time.time,
         anchors_fn: Optional[Callable[[], Mapping[str, Mapping[str, Any]]]] = None,
         name: str = "auto-qb-hr-fetch",
@@ -303,7 +303,7 @@ class HrWorker:
         prev = self._last_action.get(site)
         self._last_action[site] = result.action
         now = self._now()
-        warn_gap = max(60.0, float(self.service.global_conf.channel_silence_warn))
+        warn_gap = max(60.0, float(CHANNEL_SILENCE_WARN))
 
         if result.action in (ACTION_REFRESHED, ACTION_REUSED):
             if result.action != prev:
@@ -347,7 +347,7 @@ class HrWorker:
         endpoint = self.endpoint
         if endpoint is None:
             return
-        warn_gap = max(60.0, float(self.service.global_conf.channel_silence_warn))
+        warn_gap = max(60.0, float(CHANNEL_SILENCE_WARN))
         now = self._now()
         last = float(getattr(endpoint, "last_contact_ts", 0.0) or 0.0)
         reference = last or self._started_at or now

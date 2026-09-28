@@ -10,8 +10,9 @@
 import time
 from typing import Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
+from ....hr.report import run_hr_confirm_empty
 from ....hr.status import build_site_statuses
 from ..context import WebContext
 
@@ -19,6 +20,32 @@ from ..context import WebContext
 def build_router(ctx: WebContext) -> APIRouter:
     manager = ctx.manager
     router = APIRouter()
+
+    @router.post("/api/hr/confirm-empty")
+    def api_hr_confirm_empty(body: dict = None):
+        """人工对账戳(§5.3): 确认站点账号 HR 清单确实为空(零行波恢复签发放行, 非零行自动失效)
+
+        复用 CLI `--hr-confirm-empty` 的实现(run_hr_confirm_empty, 单点): 锁内写站点文件的
+        empty_confirmed_at。写操作与正常实例靠站点锁互斥; 站点名必须已启用 hr_check。
+        """
+        manager.touch_web_client()
+        b = body or {}
+        site = str(b.get("site") or "").strip()
+        if not site:
+            raise HTTPException(status_code=400, detail="缺少 site 参数")
+        conf = getattr(manager.config, "hr_check", None)
+        if conf is None or not conf.enabled:
+            raise HTTPException(status_code=400, detail="HR 在线核实未启用")
+        enabled = {
+            name
+            for name, tc in manager.config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled
+        }
+        if site not in enabled:
+            raise HTTPException(status_code=400, detail=f"站点 {site} 未启用 hr_check(已启用: {sorted(enabled)})")
+        code = run_hr_confirm_empty(manager.config, [site])
+        if code != 0:
+            raise HTTPException(status_code=409, detail="写入失败(站点锁被占用或锁自检失败), 稍后再试")
+        return {"ok": True, "site": site}
 
     @router.get("/api/hr/status")
     def api_hr_status():

@@ -286,7 +286,8 @@ class WebviewMixin:
             }
         excluded = rec.hr_excluded()
         triggered = rec.check_hr_condition()
-        satisfied = triggered and rec.check_hr_satisfied()
+        # v3: satisfied 独立于 triggered —— 命中 B(终态放行)不再受管束但达标结论成立(毕业)
+        satisfied = rec.check_hr_satisfied()
         judged = rec.hr_judgement()  # 站点未接入返回 None(下面四个字段留空)
         facts = judged.facts if judged is not None else None
         safety = safety_display(judged, triggered=triggered, satisfied=satisfied)

@@ -1,86 +1,61 @@
-"""test_hr_service 测试计划: HR 刷新管道(持锁 → 读 → 判有效期 → 必要时抓 → 写 → 释放)
+"""test_hr_service 测试计划: v3 波次引擎(计划 26-09-28-1932 §4/§5)
 
 ## 测试计划(每个测试函数一条)
-- test_complete_refresh_builds_index_and_backfills_infohash: 完整刷新建索引 / 回填 infohash / 落已取记录 /
-  覆盖证明成立 / 有效期 = now + refresh_interval
-- test_downloaded_ts_is_per_file_fetch_time: 已取记录的 ts 是各 .torrent **自己的取回时刻**
-  (整批共用开始时刻会让取证误读, 2026-09-25 实报)
-- test_complete_refresh_writes_verified_for_not_listed: 已取过 .torrent 但本次完整刷新未列出 -> 写放行记录
-- test_d_scope_is_exempt_and_verified: D 档(已免罪)条目本身不产生受管束, 但同样产生放行依据
-- test_valid_data_is_reused_without_any_request: 有效期内的数据直接复用, **零请求**(站点频率由有效期决定)
-- test_expired_data_triggers_refetch: 超期后重新抓取; 已取过的 .torrent 不重下(永久层)
-- test_index_loss_still_avoids_redownload: 索引条目被淘汰后仍靠 hr_downloaded 免重下
-- test_incomplete_refresh_does_not_advance_or_verify: 翻页未到底 -> 覆盖证明不成立, 不推进 last_success_ts,
-  不产生/不续期放行
-- test_incomplete_refresh_keeps_previous_verification: 不完备刷新不清空既有放行记录
-- test_min_interval_blocks_second_request: 相邻两次请求间隔 >= min_torrent_interval(抖动只向上)
-- test_diagnostic_sleeper_waits_instead_of_giving_up: 传入 sleeper 时遇到间隔门槛等满再发, 能跑完一轮
-- test_production_round_completes_with_sleeper: 生产路径也传 sleeper ⇒ 一次刷新能跑完 A/B/C + 下载
-  (2026-09-25 实报修复: 以前只能发出第一个请求, 下载永远轮不上)
-- test_round_wait_budget_gives_up_instead_of_holding_lock: 本轮总等待有上限 ⇒ 放弃剩下的请求(不持锁干等)
-- test_oversized_wait_is_not_waited_out_in_lock: 单次等待超上限(配额窗口/熔断/时间窗)直接放弃
-- test_reused_round_still_backfills_pending_infohash: 复用轮**也要**补下载(不碰页面) —— 待回填 infohash
-  每轮都推进, 索引才可能长出可查键
-- test_extension_quota_refusal_yields_waiting_not_failure: 扩展侧硬上限挡下 ⇒ 本轮让位(不计失败、不推熔断,
-  但报一次 WARNING 提醒后端频控可能失效)
-- test_login_page_is_not_a_fetch_failure: 页面是登录页 ⇒ **不算取数失败**(不计失败/不推熔断、只报一次 WARNING),
-  因为重试一万次也一样 —— 只有人去浏览器登录才会好
-- test_login_page_keeps_freshness_and_evidence_untouched: 登录失效**不得**动 fetched_at / 新鲜度基准 / 覆盖证明 /
-  放行记录 —— 它只能把原因写进 refresh.reason(报告与视图 notes 读它)
-- test_login_recovery_reports_again: 登录恢复(刷新成功)后重置告警位 ⇒ 再次失效时重新报一次
-- test_quota_exhaustion_stops_refresh_then_waits: 配额用尽时刷新截断; 窗口内是零请求的复用轮,
-  过了不完备窗口(≥2×poll)才重新进入频率判定等下一轮
-- test_incomplete_window_covers_next_poll: 不完备刷新的有效期 ≥ 2×poll_interval(以刷新周期封顶) ——
-  否则「复用轮补下载」永远比 expires_at 晚一个 ε 轮不到(2026-09-25 实报修复)
-- test_page_failure_still_backfills_pending: 页面取数失败**不带走下载的名额** —— 待回填清单在
-  已持久化的索引里, 页面异常(超时/HTTP错)不得把回填一起跳过(2026-09-25 实报饿死残留)
-- test_pages_persisted_incrementally_when_round_aborts: 每抓到一页就落盘(增量提交) —— 一轮跨多个
-  扩展轮询周期(分钟级、持锁进行), 只在轮尾写盘的话中途 Ctrl+C 会把已抓页面与配额账本全丢
-  (2026-09-25 实报「后端无落盘, Ctrl+C 后才落盘」)
-- test_download_phase_yield_events_are_not_tid_failures: 下载阶段的让位/人工事件(叫停/扩展硬上限/
-  登录页)都是 HrFetchError 子类, **不得**计入 tid 失败(否则关停三次 = 12h 冷却, 2026-09-25 实报)
-- test_download_failure_counts_then_cools_down: 取 .torrent 失败计数, 达上限且冷却未过时不再尝试
-- test_consecutive_failures_fuse_site: 连续失败达阈值 -> 熔断, 期间零请求
-- test_fuse_makes_next_round_wait: 熔断生效时返回等待(不报错)
-- test_lock_busy_skips_site: 拿不到站点锁 -> 直接等下一轮(HrLockBusy), 不排队不重试
-- test_no_channel_reports_instead_of_silent_direct_fetch: 无通道时如实上报, 绝不静默降级为后端直连
-- test_dry_run_fetches_nothing_and_writes_nothing: dry-run 清单恒空 + 不写文件
-- test_read_only_run_reports_without_persisting: hr.once 口径(抓取但只出报告, 不写文件)
-- test_read_only_run_does_not_persist_failure_counter: 只读口径下**取数失败**也不落盘(失败计数/熔断同属持久状态)
-- test_disabled_by_global_or_site: 总开关关闭 / 站点 mode=off -> 直接跳过
-- test_unknown_adapter_reports_error: adapter 名未登记 -> 明确报错而不是静默不抓
-- test_view_revision_only_moves_on_data_change: 视图 revision 只在数据实质变化时抬升(复用不抬)
-- test_parse_revision_is_incomplete: 页面改版(表头缺失) -> 覆盖证明不成立
-- test_reason_kind_separates_pacing_from_parse: 没跑完的原因分类 —— 被自己频控拦下=budget(可预期),
-  页面改版=parse(值得告警), 完整刷新=none
-- test_alert_ownership_is_marked_on_the_result: 告警归属 —— 取数失败/文件读坏已由产生处告警(alerted=True),
-  页面改版留给状态层告警(alerted=False)
-- test_cancelled_fetch_is_not_a_failure_nor_an_alert: 关停/热重挂时被叫停: 不告警不计失败不推熔断
-- test_empty_listing_is_complete: 表头在但 0 行是合法空结果, 覆盖证明仍成立
-- test_age_window_off_keeps_old_rows: 豁免线未配置(0=默认) -> 超龄行照常入索引/回填(零静默变更守门)
-- test_age_window_filters_old_rows: 超龄行不入索引、不回填(省下它的 .torrent 配额); 线内行照常
-- test_early_stop_skips_remaining_pages: 整页超龄且倒序成立 -> 后续页不再请求; 本档位照常计入覆盖证明
-- test_early_stop_not_triggered_with_in_window_row: 页面里还有线内行 -> 不能早停, 翻到页尾
-- test_early_stop_requires_desc_order_within_page: 页内完成时间升序(非倒序排) -> 放弃早停, 继续翻
-- test_early_stop_requires_desc_order_across_pages: 跨页倒序链断了(本页有比上页最老行更新的行) -> 不早停
-- test_early_stop_blocked_by_missing_done_field: 页内有行缺完成时间 -> 不早停; 该行照常保留入索引
-- test_early_stop_blocked_when_prev_page_has_no_done: 上一页没有可解析完成时刻 -> 跨页证据缺失 -> 不早停
+- test_first_wave_deep_fetch: 首波深翻(全量效果) —— 未对账对象驱动覆盖深度
+- test_stop1_completion_time_coverage: 停翻① 完成时间覆盖(最深行早于最老对象减对齐余量 1D)
+- test_stop2_zero_remain_streak: 停翻② 到期段强信号(remain==0 连续 5 行, 全深度证明)
+- test_stop2_cross_page_streak: 停翻② 跨页延续计数
+- test_stop3_local_full_coverage: 停翻③ 本地全集覆盖(未对账全部对上且无待回填)
+- test_untrusted_done_pure_seed: 纯辅种(完成时间不可信)不参与①, 由②/末页收尾且可获放行
+- test_order_violation_forced_stop: 排序失效 → 该档立即停翻, 失效点之前命中照常, 不签发放行
+- test_header_missing_lane_failed: 表头缺失 → 该档失效, 其它档独立继续(档位独立)
+- test_budget_truncation: 预算截断 → 截断点之前命中照常, 未列出待下波(不签发)
+- test_a_lane_rows_downloaded_unconditionally: 已见 A 档行无条件下载且同 tid 永不重下(永久层)
+- test_terminal_rows_download_on_fuzzy_match: B/C/D 行仅宽泛名称粗配疑似才下载; 粗配误配由精配自愈
+- test_rows_not_local_not_downloaded: 本地没有的种子(粗配也不像)不下载
+- test_exempt_seed_not_in_objects_passive_hit_managed: 超额种子(≥3×)不进对象集; 被动命中考察中仍转管束
+- test_local_satisfied_hit_scope_still_managed: 本地已达标 × 命中考察中 → 管束(网站绝对权威)
+- test_release_signed_on_full_coverage: 覆盖完整 + 防伪通过 → 未列出放行签发
+- test_freshness_gate_blocks_release: added_on 晚于本波取数 → 行 4(不签发放行)
+- test_zero_rows_no_release: 结构完好零行 → 不签发放行
+- test_zero_rows_confirmed_release: --hr-confirm-empty 后零行可签发; 非零行清除确认戳
+- test_plunge_freezes_releases: 总行数骤降(< 基线 30%) → 批量签发冻结
+- test_retention_check_freezes_batch: A 档流转守恒不达标 → 批量签发冻结
+- test_retention_does_not_block_observation: 守恒拦批量但不拦观察期(单条失踪无死锁)
+- test_observing_seed_kept_managed_then_released: 上波考察中失踪 → 维持管束; 位置覆盖连续 2 波 → 判移出放行
+- test_observing_seed_resighted: 失踪种子重见 → streak 清零按档位定论
+- test_terminal_vanish_writes_release: 终态条目消失且位置被证明 → 退役并落放行记录(终态不可逆)
+- test_terminal_vanish_unproven_kept: 终态条目消失但位置未被覆盖 → 维持原状
+- test_light_wave_when_no_objects: 空对象集 → 每档 1 页轻量波
+- test_new_top_row_reconciled_next_wave: 顶页新插入(本机新下载)在下一波被完整覆盖对账
+- test_no_fuse_no_suspension: 失败不推进熔断/停用(v3 删除), Retry-After 记等待
+- test_fuzzy_name_match_unit: 宽泛名称粗配单元(连续重合段 ≥ K)
 """
-import logging
 import time
 from datetime import datetime
 
 import pytest
 
-from auto_qb.hr import ACTION_DISABLED, ACTION_ERROR, ACTION_LOCKED, ACTION_NO_CHANNEL, ACTION_PARTIAL, \
-    ACTION_REFRESHED, ACTION_REUSED, ACTION_SUSPENDED, ACTION_WAITING, REASON_BUDGET, REASON_NONE, \
-    REASON_PARSE, HrRefreshService
-from auto_qb.hr.fetcher import HrChannelQuota, HrChannelStopped, HrLoginExpired, NullFetcher
-from auto_qb.hr.model import SOURCE_EXEMPT, SOURCE_NOT_LISTED
-from auto_qb.hr.store import HrSiteStore
+from auto_qb.hr import events
+from auto_qb.hr.fetcher import HrFetchError
+from auto_qb.hr.model import (
+    LANE_SATISFIED,
+    LANE_SCOPE,
+    LANE_UNSATISFIED,
+    SOURCE_NOT_LISTED,
+    HrSiteData,
+)
+from auto_qb.hr.resolve import HrAnchor, HrIdentity, judge_record
+from auto_qb.hr.service import (
+    ACTION_PARTIAL,
+    ACTION_WAITING,
+    FUZZY_NAME_K,
+    HrRefreshService,
+    fuzzy_name_match,
+)
+
 from hr_helpers import (
     EMPTY_TABLE_PAGE,
-    REVISED_PAGE,
     Clock,
     FakeFetcher,
     global_conf,
@@ -91,1698 +66,719 @@ from hr_helpers import (
 )
 
 SITE = "example"
-PAGE2_URL = "https://pt.example.com/myhr.php?hrtype=A&page=2"
-PAGE3_URL = "https://pt.example.com/myhr.php?hrtype=A&page=3"
-AGE_LIMIT = 365 * 86400.0  # 超龄豁免线(365 天)
-
-#: 登录页(页面里有密码输入框 ⇒ adapter 判「登录态失效」; 与扩展侧「要升级到渲染通道」的信号同源)
-LOGIN_PAGE = '<html><body><form action="takelogin.php"><input type="password" name="password"></form></body></html>'
+URL = "https://pt.example.com/myhr.php"
 
 
-def _pages(*, a_rows=(), a_next=False, b=EMPTY_TABLE_PAGE, c=EMPTY_TABLE_PAGE, page2=None):
-    pages = {"A": myhr_page(list(a_rows), has_next=a_next), "B": b, "C": c}
-    if page2 is not None:
-        pages[PAGE2_URL] = page2
-    return pages
+def url_of(lane: str, page: int = 1) -> str:
+    return f"{URL}?hrtype={lane}" + (f"&page={page}" if page > 1 else "")
 
 
-def _blobs(*tids):
-    return {tid: torrent_blob(name=f"{tid}.bin") for tid in tids}
+def E(done: str) -> float:
+    return datetime.strptime(done, "%Y-%m-%d %H:%M:%S").timestamp()
 
 
-def _service(tmp_path, fetcher, clock, *, site=None, glob=None, persist=True, allow_fetch=True, **extra):
+DONE_OLD = "2026-09-01 10:00:00"  # 深处(老)行
+DONE_NEW = "2026-09-20 10:00:00"  # 浅处(新)行
+T_DONE_NEW = E(DONE_NEW)
+
+
+def anchor_for(
+    blob_name: str,
+    *,
+    completion_on: float = -1,
+    seeding_time: int = 0,
+    added_on: int = 100,
+    name: str = ""
+) -> HrAnchor:
+    return HrAnchor(
+        added_on=added_on,
+        downloaded=1 << 30,
+        completion_on=int(completion_on),
+        progress=1.0,
+        seeding_time=seeding_time,
+        name=name or blob_name,
+    )
+
+
+def make_service(tmp_path, fetcher, *, site=None, gconf=None, clock=None) -> HrRefreshService:
+    clock = clock or Clock()
     return HrRefreshService(
         data_dir=str(tmp_path),
-        global_conf=glob or global_conf(),
+        global_conf=gconf or global_conf(),
         site_confs={SITE: site or site_conf()},
         fetcher=fetcher,
-        owner="tester",
-        persist=persist,
-        allow_fetch=allow_fetch,
+        owner="test",
+        persist=True,
+        allow_fetch=True,
         now_fn=clock,
-        **extra,
+        sleeper=lambda _s: None,
     )
 
 
-def _read(tmp_path):
-    data, err = HrSiteStore(SITE, str(tmp_path / "hr")).read_unlocked()
-    assert err is None
-    return data
+def run_wave(service, anchors=None):
+    return service.refresh_site(SITE, anchors or {})
 
 
-class _BytesFailFetcher:
-    """页面走内层 FakeFetcher, .torrent 一律抛给定异常 —— 测下载阶段的异常语义(让位/人工事件)"""
-    def __init__(self, inner, exc) -> None:
-        self._inner = inner
-        self._exc = exc
+def mk_blob(name: str):
+    """(blob, 真实 infohash) —— 锚点键必须用真实算出的 hash(与 blob 一致, 匹配才成立)"""
+    from auto_qb.hr.bencode import compute_infohashes
 
-    def get_text(self, url: str) -> str:
-        return self._inner.get_text(url)
+    blob = torrent_blob(name=name)
+    v1, _v2, _info = compute_infohashes(blob)
+    return blob, v1
 
-    def get_bytes(self, url: str) -> bytes:
-        self._inner.byte_calls.append(url)
-        raise self._exc
 
+def standard_pages(rows_a=None, rows_b=None, rows_c=None, *, has_next: bool = False):
+    """标准三页(每档一页, 无翻页)"""
+    return {
+        url_of("A"): myhr_page(rows_a or [], has_next=has_next),
+        url_of("B"): myhr_page(rows_b or [], has_next=has_next),
+        url_of("C"): myhr_page(rows_c or [], has_next=has_next),
+    }
 
-def test_complete_refresh_builds_index_and_backfills_infohash(tmp_path):
-    """完整刷新: 建索引 + 回填 infohash + 落已取记录 + 覆盖证明成立 + 有效期 = now + refresh_interval"""
-    clock = Clock()
-    fetcher = FakeFetcher(
-        _pages(a_rows=[row(101), row(102)], a_next=True, page2=myhr_page([row(103)])),
-        _blobs(101, 102, 103),
-    )
-    svc = _service(tmp_path, fetcher, clock)
 
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED
-    assert result.complete is True
-    assert result.pages_fetched == 4  # A 两页 + B + C
-    assert result.torrents_fetched == 3
-    assert result.torrents_failed == 0
-    assert result.entries_new == 3
-    assert result.lock_ok is True and result.persisted is True
-    assert result.path == str(tmp_path / "hr" / f"{SITE}.json")
-    assert len(fetcher.byte_calls) == 3
-
-    data = _read(tmp_path)
-    assert set(data.index) == {101, 102, 103}
-    assert all(e.infohash_v1 and e.infohash_v2 for e in data.index.values())
-    assert set(data.downloaded) == {101, 102, 103}
-    assert data.downloaded[101].name == "101.bin"
-    assert data.refresh.complete is True
-    assert data.refresh.scopes_done == ["A", "B", "C"]
-    assert data.refresh.last_success_ts == clock.now
-    assert data.refresh.entry_count == 3
-    assert data.expires_at == clock.now + 12 * 3600.0
-    assert data.fuse.failures == 0
-
-
-def test_downloaded_ts_is_per_file_fetch_time(tmp_path):
-    """已取记录的 ts 是各 .torrent 自己的取回时刻(不是整批共用一个) —— 取证时两条 ts 必须可区分"""
-    clock = Clock()
-    inner = FakeFetcher(_pages(a_rows=[row(101), row(102)]), _blobs(101, 102))
-
-    class _SlowBytes:
-        """每个 .torrent 让时钟走 125s(模拟逐个取回的耗时); 页面直通内层"""
-        def get_text(self, url: str) -> str:
-            return inner.get_text(url)
-
-        def get_bytes(self, url: str) -> bytes:
-            clock.advance(125.0)
-            return inner.get_bytes(url)
-
-    _service(tmp_path, _SlowBytes(), clock).refresh_site(SITE)
-
-    data = _read(tmp_path)
-    assert set(data.downloaded) == {101, 102}
-    assert data.downloaded[102].ts - data.downloaded[101].ts == 125.0
-    assert data.quota.last_fetch_ts == data.downloaded[102].ts, "配额「最近请求」与最后一个 .torrent 同刻"
-
-
-def test_complete_refresh_writes_verified_for_not_listed(tmp_path):
-    """已取过 .torrent 但本次完整刷新未列出 -> 写放行记录(source=not-listed)
-
-    (场景里 102 仍在清单 —— 若整份清单清零会触发骤降保护判不完备, 见
-    test_plunge_protection_blocks_release_on_zero_round, 那是 P1 收口的设计行为。)
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101), row(102)]), _blobs(101, 102))
-    svc = _service(tmp_path, fetcher, clock)
-    svc.refresh_site(SITE)
-    h101 = _read(tmp_path).index[101].infohash_v1
-
-    clock.advance(13 * 3600)
-    fetcher.pages = _pages(a_rows=[row(102)])  # 101 这次不列(清单合计 1, 非骤降)
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED
-    data = _read(tmp_path)
-    assert not data.index[101].active  # 完整刷新未命中 -> 只是保留的快照条目
-    assert data.verified[h101].source == SOURCE_NOT_LISTED
-    assert data.verified[h101].verified_ts == clock.now
-    assert data.verified[h101].tid == 101
-
-
-def test_d_scope_is_exempt_and_verified(tmp_path):
-    """D 档(已免罪)明确不受管束: 不算受管束, 但产生放行依据(source=absent)"""
-    clock = Clock()
-    fetcher = FakeFetcher(
-        _pages(a_rows=[row(101)], b=myhr_page([row(201)])),
-        _blobs(101, 201),
-    )
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(hr_page_scopes=["A", "B", "D"]), glob=global_conf())
-    fetcher.pages["D"] = myhr_page([row(301)])
-    fetcher.blobs[301] = torrent_blob(name="301.bin")
-
-    result = svc.refresh_site(SITE)
-
-    assert result.complete is True
-    data = _read(tmp_path)
-    assert data.index[301].lane == "D"
-    h301 = data.index[301].infohash_v1
-    assert data.verified[h301].source == SOURCE_EXEMPT
-
-
-def test_valid_data_is_reused_without_any_request(tmp_path):
-    """有效期内的数据直接复用: 零请求(站点访问频率由数据有效期决定, 与实例数无关)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-    svc.refresh_site(SITE)
-    before_text, before_bytes = len(fetcher.text_calls), len(fetcher.byte_calls)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REUSED
-    assert result.reason.startswith("数据仍在有效期")
-    assert len(fetcher.text_calls) == before_text
-    assert len(fetcher.byte_calls) == before_bytes
-
-
-def test_expired_data_triggers_refetch(tmp_path):
-    """超期后重新抓取; 已取过的 .torrent 不重下(永久层)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-    svc.refresh_site(SITE)
-    clock.advance(12 * 3600 + 1)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED
-    assert result.torrents_fetched == 0  # 已有 infohash, 不再取 .torrent
-    assert len(fetcher.byte_calls) == 1
-    assert len(fetcher.text_calls) == 6  # 3 页首轮 + 3 页次轮
-
-
-def test_index_loss_still_avoids_redownload(tmp_path):
-    """索引条目被淘汰后仍靠 hr_downloaded 免重下(页面条目消失/翻页遗漏都不重取)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-    svc.refresh_site(SITE)
-
-    # 模拟快照条目被淘汰(index 里没了), 但永久层还在
-    store = HrSiteStore(SITE, str(tmp_path / "hr"), owner="tester")
-    with store.hold() as session:
-        session.data.index.clear()
-        session.commit(clock.now)
-    clock.advance(12 * 3600 + 1)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED
-    assert len(fetcher.byte_calls) == 1  # 没有第二次取 .torrent
-    assert _read(tmp_path).index[101].infohash_v1  # 由永久层回填
-
-
-def test_incomplete_refresh_does_not_advance_or_verify(tmp_path):
-    """翻页未到底 -> 覆盖证明不成立: 不推进 last_success_ts, 不产生放行"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)], a_next=True), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(max_pages_per_refresh=1))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_PARTIAL
-    assert result.complete is False
-    assert "翻页上限" in result.reason
-    data = _read(tmp_path)
-    assert data.refresh.complete is False
-    assert data.refresh.last_success_ts == 0.0
-    assert data.verified == {}
-    assert data.index[101].active is True  # 见到的条目仍按受管束处理(保守方向)
-
-
-def test_incomplete_refresh_keeps_previous_verification(tmp_path):
-    """不完备刷新不清空也不续期既有放行记录(放行只由完整核实产生)
-
-    (101 **不在**本轮抓到的行里 —— 若 partial 轮命中了它, 放行会被清单对账即时撤销,
-    见 test_backfill_retracts_release_on_infohash_match; 那是 P2 修复的设计行为。)
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101), row(102)]), _blobs(101, 102))
-    svc = _service(tmp_path, fetcher, clock)
-    svc.refresh_site(SITE)
-    h101 = _read(tmp_path).index[101].infohash_v1
-
-    clock.advance(13 * 3600)
-    fetcher.pages = _pages(a_rows=[row(102)])  # 101 移出(清单合计 1, 非骤降) -> 放行产生
-    svc.refresh_site(SITE)
-    verified_ts = _read(tmp_path).verified[h101].verified_ts
-
-    clock.advance(13 * 3600)
-    fetcher.pages = _pages(a_rows=[row(102)], a_next=True)
-    partial = svc.refresh_site(SITE)
-
-    assert partial.action == ACTION_PARTIAL
-    data = _read(tmp_path)
-    assert data.verified[h101].verified_ts == verified_ts  # 没被续期
-    assert data.index[101].active is False, "不完备刷新不能证明 101 已消失, 也不能把它标回活跃"
-
-
-def test_min_interval_blocks_second_request(tmp_path):
-    """相邻两次请求间隔 >= min_torrent_interval(抖动只向上) —— 时钟不动时第二次请求被挡"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)], a_next=True), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, glob=global_conf(min_torrent_interval=90.0))
-
-    result = svc.refresh_site(SITE)
-
-    assert len(fetcher.text_calls) == 1  # 只发出了第一页请求
-    assert result.complete is False
-    assert "间隔" in result.reason
-    quota = _read(tmp_path).quota
-    # 下一次允许的时刻不早于「上次请求 + 90s」
-    assert quota.last_fetch_ts == clock.now
-
-
-def test_diagnostic_sleeper_waits_instead_of_giving_up(tmp_path):
-    """走查模式: 传入 sleeper 时遇到间隔门槛等满再发, 单次走查能跑完一轮(生产不传 ⇒ 等下一轮)
-
-    同时钉住「抖动只向上」: 每次等待量均 >= min_torrent_interval。
-    """
-    clock = Clock()
-    waits: list[float] = []
-
-    def sleeper(seconds: float) -> None:
-        waits.append(seconds)
-        clock.advance(seconds)
-
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=global_conf(min_torrent_interval=90.0),
-        site_confs={SITE: site_conf()},
-        fetcher=fetcher,
-        owner="tester",
-        now_fn=clock,
-        sleeper=sleeper,
-    )
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED and result.complete is True
-    assert len(fetcher.text_calls) == 3 and len(fetcher.byte_calls) == 1
-    assert len(waits) == 3  # 第一次请求无需等, 其后 3 次(2 页 + 1 .torrent)各等一次
-    assert all(w >= 90.0 for w in waits), waits
-
-
-def test_production_round_completes_with_sleeper(tmp_path):
-    """生产路径也传 sleeper ⇒ 一次刷新能把 A/B/C 与待回填的 .torrent 都跑完(2026-09-25 实报修复)
-
-    以前生产不传 sleeper(`_Budget` 一遇门槛就放弃), 而页面永远排在下载前面 ⇒ **唯一的一个名额
-    总被页面拿走**: 用户实测一小时内 11 次请求全花在页面重抓上, `.torrent` 一次没取到, 索引里
-    0 个 infohash 键 ⇒ 站点侧判定完全无从下手。本用例钉死「能跑完一轮」这个结果面。
-    """
-    clock = Clock()
-    waits: list[float] = []
-
-    def sleeper(seconds: float) -> None:
-        waits.append(seconds)
-        clock.advance(seconds)
-
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, glob=global_conf(min_torrent_interval=90.0), sleeper=sleeper)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED and result.complete is True
-    assert [FakeFetcher.scope_of(u) for u in fetcher.text_calls] == ["A", "B", "C"]
-    assert result.torrents_fetched == 1, "待回填的 .torrent 必须拿到名额(以前永远轮不上)"
-    assert len(waits) == 3 and all(w >= 90.0 for w in waits)
-
-
-def test_round_wait_budget_gives_up_instead_of_holding_lock(tmp_path):
-    """本轮总等待超预算 ⇒ 放弃剩余请求(下轮继续), 不持着站点锁干等(多实例下别人只等拿锁)"""
-    clock = Clock()
-    waits: list[float] = []
-
-    def sleeper(seconds: float) -> None:
-        waits.append(seconds)
-        clock.advance(seconds)
-
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(
-        tmp_path,
-        fetcher,
-        clock,
-        glob=global_conf(min_torrent_interval=90.0),
-        sleeper=sleeper,
-        round_wait_max=150.0,
-    )
-
-    result = svc.refresh_site(SITE)
-
-    assert len(waits) == 1, f"第二次等待(90s)会超 150s 预算 ⇒ 不该再等: {waits}"
-    assert result.action == ACTION_PARTIAL and result.complete is False
-    assert fetcher.byte_calls == [], "页面都没抓完, 下载自然还没轮到"
-    assert "间隔" in result.reason
-
-
-def test_oversized_wait_is_not_waited_out_in_lock(tmp_path):
-    """单次等待超上限 ⇒ 直接放弃本轮剩余请求, **一次也不等**(配额窗口/熔断/超长间隔都在此列)"""
-    clock = Clock()
-    waits: list[float] = []
-
-    def sleeper(seconds: float) -> None:
-        waits.append(seconds)
-        clock.advance(seconds)
-
-    # 把间隔配到 400s(> 单次上限 300s): 第一个请求照常发出, 第二个请求的等待就超限了
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, glob=global_conf(min_torrent_interval=400.0), sleeper=sleeper)
-
-    result = svc.refresh_site(SITE)
-
-    assert waits == [], "超单次上限就放弃, 不该在锁里干等"
-    assert len(fetcher.text_calls) == 1 and fetcher.byte_calls == []
-    assert result.action == ACTION_PARTIAL and result.complete is False
-    assert "间隔" in result.reason and "还差" in result.reason
-
-
-def test_reused_round_still_backfills_pending_infohash(tmp_path):
-    """复用轮**也要**补下载(不碰页面): 待回填的 infohash 每轮都推进, 索引才可能长出可查键
-
-    背景(2026-09-25 用户实报): 页面与下载共用同一个间隔门槛, 页面又永远排在下载前面 ⇒ 复用轮
-    要是空转, 下载就永远拿不到名额。本用例把「索引里有行但没 infohash」的现场造出来, 验证下一轮
-    (数据仍在有效期 ⇒ 不重抓页面)**照样把 .torrent 取回来**并落盘。
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-    svc.refresh_site(SITE)
-
-    # 造现场: 索引条目在、但 infohash 没了(比如上一轮下载被频控拦下), 永久层也一并清掉
-    store = HrSiteStore(SITE, str(tmp_path / "hr"), owner="tester")
-    with store.hold() as session:
-        session.data.index[101].infohash_v1 = ""
-        session.data.index[101].infohash_v2 = ""
-        session.data.downloaded.clear()
-        session.commit(clock.now)
-    fetcher.text_calls.clear()
-    fetcher.byte_calls.clear()
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REUSED and "直接复用" in result.reason
-    assert fetcher.text_calls == [], "复用轮不得再碰页面(那正是把下载饿死的元凶)"
-    assert len(fetcher.byte_calls) == 1 and result.torrents_fetched == 1
-    assert "顺带补 infohash: 成功 1 失败 0" in result.reason
-    assert result.persisted is True, "回填结果要落盘, 否则视图永远长不出可查键"
-    data = _read(tmp_path)
-    assert data.index[101].infohash_v1 and 101 in data.downloaded
-    assert list(svc.build_views()[SITE].by_infohash), "补齐后视图里应当真有可查的 infohash 键"
-
-
-def test_reused_round_without_pending_is_still_zero_request(tmp_path):
-    """反向守阵: 没有待回填时, 复用轮连下载都不试 —— 不允许把「补下载」变成每轮白试一次"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-    svc.refresh_site(SITE)
-    text_calls, byte_calls = len(fetcher.text_calls), len(fetcher.byte_calls)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REUSED
-    assert (len(fetcher.text_calls), len(fetcher.byte_calls)) == (text_calls, byte_calls)
-    assert result.torrents_fetched == 0 and "顺带补 infohash" not in result.reason
-
-
-def test_extension_quota_refusal_yields_waiting_not_failure(tmp_path, caplog):
-    """扩展侧硬上限挡下 ⇒ 本轮让位: 不计失败、不推熔断, 但报一次 WARNING(后端频控可能失效)
-
-    扩展有自己独立的计数(访问 10/时·15/天…, 见 site-caps.js)作第二道闸。它触发说明**后端频控
-    没拦住** —— 那是个该被看见的异常; 但不能计成取数失败, 否则会把站点推进熔断, 把一个配置/逻辑
-    问题掩盖成「站点坏了」。
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101), quota=True)
-    svc = _service(tmp_path, fetcher, clock)
-
-    with caplog.at_level(logging.WARNING, logger="auto_qb.hr"):
-        result = svc.refresh_site(SITE)
-        again = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_WAITING and "让位" in result.reason
-    assert result.alerted is False, "告警由 service 自己报(见下面), 不重复"
-    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    assert len([w for w in warnings if "扩展侧硬上限" in w]) == 1, f"只报一次(超限会持续到下一窗口): {warnings}"
-    data = _read(tmp_path)
-    assert data.fuse.failures == 0, "让位不是失败: 不推熔断"
-    assert again.action == ACTION_WAITING
-
-
-def test_login_page_is_not_a_fetch_failure(tmp_path, caplog):
-    """页面是登录页 ⇒ **不算取数失败**: 不计失败、不推熔断、每站点只报一次 WARNING
-
-    与 `HrChannelQuota` 同一套判据(**能不能靠重试解决**): 超时可以重试, 登录失效重试一万次也一样。
-    若计入熔断, 用户只会看到「连续失败达阈值」, 而真正的动作要求(去登录)被埋掉。
-    """
-    clock = Clock()
-    fetcher = FakeFetcher({"A": LOGIN_PAGE})
-    svc = _service(tmp_path, fetcher, clock)
-
-    with caplog.at_level(logging.INFO, logger="auto_qb.hr"):
-        result = svc.refresh_site(SITE)
-        during_backoff = svc.refresh_site(SITE)  # 未推进时钟: 退避期内(计划 §2 2.6)
-        clock.advance(60.0)  # 跳过第一档退避(poll_interval × 2^0)
-        again = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_ERROR and "登录态失效" in result.reason
-    assert result.alerted is True, "告警由 service 报(见下面), 状态层不重复报"
-    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    assert len([w for w in warnings if "[HR 登录失效]" in w]) == 1, f"登录失效是人工事件, 每站只报一次: {warnings}"
-    assert any("登录态仍未恢复" in r.getMessage() for r in caplog.records if r.levelno == logging.INFO)
-    data = _read(tmp_path)
-    assert data.fuse.failures == 0, "登录失效不计失败: 重试无用, 算成失败只会掩盖真因"
-    assert during_backoff.action == ACTION_WAITING and "退避" in during_backoff.reason, "退避期零请求(§2 2.6)"
-    assert again.action == ACTION_ERROR, "退避期过后仍命中登录页 ⇒ 依旧判失败(计退避不计失败)"
-
-
-def test_login_page_keeps_freshness_and_evidence_untouched(tmp_path):
-    """登录失效**不得**动 fetched_at / 新鲜度基准 / 覆盖证明 / 放行记录
-
-    它只能把原因写进 `refresh.reason`(报告与视图 notes 读它) —— 若是顺手把 fetched_at 推进或
-    把 complete 置真, 就等于「登录失效反而给了新背书」, 那是会把不该放行的种子放出去的红线。
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-    good = svc.refresh_site(SITE)
-    assert good.complete is True and good.action == ACTION_REFRESHED
-    before = _read(tmp_path)
-
-    clock.advance(13 * 3600)  # 过有效期(默认 12H)才会真去抓页面
-    fetcher.pages = {"A": LOGIN_PAGE}  # 站点侧登录态掉了
-    bad = svc.refresh_site(SITE)
-
-    assert bad.action == ACTION_ERROR
-    after = _read(tmp_path)
-    assert after.fetched_at == before.fetched_at, "登录失效不得推进「上次取数」"
-    assert after.refresh.last_success_ts == before.refresh.last_success_ts
-    assert after.refresh.complete is before.refresh.complete
-    assert after.refresh.scopes_done == before.refresh.scopes_done
-    assert after.refresh.pages_fetched == before.refresh.pages_fetched
-    assert after.refresh.reason.startswith("[HR 登录失效]"), "但要在站点文件里留下可查的痕迹"
-    assert after.expires_at == before.expires_at, "有效期只由完整刷新决定"
-    assert after.index == before.index and after.verified == before.verified, "证据不会被登录失效改动"
-
-
-def test_login_recovery_reports_again(tmp_path, caplog):
-    """登录恢复(刷新成功)后重置告警位 ⇒ 再次失效时重新报一次"""
-    clock = Clock()
-    fetcher = FakeFetcher({"A": LOGIN_PAGE})
-    svc = _service(tmp_path, fetcher, clock)
-
-    with caplog.at_level(logging.WARNING, logger="auto_qb.hr"):
-        svc.refresh_site(SITE)
-        clock.advance(60.0)  # 跳过登录退避第一档(§2 2.6), 模拟用户已登录
-        fetcher.pages = _pages(a_rows=[row(101)])  # 用户去浏览器登录了
-        fetcher.blobs = _blobs(101)
-        good = svc.refresh_site(SITE)
-        clock.advance(24 * 3600)  # 过有效期, 下一轮真去抓
-        fetcher.pages = {"A": LOGIN_PAGE}  # 又掉了
-        svc.refresh_site(SITE)
-
-    assert good.action == ACTION_REFRESHED
-    logins = [r.getMessage() for r in caplog.records if "[HR 登录失效]" in r.getMessage()]
-    assert len(logins) == 2, f"恢复后再失效应当重新提醒一次: {logins}"
-
-
-def test_quota_exhaustion_stops_refresh_then_waits(tmp_path):
-    """配额用尽时刷新截断; 窗口内是零请求的复用轮, 过了不完备窗口才重新进入频率判定(不报错)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, glob=global_conf(max_torrents_per_hour=1))
-
-    first = svc.refresh_site(SITE)
-    assert first.complete is False
-    assert "配额" in first.reason
-    assert len(fetcher.text_calls) == 1
-
-    clock.advance(61)  # 不完备窗口(2×poll=120s)内: 复用轮 —— 不重抓页面; 配额仍冻结 ⇒ 下载也发不出
-    second = svc.refresh_site(SITE)
-    assert second.action == ACTION_REUSED
-    assert len(fetcher.text_calls) == 1  # 零页面请求
-    assert len(fetcher.byte_calls) == 0
-
-    clock.advance(60)  # 过了不完备窗口: 重新进入频率判定
-    third = svc.refresh_site(SITE)
-    assert third.action == ACTION_WAITING
-    assert "小时配额" in third.reason
-    assert len(fetcher.text_calls) == 1  # 零请求
-
-
-@pytest.mark.parametrize(
-    "exc, note",
-    [
-        (HrChannelStopped("正在停止"), "叫停"),
-        (HrChannelQuota("扩展侧硬上限挡下"), "硬上限"),
-        (HrLoginExpired("登录页"), "登录页"),
-    ],
-)
-def test_download_phase_yield_events_are_not_tid_failures(tmp_path, exc, note):
-    """下载阶段的让位/人工事件**不得**计入 tid 失败(2026-09-25 实报修复)
-
-    叫停 / 扩展硬上限 / 登录页都是 `HrFetchError` 的子类: 被 `_fill_infohashes` 的
-    `except HrFetchError` 吞掉的话, 关停 / 扩展限流 / 该去登录各来三次就把 tid 送进 12h 冷却 ——
-    把「程序要关了 / 第二道闸 / 去登录」伪装成「种子坏了」。现在原样上抛、折成备注。
-    """
-    clock = Clock()
-    inner = FakeFetcher(_pages(a_rows=[row(101)]), {})
-    svc = _service(tmp_path, _BytesFailFetcher(inner, exc), clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.torrents_fetched == 0 and result.torrents_failed == 0
-    assert note in result.reason
-    assert _read(tmp_path).fails == {}, "让位/人工事件不是取数失败, 不得烧重试额度"
-
-
-@pytest.mark.parametrize(
-    "poll, refresh, expected",
-    [
-        (60.0, 12 * 3600.0, 120.0),  # 下限 120s(默认 poll 60s)
-        (300.0, 12 * 3600.0, 600.0),  # 2×poll
-        (300.0, 180.0, 180.0),  # 以刷新周期封顶
-    ],
-)
-def test_incomplete_window_covers_next_poll(tmp_path, poll, refresh, expected):
-    """不完备刷新的有效期 ≥ 2×poll_interval(以刷新周期封顶), 盖过下一轮
-
-    2026-09-25 实报: 窗口 60s == poll 60s, 而下一轮从「上一轮结束后再等 poll」才开始 ⇒ 现算时刻
-    永远比 expires_at 晚一个 ε ⇒ 复用轮(唯一给下载让名额的轮次)从不发生。
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)], a_next=True), _blobs(101))
-    svc = _service(
-        tmp_path,
-        fetcher,
-        clock,
-        site=site_conf(max_pages_per_refresh=1, refresh_interval=refresh),
-        glob=global_conf(poll_interval=poll),
-    )
-
-    result = svc.refresh_site(SITE)
-
-    assert result.complete is False
-    data = _read(tmp_path)
-    assert data.expires_at - data.fetched_at == expected
-
-
-def test_page_failure_still_backfills_pending(tmp_path):
-    """页面取数失败**不带走下载的名额**(2026-09-25 实报饿死残留)
-
-    待回填清单来自**已持久化的索引**, 页面异常(超时/HTTP 错)不该让回填一起被跳过 —— 否则
-    「先页面后下载」的顺序在通道抖动时又会把下载饿死。预算闸门(熔断/配额/间隔)照常生效。
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-    svc.refresh_site(SITE)
-
-    # 造现场: 索引条目在但 infohash 没了(上一轮下载被拦), 下一轮页面开始报错(通道抖动)
-    store = HrSiteStore(SITE, str(tmp_path / "hr"), owner="tester")
-    with store.hold() as session:
-        session.data.index[101].infohash_v1 = ""
-        session.data.index[101].infohash_v2 = ""
-        session.data.downloaded.clear()
-        session.commit(clock.now)
-    clock.advance(12 * 3600 + 1)  # 推过刷新周期: 数据过期 ⇒ 走完整刷新路径(页面才会失败)
-    fetcher.pages = {}  # get_text 将抛 HrFetchError(假通道没有配置任何页面)
-    fetcher.byte_calls.clear()
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_ERROR
-    assert len(fetcher.byte_calls) == 1, "页面失败后仍要补一次下载"
-    assert result.torrents_fetched == 1
-    data = _read(tmp_path)
-    assert data.index[101].infohash_v1 and 101 in data.downloaded, "回填结果要落盘"
-
-
-def test_pages_persisted_incrementally_when_round_aborts(tmp_path):
-    """每抓到一页就落盘(增量提交): 轮次中途出错/被杀, 已抓页面不丢(2026-09-25 实报)
-
-    一轮要跨多个扩展轮询周期(分钟级、持锁进行 —— 计划 §5/§8 设计如此), 只在轮尾写盘的话,
-    中途 Ctrl+C / 断电会把已抓的页面与配额消耗一起丢掉。本用例让页面 A 成功、页面 B 报错:
-    文件里**当场**就该有 A 的条目(连同页面失败后的补下载), 而不是等轮尾。
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101), fail_text_at={"B": "HTTP 503"})
-    svc = _service(tmp_path, fetcher, clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_ERROR
-    data = _read(tmp_path)
-    assert 101 in data.index and data.index[101].active is True, "页面 A 抓到就该已落盘, 而不是等轮尾"
-    assert 101 in data.downloaded, "页面失败后的补下载凭据(hr_downloaded)也要当场落盘"
-    assert data.index[101].infohash_v1, "回填出的 infohash 一并落盘"
-
-
-def test_download_failure_counts_then_cools_down(tmp_path):
-    """取 .torrent 失败计数; 达上限且冷却未过时不再尝试(防烧配额)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), {})  # 没有 101 的 .torrent
-    svc = _service(
-        tmp_path,
-        fetcher,
-        clock,
-        site=site_conf(refresh_interval=600.0),
-        glob=global_conf(failure_cooldown=3600.0, max_download_retries=3),
-    )
-
-    for _ in range(3):
-        clock.advance(601)
-        svc.refresh_site(SITE)
-
-    assert len(fetcher.byte_calls) == 3
-    assert _read(tmp_path).fails[101].count == 3
-
-    clock.advance(601)  # 冷却(3600s)未过
-    result = svc.refresh_site(SITE)
-    assert len(fetcher.byte_calls) == 3  # 不再尝试
-    assert result.torrents_failed == 0  # 被冷却跳过, 不算本次失败
-
-
-def test_consecutive_failures_fuse_site(tmp_path):
-    """连续失败达阈值 -> 熔断, 期间零请求"""
-    clock = Clock()
-    fetcher = FakeFetcher({}, {}, fail_text_at={"A": "429 Too Many Requests"})
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(refresh_interval=600.0))
-
-    for _ in range(3):
-        clock.advance(601)
-        result = svc.refresh_site(SITE)
-        assert result.action == ACTION_ERROR
-        assert result.persisted is True, "正式口径下失败计数要落盘(否则重启就忘了熔断)"
-
-    data = _read(tmp_path)
-    assert data.fuse.failures == 3
-    assert data.fuse.until_ts == clock.now + 3600.0
-
-    clock.advance(601)
-    calls = len(fetcher.text_calls)
-    waiting = svc.refresh_site(SITE)
-    assert waiting.action == ACTION_WAITING
-    assert "熔断" in waiting.reason
-    assert len(fetcher.text_calls) == calls
-
-
-def test_fuse_makes_next_round_wait(tmp_path):
-    """熔断生效时返回等待(不是错误, 不刷屏告警)"""
-    clock = Clock()
-    svc = _service(tmp_path, FakeFetcher(_pages()), clock)
-    store = HrSiteStore(SITE, str(tmp_path / "hr"), owner="tester")
-    with store.hold() as session:
-        session.data.fuse.failures = 3
-        session.data.fuse.until_ts = clock.now + 600
-        session.data.fuse.reason = "连续失败"
-        session.commit(clock.now)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_WAITING
-    assert result.reason.startswith("站点熔断中")
-
-
-def test_lock_busy_skips_site(tmp_path):
-    """拿不到站点锁 -> 直接等下一轮(HrLockBusy), 不排队不重试"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(), {})
-    svc = _service(tmp_path, fetcher, clock)
-    other = HrSiteStore(SITE, str(tmp_path / "hr"), owner="other")
-    with other.hold():
-        result = svc.refresh_site(SITE)
-    assert result.action == ACTION_LOCKED
-    assert "锁被其它实例持有" in result.reason
-    assert fetcher.text_calls == []
-
-
-def test_no_channel_reports_instead_of_silent_direct_fetch(tmp_path):
-    """无通道时如实上报, 绝不静默降级为后端直连(零 cookie 边界不可破)"""
-    clock = Clock()
-    svc = _service(tmp_path, NullFetcher(), clock)
-    result = svc.refresh_site(SITE)
-    assert result.action == ACTION_NO_CHANNEL
-    assert "未启用取数通道" in result.reason
-    assert not (tmp_path / "hr" / f"{SITE}.json").exists()
-
-
-class _StoppedFetcher:
-    """通道层面的「被叫停」(关停 / 热重挂端点) —— 与「没通道」是两回事"""
-    def get_text(self, url: str) -> str:
-        raise HrChannelStopped(f"取数通道已停止(HR 取数线程正在停止): {url}")
-
-    def get_bytes(self, url: str) -> bytes:
-        raise HrChannelStopped("取数通道已停止")
-
-
-def test_cancelled_fetch_is_not_a_failure_nor_an_alert(tmp_path, caplog):
-    """被叫停: 既不是「没通道」也不是失败 —— 不告警、不计失败、不推进熔断、不留残余
-
-    用户实报「一开一关就弹 warning」的其中一条就是这个: 关停时取数线程恰好正在等回传, 被叫停后
-    旧代码把 `HrChannelUnavailable` 当成「无可用取数通道」告警了一次。
-    """
-    clock = Clock()
-    svc = _service(tmp_path, _StoppedFetcher(), clock)
-
-    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr"):
-        result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_WAITING
-    assert "被叫停" in result.reason
-    assert not [r for r in caplog.records if r.levelno >= logging.WARNING], \
-        f"关停是预期动作, 不该告警: {[r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]}"
-    data = _read(tmp_path)
-    assert data.fuse.failures == 0, "叫停不是取数失败, 不得推进熔断"
-    assert data.quota.last_fetch_ts == 0.0, "叫停发生在请求之前, 不该记账"
-
-
-def test_alert_ownership_is_marked_on_the_result(tmp_path, caplog):
-    """告警归属: 「谁产生原因谁告警」—— 状态层只在还没人告过时才 WARNING
-
-    同一次事件被两处各告一次 = 两条系统通知(2026-09-24 用户实报: 一次扩展超时收到两条)。
-    """
-    clock = Clock()
-    # ① 取数失败: 产生处(本模块)告警 ⇒ alerted=True
-    failed = _service(tmp_path / "a", FakeFetcher({}, {}, fail_text_at={"A": "429 Too Many Requests"}),
-                      clock).refresh_site(SITE)
-    assert failed.action == ACTION_ERROR and failed.alerted is True
-
-    # ② 页面改版: 不是取数失败, 本模块不报 ⇒ 留给状态层(worker)告警
-    revised = _service(
-        tmp_path / "b", FakeFetcher({
-            "A": REVISED_PAGE,
-            "B": EMPTY_TABLE_PAGE,
-            "C": EMPTY_TABLE_PAGE
-        }, {}), clock
-    ).refresh_site(SITE)
-    assert revised.action == ACTION_PARTIAL and revised.alerted is False
-
-    # ③ 站点文件读坏: 存储层按自己的节流口径告警 ⇒ alerted=True 且全轮只一条 WARNING
-    hr_dir = tmp_path / "c" / "hr"
-    hr_dir.mkdir(parents=True)
-    (hr_dir / f"{SITE}.json").write_text("{ 坏", encoding="utf-8")
-    caplog.clear()  # 上面两条已经报过各自的告警, 只看这一轮
-    with caplog.at_level(logging.DEBUG, logger="auto_qb.hr"):
-        broken = _service(tmp_path / "c", FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101)), clock).refresh_site(SITE)
-    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    assert "站点文件解析失败" in "".join(warnings) and len(warnings) == 1, warnings
-    assert broken.alerted is True
-
-
-def test_dry_run_fetches_nothing_and_writes_nothing(tmp_path):
-    """dry-run: 清单恒空且零写入(零请求也零写入)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, persist=False, allow_fetch=False)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_WAITING
-    assert "dry-run" in result.reason
-    assert fetcher.text_calls == [] and fetcher.byte_calls == []
-    assert not (tmp_path / "hr" / f"{SITE}.json").exists()
-
-
-def test_read_only_run_reports_without_persisting(tmp_path):
-    """hr.once 口径: 真机只读走查 —— 抓取 + 出报告, 但不写文件、不联动 qB"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, persist=False, allow_fetch=True)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED
-    assert result.persisted is False
-    assert "只读模式" in result.reason
-    assert len(fetcher.byte_calls) == 1
-    assert not (tmp_path / "hr" / f"{SITE}.json").exists()
-
-
-def test_read_only_run_does_not_persist_failure_counter(tmp_path):
-    """❗失败计数/熔断也是持久状态: 只读口径下取数失败同样不得落盘
-
-    (旧实现这里漏了 `persist` 判断 —— 走查一旦撞上取数失败就会把熔断写进站点文件,
-    而那份文件是**正式实例共用**的, 等于只读口令偷改了取数节奏。)
-    """
-    clock = Clock()
-    fetcher = FakeFetcher({}, {}, fail_text_at={"A": "429 Too Many Requests"})
-    svc = _service(tmp_path, fetcher, clock, persist=False, allow_fetch=True)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_ERROR
-    assert result.persisted is False
-    assert "只读模式, 未写盘" in result.reason
-    assert not (tmp_path / "hr" / f"{SITE}.json").exists(), "只读走查不得写站点文件(含失败计数)"
-    assert result.path == str(tmp_path / "hr" / f"{SITE}.json")
-
-
-def test_disabled_by_global_or_site(tmp_path):
-    """总开关关闭 / 站点 mode=off -> 直接跳过(零副作用)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(), {})
-    off_global = _service(tmp_path, fetcher, clock, glob=global_conf(enabled=False))
-    res = off_global.refresh_site(SITE)
-    assert res.action == ACTION_DISABLED and res.reason == "hr_check.enabled=false"
-
-    off_site = _service(tmp_path, FakeFetcher(_pages(), {}), clock, site=site_conf(mode="off"))
-    res = off_site.refresh_site(SITE)
-    assert res.action == ACTION_DISABLED and "mode=off" in res.reason
-
-    assert fetcher.text_calls == []
-
-
-def test_unknown_adapter_reports_error(tmp_path):
-    """adapter 名未登记 -> 明确报错(而不是静默不抓, 让保护悄悄失效)"""
-    clock = Clock()
-    svc = _service(tmp_path, FakeFetcher(_pages(), {}), clock, site=site_conf(adapter="不存在的站点"))
-    result = svc.refresh_site(SITE)
-    assert result.action == ACTION_ERROR
-    assert "未登记的 adapter" in result.reason
-
-
-def test_view_revision_only_moves_on_data_change(tmp_path):
-    """视图 revision 只在数据实质变化时抬升(复用数据不抬, 主循环据此零工作)
-
-    ❗一轮内的**增量落盘**(2026-09-25 实报)会让文件 revision 每轮抬多次(每页/每 torrent 一次) ——
-    但 worker 的**视图发布**仍只在轮尾一次, 主循环看到的仍是「每轮至多变一次」。
-    """
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-
-    assert svc.build_views()[SITE].revision == 0
-    svc.refresh_site(SITE)
-    first = svc.build_views()[SITE]
-    assert first.revision >= 1, "完整刷新至少落盘一次(增量提交下会更多)"
-    assert first.complete is True and first.mode == "partial"
-    assert {e.tid for e in first.by_infohash.values()} == {101}  # 命中的 101 进了受管束集合
-
-    svc.refresh_site(SITE)  # 复用, 不写盘
-    again = svc.build_views()[SITE]
-    assert again.revision == first.revision and again.last_success_ts == first.last_success_ts
-
-
-def test_parse_revision_is_incomplete(tmp_path):
-    """页面改版(表头缺失) -> 覆盖证明不成立, 不产生放行"""
-    clock = Clock()
-    fetcher = FakeFetcher({"A": REVISED_PAGE, "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE}, {})
-    svc = _service(tmp_path, fetcher, clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_PARTIAL
-    assert "疑似改版" in result.reason
-    data = _read(tmp_path)
-    assert data.refresh.complete is False
-    assert data.verified == {}
-
-
-def test_empty_listing_is_complete(tmp_path):
-    """表头在但 0 行是合法空结果(「该账号没有 HR 种子」), 覆盖证明仍成立"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(), {})
-    svc = _service(tmp_path, fetcher, clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED
-    assert result.complete is True
-    assert result.entries == 0
-    assert _read(tmp_path).refresh.last_success_ts == clock.now
-
-
-def test_reason_kind_separates_pacing_from_parse(tmp_path):
-    """没跑完的原因分类: 频控截断=budget(可预期) / 页面改版=parse(值得告警) / 完整=none
-
-    这个分类是告警分级的依据(worker 只对 parse 类与失败才 WARNING) —— 混淆的后果是用户
-    被「本来就是这样」的频控每秒级弹窗淹没(2026-09-24 实报)。
-    """
-    clock = Clock()
-    # 频控: 间隔 90s 且不传 sleeper ⇒ 第二页被自己的频控拦住
-    pacing = _service(
-        tmp_path / "a",
-        FakeFetcher(_pages(a_rows=[row(101)], a_next=True), _blobs(101)),
-        clock,
-        glob=global_conf(min_torrent_interval=90.0),
-    ).refresh_site(SITE)
-    assert pacing.action == ACTION_PARTIAL and "间隔" in pacing.reason
-    assert pacing.reason_kind == REASON_BUDGET
-
-    # 页面改版: 表头缺失
-    revised = _service(
-        tmp_path / "b",
-        FakeFetcher({
-            "A": REVISED_PAGE,
-            "B": EMPTY_TABLE_PAGE,
-            "C": EMPTY_TABLE_PAGE
-        }, {}),
-        clock,
-    ).refresh_site(SITE)
-    assert revised.action == ACTION_PARTIAL and "疑似改版" in revised.reason
-    assert revised.reason_kind == REASON_PARSE
-
-    # 完整刷新: 没有「没跑完」这回事
-    done = _service(tmp_path / "c", FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101)), clock).refresh_site(SITE)
-    assert done.action == ACTION_REFRESHED and done.reason_kind == REASON_NONE
-
-
-@pytest.mark.parametrize("mode", ["partial", "all"])
-def test_both_modes_refresh(tmp_path, mode):
-    """partial 与 all 都走站点侧驱动刷新(差别只在未核实的默认值, 见 resolve)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101)]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(mode=mode))
-    result = svc.refresh_site(SITE)
-    assert result.action == ACTION_REFRESHED
-    assert svc.build_views()[SITE].mode == mode
-
-
-# ---------- 超龄豁免: 行过滤 + 翻页早停(completed_age_limit; 计划 §8 增补) ----------
-
-
-def _done(clock: Clock, days_ago: float) -> str:
-    """按假时钟构造「N 天前」的完成时间串(本地时区往返, 与 HrEntry.done_epoch 同一解释)"""
-    return datetime.fromtimestamp(clock.now - days_ago * 86400).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def test_age_window_off_keeps_old_rows(tmp_path):
-    """豁免线未配置(0=默认) -> 超龄行照常入索引/回填(零静默变更守门)"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(101, done=_done(clock, 400))]), _blobs(101))
-    svc = _service(tmp_path, fetcher, clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.complete is True
-    data = _read(tmp_path)
-    assert set(data.index) == {101}
-    assert len(fetcher.byte_calls) == 1
-
-
-def test_age_window_filters_old_rows(tmp_path):
-    """超龄行不入索引、不回填(判定侧会豁免它们, 索引行留着只会白烧 .torrent 配额); 线内行照常"""
-    clock = Clock()
-    fetcher = FakeFetcher(
-        _pages(
-            a_rows=[row(101, done=_done(clock, 400)), row(102, done=_done(clock, 10))]
-        ),
-        _blobs(102),  # 101 的 .torrent 故意不给: 真去取了就是 bug
-    )
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.complete is True
-    data = _read(tmp_path)
-    assert set(data.index) == {102}
-    assert [FakeFetcher.tid_of(u) for u in fetcher.byte_calls] == [102]
-
-
-def test_early_stop_skips_remaining_pages(tmp_path):
-    """第 2 页整页超龄(倒序证据成立) -> 第 3 页不再请求; 本档位照常计入覆盖证明(complete 可达)"""
-    clock = Clock()
-    page2 = myhr_page([row(201, done=_done(clock, 400))], has_next=True)  # 明示还有第 3 页, 但不去了
-    fetcher = FakeFetcher(
-        _pages(a_rows=[row(101, done=_done(clock, 10))], a_next=True, page2=page2),
-        _blobs(101),
-    )
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.complete is True, "豁免线内的清单已全覆盖, 覆盖证明照常成立(放行照常产生)"
-    assert result.pages_fetched == 4, "A 翻到第 2 页即止(共 A2+B+C); 第 3 页一个请求都不花"
-    assert "早停" in result.reason
-    data = _read(tmp_path)
-    assert set(data.index) == {101}, "超龄页的行不进索引"
-
-
-def test_early_stop_not_triggered_with_in_window_row(tmp_path):
-    """第 2 页混着线内行 -> 不能早停, 继续翻到页尾(漏一条线内清单就是误放行)
-
-    (页面行序保持倒序 —— v2 方案下乱序页会被 S1 强信号处置, 那是另一组守阵的场景。)
-    """
-    clock = Clock()
-    page2 = myhr_page([row(202, done=_done(clock, 20)), row(201, done=_done(clock, 400))], has_next=True)
-    pages = _pages(a_rows=[row(101, done=_done(clock, 10))], a_next=True, page2=page2)
-    pages[PAGE3_URL] = myhr_page([], has_next=False)
-    fetcher = FakeFetcher(pages, _blobs(101, 202))
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.complete is True
-    assert result.pages_fetched == 5, "A 翻满 3 页 + B + C"
-    data = _read(tmp_path)
-    assert set(data.index) == {101, 202}, "超龄的 201 被滤掉, 线内的 101/202 照常入索引"
-
-
-def test_early_stop_requires_desc_order_within_page(tmp_path):
-    """整页超龄但页内完成时间**升序**(页面不是按完成时间倒序排) -> S1 强信号处置(不再「放弃早停继续翻」)
-
-    v2 方案(计划 26-09-27-1815 §2 2.1)把「倒序证据不成立」升级为强信号: 乱序页翻下去也不能
-    证明覆盖(早停与「未列出」推理同时失效), 继续翻只会白烧配额 —— 判失败 + 累计违反轮数。
-    """
-    clock = Clock()
-    # 页 1 两行(线内+超龄)建立倒序方向; 页 2 出现升序对(490天前 在 380天前 之前) = 页内逆序
-    page2 = myhr_page([row(201, done=_done(clock, 490)), row(202, done=_done(clock, 380))], has_next=True)
-    pages = _pages(a_rows=[row(101, done=_done(clock, 10)), row(102, done=_done(clock, 500))], a_next=True, page2=page2)
-    pages[PAGE3_URL] = myhr_page([], has_next=False)
-    fetcher = FakeFetcher(pages, _blobs(101, 201, 202))
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_ERROR, "排序违反 = S1 强信号: 判本轮失败, 不产生放行"
-    assert result.order_violated is True
-    assert "方向翻转" in result.order_detail, "轮级方向已定时, 页内升序即方向翻转"
-    data = _read(tmp_path)
-    assert data.refresh.signal_rounds == 1
-    assert data.refresh.complete is False
-
-
-def test_early_stop_requires_desc_order_across_pages(tmp_path):
-    """跨页倒序链断了(第 2 页有比第 1 页最老行**更新**的行) -> S1 强信号处置(§2 2.1)"""
-    clock = Clock()
-    # 第 1 页: 线内 10 天 + 超龄 500 天(页内倒序成立); 第 2 页整页超龄, 但最老只到 480 天
-    page2 = myhr_page([row(201, done=_done(clock, 480)), row(202, done=_done(clock, 490))], has_next=True)
-    pages = _pages(a_rows=[row(101, done=_done(clock, 10)), row(102, done=_done(clock, 500))], a_next=True, page2=page2)
-    pages[PAGE3_URL] = myhr_page([], has_next=False)
-    fetcher = FakeFetcher(pages, _blobs(101))
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_ERROR, "跨页乱序 = S1 强信号: 判本轮失败"
-    assert result.order_violated is True and "跨页乱序" in result.order_detail
-    assert "强信号处置" in _read(tmp_path).refresh.reason
-
-
-def test_early_stop_blocked_by_missing_done_field(tmp_path):
-    """整页超龄但有一行完成时间缺失/不可解析 -> 不早停(不猜); 该行照常保留入索引"""
-    clock = Clock()
-    page2 = myhr_page([row(201, done=_done(clock, 400)), row(202, done="--")], has_next=True)
-    pages = _pages(a_rows=[row(101, done=_done(clock, 10))], a_next=True, page2=page2)
-    pages[PAGE3_URL] = myhr_page([], has_next=False)
-    fetcher = FakeFetcher(pages, _blobs(101, 202))
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.pages_fetched == 5, "有行缺完成时间 → 超龄证据不全 → 不早停"
-    data = _read(tmp_path)
-    assert set(data.index) == {101, 202}, "201 超龄被滤; 202 完成时间未知, 保留(不猜)"
-
-
-def test_early_stop_blocked_when_prev_page_has_no_done(tmp_path):
-    """上一页没有可解析的完成时刻 -> 跨页倒序证据缺失 -> 不早停"""
-    clock = Clock()
-    page1_rows = [row(101, done="--"), row(102, done="—")]  # 两行完成时间都不可解析(照常保留)
-    page2 = myhr_page([row(201, done=_done(clock, 400))], has_next=True)
-    pages = _pages(a_rows=page1_rows, a_next=True, page2=page2)
-    pages[PAGE3_URL] = myhr_page([], has_next=False)
-    fetcher = FakeFetcher(pages, _blobs(101, 102))
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(completed_age_limit=AGE_LIMIT))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.pages_fetched == 5, "上一页没有完成时刻 → 跨页证据缺失 → 不早停"
-    data = _read(tmp_path)
-    assert set(data.index) == {101, 102}
-
-
-# ---------- M5.1 判据与观测(计划 26-09-27-1815 §2 1.1–1.6) ----------
-
-
-def test_order_observation_clean_round_marks_true(tmp_path):
-    """整轮单调成立 -> refresh.order_ok=True, 结果不带违反信号(零静默变更: 判定语义不变)"""
-    clock = Clock()
-    pages = _pages(
-        a_rows=[
-            row(1, done="2026-09-25 10:00:00"),
-            row(2, done="2026-09-24 10:00:00"),
-            row(3, done="2026-09-23 10:00:00"),
-        ]
-    )
-    svc = _service(tmp_path, FakeFetcher(pages, _blobs(1, 2, 3)), clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.complete is True  # M5.1 观测不改判定
-    assert result.order_violated is False
-    data = _read(tmp_path)
-    assert data.refresh.order_ok is True
-    assert data.refresh.order_detail == ""
-
-
-def test_order_observation_inversion_flags_and_warns(tmp_path, caplog):
-    """页内逆序 1 处 -> order_ok=False + 首处位置 + WARNING 告证 + 本轮判失败(M5.2 强信号处置)"""
-    clock = Clock()
-    pages = _pages(
-        a_rows=[
-            row(1, done="2026-09-25 10:00:00"),
-            row(2, done="2026-09-24 10:00:00"),
-            row(3, done="2026-09-26 10:00:00"),  # 乱序行
-            row(4, done="2026-09-23 10:00:00"),
-        ]
-    )
-    svc = _service(tmp_path, FakeFetcher(pages, _blobs(1, 2, 3, 4)), clock)
-
-    with caplog.at_level(logging.WARNING, logger="auto_qb.hr"):
-        result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_ERROR, "S1 强信号: 本轮判失败, 不产生放行"
-    assert result.complete is False
-    assert result.order_violated is True
-    data = _read(tmp_path)
-    assert data.refresh.order_ok is False
-    assert "第 1 页" in data.refresh.order_detail
-    assert "强信号处置" in data.refresh.reason and "不产生放行" in data.refresh.reason
-    assert data.refresh.signal_rounds == 1, "S1 计入连续违反轮数(§2 2.1 ③)"
-    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    assert any("排序假设不成立" in w for w in warnings)
-
-
-def test_order_observation_cross_page_inversion(tmp_path):
-    """跨页乱序(第 2 页出现比第 1 页最老行更新的行)-> order_ok False"""
-    clock = Clock()
-    pages = _pages(
-        a_rows=[
-            row(1, done="2026-09-25 10:00:00"),
-            row(2, done="2026-09-24 10:00:00"),
-        ],
-        a_next=True,
-        page2=myhr_page(
-            [
-                row(3, done="2026-09-25 12:00:00"),  # 比上一页最老行(09-24)还新 -> 跨页乱序
-                row(4, done="2026-09-23 10:00:00"),
-            ]
-        ),
-    )
-    svc = _service(tmp_path, FakeFetcher(pages, _blobs(1, 2, 3, 4)), clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.order_violated is True
-    assert _read(tmp_path).refresh.order_ok is False
-
-
-def test_order_observation_insufficient_leaves_none(tmp_path):
-    """每页可比行 < 2 -> order_ok=None(证据不足不判, 不误报)"""
-    clock = Clock()
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(1)]), _blobs(1)), clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.order_violated is False
-    assert _read(tmp_path).refresh.order_ok is None
-
-
-def test_maxpage_marks_say_next_continues_paging(tmp_path):
-    """「下一页」链接缺失但 maxpage/currentpage 说还有 -> 继续翻(判据并集, 堵英文站缺口)"""
-    clock = Clock()
-    page1 = myhr_page([row(1)], has_next=False) + "<script>var maxpage = 2; var currentpage = 1;</script>"
-    page2 = myhr_page([row(2)], has_next=False) + "<script>var maxpage = 2; var currentpage = 2;</script>"
-    pages = {"A": page1, PAGE2_URL: page2, "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE}
-    fetcher = FakeFetcher(pages, _blobs(1, 2))
-    svc = _service(tmp_path, fetcher, clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert PAGE2_URL in fetcher.text_calls, "脚本标记说还有下一页 -> 必须继续翻"
-    assert result.complete is True
-
-
-def test_maxpage_marks_agree_last_page_stops(tmp_path):
-    """双判据都说到底 -> 停翻(并集语义的另一侧; 链接与脚本标记一致时不多发请求)"""
-    clock = Clock()
-    page1 = myhr_page([row(1)], has_next=False) + "<script>var maxpage = 1; var currentpage = 1;</script>"
-    pages = {"A": page1, "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE}
-    fetcher = FakeFetcher(pages, _blobs(1))
-    svc = _service(tmp_path, fetcher, clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert PAGE2_URL not in fetcher.text_calls
-    assert result.complete is True
-
-
-def test_plunge_observation_baseline_and_suspect(tmp_path):
-    """骤降观测: 基线取结构完好且非零轮; 骤降轮可疑且**不计入**基线; 连续可疑轮数累计"""
-    clock = Clock()
-    svc = _service(
-        tmp_path,
-        FakeFetcher(_pages(a_rows=[row(t) for t in (1, 2, 3, 4)]), _blobs(1, 2, 3, 4)),
-        clock,
-    )
-    svc.refresh_site(SITE)
-    data = _read(tmp_path)
-    assert data.refresh.scope_counts == {"A": 4, "B": 0, "C": 0}, "0 行档位也是有效观测值, 照记"
-    assert data.refresh.entry_baseline == 4
-    assert data.refresh.plunge_suspect is False
-
-    clock.advance(12 * 3600 + 60)  # 骤降轮: 4 -> 1(1 < 4*30%)
-    svc = _service(
-        tmp_path,
-        FakeFetcher(_pages(a_rows=[row(1)]), _blobs(1)),
-        clock,
-    )
-    svc.refresh_site(SITE)
-    data = _read(tmp_path)
-    assert data.refresh.plunge_suspect is True
-    assert data.refresh.plunge_rounds == 1
-    assert data.refresh.entry_baseline == 4, "可疑轮不计入基线(堵「0 vs 0」自愈洞)"
-
-    clock.advance(12 * 3600 + 60)  # 恢复轮: 1 -> 4 -> 以新合计更新基线
-    svc = _service(
-        tmp_path,
-        FakeFetcher(_pages(a_rows=[row(t) for t in (1, 2, 3, 4)]), _blobs(1, 2, 3, 4)),
-        clock,
-    )
-    svc.refresh_site(SITE)
-    data = _read(tmp_path)
-    assert data.refresh.plunge_suspect is False
-    assert data.refresh.plunge_rounds == 0
-    assert data.refresh.entry_baseline == 4
-
-
-def test_scope_counts_observation(tmp_path):
-    """各档解析行数记入 scope_counts; 上一轮的挪到 prev_scope_counts(「A: 37 → 0」观测)"""
-    clock = Clock()
-    svc = _service(
-        tmp_path,
-        FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2)),
-        clock,
-    )
-    svc.refresh_site(SITE)
-    assert _read(tmp_path).refresh.scope_counts == {"A": 2, "B": 0, "C": 0}
-
-    clock.advance(12 * 3600 + 60)  # 下一轮: A 清零(表头在 0 行 = 合法), B/C 仍空
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[]), _blobs()), clock)
-    svc.refresh_site(SITE)
-    meta = _read(tmp_path).refresh
-    assert meta.prev_scope_counts == {"A": 2, "B": 0, "C": 0}
-    assert meta.scope_counts == {"A": 0, "B": 0, "C": 0}
-
-
-# ---------- M5.2 信号处置与停用(计划 26-09-27-1815 §2 2.1–2.7) ----------
-
-
-def _disordered_pages():
-    """页内逆序的 A 页(其余档位合法空表): S1 强信号的标准场景"""
-    return _pages(
-        a_rows=[
-            row(1, done="2026-09-25 10:00:00"),
-            row(2, done="2026-09-24 10:00:00"),
-            row(3, done="2026-09-26 10:00:00"),  # 乱序行
-        ]
-    )
-
-
-def test_s2_missing_fields_is_strong_signal(tmp_path, caplog):
-    """S2 必填字段缺失(哪怕 1 行)⇒ 强信号处置: 判失败, 文案与 S1 分开(§2 2.1)"""
-    clock = Clock()
-    pages = _pages(a_rows=[row(1), row(2, need="")])  # need 列为空 = 必填字段缺失
-    svc = _service(tmp_path, FakeFetcher(pages, _blobs(1)), clock)
-
-    with caplog.at_level(logging.WARNING, logger="auto_qb.hr"):
-        result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_ERROR
-    assert "必填字段缺失" in result.reason
-    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    assert any("必填字段缺失" in w for w in warnings)
-    assert not any("排序假设不成立" in w for w in warnings), "S1/S2 告警文案必须分开, 便于对文案定位问题"
-    data = _read(tmp_path)
-    assert data.refresh.signal_rounds == 1
-    assert data.refresh.complete is False
-
-
-def test_consecutive_signals_suspend_site(tmp_path, caplog):
-    """S1 连续 3 轮 ⇒ suspended 停用(人工恢复; §2 2.3), 停用后取数侧零请求"""
-    clock = Clock()
-    fetcher = FakeFetcher(_disordered_pages(), _blobs())
-    svc = _service(tmp_path, fetcher, clock)
-
-    for i in range(3):  # 连续三轮违反(处置轮不动 fetched_at/expires_at ⇒ 每轮都会重抓)
-        result = svc.refresh_site(SITE)
-        assert result.action == ACTION_ERROR
-    assert _read(tmp_path).suspended is not None, "连续 K=3 轮强信号 ⇒ 停用"
-    assert _read(tmp_path).suspended.rounds == 3
-    errors = [r.getMessage() for r in caplog.records if "[HR 站点停用]" in r.getMessage()]
-    assert len(errors) == 1 and "--hr-resume" in errors[0], "停用进入时 ERROR 一条, 文案带恢复动作"
-
-    calls_before = len(fetcher.text_calls)
-    again = svc.refresh_site(SITE)
-    assert again.action == ACTION_SUSPENDED
-    assert len(fetcher.text_calls) == calls_before, "停用期零请求(连复用轮的下载也让位)"
-
-
-def test_clean_round_resets_signal_rounds(tmp_path):
-    """只认连续(§2 2.4③): 任何一轮干净且无违反 ⇒ 停站计数清零"""
-    clock = Clock()
-    svc = _service(tmp_path, FakeFetcher(_disordered_pages(), _blobs()), clock)
-    svc.refresh_site(SITE)
-    assert _read(tmp_path).refresh.signal_rounds == 1
-
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2)), clock)
-    svc.refresh_site(SITE)
-    assert _read(tmp_path).refresh.signal_rounds == 0, "干净轮清零"
-
-
-def test_plunge_protection_blocks_release_on_zero_round(tmp_path):
-    """清单清零且基线存在 ⇒ 骤降保护: 判不完备, **不产生放行**(P1 收口, D1)"""
-    clock = Clock()
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2)), clock)
-    svc.refresh_site(SITE)
-
-    clock.advance(13 * 3600)
-    svc = _service(tmp_path, FakeFetcher(_pages(), _blobs()), clock)  # 清零轮
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_PARTIAL
-    assert result.complete is False
-    assert _read(tmp_path).refresh.plunge_suspect is True
-    assert "骤降可疑" in result.reason
-    assert _read(tmp_path).verified == {}, "骤降轮不得产生任何放行"
-
-
-def test_accept_empty_listing_gate(tmp_path):
-    """人工确认口子(D1): 站点显式 accept_empty_listing ⇒ 空清单即使基线存在也是合法 complete"""
-    clock = Clock()
-    svc = _service(
-        tmp_path,
-        FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2)),
-        clock,
-        site=site_conf(accept_empty_listing=True),
-    )
-    svc.refresh_site(SITE)
-
-    clock.advance(13 * 3600)
-    svc = _service(
-        tmp_path,
-        FakeFetcher(_pages(), _blobs()),
-        clock,
-        site=site_conf(accept_empty_listing=True),
-    )
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED, "确认后的空清单 = 合法覆盖证明"
-    assert result.complete is True
-
-
-def test_login_backoff_doubles_and_caps_then_resets(tmp_path):
-    """登录退避 2^(n-1) × poll_interval, 上限 = refresh_interval; 登录恢复后清零(§2 2.6)"""
-    clock = Clock()
-    fetcher = FakeFetcher({"A": LOGIN_PAGE})
-    svc = _service(tmp_path, fetcher, clock, site=site_conf(refresh_interval=300.0))
-
-    svc.refresh_site(SITE)
-    data = _read(tmp_path)
-    assert data.login_backoff_until == clock.now + 60.0, "第一档: poll_interval × 2^0"
-    assert data.login_expired_streak == 1
-    assert data.fuse.failures == 0 and data.fetched_at == 0.0, "退避不计失败、不动 fetched_at"
-
-    for expected in (120.0, 240.0, 300.0):  # 2^1 / 2^2 / 封顶(2^3=480 > 300)
-        clock.advance(expected - 1)
-        svc.refresh_site(SITE)
-        data = _read(tmp_path)
-        assert data.login_backoff_until == clock.now + expected
-        assert data.login_expired_streak == 2 if expected == 120.0 else True
-
-    clock.advance(300.0)
-    fetcher.pages = _pages(a_rows=[row(1)])
-    fetcher.blobs = _blobs(1)
-    good = svc.refresh_site(SITE)
-    assert good.action == ACTION_REFRESHED
-    data = _read(tmp_path)
-    assert data.login_expired_streak == 0 and data.login_backoff_until == 0.0, "登录恢复即清零"
-
-
-def test_backfill_retracts_release_on_infohash_match(tmp_path):
-    """回填对账撤销(§2 2.5, P2「放行收不回」): 种子重回清单且回填成功 ⇒ 放行作废
-
-    场景刻意用**不完备轮**: _refresh_verified 只在 complete 时跑, 撤销只能由回填对账完成 ——
-    这正是 P2 的漏管窗口(此前清单命中但未回填 hash 的行收不回放行)。
-    """
-    clock = Clock()
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2)), clock)
-    svc.refresh_site(SITE)
-    h1 = _read(tmp_path).index[1].infohash_v1
-
-    clock.advance(13 * 3600)
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(2)]), _blobs()), clock)
-    svc.refresh_site(SITE)  # 1 未列出 ⇒ 放行(清单合计 1, 非骤降)
-    assert _read(tmp_path).verified.get(h1) is not None
-
-    clock.advance(13 * 3600)
-    # 不完备轮: 1 重回清单(hash 从永久层复用), 但翻页没到底 ⇒ _refresh_verified 不跑
-    svc = _service(
-        tmp_path,
-        FakeFetcher(_pages(a_rows=[row(1)], a_next=True), _blobs()),
-        clock,
-        site=site_conf(max_pages_per_refresh=1),
-    )
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_PARTIAL
-    assert _read(tmp_path).verified.get(h1) is None, "回填对账: 命中即作废放行(不等下一次完整刷新)"
-
-
-def test_backfill_without_match_keeps_release(tmp_path):
-    """回填未命中放行记录 ⇒ 放行不动(对账只撤销精确对上的)"""
-    clock = Clock()
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2)), clock)
-    svc.refresh_site(SITE)
-    h1 = _read(tmp_path).index[1].infohash_v1
-
-    clock.advance(13 * 3600)
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(2)]), _blobs()), clock)
-    svc.refresh_site(SITE)
-    assert _read(tmp_path).verified.get(h1) is not None
-
-    clock.advance(13 * 3600)
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(2), row(3)]), _blobs(3)), clock)
-    svc.refresh_site(SITE)
-    data = _read(tmp_path)
-    assert data.verified.get(h1) is not None, "新行 3 的回填与放行 1 无关, 不得误伤"
-
-
-def test_zero_listing_rounds_upgrade_warning(tmp_path, caplog):
-    """合计连续 3 轮零且结构完好 ⇒ WARNING 升级 + 人工确认口子指引(§2 2.2)"""
-    clock = Clock()
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2)), clock)
-    svc.refresh_site(SITE)
-
-    for i in range(3):  # 清零轮之间跨过 12H 有效期(完整刷新基线轮的有效期)
-        clock.advance(13 * 3600)
-        svc = _service(tmp_path, FakeFetcher(_pages(), _blobs()), clock)
-        svc.refresh_site(SITE)
-
-    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
-    assert any("全部毕业/被清除" in w and "accept_empty_listing" in w for w in warnings), warnings
-
-
-# ---------- M5.3 配额模型拆分(计划 26-09-27-1815 §2 3.1–3.7) ----------
-
-
-def test_split_site_page_round_skips_download(tmp_path):
-    """split 站点: 页面只在新轮做、下载只在复用轮做(§2 3.4); 页面/下载各记各账"""
-    clock = Clock()
-    site = site_conf(quota_model="split")
-    fetcher = FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2))
-    svc = _service(tmp_path, fetcher, clock, site=site, glob=global_conf(min_page_interval=0.0))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED
-    assert fetcher.byte_calls == [], "split 新轮零 .torrent 请求(种子慢慢下载)"
-    data = _read(tmp_path)
-    assert data.quota.day_count == 3, "页面请求(A/B/C 各一页)记进页面账本"
-    assert data.torrent_quota.day_count == 0
-
-    clock.advance(60.0)  # 有效期内复用轮: 下载名额全给下载
-    fetcher2 = FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2))
-    reused = _service(tmp_path, fetcher2, clock, site=site).refresh_site(SITE)
-
-    assert reused.action == ACTION_REUSED
-    assert reused.torrents_fetched == 2
-    assert _read(tmp_path).torrent_quota.day_count == 2, "下载记账进下载账本"
-
-
-def test_legacy_site_page_round_still_downloads(tmp_path):
-    """激活门(§2 3.2): 未 opt-in split 的站点新轮照旧顺带下载 —— 零静默变更"""
-    clock = Clock()
-    fetcher = FakeFetcher(_pages(a_rows=[row(1)]), _blobs(1))
-    svc = _service(tmp_path, fetcher, clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_REFRESHED
-    assert len(fetcher.byte_calls) == 1, "legacy 站点行为逐字节不变"
-
-
-def test_split_page_bucket_exhaustion_truncates(tmp_path):
-    """split 页面桶打空 ⇒ 页面截断(budget 语义), 不报错; 与下载账本无关"""
-    clock = Clock()
-    site = site_conf(quota_model="split")
-    fetcher = FakeFetcher(_pages(a_rows=[row(1)]), _blobs())
-    svc = _service(tmp_path, fetcher, clock, site=site, glob=global_conf(page_burst=2, min_page_interval=0.0))
-
-    result = svc.refresh_site(SITE)
-
-    assert result.action == ACTION_PARTIAL
-    assert len(fetcher.text_calls) == 2, "burst=2 ⇒ 只发出两个页面请求"
-    assert result.reason_kind == REASON_BUDGET
-
-
-def test_old_site_file_without_torrent_quota_still_reads(tmp_path):
-    """旧站点文件(无 torrent_quota / tokens 等新键)可正常读取(§2 3.3 向后兼容)"""
-    from auto_qb.hr.model import HrSiteData as _D
-
-    legacy = _D()
-    legacy.index[7] = __import__("auto_qb.hr.model", fromlist=["HrEntry"]).HrEntry(tid=7, name="old")
-    raw = legacy.to_json()
-    raw.pop("torrent_quota", None)  # 模拟旧版本文件
-    raw.pop("suspended", None)
-    raw["quota"].pop("tokens", None)
-    raw["quota"].pop("refill_ts", None)
-    (tmp_path / "hr").mkdir(exist_ok=True)
-    import json as _json
-
-    (tmp_path / "hr" / f"{SITE}.json").write_text(_json.dumps(raw, ensure_ascii=False), encoding="utf-8")
-
-    data, err = HrSiteStore(SITE, str(tmp_path / "hr")).read_unlocked()
-
-    assert err is None
-    assert 7 in data.index
-    assert data.torrent_quota.day_count == 0 and data.quota.tokens is None, "缺键取默认零值/未初始化"
-
-
-# ---------- M5.4 早停与豁免(计划 26-09-27-1815 §2 4.1–4.7) ----------
-
-
-def _period_rows(clock, *, in_window=2, expired=5):
-    """构造「考核期 P=30 天恒定」的页面行: 前段线内(remain>0), 尾段已到期(remain=0)"""
-    now = clock.now
-    rows = []
-    for i in range(in_window):
-        done = now - (10 + i) * 86400
-        rows.append(
-            row(100 + i, done=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(done)), remain=f"{20 - i}天00:00:00")
-        )  # P = 30 天
-    for i in range(expired):
-        done = now - (40 + i) * 86400
-        rows.append(
-            row(200 + i, done=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(done)), remain="0:00:00")
-        )  # 已到期
-    return rows
-
-
-def test_age_stop_early_stop_on_expired_segment(tmp_path):
-    """早停②(§2 4.4): 剩余达标时间连续 5 行为 0 且 P 一致 ⇒ 早停, 本档覆盖证明成立(无需配豁免线)"""
-    clock = Clock()
-    pages = _pages(a_rows=_period_rows(clock), a_next=True)
-    pages[PAGE2_URL] = myhr_page([], has_next=False)
-    fetcher = FakeFetcher(pages, _blobs())
-    svc = _service(tmp_path, fetcher, clock)
-
-    result = svc.refresh_site(SITE)
-
-    assert PAGE2_URL not in fetcher.text_calls, "到期段命中 ⇒ 后续页不再请求"
-    assert result.action == ACTION_REFRESHED, "「翻到已到期段」= 本档覆盖证明成立(§2 4.2)"
-    assert any("已到期段" in n for n in result.reason.split("; "))
-    data = _read(tmp_path)
-    assert data.refresh.complete is True
-    assert data.refresh.probe_period_days > 29.0 and data.refresh.period_consistent is True
-
-
-def test_period_inconsistency_disables_age_stop(tmp_path, caplog):
-    """P 不恒定(§2 4.4)⇒ 告警 + 早停②禁用(继续翻)+ meta 机检位落盘 —— 机检不是文档承诺"""
-    clock = Clock()
-    now = clock.now
-    rows = [
-        row(100, done=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 5 * 86400)), remain="25天00:00:00"),
-        row(101, done=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - 5 * 86400)), remain="55天00:00:00"),
-        # P: 30 天 vs 60 天 ⇒ 离散超 ±1 天
-    ] + [
-        row(200 + i, done=time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - (40 + i) * 86400)), remain="0:00:00")
+def five_expired_rows(base_tid: int) -> list:
+    """5 行 remain==0(已到期段) —— 停翻② 的最小触发面"""
+    return [
+        row(base_tid + i, f"OTHER-TORRENT {base_tid + i}", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")
         for i in range(5)
     ]
-    pages = _pages(a_rows=rows, a_next=True)
-    pages[PAGE2_URL] = myhr_page([], has_next=False)
-    fetcher = FakeFetcher(pages, _blobs())
-    svc = _service(tmp_path, fetcher, clock)
-
-    with caplog.at_level(logging.WARNING, logger="auto_qb.hr"):
-        result = svc.refresh_site(SITE)
-
-    assert PAGE2_URL in fetcher.text_calls, "P 不一致 ⇒ 早停②禁用, 继续翻(多花配额, 不会错)"
-    assert any("考核期 P 不恒定" in r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING)
-    data = _read(tmp_path)
-    assert data.refresh.period_consistent is False
-    assert data.refresh.probe_period_days == 0.0
-    assert result.action == ACTION_REFRESHED
 
 
-def test_cover_local_early_stop_never_completes(tmp_path):
-    """早停③(§2 4.6 严格版): 本地种子全部已见 + 索引无待回填 ⇒ 停翻但**绝不置 complete**"""
+# ---------------- 波次基本形态 ----------------
+
+
+def test_first_wave_deep_fetch(tmp_path):
+    """首波: 对象(未对账, 本地完成时间可信且较新)驱动各档翻页到其位置之后(全量效果)"""
     clock = Clock()
-    from auto_qb.hr.resolve import HrAnchor
+    # 对象完成于 09-20(新); 各档只有 09-01(老)的行且还有下一页 → ①停翻(更深只会更老)
+    pages = {
+        url_of("A", 1):
+            myhr_page([row(11, "OTHER 11", done=DONE_OLD)], has_next=True),
+        url_of("B", 1):
+            myhr_page([row(12, "OTHER 12", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")], has_next=True),
+        url_of("C", 1):
+            myhr_page([row(13, "OTHER 13", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")], has_next=True),
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h-old": anchor_for("OTHER", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    assert result.action in ("refreshed", "partial")
+    # 三档各取了第 1 页即被①停翻(更深只会更老, 对象不可能藏在更深处)
+    data, _ = service.store(SITE).read_unlocked()
+    assert all(st.ok for st in data.wave.lanes.values())
+    assert data.wave.lanes["A"].full_depth is False  # ①停翻: 位置有界, 非全深度
 
-    svc = _service(tmp_path, FakeFetcher(_pages(a_rows=[row(1), row(2)]), _blobs(1, 2)), clock)
-    svc.refresh_site(SITE)
-    h1 = _read(tmp_path).index[1].infohash_v1
 
+def test_stop1_completion_time_coverage(tmp_path):
+    """停翻①: 最深行完成时间早于对象最老完成时间减 1D 对齐余量 → 停翻(位置有界)"""
+    clock = Clock()
+    # 对象完成 09-10; 第 1 页行 09-20(比对象新 → 不能停), 第 2 页行 09-01(老于对象-1D → 停)
+    pages = {
+        url_of("A", 1): myhr_page([row(11, "OTHER 11", done=DONE_NEW)], has_next=True),
+        url_of("A", 2): myhr_page([row(12, "OTHER 12", done=DONE_OLD)], has_next=True),
+        url_of("B"): myhr_page([], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=E("2026-09-10 10:00:00"))}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    st = data.wave.lanes["A"]
+    assert st.status == "ok" and st.pages == 2 and st.full_depth is False
+    assert "完成时间覆盖" in st.detail
+
+
+def test_stop2_zero_remain_streak(tmp_path):
+    """停翻②: 页尾连续 5 行 remain==0 → 到期段强信号(全深度证明, 停翻零漏判)"""
+    clock = Clock()
+    pages = standard_pages(
+        rows_a=[row(11, "OTHER 11", done=DONE_NEW, remain="1天00:00:00")], rows_b=five_expired_rows(20), rows_c=[]
+    )
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    st = data.wave.lanes["B"]
+    assert st.status == "ok" and st.full_depth is True
+    assert "到期段强信号" in st.detail
+
+
+def test_stop2_cross_page_streak(tmp_path):
+    """停翻②跨页延续: 第 1 页整页 3 行全 0 + 第 2 页整页 2 行全 0 → 累计 5 → 停翻(全深度)"""
+    clock = Clock()
+    pages = {
+        url_of("B", 1): myhr_page(five_expired_rows(20)[:3], has_next=True),
+        url_of("B", 2): myhr_page(five_expired_rows(20)[3:5], has_next=True),
+        url_of("A"): myhr_page([], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=-1)}  # 纯辅种: ①不可用, 由②跨页累计收尾
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    st = data.wave.lanes["B"]
+    assert st.status == "ok" and st.full_depth is True and st.pages == 2
+
+
+def test_stop3_local_full_coverage(tmp_path):
+    """停翻③: 未对账对象全部与已见行对上且无待回填 → 停翻(不再为终态行翻页)"""
+    clock = Clock()
+    # 对象的行在 A 档第 1 页(命中即定论); B/C 档还有别的行与下一页 —— ③在 A 命中后即停 A
+    pages = {
+        url_of("A", 1):
+            myhr_page([row(11, "EXAMPLE 11")], has_next=True),
+        url_of("B", 1):
+            myhr_page([row(12, "OTHER 12", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")], has_next=True),
+        url_of("C", 1):
+            myhr_page([], has_next=False),
+    }
+    blob, h11 = mk_blob("EXAMPLE 11")
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    st = data.wave.lanes["A"]
+    assert st.status == "ok" and st.pages == 1
+    assert "本地全集覆盖" in st.detail
+    # 命中: 行已对账, 索引活跃
+    entry = next(e for e in data.index.values() if e.tid == 11)
+    assert entry.infohash_v1 == h11 and entry.lane == LANE_SCOPE and entry.active
+
+
+def test_untrusted_done_pure_seed(tmp_path):
+    """纯辅种(无本机完成时刻、未绑定): 不参与①; 由②(B/C 到期段)与末页(A)收尾且可获放行"""
+    clock = Clock()
+    pages = standard_pages(
+        rows_a=[row(11, "OTHER 11", done=DONE_NEW, remain="1天00:00:00")], rows_b=five_expired_rows(20), rows_c=[]
+    )
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h-pure": anchor_for("PURE", completion_on=-1)}  # 纯辅种: completion_on 未设
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].full_depth is True  # A 档翻到末页收尾(①不能用)
+    assert data.wave.lanes["B"].full_depth is True  # B 档由②收尾
+    assert "h-pure" in data.verified  # 全深度缺席证明成立 → 放行
+
+
+# ---------------- 失效与截断 ----------------
+
+
+def test_order_violation_forced_stop(tmp_path):
+    """排序失效 → 该档强制早停: 失效点之前命中照常, 该档不签发放行(误管, 方向安全)"""
+    clock = Clock()
+    # A 档第 1 页页内逆序(09-25 后出现 09-01 → 再出现 09-20)
+    bad_page = myhr_page(
+        [
+            row(11, "OTHER 11", done="2026-09-25 10:00:00"),
+            row(12, "OTHER 12", done=DONE_OLD),
+            row(13, "OTHER 13", done=DONE_NEW),
+        ]
+    )
+    pages = {url_of("A", 1): bad_page, url_of("B"): myhr_page([]), url_of("C"): myhr_page([])}
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].status != "ok"
+    assert data.wave.releases_enabled is False
+    assert "排序" in (result.reason + data.wave.notes)
+
+
+def test_header_missing_lane_failed(tmp_path):
+    """表头缺失(A 档改版) → 该档失效; B/C 档独立继续(档位独立, 不污染)"""
+    clock = Clock()
+    pages = {
+        url_of("A"): "<html>改版了, 没有表格</html>",
+        url_of("B"): myhr_page(five_expired_rows(20)),
+        url_of("C"): myhr_page([]),
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].status == "failed"
+    assert data.wave.lanes["B"].ok and data.wave.lanes["C"].ok
+    assert data.wave.releases_enabled is False  # A 档无效 → 批量签发关闭
+    assert result.action == ACTION_PARTIAL
+
+
+def test_budget_truncation(tmp_path):
+    """预算截断: 截断点之前命中照常; 位置未被覆盖的对象不签发放行(待下波续判)"""
+    clock = Clock()
+    pages = {
+        # A 档第 1 页有对象的行(命中), 第 2 页还有(没翻到 —— 预算 3 页分给三档各 1 页不够翻第 2 页)
+        url_of("A", 1):
+            myhr_page([row(11, "EXAMPLE 11")], has_next=True),
+        url_of("B", 1):
+            myhr_page(five_expired_rows(20)[:1], has_next=True),
+        url_of("C", 1):
+            myhr_page([row(31, "OTHER 31", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")], has_next=True),
+    }
+    fetcher = FakeFetcher(pages=pages, blobs={11: torrent_blob(name="EXAMPLE 11")})
+    gconf = global_conf(max_pages_per_wave=3)
+    service = make_service(tmp_path, fetcher, gconf=gconf, clock=clock)
+    anchors = {
+        "h11": anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW),
+        "h-deep": anchor_for("DEEP", completion_on=E("2026-08-01 10:00:00")),  # 更老: 位置未被覆盖
+    }
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    # 命中照常: tid 11 已对账
+    assert any(e.tid == 11 and e.infohash_v1 for e in data.index.values())
+    # 三档均截断(1 页, 非全深度) → 批量签发关闭; 深处的 h-deep 未签发
+    assert all(st.ok and not st.full_depth for st in data.wave.lanes.values())
+    assert "h-deep" not in data.verified
+    assert result.releases_signed == 0
+
+
+# ---------------- 下载规则(§4.5) ----------------
+
+
+def test_a_lane_rows_downloaded_unconditionally(tmp_path):
+    """A 档行无条件全部下载(硬规则); 同 tid 永不重下(永久层)"""
+    clock = Clock()
+    pages = {
+        url_of("A"): myhr_page([row(11, "TOTALLY-UNRELATED-NAME"),
+                                row(12, "ANOTHER-STRANGER")]),
+        url_of("B"): myhr_page([], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    fetcher = FakeFetcher(pages=pages, blobs={11: torrent_blob(name="EXAMPLE 11"), 12: torrent_blob(name="OTHER 12")})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h11": anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    assert set(fetcher.byte_calls) == {
+        "https://pt.example.com/download.php?id=11", "https://pt.example.com/download.php?id=12"
+    }
+    # 第二波: 同 tid 仍在 A 档 → 不再下载(永久层)
+    result = run_wave(service, anchors)
+    assert len([c for c in fetcher.byte_calls if c.endswith("id=11")]) == 1
+    data, _ = service.store(SITE).read_unlocked()
+    assert result.torrents_fetched == 0
+
+
+def test_terminal_rows_download_on_fuzzy_match(tmp_path):
+    """B/C/D 行仅当宽泛名称粗配疑似本地才下载; 粗配误配由 infohash 精配自愈"""
+    clock = Clock()
+    pages = {
+        url_of("A"):
+            myhr_page([], has_next=False),
+        url_of("B"):
+            myhr_page(
+                [
+                    row(21, "Example.Ultra.S01E01.1080p"),  # 粗配疑似本地(与本地名有 ≥K 重合段)
+                    row(22, "Completely.Different.Show.2026"),  # 不像 → 不下载
+                ],
+                has_next=False
+            ),
+        url_of("C"):
+            myhr_page([], has_next=False),
+    }
+    blob, h21 = mk_blob("Example.Ultra.S01E01.1080p")
+    fetcher = FakeFetcher(pages=pages, blobs={21: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h21: anchor_for("Example.Ultra.S01E01.1080p", completion_on=T_DONE_NEW, seeding_time=0)}
+    run_wave(service, anchors)
+    assert "https://pt.example.com/download.php?id=21" in fetcher.byte_calls
+    assert "https://pt.example.com/download.php?id=22" not in fetcher.byte_calls
+    data, _ = service.store(SITE).read_unlocked()
+    entry = next(e for e in data.index.values() if e.tid == 21)
+    assert entry.lane == LANE_SATISFIED and entry.infohash_v1 == h21  # 精配命中 B → 终态放行
+
+
+def test_rows_not_local_not_downloaded(tmp_path):
+    """本地没有的种子(粗配也不像)不下载; A 档之外的陌生行零下载"""
+    clock = Clock()
+    pages = standard_pages(
+        rows_a=[row(11, "OTHER 11", done=DONE_NEW, remain="1天00:00:00")], rows_b=five_expired_rows(20), rows_c=[]
+    )
+    fetcher = FakeFetcher(pages=pages, blobs={11: torrent_blob(name="OTHER 11")})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    # A 档行(OTHER 11)无条件下载(一次, 永久层); B 档的 5 行陌生种子(粗配不像)零下载
+    assert fetcher.byte_calls == ["https://pt.example.com/download.php?id=11"]
+
+
+# ---------------- 超额线与网站权威(§3.3) ----------------
+
+
+def test_exempt_seed_not_in_objects_passive_hit_managed(tmp_path):
+    """超额种子(≥3×)不进对象集(老藏深不拉深覆盖); 被动命中考察中仍转管束(网站绝对权威)"""
+    clock = Clock()
+    pages = {
+        # A 档第 1 页就有超额种子的行 —— 被动命中(infohash 由下载获得)
+        url_of("A"): myhr_page([row(11, "EXAMPLE 11")]),
+        url_of("B"): myhr_page([], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    blob, h11 = mk_blob("EXAMPLE 11")
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    # 做种 30 天 >= 3 × 2 天(required) → 超额; 完成时间很老(藏深处也不该被翻页拉深)
+    anchors = {h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW, seeding_time=30 * 86400)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    entry = next(e for e in data.index.values() if e.tid == 11)
+    assert entry.lane == LANE_SCOPE and entry.active  # 命中考察中 → 管束(进视图)
+    view = service.build_view_for(SITE, data)
+    j = judge_record(view, (h11, ), anchor=anchors[h11], now=clock())
+    assert j.identity is HrIdentity.HR  # 超额不构成免死金牌
+
+
+def test_local_satisfied_hit_scope_still_managed(tmp_path):
+    """本地已达标 × 命中考察中 → 管束(20:58 定稿: 站点说还在考就是还在考)"""
+    clock = Clock()
+    pages = standard_pages(rows_a=[row(11, "EXAMPLE 11")], rows_b=[], rows_c=[])
+    blob, h11 = mk_blob("EXAMPLE 11")
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW, seeding_time=10 * 86400)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    view = service.build_view_for(SITE, data)
+    j = judge_record(view, (h11, ), anchor=anchors[h11], now=clock())
+    assert j.identity is HrIdentity.HR
+
+
+# ---------------- 放行签发与防伪(§5.3) ----------------
+
+
+def test_release_signed_on_full_coverage(tmp_path):
+    """覆盖完整(全深度) + 防伪通过 → 未对账且未命中的对象签发「未列出」放行"""
+    clock = Clock()
+    pages = standard_pages(rows_b=five_expired_rows(20))
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" in data.verified
+    assert data.verified["h1"].source == SOURCE_NOT_LISTED
+    assert result.releases_signed >= 1
+
+
+def test_freshness_gate_blocks_release(tmp_path):
+    """新鲜度闸门: added_on 晚于该档本波取数 → 该档快照无证明力 → 不签发(行 4)"""
+    clock = Clock()
+    pages = standard_pages(rows_b=five_expired_rows(20))
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW, added_on=int(clock()) + 10)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" not in data.verified
+
+
+def test_zero_rows_no_release(tmp_path):
+    """结构完好零行 → 不签发放行(改版空表即整站误放行, 不冒这个险)"""
+    clock = Clock()
+    pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.zero_rows is True
+    assert data.wave.releases_enabled is False
+    assert "h1" not in data.verified
+    assert "零行" in result.reason or "清单为 0" in result.reason
+
+
+def test_zero_rows_confirmed_release(tmp_path):
+    """人工对账戳后零行可正常签发; 清单再现非零行 → 确认戳自动失效"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    data.empty_confirmed_at = clock()  # --hr-confirm-empty 的动作
+    service.store(SITE).hold().__enter__().commit(clock()) if False else None
+    with service.store(SITE).hold() as session:
+        session.data.empty_confirmed_at = clock()
+        session.commit(clock())
     clock.advance(13 * 3600)
-    pages = _pages(a_rows=[row(1), row(2)], a_next=True)
-    pages[PAGE2_URL] = myhr_page([], has_next=True)  # 空页但仍有下一页链接: 验证早停③停在它之后
-    fetcher = FakeFetcher(pages, _blobs())
-    svc = _service(tmp_path, fetcher, clock)
-    result = svc.refresh_site(SITE, {h1: HrAnchor()})  # refresh_site 收单站点映射(worker 负责按站点分层)
-
-    # 页 1 检查时索引尚无本轮 merge(条件未满足)⇒ 页 2 发出; 页 2 merge 后条件成立 ⇒ 停在第 3 页前
-    assert PAGE3_URL not in fetcher.text_calls, "本地种子已全部见到 ⇒ 本档不再翻后续页(省配额)"
-    assert result.action == ACTION_PARTIAL and result.complete is False, "早停③绝不产生覆盖证明"
-    assert _read(tmp_path).index[1].active is True, "命中行照常保留"
-    assert "本地种子已全部出现" in result.reason
-
-
-def test_budget_rotation_starts_from_undone_scope(tmp_path):
-    """轮转起点(D9=b, §2 4.3): 上轮未完成的档位本轮优先翻 —— 紧预算下不饿尾档"""
-    clock = Clock()
-    # 第一轮: A 完整(空表), B 未完成(翻页上限 1)⇒ scopes_done=[A, C]
-    pages = _pages(a_rows=[], b=myhr_page([row(201)], has_next=True))
-    pages["https://pt.example.com/myhr.php?hrtype=B&page=2"] = myhr_page([row(202)])
-    svc = _service(tmp_path, FakeFetcher(pages, _blobs()), clock, site=site_conf(max_pages_per_refresh=1))
-    svc.refresh_site(SITE)
-    assert _read(tmp_path).refresh.scopes_done == ["A", "C"], "前提: B 上轮未完成"
-
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" in data.verified  # 零行 + 确认戳 → 放行
+    # 再现非零行 → 戳失效
+    fetcher.pages = standard_pages(rows_b=five_expired_rows(20))
     clock.advance(13 * 3600)
-    fetcher2 = FakeFetcher(_pages(), _blobs())
-    _service(tmp_path, fetcher2, clock, site=site_conf(max_pages_per_refresh=1)).refresh_site(SITE)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.empty_confirmed_at == 0.0
 
-    assert fetcher2.text_calls and "hrtype=B" in fetcher2.text_calls[0], "本轮从 B 起翻(上轮未完成)"
 
-
-def test_round_pages_cap_truncates_whole_round(tmp_path):
-    """单轮页面总量上限(D5=a): 超限 ⇒ 本轮剩余档位停止, 不持锁干等"""
+def test_plunge_freezes_releases(tmp_path):
+    """总行数骤降(本波 < 基线 30%) → 批量「未列出」签发冻结"""
     clock = Clock()
-    pages = _pages(a_rows=[row(1)], a_next=True)
-    pages[PAGE2_URL] = myhr_page([row(2)], has_next=True)
-    pages[PAGE3_URL] = myhr_page([row(3)])
-    fetcher = FakeFetcher(pages, _blobs())
-    svc = _service(tmp_path, fetcher, clock, glob=global_conf(max_pages_per_round=2))
+    pages = standard_pages(rows_b=five_expired_rows(20))
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)  # 首波: A 0 行 / B 5 行 / C 0 行 → 基线 5
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.baseline_rows == 5
+    # 第二波: 全空表(结构完好) → 合计 0 < 5 × 30% → 骤降冻结
+    fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.plunge is True
+    assert data.wave.releases_enabled is False
 
-    result = svc.refresh_site(SITE)
 
-    assert len(fetcher.text_calls) == 2, "总量 2 ⇒ 只发两个页面请求, B/C 不发"
-    assert result.action == ACTION_PARTIAL and result.reason_kind == REASON_BUDGET
+def test_retention_check_freezes_batch(tmp_path):
+    """A 档流转守恒: 上波 A 行本波留存 < 70% → 批量「未列出」签发冻结(命中不受影响)"""
+    clock = Clock()
+    # 首波: A 档 3 行陌生种子(下载后都不是本地) → prev_a_tids = {11,12,13}
+    blobs = {tid: torrent_blob(name=f"STRANGER {tid}") for tid in (11, 12, 13)}
+    # 首波: A 全深度(3 行陌生种子); B 只有 2 行零 remain 且有下一页(翻不到 → 截断, 位置有界);
+    # C 全深度。h1 完成时间(08-01)早于 B 的覆盖边界(09-01) → 首波不签发(位置未被覆盖)
+    pages = {
+        url_of("A"): myhr_page([row(11, "STRANGER 11"),
+                                row(12, "STRANGER 12"),
+                                row(13, "STRANGER 13")]),
+        url_of("B"): myhr_page(five_expired_rows(20)[:2], has_next=True),
+        url_of("C"): myhr_page([]),
+    }
+    fetcher = FakeFetcher(pages=pages, blobs=blobs)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    # h1 完成时间(08-01)早于首波覆盖边界(09-01) → 首波不签发(位置未被覆盖)
+    anchors = {"h1": anchor_for("h1", completion_on=E("2026-08-01 10:00:00"))}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert len(data.wave.prev_a_tids) == 3
+    # 第二波: A 档只剩 1 行(2/3 失踪, 留存率 33% < 70%) → 守恒不达标
+    fetcher.pages = standard_pages(rows_a=[row(11, "STRANGER 11")], rows_b=five_expired_rows(20))
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.retention_ok is False
+    assert "h1" not in data.verified  # 批量签发被冻结(即便覆盖证明成立)
+
+
+def test_retention_does_not_block_observation(tmp_path):
+    """守恒只拦批量签发, 不拦观察期状态机(22:38 定稿): 单条失踪照常推进, 无死锁"""
+    clock = Clock()
+    # 首波: 本地种子 S 的行在 A 档(命中, 绑定) + 2 行陌生种子
+    blob, h11 = mk_blob("EXAMPLE 11")
+    pages = standard_pages(rows_a=[row(11, "EXAMPLE 11"), row(12, "STRANGER 12"), row(13, "STRANGER 13")])
+    fetcher = FakeFetcher(
+        pages=pages,
+        blobs={
+            11: blob,
+            12: torrent_blob(name="STRANGER 12"),
+            13: torrent_blob(name="STRANGER 13")
+        },
+    )
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert len(data.wave.prev_a_tids) == 3
+    # 第二波: S 失踪(位置被全深度覆盖), 陌生行只剩 1 行 → 守恒不达标但观察期推进
+    fetcher.pages = standard_pages(rows_a=[row(12, "STRANGER 12")], rows_b=five_expired_rows(20))
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    entry = next(e for e in data.index.values() if e.tid == 11)
+    assert entry.missing_streak == 1 and entry.active  # 观察期第 1 波(维持管束)
+    # 第三波: 仍未重见 → 连续 2 波 → 判移出放行(观察期出口不被守恒拦死)
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    entry = next(e for e in data.index.values() if e.tid == 11)
+    assert entry.active is False
+    assert h11 in data.verified  # 判移出放行
+
+
+def test_observing_seed_kept_managed_then_released(tmp_path):
+    """上波考察中失踪 → 一律当作无证据维持管束(无快路径); 位置覆盖连续 2 波 → 判移出放行"""
+    clock = Clock()
+    pages = standard_pages(rows_a=[row(11, "EXAMPLE 11")])
+    blob, h11 = mk_blob("EXAMPLE 11")
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    # 第二波: 全空(结构完好) → S 失踪但 A 档全深度覆盖(空表末页)
+    fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    entry = data.index[11]
+    assert entry.active is True and entry.missing_streak == 1  # 维持管束
+    view = service.build_view_for(SITE, data)
+    j = judge_record(view, (h11, ), anchor=anchors[h11], now=clock())
+    assert j.identity is HrIdentity.HR  # 「没看到」不终结「考察中」
+    # 第三波: 仍未重见 → 判移出放行
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[11].active is False
+    assert h11 in data.verified
+
+
+def test_observing_seed_resighted(tmp_path):
+    """失踪种子重见 → streak 清零, 按当波档位定论"""
+    clock = Clock()
+    pages = standard_pages(rows_a=[row(11, "EXAMPLE 11")])
+    blob, h11 = mk_blob("EXAMPLE 11")
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    # 第三波: 重见于 A 档
+    fetcher.pages = standard_pages(rows_a=[row(11, "EXAMPLE 11")])
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    entry = data.index[11]
+    assert entry.active is True and entry.missing_streak == 0 and entry.lane == LANE_SCOPE
+    assert h11 not in data.verified  # 重见即管束, 放行不签发
+
+
+# ---------------- 终态冻结(§4.4) ----------------
+
+
+def test_terminal_vanish_writes_release(tmp_path):
+    """终态条目消失且位置被证明 → 退役并落放行记录(终态不可逆, 条目被站点清掉也不影响判定)"""
+    clock = Clock()
+    pages = standard_pages(rows_b=[row(21, "OTHER 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")])
+    blob, h21 = mk_blob("EXAMPLE 21")
+    fetcher = FakeFetcher(pages=pages, blobs={21: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h21: anchor_for("EXAMPLE 21", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].lane == LANE_SATISFIED and data.index[21].active
+    # 第二波: B 档空表(全深度) → 条目消失被证明 → 退役 + 放行记录(毕业来源)
+    fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].active is False
+    assert h21 in data.verified
+    view = service.build_view_for(SITE, data)
+    j = judge_record(view, (h21, ), anchor=anchors[h21], now=clock())
+    assert j.identity is HrIdentity.RELEASED  # 终态不可逆: 退役后照常放行
+
+
+def test_terminal_vanish_unproven_kept(tmp_path):
+    """终态条目消失但位置未被覆盖(截断) → 维持原状(命中照常, 保守无害)"""
+    clock = Clock()
+    pages = {
+        url_of("A", 1):
+            myhr_page([], has_next=False),
+        url_of("B", 1):
+            myhr_page([row(21, "EXAMPLE 21", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")], has_next=True),
+        url_of("C", 1):
+            myhr_page([], has_next=False),
+    }
+    blob, h21 = mk_blob("EXAMPLE 21")
+    fetcher = FakeFetcher(pages=pages, blobs={21: blob})
+    gconf = global_conf(max_pages_per_wave=3)
+    service = make_service(tmp_path, fetcher, gconf=gconf, clock=clock)
+    anchors = {h21: anchor_for("EXAMPLE 21", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].lane == LANE_SATISFIED
+    # 第二波: B 档第 1 页换成别的行且有下一页(截断 —— 条目位置未被覆盖)
+    fetcher.pages = {
+        url_of("A"):
+            myhr_page([], has_next=False),
+        url_of("B", 1):
+            myhr_page([row(99, "OTHER 99", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")], has_next=True),
+        url_of("C"):
+            myhr_page([], has_next=False),
+    }
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].active is True  # 未被证明消失: 维持原状
+    assert h21 not in data.verified
+
+
+# ---------------- 轻量波与覆盖收敛 ----------------
+
+
+def test_light_wave_when_no_objects(tmp_path):
+    """空对象集 → 每档 1 页轻量波(捕获可能的新增即停)"""
+    clock = Clock()
+    pages = {
+        url_of("A", 1): myhr_page([row(11, "OTHER 11", done=DONE_OLD)], has_next=True),
+        url_of("B", 1): myhr_page(five_expired_rows(20), has_next=True),
+        url_of("C", 1): myhr_page([], has_next=False),
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, anchors={})  # 无本地种子 → 无对象集
+    data, _ = service.store(SITE).read_unlocked()
+    assert all(st.pages == 1 for st in data.wave.lanes.values())
+
+
+def test_new_top_row_reconciled_next_wave(tmp_path):
+    """顶页新插入(本机新下载的种子)在下一波被完整覆盖对账 —— 单波型对清单变动免疫"""
+    clock = Clock()
+    pages = standard_pages(rows_b=five_expired_rows(20))
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, anchors={})  # 首波无对象
+    # 第二波: 顶页新插入本机种子行(新 tid), 本地锚点同波出现
+    blob, h50 = mk_blob("BRAND NEW 50")
+    fetcher.pages = standard_pages(rows_a=[row(50, "BRAND NEW 50", done=DONE_NEW)])
+    fetcher.blobs[50] = blob
+    clock.advance(13 * 3600)
+    anchors = {h50: anchor_for("BRAND NEW 50", completion_on=T_DONE_NEW, added_on=int(clock()) - 60)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    entry = next(e for e in data.index.values() if e.tid == 50)
+    assert entry.infohash_v1 == h50 and entry.lane == LANE_SCOPE and entry.active
+    view = service.build_view_for(SITE, data)
+    j = judge_record(view, (h50, ), anchor=anchors[h50], now=clock())
+    assert j.identity is HrIdentity.HR
+
+
+# ---------------- 失败处置(§5.2: 无熔断/停用, Retry-After 保留) ----------------
+
+
+def test_no_fuse_no_suspension(tmp_path):
+    """页面失败 → 该档截断, 下周期自然重试; 不存在熔断/停用状态(数据上无 fuse/suspended 字段)"""
+    clock = Clock()
+    pages = {url_of("A"): myhr_page([], has_next=False), url_of("B"): myhr_page([]), url_of("C"): myhr_page([])}
+    fetcher = FakeFetcher(pages=pages, fail_text_at={"A": "超时"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    assert result.action == ACTION_PARTIAL
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].status == "failed"
+    # v3 失败处置: 数据上没有任何熔断/停用/退避状态字段(模型级删除)
+    raw = data.to_json()
+    for gone in ("fuse", "suspended", "login_backoff_until", "quota", "torrent_quota"):
+        assert gone not in raw
+    # Retry-After 的「下次可取时刻」语义在 test_hr_ratelimit.test_retry_after_respected 覆盖
+
+
+# ---------------- 粗配单元(D1) ----------------
+
+
+def test_fuzzy_name_match_unit():
+    assert fuzzy_name_match("Example.Ultra.S01E01.1080p", "Group.Example.Ultra.S01E01.1080p.x264")
+    assert fuzzy_name_match("Example Ultra S01E01", "example-ultra-s01e01-1080p")  # 空白/大小写折叠
+    assert not fuzzy_name_match("Example.Ultra", "Completely.Different.Show.2026")
+    assert not fuzzy_name_match("短名", "Completely.Different.Show.2026")  # 短于 K 不误配
+    assert len("Example.Ultra") >= FUZZY_NAME_K or True

@@ -1,71 +1,75 @@
-"""HR 站点现状的**纯数据**快照(计划 §11 M4「索引新鲜度与进度展示」)。
+"""HR 站点现状的**纯数据**快照(v3 波次视图, 计划 26-09-28-1932 §8 M5)。
 
 为什么单独一层: 「某个站点现在到底是什么状态」有三个消费者 ——
 1. `--hr-status` 报告(给人核数据用, 终端文本);
 2. WebUI(设置页「HR 在线核实」章节, 只在需要时拉一次);
 3. 日后的 notify / 运维脚本。
-它们必须看到**同一套数值口径**(尤其是「待回填几条」「还能取几次」「新鲜度到没到」这类派生量) ——
-各写一遍就会出现「报告说待回填 2 条、界面说 3 条」这种没法排查的偏差, 故收口到 `site_status()`。
+它们必须看到**同一套数值口径**(尤其是「各档到哪了」「还能取几次」「为什么没放行」这类派生量)
+—— 各写一遍就会出现「报告说 A 档截断、界面说正常」这种没法排查的偏差, 故收口到 `site_status()`。
 
 本模块**只读**: 不取数、不加锁、不写盘(读的是原子替换后的完整快照, 与 `--hr-status` 同款口径),
 取数节奏由取数线程决定, 展示层永远只是"看一眼"。
 
 时间相关字段的语义(易混, 明写):
-- `fetched_at`: 上次**尝试**取数的时刻(失败也会前进 —— 它回答"上次动过是什么时候");
-- `last_success_ts`: 上次**完整成功**刷新的时刻 —— 它才是新鲜度基准(不完备刷新不推进);
-- `expires_at`: 本次数据的有效期截止(完整刷新 = 周期, 不完备 = 至少 2×轮询间隔的短暂窗口、
-  以周期封顶 —— 窗口必须盖过下一轮, 否则「复用轮只补下载」永远轮不上, 见 service._do_fetch);
-- `next_refresh_at`: 下次**可能**去取的时刻(现在算: fetched_at + 刷新周期) —— 站点文件里不存它,
+- `fetched_at`: 上次**尝试**取波的刻(失败也会前进 —— 它回答"上次动过是什么时候");
+- `wave.healthy_ts`: 上次**健康波**时刻(至少一档有有效数据) —— 它才是新鲜度基准;
+- `expires_at`: 复用窗截止(别的实例刚抓过就不再抓);
+- `next_wave_at`: 下次**可能**取的时刻(现算: fetched_at + refresh_interval) —— 站点文件里不存它,
   因为它随周期配置变化, 存下来就会重复一份可能过期的副本。
 """
 import time
 from dataclasses import asdict, dataclass, field
-from statistics import median
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from .model import (
     CHANNEL_DISABLED,
     CHANNEL_OK,
     CHANNEL_SILENT,
-    LANE_EXEMPT,
-    LANE_SATISFIED,
-    LANE_SCOPE,
-    LANE_UNSATISFIED,
+    FETCH_LANES,
+    LANE_FAILED,
+    LANE_IDLE,
+    LANE_OK,
     HrSiteData,
 )
-from .ratelimit import bucket_left, day_key, fuse_active, hour_key, quota_left
+from .ratelimit import day_key, next_allowed_at, next_day_reset, quota_left
 from .resolve import HrSiteView
 
 #: 通道状态的人话(与 `--hr-status` 逐字一致 —— 两处口径必须相同)
 CHANNEL_TEXTS = {
     CHANNEL_OK: "正常",
-    CHANNEL_SILENT: "静默(长期没有成功刷新)",
+    CHANNEL_SILENT: "静默(长期没有健康波)",
     CHANNEL_DISABLED: "未启用",
 }
 
-#: 档位顺序(展示固定顺序: A 考察中 / B 已达标 / C 未达标 / D 已免罪)
-LANE_ORDER = (LANE_SCOPE, LANE_SATISFIED, LANE_UNSATISFIED, LANE_EXEMPT)
-
 #: 档位人话(明细表等展示共用; 键 = 站点 scope 字母)
 LANE_TEXTS = {
-    LANE_SCOPE: "考察中",
-    LANE_SATISFIED: "已达标",
-    LANE_UNSATISFIED: "未达标",
-    LANE_EXEMPT: "已免罪",
+    "A": "考察中",
+    "B": "已达标",
+    "C": "未达标",
+    "D": "已免罪",
+}
+
+LANE_STATUS_TEXTS = {
+    LANE_OK: "有效",
+    LANE_FAILED: "失效",
+    LANE_IDLE: "-",
 }
 
 
 @dataclass(slots=True)
-class QuotaStatus:
-    """配额窗口状态(两级: 小时 / 天)"""
+class LaneStatus:
+    """单档位波次状态(展示层; 与 model.HrLaneState 一一对应的人话折算)"""
 
-    hour: int = 0
-    hour_max: int = 0
-    day: int = 0
-    day_max: int = 0
-    left: int = 0
-    last_fetch_ts: float = 0.0
-    min_interval: float = 0.0
+    lane: str = ""
+    status: str = ""
+    status_text: str = ""
+    wave_ts: float = 0.0
+    pages: int = 0
+    rows: int = 0
+    cutoff_done: float = 0.0
+    full_depth: bool = False
+    fail_streak: int = 0
+    detail: str = ""
     text: str = ""
 
     def to_dict(self) -> Dict:
@@ -73,13 +77,15 @@ class QuotaStatus:
 
 
 @dataclass(slots=True)
-class FuseStatus:
-    """熔断状态(退避冷却)"""
+class QuotaStatus:
+    """频控账本状态(单模型: 日额 + 间隔)"""
 
-    active: bool = False
-    until_ts: float = 0.0
-    failures: int = 0
-    reason: str = ""
+    day: int = 0
+    day_max: int = 0
+    left: int = 0
+    last_fetch_ts: float = 0.0
+    min_interval: float = 0.0
+    next_reset: float = 0.0
     text: str = ""
 
     def to_dict(self) -> Dict:
@@ -91,35 +97,37 @@ class SiteStatus:
     """单站点 HR 现状(全部字段都由 `site_status()` 算好; 前端只展示, 不重算)"""
 
     site: str
-    mode: str = "off"
+    enabled: bool = False
+    listing: str = "list"
     #: 生成本快照的时刻 —— 所有相对时间(「N 前」)的**唯一基准**, 界面拿它算「多久前拉的」
     now: float = 0.0
-    complete: bool = False
     channel_state: str = CHANNEL_DISABLED
     channel_text: str = ""
     revision: int = 0
     file_path: str = ""
     read_error: str = ""
-    #: 上次**尝试**取数 / 上次**完整成功**刷新 / 有效期截止 / 下次可能取数(现算)
+    #: 上次**尝试**取波 / 上次**健康波** / 复用窗截止 / 下次可能取波(现算)
     fetched_at: float = 0.0
-    last_success_ts: float = 0.0
+    healthy_ts: float = 0.0
     expires_at: float = 0.0
-    next_refresh_at: float = 0.0
-    #: 数据是否已过有效期(读取时现算; 过期 ≠ 没数据, 只是不能再当背书用)
+    next_wave_at: float = 0.0
+    refresh_interval: float = 0.0
     stale: bool = False
     fresh_text: str = ""
-    refresh_interval: float = 0.0
-    verified_ttl: float = 0.0
-    scopes_done: Tuple[str, ...] = ()
-    pages_fetched: int = 0
-    entry_count: int = 0
-    missing_field_rate: float = 0.0
+    #: 波次视图(各档独立状态: 有效/失效/截断、页数、行数、覆盖边界、连续失效)
+    lanes: List[LaneStatus] = field(default_factory=list)
+    lanes_text: str = ""
+    releases_enabled: bool = False
+    zero_rows: bool = False
+    empty_confirmed: bool = False
+    retention_text: str = ""
+    plunge_text: str = ""
+    notes: str = ""
     writer_instance: str = ""
     writer_heartbeat: float = 0.0
-    reason: str = ""
     index_total: int = 0
     index_active: int = 0
-    lanes: Dict[str, int] = field(default_factory=dict)
+    lane_counts: Dict[str, int] = field(default_factory=dict)
     #: 待回填 infohash 条数 + 回填进度(活跃条目里已有 infohash 的比例) —— 取数通道刚接通时它是唯一的进度信号
     pending_infohash: int = 0
     backfill_ratio: float = 0.0
@@ -128,26 +136,11 @@ class SiteStatus:
     downloaded: int = 0
     fails: int = 0
     verified: int = 0
+    observing: int = 0
     quota: QuotaStatus = field(default_factory=QuotaStatus)
-    fuse: FuseStatus = field(default_factory=FuseStatus)
-    #: split 模型(计划 26-09-27-1815 §2 3.5)的页面/下载两组额度; legacy 站点为 None(看 quota)
-    page_quota: Optional[QuotaStatus] = None
-    torrent_quota: Optional[QuotaStatus] = None
     allow_window: str = ""
-    #: 覆盖证明成立但数据已过期时, 判定会保守回落 —— 界面上要能一眼看出「差在哪一步」
+    #: 一句话说明「为什么现在不签发新放行」(判定链顺序, 取第一个挡路的原因)
     blocking: str = ""
-    #: ---- 观测面(计划 26-09-27-1815 §2 1.5: 「假设是否成立」的现场证据) ----
-    #: 本轮排序校验结论(None = 证据不足未判定; False = 违反) + 首处位置
-    order_ok: Optional[bool] = None
-    order_detail: str = ""
-    #: 考核期 P 分布(P ≈ done + remain − now 反算; 前置实测②的产出)
-    period_text: str = ""
-    #: 骤降观测(轮级合计 vs 可信基线)
-    plunge_text: str = ""
-    #: 各档计数与上轮对比(「A: 37 → 0」—— 毕业/清除/改版由人看趋势, 档位级只观测不判据)
-    scope_delta_text: str = ""
-    #: 站点停用状态(计划 26-09-27-1815 §2 2.3): 非空 = 停用中(含恢复指引)
-    suspended_text: str = ""
 
     def to_dict(self) -> Dict:
         """JSON 友好(WebUI 用): 时间戳保留原始值, 人话文案另给字段"""
@@ -186,207 +179,151 @@ def lane_counts(data: HrSiteData) -> Dict[str, int]:
     return counts
 
 
-def period_stats(data: HrSiteData, now: float) -> Tuple[Optional[float], Optional[float], float, int]:
-    """考核期 P 反算分布(P ≈ done + remain − now; 计划 26-09-27-1815 §2 1.5 / 前置实测②)
-
-    只统计**同时有**完成时间与剩余达标时间的活跃行; 返回 (P 最小值/天, P 最大值/天,
-    ±1 天容差下的中位数一致率, 可比行数)。无可比行返回 (None, None, 0.0, 0)。
-    这是「考核期 P 是否恒定」这一早停②前置假设的现场证据(真机实测用它收口)。
-    """
-    ps: List[float] = []
-    for entry in data.index.values():
-        # 参与行 = 还在线内的行(remain > 0): 已到期行 remain 被站点截为 0, 反算出的是负值
-        # (done − now), 那是「已到期多久」不是考核期, 参与只会污染分布
-        if not entry.active or entry.done_epoch is None or not entry.remain_seconds:
+def _lane_statuses(data: HrSiteData, now: float) -> Tuple[List[LaneStatus], str]:
+    """各档波次状态折算(展示单点)"""
+    out: List[LaneStatus] = []
+    parts: List[str] = []
+    for lane in FETCH_LANES:
+        st = data.wave.lanes.get(lane)
+        if st is None:
+            parts.append(f"{lane}:无")
             continue
-        # 公式勘误(同 service): P = (now − done) + remain = 已考核时长 + 剩余时长
-        ps.append((now - entry.done_epoch) + entry.remain_seconds)
-    if not ps:
-        return None, None, 0.0, 0
-    med = median(ps)
-    consistent = sum(1 for p in ps if abs(p - med) <= 86400.0) / len(ps)
-    return min(ps) / 86400.0, max(ps) / 86400.0, consistent, len(ps)
-
-
-def _plunge_text(meta) -> str:
-    """骤降观测的人话(轮级合计 vs 可信基线; 计划 §2 1.5)"""
-    if meta.plunge_suspect:
-        return (
-            f"⚠ 本轮合计 {meta.entry_count} vs 可信基线 {meta.entry_baseline} ⇒ 骤降可疑"
-            f"(已连续 {meta.plunge_rounds} 轮; 全部毕业/被清除? 还是改版?)"
+        ls = LaneStatus(
+            lane=lane,
+            status=st.status,
+            status_text=LANE_STATUS_TEXTS.get(st.status, st.status),
+            wave_ts=st.wave_ts,
+            pages=st.pages,
+            rows=st.rows,
+            cutoff_done=st.cutoff_done,
+            full_depth=st.full_depth,
+            fail_streak=st.fail_streak,
+            detail=st.detail,
         )
-    if meta.entry_baseline > 0:
-        return f"本轮合计 {meta.entry_count} vs 基线 {meta.entry_baseline}, 正常"
-    return "尚无可信基线(首刷或此前未结构完好地跑完一轮)"
+        ls.text = (
+            f"{LANE_TEXTS.get(lane, lane)} {ls.status_text}: {ls.pages} 页 / {ls.rows} 行" +
+            ("(全深度)" if ls.full_depth else "") + (f", {ls.detail}" if ls.detail else "") +
+            (f", 连续失效 {ls.fail_streak} 波" if ls.fail_streak > 1 else "")
+        )
+        out.append(ls)
+        parts.append(
+            f"{lane}:{'✓' if st.status == LANE_OK else ('✗' if st.status == LANE_FAILED else '-')}"
+            f"{st.pages}页{st.rows}行" + ("(全)" if st.full_depth else "")
+        )
+    return out, " ".join(parts)
 
 
-def _scope_delta_text(meta) -> str:
-    """各档计数「上轮 → 本轮」对比(计划 §2 1.5: 档位级只观测不判据)"""
-    keys = sorted(set(meta.scope_counts) | set(meta.prev_scope_counts))
-    parts = [f"{k}: {meta.prev_scope_counts.get(k, 0)} → {meta.scope_counts.get(k, 0)}" for k in keys]
-    return " / ".join(parts)
+def _retention_text(data: HrSiteData) -> str:
+    """A 档流转守恒观测(§5.3)"""
+    meta = data.wave
+    if meta.retention_ratio < 0:
+        return "不适用(上波无 A 档行)"
+    tail = "正常" if meta.retention_ok else "⚠ 不达标(批量未列出签发已冻结)"
+    return f"上波 A 档 {len(meta.prev_a_tids)} 行, 本波留存率 {meta.retention_ratio:.0%}, {tail}"
 
 
-def _suspended_text(site: str, data: HrSiteData) -> str:
-    """停用状态的人话(计划 §2 2.3): --hr-status 的恢复指引就写在这里"""
-    susp = data.suspended
-    if susp is None:
-        return ""
-    return (
-        f"⚠ 已停用(自 {stamp_text(susp.since)}, 连续 {susp.rounds} 轮强信号): {susp.reason} | "
-        f"恢复: 排查 HR 页确认无改版后跑 --hr-resume {site}"
-    )
+def _plunge_text(data: HrSiteData) -> str:
+    """总行数骤降观测(§5.3)"""
+    meta = data.wave
+    if not meta.baseline_rows:
+        return "尚无基线(首波)"
+    total = sum(st.rows for st in meta.lanes.values() if st.status == LANE_OK)
+    if meta.plunge:
+        return f"⚠ 本波合计 {total} vs 基线 {meta.baseline_rows} ⇒ 骤降可疑(批量未列出签发已冻结)"
+    return f"本波合计 {total} vs 基线 {meta.baseline_rows}, 正常"
 
 
 def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: float, read_error: str = "") -> SiteStatus:
     """把「站点文件 + 视图」折成一份只读快照(数值口径的单点)"""
     conf = service.site_confs[site]
     limits = service.limits_for(site)
-    lanes = lane_counts(data)
     active = [e for e in data.index.values() if e.active]
     pending = sum(1 for e in active if not e.infohash_v1 and not e.infohash_v2)
     filled = len(active) - pending
     backfill = (filled / len(active)) if active else 0.0
     stale = bool(data.expires_at) and now > data.expires_at
-    fuse = FuseStatus(
-        active=fuse_active(data.fuse, now),
-        until_ts=data.fuse.until_ts,
-        failures=data.fuse.failures,
-        reason=data.fuse.reason,
-    )
-    fuse.text = (f"熔断中至 {stamp_text(fuse.until_ts)}({fuse.reason})" if fuse.active else f"正常(连续失败 {fuse.failures})")
-    # 展示口径与 quota_left 同源: 窗口键已翻篇(上一小时 / 昨天)的计数不能标成「本小时 / 本天」,
-    # 否则会出现「本小时 7/12 · 还能取 12 次」的自相矛盾(2026-09-25 实报)
-    hk, dk = hour_key(now), day_key(now)
+    lanes, lanes_text = _lane_statuses(data, now)
+    observing = sum(1 for e in active if e.lane == "A" and e.missing_streak > 0)
+    dk = day_key(now)
     quota = QuotaStatus(
-        hour=data.quota.hour_count if data.quota.hour_window == hk else 0,
-        hour_max=limits.max_per_hour,
-        day=data.quota.day_count if data.quota.day_window == dk else 0,
-        day_max=limits.max_per_day,
-        left=quota_left(data.quota, limits, now),
-        last_fetch_ts=data.quota.last_fetch_ts,
+        day=data.rate.day_count if data.rate.day_window == dk else 0,
+        day_max=limits.max_requests_per_day,
+        left=quota_left(data, limits, now),
+        last_fetch_ts=data.rate.last_fetch_ts,
         min_interval=limits.min_interval,
+        next_reset=next_day_reset(now),
     )
     quota.text = (
-        f"本小时 {quota.hour}/{quota.hour_max} · 本天 {quota.day}/{quota.day_max} · 还能取 {quota.left} 次 · "
+        f"今天 {quota.day}/{quota.day_max}(零点重置) · 还能取 {quota.left} 次 · "
         f"最近请求 {ago_text(quota.last_fetch_ts, now)} · 最小间隔 {quota.min_interval:g}s"
     )
-    # split 模型(§2 3.5): 页面/下载两组额度分开折算(账本分属 quota / torrent_quota)
-    page_quota = torrent_quota = None
-    if limits.split:
-        page_left = bucket_left(data.quota, limits, now, "page")
-        torrent_left = bucket_left(data.torrent_quota, limits, now, "torrent")
-        page_day = data.quota.day_count if data.quota.day_window == dk else 0
-        torrent_day = data.torrent_quota.day_count if data.torrent_quota.day_window == dk else 0
-        page_quota = QuotaStatus(
-            day=page_day,
-            day_max=limits.pages_per_day_max,
-            left=min(int(page_left), max(0, limits.pages_per_day_max - page_day)),
-            last_fetch_ts=data.quota.refill_ts,
-            min_interval=limits.page_min_interval,
-        )
-        page_quota.text = (
-            f"页面桶 {page_left:g}/{limits.page_burst} · 今天 {page_day}/{limits.pages_per_day_max} · "
-            f"速率 {limits.page_rate_per_hour}/时 · 最小间隔 {limits.page_min_interval:g}s"
-        )
-        torrent_quota = QuotaStatus(
-            day=torrent_day,
-            day_max=limits.torrents_per_day_max,
-            left=min(int(torrent_left), max(0, limits.torrents_per_day_max - torrent_day)),
-            last_fetch_ts=data.torrent_quota.refill_ts,
-            min_interval=limits.min_interval,
-        )
-        torrent_quota.text = (
-            f"下载桶 {torrent_left:g}/{limits.torrent_burst} · 今天 {torrent_day}/{limits.torrents_per_day_max} · "
-            f"速率 {limits.torrent_rate_per_hour}/时 · 最小间隔 {limits.min_interval:g}s"
-        )
-    fresh = f"上次取数 {ago_text(data.fetched_at, now)} · 最近完整刷新 {ago_text(data.refresh.last_success_ts, now)}"
-    if data.expires_at:
-        fresh += f" · 数据有效期至 {stamp_text(data.expires_at)}" + ("(已过期)" if stale else "")
     next_at = data.fetched_at + site_conf_interval(conf) if data.fetched_at else 0.0
+    fresh = f"上次取波 {ago_text(data.fetched_at, now)} · 最近健康波 {ago_text(data.wave.healthy_ts, now)}"
+    if data.expires_at:
+        fresh += f" · 复用窗至 {stamp_text(data.expires_at)}" + ("(已过)" if stale else "")
     return SiteStatus(
         site=site,
-        mode=conf.mode,
+        enabled=conf.enabled,
+        listing=conf.listing,
         now=now,
-        complete=view.complete,
         channel_state=view.channel_state,
         channel_text=CHANNEL_TEXTS.get(view.channel_state, "未启用"),
         revision=data.revision,
         file_path=service.site_path(site),
         read_error=read_error,
         fetched_at=data.fetched_at,
-        last_success_ts=data.refresh.last_success_ts,
+        healthy_ts=data.wave.healthy_ts,
         expires_at=data.expires_at,
-        next_refresh_at=next_at,
+        next_wave_at=next_at,
+        refresh_interval=site_conf_interval(conf),
         stale=stale,
         fresh_text=fresh,
-        refresh_interval=site_conf_interval(conf),
-        verified_ttl=view.verified_ttl,
-        scopes_done=tuple(data.refresh.scopes_done),
-        pages_fetched=data.refresh.pages_fetched,
-        entry_count=data.refresh.entry_count,
-        missing_field_rate=data.refresh.missing_field_rate,
+        lanes=lanes,
+        lanes_text=lanes_text,
+        releases_enabled=data.wave.releases_enabled,
+        zero_rows=data.wave.zero_rows,
+        empty_confirmed=data.empty_confirmed_at > 0,
+        retention_text=_retention_text(data),
+        plunge_text=_plunge_text(data),
+        notes=data.wave.notes,
         writer_instance=data.writer_instance,
         writer_heartbeat=data.writer_heartbeat,
-        reason=data.refresh.reason,
         index_total=len(data.index),
         index_active=len(active),
-        lanes=lanes,
+        lane_counts=lane_counts(data),
         pending_infohash=pending,
         backfill_ratio=backfill,
         managed=len({e.tid
-                     for e in view.by_infohash.values()}),
-        keys=len(view.by_infohash),
+                     for e in view.lane_a.values()}),
+        keys=len(view.lane_a) + len(view.lane_terminal),
         downloaded=len(data.downloaded),
         fails=len(data.fails),
         verified=len(data.verified),
+        observing=observing,
         quota=quota,
-        fuse=fuse,
-        page_quota=page_quota,
-        torrent_quota=torrent_quota,
         allow_window=limits.allow_window or "",
         blocking=blocking_reason(view, data, stale, site),
-        order_ok=data.refresh.order_ok,
-        order_detail=data.refresh.order_detail,
-        period_text=_period_text(data, now),
-        plunge_text=_plunge_text(data.refresh),
-        scope_delta_text=_scope_delta_text(data.refresh),
-        suspended_text=_suspended_text(site, data),
     )
 
 
-def _period_text(data: HrSiteData, now: float) -> str:
-    """考核期 P 分布的人话(无 P 一致性机检口径的兜底说明也给全)"""
-    p_min, p_max, rate, n = period_stats(data, now)
-    if not n:
-        return "无可比行(需行同时有完成时间与剩余达标时间)"
-    spread = p_max - p_min
-    tail = "P 恒定 ✓" if spread <= 1.0 else f"⚠ P 离散 {spread:.1f} 天(超 ±1 天容差, 早停/自动豁免将被禁用)"
-    return f"P ≈ {p_min:.1f}~{p_max:.1f} 天 · ±1 天一致率 {rate:.0%}({n} 行可比) · {tail}"
-
-
 def site_conf_interval(conf) -> float:
-    """站点刷新周期(秒); 单独提出来是为了让「下次刷新」这类字段的算法只有一处"""
+    """站点对账波周期(秒); 单独提出来是为了让「下次取波」这类字段的算法只有一处"""
     return float(getattr(conf, "refresh_interval", 0.0) or 0.0)
 
 
 def blocking_reason(view: HrSiteView, data: HrSiteData, stale: bool, site: str = "") -> str:
-    """一句话说明「为什么现在不产生新放行」(按判定链的顺序, 取第一个挡路的原因)
+    """一句话说明「为什么现在不签发新放行」(按判定链的顺序, 取第一个挡路的原因)
 
-    判定链: 站点没接入 → 停用中 → 覆盖证明不成立 → 数据过期 → 没有任何可查键。用户看到
-    「种子没被放行」时最想知道的就是它卡在哪一步, 而这一步光看数据看不出来。
+    用户看到「种子没被放行」时最想知道的就是它卡在哪一步, 而这一步光看数据看不出来。
     """
-    if view.mode == "off":
-        return "站点未接入 hr_check(mode: off)"
-    if data.suspended is not None:
-        tail = f" --hr-resume {site}" if site else "--hr-resume"
-        return f"站点已停用(suspended, {data.suspended.reason}): 判定回落本地逻辑 —— 排查 HR 页后跑{tail}恢复"
-    if not view.complete:
-        return "覆盖证明不成立(刷新不完备, 不产生新放行)"
+    if not view.lane_a and not view.lane_terminal and not view.verified:
+        return "索引里还没有任何可判数据(先让浏览器扩展跑一轮取数)"
+    if data.wave.zero_rows and not data.empty_confirmed_at:
+        return "结构完好但清单为 0: 不签发放行 —— 需 --hr-confirm-empty 人工对账一次"
+    if not data.wave.releases_enabled:
+        return "本波未全部档位有效(截断/失效): 命中照常, 批量「未列出」待下波续判"
     if stale:
-        return "数据已过有效期(会保守回落未核实)"
-    if not view.has_lookup_keys:
-        return "索引里还没有任何 infohash(待回填; 先让浏览器扩展跑一轮取数)"
+        return "复用窗已过(等待下一波)"
     return ""
 
 
@@ -407,7 +344,7 @@ def build_site_statuses(service, now: float, sites: Optional[Sequence[str]] = No
 
 __all__ = [
     "CHANNEL_TEXTS",
-    "FuseStatus",
+    "LaneStatus",
     "QuotaStatus",
     "SiteStatus",
     "ago_text",

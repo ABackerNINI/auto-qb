@@ -251,7 +251,6 @@ def _carpt_adapter(**overrides):
     conf = site_conf(
         adapter="carpt",
         hr_page_url="https://carpt.net/myhr.php",
-        hr_page_scopes=["A", "B", "C", "D"],
         **overrides,
     )
     adapter = build_adapter("carpt", conf)
@@ -266,7 +265,7 @@ def test_carpt_adapter_urls():
     assert adapter.page_url("B", 1) == "https://carpt.net/myhr.php?status=2"
     assert adapter.page_url("D", 2) == "https://carpt.net/myhr.php?status=4&page=2"
     assert adapter.download_url(40001) == "https://carpt.net/download.php?id=40001"
-    assert adapter.scopes == ("A", "B", "C", "D")
+    assert adapter.scopes == ("A", "B", "C"), "v3: 恒抓 A/B/C, D 已免罪不翻(计划 §4.1)"
 
 
 def test_carpt_adapter_parse_first_page():

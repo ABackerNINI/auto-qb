@@ -25,13 +25,13 @@
 
 ## Open
 
-- [26-09-28-1932] [HR 在线核实 · 模型推翻重建计划 · auto-qb](26-09-28-1932-plan-hr-verify-rebuild.html) — `backend-partial-hr-verify`
 - [26-09-28-0354] [计划 · WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)](26-09-28-0354-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
 - [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
 
 ## Done
 
 - [26-09-29-0003] [计划 · WEBUI 设置页「?」说明全面核对与改写](26-09-29-0003-plan-webui-settings-help-rewrite.html) — `webui-settings-help`
+- [26-09-28-1932] [HR 在线核实 · 模型推翻重建计划 · auto-qb](26-09-28-1932-plan-hr-verify-rebuild.html) — `backend-partial-hr-verify`
 - [26-09-28-1834] [计划 · 配置版本升级守卫: 键面基线冻结快照](26-09-28-1834-plan-config-version-guard.html) — `config-version-guard`
 - [26-09-28-0201] [auto-qb WEB UI · 搜索框帮助按钮 · 3 版模板(供挑选)](26-09-28-0201-plan-search-help-button-3-proposals.html) — `webui-search-query-syntax`
 - [26-09-28-0157] [沉默即成功 — my-commit-flow 输出契约 v3 (26-09-28-0157)](26-09-28-0157-plan-commands-shipflow-v3.html) — `commands-shipflow-v3`

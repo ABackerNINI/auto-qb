@@ -21,11 +21,11 @@ const HR_SAFETY_BUCKETS = { danger: "不能删", failed: "考核未通过", safe
  * (完整刷新未列出 = 缺席证据)分开编码, 同属「在线」徽标与「在线核实」来源桶 */
 const HR_SRC_BADGES = {
   site_scope: "在线", site_satisfied: "在线", site_unsatisfied: "在线", site_released: "在线", site_exempt: "在线",
-  policy: "策略", local: "本地", local_exempt: "本地", unverified: "未核",
+  local: "本地", unverified: "未核",
 };
 const HR_SRC_BUCKETS = {
   site_scope: "在线核实", site_satisfied: "在线核实", site_unsatisfied: "在线核实", site_released: "在线核实", site_exempt: "在线核实",
-  policy: "策略", local: "本地兜底", local_exempt: "本地兜底", unverified: "",
+  local: "本地兜底", unverified: "",
 };
 
 /* ---------------- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ----------------
@@ -169,13 +169,13 @@ window.AQB_HR = {
       const need = m.hr_site_need, remain = m.hr_site_remain;
       const seeded = m.seeding_time || 0, req = m.hr_req_time || 0;
       /* 生命周期 chip: 仅考核期已过的终态标「已结束」(考察中的短语已含进行中, 不重复) */
-      const ended = ["site_satisfied", "site_unsatisfied", "site_released", "site_exempt", "local_exempt"].includes(src);
+      const ended = ["site_satisfied", "site_unsatisfied", "site_released", "site_exempt"].includes(src);
       /* 数值条 = 站点侧值专用(站点分享率/站点下载; 格式化与 hrSiteLine 同口径); 无站点侧值整条不渲染 */
       const kv = [];
       if (m.hr_site_ratio !== "") kv.push(["站点分享率", Number(m.hr_site_ratio).toFixed(2)]);
       if (m.hr_site_dl !== "") kv.push(["站点下载", this.fmtSize(m.hr_site_dl)]);
       let gauge = null, badge = "";
-      if (["site_released", "site_exempt", "local_exempt", "unverified"].includes(src) || !(req > 0)) {
+      if (["site_released", "site_exempt", "unverified"].includes(src) || !(req > 0)) {
         /* 无时长要求(身份层放行/超龄豁免/未核实/未配时长): 轨道收起换状态徽记; 未核实用虚线盾 */
         badge = lane === "unknown" ? "dash" : "check";
       } else {
@@ -192,8 +192,6 @@ window.AQB_HR = {
         } else if (src === "local") {
           if (seeded - req > 0) tag = { tone: "safe", text: `已超出 ${this.fmtDuration(seeded - req)}` };
           else if (req - seeded > 0) tag = { tone: "danger", text: `还需 ${this.fmtDuration(req - seeded)}` };
-        } else if (src === "policy" && req - seeded > 0) {
-          tag = { tone: "danger", text: `还需 ${this.fmtDuration(req - seeded)}` };
         }
         /* 站点细轨(半透明填充区分): 仅站点给出数值端点时出现 —— 考察中按 还需/要求 画剩余占比
          * (与本地已做种占比互补, 两轨并排可见分歧); 已达标满格自明; 终态未达标不画(倒计时已随考核期结束) */

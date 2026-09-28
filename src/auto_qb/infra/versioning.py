@@ -26,9 +26,53 @@ VERSION_KEY = "schema_version"
 
 CURRENT_VERSIONS: Dict[str, int] = {
     "state": 3,  # <data_dir>/state.json 顶层 schema_version
-    "hr_site": 1,  # hr/<site>.json 的 schema_version(hr/model.SCHEMA_VERSION 是它的别名)
-    "config": 2,  # config.schema_version(YAML 的 config: 块内, 不占根键); v2 = HR 站点绑定改映射制(迁移函数在 config/migrations.py)
+    "hr_site": 2,  # hr/<site>.json 的 schema_version; v2 = HR 波次模型 v3(迁移在 config/migrations.py, 依赖纪律)
+    "config": 3,  # config.schema_version(YAML 的 config: 块内, 不占根键); v3 = HR 14 键口径(迁移函数在 config/migrations.py)
 }
+
+
+def _migrate_hr_site_1_2(data: dict) -> dict:
+    """hr_site v1→v2: 波次模型 v3(计划 26-09-28-1932 §7.2)。
+
+    - 保留: index / downloaded / fails / verified(旧放行按终态不可逆原样生效、永续有效)、
+      revision / fetched_at / expires_at / writer。
+    - 删除: quota / torrent_quota(双桶账本)、fuse、suspended、login_backoff_until /
+      login_expired_streak(频控单模型 + 档位截断, 无独立退避字段)。
+    - refresh → wave: last_success_ts→healthy_ts、entry_baseline→baseline_rows、
+      plunge_suspect→plunge; 其余覆盖证明字段(两级证据年龄/整波 complete 语义)随模型退役。
+    - quota → rate(单账本): last_fetch_ts 保留(间隔基准), 天窗口计数沿用 quota 的合并账本
+      (split 账本直接丢弃 —— 单模型口径下页面+下载合计重记, 方向保守)。
+    """
+    data.pop("torrent_quota", None)
+    data.pop("fuse", None)
+    data.pop("suspended", None)
+    data.pop("login_backoff_until", None)
+    data.pop("login_expired_streak", None)
+    quota = data.pop("quota", None)
+    if isinstance(quota, dict):
+        data["rate"] = {
+            "day_window": str(quota.get("day_window") or ""),
+            "day_count": quota.get("day_count") if isinstance(quota.get("day_count"), int) else 0,
+            "last_fetch_ts": _num(quota.get("last_fetch_ts")),
+        }
+    refresh = data.pop("refresh", None)
+    if isinstance(refresh, dict):
+        wave = {
+            "wave_ts": _num(refresh.get("last_success_ts")),
+            "healthy_ts": _num(refresh.get("last_success_ts")),
+            "baseline_rows": _num(refresh.get("entry_baseline")),
+            "plunge": bool(refresh.get("plunge_suspect")),
+            "notes": str(refresh.get("reason") or ""),
+        }
+        data["wave"] = wave
+    return data
+
+
+def _num(value) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _migrate_state_1_2(data: dict) -> dict:
@@ -58,7 +102,9 @@ MIGRATIONS: Dict[str, Dict[int, Callable[[dict], dict]]] = {
         1: _migrate_state_1_2,
         2: _migrate_state_2_3,
     },
-    "hr_site": {},
+    "hr_site": {
+        1: _migrate_hr_site_1_2,
+    },
     "config": {},
 }
 
