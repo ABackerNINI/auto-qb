@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR 在线核实 v3 · 重构后全面复审(安全/稳定性/缺陷) · 审查报告 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-29-0404">
+<meta name="doc-updated" content="26-09-29-0550">
+<meta name="doc-refs" content="memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html,memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html,memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html,memory-bank/activeContext/26-09-29-0310-hr-v3-wave-model-rebuild.md">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#d6a24d; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.75;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:56px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:30px;line-height:1.25;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:82ch;margin:0 0 20px}
+  .lede b{color:var(--ink);font-weight:600}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:52px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+
+  h2{font-size:21px;font-weight:600;margin:0;padding-top:36px}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  .sect{border-top:1px solid var(--line-2);margin-top:36px;padding-top:8px}
+  p{margin:10px 0;color:var(--ink-2);max-width:86ch}
+  p b,li b{color:var(--ink);font-weight:600}
+  ul,ol{margin:8px 0 14px;padding-left:22px;color:var(--ink-2);max-width:86ch}
+  li{margin:5px 0}
+  code{font-family:var(--mono);font-size:.86em;background:var(--surface-2);padding:1px 6px;border:1px solid var(--line)}
+  pre{background:var(--surface);border:1px solid var(--line);padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12.5px;line-height:1.6;color:var(--ink-2);margin:12px 0}
+  pre b{color:var(--accent);font-weight:500}
+  pre .cm{color:var(--ink-3)}
+  .src{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+
+  table{border-collapse:collapse;width:100%;margin:14px 0 20px;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;font-weight:500;padding:8px 12px;border-bottom:1px solid var(--line-2)}
+  td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+  td:first-child{white-space:nowrap}
+  .sev{font-family:var(--mono);font-size:11px;letter-spacing:.06em;padding:1px 8px;border:1px solid;white-space:nowrap}
+  .sev.h{color:var(--bad);border-color:var(--bad)}
+  .sev.m{color:var(--warn);border-color:var(--warn)}
+  .sev.l{color:var(--blue);border-color:var(--blue)}
+  .sev.i{color:var(--ink-3);border-color:var(--line-2)}
+  .ok{color:var(--good)}
+
+  .verdict{border:1px solid var(--line-2);padding:18px 22px;margin:22px 0 8px}
+  .verdict p{margin:6px 0}
+  .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin:18px 0 6px}
+  .card{background:var(--bg);padding:14px 16px}
+  .card .n{font-family:var(--mono);font-size:26px;font-weight:600;color:var(--ink)}
+  .card .t{font-size:12px;color:var(--ink-3);margin-top:2px}
+
+  .note{border-left:2px solid var(--accent);padding:2px 0 2px 16px;margin:14px 0;color:var(--ink-2)}
+  .fix{border:1px solid var(--line);border-left:2px solid var(--good);padding:10px 16px;margin:10px 0 18px;font-size:13.5px;color:var(--ink-2)}
+  .fix b{color:var(--good)}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.toc{display:none}.cards{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="mast">
+  <p class="kicker">Audit Report · auto-qb · HR Online Verification</p>
+  <h1>HR 在线核实 v3 · 重构后全面复审<br>(安全 / 稳定性 / 缺陷)</h1>
+  <p class="lede">v3 波次模型(<code>26-09-28-1932</code> 计划 M1–M5)推翻重建了取数通道、频控、判定与存储层, 本轮按「安全 → 稳定性 → 缺陷」三条线对 <code>src/auto_qb/hr/</code> 全部 20 个文件(约 6000 行)及桥接层逐文件通读复核。<b>总评: 架构与安全边界设计扎实、守卫完整, 通过复审; 但发现 1 个高危缺陷 —— 站点 Retry-After 指令不跨波生效, 与「做 PT 站好公民」的核心承诺相悖, 建议尽快修复</b>; 另有 2 中危、4 低危、5 观察项, 均附证据与修复建议。</p>
+  <p class="meta">
+    <b>审计基线</b> commit <code>05a8415</code> (develop, 已同步) · <b>测试实测</b> test.full: 1736 passed + 3 skipped, 总覆盖 90%(12312 语句 / 4172 分支), 21.96s<br>
+    <b>方法</b> security-review 方法论(数据流追踪 + 逐项自证) + 全量人工通读 + 黄金法则逐条对审(幂等/保守默认/状态持久化/fail-fast/单一写线程)<br>
+    <b>范围</b> hr/ 全模块 · torrents/record.py 桥 · webui routes/hr.py + 前端 · config models/validation/schema/migrations · infra/versioning · qbmanager 接线 · cli
+  </p>
+</div>
+
+<div class="layout">
+<nav class="toc">
+  <p>目录</p>
+  <a href="#s1">1 结论速览</a>
+  <a href="#s2">2 安全边界核验</a>
+  <a href="#s3">3 稳定性核验</a>
+  <a href="#s4">4 判定正确性核验</a>
+  <a href="#s5">5 缺陷清单</a>
+  <a href="#s6">6 观察项</a>
+  <a href="#s7">7 测试覆盖评价</a>
+  <a href="#s8">8 建议与后续</a>
+  <a href="#s9">9 端到端流程详解</a>
+  <a href="#s10">10 情况处置一览</a>
+  <a href="#s11">11 配置字段释义</a>
+  <a href="#s12">12 默认运行画像</a>
+  <a href="#s13">13 设计裁决追记</a>
+</nav>
+
+<main>
+
+<h2 id="s1">1 · 结论速览</h2>
+<div class="sect">
+<div class="cards">
+  <div class="card"><div class="n" style="color:var(--bad)">1</div><div class="t">高危(High)</div></div>
+  <div class="card"><div class="n" style="color:var(--warn)">2</div><div class="t">中危(Medium)</div></div>
+  <div class="card"><div class="n" style="color:var(--blue)">4</div><div class="t">低危(Low)</div></div>
+  <div class="card"><div class="n">5</div><div class="t">观察项(Info)</div></div>
+</div>
+<div class="verdict">
+  <p><b>安全(PT 站访问面): 通过, 附 1 个高危缺陷。</b>「后端零 cookie、零直连」边界完整落实; 本地端点四道防线(token 常数时间比较 / origin 白名单 / URL 白名单 / 127.0.0.1 独占绑定)全部有效并有单测钉死; 频控三键 + 扩展侧第二道硬上限双保险。但 <b>H1: Retry-After 指令写进了内存会话对象后从未落盘, 下一波(≤60s)照常打站点</b> —— 站点明确要求等待时反而以 60s 节奏重试到日额烧尽。</p>
+  <p><b>稳定性: 通过。</b>站点级文件锁 + 心跳自检退化只读、原子写 + .bak 自愈、档位级失败隔离、增量落盘(Ctrl+C 安全)、可中断睡眠(关停不等 180s)、告警三层防轰炸 —— 均验证有效。M2(schema 回退覆写)是唯一的稳定性缺口。</p>
+  <p><b>BUG 面: 上一轮的 RecursionError 修复正确且语义等价(已复核两条调用路径无环); 本轮新发现 H1/M1 同根(取数失败路径的持久化盲区), 该维度测试覆盖为空。</b></p>
+</div>
+
+<table>
+  <tr><th>编号</th><th>级别</th><th>一句话</th><th>位置</th></tr>
+  <tr><td>H1</td><td><span class="sev h">HIGH</span></td><td>站点 Retry-After 不跨波生效(不落盘 + 间隔基准不前进), 60s 节奏重试到日额烧尽</td><td class="src">hr/service.py:488-493</td></tr>
+  <tr><td>M1</td><td><span class="sev m">MED</span></td><td>登录失效路径不记间隔基准, 烧日额 240/天, 登录恢复后当日核实可能停摆</td><td class="src">hr/fetcher.py:142-145 · service.py:534</td></tr>
+  <tr><td>M2</td><td><span class="sev m">MED</span></td><td>站点文件 schema 比程序新时, 波次照常取数并用空数据覆写新版文件</td><td class="src">hr/store.py:258-270</td></tr>
+  <tr><td>L1</td><td><span class="sev l">LOW</span></td><td>judge_record「并列放行取更强依据」文档承诺未实现(first-wins)</td><td class="src">hr/resolve.py:265-269</td></tr>
+  <tr><td>L2</td><td><span class="sev l">LOW</span></td><td>完整 URL 进日志/系统通知, 无脱敏钩子(当前 preset 无 passkey, 机制性风险)</td><td class="src">hr/queue.py:149 · fetcher.py:138-148</td></tr>
+  <tr><td>L3</td><td><span class="sev l">LOW</span></td><td>skip_local_verify=true 时 confirm-empty 可被本机任意网页 CSRF(非默认配置)</td><td class="src">webui/server/auth.py:41</td></tr>
+  <tr><td>L4</td><td><span class="sev l">LOW</span></td><td>排序方向只做波内校验, 首波即升序的站点理论上可过早停翻(纵深防御可兜底)</td><td class="src">hr/service.py:643-663</td></tr>
+</table>
+</div>
+
+<h2 id="s2">2 · 安全边界核验(PT 站访问面)</h2>
+<div class="sect">
+<p>这是本功能最要紧的面, 逐项验证如下 —— <b>全部成立</b>:</p>
+<h3>2.1 零 cookie 边界(后端不持凭据、不直连站点)</h3>
+<ul>
+  <li>协议层无凭据字段: <code>HrTask</code> / <code>HrResult</code> 只有 URL 与内容字节(channel.py:213-270); 登录态只存在于浏览器扩展上下文。</li>
+  <li>无通道时回落<b>不是</b>偷偷直连: <code>NullFetcher</code> 调用即抛 <code>HrChannelUnavailable</code>, 由 service 转「未核实 + 本地兜底」(fetcher.py:77-87) —— 「零 cookie」在故障路径也不破。</li>
+  <li>下载 URL 单点来自内置档案 <code>/download.php?id={id}</code>(site_presets.py), <b>不含 passkey</b>; 密钥文件 hr.token 内容不进日志(channel.py:105-107, 有注释钉死原因)。</li>
+</ul>
+<h3>2.2 本地端点四道防线(server.py + channel.py)</h3>
+<ul>
+  <li><b>token</b>: <code>secrets.compare_digest</code> 常数时间比较(server.py:270-272); 401 前不写任何状态(server.py:204-207); 随机生成持久化 0600。</li>
+  <li><b>origin 白名单</b>: 非扩展 origin 一律 403 且不给 CORS 头; 配了 <code>extension_id</code> 再钉死到单一扩展(校验器强制 32 位 a~p 形态, sections.py:201-206)。runtime 在 extension_id 留空时每次启动 WARNING 提醒(runtime.py:126-141) —— 纵深提示到位。</li>
+  <li><b>URL 白名单(SSRF)</b>: 任务 URL 只由后端按配置拼出, 下发前必过 <code>UrlPolicy.require</code>(域名 + 路径 + scheme 三重), 端点本身不接受任何 URL 入参 —— 不可能被诱导成「带登录态的任意站代理」。手工 URL 解析的怪形态(userinfo/尾点)均「不匹配即拒」, 失败方向安全。</li>
+  <li><b>回传防伪</b>: 只接受「确实派发过且未回过」的任务 id + 域名必须与派发一致 + 未派发即收到也拒(queue.py:137-156); 过期任务 240s TTL 作废, 晚到回传不堆积。</li>
+  <li><b>网络面收窄</b>: 只听 127.0.0.1; <code>allow_reuse_address=False</code> 防 Windows 抢绑(端口独占守卫有效); 请求体 12MB 上限在 dispatch 与 route 双卡; 每请求 Connection: close; 端点线程只入队, 异常不外泄(500 兜底)。</li>
+</ul>
+<h3>2.3 对站点的访问节奏(双保险)</h3>
+<ul>
+  <li>后端单模型频控: min_interval(下限 5s 配置强制, 默认 90s)+ 只向上抖动(实测间隔恒 ≥ 配置) + 日额 240 + allow_window + 复用窗(多实例不重复取数)。</li>
+  <li>扩展侧独立第二道闸(60/时·600/天): 触发即 <code>HrChannelQuota</code> → 计「让位」不计失败 —— <b>不会把后端频控失效伪装成站点故障推进任何错误状态</b>, 且只报一次告警。</li>
+  <li>「取数失败 = 档位截断 + 周期自然重试」的 v3 口径本身保守; 但<b>失败路径的持久化存在盲区 → 见 H1/M1</b>。</li>
+</ul>
+<h3>2.4 数据面(不可信内容处理)</h3>
+<ul>
+  <li>扩展回传的 HTML: 标准库 html.parser 栈式抽取, 表头锚定 + 必填字段零容忍(S2) + 排序单调校验(方向自适应、证据不足不误报)。</li>
+  <li>扩展回传的 .torrent: 自写 bencode, 深度上限 64 防递归炸栈, 整数前导零/超长字节串拒收, infohash 取原始字节切片(正确性关键, 有独立向量测试)。</li>
+  <li>WebUI 呈现: 全部 Vue <code>{{ }}</code> 插值(自动转义), HR 模板无一处 v-html —— 站点页面内容经「站点 → 扩展 → JSON → 界面」的存储型 XSS 链不成立。</li>
+</ul>
+</div>
+
+<h2 id="s3">3 · 稳定性核验</h2>
+<div class="sect">
+<ul>
+  <li><b>存储层</b>(store.py): 每站点一把 filelock(拿不到即让位, 不排队轰炸); 写者心跳自检(revision 回退 / 心跳被覆盖 ⇒ 判锁不生效, 退化只读防双写); 坏文件先隔离(.bad-ts 留证)再试 .bak 兜底, 且「坏文件被换下后写盘不再复制 .bak」防止好备份被盖 —— 顺序正确; 原子替换写保证无锁读完整。</li>
+  <li><b>线程边界</b>: 端点线程只入队 / 取数线程持锁干全部重活 / 主循环只读原子发布的不可变视图(publisher 单元组防撕裂); 锚点交接用 frozen dataclass 只读快照(qbmanager.py:716-738) —— 单一写线程法则守住。</li>
+  <li><b>关停安全</b>: stop() 先 cancel_all 叫停队列再 join; 频控睡眠可中断(1s 切片查停止位, 抛 HrChannelStopped 让位) —— 关停不会白等 180s 或持锁睡完间隔。</li>
+  <li><b>崩溃安全</b>: 每页解析完 + 每个下载完成即增量 commit(分钟级波内 Ctrl+C 不丢已抓数据); 取数线程单轮异常被兜住不打死线程; 单站点失败不外抛。</li>
+  <li><b>告警防轰炸</b>: 节流状态按根因归一(pacing_class)而非 action; 持续状态 6h 周期提醒; 产生处已告警的 worker 只记 INFO —— 三层设计在 2026-09-24 实报场景上都闭环。</li>
+  <li><b>配置 fail-fast</b>: hr_check 三层未知键拦截(全局/channel/sites 条目) + 全部键有类型与范围校验(min_interval ≥5s / request_timeout 5s–1h / port 1–65535 / refresh_interval 60s–30d) + 站点档案登记制 + 绑定校验(显式 tracker 存在 / 默认映射命中 / 唯一性 / <b>绑定站点 hr 段必填否则整站保护静默失效 —— 已在配置期拦下</b>)。</li>
+</ul>
+</div>
+
+<h2 id="s4">4 · 判定正确性核验</h2>
+<div class="sect">
+<ul>
+  <li><b>四行判定表</b>: A 命中即管束(本地达标也管) → 终态 B/C/D 放行(永续) → 放行记录(锚点漂移作废回行 4) → NO_EVIDENCE 交调用方本地兜底。双 infohash 合并取保守序(管束 &gt; 放行 &gt; 无证据), 方向正确。</li>
+  <li><b>RecursionError 修复复核(05a8415)</b>: 行 4 回落改直调 <code>_local_hr_triggered()</code>。两条进入路径(judged is None / NO_EVIDENCE)下 <code>check_hr_condition</code> 的站点侧分支均已先行返回, 逐一走查<b>确认无环、语义等价</b>; 补的回归测试(test_record_hr_no_evidence_row4_no_recursion)覆盖了此前漏掉的 NO_EVIDENCE 路径。修复质量高。</li>
+  <li><b>防伪三件套</b>: A 档流转守恒(留存率 ≥0.7 否则冻结批量签发)、总行数骤降(&lt;基线 30% 冻结)、零行需人工确认戳(再现非零行自动失效) —— 加上放行前置「各档全部有效 + 新鲜度闸门(added_on ≤ 该档取数时刻)」, 把「改版吞行被误判未列出」这条最危险的误放行路径层层锁死。放行永续 + 锚点漂移作废(本机重下)的残余风险(其它客户端下载看不见)已在文档如实声明。<b>(26-09-29 裁决: 骤降保护移除, 防伪收敛为守恒 + 零行戳两道 —— 见 §13.3)</b></li>
+  <li><b>覆盖证明</b>: 三停翻条件(完成时间 +1D 余量 / 到期段强信号 / 本地全集)与缺席证明(全深度位置无关 / 有界档按可信完成时刻)方向推演无误; 失踪观察期(2 波 + 位置覆盖)「没看到不终结考察中」保守正确。</li>
+</ul>
+</div>
+
+<h2 id="s5">5 · 缺陷清单(附证据与修复建议)</h2>
+<div class="sect">
+
+<h3>H1 · 站点 Retry-After 指令不跨波生效 <span class="sev h">HIGH</span></h3>
+<p><b>后果</b>: 站点明确要求「等待 N 秒后再来」时, 取数线程仍按 worker 轮询节奏(60s)每波重发请求, 直到日额(默认 240)烧尽 —— 恰好在站点开始限流、最不该加压的时刻持续加压; 同时烧掉的配额让当天正常核实能力受损。v3 设计明确「Retry-After 是站点明确指令, 单存 retry_after_until 并参与下次可取时刻」(ratelimit.py:103-122 已实现读取侧), 但<b>写入侧从未持久化</b>。</p>
+<pre><span class="cm"># hr/service.py:485-493 —— _do_wave 的 HrFetchError 分支</span>
+except HrFetchError as e:
+    retry_after = float(getattr(e, "retry_after", 0.0) or 0.0)
+    if retry_after &gt; 0:
+<b>        data.retry_after_until = self._now() + min(retry_after, 24 * 3600.0)</b>
+        result.action = ACTION_WAITING
+        result.reason = f"站点要求等待(Retry-After {retry_after:.0f}s): {e}"
+<b>        return   ← 直接返回, 不走 _finish_wave ⇒ session.commit 永不发生</b></pre>
+<ul>
+  <li><b>根因链</b>: <code>hold()</code> 每次进入都从磁盘重读 <code>HrLockSession</code>(store.py:258-269), 写在 <code>session.data</code> 上的 <code>retry_after_until</code> 随会话关闭丢弃 → 下一波 next_allowed_at 读到 0 → 间隔门槛也不成立(该路径 <code>budget.mark()</code> 在 get_text 成功后才调用, service.py:549, 失败时 last_fetch_ts 不前进) → 下一波立即重试。两道闸同时失效, 唯一剩下的限流是日额本身。</li>
+  <li><b>连带问题</b>: .torrent 下载路径的 Retry-After 被当作普通种子失败计入 <code>data.fails</code>(service.py:821-826), 站点指令再次被降级处理。</li>
+  <li><b>测试缺口(同一根因的两处都无覆盖)</b>: test_hr_service.py:773 注释明确把 Retry-After 语义「外包」给 ratelimit 单测 —— 而单测是<b>注入值测读取侧</b>, service 收到 Retry-After 后的持久化行为零覆盖。</li>
+</ul>
+<div class="fix"><b>修复建议</b>: 该分支 return 前若 <code>session.writable</code> 则 <code>session.commit()</code>(一行); 顺带 <code>budget.mark()</code> 让间隔基准前进; 下载路径对带 retry_after 的 HrFetchError 改为上抛走波级让位。补 service 级单测: 波 A 收到 Retry-After → 断言波 B 的 next_allowed_at ≥ retry_after_until。</div>
+
+<h3>M1 · 登录失效路径不记间隔基准, 烧日额且拖慢恢复 <span class="sev m">MED</span></h3>
+<p><b>后果</b>: 扩展取到登录页(<code>KIND_LOGIN_PAGE</code> → <code>HrLoginExpired</code>, fetcher.py:142-145)时 get_text 直接抛出, mark() 未执行。登录态失效期间每波(60s)都立即重试: <code>take()</code> 先扣日额 → 取数失败 → 无间隔记录 → 下一波照旧。日额以每分钟 1 次的速度烧(4 小时烧完 240), 且<b>用户去浏览器登录回来后, 当日配额可能已耗尽, 在线核实停摆到零点</b>。v3 有意「登录失效不推进熔断」(重试无法解决, 正确), 但没有配套「至少拉开重试间隔」。</p>
+<div class="fix"><b>修复建议</b>: HrLoginExpired 抛出路径同样执行 <code>budget.mark()</code>(或 take() 时预记), 让 min_interval 挡住轮询节奏; 更优: service 对该站记一个「登录失效静默期」(如 30min)再重试。属 H1 同根(失败路径无持久化), 可一并修。</div>
+
+<h3>M2 · 站点文件 schema 比程序新时, 空数据覆写新版文件 <span class="sev m">MED</span></h3>
+<p><b>后果</b>: 版本回退场景(新版写过站点文件后跑回旧版程序)下, <code>_parse</code> 对 SchemaVersionError 返回 recoverable=False(store.py:136-137), HrLockSession 据此用<b>空数据</b>继续(store.py:265-266) —— 但 <code>_refresh_locked</code> 不检查 read_error, 波次照常取数并在结束时 commit,<b>新版文件的索引/放行记录/已取记录被空波覆写</b>(.bak 只保住一份, 随下一次写被盖)。读侧「不符即拒、不猜未来版本」的设计正确, 但<b>写侧没跟上同一防线</b>。</p>
+<div class="fix"><b>修复建议</b>: read_error 且非「坏文件」类(schema 不符)时, <code>_refresh_locked</code> 直接返回 ACTION_ERROR 且不 commit(一个 if); 或 HrLockSession 对该情形置 writable=False。低概率高损失, 值得堵上。</div>
+
+<h3>L1 · judge_record 的并列 tie-break 文档承诺未实现 <span class="sev l">LOW</span></h3>
+<p>docstring(resolve.py:253-255)承诺「同为放行取依据更强者(D 免罪 &gt; B &gt; 缺席); 同为管束取剩余时间更少的行展示」, 实现(resolve.py:265-269)是严格大于才替换 —— 并列时 first-wins(v1 先到先得)。判定身份不受影响(都已是 RELEASED/HR), 仅展示口径与文档漂移。</p>
+<h3>L2 · 完整 URL 进日志与系统通知, 无脱敏钩子 <span class="sev l">LOW</span></h3>
+<p>queue.py:149 / fetcher.py:138,145,147-148 把完整 URL 拼进异常消息, 一路进 service 的 WARNING(service.py:825) → notify 推系统通知。当前 preset 的 hr_page_url / download_path 都不含 passkey(已核对 site_presets.py), 但本仓库对 qB tracker URL 已有「拉取即脱敏」的既有口径(tracker-url-source-sanitize 专题), HR 侧 URL 是同一类敏感面 —— 机制上建议日志出口对 query 做统一遮蔽, 防未来档案变更引入参数后裸奔。</p>
+<h3>L3 · skip_local_verify=true 时 confirm-empty 可被 CSRF <span class="sev l">LOW</span></h3>
+<p><code>/api/hr/confirm-empty</code> 是写端点, 默认配置下走 web.token 鉴权(<code>skip_local_verify</code> 默认 false, models.py:217, 已核实), 安全。但用户开启 <code>web.skip_local_verify</code> 后, FastAPI 对 <code>dict</code> body 不校验 Content-Type —— 任意网页可用 <code>text/plain</code> 简单请求(无预检)携带 JSON 体成功调用, 写入人工对账戳(条件性危害: 仅在真实零行波时放大签发)。这是 WebUI 全局口径问题, HR 端点只是继承者; 若要收口, 对写端点要求自定义头(预检必触发)即可。</p>
+<h3>L4 · 排序方向只做波内校验 <span class="sev l">LOW</span></h3>
+<p><code>order_directions</code> 每波重置(service.py:266), 站点改升降序(或首波即升序)时单波内自洽可通过校验: 升序页 1 的最深行即全站最老行, 停翻条件①立即满足 → cutoff 极小 → 对「完成时间较新」的未对账对象缺席证明成立 → 理论上可批量误签「未列出」。<b>实际被纵深防御兜住</b>: 上波 A 档行存在时流转守恒必然不达标冻结签发; 误放的行若真在考察中, 下波命中即撤销放行并管束。残余面是「无 A 历史 + 首波即升序」的组合, 建议把方向记入 HrLaneState 跨波比对(翻转视同违反), 成本一行。</p>
+</div>
+
+<h2 id="s6">6 · 观察项(Info)</h2>
+<div class="sect">
+<ul>
+  <li><b>I1 死代码/重复</b>: <code>HrRefreshService._prune_index</code> staticmethod 是死代码(实例方法内同名调用解析到模块级函数, service.py:976 vs 1274); events.py <code>plunge_suspected</code> 双 return(87-90); <code>LANE_RETENTION_MIN</code> 双定义(78/127); <code>HrStoreCorrupted</code> 定义后从未抛出(store.py:42); <code>ALL_FAILED_REUSE_WINDOW</code> 常量定义后无引用(service.py:135); <code>events.fetch_failed</code> 的 failures/threshold 参数恒 (1,1)。(第 11.5 章补记)</li>
+  <li><b>I2 注入时钟破口</b>: <code>_note_dl_fail</code>(service.py:858)与 <code>_advance_observation</code>(service.py:1017)直接用 <code>time.time()</code>, 绕过 service 的 <code>now_fn</code> —— 生产无影响, 测试推时钟时这两处行为失真。</li>
+  <li><b>I3 嵌套表递归无深度上限</b>: parse.py <code>walk</code> 递归展开, 理论上 12MB 恶意 HTML 可致 RecursionError; 解析在波次异常边界内不会打死线程, 且站点是可信方 —— 仅记录。</li>
+  <li><b>I4 CLI confirm-empty 不校验站点名</b>: 任意名字符串(含 ../ 逃逸)都会创建站点 JSON/lock 文件(WebUI 侧已校验白名单, routes/hr.py:39-44); 本机用户自身操作, 风险极低。</li>
+  <li><b>I5 0600 权限在 Windows 不生效</b>: hr.token / web.token 的 os.open mode 仅 POSIX 有意义; 目录在用户 profile 下, 可接受。</li>
+</ul>
+</div>
+
+<h2 id="s7">7 · 测试覆盖评价</h2>
+<div class="sect">
+<p>实测基线(本轮, commit 05a8415): <b>1736 passed + 3 skipped, 总覆盖 90%(12312 语句 / 4172 分支), 21.96s</b>。HR 九个测试文件按 v3 模型重写(resolve 35 / service 29 / ratelimit 8 / config 29 / report 18 / store 17 / runtime 28 / worker 21 / multisite 5), 12 格判定矩阵逐格参数化钉死。</p>
+<p><b>结构性盲区恰好压在本次发现上</b>: 「取数失败路径的跨波状态持久化」维度无覆盖 —— H1(Retry-After 不落盘)与 M1(登录失效不记间隔)都属于「单测各自绿、集成行为断」的形态: ratelimit 单测注入 retry_after 值验证读取侧, service 层没有任何用例断言「波 A 收到站点指令后波 B 的行为」。建议补三类 service 级测试: ①Retry-After 跨波生效; ②登录失效期请求节奏 ≥ min_interval; ③schema 过新时不取数不覆写。</p>
+</div>
+
+<h2 id="s8">8 · 建议与后续</h2>
+<div class="sect">
+<ol>
+  <li><b>立即(修复 H1, 顺带 M1)</b>: Retry-After / 登录失效两条失败路径补持久化与间隔基准, 各一行级别改动 + service 级单测; 这是「对 PT 站安全」承诺的实质性缺口。</li>
+  <li><b>短期(M2)</b>: schema 过新时跳过取数与写盘; 顺带清理 I1 死代码簇。</li>
+  <li><b>择机(L1–L4)</b>: tie-break 二选一(改实现或改 docstring)、日志 URL 脱敏钩子、写端点自定义头、波间方向记忆。</li>
+  <li><b>开放项提醒</b>: v3 提交里「真机走查(扩展 reload + --hr-once + WebUI 对照)」仍标记开放 —— 本轮审计全部为代码级, 建议真机走查时顺带验证 H1 修复后的 Retry-After 行为。</li>
+</ol>
+<p class="note">本报告为快照(出厂即冻结), 证据均基于 commit 05a8415 的代码事实; 修复后的复核请开新报告或走任务档案进度日志。</p>
+</div>
+
+<h2 id="s9">9 · 端到端流程详解(按代码走读, 不引文档)</h2>
+<div class="sect">
+<p><b>更新记录(26-09-29-0512):</b> 应用户要求补充第 9–12 章 —— 流程/处置/配置/默认画像全部从代码推导, 每个数字带行号; 与文档冲突处以代码为准(本轮已核对: 代码与 configuration.md 无实质冲突, 但文档未覆盖的失败路径细节见第 10 章)。</p>
+
+<h3>9.1 启动装配(qbmanager → HrRuntime)</h3>
+<ul>
+  <li>主程序启动时 <code>qbmanager</code> 构造 <code>HrRuntime</code> 并把门面挂为全库记录的 <code>hr_link</code>(qbmanager.py:227-230); 仅在<b>非 dry-run</b> 时 <code>hr.start()</code>(qbmanager.py:369-370) —— <b><code>--dry-run</code> 下 HR 运行时完全不启动</b>(不是「只读运行」, 是没有)。</li>
+  <li><code>start()</code>(runtime.py:105-124): 先幂等 stop → 判 <code>enabled</code>(总开关开 <b>且</b> ≥1 站点接入, runtime.py:94-96) → 建 <code>HrTaskQueue</code> / <code>HrRefreshService</code>(persist=True, allow_fetch=有通道, sleeper=可中断睡眠) → channel.enabled 才 <code>resolve_token</code>(显式配置优先, 否则随机 32 字节落 <code>&lt;data_dir&gt;/hr.token</code> 0600) 并起端点 → 端口被占抛 <code>HrChannelBindError</code> 穿透到 CLI 退出码 1(fail-fast) → 起取数线程。</li>
+  <li>取数线程节奏: <code>POLL_INTERVAL = 60.0</code> 是<b>代码常量</b>(service.py:129, v3 删了配置键); 线程循环先跑一轮再等(runtime.py _loop → worker._loop, worker.py:236-250)。<b><code>hr.wake()</code> 当前无任何调用点</b>(qbmanager.py:225 注释明确「留给主循环的可选叫醒口」) —— 主循环与取数线程零握手, 60s 纯自唤醒。</li>
+  <li>配置热重载(runtime.py:160-189): channel 的 enabled/port/extension_id/token 或 shared_dir 变 → 整体重挂(先停线程与端点再启); 其余字段变 → 重建 service 与线程、端点不重绑; 总开关关 → 收掉线程与端点。</li>
+</ul>
+
+<h3>9.2 一次「波」的全生命周期(service.py 主流程)</h3>
+<p>取数线程每 60s 一轮, 对每个启用站点依次 <code>refresh_site</code>(站点之间互不阻塞); 单站点流程如下:</p>
+<ol>
+  <li><b>抢锁</b>(service.py:364): <code>hold()</code> 抢站点文件锁, timeout=0 拿不到即 <code>skipped-locked</code> 让位(不排队); 锁内完成「读 → 判 → 抓 → 写 → 释放」全程。</li>
+  <li><b>复用窗</b>(service.py:395-403): <code>fetched_at&gt;0 且 expires_at&gt;now</code> → 直接复用已有数据(<b>零请求</b>), expires_at 在健康波结束时设为 <code>now + refresh_interval</code>(默认 12h, service.py:927)。多实例同账号靠它保证同站点只被一个实例抓。</li>
+  <li><b>频控闸</b>(service.py:410-414 → ratelimit.py:97-122): <code>next_allowed_at</code> 取四者最晚 —— ①上次请求 + 抖动间隔(90s × (1+0~25%) = <b>90~112.5s</b>, 抖动只向上) ②Retry-After 时刻 ③日额耗尽则次日零点 ④时间窗起点。未到 → <code>waiting</code>(INFO 节流)。</li>
+  <li><b>对象集现算</b>(service.py:1079-1117): 本地种子锚点(主循环 store 快照只读交接, qbmanager.py:716-738)中 —— 已有放行记录且未漂移的跳过; 绑定了终态档(B/C/D)条目的跳过; 做种时长 ≥ <b>3×</b> 要求时长的跳过(超额线, 常量 SEED_EXEMPT_RATIO, service.py:100); 锚点漂移(本机重下/删种重加/进度回退, 判据 resolve.py:61-73)则<b>作废旧放行回炉</b>。剩下 = 覆盖对象集(未对账 ∪ 考察中)。</li>
+  <li><b>A/B/C 轮流翻页</b>(service.py:501-617): 三档(考察中 A / 已达标 B / 未达标 C; <b>D 档不抓</b> —— model.py:34 注释「命中 D 与未列出同为放行, D 档没有增量信息」, FETCH_LANES 只含 A/B/C, 两 adapter 也只传 FETCH_LANES, adapters/__init__.py:30-48)每轮各推一页、每页都过预算:
+    <ul>
+      <li><code>budget.take()</code>(service.py:235-249): 先按第 3 步的四闸等(锁内睡, 单次上限 300s / 本波累计 900s, 超限放弃剩余请求下波继续), <b>通过即先扣日额再发请求</b>。</li>
+      <li>发任务给扩展(queue.put → wait ≤ request_timeout 180s): URL 先过白名单; 扩展超时/被叫停/配额/登录页/Challenge 的分流见第 10 章。</li>
+      <li>页面有效才计进度(表头缺失或必填字段缺失率 &gt;0 → 该档结构性截断 _LaneAbort; 排序违反 → 强制早停; service.py:562-573)。</li>
+      <li>每页解析完 → 行处理(<b>命中即定论</b>: infohash 与本地对上按档位落身份、撤销既有放行; 无身份行进入下载队列 —— A 档行无条件下载, B/C 行需宽泛名称粗配 ≥12 连续重合段才下, service.py:729-763) → 下载回填(每 tid 永不重下; 3 次失败冷却 1h; 下载也过同一预算; service.py:777-852) → <b>增量落盘</b>(每页 + 每下载各 commit 一次, Ctrl+C 只丢当前请求)。</li>
+    </ul></li>
+  <li><b>每档停翻三条件</b>(service.py:665-701, 任一成立该档退出轮转): ①最深已见行早于「最老未定论对象完成时间 − 1D 余量」(位置覆盖) ②页尾跨页连续 ≥5 行剩余考察时间为 0(到期段强信号, 判全深度) ③未对账对象全部与已见行对上且无待回填(本地全集)。翻到末页(下一页链接不存在且页脚脚本 maxpage 不大于当前页, parse.py:225-253)也判全深度。</li>
+  <li><b>波后收尾</b>(service.py:867-966): ①失踪观察期 —— 上波考察中、本波未重见且位置被各档覆盖的, 连续 2 波判「移出」放行; 位置没覆盖就冻结局(
+     位置判据 service.py:1233-1247) ②防伪: A 档流转守恒(上波 A 行本波留存率 &lt;0.7 → 冻结批量签发)、总行数 &lt; 基线高水位 30% → 冻结、结构完好零行 → 不签发需人工确认戳 ③批量「未列出」放行: 仅各档全部有效 + 无骤降 + (非零行或已确认)时, 对缺席证明成立(全深度或位置覆盖, service.py:1250-1271)且 added_on 不晚于该档取数时刻的对象签发 —— <b>放行永续</b> ④终态条目未重见且位置被证明 → 退役 + 落放行记录 ⑤非活跃 30 天淘汰 ⑥写波次元数据、fetched_at、复用窗。</li>
+  <li><b>发布视图</b>(worker.py:284-290 + 99-130): 用内容指纹(revision/档位规模/健康波时刻等)判断实质变化才抬版本号, 主循环读到的永远是完整一份。</li>
+</ol>
+
+<h3>9.3 判定消费链(主循环 / Web 线程, 只读现算)</h3>
+<ul>
+  <li>入口单点 <code>HrRuntime.judge</code>(runtime.py:206-226): 总开关关 → None(整站回本地字段逻辑, 零静默变更); 否则 <code>judge_record</code> 按 (v1, v2) 双 hash 走四行判定表(resolve.py:195-237), 保守合并 管束(3) &gt; 放行(2) &gt; 无证据(1)(resolve.py:281-287)。</li>
+  <li>四行表: 命中 A → <b>管束</b>(本地达标与否都管); 命中 B/C/D → <b>放行</b>(终态不可逆); 放行记录 → 放行(锚点漂移则作废落行 4); 无证据 → <code>NO_EVIDENCE</code> 交调用方本地兜底。</li>
+  <li>消费点(record.py): <code>check_hr_condition</code>(排除辅种/打标/规则 hr 条件/表达式, record.py:346-376)与 <code>check_hr_satisfied</code>(record.py:392-431); WebUI 删除安全档位 <code>safety_display</code>(resolve.py:321-354)。行 4 本地兜底 = 本地触发条件(dlratio/dlsize/下满即触发, record.py:378-390)∧(做种达标 ∨ 分享率达标), 硬编码无配置。</li>
+  <li>线程安全: 判定只读「快照字段 + 不可变视图」, 无锁无 API 无写盘(record.py:325-327); 视图由取数线程整体替换引用(worker 发布点), 读方零等待。</li>
+</ul>
+
+<h3>9.4 扩展侧(extensions/hr-fetch-proxy, 代码核实)</h3>
+<ul>
+  <li>轮询: <code>chrome.alarms</code> 每 <b>1 分钟</b>(background.js:25 POLL_MINUTES=1, :264), 逐实例拉 <code>GET /api/hr/tasks</code>(≤16 条/批, channel.py:54), 有任务才取。</li>
+  <li>取数: <code>fetch(url, {credentials:'include'})</code> —— 用浏览器真实登录态(background.js:620,765), <b>不读 cookie、不碰 passkey、不解析页面</b>(background.js:10); HTML 文本与 .torrent 字节 base64 回传 <code>POST /api/hr/result</code>。</li>
+  <li>第二道闸(扩展独立计数, site-caps.js:20-23): HR 页 <b>60/时 · 600/天</b>, .torrent <b>50/时 · 200/天</b>, 按站点域名分账、窗口键幂等(service worker 被回收也不重置); 超限<b>拒绝发请求</b>并如实回传 <code>kind='ext-quota'</code>(background.js:415) —— 后端记「让位」不计失败。</li>
+  <li>端点 401(token 配错/通道没开): 扩展记一条 warning <b>不重试</b>(background.js:551-554), 由后端通道静默告警(6h 周期)兜底提示人。</li>
+</ul>
+</div>
+
+<h2 id="s10">10 · 各种情况处置一览(代码路径实证)</h2>
+<div class="sect">
+<table>
+  <tr><th>情况</th><th>代码行为</th><th>告警</th><th>证据</th></tr>
+  <tr><td>总开关关 / 站点未接入</td><td>运行时不启动; 判定恒走既有本地字段逻辑(零静默变更闸门)</td><td>—</td><td class="src">runtime.py:94-96 · record.py:336-338</td></tr>
+  <tr><td>站点 listing=none(全站型)</td><td>不取数; judge_record 恒 None → 本地兜底</td><td>—</td><td class="src">resolve.py:257-258 · models.py:152-155</td></tr>
+  <tr><td>channel.enabled=false(没装扩展)</td><td>NullFetcher; 波次不发起请求, 读共享站点文件发视图(别人抓的)</td><td>—(状态标注「只读共享」)</td><td class="src">fetcher.py:77-87 · runtime.py:269-270</td></tr>
+  <tr><td>端口被占(多实例同 port)</td><td>启动即抛 HrChannelBindError, CLI 干净退出码 1(fail-fast 不静默)</td><td>stderr 一行</td><td class="src">server.py:121-130</td></tr>
+  <tr><td>浏览器没开 / 扩展停用 / token 错</td><td>任务无人领, 180s 等超时计一次失败(档位截断); 端点侧 last_contact 不前进</td><td>通道静默 ERROR, 6h 周期; 文案列受影响站点</td><td class="src">fetcher.py:134-139 · worker.py:341-361</td></tr>
+  <tr><td>登录态失效(命中登录页)</td><td>停整波; 不计失败不推退避(重试无意义); wave.notes 留痕</td><td>ERROR 一次(文案给动作: 去浏览器登录); 后续轮 INFO</td><td class="src">service.py:475-484 · fetcher.py:52-64</td></tr>
+  <tr><td>站点 Retry-After</td><td><b>设计</b>: 记 retry_after_until 参与下次可取时刻; <b>实际(=H1)</b>: 不落盘, ≤60s 后照常重试到日额烧尽</td><td>INFO 一次(pacing 归一)</td><td class="src">service.py:485-493(缺陷)</td></tr>
+  <tr><td>页面改版(表头/字段/排序崩塌)</td><td>该档在失效点截断(之前有效), 其它档独立继续; 命中照常, 批量签发冻结(各档必须全有效)</td><td>WARNING 按 6h 节流; 连续 3 波同档失效 → ERROR 建议走查</td><td class="src">service.py:562-616 · 1181-1184</td></tr>
+  <tr><td>清单为 0 行(结构完好)</td><td>不签发放行(防改版空表); 人工 <code>--hr-confirm-empty</code> / WebUI 按钮写一次性戳; 再现非零行自动失效</td><td>WARNING 一次 + 界面提示</td><td class="src">service.py:887-896 · report.py:167-206</td></tr>
+  <tr><td>站点换 tid 重列同种子</td><td>downloaded 层按 infohash 接管: 新行继承身份, 命中照判, 旧条目退役</td><td>—</td><td class="src">service.py:755-757 · 772-775</td></tr>
+  <tr><td>本机重下 / 删种重加</td><td>锚点漂移 → 放行作废回对象集, 重新对账</td><td>—</td><td class="src">service.py:1099-1104 · resolve.py:61-73</td></tr>
+  <tr><td>别的客户端下载(本机看不见)</td><td>放行不撤销 —— 已声明的残余风险(锚点只覆盖本实例)</td><td>—</td><td class="src">model.py:250-253</td></tr>
+  <tr><td>多实例同时跑</td><td>站点锁互斥(timeout=0 让位); 复用窗 12h 复用; 锁不生效(revision 回退/心跳被盖)则该实例退化只读防双写</td><td>退化时 ERROR 一次</td><td class="src">store.py:77-94 · 215-233</td></tr>
+  <tr><td>站点文件读坏</td><td>坏文件先挪 .bad-ts 留证 → 试 .bak 恢复 → 都不行按空数据保守回落(/schema 过新例外 = M2 缺陷: 会覆写)</td><td>WARNING 一次(同文本不重报)</td><td class="src">store.py:252-283</td></tr>
+  <tr><td>进程被杀 / Ctrl+C</td><td>每页/每下载已增量落盘; 日额窗口键幂等(重启不重置); last_fetch_ts 已持久(间隔不重置)</td><td>—</td><td class="src">service.py:580-584 · ratelimit.py:51-73</td></tr>
+  <tr><td>站点锁被正常实例长持(波内分钟级)</td><td>其它实例 skipped-locked 等下一轮; 关停方 queue.cancel_all + 可中断睡眠, 进程退出不等 180s</td><td>—</td><td class="src">service.py:370-372 · runtime.py:143-158</td></tr>
+  <tr><td>qB 里删了种子</td><td>记录回收; 锚点消失(对象集少一个); 放行记录永续保留(账号级, 不随实例走)</td><td>—</td><td class="src">qbmanager.py:716-738</td></tr>
+</table>
+</div>
+
+<h2 id="s11">11 · 配置字段逐个释义(以 models.py + validate 代码为准)</h2>
+<div class="sect">
+<p>v3 实际可配置键共 <b>14 个</b>(全局 6 + channel 5 + sites 条目 3; 校验器 KNOWN_HR_CHECK_KEYS/KNOWN_HR_CHANNEL_KEYS/KNOWN_HR_SITE_KEYS 三层未知键拦截, sections.py:162/188/319)。标注 ⊘ 的字段由代码派生,<b>任何配置位置不再接受</b>。</p>
+<h3>11.1 hr_check 全局段</h3>
+<table>
+  <tr><th>键</th><th>默认</th><th>校验范围</th><th>代码语义(哪里生效)</th></tr>
+  <tr><td>enabled</td><td>false</td><td>bool</td><td>总开关; false = 运行时不建、判定全回本地字段逻辑(runtime.py:94, record.py:337)</td></tr>
+  <tr><td>min_interval</td><td>90(S)</td><td>5s–86400s(下限 5s = 「根本限不住」防线, sections.py:165-167)</td><td>相邻两次站点请求最小间隔, 页面+下载统一; 实际间隔 = 值 ×(1+0~25%) 只向上抖动(ratelimit.py:76-79)</td></tr>
+  <tr><td>max_requests_per_day</td><td>240</td><td>1–100000 整数</td><td>站点级日额(页面+下载合计), 本地时区零点重置; 窗口键幂等 —— 重启不重置、重放不重复扣(ratelimit.py:51-73)</td></tr>
+  <tr><td>max_pages_per_wave</td><td>30</td><td>1–100000 整数</td><td>单波三档合计页数上限(安全阀防翻页失控); 到顶该档按截断收尾, 下波从头再翻(无断点续翻)(service.py:443, 620-630)</td></tr>
+  <tr><td>allow_window</td><td>""(全天)</td><td>"HH:MM-HH:MM" 可跨午夜</td><td><b>仅该时段</b>取数(与 notify.quiet_hours 语义相反, 校验文案明示); 不在窗内等到窗起点(sections.py:171-180, ratelimit.py:115-116)</td></tr>
+  <tr><td>shared_dir</td><td>""(落 &lt;data_dir&gt;/hr/)</td><td>字符串</td><td>多实例共享站点文件与锁的目录; 未配且多实例 → 各实例账本独立、访问翻倍(INFO 引导, runtime.py:324-335); 云同步盘不可用(锁/原子替换不可靠)</td></tr>
+</table>
+<h3>11.2 hr_check.channel(本地取数通道)</h3>
+<table>
+  <tr><th>键</th><th>默认</th><th>校验范围</th><th>代码语义</th></tr>
+  <tr><td>enabled</td><td>false</td><td>bool</td><td>本实例是否具备抓取能力; false = NullFetcher 只读共享(runtime.py:99-101, 286-288)</td></tr>
+  <tr><td>port</td><td>8788</td><td>1–65535</td><td>端点端口, 只听 127.0.0.1; 同机多实例必须各不同(占用即启动失败, server.py:121-130)</td></tr>
+  <tr><td>token</td><td>""(自动生成)</td><td>字符串</td><td>端点鉴权密钥; 留空 = 首启随机 256bit 落 hr.token(0600), 内容永不进日志(channel.py:90-108); 常数时间比较(server.py:270-272)</td></tr>
+  <tr><td>extension_id</td><td>""(放行任意扩展)</td><td>32 位 a~p(填了才校验)</td><td>CORS 第二道防线钉死单一扩展; 留空每次启动 WARNING 提醒(runtime.py:126-141, sections.py:201-206)</td></tr>
+  <tr><td>request_timeout</td><td>180(S)</td><td>5s–3600s</td><td>取数线程等扩展回传上限; 必须 —— 否则扩展中途被杀会让持锁线程永久挂住; 超时计一次失败(档位截断)</td></tr>
+</table>
+<h3>11.3 hr_check.sites.&lt;档案 id&gt;(站点接入)</h3>
+<table>
+  <tr><th>键</th><th>默认</th><th>校验范围</th><th>代码语义</th></tr>
+  <tr><td>enabled</td><td>false</td><td>bool</td><td>启用即管 —— 判定语义硬编码(无 mode 分叉/无 unknown_policy 撤退路径)</td></tr>
+  <tr><td>tracker</td><td>""(默认映射)</td><td>trackers 下的条目名</td><td>显式绑定站点配置; 留空按档案已知 announce 域查表; 0 命中/歧义/重复绑定/缺 hr 段都在配置期报错(sections.py:236-307)</td></tr>
+  <tr><td>refresh_interval</td><td>43200(12h)</td><td>60s–30 天</td><td>对账波周期 = 数据复用窗; 健康波后 12h 内所有轮询与其它实例直接复用(零请求)(service.py:927, models.py:142)</td></tr>
+  <tr><td>⊘ adapter</td><td>nexusphp</td><td>—</td><td>由档案填充; 登记表 adapters/__init__.py:28-49(nexusphp / carpt), 未登记 adapter 波次报 error 跳过</td></tr>
+  <tr><td>⊘ hr_page_url</td><td>—</td><td>—</td><td>由档案按 web 域派生; 白名单(SSRF)与任务 URL 的唯一来源(channel.py:130-173)</td></tr>
+  <tr><td>⊘ download_path</td><td>/download.php?id={id}</td><td>—</td><td>由档案填充, {id} 占位; 已核对内置档案不含 passkey(site_presets.py:58,68)</td></tr>
+  <tr><td>⊘ page_param</td><td>page</td><td>—</td><td>翻页参数名</td></tr>
+  <tr><td>⊘ listing</td><td>list</td><td>—</td><td>清单型(取数) / none 全站型(不取数恒行 4)</td></tr>
+  <tr><td>⊘ required_seeding_time</td><td>0.0</td><td>—</td><td>= 绑定站点 hr 规则的 required+extra(秒, loaders.py:266-268); 超额线 3× 的判据(service.py:1110)</td></tr>
+</table>
+<h3>11.4 判定侧关联段 trackers.&lt;站点&gt;.hr(本地兜底与排除用)</h3>
+<table>
+  <tr><th>键</th><th>作用点</th></tr>
+  <tr><td>required_seeding_time / extra_seeding_time / required_share_ratio</td><td>行 4 本地兜底的「达标」判据: 做种 ≥ required+extra 或 分享率达标(record.py:416-419, 428-430); 同时经派生决定超额线</td></tr>
+  <tr><td>condition(dlratio/dlsize)</td><td>本地「是否触发 HR」条件(未接入站点既有口径, 原样保留)(record.py:378-390)</td></tr>
+  <tr><td>exclude_tags / exclude_categories</td><td>命中即整站 HR 体系排除(压过站点侧一切管束), 三个判定入口顶部短路(record.py:296-316)</td></tr>
+</table>
+<h3>11.5 代码常量(v3 从配置键降级, 「程序能定的绝不配置」)</h3>
+<p>轮询 60s(POLL_INTERVAL) · 单次等间隔上限 300s / 每波累计 900s(PROD_*_WAIT_MAX) · 走查单次上限 600s(DIAGNOSTIC_MAX_WAIT) · 覆盖余量 1D(COVERAGE_SLACK) · 到期段强信号 5 行(ZERO_REMAIN_STREAK) · 超额线 3×(SEED_EXEMPT_RATIO) · 失踪观察期 2 波(MISSING_GRACE_WAVES) · 流转守恒 0.7(LANE_RETENTION_MIN) · 骤降线 0.30(PLUNGE_RATIO) · 粗配 K=12(FUZZY_NAME_K) · 索引保留 30 天(INDEX_RETENTION) · 下载重试 3 次/冷却 1h(MAX_DOWNLOAD_RETRIES/DL_RETRY_COOLDOWN) · 通道静默告警 6h(CHANNEL_SILENCE_WARN) · 连续失效升级 3 波(LANE_FAIL_ALERT_STREAK) · 任务 TTL 240s / 批上限 16 / 体积上限 12MB(channel.py) —— 全部 service.py:88-135 与 channel.py。其中 <code>ALL_FAILED_REUSE_WINDOW=120.0</code>(service.py:135)<b>定义后无任何引用, 是死常量</b>(并入 I1)。</p>
+</div>
+
+<h2 id="s12">12 · 默认口径下的具体运行画像(全部按默认值推演)</h2>
+<div class="sect">
+<h3>12.1 默认(不动配置): 绝对零行为</h3>
+<p><code>hr_check.enabled</code> 缺省 false → 运行时不建、无线程、无端点、无文件读写; 判定全走既有本地字段逻辑。channel.enabled 也默认 false —— 即使总开关开了, 没显式开 channel 的实例也<b>只读共享数据、零请求</b>。</p>
+<h3>12.2 启用一个站点后(其余全部默认)</h3>
+<ol>
+  <li><b>t=0 启动</b>: 端点起在 <code>127.0.0.1:8788</code>(若 channel.enabled); 取数线程立即跑第一轮(worker._loop 先 run_once 再等)。扩展侧每 1 分钟来拉一次任务。</li>
+  <li><b>首波</b>(站点文件为空, 无复用): 对象集 ≈ 该站全部本地种子(超额 ≥3× 的除外) → A/B/C 各从第 1 页轮转。第 1 个请求立即发出(last_fetch_ts=0 无间隔门槛); 此后每个请求(页或下载)间隔 <b>90~112.5s</b>。设首波需要 P 页 + D 个下载, 波耗时 ≈ (P+D−1)×100s; 但<b>锁内累计等待 900s 封顶</b> —— 超出部分放弃、下波从第 1 页重来(对象集已变浅), 大账号的首次全量对账天然分摊到多波。单波页数上限 30。</li>
+  <li><b>请求记账</b>: 每个请求先扣日额(240)再发; 页面与 .torrent 同一本账。一小时硬顶 = 3600/90≈40 个、3600/112.5≈32 个(抖动随机)。扩展侧独立余量: 页 60/时·600/天, 种 50/时·200/天 —— 按设计「≥ 后端 ×1.5」只在后端失效时拦截。</li>
+  <li><b>首波结束</b>: 健康波(任一档有效)→ <code>expires_at = now+12h</code> → 之后 12h 内取数线程的每轮(60s 一次)与其它实例全部<b>复用, 零请求</b>。</li>
+  <li><b>稳态</b>(对象集只剩增量): 每 12h 一波; 未对账/新考察中对象很少, 通常每档 1 页即触发停翻(①完成时间覆盖或③本地全集), 典型 <b>1~3 页 + 0~几个下载 ≈ 2~6 请求/波</b> → <b>约 4~12 请求/天/站</b>, 距 240 日额余量极大。</li>
+  <li><b>极端上界</b>: 页数失控被 30 页/波 + 240/天双闸兜住; 即使处于失败重试循环(第 5 章 H1/M1 场景), 实际站点访问也被日额压在 <b>≤240/天/站</b>(这就是两个缺陷的完整爆炸半径 —— 有节流下限但无节流是设计初衷)。</li>
+</ol>
+<h3>12.3 判定侧默认行为</h3>
+<p>站点接入但尚未抓到数据时(首波完成前), 所有种子落行 4 → 本地兜底(达标放行/未达标管束, 硬编码): 本地触发条件(dlratio/dlsize/下满)∧(做种 ≥ required+extra 或 分享率达标)。首批数据落盘后切换为站点侧权威判定; 放行一经签发永续, 不因数据变旧失效(「证据无时效, 只有真伪」), 只有锚点漂移或重新命中清单才作废。</p>
+<h3>12.4 多实例默认分工</h3>
+<p>同一账号多实例: 有浏览器有扩展的实例抓数(各用不同 port), 其它实例(channel.enabled=false)只读共享目录(shared_dir 需显式配置, 未配则各抓各的、访问翻倍 —— 启动 INFO 引导)。同站点由「文件锁 + 12h 复用窗」保证只被访问一次; 锁在该目录不生效时自检退化只读, 宁可单实例化也不双写。</p>
+</div>
+
+<h2 id="s13">13 · 设计裁决追记(26-09-29 用户定稿, 05:06)</h2>
+<div class="sect">
+<p>设计稿走读(对照 plans/26-09-28-1932 修订日志 20:27–22:55)提出的三处「设计-代码差异」, 经用户逐条裁决如下 —— <b>本节与第 4/9 章冲突处, 以本节为准</b>:</p>
+<h3>13.1 轻量波(空对象集停翻语义): 已否决, 撤销「未实现」结论</h3>
+<p>计划 §4.2「对象集为空 ⇒ 条件①视为已满足, 每档翻 1 页轻量波」的文本<b>已被用户否决</b>, 不再是承诺口径。现行代码行为(空对象集仍按三停翻条件/末页/单波页数上限扫描)即为 accepted behavior —— 走读中实证的「空对象集时 A 档翻满 2 页」与 <code>test_light_wave_when_no_objects</code> 的名不符实, <b>降级为观察项</b>(测试名义与实际断言路径不符值得择机修名, 行为本身无需改)。</p>
+<h3>13.2 「remain==0 而档位为 A」矛盾检测: 无相关口径, 撤销「未实现」结论</h3>
+<p>计划 §4.2 条件②说明中「误判保险三件套」的第三件<b>不是已拍板口径</b>(用户澄清无此承诺), 不构成实现缺口。现行②实现(A 档 remain==0 行计入到期段信号并判 full_depth)为准; 该行为事实留档备查, 不再列为缺口。</p>
+<h3>13.3 流转守恒是骤降保护的升级版 —— <span class="sev h">裁决: 移除骤降保护</span>(已实施, 见 §13.5)</h3>
+<p><b>裁决理由(用户口径)</b>: A 档行只会流转到 B/C/D(终态)或移出清单 —— 管束正证据的唯一来源是 A 档, 流转守恒校验直接盯它的留存率, <b>即使站点清除旧记录(总量骤降)也不产生漏 HR 面</b>; 骤降保护不但没有增益, 反而有<b>误触面</b>: 站点清理旧 B/C 记录时总量跌破基线 30% ⇒ 批量「未列出」签发被冻结。</p>
+<p><b>代码事实加强该裁决</b>(走读补充): 基线是高水位且<b>永不回落</b>(service.py:885 <code>baseline = max(data.wave.baseline_rows, total_rows)</code>, 无任何衰减/重置机制) —— 一次合法清账后, 冻结将<b>永久持续</b>(<code>--hr-confirm-empty</code> 只救零行场景, 救不了部分清账); 而被清除的 B/C 记录本就是终态, 其条目经终态冻结路径(<code>_freeze_terminal</code>)正常放行, 不依赖骤降闸。</p>
+<p><b>防伪收敛为两道</b>: 流转守恒(0.7, 盯 A 档正证据) + 零行人工确认戳 —— 第 4 章「防伪三件套」、第 9.2/11 章相关表述据此修订。</p>
+<p><b>实施触点(已全部落地, 见 §13.5):</b> ①service.py: <code>PLUNGE_RATIO</code>/<code>plunge_suspect()</code>/<code>_finish_wave</code> 的 plunge 计算与 <code>releases_enabled</code> 条件、告警; ②model.py: <code>HrWaveMeta.plunge/baseline_rows</code> 字段删除(hr_site 迁移不再产出, 读侧对旧文件键容忍、无需 bump schema); ③status.py: <code>_plunge_text</code> 与展示字段; ④events.py: <code>plunge_suspected</code>(其双 return 死代码随之消掉); ⑤<code>--hr-status</code> 与 WebUI 的骤降展示行; ⑥test_hr_service 骤降用例删除、light-wave 用例按裁决行为重写。计划 22:15/22:22/22:48 中骤降相关条目由本裁决取代(计划文档不改, 以本节为准)。</p>
+
+<h3>13.4 观察期设计依据确认: 「缺席 ≠ 没证据」, 行 4 特例不可塌缩(26-09-29 用户确认)</h3>
+<p>问答中确认了失踪观察期的完整设计依据, <b>用户认可并要求存档</b> —— 它回答「缺席结论进观察期, 不就是没证据吗」的疑问: 观察期的本质恰恰是<b>拒绝在单次缺席上得出结论</b>, 不是「得出缺席结论再进观察期」。</p>
+<ul>
+  <li><b>两种证据状态不可混同</b>: 行 4(没证据 → 本地兜底)适用于<b>站点没表过态</b>的种子; 失踪 A 行的最后已知结论是站点权威的「考察中」, 本波未见有四种解释 —— 移出 / 转 D 免罪(放行正确)与扫描漏看 / 吞行(放行即漏 HR), 行 4 塌缩无法区分, 而区分失败的方向是灾难性的。</li>
+  <li><b>行 4 兜底的具体漏洞</b>: 行 4 含「达标放行」。若缺席即落行 4: 种子考察中 + 本地做种早已达标(越努力的用户越先中招)→ 一次扫漏 → 放行 → 站点实际仍在考 → H&R。20:58「本地达标 × 网站考察中 → 管束」必须由观察期载体执行 —— 条目保持 active 留在 lane_a, 判定恒走行 1, 根本到不了行 4。</li>
+  <li><b>出口参数的取舍</b>: 缺席即放行 = 单次抖动错放(灾难方向); 缺席即永管 = 真移出后永远管着(反向浪费 + 22:38 死锁)。<b>2 波 + 位置覆盖</b>(<code>MISSING_GRACE_WAVES=2</code> + <code>_position_covered</code>)= 两次独立采样在「已证明扫过其位置」的前提下都未见, 「站点移出」才成为主导解释 —— 单次抖动被过滤。</li>
+  <li><b>与批量签发的不对称</b>(同源原则的两个落点): 未对账对象无站点旧结论可持, 一次可信扫描(守恒闸担保扫描完整性)即可签; 失踪 A 行持站点新鲜权威结论, 缺席需加倍确认。守恒的波级冻结只作用于前者(批量缺席签发, 22:38 解耦), 不作用于观察期。两个方向都是「宁多管不漏」。</li>
+  <li><b>成本为零</b>: 纯状态机(<code>missing_streak</code> 计数 + 位置判定, 重见清零), 不发任何请求。</li>
+</ul>
+<p><b>一句话口径</b>: 「没看到 ≠ 没证据」—— 行 4 只属于站点没表过态的种子; 站点表过态(考察中)的种子, 缺席需<b>双波 + 位置证明</b>才能转放行。</p>
+
+<h3>13.5 实施记录(26-09-29 05:50, 用户「开工」指令)</h3>
+<p>§13.3 裁决与第 5 章 H1/M1/M2 缺陷已全部实施(源码 7 文件 + 测试 4 文件 + 文档 2 件):</p>
+<ul>
+  <li><b>骤降保护移除</b>: service(<code>PLUNGE_RATIO</code>/<code>plunge_suspect</code>/<code>releases_enabled</code> 条件/告警)、model(<code>HrWaveMeta.plunge/baseline_rows</code> 删除; <code>hr_site</code> 迁移不再产出, 旧文件多余键读侧容忍 —— 非破坏性变更, 不 bump schema)、status/events/report/WebUI 模板/configuration.md 全链清理; 防伪收敛为「守恒 + 零行戳」两道。</li>
+  <li><b>H1</b>: <code>_do_wave</code> 的 Retry-After 分支补 <code>budget.mark()</code> + <code>session.commit</code>(指令跨波生效); <code>_run_downloads</code> 对带 retry_after 的失败上抛波级, 不再计成种子失败。</li>
+  <li><b>M1</b>: <code>HrLoginExpired</code> 处理器补 <code>budget.mark()</code>(经 <code>_finish_wave</code> 落盘), 登录失效期重试节奏受 min_interval 约束。</li>
+  <li><b>M2</b>: <code>HrLockSession.version_mismatch</code>(schema 比程序新)时 <code>refresh_site</code> 跳过取数与写盘, 空壳数据不再覆写新版文件。</li>
+  <li><b>测试</b>: FakeFetcher 扩展 <code>login_at/retry_after_at/retry_bytes_at</code>; 骤降用例删除; <code>test_light_wave_when_no_objects</code> 重写为 <code>test_no_objects_sweeps_to_last_page</code>(钉 §13.1 裁决行为 —— 旧用例名不符实); 新增 4 回归(Retry-After 跨波持久化 / 下载路径上抛 / 登录 mark / schema 跳过); no_fuse 用例的「已删字段」清单补 plunge/baseline_rows。<b>test.full: 1739 passed + 3 skipped, 90%</b>。基线切片 26-09-29-0550。</li>
+  <li><b>遗留</b>: 真机走查(修 H1 后顺带验证 Retry-After 行为)仍开放; 代码未提交(等显式指令)。</li>
+</ul>
+</div>
+
+</main>
+</div>
+</div>
+</body>
+</html>

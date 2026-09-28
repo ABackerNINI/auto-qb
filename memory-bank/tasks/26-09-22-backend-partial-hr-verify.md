@@ -216,3 +216,17 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
   check_hr_condition 站点侧分支均已返回, 语义等价)。test_torrents.py 补
   test_record_hr_no_evidence_row4_no_recursion(触发/未达标/达标 + 纯辅种不触发);
   test.quick 1736 passed + 3 skipped。
+
+- **2026-09-29 (复审落地: 骤降保护移除 + 复审缺陷 H1/M1/M2 修复)** — 全面复审
+  (reports/26-09-29-0404)后按用户裁决实施四项: ①**骤降保护移除**(裁决: 流转守恒是骤降的升级版,
+  A 只流向 B/C/D, 骤降不构成漏 HR 面; 基线高水位永不回落会在站点合法清账后永久冻结批量签发) ——
+  service/model(`HrWaveMeta.plunge/baseline_rows` 删除, hr_site 迁移不再产出, 读侧对旧键容忍不 bump
+  schema)/status/events/report/WebUI/configuration.md 全链清理, 防伪收敛为「守恒 + 零行戳」两道;
+  ②**H1**: Retry-After 指令落盘(`_do_wave` 分支 commit + mark; .torrent 下载路径带 retry_after
+  上抛波级, 不再计成种子失败) —— 修复前 hold() 每波重读盘导致指令跨波即丢, 60s 节奏重试到日额烧尽;
+  ③**M1**: 登录失效路径 `budget.mark()` 前进间隔基准(修复前每 poll 立即重发烧日额); ④**M2**: 站点
+  文件 schema 比程序新(`HrLockSession.version_mismatch`)时跳过取数与写盘(修复前空壳数据照常跑波
+  覆写新版文件)。测试: FakeFetcher 扩展 login_at/retry_after_at/retry_bytes_at; 骤降用例删除;
+  test_light_wave_when_no_objects 重写为 test_no_objects_sweeps_to_last_page(钉裁决行为 —— 旧用例
+  名不符实, 断言靠 fixture 缺页报错凑成); 新增 4 回归。**test.full 1739 passed + 3 skipped(90%)**,
+  基线切片 26-09-29-0550。**未提交**(等显式指令); 真机走查开放。

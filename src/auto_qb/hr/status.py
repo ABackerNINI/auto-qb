@@ -121,7 +121,6 @@ class SiteStatus:
     zero_rows: bool = False
     empty_confirmed: bool = False
     retention_text: str = ""
-    plunge_text: str = ""
     notes: str = ""
     writer_instance: str = ""
     writer_heartbeat: float = 0.0
@@ -222,17 +221,6 @@ def _retention_text(data: HrSiteData) -> str:
     return f"上波 A 档 {len(meta.prev_a_tids)} 行, 本波留存率 {meta.retention_ratio:.0%}, {tail}"
 
 
-def _plunge_text(data: HrSiteData) -> str:
-    """总行数骤降观测(§5.3)"""
-    meta = data.wave
-    if not meta.baseline_rows:
-        return "尚无基线(首波)"
-    total = sum(st.rows for st in meta.lanes.values() if st.status == LANE_OK)
-    if meta.plunge:
-        return f"⚠ 本波合计 {total} vs 基线 {meta.baseline_rows} ⇒ 骤降可疑(批量未列出签发已冻结)"
-    return f"本波合计 {total} vs 基线 {meta.baseline_rows}, 正常"
-
-
 def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: float, read_error: str = "") -> SiteStatus:
     """把「站点文件 + 视图」折成一份只读快照(数值口径的单点)"""
     conf = service.site_confs[site]
@@ -284,7 +272,6 @@ def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: flo
         zero_rows=data.wave.zero_rows,
         empty_confirmed=data.empty_confirmed_at > 0,
         retention_text=_retention_text(data),
-        plunge_text=_plunge_text(data),
         notes=data.wave.notes,
         writer_instance=data.writer_instance,
         writer_heartbeat=data.writer_heartbeat,

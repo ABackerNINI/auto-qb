@@ -37,4 +37,4 @@ test.quick 1736 passed + 3 skipped。
   [基线切片 26-09-29-0301](../testing/baselines/26-09-29-0301-hr-v3-wave-model-rebuild.md) ·
   [扩展说明](../../extensions/hr-fetch-proxy/README.md)
 
-**Refs:** memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html
+**Refs:** memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html, memory-bank/reports/26-09-29-0404-report-hr-verify-v3-audit.html

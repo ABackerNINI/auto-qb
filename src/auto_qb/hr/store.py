@@ -258,6 +258,9 @@ class HrLockSession:
     def __init__(self, store: HrSiteStore) -> None:
         self._store = store
         self.data, self.read_error, recoverable = store._read_full()
+        #: schema 比程序新(版本回退场景): 非坏文件、不可恢复, data 是空壳 —— 若照常跑波并写盘,
+        #: 空数据会覆盖新版文件(索引/放行/已取记录全丢)。调用方必须据此跳过取数与写盘(M2)。
+        self.version_mismatch = bool(self.read_error) and not recoverable
         #: 从 `.bak` 恢复过 ⇒ 本次写盘**不得**再复制 `.bak`(否则好备份被坏内容盖掉)
         self.recovered_from_backup = False
         #: 读坏是否由本会话报过 WARNING(供调用方决定还要不要另报一次)

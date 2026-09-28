@@ -107,9 +107,6 @@ MISSING_GRACE_WAVES = 2
 #: 不达标 ⇒ 批量「未列出」签发冻结(防 A 段定向吞行被当「未列出」整批误放行)。
 LANE_RETENTION_MIN = 0.7
 
-#: 总行数骤降线(§5.3, 粗保险): 本波合计 < 可信基线 × 该值 ⇒ 批量「未列出」签发冻结。
-PLUNGE_RATIO = 0.30
-
 #: B/C/D 终态行宽泛名称粗配阈值(§4.5 D1 拍板): 本地名称与行名称存在足够长的连续重合段
 #: 即判疑似本地(宁可误配不漏配); 粗配只是下载触发器, 定论一律 infohash 精配。
 FUZZY_NAME_K = 12
@@ -133,16 +130,6 @@ LANE_FAIL_ALERT_STREAK = 3
 
 #: 全档失效时的数据复用短窗(盖过下一轮 —— 与 v2 同款理由)
 ALL_FAILED_REUSE_WINDOW = 120.0
-
-
-def plunge_suspect(total: int, baseline: int) -> bool:
-    """总行数骤降判据(§5.3): 合计低于基线 30% ⇒ 可疑(批量「未列出」签发冻结)。
-
-    baseline <= 0 = 尚无基线(首波)⇒ 不判。
-    """
-    if baseline <= 0:
-        return False
-    return total < baseline * PLUNGE_RATIO
 
 
 def fuzzy_name_match(local_name: str, row_name: str, k: int = FUZZY_NAME_K) -> bool:
@@ -366,6 +353,13 @@ class HrRefreshService:
                 if session.read_error:
                     result.reason = session.read_error
                     result.alerted = session.read_alerted
+                if session.version_mismatch:
+                    # 站点文件 schema 比程序新(版本回退): 读侧「不符即拒」, 写侧更不能拿空壳数据
+                    # 覆盖新版文件 —— 跳过取数与写盘, 等程序升级(用户升级后文件版本重新匹配)。
+                    result.action = ACTION_ERROR
+                    result.reason = (result.reason + "; " if result.reason else "") + \
+                        "站点文件 schema 比程序新, 已跳过取数与写盘(请先升级程序)"
+                    return result
                 self._refresh_locked(site, site_conf, adapter, session, result, anchors or {})
         except HrLockBusy as e:
             result.action = ACTION_LOCKED
@@ -480,6 +474,9 @@ class HrRefreshService:
             result.action = ACTION_ERROR
             result.reason = str(e)
             result.alerted = True
+            # 扩展回传「登录页」时请求确实发出去了: 间隔基准必须前进, 否则登录态恢复前
+            # 每轮 poll(60s)都立即重发, 白烧日额还持续刷站点(这条路径不经过页面级 mark)。
+            budget.mark()
             self._finish_wave(site, site_conf, data, session, result, wave, lane_states, unmatched)
             return
         except HrFetchError as e:
@@ -488,6 +485,10 @@ class HrRefreshService:
             retry_after = float(getattr(e, "retry_after", 0.0) or 0.0)
             if retry_after > 0:
                 data.retry_after_until = self._now() + min(retry_after, 24 * 3600.0)
+                # 指令必须落盘: hold() 每波从盘重读, 不 commit 的话下一波读到的 retry_after_until
+                # 是 0, 等于无视站点指令继续打站点; mark() 让间隔基准同样前进(失败的请求也是真实请求)。
+                budget.mark()
+                self._persist_step(session)
                 result.action = ACTION_WAITING
                 result.reason = f"站点要求等待(Retry-After {retry_after:.0f}s): {e}"
                 return
@@ -819,6 +820,11 @@ class HrRefreshService:
                 # 该去登录」伪装成「种子坏了」。原样上抛, 由上层折成备注。
                 raise
             except HrFetchError as e:
+                retry_after = float(getattr(e, "retry_after", 0.0) or 0.0)
+                if retry_after > 0:
+                    # 站点明确指令等待: 与页面同口径上抛波级落 retry_after_until 让位 ——
+                    # 计成「种子失败」会把站点限速伪装成种子坏了, 且指令不会落盘。
+                    raise
                 self._note_dl_fail(data, tid)
                 result.torrents_failed += 1
                 self._persist_step(session)
@@ -879,19 +885,18 @@ class HrRefreshService:
         self._merge_seen(data, wave)
         # ---- 观察期推进(§3.4): 没看到不终结「考察中」; 出口要自身位置被覆盖 ----
         exits = self._advance_observation(data, lane_states, wave)
-        # ---- 证据防伪(§5.3): 流转守恒 + 总量骤降 + 零行戳 ----
+        # ---- 证据防伪(§5.3): 流转守恒 + 零行戳。骤降保护已按 26-09-29 裁决移除: A 只流向
+        #      B/C/D, 守恒直接盯 A 档正证据, 总量变化不构成漏 HR 面; 而基线是高水位不回落,
+        #      站点合法清账后会把批量签发永久冻死(误触面)。 ----
         total_rows = sum(st.rows for st in lane_states.values())
         retention_ratio, retention_ok = self._retention_check(data, lane_states, wave)
-        baseline = max(data.wave.baseline_rows, total_rows)
-        plunge = plunge_suspect(total_rows, data.wave.baseline_rows)
         zero_rows = total_rows == 0
         if total_rows > 0:
             data.empty_confirmed_at = 0.0  # 清单再现任何非零行 → 确认戳自动失效(§5.3)
         confirmed_empty = zero_rows and data.empty_confirmed_at > 0
         releases_enabled = (
             all(st.ok for st in lane_states.values()) and
-            all(st.pages > 0 or st.full_depth for st in lane_states.values()) and not plunge and
-            (not zero_rows or confirmed_empty)
+            all(st.pages > 0 or st.full_depth for st in lane_states.values()) and (not zero_rows or confirmed_empty)
         )
         # ---- 放行签发(§5.3): 批量「未列出」只走防伪全通的波; 观察期出口与批量签发解耦 ----
         signed = 0
@@ -916,8 +921,6 @@ class HrRefreshService:
                 tid: data.infohash_of(tid)
                 for tid, row in wave.seen.items() if row.lane == LANE_SCOPE
             },
-            baseline_rows=baseline,
-            plunge=plunge,
             notes="; ".join(wave.notes),
         )
         data.fetched_at = now
@@ -930,9 +933,6 @@ class HrRefreshService:
         result.releases_signed = signed + exits
         result.lane_texts = _lanes_summary_from(lane_states)
         notes = list(wave.notes)
-        if plunge:
-            notes.append(f"总行数骤降(本波 {total_rows} vs 基线 {data.wave.baseline_rows}), 批量未列出签发冻结")
-            self._warn_parse(site, events.plunge_suspected(site, total_rows, data.wave.baseline_rows))
         if zero_rows and not confirmed_empty:
             notes.append("结构完好但清单为 0: 不签发放行(需 --hr-confirm-empty 人工对账)")
             if not wave.parse_problem and not wave.had_error:
@@ -950,7 +950,7 @@ class HrRefreshService:
         )
         # 本波产生处已打过 WARNING(页面失败/改版/防伪/零行) ⇒ worker 状态层只记 INFO 不重复
         result.alerted = bool(
-            wave.had_error or wave.parse_problem or plunge or not retention_ok or (zero_rows and not confirmed_empty)
+            wave.had_error or wave.parse_problem or not retention_ok or (zero_rows and not confirmed_empty)
         )
         result.reason = "; ".join(notes)
         result.snapshot = data

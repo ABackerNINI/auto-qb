@@ -36,7 +36,9 @@ CAP_POLICY: dict[str, int] = {
     # 仍是最简形态, 再涨一档。
     # 12,200 -> 12,400 (2026-09-29): tracker-focus-layer 档案入册(webui-sites-page-search 专题
     # 第二件)后实测 12,300, 仍是最简形态, 涨一档并留余量。
-    "index-auto": 12400,
+    # 12,400 -> 12,600 (2026-09-29): HR 复审报告+基线入册后实测 12,473(ship 闸门红); 渲染口径
+    # 已榨干(头部/单件折行/去计数), 按坑档出口② 涨一档并留余量。
+    "index-auto": 12600,
     "pitfall": 6000,  # pitfalls/* 条目集 —— 读法是「扫描找一条」, 比通读更贵
     "evergreen": 10000,  # 常青主题 (叙述型) —— ≈4k token, 一次通读可接受
     "reference": 12000,  # 参考速查 (config-reference / rule-system) —— 查表不是通读

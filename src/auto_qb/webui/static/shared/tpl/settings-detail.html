@@ -221,7 +221,7 @@
                             已取种子 {{ s.downloaded }} · 取种失败 {{ s.fails }} · 放行记录 {{ s.verified }}
                           </p>
                           <p class="hrs-line">{{ s.quota.text }}</p>
-                          <p class="hrs-line">守恒: {{ s.retention_text }} · 骤降: {{ s.plunge_text }}</p>
+                          <p class="hrs-line">守恒: {{ s.retention_text }}</p>
                           <p class="hrs-line">时间窗: {{ s.allow_window || '不限' }}
                             <button v-if="s.zero_rows && !s.empty_confirmed" class="hb-btn ghost sm"
                                     :disabled="hrs.confirming" @click="hrsConfirmEmpty(s.site)">确认空清单</button>

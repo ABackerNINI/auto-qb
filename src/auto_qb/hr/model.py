@@ -357,8 +357,6 @@ class HrWaveMeta:
     retention_ratio: float = -1.0
     retention_ok: bool = True
     prev_a_tids: Dict[int, str] = field(default_factory=dict)  # 上波 A 档 tid -> infohash(守恒校验用)
-    baseline_rows: int = 0  #: 行数基线高水位(历史健康波最大合计; 骤降校验用)
-    plunge: bool = False  #: 本波总行数骤降可疑(< 基线 30%)
     notes: str = ""
 
     def to_json(self) -> Dict[str, Any]:
@@ -377,8 +375,6 @@ class HrWaveMeta:
                 str(k): v
                 for k, v in self.prev_a_tids.items()
             },
-            "baseline_rows": self.baseline_rows,
-            "plunge": self.plunge,
             "notes": self.notes,
         }
 
@@ -399,8 +395,6 @@ class HrWaveMeta:
                 _as_int(k): str(v)
                 for k, v in (raw.get("prev_a_tids") or {}).items()
             },
-            baseline_rows=_as_int(raw.get("baseline_rows")),
-            plunge=bool(raw.get("plunge")),
             notes=str(raw.get("notes") or ""),
         )
 

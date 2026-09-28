@@ -78,18 +78,6 @@ def lane_persistent_failure(site: str, lane: str, streak: int, detail: str) -> s
 LANE_RETENTION_MIN = 0.7
 
 
-def plunge_suspected(site: str, total: int, baseline: int) -> str:
-    """总行数骤降(§5.3 粗保险): 批量「未列出」签发冻结"""
-    return (
-        f"{prefix(EVENT_PARSE)} 站点 {site} | 本波合计 {total} 行 vs 基线 {baseline}(低于 30%): "
-        "批量「未列出」签发已冻结 —— 全部毕业/被清除? 还是改版吞行?"
-    )
-    return (
-        f"{prefix(EVENT_PARSE)} 站点 {site} | 本波合计 {total} 行 vs 基线 {baseline}(低于 30%): "
-        "批量「未列出」签发已冻结 —— 全部毕业/被清除? 还是改版吞行?"
-    )
-
-
 def retention_violation(site: str, ratio: float) -> str:
     """A 档流转守恒不达标(§5.3 首要防伪): 上波考察中行在本波留存率过低"""
     return (
@@ -138,7 +126,6 @@ __all__ = [
     "login_expired_note",
     "order_broken",
     "page_changed",
-    "plunge_suspected",
     "prefix",
     "retention_violation",
     "summarize_sites",

@@ -64,7 +64,6 @@ def _sample() -> HrSiteData:
         healthy_ts=7.0,
         lanes={"A": HrLaneState(lane="A", status="ok", pages=2, rows=1, full_depth=True)},
         releases_enabled=True,
-        baseline_rows=1,
         prev_a_tids={313852: "aa" * 20},
     )
     data.rate = HrRateLedger(day_window="2026-09-24", day_count=5, last_fetch_ts=7.0)

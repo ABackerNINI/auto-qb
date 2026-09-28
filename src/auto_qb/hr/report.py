@@ -223,7 +223,6 @@ def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> Non
     if st.blocking:
         print(f"    现在为什么不签发放行: {st.blocking}", file=out)
     print(f"    守恒: {st.retention_text}", file=out)
-    print(f"    骤降: {st.plunge_text}", file=out)
     if st.zero_rows:
         tail = "(已人工确认)" if st.empty_confirmed else "(未确认 —— 零行波不签发放行)"
         print(f"    零行: 本波清单为 0{tail}", file=out)

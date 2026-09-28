@@ -393,7 +393,7 @@ def test_run_hr_status_shows_defense_lines(tmp_path):
     text = buf.getvalue()
     assert code == 0
     assert "守恒: 不适用(上波无 A 档行)" in text
-    assert "骤降: 本波合计 2 vs 基线 2, 正常" in text
+    assert "骤降" not in text  # 骤降保护已按 26-09-29 裁决移除
     assert "各档: A:" in text and "B:" in text and "C:" in text
 
 

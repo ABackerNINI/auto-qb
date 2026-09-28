@@ -8,7 +8,7 @@ import pathlib
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from auto_qb.config.models import HrCheckConfig, SiteHrCheckConfig
-from auto_qb.hr.fetcher import HrChannelQuota, HrFetchError
+from auto_qb.hr.fetcher import HrChannelQuota, HrFetchError, HrLoginExpired
 
 FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures" / "hr"
 
@@ -123,12 +123,21 @@ class FakeFetcher:
         *,
         fail_text_at: Optional[Dict[str, str]] = None,
         fail_bytes_at: Optional[Dict[int, str]] = None,
+        #: scope -> 秒: 取页抛带 retry_after 的 HrFetchError(站点明确指令等待, H1 回归用)
+        retry_after_at: Optional[Dict[str, float]] = None,
+        #: tid -> 秒: 取 .torrent 抛带 retry_after 的 HrFetchError(下载路径上抛波级, H1 回归用)
+        retry_bytes_at: Optional[Dict[int, float]] = None,
+        #: scope 集合: 取页抛 HrLoginExpired(扩展回传登录页语义, M1 回归用)
+        login_at: Iterable[str] = (),
         quota: bool = False,
     ) -> None:
         self.pages = dict(pages or {})
         self.blobs = dict(blobs or {})
         self.fail_text_at = dict(fail_text_at or {})
         self.fail_bytes_at = dict(fail_bytes_at or {})
+        self.retry_after_at = dict(retry_after_at or {})
+        self.retry_bytes_at = dict(retry_bytes_at or {})
+        self.login_at = set(login_at)
         #: True = 每次都抛 HrChannelQuota(模拟扩展侧硬上限拒发, 与「取数失败」区分开)
         self.quota = quota
         self.text_calls: List[str] = []
@@ -156,6 +165,10 @@ class FakeFetcher:
         if self.quota:
             raise HrChannelQuota("扩展侧硬上限挡下(HR 页访问 本小时达硬上限 10 次)")
         scope = self.scope_of(url)
+        if scope in self.login_at:
+            raise HrLoginExpired(f"扩展取到登录页而非内容(scope={scope})")
+        if scope in self.retry_after_at:
+            raise HrFetchError(f"站点限速(scope={scope})", retry_after=self.retry_after_at[scope])
         if scope in self.fail_text_at:
             raise HrFetchError(self.fail_text_at[scope])
         if url in self.pages:
@@ -169,6 +182,8 @@ class FakeFetcher:
         if self.quota:
             raise HrChannelQuota("扩展侧硬上限挡下(.torrent 下载 本小时达硬上限 50 次)")
         tid = self.tid_of(url)
+        if tid in self.retry_bytes_at:
+            raise HrFetchError(f"站点限速(tid={tid})", retry_after=self.retry_bytes_at[tid])
         if tid in self.fail_bytes_at:
             raise HrFetchError(self.fail_bytes_at[tid])
         if tid not in self.blobs:

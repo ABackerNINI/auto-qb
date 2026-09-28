@@ -19,16 +19,19 @@
 - test_freshness_gate_blocks_release: added_on 晚于本波取数 → 行 4(不签发放行)
 - test_zero_rows_no_release: 结构完好零行 → 不签发放行
 - test_zero_rows_confirmed_release: --hr-confirm-empty 后零行可签发; 非零行清除确认戳
-- test_plunge_freezes_releases: 总行数骤降(< 基线 30%) → 批量签发冻结
 - test_retention_check_freezes_batch: A 档流转守恒不达标 → 批量签发冻结
 - test_retention_does_not_block_observation: 守恒拦批量但不拦观察期(单条失踪无死锁)
 - test_observing_seed_kept_managed_then_released: 上波考察中失踪 → 维持管束; 位置覆盖连续 2 波 → 判移出放行
 - test_observing_seed_resighted: 失踪种子重见 → streak 清零按档位定论
 - test_terminal_vanish_writes_release: 终态条目消失且位置被证明 → 退役并落放行记录(终态不可逆)
 - test_terminal_vanish_unproven_kept: 终态条目消失但位置未被覆盖 → 维持原状
-- test_light_wave_when_no_objects: 空对象集 → 每档 1 页轻量波
+- test_no_objects_sweeps_to_last_page: 空对象集仍按停翻条件/末页收尾(轻量波已否决, 26-09-29 裁决)
 - test_new_top_row_reconciled_next_wave: 顶页新插入(本机新下载)在下一波被完整覆盖对账
 - test_no_fuse_no_suspension: 失败不推进熔断/停用(v3 删除), Retry-After 记等待
+- test_retry_after_persisted_across_waves: Retry-After 指令落盘, 跨波生效, 期满前零请求
+- test_retry_after_on_download_escalates_to_wave: .torrent 下载的 Retry-After 上抛波级, 不计种子失败
+- test_login_expired_marks_interval: 登录失效路径同样前进间隔基准(重试节奏受 min_interval 约束)
+- test_version_mismatch_skips_wave: 站点文件 schema 比程序新 → 跳过取数与写盘(不覆写新版文件)
 - test_fuzzy_name_match_unit: 宽泛名称粗配单元(连续重合段 ≥ K)
 """
 import time
@@ -47,6 +50,7 @@ from auto_qb.hr.model import (
 )
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, judge_record
 from auto_qb.hr.service import (
+    ACTION_ERROR,
     ACTION_PARTIAL,
     ACTION_WAITING,
     FUZZY_NAME_K,
@@ -519,25 +523,6 @@ def test_zero_rows_confirmed_release(tmp_path):
     assert data.empty_confirmed_at == 0.0
 
 
-def test_plunge_freezes_releases(tmp_path):
-    """总行数骤降(本波 < 基线 30%) → 批量「未列出」签发冻结"""
-    clock = Clock()
-    pages = standard_pages(rows_b=five_expired_rows(20))
-    fetcher = FakeFetcher(pages=pages)
-    service = make_service(tmp_path, fetcher, clock=clock)
-    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
-    run_wave(service, anchors)  # 首波: A 0 行 / B 5 行 / C 0 行 → 基线 5
-    data, _ = service.store(SITE).read_unlocked()
-    assert data.wave.baseline_rows == 5
-    # 第二波: 全空表(结构完好) → 合计 0 < 5 × 30% → 骤降冻结
-    fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
-    clock.advance(13 * 3600)
-    run_wave(service, anchors)
-    data, _ = service.store(SITE).read_unlocked()
-    assert data.wave.plunge is True
-    assert data.wave.releases_enabled is False
-
-
 def test_retention_check_freezes_batch(tmp_path):
     """A 档流转守恒: 上波 A 行本波留存 < 70% → 批量「未列出」签发冻结(命中不受影响)"""
     clock = Clock()
@@ -713,22 +698,26 @@ def test_terminal_vanish_unproven_kept(tmp_path):
     assert h21 not in data.verified
 
 
-# ---------------- 轻量波与覆盖收敛 ----------------
+# ---------------- 覆盖收敛(空对象集, 轻量波已否决) ----------------
 
 
-def test_light_wave_when_no_objects(tmp_path):
-    """空对象集 → 每档 1 页轻量波(捕获可能的新增即停)"""
-    clock = Clock()
+def test_no_objects_sweeps_to_last_page(tmp_path):
+    """空对象集仍按停翻条件/末页收尾, 不做「每档 1 页」早停(轻量波已否决, 26-09-29 裁决)"""
+    blob11, _h11 = mk_blob("OTHER 11")
+    blob12, _h12 = mk_blob("OTHER 12")
     pages = {
         url_of("A", 1): myhr_page([row(11, "OTHER 11", done=DONE_OLD)], has_next=True),
+        url_of("A", 2): myhr_page([row(12, "OTHER 12", done=DONE_OLD)], has_next=False),
         url_of("B", 1): myhr_page(five_expired_rows(20), has_next=True),
         url_of("C", 1): myhr_page([], has_next=False),
     }
-    fetcher = FakeFetcher(pages=pages)
-    service = make_service(tmp_path, fetcher, clock=clock)
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob11, 12: blob12})
+    service = make_service(tmp_path, fetcher)
     run_wave(service, anchors={})  # 无本地种子 → 无对象集
     data, _ = service.store(SITE).read_unlocked()
-    assert all(st.pages == 1 for st in data.wave.lanes.values())
+    assert data.wave.lanes["A"].pages == 2  # 有下一页就继续翻(未被「每档 1 页」截断)
+    assert data.wave.lanes["B"].pages == 1 and data.wave.lanes["B"].full_depth  # ② 到期段
+    assert data.wave.lanes["C"].pages == 1 and data.wave.lanes["C"].full_depth  # 末页
 
 
 def test_new_top_row_reconciled_next_wave(tmp_path):
@@ -766,11 +755,73 @@ def test_no_fuse_no_suspension(tmp_path):
     assert result.action == ACTION_PARTIAL
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.lanes["A"].status == "failed"
-    # v3 失败处置: 数据上没有任何熔断/停用/退避状态字段(模型级删除)
+    # v3 失败处置: 数据上没有任何熔断/停用/退避状态字段(模型级删除);
+    # 骤降保护同批移除(26-09-29 裁决) —— 基线/骤降字段不再落盘。
     raw = data.to_json()
-    for gone in ("fuse", "suspended", "login_backoff_until", "quota", "torrent_quota"):
+    for gone in ("fuse", "suspended", "login_backoff_until", "quota", "torrent_quota", "plunge", "baseline_rows"):
         assert gone not in raw
-    # Retry-After 的「下次可取时刻」语义在 test_hr_ratelimit.test_retry_after_respected 覆盖
+    # Retry-After 的读取侧「下次可取时刻」语义另见 test_hr_ratelimit.test_retry_after_respected;
+    # 下方三个用例钉 service 层的落盘/上抛行为(修复前只有 ratelimit 单测, H1/M1 漏网)。
+
+
+def test_retry_after_persisted_across_waves(tmp_path):
+    """Retry-After 指令必须落盘: 下一波重读盘仍受其约束, 期满前零请求(H1)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages(), retry_after_at={"A": 600.0})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.retry_after_until >= clock.now + 590  # 已持久化(修复前只写内存会话, 跨波即丢)
+    assert data.rate.last_fetch_ts == clock.now  # 间隔基准同步前进
+    calls_after_wave1 = len(fetcher.text_calls)
+    # 第二波(下一轮 poll, 60s 后): 指令未期满 → 不发任何请求
+    clock.advance(60)
+    result = run_wave(service, {})
+    assert len(fetcher.text_calls) == calls_after_wave1
+    assert result.action == ACTION_WAITING and "Retry-After" in result.reason
+    # 期满后恢复取数
+    clock.advance(600)
+    run_wave(service, {})
+    assert len(fetcher.text_calls) > calls_after_wave1
+
+
+def test_retry_after_on_download_escalates_to_wave(tmp_path):
+    """.torrent 下载收到 Retry-After → 上抛波级落盘让位, 不计成种子失败(H1 同根)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages(rows_a=[row(21, "LOCAL 21")]), retry_bytes_at={21: 300.0})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.retry_after_until >= clock.now + 290  # 波级落盘
+    assert data.fails == {} and result.torrents_failed == 0  # 站点限速不伪装成「种子坏了」
+    assert result.action == ACTION_WAITING
+
+
+def test_login_expired_marks_interval(tmp_path):
+    """登录失效路径同样前进间隔基准: 登录恢复前重试节奏受 min_interval 约束(M1)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages(), login_at={"A"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.rate.last_fetch_ts == clock.now  # 修复前恒 0: 每 poll(60s)都立即重发烧日额
+    assert result.action == ACTION_ERROR
+
+
+def test_version_mismatch_skips_wave(tmp_path):
+    """站点文件 schema 比程序新 → 跳过取数与写盘, 空数据不得覆写新版文件(M2)"""
+    import json
+
+    fetcher = FakeFetcher(pages=standard_pages())
+    service = make_service(tmp_path, fetcher)
+    path = service.store(SITE).path
+    path.parent.mkdir(parents=True, exist_ok=True)  # store.hold() 才建目录, 手写文件要先建
+    path.write_text(json.dumps({"schema_version": 999, "fetched_at": 1.0}), encoding="utf-8")
+    result = run_wave(service, {})
+    assert fetcher.text_calls == []  # 未取数
+    assert result.action == ACTION_ERROR and "schema 比程序新" in result.reason
+    # 未写盘: 新版文件原样保留(修复前波次会用空数据覆盖它)
+    assert json.loads(path.read_text(encoding="utf-8"))["schema_version"] == 999
 
 
 # ---------------- 粗配单元(D1) ----------------
