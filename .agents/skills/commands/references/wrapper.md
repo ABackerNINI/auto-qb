@@ -5,8 +5,23 @@
 ## 使用流程: 先试跑, 失败才装(2026-09-25 起)
 
 bare `commands run <task>` **直接试跑** —— PATH 那份是用户级文件, 装过一次就一直在, 多数会话免装;
-报 command not found 才跑 `install_wrapper.py`(幂等; 落点目录本就在 PATH 上, 装完即生效, 无需重开 shell)。
-装了却不正常(找不到引擎 / 转发异常)→ 重装一次幂等覆盖, 或先 `--dry-run` 看落点。
+报 command not found 才跑 `install_wrapper.py`(幂等)。装了却不正常(找不到引擎 / 转发异常)→ 重装一次
+幂等覆盖, 或先 `--dry-run` 看落点。
+
+⚠ **「装过就命中」的前提是 `~/bin` 真在 PATH 上**(2026-09-28 实测, 症状是用户报「明明装了却
+not recognized」): 生成器判的是**当前进程的 PATH** 里有没有 `~/bin` / `~/.local/bin`, 没有就**跳过**
+那份(只剩仓库根那份, 而 PowerShell **不搜 cwd**, 于是照样命令不存在)。而 Git Bash/MSYS **默认**把
+`~/bin` 放进 PATH、Windows 用户级 PATH 通常没有 ⇒ 同一生成器在两种 shell 下结论相反: Git Bash 里
+写进去并判「已是最新」, PowerShell 里那份永远找不到。处置:
+
+1. **判据**: `Get-Command commands -All` 解析不到 → 按绝对路径看文件在不在(通常
+   `%USERPROFILE%\bin\commands.cmd`)—— **在 ⇒ 目录没进 PATH; 不在 ⇒ 真没装**。
+2. **补 PATH**: 把 `~/bin` 加进**用户级** PATH(先判重, 勿重复追加); 然后在本会话手拼一次
+   `$env:PATH="$env:PATH;$env:USERPROFILE\bin"` **再**跑安装脚本 —— 它读的就是当前进程的 PATH,
+   否则照样判「跳过」。
+3. ❗**必须新开终端 / 重启 VS Code** 才 bare 可用 —— 已开着的终端拿的是旧环境块, 改环境变量不会回灌。
+
+可复制片段与更多判据: `memory-bank/pitfalls/ops/shell-env.md`「同类第二坑」。
 
 ## 为什么需要它(2026-09-24 实测)
 
@@ -31,7 +46,8 @@ bare `commands run <task>` **直接试跑** —— PATH 那份是用户级文件
 | PATH 目录(默认) | 同上 | **项目无关**: 从 `$PWD` 向上找 `.commands/`, 任意项目 bare 调用 |
 
 - PATH 目录按 `~/bin` → `~/.local/bin` 挑**第一个已在 PATH 上**的; 在 PATH 上但目录不存在就**建出来**
-  (实测本机 `~/bin` 正是"在 PATH 上但不存在")。
+  (实测本机 `~/bin` 正是"在 PATH 上但不存在")。⚠ 这里的"在 PATH 上"是**当前进程**的视野 ——
+  Git Bash 默认有、Windows 用户级 PATH 未必有, 两个 shell 下结论可以相反(见上节订正)。
 - 生成物**不入库**(`.gitignore` 里 `/commands` `/commands.cmd`): 单点定义在生成器里, 入库就是第 N+1 处副本。
 - `--cwd-only` 只装仓库根(零用户级副作用); `--uninstall` 删掉生成的那几份(**只认自己的标记行**,
   别人的同名文件一律不碰, 要覆盖得 `--force`)。
