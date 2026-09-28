@@ -126,8 +126,9 @@ def render(items: list[dict], head: str) -> str:
     names = sorted(single)
     line = " ".join(names)
     while line:
-        cut = line.rfind(" ", 0, 150)
-        cut = cut if cut > 0 else min(len(line), 150)
+        # 折行宽度只影响换行, 零信息损失 —— 2026-09-28 第四次收口 150→400(每省一行省 3 字符)
+        cut = line.rfind(" ", 0, 400)
+        cut = cut if cut > 0 else min(len(line), 400)
         out.append(f"- {line[:cut]}")
         line = line[cut:].lstrip(" ·")
     out.append("")
@@ -136,12 +137,12 @@ def render(items: list[dict], head: str) -> str:
 
 def build(root: Path, mb: Path) -> str:
     cmd = gen_cmd(root, "gen_doc_map.py")
-    # 头部固定文案须压着写: 专题数稳定增长, index-auto cap 已三连触顶(见 pitfalls/kb/cap-counting.md
+    # 头部固定文案须压着写: 专题数稳定增长, index-auto cap 已四连触顶(见 pitfalls/kb/cap-counting.md
     # 「两个出口」条) —— 这里每省 1 字符都是给内容行的余量
+    # 2026-09-28 第四次收口: 两行并一行 + 去掉 meta 字段名枚举(协议在 doc-forms.md), 压 ~40 字符
     head = f"""# 文档形态总览 (按专题)
 
-> 生成物, 不要手改 —— `{cmd}` 扫描四形态 `doc-topic` / `**Topics:**` 与状态生成;
-> 协议见 [doc-forms.md](conventions/doc-forms.md)。
+> 生成物, 勿改 —— `{cmd}` 扫四形态 meta 生成; 协议见 [doc-forms.md](conventions/doc-forms.md)。
 """
     return render(collect(mb), head)
 

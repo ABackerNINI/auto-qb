@@ -64,6 +64,7 @@
 | 09-27 | [26-09-27-config-hr-binding-mapping.md](../memory-bank/tasks/26-09-27-config-hr-binding-mapping.md) | 任务档案 | HR 绑定映射制任务档案(含旧键迁移 v1→v2) | hr-binding-tracker-mapping |
 | 09-28 00:30 | [report-hr-verify-v2-impl-audit.html](../memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) | 审计报告 | **最新**: 在线核实 v2 实施核对 + 安全/稳定性审计——33 项修改全部落地; 新发现 F1–F4 待拍板 | backend-partial-hr-verify |
 | 09-27 22:52 | [plan-config-migration-materialize.html](../memory-bank/plans/26-09-27-2252-plan-config-migration-materialize.html) | 计划(衍生) | config schema 迁移物化重构(加载即迁移 + 版本号备份)——由 HR 绑定映射制的迁移需求衍生 | hr-binding-tracker-mapping |
+| 09-28 19:32 | [plan-hr-verify-rebuild.html](../memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html) | 计划 | **在线核实 v3**: 用户定调推翻 v2 模型(全量翻页/双频控/熔断回落/40 键)——四行判定表+12格矩阵(命中考察中即管束 — 本地达标与否都管; 终态档/未列出放行; 无证据按本地兜底) + 单波型取数(每波全量对账 + A/B/C 轮流 + 三个停翻条件: 完成时间覆盖/remain==0×5 到期段/全集覆盖, 对象集=未对账∪考察中, ≥3× 超额免对账出集, .torrent 下载=身份登记一次(同 tid 永不重下), 已见 A 档行无条件全下载, B/C/D 行=覆盖区间+宽泛名称粗配(D1 已拍板)) + 单频控三键 + 熔断/退避全删(档位截断/证据无时效/排序失效强制早停) + 证据防伪(A 档流转守恒/总量骤降/零行戳 + 失踪观察期: 失踪者一律无证据无豁免), 配置 40→14 键; M1-M5 待批准实施 (doc-status Open) | backend-partial-hr-verify |
 
 ## 二、常青文档 (无固定立档时间, 随代码演进持续回写)
 

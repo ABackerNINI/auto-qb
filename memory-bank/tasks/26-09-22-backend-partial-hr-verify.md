@@ -34,8 +34,15 @@ P1/P2/P3 修复落点 + 主计划 §14 的 M5.1–M5.5 实施拆解, 10 项待�
 逐项核对 33 个修改项全部落地且与计划一致; 独立发现 F1(P2: 早停② P 机检空真 + B/C 档 remain 形态假设 ⇒ C 档
 误放行链)/F2(P3: 跨页 S1 对轮内清单插入零容忍 ⇒ 误停站场景)/F3(P3: parse_missing_rate_max 被 S2 架空)/
 F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 复验与基线 26-09-27-2326 逐位一致。
+**在线核实 v3 模型重建计划已立档 (2026-09-28, 代码未动)**: 用户定调推翻 v2 模型 —— 每轮全量翻页违背「首波全量/后续增量」口径、legacy+split 双频控混杂、熔断停用回落本地是漏 HR 隐形炸弹、40 键配置面失控; 见
+[plans/26-09-28-1932](../plans/26-09-28-1932-plan-hr-verify-rebuild.html) (doc-status Open, 22:55 修订, 待批准实施):
+**四行判定表 + 12 格情形矩阵**(命中考察中(A)→管束 — **本地达标与否都管, 删了前功尽弃**; 站点终态档 B/C/D("未达标"=考核结论已定的终态)与移出未列出→放行; 无证据→本地兜底: 达标放行/未达标管束; 管束 = 打标/删除保护/辅种排除) +
+**单波型取数**(每波以全量对账为目标 + A/B/C 轮流翻页 + **三个停翻条件**: 完成时间覆盖① / remain==0 连续 5 行到期段强信号②(纯页面信号, 独立于本地时间) / 本地全集 infohash 覆盖③, 任一成立即停 — 覆盖对象集 = 未对账 ∪ 考察中, 终态不可逆 ⇒ 终态种子不再翻页下载; 废除增量/全量/续翻三波型与断点续翻 — 清单在动, 每波自证覆盖) +
+**下载规则**(下载=身份登记一次, 同 tid 永不重下, 状态追踪靠 tid 读页面档位; **已见 A 档行无条件全下载**硬规则; B/C/D 终态行 = 覆盖区间+宽泛名称粗配(D1 已拍板 21:53: 连续重合段≥K 即疑似本地, 宁误配不漏配; 漏配后果全方向安全无漏 HR; 粗配=疑似触发器, 定论一律 infohash 精配); 本地没有的种子不下载; 完成时间可信度分层, 纯辅种不参与条件①) + **超额线 SEED_EXEMPT_RATIO=3**(做种 ≥3×required+extra ⇒ 放行并免除在线对账 — 不进覆盖对象集, 特别老藏深的种子不再拉深覆盖深度, 纯辅种做满 3× 同样出集; 网站绝对权威 — 被动命中「考察中」仍转管束) +
+单频控三键 + 熔断/停用/退避全删(档位级数据有效性截断式, 证据无时效 — 整波覆盖证据与两级证据年龄退役; 排序失效 = 强制早停立即停翻(之前数据有效, 等下周期))+ 证据防伪三道校验(A 档流转守恒: 上波考察中行在本波 A/B/C 留存 ≥0.7 首要; 总行数骤降 30% 粗保险; 零行对账戳)+ 失踪观察期(22:38 收紧: 失踪者一律当作无证据 — 无小样本豁免无快路径; streak 用局部覆盖证明推进 2 波判移出, 与整波校验解耦防死锁; 行 4 特例: 没看到不终结考察中); 22:15 梳理轮修 17 处漂移并补齐骤降保护/空对象集两个完备性缺口(§3 重编号 3.3 超额线/3.4 证据健康);
+配置 40→14 键(completed_age_limit/auto_age_limit/seeding_exempt_ratio/hr_page_scopes/accept_empty_listing/quota_model/mode/unknown_policy 全删); M1-M5 里程碑与验收判据见计划 §8; v2 审计 F1-F4 由该计划整体消解。
 **Topics:** backend-partial-hr-verify
-**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html, memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html
+**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html, memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html
 
 ## 原始请求
 

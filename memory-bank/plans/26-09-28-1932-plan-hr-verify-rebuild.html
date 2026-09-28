@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HR 在线核实 · 模型推翻重建计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-28-1932">
+<meta name="doc-updated" content="26-09-28-2255">
+<meta name="doc-refs" content="memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html,memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html,memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html,memory-bank/tasks/26-09-22-backend-partial-hr-verify.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1113;
+    --paper: #131619;
+    --ink: #d8dcdf;
+    --ink-dim: #9aa3a9;
+    --ink-faint: #6b747b;
+    --line: rgba(255,255,255,.08);
+    --line-strong: rgba(255,255,255,.16);
+    --accent: #d9a441;
+    --accent-dim: rgba(217,164,65,.14);
+    --bad: #c96f5e;
+    --ok: #7fae8f;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "JetBrains Mono", monospace;
+    --sans: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1240px; margin: 0 auto; padding: 0 40px 120px; }
+  /* ---------- cover ---------- */
+  .cover { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+  .cover .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .08em;
+    color: var(--accent); text-transform: uppercase; margin-bottom: 20px;
+  }
+  .cover h1 {
+    font-size: 40px; font-weight: 600; line-height: 1.15;
+    letter-spacing: -.02em; max-width: 21em;
+  }
+  .cover .lede {
+    margin-top: 20px; max-width: 46em; color: var(--ink-dim); font-size: 16px;
+  }
+  .meta-row {
+    margin-top: 36px; display: flex; flex-wrap: wrap; gap: 0 48px;
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); line-height: 2;
+  }
+  .meta-row b { color: var(--ink-dim); font-weight: 500; }
+  /* ---------- layout ---------- */
+  .body-grid { display: grid; grid-template-columns: 208px minmax(0,1fr); gap: 56px; padding-top: 40px; }
+  nav.toc { position: sticky; top: 32px; align-self: start; font-size: 13px; }
+  nav.toc .toc-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    color: var(--ink-faint); text-transform: uppercase; margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-faint); text-decoration: none;
+    padding: 5px 0 5px 14px; border-left: 1px solid var(--line); line-height: 1.45;
+  }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--line-strong); }
+  nav.toc a .n { font-family: var(--mono); font-size: 11px; margin-right: 8px; color: var(--ink-faint); }
+  main { min-width: 0; }
+  /* ---------- sections ---------- */
+  section { padding: 44px 0 8px; }
+  section + section { border-top: 1px solid var(--line); }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 24px; }
+  .sec-head .no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .sec-head h2 { font-size: 23px; font-weight: 600; letter-spacing: -.01em; }
+  h3 { font-size: 16.5px; font-weight: 600; margin: 34px 0 12px; }
+  h4.h4-like { font-size: 14.5px; font-weight: 600; margin: 26px 0 10px; color: var(--ink); }
+  h3 .tag { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); font-weight: 400; margin-left: 10px; }
+  p { max-width: 72ch; margin-bottom: 12px; color: var(--ink); }
+  p.dim { color: var(--ink-dim); }
+  .measure { max-width: 72ch; }
+  strong { font-weight: 550; color: #e8ebec; }
+  em { font-style: normal; color: var(--accent); }
+  code {
+    font-family: var(--mono); font-size: .86em; background: var(--paper);
+    border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px; color: #cfd6da;
+  }
+  ul.plain { max-width: 72ch; margin: 0 0 14px 0; padding: 0; list-style: none; }
+  ul.plain li { padding: 4px 0 4px 18px; position: relative; color: var(--ink); }
+  ul.plain li::before { content: "—"; position: absolute; left: 0; color: var(--ink-faint); }
+  /* ---------- tables ---------- */
+  .tbl-wrap { margin: 18px 0 26px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  caption {
+    caption-side: top; text-align: left; font-family: var(--mono); font-size: 11.5px;
+    letter-spacing: .06em; color: var(--ink-faint); padding-bottom: 8px; text-transform: uppercase;
+  }
+  th {
+    text-align: left; font-weight: 550; font-size: 12px; letter-spacing: .04em;
+    color: var(--ink-dim); border-bottom: 1px solid var(--line-strong);
+    padding: 8px 14px 8px 0; white-space: nowrap;
+  }
+  td { border-bottom: 1px solid var(--line); padding: 9px 14px 9px 0; vertical-align: top; line-height: 1.55; }
+  td code, th code { white-space: nowrap; }
+  td .ref { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; }
+  .t-mono { font-family: var(--mono); font-size: 12.5px; }
+  .c-bad { color: var(--bad); }
+  .c-ok { color: var(--ok); }
+  .c-acc { color: var(--accent); }
+  .c-dim { color: var(--ink-dim); }
+  /* ---------- verdict blocks ---------- */
+  .verdict {
+    border: 1px solid var(--line-strong); background: var(--paper);
+    padding: 20px 24px; margin: 20px 0 26px; max-width: 900px;
+  }
+  .verdict .v-label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 10px;
+  }
+  .verdict p { margin-bottom: 8px; }
+  .verdict p:last-child { margin-bottom: 0; }
+  /* ---------- key-value ledger ---------- */
+  .ledger { display: grid; grid-template-columns: max-content 1fr; gap: 0 28px; max-width: 900px; margin: 16px 0 26px; }
+  .ledger dt {
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim);
+    padding: 7px 0; border-bottom: 1px solid var(--line);
+  }
+  .ledger dd { padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+  /* ---------- flow (wave machine) ---------- */
+  .flow { margin: 20px 0 26px; border-left: 1px solid var(--line-strong); padding-left: 24px; max-width: 860px; }
+  .flow .step { position: relative; padding: 10px 0 14px; }
+  .flow .step::before {
+    content: ""; position: absolute; left: -28.5px; top: 19px;
+    width: 8px; height: 8px; background: var(--bg); border: 1px solid var(--accent);
+  }
+  .flow .step .s-no { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: .06em; }
+  .flow .step .s-title { font-weight: 550; margin: 2px 0 4px; font-size: 14.5px; }
+  .flow .step p { font-size: 13.5px; color: var(--ink-dim); margin-bottom: 4px; }
+  /* ---------- colophon ---------- */
+  .colophon {
+    margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 12px; color: var(--ink-faint); line-height: 2;
+  }
+  @media (max-width: 960px) {
+    .body-grid { grid-template-columns: 1fr; }
+    nav.toc { position: static; column-count: 2; margin-bottom: 24px; }
+    .frame { padding: 0 20px 80px; }
+    .cover h1 { font-size: 30px; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+  <!-- ======================= COVER ======================= -->
+  <header class="cover">
+    <div class="kicker">Plan · backend-partial-hr-verify · 在线核实 v3</div>
+    <h1>HR 在线核实 · 模型推翻重建计划</h1>
+    <p class="lede">
+      废除 legacy/split 双频控、熔断停用、三层豁免开关与 partial/all 模式分叉, 收敛为
+      <strong>一套判定表 + 一套波次引擎 + 一套频控</strong>: 每波以全量对账为目标 + 覆盖早停, 页数随覆盖对象集收缩自适应;
+      无证据按本地兜底写入代码而非配置; 熔断改为「档位截断 + 无证据按本地兜底」, 站点不稳定不再是隐形炸弹。
+    </p>
+    <div class="meta-row">
+      <span><b>立档</b> 2026-09-28 19:32</span>
+      <span><b>基线</b> develop @ 5bc43784</span>
+      <span><b>性质</b> 实施计划(待拍板后动代码)</span>
+      <span><b>取代</b> 26-09-27-1815 v2 计划的取数与处置模型</span>
+    </div>
+  </header>
+
+  <div class="body-grid">
+    <!-- ======================= TOC ======================= -->
+    <nav class="toc">
+      <div class="toc-title">目录</div>
+      <a href="#s0"><span class="n">§0</span>结论速览</a>
+      <a href="#s1"><span class="n">§1</span>现状病灶(证据)</a>
+      <a href="#s2"><span class="n">§2</span>新口径五原则</a>
+      <a href="#s3"><span class="n">§3</span>判定模型</a>
+      <a href="#s4"><span class="n">§4</span>波次引擎</a>
+      <a href="#s5"><span class="n">§5</span>频控与失败处置</a>
+      <a href="#s6"><span class="n">§6</span>配置面终稿</a>
+      <a href="#s7"><span class="n">§7</span>迁移与兼容</a>
+      <a href="#s8"><span class="n">§8</span>里程碑 M1–M5</a>
+      <a href="#s9"><span class="n">§9</span>风险推演</a>
+      <a href="#s10"><span class="n">§10</span>影响面清单</a>
+    </nav>
+
+    <main>
+    <!-- ======================= §0 ======================= -->
+    <section id="s0">
+      <div class="sec-head"><span class="no">§0</span><h2>结论速览</h2></div>
+      <p>本计划对 2026-09-27 落地的「在线核实 v2」做<b>模型级推翻</b>, 不是修补。推翻的判据来自四点实测病灶
+         (§1): 每轮全量翻页与「首波全量、后续增量」的理想节奏相反; legacy/split 双频控并存难维护;
+         熔断/停用在站点不稳定时把判定回落到本地逻辑形成漏 HR 口子; 40 个配置键中近三分之二不知所云。</p>
+      <div class="verdict">
+        <div class="v-label">一图流: 旧 → 新</div>
+        <dl class="ledger">
+          <dt>判定</dt><dd>站点权威 + 三层豁免开关 + unknown_policy 分叉 → <strong>四行判定表 + 12 格情形矩阵</strong>: 网站考察中(A) → 管束(绝对权威, 本地达标与否都管); 网站终态档 B/C/D 与移出未列出 → 放行(终态不可逆); 无证据 → 本地判据兜底(达标放行/未达标管束)。做种 ≥3× 要求 = 免除在线对账(非免死金牌 — 被动命中考察中仍管束)</dd>
+          <dt>取数</dt><dd>每轮按档位从第 1 页全量翻 → <strong>单波型</strong>: 每波以全量对账为目标 + A/B/C 轮流翻页 + 三个停翻条件(完成时间覆盖 / <strong>remain==0 连续 5 行到期段强信号</strong> / 本地全集 infohash 覆盖, 任一成立即停)— 覆盖对象集 = 未对账 ∪ 考察中(终态不可逆不再翻页; ≥3× 超额种子免除对账, 特别老藏深的种子不再拉深覆盖深度); .torrent 下载 = 身份登记一次(同 tid 永不重下, 状态追踪靠 tid 读页面); 已见 A 档行无条件全下载, B/C/D 行按覆盖区间 + 宽泛名称粗配(重合段≥K)下载 — 粗配只是疑似触发器, 定论一律 infohash 精配; 本地没有的种子不下载; 清单在动, 每波自证覆盖</dd>
+          <dt>频控</dt><dd>legacy 合并账本 + split 双令牌桶(quota_model 切换) → <strong>单模型</strong>: 最小间隔 + 日额保险 + 单波页数上限, 三个键</dd>
+          <dt>失败处置</dt><dd>熔断 12H + suspended 人工恢复 + 判定回落本地 → <strong>删除熔断/停用/退避</strong>: 档位级数据有效性(截断式, 失效点之前有效), 失败档下周期自然重试, 期间无证据按本地兜底(未达标管束), 无任何配置回落路径</dd>
+          <dt>配置</dt><dd>40 键 → <strong>14 键</strong>(−65%); hr_page_scopes / accept_empty_listing / auto_age_limit / seeding_exempt_ratio / quota_model / completed_age_limit / mode / unknown_policy 等全部删除</dd>
+          <dt>空清单</dt><dd>accept_empty_listing 常驻配置开关 → <strong>人工对账戳</strong>: <code>--hr-confirm-empty</code> 一次性确认写进站点数据, 清单再现非零行自动失效</dd>
+          <dt>证据防伪</dt><dd>「未列出」批量签发前过三道校验: <strong>A 档流转守恒</strong>(上波考察中行在本波 A/B/C 留存 ≥70% — 「考核中最终移入已达标/未达标/免罪」的守恒律) + 总行数骤降(≥ 基线 30%) + 零行对账戳; 上波考察中种子失踪进观察期(自身位置被覆盖且连续 2 波未重见才判移出)维持管束 — 「没看到」不终结「考察中」</dd>
+        </dl>
+      </div>
+      <p class="dim">数字口径: 现状键数 40 = 全局标量 23 + channel 5 + 站点条目 12(<code>config/schema/hr.py</code> 实数);
+         文中全部默认值为提案值, 实施时以实测与基线切片为准。</p>
+    </section>
+
+    <!-- ======================= §1 ======================= -->
+    <section id="s1">
+      <div class="sec-head"><span class="no">§1</span><h2>现状病灶(证据)</h2></div>
+      <p>v2 落地后对 <code>src/auto_qb/hr/</code> 的实测核对(2026-09-28, develop @ 5bc43784):</p>
+      <div class="tbl-wrap"><table>
+        <caption>病灶 → 证据 → 后果</caption>
+        <tr><th style="width:15%">病灶</th><th style="width:47%">现场</th><th>后果</th></tr>
+        <tr>
+          <td><strong>每轮全量翻页</strong></td>
+          <td><span class="ref">hr/service.py:489-492</span> — 外层按档位 <code>for scope in scopes</code>, 内层每档 <code>range(1, max_pages_per_refresh+1)</code> 从第 1 页翻起; 所谓增量靠有效期复用轮 + 三个早停实现, 而早停①依赖默认关闭的 <code>completed_age_limit</code>, 早停③(本地覆盖严格版)刻意不产生放行, 实际稳态仍是全量翻</td>
+          <td>与「首波 20 页、之后 1 页」的理想节奏相反; 每波烧掉的请求量恒定, 不会随索引完备而下降</td>
+        </tr>
+        <tr>
+          <td><strong>双频控模型</strong></td>
+          <td><span class="ref">hr/ratelimit.py</span> 单文件两套账本: legacy 合并窗口(<span class="ref">model.py:350</span> HrQuota)与 split 双令牌桶(<span class="ref">model.py:463-467</span>), 站点用哪套由 <code>quota_model</code> 配置切换(<span class="ref">ratelimit.py:54,67</span>); 全局 6 个 split 专属键</td>
+          <td>两条记账/恢复/判定代码路径长期并存, 测试与文档双份口径 — 模型混杂即 BUG 温床</td>
+        </tr>
+        <tr>
+          <td><strong>熔断 + 停用回落</strong></td>
+          <td>连续 3 次失败 → 12H 熔断(<span class="ref">ratelimit.py:164-181</span>); 连续 3 轮排序/字段强信号 → suspended 需人工 <code>--hr-resume</code>(<span class="ref">service.py:674-681</span>); suspended 期间 <span class="ref">resolve.py:346-350</span> 判定返回 None → <strong>整站回落本地 downloaded 口径</strong></td>
+          <td>PT 站不稳定是常态: 抖动 3 轮即停 12 小时, 停用期间保护退化为本地粗判 — 这就是漏 HR 的隐形炸弹</td>
+        </tr>
+        <tr>
+          <td><strong>mode 分叉 + 撤退路径</strong></td>
+          <td><code>mode: partial/all</code> 两套语义(<span class="ref">resolve.py:275-276</span>); <code>unknown_policy</code> 可配 <code>not-hr</code> 把未核实放行(<span class="ref">resolve.py:92-102</span>); 三层豁免(completed_age_limit / auto_age_limit / seeding_exempt_ratio)各自压过清单命中并自带「自愿漏 HR」警告</td>
+          <td>漏 HR 与否取决于配置组合 — 用户口径: 不管站点是部分 HR 还是全站 HR, 漏 HR 都不允许, 设置里不许有撤退路径</td>
+        </tr>
+        <tr>
+          <td><strong>配置键泛滥</strong></td>
+          <td>40 键(§0 口径), 其中 <code>hr_page_scopes</code> 必含 A/B/C 否则校验报错(配了也白配), <code>parse_missing_rate_max</code> 被 S2 零容忍架空(v2 审计 F3 已发现), <code>quota_model</code> 以下 6 键仅 split 站点消费</td>
+          <td>字段多到没有一处敢说「配置即真相」; WebUI 站点卡片 12 个微调项无人能解释全</td>
+        </tr>
+      </table></div>
+      <p>另有 v2 审计待拍板的 F1–F4(<span class="ref">reports/26-09-28-0030</span>): 本计划直接以新模型取代其载体 —
+         F3(parse_missing_rate_max 架构)随键删除消解, F1/F2(早停②形态假设、跨页零容忍误停站)随波次引擎与「停用改档位截断」消解,
+         F4(注释漂移)随重写消除, 不再单独修复。</p>
+    </section>
+
+    <!-- ======================= §2 ======================= -->
+    <section id="s2">
+      <div class="sec-head"><span class="no">§2</span><h2>新口径五原则</h2></div>
+      <p>用户 2026-09-28 定调, 逐条转译为可实施原则:</p>
+      <div class="tbl-wrap"><table>
+        <caption>口径 → 原则 → 落点</caption>
+        <tr><th style="width:36%">用户口径</th><th style="width:34%">设计原则</th><th>落点</th></tr>
+        <tr>
+          <td>「允许单波突发大量请求, 但不能连续多波都大量请求」; 「第一波把需要的数据都拿到, 后续仅需对新增种子获取数据, 这波 20 页下波可能 1 页」</td>
+          <td>每波都以全量对账为目标 + 覆盖早停: 覆盖了所有对象的可能位置即停 — 页数由「覆盖对象集(未对账 ∪ 考察中, 超额 ≥3× 排除)最老的完成时间」决定, 随对账与转终态单调变浅; 每波自证覆盖, 不依赖上波(清单在动)</td>
+          <td>§4 波次引擎</td>
+        </tr>
+        <tr>
+          <td>「熔断在站点不稳定时是隐形炸弹, PT 站不稳定经常发生」</td>
+          <td>失败不改变安全语义, 只改变数据效力: 任何失败路径终结于「档位截断(失效点之前有效) + 无证据按本地兜底 + 告警」, 不存在停用与配置回落</td>
+          <td>§5; 熔断/suspended/<code>--hr-resume</code> 全删</td>
+        </tr>
+        <tr>
+          <td>「部分种子 HR 的站点和所有种子 HR 的站点, 漏 HR 都不允许, 未核实恒受管束, 设置里不能做撤退路径」</td>
+          <td>未核实 → 管束写进代码, 不暴露配置; partial/all 差异是站点事实(有没有清单页), 归站点档案, 不是用户意愿</td>
+          <td>§3 判定表行 4; <code>mode</code>/<code>unknown_policy</code> 删除</td>
+        </tr>
+        <tr>
+          <td>「本地做种达到要求就可视为完成, 在线核实只是保障准确」(19:32) +「网站显示"未达标"是终态」(20:43) +「<b>本地已达标 × 网站考察中凭什么放行?</b>」(20:58 定稿)</td>
+          <td>三句合成一条优先级: <b>网站考察中 → 管束(压过本地达标)</b>, 因为删了前功尽弃; 站点终态档 B/C/D 与移出未列出 → 放行(终态不可逆); 站点无话可说时 → 本地判据兜底(达标放行/未达标管束)。本地达标不再单独构成放行, 它是无证据时的完成判据 + satisfied 轴</td>
+          <td>§3 判定表 + 矩阵; 终态不可逆同时是覆盖早停(§4.2)的基石</td>
+        </tr>
+        <tr>
+          <td>「配置字段太多就是 BUG 的温床, 模型需要完全推翻彻底简化」</td>
+          <td>程序能定的绝不配置: 节奏常量、保留期、重试数、告警阈值全部收回代码; 配置只留「用户身份类」事实</td>
+          <td>§6; 40 → 14 键</td>
+        </tr>
+      </table></div>
+    </section>
+
+    <!-- ======================= §3 ======================= -->
+    <section id="s3">
+      <div class="sec-head"><span class="no">§3</span><h2>判定模型</h2></div>
+
+      <h3>3.1 四行判定表<span class="tag">resolve.py 重写的唯一职责 · 20:58 定型, 21:25/21:53 增补</span></h3>
+      <p>对每个绑定站点的本地种子, 判定输出只有两态: <strong>受管束</strong>(HR)/ <strong>放行</strong>。
+         按序求值, 先命中先出(<code>hr/resolve.py</code> 重写后):</p>
+      <div class="tbl-wrap"><table>
+        <caption>判定表(按序求值)</caption>
+        <tr><th style="width:6%">行</th><th style="width:32%">条件</th><th style="width:12%">结论</th><th>依据与说明</th></tr>
+        <tr>
+          <td class="t-mono">1</td>
+          <td>清单命中 <strong>A 考察中</strong></td>
+          <td class="c-bad"><strong>受管束</strong></td>
+          <td><strong>站点说还在考, 就是还在考</strong> — 本机此刻删了它, 前功尽弃真吃 H&amp;R; 本地是否达标不改变这一点(本地达标只说明快转 B 了)。管束持续到站点把它转出(转终态档或移出清单)。命中 A 即撤销既有放行</td>
+        </tr>
+        <tr>
+          <td class="t-mono">2</td>
+          <td>清单命中 <strong>B 已达标 / C 未达标 / D 已免罪</strong></td>
+          <td class="c-ok"><strong>放行</strong></td>
+          <td><em>三个都是站点终态</em>: B 通过; <strong>C 未达标 = 考核结论已定</strong>(20:43 定稿) — 处置已注定, 再管束改变不了任何事; D 免罪。B 额外记 satisfied</td>
+        </tr>
+        <tr>
+          <td class="t-mono">3</td>
+          <td><strong>该档数据有效</strong>(解析层通过, §3.4)且种子完成时间位置被覆盖、未命中 — <em>「上波命中考察中」的种子须先过失踪观察期(§3.4)</em></td>
+          <td class="c-ok"><strong>放行</strong></td>
+          <td>覆盖区间里没有它 = 站点不管(删除/移出)— 也是终态。清单重现(重新考核)必然伴随重新下载: 本机重下由锚点漂移作废放行(机制保留), 非本机重下为接受的残余风险(§9)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">4</td>
+          <td><strong>无有效站点证据</strong>(首刷未完成 / 该档数据无效或未覆盖到 / 排序失效期间 / infohash 缺位)→ <strong>本地判据兜底</strong>: 本地达标(<code>seeding_time ≥ required+extra</code> 或 ratio 达标, tracker <code>hr</code> 段)→ 放行; 本地未达标 → 管束。种子 added_on 晚于最近健康波(新鲜度闸门)同落本行。<em>特例: 上波命中考察中、尚未过失踪观察期的种子不适用本行的达标放行 — 维持管束(§3.4: 网站的 last known state 是「在考」, 证据丢失不推翻它)</em></td>
+          <td class="t-mono">按本地</td>
+          <td>「<em>本地做种达到要求就可视为完成, 在线核实只是保障准确</em>」的落点: 站点无话可说时, 本地判据说了算; 证据缺失时未达标种子按「还在考」保守处理。<em>硬编码, 无配置项</em> — 现状 <code>unknown_policy</code>、mode 分支、suspended 回落本地全部并入本行后删除。超额种子(§3.3)无证据时经本行放行</td>
+        </tr>
+      </table></div>
+      <p>satisfied(达标轴) = 本地达标 ∨ 命中 B, 作为展示/消费轴保留: 打「达标」标签(<code>add_tag_for_satisfied</code> 等)、
+         WebUI 进度仪表、规则条件 <code>hr_satisfied</code> 语义不变。双 infohash(v1/v2)取更保守者的合并规则保留
+         (<span class="ref">resolve.py:281-300</span> 现实现)。</p>
+
+      <h3>3.2 情形矩阵: 本地状态 × 网站档位 → 处境<span class="tag">判定表的完全展开</span></h3>
+      <div class="tbl-wrap"><table>
+        <caption>12 格情形矩阵(本地轴: 做种达标与否; 网站轴: 清单档位/未列出/无证据; 本地已超额 ≥3× 者各格结论与「已达标」行完全一致 — 含命中考察中仍管束, 区别仅在取数侧免对账, 见 §3.3)</caption>
+        <tr><th style="width:22%">本地状态</th><th style="width:22%">网站显示</th><th style="width:20%">处境(结论)</th><th>说明</th></tr>
+        <tr><td>本地已达标</td><td>考察中(A)</td><td class="c-bad"><strong>受管束 · 考察中</strong></td><td><strong>站点说还在考就是还在考</strong> — 删了前功尽弃; 本地达标只说明快转 B 了, 管到站点转出为止</td></tr>
+        <tr><td>本地已达标</td><td>已达标(B)</td><td class="c-ok">放行 · 已达标</td><td>两边一致, satisfied</td></tr>
+        <tr><td>本地已达标</td><td>未达标(C)</td><td class="c-ok">放行 · 终态</td><td>站点结论已定, 管束无意义</td></tr>
+        <tr><td>本地已达标</td><td>已免罪(D)</td><td class="c-ok">放行</td><td>—</td></tr>
+        <tr><td>本地已达标</td><td>未列出</td><td class="c-ok">放行</td><td>站点不管它</td></tr>
+        <tr><td>本地已达标</td><td>无有效证据</td><td class="c-ok">放行</td><td>行 4 兜底: 「本地做种达到要求就可视为完成」— 站点无话可说时本地说了算</td></tr>
+        <tr><td>本地考察中(未达标)</td><td>考察中(A)</td><td class="c-bad"><strong>受管束 · 考察中</strong></td><td>典型考核态: 防删除、促做种、辅种排除全部生效</td></tr>
+        <tr><td>本地考察中(未达标)</td><td>已达标(B)</td><td class="c-ok">放行 · 已达标</td><td>本地以为没够, 站点判完 — 听站点的(satisfied)</td></tr>
+        <tr><td>本地考察中(未达标)</td><td>未达标(C)</td><td class="c-ok">放行 · 终态</td><td><strong>网站显示"未达标"是终态</strong> — 考核结论已定, 管束它改变不了任何事</td></tr>
+        <tr><td>本地考察中(未达标)</td><td>已免罪(D)</td><td class="c-ok">放行 · 免罪</td><td>—</td></tr>
+        <tr><td>本地考察中(未达标)</td><td>未列出</td><td class="c-ok">放行</td><td>站点不管它(删除/移出)</td></tr>
+        <tr><td>本地考察中(未达标)</td><td>无有效证据</td><td class="c-bad"><strong>受管束 · 未核实</strong></td><td>兜底格: 不知道站点考没考它, 按「还在考」处理 — 硬编码无配置</td></tr>
+      </table></div>
+      <div class="verdict">
+        <div class="v-label">一个管束正证据, 一个兜底, 两个放行终态</div>
+        <p><strong>管束只发生在三格</strong>: 「× 网站考察中」两格(正证据, 行 1 — 本地达标与否都管)与「本地考察中 × 无证据」(兜底, 行 4)。
+           <strong>放行三源</strong>: 站点终态档 B/C/D(行 2)、移出未列出(行 3)、本地达标在无证据时兜底(行 4)。
+           <strong>终态不可逆</strong>是整套机制的基石: B/C/D 与「未列出/移出」都不会静默反转 — 反转必然伴随重新下载
+           (本机重下 ⇒ 锚点漂移作废放行; 非本机重下为接受的残余风险), 这让取数侧(§4.2)可以不再为终态种子翻页 — 早停由此成立。</p>
+      </div>
+
+      <h3>3.3 超额线: 做种 ≥ 3× 要求即免除在线对账<span class="tag">21:25 用户定稿, 常量 SEED_EXEMPT_RATIO = 3</span></h3>
+      <div class="verdict">
+        <div class="v-label">网站是绝对的权威</div>
+        <p><strong>本地做种时间 ≥ 3 × required_seeding_time + extra_seeding_time(常量 3 倍)⇒ 放行, 且免除在线对账义务</strong> —
+           取数侧不再为它翻页、下载、对账(§4.2 对象集排除)。但这条线<strong>不是判定上的免死金牌</strong>:
+           <em>遇到网站「考察中」仍是「考察中」(管束)</em> — 网站权威压过超额线。两者的分工: 超额线免除的是「主动核实成本」,
+           不推翻站点结论; 被动命中(它的行在已翻范围内被宽泛名称粗配认出为考察中 → 该行是 A 档必被无条件下载 → infohash 精配确认; 或恰已算出 infohash 直接精配)时, 站点档位照常生效 — 粗配误配由 A 档全下载的精配自愈。</p>
+        <p>这条线同时解决了覆盖早停的一个真问题: 特别老的种子可能藏在清单很深处, 若它们都在覆盖对象集里,
+           覆盖深度会被拉到全清单 — 而这些种子 3× 义务早已超额, 没必要管。排除后, 覆盖深度只由「未对账新种子 + 考察中种子
+           (含被动命中考察中的超额种子, 罕见)」决定。它也不依赖完成时间(只看本机 <code>seeding_time</code> 计数器, 恒可信) —
+           纯辅种做满 3× 同样出对象集, 完成时间不可信的残余场景进一步收窄。</p>
+      </div>
+
+      <h3>3.4 数据有效性与状态存续(取代 verified_ttl 与证据年龄)<span class="tag">22:48 用户定稿: 拿到的数据都应该有效</span></h3>
+      <p>网络原因不会使 A 中的行跑到 B 中去 — 种子的站点状态迁移是站点侧事实, 网络故障只让「这次没拿到」, 不篡改「上次拿到的」。
+         所以证据<strong>没有时效, 只有真伪</strong>: 已拿到的数据永续有效(终态不可逆 / 考察中不静默丢失), 只被新观测更新。
+         两级证据年龄(last_full_evidence_ts / 波数据年龄)与整波「覆盖证据」概念整体退役, 换成<strong>档位级数据有效性(截断式)</strong>:</p>
+      <div class="tbl-wrap"><table>
+        <caption>数据有效性的三种失效(逐页推进, 在失效点截断 — 失效点之前的数据全部有效, 不搞零容忍整轮作废)</caption>
+        <tr><th style="width:24%">失效情况</th><th style="width:38%">处理</th><th>影响面</th></tr>
+        <tr><td><strong>未解析到表头</strong></td><td>该页无效, 该档证据在此截断(第 1 页即无表头 → 登录页检测/疑似改版路径)</td><td>该档之后页不信任; 命中照常(之前页)</td></tr>
+        <tr><td><strong>行内数据解析失败</strong></td><td>该页无效, 该档证据在此截断(失效行可能是「实为考察中但字段没解析出」— 丢弃该行会误放行, 故连页截断而非行级丢弃)</td><td>同上</td></tr>
+        <tr><td><strong>顺序排列前提失效</strong>(页内逆序/跨页乱序)</td><td><strong>该档立即停翻(强制早停), 不能继续翻页</strong> — 失效点之前拿到的数据依然有效(命中照常、未列出可判到失效前一页末), 之后的一概不取; 该档等下周期自然重试(「退避」= 等待下波, 无独立机制); 观察期推进冻结(维持管束); 连续多波失效 → ERROR 告警(疑似改版, 建议 --hr-once)</td><td>排序假设是位置推定的基石 — 失效后深处内容不可信, 宁可不取; 命中不依赖排序 — 漏 HR 不可能; 代价 = 失效期间「移出放行」延迟(误管, 方向安全)</td></tr>
+      </table></div>
+      <p><strong>状态存续规则</strong>(与数据有效性互为表里):</p>
+      <ul class="plain">
+        <li><strong>终态不可逆</strong>: 站点终态档(B/C/D)与「移出」放行一经签发永续有效, 不设过期、不需要每波重验 — 反转必然伴随重新下载(本机重下 ⇒ 锚点漂移作废; 非本机重下为接受的残余风险, §9)。</li>
+        <li><strong>考察中不因「没看到」而静默丢失</strong>: 上波命中考察中的种子, 本波没在 A/B/C 中找到 ⇒ 一律当作无证据(22:38 定稿)→ 失踪观察期维持管束。观察期出口: 该种子完成时间位置被本波覆盖且未重见, 连续 <code>MISSING_GRACE_WAVES=2</code> 波 ⇒ 判「移出」放行; 任何波重见 ⇒ 按档位定论。streak 用种子自身位置的局部覆盖证明推进, 与整波校验解耦(防单条失踪死锁)。</li>
+        <li><strong>档位独立</strong>: 某档本波失败(网络/解析)只影响该档的新证据, 不污染其他档 — A 档成功 B 档失败时, A 档的命中/未列出判定全效, B 档对象维持原状态。</li>
+      </ul>
+      <p>逐种子 <code>verified_ttl</code> 删除, 站点数据不再存任何「证据年龄」时间戳 — 状态 = 最后观测事实 + 上述存续规则。</p>
+    </section>
+
+    <!-- ======================= §4 ======================= -->
+    <section id="s4">
+      <div class="sec-head"><span class="no">§4</span><h2>波次引擎</h2></div>
+      <p>废除「档位 × 页数」双层循环与预算轮转, 重写为单一波次模型(<code>hr/service.py</code> 的 <code>_do_fetch</code> 整体重写)。
+         波的类型不是配置 — 它由索引与证据状态推导, 是波结束时的<b>结果</b>:</p>
+
+      <h3>4.1 单一波型: 每波都以全量对账为目标<span class="tag">26-09-28 20:27 用户定稿, 无波型之分</span></h3>
+      <p>废除「增量波/全量波/续翻波」三波型与断点续翻 — <strong>每波都从第 1 页开始、以覆盖全部对象为目标</strong>。
+         理由是清单是动的: 顶页新插入会把旧行往后顶, 波与波之间什么都可能变 —
+         任何「从断点继续」「凭上波已见过而跳过」都在赌上波的覆盖假设仍然成立, 赌输就是漏。
+         所以每波<strong>自证覆盖</strong>: 覆盖结论只来自本波抓到的页面, 不继承上波任何覆盖假设。</p>
+      <ul class="plain">
+        <li><strong>触发</strong>: 取数线程每 <code>poll_interval</code>(常量 60s)醒来, 到期(<code>refresh_interval</code>)/Retry-After 期满 → 发波; 站点锁被占 → 让位(多实例语义不变)。</li>
+        <li><strong>翻页方式 — A/B/C 轮流</strong>: 三档清单各自独立分页, 每档从第 1 页起, 轮流推进(A1 → B1 → C1 → A2 → B2 → C2 → …)。某档覆盖完成(§4.2)即退出轮转, 剩余档继续。<strong>D 档(已免罪)不翻</strong> — 命中 D 与「未列出」同为放行, D 档没有增量信息; 命中 D 的种子由覆盖判据按未列出放行, 结论一致。</li>
+        <li><strong>档位独立收波</strong>: 每档独立覆盖完成(停翻条件任一成立/翻到末页/异常截断)→ 该档数据有效(§3.4), 档内命中定论 + 覆盖范围内「未列出」签发(过 §5.3 语义防伪: 流转守恒 + 总量骤降 + 零行戳)+ 终态冻结出集(§4.4)。无「整波成败」概念 — 某档失败只影响该档, 其他档判定全效(22:48 定稿)。</li>
+        <li><strong>预算截断</strong>(<code>max_pages_per_wave</code> / 单轮等待上限 900s 常量) → 该档证据在截断点截止(<strong>截断点之前的数据仍然有效</strong> — 命中照常, 未列出待下波续判), 下波从头再翻。<strong>无断点续翻</strong>(每波自证覆盖)。</li>
+      </ul>
+
+      <h3>4.2 覆盖早停: 三个停翻条件<span class="tag">本波自证, 全部基于排序假设 · 21:17 定稿</span></h3>
+      <p>对档位 X(A/B/C), 维护本波<strong>覆盖对象集</strong> = 该站本地种子中的「未对账者」(新下载/锚点漂移回炉, 位置未知)
+         ∪ 「考察中者」(行 1 管束中, 档位随时会变 — 转终态即出集合)。<strong>超额种子(≥3×, §3.3)不在对象集</strong> —
+         免除在线对账义务, 不驱动覆盖深度、不为它翻页下载; 但已见行与它们做<strong>被动匹配</strong>(名称粗配或恰已算出的
+         infohash): 被动命中「考察中」→ 网站权威生效转管束(进考察中集合), 命中终态档 → 维持放行。
+         已终态/移出的放行种子也不是对象 — 终态不可逆(§3.2), 不再为它们翻一页、下一发。
+         <strong>判据的主体是本地种子</strong> — 清单里不属于本地 qB 的行(别的客户端下载的/已删除的)不构成继续翻页的理由。
+         每抓完一页, 检查三个停翻条件, <strong>任一成立即该档停翻</strong>(三者都要求该档排序单调校验通过,
+         都只用<strong>本波</strong>信息 — 与被否决的「整页全部是已见过的 tid」划清界限: 那个依赖上波索引状态,
+         而这三个条件每一个都能在本波内独立证明「更深处不可能有覆盖对象」):</p>
+      <div class="tbl-wrap"><table>
+        <caption>停翻条件(每档独立, 任一成立即停; 另有强制停翻: 排序单调校验失效 ⇒ 立即停翻不翻页, §3.4。停翻后未命中的对象判「未列出」行 3 放行, 已命中的按行 1/2 定论)</caption>
+        <tr><th style="width:8%">条件</th><th style="width:34%">判据</th><th style="width:20%">证据性质</th><th>说明</th></tr>
+        <tr>
+          <td class="t-mono">①</td>
+          <td><strong>完成时间覆盖</strong>: 已翻到的最深页面行完成时间, 早于覆盖对象集里最早(最老)的完成时间(减对齐余量, 常量 1D)</td>
+          <td>本地推定信号</td>
+          <td>更深的页只会更老, 不可能再有对象。依赖本地完成时间可信(见下: 可信度分层)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">②</td>
+          <td><strong>到期段强信号</strong>: 页尾连续 <strong>5 行「剩余考察时间」为 0</strong>(跨页延续, 沿用 STREAK=5)</td>
+          <td>纯页面信号</td>
+          <td>排序单调下更深全是到期行(remain==0) — 考察中的对象(remain&gt;0)不可能藏在更深处; 藏在深处的到期行无论看到与否结论相同(命中 → 终态放行, 没看到 → 未列出放行), <strong>停翻零漏判</strong>。❗它不依赖本地完成时间 — 纯辅种/时间漂移场景下的独立保险, 恰好补①的短板。旧版配套的反算考核期 P ±1 天机检随豁免 A 删除; 误判保险 = 排序校验 + S2 字段校验 + 「remain==0 而档位为 A」矛盾检测(视为强信号, 本波证据无效)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">③</td>
+          <td><strong>本地全集覆盖</strong>: 覆盖对象里未对账者已全部与已见行 infohash 对上(且无待回填)</td>
+          <td>本地确认信号</td>
+          <td>「本地种子已全被覆盖」的确认版 — 每个对象都亲眼确认了清单状态。种子全在清单头部活跃时最快触发; 对象不在清单里时此条件永不触发, 由①/②收尾</td>
+        </tr>
+      </table></div>
+      <ul class="plain">
+        <li><strong>完成时间可信度分层</strong>(条件①的适用前提): 本机下载完成(<code>downloaded ≥ size</code>)或曾对账绑定过站点行(记住了站点侧 <code>done_iso</code>)的种子, 完成时间可信, 参与条件①; <strong>纯辅种</strong>(本机无下载记录且从未对账)的 <code>completion_on</code> 与站点完成时刻无关联, 不可信 — 不参与①, 由②/③或翻到末页收尾(方向安全, 只费页数); 首次对账后即获得站点侧时间, 下波起恢复。可信度是演进量: 对账越多, 早停越准。</li>
+        <li><strong>对齐余量</strong>: 本地完成时刻与站点页面完成时间存在时差(时钟漂移/传输确认差), 比较时留常量余量; 余量内不能确定就继续翻 — 保守方向多花页数, 不会漏。</li>
+        <li><strong>节奏自证</strong>(用户口径的量化落点): 覆盖深度由「覆盖对象集最老的完成时间」单点决定 — 首波全部未超额种子未对账, 翻到最老对象位置或到期段(全量效果, 大站 20 页级); 此后种子陆续对账、转终态或做满 3× 出集, 对象集收缩到「未对账新种子 + 考察中种子」, 集中在完成时间较新的一侧(特别老的超额种子已被排除, 不会再拉深), 覆盖深度单调变浅, 稳态下一两页即停 — 「这波 20 页、下波 1 页」由此涌现, 不靠波型配置。</li>
+        <li><strong>空对象集的停翻语义</strong>: 对象集为空(全部终态/超额/已对账)时条件①视为已满足 — 无对象即无覆盖义务, 每档翻 1 页捕获可能的新增即停(轻量波)。顶页新插入若属本地种子, 它必然是新下载 → 未对账 → 对象集非空, 轻量波天然升级; 本地无感的新插入(他机下载)不构成翻页义务(§9 残余风险已列)。</li>
+        <li>旧三早停的去向: 考核期到期早停②<strong>原样恢复</strong>(本表条件②); 本地覆盖早停③恢复为条件③(infohash 确认版, 严格版前提「无待回填」保留); 超龄早停①的概念被条件①吸收(超龄线 = 对象集最老完成时间, 无需 completed_age_limit 配置)。</li>
+      </ul>
+
+      <h3>4.3 波内流水(与现状的差异点)</h3>
+      <div class="flow">
+        <div class="step"><div class="s-no">STEP 1</div><div class="s-title">取页 → 解析 → 校验</div>
+          <p>扩展通道取页、adapter 解析、表头/字段/排序校验 — 契约与现实现一致, 扩展零改动。表头缺失/行解析失败 → 失效点截断(之前有效); <strong>排序失效 → 强制早停, 不能继续翻页</strong>(§3.4), 不判停站。</p></div>
+        <div class="step"><div class="s-no">STEP 2</div><div class="s-title">行处理(逐页增量落盘)</div>
+          <p>行 → 按 §4.5 规则取得身份(A 档无条件下载 / B·C·D 粗配触发下载 / 永久层已有档案直接用)→ infohash 精配与本波覆盖对象对账: 命中即按档位定论(考察中 → 管束 / B/C/D 终态 → 放行并出集合, §3 矩阵), 管束事实即刻生效; 旧的放行记录被命中考察中即撤销。</p></div>
+        <div class="step"><div class="s-no">STEP 3</div><div class="s-title">覆盖判据 / 预算</div>
+          <p>每档每页后查三个停翻条件(§4.2), 任一成立即退出该档轮转; 预算到顶 → 该档截断(截断点之前数据有效)。</p></div>
+        <div class="step"><div class="s-no">STEP 4</div><div class="s-title">波完成 → 全量重算</div>
+          <p>该档数据有效 → 覆盖范围内未列出者签发放行(过 §5.3 防伪)、命中者按档位落账、转终态者移出对象集(状态冻结)— 对象集每波收敛。</p></div>
+        <div class="step"><div class="s-no">STEP 5</div><div class="s-title">回填下载</div>
+          <p>.torrent 只为<strong>覆盖区间内</strong>缺 infohash 且不在永久层的行下载(§4.5, 每条受同一间隔约束), 删除「页面只在新轮/下载只在复用轮」的 split 特化分工与复用轮特判 — 数据有效期语义由证据健康(§3.4)接管。</p></div>
+      </div>
+
+      <h3>4.4 对象集每波收敛, 终态冻结</h3>
+      <p>v2 草案的「增量波捕获重现 → 撤销放行」依赖增量证据健康, 且放行续期要靠全量波 — 两套证据等级互相纠缠。
+         单波型下这个复杂度不存在: <strong>覆盖对象集每波从「未对账 ∪ 考察中」现算</strong>, 命中即定论, 转终态即冻结出集;
+         放行记录一经签发不再需要续期(终态不可逆, §3.4)— 取数量随对象集收缩单调下降, 没有任何需要跨波维护的增量状态。</p>
+
+      <h3>4.5 下载规则: 身份登记一次, 状态追踪靠 tid<span class="tag">21:44 用户定稿修订</span></h3>
+      <p>下载 <code>.torrent</code> 的唯一目的是<strong>给清单行登记身份</strong>: 页面行只有 tid + 截断名称, 没有 infohash —
+         首见时下载解析出 infohash 存入索引永久层, 此后该行的身份永久有效, <strong>状态追踪不再需要下载</strong>:
+         每波翻页读到同一 tid 的新档位(A→B→C…)即更新索引、按判定表改判, 转变延迟 ≤ refresh_interval。生命周期示例:
+         10-01 完成的种子进 A 档(remain=30D)→ 首波下载对上本地 → 命中考察中管束; 做种到 remain=0 站点转 B →
+         下波同 tid 读到新档位 → 放行 + satisfied 出对象集; 判 C(终态)→ 放行; 行移出清单 → 未列出放行。</p>
+      <ul class="plain">
+        <li><strong>同一 tid 永远只下载一次</strong>: 永久层(<code>downloaded</code>)算过即存档、永不重取 — 档位怎么变都不再产生下载; 跨波累计下载量趋近「A 档行 ∪ 覆盖区间内行 ∪ 粗配疑似本地的终态行」, 远小于清单总量。A 档下载量大时按日额跨波分摊, 未下完的下波续排(永久层去重)。</li>
+        <li><strong>A 档(考察中)行无条件全部下载</strong>(用户 21:44 定稿): A 命中是唯一管束正证据, A 档行的身份完备性是硬规则 — 不依赖覆盖区间的推断(完成时间漂移/排序异常的残余风险全部消除), 不因「看起来不像本地种子」跳过。A 档行天然有限(考核期内的种子), 下载一次永久存档。</li>
+        <li><strong>B/C/D 档(终态)行 — 覆盖区间 + 宽泛名称粗配(D1 已拍板, 21:53)</strong>: 终态行仅当「名称粗配疑似本地」才下载。粗配走宽泛路线(用户定稿): 不是完整/前缀匹配, <strong>本地名称与行名称存在足够长的连续重合段(阈值常量 K, 实施时按真实样张调, 建议 12~15 字符)即判疑似</strong> — 宁可误配不漏配。漏配后果分析(全部方向安全, 无漏 HR): 已达标×B 漏配零后果(satisfied 本地已成立); 未达标×B 漏配丢达标标签; 未达标×C/D 漏配最坏误管束(保守), 直到被覆盖或补上 — <strong>管束正证据只有 A 命中, 而 A 档行无条件全下载, 终态行漏配不可能漏 HR</strong>。粗配误配(把别人的行认成你的)= 多下载一次, 且 A 档行全下载规则下 infohash 精配必然校正 — <strong>粗配永远只是疑似触发器, 定论一律 infohash 精配(未列出判定除外 — 它是「没看到」, 不需要 infohash)</strong>。</li>
+        <li><strong>覆盖区间外的行不下载</strong>(对 A 档的补充: 已见行中的 A 档行由上一条无条件覆盖; 未翻到的页不涉及)— 覆盖判据(§4.2)保证区间外没有覆盖对象。</li>
+        <li>下载本身受同一套频控(min_interval 90S / 日额 / 单轮等待上限); 下载失败按 §3.4 截断处理(重试上限常量), 无独立退避。</li>
+      </ul>
+    </section>
+
+    <!-- ======================= §5 ======================= -->
+    <section id="s5">
+      <div class="sec-head"><span class="no">§5</span><h2>频控与失败处置</h2></div>
+
+      <h3>5.1 单频控模型<span class="tag">ratelimit.py 重写, 删双模型</span></h3>
+      <p>三个机制, 全部站点级独立计数:</p>
+      <div class="tbl-wrap"><table>
+        <caption>频控三件套</caption>
+        <tr><th style="width:26%">机制</th><th style="width:20%">默认</th><th>说明</th></tr>
+        <tr><td>相邻请求最小间隔 <code>min_interval</code></td><td class="t-mono">90S</td><td>页面与 .torrent 下载统一适用; 抖动只向上 +0~25%(保留现实现 <span class="ref">ratelimit.py:153-156</span>); 隐含 40 请求/时 的硬顶</td></tr>
+        <tr><td>日额保险 <code>max_requests_per_day</code></td><td class="t-mono">240</td><td>全部请求(页面 + 下载)合计, 零点重置; 只防长跑超量, 不是节奏工具</td></tr>
+        <tr><td>单波页数上限 <code>max_pages_per_wave</code></td><td class="t-mono">30</td><td>安全阀: 防改版/异常导致翻页失控; 到顶该档截断(截断点之前数据有效, §3.4), 下波从头再翻(§4.1) — 无断点续翻</td></tr>
+      </table></div>
+      <p>「单波突发可以、连续多波大量不行」在这个模型下是<b>结构性成立</b>而非靠参数堵: 波的大小由覆盖对象集决定(§4),
+         首波深(全量效果)后单调变浅, 稳态波天然一两页; 间隔硬顶保证任何波的请求速率 ≤ 40/时, 日额封总量。
+         小时配额、令牌桶、burst、双间隔全部删除 — 不再有需要解释「为什么 split 比 legacy 松」的口径。</p>
+
+      <h3>5.2 失败处置: 档位截断, 自然重试<span class="tag">熔断/停用/退避全部删除 · 22:48 定稿</span></h3>
+      <ul class="plain">
+        <li><strong>无退避机制</strong>: 「整波成败」不存在后退避失去载体 — 某档失败(网络/超时/解析失效)只是该档证据截断(§3.4), 下个 <code>refresh_interval</code> 周期自然重试; 站点不稳定时的请求节奏由 refresh_interval + min_interval 天然给出。<code>Retry-After</code> 保留(站点明确要求等待 → 下波推迟)。</li>
+        <li><strong>登录失效</strong>: 不再单独维护退避字段 — 同样档位截断 + 周期重试; 登录页检测照常告警(提醒续期登录态)。</li>
+        <li><strong>告警升级, 行为不变</strong>: 连续 3 波同档失效(疑似改版)→ ERROR 告警并建议 <code>--hr-once</code> 走查; 连续多周期无有效数据 → 告警列受影响站点(并入现 channel_silence 机制, 常量 6H)。告警只提示人, 不改变取数与判定行为。</li>
+        <li><strong>判定侧</strong>: 失败档的对象维持原状态(考察中继续管束 / 终态冻结 / 未对账落行 4 本地兜底) — <em>站点不稳定期间的代价是多打标或延迟放行, 永远不是漏 HR</em>。现状「suspended → judge 返回 None → 回落本地 downloaded」路径删除, <code>--hr-resume</code> 随之删除。</li>
+      </ul>
+      <div class="verdict">
+        <div class="v-label">不稳定场景的最坏请求量</div>
+        <p>站点持续抖动: 每波在早期页失败截断(失败早断不烧页), 周期节奏恒定 1/refresh_interval; 日请求量 ≤ 2 波 × max_pages_per_wave。对比现状: 熔断 12H 虽也停, 但到期即以全量节奏重试且判定已回落本地 — 新模型同样安静, 却不放弃保护。</p>
+      </div>
+      <h3>5.3 证据防伪: 流转守恒 + 总量骤降 + 零行对账戳</h3>
+      <ul class="plain">
+        <li><strong>A 档流转守恒(22:22 用户方案, 首要校验; 22:38 收紧)</strong>: 「考核中」的种子最终都会移到「已达标/未达标/已免罪」(免罪属少数) — 上一波 A 档行 tid 非空时, 本波在 A/B/C 已见行中的留存率须 ≥ 70%(<code>LANE_RETENTION_MIN</code>, 无任何豁免), 不达标 ⇒ 本波批量「未列出」签发冻结(A 档范围内; 语义防伪层 — 解析层校验管不住「内容被吞」)+ WARNING。它直接盯住管束正证据的来源, 比总量校验更精准 — 防「A 段定向吞行」被覆盖判据当「未列出」整批误放行。<strong>失踪者个体一律当作无证据走观察期(§3.4), 与本校验解耦: 校验只拦批量签发, 失踪者的管束与放行只服从观察期状态机</strong>。</li>
+        <li><strong>总行数骤降(粗保险, 保留)</strong>: 本波行数 ≥ 历史高水位的 30%, 骤降/归零 ⇒ 批量「未列出」签发冻结 + WARNING。与流转守恒互补: 前者防全清单蒸发, 后者防 A 段定向吞行。</li>
+        <li>结构完好的波得到零行: <strong>不签发未列出放行</strong>(改版空表即整站误放行, 不冒这个险), 全部种子落行 4 本地兜底(未达标管束) + WARNING(骤降校验在零行场景的特例)。</li>
+        <li>人工对账: <code>--hr-confirm-empty &lt;站点&gt;</code>(CLI)与 WebUI 站点卡片按钮写入一次性确认戳(存站点数据, 非配置); 之后零行波可正常签发放行。</li>
+        <li>清单再现任何非零行 → 确认戳自动清除, 回到默认严格语义。账号真清空 HR 后的再次清零需重新确认一次。</li>
+        <li><code>accept_empty_listing</code> 配置键删除 — 撤退路径从「常驻配置」降为「人工对账动作 + 自动失效」, 配置面零新增。</li>
+      </ul>
+    </section>
+
+    <!-- ======================= §6 ======================= -->
+    <section id="s6">
+      <div class="sec-head"><span class="no">§6</span><h2>配置面终稿</h2></div>
+
+      <h3>6.1 新键全集(14 个)</h3>
+      <div class="tbl-wrap"><table>
+        <caption>config.hr_check(全局 6 标量 + channel 5 + 站点条目 3)</caption>
+        <tr><th style="width:26%">键</th><th style="width:12%">默认</th><th>语义</th></tr>
+        <tr><td class="t-mono">enabled</td><td class="t-mono">false</td><td>总开关(保守默认不变)</td></tr>
+        <tr><td class="t-mono">min_interval</td><td class="t-mono">90S</td><td>相邻请求最小间隔(页面 + 下载统一); 唯一的节奏键</td></tr>
+        <tr><td class="t-mono">max_requests_per_day</td><td class="t-mono">240</td><td>站点级日额保险(全部请求合计)</td></tr>
+        <tr><td class="t-mono">max_pages_per_wave</td><td class="t-mono">30</td><td>单波页数上限(安全阀)</td></tr>
+        <tr><td class="t-mono">allow_window</td><td class="t-mono">""</td><td>仅该时段取数(保留; 与 notify.quiet_hours 语义相反的警示文案保留)</td></tr>
+        <tr><td class="t-mono">shared_dir</td><td class="t-mono">""</td><td>多实例共享目录(保留)</td></tr>
+        <tr><td class="t-mono">channel.{enabled,port,token,extension_id,request_timeout}</td><td class="t-mono">不变</td><td>取数通道五键原样保留(硬件事实: 端口/密钥/超时不是模型参数)</td></tr>
+        <tr><td class="t-mono">sites.&lt;档案 id&gt;.enabled</td><td class="t-mono">false</td><td>启用即管; <strong>mode 删除</strong> — 清单型/全站型由档案声明(新增档案字段 <code>listing: list|none</code>, 全站型站点不取数, 判定恒走行 4 本地兜底: 达标放行 / 未达标管束)</td></tr>
+        <tr><td class="t-mono">sites.&lt;档案 id&gt;.tracker</td><td class="t-mono">""</td><td>显式绑定(保留; 自动映射失败时的排障出口)</td></tr>
+        <tr><td class="t-mono">sites.&lt;档案 id&gt;.refresh_interval</td><td class="t-mono">12H</td><td>对账波周期; 也是波数据年龄阈值与 full_period 的计算基量</td></tr>
+      </table></div>
+
+      <h3>6.2 废弃键去向表(26 个)</h3>
+      <div class="tbl-wrap"><table>
+        <caption>每个被删的键 → 功能由哪个机制吸收</caption>
+        <tr><th style="width:30%">废弃键</th><th>去向</th></tr>
+        <tr><td class="t-mono c-bad">quota_model</td><td>双模型归一, 键删除(§5.1)</td></tr>
+        <tr><td class="t-mono c-bad">page_rate_per_hour / page_burst / torrent_rate_per_hour / torrent_burst / min_page_interval</td><td>min_interval 一把抓; 下载不再与页面抢账本(无共享配额)</td></tr>
+        <tr><td class="t-mono c-bad">max_torrents_per_hour / max_torrents_per_day / max_pages_per_day</td><td>max_requests_per_day 合并(全局/站点覆盖两版都删)</td></tr>
+        <tr><td class="t-mono c-bad">min_torrent_interval</td><td>改名 min_interval 并接管页面间隔</td></tr>
+        <tr><td class="t-mono c-bad">max_pages_per_refresh / max_pages_per_round</td><td>max_pages_per_wave 合并</td></tr>
+        <tr><td class="t-mono c-bad">hr_page_scopes</td><td>恒全档位 — 少抓一档即漏 HR, 这种键不该存在; 档位页集合是 adapter/档案事实</td></tr>
+        <tr><td class="t-mono c-bad">completed_age_limit</td><td>无需超龄线 — 考核状态由站点清单权威判定(判定表), 省页由三个停翻条件吸收(条件①的超龄线 = 对象集最老完成时间, 条件② = remain 归零段)</td></tr>
+        <tr><td class="t-mono c-bad">auto_age_limit</td><td>删除; 反算考核期 P + ±1 天机检机制整体删除, remain 归零段由停翻条件②(到期段强信号)直接处理</td></tr>
+        <tr><td class="t-mono c-bad">seeding_exempt_ratio</td><td>删除; 以常量 <code>SEED_EXEMPT_RATIO=3</code>(§3.3)回归 — 3× 超额免对账出对象集, 不暴露配置</td></tr>
+        <tr><td class="t-mono c-bad">mode</td><td>enabled; partial/all 差异归档案 <code>listing</code> 字段</td></tr>
+        <tr><td class="t-mono c-bad">unknown_policy</td><td>无证据按本地兜底入代码(判定表行 4: 达标放行/未达标管束), 不暴露配置</td></tr>
+        <tr><td class="t-mono c-bad">verified_ttl</td><td>两级新鲜度(§3.3)</td></tr>
+        <tr><td class="t-mono c-bad">accept_empty_listing</td><td>--hr-confirm-empty 人工对账戳(§5.3)</td></tr>
+        <tr><td class="t-mono c-bad">parse_missing_rate_max</td><td>S2 零容忍已是事实(审计 F3: 架空), 常量化为零容忍</td></tr>
+        <tr><td class="t-mono c-bad">failure_threshold / failure_cooldown</td><td>熔断与退避均删除(§5.2: 档位截断 + 周期自然重试)</td></tr>
+        <tr><td class="t-mono c-bad">poll_interval / index_retention / max_download_retries / channel_silence_warn / lock_timeout</td><td>常量化(60s / 30D / 3 / 6H / 0)</td></tr>
+      </table></div>
+      <p class="dim">守卫口径: 新键集同步 <code>config/schema/hr.py</code>(Field 表)+ <code>config/models.py</code> + <code>validate_config</code>(聚合校验)+ <code>config/impact.py</code> 字段级热生效表 — 守卫测试继续查「schema ↔ validate ↔ impact」三方一致。</p>
+    </section>
+
+    <!-- ======================= §7 ======================= -->
+    <section id="s7">
+      <div class="sec-head"><span class="no">§7</span><h2>迁移与兼容</h2></div>
+      <h3>7.1 配置迁移(config_version v3)</h3>
+      <ul class="plain">
+        <li>沿用加载即迁移 + 版本号备份机制(<span class="ref">plans/26-09-27-2252</span> 已建立): 全局段删 26 个废弃键; <code>sites</code> 条目 <code>mode: partial/all → enabled: true</code>, <code>mode: off</code> 条目整体删除; <code>tracker/refresh_interval</code> 原样保留。</li>
+        <li><code>trackers.*.hr_check</code> 旧键若仍有残留 → 直接删除(v2 迁移已收敛过一轮, 不再提供旧位置兼容)。</li>
+        <li>校验期报错口径更新: 绑定失败/未支持站点/绑定站点缺 hr 段三条保留; <code>hr_page_scopes</code> 必含 ABC 的校验随键删除。</li>
+      </ul>
+      <h3>7.2 站点数据迁移(&lt;data_dir&gt;/hr/&lt;站点&gt;.json, schema v3)</h3>
+      <ul class="plain">
+        <li><strong>保留</strong>: <code>index</code>(tid→HrEntry, 含档位/比/infohash)、<code>downloaded</code>(永久层)、<code>verified</code>(放行记录, 含锚点与 source)、refresh 元数据(档位计数等)。</li>
+        <li><strong>删除</strong>: <code>quota</code>/<code>torrent_quota</code>(双桶账本)、<code>fuse</code>、<code>suspended</code>、<code>login_backoff_until</code>/streak(登录失效走档位截断, 无独立字段)。</li>
+        <li><strong>新增</strong>: <code>empty_confirmed_at</code>、行数基线高水位与上波 A 档 tid 集(证据防伪, §5.3)、种子级 <code>missing_streak</code>(失踪观察期, §3.4)、各档失效状态(截断点/失效原因, §3.4)。❗不存任何「证据年龄」时间戳(last_wave_ok_ts/last_full_evidence_ts 不再需要 — 证据无时效, §3.4)。完成时间可信度分层无需新字段 — 由 <code>downloaded ≥ size</code> 或 index 内已绑定 <code>done_iso</code> 推导(HrEntry 现有字段)。</li>
+        <li>旧放行记录语义兼容: 现有 verified 条目按终态不可逆<strong>原样生效、永续有效</strong>(v3 不设任何过期), 迁移零过渡 — 不存在「升级瞬间回管束」问题。</li>
+      </ul>
+    </section>
+
+    <!-- ======================= §8 ======================= -->
+    <section id="s8">
+      <div class="sec-head"><span class="no">§8</span><h2>里程碑 M1–M5</h2></div>
+      <div class="tbl-wrap"><table>
+        <caption>每步独立可验收; 全程 <code>commands run test.quick</code> 迭代, 步末 <code>test.full</code> 记基线</caption>
+        <tr><th style="width:14%">里程碑</th><th style="width:44%">内容</th><th>验收判据</th></tr>
+        <tr>
+          <td><strong>M1</strong><br><span class="c-dim t-mono">判定重写</span></td>
+          <td><code>hr/resolve.py</code> 按四行判定表重写(命中考察中即管束 — 含本地已达标者; 终态档/未列出放行; 无证据按本地兜底; 删除豁免链/unknown_policy/mode 分支/suspended 回落); <code>torrents/record.py</code> 消费点适配(satisfied = 本地达标 ∨ 站点 B); 档位数据有效性与失踪观察期状态进入站点视图(§3.4)</td>
+          <td><strong>§3.2 十二格矩阵逐格参数化单测</strong>(三管束格 + 九放行格全覆盖, 含「本地已达标 × 考察中 → 管束」钉死、双 infohash 保守合并、新鲜度闸门、档位无效落行 4); 四个消费点(打标/规则/表达式/WebUI)零语义回归</td>
+        </tr>
+        <tr>
+          <td><strong>M2</strong><br><span class="c-dim t-mono">波次引擎</span></td>
+          <td><code>hr/service.py</code> 取数主循环重写: 单波型(每波全量对账) + A/B/C 轮流翻页 + 三停翻条件(对象集 = 未对账 ∪ 考察中; 完成时间可信度分层 + 对齐余量; 空对象集轻量波) + 下载规则(§4.5: A 档硬规则 + D1 粗配) + 骤降保护 + 预算截断重头; 删除档位循环旧序/复用轮/旧三早停实现/反算 P</td>
+          <td>fixtures 波次单测: 首波深翻(全量效果); 转终态出对象集 → 覆盖深度变浅; 超额种子(≥3×)不在对象集 — 特别老藏深的超额种子不再拉深覆盖深度, 被动命中考察中 → 转管束; 纯辅种(完成时间不可信)所在档由到期段强信号(remain==0 ×5)或末页收尾; 三个停翻条件逐一红验; 排序失效 → 该档立即停翻(失效点之前数据有效, 之后一概不取); 预算截断 → 截断点前有效; 顶页新插入(旧行后顶)在下波被完整覆盖; 覆盖区间外的行不入下载队列; 已见 A 档行无条件下载且同 tid 永不重下(永久层); 空对象集 → 每档 1 页轻量波; 总行数骤降 / A 档流转守恒不达标 → 批量未列出冻结; 上波命中考察中的种子失踪 → 一律无证据维持管束(无小样本豁免), 自身位置被覆盖且连续 2 波未重见 → 判移出放行, 重见按档位定论; 单条考察中失踪 → 流转守恒校验拦批量签发但观察期照常推进(无死锁); 本地已达标 × 命中考察中 → 管束</td>
+        </tr>
+        <tr>
+          <td><strong>M3</strong><br><span class="c-dim t-mono">频控与失败</span></td>
+          <td><code>hr/ratelimit.py</code> 单模型重写(间隔/日额/抖动/Retry-After/时间窗); 熔断 + suspended + 退避删除(档位截断 + 周期重试取代); 告警升级; 零行确认戳 + <code>--hr-confirm-empty</code></td>
+          <td>截断式数据有效性单测(三种失效 × 截断点前后数据效力); <strong>断言测试: 全代码路径不存在「无站点证据而放行考察中种子」的组合</strong>(失踪观察期特例覆盖); Retry-After 取大用例; 最坏请求量推演用例(持续失败日请求 ≤ 2 × 页上限)</td>
+        </tr>
+        <tr>
+          <td><strong>M4</strong><br><span class="c-dim t-mono">配置与迁移</span></td>
+          <td>config 四件套(models/schema/loaders+validation/migrations v3); 档案 <code>listing</code> 字段; WebUI 站点接入卡片(mode→enabled, 微调项 12→2); 影响面表(impact.py)</td>
+          <td>validate 聚合报错单测; v2→v3 迁移样例配置逐键断言; 双 UI 冒烟(站点卡片 + HR 状态页)</td>
+        </tr>
+        <tr>
+          <td><strong>M5</strong><br><span class="c-dim t-mono">呈现与收尾</span></td>
+          <td><code>--hr-status</code> 波次视图(上波翻页数/各档停翻条件与失效状态/覆盖深度/骤降观测); <code>--hr-once</code> 适配 / <code>--hr-resume</code>(删); docs/configuration.md 与 keys.md 重写; 站点数据与 WebUI 状态页清理</td>
+          <td>真机走查(manual-walkthrough 清单更新后执行); 全量基线切片记实测数字; memory-bank 收尾 DoD 五步</td>
+        </tr>
+      </table></div>
+      <p class="dim">顺序依据: M1 立安全语义(判定是底线), M2/M3 换引擎(判定先行使波次的证据语义有锚), M4 收配置面(键随实现定型),
+         M5 面向人与文档。M1–M3 期间新旧配置键并存由 M4 迁移统一收口, 中间态不做兼容垫片(单人项目, 一步到位)。</p>
+      <h3>待拍板项</h3>
+      <div class="tbl-wrap"><table>
+        <caption>D1 · B/C/D 终态行的下载范围 — <strong>已拍板(21:53): 覆盖区间 + 宽泛名称粗配</strong></caption>
+        <tr><th style="width:22%">拍板内容</th><th>规则</th></tr>
+        <tr><td>粗配算法(宽泛路线)</td><td>不是完整/前缀匹配 — 本地名称与行名称存在<strong>足够长的连续重合段</strong>(阈值常量 K, 实施时按真实样张调, 建议 12~15 字符)即判疑似本地, 宁可误配不漏配</td></tr>
+        <tr><td>漏配后果(已分析)</td><td>全部方向安全、无漏 HR: 已达标×B 漏配零后果; 未达标×B 漏配丢达标标签; 未达标×C/D 漏配最坏误管束(保守)。管束正证据只有 A 命中, A 档行无条件全下载封死下载侧漏 HR</td></tr>
+        <tr><td>误配后果(自愈)</td><td>粗配误配 = 多下载一次; A 档行全下载 ⇒ 粗配疑似行必有 infohash 精配校正 — <strong>粗配只是疑似触发器, 定论一律 infohash 精配</strong>(「未列出」判定除外, 它是「没看到」)</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ======================= §9 ======================= -->
+    <section id="s9">
+      <div class="sec-head"><span class="no">§9</span><h2>风险推演</h2></div>
+      <div class="tbl-wrap"><table>
+        <caption>场景 → 新模型行为 → 残余风险</caption>
+        <tr><th style="width:22%">场景</th><th style="width:48%">新模型行为</th><th>残余风险与对策</th></tr>
+        <tr><td>站点抖动(间歇超时/5xx)</td><td>每波在早期页失败截断(之前页数据仍有效), 周期 1/refresh_interval 自然重试; 失败档对象维持原状态(考察中管束/终态冻结)</td><td>无 — 比现状(熔断 12H + 回落本地)严格更安全</td></tr>
+        <tr><td>改版(排序崩塌/字段缺失)</td><td>表头/行失效 → 失效点截断(之前有效); 排序失效 → 强制早停不翻页, 该档等下周期; 3 波后 ERROR 告警建议走查; 无停用、无回落</td><td>失效期间「移出放行」延迟(误管, 方向安全); 失效前命中不依赖排序 — 漏 HR 不可能</td></tr>
+        <tr><td>站点长宕(数天)</td><td>各档无证据 → 对象维持原状态(考察中管束/终态放行), 每周期自然重试; 恢复后首波深翻重建新增覆盖</td><td>无 — 终态不受影响, 考察中维持管束</td></tr>
+        <tr><td>清单骤降(改版/故障吞行, 非零)</td><td>总行数 < 基线 30% 或 A 档流转守恒不达标 ⇒ 批量「未列出」签发冻结(§5.3), 上波考察中种子维持管束 + WARNING</td><td>基线取历史高水位; 站点真清空走零行确认戳路径 — 三道校验互补</td></tr>
+        <tr><td>A 段定向吞行(总量正常, 只吞考察中)</td><td>流转守恒校验(留存率 ≥ 70%)专防此场景 — 不达标 ⇒ 证据不成立; 漏网的个别失踪者由失踪观察期(2 健康波)兜住</td><td>吞行量 &lt; 30% 且观察期内未恢复的残余概率 — 极低, 且方向随时间收敛</td></tr>
+        <tr><td>稳态运行</td><td>覆盖对象集 = 未对账 ∪ 考察中, 页数由其最老完成时间决定 — 随对账与转终态单调变浅至一两页; 终态种子冻结不再取数</td><td>覆盖深度依赖排序单调与本地/站点完成时刻对齐 — 排序校验 + 对齐余量(1D)兜底, 余量内不确定继续翻</td></tr>
+        <tr><td>新账号清单极大</td><td>首波受 30 页上限截断 → 截断点之前数据有效(命中照常), 未列出待下波续判; 每周期从头; 大清单站稳定态 ≈ 每波烧满预算</td><td>接管期未达标种子管束且日请求量有界(≤ 2 波 × 30 页 × 90s 间隔) — 预算可在配置放宽, 是唯一需要人调的旋钮</td></tr>
+        <tr><td>清单顶页大量新插入(批量做种)</td><td>旧行被往后顶 — 每波从第 1 页重翻自然覆盖, 未对账对象每波重新对账</td><td>无 — 单波型对清单变动免疫(这正是废除增量/续翻的理由)</td></tr>
+        <tr><td>站点把种子从清单移出又移回</td><td>移出 → 覆盖证据未列出 → 放行(终态); 移回必伴随重新考核/重新下载 — 本机重下由锚点漂移作废放行, 非本机重下为接受的残余风险(极罕见)</td><td>残余风险写明: 同账号在他机重下已了结种子时本机无感知 — 后果是该种子在他机重新考核, 本机种子状态不变</td></tr>
+        <tr><td>改版造出「结构完好的空表」</td><td>零行不签发放行 + WARNING; 无确认戳则未达标种子管束(行 4 兜底)</td><td>需要人工对账一次 — 换取的是整站误放行归零</td></tr>
+        <tr><td>多实例共享</td><td>文件锁 + 站点数据共享不变; 各档失效状态与 missing_streak 随站点数据共享(任一实例的观测全实例可见)</td><td>无新增</td></tr>
+      </table></div>
+    </section>
+
+    <!-- ======================= §10 ======================= -->
+    <section id="s10">
+      <div class="sec-head"><span class="no">§10</span><h2>影响面清单</h2></div>
+      <div class="tbl-wrap"><table>
+        <caption>文件级改动预估(实施时以实际为准)</caption>
+        <tr><th style="width:34%">文件/区域</th><th style="width:14%">动作</th><th>说明</th></tr>
+        <tr><td class="t-mono">hr/resolve.py (538 行)</td><td>重写</td><td>四行判定表 + satisfied 双源 + 两级新鲜度; 预计砍半</td></tr>
+        <tr><td class="t-mono">hr/service.py (1308 行)</td><td>重写核心</td><td>波次引擎; 旧三早停演进为三停翻条件/删预算轮转/复用轮/停用; 预计 −400 行</td></tr>
+        <tr><td class="t-mono">hr/ratelimit.py (317 行)</td><td>重写</td><td>单模型; 删双桶/双账本/熔断记账; 预计 −150 行</td></tr>
+        <tr><td class="t-mono">hr/model.py / store.py</td><td>改</td><td>站点数据 schema v3(§7.2); HrQuota/HrFuse/HrSuspension 删</td></tr>
+        <tr><td class="t-mono">hr/worker.py / status.py / report.py / events.py</td><td>改</td><td>档位截断/波次视图/--hr-confirm-empty/--hr-resume 删/事件文案</td></tr>
+        <tr><td class="t-mono">config/{models,schema/hr,loaders,validation/sections,migrations}.py</td><td>改</td><td>14 键 + v3 迁移 + 校验重写; site_presets 加 listing 字段</td></tr>
+        <tr><td class="t-mono">torrents/record.py / core/mixins/tags.py / rules/*</td><td>微改</td><td>消费点适配新判定接口, 语义不变</td></tr>
+        <tr><td class="t-mono">webui/(设置卡片/HR 状态页/详情)</td><td>改</td><td>站点卡片 12→2 项; 状态页熔断/配额分区换波次区</td></tr>
+        <tr><td class="t-mono">extensions/hr-fetch-proxy</td><td><strong>不动</strong></td><td>任务契约(page/torrent)与扩展侧第二道闸保留</td></tr>
+        <tr><td class="t-mono">tests/ HR 相关</td><td>大改</td><td>判定表/波次/频控/迁移四组单测重写; fixtures 复用</td></tr>
+        <tr><td class="t-mono">docs/configuration.md / memory-bank/config-reference/keys.md</td><td>重写</td><td>hr_check 节按 14 键口径; 扩展 README 微调</td></tr>
+      </table></div>
+      <p class="dim">范围守恒: 除上表所列外不动任何文件; 实施中撞见的计划外缺陷入 <code>memory-bank/issues/</code> 不顺手修。</p>
+      <div class="colophon">
+        auto-qb · HR 在线核实模型重建计划 · 2026-09-28 立档 · 基线 develop @ 5bc43784<br>
+        上游口径: 用户 2026-09-28 定调(本文 §2 逐条转译) · 取代 plans/26-09-27-1815 的取数与处置模型 · 相关: reports/26-09-28-0030(F1–F4 由本计划消解)<br>
+        修订 20:27: 用户四点定稿 — ①废除增量/全量/续翻三波型与断点续翻(续翻漏顶页变化); ②每波以全量为目标 + 覆盖即停; ③A/B/C 轮流翻页, 删判据「整页已见」(上波覆盖不可继承, 清单是动的); ④判定语义修订<br>
+        修订 20:43: 用户纠偏定稿 — <b>网站显示"未达标"(C)是终态</b>(考核结论已定), 管束对象只剩「本地考察中 × 网站考察中」与「无证据」两格, 新增 §3.2 十二格情形矩阵; 覆盖判据主体改为本地种子(本地种子全被覆盖即停), 新增 §4.5 下载规则(.torrent 只为覆盖区间内的行下载, 本地没有的种子不下载), 完成时间可信度分层(纯辅种不参与早停)<br>
+        修订 20:58: 用户纠偏 — <b>「本地已达标 × 网站考察中」改判管束</b>(站点说还在考就是还在考, 删了前功尽弃; 本地达标不再单独构成放行): 判定表收敛为四行 — 命中考察中(A)管束 / 终态档 B-C-D 放行 / 未列出放行 / 无证据按本地兜底(达标放行·未达标管束); 覆盖对象集 = 未对账 ∪ 考察中(终态不可逆 ⇒ 终态种子不再翻页下载, 覆盖对象集单调收缩), 波数据/覆盖证据超龄一律滑入行 4 本地兜底而非全站恒管束<br>
+        修订 21:17: 用户纠偏 — 20:27 误将「旧三早停全部废除」: 被否决的只是「整页全部是已见过的 tid」(依赖上波索引); 基于排序假设的早停全部保留 — §4.2 收敛为三个停翻条件(完成时间覆盖① / remain==0 连续 5 行到期段强信号②·纯页面信号, 补完成时间不可信场景 / 本地全集 infohash 覆盖③), 任一成立即停<br>
+        修订 21:25: 用户定稿 — 新增 <b>超额线 SEED_EXEMPT_RATIO=3</b>(做种 ≥ 3×required+extra ⇒ 放行并免除在线对账义务, 不进覆盖对象集 — 解决「特别老种子藏很深拉深覆盖」问题; 不依赖完成时间, 纯辅种做满 3× 同样出集); <b>网站仍是绝对权威</b> — 超额种子被动命中「考察中」仍转管束; 判定表保持四行(超额无证据时经行 4 达标放行)<br>
+        修订 21:44: 用户定稿 — §4.5 重写: 下载 = <b>身份登记一次</b>(同 tid 永不重下, 状态追踪靠 tid 读页面, 生命周期 A→B/C→出集示例入文); <b>已见 A 档行无条件全部下载</b>成为硬规则(不依赖覆盖区间推断); B/C/D 终态行下载范围列为待拍板 D1(推荐: 区间内全下; 备选: 名称粗配疑似本地才下 — 判定结论相同, 差异仅 satisfied 覆盖面与配额)<br>
+        修订 21:53: 用户拍板 D1 — <b>B/C/D 终态行 = 覆盖区间 + 宽泛名称粗配</b>(本地名与行名存在足够长连续重合段 ≥K 即疑似, 宁误配不漏配); 漏配后果分析入档(全部方向安全无漏 HR — 管束正证据只有 A 命中且 A 档行全下载); 粗配定位为疑似触发器, 定论一律 infohash 精配(未列出除外), 误配由 A 档全下载自愈
+        修订 22:15: 全文梳理轮 — 修复 17 处口径漂移(lede/§2 的「首波增量」残留、§5.2 标题与 §9 四处「恒管束」、§5.1/§5.3 的「全量波」、§6.2 四行去向的旧行号与旧倍数、§8 M5「上波型/断点」等), 节重编号 §3.3 超额线/§3.4 证据健康(§3.2a 移至矩阵后); 补齐两个完备性缺口 — <b>①骤降保护回归</b>(v2 机制: 行数 < 基线 30% ⇒ 覆盖证据不成立, 防改版吞行被当「未列出」整批误放行, §5.3)与 <b>②空对象集停翻语义</b>(每档 1 页轻量波, §4.2); §7.2 补行数基线高水位字段与可信度分层存储说明
+        修订 22:22: 用户方案完善骤降保护 — 新增 <b>A 档流转守恒校验</b>(首要: 「考核中」最终移入已达标/未达标/免罪(免罪少数), 上波 A 档行在本波 A/B/C 留存率 ≥LANE_RETENTION_MIN(0.7, 小样本豁免)否则覆盖证据不成立 — 直接盯住管束正证据来源, 防 A 段定向吞行); 新增 <b>种子级失踪观察期</b>(上波命中考察中失踪 → 维持管束 + missing_streak, 连续 MISSING_GRACE_WAVES=2 健康波未重见 → 判移出放行; 重见按档位定论)与 <b>行 4 特例</b>(考察中种子的无证据兜底不适用达标放行 — 「没看到」不终结「考察中」); 总量骤降(30%)保留为粗保险, 三道校验互补
+        修订 22:38: 用户收紧 — 删除小样本豁免(宁多管不漏): <b>失踪者一律当作无证据</b>(上波 A 档行本波未在 A/B/C 找到 ⇒ 观察期维持管束, 无快路径); 流转守恒校验(留存 ≥70%, 无豁免)只拦批量「未列出」签发, 与失踪者处理解耦; 观察期 streak 改用<b>种子自身位置的局部覆盖证明</b>推进(连续 2 波), 消解「单条失踪 ⇒ 留存率归零 ⇒ 校验永不通过 ⇒ 永久观察期」死锁
+        修订 22:48: 用户定稿「除解析失效外拿到的数据都应该有效」 — <b>证据无时效, 只有真伪</b>: 整波「覆盖证据」与两级证据年龄(last_full_evidence_ts/波数据年龄/full_period)整体退役, 换成<b>档位级数据有效性(截断式)</b>(§3.4: 表头缺失/行解析失败/排序失效 → 失效点截断, 之前数据全部有效 — 废除零容忍整轮作废); <b>退避机制整体删除</b>(无整波成败即无退避载体, 失败档 refresh_interval 自然重试, Retry-After 保留); 排序失效分析入档(命中不依赖排序 ⇒ 漏 HR 不可能; 未列出不可判/观察期冻结 ⇒ 误管方向安全); 三道语义防伪(流转守恒/总量/零行)保留 — 解析层管不住「内容被吞」; §7.2 删证据时间戳字段, 旧放行永续生效零过渡
+        修订 22:55: 用户纠偏排序失效处置 — <b>顺序前提失效是强制早停条件</b>: 该档立即停翻、不能继续翻页(22:48 版「失效点起继续翻页拿命中」废除), 失效点之前拿到的数据依然有效, 该档等下周期自然重试; §4.2 停翻条件表补强制停翻注记
+      </div>
+    </section>
+    </main>
+  </div>
+</div>
+</body>
+</html>
