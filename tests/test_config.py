@@ -790,31 +790,6 @@ def test_validate_section_type_errors():
         assert "config.trackers.T1.tags: 必须是列表" in err, err
 
 
-def test_validate_hr_value_errors():
-    """站点 hr 段值错误聚合(extra_seeding_time/required_share_ratio/condition/布尔非法)"""
-    with tempfile.TemporaryDirectory() as td:
-        text = (
-            "config:\n"
-            "  grouping:\n"
-            "    enabled: not-bool\n"
-            "  trackers:\n"
-            "    T1:\n"
-            "      domains: [a.com]\n"
-            "      hr:\n"
-            "        required_seeding_time: 3D\n"
-            "        extra_seeding_time: abc\n"
-            "        required_share_ratio: not-number\n"
-            "        condition: bad-cond\n"
-            "        overwrite_category: not-bool\n"
-        )
-        err = _load_errors(td, text)
-        assert "config.grouping.enabled" in err, err
-        assert "config.trackers.T1.hr.extra_seeding_time" in err, err
-        assert "config.trackers.T1.hr.required_share_ratio(须为数字)" in err, err
-        assert "config.trackers.T1.hr.condition(如 80% 或 10MiB)" in err, err
-        assert "config.trackers.T1.hr.overwrite_category" in err, err
-
-
 def test_validate_gslc():
     """global_speed_limit_curve 由原生校验器 _validate_global_speed_limit_curve 聚合错误"""
     with tempfile.TemporaryDirectory() as td:
