@@ -534,6 +534,8 @@ class QbManager(
         - L0 即时生效(仅替换 Config 对象): main_tick/state_save_interval/max_tasks_per_tick/remove_similar_tags/
           skip_checking_tag/grouping.*/add_episode_tags.*/trackers.X.tags|remove_tags|remove_similar_tags|
           limits|hr.*(运行时动态读取, 数据/任务/分组全保留)
+          ❗HR 例外: 服务对象按值持有站点表, 「仅替换对象」对它不够 —— hr.apply 在 L0/L2 下也会被调
+          (见下方调用点), 由它自判重建/短路
         - L1 轻量应用: logging 重挂 / 通知 handler 重挂 / qbittorrent 重连 / web 服务器
           **仅在"监听身份"(enabled/host/port)变化时重启**(次序: 停旧并等其线程退出 -> 启新, 见 _apply_web_config)
         - L2 结构重建: 重建任务队列与规则 + 全部记录重匹配 tracker(保留 store 记录/分组/执行历史)
@@ -564,7 +566,11 @@ class QbManager(
             self._last_conn_ok = None
             self.connect()
             self._apply_web_config(old_web)
-            self.hr.apply(old_hr_check)
+        # HR 运行时**每次热重载都要过一遍 apply, 不限 L1**: 站点接入(hr_check.sites /
+        # trackers.X.hr_check)是 L0, 只替换 config 对象重建不了按值持配置的服务 —— 漏调会让
+        # 「启动时无站点、热接入第一个站点」永远停在取数线程未启动(2026-09-29 实报)。
+        # HR 侧无实质变化时 apply 内部短路返回, 无关配置的保存不会重启取数线程。
+        self.hr.apply(old_hr_check)
         if "L2" in levels:
             logger.info("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
             self.task_queue = TaskQueue()

@@ -24,7 +24,10 @@
 - test_sleeper_is_interruptible_by_stop: 锁内等待可中断 —— 关停/热重挂不必等它把间隔睡完
 - test_sleeper_returns_after_the_wait: 没被打断时按秒数返回(不提前也不卡住)
 - test_production_service_gets_a_sleeper: 生产服务必须带 sleeper(2026-09-25 实报: 不等待 ⇒ 下载被页面饿死)
-- test_apply_l0_rebuilds_service_without_worker_running: 未启动时 apply 不得把线程拉起来
+- test_apply_starts_worker_when_never_started: 站点接入热重载(启动时无站点) -> apply 必须把服务与线程带起来
+  (旧版「未启动时 apply 不得拉起线程」是 2026-09-29「取数线程未启动」bug 的成因之一, 已随修复反转)
+- test_apply_no_change_short_circuits: HR 侧无变化 -> apply 短路, 服务/线程对象原样保留不重启
+- test_apply_adds_site_while_running: 已运行时热接入新站点 -> 服务站点表长出新站点且线程仍在跑
 - test_runtime_uses_anchors_provider: 取数线程经主循环提供的锚点提供者取锚点(M3 的交接面)
 - test_stop_is_prompt_while_waiting_for_extension: 取数线程正等扩展回传时 stop 也要立刻返回(不等满 request_timeout)
 - test_restart_after_stop_works: 关停再启动能重新正常工作(叫停标记不得残留)
@@ -335,15 +338,63 @@ def test_view_snapshot_and_wake_are_safe_when_not_started(tmp_path):
     runtime.stop()  # 幂等
 
 
-def test_apply_l0_rebuilds_service_without_worker_running(tmp_path):
+def test_apply_starts_worker_when_never_started(tmp_path):
+    """站点接入热重载(2026-09-29 实报「取数线程未启动」): 启动时无站点 => 线程从未建过;
+    热接入第一个站点后 apply 必须把服务与线程带起来(enabled => 在跑)。
+    ❗本用例旧版钉的是反语义(「未启动时 apply 不得拉起线程」), 正是本 bug 的成因之一 —— 已随修复反转。"""
     runtime = make_runtime(tmp_path, enabled=True, channel=True)
     old = runtime.global_conf
     runtime.config.hr_check = make_config(tmp_path, enabled=True, channel=True).hr_check
     runtime.config.trackers["pt.example.com"].hr_check.refresh_interval = 3 * 3600.0
     runtime.apply(old)
-    assert runtime.service is not None
+    assert runtime.service is not None, "站点接入后服务必须建出来(否则 /api/hr/status 报「取数线程未启动」)"
     assert runtime.service.site_confs["pt.example.com"].refresh_interval == 3 * 3600.0
-    assert runtime.worker is None or not runtime.worker.started, "从未启动过就不该被 apply 拉起来"
+    assert runtime.worker is not None and runtime.worker.started, "enabled 时 apply 必须把取数线程带起来"
+    try:
+        assert runtime.status().worker_running is True
+    finally:
+        runtime.stop()
+
+
+def test_apply_no_change_short_circuits(tmp_path):
+    """HR 侧配置无实质变化 => apply 短路: 服务与线程对象原样保留(不重启)。
+
+    apply 现在每次热重载都会被调到(qbmanager 不再只挂 L1 分支), 无关配置的保存不能拿取数线程陪葬。
+    """
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
+    runtime.start()
+    try:
+        old = runtime.global_conf
+        worker_before, service_before, endpoint_before = runtime.worker, runtime.service, runtime.endpoint
+        runtime.apply(old)  # old 与当前完全一致
+        assert runtime.worker is worker_before, "无变化不得重建线程"
+        assert runtime.service is service_before, "无变化不得重建服务"
+        assert runtime.endpoint is endpoint_before
+        assert runtime.worker.started
+    finally:
+        runtime.stop()
+
+
+def test_apply_adds_site_while_running(tmp_path):
+    """已运行时热接入第二个站点: 服务站点表要长出新站点(服务按值持站点表, 只换 config 对象不够)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
+    runtime.start()
+    try:
+        old = runtime.global_conf
+        runtime.config.trackers["pt2.example.com"] = TrackerConfig(
+            name="pt2.example.com",
+            domains=["pt2.example.com"],
+            hr_check=SiteHrCheckConfig(
+                enabled=True,
+                tracker="pt2.example.com",
+                hr_page_url="https://pt2.example.com/myhr.php",
+            ),
+        )
+        runtime.apply(old)
+        assert "pt2.example.com" in runtime.service.site_confs, "新站点必须进入服务的站点表"
+        assert runtime.worker.started, "重建后线程仍在跑"
+    finally:
+        runtime.stop()
 
 
 def test_judge_is_none_when_disabled(tmp_path):

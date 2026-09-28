@@ -15,6 +15,7 @@
 | [format-driven-parse.md](format-driven-parse.md) | 解析"按 format 渲染出来的文本"(日志行首当其冲)时, 把字段的**书写形状**写死成字面量 —— 默认配置下侥幸能跑, 用户换一种 format 就**静默失效**; 过滤类失效的表现是"恒空", 与"确实没有"完全同形。 | 日志过滤, 按等级, 日志行解析, levelname, 日志格式, format, 正则提取, 文本解析, 恒空, 结果为空 |
 | [fs-pathmap-tristate.md](fs-pathmap-tristate.md) | 文件访问层(2026-09-27 审查轮)踩出的两条 —— ①casefold 折叠空间匹配后回原串切片, | casefold, 大小写无关, 前缀匹配, 路径映射, path_map, 切片, 变长折叠, UNDETERMINED, |
 | [high-risk-ops.md](high-risk-ops.md) | 代码里已有防护的高风险动作 —— 改动时**不得削弱**这些防护; 删种重加、强制汇报、限速覆盖都属于这一类。 | 跳检, reannounce, qB 版本兼容, 删除种子, 限速, or 默认值, 死防御, 状态观测 |
+| [hot-reload-held-config.md](hot-reload-held-config.md) | 影响分级标 L0 只保证「新配置对象已被替换」; 若消费方(服务/线程)构造时把配置**按值**拷走, | 加配置键, 定热重载级别, impact, L0, 热重载, apply, 按值持有, 站点接入, 服务重建 |
 | [page-scraping.md](page-scraping.md) | 从 HTML 里抽一段小数字 / 小文本时, 不锤定结构的正则会匹配到页面上别处的同类文本 —— 结果**看着合法但值是错的**, 且不报错。 | 爬页面, 抓页面, 解析 HTML, 正则提取, 页脚区间, 分页判据, HR 统计页, 站点改版, 数字提取 |
 | [platform-fs.md](platform-fs.md) | Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。 | 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn |
 | [qb-api.md](qb-api.md) | qB 版本差异、`sync/maindata` 增量语义、`torrents/add` 的响应形态与选项缺省语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。 | 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理, 添加选项, optional 缺省, 添加回执 |

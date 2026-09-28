@@ -160,10 +160,22 @@ class HrRuntime:
     def apply(self, old: HrCheckConfig) -> None:
         """配置热重载(L1): `channel` 段与 `shared_dir` 变了要**重挂**(先停旧、等线程退出、再启新)
 
+        ❗调用方(QbManager.apply_new_config)**每次热重载都调本方法, 不限 L1**: 站点接入
+        (hr_check.sites / trackers.X.hr_check)是 L0 级变更, 只挂在 L1 分支的话, 「启动时无站点、
+        热接入第一个站点」就永远起不来取数线程(2026-09-29 实报「取数线程未启动」)。相应地,
+        HR 相关配置无实质变化时在下面短路返回 —— 无关配置的保存不重启取数线程。
+
         其余字段(间隔/配额/策略...)是取数线程每轮现读的 L0 项, 但服务对象把配置**按值**持有着,
         所以只要 hr_check 段有任何变化就重建服务与线程(它们无状态, 重建代价可忽略);
         端点的**监听身份**(enabled/port/extension_id/token)没变则不拆 —— 免得白白重绑端口。
         """
+        # 短路: 服务在、全局段与派生站点表都和新配置相等 ⇒ HR 侧无变化, 什么都不做
+        # (含线程不重启 —— 本方法现在每次热重载都会被调到)
+        if (
+            self.service is not None and self.global_conf == self.service.global_conf and
+            self.site_confs() == self.service.site_confs
+        ):
+            return
         new_ident = self._identity(self.global_conf)
         old_ident = self._identity(old)
         if new_ident != old_ident:
@@ -176,15 +188,15 @@ class HrRuntime:
                 logger.info("HR 在线核实已关闭: 停止端点与取数线程")
             self.stop()
             return
-        # L0 字段变化: 用新配置重建服务与线程, 端点保持不变
-        running = self.worker is not None
-        self.service = None
+        # L0 字段变化: 用新配置重建服务与线程, 端点保持不变。
+        # ❗线程要收敛到「enabled ⇒ 在跑」: worker 不在(启动时无站点接入, 线程从未建过)也要补启动
+        # —— 站点接入经热重载到达这里时, 这是它被建出来的唯一机会; 走到这里 enabled 已为真。
         if self.worker is not None:
             self._sleep_stop.set()  # 线程可能正睡在频控间隔里: 先打断再 join(否则白等它睡完)
             self.worker.stop()
             self.worker = None
         self._build(keep_endpoint=True)
-        if running and self.worker is not None:
+        if self.worker is not None:
             self.worker.start()
         logger.info("HR 在线核实配置已热应用(L0 字段; 端点未重绑)")
 

@@ -143,7 +143,7 @@
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
-- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用
+- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用; L0 下 hr.apply 也必须被调到(HR 路由守阵)
 - test_apply_new_config_l2_preserves_runtime_state: L2 热重载保留运行期内存 state —— 不得重读磁盘旧版回滚 exec_history/skip_check_day/recheck_fails(issue 26-09-21-1347 守阵)
 - test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
 - test_start_web_server_started_message_is_info: 「WEB UI 已启动」按 INFO 记(alert-levels 契约: 生命周期消息不许 WARNING, 否则 notify 开启时每次启动弹通知)
@@ -5806,6 +5806,9 @@ def test_apply_new_config_levels(monkeypatch):
             return mgr.apply_new_config(new_cfg)
 
         # ① L0: 仅替换配置对象, 任务队列保持不变(运行时动态读取项)
+        # ❗HR 路由守阵(2026-09-29 实报「取数线程未启动」): 站点接入是 L0, hr.apply 必须在
+        # L0 下也被调到(由 HrRuntime.apply 自判重建/短路), 不能只挂在 L1 分支
+        mgr.hr = mock.MagicMock()
         queue_before = mgr.task_queue
         try:
             res = _apply([ConfigChange("main_tick", "L0", 1, 2)])
@@ -5814,6 +5817,7 @@ def test_apply_new_config_levels(monkeypatch):
         assert res == {"applied": True, "levels": ["L0"], "changes": 1, "restart_required": []}, res
         assert mgr.config is new_cfg
         assert mgr.task_queue is queue_before, "L0 不应重建任务队列"
+        mgr.hr.apply.assert_called_once(), "HR 运行时每次热重载都要过一遍 apply(站点接入是 L0)"
         # 生命周期消息守阵: 完成消息必须是 INFO, 不得用 WARNING(否则 notify 开启时每次保存配置弹通知)
         done_logs = [r for r in grabbed if "配置热重载完成" in r.getMessage()]
         assert done_logs, "热重载完成应留一行日志"

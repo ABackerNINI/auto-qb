@@ -73,11 +73,11 @@ TRACKER_FIELD_LEVELS = {
 }
 
 # hr_check 段内部字段级别(逐字段表, 未列出 = L2 保守)。
-# 绝大多数字段是 L0: 取数线程每轮从 self.config 现读配置(间隔/配额/策略/保留期…), 替换
-# Config 对象即生效; 站点级 `trackers.X.hr_check.*` 同理(见 TRACKER_FIELD_LEVELS)。
-# ❗两个例外必须是 L1(M2 起): `channel`(端点监听身份 + 扩展 token ⇒ 需「先停旧、等线程退出、
-#   再启新」重挂, 与 web 段同款)与 `shared_dir`(站点文件目录变了, 服务与取数线程得重建)。
-#   挂载动作在 QbManager.apply_new_config 的 L1 分支 -> HrRuntime.apply()。
+# 绝大多数字段是 L0: 但❗服务对象把全局段与站点表**按值**持有, 「仅替换 Config 对象」对 HR 不够
+# —— QbManager.apply_new_config **每次热重载都调 HrRuntime.apply**(不限 L1, 2026-09-29 实报:
+# 只挂 L1 分支时「启动时无站点、热接入第一个站点」永远起不来取数线程), 由它自判重建/短路。
+# L1(M2 起)仅 `channel`(端点监听身份 + 扩展 token ⇒ 需「先停旧、等线程退出、再启新」重挂,
+# 与 web 段同款)与 `shared_dir`(站点文件目录变了, 服务与取数线程得重建)。
 HR_CHECK_FIELD_LEVELS = {
     "enabled": LEVEL_L0,
     "min_interval": LEVEL_L0,
