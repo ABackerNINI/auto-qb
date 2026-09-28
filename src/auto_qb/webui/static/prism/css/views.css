@@ -563,6 +563,8 @@
 .drawer-table th { text-align: left; font: 600 11px/1.4 var(--font-mono); letter-spacing: .08em;
   text-transform: uppercase; color: var(--fg-muted); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .drawer-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+/* 数值列右对齐(2026-09-29 列对齐审计 P2): 抽屉表无列模型, 对齐挂模板 th/td 的 .num 类 */
+.drawer-table th.num, .drawer-table td.num { text-align: right; }
 .drawer-table td.wrap { white-space: normal; overflow-wrap: anywhere; }
 .drawer-table tr.virtual td { color: var(--fg-muted); }
 .drawer-table .mono-cell { font-family: var(--font-mono); font-size: 12px; }

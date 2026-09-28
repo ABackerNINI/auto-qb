@@ -117,9 +117,10 @@ const DETAIL_COLUMNS = [
   // (保存路径列 2026-09-17 移出本表 -> 见 GROUP_COLUMNS: 组内路径天然一致, 只保留组级一处)
   { key: "added_on", label: "添加于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
   // 完成于/最近活动/活跃时间: 成员差异时间列, 表头名称与种子页同名列对齐
-  { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true, align: "right", hide: true },
+  // 时间/时长族一律左对齐(2026-09-29 列对齐审计 R4: 与添加于/最近活动/做种时长同族同口径)
+  { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left", hide: true },
   { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true, align: "left", hide: true },
-  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "right", hide: true },
+  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left", hide: true },
   // Tracker: 每站点各自 announce; Hash v2: v2 种子的信息哈希 —— 均成员各异(用户 2026-09-28 指定默认隐藏)
   { key: "tracker", label: "Tracker", tpl: "minmax(150px, 1.4fr)", align: "left", hide: true },
   { key: "hash", label: "Hash", tpl: "80px", align: "left", hide: true },
@@ -155,9 +156,9 @@ const TORRENT_COLUMNS = [
   { key: "amount_left", label: "剩余量", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   { key: "availability", label: "可用性", tpl: "minmax(80px, 1fr)", sortable: true, align: "right" },
   { key: "seeding_time", label: "做种时长", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },
-  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "right" },
+  { key: "time_active", label: "活跃时间", tpl: "minmax(110px, 1.1fr)", sortable: true, align: "left" },  // 时间/时长族左对齐(R4, 同 DETAIL_COLUMNS)
   { key: "last_activity", label: "最近活动", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },
-  { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true, align: "right" },
+  { key: "completion_on", label: "完成于", tpl: "minmax(110px, 1fr)", sortable: true, align: "left" },  // 时间点族左对齐(R4)
   { key: "up_limit", label: "限速上行", tpl: "minmax(96px, 1fr)", align: "right" },
   { key: "dl_limit", label: "限速下行", tpl: "minmax(96px, 1fr)", align: "right" },
   { key: "infohash_v1", label: "Hash v1", tpl: "90px", align: "left" },
