@@ -38,3 +38,8 @@ run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest <args> -q -n 0']
 timeout = 900
 when    = "排查单个文件 / 用 -k 筛一组用例"
 note    = "<args> 填文件路径或 -k 表达式；单文件用 -n 0（并行会慢在 worker 启动上）"
+
+[tasks."test.keys-update"]
+run     = ["uv run python scripts/update_config_key_surface.py"]
+when    = "键面守卫(test_config_key_surface)报基线过期后重写 tests/fixtures/config_key_surface.txt"
+note    = "消失键且版本未抬时脚本拒绝重生成(先抬 CURRENT_VERSIONS + 注册迁移再跑); 生成器单点在测试模块, 不要复制展开逻辑"

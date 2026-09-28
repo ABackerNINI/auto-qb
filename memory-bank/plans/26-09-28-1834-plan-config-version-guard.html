@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · 配置版本升级守卫: 键面基线冻结快照</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-28">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="config-version-guard">
+<meta name="doc-added" content="26-09-28-1834">
+<meta name="doc-updated" content="26-09-28-1855">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-28-config-version-guard.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #14181d;
+    --ink: #e4e8ea;
+    --ink-dim: #99a2a8;
+    --ink-faint: #6b7378;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-soft: rgba(255,255,255,.05);
+    --accent: #63a6c4;
+    --accent-dim: rgba(99,166,196,.13);
+    --warn: #c99a63;
+    --font-sans: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --font-mono: "Cascadia Code", "Consolas", "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); font-size: 15px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+  .frame { max-width: 1140px; margin: 0 auto; padding: 0 44px; }
+
+  header.cover { padding: 72px 0 0; }
+  .kicker { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-size: 34px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; margin: 18px 0 0; max-width: 26em; }
+  .lede { margin-top: 18px; max-width: 64ch; color: var(--ink-dim); font-size: 16px; }
+  .meta-row { margin-top: 34px; padding: 12px 0; border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline); display: flex; flex-wrap: wrap; gap: 8px 42px; font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); }
+  .meta-row b { color: var(--ink-dim); font-weight: 500; }
+
+  .layout { display: grid; grid-template-columns: 188px 1fr; gap: 56px; padding: 26px 0 0; }
+  nav.toc { position: sticky; top: 32px; align-self: start; padding-top: 26px; }
+  nav.toc .toc-cap { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--ink-faint); text-decoration: none; font-size: 13px; padding: 5px 0; border-left: 1px solid var(--hairline-soft); padding-left: 14px; margin-left: -15px; }
+  nav.toc a:hover { color: var(--ink); }
+  main { padding: 26px 0 90px; min-width: 0; }
+
+  h2 { font-size: 21px; font-weight: 600; letter-spacing: -.01em; margin: 52px 0 4px; }
+  h2 .no { font-family: var(--font-mono); font-size: 12px; color: var(--accent); margin-right: 10px; vertical-align: 2px; }
+  h2 + .sub { color: var(--ink-faint); font-size: 13px; margin-bottom: 18px; }
+  p { max-width: 76ch; margin: 12px 0; color: var(--ink-dim); }
+  p b, li b { color: var(--ink); font-weight: 600; }
+  code { font-family: var(--font-mono); font-size: .88em; background: var(--hairline-soft); padding: 1px 5px; border-radius: 2px; color: var(--ink); }
+  strong { color: var(--ink); }
+  ul, ol { max-width: 76ch; margin: 12px 0 12px 22px; color: var(--ink-dim); }
+  li { margin: 7px 0; }
+
+  .verdict { border: 1px solid var(--accent); background: var(--accent-dim); padding: 16px 20px; margin: 26px 0 6px; }
+  .verdict .v-cap { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+  .verdict p { max-width: 80ch; margin: 0 0 6px; }
+  .verdict p:last-child { margin: 0; }
+  .verdict b { color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; padding: 8px 12px; border-bottom: 1px solid var(--hairline); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--hairline-soft); color: var(--ink-dim); vertical-align: top; }
+  td:first-child { color: var(--ink); white-space: nowrap; }
+  td code { white-space: nowrap; }
+
+  .panel { border: 1px solid var(--hairline); background: var(--paper); padding: 18px 22px; margin: 18px 0; }
+  .panel .p-cap { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 10px; }
+  .panel.warn { border-color: rgba(201,154,99,.4); }
+  .panel.warn .p-cap { color: var(--warn); }
+
+  pre { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; background: var(--paper); border: 1px solid var(--hairline); padding: 16px 20px; overflow-x: auto; margin: 16px 0; color: var(--ink-dim); }
+  pre b { color: var(--accent); font-weight: 600; }
+  pre .c { color: var(--ink-faint); }
+
+  .files { font-family: var(--font-mono); font-size: 13px; }
+  .files td:first-child { white-space: normal; color: var(--accent); }
+  .files td { color: var(--ink-dim); }
+
+  footer { border-top: 1px solid var(--hairline); margin-top: 70px; padding: 18px 0 40px; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-faint); }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } nav.toc { display: none; } .frame { padding: 0 24px; } }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<header class="cover">
+  <div class="kicker">Plan · Config Version Guard</div>
+  <h1>配置版本升级守卫: 键面基线冻结快照</h1>
+  <p class="lede">拦住「改了配置键却不走版本升级流程」—— 在 schema 与 validation 之外立第三份冻结副本, 键面一变即红, 报错信息把人路由到抬版本 + 写迁移的既定流程。</p>
+  <div class="meta-row">
+    <span><b>状态</b> Done</span>
+    <span><b>拍板</b> 2026-09-28 · 用户「计划入档, 按推荐实施」</span>
+    <span><b>范围</b> 核心层 + keys.md 同步钩; commit 闸门不做</span>
+    <span><b>上游口径</b> 计划 26-09-26-0506 (版本链)</span>
+  </div>
+
+  <div class="verdict">
+    <div class="v-cap">结论</div>
+    <p>现有四道防线（版本链框架 / 写回版本闸门 / 启动物化 / schema↔validation 互检）全部以<b>「流程被正确走」为前提</b>——没有任何一环在开发期拦住「改键不抬版本」。补一道<b>键面基线守卫</b>：从 schema + validation 常量派生全量键路径，与基线文件比对，报错按「新增 = 非破坏 / 消失 = 破坏」分流并指路处置；迁移链完整性改为静态断言；基线里每个叶键必须在 keys.md 有出处。</p>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc">
+  <div class="toc-cap">目录</div>
+  <a href="#s1">1 · 问题与缺口</a>
+  <a href="#s2">2 · 现有防线为何拦不住</a>
+  <a href="#s3">3 · 方案: 键面基线</a>
+  <a href="#s4">4 · 键面口径与边界</a>
+  <a href="#s5">5 · 判定与分流</a>
+  <a href="#s6">6 · 落地清单</a>
+  <a href="#s7">7 · 取舍记录</a>
+  <a href="#s8">8 · 变更记录</a>
+</nav>
+
+<main>
+
+<h2 id="s1"><span class="no">01</span>问题与缺口</h2>
+<p class="sub">事故形态: agent 修改 config 字段, 没抬版本、没写迁移</p>
+<p>2026-09-28 用户定调: 上一个 agent 修改了 config 中的字段而没有走现有的版本升级流程。排查确认这不是单点失误——<strong>现有体系里不存在能在开发期发现这件事的检查</strong>。改键（删键 / 改名）只要把 schema 和 validation 两边同步改掉，全部测试照样绿；后果落在用户侧：存量 <code>config.yml</code> 里的旧键成为孤儿键，要么被静默丢弃（配置语义丢失），要么由废除校验报废（启动进不去）。</p>
+
+<h2 id="s2"><span class="no">02</span>现有防线为何拦不住</h2>
+<table>
+  <tr><th>防线</th><th>它拦什么</th><th>为何拦不住本事故</th></tr>
+  <tr><td>版本链框架<br><code>infra/versioning.py</code></td><td>已登记版本的旧文件沿链升级; 未来版本拒绝</td><td>前提是「改键的人记得抬 <code>CURRENT_VERSIONS</code> + 注册迁移」——不抬号, 框架根本不知道发生过变更</td></tr>
+  <tr><td>写回版本闸门<br><code>writer._reject_stale_version</code></td><td>WebUI 提交低于当前版本的树 → 400</td><td>版本号没变时, 旧结构树带着当前版本章往返, 闸门看不见差异</td></tr>
+  <tr><td>启动物化<br><code>materialize_schema_migration</code></td><td>磁盘落后结构改写到当前版本</td><td>同上——没有登记的版本差, 就没有迁移可做</td></tr>
+  <tr><td>schema 互检<br><code>test_config_schema.py</code></td><td>schema Field 树 ↔ validation <code>KNOWN_*_KEYS</code> 两边一致</td><td>两边<strong>一起改</strong>（改名/删除同步落地）互检恒绿——它守「每一键可图形化」, 不守「键面没变」</td></tr>
+</table>
+<p>缺口本质: 四道防线都在「版本差」存在之后才工作, 而<strong>制造版本差的第一步（抬号 + 写迁移）没有守卫</strong>。运行时补不了这道岗——必须在开发期立冻结参照物。</p>
+
+<h2 id="s3"><span class="no">03</span>方案: 键面基线（核心层）</h2>
+<p class="sub">第三份冻结副本 + 生成器 + 分流报错 + 显式再生命令</p>
+<p>新增守卫测试 <code>tests/test_config_key_surface.py</code>, 三条用例:</p>
+<ul>
+  <li><b>键面比对</b> — 生成器从 <code>schema.config_fields()</code> 递归展开 + validation 常量补动态段（口径见 §4）, 产出全量键路径集合; 与基线文件 <code>tests/fixtures/config_key_surface.txt</code>（含 <code>version:</code> 行记录基线时的 config 版本）比对。不一致即红, 报错按 §5 分流。</li>
+  <li><b>迁移链完整性（静态化）</b> — <code>MIGRATIONS["config"]</code> 的键集合必须恰好是 <code>1..CURRENT_VERSIONS["config"]-1</code>。这条目前只在运行时 <code>migrate()</code> 里兜底（缺项 fail-fast）, 提前到测试期: 抬了号忘写迁移, 不用等人跑主程序。</li>
+  <li><b>keys.md 同步钩</b> — 基线键面每个叶键（路径末段, 词边界匹配）必须在 <code>memory-bank/config-reference/keys.md</code> 的反引号 span 内有出处。改键忘回写文档当场红。</li>
+</ul>
+<div class="panel">
+  <div class="p-cap">为什么是「第三份冻结副本」</div>
+  <p style="margin-top:0">schema 与 validation 互检是两边对表, <b>基线独立于两者</b>——这正是它能在两边一起改时报警的原因。基线是生成物（生成器单点在测试模块里, 再生脚本只是调用方）, 头部注明口径, <b>禁止手改</b>; 「更新基线」因此成为一个显式动作而非顺手改文件。</p>
+</div>
+<div class="panel warn">
+  <div class="p-cap">守卫不自动裁决破坏 / 非破坏</div>
+  <p style="margin-top:0">机器判不了「这次改动语义上算不算破坏」。守卫的裁决方式是<b>把键面差异完整摆出来 + 报错文案分流路由</b>: 消失键 → 指向抬版本 + 迁移注册 + 回归测试（参照 <code>test_hr_config.py</code> 兼容锚写法）; 纯新增 → 指向重生成基线（<code>commands run test.keys-update</code>）。文案同时指路 <code>versioning.py</code> 口径段、计划 26-09-26-0506 与 <code>pitfalls/backend/schema-stamp-writeback.md</code>。</p>
+</div>
+
+<h2 id="s4"><span class="no">04</span>键面口径与边界</h2>
+<table>
+  <tr><th>段</th><th>派生源</th><th>路径形态</th></tr>
+  <tr><td>顶层键</td><td><code>validation.KNOWN_CONFIG_KEYS</code>（剔除 <code>schema_version</code>——版本章本身不入面）</td><td><code>&lt;key&gt;</code></td></tr>
+  <tr><td>具名子树</td><td>schema Field 树递归（<code>web</code> / <code>log</code> / <code>notify</code> / <code>grouping</code> / <code>hr</code> / <code>hr_check.channel</code> / <code>add_episode_tags</code> / <code>fs</code> / <code>qbittorrent</code> …）</td><td><code>hr_check.channel.port</code> 等</td></tr>
+  <tr><td>站点段（动态）</td><td><code>schema.TRACKER_FIELDS</code></td><td><code>trackers.*.&lt;key&gt;</code>, 子段 <code>trackers.*.hr.&lt;key&gt;</code></td></tr>
+  <tr><td>HR 站点接入（动态）</td><td><code>schema.HR_CHECK_SITES_FIELDS</code></td><td><code>hr_check.sites.*.&lt;key&gt;</code></td></tr>
+  <tr><td>规则集（动态）</td><td><code>schema.RULE_FIELDS</code> + <code>plugin_table()</code> 全部插件 spec</td><td><code>&lt;任意&gt;_rules.*.&lt;key&gt;</code>, 插件 <code>&lt;任意&gt;_rules.*.conditions.&lt;名&gt;…</code></td></tr>
+  <tr><td>路径映射条目</td><td><code>validation.KNOWN_PATH_MAP_ENTRY_KEYS</code></td><td><code>fs.path_map.*.from / .to</code></td></tr>
+</table>
+<ul>
+  <li><b>动态段归一</b>: 站点名 / 规则集名 / 规则名 / 档案 id / 映射条目一律通配, 键面只含「结构」, 不含用户起的名词。</li>
+  <li><b>边界一（v1 不入面）</b>: 限速曲线段内部键（<code>traffic_source</code> / <code>curves</code> / 阶梯点）目前是 <code>validation/curves.py</code> 的内联字面量, 无常量可派生——提常量属对生产校验器的计划外改动, v1 不做; 后续要纳入, 先把字面量提成常量再进生成器。</li>
+  <li><b>边界二（永远不入面）</b>: 默认值 / 帮助文案 / UI 元数据（<code>tone</code> / <code>label</code> 等）。改默认不改结构, 非「旧数据读不读得懂」问题——versioning.py 口径本就刻意不为补字段造版本。</li>
+  <li><b>边界三（拦不住, 靠评审）</b>: 键不变、语义改义。守卫看的是结构键面, 语义变更没有结构信号。</li>
+</ul>
+
+<h2 id="s5"><span class="no">05</span>判定与分流</h2>
+<table>
+  <tr><th>现场状态</th><th>判定</th><th>报错指路的处置</th></tr>
+  <tr><td>键面 = 基线, 版本 = 基线版本</td><td>过</td><td>—</td></tr>
+  <tr><td>键面有<strong>消失键</strong>, 版本未动</td><td>红 — 破坏性变更(删/改名)未走流程</td><td>抬 <code>CURRENT_VERSIONS["config"]</code> → <code>config/migrations.py</code> 注册迁移(import 即注册) → 补迁移回归测试 → 重生成基线</td></tr>
+  <tr><td>键面只有<strong>新增键</strong>, 版本未动</td><td>红 — 键面漂移未确认</td><td>非破坏(补字段), 直接 <code>commands run test.keys-update</code> 重生成基线 + 回写 keys.md</td></tr>
+  <tr><td>版本已抬, 键面 ≠ 基线</td><td>红 — 基线待重生成</td><td>列出增删清单供复核; 迁移链完整性断言已静态兜住「抬号忘迁移」</td></tr>
+</table>
+
+<h2 id="s6"><span class="no">06</span>落地清单</h2>
+<table class="files">
+  <tr><th>文件</th><th>动作</th></tr>
+  <tr><td>tests/test_config_key_surface.py</td><td>新建 — 生成器(单点) + 三条守卫用例; 头部「## 测试计划」docstring</td></tr>
+  <tr><td>tests/fixtures/config_key_surface.txt</td><td>新建 — 基线(生成物, version 行 + 排序键路径)</td></tr>
+  <tr><td>scripts/update_config_key_surface.py</td><td>新建 — 再生脚本: 加载测试模块生成器, 重写基线, 打印增删摘要</td></tr>
+  <tr><td>.commands/test/config.toml</td><td>追加 <code>test.keys-update</code>(收录协议: 难拼 + 会重复)</td></tr>
+  <tr><td>memory-bank/config-reference/keys.md</td><td>仅当同步钩暴露缺口时补(回写, 非重构)</td></tr>
+  <tr><td>memory-bank/tasks/26-09-28-config-version-guard.md</td><td>新建任务档案(阈值命中: 计划制品 + ≥3 源文件)</td></tr>
+</table>
+
+<h2 id="s7"><span class="no">07</span>取舍记录</h2>
+<ul>
+  <li><b>commit 闸门不做（推荐被采纳）</b>: 在 <code>.my-commit-flow</code> 加「动了 schema 就必须动 versioning/migrations」的 staged 检查误报面大——<code>b68e9a0</code> 给 Field 加 <code>tone</code> 这类纯 UI 元数据改动合法不抬号, 硬闸会逼人 spam 豁免标记; 键面级判定只有跑 Python 才准, 而 test.full 必跑守卫, commit 层只剩软提醒价值。放弃。</li>
+  <li><b>基线不记默认值</b>: 默认值变更高频且非破坏, 入面会让基线常刷常新、稀释「键面变了」的信号强度。</li>
+  <li><b>生成器单点放测试模块</b>: 再生脚本 import 测试模块取生成器, 不复制第二份展开逻辑——两份实现必然漂移。</li>
+  <li><b>state / hr_site 版本不扩</b>: 本次事故与需求都针对 config; 机制可平移（基线思路对三类文件通用）, 等真实需要再扩, 不预建。</li>
+</ul>
+
+<h2 id="s8"><span class="no">08</span>变更记录</h2>
+<ul>
+  <li><b>26-09-28-1855 · 实施完成转 Done</b>: 三条守卫用例 + 基线 170 键 + <code>test.keys-update</code> 收录落地; 出处语料定为 keys.md + 其规则集段委托的 <code>rule-system/conditions-and-actions.md</code>(实施时发现插件参考实际在那边, keys.md 只留指针——跟随委托合并检查, 不重复维护插件清单); keys.md 补 <code>fs</code> 行(守卫暴露的既有漂移) + <code>hr</code> 输出键反引号化; 插件 spec 内部键暂豁免出处检查(权威单点 schema 插件表, 逐键展开属独立回写任务)。test.full 1823 passed / 3 skipped / TOTAL 91%(基线切片 26-09-28-1855)。</li>
+</ul>
+
+<footer>
+  plan · config-version-guard · 拍板后冻结, 改版走「## 变更记录」· 执行与验证数字见 tasks/26-09-28-config-version-guard.md
+</footer>
+
+</main>
+</div>
+</div>
+</body>
+</html>

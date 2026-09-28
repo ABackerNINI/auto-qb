@@ -3,7 +3,7 @@
 > 生成物, 不要手改 —— `commands run kb.index` 扫描四形态 `doc-topic` / `**Topics:**` 与状态生成;
 > 协议见 [doc-forms.md](conventions/doc-forms.md)。
 
-## 跨形态专题 (≥2 件) · 38
+## 跨形态专题 (≥2 件) · 39
 
 - **(无主键)** (8) — 档案 [26-09-26](tasks/26-09-26-webui-button-system.md) Done 档案 [26-09-26](tasks/26-09-26-webui-frontend-file-split.md) In Progress 档案 [26-09-26](tasks/26-09-26-webui-settings-group-merge.md) Done 档案 [26-09-27](tasks/26-09-27-backend-log-levels-notify.md) Done 档案 [26-09-28](tasks/26-09-28-commands-shipflow-output-contract.md) Done 档案 [26-09-28](tasks/26-09-28-ext-log-noise-suppress.md) Done 档案 [26-09-28](tasks/26-09-28-webui-settings-categorize-logs.md) Done 档案 [26-09-28](tasks/26-09-28-webui-sites-page-search.md) Done
 - **webui-optimistic-ui** (8) — issue [26-09-19-1939](issues/26-09-19-1939-perf-webui-optimistic-latency.html) Done issue [26-09-19-1959](issues/26-09-19-1959-bug-webui-show-row-no-pending.html) Done issue [26-09-19-2024](issues/26-09-19-2024-bug-webui-truth-convergence.html) Done issue [26-09-19-2141](issues/26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) Done 计划 [26-09-19](plans/26-09-19-2245-webui-optimistic-settle-plan.html) Done 计划 [26-09-20](plans/26-09-20-2139-webui-truth-direct-query-and-optimistic-removal-plan.html) Done 报告 [26-09-20](reports/26-09-20-1806-optimistic-ui-half-fix-report.html) Done 报告 [26-09-20](reports/26-09-20-2131-optimistic-ui-event-driven-feasibility.html) Done
@@ -28,6 +28,7 @@
 - **backend-torrentrecord-fields** (2) — 计划 [26-09-15](plans/26-09-15-1302-record-full-fields-plan.html) Done 档案 [26-09-15](tasks/26-09-15-backend-torrentrecord-fields.md) Done
 - **baseline-slice-per-file** (2) — 计划 [26-09-26](plans/26-09-26-0529-plan-baseline-slice-per-file.html) Done 档案 [26-09-26](tasks/26-09-26-memory-bank-baseline-slice-per-file.md) Done
 - **config-hr-binding-mapping** (2) — 计划 [2026-09-27](plans/26-09-27-2252-plan-config-migration-materialize.html) Done 档案 [26-09-27](tasks/26-09-27-config-hr-binding-mapping.md) Done
+- **config-version-guard** (2) — 计划 [26-09-28](plans/26-09-28-1834-plan-config-version-guard.html) Done 档案 [26-09-28](tasks/26-09-28-config-version-guard.md) Done
 - **deps-env-modernization** (2) — 报告 [26-09-15](reports/26-09-15-1150-report-dependency-lock.html) Done 档案 [26-09-15](tasks/26-09-15-deps-env-modernization.md) Done
 - **memory-bank-activecontext-conflict** (2) — 计划 [26-09-22](plans/26-09-22-2350-activecontext-conflict-plan.html) In Progress 档案 [26-09-22](tasks/26-09-22-memory-bank-activecontext-conflict.md) In Progress
 - **memory-bank-dir-refactor** (2) — 计划 [26-09-22](plans/26-09-22-1248-memory-bank-dir-refactor-plan.html) Done 档案 [26-09-22](tasks/26-09-22-memory-bank-dir-refactor.md) In Progress
