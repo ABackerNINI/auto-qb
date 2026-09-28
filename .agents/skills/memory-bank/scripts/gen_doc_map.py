@@ -114,7 +114,7 @@ def render(items: list[dict], head: str) -> str:
     multi = {t: v for t, v in by_topic.items() if len(v) > 1}
     single = {t: v for t, v in by_topic.items() if len(v) == 1}
 
-    out = [head, f"## 跨形态专题 (≥2 件) · {len(multi)}\n"]
+    out = [head, f"## 专题 (≥2 件) · {len(multi)}\n"]
     for topic in sorted(multi, key=lambda t: (-len(multi[t]), t)):
         group = sorted(multi[topic], key=lambda i: FORM_ORDER.index(i["form"]))
         parts = [f"{FORM_CN[i['form']]} [{i['stamp']}]({i['link']}) {i['status']}" for i in group]
@@ -123,7 +123,7 @@ def render(items: list[dict], head: str) -> str:
     out.append("")
     # 单件专题只列名: 它们没有跨形态材料要对照, 详细行在各自形态的 `_index.md`;
     # 这里保留一行紧凑清单是为了「覆盖 100%」可判定 (每个 topic 都出现在本文件里)。
-    out.append(f"## 单件专题 ({len(single)})\n")
+    out.append(f"## 单件 ({len(single)})\n")
     names = sorted(single)
     line = " ".join(names)
     while line:

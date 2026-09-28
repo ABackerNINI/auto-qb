@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-readonly-fields">
+<meta name="issue-stamp" content="26-09-28-2135">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="webui-readonly-fields">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="WEBUI 设置页支持只读字段: 程序托管/R 级字段改为只读展示">
+<meta name="issue-summary" content="schema_version/data_dir/state_file/fs.path_map 渲染为可编辑但保存必然被覆盖或静默回退, 且反馈误导; 需 Field 只读标志 + 前端禁用渲染 + 写盘防线">
+<title>WEBUI 设置页支持只读字段: 程序托管/R 级字段改为只读展示 · feat · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 feat · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· feat</div>
+    <h1>WEBUI 设置页支持只读字段: 程序托管/R 级字段改为只读展示</h1>
+    <p class="lede">schema_version/data_dir/state_file/fs.path_map 渲染为可编辑但保存必然被覆盖或静默回退, 且反馈误导; 需 Field 只读标志 + 前端禁用渲染 + 写盘防线</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-28-2135-feat-webui-readonly-fields</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-28 21:35</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>用户提出「WEBUI 设置里有部分设置不适合修改（如 schema 版本），应可展示给用户但不支持修改」，要求排查其余同类字段。逐字段通读 <code>config/schema/</code>（fields/groups/hr/trackers）、<code>config/impact.py</code>（热重载分级）、<code>config/writer.py</code>（保存链路）与前端 <code>config_editor.js</code> 后，共定位 4 个点位：除 <code>schema_version</code> 外还有 <code>data_dir</code> / <code>state_file</code> / <code>fs</code> 段。它们有一个共同形态：<strong>后端机制实际会覆盖或丢弃用户输入，UI 却渲染成可编辑控件，且丢弃后的反馈是误导性的「已保存」口径</strong>。与平台 / 特定配置无关，任何配置下保存即现。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>取证时间 2026-09-28 21:35（代码阅读取证，非运行时报错）。4 个点位的现状行为：</p>
+    <table>
+      <tr><th>字段</th><th>类别</th><th>现状行为（保存时）</th></tr>
+      <tr><td><code>config.schema_version</code></td><td>程序盖章</td>
+        <td>保存/预览时 <code>_stamp_schema_version</code> <strong>无条件</strong>把该键盖为当前版本，手改必然被覆盖；改低则整次保存被 <code>_reject_stale_version</code> 拒绝，报错文案却是「页签过期请刷新」——与用户实际操作（手改版本号）对不上</td></tr>
+      <tr><td><code>config.data_dir</code></td><td>R 级（进程身份）</td>
+        <td>保存时 <code>_fallback_restart_fields</code> 把该键<strong>静默回退</strong>为磁盘旧值，但 API 仍返回 <code>restart_required</code> 含该项，前端 toast「已保存并热重载(变更 N 项); 需重启进程才生效: config.data_dir」——用户重启后发现值根本没变</td></tr>
+      <tr><td><code>config.state_file</code></td><td>R 级（进程身份）</td><td>同 <code>data_dir</code>：静默回退 + 误导 toast</td></tr>
+      <tr><td><code>config.fs</code> 整段（含 <code>fs.path_map</code>）</td><td>R 级 + 控件不匹配</td>
+        <td>①整段 <code>LEVEL_R</code>，保存静默回退（同上）；②<code>path_map</code> 是 YAML 列表结构，schema 却声明为 <code>text</code> 控件——列表值在表单里显示为 <code>[object Object]</code>（<code>cfgScalar</code> 对列表做 String 化），编辑产出字符串必挂校验；help 文案自认「WebUI 暂不提供逐条编辑, 在 config.yml 按 YAML 列表编辑」</td></tr>
+    </table>
+<pre><code># writer.py: _stamp_schema_version docstring（程序盖章语义）
+该键是文件格式标记, 由程序统一维护 —— WebUI 保存/预览时无条件盖章, 用户手编配置不需要写它
+
+# writer.py: _fallback_restart_fields（R 级静默回退）
+R 级字段回退为磁盘旧值: 旧值存在则覆盖, 旧值不存在则删除该键(走默认值)
+
+# config_editor.js: cfgSave 的 toast（对被回退的 R 级变更仍报「需重启才生效」）
+this.toast(`已保存并热重载(变更 ${n} 项); 需重启进程才生效: ${result.restart_required.join(", ")}`, "timeout", 9000);</code></pre>
+    <p>排查过但不在此列：敏感字段（<code>web.token</code> / <code>qbittorrent.password</code> / <code>trackers.*.passkey</code> / <code>hr_check.channel.token</code>）已有掩码哨兵机制（展示打码、保存还原磁盘旧值），设计上可改；其余 <code>risk="修改后需重启"</code> 字段恰为上述 R 级三项，全部 L0/L1/L2 字段设计为热改生效；校验层 <code>KNOWN_CONFIG_KEYS</code> 与 schema 键面一一对应，无隐藏键。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>在 WebUI 设置页编辑这 4 个点位任意一个并保存——必现（后端覆盖/回退是保存链路的无条件行为）</td></tr>
+      <tr><td>影响范围</td><td>设置表单 4 个点位；R 级三项（data_dir/state_file/fs）保存后 toast 误导；schema_version 改低会以「页签过期」错误堵死整次保存</td></tr>
+      <tr><td>严重度</td><td>中——写盘防线兜住了数据（R 级回退、版本盖章），无数据损坏；但交互误导（用户以为改成功），且 fs.path_map 控件形态本身就是坏的</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/config/writer.py:111</code> · <code>_stamp_schema_version</code> · grep <code>_stamp_schema_version</code>（取证 2026-09-28 21:35）</li>
+      <li><code>src/auto_qb/config/writer.py:221</code> · <code>_reject_stale_version</code> · grep <code>低于当前程序</code>（取证 2026-09-28 21:35）</li>
+      <li><code>src/auto_qb/config/writer.py:264</code> · <code>_fallback_restart_fields</code> · grep <code>_fallback_restart_fields</code>（取证 2026-09-28 21:35）</li>
+      <li><code>src/auto_qb/config/impact.py:24</code> · <code>SECTION_LEVELS</code>（R 级：data_dir/state_file/fs） · grep <code>"fs": LEVEL_R</code>（取证 2026-09-28 21:35）</li>
+      <li><code>src/auto_qb/config/schema/groups.py:103</code> · schema_version 字段声明 · grep <code>请勿手改</code>；<code>groups.py:294</code> · fs 段（text 控件） · grep <code>WebUI 暂不提供逐条编辑</code>（取证 2026-09-28 21:35）</li>
+      <li><code>src/auto_qb/webui/static/shared/config_editor.js:967</code> · <code>CE_FIELD_BASE</code>（无任何只读渲染分支，全文 grep <code>readonly|disabled</code> 零命中） · grep <code>CE_FIELD_BASE</code>（取证 2026-09-28 21:35）</li>
+      <li><code>src/auto_qb/webui/server/routes/config.py:96</code> · <code>api_config_put</code>（restart_required 口径） · grep <code>restart_required</code>（取证 2026-09-28 21:35）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">代码阅读已有结论（取证 2026-09-28 21:35）：schema 的 <code>Field</code> 数据类没有只读概念（所有声明字段默认可编辑），前端按「schema 声明即可编辑」渲染；而后端保存链路存在两条覆盖/丢弃用户输入的路径（程序盖章、R 级回退），丢弃后仍以「已保存并热重载」口径反馈——<strong>表单元数据与写盘防线脱节</strong>。另外 <code>PUT /api/config</code> 是结构化树直写，表单只是前端约束，后端无字段级只读防线（当前仅 R 级回退与版本盖章两道）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <ol>
+      <li><strong>schema</strong>：<code>Field</code> 加 <code>readonly: bool = False</code>，4 个点位打标（<code>schema_version</code> / <code>data_dir</code> / <code>state_file</code> / <code>fs</code> 段）；<code>schema_payload()</code> 走 dataclass 序列化自动下发，前端零成本拿到。</li>
+      <li><strong>前端</strong>：<code>CE_FIELD_BASE</code>（及 <code>config_hub.js</code> 的 <code>HUB_FIELD_COMPONENT</code> 同款）对 readonly 渲染禁用控件 + 「程序维护」视觉标记；<code>fs</code> 段建议改只读摘要（显示已配置映射对）而非 text 框。</li>
+      <li><strong>反馈修正</strong>：R 级回退发生时，保存结果反馈改为「该项仅在配置文件中修改，本次未写入」口径，不再说「需重启进程才生效」（回退 = 值没写进去，重启也不会生效）。</li>
+      <li><strong>后端防线（可选加固）</strong>：R 级回退与版本盖章已实际兜住 4 个点位；可再加 readonly 键面防线（<code>_prepare</code> 里对 readonly 键做同款回退），防未来新增点位漏配时重演「可编辑但不生效」。注意 <code>schema_version</code> 比程序新时仍应放行给校验层报精确错，别在回退里误伤。</li>
+      <li><strong>守卫</strong>：补 readonly 点位清单断言（schema 键面守卫测试已有挂点）。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-28 21:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-09-28-2135-feat-webui-readonly-fields.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
