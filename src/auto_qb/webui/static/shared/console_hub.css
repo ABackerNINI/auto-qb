@@ -573,10 +573,11 @@
 .hb-pill .p-n { font: 500 11px/1 var(--hb-font-mono); margin-left: 5px; opacity: .8; }
 
 /* ==========================================================================
-   站点搜索: 搜索行 + 命中列表 + 左右分栏(计划 26-09-27-1852)
+   站点搜索: 搜索行 + 命中下拉浮层 + 整栏详情(计划 26-09-27-1852; 26-09-28 左右分栏改下拉)
    三套皮肤共用本层, 颜色一律走皮肤令牌(同 hb- 其余控件), 不写硬编码色值
    ========================================================================== */
-/* 搜索行: 与首页 hd-search 同款视觉(左放大镜 + 发光输入框), 计数 / 清空钮常驻右侧 */
+/* 搜索行: 与首页 hd-search 同款视觉(左放大镜 + 发光输入框), 计数 / 清空钮常驻右侧;
+   position: relative 同时是命中下拉的锚定父级 */
 .hb-tr-search { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
 .hb-tr-search .hb-ico {
   position: absolute;
@@ -602,27 +603,39 @@
 .hb-tr-count { flex: none; font: 500 11.5px/1 var(--hb-font-mono); color: var(--fg-dim); white-space: nowrap; }
 .hb-tr-count.warn { color: var(--warn); }
 
-/* 搜索态左右分栏: 非搜索态本容器只是详情卡的普通父级(display: block), 命中列表根本不渲染 */
-.hb-tr-split { display: block; }
-.hb-tr-split.on { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
-.hb-tr-hits { min-width: 0; }
+/* 命中下拉: 锚定搜索框正下方的浮层, 视觉口径同 search-help-pop(--bg-elev + border-strong + shadow-3);
+   有查询才渲染(v-if), 弹出时遮住下方详情; 详情卡本身在浮层下整栏宽 */
 .hb-tr-detail { min-width: 0; }
+.hb-tr-drop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+}
 
-/* 命中行: 整行可点(点 = 选中该站, 搜索词保持); 选中态 = 左右联动高亮 */
+/* 命中行: 整行可点(点 = 选中该站, 搜索词保持); 选中态 = 下拉内高亮,
+   行间用 border-top 分隔(浮层自带外框, 首行不再加) */
 .hb-tr-hit {
   display: block;
   width: 100%;
   text-align: left;
   font: inherit;
   color: var(--fg);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-top: 0;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border);
   padding: 9px 13px;
   cursor: pointer;
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
-.hb-tr-hit:first-of-type { border-top: 1px solid var(--border); }
+.hb-tr-hit:first-of-type { border-top: 0; }
 .hb-tr-hit:hover { background: var(--bg-hover); }
 .hb-tr-hit:hover .hb-tr-hit-name { color: var(--accent-hi); }
 .hb-tr-hit.on { background: var(--accent-soft); border-color: var(--accent-line); }
@@ -645,7 +658,7 @@
 .hb-tr-chip em { font-style: normal; color: var(--accent-hi); word-break: break-all; }
 .hb-tr-chip.more { border-style: dashed; background: transparent; color: var(--fg-dim); }
 
-/* 空态 / 仅排除词 / 右栏引导提示 */
+/* 空态 / 仅排除词 / 选中不在命中里的提示: 前两者在命中下拉内部(去自带框底), 后者整栏独挂 */
 .hb-tr-hint {
   margin: 0;
   padding: 10px 14px;
@@ -655,6 +668,7 @@
   line-height: 1.6;
   color: var(--fg-muted);
 }
+.hb-tr-drop .hb-tr-hint { border: 0; background: transparent; }
 .hb-tr-hint.warn {
   color: var(--warn);
   border-color: var(--warn-line, color-mix(in srgb, var(--warn) 45%, transparent));
@@ -855,7 +869,7 @@
   .hb-row .hb-ask { justify-self: end; margin-top: -26px; }
   .hb-hd .hd-search { margin-left: 0; width: 100%; }
   .hb-hd .hd-search .hb-input { width: 100%; }
-  .hb-tr-split.on { grid-template-columns: 1fr; }
+  .hb-tr-drop { max-height: 55vh; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hb-view.on, .hb-pop.on, .aq-tip.on { animation: none; }

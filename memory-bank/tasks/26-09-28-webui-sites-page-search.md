@@ -2,8 +2,8 @@
 
 **Status:** Done
 **Added:** 2026-09-28
-**Updated:** 2026-09-28 00:14
-**Summary:** 按计划 plans/26-09-27-1852 实施 trackers 二级页搜索: 名称/域名/标签/分组/删标/规则/限速/HR 全字段前端匹配, 语法照搬种子搜索(空格 AND / -词排除 / "短语"); 命中列表+详情左右分栏, chip 展示命中字段组与整值。纯前端零后端。
+**Updated:** 2026-09-28 15:58
+**Summary:** 按计划 plans/26-09-27-1852 实施 trackers 二级页搜索: 名称/域名/标签/分组/删标/规则/限速/HR 全字段前端匹配, 语法照搬种子搜索(空格 AND / -词排除 / "短语"); 命中展示 26-09-28 由「列表居左+详情居右」分栏改为搜索框下挂下拉浮层(hb-tr-drop)+详情整栏。纯前端零后端。
 
 ## 原始请求
 
@@ -30,7 +30,9 @@
 | 3 | settings.html trackers 分支: 搜索行 + 命中列表 + 左右分栏 + pill 去键数徽标 | Done |
 | 4 | console_hub.css: hb-tr-* 样式(皮肤令牌, 三皮肤共用) | Done |
 | 5 | 守阵 test_frontend_tracker_search_wiring + test.full 全绿 | Done |
+| 6 | 命中展示改下拉: hb-tr-split 分栏废, hb-tr-drop 浮层 + 详情整栏(用户 26-09-28 要求) | Done |
 
 ## 进度日志
 
 - **2026-09-28 00:14 (Done)**: 实施完成。开工同步快进合并远端 7 笔(6262d3b→c7dfbd2), `_doc-map.md` stash 施回冲突已解决并由 kb.index 重建收敛。test.full **1812 passed + 3 skipped / 91%**(基线切片 [26-09-28-0014](../testing/baselines/26-09-28-0014-webui-sites-page-search.md))。新增守阵 1 条; `_common.CAP_POLICY["index-auto"]` 12000→12100(sites-page-search 专题入册后 12,006 超 cap) + SKILL.md cap 表同步。新坑入库: pitfalls/web-ui/cjk-regex-norm.md。
+- **2026-09-28 15:58 (Done)**: 用户要求「搜索结果改下拉框, 取消左右显示」。模板: 命中列表移入搜索行容器内作锚定下拉(hb-tr-drop, v-if hubTrackerActive), 详情 hb-tr-detail 整栏宽; 行为不变(点命中只选中不清词 / 单命中自动选中 / Esc·×清空)。CSS: 删 hb-tr-split 栅格与响应式降级, hb-tr-drop 视觉口径对齐 search-help-pop(--bg-elev + border-strong + shadow-3, z-40, 限高 320px/窄屏 55vh 内滚), 命中行改行间分隔线式。JS 零改动。守阵同步 hb-tr-split/hits→hb-tr-drop。stash→ff(c64b836f)→pop 与远端 tooltip 笔干净合流。

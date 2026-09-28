@@ -2628,8 +2628,7 @@ def test_frontend_tracker_search_wiring():
         "hubTrackerClear()",
         "hubTrackerCountText",
         "hubTrackerHits.hits",
-        'class="hb-tr-split"',
-        'class="hb-tr-hits"',
+        'class="hb-tr-drop"',  # 26-09-28 命中列表改搜索框下挂下拉浮层(原 hb-tr-split 左右分栏已废)
         'class="hb-tr-detail"',
         "hb-tr-hit",
         "hb-tr-chip",
@@ -2658,8 +2657,7 @@ def test_frontend_tracker_search_wiring():
         "hb-tr-search",
         "hb-tr-x",
         "hb-tr-count",
-        "hb-tr-split",
-        "hb-tr-hits",
+        "hb-tr-drop",  # 26-09-28 命中下拉浮层(原 hb-tr-split/hb-tr-hits 分栏已废)
         "hb-tr-detail",
         "hb-tr-hit",
         "hb-tr-hit-name",
