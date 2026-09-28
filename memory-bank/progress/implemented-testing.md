@@ -27,3 +27,4 @@
   ⚠ 剩余: `web.py::_within_roots` 的大小写守阵**只能在 Linux 上真跑**(本机 skip), 由 CI 验
   (上一批 `84f92dd` 的 CI run 72 = success ⇒ 已在 ubuntu 上真跑并通过)。
 - **真机语料抓取 / 脱敏 / 离线回放 (W0–W6)** —— **详述已外迁**: [attachments/corpus-capture-replay.md](attachments/corpus-capture-replay.md)
+- **全量测试耗时归因与并行化 (2026-09-23, 已入库 `1bde85d` / `f469492`)**: 全量 **75s → 默认并行 7.6s** —— 大头是**环境**(用户调好系统层排除项后四类文件操作全 <1ms)不是代码; 代码侧另修三处框架开销。**并行已落地**(`pytest.ini` 默认 `-n 4` + conftest 台账回传)。耗时成因 / 度量纪律 / 定位三步 → [pitfalls/testing/perf-measurement.md](../pitfalls/testing/perf-measurement.md); 并行机制与结论翻转 → [pitfalls/testing/parallel-run.md](../pitfalls/testing/parallel-run.md); 完整归因 → [tasks/26-09-23-test-suite-perf.md](../tasks/26-09-23-test-suite-perf.md)。原 activeContext 切片蒸馏至此删除。

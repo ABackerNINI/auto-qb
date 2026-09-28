@@ -99,6 +99,7 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         default=[],
         help="从该站点的种子上删除匹配的标签; 支持 regex:/ 前缀与 :ignore_case 后缀(可组合), 例: regex:^BTS / 'M-Team:ignore_case'",
         risk="匹配到的标签会从该站点的种子中删除",
+        tone="danger",
     ),
     Field(
         "groups",

@@ -344,6 +344,7 @@ GROUPS: Tuple[Group, ...] = (
                 default=[],
                 help="从所有种子上摘除匹配的标签, 并从 qB 全局标签表里注销; 支持 regex:/、:ignore_case 与 @tracker_tags 引用",
                 risk="标签定义一并删除, 依赖该标签的自动化(如 HR 标记)随之失效",
+                tone="danger",
             ),
             Field(
                 "delete_tags_if_has_no_torrents",

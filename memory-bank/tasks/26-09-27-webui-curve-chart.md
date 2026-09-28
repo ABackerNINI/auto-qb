@@ -41,9 +41,11 @@
 | 曲线标题栏整栏可点折叠 + 图标指示(09-28) | Done | 删「收起/展开」钮; 周期输入框/删除钮 @click.stop; `#i-chevron` 旋转指示; 光标修进 `.hb-curve-hd` |
 | 「添加档位」与「下载档位」间距(09-28) | Done | 6px → 18px(`.hb-tier-add` margin-bottom 12px), 浏览器实测 |
 | 设置页行内「?」按钮语调色对齐选项(09-28) | Done | xtpl 挂 `hubToneOf` 类 + console_hub.css 两变体; danger 实测边框/发光/底/字全红 |
+| 「?」语调色补漏: schema tone 字段单点(09-28 二次) | Done | `Field` 加 `tone` 属性, `hubToneOf` 优先读它回落静态表; 删标两字段补红, CSS 零改动 |
 
 ## 进度日志
 
 - 2026-09-27 21:38 全部落地: 模板实测 → 应用(6 文件) → 集成冒烟 → test.quick(1752 passed) → test.full(与上基线持平) → 收尾回写。未提交, 等用户「提交」指令。
 - 2026-09-27 22:05 按用户反馈**取消 ∞ 水印**(大号半透明 ∞ 装饰字): 模板/冒烟页/`settings-detail.html` 元素、`_buildCurveChart` 的 infMark 字段、三主题 `.ce-chart-inf-mark` 规则全部撤除(死类连 CSS 一起清); ∞ 语义仍由 X 轴右缘刻度 + 图例「末档 ∞」表达。复验(浏览器 infMarks=0 + 渲染正常)与 test.quick 全绿。
 - 2026-09-28 05:49 用户两条新反馈落地(同专题追加): ①曲线**标题栏整栏可点**折叠(删「收起/展开」独立钮), 状态由 `#i-chevron` 旋转指示(收起朝右/展开朝下, 160ms 过渡); 周期输入框与「删除曲线」`@click.stop` 防误触, 支持 Tab+Enter。坑: 可点手型光标既有选择器 `.hb-blk-hd.hb-sub-toggle` 命中不了 `.hb-curve-hd` —— `cursor` 直接写进 `.hb-curve-hd` 并实测。②「添加档位」→「下载档位」间距 6px → 18px(`.hb-tier-add` margin-bottom:12px)。③同轮附带: 设置页行内「?」按钮语调色对齐选项 —— `xtpl.html` 叶子行「?」挂 `hubToneOf(item)` 类, `console_hub.css` 加 `.hb-ask.important/.danger` 变体(静息描边 `--tone-line` 与输入框同配方, hover/打开整组转语义色)。验证: dev.harness 桩 + 真浏览器逐项量测(折叠/图标/键盘/间距像素/?「on」态全红), test.full 见基线 26-09-28。
+- 2026-09-28 17:38 用户报「?」语调色**仍有遗漏**(同专题三次追加): 站点「删除标签格式」(`trackers.<站点>.remove_tags`)与自动化「彻底删除标签」(`delete_tags`)仍中性灰。根因: 语调取值只查前端 `HUB_TONE` 静态表, 动态路径(站点级)字段进不去表, 顶层 `delete_tags` 也不在表里。修法: schema `Field` 加 **`tone` 属性**(破坏性字段显式声明, 与 `risk` 文案解耦 —— 带 risk 不全是危险, "需重启"类只写文案不标), `config_hub.js` 的 `hubToneOf` 改为 `field.tone` 优先、静态表回落; 两个删标字段标 `tone="danger"`。CSS 零改动复用 eb57595 的 `.hb-ask.danger` 变体。附带: 两字段行条纹由 warn 黄转红(`hubRowClass` 按 tone 判 danger)。验证: 桩服务 + 真浏览器量测 —— 两行静息描边红 45%/on 态字+底+发光全红/弹层正常, 普通行(域名)中性灰不变, 静态表老键(qbittorrent.password)回落正常; test.full 1820 passed / 3 skipped(基线 26-09-28-1738)。

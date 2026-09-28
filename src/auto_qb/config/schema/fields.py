@@ -72,6 +72,9 @@ class Field:
     fields:     kind == "object" 时的子字段
     optional:   object 字段是否可整段省略(前端以开关控制该键存在性, 子字段随之显示/隐藏)
     ui_only:    UI 专段入口(不对应真实配置键, 如规则集 "rules" 对应动态的 *_rules 键)
+    tone:       语义语调("danger"/"important") —— 破坏性/不可逆字段显式声明, 前端据此给行条纹
+                与行内「?」按钮上语义色; 优先于前端 HUB_TONE 静态表, 留空 = 无语义行(中性灰)。
+                只标真正破坏性的字段, "需重启"这类提示用 risk 文案即可, 不标 tone
     unit_default: kind 属 UNIT_KINDS 时的**首选单位**(未配置/无法解析该值时下拉框的初值)。
                   留空则前端回退到该 kind 的第一个单位; 常见值可由默认值后缀直接读出
                   (如 default="3D" -> D), 只有需要偏离默认值后缀时才显式声明
@@ -95,6 +98,7 @@ class Field:
     grey_if: Tuple[str, str] = ()
     group_of: str = ""
     risk: str = ""
+    tone: str = ""  # "danger"/"important"; 见类 docstring —— 前端行条纹与「?」按钮的语义色单点
     unit_default: str = ""
     open: bool = False  # object 段缺省展开态(True = 平铺不渲染折叠头; 现 schema 仅 hr_check 段在用)
 

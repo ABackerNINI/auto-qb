@@ -729,8 +729,11 @@ window.CONFIG_HUB = {
     },
 
     /* ---------------------------------------------------------- 行 / 控件辅助 */
+    /* 语调单点: schema 的 tone 字段(破坏性/重要字段显式声明, 如 删标/彻底删标)优先,
+     * 回落 HUB_TONE 静态表(动态路径进不去表的老键, 如 qbittorrent.password);
+     * 行条纹(hubRowClass)与行内「?」按钮同一来源, 危险行整组走红 */
     hubToneOf(item) {
-      return HUB_TONE[this.hubBare(item.path)] || "";
+      return (item.field && item.field.tone) || HUB_TONE[this.hubBare(item.path)] || "";
     },
     hubRowClass(item) {
       const out = [];
