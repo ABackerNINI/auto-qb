@@ -122,7 +122,7 @@ HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
         "下载桶速率(站点覆盖)",
         "int",
         default="",
-        help="仅 quota_model=split 生效; 留空 = 回退全局 torrent_rate_per_hour, 再回落站点 max_torrents_per_hour 覆盖",
+        help="仅 quota_model=split 生效; 留空时: 站点已配 max_torrents_per_hour 则用它作下载桶速率, 否则回退全局 torrent_rate_per_hour(20)",
     ),
     Field(
         "completed_age_limit",
@@ -165,7 +165,7 @@ HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
         "每小时配额(站点覆盖)",
         "int",
         default="",
-        help="留空 = 回退全局 config.hr_check.max_torrents_per_hour",
+        help="留空 = 回退全局 config.hr_check.max_torrents_per_hour。❗quota_model=split 时本键改义为「下载桶速率覆盖」, 见 torrent_rate_per_hour 的回退链",
     ),
 )
 
@@ -186,7 +186,13 @@ HR_CHECK_FIELDS: Tuple[Field, ...] = (
         help="相邻两次站点请求的最小间隔; 抖动只向上(+0~25%), 故实测间隔恒 >= 本值。访问频度是账号安全的第一条防线。"
         "❗quota_model=split 的站点本键只管 .torrent 下载间隔(页面间隔用 min_page_interval)",
     ),
-    Field("max_torrents_per_hour", "每小时配额", "int", default="12", help="站点级独立计数; 到顶即停, 不报错; split 站点不使用(速率由下载桶承担)"),
+    Field(
+        "max_torrents_per_hour",
+        "每小时配额",
+        "int",
+        default="12",
+        help="站点级独立计数; 到顶即停, 不报错; split 站点不使用(速率由下载桶承担)。❗站点级同名键在 split 下改义为下载桶速率覆盖"
+    ),
     Field(
         "max_torrents_per_day",
         "每天配额",
@@ -317,7 +323,7 @@ HR_CHECK_FIELDS: Tuple[Field, ...] = (
         default="0.5",
         min=0,
         max=1,
-        help="HR 页必填字段缺失率超过该值即判「页面可能改版」, 该次刷新不产生放行(防把空结果当真)",
+        help="「页面可能改版」保护的可调阈值(预留): 自 v2 起必填字段缺失实行零容忍(缺任何必填字段即中止本轮), 本键当前不参与判定",
     ),
     Field(
         "channel",

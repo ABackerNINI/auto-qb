@@ -27,7 +27,7 @@ RULE_FIELDS: Tuple[Field, ...] = (
         "扫描间隔",
         "time",
         default="0S",
-        help="多久检查一次该规则(仅周期触发时生效); 留空 = 每 tick 级别(队列归一化为 1s); 显式配置最短 1S; 以上一轮结束起算, 不会叠加"
+        help="多久检查一次该规则(仅周期触发时生效); 留空 = 每 tick 级别(队列归一化为 1s); 显式配置最短 1S; 以上一轮到期时刻起算, 执行耗时不计入, 不会叠加"
     ),
     Field(
         "execute_once",
@@ -50,7 +50,9 @@ RULE_FIELDS: Tuple[Field, ...] = (
         "enum",
         default="conditions-met",
         options=STOP_IF,
-        help="什么情况下不再执行列表中排在后面的规则(默认: 条件满足后就停; 规则先后按列表顺序)",
+        help="什么情况下不再执行列表中排在后面的规则: conditions-met 条件满足并执行后停(默认); "
+        "conditions-not-met 条件不满足也停; action-failed 任一动作失败才停; all-actions-succeed 全部动作成功(无一失败)才停; "
+        "always 条件满足即停(与动作成败无关); never 不主动停。条件求值出错时无论配什么都停",
     ),
 )
 
@@ -60,7 +62,7 @@ CONDITION_PLUGINS: Tuple[Plugin, ...] = (
         "路径",
         "condition",
         "list",
-        "按种子保存路径匹配(命中任意一条即满足); 支持正则",
+        "按种子的保存路径或内容路径匹配(命中任意一条即满足); 支持正则",
         item_kind="pattern",
         placeholder="/downloads/anime"
     ),
@@ -110,7 +112,14 @@ CONDITION_PLUGINS: Tuple[Plugin, ...] = (
         item_kind="state_group",
         placeholder="is_complete&is_uploading"
     ),
-    Plugin("hr", "HR 条件", "condition", "enum", "按站点 HR 管理状态筛选; 站点没配 HR 段则永远不匹配", options=HR_MODES),
+    Plugin(
+        "hr",
+        "HR 条件",
+        "condition",
+        "enum", "按站点 HR 管理状态筛选。站点没配 HR 段时: condition-met 永不匹配; "
+        "condition-not-met 与 satisfied 恒匹配(没有要求 = 视为已满足)。站点本身没匹配上时, 仅 condition-not-met 匹配",
+        options=HR_MODES
+    ),
     Plugin(
         "date_time",
         "日期时间",
@@ -118,7 +127,15 @@ CONDITION_PLUGINS: Tuple[Plugin, ...] = (
         "object",
         "各项留空 = 不检查该项",
         fields=(
-            Field("day_of_month", "每月第几天", "range", default="", unit="1-31", placeholder="1-31"),
+            Field(
+                "day_of_month",
+                "每月第几天",
+                "range",
+                default="",
+                unit="1-31",
+                placeholder="1-31",
+                help="当月几号命中才通过; 支持单值(15)或区间(1-15); 留空 = 不检查"
+            ),
             Field("day_of_week", "星期几", "range", default="", unit="1-7", placeholder="1-7", help="1 = 周一"),
             Field("time", "时间区间", "str", default="", placeholder="10:00-23:00", help="支持跨午夜"),
         )
@@ -138,10 +155,18 @@ CONDITION_PLUGINS: Tuple[Plugin, ...] = (
         "磁盘可用空间",
         "condition",
         "object",
-        "检查指定路径的剩余空间; 路径为空或不可用时视为不匹配",
+        "检查指定路径的剩余空间; 路径为空或磁盘不可用时视为不匹配; 容器场景路径映射未命中会报错并停止后续规则, 不是静默跳过",
         fields=(
             Field("path", "检查路径", "path", default="", required=True, placeholder="R:/"),
-            Field("amount", "可用空间条件", "compare_size", default="<100GiB", required=True, placeholder="<100GiB"),
+            Field(
+                "amount",
+                "可用空间条件",
+                "compare_size",
+                default="<100GiB",
+                required=True,
+                placeholder="<100GiB",
+                help="可用空间条件, 如 <100GiB、>=1TiB"
+            ),
         )
     ),
 )
@@ -156,7 +181,7 @@ CHECKING_SECTION_FIELDS: Tuple[Field, ...] = (
         options=CHECKING_MODES,
         help="skip-checking 跳检(删种重加, 不再哈希校验); full-checking 强制完整哈希校验"
     ),
-    Field("auto_start", "校验后自动开始", "bool", default="false"),
+    Field("auto_start", "校验后自动开始", "bool", default="false", help="完成后自动开始该种子(重加 / 校验通过后种子处于暂停, 开启后才恢复运行)"),
 )
 
 ACTION_PLUGINS: Tuple[Plugin, ...] = (
@@ -206,7 +231,7 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
         "校验/跳检",
         "action",
         "object",
-        "按参考种子判断数据是否可信: 可信则跳过校验直接重挂, 不可信则强制哈希校验",
+        "按组内「有 / 无可信参考种子」分别走「有参考种子 / 无参考种子」分支, 各分支的校验方式(跳检 / 强校验)由你配置; 建议有参考配跳检、无参考配强制校验",
         risk="跳检会删除种子并重新添加(期间停止做种), 请务必配置去重/冷却避免反复执行",
         fields=(
             Field(
@@ -224,7 +249,7 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
                 "path",
                 default="",
                 show_if=("basic_check", "custom"),
-                risk="会以 <种子hash> <保存路径> 为参数执行该程序",
+                risk="会以 <候选参考种子hash> <其保存路径> 为参数对每个候选逐个执行, 退出码 0 表示该候选可信",
                 placeholder="C:/tools/check.bat",
             ),
             Field(
@@ -252,7 +277,8 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
         "移动种子",
         "action",
         "object",
-        "把种子的保存路径改为新目录(仅改 qB 里的记录, 不搬动磁盘上的文件)",
+        "把种子的保存路径改为新目录: qB 会把磁盘文件搬到新路径, 大量种子搬迁期间做种会中断, 慎用",
+        risk="会触发磁盘文件搬迁, 与只改记录有本质区别",
         fields=(Field("path", "目标路径", "path", default="", required=True, placeholder="R:/seeds"), )
     ),
     Plugin(
@@ -268,8 +294,15 @@ ACTION_PLUGINS: Tuple[Plugin, ...] = (
         "上传限速",
         "action",
         "speed",
-        "限制该种子的上传速度; 0 = 不限速; 奇数 KiB/s(如 2001KiB/s)视为手动限速, 本程序不覆盖",
+        "限制该种子的上传速度; 0 = 不限速; 若种子当前限速是奇数 KiB/s(如 2001), 视为手动限速, 不覆盖",
         placeholder="1000KiB/s"
     ),
-    Plugin("download_speed_limit", "下载限速", "action", "speed", "限制该种子的下载速度; 0 = 不限速", placeholder="1000KiB/s"),
+    Plugin(
+        "download_speed_limit",
+        "下载限速",
+        "action",
+        "speed",
+        "限制该种子的下载速度; 0 = 不限速; 若种子当前限速是奇数 KiB/s(如 2001), 视为手动限速, 不覆盖",
+        placeholder="1000KiB/s"
+    ),
 )

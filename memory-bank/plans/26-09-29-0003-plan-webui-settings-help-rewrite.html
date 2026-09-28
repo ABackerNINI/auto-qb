@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · WEBUI 设置页「?」说明全面核对与改写</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-09-29">
+<meta name="doc-status" content="Done">
+<meta name="doc-topic" content="webui-settings-help">
+<meta name="doc-added" content="26-09-29-0003">
+<meta name="doc-updated" content="26-09-29-0003">
+<meta name="doc-refs" content="memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101214;
+    --bg-soft: #15181b;
+    --ink: #e8eaec;
+    --ink-mute: #9aa3a9;
+    --ink-dim: #6f787e;
+    --hair: rgba(255,255,255,.09);
+    --hair-strong: rgba(255,255,255,.16);
+    --accent: #8fc1cc;
+    --p1: #cf9494;
+    --sans: "Segoe UI", "PingFang SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "JetBrains Mono", Consolas, "Sarasa Mono SC", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-padding-top: 24px; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 15.5px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { display: flex; max-width: 1400px; margin: 0 auto; }
+  /* ---- 左栏 sticky TOC ---- */
+  nav.toc {
+    width: 216px; flex: none; position: sticky; top: 0; align-self: flex-start;
+    height: 100vh; padding: 44px 8px 24px 28px; overflow-y: auto;
+    border-right: 1px solid var(--hair);
+  }
+  nav.toc .toc-cap {
+    font-size: 11px; letter-spacing: .14em; color: var(--ink-dim);
+    text-transform: uppercase; margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-mute); text-decoration: none;
+    font-size: 13px; line-height: 1.45; padding: 5px 10px;
+    border-left: 1px solid var(--hair);
+  }
+  nav.toc a + a { margin-top: 1px; }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--hair-strong); }
+  main { flex: 1; min-width: 0; padding: 0 40px 80px 44px; }
+  @media (max-width: 1080px) { nav.toc { display: none; } main { padding: 0 22px 60px; } }
+  @media (min-width: 1081px) {
+    main .inner { max-width: 1000px; }
+    main { --pad: 40px; }
+  }
+  /* ---- 封面 ---- */
+  header.cover { padding: 76px 0 34px; border-bottom: 1px solid var(--hair-strong); }
+  .kicker {
+    font-size: 11.5px; letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; margin-bottom: 20px;
+  }
+  header.cover h1 {
+    font-size: 40px; line-height: 1.14; font-weight: 600;
+    letter-spacing: -.02em; max-width: 22em;
+  }
+  header.cover .sub {
+    margin-top: 16px; color: var(--ink-mute); font-size: 16px; max-width: 46em;
+  }
+  .meta-row { margin-top: 30px; display: flex; flex-wrap: wrap; gap: 8px 34px; }
+  .meta-row span { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+  .meta-row b { color: var(--ink-mute); font-weight: 400; }
+  /* ---- 目录 ---- */
+  .toc-inline { padding: 26px 0 8px; }
+  .toc-inline ol { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 26px; }
+  .toc-inline a { color: var(--ink-mute); text-decoration: none; font-size: 13.5px; }
+  .toc-inline a:hover { color: var(--ink); }
+  .toc-inline li b { color: var(--ink-dim); font-family: var(--mono); font-weight: 400; font-size: 12px; margin-right: 7px; }
+  /* ---- 章节 ---- */
+  section { padding-top: 54px; }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+  .sec-head .no { font-family: var(--mono); font-size: 12.5px; color: var(--accent); letter-spacing: .06em; }
+  .sec-head h2 { font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
+  section > p.lede { color: var(--ink-mute); max-width: 68ch; margin-bottom: 22px; }
+  section + section { border-top: 1px solid var(--hair); margin-top: 54px; }
+  h3 { font-size: 16.5px; font-weight: 600; margin: 30px 0 12px; }
+  h3 .cnt { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); font-weight: 400; margin-left: 10px; }
+  p.body { max-width: 68ch; margin-bottom: 14px; }
+  p.body code, td code, li code {
+    font-family: var(--mono); font-size: .86em; color: var(--ink);
+    background: var(--bg-soft); border: 1px solid var(--hair); padding: 0 5px; border-radius: 2px;
+  }
+  /* ---- 优化表 ---- */
+  .tbl { width: 100%; border-collapse: collapse; margin: 10px 0 8px; }
+  .tbl caption {
+    caption-side: top; text-align: left; font-size: 12px; letter-spacing: .1em;
+    color: var(--ink-dim); text-transform: uppercase; padding-bottom: 10px;
+  }
+  .tbl th {
+    text-align: left; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--ink-dim); font-weight: 400; padding: 0 14px 9px 0;
+    border-bottom: 1px solid var(--hair-strong);
+  }
+  .tbl td {
+    vertical-align: top; padding: 13px 14px 15px 0;
+    border-bottom: 1px solid var(--hair); font-size: 13.5px; line-height: 1.6;
+  }
+  .tbl tr:last-child td { border-bottom: none; }
+  .tbl .c-field { width: 21%; }
+  .tbl .c-now { width: 41%; }
+  .tbl .c-fix { width: 38%; }
+  .f-key { font-family: var(--mono); font-size: 12px; color: var(--ink); display: block; word-break: break-all; }
+  .f-grp { font-size: 11px; color: var(--ink-dim); letter-spacing: .08em; display: block; margin-bottom: 3px; }
+  .sev {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em;
+    border: 1px solid var(--hair-strong); border-radius: 2px; padding: 0 5px;
+    color: var(--ink-mute); margin: 6px 6px 0 0;
+  }
+  .sev.p1 { color: var(--p1); border-color: rgba(207,148,148,.4); }
+  .now-q {
+    color: var(--ink-mute); border-left: 1px solid var(--hair-strong);
+    padding-left: 10px; margin-bottom: 8px;
+  }
+  .now-q b { color: var(--ink); font-weight: 400; }
+  .ev { font-family: var(--mono); font-size: 11.5px; color: var(--ink-dim); display: block; word-break: break-all; }
+  .why { display: block; margin-bottom: 8px; }
+  .fix-t { color: var(--ink); }
+  .fix-note { display: block; margin-top: 8px; color: var(--ink-dim); font-size: 12.5px; }
+  /* ---- 落点清单 ---- */
+  ul.plain { list-style: none; max-width: 72ch; }
+  ul.plain li { padding: 9px 0; border-bottom: 1px solid var(--hair); font-size: 14px; }
+  ul.plain li:last-child { border-bottom: none; }
+  ul.plain .mono { font-family: var(--mono); font-size: 12.5px; color: var(--ink-mute); }
+  ul.plain .n { color: var(--ink-dim); font-family: var(--mono); font-size: 12px; margin-right: 10px; }
+  /* ---- 无问题清单 ---- */
+  .oklist { font-size: 12.5px; line-height: 1.9; color: var(--ink-mute); max-width: 90ch; }
+  .oklist b { color: var(--ink); font-weight: 400; }
+  .oklist span { display: block; margin-top: 10px; }
+  /* ---- colophon ---- */
+  footer.colophon {
+    margin-top: 64px; border-top: 1px solid var(--hair-strong); padding-top: 22px;
+    display: flex; gap: 40px; flex-wrap: wrap;
+  }
+  footer.colophon div { font-family: var(--mono); font-size: 11.5px; color: var(--ink-dim); line-height: 1.9; }
+  footer.colophon b { color: var(--ink-mute); font-weight: 400; letter-spacing: .1em; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <nav class="toc" aria-label="目录">
+    <div class="toc-cap">Contents</div>
+    <a href="#s1">01 · 背景与结论</a>
+    <a href="#s2">02 · 核对方法与数据链路</a>
+    <a href="#s3">03 · P1 与实现相反</a>
+    <a href="#s4">04 · P2 过时与机制错位</a>
+    <a href="#s5">05 · P3 不完整 / 易误导</a>
+    <a href="#s6">06 · P4 缺说明的项</a>
+    <a href="#s7">07 · 实施落点与批次</a>
+    <a href="#s8">08 · 已核对无问题项</a>
+  </nav>
+  <main><div class="inner">
+
+    <header class="cover">
+      <div class="kicker">Plan · WebUI Settings Help Audit</div>
+      <h1>WEBUI 设置页「?」说明<br>全面核对与改写计划</h1>
+      <p class="sub">设置页每个配置行末的「?」浮窗说明, 逐条对照代码实现核对了一遍: 大多数文案是准的, 但有 27 处存在与实现相反、过时架空、缺关键边界或措辞误导的问题。本计划给出逐项的「字段 / 现状 / 如何优化」改写表, 只动文案, 不动行为。</p>
+      <div class="meta-row">
+        <span>状态 <b>Done(2026-09-29 实施完成)</b></span>
+        <span>范围 <b>6 个设置分区 · 全部「?」项</b></span>
+        <span>核查 <b>五路只读核查 164 项次 · 27 行进表</b></span>
+        <span>行为改动 <b>无(纯文案)</b></span>
+      </div>
+    </header>
+
+    <div class="toc-inline">
+      <ol>
+        <li><b>01</b><a href="#s1">背景与结论</a></li>
+        <li><b>02</b><a href="#s2">核对方法与数据链路</a></li>
+        <li><b>03–06</b><a href="#s3">优化表(P1 / P2 / P3 / P4)</a></li>
+        <li><b>07</b><a href="#s7">实施落点与批次</a></li>
+        <li><b>08</b><a href="#s8">已核对无问题项</a></li>
+      </ol>
+    </div>
+
+    <!-- ================= 01 ================= -->
+    <section id="s1">
+      <div class="sec-head"><span class="no">01</span><h2>背景与结论</h2></div>
+      <p class="lede">设置页「?」浮窗是配置项说明的唯一出口, 文案写在两处: 后端 schema(<code>config/schema/*.py</code> 的 help / risk / default)与前端富文案(<code>config_hub.js</code> 的 <code>HUB_HELP</code>, 命中时整段覆盖 schema)。本次把六个分区全部「?」项逐条与代码实现对照, 结论如下。</p>
+      <p class="body">27 处问题分四档:<b>P1(5 行)</b>描述与实现相反或张冠李戴, 会直接误导操作 —— 最典型的是「移动种子」写的是不搬磁盘文件, 实际 qB 会真搬;<b>P2(2 行)</b>是过时/架空文案与一处永不显示的富文案死键;<b>P3(17 行)</b>缺关键边界或主语易误读;<b>P4(3 行)</b>压根没写说明, 浮窗显示「这一项还没有说明。」。</p>
+      <p class="body">全部修复只改 help / risk 字符串与一处页面静态句, 不涉及任何行为变更, 守卫测试的键集合基线不受影响。其中 <code>parse_missing_rate_max</code> 的「去留」是行为决策(恢复消费或废弃删键), 不在本计划内动手, 只修文案并建议入池。</p>
+    </section>
+
+    <!-- ================= 02 ================= -->
+    <section id="s2">
+      <div class="sec-head"><span class="no">02</span><h2>核对方法与数据链路</h2></div>
+      <p class="lede">「?」浮窗内容组装在 <code>config_hub.js :: hubHelpOf</code>: 富文案 <code>HUB_HELP[去 config. 前缀的路径]</code> 优先, 未命中回退 schema 的 help / risk / default。因此同一个键可能有两层文案, 富文案会整段盖掉 schema —— 核对时两层都查。</p>
+      <p class="body">核查按分区拆了五路只读代理(常规 / 自动化 / HR 在线核实 / 限速+站点 / 规则+插件), 每条结论都要求给出 <code>file:line</code> 证据; 四处高影响结论(移动种子、HR 条件、parse_missing_rate_max、任务队列起算点)由主会话复核源码二次确认。判定档位:<b>❌ 与实现相反</b> / <b>⏱ 过时架空</b> / <b>⚠ 不完整</b> / <b>❓ 易误导</b> / <b>缺 help</b>。</p>
+      <p class="body">覆盖面:常规、自动化、HR 在线核实、限速、站点、规则六个分区中出现「?」的全部配置项、站点微调字段、曲线编辑器内嵌字段、全部条件 / 动作插件说明, 以及六个分区的首页卡片 lede; 另核对了浮窗「默认值」栏的对象 / 数组渲染。合计 164 项次核查, 27 行进优化表, 其余文案与实现一致(清单见 08)。</p>
+    </section>
+
+    <!-- ================= 03 P1 ================= -->
+    <section id="s3">
+      <div class="sec-head"><span class="no">03</span><h2>P1 · 与实现相反</h2></div>
+      <p class="lede">现状文案会把用户引向与真实行为相反的操作预期, 优先修。</p>
+      <table class="tbl">
+        <caption>P1 · 5 行</caption>
+        <thead><tr><th class="c-field">字段</th><th class="c-now">现状</th><th class="c-fix">如何优化</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 动作</span><span class="f-key">move_to</span><span class="sev p1">与实现相反</span></td>
+            <td class="c-now">
+              <span class="now-q">「把种子的保存路径改为新目录<b>(仅改 qB 里的记录, 不搬动磁盘上的文件)</b>」</span>
+              实际调 qB WebAPI <code>torrents/setLocation</code>, 磁盘文件会整体搬迁到新目录。
+              <span class="ev">rules/actions/transfer.py:22 · core/qbapi.py:145-152(主会话复核)</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">「把种子的保存路径改为新目录: qB 会把磁盘文件搬到新路径, 大量种子搬迁期间做种会中断, 慎用」</span>
+              <span class="fix-note">建议同时给该插件补 risk:「会触发磁盘文件搬迁, 与改记录有本质区别」。</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 条件</span><span class="f-key">hr</span><span class="sev p1">与实现相反</span></td>
+            <td class="c-now">
+              <span class="now-q">「按站点 HR 管理状态筛选; <b>站点没配 HR 段则永远不匹配</b>」</span>
+              实现是 <code>mode != "condition-met"</code>: 没配 HR 段时仅 condition-met 永不匹配, condition-not-met 与 satisfied 反而恒匹配。
+              <span class="ev">rules/conditions.py:155-157(主会话复核)</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">「按站点 HR 管理状态筛选。站点没配 HR 段时: condition-met 永不匹配; condition-not-met 与 satisfied 恒匹配(没有要求 = 视为已满足)。站点本身没匹配上时, 仅 condition-not-met 匹配」</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">常规</span><span class="f-key">data_dir</span><span class="sev p1">基准说错</span></td>
+            <td class="c-now">
+              <span class="now-q">「(相对<b>程序目录</b>或绝对路径)」</span>
+              相对路径按进程启动时的工作目录(cwd)解析, 全仓没有 chdir; 从不同 cwd 启动会落到不同位置。
+              <span class="ev">webui/server/common.py:53 · config/loaders.py:39-41</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">「运行状态、日志、跳检备份等文件的存放目录(相对启动时的工作目录, 或绝对路径)」</span>
+              <span class="fix-note">risk「修改后需重启进程才生效」保留。</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">限速 · 富文案</span><span class="f-key">global_speed_limit_curve → what 段</span><span class="sev p1">数据源张冠李戴</span></td>
+            <td class="c-now">
+              <span class="now-q">「让 auto-qb 盯着 <b>qB 的累计流量</b>, 跨过一档阈值就把全局限速降到该档的数值。」</span>
+              数据源是 TrafficMonitor 的 <code>history_traffic.dat</code>, 不读 qB 自身统计。schema help 本身写对了, 但富文案命中后整段覆盖它 —— 用户看到的就是错的那句。
+              <span class="ev">config_hub.js:77 · core/mixins/speed_curve.py:86-92</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">「让 auto-qb 盯着 Traffic Monitor 记录的累计流量, 跨过一档阈值就把全局限速降到该档的数值。」</span>
+              <span class="fix-note">顺手复核该富文案的 def / when 段与实现口径。</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">站点 + 规则动作</span><span class="f-key">upload_speed_limit / download_speed_limit(奇数句, 共 4 处)</span><span class="sev p1">主语误导</span></td>
+            <td class="c-now">
+              <span class="now-q">「<b>奇数值(如 2001KiB/s)</b>视为你的手动限速, 本程序不覆盖」</span>
+              奇数判定检查的是 qB 里种子<b>当前限速</b>是否奇数(疑似人工设过); 配置里填奇数会照常写入。现文案易读成「配置填奇数不生效」。
+              <span class="ev">core/mixins/tracker.py:41-55 · infra/utils.py:524-529 · rules/actions/transfer.py:64-66</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">站点字段:「该站点种子添加时即设置的上传限速; 0 = 不限速; 添加时若种子的当前限速已是奇数 KiB/s(如 2001), 视为你手动设过, 不覆盖」</span>
+              <span class="fix-t">规则动作:「限制该种子的上传速度; 0 = 不限速; 若种子当前限速是奇数 KiB/s(如 2001), 视为手动限速, 不覆盖」</span>
+              <span class="fix-note">上传 / 下载两方向、站点段与动作插件四处统一口径。</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================= 04 P2 ================= -->
+    <section id="s4">
+      <div class="sec-head"><span class="no">04</span><h2>P2 · 过时架空与机制错位</h2></div>
+      <p class="lede">描述的是旧版本语义或永不生效 / 永不显示的内容。</p>
+      <table class="tbl">
+        <caption>P2 · 2 行</caption>
+        <thead><tr><th class="c-field">字段</th><th class="c-now">现状</th><th class="c-fix">如何优化</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="c-field"><span class="f-grp">HR 在线核实</span><span class="f-key">parse_missing_rate_max</span><span class="sev">过时架空</span></td>
+            <td class="c-now">
+              <span class="now-q">「HR 页必填字段缺失率<b>超过该值</b>即判「页面可能改版」, 该次刷新不产生放行(防把空结果当真)」</span>
+              HR 核实 v2 改造后, S2 强信号校验对必填字段缺失实行<b>零容忍</b>(缺失率 &gt; 0 即中止本轮), 写在阈值比较之前 —— 0.5 阈值已不可达, 本键当前不参与判定。审计报告 F3 已记, issues/ 尚未登记。
+              <span class="ev">hr/service.py:549-553, 806-807 · reports/26-09-28-0030(F3)</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">「「页面可能改版」保护的可调阈值(预留): 自 v2 起必填字段缺失实行零容忍(缺任何必填字段即中止本轮), 本键当前不参与判定」</span>
+              <span class="fix-note">键的去留(恢复消费 / 废弃删键)是行为决策, 待拍板; 建议先入池 issue 登记, 本计划只修文案。</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">前端富文案</span><span class="f-key">HUB_HELP["rules.overview"]</span><span class="sev">永不显示 + 内容错</span></td>
+            <td class="c-now">
+              键与任何字段路径都对不上(规则组 section 的 bare 键是 <code>rules</code>, 规则视图也没有组级「?」按钮), 这条富文案<b>永远不会被渲染</b>; 且其内容「规则按列表顺序逐条判断, 不会命中一条就停」与默认 <code>stop_following_rules_if=conditions-met</code>(命中即停后续)相悖。
+              <span class="ev">config_hub.js:101-108 · hubHelpOf 仅查 HUB_HELP[bare]</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">删除该死条目</span>
+              <span class="fix-note">规则分区的说明已由分区 lede 承担; 若想要组级「?」, 需另配键位并按默认行为重写内容, 不在本计划展开。</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================= 05 P3 ================= -->
+    <section id="s5">
+      <div class="sec-head"><span class="no">05</span><h2>P3 · 不完整 / 易误导</h2></div>
+      <p class="lede">文案没错得那么彻底, 但缺了关键边界、数字口径或主语, 照着字面理解会出偏差。</p>
+      <table class="tbl">
+        <caption>P3 · 17 行</caption>
+        <thead><tr><th class="c-field">字段</th><th class="c-now">现状</th><th class="c-fix">如何优化</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="c-field"><span class="f-grp">HR 在线核实 · 站点微调</span><span class="f-key">sites.torrent_rate_per_hour</span><span class="sev">回退链顺序写反</span></td>
+            <td class="c-now">
+              <span class="now-q">「留空 = 回退全局 torrent_rate_per_hour, <b>再回落站点 max_torrents_per_hour</b> 覆盖」</span>
+              实际顺序相反: 站点 torrent_rate_per_hour → 站点 max_torrents_per_hour → 全局 torrent_rate_per_hour。
+              <span class="ev">hr/ratelimit.py:66-70, 86</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「仅 quota_model=split 生效; 留空时: 站点已配 max_torrents_per_hour 则用它作下载桶速率, 否则回退全局 torrent_rate_per_hour(20)」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">HR 在线核实</span><span class="f-key">max_torrents_per_hour(全局) 与 sites.max_torrents_per_hour</span><span class="sev">缺 split 改义提示</span></td>
+            <td class="c-now">
+              全局键写「split 站点不使用」(对), 但站点级同名键在 split 下被<b>改义为下载桶速率覆盖</b>, 两处文案都没提; 站点键只写了 legacy 的回退。
+              <span class="ev">hr/ratelimit.py:61-70, 86, 126-128 · config/models.py:179-182</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">站点键补:「❗quota_model=split 时本键改义为「下载桶速率覆盖」, 见 torrent_rate_per_hour 的回退链」</span>
+              <span class="fix-t">全局键补:「❗站点级同名键在 split 下改义为下载桶速率覆盖」</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">常规</span><span class="f-key">log.level</span><span class="sev">通知基准说法不成立</span></td>
+            <td class="c-now">
+              <span class="now-q">「也是通知的基准(达到 通知.最低通知级别 的日志会推送)」</span>
+              auto_qb 自身日志恒全量发出, 通知只受 notify.min_level 过滤; 调 log.level 不增减推送。
+              <span class="ev">infra/notify.py:279-281 · infra/logging.py:123</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「日志落盘 / 控制台的详细程度: DEBUG 最详细, CRITICAL 只记严重错误。只影响输出 —— 是否推送通知只看「通知 → 最低通知级别」」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">常规</span><span class="f-key">web.token</span><span class="sev">存储路径不精确</span></td>
+            <td class="c-now">
+              <span class="now-q">「存到 <b>data_dir</b>/web.token」</span>
+              实际落在 state_file 所在目录; 默认恰好是 data_dir, 但 state_file 另设时两者不同。
+              <span class="ev">webui/server/common.py:62</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「登录 WebUI 用的密钥; 留空 = 首次启动随机生成, 存到状态文件同目录(默认即 data_dir)的 web.token; 启动日志只提示文件路径, 密钥内容不打印」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">常规</span><span class="f-key">notify.dedup_window</span><span class="sev">去重口径含糊</span></td>
+            <td class="c-now">
+              <span class="now-q">「该时间内<b>内容相同</b>的通知只推第一条」</span>
+              实际去重键 = 同一来源 logger + 同级别 + 消息前 80 字; 同内容不同级别会各推一条, 前 80 字相同后文不同也会被并掉。
+              <span class="ev">infra/notify.py:237-238</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「该窗口内「同一来源 + 同级别 + 消息开头 80 字相同」的通知只推第一条, 避免重复轰炸; 0 = 不去重」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">常规</span><span class="f-key">state_file</span><span class="sev">「留空」歧义 + 实际只读</span></td>
+            <td class="c-now">
+              <span class="now-q">「留空 = &lt;data_dir&gt;/state.json」</span>
+              「留空」仅指整键省略(YAML 显式空串会被校验拒绝); 且本项是 R 级字段, WebUI 保存时一律回退磁盘旧值, 界面上改不了。
+              <span class="ev">config/validation/core.py:216-217 · config/writer.py(R 级回退)</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「运行状态存档(重启后接着上次进度继续); 省略整键 = &lt;data_dir&gt;/state.json。WebUI 中本项只读, 调整需直接编辑 YAML 并重启」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">常规 + 规则</span><span class="f-key">interval(内置任务) 与 规则.interval</span><span class="sev">起算点写错</span></td>
+            <td class="c-now">
+              两处都写「<b>以上一轮结束起算</b>」; 实现是 run_due 开始时快照 now, 收尾按 <code>next_run = now + interval</code> 重入队 —— 即以上一轮<b>到期时刻</b>起算, 执行耗时不计入(单轮超时则下一轮立即补跑)。
+              <span class="ev">core/taskqueue.py:174, 207(主会话复核)</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">常规:「维护 / 全局清理 / 曲线等内置任务的执行周期; 以上一轮到期时刻起算, 执行耗时不计入, 不会越跑越密」</span>
+              <span class="fix-t">规则:「…显式配置最短 1S; 以上一轮到期时刻起算, 执行耗时不计入」</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">自动化</span><span class="f-key">remove_similar_tags</span><span class="sev">清理范围过宽</span></td>
+            <td class="c-now">
+              <span class="now-q">「自动清理仅大小写不同的<b>重复标签</b>」</span>
+              实际只以站点标签为基准: 摘除与站点标签仅大小写不同的变体、保留站点配置的拼写; 两个都不是站点标签的大小写重复(如种子上同时挂着 Abc / abc)不在清理范围。
+              <span class="ev">core/mixins/tags.py:83 · core/qbmanager.py:906-907</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「自动清理与站点标签仅大小写不同的重复变体(站点标签 HHan 保留, 种子上的 hhan 被摘除); 站点配置里可单独覆盖」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">自动化</span><span class="f-key">add_episode_tags(段) + enabled</span><span class="sev">触发面与解析范围缺边</span></td>
+            <td class="c-now">
+              <span class="now-q">「仅新增种子时触发」</span>
+              程序启动首轮会把现有种子也走一遍 added 路径(一次性补打); 解析只认视频文件名里的显式集数标记(第x集 / S01E05 / EP05 / E05), 纯数字文件名与截图 / 字幕不参与。
+              <span class="ev">core/qbmanager.py:786-817 · torrents/store.py:105-107 · core/episodes.py:14-27, 35-39</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">段:「从种子的视频文件名解析集数自动打标签; 新增种子时触发(启动首轮会对现有种子统一补打一次), 集数不连续视为不可靠、不打标」</span>
+              <span class="fix-t">enabled:「开启后按文件名中的显式集数标记(第x集 / S01E05 / EP05 / E05)自动打标签; 仅视频文件参与, 解析不到不打标」</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">自动化</span><span class="f-key">delete_tags(risk)</span><span class="sev">「失效」说法不成立</span></td>
+            <td class="c-now">
+              <span class="now-q">「依赖该标签的自动化(如 HR 标记)<b>随之失效</b>」</span>
+              若标签仍被 hr.add_tag / 站点 tags 引用, 下一维护轮会重新打上并由 qB 重建定义(删除与添加互相打架); 真正失效的是规则条件等按该标签匹配的逻辑。
+              <span class="ev">core/mixins/tags.py:173-192 · core/qbmanager.py:898-907</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">risk 改:「仍被 HR 标签 / 站点标签配置引用的, 下一维护轮会重新打上(与删除互相打架); 规则条件里按该标签匹配的逻辑会停止命中」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">自动化 · HR 全局默认</span><span class="f-key">add_tag_for_satisfied</span><span class="sev">「删掉」两义</span></td>
+            <td class="c-now">
+              <span class="now-q">「删掉后程序不会再自动添加」</span>
+              读成「清空该配置」是对的; 读成「从种子上删掉标签」就错了 —— 下一维护轮会加回来。
+              <span class="ev">core/mixins/tags.py:154-158</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「HR 达标(做满要求+额外时长, 或分享率达标)后打的标签, 相当于「HR 已完成」标记; 留空 = 不再打标; 已打上的标签程序不会自动摘除」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则</span><span class="f-key">stop_following_rules_if</span><span class="sev">仅默认枚举有解释</span></td>
+            <td class="c-now">
+              <span class="now-q">「什么情况下不再执行列表中排在后面的规则(默认: 条件满足后就停…)」</span>
+              其余 5 个枚举在界面无任何解释; 且条件求值出错时无视该配置强制停, 用户无从知晓。
+              <span class="ev">rules/base.py:214-220, 286-294(六枚举语义主会话复核)</span>
+            </td>
+            <td class="c-fix">
+              <span class="fix-t">「什么情况下不再执行列表中排在后面的规则: conditions-met 条件满足并执行后停(默认); conditions-not-met 条件不满足也停; action-failed 任一动作失败才停; all-actions-succeed 全部动作成功(无一失败)才停; always 条件满足即停(与动作成败无关); never 不主动停。条件求值出错时无论配什么都停」</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 条件</span><span class="f-key">path</span><span class="sev">漏了 content_path</span></td>
+            <td class="c-now">
+              <span class="now-q">「按种子保存路径匹配」</span>
+              除 save_path 外还匹配 content_path, 任一命中即满足。
+              <span class="ev">rules/conditions.py:28-32</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「按种子的保存路径或内容路径匹配(命中任意一条即满足); 支持正则」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 条件</span><span class="f-key">freespace</span><span class="sev">报错路径没写</span></td>
+            <td class="c-now">
+              <span class="now-q">「路径为空或不可用时视为不匹配」</span>
+              盘不可用(OSError)确实按不匹配; 但容器路径映射未命中(FileAccessError)会抛 ExprError —— 不匹配 + 停止后续规则 + ERROR 日志。
+              <span class="ev">rules/conditions.py:251-257 · rules/base.py:214-218</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「检查指定路径的剩余空间; 路径为空或磁盘不可用时视为不匹配; 容器场景路径映射未命中会报错并停止后续规则, 不是静默跳过」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 动作</span><span class="f-key">checking(主文案)</span><span class="sev">「不可信则强校验」与实现不符</span></td>
+            <td class="c-now">
+              <span class="now-q">「可信则跳过校验直接重挂, <b>不可信则强制哈希校验</b>」</span>
+              实际按组内「有 / 无可信参考种子」选 with/without_reference 分支, 每个分支的校验方式完全由用户配置; 无参考时并不会自动强制校验(两分支 mode 默认都是 skip-checking)。
+              <span class="ev">rules/actions/checking.py:109-124 · schema/rules.py 两分支默认值</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">「按组内「有 / 无可信参考种子」分别走「有参考种子 / 无参考种子」分支, 各分支的校验方式(跳检 / 强校验)由你配置; 建议有参考配跳检、无参考配强制校验」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 动作</span><span class="f-key">checking.custom_basic_check_program_path(risk)</span><span class="sev">参数主体写错</span></td>
+            <td class="c-now">
+              <span class="now-q">「会以 <b>&lt;种子hash&gt; &lt;保存路径&gt;</b> 为参数执行该程序」</span>
+              实际对每个候选参考种子逐个执行, 参数是候选的 hash / 保存路径(不是目标种子), 退出码 0 表示该候选可信。
+              <span class="ev">rules/actions/checking.py:178-194</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">risk 改:「会以 &lt;候选参考种子hash&gt; &lt;其保存路径&gt; 为参数对每个候选逐个执行, 退出码 0 表示该候选可信」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">限速 · 页面静态句</span><span class="f-key">settings-detail.html 档位读法句</span><span class="sev">ND 曲线无「周期结束」</span></td>
+            <td class="c-now">
+              <span class="now-q">「最后一档会一直生效到周期结束」</span>
+              对 DAY / MONTH 成立(周期内累计单调增); 但 ND(最近 N 天)是滚动窗口, 旧日期滚出后累计回落、限速随之放宽, 没有「周期结束」。
+              <span class="ev">core/curves.py:86-89, 101-104 · settings-detail.html:113</span>
+            </td>
+            <td class="c-fix"><span class="fix-t">句尾补:「「最近 N 天」曲线按滚动窗口计算, 旧日期滚出后累计回落, 限速随之放宽」</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================= 06 P4 ================= -->
+    <section id="s6">
+      <div class="sec-head"><span class="no">06</span><h2>P4 · 缺说明的项</h2></div>
+      <p class="lede">schema 里没写 help 的字段, 「?」浮窗正文显示「这一项还没有说明。」—— 全量 schema 扫了一遍, 只剩这三处(曲线 dat_path 也没有 help, 但 placeholder 足够表意, 不补)。</p>
+      <table class="tbl">
+        <caption>P4 · 3 行</caption>
+        <thead><tr><th class="c-field">字段</th><th class="c-now">现状</th><th class="c-fix">如何优化</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 动作 checking 分支</span><span class="f-key">auto_start</span><span class="sev">无 help</span></td>
+            <td class="c-now">浮窗显示「这一项还没有说明。」<span class="ev">schema/rules.py:159 · config_hub.js:593 兜底文案</span></td>
+            <td class="c-fix"><span class="fix-t">「完成后自动开始该种子(重加 / 校验通过后种子处于暂停, 开启后才恢复运行)」</span><span class="ev">rules/actions/skip_checking.py:115-121 · full_checking.py:93-99</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 条件 date_time</span><span class="f-key">day_of_month</span><span class="sev">无 help</span></td>
+            <td class="c-now">浮窗显示「这一项还没有说明。」<span class="ev">schema/rules.py:121 · rules/conditions.py:12-17, 179</span></td>
+            <td class="c-fix"><span class="fix-t">「当月几号命中才通过; 支持单值(15)或区间(1-15); 留空 = 不检查」</span></td>
+          </tr>
+          <tr>
+            <td class="c-field"><span class="f-grp">规则 · 条件 freespace</span><span class="f-key">amount</span><span class="sev">无 help</span></td>
+            <td class="c-now">浮窗显示「这一项还没有说明。」<span class="ev">schema/rules.py:144</span></td>
+            <td class="c-fix"><span class="fix-t">「可用空间条件, 如 &lt;100GiB、&gt;=1TiB」</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ================= 07 ================= -->
+    <section id="s7">
+      <div class="sec-head"><span class="no">07</span><h2>实施落点与批次</h2></div>
+      <p class="lede">全部改动是纯文案(帮助字符串与一处页面静态句), 不动键集合、不动校验、不动行为。</p>
+      <ul class="plain">
+        <li><span class="n">F1</span><span class="mono">src/auto_qb/config/schema/groups.py</span> — 常规 / 自动化分区 9 行(data_dir、log.level、web.token、notify.dedup_window、state_file、interval、remove_similar_tags、add_episode_tags×2、delete_tags risk、add_tag_for_satisfied 中属本文件的)</li>
+        <li><span class="n">F2</span><span class="mono">src/auto_qb/config/schema/hr.py</span> — parse_missing_rate_max、sites.torrent_rate_per_hour、sites.max_torrents_per_hour(共 3 行)</li>
+        <li><span class="n">F3</span><span class="mono">src/auto_qb/config/schema/trackers.py</span> — 单种上传 / 下载限速奇数句(2 行)</li>
+        <li><span class="n">F4</span><span class="mono">src/auto_qb/config/schema/rules.py</span> — hr 条件、move_to、stop_following_rules_if、path、freespace、checking 主文案与 custom risk、auto_start / day_of_month / amount 补 help、规则.interval(约 10 行)</li>
+        <li><span class="n">F5</span><span class="mono">src/auto_qb/webui/static/shared/config_hub.js</span> — HUB_HELP["global_speed_limit_curve"].what 改写; 删除死条目 HUB_HELP["rules.overview"]</li>
+        <li><span class="n">F6</span><span class="mono">src/auto_qb/webui/static/shared/tpl/settings-detail.html</span> — 曲线档位读法句补 ND 滚动窗口一句</li>
+      </ul>
+      <h3>批次建议<span class="cnt">三批, 每批可独立保存验收</span></h3>
+      <p class="body"><b>批次一(P1, 5 行)</b>: 与实现相反的文案, 改动收益最高;<b>批次二(P2 + P4, 5 行)</b>: 架空注释、死键删除与补缺;<b>批次三(P3, 17 行)</b>: 边界与口径补齐。schema 文案变更不影响 <code>tests/test_config_schema.py</code> 的键集合守卫, 也不触发配置迁移; 改完跑 <code>commands run test.full</code> 确认基线无漂移, 再开 WEBUI 走查一遍浮窗实际渲染(含富文案覆盖键)。</p>
+      <h3>待拍板项<span class="cnt">不在本计划内动手</span></h3>
+      <p class="body"><code>parse_missing_rate_max</code> 的去留(恢复消费 vs 废弃删键)是行为决策, 且 issues/ 里还没有对应登记 —— 建议按 create-issue 流程入池后再定; 本计划先把它在界面上的误导性文案改掉。</p>
+    </section>
+
+    <!-- ================= 08 ================= -->
+    <section id="s8">
+      <div class="sec-head"><span class="no">08</span><h2>已核对无问题项</h2></div>
+      <p class="lede">以下键 / 文案经五路核查与实现一致, 本计划不触碰 —— 留档备查, 下次改动 schema 时可对照。</p>
+      <div class="oklist">
+        <span><b>常规(23)</b>: qbittorrent 段 4 项、main_tick、sync_interval(含 min(sync_interval, main_tick) 钳制)、state_save_interval(0=off 与 ≥30s 下限)、max_tasks_per_tick、schema_version、log.file / max_bytes(backupCount=5) / format、web.enabled / host(risk) / port / skip_local_verify、notify.enabled / min_level / quiet_hours / max_per_hour / channels。</span>
+        <span><b>自动化(18)</b>: maintenance_tag_mode(on_change 仅外部变化重检, HR 恒周期)、skip_checking_tag、grouping 3 项(缺文件整组暂停 + 逐成员打标)、fs 与 fs.path_map(text 形态无逐条编辑属实、miss 一律不可判定、docs §11.5 存在)、add_tag_single / multi、delete_tags 主体、delete_tags_if_has_no_torrents、HR 输出 add_tag / add_category / 两个 overwrite_category / add_category_for_satisfied / overwrite_category_for_satisfied / exclude_tags / exclude_categories(并集 + 现算属实)。</span>
+        <span><b>HR 在线核实(39)</b>: enabled、min_torrent_interval(抖动仅向上 +0~25%)、max_torrents_per_day(legacy 60 / split 200)、split 五键(page_rate 40 / page_burst 10 / torrent_rate 20 / torrent_burst 5 / pages_day 400, 桶跨重启不重置)、min_page_interval 90S、max_pages_per_round 9 与 900s 常量并行、熔断 3 次 / 12H、allow_window(跨午夜, 语义与免打扰相反)、unknown_policy、verified_ttl、index_retention 30D、max_download_retries 3、channel_silence_warn 6H、shared_dir、lock_timeout、poll_interval、channel 5 项(8788 / 127.0.0.1 / hr.token / extension_id 32 位 a~p / 180S)、sites 段 mode / tracker / hr_page_scopes(A+B+C 必含) / refresh_interval 12H / max_pages_per_refresh 5 / quota_model / page_rate 站点覆盖 / completed_age_limit(豁免优先 + 乱序放弃早停) / accept_empty_listing / auto_age_limit(±1 天机检) / seeding_exempt_ratio。</span>
+        <span><b>限速 + 站点(21)</b>: 曲线 schema help、编辑器 enabled / interval(留空回退主 interval 属实)、「未启用」句、「多条曲线取最严」、表头与图例(阈值=区间上限, 末档沿用)、HUB speed lede(当月聚合自然回落); 站点 domains(子域匹配)、tags(首标签作站点名)、remove_tags、groups、hr 段引言、required_seeding_time / required_share_ratio(满足其一) / extra_seeding_time / condition(辅种不触发)、rules_ref(留空不回退)、remove_similar_tags 站点覆盖、trackers lede。</span>
+        <span><b>规则(34)</b>: enabled、trigger(事件立即检查属实)、watch_fields(自写抑制 + v1 白名单)、execute_once(state 持久, 失败不计入)、cooldown(与 execute_once 独立)、size / tags / category / trackers / tracker_group / state / date_time(day_of_week、time)、seedtime、upload_ratio、expr(前缀与函数清单、一层一运算符)、add_tags / remove_tags / add_category.format / add_category.overwrite / remove_category / start / stop / print_torrent_details(删除触发唯一允许动作) / checking.risk / basic_check / with_reference / without_reference / 分支 enabled / 分支 mode、reannounce(600s 内置间隔 + 启动告警)、upload / download_speed_limit 动作主体。</span>
+      </div>
+    </section>
+
+    <footer class="colophon">
+      <div><b>METHOD</b><br>五路只读核查代理(常规 / 自动化 / HR / 限速+站点 / 规则)逐条对照实现, 164 项次; 4 处高影响结论主会话复核源码二次确认。</div>
+      <div><b>SCOPE</b><br>6 个设置分区全部「?」项 · 站点微调字段 · 曲线内嵌字段 · 15 条件 + 12 动作插件 · 6 分区 lede。</div>
+      <div><b>REFS</b><br>memory-bank/reports/26-09-28-0030(F3 parse_missing_rate_max) · config/schema/* · webui/static/shared/config_hub.js。</div>
+      <div><b>DATE</b><br>2026-09-29 · 核对基线 develop@d79fb1be。</div>
+    </footer>
+
+  </div></main>
+</div>
+</body>
+</html>

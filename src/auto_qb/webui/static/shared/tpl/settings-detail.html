@@ -110,7 +110,7 @@
                         <button class="hb-btn sm hb-tier-add" @click="cfgCurvePointAdd(i, dir)">＋ 添加档位</button>
                       </div>
                       <p class="hb-hp" style="margin-top:10px">
-                        读法：累计流量<b>还没到</b>左边那个值时，限速就按右边那个值。填 0 = 这一档不限速；最后一档会一直生效到周期结束。
+                        读法：累计流量<b>还没到</b>左边那个值时，限速就按右边那个值。填 0 = 这一档不限速；最后一档会一直生效到周期结束。「最近 N 天」曲线按滚动窗口计算，旧日期滚出后累计回落，限速随之放宽。
                       </p>
                     </div>
                   </div>

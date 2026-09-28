@@ -36,7 +36,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "达标后添加标签",
         "str",
         default="",
-        help="HR 达标(做满要求+额外时长, 或分享率达标)后打的标签, 相当于「HR 已完成」标记; 删掉后程序不会再自动添加",
+        help="HR 达标(做满要求+额外时长, 或分享率达标)后打的标签, 相当于「HR 已完成」标记; 留空 = 不再打标; 已打上的标签程序不会自动摘除",
     ),
     Field(
         "add_category_for_satisfied",
@@ -130,9 +130,15 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "单种上传限速",
         "speed",
         default="0KiB/s",
-        help="该站点种子添加时即设置的上传限速; 0 = 不限速; 奇数值(如 2001KiB/s)视为你的手动限速, 本程序不覆盖",
+        help="该站点种子添加时即设置的上传限速; 0 = 不限速; 添加时若种子的当前限速已是奇数 KiB/s(如 2001), 视为你手动设过, 不覆盖",
     ),
-    Field("download_speed_limit", "单种下载限速", "speed", default="0KiB/s", help="同上, 作用于下载方向; 0 = 不限速"),
+    Field(
+        "download_speed_limit",
+        "单种下载限速",
+        "speed",
+        default="0KiB/s",
+        help="同上传限速, 作用于下载方向; 0 = 不限速; 添加时若种子的当前限速已是奇数 KiB/s(如 2001), 视为你手动设过, 不覆盖"
+    ),
     Field(
         "hr",
         "HR 规则",

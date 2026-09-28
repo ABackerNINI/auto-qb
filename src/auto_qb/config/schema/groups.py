@@ -82,14 +82,14 @@ GROUPS: Tuple[Group, ...] = (
                 "内置任务间隔",
                 "time",
                 default="60S",
-                help="维护/全局清理/曲线等内置任务的执行周期; 以上一轮结束起算, 不会越跑越密",
+                help="维护/全局清理/曲线等内置任务的执行周期; 以上一轮到期时刻起算, 执行耗时不计入, 不会越跑越密",
             ),
             Field(
                 "data_dir",
                 "运行时数据目录",
                 "path",
                 default="auto-qb-data",
-                help="运行状态、日志、跳检备份等文件的存放目录(相对程序目录或绝对路径)",
+                help="运行状态、日志、跳检备份等文件的存放目录(相对启动时的工作目录, 或绝对路径)",
                 risk="修改后需重启进程才生效",
             ),
             Field(
@@ -97,7 +97,7 @@ GROUPS: Tuple[Group, ...] = (
                 "状态文件",
                 "path",
                 default="",
-                help="运行状态存档(重启后接着上次进度继续); 留空 = <data_dir>/state.json",
+                help="运行状态存档(重启后接着上次进度继续); 省略整键 = <data_dir>/state.json。WebUI 中本项只读, 调整需直接编辑 YAML 并重启",
                 risk="修改后需重启进程才生效"
             ),
             Field(
@@ -124,7 +124,7 @@ GROUPS: Tuple[Group, ...] = (
                         "enum",
                         default="INFO",
                         options=LOG_LEVELS,
-                        help="详细程度: DEBUG 最详细, CRITICAL 只记严重错误; 也是通知的基准(达到 通知.最低通知级别 的日志会推送)"
+                        help="日志落盘 / 控制台的详细程度: DEBUG 最详细, CRITICAL 只记严重错误。只影响输出 —— 是否推送通知只看「通知 → 最低通知级别」"
                     ),
                     Field("file", "日志文件", "path", default="", help="留空 = <data_dir>/logs/auto-qb.log"),
                     Field(
@@ -167,7 +167,7 @@ GROUPS: Tuple[Group, ...] = (
                         "访问密钥",
                         "password",
                         default="",
-                        help="登录 WebUI 用的密钥; 留空 = 首次启动随机生成(存到 data_dir/web.token, 启动日志只提示文件路径, 密钥内容不打印)"
+                        help="登录 WebUI 用的密钥; 留空 = 首次启动随机生成, 存到状态文件同目录(默认即 data_dir)的 web.token; 启动日志只提示文件路径, 密钥内容不打印"
                     ),
                     Field(
                         "skip_local_verify",
@@ -219,7 +219,7 @@ GROUPS: Tuple[Group, ...] = (
                         "time",
                         default="10M",
                         grey_if=("enabled", "true"),
-                        help="该时间内内容相同的通知只推第一条, 避免重复轰炸; 0 = 不去重",
+                        help="该窗口内「同一来源 + 同级别 + 消息开头 80 字相同」的通知只推第一条, 避免重复轰炸; 0 = 不去重",
                     ),
                     Field(
                         "channels",
@@ -245,7 +245,7 @@ GROUPS: Tuple[Group, ...] = (
                 "删除类似标签",
                 "bool",
                 default="false",
-                help="自动清理仅大小写不同的重复标签(如 HHan 与 hhan 保留一个); 站点配置里可单独覆盖"
+                help="自动清理与站点标签仅大小写不同的重复变体(站点标签 HHan 保留, 种子上的 hhan 被摘除); 站点配置里可单独覆盖"
             ),
             Field(
                 "maintenance_tag_mode",
@@ -316,9 +316,15 @@ GROUPS: Tuple[Group, ...] = (
                 "add_episode_tags",
                 "集数标签",
                 "object",
-                help="从新种子的文件名解析集数自动打标签; 仅新增种子时触发, 集数不连续视为不可靠、不打标",
+                help="从种子的视频文件名解析集数自动打标签; 新增种子时触发(启动首轮会对现有种子统一补打一次), 集数不连续视为不可靠、不打标",
                 fields=(
-                    Field("enabled", "启用", "bool", default="false", help="开启后按文件名中的集数自动打标签"),
+                    Field(
+                        "enabled",
+                        "启用",
+                        "bool",
+                        default="false",
+                        help="开启后按文件名中的显式集数标记(第x集 / S01E05 / EP05 / E05)自动打标签; 仅视频文件参与, 解析不到不打标"
+                    ),
                     Field(
                         "add_tag_single",
                         "单集模板",
@@ -343,7 +349,7 @@ GROUPS: Tuple[Group, ...] = (
                 "pattern_list",
                 default=[],
                 help="从所有种子上摘除匹配的标签, 并从 qB 全局标签表里注销; 支持 regex:/、:ignore_case 与 @tracker_tags 引用",
-                risk="标签定义一并删除, 依赖该标签的自动化(如 HR 标记)随之失效",
+                risk="仍被 HR 标签 / 站点标签配置引用的, 下一维护轮会重新打上(与删除互相打架); 规则条件里按该标签匹配的逻辑会停止命中",
                 tone="danger",
             ),
             Field(

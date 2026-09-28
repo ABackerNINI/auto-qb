@@ -118,7 +118,8 @@ def render(items: list[dict], head: str) -> str:
     for topic in sorted(multi, key=lambda t: (-len(multi[t]), t)):
         group = sorted(multi[topic], key=lambda i: FORM_ORDER.index(i["form"]))
         parts = [f"{FORM_CN[i['form']]} [{i['stamp']}]({i['link']}) {i['status']}" for i in group]
-        out.append(f"- **{topic}** ({len(group)}) — " + " ".join(parts))
+        # (N) 计数 2026-09-29 收口移除: 件数从行内容可数, 纯冗余 —— 每行省 4 字符
+        out.append(f"- **{topic}** — " + " ".join(parts))
     out.append("")
     # 单件专题只列名: 它们没有跨形态材料要对照, 详细行在各自形态的 `_index.md`;
     # 这里保留一行紧凑清单是为了「覆盖 100%」可判定 (每个 topic 都出现在本文件里)。
@@ -126,9 +127,10 @@ def render(items: list[dict], head: str) -> str:
     names = sorted(single)
     line = " ".join(names)
     while line:
-        # 折行宽度只影响换行, 零信息损失 —— 2026-09-28 第四次收口 150→400(每省一行省 3 字符)
-        cut = line.rfind(" ", 0, 400)
-        cut = cut if cut > 0 else min(len(line), 400)
+        # 折行宽度只影响换行, 零信息损失 —— 2026-09-28 第四次收口 150→400; 2026-09-29 第五次 400→4000
+        # (单件专题每省一行省 3 字符, 7 行并 1 行省 18; 配合去 (N) 计数才够本轮 28 字符超量)
+        cut = line.rfind(" ", 0, 4000)
+        cut = cut if cut > 0 else min(len(line), 4000)
         out.append(f"- {line[:cut]}")
         line = line[cut:].lstrip(" ·")
     out.append("")
