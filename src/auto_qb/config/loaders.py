@@ -316,6 +316,8 @@ def load_global_hr(spec: dict) -> HRRule:
         overwrite_category_for_satisfied=_get(
             spec, "overwrite_category_for_satisfied", d.overwrite_category_for_satisfied, parse_bool
         ),
+        exclude_tags=list(_get(spec, "exclude_tags", d.exclude_tags)),
+        exclude_categories=list(_get(spec, "exclude_categories", d.exclude_categories)),
     )
 
 
@@ -325,6 +327,9 @@ def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
 
     站点段: required_seeding_time(必填) / required_share_ratio / extra_seeding_time /
             condition(80% 或 10MiB) + 可覆盖全局的输出字段; 合法性由 validate_config 保证。
+    排除表(exclude_tags/exclude_categories, 计划 26-09-28-1805)不走上带回退链:
+    取「全局 ∪ 站点」并集(去重保序) —— 排除只收窄管束面, 站点段只能在全局之上追加,
+    覆盖语义会埋「站点段写了就静默丢全局」的陷阱。
     """
     d = HRRule()
 
@@ -334,6 +339,13 @@ def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
 
     def out_bool(key: str):
         return parse_bool(spec.get(key, global_hr.get(key, getattr(d, key))))
+
+    def out_union(key: str) -> List[str]:
+        merged: List[str] = []
+        for item in (*(global_hr.get(key) or ()), *(spec.get(key) or ())):
+            if item and item not in merged:
+                merged.append(item)
+        return merged
 
     return HRRule(
         # 原始时间字符串用于变量替换: "3D" / "12H" / "1.5D"
@@ -348,6 +360,8 @@ def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
         add_tag_for_satisfied=out("add_tag_for_satisfied"),
         add_category_for_satisfied=out("add_category_for_satisfied"),
         overwrite_category_for_satisfied=out_bool("overwrite_category_for_satisfied"),
+        exclude_tags=out_union("exclude_tags"),
+        exclude_categories=out_union("exclude_categories"),
     )
 
 

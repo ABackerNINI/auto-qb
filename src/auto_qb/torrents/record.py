@@ -8,6 +8,7 @@ from qbittorrentapi import TorrentState
 
 from ..config import TrackerConfig
 from ..hr.resolve import HrAnchor, HrJudgement
+from ..infra.utils import match_tag_patterns
 from .compat import REQUIRED_TORRENT_FIELDS, _SNAPSHOT_FIELDS, _SNAPSHOT_FIELD_SET
 from .view import _VIEW_FIELD_SET, _VIEW_QUANTUM, view_field_value
 
@@ -291,17 +292,43 @@ class TorrentRecord:
             seeding_time=self.seeding_time,
         )
 
+    def hr_excluded(self) -> bool:
+        """HR 排除(计划 26-09-28-1805): 命中 hr.exclude_tags/exclude_categories 的种子不纳入 HR 体系
+
+        排除优先级最高 —— 压过站点侧一切管束(mode=all / unknown_policy / 新鲜度闸门):
+        用户显式排除 > 保守管束, 与超龄豁免「豁免压过清单」同构。判定时现算:
+        在 qB 里加/删排除标签, 下一轮判定即生效或恢复管束, 无需重启、无需记录置脏。
+        空表快速路径: 两个列表都空(默认) = 一次布尔判断, 三个判定入口的热路径零成本。
+
+        公开方法(webui/views.py 的 _hr_view_fields 也要读排除态做展示); 本文件内三个
+        判定入口(check_hr_condition / check_hr_satisfied / hr_judgement)顶部各有一行短路。
+        """
+        hr = self.tracker_conf.hr
+        if hr is None:
+            return False
+        exc_tags = hr.exclude_tags
+        exc_cats = hr.exclude_categories
+        if not exc_tags and not exc_cats:
+            return False
+        if exc_tags and any(match_tag_patterns(t, exc_tags) for t in self.tags_set):
+            return True
+        return bool(exc_cats) and match_tag_patterns(self.category, exc_cats)
+
     def hr_judgement(self) -> Optional[HrJudgement]:
         """站点侧三态判定(站点已接入才返回; None = 走本地字段逻辑)
 
         ❗**零静默变更**闸门(计划 §9): 只有「站点配了 `hr_check` 且 `mode != off`」+「总开关开」
         才走站点侧语义 —— 没接入的站点行为一个字都不变(它们的 downloaded 判断不动)。
+        ❗HR 排除优先: 命中排除表(hr_excluded)返回 None —— 用户显式排除压过站点侧判定,
+        WebUI 的站点侧字段随之留空, 与「站点未接入」呈现同构。
         ❗线程: 只读(快照字段 + tracker_conf + 站点视图的不可变快照), 无状态、无 API、无写盘,
         故 Web 线程也安全(`_hr_view_fields` 与主循环同域)。
         """
         link = self.hr_link
         conf = self.tracker_conf
         if link is None or conf is None:
+            return None
+        if self.hr_excluded():
             return None
         site_conf = conf.hr_check
         if site_conf is None or site_conf.mode == "off":
@@ -333,8 +360,13 @@ class TorrentRecord:
         (下载量 >= 种子大小)也视为触发 —— 否则触发量大于种子体积的小种子永远不会触发
         (想法.md 已知问题)。downloaded=0 的纯辅种(添加时数据已完整, 对本站无下载消耗)
         与部分下载(如 1B)不触发。
+
+        HR 排除(计划 26-09-28-1805)优先于本方法一切逻辑: 命中排除表恒 False,
+        打标 / 规则 hr 条件 / 表达式四个消费点因此一并按「未触发」处理。
         """
         if not self.tracker_conf.hr:
+            return False
+        if self.hr_excluded():
             return False
         judged = self.hr_judgement()
         if judged is not None:
@@ -357,8 +389,11 @@ class TorrentRecord:
         站点侧优先(计划 §9 v3.0): **档位即结论** —— B 已达标 ⇒ 达标; A 考察中 / C 未达标 ⇒ 未达标,
         命中即停(不看页面数值字段、不回落本地, 本地值不得越级推翻站点清单结论);
         site_satisfied=None(未核实 / mode=all 未列出等)才回落本地时长/分享率。
+        HR 排除恒 False(显式短路, 不依赖 check_hr_condition 的传递)。
         """
         if not self.tracker_conf.hr:
+            return False
+        if self.hr_excluded():
             return False
         judged = self.hr_judgement()
         if judged is not None:

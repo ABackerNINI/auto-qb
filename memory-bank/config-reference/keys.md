@@ -25,7 +25,7 @@
 | `grouping` | | `{enabled: bool, check_missing_files: bool, missing_tag: "MISSING"}` |
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |
-| `hr` | | 全局 HR 输出设置 (add_tag/add_category/overwrite_category/add_tag_for_satisfied/add_category_for_satisfied/overwrite_category_for_satisfied); 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--` |
+| `hr` | | 全局 HR 输出设置 (add_tag/add_category/overwrite_category/add_tag_for_satisfied/add_category_for_satisfied/overwrite_category_for_satisfied) + 排除表 exclude_tags/exclude_categories: 命中种子不纳入 HR 体系(不打标/不核实/规则按未触发, 压过 mode=all 等一切管束), 判定时现算, 不回撤存量, 与站点段并集(26-09-28-1805); 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--` |
 | `skip_checking_tag` | `"zSkipChecked"` | 跳检成功标签全局名; 带此标签的种子未经哈希校验, `_find_reference` 一律排除 (防"未验证"经参考链传播)。全局统一, **checking 动作 spec 不可配置同名键** (校验报未知键), 动作运行时经 ctx 读取; YAML 留空/空串被 `_strip_none` 视为未配置走默认 (与 log.file 同约定) |
 | `hr_check` | 默认关闭 | **HR 在线核实** (部分种子 HR 站点): `{enabled(false), min_torrent_interval("90S"; split 站点改义为「仅 .torrent 下载间隔」), max_torrents_per_hour(12; split 站点不使用), max_torrents_per_day(留空=按模型取默认: legacy 60 / split 200; split 下改义为「仅下载天顶」), page_rate_per_hour(40, 仅 split), page_burst(10, 仅 split), torrent_rate_per_hour(20, 仅 split), torrent_burst(5, 仅 split), max_pages_per_day(400, 仅 split), min_page_interval("90S", 仅 split), max_pages_per_round(9, 单轮页面总量, 0=不限), failure_threshold(3), failure_cooldown("12H"), allow_window(""), unknown_policy(hr|not-hr), verified_ttl(留空=跟随站点 refresh_interval), index_retention("30D"), max_download_retries(3), channel_silence_warn("6H"), shared_dir(""), lock_timeout("0S"), poll_interval("1M"), parse_missing_rate_max(0.5), channel{enabled, port(8788), token, extension_id(""), request_timeout("180S")}}`。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」); `unknown_policy`/`verified_ttl` 调松等于自愿放大漏管窗口。**取数通道(M2 已落地)**: 端点仅听 `127.0.0.1`, 无 token ⇒ 401 **且不写任何状态**; 同机多实例 `channel.port` 必须错开(被占 = 启动即报错); `shared_dir` 与 `channel` 是 hr_check 里**仅有的两个 L1 字段**(需重挂端点/重建服务), 其余全 L0(站点接入 `sites` 也是 L0)。**站点接入(26-09-27-1318 收敛; 绑定改映射制见 26-09-27-1930)**: `sites` 子段是站点启用与微调的唯一配置源, 见下方「hr_check.sites」节; 旧键 `trackers.<站点>.hr_check` 已随 config schema v2 废除(迁移链一次性改写, 无常驻兼容层)。设置页「HR 在线核实」分组 |
 | `global_speed_limit_curve` | 无=不启用 | 见下 |
@@ -42,7 +42,7 @@
 | `tags` | | 站点标签 (maintenance 加) |
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |
-| `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 |
+| `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 + 排除表 `exclude_tags`/`exclude_categories`(与全局并集, 26-09-28-1805) |
 | `hr_check` | | **旧键(已废除, 26-09-27-1930)**: 站点级在线核实的唯一入口是 `hr_check.sites.<档案 id>`。本键不再被任何代码接受 —— 加载时由 schema 迁移链 **config v1→v2**(单点 `config/migrations.py`)一次性改写: mode=off/非字典直接删除; mode != off 时按 `hr_page_url` 的 host(web 命名空间)定位档案, mode 与微调项搬入新位置(页面事实四键 adapter/hr_page_url/download_path/page_param 丢弃, 值一律以档案为准), 旧键删除; host 定位不到档案则旧键原地保留, 校验报废除错。迁移语义与 `hr_check.sites` 键集见下节 |
 | `rules` | | `["@规则集", "@规则集.规则"]`。**留空 = 该站点不执行任何规则**(无任何隐式回退; `_rules_for_torrent` 直接返回空列表) |
 | `groups` | | 站点分组列表 (可多个, 自由命名无需预定义); 配置层声明不写种子; 供规则 `tracker_group` 条件按分组筛选 (2026-09-15) |

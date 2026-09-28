@@ -35,6 +35,10 @@
 - test_record_hr_follows_site_judgement: 接入站点后 check_hr_* 听站点侧(转移种子 downloaded=0 也受管束)
 - test_record_hr_released_by_site_view: 已核实放行 -> 触发与达标都 False(本地 downloaded 再大也不算)
 - test_record_hr_falls_back_without_link: 未注入判定桥 / 站点未接入 / 桥返回 None -> 行为与既有本地逻辑完全一致(零静默变更)
+- test_record_hr_excluded_blocks_all_entries: HR 排除命中标签 -> 三入口全短路且判定桥不被打扰
+- test_record_hr_excluded_category_and_regex: HR 排除的分类命中与 regex:/ :ignore_case 格式
+- test_record_hr_excluded_beats_site_all_mode: 排除优先级最高, mode=all 也压不过用户显式排除
+- test_record_hr_excluded_table_empty_is_noop: 排除表未命中 -> 行为与无排除一致(零静默变更)
 - test_store_attaches_hr_link: 注入的判定桥挂到新记录上(未注入时不引入 HR 依赖)
 - test_snapshot_fields_match_record_slots: 守卫: _SNAPSHOT_FIELDS ↔ record 声明字段一一对应, REQUIRED ⊆ SNAPSHOT
 - test_record_from_real_example_payload: 真机 TorrentDictionary 字段样例全量入库(不再丢弃字段)
@@ -317,6 +321,58 @@ def test_record_hr_falls_back_without_link():
     assert len(link.calls) == asked, "站点未接入时不该读判定桥"
     rec.tracker_conf.hr_check = SiteHrCheckConfig(mode="off")
     assert rec.hr_judgement() is None and len(link.calls) == asked, "mode=off 不该打扰判定桥"
+
+
+def test_record_hr_excluded_blocks_all_entries():
+    """HR 排除(计划 26-09-28-1805): 命中排除表 -> 三入口全短路, 判定桥不被打扰
+
+    打标/规则/表达式/WebUI 四个消费点全经由这三个入口 —— 单点短路即全体系退出。
+    """
+    from auto_qb.hr.resolve import HrIdentity, HrJudgement
+
+    rec = _hr_record(downloaded=70 * 1024**2)
+    rec.tags = "HHan,noHR"  # _tags_set 尚未缓存, 直接赋值即生效(须先于任何 tags_set 读取)
+    assert rec.check_hr_condition() is True and rec.hr_excluded() is False, "对照: 未配排除时照常触发"
+    rec.tracker_conf.hr.exclude_tags = ["noHR"]
+    assert rec.hr_excluded() is True
+    link = _StubLink(HrJudgement(identity=HrIdentity.HR, is_hr=True, reason="清单命中(档位 A)"))
+    rec.hr_link = link
+    asked = len(link.calls)
+    assert rec.hr_judgement() is None, "排除种子连站点侧判定都不发起"
+    assert rec.check_hr_condition() is False
+    assert rec.check_hr_satisfied() is False, "排除后达标语义无意义, 恒 False(显式短路)"
+    assert len(link.calls) == asked, "排除种子不该打扰判定桥"
+
+
+def test_record_hr_excluded_category_and_regex():
+    """HR 排除: 分类命中(默认大小写敏感)与 regex:/ :ignore_case 组合格式"""
+    rec = _hr_record(downloaded=70 * 1024**2)
+    rec.tracker_conf.hr.exclude_categories = ["free"]
+    rec.category = "FREE"
+    assert rec.hr_excluded() is False, "默认大小写敏感(FREE 不匹配 free)"
+    rec.category = "free"
+    assert rec.hr_excluded() is True
+    rec.category = ""
+    rec.tracker_conf.hr.exclude_tags = ["regex:^skip.?hr:ignore_case"]
+    rec.tags = "HHan,SKIP_HR"
+    assert rec.hr_excluded() is True
+
+
+def test_record_hr_excluded_beats_site_all_mode():
+    """排除优先级最高: mode=all(未核实恒受管束)也压不过用户显式排除"""
+    rec = _hr_record(downloaded=70 * 1024**2, mode="all")
+    assert rec.tracker_conf.hr_check.mode == "all"
+    rec.tags = "noHR"
+    rec.tracker_conf.hr.exclude_tags = ["noHR"]
+    assert rec.check_hr_condition() is False and rec.check_hr_satisfied() is False
+
+
+def test_record_hr_excluded_table_empty_is_noop():
+    """零静默变更: 排除表配置了但未命中 -> 行为与无排除完全一致"""
+    rec = _hr_record(downloaded=70 * 1024**2)
+    rec.tracker_conf.hr.exclude_tags = ["noHR"]
+    rec.tags = "HHan"
+    assert rec.hr_excluded() is False and rec.check_hr_condition() is True
 
 
 def test_store_attaches_hr_link():

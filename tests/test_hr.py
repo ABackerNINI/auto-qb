@@ -12,6 +12,7 @@
 - test_hr_aux_seed_excluded: downloaded=0(dlratio=0) -> 不触发任何 HR 输出
 - test_hr_overwrite_category_semantics: _set_category 覆盖语义(跳过/覆盖/自动分类可更新)
 - test_hr_tracker_without_hr_skips: 站点无 hr 配置 -> 不应用 HR(即使全局有默认)
+- test_hr_exclude_tag_skips_tagging: HR 排除命中标签/分类 -> 不加任何 HR 标签/分类(未命中照常)
 """
 import os
 import tempfile
@@ -378,3 +379,45 @@ def test_hr_tracker_without_hr_skips():
         tor.tracker_conf = cfg.trackers["HHan"]
         assert mgr._add_hr_tag_or_category(tor, dry_run=False) is False
         assert client.calls == [], f"站点无 hr 不应应用全局 HR: {client.calls}"
+
+
+def test_hr_exclude_tag_skips_tagging():
+    """HR 排除(计划 26-09-28-1805): 命中 exclude_tags/exclude_categories 的种子不加任何 HR 标签/分类
+
+    触发条件本应满足, 排除压过一切 -> 零写入; 未命中排除表的种子照常打标(零静默变更对照)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        client = FakeClient()
+        mgr.client = client
+        mgr.config.trackers["HHan"].hr = _hr_rule(
+            add_tag="!!HR3D!!", add_category="--HR3D--", exclude_tags=["noHR"], exclude_categories=["free"]
+        )
+        conf = mgr.config.trackers["HHan"]
+
+        # 命中排除标签: 零写入(不打标也不打分类)
+        tor = FakeTorrent(tags="HHan,noHR", downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
+        tor.tracker_conf = conf
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is False
+        assert client.calls == [], f"排除种子不应有任何写入: {client.calls}"
+
+        # 命中排除分类同理
+        mgr2 = make_manager(os.path.join(td, "state2.json"))
+        client2 = FakeClient()
+        mgr2.client = client2
+        mgr2.config.trackers["HHan"].hr = _hr_rule(add_tag="!!HR3D!!", exclude_categories=["free"])
+        tor2 = FakeTorrent(category="free", downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
+        tor2.tracker_conf = mgr2.config.trackers["HHan"]
+        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is False
+        assert client2.calls == [], f"排除分类不应有任何写入: {client2.calls}"
+
+        # 对照: 排除表配了但未命中 -> 照常打标
+        mgr3 = make_manager(os.path.join(td, "state3.json"))
+        client3 = FakeClient()
+        mgr3.client = client3
+        mgr3.config.trackers["HHan"].hr = _hr_rule(add_tag="!!HR3D!!", add_category="", exclude_tags=["noHR"])
+        tor3 = FakeTorrent(tags="HHan", downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
+        tor3.tracker_conf = mgr3.config.trackers["HHan"]
+        assert mgr3._add_hr_tag_or_category(tor3, dry_run=False) is True
+        assert ("add_tags", ["!!HR3D!!"]) in client3.calls, f"未命中排除表应照常打标: {client3.calls}"

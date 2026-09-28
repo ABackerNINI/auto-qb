@@ -99,6 +99,9 @@ KNOWN_HR_KEYS = {
     "add_tag_for_satisfied",
     "add_category_for_satisfied",
     "overwrite_category_for_satisfied",
+    # HR 排除表(计划 26-09-28-1805): 命中的种子不纳入 HR 体系; 全局与站点段共用本键集
+    "exclude_tags",
+    "exclude_categories",
 }
 
 KNOWN_TRACKER_KEYS = {
@@ -177,6 +180,9 @@ def _validate_global_hr(spec, errors: List[str]) -> None:
     for key in ("overwrite_category", "overwrite_category_for_satisfied"):
         if key in spec:
             _try(parse_bool, spec[key], f"config.hr.{key}", errors)
+    for key in ("exclude_tags", "exclude_categories"):
+        if key in spec and _check_str_list(spec[key], f"config.hr.{key}", errors):
+            _check_regex_patterns(spec[key], f"config.hr.{key}", errors)
 
 
 def _validate_hr_check(spec, errors: List[str]) -> None:
@@ -590,6 +596,9 @@ def _validate_tracker_hr(spec, where: str, errors: List[str]) -> None:
     for key in ("overwrite_category", "overwrite_category_for_satisfied"):
         if key in spec:
             _try(parse_bool, spec[key], f"{where}.{key}", errors)
+    for key in ("exclude_tags", "exclude_categories"):
+        if key in spec and _check_str_list(spec[key], f"{where}.{key}", errors):
+            _check_regex_patterns(spec[key], f"{where}.{key}", errors)
 
 
 def _validate_trackers(spec, rules_config: dict, errors: List[str]) -> None:

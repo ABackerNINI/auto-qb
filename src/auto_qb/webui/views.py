@@ -239,6 +239,8 @@ class WebviewMixin:
 
         - hr_tag / hr_tag_done: 已触发未达标 / 已达标时应有的标签(供前端按文本着色)
         - hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
+        - hr_excluded: 是否命中 HR 排除表(计划 26-09-28-1805) —— True 时触发/达标恒 False、
+          站点侧字段全空, 前端显示「已排除」徽标(不得在 JS 里重算匹配, 只消费本布尔)
         - hr_req_time: 要求做种时长(秒) = required_seeding_time + extra_seeding_time
         - hr_req_ratio: 要求分享率(0 = 不要求)
         - hr_state / hr_state_text / hr_reason: 站点侧判定(hr / verified_non_hr / unknown /
@@ -267,6 +269,7 @@ class WebviewMixin:
                 "hr_tag_done": "",
                 "hr_triggered": False,
                 "hr_satisfied": False,
+                "hr_excluded": False,
                 "hr_req_time": 0,
                 "hr_req_ratio": 0.0,
                 "hr_state": "",
@@ -281,6 +284,7 @@ class WebviewMixin:
                 "hr_site_ratio": "",
                 "hr_site_dl": "",
             }
+        excluded = rec.hr_excluded()
         triggered = rec.check_hr_condition()
         satisfied = triggered and rec.check_hr_satisfied()
         judged = rec.hr_judgement()  # 站点未接入返回 None(下面四个字段留空)
@@ -295,6 +299,8 @@ class WebviewMixin:
                 triggered,
             "hr_satisfied":
                 satisfied,
+            "hr_excluded":
+                excluded,
             "hr_req_time":
                 hr.required_seeding_time + hr.extra_seeding_time,
             "hr_req_ratio":

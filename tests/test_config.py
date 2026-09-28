@@ -7,6 +7,8 @@
 - test_parse_hr_spec_site_overrides_global: 站点 HR 覆盖全局
 - test_parse_hr_spec_condition: HR 规范条件解析
 - test_hr_rule_defaults: HRRule 默认值
+- test_parse_hr_exclude_union: HR 排除表全局∪站点并集(去重保序)
+- test_validate_hr_exclude_errors: HR 排除表校验(未知键/非列表/空串/非法 regex, 全局与站点)
 - test_config_tracker_tags_expand_ignore_case: @tracker_tags:ignore_case 展开附加后缀
 - test_validate_trackers_empty_and_non_dict: trackers 留空合法; 非字典报错(fail-fast)
 - test_config_tracker_tags_expand_no_tracker_tags: 无任何 tracker tags 时 @tracker_tags 展开为空
@@ -60,6 +62,7 @@ from auto_qb.config import (
     QbittorrentConfig,
     TrackerConfig,
     load_config,
+    load_global_hr,
     load_tracker_hr,
 )
 from auto_qb.infra.errors import AutoQbError
@@ -220,6 +223,18 @@ def test_hr_rule_defaults():
     assert rule.condition == ("dlratio", 0.8)
     assert rule.add_category == ""
     assert rule.overwrite_category is False
+
+
+def test_parse_hr_exclude_union():
+    """HR 排除表(计划 26-09-28-1805): 全局 ∪ 站点并集(去重保序), 不是站点覆盖全局"""
+    global_hr = {"exclude_tags": ["a", "c"], "exclude_categories": ["free"]}
+    rule = load_tracker_hr({"required_seeding_time": "3D", "exclude_tags": ["b", "a"]}, global_hr)
+    assert rule.exclude_tags == ["a", "c", "b"], "并集去重保序: 全局在前, 站点追加在后"
+    assert rule.exclude_categories == ["free"]
+    assert load_tracker_hr({"required_seeding_time": "3D"}, {"exclude_tags": ["x"]}).exclude_tags == ["x"], "全局单独生效"
+    assert load_tracker_hr({"required_seeding_time": "3D", "exclude_tags": ["y"]}, {}).exclude_tags == ["y"], "站点单独生效"
+    assert load_tracker_hr({"required_seeding_time": "3D"}, {}).exclude_tags == [], "双方皆缺 = 空表"
+    assert load_global_hr({"exclude_tags": ["g"]}).exclude_tags == ["g"], "全局段自身也能读出排除表"
 
 
 # ---------- fail-fast 全量配置校验 ----------
@@ -925,6 +940,32 @@ def test_validate_hr_value_errors():
         assert "config.trackers.T1.hr.required_share_ratio(须为数字)" in err, err
         assert "config.trackers.T1.hr.condition(如 80% 或 10MiB)" in err, err
         assert "config.trackers.T1.hr.overwrite_category" in err, err
+
+
+def test_validate_hr_exclude_errors():
+    """HR 排除表校验(计划 26-09-28-1805): 未知键(拼写错)/非列表/空白串项/非法 regex, 全局与站点两处都拦
+
+    纯空串项会被 _strip_none 过滤(视为未配置), 故空项用空格串触发。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  hr:\n"
+            "    excluded_tags: [x]\n"  # 未知键(拼写错, 全局)
+            "    exclude_tags: not-a-list\n"  # 非列表
+            "    exclude_categories: [\" \"]\n"  # 空白串项
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      hr:\n"
+            "        required_seeding_time: 3D\n"
+            "        exclude_tags: [\"regex:[\"]\n"  # 非法正则(站点段)
+        )
+        err = _load_errors(td, text)
+        assert "excluded_tags" in err and "config.hr: 未知键" in err, err
+        assert "config.hr.exclude_tags: 必须是列表" in err, err
+        assert "config.hr.exclude_categories" in err and "必须是非空字符串" in err, err
+        assert "config.trackers.T1.hr.exclude_tags[0]: 非法正则" in err, err
 
 
 def test_validate_value_errors_extended():

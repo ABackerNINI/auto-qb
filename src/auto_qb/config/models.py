@@ -46,6 +46,9 @@ class HRRule:
       overwrite_category: 添加分类时是否覆盖已有分类
       add_tag_for_satisfied / add_category_for_satisfied: 做种时长已满足要求+额外时间时添加
       overwrite_category_for_satisfied: 同上, 覆盖已有分类
+      exclude_tags / exclude_categories: HR 排除表(计划 26-09-28-1805) —— 命中任一格式的种子
+        不纳入 HR 体系(不打标/不在线核实/规则按未触发), 优先级高于站点侧一切管束;
+        站点段与全局 hr 段取并集(去重保序), 不是覆盖。匹配语法同 remove_tags(MatchPattern 单点)
     """
     required_seeding_time: int = 0
     required_seeding_time_raw: str = ""
@@ -58,6 +61,8 @@ class HRRule:
     add_tag_for_satisfied: str = ""
     add_category_for_satisfied: str = ""
     overwrite_category_for_satisfied: bool = False
+    exclude_tags: List[str] = field(default_factory=list)
+    exclude_categories: List[str] = field(default_factory=list)
 
 
 @dataclass

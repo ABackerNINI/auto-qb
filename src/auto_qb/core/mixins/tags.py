@@ -137,7 +137,9 @@ class TagsMixin:
 
         - 满足触发条件(下载比例/下载量, 含完全下载的小种子): 添加 add_tag / add_category
         - HR 满足(做种时长 >= required_seeding_time + extra_seeding_time 或 分享率达标): 添加 add_tag_for_satisfied / add_category_for_satisfied
-        HR 条件/达标判定统一委托 TorrentRecord.check_hr_condition/check_hr_satisfied(单点语义)。
+        HR 条件/达标判定统一委托 TorrentRecord.check_hr_condition/check_hr_satisfied(单点语义);
+        命中排除表(hr.exclude_tags/exclude_categories)的种子两个判定恒 False —— 自然早退,
+        已打的标记残留不回撤(计划 26-09-28-1805)。
         """
         hr = torrent.tracker_conf.hr
         if hr is None:

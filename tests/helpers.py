@@ -689,8 +689,21 @@ class FakeTorrent:
 
     # ---------- HR 条件(2026-09 迁到 TorrentRecord, FakeTorrent 鸭子兼容补) ----------
 
+    def hr_excluded(self) -> bool:
+        """与 TorrentRecord.hr_excluded 同语义(HR 排除表, 计划 26-09-28-1805); 真实判定以真记录为准"""
+        hr = self.tracker_conf.hr
+        if hr is None:
+            return False
+        from auto_qb.infra.utils import match_tag_patterns
+
+        if hr.exclude_tags and any(match_tag_patterns(t, hr.exclude_tags) for t in self.tags_set):
+            return True
+        return bool(hr.exclude_categories) and match_tag_patterns(self.category, hr.exclude_categories)
+
     def check_hr_condition(self) -> bool:
         if not self.tracker_conf.hr:
+            return False
+        if self.hr_excluded():
             return False
         hr = self.tracker_conf.hr
         cond_type, cond_value = hr.condition
@@ -707,6 +720,8 @@ class FakeTorrent:
 
     def check_hr_satisfied(self) -> bool:
         if not self.tracker_conf.hr:
+            return False
+        if self.hr_excluded():
             return False
         hr = self.tracker_conf.hr
         if not self.check_hr_condition():

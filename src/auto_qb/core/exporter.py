@@ -91,6 +91,8 @@ def build_tracker_entry(domain: str) -> dict:
                 "required_share_ratio": 0,
                 "extra_seeding_time": "12H",
                 "condition": "80%",
+                # "exclude_tags": ["noHR"],           # 命中的种子不纳入 HR 管理(支持 regex:/ :ignore_case)
+                # "exclude_categories": ["free"],
             },  # 示例，需用户修改; 输出设置(add_tag 等)可覆盖全局 hr:
     }
 

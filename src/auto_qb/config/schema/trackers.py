@@ -53,6 +53,23 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         group_of="add_category_for_satisfied",
         risk="开启后会覆盖人工设置的分类",
     ),
+    Field(
+        "exclude_tags",
+        "排除标签(格式)",
+        "pattern_list",
+        default=[],
+        risk="命中任一格式的种子会整个退出 HR 体系: 不打 HR 标签/分类、不参与在线核实判定、规则一律按未触发 —— 若种子实际仍在考核期将漏管",
+        help="命中任一格式的种子不纳入 HR 管理; 支持 regex:/ 前缀与 :ignore_case 后缀(可组合), 例: noHR / 'regex:^skip.?hr:ignore_case'。"
+        "与「HR 全局默认」里的同名配置取并集(两边都生效); 判定时现算 —— 在 qB 里加/删标签, 下一轮即生效或恢复管束。留空 = 不排除",
+    ),
+    Field(
+        "exclude_categories",
+        "排除分类(格式)",
+        "pattern_list",
+        default=[],
+        risk="命中任一格式的分类会把该种子整个排除出 HR 体系(同「排除标签」的漏管风险)",
+        help="种子分类命中任一格式即排除出 HR 管理; 支持 regex:/ 前缀与 :ignore_case 后缀。与「HR 全局默认」里的同名配置取并集; 留空 = 不排除",
+    ),
 )
 
 TRACKER_HR_FIELDS: Tuple[Field, ...] = (

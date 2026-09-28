@@ -159,6 +159,7 @@
 - test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt): 63 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 - test_hr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
+- test_hr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰)
 - test_api_hr_status_disabled_returns_empty_state: 未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端空态, 不报错)
 - test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
   「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径)
@@ -3249,6 +3250,39 @@ def test_hr_view_fields_three_state(tmp_path):
     fields = QbManager._hr_view_fields(rec3)
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "local"
     assert fields["hr_safety_text"] == "本地·兜底，已达标"
+
+
+def test_hr_view_fields_excluded(tmp_path):
+    """HR 排除态视图(计划 26-09-28-1805): hr_excluded=True, 触发/达标恒 False, 站点侧字段全空(与未接入同构)"""
+    from auto_qb.config import HRRule, TrackerConfig
+    from auto_qb.config.models import SiteHrCheckConfig
+    from auto_qb.core.qbmanager import QbManager
+    from auto_qb.torrents import TorrentRecord
+    from helpers import FakeTorrent, make_manager
+
+    make_manager(str(tmp_path / "state.json"))  # 与其它视图测试同构(本函数直调类方法, 不读实例态)
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="HD", state="stalledUP", downloaded=0, tags="noHR"))
+    conf = TrackerConfig(
+        name="HHan",
+        domains=["hhanclub.net"],
+        hr=HRRule(required_seeding_time=3 * 86400, condition=("dlratio", 0.7), exclude_tags=["noHR"]),
+    )
+    conf.hr_check = SiteHrCheckConfig(mode="partial", hr_page_url="https://hhanclub.net/myhr.php")
+    rec.tracker_conf = conf
+    rec.hr_link = mock.Mock()  # 排除种子连判定桥都不该被打扰
+    fields = QbManager._hr_view_fields(rec)
+    assert fields["hr_excluded"] is True
+    assert fields["hr_triggered"] is False and fields["hr_satisfied"] is False
+    assert fields["hr_state"] == "" and fields["hr_safety"] == "none" and fields["hr_site_lane"] == ""
+    rec.hr_link.judge.assert_not_called()
+
+    # 未命中排除表: hr_excluded=False, 行为照旧
+    rec2 = TorrentRecord.from_torrent(FakeTorrent(hash="HE", state="stalledUP", downloaded=0, tags="HHan"))
+    rec2.tracker_conf = conf
+    assert QbManager._hr_view_fields(rec2)["hr_excluded"] is False
+
+    # 空配置分支也带 hr_excluded 键(前端字段一致性守阵消费全键集)
+    assert QbManager._hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HF")))["hr_excluded"] is False
 
 
 def _hr_status_env(mgr, tmp_path, *, complete=True):
