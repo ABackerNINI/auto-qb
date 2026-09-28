@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-09-28-2345] [WEBUI 表格列对齐审计 · auto-qb](26-09-28-2345-report-webui-column-alignment.html) — `webui-column-alignment`
 - [26-09-28-0030] [HR 在线核实 v2 · 实施核对 + 安全/稳定性审计 · 审查报告 · auto-qb](26-09-28-0030-report-hr-verify-v2-impl-audit.html) — `backend-partial-hr-verify`
 - [26-09-27-1547] [报告 · plans / reports 实施状态清点与漂移审计 — auto-qb](26-09-27-1547-report-docs-implementation-audit.html) — `docs-implementation-audit`
 - [26-09-27-1352] [报告 · 「文件访问层包装 + 下载目录只读挂载 + 路径映射」可行性验证](26-09-27-1352-report-docker-fs-wrapper-pathmap.html) — `docker-deploy`

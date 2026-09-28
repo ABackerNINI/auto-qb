@@ -44,12 +44,12 @@
 - **webui-hr-safety-display** (2) — 计划 [26-09-25](plans/26-09-25-1823-plan-webui-hr-safety-display.html) Done 档案 [26-09-25](tasks/26-09-25-webui-hr-safety-display.md) In Progress
 - **webui-polling** (2) — issue [26-09-19-1900](issues/26-09-19-1900-bug-webui-poll-cadence-mismatch.html) Done issue [26-09-19-2122](issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) Open
 
-## 单件专题 (87)
+## 单件专题 (88)
 
 - appjs-split architecture auto-qb-project ci-no-windows-runner commands-shipflow-v2 commands-shipflow-v3 commands-unified-command-surface commands-unified-surface commit-gate-auto-run config-value-range-validation cross-group-file-conflict dependency-lock docs-implementation-audit docs-readme-modules-drift docs-restructure duplicate-test-name-shadowed-guard fakeconfig-shared-state-order-pollution
 - field-changed-trigger full-checking-verdict git-ship-skill-proposal hot-reload-l2-state-rollback-fix hr-binding-tracker-mapping hr-check-site-presets hr-exclude-tag-category issue-typing kb-doc-map-cap log-level-notify-error memory-bank-migration memory-bank-task-id memory-bank-trigger-fix my-commit-flow-merge-first-writeback my-commit-flow-staged-delete-add plan-shipflow-v2-missing-meta
 - remove-upload-stats rule-conditions-expression seed-group-status sites-page-search skill-user-md-write-conflict skill-vetter skip-checking-readd-no-backup-window src-layout-restructure state-load-corrupt-silent-reset test-sidefx-guard test-suite-perf torrent-traffic-stats tracker-url-source-sanitize tray-join-timeout-abandons-save type-annotations-mypy web-runtime-host-protocol
-- web-tracker-url-passkey-log webui-appjs-split webui-button-system webui-cols-store-version webui-component-libraries webui-config-health-warning webui-ctx-menu-multi-select webui-ctx-submenu webui-curve-chart webui-dialog-gap-warn-expand webui-error-reason webui-ext-hr-logging webui-filter-data-and-color-flicker webui-fix-plan-round10 webui-fix-plan-round9 webui-fix-round10 webui-fix-round11
-- webui-fix-round9 webui-group-columns webui-hot-endpoints-jsonable-encoder webui-hr-popup webui-hr-popup-t1 webui-hr-popup-t2 webui-hr-popup-t3 webui-log-level-filter webui-long-path-open webui-naming webui-page-location-persist webui-polish-and-redesign webui-progress-bar-width webui-redesign webui-settings-back-nav webui-settings-unsaved-changes webui-sites-import webui-speed-refresh-fix
-- webui-tag-candidates webui-torrent-meta-edit
+- web-tracker-url-passkey-log webui-appjs-split webui-button-system webui-cols-store-version webui-column-alignment webui-component-libraries webui-config-health-warning webui-ctx-menu-multi-select webui-ctx-submenu webui-curve-chart webui-dialog-gap-warn-expand webui-error-reason webui-ext-hr-logging webui-filter-data-and-color-flicker webui-fix-plan-round10 webui-fix-plan-round9 webui-fix-round10
+- webui-fix-round11 webui-fix-round9 webui-group-columns webui-hot-endpoints-jsonable-encoder webui-hr-popup webui-hr-popup-t1 webui-hr-popup-t2 webui-hr-popup-t3 webui-log-level-filter webui-long-path-open webui-naming webui-page-location-persist webui-polish-and-redesign webui-progress-bar-width webui-redesign webui-settings-back-nav webui-settings-unsaved-changes webui-sites-import
+- webui-speed-refresh-fix webui-tag-candidates webui-torrent-meta-edit
 - webui-view-rebuild
