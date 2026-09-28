@@ -666,7 +666,12 @@ window.CONFIG_HUB = {
       /* 站点搜索的退出路径(计划 §06 Q5): Esc 等效清空, 恢复全量 pill 列表 */
       if (this.hub.view === "trackers" && String(this.cfg.trackerQuery || "").trim()) {
         this.cfg.trackerQuery = "";
+        return;
       }
+      /* 设置二级页 Esc 返回首页(方案三 2026-09-28): 排在说明浮窗/站点搜索之后, 不抢既有职责;
+       * lifecycle 的 Esc 关闭链还有层要关(escBusy, 名单在 dialogs.js)时本键归它 ——
+       * 否则用户按 Esc 关弹窗会顺带把页面退回首页 */
+      if (this.page === "settings" && this.hub.view !== "hub" && !this.escBusy()) this.hubBack();
     },
 
     /* ---------------------------------------------------------- 站点搜索(计划 26-09-27-1852)

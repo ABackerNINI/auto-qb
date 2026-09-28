@@ -74,10 +74,16 @@
 
             <!-- ============ 二级页: 一个分区只做一件事 ============ -->
             <div class="hb-view" :class="{ on: hub.view !== 'hub' }">
+              <!-- 返回条(方案一 2026-09-28): 原小字面包屑随页滚走, 二级页深处没有回首页入口 ——
+                   升级为吸顶(样式见 console_hub.css .hb-crumb), 左端箭头+「设置」整钮回首页,
+                   右端 Esc 键帽 = 方案三快捷键的可见提示(真实处理在 config_hub.js::hubOnKey) -->
               <nav class="hb-crumb">
-                <button @click="hubBack()">设置</button>
+                <button class="cb-back" @click="hubBack()">
+                  <svg class="hb-ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.8 3.2 5 8l4.8 4.8"/></svg>设置
+                </button>
                 <span class="cb-sep">/</span>
                 <span class="cb-now">{{ hubNow.title }}</span>
+                <span class="cb-kbd"><kbd>Esc</kbd> 返回首页</span>
               </nav>
 
               <header class="hb-sec">

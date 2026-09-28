@@ -351,10 +351,46 @@
 /* ==========================================================================
    二级页(Spoke): 面包屑 / 分区头 / 块 / 行
    ========================================================================== */
-.hb-crumb { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg-dim); margin-bottom: 13px; }
-.hb-crumb button { background: transparent; border: 0; color: var(--accent-hi); cursor: pointer; padding: 0; font-size: 12.5px; }
+/* 返回条(方案一 2026-09-28): 原面包屑随页滚走, 二级页深处回不了首页 —— sticky 钉在顶栏之下。
+ * top 用 --head-h(columns.js 实测写入 :root; 设置页无状态分布条 = 纯顶栏高), -1px 防透缝,
+ * 与 .group-head 同口径。玻璃底配方同 .hb-actbar; z-index 只需盖过普通内容 ——
+ * 说明浮窗(60)/保存条(40)/抽屉一族(80)都在其上, 不受影响 */
+.hb-crumb {
+  position: sticky;
+  top: calc(var(--head-h, 100px) - 1px);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  margin-bottom: 13px;
+  padding: 8px 2px;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+}
+.hb-crumb button {
+  background: transparent;
+  border: 0;
+  color: var(--accent-hi);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
 .hb-crumb button:hover { text-decoration: underline; }
 .hb-crumb .cb-now { color: var(--fg-muted); }
+/* Esc 键帽(方案三): 快捷键的可见提示, 真实处理在 config_hub.js::hubOnKey */
+.hb-crumb .cb-kbd { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.hb-crumb .cb-kbd kbd {
+  font: 500 10.5px/1 var(--hb-font-mono);
+  color: var(--fg-muted);
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
 
 .hb-sec { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 18px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
 .hb-sec-mark {

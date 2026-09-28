@@ -477,6 +477,16 @@ window.AQB_DIALOGS = {
       this.speedOpen = false;
       this.speedAt = { left: 0, dir: "up" };
     },
+    /* Esc 链是否被浮层占用: lifecycle.js mounted 里 Esc 关闭链的**同一名单**(顺序无关, 只看有无)。
+     * config_hub.js::hubOnKey 的「Esc 返回设置首页」用它守门 —— 链上还有层要关时, 该 Esc 先归
+     * 关闭链, 不顺带把设置页退回首页。⚠ 新增浮层时两处同步: 那条 else-if 链 + 本方法(搜「escBusy」)。 */
+    escBusy() {
+      return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
+        this.metaOpen || this.filePrio.visible || this.drawer.open || this.historyOpen || this.headMenu.visible ||
+        this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible ||
+        this.selGroups.length || this.selMembers.length || this.expandedKey || this.expandedShowEp ||
+        this.expandedShows.length);
+    },
     async submitSpeedDialog() {
       const okMain = await this.submitSpeedOverride();
       const okAlt = await this.submitAltLimits();

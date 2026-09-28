@@ -5,7 +5,7 @@
 **Updated:** 2026-09-28
 **Summary:** 前案 26-09-26-0822 (localStorage 预选) 经成熟方案调研与存储对比后被 26-09-28-0354 取代(0822 置 Superseded): 定案建议后端独立文件 auto-qb-data/webui-keys.json + GET/PUT /api/keys(金清单+2); 引擎不引库自写 ~200 行(tinykeys 为参照), 沿 0822 注册表/e.code/作用域/三段屏蔽设计; 自定义面板进设置页「快捷键」分区 + ? 浮层; W1-W7 修订波次, 6 个决策点建议案待拍板。
 **Topics:** webui-keyboard-shortcuts
-**Refs:** memory-bank/plans/26-09-28-0354-plan-webui-keyboard-shortcuts.html, memory-bank/plans/26-09-26-0822-plan-webui-keyboard-shortcuts.html
+**Refs:** memory-bank/plans/26-09-28-0354-plan-webui-keyboard-shortcuts.html, memory-bank/plans/26-09-26-0822-plan-webui-keyboard-shortcuts.html, memory-bank/tasks/26-09-28-webui-settings-back-nav.md
 
 ## 原始请求
 
