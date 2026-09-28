@@ -653,9 +653,15 @@ window.CONFIG_HUB = {
       this.hub.helpKey = "";
     },
     hubOnDocClick(e) {
-      if (!this.hub.help) return;
-      if (e.target && e.target.closest && e.target.closest(".hb-pop")) return;
-      this.hubCloseHelp();
+      if (this.hub.help && !(e.target && e.target.closest && e.target.closest(".hb-pop"))) {
+        this.hubCloseHelp();
+      }
+      /* 站点搜索「点外即收」(跳转器交互 2026-09-28): 收层一律清词 —— 浮层盖着详情,
+       * 留词只会让下次点击又盖回来; 搜索行内点击(改词 / × / 计数)不算点外, 不收 */
+      if (this.hub.view === "trackers" && this.hubTrackerActive &&
+          !(e.target && e.target.closest && e.target.closest(".hb-tr-search"))) {
+        this.cfg.trackerQuery = "";
+      }
     },
     hubOnKey(e) {
       if (e.key !== "Escape") return;
@@ -727,6 +733,12 @@ window.CONFIG_HUB = {
         (m[1] ? neg : pos).push(n);
       }
       return { pos, neg, negOnly: !pos.length && neg.length > 0 };
+    },
+    /* 点命中行(跳转器交互 2026-09-28): 选中即清词收层直达详情 —— 下拉盖着详情,
+     * 只选中不清词会把切站效果留在浮层底下看不见(原「保留搜索」是分栏语境的拍板, 随下拉退役) */
+    hubTrackerPick(name) {
+      this.cfg.trackerKey = name;
+      this.cfg.trackerQuery = "";
     },
     /* × 清空钮: 配合模板 @mousedown.prevent —— 阻止按钮抢焦点, 输入框保持聚焦可继续输入 */
     hubTrackerClear() {

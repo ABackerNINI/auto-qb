@@ -108,7 +108,8 @@
                   <span v-if="hubTrackerCountText" class="hb-tr-count"
                         :class="{ warn: hubTrackerHits.kind === 'negOnly' }">{{ hubTrackerCountText }}</span>
 
-                  <!-- 命中下拉: 锚定搜索框正下方, 遮住下方详情; 空态 / 仅排除词提示也收进浮层 -->
+                  <!-- 命中下拉: 锚定搜索框正下方(跳转器交互 2026-09-28: 点命中即清词收层 /
+                       点下拉外即收, 不赖着盖详情); 空态 / 仅排除词提示也收进浮层 -->
                   <div v-if="hubTrackerActive" class="hb-tr-drop">
                     <p v-if="hubTrackerHits.kind === 'negOnly'" class="hb-tr-hint warn">
                       只有排除词 — 请补一个要包含的词
@@ -118,7 +119,7 @@
                     </p>
                     <template v-else>
                       <button v-for="h in hubTrackerHits.hits" :key="h.name" class="hb-tr-hit"
-                              :class="{ on: cfg.trackerKey === h.name }" @click="cfg.trackerKey = h.name">
+                              :class="{ on: cfg.trackerKey === h.name }" @click="hubTrackerPick(h.name)">
                         <span class="hb-tr-hit-name" :class="{ hit: h.nameHit }">{{ h.name }}</span>
                         <span class="hb-tr-chips">
                           <span v-for="c in h.chips" :key="c.grp + '|' + c.raw" class="hb-tr-chip">
