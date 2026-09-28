@@ -34,7 +34,7 @@
 - **memory-bank-doc-forms** (2) — 计划 [26-09-23](plans/26-09-23-1959-memory-bank-doc-forms-plan.html) Done 档案 [26-09-23](tasks/26-09-23-memory-bank-doc-forms.md) Done
 - **rule-iyuu-stop-guard** (2) — 报告 [26-09-27](reports/26-09-27-0047-report-rule-iyuu-stop-guard.html) Done 档案 [26-09-27](tasks/26-09-27-rule-iyuu-stop-guard.md) Done
 - **skill-hygiene** (2) — issue [26-09-20-1427](issues/26-09-20-1427-chore-skill-grill-me-empty-stub.html) Open issue [26-09-20-1427](issues/26-09-20-1427-chore-skill-hatch-pet-api-cost.html) Open
-- **test-timing-tolerance** (2) — issue [26-09-20-0952](issues/26-09-20-0952-test-mainloop-tick-timing-flaky.html) Open issue [26-09-22-2052](issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html) Open
+- **test-timing-tolerance** (2) — issue [26-09-20-0952](issues/26-09-20-0952-test-mainloop-tick-timing-flaky.html) Done issue [26-09-22-2052](issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html) Done
 - **tracker-group** (2) — 计划 [26-09-15](plans/26-09-15-1504-tracker-group-plan.html) Done 档案 [26-09-15](tasks/26-09-15-rule-tracker-groups.md) Done
 - **web-auth-hardening** (2) — issue [26-09-21-1408](issues/26-09-21-1408-bug-web-auth-hardening-minors.html) Open issue [26-09-21-1408](issues/26-09-21-1408-bug-web-skip-local-verify-csrf.html) Open
 - **web-create-app** (2) — issue [26-09-21-1408](issues/26-09-21-1408-refactor-web-create-app-monolith.html) Done 计划 [26-09-22](plans/26-09-22-1857-web-create-app-split-plan.html) Done

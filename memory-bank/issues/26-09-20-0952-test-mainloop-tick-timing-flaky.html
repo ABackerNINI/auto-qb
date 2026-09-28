@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="issue-slug" content="mainloop-tick-timing-flaky">
 <meta name="issue-stamp" content="26-09-20-0952">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="test-timing-tolerance">
 <meta name="issue-tier" content="standard">
@@ -92,13 +92,13 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">auto-qb · 计划外问题（未修）</div>
+    <div class="kicker">auto-qb · 计划外问题（已修）</div>
     <h1>主循环节拍断言无容差: 机器负载高时偶发假红</h1>
     <p class="lede">test_qbmanager.py:186 断言 elapsed &gt;= 0.05 无容差, 负载下实测 0.046s 即假失败</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-20-0952-test-mainloop-tick-timing-flaky</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 09:52</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">test</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
@@ -193,8 +193,20 @@ python scripts/gen_tasks_index.py &amp;&amp; uv run pytest tests -q --no-cov --t
     <ul>
       <li>2026-09-20 09:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h3>修复记录（2026-09-28）</h3>
+    <p><strong>实际修法</strong>（与方案 A 同向、余量取值改道）：断言改为
+      <code>assert elapsed &gt;= main_tick - 0.02</code>（tests/test_qbmanager.py，2026-09-28 取证）。
+      <strong>改道原因</strong>：方案 A 原文的 0.9 倍下界 = 45ms，距假红实测值 46.8ms（3 × 15.6ms 定时器刻度）
+      仅 1.8ms，仍会抖；20ms 余量把下界压到 30ms，而空转是微秒级，判别力不受损。
+      <strong>未采用</strong>方案 A 的上界建议（<code>elapsed &lt; 0.05 × 4</code>）：负载合法拉长等待，加上界会制造新的假红模式；
+      也未走方案 B（注入时钟），mock 场景断真实经过时间是分层节拍后有意的写法。</p>
+    <p><strong>根因补充</strong>（2026-09-28 调查）：不是多线程竞争 —— 阻塞路径单线程、wake_event 测试中无人置位、
+      主循环 <code>tick_due</code> 时间门控保证提前唤醒只会多空迭代；46ms = Windows 等待粒度按 15.6ms 刻度取整。
+      当日 regime 实测 <code>Event.wait(0.05)</code> 3000 次 min=59.1ms、全量 --no-cov 4/4 绿 —— 假红与系统定时器
+      分辨率状态相关，故"有时红有时绿"。</p>
+    <p><strong>验证</strong>：修复后单用例 3/3 绿、整文件 3/3 绿（45 passed）、<code>commands run test.quick</code>
+      全量 1820 passed + 3 skipped（18.07s）。与
+      <a href="26-09-22-2052-test-throttle-test-sleep-tolerance.html">26-09-22-2052</a> 同根，一并修复关闭。</p>
   </section>
 
   <footer>

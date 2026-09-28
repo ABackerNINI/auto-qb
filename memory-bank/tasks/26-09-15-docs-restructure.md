@@ -2,10 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-09-15
-**Updated:** 2026-09-15
+**Updated:** 2026-09-28
 **专题:** 文档 / 用户视角
 **Legacy-ID:** TASK009
-**Summary:** README 29KB→10KB + 抽出 `docs/configuration.md` (2026-09-15)
+**Summary:** README 29KB→10KB + 抽出 `docs/configuration.md` (2026-09-15); 二轮用户视角重写九轮完成 27KB→13.5KB (2026-09-22, 原切片蒸馏至此)
 **Topics:** docs-restructure
 
 ## 原始请求
@@ -36,6 +36,11 @@
 | 9.3 | `minimal.yml` 补 `web` 段 | Complete | 2026-09-15 | 含 host / port / token |
 
 ## 进度日志
+
+### 2026-09-28(切片蒸馏迁入)
+
+- 二轮 README 用户视角重写 (2026-09-22 完成, 九轮; 27KB→13.5KB, 机检过): 砍实现细节 / 亮点前置 / 删 Web UI 详情章 / 开发测试去贡献者规范。原 `activeContext/26-09-22-2219-docs-readme-rewrite.md` 切片于此日蒸馏删除(activeContext 切片数触顶 56)。
+- **范围外残留待拍板(2 条, 沿用原切片记载)**: ①`memory-bank` keys.md 运行时文件表仍有 `web.py` 字样; ②`AGENTS.md`「testing.md 顶部」旧指针(存根可跳转, 危害低)。
 
 ### 2026-09-15
 

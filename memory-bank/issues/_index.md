@@ -17,7 +17,7 @@
 | bug | 7 |
 | perf | 2 |
 | docs | 2 |
-| test | 4 |
+| test | 2 |
 | refactor | 2 |
 | feat | 2 |
 | chore | 4 |
@@ -29,7 +29,6 @@
 - [bug] [设置页有未保存改动时刷新会丢改动(无任何提醒)](26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html) — 设置页(唯一 Console Hub)编辑配置后按 F5 / 关标签 / 后退会静默丢弃未保存改动 —— 全仓无 beforeunload 提醒, cfg.tree 是内存态, 重载即被服务端树覆盖
 - [test] [FakeConfig 类级共享 grouping 实例被 test_web 实例改写, test_refresh_removed_grouping_disabled 顺序敏感](26-09-22-2311-test-fakeconfig-shared-state-order-pollution.html) — FakeConfig.grouping 为类级共享实例, test_web 两处在实例上改 enabled=True 后残留全局, test_qbmanager 该用例在 test_web 先跑的自定义顺序下必红（全量字母序不触发, 与方案 C 目录迁移无关）
 - [feat] [跨组文件交叉紧急处置: 防止新种子覆盖已下载/已完成文件](26-09-22-2221-feat-cross-group-file-conflict.html) — 不同组之间出现文件交叉(如同名/同路径文件已被其他组下载完成)时需要紧急处置, 防止新种子下载覆盖已有数据
-- [test] [throttle 守阵 elapsed 容差无 sleep 精度余量, 文件级/全量跑偶发假红](26-09-22-2052-test-throttle-test-sleep-tolerance.html) — test_run_loop_throttles_without_stop_event 的 mock 场景断言 elapsed >= 0.05, Windows sleep(50ms) 实测可 46ms(定时器精度), 文件级跑时前序测试改变定时器状态即红; 单跑恒绿
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [bug] [WebUI 鉴权面三个低危加固点: SSE token 查询串 / config-public 暴露 / proxy_headers](26-09-21-1408-bug-web-auth-hardening-minors.html) — SSE ticket 化或 fetch 流消费; /api/config/public 限 loopback; uvicorn 显式 proxy_headers=False 防反代 XFF 误判
 - [bug] [skip_local_verify 开启后无 Origin/Host 校验, 本机任意网页可跨站驱动 WebUI 写命令](26-09-21-1408-bug-web-skip-local-verify-csrf.html) — P2: CSRF+DNS rebinding, 删除/暂停/限速写动作照常入队执行; 默认关闭但开关一开即洞
@@ -45,7 +44,6 @@
 - [chore] [grill-me skill 是 2 行占位 stub](26-09-20-1427-chore-skill-grill-me-empty-stub.html) — grill-me 仅含 openai.yaml 与 2 行 SKILL.md, 无实际内容却占一个技能位
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [docs] [两个 skill 对写 USER.md 的口径相反](26-09-20-1427-docs-skill-user-md-write-conflict.html) — aesthetic-preset-library 要求写入 USER.md, autoclaw INTERACTIONS.md 明令禁止回写
-- [test] [主循环节拍断言无容差: 机器负载高时偶发假红](26-09-20-0952-test-mainloop-tick-timing-flaky.html) — test_qbmanager.py:186 断言 elapsed >= 0.05 无容差, 负载下实测 0.046s 即假失败
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
 ## In Progress
@@ -55,6 +53,7 @@
 ## Done
 
 - [test] [既有: 26-09-26-2345 旧计划缺 doc meta, test_docs_forms 两条守阵红](26-09-27-1153-test-plan-shipflow-v2-missing-meta.html) — plans/26-09-26-2345-plan-commands-shipflow-v2.html 缺 doc-status/doc-topic/doc-added/doc-updated, test_docs_forms::test_artifacts_meta_complete 与 test_status_vocabulary 恒红(HEAD 上复验同红)
+- [test] [throttle 守阵 elapsed 容差无 sleep 精度余量, 文件级/全量跑偶发假红](26-09-22-2052-test-throttle-test-sleep-tolerance.html) — test_run_loop_throttles_without_stop_event 的 mock 场景断言 elapsed >= 0.05, Windows sleep(50ms) 实测可 46ms(定时器精度), 文件级跑时前序测试改变定时器状态即红; 单跑恒绿
 - [bug] [config 校验缺少取值范围约束, 可配出合法格式但危险的值](26-09-22-1937-bug-config-value-range-validation.html) — validate_config 只拦格式与未知键, 数值/时间类配置取值范围大多无上下限约束, 可能引发运行时问题, 需逐项分析收紧
 - [bug] [tracker URL 含 passkey 全文写入日志, 可经 /api/log 读回](26-09-21-1408-bug-web-tracker-url-passkey-log.html) — P2: 私站 announce URL 内嵌 passkey, 轮转日志备份/同机进程是泄露面; 建议单点 sanitize_tracker_url 脱敏
 - [refactor] [web.py create_app 单函数 926 行, 鉴权与全部端点挤在一个工厂函数](26-09-21-1408-refactor-web-create-app-monolith.html) — P1: 全项目最大函数坐在唯一对外暴露面里, 本次审计三条安全发现同出一文件; 建议按域拆 Router
@@ -66,6 +65,7 @@
 - [bug] [状态栏今日流量: 图标与数值同色且非真图标, 易被读成数值的一部分](26-09-20-1840-bug-webui-statusbar-traffic-icon.html) — 今日流量块图标(#i-chart)与 ↑/↓ 数值同色同排, 易误读为数值一部分; 棱镜侧同病且图标无颜色
 - [bug] [WebUI 列设置(顺序/显示/宽度)经常被重置](26-09-20-1800-bug-webui-column-prefs-reset.html) — 表格列的顺序/显隐/宽度偏好偶发丢失, 刷新后回到默认布局
 - [bug] [状态栏上传/下载速度不更新, 恒显示 0](26-09-20-1646-bug-webui-statusbar-speed-always-zero.html) — 状态栏速度由前端对 groups 求和(totalDl/totalUl), 真机有下载/上传时仍恒为 0
+- [test] [主循环节拍断言无容差: 机器负载高时偶发假红](26-09-20-0952-test-mainloop-tick-timing-flaky.html) — test_qbmanager.py:186 断言 elapsed >= 0.05 无容差, 负载下实测 0.046s 即假失败
 - [docs] [conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾](26-09-19-2359-docs-memory-bank-push-rule-drift.html) — 知识库 Git 约定仍写禁 push, 与 2026-09-19 用户新规相反, 会让 agent 拒绝推送
 - [bug] [3s 兜底超时后补丁值永久留在行上: 「不再贴、等下轮服务端」在 rid 门控下不成立](26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) — isPending() 超时只 delete pendingOps[hash], 注释称'下轮以服务端为准'; 但 rid 未变时服务端不回传数组、行对象不被替换 ⇒ 乐观补丁(kind=paused)留在行上不走。hang 模式实测: 3.66s 清 pending 后行仍 s-paused, 真值 s-downloading
 - [bug] [乐观态要挂满 3 秒才消除: 「真值匹配即清」从未实现, 且回执后不立即拉真值](26-09-19-2024-bug-webui-truth-convergence.html) — pendingOps 只有超时/失败两个清除点(app.js:2315/2361), 真值到了也不清; 且 act*/bulk 回执后无 refresh, 真值要等下一轮轮询(>3000 种子 3s) —— 用户报的「乐观后 2-4s 才恢复」

@@ -174,19 +174,23 @@ def test_run_loop_throttles_without_stop_event():
 
     分层节拍后阻塞原语换成了 `_wait_next`(非托管模式走 wake_event.wait(剩余时间)),
     故判据改为**真实经过时间**: 循环若不阻塞, 两次 _tick 会在微秒内连续发生。
+    下界留 sleep 精度余量(见断言处注释)。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.connect = mock.Mock(return_value=True)
+        main_tick = 0.05
         # 两条线同拍 -> 每轮走完整 _tick(与改造前"单一 cadence"的循环结构等价)
-        mgr.config.main_tick = 0.05
-        mgr.config.sync_interval = 0.05
+        mgr.config.main_tick = main_tick
+        mgr.config.sync_interval = main_tick
         mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
         start = time.monotonic()
         mgr.run(dry_run=False)
         elapsed = time.monotonic() - start
         assert mgr._tick.call_count == 2
-        assert elapsed >= 0.05, f"每轮循环后应阻塞到下一条时间线, 实际 {elapsed:.3f}s —— 主循环在空转"
+        # 下界 -20ms 余量: Windows 等待粒度按 15.6ms 定时器刻度取整, 50ms 等待可提前到
+        # 46.8ms(3 刻度, 2026-09-22 实测假红) —— 空转是微秒级, 余量不损失判别力
+        assert elapsed >= main_tick - 0.02, f"每轮循环后应阻塞到下一条时间线, 实际 {elapsed:.3f}s —— 主循环在空转"
 
 
 def test_run_loop_managed_never_sleeps():
