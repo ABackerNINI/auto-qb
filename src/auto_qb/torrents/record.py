@@ -417,8 +417,13 @@ class TorrentRecord:
                 seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
                 ratio_ok = hr.required_share_ratio > 0 and self.ratio >= hr.required_share_ratio
                 return seeding_ok or ratio_ok
-        # 行 4 / 站点未接入: 本地兜底(未触发即未达标, 与既有口径一致)
-        if not self.check_hr_condition():
+        # 行 4 / 站点未接入: 本地兜底(未触发即未达标, 与既有口径一致)。
+        # ❗这里只能走 _local_hr_triggered 纯本地判据, 不能调 check_hr_condition ——
+        # 行 4 时后者又会调回本方法(check_hr_condition 行 4 → check_hr_satisfied),
+        # 无限递归(2026-09-29 实测 RecursionError, BTSchool)。走到本行的两种情形
+        # (judged is None / identity 为 NO_EVIDENCE)下 check_hr_condition 的站点侧
+        # 分支都已返回, 恰好坍缩成 _local_hr_triggered, 语义等价。
+        if not self._local_hr_triggered():
             return False
         hr = self.tracker_conf.hr
         seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)

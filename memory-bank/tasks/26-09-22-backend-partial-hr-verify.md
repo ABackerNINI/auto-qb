@@ -206,3 +206,13 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
   垃圾键), 首页读数按 enabled 真值计数, 微调表改滤 enabled; settings-detail.html 三态下拉换
   「启用在线核实」勾选框。纯前端两文件, node --check 通过; 存量 `mode` 由 `_migrate_config_2_3`
   加载期自动转换, 无需手工改。
+
+- **2026-09-29 (v3 跟进修复②: 行 4 判定无限递归 RecursionError)** — `check_hr_satisfied` 的
+  行 4(站点无有效证据)回落分支调 `check_hr_condition()`, 而后者行 4 又调回 `check_hr_satisfied()`
+  —— 站点已接入 + 判定落行 4(取数未产出证据 / 全站型 listing=none)即无限递归, BTSchool 实报;
+  主循环每轮重试重复报错形似「无限循环」。record 级测试的行 4 只测过「桥返回 None」路径
+  (该路径 check_hr_condition → _local_hr_triggered 不递归), 「桥返回 NO_EVIDENCE」无覆盖故漏网。
+  修: 行 4 回落直调纯本地判据 `_local_hr_triggered()`(走到该行时 judged 只能是 None/NO_EVIDENCE,
+  check_hr_condition 站点侧分支均已返回, 语义等价)。test_torrents.py 补
+  test_record_hr_no_evidence_row4_no_recursion(触发/未达标/达标 + 纯辅种不触发);
+  test.quick 1736 passed + 3 skipped。

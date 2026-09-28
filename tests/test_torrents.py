@@ -35,6 +35,7 @@
 - test_record_hr_follows_site_judgement: 接入站点后 check_hr_* 听站点侧(转移种子 downloaded=0 也受管束)
 - test_record_hr_released_by_site_view: 已核实放行 -> 触发与达标都 False(本地 downloaded 再大也不算)
 - test_record_hr_falls_back_without_link: 未注入判定桥 / 站点未接入 / 桥返回 None -> 行为与既有本地逻辑完全一致(零静默变更)
+- test_record_hr_no_evidence_row4_no_recursion: 行 4(站点无有效证据)本地兜底不再与 check_hr_condition 互相递归(回归 2026-09-29 RecursionError)
 - test_record_hr_excluded_blocks_all_entries: HR 排除命中标签 -> 三入口全短路且判定桥不被打扰
 - test_record_hr_excluded_category_and_regex: HR 排除的分类命中与 regex:/ :ignore_case 格式
 - test_record_hr_excluded_beats_site_judgement: 排除优先级最高, 站点接入(enabled)也压不过用户显式排除
@@ -302,6 +303,25 @@ def test_record_hr_released_by_site_view():
     rec.hr_link = _StubLink(HrJudgement(identity=HrIdentity.RELEASED, reason="覆盖范围内未列出"))
     assert rec.check_hr_condition() is False
     assert rec.check_hr_satisfied() is False
+
+
+def test_record_hr_no_evidence_row4_no_recursion():
+    """行 4(站点无有效证据)本地兜底不递归: check_hr_condition 行 4 调 check_hr_satisfied,
+    后者回落本地时又调回 check_hr_condition —— 无限递归 RecursionError(2026-09-29 BTSchool 实报)。
+    修复后行 4 的达标回落走纯本地判据, 语义不变"""
+    from auto_qb.hr.resolve import HrIdentity, HrJudgement
+
+    rec = _hr_record(downloaded=70 * 1024**2)  # 本地 dlratio 0.7 >= 0.7: 触发
+    rec.hr_link = _StubLink(HrJudgement(identity=HrIdentity.NO_EVIDENCE, reason="站点无有效证据"))
+    assert rec.check_hr_condition() is True, "行 4 本地兜底: 本地触发即管束"
+    assert rec.check_hr_satisfied() is False, "做种 0 < 3D: 未达标"
+    rec.seeding_time = 3 * 86400 + 12 * 3600
+    assert rec.check_hr_satisfied() is True, "做种时长达标 -> 达标"
+    # 纯辅种(downloaded=0 本地不触发): 行 4 下达标回落也走本地, 恒未达标
+    rec2 = _hr_record(downloaded=0)
+    rec2.hr_link = _StubLink(HrJudgement(identity=HrIdentity.NO_EVIDENCE))
+    assert rec2.check_hr_condition() is False
+    assert rec2.check_hr_satisfied() is False
 
 
 def test_record_hr_falls_back_without_link():
