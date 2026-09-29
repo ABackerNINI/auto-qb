@@ -12,7 +12,7 @@
 |---|---|---|
 | [cjk-regex-norm.md](cjk-regex-norm.md) | 把 Python 的 `[\W_]+ → 空格` 归一化直译成 JS `s.replace(/[\W_]+/g,' ')` 会静默废掉中文搜索 —— Python `\W` 是 Unicode 语义(CJK 算词字符), JS `\W` 是 ASCII 语义(整个中文词全是"非词字符"被折成空格)。前端必须写 `[^\p{L}\p{N}]+/gu`(u 标志必带)。 | 写前端搜索/过滤, 前端照抄服务端归一化语义, 中文词搜不到, \W, \p{L}, unicode 归一化 |
 | [columns-persist.md](columns-persist.md) | 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案(前四轮修复都栽在把意图与派生混在一个字段里); 另有一条**应用之外**的通道: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据"。 | 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths, 浏览器重启, 偏好全回默认, 关闭窗口时清除站点数据, SESSION_ONLY |
-| [contract-api.md](contract-api.md) | 前端不只是后端的镜像 —— 判"字段不一致"前必须沿派生链追到消费点; 跨视图裁剪与真值时序是两条反复出事的线。 | 字段不一致, 前后端契约, 视图回传, rid, 真值, 乐观 UI, 状态色, 占位符, HR 标签 |
+| [contract-api.md](contract-api.md) | 前端不只是后端的镜像 —— 判"字段不一致"前必须沿派生链追到消费点; 跨视图裁剪与真值时序是两条反复出事的线。 | 字段不一致, 前后端契约, 视图回传, rid, 真值, 乐观 UI, 状态色, 占位符, HR 标签, 空值转有值, 上游修复后的展示回归 |
 | [css-comment-terminator.md](css-comment-terminator.md) | CSS 注释以第一个 `*/` 结束 —— 注释文字里再出现 `*/`(如 `s-*/member-row`)会把注释提前砍断, 尾巴落成代码态垃圾, 浏览器按错误恢复把**紧跟的那条规则整条静默丢弃**, 无任何报错。 | 写 CSS 注释, 注释里出现 星号斜杠, 进度条不显示, 样式规则不生效, display 没生效, 控制台皮肤, m-progress |
 | [css-perf-parity.md](css-perf-parity.md) | 「星图卡、棱镜不卡」这类单边性能问题的定位路径 —— 差异只在 CSS(JS 是共享层), 且两套 CSS 里唯一有实质差异的昂贵属性是 backdrop-filter; 嵌套毛玻璃的成本与摘法。 | 卡顿, 掉帧, 不跟手, 两套 UI 性能差, 一边卡一边不卡, 毛玻璃, backdrop-filter, 弹层卡, 改 CSS 后变慢, 星图卡 |
 | [dialog-measure.md](dialog-measure.md) | 在居中弹窗(.modal 等水平垂直居中容器)里用 getBoundingClientRect 量「内容增高把下方推下去多少」, 视口位移只有真实增量的一半 —— 弹窗增高时上下对半扩, 下方位移被「整体上移」抵消一半; 另有 body 内部滚动与 Playwright 塌缩元素两处同族假象。量测一律用「相对滚动容器顶 + scrollTop」的布局坐标。 | 真浏览器量弹窗内元素位移, 量展开/收起动画的推下量, 验证过渡动画, Playwright waitForSelector 塌缩元素超时, 量出来的位移比预期小一半 |

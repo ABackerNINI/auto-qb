@@ -1611,6 +1611,8 @@ def test_frontend_hr_safety_wiring():
     ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + 挂 hrSrcBadge/
       hrPopEnter 触发 —— 漏一处那一列就不显示安全档位/悬停弹窗; 弹窗单例 DOM(teleport body)
       每套 UI 恰一份(26-09-26-webui-hr-popup 起 :title 换成悬停弹窗触发);
+      要求时长的渲染门只认「已做种非空 + 有要求」, 不得依赖 hr_triggered(2026-09-29 实报:
+      未核/在线行被一并藏掉要求, 只剩孤立的来源芯片);
     ③ hr-unk / hr-fail / hr-src / bulk-hr-warn 新样式必须两套 CSS 成对定义(改这里时同步另一套的纪律);
       hr-pop 弹窗规则(浮层/箭头/双轨)同理成对;
     ④ 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
@@ -1656,6 +1658,17 @@ def test_frontend_hr_safety_wiring():
         # 旧绑定不得残留(换绑遗漏的形态)
         assert ':class="hrTimeClass(m)"' not in html, f"{ui} 仍有做种时长列挂着旧 hrTimeClass —— 漏换绑"
         assert "hrDurTitle" not in html, f"{ui} 仍有做种时长列挂原生 :title —— 应已换悬停弹窗触发"
+        # 要求时长必须「有要求就显示」(2026-09-29 用户实报: 未核/在线行只剩来源芯片, 看不到要求):
+        # 门只能是「已做种非空 + 有要求」—— 依赖 hr_triggered 会把未触发行连要求一起藏掉
+        assert '"cellSeedingTime(m) && m.hr_req_time"' in html, \
+            f"{ui} 做种时长列的要求渲染门被改 —— 应只按 hr_req_time 判定(未触发行也要看得到要求)"
+
+    # 弹窗「无时长要求」收起条件: 不得再把 unverified 包进去(它有本地要求, 收起就看不到),
+    # 真放行/免罪(义务已了)仍收起——2026-09-29 实报后定稿
+    collapse = re.search(r"if \(\[([^\]]*)\]\.includes\(src\) \|\| !\(req > 0\)\)", hr_js)
+    assert collapse, "hr.js 弹窗的「无时长要求」收起条件找不到了 —— 渲染规则被改? 同步本守阵"
+    assert "unverified" not in collapse.group(1), "未核实行不得收起为「无时长要求」(本地有要求, 收起即失真)"
+    assert "site_released" in collapse.group(1) and "site_exempt" in collapse.group(1), "真放行/免罪仍应收起轨道"
 
     # ③ 新样式两套 CSS 成对
     atlas_css = _ui_css_aggregate("atlas")

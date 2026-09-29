@@ -164,7 +164,7 @@
                           </span>
                           <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
                             {{ cellSeedingTime(m) }}
-                            <span v-if="cellSeedingTime(m) && m.hr_triggered && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
+                            <span v-if="cellSeedingTime(m) && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
                             <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
                             <span v-if="m.hr_excluded" class="hr-src" title="已排除出 HR 管理(排除标签/分类命中)">已排除</span>
                           </span>
