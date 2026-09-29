@@ -6,7 +6,7 @@
 <title>计划 · WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-date" content="2026-09-28">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="拍板齐 (2026-09-30), 待实施">
 <meta name="doc-topic" content="webui-keyboard-shortcuts">
 <meta name="doc-added" content="26-09-28-0354">
 <meta name="doc-updated" content="26-09-28-0354">
@@ -96,7 +96,7 @@
   <h1>WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)</h1>
   <p class="lede">为 auto-qb WEB UI 加全局键盘快捷键, 支持在设置页自定义。本计划补齐前案缺失的两块论证 —— 成熟产品的实现/存储横评, 与「后端独立文件 vs localStorage」的逐维对比 —— 并给出定案建议与修订后的实施波次。</p>
   <div class="meta-row">
-    <span><b>状态</b> Open (待拍板 §08)</span>
+    <span><b>状态</b> 拍板齐 (2026-09-30, §08 六项全部拍板), 待实施</span>
     <span><b>专题</b> webui-keyboard-shortcuts</span>
     <span><b>前案</b> 26-09-26-0822 <span class="sup">Superseded</span></span>
     <span><b>日期</b> 2026-09-28</span>
@@ -107,7 +107,7 @@
     <div class="v-cap">结论速览</div>
     <p><b>引擎:</b> 不引第三方库, 自写 ~200 行 (前案 0822 的注册表 / e.code 归一化 / 作用域 / 输入态屏蔽设计全部沿袭)。<b>依据:</b> 调研横评显示, 满足「可自定义」的完整栈 (录制器 / 冲突检测 / 作用域 / 黑名单 / 存储) 没有任何现成库覆盖 —— 库只解决「按键→动作」派发这一层 (~30%), 且活跃库的匹配依据 (keyCode / event.key) 与本案 e.code 物理键位设计相抵; tinykeys (活跃, 1.1KB gzip) 作为实现细节参照。</p>
     <p><b>存储:</b> 定案建议<b>后端独立文件</b> <span class="mono">auto-qb-data/webui-keys.json</span> + <span class="mono">GET/PUT /api/keys</span> 两端点。推翻前案 0822 的 localStorage 预选: 前案把「服务端持久化」等同于「写 config.yml 红线」, 是假二分 —— 独立文件两者都不沾。决定性证据: ①调研的所有成熟产品无一用 localStorage 作为快捷键正式存储 (JupyterLab=服务端用户文件, VS Code=本地文件, Gmail=账号服务端); ②本项目列偏好已被浏览器「关闭窗口时清除站点数据」静默清空过 (<span class="mono">pitfalls/web-ui/columns-persist.md</span>), localStorage 的失效通道是已验证的现实, 而快捷键是用户逐条录制的配置, 丢失代价远高于列宽; ③auto-qb-data 即备份单元 (Docker 卷), 自定义随 state 一起走。</p>
-    <p><b>自定义:</b> 设置页新增「快捷键」分区 (页尾块, 有「运行日志」先例) + <span class="kbd">?</span> 帮助浮层入口; 按下即录制的录制器, 冲突提示可交换, 浏览器保留键当场拒绑, 单条/全部重置。前案 5 个待拍板点全部补上建议案, 见 §08。</p>
+    <p><b>自定义:</b> 设置页新增「快捷键」分区 (页尾块, 有「运行日志」先例) + <span class="kbd">?</span> 帮助浮层入口; 按下即录制的录制器, 冲突提示可交换, 浏览器保留键当场拒绑, 危险条目标 ⚠ 并由确认框兜底, 单条/全部重置。§08 六个决策点已全部拍板 (2026-09-30, ①⑤ 有改向), 危险清单与确认框标注见 §08。</p>
   </div>
 </header>
 
@@ -121,7 +121,7 @@
   <a href="#s5"><span class="n">05</span>引擎与自定义面板设计</a>
   <a href="#s6"><span class="n">06</span>实施波次 (修订)</a>
   <a href="#s7"><span class="n">07</span>测试计划与真机走查</a>
-  <a href="#s8"><span class="n">08</span>待拍板决策点</a>
+  <a href="#s8"><span class="n">08</span>决策点 (已拍板)</a>
   <a href="#s9"><span class="n">09</span>附录 · 调研来源</a>
 </nav>
 
@@ -277,10 +277,10 @@
   <h3>4.4 文件与接口规格</h3>
   <ul class="plain">
     <li><b>路径</b>: <span class="mono">&lt;state_file 同目录&gt;/webui-keys.json</span> (即 <span class="mono">auto-qb-data/webui-keys.json</span>, 与 web.token 同一寻址规则)。</li>
-    <li><b>结构</b>: <span class="mono">{ "schema_version": 1, "bindings": { "&lt;action_id&gt;": "&lt;归一化串 or 空=禁用&gt;" } }</span> —— 只存用户改过的条目, 未提及的 action 用注册表默认。</li>
+    <li><b>结构</b>: <span class="mono">{ "schema_version": 1, "template": "aqb-default", "overrides": { "&lt;action_id&gt;": "&lt;归一化串 or 空=禁用&gt;" } }</span> —— 只存用户改过的条目, 未提及的 action 用当前模板基准; 模板机制见 §4.7 (v1 一次到位预埋, 本期只有 <span class="mono">aqb-default</span> 一套, overrides 语义与原 bindings 等价)。</li>
     <li><b>读时</b>: schema_version 校验 (沿 26-09-26-0506 版本链口径) → 结构校验 (dict[str,str] + 值正则) → 未知 action_id 忽略 (注册表前向兼容) → 与默认表合并后下发; 文件损坏 → WARN + 尝试 <span class="mono">.bak</span> → 仍坏用默认表 (atomic_write keep_backup=True 范式兜底)。</li>
     <li><b>写时</b>: 面板保存才写 (PUT 整份替换); 后端重校验结构, 非法 422; 黑名单/冲突仍由前端面板拦截 (后端只做结构层, 键位语义归前端单一事实源)。</li>
-    <li><b>端点</b>: <span class="mono">GET /api/keys</span> (返回存盘 bindings + schema_version) / <span class="mono">PUT /api/keys</span>; 鉴权走全局 Bearer 依赖 (零额外工作); <b>金清单 +2 并同步 <span class="mono">test_web_route_manifest_frozen</span></b>。</li>
+    <li><b>端点</b>: <span class="mono">GET /api/keys</span> (返回生效表 (模板 ⊕ overrides) + template id + schema_version) / <span class="mono">PUT /api/keys</span>; 鉴权走全局 Bearer 依赖 (零额外工作); <b>金清单 +2 并同步 <span class="mono">test_web_route_manifest_frozen</span></b>。</li>
     <li><b>前端适配器</b>: <span class="mono">AQB_KEYS.load()/save()</span> 单点封装 —— 启动拉取失败 → 默认表 + toast 提示; 保存失败 → 本地回滚 + 报错。引擎对其余代码只暴露这一对函数。</li>
   </ul>
 
@@ -289,6 +289,17 @@
 
   <h3>4.6 反悔路径</h3>
   <p>引擎对存储介质无感知 (只认 <span class="mono">AQB_KEYS.load/save</span>)。若用户拍板后改主意要 localStorage: 删两个端点与守阵、把适配器换成 localStorage 实现 (含 storage 事件), 引擎与面板零改动 —— 决策可逆, 沉没成本只有已删的 ~200 行。</p>
+
+  <h3>4.7 绑定模板机制 (缓议·仅预埋, 2026-09-30 用户确认)</h3>
+  <p>用户提出的方向: 预定义多套绑定模板 (如「auto-qb 默认 · 单键高效」/「保守 · 全带修饰」), 可整表切换, 且支持<b>基于模板派生自定义</b> (在模板之上只记个人差异), 外加导入/导出。<b>可行性结论: 可行, 复杂度中低 (~+150-250 行含守阵), 与既有架构零冲突</b> —— 模板就是注册表里的第二份 <span class="mono">def</span> 数据, 派生/合并/校验全部复用既有单点 (注册表 / 归一化 / danger 与黑名单规则 / PUT 校验)。</p>
+  <ul class="plain">
+    <li><b>数据形状 (唯一需要预埋的决策)</b>: §4.4 的 <span class="mono">{schema_version, bindings}</span> 改为 <span class="mono">{schema_version, template: "aqb-default", overrides: {&lt;action_id&gt;: &lt;归一化串 or 空&gt;}}</span> —— bindings 语义从「整份键表」变为「相对模板的差异」。生效表 = 模板基准 ⊕ overrides (override 恒胜出, 撞车 toast)。GET 返回生效表 + template id (引擎仍只消费生效表, 零改动); 面板显示「当前模板 + 已派生 N 条」。<b>建议 v1 一次到位</b>: 现在改只是字段名, 日后再改要 schema 升级迁移。</li>
+    <li><b>模板定义进注册表</b>: 每套模板 = 注册表内一组 <span class="mono">def</span> (静态数据字面量, 可被守阵逐条断言: 模板内无冲突 / 全模板过 danger 与黑名单规则)。新增模板 = 纯数据追加, 不碰引擎。</li>
+    <li><b>切换语义</b>: 换模板 = 改 <span class="mono">template</span> 字段 + PUT, overrides 保留 (派生自定义不丢); 生效表重算后若有 override 与新模板撞车, override 仍胜出并 toast 说明。面板提供「清空派生, 回到纯模板」一键。</li>
+    <li><b>导入/导出</b>: 纯前端实现, <b>零新增端点</b> —— 导出 = 生效文件 JSON (template + overrides) 走 blob 下载; 导入 = FileReader 读入后走与 PUT 完全相同的结构校验 + 注册表 action_id 校验 + danger/黑名单校验, 合法即本地生效并提示保存。跨设备迁移天然走服务端文件, 导入/导出主要用于备份与分享。</li>
+    <li><b>约束</b>: 危险判定口径与确认框标注 (§08 v3) 对<b>所有模板与导入内容</b>一律生效 —— danger 条目无论绑到什么键, 快捷键路径的确认框都不可省略, 面板 ⚠「单键触发 (有确认框)」标注照常显示; <span class="kbd">Delete</span> 额外删除操作在注册表之外, 不随模板切换/导入导出变化 (各模板与上游 qB 习惯天然一致)。</li>
+    <li><b>缓议理由</b>: 本期 W1-W7 不含多模板; 但 schema 形状按本节预埋, W6 实现成本 +~10 行。真做多模板时加 W6.5 (模板选择器 + 清空派生 + 导入导出 UI), 引擎与端点不动。</li>
+  </ul>
 </section>
 
 <!-- ═══════════════ 05 ═══════════════ -->
@@ -297,11 +308,11 @@
 
   <h3>5.1 注册表与引擎</h3>
   <ul class="plain">
-    <li><b>注册表单一事实源</b>: <span class="mono">shared/shortcuts.js</span> 内 <span class="mono">AQB_KEYS</span> 常量, 条目 <span class="mono">{id, group, label, def, scope, danger?, fixed?, run(vm)}</span>; 58 条 (52 有默认键 + 6 空位留给自定义)。挂 <span class="mono">window.AQB_SHORTCUTS</span> mixin, 进三份 index.html 的 tpl-manifest 且排 app.js 前。</li>
+    <li><b>注册表单一事实源</b>: <span class="mono">shared/shortcuts.js</span> 内 <span class="mono">AQB_KEYS</span> 常量, 条目 <span class="mono">{id, group, label, def, scope, danger?, fixed?, run(vm)}</span>; 58 条 (52 有默认键 + 6 空位留给自定义; 0822 的 D8 删除保留在注册表, 默认键改 <span class="kbd">Shift+D</span> —— <span class="kbd">Delete</span> 键作为额外删除操作在引擎里直连 <span class="mono">_deleteFlow</span>, 无需绑定、不占键表, §08 v4)。挂 <span class="mono">window.AQB_SHORTCUTS</span> mixin, 进三份 index.html 的 tpl-manifest 且排 app.js 前。</li>
     <li><b>匹配</b>: e.code 物理键位 + 固定修饰序归一化 (§3.3); <span class="mono">repeat</span> / <span class="mono">isComposing</span> / 纯修饰键三道前置拦截; 尊重 <span class="mono">event.defaultPrevented</span>。</li>
     <li><b>作用域</b>: <span class="mono">global/list/drawer/settings/modal</span> 五值 + 优先级; 引擎 handler 挂 document keydown, 接在 lifecycle.js Esc 退栈链 (FIX-07) 之后 —— Esc 是唯一 <span class="mono">fixed</span> 键, 面板不可改。</li>
     <li><b>输入态三段屏蔽</b>: ①isComposing/229 拦截 → ②输入元素白名单 (INPUT/TEXTAREA/select/contenteditable 内只放行显式标记 inputSafe 的绑定, 如 <span class="kbd">Ctrl+S</span> 保存) → ③模态层白名单 (modal 作用域内只响应模态键位)。</li>
-    <li><b>黑名单</b>: <span class="kbd">Ctrl+W/T/N/Q</span> 及 Shift 变体等浏览器不可拦组合, 面板内当场拒绑 (§3.3 边界)。</li>
+    <li><b>黑名单</b>: <span class="kbd">Ctrl+W/T/N/Q</span> 及 Shift 变体等浏览器不可拦组合, 面板内当场拒绑 (§3.3 边界); danger 条目 (§08 危险清单) 在面板行内标 ⚠「危险操作 (有确认框)」, 用户自绑裸键时提示但允许 (决策点① v4)。</li>
     <li><b>光标行</b>: <span class="mono">kbCursor={kind,id}</span> 按身份不按下标; MVP 组行线性链 + scrollIntoView (虚拟滚窗口径 <span class="mono">_rowWindow</span> 前缀和), 与选中态两套视觉不合并。</li>
     <li><b>唯一重构点</b>: <span class="mono">commands.js</span> 抽 <span class="mono">_actCore(action, {keys, hashes})</span>, 快捷键与按钮/右键菜单共用同一动作出口 —— 不另起旁路。</li>
   </ul>
@@ -310,7 +321,7 @@
   <ul class="plain">
     <li><b>入口</b>: ①设置页新增「快捷键」分区 (分区详情页尾块 —— 「运行日志」客户端只读块同款先例); ②任意页面 <span class="kbd">?</span> 打开帮助浮层 (只读速查, 附「前往设置自定义」链接)。顶栏不加按钮。</li>
     <li><b>面板形态</b>: 带遮罩居中 modal, 按 group 分组列出; 每行 = 动作名 + 当前键位 chip + 录制钮 + 重置钮。</li>
-    <li><b>录制交互</b> (§3.3 VS Code 模式): 点录制 → 只读输入框「按下组合键…」→ 首个非修饰键落定即收 → 展示人类可读键名; 纯修饰键拒收; <span class="kbd">Esc</span> 取消 (引擎屏蔽层保证录制态不触发其它动作); 冲突 → 提示「已绑定为 X: 交换 / 覆盖(对方置空) / 取消」; 黑名单 → 当场拒绝并说明。</li>
+    <li><b>录制交互</b> (§3.3 VS Code 模式): 点录制 → 只读输入框「按下组合键…」→ 首个非修饰键落定即收 → 展示人类可读键名; 纯修饰键拒收; <span class="kbd">Esc</span> 取消 (引擎屏蔽层保证录制态不触发其它动作); 冲突 → 提示「已绑定为 X: 交换 / 覆盖(对方置空) / 取消」; 黑名单 → 当场拒绝并说明; danger 条目录到无修饰单键 → 允许, 行内标 ⚠「危险操作 (有确认框)」。</li>
     <li><b>重置</b>: 单条重置回默认 / 全部重置; 空串 = 显式禁用该动作。</li>
     <li><b>保存语义</b>: 面板改动先本地生效 (即时试用) → 「保存」PUT 落盘; 离开面板未保存 → 提示放弃或保存。面板底部注明: 键位存于服务端 <span class="mono">webui-keys.json</span>, 所有浏览器共享。</li>
   </ul>
@@ -325,13 +336,13 @@
       <tr><td class="keep">W1</td><td class="dim">引擎 + 注册表 + 适配器桩 (纯默认表可跑): 归一化 / 匹配 / 作用域 / 三段屏蔽 / 黑名单 / defaultPrevented 礼仪</td><td class="dim">默认键全活; 输入框内打字 (含中文 IME) 不误触; Esc 链序不回归</td></tr>
       <tr><td class="keep">W2</td><td class="dim">光标模型 + 滚动进视口 (<span class="mono">_rowWindow</span> 前缀和)</td><td class="dim">3000 行库 ↑↓ 跟手且光标行始终可见</td></tr>
       <tr><td class="keep">W3</td><td class="dim">目标解析 + <span class="mono">commands.js</span> 抽 <span class="mono">_actCore</span> (唯一重构点)</td><td class="dim">按钮 / 右键菜单 / 快捷键三入口行为等价, 既有测试全绿</td></tr>
-      <tr><td class="keep">W4</td><td class="dim">绑定 A-D 组 (切页 / 光标 / 选择 / 一级动作: P S F C D, 危险动作走确认框)</td><td class="dim">与上游 qB 习惯对齐 (Ctrl+A / Delete); 非焦点页不串扰</td></tr>
+      <tr><td class="keep">W4</td><td class="dim">绑定 A-D 组 (切页 / 光标 / 选择 / 一级动作: P S I M O 单键; 危险档二键: 删除 <span class="kbd">Shift+D</span>、重新校验 <span class="kbd">Shift+Y</span>、强制汇报 <span class="kbd">Shift+A</span> + 确认框 (默认「确定」, <span class="kbd">Enter</span> 即确认); <span class="kbd">Delete</span> 额外删除操作直连 <span class="mono">_deleteFlow</span>, 决策点① v4)</td><td class="dim">与上游 qB 习惯对齐 (Ctrl+A 全选 / Delete 删除); 非焦点页不串扰</td></tr>
       <tr><td class="keep">W5</td><td class="dim">绑定 E-H 组 + 局部作用域 (抽屉 Alt+1-4 / 设置页 Ctrl+S / 模态); 引擎接 Esc 链尾</td><td class="dim">模态内只响应模态键位; 抽屉页切换不与全局键冲突</td></tr>
       <tr><td class="keep">W6</td><td class="dim">后端持久化 + 自定义面板: <span class="mono">webui-keys.json</span> / GET·PUT <span class="mono">/api/keys</span> / 金清单+2 / 面板与录制器 / 适配器接通</td><td class="dim">改键→保存→刷新仍生效; 换浏览器键位一致; 损坏文件兜底路径走通</td></tr>
       <tr><td class="keep">W7</td><td class="dim">静态守阵 + 真机走查 + 文档回写 (progress / pitfalls 若踩新坑)</td><td class="dim">§07 清单全绿; test.full 数字入基线切片</td></tr>
     </tbody>
   </table>
-  <p class="dim">可拆口: W1-W4 先行交付「默认键位开箱即用」, W5-W6 作为第二波 (自定义能力)。每波独立可验收、可单独提交。</p>
+  <p class="dim">可拆口 (<b>已拍板 2026-09-30, 决策点⑤</b>): W1-W4 第一波先行交付「默认键位开箱即用」(含当波守阵, 可单独提交); W5-W7 第二波 (局部作用域 + 自定义面板 + 收尾守阵/真机走查/文档回写)。每波独立可验收。</p>
 </section>
 
 <!-- ═══════════════ 07 ═══════════════ -->
@@ -340,7 +351,7 @@
   <h3>静态守阵 (pytest, 沿 test_web.py 既有范式)</h3>
   <ul class="plain">
     <li>键表单一事实源: id 唯一 / def 归一化串合法 / scope 合法 / run 方法在根实例存在。</li>
-    <li>默认键无冲突; 默认键不碰浏览器黑名单; <span class="mono">fixed</span> 集 (Esc) 不可被自定义覆盖 (后端 PUT 与前端面板双侧拦)。</li>
+    <li>默认键无冲突; 默认键不碰浏览器黑名单; <b>danger 键位 (Shift+D / Shift+Y / Shift+A) 与额外删除操作 (Delete) 的快捷键路径确认框存在且默认焦点在「确定」</b> (§08 清单逐条断言); <span class="mono">fixed</span> 集 (Esc) 不可被自定义覆盖 (后端 PUT 与前端面板双侧拦)。</li>
     <li>三份 index.html 挂载成对: shortcuts.js 进三份 tpl-manifest、排 app.js 前; 对应 mixin 注册存在。</li>
     <li>金清单 +2 与路由实现一致; PUT 结构校验 (非 dict / 非法值 → 422); 空串禁用语义保留。</li>
     <li>读时兜底: 注入坏 JSON → GET 回默认表且服务不炸; 未知 action_id 被忽略; schema_version 不识别走升级链报错口径。</li>
@@ -351,7 +362,8 @@
     <li>中文输入法在搜索框 / 设置输入框打字, 逐字母确认不触发任何单键快捷键 (IME 双保险)。</li>
     <li>Esc 退栈链全序: 确认框 → 对话框 → … → 清选择, 快捷键引擎不抢先不漏接。</li>
     <li>3000 行仿真库 ↑↓ / Space / Ctrl+A / Delete 流畅, 光标行滚动跟随。</li>
-    <li>录制器: 单修饰键拒收 / 冲突三选一 / 黑名单拒绑 / Esc 取消 / 重置单条与全部。</li>
+    <li>录制器: 单修饰键拒收 / 冲突三选一 / 黑名单拒绑 / danger 条目绑裸键出现 ⚠ 标注 / Esc 取消 / 重置单条与全部。</li>
+    <li>危险档确认框: <span class="kbd">Shift+D</span> / <span class="kbd">Delete</span> (删除, 双入口) / <span class="kbd">Shift+Y</span> (重新校验) / <span class="kbd">Shift+A</span> (强制汇报) 均弹确认框, 默认焦点在「确定」, <span class="kbd">Enter</span> 直接生效, <span class="kbd">Esc</span> 取消; 鼠标右键触发同动作不新增确认框 (重新校验/强制汇报)。</li>
     <li>存储对照实验: 改键保存后 ①刷新生效 ②换浏览器生效 ③浏览器清站点数据后仍生效 (localStorage 方案下此项必然红 —— 定案的反向验证) ④手损 webui-keys.json → WARN + 默认表 + .bak 兜底。</li>
     <li>浏览器保留键: 尝试绑 Ctrl+W/T/N 被面板拒绝; Ctrl+S 在设置页被拦截且不弹浏览器保存框。</li>
   </ul>
@@ -359,19 +371,32 @@
 
 <!-- ═══════════════ 08 ═══════════════ -->
 <section id="s8">
-  <div class="sec-head"><span class="no">08</span><h2>待拍板决策点 (前案 5 项 + 本轮 1 项)</h2></div>
+  <div class="sec-head"><span class="no">08</span><h2>决策点 (六项已全部拍板, 2026-09-30)</h2></div>
   <table>
-    <thead><tr><th class="keep">#</th><th>决策点</th><th>建议案</th><th>依据</th></tr></thead>
+    <thead><tr><th class="keep">#</th><th>决策点</th><th>拍板结果</th><th>备注</th></tr></thead>
     <tbody>
-      <tr><td class="keep">①</td><td>默认键风格: 无修饰单键 vs 全 Alt+ 系</td><td><b>无修饰单键为主</b>, 危险动作 (删除) 走既有确认框</td><td class="dim">上游 qB / Gmail / GitHub 均用单键; 三段屏蔽已兜输入态</td></tr>
-      <tr><td class="keep">②</td><td>光标是否串进成员行</td><td><b>MVP 只走组行线性链</b>, 成员行 vNext</td><td class="dim">虚拟滚动前缀和成本可控, 成员行走查复杂度先摘除</td></tr>
-      <tr><td class="keep">③</td><td>Shift 族次要动作去留</td><td><b>本期砍掉</b>, 键表只留 52+6</td><td class="dim">MVP 收敛是业界常态 (§3.1); 需要时加条目不破架构</td></tr>
-      <tr><td class="keep">④</td><td>面板入口是否加顶栏按钮</td><td><b>不加</b>: <span class="kbd">?</span> 浮层 + 设置页分区</td><td class="dim">顶栏是全 UI 最挤的一条 (搜索帮助轮先例); 帮助浮层是标配入口</td></tr>
-      <tr><td class="keep">⑤</td><td>本期范围</td><td><b>W1-W7 一次做完</b>; 可拆 W1-W4 先行</td><td class="dim">W6 前后端本就一体 (面板是端点唯一消费方), 拆开反而留死代码窗口</td></tr>
-      <tr><td class="keep">⑥</td><td><b>存储定案 (本轮核心)</b></td><td><b>后端独立文件</b> <span class="mono">webui-keys.json</span> (§4.3)</td><td class="dim">§4.2 矩阵: 成熟产品零先例 / 失效通道已实证 / 信息价值错档 vs 仅 ~200 行成本</td></tr>
+      <tr><td class="keep">①</td><td>默认键风格: 无修饰单键 vs 全 Alt+ 系<br><b class="keep">✓ 拍板 v4 (2026-09-30, 终版)</b></td><td><b>无修饰单键为主, 以单手操作为优先</b>; 危险操作一律走<b>二键组合</b> (一个修饰键 + 字母; 非裸键、非三键), 确认框兜底 (默认按钮 = 「确定」, 按 <span class="kbd">Enter</span> 即确认): <b>删除 = <span class="kbd">Shift+D</span></b> (另有 <span class="kbd">Delete</span> 键作为额外删除操作, 无需绑定 —— 删除共两个快捷键入口)、<b>重新校验 = <span class="kbd">Shift+Y</span></b> (验)、<b>强制汇报 = <span class="kbd">Shift+A</span></b> (reAnnounce)</td><td class="dim">用户五轮拍板: ①v1 确认框兜底 → v2 裸键不绑危险+Ctrl+Alt 三键 → v3 单键+Delete → v4 危险档一律二键组合, Delete 保留为额外操作故删除双入口; 二键避开浏览器保留键与既有 Shift 族占用 (Shift+C/H/G/V/R/E/T/F/L/\ 已占)</td></tr>
+      <tr><td class="keep">②</td><td>光标是否串进成员行<br><b class="keep">✓ 拍板 (2026-09-30)</b></td><td><b>按建议案</b>: MVP 只走组行线性链, 成员行 vNext</td><td class="dim">虚拟滚动前缀和成本可控, 成员行走查复杂度先摘除</td></tr>
+      <tr><td class="keep">③</td><td>Shift 族次要动作去留<br><b class="keep">✓ 拍板 (2026-09-30, 改向)</b></td><td><b>保留</b> (否决建议案): E 组 7 条 (Shift+V/R/E/C/H/G + K) 与 F5/F6 (Shift+T / Shift+F) 全部进默认表</td><td class="dim">用户拍板; 与①不冲突 —— Shift 族全部带修饰键, 无一是危险操作</td></tr>
+      <tr><td class="keep">④</td><td>面板入口是否加顶栏按钮<br><b class="keep">✓ 拍板 (2026-09-30)</b></td><td><b>按建议案</b>: 不加, <span class="kbd">?</span> 浮层 + 设置页分区</td><td class="dim">顶栏是全 UI 最挤的一条 (搜索帮助轮先例); 帮助浮层是标配入口</td></tr>
+      <tr><td class="keep">⑤</td><td>本期范围<br><b class="keep">✓ 拍板 (2026-09-30, 改向)</b></td><td><b>取消「一次做完」, 按原拆口分两波</b>: W1-W4 第一波交付「默认键位开箱即用」(含当波守阵, 可单独提交); W5-W7 第二波 (局部作用域 + 自定义面板 + 收尾守阵/走查/回写)</td><td class="dim">用户拍板; 每波独立可验收、可单独提交, 第二波开工时重跑 sync</td></tr>
+      <tr><td class="keep">⑥</td><td><b>存储定案 (本轮核心)</b><br><b class="keep">✓ 拍板 (2026-09-30)</b></td><td><b>按建议案: 后端独立文件</b> <span class="mono">webui-keys.json</span> + GET/PUT <span class="mono">/api/keys</span> (§4.3)</td><td class="dim">§4.2 矩阵: 成熟产品零先例 / 失效通道已实证 / 信息价值错档 vs 仅 ~200 行成本</td></tr>
     </tbody>
   </table>
-  <p class="dim">拍板方式: 逐项确认或整体「按建议案」。①-⑤任一改向都不影响引擎架构; ⑥若改选 localStorage, 走 §4.6 反悔路径, 波次不变仅 W6 缩为面板+适配器换实现。</p>
+  <h3>危险操作清单与确认框标注 (① 拍板 v3 落地)</h3>
+  <p>危险判定口径保留: <b>不可逆</b>、<b>触发远端/批量重活且误触代价高</b>、或<b>静默改变做种语义且无撤销</b> —— 用于确认框接线与面板 ⚠ 标注。逐条盘点 0822 键表 (A-H 组共 52 条默认键 + 6 空位) 后, 落入危险档的如下 (<b>v4 终版</b>: 危险档一律二键组合, 非裸键、非三键; Delete 键保持额外删除操作无需绑定, 故删除为双快捷键入口):</p>
+  <table>
+    <thead><tr><th class="keep">条目</th><th>动作</th><th>默认键 (0822)</th><th>拍板后默认键</th><th>危险理由</th><th>快捷键路径确认框</th></tr></thead>
+    <tbody>
+      <tr><td class="keep">D8</td><td>删除所选…</td><td><span class="kbd">D</span></td><td><b><span class="kbd">Shift+D</span></b> (注册表默认键); 另有 <span class="kbd">Delete</span> 键作为<b>额外删除操作</b>无需绑定 (不占键表槽位、不进注册表与面板改键列表, 引擎里直连既有 <span class="mono">_deleteFlow</span>) —— 删除共两个快捷键入口; 字母 D 释放为空位</td><td>不可逆 (含删除文件选项), 确认框含 HR 风险点名</td><td>两入口照旧走既有确认框 (默认确定 / Enter 确认)</td></tr>
+      <tr><td class="keep">D4</td><td>重新校验</td><td><span class="kbd">C</span></td><td><b><span class="kbd">Shift+Y</span></b> (验; Shift+C 已被复制名称占用)</td><td>全量重读磁盘, 大库上重 IO 且耗时不可中断 (用户点名)</td><td><b>新增</b>: 确认框 (默认确定 / Enter 确认); 鼠标路径不变</td></tr>
+      <tr><td class="keep">D3</td><td>强制汇报</td><td><span class="kbd">F</span></td><td><b><span class="kbd">Shift+A</span></b> (reAnnounce; Shift+F 已被强制开始占用)</td><td>立即向 tracker 发 reannounce, 频繁误触有限流/警告风险</td><td><b>新增</b>: 确认框 (默认确定 / Enter 确认); 鼠标路径不变</td></tr>
+      <tr><td class="keep">F6</td><td>强制开始切换</td><td><span class="kbd">Shift+F</span></td><td>保持 Shift+F</td><td>改变做种行为但可逆</td><td>不加 (可逆)</td></tr>
+      <tr><td class="keep">I1</td><td>超级做种切换</td><td>(空位)</td><td>(空位)</td><td>静默改变做种语义</td><td>— (面板标 danger ⚠)</td></tr>
+      <tr><td class="keep">G6</td><td>设置页 · 放弃改动</td><td>(不绑)</td><td>(不绑)</td><td>无撤销</td><td>— (默认留给鼠标)</td></tr>
+    </tbody>
+  </table>
+  <p class="dim">配套规则 (v4 终版): ① 危险档<b>一律二键组合</b> (一个修饰键+字母; 非裸键、非三键): 删除 <span class="kbd">Shift+D</span> / 重新校验 <span class="kbd">Shift+Y</span> / 强制汇报 <span class="kbd">Shift+A</span>, 均避开浏览器保留键与既有 Shift 族占用 (Shift+C/H/G/V/R/E/T/F/L/\ 已占); <span class="kbd">Delete</span> 键保留为<b>额外删除操作, 无需绑定</b> (直连 <span class="mono">_deleteFlow</span>), 故删除有 Delete 与 Shift+D 两个快捷键入口; 裸键 <span class="kbd">D</span>/<span class="kbd">C</span>/<span class="kbd">F</span> 释放为空位 (面板可自定); ② 面板对 danger 条目行内显示「⚠ 危险操作 (有确认框)」标注, 用户自绑裸键时提示但允许 (确认框兜底); ③ 危险判定口径仅用于确认框接线与面板标注; ④ v2 的 <span class="mono">Ctrl+Alt+F/C/D</span> 三键取消, 不进默认表。</p>
 </section>
 
 <!-- ═══════════════ 09 ═══════════════ -->

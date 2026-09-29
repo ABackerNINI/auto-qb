@@ -33,8 +33,8 @@
 
 ## Open
 
-- [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
 - [26-09-28-webui-keyboard-shortcuts] WEBUI 键盘快捷键(可自定义): 成熟方案调研 + 存储定案 - 前案 26-09-26-0822 (localStorage 预选) 经成熟方案调研与存储对比后被 26-09-28-0354 取代(0822 置 Supers…
+- [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
 - [26-09-23-commands-unified-surface] 项目命令统一调用面 (纯引擎 + 包式配置层) - 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell…
 
 ## Done
