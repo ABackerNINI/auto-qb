@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>危险操作统一收编（简化模型） · 工程计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="dangerous-op-consolidation">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-30-0109">
+<meta name="doc-updated" content="26-09-30-0307">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #111310;
+    --paper: #171a15;
+    --ink: #d7dacd;
+    --ink-dim: #99a091;
+    --ink-faint: #6f7568;
+    --accent: #d9a83f;
+    --accent-dim: rgba(217, 168, 63, .14);
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --mono: "JetBrains Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
+    --sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1260px; margin: 0 auto; padding: 0 40px; }
+
+  /* ---------- 封面 ---------- */
+  .cover { padding: 96px 0 72px; border-bottom: 1px solid var(--line-strong); }
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .cover h1 {
+    font-size: 52px; font-weight: 600; line-height: 1.12;
+    letter-spacing: -.02em; margin: 22px 0 18px;
+  }
+  .cover .sub { font-size: 19px; color: var(--ink-dim); max-width: 46em; line-height: 1.6; }
+  .cover-meta {
+    display: flex; gap: 36px; margin-top: 44px; flex-wrap: wrap;
+  }
+  .cover-meta div { font-size: 13px; }
+  .cover-meta .k {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    color: var(--ink-faint); text-transform: uppercase; display: block; margin-bottom: 3px;
+  }
+  .cover-meta .v { color: var(--ink); font-family: var(--mono); white-space: nowrap; }
+
+  /* ---------- 双栏布局 ---------- */
+  .layout { display: grid; grid-template-columns: 216px 1fr; gap: 56px; padding-top: 8px; }
+  aside { align-self: start; position: sticky; top: 0; padding: 40px 0 40px; }
+  aside .toc-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    color: var(--ink-faint); text-transform: uppercase; margin-bottom: 14px;
+  }
+  aside nav a {
+    display: block; color: var(--ink-dim); text-decoration: none;
+    font-size: 13.5px; padding: 5px 0 5px 14px; border-left: 1px solid var(--line);
+    line-height: 1.45;
+  }
+  aside nav a:hover { color: var(--ink); border-left-color: var(--line-strong); }
+  aside nav a .n { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-right: 8px; }
+
+  main { padding: 40px 0 0; min-width: 0; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-bottom: 88px; scroll-margin-top: 32px; }
+  .sec-head { margin-bottom: 28px; }
+  .sec-no {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+    color: var(--accent); display: block; margin-bottom: 8px;
+  }
+  .sec-head h2 { font-size: 28px; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+  .sec-head .sec-rule { width: 64px; height: 1px; background: var(--line-strong); margin-top: 16px; }
+
+  h3 { font-size: 18px; font-weight: 600; margin: 40px 0 14px; line-height: 1.35; }
+  h3 .hn { font-family: var(--mono); font-size: 13px; color: var(--ink-faint); margin-right: 10px; font-weight: 400; }
+  p { margin-bottom: 14px; max-width: 74ch; }
+  p.wide { max-width: none; }
+  .dim { color: var(--ink-dim); }
+  strong { font-weight: 600; color: var(--ink); }
+  em { font-style: normal; color: var(--accent); }
+  code {
+    font-family: var(--mono); font-size: .86em; background: var(--paper);
+    border: 1px solid var(--line); padding: 1px 5px; border-radius: 2px;
+    color: var(--ink); white-space: nowrap;
+  }
+  ul.plain { list-style: none; margin: 0 0 14px; max-width: 74ch; }
+  ul.plain li { padding: 6px 0 6px 18px; position: relative; }
+  ul.plain li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 7px; height: 1px; background: var(--ink-faint); }
+  ol.steps { list-style: none; counter-reset: st; margin: 0 0 14px; max-width: 74ch; }
+  ol.steps li { counter-increment: st; padding: 8px 0 8px 34px; position: relative; }
+  ol.steps li::before {
+    content: counter(st, decimal-leading-zero); position: absolute; left: 0; top: 10px;
+    font-family: var(--mono); font-size: 11.5px; color: var(--accent);
+  }
+
+  /* ---------- 表格 ---------- */
+  .tbl-wrap { margin: 18px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; line-height: 1.55; }
+  th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 400; text-align: left;
+    padding: 8px 14px 8px 0; border-bottom: 1px solid var(--line-strong);
+  }
+  td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td .path { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+  td.op { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .lvl { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; white-space: nowrap; }
+  .lvl.hi { color: var(--accent); }
+  .lvl.mid, .lvl.no { color: var(--ink-faint); }
+  tr.hl td { background: var(--accent-dim); }
+
+  /* ---------- 引用块 ---------- */
+  .note {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    padding: 14px 20px; margin: 20px 0; max-width: 74ch;
+    font-size: 14px; color: var(--ink-dim); background: var(--paper);
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- 代码块 ---------- */
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    background: var(--paper); border: 1px solid var(--line);
+    padding: 16px 20px; overflow-x: auto; margin: 16px 0 20px; color: var(--ink);
+  }
+  pre .c { color: var(--ink-faint); }
+
+  /* ---------- 图 ---------- */
+  figure { margin: 24px 0 10px; border: 1px solid var(--line); background: var(--paper); padding: 20px; }
+  figcaption {
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint);
+    letter-spacing: .06em; margin-top: 12px;
+  }
+  figure svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: var(--mono); }
+  svg .t-dim { fill: var(--ink-faint); }
+  svg .t-ink { fill: var(--ink); }
+  svg .t-acc { fill: var(--accent); }
+  svg .ln { stroke: var(--line-strong); fill: none; }
+  svg .ln-acc { stroke: var(--accent); fill: none; }
+  svg .box { fill: none; stroke: var(--line-strong); }
+
+  /* ---------- 分期卡片 ---------- */
+  .phase { border: 1px solid var(--line); margin-bottom: 22px; }
+  .phase-head {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--paper);
+  }
+  .phase-head .pid { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: .08em; white-space: nowrap; }
+  .phase-head .pt { font-size: 16px; font-weight: 600; }
+  .phase-head .pr { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); white-space: nowrap; }
+  .phase-body { padding: 16px 20px 18px; font-size: 14px; }
+  .phase-body p { max-width: none; }
+  .phase-body table { font-size: 13px; }
+  .phase-body td, .phase-body th { padding: 7px 14px 7px 0; }
+
+  /* ---------- 决策点 ---------- */
+  .decide { border: 1px solid var(--line); padding: 16px 20px; margin-bottom: 14px; background: var(--paper); }
+  .decide .q { font-weight: 600; font-size: 14.5px; margin-bottom: 6px; }
+  .decide .q .dn { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 10px; }
+  .decide .a { font-size: 13.5px; color: var(--ink-dim); }
+  .decide .a b { color: var(--accent); font-weight: 600; }
+
+  /* ---------- colophon ---------- */
+  .colophon {
+    border-top: 1px solid var(--line-strong); margin-top: 40px; padding: 32px 0 72px;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-faint); line-height: 2;
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { position: static; padding: 20px 0; }
+    aside nav { display: none; }
+    .cover h1 { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+  <!-- ================= 封面 ================= -->
+  <header class="cover">
+    <div class="kicker">Auto-QB · 工程计划 · Plan Draft v2</div>
+    <h1>危险操作统一收编<br>简化模型</h1>
+    <p class="sub">不建全局队列。单一写线程 + 阻塞执行体已经是危险操作的天然串行器，本计划只补三处提交点检查与一处闸门复核，把 WEB 来源接到规则侧已有的在途登记 / 限频 / 去重体系上，并以此落地 WEBUI 右键「跳检」。前版（同日 01:09）的全局队列模式经评审否决，否决记录见 §02。</p>
+    <div class="cover-meta">
+      <div><span class="k">日期</span><span class="v">2026-09-30</span></div>
+      <div><span class="k">分支</span><span class="v">develop</span></div>
+      <div><span class="k">状态</span><span class="v">草案 v2 · 待评审</span></div>
+      <div><span class="k">涉及</span><span class="v">rules / webui（零配置键）</span></div>
+      <div><span class="k">起草</span><span class="v">ZCode (AI) · 待用户拍板 §06</span></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- ================= TOC ================= -->
+    <aside>
+      <div class="toc-title">目录 · Contents</div>
+      <nav>
+        <a href="#s1"><span class="n">01</span>背景与现状</a>
+        <a href="#s2"><span class="n">02</span>否决记录：全局队列模式</a>
+        <a href="#s3"><span class="n">03</span>设计方案：提交点检查</a>
+        <a href="#s4"><span class="n">04</span>分期实施 P1–P2</a>
+        <a href="#s5"><span class="n">05</span>测试 · 成本 · 回滚</a>
+        <a href="#s6"><span class="n">06</span>待拍板决策点</a>
+      </nav>
+    </aside>
+
+    <main>
+
+    <!-- ================= 01 背景与现状 ================= -->
+    <section id="s1">
+      <div class="sec-head">
+        <span class="sec-no">01 / BACKGROUND</span>
+        <h2>背景与现状</h2>
+        <div class="sec-rule"></div>
+      </div>
+
+      <h3><span class="hn">1.1</span>线程模型要点：单一写线程 + 唯一命令消费点 = 天然串行器</h3>
+      <p>本仓库的核心线程契约是<strong>单一写线程</strong>：所有对 qB 的写操作、任务队列结构与 state_file 的修改都只发生在主循环线程（<span class="path">taskqueue.py:4</span>、<span class="path">webui/runtime.py:21-26</span>）；WEB 线程只读快照 + 投递命令。主循环内三条时间线：<strong>同步线</strong>（1.5s，只刷快照，<span class="path">qbmanager.py:619</span>）、<strong>任务线</strong>（2s，跑任务，<span class="path">qbmanager.py:632</span>）、<strong>命令线</strong>（主循环<strong>每轮顶部</strong> drain，<span class="path">qbmanager.py:422-423</span>）。</p>
+      <p>命令线由 wake_event 驱动：WEB 提交即唤醒主循环（<span class="path">runtime.py:529</span>），消费延迟 ≈ 0（<span class="path">qbmanager.py:100-124</span> <code>_wait_next</code>），且改状态的命令当轮强制补刷新把真值推进快照（P0-5，<span class="path">qbmanager.py:435</span>）。两条关键推论：</p>
+      <div class="note"><b>推论一（串行器）：</b>命令消费点全仓唯一（<span class="path">qbmanager.py:423</span>）。凡「一次阻塞跑完」的执行体——跳检全程约 6s（<code>_poll_until</code> 内是 <code>time.sleep</code>，<span class="path">skip_checking.py:21</span>）——执行期间不会有任何其它写操作插入。危险操作的互斥，一半由这个架构事实免费提供。<b>推论二（及时性现状）：</b>WEB 操作今天就是近零延迟执行的；任何新机制若把执行推迟到周期性节拍上，都是回退。</div>
+
+      <h3><span class="hn">1.2</span>实证冲突点（现状即已存在，非未来 hypothetical）</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th style="width:32px">#</th><th style="width:250px">冲突</th><th>机理与后果</th></tr>
+          <tr>
+            <td class="op">C1</td>
+            <td><strong>WEB 校验 × 规则校验</strong><br><span class="path">commands.py:304-307</span></td>
+            <td>WEB <code>recheck_torrent</code> 只判「hash 在快照中」，不查规则侧在途登记 <code>_active_checks</code>（<span class="path">taskqueue.py:141</span>）、不查失败冷却 <code>RECHECK_FAIL_LIMIT</code>（<span class="path">full_checking.py:34-52</span>）。规则校验进行中用户再发 recheck → qB <strong>重启</strong>校验 → 规则轮询子任务看到进度回落，可能触发 <code>CHECK_START_GIVEUP</code>（600s 宽限）误判失败、污染当日失败计数。<strong>反向</strong>：WEB 校验不登记，规则决策链 1.5「组内校验串行化」（<code>active_check_hashes()</code>）看不见它。</td>
+          </tr>
+          <tr>
+            <td class="op">C2</td>
+            <td><strong>WEB 删除 × 跳检的陈旧快照竞态</strong><br><span class="path">skip_checking.py:39-215</span></td>
+            <td>⚠ <strong>v2 机理修正</strong>：跳检执行体一次阻塞跑完（1.1 推论一），<strong>窗口期 WEB 命令不可能插入执行</strong>——v1 把机理写成「窗口期插入致重加确认失败」是错的。真实竞态在边界：跳检任务按上一轮快照创建，闸门（<span class="path">skip_checking.py:124-152</span>）读陈旧记录；WEB 删除在循环顶部先执行、qB 端尚未生效时，跳检继续走 导出→备份→删除（空操作）→确认消失→重加——<strong>把用户刚删的种子复活</strong>；删除已生效则导出失败、干净放弃（噪声失败）。</td>
+          </tr>
+          <tr>
+            <td class="op">C3</td>
+            <td><strong>WEB 汇报 × 规则限频</strong><br><span class="path">transfer.py:34-45</span></td>
+            <td>规则侧 reannounce 按种子计 <code>state["reannounce_ts"]</code> 强制 600s 最小间隔；WEB 侧 <code>reannounce_torrent</code> 独立计数、不走这套限频。用户 WEB 点一次 + 规则窗口外触发一次 → 同一种子短时间内连续两次 announce，只能靠 qB/tracker 端 min-interval 兜底。</td>
+          </tr>
+          <tr>
+            <td class="op">C4</td>
+            <td><strong>WEB 移动/批量无在途感知</strong><br><span class="path">commands.py:354-361</span></td>
+            <td><code>set_torrent_location</code> 与 <code>bulk_torrents</code> 对移动/删除/校验无冷却、无限频、无在途互斥。规则 <code>MoveToAction</code>（<span class="path">transfer.py:10-23</span>）不判 save_path 是否已在目标，仅靠规则级 execute_once/cooldown 兜底。v2 处置：接受现状（§3.5）。</td>
+          </tr>
+        </table>
+      </div>
+
+      <h3><span class="hn">1.3</span>现有防护盘点：规则侧完整，WEB 侧只有一条守阵</h3>
+      <p>规则侧防护链相当完整：决策链闸门（仅暂停中未完成种子、组内整组判定）、<code>_active_checks</code> 在途去重（<span class="path">taskqueue.py:141</span>）、决策链 1.5 组内校验串行化、<code>RECHECK_FAIL_LIMIT</code> 3 次/日失败冷却、<code>skip_check_day</code> 跨规则同日去重、reannounce 600s 限频。WEB 侧只有一条「hash 在快照中」守阵。统一的方向不是新基建，而是<strong>把 WEB 提交点接到规则侧已有的登记 / 限频 / 去重上</strong>——这正是 §03 的全部内容。</p>
+    </section>
+
+    <!-- ================= 02 否决记录 ================= -->
+    <section id="s2">
+      <div class="sec-head">
+        <span class="sec-no">02 / REJECTED</span>
+        <h2>否决记录：全局操作队列模式（v1 → v2）</h2>
+        <div class="sec-rule"></div>
+      </div>
+      <p>v1（同日 01:09 版）设计了「六队列（skip_check/recheck/delete/move/add/reannounce）+ 全局执行槽 max_running + 跨队列 hash 锁 + 失败 halted + 持久化恢复 + 延迟回执 + 队列面板」的完整基建，分 M1–M4 四期。经评审否决，本版替代；v1 的五个决策点（D1 max_running / D2 删除重启挂起 / D3 延迟回执 / D4 enabled / D5 priority）随之全部废止。否决原因：</p>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th style="width:32px">#</th><th style="width:220px">原因</th><th>一句话机理</th></tr>
+          <tr><td class="op">1</td><td><strong>执行槽的保护是虚的</strong></td><td>重 I/O 都发生在槽让出之后（recheck/skip_check 的 inflight、move 的 qB 异步搬移），槽实际串行化的只是毫秒级 API 提交；反而引入跨队列队头阻塞——两个卡死的 qB 调用占满槽，六个队列全部停摆。</td></tr>
+          <tr><td class="op">2</td><td><strong>泵挂任务线造成延迟回退</strong></td><td>WEB 提交本可 wake 即时消费（<span class="path">runtime.py:529</span> → <span class="path">qbmanager.py:422</span>），挂 2s 任务线后最坏等 2s+——仓库已有的唤醒机制被绕开（1.1 推论二）。</td></tr>
+          <tr><td class="op">3</td><td><strong>move 的「短操作」分类站不住</strong></td><td><code>setLocation</code> 毫秒返回、真搬移在 qB 后台异步；按「API 返回即终态」，队列内串行挡不住 qB 端并发搬移——声称要防的资源冲击照样发生。</td></tr>
+          <tr><td class="op">4</td><td><strong>bulk 多 hash 粒度无解</strong></td><td>hash 锁全有或全无 → 凑不齐全部空闲即永久推迟（饥饿）；失败 / halted / 回执都要为多 hash 额外定义一套粒度。</td></tr>
+          <tr><td class="op">5</td><td><strong>用户操作排队是自造问题</strong></td><td>直接执行下，「用户操作优先于规则」（v1 D5）这个问题根本不存在；排队才制造出饥饿与优先级需求。</td></tr>
+          <tr><td class="op">6</td><td><strong>复杂度与收益不匹配</strong></td><td>六队列 + 持久化恢复 + 延迟回执 + 面板 ≈ 300–400 行新模块 + 四期；而四个实证冲突用三处提交点检查 + 一处闸门复核即可覆盖（§03）。</td></tr>
+          <tr><td class="op">7</td><td><strong>队列的前提不成立</strong></td><td>「让出执行槽」暗示长操作非阻塞化；当前模型下阻塞执行体 + 单一写线程本身就是串行器（1.1 推论一）——队列是在给已有的性质再买一遍。</td></tr>
+        </table>
+      </div>
+      <p class="dim">从 v1 保留的资产：C1–C4 取证与冲突清单（C2 机理已修正，见 §1.2）、操作危险度盘点（谁该被管：跳检 / 校验 / 删除 / 移动 / 添加 / 汇报）、「业务幂等闸门留在提交侧」的职责划分。</p>
+    </section>
+
+    <!-- ================= 03 设计方案 ================= -->
+    <section id="s3">
+      <div class="sec-head">
+        <span class="sec-no">03 / DESIGN</span>
+        <h2>设计方案：三处提交点检查 + 一处闸门复核</h2>
+        <div class="sec-rule"></div>
+      </div>
+
+      <h3><span class="hn">3.1</span>核心原则：不建新基建，只补提交点动作</h3>
+      <ol class="steps">
+        <li><strong>在途可见</strong>：长操作把「我在途」写进已有登记（<code>_active_checks</code> 先例）；短操作提交点<strong>只读查询</strong>，拒已在途、不挡其它。</li>
+        <li><strong>动手前复核</strong>：长操作从「快照时代的决定」到真正动手之间，用实时状态复核一次——快照龄内的外部变化（用户删除等）在此被拦截。</li>
+        <li><strong>计数共享</strong>：有速率语义的操作（reannounce），两来源读写<strong>同一份</strong>计数，而不是各记各的。</li>
+      </ol>
+      <figure>
+        <svg viewBox="0 0 1120 316" xmlns="http://www.w3.org/2000/svg" font-size="12">
+          <!-- 命令线 -->
+          <rect class="box" x="20" y="24" width="1080" height="82"/>
+          <text class="t-acc" x="40" y="50" font-size="12.5">命令线 · 每轮循环顶部 · wake 驱动（延迟 ≈ 0，qbmanager.py:422-423）</text>
+          <rect class="box" x="40" y="62" width="150" height="32"/>
+          <text class="t-ink" x="115" y="82" text-anchor="middle" font-size="12">WEB 提交</text>
+          <line class="ln" x1="190" y1="78" x2="280" y2="78"/>
+          <rect class="box" x="280" y="62" width="260" height="32"/>
+          <text class="t-acc" x="410" y="82" text-anchor="middle" font-size="12">① R1 查 _active_checks / checking 态</text>
+          <line class="ln" x1="540" y1="78" x2="610" y2="78"/>
+          <rect class="box" x="610" y="62" width="200" height="32"/>
+          <text class="t-acc" x="710" y="82" text-anchor="middle" font-size="12">② R3 查 reannounce_ts</text>
+          <line class="ln" x1="810" y1="78" x2="880" y2="78"/>
+          <rect class="box" x="880" y="62" width="150" height="32"/>
+          <text class="t-ink" x="955" y="82" text-anchor="middle" font-size="12">执行写操作</text>
+          <!-- 任务线 -->
+          <rect class="box" x="20" y="126" width="1080" height="100"/>
+          <text class="t-acc" x="40" y="152" font-size="12.5">任务线 · main_tick 2s（qbmanager.py:632）</text>
+          <rect class="box" x="40" y="164" width="170" height="32"/>
+          <text class="t-ink" x="125" y="184" text-anchor="middle" font-size="12">规则跳检任务</text>
+          <line class="ln" x1="210" y1="180" x2="300" y2="180"/>
+          <rect class="box" x="300" y="164" width="180" height="32"/>
+          <text class="t-acc" x="390" y="184" text-anchor="middle" font-size="12">③ R2 实时复核</text>
+          <line class="ln" x1="480" y1="180" x2="560" y2="180"/>
+          <rect class="box" x="560" y="164" width="300" height="32"/>
+          <text class="t-ink" x="710" y="184" text-anchor="middle" font-size="12">阻塞窗口 ~6s（删除→轮询→重加）</text>
+          <text class="t-dim" x="560" y="216" font-size="11">窗口期其它命令只能排队 —— 线程即串行器（1.1 推论一）；窗口结束后命令正常消费</text>
+          <!-- 同步线 -->
+          <rect class="box" x="20" y="246" width="1080" height="52"/>
+          <text class="t-acc" x="40" y="270" font-size="12.5">同步线 · 1.5s 只刷快照（qbmanager.py:619）</text>
+          <text class="t-dim" x="40" y="288" font-size="11">checking 态进快照 → WEBUI 种子列表可见校验在途；P0-5：命令改状态后当轮强制补刷新（qbmanager.py:435）</text>
+        </svg>
+        <figcaption>FIG.1 — 简化模型的全部改动点：命令线上两个只读检查（①②）、任务线上一次实时复核（③）。无新模块、无新线程、无新节拍。</figcaption>
+      </figure>
+
+      <h3><span class="hn">3.2</span>R1 — WEB recheck 接入校验在途体系（修 C1，双向）</h3>
+      <p><strong>P1 最小版（提交点只读检查）</strong>：<code>recheck_torrent</code> handler 提交前加判——hash ∈ <code>_active_checks</code> 或快照 state 属 checking 类 → 回执「校验进行中」拒绝，qB 不重启校验。C1 的 WEB→规则半边当期闭合，全部代价是一次集合查询。</p>
+      <p><strong>P2 全收编（D1-A）</strong>：WEB recheck handler 改调 full_checking 的提交路径（提交 recheck + check 轮询子任务 + <code>_active_checks</code> 登记 + 失败冷却），source 标记 <code>web</code>。免费获得：规则决策链 1.5 经 <code>active_check_hashes()</code> 看见 WEB 校验（反向闭合）；3 次/日失败冷却统一计数；校验完成后轮询 FINISHED 释放在途登记（<span class="path">taskqueue.py</span> kind=="check" 既有语义）。唯一适配点：check 轮询子任务的 origin 重入队语义（<span class="path">full_checking.py:176</span>）对 web 来源退化为「无 origin，FINISHED 即消亡」。</p>
+
+      <h3><span class="hn">3.3</span>R2 — 跳检闸门后、动手前的实时复核（修 C2）</h3>
+      <p>位置：前置闸门 <code>_skip_gates</code> 通过后、<strong>导出之前</strong>（skip_checking 阶段 1 与 2 之间）。动作：<code>torrents_info(hash)</code> 重拉一次实时状态；种子已不在 → <code>ActionResult.skip("种子已被移除(可能被用户删除), 放弃跳检")</code>——发生在备份与删除之前，<strong>零副作用</strong>，无孤儿备份。</p>
+      <p>效果：消灭「按陈旧快照执行」这个主要形态；竞态窗口从快照龄（≤2s）压缩到「复核→删除」的毫秒级缝隙（qB 删除生效延迟），且残余方向安全（最坏导出失败、干净放弃）。跳检是天级低频操作，多一次 API 调用成本可忽略。</p>
+
+      <h3><span class="hn">3.4</span>R3 — WEB reannounce 对齐 600s 限频（修 C3）</h3>
+      <p>WEB handler 提交点查 <code>state["reannounce_ts"]</code>：窗口内 → 回执「N 秒前刚汇报过，稍后再试」拒绝；执行成功后写<strong>同一份</strong>计数。两来源共享一个窗口，不再依赖 tracker min-interval 兜底。</p>
+
+      <h3><span class="hn">3.5</span>C4 — 接受现状（记为已知限制）</h3>
+      <p>move 幂等可逆、规则侧已有 execute_once/cooldown、WEB 移动是用户显式动作且即时回执——维持现状。若未来实证冲击（做种速度下滑 / 移动堆积），再单独立项「moving 态 inflight 感知」：判定材料现成（<span class="path">record.py:231</span> state_enum，版本无关的状态类别判定）。本计划不预支。</p>
+
+      <h3><span class="hn">3.6</span>WEBUI 右键「跳检」（需求场景落地）</h3>
+      <p>WEB 命令表加一项 → handler 包装现有 <code>_execute_skip_checking</code> 执行体（source=web）。天然性质，无需新机制：命令在主循环线程执行 → 与规则跳检<strong>天然串行</strong>（线程即队列）；<code>skip_check_day</code> 跨来源去重免费；阻塞 ~6s 期间其它 WEB 命令排队等待——与规则跳检执行时的现状一致。前端：右键菜单项 + 危险确认框（跳检清空本地统计，须显式确认）。前置依赖：R2 先落地（实时复核同样保护 WEB 触发的跳检）。</p>
+
+      <h3><span class="hn">3.7</span>可选：在途操作只读视图（D2）</h3>
+      <p><code>GET /api/inflight</code> 只读端点：列 <code>_active_checks</code>（+ 若实现，跳检窗口标记）。这是 v1「队列面板」的降级替代。<strong>倾向：不做</strong>——校验在途在种子列表 checking 态已可见，跳检窗口 6s 且天级低频；等真实需要再立项。</p>
+
+      <h3><span class="hn">3.8</span>红线（随本计划入档）</h3>
+      <div class="note"><b>阻塞执行体 + 单一写线程是当前安全模型的一半。</b>跳检窗口的互斥 = 主循环被阻塞（1.1 推论一）。任何把长操作改成非阻塞 / 分阶段 / 独立线程的优化，<strong>必须同步</strong>把「在途标记」升级为提交点强制检查的互斥层，否则 C1/C2 类竞态以新形态回归。新来源（HR 联动 / 外部 API / 定时任务）接入一律走同一套提交点检查，不开旁路。</div>
+
+      <h3><span class="hn">3.9</span>非目标（明确排除）</h3>
+      <ul class="plain">
+        <li>不建队列模块 / 执行槽 / 延迟回执改造 / 操作优先级——v1 基建全部不做（§02）。</li>
+        <li>零新增配置键（<code>validate_config</code> 与 <code>schema.py</code> 无改动）、零新增线程、零 state_file schema 变更。</li>
+        <li>不改规则决策链业务语义（哪些种子该跳检 / 校验的判定逻辑不动）；delete/move/add 的规则侧行为不变。</li>
+      </ul>
+    </section>
+
+    <!-- ================= 04 分期实施 ================= -->
+    <section id="s4">
+      <div class="sec-head">
+        <span class="sec-no">04 / ROADMAP</span>
+        <h2>分期实施</h2>
+        <div class="sec-rule"></div>
+      </div>
+      <p>排序原则：先低风险提交点检查、后收编与需求落地；每期独立可交付、可回滚。对比 v1 的 M1–M4：原 M1 框架期整体取消，M2 收编 / M3 右键跳检 / M4 汇报对齐压缩为下述两期。</p>
+
+      <div class="phase">
+        <div class="phase-head"><span class="pid">P1</span><span class="pt">提交点检查</span><span class="pr">低风险 · 现有文件内小改</span></div>
+        <div class="phase-body">
+          <table>
+            <tr><th style="width:90px">范围</th><td>R2 跳检闸门实时复核（<span class="path">skip_checking.py</span>）+ R3 WEB reannounce 600s 对齐（<span class="path">commands.py</span>）+ R1 最小版 WEB recheck 提交点拒绝（<span class="path">commands.py</span>）。</td></tr>
+            <tr><th>价值</th><td>C1 半边 + C2 + C3 当期闭合；P2 右键跳检的前置就绪。</td></tr>
+            <tr><th>验收</th><td>① 跳检任务运行前种子被 WEB 删除 → skip 干净放弃，无复活、无孤儿备份；② 正常跳检 / 校验 / 汇报路径回归不变；③ 规则校验在途时 WEB 再发 recheck → 拒绝回执，qB 不重启校验；④ WEB 汇报后 600s 内任一来源再汇报 → 拒绝回执含剩余秒数。</td></tr>
+            <tr><th>回滚</th><td>三个 R 各自独立 commit，单点 revert 即可。</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="phase-head"><span class="pid">P2</span><span class="pt">收编与需求落地</span><span class="pr">WEB recheck 收编 + 右键跳检</span></div>
+        <div class="phase-body">
+          <table>
+            <tr><th style="width:90px">范围</th><td>R1 全收编（若 D1=A）：WEB recheck 走 full_checking 提交路径，web 来源适配（无 origin 消亡）；WEBUI 种子右键「跳检」命令 + 前端菜单与确认框；（若 D2）<code>GET /api/inflight</code> 最小只读视图。</td></tr>
+            <tr><th>价值</th><td>C1 双向闭环（决策链 1.5 可见 WEB 校验、失败冷却统一）；原需求「右键跳检」落地——接入成本只剩一次 handler 包装。</td></tr>
+            <tr><th>验收</th><td>① WEB 校验计入 <code>_active_checks</code> → 规则决策链组内串行化可见；② WEB 校验失败计入 3 次/日冷却（D1=A）；③ 右键跳检与规则跳检同日去重共享、执行天然串行；④ check 轮询对 web 来源 FINISHED 即消亡，无 origin 重入队副作用。</td></tr>
+            <tr><th>回滚</th><td>R1-full 与右键跳检独立成 commit。</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 05 测试与成本 ================= -->
+    <section id="s5">
+      <div class="sec-head">
+        <span class="sec-no">05 / TESTING</span>
+        <h2>测试 · 成本 · 回滚</h2>
+        <div class="sec-rule"></div>
+      </div>
+      <h3><span class="hn">5.1</span>测试计划（新增用例同步进各测试文件头「测试计划」清单）</h3>
+      <ul class="plain">
+        <li><strong>test_skip_checking 扩展</strong>：闸门复核——任务运行前种子已消失 → skip、无副作用、无孤儿备份；正常跳检路径回归对照。</li>
+        <li><strong>test_full_checking 扩展</strong>（P2）：web 来源提交 → 登记 / 冷却计数 / 轮询 FINISHED 消亡、无 origin 副作用。</li>
+        <li><strong>WEBUI commands 测试扩展</strong>：recheck 拒绝路径（在途时）；reannounce 600s 拒绝路径 + 执行后写同一份计数。</li>
+        <li><strong>回归</strong>：现有 test_skip_checking / test_full_checking 全绿 + <code>commands run test.quick</code>。</li>
+      </ul>
+      <h3><span class="hn">5.2</span>成本与风险</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th style="width:200px">项</th><th>评估</th></tr>
+          <tr><td>代码量</td><td>预计 ≤ 150 行含测试；全部落在现有 handler / 闸门 / 动作文件。无新模块、无配置键、无持久化变更、无迁移。</td></tr>
+          <tr><td>行为变化</td><td>仅两处显式收紧：WEB recheck 会被「校验进行中」拒绝；WEB reannounce 受 600s 窗口约束。均为冲突修复的本意。</td></tr>
+          <tr><td>残余风险</td><td>R2 复核后到删除之间的毫秒级缝隙（qB 删除生效延迟）依旧存在，方向安全（最坏导出失败干净放弃）；如未来要彻底闭合，在重加前再查一次即可，不预支。</td></tr>
+          <tr><td>回滚</td><td>每 R 独立 commit；无状态迁移，revert 即回到现状。</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= 06 决策点 ================= -->
+    <section id="s6">
+      <div class="sec-head">
+        <span class="sec-no">06 / DECISIONS</span>
+        <h2>待拍板决策点</h2>
+        <div class="sec-rule"></div>
+      </div>
+      <p>三项建议已有默认倾向，开工前请逐项确认或改判：</p>
+      <div class="decide">
+        <div class="q"><span class="dn">D1</span>WEB recheck 收编深度？</div>
+        <div class="a">建议 <b>A：全收编</b>——走 full_checking 提交路径，获得登记 + 冷却 + 决策链可见性；行为变化是 WEB 校验也计入 3 次/日失败冷却（正是防滥用语义）。B：维持 P1 最小版（只拒绝已在途，不登记不冷却），C1 反向半边不闭合。</div>
+      </div>
+      <div class="decide">
+        <div class="q"><span class="dn">D2</span>在途操作只读视图做不做？</div>
+        <div class="a">建议 <b>不做</b>：校验在途在种子列表 checking 态已可见，跳检窗口 6s 且天级低频。若要做取最小版（只列 _active_checks 的只读端点）。</div>
+      </div>
+      <div class="decide">
+        <div class="q"><span class="dn">D3</span>C4（move/bulk 无在途感知）接受现状？</div>
+        <div class="a">建议 <b>接受</b>并记为已知限制；实证冲击后再立「moving 态 inflight 感知」专项（材料现成，<span class="path">record.py:231</span>）。</div>
+      </div>
+    </section>
+
+    <!-- ================= colophon ================= -->
+    <div class="colophon">
+      auto-qb · memory-bank/plans/26-09-30-0109-plan-dangerous-op-consolidation.html<br>
+      v2 完全重写（26-09-30 02:43）：否决 v1 全局队列模式，否决原因见 §02 · 代码事实核对截至 develop@0e43bf7d（于 c76469a3 取证复核；0e43bf7d 为净零行符号替换，引用锚点行号未漂移）<br>
+      起草 ZCode (AI) · 评审通过后按 P1 → P2 顺序实施
+    </div>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>

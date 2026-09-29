@@ -28,6 +28,7 @@
 ## Open
 
 - [26-09-30-0240] [修改计划 · HR 在线核实三参数解耦 — 拉取间隔 / 复用窗 / 立即拉取](26-09-30-0240-plan-hr-reuse-window-decouple.html) — `backend-partial-hr-verify`
+- [26-09-30-0109] [危险操作统一收编（简化模型） · 工程计划 · auto-qb](26-09-30-0109-plan-dangerous-op-consolidation.html) — `dangerous-op-consolidation`
 - [26-09-28-0354] [计划 · WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)](26-09-28-0354-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
 - [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
 
