@@ -4,6 +4,7 @@
 **Added:** 2026-09-27
 **Updated:** 2026-09-27
 **Summary:** 等级语义收窄定案(WARNING=纯排障/ERROR=真正危险), 表 A 升 20 处 ERROR、表 B 降 13 处 INFO、表 D 反向 1 处, notify.min_level 默认 WARNING→ERROR; test.full 1685 passed(2 failed 为既有 docs 守阵, 已入池)。
+**Topics:** log-level-notify-error
 
 ## 原始请求
 

@@ -4,6 +4,7 @@
 **Added:** 2026-09-29
 **Updated:** 2026-09-29
 **Summary:** HR 在线核实站点接入热重载后取数线程永不启动(两缺陷: hr.apply 只挂 L1 分支而站点接入是 L0; HrRuntime.apply 的 running 守卫挡住「从无到有」)。修复: apply 每次热重载都调 + 内部无变化短路 + enabled 必补启动; 反转钉反语义的旧守阵。test.full 1741 passed / 3 skipped (90%)。
+**Topics:** backend-partial-hr-verify
 
 ## 原始请求
 

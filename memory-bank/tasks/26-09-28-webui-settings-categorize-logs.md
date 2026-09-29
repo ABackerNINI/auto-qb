@@ -4,6 +4,7 @@
 **Added:** 2026-09-28
 **Updated:** 2026-09-28
 **Summary:** 26-09-26 分组合并(1905d6d)的回归修复 —— log/web/notify 三段去 open=True 恢复成块(「常规/日志/WebUI/通知」各自显标题, 不折叠保持平铺诉求), label 恢复 日志/WebUI/通知 + 补回旧分组 help; 运行日志块默认折叠、首次展开才拉 /api/log; hubHits/hubFieldCount 递归适配; test_config_schema_endpoint 钉"尾三段不声明 open"; 三套 UI 经 shared 层一处生效。全量 1815 passed + 3 skipped, TOTAL 91.39%。
+**Topics:** webui-settings-group-merge
 
 ## 原始请求
 

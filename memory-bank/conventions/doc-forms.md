@@ -53,10 +53,13 @@
 
 映射: issue `Fixed`→Done · `WontFix`→Dropped · `Duplicate`→Superseded; 档案 `Pending`→Open · `Completed`→Done · `Abandoned`→Dropped; plan 待拍板 = Open / 实施中 = In Progress / 被新版取代 = Superseded; report 恒 `Done` (快照完成即终态)。
 
-## 索引与专题视图 (生成物, 不要手改)
+## 索引与专题视图 (生成物 / 查询, 不要手改)
 
 - `plans/_index.md` · `reports/_index.md` —— `gen_docs_index.py` 按状态分区生成 (行 = 类型 · 简述 · 链接)。
-- `_doc-map.md` —— `gen_doc_map.py`: **一行一专题**, 列出该专题名下的 issue / 计划 / 报告 / 档案及状态; `In Progress` 超 30 天打陈旧标记。
+- 跨形态专题视图 —— `commands run kb.docmap` **查询现算, 不落盘** (2026-09-29 起 `_doc-map.md` 物化退役,
+  写热点 + `index-auto` cap 反复触顶): **一行一专题**, 列出该专题名下的 issue / 计划 / 报告 / 档案及状态。
+  默认只展**活跃**专题全行 (有任一未完结件), 全完结专题轮转成名录; `--topic <key>` 单专题下钻
+  (出件前先查主键), `--all` 全量, `--check` 缺主键判红, `--forks` 分叉提示。
 - `issues/_index.md` · `tasks/_index.md` —— 各自生成器; 合并冲突的解法一律是**重跑脚本**。
 
 ## 认领链

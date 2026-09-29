@@ -4,6 +4,7 @@
 **Added:** 2026-09-26
 **Updated:** 2026-09-26
 **Summary:** schema groups.py 把 log/web/notify 三段并进 basic 组删三个独立分组(首页 10 卡→6 卡), WebUI 界面卡改名 WebUI, 运行日志移入常规分区页尾; config_hub.js/atlas/prism 配套收口, test_config_schema_endpoint 守阵同步; 全量 1665 passed + 1 skipped, TOTAL 92%。
+**Topics:** webui-settings-group-merge
 
 ## 原始请求
 

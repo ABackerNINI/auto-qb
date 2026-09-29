@@ -56,7 +56,10 @@ def changed_files() -> tuple[list[str], list[str]]:
     按文件的展开**匹配不到新加的文件** —— 新增脚本拿不到 `--help` 冒烟, 且是静默的。
     """
     staged, unstaged = [], []
-    for line in git("status", "--porcelain", "-uall").splitlines():
+    # ❗必须关 quotepath(2026-09-29 实测): 默认 ON 时非 ASCII 文件名被八进制转义加引号
+    #   (`?? "\346..."`), 解析出的路径不存在 → exists()=False → 按"已暂存删除"被静默跳过
+    #   → 什么都没暂存, commit 报 "nothing added"。off 后路径为原始 UTF-8, 解析才对得上。
+    for line in git("-c", "core.quotepath=off", "status", "--porcelain", "-uall").splitlines():
         if not line.strip():
             continue
         xy = line[:2].ljust(2)  # 短行兜底, 避免索引错位后再切错路径

@@ -4,7 +4,7 @@
 > 新增制品或改状态后重跑脚本即可, 合并冲突也只需重跑。
 > 每行 = `[时间戳] 标题 — 专题`(分区即状态); 状态取值: `In Progress` / `Open` / `Done` / `Dropped` / `Superseded`。
 > 状态写在制品 `<head>` 的 `<meta name="doc-status">` 一行(单处); 协议与决策树见
-> [conventions/doc-forms.md](../conventions/doc-forms.md), 跨形态专题视图见 [_doc-map.md](../_doc-map.md)。
+> [conventions/doc-forms.md](../conventions/doc-forms.md), 跨形态专题视图用 `commands run kb.docmap` 查(不落盘)。
 > 机械守卫: `tests/test_docs_forms.py`(索引 == 生成结果 / meta 完整 / 命名合规 / dark 主题)。
 
 ## In Progress
@@ -39,7 +39,7 @@
 - [26-09-28-0037] [备用速度切换按钮 · 三套设计模板 (26-09-28-0037)](26-09-28-0037-plan-alt-speed-toggle.html) — `webui-alt-speed-toggle`
 - [26-09-27-2252] [计划 · config schema 迁移物化重构: 加载即迁移 + 版本号备份 + 立即落盘](26-09-27-2252-plan-config-migration-materialize.html) — `config-hr-binding-mapping`
 - [26-09-27-1930] [计划 · HR 在线核实绑定改映射制: 档案双域硬编码 + 已知映射零配置 + 旧键迁移 v1→v2](26-09-27-1930-plan-hr-binding-tracker-mapping.html) — `hr-binding-tracker-mapping`
-- [26-09-27-1852] [计划 · 站点页搜索: 全字段匹配与多命中展示](26-09-27-1852-plan-sites-page-search.html) — `sites-page-search`
+- [26-09-27-1852] [计划 · 站点页搜索: 全字段匹配与多命中展示](26-09-27-1852-plan-sites-page-search.html) — `webui-sites-page-search`
 - [26-09-27-1815] [HR 在线核实 · 审计修复 + v2 方案实施 · 修改计划 · auto-qb](26-09-27-1815-plan-hr-verify-audit-fixes.html) — `backend-partial-hr-verify`
 - [26-09-27-1438] [计划 · 字段变化触发时机 on_torrent_field_changed 与维护任务 tags 迁移](26-09-27-1438-plan-field-changed-trigger.html) — `field-changed-trigger`
 - [26-09-27-1318] [计划 · HR 在线核实配置收敛: 内置站点档案 + 配置全部上收「HR 在线核实」分区](26-09-27-1318-plan-hr-check-site-presets.html) — `hr-check-site-presets`

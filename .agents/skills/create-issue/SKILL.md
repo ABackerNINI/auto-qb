@@ -65,7 +65,7 @@ python .agents/skills/create-issue/scripts/new_issue.py <slug> \
 - `<slug>`: 小写英文短横线, 建议 `<领域>-<专题>`(只是建议, 分类职责已交给 type)。
 - `--type`: **必填**, 不在 8 类枚举里直接报错。
 - `--topic`: `doc-topic` 跨形态串联主键(默认 = slug)。**多条 issue 属于同一专题时显式指定同一个值**
-  (如 `webui-optimistic-ui` 下挂 3 条), 这样 `_doc-map.md` 的专题视图才把它们串成一条线。
+  (如 `webui-optimistic-ui` 下挂 3 条), 这样 `commands run kb.docmap` 的专题视图才把它们串成一条线。
   不传 = 一题一专题。**该 meta 不可省** —— 缺了该 issue 会从专题视图里静默漏掉
   (守卫 `tests/test_docs_forms.py::test_issue_topics_present` 判红)。
 - 产出 `<issues dir>/<时间>-<类型>-<slug>.html`, 例 `26-09-19-2359-docs-memory-bank-push-rule-drift.html`。

@@ -45,14 +45,16 @@ def collect(directory: Path) -> list[dict]:
         title_match = TITLE_RE.search(text)
         stamp_match = STAMP_RE.match(path.stem)
         stamp = "-".join(p for p in (stamp_match.group(1), stamp_match.group(2)) if p) if stamp_match else ""
-        items.append({
-            "file": path.name,
-            "stamp": stamp,
-            "title": (title_match.group(1).strip() if title_match else path.stem),
-            "status": meta.get("doc-status", "Open"),
-            "topic": meta.get("doc-topic", ""),
-            "type": meta.get("doc-type", ""),
-        })
+        items.append(
+            {
+                "file": path.name,
+                "stamp": stamp,
+                "title": (title_match.group(1).strip() if title_match else path.stem),
+                "status": meta.get("doc-status", "Open"),
+                "topic": meta.get("doc-topic", ""),
+                "type": meta.get("doc-type", ""),
+            }
+        )
     return items
 
 
@@ -64,7 +66,7 @@ def header(root: Path, kind: str) -> str:
 > 新增制品或改状态后重跑脚本即可, 合并冲突也只需重跑。
 > 每行 = `[时间戳] 标题 — 专题`(分区即状态); 状态取值: {" / ".join(f"`{s}`" for s in STATUSES)}。
 > 状态写在制品 `<head>` 的 `<meta name="doc-status">` 一行(单处); 协议与决策树见
-> [conventions/doc-forms.md](../conventions/doc-forms.md), 跨形态专题视图见 [_doc-map.md](../_doc-map.md)。
+> [conventions/doc-forms.md](../conventions/doc-forms.md), 跨形态专题视图用 `commands run kb.docmap` 查(不落盘)。
 > 机械守卫: `tests/test_docs_forms.py`(索引 == 生成结果 / meta 完整 / 命名合规 / dark 主题)。
 """
 

@@ -4,6 +4,7 @@
 **Added:** 2026-09-26
 **Updated:** 2026-09-26
 **Summary:** 用户报"大部分按钮与 UI 不符"; 截图实证后出 3 组全状态方案模板供挑选, 定案星图 B(胶囊统一)/棱镜 C(强声明双色); ce-btn/ce-icon 全量迁入 .bt 族, 两套 UI 成对, 守阵测试钉住成对性。
+**Topics:** webui-button-system
 
 ## 原始请求
 

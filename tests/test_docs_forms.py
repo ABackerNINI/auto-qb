@@ -4,7 +4,8 @@
 状态词漂移、dark 口径靠人眼、认领链只活在散文里。这些都是纯静态判定, 用测试守住成本极低。
 
 范围: `memory-bank/plans/` 与 `memory-bank/reports/` 的 HTML 制品 + 两份生成物索引 + 跨形态专题视图
-`_doc-map.md` + 四形态主键 (`doc-topic` / `**Topics:**`) 的覆盖与认领链。
+(查询 CLI `kb.docmap`, 2026-09-29 起 `_doc-map.md` 物化退役) + 四形态主键 (`doc-topic` / `**Topics:**`)
+的覆盖与认领链。
 
 ## 测试计划
 
@@ -14,8 +15,8 @@
 - test_new_artifact_naming: `doc-added ≥ 26-09-24` 的新件必须带 type token (`YY-MM-DD-HHMM-<type>-<topic>.html`)
 - test_artifacts_are_dark: 每份计划/报告都含 `color-scheme: dark` (dark 口径从人眼变机检)
 - test_docs_index_is_regenerated: `plans|reports/_index.md` == `gen_docs_index.build()`
-- test_doc_map_is_regenerated_and_capped: `_doc-map.md` == `gen_doc_map.build()` 且 ≤ `index-auto` cap
-- test_doc_map_covers_every_topic: 四形态 topic 集合 ⊆ 专题视图里出现的 topic (覆盖 100%, 孤儿 0)
+- test_doc_topics_complete: 四形态任一文档缺 `doc-topic` / `**Topics:**` 即红 (旧覆盖测试的补漏版)
+- test_doc_map_live_rotation: 全完结专题在默认视图只留名 (轮转), `--all` 仍全量
 - test_issue_topics_present: 每条 issue 都有 `doc-topic` (否则会从专题视图里静默漏掉)
 - test_claim_chain_is_bidirectional: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明
 """
@@ -36,7 +37,6 @@ SKILL_SCRIPTS = ROOT / ".agents" / "skills" / "memory-bank" / "scripts"
 
 STATUSES = ("Open", "In Progress", "Done", "Dropped", "Superseded")
 META_RE = re.compile(r'<meta name="(doc-[a-z]+)" content="([^"]*)">')
-TASK_TOPICS_RE = re.compile(r"^\*\*Topics:\*\*\s*(.+)$", re.MULTILINE)
 TASK_REFS_RE = re.compile(r"^\*\*Refs:\*\*\s*(.+)$", re.MULTILINE)
 HTML_REFS_RE = re.compile(r'<meta name="doc-refs" content="([^"]*)">')
 # 命名协议从 2026-09-24 起对新件生效; 存量 51 份豁免 (改名引用面远超收益 —— 见计划 §03)
@@ -55,26 +55,6 @@ def _artifacts() -> list[Path]:
 
 def _meta(path: Path) -> dict[str, str]:
     return dict(META_RE.findall(path.read_text(encoding="utf-8")))
-
-
-def _topics_of_all_forms() -> dict[str, set[str]]:
-    """四形态各自声明的 topic 集合 (键 = 形态)。"""
-    topics: dict[str, set[str]] = {"plan": set(), "report": set(), "issue": set(), "task": set()}
-    for path in _artifacts():
-        meta = _meta(path)
-        if meta.get("doc-topic"):
-            topics[meta["doc-type"]].add(meta["doc-topic"])
-    for path in sorted(ISSUES.glob("*.html")):
-        meta = _meta(path)
-        if meta.get("doc-topic"):
-            topics["issue"].add(meta["doc-topic"])
-    for path in sorted(TASKS.glob("*.md")):
-        if path.name.startswith("_"):
-            continue
-        match = TASK_TOPICS_RE.search(path.read_text(encoding="utf-8"))
-        if match:
-            topics["task"].add(match.group(1).strip())
-    return topics
 
 
 def _refs_of(path: Path) -> list[str]:
@@ -157,25 +137,30 @@ def test_docs_index_is_regenerated() -> None:
             f"{kind}/_index.md 与生成结果不一致, 请运行 gen_docs_index.py"
 
 
-def test_doc_map_is_regenerated_and_capped() -> None:
-    """专题视图是生成物, 且有上限 (`index-auto` 档) —— 它会随专题数增长, 不能无界。"""
+def test_doc_topics_complete() -> None:
+    """主键纪律 (2026-09-29 随 `_doc-map.md` 物化退役重写): 四形态任一文档缺 doc-topic / **Topics:** 即红。
+
+    旧「覆盖 100%」实现把声明过的 topic 集合对物化文本做 `t not in text` 判断, 空主键因
+    `"" in text` 恒真被静默放过; 现在直接列出缺主键的文档。
+    """
     gen = _load_generator("gen_doc_map")
-    target = MB / "_doc-map.md"
-    assert target.is_file(), "缺少 _doc-map.md (跑 gen_doc_map.py 生成)"
-    current = target.read_text(encoding="utf-8")
-    assert current == gen.build(ROOT, MB), "_doc-map.md 与生成结果不一致, 请运行 gen_doc_map.py"
-
-    common = _load_generator("_common")
-    cap = common.CAP_POLICY["index-auto"]
-    assert len(current) <= cap, f"_doc-map.md 超 cap: {len(current)} > {cap} (专题数增长时需要收口)"
+    orphans = [f"{i['form']}: {i['link']}" for i in gen.collect(MB) if not i["topic"]]
+    assert not orphans, "下列文档缺跨形态主键 (doc-topic / **Topics:**):\n  " + "\n  ".join(orphans)
 
 
-def test_doc_map_covers_every_topic() -> None:
-    """覆盖 100% / 孤儿 0: 四形态声明过的每个 topic 都必须出现在专题视图里。"""
-    text = (MB / "_doc-map.md").read_text(encoding="utf-8")
-    declared = {t for names in _topics_of_all_forms().values() for t in names}
-    missing = sorted(t for t in declared if t not in text)
-    assert not missing, "下列 topic 未出现在 _doc-map.md 里 (漏登记即静默孤儿):\n  " + "\n  ".join(missing)
+def test_doc_map_live_rotation() -> None:
+    """轮转口径: 活跃**多件**专题默认视图给全行; 全完结专题与单件专题只列名; `--all` 仍全量。"""
+    gen = _load_generator("gen_doc_map")
+    items = gen.collect(MB)
+    live_text, all_text = gen.render_live(items), gen.render_all(items)
+    for topic, group in gen.group_by_topic(items).items():
+        has_line = f"- **{topic}**" in live_text
+        if len(group) > 1 and gen.is_live(group):
+            assert has_line, f"{topic} 有未完结件, 默认视图丢了全行"
+        else:
+            assert not has_line, f"{topic} 是单件或已完结, 默认视图不应有全行 (轮转失效)"
+            assert topic in live_text, f"{topic} 连名录里都没有 (覆盖断裂)"
+        assert topic in all_text, f"{topic} 未出现在 --all 全量视图"
 
 
 def test_issue_topics_present() -> None:

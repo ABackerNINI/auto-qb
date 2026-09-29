@@ -4,6 +4,7 @@
 **Added:** 2026-09-28
 **Updated:** 2026-09-28 02:03
 **Summary:** 用户判定 my-commit-flow 输出背离设计初衷(少手写错误/少 token/复杂藏背后)。计划 26-09-28-0157 全章节 Done: v3 已实施并真机验收(4ba6cb7f, ship.commit 输出 2 行); W2 推广落地——W2-1 根治 charset_normalizer 半装(授权普查 7 clone, clone2 待其进程退出), W2-2 引擎摘要结论行必保, W2-3 警告 6→0(pytest.ini 消息前缀过滤)。全量 1818 passed / 0 failed / 0 warnings(基线 26-09-28-0432)。
+**Topics:** commands-shipflow-v3
 
 ## 原始请求
 

@@ -45,13 +45,13 @@ memory-bank/
 ## 收尾 (改完 `memory-bank/` 必跑)
 
 ```text
-commands run kb.index    # 改了档案 Status / Summary, 或任何主题文件的三行头 (跑 gen_tasks_index.py + gen_kb_index.py)
-commands run kb.check    # 改了会话切片 (三个生成器的 --check, 含 gen_active_recent.py)
+commands run kb.index    # 改了档案 Status / Summary, 或任何主题文件的三行头 (跑 gen_tasks_index.py + gen_kb_index.py + gen_docs_index.py)
+commands run kb.check    # 改了会话切片 (各索引生成器 + docmap 主键 + gen_active_recent.py 等切片校验的 --check)
 commands run doc.links   # 相对链接存在性
 ```
 
 - 结构 / cap / 双向一致 / 存根 / 条目字段: `python .agents/skills/memory-bank/scripts/check_kb_structure.py`
   (还没收进包 —— 它只在整库体检时用, 不是每轮收尾的一环)。
-- 制品目录另有守卫 `tests/test_docs_forms.py`(命名 / meta / 状态词 / dark / 索引自洽 / 认领链), 罩着 `gen_docs_index.py` / `gen_doc_map.py` 生成的 plans/ reports/ 制品与 `_doc-map.md`; 这两个生成器暂未收进 `commands` 包, 改制品或 meta 后靠该测试兜底。
+- 制品目录另有守卫 `tests/test_docs_forms.py`(命名 / meta / 状态词 / dark / 索引自洽 / 认领链), 罩着 `gen_docs_index.py` 生成的 plans/ reports/ 制品; 跨形态专题视图是查询命令 `commands run kb.docmap`(2026-09-29 起 `_doc-map.md` 物化退役, 不落盘), 主键纪律由该测试的 `test_doc_topics_complete` 兜底。
 
 这些命令都已挂 `my-commit-flow` 包的 `[[gates]]`, 提交时会自动跑; 会话级 5 步 DoD 见 skill。

@@ -24,7 +24,7 @@
 | **真机走查清单** | [checklists/_index.md](checklists/_index.md) —— 做走查时逐条勾 |
 | 跨会话任务档案 (立档 / 查档) | [tasks/_index.md](tasks/_index.md) |
 | 计划外问题池 (8 类 × 两档) | [issues/_index.md](issues/_index.md) |
-| **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · [_doc-map.md](_doc-map.md) |
+| **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · 专题视图 `kb.docmap`(不落盘) |
 | **跑项目命令** | `.commands/` 包(每包一 `config.toml`), 经 `commands` 引擎按 task id 调; 文档不许抄命令(`commands run doc.drift` 判红) |
 
 ## 生成物 (冲突时**重跑脚本**, 不要手改)
@@ -32,7 +32,7 @@
 - 各目录的 `_index.md` —— `commands run kb.index` 扫主题文件的三行头元数据生成
 - [tasks/_index.md](tasks/_index.md) —— `commands run kb.index` 扫档案 `Status` / `Summary` 生成
 - [issues/_index.md](issues/_index.md) —— create-issue skill 的生成器重建
-- [plans/_index.md](plans/_index.md) / [reports/_index.md](reports/_index.md) / [_doc-map.md](_doc-map.md) —— `gen_docs_index.py` / `gen_doc_map.py`(专题视图)
+- [plans/_index.md](plans/_index.md) / [reports/_index.md](reports/_index.md) —— `gen_docs_index.py`; 专题视图 `kb.docmap` 查询现算不落盘(_doc-map.md 已退役)
 - 新增目录 / 超 cap 的处置见 [memory-bank skill](../.agents/skills/memory-bank/SKILL.md) —— 改目录须同时改本细路由, 少一处守卫就红。
 
 ## 一分钟速览

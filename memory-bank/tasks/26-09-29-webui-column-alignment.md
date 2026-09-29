@@ -4,6 +4,7 @@
 **Added:** 2026-09-29
 **Updated:** 2026-09-29 02:40
 **Summary:** 按 reports/26-09-28-2345 审计报告推荐实施列对齐口径: P1 明细/种子两表 completion_on + time_active 共 4 处 align right→left(时间/时长族 R4 统一左, 默认隐藏列低风险); P2 抽屉 3 表数值列 9 字段(Tracker 做种/用户, 用户 进度/下行/上行/已下载/已上传/关联度, 内容 大小/进度)th/td 挂 .num 类 + 三主题 CSS 各补一条右对齐规则。test.full 1831 passed / 3 skipped(91%), 见基线 26-09-29-0240。
+**Topics:** webui-column-alignment
 
 ## 原始请求
 

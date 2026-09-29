@@ -4,6 +4,7 @@
 **Added:** 2026-09-28
 **Updated:** 2026-09-28 01:15
 **Summary:** 用户实报: 后端端点不在跑时, 扩展轮询每分钟一条全量排查清单 ERROR + 状态栏同文再刷一条 INFO, 日志环(默认 1000 条)几小时被灌满。改「故障期只打头尾」: 首次失败全量 ERROR; 连败期降 debug(默认记录级别不落盘), 每连败 30 轮重提一次全量; 恢复补一句 INFO 并清计数(计数落 storage.local, SW 回收不丢); 状态栏同文复读降 debug。守阵 1 条(node VM 真跑 pollAll 五步场景)。
+**Topics:** ext-log-noise-suppress
 
 ## 原始请求
 

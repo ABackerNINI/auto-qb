@@ -4,6 +4,7 @@
 **Added:** 2026-09-26
 **Updated:** 2026-09-27
 **Summary:** 用户报「webui 代码文件很大难维护」。实测定案单体 = 两套 index.html(2555/2613 行,根模板各约 2360 行语义同构副本)+ atlas/style.css 1720 + app.js 1271;后端与共享 JS 粒度健康不在范围。产出拆分计划(plans/26-09-26-2233),5 波次,机制定案「分片 HTML + boot.js fetch 注入」。2026-09-27 用户放行按计划实施、往「消灭双模板副本」走: W0 守阵迁移盘点 + W1 根模板分片已落地(两套 shell 166/177 行 + 14×2 分片全部 ≤400 行 + shared/boot.js,聚合字节等价 + 无头 Edge 冒烟通过,守阵全绿)。待: W2 样式/app.js 续拆、W3 双模板差异评估、W4 收口。
+**Topics:** webui-frontend-file-split
 
 ## 原始请求
 

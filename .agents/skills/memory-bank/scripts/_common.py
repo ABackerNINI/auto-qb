@@ -186,9 +186,9 @@ def char_count(path: Path) -> int:
 GEN_CMD_BY_SCRIPT = {
     "gen_tasks_index.py": "commands run kb.index",
     "gen_kb_index.py": "commands run kb.index",
-    "gen_doc_map.py": "commands run kb.index",
     "gen_docs_index.py": "commands run kb.index",
-    # 只校验不写文件的脚本 —— 它的"重跑"是校验命令, 不是重建命令
+    # 只校验/查询不写文件的脚本 —— 它的"重跑"是校验或查询命令, 不是重建命令
+    # (gen_doc_map.py 同类: 2026-09-29 起 _doc-map.md 物化退役, 改查询 `commands run kb.docmap`)
     "gen_active_recent.py": "commands run kb.active --check",
     "gen_baseline_recent.py": "commands run kb.baseline --check",
 }
@@ -255,7 +255,7 @@ def role_of(rel: str) -> str:
         return "agents"
     if rel in (
         "memory-bank/tasks/_index.md", "memory-bank/issues/_index.md", "memory-bank/plans/_index.md",
-        "memory-bank/reports/_index.md", "memory-bank/_doc-map.md"
+        "memory-bank/reports/_index.md"
     ):
         return "index-auto"
     if rel == "memory-bank/README.md":
