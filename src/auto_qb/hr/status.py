@@ -224,7 +224,7 @@ def _lane_statuses(data: HrSiteData, now: float) -> Tuple[List[LaneStatus], str]
         )
         out.append(ls)
         parts.append(
-            f"{lane}:{'✓' if st.status == LANE_OK else ('✗' if st.status == LANE_FAILED else '-')}"
+            f"{lane}:{'[x]' if st.status == LANE_OK else ('x' if st.status == LANE_FAILED else '-')}"
             f"{st.pages}页{st.rows}行" + ("(全)" if st.full_depth else "") + (
                 f"/声明{st.count_claim}" +
                 (" 对不平" if st.count_match is False else "") if st.count_claim is not None else ""
@@ -238,7 +238,7 @@ def _retention_text(data: HrSiteData) -> str:
     meta = data.wave
     if meta.retention_ratio < 0:
         return "不适用(上波无 A 档行)"
-    tail = "正常" if meta.retention_ok else "⚠ 不达标(批量未列出签发已冻结)"
+    tail = "正常" if meta.retention_ok else "WARN: 不达标(批量未列出签发已冻结)"
     return f"上波 A 档 {len(meta.prev_a_tids)} 行, 本波留存率 {meta.retention_ratio:.0%}, {tail}"
 
 

@@ -4,16 +4,16 @@
  * 挂到 window.AQB_COMMANDS, 由 app.js 末尾 app.mixin(window.AQB_COMMANDS) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
- * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_COMMANDS);
+ * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_COMMANDS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 /* 「值覆盖」的保持上限(ms) —— 必须与后端 TRUTH_PUSH_CAP_MS 一致(静态守阵钉住)。
  *
  * 2026-09-20 D2 定案后, 一次命令有**两个**时刻:
- *   ① 回执到达(命令已执行)  -> **结束压暗**(撤下, 10~20ms 级)
- *   ② 真值事件到达(已落地)  -> **结束值覆盖**(行上换成真值, 真机实测 ~1.25s)
- * 本常数管的是 ② 的兜底: 超时还没等到真值就回滚, 不留假状态。
- * ❗它不再进"端到端"宽限 —— 回执不再被扣住等真值, 端到端就是命令执行时间。 */
+ *   1. 回执到达(命令已执行)  -> **结束压暗**(撤下, 10~20ms 级)
+ *   2. 真值事件到达(已落地)  -> **结束值覆盖**(行上换成真值, 真机实测 ~1.25s)
+ * 本常数管的是 2. 的兜底: 超时还没等到真值就回滚, 不留假状态。
+ * !它不再进"端到端"宽限 —— 回执不再被扣住等真值, 端到端就是命令执行时间。 */
 const TRUTH_HOLD_MS = 8000;
 
 window.AQB_COMMANDS = {
@@ -35,7 +35,7 @@ window.AQB_COMMANDS = {
         patchMs: null,    // 点击 -> 乐观补丁贴上(补丁先于 POST, 正常 ~0ms)
         postMs: null,     // 点击 -> 命令 POST 返回(真机大库可能秒级 —— 本埋点要的就是它)
         /* 点击 -> 补丁撤下、行恢复正常(**用户感知的那一半**)。
-         * ❗为什么必须单独埋这一段: 「贴上」早就修好了(受控 4~8ms), 而同一现象用户报了三次
+         * !为什么必须单独埋这一段: 「贴上」早就修好了(受控 4~8ms), 而同一现象用户报了三次
          * —— 前三次全都只埋了 patchMs/postMs, 于是"撤下慢"在日志里全绿、只能靠肉眼报。
          * 修前这一段恒 3~4.5s(3s 常量兜底 + 等到下一次轮询), 修后 ~200~350ms。 */
         settleMs: null,
@@ -51,12 +51,12 @@ window.AQB_COMMANDS = {
     /* 撤下埋点: pendingOps 归零的那一刻记 settleMs。
      * 调用点两处(覆盖"压暗结束"的全部出口): resolveOptimistic(回执到达 / 失败回滚)、
      * onTruthEvent(真值事件到达)。缺一处就会漏记。
-     * ❗注意 reapplyPending 里的 _optimisticSettled 也删 pendingOps, 但那时压暗早已结束、
+     * !注意 reapplyPending 里的 _optimisticSettled 也删 pendingOps, 但那时压暗早已结束、
      *   settleMs 已记过, 所以不需要再调这里。 */
     _markCmdSettle() {
       const c = this.cmdStats;
       if (!c || c.settleMs != null || !c.t0) return;
-      /* ❗判据是"**没有行还在压暗**", 不是"pendingOps 清空": D2 之后回执到了就结束压暗,
+      /* !判据是"**没有行还在压暗**", 不是"pendingOps 清空": D2 之后回执到了就结束压暗,
        * 但值覆盖会继续保留到真值事件到达, 那时 pendingOps 仍非空。
        * 撤下 = 用户不再看到"在飞"态, 就该在这一刻记账。 */
       for (const _h of Object.keys(this.pendingOps)) {
@@ -66,11 +66,11 @@ window.AQB_COMMANDS = {
       c.settleMs = Math.round(performance.now() - c.t0);
       /* 阈值按目标数分档: 单目标/小批量 800ms; >100 目标 2500ms —— 整剧 800 个种子的**补丁本身**
        * 就要 ~160ms, 按单目标阈值报会变成常驻噪音, 而常驻的报警没人看。
-       * ❗无回执(hang / 命令在途)时只记不报: 那时走的是 3s 兜底, 慢是设计如此, 报出来是噪音。 */
-      /* ❗**无条件打印一行**: 真机上"点完再切到控制台敲命令取 cmdStats"根本做不到(没有那个空档),
+       * !无回执(hang / 命令在途)时只记不报: 那时走的是 3s 兜底, 慢是设计如此, 报出来是噪音。 */
+      /* !**无条件打印一行**: 真机上"点完再切到控制台敲命令取 cmdStats"根本做不到(没有那个空档),
        * 而这正是**用户感知的那一半**, 每次都该看得见。超阈值才升级成 WARNING —— 常驻的报警没人看,
        * 但"没有报警"不等于"能看见数字"。
-       * ❗无回执(hang / 命令在途)时**不打印**: 那时走 3s 兜底, 慢是设计如此, 报出来是噪音。 */
+       * !无回执(hang / 命令在途)时**不打印**: 那时走 3s 兜底, 慢是设计如此, 报出来是噪音。 */
       if (c.totalMs == null) return;
       /* `via` = 撤下走的是哪条路, 真机排查的第一判据(2026-09-21 简化为两档):
        *   receipt = 回执到达即结束压暗(正常路径, 真机实测撤下 85ms);
@@ -109,7 +109,7 @@ window.AQB_COMMANDS = {
       const capMs = opts.capMs || 500;
       /* P2 事件驱动: SSE 连着时回执由 `cmd` 事件**推**过来, 不必等轮询退避的粒度
        * (0→150→300→500ms)—— 那段粒度本身就是撤下延迟的一部分。
-       * ❗与轮询**赛跑**而不是替换: SSE 不可用/断了就自动退回原路径, 语义不变。 */
+       * !与轮询**赛跑**而不是替换: SSE 不可用/断了就自动退回原路径, 语义不变。 */
       const evP = this._awaitCmd(cmdId, timeoutMs);
       const stop = { v: false };
       const pollP = this._pollCmd(cmdId, timeoutMs, firstMs, capMs, start, stop);
@@ -156,7 +156,7 @@ window.AQB_COMMANDS = {
                * (真机大库长 tick / GIL 争用); waitMs 大 = 命令没被及时消费(P0-1 唤醒退化);
                * totalMs 大 = 轮询曲线或网络慢。 */
             const c = this.cmdStats;
-              /* ❗端到端阈值**不再**加"等真值"的宽限 —— D2 之后回执不再被扣住等真值,
+              /* !端到端阈值**不再**加"等真值"的宽限 —— D2 之后回执不再被扣住等真值,
                * 它就是命令执行时间(真机实测 pause 端到端应远小于旧值 1259ms)。
                * 真值那一段现在由 `撤下` 之后的"值覆盖"独立负责, 不混进端到端。 */
               const e2eBudget = 400;
@@ -175,7 +175,7 @@ window.AQB_COMMANDS = {
     },
     /* ---------------- P2 事件驱动: 订阅式等回执 ----------------
      * 由 app.js 的 EventSource(/api/events)收 `cmd` 事件后回调这里兑现。
-     * ❗挂在实例上而不是 data 里: Map 不需要响应式, 放进 data 只是白白付代理开销。 */
+     * !挂在实例上而不是 data 里: Map 不需要响应式, 放进 data 只是白白付代理开销。 */
     _cmdWaiters: null,
     _awaitCmd(cmdId, timeoutMs) {
       if (!this._cmdWaiters) this._cmdWaiters = new Map();
@@ -211,13 +211,13 @@ window.AQB_COMMANDS = {
      * 到这里把真值落到行上, 但**不结束值覆盖** —— 覆盖的终点是"服务端**快照**同意"
      * (_optimisticSettled) 或 hold 超时兜底, 不是"真值到达"。
      *
-     * ❗为什么不能在这里 `delete pendingOps[h]`(2026-09-21 用户报「整组暂停后 灰→绿→灰」):
+     * !为什么不能在这里 `delete pendingOps[h]`(2026-09-21 用户报「整组暂停后 灰→绿→灰」):
      *   真值走 `torrents/info` **直查**, 比我们自己的 `/sync/maindata` **快照**新 —— 快照要等主循环
      *   下一次 sync(≤ sync_interval = 1.5s)才带上同一个状态。此刻把覆盖撤掉, 这 1.5s 内任何一次
      *   **视图发布**(任何种子任何字段变化都会让 rid 前进、整表重发)都会带着"命令前"的 kind 覆盖行
      *   对象 ⇒ 行被打回命令前的颜色(整组暂停闪回做种绿), 直到快照追上才再变灰。
      *   覆盖留着, 那一轮只会被 reapplyPending 用真值重新贴回去(观感: 一直是灰的)。
-     * ❗真值**同时改 patch 与 prev**: patch 的值 = 已落地的真值(resume 的"落地态 6 种 vs 预测 2 种"
+     * !真值**同时改 patch 与 prev**: patch 的值 = 已落地的真值(resume 的"落地态 6 种 vs 预测 2 种"
      *   由此收敛, 不再依赖"预测 == 真值"这种严格相等), prev 的值 = **最后已知真值** ——
      *   兜底回滚必须回这里: 回命令前的旧值等于把一个已暂停的种子显示成做种中。
      */
@@ -254,14 +254,14 @@ window.AQB_COMMANDS = {
        * 但**值覆盖还要继续**(op.hold), 直到真值事件到达; 否则下一轮 refresh 会把
        * 命令**前**的旧值打回行上 ⇒ 弹回。这里只管压暗, 不要和值覆盖混在一起。 */
       if (op.grey === false) return false;
-      /* ❗超时**只判 false、不在这里 delete**: 模板每帧都会调 isPending, 在渲染函数里改响应式
+      /* !超时**只判 false、不在这里 delete**: 模板每帧都会调 isPending, 在渲染函数里改响应式
        * 数据(回滚字段)有递归更新风险; 真正的回滚交给 _expirePending()(每轮 refresh 一次)。
        * 另注: 光 delete 不叫"回落真值" —— 见 _expirePending 的注释(issue 26-09-19-2141)。 */
       if (Date.now() - op.ts > 3000) return false;
       return true;
     },
     /* 3s 兜底: 超时未确认的补丁**显式回滚到补丁前的值**, 与失败回滚同一写法。
-     * ❗旧写法"不再贴补丁、下轮以服务端为准"在 rid 门控下**不成立**: 服务端版本未变时不回传
+     * !旧写法"不再贴补丁、下轮以服务端为准"在 rid 门控下**不成立**: 服务端版本未变时不回传
      * 数组、行对象不被替换 ⇒ 上一轮贴的 kind:"paused" 会一直留在行上 —— 命令根本没执行,
      * 界面却一直显示已暂停(hang 模式实测: 3.66s 清 pending 后行仍是 s-paused, 真值 s-downloading)。
      * 回滚用的是 op.prev(贴补丁那一刻的行值 = 最近一次已知的服务端真值); 之后若真值真的变了,
@@ -315,7 +315,7 @@ window.AQB_COMMANDS = {
           /* D2 成功: **压暗立即结束**(撤下 —— 用户感知的那一半), 值覆盖转入 hold 继续保留
            * 到真值事件到达(onTruthEvent)。qB 翻状态真机实测要 ~1.25s, 等它就没有"点击即变"了;
            * 不弹回由 hold 保证(真值到达前一直盖住行上的值), 不靠等真值。
-           * ❗兜底期限**从回执到达重算**且放宽到 TRUTH_HOLD_MS: 压暗已结束, 晚释放没有观感
+           * !兜底期限**从回执到达重算**且放宽到 TRUTH_HOLD_MS: 压暗已结束, 晚释放没有观感
            * 代价。**无回执(hang)时不会走到这里** —— 那种情况仍按 3s 回滚, "失败/未知绝不
            * 留永久假状态"这条不变。 */
           op.grey = false;
@@ -332,11 +332,11 @@ window.AQB_COMMANDS = {
     },
     reapplyPending() {
       /* 每轮 refresh 整表替换会盖掉乐观值, 这里把仍 pending 的补丁重新贴上。
-       * ❗**真值已到就收工**(issue 26-09-19-2024-webui-truth-convergence): 原先这里只管贴,
+       * !**真值已到就收工**(issue 26-09-19-2024-webui-truth-convergence): 原先这里只管贴,
        * pendingOps 唯一的出口是 3s 兜底 ⇒ 真值早就到了、行还半透明挂着, 用户看到的就是
        * "点了之后 2-4s 才恢复正常"。现在逐个比对**服务端真值快照** ⇒ 对齐就立即清掉。 */
       for (const h of Object.keys(this.pendingOps)) {
-        /* ❗不再跳过"已结束压暗"的 op: hold 期间必须继续盖住行上的值, 否则轮询带回的
+        /* !不再跳过"已结束压暗"的 op: hold 期间必须继续盖住行上的值, 否则轮询带回的
          * 命令**前**旧值会把行打回去(弹回)。压暗只是视觉, 与值覆盖无关(见 isPending)。 */
         const op = this.pendingOps[h];
         if (!op) { delete this.pendingOps[h]; continue; }
@@ -350,12 +350,12 @@ window.AQB_COMMANDS = {
       this._markCmdSettle();  // pendingOps 的出口之二(真值对齐后由上面 delete)
     },
     /* 本轮 /api/state 的真值快照(只记仍 pending 的 hash)。
-     * ❗**必须比服务端原始值, 不能比行上的当前值**: 行在上一轮已经被贴过补丁了, 拿行上的值
+     * !**必须比服务端原始值, 不能比行上的当前值**: 行在上一轮已经被贴过补丁了, 拿行上的值
      *   跟补丁比 = 跟自己比 ⇒ 首轮必"匹配"、pending 立刻消失(2026-09-19 实测 28ms 就清了,
      *   而桩服务真值 +120ms 才到 —— 断言全绿却什么都没测到)。
-     * ❗**拷值不拷引用**: 赋值后 `this.torrents` 与 payload 是同一批对象, 补丁随后就改到它们,
+     * !**拷值不拷引用**: 赋值后 `this.torrents` 与 payload 是同一批对象, 补丁随后就改到它们,
      *   存引用等于没存。
-     * ❗只认 payload 里**真的带了**的 hash: 当前视图的 payload 可能不含它(如追剧视图只回
+     * !只认 payload 里**真的带了**的 hash: 当前视图的 payload 可能不含它(如追剧视图只回
      *   shows), 那时返回 false ⇒ 继续贴、交给 3s 兜底 —— 宁可慢收, 不可误判。 */
     _snapshotTruth(state) {
       const keys = Object.keys(this.pendingOps);

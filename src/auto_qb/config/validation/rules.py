@@ -78,7 +78,7 @@ class _ExprGate:
 def _expr_gate(data) -> _ExprGate:
     """从原始配置判断数据源是否配置(Traffic Monitor 的 history dat)
 
-    ⚠ 本函数跑在**曲线段校验之前**(validate_config 里规则段在前), 所以必须容忍结构非法的
+    WARN: 本函数跑在**曲线段校验之前**(validate_config 里规则段在前), 所以必须容忍结构非法的
     traffic_source —— 结构错误由 _validate_global_speed_limit_curve 负责报错, 这里只尽力判
     "配没配"; 判不出来就按"没配"处理(最保守: 相关名字禁用)。
     """

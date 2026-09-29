@@ -4,7 +4,7 @@
  * 挂到 window.AQB_COLUMNS, 由 app.js 末尾 app.mixin(window.AQB_COLUMNS) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
- * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_COLUMNS);
+ * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_COLUMNS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_COLUMNS = {
@@ -150,7 +150,7 @@ window.AQB_COLUMNS = {
      * prism 是 5px、成员容器 `.detail` 是块级容器(没有 flex gap = 0)。硬编码任何一个值
      * 都会让另外两层的占位总高失真, 所以一律读计算样式实测(见文件头 BUG-1 注释)。
      * 块级容器的 rowGap 计算值是 "normal" ⇒ parseFloat 得 NaN ⇒ 回落 0, 正是我们要的值。
-     * ❗返回 **null = 容器当前没渲染**(如种子页未打开时问 .group-table) —— 调用方**不得**
+     * !返回 **null = 容器当前没渲染**(如种子页未打开时问 .group-table) —— 调用方**不得**
      * 把它当 0 缓存: 否则在分组页问一次就把种子页的间距永久记成 0(实测占位总高少 5px×2999)。 */
     _winGapOf(kind) {
       const el = kind === "torrent" ? this._winContainer(kind, "torrentTable")
@@ -194,7 +194,7 @@ window.AQB_COLUMNS = {
     _measureRowH() {
       if (!this.rowWin) return;
       const sig = `${this.viewMode}|${this._winResize}|${this.visibleGroupCols.length}|${this.visibleTorrentCols.length}|${this.visibleDetailCols.length}`;
-      // ❗用 getBoundingClientRect().height 而不是 offsetHeight: 后者取整, 0.4px 的误差 ×
+      // !用 getBoundingClientRect().height 而不是 offsetHeight: 后者取整, 0.4px 的误差 ×
       // 3000 行就是 1200px 的漂移。
       const probes = [["torrent", ".torrent-row[data-hash]"], ["group", ".group-row:not(.torrent-row)[data-key]"], ["member", ".member-row[data-hash]"]];
       for (const [kind, sel] of probes) {
@@ -305,7 +305,7 @@ window.AQB_COLUMNS = {
     /* 生效宽度现算(双轨模型的"生效轨", plan 26-09-21-1551 §3.1):
      * - 全自动页(colW 为空) -> 每次窗口变化后按当前渲染实测(保留"填满容器 + 自适应"的观感)
      * - 固化页(colW 非空)   -> 用意图值(冻结, 拖一列不再动其它列)
-     * ❗只写易变态 colWidths, **绝不落盘** —— persistPage 只收意图(colHidden/colOrder/colW),
+     * !只写易变态 colWidths, **绝不落盘** —— persistPage 只收意图(colHidden/colOrder/colW),
      *   "派生值没有资格落盘"是双轨模型唯一铁律(守阵 test_frontend_persist_page_takes_intent_only)。
      */
     recomputeEffective() {
@@ -324,7 +324,7 @@ window.AQB_COLUMNS = {
     /* 空存储提示(W4 origin 隔离 + W5 浏览器"关闭时清除站点数据"): 本 origin 没有列偏好记录时弹一次
      * (点击关闭 / 15s 自灭)。运行时注入 DOM, 两套模板零改动。
      *
-     * ❗为什么只陈述"本地址没有偏好记录"、不做精确判定(2026-09-24 取证): 站点级"关闭窗口时清除
+     * !为什么只陈述"本地址没有偏好记录"、不做精确判定(2026-09-24 取证): 站点级"关闭窗口时清除
      * Cookie 和站点数据"(Chromium cookie 例外 setting=4 = SESSION_ONLY)会在关浏览器时把该 host 的
      * Cookie 与 localStorage **一起**清掉 ⇒ "被清过"与"首次访问"在客户端**完全同形**: 任何能当跨会话
      * 记忆用的东西(包括本函数的"已提示"标记)都躺在被清掉的那份数据里, 没有服务端就无法区分。
@@ -344,8 +344,8 @@ window.AQB_COLUMNS = {
         localStorage.setItem(COLS_ORIGIN_HINT_KEY, "1");
       } catch { /* 私隐模式: 写失败也继续弹, 本会话内由 _colsOriginHintShown 挡住 */ }
       const el = document.createElement("div");
-      el.textContent = "本地址还没有列偏好记录。常见成因: ① 偏好按站点隔离存储, 换地址/端口"
-        + "(127.0.0.1 ↔ localhost、38080 ↔ 38081)各存一份; ② 浏览器在本地址上开了"
+      el.textContent = "本地址还没有列偏好记录。常见成因: 1. 偏好按站点隔离存储, 换地址/端口"
+        + "(127.0.0.1 ↔ localhost、38080 ↔ 38081)各存一份; 2. 浏览器在本地址上开了"
         + "「关闭窗口时清除 Cookie 和站点数据」→ 每次关掉浏览器偏好都会回默认"
         + "(Edge 可在 edge://settings/content/all 里查该地址)。可固定用同一地址, "
         + "或改用 http://localhost:<端口> 打开。";
@@ -361,7 +361,7 @@ window.AQB_COLUMNS = {
 
     /* 唯一持久化漏斗(plan 26-09-21-1551 §3.4): 全仓对 COLS_STORE_KEY 的 setItem **只允许这一处**
      * (静态守阵钉住)。写 v5 按页子树: 以存储为底(RMW, 防"同一毫秒两边写"), 只覆盖本次涉及的
-     * page, 其余 page 取存储最新值。❗只收意图态(colHidden/colOrder/colW) —— 生效宽度 colWidths
+     * page, 其余 page 取存储最新值。!只收意图态(colHidden/colOrder/colW) —— 生效宽度 colWidths
      * 是按窗口现算的派生值, 到不了这里; 旧模型"先存后算/先算后存"的顺序约束在本模型下不存在
      * (派生根本不在持久化路径上)。 */
     persistPage(page) {
@@ -383,7 +383,7 @@ window.AQB_COLUMNS = {
      * 双轨模型下采纳永远安全: 采纳的是纯意图, 生效宽度随后由 recomputeEffective 按本窗口现算,
      * 不存在"采纳了别的窗口算出的 px"这回事。不做逐列合并 —— 那需要给每段加"谁更新"的时间戳
      * 语义, 代价远大于收益(同页同秒并发仍最后写赢, 固有且可接受)。
-     * ❗调用方只能是 storage 事件(它**只在其它标签**触发, 写入方自己收不到, 故无需去重)
+     * !调用方只能是 storage 事件(它**只在其它标签**触发, 写入方自己收不到, 故无需去重)
      *   与 visibilitychange 的"回到可见"分支(补漏: 标签被冻结 / 事件丢失)。 */
     adoptColState() {
       const next = loadColState();
@@ -467,7 +467,7 @@ window.AQB_COLUMNS = {
       const up = () => {
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mouseup", up);
-        // 意图升格: 以既有 colW 为底 merge(❗隐藏列的 px 在这里保住 —— 渲染快照只含可见列,
+        // 意图升格: 以既有 colW 为底 merge(!隐藏列的 px 在这里保住 —— 渲染快照只含可见列,
         // 旧实现整段替换正是"隐藏列宽度被抹"的根因), 再叠本次拖拽终值; 整页自此固化
         const intent = { ...(this.colW[page] || {}), ...widths, ...(lastWidths || {}) };
         this.colW = { ...this.colW, [page]: intent };
@@ -644,7 +644,7 @@ window.AQB_COLUMNS = {
      *   - 输给 .g-stat.zero/.m-stat.zero(0,2,0) -> 保留既有"0 值居中"口径。
      * 同时写 text-align 与 justify-content: 值单元格有的是块级文本, 有的是 flex(进度条/
      * 分享率对/芯片组), 只写 text-align 会漏掉后者。
-     * ⚠ **left 也必须生成**: 数值列的值格子带 .g-stat/.m-stat(right), 若因为"left 是默认值"就跳过,
+     * WARN: **left 也必须生成**: 数值列的值格子带 .g-stat/.m-stat(right), 若因为"left 是默认值"就跳过,
      *    左对齐的口径会被这两条通用规则盖掉(实测: 添加于列表头左、值右)。
      */
     colAlignCss() {
@@ -676,10 +676,10 @@ window.AQB_COLUMNS = {
       return this.torrentWin.padBottom;
     },
     /* 分组页: **有展开面板时退避** —— .detail 高度不定(含明细表头 + N 行成员), 会让后续行的
-     * 位置偏离"第 i 行在 i×step"的假设(硬约束 ②); 此时回退全量渲染, 宁可慢也不能错位。 */
+     * 位置偏离"第 i 行在 i×step"的假设(硬约束 2.); 此时回退全量渲染, 宁可慢也不能错位。 */
     groupWin() {
       const n = this.filteredGroups.length;
-      // ❗退避判据必须是"**当前真的有面板**", 不能只看 expandedKey 非空: 展开态现在会跨视图带回
+      // !退避判据必须是"**当前真的有面板**", 不能只看 expandedKey 非空: 展开态现在会跨视图带回
       // (切回分组页时原组可能已被删/被筛掉, 见 app.js restoreExpandState), 为一个不存在的面板退避
       // = 大库上永久退化成全量渲染, 且用户完全看不出原因(界面一切正常, 只是滚动变卡)。
       if (this.expandedKey && this.filteredGroups.some((g) => g.key === this.expandedKey)) {

@@ -59,10 +59,10 @@
       </div>
     </div>
     <!-- 限速浮层(SPD-04; FX-08 改为就近弹出): 点击状态栏"限制速度"向上弹出, 该方向输入框预聚焦。
-         ① 无遮罩(页面其余部分仍可操作), 点空白/Esc 关闭;
-         ② **必须是状态栏的兄弟节点** —— .statusbar 有 overflow: hidden, 嵌在里面时子元素溢出会被裁掉,
+         1. 无遮罩(页面其余部分仍可操作), 点空白/Esc 关闭;
+         2. **必须是状态栏的兄弟节点** —— .statusbar 有 overflow: hidden, 嵌在里面时子元素溢出会被裁掉,
            表现为"点了没反应"(与 pitfalls 里那条同源);
-         ③ 位置由 JS 写在 inline style 上(只写 left, 并夹取到视口内), 不写死在 CSS 里。 -->
+         3. 位置由 JS 写在 inline style 上(只写 left, 并夹取到视口内), 不写死在 CSS 里。 -->
     <div v-if="speedOpen" ref="speedPop" class="speed-pop" :style="speedPopStyle()"
          role="dialog" aria-label="限速" @click.stop>
       <div class="modal-title">

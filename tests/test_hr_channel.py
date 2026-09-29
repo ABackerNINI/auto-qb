@@ -135,7 +135,7 @@ def test_result_from_json_text_and_binary():
 def test_result_carries_extension_quota_kind():
     """扩展侧硬上限的回传带 kind='ext-quota' —— 后端据此让位而不是计一次取数失败
 
-    ❗两边的常量必须一致(`hr.channel.KIND_EXT_QUOTA` ↔ `extensions/.../background.js` 里写死的那串),
+    !两边的常量必须一致(`hr.channel.KIND_EXT_QUOTA` ↔ `extensions/.../background.js` 里写死的那串),
     否则最坏情况是「配额让位」被当成「站点故障」: 熔断 + 告警, 真正的问题(后端频控失效)反而被掩盖。
     """
     quota = HrResult.from_json(

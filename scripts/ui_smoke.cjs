@@ -50,7 +50,7 @@ const add = (ui, name, ok, detail) => {
 
 /**
  * Vue 根实例(读 renderMs 等埋点; 取不到返回 null, 相关项降级为跳过)。
- * ❗不能用 `__vue_app__._instance.proxy`: 实测 Vue 3.5.13 下 `_instance` 恒为空(键在但没值),
+ * !不能用 `__vue_app__._instance.proxy`: 实测 Vue 3.5.13 下 `_instance` 恒为空(键在但没值),
  * 走容器上的 `_vnode.component.proxy` 才拿得到(踩过一次, 别改回去)。
  */
 const INST = "document.querySelector('#app')._vnode.component.proxy";
@@ -121,7 +121,7 @@ async function pausableRow(page, rowSel, resumeText) {
 }
 
 /** 命令投递端点(给 P0-3「补丁先于 POST」那一条注入人为延迟用)。
- *  ❗Playwright 新版的路由谓词收到的是 URL 对象而不是字符串, 别直接当 string 用。 */
+ *  !Playwright 新版的路由谓词收到的是 URL 对象而不是字符串, 别直接当 string 用。 */
 const CMD_URL = (u) => {
   const s = typeof u === "string" ? u : String(u);
   return /\/api\/(torrents|groups)\/[^/?]+\/(pause|resume)(\?|$)/.test(s) || s.includes("/api/torrents/bulk");
@@ -135,8 +135,8 @@ async function readInst(page, expr) {
  * hang 模式(命令永不回执)的**常驻守阵** —— 只在 `--expect-cmd hang` 时跑, 且**独占**一轮
  * (不与其他断言混跑): hang 下前端 waitCmd 超时是 40s, 混进主轮会把一轮拖到十分钟。
  * 判的是「失败/未知绝不留永久假状态」这条红线在无回执场景下还成不成立:
- *   ① pending 立即出现(乐观) ② 约 3s 后消失(兜底) ③ 消失后**状态色回到点击前**
- * ③ 是这条守阵的全部意义: 2026-09-19 之前兜底只 delete pendingOps 不回滚字段值, 而 rid 未变时
+ *   1. pending 立即出现(乐观) 2. 约 3s 后消失(兜底) 3. 消失后**状态色回到点击前**
+ * 3. 是这条守阵的全部意义: 2026-09-19 之前兜底只 delete pendingOps 不回滚字段值, 而 rid 未变时
  *   服务端不回传数组、行对象不被替换 ⇒ 补丁值(kind:"paused")永久留在行上, 命令根本没执行
  *   界面却一直显示已暂停。ok / error 两轮都碰不到这条路径, 缺陷才躺到了现在(issue 26-09-19-2141)。
  */
@@ -228,9 +228,9 @@ async function smokeUi(browser, ui) {
   /*
    * 展开态跨视图记忆(2026-09-25 用户报「辅种页切到种子页再切回, 展开的组收起来了」):
    * 展开 = "我正盯着这一组"这种临时意图, 切走再切回必须还是那一组。三层断言缺一层都会放过一档:
-   * ①切走后实时字段清空(展开态**不串台**到种子视图 —— 修法是分桶暂存, 不是把字段留在原处不管);
-   * ②切回后 `expandedKey` 还原成**同一个组 key**(不是"随便展开了一个");
-   * ③DOM 里 `.detail` 真渲染出来(只判字段会放过"值还原了、面板没画"这一档)。
+   * 1.切走后实时字段清空(展开态**不串台**到种子视图 —— 修法是分桶暂存, 不是把字段留在原处不管);
+   * 2.切回后 `expandedKey` 还原成**同一个组 key**(不是"随便展开了一个");
+   * 3.DOM 里 `.detail` 真渲染出来(只判字段会放过"值还原了、面板没画"这一档)。
    * 走**真实点击**(onGroupClick -> toggleExpand)而不是直接改 vm 字段 —— 值对而面板没画正是要抓的形态。
    */
   {
@@ -278,7 +278,7 @@ async function smokeUi(browser, ui) {
      * 状态栏速度(issue 26-09-20-1646): 状态栏是**跨视图**的常驻显示, 旧实现在前端对
      * `groups` 求和, 而 groups 按视图回传 —— 种子页根本不回它 ⇒ 恒显示 0(首屏即种子页)
      * 或停在**冻结的旧值**(先开过辅种页再切过来, 这个形态比 0 更隐蔽)。
-     * ❗所以断言写成「等于服务端 status.totals 真值」而不是「≠ 0」: 只断言非 0 会被
+     * !所以断言写成「等于服务端 status.totals 真值」而不是「≠ 0」: 只断言非 0 会被
      * 冻结值蒙过去, 而这正是 pytest 侧看不见的那一段(数值显示在 DOM 里, 单测看不到)。
      */
     const wantDl = await readInst(page, "vm.status && vm.status.totals ? vm.status.totals.dlspeed : null");
@@ -296,7 +296,7 @@ async function smokeUi(browser, ui) {
      * (`VIEW_ARRAYS["torrent"]` 只有 torrents) ⇒ 标签/分类/站点/路径四个恒空, 弹层只剩
      * "暂无数据"(H&R 是固定两档, 会显示成 0/0)。与状态栏速度(上一条)同一类成因:
      * 跨视图的消费者去依赖按视图裁剪的阵列。
-     * 判据两层, 缺一不可: ①选项非空 + 弹层 DOM 真渲染出项 ②计数 = **种子数**(该视图的行口径)。
+     * 判据两层, 缺一不可: 1.选项非空 + 弹层 DOM 真渲染出项 2.计数 = **种子数**(该视图的行口径)。
      * 只判非空会放过"仍按组算"的错误口径 —— 先开过辅种页再切过来时 groups 还在, 按组也能算出非零。
      */
     {
@@ -416,7 +416,7 @@ async function smokeUi(browser, ui) {
 
     /*
      * P1-2 占位总高必须**等于全量渲染**的总高(窗口化只少渲染 DOM, 不改布局高度)。
-     * ❗必须在**同一帧序列**里对照开关两侧: 早先只在"滚动前后"各读一次 scrollHeight,
+     * !必须在**同一帧序列**里对照开关两侧: 早先只在"滚动前后"各读一次 scrollHeight,
      * 而那个读点发生在 bench(true) 把 rowWin 还原成 true **之后** ⇒ 两次量的都是窗口化
      * 高度, 恒等成立。正是这个读数时机让 prism 的行间距硬编码(6px vs 实际 5px)造成的
      * +2973px 偏差一路溜到提交(BUG-1 / TEST-2)。
@@ -583,32 +583,32 @@ async function smokeUi(browser, ui) {
      * 与上面「补丁先于 POST」是**两段**: 上面管"变灰快不快", 这里管"恢复正常快不快"。
      * 修之前: pendingOps 只有 3s 超时一个出口(真值到了也不清) + 回执后不刷新 ⇒ 实测 3.1~3.4s;
      * 修之后: 回执后立刻拉真值(带退避重试) + 真值匹配即清 ⇒ 应 < 1s。
-     * ⚠ 前提是桩服务**真的改状态**(ui_harness.py::_apply_truth) —— 否则真值永不到,
+     * WARN: 前提是桩服务**真的改状态**(ui_harness.py::_apply_truth) —— 否则真值永不到,
      *   这条断言只会测到"走满 3s 兜底", 跟没测一样(这正是本条缺陷当初溜过去的原因)。
      *
-     * ❗**这里量的是两段, 不是一段**(2026-09-22 修订 —— 此前双 UI 各 1 条恒红, 根因是量错了对象):
+     * !**这里量的是两段, 不是一段**(2026-09-22 修订 —— 此前双 UI 各 1 条恒红, 根因是量错了对象):
      * D2(`0c18fcd`)之后乐观态拆成了两条独立的时间线, 而旧断言把两者混成一个:
-     *   ① 压暗(`.is-pending`)—— 回执到达即结束, 设计值就是十几~几十 ms(真机实测撤下 85ms);
-     *   ② 值覆盖(`pendingOps`)—— 压暗结束后继续盖住行值, 直到"服务端快照同意"才释放,
+     *   1. 压暗(`.is-pending`)—— 回执到达即结束, 设计值就是十几~几十 ms(真机实测撤下 85ms);
+     *   2. 值覆盖(`pendingOps`)—— 压暗结束后继续盖住行值, 直到"服务端快照同意"才释放,
      *      这才是"等真值"的那一段(桩里真值 +120ms 落 ⇒ 再经 ver 去抖 + 一轮 refresh ⇒ 实测 350~400ms)。
-     * 旧断言拿 DOM 上的 `.is-pending` 消失去卡"≥80ms 才证明等了真值" ⇒ ① 只有 17~22ms,
+     * 旧断言拿 DOM 上的 `.is-pending` 消失去卡"≥80ms 才证明等了真值" ⇒ 1. 只有 17~22ms,
      * **必然**低于下界 ⇒ 双 UI 恒红, 而代码一直是对的。
-     * ⇒ 现在 ① 量 DOM、上界 250ms(回归形态: 压暗不随回执结束 ⇒ 挂到值覆盖释放才消失 ≈350ms;
+     * ⇒ 现在 1. 量 DOM、上界 250ms(回归形态: 压暗不随回执结束 ⇒ 挂到值覆盖释放才消失 ≈350ms;
      *    再坏一层撤下退化回 D2 前的 ~3s 也一样红);
-     *    ② 量 `pendingOps` 归零、仍卡 80~1000ms(回归形态: 走满 3s 兜底, 或回执即释放 ⇒ <80ms)。
+     *    2. 量 `pendingOps` 归零、仍卡 80~1000ms(回归形态: 走满 3s 兜底, 或回执即释放 ⇒ <80ms)。
      */
     {
-      const BUDGET = 1000;        // ② 值覆盖释放的上界(3s 兜底是它的回归形态)
-      /* ① 的上界 —— ❗**不是**拍脑袋的 400: 压暗若没随回执结束, DOM 上的 `.is-pending` 会一直挂到
+      const BUDGET = 1000;        // 2. 值覆盖释放的上界(3s 兜底是它的回归形态)
+      /* 1. 的上界 —— !**不是**拍脑袋的 400: 压暗若没随回执结束, DOM 上的 `.is-pending` 会一直挂到
        * **值覆盖释放**(pendingOps 清空)才消失, 而桩里那一段实测 ~350ms(真值 120ms + ver 去抖 60ms
        * + 一轮 refresh ~140ms)。上界取 400 的话"压暗不结束"会**擦线过关**(实测 349/374ms),
        * 故压到 250: 正常路径 ~20ms(12 倍余量), 退化路径 ~350ms(必红)。
-       * ⚠ 该间隔随库规模浮动(refresh 越慢退化值越大), 小库下退化值会更靠近 250; --torrents 3000 是定阈值时的口径。 */
+       * WARN: 该间隔随库规模浮动(refresh 越慢退化值越大), 小库下退化值会更靠近 250; --torrents 3000 是定阈值时的口径。 */
       const GREY_BUDGET = 250;
-      /* ② 的采样间隔: pendingOps 是**响应式对象、DOM 上看不见**, 没有 MutationObserver 可用,
+      /* 2. 的采样间隔: pendingOps 是**响应式对象、DOM 上看不见**, 没有 MutationObserver 可用,
        * 只能定时采样。4ms 远小于最短窗口(error 模式回滚 ~21ms), 不至于漏采整个起落。 */
       /*
-       * ❗挑目标**之前**先与服务端真值对齐一次。否则会空过: 上面的块刚暂停过若干行, 桩服务
+       * !挑目标**之前**先与服务端真值对齐一次。否则会空过: 上面的块刚暂停过若干行, 桩服务
        * 真值已经改了, 但前端要等下一轮轮询(2s)才在 DOM 上反映 —— 此时按"class 没有 s-paused"
        * 挑出来的行其实**服务端已是 paused**, 点暂停后真值瞬间匹配 ⇒ pending 0~20ms 就清,
        * 断言恒绿却什么都没测到(2026-09-19 实测就是这样: 19ms)。
@@ -646,7 +646,7 @@ async function smokeUi(browser, ui) {
               if (m.dom0 !== null && m.clear === null && !document.querySelector(".is-pending")) m.clear = performance.now();
             });
             window.__mo3.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["class"], childList: true });
-            /* ② 值覆盖的起落: 0 -> N 记 opsUp, N -> 0 记 opsDown。 */
+            /* 2. 值覆盖的起落: 0 -> N 记 opsUp, N -> 0 记 opsDown。 */
             clearInterval(window.__ti3);
             window.__ti3 = setInterval(() => {
               const m = window.__t;
@@ -673,7 +673,7 @@ async function smokeUi(browser, ui) {
           return { clear: f(m.clear), opsUp: f(m.opsUp), opsDown: f(m.opsDown) };
         })()`);
         /*
-         * ❗**同时设下界**: 桩服务的真值是**回执后 +120ms** 才落的(_TRUTH_DELAY), 所以要等真值
+         * !**同时设下界**: 桩服务的真值是**回执后 +120ms** 才落的(_TRUTH_DELAY), 所以要等真值
          * 就必须 ≥ 100ms 量级。若代码又退回"拿自己贴的补丁当真值比对"(2026-09-19 实测的坑:
          * 28ms 就清, 断言全绿却什么都没测到), 下界会立刻把它打成红。
          */
@@ -683,10 +683,10 @@ async function smokeUi(browser, ui) {
           (FLOOR ? `, 早于 ${FLOOR}ms 说明没等真值、只是跟自己的补丁比上了)` : `, error 模式=失败立即回滚)`) +
           ` / 覆盖起于 ${tm.opsUp === null ? "未采到" : tm.opsUp + "ms"}`);
         /*
-         * ① 压暗(DOM `.is-pending`)单独成条: 它是**用户感知的那一半**(D2 前撤下 2947ms,
+         * 1. 压暗(DOM `.is-pending`)单独成条: 它是**用户感知的那一半**(D2 前撤下 2947ms,
          * 修后真机 85ms / 桩里十几 ms)。上面那条改量 pendingOps 之后, 它就没人管了 ——
          * 不补一条等于把"撤下慢"这个真实回归形态放走。
-         * ❗不下界: D2 之后压暗本来就由回执结束, 十几 ms 是设计使然(给它套下界就是上面那条恒红的翻版)。
+         * !不下界: D2 之后压暗本来就由回执结束, 十几 ms 是设计使然(给它套下界就是上面那条恒红的翻版)。
          */
         add(ui, `P0-3 压暗在回执后及时撤下(<${GREY_BUDGET}ms)`,
           clicked2 && tm.clear !== null && tm.clear < GREY_BUDGET,
@@ -768,8 +768,8 @@ async function smokeUi(browser, ui) {
      * CTX-03 多选右键 = 对**整个选中集合**生效。
      * 用户报: "多选时右键菜单应该对所有选择的种子生效, 当前仅对鼠标指向的触发右键的种子生效"。
      * 判据两条, 缺一不可 —— 只验文案会漏掉"文案对、动作错"这个最容易犯的形态:
-     *   ① 菜单文案: 右键**选中行** -> 出现"批量暂停"; 右键**未选中行** -> 仍是"暂停该种子"。
-     *   ② 实际投递: 点"批量暂停" -> 恰好 1 条 POST /api/torrents/bulk、0 条逐目标 pause。
+     *   1. 菜单文案: 右键**选中行** -> 出现"批量暂停"; 右键**未选中行** -> 仍是"暂停该种子"。
+     *   2. 实际投递: 点"批量暂停" -> 恰好 1 条 POST /api/torrents/bulk、0 条逐目标 pause。
      *      修之前这里会是 5 条逐目标 pause(菜单只认被点的那一行), 断言即红。
      * 这里刻意复用批量浮条的链路(ctxAct -> bulkAct), 目标集合权威仍是 selMembers。
      */
@@ -811,7 +811,7 @@ async function smokeUi(browser, ui) {
         !!otherRow && otherTexts.some((t) => t.includes("暂停该种子")) && !otherTexts.some((t) => t.includes("批量")),
         `菜单: ${otherTexts.slice(0, 6).join(" / ") || "(未打开)"}`);
 
-      // ② 实际投递: 点"批量暂停" -> 1 条 bulk / 0 条逐目标
+      // 2. 实际投递: 点"批量暂停" -> 1 条 bulk / 0 条逐目标
       const hits = { bulk: 0, single: 0 };
       const onReq = (r) => {
         const u = r.url();
@@ -852,13 +852,13 @@ async function smokeUi(browser, ui) {
     /*
      * CTX-04 / CTX-05 / CTX-06 —— 右键**次级菜单**的三条(2026-09-24 用户报, 都是"pytest 全绿、
      * node --check 全绿、界面废掉"那一类; 判据一律取**可测的事实**, 不靠截图):
-     *   ① 图标 hover 变灰(CTX-04): `.ctx-item:hover .ico` 是**后代**选择器, 而 `.ctx-sub` 是父项的
+     *   1. 图标 hover 变灰(CTX-04): `.ctx-item:hover .ico` 是**后代**选择器, 而 `.ctx-sub` 是父项的
      *      DOM 后代 ⇒ hover「更多操作」会把整个子面板的图标刷成 --fg-muted, 语义色全被抹平。
      *      判据: 悬停父项时读子面板首项图标的 computed color, 必须仍是语义色(队列族 --teal),
      *      且不等于 --fg-muted —— 修之前这里恒等于 --fg-muted。
-     *   ② 移出不消失(CTX-05): 只有 mouseenter 展开、没有任何收起 ⇒ 鼠标移到别的菜单项上
+     *   2. 移出不消失(CTX-05): 只有 mouseenter 展开、没有任何收起 ⇒ 鼠标移到别的菜单项上
      *      子面板一直挂在屏幕上。判据: hover 到另一个一级项 → 450ms 后 .ctx-sub 必须为 0。
-     *   ③ 一级两个"更多"入口(CTX-06): 复制族曾单列第二个子面板 ⇒ 用户得先选"该进哪个"。
+     *   3. 一级两个"更多"入口(CTX-06): 复制族曾单列第二个子面板 ⇒ 用户得先选"该进哪个"。
      *      判据: 一级 has-sub 恰好 1 个且文案是「更多操作」, 复制三项在它展开的面板里。
      */
     {
@@ -870,7 +870,7 @@ async function smokeUi(browser, ui) {
       } else {
         await row0.click({ button: "right" });
         await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
-        // ③ 一级只允许一个次级菜单入口
+        // 3. 一级只允许一个次级菜单入口
         const subs = await page.$$(".ctx-menu > .ctx-item.has-sub");
         const subTexts = [];
         for (const h of subs) subTexts.push(((await h.textContent()) || "").trim());
@@ -887,7 +887,7 @@ async function smokeUi(browser, ui) {
           ["复制名称", "复制哈希", "复制 magnet"].every((t) => flat.includes(t)),
           `面板: ${flat.slice(0, 90) || "(未展开)"}`);
 
-        // ① 悬停父项时子面板图标必须仍是语义色(队列族 --teal), 不是 --fg-muted
+        // 1. 悬停父项时子面板图标必须仍是语义色(队列族 --teal), 不是 --fg-muted
         const probe = await page.evaluate(`(() => {
           const el = document.querySelector(".ctx-sub .ico-queue");
           if (!el) return null;
@@ -906,7 +906,7 @@ async function smokeUi(browser, ui) {
           probe ? `图标 ${probe.icon} / 语义色(--teal) ${probe.teal} / 灰(--fg-muted) ${probe.muted}`
             : "(子面板没展开, 读不到图标)");
 
-        // ② 移到别的菜单项上 -> 子面板必须收起(延迟 ~180ms, 故等 450ms 再看)
+        // 2. 移到别的菜单项上 -> 子面板必须收起(延迟 ~180ms, 故等 450ms 再看)
         const firstItem = await page.$(".ctx-menu > .ctx-item");
         if (firstItem) await firstItem.hover();
         await page.waitForTimeout(450);
@@ -923,13 +923,13 @@ async function smokeUi(browser, ui) {
      * 只补成员 hash 不够: 组行的状态色取自 g.status.primary(不展开明细时看不到成员行),
      * 而组行此前也没有 is-pending 绑定 ⇒ 整组操作在感知层完全没有反馈。
      * 走真实右键菜单(与用户路径一致), 不用 vm.act() 直调。
-     * ❗先切回分组视图: 上一段 P0-4 是在**种子页**做的, 此时 DOM 里没有任何组行。
+     * !先切回分组视图: 上一段 P0-4 是在**种子页**做的, 此时 DOM 里没有任何组行。
      */
     await nav[0].click();  // 回分组
     await page.waitForTimeout(600);
     {
       /*
-       * ❗走 pausableRow(带"全暂停了就先恢复一行"的兜底), 不要只按 DOM class 挑:
+       * !走 pausableRow(带"全暂停了就先恢复一行"的兜底), 不要只按 DOM class 挑:
        * 行是**窗口化**的(只渲染 26 行), 而前面的块已经批量暂停 60 个种子 + 整剧暂停一整部剧,
        * 窗口里的组行很容易**全是 s-paused** ⇒ 直接报"找不到可暂停的组行"
        * (2026-09-19 与对方提交合流后实测: prism 过、atlas 挂 —— 只因两者窗口落点不同)。
@@ -1067,9 +1067,9 @@ async function smokeUi(browser, ui) {
       }
       /*
        * 不能用「固定睡 150ms 再采一次」:
-       * ① 成功路径 —— 整剧操作会把该剧**全部**成员一起补丁(桩里这一"剧"就有 1500 个种子),
+       * 1. 成功路径 —— 整剧操作会把该剧**全部**成员一起补丁(桩里这一"剧"就有 1500 个种子),
        *    applyOptimistic 逐 hash 扫表, 补丁贴完前 pendingOps 还没填齐 ⇒ 150ms 采样会假失败;
-       * ② 失败路径 —— 补丁贴在 POST **之前**(issue 26-09-19-1939 的修法), 失败要等回执回来才回滚,
+       * 2. 失败路径 —— 补丁贴在 POST **之前**(issue 26-09-19-1939 的修法), 失败要等回执回来才回滚,
        *    150ms 采样会看到"还没回滚"的假阳性(实测 atlas 就抓到过)。
        * 故两条路径都等条件成立再断言: 成功等 is-pending 出现, 失败等 pendingOps 归零。
        * 真机上单剧通常几十个种子, 会比桩里快得多 —— 轮询把两种规模都覆盖到。
@@ -1211,7 +1211,7 @@ async function smokeUi(browser, ui) {
    * 设置页位置持久化(2026-09-25 用户报"设置页刷新会回到种子页"): 顶层 page 与设置分区
    * (`hub.view`)原本都是**纯内存态** ⇒ F5 必掉回辅种页 + 设置首页, 编辑到一半的位置全丢。
    * 这里走真实手势(点设置 → 进分区 → 刷新)复现用户路径。
-   * ❗断言里必须含 `cfg.schema` 非空 —— 只改初值不改启动路径的写法会让刷新停在
+   * !断言里必须含 `cfg.schema` 非空 —— 只改初值不改启动路径的写法会让刷新停在
    * 「配置加载失败 + 重试」(设置页配置树是**按需加载**的), 而 page 值看着是对的。
    */
   {

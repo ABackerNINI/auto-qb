@@ -181,7 +181,7 @@ def test_row3_anchor_drift_invalidates_to_local_fallback():
 def test_row3_record_without_anchor_snapshot_is_not_drift():
     """记录无锚点快照(旧记录 / 写入方漏带) ⇒ 不作废: 「永续有效」优先于漂移这条辅助机制
 
-    ❗把 anchor_downloaded=0 读成「downloaded 增长」会让每条无快照的放行在**签发当刻**被判漂移,
+    !把 anchor_downloaded=0 读成「downloaded 增长」会让每条无快照的放行在**签发当刻**被判漂移,
     种子回落本地兜底(2026-09-29 实报「已在线核实过却显示本地兜底」)。
     """
     ver = HrVerified(infohash="h1", tid=TID, verified_ts=NOW, source=SOURCE_NOT_LISTED)

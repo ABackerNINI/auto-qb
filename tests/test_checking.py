@@ -189,7 +189,7 @@ def process_rule(mgr, client, tor, dry_run=False):
     """
     rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
     store = mgr.store
-    ctx = make_ctx(mgr, tor, client, dry_run=dry_run)  # ① 注入 by_hash(make_ctx 后捕获, 覆盖未 seed_store 的测试)
+    ctx = make_ctx(mgr, tor, client, dry_run=dry_run)  # 1. 注入 by_hash(make_ctx 后捕获, 覆盖未 seed_store 的测试)
     prev = dict(store.by_hash)
     orig_delete = mgr.api.torrents_delete
 

@@ -310,7 +310,7 @@ def _validate_hr_site_bindings(cfg: dict, errors: List[str]) -> None:
 def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
     """校验 hr_check.sites.<档案 id> 条目(enabled + tracker 显式映射 + refresh_interval; v3)
 
-    ❗fail-fast 重点: enabled 时绑定站点的 `hr` 段必填 —— 由 _validate_hr_site_bindings
+    !fail-fast 重点: enabled 时绑定站点的 `hr` 段必填 —— 由 _validate_hr_site_bindings
     在绑定层检查(绑定关系要等默认映射查表/显式直取解析完才知道)。
     """
     if not isinstance(spec, dict):

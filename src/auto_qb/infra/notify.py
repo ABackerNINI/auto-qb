@@ -3,8 +3,8 @@
 设计:
 - 接入: NotifyHandler 挂在 "auto_qb" logger 上, 复用全项目统一日志规范(memory-bank/conventions.md 日志骨架)——
   现有与未来的 logger.warning/error 调用自动成为通知源, 新增告警点无需逐处接入;
-- 防打扰双层: ①平台原生 toast 受 OS 专注助手/勿扰管理(Windows 全屏时横幅自动静默转入通知中心);
-  ②程序级 quiet_hours 免打扰时段兜底(时段内跳过发送, 与 date_time 条件共用 utils.time_in_range);
+- 防打扰双层: 1.平台原生 toast 受 OS 专注助手/勿扰管理(Windows 全屏时横幅自动静默转入通知中心);
+  2.程序级 quiet_hours 免打扰时段兜底(时段内跳过发送, 与 date_time 条件共用 utils.time_in_range);
 - 线程模型: 日志调用线程仅在 handler 内做非阻塞 enqueue, subprocess 派发在 daemon 线程完成——
   不碰任务队列/state_file/store, 不违反"主循环单写线程"约束; 通知失败只 DEBUG, 绝不外抛;
 - 防自环: handler 忽略来自本模块 logger 的记录, 杜绝"通知触发通知";
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 NOTIFY_LOGGER_PREFIX = "auto_qb.notify"
 # Windows toast 来源应用标识(AUMID), 经注册表 HKCU\Software\Classes\AppUserModelId
 # 注册 DisplayName/IconUri(通知平台标准机制)。
-# ⚠️ 历史教训: 曾用开始菜单 .lnk(隐式 AUMID=文件名)注册, 但 lnk 的 TargetPath 指向
+# WARN: 历史教训: 曾用开始菜单 .lnk(隐式 AUMID=文件名)注册, 但 lnk 的 TargetPath 指向
 # python.exe 时, explorer 解析任务栏按钮的应用身份取"目标应用"而非 IconLocation ->
 # 名字/图标全部回退 "Python 3.12 (64-bit)"/python 图标; 改注册表键后无任何 python 关联。
 WINDOWS_TOAST_APPID = "AutoQB.UI"

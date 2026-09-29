@@ -42,7 +42,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         """
         manager.touch_web_client()
         snap = manager.status_snapshot()
-        # ❗**先**取分组状态再拼 status: ensure_group_state 才是真正触发"视图发布"的地方
+        # !**先**取分组状态再拼 status: ensure_group_state 才是真正触发"视图发布"的地方
         # (脏则重建四视图 + 速度合计)。若把它写在 status 字典之后(作为 `**` 展开项),
         # 字典字面量会**先**求值 ⇒ 读到的是上一轮的旧值: 首次请求拿到全 0, 之后每轮慢一拍。
         group_state = manager.ensure_group_state(rid, view or None)
@@ -64,7 +64,7 @@ def build_router(ctx: WebContext) -> APIRouter:
                     # 合并后每轮只剩 1 条请求, 且两者同源同轮。
                     "server": manager.store.server_state,
                     # 全量种子的上传/下载速度合计(状态栏常显统计): 与 traffic / server 同为
-                    # "恒回传"口径 —— ❗**不参与 VIEW_ARRAYS 视图分片、不受 rid 门控**。
+                    # "恒回传"口径 —— !**不参与 VIEW_ARRAYS 视图分片、不受 rid 门控**。
                     # 状态栏是跨视图的常驻显示, 一旦让它去读按视图裁剪的数组(旧实现对 groups
                     # 求和), 种子页就会恒显示 0(issue 26-09-20-1646); 服务端算好标量再回传,
                     # 前端只读这一个值, 彻底与视图分片解耦。
@@ -72,14 +72,14 @@ def build_router(ctx: WebContext) -> APIRouter:
                 },
             **group_state,
         }
-        # ⚡ 直接返回 JSONResponse, **不要**返回裸 dict: FastAPI 对普通返回值会先跑一遍
+        # [!] 直接返回 JSONResponse, **不要**返回裸 dict: FastAPI 对普通返回值会先跑一遍
         # `jsonable_encoder` 递归遍历整个响应体 —— 实测 3000 种子 `view=torrent` 时它要
         # **161 ms**, 占端点总耗时 189 ms 的 85%(中间件实测), 而我们的视图本来就是 JSON 原生
         # 类型(str/int/float/bool/None/dict/list), 这趟遍历纯属白跑, 还全程占着 GIL
         # (与主循环抢 CPU ⇒ 大库下"点了没反应"的一个真实来源)。
         # 返回 Response 实例会被 FastAPI 短路(fastapi/routing.py: `isinstance(raw_response, Response)`
         # ⇒ 跳过 serialize_response), 只付 json.dumps 的钱(实测 25~50 ms)。**输出字节完全一致**。
-        # ⚠ 代价: 若日后往 payload 里塞了非 JSON 原生类型(datetime/set/Decimal), 这里会**直接
+        # WARN: 代价: 若日后往 payload 里塞了非 JSON 原生类型(datetime/set/Decimal), 这里会**直接
         # 抛 TypeError 变 500**(fail-fast), 而不是被静默转成字符串 —— 加字段时注意。
         return JSONResponse(content=payload)
 

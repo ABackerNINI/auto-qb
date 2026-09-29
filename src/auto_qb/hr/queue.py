@@ -70,7 +70,7 @@ class HrTaskQueue:
                 got = self._results.pop(task_id, None)
                 if got is not None:
                     return got
-                # ❗叫停标记优先于一切: 包括"叫停之后才发起的等待" —— 否则关停时线程又新发一条
+                # !叫停标记优先于一切: 包括"叫停之后才发起的等待" —— 否则关停时线程又新发一条
                 # 任务, 就得白等满 request_timeout(默认 180s), 而且一直持着站点锁。
                 if self._cancel_reason:
                     return None

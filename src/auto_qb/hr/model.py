@@ -304,9 +304,9 @@ class HrLaneState:
     """单档位最近一波的取数状态(§3.4 档位级数据有效性, 截断式)
 
     **失效点之前的数据全部有效**(命中照常、覆盖范围内的「未列出」可判), 之后的一概不取:
-    - status=ok 且 full_depth: 覆盖证明达全深度(翻到末页 / ②到期段停翻 —— 深处全是到期行,
+    - status=ok 且 full_depth: 覆盖证明达全深度(翻到末页 / 2.到期段停翻 —— 深处全是到期行,
       无论看到与否结论相同) ⇒ 该档对**任意位置**的缺席证明成立;
-    - status=ok 且非 full_depth(①完成时间覆盖 / ③本地全集停翻): 缺席证明只对
+    - status=ok 且非 full_depth(1.完成时间覆盖 / 3.本地全集停翻): 缺席证明只对
       done >= cutoff_done 的位置成立(更深未翻, 不可判);
     - status=ok 且是截断(预算/解析失效点截断): 同上按位置判, 截断点之前有效;
     - status=failed: 结构性失效(第 1 页即无表头/字段缺失) ⇒ 本档无有效数据, 缺席不可判。
@@ -318,7 +318,7 @@ class HrLaneState:
     pages: int = 0  #: 本波本档抓取页数(含截断页)
     rows: int = 0  #: 本波本档有效行数
     cutoff_done: float = 0.0  #: 已见最深行的完成时刻(epoch; 0 = 没有位置概念)
-    full_depth: bool = False  #: 覆盖证明是否达全深度(末页 / ②到期段停翻)
+    full_depth: bool = False  #: 覆盖证明是否达全深度(末页 / 2.到期段停翻)
     detail: str = ""  #: 截断/失效原因(展示与排障)
     #: 连续失效波数(§5.2 告警升级: 连续 3 波同档失效 → ERROR 告警疑似改版; 干净波清零)
     fail_streak: int = 0
@@ -351,7 +351,7 @@ class HrLaneState:
 
     @classmethod
     def from_json(cls, raw: Dict[str, Any]) -> "HrLaneState":
-        # ❗count_claim/count_match 必须显式判空(计划 §2.3 陷阱 T1): 旧站点文件没有这些键,
+        # !count_claim/count_match 必须显式判空(计划 §2.3 陷阱 T1): 旧站点文件没有这些键,
         # raw.get 返回 None —— 走 _as_int 缺省路径会被折成 0, 全部存量档案瞬间变「声明 0 行」
         # ⇒ 全站假 mismatch ⇒ 批量签发永久冻结。None 语义必须原样穿过。
         claim = raw.get("count_claim")

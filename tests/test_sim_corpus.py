@@ -96,7 +96,7 @@ def test_fsmock_long_path_prefix_and_case():
 def test_fsmock_case_folding_does_not_follow_platform(monkeypatch):
     """大小写折叠必须**固定走 NTFS 语义**, 不能跟随运行平台(2026-09-22 Linux CI 红了这条)。
 
-    ❗为什么不用文本扫描当判据: `os.path.normcase` 这串字**就写在 `_key()` 的 docstring 里**
+    !为什么不用文本扫描当判据: `os.path.normcase` 这串字**就写在 `_key()` 的 docstring 里**
     (作为反例警告), 文本扫描会被注释骗过 —— 冒烟里 `_scan_filter_facets` 先剥注释就是同一个坑。
     故改为**运行时判定**: 把模块里的 `os` 换成 `path=posixpath` 的替身。折叠若真跟随 `os.path`,
     结果立刻退化成大小写敏感 ⇒ 红; 走 `ntpath.normcase` 则不受影响 ⇒ 绿。
@@ -163,10 +163,10 @@ def test_sim_is_within_red_on_fold_without_sep(monkeypatch):
 def test_safe_delete_rejects_path_outside_fs_root(tmp_path):
     """B2 逃逸: `safe_delete_files` 对落在 fs_root 之外的目标必须拒绝(从 `--self-test` 下沉, 进 CI)
 
-    ❗为什么要下沉: 这一段原本只在 `python scripts/sim_qb.py --self-test` 里跑 —— 要真起 HTTP 服务
+    !为什么要下沉: 这一段原本只在 `python scripts/sim_qb.py --self-test` 里跑 —— 要真起 HTTP 服务
     **且**真装 qbittorrentapi(没装就整段 `return 0` 跳过), **CI 从不执行** ⇒ 平台语义回归抓不到
-    (pitfalls「Windows 全绿 / Linux 全红」❗⑤ 的根因就是这个盲区)。这里改成直接打方法, 不起服务。
-    比原自检多钉两条: ① 拒绝时**文件没被真删**(别把"拒了"做成"删了") ② **记进 violations**
+    (pitfalls「Windows 全绿 / Linux 全红」!5. 的根因就是这个盲区)。这里改成直接打方法, 不起服务。
+    比原自检多钉两条: 1. 拒绝时**文件没被真删**(别把"拒了"做成"删了") 2. **记进 violations**
     (否则"拒了但没记账"看不出来 —— 记账是 sim_run 判定越界的依据)。
     """
     sim = _make_sim(tmp_path, cmd_latency_ms=0, md_lag_ms=0)
@@ -199,7 +199,7 @@ def test_safe_delete_rejects_bulk_over_declared(tmp_path):
 def test_delete_group_files_removes_them_from_disk(tmp_path):
     """D4 删组文件(从 `--self-test` 下沉): 删完磁盘上**确实少文件**, 且组内一个成员进 `error`
 
-    ❗必须用**合成档**: 语料档是 `fs-mode=mock`, 磁盘上根本没有文件 ⇒ `_walk()` 前后都是 0
+    !必须用**合成档**: 语料档是 `fs-mode=mock`, 磁盘上根本没有文件 ⇒ `_walk()` 前后都是 0
     ⇒ "删完更少"永远不成立 ⇒ 判据**恒假**(比不测更糟)。这是下沉时最容易踩的坑, 故显式断言
     `before > 0` 把"没物化"变成红而不是绿。
     """
@@ -891,7 +891,7 @@ def test_group_exact_diff_red_on_missing_group():
 def test_known_tag_literals_are_mapped_after_sanitization():
     """auto-qb 自有标签字面量(MISSING / zSkipChecked)被伪名化后, 必须能在 meta 里查到"字面量 -> 伪名"
 
-    ❗踩过的坑: 标签集合里存的是**已脱敏**的伪名, 拿原始字面量去 `in` 判断永远为假 ⇒ 映射恒为空
+    !踩过的坑: 标签集合里存的是**已脱敏**的伪名, 拿原始字面量去 `in` 判断永远为假 ⇒ 映射恒为空
     ⇒ 回放端生成的 config 用的还是真字面量 ⇒ 跳检 / 缺文件行为与真机不一致(判据全绿也是假的)。
     所以必须用反查表把伪名还原成原文再比。
     """

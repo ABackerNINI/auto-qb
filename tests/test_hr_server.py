@@ -1,8 +1,8 @@
 """test_hr_server 测试计划: 本地取数端点(127.0.0.1 监听 + token 鉴权 + origin/URL 边界)
 
 分两层测:
-① `route()` 纯逻辑层 —— 鉴权与白名单全部在这里, 直接调不碰 socket, 判据最稳;
-② 真 HTTP 层 —— 起真监听用 urllib 打一轮(含 401/403 与端口冲突 fail-fast),
+1. `route()` 纯逻辑层 —— 鉴权与白名单全部在这里, 直接调不碰 socket, 判据最稳;
+2. 真 HTTP 层 —— 起真监听用 urllib 打一轮(含 401/403 与端口冲突 fail-fast),
    确认薄适配层(头解析 / Content-Length / 状态码)真的通。
 
 ## 测试计划(每个测试函数一条)
@@ -70,7 +70,7 @@ def _free_port() -> int:
     return port
 
 
-# ---------- ① 纯逻辑路由 ----------
+# ---------- 1. 纯逻辑路由 ----------
 
 
 def test_route_rejects_missing_token():
@@ -215,7 +215,7 @@ def test_contact_recorded_only_after_auth():
     assert server.last_contact_ts == 2000.0, "每次接触都刷新(静默判定看的就是它)"
 
 
-# ---------- ② 真 HTTP ----------
+# ---------- 2. 真 HTTP ----------
 
 
 def _http(method: str, port: int, path: str, *, token=None, body=None, origin=None):

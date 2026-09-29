@@ -191,9 +191,9 @@ def test_filter_log_lines_unfilterable_returns_note():
     lines = _lines(
         _DEFAULT_FMT, [("auto_qb.core.x", logging.INFO, "启动完成"), ("auto_qb.core.y", logging.WARNING, "连接重试")]
     )
-    # ①格式里没有等级字段 -> 等级无从判定
+    # 1.格式里没有等级字段 -> 等级无从判定
     assert filter_log_lines("%(asctime)s %(message)s", lines, "WARNING") == (lines, NOTE_NO_LEVEL_FIELD)
-    # ②格式有等级字段, 但行是另一种格式(改了 format, 旧行还在)
+    # 2.格式有等级字段, 但行是另一种格式(改了 format, 旧行还在)
     assert filter_log_lines("%(levelname)s %(message)s", lines, "WARNING") == (lines, NOTE_FORMAT_MISMATCH)
     # 空文件不报"筛不了"(确实没有内容, 不是筛不了)
     assert filter_log_lines(_DEFAULT_FMT, [], "WARNING") == ([], "")

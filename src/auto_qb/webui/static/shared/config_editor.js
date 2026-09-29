@@ -959,7 +959,7 @@ window.CONFIG_EDITOR = {
  * 唯一消费者是 `config_hub.js` 的 `HUB_FIELD_COMPONENT`: 它 `Object.assign` 拷走这里全部读写方法,
  * 只换掉 `name` 与 `template`(即"同一套控件语义, 两套版式")。
  *
- * ⚠ 2026-09-25: 经典设置页移除后, 原 `ce-field` 组件与 `tpl-ce-field` 模板已不可达, 一并删除;
+ * WARN: 2026-09-25: 经典设置页移除后, 原 `ce-field` 组件与 `tpl-ce-field` 模板已不可达, 一并删除;
  *   这里随之摘掉只服务那个组件的 `name` / `template` 两个键。**基座本身不能删** —— 删了 hub 侧
  *   会连带失去全部 cfg* 读写(inject/provide 链 + 方法都在这里)。守阵 `_scan_mixin_wiring` 的
  *   "定义即需接线" 规则已把 "被别的全局 Object.assign 消费" 也算作接线。
@@ -1101,7 +1101,7 @@ window.CE_FIELD_BASE = {
     },
     /* 数值 + 单位: 只改其中一半时保留另一半的当前值(避免"改单位把数字清空")
      *
-     * ⚠ `unitParts` 是 **computed**(无参 getter), 只能 `this.unitParts.unit` 取属性;
+     * WARN: `unitParts` 是 **computed**(无参 getter), 只能 `this.unitParts.unit` 取属性;
      *    写成 `this.unitParts()` 是把 getter 的**返回值**({num, unit} 对象)当函数调用
      *    ⇒ TypeError ⇒ 经典设置页一改"数值 + 单位"字段的数字就整页白屏
      *    (2026-09-21 实测修复; 静态守阵见 tests/test_web.py

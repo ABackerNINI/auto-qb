@@ -346,7 +346,7 @@
   border-right: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
 .hr-pop.below .hp-arrow { display: block; top: -5.5px;
   border-left: 1px solid var(--border-strong); border-top: 1px solid var(--border-strong); }
-/* ① 结论行 */
+/* 1. 结论行 */
 .hp-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .hp-dot { width: 8px; height: 8px; flex: 0 0 auto; }
 .hp-dot.danger { background: var(--hr-pending); }
@@ -360,7 +360,7 @@
 .hp-verdict.unknown { color: var(--paused); }
 .hp-cyc { font: 500 10px/1.5 var(--font-mono); border: 1px solid transparent; padding: 0 5px; white-space: nowrap; }
 .hp-cyc.ended { color: var(--fg-muted); background: var(--surface-1); border-color: var(--border-soft); }
-/* ② 进度轨道: 已过段 = 档位色, 未达段 = 轨道底色 */
+/* 2. 进度轨道: 已过段 = 档位色, 未达段 = 轨道底色 */
 .hp-gauge { margin-top: 11px; display: grid; gap: 5px; }
 .hg-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hg-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--fg-dim); }
@@ -389,7 +389,7 @@
 .fill.unknown { background: var(--paused); }
 .hg-rail.site .fill { opacity: .55; }
 .hg-site { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
-/* ②' 档位徽记 */
+/* 2.' 档位徽记 */
 .hp-badge { margin-top: 11px; display: flex; width: max-content; align-items: center; gap: 7px;
   padding: 6px 10px; font: 600 11.5px/1.5 var(--font-ui); }
 .hp-badge svg { width: 14px; height: 14px; flex: 0 0 auto; }
@@ -397,13 +397,13 @@
 .hp-badge.failed { color: var(--error); background: var(--error-soft); border: 1px solid var(--error-line); }
 .hp-badge.safe { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-line); }
 .hp-badge.unknown { color: var(--fg-muted); background: var(--surface-1); border: 1px solid var(--border-soft); }
-/* ③ 数值条: mono 紧排 kv */
+/* 3. 数值条: mono 紧排 kv */
 .hp-kv { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px 6px; }
 .kv { display: inline-flex; align-items: baseline; gap: 5px; padding: 2.5px 8px; background: var(--surface-1); }
 .kv i { font-style: normal; font: 500 10.5px/1.5 var(--font-mono); color: var(--fg-dim); white-space: nowrap; }
 .kv b { font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-weight: 600; font-size: 11.5px; color: var(--fg-soft); white-space: nowrap; }
-/* ④ 底部: 依据原文 + 站点滞后角注 */
+/* 4. 底部: 依据原文 + 站点滞后角注 */
 .hp-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-soft); display: grid; gap: 3px; }
 .hp-reason, .hp-lag { display: flex; align-items: flex-start; gap: 6px; }
 .hp-reason svg, .hp-lag svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: 2px; color: var(--fg-dim); }

@@ -131,7 +131,7 @@ class HrJudgement:
     def is_hr(self) -> bool:
         """「是否按 HR 对待」的布尔语义(打标 / 规则 / 表达式 / 视图共用)
 
-        ❗NO_EVIDENCE 恒 False —— 行 4 的管束/放行由调用方按本地判据现算(check_hr_condition),
+        !NO_EVIDENCE 恒 False —— 行 4 的管束/放行由调用方按本地判据现算(check_hr_condition),
         本属性只表达**站点侧**的明确结论。
         """
         return self.identity is HrIdentity.HR

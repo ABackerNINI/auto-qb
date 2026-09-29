@@ -1,9 +1,9 @@
 """pytest 全局夹具: 测试期禁止**真实系统副作用**。
 
 覆盖三件事, 都是会话级 autouse 夹具 —— 拦在"真实副作用入口"之前:
-① 系统通知: 通知器进程不启动; ② AUMID 注册表键: 不落盘; ③ 全程记账: 越界副作用直接让本次运行失败。
+1. 系统通知: 通知器进程不启动; 2. AUMID 注册表键: 不落盘; 3. 全程记账: 越界副作用直接让本次运行失败。
 
-## ① 真实系统通知 (2026-09-18 实测)
+## 1. 真实系统通知 (2026-09-18 实测)
 
 **背景**: `notify.py` 的通知渠道在**后台线程真实执行外部命令** ——
 win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript`。
@@ -22,7 +22,7 @@ win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript
   `subprocess.run`, 会自然覆盖本夹具;
 - `node --check` 等**非通知器**子进程原样放行。
 
-## ② AUMID 注册表键 (2026-09-18 副作用普查发现)
+## 2. AUMID 注册表键 (2026-09-18 副作用普查发现)
 
 **背景**: `PlatformChannel("win32")` 构造时会调 `_ensure_appid_registered()` 真写
 `HKCU\\Software\\Classes\\AppUserModelId\\AutoQB.UI`(通知来源显示名/图标)。
@@ -38,9 +38,9 @@ win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript
 
 **不拦什么**: 非 AUMID 键(如 `autostart` 的 Run 键)照常真实读写 —— 那是既有明文约定且自清理。
 
-## ③ 副作用记账器 (2026-09-18 普查的临时探针固化而来)
+## 3. 副作用记账器 (2026-09-18 普查的临时探针固化而来)
 
-**背景**: ①②都是"已经发现的"副作用。普查用的临时探针在 `%TEMP%` 里会随会话消失,
+**背景**: 1.2.都是"已经发现的"副作用。普查用的临时探针在 `%TEMP%` 里会随会话消失,
 同类问题下次还得靠人肉发现。本文件把它固化成常驻守卫 —— `sidefx.py` 记账器全程记录五类
 真实副作用, 收尾时按放行清单判定, **有越界项就让本次 pytest 失败**。
 
@@ -58,7 +58,7 @@ import sidefx
 # 通知器可执行名(小写、不含 .exe): 与 notify.PlatformChannel 的三个平台后端一一对应
 NOTIFIER_EXECUTABLES = frozenset({"notify-send", "osascript", "powershell", "pwsh"})
 
-# AUMID 键前缀: PlatformChannel("win32") 构造时会真写这个键(见模块 docstring ②)
+# AUMID 键前缀: PlatformChannel("win32") 构造时会真写这个键(见模块 docstring 2.)
 AUMID_KEY_PREFIX = "Software\\Classes\\AppUserModelId\\"
 
 _real_run = subprocess.run
@@ -94,7 +94,7 @@ def pytest_testnodedown(node, error):
 def pytest_terminal_summary(terminalreporter):
     """把副作用台账打进收尾总结 —— 没有越界时守卫是静默的, 不打印就没人知道它在工作
 
-    ❗并行(xdist)下每个 worker 各跑一个会话, 而**终端总结只在控制器上产出** ⇒ worker 的台账若不回传,
+    !并行(xdist)下每个 worker 各跑一个会话, 而**终端总结只在控制器上产出** ⇒ worker 的台账若不回传,
     「越界 0 条」这行在日常输出里会**静默消失**(拦截仍在: 越界时 worker 自己的会话夹具已让本次运行失败,
     见 `sidefx_recorder` —— 丢的只是**可见性**)。回传走 xdist 的 `workeroutput`:
     worker 侧写进 `config.workeroutput`, 控制器侧在 `pytest_testnodedown` 里从 `node.workeroutput` 收。
@@ -131,7 +131,7 @@ def pytest_terminal_summary(terminalreporter):
 
 @pytest.fixture(scope="session", autouse=True)
 def sidefx_recorder(request):
-    """会话级: 全程记录真实系统副作用; 收尾时如有越界项**让本次运行失败**(详见模块 docstring ③)
+    """会话级: 全程记录真实系统副作用; 收尾时如有越界项**让本次运行失败**(详见模块 docstring 3.)
 
     测试可请求本夹具取用记账器(如断言"某个操作没有产生副作用")。
     """
@@ -158,7 +158,7 @@ def sidefx_recorder(request):
 
 @pytest.fixture(scope="session", autouse=True)
 def _no_real_system_notification():
-    """会话级: 通知器命令一律不启动(详见模块 docstring ①)"""
+    """会话级: 通知器命令一律不启动(详见模块 docstring 1.)"""
     subprocess.run = _guard_run
     try:
         yield
@@ -168,7 +168,7 @@ def _no_real_system_notification():
 
 @pytest.fixture(scope="session", autouse=True)
 def _no_real_aumid_registry_write():
-    """会话级: 只把 AUMID 键的写入变成空操作, 其余注册表写入放行(详见模块 docstring ②)"""
+    """会话级: 只把 AUMID 键的写入变成空操作, 其余注册表写入放行(详见模块 docstring 2.)"""
     try:
         import winreg
     except ImportError:  # 非 Windows: notify 不会走 win32 后端, 无需处理

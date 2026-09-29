@@ -4,7 +4,7 @@
  * 挂到 window.AQB_FORMAT, 由 app.js 末尾 app.mixin(window.AQB_FORMAT) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
- * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_FORMAT);
+ * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_FORMAT);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_FORMAT = {
@@ -61,7 +61,7 @@ window.AQB_FORMAT = {
      * 显示 3天前、有的显示 08-11 20:56"会让人以为没改干净(2026-09-20 用户实测反馈); 长跨度
      * 的可读性损失由 title 上的绝对时间点补回(调用方挂 :title="fmtTs(...)" )。
      * 哨兵与 fmtTs 同口径: -1/0 = 从未传输 → 空白(TBL-01)。
-     * ⚠ 时基必须读 this.nowSec(响应式秒计数, app.js 每 30s 一跳)而不是现取 Date.now():
+     * WARN: 时基必须读 this.nowSec(响应式秒计数, app.js 每 30s 一跳)而不是现取 Date.now():
      *   后端 last_activity 按分钟量化且只在活动发生时才变 ⇒ 行对象不变时 Vue 不重渲染,
      *   现取时间会让"刚刚"之类的相对值**永久停在渲染那一刻**。 */
     fmtRelTime(ts) {
@@ -109,8 +109,8 @@ window.AQB_FORMAT = {
       return (m.ratio || 0).toFixed(2);
     },
     /* 可用性(FX-26): 两个"没有有效值"的来源都不显示 ——
-     * ① 负数: qB 拿不到 distributed_copies 时给 -1(未连上 tracker / 无 peer 数据), 旧版直接
-     *    toFixed 出 "-1.00" 看着像真数值; ② 暂停中的种子: 没连接就谈不上分布式副本数(与
+     * 1. 负数: qB 拿不到 distributed_copies 时给 -1(未连上 tracker / 无 peer 数据), 旧版直接
+     *    toFixed 出 "-1.00" 看着像真数值; 2. 暂停中的种子: 没连接就谈不上分布式副本数(与
      *    FX-03 的做种/用户列同口径)。0 仍是有效值(确实零副本), 保留显示 */
     cellAvailability(m) {
       if (m.kind === "paused") return "";
@@ -122,7 +122,7 @@ window.AQB_FORMAT = {
      * 所有时间点列一律走这两个函数, 模板里不得再直接调 fmtTime/fmtTs(否则那列就没有开关)。
      * 两种口径互为悬停提示 —— 显示相对时 title 给绝对时间点, 显示绝对时 title 给"3天前",
      * 这样长跨度(1个月前/1年前)也能一眼核对, 不必为可核对性在列内混两种格式。
-     * ⚠ 统一走 fmtTs(而非 fmtTime): 它挡住了 -1 哨兵(直接 fmtTime(-1) 会渲染出 1970 年的日期)。 */
+     * WARN: 统一走 fmtTs(而非 fmtTime): 它挡住了 -1 哨兵(直接 fmtTime(-1) 会渲染出 1970 年的日期)。 */
     cellTime(ts, key) {
       return this.timeFmt[key] === "rel" ? this.fmtRelTime(ts) : this.fmtTs(ts);
     },

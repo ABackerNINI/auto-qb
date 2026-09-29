@@ -23,13 +23,13 @@ r"""测试期"真实系统副作用"**记账器与判定策略**(2026-09-18 普�
 (资源管理器 / 浏览器 / shell), 和用户最初报的"测试时弹出系统通知框"是同一族问题。
 `open_path()` 在 Windows 上走 `utils._win_shell_open`(Shell PIDL 长路径路线), 该路线失败才退回
 `os.startfile`; `/api/open-path` 能触达两者。
-❗`_win_shell_open` 是 **ctypes 直调 shell32**, 不经过任何 stdlib 入口 —— 所以它必须像
+!`_win_shell_open` 是 **ctypes 直调 shell32**, 不经过任何 stdlib 入口 —— 所以它必须像
 `os.startfile` 一样**单列进 LAUNCH**, 否则"长路径打开"这条新路线在守阵里是**盲区**:
 用一个守阵看不见的 API 换掉它看得见的 API, 等于把守卫废掉。
 (`subprocess.call/check_output/run` 内部都会走到 `Popen`, 由 `POPEN` 覆盖, 不必单列。)
 
-**不做什么**: ①**不阻断**任何操作(只记账, 语义不变); ②不记录只读操作
-(`winreg.OpenKey`/`QueryValue`/`os.stat` 等无副作用); ③`SetValueEx` 只记值名不记键路径 ——
+**不做什么**: 1.**不阻断**任何操作(只记账, 语义不变); 2.不记录只读操作
+(`winreg.OpenKey`/`QueryValue`/`os.stat` 等无副作用); 3.`SetValueEx` 只记值名不记键路径 ——
 本仓两处调用都紧跟 `CreateKeyEx`, 键路径由 `REG` 那条记录覆盖(见 `is_violation` 注释)。
 
 **已知坑(普查时踩过, 已固化在 `is_temp_path`)**: 用 `tempfile.gettempdir()` 直接做
@@ -113,7 +113,7 @@ def _path_of_fd(fd: Any) -> Optional[str]:
 def _with_dir_fd(path: Any, kw: dict) -> Any:
     """把 `dir_fd` 相对的路径补全为绝对路径(无 `dir_fd` 时原样返回)
 
-    ❗为什么必须补: POSIX 上 `shutil.rmtree` 走 fd 版实现(`_rmtree_safe_fd`), 删目录内条目时传的是
+    !为什么必须补: POSIX 上 `shutil.rmtree` 走 fd 版实现(`_rmtree_safe_fd`), 删目录内条目时传的是
     **纯文件名 + dir_fd** —— Windows 不支持 `dir_fd`, 走的是拼接好绝对路径的另一支。于是同一份
     `TemporaryDirectory` 清理, 在 Windows 上记到 `<temp>\\xxx\\state.json`, 在 Linux 上只记到
     `'state.json'`; 后者 realpath 后落在 CWD(仓库根目录), 被判成"临时目录外删除"。
@@ -261,7 +261,7 @@ class SideFxRecorder:
 
         recorder = self
 
-        # ① 外部进程
+        # 1. 外部进程
         orig_popen_init = subprocess.Popen.__init__
 
         def popen_init(self, args, *a, **kw):
@@ -270,7 +270,7 @@ class SideFxRecorder:
 
         patch(subprocess.Popen, "__init__", popen_init)
 
-        # ①b "启动"类: 不走 subprocess, 但同样会弹窗口(资源管理器 / 浏览器 / shell)
+        # 1.b "启动"类: 不走 subprocess, 但同样会弹窗口(资源管理器 / 浏览器 / shell)
         for mod, name in ((os, "startfile"), (os, "system")):
             orig_launch = getattr(mod, name, None)
             if orig_launch is None:  # 非 Windows 上 os.startfile 不存在
@@ -295,7 +295,7 @@ class SideFxRecorder:
 
         patch(webbrowser, "open", open_browser)
 
-        # ①c Shell PIDL 长路径路线(本项目自己的打开入口): ctypes 直调 shell32, **不走任何
+        # 1.c Shell PIDL 长路径路线(本项目自己的打开入口): ctypes 直调 shell32, **不走任何
         #     stdlib 入口** ⇒ POPEN 与上面几个都抓不到, 必须单列(理由见模块 docstring 的 LAUNCH 段)
         try:
             from auto_qb.infra import utils as _aq_utils
@@ -314,7 +314,7 @@ class SideFxRecorder:
 
             patch(_aq_utils, "_win_shell_open", shell_open)
 
-        # ② 注册表(非 Windows 无 winreg, 跳过)
+        # 2. 注册表(非 Windows 无 winreg, 跳过)
         try:
             import winreg
         except ImportError:
@@ -356,7 +356,7 @@ class SideFxRecorder:
 
             patch(winreg, "DeleteValue", delete_value)
 
-        # ③ 文件删除
+        # 3. 文件删除
         for name in ("remove", "unlink", "rmdir"):
             orig = getattr(os, name, None)
             if orig is None:
@@ -379,7 +379,7 @@ class SideFxRecorder:
 
         patch(shutil, "rmtree", rmtree)
 
-        # ④ 建符号链接(极老版本 Windows 上 os.symlink 不存在, 那就无从"真实建链", 跳过)
+        # 4. 建符号链接(极老版本 Windows 上 os.symlink 不存在, 那就无从"真实建链", 跳过)
         orig_symlink = getattr(os, "symlink", None)
         if orig_symlink is not None:
 
@@ -389,7 +389,7 @@ class SideFxRecorder:
 
             patch(os, "symlink", symlink)
 
-        # ⑤ 网络监听
+        # 5. 网络监听
         orig_bind = socket.socket.bind
 
         def bind(self, addr, *a, **kw):
@@ -398,7 +398,7 @@ class SideFxRecorder:
 
         patch(socket.socket, "bind", bind)
 
-        # ⑥ 出站连接: 测试不得连外网(本地假服务是回环, 放行)
+        # 6. 出站连接: 测试不得连外网(本地假服务是回环, 放行)
         orig_connect = socket.socket.connect
 
         def connect(self, addr, *a, **kw):
@@ -433,7 +433,7 @@ class SideFxRecorder:
     def report(self) -> str:
         """人类可读的台账摘要(与 2026-09-18 普查报告同形态)
 
-        ❗`violations` **必须在循环外只求值一次**(2026-09-23 性能实测): 它内部对每条
+        !`violations` **必须在循环外只求值一次**(2026-09-23 性能实测): 它内部对每条
         FSDEL/SYMLINK 记录都要走 `is_temp_path` -> `_norm_path` -> `os.path.realpath`,
         而本机 realpath 单次 0.18~0.48ms, 全量跑有 ~1600 条路径记录。原写法在 for 循环里
         **每种 kind 重算一次**(8 次)= 约 1.4 万次 realpath, 会话收尾白白多花 4~7s

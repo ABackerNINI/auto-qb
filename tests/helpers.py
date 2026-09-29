@@ -257,7 +257,7 @@ class FakeClient:
             category=category or "",
             tags=tags or "",
         )
-        # ⚠ 只模拟 **Web API < 2.14.0** 的文本形态("Ok."/"Fails."); 真机 qB 5.2+(API 2.14.0 起)
+        # WARN: 只模拟 **Web API < 2.14.0** 的文本形态("Ok."/"Fails."); 真机 qB 5.2+(API 2.14.0 起)
         #   回的是 JSON 元数据 `{success_count, failure_count, pending_count, added_torrent_ids}`,
         #   本替身**回不出**该形态 —— 这正是"添加成功却报失败"能溜到线上的口子(2026-09-24)。
         #   新形态的守阵由 test_web.py::test_add_torrent_receipt_and_optional_flags 直接用
@@ -647,7 +647,7 @@ class FakeTorrent:
     def to_dict(self) -> dict:
         """全字段导出(真记录是 `TorrentRecord.to_dict`: 快照字段 + `_raw` 前向兼容字段)
 
-        ❗没有这个方法时桩服务的详情端点 `/api/torrents/{hash}` **恒 500**
+        !没有这个方法时桩服务的详情端点 `/api/torrents/{hash}` **恒 500**
         (`'FakeTorrent' object has no attribute 'to_dict'`, 2026-09-19 实测), 于是整条依赖详情的
         链路在冒烟里从未被覆盖: 详情抽屉、限速/分享率/移动/重命名对话框、以及"复制磁力"
         (magnet_uri 只在平铺 SEED_ITEM 与详情里, 成员索引没有该字段 —— 见 app.js copyTorrentInfo)。
@@ -977,20 +977,20 @@ def make_ctx(mgr, tor, client, dry_run=False):
     """构造 RuleContext(规则动作测试辅助)
 
     新架构: RuleContext 第 4 参为 hash 字符串; ctx.torrent = mgr.store.get(hash)(无 None 兜底)。
-    因此本函数保证: ①client 已绑定到 mgr(动作经 ctx.api 调 manager.api Facade) ②store 中已有该
+    因此本函数保证: 1.client 已绑定到 mgr(动作经 ctx.api 调 manager.api Facade) 2.store 中已有该
     tor 的记录, 且记录对象即 tor 本身(对象身份直写: 后续修改 tor 属性对 ctx.torrent 实时可见)
-    ③tracker_conf 已匹配(等效 _refresh_torrents 对新增种子的处理; ${required_seeding_time} 等依赖它)。
+    3.tracker_conf 已匹配(等效 _refresh_torrents 对新增种子的处理; ${required_seeding_time} 等依赖它)。
     """
-    # ① client 绑定: 动作走 ctx.api -> manager.api(QbApi), 未绑 client 时自动绑定
+    # 1. client 绑定: 动作走 ctx.api -> manager.api(QbApi), 未绑 client 时自动绑定
     if getattr(mgr, "_client", None) is None:
         mgr.client = client
-    # ③ tracker_conf 匹配(未显式设置时; 模拟新增种子进 refresh 后由 _match_tracker_conf 赋值)
+    # 3. tracker_conf 匹配(未显式设置时; 模拟新增种子进 refresh 后由 _match_tracker_conf 赋值)
     if tor.tracker_conf is None:
         try:
             tor.tracker_conf = mgr._match_tracker_conf(tor)
         except Exception:
             tor.tracker_conf = None
-    # ② 对象身份注入: by_hash[h] is tor(已存在则原地替换/更新)
+    # 2. 对象身份注入: by_hash[h] is tor(已存在则原地替换/更新)
     existing = mgr.store.by_hash.get(tor.hash)
     if existing is not tor:
         if existing is not None and not isinstance(existing, FakeTorrent):

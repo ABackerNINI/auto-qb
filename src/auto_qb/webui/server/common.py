@@ -3,7 +3,7 @@
 除 HTTPException 外无 FastAPI 依赖。拆分更名: _app_version→app_version、
 _group_key_param→group_key_param(factory 以别名引用, 端点体零改动)。
 
-❗本模块 logger 显式取名 "auto_qb.web"(见包 __init__ K3) —— ensure_web_token 的
+!本模块 logger 显式取名 "auto_qb.web"(见包 __init__ K3) —— ensure_web_token 的
   生成提示日志被 test_web_token_not_printed_in_logs 按 r.name 钉死。
 """
 import logging
@@ -40,7 +40,7 @@ def open_path(path: str, select: bool = False) -> None:
 
     原先是 `from infra.utils import open_path` 的再导出; 改走包装层后容器(Mapped)实现
     抛 NotSupported -> open-path 端点语义化 501, 宿主直跑(Local)行为不变。
-    ❗保留本模块入口名: open-path 端点与 test_api_open_path_endpoint 都以
+    !保留本模块入口名: open-path 端点与 test_api_open_path_endpoint 都以
     `common.open_path` 为 patch 地址(拆分时定下的稳定点), 不动。
     """
     get_file_access().open_path(path, select=select)

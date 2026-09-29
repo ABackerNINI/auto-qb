@@ -11,14 +11,14 @@
 // 解析与策略全在后端(能用 pytest 守住的那一侧), cookie 全程不离开浏览器。
 //
 // 配置在选项页(实例列表 + 站点权限), 存在 chrome.storage.local。
-// 运行日志(分级 + 环形上限, 选项页④区过滤查看)也落 chrome.storage.local —— 见下方「运行日志」节。
+// 运行日志(分级 + 环形上限, 选项页4.区过滤查看)也落 chrome.storage.local —— 见下方「运行日志」节。
 // 地址归一化共用 normalize.js(选项页用 <script> 载入, 这里用 importScripts —— 同一份代码)。
 
 importScripts('normalize.js');
 importScripts('site-caps.js');
 
 const ALARM_NAME = 'hr-poll';
-// ❗轮询周期必须**小于**后端 `channel.request_timeout` 的等待窗口(默认 180s): 任务只有在窗口内
+// !轮询周期必须**小于**后端 `channel.request_timeout` 的等待窗口(默认 180s): 任务只有在窗口内
 // 等到下一次轮询才会被取走。v2.6 前按 5 分钟轮询, 每条任务约四成概率直接超时
 // (2026-09-25 实报「取 .torrent 失败: 等待浏览器扩展取数超时(180s)」)。1 分钟轮询只打本机
 // loopback 一次 GET, 成本可忽略; 后端才是站点频控的唯一权威 —— 空轮询不会碰到站点。
@@ -55,8 +55,8 @@ async function noteStatus(patch, lvl) {
 
 // ---------- 运行日志(分级 + 环形上限, 落 chrome.storage.local) ----------
 //
-// ❗为什么需要: 状态栏只有**最后一句**, 一轮里多实例多任务的经过全被覆盖掉; 排查「这条为什么失败 /
-// 后端到底收到了什么」必须看时序。故把关键事件逐条落成带级别的日志, 选项页④区可按级别过滤查看:
+// !为什么需要: 状态栏只有**最后一句**, 一轮里多实例多任务的经过全被覆盖掉; 排查「这条为什么失败 /
+// 后端到底收到了什么」必须看时序。故把关键事件逐条落成带级别的日志, 选项页4.区可按级别过滤查看:
 //   · 分级: debug/info/warn/error。低于「记录级别」的直接丢弃(选项页可设, 默认 info);
 //   · 环形上限: 只留最近 N 条(选项页可设 10–10000, 默认 1000; 10000 是用户指定的硬上限) ——
 //     再大单次落盘的序列化开始拖慢 SW, 且 storage.local 配额(10MB)吃紧;
@@ -104,7 +104,7 @@ function compactDetail(detail) {
 
 /**
  * 写一条日志(fire-and-forget, 返回值仅供测试 await): 低于记录级别的直接丢。
- * ❗绝不让日志反噬主流程: 初始化/追加/落盘任何一步失败都吞掉, 取数照跑。
+ * !绝不让日志反噬主流程: 初始化/追加/落盘任何一步失败都吞掉, 取数照跑。
  */
 function log(lvl, cat, msg, detail) {
   if (!logInitPromise) logInitPromise = initLogBuffer();
@@ -157,7 +157,7 @@ function scheduleLogFlush() {
 /** 整份写回(串行化: 前一笔没写完不叠下一笔); pollAll 收尾会 await 它, 让「立即拉取」立刻可见 */
 function flushLogs() {
   if (!logInitPromise) return Promise.resolve();
-  const prev = logFlushChain; // ❗先取队尾再排队: 回调里若按名字引用 logFlushChain, 那时它已被改成
+  const prev = logFlushChain; // !先取队尾再排队: 回调里若按名字引用 logFlushChain, 那时它已被改成
   const p = logInitPromise.then(() => // 「本次 flush 自己」, 等自己 = 首刷即死锁(实测抓过)
     prev.then(() => {
       logSelfWriteAt = Date.now();
@@ -258,7 +258,7 @@ function flushEvents() {
 }
 
 function schedule() {
-  // ❗delayInMinutes 别小于 0.5 分钟: Chrome 对 alarm 有最小间隔限制(非 unpacked 时更严),
+  // !delayInMinutes 别小于 0.5 分钟: Chrome 对 alarm 有最小间隔限制(非 unpacked 时更严),
   // 违规会直接抛错 —— 那会在安装/启动路径上变成一个看不懂的未捕获异常。
   try {
     chrome.alarms.create(ALARM_NAME, { periodInMinutes: POLL_MINUTES, delayInMinutes: 0.5 });
@@ -356,10 +356,10 @@ function explainFetchError(url, e) {
   const msg = String((e && e.message) || e);
   if (msg.includes('Failed to fetch')) {
     return (
-      `连不上 ${url}。逐条确认: ① 后端主程序在跑吗(--hr-once 是只读走查, **不会**起端点); ` +
-      '② config.yml 里 hr_check.enabled=true、至少一个站点 mode != off、且 hr_check.channel.enabled=true' +
-      '(三者缺一, 端点根本不会启动); ③ 端口对不对(后端启动日志会打「HR 取数通道端点已启动: http://127.0.0.1:<端口>」);' +
-      '④ 同机多实例端口是否撞车'
+      `连不上 ${url}。逐条确认: 1. 后端主程序在跑吗(--hr-once 是只读走查, **不会**起端点); ` +
+      '2. config.yml 里 hr_check.enabled=true、至少一个站点 mode != off、且 hr_check.channel.enabled=true' +
+      '(三者缺一, 端点根本不会启动); 3. 端口对不对(后端启动日志会打「HR 取数通道端点已启动: http://127.0.0.1:<端口>」);' +
+      '4. 同机多实例端口是否撞车'
     );
   }
   return msg;
@@ -367,7 +367,7 @@ function explainFetchError(url, e) {
 
 // ---------- 连接失败降噪(故障期只打头尾, 2026-09-28 用户实报) ----------
 //
-// ❗为什么需要: 轮询 1 分钟一轮, 后端不在跑时每轮都打一条**全量排查清单** ERROR —— 日志环
+// !为什么需要: 轮询 1 分钟一轮, 后端不在跑时每轮都打一条**全量排查清单** ERROR —— 日志环
 // (默认 1000 条)几小时就被同一句话灌满, 有用的历史全被冲掉。故按「故障期」记连败轮数:
 //   · 首次失败: 全量 ERROR(排查清单照旧);
 //   · 连败期: 降为 debug 短句(默认记录级别 info 下不落盘), 每连败 30 轮(约半小时)重打一次全量,
@@ -409,7 +409,7 @@ async function clearNetFailStreak(key) {
 
 // ---------- 扩展侧硬上限(第二道闸: 后端出错时的兜底) ----------
 //
-// ❗为什么扩展也要限: 后端有自己的频控(间隔 + 两级配额 + 熔断), 但那是**同一个进程里的代码**。
+// !为什么扩展也要限: 后端有自己的频控(间隔 + 两级配额 + 熔断), 但那是**同一个进程里的代码**。
 // 它写错 / 配置被改坏 / 有人手工灌任务时, 浏览器会把站点打爆 —— 而承受后果的是用户的账号。
 // 故这里加一道**独立**计数: 口径与阈值见 site-caps.js(唯一事实源), 用户可在选项页看到用量。
 // 超限时**拒绝该次请求**并如实回传 kind='ext-quota'(后端据此让位, 不计失败、不推熔断)。
@@ -601,7 +601,7 @@ async function pollInstance(inst) {
  * 页面取数: **先无界面直取**(service worker 的 fetch 带站点 cookie, 零标签零窗口),
  * 只有当拿到的内容「看起来没渲染出来」时才退到离屏窗口拿 DOM。
  *
- * ❗为什么要这样: 开任何界面都会打扰用户, 而用户已实报两次 —— 先是「抓数据时打开新标签」
+ * !为什么要这样: 开任何界面都会打扰用户, 而用户已实报两次 —— 先是「抓数据时打开新标签」
  * (`tabs.create({active:false})` 不保证窗口不被抬起来), 改成自建隐藏窗口后又变成「打开新窗口」
  * (`state:'minimized'` 在用户平台上仍会先显示出来)。而站点侧页面(NexusPHP 这类)本来就是
  * **服务端渲染**的表格, 直取即可; 需要 JS 的站点才走渲染通道。
@@ -628,8 +628,8 @@ async function fetchText(url) {
 
 /**
  * 直取的内容该不该改用渲染通道拿 —— 两个**通用结构信号**(不做站点解析):
- * ① 没表格 ⇒ 多半要 JS 渲染, 或命中了挑战页;
- * ② 有密码输入框 ⇒ 拿到的是登录页。❗第二种是 SameSite 的安全网: 无 `SameSite` 属性的 cookie 按
+ * 1. 没表格 ⇒ 多半要 JS 渲染, 或命中了挑战页;
+ * 2. 有密码输入框 ⇒ 拿到的是登录页。!第二种是 SameSite 的安全网: 无 `SameSite` 属性的 cookie 按
  *    Lax 对待, 而扩展发起的 fetch 算**跨站**请求 ⇒ 有可能不带 cookie 而拿到登录页。
  *    这时必须升级到渲染通道(那是真正的顶层导航, 一定带 cookie), 否则会把「未登录」误报成站点改版。
  */
@@ -685,7 +685,7 @@ async function runTask(task) {
 /**
  * 在**隐藏窗口**里取渲染后 DOM: 带登录态、能过挑战页、不抢焦点、不占用用户窗口
  *
- * ❗为什么不能直接在用户自己的窗口里 `chrome.tabs.create({ active: false })`:
+ * !为什么不能直接在用户自己的窗口里 `chrome.tabs.create({ active: false })`:
  * `active:false` 只保证「不是那个窗口的活动标签」, **不保证窗口不被抬起来** —— 扩展被 alarm 唤醒时
  * 用户往往正在别的程序里, Chrome 仍会把窗口连同新标签一起显示出来(2026-09-25 实报 "打开新标签");
  * 改成 `state:'minimized'` 的自建窗口后, 用户又实报 "打开新窗口" —— 最小化在部分平台上仍会先显示一下。
@@ -755,7 +755,7 @@ async function focusGuard() {
 
 /** 取 .torrent 二进制: 由 service worker 自己发(credentials include 带上站点 cookie)
  *
- * ❗拿到 HTML 必须报「登录页」而不是原样回传: 与页面直取的 needsRender 同一个根因(SameSite 剥
+ * !拿到 HTML 必须报「登录页」而不是原样回传: 与页面直取的 needsRender 同一个根因(SameSite 剥
  * cookie / 登录态失效会让 download.php 返回登录页), 但二进制没有解析层兜底 —— 不检测的话,
  * 后端只会说「不是合法 .torrent」并烧掉该 tid 的重试额度(3 次后冷却 12h), 真因被埋掉。
  */

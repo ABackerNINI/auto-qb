@@ -33,7 +33,7 @@ class LocalQbClient(Client):
     proxy_bypass_registry 读注册表)与 ~/.netrc(get_netrc_auth 走 expanduser + os.path.exists),
     对 127.0.0.1/localhost 连接毫无意义(实测单请求 0.276ms -> 0.043ms)。
 
-    ❗为什么不"连上后给 client._session.trust_env 赋 False": 库的 `Request._session` 是**只读
+    !为什么不"连上后给 client._session.trust_env 赋 False": 库的 `Request._session` 是**只读
     property**(qbittorrentapi/request.py), 且库在 `build_base_url()`(首次请求)与
     `_initialize_context()`(登录过期/qB 重启)中都会调用 `_trigger_session_initialization()`
     **丢弃当前 Session 并在下次访问时重建** —— 旧实现赋的值在第一次真实请求时即被清除

@@ -52,7 +52,7 @@ function normalizeEndpoint(raw) {
 function normalizeOrigin(raw) {
   let text = String(raw || '').trim();
   if (!text) throw new Error('站点源为空');
-  if (!hasScheme(text)) text = 'https://' + text;  // ❗权限 API 只吃带 scheme 的模式
+  if (!hasScheme(text)) text = 'https://' + text;  // !权限 API 只吃带 scheme 的模式
   let url;
   try {
     url = new URL(text);

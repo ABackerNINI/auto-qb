@@ -318,11 +318,11 @@ class TorrentRecord:
     def hr_judgement(self) -> Optional[HrJudgement]:
         """站点侧三态判定(站点已接入才返回; None = 走本地字段逻辑)
 
-        ❗**零静默变更**闸门(计划 §9): 只有「站点配了 `hr_check` 且 enabled」+「总开关开」
+        !**零静默变更**闸门(计划 §9): 只有「站点配了 `hr_check` 且 enabled」+「总开关开」
         才走站点侧语义 —— 没接入的站点行为一个字都不变(它们的 downloaded 判断不动)。
-        ❗HR 排除优先: 命中排除表(hr_excluded)返回 None —— 用户显式排除压过站点侧判定,
+        !HR 排除优先: 命中排除表(hr_excluded)返回 None —— 用户显式排除压过站点侧判定,
         WebUI 的站点侧字段随之留空, 与「站点未接入」呈现同构。
-        ❗线程: 只读(快照字段 + tracker_conf + 站点视图的不可变快照), 无状态、无 API、无写盘,
+        !线程: 只读(快照字段 + tracker_conf + 站点视图的不可变快照), 无状态、无 API、无写盘,
         故 Web 线程也安全(`_hr_view_fields` 与主循环同域)。
         判定表(v3, 计划 26-09-28-1932 §3.1): identity=NO_EVIDENCE 即行 4 —— 站点无话可说,
         调用方按本地判据兜底(达标放行 / 未达标管束, 硬编码无配置)。
@@ -418,7 +418,7 @@ class TorrentRecord:
                 ratio_ok = hr.required_share_ratio > 0 and self.ratio >= hr.required_share_ratio
                 return seeding_ok or ratio_ok
         # 行 4 / 站点未接入: 本地兜底(未触发即未达标, 与既有口径一致)。
-        # ❗这里只能走 _local_hr_triggered 纯本地判据, 不能调 check_hr_condition ——
+        # !这里只能走 _local_hr_triggered 纯本地判据, 不能调 check_hr_condition ——
         # 行 4 时后者又会调回本方法(check_hr_condition 行 4 → check_hr_satisfied),
         # 无限递归(2026-09-29 实测 RecursionError, BTSchool)。走到本行的两种情形
         # (judged is None / identity 为 NO_EVIDENCE)下 check_hr_condition 的站点侧

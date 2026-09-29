@@ -5,8 +5,8 @@ window.AQB_POLL = {
     /* ---------------- P2 事件驱动(SSE /api/events) ----------------
      * 目的: 把「命令回执」与「视图版本变更」从轮询改成推送 ——
      *   前者省掉回执轮询的退避粒度(0→150→300→500ms), 后者省掉 1.5/2/3s 的定时触发。
-     * ❗轮询**保留**作为兜底: 断线 / 首帧 / 浏览器不支持 / 反代缓冲时自动退回, 语义不变。
-     * ⚠ EventSource 发不出 Authorization 头 ⇒ 密钥走 ?token=(服务端已放行, 见 web.py);
+     * !轮询**保留**作为兜底: 断线 / 首帧 / 浏览器不支持 / 反代缓冲时自动退回, 语义不变。
+     * WARN: EventSource 发不出 Authorization 头 ⇒ 密钥走 ?token=(服务端已放行, 见 web.py);
      *   本机 skip_local_verify(默认)下不需要带密钥。
      */
     startEvents() {
@@ -71,9 +71,9 @@ window.AQB_POLL = {
      *   1000 种子 143ms | 3000 种子 309ms | 5000 种子 396~501ms
      * 再把每档的**主线程占用率**压到 ~15% 上下(单轮耗时 / 间隔), 于是:
      *   ≤1000 → 1.5s(≈10%)  1000~3000 → 2s(≈15%)  >3000 → 3s(≈17%)
-     * 两个边界条件: ①**下界 1.5s = 服务端 sync_interval** —— 后端每 1.5s 才刷一次数据,
+     * 两个边界条件: 1.**下界 1.5s = 服务端 sync_interval** —— 后端每 1.5s 才刷一次数据,
      *   再快也只是多拿一次"版本未变"的空响应(此时响应体趋近于零, 但不产生新数据);
-     * ②**不是"无变化退避"** —— 那只按 rid 是否变化放慢, 会把行数据新鲜度直接卖掉(见下)。
+     * 2.**不是"无变化退避"** —— 那只按 rid 是否变化放慢, 会把行数据新鲜度直接卖掉(见下)。
      */
     basePollMs() {
       const n = this.status && this.status.torrents;
@@ -120,7 +120,7 @@ window.AQB_POLL = {
           if (state.torrents !== undefined) this.torrents = state.torrents;  // 种子页平铺数组(SEED_ITEM)
           if (state.shows !== undefined) this.shows = state.shows;  // 追剧视图(R10)
           if (typeof state.rid === "number") this.lastRid = state.rid;
-          this._snapshotTruth(state);  // ❗必须在 reapplyPending **之前**: 快照要的是服务端原始值
+          this._snapshotTruth(state);  // !必须在 reapplyPending **之前**: 快照要的是服务端原始值
           // 增量替换后按现存 key/hash 交集保留多选(避免轮询把用户选择清空);
           // 虚拟行 key(u-<hash>)不做存在性校验(搜索视图由 filteredGroups 重建)
           if (this.selectedCount) {
@@ -135,7 +135,7 @@ window.AQB_POLL = {
           if (this.renderMs > 50) console.warn(`[perf] 单轮视图赋值 ${this.renderMs}ms(>50ms)` +
             ` —— 稳态应远低于此; 首次切视图要全量渲染一帧量行高, 那一帧超属预期(P1-2 已落地)`);
         }
-        this._expirePending();    // ❗先回滚超时的(不回滚会留永久假状态, issue 26-09-19-2141)
+        this._expirePending();    // !先回滚超时的(不回滚会留永久假状态, issue 26-09-19-2141)
         this.reapplyPending();    // P0-3: 整表替换后把仍 pending 的乐观值重新贴上
         this.serviceDown = false;
         this.pollFails = 0;

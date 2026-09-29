@@ -101,7 +101,7 @@ CORPUS_SCENARIOS: list[tuple[str, list[str]]] = [
 
 # 语料档需要固化的指标(余量系数): 硬判据(group_exact / fs_state_match / endpoints_covered /
 # stream_consumed / maindata_lag_modeled)已在 sim_run 里写死 0/1, 不需要固化。
-# ❗`CORPUS.replay_timeline_aligned` **不进固化表**: 它的预算在 sim_run 里按
+# !`CORPUS.replay_timeline_aligned` **不进固化表**: 它的预算在 sim_run 里按
 #   「客户端轮询间隔 × 倍速 × 2 裕度」动态算 —— 固化成常数会在换倍速 / 换轮询档时假红或假绿。
 CORPUS_MARGINS: dict[str, tuple[str, float]] = {
     "P1.first_round_s": ("first_round_s", 1.5),
@@ -280,7 +280,7 @@ def main(argv=None) -> int:
         return 0
 
     # ---- 推阈值 ----
-    # ❗**常规场景**才进阈值: --ramp(P2)是渐进灌入、P6x 是人为打满的压力档,
+    # !**常规场景**才进阈值: --ramp(P2)是渐进灌入、P6x 是人为打满的压力档,
     # 它们的数字是"要观测的现象", 拿来当阈值会把真正的稳态回归放过去。
     def normal() -> list[dict]:
         """常规场景: 非 --ramp、非压力档(x 后缀); 可以带真实节奏的 WEB 轮询"""

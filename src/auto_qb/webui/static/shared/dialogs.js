@@ -4,7 +4,7 @@
  * 挂到 window.AQB_DIALOGS, 由 app.js 末尾 app.mixin(window.AQB_DIALOGS) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
- * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DIALOGS);
+ * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DIALOGS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_DIALOGS = {
@@ -480,7 +480,7 @@ window.AQB_DIALOGS = {
     },
     /* Esc 链是否被浮层占用: lifecycle.js mounted 里 Esc 关闭链的**同一名单**(顺序无关, 只看有无)。
      * config_hub.js::hubOnKey 的「Esc 返回设置首页」用它守门 —— 链上还有层要关时, 该 Esc 先归
-     * 关闭链, 不顺带把设置页退回首页。⚠ 新增浮层时两处同步: 那条 else-if 链 + 本方法(搜「escBusy」)。 */
+     * 关闭链, 不顺带把设置页退回首页。WARN: 新增浮层时两处同步: 那条 else-if 链 + 本方法(搜「escBusy」)。 */
     escBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
         this.metaOpen || this.filePrio.visible || this.drawer.open || this.historyOpen || this.headMenu.visible ||

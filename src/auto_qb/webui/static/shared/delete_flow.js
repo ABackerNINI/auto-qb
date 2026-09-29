@@ -4,7 +4,7 @@
  * 挂到 window.AQB_DELETE, 由 app.js 末尾 app.mixin(window.AQB_DELETE) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
- * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DELETE);
+ * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DELETE);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 
@@ -21,7 +21,7 @@ window.AQB_DELETE = {
      * 而非"辅种", 保证批量条按钮/确认框标题/提交体三处一致; 空串 = 选中项均已失效。
      * FX-12: 批量条直接渲染它 —— 计数随**权威选择**而非当前视图漂移
      * (在种子页看"N 个辅种"不变, 这正是"三视图打通"的直观体现)。
-     * ⚠ 方法名不得以 `_` 开头: Vue 模板编译器不解析下划线前缀标识符
+     * WARN: 方法名不得以 `_` 开头: Vue 模板编译器不解析下划线前缀标识符
      *   (会报 "_xxx is not defined" 且整块渲染失败 —— 2026-09-17 浏览器冒烟实测)。
      */
     bulkCountText() {

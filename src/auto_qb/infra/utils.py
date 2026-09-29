@@ -68,7 +68,7 @@ def atomic_write(path: str, write_fn, keep_backup: bool = False) -> None:
     keep_backup=True 时先把当前文件复制为 `<path>.bak`(仅在写盘前存在旧文件时), 用于
     兜住"新内容本身是错的"这类非截断型损坏。临时文件与失败清理都由本函数负责。
 
-    ❗空路径直接报错(不静默兜底): `abspath("")` 是 CWD, `dirname` 再取一级就成了 **CWD 的父目录**
+    !空路径直接报错(不静默兜底): `abspath("")` 是 CWD, `dirname` 再取一级就成了 **CWD 的父目录**
     —— 空路径不会"什么都不写", 而是把临时文件丢到仓库外面(实测: 在 `.../auto-qb-clone1` 下跑
     测试会在 `.../` 留下 `.xxxxxxxx.tmp`), 随后 `os.replace(tmp, "")` 失败再把它删掉, 表现为
     "偶发、无害"的噪音, 实为调用方漏传路径。配置层已校验 `state_file` 等非空(见 config/validation),
@@ -684,7 +684,7 @@ def open_path(path: str, select: bool = False) -> None:
     **目录**与**定位选中**两种语义改走 Shell PIDL; 目录判定一律经 `_exists_dir`(带前缀)。
     macOS/Linux 无 260 限制(PATH_MAX 1024 / 4096), 分支**逐字保持改动前行为**。
 
-    ❗`_win_shell_open` 只在 `is_windows()` 分支内调用 —— 它在 POSIX 上是空转, 而测试期副作用
+    !`_win_shell_open` 只在 `is_windows()` 分支内调用 —— 它在 POSIX 上是空转, 而测试期副作用
     记账器把该入口整体计入 LAUNCH(放行清单为空), 无谓调用会变成假阳性。
     """
     if is_windows():

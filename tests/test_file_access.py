@@ -257,14 +257,14 @@ def _dir_symlink_or_skip(link, target):
     """建目录符号链接; **宿主不具备建链能力时跳过用例** —— 逃逸校验依赖真实 symlink, 缺能力
     时「逃逸」场景根本不成立, 断言无意义(不是代码缺陷)。两种缺失形态都要跳过:
 
-    ① `os.symlink` 抛 OSError / NotImplementedError(Windows 未开开发者模式或非管理员);
-    ② **假成功** —— 部分沙箱 / 文件系统重定向层让 `os.symlink` 不抛异常却建不出重解析点,
+    1. `os.symlink` 抛 OSError / NotImplementedError(Windows 未开开发者模式或非管理员);
+    2. **假成功** —— 部分沙箱 / 文件系统重定向层让 `os.symlink` 不抛异常却建不出重解析点,
        2026-09-29 本机实测更彻底: `os.path.lexists(link)` 为 False(连普通目录都没建出来),
        `islink` 恒 False; 先例里记录的形态是落成真实目录(islink 也是 False)。
 
-    只 catch 异常(旧实现)会把 ② 漏成断言红 —— 见 issue 26-09-29-2031 与
+    只 catch 异常(旧实现)会把 2. 漏成断言红 —— 见 issue 26-09-29-2031 与
     testing/file-conventions.md「测试不得依赖宿主环境能力」; 同款先例是
-    test_api_fs_dirs_endpoint 第⑤条(建了但非链接就不断言)。
+    test_api_fs_dirs_endpoint 第5.条(建了但非链接就不断言)。
     """
     try:
         os.symlink(target, link, target_is_directory=True)

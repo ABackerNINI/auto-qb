@@ -22,12 +22,12 @@ def build_router(ctx: WebContext) -> APIRouter:
     def api_events():
         """SSE 事件流(P2 事件驱动): 命令回执 / 视图版本变更**主动推**, 前端据此撤下与刷新
 
-        替代什么: ① 前端对 `/api/cmd/{id}` 的退避轮询(0→150→300→500ms 粒度);
-                  ② 对 `/api/state` 的定时轮询触发(1.5/2/3s 分档)。
-        ❗只推**信号与小真值**, 绝不推全量状态 —— 3000 种子一轮全量要 63ms(序列化+网络+
+        替代什么: 1. 前端对 `/api/cmd/{id}` 的退避轮询(0→150→300→500ms 粒度);
+                  2. 对 `/api/state` 的定时轮询触发(1.5/2/3s 分档)。
+        !只推**信号与小真值**, 绝不推全量状态 —— 3000 种子一轮全量要 63ms(序列化+网络+
           JSON.parse), 频繁推会把主线程打满(本项目踩过同类坑: 搜索索引阻塞主循环)。
 
-        ⚠ 两个前端侧注意: EventSource 发不出 Authorization 头(密钥走 ?token=, 见 require_token);
+        WARN: 两个前端侧注意: EventSource 发不出 Authorization 头(密钥走 ?token=, 见 require_token);
           经过反代时要关掉响应缓冲(已带 X-Accel-Buffering: no)。
         """
         q = manager.web.subscribe()

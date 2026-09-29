@@ -94,7 +94,7 @@ def collect_sync_metrics(run_dir: str, boundaries: tuple[float, ...] = (), tick:
             ts.append(r["ts"])
             sizes.append(r.get("b", 0))
     gaps = [b - a for a, b in zip(ts, ts[1:]) if not any(a < m < b for m in boundaries)]
-    # ❗首轮(第 1 个间隔)必须单列: 灌入 N 个种子时它包含 files 拉取 + maintenance 立即执行,
+    # !首轮(第 1 个间隔)必须单列: 灌入 N 个种子时它包含 files 拉取 + maintenance 立即执行,
     # 实测 5000 种子约 17 s。混进稳态漂移会让每次跑都假红, 反而掩盖真正的稳态问题。
     first = round(gaps[0], 3) if gaps else 0.0
     steady = gaps[1:] if len(gaps) > 1 else []
@@ -103,7 +103,7 @@ def collect_sync_metrics(run_dir: str, boundaries: tuple[float, ...] = (), tick:
         "first_round_s": first,
         "avg_interval_s": round(sum(steady) / len(steady), 3) if steady else 0.0,
         "p95_interval_s": round(_pct(steady, 0.95), 3),
-        # ❗基准是**本次的 main_tick**, 不是写死的 2.0: --tick 1.5 时会把 0.5 s 的正常间隔算成漂移
+        # !基准是**本次的 main_tick**, 不是写死的 2.0: --tick 1.5 时会把 0.5 s 的正常间隔算成漂移
         "drift_max_s": round(max([abs(g - tick) for g in steady], default=0.0), 3),
         "avg_bytes": int(sum(sizes) / len(sizes)) if sizes else 0,
         "max_bytes": max(sizes, default=0),
@@ -167,7 +167,7 @@ def scan_log(path: str) -> dict:
 def graceful_stop(proc: subprocess.Popen, grace: float = 12) -> int:
     """优雅停 auto-qb: 让它走 KeyboardInterrupt -> finally -> save_state()
 
-    ❗直接 terminate()/kill() 在 Windows 上是 TerminateProcess —— 进程没有机会跑 finally,
+    !直接 terminate()/kill() 在 Windows 上是 TerminateProcess —— 进程没有机会跑 finally,
     state.json 永远不落盘, D5「状态持久化」判据就成了空转(实测: 目录里只有 state.lock)。
     CTRL_BREAK_EVENT 会触发 Python 的 KeyboardInterrupt, 才会走到 save_state()。
     """
@@ -238,7 +238,7 @@ def group_exact_diff(truth: list[set], actual: list[set]) -> tuple[list[set], li
     """头号判据的比对内核: 真值分组 vs auto-qb 实际分组, 逐组**逐 hash** 比
 
     返回 (真值有但 auto-qb 没分出来的组, auto-qb 多分出来的组)。两边都空 = 完全一致。
-    ❗必须逐 hash 比成员集合, 不能只比"组数" —— 组数相同但成员被串了组是完全可能的,
+    !必须逐 hash 比成员集合, 不能只比"组数" —— 组数相同但成员被串了组是完全可能的,
     而那正是"增量应用出错"的表现形式(同组文件列表被拆开 / 不同组被并起来)。
     """
     actual_sets = [set(x) for x in actual]
@@ -251,7 +251,7 @@ def group_exact_diff(truth: list[set], actual: list[set]) -> tuple[list[set], li
 def fetch_web_groups(web_port: int) -> list[set[str]] | None:
     """取 auto-qb **实际**分出来的组(每组一个 hash 集合) —— 头号判据的"实际"侧
 
-    ❗必须走 auto-qb 自己的端点 `GET /api/state?rid=-1&view=group`(groups[].members[].hash),
+    !必须走 auto-qb 自己的端点 `GET /api/state?rid=-1&view=group`(groups[].members[].hash),
     不能在 sim 侧用同一套公式重算 —— 那会变成"自己算的期望 vs 自己算的实际", 判据空转。
     groups.json 的价值恰恰在于"答案来自真机原始数据", 拿它去比 auto-qb 回放时**自己**分出来的组,
     才能验出增量应用有没有出错。
@@ -312,7 +312,7 @@ def observe_web(
 ):
     """轮询 /api/status 拿 auto-qb 快照规模
 
-    ❗这是 D1/D2/D5 唯一**非空**的观测通道: 仅看写台账会测假 —— 打标签是一次性的
+    !这是 D1/D2/D5 唯一**非空**的观测通道: 仅看写台账会测假 —— 打标签是一次性的
     (state_file 记过就不再写), 种子被删后 auto-qb 若留幽灵, 写台账上根本看不出来。
     """
     while not stop_ev.is_set():
@@ -420,7 +420,7 @@ def build_checks(
     add("B4.fs_unexpected_removals", len(fs["unexpected_removals"]), "==", 0, "文件树只允许出现预期删除")
 
     # ---------------- D1: 快照一致性(auto-qb 自己的种子数 == 仿真端剩余) ----------------
-    # ❗唯一非空判据: 写台账看不出幽灵(打标签一次性), 必须直接问 auto-qb 快照里还有几个
+    # !唯一非空判据: 写台账看不出幽灵(打标签一次性), 必须直接问 auto-qb 快照里还有几个
     if snaps:
         final = snaps[-1]["torrents"]
         peak = max((x["torrents"] for x in snaps if x["torrents"] is not None), default=None)
@@ -527,7 +527,7 @@ def build_checks(
             )
     # 跨进程幂等: 第二相不得重跑 execute_once=once 的规则(依 state_file 去重)
     if len(hist_sizes) >= 2:
-        # ❗硬 kill 会拿不到 state.json(hist=-1), 此时不能静默跳过, 必须判红
+        # !硬 kill 会拿不到 state.json(hist=-1), 此时不能静默跳过, 必须判红
         add("D5.state_file_present", hist_sizes[0] >= 0, "==", True, "第一相结束时 state.json 必须已落盘且可解析")
         add("D5.exec_history_seeded", hist_sizes[0], ">=", 1, "第一相必须真的命中过规则(否则下一条是空转)")
         if hist_sizes[0] >= 0 and hist_sizes[1] >= 0:
@@ -571,7 +571,7 @@ def build_checks(
     if getattr(sim, "corpus_mode", False):
         rs = sim.replay_stats
         # 录播必须把流**完整消费**掉 —— 否则"回放提前结束却判 OK"是空转陷阱。
-        # ⚠ 静态档(--replay-speed 0)不推进游标, 本就没有"流被吐完"这回事 ⇒ 只在录播档判。
+        # WARN: 静态档(--replay-speed 0)不推进游标, 本就没有"流被吐完"这回事 ⇒ 只在录播档判。
         if sim.replay_speed <= 0:
             add("CORPUS.replay_stream_consumed", None, "==", None, "静态回放(不推进游标): 无“流被吐完”可判 -> BASELINE")
         else:
@@ -582,7 +582,7 @@ def build_checks(
                 f"(结束标记 {rs.get('ended')})"
             )
         # 回放推进的录制时刻与墙上时钟的偏差(计划 §09 replay_timeline_aligned)。
-        # ❗这个滞后**天然受客户端轮询间隔 × 倍速限制**: 客户端每 1.5 s 来拉一次, 游标却连续推进,
+        # !这个滞后**天然受客户端轮询间隔 × 倍速限制**: 客户端每 1.5 s 来拉一次, 游标却连续推进,
         # 所以"已交付位置"最多落后一个轮询间隔(折算到录制时间就是 interval × speed)。故阈值按它算,
         # 而不是拍一个常数 —— 拍常数会在换倍速/换轮询档时变成假红或假绿。
         # 真掉拍的信号是"落后**超过**一个轮询间隔", 那说明 sim 端自己没跟上。
@@ -617,7 +617,7 @@ def build_checks(
         add("CORPUS.endpoints_covered", len(uncovered), "==", 0, f"语料里出现过但外壳未实现的端点: {uncovered[:5]}")
         # ---------------- CORPUS.group_exact —— 头号判据(计划 §09) ----------------
         # 真值分组(groups.json, 抓取端用真机数据算出) == auto-qb 回放时**自己**分出的组。
-        # ⚠ 参考时刻: 计划定在"首帧应用后、任何写动作发生前"(与 T0 快照同构, 语义最干净)。
+        # WARN: 参考时刻: 计划定在"首帧应用后、任何写动作发生前"(与 T0 快照同构, 语义最干净)。
         #   时间轴回放会让状态推进, 故**静态回放(--replay-speed 0)下这条最干净**; 录播档下若
         #   auto-qb 自己动过(缺文件暂停整组 / 规则删种触发拆组), 分组本就会变 —— 那是真实现象
         #   而不是判据失效, 故只在"取不到实际分组"时记 BASELINE。
@@ -627,7 +627,7 @@ def build_checks(
         if not truth or actual is None:
             add("CORPUS.group_exact", None, "==", None, "真值分组为空 或 未取到 auto-qb 实际分组(需 --web-port); 未观测到 -> BASELINE")
         else:
-            # ❗逐组逐 hash 比: 只比组数会放过"组数相同但成员串了组"这种真正的错误
+            # !逐组逐 hash 比: 只比组数会放过"组数相同但成员串了组"这种真正的错误
             missing, extra = group_exact_diff(truth, actual)
             add(
                 "CORPUS.group_exact",
@@ -739,7 +739,7 @@ def main(argv=None) -> int:
         for _ in range(max(0, args.web_poll)):  # S7 并发只读轮询
             threading.Thread(target=poll_web, args=(args.web_port, polls, obs_stop, 0.5, quiesce), daemon=True).start()
     # 语料档: 周期性抓 auto-qb **实际**分出的组, 供头号判据 CORPUS.group_exact 与真值分组比对。
-    # ❗必须在 auto-qb **还活着**的时候起 —— 收尾阶段再取只会拿到 None(WEB UI 已随进程退出)。
+    # !必须在 auto-qb **还活着**的时候起 —— 收尾阶段再取只会拿到 None(WEB UI 已随进程退出)。
     if getattr(sim, "corpus_mode", False):
         sim._web_groups = None
 
@@ -774,7 +774,7 @@ def main(argv=None) -> int:
 
         web_th = threading.Thread(target=_web_driver, daemon=True)
 
-    # ❗走 sim_autoqb.py 包装启动(装 SIGBREAK 处理器), 否则只能硬 kill -> state_file 不落盘
+    # !走 sim_autoqb.py 包装启动(装 SIGBREAK 处理器), 否则只能硬 kill -> state_file 不落盘
     cmd = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "sim_autoqb.py"), cfg]
     if args.dry_run:
         cmd.append("--dry-run")

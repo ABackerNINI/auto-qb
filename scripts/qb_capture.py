@@ -306,7 +306,7 @@ class Sanitizer:
         """tracker 域名 -> site-N.example 形态, 路径尾部保留(计划 §05: PT 站域名直接关联账号)
 
         三条形态必须保留, 因为它们是"域名 -> 种子数"分布与"一种子多 tracker"结构的载体:
-          ① scheme 原样; ② host 换成 site-N.example(端口原样); ③ path/query 形态守恒
+          1. scheme 原样; 2. host 换成 site-N.example(端口原样); 3. path/query 形态守恒
              (passkey 这类长 token 因此仍是同长度的同字符类别串, 但内容已不可反查)。
         注意不能把整条 URL 丢给 _shape —— 那会把 'site-1.example' 也一起改掉, 失去可读的站点编号。
         """
@@ -350,8 +350,8 @@ class Sanitizer:
     def path(self, p: str) -> str:
         """save_path / content_path / download_path / root_path: 盘符+根重映射到 <FSROOT>/dN/ + 形态守恒
 
-        三条等价类边界必须 1:1 保留(计划 §05): ①不同盘符不得并组 -> 带盘符短令牌;
-        ②尾斜杠有无不得被 rstrip; ③大小写形态不得被 casefold。
+        三条等价类边界必须 1:1 保留(计划 §05): 1.不同盘符不得并组 -> 带盘符短令牌;
+        2.尾斜杠有无不得被 rstrip; 3.大小写形态不得被 casefold。
         """
         if not p:
             return p
@@ -372,7 +372,7 @@ class Sanitizer:
             self._root_tokens[root_key] = f"{FSROOT_PLACEHOLDER}/{letter}{idx}/"
         new_root = self._root_tokens[root_key]
         parts = [x for x in re.split(r"[\\/]+", rest) if x != ""]
-        tail_sep = rest.endswith(("/", "\\"))  # 尾斜杠 1:1 保留(计划 §05 边界②)
+        tail_sep = rest.endswith(("/", "\\"))  # 尾斜杠 1:1 保留(计划 §05 边界2.)
         # 分隔符统一输出 '/': path_normalize 反正会把 '\' 换成 '/', 输出 '\' 只会制造
         # "同一逻辑路径有两种伪名"的假差异。尾斜杠的有无仍然逐条保留。
         shaped = "/".join(self._pseudonym("name", x) for x in parts)
@@ -566,7 +566,7 @@ def probe_disk(save_path: str, rel_name: str, size: int, temp_path: str = "") ->
     except OSError:
         pass
     if temp_path:
-        # qB 配了 temp path 时下载中文件另存他处; 按 save_path 探不到属已知边界(计划 §04 note ③)
+        # qB 配了 temp path 时下载中文件另存他处; 按 save_path 探不到属已知边界(计划 §04 note 3.)
         try:
             if os.path.exists(os.path.join(temp_path, utils.path_normalize(rel_name))):
                 return {"exists": False, "size": None, "suffix": None, "in_temp": True}
@@ -654,7 +654,7 @@ class Capture:
         self._temp_path = prefs.get("temp_path") or ""
         logger.info("qB %s / webapi %s / server_state 键 %d", ver, wapi, len(ss))
         if self.probe_fs_on and self.meta["temp_path_enabled"]:
-            self.warn("temp_path_enabled", note="temp path 已启用: 按 save_path 探测不到下载中文件, 见计划 §04 note ③")
+            self.warn("temp_path_enabled", note="temp path 已启用: 按 save_path 探测不到下载中文件, 见计划 §04 note 3.")
 
     @property
     def probe_fs_on(self) -> bool:
@@ -906,7 +906,7 @@ class Capture:
             for h, v in self.trackers_map.items()
         }
         # 磁盘探测表同样按假 hash 重键, 且**内层相对路径也要伪名化**
-        # ❗只重外层 hash 是不够的: 内层 key 是真实文件名, 会把真机资源名原样漏进语料
+        # !只重外层 hash 是不够的: 内层 key 是真实文件名, 会把真机资源名原样漏进语料
         #   (实测漏过一次: disk.json.gz 里全是未脱敏的中文资源名)。故内层走与 files 同一套
         #   `san.name(path_normalize(...))`, 保证与 files.json 的 name 逐字一致(回放端要按它对表)。
         if self.disk_map:
@@ -977,14 +977,14 @@ class Capture:
           · `missing_tag` / `skip_checking_tag` 按真字面量写 ⇒ 与语料里的伪名标签对不上 ⇒
             跳检 / 缺文件的行为跟真机不一致(该跳的没跳、该打的标签打不上) —— 判据全绿也是假的。
 
-        ⚠ **只记已脱敏的两侧**(伪域名 ↔ 伪标签)。站点标签的伪名**绝不**反向对应到真实站名
+        WARN: **只记已脱敏的两侧**(伪域名 ↔ 伪标签)。站点标签的伪名**绝不**反向对应到真实站名
         —— 那等于把站点名原样写进语料。`MISSING` / `zSkipChecked` 是 auto-qb 自己的常量、非用户数据,
         记它们的伪名不构成泄露(这是本映射能成立的前提)。
         """
         san = self.sanitizer
         out: dict = {"tracker_tags": {}, "known_tags": {}}
         # 1) auto-qb 自有标签字面量 -> 伪名(只在真机上真出现过才记, 免得凭空造出不存在的标签)
-        # ❗self.tags 里存的是**已脱敏**的伪名; 拿原始字面量 "MISSING" 去比对永远对不上。
+        # !self.tags 里存的是**已脱敏**的伪名; 拿原始字面量 "MISSING" 去比对永远对不上。
         #   必须用反查表把伪名还原成原标签再比(san._revs[kind] = {伪名: 原文}, 同模块内取用)。
         revs = san._revs.get("tag") or {}
         raw_seen = {revs.get(t, t) for t in seen}
@@ -1228,7 +1228,7 @@ class Capture:
         # 5. 流级脱敏一致性: 流中每个 hash 都能在 files/trackers 找到; tracker 域名都在映射表内
         stream_hashes = {h for f in stream for h in (f.get("torrents") or {})}
         unknown_files = sorted(stream_hashes - set(self.files_map))
-        # ❗磁盘表的内层相对路径必须与 files 的 name 逐字一致 —— 它是最容易漏脱敏的一处
+        # !磁盘表的内层相对路径必须与 files 的 name 逐字一致 —— 它是最容易漏脱敏的一处
         # (外层 hash 换了, 内层还是真实文件名, 且藏在 .gz 里, 凭据扫描扫不到)
         disk_orphans = []
         if self.disk_map:

@@ -13,7 +13,7 @@
     # 不自动开浏览器(比如已经开着 / 在远程桌面里)
     uv run python scripts/dev_webui.py --qb-port 8080 --no-open
 
-⚠⚠ **必须知道的两件事**:
+WARN: **必须知道的两件事**:
     1. **WebUI 上的手动命令会真的作用到 qB** —— 点"暂停"就是真暂停种子。
        这是测试乐观 UI 的前提(要有真的状态变化), 但也意味着别在正在做种的关键机上乱点。
     2. **`dry_run` 不能用** —— 项目里 `if not dry_run and web.enabled` 才起 WEB 服务,
@@ -49,7 +49,7 @@ config:
     add_episode_tags:
         enabled: false          # 不给种子补集数标签
     delete_tags: []             # 不做全局标签清理
-    # ❗规则集: 不写任何 `*_rules` 段即可 —— 规则是按键名 `_rules` 结尾自动发现的,
+    # !规则集: 不写任何 `*_rules` 段即可 —— 规则是按键名 `_rules` 结尾自动发现的,
     #   没有这样的键 = 没有规则 ⇒ 不会自动删种/改限速/打 HR 标签。(写成 rules_config: {{}}
     #   反而会被 validate_config 判"未知键", 已实测)
     hr:
@@ -121,7 +121,7 @@ def main() -> int:
     args = ap.parse_args()
 
     # ---- 启动前自检: 两条都是"启动后才炸、还得读栈"的典型, 提前拦掉 ----
-    # ① qB 端口不通 => 直接退出并给出排查清单(否则要等 Web 起来、主循环连一轮才知道)
+    # 1. qB 端口不通 => 直接退出并给出排查清单(否则要等 Web 起来、主循环连一轮才知道)
     if not _port_listening(args.qb_host, args.qb_port):
         print(f"\n[失败] 连不上 qBittorrent: {args.qb_host}:{args.qb_port} 没有服务在听\n")
         print("  请依次确认:")
@@ -131,7 +131,7 @@ def main() -> int:
         print(f"       改端口: --qb-port <qB 里那个端口>")
         print("    4. 若 qB 只监听了具体网卡, 用 --qb-host 指定那个地址")
         return 2
-    # ② WEB 端口被占 => 自动换一个(实测: 上一次进程没退干净最常见)
+    # 2. WEB 端口被占 => 自动换一个(实测: 上一次进程没退干净最常见)
     web_port = args.web_port
     if _port_listening(args.web_host, web_port):
         alt = _pick_web_port(args.web_host, web_port)
@@ -179,8 +179,8 @@ def main() -> int:
     print("  已关闭: 规则集(HR/限速/删种) / 集数标签 / 标签清理 / 缺文件扫描 / 站点标签")
     print("  已保留: 同步快照(1.5s) + 辅种分组(只读归组) + WEB UI")
     print()
-    print("  ⚠ WebUI 上的**手动**命令会真的作用到 qB(点暂停就是真暂停)。")
-    print("  ⚠ 别在正在做种的关键机上乱点。Ctrl+C 退出。")
+    print("  WARN: WebUI 上的**手动**命令会真的作用到 qB(点暂停就是真暂停)。")
+    print("  WARN: 别在正在做种的关键机上乱点。Ctrl+C 退出。")
     print("=" * 68)
 
     if not args.no_open:

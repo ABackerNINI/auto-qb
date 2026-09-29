@@ -67,7 +67,7 @@ window.AQB_VIEW = {
     /* 顶层页面持久化(**唯一写入口**, 与列偏好同纪律): 只落"用户切到哪一页"这个意图,
      * 不落任何派生值; 读侧白名单在 initialPage()。写入失败(隐私模式/配额满)只影响
      * 刷新后的落点, 不该打断切页 —— 故吞掉异常。
-     * ⚠ 方法名不能叫 persistPage —— columns.js 已占用该名(列状态漏斗), 同名会互相覆盖。 */
+     * WARN: 方法名不能叫 persistPage —— columns.js 已占用该名(列状态漏斗), 同名会互相覆盖。 */
     persistUiPage() {
       try {
         localStorage.setItem("autoqb.ui.page", this.page === "settings" ? "settings" : "groups");
@@ -84,7 +84,7 @@ window.AQB_VIEW = {
      * 用户报「辅种页切到种子页再切回, 展开的组收起来了」: 旧实现在 setViewMode 里一律置空,
      * 展开态随切页丢掉。改法是**按视图分桶暂存** —— 切走时收进 expandMemo 并清空实时字段
      * (展开态仍不串台到别的视图), 切回时还回该视图最后一次的展开。
-     * ❗还回前必须验"那一行还在": 组可能已被删或被筛掉, 为一个不存在的面板留着 expandedKey
+     * !还回前必须验"那一行还在": 组可能已被删或被筛掉, 为一个不存在的面板留着 expandedKey
      *   会让 groupWin 永久退避行窗口(见 columns.js)—— 大库上等于悄悄关掉 P1-2 优化。 */
     stashExpandState() {
       if (this.viewMode === "groups") this.expandMemo.groups = this.expandedKey;

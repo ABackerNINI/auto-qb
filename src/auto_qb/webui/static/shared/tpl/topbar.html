@@ -197,7 +197,7 @@
             <div v-if="selectedCount" class="bulk-inline">
               <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
               <span class="bulk-count">已选 <b>{{ bulkCountText() }}</b></span>
-              <span v-if="bulkHrWarnText()" class="bulk-hr-warn">⚠ {{ bulkHrWarnText() }}</span>
+              <span v-if="bulkHrWarnText()" class="bulk-hr-warn">WARN: {{ bulkHrWarnText() }}</span>
               <span class="bulk-sep"></span>
               <button class="bulk-btn" @click="bulkAct('resume')">
                 <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始

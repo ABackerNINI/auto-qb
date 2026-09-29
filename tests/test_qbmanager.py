@@ -608,7 +608,7 @@ def test_connect_throttle_repeated_failures():
 def test_connect_recovery_logged():
     """连接恢复: 断开后重新连接成功记录'已重新连接'
 
-    ❗必须 patch `_new_client`(不是 `Client`): `connect()` 走的是 `qbclient._new_client`,
+    !必须 patch `_new_client`(不是 `Client`): `connect()` 走的是 `qbclient._new_client`,
     patch `qbmanager.Client` 根本不生效 ⇒ 会真的去连 `127.0.0.1:16585`。那条路径是否抛异常
     **取决于机器/网络环境**(2026-09-19 Linux CI 上 connect() 返回 False, Windows 本地却绿),
     用例因此时好时坏。换成 patch 真正被调用的那个名字, 用例与网络彻底解耦。
@@ -754,7 +754,7 @@ def test_tick_rebuilds_all_views_when_changed():
             assert counts() == (1, 1, 1, 1)  # 视图变化 -> 四份同次重建
             mgr._tick(dry_run=False)
             assert counts() == (1, 1, 1, 1)  # 标记已消费且无新变化 -> 不重建
-            # ⚠ 新增前提: 上面那一版**还没被任何 /api/state 请求取走**(pending 未清) ⇒
+            # WARN: 新增前提: 上面那一版**还没被任何 /api/state 请求取走**(pending 未清) ⇒
             # 即便又脏了也不生产新版本(节拍对齐门控)。这里模拟客户端取走一次再继续。
             mgr.store.view_changed = True
             mgr._tick(dry_run=False)
@@ -778,7 +778,7 @@ def test_view_rebuild_waits_for_client_consume():
     这里让"生产"等"消费": `_web_pending_ver` 未清(没人取)就不重建, 但**脏标记必须保留**
     (否则这次变化会被丢掉) —— 客户端一取走立刻补上。
 
-    ⚠ `force=True`(本轮有命令改了种子状态)**必须绕过** —— P0-5 要求用户操作后真值几十毫秒内
+    WARN: `force=True`(本轮有命令改了种子状态)**必须绕过** —— P0-5 要求用户操作后真值几十毫秒内
     进快照; 若被门控挡住, 真值要等客户端下一次轮询才可见, 与 P0-5 相悖。
     """
     with tempfile.TemporaryDirectory() as td:
@@ -793,29 +793,29 @@ def test_view_rebuild_waits_for_client_consume():
                 "unrecognized": []
             }
         ), mock.patch.object(mgr, "_build_flat_view", return_value=[]):
-            # ① 首版: 无 pending -> 重建, 并登记"这一版还没人取走"
+            # 1. 首版: 无 pending -> 重建, 并登记"这一版还没人取走"
             mgr.store.view_changed = True
             mgr._flush_views()
             assert g.call_count == 1
             assert mgr._web_pending_ver == mgr._group_view_ver
 
-            # ② 又脏了但上一版还没人取 -> **不生产**(这就是省掉的那一次)
+            # 2. 又脏了但上一版还没人取 -> **不生产**(这就是省掉的那一次)
             mgr.store.view_changed = True
             mgr._flush_views()
             assert g.call_count == 1, "上一版没人取就再产一版 = 白烧 CPU(节拍错配的症状)"
             assert mgr._group_view_dirty is True, "脏标记必须保留, 否则这次变化会被丢掉"
 
-            # ③ 命令驱动: force=True 必须绕过门控(P0-5: 真值不能等客户端轮询)
+            # 3. 命令驱动: force=True 必须绕过门控(P0-5: 真值不能等客户端轮询)
             mgr._flush_views(force=True)
             assert g.call_count == 2, "命令改了状态就必须立刻重建, 不能等客户端轮询"
             assert mgr._group_view_dirty is False
 
-            # ④ 客户端取走当前版本(此时不脏, 不会顺带重建) -> pending 清空
+            # 4. 客户端取走当前版本(此时不脏, 不会顺带重建) -> pending 清空
             mgr.ensure_group_state(mgr._group_view_ver)
             assert mgr._web_pending_ver is None
             assert g.call_count == 2
 
-            # ⑤ 已被取走 -> 门控重新打开, 再脏就能重建
+            # 5. 已被取走 -> 门控重新打开, 再脏就能重建
             mgr.store.view_changed = True
             mgr._flush_views()
             assert g.call_count == 3

@@ -344,7 +344,7 @@ def test_view_snapshot_and_wake_are_safe_when_not_started(tmp_path):
 def test_apply_starts_worker_when_never_started(tmp_path):
     """站点接入热重载(2026-09-29 实报「取数线程未启动」): 启动时无站点 => 线程从未建过;
     热接入第一个站点后 apply 必须把服务与线程带起来(enabled => 在跑)。
-    ❗本用例旧版钉的是反语义(「未启动时 apply 不得拉起线程」), 正是本 bug 的成因之一 —— 已随修复反转。"""
+    !本用例旧版钉的是反语义(「未启动时 apply 不得拉起线程」), 正是本 bug 的成因之一 —— 已随修复反转。"""
     runtime = make_runtime(tmp_path, enabled=True, channel=True)
     old = runtime.global_conf
     runtime.config.hr_check = make_config(tmp_path, enabled=True, channel=True).hr_check

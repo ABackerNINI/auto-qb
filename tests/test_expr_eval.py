@@ -54,7 +54,7 @@ _GIB = 1024**3
 def _setup(tmp=None, **tor_kw):
     """造 manager + ctx; tor 默认 200GiB / 分享率 2.0 / 已做种 4 天
 
-    ❗不传 `tmp` 时**不用 `tempfile.mkdtemp()`**(2026-09-23 实测): 那个没人回收, 每跑一次就在
+    !不传 `tmp` 时**不用 `tempfile.mkdtemp()`**(2026-09-23 实测): 那个没人回收, 每跑一次就在
     TMPDIR 根下留一个 `tmpXXXX` 目录 —— 实测已积到 1268 个。改挂 `TemporaryDirectory` 到 mgr 上:
     随 mgr 释放即删, 且不会像"局部变量不返回"那样被提前回收(那会让 mgr 后续写 state.json 失败)。
     """

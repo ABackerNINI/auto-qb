@@ -102,8 +102,8 @@ def next_allowed_at(
 ) -> Tuple[float, str]:
     """下一次允许发起请求的时刻 + 原因(供报告与日志)。
 
-    取最晚: ① 间隔门槛(上次请求 + 抖动后的最小间隔) ② 日额重置(到顶时) ③ Retry-After
-    ④ allow_window(不在时段内则等到时段起点)。熔断/停用/退避已随 v3 模型删除(§5.2)。
+    取最晚: 1. 间隔门槛(上次请求 + 抖动后的最小间隔) 2. 日额重置(到顶时) 3. Retry-After
+    4. allow_window(不在时段内则等到时段起点)。熔断/停用/退避已随 v3 模型删除(§5.2)。
     """
     candidates: List[Tuple[float, str]] = []
     if limits.min_interval > 0 and data.rate.last_fetch_ts > 0:

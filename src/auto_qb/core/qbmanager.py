@@ -85,7 +85,7 @@ def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
     托管模式(tray/UI 传入 stop_event)走 Event.wait, 保持对停止信号的即时响应;
     非托管模式(CLI 默认无 stop_event)走 time.sleep —— **必须真实睡眠**。
 
-    ❗回归背景(2026-09-14): 主循环曾写成 `if stop_event is not None and stop_event.wait(main_tick)`,
+    !回归背景(2026-09-14): 主循环曾写成 `if stop_event is not None and stop_event.wait(main_tick)`,
     非托管模式下被 `and` 短路 -> 完全不阻塞 -> 空转。由每 tick 固定成本(update_state_snapshot 等)
     反推约 2800 tick/s, 是 main_tick=2s 设计值的约 5500 倍: CPU 打满, 且把
     sync/maindata 请求量同步放大 5500 倍(连带 requests 每次请求的 netrc/代理/注册表解析一并放大)。
@@ -103,7 +103,7 @@ def _wait_next(stop_event: Optional[threading.Event], wake_event: threading.Even
     与 _throttle 的区别: 本函数额外响应「命令唤醒」, 让 WEB 操作不必等到下个节拍才被消费;
     且 timeout 是「距下一条时间线的剩余时间」而非固定的 main_tick。
 
-    ❗stop_event 与 wake_event 是两个独立事件, Python 无多事件等待原语。这里**以唤醒为主**:
+    !stop_event 与 wake_event 是两个独立事件, Python 无多事件等待原语。这里**以唤醒为主**:
     阻塞在 wake_event 上(命令到达即返回, 延迟 ≈ 0), 按 STOP_POLL_INTERVAL 分段,
     段间用**非阻塞**的 stop_event.is_set() 检查停止 —— 停止延迟 ≤ 0.5s(UI 退出路径另在
     stop_event.set() 后直接调 manager.wake(), 立即响应)。
@@ -164,7 +164,7 @@ class QbManager(
     def __getattr__(self, name: str):
         """旧字段名 -> self.web 的只读转发(仅在普通属性查找失败时被调用)
 
-        ❗'web' 自身不在别名表里, 故 __init__ 之前访问任何别名都会在这里抛 AttributeError
+        !'web' 自身不在别名表里, 故 __init__ 之前访问任何别名都会在这里抛 AttributeError
         而不是递归 —— 别名属性必须在 self.web 建立之后才可用。
         """
         alias = self._WEB_STATE_ALIAS.get(name)
@@ -319,7 +319,7 @@ class QbManager(
 
         Web 线程投递命令后调用: 命令延迟从 0~main_tick(最坏 2s)降到近乎 0。
 
-        ❗只走命令线是硬约束, 不能退化成"投递即跑下一轮 tick":
+        !只走命令线是硬约束, 不能退化成"投递即跑下一轮 tick":
         1) max_tasks_per_tick 承载的是**速率语义**(20 个/2s = 10 任务/秒), tick 频率一旦由命令
            决定, 这个上限即失效;
         2) 存在**自投递命令**(Web 侧索引脏时自己 put build_search_index), "投递即唤醒跑 tick"
@@ -434,7 +434,7 @@ class QbManager(
                     # dry_run 不补(只观察); 暂停时上面已 continue(暂停 = 完全旁观)。
                     sync_due = (now >= next_sync_at) or (state_changed and not dry_run)
                     tick_due = now >= next_tick_at
-                    # ❗必须在 try **之外**初始化: 兜底 flush 在 except 之后读它, 若异常发生在这行
+                    # !必须在 try **之外**初始化: 兜底 flush 在 except 之后读它, 若异常发生在这行
                     # 之前, 名字未绑定会抛 NameError —— 它在 try 外面, 会直接把主循环打挂。
                     _flushed = False  # 本轮正常路径是否已落过回执(兜底据此跳过, 免得日志打两遍)
                     try:
@@ -459,7 +459,7 @@ class QbManager(
                         elif tick_due:
                             self._task_line(dry_run, force=cmd_forced)
                             next_tick_at = time.time() + main_tick
-                        # ❗无条件落"推迟的回执"(哪怕本轮没跑补刷新 / dry_run):
+                        # !无条件落"推迟的回执"(哪怕本轮没跑补刷新 / dry_run):
                         # 漏调会让前端 waitCmd 干等 40s。放在补刷新**之后**是刻意的 ——
                         # 回执带上此刻的真值, 前端就不必再拉一次全量 /api/state。
                         self.web.flush_truths()
@@ -498,7 +498,7 @@ class QbManager(
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
                     # 兜底: 上面任何一条线抛异常时也要把推迟的回执落掉 —— 漏写会让前端 waitCmd
-                    # 干等 40s, 界面一直半透明。❗**只在正常路径没跑到时才补**: 否则等真值的那些
+                    # 干等 40s, 界面一直半透明。!**只在正常路径没跑到时才补**: 否则等真值的那些
                     # 回执会在同一轮里被 flush 两次, 日志出现两行一模一样的"另 N 条等真值落地"。
                     if not _flushed:
                         self.web.flush_truths()
@@ -534,7 +534,7 @@ class QbManager(
         - L0 即时生效(仅替换 Config 对象): main_tick/state_save_interval/max_tasks_per_tick/remove_similar_tags/
           skip_checking_tag/grouping.*/add_episode_tags.*/trackers.X.tags|remove_tags|remove_similar_tags|
           limits|hr.*(运行时动态读取, 数据/任务/分组全保留)
-          ❗HR 例外: 服务对象按值持有站点表, 「仅替换对象」对它不够 —— hr.apply 在 L0/L2 下也会被调
+          !HR 例外: 服务对象按值持有站点表, 「仅替换对象」对它不够 —— hr.apply 在 L0/L2 下也会被调
           (见下方调用点), 由它自判重建/短路
         - L1 轻量应用: logging 重挂 / 通知 handler 重挂 / qbittorrent 重连 / web 服务器
           **仅在"监听身份"(enabled/host/port)变化时重启**(次序: 停旧并等其线程退出 -> 启新, 见 _apply_web_config)
@@ -724,10 +724,10 @@ class QbManager(
 
         锚点是**辅助信号**(计划 §9): 它只能让**本实例**的放行失效(二次下载 / 删种重加 /
         文件重下), 覆盖不到别的客户端 —— 故放行仍以「刷新背书」为主, 锚点只把可疑的收回来。
-        ❗线程: 取数线程经 `HrRuntime._anchors` 异步要这份数据, 而 `store.by_hash` 由主循环
+        !线程: 取数线程经 `HrRuntime._anchors` 异步要这份数据, 而 `store.by_hash` 由主循环
         整体替换引用(读者看到的永远是某个完整快照)。故本方法**只读**: 不写状态、不发 API,
         `rec.hr_anchor()` 也只把快照字段拷成不可变对象。
-        ❗站点键用 `tracker_conf.name`(= config.trackers 的键), 与取数线程的视图键同源。
+        !站点键用 `tracker_conf.name`(= config.trackers 的键), 与取数线程的视图键同源。
         """
         out: dict = {}
         for rec in self.store.all():

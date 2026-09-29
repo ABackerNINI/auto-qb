@@ -811,7 +811,7 @@ def _scan_template_transitions(path, rel, problems):
 
 
 # `node -e` 批量校验脚本(不落盘): 逐文件按 **CommonJS 包装**编译 —— 与 `node --check` 同语义, 但只起一个进程。
-# ⚠ 必须经 `Module.wrap`: 裸 `new vm.Script(src)` 按**经典脚本**解析, 会把顶层 `return`(CommonJS 下合法)
+# WARN: 必须经 `Module.wrap`: 裸 `new vm.Script(src)` 按**经典脚本**解析, 会把顶层 `return`(CommonJS 下合法)
 #   判成语法错误 ⇒ 比原判据凭空变严(2026-09-23 实测: 同一批样本里只有该边界项判定不同)。
 _NODE_SYNTAX_CHECK = (
     "const fs=require('fs'),vm=require('vm'),M=require('module');let bad=0;"
@@ -829,7 +829,7 @@ def _scan_js_syntax_with_node(js_files, problems):
     无 node(未装的机器/精简 CI)时**静默跳过**本项 —— 不引入 pytest skip(基线是 0 skipped),
     启发式扫描仍在拦最常见的那类损坏。
 
-    ❗2026-09-23 由「逐文件起一个 `node --check`」改为**单进程批量**: 20 个文件 = 20 次进程启动,
+    !2026-09-23 由「逐文件起一个 `node --check`」改为**单进程批量**: 20 个文件 = 20 次进程启动,
     实测 7.4s, 其中 95% 是进程启动开销(批量 0.38s)。校验语义已逐样本对齐过 ——
     6 个故障样本(注释孤儿续行 / 未闭括号 / 未闭字符串 / 未闭模板串 / 坏正则 / 未闭圆括号)
     + 1 个正常样本 + 1 个顶层 `return` 边界样本, 判定与 `node --check` **8/8 一致**。
@@ -899,9 +899,9 @@ def _scan_mixin_wiring(problems):
     """拆分接线守阵(2026-09-20): 片段文件必须「HTML 引用了」且「app.js 注入了」, 且成员不得重名
 
     拆成多文件后有两类**静默**故障形态(pytest 全绿 / 界面局部废掉):
-    ① 文件写了但漏加 <script> 或漏 app.mixin() —— 那一整块功能凭空消失, 控制台不报错
+    1. 文件写了但漏加 <script> 或漏 app.mixin() —— 那一整块功能凭空消失, 控制台不报错
        (Vue 直接把没注册的 mixin 当不存在);
-    ② 两个片段里出现同名成员 —— Vue 的 mixin 合并是**后者覆盖前者**, 不报错, 但被覆盖的那个
+    2. 两个片段里出现同名成员 —— Vue 的 mixin 合并是**后者覆盖前者**, 不报错, 但被覆盖的那个
        实现从此永不执行(表现为"点了没反应"或行为回到旧逻辑)。
     """
     bundle = _app_bundle_files()
@@ -925,15 +925,15 @@ def _scan_mixin_wiring(problems):
 
     app_text = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
     # 三种"已接线"形态:
-    #   ① mixin    —— window.AQB_* 注入 Vue 实例
-    #   ② component —— 注册为组件(如 hub-field 走 app.component)
-    #   ③ **行为基座** —— 被另一个全局用 `Object.assign({}, window.X, …)` 拷走复用(如 config_hub.js
+    #   1. mixin    —— window.AQB_* 注入 Vue 实例
+    #   2. component —— 注册为组件(如 hub-field 走 app.component)
+    #   3. **行为基座** —— 被另一个全局用 `Object.assign({}, window.X, …)` 拷走复用(如 config_hub.js
     #      的 HUB_FIELD_COMPONENT 拷 config_editor.js 的 CE_FIELD_BASE)。它本身不是组件、不注册,
     #      但成员确实在跑 ⇒ 不该报"定义了没注入"。
-    #      ⚠ 只认 `Object.assign({}, window.X` 这一种形态(本项目唯一的复用写法), 不要放宽成"出现即算"。
+    #      WARN: 只认 `Object.assign({}, window.X` 这一种形态(本项目唯一的复用写法), 不要放宽成"出现即算"。
     #      (2026-09-25: 经典设置页移除后 ce-field 组件与 tpl-ce-field 模板删除, 基座随之改名去组件化。)
-    #   ④ **根选项展开** —— `...window.X` 展开进 createApp 根组件选项(W2b: state.js 的 data/computed/watch
-    #      与 lifecycle.js 的生命周期)。❗这类成员**不许**走 app.mixin: 全局 mixin 会波及 hub-field 等
+    #   4. **根选项展开** —— `...window.X` 展开进 createApp 根组件选项(W2b: state.js 的 data/computed/watch
+    #      与 lifecycle.js 的生命周期)。!这类成员**不许**走 app.mixin: 全局 mixin 会波及 hub-field 等
     #      组件实例(watch/mounted 双份执行)。只认 app.js 里 `...window.X` 展开形态, 不放宽。
     registered = set(re.findall(r"app\.mixin\(window\.(\w+)\)", app_text))
     registered |= set(re.findall(r"app\.component\(\s*\"[^\"]+\"\s*,\s*window\.(\w+)\)", app_text))
@@ -984,8 +984,8 @@ def _scan_state_rank(text, rel, problems):
     两表是**同一概念**("一组/一集种子该显示成什么状态")的两份实现:
     前端那份决定辅种页组行取哪个成员状态着色(`decoratedGroups.status.primary`),
     后端那份决定追剧页集行的 `e.state`。漂移的后果有两层 ——
-    ① 同一批种子在辅种页与追剧页显示成**不同颜色**(用户没法解释, 只会觉得"颜色乱");
-    ② 乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 ⇒ 颜色弹回。
+    1. 同一批种子在辅种页与追剧页显示成**不同颜色**(用户没法解释, 只会觉得"颜色乱");
+    2. 乐观 UI: 前端按自己的表算出"点击后的颜色", 下一轮回执却按后端的表算真值 ⇒ 颜色弹回。
     实测曾漂移两处({downloading,checking} 与 {paused,seeding} 两组取值相反), 人眼不可能发现,
     故机械比对(改一边必须改另一边 —— 这正是本守阵要逼出来的动作)。
     """
@@ -1022,16 +1022,16 @@ def _scan_pending_settle(text, rel, problems):
     因为没人量过"撤下"。
 
     主线修法落地后有两处**极易被改回去/写反**的地方, 本守阵逐条钉住:
-      ① `_snapshotTruth(state)` 必须在 `reapplyPending()` **之前** —— 快照要的是服务端原始值;
+      1. `_snapshotTruth(state)` 必须在 `reapplyPending()` **之前** —— 快照要的是服务端原始值;
          挪到之后就变成"行上的补丁值 vs 补丁值", 恒真 ⇒ pending 一瞬间就清(实测 28ms),
          而且冒烟里「落回的是真值」那条**照样 PASS**(补丁值还留在行上, 看着就像真值)。
-      ② 判定必须走 `_optimisticSettled`(比真值快照)而不是"拿行上的当前值比" —— 同上。
+      2. 判定必须走 `_optimisticSettled`(比真值快照)而不是"拿行上的当前值比" —— 同上。
 
-    ❗2026-09-21 P3 后①②**仍然保留, 且必须保留**: 真值现在主要由 `truth` 事件(SSE)推送,
+    !2026-09-21 P3 后1.2.**仍然保留, 且必须保留**: 真值现在主要由 `truth` 事件(SSE)推送,
       但 **SSE 断线期间推的事件会丢**; 这时 `_optimisticSettled` 是唯一的安全网 —— 轮询带回的
       `/api/state` 一旦已经含真值就提前收工, 不用干等到 TRUTH_HOLD_MS(8s)超时回滚。
       没有它, SSE 一断就会出现"命令其实成功了, 8 秒后却回滚"的假失败。
-    ❗已删除的旧机制(勿复活): `_settleFromTruth`(回执带真值就地撤下)、
+    !已删除的旧机制(勿复活): `_settleFromTruth`(回执带真值就地撤下)、
       `_pullTruthAfterCmd`(回执后拉全量, 1500ms 预算) —— 真值改由事件推送后它们成了死代码。
     """
     i_snap = text.find("this._snapshotTruth(state)")
@@ -1075,7 +1075,7 @@ def _computed_body(text, name):
 def _strip_js_comments(text):
     """去掉 JS 的块注释与行注释 —— 供**存在性**守阵使用, 避免被注释骗过
 
-    ❗这是本项目踩过的坑(memory-bank/testing.md 列偏好守阵那条): 只查"字符串出现了没有",
+    !这是本项目踩过的坑(memory-bank/testing.md 列偏好守阵那条): 只查"字符串出现了没有",
     注释里正写着那个名字 ⇒ 真被注释掉的代码照样判过。故存在性判定一律先剥注释。
     行注释只认"前面不是冒号"的 `//`(避开 `https://` 这类字面量), 不做完整词法分析 ——
     本函数只服务"某标识符在这段实现里有没有被调用", 不需要精确到字符串内部。
@@ -1186,8 +1186,8 @@ def _scan_backdrop_filter(problems):
     所以无此症状。
 
     两层断言(缺一不可):
-    ①**位置**: 上述六类元素一律不许出现 backdrop-filter(不论哪套 UI、哪份 CSS);
-    ②**数量**: 各套 UI 自己的声明数必须相等 —— 防"只在某一侧加回来"这类单边改动
+    1.**位置**: 上述六类元素一律不许出现 backdrop-filter(不论哪套 UI、哪份 CSS);
+    2.**数量**: 各套 UI 自己的声明数必须相等 —— 防"只在某一侧加回来"这类单边改动
       (shared/console_hub.css 是共用层, 各边同担, 不计入各自计数)。
     扫描前先剥 `/* ... */`, 否则本文件里解释这段历史的注释会被当成真实声明(实测会误报)。
     """
@@ -1350,7 +1350,7 @@ def _scan_frontend_assets():
        文本宽度逐行漂移(2026-09-28 实测: 「100.0%」的行比「5.2%」的行条短)。
 
 
-    ⚠ 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
+    WARN: 7/8/9/11 四项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测)。
     """
     problems = []
@@ -1406,9 +1406,9 @@ def test_frontend_static_bundle_health():
     """前端静态资源守阵: 冲突残留/注释孤儿续行/node 语法校验/CSS 漏闭合/transition 吞弹窗/引用缺失/集成员取 hash/状态优先级表/列单元格配对
 
     三个实测故障(2026-09-17)都是"pytest 全绿但界面废掉"的形态:
-    ① app.js 注释续行留在已闭合的 `*/` 之后 -> 整包 SyntaxError -> Vue 不 mount -> 只剩背景色;
-    ② prism views.css 一条规则漏 `; }` -> 其后约 200 条规则被浏览器丢弃 -> 棱镜大半样式消失;
-    ③ 抽屉外层 `<transition>` 未闭合 -> 统计/限速/添加/确认框被 Transition 丢弃(点了没反应且无报错)。
+    1. app.js 注释续行留在已闭合的 `*/` 之后 -> 整包 SyntaxError -> Vue 不 mount -> 只剩背景色;
+    2. prism views.css 一条规则漏 `; }` -> 其后约 200 条规则被浏览器丢弃 -> 棱镜大半样式消失;
+    3. 抽屉外层 `<transition>` 未闭合 -> 统计/限速/添加/确认框被 Transition 丢弃(点了没反应且无报错)。
     装了 node 的机器还会在此跑 `node --check` 对所有前端 JS 做真语法校验(无 node 则静默跳过)。
     """
     problems = _scan_frontend_assets()
@@ -1455,10 +1455,10 @@ def test_frontend_template_split_wiring():
     """模板分片接线守阵(2026-09-26 W1; 26-09-27 收敛后 = 单一语义源 shared/tpl): 清单完整性 + 差异口 + 聚合配平
 
     模板拆分/收敛后的静默故障形态(与 JS 片段的 _scan_mixin_wiring 同源):
-      ① 分片文件在盘上但清单漏挂 —— boot 不注入, 该页面区整块消失(零报错);
-      ② 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
-      ③ 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
-      ④ 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
+      1. 分片文件在盘上但清单漏挂 —— boot 不注入, 该页面区整块消失(零报错);
+      2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
+      3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
+      4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
     另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤200 行 / 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
@@ -1529,10 +1529,10 @@ def test_frontend_button_system_paired():
 
     迁移是一次大批量类名替换(ce-btn/ce-icon -> bt 变体), 最危险的残缺形态是"只改一边"或
     "模板换了 CSS 没换"(页面静默回退到 UA 默认按钮)。四类机械断言:
-    ① 旧类名 ce-btn / ce-icon 在全部前端语料(html/css/js)里零残留;
-    ② .bt 体系块与六个语义变体在两套 CSS 各有成对定义(星图 style.css / 棱镜 components.css);
-    ③ 两套 index.html 的 bt 变体用量逐类相等(模板本就同构, 数量不等 = 单边漏改/误删);
-    ④ 双色配方令牌 --on-accent / --on-accent-ink / --on-error 在星图 :root 与棱镜五主题成对声明
+    1. 旧类名 ce-btn / ce-icon 在全部前端语料(html/css/js)里零残留;
+    2. .bt 体系块与六个语义变体在两套 CSS 各有成对定义(星图 style.css / 棱镜 components.css);
+    3. 两套 index.html 的 bt 变体用量逐类相等(模板本就同构, 数量不等 = 单边漏改/误删);
+    4. 双色配方令牌 --on-accent / --on-accent-ink / --on-error 在星图 :root 与棱镜五主题成对声明
       (缺一个主题, 该主题实心主钮/危险钮的前景色会掉回继承或 UA 默认)。
     """
     atl = os.path.join(STATIC_ROOT, "atlas")
@@ -1542,7 +1542,7 @@ def test_frontend_button_system_paired():
     atl_css = _ui_css_aggregate("atlas")
     pri_css = open(os.path.join(pri, "css", "components.css"), encoding="utf-8").read()
 
-    # ① 旧类名零残留(全语料: static 树下全部 html/css/js, 排除 vendor; 类名若只留在注释里
+    # 1. 旧类名零残留(全语料: static 树下全部 html/css/js, 排除 vendor; 类名若只留在注释里
     #    也应清理, 留着会误导下一次死类判定)
     corpus_files = []
     for root, dirs, files in os.walk(STATIC_ROOT):
@@ -1558,7 +1558,7 @@ def test_frontend_button_system_paired():
                 leftovers.append(f"{os.path.relpath(f, STATIC_ROOT)}:{bad}")
     assert not leftovers, f"旧按钮类名必须零残留: {leftovers}"
 
-    # ② .bt 体系块与变体在两套 CSS 成对定义
+    # 2. .bt 体系块与变体在两套 CSS 成对定义
     variants = ["primary", "ghost", "danger", "danger-solid", "icon", "sm"]
     for css, name in (
         (atl_css, "atlas css 聚合(link 序)"),
@@ -1569,7 +1569,7 @@ def test_frontend_button_system_paired():
         for v in variants:
             assert re.search(rf"^\.bt\.{re.escape(v)} \{{", css, re.M), f"{name} 缺 .bt.{v} 变体"
 
-    # ③ 两套模板的 bt 用量逐类相等(class="bt ..." 静态写法; :class 动态绑定单独对账)
+    # 3. 两套模板的 bt 用量逐类相等(class="bt ..." 静态写法; :class 动态绑定单独对账)
     def _bt_counts(html):
         counts = {}
         for m in re.finditer(r'class="(bt[^"]*)"', html):
@@ -1587,7 +1587,7 @@ def test_frontend_button_system_paired():
         assert atl_html.count(dyn) == pri_html.count(dyn) and atl_html.count(dyn) >= 1, \
             f"站内确认框的动态变体绑定 {dyn} 未成对"
 
-    # ④ 双色配方令牌成对声明(星图 :root 一处 + 棱镜五主题各一处)
+    # 4. 双色配方令牌成对声明(星图 :root 一处 + 棱镜五主题各一处)
     for tok in ("--on-accent:", "--on-accent-ink:", "--on-error:"):
         assert atl_css.count(tok) == 1, f"星图 :root 应恰好声明一次 {tok}"
         themes = os.path.join(pri, "css", "themes")
@@ -1600,10 +1600,10 @@ def test_frontend_search_syntax_wiring():
     """搜索匹配**服务端单点**的前端接线守阵(2026-09-26 统一, 治"同一语义修三遍")
 
     两类"pytest 全绿但交互废掉 / 前端再长出第二套匹配实现"的故障形态, 一律机械钉住:
-    ① 顶栏搜索清除钮必须挂 @mousedown.prevent —— 缺了它, 按下瞬间输入框失焦收窄
+    1. 顶栏搜索清除钮必须挂 @mousedown.prevent —— 缺了它, 按下瞬间输入框失焦收窄
       (focus 时 240→300px 的宽度过渡回退), 绝对定位在右沿的按钮随收窄移出光标,
       click 落空 => "有焦点时点 x 清不掉, 无焦点正常"; 两套 index.html 成对断言。
-    ② 三页(辅种/种子/追剧)搜索命中一律消费服务端 searchHits(views.py::search_torrents 的
+    2. 三页(辅种/种子/追剧)搜索命中一律消费服务端 searchHits(views.py::search_torrents 的
       行级裁决, 候选行 = 名字/站点/分类/路径/标签/文件名): 前端**不得再出现**任何文本匹配
       实现 —— 26-09-26 统一前 filters.js(_parseSearchQuery/_searchNorm/_torrentTextMatch)、
       hr.js(更早的整句 includes)、shows.js(剧名整句 includes)各持一份, 同一语义
@@ -1617,7 +1617,7 @@ def test_frontend_search_syntax_wiring():
     app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
     shows_js = open(os.path.join(shared, "shows.js"), encoding="utf-8").read()
 
-    # ① 清除钮 mousedown.prevent 成对(两套模板的 search-clear 按钮逐个检查)
+    # 1. 清除钮 mousedown.prevent 成对(两套模板的 search-clear 按钮逐个检查)
     for theme in _UI_ALL:
         html = _ui_aggregate(theme)
         m = re.search(r'<button[^>]*class="search-clear"[^>]*>', html)
@@ -1626,7 +1626,7 @@ def test_frontend_search_syntax_wiring():
         assert "@mousedown.prevent" in tag, f"{theme} search-clear 缺 @mousedown.prevent(焦点态清除失灵回归)"
         assert '@click="clearSearch"' in tag, f"{theme} search-clear 缺 clearSearch 接线"
 
-    # ② 前端无第二匹配实现(反漂移: 任何一个复活即红); 三页接线走 searchHits
+    # 2. 前端无第二匹配实现(反漂移: 任何一个复活即红); 三页接线走 searchHits
     # (注释里允许引用旧函数名讲历史, 故断言"名字+括号"—— 定义或调用才算复活)
     for name in ("_parseSearchQuery", "_searchNorm", "_torrentTextMatch", "_torrentSearchPass"):
         assert not re.search(rf"{name}\s*\(", filters_js), \
@@ -1642,19 +1642,19 @@ def test_frontend_hr_safety_wiring():
     """删除安全档位的前端接线守阵(2026-09-25, 计划 webui-hr-safety-display)
 
     四类"字段/令牌打错 = pytest 全绿但页面静默空白或配色失效"的故障形态, 一律机械钉住:
-    ① hr.js 的 token 映射表(HR_SRC_CLASSES / HR_SRC_BUCKETS)必须与后端 resolve.py 的 SRC_* 常量
+    1. hr.js 的 token 映射表(HR_SRC_CLASSES / HR_SRC_BUCKETS)必须与后端 resolve.py 的 SRC_* 常量
       逐字一致 —— 来源档位是前后端契约, 打错字来源标记静默消失; 三档类名驱动单元格底线三编码(CSS),
       文字结论改由悬停弹窗承载(原生 title 已移除, 避免与弹窗叠出被遮挡的冗余提示);
-    ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + hrSrcClass, 并由
+    2. 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + hrSrcClass, 并由
       hrSrcFull/hrSrcHalf 挂底线 + hrPopEnter 触发 —— 漏一处那一列就不显示安全档位/来源线/悬停弹窗;
       弹窗单例 DOM(teleport body)每套 UI 恰一份(26-09-26-webui-hr-popup 起 :title 换成悬停弹窗触发);
       要求时长的渲染门只认「已做种非空 + 有要求」, 不得依赖 hr_triggered(2026-09-29 实报:
       未核/在线行被一并藏掉要求, 只剩孤立的来源芯片);
-    ③ hr-unk / hr-fail / hr-line / bulk-hr-warn 新样式必须三套 CSS 成对定义(改这里时同步另一套的纪律);
+    3. hr-unk / hr-fail / hr-line / bulk-hr-warn 新样式必须三套 CSS 成对定义(改这里时同步另一套的纪律);
       hr-pop 弹窗规则(浮层/箭头/双轨)同理成对;
       整格线(在线)必须挂**文字包裹层** .dur-body 而不是单元格 .m-dur —— 行是 grid, 单元格被拉满整列宽,
       挂它上面 width:100% 的空 <i> 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报);
-    ④ 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
+    4. 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
       M4 设置页守阵同款思路)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
@@ -1664,7 +1664,7 @@ def test_frontend_hr_safety_wiring():
         encoding="utf-8",
     ).read()
 
-    # ① 来源 token 契约: 后端常量集 == 前端两张映射表的键集
+    # 1. 来源 token 契约: 后端常量集 == 前端两张映射表的键集
     src_tokens = set(re.findall(r'^SRC_[A-Z_]+ = "([a-z_]+)"', resolve_py, re.M))
     assert len(
         src_tokens
@@ -1687,7 +1687,7 @@ def test_frontend_hr_safety_wiring():
     for name in ("HR_SAFETY_CLASSES", "HR_SAFETY_BUCKETS"):
         assert _map_keys(name) == {"danger", "failed", "safe", "unknown"}, f"{name} 键集应为四个安全档位"
 
-    # ② 做种时长列换绑 + 弹窗单例: 两套 UI 各 3 处触发 / 各 1 份弹窗 DOM
+    # 2. 做种时长列换绑 + 弹窗单例: 两套 UI 各 3 处触发 / 各 1 份弹窗 DOM
     for ui in _UI_ALL:
         html = _ui_aggregate(ui)
         for needle, want in (
@@ -1722,7 +1722,7 @@ def test_frontend_hr_safety_wiring():
     assert "unverified" not in collapse.group(1), "未核实行不得收起为「无时长要求」(本地有要求, 收起即失真)"
     assert "site_released" in collapse.group(1) and "site_exempt" in collapse.group(1), "真放行/免罪仍应收起轨道"
 
-    # ③ 新样式两套 CSS 成对
+    # 3. 新样式两套 CSS 成对
     atlas_css = _ui_css_aggregate("atlas")
     prism_css = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
     console_css = _ui_css_aggregate("console")
@@ -1758,7 +1758,7 @@ def test_frontend_hr_safety_wiring():
         assert ".m-dur > .hr-line" not in css, \
             f"{name} 整格线仍挂在单元格 .m-dur 上 —— 单元格是 grid item 会被拉满列宽, 线随列宽不随文字"
 
-    # ④ 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
+    # 4. 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
     from auto_qb.core.qbmanager import QbManager
     from auto_qb.torrents import TorrentRecord
     from helpers import FakeTorrent
@@ -1809,8 +1809,8 @@ def test_frontend_member_window_functions_live_in_methods():
 def _computed_member_names(lines):
     """取一个片段文件里所有 `computed: {` 块的成员名(块缩进 + 2 的成员行)
 
-    比 `_section_members` 多两件事: ①**所有** computed 块都要取(组件里的 computed 也在内,
-    不只看顶层 mixin); ②终止行按**块的缩进**判定 —— 用 `line.strip() in ("},", "}")`
+    比 `_section_members` 多两件事: 1.**所有** computed 块都要取(组件里的 computed 也在内,
+    不只看顶层 mixin); 2.终止行按**块的缩进**判定 —— 用 `line.strip() in ("},", "}")`
     会被深层嵌套的 `},`(如 `return {...};` 之后那一行)提前关掉块, 从而漏掉后面的成员。
     """
     out, in_block, indent = set(), False, 0
@@ -1836,8 +1836,8 @@ def test_frontend_computed_not_invoked_as_function():
     `unitParts` 是 computed(返回 `{num, unit}`), 而 `setUnitNum` 里写成了
     `this.unitParts().unit` —— 这是把 getter 的**返回值**当函数调用 ⇒ `TypeError:
     this.unitParts is not a function` ⇒ **一改数字框就整页白屏**(设置页整段消失)。
-    此前没人发现是因为: ① 模板里 `unitParts.num` 是对的(只错在 JS 方法里);
-    ② 只有真的去改"主循环间隔 / 轮转大小"这类带单位的值才会触发。
+    此前没人发现是因为: 1. 模板里 `unitParts.num` 是对的(只错在 JS 方法里);
+    2. 只有真的去改"主循环间隔 / 轮转大小"这类带单位的值才会触发。
 
     为什么必须机检: 这类错误**只在真浏览器里跑特定交互**才现形, `node --check` 查不出来
     (语法完全合法), 静态守阵里也天然看不见; 与 `test_frontend_member_window_functions_live_in_methods`
@@ -1871,8 +1871,8 @@ def test_frontend_dist_segments_aggregates_per_view():
     后端按视图回传(P1-1, 见 mixins/web_view.VIEW_ARRAYS): view=torrent 只回 torrents,
     view=group 只回 groups+singles。旧版 distSegments 只数 this.groups[].members[].kind,
     于是两种场景 chips 全空:
-    ① localStorage 持久化 `autoqb.ui.view=torrents` 后首进种子页(首轮 groups=[]);
-    ② 在种子页停得久(轮询只刷 torrents, groups 永远是空/旧)。
+    1. localStorage 持久化 `autoqb.ui.view=torrents` 后首进种子页(首轮 groups=[]);
+    2. 在种子页停得久(轮询只刷 torrents, groups 永远是空/旧)。
     表现是「做种10 错误1」整行消失。
 
     断言: distSegments 实现里必须包含三个 viewMode 分支(torrents / shows / 其余即 groups)。
@@ -1925,7 +1925,7 @@ def test_frontend_persist_page_takes_intent_only():
     m = re.search(r"persistPage\s*\(\s*page\s*\)\s*\{(.*?)\n    \},", text, re.S)
     assert m, f"{rel} 找不到 persistPage(page)(改名或挪走了? 同步本守阵)"
     body = m.group(1)
-    # ❗只看**代码行**(同旧守阵教训: 注释里提到不算)
+    # !只看**代码行**(同旧守阵教训: 注释里提到不算)
     code_lines = [ln.strip() for ln in body.splitlines() if not ln.strip().startswith(("*", "//", "#"))]
     assert not any("colWidths" in ln for ln in code_lines
                   ), ("persistPage 的**代码**里出现 colWidths(生效态/派生值) —— 派生值落盘会让"
@@ -1951,7 +1951,7 @@ def test_frontend_col_manual_flag_not_revived():
 def test_frontend_cols_legacy_keys_have_migration():
     """LEGACY_COLS_KEYS 键链必须伴随迁移函数 —— 升版必挂迁移(定案口径)
 
-    v3->v4 升版没挂迁移, 用户手调的宽/隐/序一次性清零(四轮修复复盘第①轮, "时不时被重置"
+    v3->v4 升版没挂迁移, 用户手调的宽/隐/序一次性清零(四轮修复复盘第1.轮, "时不时被重置"
     的机制性来源)。v5 挂 migrateLegacyToV5; 本守阵钉住键链与迁移的耦合。
     """
     rel = "shared/app.js"
@@ -1996,11 +1996,11 @@ def test_frontend_page_location_persisted():
     `page` 原本是**纯内存态**、初值恒 "groups" ⇒ 在设置页按 F5 必掉回辅种页, 编辑位置全丢;
     设置页里的分区(`hub.view`)同理, 只持久化顶层页会让「设置 → 站点」刷新后落到设置首页。
     两条都只有真浏览器看得见(pytest 全绿、界面行为退化), 故在此静态钉住四件事:
-    ① 读侧**白名单**(只认 "settings", 不信任存储内容) + 写侧唯一漏斗;
-    ② **启动必须补一次 cfgLoad** —— 设置页的配置树是按需加载的, 只改初值不改启动路径,
+    1. 读侧**白名单**(只认 "settings", 不信任存储内容) + 写侧唯一漏斗;
+    2. **启动必须补一次 cfgLoad** —— 设置页的配置树是按需加载的, 只改初值不改启动路径,
        首屏会停在「配置加载失败 + 重试」(`cfg.schema` 永远为 null);
-    ③ 恢复的分区 key 必须**对 schema 校验** —— 分区会随版本改名/删除, 否则停在空白分区;
-    ④ 恢复走 `hubGo`(懒加载与默认选中项都在那条路径里, 自己重写必漏一半)。
+    3. 恢复的分区 key 必须**对 schema 校验** —— 分区会随版本改名/删除, 否则停在空白分区;
+    4. 恢复走 `hubGo`(懒加载与默认选中项都在那条路径里, 自己重写必漏一半)。
     """
     app = _app_bundle_text()
     m = re.search(r"function initialPage\(\)\s*\{(.*?)\n\}", app, re.S)
@@ -2050,8 +2050,8 @@ def test_frontend_expand_state_survives_view_switch():
     切回还回该视图最后一次的展开。
 
     两条反向约束(少一条就会把修好的东西又弄坏):
-    ① **还回前必须验"那一行还在"** —— 组可能已被删或被筛掉;
-    ② `groupWin` 的退避判据必须同步成"**当前真的有面板**" —— 只判 `expandedKey` 非空的话,
+    1. **还回前必须验"那一行还在"** —— 组可能已被删或被筛掉;
+    2. `groupWin` 的退避判据必须同步成"**当前真的有面板**" —— 只判 `expandedKey` 非空的话,
        一个过期的键会让行窗口永久退避(大库上 = 悄悄关掉 P1-2 优化, 界面看着完全正常, 只是滚动变卡)。
     """
     app = _app_bundle_text()
@@ -2095,9 +2095,9 @@ def test_frontend_hub_field_covers_non_leaf_items():
     `hubBlocks` 只挑 `type === "field"`, 所以只有这两个专段暴露出来)。
 
     守阵两条:
-    ① 两套皮肤的模板都必须**逐个**判 `item.type === '<非叶子类型>'`, 类型名单从 config_editor.js
+    1. 两套皮肤的模板都必须**逐个**判 `item.type === '<非叶子类型>'`, 类型名单从 config_editor.js
        的 cfgFlatten 实读(将来新增类型忘了加分支 → 立刻红, 不靠人记);
-    ② 叶子分支必须是链尾的 `v-else` —— 否则非叶子项会有绕回兜底 input 的路径。
+    2. 叶子分支必须是链尾的 `v-else` —— 否则非叶子项会有绕回兜底 input 的路径。
     """
     editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
     kinds = set(re.findall(r'type:\s*"(field|section|group|subcard)"', editor))
@@ -2157,13 +2157,13 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
 
     修法是让菜单在"被点的行属于选中集合"时升级为批量菜单, 动作复用批量浮条的链路。这条守阵
     钉住三处**成对**关系(任一处漏改都会静默退化回单目标, 且 pytest/`node --check` 都看不见):
-      ① 四个 open*Menu 必须各自写入 `multi:` —— 漏一处, 那条路径的多选右键就仍是单目标;
-      ② 两套 UI 的批量分支必须**成对存在**且逐项一致(双 UI 是两条独立模板, 只改一边 = 另一边
+      1. 四个 open*Menu 必须各自写入 `multi:` —— 漏一处, 那条路径的多选右键就仍是单目标;
+      2. 两套 UI 的批量分支必须**成对存在**且逐项一致(双 UI 是两条独立模板, 只改一边 = 另一边
          用户看不到批量菜单), 且只能调 ctxAct/ctxDelete;
-      ③ ctxAct/ctxDelete 必须**复用** bulkAct/bulkDelete —— 自己再拆一遍目标集合就会与批量浮条
+      3. ctxAct/ctxDelete 必须**复用** bulkAct/bulkDelete —— 自己再拆一遍目标集合就会与批量浮条
          的口径漂移(虚拟行/组展开/失效目标跳过这三条语义都在 _bulkTargets 里)。
     """
-    # ① 四个菜单入口都必须写 multi
+    # 1. 四个菜单入口都必须写 multi
     openers = {
         "shared/menu.js": ["openMenu(event, group)", "openMemberMenu(event, member)"],
         "shared/shows.js": ["openShowEpMenu(event, show, ep)", "openShowMenu(event, show)"],
@@ -2180,7 +2180,7 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
             )
             assert "multi:" in body, f"{rel} 的 {fn} 没把 multi 写进 this.menu —— 模板读不到, 批量分支永不渲染"
 
-    # ② 两套 UI 的批量分支成对且逐项一致
+    # 2. 两套 UI 的批量分支成对且逐项一致
     branches = {}
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
@@ -2202,7 +2202,7 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
         f"atlas={branches['atlas'][:120]!r} / prism={branches['prism'][:120]!r}"
     )
 
-    # ③ ctxAct/ctxDelete 复用批量浮条链路, 且先收起菜单(菜单根节点 @click.stop, 全局点空白关不掉)
+    # 3. ctxAct/ctxDelete 复用批量浮条链路, 且先收起菜单(菜单根节点 @click.stop, 全局点空白关不掉)
     cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
     for name, delegate in (("ctxAct(action)", "bulkAct(action)"), ("ctxDelete()", "bulkDelete()")):
         m = re.search(rf"\n    {re.escape(name)} \{{(.*?)\n    \}},", cmd, re.S)
@@ -2219,13 +2219,13 @@ def test_frontend_meta_dialog_paired():
     """标签/分类编辑对话框守阵(静态防回潮)
 
     对选中集合(或单种子)即时增删标签/改分类。风险形态与批量菜单守阵(CTX-03)同源:
-      ① 双 UI 是两条独立模板, 只改一边 = 另一边用户没有入口(两套 UI 必须成对改);
-      ② 对话框的投递必须走 bulk 链路(/api/torrents/bulk), 目标集合口径单点在
+      1. 双 UI 是两条独立模板, 只改一边 = 另一边用户没有入口(两套 UI 必须成对改);
+      2. 对话框的投递必须走 bulk 链路(/api/torrents/bulk), 目标集合口径单点在
          _bulkTargets/openMetaDialog —— 自己再拆一遍就会与批量浮条口径漂移;
-      ③ .opt-pill(atlas 此前没有该组件)与 .meta-dialog 的 CSS 必须两套成对定义,
+      3. .opt-pill(atlas 此前没有该组件)与 .meta-dialog 的 CSS 必须两套成对定义,
          模板用到的类在 CSS 无定义 = 静默裸样式(挂件类名错配的变体)。
     """
-    # ① 双 UI 成对: metaOpen 对话框 + 三处入口(批量浮条 / 批量菜单 ctxMeta / 单种子菜单)
+    # 1. 双 UI 成对: metaOpen 对话框 + 三处入口(批量浮条 / 批量菜单 ctxMeta / 单种子菜单)
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
         assert 'v-if="metaOpen"' in text, f"{ui}/index.html 缺少标签/分类对话框(双 UI 必须成对改)"
@@ -2233,7 +2233,7 @@ def test_frontend_meta_dialog_paired():
                          ) == 1, (f"{ui}/index.html 批量浮条应恰有一处 openMetaDialog(null)(批量菜单入口走 ctxMeta)")
         assert 'openMetaDialog(menu.hash)' in text, f"{ui}/index.html 单种子右键菜单缺少标签/分类入口"
         assert "ctxMeta()" in text, f"{ui}/index.html 批量右键菜单缺少 ctxMeta 入口"
-    # ② shared 逻辑接线(逻辑层两套共用, 只在 shared 出现)
+    # 2. shared 逻辑接线(逻辑层两套共用, 只在 shared 出现)
     dlg = open(os.path.join(STATIC_ROOT, "shared", "dialogs.js"), encoding="utf-8").read()
     for token in (
         "openMetaDialog(singleHash)",
@@ -2251,7 +2251,7 @@ def test_frontend_meta_dialog_paired():
     assert m, "shared/commands.js 找不到 ctxMeta(改名或挪走了? 同步本守阵)"
     assert "this.menu.visible = false" in m.group(1), ("ctxMeta 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)")
     assert "openMetaDialog(null)" in m.group(1), ("ctxMeta 必须复用 openMetaDialog 打开对话框 —— 目标集合口径单点在它里面")
-    # ③ CSS 成对: .meta-dialog 与 .opt-pill 各套 UI 都要有定义
+    # 3. CSS 成对: .meta-dialog 与 .opt-pill 各套 UI 都要有定义
     for name, t in (
         ("atlas css 聚合(link 序)", _ui_css_aggregate("atlas")),
         (
@@ -2268,19 +2268,19 @@ def test_frontend_add_torrent_drag_drop_wiring():
     """DND-01 全局拖拽添加种子接线守阵(静态防回潮)
 
     拖拽进料口的关键点全在 JS/HTML 静态结构里, pytest 运行时看不见:
-      ① window 级 drag 事件四件套(dragenter/dragover/dragleave/drop) add/remove 严格对称
+      1. window 级 drag 事件四件套(dragenter/dragover/dragleave/drop) add/remove 严格对称
          —— 漏 remove = 卸载后幽灵监听重复 ingest;
-      ② drop handler 必须 preventDefault —— 删掉它浏览器会直接打开 .torrent / 跳转链接,
+      2. drop handler 必须 preventDefault —— 删掉它浏览器会直接打开 .torrent / 跳转链接,
          表现为"拖进去弹出的是文件内容页";
-      ③ 接管判据只认 "Files"/"text/uri-list" —— 若放宽到 text/plain, 页面内拖选中文本、
+      3. 接管判据只认 "Files"/"text/uri-list" —— 若放宽到 text/plain, 页面内拖选中文本、
          拖词进输入框的原生行为会被误拦;
-      ④ 双 UI 的落点遮罩成对存在(v-if="addDragOver"), app.js 有 addDragOver 状态 ——
+      4. 双 UI 的落点遮罩成对存在(v-if="addDragOver"), app.js 有 addDragOver 状态 ——
          只改一套皮肤 = 另一套用户拖了没反应。
     """
     import re
 
     add_js = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
-    # ① 四件套 add/remove 对称
+    # 1. 四件套 add/remove 对称
     added, removed = set(), set()
     for hook, bucket in (("mounted", added), ("unmounted", removed)):
         m = re.search(rf"\n  {hook}\(\) \{{(.*?)\n  \}},", add_js, re.S)
@@ -2291,13 +2291,13 @@ def test_frontend_add_torrent_drag_drop_wiring():
     assert added == expect, f"mounted 缺 drag 事件: {expect - added}(少一个就有一条路径不接管)"
     assert removed == added, f"unmounted 与 mounted 不对称: add={sorted(added)} / remove={sorted(removed)}"
 
-    # ② drop handler 必须拦默认行为 + depth 归零灭遮罩
+    # 2. drop handler 必须拦默认行为 + depth 归零灭遮罩
     m = re.search(r"\n    _addDragDrop\(e\) \{(.*?)\n    \},", add_js, re.S)
     assert m, "add_torrent.js 找不到 _addDragDrop(drop 分流入口, 改名或挪走了? 同步本守阵)"
     assert "preventDefault()" in m.group(1
                                         ), ("_addDragDrop 少了 preventDefault —— 浏览器会直接打开 .torrent/链接而不是交给添加对话框(DND-01)")
 
-    # ③ 接管判据只认文件与链接, 不得放宽到 text/plain
+    # 3. 接管判据只认文件与链接, 不得放宽到 text/plain
     m = re.search(r"\n    _addDragTakes\(e\) \{(.*?)\n    \},", add_js, re.S)
     assert m, "add_torrent.js 找不到 _addDragTakes(接管判据, 改名或挪走了? 同步本守阵)"
     takes = m.group(1)
@@ -2306,7 +2306,7 @@ def test_frontend_add_torrent_drag_drop_wiring():
     )
     assert "text/plain" not in takes, ("_addDragTakes 不得认 text/plain —— 会误拦页面内拖选中文本/拖词进输入框的原生行为(DND-01)")
 
-    # ④ app.js 状态 + 双 UI 遮罩成对
+    # 4. app.js 状态 + 双 UI 遮罩成对
     app_js = _app_bundle_text()
     assert "addDragOver: false" in app_js, "app.js 缺 addDragOver 状态(遮罩显隐没有数据源)"
     for ui in _UI_ALL:
@@ -2321,16 +2321,16 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
     """右键菜单的次级菜单: 一级只留「更多操作」一个入口, 且移出后必须收起 (CTX-04 / CTX-05 / CTX-06)
 
     三条用户报的故障形态, 全部是"pytest 全绿 + node --check 全绿 + 界面废掉"那一类:
-      ① **二级菜单图标 hover 变灰**: `.ctx-item:hover .ico` 是后代选择器, 而 `.ctx-sub` 是父项的
+      1. **二级菜单图标 hover 变灰**: `.ctx-item:hover .ico` 是后代选择器, 而 `.ctx-sub` 是父项的
          DOM 后代 —— hover 父项会把整个子面板的图标一起刷成 `--fg-muted`, 语义色全被抹平。
          修法两处缺一不可: `>` 限定直接子级 + `:where(:hover)` 把特异性压到 0(让位给语义色规则)。
-      ② **移出不消失**: 只有 mouseenter 展开、没有任何 mouseleave, 鼠标移到别的菜单项上子面板
+      2. **移出不消失**: 只有 mouseenter 展开、没有任何 mouseleave, 鼠标移到别的菜单项上子面板
          会一直挂在屏幕上。修法挂**父项**的 mouseleave 延迟收起(子面板上再挂一条会在
          "从面板回到父项"时误收起), 延迟只为跨过父项与面板之间那 4px 缝隙。
-      ③ **复制族并成第二个子面板**: 一级出现两个"更多"入口, 用户得先选"该进哪个"。
+      3. **复制族并成第二个子面板**: 一级出现两个"更多"入口, 用户得先选"该进哪个"。
          CTX-06 把 复制名称/哈希/magnet 并入「更多操作」末尾。
     """
-    # ① CSS 的 hover 规则: 直接子级 + 特异性压制(改回后代选择器 = 整片子面板变灰)
+    # 1. CSS 的 hover 规则: 直接子级 + 特异性压制(改回后代选择器 = 整片子面板变灰)
     css = {
         "atlas": _ui_css_aggregate("atlas"),
         "prism": open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read(),
@@ -2344,7 +2344,7 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
         assert not re.search(r"\.ctx-item:hover\s+\.ico\b",
                              text), (f"{ui} 仍存在后代写法的 `.ctx-item:hover .ico` —— hover 父项会连子面板图标一起变灰(CTX-04)")
 
-    # ② 两套 UI 的次级菜单: 一级只有一个入口, 复制三项在面板内
+    # 2. 两套 UI 的次级菜单: 一级只有一个入口, 复制三项在面板内
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
         m = re.search(r'<div class="ctx-item has-sub".*?\n            </div>\n', text, re.S)
@@ -2365,7 +2365,7 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
             )
         assert "subMenu === 'copy'" not in text, (f"{ui} 仍残留 subMenu === 'copy' 分支 —— 复制已并入「更多操作」, 双入口会回潮(CTX-06)")
 
-    # ③ 收起的两个方法必须存在且挂在延迟上(同步收起 = 鼠标进不去子面板)
+    # 3. 收起的两个方法必须存在且挂在延迟上(同步收起 = 鼠标进不去子面板)
     menu = open(os.path.join(STATIC_ROOT, "shared", "menu.js"), encoding="utf-8").read()
     for name, needle in (("keepSub()", "clearTimeout"), ("scheduleSubClose()", "setTimeout")):
         m = re.search(rf"\n    {re.escape(name)} \{{(.*?)\n    \}},", menu, re.S)
@@ -2702,16 +2702,16 @@ def test_frontend_tracker_search_wiring():
     """站点页搜索接线守阵(静态防回潮, 计划 26-09-27-1852; 方案C 聚焦搜索层 2026-09-29 拍板)
 
     trackers 二级页搜索是纯前端实现, pytest 运行时看不见, 断链都是静默的:
-      ① 模板三件套(输入框绑定 / 清空钮 / 计数)与命中行结构缺一 = 搜索入口废;
-      ② 归一化必须用 [^\\p{L}\\p{N}](u 标志) —— JS 的 ASCII \\W 是 Unicode 语义的反面,
+      1. 模板三件套(输入框绑定 / 清空钮 / 计数)与命中行结构缺一 = 搜索入口废;
+      2. 归一化必须用 [^\\p{L}\\p{N}](u 标志) —— JS 的 ASCII \\W 是 Unicode 语义的反面,
          会把整个中文词折成空格, 中文搜索静默失效(Python \\W 的同语义直译陷阱);
-      ③ 收层路径四条(点命中 / Esc / 点暗幕 / 点外即收)一律走 hubTrackerStageClose 清词单点 ——
+      3. 收层路径四条(点命中 / Esc / 点暗幕 / 点外即收)一律走 hubTrackerStageClose 清词单点 ——
          漏一条 = 层赖着盖详情(「不主动消失」报障的根因);
-      ④ 聚焦层开合(聚焦或有词即开) + 键盘导航(↑↓ 移动 / Enter 打开) + IME 组词守卫(方案C)
+      4. 聚焦层开合(聚焦或有词即开) + 键盘导航(↑↓ 移动 / Enter 打开) + IME 组词守卫(方案C)
          + 悬停接管(mousemove + 3px 位移门限, 静止光标/合成事件不夺活动项 —— 治上下键选中项闪烁 2026-09-29)
          + 键盘活动项滚动跟随(↑↓ 后 .act 行滚进 300px 列表视野, 手动 scrollTop 差值, 禁 scrollIntoView —— 26-09-29-2142);
-      ⑤ 站点 pill 不带配置键数徽标(26-09-27 拍板); 新增/导入收进行尾动作区与站点 pill 分形(P4);
-      ⑥ 模板用到的 hb-tr-* 类必须在 console_hub.css 有定义(挂件类名错配变体)。
+      5. 站点 pill 不带配置键数徽标(26-09-27 拍板); 新增/导入收进行尾动作区与站点 pill 分形(P4);
+      6. 模板用到的 hb-tr-* 类必须在 console_hub.css 有定义(挂件类名错配变体)。
     """
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "settings.html"), encoding="utf-8").read()
     for token in (
@@ -2743,7 +2743,7 @@ def test_frontend_tracker_search_wiring():
     assert "hubCount" not in pills.group(1), "站点 pill 不应显示配置键数徽标(hubCount), 26-09-27 拍板"
     assert "hb-pill-tail" in pills.group(1) and "hubImportSites()" in pills.group(1), \
         "行尾动作区(新增/导入)必须留在 pill 行内(P4: 与站点 pill 分形分位)"
-    # ② 逻辑层单点: CJK 安全归一化 + 解析 / 行索引 / 命中 / 清空 / 收层 / 键盘
+    # 2. 逻辑层单点: CJK 安全归一化 + 解析 / 行索引 / 命中 / 清空 / 收层 / 键盘
     hub = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
     assert re.search(r"replace\(/\[\^\\p\{L\}\\p\{N\}\]\+/gu",
                      hub), ("站点归一化必须用 [^\\p{L}\\p{N}](u 标志): ASCII \\W 会把整个中文词折成空格")
@@ -2764,7 +2764,7 @@ def test_frontend_tracker_search_wiring():
     keydown = re.search(r"hubTrackerKeydown\(e\) \{(.*?)\n    \},", hub, re.S)
     assert keydown and "isComposing" in keydown.group(1) and "ArrowDown" in keydown.group(1) \
         and "Enter" in keydown.group(1), "键盘导航必须含 ↑↓/Enter 且 IME 组词中不劫持(isComposing 守卫)"
-    # ②b 滚动跟随(26-09-29-2142): 命中列表 max-height 300px 可滚, ↑↓ 只改 idx 不推滚动条,
+    # 2.b 滚动跟随(26-09-29-2142): 命中列表 max-height 300px 可滚, ↑↓ 只改 idx 不推滚动条,
     #    长列表上高亮走出可视区 = 键盘选择不可用。手动差值调 scrollTop, 禁 scrollIntoView(连带滚整页)。
     assert keydown and "hubTrackerScrollActIntoView" in keydown.group(1), \
         "↑↓ 改 idx 后必须调 hubTrackerScrollActIntoView 滚动跟随(长列表高亮走出视野)"
@@ -2775,7 +2775,7 @@ def test_frontend_tracker_search_wiring():
         "滚动跟随必须手动差值调 scrollTop(只滚命中列表自身, block:nearest 语义)"
     assert "scrollIntoView" not in scbody, \
         "不得用 scrollIntoView(逐层滚动所有可滚祖先, 连带滚动暗幕后面的整页产生二次干扰)"
-    # ③ 收层单点四条路径: 点命中 / Esc(hubOnKey) / 点暗幕(veil) / 点外即收(hubOnDocClick) —— 全部清词
+    # 3. 收层单点四条路径: 点命中 / Esc(hubOnKey) / 点暗幕(veil) / 点外即收(hubOnDocClick) —— 全部清词
     pick = re.search(r'@click="(hubTrackerPick\(h\.name\))"', tpl)
     assert pick, "命中行 @click 必须接 hubTrackerPick —— 只选中不清词会把切站效果留在暗幕底下(死锁)"
     assert '@mouseenter="hub.trackerHitIdx' not in tpl, \
@@ -2800,7 +2800,7 @@ def test_frontend_tracker_search_wiring():
         "收层单点必须清词 + 复位聚焦态 + 复位悬停门限坐标(跳转器拍板: 收层一律清词)"
     ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
     assert 'trackerQuery: ""' in ed, "cfg.trackerQuery 必须在 config_editor.js state 声明(漏声明 = 响应性缺失)"
-    # ⑥ CSS 成对: 模板用到的 hb-tr-* 类都要有规则
+    # 6. CSS 成对: 模板用到的 hb-tr-* 类都要有规则
     css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
     for cls in (
         "hb-tr-stage",
@@ -2832,9 +2832,9 @@ def test_frontend_dialog_combo_hover_takeover():
     添加种子分类/标签下拉与编辑弹窗分类下拉原是 @mouseenter 直写键盘活动项 —— 光标静止停在
     列表上用 ↑↓ 选择时, 行滚动/DOM 变更后浏览器给静止光标补发合成 hover 事件, 活动项被拽回
     光标行(改前真机实测: ↓×16 轨迹两次被拽回, Enter 选中 cat-06 而非键盘到达的 cat-16 ——
-    不止闪烁, 实选错)。处置(hover-keynav-fight 同款): ① 悬停接管走 @mousemove + 3px 位移
-    门限(comboHoverIdx 共享小工具, 三处不各抄一份); ② CSS 摘 data-hi 行的 :hover, 高亮只走
-    .on 一条路; ③ 开层单点复位门限坐标(下次打开首个动作不被旧坐标误挡)。
+    不止闪烁, 实选错)。处置(hover-keynav-fight 同款): 1. 悬停接管走 @mousemove + 3px 位移
+    门限(comboHoverIdx 共享小工具, 三处不各抄一份); 2. CSS 摘 data-hi 行的 :hover, 高亮只走
+    .on 一条路; 3. 开层单点复位门限坐标(下次打开首个动作不被旧坐标误挡)。
     """
     mgr = open(os.path.join(STATIC_ROOT, "shared", "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
     for token in (
@@ -2847,7 +2847,7 @@ def test_frontend_dialog_combo_hover_takeover():
     pop = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
     assert "@mousemove=\"comboHoverIdx('meta', i, $event)\"" in pop, "popovers.html 缺少 meta 分类下拉悬停接线(同步本守阵)"
     assert "@mouseenter=\"metaCatHi" not in pop, "编辑弹窗分类下拉行不得挂 @mouseenter(同族打架), 悬停接管走 comboHoverIdx"
-    # ① 门限坐标三字段声明(漏声明 = 响应性缺失) + 共享小工具单点实现(别三处各抄一份)
+    # 1. 门限坐标三字段声明(漏声明 = 响应性缺失) + 共享小工具单点实现(别三处各抄一份)
     st = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
     for token in ("addCatMouseAt: null", "addTagMouseAt: null", "metaCatMouseAt: null"):
         assert token in st, f"state.js 缺少 {token}(门限坐标未声明 = 响应性缺失)"
@@ -2856,7 +2856,7 @@ def test_frontend_dialog_combo_hover_takeover():
     fn = re.search(r"comboHoverIdx\(kind, i, ev\) \{(.*?)\n    \},", at, re.S)
     assert fn and "dx * dx + dy * dy < 9" in fn.group(1), \
         "悬停接管必须带 3px 位移门限(合成事件位移恒 0 被挡, 真实移动才接管)"
-    # ③ 开层单点复位门限坐标(下次打开首个动作不被旧坐标误挡)
+    # 3. 开层单点复位门限坐标(下次打开首个动作不被旧坐标误挡)
     for fnname, field in (("openAddCatMenu", "addCatMouseAt"), ("openAddTagMenu", "addTagMouseAt")):
         body = re.search(rf"{fnname}\(\) \{{(.*?)\n    \}},", at, re.S)
         assert body and f"{field} = null" in body.group(1), \
@@ -2865,7 +2865,7 @@ def test_frontend_dialog_combo_hover_takeover():
     body = re.search(r"openMetaCatMenu\(\) \{(.*?)\n    \},", dlg, re.S)
     assert body and "metaCatMouseAt = null" in body.group(1), \
         "openMetaCatMenu 必须复位 metaCatMouseAt(开层复位门限坐标)"
-    # ② CSS 单路高亮: 三皮肤 data-hi 行摘 :hover(.on 活动项是唯一高亮通道)
+    # 2. CSS 单路高亮: 三皮肤 data-hi 行摘 :hover(.on 活动项是唯一高亮通道)
     for rel in (
         os.path.join("atlas", "css",
                      "dialogs.css"), os.path.join("console", "css",
@@ -2894,7 +2894,7 @@ def test_frontend_search_help_wiring():
         'ref="searchInput"',
     ):
         assert token in tpl, f"shared/tpl/topbar.html 缺少 {token}(搜索语法浮卡被改坏? 同步本守阵)"
-    # ② state 声明 + 方法单点(回填必须走 doSearch 即搜 + 焦点还输入框)
+    # 2. state 声明 + 方法单点(回填必须走 doSearch 即搜 + 焦点还输入框)
     state = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
     assert "searchHelpOpen: false" in state, "searchHelpOpen 必须在 state.js data 声明(漏声明 = 响应性缺失)"
     view = open(os.path.join(STATIC_ROOT, "shared", "view.js"), encoding="utf-8").read()
@@ -2902,7 +2902,7 @@ def test_frontend_search_help_wiring():
         assert token in view, f"shared/view.js 缺少 {token}"
     fill = re.search(r"searchHelpFill\(q\) \{(.*?)\n    \},", view, re.S)
     assert fill and "this.searchHelpOpen = false" in fill.group(1), "searchHelpFill 必须先收起浮卡"
-    # ③ 收起路径: 点空白 + Esc(lifecycle 两条链), 以及 goView/openSettings 导航收起(不带残留跨页)
+    # 3. 收起路径: 点空白 + Esc(lifecycle 两条链), 以及 goView/openSettings 导航收起(不带残留跨页)
     lc = open(os.path.join(STATIC_ROOT, "shared", "lifecycle.js"), encoding="utf-8").read()
     assert lc.count("this.searchHelpOpen = false") >= 2, "浮卡必须挂 lifecycle 的点空白与 Esc 两条收起链"
     assert "searchHelpOpen) this.searchHelpOpen = false" in lc, "Esc 退栈必须含浮卡(pop 层)"
@@ -2911,7 +2911,7 @@ def test_frontend_search_help_wiring():
     ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
     openst = re.search(r"async openSettings\(\) \{(.*?)\n    \},", ed, re.S)
     assert openst and "this.searchHelpOpen = false" in openst.group(1), "openSettings 导航必须收起浮卡"
-    # ④ CSS 成对: 挂件类在共用层(console_hub.css, 三套 UI 同载), input 右内边距 52px 三皮肤各自留位
+    # 4. CSS 成对: 挂件类在共用层(console_hub.css, 三套 UI 同载), input 右内边距 52px 三皮肤各自留位
     shared_css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
     for cls in (".search-help", ".search-help.no-clear", ".search-help-pop", ".shp-row", ".shp-tip"):
         assert cls in shared_css, f"shared/console_hub.css 缺少 {cls} 定义(挂件类名错配 = 静默裸样式)"
@@ -3518,7 +3518,7 @@ def _hr_status_env(mgr, tmp_path, *, complete=True):
     from auto_qb.hr.runtime import HrRuntimeStatus, HrRefreshService
     from hr_helpers import Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
 
-    # ❗假时钟要落在**真实当前时间**附近: 端点用真 `time.time()` 取 now, 若测试时钟是
+    # !假时钟要落在**真实当前时间**附近: 端点用真 `time.time()` 取 now, 若测试时钟是
     # hr_helpers 默认的 2023 基准, 数据必然被判「已过有效期」—— 测的就不是想测的东西了
     clock = Clock(start=time.time())
     pages = {"A": myhr_page([row(101)]), "B": myhr_page([row(101)]), "C": myhr_page([row(101)])}
@@ -3706,8 +3706,8 @@ def test_views_published_atomically_when_rebuilt_concurrently(tmp_path):
     """并发重建: 四份视图与版本号必须**同一轮**发布(主循环线程 vs Web 线程)
 
     web.py 的同步 `def` 处理器跑在 FastAPI 线程池里, 会与主循环同时走 `rebuild_views`。
-    无锁时后者的"逐条赋值 + 版本号自增"会被前者插到中间 ⇒ ①`_group_view_ver += 1` 是
-    读-改-写, 丢失更新; ②Web 线程可能拿到"groups 来自本轮、flat 来自上一轮"的错位组合,
+    无锁时后者的"逐条赋值 + 版本号自增"会被前者插到中间 ⇒ 1.`_group_view_ver += 1` 是
+    读-改-写, 丢失更新; 2.Web 线程可能拿到"groups 来自本轮、flat 来自上一轮"的错位组合,
     而版本号只有一个 ⇒ 前端按 rid 判定 updated=true 却把错位数据整表换上去。
 
     检测手法(刻意做成**确定性**, 不依赖线程调度): 让重建卡在 builder 里不放行, 再把脏标记
@@ -4029,8 +4029,8 @@ def test_search_torrents_negative_torrent_veto():
     """search_torrents 负词种子级(2026-09-27 定案): 任一候选行(名字/站点/分类/路径/标签/文件行)
     含负词 ⇒ 整种子排除, 优先于一切正词命中
 
-    两轮实机报障的收口: ①「cat and -11」(26-09-26) —— E11 单文件的种子名行含 "11" 被行级作废,
-    却被不含 "11" 的保存路径行整颗捞回; ②「-mteam」(27-09-27) —— 站点/标签行负词拦不住名字行
+    两轮实机报障的收口: 1.「cat and -11」(26-09-26) —— E11 单文件的种子名行含 "11" 被行级作废,
+    却被不含 "11" 的保存路径行整颗捞回; 2.「-mteam」(27-09-27) —— 站点/标签行负词拦不住名字行
     正词命中。负词必须是种子级才有可预测的排除语义; 文件行同入种子级否决(见 negative_term)。
     """
     from helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store, _fake_file
@@ -4054,11 +4054,11 @@ def test_search_torrents_negative_torrent_veto():
         seed_store(mgr, [t1, t2, t3])
         mgr._build_search_index()
 
-        # 报障①回归: HA 名字行含 "11" ⇒ 整种子否决, 保存路径行("cat and" 齐、无 "11")不得捞回
+        # 报障1.回归: HA 名字行含 "11" ⇒ 整种子否决, 保存路径行("cat and" 齐、无 "11")不得捞回
         assert mgr.search_torrents("cat and -11")["results"] == []
         # 无负词时 HA 照常命中(名字行) —— 否决只由负词触发
         assert [(x["hash"], x["by"]) for x in mgr.search_torrents("cat and")["results"]] == [("HA", "name")]
-        # 报障②: HB 名字行通过 "alpha", 但站点行含 "mteam" ⇒ 整种子排除; 去负词后名字行照常命中
+        # 报障2.: HB 名字行通过 "alpha", 但站点行含 "mteam" ⇒ 整种子排除; 去负词后名字行照常命中
         assert mgr.search_torrents("alpha -mteam")["results"] == []
         assert [(x["hash"], x["by"]) for x in mgr.search_torrents("alpha")["results"]] == [("HB", "name")]
         # 文件轮同受身份行否决: HC 名字行含 "repack" ⇒ 排除, 唯一文件行(Show.1080p.mkv)干净也救不回
@@ -4318,28 +4318,28 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     # patch 地址 = auto_qb.web.common.open_path(web.py 拆 web/ 包后模块地址稳定化;
     # 原地址 auto_qb.web.open_path 随模块拆分失效 —— 管线性改动, plan 26-09-22-1857 W1)
     with mock.patch("auto_qb.webui.server.common.open_path") as spy:
-        # ① 目录型 content_path -> 取自身(非选中语义)
+        # 1. 目录型 content_path -> 取自身(非选中语义)
         r = post({"kind": "torrent", "hash": "HA"})
         assert r.status_code == 200 and r.json() == {"opened": norm(d_content), "select": False}, r.text
         spy.assert_called_once_with(norm(d_content), select=False)
-        # ② 文件型 content_path(单文件种子) -> 打开该文件并**定位选中**(R10-10)
+        # 2. 文件型 content_path(单文件种子) -> 打开该文件并**定位选中**(R10-10)
         spy.reset_mock()
         assert post({"kind": "torrent", "hash": "HB"}).json() == {"opened": norm(f_file), "select": True}
         spy.assert_called_once_with(norm(f_file), select=True)
-        # ③ content_path 缺失 -> 回退 save_path
+        # 3. content_path 缺失 -> 回退 save_path
         spy.reset_mock()
         assert post({"kind": "torrent", "hash": "HC"}).json() == {"opened": norm(d_seed), "select": False}
         spy.assert_called_once_with(norm(d_seed), select=False)
-        # ④ 组: 组键首元即规范化 save_path(组内成员天然一致)
+        # 4. 组: 组键首元即规范化 save_path(组内成员天然一致)
         spy.reset_mock()
         group_key = encode_group_key((norm(d_seed), ("a.mkv", )))
         assert post({"kind": "group", "key": group_key}).json() == {"opened": norm(d_seed), "select": False}
         spy.assert_called_once_with(norm(d_seed), select=False)
-        # ⑤ 安全: 客户端多传的 path 被忽略 —— 打开的是服务端派生的目录, 不是它
+        # 5. 安全: 客户端多传的 path 被忽略 —— 打开的是服务端派生的目录, 不是它
         spy.reset_mock()
         post({"kind": "group", "key": group_key, "path": "C:/Windows/System32"})
         spy.assert_called_once_with(norm(d_seed), select=False)
-        # ⑥ 未知组 / 未知 hash / 不存在目录 -> 404; kind 非法 -> 400; 均不调用系统打开
+        # 6. 未知组 / 未知 hash / 不存在目录 -> 404; kind 非法 -> 400; 均不调用系统打开
         spy.reset_mock()
         assert post({"kind": "group", "key": encode_group_key(("D:/nope", ("z", )))}).status_code == 404
         assert post({"kind": "torrent", "hash": "NOPE"}).status_code == 404
@@ -4360,10 +4360,10 @@ def test_api_open_path_endpoint(web_env, tmp_path):
 def test_api_fs_dirs_endpoint(web_env, tmp_path):
     """GET /api/fs/dirs (R10-11): 服务端目录浏览 —— 允许根白名单/只列目录/穿越防护/鉴权
 
-    这是本项目唯一新增的**文件系统读**能力, 安全边界逐条固化: ①首屏(path 空)= 允许根列表;
-    ②只返回目录条目(同名文件不出现); ③上溯到允许根为止(根之上 parent 为空);
-    ④`..` 穿越与白名单外路径一律 403; ⑤不存在/不是目录 404; ⑥无白名单时空返回(不报错);
-    ⑦指向根外的符号链接不出现在列表里(逃逸防护); ⑧无密钥 401; ⑨只读不入命令队列。
+    这是本项目唯一新增的**文件系统读**能力, 安全边界逐条固化: 1.首屏(path 空)= 允许根列表;
+    2.只返回目录条目(同名文件不出现); 3.上溯到允许根为止(根之上 parent 为空);
+    4.`..` 穿越与白名单外路径一律 403; 5.不存在/不是目录 404; 6.无白名单时空返回(不报错);
+    7.指向根外的符号链接不出现在列表里(逃逸防护); 8.无密钥 401; 9.只读不入命令队列。
     """
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
@@ -4376,24 +4376,24 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
     get = lambda p=None: client.get("/api/fs/dirs", headers=auth, params={} if p is None else {"path": p})  # noqa: E731
 
-    # ① 首屏 = 允许根列表(前端入口)
+    # 1. 首屏 = 允许根列表(前端入口)
     body = get().json()
     assert body["path"] == "" and body["roots"] == [norm(root)]
     assert body["dirs"] == [{"name": norm(root), "path": norm(root)}]
-    # ② 列子目录: 只出现目录(同名文件被排除); 已在允许根 -> 不能再上溯
+    # 2. 列子目录: 只出现目录(同名文件被排除); 已在允许根 -> 不能再上溯
     body = get(norm(root)).json()
     assert [d["name"] for d in body["dirs"]] == ["sub"]
     assert body["path"] == norm(root) and body["parent"] == ""
-    # ③ 进入子目录后可上溯回根
+    # 3. 进入子目录后可上溯回根
     body = get(norm(root / "sub")).json()
     assert [d["name"] for d in body["dirs"]] == ["deep"]
     assert body["parent"] == norm(root)
-    # ④ 越界 / .. 穿越 / 不存在 -> 403 / 403 / 404
+    # 4. 越界 / .. 穿越 / 不存在 -> 403 / 403 / 404
     assert get(norm(outside)).status_code == 403
     assert get(norm(root / ".." / "outside")).status_code == 403
     assert get(norm(root / "nope")).status_code == 404
     assert get(norm(root / "b.txt")).status_code == 404  # 目标存在但是文件 -> 不是目录
-    # ⑤ 符号链接逃逸: 指向根外的子目录不进列表
+    # 5. 符号链接逃逸: 指向根外的子目录不进列表
     #    跳过条件有两种: (a) 环境不允许建链(Windows 未开开发者模式 -> OSError);
     #    (b) **建了但落成真实目录** —— 部分沙箱/文件系统重定向层会让 os.symlink "成功"却
     #    islink=False(实测 mode=0o40777), 此时根本不存在"逃逸链接", 断言无意义。
@@ -4406,10 +4406,10 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     else:
         if os.path.islink(link):
             assert "escape" not in [d["name"] for d in get(norm(root)).json()["dirs"]]
-    # ⑥ 无白名单(还没有任何已知保存路径) -> 空返回而非报错
+    # 6. 无白名单(还没有任何已知保存路径) -> 空返回而非报错
     mgr.store.by_hash = {}
     assert get().json() == {"path": "", "parent": "", "roots": [], "dirs": []}
-    # ⑦ 鉴权 + 只读无副作用
+    # 7. 鉴权 + 只读无副作用
     assert client.get("/api/fs/dirs").status_code == 401
     assert mgr.web_commands.empty()
 
@@ -4421,7 +4421,7 @@ def test_api_fs_dirs_case_sibling_is_outside_whitelist(web_env, tmp_path):
     生产代码跑在**本机真实磁盘**上: Linux 下 `/x/Media` 与 `/x/media` 是两个**不同**目录。若把归一
     换成 `ntpath.normcase`(折叠大小写 + `/`->`\\`), 后者会被判成"在白名单内" ⇒ **越界放行**
     (fail-open, 安全方向反了)。`os.path.normcase` 在 Linux 是恒等函数, 恰恰是所需语义 —— 钉死它。
-    ⚠ 本条只能在 Linux 上真跑(NTFS 上根本建不出"仅大小写不同"的两个目录), 由 CI 验。
+    WARN: 本条只能在 Linux 上真跑(NTFS 上根本建不出"仅大小写不同"的两个目录), 由 CI 验。
     """
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
@@ -4455,23 +4455,23 @@ def test_api_fs_mkdir_endpoint(web_env, tmp_path):
     mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
     post = lambda body: client.post("/api/fs/mkdir", json=body, headers=auth)  # noqa: E731
 
-    # ① 正常新建
+    # 1. 正常新建
     r = post({"path": norm(root), "name": "新文件夹"})
     assert r.status_code == 200 and r.json() == {"created": norm(root / "新文件夹"), "existed": False}, r.text
     assert (root / "新文件夹").is_dir()
-    # ② 重名目录幂等(不报错)
+    # 2. 重名目录幂等(不报错)
     assert post({"path": norm(root), "name": "新文件夹"}).json()["existed"] is True
-    # ③ 同名文件 -> 409
+    # 3. 同名文件 -> 409
     (root / "b.txt").write_bytes(b"x")
     assert post({"path": norm(root), "name": "b.txt"}).status_code == 409
-    # ④ 名字含路径成分 / . / .. -> 400(只接受单层名字, 不做路径拼接)
+    # 4. 名字含路径成分 / . / .. -> 400(只接受单层名字, 不做路径拼接)
     for bad in ("", "  ", "a/b", "a\\b", ".", ".."):
         assert post({"path": norm(root), "name": bad}).status_code == 400, bad
-    # ⑤ 白名单外 / 父目录不存在 -> 403 / 404
+    # 5. 白名单外 / 父目录不存在 -> 403 / 404
     assert post({"path": norm(outside), "name": "x"}).status_code == 403
     assert post({"path": "", "name": "x"}).status_code == 403
     assert post({"path": norm(root / "missing"), "name": "x"}).status_code == 404
-    # ⑥ 鉴权 + 不入命令队列(不绕过单一写线程: 只建目录)
+    # 6. 鉴权 + 不入命令队列(不绕过单一写线程: 只建目录)
     assert client.post("/api/fs/mkdir", json={"path": norm(root), "name": "x"}).status_code == 401
     assert mgr.web_commands.empty()
 
@@ -4483,7 +4483,7 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
     误报 404, 而前端只看到"目录不存在或不可访问"。这里把前缀 helper 换成 spy, 逐端点钉住
     "确实调了它"。
 
-    ⚠ 测的是**路由**而不是平台效果: 真 Windows 行为在 Linux CI 上无法复现(平台固定约定见
+    WARN: 测的是**路由**而不是平台效果: 真 Windows 行为在 Linux CI 上无法复现(平台固定约定见
     testing/file-conventions.md), 故宿主上前缀是恒等(前缀对 POSIX 路径无意义); 前缀本身的
     正确性与打开层分支另由 `test_exists_dir_file_apply_long_path_prefix` /
     `test_open_path_windows_*` 覆盖。26-09-27: 前缀单点收编进文件访问层(infra/file_access,
@@ -4509,14 +4509,14 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
 
     monkeypatch.setattr("auto_qb.infra.utils.add_long_path_prefix_for_win", spy)
 
-    # ① 目录浏览
+    # 1. 目录浏览
     assert client.get("/api/fs/dirs", headers=auth, params={"path": norm(root)}).status_code == 200
     assert norm(root) in calls, f"fs/dirs 的文件系统调用未过前缀 helper: {calls}"
-    # ② 新建目录
+    # 2. 新建目录
     calls.clear()
     assert client.post("/api/fs/mkdir", json={"path": norm(root), "name": "new"}, headers=auth).status_code == 200
     assert norm(root) in calls, f"fs/mkdir 的文件系统调用未过前缀 helper: {calls}"
-    # ③ 打开目标文件夹(open_path 必须 mock —— 真调会弹资源管理器, 守阵判越界)
+    # 3. 打开目标文件夹(open_path 必须 mock —— 真调会弹资源管理器, 守阵判越界)
     calls.clear()
     with mock.patch("auto_qb.webui.server.common.open_path"):
         assert client.post("/api/open-path", json={"kind": "torrent", "hash": "HA"}, headers=auth).status_code == 200
@@ -4546,16 +4546,16 @@ def test_fs_endpoints_unmapped_root_semantic_404(web_env, tmp_path):
         mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(unmapped), content_path="")}
         mgr.store.groups = {(norm(unmapped), ("a.mkv", )): ["HA"]}
         mgr.store.get = lambda h: mgr.store.by_hash.get(h)
-        # ① 目录浏览: 白名单内(是已知保存路径)但未命中映射 -> 404 不可判定
+        # 1. 目录浏览: 白名单内(是已知保存路径)但未命中映射 -> 404 不可判定
         r = client.get("/api/fs/dirs", headers=auth, params={"path": norm(unmapped)})
         assert r.status_code == 404 and "不可判定" in r.json()["detail"], r.text
-        # ② 新建文件夹: 父目录未命中映射 -> 404 不可判定
+        # 2. 新建文件夹: 父目录未命中映射 -> 404 不可判定
         r = client.post("/api/fs/mkdir", json={"path": norm(unmapped), "name": "x"}, headers=auth)
         assert r.status_code == 404 and "不可判定" in r.json()["detail"], r.text
-        # ③ 打开路径(torrent): content_path 缺失回退 save_path(未命中) -> 404 不可判定
+        # 3. 打开路径(torrent): content_path 缺失回退 save_path(未命中) -> 404 不可判定
         r = client.post("/api/open-path", json={"kind": "torrent", "hash": "HA"}, headers=auth)
         assert r.status_code == 404 and "不可判定" in r.json()["detail"], r.text
-        # ④ 打开路径(组): 组键首元未命中映射 -> 404 不可判定
+        # 4. 打开路径(组): 组键首元未命中映射 -> 404 不可判定
         key = encode_group_key((norm(unmapped), ("a.mkv", )))
         r = client.post("/api/open-path", json={"kind": "group", "key": key}, headers=auth)
         assert r.status_code == 404 and "不可判定" in r.json()["detail"], r.text
@@ -4608,7 +4608,7 @@ def _make_grouped_manager(td):
         FakeTorrent(hash="HA", name="Show", save_path=r"R:\Downloads"),
         FakeTorrent(hash="HB", name="Show", save_path=r"R:\Downloads"),
     ]
-    # ❗**同时**灌进 FakeClient: 真值改走 `torrents/info` 直查(不再读同步快照),
+    # !**同时**灌进 FakeClient: 真值改走 `torrents/info` 直查(不再读同步快照),
     #   直查查的是 qB 客户端里的种子 —— 只 seed store 的话桩里查不到, 与真机不符。
     for t in tors:
         client.torrents[t.hash] = t
@@ -5036,7 +5036,7 @@ def test_drain_web_commands_torrent_write_actions():
         assert client.calls[11] == ("remove_trackers", ("HA", ["https://c/announce"]))
         assert client.calls[12] == ("file_priority", ("HA", [0, 1], 6))
         assert client.calls[13] == ("rename_file", ("HA", "old/file.mkv", "new/file.mkv"))
-        # ❗D2 之后回执**在 drain 阶段就写**(不再扣住等真值)—— 真机实测 qB 翻状态要 1258ms,
+        # !D2 之后回执**在 drain 阶段就写**(不再扣住等真值)—— 真机实测 qB 翻状态要 1258ms,
         #   扣着回执等 = 撤下被钉死在 1.25s+(实测撤下 2947ms)。回执只表示"命令已执行"。
         assert mgr._web_results["c1"]["status"] == "ok", "回执必须立即发, 不再等真值落地"
         # 回执**不带 truth**: 带上未落地的真值 = 让前端采纳命令前的旧值 ⇒ 弹回(红线)
@@ -5859,7 +5859,7 @@ def test_build_speed_totals_covers_ungrouped(tmp_path):
 def test_api_state_speed_totals_survives_view_scoping():
     """status.totals 恒回传: 种子页(不回 groups)/ 辅种页 / rid 命中三种情况下都在且等于全量
 
-    ❗这是 issue 26-09-20-1646(状态栏速度恒为 0)的防复现守阵。状态栏是**跨视图**的常驻
+    !这是 issue 26-09-20-1646(状态栏速度恒为 0)的防复现守阵。状态栏是**跨视图**的常驻
     显示, 一旦它的数值来自按视图裁剪的数组, 就会在某个视图下恒 0 或停在冻结的旧值。
     故 totals 必须与 traffic / server 同属"恒回传"口径: 不参与 VIEW_ARRAYS 分片、不受 rid 门控。
     """
@@ -5885,16 +5885,16 @@ def test_api_state_speed_totals_survives_view_scoping():
         auth = {"Authorization": "Bearer t"}
         want = {"dlspeed": 10000, "upspeed": 14000}
 
-        # ① 种子页: groups 根本不回传 —— 但若 totals 也跟着没了, 状态栏就恒为 0
+        # 1. 种子页: groups 根本不回传 —— 但若 totals 也跟着没了, 状态栏就恒为 0
         t = tc.get("/api/state?view=torrent", headers=auth).json()
         assert "groups" not in t, "种子页按设计不回 groups(P1-1 体积优化)"
         assert t["status"]["totals"] == want, f"种子页缺少/错误的 totals: {t['status'].get('totals')}"
 
-        # ② 辅种页: totals 与种子页**同源同值**(不能因视图不同而变)
+        # 2. 辅种页: totals 与种子页**同源同值**(不能因视图不同而变)
         g = tc.get("/api/state?view=group", headers=auth).json()
         assert g["status"]["totals"] == want
 
-        # ③ rid 命中(updated=False, 任何数组都不回)时 totals 仍必须回传 —— 否则稳态下每轮都拿不到
+        # 3. rid 命中(updated=False, 任何数组都不回)时 totals 仍必须回传 —— 否则稳态下每轮都拿不到
         ver = g["rid"]
         same = tc.get(f"/api/state?rid={ver}&view=torrent", headers=auth).json()
         assert same["updated"] is False
@@ -5960,8 +5960,8 @@ def test_apply_new_config_levels(monkeypatch):
             monkeypatch.setattr("auto_qb.config.impact.diff_config_impacts", lambda old, new: changes)
             return mgr.apply_new_config(new_cfg)
 
-        # ① L0: 仅替换配置对象, 任务队列保持不变(运行时动态读取项)
-        # ❗HR 路由守阵(2026-09-29 实报「取数线程未启动」): 站点接入是 L0, hr.apply 必须在
+        # 1. L0: 仅替换配置对象, 任务队列保持不变(运行时动态读取项)
+        # !HR 路由守阵(2026-09-29 实报「取数线程未启动」): 站点接入是 L0, hr.apply 必须在
         # L0 下也被调到(由 HrRuntime.apply 自判重建/短路), 不能只挂在 L1 分支
         mgr.hr = mock.MagicMock()
         queue_before = mgr.task_queue
@@ -5979,7 +5979,7 @@ def test_apply_new_config_levels(monkeypatch):
         assert done_logs[-1].levelno == std_logging.INFO, \
             f"热重载完成是预期动作, 应记 INFO(实为 {done_logs[-1].levelname})"
 
-        # ② L1: 重挂日志/通知 + 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新)
+        # 2. L1: 重挂日志/通知 + 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新)
         mgr._notify_handler = std_logging.NullHandler()
         # 旧配置(复现真实新旧对比): hr_check 也要给上 —— apply_new_config 的 L1 分支要拿旧值
         # 与新的 channel/shared_dir 比对(见 HrRuntime.apply), 缺了会 AttributeError
@@ -6006,7 +6006,7 @@ def test_apply_new_config_levels(monkeypatch):
         assert calls == [("stop", old_handle), ("start", mgr)], "必须先停旧服务(并等其线程退出)再启新服务"
         assert mgr._web_handle == "新句柄", "web 句柄应换为新服务句柄"
 
-        # ③ L2: 重建任务队列/规则 + 抑制下一轮事件分派
+        # 3. L2: 重建任务队列/规则 + 抑制下一轮事件分派
         queue_before = mgr.task_queue
         res = _apply([ConfigChange("interval", "L2", 1, 2)])
         assert res["levels"] == ["L2"]
@@ -6015,7 +6015,7 @@ def test_apply_new_config_levels(monkeypatch):
         mgr._load_rules.assert_called_once()
         mgr._create_global_tasks.assert_called_once()
 
-        # ④ R: 仅提示重启, 不计入应用级别
+        # 4. R: 仅提示重启, 不计入应用级别
         res = _apply([ConfigChange("state_file", "R", "a", "b")])
         assert res["restart_required"] == ["state_file"]
         assert res["levels"] == []
@@ -6192,7 +6192,7 @@ def test_start_web_server_reports_failure_when_port_taken(tmp_path):
 def _grab_web_logger(min_level=logging.INFO):
     """挂在 auto_qb.web 模块 logger 上的日志采集器: 对全局日志状态自足; 用完必须调 restore
 
-    ❗这组测试不要用 caplog 断言: caplog 的采集 handler 挂在 root 上, 而 root 的级别与
+    !这组测试不要用 caplog 断言: caplog 的采集 handler 挂在 root 上, 而 root 的级别与
     handlers 是**跨测试全局状态** —— root 出厂 level 是 WARNING(auto_qb.web 未显式设级时
     INFO 调用被拦成 no-op), test_logging 的 setup_logging 测试还会清空/重置 root。
     xdist 动态调度下同 worker 邻居每次不同, 依赖全局状态的断言就**偶发落空**(CI 实测:
@@ -6558,16 +6558,16 @@ def test_api_add_torrent_endpoint():
 def test_add_torrent_receipt_and_optional_flags():
     """添加种子回执两形态 + 两个 optional 选项恒显式下发 + 成功走 INFO(2026-09-24 真机 bug)
 
-    ① 回执判定只认 `"Ok." in str(result)` ⇒ 在 qB 5.2.3(Web API 2.14.0 起 `/torrents/add` 改成
+    1. 回执判定只认 `"Ok." in str(result)` ⇒ 在 qB 5.2.3(Web API 2.14.0 起 `/torrents/add` 改成
        JSON 元数据 `{success_count, failure_count, pending_count, added_torrent_ids}`)恒为假 ⇒
        种子明明加进去了, WEB UI 却弹"添加种子失败";
-    ② 停止位被"False 就不传"的过滤器吞掉 ⇒ qB 回落到**会话级**默认(SessionImpl::
+    2. 停止位被"False 就不传"的过滤器吞掉 ⇒ qB 回落到**会话级**默认(SessionImpl::
        initLoadTorrentParams 的 `addStopped.value_or(isAddTorrentStopped())`)⇒ 前端「添加后开始」
        勾了没用。另: 停止位只能用 `is_stopped=` 传 —— 库内 `is_paused or is_stopped` 会把
        `is_paused=False` 折成 None(实测请求体为空);
        同类的「自动种子管理」也是 `std::optional`(缺省回落 `savePath 空 ∧ 全局未禁自动管理`),
        一并按"恒显式"钉住;
-    ③ 成功路径原来记 WARNING, 而 NotifyHandler 挂在 auto_qb logger 上 ⇒ 每次添加成功都往桌面推
+    3. 成功路径原来记 WARNING, 而 NotifyHandler 挂在 auto_qb logger 上 ⇒ 每次添加成功都往桌面推
        一条 WARNING 弹窗; 成功必须 INFO, 只有未被接受才 WARNING。
     """
     import base64
@@ -6589,7 +6589,7 @@ def test_add_torrent_receipt_and_optional_flags():
             self.records.append(record)
 
     with tempfile.TemporaryDirectory() as td:
-        # ❗不能用 caplog: make_manager 走 setup_logging, 那里有 `logging.getLogger().handlers.clear()`
+        # !不能用 caplog: make_manager 走 setup_logging, 那里有 `logging.getLogger().handlers.clear()`
         #   —— 用例体内建 manager 会把 pytest 挂在 root 上的采集 handler 一并清掉, 之后一条也抓不到
         #   (症状是"日志断言恒空")。挂模块 logger 不受 root 清理影响, 且能验到真实级别。
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -6625,7 +6625,7 @@ def test_add_torrent_receipt_and_optional_flags():
             def add_logs():
                 return [(r.levelno, r.getMessage()) for r in cap.records if "添加种子" in r.getMessage()]
 
-            # ① 新形态(API >= 2.14.0): JSON 元数据 -> 受理; 成功必须是 INFO(改前: error + WARNING)
+            # 1. 新形态(API >= 2.14.0): JSON 元数据 -> 受理; 成功必须是 INFO(改前: error + WARNING)
             add_returns(
                 TorrentsAddedMetadata(
                     {
@@ -6639,7 +6639,7 @@ def test_add_torrent_receipt_and_optional_flags():
             assert mgr._web_results[post_add(False)]["status"] == "ok"
             assert [lvl for lvl, _ in add_logs()] == [logging.INFO], "受理成功不得走 WARNING(通知联动会直推桌面弹窗)"
 
-            # ② 部分失败 -> error 回执(部分成功也报错, 与 bulk 同一口径)且走 WARNING
+            # 2. 部分失败 -> error 回执(部分成功也报错, 与 bulk 同一口径)且走 WARNING
             cap.records.clear()
             add_returns(
                 TorrentsAddedMetadata(
@@ -6656,7 +6656,7 @@ def test_add_torrent_receipt_and_optional_flags():
             assert "成功 1 / 失败 1" in mgr._web_results[cid]["error"]
             assert [lvl for lvl, _ in add_logs()] == [logging.WARNING]
 
-            # ③ 仅 pending(magnet 元数据未就绪)也是受理, 不是失败
+            # 3. 仅 pending(magnet 元数据未就绪)也是受理, 不是失败
             add_returns(
                 TorrentsAddedMetadata(
                     {
@@ -6669,13 +6669,13 @@ def test_add_torrent_receipt_and_optional_flags():
             )
             assert mgr._web_results[post_add(False)]["status"] == "ok"
 
-            # ④ 旧形态文本仍认(API < 2.14.0 的 "Ok."/"Fails.")
+            # 4. 旧形态文本仍认(API < 2.14.0 的 "Ok."/"Fails.")
             add_returns("Ok.")
             assert mgr._web_results[post_add(False)]["status"] == "ok"
             add_returns("Fails.")
             assert mgr._web_results[post_add(False)]["status"] == "error"
 
-            # ⑤ 两个 optional 选项必须**显式**下发(省略 = 吃 qB 会话/全局默认, 勾选框失效):
+            # 5. 两个 optional 选项必须**显式**下发(省略 = 吃 qB 会话/全局默认, 勾选框失效):
             #    停止位 + 自动种子管理。`use_auto_torrent_management` 由替身记 kw.get(...) ——
             #    没传时是 None, 传 False 才是 False, 两者可分。
             add_returns("Ok.")
@@ -6886,11 +6886,11 @@ def test_api_log_note_when_level_unfilterable(web_env):
     with open(log_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     mgr.config.logging.file = log_path
-    # ①格式里没有等级字段 -> 等级无从判定
+    # 1.格式里没有等级字段 -> 等级无从判定
     mgr.config.logging.format = "%(asctime)s %(message)s"
     data = client.get("/api/log?lines=100&level=WARNING", headers=auth).json()
     assert data["lines"] == lines and data["note"] == NOTE_NO_LEVEL_FIELD
-    # ②格式有等级字段, 但文件里的行是另一种格式(改了 format, 旧行还在) -> 一行都对不上
+    # 2.格式有等级字段, 但文件里的行是另一种格式(改了 format, 旧行还在) -> 一行都对不上
     mgr.config.logging.format = "%(levelname)s|%(asctime)s|%(message)s"
     data = client.get("/api/log?lines=100&level=WARNING", headers=auth).json()
     assert data["lines"] == lines and data["note"] == NOTE_FORMAT_MISMATCH
@@ -7309,8 +7309,8 @@ def test_cmd_timing_is_logged_without_browser(caplog):
     """命令耗时必须落到**日志**(不是只在回执里回传) —— 真机排查"点了要等几秒"的主出口
 
     2026-09-20: 用户连报四次「乐观 UI 生效但要 2-4s 才恢复正常」, 四轮修复全在前端找, 因为
-    ① 本地桩服务没有主循环 ⇒ wait_ms 恒为 0 ⇒ 「投递 → 回执」这一段从来没被测到;
-    ② 埋点只随回执回传, 要看就得开 F12 —— 真机上用户常常开不了/不愿开, 等于没有埋点。
+    1. 本地桩服务没有主循环 ⇒ wait_ms 恒为 0 ⇒ 「投递 → 回执」这一段从来没被测到;
+    2. 埋点只随回执回传, 要看就得开 F12 —— 真机上用户常常开不了/不愿开, 等于没有埋点。
     故 `_log_cmd_timing` 直接落日志, 且**慢命令必须 WARNING**(否则淹没在 INFO 里捞不出来)。
     """
     import logging
@@ -7326,7 +7326,7 @@ def test_cmd_timing_is_logged_without_browser(caplog):
         _log_cmd_timing = WebUIRuntime._log_cmd_timing
 
     t = _T()
-    # ① 慢 -> WARNING, 且带归因提示(排队/执行各自指向不同的后端原因)
+    # 1. 慢 -> WARNING, 且带归因提示(排队/执行各自指向不同的后端原因)
     with caplog.at_level(logging.DEBUG):
         caplog.clear()
         t._log_cmd_timing("pause_torrent", {"wait_ms": 1800.0, "exec_ms": 2.0})
@@ -7335,7 +7335,7 @@ def test_cmd_timing_is_logged_without_browser(caplog):
     assert recs[-1].levelno == logging.WARNING, f"慢命令应为 WARNING, 实际 {recs[-1].levelname}"
     assert "1800" in recs[-1].getMessage()
 
-    # ② 快 -> DEBUG(2026-09-21 改: 原本是 INFO, 但每条命令都打会把日志刷满;
+    # 2. 快 -> DEBUG(2026-09-21 改: 原本是 INFO, 但每条命令都打会把日志刷满;
     #    常态耗时改由前端 `[perf]` 那一行承载, 服务端只在**异常慢**时升 WARNING)
     with caplog.at_level(logging.DEBUG):
         caplog.clear()
@@ -7349,7 +7349,7 @@ def test_cmd_timing_is_logged_without_browser(caplog):
         t._log_cmd_timing("pause_torrent", {"wait_ms": 1.0, "exec_ms": 3.0})
     assert not [r for r in caplog.records if "[cmd]" in r.getMessage()], "快命令不得进 INFO —— 每条命令都打会刷屏"
 
-    # ③ 自投递命令(建索引等)频次高 -> 压到 DEBUG, 不许进常规日志
+    # 3. 自投递命令(建索引等)频次高 -> 压到 DEBUG, 不许进常规日志
     with caplog.at_level(logging.DEBUG):
         caplog.clear()
         t._log_cmd_timing("build_search_index", {"wait_ms": 900.0, "exec_ms": 900.0})
@@ -7362,7 +7362,7 @@ def test_cmd_timing_is_logged_without_browser(caplog):
 def _mk_mgr_with_one_torrent(state="pausedDL", progress=1.0):
     """一个只含单个种子的 QbManager(供回执时序类断言用)
 
-    ❗临时目录**挂到 mgr 上**, 不用 `tempfile.mkdtemp()`(2026-09-23 实测): 后者没有任何人回收,
+    !临时目录**挂到 mgr 上**, 不用 `tempfile.mkdtemp()`(2026-09-23 实测): 后者没有任何人回收,
     每跑一次就在 TMPDIR 根下留一个 `tmpXXXX` 目录 —— 实测已积到 1268 个。
     也不能写成"函数内建 TemporaryDirectory 但不返回": 局部对象出函数即被回收, 目录当场消失,
     mgr 后续写 state.json 会失败。挂给 mgr 后随 mgr 释放即删, 两头都对。
@@ -7389,9 +7389,9 @@ def test_receipt_sent_immediately_truth_pushed_later():
     qB 侧出现(走直查也一样)⇒ 扣着回执等 = 撤下被钉死在 1.25s+(实测撤下 2947ms)。
 
     新做法两步:
-      ① 回执立刻发 —— 只表示"命令已执行", **不带 truth**(带上未落地的真值 = 让前端采纳
+      1. 回执立刻发 —— 只表示"命令已执行", **不带 truth**(带上未落地的真值 = 让前端采纳
          命令前的旧值 ⇒ 弹回, 那条红线不能破); 前端据此结束压暗 ⇒ 撤下降到 10~20ms。
-      ② 真值继续直查, 落地了再推 `truth` 事件; **超时不推**(宁可让前端超时回滚)。
+      2. 真值继续直查, 落地了再推 `truth` 事件; **超时不推**(宁可让前端超时回滚)。
     """
     import time
 
@@ -7403,17 +7403,17 @@ def test_receipt_sent_immediately_truth_pushed_later():
     pushed = []
     rt.notify = lambda etype, payload: (pushed.append((etype, payload)), 0)[1]
 
-    # ① 回执立即到账, 且**不带 truth**
+    # 1. 回执立即到账, 且**不带 truth**
     rt.defer_receipt("r1", "resume_torrent", {"hash": h}, {"wait_ms": 0.0, "exec_ms": 1.0})
     assert rt.results["r1"]["status"] == "ok", "回执必须立即发(不再扣住等真值)"
     assert "truth" not in rt.results["r1"], "回执带未落地的真值 ⇒ 前端采纳旧值 ⇒ 弹回"
     assert "r1" in rt.truth_pending, "真值应登记为待推"
 
-    # ② 真值没落地 -> 不推
+    # 2. 真值没落地 -> 不推
     rt.flush_truths()
     assert not [p for p in pushed if p[0] == "truth"], "真值未落地不得推送"
 
-    # ③ 真值落地 -> 推 `truth` 事件, 内容是落地后的值
+    # 3. 真值落地 -> 推 `truth` 事件, 内容是落地后的值
     tor.state = "uploading"
     rt.flush_truths()
     ev = [p for p in pushed if p[0] == "truth"]
@@ -7421,7 +7421,7 @@ def test_receipt_sent_immediately_truth_pushed_later():
     assert ev[0][1]["truth"][h]["kind"] == "seeding", ev[0][1]
     assert "r1" not in rt.truth_pending, "推完应出队"
 
-    # ④ 超时兜底: 真值始终不落地则**放弃推送**(不是推一个可能是旧值的真值)
+    # 4. 超时兜底: 真值始终不落地则**放弃推送**(不是推一个可能是旧值的真值)
     rt.defer_receipt("r2", "pause_torrent", {"hash": h}, {"wait_ms": 0.0, "exec_ms": 1.0})
     assert rt.results["r2"]["status"] == "ok"
     rt.truth_pending["r2"]["ts"] = time.time() - (TRUTH_PUSH_CAP_MS / 1000.0 + 1.0)
@@ -7439,7 +7439,7 @@ def test_affected_truth_reads_qb_directly_not_sync_snapshot():
     拿快照当"命令后的真值"就会读到命令**前**的旧值 —— 这正是"撤下要等 3s"的根源。
 
     判据: 故意让**快照**与** qB 客户端**不一致, 真值必须等于客户端那一侧。
-    ❗这条守阵要能挡住"改回读 store.by_hash": 那样 truth 会变成 paused, 断言立刻红。
+    !这条守阵要能挡住"改回读 store.by_hash": 那样 truth 会变成 paused, 断言立刻红。
     """
     with tempfile.TemporaryDirectory() as td:
         from helpers import FakeClient, FakeTorrent, make_manager, seed_store
@@ -7466,7 +7466,7 @@ def test_affected_truth_reads_qb_directly_not_sync_snapshot():
 def test_truth_hold_matches_truth_push_cap():
     """前端"值覆盖"的保持上限必须与后端真值推送上限一致(否则判据漂移)
 
-    ❗本条**同时**修掉一个既有缺陷: 原 `test_truth_hold_budget_matches_backend` 在文件里
+    !本条**同时**修掉一个既有缺陷: 原 `test_truth_hold_budget_matches_backend` 在文件里
       同名定义了两次, Python 后者覆盖前者 ⇒ 前一条**从未执行**(已入池 issue
       26-09-20-2212)。现在合并成一条, 且断言改名后的新常数 —— 守阵失效时会直接红,
       不会像之前那样"看着有守阵其实没跑"。

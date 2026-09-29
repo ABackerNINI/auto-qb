@@ -290,7 +290,7 @@ def order_violations(values: Sequence[Optional[float]]) -> OrderViolation:
     """对一列「可缺字段」的数值做单调性校验(方向自适应, 见 OrderViolation 说明)
 
     用于 HR 页行序校验: done_epoch(完成时间倒序假设)与 remain_seconds(剩余达标时间,
-    早停② 的「remain==0 连续段」也依赖页序稳定)都传得进来。
+    早停2. 的「remain==0 连续段」也依赖页序稳定)都传得进来。
     """
     seq = [v for v in values if v is not None]
     if len(seq) < 2:

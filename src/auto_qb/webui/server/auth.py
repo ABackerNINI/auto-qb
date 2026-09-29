@@ -6,7 +6,7 @@ create_app, 不得提升为模块级全局)。鉴权语义逐字保留: /api/con
 web.skip_local_verify=true 时 loopback 免密钥(INFO 只记一次); 非 /api 路径放行;
 SSE ?token= 查询串兜底; compare_digest 防时序侧信道; 错密钥恰好一条不含密钥内容的 WARNING。
 
-❗本模块 logger 显式取名 "auto_qb.web"(见包 __init__ K3) —— tests/test_web.py 按
+!本模块 logger 显式取名 "auto_qb.web"(见包 __init__ K3) —— tests/test_web.py 按
   ``r.name == "auto_qb.web"`` 断言 caplog 记录, 用 __name__ 会漂移必红。
 """
 import logging

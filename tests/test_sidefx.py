@@ -116,7 +116,7 @@ def test_sidefx_launch_entry_points_wrapped():
     资源管理器/浏览器/起 shell, 那本身就是越界副作用(会让会话夹具报错)。所以这里只装一层记账器、
     看入口是否已被包装。
 
-    ❗`utils._win_shell_open` 是 ctypes 直调 shell32 的 PIDL 路线, **不经过任何 stdlib 入口** ——
+    !`utils._win_shell_open` 是 ctypes 直调 shell32 的 PIDL 路线, **不经过任何 stdlib 入口** ——
     它是否被包装与宿主平台无关, 所以这里**不做平台跳过**(漏包装 = 守阵盲区, 任何宿主都得查)。
     """
     import webbrowser

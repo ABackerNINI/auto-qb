@@ -122,7 +122,7 @@ def _skip(data: bytes, pos: int, _depth: int = 0) -> int:
 def info_span(data: bytes) -> Tuple[int, int]:
     """定位顶层 info 值的原始字节跨度, 返回 (start, end)。
 
-    ❗这是 infohash 正确性的关键: **只接受原始切片**, 绝不 decode 后重编码。
+    !这是 infohash 正确性的关键: **只接受原始切片**, 绝不 decode 后重编码。
     非 info 的顶层值正常跳过; info 的值只跳不建对象。
     """
     if not data.startswith(b"d"):

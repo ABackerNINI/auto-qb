@@ -1,15 +1,15 @@
 // 选项页: 读/写 chrome.storage.local, 申请站点权限, 自测端点连通性, 手动触发一次拉取。
 //
-// ❗这里是**唯一**能替用户挡住"格式写错"的地方 —— 浏览器 API 对格式极其严格且报错难懂:
+// !这里是**唯一**能替用户挡住"格式写错"的地方 —— 浏览器 API 对格式极其严格且报错难懂:
 //   · chrome.permissions.request 只吃**匹配模式**(必须带 scheme), 裸域名报
 //     "Invalid value for origin pattern xxx: Missing scheme separator." 且是**未捕获的拒绝**;
 //   · fetch 的 URL 必须带 scheme 与回环主机, 否则报一句 "TypeError: Failed to fetch"(什么都看不出来)。
 // 所以本页一律"先归一化、再落盘", 并把失败逐条翻译成中文可操作提示; 绝不让 Promise 裸抛。
 //
 // 页面形态(2026-09-26 定稿, 风格选型 A「瑞士网格」, 见 memory-bank/plans/26-09-26-0031):
-//   ① 连接端点(表单, 存入即生效) → ② 站点权限(后端拉清单勾选 + 一键授权, GET /api/hr/sites 与
-//   后端 hr/channel.API_SITES 同源) → ③ 站点现状表 → ④ 最近取数明细表 → 状态行 →
-//   折叠区(运行日志排障用 + 硬上限 + 高级 JSON)。③④ 的数据源是后台与日志同源双写的
+//   1. 连接端点(表单, 存入即生效) → 2. 站点权限(后端拉清单勾选 + 一键授权, GET /api/hr/sites 与
+//   后端 hr/channel.API_SITES 同源) → 3. 站点现状表 → 4. 最近取数明细表 → 状态行 →
+//   折叠区(运行日志排障用 + 硬上限 + 高级 JSON)。3.4. 的数据源是后台与日志同源双写的
 //   结构化事件环(chrome.storage `events`) + `siteLedger` 用量台账 —— 解析日志文案做表太脆。
 //
 // 策略与频控判断**不在这里** —— 那唯一权威在后端。
@@ -34,7 +34,7 @@ function hint(text) {
 // ---------- 输入处理 ----------
 
 // normalizeEndpoint / normalizeOrigin 都是 normalize.js 里的纯函数(与后台共用同一份);
-// ❗这里**不要**再定义同名的本地副本 —— 两份分头演化必然漂移, 而漂移的症状是"配了不生效"。
+// !这里**不要**再定义同名的本地副本 —— 两份分头演化必然漂移, 而漂移的症状是"配了不生效"。
 
 function linesOf(el) {
   return el.value.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -180,7 +180,7 @@ async function fetchSites(manual) {
   if (!inst) {
     backendSites = [];
     renderSiteChecks();
-    if (manual) setStatus('先在 ① 把实例端点存入列表, 再来获取站点');
+    if (manual) setStatus('先在 1. 把实例端点存入列表, 再来获取站点');
     return;
   }
   try {
@@ -208,7 +208,7 @@ async function fetchSites(manual) {
       );
     }
   } catch (e) {
-    if (manual) setStatus(`✗ 连不上端点(${e.message || e}) — 先点「自测端点连通」按提示排查`);
+    if (manual) setStatus(`x 连不上端点(${e.message || e}) — 先点「自测端点连通」按提示排查`);
   }
 }
 
@@ -263,7 +263,7 @@ async function grant() {
   }
   hint('申请的是这些匹配模式: ' + origins.join(', '));
   try {
-    // ❗授权窗必须由用户手势直接触发: 这里前面不能有 await(否则 Chrome 报"not during a user gesture")
+    // !授权窗必须由用户手势直接触发: 这里前面不能有 await(否则 Chrome 报"not during a user gesture")
     const ok = await chrome.permissions.request({ origins });
     const badTail = manual.bad.length ? `; 跳过 ${manual.bad.length} 条格式不对的: ${manual.bad.join(' / ')}` : '';
     setStatus(ok ? `已授予 ${origins.length} 个站点源` : `站点权限被拒绝(再点一次授权即可重试)${badTail}`);
@@ -287,10 +287,10 @@ const KIND_TEXT = { page: 'HR 页', torrent: '.torrent' };
 /** 一条事件的「最近动作 · 结果」短语(表一用) */
 function eventPhrase(ev) {
   const kind = KIND_TEXT[ev.kind] || ev.kind || '—';
-  if (ev.tag === 'ok') return `取 ${kind} · ✓ ${ev.status || 200}${ev.note ? `(${ev.note})` : ''}`;
+  if (ev.tag === 'ok') return `取 ${kind} · [x] ${ev.status || 200}${ev.note ? `(${ev.note})` : ''}`;
   if (ev.tag === 'quota') return `取 ${kind} · 让位(扩展侧配额)`;
   if (ev.tag === 'login') return `取 ${kind} · 登录页(需人工登录)`;
-  return `取 ${kind} · ✗ ${(ev.note || '失败').slice(0, 30)}`;
+  return `取 ${kind} · x ${(ev.note || '失败').slice(0, 30)}`;
 }
 
 const TAG_TEXT = { ok: '正常', quota: '受限', login: '登录失效', error: '异常' };
@@ -324,7 +324,7 @@ function renderSiteStatus(events, ledger) {
       const pd = page.dk === dk ? page.day || 0 : 0;
       const th = tor.hk === hk ? tor.hour || 0 : 0;
       const td = tor.dk === dk ? tor.day || 0 : 0;
-      // ❗阈值从 site-caps.js 取(唯一事实源), 与后台/硬上限展示同一份 —— 这里写死必漂移
+      // !阈值从 site-caps.js 取(唯一事实源), 与后台/硬上限展示同一份 —— 这里写死必漂移
       usage = `${ph}/${SITE_CAPS.page.perHour} · ${th}/${SITE_CAPS.torrent.perHour}` +
               ` ／ ${pd}/${SITE_CAPS.page.perDay} · ${td}/${SITE_CAPS.torrent.perDay}`;
     }
@@ -353,12 +353,12 @@ function renderEvents(events) {
         const cls = ev.tag === 'ok' ? 'num' : 'warn';
         const result =
           ev.tag === 'ok'
-            ? `✓ ${ev.status || 200}${ev.note ? `(${esc(ev.note)})` : ''}`
+            ? `[x] ${ev.status || 200}${ev.note ? `(${esc(ev.note)})` : ''}`
             : ev.tag === 'quota'
               ? '让位 · 扩展侧配额'
               : ev.tag === 'login'
                 ? '登录页(需人工登录)'
-                : `✗ ${esc((ev.note || '失败').slice(0, 40))}`;
+                : `x ${esc((ev.note || '失败').slice(0, 40))}`;
         return (
           `<tr><td class="num">${shortTime(ev.t)}</td><td>${esc(ev.host || '—')}</td>` +
           `<td>${KIND_TEXT[ev.kind] || esc(ev.kind || '—')}</td><td class="${cls}">${result}</td>` +
@@ -381,7 +381,7 @@ function scheduleTablesRender() {
 
 /**
  * 展示两道闸的额度与今日/本小时用量(折叠排障区)。
- * ❗阈值来自 site-caps.js(唯一事实源, 与后台共用) —— 这里**不写死数字**, 免得改了后台忘改这里,
+ * !阈值来自 site-caps.js(唯一事实源, 与后台共用) —— 这里**不写死数字**, 免得改了后台忘改这里,
  * 用户按选项页显示的数字去理解行为, 结果对不上。
  */
 function renderCaps(ledger) {
@@ -458,7 +458,7 @@ async function save() {
 async function testEndpoint() {
   const inst = currentInstances()[0];
   if (!inst) {
-    setStatus('先在 ① 存入一个实例端点再自测');
+    setStatus('先在 1. 存入一个实例端点再自测');
     return;
   }
   const url = `${inst.endpoint}/api/hr/tasks`;
@@ -468,7 +468,7 @@ async function testEndpoint() {
     const res = await fetch(url, { headers: { 'X-Hr-Token': inst.token } });
     if (res.status === 200) {
       const data = await res.json();
-      setStatus(`✓ 端点可达: 本批 ${(data.tasks || []).length} 条任务, 建议轮询间隔 ${data.next_poll_s}s`);
+      setStatus(`[x] 端点可达: 本批 ${(data.tasks || []).length} 条任务, 建议轮询间隔 ${data.next_poll_s}s`);
       hint('后端与扩展的端口/token 一致 ⇒ 保持浏览器开着即可。');
     } else if (res.status === 401) {
       setStatus('端点可达, 但 token 不对(HTTP 401)');
@@ -480,13 +480,13 @@ async function testEndpoint() {
     }
   } catch (e) {
     // fetch 对网络层失败只会给一句 TypeError: Failed to fetch —— 这里替用户展开成排查清单
-    setStatus(`✗ 连不上端点(${e.message || e})`);
+    setStatus(`x 连不上端点(${e.message || e})`);
     hint(
-      '逐条确认: ① 后端正在运行吗(auto-qb 主程序, 不是 --hr-once 走查); ' +
-      '② config.yml 里 hr_check.enabled=true、至少一个站点 trackers.<站点>.hr_check.mode != off、' +
+      '逐条确认: 1. 后端正在运行吗(auto-qb 主程序, 不是 --hr-once 走查); ' +
+      '2. config.yml 里 hr_check.enabled=true、至少一个站点 trackers.<站点>.hr_check.mode != off、' +
       '且 hr_check.channel.enabled=true —— 三者缺一, 端点**根本不会启动**; ' +
-      `③ 端口对不对(现在是 ${inst.endpoint} , 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:<端口>」); ` +
-      '④ 同机多实例是否端口撞车(被占则后端启动即报错)。'
+      `3. 端口对不对(现在是 ${inst.endpoint} , 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:<端口>」); ` +
+      '4. 同机多实例是否端口撞车(被占则后端启动即报错)。'
     );
   }
 }
@@ -511,7 +511,7 @@ async function poll() {
 // ---------- 运行日志(排障用, 默认收起) ----------
 //
 // 这里只做「读 + 过滤 + 清空 + 设置」; 写入全在后台(环形缓冲, 唯一写入口)。两个设置改动**即时生效**。
-// ❗清空必须经后台(clear-logs): 后台内存里还留着缓冲, 选项页直接改 storage 会在它下一次落盘时
+// !清空必须经后台(clear-logs): 后台内存里还留着缓冲, 选项页直接改 storage 会在它下一次落盘时
 // 被旧数据盖回去(后台没应答时的兜底路径除外 —— 后台会采纳外部清空, 见 background.js 的 onChanged)。
 
 const LOG_RANK = { debug: 0, info: 1, warn: 2, error: 3 };

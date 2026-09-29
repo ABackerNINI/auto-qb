@@ -5,7 +5,7 @@
   (锁会被正常实例持有 → 报告里如实显示"锁被持有/跳过", 这本身就是有用的信息);
 - 它把「配置是否成立 / 站点文件落在哪 / 锁在该目录是否生效 / 解析是否还能读 / 各档覆盖到哪」
   一次性摊开, 供用户确认多实例共享目录与站点改版;
-- ❗它**不绕过零 cookie 边界**: 取数仍然只能经 `HrFetcher`(浏览器扩展通道)。
+- !它**不绕过零 cookie 边界**: 取数仍然只能经 `HrFetcher`(浏览器扩展通道)。
   `--hr-html-dir` 只是给走查用的**离线页面替身**(把保存下来的页面按 `<档位>.html` 放进目录),
   不会让后端自己发请求。
 
@@ -213,7 +213,7 @@ def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> Non
         f"放行签发={'开' if st.releases_enabled else '冻结'}",
         file=out
     )
-    print(f"    文件: {st.file_path}" + (f"  ⚠ {st.read_error}" if st.read_error else ""), file=out)
+    print(f"    文件: {st.file_path}" + (f"  WARN: {st.read_error}" if st.read_error else ""), file=out)
     print(f"    取波: {st.fresh_text}", file=out)
     print(f"    各档: {st.lanes_text or '-'}", file=out)
     for lane in st.lanes:  # 逐档明细(截断/失效原因与连续失效都在 text 里)

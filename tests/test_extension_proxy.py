@@ -2,9 +2,9 @@
 
 扩展是**要用户装进浏览器**的交付物: pytest 跑不到它的运行期, 但四类故障是**静态/半静态可查**的,
 且都属于"pytest 全绿、用户装上就报错"的形态 —— 2026-09-24 实测两条:
-① 裸域名直喂 `chrome.permissions.request` ⇒ `Invalid value for origin pattern pt.btschool.club:
+1. 裸域名直喂 `chrome.permissions.request` ⇒ `Invalid value for origin pattern pt.btschool.club:
    Missing scheme separator.`(**未捕获的 Promise 拒绝**);
-② 端点没起 / 地址写法不对时用户只看到一句 `TypeError: Failed to fetch`(浏览器对网络层失败只给这句)。
+2. 端点没起 / 地址写法不对时用户只看到一句 `TypeError: Failed to fetch`(浏览器对网络层失败只给这句)。
 故这里钉死: manifest 的作用域、JS 语法、**与后端的协议常量**、以及"输入先归一化再交给浏览器 API"。
 
 ## 测试计划(每个测试函数一条)
@@ -148,7 +148,7 @@ def test_js_syntax_passes_node_check():
 def test_normalizers_behave():
     """真跑 normalize.js —— 这是本次两条报错的直接守阵
 
-    ❗node --check 只看语法, 看不见"LOOPBACK_HOSTS 未定义"这类运行期错(本次重构时就真出现过一次),
+    !node --check 只看语法, 看不见"LOOPBACK_HOSTS 未定义"这类运行期错(本次重构时就真出现过一次),
     所以这里必须**执行**它。
     """
     node = _node()
@@ -301,7 +301,7 @@ def test_options_swiss_wiring():
 # ---------- 页面取数: 不打扰用户(实报两轮: 先「开新标签」后「开新窗口」) ----------
 
 #: 两个页面样本(单点定义: 注入给 node 脚本, Python 侧断言也用同一份)
-#: ① 服务端渲染的真页面(自带表格) ② 挑战页形态(短小、无表格 ⇒ 应当升级到渲染通道)
+#: 1. 服务端渲染的真页面(自带表格) 2. 挑战页形态(短小、无表格 ⇒ 应当升级到渲染通道)
 PAGE_WITH_TABLE = '<html><body><table class="main"><tr><td>HR编号</td></tr></table></body></html>'
 CHALLENGE_LIKE = '<html><head><title>Just a moment...</title></head><body>Checking your browser</body></html>'
 #: 带表格的**登录页** —— 直取可能因为 SameSite 不带 cookie 而拿到它, 必须当成"要升级渲染"的信号
@@ -423,7 +423,7 @@ def _first(trace: dict, name: str):
 
 
 def test_page_fetch_is_headless_when_html_looks_fine():
-    """❗默认必须**无界面**: 直取(带站点 cookie 的 fetch)就能拿到页面时, 绝不打开任何窗口/标签
+    """!默认必须**无界面**: 直取(带站点 cookie 的 fetch)就能拿到页面时, 绝不打开任何窗口/标签
 
     用户实报过两轮(先「抓数据时打开新标签」, 改完又「打开新窗口」)—— 所以这里钉死的不是
     「窗口该怎么开」, 而是**能不开就不开**: 站点侧页面(NexusPHP 这类)本来就是服务端渲染的表格。
@@ -488,9 +488,9 @@ def test_page_fetch_hands_focus_back_when_window_steals_it():
 # ---------- 扩展侧硬上限(第二道闸: 后端出错时的兜底, 2026-09-25 用户指定) ----------
 
 #: 用**真** storage(内存)真跑 background.js: 台账必须真存真读, 否则「计数」是自欺欺人。
-#: 四个场景一次跑完: ①页面上限(第 cap+1 次被拒且**不发请求**) ②下载有独立额度(页面用满照样能下)
-#: ③窗口键过期 ⇒ 计数归零 ④日上限 ⇒ 拒发且 retry_after 指向次日。
-#: ❗阈值一律从 site-caps.js 现值动态取(SITE_CAPS), 场景与断言**不许硬编码魔法数字** ——
+#: 四个场景一次跑完: 1.页面上限(第 cap+1 次被拒且**不发请求**) 2.下载有独立额度(页面用满照样能下)
+#: 3.窗口键过期 ⇒ 计数归零 4.日上限 ⇒ 拒发且 retry_after 指向次日。
+#: !阈值一律从 site-caps.js 现值动态取(SITE_CAPS), 场景与断言**不许硬编码魔法数字** ——
 #: 09d4109(配额双桶)把 10/50 提到 60/600·50/200 时, 硬编码守阵红了一天没人看见(本机无 node 静默跳过)。
 _NODE_RUN_QUOTA = """
 const fs = require('fs');
@@ -594,8 +594,8 @@ def quota_trace() -> dict:
 
 def test_extension_quota_caps_and_refuses():
     """超限即**拒发**: 不发请求 + 回传 kind=ext-quota + retry_after(后端据此让位, 不计失败)
-    ❗这条闸的意义在「后端出错时」: 后端频控写错 / 配置被改坏 / 有人手工灌任务时, 浏览器仍然
-    打不爆站点。所以断言要看两件事: ①第 cap+1 次被拒 ②**它真的没有发出请求**(只看回传字段不算数)。
+    !这条闸的意义在「后端出错时」: 后端频控写错 / 配置被改坏 / 有人手工灌任务时, 浏览器仍然
+    打不爆站点。所以断言要看两件事: 1.第 cap+1 次被拒 2.**它真的没有发出请求**(只看回传字段不算数)。
     阈值动态取 site-caps.js 现值, 不硬编码(09d4109 阈值上提时硬编码守阵漂移, 见基线 26-09-28-0041)。
     """
     trace = quota_trace()
@@ -774,9 +774,9 @@ def test_background_events_ring_dual_write():
 
 # ---------- 运行日志(分级 + 环形上限 + 落 storage) ----------
 
-#: 真跑 background.js 的日志场景: ①默认记录级别 info ⇒ debug 直接丢, 且条目字段齐全、超长字段截断
-#: ②环形上限 10 ⇒ 灌 25 条只留最新 10 条 ③记录级别实时生效(debug 收得进 / error 起滤掉 info)
-#: ④clearLogs 清空后 storage 里是空数组。
+#: 真跑 background.js 的日志场景: 1.默认记录级别 info ⇒ debug 直接丢, 且条目字段齐全、超长字段截断
+#: 2.环形上限 10 ⇒ 灌 25 条只留最新 10 条 3.记录级别实时生效(debug 收得进 / error 起滤掉 info)
+#: 4.clearLogs 清空后 storage 里是空数组。
 _NODE_RUN_LOGGER = """
 const fs = require('fs');
 const vm = require('vm');
@@ -850,8 +850,8 @@ def test_logger_levels_ring_truncation_and_clear():
 
 
 #: 连不上时的降噪场景(2026-09-28 用户实报: 后端不在跑时每轮一条全量排查清单 ERROR + 状态栏同文,
-#: 日志环被复读机灌满)。真跑 background.js 的 pollAll 五步: ①首报全量 ②连败降 debug ③第 30 轮重提
-#: ④恢复补 INFO 并清计数 ⑤恢复后再挂重新首报。记录级别预置 debug —— 连败期的 debug 短句要看得见;
+#: 日志环被复读机灌满)。真跑 background.js 的 pollAll 五步: 1.首报全量 2.连败降 debug 3.第 30 轮重提
+#: 4.恢复补 INFO 并清计数 5.恢复后再挂重新首报。记录级别预置 debug —— 连败期的 debug 短句要看得见;
 #: normalize.js 也要真载入(safeEndpoint 要用 normalizeEndpoint)。
 _NODE_RUN_NOISE = """
 const fs = require('fs');

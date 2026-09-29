@@ -16,7 +16,7 @@
 - worker     取数线程 + 只读视图发布(自唤醒, 不随主循环 tick)
 - runtime    运行时门面(端点 + 取数线程 + 热重载重挂)
 
-❗本模块只读写 hr 文件与返回结果对象: **不碰 state_file / 任务队列 / store**
+!本模块只读写 hr 文件与返回结果对象: **不碰 state_file / 任务队列 / store**
 (线程三分职责的硬约束)。
 """
 from .adapters import available_adapters, build_adapter

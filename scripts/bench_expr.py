@@ -2,9 +2,9 @@
 
 三层测量(口径见 memory-bank/plans/26-09-20-2225-rule-conditions-expression-plan.html 第 07 节):
 
-  ① **编译**   M 条规则的 parse + 语义校验总耗时 —— 只在启动时做一次, 不在热路径
-  ② **单次求值** 按复杂度分档各跑 K 次取**中位数**(不取平均: 平均会被 GC/调度尖刺带跑)
-  ③ **一轮总耗时** N 种子 × M 规则跑完整一轮条件评估 —— 决定「能不能用 interval: 0S」的数字
+  1. **编译**   M 条规则的 parse + 语义校验总耗时 —— 只在启动时做一次, 不在热路径
+  2. **单次求值** 按复杂度分档各跑 K 次取**中位数**(不取平均: 平均会被 GC/调度尖刺带跑)
+  3. **一轮总耗时** N 种子 × M 规则跑完整一轮条件评估 —— 决定「能不能用 interval: 0S」的数字
 
 关键前提(不守这三条, 测出来的数字没有意义)
 ------------------------------------------
@@ -230,16 +230,16 @@ def main() -> int:
     print(f"参数: {params['torrents']} 种子 × {params['rules']} 规则, 单次重复 {params['repeat']} 次\n")
 
     c = result["compile"]
-    print("① 编译(启动期一次)")
+    print("1. 编译(启动期一次)")
     print(f"    {c['rules']} 条规则共 {c['total_ms']} ms   单条 {c['per_rule_us']} µs\n")
 
-    print("② 单次求值(每次新建 ctx, 中位数 / p95)")
+    print("2. 单次求值(每次新建 ctx, 中位数 / p95)")
     for row in result["single"]:
         print(f"    {row['tier']:<10} {row['median_us']:>8.3f} µs   p95 {row['p95_us']:>8.3f} µs")
     print()
 
     r = result["round"]
-    print("③ 一轮总耗时")
+    print("3. 一轮总耗时")
     print(f"    求值次数            {r['evals']}")
     print(f"    表达式总耗时        {r['expr_total_ms']} ms")
     print(f"    其中 ctx 构造基线   {r['ctx_only_ms']} ms")

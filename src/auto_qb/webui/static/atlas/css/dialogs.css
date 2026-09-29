@@ -301,7 +301,7 @@
   background: var(--accent-soft); color: var(--accent); font: inherit; font-size: 11.5px;
   font-weight: 600; cursor: pointer; transition: filter var(--dur-fast) var(--ease); }
 .rail-speed-open:hover { filter: brightness(1.1); }
-/* R10-04②: 走 modal 的限速弹窗已删(与 .speed-pop 共用 speedOpen -> 点一次开两窗),
+/* R10-042.: 走 modal 的限速弹窗已删(与 .speed-pop 共用 speedOpen -> 点一次开两窗),
  * 这里同步删掉它的死样式 .modal.speed-dialog; .speed-dialog-grid 仍被 .speed-pop 使用, 保留。 */
 .speed-mode-line { display: flex; align-items: center; gap: 8px; margin: 2px 0 12px; padding: 8px 11px;
   border-radius: var(--radius-sm); background: var(--bg-sunken); color: var(--fg-muted); font-size: 12px;
@@ -311,9 +311,9 @@
 
 /* ================= (FX-07/08) 状态栏重排: 今日流量 / 速度·限速配对 / 就近限速浮层 =================
  * 与棱镜同设计语言、同令牌族(颜色只引用令牌, 不散写色值)。
- * ① 今日流量 = Traffic Monitor dat 的按日行; 未启用限速曲线时整项不渲染(D2)。
- * ② 速度与限速融合为「下载速度 / 限制速度 · 上传速度 / 限制速度」, 组合内距离 < 组间距离。
- * ③ \"限制速度\"= 按钮(点击就近弹出浮层); 浮层无遮罩、锚在状态栏上缘, 横向由 JS 夹取到视口内。
+ * 1. 今日流量 = Traffic Monitor dat 的按日行; 未启用限速曲线时整项不渲染(D2)。
+ * 2. 速度与限速融合为「下载速度 / 限制速度 · 上传速度 / 限制速度」, 组合内距离 < 组间距离。
+ * 3. \"限制速度\"= 按钮(点击就近弹出浮层); 浮层无遮罩、锚在状态栏上缘, 横向由 JS 夹取到视口内。
  */
 .sb-sep { width: 1px; height: 14px; background: var(--border); flex: 0 0 auto; }
 /* 2026-09-20: 「[方向图标] 速度 / 限速」合成按钮 —— 整组可点(点图标 / 速度 / 限速任一处都就近弹出限速浮层);
@@ -400,7 +400,7 @@
   border-right: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
 .hr-pop.below .hp-arrow { display: block; top: -5.5px;
   border-left: 1px solid var(--border-strong); border-top: 1px solid var(--border-strong); }
-/* ① 结论行: 档位色结论短语 + 生命周期 chip(紧凑, 不占大块; 来源章不渲染 —— 短语已含来源) */
+/* 1. 结论行: 档位色结论短语 + 生命周期 chip(紧凑, 不占大块; 来源章不渲染 —— 短语已含来源) */
 .hp-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .hp-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .hp-dot.danger { background: var(--hr-pending); }
@@ -415,7 +415,7 @@
 .hp-cyc { font-size: 10px; line-height: 1.5; border: 1px solid transparent; border-radius: 3px;
   padding: 0 5px; white-space: nowrap; }
 .hp-cyc.ended { color: var(--fg-muted); background: var(--surface-1); border-color: var(--border-soft); }
-/* ② 进度轨道: 本地粗轨(6px, 已做种/要求) + 站点细轨(3px, 还需/要求); 已过段 = 档位色, 未达段 = 轨道底色 */
+/* 2. 进度轨道: 本地粗轨(6px, 已做种/要求) + 站点细轨(3px, 还需/要求); 已过段 = 档位色, 未达段 = 轨道底色 */
 .hp-gauge { margin-top: 11px; display: grid; gap: 5px; }
 .hg-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hg-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--fg-dim); }
@@ -444,7 +444,7 @@
 .fill.unknown { background: var(--paused); }
 .hg-rail.site .fill { opacity: .55; }
 .hg-site { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
-/* ②' 档位徽记: 无时间要求(身份层放行/未核实/未配时长)时轨道收起, 不留空轨 */
+/* 2.' 档位徽记: 无时间要求(身份层放行/未核实/未配时长)时轨道收起, 不留空轨 */
 .hp-badge { margin-top: 11px; display: flex; width: max-content; align-items: center; gap: 7px;
   padding: 6px 10px; border-radius: var(--radius-sm); font-size: 11.5px; font-weight: 600; }
 .hp-badge svg { width: 14px; height: 14px; flex: 0 0 auto; }
@@ -452,14 +452,14 @@
 .hp-badge.failed { color: var(--error); background: var(--error-soft); border: 1px solid var(--error-line); }
 .hp-badge.safe { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-line); }
 .hp-badge.unknown { color: var(--fg-muted); background: var(--surface-1); border: 1px solid var(--border-soft); }
-/* ③ 数值条: mono 紧排 kv(仅站点侧值 —— 本地值表格行可见, 不上弹窗) */
+/* 3. 数值条: mono 紧排 kv(仅站点侧值 —— 本地值表格行可见, 不上弹窗) */
 .hp-kv { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px 6px; }
 .kv { display: inline-flex; align-items: baseline; gap: 5px; padding: 2.5px 8px;
   border-radius: var(--radius-sm); background: var(--surface-1); }
 .kv i { font-style: normal; font-size: 10.5px; color: var(--fg-dim); white-space: nowrap; }
 .kv b { font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-weight: 600; font-size: 11.5px; color: var(--fg-soft); white-space: nowrap; }
-/* ④ 底部: 依据原文 + 站点滞后角注 */
+/* 4. 底部: 依据原文 + 站点滞后角注 */
 .hp-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-soft); display: grid; gap: 3px; }
 .hp-reason, .hp-lag { display: flex; align-items: flex-start; gap: 6px; }
 .hp-reason svg, .hp-lag svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: 2px; color: var(--fg-dim); }

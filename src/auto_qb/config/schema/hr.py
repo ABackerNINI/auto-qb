@@ -5,7 +5,7 @@
 由档案填充, 不再是可配置项。本模块只管**展示元数据**; 合法性唯一入口仍是 config.validate_config,
 级别唯一来源是 config/impact.py。
 
-⚠注意一处语义容易配错, help 文案必须写明:
+WARN:注意一处语义容易配错, help 文案必须写明:
 - `allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」)。
 """
 from typing import Tuple
@@ -18,7 +18,7 @@ HR_CHECK_CHANNEL_FIELDS: Tuple[Field, ...] = (
         "启用取数通道",
         "bool",
         default="false",
-        help="本实例是否有浏览器扩展可驱动。⚠本机有浏览器的实例推荐都启用: 抓取能力的硬边界是「本机有没有装扩展的浏览器」, "
+        help="本实例是否有浏览器扩展可驱动。WARN:本机有浏览器的实例推荐都启用: 抓取能力的硬边界是「本机有没有装扩展的浏览器」, "
         "多通道不会双倍访问站点(同站点靠文件锁 + 复用窗)",
     ),
     Field(
@@ -43,7 +43,7 @@ HR_CHECK_CHANNEL_FIELDS: Tuple[Field, ...] = (
         "str",
         default="",
         placeholder="abcdefghijklmnopabcdefghijklmnop",
-        help="填了则只放行该扩展(32 位 a~p); 留空 = 放行任意扩展。❗真正的鉴权是 token, 本项只是第二道防线",
+        help="填了则只放行该扩展(32 位 a~p); 留空 = 放行任意扩展。!真正的鉴权是 token, 本项只是第二道防线",
     ),
     Field(
         "request_timeout",
@@ -65,7 +65,7 @@ HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
         "bool",
         default="false",
         help="启用即管: 判定语义硬编码(命中考察中→管束 / 终态档 B·C·D 与移出未列出→放行 / "
-        "无证据→本地兜底: 达标放行·未达标管束), 没有撤退路径。❗启用时该站点必须配 HR 规则段"
+        "无证据→本地兜底: 达标放行·未达标管束), 没有撤退路径。!启用时该站点必须配 HR 规则段"
         "(要求做种时长等) —— 绑定按档案已知 announce 域自动映射完成, 未命中时用 tracker 显式指定",
     ),
     Field(
@@ -125,7 +125,7 @@ HR_CHECK_FIELDS: Tuple[Field, ...] = (
         "str",
         default="",
         placeholder="23:00-08:00",
-        help='格式 "HH:MM-HH:MM"(可跨午夜); 留空 = 全天。❗与「通知免打扰」语义相反 —— 那个是「该时段不发」, 本项是「仅该时段取数」',
+        help='格式 "HH:MM-HH:MM"(可跨午夜); 留空 = 全天。!与「通知免打扰」语义相反 —— 那个是「该时段不发」, 本项是「仅该时段取数」',
     ),
     Field(
         "shared_dir",

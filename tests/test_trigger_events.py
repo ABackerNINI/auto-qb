@@ -50,7 +50,7 @@ def _ev(trigger, actions, conditions=None, **kw):
 def _event_mgr(rules, tracker_rules=None, state_file=None):
     """构造仅含事件规则的 manager(替换 make_manager 的示例规则; tracker 引用事件规则集)
 
-    ❗临时目录**挂到 mgr 上**(2026-09-23 实测): 原写法 `with TemporaryDirectory()` 在函数
+    !临时目录**挂到 mgr 上**(2026-09-23 实测): 原写法 `with TemporaryDirectory()` 在函数
     返回时就把目录删了, 而 `mgr.state_file` 仍指向该路径 —— 后续写 state.json(如
     `test_event_checking_resume_fail` 里的 `seed_store`)会把目录**重新建出来**, 且此时
     持有者已销毁 ⇒ 每跑一次全量就在 TMPDIR 根下留一个 `tmpXXXX`。挂给 mgr 后随 mgr 释放即删。
@@ -637,7 +637,7 @@ def test_maintenance_tag_mode_validation():
 def _maint_mgr(mode, state_file):
     """构造 on_change/interval 模式的 manager(内置示例规则集, tracker=HHan)
 
-    ❗改模式后必须重跑 _load_rules: 生产中 maintenance_tag_mode 是 L2 热重载(整体重建 manager,
+    !改模式后必须重跑 _load_rules: 生产中 maintenance_tag_mode 是 L2 热重载(整体重建 manager,
     规则随新配置重载), store 的监听集合在 _load_rules 收尾推导 —— 测试同口径。
     """
     mgr = make_manager(state_file)

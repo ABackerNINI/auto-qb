@@ -1,7 +1,7 @@
 """HR 在线核实测试用的共享夹具(非测试文件, 不被 pytest 收集)。
 
-四件事: ① 读脱敏页面 fixture; ② 按行构造 myhr 页面(行为测试用, 恰好裁剪出需要的行);
-③ 构造合法 .torrent 字节(测试 infohash 用, 不依赖外部样本); ④ 假取数通道 ——
+四件事: 1. 读脱敏页面 fixture; 2. 按行构造 myhr 页面(行为测试用, 恰好裁剪出需要的行);
+3. 构造合法 .torrent 字节(测试 infohash 用, 不依赖外部样本); 4. 假取数通道 ——
 按 URL/scope 返回 HTML、按 tid 返回 .torrent, 并记录调用序列(用于验证防重取与限速)。
 """
 import pathlib

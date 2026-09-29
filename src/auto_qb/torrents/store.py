@@ -286,7 +286,7 @@ class TorrentStore:
         """轮末刷新字段变化基线(与 update_state_snapshot 并列, 仅主循环线程调用)
 
         只存监听字段的当前值: 监听集合为空时清空基线(无规则监听 -> 零持久化开销);
-        已删种子的基线一并清掉。❗原地更新 —— field_snapshots 与 state["field_snapshots"]
+        已删种子的基线一并清掉。!原地更新 —— field_snapshots 与 state["field_snapshots"]
         是同一对象(见 _bind_field_snapshots), 原地改即等于改落盘内容; 不得整体换引用。
         """
         watch = self.watch_fields

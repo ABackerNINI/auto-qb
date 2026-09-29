@@ -3,9 +3,9 @@
  * 与 config_editor.js / config_rules.js 同一范式: 一个 Vue 全局 mixin, 方法名统一 `hub` 前缀。
  * **不复制任何编辑能力** —— 增删改全部复用既有的 cfg* 方法(同一棵 YAML 树、同一套保存/脏检测),
  * 本文件只负责:
- *   ① Hub & Spoke 的视图状态(首页 / 分区二级页 / 面包屑);
- *   ② 把 schema 字段拆成「块 → 行」两层(取代旧页五种折叠容器);
- *   ③ 就近说明浮窗的内容与定位(富文案优先, 否则回退 schema 的 help / risk / default)。
+ *   1. Hub & Spoke 的视图状态(首页 / 分区二级页 / 面包屑);
+ *   2. 把 schema 字段拆成「块 → 行」两层(取代旧页五种折叠容器);
+ *   3. 就近说明浮窗的内容与定位(富文案优先, 否则回退 schema 的 help / risk / default)。
  *
  * 版式与控件外观见 shared/console_hub.css(样张 05-console-hub 的原样复刻)。
  * 分组文案取自样张第 9 节「文案改写对照」—— 说它做了什么, 不说它叫什么。
@@ -86,7 +86,7 @@ const HUB_HELP = {
     def: "（全天）",
     when: ["站点对夜间访问敏感，想避开高峰。", "自己常在白天用网，取数挑凌晨做。"],
     rel: [
-      ["常规 → 免打扰时段", "❗语义正好相反：那个是「这段时间不要发通知」，本项是「只在这段时间取数」"],
+      ["常规 → 免打扰时段", "!语义正好相反：那个是「这段时间不要发通知」，本项是「只在这段时间取数」"],
       ["HR 在线核实 → 请求最小间隔", "两者一起决定对站点的访问频度"],
     ],
   },
@@ -601,7 +601,7 @@ window.CONFIG_HUB = {
         rel: (rich && rich.rel) || [],
       };
     },
-    /* ⚠ 对象/数组型默认值(如 trackers / rules 的 default={}、channels 的 default=["platform"])不能
+    /* WARN: 对象/数组型默认值(如 trackers / rules 的 default={}、channels 的 default=["platform"])不能
        直接进 cfgScalar —— String({}) 是 "[object Object]", 会在「?」说明浮窗的「默认值」一栏里
        原样显示给读者。空的一律归「（空）」, 非空对象按条目数给一句人话。 */
     hubDefaultText(field) {
@@ -690,7 +690,7 @@ window.CONFIG_HUB = {
     /* ---------------------------------------------------------- 站点搜索(计划 26-09-27-1852)
      * 匹配函数收敛为前端单点: 一处 norm / 一处 parse / 一处 rows, 模板不散写。 */
     /* 归一化: 与 views.py::_search_norm 同语义(分隔符折叠为单空格 + 小写)。
-     * ⚠ JS 必须用 [^\p{L}\p{N}](u 标志必带) —— ASCII \W 是 Unicode 语义的反面,
+     * WARN: JS 必须用 [^\p{L}\p{N}](u 标志必带) —— ASCII \W 是 Unicode 语义的反面,
      * 会把整个中文词折成空格, 中文搜索直接废掉(拟记 pitfalls/web-ui) */
     trackerNorm(s) {
       return String(s).replace(/[^\p{L}\p{N}]+/gu, " ").toLowerCase().trim();

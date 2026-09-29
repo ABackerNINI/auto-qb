@@ -74,7 +74,7 @@ ACTION_NO_CHANNEL = "no-channel"
 ACTION_ERROR = "error"
 
 # 本轮「没跑完」的原因分类(告警分级与报告展示用)。
-# ❗被**自己的频控**拦下 ≠ 故障: 那是设计如此, 而且会持续几小时;
+# !被**自己的频控**拦下 ≠ 故障: 那是设计如此, 而且会持续几小时;
 #   真值得盯着的是页面/解析问题(可能是改版)。两者混成同一级会让用户在弹窗轰炸中开始忽略告警。
 REASON_NONE = ""  # 没有「没跑完」这回事
 REASON_BUDGET = "budget"  # 被自己的间隔/日额/时间窗拦下(可预期, 下轮继续)
@@ -90,16 +90,16 @@ DIAGNOSTIC_MAX_WAIT = 600.0
 
 # ---------------- v3 波次模型常量(程序能定的绝不配置, §6) ----------------
 
-#: 覆盖早停① 的对齐余量(§4.2): 本地完成时刻与站点页面完成时间的时差容差(时钟漂移/传输确认差);
+#: 覆盖早停1. 的对齐余量(§4.2): 本地完成时刻与站点页面完成时间的时差容差(时钟漂移/传输确认差);
 #: 余量内不能确定就继续翻 —— 保守方向多花页数, 不会漏。
 COVERAGE_SLACK = 86400.0  # 1D
 
-#: 停翻② 到期段强信号(§4.2): 页尾连续 N 行「剩余考察时间」为 0(跨页延续) ⇒ 深处全是到期行,
+#: 停翻2. 到期段强信号(§4.2): 页尾连续 N 行「剩余考察时间」为 0(跨页延续) ⇒ 深处全是到期行,
 #: 考察中的对象(remain>0)不可能藏在更深处; 藏在深处的到期行无论看到与否结论相同 —— 停翻零漏判。
 ZERO_REMAIN_STREAK = 5
 
 #: 超额线(§3.3): 本地做种时长 >= 要求时长 × 该倍数 ⇒ 放行并免除在线对账义务(不进覆盖对象集)。
-#: ❗不是判定上的免死金牌: 被动命中「考察中」仍是「考察中」(网站绝对权威)。
+#: !不是判定上的免死金牌: 被动命中「考察中」仍是「考察中」(网站绝对权威)。
 SEED_EXEMPT_RATIO = 3.0
 
 #: 失踪观察期(§3.4): 上波命中考察中的种子, 自身位置被覆盖且连续 N 波未重见 ⇒ 判「移出」放行;
@@ -112,7 +112,7 @@ LANE_RETENTION_MIN = 0.7
 
 #: B/C/D 终态行宽泛名称粗配阈值(§4.5 D1 拍板): **去掉技术噪声后**本地名称与行名称存在足够长的
 #: 连续重合段即判疑似本地; 粗配只是下载触发器, 定论一律 infohash 精配。
-#: ❗2026-09-29 收紧: K 仍是 12, 变的是「拿哪部分参与重合」(见 FUZZY_NOISE_TOKEN)。
+#: !2026-09-29 收紧: K 仍是 12, 变的是「拿哪部分参与重合」(见 FUZZY_NOISE_TOKEN)。
 FUZZY_NAME_K = 12
 
 #: 粗配前必须剔除的**技术噪声整词**: 分辨率 / 来源 / 编码 / 音轨 / 发布类型 / 字幕标记。
@@ -282,12 +282,12 @@ class _WaveContext:
         self.seen: Dict[int, HrEntry] = {}  # 本波已见行 tid -> 行对象
         self.hits: Dict[str, str] = {}  # infohash -> 命中档位(本波定论)
         self.retracted = 0  # 撤销的放行记录数(观测)
-        self.pending_downloads: Set[int] = set()  # 待身份登记的 tid(③停翻的「无待回填」判据)
+        self.pending_downloads: Set[int] = set()  # 待身份登记的 tid(3.停翻的「无待回填」判据)
         self.dl_by_hash: Dict[str, int] = {}  # 永久层身份缓存(infohash -> tid), 行处理用
         self.order_directions: Dict[str, str] = {}  # 档位 -> 波级方向(翻转视同违反)
         self.prev_dones: Dict[str, List[float]] = {}  # 档位 -> 上一页完成时刻(跨页证据)
         self.zero_remain_streaks: Dict[str, int] = {}  # 档位 -> 跨页 remain==0 连续行数
-        self.trusted_done: Dict[str, float] = {}  # infohash -> 可信完成时刻(①的判据, §4.2 分层)
+        self.trusted_done: Dict[str, float] = {}  # infohash -> 可信完成时刻(1.的判据, §4.2 分层)
         self.current_lane: str = ""  # 当前正在取页的档位(页面级失败时定位截断档)
         # 档位 -> 站点声明行数(计划 26-09-29-2036 §2.1 波内临时账; 首个非 None 胜出 —— tab 形
         # 第 1 页即有值, 分页区间形中途页无键、末页才非 None 自然胜出; 随波生灭, 持久化面在 HrLaneState)
@@ -306,7 +306,7 @@ def _release_record(
 ) -> HrVerified:
     """构造放行记录 —— **锚点快照的单点**(计划 §7.2: verified 记录「含锚点与 source」)。
 
-    ❗三处签发(批量未列出 / 终态冻结 / 观察期移出)必须都经这里: 漏带快照的记录会被判定侧
+    !三处签发(批量未列出 / 终态冻结 / 观察期移出)必须都经这里: 漏带快照的记录会被判定侧
     当成「锚点漂移」在**签发当刻**作废 —— 放行记录形同虚设, 种子回落本地兜底(2026-09-29 实报)。
     无锚点(本机已无该种子)时给全零 —— 判定侧的 `anchor is not None` 闸门自会跳过漂移检查。
     """
@@ -527,7 +527,7 @@ class HrRefreshService:
             self._warn_no_channel(site, e)
             return
         except HrLoginExpired as e:
-            # 登录失效: 只有人去浏览器登录才会好 —— 不算取数失败。痕迹: ①一条 WARNING ②
+            # 登录失效: 只有人去浏览器登录才会好 —— 不算取数失败。痕迹: 1.一条 WARNING 2.
             # wave.notes。不动任何数据语义(档位截断 + 周期自然重试, §5.2)。
             wave.notes.append(events.login_expired_note(site, e))
             self._warn_login(site, e)
@@ -730,7 +730,7 @@ class HrRefreshService:
 
     def _stop_condition(self, lane: str, parsed, wave: _WaveContext, objects, unmatched) -> Tuple[bool, bool, str]:
         """三停翻条件(§4.2, 每档独立, 任一成立即停)。返回 (停翻, 是否全深度, 原因)。"""
-        # ---- ② 到期段强信号(纯页面信号, 不依赖本地完成时间): 页尾连续 remain==0 达阈值 ----
+        # ---- 2. 到期段强信号(纯页面信号, 不依赖本地完成时间): 页尾连续 remain==0 达阈值 ----
         tail_zero = 0
         for e in reversed(parsed.entries):
             if e.remain_seconds == 0:
@@ -748,7 +748,7 @@ class HrRefreshService:
         if streak >= ZERO_REMAIN_STREAK:
             return True, True, f"到期段强信号(连续 {streak} 行剩余考察时间为 0, 深处全是到期行)"
 
-        # ---- ① 完成时间覆盖(本地推定信号): 最深行早于未定论对象里最早(最老)的可信完成时间 ----
+        # ---- 1. 完成时间覆盖(本地推定信号): 最深行早于未定论对象里最早(最老)的可信完成时间 ----
         oldest = 0.0
         for h, anchor in objects.items():
             if h in wave.hits:
@@ -760,7 +760,7 @@ class HrRefreshService:
         if oldest > 0 and deepest > 0 and deepest < oldest - COVERAGE_SLACK:
             return True, False, (f"完成时间覆盖(本档最深行早于最老对象减对齐余量 1D, 更深的页只会有更老的行)")
 
-        # ---- ③ 本地全集覆盖(本地确认信号): 未对账对象已全部与已见行 infohash 对上且无待回填 ----
+        # ---- 3. 本地全集覆盖(本地确认信号): 未对账对象已全部与已见行 infohash 对上且无待回填 ----
         if unmatched and not wave.pending_downloads:
             if all(h in wave.hits for h in unmatched):
                 return True, False, "本地全集覆盖(未对账种子已全部与已见行对上, 且无待回填)"
@@ -965,7 +965,7 @@ class HrRefreshService:
             if st.ok:
                 st.fail_streak = 0
         # ---- 计数对平记账(计划 26-09-29-2036 §2.2/§2.4): 声明落档 + mismatch 定界 ----
-        # mismatch 只在「本波承认了全深度」的档上成立; 截断/①③停翻波 rows<claim 是预期差值
+        # mismatch 只在「本波承认了全深度」的档上成立; 截断/1.3.停翻波 rows<claim 是预期差值
         # (还没翻完), 只记量化差值不告警不冻结。无计数(claim=None)一律降级现状。
         depth_broken = False
         for st in lane_states.values():
@@ -1357,9 +1357,9 @@ def _position_covered(entry: HrEntry, lane_states) -> bool:
 def _absence_proven_all(lane_states, wave: _WaveContext, anchor: HrAnchor) -> bool:
     """该种子在所有取数档位的缺席证明(§3.2 行 3: 完成时间位置被覆盖且未命中)。
 
-    全深度档(末页 / ②到期段停翻)对**任意位置**的缺席证明成立 —— 深处的到期行无论看到与否
+    全深度档(末页 / 2.到期段停翻)对**任意位置**的缺席证明成立 —— 深处的到期行无论看到与否
     结论相同(命中 → 终态放行, 没看到 → 未列出放行), 不依赖完成时间可信度; 位置有界档
-    (①/③停翻或截断)则需要可信完成时间推定位置(本机下载完成)—— 纯辅种只能由全深度收尾
+    (1./3.停翻或截断)则需要可信完成时间推定位置(本机下载完成)—— 纯辅种只能由全深度收尾
     (方向安全, 只费页数, §4.2 可信度分层)。"""
     done = float(anchor.completion_on) if anchor.completion_on and anchor.completion_on > 0 else 0.0
     for lane in FETCH_LANES:
@@ -1394,7 +1394,7 @@ def _lanes_summary_from(lane_states) -> str:
         if st is None:
             parts.append(f"{lane}:无")
             continue
-        tag = {"ok": "✓", LANE_FAILED: "✗", LANE_IDLE: "-"}.get(st.status, st.status)
+        tag = {"ok": "[x]", LANE_FAILED: "x", LANE_IDLE: "-"}.get(st.status, st.status)
         counter = ""
         if st.count_claim is not None:  # 计数对平展示(计划 26-09-29-2036 §2.6)
             counter = f"/声明{st.count_claim}" + (" 对不平" if st.count_match is False else "")

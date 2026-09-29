@@ -1,13 +1,13 @@
 ---
 # 容器化示例配置 (plan 26-09-25-2241 · D3): 以 minimal.yml 为底, 按容器场景改了五处
-#   ① data_dir: /data —— 对齐 compose.yaml 的 named volume
-#   ② qbittorrent.host: host.docker.internal —— qB 跑宿主机时容器内的访问入口(D4 案 1; Linux 宿主由 compose extra_hosts 补)
-#   ③ web.host: "0.0.0.0" —— 容器里 127.0.0.1 等于自断访问(端口映射探不到)
-#   ④ notify.enabled: false 显式写死 —— 无桌面环境, 平台通知预期不可用
-#   ⑤ grouping.check_missing_files: false —— 缺文件扫描读宿主磁盘, 不关会误暂停整组并打 MISSING 标签
+#   1. data_dir: /data —— 对齐 compose.yaml 的 named volume
+#   2. qbittorrent.host: host.docker.internal —— qB 跑宿主机时容器内的访问入口(D4 案 1; Linux 宿主由 compose extra_hosts 补)
+#   3. web.host: "0.0.0.0" —— 容器里 127.0.0.1 等于自断访问(端口映射探不到)
+#   4. notify.enabled: false 显式写死 —— 无桌面环境, 平台通知预期不可用
+#   5. grouping.check_missing_files: false —— 缺文件扫描读宿主磁盘, 不关会误暂停整组并打 MISSING 标签
 #      (2026-09-26 补; 逐项依据见 docs/deployment.md §11)
 # 用法: cp docker/config.example.yml config/config.yml, 改好 qbittorrent 三项后 docker compose up -d --build
-# 🔴 qB 凭据请占位替换, 不要把真实密码提交进仓库
+# [!] qB 凭据请占位替换, 不要把真实密码提交进仓库
 config:
     interval: 60S
     remove_similar_tags: true
@@ -31,7 +31,7 @@ config:
     # 种子分组管理(辅种管理)
     grouping:
         enabled: true # 启用种子分组管理
-        # ❗容器场景默认 false: 缺文件扫描读的是 qB 报回的**宿主**保存路径, 容器内看不见那块盘
+        # !容器场景默认 false: 缺文件扫描读的是 qB 报回的**宿主**保存路径, 容器内看不见那块盘
         #   ⇒ 恒判定"文件缺失" ⇒ 误暂停整组 + 打 MISSING 标签(真实写 qB)。
         #   配好 fs.path_map(下方样例)把下载目录挂进容器后可改回 true 恢复该功能(§11.5);
         #   映射 miss 时一律判「不可判定」跳过, 不再误暂停(plan 26-09-27-1407)。
@@ -61,15 +61,15 @@ config:
     qbittorrent:
         host: host.docker.internal # qB 在宿主机; 同一 compose 里跑 qB 则直接填服务名; NAS/远程填 IP
         port: 8080 # qB WebUI 端口(注意与本程序 web.port 区分)
-        username: "your-qb-username" # 🔴 替换成真实账号
-        password: "your-qb-password" # 🔴 替换成真实密码
+        username: "your-qb-username" # [!] 替换成真实账号
+        password: "your-qb-password" # [!] 替换成真实密码
 
     # Web UI: 辅种管理 + 图形化配置编辑(推荐的日常配置方式; 快速开始即从此进入)
     web:
         enabled: true       # 容器示例恒为 true: compose 健康检查探的就是这个端口 ——
                             # 关掉它容器会在约 1 分钟后永远 unhealthy(实测; 想关就同时删 compose 的 healthcheck 段)
-        host: "0.0.0.0"     # ❗容器内必须 0.0.0.0: 默认 127.0.0.1 时端口映射过去谁也连不上。
-                            #   ⚠️ 对外暴露会把可删除种子、可改配置的管理界面放到网络上 ——
+        host: "0.0.0.0"     # !容器内必须 0.0.0.0: 默认 127.0.0.1 时端口映射过去谁也连不上。
+                            #   WARN: 对外暴露会把可删除种子、可改配置的管理界面放到网络上 ——
                             #   务必保留 token 鉴权, 并配合防火墙 / 反向代理(与 README 安全提示同口径)
         port: 8080          # 本程序 Web UI 端口(与 qB WebUI 端口区分; 改动需同步 compose 的 ports 与 healthcheck)
         token: ""           # 访问密钥; 留空首次启动随机生成 -> /data/web.token(docker exec auto-qb cat /data/web.token)

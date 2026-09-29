@@ -1,7 +1,7 @@
   <script type="text/x-template" id="tpl-hub-field">
     <div v-if="visible">
       <!-- 非叶子项三段: section(可选段) / group(普通 object 段) / subcard(父字段的相关设置子卡)
-           ⚠ 这三个分支**不能省** —— cfgFlatten 会把嵌套 object 展开成这三类项; 少了它们, 段项会
+           WARN: 这三个分支**不能省** —— cfgFlatten 会把嵌套 object 展开成这三类项; 少了它们, 段项会
            落进下面叶子字段的 <input v-else> 分支, 值被 String(对象) 成 "[object Object]"
            (2026-09-25 实测: 站点页「HR 规则」「HR 在线核实」与规则页 checking 的两个分支都成了
            `[object Object]` —— 经典页 tpl-ce-field 有这三支, 清理死代码时随模板一起被删掉了)。

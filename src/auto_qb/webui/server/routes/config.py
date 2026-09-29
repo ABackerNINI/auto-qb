@@ -31,7 +31,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         - 给 hash: 用该种子求值, 返回布尔结果 + **中间值**(每个名字/函数取到了什么),
           让人看清判断依据; 求值出错时返回错误(与运行期同口径: 数据源不可用等)
         只读: 不碰任务队列与 state_file, 不违反单一写线程假设。
-        ⚠ 用到 tracker.names 时会走一次 qB tracker 查询(试算是手动触发的偶发请求, 可接受)。
+        WARN: 用到 tracker.names 时会走一次 qB tracker 查询(试算是手动触发的偶发请求, 可接受)。
         """
         b = body or {}
         text = str(b.get("text") or "")
@@ -70,7 +70,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         payload = config_schema.schema_payload()
         # 级别表由 impact 单一维护(与热重载实际分级同源), API 层只做合并
         payload["levels"] = {"sections": SECTION_LEVELS, "tracker_fields": TRACKER_FIELD_LEVELS}
-        # ⚠ 这里**不能**改 JSONResponse 直返(与 /api/state 不同): schema_payload() 里是
+        # WARN: 这里**不能**改 JSONResponse 直返(与 /api/state 不同): schema_payload() 里是
         # dataclass 实例(Group / Field / Plugin), 靠 FastAPI 的 jsonable_encoder 转成 dict;
         # 直返会在 json.dumps 处抛 `Object of type Group is not JSON serializable` 变 500
         # (2026-09-19 实测)。判据: **载荷里有没有非 JSON 原生类型** —— 有就必须保留编码器。

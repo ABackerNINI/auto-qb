@@ -2,11 +2,11 @@
 
 ## 测试计划(每个测试函数一条)
 - test_first_wave_deep_fetch: 首波深翻(全量效果) —— 未对账对象驱动覆盖深度
-- test_stop1_completion_time_coverage: 停翻① 完成时间覆盖(最深行早于最老对象减对齐余量 1D)
-- test_stop2_zero_remain_streak: 停翻② 到期段强信号(remain==0 连续 5 行, 全深度证明)
-- test_stop2_cross_page_streak: 停翻② 跨页延续计数
-- test_stop3_local_full_coverage: 停翻③ 本地全集覆盖(未对账全部对上且无待回填)
-- test_untrusted_done_pure_seed: 纯辅种(完成时间不可信)不参与①, 由②/末页收尾且可获放行
+- test_stop1_completion_time_coverage: 停翻1. 完成时间覆盖(最深行早于最老对象减对齐余量 1D)
+- test_stop2_zero_remain_streak: 停翻2. 到期段强信号(remain==0 连续 5 行, 全深度证明)
+- test_stop2_cross_page_streak: 停翻2. 跨页延续计数
+- test_stop3_local_full_coverage: 停翻3. 本地全集覆盖(未对账全部对上且无待回填)
+- test_untrusted_done_pure_seed: 纯辅种(完成时间不可信)不参与1., 由2./末页收尾且可获放行
 - test_order_violation_forced_stop: 排序失效 → 该档立即停翻, 失效点之前命中照常, 不签发放行
 - test_header_missing_lane_failed: 表头缺失 → 该档失效, 其它档独立继续(档位独立)
 - test_budget_truncation: 预算截断 → 截断点之前命中照常, 未列出待下波(不签发)
@@ -38,8 +38,8 @@
 - test_counter_mismatch_freezes_batch: T2 不对平冻结 —— depth_broken 整波不签发, 连续 3 波 ERROR 升级, 对平自愈清零; 命中/管束/复用窗不变
 - test_counter_absent_degrades_to_legacy: T3 无计数降级 —— 默认 adapter + 旧档案(无三键)加载 count_claim None(T1 迁移陷阱守阵, 不得变 0)
 - test_counter_zero_claims_self_attest_empty: T4 计数零自证空 —— 三档 claim=0∧rows=0 视同人工戳, 零行软提示不出现
-- test_counter_positive_zero_rows_page_changed: T5① 计数>0∧行数=0 —— page_changed 硬告警 + 不签发
-- test_interval_empty_page_keeps_manual_stamp: T5② 分页区间形空表无标记(claim=None) —— 维持 zero_listing 人工戳路径
+- test_counter_positive_zero_rows_page_changed: T51. 计数>0∧行数=0 —— page_changed 硬告警 + 不签发
+- test_interval_empty_page_keeps_manual_stamp: T52. 分页区间形空表无标记(claim=None) —— 维持 zero_listing 人工戳路径
 - test_counter_truncation_gap_informational: T6 截断差值信息性 —— 非全深度 rows<claim 不告警不冻结, notes 记差值, REASON_BUDGET 语义不变
 - test_fail_streak_resets_on_clean_wave: 失效波数清零 —— 连续失效只跨失效波延续, 恢复波清零, 单次失效不背历史(修复既有从未清零)
 """
@@ -160,7 +160,7 @@ def standard_pages(rows_a=None, rows_b=None, rows_c=None, *, has_next: bool = Fa
 
 
 def five_expired_rows(base_tid: int) -> list:
-    """5 行 remain==0(已到期段) —— 停翻② 的最小触发面"""
+    """5 行 remain==0(已到期段) —— 停翻2. 的最小触发面"""
     return [
         row(base_tid + i, f"OTHER-TORRENT {base_tid + i}", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")
         for i in range(5)
@@ -173,7 +173,7 @@ def five_expired_rows(base_tid: int) -> list:
 def test_first_wave_deep_fetch(tmp_path):
     """首波: 对象(未对账, 本地完成时间可信且较新)驱动各档翻页到其位置之后(全量效果)"""
     clock = Clock()
-    # 对象完成于 09-20(新); 各档只有 09-01(老)的行且还有下一页 → ①停翻(更深只会更老)
+    # 对象完成于 09-20(新); 各档只有 09-01(老)的行且还有下一页 → 1.停翻(更深只会更老)
     pages = {
         url_of("A", 1):
             myhr_page([row(11, "OTHER 11", done=DONE_OLD)], has_next=True),
@@ -187,14 +187,14 @@ def test_first_wave_deep_fetch(tmp_path):
     anchors = {"h-old": anchor_for("OTHER", completion_on=T_DONE_NEW)}
     result = run_wave(service, anchors)
     assert result.action in ("refreshed", "partial")
-    # 三档各取了第 1 页即被①停翻(更深只会更老, 对象不可能藏在更深处)
+    # 三档各取了第 1 页即被1.停翻(更深只会更老, 对象不可能藏在更深处)
     data, _ = service.store(SITE).read_unlocked()
     assert all(st.ok for st in data.wave.lanes.values())
-    assert data.wave.lanes["A"].full_depth is False  # ①停翻: 位置有界, 非全深度
+    assert data.wave.lanes["A"].full_depth is False  # 1.停翻: 位置有界, 非全深度
 
 
 def test_stop1_completion_time_coverage(tmp_path):
-    """停翻①: 最深行完成时间早于对象最老完成时间减 1D 对齐余量 → 停翻(位置有界)"""
+    """停翻1.: 最深行完成时间早于对象最老完成时间减 1D 对齐余量 → 停翻(位置有界)"""
     clock = Clock()
     # 对象完成 09-10; 第 1 页行 09-20(比对象新 → 不能停), 第 2 页行 09-01(老于对象-1D → 停)
     pages = {
@@ -214,7 +214,7 @@ def test_stop1_completion_time_coverage(tmp_path):
 
 
 def test_stop2_zero_remain_streak(tmp_path):
-    """停翻②: 页尾连续 5 行 remain==0 → 到期段强信号(全深度证明, 停翻零漏判)"""
+    """停翻2.: 页尾连续 5 行 remain==0 → 到期段强信号(全深度证明, 停翻零漏判)"""
     clock = Clock()
     pages = standard_pages(
         rows_a=[row(11, "OTHER 11", done=DONE_NEW, remain="1天00:00:00")], rows_b=five_expired_rows(20), rows_c=[]
@@ -230,7 +230,7 @@ def test_stop2_zero_remain_streak(tmp_path):
 
 
 def test_stop2_cross_page_streak(tmp_path):
-    """停翻②跨页延续: 第 1 页整页 3 行全 0 + 第 2 页整页 2 行全 0 → 累计 5 → 停翻(全深度)"""
+    """停翻2.跨页延续: 第 1 页整页 3 行全 0 + 第 2 页整页 2 行全 0 → 累计 5 → 停翻(全深度)"""
     clock = Clock()
     pages = {
         url_of("B", 1): myhr_page(five_expired_rows(20)[:3], has_next=True),
@@ -240,7 +240,7 @@ def test_stop2_cross_page_streak(tmp_path):
     }
     fetcher = FakeFetcher(pages=pages)
     service = make_service(tmp_path, fetcher, clock=clock)
-    anchors = {"h1": anchor_for("h1", completion_on=-1)}  # 纯辅种: ①不可用, 由②跨页累计收尾
+    anchors = {"h1": anchor_for("h1", completion_on=-1)}  # 纯辅种: 1.不可用, 由2.跨页累计收尾
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     st = data.wave.lanes["B"]
@@ -248,9 +248,9 @@ def test_stop2_cross_page_streak(tmp_path):
 
 
 def test_stop3_local_full_coverage(tmp_path):
-    """停翻③: 未对账对象全部与已见行对上且无待回填 → 停翻(不再为终态行翻页)"""
+    """停翻3.: 未对账对象全部与已见行对上且无待回填 → 停翻(不再为终态行翻页)"""
     clock = Clock()
-    # 对象的行在 A 档第 1 页(命中即定论); B/C 档还有别的行与下一页 —— ③在 A 命中后即停 A
+    # 对象的行在 A 档第 1 页(命中即定论); B/C 档还有别的行与下一页 —— 3.在 A 命中后即停 A
     pages = {
         url_of("A", 1):
             myhr_page([row(11, "EXAMPLE 11")], has_next=True),
@@ -274,7 +274,7 @@ def test_stop3_local_full_coverage(tmp_path):
 
 
 def test_untrusted_done_pure_seed(tmp_path):
-    """纯辅种(无本机完成时刻、未绑定): 不参与①; 由②(B/C 到期段)与末页(A)收尾且可获放行"""
+    """纯辅种(无本机完成时刻、未绑定): 不参与1.; 由2.(B/C 到期段)与末页(A)收尾且可获放行"""
     clock = Clock()
     pages = standard_pages(
         rows_a=[row(11, "OTHER 11", done=DONE_NEW, remain="1天00:00:00")], rows_b=five_expired_rows(20), rows_c=[]
@@ -284,8 +284,8 @@ def test_untrusted_done_pure_seed(tmp_path):
     anchors = {"h-pure": anchor_for("PURE", completion_on=-1)}  # 纯辅种: completion_on 未设
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
-    assert data.wave.lanes["A"].full_depth is True  # A 档翻到末页收尾(①不能用)
-    assert data.wave.lanes["B"].full_depth is True  # B 档由②收尾
+    assert data.wave.lanes["A"].full_depth is True  # A 档翻到末页收尾(1.不能用)
+    assert data.wave.lanes["B"].full_depth is True  # B 档由2.收尾
     assert "h-pure" in data.verified  # 全深度缺席证明成立 → 放行
 
 
@@ -645,7 +645,7 @@ def test_observing_seed_kept_managed_then_released(tmp_path):
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[11].active is False
     assert h11 in data.verified
-    # ❗「记录在」≠「放行生效」: 观察期出口同样必须带锚点快照, 否则判定侧当场判滴移作废
+    # !「记录在」≠「放行生效」: 观察期出口同样必须带锚点快照, 否则判定侧当场判滴移作废
     assert data.verified[h11].has_anchor_snapshot
     view = service.build_view_for(SITE, data)
     assert judge_record(view, (h11, ), anchor=anchors[h11], now=clock()).identity is HrIdentity.RELEASED
@@ -679,7 +679,7 @@ def test_observing_seed_resighted(tmp_path):
 def test_terminal_vanish_writes_release(tmp_path):
     """终态条目消失且位置被证明 → 退役并落放行记录(终态不可逆, 条目被站点清掉也不影响判定)
 
-    ❗终态行必须**粗配同名 ⇒ 真下到 .torrent ⇒ 登记 infohash**, 冻结的内层「落放行记录」
+    !终态行必须**粗配同名 ⇒ 真下到 .torrent ⇒ 登记 infohash**, 冻结的内层「落放行记录」
     分支才进得去 —— 否则 infohash 为空, 那三行永不执行, 守阵假绿灯(2026-09-29 实报
     `LANE_SATISFIED` NameError 正是从这个从未被覆盖的分支炸出来的)。
     """
@@ -785,7 +785,7 @@ def test_no_objects_sweeps_to_last_page(tmp_path):
     run_wave(service, anchors={})  # 无本地种子 → 无对象集
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.lanes["A"].pages == 2  # 有下一页就继续翻(未被「每档 1 页」截断)
-    assert data.wave.lanes["B"].pages == 1 and data.wave.lanes["B"].full_depth  # ② 到期段
+    assert data.wave.lanes["B"].pages == 1 and data.wave.lanes["B"].full_depth  # 2. 到期段
     assert data.wave.lanes["C"].pages == 1 and data.wave.lanes["C"].full_depth  # 末页
 
 
@@ -987,7 +987,7 @@ def test_counter_mismatch_freezes_batch(tmp_path, monkeypatch, caplog):
     blob11, h11 = mk_blob("EXAMPLE 11")
     pages = {
         url_of("A"): myhr_page([row(11, "EXAMPLE 11")]),  # 命中行(A 档, 全深度)
-        url_of("B"): myhr_page(five_expired_rows(20)),  # ② 停翻全深度, 实抓 5 行 vs 声明 50
+        url_of("B"): myhr_page(five_expired_rows(20)),  # 2. 停翻全深度, 实抓 5 行 vs 声明 50
         url_of("C"): myhr_page([]),
     }
     fetcher = FakeFetcher(pages=pages, blobs={11: blob11})
@@ -1068,7 +1068,7 @@ def test_counter_zero_claims_self_attest_empty(tmp_path, monkeypatch, caplog):
 
 
 def test_counter_positive_zero_rows_page_changed(tmp_path, monkeypatch, caplog):
-    """T5① 计数>0 ∧ 行数=0(tab 形): 整表被吃光/首页即被截的显式信号 → page_changed 硬告警 + 不签发。"""
+    """T51. 计数>0 ∧ 行数=0(tab 形): 整表被吃光/首页即被截的显式信号 → page_changed 硬告警 + 不签发。"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
     clock = Clock()
     counter_adapter(monkeypatch, {"B": 3})
@@ -1089,7 +1089,7 @@ def test_counter_positive_zero_rows_page_changed(tmp_path, monkeypatch, caplog):
 
 
 def test_interval_empty_page_keeps_manual_stamp(tmp_path, monkeypatch, caplog):
-    """T5② 分页区间形空表(无标记 ⇒ claim=None): 自证空不可用 → 维持 zero_listing 人工戳路径。"""
+    """T52. 分页区间形空表(无标记 ⇒ claim=None): 自证空不可用 → 维持 zero_listing 人工戳路径。"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
     clock = Clock()
     counter_adapter(monkeypatch, {})  # 区间形空表无计数标记: 覆写了也拿不到键

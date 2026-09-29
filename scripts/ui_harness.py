@@ -35,7 +35,7 @@
 ----
 * 仅开发期使用, 不参与打包; 数据全在内存 + 临时 state 文件, 关闭即弃。
 * 鉴权走 `skip_local_verify`(本机免密钥), 浏览器不需要带 token。
-  ❗正因如此 `--host` **只接受回环地址**(127.0.0.0/8 / ::1 / localhost) —— 绑 0.0.0.0
+  !正因如此 `--host` **只接受回环地址**(127.0.0.0/8 / ::1 / localhost) —— 绑 0.0.0.0
   等于把一个免鉴权的 WEB UI 交给整个局域网(合成数据也含配置结构), 直接拒绝启动。
 """
 import argparse
@@ -99,7 +99,7 @@ def _make_torrents(count: int, site_conf):
 _PAUSED_STATE = "pausedDL"
 _RESUME_DONE = "uploading"
 _RESUME_TODO = "downloading"
-# ❗刻意让**回执先到、状态后改**(复刻真机竞态: 服务端 P0-5 补刷新在回执**之后**才跑,
+# !刻意让**回执先到、状态后改**(复刻真机竞态: 服务端 P0-5 补刷新在回执**之后**才跑,
 # 见 webui/commands.py)。前端"回执后立刻拉真值"第一次会扑空(rid 还没变),
 # 必须靠退避重试才拿得到 —— 这段延迟就是为了让重试逻辑被测到(issue 26-09-19-2024)。
 _TRUTH_DELAY = 0.12
@@ -175,11 +175,11 @@ def _target_hashes(mgr, cmd: str, body: dict):
 def _restore_state(mgr, hashes):
     """把 _apply_truth 改过的种子还原成**最初**的 state
 
-    ❗为什么需要: 真机上"暂停"是永久的, 但桩服务是**长驻**的(起一次要跑很多轮冒烟, 红绿双验
+    !为什么需要: 真机上"暂停"是永久的, 但桩服务是**长驻**的(起一次要跑很多轮冒烟, 红绿双验
     更是同一进程反复跑)。状态一旦永久累积, 跑过一轮"整剧暂停"(合成数据里一剧 = 全部种子)之后,
     下一轮冒烟里**所有行都是 s-paused** ⇒ 所有"挑一个未暂停的行"的断言全部假失败 —— 实测第二轮
     就 4 条断言因此变红, 而它们跟被测代码毫无关系。
-    ❗记的是**最初**值(不是上一次命令后的值): pause→resume 连续两次操作同一批种子时, 若记
+    !记的是**最初**值(不是上一次命令后的值): pause→resume 连续两次操作同一批种子时, 若记
     "上一次", 回弹会把它们还原成暂停态。
     """
     orig = getattr(mgr, "_harness_orig_state", None) or {}
@@ -197,7 +197,7 @@ def _restore_state(mgr, hashes):
 def _revert_after_consume(mgr, hashes, wait_ms: int):
     """等真值这一版**真的被 /api/state 取走**之后, 再等 wait_ms 回弹
 
-    ❗不能直接 `Timer(revert_ms)` 定时回弹: 回弹可能跑在前端看到真值**之前**(实测一次"整组暂停"
+    !不能直接 `Timer(revert_ms)` 定时回弹: 回弹可能跑在前端看到真值**之前**(实测一次"整组暂停"
     的撤下因此被拖到 4149ms —— 真值被回弹改回去了, 前端要等到下一次回弹才碰巧对上)。以
     `_web_pending_ver` 判"这一版已被消费"(它在 `ensure_group_state` 里被清空), 再等一小段,
     回弹就一定落在前端观测之后。
@@ -254,7 +254,7 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
     def _loop():
         while True:
             try:
-                # ❗队列元素是 **2 元组** (cmd, body), cmd_id 在 body 里 —— 按 3 元组解包会抛
+                # !队列元素是 **2 元组** (cmd, body), cmd_id 在 body 里 —— 按 3 元组解包会抛
                 # ValueError, 命令被吃掉且永远没有回执(前端一直轮询, 表现为"点了没反应")。
                 _cmd, body = mgr.web_commands.get(timeout=0.2)
             except queue.Empty:
@@ -270,7 +270,7 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
                 mgr._web_results[cmd_id] = {"status": "error", "error": "桩服务注入的失败(用于验证乐观 UI 回滚)"}
             else:
                 if wait_ms:
-                    # ❗模拟真机「主循环正忙着, 命令排在后面」: 回执与真值是**同一轮主循环**里
+                    # !模拟真机「主循环正忙着, 命令排在后面」: 回执与真值是**同一轮主循环**里
                     # 出来的, 所以两者一起延后 —— 不是只延后回执。本地桩没有主循环, wait_ms 恒为 0,
                     # 于是"命令投递到回执"这一段在本地从来测不到, 而真机上它恰恰是最长的那一段。
                     time.sleep(wait_ms / 1000.0)
@@ -282,7 +282,7 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
                 # 先回执、后改状态(复刻真机补刷新的错位, 见 _TRUTH_DELAY 注释)
                 time.sleep(_TRUTH_DELAY)
                 try:
-                    _apply_truth(mgr, _cmd, body, revert_ms)  # ❗队列解出来的是 _cmd(与 cmd 区分开)
+                    _apply_truth(mgr, _cmd, body, revert_ms)  # !队列解出来的是 _cmd(与 cmd 区分开)
                 except Exception as e:  # 桩的健壮性优先: 同步失败也不能拖死命令泵
                     print(f"[harness] 状态同步失败: {e}", file=sys.stderr)
 
@@ -332,7 +332,7 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=8099)
     args = ap.parse_args()
 
-    # ❗本服务故意免鉴权(skip_local_verify), 绑到非回环等于把 WEB UI 交给整个局域网。
+    # !本服务故意免鉴权(skip_local_verify), 绑到非回环等于把 WEB UI 交给整个局域网。
     if not _is_loopback(args.host):
         print(
             f"[harness] 拒绝启动: --host 只接受回环地址(127.0.0.0/8 / ::1 / localhost), 收到 {args.host!r}\n"

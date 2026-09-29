@@ -12,7 +12,7 @@
     <root>/runs/<时间戳-场景ID>/{fs,config.yml,data,trace.jsonl,writes.jsonl,
                                 sim-events.jsonl,fs-before.txt,fs-after.txt,summary.json}
 
-❗R 盘即真实下载盘: 删除动作只在 <run>/fs/ 内生效, 受 B1-B4 四道边界校验约束,
+!R 盘即真实下载盘: 删除动作只在 <run>/fs/ 内生效, 受 B1-B4 四道边界校验约束,
   任一不过即拒绝(越界删除是不可逆的真实数据损失)。
 
 设计要点见 memory-bank/plans/26-09-19-1433-sim-client-5000-plan.html 第 06/07/08 节。
@@ -266,7 +266,7 @@ def minimal_bencode(name: str, size: int) -> bytes:
 def merge_window(frames: list[dict]) -> dict:
     """把窗口内的多帧合并成"这一拍的状态"(计划 §08 窗口合并语义)。
 
-    ❗语义必须与 store 自己对齐, 否则 D 系列(删除 / 重复投递 / 幂等)判据会因**合并错误**而假红或假绿,
+    !语义必须与 store 自己对齐, 否则 D 系列(删除 / 重复投递 / 幂等)判据会因**合并错误**而假红或假绿,
     且极难归因(看起来像 auto-qb 的 bug)。规则:
       · torrents          —— 逐 hash **后写覆盖**(窗口内先改再改回, 取末值)
       · torrents_removed  —— 与 torrents 做**净额判定**(以窗口末态为准: 先删后加 => 净额是"加")
@@ -284,7 +284,7 @@ def merge_window(frames: list[dict]) -> dict:
     }
     if not frames:
         return out
-    # ❗必须**按序**推进, 不能只做集合运算: 先增后删与先删后加的结果完全不同
+    # !必须**按序**推进, 不能只做集合运算: 先增后删与先删后加的结果完全不同
     state: dict[str, dict] = {}
     removed_seq: list[str] = []
     tag_add: list[str] = []
@@ -416,7 +416,7 @@ class CorpusSource:
     def disk_table(self) -> dict:
         """拼出 mock 用的磁盘状态表: {全路径: {exists,size}}。
 
-        ❗**必须以 disk.json.gz 为准**(抓取时刻的磁盘三态), 不能拿 files.json 的"逻辑大小"当"存在"。
+        !**必须以 disk.json.gz 为准**(抓取时刻的磁盘三态), 不能拿 files.json 的"逻辑大小"当"存在"。
         两者是不同的东西: files.json 是 qB 报的文件清单(逻辑上该有哪些文件、多大),
         disk.json 是抓取时**磁盘上真实是什么样**(存在性 + 实际大小 + `.!qB` 后缀)。
         W0 真机实测: 11457 个文件里 **9673 个不存在**(R 盘上 progress=0 的 stoppedDL 等) ——
@@ -464,7 +464,7 @@ class SimQb:
         self._materialized = 0
         self.latency_ms = float(getattr(args, "latency_ms", 0) or 0)  # 每个请求的人为延迟(模拟真机负载)
         self.expected_removals: set[str] = set()  # B4 核账: 预期删除清单
-        # ❗外部删除必须经 sync/maindata 的 torrents_removed 报出去, 否则 auto-qb 永远看不
+        # !外部删除必须经 sync/maindata 的 torrents_removed 报出去, 否则 auto-qb 永远看不
         # 到"种子没了" —— 快照里残留幽灵种子, D1/D2/D5 会全测成绿的假象(曾硬编码 [])。
         self.removed: list[str] = []  # 待上报的删除队列(sync 增量轮消费)
         self.removed_all: set[str] = set()  # 累计删除(判据用)
@@ -508,7 +508,7 @@ class SimQb:
         """把初始磁盘状态落成文件, 供 FS mock **启动即用**(消除"首轮早于首次轮询"的竞态)。
 
         时间源仍归播放器: 这个文件只是初值, 之后 mock 按秒拉 `GET /_fsmock/state` 覆盖它
-        (计划 §07 硬条件③)。不给初值的话, auto-qb 的首轮会在空表上跑 —— 所有文件都被当成缺失。
+        (计划 §07 硬条件3.)。不给初值的话, auto-qb 的首轮会在空表上跑 —— 所有文件都被当成缺失。
         """
         p = os.path.join(self.run_dir, "fs-state.json")
         try:
@@ -541,7 +541,7 @@ class SimQb:
         self.groups = [list(g.get("members") or []) for g in (self.corpus.groups.get("groups") or [])]
         # ---- 录播时间轴(计划 §08) ----
         # 帧自带**实测 dt_ms**, 累积成时间轴; 回放按墙钟 × 倍速推进游标。
-        # ❗末帧(closure/mismatch)是校验锚点, **不吐给客户端**(吐了客户端会按全量轮重置一次)。
+        # !末帧(closure/mismatch)是校验锚点, **不吐给客户端**(吐了客户端会按全量轮重置一次)。
         allf = self.corpus.frames
         self.replay_data = allf[:-1] if (allf and allf[-1].get("role") in ("closure", "mismatch")) else list(allf)
         # 帧的"可交付时刻" = 它**完成**时的累积时间(sum(dt))。用完成时刻而不是开始时刻:
@@ -598,7 +598,7 @@ class SimQb:
     def consume_replay(self, cursor_ms: float | None = None) -> dict:
         """把游标推进到 cursor_ms, 把这段时间内落过的采样帧**合并成一拍**(计划 §08)。
 
-        ⚠ 顺序: 先合并窗口(本函数) → 再由 `_snapshot_view` 叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
+        WARN: 顺序: 先合并窗口(本函数) → 再由 `_snapshot_view` 叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
         """
         if cursor_ms is None:
             cursor_ms = self.replay_cursor_ms()
@@ -732,7 +732,7 @@ class SimQb:
             show = i % 40
             ep = (i % 24) + 1
             if i in grouped:
-                # ❗组内成员必须共享 save_path 与**完全相同的文件相对路径**, 否则归不成组
+                # !组内成员必须共享 save_path 与**完全相同的文件相对路径**, 否则归不成组
                 # (曾按种子序号算 ep -> 同组文件名各不相同 -> 辅种组形同虚设)
                 gi = i // group_size
                 gep = (gi % 24) + 1
@@ -756,7 +756,7 @@ class SimQb:
                 state = "stalledUP"
             t = make_torrent(rng, i, self.fs_root, tracker_urls[site], save_path, rel, a.fs_file_size, name, state)
             # S8 限速保护: 约 10% 的种子带**手设单种限速**。
-            # ❗必须造**奇数 KiB/s** —— 项目约定 `utils.is_manual_speed_limit` 判定为
+            # !必须造**奇数 KiB/s** —— 项目约定 `utils.is_manual_speed_limit` 判定为
             # `(bytes // 1024) % 2 == 1`, 奇数值才被当作"用户手设、本程序不覆盖"。
             # 造偶数(初版写成 i*7+1, i 恒为奇数 ⇒ KiB 恒为偶数)会被正常覆盖 -> 假红。
             if i % 10 == 3:
@@ -776,7 +776,7 @@ class SimQb:
     def _expose(self, target: int) -> int:
         """把生成序里的前 target 个种子暴露给 auto-qb(P2 渐进灌入用)
 
-        ❗新暴露的种子必须整条进脏集合: 增量轮只回 `dirty`, 不这么做的话 auto-qb 永远
+        !新暴露的种子必须整条进脏集合: 增量轮只回 `dirty`, 不这么做的话 auto-qb 永远
         看不到新种子(ramp 场景会静默少一半数据)。
         """
         added = 0
@@ -891,7 +891,7 @@ class SimQb:
         n = self.safe_delete_files(paths, len(paths))
         members = [h for h in self.groups[gi] if h in self.torrents]
         if members:  # 触发 _handle_state_transitions 的 "进入 errored" 分支
-            # ❗状态名必须是 qB 的 "error"(写成 "errored" 会被解析成 UNKNOWN -> is_errored 为假)
+            # !状态名必须是 qB 的 "error"(写成 "errored" 会被解析成 UNKNOWN -> is_errored 为假)
             t = self.torrents[members[0]]
             t["state"] = "error"
             self.dirty.setdefault(members[0], {})["state"] = "error"
@@ -1021,12 +1021,12 @@ class SimQb:
     def _sync_corpus(self, rid: int) -> dict:
         """语料档的 sync/maindata —— 流状态视图(计划 §07 两层状态)。
 
-        ⚠ 顺序: 先合并窗口(§08) → **再**按滞后规则叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
+        WARN: 顺序: 先合并窗口(§08) → **再**按滞后规则叠 overlay。反了会让滞后边界落在错误的 t_seq 上。
         静态回放时流不推进(帧已全量加载, 由 W4 的游标按时间轴吐), 所以这里只处理 overlay。
         """
         with self.lock:
             self.stats["sync_rounds"] += 1
-            # ⚠ 顺序: 先合并窗口(§08) → 再叠 overlay 的可见性(§07)。
+            # WARN: 顺序: 先合并窗口(§08) → 再叠 overlay 的可见性(§07)。
             # 反了会让滞后边界落在错误的 t_seq 上 —— 故刻意写成两个独立调用, 不揉在一起。
             self.consume_replay()
             self._promote_overlays()
@@ -1059,7 +1059,7 @@ class SimQb:
             return out
 
     def fsmock_state(self) -> dict:
-        """给 FS mock 的"当前磁盘状态"(计划 §07 硬条件③: 时间源归播放器)。
+        """给 FS mock 的"当前磁盘状态"(计划 §07 硬条件3.: 时间源归播放器)。
 
         语料档 = files.json 的 disk 初值(按 t_seq 变化的部分由 W4 的 fs_delta 叠加);
         合成档 = 真树现算(只在 --fs-mode=mock 时才会被拉)。
@@ -1521,7 +1521,7 @@ class Handler(BaseHTTPRequestHandler):
             self._trace(route, params, 200, len(blob))
             return
         if route == "_fsmock/state":
-            # FS mock 的时间源(计划 §07 硬条件③): 由播放器给出"当前磁盘状态", mock 按秒拉取
+            # FS mock 的时间源(计划 §07 硬条件3.): 由播放器给出"当前磁盘状态", mock 按秒拉取
             payload = sim.fsmock_state()
             self._trace(route, params, 200, 0)
             return self._json(payload)
@@ -1744,7 +1744,7 @@ WEB_TMPL = """    web:
 # D5 幂等用: execute_once=once 的规则 + 无副作用的 print_torrent_details 动作。
 # 它会在 state.json 的 exec_history 里给每个命中种子留一条记录 —— 第二相(新进程)必须
 # 靠这条记录跳过, 一个都不许重跑。state 若没落盘, 第二相就会全部重跑 -> 判据立刻变红。
-# ❗规则块必须落在 config: **之内**且键名以 _rules 结尾 —— validate_config 的
+# !规则块必须落在 config: **之内**且键名以 _rules 结尾 —— validate_config 的
 # rules_config = {k: v for k, v in cfg.items() if k.endswith("_rules")}; 根节点只认 config。
 # (test_stop.yml 里那种顶层写法是旧格式, 现在会被判"根节点未知键")
 RULES_TMPL = """    sim_once_rules:
@@ -1793,12 +1793,12 @@ def corpus_tracker_section(sim: SimQb) -> str:
     站点标签的推断 —— 取"**对该 host 最专有**"的那个标签: score = 该站出现次数 / 全局出现次数。
     真机上站点标签几乎只出现在本站的种子上(score→1), 而通用标签(MISSING / zSkipChecked / 辅种)
     散布在全库(score 很小)。⇒ 不能按"出现最多"挑, 那会被通用标签抢走。
-    (⚠ 标签在语料里已伪名化, 所以**不能**用原始字面量 "MISSING" 之类去排除 —— 只能靠这个统计判据。)
+    (WARN: 标签在语料里已伪名化, 所以**不能**用原始字面量 "MISSING" 之类去排除 —— 只能靠这个统计判据。)
 
-    ⚠ 首选 `meta.sanitize_map.tracker_tags`: 抓取端拿用户 config 的 trackers 段算出来的**权威**
+    WARN: 首选 `meta.sanitize_map.tracker_tags`: 抓取端拿用户 config 的 trackers 段算出来的**权威**
     伪域名 ↔ 伪标签映射; 取不到才退回上面的统计派生。两者都只产出**已脱敏**的两侧。
     """
-    # ❗`or {}`: 老语料 / 无映射时 `.get()` 返回 None, 后面再 .get() 会直接 AttributeError
+    # !`or {}`: 老语料 / 无映射时 `.get()` 返回 None, 后面再 .get() 会直接 AttributeError
     _corpus = getattr(sim, "corpus", None)
     smap = ((_corpus.meta.get("sanitize_map") or {}) if _corpus else {}) or {}
     auth = smap.get("tracker_tags") or {}
@@ -1820,11 +1820,11 @@ def corpus_tracker_section(sim: SimQb) -> str:
                 slot[tag] = slot.get(tag, 0) + 1
 
     # ---- 输出: 权威映射优先, 覆盖不到的域名退回统计派生, 且只输出语料里真出现过的域名 ----
-    # ❗**不能只信权威映射**: 用户 config 的 `domains:` 字面量与 tracker URL 的 **host 不一定相等**
+    # !**不能只信权威映射**: 用户 config 的 `domains:` 字面量与 tracker URL 的 **host 不一定相等**
     #   (auto-qb 的站点匹配是**后缀**匹配, 而这里按 host 精确对表)。实测该映射漏掉了语料里最大的
     #   站点(35 个种子) ⇒ 那些种子因"未匹配 tracker 配置"被 `continue` 跳过(qbmanager.py:685-690),
     #   **连带不参与归组** ⇒ 头号判据 group_exact 从 0 变成 34(真值 63 组只分出 29 组)。
-    # ❗也**不能只信统计**: 站点混用标签时统计会挑错。故**两者合并**: 有权威就用, 没有才统计。
+    # !也**不能只信统计**: 站点混用标签时统计会挑错。故**两者合并**: 有权威就用, 没有才统计。
     stat_tag: dict[str, str] = {}
     for host in host_tags:
         counts = host_tags[host]
@@ -1923,7 +1923,7 @@ def run_load_engine(sim: SimQb, stop: threading.Event):
             sim._event("abort_start", {"duration_s": a.abort_duration})
         elif sim._abort and time.time() >= sim._abort_until:
             sim._abort = False
-            # ❗恢复时把 rid 断层(模拟 qB 重启): 客户端手上的旧 rid 必然失配 -> 走全量自愈。
+            # !恢复时把 rid 断层(模拟 qB 重启): 客户端手上的旧 rid 必然失配 -> 走全量自愈。
             # 不这么做的话 rid 只是暂停推进, 恢复后仍是增量, 测不到"全量重建"这条路径。
             sim.rid += 1000
             sim._event("abort_recover", {"rid": sim.rid})
@@ -2053,7 +2053,7 @@ def self_test(sim: SimQb, srv: SimServer, port: int) -> int:
     # 本自检要真起 HTTP + 真装 qbittorrentapi, CI 从不执行 ⇒ 交给 pytest 验, 覆盖两平台。
 
     srv.shutdown()
-    print("[自检] " + ("全部通过 ✓" if ok else "存在失败 ✗"))
+    print("[自检] " + ("全部通过 [x]" if ok else "存在失败 x"))
     return 0 if ok else 1
 
 

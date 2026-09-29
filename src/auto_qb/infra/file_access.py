@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 class _UndeterminedType:
     """「不可判定」哨兵: 映射 miss 时存在性未知 —— 与「不存在」严格区分(报告 §05 红线)
 
-    ❗不可作布尔值: 判定代码必须显式 `result is UNDETERMINED` 走三态分支。
+    !不可作布尔值: 判定代码必须显式 `result is UNDETERMINED` 走三态分支。
     若放行隐式真值判断(falsy), `if not fa.exists(p)` 会把「不可判定」当成「不存在」
     —— 恰是本层要防的误暂停事故, 故直接抛错让写法暴露。
     """
@@ -115,7 +115,7 @@ def _norm_logical(p: str) -> str:
 def _fold_prefix_len(lp: str, folded_prefix: str) -> int:
     """原串 lp 中折叠后恰等于 folded_prefix 的前缀的**码点长度**; 不命中返回 -1
 
-    casefold 是逐码点映射却可能变长(ß→ss、İ→i̇), 折叠串与原串长度不对齐 —— 拿折叠
+    casefold 是逐码点映射却可能变长(ß→ss、İ→i), 折叠串与原串长度不对齐 —— 拿折叠
     前缀的长度硬切原串会切错位(容器路径丢字符 → exists 误判「不存在」→ 重演误暂停
     事故, 报告 §05 红线)。故沿原串逐码点累加折叠定位边界: 累加折叠长度严格单调递增,
     与目标等值至多命中一次; 累加结果不再是目标前缀时提前退出(后续只会更长)。
@@ -367,9 +367,9 @@ def get_file_access() -> FileAccess:
 def path_map_selfcheck(save_paths: List[str]) -> None:
     """映射自检(非 fail-fast, 只记日志不阻塞启动): 结果是预告, 运行期以真实 syscall 为准
 
-    ① 每条挂载点(to)在容器内 isdir 存在 —— 不存在提示查 compose volumes;
-    ② 现存种子 save_path 对映射源前缀命中率 0% —— 提示映射表可能写错(盘符/大小写/分隔符);
-    ③ 每条挂载点做可写探测(建删临时目录), 只读结果记 INFO(「新建文件夹」需 :rw 挂载)。
+    1. 每条挂载点(to)在容器内 isdir 存在 —— 不存在提示查 compose volumes;
+    2. 现存种子 save_path 对映射源前缀命中率 0% —— 提示映射表可能写错(盘符/大小写/分隔符);
+    3. 每条挂载点做可写探测(建删临时目录), 只读结果记 INFO(「新建文件夹」需 :rw 挂载)。
     """
     fa = get_file_access()
     if not isinstance(fa, MappedFileAccess) or not fa._table:

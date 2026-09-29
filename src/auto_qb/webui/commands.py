@@ -25,7 +25,7 @@ REANNOUNCE_CONFIRM_TIMEOUT = 30.0
 
 # **自投递**命令: 由 Web 侧在自己处理过程中 put 回队列(不是用户操作), 投递后**不唤醒**主循环。
 # 目前只有 build_search_index —— web_view 在搜索索引脏时自投递(web_view.py:513/:699)。
-# ❗若允许它唤醒会形成自激循环: 唤醒 -> drain(单轮最多 SEARCH_INDEX_BUILD_BUDGET=500 条文件 API)
+# !若允许它唤醒会形成自激循环: 唤醒 -> drain(单轮最多 SEARCH_INDEX_BUILD_BUDGET=500 条文件 API)
 # -> 索引仍脏 -> 再投递 -> 立刻再唤醒 …… 中间没有 tick 兜底, 直接打满 CPU 并冲垮 qB。
 # 新增自投递命令时必须同步加进这里(测试守卫: tests/test_web.py::test_api_enqueue_wakes_main_loop)。
 SELF_POSTED_COMMANDS = frozenset({"build_search_index"})
@@ -70,7 +70,7 @@ def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
     wait_ms = 出队时刻 - 投递时刻(命令排队等主循环的空档, P0-1 唤醒后应趋近 0)
     exec_ms = 执行完时刻 - 出队时刻(真正干活: 多数是 1 次 qB API 往返)
 
-    ❗这两段**只在回执里回传**, 要看就得开浏览器控制台 —— 真机上用户不一定开得了(嵌入式
+    !这两段**只在回执里回传**, 要看就得开浏览器控制台 —— 真机上用户不一定开得了(嵌入式
     WebView / 手机 / 不愿开 F12)。故 drain 侧同时落一行日志(见 _log_cmd_timing),
     排查"点了要等几秒"时**不用控制台**。
     """
@@ -87,9 +87,9 @@ CMD_SLOW_MS = 300.0
 
 # 真值推送的等待上限(ms): 命令执行完**立即发回执**(只表示"已执行"), 真值另走 `truth`
 # 事件稍后推 —— 见 WebUIRuntime.defer_receipt / flush_truths。
-# ❗2026-09-20 D2 定案: 原做法是"扣住回执等真值再发", 真机实测 qB 翻状态要 **1258ms**
+# !2026-09-20 D2 定案: 原做法是"扣住回执等真值再发", 真机实测 qB 翻状态要 **1258ms**
 #   (而命令执行只要 2.7ms)⇒ 扣着回执等 = 把撤下钉死在 1.25s+(实测撤下 2947ms)。
-# ❗超时**不推**真值(宁可让前端超时回滚), 因为推一个未落地的真值 = 采纳命令前的旧值 ⇒ 弹回。
+# !超时**不推**真值(宁可让前端超时回滚), 因为推一个未落地的真值 = 采纳命令前的旧值 ⇒ 弹回。
 #   改这里必须同步前端 TRUTH_HOLD_MS(前端"值覆盖"的保持上限)—— 两边各写各的必然漂移,
 #   已有静态守阵钉住。
 TRUTH_PUSH_CAP_MS = 8000.0
@@ -103,7 +103,7 @@ def _add_outcome(result: object) -> tuple[bool, str]:
       `{success_count, failure_count, pending_count, added_torrent_ids}`, qbittorrent-api 包成
       `TorrentsAddedMetadata`(**dict 子类**, 见库内 torrents.py 的 `resp.json()` 分支)。
 
-    ❗2026-09-24 实测 bug: 老写法只认 `"Ok." in str(result)`, 在 5.2.3 上**恒为假** ——
+    !2026-09-24 实测 bug: 老写法只认 `"Ok." in str(result)`, 在 5.2.3 上**恒为假** ——
     `str(TorrentsAddedMetadata(...))` 是 `"TorrentsAddedMetadata({'success_count': 1, ...})"`,
     于是"种子明明加进去了, WEB UI 却弹添加失败"。判据必须同时覆盖两形态。
     `pending_count > 0` = 已受理但仍在异步处理(magnet 元数据未就绪 / 走 search 插件下载),
@@ -623,12 +623,12 @@ class WebCommandsMixin:
             is_first_last_piece_priority=bool(first_last_piece_prio),
         )
         kwargs = {k: v for k, v in kwargs.items() if v not in (None, False)}
-        # ❗停止位是**唯一必须显式下发**的布尔选项(既不能省, 也不能用 is_paused 传), 两处坑叠加
+        # !停止位是**唯一必须显式下发**的布尔选项(既不能省, 也不能用 is_paused 传), 两处坑叠加
         #   才会让前端「添加后开始」勾了等于没勾(2026-09-24 实测 bug):
-        #   ① qB 侧 `stopped` 缺省时**不是** false, 而是回落到会话级默认 —— SessionImpl::
+        #   1. qB 侧 `stopped` 缺省时**不是** false, 而是回落到会话级默认 —— SessionImpl::
         #      initLoadTorrentParams 里 `addStopped.value_or(isAddTorrentStopped())`, 那个会话值由
         #      qB 自己的添加对话框/选项("不自动开始")写入 ⇒ 用户勾了「添加后开始」照样按停止添加;
-        #   ② qbittorrent-api 的 `is_stopped = is_paused or is_stopped` 会把 **is_paused=False 折成
+        #   2. qbittorrent-api 的 `is_stopped = is_paused or is_stopped` 会把 **is_paused=False 折成
         #      None**(`False or None` == None) ⇒ 传 is_paused=False 等于没传(实测请求体为空字符串);
         #      只有 is_stopped=False 才会真的发出 `paused=false&stopped=false`。
         #   qB 自家 WebUI 同此口径: addtorrent.js 恒传 stopped=true/false, 从不省略。
@@ -640,7 +640,7 @@ class WebCommandsMixin:
         # (填了保存路径时缺省恰好也得 false, 所以这个隐患只在"未勾 + 未填路径"这一支暴露。)
         # qB 自家 WebUI 的 autoTMM 是 `<select name="autoTMM">`(Manual=false 默认 / Automatic=true),
         # 随表单恒提交 —— 同此口径。
-        # ❗只有 qB 侧声明为 `std::optional` 的选项才需要这样显式下发; 普通 `bool` 的
+        # !只有 qB 侧声明为 `std::optional` 的选项才需要这样显式下发; 普通 `bool` 的
         #   (sequential / firstLastPiecePriority / skip_checking) 缺省就是 false, 省略安全。
         kwargs["use_auto_torrent_management"] = bool(auto_tmm)
         results = []

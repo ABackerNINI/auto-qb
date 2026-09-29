@@ -122,7 +122,7 @@ def test_task_file_naming_and_sections() -> None:
         text = path.read_text(encoding="utf-8")
         assert STATUS_RE.search(text), f"{path.name} 缺少合法的 `**Status:**` 行"
         for section in REQUIRED_SECTIONS:
-            # ❗必须锚到**行首标题**: `section in text` 会被正文里的字面量骗过 ——
+            # !必须锚到**行首标题**: `section in text` 会被正文里的字面量骗过 ——
             # 本档案的日志里正好写了"把 `## 进度日志` 标题丢了"这句, 于是缺章节也判绿(2026-09-22 实测)。
             assert re.search(rf"^{re.escape(section)}\s*$", text,
                              re.M), (f"{path.name} 缺少必备章节 `{section}`(须是行首的 `## ` 标题, 正文里提到不算)")
@@ -310,7 +310,7 @@ def test_memory_bank_instructions_match_current_structure() -> None:
     任务档案格式)**都在 skill 与 `_common.py` 有单点**, 而其中 cap 表是**数值型重复** —— 守卫只钉
     token 不钉数值, 改了源不会红。所以针列表同步换掉了 `## 原始请求` / `## 进度日志`(那是 skill
     里「任务档案规范」的内容), 换成 `CAP_POLICY`(证明它指向机器单点而不是自己抄一张表)。
-    ⚠ **不要退回成"纯指针"**: 本文件是**自动注入**, 而 skill 是**按需触发**加载 —— 纯指针会让
+    WARN: **不要退回成"纯指针"**: 本文件是**自动注入**, 而 skill 是**按需触发**加载 —— 纯指针会让
     规则从「可见」退化成「可触达」, 而这三条铁律对应的失败模式恰恰是"少做一个动作"。
     """
     path = ROOT / ".github" / "instructions" / "memory-bank.instructions.md"
@@ -341,7 +341,7 @@ def test_skill_cap_table_matches_cap_policy() -> None:
     `.github/instructions/memory-bank.instructions.md` 里**两张** cap 表都是手工同步的,
     而当时没有任何守卫盯数值 —— 改了源、忘了表, 全绿。瘦身后那张重复表已删, 剩这一张被钉住。
 
-    ⚠ 只比**数值多集合 + 行数**: 能判红「改了源没改表」与「少写一行」, **判不出**「两行数值互换角色」
+    WARN: 只比**数值多集合 + 行数**: 能判红「改了源没改表」与「少写一行」, **判不出**「两行数值互换角色」
     —— 后者只能靠人读表, 这里不假装守得住。
     """
     if str(SKILL_SCRIPTS) not in sys.path:
@@ -397,10 +397,10 @@ def test_gen_cmd_hints_name_real_tasks() -> None:
     文案("请运行 commands run kb.index")**照做一遍仍然是红的** —— 而提交闸门早就把这两条的
     `--check` 挂上了, 形成"闸门能红、却没有一条能修的命令"。
 
-    三条断言(前两条都拦不住这个缺陷, 只有 ③ 判的是"跑那条命令真的会重建/校验它"):
-      ① 每个 `gen_cmd(root, "<脚本>")` 调用点的脚本名都在表里(新生成脚本忘了登记 ⇒ 退回默认值);
-      ② 表里每个 task id 在 `.commands/` 里真实存在(任务改名/删除后提示不能变成死指针);
-      ③ **提示说跑 `kb.index` 的脚本必须真的出现在 `kb.index` 的 run 列表里**(`kb.check` 同理)
+    三条断言(前两条都拦不住这个缺陷, 只有 3. 判的是"跑那条命令真的会重建/校验它"):
+      1. 每个 `gen_cmd(root, "<脚本>")` 调用点的脚本名都在表里(新生成脚本忘了登记 ⇒ 退回默认值);
+      2. 表里每个 task id 在 `.commands/` 里真实存在(任务改名/删除后提示不能变成死指针);
+      3. **提示说跑 `kb.index` 的脚本必须真的出现在 `kb.index` 的 run 列表里**(`kb.check` 同理)
          —— 这同时钉住了"`kb.index` 的覆盖面 ⊇ 提交闸门判红的生成物集合"这条设计口径。
     """
     if str(SKILL_SCRIPTS) not in sys.path:
@@ -409,7 +409,7 @@ def test_gen_cmd_hints_name_real_tasks() -> None:
 
     table = _common.GEN_CMD_BY_SCRIPT
 
-    # ① 调用点全覆盖
+    # 1. 调用点全覆盖
     call_sites: set[str] = set()
     for path in sorted(SKILL_SCRIPTS.glob("*.py")):
         call_sites |= set(re.findall(r'gen_cmd\(\s*root\s*,\s*"([^"]+)"\s*\)', path.read_text(encoding="utf-8")))
@@ -431,8 +431,8 @@ def test_gen_cmd_hints_name_real_tasks() -> None:
         parts = hint.split()
         assert parts[:2] == ["commands", "run"] and len(parts) >= 3, f"{script} 的提示不是 `commands run <task>`: {hint!r}"
         task_id = parts[2]
-        body = task_body(task_id)  # ② 任务真实存在
-        if task_id == "kb.index":  # ③ 核心: 真的会重建它
+        body = task_body(task_id)  # 2. 任务真实存在
+        if task_id == "kb.index":  # 3. 核心: 真的会重建它
             assert script in body, (
                 f"{script} 的提示说跑 `{task_id}`, 但它的 run 列表里没有 {script} —— "
                 f"用户照做一遍仍然是红的(2026-09-24 实测的缺陷形态)"

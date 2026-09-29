@@ -4,7 +4,7 @@
  * 挂到 window.AQB_SHOWS, 由 app.js 末尾 app.mixin(window.AQB_SHOWS) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
- * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_SHOWS);
+ * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_SHOWS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_SHOWS = {
@@ -119,8 +119,8 @@ window.AQB_SHOWS = {
           const r = await this.waitCmd(resp.cmd_id);
           this.resolveOptimistic(hashes, r.ok);
           /* D2: 与 commands.js 三处保持一致 —— 真值由 `truth` 事件推送, 不再拉全量。
-           * ❗这里原先漏改, 追剧页集行还在走 1500ms 拉取预算, 撤下比种子页慢一大截。
-           * ❗只在成功时标 receipt: 失败那一路是回滚, 标它会把 [perf] 里的路径判据带偏。 */
+           * !这里原先漏改, 追剧页集行还在走 1500ms 拉取预算, 撤下比种子页慢一大截。
+           * !只在成功时标 receipt: 失败那一路是回滚, 标它会把 [perf] 里的路径判据带偏。 */
           if (r.ok && this.cmdStats) this.cmdStats.settleVia = "receipt";
           if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
           else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);

@@ -85,7 +85,7 @@ def test_sanitizer_short_tag_collision_resolved(monkeypatch):
     """碰撞必须被**确定性重派生**解决而不是中止(真机短标签同形是常态, 中止会让抓取跑不起来)
 
     直接打碰撞分支: 把 _shape 固定成同一输出, 逼出碰撞, 再断言两条性质 ——
-    ① 仍单射(两个不同原文拿到不同伪名); ② 碰撞被记账(可观测)。
+    1. 仍单射(两个不同原文拿到不同伪名); 2. 碰撞被记账(可观测)。
     """
     s = _san()
     monkeypatch.setattr(s, "_shape", lambda text, kind, orig, nonce=0: f"zL{nonce % 10}"[:len(text)])
@@ -113,13 +113,13 @@ def test_sanitizer_short_tags_do_not_collide_on_real_data():
 
 def test_sanitizer_path_equivalence_boundaries():
     s = _san()
-    # ① 尾斜杠有无 1:1 保留(不得 rstrip) —— 分隔符可能是 \ 或 /, 只看"是否以分隔符结尾"
+    # 1. 尾斜杠有无 1:1 保留(不得 rstrip) —— 分隔符可能是 \ 或 /, 只看"是否以分隔符结尾"
     a, b = s.path("R:\\Download\\TV\\"), s.path("R:\\Download\\TV")
     assert a.endswith(("/", "\\")) and not b.endswith(("/", "\\")), \
         f"尾斜杠的有无必须 1:1 保留: {a!r} vs {b!r}"
-    # ② 大小写形态 1:1 保留(path_normalize 不做 casefold)
+    # 2. 大小写形态 1:1 保留(path_normalize 不做 casefold)
     assert s.path("R:\\Downloads") != s.path("r:\\downloads"), "大小写不同必须是不同 key"
-    # ③ 不同盘符不得并组 -> 带盘符短令牌
+    # 3. 不同盘符不得并组 -> 带盘符短令牌
     assert s.path("R:\\Download") != s.path("S:\\Download"), "不同盘符不得映射到同一路径"
     # 同一逻辑路径的两种分隔符写法必须收敛到同一伪名(path_normalize 语义)
     assert s.path("R:/Download/PTing") == s.path("R:\\Download\\PTing"), "分隔符写法必须收敛"
@@ -243,7 +243,7 @@ def test_group_conservation_red_on_casefold():
 
 
 def test_group_conservation_red_on_member_path_change():
-    """**红验**(计划 §09 反向对照①): 改掉**多成员组**里一个成员的路径一个字符 -> 判据必须红"""
+    """**红验**(计划 §09 反向对照1.): 改掉**多成员组**里一个成员的路径一个字符 -> 判据必须红"""
     t, f = _toy_corpus()
     san = _san()
     st, sf = _sanitize(t, f, san)

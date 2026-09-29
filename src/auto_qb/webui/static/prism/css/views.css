@@ -353,8 +353,8 @@
  * 长度(在线整格 / 本地与未核实半格) + 线型(未核实点线) + 明暗(本地 50% 兜底) 三重编码;
  * 线色一律 currentColor 跟随上面的档位色, 不引入新令牌。已排除 / 无 HR 不产线(无线 = 没有来源结论),
  * 文案进 title。三套 UI 同口径 —— 改这里时同步 atlas/css/views.css 与 console/css/views.css。
- * ❗两条线都是空 <i>: 绝对定位只给 left:0 而 width:auto 会收缩成 0(整条不可见), 必须显式 width:100%。
- * ❗整格线必须挂 .dur-body(**文字**包裹层)而不是 .m-dur —— 行是 grid, 单元格被拉满整列宽, 挂单元格
+ * !两条线都是空 <i>: 绝对定位只给 left:0 而 width:auto 会收缩成 0(整条不可见), 必须显式 width:100%。
+ * !整格线必须挂 .dur-body(**文字**包裹层)而不是 .m-dur —— 行是 grid, 单元格被拉满整列宽, 挂单元格
  *   上 width:100% 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报); 包裹层是 flex item
  *   (fit-content), 线自然只覆盖「数值 + 要求」这段文字; 挂它也保住了弹窗的整格触发面。 */
 .m-pair.m-dur { position: relative; --dur-pad: 6px; padding-bottom: var(--dur-pad); }
@@ -374,7 +374,7 @@
  * 造成整页跳动; 现改为 .status-strip 行首的同行段 —— 无独立 top/z-index/margin,
  * 无选中时完全不渲染, 有选中时在行内出现(同排不改变行高)。
  * FX-09: 高度必须 ≤ 26px(与 .dist-chip 齐平) —— 它是靠"自然高度不超"来实现同排不改变行高,
- * 只靠 ① 压按钮不够: 段自身的 padding+border 也会超出, 所以两处都锁死。 */
+ * 只靠 1. 压按钮不够: 段自身的 padding+border 也会超出, 所以两处都锁死。 */
 .bulk-inline { display: flex; flex-wrap: nowrap; align-items: center; gap: 0 9px; height: 26px;
   padding: 0 9px 0 8px; border: 1px solid var(--accent-line); border-radius: var(--radius);
   background: linear-gradient(180deg, var(--accent-soft), transparent 70%), var(--bg-card); }
@@ -407,7 +407,7 @@
 
 /* ---------------- 设置页(图形化配置编辑器) ----------------
  * TBL-07: 不再 2560px 居中限宽。
- * ⚠ 2026-09-25: 设置页只剩 Console Hub 一套版式(经典页已移除), 字段行栅格令牌
+ * WARN: 2026-09-25: 设置页只剩 Console Hub 一套版式(经典页已移除), 字段行栅格令牌
  *   (--ce-label-w / --ce-ctl-gap / --ce-row-pad-x)随之退役 —— 它们只被已删的 `.ce-field` 行用;
  *   `--ce-input-max` 保留, 仍被 `.ce-note`(统一注记)引用。 */
 .ce-page { padding: 16px 12px calc(24px + var(--statusbar-h, 34px)); display: flex; flex-direction: column;
@@ -693,8 +693,8 @@
  * 站数。芯片类(站点/标签/分类)按决策 D6-A **不跟随**行状态色: 芯片表达的是**成员级**语义
  * (组内不同站点状态可不同), 强行覆盖会把这层信息抹平。
  *
- * R12(用户要求, 与星图同口径): ① 进度/状态两列文字纳入同一套规则(此前恒为 --fg-muted 灰);
- * ② paused/other 不再保持默认前景(近白), 改用中性中间调 --paused —— 即"已暂停"状态文字那支色,
+ * R12(用户要求, 与星图同口径): 1. 进度/状态两列文字纳入同一套规则(此前恒为 --fg-muted 灰);
+ * 2. paused/other 不再保持默认前景(近白), 改用中性中间调 --paused —— 即"已暂停"状态文字那支色,
  * 与 FX-06 的徽标/站点芯片同一族。 */
 .group-row.s-seeding .g-name-text, .group-row.s-seeding .g-stat:not(.zero),
 .group-row.s-seeding .g-save-path, .group-row.s-seeding .m-hash, .group-row.s-seeding .g-count,
@@ -739,9 +739,9 @@
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
 .drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
 /* 字段行: 图标 + 小字字段名 + 等宽值(超长值看下方 .wide 块行)
- * FX-22 重构三件: ① 长值行升格为**块行**(标签一行, 值独占下一行) —— 旧写法所有行都是
- * "16px / 112px / 1fr" 三列 + anywhere 硬断, 长路径被切成两行且与邻行参差; ② 图标按语义着色
- * (.ico-t-*, 不再是 48 行全灰); ③ 值区右侧可挂操作按钮(复制/打开目录)。 */
+ * FX-22 重构三件: 1. 长值行升格为**块行**(标签一行, 值独占下一行) —— 旧写法所有行都是
+ * "16px / 112px / 1fr" 三列 + anywhere 硬断, 长路径被切成两行且与邻行参差; 2. 图标按语义着色
+ * (.ico-t-*, 不再是 48 行全灰); 3. 值区右侧可挂操作按钮(复制/打开目录)。 */
 .f-rows { display: flex; flex-direction: column; font-size: 13px; }
 .f-row { display: grid; grid-template-columns: 16px 112px minmax(0, 1fr) auto; gap: 10px;
   align-items: flex-start; padding: 6px 0; border-bottom: 1px solid var(--hairline); }
@@ -794,7 +794,7 @@
   border-right: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
 .hr-pop.below .hp-arrow { display: block; top: -5.5px;
   border-left: 1px solid var(--border-strong); border-top: 1px solid var(--border-strong); }
-/* ① 结论行: 档位色结论短语 + 生命周期 chip(紧凑, 不占大块; 来源章不渲染 —— 短语已含来源) */
+/* 1. 结论行: 档位色结论短语 + 生命周期 chip(紧凑, 不占大块; 来源章不渲染 —— 短语已含来源) */
 .hp-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .hp-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
 .hp-dot.danger { background: var(--hr-pending); }
@@ -809,7 +809,7 @@
 .hp-cyc { font-size: 10px; line-height: 1.5; border: 1px solid transparent; border-radius: 3px;
   padding: 0 5px; white-space: nowrap; }
 .hp-cyc.ended { color: var(--fg-muted); background: var(--surface-1); border-color: var(--border-soft); }
-/* ② 进度轨道: 本地粗轨(6px, 已做种/要求) + 站点细轨(3px, 还需/要求); 已过段 = 档位色, 未达段 = 轨道底色 */
+/* 2. 进度轨道: 本地粗轨(6px, 已做种/要求) + 站点细轨(3px, 还需/要求); 已过段 = 档位色, 未达段 = 轨道底色 */
 .hp-gauge { margin-top: 11px; display: grid; gap: 5px; }
 .hg-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hg-legend { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--fg-dim); }
@@ -838,7 +838,7 @@
 .fill.unknown { background: var(--paused); }
 .hg-rail.site .fill { opacity: .55; }
 .hg-site { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
-/* ②' 档位徽记: 无时间要求(身份层放行/未核实/未配时长)时轨道收起, 不留空轨 */
+/* 2.' 档位徽记: 无时间要求(身份层放行/未核实/未配时长)时轨道收起, 不留空轨 */
 .hp-badge { margin-top: 11px; display: flex; width: max-content; align-items: center; gap: 7px;
   padding: 6px 10px; border-radius: var(--radius-sm); font-size: 11.5px; font-weight: 600; }
 .hp-badge svg { width: 14px; height: 14px; flex: 0 0 auto; }
@@ -846,14 +846,14 @@
 .hp-badge.failed { color: var(--error); background: var(--error-soft); border: 1px solid var(--error-line); }
 .hp-badge.safe { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-line); }
 .hp-badge.unknown { color: var(--fg-muted); background: var(--surface-1); border: 1px solid var(--border-soft); }
-/* ③ 数值条: mono 紧排 kv(仅站点侧值 —— 本地值表格行可见, 不上弹窗) */
+/* 3. 数值条: mono 紧排 kv(仅站点侧值 —— 本地值表格行可见, 不上弹窗) */
 .hp-kv { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px 6px; }
 .kv { display: inline-flex; align-items: baseline; gap: 5px; padding: 2.5px 8px;
   border-radius: var(--radius-sm); background: var(--surface-1); }
 .kv i { font-style: normal; font-size: 10.5px; color: var(--fg-dim); white-space: nowrap; }
 .kv b { font-family: var(--font-mono); font-variant-numeric: tabular-nums;
   font-weight: 600; font-size: 11.5px; color: var(--fg-soft); white-space: nowrap; }
-/* ④ 底部: 依据原文 + 站点滞后角注 */
+/* 4. 底部: 依据原文 + 站点滞后角注 */
 .hp-foot { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-soft); display: grid; gap: 3px; }
 .hp-reason, .hp-lag { display: flex; align-items: flex-start; gap: 6px; }
 .hp-reason svg, .hp-lag svg { width: 12px; height: 12px; flex: 0 0 auto; margin-top: 2px; color: var(--fg-dim); }

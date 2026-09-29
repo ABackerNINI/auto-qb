@@ -48,11 +48,11 @@ def _fs_real(p: str) -> str:
     (infra/file_access SEC-1: 容器侧 realpath 跳出挂载根按 miss → 三态消费点语义化 404,
     scandir 逃逸条目直接剔除), 本函数只负责逻辑空间白名单比较的归一。
 
-    ❗实现内部先剥 `\\\\?\\` 前缀: 比较双方可能一侧带前缀(如 `os.scandir` 家族返回值)、
+    !实现内部先剥 `\\\\?\\` 前缀: 比较双方可能一侧带前缀(如 `os.scandir` 家族返回值)、
     一侧不带 —— 不剥就会因前缀差异被判成"越界", 实测后果是**子目录被全部过滤掉**
     (目录树恒空)。
 
-    ⚠ 已知限制(沿用, 仅 Local): 对 >MAX_PATH 的路径 realpath **静默退化成 abspath**(不抛错)
+    WARN: 已知限制(沿用, 仅 Local): 对 >MAX_PATH 的路径 realpath **静默退化成 abspath**(不抛错)
     ⇒ 长路径上的符号链接/junction 解析不可用, 逃逸防护退化为词法比较(Mapped 无此限制)。
     """
     return file_access.get_file_access().realpath_lexical(p)
@@ -84,8 +84,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         """已知目录聚合(DLG-04, 决策 D3): 添加种子对话框「保存位置」下拉的推荐目录集
 
         浏览器无法枚举本地目录树, 聚合两组已知目录排序去重后返回, 前端仍允许自由输入:
-        ①当前分组索引各组 key 首元(store.groups 的 key = (规范化 save_path, 文件列表), 组空即删,
-        无陈旧条目); ②store 现有种子的 save_path(经 path_normalize 归一分隔符后参与去重, 与组 key
+        1.当前分组索引各组 key 首元(store.groups 的 key = (规范化 save_path, 文件列表), 组空即删,
+        无陈旧条目); 2.store 现有种子的 save_path(经 path_normalize 归一分隔符后参与去重, 与组 key
         同径不重复出现)。只读快照, 无副作用(不触发视图重建/不投命令)。
         """
         manager.touch_web_client()
@@ -97,7 +97,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         """目录浏览的**允许根**集合(R10-11): 与 /api/paths 同源的已知保存路径。
 
         白名单只由服务端从自己的快照派生, 不接受客户端传参 —— 这是文件系统读端点的第一道闸门。
-        ❗roots 恒为**逻辑空间**路径(qB 报回的 save_path) —— 与映射无关, 见报告 §04。
+        !roots 恒为**逻辑空间**路径(qB 报回的 save_path) —— 与映射无关, 见报告 §04。
         """
         roots = {path_normalize(rec.save_path or "") for rec in manager.store.by_hash.values() if rec.save_path}
         return sorted(r for r in roots if r)
@@ -120,13 +120,13 @@ def build_router(ctx: WebContext) -> APIRouter:
         物理上做不到, 结果等价的做法只能是服务端给路径。
 
         **安全边界**(本项目唯一新增的文件系统读能力, 后续改动必须保持):
-        ① 只列**目录**, 绝不返回文件条目、不读文件内容;
-        ② 允许根白名单 = 已知保存路径(与 /api/paths 同源, 逻辑空间); 路径经 _fs_real 规范化后
+        1. 只列**目录**, 绝不返回文件条目、不读文件内容;
+        2. 允许根白名单 = 已知保存路径(与 /api/paths 同源, 逻辑空间); 路径经 _fs_real 规范化后
            必须落在某个根之内(相等或为子目录), 否则 403 —— 同时挡掉 `..` 穿越;
-        ③ 逐条子目录同样过白名单 -> 指向根外的符号链接/junction 不会出现在列表里(逃逸防护;
+        3. 逐条子目录同样过白名单 -> 指向根外的符号链接/junction 不会出现在列表里(逃逸防护;
            Local 实现靠 realpath 解析符号链接, Mapped 实现由包装层剔除容器侧逃逸挂载根的
            条目(SEC-1) —— 下载目录内指向挂载外的符号链接既不出现、点进去也按「不可判定」404);
-        ④ 鉴权沿用全局 require_token 依赖(本机免鉴权同样放行, 与其它端点一致)。
+        4. 鉴权沿用全局 require_token 依赖(本机免鉴权同样放行, 与其它端点一致)。
         path 为空 = 返回允许根列表(前端首屏入口)。
 
         扫描与子路径构造全程在**逻辑空间**进行(包装层把 entry 译回逻辑空间, 报告 §04):
@@ -168,9 +168,9 @@ def build_router(ctx: WebContext) -> APIRouter:
     def api_fs_mkdir(body: dict = None):
         """在允许根内的目录下新建文件夹(目录浏览器的"新建"按钮)。
 
-        安全边界与 /api/fs/dirs 同源, 另加: ① name 必须是**单层名字**(不含分隔符、不为 . / ..),
-        不接受任何路径成分; ② 已存在同名目录直接返回(幂等), 同名**文件**报 409;
-        ③ 这是本项目唯一的文件系统**写**能力, 不扩展到重命名/删除/递归。
+        安全边界与 /api/fs/dirs 同源, 另加: 1. name 必须是**单层名字**(不含分隔符、不为 . / ..),
+        不接受任何路径成分; 2. 已存在同名目录直接返回(幂等), 同名**文件**报 409;
+        3. 这是本项目唯一的文件系统**写**能力, 不扩展到重命名/删除/递归。
         不触碰任务队列与 state_file -> 不违反单一写线程假设。
 
         容器(Mapped)实现下 mkdir 真实执行: 挂载点可写(:rw)即成功, 只读挂载由 OS 的

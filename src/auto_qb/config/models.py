@@ -70,7 +70,7 @@ class HrChannelConfig:
     """本地取数通道: 浏览器扩展拉清单/回传数据的本地端点(计划 §6)
 
     enabled: 本实例是否有浏览器扩展可驱动; 默认 false(保守), 装上扩展后开启。
-      ⚠本机有浏览器的实例推荐都启用 —— 抓取能力的硬边界是「本机有没有装扩展的浏览器」,
+      WARN:本机有浏览器的实例推荐都启用 —— 抓取能力的硬边界是「本机有没有装扩展的浏览器」,
       而不是名额(端点只听 127.0.0.1, 浏览器只能连本机 loopback ⇒ 跨机器配了也驱动不了);
       多通道不会双倍访问站点: 同站点靠「文件锁 + 有效期复用」保证只被访问一次。
     port: 监听端口; 仅监听 127.0.0.1。同机多实例必须各用不同端口(被占 => 启动即报错)
@@ -109,7 +109,7 @@ class HrCheckConfig:
     min_interval: float = 90.0  # 相邻两次站点请求最小间隔(秒), 页面 + 下载统一; 抖动只向上 +0~25%
     max_requests_per_day: int = 240  # 站点级日额保险(全部请求合计, 零点重置); 只防长跑超量
     max_pages_per_wave: int = 30  # 单波页数上限(安全阀: 防改版/异常导致翻页失控); 到顶该档截断
-    allow_window: str = ""  # 仅该时段取数 "HH:MM-HH:MM"(可跨午夜); 空 = 全天。❗与 notify.quiet_hours 语义相反
+    allow_window: str = ""  # 仅该时段取数 "HH:MM-HH:MM"(可跨午夜); 空 = 全天。!与 notify.quiet_hours 语义相反
     shared_dir: str = ""  # 空 = 多实例不共享(站点文件落 <data_dir>/hr/); 多实例互通时指向同一目录
     channel: HrChannelConfig = field(default_factory=HrChannelConfig)
     # 站点接入(计划 26-09-27-1318 REV2): 键 = 内置站点档案 id(config/site_presets.py),
@@ -125,7 +125,7 @@ class SiteHrCheckConfig:
     enabled: 启用即管 —— 判定语义硬编码(命中考察中管束 / 终态放行 / 无证据本地兜底),
     不再有 mode 分叉与 unknown_policy 撤退路径。partial/all 差异是站点事实(有没有清单页),
     归档案 listing 字段: 全站型(listing=none)不取数, 判定恒走行 4 本地兜底。
-    ❗enabled 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None, check_hr_condition 恒 False,
+    !enabled 时该站 `hr` 段必填 —— 否则 tracker_conf.hr 为 None, check_hr_condition 恒 False,
       整站保护静默失效(配置期 fail-fast 拦下)。
 
     配置源在 hr_check.sites.<档案 id>; adapter / hr_page_url / download_path / page_param /
@@ -203,7 +203,7 @@ class WebConfig:
     """WEB UI(辅种管理)配置
 
     enabled: 总开关(False 时不启动 Web 服务器, 保守默认)
-    host: 监听地址 —— 默认仅本机; ⚠️ 显式改为 0.0.0.0 会将可删除种子的管理接口暴露到网络,
+    host: 监听地址 —— 默认仅本机; WARN: 显式改为 0.0.0.0 会将可删除种子的管理接口暴露到网络,
     建议配合反向代理与鉴权使用
     port: 监听端口
     token: 访问密钥(Bearer 鉴权); 留空 = 首次启动随机生成并持久化到 data_dir/web.token

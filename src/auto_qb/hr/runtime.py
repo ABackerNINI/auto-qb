@@ -8,7 +8,7 @@
   但它 `allow_fetch=False`: 只读共享站点文件(别人抓的), 顺手把视图发布出来给主循环消费。
   这正是多实例分工(who 有浏览器谁抓), 也是「跨机器实例只能只读」的落地形态。
 
-❗共享目录引导(计划 §7): 功能开启但 `shared_dir` 为空 ⇒ 记一条 INFO —— 程序**无法可靠判断
+!共享目录引导(计划 §7): 功能开启但 `shared_dir` 为空 ⇒ 记一条 INFO —— 程序**无法可靠判断
   「我是不是多实例」**, 故只引导不强求, 不阻断启动, 由用户决定是否配置。
 """
 import logging
@@ -118,7 +118,7 @@ class HrRuntime:
             self.worker.start()
         sites = ", ".join(self.service.enabled_sites()) if self.service else ""
         mode = "端点 + 取数" if self.fetch_enabled else "只读共享(本实例无取数通道)"
-        # ❗生命周期消息一律 INFO: 本仓 WARNING 以上会被 notify 推成**系统通知**, 而启动/关闭是
+        # !生命周期消息一律 INFO: 本仓 WARNING 以上会被 notify 推成**系统通知**, 而启动/关闭是
         # 程序自己决定要发生的事 —— 用 WARNING 只会让用户每次重启吃三条通知(2026-09-24 用户实报)。
         logger.info(f"HR 在线核实已启动({mode}): 站点 {sites}; 站点文件目录 {self._sites_dir()}")
         return True
@@ -126,7 +126,7 @@ class HrRuntime:
     def _advise_endpoint_depth(self) -> None:
         """端点纵深提示(计划 26-09-27-1815 §2 5.2, P3): extension_id 留空 ⇒ 第二道防线缺席
 
-        ❗有意用 WARNING(会推系统通知): 与 shared_dir 的引导不同, 这是一条**需要用户行动**的
+        !有意用 WARNING(会推系统通知): 与 shared_dir 的引导不同, 这是一条**需要用户行动**的
         安全提示 —— 配好 extension_id 后就不再出现; 「每次启动提醒」正是让用户去配的机制。
         token 留空自动生成(M2 已实现)与 token: 123456 应改由用户手改的口径写进 configuration.md,
         config.yml 是用户生产配置(红线), 程序侧只提示不代改。
@@ -143,10 +143,10 @@ class HrRuntime:
     def stop(self) -> None:
         """停取数线程 -> 停端点
 
-        ⚠ 线程可能正持着站点锁等扩展回传 —— `HrWorker.stop()` 会**先叫停取数通道**再 join,
+        WARN: 线程可能正持着站点锁等扩展回传 —— `HrWorker.stop()` 会**先叫停取数通道**再 join,
         否则一次正常关停要白等到 `channel.request_timeout`(默认 180s), 期间该站点锁死、
         进程退出也被拖住。
-        ⚠ 同理, 线程也可能正睡在频控间隔里(`sleeper`): 先置中断位再停, 否则要等它睡完。
+        WARN: 同理, 线程也可能正睡在频控间隔里(`sleeper`): 先置中断位再停, 否则要等它睡完。
         """
         self._sleep_stop.set()
         if self.worker is not None:
@@ -160,7 +160,7 @@ class HrRuntime:
     def apply(self, old: HrCheckConfig) -> None:
         """配置热重载(L1): `channel` 段与 `shared_dir` 变了要**重挂**(先停旧、等线程退出、再启新)
 
-        ❗调用方(QbManager.apply_new_config)**每次热重载都调本方法, 不限 L1**: 站点接入
+        !调用方(QbManager.apply_new_config)**每次热重载都调本方法, 不限 L1**: 站点接入
         (hr_check.sites / trackers.X.hr_check)是 L0 级变更, 只挂在 L1 分支的话, 「启动时无站点、
         热接入第一个站点」就永远起不来取数线程(2026-09-29 实报「取数线程未启动」)。相应地,
         HR 相关配置无实质变化时在下面短路返回 —— 无关配置的保存不重启取数线程。
@@ -189,7 +189,7 @@ class HrRuntime:
             self.stop()
             return
         # L0 字段变化: 用新配置重建服务与线程, 端点保持不变。
-        # ❗线程要收敛到「enabled ⇒ 在跑」: worker 不在(启动时无站点接入, 线程从未建过)也要补启动
+        # !线程要收敛到「enabled ⇒ 在跑」: worker 不在(启动时无站点接入, 线程从未建过)也要补启动
         # —— 站点接入经热重载到达这里时, 这是它被建出来的唯一机会; 走到这里 enabled 已为真。
         if self.worker is not None:
             self._sleep_stop.set()  # 线程可能正睡在频控间隔里: 先打断再 join(否则白等它睡完)
@@ -294,7 +294,7 @@ class HrRuntime:
             persist=True,
             # 无通道实例只读共享数据(别人抓的), 不发起任何请求
             allow_fetch=self.fetch_enabled,
-            # ❗生产也要等满间隔(计划 §8「连分钟级抓取也在锁内」): 不等就没法在一次刷新里发出
+            # !生产也要等满间隔(计划 §8「连分钟级抓取也在锁内」): 不等就没法在一次刷新里发出
             # 第二个请求 ⇒ 「先页面后下载」的顺序会把下载饿死(2026-09-25 实报)。等待在取数线程
             # 内发生, 卡不住主循环 2s 节拍; 单次/本轮两个上限见 service 的常量。
             sleeper=self.sleeper,
@@ -355,7 +355,7 @@ class HrRuntime:
         # 「多实例」判据, 程序无法可靠判断(主计划 §7 已注明), 强行升级会对全部单实例用户告警。
         logger.info(
             "hr_check.shared_dir 未配置: HR 站点文件落在 <data_dir>/hr/(单实例足够)。"
-            "❗若同一账号还跑了其它实例而没共享目录, 各实例的频控账本各一份 ⇒ 站点访问翻倍; "
+            "!若同一账号还跑了其它实例而没共享目录, 各实例的频控账本各一份 ⇒ 站点访问翻倍; "
             "多实例共享时请把它指向所有实例都能看到的同一目录(网络盘可以, 云同步盘不可用 —— "
             "锁与原子替换都不保证), 并让各实例用不同的 hr_check.channel.port"
         )

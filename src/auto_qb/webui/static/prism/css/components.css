@@ -196,9 +196,9 @@
 .ctx-item:hover { background: var(--bg-hover); }
 .ctx-item .ico { color: var(--fg-dim); }
 /* CTX-04: hover 只提亮**该项自己**那颗图标 —— 两处刻意的写法, 缺一就会回到"整片图标变灰":
- * ① `>` 限定直接子级: 子面板(.ctx-sub)是父项的 DOM 后代, 用后代选择器时 hover 父项会连子面板
+ * 1. `>` 限定直接子级: 子面板(.ctx-sub)是父项的 DOM 后代, 用后代选择器时 hover 父项会连子面板
  *    的图标一起拉灰(用户报的"二级菜单图标 hover 变灰"就是这条);
- * ② `:where(:hover)` 把 :hover 的特异性压成 0 -> 本条只有 0,2,0, 与下面那批语义色规则同重,
+ * 2. `:where(:hover)` 把 :hover 的特异性压成 0 -> 本条只有 0,2,0, 与下面那批语义色规则同重,
  *    按源码顺序让位给语义色 => 有色图标 hover 时保持本族色(变灰等于把语义色抹掉)。 */
 .ctx-item:where(:hover) > .ico { color: var(--fg-muted); }
 .ctx-item .ico-play { color: var(--green); }
@@ -330,7 +330,7 @@
  * 状态纪律: hover 换底色+描边 / 按下 scale(.98) / 键盘聚焦 ring / 禁用 .45 / 加载中用 .spin 图标。
  * 方案定案与全状态陈列见 memory-bank/plans/26-09-26-0538-webui-button-3-proposals.html;
  * 星图侧为 B 方案(胶囊统一)配方, 两套 UI 语义类名一致、外观各按其设计语言。
- * ⚠ <button> 一律显式声明 color(UA 默认色跟随系统配色, 见 pitfalls/web-ui/layout-css.md)。 */
+ * WARN: <button> 一律显式声明 color(UA 默认色跟随系统配色, 见 pitfalls/web-ui/layout-css.md)。 */
 .bt { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
   height: 34px; padding: 0 16px; border-radius: 5px; border: 1px solid var(--border-strong);
   background: transparent; color: var(--fg); font-size: 13px; font-weight: 600; cursor: pointer;

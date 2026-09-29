@@ -11,7 +11,7 @@ global 任务按 config.interval 周期执行: 读取 history_traffic.dat, 按�
   (每轮重读当前值, 手动取消后自动恢复接管)
 - 手动保护的**日志节流**: 手动值是持续状态(用户不改就一直命中), 故进入该状态(或手动值变了)
   记一条 INFO, 之后同一状态每 `_MANUAL_REMIND_GAP` 才再提醒一次, 被去重的轮次降 DEBUG ——
-  逐轮 INFO 会刷屏(判据见 pitfalls/ops/alert-levels.md ②④); 可见性另由 Web UI 的
+  逐轮 INFO 会刷屏(判据见 pitfalls/ops/alert-levels.md 2.4.); 可见性另由 Web UI 的
   `reasons`(code=manual)承载, 不依赖这行日志
 - 数据源文件缺失/整体无法解析 -> warning, 本轮不动限速(任务保留);
   dat 有行但当前 period 窗口内无数据(如今天行尚未写入) -> 累计视为 0, 自动回落放宽
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 _CN_DIGITS = "零一二三四五六七八九"
 
 #: 手动保护命中的**周期提醒**间隔(秒): 同一状态在此期间只说明白一次, 其余轮次降 DEBUG。
-#: 固定常量而非配置键 —— 这是日志节流, 不是行为开关(判据见 pitfalls/ops/alert-levels.md ④)。
+#: 固定常量而非配置键 —— 这是日志节流, 不是行为开关(判据见 pitfalls/ops/alert-levels.md 4.)。
 _MANUAL_REMIND_GAP = 3600.0
 
 
@@ -198,7 +198,7 @@ class SpeedCurveMixin:
 
         手动值是**持续状态** —— 用户不改 qB 里那个奇数限速就会一直命中, 逐轮记 INFO 等于同一行
         刷屏(实测 `interval: 10M` 下每天上百条, 且永远不停)。判据见 pitfalls/ops/alert-levels.md
-        ②「同一根因只说明白一次」与 ④「持续状态不静默消失: 按周期再提醒, 被去重的轮次留 DEBUG」:
+        2.「同一根因只说明白一次」与 4.「持续状态不静默消失: 按周期再提醒, 被去重的轮次留 DEBUG」:
         进入该状态(或手动值变了)立即记一条 INFO, 之后同一状态每 `_MANUAL_REMIND_GAP` 再提醒一次。
 
         可见性不依赖这行日志: Web UI 的 `reasons`(code=manual)已显示锁图标与"命中/实际"两值。

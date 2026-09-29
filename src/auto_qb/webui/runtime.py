@@ -25,7 +25,7 @@
   Web 线程**只读**;`ensure_*` 的「判脏 → 重建 → 取值」全程持锁, 保证四份视图同轮。
 - `wake()` / 唤醒事件**不在这里**: 它是主循环的等待原语(托盘 UI 停止时也要用), 归核心域。
 
-❗「四视图同轮发布」是硬约束: 四份视图共用 `group_view_ver` 一个版本号回传, 任何一份漏建
+!「四视图同轮发布」是硬约束: 四份视图共用 `group_view_ver` 一个版本号回传, 任何一份漏建
 或跨轮混拼, 前端都会把陈旧数组当成新数据换上去(2026-09-18 实测事故)。新增视图只挂
 `_publish_locked`, 不要在调用点各建一部分。
 """
@@ -115,7 +115,7 @@ class WebUIRuntime:
         self.speed_totals: dict = {"dlspeed": 0, "upspeed": 0}
         # ---- 事件推送(SSE /api/events) ----
         # 每个订阅者一个**有界**队列: 主循环侧只 put_nowait, 队列满就丢(推送是加速手段,
-        # 丢了只是退化成轮询, 不是错误)。❗主循环**绝不直接写 socket** —— 本项目头号教训:
+        # 丢了只是退化成轮询, 不是错误)。!主循环**绝不直接写 socket** —— 本项目头号教训:
         # 搜索索引单次 500 条文件 API 曾占满主循环, 导致命令排队数秒。
         self._subscribers: list = []
         self._sub_lock = threading.Lock()
@@ -146,7 +146,7 @@ class WebUIRuntime:
     def notify(self, etype: str, payload: dict) -> int:
         """广播一条事件; 返回送达的订阅者数
 
-        ❗必须**非阻塞**: 调用点可能在主循环线程(且 `_publish_locked` 还持有 view_lock)。
+        !必须**非阻塞**: 调用点可能在主循环线程(且 `_publish_locked` 还持有 view_lock)。
         这里只做 put_nowait, 慢消费者丢事件(它下一轮轮询会补上)。
         """
         ev = {"type": etype, "payload": payload, "ts": time.time()}
@@ -198,7 +198,7 @@ class WebUIRuntime:
         例外: reannounce 只发指令并登记确认跟踪(reannounce_pending), 回执由 check_pending()
         在 tracker 确认后写入 —— "已发送"不等于"汇报成功"; bulk/add 的回执由 handler 聚合写。
 
-        ❗写序号必须在写回执**之前**自增: 前端拿到回执会立刻重取只读端点(如改完分类重取
+        !写序号必须在写回执**之前**自增: 前端拿到回执会立刻重取只读端点(如改完分类重取
         /api/categories), 顺序反过来会让那一瞬的读命中旧写序号对应的缓存键。
         """
         host = self._host
@@ -319,8 +319,8 @@ class WebUIRuntime:
     def flush_truths(self) -> None:
         """直查真值, 落地了就推 `truth` 事件; 未落地继续等(上限 TRUTH_PUSH_CAP_MS)
 
-        ❗**必须无条件调用**(哪怕本轮没跑补刷新): 漏调会让前端一直挂着乐观值。
-        ❗超时**不推**: 推一个未落地的真值 = 让前端采纳命令前的旧值 ⇒ 弹回。
+        !**必须无条件调用**(哪怕本轮没跑补刷新): 漏调会让前端一直挂着乐观值。
+        !超时**不推**: 推一个未落地的真值 = 让前端采纳命令前的旧值 ⇒ 弹回。
           那种情况交给前端超时回滚, 且必须有明确 toast(不能静默)。
         """
         if not self.truth_pending:
@@ -356,7 +356,7 @@ class WebUIRuntime:
         与 set_result 里的 wait_ms / exec_ms 合起来是"点下去到真值进快照"的三段归因。
         """
         ms = round((time.time() - t0) * 1000, 1)
-        # ❗正常耗时只打 DEBUG: 每条命令都会跑一次补刷新, 全打 INFO 会把日志刷满 ——
+        # !正常耗时只打 DEBUG: 每条命令都会跑一次补刷新, 全打 INFO 会把日志刷满 ——
         #   而现在真值走直查、撤下也不再等它, 它已经不在用户可见的延迟链路上。
         #   只有**异常慢**才升到 WARNING(那时它确实会拖慢下一次视图数据的新鲜度)。
         if ms > CMD_SLOW_MS:
@@ -391,18 +391,18 @@ class WebUIRuntime:
         self.results[cmd_id] = rec
         # 事件驱动(P2): 回执**主动推**给前端, 前端不必再轮询 /api/cmd/{id}。
         # 轮询退避 0→150→300→500ms 的粒度是撤下延迟的一部分, 推送把它压到 ~1ms。
-        # ❗必须带上 cmd_id —— 前端按它匹配自己那条命令(多个命令可能同时在途)。
+        # !必须带上 cmd_id —— 前端按它匹配自己那条命令(多个命令可能同时在途)。
         self.notify("cmd", {**rec, "cmd_id": cmd_id})
 
     def defer_receipt(self, cmd_id: str, cmd: str, args: dict, timing: dict) -> None:
         """回执**立即**写 + 真值登记为"稍后推"(2026-09-20 D2 定案)
 
-        ❗为什么不再"扣住回执等真值": 真机实测 qB 把状态翻过来要 **1258ms**, 而命令执行
+        !为什么不再"扣住回执等真值": 真机实测 qB 把状态翻过来要 **1258ms**, 而命令执行
           只要 2.7ms —— 扣着回执等, 撤下就被 qB 钉死在 1.25s+(实测撤下 2947ms)。
           拆成两步:
-            ① 回执立刻发(只表示"命令已执行"), 前端据此**结束压暗** ⇒ 撤下降到 10~20ms;
-            ② 真值继续直查, 落地了再推 `truth` 事件, 前端据此结束"值覆盖"。
-        ❗回执**不带 truth**: 带上未落地的真值 = 让前端采纳命令**前**的旧值 ⇒ 弹回
+            1. 回执立刻发(只表示"命令已执行"), 前端据此**结束压暗** ⇒ 撤下降到 10~20ms;
+            2. 真值继续直查, 落地了再推 `truth` 事件, 前端据此结束"值覆盖"。
+        !回执**不带 truth**: 带上未落地的真值 = 让前端采纳命令**前**的旧值 ⇒ 弹回
           (4df80dc 那条红线)。真值只走 `truth` 事件, 且只有落地了才推。
         """
         self.set_result(cmd_id, "ok", timing=timing)
@@ -416,7 +416,7 @@ class WebUIRuntime:
     def _truth_landed(cmd: str, args: dict, truth: Optional[dict]) -> bool:
         """真值是否已**落地**(命令的效果是否已经在种子状态上体现)
 
-        ❗与"命令执行成功"是两回事: `torrents/resume` 返回 200 时 qB 可能还没翻状态,
+        !与"命令执行成功"是两回事: `torrents/resume` 返回 200 时 qB 可能还没翻状态,
         补刷新读到的还是命令**前**的 paused。此时若把回执发出去, 回执里的真值就是旧值 ——
         前端一旦采纳就会把行改回「已暂停」, 用户看到"乐观做种 → 弹回暂停 → 2 秒后变做种"
         (2026-09-20 真机回归)。故这里在服务端**等真值落地**再发回执, 前端拿到的必然是自洽的。
@@ -453,14 +453,14 @@ class WebUIRuntime:
     def _affected_truth(self, cmd: str, args: dict) -> Optional[dict]:
         """受影响种子的**当前真值**({hash: {"kind": ...}}) —— **直查 qB, 不读同步快照**
 
-        ❗为什么必须直查(2026-09-20 定案):
+        !为什么必须直查(2026-09-20 定案):
           `store.by_hash` 来自 `/sync/maindata` **同步快照**, 按 qB 的节奏刷新 —— 真机实测命令后
           要等 6 轮 / **1362ms** 才在上面看到新状态(而命令本身只要 8.4ms), 这个数与
           `sync_interval = 1.5 # 与 qB 自带 WebUI(1500ms)同量级` 几乎重合 ⇒ 滞后来自快照刷新节奏。
           拿快照当"命令后的真值"就会读到命令**前**的旧值 —— 这正是"撤下要等 3s"的根源。
           改走 `torrents/info` 直查, 拿到的是 qB 的**实时**状态。
 
-        ❗取不到就返回 **None（不回落快照）**: 回落会把"读不到"伪装成"读到了旧值",
+        !取不到就返回 **None（不回落快照）**: 回落会把"读不到"伪装成"读到了旧值",
           而旧值正是要消灭的东西。没有真值时前端保持乐观/等待, 语义更干净。
         """
         hashes = self._affected_hashes(cmd, args)
@@ -505,7 +505,7 @@ class WebUIRuntime:
                 " 执行大=qB API 慢; 前端再快也盖不住这一段(乐观 UI 只遮住回执之前的一半)"
             )
         else:
-            # ❗正常耗时只打 DEBUG: 每条命令都打, 全进 INFO 会把日志刷满 ——
+            # !正常耗时只打 DEBUG: 每条命令都打, 全进 INFO 会把日志刷满 ——
             #   常态下的耗时看前端 `[perf]` 那一行即可(五段更全), 异常慢才由上面升 WARNING。
             logger.debug(msg)
 

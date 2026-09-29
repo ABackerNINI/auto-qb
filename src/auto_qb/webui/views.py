@@ -4,7 +4,7 @@
 **构建**: 每个 `_build_*` 都是纯读(读 store / config 产出 dict), 不碰快照、版本号与锁 ——
 那些归 `web_runtime.WebUIRuntime`(门面), 由它调本模块的构建器并在同一临界区内发布。
 
-❗新增视图必须挂进 `WebUIRuntime._publish_locked`, 不要在调用点各建一份: 四份视图共用
+!新增视图必须挂进 `WebUIRuntime._publish_locked`, 不要在调用点各建一份: 四份视图共用
 一个版本号回传, 漏建一份会让前端把陈旧数组当成新数据换上去(2026-09-18 实测事故)。
 
 依赖的宿主属性:
@@ -84,7 +84,7 @@ _TRACKER_ERROR_STATUSES = frozenset(
 _VIRTUAL_TRACKER_PREFIXES = ("**", "[DHT]", "[PeX]", "[LSD]")
 
 # 集节点聚合状态优先级: 错误 > 下载 > 校验 > 做种 > 暂停 > 其它(前端按 state 着色)
-# ❗做种必须排在**暂停之前**: 组/集内"部分暂停部分做种中"是常态(整组只有个别站点被暂停),
+# !做种必须排在**暂停之前**: 组/集内"部分暂停部分做种中"是常态(整组只有个别站点被暂停),
 #   取 paused 会让整个做种中的行变成灰的(2026-09-21 用户报"辅种页状态色错误")。
 #   与前端 `shared/app.js::STATE_RANK` 逐项一致由 tests/test_web.py 静态守阵机械比对。
 _SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "seeding": 3, "paused": 4, "other": 5}
@@ -98,7 +98,7 @@ VIEW_ARRAYS = {
     # 种子页: 全部种子一行一条的平铺数组
     "torrent": ("torrents", ),
     # 追剧页: 剧→季→集聚合 + **成员索引**。
-    # ❗shows 里的 members 只是一串 hash(见前端 memberByHash 注释: 明细成员经索引取, 不随 shows
+    # !shows 里的 members 只是一串 hash(见前端 memberByHash 注释: 明细成员经索引取, 不随 shows
     #   重复回传), 而索引正是 groups + singles 拼出来的 ⇒ 只回 shows 时前端索引为空,
     #   decoratedShows 的成员解析全部落空: **刷新后停在追剧页会得到一张永久空表**
     #   (2026-09-19 实测: groups=0 / memberByHash=0 / 0 行; 且 rid 已记住 ⇒ 后续每轮都是
@@ -544,7 +544,7 @@ class WebviewMixin:
     def _build_speed_totals(self) -> dict:
         """全量种子的上传/下载速度合计(状态栏常显统计的数据源)
 
-        ❗为什么必须由**服务端**算: 状态栏是跨视图的常驻显示, 而四个视图数组是**按视图回传**
+        !为什么必须由**服务端**算: 状态栏是跨视图的常驻显示, 而四个视图数组是**按视图回传**
         的(见 VIEW_ARRAYS) —— 种子页压根不回 groups。此前由前端对 groups 求和, 于是状态栏
         在种子页恒为 0(issue 26-09-20-1646); 且那份求和还漏掉未归组种子(singles, 实测少算
         88.7%)。改成服务端对 store 全量求和后前端只读一个标量, 与视图分片彻底解耦。

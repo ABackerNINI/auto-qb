@@ -4,7 +4,7 @@
  * 挂到 window.AQB_DECORATE, 由 app.js 末尾 app.mixin(window.AQB_DECORATE) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
- * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DECORATE);
+ * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DECORATE);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_DECORATE = {
@@ -135,7 +135,7 @@ window.AQB_DECORATE = {
     },
     /* 状态栏速度合计: 只读服务端算好的标量(status.totals 随 status **恒回传**, 不参与
      * 视图分片与 rid 门控)。
-     * ❗**不要改回对 groups 求和** —— groups 是按视图回传的(VIEW_ARRAYS: 种子页不回它),
+     * !**不要改回对 groups 求和** —— groups 是按视图回传的(VIEW_ARRAYS: 种子页不回它),
      * 而状态栏是跨视图的常驻显示: 求和会让种子页恒显示 0(首屏即种子页, groups 一直是 [])
      * 或停在**冻结的旧值**(先开过辅种页再切过来), 且漏掉未归组单种子(singles, 实测
      * 少算 88.7%)。见 issue 26-09-20-1646。 */

@@ -4,7 +4,7 @@
  * 挂到 window.AQB_FILTERS, 由 app.js 末尾 app.mixin(window.AQB_FILTERS) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
- * ❗本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_FILTERS);
+ * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_FILTERS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_FILTERS = {
@@ -90,7 +90,7 @@ window.AQB_FILTERS = {
       this.searchQuery = "";
       this.resetSearch();
     },
-    /* ❗本文件**不得**再出现任何搜索文本匹配实现(归一/解析/行匹配): 26-09-26 起搜索匹配
+    /* !本文件**不得**再出现任何搜索文本匹配实现(归一/解析/行匹配): 26-09-26 起搜索匹配
      * 收敛为服务端单点(views.py::search_torrents, 候选行 = 名字/站点/分类/路径/标签/文件名),
      * 三页(辅种/种子/追剧)统一消费 searchHits。此前客户端自持 _searchNorm/_parseSearchQuery/
      * _torrentTextMatch 与服务端平行演化, 同一语义(恶女 10 / 季包"cat 12")前后端修了三遍;
@@ -100,10 +100,10 @@ window.AQB_FILTERS = {
     /* 筛选器选项的取数面(**单点**): 必须与当前视图真正在筛的那一行集合一致 ——
      * 组视图 / 追剧视图按**组**(计数 = 含该值的组数), 种子页按**种子**(计数 = 含该值的种子数)。
      *
-     * ❗不能一律按组算: 种子页按视图分片**不回 groups**(`VIEW_ARRAYS["torrent"] = ("torrents",)`),
+     * !不能一律按组算: 种子页按视图分片**不回 groups**(`VIEW_ARRAYS["torrent"] = ("torrents",)`),
      *   而筛选弹层的选项原先只遍历 groups ⇒ 四个筛选器恒空、弹层显示"暂无数据"
      *   (2026-09-21 用户报「种子页筛选器无数据」)。
-     * ❗也不能一律按种子算: 组视图同理不回 torrents, 且组级筛选的语义是"含该值的组"。
+     * !也不能一律按种子算: 组视图同理不回 torrents, 且组级筛选的语义是"含该值的组"。
      * · 追剧视图回传 groups(VIEW_ARRAYS), 明细成员就在组里 ⇒ 与组视图同源, 不必单列一支。
      * · 种子页平铺数组还没到时回落组视图口径(首轮/旧服务端): 那时两处都是空, 不会给出错的计数。 */
     facetRows() {
@@ -223,7 +223,7 @@ window.AQB_FILTERS = {
       for (const r of this.torrents) {
         if (!this._memberPass(r)) continue;
         if (q && !hits.has(r.hash)) continue;
-        /* ❗刻意**不复制**成 { ...r, hit }: 每条 74 个字段, 复制要经一遍响应式代理的 get 陷阱
+        /* !刻意**不复制**成 { ...r, hit }: 每条 74 个字段, 复制要经一遍响应式代理的 get 陷阱
          * (3000 条 = 22 万次), 实测**仅这一句就 68ms** —— 比整个窗口渲染还贵。
          * 命中高亮改由模板问 searchHits(见 isHit), 语义不变; 顺带每轮少建 3000 个临时对象。 */
         out.push(r);

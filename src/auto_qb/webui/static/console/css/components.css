@@ -498,7 +498,7 @@
  * 全部动作按钮收敛一族 .bt: primary(描边主钮) / 默认(次钮) / ghost(幽灵) / danger(危险·描边) /
  * danger-solid(危险·实心, 唯一实心档) / icon(图标钮) + sm 小档。
  * 状态纪律: hover 点亮 + 发光 / 按下下沉 1px / 键盘聚焦 ring / 禁用 .45。
- * ⚠ 与 atlas/prism 的 .bt 同名同语义(成对守阵), 外观各按其设计语言。 */
+ * WARN: 与 atlas/prism 的 .bt 同名同语义(成对守阵), 外观各按其设计语言。 */
 .bt { --tone: var(--border-strong);
   --tone-line: color-mix(in srgb, var(--tone) 45%, transparent);
   --glow-soft: inset 0 0 0 1px color-mix(in srgb, var(--tone) 50%, transparent),

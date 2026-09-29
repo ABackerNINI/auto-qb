@@ -1,7 +1,7 @@
 /* state.js — 根组件状态单点(data/computed/watch): 26-09-27 W2b 自 app.js 拆出。
- * ⚠ 不是 app.mixin!经 app.js 的 `...window.AQB_STATE` 展开进**根组件选项** ——
+ * WARN: 不是 app.mixin!经 app.js 的 `...window.AQB_STATE` 展开进**根组件选项** ——
  * 全局 mixin 会波及 hub-field 等组件实例(watch/mounted 双份执行), 根选项只命中根。
- * 成员逐行原样搬运, 语义与拆分前一致; 接线形态④由 _scan_mixin_wiring 钉住。 */
+ * 成员逐行原样搬运, 语义与拆分前一致; 接线形态4.由 _scan_mixin_wiring 钉住。 */
 /* 皮肤判定单点: URL 首段路径 == 皮肤目录名(static/<名>/index.html, 目录即 UI, 后端零注册表)。
  * 未识别段回落 atlas(如直接以 / 访问时的边缘路径)。加第四套 UI 在这里扩一档。 */
 function _aqbDetectUi() {
@@ -45,7 +45,7 @@ window.AQB_STATE = {
       // 辅种页视图: groups(分组表) | torrents(单种子平铺) | shows(追剧); 列模型/列宽/排序独立, 筛选与搜索共用
       viewMode: initialViewMode(),
       status: {},
-      // ⚠️ 轮询间隔不在这里 —— 见 computed.basePollMs(): 前端是服务端状态的**封顶**
+      // WARN: 轮询间隔不在这里 —— 见 computed.basePollMs(): 前端是服务端状态的**封顶**
       // (后端数据再快也要等下一轮轮询才可见), P1 落地后改成按种子量分档。
       // P0-0 埋点(排查用, 不参与渲染): 单次命令端到端耗时与单轮视图赋值耗时
       cmdStats: null,  // { cmdId, totalMs, waitMs, execMs } —— waitMs 排队等主循环, execMs 执行

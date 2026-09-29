@@ -11,7 +11,7 @@
   真鉴权是 token —— origin 白名单只是第二道(扩展 id 未必定得住, 见计划 §6);
 - URL 白名单(SSRF)在**下发任务时**卡死(见 channel.UrlPolicy), 端点本身不接受任何 URL 入参。
 
-❗`allow_reuse_address = False`: Windows 上 `SO_REUSEADDR` 允许**抢绑**已在监听的端口, 会让
+!`allow_reuse_address = False`: Windows 上 `SO_REUSEADDR` 允许**抢绑**已在监听的端口, 会让
   「同机多实例配了同一个 port ⇒ 启动 fail-fast」这条守卫失效; 关掉它才是真的独占。
 """
 import json
@@ -49,7 +49,7 @@ _JSON = "application/json; charset=utf-8"
 class _LoopbackServer(ThreadingHTTPServer):
     """单机端点: 线程池处理 + 严格独占端口(见模块 docstring)"""
     daemon_threads = True
-    #: ❗关掉地址复用: Windows 上它会允许第二个进程抢绑同一端口, 端口占用就检测不出来了
+    #: !关掉地址复用: Windows 上它会允许第二个进程抢绑同一端口, 端口占用就检测不出来了
     allow_reuse_address = False
 
     def server_bind(self) -> None:  # type: ignore[override]
@@ -202,7 +202,7 @@ class HrChannelServer:
             }, b""
 
         if not self._token_ok(_header(headers, TOKEN_HEADER)):
-            # ❗401 之前不写任何状态(不记接触、不入队、不落盘)
+            # !401 之前不写任何状态(不记接触、不入队、不落盘)
             logger.error(f"HR 取数通道 | 鉴权失败({method} {route_path}), 已拒绝且未写任何状态")
             return 401, {**cors, "WWW-Authenticate": "X-Hr-Token"}, _json({"error": "unauthorized"})
 

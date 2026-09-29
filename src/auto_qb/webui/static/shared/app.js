@@ -2,18 +2,18 @@
  *
  * **2026-09-27 W2b 续拆后的形态**: 本文件只留**常量单点**(列模型/排序/时间口径, 见下)与**接线**
  * (createApp 根选项展开 + app.mixin 注册 + mount)。根组件的 data/computed/watch 在 state.js、
- * 生命周期在 lifecycle.js(二者经 `...window.X` 展开进根选项 —— ❗不能走 app.mixin, 否则全局
+ * 生命周期在 lifecycle.js(二者经 `...window.X` 展开进根选项 —— !不能走 app.mixin, 否则全局
  * mixin 会波及 hub-field 等组件实例, watch/mounted 双份执行); HTTP 鉴权(auth.js)/轮询推送
  * (polling.js)/视图切换与搜索(view.js)以 `window.AQB_*` 全局 mixin 方法域注入。**其余业务方法
  * 在 15 个片段文件里**(ui_feedback / filters / columns / format / decorate / hr / sort / menu /
  * commands / add_torrent / selection / shows / delete_flow / drawer / dialogs), 同一 mixin 范式,
  * 方法体里的 this 仍是**同一个**组件实例。
  *
- * ❗三条硬约束(改动前先看 memory-bank/modules.md「前端契约速查 · 拆分」):
- *   ①片段文件在清单里必须排在**本文件之前**(本文件要读 window.AQB_*; boot.js 按清单序放行);
- *   ②下面的列模型常量是单一来源, 片段按裸名引用(运行时才求值) —— **不要再往下搬**,
+ * !三条硬约束(改动前先看 memory-bank/modules.md「前端契约速查 · 拆分」):
+ *   1.片段文件在清单里必须排在**本文件之前**(本文件要读 window.AQB_*; boot.js 按清单序放行);
+ *   2.下面的列模型常量是单一来源, 片段按裸名引用(运行时才求值) —— **不要再往下搬**,
  *     一搬就是上百处改名; 守阵盯住片段是否被清单引用 + 是否被 app.mixin 注入/根选项展开;
- *   ③data/watch/生命周期**只能**在 state.js/lifecycle.js 经根选项展开承载, 新增同类成员别写进
+ *   3.data/watch/生命周期**只能**在 state.js/lifecycle.js 经根选项展开承载, 新增同类成员别写进
  *     app.mixin 片段(会波及全部组件实例); 反之方法域成员别塞回根选项(两套 UI 的组件树共用)。
  */
 /* global Vue, localStorage, confirm, alert */  // 声明浏览器全局, 消除编辑器 no-undef 红线
@@ -194,10 +194,10 @@ const RESIZE_DRAG_THRESHOLD = 3;  // 拖列宽超过该位移(px)即视为"真�
  * v2(按列索引的稀疏覆盖) -> v3(**按列 key**) -> v4(加列) -> v5(意图/生效分轨, 挂 v4/v3 迁移)。
  *
  * R10-09 修订两条:
- * ① **不再靠"升版本"应对列集变更** —— 宽/隐/序一律按**列 key** 存, 新增列在旧缓存里只是
+ * 1. **不再靠"升版本"应对列集变更** —— 宽/隐/序一律按**列 key** 存, 新增列在旧缓存里只是
  *    "没有记录"(回退 tpl 默认宽), 不会错配; 历史上 v3->v4 升版本反而把用户手调的宽/隐/序
  *    清零, 正是"时不时被重置"的机制性来源。故本轮列模型增 `align` **不升版本**。
- * ② 保留旧键迁移: 当前键缺失/损坏时依次读 LEGACY_COLS_KEYS, 命中即按列 key 求交集洗净后
+ * 2. 保留旧键迁移: 当前键缺失/损坏时依次读 LEGACY_COLS_KEYS, 命中即按列 key 求交集洗净后
  *    内存迁移为 v5(不立即回写, 首次意图动作经 persistPage 落盘)。v2 是**按列索引**式,
  *    索引在支持隐藏列后会漂移, 无法可靠迁移 -> 刻意不读。
  *
@@ -214,7 +214,7 @@ const COLS_ORIGIN_HINT_KEY = "autoqb_cols_origin_hint_v1";
  * 最近活动看相对", 一把切会互相打架。刻意**不**塞进 COLS_STORE_KEY: 那个键管的是列集合/列宽/
  * 顺序(按 page 分段 + 跨标签合并), 显示口径是另一条生命周期, 混进去要多背一段 read-modify-write。
  * 默认值 = 改造前的现状(添加于/完成于/最近动静原本就是绝对时间, 最近活动已改相对) —— 加开关不该
- * 顺手改掉既有观感。⚠ 只收**时间点**列: 做种时长/活跃时间/ETA 是时长, 没有绝对/相对之分。 */
+ * 顺手改掉既有观感。WARN: 只收**时间点**列: 做种时长/活跃时间/ETA 是时长, 没有绝对/相对之分。 */
 const TIME_FMT_STORE_KEY = "autoqb_timefmt_v1";
 const TIME_FMT_KEYS = ["added_on", "last_activity", "completion_on", "latest"];
 const TIME_FMT_DEFAULT = { added_on: "abs", last_activity: "rel", completion_on: "abs", latest: "abs" };
@@ -245,20 +245,20 @@ const DEFAULT_SORT = { key: "added_on", dir: -1 };
  * 做法: 只渲染视口附近的行, 上下各用占位 div 撑住总高度(滚动条长度与滚到底都照旧)。
  * 与"虚拟滚动"常见实现的区别 —— 这里**不改布局模型**: 行仍在原地流式排列(flex column),
  * 占位只是两个空盒子, 因此:
- *   ① 每行仍渲染**完整单元格序列**(CSS 的 :nth-child 列对齐与 data-table 都依赖它);
- *   ② 横向滚动/sticky 表头/列宽拖拽全部不受影响;
- *   ③ 多选 shift 区间、右键、搜索高亮仍按**数据索引**走(filteredTorrents 原数组不变),
+ *   1. 每行仍渲染**完整单元格序列**(CSS 的 :nth-child 列对齐与 data-table 都依赖它);
+ *   2. 横向滚动/sticky 表头/列宽拖拽全部不受影响;
+ *   3. 多选 shift 区间、右键、搜索高亮仍按**数据索引**走(filteredTorrents 原数组不变),
  *      窗口只决定"渲染哪一段", 不参与任何业务语义。
  *
  * 三条硬约束(漏了就出事):
- *   ① 占位高度必须等于被折叠掉的行高之和 —— 而**行高是不齐的**(带 H&R 要求的行多渲染一行,
+ *   1. 占位高度必须等于被折叠掉的行高之和 —— 而**行高是不齐的**(带 H&R 要求的行多渲染一行,
  *      实测 43.7px 与 65.4px 混排), 故一律**逐行实测 + 前缀和**, 不做"等高"近似
  *      (等高假设在 3000 行上会漂 218px ⇒ 滚到底够不着)。首轮先全量渲染一次量齐。
- *   ② 视图有"插队元素"时必须退避: 分组页展开的 .detail 面板高度不定, 会让后续行整体下移,
+ *   2. 视图有"插队元素"时必须退避: 分组页展开的 .detail 面板高度不定, 会让后续行整体下移,
  *      此时窗口的"第 i 行在 pre[i]"假设失效 —— 有展开即回退全量。
- *   ③ 阈值以下不开窗: 小库(<ROW_WIN_MIN)开窗只是平白多一次测量, 且更容易露白。
+ *   3. 阈值以下不开窗: 小库(<ROW_WIN_MIN)开窗只是平白多一次测量, 且更容易露白。
  *
- * ⚠️ 行间距必须**实测**, 不能硬编码(2026-09-19 修 BUG-1): 三个行容器的真实 gap 并不相同 ——
+ * WARN: 行间距必须**实测**, 不能硬编码(2026-09-19 修 BUG-1): 三个行容器的真实 gap 并不相同 ——
  * atlas `.group-table` 是 6px, prism `.group-table` 是 5px, 而成员容器 `.detail` 是**块级容器**
  * (没有 flex gap, 行间距为 0)。曾按 6px 写死, 结果 prism 的占位总高比全量渲染多 2973px
  * (3000 行实测) ⇒ 滚动条长度失真、中段位置最多偏 49 行。真值由 `_measureRowH` 读
@@ -410,7 +410,7 @@ function initialViewMode() {
  * 为什么要有: `page` 原本是**纯内存态**、初值恒 "groups" ⇒ 在设置页按 F5 必掉回辅种页
  * (2026-09-25 用户报"设置页刷新会回到种子页"), 编辑到一半的位置全丢。
  * 白名单式取值: 只认 "settings", 其余(含脏值/被清空)一律落回 "groups" —— 不信任存储内容。
- * ⚠ 只把初值改成读存储**还不够**: 设置页的配置树是按需加载的, 启动路径必须补一次
+ * WARN: 只把初值改成读存储**还不够**: 设置页的配置树是按需加载的, 启动路径必须补一次
  * cfgLoad(见 startPolling 尾部), 否则首屏停在「配置加载失败 + 重试」。 */
 function initialPage() {
   try {
@@ -446,7 +446,7 @@ function initialDrawerTab() {
  * 组内"部分暂停部分做种中"是常态(整组只有个别站点被暂停), 取 paused 会把整个做种中的组刷成灰的。
  * 曾用顺序 ["error","checking","downloading","seeding","paused","other"] 与后端差两处:
  * {downloading,checking}(后端取 downloading —— 保留) 与 {paused,seeding}(前端取 seeding —— 恢复)。
- * ❗2026-09-19 的 BUG-7 把前端表整体对齐到后端, 顺手把 {paused,seeding} 也翻成 paused ⇒
+ * !2026-09-19 的 BUG-7 把前端表整体对齐到后端, 顺手把 {paused,seeding} 也翻成 paused ⇒
  * 辅种页"部分暂停部分做种中"的组由绿变灰(2026-09-21 用户报"以前是对的"), 本次两表一起改回做种优先。
  */
 const STATE_RANK = { error: 0, downloading: 1, checking: 2, seeding: 3, paused: 4, other: 5 };
