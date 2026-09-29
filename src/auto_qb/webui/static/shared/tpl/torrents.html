@@ -31,23 +31,23 @@
                   <span class="g-name-text">{{ m.name }}</span>
                 </div>
                 <div v-else-if="col.key === 'site'" class="g-sites">
-                  <span class="site-chip" :class="m.kind" :title="m.site">{{ m.site }}</span>
+                  <span class="site-chip" :class="m.kind">{{ m.site }}</span>
                 </div>
                 <div v-else-if="col.key === 'state'" class="g-cat">
-                  <span class="g-status" :class="'k-' + m.kind" :title="stateText(m)">
+                  <span class="g-status" :class="'k-' + m.kind">
                     <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="kindIcon(m.kind)"></use></svg>
                   </span>
-                  <span class="state-text" :title="stateText(m)">{{ stateText(m) }}</span>
+                  <span class="state-text">{{ stateText(m) }}</span>
                 </div>
                 <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="[{ zero: !m.dlspeed }, numTone(m.dlspeed, speedLimitBytes.down)]">{{ fmtSpeedOrDash(m.dlspeed) }}</div>
                 <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="[{ zero: !m.upspeed }, numTone(m.upspeed, speedLimitBytes.up)]">{{ fmtSpeedOrDash(m.upspeed) }}</div>
                 <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, numTone(m.uploaded, m.size)]">{{ fmtSizeOrDash(m.uploaded) }}</div>
                 <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</div>
                 <div v-else-if="col.key === 'category'" class="g-cat">
-                  <span v-if="m.category" class="cat-chip" :title="m.category">{{ m.category }}</span>
+                  <span v-if="m.category" class="cat-chip">{{ m.category }}</span>
                   <span v-else class="zero"></span>
                 </div>
-                <div v-else-if="col.key === 'tags'" class="g-tags" :title="mTags(m).join(', ')">
+                <div v-else-if="col.key === 'tags'" class="g-tags">
                   <span v-for="t in tagSlice(mTags(m), 3)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
                   <span v-if="mTags(m).length > 3" class="tag-more">+{{ mTags(m).length - 3 }}</span>
                   <span v-if="!mTags(m).length" class="zero"></span>
@@ -72,7 +72,7 @@
                 <div v-else-if="col.key === 'dl_limit'" class="g-stat" :class="numTone(m.dl_limit, m.dl_limit)">{{ fmtLimitBytes(m.dl_limit) }}</div>
                 <div v-else-if="col.key === 'infohash_v1'" class="m-hash" :title="m.infohash_v1">{{ (m.infohash_v1 || '').slice(0, 8) }}</div>
                 <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
-                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[hrDurClass(m), hrSrcClass(m)]" :title="hrDurHint(m)" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
+                <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[hrDurClass(m), hrSrcClass(m)]" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
                   <!-- .dur-body = **文字**包裹层: 整格线(在线)挂它上面才随文字宽; 挂 .m-dur 上会随列宽
                        (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条) -->
                   <span class="dur-body">

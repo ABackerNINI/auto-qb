@@ -26,12 +26,8 @@ const HR_SRC_CLASSES = {
   site_released: "src-online", site_exempt: "src-online",
   local: "src-local", unverified: "src-unver",
 };
-/* title 文案单独一份: HR_SRC_BUCKETS 的 unverified 是空串(筛选器语义里不属于任何桶),
- * 拿它当提示会得到空白 title —— 桶名表仍只服务筛选器, 不被展示层复用。 */
-const HR_SRC_TITLES = { "src-online": "来源: 在线核实", "src-local": "来源: 本地兜底", "src-unver": "来源: 未核实" };
-/* 已排除(命中排除标签/分类)的提示文案单点(2026-09-29): 原本是行内「已排除」文字 chip ——
- * 与已退役的来源芯片同款, 同样撑宽做种时长列; 撤到 title 后不再占宽, 也不再产线(无线 = 没有结论)。 */
-const HR_EXCLUDED_TITLE = "已排除出 HR 管理(排除标签/分类命中)";
+/* 来源档位(2026-09-29 晚起)不再进单元格原生 title: 经 hrSrcClass → CSS 底线三编码(长度/线型/明暗),
+ * 文字结论由悬停弹窗(hrPopEnter)承载; 原生 title 已移除以避免与弹窗叠出被遮挡的冗余提示。 */
 const HR_SRC_BUCKETS = {
   site_scope: "在线核实", site_satisfied: "在线核实", site_unsatisfied: "在线核实", site_released: "在线核实", site_exempt: "在线核实",
   local: "本地兜底", unverified: "",
@@ -94,22 +90,10 @@ window.AQB_HR = {
       if (!m.hr_safety) return this.hrTimeClass(m);
       return HR_SAFETY_CLASSES[m.hr_safety] || "";
     },
-    /* 来源标记(2026-09-29 起非文字底线): 类名交 CSS 画线, 文字只进 title ——
-     * 未接入(hr_safety 空)既不产线也不产 title; 判定仍全在后端(hr_safety_src), 前端不重算。 */
+    /* 来源标记(2026-09-29 晚起非文字底线): 类名交 CSS 画线, 文字结论由悬停弹窗承载 ——
+     * 未接入(hr_safety 空)既不产线也不产弹窗; 判定仍全在后端(hr_safety_src), 前端不重算。 */
     hrSrcClass(m) {
       return m.hr_safety ? (HR_SRC_CLASSES[m.hr_safety_src] || "") : "";
-    },
-    hrSrcText(m) {
-      return HR_SRC_TITLES[this.hrSrcClass(m)] || "";
-    },
-    /* 单元格 title = 来源文案 + 已排除说明(2026-09-29: 两者都从行内文字 chip 撤进 title, 不占列宽)。
-     * 已排除行 hr_safety 恒为 none ⇒ 来源文案为空, 实际只出现一条; 仍走拼接以防两种状态并存。 */
-    hrDurHint(m) {
-      const parts = [];
-      const src = this.hrSrcText(m);
-      if (src) parts.push(src);
-      if (m.hr_excluded) parts.push(HR_EXCLUDED_TITLE);
-      return parts.join(" · ");
     },
     /* 整格 = 在线(站点结论覆盖到要求值); 半格 = 本地 / 未核实(只对实际值负责) */
     hrSrcFull(m) {

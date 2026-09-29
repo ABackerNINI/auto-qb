@@ -1643,12 +1643,10 @@ def test_frontend_hr_safety_wiring():
 
     四类"字段/令牌打错 = pytest 全绿但页面静默空白或配色失效"的故障形态, 一律机械钉住:
     ① hr.js 的 token 映射表(HR_SRC_CLASSES / HR_SRC_BUCKETS)必须与后端 resolve.py 的 SRC_* 常量
-      逐字一致 —— 来源档位是前后端契约, 打错字来源标记静默消失; 三档类名还各需一份非空 title 文案
-      (2026-09-29 起徽标非文字化: 线画在单元格里, 文字只进 title —— 缺一份即该档来源读不出来);
+      逐字一致 —— 来源档位是前后端契约, 打错字来源标记静默消失; 三档类名驱动单元格底线三编码(CSS),
+      文字结论改由悬停弹窗承载(原生 title 已移除, 避免与弹窗叠出被遮挡的冗余提示);
     ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + hrSrcClass, 并由
       hrSrcFull/hrSrcHalf 挂底线 + hrPopEnter 触发 —— 漏一处那一列就不显示安全档位/来源线/悬停弹窗;
-      来源与「已排除」两条文案都经 hrDurHint 进单元格 title(2026-09-29 起行内不留任何文字 chip ——
-      chip 是撑宽这一列的元凶; 已排除 chip 与来源芯片同款, 一并撤掉);
       弹窗单例 DOM(teleport body)每套 UI 恰一份(26-09-26-webui-hr-popup 起 :title 换成悬停弹窗触发);
       要求时长的渲染门只认「已做种非空 + 有要求」, 不得依赖 hr_triggered(2026-09-29 实报:
       未核/在线行被一并藏掉要求, 只剩孤立的来源芯片);
@@ -1679,17 +1677,12 @@ def test_frontend_hr_safety_wiring():
 
     assert _map_keys("HR_SRC_CLASSES") == src_tokens, "HR_SRC_CLASSES 键与后端 SRC_* 不一致"
     assert _map_keys("HR_SRC_BUCKETS") == src_tokens, "HR_SRC_BUCKETS 键与后端 SRC_* 不一致"
-    # 非文字化后的来源文案单点: 三档类名各一份非空 title(桶名表不能复用 —— unverified 桶名是空串)
-    m_titles = re.search(r"const HR_SRC_TITLES = \{(.*?)\};", hr_js, re.S)
-    assert m_titles, "hr.js 缺 const HR_SRC_TITLES(来源 title 文案单点)"
-    titles = dict(re.findall(r'"(src-[a-z]+)":\s*"([^"]*)"', m_titles.group(1)))
-    assert set(titles) == {"src-online", "src-local", "src-unver"}, \
-        f"HR_SRC_TITLES 应覆盖三档来源类名, 实测 {sorted(titles)}"
-    assert all(v.strip() for v in titles.values()), "HR_SRC_TITLES 有空文案 —— 该档来源的 title 会是空白"
-    # 「已排除」提示同走 title(2026-09-29: 行内 chip 撤掉后文案不能再散在模板里, 否则改一处漏两处)
-    m_excl = re.search(r'const HR_EXCLUDED_TITLE = "([^"]+)"', hr_js)
-    assert m_excl and m_excl.group(1).strip(), "hr.js 缺 const HR_EXCLUDED_TITLE(已排除 title 文案单点)"
-    assert 'hrDurHint' in hr_js, "hr.js 缺 hrDurHint(来源 + 已排除 的 title 组装)"
+    # 来源文案不再进原生 title(2026-09-29 晚: 原生 title 与悬停弹窗叠出, 出现「来源:未核实」等
+    #   被弹窗遮挡的冗余提示; 来源改由 hrSrcClass → CSS 底线编码, 文字结论在悬停弹窗内)。
+    #   故 hrDurHint / HR_SRC_TITLES / HR_EXCLUDED_TITLE 整套应已退役。
+    assert "hrDurHint" not in hr_js, "hr.js 仍残留 hrDurHint(来源+已排除的 title 组装) —— 原生 title 已移除"
+    assert "HR_SRC_TITLES" not in hr_js, "hr.js 仍残留 HR_SRC_TITLES —— 来源文案不再进 title"
+    assert "HR_EXCLUDED_TITLE" not in hr_js, "hr.js 仍残留 HR_EXCLUDED_TITLE —— 已排除文案不再进 title"
     # 四个安全档位(2026-09-25 用户修正起 failed=未达标终态红档): failed 由前端映射 hr-fail 红
     for name in ("HR_SAFETY_CLASSES", "HR_SAFETY_BUCKETS"):
         assert _map_keys(name) == {"danger", "failed", "safe", "unknown"}, f"{name} 键集应为四个安全档位"
@@ -1699,7 +1692,6 @@ def test_frontend_hr_safety_wiring():
         html = _ui_aggregate(ui)
         for needle, want in (
             (':class="[hrDurClass(m), hrSrcClass(m)]"', 3),
-            (':title="hrDurHint(m)"', 3),  # 来源 + 已排除 文案进 title(行内不再有任何文字 chip)
             ('v-if="hrSrcHalf(m)"', 3),  # 半格线(本地 / 未核实)画在数值上
             ('v-if="hrSrcFull(m)"', 3),  # 整格线(在线)画在**文字包裹层**上
             ('class="dur-body"', 3),  # 文字包裹层: 整格线随文字不随列宽(挂单元格 = 随列宽)
@@ -1714,6 +1706,7 @@ def test_frontend_hr_safety_wiring():
         assert ':class="hrTimeClass(m)"' not in html, f"{ui} 仍有做种时长列挂着旧 hrTimeClass —— 漏换绑"
         assert "hrSrcBadge" not in html, f"{ui} 仍挂着旧的 2 字来源徽标 hrSrcBadge —— 漏换绑"
         assert "hrDurTitle" not in html, f"{ui} 仍有做种时长列挂原生 :title —— 应已换悬停弹窗触发"
+        assert ':title="hrDurHint(m)"' not in html, f"{ui} 做种时长列仍挂原生 :title(hrDurHint) —— 应只靠悬停弹窗"
         # 行内文字 chip 零残留(2026-09-29 非文字化的对象就是这两个 chip, 复活即列宽问题回归)
         assert 'class="hr-src"' not in html, f"{ui} 做种时长列仍有 .hr-src 文字 chip —— 文案应只走 title"
         assert ">已排除<" not in html, f"{ui} 做种时长列仍有「已排除」文字 chip —— 应已撤进 title"
