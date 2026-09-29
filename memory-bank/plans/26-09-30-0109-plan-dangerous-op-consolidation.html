@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>危险操作统一收编（简化模型） · 工程计划 · auto-qb</title>
+<title>危险操作独立操作层 · 工程计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="dangerous-op-consolidation">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-09-30-0109">
-<meta name="doc-updated" content="26-09-30-0307">
+<meta name="doc-updated" content="26-09-30-0531">
 <style>
   :root {
     color-scheme: dark;
@@ -193,14 +193,14 @@
 
   <!-- ================= 封面 ================= -->
   <header class="cover">
-    <div class="kicker">Auto-QB · 工程计划 · Plan Draft v2</div>
-    <h1>危险操作统一收编<br>简化模型</h1>
-    <p class="sub">不建全局队列。单一写线程 + 阻塞执行体已经是危险操作的天然串行器，本计划只补三处提交点检查与一处闸门复核，把 WEB 来源接到规则侧已有的在途登记 / 限频 / 去重体系上，并以此落地 WEBUI 右键「跳检」。前版（同日 01:09）的全局队列模式经评审否决，否决记录见 §02。</p>
+    <div class="kicker">Auto-QB · 工程计划 · Plan Draft v3.1</div>
+    <h1>危险操作独立操作层<br>不收编，只抽取</h1>
+    <p class="sub">不建队列（§02.1 已否决），也不把 WEB 接到规则侧体系（§02.2 废弃该收编方向）。危险操作的执行语义与保护策略单点抽成独立 ops 层，规则与 WEB 都只做调用方（rules → ops ← web）；保护策略按来源区分——防自动化失控的限频只作用规则源，防真实冲突的互斥作用所有来源。P1 沿用 v2 骨架（跳检实时复核 + WEB recheck 提交点拒绝），P2' 以抽取替代收编，并落地 WEBUI 右键「跳检」。</p>
     <div class="cover-meta">
       <div><span class="k">日期</span><span class="v">2026-09-30</span></div>
       <div><span class="k">分支</span><span class="v">develop</span></div>
-      <div><span class="k">状态</span><span class="v">草案 v2 · 待评审</span></div>
-      <div><span class="k">涉及</span><span class="v">rules / webui（零配置键）</span></div>
+      <div><span class="k">状态</span><span class="v">草案 v3.1 · 待评审</span></div>
+      <div><span class="k">涉及</span><span class="v">rules / webui / core（新增 mixins/ops.py · 零配置键）</span></div>
       <div><span class="k">起草</span><span class="v">ZCode (AI) · 待用户拍板 §06</span></div>
     </div>
   </header>
@@ -211,9 +211,9 @@
       <div class="toc-title">目录 · Contents</div>
       <nav>
         <a href="#s1"><span class="n">01</span>背景与现状</a>
-        <a href="#s2"><span class="n">02</span>否决记录：全局队列模式</a>
-        <a href="#s3"><span class="n">03</span>设计方案：提交点检查</a>
-        <a href="#s4"><span class="n">04</span>分期实施 P1–P2</a>
+        <a href="#s2"><span class="n">02</span>演进与否决记录</a>
+        <a href="#s3"><span class="n">03</span>设计方案：独立操作层</a>
+        <a href="#s4"><span class="n">04</span>分期实施 P1–P2'</a>
         <a href="#s5"><span class="n">05</span>测试 · 成本 · 回滚</a>
         <a href="#s6"><span class="n">06</span>待拍板决策点</a>
       </nav>
@@ -241,38 +241,41 @@
           <tr>
             <td class="op">C1</td>
             <td><strong>WEB 校验 × 规则校验</strong><br><span class="path">commands.py:304-307</span></td>
-            <td>WEB <code>recheck_torrent</code> 只判「hash 在快照中」，不查规则侧在途登记 <code>_active_checks</code>（<span class="path">taskqueue.py:141</span>）、不查失败冷却 <code>RECHECK_FAIL_LIMIT</code>（<span class="path">full_checking.py:34-52</span>）。规则校验进行中用户再发 recheck → qB <strong>重启</strong>校验 → 规则轮询子任务看到进度回落，可能触发 <code>CHECK_START_GIVEUP</code>（600s 宽限）误判失败、污染当日失败计数。<strong>反向</strong>：WEB 校验不登记，规则决策链 1.5「组内校验串行化」（<code>active_check_hashes()</code>）看不见它。</td>
+            <td>WEB <code>recheck_torrent</code> 只判「hash 在快照中」，不查规则侧在途登记 <code>_active_checks</code>（<span class="path">taskqueue.py:141</span>）、不查失败冷却 <code>RECHECK_FAIL_LIMIT</code>（<span class="path">full_checking.py:34-52</span>）。规则校验进行中用户再发 recheck → qB <strong>重启</strong>校验 → 规则轮询子任务看到进度回落，可能触发 <code>CHECK_START_GIVEUP</code>（600s 宽限）误判失败、污染当日失败计数。<strong>反向</strong>：WEB 校验不登记，规则决策链 1.5「组内校验串行化」（<code>active_check_hashes()</code>）看不见它。⚠ <strong>v3 补充取证</strong>：<code>bulk_torrents action=recheck</code>（<span class="path">commands.py:458-459</span>）同样直调 API——C1 的<strong>第二入口</strong>，P1 必须同查，否则批量路径留旁路。</td>
           </tr>
           <tr>
             <td class="op">C2</td>
             <td><strong>WEB 删除 × 跳检的陈旧快照竞态</strong><br><span class="path">skip_checking.py:39-215</span></td>
-            <td>⚠ <strong>v2 机理修正</strong>：跳检执行体一次阻塞跑完（1.1 推论一），<strong>窗口期 WEB 命令不可能插入执行</strong>——v1 把机理写成「窗口期插入致重加确认失败」是错的。真实竞态在边界：跳检任务按上一轮快照创建，闸门（<span class="path">skip_checking.py:124-152</span>）读陈旧记录；WEB 删除在循环顶部先执行、qB 端尚未生效时，跳检继续走 导出→备份→删除（空操作）→确认消失→重加——<strong>把用户刚删的种子复活</strong>；删除已生效则导出失败、干净放弃（噪声失败）。</td>
+            <td>⚠ <strong>v2 机理修正（沿用）</strong>：跳检执行体一次阻塞跑完（1.1 推论一），<strong>窗口期 WEB 命令不可能插入执行</strong>——v1 把机理写成「窗口期插入致重加确认失败」是错的。真实竞态在边界：跳检任务按上一轮快照创建，闸门（<span class="path">skip_checking.py:124-152</span>）读陈旧记录；WEB 删除在循环顶部先执行、qB 端尚未生效时，跳检继续走 导出→备份→删除（空操作）→确认消失→重加——<strong>把用户刚删的种子复活</strong>；删除已生效则导出失败、干净放弃（噪声失败）。</td>
           </tr>
           <tr>
             <td class="op">C3</td>
-            <td><strong>WEB 汇报 × 规则限频</strong><br><span class="path">transfer.py:34-45</span></td>
-            <td>规则侧 reannounce 按种子计 <code>state["reannounce_ts"]</code> 强制 600s 最小间隔；WEB 侧 <code>reannounce_torrent</code> 独立计数、不走这套限频。用户 WEB 点一次 + 规则窗口外触发一次 → 同一种子短时间内连续两次 announce，只能靠 qB/tracker 端 min-interval 兜底。</td>
+            <td><strong>WEB 汇报 × 规则限频</strong><br><span class="path">transfer.py:33-45</span></td>
+            <td>规则侧 reannounce 按种子计 <code>state["reannounce_ts"]</code> 强制 600s 最小间隔；WEB 侧 <code>reannounce_torrent</code> 独立计数、不走这套限频。用户 WEB 点一次 + 规则窗口外触发一次 → 同一种子短时间内两次 announce，由 qB/tracker 端 min-interval 兜底。<strong>v3 处置：降级「已知无害现状」</strong>，与 C4 同口径——600s 是防自动化连发（规则每 2s tick）的自限频，不适用于人手点击；对 WEB 设限产生「按钮为什么不生效」困惑（否决理由见 §02.2）。</td>
           </tr>
           <tr>
             <td class="op">C4</td>
             <td><strong>WEB 移动/批量无在途感知</strong><br><span class="path">commands.py:354-361</span></td>
-            <td><code>set_torrent_location</code> 与 <code>bulk_torrents</code> 对移动/删除/校验无冷却、无限频、无在途互斥。规则 <code>MoveToAction</code>（<span class="path">transfer.py:10-23</span>）不判 save_path 是否已在目标，仅靠规则级 execute_once/cooldown 兜底。v2 处置：接受现状（§3.5）。</td>
+            <td><code>set_torrent_location</code> 与 <code>bulk_torrents</code> 对移动/删除/校验无冷却、无限频、无在途互斥。规则 <code>MoveToAction</code>（<span class="path">transfer.py:10-23</span>）不判 save_path 是否已在目标，仅靠规则级 execute_once/cooldown 兜底。v3 处置：接受现状（§3.9），与 C3 同口径。</td>
           </tr>
         </table>
       </div>
 
-      <h3><span class="hn">1.3</span>现有防护盘点：规则侧完整，WEB 侧只有一条守阵</h3>
-      <p>规则侧防护链相当完整：决策链闸门（仅暂停中未完成种子、组内整组判定）、<code>_active_checks</code> 在途去重（<span class="path">taskqueue.py:141</span>）、决策链 1.5 组内校验串行化、<code>RECHECK_FAIL_LIMIT</code> 3 次/日失败冷却、<code>skip_check_day</code> 跨规则同日去重、reannounce 600s 限频。WEB 侧只有一条「hash 在快照中」守阵。统一的方向不是新基建，而是<strong>把 WEB 提交点接到规则侧已有的登记 / 限频 / 去重上</strong>——这正是 §03 的全部内容。</p>
+      <h3><span class="hn">1.3</span>现有防护盘点：规则侧完整、WEB 侧一条守阵，且执行体与保护长在规则 mixin 里</h3>
+      <p>规则侧防护链相当完整：决策链闸门（仅暂停中未完成种子、组内整组判定）、<code>_active_checks</code> 在途去重（<span class="path">taskqueue.py:141-144</span>）、决策链 1.5 组内校验串行化、<code>RECHECK_FAIL_LIMIT</code> 3 次/日失败冷却、<code>skip_check_day</code> 跨规则同日去重、reannounce 600s 限频。WEB 侧只有一条「hash 在快照中」守阵。</p>
+      <p>但 recheck / skip_check 的<strong>执行体与这些保护是长在一起的</strong>：<code>_execute_full_checking</code> / <code>_execute_skip_checking</code> 是 <code>CheckAction</code> 的 mixin 方法（<span class="path">checking.py:18</span>、<span class="path">full_checking.py:55</span>、<span class="path">skip_checking.py:36</span>），参数是规则侧 <code>RuleContext</code>，保护状态（在途登记 / <code>recheck_fails</code> / <code>skip_check_day</code>）散在动作实现与 state 键里。v2 的结论「把 WEB 提交点接到规则侧已有体系上」意味着 WEB 伪造 RuleContext、适配 origin 重入队语义、读写规则私有 state 键——<strong>依赖方向做反，改一处动两处</strong>（§02.2）。v3 的结论：<strong>执行体与保护抽成独立层，两个来源都依赖它</strong>。抽的不是新基建——执行体今天已经存在，只是长在规则 mixin 里。</p>
     </section>
 
-    <!-- ================= 02 否决记录 ================= -->
+    <!-- ================= 02 演进与否决记录 ================= -->
     <section id="s2">
       <div class="sec-head">
         <span class="sec-no">02 / REJECTED</span>
-        <h2>否决记录：全局操作队列模式（v1 → v2）</h2>
+        <h2>演进与否决记录</h2>
         <div class="sec-rule"></div>
       </div>
-      <p>v1（同日 01:09 版）设计了「六队列（skip_check/recheck/delete/move/add/reannounce）+ 全局执行槽 max_running + 跨队列 hash 锁 + 失败 halted + 持久化恢复 + 延迟回执 + 队列面板」的完整基建，分 M1–M4 四期。经评审否决，本版替代；v1 的五个决策点（D1 max_running / D2 删除重启挂起 / D3 延迟回执 / D4 enabled / D5 priority）随之全部废止。否决原因：</p>
+
+      <h3><span class="hn">2.1</span>v1 → v2：全局操作队列模式否决（26-09-30 01:09 版）</h3>
+      <p>v1（同日 01:09 版）设计了「六队列（skip_check/recheck/delete/move/add/reannounce）+ 全局执行槽 max_running + 跨队列 hash 锁 + 失败 halted + 持久化恢复 + 延迟回执 + 队列面板」的完整基建，分 M1–M4 四期。经评审否决，由 v2 替代并保留至今；v1 的五个决策点（D1 max_running / D2 删除重启挂起 / D3 延迟回执 / D4 enabled / D5 priority）随之全部废止。否决原因：</p>
       <div class="tbl-wrap">
         <table>
           <tr><th style="width:32px">#</th><th style="width:220px">原因</th><th>一句话机理</th></tr>
@@ -281,27 +284,49 @@
           <tr><td class="op">3</td><td><strong>move 的「短操作」分类站不住</strong></td><td><code>setLocation</code> 毫秒返回、真搬移在 qB 后台异步；按「API 返回即终态」，队列内串行挡不住 qB 端并发搬移——声称要防的资源冲击照样发生。</td></tr>
           <tr><td class="op">4</td><td><strong>bulk 多 hash 粒度无解</strong></td><td>hash 锁全有或全无 → 凑不齐全部空闲即永久推迟（饥饿）；失败 / halted / 回执都要为多 hash 额外定义一套粒度。</td></tr>
           <tr><td class="op">5</td><td><strong>用户操作排队是自造问题</strong></td><td>直接执行下，「用户操作优先于规则」（v1 D5）这个问题根本不存在；排队才制造出饥饿与优先级需求。</td></tr>
-          <tr><td class="op">6</td><td><strong>复杂度与收益不匹配</strong></td><td>六队列 + 持久化恢复 + 延迟回执 + 面板 ≈ 300–400 行新模块 + 四期；而四个实证冲突用三处提交点检查 + 一处闸门复核即可覆盖（§03）。</td></tr>
+          <tr><td class="op">6</td><td><strong>复杂度与收益不匹配</strong></td><td>六队列 + 持久化恢复 + 延迟回执 + 面板 ≈ 300–400 行新模块 + 四期；而实证冲突用提交点检查 + 闸门复核即可覆盖（§03）。</td></tr>
           <tr><td class="op">7</td><td><strong>队列的前提不成立</strong></td><td>「让出执行槽」暗示长操作非阻塞化；当前模型下阻塞执行体 + 单一写线程本身就是串行器（1.1 推论一）——队列是在给已有的性质再买一遍。</td></tr>
         </table>
       </div>
-      <p class="dim">从 v1 保留的资产：C1–C4 取证与冲突清单（C2 机理已修正，见 §1.2）、操作危险度盘点（谁该被管：跳检 / 校验 / 删除 / 移动 / 添加 / 汇报）、「业务幂等闸门留在提交侧」的职责划分。</p>
+
+      <h3><span class="hn">2.2</span>v2 → v3：收编方向废弃（26-09-30 用户评审，两条修订）</h3>
+      <p>v2 的「提交点检查」骨架保留（R2 实时复核 / R1 提交点拒绝），但其中两处经评审否决：</p>
+
+      <p><strong>(a) R3 废止——WEB reannounce 600s 对齐整条删除，C3 降级无害现状</strong></p>
+      <ul class="plain">
+        <li>WEB 汇报是<strong>用户的显式选择，频率天然有界</strong>。规则侧 600s 的存在理由是防自动化连发——规则每 2s tick，没有自限频会对同一种子无限连发 announce，那才会被封号；把自动化限频套到人手上，拒绝回执就是「按钮为什么不生效」。</li>
+        <li>危害 ≈ 0：reannounce 只是一次 announce 请求，qB/tracker 端 min-interval 本来就在兜底。对比之下 C4（move，有真实 I/O）都接受现状，危害更小的 C3 却要修——v2 口径不一致。</li>
+        <li>共享计数半边（WEB 写 <code>reannounce_ts</code> 压制规则）<strong>纯耦合无收益</strong>：用户刚汇报过，tracker 状态新鲜，规则触发条件多半不会马上再触发；若 tracker 真有问题，压掉规则的自动重试反而有害。</li>
+        <li><strong>处置</strong>：R3 整条删除；C3 与 C4 同口径记「已知无害现状」（D3）。WEB reannounce 的行为、回执与 tracker 确认跟踪（<code>REANNOUNCE_CONFIRM_TIMEOUT</code>）完全不变。</li>
+      </ul>
+
+      <p><strong>(b) D1-A「全收编」废弃——P2 由收编改为操作层抽取（§3.4）</strong></p>
+      <ul class="plain">
+        <li>v2 让 WEB recheck 改调 full_checking 提交路径，是把<strong>依赖方向做反</strong>（web → rules 内部）：WEB 需伪造 RuleContext、适配 origin 重入队语义（<span class="path">full_checking.py:88</span>/:176）；full_checking 为规则语义重构，WEB 随之断；WEB 有新诉求，得进规则模块里改——正是「改一处就要改另一处」。</li>
+        <li>附带行为有害：WEB 校验计入 3 次/日失败冷却 = 同款「为什么不生效」——手动排障第 4 次 recheck 被当日冷却挡住。</li>
+        <li>右键跳检同理：包装 <code>_execute_skip_checking(ctx, segment, has_reference)</code> 要带规则侧概念——<code>has_reference=False</code> 会把「无参考跳检(高风险)」的规则告警语义泄漏进 WEB。</li>
+        <li><strong>处置</strong>：v2 的 P2 由「收编」改为「操作层抽取」（§3.4，v3 期名 P2'）；D1 决策点改写（§06），保护策略按来源区分（§3.5）。</li>
+      </ul>
+
+      <p class="dim">从 v2 保留的资产：R2 跳检实时复核、R1-P1 提交点只读检查（补 bulk 第二入口）、C1–C4 取证（含 C2 机理修正）、线程模型分析（1.1）、红线（§3.8）。从 v1 保留的资产：操作危险度盘点（谁该被管：跳检 / 校验 / 删除 / 移动 / 添加 / 汇报）、「业务幂等闸门留在提交侧」的职责划分。</p>
     </section>
 
     <!-- ================= 03 设计方案 ================= -->
     <section id="s3">
       <div class="sec-head">
         <span class="sec-no">03 / DESIGN</span>
-        <h2>设计方案：三处提交点检查 + 一处闸门复核</h2>
+        <h2>设计方案：独立操作层</h2>
         <div class="sec-rule"></div>
       </div>
 
-      <h3><span class="hn">3.1</span>核心原则：不建新基建，只补提交点动作</h3>
+      <h3><span class="hn">3.1</span>核心原则</h3>
       <ol class="steps">
-        <li><strong>在途可见</strong>：长操作把「我在途」写进已有登记（<code>_active_checks</code> 先例）；短操作提交点<strong>只读查询</strong>，拒已在途、不挡其它。</li>
-        <li><strong>动手前复核</strong>：长操作从「快照时代的决定」到真正动手之间，用实时状态复核一次——快照龄内的外部变化（用户删除等）在此被拦截。</li>
-        <li><strong>计数共享</strong>：有速率语义的操作（reannounce），两来源读写<strong>同一份</strong>计数，而不是各记各的。</li>
+        <li><strong>依赖方向 rules → ops ← web</strong>：操作的 qB 交互序列、在途登记、保护策略单点归 ops 层；规则只保留决策（哪些种子何时该跳检/校验）与断点续跑，WEB 只保留入口与回执。修正 v2「WEB 接到规则侧体系」的反向依赖（§02.2）。</li>
+        <li><strong>保护策略按来源区分</strong>：防「自动化频率失控」的保护（冷却、600s）只作用 <code>source=rule</code>；防「真实冲突」的保护（在途互斥、R2 复核、同日去重）作用所有来源。R3 的错误不是共享状态本身，而是把自动化限频套到人手上（§02.2）。</li>
+        <li><strong>不建新基建，只换模块边界</strong>：ops 是同步阻塞函数，两个调用方都在主循环线程（WEB 命令线 drain + 规则任务线），单一写线程约束原样成立——执行模型与今天完全相同。§02.1 否决 v1 的七条理由没有一条适用于纯抽取。</li>
       </ol>
+      <div class="note"><b>判据：何时可以对 WEB 源「说不」。</b>被拒时用户能否从界面<strong>自行看出原因</strong>。checking 态在种子列表可见 → R1 的「校验进行中」拒绝可自解释，保留；600s 窗口不可见 → reannounce 拒绝不可解释，不对 WEB 源设限。这条判据同时约束未来新增的任何 WEB 侧限制。</div>
+
       <figure>
         <svg viewBox="0 0 1120 316" xmlns="http://www.w3.org/2000/svg" font-size="12">
           <!-- 命令线 -->
@@ -309,63 +334,109 @@
           <text class="t-acc" x="40" y="50" font-size="12.5">命令线 · 每轮循环顶部 · wake 驱动（延迟 ≈ 0，qbmanager.py:422-423）</text>
           <rect class="box" x="40" y="62" width="150" height="32"/>
           <text class="t-ink" x="115" y="82" text-anchor="middle" font-size="12">WEB 提交</text>
-          <line class="ln" x1="190" y1="78" x2="280" y2="78"/>
-          <rect class="box" x="280" y="62" width="260" height="32"/>
-          <text class="t-acc" x="410" y="82" text-anchor="middle" font-size="12">① R1 查 _active_checks / checking 态</text>
-          <line class="ln" x1="540" y1="78" x2="610" y2="78"/>
-          <rect class="box" x="610" y="62" width="200" height="32"/>
-          <text class="t-acc" x="710" y="82" text-anchor="middle" font-size="12">② R3 查 reannounce_ts</text>
-          <line class="ln" x1="810" y1="78" x2="880" y2="78"/>
-          <rect class="box" x="880" y="62" width="150" height="32"/>
-          <text class="t-ink" x="955" y="82" text-anchor="middle" font-size="12">执行写操作</text>
+          <line class="ln" x1="190" y1="78" x2="270" y2="78"/>
+          <rect class="box" x="270" y="62" width="330" height="32"/>
+          <text class="t-acc" x="435" y="82" text-anchor="middle" font-size="12">① R1 查 _active_checks / checking 态（P1）</text>
+          <line class="ln" x1="600" y1="78" x2="680" y2="78"/>
+          <rect class="box" x="680" y="62" width="170" height="32"/>
+          <text class="t-ink" x="765" y="82" text-anchor="middle" font-size="12">执行写操作</text>
+          <text class="t-dim" x="40" y="100" font-size="11">P2' 后 recheck / 右键跳检经 ops 层提交（登记在途 + 按 source 策略，FIG.2）；其它命令行为不变</text>
           <!-- 任务线 -->
           <rect class="box" x="20" y="126" width="1080" height="100"/>
           <text class="t-acc" x="40" y="152" font-size="12.5">任务线 · main_tick 2s（qbmanager.py:632）</text>
           <rect class="box" x="40" y="164" width="170" height="32"/>
           <text class="t-ink" x="125" y="184" text-anchor="middle" font-size="12">规则跳检任务</text>
-          <line class="ln" x1="210" y1="180" x2="300" y2="180"/>
-          <rect class="box" x="300" y="164" width="180" height="32"/>
-          <text class="t-acc" x="390" y="184" text-anchor="middle" font-size="12">③ R2 实时复核</text>
-          <line class="ln" x1="480" y1="180" x2="560" y2="180"/>
-          <rect class="box" x="560" y="164" width="300" height="32"/>
-          <text class="t-ink" x="710" y="184" text-anchor="middle" font-size="12">阻塞窗口 ~6s（删除→轮询→重加）</text>
-          <text class="t-dim" x="560" y="216" font-size="11">窗口期其它命令只能排队 —— 线程即串行器（1.1 推论一）；窗口结束后命令正常消费</text>
+          <line class="ln" x1="210" y1="180" x2="280" y2="180"/>
+          <rect class="box" x="280" y="164" width="220" height="32"/>
+          <text class="t-acc" x="390" y="184" text-anchor="middle" font-size="12">② R2 实时复核（P1）</text>
+          <line class="ln" x1="500" y1="180" x2="570" y2="180"/>
+          <rect class="box" x="570" y="164" width="300" height="32"/>
+          <text class="t-ink" x="720" y="184" text-anchor="middle" font-size="12">阻塞窗口 ~6s（删除→轮询→重加）</text>
+          <text class="t-dim" x="570" y="216" font-size="11">窗口期其它命令只能排队 —— 线程即串行器（1.1 推论一）；P2' 后执行体搬进 ops，执行模型不变</text>
           <!-- 同步线 -->
           <rect class="box" x="20" y="246" width="1080" height="52"/>
           <text class="t-acc" x="40" y="270" font-size="12.5">同步线 · 1.5s 只刷快照（qbmanager.py:619）</text>
           <text class="t-dim" x="40" y="288" font-size="11">checking 态进快照 → WEBUI 种子列表可见校验在途；P0-5：命令改状态后当轮强制补刷新（qbmanager.py:435）</text>
         </svg>
-        <figcaption>FIG.1 — 简化模型的全部改动点：命令线上两个只读检查（①②）、任务线上一次实时复核（③）。无新模块、无新线程、无新节拍。</figcaption>
+        <figcaption>FIG.1 — 全部改动点与执行模型：P1 只加两个检查点（① 命令线只读检查，覆盖单发与 bulk 两个入口；② 任务线实时复核）；P2' 沿同一时间线只换调用方（FIG.2）。无新线程、无新节拍。</figcaption>
       </figure>
 
-      <h3><span class="hn">3.2</span>R1 — WEB recheck 接入校验在途体系（修 C1，双向）</h3>
-      <p><strong>P1 最小版（提交点只读检查）</strong>：<code>recheck_torrent</code> handler 提交前加判——hash ∈ <code>_active_checks</code> 或快照 state 属 checking 类 → 回执「校验进行中」拒绝，qB 不重启校验。C1 的 WEB→规则半边当期闭合，全部代价是一次集合查询。</p>
-      <p><strong>P2 全收编（D1-A）</strong>：WEB recheck handler 改调 full_checking 的提交路径（提交 recheck + check 轮询子任务 + <code>_active_checks</code> 登记 + 失败冷却），source 标记 <code>web</code>。免费获得：规则决策链 1.5 经 <code>active_check_hashes()</code> 看见 WEB 校验（反向闭合）；3 次/日失败冷却统一计数；校验完成后轮询 FINISHED 释放在途登记（<span class="path">taskqueue.py</span> kind=="check" 既有语义）。唯一适配点：check 轮询子任务的 origin 重入队语义（<span class="path">full_checking.py:176</span>）对 web 来源退化为「无 origin，FINISHED 即消亡」。</p>
+      <h3><span class="hn">3.2</span>R1 — WEB recheck 提交点拒绝（P1，修 C1 的 WEB→规则半边）</h3>
+      <p><strong>P1 最小版（提交点只读检查）</strong>：<code>recheck_torrent</code> handler 提交前加判——hash ∈ <code>_active_checks</code> 或快照 state 属 checking 类 → 回执「校验进行中」拒绝，qB 不重启校验。单发路径的全部代价是一次集合查询；bulk 路径另加在途过滤与聚合回执（下条）。</p>
+      <p>⚠ <strong>必须覆盖第二条入口</strong>：<code>bulk_torrents action=recheck</code>（<span class="path">commands.py:458-459</span>）同样直调 API——在途 hash 过滤，聚合回执带「N 个校验进行中已跳过」；漏掉它，批量路径就是 C1 的旁路。</p>
+      <p>P2' 后该检查迁入 <code>ops_recheck</code> 提交点（handler 守阵退化为回执映射），避免两处实现。WEB 源不受 3 次/日 冷却（D1）；WEB recheck 的 <code>auto_start</code> 恒 False（与 qB 自家 WebUI 行为一致，开始与否用户自己控制）。</p>
 
-      <h3><span class="hn">3.3</span>R2 — 跳检闸门后、动手前的实时复核（修 C2）</h3>
+      <h3><span class="hn">3.3</span>R2 — 跳检闸门后、动手前的实时复核（P1，修 C2）</h3>
       <p>位置：前置闸门 <code>_skip_gates</code> 通过后、<strong>导出之前</strong>（skip_checking 阶段 1 与 2 之间）。动作：<code>torrents_info(hash)</code> 重拉一次实时状态；种子已不在 → <code>ActionResult.skip("种子已被移除(可能被用户删除), 放弃跳检")</code>——发生在备份与删除之前，<strong>零副作用</strong>，无孤儿备份。</p>
-      <p>效果：消灭「按陈旧快照执行」这个主要形态；竞态窗口从快照龄（≤2s）压缩到「复核→删除」的毫秒级缝隙（qB 删除生效延迟），且残余方向安全（最坏导出失败、干净放弃）。跳检是天级低频操作，多一次 API 调用成本可忽略。</p>
+      <p>效果：消灭「按陈旧快照执行」这个主要形态；竞态窗口从快照龄（≤2s）压缩到「复核→删除」的毫秒级缝隙（qB 删除生效延迟），且残余方向安全（最坏导出失败、干净放弃）。跳检是天级低频操作，多一次 API 调用成本可忽略。本项纯规则内部补强，与抽取正交——P2' 搬家时随代码迁入 <code>ops_skip_check</code>，两来源同时受保护。</p>
 
-      <h3><span class="hn">3.4</span>R3 — WEB reannounce 对齐 600s 限频（修 C3）</h3>
-      <p>WEB handler 提交点查 <code>state["reannounce_ts"]</code>：窗口内 → 回执「N 秒前刚汇报过，稍后再试」拒绝；执行成功后写<strong>同一份</strong>计数。两来源共享一个窗口，不再依赖 tracker min-interval 兜底。</p>
+      <h3><span class="hn">3.4</span>P2' — 操作层抽取：rules → ops ← web（替代 v2 的 D1-A 收编）</h3>
+      <p><strong>形态</strong>：<span class="path">src/auto_qb/core/mixins/ops.py</span> 新增 <code>OpsMixin</code>，组合进 <code>QbManager</code>（<span class="path">qbmanager.py:127-136</span> 既有 mixin 序列追加，与 CheckingMixin / RuleEngineMixin 同模式）。选 manager 侧而非独立对象的理由：ops 依赖的三样东西（<code>manager.api</code> / <code>task_queue</code> / <code>state</code>）本来就挂在 manager 上，且 WEB 命令处理器的 self 就是 manager——调用零转换。两方法签名中 <code>torrent</code> 均为可选：None 时 ops 内部经 store 取活记录；规则侧 <code>ctx.torrent</code> 本就是实时 store 优先的 property，显式传参与缺省取值等价。</p>
+      <ul class="plain">
+        <li><strong><code>ops_recheck(hash, source, torrent=None, auto_start=False, on_success=None)</code></strong>：从 <code>_execute_full_checking</code> 搬「登记 check 轮询子任务 + 提交 recheck + 轮询」主干（<span class="path">full_checking.py:58-176</span>）。规则侧差异全部收进参数：<code>on_success</code> 回调承载 origin 重入队（keep_progress）与晋升；<code>source=rule</code> 时失败冷却生效（<code>_bump_recheck_fail</code>），<code>source=web</code> 时冷却跳过、<code>on_success=None</code>（FINISHED 即消亡——<span class="path">full_checking.py:88</span>「外部入口 origin=None」的退化路径已存在，抽取只是把这条内部路径转正为公开接口）。</li>
+        <li><strong><code>ops_skip_check(hash, source, torrent=None, auto_start=False)</code></strong>：四阶段整体搬（<span class="path">skip_checking.py:39-121</span>，含 <code>_skip_gates</code> / 备份 / 清理）；R2 复核落在阶段 1 与 2 之间，两来源同时受保护。<code>has_reference</code>「无参考高风险」告警是规则侧语义：随迁并按 source——web 不产生该告警（前端危险确认框已承担风险告知）。安全闸门（部分下载禁止跳检）全来源生效。</li>
+        <li><strong><code>_active_checks</code> 留在 TaskQueue</strong>：kind=="check" 的登记/释放与队列生命周期耦合（入队登记 <span class="path">taskqueue.py:141-144</span>，FINISHED 释放 :181），挪出去要重新发明；ops 经 <code>add_task</code> 登记，决策链 1.5 经 <code>active_check_hashes()</code> 的查询照旧。这是抽取里唯一不追求「彻底」的地方。</li>
+        <li><strong>CheckAction 变薄</strong>：<code>_execute_full_checking</code> / <code>_execute_skip_checking</code> 改为一行委托（ctx 字段 → ops 参数），决策链 0–4（<span class="path">checking.py:75-126</span>）不动。</li>
+        <li><strong>WEB handler 变薄</strong>：<code>_cmd_recheck_torrent</code> / bulk recheck 改调 ops（P1 的守阵迁入 ops 提交点，handler 只做回执映射）；右键跳检 handler 即 <code>self.ops_skip_check(hash, source="web")</code>。边界：<strong>webui 模块不得 import rules.*</strong>，加静态守阵测试钉住（v2 的收编方案做不到这一点——它要求 WEB 调进规则模块内部）。</li>
+        <li><strong>等价性红线</strong>：poll 闭包捕获的 <code>ctx.torrent</code> 依赖 store 原地更新的活记录语义——搬家时必须原样保留（不得改为每次 <code>store.get</code> 重查），由现有 test_full_checking 行为断言钉住。</li>
+      </ul>
 
-      <h3><span class="hn">3.5</span>C4 — 接受现状（记为已知限制）</h3>
-      <p>move 幂等可逆、规则侧已有 execute_once/cooldown、WEB 移动是用户显式动作且即时回执——维持现状。若未来实证冲击（做种速度下滑 / 移动堆积），再单独立项「moving 态 inflight 感知」：判定材料现成（<span class="path">record.py:231</span> state_enum，版本无关的状态类别判定）。本计划不预支。</p>
+      <figure>
+        <svg viewBox="0 0 1120 300" xmlns="http://www.w3.org/2000/svg" font-size="12">
+          <!-- 三调用方 -->
+          <rect class="box" x="20" y="28" width="310" height="110"/>
+          <text class="t-acc" x="40" y="54" font-size="12.5">规则侧 · rules/actions</text>
+          <text class="t-ink" x="40" y="78" font-size="11.5">CheckAction 决策链 0-4 不动</text>
+          <text class="t-ink" x="40" y="98" font-size="11.5">origin 重入队 → on_success 回调</text>
+          <text class="t-ink" x="40" y="118" font-size="11.5">失败冷却 · 晋升（仅 rule 源生效）</text>
+          <rect class="ln-acc" x="410" y="28" width="300" height="110"/>
+          <text class="t-acc" x="430" y="54" font-size="12.5">ops 层 · core/mixins/ops.py（P2'）</text>
+          <text class="t-ink" x="430" y="78" font-size="11.5">ops_recheck: 登记轮询 + 提交 + 失败推断</text>
+          <text class="t-ink" x="430" y="98" font-size="11.5">ops_skip_check: 四阶段 + R2 复核</text>
+          <text class="t-ink" x="430" y="118" font-size="11.5">保护策略按 source 区分（rule / web）</text>
+          <rect class="box" x="790" y="28" width="310" height="110"/>
+          <text class="t-acc" x="810" y="54" font-size="12.5">WEB 侧 · webui/commands</text>
+          <text class="t-ink" x="810" y="78" font-size="11.5">recheck_torrent / bulk recheck（在途过滤）</text>
+          <text class="t-ink" x="810" y="98" font-size="11.5">右键跳检（P2'）</text>
+          <text class="t-ink" x="810" y="118" font-size="11.5">只做入口与回执映射</text>
+          <line class="ln" x1="330" y1="83" x2="410" y2="83"/>
+          <line class="ln" x1="790" y1="83" x2="710" y2="83"/>
+          <line class="ln" x1="560" y1="138" x2="560" y2="198"/>
+          <!-- 既有基建 -->
+          <rect class="box" x="20" y="198" width="1080" height="64"/>
+          <text class="t-acc" x="40" y="222" font-size="12.5">既有基建（不动）</text>
+          <text class="t-dim" x="40" y="244" font-size="11">TaskQueue：check 轮询 + _active_checks 登记/释放（taskqueue.py:141/:181） · QbApi · store / state_file（skip_check_day / recheck_fails / 备份元数据）</text>
+        </svg>
+        <figcaption>FIG.2 — P2' 的依赖方向：规则与 WEB 都只依赖 ops 层，ops 层依赖既有基建；webui 对 rules 内部的引用归零（静态守阵钉住）。执行模型不变：全部仍在主循环线程。</figcaption>
+      </figure>
 
-      <h3><span class="hn">3.6</span>WEBUI 右键「跳检」（需求场景落地）</h3>
-      <p>WEB 命令表加一项 → handler 包装现有 <code>_execute_skip_checking</code> 执行体（source=web）。天然性质，无需新机制：命令在主循环线程执行 → 与规则跳检<strong>天然串行</strong>（线程即队列）；<code>skip_check_day</code> 跨来源去重免费；阻塞 ~6s 期间其它 WEB 命令排队等待——与规则跳检执行时的现状一致。前端：右键菜单项 + 危险确认框（跳检清空本地统计，须显式确认）。前置依赖：R2 先落地（实时复核同样保护 WEB 触发的跳检）。</p>
+      <h3><span class="hn">3.5</span>保护策略按来源区分（行为口径单点 · 生效范围 D1 待拍板）</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th style="width:210px">保护</th><th style="width:250px">防什么</th><th style="width:90px">rule 源</th><th style="width:90px">web 源</th><th>理由</th></tr>
+          <tr><td><strong>在途互斥</strong>（R1 提交点拒绝 / ops 登记）</td><td>真实冲突：重启校验污染规则轮询、组内重复 I/O</td><td class="lvl hi">生效</td><td class="lvl hi">生效</td><td>冲突真实且 checking 态 UI 可见——拒绝可自解释（§3.1 判据）</td></tr>
+          <tr><td><strong>R2 实时复核</strong></td><td>真实冲突：陈旧快照复活用户刚删的种子</td><td class="lvl hi">生效</td><td class="lvl hi">生效</td><td>零副作用、方向安全，无理由区分来源</td></tr>
+          <tr><td><strong>跳检同日去重</strong>（<code>skip_check_day</code>）</td><td>二次跳检无收益（本地统计已丢一次）</td><td class="lvl hi">生效</td><td class="lvl hi">生效</td><td>拒绝文案「今日已跳检过」自解释；前端另有危险确认框</td></tr>
+          <tr><td><strong>3 次/日校验失败冷却</strong>（<code>recheck_fails</code>）</td><td>自动化 recheck 死循环（损坏文件）</td><td class="lvl hi">生效</td><td class="lvl no">不生效</td><td>手动排障不受限——限制它就是「为什么不生效」；且 WEB 源失败本就由人当场看见</td></tr>
+          <tr><td><strong>reannounce 600s 限频</strong>（<code>reannounce_ts</code>）</td><td>自动化连发 announce（封号风险）</td><td class="lvl hi">生效</td><td class="lvl no">不生效</td><td>人手点击频率有界；不可见窗口的拒绝 = 困惑 → C3 接受现状</td></tr>
+        </table>
+      </div>
+
+      <h3><span class="hn">3.6</span>WEBUI 右键「跳检」（需求场景落地，依赖 P1 + P2'）</h3>
+      <p>WEB 命令表加一项 → handler 调 <code>self.ops_skip_check(hash, source="web")</code>。天然性质，无需新机制：命令在主循环线程执行 → 与规则跳检<strong>天然串行</strong>（线程即队列）；<code>skip_check_day</code> 跨来源去重共享（拒绝文案「今日已跳检过」自解释）；阻塞 ~6s 期间其它 WEB 命令排队等待——与规则跳检执行时的现状一致。前端：右键菜单项 + 危险确认框（跳检清空本地统计，须显式确认）。前置依赖：R2（P1）先落地（实时复核同样保护 WEB 触发的跳检）+ ops 抽取（P2'）——v2 的方案（包装规则 mixin）因依赖方向反了而废弃（§02.2）。</p>
 
       <h3><span class="hn">3.7</span>可选：在途操作只读视图（D2）</h3>
       <p><code>GET /api/inflight</code> 只读端点：列 <code>_active_checks</code>（+ 若实现，跳检窗口标记）。这是 v1「队列面板」的降级替代。<strong>倾向：不做</strong>——校验在途在种子列表 checking 态已可见，跳检窗口 6s 且天级低频；等真实需要再立项。</p>
 
       <h3><span class="hn">3.8</span>红线（随本计划入档）</h3>
-      <div class="note"><b>阻塞执行体 + 单一写线程是当前安全模型的一半。</b>跳检窗口的互斥 = 主循环被阻塞（1.1 推论一）。任何把长操作改成非阻塞 / 分阶段 / 独立线程的优化，<strong>必须同步</strong>把「在途标记」升级为提交点强制检查的互斥层，否则 C1/C2 类竞态以新形态回归。新来源（HR 联动 / 外部 API / 定时任务）接入一律走同一套提交点检查，不开旁路。</div>
+      <div class="note"><b>阻塞执行体 + 单一写线程是当前安全模型的一半。</b>跳检窗口的互斥 = 主循环被阻塞（1.1 推论一）。任何把长操作改成非阻塞 / 分阶段 / 独立线程的优化，<strong>必须同步</strong>把「在途标记」升级为提交点强制检查的互斥层，否则 C1/C2 类竞态以新形态回归。ops 层是这条红线的执行载体：<strong>新来源（HR 联动 / 外部 API / 定时任务）接入 = 新增一个 source 调 ops</strong>，不复制操作语义、不开旁路；ops 方法必须留在主循环线程调用。</div>
 
       <h3><span class="hn">3.9</span>非目标（明确排除）</h3>
       <ul class="plain">
-        <li>不建队列模块 / 执行槽 / 延迟回执改造 / 操作优先级——v1 基建全部不做（§02）。</li>
+        <li>不建队列模块 / 执行槽 / 延迟回执改造 / 操作优先级——v1 基建全部不做（§02.1）。</li>
+        <li>不抽 reannounce / move / delete：单来源 + C3/C4 接受现状（D3/D4）；未来出现第三来源再扩 ops。</li>
         <li>零新增配置键（<code>validate_config</code> 与 <code>schema.py</code> 无改动）、零新增线程、零 state_file schema 变更。</li>
-        <li>不改规则决策链业务语义（哪些种子该跳检 / 校验的判定逻辑不动）；delete/move/add 的规则侧行为不变。</li>
+        <li>不改规则决策链业务语义（哪些种子该跳检 / 校验的判定逻辑不动）；delete/move/add/reannounce 的规则侧行为不变。</li>
       </ul>
     </section>
 
@@ -376,28 +447,28 @@
         <h2>分期实施</h2>
         <div class="sec-rule"></div>
       </div>
-      <p>排序原则：先低风险提交点检查、后收编与需求落地；每期独立可交付、可回滚。对比 v1 的 M1–M4：原 M1 框架期整体取消，M2 收编 / M3 右键跳检 / M4 汇报对齐压缩为下述两期。</p>
+      <p>排序原则：先低风险提交点检查、后抽取与需求落地；每期独立可交付、可回滚。对比 v1 的 M1–M4：原 M1 框架期整体取消；对比 v2：P1 保留骨架、范围微调（砍 R3、补 bulk 入口），原 P2 由「收编」改为 P2'（抽取）。</p>
 
       <div class="phase">
         <div class="phase-head"><span class="pid">P1</span><span class="pt">提交点检查</span><span class="pr">低风险 · 现有文件内小改</span></div>
         <div class="phase-body">
           <table>
-            <tr><th style="width:90px">范围</th><td>R2 跳检闸门实时复核（<span class="path">skip_checking.py</span>）+ R3 WEB reannounce 600s 对齐（<span class="path">commands.py</span>）+ R1 最小版 WEB recheck 提交点拒绝（<span class="path">commands.py</span>）。</td></tr>
-            <tr><th>价值</th><td>C1 半边 + C2 + C3 当期闭合；P2 右键跳检的前置就绪。</td></tr>
-            <tr><th>验收</th><td>① 跳检任务运行前种子被 WEB 删除 → skip 干净放弃，无复活、无孤儿备份；② 正常跳检 / 校验 / 汇报路径回归不变；③ 规则校验在途时 WEB 再发 recheck → 拒绝回执，qB 不重启校验；④ WEB 汇报后 600s 内任一来源再汇报 → 拒绝回执含剩余秒数。</td></tr>
-            <tr><th>回滚</th><td>三个 R 各自独立 commit，单点 revert 即可。</td></tr>
+            <tr><th style="width:90px">范围</th><td>R2 跳检闸门实时复核（<span class="path">skip_checking.py</span>）+ R1 WEB recheck 提交点拒绝，覆盖单发（<span class="path">commands.py:304-307</span>）与 bulk（<span class="path">commands.py:458-459</span>）两条入口。R3 已废止（§02.2），WEB reannounce 行为不变。</td></tr>
+            <tr><th>价值</th><td>C1 的 WEB→规则半边（两个入口）当期闭合 + C2 闭合；P2' 右键跳检的前置就绪。</td></tr>
+            <tr><th>验收</th><td>① 跳检任务运行前种子被 WEB 删除 → skip 干净放弃，无复活、无孤儿备份；② 正常跳检 / 校验路径回归不变；③ 规则校验在途时 WEB 单发 recheck → 拒绝回执「校验进行中」，bulk recheck → 在途 hash 跳过且聚合回执含跳过计数，两种路径 qB 都不重启校验。</td></tr>
+            <tr><th>回滚</th><td>两个 R 各自独立 commit，单点 revert 即可。</td></tr>
           </table>
         </div>
       </div>
 
       <div class="phase">
-        <div class="phase-head"><span class="pid">P2</span><span class="pt">收编与需求落地</span><span class="pr">WEB recheck 收编 + 右键跳检</span></div>
+        <div class="phase-head"><span class="pid">P2'</span><span class="pt">操作层抽取与需求落地</span><span class="pr">搬运为主 · 逻辑等价 + 右键跳检</span></div>
         <div class="phase-body">
           <table>
-            <tr><th style="width:90px">范围</th><td>R1 全收编（若 D1=A）：WEB recheck 走 full_checking 提交路径，web 来源适配（无 origin 消亡）；WEBUI 种子右键「跳检」命令 + 前端菜单与确认框；（若 D2）<code>GET /api/inflight</code> 最小只读视图。</td></tr>
-            <tr><th>价值</th><td>C1 双向闭环（决策链 1.5 可见 WEB 校验、失败冷却统一）；原需求「右键跳检」落地——接入成本只剩一次 handler 包装。</td></tr>
-            <tr><th>验收</th><td>① WEB 校验计入 <code>_active_checks</code> → 规则决策链组内串行化可见；② WEB 校验失败计入 3 次/日冷却（D1=A）；③ 右键跳检与规则跳检同日去重共享、执行天然串行；④ check 轮询对 web 来源 FINISHED 即消亡，无 origin 重入队副作用。</td></tr>
-            <tr><th>回滚</th><td>R1-full 与右键跳检独立成 commit。</td></tr>
+            <tr><th style="width:90px">范围</th><td>ops 层抽取（<span class="path">core/mixins/ops.py</span>：<code>ops_recheck</code> / <code>ops_skip_check</code> + 按 source 保护策略）；CheckAction 两执行体改一行委托，决策链 0–4 不动；WEB handler 改调 ops（recheck 单发 + bulk 路径）；WEBUI 种子右键「跳检」命令 + 前端菜单与确认框；webui 不 import rules 的静态守阵；（若 D2）<code>GET /api/inflight</code> 最小只读视图。</td></tr>
+            <tr><th>价值</th><td>依赖方向摆正（rules → ops ← web），操作语义与保护策略单点——改一处不再动两处；C1 双向自然闭环（WEB recheck 经 ops 登记 → 决策链 1.5 可见）；原需求「右键跳检」落地，接入成本只剩一次 handler 调用。</td></tr>
+            <tr><th>验收</th><td>① WEB recheck 经 ops 登记 → 决策链 1.5 组内串行化可见；轮询 FINISHED 释放在途，无 origin 重入队副作用；② WEB 源不计 3 次/日 冷却、不晋升 verified_references（D1）；③ 右键跳检与规则跳检同日去重共享、执行天然串行；④ CheckAction 决策链回归不变（test_full_checking / test_skip_checking 全绿）；⑤ webui 不 import rules 的静态守阵通过。</td></tr>
+            <tr><th>回滚</th><td>抽取 commit 搬运为主、逻辑等价，整体 revert 即回 P1 状态；右键跳检独立成 commit。</td></tr>
           </table>
         </div>
       </div>
@@ -412,19 +483,20 @@
       </div>
       <h3><span class="hn">5.1</span>测试计划（新增用例同步进各测试文件头「测试计划」清单）</h3>
       <ul class="plain">
-        <li><strong>test_skip_checking 扩展</strong>：闸门复核——任务运行前种子已消失 → skip、无副作用、无孤儿备份；正常跳检路径回归对照。</li>
-        <li><strong>test_full_checking 扩展</strong>（P2）：web 来源提交 → 登记 / 冷却计数 / 轮询 FINISHED 消亡、无 origin 副作用。</li>
-        <li><strong>WEBUI commands 测试扩展</strong>：recheck 拒绝路径（在途时）；reannounce 600s 拒绝路径 + 执行后写同一份计数。</li>
+        <li><strong>test_skip_checking 扩展</strong>（P1）：闸门复核——任务运行前种子已消失 → skip、无副作用、无孤儿备份；正常跳检路径回归对照。</li>
+        <li><strong>WEBUI commands 测试扩展</strong>（P1）：recheck 拒绝路径（在途时，单发）；bulk recheck 在途过滤 + 聚合回执跳过计数。</li>
+        <li><strong>ops 层测试</strong>（P2'，新 test_ops 或并入 test_full_checking）：web 源提交 → 登记 / 轮询 FINISHED 释放 / 不计冷却 / 不晋升 / 无 origin 副作用；rule 源回调重入队回归不变；<code>skip_check_day</code> 跨来源共享。</li>
+        <li><strong>边界守阵</strong>（P2'）：webui 模块不得 import rules.* 的静态断言。</li>
         <li><strong>回归</strong>：现有 test_skip_checking / test_full_checking 全绿 + <code>commands run test.quick</code>。</li>
       </ul>
       <h3><span class="hn">5.2</span>成本与风险</h3>
       <div class="tbl-wrap">
         <table>
           <tr><th style="width:200px">项</th><th>评估</th></tr>
-          <tr><td>代码量</td><td>预计 ≤ 150 行含测试；全部落在现有 handler / 闸门 / 动作文件。无新模块、无配置键、无持久化变更、无迁移。</td></tr>
-          <tr><td>行为变化</td><td>仅两处显式收紧：WEB recheck 会被「校验进行中」拒绝；WEB reannounce 受 600s 窗口约束。均为冲突修复的本意。</td></tr>
-          <tr><td>残余风险</td><td>R2 复核后到删除之间的毫秒级缝隙（qB 删除生效延迟）依旧存在，方向安全（最坏导出失败干净放弃）；如未来要彻底闭合，在重加前再查一次即可，不预支。</td></tr>
-          <tr><td>回滚</td><td>每 R 独立 commit；无状态迁移，revert 即回到现状。</td></tr>
+          <tr><td>代码量</td><td>P1 ≤ 60 行（现有文件内小改）。P2' 搬运为主：约 430 行函数体迁移（full_checking 主干 ~120 行 + skip_checking 四阶段 ~260 行 + 备份/清理），git diff 大但逻辑等价；净新增 ≤ 150 行含测试（ops 接缝 / 来源策略 / 守阵）。无新配置键、无新线程、无 state_file schema 变更、无迁移。</td></tr>
+          <tr><td>行为变化</td><td>仅一处收紧：WEB recheck 会被「校验进行中」拒绝（含 bulk 路径）；一处新增能力：右键跳检。WEB reannounce / move / delete 行为完全不变（v2 的 R3 取消，C3/C4 接受现状）。</td></tr>
+          <tr><td>残余风险</td><td>R2 复核后到删除之间的毫秒级缝隙依旧存在，方向安全（最坏导出失败干净放弃）。抽取的回归风险由现有测试钉住——poll 闭包捕获的活记录语义（§3.4 等价性红线）是搬家时最容易踩的点。</td></tr>
+          <tr><td>回滚</td><td>每 R / 每期独立 commit；无状态迁移，revert 即回到现状。</td></tr>
         </table>
       </div>
     </section>
@@ -436,26 +508,31 @@
         <h2>待拍板决策点</h2>
         <div class="sec-rule"></div>
       </div>
-      <p>三项建议已有默认倾向，开工前请逐项确认或改判：</p>
+      <p>四项建议已有默认倾向，开工前请逐项确认或改判：</p>
       <div class="decide">
-        <div class="q"><span class="dn">D1</span>WEB recheck 收编深度？</div>
-        <div class="a">建议 <b>A：全收编</b>——走 full_checking 提交路径，获得登记 + 冷却 + 决策链可见性；行为变化是 WEB 校验也计入 3 次/日失败冷却（正是防滥用语义）。B：维持 P1 最小版（只拒绝已在途，不登记不冷却），C1 反向半边不闭合。</div>
+        <div class="q"><span class="dn">D1</span>保护策略按来源区分（§3.5 表）采纳？</div>
+        <div class="a">建议 <b>采纳</b>：防自动化失控的限频（3 次/日冷却、reannounce 600s）只作用 source=rule；防真实冲突的（在途互斥、R2 复核、同日去重）作用所有来源。关键子项：WEB recheck <b>不受 3 次/日 冷却限制</b>，手动排障不被挡——v2 D1-A 的同款困惑在此消掉。</div>
       </div>
       <div class="decide">
         <div class="q"><span class="dn">D2</span>在途操作只读视图做不做？</div>
         <div class="a">建议 <b>不做</b>：校验在途在种子列表 checking 态已可见，跳检窗口 6s 且天级低频。若要做取最小版（只列 _active_checks 的只读端点）。</div>
       </div>
       <div class="decide">
-        <div class="q"><span class="dn">D3</span>C4（move/bulk 无在途感知）接受现状？</div>
-        <div class="a">建议 <b>接受</b>并记为已知限制；实证冲击后再立「moving 态 inflight 感知」专项（材料现成，<span class="path">record.py:231</span>）。</div>
+        <div class="q"><span class="dn">D3</span>C3 + C4 接受现状？</div>
+        <div class="a">建议 <b>接受</b>并记为已知限制。C4 为 v2 原判；C3 为 v3 新降级（WEB 汇报是用户显式选择，限频产生「为什么不生效」困惑，且危害 ≈ 0，§02.2）。实证冲击后再分别立「moving 态 inflight 感知」/「汇报对齐」专项（材料现成，<span class="path">record.py:231</span>）。</div>
+      </div>
+      <div class="decide">
+        <div class="q"><span class="dn">D4</span>抽取范围？</div>
+        <div class="a">建议 <b>本轮只抽 recheck 与 skip_check</b>——它们是有双来源（规则 + WEB）与共享保护语义的操作；reannounce / move / delete 单来源且 C3/C4 接受现状，不抽，未来出现第三来源（HR 联动 / 外部 API）再扩 ops（§3.8）。</div>
       </div>
     </section>
 
     <!-- ================= colophon ================= -->
     <div class="colophon">
       auto-qb · memory-bank/plans/26-09-30-0109-plan-dangerous-op-consolidation.html<br>
-      v2 完全重写（26-09-30 02:43）：否决 v1 全局队列模式，否决原因见 §02 · 代码事实核对截至 develop@0e43bf7d（于 c76469a3 取证复核；0e43bf7d 为净零行符号替换，引用锚点行号未漂移）<br>
-      起草 ZCode (AI) · 评审通过后按 P1 → P2 顺序实施
+      v3 完全重写（26-09-30 04:59）：用户评审 v2 两条修订——WEB 汇报限频致「不生效」困惑（R3 废止，C3 降级）· web×规则交织难维护（收编改独立操作层抽取），否决记录见 §02.2 · 代码事实核对截至 develop@da860d2（25aacd9 → da860d2 引用锚点未漂移）<br>
+      v3.1 口径一致性修订（26-09-30 05:31）：FIG.1 检查点编号断档（③→②，R3 废止后残留）/ ops 方法名统一（_ops_skip_check → ops_skip_check，torrent 改可选参与调用式自洽）/「P1 不变」与砍补矛盾解除 / P2 与 P2' 期名统一 / §3.5 标注 D1 待拍板
+      起草 ZCode (AI) · 评审通过后按 P1 → P2' 顺序实施
     </div>
 
     </main>
