@@ -679,8 +679,8 @@ window.CONFIG_EDITOR = {
         // SPD-03 enabled 总开关: 勾 = 写 enabled:true, 取消勾 = 写 enabled:false(保留各档配置, 不删段);
         // 键缺省 = 后端默认 true, 开关按勾选显示并带"默认"角标
         { type: "field", field: { key: "enabled", label: "启用", kind: "bool", default: true, help: "关闭后曲线任务整体停用(不写 qB), 各档配置保留" }, path: [...base, "enabled"], depth: 0 },
-        { type: "field", field: { key: "interval", label: "执行间隔", kind: "time", help: "留空 = 回退主 interval", default: "" }, path: [...base, "interval"], depth: 0 },
-        { type: "field", field: { key: "dat_path", label: "Traffic Monitor 数据文件", kind: "path", placeholder: ".../history_traffic.dat", default: "" }, path: [...base, "traffic_source", 0, "traffic_monitor", "dat_path"], depth: 0 },
+        { type: "field", field: { key: "interval", label: "执行间隔", kind: "time", help: "曲线任务多久重算一次并套用全局限速: 读 dat、按各 period 曲线聚合查档、写 qB 全局速度限制。流量按日聚合, 不必太频繁(分钟级即可, 不必秒级)。留空 = 回退常规 → interval, 与维护 / 全局清理等内置任务同周期。", default: "" }, path: [...base, "interval"], depth: 0 },
+        { type: "field", field: { key: "dat_path", label: "Traffic Monitor 数据文件", kind: "path", placeholder: ".../history_traffic.dat", default: "", help: "Traffic Monitor 的 history_traffic.dat 路径(每行 \"YYYY/MM/DD <上传KB>/<下载KB>\", 单位 KB=1024B); 曲线靠它累计流量自动分档限速。必须指向该文件实际位置 —— 留空或路径错则读不到数据, 该曲线整条不生效。", risk: "路径错 / 文件不存在时不会报错中断, 只是该曲线静默失效(本轮不套用限速、下轮重试), 容易误以为限速没起作用。" }, path: [...base, "traffic_source", 0, "traffic_monitor", "dat_path"], depth: 0 },
       ];
     },
     cfgCurveList() {
