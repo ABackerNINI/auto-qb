@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>修改计划 · HR 触发语义重构 — 移除「本地不触发」,全量纳入管理</title>
+<meta name="doc-topic" content="backend-hr-verify">
+<meta name="doc-type" content="plan">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-30-0559">
+<meta name="doc-updated" content="26-09-30-0559">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101013;
+    --ink: #e9e9e4;
+    --ink-strong: #f6f6f2;
+    --muted: #9c9c94;
+    --faint: #6f6f68;
+    --hairline: rgba(255, 255, 255, 0.09);
+    --hairline-soft: rgba(255, 255, 255, 0.055);
+    --accent: #5ac2ae;
+    --accent-dim: rgba(90, 194, 174, 0.14);
+    --warn: #d9a441;
+    --error: #e08573;
+    --ok: #8fbf9a;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1100px; margin: 0 auto; padding: 72px 48px 96px; }
+
+  /* ---------- 封面 ---------- */
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: 40px;
+    line-height: 1.15;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+    margin: 18px 0 14px;
+  }
+  .lede { font-size: 17px; color: var(--muted); max-width: 46em; }
+  .lede strong { color: var(--ink); font-weight: 510; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 28px;
+    margin-top: 34px; padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+  }
+  .meta-row div { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .meta-row b { display: block; color: var(--muted); font-weight: 500; margin-bottom: 3px; letter-spacing: 0.05em; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-top: 76px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--hairline); padding-bottom: 12px; margin-bottom: 26px; }
+  .sec-no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-strong); }
+  h3 { font-size: 17px; font-weight: 600; color: var(--ink-strong); margin: 34px 0 12px; }
+  h3 .ref { font-family: var(--mono); font-size: 12px; color: var(--faint); font-weight: 400; margin-left: 10px; }
+  p { max-width: 74ch; margin-bottom: 12px; }
+  p.wide { max-width: none; }
+  .small { font-size: 13px; color: var(--muted); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- 表 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 10px; font-size: 13.5px; }
+  th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; text-align: left;
+    padding: 8px 12px; border-bottom: 1px solid var(--hairline);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--hairline-soft); vertical-align: top; }
+  td code { white-space: normal; }
+  .t-mono { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .del { color: var(--error); text-decoration: line-through; }
+  .new { color: var(--accent); }
+
+  /* ---------- 标注 ---------- */
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; padding: 1px 7px; border: 1px solid var(--hairline); border-radius: 3px; color: var(--muted); }
+  .tag.accent { color: var(--accent); border-color: rgba(90, 194, 174, 0.4); }
+  .tag.warn { color: var(--warn); border-color: rgba(217, 164, 65, 0.4); }
+  .note {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-dim);
+    padding: 14px 18px;
+    margin: 20px 0;
+    max-width: none;
+  }
+  .note p { margin: 0; max-width: none; }
+  .note .note-t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent); display: block; margin-bottom: 6px; }
+
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 16px 0 22px;
+    color: var(--ink);
+  }
+  pre .c { color: var(--faint); }
+  pre .k { color: var(--accent); }
+  pre .w { color: var(--warn); }
+
+  /* ---------- 图 ---------- */
+  figure { margin: 26px 0 30px; }
+  figcaption { font-size: 12.5px; color: var(--faint); margin-top: 10px; font-family: var(--mono); }
+  svg text { font-family: var(--mono); }
+
+  /* ---------- 清单 ---------- */
+  ul, ol { max-width: 74ch; padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+
+  .file-changes { margin: 14px 0 8px; }
+  .file-changes li { margin-bottom: 12px; }
+  .fc-path { font-family: var(--mono); font-size: 13px; color: var(--ink-strong); }
+  .fc-path .ln { color: var(--faint); }
+
+  footer {
+    margin-top: 90px; padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ============ 封面 ============ -->
+  <header>
+    <span class="kicker">Delivery Plan · auto-qb · HR 在线核实</span>
+    <h1>HR 触发语义重构:<br>移除「本地不触发」· 全量纳入管理</h1>
+    <p class="lede">
+      「未核实(本地不触发)」这个状态的根因,是拿<strong>本机下载量</strong>当<strong>有没有 HR 义务</strong>的判据 ——
+      但转移种子在本机 downloaded 恒为 0,这在 PT 圈是常态,不代表无义务;更拧巴的是,做种已满的种子
+      也因为「达标 ⇒ 不触发」的短路落进同一个桶。本计划把「触发」降级为<strong>纯展示辅助</strong>(只用来区分
+      「本机下载的」与「疑似辅种」),后端管理(打标 / 管束)<strong>全量纳入</strong>配置了 HR 的站点的所有种子;
+      做种早已超额的老种直接跳过不打标。
+    </p>
+    <div class="meta-row">
+      <div><b>日期</b>2026-09-30</div>
+      <div><b>状态</b>Open(设计已拍板 2026-09-30 会话, 待开工)</div>
+      <div><b>关联</b>26-09-28-1932(判定收口重建) · 26-09-30-0240(三参数解耦)</div>
+      <div><b>影响面</b>后端 5 文件 · 前端 2 文件 · 测试 3 文件 · 零配置变更</div>
+    </div>
+  </header>
+
+  <!-- ============ 1. 现状诊断 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§1</span><h2>现状诊断:「未核实」桶里装的都是谁</h2></div>
+
+    <p>「未核实(本地不触发)」由 <code>resolve.safety_display</code> 派生:<strong>站点侧无个体证据</strong>(判定落「无站点证据」身份)
+    且 <code>check_hr_condition()</code> 为 False。而 <code>check_hr_condition</code> 在无站点证据时是「先问达标、再问本地下载触发」的混合体
+    (<code>torrents/record.py</code> 的 <code>check_hr_condition</code> / <code>check_hr_satisfied</code>),于是三种互不相干的人落进了同一个桶:</p>
+
+    <table>
+      <thead>
+        <tr><th style="width:26%">桶里的人</th><th style="width:44%">怎么进来的</th><th>实际语义</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>转移种 / 纯辅种</b>(downloaded=0 或部分下载)</td>
+          <td>本地下载条件不满足 → 「未触发」;站点侧从未把它列进任何清单(没下载过的种子不会进考察名单)→ 无证据。</td>
+          <td>两头都没话说。<strong>不代表无义务</strong> —— 转移种子在原机可能正在考察期。</td>
+        </tr>
+        <tr>
+          <td><b>做种已满的种子</b>(含超额线 3× 老种)</td>
+          <td>无站点证据路径下「达标 ⇒ check_hr_condition 返回 False ⇒ 未触发」—— 达标反而显示「未核实」。</td>
+          <td>义务早已了结,却挂着「未核实」的灰档 —— <strong>最误导的一格</strong>。超额老种被取数侧排除在对账对象集外(<code>hr/service.py</code> 的对象集现算),永远拿不到放行记录,只能常驻此桶。</td>
+        </tr>
+        <tr>
+          <td><b>刚加的新种</b>(新鲜度闸门内)</td>
+          <td>种子 added_on 晚于该档本波取数时刻 → 本波缺席证明不成立 → 无证据(<code>hr/service.py</code> 的缺席证明)。</td>
+          <td>过渡态,下一健康波自愈。桶是稳态的,这批人不是。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>四个消费点全部走 <code>check_hr_condition</code> / <code>check_hr_satisfied</code> 单点(HR 打标 <code>core/mixins/tags.py</code>、
+    规则条件 <code>rules/conditions.py</code>、表达式 <code>rules/expr/env.py</code>、WebUI <code>webui/views.py</code>),
+    所以语义必须在判定层一次改对,而不是在消费点各自打补丁。</p>
+  </section>
+
+  <!-- ============ 2. 术语与目标模型 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§2</span><h2>术语约定与目标模型</h2></div>
+
+    <p>本文与后续实现一律用业务词称呼站点侧结论;代码标识符(函数 / 常量名)保留原名。</p>
+
+    <table>
+      <thead>
+        <tr><th style="width:22%">业务词</th><th>含义</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><b>考察中</b></td><td>站点在线清单命中、义务进行中 —— 站点绝对权威,管束。</td></tr>
+        <tr><td><b>毕业达标</b></td><td>站点确认达标并移出清单 —— 终态放行。</td></tr>
+        <tr><td><b>未达标终态</b></td><td>考核期结束仍未达标,结论已定 —— 终态放行(删除安全档是独立红档,不是管束)。</td></tr>
+        <tr><td><b>免罪</b></td><td>站点豁免 —— 终态放行。</td></tr>
+        <tr><td><b>放行记录</b></td><td>「覆盖范围内未列出 / 免罪」在案的永续本地记录 —— 放行。</td></tr>
+        <tr><td><b>无站点证据</b></td><td>站点侧对这颗种子没有任何个体记录 —— 交由本地判据兜底。</td></tr>
+        <tr><td><b>未接入</b></td><td>站点未配置在线核实(或全站型不取数),判定桥返回空 —— 走本地判据。</td></tr>
+        <tr><td><b>本地触发</b></td><td>本机下载条件满足(下载比例 / 下载量达线,或下载量覆盖全种)。</td></tr>
+        <tr><td><b>疑似辅种</b></td><td>本地未触发 —— 转移种 / 纯辅种常态,downloaded 丢失不代表无义务。</td></tr>
+        <tr><td><b>超额</b></td><td>本机做种时长 ≥ 3× 该站点做种要求基准(与取数侧对象集排除线同源)。</td></tr>
+      </tbody>
+    </table>
+
+    <h3>目标模型三句话</h3>
+    <ul>
+      <li><strong>「触发」降级为展示辅助</strong>:<code>check_hr_condition</code> 只回答「本机下载条件满足吗」,唯一消费点是前端在未达标种子里区分「本机下载」与「疑似辅种」。管理语义不再消费它。</li>
+      <li><strong>后端全量纳入</strong>:配置了 HR 的站点,所有种子(含 downloaded=0)要么「义务已了」(<code>check_hr_satisfied</code>)要么「需管束」(打 HR 标签)。不再有「不触发 ⇒ 不管理」的早退。</li>
+      <li><strong>超额老种跳过打标</strong>:站点侧未命中考察中时,做种 ≥ 3× 基准的种子不打任何标签 —— 义务早已了结,打卡无信息量。</li>
+    </ul>
+
+    <h3>目标状态矩阵</h3>
+    <table>
+      <thead>
+        <tr><th style="width:20%">站点侧</th><th style="width:24%">本地状态</th><th style="width:22%">展示(删除安全档)</th><th style="width:18%">打标</th><th>管束</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>考察中</td><td>任何(含超额)</td><td>在线·考察中(danger 橙)</td><td>HR 标签</td><td>管(站点权威)</td></tr>
+        <tr><td>毕业达标</td><td>任何</td><td>在线·已达标(safe 绿)</td><td>不打</td><td>放</td></tr>
+        <tr><td>未达标终态</td><td>任何</td><td>在线·未达标·终态(failed 红)</td><td>不打</td><td>放(终态)</td></tr>
+        <tr><td>免罪 / 放行记录</td><td>任何</td><td>在线·已核实(safe 绿)</td><td>不打</td><td>放</td></tr>
+        <tr><td>无证据 / 未接入</td><td>做种 ≥ 3× 基准(超额)</td><td>本地·达标(safe 绿)</td><td><span class="new">跳过,不打</span></td><td>放</td></tr>
+        <tr><td>无证据 / 未接入</td><td>做种满 req+extra</td><td>本地·达标(safe 绿)</td><td>达标标签</td><td>放</td></tr>
+        <tr><td>无证据 / 未接入</td><td>未满 + 本地触发</td><td>本地·未达标(danger 橙)</td><td>HR 标签</td><td>管</td></tr>
+        <tr><td>无证据 / 未接入</td><td>未满 + 未触发</td><td><span class="new">本地·未达标(疑似辅种)(warning 黄)</span></td><td>HR 标签</td><td>管</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <span class="note-t">RATIONALE</span>
+      <p>「疑似辅种」给 warning 而非 danger(2026-09-30 用户拍板):它可能有义务也可能早已在原机完成,本机无法分辨 ——
+      黄色警示「注意」比红色「删了吃 H&amp;R」诚实。删除流程的「不能删」点名集合只含 danger(<code>delete_flow.js</code> 的
+      <code>HR_NO_DELETE</code>),warning 天然不拦删除,行为与语义一致,该文件只需同步注释。</p>
+    </div>
+  </section>
+
+  <!-- ============ 3. 判定层变更 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§3</span><h2>判定层变更(record.py 三方法)</h2></div>
+
+    <h3>check_hr_condition → 纯本地触发判据(展示辅助)</h3>
+    <p>方法体简化为:配置了 hr 且未命中排除表时,返回纯本地下载触发判据(现 <code>_local_hr_triggered</code> 原样保留)。
+    四行判定表的混合短路逻辑(考察中恒 True / 放行恒 False / 无证据先问达标)全部删除。docstring 明确:
+    <strong>管理语义(打标 / 规则 / 表达式)不得再消费本方法</strong>。</p>
+
+    <h3>check_hr_satisfied → 义务已了的单点</h3>
+    <p>唯一实质变更:删掉「本地未触发 ⇒ 未达标」的前置(<code>check_hr_satisfied</code> 尾部对 <code>_local_hr_triggered</code> 的门)。
+    无站点证据 / 未接入路径的达标判据变为:</p>
+    <pre>seeding_ok = seeding_time &gt;= (required_seeding_time + extra_seeding_time)
+ratio_ok  = required_share_ratio &gt; 0 and ratio &gt;= required_share_ratio
+satisfied = seeding_ok <span class="k">or</span> ratio_ok   <span class="c"># ratio 通道保留(独立功能, 不搭车移除)</span></pre>
+    <p>站点侧结论分支全部不变:考察中恒未达标(义务在);毕业达标 / 免罪恒达标;未达标终态恒未达标;
+    放行记录(站点没给达标结论)维持「本地判据说了算」—— 本就无触发门,不动。
+    原方法尾部为修递归而写的注释与防递归结构随前置删除一并简化(<code>check_hr_condition</code> 不再调用
+    <code>check_hr_satisfied</code>,递归风险源消失)。</p>
+
+    <h3>新增 hr_managed →「需管束」单点</h3>
+    <p>打标分流、规则、表达式共用的管理语义。放行类结论即使本地未做够也<strong>不许管束</strong>,所以不能写成
+    <code>not check_hr_satisfied()</code> —— 必须显式先排除放行:</p>
+    <pre><span class="k">def</span> hr_managed(self) -&gt; bool:
+    <span class="c"># 需按 HR 管束: 考察中, 或 (无站点证据/未接入 且 未达标)</span>
+    <span class="k">if not</span> self.tracker_conf.hr <span class="k">or</span> self.hr_excluded(): <span class="k">return</span> <span class="k">False</span>
+    judged = self.hr_judgement()
+    <span class="k">if</span> judged <span class="k">is</span> <span class="k">None</span>:   <span class="k">return not</span> self.check_hr_satisfied()   <span class="c"># 未接入</span>
+    <span class="k">if</span> 考察中:           <span class="k">return</span> <span class="k">True</span>
+    <span class="k">if</span> 放行(终态/记录):  <span class="k">return</span> <span class="k">False</span>
+    <span class="k">return not</span> self.check_hr_satisfied()                       <span class="c"># 无站点证据</span></pre>
+  </section>
+
+  <!-- ============ 4. 打标层变更 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§4</span><h2>打标层变更(tags.py)</h2></div>
+
+    <p><code>_add_hr_tag_or_category</code> 的门禁从「<code>check_hr_condition</code> 不过就早退」改为<strong>放行短路 + 超额跳过 + satisfied 分流</strong>:</p>
+
+    <pre><span class="k">if</span> hr <span class="k">is</span> <span class="k">None</span> <span class="k">or</span> rec.hr_excluded(): <span class="k">return</span> <span class="k">False</span>
+judged = rec.hr_judgement()
+<span class="k">if</span> judged <span class="k">is not</span> <span class="k">None</span> <span class="k">and</span> 放行(judged):
+    <span class="k">return</span> <span class="k">False</span>                 <span class="c"># 毕业/终态/免罪/放行记录: 不打标(维持现状)</span>
+<span class="k">if</span> rec.seeding_time &gt;= 3 * 基准(rec) <span class="k">and not</span> (judged <span class="k">is not</span> <span class="k">None</span> <span class="k">and</span> 考察中(judged)):
+    <span class="k">return</span> <span class="k">False</span>                 <span class="c"># 超额老种跳过; 被动命中考察中仍打 HR 标签(站点权威)</span>
+<span class="k">if</span> rec.check_hr_satisfied():
+    打达标标签/分类               <span class="c"># 含转移种做种满 —— 义务已了</span>
+<span class="k">else</span>:
+    打 HR 标签/分类               <span class="c"># 含疑似辅种未满 —— 全量纳入(2026-09-30 拍板)</span></pre>
+
+    <h3>超额基准的配置源(拍板点 3 的落地)</h3>
+    <p>两个配置各自独立:<code>hr.required_seeding_time</code>(本地要求,int 秒)与
+    <code>hr_check.required_seeding_time</code>(在线核实的站点档案预设,float 秒,由 <code>config/site_presets.py</code> 填充)。
+    取数侧对象集排除线用的是后者。打标跳过与取数侧<strong>同源</strong>:</p>
+    <ul>
+      <li>已接入站点(<code>hr_check</code> 存在且启用):基准 = <code>hr_check.required_seeding_time</code> —— 与取数侧同源,同一颗种子不出现「取数跳过但打标不跳」的劈叉;</li>
+      <li>未接入站点(<code>hr_check</code> 为空):基准 = <code>hr.required_seeding_time</code>;</li>
+      <li>基准 ≤ 0 时跳过线不生效(与取数侧 <code>required_seeding_time &gt; 0</code> 前提一致)。</li>
+    </ul>
+    <p class="small">实现时抽一个小函数(如 <code>_seed_exempt_baseline(rec)</code>)承载上述分支,禁止两处各写一份判据。</p>
+  </section>
+
+  <!-- ============ 5. 展示层变更 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§5</span><h2>展示层变更(resolve.py + 前端)</h2></div>
+
+    <h3>safety_display(resolve.py)</h3>
+    <p>无站点证据 / 未接入分支从「triggered 二分」改为「satisfied × triggered 三分」:</p>
+    <table>
+      <thead>
+        <tr><th style="width:18%">satisfied</th><th style="width:18%">triggered</th><th style="width:30%">现状</th><th>新档位 / 文案</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>True</td><td>任意</td><td class="del">未核实(本地不触发) unknown</td><td><span class="new">safe ·「本地·达标」</span></td></tr>
+        <tr><td>False</td><td>True</td><td>本地·兜底,未达标 danger</td><td>danger ·「本地·未达标」(文案去掉「兜底」字样)</td></tr>
+        <tr><td>False</td><td>False</td><td class="del">未核实(本地不触发) unknown</td><td><span class="new">warning ·「本地·未达标(疑似辅种)」</span></td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><code>SAFETY_WARNING = "warning"</code> 新增;<code>SAFETY_UNKNOWN</code> / <code>SRC_UNVERIFIED</code> 删除,来源统一 <code>SRC_LOCAL</code>。</li>
+      <li><code>judged is None</code>(未接入)走同一三分;但<strong>排除表种子维持「不适用」空白</strong> —— 调用方(<code>views.py</code> 的视图字段组装)先把排除态短路成空串,再进 <code>safety_display</code>,避免 None 分支无法区分「排除」与「未接入」。</li>
+      <li>「身份缺位(infohash 未回填)」的种子同落本地三分(回填已 100%,无实际影响,机制上不再特判)。</li>
+    </ul>
+
+    <h3>前端 hr.js</h3>
+    <ul>
+      <li><code>HR_SAFETY_CLASSES</code>:新增 <code>warning: "hr-warn"</code>(黄,色值对齐 <code>--warn</code> 系),删 <code>unknown</code>;对应样式表新增 <code>.hr-warn</code>。</li>
+      <li><code>HR_SAFETY_BUCKETS</code>:新增 <code>warning: "疑似辅种"</code>,删 <code>unknown: "未核实"</code>。</li>
+      <li><code>HR_SRC_CLASSES</code> / 来源桶:删 <code>unverified</code> 项(<code>local</code> 承接)。</li>
+      <li>详情抽屉里 <code>lane === "unknown"</code> 的 dash 徽标分支清理(warning 按 check 处理)。</li>
+    </ul>
+
+    <h3>前端 delete_flow.js</h3>
+    <p><code>HR_NO_DELETE</code> 保持只含 <code>danger</code> —— warning 不进集合,删除流程不点名疑似辅种(黄档警示,不禁止)。
+    仅同步文件头注释与批量提示文案里的档位清单。</p>
+  </section>
+
+  <!-- ============ 6. 规则与表达式 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§6</span><h2>规则与表达式(conditions.py + env.py)</h2></div>
+
+    <table>
+      <thead>
+        <tr><th style="width:26%">入口</th><th style="width:37%">现状语义</th><th>新语义</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="t-mono">规则 condition-met<br>表达式 tor.hr_condition_met</td>
+          <td><code>check_hr_condition()</code>(四行表混合体)</td>
+          <td><span class="new"><code>hr_managed()</code>(需管束)</span> —— 与打标 / 管束同源</td>
+        </tr>
+        <tr>
+          <td class="t-mono">规则 satisfied</td>
+          <td><code>check_hr_condition() and check_hr_satisfied()</code> —— 无证据+已达标时恒 False(拧巴)</td>
+          <td><span class="new"><code>check_hr_satisfied()</code> 单条件</span> —— 修掉拧巴</td>
+        </tr>
+        <tr>
+          <td class="t-mono">规则 condition-not-met</td>
+          <td><code>not check_hr_condition()</code></td>
+          <td><code>not hr_managed()</code>(补集)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">表达式 tor.hr_local_triggered<br><span class="new">(新增)</span></td>
+          <td>—</td>
+          <td><code>check_hr_condition()</code>(纯本地触发) —— 把「辅种判别力」保留给规则</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <span class="note-t">MIGRATION</span>
+      <p><code>tor.hr_condition_met</code> 是<strong>已发布表达式,语义变化</strong>:旧含义 ≈「本机下载触发(带站点侧短路)」,
+      新含义 =「需管束」。既有规则若用它过滤「我下载的种子」,必须手动迁移到 <code>tor.hr_local_triggered</code>。
+      计划不带自动迁移(表达式存量无法静态识别),落地后在用户配置检查清单里提示。</p>
+    </div>
+  </section>
+
+  <!-- ============ 7. 明确不变项 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§7</span><h2>明确不变项(防实现走样)</h2></div>
+    <ul>
+      <li><strong>站点权威不动</strong>:考察中管束(含超额种子被动命中仍管束)、终态放行、放行记录永续 —— 判定收口(26-09-28-1932)的既有原则原样保留,本计划不碰 <code>hr/resolve.py</code> 的身份判定与 <code>hr/service.py</code> 的取数 / 签发链路。</li>
+      <li><strong>排除表优先级不动</strong>:命中排除表恒不纳入(打标 / 规则 / 表达式 / 展示全空),排除短路保留在所有入口顶部。</li>
+      <li><strong>取数侧对象集与新鲜度闸门不动</strong>:超额排除、缺席证明、放行签发 —— 「疑似辅种 warning 是过渡态」靠的就是这条链路把它们收编成「在线·已核实」。</li>
+      <li><strong>零配置变更</strong>:不新增 / 修改任何配置键,<code>validate_config</code> 与 <code>config/schema.py</code> 无需触碰。</li>
+      <li><strong>打标是加法</strong>:已在种子上的历史标签不回撤(与排除表既有口径一致);旧「未核实」种子在下一轮维护时按新语义重新分流。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 8. 测试计划 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§8</span><h2>测试计划</h2></div>
+
+    <table>
+      <thead>
+        <tr><th style="width:30%">文件</th><th>变更</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="t-mono">tests/test_hr_resolve.py</td>
+          <td>「未核实」桶测试删除;<code>safety_display</code> 无证据分支改三分断言:达标→safe / 未达标+触发→danger / 未达标+未触发→<b>warning</b>;SRC_UNVERIFIED / SAFETY_UNKNOWN 相关断言清理。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/test_torrents.py</td>
+          <td>行 4 语义反转:纯辅种(downloaded=0)做种满 → <code>check_hr_satisfied()</code> 为 True(旧断言「恒未达标」作废);<code>check_hr_condition()</code> 等于纯本地判据(不再受站点侧身份影响);防递归用例改写为结构断言(两方法互不调用)。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/test_torrents.py(新增)</td>
+          <td>打标三分:超额跳过(接入站用 hr_check 基准 / 未接入站用 hr 基准 / 基准为 0 不跳过);转移种未满打 HR 标签;做种满打达标标签;放行记录不打标。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/(规则/表达式所在测试)</td>
+          <td>规则三模式新语义:condition-met = 需管束(放行记录+未做够 → False);satisfied 单条件(无证据+已达标 → True);<code>tor.hr_local_triggered</code> 新表达式注册与求值。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="small">按仓库口径:新增测试同步所在文件头部 docstring 的「测试计划」清单;完成后跑 <code>commands run test.full</code> 建基线切片。</p>
+  </section>
+
+  <!-- ============ 9. 风险与迁移 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§9</span><h2>风险与迁移影响</h2></div>
+
+    <table>
+      <thead>
+        <tr><th style="width:26%">风险</th><th>评估与对策</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>标签铺面</b></td>
+          <td>配置了 HR 的站点全部种子进入打标分流(未满 → HR 标签,满 → 达标标签,超额跳过)。纯辅种大户的标签量会显著上升 —— <b>用户已拍板接受</b>(2026-09-30),这是「全量纳入」的直接体现。</td>
+        </tr>
+        <tr>
+          <td><b>规则语义漂移</b></td>
+          <td><code>tor.hr_condition_met</code> 与规则 condition-met 含义变化。存量规则/表达式无法静态识别,落地后交付「迁移提示」:旧「本机下载判别」用途改用 <code>tor.hr_local_triggered</code>。</td>
+        </tr>
+        <tr>
+          <td><b>疑似辅种 warning 的持续时长</b></td>
+          <td>已接入站点:过渡态 —— 转移种在对账对象集内,健康波签发「未列出」放行后转「在线·已核实」。未接入站点:无站点证据可救,warning 持续到本机做种满 req+extra —— 保守代价,已拍板。</td>
+        </tr>
+        <tr>
+          <td><b>未达标管束的误伤面</b></td>
+          <td>部分下载未达线的种子从「不管」变「管束打标」(做种满即自动放行,不会永久管束)。方向保守,漏管代价大于误管。</td>
+        </tr>
+        <tr>
+          <td><b>前端旧 token 残留</b></td>
+          <td>浏览器缓存的旧页面可能短暂收到 <code>warning</code> 而无对应样式 —— 映射表缺项时无类名(灰底),可接受;不强推缓存失效。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 10. 实施步骤 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§10</span><h2>实施步骤</h2></div>
+
+    <ol class="file-changes">
+      <li><span class="fc-path">src/auto_qb/torrents/record.py</span> — <code>check_hr_condition</code> 简化为纯本地判据;<code>check_hr_satisfied</code> 删触发前置;新增 <code>hr_managed</code>;防递归注释段随结构消失。</li>
+      <li><span class="fc-path">src/auto_qb/hr/resolve.py</span> — <code>SAFETY_WARNING</code> 增、<code>SAFETY_UNKNOWN</code>/<code>SRC_UNVERIFIED</code> 删;<code>safety_display</code> 无证据分支改三分;导出清单同步。</li>
+      <li><span class="fc-path">src/auto_qb/core/mixins/tags.py</span> — 打标门禁改「放行短路 + 超额跳过 + satisfied 分流」,抽超额基准小函数。</li>
+      <li><span class="fc-path">src/auto_qb/rules/conditions.py</span> — HR 条件三模式切到 <code>hr_managed</code> / <code>check_hr_satisfied</code> 单点。</li>
+      <li><span class="fc-path">src/auto_qb/rules/expr/env.py</span> — <code>tor.hr_condition_met</code> 换绑 <code>hr_managed</code>;新增 <code>tor.hr_local_triggered</code>。</li>
+      <li><span class="fc-path">src/auto_qb/webui/views.py</span> — 排除态在组装层短路成空串;其余字段透传不动。</li>
+      <li><span class="fc-path">src/auto_qb/webui/static/shared/hr.js + 样式表</span> — 映射表增 warning 删 unknown/unverified,新增 <code>.hr-warn</code> 黄档样式。</li>
+      <li><span class="fc-path">src/auto_qb/webui/static/shared/delete_flow.js</span> — 注释与档位清单同步(<code>HR_NO_DELETE</code> 集合本身不动)。</li>
+      <li><span class="fc-path">tests/*</span> — §8 清单;文件头 docstring 测试计划同步。</li>
+      <li>全量验证:<code>commands run test.full</code> → 基线切片;<code>commands run dev.run -- config.yml --dry-run</code> 真机走查一轮判定输出。</li>
+    </ol>
+  </section>
+
+  <footer>
+    <span>26-09-30-0559 · plan-hr-trigger-semantics</span>
+    <span>auto-qb · memory-bank/plans</span>
+  </footer>
+</div>
+</body>
+</html>
