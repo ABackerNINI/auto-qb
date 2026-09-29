@@ -100,6 +100,11 @@ class ChannelFetcher:
     `request_timeout` 必须有: 扩展中途被关掉时, 若无人叫停, 持锁的取数线程会永久挂住,
     该站点就再也不会被刷新(而且锁也永远不释放)—— 超时即按一次失败计, 交给退避熔断处理。
 
+    ❗`listening_fn`(端点是否在监听, 现读): 端口根本没绑定时**本机自己就知道**等不到回传 ——
+    此时立刻如实报「无可用通道」, 别等满 `request_timeout`: 白等会把站点锁占住几分钟, 而且
+    日志里只剩「等扩展取数超时(浏览器是否在运行...)」这条**把人引向浏览器的假线索**
+    (2026-09-29 实报: 热重载后端点对象建了却从未 `start()`, 每页白等 180s)。
+
     ❗URL 先过 `UrlPolicy`(域名 + 路径白名单)再下发: 端点绝不成为「带登录态的任意站代理」。
     """
     def __init__(
@@ -109,11 +114,14 @@ class ChannelFetcher:
         policy: UrlPolicy,
         request_timeout: float = 180.0,
         now_fn: Callable[[], float] = time.time,
+        listening_fn: Optional[Callable[[], bool]] = None,
     ) -> None:
         self.queue = queue
         self.policy = policy
         self.request_timeout = float(request_timeout)
         self._now = now_fn
+        #: 端点是否在监听(现读一次回调; None = 不做这项检查)
+        self._listening = listening_fn
         #: 便于报告与排障: 本实例实际下发的任务数(不代表配额)
         self.requests = 0
 
@@ -127,6 +135,14 @@ class ChannelFetcher:
         if self.queue.cancel_reason:
             # 通道已叫停(关停路径): 连任务都不下发, 直接如实上报「被叫停」(不是「没通道」)
             raise HrChannelStopped(f"取数通道已停止({self.queue.cancel_reason}): {url}")
+        if self._listening is not None and not self._listening():
+            # 端点没在监听 = 本机端口未绑定 ⇒ 任何扩展都取不到任务、也没人能回传:
+            # 立刻报「无可用通道」(不计失败/不推熔断, 每站只报一次 + 下次恢复自动消音),
+            # 而不是等满 request_timeout —— 白等既占着站点锁, 又把本机故障伪装成远端超时。
+            raise HrChannelUnavailable(
+                f"HR 取数通道端点未在监听(本机 127.0.0.1 端口未绑定): 扩展取不到任务也没人回传, "
+                f"本波按「无可用通道」处理(未发起取数): {url}"
+            )
         site = self.policy.require(url)  # 白名单外直接抛 HrChannelError -> service 记失败
         task = self.queue.put(site, kind, url, scope=scope, tid=tid)
         self.requests += 1
@@ -176,16 +192,23 @@ def build_channel_fetcher(
     enabled: bool,
     queue: HrTaskQueue,
     site_confs,
+    listening_fn: Optional[Callable[[], bool]] = None,
 ) -> HrFetcher:
     """按配置决定「真通道」还是「空通道」——**唯一**的分支点
 
     `channel.enabled=false`(未装扩展 / 未启用)时返回 `NullFetcher`: 上层如实报「无可用
     取数通道」并保守回落未核实, 而不是偷偷改成后端直连。
+
+    `listening_fn` 透传给真通道(端点是否在监听的现读回调, 见 `ChannelFetcher`) —— 端点没绑
+    端口时快速失败, 不白等超时。
     """
     if not enabled or not channel_conf.enabled:
         return NullFetcher("本实例未启用取数通道 (hr_check.channel.enabled=false): 装上浏览器扩展并开启后才会在线核实")
     return ChannelFetcher(
-        queue, policy=UrlPolicy(site_confs), request_timeout=getattr(channel_conf, "request_timeout", 180.0)
+        queue,
+        policy=UrlPolicy(site_confs),
+        request_timeout=getattr(channel_conf, "request_timeout", 180.0),
+        listening_fn=listening_fn,
     )
 
 

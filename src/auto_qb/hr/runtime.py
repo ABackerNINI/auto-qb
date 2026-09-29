@@ -196,9 +196,17 @@ class HrRuntime:
             self.worker.stop()
             self.worker = None
         self._build(keep_endpoint=True)
+        if self.fetch_enabled:
+            assert self.endpoint is not None
+            if not self.endpoint.started:
+                # 端点「从无到有」: 启动时无站点接入 / 站点全关过 ⇒ 端点从未建过或已被收掉。
+                # `keep_endpoint` 只保证「已在监听的不重绑」, 新建的那个必须自己拉起 —— 否则端口
+                # 从未绑定, 扩展连不上端点而取数线程照样派发任务, 每页白等到 request_timeout
+                # (2026-09-29 实报「扩展连不上端点」; 与 worker 的「从无到有」同一类缺陷)。
+                self.endpoint.start()
         if self.worker is not None:
             self.worker.start()
-        logger.info("HR 在线核实配置已热应用(L0 字段; 端点未重绑)")
+        logger.info("HR 在线核实配置已热应用(L0 字段; 端点监听身份未变, 未重绑)")
 
     def wake(self) -> None:
         """非阻塞叫醒取数线程(主循环用)"""
@@ -269,7 +277,13 @@ class HrRuntime:
         self.queue.resume()
         self._sleep_stop.clear()
         self.fetcher = build_channel_fetcher(
-            channel_conf=conf.channel, enabled=self.enabled, queue=self.queue, site_confs=site_confs
+            channel_conf=conf.channel,
+            enabled=self.enabled,
+            queue=self.queue,
+            site_confs=site_confs,
+            # 端点是否在监听**现读**(不能在构造时快照): 本方法可能先建通道、后建/补启动端点,
+            # 而热重载重挂时端点对象会被整个换掉 —— 闭包读的是当下那一个。
+            listening_fn=lambda: self.endpoint is not None and self.endpoint.started,
         )
         self.service = HrRefreshService(
             data_dir=self.config.data_dir,

@@ -261,6 +261,18 @@ class HrVerified:
     anchor_completion_on: int = -1
     anchor_progress: float = 0.0
 
+    @property
+    def has_anchor_snapshot(self) -> bool:
+        """记录是否带锚点快照
+
+        全零 = **无快照可比**(早于快照落盘期的旧记录 / 写入方漏带)—— 判定侧据此不作废放行:
+        行 3 的「放行永续有效」优先于「本机重下提前作废」这条辅助机制; 把 anchor_downloaded=0
+        读成「downloaded 增长」会让每条无快照的放行在签发当刻被判漂移, 种子回落本地兜底。
+        """
+        return bool(
+            self.anchor_added_on or self.anchor_downloaded or self.anchor_completion_on >= 0 or self.anchor_progress > 0
+        )
+
     def to_json(self) -> Dict[str, Any]:
         return {
             "infohash": self.infohash,

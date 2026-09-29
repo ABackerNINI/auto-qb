@@ -24,8 +24,11 @@
 - test_sleeper_is_interruptible_by_stop: 锁内等待可中断 —— 关停/热重挂不必等它把间隔睡完
 - test_sleeper_returns_after_the_wait: 没被打断时按秒数返回(不提前也不卡住)
 - test_production_service_gets_a_sleeper: 生产服务必须带 sleeper(2026-09-25 实报: 不等待 ⇒ 下载被页面饿死)
-- test_apply_starts_worker_when_never_started: 站点接入热重载(启动时无站点) -> apply 必须把服务与线程带起来
-  (旧版「未启动时 apply 不得拉起线程」是 2026-09-29「取数线程未启动」bug 的成因之一, 已随修复反转)
+- test_apply_starts_worker_when_never_started: 站点接入热重载(启动时无站点) -> apply 必须把服务/线程/端点都带起来
+  (旧版「未启动时 apply 不得拉起线程」是 2026-09-29「取数线程未启动」bug 的成因之一, 已随修复反转;
+  端点「从无到有」同为该族缺陷 —— 只建对象不绑端口 ⇒ 扩展连不上端点)
+- test_apply_rebinds_endpoint_after_all_sites_hot_disabled: 站点全关收掉端点后重新启用 -> 必须重新监听
+- test_fetcher_fails_fast_when_endpoint_stops_listening: 端点不在监听 -> 取数立刻报无通道, 不白等 request_timeout
 - test_apply_no_change_short_circuits: HR 侧无变化 -> apply 短路, 服务/线程对象原样保留不重启
 - test_apply_adds_site_while_running: 已运行时热接入新站点 -> 服务站点表长出新站点且线程仍在跑
 - test_runtime_uses_anchors_provider: 取数线程经主循环提供的锚点提供者取锚点(M3 的交接面)
@@ -44,7 +47,7 @@ import pytest
 
 from auto_qb.config.models import Config, HrChannelConfig, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.channel import HrChannelBindError
-from auto_qb.hr.fetcher import HrChannelStopped
+from auto_qb.hr.fetcher import HrChannelStopped, HrChannelUnavailable
 from auto_qb.hr.model import HrEntry
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, HrSiteView, HrViewSet
 from auto_qb.hr.runtime import HrRuntime
@@ -350,8 +353,35 @@ def test_apply_starts_worker_when_never_started(tmp_path):
     assert runtime.service is not None, "站点接入后服务必须建出来(否则 /api/hr/status 报「取数线程未启动」)"
     assert runtime.service.site_confs["pt.example.com"].refresh_interval == 3 * 3600.0
     assert runtime.worker is not None and runtime.worker.started, "enabled 时 apply 必须把取数线程带起来"
+    assert runtime.endpoint is not None and runtime.endpoint.started, \
+        "端点「从无到有」也必须拉起: 只建对象不绑端口 ⇒ 扩展连不上端点(2026-09-29 实报)"
     try:
         assert runtime.status().worker_running is True
+        assert runtime.status().channel is not None and runtime.status().channel.listening
+    finally:
+        runtime.stop()
+
+
+def test_apply_rebinds_endpoint_after_all_sites_hot_disabled(tmp_path):
+    """站点全关(总开关仍开) ⇒ 端点与线程被收掉; 再启用必须重新监听
+
+    `enabled` 取决于「总开关 + 至少一个站点」, 而**监听身份**只看总开关/channel 那几个 ——
+    站点全关时 identity 不变, apply 走的是 L0 重建路径, 端点靠「从无到有」分支补启动。
+    缺了这一步: 端口从未绑定, 扩展连不上, 而取数线程照样派发任务白等满 request_timeout。
+    """
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
+    runtime.start()
+    try:
+        assert runtime.endpoint is not None and runtime.endpoint.started
+        old = runtime.global_conf
+        runtime.config.trackers = make_config(tmp_path, enabled=True, channel=True, site_enabled=False).trackers
+        runtime.apply(old)
+        assert runtime.endpoint is None and runtime.worker is None, "站点全关 ⇒ 收掉端点与线程"
+        old2 = runtime.global_conf
+        runtime.config.trackers = make_config(tmp_path, enabled=True, channel=True).trackers
+        runtime.apply(old2)
+        assert runtime.endpoint is not None and runtime.endpoint.started, "重新启用必须重新监听"
+        assert runtime.worker is not None and runtime.worker.started
     finally:
         runtime.stop()
 
@@ -489,6 +519,25 @@ def test_runtime_uses_anchors_provider(tmp_path):
         while not calls and time.monotonic() < deadline:
             time.sleep(0.02)
         assert calls, "取数线程应经主循环提供的锚点提供者拿本地锚点(M3 的交接面)"
+    finally:
+        runtime.stop()
+
+
+def test_fetcher_fails_fast_when_endpoint_stops_listening(tmp_path):
+    """门面把「端点是否在监听」接进了取数通道: 端点被收掉后取数立刻报无通道, 不白等超时
+
+    2026-09-29 实报的另一半: 端点没绑端口时取数线程照样派发任务, 每页白等满 request_timeout
+    (一个站点一轮白占 3 分钟锁, 日志只留下会把人引向浏览器的「等扩展超时」)。
+    """
+    runtime = make_runtime(tmp_path, enabled=True, channel=True, request_timeout=5.0)
+    runtime.start()
+    try:
+        assert runtime.endpoint is not None and runtime.endpoint.started
+        runtime.endpoint.stop()  # 端口不再绑定(热重载整站关停 / 端点异常收掉)
+        started = time.monotonic()
+        with pytest.raises(HrChannelUnavailable):
+            runtime.fetcher.get_text("https://pt.example.com/myhr.php?hrtype=A")
+        assert time.monotonic() - started < 2.0, "端点没在监听就不该白等满 request_timeout"
     finally:
         runtime.stop()
 

@@ -17,8 +17,15 @@
   **短路**(比对新旧配置, 相等直接 return) —— 别让调用方做裁剪, 裁剪就是漏调的温床;
   ②挂载口把运行态收敛到「enabled ⇒ 在跑」: 线程没建过(冷启动无站点)也要补启动,
   别用「原来在跑才重启」的 `running` 守卫 —— 那会把「从无到有」永久挡在门外;
+  ❗「从无到有」要覆盖挂载口建的**每一个**活体对象: **端点也算**。只补线程不补端点,
+  端点对象建了却没人 `start()` ⇒ 端口从未绑定 ⇒ 扩展连不上端点, 而取数线程照样派发任务、
+  每页白等满 `request_timeout`(默认 180s) —— 症状是「扩展连不上, 重新连接后才能恢复」
+  (2026-09-29 实报, 与上一轮同一族的第三例; `keep_endpoint` 只保证「已在监听的不重绑」)。
+  该白等已修为**快速失败**: 通道拿到 `listening_fn`(现读)后未监听即报无通道, 见
+  [unreachable-wait.md](unreachable-wait.md);
   ③机制注释要写**机制真相**(谁按值持有什么、挂载口在哪), 别写「每轮现读」这种与实现相反的话;
   ④守阵测试若钉住「不得拉起」这类反语义, 修 bug 时**连测试一起反转并注明实报出处**。
 - **守阵**: `test_apply_new_config_levels` 断言 L0 下 `hr.apply` 也被调; `test_hr_runtime.py`
-  的 `test_apply_starts_worker_when_never_started` / `test_apply_no_change_short_circuits`
-  钉「enabled 必启动」与「无变化不重启」两端。
+  的 `test_apply_starts_worker_when_never_started`(服务/线程/**端点**三者都要在跑) /
+  `test_apply_no_change_short_circuits` / `test_apply_rebinds_endpoint_after_all_sites_hot_disabled`
+  (站点全关收掉端点后重新启用必须重新监听)钉住两端。

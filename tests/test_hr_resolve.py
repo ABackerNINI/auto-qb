@@ -8,6 +8,7 @@
 - test_row3_release_record_releases: 行 3 放行记录放行
 - test_row3_release_permanent_no_expiry: 放行永续有效(一年前签发仍有效, 无 verified_ttl)
 - test_row3_anchor_drift_invalidates_to_local_fallback: 锚点漂移 → 行 4 本地兜底
+- test_row3_record_without_anchor_snapshot_is_not_drift: 记录无锚点快照 → 不凭空判漂移(不作废)
 - test_row3_exempt_source_keeps_label: D 免罪来源标签保留
 - test_row4_no_evidence: 无证据 → NO_EVIDENCE(行 4, is_hr 恒 False 由调用方合成)
 - test_row4_missing_infohash: infohash 缺位 → 行 4
@@ -175,6 +176,19 @@ def test_row3_anchor_drift_invalidates_to_local_fallback():
     view = make_view(verified=make_verified())
     j = judge_record(view, ("h1", ), anchor=anchor(downloaded=2 << 30), now=NOW)  # downloaded 增长
     assert j.identity is HrIdentity.NO_EVIDENCE
+
+
+def test_row3_record_without_anchor_snapshot_is_not_drift():
+    """记录无锚点快照(旧记录 / 写入方漏带) ⇒ 不作废: 「永续有效」优先于漂移这条辅助机制
+
+    ❗把 anchor_downloaded=0 读成「downloaded 增长」会让每条无快照的放行在**签发当刻**被判漂移,
+    种子回落本地兜底(2026-09-29 实报「已在线核实过却显示本地兜底」)。
+    """
+    ver = HrVerified(infohash="h1", tid=TID, verified_ts=NOW, source=SOURCE_NOT_LISTED)
+    assert not ver.has_anchor_snapshot
+    view = make_view(verified=ver)
+    j = judge_record(view, ("h1", ), anchor=anchor(downloaded=7 << 30), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
 
 
 def test_row3_exempt_source_keeps_label():

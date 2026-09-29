@@ -41,6 +41,7 @@ from .model import (
     LANE_IDLE,
     LANE_OK,
     LANE_EXEMPT,
+    LANE_SATISFIED,
     LANE_SCOPE,
     SOURCE_EXEMPT,
     SOURCE_NOT_LISTED,
@@ -243,6 +244,7 @@ class _Budget:
 class _WaveContext:
     """一波内的可变状态(全部是波级临时量, 波结束即弃)"""
     def __init__(self, anchors: Mapping[str, HrAnchor]) -> None:
+        self.anchors: Mapping[str, HrAnchor] = anchors
         self.local_hashes: Set[str] = {h for h in anchors if h}
         self.local_names: Tuple[str, ...] = tuple(a.name for a in anchors.values() if getattr(a, "name", ""))
         self.seen: Dict[int, HrEntry] = {}  # 本波已见行 tid -> 行对象
@@ -262,6 +264,28 @@ class _WaveContext:
 
     def seen_rows(self) -> Mapping[int, HrEntry]:
         return self.seen
+
+
+def _release_record(
+    *, infohash: str, tid: int, verified_ts: float, source: str, anchor: Optional[HrAnchor]
+) -> HrVerified:
+    """构造放行记录 —— **锚点快照的单点**(计划 §7.2: verified 记录「含锚点与 source」)。
+
+    ❗三处签发(批量未列出 / 终态冻结 / 观察期移出)必须都经这里: 漏带快照的记录会被判定侧
+    当成「锚点漂移」在**签发当刻**作废 —— 放行记录形同虚设, 种子回落本地兜底(2026-09-29 实报)。
+    无锚点(本机已无该种子)时给全零 —— 判定侧的 `anchor is not None` 闸门自会跳过漂移检查。
+    """
+    snap = anchor if anchor is not None else HrAnchor()
+    return HrVerified(
+        infohash=infohash,
+        tid=tid,
+        verified_ts=verified_ts,
+        source=source,
+        anchor_added_on=snap.added_on,
+        anchor_downloaded=snap.downloaded,
+        anchor_completion_on=snap.completion_on,
+        anchor_progress=snap.progress,
+    )
 
 
 class HrRefreshService:
@@ -815,9 +839,9 @@ class HrRefreshService:
                 # None = 同空间站点, 回落 tid
                 blob = self.fetcher.get_bytes(adapter.download_url(entry.dl_id or tid))
                 budget.mark()
-            except (HrChannelStopped, HrChannelQuota, HrLoginExpired):
-                # 让位 / 人工事件, 不是「这个种子取失败」: 计数会把「程序要关了 / 扩展限流 /
-                # 该去登录」伪装成「种子坏了」。原样上抛, 由上层折成备注。
+            except (HrChannelStopped, HrChannelQuota, HrChannelUnavailable, HrLoginExpired):
+                # 让位 / 人工事件 / 端点级故障, 不是「这个种子取失败」: 计数会把「程序要关了 /
+                # 扩展限流 / 该去登录 / 端点没在监听」伪装成「种子坏了」。原样上抛, 由上层折成备注。
                 raise
             except HrFetchError as e:
                 retry_after = float(getattr(e, "retry_after", 0.0) or 0.0)
@@ -1002,7 +1026,13 @@ class HrRefreshService:
                     source = SOURCE_SATISFIED if entry.lane == LANE_SATISFIED else (
                         SOURCE_EXEMPT if entry.lane == LANE_EXEMPT else SOURCE_NOT_LISTED
                     )
-                    data.verified[h] = HrVerified(infohash=h, tid=tid, verified_ts=now, source=source)
+                    data.verified[h] = _release_record(
+                        infohash=h,
+                        tid=tid,
+                        verified_ts=now,
+                        source=source,
+                        anchor=wave.anchors.get(h),
+                    )
                     frozen += 1
         return frozen
 
@@ -1026,11 +1056,12 @@ class HrRefreshService:
                 entry.active = False
                 entry.missing_streak = 0
                 if h and h not in data.verified:
-                    data.verified[h] = HrVerified(
+                    data.verified[h] = _release_record(
                         infohash=h,
                         tid=tid,
                         verified_ts=now,
                         source=SOURCE_NOT_LISTED,
+                        anchor=wave.anchors.get(h),
                     )
                 exits += 1
                 logger.info(f"HR | tid={tid} 失踪观察期出口: 连续 {MISSING_GRACE_WAVES} 波未重见且位置被覆盖, "
@@ -1061,15 +1092,12 @@ class HrRefreshService:
                 continue
             if not _absence_proven_all(lane_states, wave, anchor):
                 continue
-            data.verified[h] = HrVerified(
+            data.verified[h] = _release_record(
                 infohash=h,
                 tid=wave.dl_by_hash.get(h, 0),
                 verified_ts=now,
                 source=SOURCE_NOT_LISTED,
-                anchor_added_on=anchor.added_on,
-                anchor_downloaded=anchor.downloaded,
-                anchor_completion_on=anchor.completion_on,
-                anchor_progress=anchor.progress,
+                anchor=anchor,
             )
             signed += 1
         if signed:

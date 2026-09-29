@@ -60,6 +60,8 @@ class HrAnchor:
 
     def drift_reason(self, ver: HrVerified) -> str:
         """与放行记录里的锚点比对, 漂移返回人话原因, 未漂移返回空串"""
+        if not ver.has_anchor_snapshot:
+            return ""  # 无快照可比: 不凭空判漂移(见 HrVerified.has_anchor_snapshot)
         if ver.anchor_added_on and self.added_on != ver.anchor_added_on:
             return "added_on 变化(删种重加 / 重新添加)"
         if self.downloaded < ver.anchor_downloaded:

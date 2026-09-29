@@ -23,7 +23,8 @@
 - test_retention_does_not_block_observation: 守恒拦批量但不拦观察期(单条失踪无死锁)
 - test_observing_seed_kept_managed_then_released: 上波考察中失踪 → 维持管束; 位置覆盖连续 2 波 → 判移出放行
 - test_observing_seed_resighted: 失踪种子重见 → streak 清零按档位定论
-- test_terminal_vanish_writes_release: 终态条目消失且位置被证明 → 退役并落放行记录(终态不可逆)
+- test_terminal_vanish_writes_release: 终态(B)条目消失且位置被证明 → 退役并落放行记录(source=satisfied)
+- test_terminal_vanish_c_lane_release_source: 终态(C)条目同路径 → 落放行记录 source=not-listed
 - test_terminal_vanish_unproven_kept: 终态条目消失但位置未被覆盖 → 维持原状
 - test_no_objects_sweeps_to_last_page: 空对象集仍按停翻条件/末页收尾(轻量波已否决, 26-09-29 裁决)
 - test_new_top_row_reconciled_next_wave: 顶页新插入(本机新下载)在下一波被完整覆盖对账
@@ -46,6 +47,7 @@ from auto_qb.hr.model import (
     LANE_SCOPE,
     LANE_UNSATISFIED,
     SOURCE_NOT_LISTED,
+    SOURCE_SATISFIED,
     HrSiteData,
 )
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, judge_record
@@ -613,6 +615,10 @@ def test_observing_seed_kept_managed_then_released(tmp_path):
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[11].active is False
     assert h11 in data.verified
+    # ❗「记录在」≠「放行生效」: 观察期出口同样必须带锚点快照, 否则判定侧当场判滴移作废
+    assert data.verified[h11].has_anchor_snapshot
+    view = service.build_view_for(SITE, data)
+    assert judge_record(view, (h11, ), anchor=anchors[h11], now=clock()).identity is HrIdentity.RELEASED
 
 
 def test_observing_seed_resighted(tmp_path):
@@ -641,9 +647,14 @@ def test_observing_seed_resighted(tmp_path):
 
 
 def test_terminal_vanish_writes_release(tmp_path):
-    """终态条目消失且位置被证明 → 退役并落放行记录(终态不可逆, 条目被站点清掉也不影响判定)"""
+    """终态条目消失且位置被证明 → 退役并落放行记录(终态不可逆, 条目被站点清掉也不影响判定)
+
+    ❗终态行必须**粗配同名 ⇒ 真下到 .torrent ⇒ 登记 infohash**, 冻结的内层「落放行记录」
+    分支才进得去 —— 否则 infohash 为空, 那三行永不执行, 守阵假绿灯(2026-09-29 实报
+    `LANE_SATISFIED` NameError 正是从这个从未被覆盖的分支炸出来的)。
+    """
     clock = Clock()
-    pages = standard_pages(rows_b=[row(21, "OTHER 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")])
+    pages = standard_pages(rows_b=[row(21, "EXAMPLE 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")])
     blob, h21 = mk_blob("EXAMPLE 21")
     fetcher = FakeFetcher(pages=pages, blobs={21: blob})
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -651,16 +662,44 @@ def test_terminal_vanish_writes_release(tmp_path):
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].lane == LANE_SATISFIED and data.index[21].active
+    assert data.index[21].infohash_v1 == h21, "粗配同名 ⇒ 下载登记身份(冻结才有对象可落记录)"
+    assert h21 not in data.verified, "命中不是放行: 放行记录由冻结/未列出签发来落"
     # 第二波: B 档空表(全深度) → 条目消失被证明 → 退役 + 放行记录(毕业来源)
     fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
     clock.advance(13 * 3600)
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].active is False
-    assert h21 in data.verified
+    assert data.verified[h21].source == SOURCE_SATISFIED, "B 档毕业移出 ⇒ 来源 satisfied(站侧结论要留住)"
+    assert data.verified[h21].has_anchor_snapshot, "记录必须带锚点快照, 否则判定侧当场判漂移作废"
+    assert data.verified[h21].anchor_downloaded == anchors[h21].downloaded
     view = service.build_view_for(SITE, data)
     j = judge_record(view, (h21, ), anchor=anchors[h21], now=clock())
     assert j.identity is HrIdentity.RELEASED  # 终态不可逆: 退役后照常放行
+
+
+def test_terminal_vanish_c_lane_release_source(tmp_path):
+    """C 档终态移出 → 同样退役落放行记录, 来源 not-listed(非 B 毕业)
+
+    冻结落记录的三元表达式有 B／非 B 两条子句, 2026-09-29 的 NameError 只在**条件求值**
+    上, 故两个可达终态档各钉一条(另一条 C 子句同样是真机路径)。
+    """
+    clock = Clock()
+    pages = standard_pages(rows_c=[row(21, "EXAMPLE 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")])
+    blob, h21 = mk_blob("EXAMPLE 21")
+    fetcher = FakeFetcher(pages=pages, blobs={21: blob})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h21: anchor_for("EXAMPLE 21", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].lane == LANE_UNSATISFIED and data.index[21].infohash_v1 == h21
+    assert h21 not in data.verified
+    fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].active is False
+    assert data.verified[h21].source == SOURCE_NOT_LISTED
 
 
 def test_terminal_vanish_unproven_kept(tmp_path):

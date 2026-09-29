@@ -15,9 +15,11 @@
 - test_empty_body_is_failure: 回传成功但内容为空 -> 失败(不给解析器喂空页面)
 - test_unlisted_url_raises_before_dispatch: 白名单外 URL 直接拒, **任务都不下发**(SSRF 边界)
 - test_cancelled_queue_reports_channel_unavailable: 通道被叫停 -> HrChannelStopped(可区分, 不计失败/熔断)
+- test_endpoint_not_listening_fails_fast: 端点未在监听 -> 立刻报无通道(不下发任务 / 不等满 request_timeout)
 - test_requests_counter: 排障用的下发计数
 """
 import threading
+import time
 
 import pytest
 
@@ -81,10 +83,12 @@ class _Auto:
         self._thread.join(1.0)
 
 
-def make_fetcher(*, queue=None, timeout=2.0):
+def make_fetcher(*, queue=None, timeout=2.0, listening=None):
     """取数通道 + 其队列(策略只声明一个站点, 便于测白名单)"""
     queue = queue or HrTaskQueue()
-    fetcher = ChannelFetcher(queue, policy=UrlPolicy({"pt.example.com": site_conf()}), request_timeout=timeout)
+    fetcher = ChannelFetcher(
+        queue, policy=UrlPolicy({"pt.example.com": site_conf()}), request_timeout=timeout, listening_fn=listening
+    )
     return queue, fetcher
 
 
@@ -225,6 +229,25 @@ def test_cancelled_queue_reports_channel_unavailable():
         fetcher.get_text(URL)
     assert isinstance(err.value, HrChannelUnavailable), "父类语义仍要成立(调用方兼容)"
     assert "停止" in str(err.value)
+
+
+def test_endpoint_not_listening_fails_fast():
+    """端点未在监听 -> 立刻报「无可用通道」: 既不下发任务, 也不等满 request_timeout
+
+    2026-09-29 实报: 热重载后端点对象建了却从未 `start()` —— 端口从未绑定, 每页白等 180s,
+    日志里只剩「等扩展取数超时(浏览器是否在运行…)」这条**把人引向浏览器的假线索**。
+    「被叫停」语义优先: 关停路径照旧报 `HrChannelStopped`(不是「没通道」)。
+    """
+    queue, fetcher = make_fetcher(timeout=30.0, listening=lambda: False)
+    started = time.monotonic()
+    with pytest.raises(HrChannelUnavailable) as exc:
+        fetcher.get_text(URL)
+    assert type(exc.value) is HrChannelUnavailable, f"端点没监听不是「被叫停」: {type(exc.value).__name__}"
+    assert time.monotonic() - started < 1.0, "端点没绑端口就不该等满 request_timeout"
+    assert queue.pending() == 0, "没绑端口就没人能回传 —— 任务根本不该下发"
+    queue.cancel_all("关停中")  # 叫停语义优先于端点检查
+    with pytest.raises(HrChannelStopped):
+        fetcher.get_text(URL)
 
 
 def test_requests_counter():
