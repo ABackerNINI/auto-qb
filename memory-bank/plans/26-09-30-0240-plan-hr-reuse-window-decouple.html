@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>修改计划 · HR 在线核实三参数解耦 — 拉取间隔 / 复用窗 / 立即拉取</title>
+<meta name="doc-topic" content="backend-partial-hr-verify">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101013;
+    --ink: #e9e9e4;
+    --ink-strong: #f6f6f2;
+    --muted: #9c9c94;
+    --faint: #6f6f68;
+    --hairline: rgba(255, 255, 255, 0.09);
+    --hairline-soft: rgba(255, 255, 255, 0.055);
+    --accent: #5ac2ae;
+    --accent-dim: rgba(90, 194, 174, 0.14);
+    --warn: #d9a441;
+    --error: #e08573;
+    --ok: #8fbf9a;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1100px; margin: 0 auto; padding: 72px 48px 96px; }
+
+  /* ---------- 封面 ---------- */
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: 40px;
+    line-height: 1.15;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+    margin: 18px 0 14px;
+  }
+  .lede { font-size: 17px; color: var(--muted); max-width: 46em; }
+  .lede strong { color: var(--ink); font-weight: 510; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 28px;
+    margin-top: 34px; padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+  }
+  .meta-row div { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .meta-row b { display: block; color: var(--muted); font-weight: 500; margin-bottom: 3px; letter-spacing: 0.05em; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-top: 76px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--hairline); padding-bottom: 12px; margin-bottom: 26px; }
+  .sec-no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-strong); }
+  h3 { font-size: 17px; font-weight: 600; color: var(--ink-strong); margin: 34px 0 12px; }
+  h3 .ref { font-family: var(--mono); font-size: 12px; color: var(--faint); font-weight: 400; margin-left: 10px; }
+  p { max-width: 74ch; margin-bottom: 12px; }
+  p.wide { max-width: none; }
+  .small { font-size: 13px; color: var(--muted); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- 表 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 10px; font-size: 13.5px; }
+  th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; text-align: left;
+    padding: 8px 12px; border-bottom: 1px solid var(--hairline);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--hairline-soft); vertical-align: top; }
+  td code { white-space: normal; }
+  .t-mono { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+
+  /* ---------- 标注 ---------- */
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; padding: 1px 7px; border: 1px solid var(--hairline); border-radius: 3px; color: var(--muted); }
+  .tag.accent { color: var(--accent); border-color: rgba(90, 194, 174, 0.4); }
+  .tag.warn { color: var(--warn); border-color: rgba(217, 164, 65, 0.4); }
+  .note {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-dim);
+    padding: 14px 18px;
+    margin: 20px 0;
+    max-width: none;
+  }
+  .note p { margin: 0; max-width: none; }
+  .note .note-t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent); display: block; margin-bottom: 6px; }
+
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 16px 0 22px;
+    color: var(--ink);
+  }
+  pre .c { color: var(--faint); }
+  pre .k { color: var(--accent); }
+  pre .w { color: var(--warn); }
+
+  /* ---------- 图 ---------- */
+  figure { margin: 26px 0 30px; }
+  figcaption { font-size: 12.5px; color: var(--faint); margin-top: 10px; font-family: var(--mono); }
+  svg text { font-family: var(--mono); }
+
+  /* ---------- 清单 ---------- */
+  ul, ol { max-width: 74ch; padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+
+  .file-changes { margin: 14px 0 8px; }
+  .file-changes li { margin-bottom: 12px; }
+  .fc-path { font-family: var(--mono); font-size: 13px; color: var(--ink-strong); }
+  .fc-path .ln { color: var(--faint); }
+
+  footer {
+    margin-top: 90px; padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ============ 封面 ============ -->
+  <header>
+    <span class="kicker">Delivery Plan · auto-qb · HR 在线核实</span>
+    <h1>HR 三参数解耦:<br>拉取间隔 · 复用窗 · 立即拉取</h1>
+    <p class="lede">
+      现状三个参数互相掣肘的根因只有一个:<strong>复用窗的时长直接借用了「对账波周期」这个配置值</strong>,
+      而插件的「立即拉取一次」在设计上就只是排空后端任务队列 —— 它从来不能触发取数。
+      本计划把三者拆成正交参数:节奏归<strong>拉取间隔</strong>,新鲜度归<strong>可配置的复用窗</strong>(默认 2 小时),
+      人工意志归<strong>立即拉取</strong>(压过前两道闸,但账号安全频控照常)。
+    </p>
+    <div class="meta-row">
+      <div><b>日期</b>2026-09-30</div>
+      <div><b>状态</b>已批准(2026-09-30 拍板, 见 §8)</div>
+      <div><b>关联</b>26-09-28-1932(HR v3 重建) · 26-09-29-2036(计数对平)</div>
+      <div><b>影响面</b>配置层 5 文件 · hr 核心 4 文件 · WebUI 2 文件 · 插件 3 文件 · 测试 4 文件</div>
+    </div>
+  </header>
+
+  <!-- ============ 1. 现状诊断 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§1</span><h2>现状诊断:三个参数在代码里的真实关系</h2></div>
+
+    <p>逐条给代码事实。结论:<strong>「对账波周期」和「复用窗」在实现上是同一个数,而「立即拉取」根本不在同一条链路上</strong>。</p>
+
+    <table>
+      <thead>
+        <tr><th style="width:15%">参数</th><th style="width:47%">代码事实</th><th>用户感受</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>复用窗</b></td>
+          <td class="t-mono">唯一写入点 service.py:1031 —— <code>data.expires_at = now + site_conf.refresh_interval if any_ok else 0.0</code>;唯一消费点 service.py:448 —— 窗内直接 <code>ACTION_REUSED</code> 返回,不取数。展示在 status.py:272(「复用窗至 MM-DD HH:MM:SS」)。</td>
+          <td>时长不可配置;实际长度 = 对账波周期(默认 12H)—— 太长,数据最长陈旧 12 小时;「太长失去意义」。</td>
+        </tr>
+        <tr>
+          <td><b>对账波周期</b></td>
+          <td class="t-mono"><code>refresh_interval</code>(schema/hr.py:81,站点级,默认 12H)。名义是「在线对账多久跑一波」,但全链路<strong>没有第二个节奏闸门</strong>:ratelimit.next_allowed_at(ratelimit.py:97)只算 min_interval(90s)/ 日额 / Retry-After / 时间窗。所以它唯一的实际作用就是充当复用窗时长。</td>
+          <td>字面难懂;且「对账波周期仍要看复用窗」—— 因为两者就是同一个变量,不是谁看谁,是同一体。</td>
+        </tr>
+        <tr>
+          <td><b>立即拉取一次</b></td>
+          <td class="t-mono">options.html:163 按钮 → options.js:494 <code>poll()</code> → background.js:289 <code>{type:'poll-now'}</code> → <code>pollAll('手动(选项页)')</code> → <code>GET /api/hr/tasks</code> → <code>queue.take_batch()</code>(server.py:222)。队列内容由后端取数线程决定(worker.py 60s 节拍 → service.refresh_site → 被复用窗挡住)。</td>
+          <td>点击时若处于复用窗内,队列恒空 → 「无任务」。按钮从设计上就只是「排空队列」,不是「触发取数」。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <figure>
+      <svg viewBox="0 0 960 128" width="100%" role="img" aria-label="默认配置下的时间线:复用窗与前次波结束重叠,取数节奏由复用窗决定">
+        <line x1="30" y1="96" x2="930" y2="96" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+        <!-- 相位带 -->
+        <rect x="30" y="46" width="140" height="34" fill="rgba(90,194,174,0.16)" stroke="rgba(90,194,174,0.45)" stroke-width="1"/>
+        <rect x="170" y="46" width="560" height="34" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+        <line x1="730" y1="40" x2="730" y2="104" stroke="#5ac2ae" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="42" y="67" fill="#5ac2ae" font-size="12">复用窗内 → REUSED</text>
+        <text x="182" y="67" fill="#9c9c94" font-size="12">窗内每 60s 轮询都直接复用,插件点「立即拉取」= 无任务</text>
+        <text x="740" y="38" fill="#5ac2ae" font-size="12">下一波(12H 后)</text>
+        <!-- 刻度 -->
+        <text x="30" y="118" fill="#6f6f68" font-size="11">T₀ 波结束</text>
+        <text x="230" y="118" fill="#6f6f68" font-size="11">默认 12H 的复用窗,期间人工意志无法介入</text>
+        <text x="700" y="118" fill="#6f6f68" font-size="11">T₀+12H</text>
+      </svg>
+      <figcaption>图 1 · 现状时间线(默认 12H):波结束后 12 小时内,取数与否完全由这一个变量决定。</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 2. 目标行为 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§2</span><h2>目标行为:三个正交参数</h2></div>
+
+    <table>
+      <thead>
+        <tr><th style="width:13%">新参数</th><th style="width:22%">配置键</th><th style="width:9%">默认</th><th style="width:36%">语义</th><th>闸门位置</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>拉取间隔</b></td>
+          <td class="t-mono">hr_check.sites.&lt;id&gt;.refresh_interval<br>(键不变,展示名与 help 重写)</td>
+          <td class="t-mono">12H</td>
+          <td>波次硬节奏:下次拉取 = <b>上次健康波</b> + 本值。失败波不推进基准 → 失败的档位仍按「下一轮重试」(与现状一致)。</td>
+          <td class="t-mono">service._refresh_locked<br><b>新增</b></td>
+        </tr>
+        <tr>
+          <td><b>数据复用窗</b></td>
+          <td class="t-mono">hr_check.reuse_window<br>(<b>新全局键</b>)</td>
+          <td class="t-mono">2H</td>
+          <td>波后数据新鲜窗:窗内本实例/其它实例直接复用不取数(多实例去重 + 新鲜度展示)。生效值 = min(本值, 拉取间隔)。</td>
+          <td class="t-mono">service.py:448 既有分支,时长换源</td>
+        </tr>
+        <tr>
+          <td><b>立即拉取</b></td>
+          <td class="t-mono">非配置 —— 人工动作</td>
+          <td class="t-mono">—</td>
+          <td>跳过「复用窗 + 拉取间隔」两道闸立即开波;<b>保留</b> min_interval / 日额 / Retry-After / 时间窗(账号安全线,详见 §3.2 决策)。</td>
+          <td class="t-mono">插件按钮 + WebUI 按钮 + --hr-once</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <figure>
+      <svg viewBox="0 0 960 150" width="100%" role="img" aria-label="改后时间线:复用窗两小时,之后进入未到拉取时刻,十二小时后下一波;立即拉取可随时插入">
+        <line x1="30" y1="104" x2="930" y2="104" stroke="rgba(255,255,255,0.25)" stroke-width="1"/>
+        <rect x="30" y="54" width="116" height="34" fill="rgba(90,194,174,0.16)" stroke="rgba(90,194,174,0.45)" stroke-width="1"/>
+        <rect x="146" y="54" width="584" height="34" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+        <line x1="730" y1="48" x2="730" y2="112" stroke="#5ac2ae" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="40" y="75" fill="#5ac2ae" font-size="12">REUSED(2H)</text>
+        <text x="156" y="75" fill="#9c9c94" font-size="12">WAITING「未到拉取时刻(拉取间隔)」—— 数据仍参与判定(证据无时效)</text>
+        <text x="740" y="46" fill="#5ac2ae" font-size="12">下一波 T₀+12H</text>
+        <!-- 立即拉取插入点 -->
+        <line x1="430" y1="20" x2="430" y2="54" stroke="#d9a441" stroke-width="1"/>
+        <polygon points="430,54 426,46 434,46" fill="#d9a441"/>
+        <text x="380" y="14" fill="#d9a441" font-size="12">点击「立即拉取」→ 最多等 min_interval(90~112s)即开波</text>
+        <text x="30" y="128" fill="#6f6f68" font-size="11">T₀ 波结束</text>
+        <text x="128" y="144" fill="#6f6f68" font-size="11">T₀+2H 复用窗止</text>
+        <text x="700" y="128" fill="#6f6f68" font-size="11">T₀+12H</text>
+      </svg>
+      <figcaption>图 2 · 改后时间线(默认 12H / 2H):节奏与新鲜度各自独立,人工意志随时可插入。</figcaption>
+    </figure>
+
+    <div class="note">
+      <span class="note-t">关键正确性</span>
+      <p>解耦的同一时刻<strong>必须</strong>新增「拉取间隔」闸门。现状里防止按 90s 间隔连波取数的唯一机制就是复用窗
+      (<code>expires_at</code>);若只把复用窗缩到 2H 而不加节奏闸门,取数频率会从「12 小时一波」变成「约 2 小时一波」
+      —— 站点访问量放大 6 倍,直接踩访问安全线。这是本计划唯一的行为风险点,已作为独立改动项(§3.2-B)与测试项(§6)钉死。</p>
+    </div>
+  </section>
+
+  <!-- ============ 3. 改动清单 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§3</span><h2>改动清单(按模块)</h2></div>
+
+    <h3>3.1 配置层:新键 <code>reuse_window</code> + 「对账波周期」改名为「拉取间隔」<span class="ref">5 文件</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">src/auto_qb/config/models.py<span class="ln"> ~:118 HrCheckConfig</span></span><br>
+        新字段 <code>reuse_window: float = 2 * 3600.0</code>;docstring「v3 14 键口径」改 15 键。</li>
+      <li><span class="fc-path">src/auto_qb/config/loaders.py<span class="ln"> _load_hr_check</span></span><br>
+        解析 <code>reuse_window=_get(spec, "reuse_window", d.reuse_window, parse_time)</code>。</li>
+      <li><span class="fc-path">src/auto_qb/config/schema/hr.py</span><br>
+        ① <code>HR_CHECK_FIELDS</code> 增加 Field:<code>reuse_window</code> /「数据复用窗」/ time / 默认 2H,
+        help 写明「一波取完后的数据新鲜窗:窗内直接复用不取数(多实例去重 + 界面新鲜度);实际生效不超过拉取间隔;
+        调大不增加站点访问,只让数据显得更新」。<br>
+        ② <code>refresh_interval</code> 展示名「对账波周期」→「<b>拉取间隔</b>」,help 重写:
+        「自上次健康波起,每隔多久重新拉取一次站点清单(在线对账的节奏);失败的档位随下一轮自然重试(无独立退避)。
+        站点访问节奏由本值与频控(最小间隔/日额/时间窗)共同决定;点『立即拉取』可越过本闸(频控仍生效)」。
+        头部「14 键」同步改 15 键。键名与全部代码标识符不变,只动展示层。</li>
+      <li><span class="fc-path">src/auto_qb/config/validation/sections.py<span class="ln"> :30 KNOWN_HR_CHECK_KEYS</span></span><br>
+        键集加 <code>reuse_window</code>;全局 hr_check 校验加 <code>_try_time(..., positive=True, min_s=60, max_s=7*86400)</code>
+        (与 refresh_interval 同款口径)。</li>
+      <li><span class="fc-path">src/auto_qb/config/impact.py<span class="ln"> HR_CHECK_FIELD_LEVELS</span></span><br>
+        <code>"reuse_window": LEVEL_L0</code>(热重载即时生效,与整段口径一致)。</li>
+    </ul>
+    <p class="small">取舍:复用窗放<strong>全局</strong>不放站点级 —— 它的本质是多实例去重与展示口径(shared_dir 本身就是全局概念);
+    站点间的节奏差异由站点级 refresh_interval 承担。这样「站点接入」卡片不新增字段,配置面最小。</p>
+
+    <h3>3.2 service / worker:节奏闸门 + 复用窗换源 + force 通路<span class="ref">核心语义</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">A · src/auto_qb/hr/service.py<span class="ln"> refresh_site / _refresh_locked</span></span><br>
+        签名加 <code>force: bool = False</code>,透传 <code>_refresh_locked</code>。</li>
+      <li><span class="fc-path">B · service.py<span class="ln"> _refresh_locked 复用分支之后新增</span></span><br>
+        拉取间隔闸门(force 时跳过):</li>
+    </ul>
+<pre><span class="c"># 复用分支(448 行)保持不动,其后新增:</span>
+healthy = data.wave.healthy_ts
+<span class="k">if not force and healthy > 0:</span>
+    due_wave = healthy + site_conf.refresh_interval
+    <span class="k">if now < due_wave:</span>
+        result.action = ACTION_WAITING
+        result.reason = f<span class="w">"未到拉取时刻(拉取间隔, 还差 {due_wave - now:.0f}s)"</span>
+        <span class="k">return</span></pre>
+    <ul class="file-changes">
+      <li><span class="fc-path">C · service.py<span class="ln"> :1031 _finish_wave</span></span><br>
+        <code>data.expires_at = now + min(self.global_conf.reuse_window, site_conf.refresh_interval) if any_ok else 0.0</code>
+        —— clamp 保证复用窗永不把节奏拖过拉取间隔。</li>
+      <li><span class="fc-path">D · src/auto_qb/hr/worker.py</span><br>
+        ① 新增 <code>request_refresh(sites: Optional[Iterable[str]] = None) -> List[str]</code>:在
+        <code>self._cond</code> 下把站点并入 <code>self._force</code>(None = 全部启用站点)后 <code>wake()</code>,返回实际受理的站点清单;线程安全、无持久化(重启丢失无副作用,幂等)。<br>
+        ② <code>run_once</code> 消费:逐站点判断 <code>site in self._force</code> 并 <code>discard</code>,以
+        <code>force=</code> 传给 refresh_site —— 旗标一次性,不残留。<br>
+        ③ <code>_PACING_CLASSES</code>(worker.py:45)增加 <code>("拉取间隔", "拉取间隔")</code>,
+        让新等待原因进入既有节流去重,不刷屏。</li>
+    </ul>
+    <div class="note">
+      <span class="note-t">决策 · 为什么基准是 healthy_ts 而不是 fetched_at</span>
+      <p>fetched_at 随<strong>失败波</strong>也会前进;若以它为节奏基准,「全档失败 → expires_at=0 → 下一轮(60s)重试」的现行失败处置
+      (service.py:1029 注释、§5.2「档位截断 + 周期自然重试」)会被拖慢成一个拉取间隔。
+      <code>wave.healthy_ts</code>(上次健康波)不随失败波前进,节奏语义与现状完全一致;部分失败的波两者都推进,
+      失败档位仍等下一波 —— 与 schema help「按本周期自然重试」的承诺一致。</p>
+      <p style="margin-top:8px"><strong>决策 · force 保留哪些频控</strong>:min_interval(最多再等 90~112s,锁内等待已有
+      PROD_REQUEST_WAIT_MAX 上限)/ 日额 / Retry-After(站点明确指令)/ 时间窗(用户自设)一律照常 ——
+      「立即拉取」压过的是<strong>本程序的调度意志</strong>,不该压过账号安全线与站点指令。等待原因照常出现在状态与日志里,可解释。</p>
+    </div>
+
+    <h3>3.3 通道端点:插件侧入口 <code>POST /api/hr/refresh</code><span class="ref">2 文件</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">src/auto_qb/hr/channel.py</span><br>
+        新增 <code>API_REFRESH = "/api/hr/refresh"</code> 并导出。</li>
+      <li><span class="fc-path">src/auto_qb/hr/server.py</span><br>
+        ① 构造参数加 <code>force_fn: Optional[Callable[[], dict]] = None</code>(runtime 注入)。<br>
+        ② <code>route()</code> 增加 <code>POST /api/hr/refresh</code>:鉴权与 origin 关卡照走
+        (token + 扩展 origin,与其它端点同款),调 <code>force_fn()</code> 后<strong>立即</strong>回
+        <code>{"requested": [...], "note": "已受理, 取数由取数线程执行"}</code>。<br>
+        ③ 模块 docstring「端点线程只入队」的边界声明扩展为「只入队 + 置一次性 force 旗标并唤醒取数线程」,
+        写明理由:旗标只活在 worker 内存,不碰站点文件 / state_file / 队列结构,单一写线程假设不变。</li>
+    </ul>
+
+    <h3>3.4 runtime / WebUI:force 的汇合点与人工按钮<span class="ref">3 文件</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">src/auto_qb/hr/runtime.py</span><br>
+        新增 <code>request_refresh(sites=None) -> dict</code>:委托 worker(worker 不在跑时返回
+        <code>{"requested": [], "note": "取数线程未启动"}</code>);<code>_build</code> 里给 HrChannelServer 传
+        <code>force_fn=self.request_refresh</code>。</li>
+      <li><span class="fc-path">src/auto_qb/webui/server/routes/hr.py</span><br>
+        新增 <code>POST /api/hr/refresh</code>(body 可带 <code>site</code> 单站触发):校验 HR 启用与站点已接入
+        (与 confirm-empty 同款校验风格),调 <code>manager.hr.request_refresh</code>,回受理清单;线程未启动回 409。</li>
+      <li><span class="fc-path">src/auto_qb/webui/static/shared/tpl/settings-detail.html<span class="ln"> 站点状态卡片</span></span><br>
+        每站点加「立即拉取」按钮 + 卡片头加「全部立即拉取」;调用新路由后自动 <code>loadHrStatus(true)</code> 刷新;
+        展示行增加「下次拉取」(见 §3.6)。</li>
+    </ul>
+
+    <h3>3.5 插件:按钮行为兑现「点击即拉取」<span class="ref">3 文件</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">extensions/hr-fetch-proxy/background.js</span><br>
+        新消息 <code>{type:'refresh-now'}</code>:逐实例 <code>POST {base}/api/hr/refresh</code>(带 token);
+        <b>404 = 旧后端</b> → 降级为纯排空并在日志提示「后端版本较旧,请升级主程序后才有立即拉取」;
+        其余网络失败走既有 explainFetchError 排查清单;随后照旧 <code>pollAll('手动(选项页)')</code> 排空已生成的任务
+        (首任务通常在波启动后数秒内入队,后续任务由 1 分钟定时轮询接管)。</li>
+      <li><span class="fc-path">extensions/hr-fetch-proxy/options.html<span class="ln"> :163</span> / options.js<span class="ln"> :494 poll()</span></span><br>
+        按钮文案<strong>保留「立即拉取一次」</strong>(拍板:不叫「立即对账」),改的是行为 —— 点击改发
+        <code>refresh-now</code>,即「请求后端立即开波 + 排空」;状态行汇总「已受理 N 个站点 + 排空结果」;
+        选项页里两处空态文案(「点『立即拉取一次』后出现」)与新行为语义一致,不需改词。</li>
+    </ul>
+
+    <h3>3.6 走查与状态展示:口径对齐<span class="ref">2 文件</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">src/auto_qb/hr/report.py<span class="ln"> :109 run_hr_once</span></span><br>
+        <code>service.refresh_all(force=True)</code> —— 走查本义就是「人工立即跑一波给人看」,
+        不改会被 §3.2-B 的新闸门挡住(回归风险,测试钉死,见 §6)。</li>
+      <li><span class="fc-path">src/auto_qb/hr/status.py<span class="ln"> :269-272 :335</span></span><br>
+        ① <code>next_wave_at</code> 改为 <code>data.wave.healthy_ts + interval</code>(与 §3.2-B 同基准,单一算法);<br>
+        ② <code>fresh_text</code> 追加「· 下次拉取 &lt;时刻&gt;」;SiteStatus 顶部时间语义 docstring 同步;<br>
+        ③ <code>blocking_reason</code> 的 stale 文案「复用窗已过(等待下一波)」→
+        「数据已过复用窗, 下次拉取 &lt;时刻&gt;(可点『立即拉取』提前)」。</li>
+    </ul>
+
+    <figure>
+      <svg viewBox="0 0 960 236" width="100%" role="img" aria-label="立即拉取调用链:三个入口汇入同一 force 通路,端点线程只置旗与唤醒,取数线程执行波次">
+        <g font-size="12" fill="#9c9c94">
+          <rect x="30" y="18" width="180" height="40" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+          <text x="44" y="36" fill="#e9e9e4">插件「立即拉取一次」</text>
+          <text x="44" y="50" fill="#6f6f68">POST /api/hr/refresh</text>
+
+          <rect x="30" y="86" width="180" height="40" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+          <text x="44" y="104" fill="#e9e9e4">WebUI「立即拉取」</text>
+          <text x="44" y="118" fill="#6f6f68">manager.hr 直调</text>
+
+          <rect x="30" y="154" width="180" height="40" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+          <text x="44" y="172" fill="#e9e9e4">--hr-once 走查</text>
+          <text x="44" y="186" fill="#6f6f68">refresh_all(force=True)</text>
+
+          <rect x="330" y="52" width="250" height="72" fill="rgba(90,194,174,0.08)" stroke="rgba(90,194,174,0.4)" stroke-width="1"/>
+          <text x="346" y="74" fill="#5ac2ae">HrRuntime.request_refresh(sites)</text>
+          <text x="346" y="92" fill="#9c9c94">worker 置一次性 force 旗标</text>
+          <text x="346" y="108" fill="#9c9c94">+ wake()(非阻塞)</text>
+
+          <rect x="700" y="52" width="230" height="72" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+          <text x="714" y="74" fill="#e9e9e4">取数线程 run_once</text>
+          <text x="714" y="92" fill="#9c9c94">force: 跳复用窗 + 拉取间隔</text>
+          <text x="714" y="108" fill="#9c9c94">仍守 min_interval/日额/Retry-After</text>
+
+          <line x1="210" y1="38" x2="330" y2="70" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+          <line x1="210" y1="106" x2="330" y2="88" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+          <line x1="210" y1="174" x2="330" y2="106" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+          <line x1="580" y1="88" x2="700" y2="88" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+          <polygon points="700,88 692,84 692,92" fill="rgba(255,255,255,0.4)"/>
+
+          <text x="330" y="152" fill="#6f6f68">端点线程例外边界:只置旗 + 唤醒,不碰站点文件 / state_file / 队列结构</text>
+          <text x="330" y="170" fill="#6f6f68">三个入口同一实现(single source of truth),WebUI 不经网络</text>
+        </g>
+      </svg>
+      <figcaption>图 3 · 立即拉取的三条入口与同一条 force 通路。</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 4. 兼容与迁移 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§4</span><h2>兼容与迁移</h2></div>
+    <table>
+      <thead><tr><th style="width:34%">场景</th><th>处理</th></tr></thead>
+      <tbody>
+        <tr><td>旧站点文件里的 <code>expires_at</code>(= 旧 12H 窗)</td><td>不迁移。下次成功波按新公式(min(2H, 12H))自动重算;期间旧窗最多再生效一次,无判定影响(证据无时效)。</td></tr>
+        <tr><td>用户生产 config.yml</td><td><b>零改动</b>(红线)。新键缺省即默认 2H;「对账波周期」只是展示名,键名 <code>refresh_interval</code> 不变,配置文件无需任何编辑。</td></tr>
+        <tr><td>旧后端 + 新插件</td><td>POST /api/hr/refresh 得 404 → 插件降级为纯排空 + 日志提示升级,不报错。</td></tr>
+        <tr><td>新后端 + 旧插件</td><td>旧 <code>poll-now</code> 消息保留,行为不变;新端点只是没人调。</td></tr>
+        <tr><td>多实例共享目录</td><td>force 旗标是<b>实例内</b>内存态,不落共享文件;共享文件的 healthy_ts 已天然去重,A 实例刚跑完健康波,B 实例不会因 force 重复跑(force 只跳自己实例的两道闸,min_interval 仍在,且 healthy_ts 已推进 → 即便晚到一轮也只是 REUSED)。极端并发由站点文件锁兜底。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 5. 明确不做的事 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§5</span><h2>明确不做的事(范围守卫)</h2></div>
+    <ul>
+      <li>不改 <code>min_interval</code> / 日额 / Retry-After / 时间窗的任何语义 —— 立即拉取不越过账号安全线。</li>
+      <li>不做站点级复用窗(全局一键);不做「复用窗 &gt; 拉取间隔」的报错 —— clamp 静默收敛,help 说明。</li>
+      <li>不改插件侧硬上限(site-caps)与取数线程 60s 轮询节奏 —— force 用 wake() 即时唤醒,不需要加密轮询。</li>
+      <li>不动 WaveCoverage / 判定 / 签发逻辑 —— 本计划只动「什么时候取数」的调度层,不动「取到后怎么判」。</li>
+      <li>计划外发现的问题一律入池 <code>memory-bank/issues/</code>,不顺手修。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 6. 测试计划 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§6</span><h2>测试计划</h2></div>
+    <table>
+      <thead><tr><th style="width:26%">文件</th><th>用例</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="t-mono">tests/test_hr_config.py</td>
+          <td>reuse_window 默认 2H / 自定义解析 / 未知键拒绝 / 边界(60s 与 7d 之外报错);「15 键」计数与 schema 同步守卫更新;热重载级别 L0。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/test_hr_service.py</td>
+          <td>① 复用窗内 → REUSED(现有用例改断言:expires = 波 + min(2H, interval));<br>
+              ② 窗外 + 拉取间隔内 → WAITING「未到拉取时刻(拉取间隔)」;<br>
+              ③ 健康波 + interval 到点 → 正常开波;<br>
+              ④ force → 跳过两道闸直接开波;<br>
+              ⑤ force 且 min_interval 未到 → 仍 WAITING(间隔)—— 安全线不被越过;<br>
+              ⑥ 全档失败波 → healthy_ts 不前进 → 下一轮(60s)重试,节奏不变;<br>
+              ⑦ 部分失败波 → healthy_ts 前进 → 失败档位等下一波;<br>
+              ⑧ 走查 refresh_all(force=True)不被闸门挡。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/test_hr_worker.py</td>
+          <td>request_refresh:置旗 + 唤醒 + 一次性消费(不残留);按站触发只影响该站;worker 未启动时的返回;「拉取间隔」进入节流类别不刷屏。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/test_web.py</td>
+          <td>fresh_text 含「下次拉取」(改 :3583 断言);POST /api/hr/refresh:成功受理 / HR 未启用 400 / 未接入站点 400 / 线程未启动 409。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/test_hr_server.py*</td>
+          <td>route():POST /api/hr/refresh 鉴权(401)/ origin(403)/ 受理响应;force_fn 未注入时的 404。(*若该文件承载端点路由用例则并入,否则新建小文件)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">插件(手动)</td>
+          <td>端到端验收:真机 + 真实通道,复用窗内点「立即拉取一次」→ 后端日志出现波启动 → WebUI「上次取波」前进;连点两次 → 第二次因 min_interval 等待且文案可见。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="small">收尾按会话协议:<code>commands run test.full</code> 全量 + 新基线切片;新增测试同步各文件头部 docstring 的「## 测试计划」清单。</p>
+  </section>
+
+  <!-- ============ 7. 实施顺序与风险 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§7</span><h2>实施顺序与风险</h2></div>
+    <h3>顺序(每步可独立验证)</h3>
+    <ol>
+      <li><b>配置层</b>(§3.1)→ test_hr_config 过。</li>
+      <li><b>核心语义</b>(§3.2 + §3.6 走查 force)→ test_hr_service / test_hr_worker 过。<span class="tag warn">顺序硬约束:必须与 §3.2-B 同一批落地,禁止只缩复用窗不加间隔闸门(§2 关键正确性)</span></li>
+      <li><b>端点 + runtime</b>(§3.3/3.4 路由)→ 端点 route 用例过。</li>
+      <li><b>WebUI</b>(按钮 + 展示)→ test_web 过。</li>
+      <li><b>插件</b>(§3.5)→ 手动端到端。</li>
+      <li><code>commands run test.full</code> + 基线切片 + 收尾回写(activeContext / 若有新坑入 pitfalls)。</li>
+    </ol>
+    <h3>风险与对策</h3>
+    <table>
+      <thead><tr><th style="width:34%">风险</th><th>对策</th></tr></thead>
+      <tbody>
+        <tr><td>只改复用窗忘了节奏闸门 → 取数频率放大 6 倍</td><td>实施顺序把两者绑成同一步(第 2 步);test_hr_service ①-③ 钉死三态;本计划评审时作为唯一否决点。</td></tr>
+        <tr><td>force 与正在跑的波并发</td><td>旗标由 run_once 串行消费;波进行中到达的 force 留到下一轮(≤60s)生效 —— 状态与日志如实显示,不做跨线程打断(与「单一写线程」黄金法则一致)。</td></tr>
+        <tr><td>用户连点「立即拉取」</td><td>每次点击都是一次合法的 force,但 min_interval(90~112s)兜底 + 日额硬顶;WebUI「上次取波」时间可见,不做额外去重(保持语义简单:点了就拉取)。</td></tr>
+        <tr><td>「14 键」口径散落多处文档</td><td>models / schema / test_hr_config 三处 docstring 同批改「15 键」;收尾时 docs 检索「对账波周期」全量回写。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 8. 拍板记录 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§8</span><h2>拍板记录(2026-09-30,计划随拍板更新)</h2></div>
+    <table>
+      <thead><tr><th style="width:34%">事项</th><th>拍板</th></tr></thead>
+      <tbody>
+        <tr><td>人工动作命名</td><td><b>「立即拉取」</b>(用户定;原计划「立即对账」因不直观被否)。插件按钮、WebUI 按钮、状态文案、日志统一用词。</td></tr>
+        <tr><td>refresh_interval 展示名</td><td><b>「拉取间隔」</b>(用户定;原推荐「对账间隔」被否)。键名与代码标识符不变。</td></tr>
+        <tr><td>WebUI「立即拉取」按钮</td><td><b>要</b>(按推荐):每站 + 全部。「复用窗至…」显示在 WebUI,用户在那里看到陈旧却无处下手是同一类掣肘;成本小(路由 + 一个按钮)。</td></tr>
+        <tr><td>插件按钮文案</td><td><b>保留「立即拉取一次」</b>(按推荐方向的落定):只改行为(请求后端开波 + 排空),不改名。</td></tr>
+        <tr><td>复用窗是否允许超过拉取间隔</td><td><b>不允许,代码 clamp(min)</b>(按推荐)——「拉取间隔是硬节奏」只有一处例外会破坏它,不留这个口子。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    <span>auto-qb · memory-bank/plans · 26-09-30-0240</span>
+    <span>现状代码事实核对截至 c76469a3(2026-09-30)</span>
+  </footer>
+</div>
+</body>
+</html>
