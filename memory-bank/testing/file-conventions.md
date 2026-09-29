@@ -110,12 +110,18 @@
 
 - **触发**: 断言"环境相关能力"(环境变量 / 符号链接权限 / 注册表 / 文件系统重定向)。
 - **判别**: 不显式给定前提会出现"单跑通过、全量失败"或"换台机器就红"的**假失败**。
-  已修两例: ①`test_notify_legacy_shortcut_cleanup` 补 `monkeypatch.setenv("APPDATA", ...)` ——
+  已修三例: ①`test_notify_legacy_shortcut_cleanup` 补 `monkeypatch.setenv("APPDATA", ...)` ——
   `_legacy_shortcut_paths()` 在 `APPDATA` 缺失时返回 `[]`, 不设等于空跑、断言必失败;
   ②`test_api_fs_dirs_endpoint` 第⑤条补 `os.path.islink()` 判定 —— 沙箱 / 重定向层会让 `os.symlink` "成功"
-  却落成**真实目录**(实测 `islink=False`), 此时不存在"逃逸链接", 断言无意义。
+  却落成**真实目录**(实测 `islink=False`), 此时不存在"逃逸链接", 断言无意义;
+  ③`test_file_access._dir_symlink_or_skip` 建链后补 `os.path.islink()` 复核(issue 26-09-29-2031) ——
+  旧实现只 catch `OSError`, 本机 `os.symlink` 是**假成功**: 不抛异常但 `os.path.lexists(link)` 为 False
+  (**连普通目录都没建出来**, 比 ② 的"落成真实目录"更彻底), 两条端到端用例因此 **failed 而非 skip**,
+  直接卡死 `ship.commit` 的 `test.quick` 闸门。
+  ⚠ **建链类 helper 的通用形态**: `try: os.symlink(...) except OSError: skip` **不够** ——
+  异常路径之外必须再判 `os.path.islink(link)`; 该 skip 的必须 skip, 不能落成断言红。
 - **处置**: **判据: 单跑通过 + 全量失败, 或本机失败但逻辑上看不出问题 ⇒ 先查环境能力,
-  排除环境之前不要动 `src/`**(这两例生产代码都是对的)。
+  排除环境之前不要动 `src/`**(这三例生产代码都是对的)。
 
 ### 测试期真实系统副作用有常驻守卫(`tests/sidefx.py`)
 

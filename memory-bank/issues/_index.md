@@ -54,6 +54,7 @@
 
 ## Done
 
+- [test] [test_file_access 两条 symlink 端到端用例依赖宿主建链能力: 本机 os.symlink 假成功(建出的不是重解析点)时断言红而非 skip, 卡住提交闸门](26-09-29-2031-test-file-access-symlink-host-capability.html) — _dir_symlink_or_skip 只捕获 OSError 而未做 os.path.islink() 判定 —— 本机 os.symlink 返回成功却建不出重解析点(R 盘与 C 盘实测均如此), 两条端到端用例因此 failed 而非 skip, test.quick 闸门恒红
 - [test] [既有: 26-09-26-2345 旧计划缺 doc meta, test_docs_forms 两条守阵红](26-09-27-1153-test-plan-shipflow-v2-missing-meta.html) — plans/26-09-26-2345-plan-commands-shipflow-v2.html 缺 doc-status/doc-topic/doc-added/doc-updated, test_docs_forms::test_artifacts_meta_complete 与 test_status_vocabulary 恒红(HEAD 上复验同红)
 - [test] [throttle 守阵 elapsed 容差无 sleep 精度余量, 文件级/全量跑偶发假红](26-09-22-2052-test-throttle-test-sleep-tolerance.html) — test_run_loop_throttles_without_stop_event 的 mock 场景断言 elapsed >= 0.05, Windows sleep(50ms) 实测可 46ms(定时器精度), 文件级跑时前序测试改变定时器状态即红; 单跑恒绿
 - [bug] [config 校验缺少取值范围约束, 可配出合法格式但危险的值](26-09-22-1937-bug-config-value-range-validation.html) — validate_config 只拦格式与未知键, 数值/时间类配置取值范围大多无上下限约束, 可能引发运行时问题, 需逐项分析收紧

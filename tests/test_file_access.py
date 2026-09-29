@@ -16,10 +16,11 @@
 - test_mapped_realpath_lexical: Mapped realpath_lexical 纯词法(normcase+normpath, 不解析符号链接)
 - test_mapped_symlink_escape_treated_as_miss: SEC-1 逃逸加固 —— 挂载内符号链接指向挂载外按
   miss 处理(存在性 UNDETERMINED / 取值 FileAccessError / map_to_container None / scandir 剔除);
-  挂载内合法符号链接不受影响
+  挂载内合法符号链接不受影响(宿主无建链能力时 skip —— 含 os.symlink 假成功)
 - test_mapped_escape_containment_logic: SEC-1 逃逸判定逻辑(非 symlink 环境可跑) —— 容器侧
   realpath 解析跳出挂载根 -> 按 miss, 仍在根内 -> 正常
 - test_mapped_mount_root_via_symlink: 挂载根本身经符号链接到达 -> 按解析后的真实根比较不误伤
+  (同上, 宿主无建链能力时 skip)
 - test_mapped_open_path_not_supported: 容器 open_path 恒 NotSupported(B/C 类根因, 优雅降级)
 - test_init_file_access_by_config: 空表 -> Local; 非空 -> Mapped(单例构建, R 级热重载不切换)
 - test_selfcheck_mount_missing_and_readonly: 挂载点不存在 WARNING; 只读探测 INFO; 命中率 0% WARNING; Local 空转
@@ -253,11 +254,24 @@ def test_mapped_realpath_lexical(tmp_path):
 
 
 def _dir_symlink_or_skip(link, target):
-    """建目录符号链接; 无权限时跳过用例(Windows 需开发者模式/管理员, 逃逸校验依赖真实 symlink)"""
+    """建目录符号链接; **宿主不具备建链能力时跳过用例** —— 逃逸校验依赖真实 symlink, 缺能力
+    时「逃逸」场景根本不成立, 断言无意义(不是代码缺陷)。两种缺失形态都要跳过:
+
+    ① `os.symlink` 抛 OSError / NotImplementedError(Windows 未开开发者模式或非管理员);
+    ② **假成功** —— 部分沙箱 / 文件系统重定向层让 `os.symlink` 不抛异常却建不出重解析点,
+       2026-09-29 本机实测更彻底: `os.path.lexists(link)` 为 False(连普通目录都没建出来),
+       `islink` 恒 False; 先例里记录的形态是落成真实目录(islink 也是 False)。
+
+    只 catch 异常(旧实现)会把 ② 漏成断言红 —— 见 issue 26-09-29-2031 与
+    testing/file-conventions.md「测试不得依赖宿主环境能力」; 同款先例是
+    test_api_fs_dirs_endpoint 第⑤条(建了但非链接就不断言)。
+    """
     try:
         os.symlink(target, link, target_is_directory=True)
-    except (OSError, NotImplementedError):
+    except (OSError, NotImplementedError, AttributeError):
         pytest.skip(f"无法创建目录符号链接(权限不足): {link} -> {target}")
+    if not os.path.islink(link):
+        pytest.skip(f"os.symlink 假成功(建出的不是重解析点, islink=False): {link} -> {target}")
 
 
 def test_mapped_symlink_escape_treated_as_miss(tmp_path):

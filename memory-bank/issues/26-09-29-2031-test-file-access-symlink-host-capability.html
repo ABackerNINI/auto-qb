@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="file-access-symlink-host-capability">
+<meta name="issue-stamp" content="26-09-29-2031">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="file-access-symlink-host-capability">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="test_file_access 两条 symlink 端到端用例依赖宿主建链能力: 本机 os.symlink 假成功(建出的不是重解析点)时断言红而非 skip, 卡住提交闸门">
+<meta name="issue-summary" content="_dir_symlink_or_skip 只捕获 OSError 而未做 os.path.islink() 判定 —— 本机 os.symlink 返回成功却建不出重解析点(R 盘与 C 盘实测均如此), 两条端到端用例因此 failed 而非 skip, test.quick 闸门恒红">
+<title>test_file_access 两条 symlink 端到端用例依赖宿主建链能力: 本机 os.symlink 假成功(建出的不是重解析点)时断言红而非 skip, 卡住提交闸门 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（已修 · 2026-09-29 20:4x 认领并验证）· test</div>
+    <h1>test_file_access 两条 symlink 端到端用例依赖宿主建链能力: 本机 os.symlink 假成功(建出的不是重解析点)时断言红而非 skip, 卡住提交闸门</h1>
+    <p class="lede">_dir_symlink_or_skip 只捕获 OSError 而未做 os.path.islink() 判定 —— 本机 os.symlink 返回成功却建不出重解析点(R 盘与 C 盘实测均如此), 两条端到端用例因此 failed 而非 skip, test.quick 闸门恒红</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-09-29-2031-test-file-access-symlink-host-capability</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-09-29 20:31</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge type">Done</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">infra</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-09-29 20:1x，做种时长列 HR 来源标记非文字化（计划 <code>plans/26-09-29-1905</code>）实施完毕、
+       准备 <code>commands run ship.commit</code> 时撞见：闸门「全量测试 test.quick」恒红，
+       <code>tests/test_file_access.py</code> 两条端到端 symlink 用例 failed。与本次改动（前端静态资源 +
+       守阵断言）零交集 —— 换临时目录、关沙箱均同红，属既有测试债。</p>
+    <p>两条用例分别是 <code>test_mapped_symlink_escape_treated_as_miss</code>（逃逸链接必须按 miss，
+       挂载内链接必须照常）与 <code>test_mapped_mount_root_via_symlink</code>（挂载根本身经符号链接到达不误伤）。
+       二者都靠 <code>_dir_symlink_or_skip</code> 先建出一条<b>真实</b>目录符号链接；本机上
+       <code>os.symlink</code> 不抛异常、<b>却建不出重解析点</b>（<code>os.path.islink</code> 应为 False，
+       待复验确认），于是「逃逸」场景根本不成立，断言红而不是 skip。</p>
+    <p>项目已有同款先例：<code>test_api_fs_dirs_endpoint</code> 第⑤条曾因「沙箱 / 重定向层让
+       <code>os.symlink</code> 成功却落成真实目录（实测 <code>islink=False</code>）」补过
+       <code>os.path.islink()</code> 判定（见 <code>memory-bank/testing/file-conventions.md</code>
+       「测试不得依赖宿主环境能力」）。本两条漏了同样的判定。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-09-29 20:17 @ b6ce666b（同步后 HEAD），改动面为前端静态资源 + 守阵断言
+
+# ① ship.commit 闸门
+[FAIL] ship.commit (45.0s)
+  提交失败: 闸门「全量测试(跳覆盖率报表): 经 commands 引擎跑 test.quick, 红了即 STOP」未过 (rc=1, 26.4s)
+  FAILED tests/test_file_access.py::test_mapped_symlink_escape_treated_as_miss
+  FAILED tests/test_file_access.py::test_mapped_mount_root_via_symlink - Assert...
+  2 failed, 1749 passed, 1 skipped in 24.31s
+
+# ② 逃逸用例：本该 None（逃逸按 miss），实际照常映射 —— 说明链接没被识别为重解析点
+&gt;       assert fa.map_to_container("D:/Downloads/jail") is None
+E       AssertionError: assert 'R:/Temp/auto-qb/tests/pytest-of-11059/pytest-928/popen-gw3/.../jail' is None
+tests\test_file_access.py:278: AssertionError
+
+# ③ 挂载根经链接：本该 True，实际 False
+&gt;       assert fa.exists("D:/Downloads/x.bin") is True
+E       AssertionError: assert False is True
+tests\test_file_access.py:304: AssertionError
+
+# ④ 排除临时目录因素：TMPDIR 换成 C:/Users/11059/AppData/Local/Temp 后仍同红
+$env:TMPDIR="C:/Users/11059/AppData/Local/Temp"; uv run pytest -q -n 0 tests/test_file_access.py --no-cov
+2 failed, 24 passed in 1.02s   （同一两条）
+
+# ⑤ 排除工具沙箱因素：dangerouslyDisableSandbox 下跑 commands run test.quick 仍同红
+2 failed, 1749 passed, 1 skipped in 23.59s
+
+# ⑥ 历史对照：基线 26-09-27-1737 记「无权限环境（本机 WinError 1314）自动 pytest.skip」，
+#    skipped 1→3；即本机的预期形态是 skip，不是 failed —— 现状与基线不一致。</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>宿主 <code>os.symlink</code> 「假成功」（不抛异常但不成重解析点）的环境必现 —— 本机 R 盘与 C 盘临时目录、开关沙箱均复现；<code>TMPDIR</code> 不是变量</td></tr>
+      <tr><td>影响范围</td><td>①<b>提交闸门被卡死</b>：<code>ship.commit</code> 的前置 test.quick 恒红，任何提交都过不去；②测试信号噪音：本机 <code>test.full</code> 基线数字长期带这 2 条 failed（见基线 26-09-29-2004），掩盖真回归；③生产代码无影响（SEC-1 逃逸判定在真 symlink 环境下逻辑本身未被证伪）</td></tr>
+      <tr><td>严重度</td><td>中——不掩盖生产行为，但直接阻塞交付流程；同类风险：任何依赖 <code>os.symlink</code> 的用例在假成功环境都会以「断言红」而非「skip」显形</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>tests/test_file_access.py:255</code>（取证 2026-09-29 20:31）· <code>def _dir_symlink_or_skip(link, target)</code> · grep <code>os.symlink(target, link</code> —— 只 <code>except (OSError, NotImplementedError)</code>，建链后无 <code>os.path.islink()</code> 复核</li>
+      <li><code>tests/test_file_access.py:263</code>（同上）· <code>test_mapped_symlink_escape_treated_as_miss</code> · grep <code>map_to_container("D:/Downloads/jail") is None</code>（断言在 :278）</li>
+      <li><code>tests/test_file_access.py:294</code>（同上）· <code>test_mapped_mount_root_via_symlink</code> · grep <code>exists("D:/Downloads/x.bin") is True</code>（断言在 :304）</li>
+      <li>先例（同款已修）<code>tests/test_web.py</code> 或 <code>tests/test_api.py</code> · <code>test_api_fs_dirs_endpoint</code> 第⑤条 · grep <code>os.path.islink()</code></li>
+      <li>被测生产代码：<code>src/auto_qb/infra/file_access.py</code> · <code>MappedFileAccess</code> / <code>_match</code> / <code>_root_contained</code>（SEC-1 逃逸判定，2026-09-27 cbc4b80 引入）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout"><b>已证实</b>（2026-09-29 20:4x 认领后探针实证）。<code>_dir_symlink_or_skip</code>
+       只在 <code>except (OSError, NotImplementedError)</code> 分支 skip；本机 <code>os.symlink</code> 走的是
+       <b>假成功</b>路径 —— 不抛异常，但 <code>os.path.lexists(link)</code> 为 <b>False</b>（<b>连普通目录都没建出来</b>，
+       比先例「落成真实目录」更彻底），<code>islink</code> 恒 False。于是「逃逸链接」不存在，
+       <code>realpath</code> 解析不出逃逸、<code>map_to_container</code> 照常返回具体路径（见 02 段②），
+       断言失去前提 ⇒ <b>failed 而非 skip</b>。</div>
+    <p class="hint">探针原文（取证 2026-09-29 20:4x，<code>TMPDIR=R:/Temp/auto-qb/tests</code>）：</p>
+<pre><code>tmpdir: R:\Temp\auto-qb\tests\tmpyxy793y2
+a OK islink= False isdir= False lstat_mode= None   # symlink() 返回成功, 但什么都没建出来
+b OK islink= False isdir= False lstat_mode= None</code></pre>
+    <p class="hint">已排除（入池时的四项仍然成立）：①临时目录（R 盘 / C 盘同红）；②工具沙箱（关沙箱同红）；
+       ③本次改动（与 <code>infra/file_access.py</code> 零交集）；④并行 worker 污染（<code>-n 0</code> 同红）。
+       生产代码未被证伪 —— SEC-1 逃逸逻辑在真 symlink 环境下仍成立。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>倾向 ①（与项目既有先例一致，改动最小）：<code>_dir_symlink_or_skip</code> 在建链后补
+       <code>os.path.islink(link)</code> 判定 —— 为 False 即 <code>pytest.skip</code>（与「无权限」同一条路径），
+       两条端到端用例在假成功环境自动退化为 skip，闸门恢复绿；真 symlink 环境照常跑端到端。
+       代价：本机这两条 SEC-1 端到端路径不再被真实验证（靠
+       <code>test_mapped_escape_containment_logic</code> 的 realpath 桩兜底，它本来就是「无特权环境可跑」的补充）。</p>
+    <h3>实际修法（2026-09-29 认领后实施 = 建议修法 ①）</h3>
+    <p><code>tests/test_file_access.py</code> · <code>_dir_symlink_or_skip</code>：建链后补
+       <code>os.path.islink(link)</code> 复核，为 False 即 <code>pytest.skip</code>（与「无权限」同一条路径），
+       并把 <code>AttributeError</code> 也并进 except（极老 Python 无 <code>os.symlink</code>）。
+       同步更新该文件头部「## 测试计划」清单里两条的描述（补 skip 条件），
+       并在 <code>memory-bank/testing/file-conventions.md</code>「测试不得依赖宿主环境能力」
+       补为第 ③ 例 + 一条通用形态（建链类 helper：异常路径之外必须再判 <code>islink</code>）。</p>
+<pre><code>    try:
+        os.symlink(target, link, target_is_directory=True)
+    except (OSError, NotImplementedError, AttributeError):
+        pytest.skip(f"无法创建目录符号链接(权限不足): {link} -&gt; {target}")
+    if not os.path.islink(link):
+        pytest.skip(f"os.symlink 假成功(建出的不是重解析点, islink=False): {link} -&gt; {target}")</code></pre>
+    <p>备选 ②：不动测试，改闸门 —— 把 <code>.commands/my-commit-flow/.my-commit-flow.toml</code> 里 pytest 闸门的
+       <code>TMPDIR</code> 换到能建真重解析点的盘；代价是换机器即失效，且与「测试不得依赖宿主环境能力」的约定背道而驰，
+       不建议。验收标准（修法 ①）：<code>commands run test.quick</code> 全绿且两条转为 skipped，
+       <code>test.full</code> 基线数字更新到 <code>testing/baselines/</code>。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-09-29 20:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-29 20:40 — 用户指令「认领 issue」⇒ 置 <strong>In Progress</strong> 并复验：<b>仍复现</b>
+          （探针实证 <code>os.symlink</code> 假成功、<code>lexists=False</code>，见 05 段）</li>
+      <li>2026-09-29 20:40 — 修复 + 验证完毕，置 <strong>Done</strong></li>
+    </ul>
+    <h3>复验</h3>
+    <p>复验（2026-09-29 20:40）：<b>仍复现</b> —— 探针直接打印 <code>os.path.islink</code> /
+       <code>lexists</code>，确认假成功形态（详见 05 段证据），入池时的怀疑成立。</p>
+    <h3>修复后补充</h3>
+    <p>实际修法 = 建议修法 ①（未改道），见 06 段。<b>验证方式</b>：
+       ①<code>commands run test.one -- tests/test_file_access.py -v</code> →
+       <code>24 passed, 2 skipped</code>、rc=0（两条由 failed 转 skipped）；
+       ②<code>commands run test.full</code> → <code>1749 passed, 3 skipped / 91%</code>、rc=0
+       （skipped 由 1 变 3，与基线 26-09-27-1737 记的本机预期形态一致）；
+       ③<code>ship.commit</code> 的 test.quick 闸门已恢复可用（本条不再卡门）。
+       <b>代价已记录</b>：本机这两条 SEC-1 端到端路径不再真实验证，靠
+       <code>test_mapped_escape_containment_logic</code>（realpath 桩、无特权环境可跑）兜底。</p>
+  </section>
+
+  <footer>
+    26-09-29-2031-test-file-access-symlink-host-capability.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
