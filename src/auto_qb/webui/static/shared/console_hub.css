@@ -742,7 +742,9 @@
 /* pill 行尾动作区(方案C P4 拍板): 新增 = 虚线描边 / 导入 = 幽灵钮, 与实底站点 pill 分形分位 */
 .hb-pill-tail { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 
-/* 命中行: 整行可点(点 = 选中该站即清词收层); ↑↓ 活动项与悬停同款高亮(accent-soft 底 + 左缘竖条),
+/* 命中行: 整行可点(点 = 选中该站即清词收层); 高亮(accent-soft 底 + 左缘竖条)只走 .act 一条路 ——
+   键盘 ↑↓ 与真实鼠标移动(经 hubTrackerHoverIdx 位移门限接管)都落在活动项上, 不写 CSS :hover
+   (治上下键时选中项与静止光标旧高亮打架的闪烁, 2026-09-29);
    「当前选中站」用行内「当前」小标记表达, 与活动项是两个语义; 行间用 border-top 分隔 */
 .hb-tr-hit {
   display: flex;
@@ -757,11 +759,12 @@
   border-top: 1px solid var(--border);
   padding: 9px 13px;
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+      box-shadow var(--dur-fast) var(--ease); /* 左缘竖条同拍渐变, 不再突跳 */
   animation: hb-tr-drop-in 200ms var(--ease-out) backwards; /* 逐行入场, 延迟由模板 :style 按 index 给 */
 }
 .hb-tr-hit:first-of-type { border-top: 0; }
-.hb-tr-hit:hover, .hb-tr-hit.act { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.hb-tr-hit.act { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .hb-tr-hit.act .hb-tr-hit-name { color: var(--accent-hi); }
 .hb-tr-hit-name { font-weight: 600; font-size: 13.5px; flex: none; }
 .hb-tr-hit-name.hit { color: var(--accent-hi); }

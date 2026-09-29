@@ -158,6 +158,7 @@ window.CONFIG_HUB = {
         focusKey: "",      // 搜索跳转后要高亮的行
         trackerSearchFocus: false,  // 聚焦搜索层(方案C, plans/26-09-29-0323): 搜索框聚焦即开层
         trackerHitIdx: -1,          // 命中面板键盘活动项(↑↓ 移动), -1 = 无
+        trackerMouseAt: null,       // 悬停接管的最后一次接管坐标 {x,y}(hubTrackerHoverIdx); null = 无
       },
     };
   },
@@ -751,12 +752,26 @@ window.CONFIG_HUB = {
       this.cfg.trackerQuery = "";
       this.hub.trackerSearchFocus = false;
       this.hub.trackerHitIdx = -1;
+      this.hub.trackerMouseAt = null;
       if (blurInput && this.$refs.trackerSearchInput) this.$refs.trackerSearchInput.blur();
     },
     /* × 清空钮: 配合模板 @mousedown.prevent —— 阻止按钮抢焦点, 输入框保持聚焦可继续输入
      * (清词后聚焦层仍开着, 回到空态引导, 再敲字即搜) */
     hubTrackerClear() {
       this.cfg.trackerQuery = "";
+    },
+    /* 悬停接管(治「上下键选中项闪烁」2026-09-29): 命中行不挂 @mouseenter + CSS 不写 :hover ——
+     * 光标静止停在命中列表上时, 旧高亮(悬停)与键盘活动项两套同源高亮打架, 活动项会跳回光标行;
+     * 行入场动画 / 滚动 / DOM 变更后浏览器还会给静止光标补发合成 hover 事件, 放大成交替闪烁。
+     * 改为 @mousemove + 位移门限: 位移 <3px(静止 / 合成事件)不接管, 真实移动才把活动项交给光标 */
+    hubTrackerHoverIdx(i, ev) {
+      const x = ev.clientX, y = ev.clientY, at = this.hub.trackerMouseAt;
+      if (at) {
+        const dx = x - at.x, dy = y - at.y;
+        if (dx * dx + dy * dy < 9) return; // <3px: 光标静止 / 合成事件, 不接管
+      }
+      this.hub.trackerMouseAt = { x, y };
+      this.hub.trackerHitIdx = i;
     },
     /* 聚焦层键盘导航(方案C): ↑↓ 移动命中活动项, Enter 打开活动项(=点命中); IME 组词中不劫持。
      * Esc 不在这里处理 —— 归 hubOnKey 的既有 Esc 链(帮助浮窗优先级在前), 避免双路径清词 */

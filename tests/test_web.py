@@ -42,7 +42,7 @@
 - test_sites_missing_requires_connected_client: qB 断连 -> 503(不得拿空扫描冒充"没有缺失站点")
 - test_sites_missing_api_failure_maps_502: 扫描中途 qB 调用失败 -> 502 带原因(不裸 500)
 - test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志
-- test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \\p{L}\\p{N}(u 标志, ASCII \\W 折碎中文词) + 收层路径四条一律清词单点(点命中/Esc/点暗幕/点外即收; 方案C 聚焦层 2026-09-29 拍板) + 聚焦层开合/键盘导航/IME 守卫 + pill 无键数徽标 + 行尾动作区分形 + hb-tr-* 类 CSS 成对定义
+- test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \\p{L}\\p{N}(u 标志, ASCII \\W 折碎中文词) + 收层路径四条一律清词单点(点命中/Esc/点暗幕/点外即收; 方案C 聚焦层 2026-09-29 拍板) + 聚焦层开合/键盘导航/IME 守卫 + 悬停接管位移门限(治上下键选中项闪烁 2026-09-29) + pill 无键数徽标 + 行尾动作区分形 + hb-tr-* 类 CSS 成对定义
 - test_frontend_search_help_wiring: 顶栏搜索语法浮卡接线守阵(计划 26-09-28-0201 方案A) —— 模板(「?」钮/浮卡/示例回填/简化占位符) + state 声明 + view.js 方法(回填即搜) + 点空白/Esc/导航三条收起路径 + 三皮肤 CSS 成对定义与 input 右内边距留位
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
@@ -2713,7 +2713,8 @@ def test_frontend_tracker_search_wiring():
          会把整个中文词折成空格, 中文搜索静默失效(Python \\W 的同语义直译陷阱);
       ③ 收层路径四条(点命中 / Esc / 点暗幕 / 点外即收)一律走 hubTrackerStageClose 清词单点 ——
          漏一条 = 层赖着盖详情(「不主动消失」报障的根因);
-      ④ 聚焦层开合(聚焦或有词即开) + 键盘导航(↑↓ 移动 / Enter 打开) + IME 组词守卫(方案C);
+      ④ 聚焦层开合(聚焦或有词即开) + 键盘导航(↑↓ 移动 / Enter 打开) + IME 组词守卫(方案C)
+         + 悬停接管(mousemove + 3px 位移门限, 静止光标/合成事件不夺活动项 —— 治上下键选中项闪烁 2026-09-29);
       ⑤ 站点 pill 不带配置键数徽标(26-09-27 拍板); 新增/导入收进行尾动作区与站点 pill 分形(P4);
       ⑥ 模板用到的 hb-tr-* 类必须在 console_hub.css 有定义(挂件类名错配变体)。
     """
@@ -2735,6 +2736,7 @@ def test_frontend_tracker_search_wiring():
         'ref="trackerSearchInput"',
         "hub.trackerSearchFocus = true",
         "hubTrackerKeydown($event)",
+        '@mousemove="hubTrackerHoverIdx(i, $event)"',  # 悬停接管走位移门限(治上下键选中项闪烁)
         "hb-tr-drop-hd",
         "hb-tr-drop-ft",
         "hb-pill-tail",
@@ -2758,6 +2760,8 @@ def test_frontend_tracker_search_wiring():
         "hubTrackerPick(name)",
         "hubTrackerStageClose(blurInput)",
         "hubTrackerKeydown(e)",
+        "hubTrackerHoverIdx(i, ev)",
+        "trackerMouseAt: null",
         "trackerSearchFocus: false",
         "trackerHitIdx: -1",
     ):
@@ -2768,6 +2772,8 @@ def test_frontend_tracker_search_wiring():
     # ③ 收层单点四条路径: 点命中 / Esc(hubOnKey) / 点暗幕(veil) / 点外即收(hubOnDocClick) —— 全部清词
     pick = re.search(r'@click="(hubTrackerPick\(h\.name\))"', tpl)
     assert pick, "命中行 @click 必须接 hubTrackerPick —— 只选中不清词会把切站效果留在暗幕底下(死锁)"
+    assert '@mouseenter="hub.trackerHitIdx' not in tpl, \
+        "命中行不得挂 @mouseenter(静止光标的旧高亮与键盘活动项同源打架 = 上下键选中项闪烁), 悬停接管走 hubTrackerHoverIdx"
     veil = re.search(r'class="hb-tr-veil" @click="(hubTrackerStageClose\(true\))"', tpl)
     assert veil, "暗幕 @click 必须接 hubTrackerStageClose(true) —— 点暗幕 = 清词收层退聚焦层"
     docclick = re.search(r"hubOnDocClick\(e\) \{(.*?)\n    \},", hub, re.S)
@@ -2783,8 +2789,9 @@ def test_frontend_tracker_search_wiring():
             f"{fn} 必须走收层单点(离开分区不带搜索残留, 聚焦态一并复位)"
     closefn = re.search(r"hubTrackerStageClose\(blurInput\) \{(.*?)\n    \},", hub, re.S)
     assert closefn and 'this.cfg.trackerQuery = ""' in closefn.group(1) \
-        and "trackerSearchFocus = false" in closefn.group(1), \
-        "收层单点必须清词 + 复位聚焦态(跳转器拍板: 收层一律清词)"
+        and "trackerSearchFocus = false" in closefn.group(1) \
+        and "trackerMouseAt = null" in closefn.group(1), \
+        "收层单点必须清词 + 复位聚焦态 + 复位悬停门限坐标(跳转器拍板: 收层一律清词)"
     ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
     assert 'trackerQuery: ""' in ed, "cfg.trackerQuery 必须在 config_editor.js state 声明(漏声明 = 响应性缺失)"
     # ⑥ CSS 成对: 模板用到的 hb-tr-* 类都要有规则
@@ -2809,6 +2816,8 @@ def test_frontend_tracker_search_wiring():
         "hb-btn.dashed",
     ):
         assert "." + cls in css, f"console_hub.css 缺少 .{cls} 定义(挂件类名错配 = 静默裸样式)"
+    assert ".hb-tr-hit.act" in css and "hb-tr-hit:hover" not in css, \
+        "命中行高亮只走 .act —— CSS :hover 会跟键盘活动项双高亮打架(闪烁根因之一), 悬停接管在 hubTrackerHoverIdx"
 
 
 def test_frontend_search_help_wiring():

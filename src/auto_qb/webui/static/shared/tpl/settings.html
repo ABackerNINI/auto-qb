@@ -113,7 +113,8 @@
                     <button v-if="cfg.trackerQuery.trim()" class="hb-tr-x" title="清空"
                             @mousedown.prevent @click="hubTrackerClear()">×</button>
 
-                    <!-- 命中面板: 头(标签 + 命中数搬出输入框 + 键位) / 命中行(↑↓ 活动高亮) /
+                    <!-- 命中面板: 头(标签 + 命中数搬出输入框 + 键位) / 命中行(高亮只走 act:
+                         键盘 ↑↓ 与真实鼠标移动接管共用, 治上下键选中项闪烁) /
                          尾(「新增站点「词」」快捷新增 + Esc 提示); 空态语法引导也在面板内 -->
                     <div v-if="hubTrackerStageOpen" class="hb-tr-drop">
                       <div class="hb-tr-drop-hd">
@@ -136,7 +137,7 @@
                           <button v-for="(h, i) in hubTrackerHits.hits" :key="h.name" class="hb-tr-hit"
                                   :class="{ on: cfg.trackerKey === h.name, act: hub.trackerHitIdx === i }"
                                   :style="{ animationDelay: (i * 24) + 'ms' }"
-                                  @click="hubTrackerPick(h.name)" @mouseenter="hub.trackerHitIdx = i">
+                                  @click="hubTrackerPick(h.name)" @mousemove="hubTrackerHoverIdx(i, $event)">
                             <span class="hb-tr-hit-name" :class="{ hit: h.nameHit }">{{ h.name }}</span>
                             <span v-if="cfg.trackerKey === h.name" class="hb-tr-cur">当前</span>
                             <span class="hb-tr-chips">
