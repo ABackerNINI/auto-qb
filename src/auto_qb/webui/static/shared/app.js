@@ -420,6 +420,19 @@ function initialPage() {
   }
 }
 
+/* 种子详情抽屉标签页初值(持久化用户偏好, 与 initialViewMode/initialPage 同口径)。
+ * 记住上次停留的 tab(常规/内容/用户/Tracker), 跨种子打开与刷新保持 ——
+ * 用户报"在内容页打开一个种子, 点开另一个种子却回到常规页"。
+ * 白名单取值: 只认 4 个合法 tab, 脏值/被清空一律回落 "general"。 */
+function initialDrawerTab() {
+  try {
+    const saved = localStorage.getItem("autoqb.ui.drawerTab");
+    return ["general", "trackers", "peers", "content"].includes(saved) ? saved : "general";
+  } catch {
+    return "general";
+  }
+}
+
 /* 状态优先级**单点表**(数值越小越"该被看到"): "一组/一集种子的聚合状态取哪个"。
  *
  * 必须与后端 `auto_qb/mixins/web_view.py::_SHOW_STATE_RANK` **逐项一致** —— 追剧页的集状态

@@ -315,12 +315,14 @@ window.AQB_DRAWER = {
     async openTorrentDrawer(hash) {
       this.menu.visible = false;
       this._stopDrawerPoll();
+      const initialTab = this.drawerLastTab || "general";
       this.drawer = {
-        open: true, hash, tab: "general", loading: true, error: "",
+        open: true, hash, tab: initialTab, loading: true, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
       };
-      await this._fetchDrawerDetail();
+      await this._fetchDrawerDetail();  // 详情恒拉(头部标题/常规页都依赖); 非常规 tab 再补拉对应数据
+      if (initialTab !== "general") this._loadDrawerTab(initialTab);
     },
     closeDrawer() {
       this.drawer.open = false;
@@ -391,12 +393,19 @@ window.AQB_DRAWER = {
         this.drawer.peersLoading = false;
       }
     },
-    /* tab 切换: general 重新拉详情(反映最新状态); trackers/peers 拉一次并启动轮询; content 拉一次 */
+    /* tab 切换: general 重新拉详情(反映最新状态); trackers/peers 拉一次并启动轮询; content 拉一次。
+     * 切换即记住该 tab(drawerLastTab + localStorage), 使下一个种子默认停在相同页签。 */
     drawerTab(tab) {
       if (this.drawer.tab === tab) return;
       this.drawer.tab = tab;
+      this.drawerLastTab = tab;
+      this.persistDrawerTab();
       this.filePrio.visible = false;  // 换页签时收起文件优先级小菜单(内容页签专属)
       this._stopDrawerPoll();
+      this._loadDrawerTab(tab);
+    },
+    /* 按 tab 拉取对应数据(开抽屉初值 / 切 tab 共用, 单一加载逻辑): 避免两处各写一遍分支 */
+    _loadDrawerTab(tab) {
       if (tab === "general") this._fetchDrawerDetail();
       else if (tab === "trackers") {
         this._fetchDrawerTrackers();
@@ -405,6 +414,13 @@ window.AQB_DRAWER = {
         this._fetchDrawerPeers();
         this._startDrawerPoll();
       } else if (tab === "content") this._fetchDrawerFiles();
+    },
+    /* 持久化抽屉 tab 偏好(与 persistUiPage 同纪律): 只落"停在哪页"这个意图, 不落派生值;
+     * 写入失败(隐私模式/配额满)只影响刷新后落点, 不该打断切页 —— 故吞掉异常。 */
+    persistDrawerTab() {
+      try {
+        localStorage.setItem("autoqb.ui.drawerTab", this.drawerLastTab);
+      } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
     },
     /* 抽屉头部动作: 复用 actTorrent(它读 menu.hash 并自带回执/toast) */
     drawerAct(action) {

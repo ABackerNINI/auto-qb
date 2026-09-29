@@ -104,6 +104,7 @@ window.AQB_STATE = {
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
       },
+      drawerLastTab: initialDrawerTab(),  // 记住上次停留的 tab(跨种子打开 + 刷新保持); 见 initialDrawerTab()
       torrentColumns: TORRENT_COLUMNS,  // 单种子视图列模型(列选择器第三段)
       showColumns: SHOW_COLUMNS,        // 追剧视图列模型(列选择器第四段)
       // 列状态双轨(plan 26-09-21-1551): 意图态(唯一持久化对象)与生效态(易变, 绝不落盘)分开
