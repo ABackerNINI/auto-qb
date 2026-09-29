@@ -61,19 +61,23 @@
                 <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, numTone(g.downloaded, g.size)]">{{ fmtSizeOrDash(g.downloaded) }}</div>
                 <div v-else-if="col.key === 'tags'" class="g-tags">
                   <span v-for="t in g.commonTags.list.slice(0, 3)" :key="t" class="tag-chip"
-                        :class="tagClass(t, g.members[0])">{{ t }}</span>
+                        :class="[tagClass(t, g.members[0]), { 'f-on': isFilterOn('tagFilter', t) }]"
+                        @click.stop="filterFromChip('tag', t)">{{ t }}</span>
                   <span v-if="g.commonTags.list.length > 3" class="tag-more">+{{ g.commonTags.list.length - 3 }}</span>
                   <span v-if="!g.commonTags.list.length" class="zero"></span>
                   <span v-if="g.commonTags.diff" class="diff-mark" title="组内标签不一致(此处仅显示共同标签)">±</span>
                 </div>
                 <div v-else-if="col.key === 'category'" class="g-cat">
-                  <span v-if="g.commonCategory.value" class="cat-chip">{{ g.commonCategory.value }}</span>
+                  <span v-if="g.commonCategory.value" class="cat-chip"
+                        :class="{ 'f-on': isFilterOn('categoryFilter', g.commonCategory.value) }"
+                        @click.stop="filterFromChip('category', g.commonCategory.value)">{{ g.commonCategory.value }}</span>
                   <span v-else-if="g.commonCategory.diff" class="diff-mark" title="组内分类不一致">多分类</span>
                   <span v-else class="zero"></span>
                 </div>
                 <div v-else-if="col.key === 'sites'" class="g-sites">
                   <span v-for="m in g.members" :key="m.hash"
-                        class="site-chip" :class="[m.kind, { 'search-hit': m.hit }]">
+                        class="site-chip" :class="[m.kind, { 'search-hit': m.hit, 'f-on': isFilterOn('siteFilter', m.site) }]"
+                        @click.stop="filterFromChip('site', m.site)">
                     {{ m.site }}
                   </span>
                 </div>
@@ -92,7 +96,9 @@
                 <!-- 最近活动 = 组内最新(0 = 全组从未 -> 空白); 与"添加于"同族时间列 -->
                 <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="cellTimeHint(g.last_activity, 'last_activity')">{{ cellTime(g.last_activity, 'last_activity') }}</div>
                 <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
-                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="g.save_path">{{ g.save_path || '' }}</div>
+                <div v-else-if="col.key === 'save_path'" class="g-save-path f-cell"
+                     :class="{ 'f-on': isFilterOn('pathFilter', g.save_path) }" :title="g.save_path"
+                     @click.stop="filterFromChip('path', g.save_path)">{{ g.save_path || '' }}</div>
                 <!-- 可选列(hide 默认隐藏): 表头名称与种子页同名列对齐 -->
                 <!-- 剩余量 = 组内最小(补齐一份即可 —— 最完整成员还差的字节) -->
                 <div v-else-if="col.key === 'amount_left'" class="g-stat" :class="{ zero: !g.amount_left }">{{ fmtSizeOrDash(g.amount_left) }}</div>
@@ -132,7 +138,9 @@
                    @click="onMemberClick(m, $event)"
                    @contextmenu.prevent="openMemberMenu($event, m)">
                 <template v-for="col in visibleDetailCols" :key="col.key">
-                  <span v-if="col.key === 'site'" class="m-site"><i class="dot"></i>{{ m.site }}</span>
+                  <span v-if="col.key === 'site'" class="m-site f-cell"
+                        :class="{ 'f-on': isFilterOn('siteFilter', m.site) }"
+                        @click.stop="filterFromChip('site', m.site)"><i class="dot"></i>{{ m.site }}</span>
                   <span v-else-if="col.key === 'state'" class="m-state"><i class="dot"></i><span class="state-text">{{ stateText(m) }}</span></span>
                   <!-- 做种/用户: 口径单点化(FX-03) —— 暂停中的种子不显示; 同一函数也为种子页/追剧集明细服务 -->
                   <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !cellPeers(m, 'seeds') }">{{ cellPeers(m, 'seeds') }}</span>
@@ -152,12 +160,16 @@
                   <span v-else-if="col.key === 'up_limit'" class="m-stat">{{ fmtLimitBytes(m.up_limit) }}</span>
                   <span v-else-if="col.key === 'dl_limit'" class="m-stat">{{ fmtLimitBytes(m.dl_limit) }}</span>
                   <span v-else-if="col.key === 'tags'" class="m-tags">
-                    <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
+                    <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip"
+                          :class="[tagClass(t, m), { 'f-on': isFilterOn('tagFilter', t) }]"
+                          @click.stop="filterFromChip('tag', t)">{{ t }}</span>
                     <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
                     <span v-if="!mTags(m).length" class="zero"></span>
                   </span>
                   <span v-else-if="col.key === 'category'" class="m-cat">
-                    <span v-if="m.category" class="cat-chip">{{ m.category }}</span>
+                    <span v-if="m.category" class="cat-chip"
+                          :class="{ 'f-on': isFilterOn('categoryFilter', m.category) }"
+                          @click.stop="filterFromChip('category', m.category)">{{ m.category }}</span>
                     <span v-else class="zero"></span>
                   </span>
                   <span v-else-if="col.key === 'progress'" class="m-progress">

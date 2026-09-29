@@ -123,9 +123,19 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .tag-chip, .cat-chip, .site-chip, .tag-more, .diff-mark, .topbar .ver {
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease),
-    transform var(--dur-fast) var(--ease-out); }
+    filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease-out); }
 .group-row:hover .site-chip, .member-row:hover .tag-chip, .member-row:hover .cat-chip {
   transform: translateY(-1px); }
+/* 挂件点击即筛选(2026-09-29): 站点/标签/分类胶囊与路径、明细站点单元格可点 —— 点击 = 切换
+ * 顶栏筛选弹层里的对应值(再点一次取消, 与弹层同一多选语义); f-on = 该值已在筛选中,
+ * 环用 currentColor 自动跟随各状态色/HR 色变体(inset 环不被 console 皮肤的 clip-path 裁掉)。
+ * 过渡复用上方 chip 基线(已含 filter/box-shadow)。 */
+.site-chip, .tag-chip, .cat-chip { cursor: pointer; }
+.site-chip:hover, .tag-chip:hover, .cat-chip:hover { filter: brightness(1.12); }
+.site-chip.f-on, .tag-chip.f-on, .cat-chip.f-on { box-shadow: inset 0 0 0 1.5px currentColor; }
+.f-cell { cursor: pointer; border-radius: var(--radius-sm, 4px); }
+.f-cell:hover { background-image: linear-gradient(rgba(127, 127, 127, .16), rgba(127, 127, 127, .16)); }
+.f-cell.f-on { box-shadow: inset 0 0 0 1px currentColor; font-weight: 600; }
 /* 进度条填充: 数值变化平滑过渡, 不再瞬间跳变 */
 .m-progress .bar > i { transition: width var(--dur-slow) var(--ease-out); }
 /* 可折叠箭头的展开回弹 */

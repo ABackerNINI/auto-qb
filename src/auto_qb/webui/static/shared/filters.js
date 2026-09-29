@@ -47,6 +47,17 @@ window.AQB_FILTERS = {
     isFilterOn(field, value) {
       return (this[field] || []).includes(value);
     },
+    /* 挂件点击即筛选(2026-09-29): 表格里点 站点/标签/分类/路径 挂件 = 切换顶栏筛选弹层里的对应值 ——
+     * 复用 toggleFilterValue(再点一次取消, 与弹层同一多选语义); kind->field 单点取自 filterDefs, 不另抄映射。
+     * 挂件 @click.stop 会一并拦掉 window 级「点空白收浮层」(lifecycle), 这里镜像补上收浮层动作。
+     * 空值(未设分类/空路径)没有可指的值, 直接忽略 —— 筛「(空)」走顶栏弹层(那里有专门的空值选项)。 */
+    filterFromChip(kind, value) {
+      this.menu.visible = false;
+      this.filterMenu = "";
+      if (value === null || value === undefined || value === "") return;
+      const def = this.filterDefs.find((d) => d.kind === kind);
+      if (def) this.toggleFilterValue(def.field, value);
+    },
     clearFilter(field) {
       this[field] = [];
       this.expandedKey = null;

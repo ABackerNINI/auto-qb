@@ -246,6 +246,19 @@
 .group-row.s-error .cat-chip,
 .member-row.error .tag-chip:not(.hr-pending):not(.hr-done),
 .member-row.error .cat-chip { background: var(--error-soft); color: var(--error); }
+
+/* 挂件点击即筛选(2026-09-29): 与 atlas/components.css 同口径 —— 站点/标签/分类胶囊与路径、
+ * 明细站点单元格可点, 点击 = 切换顶栏筛选弹层里的对应值; f-on = 该值已在筛选中
+ * (currentColor 环随状态色; prism 的 chip 基线只过渡 background, 这里补齐 filter/box-shadow)。 */
+.site-chip, .tag-chip, .cat-chip { cursor: pointer;
+  transition: background var(--dur) var(--ease), filter var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease); }
+.site-chip:hover, .tag-chip:hover, .cat-chip:hover { filter: brightness(1.12); }
+.site-chip.f-on, .tag-chip.f-on, .cat-chip.f-on { box-shadow: inset 0 0 0 1.5px currentColor; }
+.f-cell { cursor: pointer; border-radius: var(--radius-sm, 4px); }
+.f-cell:hover { background-image: linear-gradient(rgba(127, 127, 127, .16), rgba(127, 127, 127, .16)); }
+.f-cell.f-on { box-shadow: inset 0 0 0 1px currentColor; font-weight: 600; }
+
 .tag-more { font-size: 11px; color: var(--fg-dim); flex: 0 0 auto; }
 .diff-mark { flex: 0 0 auto; padding: 0 5px; border-radius: var(--radius-sm); background: var(--surface-2);
   color: var(--fg-dim); font-size: 11px; white-space: nowrap; }

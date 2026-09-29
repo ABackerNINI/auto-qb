@@ -31,7 +31,8 @@
                   <span class="g-name-text">{{ m.name }}</span>
                 </div>
                 <div v-else-if="col.key === 'site'" class="g-sites">
-                  <span class="site-chip" :class="m.kind">{{ m.site }}</span>
+                  <span class="site-chip" :class="[m.kind, { 'f-on': isFilterOn('siteFilter', m.site) }]"
+                        @click.stop="filterFromChip('site', m.site)">{{ m.site }}</span>
                 </div>
                 <div v-else-if="col.key === 'state'" class="g-cat">
                   <span class="g-status" :class="'k-' + m.kind">
@@ -44,11 +45,15 @@
                 <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="[{ zero: !m.uploaded }, numTone(m.uploaded, m.size)]">{{ fmtSizeOrDash(m.uploaded) }}</div>
                 <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !m.size }">{{ fmtSizeOrDash(m.size) }}</div>
                 <div v-else-if="col.key === 'category'" class="g-cat">
-                  <span v-if="m.category" class="cat-chip">{{ m.category }}</span>
+                  <span v-if="m.category" class="cat-chip"
+                        :class="{ 'f-on': isFilterOn('categoryFilter', m.category) }"
+                        @click.stop="filterFromChip('category', m.category)">{{ m.category }}</span>
                   <span v-else class="zero"></span>
                 </div>
                 <div v-else-if="col.key === 'tags'" class="g-tags">
-                  <span v-for="t in tagSlice(mTags(m), 3)" :key="t" class="tag-chip" :class="tagClass(t, m)">{{ t }}</span>
+                  <span v-for="t in tagSlice(mTags(m), 3)" :key="t" class="tag-chip"
+                        :class="[tagClass(t, m), { 'f-on': isFilterOn('tagFilter', t) }]"
+                        @click.stop="filterFromChip('tag', t)">{{ t }}</span>
                   <span v-if="mTags(m).length > 3" class="tag-more">+{{ mTags(m).length - 3 }}</span>
                   <span v-if="!mTags(m).length" class="zero"></span>
                 </div>
@@ -85,7 +90,9 @@
                   {{ cellRatio(m) }}
                   <span v-if="cellRatio(m) && m.hr_triggered && m.hr_req_ratio > 0" class="req">/ {{ m.hr_req_ratio.toFixed(2) }}</span>
                 </div>
-                <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">{{ m.save_path || '' }}</div>
+                <div v-else-if="col.key === 'save_path'" class="g-save-path f-cell"
+                     :class="{ 'f-on': isFilterOn('pathFilter', m.save_path) }" :title="m.save_path"
+                     @click.stop="filterFromChip('path', m.save_path)">{{ m.save_path || '' }}</div>
                 <div v-else-if="col.key === 'hash'" class="m-hash" :title="m.hash">{{ m.hash.slice(0, 8) }}</div>
               </template>
             </div>
