@@ -53,6 +53,9 @@ USER.md
 
 # WorkBuddy AI 相关文件(会话记忆/技能数据目录)
 .workbuddy-ai/
+# 同上: 会话记忆目录 .workbuddy/memory/ —— 2026-09-29 误入库(5811c7b)后撤出;
+# 进版本库的知识库是 memory-bank/, 会话记忆随会话走, 每份 clone 各自演化(入库即冲突热点)
+.workbuddy/
 
 # 内置 CLI (codebuddy.js) 的项目级技能扫描目录; 由 scripts/sync_agent_skills.py 生成链接
 .codebuddy/
