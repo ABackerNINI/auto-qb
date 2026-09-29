@@ -16,6 +16,7 @@ from typing import Callable, Dict, Optional, Tuple
 from ...config.models import SiteHrCheckConfig
 from ..model import FETCH_LANES
 from .base import HrAdapter, ParsedScope
+from .btschool import BtschoolMyhrAdapter
 from .carpt import COLUMN_NAMES as CARPT_COLUMNS
 from .carpt import HEADER_KEY as CARPT_HEADER_KEY
 from .carpt import SCOPE_STATUS as CARPT_SCOPE_STATUS
@@ -28,6 +29,14 @@ AdapterFactory = Callable[[str, SiteHrCheckConfig], HrAdapter]
 ADAPTERS: Dict[str, AdapterFactory] = {
     "nexusphp":
         lambda site, conf: NexusPhpMyhrAdapter(
+            site,
+            hr_page_url=conf.hr_page_url,
+            download_path=conf.download_path,
+            scopes=FETCH_LANES,
+            page_param=conf.page_param,
+        ),
+    "btschool":
+        lambda site, conf: BtschoolMyhrAdapter(
             site,
             hr_page_url=conf.hr_page_url,
             download_path=conf.download_path,

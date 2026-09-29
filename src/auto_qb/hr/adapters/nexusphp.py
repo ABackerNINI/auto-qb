@@ -66,6 +66,28 @@ _DL_ID_RES = (
     re.compile(r"details\.php\?id=(\d+)"),
 )
 
+#: 页头「H&R:」计数条(摘要形)的标签锚点: 标签在 class="color_bonus" 的 font 元素里,
+#: 数字段从标签尾到最近一个 </a>。两种包裹形态同一段式覆盖(CarPT 标签在 <a> 外:
+#: `<font class="color_bonus">H&amp;R: </font> [<a …>0/…/20</a>]`;
+#: BTSchool 标签在 <a> 内: `<a …><font class="color_bonus">…H&amp;R:</font>1/<span…>0</span></a>`;
+#: 均为 2026-09-29 样张原文)。
+_HR_COUNTER_RE = re.compile(r'class="color_bonus"[^>]*>[^<]*H&amp;R\s*:?\s*</font>(.{0,260}?)</a>', re.S)
+
+
+def header_hr_numbers(html: str) -> Optional[List[int]]:
+    """提取 NexusPHP 页头状态栏「H&R:」计数条的数字序列(计划 26-09-29-2036 §2.1 摘要形)。
+
+    返回 None = 本页没有可证的计数条(标签不在 / 载体变了); 非空时每个数字的档位语义
+    由各站点 adapter 自行钉死(样张实证), 本函数不做任何档位猜测 —— 位数的解释权在子类。
+    先剥 <…> 再取数字: 未达标位常被红色 font/span 包裹, 标签属性里也带数字
+    (style="color: rgb(255, 0, 0)"), 直接 findall 会把样式里的数当计数。
+    """
+    m = _HR_COUNTER_RE.search(html)
+    if m is None:
+        return None
+    return [int(n) for n in re.findall(r"\d+", re.sub(r"<[^>]+>", "", m.group(1)))]
+
+
 #: 兼容历史导入(标准形态的必填列名)
 REQUIRED_COLUMNS = tuple(STANDARD_COLUMNS[k] for k in REQUIRED_KEYS)
 

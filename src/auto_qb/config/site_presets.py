@@ -44,14 +44,14 @@ class SiteHrPreset:
         return f"https://{self.web_domain}{self.page_path}"
 
 
-#: 页面事实来源: btschool = nexusphp adapter docstring(2026-09-22 BTSchool 样张);
-#: carpt = carpt adapter docstring(2026-09-27 CarPT 样张, status 参数已核)。
+#: 页面事实来源: btschool = adapters/btschool.py docstring(2026-09-22 样张 + 2026-09-29 计数样张);
+#: carpt = carpt adapter docstring(2026-09-27 CarPT 样张, status 参数已核; 2026-09-29 计数样张)。
 #: nexusphp 形态的翻页参数 `page` 标「待在线实测」(adapter docstring 注记), 错了改档案一行。
 SITE_PRESETS: Dict[str, SiteHrPreset] = {
     "btschool":
         SiteHrPreset(
             preset_id="btschool",
-            adapter="nexusphp",
+            adapter="btschool",  # 标准 myhr 表格 + 页头 H&R 计数条(见 adapters/btschool.py)
             web_domain="pt.btschool.club",
             tracker_domain="pt.btschool.club",  # 两域同值(announce 域恰为 web 域)
             page_path="/myhr.php",

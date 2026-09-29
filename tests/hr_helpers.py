@@ -63,15 +63,29 @@ def torrent_blob(
     return b"d8:announce25:http://t.example/announce4:info" + info + tail + b"e"
 
 
-def counter_bar(a: int, b: int, c: int) -> str:
-    """tab 形计数条 HTML 片段(计划 26-09-29-2036 §2.1: 同页带全档声明数 —— 考察中 (a) · 已达标 (b) · 未达标 (c))。
+def carpt_counter_bar(surveying: int, unsatisfied: int, limit: int) -> str:
+    """CarPT 页头计数条(2026-09-29 样张原文形态, 计划 26-09-29-2036 §2.1 摘要形)。
 
-    M1 引擎行为测试经 adapter 覆写 parse_counters 上交合成值, 不解析本片段;
-    它是 M2 tab 形站点覆写的解析对象, 行为测试里作页面装饰保持同构。
+    标签在 <a> 外、数字段被 [] 包裹, 未达标位红字, 3 个数 = 考察中 / 未达标 / 上限。
+    M2 carpt 覆写 parse_counters 的解析对象; 引擎行为测试仍经 adapter 覆写上交合成值。
     """
     return (
-        '<p align="center" class="switches">'
-        f'<span class="active">考察中 ({a})</span><span>已达标 ({b})</span><span>未达标 ({c})</span></p>'
+        '<font class="color_bonus">H&amp;R: </font> '
+        f'[<a href="https://carpt.net/myhr.php">{surveying}/'
+        f'<font color="red">{unsatisfied}</font>/{limit}</a>]'
+    )
+
+
+def btschool_counter_bar(surveying: int, unsatisfied: int) -> str:
+    """BTSchool 页头计数条(2026-09-29 样张原文形态): 标签在 <a> 内, 未达标位红色加粗 span。
+
+    2 个数 = 考察中 / 未达标。span 的 style 属性里带数字(rgb(255, 0, 0)) ——
+    解析必须先剥标签再取数, 本夹具专门钉住这个坑。
+    """
+    return (
+        '<a href="https://pt.btschool.club/myhr.php">'
+        '<font class="color_bonus">&nbsp;&nbsp;H&amp;R:</font>'
+        f'{surveying}/<span style="color: rgb(255, 0, 0); font-weight: bold;">{unsatisfied}</span></a>'
     )
 
 
@@ -116,26 +130,6 @@ def myhr_page(
         '<td class="colhead">20000魔力值免罪</td>' + "</tr>" + body + "</tbody></table><p>" + next_link +
         "</p></td></tr></tbody></table>"
     )
-
-
-def myhr_page_interval(
-    rows: Sequence[Tuple[int, str, str, str, str, str, str, str]],
-    has_next: bool = False,
-    *,
-    first: int = 1,
-    last: Optional[int] = None
-) -> str:
-    """分页区间形 HR 页(CarPT 实证形态, 计划 26-09-29-2036 §2.1): 区间标记 <b>first - last</b>。
-
-    last = 档内累计行数(1 起含端) —— 只有「无下一页」的末页能证到总数; 非末页 last=None
-    ⇒ 无标记(早停波拿不到总数)。空表页 rows=[] 且 last=None = 无标记(无法自证空集, §2.5)。
-    表格结构同 myhr_page(参数名/表头名差异对引擎行为无影响; M2 carpt 覆写解析才涉及)。
-    """
-    page = myhr_page(rows, has_next=has_next)
-    if last is None:
-        return page
-    marker = f'<p align="center"><font class="gray"><b>{first}&nbsp;-&nbsp;{last}</b></font></p>'
-    return page.replace("</p></td></tr></tbody></table>", marker + "</p></td></tr></tbody></table>")
 
 
 def row(

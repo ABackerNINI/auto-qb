@@ -90,8 +90,32 @@ M1 核心对平机制(上线即现状, 零拍板依赖) / M2 两站启用(前置
 | v2 实施核对 + 安全/稳定性审计 | **Done** (纯审计, 代码未动) | 2026-09-28 00:30: 报告 [26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) —— M5.1-M5.5 共 33 项逐条以 file:line 核对全落地; 安全面五道边界/稳定性六维度全核对; 新发现 F1(P2)/F2(P3)/F3(P3)/F4(P4) 见报告 §2 与切片「未完成」; 处置待用户拍板 |
 | v3.1 计数集成修改计划产出 (报告 1803 转化) | **Done** (纯文档, 代码未动) | 2026-09-29 20:36: [plans/26-09-29-2036](../plans/26-09-29-2036-plan-hr-counter-integration.html) (doc-status Open) —— 报告 §7 草案对照代码基线 b6ce666 收口成触点清单 (M1 七文件) + 里程碑 M1-M3 + 六类测试 + 命中不受影响不变量; 三处设计定稿 (逐页提取首非 None 合并 / 收紧落点改 releases_enabled 单点 AND 门 / 截断波差值≠mismatch) + 新识别 T1 迁移陷阱 (旧档案 count_claim 误读 0 ⇒ 全站假 mismatch); 拍板点 P1-P4 待用户, M1 零拍板依赖可开工 |
 | v3.1 计数集成 M1 核心对平机制 | **Done** (代码侧; M2 等样张+拍板, M3 缓做) | 2026-09-29 21:47: 用户令「按计划实施 M1」⇒ 触点 7 文件落地: `model.py` HrLaneState +3 additive 字段 (from_json 显式判空挡 T1 陷阱, 不抬 schema 版) / `adapters/base.py` 默认钩子 `parse_counters(html)={}` (契约三条进 docstring) / `service.py` 波内 counter_claims 首非 None 胜出 + `_finish_wave` 对平记账 + **唯一行为变更点** (releases_enabled 追加 `and not depth_broken`) + 零行自证 OR 分支 (三档 claim=0 视同人工戳) + 截断差值进 notes / `events.py` counter_mismatch 文案 (含口径校准引导) / `status.py` LaneStatus +2 字段与 rows/claim·对不平 展示 / report.py 走 lane_texts 单点零直改; 测试 T1–T6 七用例 + 红验闭环 (移门 T2/T5① 红 → 还原绿); 全量 **1756 passed + 3 skipped / 90%**, 基线 26-09-29-2147; M1 全 adapter 默认无计数 ⇒ 无计数站点行为与基线逐位一致 |
+| v3.1 计数集成 M2 两站启用 (CarPT + BTSchool) | **Done** (代码侧; 真机走查 + R7 拍板待) | 2026-09-29 23:17: 用户给 D2 样张(C:/Users/11059/Desktop/Projects/PT页)并拍板口径 ⇒ 载体定形**页头摘要形**(页头状态栏「H&R:」计数条每页都有、与分页解耦 —— 计划原假设 CarPT 走分页区间形被样张证伪: 区间终点在早停页==已抓行数, 对「翻页标记失效」这一目标失效模式无保护); `nexusphp.py` 共享 `header_hr_numbers`(先剥标签再取数 —— 红 span 的 style 属性带数字) / `btschool.py` 新薄子类 2 数=考察中/未达标(考察中位样张实证: 页头 1 == A 档实抓 1 行; 位 1 非已达标反证: 已达标样例 50 行而页头 1) / `carpt.py` 覆写 3 数=考察中/未达标/上限(上限是处罚阈值不采, B 无声明不猜) / `ADAPTERS` 注册 btschool + 站点档案 adapter 改 btschool(loaders 派生视图自动生效, 无存量迁移) / docs/configuration.md 补「计数口径校准」节; 8 新用例 + 夹具按样张原文定形; 全量 **1767 passed + 3 skipped / 91%**(远端 WebUI 三修复合流后复测), 基线 [26-09-29-2317](../testing/baselines/26-09-29-2317-hr-counter-m2.md) |
 
 ## 进度日志
+- **2026-09-29 23:17 (v3.1 计数集成 M2 落地 —— 两站启用代码轮)** — 用户令「按计划实施 M2」并提供
+  D2 样张(C:/Users/11059/Desktop/Projects/PT页: 两站各考察中/已达标页)与口径拍板: CarPT「H&R:」后
+  3 数 = 考察中/未达标/上限(达到上限受处罚), BTSchool 2 数 = 考察中/未达标。开工前 sync 至 9241760。
+  **载体定形 = 页头摘要形**(计划原假设 CarPT 分页区间形被样张证伪 —— 区间终点在早停页等于已抓行数,
+  对「翻页标记失效」无保护; 页头计数与分页解耦, 才是目标失效模式的防线)。校准实证(项目 parser 对
+  样张实抓): BTSchool 考察中 页头 1 == A 实抓 1 行 ✓ + 位 1 非已达标反证(已达标样例 50 行而页头 1);
+  CarPT 考核中 页头 0 == A 实抓 0 行 ✓(与 26-09-27 存档「已达标 17 行 ↔ 1-17」互证); 未达标位语义
+  来自用户拍板(样张恒 0, 无未达标档样张)。触点 7 文件: ①`nexusphp.py` 共享 `header_hr_numbers`
+  (color_bonus 标签锚点, 标签在 <a> 内/外两包裹形态同一段式覆盖; 先剥标签再取数); ②`btschool.py`
+  新薄子类(2 数→A/C, 位数不符=空 dict 降级; 证据链进 docstring); ③`carpt.py` 覆写(3 数→A/C,
+  上限位不采; docstring 记录区间形→摘要形定形理由); ④`adapters/__init__.py` 注册 "btschool";
+  ⑤`config/site_presets.py` 档案 adapter 改 btschool; ⑥docs/configuration.md 补「计数口径校准」节
+  (铁律四步 + 样张归档要求) + 日志标签表补计数对不平; ⑦测试 8 新用例(test_hr_parse) + 夹具定形
+  (hr_helpers: M1 预留 tab 形 counter_bar/区间形 myhr_page_interval 退役, 换样张原文形态的
+  carpt/btschool 计数条构造器) + test_hr_config 档案断言同步 + docstring 测试计划同步。
+  **R7(②停翻 × 页头计数)未闭**: 样张无②停翻波, 「计数口径若含到期段深处行 ⇒ ②停翻波 rows<claim
+  持续 mismatch 冻结」无法离线证伪 —— 方向保守(冻结不误放), 当前两站账号 A/C 声明全 0 或对平无
+  实际风险; 处置待拍板: 现状观察(告警文案自带引导) vs 另立计划给②来源 full_depth 加可区分标记豁免
+  该门。真机走查(连续 ≥2 波逐档对平 + 人为缺口验证冻结自愈)待用户侧执行。全量 **1767 passed +
+  3 skipped / 91%**(12396 语句 / 999 未覆盖, test.full 21.4s; 42502f29 合并
+  远端 WebUI 三修复后复测, 开工基线 9241760), 基线切片
+  [26-09-29-2317](../testing/baselines/26-09-29-2317-hr-counter-m2.md)。**未提交**(等用户显式指令)。
+
 
 - **2026-09-29 22:12 (M1 修复轮: fail_streak 清零 + events 重复常量 + 计划 v1.1)** — 用户令
   「修复问题1/2，问题3更新文档，之后提交」。①**fail_streak 从未清零**(实施期发现①): model.py
@@ -109,32 +133,7 @@ M1 核心对平机制(上线即现状, 零拍板依赖) / M2 两站启用(前置
   3 skipped / 91%**(12370 语句 / 999 未覆盖, test.full 24.3s, 基于 develop d65f831 合并基线);
   6 条 warnings 为既有依赖级告警, 与本轮无关。随后按用户指令提交。
 
-- **2026-09-29 21:47 (v3.1 计数集成 M1 落地 —— 代码轮)** — 用户令「按计划实施 M1 (plans/26-09-29-2036), 有待拍板的询问」。
-  开工前 sync 至 616676a (本地回写与远端在 plans/_index.md 相邻行重叠 ⇒ stash→sync→pop 无冲突合流)。
-  触点 7 文件: ①`model.py` HrLaneState +count_claim/count_match/count_mismatch_streak (additive,
-  to_json/from_json 同步; **from_json 显式判空** —— 旧档案无键必须得 None, 走 _as_int 会折成 0 造成
-  全站假 mismatch 永久冻结, T1 陷阱守阵钉死); ②`adapters/base.py` 新默认钩子 `parse_counters(html)`
-  返回 `{}` (契约三条写进 docstring: 只上交本页能证到的总数 / 键缺即降级绝不猜测 / 样张未实证不得覆写);
-  ③`service.py` _WaveContext +counter_claims 波内临时账 (首非 None 胜出, 校验失败页不上交) +
-  _do_wave 跨波延续 mismatch streak + _finish_wave 对平记账 (**唯一行为变更点**: releases_enabled 追加
-  `and not depth_broken`; mismatch 只在全深度档成立, 截断/①③波 rows<claim 只记差值进 notes) +
-  零行自证 OR 分支 (三档 claim==0 视同人工确认戳, None 参与全称量词即为假) + depth_broken 并入
-  reason_kind(REASON_PARSE)/alerted; ④`events.py` counter_mismatch (含口径校准引导, streak≥2 点名);
-  ⑤`status.py` LaneStatus +2 字段, 详/简两形态补 rows/claim·对不平 (CLI --hr-status 与 WebUI 同套数);
-  ⑥report.py 零直改 (走查报告走 result.lane_texts 单点); ⑦测试: test_hr_service.py 尾部「计数对平」节
-  T1–T6 七用例 (adapter 覆写注入器经 monkeypatch build_adapter) + hr_helpers 计数条片段/分页区间形页面
-  夹具 + docstring 测试计划同步。**红验闭环**: 临时移除 `and not depth_broken` ⇒ T2/T5① 变红 (其余
-  1754 绿), 还原后全绿 —— 守阵钉在闸门上。全量 **1756 passed + 3 skipped / 90%** (12358/999,
-  test.full 22.9s), 基线切片 [26-09-29-2147](../testing/baselines/26-09-29-2147-hr-counter-m1.md);
-  HR 模块新增行全覆盖 (base 100%, 其余未覆盖行均为既有遗留)。P1 拍板已由「实施 M1」实质成立;
-  P2 校准策略 / P3 备选项 / P4 样张采集已当面询问用户待答。**未提交**(等用户显式指令)。
-  实施中发现的计划外事项 (未动, 待拍板): ①既有 `fail_streak` 无清零点 (model.py 注释称「干净波清零」
-  但代码从未清), 恢复后 ERROR 升级文案会虚报连续波数; ②events.py `LANE_RETENTION_MIN` 重复定义两次
-  (:77 与 :114); ③计划签名 `parse_counters(html)` 无档位参数, 区间形站点须从页面辨认所属档位 (M2 定形时核对)。
-  踩坑复发 2 条 (已各 +1): heredoc 追加被截断 (pitfalls/git/editing-traps.md —— 图省事走了 heredoc, 没路由到
-  git 类) 与档案追加未量余量触顶 (pitfalls/kb/cap-counting.md —— 追加前未过 kb 类), 均已按条目处置收口。
-  **拍板结果 (21:55 当面询问)**: P2 校准策略 = **方案 A** (样张实证后硬编码启用; 用户拍板, 暂不执行 ——
-  M2 不开工); P3 备选项与 P4 样张安排 = 后续决定。用户随后下「先提交」指令 ⇒ 随主提交入库。
+- **2026-09-29 21:47 (v3.1 计数集成 M1 落地 —— 代码轮)** — 已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md); 摘要见本档案子任务状态表「v3.1 计数集成 M1」行与基线切片 [26-09-29-2147](../testing/baselines/26-09-29-2147-hr-counter-m1.md)。
 
 - **2026-09-29 20:36 (v3.1 计数集成修改计划产出 —— 纯文档轮, 代码未动)** — 用户令「按照报告出一个修改计划」。
   [plans/26-09-29-2036-plan-hr-counter-integration.html](../plans/26-09-29-2036-plan-hr-counter-integration.html) 出厂
@@ -153,23 +152,7 @@ M1 核心对平机制(上线即现状, 零拍板依赖) / M2 两站启用(前置
   [reports/26-09-29-1803-report-hr-counter-verify.html](../reports/26-09-29-1803-report-hr-counter-verify.html) —— 结论: 计数是清单的
   校验和非替代品, 补绝对量轴堵 B/C 档批量误放行洞; 用户实测两站均有计数(CarPT 存档分页区间 1-17 对平实证); 裁决点 D1-D4 待拍板, 未动代码。
 
-- **2026-09-29 (v3 波次模型重建 M1–M5 全落地 —— 代码大改轮)** — 用户令「按照计划重构 HR 在线核实
-  26-09-28-1932」。五步一次落完: **M1** 判定重写(`resolve.py` 四行判定表, HrIdentity 收敛三态
-  HR/RELEASED/NO_EVIDENCE, `NO_EVIDENCE` 即判定表行 4 —— 本地兜底在调用方 `check_hr_condition` 合成;
-  satisfied 独立于受管束 —— 命中 B 毕业也达标; `record.py` 双入口重写, 消费点零接口变化); **M2**
-  波次引擎(`service.py` 重写: 对象集 = 未对账∪考察中现算, 三停翻条件, A 档行无条件下载 + 终态行
-  宽泛粗配触发(归一后完全相等也算疑似), 档位级截断(表头/字段/排序三种失效, 失效点前有效), 批量
-  「未列出」签发要过防伪三道闸, 失踪观察期独立推进与防伪解耦, 终态冻结落放行记录); **M3** 单频控
-  (`ratelimit.py` 重写, 账本 `HrRateLedger` 日窗口 + 间隔基准; Retry-After 单存 `retry_after_until`);
-  **M4** 配置(models/schema/loaders/validation/impact/migrations 五处同步, `_migrate_config_2_3`
-  删 26 废弃键 + mode→enabled + `enabled` 键原样保留(治「无版本章新配置被当 v1 误杀」), hr_site
-  v1→v2 迁移删双桶/熔断/停用账本, 档案 `listing` 字段 + `required_seeding_time` 派生); **M5**
-  status/report/worker/CLI/events/WebUI 波次视图(`--hr-confirm-empty` 新增 + `/api/hr/confirm-empty`
-  路由 + `--hr-resume` 删除)。**实施中修掉的真 bug**: 轮转循环「末页/停翻 break」吞掉同轮其它档位
-  取数机会(改 continue); 无版本章新配置在 v2→v3 迁移被清空 enabled。测试: HR 九文件按新模型重写
-  (resolve 35 / service 29 / ratelimit 8 / config 29 / report 18 / store 17 / runtime 28 / worker 21 /
-  multisite 5), 键面基线 `commands run test.keys-update` 重生成, keys.md 同步; 全量 **1743 passed +
-  3 skipped**(test.quick 实测; 基线切片另记)。**未提交**(等用户显式指令); 真机走查仍开放。
+- **2026-09-29 (v3 波次模型重建 M1–M5 全落地 —— 代码大改轮)** — 已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md); 摘要见本档案子任务状态表「v3 波次模型重建」行与 [plans/26-09-28-1932](../plans/26-09-28-1932-plan-hr-verify-rebuild.html)。
 
 - **2026-09-28 00:30 (v2 实施核对 + 安全/稳定性审计 —— 纯审计轮)** — 已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md); 摘要见本档案子任务状态表「v2 实施核对」行与报告 [26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html)。
 

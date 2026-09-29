@@ -20,6 +20,14 @@
 - test_carpt_adapter_empty_table: 真实样张的空表结构 = 合法空结果, 不是改版
 - test_carpt_adapter_revised_page_reports_header_missing: CarPT 页改版(无 H&R ID 表头) -> header_found False
 - test_carpt_adapter_detects_login: 登录页识别按 CarPT 表头锚点(基类锚的是标准「HR编号」)
+- test_header_hr_numbers_btschool_carrier: BTSchool 页头计数条原文形态, 红 span 的 style 属性带数字不误采
+- test_header_hr_numbers_carpt_carrier: CarPT 页头计数条原文形态([] 包裹 + 中间位红字)按序取出 3 数
+- test_header_hr_numbers_absent_returns_none: 无计数条 / 标签被改 = None(无证据降级)
+- test_carpt_parse_counters_maps_survey_and_unsatisfied: CarPT 3 数 = A 考察中 / C 未达标, 上限位不采
+- test_carpt_parse_counters_wrong_arity_degrades: 位数与钉死值不符 = 空 dict 降级(铁律)
+- test_btschool_parse_counters_maps_two_numbers: BTSchool 2 数 = A 考察中 / C 未达标
+- test_btschool_parse_counters_missing_bar_degrades: BTSchool 页无计数条 = 空 dict 降级
+- test_default_nexusphp_adapter_has_no_counters: 未实证站点(默认 nexusphp)一律无计数
 - test_order_violations_desc_holds: 完成时间倒序整列成立 -> 0 违反
 - test_order_violations_single_inversion_is_flagged: 页内逆序 1 处即记违反 + 首处位置
 - test_order_violations_direction_flip_counts_as_violation: 方向翻转视同逆序
@@ -32,7 +40,7 @@
 import pytest
 
 from auto_qb.hr.adapters import build_adapter
-from auto_qb.hr.adapters.nexusphp import REQUIRED_COLUMNS
+from auto_qb.hr.adapters.nexusphp import REQUIRED_COLUMNS, header_hr_numbers
 from auto_qb.hr.parse import (
     cell_text,
     column_index,
@@ -52,7 +60,11 @@ from hr_helpers import (
     EMPTY_TABLE_PAGE,
     LOGIN_PAGE,
     REVISED_PAGE,
+    btschool_counter_bar,
+    carpt_counter_bar,
     load_fixture,
+    myhr_page,
+    row,
     site_conf,
 )
 
@@ -316,6 +328,61 @@ def test_carpt_adapter_detects_login():
     adapter = _carpt_adapter()
     assert adapter.looks_like_login(LOGIN_PAGE) is True
     assert adapter.looks_like_login(load_fixture(CARPT_PAGE1)) is False
+
+
+# ---------- 页头 H&R 计数条(计划 26-09-29-2036 §2.1 摘要形; M2 两站启用) ----------
+
+
+def test_header_hr_numbers_btschool_carrier():
+    """BTSchool 样张原文形态(标签在 <a> 内): 未达标红 span 的 style 属性带数字不得误采"""
+    assert header_hr_numbers(btschool_counter_bar(1, 0)) == [1, 0]
+
+
+def test_header_hr_numbers_carpt_carrier():
+    """CarPT 样张原文形态(标签在 <a> 外、[] 包裹、中间位红字): 3 个数按序取出"""
+    assert header_hr_numbers(carpt_counter_bar(0, 0, 20)) == [0, 0, 20]
+
+
+def test_header_hr_numbers_absent_returns_none():
+    """无计数条 / 标签被改(改版) -> None = 无证据, 调用方按降级处理"""
+    assert header_hr_numbers(myhr_page([row(1)])) is None
+    assert header_hr_numbers(REVISED_PAGE) is None
+
+
+def test_carpt_parse_counters_maps_survey_and_unsatisfied():
+    """CarPT: 3 数 = A 考察中 / C 未达标; 第 3 位是处罚上限不是档位行数不采, B 无声明不猜"""
+    page = myhr_page([row(40001)], counter_bar_html=carpt_counter_bar(2, 1, 20))
+    assert _carpt_adapter().parse_counters(page) == {"A": 2, "C": 1}
+
+
+def test_carpt_parse_counters_wrong_arity_degrades():
+    """位数与钉死的 3 不符(载体变了) -> 空 dict = 无证据降级, 绝不猜(铁律: 宁可不用)"""
+    page = myhr_page([row(1)], counter_bar_html=btschool_counter_bar(2, 1))
+    assert _carpt_adapter().parse_counters(page) == {}
+
+
+def test_btschool_parse_counters_maps_two_numbers():
+    """BTSchool: 2 数 = A 考察中 / C 未达标(校准实证: 考察中样例 页头 1 == A 档实抓 1 行)"""
+    page = myhr_page([row(90001)], counter_bar_html=btschool_counter_bar(1, 0))
+    adapter = build_adapter("btschool", site_conf(adapter="btschool"))
+    assert adapter is not None
+    assert adapter.parse_counters(page) == {"A": 1, "C": 0}
+
+
+def test_btschool_parse_counters_missing_bar_degrades():
+    """BTSchool 页没有计数条(改版 / 形态变) -> 空 dict, 行为退回无计数现状"""
+    adapter = build_adapter("btschool", site_conf(adapter="btschool"))
+    assert adapter is not None
+    assert adapter.parse_counters(myhr_page([row(1)])) == {}
+    assert adapter.parse_counters(REVISED_PAGE) == {}
+
+
+def test_default_nexusphp_adapter_has_no_counters():
+    """默认 nexusphp 形态不启用计数 —— 未实证站点一律无计数(基类默认空 dict 恒成立)"""
+    adapter = build_adapter("nexusphp", site_conf())
+    assert adapter is not None
+    page = myhr_page([row(1)], counter_bar_html=btschool_counter_bar(1, 0))
+    assert adapter.parse_counters(page) == {}
 
 
 # ---------- 排序校验(计划 26-09-27-1815 §2 1.1) ----------

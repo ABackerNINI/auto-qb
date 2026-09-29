@@ -657,3 +657,53 @@
   「0 vs 0」自愈洞) + 持续零走「告警 + 人工确认」不做自动接受 (持续零 + 结构完好同样可由改版造出); D1 与
   骤降守阵组同步, 残余风险 (单档改版下 X% 线只挡一轮) 如实注明。计划 §8 v1.1。
   **未提交**(等用户显式指令)。
+
+
+## 2026-09-29 21:47 外迁段(档案触顶腾挪, 原样搬运)
+
+- **2026-09-29 21:47 (v3.1 计数集成 M1 落地 —— 代码轮)** — 用户令「按计划实施 M1 (plans/26-09-29-2036), 有待拍板的询问」。
+  开工前 sync 至 616676a (本地回写与远端在 plans/_index.md 相邻行重叠 ⇒ stash→sync→pop 无冲突合流)。
+  触点 7 文件: ①`model.py` HrLaneState +count_claim/count_match/count_mismatch_streak (additive,
+  to_json/from_json 同步; **from_json 显式判空** —— 旧档案无键必须得 None, 走 _as_int 会折成 0 造成
+  全站假 mismatch 永久冻结, T1 陷阱守阵钉死); ②`adapters/base.py` 新默认钩子 `parse_counters(html)`
+  返回 `{}` (契约三条写进 docstring: 只上交本页能证到的总数 / 键缺即降级绝不猜测 / 样张未实证不得覆写);
+  ③`service.py` _WaveContext +counter_claims 波内临时账 (首非 None 胜出, 校验失败页不上交) +
+  _do_wave 跨波延续 mismatch streak + _finish_wave 对平记账 (**唯一行为变更点**: releases_enabled 追加
+  `and not depth_broken`; mismatch 只在全深度档成立, 截断/①③波 rows<claim 只记差值进 notes) +
+  零行自证 OR 分支 (三档 claim==0 视同人工确认戳, None 参与全称量词即为假) + depth_broken 并入
+  reason_kind(REASON_PARSE)/alerted; ④`events.py` counter_mismatch (含口径校准引导, streak≥2 点名);
+  ⑤`status.py` LaneStatus +2 字段, 详/简两形态补 rows/claim·对不平 (CLI --hr-status 与 WebUI 同套数);
+  ⑥report.py 零直改 (走查报告走 result.lane_texts 单点); ⑦测试: test_hr_service.py 尾部「计数对平」节
+  T1–T6 七用例 (adapter 覆写注入器经 monkeypatch build_adapter) + hr_helpers 计数条片段/分页区间形页面
+  夹具 + docstring 测试计划同步。**红验闭环**: 临时移除 `and not depth_broken` ⇒ T2/T5① 变红 (其余
+  1754 绿), 还原后全绿 —— 守阵钉在闸门上。全量 **1756 passed + 3 skipped / 90%** (12358/999,
+  test.full 22.9s), 基线切片 [26-09-29-2147](../../testing/baselines/26-09-29-2147-hr-counter-m1.md);
+  HR 模块新增行全覆盖 (base 100%, 其余未覆盖行均为既有遗留)。P1 拍板已由「实施 M1」实质成立;
+  P2 校准策略 / P3 备选项 / P4 样张采集已当面询问用户待答。**未提交**(等用户显式指令)。
+  实施中发现的计划外事项 (未动, 待拍板): ①既有 `fail_streak` 无清零点 (model.py 注释称「干净波清零」
+  但代码从未清), 恢复后 ERROR 升级文案会虚报连续波数; ②events.py `LANE_RETENTION_MIN` 重复定义两次
+  (:77 与 :114); ③计划签名 `parse_counters(html)` 无档位参数, 区间形站点须从页面辨认所属档位 (M2 定形时核对)。
+  踩坑复发 2 条 (已各 +1): heredoc 追加被截断 (pitfalls/git/editing-traps.md —— 图省事走了 heredoc, 没路由到
+  git 类) 与档案追加未量余量触顶 (pitfalls/kb/cap-counting.md —— 追加前未过 kb 类), 均已按条目处置收口。
+  **拍板结果 (21:55 当面询问)**: P2 校准策略 = **方案 A** (样张实证后硬编码启用; 用户拍板, 暂不执行 ——
+  M2 不开工); P3 备选项与 P4 样张安排 = 后续决定。用户随后下「先提交」指令 ⇒ 随主提交入库。
+
+## 2026-09-29 外迁段(v3 波次重建, 原样搬运)
+
+- **2026-09-29 (v3 波次模型重建 M1–M5 全落地 —— 代码大改轮)** — 用户令「按照计划重构 HR 在线核实
+  26-09-28-1932」。五步一次落完: **M1** 判定重写(`resolve.py` 四行判定表, HrIdentity 收敛三态
+  HR/RELEASED/NO_EVIDENCE, `NO_EVIDENCE` 即判定表行 4 —— 本地兜底在调用方 `check_hr_condition` 合成;
+  satisfied 独立于受管束 —— 命中 B 毕业也达标; `record.py` 双入口重写, 消费点零接口变化); **M2**
+  波次引擎(`service.py` 重写: 对象集 = 未对账∪考察中现算, 三停翻条件, A 档行无条件下载 + 终态行
+  宽泛粗配触发(归一后完全相等也算疑似), 档位级截断(表头/字段/排序三种失效, 失效点前有效), 批量
+  「未列出」签发要过防伪三道闸, 失踪观察期独立推进与防伪解耦, 终态冻结落放行记录); **M3** 单频控
+  (`ratelimit.py` 重写, 账本 `HrRateLedger` 日窗口 + 间隔基准; Retry-After 单存 `retry_after_until`);
+  **M4** 配置(models/schema/loaders/validation/impact/migrations 五处同步, `_migrate_config_2_3`
+  删 26 废弃键 + mode→enabled + `enabled` 键原样保留(治「无版本章新配置被当 v1 误杀」), hr_site
+  v1→v2 迁移删双桶/熔断/停用账本, 档案 `listing` 字段 + `required_seeding_time` 派生); **M5**
+  status/report/worker/CLI/events/WebUI 波次视图(`--hr-confirm-empty` 新增 + `/api/hr/confirm-empty`
+  路由 + `--hr-resume` 删除)。**实施中修掉的真 bug**: 轮转循环「末页/停翻 break」吞掉同轮其它档位
+  取数机会(改 continue); 无版本章新配置在 v2→v3 迁移被清空 enabled。测试: HR 九文件按新模型重写
+  (resolve 35 / service 29 / ratelimit 8 / config 29 / report 18 / store 17 / runtime 28 / worker 21 /
+  multisite 5), 键面基线 `commands run test.keys-update` 重生成, keys.md 同步; 全量 **1743 passed +
+  3 skipped**(test.quick 实测; 基线切片另记)。**未提交**(等用户显式指令); 真机走查仍开放。

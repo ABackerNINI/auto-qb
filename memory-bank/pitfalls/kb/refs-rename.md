@@ -10,7 +10,14 @@
   `pitfalls.md` 113 处), 且含 `.html` / `.md` / `.py` / `.yml`, **HTML 的 `href=` 与正文里的裸路径也算**。
 - **处置**: ①改之前全仓 grep 旧文件名统计引用数 ②用 **Python 显式 UTF-8** 批量替换
   ③替换后再 grep 确认为 0。
-  ⚠ 已知守卫缺口(建议未做): 加一个**相对链接存在性扫描**测试 —— 这是本仓库反复吃亏的一类。
+  （相对链接存在性扫描守卫已建: `tests/test_memory_bank.py::test_doc_links_are_not_broken`,
+  2026-09-29 实战拦截过一次 —— 守卫兜底不豁免本条三步, 写对路径仍是人的责任。）
+- **复发**: 1 —— 2026-09-29 (auto-qb-clone1): M2 收尾把档案两条进度日志**外迁**进 `tasks/attachments/`
+  时, 段内 `../testing/…`/`../plans/…` 链接深度差一层全变坏链; 手写的指针行还猜错了计划文件名
+  (`plan-hr-v3-rebuild` ≠ 实际 `plan-hr-verify-rebuild`)。守卫 `test_doc_links_are_not_broken` 拦下,
+  改 `../../` 与真实文件名后转绿。**为什么没命中**: 把「外迁搬段落」当成「追加」, 没路由到本条
+  (「移动文档」触发词) —— 段落搬家 = 引用面搬家, 搬完必须按本条三步扫链接; 文件名一律 `ls` 核对,
+  不凭印象拼。
 
 ### 生成型脚本往 markdown / html 里写路径: `relative_to` 不会生成 `..` 回跳
 

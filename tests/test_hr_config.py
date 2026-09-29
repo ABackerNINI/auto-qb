@@ -156,7 +156,7 @@ def test_sites_entry_parsed(tmp_path):
     assert site.enabled is True
     assert site.refresh_interval == 6 * 3600.0
     # 页面事实: 配置里根本没写, 全部由内置档案填充
-    assert site.adapter == "nexusphp"
+    assert site.adapter == "btschool"  # 标准 myhr 表格 + 页头 H&R 计数(M2 起, 见 adapters/btschool.py)
     assert site.hr_page_url == "https://pt.btschool.club/myhr.php"
     assert site.download_path == "/download.php?id={id}"
     assert site.page_param == "page"
