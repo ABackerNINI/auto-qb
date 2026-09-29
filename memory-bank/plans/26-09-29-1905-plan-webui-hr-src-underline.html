@@ -80,10 +80,13 @@
     font-variant-numeric: tabular-nums;
     color: var(--teal);
   }
+  .m-dur .dur-body { position: relative; display: inline-flex; align-items: baseline; gap: 3px; }
   .m-dur .dur-val { position: relative; display: inline-block; }
   .m-dur .req { color: var(--fg-dim); font-size: 11px; }
   .m-dur .hr-line { position: absolute; left: 0; height: 2px; background: currentColor; }
-  .m-dur > .hr-line { bottom: 0; width: 100%; }                                     /* 整格: 在线 */
+  /* 整格线挂**文字包裹层** .dur-body, 不挂 .m-dur: 行是 grid, 单元格被拉满整列宽, 挂单元格上
+     width:100% 就画成整列一条(线随列宽不随文字) —— 2026-09-29 真机走查后修正 */
+  .m-dur .dur-body > .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; }   /* 整格: 在线 */
   .m-dur .dur-val > .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; }    /* 半格: 本地/未核实 */
   .m-dur.src-local .hr-line { opacity: .5; }
   .m-dur.src-unver .hr-line { height: 0; border-bottom: 2px dotted currentColor; opacity: .8; }
@@ -165,48 +168,48 @@
       <tr>
         <td class="colname">Sample.Show.S01.2160p</td><td class="colstate">已达标</td>
         <td class="coldur">
-          <span class="m-pair m-dur reached src-online"><span class="dur-val">3天02时</span><span class="req">/ 3天00时</span><i class="hr-line"></i></span>
+          <span class="m-pair m-dur reached src-online"><span class="dur-body"><span class="dur-val">3天02时</span><span class="req">/ 3天00时</span><i class="hr-line"></i></span></span>
         </td><td>在线</td>
       </tr>
       <tr>
         <td class="colname">Sample.Show.S01.2160p</td><td class="colstate">已达标</td>
         <td class="coldur">
-          <span class="m-pair m-dur reached src-local"><span class="dur-val">3天02时<i class="hr-line"></i></span><span class="req">/ 3天00时</span></span>
+          <span class="m-pair m-dur reached src-local"><span class="dur-body"><span class="dur-val">3天02时<i class="hr-line"></i></span><span class="req">/ 3天00时</span></span></span>
         </td><td>本地</td>
       </tr>
       <tr>
         <td class="colname">Sample.Movie.1080p.WEB</td><td class="colstate">未核实</td>
         <td class="coldur">
-          <span class="m-pair m-dur hr-unk src-unver"><span class="dur-val">3天02时<i class="hr-line"></i></span><span class="req">/ 3天00时</span></span>
+          <span class="m-pair m-dur hr-unk src-unver"><span class="dur-body"><span class="dur-val">3天02时<i class="hr-line"></i></span><span class="req">/ 3天00时</span></span></span>
         </td><td>未核实</td>
       </tr>
       <tr>
         <td class="colname">Sample.Drama.E05.1080p</td><td class="colstate">考察中</td>
         <td class="coldur">
-          <span class="m-pair m-dur pending src-online"><span class="dur-val">12时40分</span><span class="req">/ 3天00时</span><i class="hr-line"></i></span>
+          <span class="m-pair m-dur pending src-online"><span class="dur-body"><span class="dur-val">12时40分</span><span class="req">/ 3天00时</span><i class="hr-line"></i></span></span>
         </td><td>在线</td>
       </tr>
       <tr>
         <td class="colname">Sample.Drama.E05.1080p</td><td class="colstate">考察中</td>
         <td class="coldur">
-          <span class="m-pair m-dur pending src-local"><span class="dur-val">12时40分<i class="hr-line"></i></span><span class="req">/ 3天00时</span></span>
+          <span class="m-pair m-dur pending src-local"><span class="dur-body"><span class="dur-val">12时40分<i class="hr-line"></i></span><span class="req">/ 3天00时</span></span></span>
         </td><td>本地</td>
       </tr>
       <tr>
         <td class="colname">Sample.Anime.01.1080p</td><td class="colstate">考核未通过</td>
         <td class="coldur">
-          <span class="m-pair m-dur hr-fail src-online"><span class="dur-val">5时12分</span><span class="req">/ 3天00时</span><i class="hr-line"></i></span>
+          <span class="m-pair m-dur hr-fail src-online"><span class="dur-body"><span class="dur-val">5时12分</span><span class="req">/ 3天00时</span><i class="hr-line"></i></span></span>
         </td><td>在线</td>
       </tr>
       <tr>
         <td class="colname">Sample.Book.PDF</td><td class="colstate">无 HR</td>
         <td class="coldur">
-          <span class="m-pair m-dur"><span class="dur-val">2天08时</span></span>
+          <span class="m-pair m-dur"><span class="dur-body"><span class="dur-val">2天08时</span></span></span>
         </td><td>—</td>
       </tr>
     </table>
   </div>
-  <p class="note">⚠ 实现坑（本页已修，真机照抄时注意）：半格线挂在空的 <code>&lt;i&gt;</code> 上，绝对定位只写 <code>left: 0</code> 而不给 <code>width</code> 时，宽度 <code>auto</code> 会收缩成 0 —— 本地与未核实的线会整条不可见。整格线因为写了 <code>width: 100%</code> 才一直正常。半格线必须显式 <code>width: 100%</code>（<code>.dur-val</code> 是 inline-block，宽度即数值文本宽度）。</p>
+  <p class="note">⚠ 实现坑一（本页已修，真机照抄时注意）：两条线都挂在空的 <code>&lt;i&gt;</code> 上，绝对定位只写 <code>left: 0</code> 而不给 <code>width</code> 时，宽度 <code>auto</code> 会收缩成 0 —— 线会整条不可见，必须显式 <code>width: 100%</code>。<br>⚠ 实现坑二（真机走查 2026-09-29 报，已修）：整格线原先挂在单元格 <code>.m-dur</code> 上，<b>行是 grid，单元格被拉满整列宽</b>，<code>width: 100%</code> 于是画成<b>整列一条 —— 线随列宽不随文字</b>。修正：整格线挂到<b>文字包裹层</b> <code>.dur-body</code>（flex item，宽度 fit-content，只覆盖「数值 + 要求」这段文字）；挂它也同时保住了悬停弹窗的整格触发面（见 04 落地片段）。</p>
 
   <h2 style="margin-top:30px"><span class="n">03</span>改前 / 改后</h2>
   <p class="lead">同一格内容，列宽都按当前的 124px 摆；橙色虚线标出列宽边界。</p>
@@ -221,7 +224,7 @@
     <div>
       <h3>改后 <span>124px · 内容约 118px（估算）</span></h3>
       <div style="border-right:1px dashed var(--orange); width:124px">
-        <span class="m-pair m-dur reached src-online"><span class="dur-val">3天02时</span><span class="req">/ 3天00时</span><i class="hr-line"></i></span>
+        <span class="m-pair m-dur reached src-online"><span class="dur-body"><span class="dur-val">3天02时</span><span class="req">/ 3天00时</span><i class="hr-line"></i></span></span>
       </div>
       <p class="note" style="margin-top:14px">数值与要求值回到列宽内，零额外宽度；行高待真机确认（见 05）。</p>
     </div>
@@ -239,22 +242,26 @@
   position: relative;
   padding-bottom: var(--dur-pad);
 }
+.m-dur .dur-body { position: relative; display: inline-flex; align-items: baseline; gap: 3px; }
 .m-dur .dur-val { position: relative; display: inline-block; }
 .m-dur .hr-line { position: absolute; left: 0; height: 2px; background: currentColor; }
-.m-dur &gt; .hr-line { bottom: 0; width: 100%; }                    /* 整格: 在线 */
+/* 整格线挂 .dur-body(文字包裹层)而非 .m-dur: 行是 grid, 单元格被拉满整列宽 —— 挂单元格上线随列宽 */
+.m-dur .dur-body &gt; .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; } /* 整格: 在线(随文字) */
 .m-dur .dur-val &gt; .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; } /* 半格: 与整格共线 */
 .m-dur.src-local .hr-line { opacity: .5; }                       /* 半格实线, 压暗作兜底 */
 .m-dur.src-unver .hr-line { height: 0; border-bottom: 2px dotted currentColor; opacity: .8; }
-/* ⚠ 半格线是空 &lt;i&gt;: 绝对定位只给 left:0 时 width:auto 会收缩到 0, 必须显式 width:100% */
+/* ⚠ 两条线都是空 &lt;i&gt;: 绝对定位只给 left:0 时 width:auto 会收缩到 0, 必须显式 width:100% */
 /* 已排除 / 无 HR 不产出 .hr-line —— 无线本身即「没有来源结论」 */</pre>
 
   <p class="tag">模板 · tpl/torrents.html（groups.html / shows.html 同构，元素是 span）</p>
   <pre>&lt;div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur"
      :class="[hrDurClass(m), hrSrcClass(m)]" :title="hrDurHint(m)"
      @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave"&gt;
-  &lt;span class="dur-val"&gt;{{ cellSeedingTime(m) }}&lt;i v-if="hrSrcHalf(m)" class="hr-line"&gt;&lt;/i&gt;&lt;/span&gt;
-  &lt;span v-if="cellSeedingTime(m) &amp;&amp; m.hr_req_time" class="req"&gt;/ {{ fmtDuration(m.hr_req_time) }}&lt;/span&gt;
-  &lt;i v-if="hrSrcFull(m)" class="hr-line"&gt;&lt;/i&gt;
+  &lt;span class="dur-body"&gt;                                  /* 文字包裹层: 整格线随文字不随列宽 */
+    &lt;span class="dur-val"&gt;{{ cellSeedingTime(m) }}&lt;i v-if="hrSrcHalf(m)" class="hr-line"&gt;&lt;/i&gt;&lt;/span&gt;
+    &lt;span v-if="cellSeedingTime(m) &amp;&amp; m.hr_req_time" class="req"&gt;/ {{ fmtDuration(m.hr_req_time) }}&lt;/span&gt;
+    &lt;i v-if="hrSrcFull(m)" class="hr-line"&gt;&lt;/i&gt;
+  &lt;/span&gt;
 &lt;/div&gt;
 <b style="color:var(--fg-dim)">/* 已无「已排除」文字 chip —— 它与来源芯片同款、同样撑宽, 一并撤进 title */</b></pre>
 
@@ -280,7 +287,8 @@ hrSrcHalf(m)  { const c = this.hrSrcClass(m); return c === "src-local" || c === 
   <ul>
     <li><span class="file">tpl/torrents.html:75-79</span>、<span class="file">tpl/groups.html:169-173</span>、<span class="file">tpl/shows.html:165-169</span> 三处同一份改法；后两处是 <code>&lt;span&gt;</code>，注意别写成块级。</li>
     <li><span class="file">hr.js</span>：撤 <code>HR_SRC_BADGES</code> 与 <code>hrSrcBadge</code>，加上面五个方法；<code>HR_SRC_BUCKETS</code> 保留（筛选器「HR 来源」仍用中文桶名）。</li>
-    <li>三套 CSS 成对改：atlas <span class="file">views.css:62-68</span> / prism <span class="file">views.css:344-350</span> / console <span class="file">views.css:43-48</span>；同时各删 <code>.m-pair .hr-src</code>（已排除 chip 撤掉后无消费方）。</li>
+    <li>三套 CSS 成对改：atlas <span class="file">views.css:57-72</span> / prism <span class="file">views.css:339-354</span> / console <span class="file">views.css:38-53</span>（含 <code>.dur-body</code> 文字包裹层规则）；同时各删 <code>.m-pair .hr-src</code>（已排除 chip 撤掉后无消费方）。</li>
+    <li>守阵随改：<span class="file">tests/test_web.py::test_frontend_hr_safety_wiring</span> 钉住「整格线挂 <code>.dur-body</code> 且显式 <code>width: 100%</code>」+「<code>.m-dur &gt; .hr-line</code> 零残留」（挂回单元格即随列宽回归）。</li>
     <li>列宽暂不动：明细表 124px、种子页与辅种组表 110px（改后内容估算约 118px，落回列宽内）。</li>
   </ul>
 
@@ -289,7 +297,7 @@ hrSrcHalf(m)  { const c = this.hrSrcClass(m); return c === "src-local" || c === 
   <h2><span class="n">05</span>待确认</h2>
   <ul>
     <li><b>行高</b>：<code>padding-bottom: 6px</code> 是否撑高行。明细表行高多半由名称列主导、可被吸收；若被撑高，把 <code>--dur-pad</code> 降到 4px（半格线的 <code>calc</code> 会自动跟随）。</li>
-    <li><b>半格线共线</b>：<code>.dur-val</code> 与单元格的底线是否严格同 y，真机上差 1px 就很显眼，必要时把两种长度都挂到外层、用 <code>width: 100%</code> 与「半格线写死数值宽度」区分（注意不能写 <code>width: auto</code>，空元素会收缩到 0）。</li>
+    <li><b>半格线共线</b>：<code>.dur-val</code> 与单元格的底线是否严格同 y，真机上差 1px 就很显眼，必要时把两种长度都挂到外层、用 <code>width: 100%</code> 与「半格线写死数值宽度」区分（注意不能写 <code>width: auto</code>，空元素会收缩到 0）。<b>已确认（2026-09-29）</b>：两种长度都挂<b>文字级</b>盒子 —— 整格挂 <code>.dur-body</code>、半格挂 <code>.dur-val</code>，同一个 <code>calc(-1 * var(--dur-pad))</code>，真机共线；顺带把整格线从「随列宽」修回「随文字」（见 02 下方注）。</li>
     <li><b>数值为空</b>：<code>cellSeedingTime(m)</code> 为空时半格无线可画，来源只能靠 title —— 这类行多为 HR 已触发但尚未开始做种。</li>
     <li><b>长度线索失效的场景</b>：不显示要求值时（无 <code>hr_req_time</code> 的行）整格与半格都只剩数值段，长度这一维归零 —— 在线 vs 本地只剩明暗（100% vs 50%），本地 vs 未核实只剩线型（实线 vs 点线）。本版保留本地 50% 半透明就是为了这个兜底；若真机上仍难辨，退路是「在线额外加粗到 2.5px」。</li>
     <li><b>点线可见度</b>：未核实的 2px 点线在深色底上天生比实线弱（点线本身已"稀"一层，再叠透明度更淡）。本版已从 75% 提到 80%；真机若仍偏淡，直接提到 100% —— 点线靠线型区分，不必再靠明暗。上一版本地 / 未核实的线整条不可见是 <code>width</code> 缺失导致的（见 02 下方注），不是透明度问题。</li>

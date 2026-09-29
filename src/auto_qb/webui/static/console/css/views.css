@@ -39,12 +39,16 @@
  * 长度(在线整格 / 本地与未核实半格) + 线型(未核实点线) + 明暗(本地 50% 兜底) 三重编码;
  * 线色一律 currentColor 跟随上面的档位色, 不引入新令牌。已排除 / 无 HR 不产线(无线 = 没有来源结论),
  * 文案进 title。三套 UI 同口径 —— 改这里时同步 atlas/css/views.css 与 prism/css/views.css。
- * ❗半格线是空 <i>: 绝对定位只给 left:0 而 width:auto 会收缩成 0(整条不可见), 必须显式 width:100%。 */
+ * ❗两条线都是空 <i>: 绝对定位只给 left:0 而 width:auto 会收缩成 0(整条不可见), 必须显式 width:100%。
+ * ❗整格线必须挂 .dur-body(**文字**包裹层)而不是 .m-dur —— 行是 grid, 单元格被拉满整列宽, 挂单元格
+ *   上 width:100% 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报); 包裹层是 flex item
+ *   (fit-content), 线自然只覆盖「数值 + 要求」这段文字; 挂它也保住了弹窗的整格触发面。 */
 .m-pair.m-dur { position: relative; --dur-pad: 6px; padding-bottom: var(--dur-pad); }
+.m-dur .dur-body { position: relative; display: inline-flex; align-items: baseline; gap: 3px; }
 .m-dur .dur-val { position: relative; display: inline-block; }
 .m-dur .hr-line { position: absolute; left: 0; height: 2px; background: currentColor; }
-.m-dur > .hr-line { bottom: 0; width: 100%; }
-.m-dur .dur-val > .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; }
+.m-dur .dur-body > .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; }  /* 整格: 在线(随文字) */
+.m-dur .dur-val > .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; }   /* 半格: 本地/未核实 */
 .m-dur.src-local .hr-line { opacity: .5; }
 .m-dur.src-unver .hr-line { height: 0; border-bottom: 2px dotted currentColor; opacity: .8; }
 /* 弹层多选行: 整行可点、无勾选框、左色条 + 亮字; 焦点必须 :focus-visible */

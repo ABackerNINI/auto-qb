@@ -1653,6 +1653,8 @@ def test_frontend_hr_safety_wiring():
       未核/在线行被一并藏掉要求, 只剩孤立的来源芯片);
     ③ hr-unk / hr-fail / hr-line / bulk-hr-warn 新样式必须三套 CSS 成对定义(改这里时同步另一套的纪律);
       hr-pop 弹窗规则(浮层/箭头/双轨)同理成对;
+      整格线(在线)必须挂**文字包裹层** .dur-body 而不是单元格 .m-dur —— 行是 grid, 单元格被拉满整列宽,
+      挂它上面 width:100% 的空 <i> 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报);
     ④ 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
       M4 设置页守阵同款思路)。
     """
@@ -1698,7 +1700,8 @@ def test_frontend_hr_safety_wiring():
             (':class="[hrDurClass(m), hrSrcClass(m)]"', 3),
             (':title="hrDurHint(m)"', 3),  # 来源 + 已排除 文案进 title(行内不再有任何文字 chip)
             ('v-if="hrSrcHalf(m)"', 3),  # 半格线(本地 / 未核实)画在数值上
-            ('v-if="hrSrcFull(m)"', 3),  # 整格线(在线)画在单元格上
+            ('v-if="hrSrcFull(m)"', 3),  # 整格线(在线)画在**文字包裹层**上
+            ('class="dur-body"', 3),  # 文字包裹层: 整格线随文字不随列宽(挂单元格 = 随列宽)
             ('@mouseenter="hrPopEnter($event, m)"', 3),
             ('@mouseleave="hrPopLeave"', 4),  # 3 处触发面 + 弹窗自身(移入弹窗不隐藏)
             ('<teleport to="body">', 1),
@@ -1752,6 +1755,14 @@ def test_frontend_hr_safety_wiring():
             assert half in css, f"{name} 缺 {half} 规则 —— 本地 / 未核实的半格线会消失"
         assert re.search(r"\.m-dur \.dur-val > \.hr-line \{[^}]*width: 100%", css), \
             f"{name} 半格线没写显式 width:100% —— 空 <i> 的 width:auto 会收缩成 0(线整条不可见)"
+        # 整格线(在线)必须挂文字包裹层 .dur-body —— 挂 .m-dur 上会随列宽(2026-09-29 真机实报:
+        # 行是 grid, 单元格被拉满整列宽, width:100% 的空 <i> 画成整列一条, 与「随文字」相反)
+        for full in (".m-dur .dur-body {", ".m-dur .dur-body > .hr-line"):
+            assert full in css, f"{name} 缺 {full} 规则 —— 在线的整格线会随列宽而不是随文字"
+        assert re.search(r"\.m-dur \.dur-body > \.hr-line \{[^}]*width: 100%", css), \
+            f"{name} 整格线没写显式 width:100% —— 空 <i> 的 width:auto 会收缩成 0(线整条不可见)"
+        assert ".m-dur > .hr-line" not in css, \
+            f"{name} 整格线仍挂在单元格 .m-dur 上 —— 单元格是 grid item 会被拉满列宽, 线随列宽不随文字"
 
     # ④ 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
     from auto_qb.core.qbmanager import QbManager

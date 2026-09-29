@@ -52,3 +52,18 @@ TOTAL **1749 passed + 1 skipped / 91%**(test.full 29.6s), 2 failed 仍是同两�
 TOTAL **1749 passed + 3 skipped / 91%**(12432 语句 / 999 未覆盖, test.full 33.7s, rc=0) ——
 **0 failed**: skipped 由 1 变 3, 正是基线 26-09-27-1737 记的本机预期形态(无建链能力 ⇒ skip),
 闸门恢复可用。覆盖率口径见 [baseline.md](../../testing/baseline.md)。
+
+## 第四轮复测(整格线随列宽 → 随文字, 2026-09-29 21:0x)
+
+真机走查报「在线的线随列宽而不是随文字」⇒ 根因: 行是 `display: grid`, 做种时长单元格是 **grid item
+被拉满整列宽**(默认 stretch), 而整格线是 `.m-dur > .hr-line { width: 100% }` 的空 `<i>` ⇒ 线画成整列
+一条。修法: 三处模板(torrents/groups/shows)把「数值 + 要求」包进**文字包裹层** `<span class="dur-body">`
+(inline-flex / flex item ⇒ fit-content), 整格线改挂 `.dur-body`(`bottom: calc(-1 * var(--dur-pad))`,
+与半格线同一条基线); 三套 CSS 成对加 `.m-dur .dur-body` 规则。**不缩单元格** —— 单元格保持整列宽,
+悬停弹窗的触发面与 native title 命中区不变(缩 `.m-dur` 会让弹窗只在文字上才触发)。
+守阵加四条针脚: 模板 `class="dur-body"` 各 3 处; CSS 必含 `.m-dur .dur-body` 与
+`.m-dur .dur-body > .hr-line`(含显式 `width: 100%`); `.m-dur > .hr-line` **零残留**(挂回单元格即回归)。
+计划 plans/26-09-29-1905 的 02/04/05 段与样式块随改同步(整格线挂包裹层的坑写进「实现坑二」)。
+
+TOTAL **1749 passed + 3 skipped / 91%**(12432 语句 / 999 未覆盖, test.full 31.8s, rc=0) —— 0 failed,
+数字与第三轮一致(改动面 = 三处模板 + 三套 CSS + 守阵, 未触及被测业务逻辑)。
