@@ -257,6 +257,9 @@ window.AQB_COLUMNS = {
         y += (h === undefined ? est : h) + gap;
         pre[i + 1] = y;
       }
+      // 前缀和留存(计划 26-09-28-0354 W2): 键盘光标滚到窗口化未渲染行时按它换算文档 y
+      // (shortcuts.js _kbScrollRowIntoView)。纯缓存, created 里初始化, 不进 data。
+      this._rowPre[kind] = pre;
       const rel = this._winScrollY - (this._winTop[kind] || 0);
       let start = this._prefixFloor(pre, rel) - ROW_WIN_OVERSCAN;
       let end = this._prefixFloor(pre, rel + this._winViewH) + 1 + ROW_WIN_OVERSCAN;

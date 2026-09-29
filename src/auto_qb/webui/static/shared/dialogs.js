@@ -175,15 +175,16 @@ window.AQB_DIALOGS = {
      * 交互为即时模式(照 qB 官方 WebUI): 点胶囊即投递一条 bulk 命令(add_tags/remove_tags),
      * 每条命令独立回执, 不设"应用/取消" —— 对话框只是把候选摊开, 关闭即完。
      * 目标集合在打开时刻锁定(遮罩下选择不会变); 单种子右键传 hash, 批量(浮条/批量菜单)传空
-     * = 整个选中集合(与批量浮条同口径 _bulkTargets)。
+     * = 整个选中集合(与批量浮条同口径)。键盘路径(计划 26-09-28-0354 W4)可传目标对象
+     * {groupKeys, memberHashes}(光标组行/剧集单元, 无选中集合时), 与 _bulkTargets 同形状。
      * 新分类/新标签走"先建后设": 创建命令与打标命令按 FIFO 在主循环顺序执行, 创建失败
      * (典型 = 已存在的 409)不影响后续设置 —— 真正决定成败的是 set/add 的回执。
      */
     openMetaDialog(singleHash) {
       this.menu.visible = false;
-      const targets = singleHash
+      const targets = typeof singleHash === "string"
         ? { groupKeys: [], memberHashes: [singleHash] }
-        : this._bulkTargets();
+        : (singleHash || this._bulkTargets());
       if (!targets.groupKeys.length && !targets.memberHashes.length) return;
       this.metaTargets = targets;
       this.metaOpen = true;

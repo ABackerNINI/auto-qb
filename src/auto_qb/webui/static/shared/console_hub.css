@@ -1010,3 +1010,11 @@
 @media (prefers-reduced-motion: reduce) {
   .hb-view.on, .hb-pop.on, .aq-tip.on { animation: none; }
 }
+
+/* ---------------- 键盘快捷键: 光标行(计划 26-09-28-0354 W2) ----------------
+ * 与选中态是两套语义两套视觉(0822 §04): 光标 = 虚线描边不铺底, 选中 = 既有底色 + 左侧条。
+ * 三套 UI 共用(shared 层), 颜色走皮肤令牌 --accent(atlas/prism/console 各自定义)。 */
+.kb-cursor {
+  outline: 1px dashed var(--accent, #5cc0cf);
+  outline-offset: -1px;
+}

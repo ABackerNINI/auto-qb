@@ -21,7 +21,8 @@
             <template v-for="s in decoratedShows" :key="s.key">
               <!-- 剧行: 展开箭头 + 剧名; 聚合列仅展示统计(速度/大小等在集行粒度才有意义)
                    FX-13: 右键 = 整剧菜单(此前该层无 @contextmenu, "剧"这一级操作无处可做) -->
-              <div class="group-row show-row" data-table="show" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial, 'is-pending': isShowPending(s) }"
+              <!-- data-key: 键盘光标定位锚点(计划 26-09-28-0354 W2; 剧/集单元与 _kbRows 链同 id) -->
+              <div class="group-row show-row" data-table="show" :data-key="s.key" :class="{ expanded: isShowExpanded(s.key), 'search-hit': s.hit, selected: showSelState(s).selected, partial: showSelState(s).partial, 'is-pending': isShowPending(s), 'kb-cursor': isKbCursor('show', s.key) }"
                    :style="gridStyle('show')" @click="onShowClick(s, $event)"
                    @contextmenu.prevent="openShowMenu($event, s)">
                 <template v-for="col in visibleShowCols" :key="col.key">
@@ -56,7 +57,7 @@
                     </span>
                   </div>
                   <template v-for="e in sn.episodes" :key="s.key + '~' + sn.season + '~' + e.epKeyStr">
-                    <div class="group-row ep-row" data-table="show" :class="['s-' + epState(e), { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit, selected: epSelState(e).selected, partial: epSelState(e).partial, 'is-pending': isEpPending(e) }]"
+                    <div class="group-row ep-row" data-table="show" :data-key="showEpRowId(s.key, sn.season, e.epKeyStr)" :class="['s-' + epState(e), { expanded: expandedShowEp === showEpRowId(s.key, sn.season, e.epKeyStr), 'search-hit': e.hit, selected: epSelState(e).selected, partial: epSelState(e).partial, 'is-pending': isEpPending(e), 'kb-cursor': isKbCursor('ep', showEpRowId(s.key, sn.season, e.epKeyStr)) }]"
                          :style="gridStyle('show')"
                          @click="onShowEpClick(s, sn, e, $event)"
                          @contextmenu.prevent="openShowEpMenu($event, s, e)">

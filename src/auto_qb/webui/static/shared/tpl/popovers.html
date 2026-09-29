@@ -154,7 +154,8 @@
         </div>
         <div class="modal-actions">
           <button class="bt ghost" @click="resolveModal(false)">{{ modal.cancelText }}</button>
-          <button class="bt" :class="modal.danger ? 'danger-solid' : 'primary'" @click="resolveModal(true)">
+          <!-- ref="modalOk": 确认类默认焦点落此(计划 26-09-28-0354 §08) —— Enter 即确认 -->
+          <button ref="modalOk" class="bt" :class="modal.danger ? 'danger-solid' : 'primary'" @click="resolveModal(true)">
             {{ modal.okText }}
           </button>
         </div>

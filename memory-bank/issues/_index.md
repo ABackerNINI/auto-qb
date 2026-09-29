@@ -17,13 +17,15 @@
 | bug | 7 |
 | perf | 3 |
 | docs | 3 |
-| test | 2 |
+| test | 4 |
 | refactor | 2 |
 | feat | 5 |
 | chore | 4 |
 
 ## Open
 
+- [test] [冒烟「列设置·隐藏列宽保留」确定性失败: 隐藏列的意图宽度读不回](26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve.html) — dev.harness 列设置用例「隐藏列宽度保留」双 UI 100% 失败(key=amount_left 前=undefined 后=92px), stash 对照确认先在于键盘快捷键 W1-W4 之前, 与列偏好双轨模型的意图/生效分轨有关, 待查
+- [test] [冒烟 CTX-03 多选右键批量菜单: 追剧集行确定性失败 + 辅种组行抖动](26-09-30-0602-test-ui-smoke-ctx03-multiselect.html) — dev.harness 两条 CTX-03 多选用例失败(追剧集行 100% 复现/辅种组行间歇), stash 前后对照确认先在于键盘快捷键 W1-W4 之前; Ctrl+click 选择在冒烟完整链路下不生效而孤立探针正常, 疑似轮询重渲染与 ElementHandle 的竞态或真实 UI 缺陷, 待查
 - [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
 - [feat] [HR 计数：looks_like_login 补计数文本佐证（P3 缓做项）](26-09-30-0052-feat-hr-login-counter-attest.html) — 登录态判定 looks_like_login 补页头计数文本负信号佐证（报告 26-09-29-1803 §6 登录态负信号 / HR 计划 §7 P3），依赖 D4 口径实证，缓做
 - [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做

@@ -20,7 +20,7 @@ window.AQB_COMMANDS = {
   methods: {
     // 命令 => 中文动作名(用于投递成功/失败的提示文案)
     _actionText(action) {
-      return { pause: "暂停", resume: "开始", reannounce: "强制汇报", delete: "删除" }[action] || action;
+      return { pause: "暂停", resume: "开始", reannounce: "强制汇报", recheck: "重新校验", delete: "删除" }[action] || action;
     },
     /* ---------------- P0-3 埋点(点击侧): 「点击 → 补丁」/「点击 → POST 返回」 ----------------
      * 原先 cmdStats 只量**回执段**(wait_ms / exec_ms / 端到端), 「点击 → 命令投递」这一段
@@ -423,45 +423,107 @@ window.AQB_COMMANDS = {
       if (!this.isEpPending(e)) return e.state;
       return this._aggKind(e.members) || e.state;
     },
-    async act(action) {
-      this.menu.visible = false;
-      if (!this.menu.key) return;
+    /* ---------------- 动作统一出口(计划 26-09-28-0354 W3 的唯一重构点) ----------------
+     * 批量浮条(按钮) / 右键菜单 / 键盘快捷键三个入口共用同一条动作链。端点按目标形态路由:
+     *   单组(仅 1 个组 key 且动作在组级端点支持面内 pause/resume) -> /api/groups/{k}/{action};
+     *   单种子(仅 1 个 hash)                                      -> /api/torrents/{h}/{action};
+     *   其余(多目标 / 组级端点不支持的 recheck 等)                 -> /api/torrents/bulk 合单;
+     *   reannounce 恒逐目标投递(后端 _BULK_ACTIONS 不含它, tracker 确认要逐个跟踪)。
+     * what / countSuffix 只管 toast 文案(成功 = `已执行: {动作}{what}{countSuffix}`,
+     * 失败 = `{动作}{what}失败`), 调用方按入口语义传入, 缺省按目标形态推导(键盘路径)。
+     * 乐观补丁: pause/resume 白名单(§P0-3), 目标 = 组成员展开 ∪ hashes 去重 —— 与原三条链一致。 */
+    async _actCore(action, { keys = [], hashes = [], what = "", countSuffix = "" } = {}) {
+      const n = keys.length + hashes.length;
+      if (!n) return;
+      if (!what) {
+        what = keys.length === 1 && !hashes.length ? "整组" : hashes.length === 1 && !keys.length ? "该种子" : "";
+      }
+      if (!countSuffix && !what) countSuffix = `(${n} 个目标)`;
       const label = this._actionText(action);
       const isRe = action === "reannounce";
-      /* P0-3「点击即变」: 补丁必须**先于** POST 贴上(与 actEpisode / bulk 同一顺序)。
-       * 放在 await 之后 = 把即时反馈押在网络往返上 —— 真机大库下 POST 可达秒级, 用户看到的就是
-       * "点了 2-4s 才变"(issue 26-09-19-1939-webui-optimistic-latency; 受控测量: 注入 2000ms
-       * POST 延迟时补丁 2012ms 才贴, 改顺序后恒 ~0ms)。reannounce 结果在远端, 不做乐观。 */
-      const g = isRe ? null : this._findGroup(this.menu.key);
-      const hashes = isRe ? [] : (g && g.members ? g.members : []).map((m) => m.hash);
+      const optHashes = [];
+      if (!isRe) {
+        const seen = new Set();
+        for (const k of keys) {
+          const g = this._findGroup(k);
+          if (!g) continue;
+          for (const m of g.members || []) {
+            if (!seen.has(m.hash)) {
+              seen.add(m.hash);
+              optHashes.push(m.hash);
+            }
+          }
+        }
+        for (const h of hashes) {
+          if (!seen.has(h)) {
+            seen.add(h);
+            optHashes.push(h);
+          }
+        }
+      }
       const t0 = isRe ? 0 : this._newCmdStats(action);
       if (!isRe) {
-        this.applyOptimistic(hashes, action);
+        this.applyOptimistic(optHashes, action);  // P0-3: 补丁先于 POST(失败会回滚), 见 26-09-19-1939
         this._markCmdPatch(t0);
       }
       try {
-        const resp = await this.api(`/api/groups/${this.menu.key}/${action}`, { method: "POST" });
         if (isRe) {
-          // 强反馈状态机: 常驻"等待中" -> 原位换成 成功(绿) / 超时失败(琥珀), 不再用红色警告样式
-          const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
-          const r = await this.waitCmd(resp.cmd_id, 40000, { firstMs: 500, capMs: 1000 });
-          if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
-          else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
-        } else {
-          this._markCmdPost(t0);
-          const r = await this.waitCmd(resp.cmd_id);
-          this.resolveOptimistic(hashes, r.ok);
-          // 回执已带真值 ⇒ 就地撤下(与库大小解耦); 没对上才补拉一次(旧服务端 / 取不到真值)
-          /* D2: 真值不再走"回执里带 + 拉全量补"。回执**不带 truth**(带上未落地的真值 =
-           * 让前端采纳命令前的旧值 ⇒ 弹回), 真值由 `truth` 事件推送(见 onTruthEvent)。
-           * 这里删掉的 1500ms 拉取预算, 真机实测是撤下 2947ms 中的 1688ms 大头。 */
-          if (r.ok) this.toast(`已执行: ${label}整组`, "ok", 2500);
-          else this.toast(`${label}整组失败: ${r.error}`, "error", 8000);
+          const jobs = [
+            ...keys.map((k) => `/api/groups/${k}/reannounce`),
+            ...hashes.map((h) => `/api/torrents/${h}/reannounce`),
+          ];
+          const tid = this.toast(
+            n > 1
+              ? `强制汇报等待中…(${n} 个目标, tracker 确认最长 30s)`
+              : "强制汇报等待中…(已投递, tracker 确认最长 30s)",
+            "busy", 0, { sticky: true }
+          );
+          const results = await Promise.allSettled(
+            jobs.map((p) =>
+              this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id, 40000, { firstMs: 500, capMs: 1000 }))
+            )
+          );
+          const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
+          if (!fails.length) {
+            this._finishToast(tid, "ok",
+              n > 1 ? `强制汇报成功(tracker 已确认, ${n} 个目标)` : "强制汇报成功(tracker 已确认)", 3000);
+            return;
+          }
+          const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
+          this._finishToast(
+            tid,
+            "timeout",
+            `强制汇报: 成功 ${n - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`,
+            6000
+          );
+          return;
         }
+        let resp;
+        if (keys.length === 1 && !hashes.length && (action === "pause" || action === "resume")) {
+          resp = await this.api(`/api/groups/${keys[0]}/${action}`, { method: "POST" });
+        } else if (hashes.length === 1 && !keys.length) {
+          resp = await this.api(`/api/torrents/${hashes[0]}/${action}`, { method: "POST" });
+        } else {
+          resp = await this.api("/api/torrents/bulk", {
+            method: "POST",
+            body: JSON.stringify({ action, keys, hashes }),
+          });
+        }
+        this._markCmdPost(t0);
+        const r = await this.waitCmd(resp.cmd_id);
+        this.resolveOptimistic(optHashes, r.ok);
+        /* D2: 真值由 `truth` 事件推送(onTruthEvent), 回执不带 truth —— 各入口原注释合并于此 */
+        if (r.ok) this.toast(`已执行: ${label}${what}${countSuffix}`, "ok", 2500);
+        else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
       } catch (e) {
-        if (!isRe) this.resolveOptimistic(hashes, false);  // 发送失败: 同样回滚, 不留假状态
+        if (!isRe) this.resolveOptimistic(optHashes, false);  // 发送失败: 回滚, 不留假状态
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
+    },
+    async act(action) {
+      this.menu.visible = false;
+      if (!this.menu.key) return;
+      return this._actCore(action, { keys: [this.menu.key], hashes: [], what: "整组" });
     },
     /* 选中集合拆解: 虚拟行(未归组命中种子)无真实组 key, 转为单种子命令; 已消失的目标跳过 */
     _bulkTargets() {
@@ -475,69 +537,18 @@ window.AQB_COMMANDS = {
       }
       return { groupKeys, memberHashes };
     },
-    /* 批量动作: pause/resume/recheck **合单**为一条 bulk 命令(一次 POST + 一个聚合回执);
-     * reannounce 仍逐目标投递(后端 _BULK_ACTIONS 不含它 —— tracker 确认要逐个跟踪)。
-     * 合单前 100 个目标 = 100 次 POST + 100 条回执轮询, 后端还要串行跑 100 次 qB 调用
-     * (在主循环线程上, 期间界面"卡住"); 合单后是 1 + 1。 */
+    /* 批量动作(批量浮条按钮入口): 目标集合 = _bulkTargets, 动作链交 _actCore 统一出口。
+     * pause/resume/recheck 合单语义由 _actCore 的 bulk 路由承担(一次 POST + 一个聚合回执);
+     * reannounce 逐目标投递 + tracker 确认聚合回执, 文案与原实现逐字一致。 */
     async bulkAct(action) {
       const { groupKeys, memberHashes } = this._bulkTargets();
-      const label = action === "recheck" ? "重新校验" : this._actionText(action);
-      if (action !== "reannounce") {
-        // 后端 bulk 会自己展开 keys 的组成员并与 hashes 合并去重, 组级端点不支持的
-        // recheck 也因此不必在前端展开 —— 只有组没有成员时后端计一个"缺失组"。
-        if (!groupKeys.length && !memberHashes.length) return;
-        const hashes = [...memberHashes];
-        for (const k of groupKeys) {
-          const g = this._findGroup(k);
-          if (g) for (const m of g.members) hashes.push(m.hash);
-        }
-        const t0 = this._newCmdStats(action);
-        this.applyOptimistic(hashes, action);  // P0-3: 点击即变(失败会回滚)
-        this._markCmdPatch(t0);
-        try {
-          const resp = await this.api("/api/torrents/bulk", {
-            method: "POST",
-            body: JSON.stringify({ action, keys: groupKeys, hashes: memberHashes }),
-          });
-          this._markCmdPost(t0);
-          const r = await this.waitCmd(resp.cmd_id);
-          this.resolveOptimistic(hashes, r.ok);
-          /* D2: 真值不再走"回执里带 + 拉全量补"。回执**不带 truth**(带上未落地的真值 =
-           * 让前端采纳命令前的旧值 ⇒ 弹回), 真值由 `truth` 事件推送(见 onTruthEvent)。
-           * 这里删掉的 1500ms 拉取预算, 真机实测是撤下 2947ms 中的 1688ms 大头。 */
-          const n = groupKeys.length + memberHashes.length;
-          if (r.ok) this.toast(`已执行: ${label}(${n} 个目标)`, "ok", 2500);
-          else this.toast(`${label}失败: ${r.error}`, "error", 8000);
-        } catch (e) {
-          this.resolveOptimistic(hashes, false);  // 发送失败: 同样回滚, 不留假状态
-          if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
-        }
-        return;
-      }
-      const jobs = [
-        ...groupKeys.map((k) => `/api/groups/${k}/${action}`),
-        ...memberHashes.map((h) => `/api/torrents/${h}/${action}`),
-      ];
-      if (!jobs.length) return;
-      // 批量汇报: 常驻"等待中"(含目标数), 回执齐后原位换汇总终态(成功/超时, 琥珀不用红警告)
-      const tid = this.toast(`强制汇报等待中…(${jobs.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true });
-      const results = await Promise.allSettled(
-        jobs.map((p) =>
-          this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id, 40000, { firstMs: 500, capMs: 1000 }))
-        )
-      );
-      const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
-      if (!fails.length) {
-        this._finishToast(tid, "ok", `强制汇报成功(tracker 已确认, ${jobs.length} 个目标)`, 3000);
-        return;
-      }
-      const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
-      this._finishToast(
-        tid,
-        "timeout",
-        `强制汇报: 成功 ${jobs.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`,
-        6000
-      );
+      if (!groupKeys.length && !memberHashes.length) return;
+      return this._actCore(action, {
+        keys: groupKeys,
+        hashes: memberHashes,
+        what: "",
+        countSuffix: `(${groupKeys.length + memberHashes.length} 个目标)`,
+      });
     },
     /* ---------------- CTX-03 批量右键菜单的动作入口 ----------------
      * 多选右键时菜单升级为批量菜单(见 menu.js `_ctxMulti`), 动作**直接复用批量浮条的链路** ——
@@ -563,36 +574,7 @@ window.AQB_COMMANDS = {
     async actTorrent(action) {
       this.menu.visible = false;
       if (!this.menu.hash) return;
-      const label = this._actionText(action);
-      const isRe = action === "reannounce";
-      // 同 act(): 补丁先于 POST(见那里的注释与 issue 26-09-19-1939-webui-optimistic-latency)
-      const hashes = isRe ? [] : [this.menu.hash];
-      const t0 = isRe ? 0 : this._newCmdStats(action);
-      if (!isRe) {
-        this.applyOptimistic(hashes, action);
-        this._markCmdPatch(t0);
-      }
-      try {
-        const resp = await this.api(`/api/torrents/${this.menu.hash}/${action}`, { method: "POST" });
-        if (isRe) {
-          const tid = this.toast("强制汇报等待中…(已投递, tracker 确认最长 30s)", "busy", 0, { sticky: true });
-          const r = await this.waitCmd(resp.cmd_id, 40000, { firstMs: 500, capMs: 1000 });
-          if (r.ok) this._finishToast(tid, "ok", "强制汇报成功(tracker 已确认)", 3000);
-          else this._finishToast(tid, "timeout", `强制汇报超时失败: ${r.error}`, 6000);
-        } else {
-          this._markCmdPost(t0);
-          const r = await this.waitCmd(resp.cmd_id);
-          this.resolveOptimistic(hashes, r.ok);
-          /* D2: 真值不再走"回执里带 + 拉全量补"。回执**不带 truth**(带上未落地的真值 =
-           * 让前端采纳命令前的旧值 ⇒ 弹回), 真值由 `truth` 事件推送(见 onTruthEvent)。
-           * 这里删掉的 1500ms 拉取预算, 真机实测是撤下 2947ms 中的 1688ms 大头。 */
-          if (r.ok) this.toast(`已执行: ${label}该种子`, "ok", 2500);
-          else this.toast(`${label}该种子失败: ${r.error}`, "error", 8000);
-        }
-      } catch (e) {
-        if (!isRe) this.resolveOptimistic(hashes, false);  // 发送失败: 同样回滚, 不留假状态
-        if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
-      }
+      return this._actCore(action, { keys: [], hashes: [this.menu.hash], what: "该种子" });
     },
     /* 复制种子信息(种子页右键 R1A): clipboard API 优先, execCommand 降级(非安全上下文/权限拒绝);
      * 无论成功失败都给 toast 反馈 */

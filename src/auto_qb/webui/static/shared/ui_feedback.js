@@ -74,14 +74,19 @@ window.AQB_FEEDBACK = {
         this._modalResolve = resolve;
         this.modal = { ...this._modalInit(), ...cfg, visible: true };
         this.$nextTick(() => {
-          // 多字段形态聚焦第一个输入框(fields), 单输入形态聚焦 modalInput
+          // 多字段形态聚焦第一个输入框(fields), 单输入形态聚焦 modalInput;
+          // 确认类(计划 26-09-28-0354 §08): 默认焦点在「确定」钮 —— Enter 即确认(按钮原生行为),
+          // Esc 取消走 lifecycle 退栈链。删除类确认框(危险钮)同此, 与计划"默认确定 / Enter 确认"一致。
           const el = (this.modal.fields && this.$refs.modalFields)
             ? this.$refs.modalFields.querySelector("input")
             : this.$refs.modalInput;
           if (el) {
             el.focus();
             el.select();
+            return;
           }
+          const ok = this.$refs.modalOk;
+          if (ok) ok.focus();
         });
       });
     },

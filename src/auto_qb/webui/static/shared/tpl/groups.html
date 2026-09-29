@@ -30,7 +30,7 @@
           <div v-if="groupPadTop" class="row-pad" :style="{ height: groupPadTop + 'px' }" aria-hidden="true"></div>
           <template v-for="g in visibleGroups" :key="g.key">
             <!-- 单元格按「可见列」渲染: 顺序与 grid 模板同源(见 app.js 列模型), 不会再错位 -->
-            <div class="group-row" data-table="group" :data-key="g.key" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: groupSelState(g).selected, partial: groupSelState(g).partial, 'is-pending': isGroupPending(g) }]"
+            <div class="group-row" data-table="group" :data-key="g.key" :class="['s-' + g.status.primary, { expanded: expandedKey===g.key, 'search-hit': g.hit, selected: groupSelState(g).selected, partial: groupSelState(g).partial, 'is-pending': isGroupPending(g), 'kb-cursor': isKbCursor('group', g.key) }]"
                  :style="gridStyle('group')"
                  @click="onGroupClick(g, $event)"
                  @contextmenu.prevent="openMenu($event, g)">

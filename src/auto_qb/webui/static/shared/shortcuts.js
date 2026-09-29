@@ -1,0 +1,688 @@
+/* auto-qb WEB UI · 键盘快捷键引擎 + 动作注册表(计划 26-09-28-0354 W1-W4 第一波)
+ *
+ * 设计单点(计划 §05, 沿袭 0822 前案):
+ *   - 注册表 AQB_SHORTCUT_DEFS 是**键位单一事实源**: 默认键表 / 面板(W6) / 冲突检测 / 守阵断言
+ *     全部读这一张表, 表外无键位。
+ *   - 匹配用 e.code 物理键位 + 固定修饰序 Ctrl,Alt,Shift,Meta 归一化串, 不用布局相关的 e.key
+ *     (录制/重绑在任意布局下可往返; 显示名由 code 映射, 极端布局差异由"可重绑"兜底)。
+ *   - 输入态屏蔽: isComposing/keyCode 229 双保险 -> 输入元素(input/textarea/select/contenteditable)
+ *     -> 模态层(任一浮层/对话框打开时列表键位一律失效); 另有 repeat / 纯修饰键 / defaultPrevented
+ *     三道前置拦截。
+ *   - Esc 是唯一固定键: 归 lifecycle.js 既有退栈链(FIX-07), 引擎永不接(监听注册序也排在其后,
+ *     双保险)。Delete 键是注册表**外**的"额外删除操作", 引擎直连 _deleteFlow(§08 决策 v4:
+ *     删除双入口, 不占键表槽位、不进面板改键列表)。
+ *   - 黑名单 KB_BLACKLIST = 浏览器不可拦组合(Ctrl+W/T/N/Q 及 Shift 变体 / 标签页族 / 开发者工具
+ *     / Meta 全族), 依据 §3.3 经验边界: Ctrl+S/F/P 可拦不在名单; 面板(W6)拒绑 + 守阵断言默认键不碰。
+ *   - 适配器 window.AQB_KEYS.load()/save() 是引擎唯一的存储出口(W1 是内存桩, W6 接
+ *     GET/PUT /api/keys 与 webui-keys.json) —— 引擎对存储介质无感知, 反悔路径见计划 §4.6。
+ *
+ * !接线(三份 index.html 的 tpl-manifest 清单序, 守阵 test_web.py::_scan_mixin_wiring):
+ *   - 本文件必须排在 app.js **之前**(app.js 末尾 app.mixin(window.AQB_SHORTCUTS))。
+ *   - keydown 监听在 lifecycle.js mounted 里注册, 排在既有 Esc 退栈链**之后**; data 字段
+ *     kbCursor 在 state.js(根选项展开, 不许进 app.mixin —— pitfalls web-ui/frontend-split)。
+ *   - W1-W4 只激活 A-D 组(E/F/G/H/I 组 run: null, W5/W6 接线), 波次验收口径见计划 §06。
+ *   - 光标滚动跟随**禁用 scrollIntoView**(逐层滚动可滚祖先会连带滚整页, pitfalls
+ *     web-ui/hover-keynav-fight): 渲染行用 getBoundingClientRect+scrollBy 差值, 窗口化未渲染行
+ *     用 _rowWindow 前缀和换算(columns.js 已留存 this._rowPre[kind])。
+ */
+
+/* 纯修饰键: 自身发 keydown, 匹配器等非修饰键落定才判定(录制器把"只按了 Shift"判无效) */
+const KB_MODIFIER_CODES = new Set([
+  "ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight",
+  "AltLeft", "AltRight", "MetaLeft", "MetaRight", "CapsLock",
+]);
+
+/* 事件 -> 归一化键位串: 修饰键固定序 Ctrl,Alt,Shift,Meta + e.code(§3.3 VS Code 展示序同族) */
+function kbSerializeEvent(e) {
+  const mods = [];
+  if (e.ctrlKey) mods.push("Ctrl");
+  if (e.altKey) mods.push("Alt");
+  if (e.shiftKey) mods.push("Shift");
+  if (e.metaKey) mods.push("Meta");
+  mods.push(e.code);
+  return mods.join("+");
+}
+
+/* 浏览器保留键黑名单: preventDefault 无效的组合, 面板(W6)当场拒绑; 引擎侧只作脏数据兜底
+ * (§3.3: Ctrl+W/T/N/Q 及其 Shift 变体不可拦; Ctrl+S/F/P 可拦, 留给设置页保存等绑定) */
+const KB_BLACKLIST = (() => {
+  const bad = new Set();
+  // 标签页 / 窗口族(浏览器接管)
+  for (const c of ["KeyW", "KeyT", "KeyN", "KeyQ"]) {
+    bad.add(`Ctrl+${c}`);
+    bad.add(`Ctrl+Shift+${c}`);
+  }
+  bad.add("Ctrl+Tab");
+  bad.add("Ctrl+Shift+Tab");
+  for (let i = 1; i <= 8; i++) bad.add(`Ctrl+Digit${i}`);
+  bad.add("Ctrl+Shift+KeyN");  // 隐身窗口(与 Ctrl+Shift+KeyT 重复覆盖, 保守再收一档)
+  // 开发者工具
+  for (const c of ["KeyI", "KeyJ", "KeyC"]) bad.add(`Ctrl+Shift+${c}`);
+  bad.add("F12");
+  // 系统级
+  bad.add("F5");
+  bad.add("F11");
+  bad.add("Ctrl+Alt+Delete");
+  return bad;
+})();
+
+function kbInBlacklist(serial) {
+  if (serial.split("+").includes("Meta")) return true;  // mac Cmd 全族 OS 先拿
+  return KB_BLACKLIST.has(serial);
+}
+
+/* 默认键位归一化串合法形态: 修饰键按固定序出现至多一次 + 单个 e.code(守阵逐条断言) */
+const KB_DEF_RE = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$/;
+
+/* ---------------- 动作注册表(单一事实源) ----------------
+ * 条目形状: { id, group, label, def, scope, danger?, fixed?, run }
+ *   def  = 默认键位归一化串; "" = 默认不绑定(空位, 可被自定义); fixed = 不可改键(Esc)。
+ *   scope = global(任何非输入态) | list(三数据视图) | drawer | settings | modal(后三档 W5)。
+ *   danger = 危险档(§08 清单): 键盘路径必经确认框, 面板行内标 WARN; 危险档默认键一律二键组合。
+ *   run(vm) = 动作出口, 只映射既有方法不另写实现; run: null = 本波未激活(W5/W6 接线)。
+ * A-D 组为第一波(计划 §06 拍板⑤); E/F/G/H 组默认键已定但 run: null, 2026-09-30 决策③
+ * 保留 Shift 族全部进默认表 —— 先占键位防冲突, W5 接线即活。 */
+const AQB_SHORTCUT_DEFS = [
+  // ---- A · 视图与全局导航 ----
+  { id: "view-groups", group: "视图与导航", label: "切到辅种页",
+    def: "Digit1", scope: "global",
+    run: (vm) => vm.goView("groups") },
+  { id: "view-torrents", group: "视图与导航", label: "切到种子页",
+    def: "Digit2", scope: "global",
+    run: (vm) => vm.goView("torrents") },
+  { id: "view-shows", group: "视图与导航", label: "切到追剧页",
+    def: "Digit3", scope: "global",
+    run: (vm) => vm.goView("shows") },
+  { id: "open-settings", group: "视图与导航", label: "打开设置",
+    def: "Ctrl+Comma", scope: "global",
+    run: (vm) => vm.openSettings() },
+  { id: "add-torrent", group: "视图与导航", label: "添加种子",
+    def: "KeyN", scope: "list",
+    run: (vm) => vm.openAddTorrent() },
+  { id: "focus-search", group: "视图与导航", label: "聚焦搜索框",
+    def: "Slash", scope: "list",
+    run: (vm) => vm._kbFocusSearch() },
+  { id: "open-stats", group: "视图与导航", label: "统计面板",
+    def: "Backslash", scope: "global",
+    run: (vm) => vm.openStats() },
+  { id: "open-history", group: "视图与导航", label: "历史流量",
+    def: "Shift+Backslash", scope: "global",
+    run: (vm) => vm.openHistory() },
+  { id: "speed-down", group: "视图与导航", label: "限速(下载方向)",
+    def: "KeyL", scope: "list",
+    run: (vm) => vm.openSpeedAt(null, "down") },
+  { id: "speed-up", group: "视图与导航", label: "限速(上传方向)",
+    def: "Shift+KeyL", scope: "list",
+    run: (vm) => vm.openSpeedAt(null, "up") },
+  // ---- B · 光标与导航(追剧页走 剧/集 单元; 辅种页只走组行线性链, 成员行 vNext, §08 决策②) ----
+  { id: "cursor-up", group: "光标与导航", label: "光标上移一行",
+    def: "ArrowUp", scope: "list",
+    run: (vm) => vm._kbMove(-1) },
+  { id: "cursor-down", group: "光标与导航", label: "光标下移一行",
+    def: "ArrowDown", scope: "list",
+    run: (vm) => vm._kbMove(1) },
+  { id: "row-expand", group: "光标与导航", label: "展开当前行",
+    def: "ArrowRight", scope: "list",
+    run: (vm) => vm._kbExpandRow() },
+  { id: "row-collapse", group: "光标与导航", label: "收起当前行",
+    def: "ArrowLeft", scope: "list",
+    run: (vm) => vm._kbCollapseRow() },
+  { id: "cursor-first", group: "光标与导航", label: "跳到首行",
+    def: "Home", scope: "list",
+    run: (vm) => vm._kbMoveTo(0) },
+  { id: "cursor-last", group: "光标与导航", label: "跳到末行",
+    def: "End", scope: "list",
+    run: (vm) => vm._kbMoveTo(-1) },
+  { id: "page-up", group: "光标与导航", label: "上翻一屏",
+    def: "PageUp", scope: "list",
+    run: (vm) => vm._kbMovePage(-1) },
+  { id: "page-down", group: "光标与导航", label: "下翻一屏",
+    def: "PageDown", scope: "list",
+    run: (vm) => vm._kbMovePage(1) },
+  { id: "row-open", group: "光标与导航", label: "打开当前行(组行=展开明细, 种子行=详情抽屉)",
+    def: "Enter", scope: "list",
+    run: (vm) => vm._kbOpenRow() },
+  // ---- C · 选择 ----
+  { id: "toggle-select", group: "选择", label: "切换当前行选中",
+    def: "Space", scope: "list",
+    run: (vm) => vm._kbToggleSelect() },
+  { id: "extend-up", group: "选择", label: "向上扩展选择",
+    def: "Shift+ArrowUp", scope: "list",
+    run: (vm) => vm._kbExtend(-1) },
+  { id: "extend-down", group: "选择", label: "向下扩展选择",
+    def: "Shift+ArrowDown", scope: "list",
+    run: (vm) => vm._kbExtend(1) },
+  { id: "select-all", group: "选择", label: "全选当前视图",
+    def: "Ctrl+KeyA", scope: "list",
+    run: (vm) => vm._kbSelectAll() },
+  { id: "clear-esc", group: "选择", label: "清除选择 / 逐层退栈",
+    def: "Escape", scope: "global", fixed: true,
+    run: null },  // 既有 lifecycle.js 退栈链(FIX-07)实现, 引擎永不接(注册表登记只为守阵与面板展示)
+  // ---- D · 一级动作(§08 决策 v4: 危险档一律二键组合; 裸键 D/C/F 释放为空位) ----
+  { id: "act-pause", group: "一级动作", label: "暂停",
+    def: "KeyP", scope: "list",
+    run: (vm) => vm._kbAct("pause") },
+  { id: "act-resume", group: "一级动作", label: "开始",
+    def: "KeyS", scope: "list",
+    run: (vm) => vm._kbAct("resume") },
+  { id: "act-reannounce", group: "一级动作", label: "强制汇报",
+    def: "Shift+KeyA", scope: "list", danger: true,
+    run: (vm) => vm._kbAct("reannounce") },
+  { id: "act-recheck", group: "一级动作", label: "重新校验",
+    def: "Shift+KeyY", scope: "list", danger: true,
+    run: (vm) => vm._kbAct("recheck") },
+  { id: "act-detail", group: "一级动作", label: "详细信息(抽屉)",
+    def: "KeyI", scope: "list",
+    run: (vm) => vm._kbOpenDrawer() },
+  { id: "act-meta", group: "一级动作", label: "标签 / 分类",
+    def: "KeyM", scope: "list",
+    run: (vm) => vm._kbMeta() },
+  { id: "act-open-folder", group: "一级动作", label: "打开目标文件夹",
+    def: "KeyO", scope: "list",
+    run: (vm) => vm._kbOpenFolder() },
+  { id: "act-delete", group: "一级动作", label: "删除所选",
+    def: "Shift+KeyD", scope: "list", danger: true,
+    run: (vm) => vm._kbDelete() },
+  // ---- E · 次要动作(Shift 族, §08 决策③保留; W5 接线) ----
+  { id: "edit-move", group: "次要动作", label: "移动位置",
+    def: "Shift+KeyV", scope: "list",
+    run: null },  // W5: vm.editMove(hash)
+  { id: "edit-rename", group: "次要动作", label: "重命名",
+    def: "Shift+KeyR", scope: "list",
+    run: null },  // W5: vm.editRename(hash)
+  { id: "export-torrent", group: "次要动作", label: "导出 .torrent",
+    def: "Shift+KeyE", scope: "list",
+    run: null },  // W5: 目标解析接 vm.exportTorrent()
+  { id: "copy-name", group: "次要动作", label: "复制名称",
+    def: "Shift+KeyC", scope: "list",
+    run: null },  // W5: vm.copyTorrentInfo("name")
+  { id: "copy-hash", group: "次要动作", label: "复制哈希",
+    def: "Shift+KeyH", scope: "list",
+    run: null },  // W5: vm.copyTorrentInfo("hash")
+  { id: "copy-magnet", group: "次要动作", label: "复制 magnet",
+    def: "Shift+KeyG", scope: "list",
+    run: null },  // W5: vm.copyTorrentInfo("magnet")
+  { id: "col-picker", group: "次要动作", label: "列选择器",
+    def: "KeyK", scope: "list",
+    run: null },  // W5: vm.toggleColMenu(null)
+  // ---- F · 队列与开关(W5 接线; §08 决策③: F5/F6 保留默认键) ----
+  { id: "queue-up", group: "队列与开关", label: "队列上移",
+    def: "Ctrl+ArrowUp", scope: "list",
+    run: null },  // W5: 目标解析 + torrentCmd("queue", {action:"up"})
+  { id: "queue-down", group: "队列与开关", label: "队列下移",
+    def: "Ctrl+ArrowDown", scope: "list",
+    run: null },  // W5: 同上(action:"down")
+  { id: "queue-top", group: "队列与开关", label: "队列置顶",
+    def: "Ctrl+Home", scope: "list",
+    run: null },  // W5: 同上(action:"top")
+  { id: "queue-bottom", group: "队列与开关", label: "队列置底",
+    def: "Ctrl+End", scope: "list",
+    run: null },  // W5: 同上(action:"bottom")
+  { id: "auto-tmm", group: "队列与开关", label: "自动种子管理(TMM)切换",
+    def: "Shift+KeyT", scope: "list",
+    run: null },  // W5: 目标解析 + torrentCmd("auto-tmm")
+  { id: "force-start", group: "队列与开关", label: "强制开始切换",
+    def: "Shift+KeyF", scope: "list",
+    run: null },  // W5: 目标解析 + torrentCmd("force-start"); 可逆故不入危险档(§08)
+  // ---- G · 局部作用域(W5 接线) ----
+  { id: "drawer-tab-general", group: "局部作用域", label: "抽屉 · 常规页",
+    def: "Alt+Digit1", scope: "drawer",
+    run: null },  // W5: vm.drawerTab("general")
+  { id: "drawer-tab-trackers", group: "局部作用域", label: "抽屉 · Tracker 页",
+    def: "Alt+Digit2", scope: "drawer",
+    run: null },  // W5: vm.drawerTab("trackers")
+  { id: "drawer-tab-peers", group: "局部作用域", label: "抽屉 · 用户页",
+    def: "Alt+Digit3", scope: "drawer",
+    run: null },  // W5: vm.drawerTab("peers")
+  { id: "drawer-tab-content", group: "局部作用域", label: "抽屉 · 内容页",
+    def: "Alt+Digit4", scope: "drawer",
+    run: null },  // W5: vm.drawerTab("content")
+  { id: "settings-save", group: "局部作用域", label: "设置页 · 保存配置",
+    def: "Ctrl+KeyS", scope: "settings", inputSafe: true,
+    run: null },  // W5: vm.cfgSave()(inputSafe: 输入框内也放行; 浏览器保存网页可拦, §3.3)
+  // 设置页"放弃改动"(G6)危险且无撤销, 默认不绑定也不注册(§08: 默认留给鼠标)
+  // ---- H · 面板(W6 接线) ----
+  { id: "help-panel", group: "面板", label: "打开快捷键帮助面板",
+    def: "Shift+Slash", scope: "global",
+    run: null },  // W6: 帮助浮层(只读速查 + 前往设置链接); 面板内 Esc 取消录制归 W6 面板自身
+  // ---- I · 默认不绑定空位(可自定义; W5/W6 随面板接线) ----
+  { id: "super-seeding", group: "更多动作", label: "超级做种切换",
+    def: "", scope: "list", danger: true,
+    run: null },  // W5: 目标解析 + torrentCmd("super-seeding"); 静默改变做种语义故标危险(§08)
+  { id: "share-limits", group: "更多动作", label: "分享率限制",
+    def: "", scope: "list",
+    run: null },  // W5: vm.editShareLimits(hash)
+  { id: "clear-filters", group: "更多动作", label: "清除全部筛选",
+    def: "", scope: "list",
+    run: null },  // W5: vm.clearFilters()
+  { id: "invert-select", group: "更多动作", label: "反选当前视图",
+    def: "", scope: "list",
+    run: null },  // W5: _kbInvertSel()(大库反选代价高, 默认不给键, 0822 I6)
+];
+
+/* ---------------- 存储适配器(单一出口, 计划 §4.4) ----------------
+ * W1 内存桩: 纯默认表可跑; W6 换 GET/PUT /api/keys(后端 webui-keys.json), 引擎与面板零改动。
+ * 结构按 §4.7 预埋: { schema_version, template, overrides } —— overrides 只存用户改过的条目,
+ * 未提及的 action 用当前模板基准; 空串 = 显式禁用。
+ * (先 const 后挂 window: 它是被本文件 _kbTable 直接消费的适配器单例, 不是 Vue mixin 片段 ——
+ *  不走 app.mixin, 也别写成 `window.X = {` 字面量形态, 那会被片段接线守阵当漏注入。)
+ */
+const AQB_KEYS_ADAPTER = {
+  load() {
+    return { schema_version: 1, template: "aqb-default", overrides: {} };
+  },
+  save(_cfg) {
+    return false;  // W6 接通: PUT 落盘, 失败由调用方本地回滚
+  },
+};
+window.AQB_KEYS = AQB_KEYS_ADAPTER;
+
+window.AQB_SHORTCUTS = {
+  methods: {
+    /* ---------------- 引擎: 匹配与屏蔽 ---------------- */
+    /* 生效键表(模板基准 ⊕ overrides): 序列 -> 注册表条目。fixed(Esc)不进匹配表;
+     * 黑名单串/空串(显式禁用)跳过 —— 后端脏数据在引擎层也不生效(守阵另断言默认键全干净)。 */
+    _kbTable() {
+      if (this._kbTableCache) return this._kbTableCache;
+      const cfg = window.AQB_KEYS.load();
+      const overrides = (cfg && cfg.overrides) || {};
+      const map = new Map();
+      for (const item of AQB_SHORTCUT_DEFS) {
+        if (item.fixed || !item.run) continue;
+        const serial = Object.prototype.hasOwnProperty.call(overrides, item.id) ? overrides[item.id] : item.def;
+        if (!serial || kbInBlacklist(serial) || map.has(serial)) continue;
+        map.set(serial, item);
+      }
+      this._kbTableCache = map;
+      return map;
+    },
+    /* 当前作用域(W1-W4 两档): 设置页 / 列表; 抽屉与模态档 W5 随局部作用域引入 */
+    _kbScope() {
+      return this.page === "settings" ? "settings" : "list";
+    },
+    /* 模态层名单: 与 dialogs.js escBusy 的**浮层名单**同形, 但不含选择/展开兜底段
+     * (有选中时快捷键必须照常可用 —— 目标解析走选中集合; escBusy 是 Esc 退栈专用, 不能混用)。 */
+    _kbOverlayBusy() {
+      return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
+        this.metaOpen || this.filePrio.visible || this.drawer.open || this.historyOpen || this.headMenu.visible ||
+        this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible);
+    },
+    /* 引擎入口(lifecycle.js mounted 注册在 Esc 退栈链之后; unmounted 撤除) */
+    _kbOnKeyDown(e) {
+      if (e.key === "Escape") return;                  // 固定键归退栈链, 引擎永不接(§08 C5)
+      if (e.defaultPrevented) return;                  // 多 handler 礼仪: 先到先得
+      if (e.isComposing || e.keyCode === 229) return;  // IME 组合期双保险(§3.4)
+      if (KB_MODIFIER_CODES.has(e.code)) return;       // 纯修饰键不判定
+      if (e.repeat) return;                            // 长按自动重复一律不吃
+      if (!this.authOk) return;                        // 登录遮罩期不响应
+      const item = this._kbTable().get(kbSerializeEvent(e));
+      const t = e.target;
+      const inInput = !!(t && t.closest && t.closest("input, textarea, select, [contenteditable]"));
+      if (inInput) {
+        // 输入元素内只放行显式标记 inputSafe 的绑定(本波无; W5 的设置页 Ctrl+S 在此放行)
+        if (!item || !item.inputSafe) return;
+      } else {
+        if (this._kbOverlayBusy()) return;             // 模态层打开: 列表键位一律失效
+        if (item) {
+          if (item.scope !== "global" && item.scope !== this._kbScope()) return;  // 非焦点页不串扰
+          e.preventDefault();
+          item.run(this);
+          return;
+        }
+        // Delete 键是注册表**外**的"额外删除操作"(§08 决策 v4): 直连删除链(_kbDelete 内部走
+        // _deleteFlow 的确认框 + HR 风险点名, 与批量浮条同链), 不占键表槽位、不进面板改键列表。
+        // 上游 qB WebUI 习惯对齐(Delete 删除所选); Shift+Delete 同走确认框, 无"永久删"分支。
+        if (e.code === "Delete" && !e.ctrlKey && !e.altKey && !e.metaKey && this._kbScope() === "list") {
+          e.preventDefault();
+          this._kbDelete();
+        }
+      }
+    },
+    /* ---------------- W2: 光标模型(按身份不按下标) ---------------- */
+    /* 光标线性链: 辅种页=组行; 种子页=平铺行; 追剧页=剧/集单元(决策②: 成员行 vNext)。
+     * 每次移动时现取现定位 —— 轮询整表替换/排序/筛选后身份重定位天然成立, 不需刷新钩子。 */
+    _kbRows() {
+      if (this.page !== "groups") return [];
+      if (this.viewMode === "torrents") return this.filteredTorrents.map((m) => ({ kind: "torrent", id: m.hash }));
+      if (this.viewMode === "shows") {
+        const out = [];
+        for (const s of this.decoratedShows) {
+          out.push({ kind: "show", id: s.key });
+          if (this.expandedShows.includes(s.key)) {
+            for (const sn of s.seasons) {
+              for (const e of sn.episodes) out.push({ kind: "ep", id: this.showEpRowId(s.key, sn.season, e.epKeyStr) });
+            }
+          }
+        }
+        return out;
+      }
+      return this.filteredGroups.map((g) => ({ kind: "group", id: g.key }));
+    },
+    isKbCursor(kind, id) {
+      const c = this.kbCursor;
+      return !!c && c.kind === kind && c.id === id;
+    },
+    _kbApplyCursor(rows, idx) {
+      this.kbCursor = rows[idx];
+      this._kbScrollRowIntoView(rows, idx);
+    },
+    _kbMove(delta) {
+      const rows = this._kbRows();
+      if (!rows.length) {
+        this.kbCursor = null;
+        return;
+      }
+      const cur = this.kbCursor ? rows.findIndex((r) => r.kind === this.kbCursor.kind && r.id === this.kbCursor.id) : -1;
+      // 光标失效(刷新换人/切视图回落): 下移落首行, 上移落末行; 找得到则裁剪夹取(就近回落口径)
+      const idx = cur < 0
+        ? (delta > 0 ? 0 : rows.length - 1)
+        : Math.max(0, Math.min(rows.length - 1, cur + delta));
+      if (idx === cur) return;
+      this._kbApplyCursor(rows, idx);
+    },
+    _kbMoveTo(idx) {
+      const rows = this._kbRows();
+      if (!rows.length) return;
+      this._kbApplyCursor(rows, idx < 0 ? rows.length - 1 : Math.max(0, Math.min(rows.length - 1, idx)));
+    },
+    _kbMovePage(dir) {
+      const rows = this._kbRows();
+      if (!rows.length) return;
+      const kind = this.kbCursor ? this.kbCursor.kind : rows[0].kind;
+      const est = this._rowH[kind === "torrent" ? "torrent" : kind === "group" ? "group" : "member"] ||
+        ROW_WIN_EST_H[kind === "torrent" ? "torrent" : "group"] || 44;
+      const per = Math.max(1, Math.floor((this._winViewH || window.innerHeight) / est));
+      this._kbMove(dir * per);
+    },
+    /* 滚动进视口: 目标已可见则不动(避免每次按键都跳)。渲染行用 getBoundingClientRect 差值;
+     * 窗口化未渲染行用 _rowWindow 前缀和换算 y(计划 W2; 禁 scrollIntoView, 见文件头)。 */
+    _kbScrollRowIntoView(rows, idx) {
+      this.$nextTick(() => {
+        const r = rows[idx];
+        if (!r) return;
+        const sel = r.kind === "group" || r.kind === "show" || r.kind === "ep"
+          ? `[data-key="${CSS.escape(r.id)}"]`
+          : `[data-hash="${CSS.escape(r.id)}"]`;
+        const el = document.querySelector(sel);
+        const headH = this._headH || 0;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.top < headH + 4) window.scrollBy(0, rect.top - headH - 8);
+          else if (rect.bottom > window.innerHeight - 4) window.scrollBy(0, rect.bottom - window.innerHeight + 8);
+          return;
+        }
+        // 窗口化把该行折叠了: 用前缀和算它的文档 y。前缀和与当前列表不同源(长度不符)则放弃
+        // 本次滚动 —— 宁可暂时看不见, 也不能滚到错位处(P1-2 的退避口径)。
+        const kind = r.kind === "torrent" ? "torrent" : r.kind === "group" ? "group" : null;
+        const pre = kind && this._rowPre && this._rowPre[kind];
+        if (!pre || pre.length !== rows.length + 1) return;
+        const y = pre[idx] + (this._winTop[kind] || 0);
+        const h = pre[idx + 1] - pre[idx];
+        if (y < window.scrollY + headH + 4) window.scrollTo(0, y - headH - 8);
+        else if (y + h > window.scrollY + window.innerHeight - 4) window.scrollTo(0, y + h - window.innerHeight + 8);
+      });
+    },
+    /* ---------------- W2: 展开 / 收起 / 打开 ---------------- */
+    _kbParseEpId(id) {
+      const parts = String(id).split("|");
+      if (parts.length < 3) return null;
+      return { showKey: parts[0], season: parts[1] === "~" ? null : Number(parts[1]), epKeyStr: parts.slice(2).join("|") };
+    },
+    _kbExpandRow() {
+      const c = this.kbCursor;
+      if (!c) return;
+      if (c.kind === "group") {
+        if (this.expandedKey !== c.id) {
+          this.expandedKey = c.id;
+          this.selAnchorGroup = c.id;  // 展开的组作为 Shift 多选默认起点(与 toggleExpand 同口径)
+        }
+        return;
+      }
+      if (c.kind === "show") {
+        if (!this.expandedShows.includes(c.id)) this.expandedShows.push(c.id);
+        return;
+      }
+      if (c.kind === "ep") {
+        const p = this._kbParseEpId(c.id);
+        if (p && this.expandedShowEp !== c.id) this.expandedShowEp = c.id;
+      }
+    },
+    _kbCollapseRow() {
+      const c = this.kbCursor;
+      if (!c) return;
+      if (c.kind === "group") {
+        if (this.expandedKey === c.id) this.expandedKey = null;
+        return;
+      }
+      if (c.kind === "show") {
+        const i = this.expandedShows.indexOf(c.id);
+        if (i >= 0) this.expandedShows.splice(i, 1);
+        return;
+      }
+      if (c.kind === "ep" && this.expandedShowEp === c.id) this.expandedShowEp = null;
+    },
+    _kbOpenRow() {
+      const c = this.kbCursor;
+      if (!c) {
+        this._kbHint();
+        return;
+      }
+      if (c.kind === "group" || c.kind === "show" || c.kind === "ep") {
+        // 组行/剧行/集行: 展开明细(与鼠标左键同语义, 0822 B9); 已展开则收起
+        const open = c.kind === "group" ? this.expandedKey === c.id
+          : c.kind === "show" ? this.expandedShows.includes(c.id)
+            : this.expandedShowEp === c.id;
+        if (open) this._kbCollapseRow();
+        else this._kbExpandRow();
+        return;
+      }
+      this.openTorrentDrawer(c.id);  // 种子行: 详情抽屉
+    },
+    /* ---------------- W2/W3: 选择与目标解析 ---------------- */
+    _kbHint() {
+      this.toast("先用 ↑↓ 移到一行, 或点选/框选目标(空列表无动作)", "info", 2500);
+    },
+    /* 追剧页与 _kbRows 同序的单元链(剧单元 + 展开的集单元), 供 _toggleUnit/_extendUnit */
+    _kbShowUnits() {
+      const out = [];
+      for (const s of this.decoratedShows) {
+        out.push({ id: "show|" + s.key, hashes: this._showHashes(s) });
+        if (this.expandedShows.includes(s.key)) {
+          for (const sn of s.seasons) {
+            for (const e of sn.episodes) {
+              out.push({ id: this.showEpRowId(s.key, sn.season, e.epKeyStr), hashes: this.memberHashesOf(e.members) });
+            }
+          }
+        }
+      }
+      return out;
+    },
+    _kbUnitOf(c) {
+      if (c.kind !== "show" && c.kind !== "ep") return null;
+      const want = c.kind === "show" ? "show|" + c.id : c.id;
+      return this._kbShowUnits().find((u) => u.id === want) || null;
+    },
+    _kbToggleSelect() {
+      const c = this.kbCursor;
+      if (!c) {
+        this._kbHint();
+        return;
+      }
+      if (c.kind === "group") {
+        const g = this._findGroup(c.id);
+        if (g) this.toggleGroupSel(g);
+        return;
+      }
+      if (c.kind === "torrent") {
+        this.toggleMemberSel({ hash: c.id });
+        return;
+      }
+      this._toggleUnit(this._kbUnitOf(c));  // 剧/集单元: 整单元切换(与鼠标 Ctrl+点击同语义)
+    },
+    _kbExtend(delta) {
+      this._kbMove(delta);  // 先移动光标, 再把锚点到新光标整段并入选择(锚点语义沿用既有实现)
+      const c = this.kbCursor;
+      if (!c) return;
+      if (c.kind === "group") {
+        this.shiftGroupSel({ key: c.id });
+        return;
+      }
+      if (c.kind === "torrent") {
+        this.shiftTorrentSel({ hash: c.id });
+        return;
+      }
+      const units = this._kbShowUnits();
+      this._extendUnit(units.find((u) => u.id === (c.kind === "show" ? "show|" + c.id : c.id)), units);
+    },
+    _kbSelectAll() {
+      if (this.viewMode === "torrents") {
+        this.selGroups = [];
+        this.selAnchorGroup = null;
+        this.selMembers = this.filteredTorrents.map((m) => m.hash);
+        return;
+      }
+      if (this.viewMode === "shows") {
+        const hashes = [];
+        for (const u of this._kbShowUnits()) hashes.push(...u.hashes);
+        this.selGroups = [];
+        this.selAnchorGroup = null;
+        this.selMembers = [...new Set(hashes)];
+        return;
+      }
+      this.selMembers = [];  // FX-11: 两类选择口径互斥
+      this.selAnchorMember = null;
+      this.selGroups = this.filteredGroups.map((g) => g.key);
+    },
+    /* 目标解析(计划 W3): 有选中走选中集合(_bulkTargets 同口径), 无选中用光标行;
+     * 虚拟组行(未归组命中)无组 key, 转为单种子命令(与 _bulkTargets 同处理)。 */
+    _kbTargets() {
+      if (this.selGroups.length || this.selMembers.length) return this._bulkTargets();
+      const c = this.kbCursor;
+      if (!c) return { groupKeys: [], memberHashes: [] };
+      if (c.kind === "group") {
+        const g = this._findGroup(c.id);
+        if (!g) return { groupKeys: [], memberHashes: [] };
+        if (g.virtual) return { groupKeys: [], memberHashes: g.members[0] ? [g.members[0].hash] : [] };
+        return { groupKeys: [c.id], memberHashes: [] };
+      }
+      if (c.kind === "torrent") return { groupKeys: [], memberHashes: [c.id] };
+      const unit = this._kbUnitOf(c);
+      return { groupKeys: [], memberHashes: unit ? [...new Set(unit.hashes)] : [] };
+    },
+    _kbTargetText(t) {
+      const n = t.groupKeys.length + t.memberHashes.length;
+      if (t.groupKeys.length === 1 && !t.memberHashes.length) return "整组";
+      if (t.memberHashes.length === 1 && !t.groupKeys.length) return "该种子";
+      return `${n} 个目标`;
+    },
+    /* ---------------- W4: 一级动作(危险档先确认, 鼠标路径不变, §08) ---------------- */
+    async _kbAct(action) {
+      const t = this._kbTargets();
+      if (!t.groupKeys.length && !t.memberHashes.length) {
+        this._kbHint();
+        return;
+      }
+      const what = this._kbTargetText(t);
+      if (action === "recheck") {
+        const ok = await this.confirmDialog("重新校验",
+          `将对${what}重新校验: 全量重读磁盘并校验完整性, 大库上耗时长且不可中断。`, { okText: "确定" });
+        if (!ok) return;
+      } else if (action === "reannounce") {
+        const ok = await this.confirmDialog("强制汇报",
+          `将向 tracker 强制汇报${what}。频繁误触可能触发站点限流或警告。`, { okText: "确定" });
+        if (!ok) return;
+      }
+      return this._actCore(action, { keys: t.groupKeys, hashes: t.memberHashes });
+    },
+    /* 删除: 与批量浮条(bulkDelete)同一条 _deleteFlow 链(确认框 + HR 风险点名 + 汇报前置),
+     * 键盘双入口之二(D8 默认键 Shift+D 与本 Delete 直连, 注册表外, §08 决策 v4)。 */
+    async _kbDelete() {
+      const t = this._kbTargets();
+      if (!t.groupKeys.length && !t.memberHashes.length) {
+        this._kbHint();
+        return;
+      }
+      const parts = [];
+      if (t.groupKeys.length) parts.push(`${t.groupKeys.length} 个${this.l10nGroup}`);
+      if (t.memberHashes.length) parts.push(`${t.memberHashes.length} 个种子`);
+      const countText = parts.join("、");
+      const seen = new Set();  // 种子数(组展开去重)与批量删除同口径
+      for (const k of t.groupKeys) {
+        const g = this._findGroup(k);
+        if (!g) continue;
+        if (g.virtual) {
+          if (g.members[0]) seen.add(g.members[0].hash);
+        } else {
+          for (const m of g.members || []) seen.add(m.hash);
+        }
+      }
+      for (const h of t.memberHashes) seen.add(h);
+      await this._deleteFlow({
+        keys: t.groupKeys,
+        hashes: t.memberHashes,
+        title: `删除 ${countText}`,
+        body: `将删除选中目标内的全部种子, 共 ${seen.size} 个。建议删除前先向 tracker 汇报, 避免留下未汇报的 H&R 记录。`,
+        countText,
+        label: countText,
+      });
+    },
+    _kbOpenDrawer() {
+      const c = this.kbCursor;
+      if (!c) {
+        this._kbHint();
+        return;
+      }
+      if (c.kind === "torrent") {
+        this.openTorrentDrawer(c.id);
+        return;
+      }
+      if (c.kind === "group") {
+        const g = this._findGroup(c.id);
+        const h = g && g.members && g.members[0] ? g.members[0].hash : "";
+        if (h) this.openTorrentDrawer(h);
+      }
+    },
+    _kbMeta() {
+      if (this.selGroups.length || this.selMembers.length) {
+        this.openMetaDialog(null);  // 有选中传 null = 整个选中集合(与批量浮条同口径)
+        return;
+      }
+      const c = this.kbCursor;
+      if (!c) {
+        this._kbHint();
+        return;
+      }
+      if (c.kind === "torrent") {
+        this.openMetaDialog(c.id);
+        return;
+      }
+      const unit = this._kbUnitOf(c);
+      if (unit && unit.hashes.length) {
+        this.openMetaDialog({ groupKeys: [], memberHashes: [...new Set(unit.hashes)] });
+        return;
+      }
+      const g = c.kind === "group" ? this._findGroup(c.id) : null;
+      if (g && !g.virtual) this.openMetaDialog({ groupKeys: [c.id], memberHashes: [] });
+    },
+    _kbOpenFolder() {
+      const c = this.kbCursor;
+      if (!c) {
+        this._kbHint();
+        return;
+      }
+      if (c.kind === "group") {
+        const g = this._findGroup(c.id);
+        if (g && !g.virtual) this.openTargetPath("group", c.id);
+        return;
+      }
+      if (c.kind === "torrent") this.openTargetPath("torrent", c.id);
+    },
+    _kbFocusSearch() {
+      const el = this.$refs.searchInput;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    },
+  },
+};

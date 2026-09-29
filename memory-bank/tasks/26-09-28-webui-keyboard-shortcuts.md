@@ -1,6 +1,6 @@
 # 26-09-28-webui-keyboard-shortcuts — WEBUI 键盘快捷键(可自定义): 成熟方案调研 + 存储定案
 
-**Status:** Ready (拍板齐, 待实施)
+**Status:** In Progress
 **Added:** 2026-09-28
 **Updated:** 2026-09-30
 **Summary:** 前案 26-09-26-0822 (localStorage 预选) 经成熟方案调研与存储对比后被 26-09-28-0354 取代(0822 置 Superseded): 定案后端独立文件 auto-qb-data/webui-keys.json + GET/PUT /api/keys(金清单+2); 引擎不引库自写 ~200 行(tinykeys 为参照), 沿 0822 注册表/e.code/作用域/三段屏蔽设计; 自定义面板进设置页「快捷键」分区 + ? 浮层。§08 六决策点已全部拍板(2026-09-30, ① 五轮收敛至 v4 终版): ①危险档一律二键组合(修饰键+字母, 非裸键非三键)+确认框兜底(默认确定/Enter 确认)—— 删除=Shift+D(另有 Delete 键作为额外删除操作无需绑定, 直连 _deleteFlow, 即删除双快捷键入口), 重新校验=Shift+Y, 强制汇报=Shift+A; 裸键 D/C/F 释放空位; ②光标只走组行; ③Shift 族保留; ④不加顶栏按钮; ⑤取消一次做完, W1-W4 第一波先行、W5-W7 第二波; ⑥后端文件。注册表 58 条(52 默认+6 空位)。存储 schema 预埋 {template, overrides}, 绑定模板机制确认缓议仅预埋(§4.7)。
@@ -30,8 +30,8 @@
 | 1 | 前案 0822 可行性分析 | Done (26-09-26) |
 | 2 | 成熟方案调研(产品/库/坑/上游) + 存储对比分析 → 计划 26-09-28-0354 | Done |
 | 3 | §08 六个决策点拍板(核心: 存储定案) | Done (2026-09-30 全部拍板, ①③改向见进度日志) |
-| 4 | W1-W7 实施 | Pending |
-| 5 | 收尾回写(基线/progress/pitfalls) | Pending |
+| 4 | W1-W7 实施 | In Progress (W1-W4 Done 2026-09-30, 未提交; W5-W7 待开工) |
+| 5 | 收尾回写(基线/progress/pitfalls) | In Progress (当波基线切片已立; 全波收尾待 W7) |
 
 ## 进度日志
 
@@ -41,3 +41,7 @@
 - 2026-09-30 ①⑤再改向 (v3): ①取消 Ctrl+Alt 三键, 以单手操作为主 —— 危险操作回到单键默认 + 确认框兜底: 删除=Delete 键(上游对齐, 字母 D 释放为空位), 重新校验还原 C, 强制汇报还原 F; 面板 danger 条目改回 0822 §06 口径「⚠ 单键触发 (有确认框)」标注, 不再拒绑裸键。⑤取消「W1-W7 一次做完」, 按原拆口: W1-W4 第一波(默认键位), W5-W7 第二波。模板机制确认缓议·仅预埋(schema {template, overrides} 不变)。
 - 2026-09-30 ① v3 修正: 危险档选键仅两条(重新校验 C / 强制汇报 F); Delete 键算额外的删除操作, 无需绑定 —— 不占键表槽位、不进注册表与面板改键列表, 引擎里直连 _deleteFlow; 字母 D 释放为空位。注册表 58→57 条(51 默认+6 空位)。计划 §08/§5.1/W4/§07 已联动修正。
 - 2026-09-30 ① 终版 v4: 危险操作一律二键组合(一个修饰键+字母; 非裸键、非三键), Delete 也算危险操作且保留额外操作身份 —— 删除绑定两个快捷键: Shift+D(注册表默认) + Delete(额外操作, 无需绑定直连 _deleteFlow); 重新校验=Shift+Y(验), 强制汇报=Shift+A(reAnnounce); 均确认框兜底(默认确定/Enter)。裸键 D/C/F 释放空位; 注册表回到 58 条(52 默认+6 空位); 面板 danger 条目标「⚠ 危险操作 (有确认框)」, 自绑裸键提示但允许。计划 §08/§5.1/§5.2/W4/§07 已联动修正。
+- 2026-09-30 05:55 **W1-W4 第一波实施完成, 未提交**(等用户「提交」指令): shared/shortcuts.js 新增(引擎 e.code 归一化 + 六道拦截 + 黑名单 + 注册表 + 适配器桩 window.AQB_KEYS 内存实现 + 光标/目标解析/键位动作); 光标滚动进视口走 getBoundingClientRect 差值 + columns._rowWindow 留存 _rowPre(禁 scrollIntoView, hover-keynav-fight 坑档); commands._actCore 抽取, act/actTorrent/bulkAct/actEpisode 四入口收敛(端点按目标形态路由, recheck 恒 bulk/单种子种子级); Delete 直连 _kbDelete->_deleteFlow(注册表外, §08 v4); 模态确认框默认焦点落「确定」(ref=modalOk, Enter 即确认)。当波守阵 tests/test_web_shortcuts.py 10 条; test.full **1802 passed + 3 skipped / 91%**(基线 [26-09-30-0555](../testing/baselines/26-09-30-0555-webui-keyboard-w1w4.md)); Playwright 探针 30 项功能验证全过(光标/选择/危险档确认框/输入态屏蔽/设置页不串扰)。
+  - 与计划文字偏差两处: ①注册表落地 55 条(51 默认+4 空位)而非 58 —— H2(面板 Esc)归 W6 面板自身不进注册表; I 组文件优先级 x4 / 按列排序未注册(0822 自评「需二层光标, 复杂度不划算」/「绑键不现实」), W6 面板动工时再议补齐。②危险档确认框无逐条接线 —— 模态原语统一实现默认焦点+Enter 确认(§08 对确认框的要求由 _openModal 单点满足, 删除类既有确认框同样受益)。
+  - 实施前既有红 3 条(计划会话遗留, 已修): 任务档案 Status「Ready」与计划 doc-status「拍板齐, 待实施」不在守阵词表 → 改 In Progress + kb.index 重建。
+  - 冒烟既有失败 3 项(dev.harness, stash 前后对照确认先在、与本波无关): 追剧集行 CTX-03 多选右键(确定性)、辅种组行 CTX-03(抖动)、列设置隐藏列宽保留(确定性) —— 未修(范围守恒), 已入池 issues/26-09-30-0602-test-ui-smoke-ctx03-multiselect 与 26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve(2026-09-30)。

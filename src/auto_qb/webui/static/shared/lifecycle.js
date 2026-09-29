@@ -19,6 +19,10 @@ window.AQB_LIFECYCLE = {
     this._winGap = {};
     this._winRaf = 0;      // 滚动合帧句柄
     this._winListening = false;
+    // 键盘快捷键(计划 26-09-28-0354 W1): 生效键表缓存(非响应式, W6 改键时失效)与
+    // _rowWindow 前缀和留存(光标滚动进视口用, 见 columns.js)都是纯缓存, 刻意不进 data
+    this._kbTableCache = null;
+    this._rowPre = {};
   },
   async mounted() {
     /* P1-2: 视口高度 + 页面滚动监听(被动 + rAF 合帧, 滚动本身不做任何布局读取) */
@@ -66,6 +70,10 @@ window.AQB_LIFECYCLE = {
       else if (this.expandedShowEp) this.expandedShowEp = null;  // 兜底: 收起追剧集展开
       else if (this.expandedShows.length) this.expandedShows = [];  // 兜底: 收起追剧剧展开
     });
+    // 键盘快捷键引擎(计划 26-09-28-0354 W1): 必须注册在 Esc 退栈链**之后**(注册序 = 触发序);
+    // 引擎自身对 Escape 也直接放行, 双保险。句柄存实例, unmounted 撤掉防热重载堆叠。
+    this._kbKeyDown = (e) => this._kbOnKeyDown(e);
+    document.addEventListener("keydown", this._kbKeyDown);
     // 生效宽度: 全自动页按当前渲染现算(见 recomputeEffective); 窗口变化后重算, 保持
     // "填满容器 + 自适应"的观感; 固化页(colW 非空)用意图值, 不随窗口变(拖一列不再影响其它列)
     let resizeTimer = null;
@@ -148,6 +156,11 @@ window.AQB_LIFECYCLE = {
   },
   unmounted() {
     this.stopEvents();  // P2: 断开 SSE(否则热重载后句柄堆叠)
+    // 键盘快捷键引擎(计划 26-09-28-0354 W1): keydown 监听随组件销毁撤掉(同上, 防堆叠)
+    if (this._kbKeyDown) {
+      document.removeEventListener("keydown", this._kbKeyDown);
+      this._kbKeyDown = null;
+    }
     // P1-2: 滚动/缩放监听随组件销毁撤掉(否则热重载后句柄堆叠, 滚动一次算 N 次)
     if (this._winListening) {
       window.removeEventListener("scroll", this._onWinScroll);

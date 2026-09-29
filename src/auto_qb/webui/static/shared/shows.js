@@ -101,55 +101,14 @@ window.AQB_SHOWS = {
       const ep = this.menu.episode || {};
       const hashes = ep.hashes || [];
       if (!hashes.length) return;
-      const what = ep.scope === "show" ? "整剧" : "整集";
-      const label = this._actionText(action);
-      const isRe = action === "reannounce";
-      // P0-4: pause/resume 合单为一条 bulk 命令 —— 整剧动辄上百集, 逐条投递要发上百次请求
-      if (!isRe) {
-        const t0 = this._newCmdStats(action);
-        // P0-3: 与整组/单种子同一条乐观链路(整集/整剧此前**完全没接**, 点了没有任何即时反馈)
-        this.applyOptimistic(hashes, action);
-        this._markCmdPatch(t0);
-        try {
-          const resp = await this.api("/api/torrents/bulk", {
-            method: "POST",
-            body: JSON.stringify({ action, hashes }),
-          });
-          this._markCmdPost(t0);
-          const r = await this.waitCmd(resp.cmd_id);
-          this.resolveOptimistic(hashes, r.ok);
-          /* D2: 与 commands.js 三处保持一致 —— 真值由 `truth` 事件推送, 不再拉全量。
-           * !这里原先漏改, 追剧页集行还在走 1500ms 拉取预算, 撤下比种子页慢一大截。
-           * !只在成功时标 receipt: 失败那一路是回滚, 标它会把 [perf] 里的路径判据带偏。 */
-          if (r.ok && this.cmdStats) this.cmdStats.settleVia = "receipt";
-          if (r.ok) this.toast(`已执行: ${label}${what}(${hashes.length} 个种子)`, "ok", 2500);
-          else this.toast(`${label}${what}失败: ${r.error}`, "error", 8000);
-        } catch (e) {
-          this.resolveOptimistic(hashes, false);  // 发送失败: 同样回滚, 不留假状态
-          if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
-        }
-        return;
-      }
-      const tid = this.toast(`强制汇报等待中…(${hashes.length} 个目标, tracker 确认最长 30s)`, "busy", 0, { sticky: true });
-      const results = await Promise.allSettled(
-        hashes.map((h) =>
-          this.api(`/api/torrents/${h}/${action}`, { method: "POST" }).then((r) =>
-            this.waitCmd(r.cmd_id, 40000, { firstMs: 500, capMs: 1000 })
-          )
-        )
-      );
-      const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
-      if (!fails.length) {
-        this._finishToast(tid, "ok", `强制汇报成功(tracker 已确认, ${hashes.length} 个目标)`, 3000);
-        return;
-      }
-      const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
-      this._finishToast(
-        tid,
-        "timeout",
-        `强制汇报: 成功 ${hashes.length - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`,
-        6000
-      );
+      // 计划 26-09-28-0354 W3: 动作链收敛进 commands.js::_actCore(与整组/单种子/批量同一出口),
+      // 这里只按整集/整剧语义传入 toast 文案; 乐观补丁与回执链与原来逐字一致
+      return this._actCore(action, {
+        keys: [],
+        hashes,
+        what: ep.scope === "show" ? "整剧" : "整集",
+        countSuffix: `(${hashes.length} 个种子)`,
+      });
     },
     /* 删除整集/整剧(全部版本; FX-13 起两者共用): 目标名与种子数进 body, 详情行由 _deleteFlow 统一派生 */
     async delEpisode() {

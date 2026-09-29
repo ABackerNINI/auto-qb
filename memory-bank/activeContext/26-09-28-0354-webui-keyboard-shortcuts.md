@@ -1,12 +1,23 @@
-# WEBUI 键盘快捷键 · 成熟方案调研 + 存储定案 (计划 26-09-28-0354, 取代 0822)
+# WEBUI 键盘快捷键 · W1-W4 第一波已实施(引擎/光标/_actCore/A-D 绑定) → 待提交 + W5-W7 第二波
 
-> 摘要: 用户令为 WEBUI 加键盘快捷键(可自定义, 自定义进设置页), 并要求对「后端独立文件 vs localStorage」做对比分析。调研结论: 逐条重映射只有 Gmail/VS Code/JupyterLab 三家且无一 localStorage-only; 库横评后定「自写引擎 + tinykeys 作参照」; 存储定案建议**后端独立文件 auto-qb-data/webui-keys.json + GET/PUT /api/keys**(0822 的「服务端持久化=config.yml 红线」是假二分; localStorage 失效通道已在列偏好上实坑)。计划 26-09-28-0354 落档, 0822 置 Superseded; W1-W7 修订波次 + 6 决策点建议案(§08)。本轮只计划不改代码, 未提交。
-> 最后活动: 2026-09-30 (§08 六项全部拍板)
+> 摘要: 计划 plans/26-09-28-0354 §06 W1-W4 全量落地(2026-09-30, 未提交)。**W1 引擎**
+> shared/shortcuts.js: e.code+固定修饰序归一化 / IME isComposing+229 双保险 / 输入元素+模态层
+> 屏蔽 / repeat+纯修饰键+defaultPrevented 前置 / 保留键黑名单 / 注册表单一事实源 / 适配器桩
+> window.AQB_KEYS.load 内存实现(W6 换 GET/PUT /api/keys 引擎零改动)。**W2 光标**: kbCursor 按
+> 身份不按下标(根选项 data), 滚动进视口 getBoundingClientRect 差值 + _rowWindow 留存 _rowPre
+> 前缀和(**禁 scrollIntoView**)。**W3 统一出口**: commands._actCore, act/actTorrent/bulkAct/
+> actEpisode 四入口收敛(端点按目标形态路由; recheck 恒 bulk; reannounce 恒逐目标)。
+> **W4 绑定**: A-D 组 30 条默认键位(§08 v4 危险档二键 Shift+D/Y/A + 键盘路径 confirmDialog),
+> Delete 直连 _kbDelete->_deleteFlow(注册表外), 模态确认框默认焦点「确定」(ref=modalOk,
+> Enter 即确认)。守阵 tests/test_web_shortcuts.py 10 条; test.full 1802 passed / 91%;
+> Playwright 探针 30 项功能验证全过。注册表落地 55 条(51 默认+4 空位), 与计划 58 的偏差见档案。
+> 最后活动: 2026-09-30 05:55 (W1-W4 完成, 全量 1802 passed, 未提交)
 
 ## 正在进行
 
-- §08 六个决策点已全部拍板 (2026-09-30, ① 五轮收敛至 v4 终版): ①危险档一律二键组合(修饰键+字母, 非裸键非三键)+确认框兜底(默认确定/Enter) —— 删除=Shift+D(+Delete 额外操作无需绑定, 双入口), 重新校验=Shift+Y, 强制汇报=Shift+A; 裸键 D/C/F 释放空位; 注册表 58 条(52 默认+6 空位); ②组行线性链; ③Shift 族保留; ④不加顶栏; ⑤W1-W4 第一波先行, W5-W7 第二波; ⑥后端 webui-keys.json。计划状态「拍板齐, 待实施」。
-- 下一步: W1-W4 第一波开工 (引擎+注册表+适配器桩 → 光标模型 → _actCore 抽取 → A-D 组绑定; 开工前先 `commands run my-commit-flow.sync`)。绑定模板机制确认缓议·仅预埋 (§4.7, schema {template, overrides} 已预埋)。
+- **W1-W4 已完成待提交**(基线 [26-09-30-0555](../testing/baselines/26-09-30-0555-webui-keyboard-w1w4.md)); 改动面 22 文件: 新增 shortcuts.js + test_web_shortcuts.py, 接线 app.js/三 index.html/lifecycle/state/columns/console_hub.css, 重构 commands/shows/dialogs, 模板 groups/torrents/shows/popovers。
+- 下一步: ①用户「提交」指令走 ship.commit; ②W5-W7 第二波(E-H 组接线 + 局部作用域 drawer/settings + Esc 链尾 + 后端 webui-keys.json + GET/PUT /api/keys + 金清单+2 + 自定义面板/录制器 + 收尾守阵/真机走查/文档回写), 开工前先 sync。
+- 冒烟既有失败 3 项(先在, stash 对照确认, 已入池 26-09-30-0602-test-ui-smoke-ctx03-multiselect(前两条) 与 26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve(第三条)): 追剧集行 CTX-03 多选右键(确定性) / 辅种组行 CTX-03(抖动) / 列设置隐藏列宽保留(确定性)。
 
 ## 关键决策
 

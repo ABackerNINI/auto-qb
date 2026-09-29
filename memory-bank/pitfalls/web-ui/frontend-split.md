@@ -23,6 +23,19 @@
 - **处置**: 根组件的 data/computed/watch 在 `state.js`、生命周期在 `lifecycle.js`, 经 app.js 的 `...window.X` **展开进 createApp 根选项**(只命中根); 方法域(auth/polling/view 与业务片段)才走全局 mixin。接线由 `_scan_mixin_wiring` 形态④钉住(只认 app.js 内 `...window.X` 展开, 不放宽)。
 - **守阵**: `test_frontend_mixin_wiring`(挂 test_frontend_static_bundle_health)。
 
+### 片段文件里定义「非 mixin 的 window.* 单例」会被接线守阵判漏注入
+
+- **触发**: 在 shared/*.js 片段里定义一个**不是 Vue mixin** 的全局单例(如快捷键存储适配器
+  `window.AQB_KEYS`)供同文件或跨文件直接消费。
+- **判别**: `_scan_mixin_wiring` 只认 `^window\.(\w+) = \{` 字面量形态并要求它被
+  app.mixin/app.component/`...window.X`/Object.assign 基座四种形态接线 —— 适配器这类「被 JS
+  直接调用」的单例不在名单里, pytest 直接红「定义了 window.X 但 app.js 没有 app.mixin(window.X)
+  (片段漏注入)」。它不是守阵误报要放宽, 而是书写形态约定。
+- **处置**: 写成 `const X_ADAPTER = {...}; window.X = X_ADAPTER;`(赋值右侧不是 `{` 字面量,
+  守阵不命中), 并在注释里写明「这是被直接消费的单例, 不走 app.mixin」。键盘快捷键 W1 实测
+  (shortcuts.js AQB_KEYS, 2026-09-30); W6 后端存储接入时同形态。
+- **复发**: 0
+
 ### 再拆前端大文件: 等价性验证 = 切割自验 + 真 API stub 冒烟 DOM 比对
 
 - **触发**: 拆任何模板/样式/JS 大文件时(W1/W2a/W2b 已各有一套, 复用方法)。

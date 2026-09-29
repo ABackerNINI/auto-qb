@@ -170,6 +170,10 @@ window.AQB_STATE = {
       // 多选(分组表/明细表): Ctrl/⌘+点击切换, Shift+点击锚点范围; 普通点击行为不变(组=展开)
       selGroups: [],          // 选中组 key
       selMembers: [],         // 选中成员 hash
+      // 键盘光标行(计划 26-09-28-0354 W2): {kind, id} —— kind ∈ group|torrent|show|ep,
+      // 按身份不按下标(轮询整表替换/排序后由 _kbMove 按身份重定位); 视觉为虚线描边,
+      // 与选中底色是两套语义, 不合并(0822 §04)
+      kbCursor: null,
       selAnchorGroup: null,   // 分组表 Shift 锚点(组 key; shift 后不更新, 便于多次扩展同一范围)
       selAnchorMember: null,  // 明细表 Shift 锚点(成员 hash)
       selAnchorUnit: null,    // FX-12: 追剧页 Shift 锚点(剧/集单元 id)

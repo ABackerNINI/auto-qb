@@ -483,5 +483,6 @@ app.mixin(window.CONFIG_HUB);
 app.mixin(window.AQB_AUTH);
 app.mixin(window.AQB_POLL);
 app.mixin(window.AQB_VIEW);
+app.mixin(window.AQB_SHORTCUTS);  // 键盘快捷键引擎(计划 26-09-28-0354 W1; data 在 state.js / 监听在 lifecycle.js)
 app.component("hub-field", window.HUB_FIELD_COMPONENT);
 app.mount("#app");
