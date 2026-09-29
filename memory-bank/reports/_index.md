@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-09-29-1803] [HR 计数: 数据完整性的校验和 — 可行性分析](26-09-29-1803-report-hr-counter-verify.html) — `backend-partial-hr-verify`
 - [26-09-29-0404] [HR 在线核实 v3 · 重构后全面复审(安全/稳定性/缺陷) · 审查报告 · auto-qb](26-09-29-0404-report-hr-verify-v3-audit.html) — `backend-partial-hr-verify`
 - [26-09-28-2345] [WEBUI 表格列对齐审计 · auto-qb](26-09-28-2345-report-webui-column-alignment.html) — `webui-column-alignment`
 - [26-09-28-0030] [HR 在线核实 v2 · 实施核对 + 安全/稳定性审计 · 审查报告 · auto-qb](26-09-28-0030-report-hr-verify-v2-impl-audit.html) — `backend-partial-hr-verify`

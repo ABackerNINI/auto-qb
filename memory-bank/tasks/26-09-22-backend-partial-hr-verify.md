@@ -42,7 +42,7 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
 单频控三键 + 熔断/停用/退避全删(档位级数据有效性截断式, 证据无时效 — 整波覆盖证据与两级证据年龄退役; 排序失效 = 强制早停立即停翻(之前数据有效, 等下周期))+ 证据防伪三道校验(A 档流转守恒: 上波考察中行在本波 A/B/C 留存 ≥0.7 首要; 总行数骤降 30% 粗保险; 零行对账戳)+ 失踪观察期(22:38 收紧: 失踪者一律当作无证据 — 无小样本豁免无快路径; streak 用局部覆盖证明推进 2 波判移出, 与整波校验解耦防死锁; 行 4 特例: 没看到不终结考察中); 22:15 梳理轮修 17 处漂移并补齐骤降保护/空对象集两个完备性缺口(§3 重编号 3.3 超额线/3.4 证据健康);
 配置 40→14 键(completed_age_limit/auto_age_limit/seeding_exempt_ratio/hr_page_scopes/accept_empty_listing/quota_model/mode/unknown_policy 全删); M1-M5 里程碑与验收判据见计划 §8; v2 审计 F1-F4 由该计划整体消解。
 **Topics:** backend-partial-hr-verify
-**Refs:** memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html, memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html
+**Refs:** memory-bank/reports/26-09-29-1803-report-hr-counter-verify.html, memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html, memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html
 
 ## 原始请求
 
@@ -87,6 +87,10 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
 | v2 实施核对 + 安全/稳定性审计 | **Done** (纯审计, 代码未动) | 2026-09-28 00:30: 报告 [26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) —— M5.1-M5.5 共 33 项逐条以 file:line 核对全落地; 安全面五道边界/稳定性六维度全核对; 新发现 F1(P2)/F2(P3)/F3(P3)/F4(P4) 见报告 §2 与切片「未完成」; 处置待用户拍板 |
 
 ## 进度日志
+
+- **2026-09-29 (HR 计数可行性分析 —— 纯文档轮)** — 用户问「HR 页计数能否佐证完整性/简化模型/增强安全稳定」。报告出厂
+  [reports/26-09-29-1803-report-hr-counter-verify.html](../reports/26-09-29-1803-report-hr-counter-verify.html) —— 结论: 计数是清单的
+  校验和非替代品, 补绝对量轴堵 B/C 档批量误放行洞; 用户实测两站均有计数(CarPT 存档分页区间 1-17 对平实证); 裁决点 D1-D4 待拍板, 未动代码。
 
 - **2026-09-29 (v3 波次模型重建 M1–M5 全落地 —— 代码大改轮)** — 用户令「按照计划重构 HR 在线核实
   26-09-28-1932」。五步一次落完: **M1** 判定重写(`resolve.py` 四行判定表, HrIdentity 收敛三态
@@ -191,13 +195,7 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
   基线切片 26-09-27-2035; 主计划 §15 v3.6 + 计划 1815 v1.2 已回写。**未提交**(等用户显式指令);
   真机走查 + M0 前置实测三项(排序倒序 / P 恒定 / 英文站分页)仍开放。
 
-- **2026-09-27 18:15 (v2 修改计划产出: 审计报告 26-09-26-1628 转化为 plans/26-09-27-1815 —— 纯文档,
-  代码未动; 含承接不重证 / P1-P3 缺口补齐 / 三个实施设计点 / D1-D10 拍板汇总 / 认领链踩坑复发 +1 /
-  v1.1 骤降判据细化)** — 原文已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md]
-  (attachments/26-09-22-backend-partial-hr-verify-log.md)(档案触顶处置); 摘要见 activeContext 切片。
-- **2026-09-27 12:54 (提交轮: 合并远端 + 合并树重测零漂移) 与 12:46 (v3.5 补验: 已达标样张验证 + 「双 id 空间」真缺陷修复
-  —— H&R ID 与种子 id 是两个空间, dl_id 落地) 两条日志已外迁**: [attachments/26-09-22-backend-partial-hr-verify-log.md]
-  (attachments/26-09-22-backend-partial-hr-verify-log.md)(档案触顶处置); 摘要见 activeContext 切片「已交付 · v3.5」。
+- **2026-09-27 18:15 (v2 修改计划产出 = plans/26-09-27-1815) 与 12:54/12:46 (提交轮 + v3.5 补验「双 id 空间」真缺陷修复) 三条日志已外迁**: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md)(档案触顶处置); 摘要见 activeContext 切片。
 - （本段更早的进度纪要已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md) —— 触顶处置见 `.agents/skills/memory-bank/scripts/_common.py` 的 `TASK_LOG_CAP`）
 
 - **2026-09-29 (v3 跟进修复: WEBUI 站点接入卡片 mode→enabled 口径)** — v3 重构(be83d61)把
