@@ -333,6 +333,7 @@ window.AQB_DIALOGS = {
       }
     },
     openMetaCatMenu() {
+      this.metaCatMouseAt = null;  // 开层复位悬停门限坐标(同 addCatMouseAt)
       this.metaCatHi = this.metaCategories.indexOf(this.metaCatInput.trim());
       this.metaCatMenu = true;
       this._hiScroll("metaCatList");

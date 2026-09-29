@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="dialog-hover-keynav-fight">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="弹窗分类/标签下拉仍是 mouseenter 高亮 + 键盘活动项同源并存(站点搜索闪烁同族)">
 <meta name="issue-summary" content="add_torrent/dialogs 的分类/标签下拉沿用 @mouseenter 直写高亮 + 键盘 ArrowDown/Up 活动项, 与站点搜索已修的闪烁同族(静止光标合成 hover 事件夺高亮)">
 <title>弹窗分类/标签下拉仍是 mouseenter 高亮 + 键盘活动项同源并存(站点搜索闪烁同族) · bug · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修 · 2026-09-29 23:16 认领并验证）· bug</div>
     <h1>弹窗分类/标签下拉仍是 mouseenter 高亮 + 键盘活动项同源并存(站点搜索闪烁同族)</h1>
     <p class="lede">add_torrent/dialogs 的分类/标签下拉沿用 @mouseenter 直写高亮 + 键盘 ArrowDown/Up 活动项, 与站点搜索已修的闪烁同族(静止光标合成 hover 事件夺高亮)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-29-2142-bug-dialog-hover-keynav-fight</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-29 21:42</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,21 @@ src/auto_qb/webui/static/shared/add_torrent.js:141:      const hiKey = kind === 
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-29 21:42 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-29 22:56 — 认领（用户指派），状态 <strong>In Progress</strong>；先真机复验（重点：Enter 落点是否被光标行拽走），再按 §06 实施（mousemove + 3px 门限接管，抽共享小工具，CSS 单路高亮）</li>
+      <li>2026-09-29 23:16 — 修复完成，状态 <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p>未开工；认领后先真机复验闪烁是否实际发生（重点验 Enter 落点），再按 §06 动手。</p>
+    <p>2026-09-29 23:00 前后真机复验（ui_harness 桩 + Playwright 真实点击/悬停/键盘，注入 40 个分类使列表必滚）：改前 ↓×16 高亮轨迹 <code>[1,2,3,4,5,<strong>1</strong>,…,7,<strong>3</strong>,…]</code> 两次被拽回光标行，终值 6（键盘期望 16），<strong>Enter 实选光标行 cat-06 而非键盘到达的 cat-16</strong> —— 现象坐实且比入池推定更重（不止闪烁，实选错；错误分类会提交进添加请求）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（2026-09-29 23:16，与 §06 同向，落点微调）：</p>
+    <ul>
+      <li>悬停接管：<code>@mousemove</code> + 3px 位移门限抽成共享小工具 <code>comboHoverIdx(kind, i, ev)</code>（add_torrent.js，分类/标签/编辑分类三处共用 —— §06「别三处各抄一份」照做）；门限坐标 <code>*MouseAt</code> 按下拉分存 state.js，开层单点复位（openAddCatMenu/openAddTagMenu/openMetaCatMenu；键盘 / @input 开层路径<strong>故意不复位</strong> —— 静止光标的旧坐标恰是保护，复位反而制造「坐标 null = 任何事件都接管」的夺高亮窗口）。</li>
+      <li>CSS 单路高亮：§06 说「CSS 摘 <code>:hover</code>」，实际改为 <strong>data-hi 行定点中和</strong> <code>.pop-item[data-hi]:not(.on):hover</code>（三皮肤）—— <code>.pop-item:hover</code> 是共享组件样式，列菜单/UI 切换器等无键盘导航的菜单仍靠它做悬停反馈，全局摘除伤及无辜。</li>
+      <li>范围说明：路径下拉（addPathHi）同为 data-hi 行，被同一条 CSS 覆盖一并单路化 —— 它无 mouseenter 直写、不在本条现象内，属同族预防。</li>
+      <li>不改 <code>_hiScroll</code>（scrollIntoView(block:nearest) 与 hover-keynav-fight 处置④相悖，但滚跟随已工作、程序滚动可能补发的合成事件已被门限挡住，换差值法属另一范畴）。</li>
+    </ul>
+    <p><strong>验证方式</strong>：同一 Playwright 驱动改前/改后 A/B —— 改后 ↓×16 轨迹 1→16 纯净零回跳，Enter 正确选中 cat-16，零位移合成 mousemove 被 3px 门限挡住；守阵 <code>test_frontend_dialog_combo_hover_takeover</code> 落地并红验（临时改坏接线确认能红）。</p>
+    <p><strong>测试数字</strong>：<code>test.full 1760 passed + 2 skipped / 91%</code>（12480 语句 / 999 未覆盖，30.90s，rc=0），基线切片 <a href="../testing/baselines/26-09-29-2316-webui-dialog-hover-keynav.md">26-09-29-2316</a>。</p>
   </section>
 
   <footer>

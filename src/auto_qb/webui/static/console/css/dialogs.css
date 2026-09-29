@@ -120,6 +120,10 @@
 .add-pop { top: calc(100% + 4px); width: 100%; z-index: 60; }
 .add-pop-list { max-height: 210px; overflow-y: auto; }
 .add-pop-item { cursor: pointer; }
+/* 键盘活动项行(data-hi 行)摘掉 hover 高亮: 高亮只走 .on 一条路 —— 治「上下键选中项闪烁」
+ * (pitfalls/web-ui/hover-keynav-fight); 悬停接管在 comboHoverIdx(@mousemove + 3px 位移门限)。
+ * color 与 .pop-item 基础色一致(中性化到无悬停观感), :not(.on) 保证活动项自身不被中和 */
+.pop-item[data-hi]:not(.on):hover { background: transparent; color: var(--fg-soft); }
 /* 文件选择按钮(隐藏原生 input)与已选文件 chips */
 .add-dialog-filepick { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
   border: 1px dashed var(--border-strong); background: var(--surface-1); color: var(--fg-muted); font-size: 13px;

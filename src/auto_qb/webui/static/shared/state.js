@@ -204,6 +204,8 @@ window.AQB_STATE = {
       addTagMenu: false,      // 标签下拉展开态
       addCatHi: -1,           // 分类下拉键盘高亮
       addTagHi: -1,           // 标签下拉键盘高亮
+      addCatMouseAt: null,    // 悬停接管门限坐标(comboHoverIdx, 治上下键选中项闪烁 26-09-29-2142)
+      addTagMouseAt: null,    // 同上(标签下拉)
       addPathOptions: [],     // DLG-04: 保存路径候选(GET /api/paths, 已排序去重)
       addPathPop: false,      // DLG-04: 选择位置面板展开态
       addPathHi: -1,          // 位置面板键盘高亮
@@ -263,6 +265,7 @@ window.AQB_STATE = {
       metaCatInput: "",      // 分类输入框(自由输入 + 下拉候选; 回车/候选点击应用)
       metaCatMenu: false,    // 分类下拉展开态
       metaCatHi: -1,         // 分类下拉键盘高亮
+      metaCatMouseAt: null,  // 悬停接管门限坐标(comboHoverIdx, 同 addCatMouseAt)
       metaNewTags: "",       // 新标签输入(逗号分隔可批量)
       metaBusy: false,       // 有命令在飞(防误关 + 防重复投递)
     };

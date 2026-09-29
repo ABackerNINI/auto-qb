@@ -69,7 +69,7 @@
                   </div>
                   <div v-for="(c, i) in metaCatFiltered()" :key="c" class="pop-item add-pop-item"
                        :class="{ on: i === metaCatHi }" :data-hi="i === metaCatHi ? '1' : '0'"
-                       @mousedown.prevent="metaSetCategory(c)" @mouseenter="metaCatHi = i">
+                       @mousedown.prevent="metaSetCategory(c)" @mousemove="comboHoverIdx('meta', i, $event)">
                     <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
                     <span class="pop-value">{{ c }}</span>
                   </div>

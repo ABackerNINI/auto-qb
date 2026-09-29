@@ -43,6 +43,7 @@
 - test_sites_missing_api_failure_maps_502: 扫描中途 qB 调用失败 -> 502 带原因(不裸 500)
 - test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志
 - test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \\p{L}\\p{N}(u 标志, ASCII \\W 折碎中文词) + 收层路径四条一律清词单点(点命中/Esc/点暗幕/点外即收; 方案C 聚焦层 2026-09-29 拍板) + 聚焦层开合/键盘导航/IME 守卫 + 悬停接管位移门限(治上下键选中项闪烁 2026-09-29) + 键盘活动项滚动跟随(26-09-29-2142) + pill 无键数徽标 + 行尾动作区分形 + hb-tr-* 类 CSS 成对定义
+- test_frontend_dialog_combo_hover_takeover: 弹窗下拉悬停接管守阵(issue 26-09-29-2142, 站点搜索闪烁同族) —— 分类/标签/编辑分类下拉 @mousemove+3px 位移门限共享小工具(comboHoverIdx) + @mouseenter 直写零残留 + 门限坐标 state 声明 + 开层单点复位 + 三皮肤 data-hi 行 CSS 摘 :hover(高亮只走 .on 单路)
 - test_frontend_search_help_wiring: 顶栏搜索语法浮卡接线守阵(计划 26-09-28-0201 方案A) —— 模板(「?」钮/浮卡/示例回填/简化占位符) + state 声明 + view.js 方法(回填即搜) + 点空白/Esc/导航三条收起路径 + 三皮肤 CSS 成对定义与 input 右内边距留位
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
@@ -2830,6 +2831,56 @@ def test_frontend_tracker_search_wiring():
         assert "." + cls in css, f"console_hub.css 缺少 .{cls} 定义(挂件类名错配 = 静默裸样式)"
     assert ".hb-tr-hit.act" in css and "hb-tr-hit:hover" not in css, \
         "命中行高亮只走 .act —— CSS :hover 会跟键盘活动项双高亮打架(闪烁根因之一), 悬停接管在 hubTrackerHoverIdx"
+
+
+def test_frontend_dialog_combo_hover_takeover():
+    """弹窗下拉悬停接管守阵(issue 26-09-29-2142, 站点搜索闪烁同族, 2026-09-29 修)
+
+    添加种子分类/标签下拉与编辑弹窗分类下拉原是 @mouseenter 直写键盘活动项 —— 光标静止停在
+    列表上用 ↑↓ 选择时, 行滚动/DOM 变更后浏览器给静止光标补发合成 hover 事件, 活动项被拽回
+    光标行(改前真机实测: ↓×16 轨迹两次被拽回, Enter 选中 cat-06 而非键盘到达的 cat-16 ——
+    不止闪烁, 实选错)。处置(hover-keynav-fight 同款): ① 悬停接管走 @mousemove + 3px 位移
+    门限(comboHoverIdx 共享小工具, 三处不各抄一份); ② CSS 摘 data-hi 行的 :hover, 高亮只走
+    .on 一条路; ③ 开层单点复位门限坐标(下次打开首个动作不被旧坐标误挡)。
+    """
+    mgr = open(os.path.join(STATIC_ROOT, "shared", "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
+    for token in (
+        "@mousemove=\"comboHoverIdx('cat', i, $event)\"",  # 悬停接管走位移门限(治上下键选中项闪烁)
+        "@mousemove=\"comboHoverIdx('tag', i, $event)\"",
+    ):
+        assert token in mgr, f"dialogs-mgr.html 缺少 {token}(分类/标签下拉悬停接线被改坏? 同步本守阵)"
+    assert "@mouseenter=\"addCatHi" not in mgr and "@mouseenter=\"addTagHi" not in mgr, \
+        "分类/标签下拉行不得挂 @mouseenter(静止光标旧高亮与键盘活动项同源打架 = 上下键选中项闪烁/Enter 选错), 悬停接管走 comboHoverIdx"
+    pop = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
+    assert "@mousemove=\"comboHoverIdx('meta', i, $event)\"" in pop, "popovers.html 缺少 meta 分类下拉悬停接线(同步本守阵)"
+    assert "@mouseenter=\"metaCatHi" not in pop, "编辑弹窗分类下拉行不得挂 @mouseenter(同族打架), 悬停接管走 comboHoverIdx"
+    # ① 门限坐标三字段声明(漏声明 = 响应性缺失) + 共享小工具单点实现(别三处各抄一份)
+    st = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
+    for token in ("addCatMouseAt: null", "addTagMouseAt: null", "metaCatMouseAt: null"):
+        assert token in st, f"state.js 缺少 {token}(门限坐标未声明 = 响应性缺失)"
+    at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
+    assert "comboHoverIdx(kind, i, ev)" in at, "缺 comboHoverIdx 共享小工具(三处下拉共用, 别各抄一份)"
+    fn = re.search(r"comboHoverIdx\(kind, i, ev\) \{(.*?)\n    \},", at, re.S)
+    assert fn and "dx * dx + dy * dy < 9" in fn.group(1), \
+        "悬停接管必须带 3px 位移门限(合成事件位移恒 0 被挡, 真实移动才接管)"
+    # ③ 开层单点复位门限坐标(下次打开首个动作不被旧坐标误挡)
+    for fnname, field in (("openAddCatMenu", "addCatMouseAt"), ("openAddTagMenu", "addTagMouseAt")):
+        body = re.search(rf"{fnname}\(\) \{{(.*?)\n    \}},", at, re.S)
+        assert body and f"{field} = null" in body.group(1), \
+            f"{fnname} 必须复位 {field}(开层复位门限坐标)"
+    dlg = open(os.path.join(STATIC_ROOT, "shared", "dialogs.js"), encoding="utf-8").read()
+    body = re.search(r"openMetaCatMenu\(\) \{(.*?)\n    \},", dlg, re.S)
+    assert body and "metaCatMouseAt = null" in body.group(1), \
+        "openMetaCatMenu 必须复位 metaCatMouseAt(开层复位门限坐标)"
+    # ② CSS 单路高亮: 三皮肤 data-hi 行摘 :hover(.on 活动项是唯一高亮通道)
+    for rel in (
+        os.path.join("atlas", "css",
+                     "dialogs.css"), os.path.join("console", "css",
+                                                  "dialogs.css"), os.path.join("prism", "css", "components.css")
+    ):
+        css = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+        assert ".pop-item[data-hi]:not(.on):hover" in css, \
+            f"{rel} 缺 data-hi 行 hover 中和规则(CSS :hover 与键盘活动项双高亮 = 闪烁根因之一)"
 
 
 def test_frontend_search_help_wiring():

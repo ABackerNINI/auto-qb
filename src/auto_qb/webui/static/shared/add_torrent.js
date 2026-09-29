@@ -95,11 +95,13 @@ window.AQB_ADD = {
     openAddCatMenu() {
       this.addTagMenu = false;
       this.addCatHi = -1;
+      this.addCatMouseAt = null;  // 开层复位悬停门限坐标(下次打开首个动作不被旧坐标误挡)
       this.addCatMenu = true;
     },
     openAddTagMenu() {
       this.addCatMenu = false;
       this.addTagHi = -1;
+      this.addTagMouseAt = null;  // 同上
       this.addTagMenu = true;
     },
     addCatFiltered() {
@@ -133,6 +135,23 @@ window.AQB_ADD = {
     },
     onAddTagKeydown(e) {
       this._comboKeydown(e, "tag");
+    },
+    /* 悬停接管(治「上下键选中项闪烁/Enter 选错」2026-09-29, issue 26-09-29-2142; 同款: config_hub.hubTrackerHoverIdx):
+     * 分类/标签/编辑分类三处下拉的悬停高亮原是 @mouseenter 直写键盘活动项 —— 光标静止停在列表上
+     * 用 ↑↓ 选择时, 行滚动/DOM 变更后浏览器给静止光标补发合成 hover 事件, 活动项被拽回光标行
+     * (改前真机实测: ↓×16 两次被拽回, Enter 选中光标行 cat-06 而非键盘到达的 cat-16 —— 不止闪烁, 实选错)。
+     * 改为 @mousemove + 位移门限: 位移 <3px(静止 / 合成事件)不接管, 真实移动才把活动项交给光标;
+     * 门限坐标按下拉分存(state.js *MouseAt), 开层单点复位(openAddCatMenu/openAddTagMenu/openMetaCatMenu) */
+    comboHoverIdx(kind, i, ev) {
+      const atKey = kind === "cat" ? "addCatMouseAt" : kind === "tag" ? "addTagMouseAt" : "metaCatMouseAt";
+      const hiKey = kind === "cat" ? "addCatHi" : kind === "tag" ? "addTagHi" : "metaCatHi";
+      const x = ev.clientX, y = ev.clientY, at = this[atKey];
+      if (at) {
+        const dx = x - at.x, dy = y - at.y;
+        if (dx * dx + dy * dy < 9) return; // <3px: 光标静止 / 合成事件, 不接管
+      }
+      this[atKey] = { x, y };
+      this[hiKey] = i;
     },
     _comboKeydown(e, kind) {
       // 分类/标签 combobox 共用键盘导航: 上下循环高亮, 回车选中, Esc 只收下拉(阻断冒泡, 不关对话框)
