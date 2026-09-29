@@ -8,7 +8,8 @@
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
-- test_ui_root_and_legacy_newui_redirect: / -> 307 /atlas/; 旧 /newui/* 书签 -> 307 /prism/*
+- test_ui_root_and_legacy_newui_redirect: / -> 307 上次使用的 UI(autoqb_ui 皮肤 cookie, 未记录/失效回落星图); 旧 /newui/* 书签 -> 307 /prism/*
+- test_frontend_ui_skin_cookie_persisted: boot.js 必须把当前 UI 写进 autoqb_ui cookie —— 根路径「记住上次 UI」的数据源(307 在服务端裁决, cookie 是唯一读得到的载体)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+hide 默认隐藏接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤200 行/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
@@ -547,15 +548,35 @@ def test_static_assets_disable_heuristic_cache(web_env):
 
 
 def test_ui_root_and_legacy_newui_redirect(web_env):
-    """根路径与旧 /newui/* 重定向: / -> 307 /atlas/; /newui/* -> 307 /prism/*
+    """根路径与旧 /newui/* 重定向: / -> 上次使用的 UI(autoqb_ui 皮肤 cookie); /newui/* -> 307 /prism/*
 
-    UI 目录化后 StaticFiles 根下无 index.html, 根路径由显式路由兜底进默认 UI(星图);
-    /newui 兼容路由保住升级前书签(子路径原样映射到 /prism/*)。
+    UI 目录化后 StaticFiles 根下无 index.html, 根路径由显式路由兜底; 默认星图, 但带皮肤 cookie
+    (shared/boot.js 在每套 UI 加载时写入)时直达该 UI —— 修复「关窗口重开总回星图」(2026-09-29 用户报)。
+    cookie 值双重校验: 形状合法 + static/<名>/index.html 真实存在 —— UI 改名/删除后的旧 cookie
+    与路径逃逸形状一律回落星图。/newui 兼容路由保住升级前书签(子路径原样映射到 /prism/*)。
     """
     _, client = web_env
-    root = client.get("/", follow_redirects=False)
-    assert root.status_code == 307, "根路径应 307 重定向"
-    assert root.headers["location"] == "/atlas/"
+    for cookie, expect in (
+        ({}, "/atlas/"),  # 未记录(首次访问/清过站点数据) -> 默认星图
+        ({
+            "autoqb_ui": "prism"
+        }, "/prism/"),  # 上次用棱镜 -> 直达棱镜
+        ({
+            "autoqb_ui": "console"
+        }, "/console/"),  # 上次用控制台 -> 直达控制台
+        ({
+            "autoqb_ui": "atlas"
+        }, "/atlas/"),  # 上次用星图(显式记录)
+        ({
+            "autoqb_ui": "ghost"
+        }, "/atlas/"),  # 目录已不存在(UI 改名/删除后的旧 cookie)
+        ({
+            "autoqb_ui": "../prism"
+        }, "/atlas/"),  # 形状不合法(路径逃逸形状不得进重定向目标)
+    ):
+        root = client.get("/", follow_redirects=False, cookies=cookie)
+        assert root.status_code == 307, f"cookie={cookie} 根路径应 307 重定向"
+        assert root.headers["location"] == expect, f"cookie={cookie} 应重定向到 {expect}"
     for old, new in (
         ("/newui", "/prism/"), ("/newui/", "/prism/"), ("/newui/css/tokens.css", "/prism/css/tokens.css"),
         ("/newui/js/theme.js", "/prism/js/theme.js")
@@ -563,6 +584,20 @@ def test_ui_root_and_legacy_newui_redirect(web_env):
         resp = client.get(old, follow_redirects=False)
         assert resp.status_code == 307, f"{old} 应 307 重定向"
         assert resp.headers["location"] == new, f"{old} 应映射到 {new}"
+
+
+def test_frontend_ui_skin_cookie_persisted():
+    """boot.js 必须把当前 UI 写进 autoqb_ui cookie —— 根路径「记住上次 UI」的数据源(2026-09-29 用户报)
+
+    根路径 307 由服务端在收到请求那一刻裁决, localStorage 服务端读不到, cookie 是唯一可行载体;
+    三套 UI 共用 boot.js = 唯一写入口(打开即记录, 切换菜单无需单独埋点)。服务端取值校验
+    (形状 + 目录存在性)见 test_ui_root_and_legacy_newui_redirect。
+    """
+    boot = open(os.path.join(STATIC_ROOT, "shared", "boot.js"), encoding="utf-8").read()
+    assert '"autoqb_ui="' in boot, "boot.js 未写 autoqb_ui cookie —— 关窗重开根路径会回到默认星图"
+    assert "location.pathname.split" in boot, "boot.js 未从 URL 路径段判定当前 UI"
+    assert "Max-Age=" in boot, "皮肤 cookie 必须带有效期(会话 cookie 关窗即丢, 等于没修)"
+    assert "Path=/" in boot, "皮肤 cookie 必须 Path=/(根路径 / 要能读到)"
 
 
 STATIC_ROOT = os.path.join(
