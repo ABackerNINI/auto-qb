@@ -34,26 +34,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # AGENTS.md 的依据: IDE 注入项目引导文件时 MAX_GUIDANCE_CHARS = 8000, 超出部分被 slice 掉;
 # 引导文件按 GUIDANCE_FILES = [CODEBUDDY.md, .codebuddy/CODEBUDDY.md, AGENTS.md] 首个存在即停 ——
 # 本仓库前两个都不存在, 项目引导实际走 AGENTS.md。**改这里前先确认 IDE 常量没变。**
-# commands 的 SKILL.md 依据不同: 它不走 IDE 注入, 而是**每次加载 skill 都要进上下文** ——
-# 它本该是"恒定大小"的文档, 没有硬上限就会被自己慢慢撑大, "省 token"的初衷先被它吃掉。
-# 2026-09-24 把收录协议的细节搬去 references/howto-add-command.md 后, 上限从 4200 收到 2600
-# (当时实测 ~2140 含 CRLF, 留 ~20% 余量)—— 上限跟着实测收, 才叫"恒定大小"。
-# memory-bank 的 SKILL.md 同理(它每次会话开始/收尾都要加载): 2026-09-24 把知识库结构/脚本表/
-# 切片约定搬去 references/kb-structure.md 后, 10114 → 5948 字符, 上限据此定 7500。
+# 2026-09-29 用户定调: 除 AGENTS.md(IDE 硬约束, 放大 = 守卫失效)外**全部翻倍** —— 旧值频繁触顶,
+# 每次触顶都逼出一轮"压文案"返工, 返工轮次的 token 成本远大于文件变长; 触顶处置改为收缩到 50%(见下)。
 CONTEXT_CAPS: dict[str, int] = {
     "AGENTS.md": 8000,
-    ".agents/skills/commands/SKILL.md": 2600,
-    ".agents/skills/memory-bank/SKILL.md": 7500,
+    ".agents/skills/commands/SKILL.md": 5200,
+    ".agents/skills/memory-bank/SKILL.md": 15000,
 }
 
 # 阅读预算 —— 与上面的"注入上限"不是一回事: 这些文件不被 IDE 注入, 但**指针一旦指向它们就只能整读**。
 # 上限的意义是让"包内说明文档"维持**索引形态**: 细节必须能外置到 references/ 按需读, 而不是长在这份文件里。
 # 否则省下的 token 会从另一头漏回来(实测: 提交流程里被当入口整读一次 ≈ 4–5k token)。
-# 2026-09-24 拆分: `.commands/my-commit-flow/README.md` 8212 → 2808 字符(七步表 / 停手点 / 六条反模式留索引,
-# 完整判据 → references/pipeline.md, 配置机制 → references/config.md, 反模式全集 → references/anti-patterns.md),
-# 上限据此定 3000。**上限跟着实测收**, 才叫预算。
 READ_BUDGET_CAPS: dict[str, int] = {
-    ".commands/my-commit-flow/README.md": 3000,
+    ".commands/my-commit-flow/README.md": 6000,
 }
 
 PASS, WARN, STOP, GROUP = "PASS", "WARN", "STOP", "GROUP"
@@ -118,8 +111,8 @@ def main() -> int:
                 rows.append(
                     (
                         STOP, rel, f"{size} 字符 > 上限 {limit} (超 {size - limit}) —— {_why(group)};"
-                        f" **先精简到 {limit} 以内再提交**"
-                        f" (建议留 10% 余量: 削到 {int(limit * 0.9)})"
+                        f" **先精简/外迁到 ≤ {limit // 2} 再提交**"
+                        f" (收缩到最大值的 50%, 一次留足余量)"
                     )
                 )
             else:

@@ -99,7 +99,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_list(args: argparse.Namespace) -> int:
     tree = C.load_tree()
-    print(T.render(tree, args.path, show_all=args.all))
+    print(T.render(tree, args.path))
     if tree.warnings:
         print("")
         for warn in tree.warnings:
@@ -175,7 +175,7 @@ def _pick(tree: C.Tree, name: str) -> C.Task:
         task = tree.tasks.get(short)
     if task is None:
         near = [t for t in tree.tasks if name in t or short in t or t.startswith(name.split(".")[0])]
-        hint = f"  相近: {', '.join(sorted(near)[:8])}" if near else "  用 list 逐级找"
+        hint = f"  相近: {', '.join(sorted(near)[:8])}" if near else "  用 list 平铺找(全树一次列出)"
         raise SystemExit(f"[STOP] 没有这个 task: {name}\n{hint}\n"
                          "  写法: `run <id>`; id 见 list(子包可写 `包/子包.<task>`)")
     return task
@@ -327,9 +327,8 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("task")
     p_run.add_argument("extra", nargs=argparse.REMAINDER, help="填进 <args> 占位符")
 
-    p_list = sub.add_parser("list", help="逐级列出当前层级")
-    p_list.add_argument("path", nargs="?", default=None, help="子包路径, 如 <父包>/<子包>")
-    p_list.add_argument("--all", action="store_true", help="全量(排障兜底, 不是入口)")
+    p_list = sub.add_parser("list", help="平铺列出全部包与命令(一次看全, 无需下钻)")
+    p_list.add_argument("path", nargs="?", default=None, help="只看某子树, 如 <父包>/<子包>")
 
     p_show = sub.add_parser("show", help="打印展开后的真实命令, 不执行")
     p_show.add_argument("task")
@@ -345,7 +344,7 @@ def main(argv: list[str] | None = None) -> int:
     p_add.add_argument("--note", default="", help="环境陷阱判据: 为什么必须这么写")
     p_add.add_argument("--doc", default="", help="包内深读文档的相对路径(排障才读, 不进常规路径)")
     p_add.add_argument("--timeout", type=int, default=0)
-    p_add.add_argument("--pin", action="store_true", help="常显: 浮到父级列表")
+    p_add.add_argument("--pin", action="store_true", help="标 ★(高频命令记号; 平铺视图下仅作视觉锚点)")
     p_add.add_argument("--risky", action="store_true", help="高风险: run 时先打印命令")
     p_add.add_argument("--write", action="store_true", help="真的落盘(默认只打印)")
 

@@ -43,7 +43,7 @@ user-invocable: true
 5. **收录命令**: 遇到**反复要跑/难拼/有"看起来正常但不生效"写法**的命令 → 自己 `add` 进 `.commands/` 的对应包, 别在文档里抄(手抄会被 `commands run doc.drift` 判红)。判据见 [commands skill](../commands/SKILL.md)「收录协议」。
 6. **新坑**: 非显然的失败/陷阱 → **按动作选类, 写进 `pitfalls/<类>/<主题>.md`**: 补三行头(`# 标题`/`> 摘要:`/`> 触发:`), 条目写 `触发`/`判别`/`处置` **三必填**(`守阵`/`复发` 选填); 没有合适的类**先扩枚举**; 写完 `commands run kb.index`。
    - **复发闭环**: 踩到**已记的坑** → 该条 `复发` **+1**, 并在档案里写一句**为什么没命中**(路由没到/文件没读/读了没照做)。反复重踩于是变成**可排序的数字**, 也是「下沉为守阵」的优先级依据。
-   - **拆文档也算入库动作**: 写进 `memory-bank` 前先看目标文件的 cap(`_common.CAP_POLICY`, 人读镜像见下方 cap 表); 超了要么拆文件、要么外迁。
+   - **拆文档也算入库动作**: 写进 `memory-bank` 前先看目标文件的 cap(`_common.CAP_POLICY`, 人读镜像见下方 cap 表); 超了精简/外迁到 50%(触顶处置口径见 cap 表注)。
 
 ## 任务档案规范
 
@@ -62,19 +62,21 @@ user-invocable: true
 
 > 守卫 `test_skill_cap_table_matches_cap_policy` 钉住本表与 `CAP_POLICY` 的**数值集合与行数**一致 —— 改了源忘了改表会红;
 > ⚠ 判不出「两行数值互换角色」, 那种改动只能靠人读表。**别在别处抄第三张表**。
+> **触顶处置 (2026-09-29 用户定调)**: 精简/外迁到**最大值的 50%**(`_common.TRIM_KEEP`), 一次留足余量;
+> 全表数值同日翻倍 —— 治「每次触顶都要多一轮压文案返工」的 token 税。唯一例外 `AGENTS.md`(IDE 注入硬约束)。
 
 | 角色 | 上限 (字符) |
 |---|---|
-| `memory-bank/README.md`(手写) | 3,000 |
-| `*/_index.md`(自动生成, 含 tasks / issues / 各目录) | 12,600 |
-| `pitfalls/*` 条目集(「扫描找一条」比通读更贵) | 6,000 |
-| 常青主题(叙述型) | 10,000 |
-| 参考速查(`config-reference/` · `rule-system/`) | 12,000 |
-| 易变层(`activeContext.md`; 目录化后原位只留 ≤1 KB 存根) | 12,000 |
-| `activeContext/` 会话切片(per-专题) | 6,000 |
-| `testing/baselines/` 基线切片(一次性快照) | 4,000 |
-| 任务档案(`tasks/*.md`, 「历史会话纪要」段 ≤8,000) | 24,000 |
-| append-only 历史流水(`*-history.md`) | 24,000 |
+| `memory-bank/README.md`(手写) | 6,000 |
+| `*/_index.md`(自动生成, 含 tasks / issues / 各目录) | 25,200 |
+| `pitfalls/*` 条目集(「扫描找一条」比通读更贵) | 12,000 |
+| 常青主题(叙述型) | 20,000 |
+| 参考速查(`config-reference/` · `rule-system/`) | 24,000 |
+| 易变层(`activeContext.md`; 目录化后原位只留 ≤2 KB 存根) | 24,000 |
+| `activeContext/` 会话切片(per-专题) | 12,000 |
+| `testing/baselines/` 基线切片(一次性快照) | 8,000 |
+| 任务档案(`tasks/*.md`, 「历史会话纪要」段 ≤16,000) | 48,000 |
+| append-only 历史流水(`*-history.md`) | 48,000 |
 | `AGENTS.md`(IDE 注入硬上限, 由 `scripts/check_context_caps.py` 管) | 8,000 |
 
 ## 结构 / 索引 / 脚本 → 见 references

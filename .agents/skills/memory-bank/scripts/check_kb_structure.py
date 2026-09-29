@@ -28,13 +28,13 @@ from _common import (  # noqa: E402
     CAP_POLICY,
     EXCLUDED_DIRS,
     INDEX_NAME,
-    LOG_ROTATE_KEEP,
     PITFALL_CLASSES,
     REQUIRED_FIELDS,
     STUB_CANDIDATES,
     STUB_CAP,
     STUB_MARK,
     TOPIC_FILE_RE,
+    TRIM_KEEP,
     char_count,
     find_root,
     is_topic_file,
@@ -154,13 +154,19 @@ def check_caps(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> 
         size = char_count(path)
         cap = CAP_POLICY[role]
         if size > cap:
-            # 报错即给修法: `log` 是 append-only, 超了不是"该删", 而是"该轮转" —— 把切到哪、搬到哪写进消息
-            hint = ""
+            # 报错即给修法: 触顶处置统一是"收缩到最大值的 50%"(TRIM_KEEP) —— 削到贴线等于下次
+            # 追加立刻再触顶; `log` 是 append-only, 超了不是"该删", 而是"该轮转", 把切到哪、搬到哪写进消息
+            target = f"{int(cap * TRIM_KEEP):,}"
             if role == "log":
                 hint = (
                     f"\n    → 它是 append-only 流水, 按设计会一直长: 从**最老一端**切到 ≤ "
-                    f"{int(cap * LOG_ROTATE_KEEP):,} 字符 (保留 ~{LOG_ROTATE_KEEP:.0%}), 外迁同目录 `attachments/` "
+                    f"{target} 字符 (收缩到 ~{TRIM_KEEP:.0%}), 外迁同目录 `attachments/` "
                     "并原位留一行指针; 别只搬最老一条 —— 那样下次追加立刻再触顶"
+                )
+            else:
+                hint = (
+                    f"\n    → 触顶处置: 精简/外迁到 ≤ {target} 字符 (最大值的 ~{TRIM_KEEP:.0%}),"
+                    " 外迁同目录 `attachments/` 并原位留一行指针"
                 )
             problems.append(f"{rel} 超 cap: {size:,} > {cap:,} 字符 (角色 {role}){hint}")
         elif is_topic_file(path) and size < CAP_MIN_WARN:
@@ -216,11 +222,11 @@ def check_orphan_indexes(root: Path, mb: Path) -> list[str]:
 
 
 def is_stub(path: Path) -> tuple[bool, str]:
-    """存根判据: ≤1 KB + 含「已迁至」+ 不含正文 (无 `##` 标题、无列表条目)。"""
+    """存根判据: ≤2 KB + 含「已迁至」+ 不含正文 (无 `##` 标题、无列表条目)。"""
     text = path.read_bytes().decode("utf-8")
     size = len(text)
     if size > STUB_CAP:
-        return False, f"{size:,} > {STUB_CAP:,} 字符 (存根必须 ≤1 KB)"
+        return False, f"{size:,} > {STUB_CAP:,} 字符 (存根必须 ≤2 KB)"
     if STUB_MARK not in text:
         return False, f"缺「{STUB_MARK}」标记"
     if re.search(r"^##\s", text, re.MULTILINE):
@@ -250,7 +256,7 @@ def check_stubs(root: Path, mb: Path) -> list[str]:
 
 
 def check_active_context_cap(root: Path, mb: Path) -> list[str]:
-    """`activeContext.md` ≤12 KB —— 超了就是内容该外迁的信号, 不是「这次先写着」。"""
+    """`activeContext.md` ≤24 KB —— 超了就是内容该外迁的信号, 不是「这次先写着」。"""
     path = mb / "activeContext.md"
     if not path.is_file():
         return [f"{_mb_rel(root, path)} 缺失"]

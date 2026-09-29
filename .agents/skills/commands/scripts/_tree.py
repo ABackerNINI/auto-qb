@@ -1,9 +1,10 @@
-"""层级视图: 包 → 子包 → 命令。
+"""平铺视图: 一次列出全部包与命令 (2026-09-29 起默认, 不再逐级下钻)。
 
-关键约束: 一级视图**只出当前层级**(包 + 常显命令), 所以命令总数从十条长到两百条,
-一级视图都还是"几个包 + 几条常显" —— 不臃肿靠的是分层, 不是靠写得短。
+旧设计是"一级只出包 + 常显命令, 靠分层防臃肿"; 改平铺的原因: **每下钻一次 = 多一轮引擎调用**,
+多轮往返的 token 成本远大于列表本身变长 —— 而全树实测才 ~30 行, 平铺没有成本。
+`list <包路径>` 保留为**聚焦**视图(只看某个子树, 同样递归铺开)。
 
-`--all` 是排障兜底, 不是入口: 一旦被当成常规入口, 臃肿就从那张平表搬到这里。
+★ = pin 标记(高频命令记号), 仅作视觉锚点 —— 平铺下每条命令本来就可见, 不再有"浮到父级"行为。
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # 允许 `python scrip
 from _config import ConfigError, Pack, Task, Tree  # noqa: E402
 
 W_ID = 30
-STAR = "★ "  # 常显: 从子包浮到父级列表, 不必进到所属包就能看到
+STAR = "★ "  # pin: 高频命令记号
 
 
 def resolve(tree: Tree, path: str) -> Pack | None:
@@ -33,8 +34,8 @@ def resolve(tree: Tree, path: str) -> Pack | None:
     return node
 
 
-def render(tree: Tree, path: str | None = None, show_all: bool = False) -> str:
-    """渲染某一层的视图。`path` 为空 = 一级(顶级包)。"""
+def render(tree: Tree, path: str | None = None) -> str:
+    """渲染平铺视图。`path` 为空 = 全树; 给定 = 只看该子树(同样递归铺开)。"""
     if not path:
         owner, subs = None, tree.packs
     else:
@@ -43,14 +44,14 @@ def render(tree: Tree, path: str | None = None, show_all: bool = False) -> str:
             raise ConfigError(f"[STOP] 找不到包: {path}(用 list 看有哪些包)")
         subs = owner.subs
     lines = [_pad("包 / 命令", W_ID + 2) + "何时用", "─" * 78]
-    lines += _level(owner, subs, 0, show_all)
-    if not show_all and subs:
-        lines.append("")
-        lines.append("下钻: list <包>/<子包>   ·   全量(排障): list --all")
+    lines += _level(owner, subs, 0)
+    lines.append("")
+    lines.append("聚焦某包: list <包>   ·   看单条: show <id>")
     return "\n".join(lines)
 
 
-def _level(owner: Pack | None, subs: dict[str, Pack], indent: int, show_all: bool) -> list[str]:
+def _level(owner: Pack | None, subs: dict[str, Pack], indent: int) -> list[str]:
+    """递归铺开: 本级命令在前, 子包(连带它们的子树)随后, 缩进体现从属。"""
     lines: list[str] = []
     if owner is not None:
         for task in sorted(owner.tasks.values(), key=lambda t: t.id):
@@ -58,18 +59,10 @@ def _level(owner: Pack | None, subs: dict[str, Pack], indent: int, show_all: boo
         if not owner.tasks:
             lines.append(f"{' ' * indent}(本层没有命令 —— 在下级子包里)")
     for sub in subs.values():
-        if not sub.enabled and not show_all:
+        if not sub.enabled:
             continue
         lines.append(_pack_line(sub, indent))
-        if show_all:
-            # `--all` 是全树铺开: 每个包的任务交给它**自己那一层**列(pin 由 _task_line 标 ★),
-            # 不再往上浮 —— 否则递归进子包时, 同一批 pin 命令会被列第二遍(看着像 task id 重复)。
-            lines += _level(sub, sub.subs, indent + 2, show_all)
-        else:
-            # 常显浮一级: 子包里标了 pin 的命令, 在父级列表就能看到
-            for task in sorted(sub.tasks.values(), key=lambda t: t.id):
-                if task.pin:
-                    lines.append(_task_line(task, indent + 2, star=True))
+        lines += _level(sub, sub.subs, indent + 2)
     return lines
 
 
@@ -79,12 +72,11 @@ def _pad(text: str, width: int) -> str:
     return text + " " * max(1, width - len(text) - wide)
 
 
-def _task_line(task: Task, indent: int, star: bool = False) -> str:
-    # 只出 id 与"何时用" —— 命令本体与 note 留给 show, 否则一级视图会随命令数一起膨胀
-    mark = STAR if (star or task.pin) else "  "
+def _task_line(task: Task, indent: int) -> str:
+    # 只出 id 与"何时用" —— 命令本体与 note 留给 show, 否则列表会随命令数一起膨胀
+    mark = STAR if task.pin else "  "
     return f"{' ' * indent}{mark}{_pad(task.id, W_ID)}{task.when}"
 
 
 def _pack_line(pack: Pack, indent: int) -> str:
-    tag = "" if pack.enabled else "  [已禁用]"
-    return f"{' ' * indent}{_pad(pack.name + '/', W_ID + 2)}{pack.when}{tag}"
+    return f"{' ' * indent}{_pad(pack.name + '/', W_ID + 2)}{pack.when}"

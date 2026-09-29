@@ -176,10 +176,10 @@ def load_tree(root: Path | None = None) -> Tree:
 
 
 def _pin_warnings(tree: Tree) -> list[str]:
-    """每层视图里浮出的常显命令过多 → WARN。
+    """标 ★(pin)的命令过多 → WARN。
 
-    视图规则: 一层 = 本级包自己的命令 + **各子包标了 pin 的命令**(浮一级)。所以 pin 一多,
-    这一层就变回一张平表 —— 与"不臃肿靠分层"的初衷相抵。这是纪律问题不是结构错误, 故 WARN 不 STOP。
+    2026-09-29 起 list 默认平铺, pin 不再有"浮到父级"的行为, 只剩 ★ 记号 —— ★ 太多会稀释
+    "高频命令"的锚点价值。这是纪律问题不是结构错误, 故 WARN 不 STOP。
     """
     out: list[str] = []
     stack: list[tuple[str, dict[str, Pack]]] = [("(一级)", tree.packs)]
@@ -188,8 +188,8 @@ def _pin_warnings(tree: Tree) -> list[str]:
         pinned = [t.id for sub in subs.values() if sub.enabled for t in sub.tasks.values() if t.pin]
         if len(pinned) > MAX_PIN_PER_LEVEL:
             out.append(
-                f"{where} 视图浮出 {len(pinned)} 条常显命令(上限 {MAX_PIN_PER_LEVEL}): "
-                "pin 只给「每次会话都要用」的命令 —— 滥用等于把平表搬回一级"
+                f"{where} 有 {len(pinned)} 条 ★ 常显标记(上限 {MAX_PIN_PER_LEVEL}): "
+                "pin 只给「每次会话都要用」的命令 —— 滥用会让 ★ 失去锚点价值"
             )
         stack += [(pack.path, pack.subs) for pack in subs.values() if pack.subs]
     return out

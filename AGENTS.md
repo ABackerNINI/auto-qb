@@ -52,7 +52,7 @@
 PATH 那份跨 clone 共享, 多数会话免装); 没装时也可展开
 `uv run python .agents/skills/commands/scripts/run.py run <task>`。
 `<task>` 用 `list` 里的 id(子包可写 `ship.commit`, 也可写全 `包/子包.<task>`)。
-不知道调哪个就 `list` 逐级下钻(一级只出包 + 常显命令)。遇到**反复要跑 / 难拼 / 有陷阱写法**的命令,
+不知道调哪个就 `list`(一次平铺全部包与命令, 无需下钻)。遇到**反复要跑 / 难拼 / 有陷阱写法**的命令,
 按 SKILL.md 的收录协议自己 `add` 进包 —— 命令集靠这个长大, 不是靠人维护。
 
 ```text

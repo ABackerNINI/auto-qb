@@ -20,7 +20,7 @@ applyTo: 'memory-bank/**'
    ✅ 入口链: `AGENTS.md`(粗路由) → `memory-bank/README.md`(细路由) → `<目录>/_index.md` → 主题文件。
    关键词不明确时 `grep -rn "<词>" memory-bank/` 兜底 —— 每个主题文件头部都写了 `触发:` 动作词, 就是给 grep 用的。
 2. **生成物一律不要手改。** `_index.md` 冲突只需**重跑生成器**, 不要人工合并两版文本 ——
-   同理 `tasks/_index.md` / `issues/_index.md`; `activeContext.md` 是 ≤1 KB 存根(滚动状态在 `activeContext/`)。
+   同理 `tasks/_index.md` / `issues/_index.md`; `activeContext.md` 是 ≤2 KB 存根(滚动状态在 `activeContext/`)。
 3. **改完让机检全绿** —— 见末节「收尾」。红了先读判据说的是哪一条, 不要绕过。
 
 ## 这个目录怎么长
@@ -28,7 +28,7 @@ applyTo: 'memory-bank/**'
 ```
 memory-bank/
   README.md              # 库内细路由 (手写)
-  activeContext.md       # ≤1 KB 存根; 滚动状态在下面那个目录里 (勿往存根写状态)
+  activeContext.md       # ≤2 KB 存根; 滚动状态在下面那个目录里 (勿往存根写状态)
   activeContext/         # 会话切片 YY-MM-DD-HHMM-<slug>.md; 有独立阅读器, 不生成 _index.md
   <专题>/                # _about.md(手写) + _index.md(生成物) + <主题>.md(三行头)
   tasks/                 # 档案 YY-MM-DD-<slug>.md + attachments/ (有独立生成器)
@@ -38,7 +38,7 @@ memory-bank/
 - 新增**目录** = 建目录 + 写 `_about.md` + 主题文件(三行头) + **重跑生成器** + 在
   [memory-bank/README.md](../../memory-bank/README.md) 细路由**登记一行** —— 少一处结构守卫就红。
 - 新增**主题文件** = 写文件(三行头) + 重跑生成器。
-- **存根**: 被拆掉的原路径保留 ≤1 KB 存根, 只为兜住历史计划 HTML / issue 报告里的既有引用。
+- **存根**: 被拆掉的原路径保留 ≤2 KB 存根, 只为兜住历史计划 HTML / issue 报告里的既有引用。
   ❗**活文档应指向目标文件, 不指向存根** —— 链接存在性由 `scripts/check_doc_links.py` 验,
   但"指向存根"**不会报错**, 只能靠人守。
 

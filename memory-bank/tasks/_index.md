@@ -2,7 +2,7 @@
 
 > **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 扫描 `tasks/*.md` 的 `Status` / `Summary` / 标题生成; 新增或改状态后跑它重建即可, 合并冲突也只需重跑。
 > 档案命名 `YY-MM-DD-<slug>.md`(见 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md)); 旧编号保留在各档案的 `**Legacy-ID:**` 字段, 供历史文档回溯。
-> 粒度为**专题**(一个功能线一个档案, 不逐会话建文件); 历史流水账原文归档在各档案的 `## 历史会话纪要 (原文归档)` 段, 超 24 KB 的档案把该段移入 `tasks/attachments/`(索引守卫按 `tasks/*.md` 扫描, 不递归)。
+> 粒度为**专题**(一个功能线一个档案, 不逐会话建文件); 历史流水账原文归档在各档案的 `## 历史会话纪要 (原文归档)` 段, 超 48 KB 的档案把该段移入 `tasks/attachments/`(索引守卫按 `tasks/*.md` 扫描, 不递归)。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在档案里): 这样索引大小由**档案数**决定, 不随摘要写得多长而膨胀 —— 否则迟早撞 `index-auto` cap, 而靠"外迁老档案"化解会打坏外部引用。
 > 日常短周期工作只记 [../activeContext/](../activeContext/_about.md) 的会话切片; 完成项沉淀进 [../progress.md](../progress.md)。
 > 机械守卫: `tests/test_memory_bank.py`(索引 == 生成结果 / slug 唯一 / 命名规范 / 状态分区 / 必备章节)。
@@ -39,6 +39,7 @@
 
 ## Done
 
+- [26-09-30-memory-bank-token-budget] memory-bank cap 翻倍 + commands list 平铺 - 用户定调治理「提交触 cap 多轮返工」的 token 税: ①`_common.CAP_POLICY` 全表翻倍(唯一例外 AGENTS.md 的 IDE 注…
 - [26-09-29-backend-hr-hot-apply] HR 站点接入热重载「取数线程未启动」修复 - HR 在线核实站点接入热重载后取数线程永不启动(两缺陷: hr.apply 只挂 L1 分支而站点接入是 L0; HrRuntime.apply 的 runni…
 - [26-09-29-backend-hr-release-deadend] HR「放行签发即作废」与端点未监听(白等 180s)修复 - 用户实报 HR 站点接入热重载后种子仍显示「本地兜底已达标」+ 扩展连不上端点。真机 traceback 揪出三个同族缺陷: ①`service._freeze…
 - [26-09-29-webui-column-alignment] WEBUI 表格列对齐口径实施 - 按 reports/26-09-28-2345 审计报告推荐实施列对齐口径: P1 明细/种子两表 completion_on + time_active 共…
