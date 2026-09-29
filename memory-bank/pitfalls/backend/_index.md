@@ -11,6 +11,7 @@
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
 | [behavior-core.md](behavior-core.md) | 后端一批"看着像 bug 其实是特性"的行为 —— 改之前先确认它是不是有意设计。 | 改规则, 改主循环, 改归组, 改缺文件扫描, 改限速, 改状态持久化, 改 web 服务生命周期 |
+| [cold-start-view-gap.md](cold-start-view-gap.md) | 数据/结论已经写进磁盘或内存, 但**广播/发布的时机**排在一个长达数小时的任务之后 —— | 重启后功能像没生效, 视图, 发布, publish, 广播, 冷启动, 判定真空期, 回落本地, 第一波, 长任务, 取数波 |
 | [concurrency.md](concurrency.md) | 七条线程 / 状态机硬约束, 违反即引入难以复现的 bug。 | 加线程, 改队列, 改 state_file, 改校验流程, 视图组装, QbApi 写方法, 阻塞等待, 关停, stop, join |
 | [format-driven-parse.md](format-driven-parse.md) | 解析"按 format 渲染出来的文本"(日志行首当其冲)时, 把字段的**书写形状**写死成字面量 —— 默认配置下侥幸能跑, 用户换一种 format 就**静默失效**; 过滤类失效的表现是"恒空", 与"确实没有"完全同形。 | 日志过滤, 按等级, 日志行解析, levelname, 日志格式, format, 正则提取, 文本解析, 恒空, 结果为空 |
 | [fs-pathmap-tristate.md](fs-pathmap-tristate.md) | 文件访问层(2026-09-27 审查轮)踩出的两条 —— ①casefold 折叠空间匹配后回原串切片, | casefold, 大小写无关, 前缀匹配, 路径映射, path_map, 切片, 变长折叠, UNDETERMINED, |

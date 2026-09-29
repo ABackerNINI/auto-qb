@@ -6,6 +6,7 @@
 - test_signature_ignores_generated_at: 只有 generated_at 变(时间流逝)不算变化
 - test_signature_tracks_channel_state_flip: 通道状态翻转要算变化(它改变告警与展示)
 - test_run_once_refreshes_and_publishes: 一轮刷新建索引并发布视图(revision 1)
+- test_start_publishes_disk_views_before_first_wave: 冷启动先把**磁盘既有结论**发布出去(不得留判定真空期)
 - test_run_once_keeps_revision_when_reusing: 数据仍在有效期 -> 复用 -> 视图不变 -> revision 不抬
 - test_run_once_logs_no_channel_once_per_state: 无通道告警只报一次(分钟级轮询不得刷通知)
 - test_run_once_warns_on_partial_refresh: 刷新不完备(疑似改版) -> WARNING(service 不报这条)
@@ -25,11 +26,12 @@
 - test_revision_bumps_when_data_changes: 数据实质变化(新增条目) -> revision 抬升
 """
 import logging
+import threading
 import time
 
 from auto_qb.hr.fetcher import NullFetcher
 from auto_qb.hr.model import CHANNEL_OK, CHANNEL_SILENT
-from auto_qb.hr.resolve import HrSiteView, HrViewSet
+from auto_qb.hr.resolve import HrIdentity, HrSiteView, HrViewSet, judge_record
 from auto_qb.hr.service import ACTION_ERROR, ACTION_NO_CHANNEL, ACTION_PARTIAL, ACTION_REFRESHED, ACTION_REUSED, \
     ACTION_WAITING, REASON_BUDGET, HrRefreshResult, HrRefreshService
 import auto_qb.hr.worker as worker_module
@@ -113,6 +115,54 @@ def test_signature_tracks_channel_state_flip():
 
 
 # ---------- 取数线程 ----------
+
+
+class _BlockingFetcher:
+    """永远卡在取数上的假通道: 让第一轮波次跑不完, 用来证明「发布不依赖第一轮跑完」"""
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def get_text(self, url: str) -> str:
+        self.entered.set()
+        self.release.wait(10.0)
+        return EMPTY_TABLE_PAGE
+
+    def get_bytes(self, url: str) -> bytes:
+        return self.get_text(url).encode()
+
+
+def test_start_publishes_disk_views_before_first_wave(tmp_path):
+    """冷启动先把**磁盘既有结论**发布出去 —— 第一波跑完前不得出现「判定真空期」
+
+    2026-09-29 实报: 重启后 `view_revision` 仍为 0(第一波受站点最小间隔约束要跑数小时, 待回填的
+    .torrent 越积越久), 108 个种子 `hr_state` **全是空串** ⇒ 界面全回落本地兜底; 而站点文件里
+    B 档命中与放行记录都在。修复 = `_loop` 在首轮取数**之前**先发布一次 `build_views()`。
+    """
+    clock = Clock()
+    first = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
+    HrWorker(service=first, publisher=HrViewPublisher(), poll_interval=60.0).run_once()
+    data, _err = first.store("pt.example.com").read_unlocked()
+    h = data.index[TID_A].infohash_v1
+    assert h, "第一轮应已登记身份(否则本用例前提不成立)"
+    clock.advance(13 * 3600)  # 越过复用窗: 第二轮必须真的去取数
+
+    stuck = _BlockingFetcher()
+    service = _service(tmp_path, stuck, clock=clock)
+    publisher = HrViewPublisher()
+    worker = HrWorker(service=service, publisher=publisher, poll_interval=60.0, now_fn=clock)
+    assert publisher.revision == 0
+    worker.start()
+    try:
+        assert stuck.entered.wait(3.0), "用例前提: 第一轮应已卡进取数(波次确实没跑完)"
+        assert publisher.revision >= 1, "第一轮跑完前就必须发布磁盘既有结论"
+        view = publisher.latest().get("pt.example.com")
+        assert view is not None and h in view.lane_terminal, "磁盘上的终态命中要进视图"
+        judged = judge_record(view, (h, ), now=clock())
+        assert judged is not None and judged.identity is HrIdentity.RELEASED, "判定侧立刻可用"
+    finally:
+        stuck.release.set()
+        worker.stop()
 
 
 def test_run_once_refreshes_and_publishes(tmp_path):

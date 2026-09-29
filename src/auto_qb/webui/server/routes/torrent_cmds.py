@@ -3,6 +3,7 @@
 端点体逐字平移(plan 26-09-22-1857 W3); 仅 @app.* → @router.* 与共享件别名(原闭包名不变)。
 鉴权由 factory 的全局 dependencies 单点覆盖, 本模块不另挂依赖。
 日志命名空间见包 __init__(K3)。"""
+from typing import List
 
 from fastapi import HTTPException
 

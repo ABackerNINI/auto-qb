@@ -3,7 +3,7 @@
 **Status:** Done
 **Added:** 2026-09-29
 **Updated:** 2026-09-29
-**Summary:** 用户实报 HR 站点接入热重载后种子仍显示「本地兜底已达标」+ 扩展连不上端点。真机 traceback 揪出三个同族缺陷: ①`service._freeze_terminal` 引用**未导入**的 `LANE_SATISFIED`(v3 重建起潜伏到真机才炸) ②冻结/观察期签发的放行记录**漏带锚点快照**, 判定侧把 `anchor_downloaded=0` 读成「downloaded 增长」⇒ 签发当刻作废 ③`HrRuntime.apply` L0 重建路径新建端点却**从不 `start()`**, 端口从未绑定。既有守阵 `test_terminal_vanish_writes_release` 从未走到目标分支(假绿灯) —— 已重塑并红验。**同会话追加一轮**: 端点未监听改为**快速失败**(不再白等 180s) + 观测期出口守阵同样加固。test.full 1745 passed / 4 skipped (91%)。
+**Summary:** 用户实报 HR 站点接入热重载后种子仍显示「本地兜底已达标」+ 扩展连不上端点。真机 traceback 揪出三个同族缺陷: ①`service._freeze_terminal` 引用**未导入**的 `LANE_SATISFIED`(v3 重建起潜伏到真机才炸) ②冻结/观察期签发的放行记录**漏带锚点快照**, 判定侧把 `anchor_downloaded=0` 读成「downloaded 增长」⇒ 签发当刻作废 ③`HrRuntime.apply` L0 重建路径新建端点却**从不 `start()`**, 端口从未绑定。既有守阵 `test_terminal_vanish_writes_release` 从未走到目标分支(假绿灯) —— 已重塑并红验。**同会话追加一轮**: 端点未监听改为**快速失败**(不再白等 180s) + 观测期出口守阵同样加固。**第三轮**(只读核对用户运行数据): 定位「冷启动判定真空期」并修复 —— 发布原排在所有波次返回之后, 首波可跑数小时 ⇒ 重启后视图为空、判定全回落本地。**第四轮**(同一批数据里挖出真凶): `service.py::channel_state` 的 `CHANNEL_OK` 未导入 —— 健康波一到就 NameError ⇒ 视图发布崩(`view_revision` 恒 0)、`/api/hr/status` 500; 同族 `List`(torrent_cmds)一并修, 并把「名字解析不到」做成**静态守卫**(第三道, 关掉这一类)。test.full 1747 passed / 4 skipped (91%)。
 **Topics:** backend-partial-hr-verify
 
 ## 原始请求
@@ -36,6 +36,9 @@
 | 修 runtime 端点从无到有(缺陷 3) | Done | L0 路径补 `endpoint.start()` |
 | 端点未监听快速失败(追加轮) | Done | `ChannelFetcher.listening_fn` + 门面接线; 下载路径让位元组补齐 |
 | 守阵加固(追加轮) | Done | 观测期出口补「快照 + 判定生效」断言; 新增 2 条快速失败守阵并红验 |
+| 冷启动判定真空期(第三轮) | Done | `_loop` 首轮取数**前**发布磁盘既有结论; 守阵用「卡住的通道」钉住首轮 |
+| 真凶 `CHANNEL_OK` 未导入(第四轮) | Done | 健康波一到就 NameError ⇒ 视图发布崩 + 状态接口 500; 同族 `List` 一并修 |
+| 静态名字解析守卫(第四轮收口) | Done | `test_import_all.py::test_no_undeclared_global_names`(第三道; 零误报 + 回退即红) |
 | 守阵重塑 + 红验(4 条) | Done | 修复前全红且复现 NameError; 修复后全绿 |
 | 收尾回写(归档/切片/坑档/基线) | Done | 基线 26-09-29-1821; 坑档 backend/release-record-baseline.md + testing/unreached-branch-guard.md; hot-reload-held-config.md 扩端点 |
 
@@ -55,8 +58,52 @@
   `judge_record(...).identity is RELEASED`(红验实测: 未修复时记录 `anchor_*` 全零)。
 - **未做**: 端点未监听时的前端展示/自检新字段 —— WebUI 状态块已有 `channel.listening`, 语义够用。
 
+## 第三轮(用户复验「仍显示本地」: 只读核对运行数据)
+
+- **新证据**(用户授权的只读核对: `auto-qb-data/hr/BTSchool.json` + 运行实例的 `/api/hr/status`、`/api/state`):
+  站点文件 schema v2、194 条**全在 B 档**(114 条有 infohash)、`verified` 4 条(锚点全零 —— 旧代码写的,
+  现已被 `has_anchor_snapshot` 放行); 而 `view_revision = 0`、108 个种子 `hr_state` **全为空串**。
+- **新缺陷(冷启动判定真空期)**: `HrWorker.run_once()` 的发布排在**所有站点波次返回之后**, 而一波受
+  站点最小间隔(90s/请求) + 待回填 .torrent 约束可跑数小时 ⇒ `HrRuntime.judge()` 在视图为空时返回
+  None ⇒ 四个消费点全部回落本地 ⇒ 界面全是「本地」。(补: `wave_ts` 与 `fetched_at` 差 12h,
+  直接说明「那一波没跑完」—— 两者都只由 `_finish_wave` 写。)
+- **修复**: `HrWorker._loop` 在首轮取数**之前**先 `publish(self._build_views([]))`(读盘既有结论),
+  在 try/except 内只记 ERROR —— 读盘失败不打死取数线程。
+- **量化复验**(站点文件 × /api/state 只读比对): 108 个本地种子中按 infohash 命中站点行的只有 **2 个**
+  (Cat&Dragon S01E11/E12); 其余 106 = **77 个站点清单里根本没有对应行** + **29 个只有粗配命中他人的行**
+  (例: 本地「每月三万…1080p…HHWEB」粗配了行「Yiran's Silver Linings 2026 …2160p…UBWEB」—— 靠质量
+  标签构成重合段) ⇒ 行 4 本地兜底, 设计如此。视图发布后前者立刻转「已核实·放行」。
+- **旁证(未入池, 待拍板)**: `FUZZY_NAME_K = 12`(计划建议 12~15, 取下限)使质量标签
+  ("webdlh265aac" 13 字符)构成假重合段 —— 114 次 .torrent 下载里只有 2 次真命中, 白烧站点配额
+  (90s/请求、240/日)。是否收紧(提高 K / 要求重合段落迺�发布组段)由用户定。
+
+## 第四轮(同一批数据里的真凶: `CHANNEL_OK` 未导入)
+
+- **证据链**(全部只读取证, 未改动用户任何文件): 运行实例日志 `auto-qb-data/logs/auto-qb.log` 尾部 ——
+  `File "hr/service.py", line 1179, in channel_state / return CHANNEL_OK` →
+  `NameError: name 'CHANNEL_OK' is not defined`。崩点链:
+  `worker._loop → run_once → publisher.publish(_build_views(...)) → service.build_views →
+  build_view_for → channel_state → return CHANNEL_OK` ⇒ **视图永不发布**(被 `_loop` 的「单轮异常不打死
+  线程」兜住, 只留一条 ERROR), `view_revision` 恒 0 ⇒ 判定全回落本地; 同一行也让 `/api/hr/status`
+  500(`build_site_statuses → build_view_for`)。
+- **为何前两轮没看见**: `channel_state` 只在「健康波新鲜」时返回 `CHANNEL_OK`; 重启时 `healthy_ts` 还是
+  24h 前的(返回 `CHANNEL_SILENT`, 那行不执行)。18:50:08 波次跑成功(`终态冻结 124 条`)后 `healthy_ts`
+  变新鲜 ⇒ 第一次走到 `CHANNEL_OK` ⇒ 崩 —— 即**前两轮修复让波次跑通了, 才把这个更深一层的未导入名顶出来**。
+- **同类第三例**: `_freeze_terminal` 的 `LANE_SATISFIED`(第一轮)、`channel_state` 的 `CHANNEL_OK`(本轮)、
+  `webui/routes/torrent_cmds.py::api_torrents_add` 的 `List`(局部注解不参与运行期求值, 一直潜伏)。
+- **收口(关掉这一类)**: `test_import_all.py` 增第三道静态守卫 `test_no_undeclared_global_names` ——
+  逐作用域解析函数体里的名字(自有绑定 / 外层作用域 / 模块全局 / 内建), 解析不到即 red。
+  **实测: 现有代码库零误报; 回退本轮两处修复即红**(红/绿双向验证)。前两道拦不住: import-all 只管
+  导入期求值, `inspect.get_annotations` 只管注解 —— 函数体里的名字只在**被调用**时才解析。
+
 ## 进度日志
 
 - **2026-09-29 (同会话追加)**: 端点未监听快速失败 + 守阵加固 —— 3 条守阵红验(白等 5s 后才报超时 /
   观测期记录快照全零 / API 缺失), 修复后 test.full **1745 passed / 4 skipped (91%)**。
 - **2026-09-29**: 实报定位(含探针取证: 第一波后 `data.verified[h21]=not-listed`、`infohash_v1` 为空 ⇒ 解释守阵为何假绿灯) → 三缺陷修复 → 守阵重塑与红/绿双向验证 → test.full **1743 passed / 4 skipped, TOTAL 91%**(改动前 1740/4, 90%) → 收尾回写。**真机验证待用户**(端点监听 + 种子从「本地兜底」转「已核实·放行」)。
+- **2026-09-29 (第三轮, 只读核对用户运行数据后)**: 定位「冷启动判定真空期」并修复(首轮取数前发布磁盘结论)
+  —— 红验 `assert 0 >= 1` 精确复现实测(`view_revision == 0`); test.full **1746 passed / 4 skipped (91%)**。
+  仍待用户确认: 106 个种子在站点清单里无对应行是否与预期一致。
+- **2026-09-29 (第四轮, 日志取证)**: 挖出真凶 `CHANNEL_OK` 未导入(健康波一到就 NameError ⇒ 视图发布崩
+  + `/api/hr/status` 500), 同族 `List` 一并修; 并给这类缺陷补上**静态守卫**(函数体名字解析)。
+  全库扫描实测零误报, 回退修复即红; test.full **1747 passed / 4 skipped (91%)**。

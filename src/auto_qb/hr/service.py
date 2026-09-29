@@ -35,6 +35,7 @@ from .fetcher import (
 )
 from .model import (
     CHANNEL_DISABLED,
+    CHANNEL_OK,
     CHANNEL_SILENT,
     FETCH_LANES,
     LANE_FAILED,

@@ -24,6 +24,23 @@
    根本不执行(症状: 断言「端点应被收掉」失败)。**处置**: 模拟热重载一律**整对象替换**
    (`config.trackers = make_config(...).trackers`), 与生产里「重新加载出全新对象」同形。
 
+## 静态兜底: 动态测试覆盖不到的分支, 用「名字解析」兜
+
+「未导入的名字只在真机走到那一行才炸」在本仓已复发 **3 次**(`service.py::_freeze_terminal` 的
+`LANE_SATISFIED` 崩整波 / `service.py::channel_state` 的 `CHANNEL_OK` 卡死视图发布 / 
+`webui/routes/torrent_cmds.py` 的 `List` 潜伏)。三道守阵各管一段, 缺一不可:
+
+1. `test_all_modules_import`(import-all): 管**导入期**求值(装饰器 / 默认值 / 类体);
+2. `test_all_annotations_resolve`(`inspect.get_annotations(eval_str=True)`): 管**注解**
+   (含 PEP 649 惰性求值下的 typing 名字);
+3. `test_no_undeclared_global_names`(函数体名字解析): 管**函数体里的名字** —— 它只在被**调用**时求值,
+   动态测试永远可能没走到那条路。实现按作用域链解析(自有绑定 / 外层 / 模块全局 / 内建), 局部名识别
+   刻意**过宽**(宁少报不假报); 注解不归它管(第 2 道负责)。
+
+- 深挖时用权威工具: `uv run --with pyflakes python -m pyflakes src/auto_qb tests`(按需拉取, **不入依赖**) ——
+  它还会报未使用导入 / 未使用局部变量, 本仓此类噪音多, 故只作排障不入闸门。
+- 纪律不变: 新守卫写完必须**回退修复看它红**(本轮: 全库零误报 + 回退即红)。
+
 ## 通用判据 —— 红验怎么写
 
 - 红验的**正确写法**: 只 stash **源码**改动(`git stash push -- <src 路径>`), 保留测试改动,

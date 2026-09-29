@@ -234,6 +234,17 @@ class HrWorker:
     # ---------- 主循环 ----------
 
     def _loop(self) -> None:
+        # ---- 冷启动第一步: 先把**磁盘上的既有结论**发布出去 ----
+        # ❗证据「无时效, 只有真伪」(计划 §3.4): 重启不该留出**判定真空期**。`run_once` 的发布排在
+        # 所有站点波次**返回之后**, 而一波可能要跑数小时(站点最小间隔 90s × 待回填 .torrent);
+        # 这段时间里 `judge()` 因视图为空返回 None ⇒ 四个消费点全部回落本地, 界面上所有种子都显示
+        # 「本地兜底」——站点文件里明明有 B 档命中与放行记录(2026-09-29 实报: 重启后 4 分钟
+        # `view_revision` 仍为 0, 108 个种子 `hr_state` 全为空串)。
+        # ❗必须发在第一轮取数**之前**: 发布是「内容实质变化才抬版本」, 后发的旧快照会把新视图盖回去。
+        try:
+            self.publisher.publish(self._build_views([]))
+        except Exception as e:  # 读盘失败不该打死取数线程(下一轮照常刷新)
+            logger.error(f"HR 启动时发布既有视图失败(不影响取数): {e}", exc_info=True)
         while True:
             with self._cond:
                 if self._stopped:
