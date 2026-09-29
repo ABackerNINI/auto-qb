@@ -306,7 +306,7 @@
       <div><b>PLAN</b>26-09-29-2036</div>
       <div><b>TOPIC</b>backend-partial-hr-verify</div>
       <div><b>前置</b>报告 §9 D2 样张（仅阻塞 M2）· 代码基线 b6ce666</div>
-      <div><b>状态</b>待拍板（Open）</div>
+      <div><b>状态</b>落地中 → M1+M2+M3 Done（拍板全闭：P2 方案 A / R7 现状观察 / P3 全缓做；真机走查待用户侧）</div>
     </div>
   </header>
 
@@ -602,13 +602,14 @@ releases_enabled = ( 既有三条件 ) <span class="kw">and not</span> depth_bro
       <tr><td class="m">v1.0 · 26-09-29-2036</td><td>初稿：按报告 26-09-29-1803 §7 草案对照代码收口 —— 三处定稿（parse_counters 逐页契约与首非 None 合并、收紧落点改 releases_enabled 单点闸门而非 full_depth 赋值折叠、mismatch 判定边界排除截断波）+ T1 迁移陷阱 + 六类测试与里程碑拆分。</td></tr>
       <tr><td class="m">v1.1 · 26-09-29 22:10</td><td>M1 落地（commit 35aa8af，全量 1757 passed + 3 skipped / 91%，T1–T6 七守阵 + 红验闭环；无计数站点行为与基线逐位一致）。拍板：P2 校准策略 = 方案 A（样张实证后硬编码，M2 暂不执行），P3/P4 后续定。实施期补两处 M2 校准要求：①签名无档位参数 —— 区间形站点须由页面自身辨认所属档位（§2.1 实施期补充）；②新增 R7「②停翻 × tab 形计数」——「②停翻波的 rows vs claim」列为 M2 样张必验项。</td></tr>
       <tr><td class="m">v1.2 · 26-09-29 23:17</td><td>M2 落地（用户给 D2 样张 C:/Users/11059/Desktop/Projects/PT页 并拍板口径：CarPT「H&amp;R:」后 3 数 = 考察中/未达标/上限，BTSchool 2 数 = 考察中/未达标）。载体定形为<b>页头摘要形</b>（§2.1 原假设 CarPT 分页区间形被样张证伪：区间终点在早停页==已抓行数，对「翻页标记失效」无保护；页头计数与分页解耦，才是目标失效模式的防线）。nexusphp.py 共享 header_hr_numbers（先剥标签再取数）· btschool.py 新薄子类 2 数→A/C（考察中位样张实证：页头 1 == A 档实抓 1 行；位 1 非已达标反证：已达标样例 50 行而页头 1）· carpt.py 覆写 3 数→A/C（上限不采，B 无声明不猜）· ADAPTERS 注册 btschool + 站点档案 adapter 改 btschool（loaders 派生自动生效）· docs 补「计数口径校准」节。8 新用例 + 夹具按样张原文定形（tab 形/区间形构造器退役）。全量 1767 passed + 3 skipped / 91%（42502f29 合并远端后复测），基线 testing/baselines/26-09-29-2317。<b>开放</b>：真机走查（用户侧）与 R7 拍板（样张无②停翻波无法离线闭项 —— ②停翻波在计数含到期段深处行时会持续 mismatch 冻结，方向保守，当前账号 A/C 全 0 或对平无风险；二选一：现状观察 vs 另立计划给②来源 full_depth 加标记豁免）。</td></tr>
+      <tr><td class="m">v1.3 · 26-09-30 00:24</td><td>M3 落地。拍板（AskUserQuestion 两问）：R7 = <b>现状观察</b>（冻结方向保守 + 告警自带走查引导 + 连续 3 波 ERROR 升级，信号充分；当前账号 A/C 全 0 或对平风险未激活，真出现再另立豁免计划）；P3 备选项 = <b>全部缓做</b>（M3 只做计划 §4 定的两件小事）。落地：①提示语收尾 —— <code>--hr-confirm-empty</code> 帮助文案与 WebUI 确认戳弹窗补「页头计数可自证空集的站点无需人工确认」；②展示口径对齐（实施期发现：行为面 service.py:992 已认计数自证，展示面 empty_confirmed 只认人工戳 ⇒ 计数自证站点被误标「零行未确认」+ 误报「需人工对账」）—— status.py 新增 <code>count_attested_empty</code>（SiteStatus 字段 + 与 service 同式的 helper）并进 blocking_reason 判零行卡点，report.py 零行尾注三分支（已人工确认 / 计数自证空集 / 未确认）；③WebUI —— 站点状态块「各档波次」徽章化（hrsLaneBadge/hrsLaneClass：rows/声明 + 对不平 warn 态 + 失效 error 态，数字全来自后端 s.lanes），自证空集站点摘「零行未确认」标签与「确认空清单」按钮、换「计数自证空集」ok 徽章。测试：T4 补展示对齐断言、test_zero_rows_no_release 重排两波夹具（首波立索引让零行卡点分支可达）、新增 report 尾注守阵；全量 <b>1768 passed + 3 skipped / 91%</b>（f39413b0 上实测），基线 testing/baselines/26-09-30-0024。docs/configuration.md 计数节补展示对齐说明。未动：末页追翻省略 / 总数轴互证 / 登录态佐证（P3 缓做）。</td></tr>
     </table>
   </section>
 
   <!-- ================= colophon ================= -->
   <footer class="colophon">
-    PLAN 26-09-29-2036-plan-hr-counter-integration · TOPIC backend-partial-hr-verify · STATUS In Progress（M1+M2 Done 代码侧 · 真机走查与 R7 拍板待 · M3 缓做）<br>
-    代码基线 9241760（M1 落地于 35aa8af，M2 落地本轮）· 可行性依据 reports/26-09-29-1803（doc-updated 26-09-29-2001）· 测试基线 1767 passed / 3 skipped (91%, M2 落地轮实测)<br>
+    PLAN 26-09-29-2036-plan-hr-counter-integration · TOPIC backend-partial-hr-verify · STATUS In Progress（M1+M2+M3 Done 代码侧 · 真机走查待用户侧）<br>
+    代码基线 9241760（M1 落地于 35aa8af，M2 落地于 f39413b 前轮，M3 落地本轮待提交）· 可行性依据 reports/26-09-29-1803（doc-updated 26-09-29-2001）· 测试基线 1768 passed / 3 skipped (91%, M3 落地轮实测)<br>
     同专题链：报告 <a href="../reports/26-09-29-1803-report-hr-counter-verify.html">26-09-29-1803 (计数可行性)</a> ·
     计划 <a href="../plans/26-09-28-1932-plan-hr-verify-rebuild.html">26-09-28-1932 (v3 rebuild, Done)</a> ·
     审计 <a href="../reports/26-09-29-0404-report-hr-verify-v3-audit.html">26-09-29-0404</a> ·

@@ -208,10 +208,16 @@
                             <span class="hrs-tag" :class="hrsStateClass(s)">{{ hrsStateText(s) }}</span>
                             <span class="hrs-tag">通道 {{ s.channel_text }}</span>
                             <span v-if="s.stale" class="hrs-tag warn">复用窗已过</span>
-                            <span v-if="s.zero_rows && !s.empty_confirmed" class="hrs-tag warn">零行未确认</span>
+                            <span v-if="s.zero_rows && !s.empty_confirmed && !s.count_attested_empty" class="hrs-tag warn">零行未确认</span>
+                            <span v-if="s.count_attested_empty" class="hrs-tag ok">计数自证空集</span>
                           </div>
                           <p class="hrs-line">{{ s.fresh_text }}</p>
-                          <p class="hrs-line">各档波次: {{ s.lanes_text || '-' }}</p>
+                          <p class="hrs-line">各档波次:
+                            <template v-if="s.lanes && s.lanes.length">
+                              <span v-for="ls in s.lanes" :key="ls.lane" class="hrs-tag" :class="hrsLaneClass(ls)">{{ hrsLaneBadge(ls) }}</span>
+                            </template>
+                            <template v-else>{{ s.lanes_text || '-' }}</template>
+                          </p>
                           <p class="hrs-line">
                             索引 {{ s.index_total }} 条(活跃 {{ s.index_active }}) · 档位 {{ hrsLaneText(s) }} ·
                             考察中命中 {{ s.managed }} 个 · 观察期 {{ s.observing }} 个 ·
@@ -223,7 +229,7 @@
                           <p class="hrs-line">{{ s.quota.text }}</p>
                           <p class="hrs-line">守恒: {{ s.retention_text }}</p>
                           <p class="hrs-line">时间窗: {{ s.allow_window || '不限' }}
-                            <button v-if="s.zero_rows && !s.empty_confirmed" class="hb-btn ghost sm"
+                            <button v-if="s.zero_rows && !s.empty_confirmed && !s.count_attested_empty" class="hb-btn ghost sm"
                                     :disabled="hrs.confirming" @click="hrsConfirmEmpty(s.site)">确认空清单</button>
                           </p>
                           <p v-if="s.notes" class="hrs-line warn">最近一波备注: {{ s.notes }}</p>

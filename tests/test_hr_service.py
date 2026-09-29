@@ -64,6 +64,7 @@ from auto_qb.hr.model import (
     HrSiteData,
 )
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, judge_record
+from auto_qb.hr.status import build_site_statuses
 from auto_qb.hr.service import (
     ACTION_ERROR,
     ACTION_PARTIAL,
@@ -501,18 +502,32 @@ def test_freshness_gate_blocks_release(tmp_path):
 
 
 def test_zero_rows_no_release(tmp_path):
-    """结构完好零行 → 不签发放行(改版空表即整站误放行, 不冒这个险)"""
+    """结构完好零行 → 不签发放行(改版空表即整站误放行, 不冒这个险)。
+    首波先立索引(命中登记, 无「未列出」可签), 次波改版空表 —— 零行卡点分支才可达
+    (索引全空时 blocking_reason 先报「还没有任何可判数据」)。"""
     clock = Clock()
-    pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
-    fetcher = FakeFetcher(pages=pages)
+    blob11, h11 = mk_blob("EXAMPLE 11")
+    pages = {
+        url_of("A"): myhr_page([row(11, "EXAMPLE 11")]),
+        url_of("B"): myhr_page([]),
+        url_of("C"): myhr_page([]),
+    }
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob11})
     service = make_service(tmp_path, fetcher, clock=clock)
-    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    anchors = {h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    clock.advance(13 * 3600)
+    fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
     result = run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.zero_rows is True
     assert data.wave.releases_enabled is False
-    assert "h1" not in data.verified
-    assert "零行" in result.reason or "清单为 0" in result.reason
+    assert h11 not in data.verified
+    assert "清单为 0" in result.reason
+    # M3 展示口径对齐(计划 26-09-29-2036): 无计数站点不误标「计数自证空集」, 人工戳提示照旧
+    snap = build_site_statuses(service, clock.now)[0]
+    assert snap.count_attested_empty is False
+    assert "--hr-confirm-empty" in snap.blocking
 
 
 def test_zero_rows_confirmed_release(tmp_path):
@@ -1046,6 +1061,10 @@ def test_counter_zero_claims_self_attest_empty(tmp_path, monkeypatch, caplog):
     assert "h1" in data.verified and data.wave.releases_enabled is True
     assert "清单为 0" not in result.reason and "零行" not in result.reason
     assert "若确认账号的 HR 清单确实为空" not in caplog.text
+    # M3 展示口径对齐(计划 26-09-29-2036 §2.5): 计数自证空集的站点不再标「零行未确认」/「需人工对账」
+    snap = build_site_statuses(service, clock.now)[0]
+    assert snap.count_attested_empty is True and snap.empty_confirmed is False
+    assert snap.blocking == ""
 
 
 def test_counter_positive_zero_rows_page_changed(tmp_path, monkeypatch, caplog):

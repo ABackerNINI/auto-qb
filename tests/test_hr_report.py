@@ -21,6 +21,8 @@
 - test_run_hr_status_survives_broken_file: 站点文件坏掉时如实标 ⚠, 报告仍出得来
 - test_run_hr_status_shows_observation_lines: 观测面四行(排序/P 分布/骤降/档位对比)
 - test_run_hr_status_shows_order_violation: 排序违反轮的 ✗ + 首处位置
+- test_run_hr_status_zero_row_counter_attested_tail: M3 展示口径 —— 计数自证空集的零行波
+  尾注标「计数自证空集, 无需人工确认」, 全文不再出现 --hr-confirm-empty 话术(计划 26-09-29-2036 §2.5)
 - test_period_stats_consistency_and_gap: P 反算一致率与离散(前置实测②的证据口径)
 - test_run_hr_resume_clears_suspension: --hr-resume 清停用 + 记恢复痕迹; 未停用如实说明
 """
@@ -34,8 +36,11 @@ import pytest
 
 from auto_qb.config.models import Config, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.fetcher import HrChannelUnavailable, NullFetcher
+from auto_qb.hr.model import FETCH_LANES
+from auto_qb.hr.adapters.nexusphp import NexusPhpMyhrAdapter
 from auto_qb.hr.ratelimit import day_key
 from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_confirm_empty, run_hr_once, run_hr_status
+import auto_qb.hr.service as hr_service
 from auto_qb.hr.service import HrRefreshService
 from auto_qb.hr.store import HrSiteStore
 
@@ -454,3 +459,33 @@ def test_run_hr_confirm_empty_stamps_site(tmp_path):
     buf2 = io.StringIO()
     assert run_hr_confirm_empty(cfg, [SITE], out=buf2) == 0
     assert "已写入人工对账戳" in buf2.getvalue()
+
+
+def test_run_hr_status_zero_row_counter_attested_tail(tmp_path, monkeypatch):
+    """M3 展示口径(计划 26-09-29-2036 §2.5): 计数自证空集(各档声明全 0)的零行波,
+    零行尾注标「计数自证空集, 无需人工确认」且全文不再出现 --hr-confirm-empty 话术;
+    对照: 未证到计数的零行波维持「未确认」旧口径(行为面守阵见 test_zero_rows_no_release)。"""
+    class _CounterNexus(NexusPhpMyhrAdapter):
+        def parse_counters(self, html):
+            return {lane: 0 for lane in FETCH_LANES}
+
+    monkeypatch.setattr(
+        hr_service,
+        "build_adapter",
+        lambda site, conf: _CounterNexus(
+            site,
+            hr_page_url=conf.hr_page_url,
+            download_path=conf.download_path,
+            scopes=FETCH_LANES,
+            page_param=conf.page_param,
+        ),
+    )
+    _seed(tmp_path, FakeFetcher(pages={l: EMPTY_TABLE_PAGE for l in "ABC"}))
+
+    buf = io.StringIO()
+    assert run_hr_status(_config(tmp_path, data_dir=tmp_path), out=buf) == 0
+
+    text = buf.getvalue()
+    assert "计数自证空集, 无需人工确认" in text
+    assert "未确认 —— 零行波不签发放行" not in text
+    assert "--hr-confirm-empty" not in text, "计数自证的站点不再被引导去人工对账"

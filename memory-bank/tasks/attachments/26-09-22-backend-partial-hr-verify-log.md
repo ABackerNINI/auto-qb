@@ -707,3 +707,48 @@
   (resolve 35 / service 29 / ratelimit 8 / config 29 / report 18 / store 17 / runtime 28 / worker 21 /
   multisite 5), 键面基线 `commands run test.keys-update` 重生成, keys.md 同步; 全量 **1743 passed +
   3 skipped**(test.quick 实测; 基线切片另记)。**未提交**(等用户显式指令); 真机走查仍开放。
+
+
+## 2026-09-30 外迁段(v3.1 计数集成 M2, 档案触顶腾挪, 原样搬运)
+
+- **2026-09-29 23:17 (v3.1 计数集成 M2 落地 —— 两站启用代码轮)** — 用户令「按计划实施 M2」并提供
+  D2 样张(C:/Users/11059/Desktop/Projects/PT页: 两站各考察中/已达标页)与口径拍板: CarPT「H&R:」后
+  3 数 = 考察中/未达标/上限(达到上限受处罚), BTSchool 2 数 = 考察中/未达标。开工前 sync 至 9241760。
+  **载体定形 = 页头摘要形**(计划原假设 CarPT 分页区间形被样张证伪 —— 区间终点在早停页等于已抓行数,
+  对「翻页标记失效」无保护; 页头计数与分页解耦, 才是目标失效模式的防线)。校准实证(项目 parser 对
+  样张实抓): BTSchool 考察中 页头 1 == A 实抓 1 行 ✓ + 位 1 非已达标反证(已达标样例 50 行而页头 1);
+  CarPT 考核中 页头 0 == A 实抓 0 行 ✓(与 26-09-27 存档「已达标 17 行 ↔ 1-17」互证); 未达标位语义
+  来自用户拍板(样张恒 0, 无未达标档样张)。触点 7 文件: ①`nexusphp.py` 共享 `header_hr_numbers`
+  (color_bonus 标签锚点, 标签在 <a> 内/外两包裹形态同一段式覆盖; 先剥标签再取数); ②`btschool.py`
+  新薄子类(2 数→A/C, 位数不符=空 dict 降级; 证据链进 docstring); ③`carpt.py` 覆写(3 数→A/C,
+  上限位不采; docstring 记录区间形→摘要形定形理由); ④`adapters/__init__.py` 注册 "btschool";
+  ⑤`config/site_presets.py` 档案 adapter 改 btschool; ⑥docs/configuration.md 补「计数口径校准」节
+  (铁律四步 + 样张归档要求) + 日志标签表补计数对不平; ⑦测试 8 新用例(test_hr_parse) + 夹具定形
+  (hr_helpers: M1 预留 tab 形 counter_bar/区间形 myhr_page_interval 退役, 换样张原文形态的
+  carpt/btschool 计数条构造器) + test_hr_config 档案断言同步 + docstring 测试计划同步。
+  **R7(②停翻 × 页头计数)未闭**: 样张无②停翻波, 「计数口径若含到期段深处行 ⇒ ②停翻波 rows<claim
+  持续 mismatch 冻结」无法离线证伪 —— 方向保守(冻结不误放), 当前两站账号 A/C 声明全 0 或对平无
+  实际风险; 处置待拍板: 现状观察(告警文案自带引导) vs 另立计划给②来源 full_depth 加可区分标记豁免
+  该门。真机走查(连续 ≥2 波逐档对平 + 人为缺口验证冻结自愈)待用户侧执行。全量 **1767 passed +
+  3 skipped / 91%**(12396 语句 / 999 未覆盖, test.full 21.4s; 42502f29 合并
+  远端 WebUI 三修复后复测, 开工基线 9241760), 基线切片
+  [26-09-29-2317](../../testing/baselines/26-09-29-2317-hr-counter-m2.md)。**未提交**(等用户显式指令)。
+
+
+## 2026-09-30 外迁段(M1 修复轮 22:12, 档案触顶腾挪, 原样搬运)
+
+- **2026-09-29 22:12 (M1 修复轮: fail_streak 清零 + events 重复常量 + 计划 v1.1)** — 用户令
+  「修复问题1/2，问题3更新文档，之后提交」。①**fail_streak 从未清零**(实施期发现①): model.py
+  注释称「干净波清零」但代码无任何清零点 —— 恢复波后陈旧波数一直背着, ERROR 升级文案虚报
+  「已连续 N 波」、status 展示常挂「连续失效 N 波」。修法: `_finish_wave` 对平记账前补清零循环
+  (本波 ok 的档归零; 失效波自身照常累加, multisite 既有守阵「连续 3 波失效 = 3」不受影响);
+  新守阵 `test_fail_streak_resets_on_clean_wave` 四波断言(失效1→失效2→恢复清0→再失效从1起算),
+  红验: 禁用清零 ⇒ 仅该守阵红, 还原绿。②**events.py `LANE_RETENTION_MIN` 重复定义**(实施期发现②):
+  :77 与 :130 两处同值 —— 删后者, 保留紧邻消费方 `retention_violation` 的第一处。③**计划文档 v1.1**
+  (实施期发现③回写): [plans/26-09-29-2036](../../plans/26-09-29-2036-plan-hr-counter-integration.html)
+  §2.1 补「签名无档位参数 —— 区间形站点须由页面自身辨认所属档位」实施期补充、§3 carpt 行补两项
+  校准必验、§6 新增 R7「②停翻 × tab 形计数」(若 tab 形计数把到期段深处行计入总数, ②停翻波持续
+  mismatch 冻结批量签发且不 self-heal —— 「②停翻波的 rows vs claim」列为 M2 样张必验项)、§+ 变更记录
+  v1.1 与页脚状态 In Progress。基线切片 26-09-29-2147 追加修复轮复测段。全量 **1758 passed +
+  3 skipped / 91%**(12370 语句 / 999 未覆盖, test.full 24.3s, 基于 develop d65f831 合并基线);
+  6 条 warnings 为既有依赖级告警, 与本轮无关。随后按用户指令提交。

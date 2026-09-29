@@ -63,11 +63,23 @@ window.AQB_HR_STATUS = {
       const l = s.lane_counts || {};
       return `A=${l.A || 0} B=${l.B || 0} C=${l.C || 0} D=${l.D || 0}`;
     },
+    /* 档位波次徽章(计划 26-09-29-2036 M3): 数字全由后端 s.lanes 算好, 这里只拼文案与配色 */
+    hrsLaneBadge(ls) {
+      let t = `${ls.lane} ${ls.status_text}: ${ls.pages}页${ls.rows}行${ls.full_depth ? "(全)" : ""}`;
+      if (ls.count_claim != null) t += ` · ${ls.rows}/声明${ls.count_claim}`;
+      if (ls.count_match === false) t += " 对不平";
+      return t;
+    },
+    hrsLaneClass(ls) {
+      if (ls.count_match === false) return "warn";
+      return ls.status === "failed" ? "error" : "";
+    },
     /* 人工对账戳(§5.3): 零行波默认不签发放行, 确认账号清单确实为空后写一次性戳 */
     async hrsConfirmEmpty(site) {
       if (this.hrs.confirming) return;
       if (!confirm(`确认站点 ${site} 的 HR 清单确实为空?
-确认后零行波可正常签发放行; 清单再现非零行时确认戳自动失效。`)) return;
+确认后零行波可正常签发放行; 清单再现非零行时确认戳自动失效。
+页头计数可自证空集的站点(各档声明全为 0)无需此人工确认。`)) return;
       this.hrs.confirming = true;
       try {
         await this.api("/api/hr/confirm-empty", { method: "POST", body: JSON.stringify({ site }) });

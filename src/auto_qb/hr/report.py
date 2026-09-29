@@ -224,7 +224,12 @@ def _print_status_site(st: SiteStatus, data: HrSiteData, limit: int, out) -> Non
         print(f"    现在为什么不签发放行: {st.blocking}", file=out)
     print(f"    守恒: {st.retention_text}", file=out)
     if st.zero_rows:
-        tail = "(已人工确认)" if st.empty_confirmed else "(未确认 —— 零行波不签发放行)"
+        if st.empty_confirmed:
+            tail = "(已人工确认)"
+        elif st.count_attested_empty:
+            tail = "(计数自证空集, 无需人工确认)"  # 计划 26-09-29-2036 §2.5/M3: 零行人机环节退役
+        else:
+            tail = "(未确认 —— 零行波不签发放行)"
         print(f"    零行: 本波清单为 0{tail}", file=out)
 
     lanes = st.lane_counts

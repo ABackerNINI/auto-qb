@@ -122,6 +122,8 @@ class SiteStatus:
     releases_enabled: bool = False
     zero_rows: bool = False
     empty_confirmed: bool = False
+    #: 页头计数自证空集(§2.5): 零行波 ∧ 各档声明全 0 —— 无需人工戳, 前端据此摘掉「零行未确认」
+    count_attested_empty: bool = False
     retention_text: str = ""
     notes: str = ""
     writer_instance: str = ""
@@ -178,6 +180,17 @@ def lane_counts(data: HrSiteData) -> Dict[str, int]:
     for entry in data.index.values():
         counts[entry.lane] = counts.get(entry.lane, 0) + 1
     return counts
+
+
+def count_attested_empty(data: HrSiteData) -> bool:
+    """页头计数自证空集(计划 26-09-29-2036 §2.5): 零行波 ∧ 各档站点声明全为 0。
+
+    与 service._finish_wave 里 confirmed_empty 的 OR 分支同一公式(对持久化后的波次状态复算)
+    —— 展示面与行为面必须同一口径: 计数自证的站点不需要人工戳, 就不该再被标
+    「零行未确认」/「需 --hr-confirm-empty」。任一档声明为 None(未证到/无计数)参与全称量词
+    即为假, 保守方向自动成立。
+    """
+    return bool(data.wave.zero_rows) and all(st.count_claim == 0 for st in data.wave.lanes.values())
 
 
 def _lane_statuses(data: HrSiteData, now: float) -> Tuple[List[LaneStatus], str]:
@@ -279,6 +292,7 @@ def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: flo
         releases_enabled=data.wave.releases_enabled,
         zero_rows=data.wave.zero_rows,
         empty_confirmed=data.empty_confirmed_at > 0,
+        count_attested_empty=count_attested_empty(data),
         retention_text=_retention_text(data),
         notes=data.wave.notes,
         writer_instance=data.writer_instance,
@@ -313,7 +327,7 @@ def blocking_reason(view: HrSiteView, data: HrSiteData, stale: bool, site: str =
     """
     if not view.lane_a and not view.lane_terminal and not view.verified:
         return "索引里还没有任何可判数据(先让浏览器扩展跑一轮取数)"
-    if data.wave.zero_rows and not data.empty_confirmed_at:
+    if data.wave.zero_rows and not data.empty_confirmed_at and not count_attested_empty(data):
         return "结构完好但清单为 0: 不签发放行 —— 需 --hr-confirm-empty 人工对账一次"
     if not data.wave.releases_enabled:
         return "本波未全部档位有效(截断/失效): 命中照常, 批量「未列出」待下波续判"
@@ -345,6 +359,7 @@ __all__ = [
     "ago_text",
     "blocking_reason",
     "build_site_statuses",
+    "count_attested_empty",
     "duration_text",
     "lane_counts",
     "LANE_TEXTS",
