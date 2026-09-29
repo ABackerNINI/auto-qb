@@ -32,10 +32,11 @@
 - test_view_field_value_quantizes_seeding_time: 视图量化: seeding_time 按分钟取整, 其余原样
 - test_store_seeding_time_quantized_no_repaint: 做种时长秒级递增不每轮置脏, 跨分钟才置脏
 - test_record_seeding_time_quantized_update_from: update_from 双通道(Mapping/对象)的分钟量化
-- test_record_hr_follows_site_judgement: 接入站点后 check_hr_* 听站点侧(转移种子 downloaded=0 也受管束)
-- test_record_hr_released_by_site_view: 已核实放行 -> 触发与达标都 False(本地 downloaded 再大也不算)
+- test_record_hr_follows_site_judgement: 接入站点后 hr_managed 听站点侧(转移种子 downloaded=0 也受管束); check_hr_condition 只答本地触发
+- test_record_hr_released_by_site_view: 已核实放行 -> hr_managed False(本地 downloaded 再大也不管束)
 - test_record_hr_falls_back_without_link: 未注入判定桥 / 站点未接入 / 桥返回 None -> 行为与既有本地逻辑完全一致(零静默变更)
-- test_record_hr_no_evidence_row4_no_recursion: 行 4(站点无有效证据)本地兜底不再与 check_hr_condition 互相递归(回归 2026-09-29 RecursionError)
+- test_record_hr_no_evidence_row4_semantics: 行 4(站点无有效证据)语义反转 —— 纯辅种做种满即达标 / 未达标即管束; 结构断言两方法互不调用(回归 2026-09-29 RecursionError)
+- test_record_hr_methods_decoupled_structurally: 结构断言 check_hr_condition / check_hr_satisfied 互不调用, hr_managed 为需管束单点(计划 26-09-30-0559)
 - test_record_hr_excluded_blocks_all_entries: HR 排除命中标签 -> 三入口全短路且判定桥不被打扰
 - test_record_hr_excluded_category_and_regex: HR 排除的分类命中与 regex:/ :ignore_case 格式
 - test_record_hr_excluded_beats_site_judgement: 排除优先级最高, 站点接入(enabled)也压不过用户显式排除
@@ -270,58 +271,89 @@ def _hr_record(*, downloaded=0, total_size=100 * 1024**2, mode="partial"):
     return rec
 
 
-def test_record_hr_follows_site_judgement():
-    """接入站点后两个 check_* 听站点侧三态: 转移种子(A 客户端下载 → B 保种)downloaded=0 也受管束"""
+def test_record_hr_managed_follows_site_judgement():
+    """接入站点后 hr_managed 听站点侧三态: 转移种子(A 客户端下载 → B 保种)downloaded=0 也受管束;
+    check_hr_condition 只答本地下载触发(展示辅助), 不再受站点侧身份影响(计划 26-09-30-0559)"""
     from auto_qb.hr.resolve import HrIdentity, HrJudgement
 
     rec = _hr_record(downloaded=0)  # 本地看是纯辅种, 站点侧却是清单命中
     link = _StubLink(HrJudgement(identity=HrIdentity.HR, reason="清单命中(档位 A)"))
     rec.hr_link = link
-    assert rec.check_hr_condition() is True, "名单命中即受管束, 与本地 downloaded=0 无关"
+    assert rec.check_hr_condition() is False, "纯辅种本地未触发 —— 触发判据只看本机下载"
+    assert rec.hr_managed() is True, "名单命中即需管束, 与本地 downloaded=0 无关"
     site, hashes, anchor = link.calls[0]
     assert site == "X" and hashes == (rec.infohash_v1, rec.infohash_v2)
     assert anchor == rec.hr_anchor() and anchor.added_on == 1000
 
     link.judged = HrJudgement(identity=HrIdentity.RELEASED, site_satisfied=True)
     assert rec.check_hr_satisfied() is True, "站点侧 B 档(终态放行) => 直接达标"
+    assert rec.hr_managed() is False, "放行 => 不许管束(即便本地未做够)"
     link.judged = HrJudgement(identity=HrIdentity.RELEASED, site_satisfied=False)
     assert rec.check_hr_satisfied() is False, "站点侧 C 档 => 直接未达标"
+    assert rec.hr_managed() is False, "终态放行: 本地未做够也不许管束(not satisfied 的补集不成立)"
     link.judged = HrJudgement(identity=HrIdentity.RELEASED, site_satisfied=None)
     assert rec.check_hr_satisfied() is False, "站点没给达标字段 => 回落本地(做种不足)"
     rec.seeding_time = 3 * 86400 + 12 * 3600
     assert rec.check_hr_satisfied() is True, "回落本地时做种时长达标仍算达标(不能因缺字段误报)"
+    assert rec.hr_managed() is False, "放行记录: 达标与否都不管束"
     link.judged = HrJudgement(identity=HrIdentity.HR)
     assert rec.check_hr_satisfied() is False, "命中考察中 => 义务仍在, 恒未达标"
+    assert rec.hr_managed() is True, "考察中恒管束(含本地已达标者)"
 
 
 def test_record_hr_released_by_site_view():
-    """已核实放行(安全放行): 触发与达标都 False —— 本地 downloaded 已满也不算, 否则漏管口径就白做了"""
+    """已核实放行(安全放行): hr_managed False —— 本地 downloaded 再大也不管束;
+    check_hr_condition 只看本地触发, 站点放行不再改写它(旧断言「触发也 False」作废)"""
     from auto_qb.hr.resolve import HrIdentity, HrJudgement
 
     rec = _hr_record(downloaded=100 * 1024**2)
     assert rec.check_hr_condition() is True, "前置: 本地口径下它确实触发(对照用)"
     rec.hr_link = _StubLink(HrJudgement(identity=HrIdentity.RELEASED, reason="覆盖范围内未列出"))
-    assert rec.check_hr_condition() is False
-    assert rec.check_hr_satisfied() is False
+    assert rec.check_hr_condition() is True, "触发判据 = 纯本地, 站点结论不再改写"
+    assert rec.hr_managed() is False, "放行记录在案: 不打 HR 标签、不管束"
+    assert rec.check_hr_satisfied() is False, "站点没给达标结论 + 做种 0: 未达标(但已放行)"
 
 
-def test_record_hr_no_evidence_row4_no_recursion():
-    """行 4(站点无有效证据)本地兜底不递归: check_hr_condition 行 4 调 check_hr_satisfied,
-    后者回落本地时又调回 check_hr_condition —— 无限递归 RecursionError(2026-09-29 BTSchool 实报)。
-    修复后行 4 的达标回落走纯本地判据, 语义不变"""
+def test_record_hr_no_evidence_row4_semantics():
+    """行 4(站点无有效证据)语义反转(计划 26-09-30-0559): 管束/达标全走本地判据, 无触发门 ——
+    纯辅种(downloaded=0)做种满也算达标(旧断言「恒未达标」作废), 未达标即管束(全量纳入)。
+    旧实现 check_hr_condition 行 4 调 check_hr_satisfied, 后者回落本地时又调回前者 ——
+    无限递归 RecursionError(2026-09-29 BTSchool 实报); 递归源已随重构消失(另见结构断言)"""
     from auto_qb.hr.resolve import HrIdentity, HrJudgement
 
     rec = _hr_record(downloaded=70 * 1024**2)  # 本地 dlratio 0.7 >= 0.7: 触发
     rec.hr_link = _StubLink(HrJudgement(identity=HrIdentity.NO_EVIDENCE, reason="站点无有效证据"))
-    assert rec.check_hr_condition() is True, "行 4 本地兜底: 本地触发即管束"
+    assert rec.check_hr_condition() is True, "行 4 本地触发判据: 本机下载达线"
+    assert rec.hr_managed() is True, "行 4 未达标即管束"
     assert rec.check_hr_satisfied() is False, "做种 0 < 3D: 未达标"
     rec.seeding_time = 3 * 86400 + 12 * 3600
     assert rec.check_hr_satisfied() is True, "做种时长达标 -> 达标"
-    # 纯辅种(downloaded=0 本地不触发): 行 4 下达标回落也走本地, 恒未达标
+    assert rec.hr_managed() is False, "做种满即义务已了, 不再管束"
+    # 纯辅种(downloaded=0 本地不触发): 语义反转 —— 做种满也达标; 未满时管束(疑似辅种全量纳入)
     rec2 = _hr_record(downloaded=0)
     rec2.hr_link = _StubLink(HrJudgement(identity=HrIdentity.NO_EVIDENCE))
-    assert rec2.check_hr_condition() is False
-    assert rec2.check_hr_satisfied() is False
+    assert rec2.check_hr_condition() is False, "纯辅种本地未触发"
+    assert rec2.check_hr_satisfied() is False, "做种 0: 未达标"
+    assert rec2.hr_managed() is True, "未触发不代表无义务 —— 疑似辅种未满也管束"
+    rec2.seeding_time = 3 * 86400 + 12 * 3600
+    assert rec2.check_hr_satisfied() is True, "纯辅种做种满 -> 达标(触发门已删)"
+    assert rec2.hr_managed() is False
+
+
+def test_record_hr_methods_decoupled_structurally():
+    """结构断言(计划 26-09-30-0559 §8): check_hr_condition(纯本地触发, 展示辅助)与
+    check_hr_satisfied(义务已了)互不调用 —— 递归风险源消失; hr_managed 为需管束单点,
+    显式放行短路 + satisfied 兜底(不能写成 not check_hr_satisfied)"""
+    import inspect
+
+    cond_src = inspect.getsource(TorrentRecord.check_hr_condition)
+    sat_src = inspect.getsource(TorrentRecord.check_hr_satisfied)
+    managed_src = inspect.getsource(TorrentRecord.hr_managed)
+    assert "check_hr_satisfied" not in cond_src, "check_hr_condition 不得调 check_hr_satisfied(纯本地判据)"
+    assert "check_hr_condition" not in sat_src, "check_hr_satisfied 不得调 check_hr_condition(触发门已删)"
+    assert "check_hr_satisfied" in managed_src, "hr_managed 兜底必须经 check_hr_satisfied(达标判据单点)"
+    assert "RELEASED" in managed_src, "hr_managed 必须显式放行短路(放行记录+未做够也不许管束)"
+    assert "hr_judgement" in managed_src, "hr_managed 必须经站点侧判定"
 
 
 def test_record_hr_falls_back_without_link():
@@ -331,9 +363,11 @@ def test_record_hr_falls_back_without_link():
     rec = _hr_record(downloaded=70 * 1024**2)
     assert rec.hr_link is None
     assert rec.hr_judgement() is None and rec.check_hr_condition() is True
+    assert rec.hr_managed() is True, "未接入 + 未达标: 本地判据兜底管束(全量纳入)"
     link = _StubLink(None)
     rec.hr_link = link
     assert rec.hr_judgement() is None and rec.check_hr_condition() is True, "桥返回 None(总开关关) => 本地逻辑"
+    assert rec.hr_managed() is True
     rec.tracker_conf.hr_check = None  # 该站未接入(桥在也不该问它)
     asked = len(link.calls)
     assert rec.hr_judgement() is None and rec.check_hr_condition() is True
@@ -343,9 +377,9 @@ def test_record_hr_falls_back_without_link():
 
 
 def test_record_hr_excluded_blocks_all_entries():
-    """HR 排除(计划 26-09-28-1805): 命中排除表 -> 三入口全短路, 判定桥不被打扰
+    """HR 排除(计划 26-09-28-1805): 命中排除表 -> 判定入口全短路, 判定桥不被打扰
 
-    打标/规则/表达式/WebUI 四个消费点全经由这三个入口 —— 单点短路即全体系退出。
+    打标/规则/表达式/WebUI 四个消费点全经由这些入口 —— 单点短路即全体系退出。
     """
     from auto_qb.hr.resolve import HrIdentity, HrJudgement
 
@@ -360,6 +394,7 @@ def test_record_hr_excluded_blocks_all_entries():
     assert rec.hr_judgement() is None, "排除种子连站点侧判定都不发起"
     assert rec.check_hr_condition() is False
     assert rec.check_hr_satisfied() is False, "排除后达标语义无意义, 恒 False(显式短路)"
+    assert rec.hr_managed() is False, "排除后管束语义无意义, 恒 False(显式短路)"
     assert len(link.calls) == asked, "排除种子不该打扰判定桥"
 
 

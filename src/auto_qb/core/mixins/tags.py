@@ -11,9 +11,26 @@ from ..qbapi import QbApi
 from .. import episodes
 from ...infra import utils
 from ...torrents import TorrentRecord
+from ...hr.resolve import HrIdentity
+from ...hr.service import SEED_EXEMPT_RATIO
 from ..taskqueue import FINISHED, REQUEUE
 
 logger = logging.getLogger(__name__)
+
+
+def _seed_exempt_baseline(rec: TorrentRecord) -> float:
+    """超额跳过线的做种要求基准(秒)(计划 26-09-30-0559 §4)
+
+    已接入站点(hr_check 存在且启用)用站点档案预设 hr_check.required_seeding_time ——
+    与取数侧对象集排除线同源, 同一颗种子不出现「取数跳过但打标不跳」的劈叉;
+    未接入站点回落本地 hr.required_seeding_time。基准 <= 0 时调用方跳过线不生效
+    (与取数侧 required_seeding_time > 0 前提一致)。
+    """
+    conf = rec.tracker_conf
+    site_conf = conf.hr_check
+    if site_conf is not None and site_conf.enabled:
+        return site_conf.required_seeding_time
+    return float(conf.hr.required_seeding_time)
 
 
 class TagsMixin:
@@ -135,19 +152,29 @@ class TagsMixin:
     def _add_hr_tag_or_category(self, torrent: TorrentRecord, dry_run: bool):
         """添加HR标签或分类(基于站点合并后的 hr 设置)
 
-        - 满足触发条件(下载比例/下载量, 含完全下载的小种子): 添加 add_tag / add_category
-        - HR 满足(做种时长 >= required_seeding_time + extra_seeding_time 或 分享率达标): 添加 add_tag_for_satisfied / add_category_for_satisfied
-        HR 条件/达标判定统一委托 TorrentRecord.check_hr_condition/check_hr_satisfied(单点语义);
-        命中排除表(hr.exclude_tags/exclude_categories)的种子两个判定恒 False —— 自然早退,
-        已打的标记残留不回撤(计划 26-09-28-1805)。
+        门禁三段(计划 26-09-30-0559 §4): 放行短路 -> 超额跳过 -> satisfied 分流。
+        - 放行(毕业达标 / 未达标终态 / 免罪 / 放行记录): 不打标 —— 终态结论不受本地做种影响;
+        - 超额老种(做种 >= 3x 基准): 跳过不打标 —— 义务早已了结, 打卡无信息量;
+          被动命中考察中仍打 HR 标签(站点权威);
+        - 其余**全量纳入**(2026-09-30 拍板): 做种满 req+extra(或分享率达标)打达标标签,
+          否则打 HR 标签 —— 含 downloaded=0 的转移种/纯辅种(本地「不触发」不代表无义务)。
+        达标判定委托 TorrentRecord.check_hr_satisfied(单点语义); 命中排除表
+        (hr.exclude_tags/exclude_categories)的种子恒早退, 已打的标记残留不回撤(计划 26-09-28-1805)。
         """
         hr = torrent.tracker_conf.hr
         if hr is None:
             return False
-
-        # 检查下载条件, 主要为了排除辅种(未达触发量但已完全下载的小种子同样触发)
-        if not torrent.check_hr_condition():
+        if torrent.hr_excluded():
             return False
+
+        judged = torrent.hr_judgement()
+        if judged is not None and judged.identity is HrIdentity.RELEASED:
+            return False  # 毕业/终态/免罪/放行记录: 不打标(维持现状)
+
+        baseline = _seed_exempt_baseline(torrent)
+        if baseline > 0 and torrent.seeding_time >= SEED_EXEMPT_RATIO * baseline \
+                and not (judged is not None and judged.is_hr):
+            return False  # 超额老种跳过; 被动命中考察中仍打 HR 标签(站点权威)
 
         added = False
 

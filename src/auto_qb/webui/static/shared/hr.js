@@ -10,27 +10,31 @@
 
 /* 删除安全档位 × 来源档位的 token -> 展示映射(2026-09-25, 计划 webui-hr-safety-display §3):
  * token 由后端 hr.resolve.safety_display 单点派生, 前端只做映射与着色 —— 判定与来源不得在 JS 重算。
- * 颜色编码安全档位五档(2026-09-25 用户修正): danger 橙=考察中进行中 / failed 红=未达标终态
- * (考核期已过, 独立醒目色, 不与考察中混橙、更不是可删绿) / safe 绿 / unknown 灰;
- * danger 与 failed 同属「不能删」桶。来源用非文字底线编码(2026-09-29 起, 原 2 字徽标已退役)。 */
-const HR_SAFETY_CLASSES = { danger: "pending", failed: "hr-fail", safe: "reached", unknown: "hr-unk" };
+ * 颜色编码安全档位五档(2026-09-25 用户修正; 2026-09-30 计划 hr-trigger-semantics: unknown 灰档
+ * 退役, 换 warning 黄档=本地未达标且疑似辅种 —— 可能有义务也可能原机已完成, 警示但不拦删):
+ * danger 橙=考察中进行中 / failed 红=未达标终态(考核期已过, 独立醒目色, 不与考察中混橙、
+ * 更不是可删绿) / safe 绿 / warning 黄; danger 与 failed 同属「不能删」桶。
+ * 来源用非文字底线编码(2026-09-29 起, 原 2 字徽标已退役)。 */
+const HR_SAFETY_CLASSES = { danger: "pending", failed: "hr-fail", safe: "reached", warning: "hr-warn" };
 /* 桶名(2026-09-25 用户修正): failed = 考核期已过仍未达标, 结果已成立的**终态** —— 删除不会新增
- * 惩罚, 叫「不能删」不符合实际, 独立成「考核未通过」桶(红), 不进 delete_flow 的删除点名集合 */
-const HR_SAFETY_BUCKETS = { danger: "不能删", failed: "考核未通过", safe: "可删", unknown: "未核实" };
+ * 惩罚, 叫「不能删」不符合实际, 独立成「考核未通过」桶(红), 不进 delete_flow 的删除点名集合;
+ * warning = 疑似辅种(黄), 黄档警示不禁止删除, 同样不进点名集合 */
+const HR_SAFETY_BUCKETS = { danger: "不能删", failed: "考核未通过", safe: "可删", warning: "疑似辅种" };
 /* v3.4(2026-09-26 用户指令): site_exempt = D 档已免罪, 站点的明确终态结论 —— 与 site_released
  * (完整刷新未列出 = 缺席证据)分开编码, 同属「在线」徽标与「在线核实」来源桶。
  * 2026-09-29(计划 webui-hr-src-underline): 徽标从「2 字芯片」换成非文字底线 —— token -> 类名,
- * 由 CSS 编码长度/线型, 文字只进单元格 title; 旧 HR_SRC_BADGES 随之退役(它是唯一的消费方)。 */
+ * 由 CSS 编码长度/线型, 文字只进单元格 title; 旧 HR_SRC_BADGES 随之退役(它是唯一的消费方)。
+ * 2026-09-30: unverified 来源档随「未核实」灰档退役, 本地判据统一 local 承接。 */
 const HR_SRC_CLASSES = {
   site_scope: "src-online", site_satisfied: "src-online", site_unsatisfied: "src-online",
   site_released: "src-online", site_exempt: "src-online",
-  local: "src-local", unverified: "src-unver",
+  local: "src-local",
 };
 /* 来源档位(2026-09-29 晚起)不再进单元格原生 title: 经 hrSrcClass → CSS 底线三编码(长度/线型/明暗),
  * 文字结论由悬停弹窗(hrPopEnter)承载; 原生 title 已移除以避免与弹窗叠出被遮挡的冗余提示。 */
 const HR_SRC_BUCKETS = {
   site_scope: "在线核实", site_satisfied: "在线核实", site_unsatisfied: "在线核实", site_released: "在线核实", site_exempt: "在线核实",
-  local: "本地兜底", unverified: "",
+  local: "本地兜底",
 };
 
 /* ---------------- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ----------------
@@ -40,8 +44,8 @@ const HR_SRC_BUCKETS = {
  * 双轨进度 = 本地粗轨(已做种/要求) + 站点细轨(还需/要求, 仅站点给出 need 端点时出现);
  * 角标只在结论没说时出现(还需 X / 已超出 X / 考核期已过); 数值条仅站点侧值(本地值表格行可见);
  * 无时长要求(**身份层放行** / 未配时长)时轨道收起换状态徽记, 不留空轨。
- * !「未核实(本地不触发)」**不在此列**(2026-09-29 用户实报): 它本地有要求(只是不触发 HR
- * 条件), 收起轨道会让人看不到要求时长、只留一个孤立的来源芯片。
+ * !「本地·未达标(疑似辅种)」warning **不在此列**(承 2026-09-29 用户实报的同一逻辑): 它本地
+ * 有要求(只是本地未触发下载条件), 收起轨道会让人看不到要求时长、只留一个孤立的来源芯片。
  * 前端只做比例呈现与着色, 判定与阈值仍全部消费后端算好字段(hr.resolve / _hr_view_fields), 不重算。
  * 单例浮层 teleport 到 body 级(脱离列表容器, 同 .speed-pop 的 overflow/特异性教训);
  * prism 主题令牌挂在 html[data-theme], body 级自动继承, 弹窗无需拷贝主题。 */
@@ -95,13 +99,12 @@ window.AQB_HR = {
     hrSrcClass(m) {
       return m.hr_safety ? (HR_SRC_CLASSES[m.hr_safety_src] || "") : "";
     },
-    /* 整格 = 在线(站点结论覆盖到要求值); 半格 = 本地 / 未核实(只对实际值负责) */
+    /* 整格 = 在线(站点结论覆盖到要求值); 半格 = 本地(只对实际值负责) */
     hrSrcFull(m) {
       return this.hrSrcClass(m) === "src-online";
     },
     hrSrcHalf(m) {
-      const c = this.hrSrcClass(m);
-      return c === "src-local" || c === "src-unver";
+      return this.hrSrcClass(m) === "src-local";
     },
     /* ---------------- HR 悬停弹窗: 触发调度 + 数据组装(渲染规则单点见文件头) ---------------- */
 
@@ -174,10 +177,10 @@ window.AQB_HR = {
       window.addEventListener("resize", () => this.hrPopHideNow());
     },
     /* 弹窗数据组装(全为后端算好字段的展示映射; null = 不弹):
-     * lane ← hr_safety(danger 橙=考察中 / failed 红=考核未通过终态 / safe 绿 / unknown 灰),
+     * lane ← hr_safety(danger 橙=考察中 / failed 红=考核未通过终态 / safe 绿 / warning 黄=疑似辅种),
      * verdict ← hr_safety_text, 依据 ← hr_reason, 站点侧值 ← hr_site_*(与详情抽屉 hrSiteLine 同源),
      * 本地值 ← seeding_time / hr_req_time(与表格列同口径)。
-     * "none" = 不适用(站点未接入且未触发), 与无字段行同等不弹。 */
+     * "none" = 不适用(站点未配 HR / 命中排除表 —— 后端组装层短路成空串), 与无字段行同等不弹。 */
     hrPopData(m) {
       if (!m.hr_safety || m.hr_safety === "none") return null;
       const lane = m.hr_safety;
@@ -192,11 +195,12 @@ window.AQB_HR = {
       if (m.hr_site_dl !== "") kv.push(["站点下载", this.fmtSize(m.hr_site_dl)]);
       let gauge = null, badge = "";
       if (["site_released", "site_exempt"].includes(src) || !(req > 0)) {
-        /* 无时长要求(身份层放行 / 超龄豁免 / 未配时长): 轨道收起换状态徽记; 未核实用虚线盾 */
-        badge = lane === "unknown" ? "dash" : "check";
+        /* 无时长要求(身份层放行 / 免罪 / 未配时长): 轨道收起换状态徽记
+         * (warning 也按 check —— 2026-09-30 计划 hr-trigger-semantics: unknown 灰档 dash 徽标随档退役) */
+        badge = "check";
       } else {
-        /* !未核实(本地不触发)也走这里: 它有本地要求, 要画本地轨把「已做种/要求」摆出来
-         * (2026-09-29 实报: 收起成「无时长要求」看不到要求时长)。*/
+        /* !疑似辅种(warning)也走这里: 它有本地要求, 要画本地轨把「已做种/要求」摆出来
+         * (承 2026-09-29 实报: 收起成「无时长要求」看不到要求时长)。*/
         /* 角标只在结论短语没说时出现: 考察中 = 还需 X(站点 need 优先, 缺了回落本地差值) /
          * 本地兜底 = 已超出 X 或还需 X / 终态未达标 = 考核期已过; 已达标不重复出角标(站点轨满格自明) */
         let tag = null;
@@ -240,7 +244,7 @@ window.AQB_HR = {
         lag: kv.length > 0 || !!(gauge && gauge.site),
       };
     },
-    /* H&R 筛选档位(2026-09-25 起四桶: 不能删/考核未通过/可删/未核实): 组级消费组内成员档位集合、
+    /* H&R 筛选档位(2026-09-25 起四桶; 2026-09-30 起第四桶 = 疑似辅种): 组级消费组内成员档位集合、
      * 成员级消费 hr_safety; 旧服务端(无 hr_safety 字段)回落本地布尔, 词汇映射进新档位。
      * 只比较后端算好的字段, 前端不重算模板/阈值(pitfalls: HR 判定前后端各写一遍 = 自定义标签立即失效) */
     /* 成员级筛选谓词: 单种子平铺/追剧集行/未识别桶共用同一套条件
@@ -310,12 +314,12 @@ window.AQB_HR = {
     },
   },
   computed: {
-    /* H&R 四桶计数(不能删/考核未通过/可删/未核实; 从未触发的行不属于任何桶):
+    /* H&R 四桶计数(不能删/考核未通过/可删/疑似辅种; 未配 HR 的行不属于任何桶):
      * 只消费后端算好的 hr_safety, 前端不重算判定; 组行 = 组内出现过的档位各计 1(计数 = 含该档的组数),
      * 种子行按自身。!取数面走 `facetRows`(**单点**, 见 filters.js): 组视图按组计数、种子页按种子计数。
      * (原先一律遍历 decoratedGroups ⇒ 种子页(按视图分片不回 groups)恒得 0/0 —— issue 见 filters.js) */
     hrOptions() {
-      const counts = { "不能删": 0, "考核未通过": 0, "可删": 0, "未核实": 0 };
+      const counts = { "不能删": 0, "考核未通过": 0, "可删": 0, "疑似辅种": 0 };
       for (const r of this.facetRows) {
         const buckets = r.members ? this._hrBuckets(r) : [this._hrBucketMember(r)].filter(Boolean);
         for (const b of buckets) if (b in counts) counts[b] += 1;

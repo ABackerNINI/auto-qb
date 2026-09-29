@@ -719,16 +719,25 @@ class FakeTorrent:
         return self.total_size > 0 and self.downloaded >= self.total_size
 
     def check_hr_satisfied(self) -> bool:
+        """与 TorrentRecord.check_hr_satisfied 同语义(计划 26-09-30-0559): 无触发门,
+        达标只看做种事实(时长/分享率); 真实判定以真记录为准"""
         if not self.tracker_conf.hr:
             return False
         if self.hr_excluded():
             return False
         hr = self.tracker_conf.hr
-        if not self.check_hr_condition():
-            return False
         seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
         ratio_ok = hr.required_share_ratio > 0 and (self.ratio or 0) >= hr.required_share_ratio
         return seeding_ok or ratio_ok
+
+    def hr_managed(self) -> bool:
+        """与 TorrentRecord.hr_managed 同语义(计划 26-09-30-0559): 替身恒未接入(judged None)
+        -> 本地判据兜底, 未达标即需管束; 真实判定以真记录为准"""
+        if not self.tracker_conf.hr:
+            return False
+        if self.hr_excluded():
+            return False
+        return not self.check_hr_satisfied()
 
     def hr_anchor(self):
         """与 TorrentRecord.hr_anchor 一致(由快照字段派生的下载锚点)"""

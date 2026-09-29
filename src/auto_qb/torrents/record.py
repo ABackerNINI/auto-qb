@@ -126,7 +126,7 @@ class TorrentRecord:
     #: HR 判定桥: `QbManager.hr` 门面(HrRuntime)的**稳定引用** —— 热重载不换对象, 故不必重挂。
     #: 非快照字段: 不进 _SNAPSHOT_FIELDS/_raw, 不参与 apply_delta 与视图脏判定。
     #: 读取时经它现算「三态 + 锚点校验」(计划 §9), 所以锚点漂移/视图更新都不需要"记录置脏",
-    #: 也就不用为了 HR 走一遍全库重建。未注入(None) ⇒ 两个 check_hr_* 走既有本地字段逻辑。
+    #: 也就不用为了 HR 走一遍全库重建。未注入(None) ⇒ check_hr_* / hr_managed 走既有本地字段逻辑。
     hr_link: Any = None
 
     def __getattr__(self, name: str) -> Any:
@@ -301,8 +301,8 @@ class TorrentRecord:
         在 qB 里加/删排除标签, 下一轮判定即生效或恢复管束, 无需重启、无需记录置脏。
         空表快速路径: 两个列表都空(默认) = 一次布尔判断, 三个判定入口的热路径零成本。
 
-        公开方法(webui/views.py 的 _hr_view_fields 也要读排除态做展示); 本文件内三个
-        判定入口(check_hr_condition / check_hr_satisfied / hr_judgement)顶部各有一行短路。
+        公开方法(webui/views.py 的 _hr_view_fields 也要读排除态做展示); 本文件内四个
+        判定入口(hr_managed / check_hr_condition / check_hr_satisfied / hr_judgement)顶部各有一行短路。
         """
         hr = self.tracker_conf.hr
         if hr is None:
@@ -344,36 +344,48 @@ class TorrentRecord:
         )
 
     def check_hr_condition(self) -> bool:
-        """是否触发 HR(站点侧优先, 本地条件兜底), 用于排除辅种
+        """纯本地下载触发判据(计划 26-09-30-0559): 只回答「本机下载条件满足吗」
 
-        前置: tracker_conf 已在 _refresh_torrents 阶段匹配(无 None 防御, 早暴露调用路径错误)。
-        站点接入后本条语义 = 四行判定表(计划 26-09-28-1932 §3.1): 命中考察中 ⇒ 受管束(本地
-        达标与否都管); 命中终态档 / 放行记录 ⇒ 放行; **行 4**(无有效站点证据)⇒ 本地判据兜底:
-        达标放行 / 未达标管束(硬编码无配置)。
+        展示辅助 —— 唯一消费点是前端在未达标种子里区分「本机下载」与「疑似辅种」
+        (WebUI hr_triggered 字段 / 表达式 tor.hr_local_triggered)。
+        !管理语义(打标 / 规则条件 / 表达式 hr_condition_met)不得再消费本方法:
+        「不触发」不代表无义务(转移种子 downloaded 恒 0), 管束判据单点在 hr_managed()。
 
-        本地兜底边界(未接入站点原样保留): 未达触发量的种子, 把种子完整下载完
-        (下载量 >= 种子大小)也视为触发 —— 否则触发量大于种子体积的小种子永远不会触发
-        (想法.md 已知问题)。downloaded=0 的纯辅种(添加时数据已完整, 对本站无下载消耗)
-        与部分下载(如 1B)不触发。
+        判据(既有口径原样保留): 下载比例 / 下载量达线, 或把种子完整下载完
+        (下载量 >= 种子大小 —— 触发量大于种子体积的小种子兜底, 想法.md 已知问题)。
+        downloaded=0 的纯辅种(添加时数据已完整, 对本站无下载消耗)与部分下载(如 1B)不触发。
 
-        HR 排除(计划 26-09-28-1805)优先于本方法一切逻辑: 命中排除表恒 False,
-        打标 / 规则 hr 条件 / 表达式四个消费点因此一并按「未触发」处理。
+        HR 排除(计划 26-09-28-1805)优先于本方法一切逻辑: 命中排除表恒 False。
+        """
+        if not self.tracker_conf.hr:
+            return False
+        if self.hr_excluded():
+            return False
+        return self._local_hr_triggered()
+
+    def hr_managed(self) -> bool:
+        """需按 HR 管束(计划 26-09-30-0559): 打标分流 / 规则条件 / 表达式的管理语义单点
+
+        站点侧结论权威: 考察中恒管束(含超额种子被动命中 —— 网站绝对权威);
+        终态放行 / 放行记录恒不管束(即使本地未做够 —— 放行不许被本地判据推翻);
+        无站点证据 / 未接入按本地判据兜底(未达标即管束, 全量纳入: 含 downloaded=0 的疑似辅种)。
+        !不能写成 `not check_hr_satisfied()`: 放行记录 + 本地未做够也**不许**管束,
+        必须显式先排除放行。
+
+        HR 排除优先: 命中排除表恒 False(与其它判定入口同构)。
         """
         if not self.tracker_conf.hr:
             return False
         if self.hr_excluded():
             return False
         judged = self.hr_judgement()
-        if judged is not None:
-            if judged.identity is HrIdentity.HR:
-                return True  # 行 1: 命中考察中(绝对权威 —— 本地达标与否都管)
-            if judged.identity is HrIdentity.RELEASED:
-                return False  # 行 2/3: 终态放行 / 放行记录(终态不可逆)
-            # 行 4: 站点无话可说 → 本地判据兜底(达标放行 / 未达标管束)
-            if self.check_hr_satisfied():
-                return False
-            return self._local_hr_triggered()
-        return self._local_hr_triggered()
+        if judged is None:
+            return not self.check_hr_satisfied()  # 未接入: 本地判据兜底
+        if judged.identity is HrIdentity.HR:
+            return True  # 行 1: 考察中(绝对权威)
+        if judged.identity is HrIdentity.RELEASED:
+            return False  # 行 2/3: 终态放行 / 放行记录(终态不可逆)
+        return not self.check_hr_satisfied()  # 行 4: 无站点证据, 本地判据兜底
 
     def _local_hr_triggered(self) -> bool:
         """本地触发条件(未接入站点的既有口径, 原样保留)"""
@@ -390,13 +402,13 @@ class TorrentRecord:
         return self.total_size > 0 and self.downloaded >= self.total_size
 
     def check_hr_satisfied(self) -> bool:
-        """是否满足 HR 要求: (站点侧达标结论) 或 本地(做种时长 >= 要求 + 额外 或 分享率达标)
+        """义务已了的单点(计划 26-09-30-0559): (站点侧达标结论) 或 本地(做种时长 >= 要求 + 额外 或 分享率达标)
 
         站点侧优先(档位即结论): 命中 B 已达标 ⇒ 达标; 命中 C 未达标 ⇒ 未达标, 命中即停
         (不看页面数值字段、不回落本地, 本地值不得越级推翻站点清单结论); 命中考察中 ⇒ 未达标
         (义务仍在); D 免罪 / 未列出放行(站点没给达标结论)与行 4(无有效站点证据)回落本地
-        时长/分享率 —— 兜底保持旧口径: 本地未触发 HR 条件即未达标(零静默变更)。
-        HR 排除恒 False(显式短路, 不依赖 check_hr_condition 的传递)。
+        时长/分享率 —— 无触发门: 达标只看做种事实, 转移种(downloaded=0)做种满也算达标。
+        HR 排除恒 False(显式短路, 不依赖 hr_managed 的传递)。
         """
         if not self.tracker_conf.hr:
             return False
@@ -413,18 +425,12 @@ class TorrentRecord:
                     return False  # 命中 C(考核结论已定: 未达标)
                 # D 免罪 / 未列出放行(站点没给达标结论): 本地判据说了算 —— 不设触发门
                 # (种子已放行, 谈「触发」无意义; satisfied = 本地达标 ∨ 命中 B)
-                hr = self.tracker_conf.hr
-                seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
-                ratio_ok = hr.required_share_ratio > 0 and self.ratio >= hr.required_share_ratio
-                return seeding_ok or ratio_ok
-        # 行 4 / 站点未接入: 本地兜底(未触发即未达标, 与既有口径一致)。
-        # !这里只能走 _local_hr_triggered 纯本地判据, 不能调 check_hr_condition ——
-        # 行 4 时后者又会调回本方法(check_hr_condition 行 4 → check_hr_satisfied),
-        # 无限递归(2026-09-29 实测 RecursionError, BTSchool)。走到本行的两种情形
-        # (judged is None / identity 为 NO_EVIDENCE)下 check_hr_condition 的站点侧
-        # 分支都已返回, 恰好坍缩成 _local_hr_triggered, 语义等价。
-        if not self._local_hr_triggered():
-            return False
+                return self._local_satisfied()
+        # 行 4 / 站点未接入: 本地判据兜底(无触发门 —— 与放行记录回落同一判据)
+        return self._local_satisfied()
+
+    def _local_satisfied(self) -> bool:
+        """本地达标判据: 做种时长 >= 要求 + 额外, 或分享率达标(ratio 通道独立功能, 保留)"""
         hr = self.tracker_conf.hr
         seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
         ratio_ok = hr.required_share_ratio > 0 and self.ratio >= hr.required_share_ratio

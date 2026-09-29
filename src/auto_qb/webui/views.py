@@ -238,7 +238,8 @@ class WebviewMixin:
         """该成员的 HR 展示字段(标签文本 + 要求/达成布尔 + 三态与依据), 供前端渲染 H&R 栏与对照列
 
         - hr_tag / hr_tag_done: 已触发未达标 / 已达标时应有的标签(供前端按文本着色)
-        - hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
+        - hr_triggered / hr_satisfied: 本机下载条件满足(展示辅助, 区分「本机下载」与「疑似辅种」;
+          管理语义在 hr_managed, 不再由本字段表达) / 是否已达成要求
         - hr_excluded: 是否命中 HR 排除表(计划 26-09-28-1805) —— True 时触发/达标恒 False、
           站点侧字段全空, 前端在做种时长列的 title 里提示(2026-09-29 起撤掉行内「已排除」徽标,
           与来源标记同批非文字化; 不得在 JS 里重算匹配, 只消费本布尔)
@@ -246,10 +247,11 @@ class WebviewMixin:
         - hr_req_ratio: 要求分享率(0 = 不要求)
         - hr_state / hr_state_text / hr_reason: 站点侧判定(hr / verified_non_hr / unknown /
           exempt=超龄豁免) + 中文说法 + 依据; 接入站点才非空(未接入 = "", 前端据此不显示三态行)
-        - hr_safety / hr_safety_text / hr_safety_src: 删除安全档位(danger/failed/safe/unknown/none,
-          failed = 未达标终态红档, 2026-09-25 用户修正) +
-          含来源的人话短语 + 来源档位 token —— 派生单点在 hr.resolve.safety_display(不新造判定,
-          只转译既有结论); 站点未配 HR 全空串(前端整列不显示)
+        - hr_safety / hr_safety_text / hr_safety_src: 删除安全档位(danger/failed/safe/warning/none,
+          failed = 未达标终态红档, 2026-09-25 用户修正; warning = 本地未达标且疑似辅种黄档,
+          计划 26-09-30-0559) + 含来源的人话短语 + 来源档位 token —— 派生单点在
+          hr.resolve.safety_display(不新造判定, 只转译既有结论); 站点未配 HR 全空串(前端整列
+          不显示), 命中排除表同样短路成空串(「不适用」空白由组装层保证)
         - hr_site_lane / hr_site_need / hr_site_remain / hr_site_ratio / hr_site_dl: 命中行的
           **站点侧值**(档位 / 还需做种 / 剩余达标 / 分享率 / 下载量) —— 与本地实时值对照用:
           本地值实时但会被重加/转移清零, 站点值是账号级权威但滞后一个刷新周期(计划 §9)
@@ -291,7 +293,9 @@ class WebviewMixin:
         satisfied = rec.check_hr_satisfied()
         judged = rec.hr_judgement()  # 站点未接入返回 None(下面四个字段留空)
         facts = judged.facts if judged is not None else None
-        safety = safety_display(judged, triggered=triggered, satisfied=satisfied)
+        # 排除态在组装层短路成空串(计划 26-09-30-0559 §5): safety_display 的 None 分支无法区分
+        # 「排除」与「未接入」, 排除种子维持「不适用」空白必须由这里保证。
+        safety = None if excluded else safety_display(judged, triggered=triggered, satisfied=satisfied)
         fields = {
             "hr_tag":
                 "",
@@ -314,11 +318,11 @@ class WebviewMixin:
             "hr_reason":
                 judged.reason if judged is not None else "",
             "hr_safety":
-                safety.safety,
+                safety.safety if safety is not None else "",
             "hr_safety_text":
-                safety.text,
+                safety.text if safety is not None else "",
             "hr_safety_src":
-                safety.src,
+                safety.src if safety is not None else "",
             "hr_site_lane":
                 facts.lane if facts is not None else "",
             "hr_site_need":

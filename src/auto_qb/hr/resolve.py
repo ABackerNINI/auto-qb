@@ -131,7 +131,7 @@ class HrJudgement:
     def is_hr(self) -> bool:
         """「是否按 HR 对待」的布尔语义(打标 / 规则 / 表达式 / 视图共用)
 
-        !NO_EVIDENCE 恒 False —— 行 4 的管束/放行由调用方按本地判据现算(check_hr_condition),
+        !NO_EVIDENCE 恒 False —— 行 4 的管束/放行由调用方按本地判据现算(hr_managed),
         本属性只表达**站点侧**的明确结论。
         """
         return self.identity is HrIdentity.HR
@@ -294,17 +294,16 @@ def _rank(res: HrResolution) -> int:
 
 SAFETY_DANGER = "danger"  # 不能删(进行中): 考察中, 删除可能吃 H&R
 SAFETY_FAILED = "failed"  # 不能删(终态): 考核期已过仍未达标, 结果已成立 —— 独立醒目红色
-SAFETY_SAFE = "safe"  # 可删: 义务已了或从未有
-SAFETY_UNKNOWN = "unknown"  # 未核实: 站点还没查到它
-SAFETY_NONE = "none"  # 不适用: 站点未配 HR / 从未触发
+SAFETY_SAFE = "safe"  # 可删: 义务已了
+SAFETY_WARNING = "warning"  # 注意: 本地未达标且疑似辅种 —— 可能有义务也可能原机已完成, 黄档警示不拦删
+SAFETY_NONE = "none"  # 不适用: 站点未配 HR / 命中排除表(调用方组装层短路成空串, 本函数不再产出)
 
 SRC_SITE_SCOPE = "site_scope"  # 在线·考察中(清单命中档位 A)
 SRC_SITE_SATISFIED = "site_satisfied"  # 在线·已达标(档位 B)
 SRC_SITE_UNSATISFIED = "site_unsatisfied"  # 在线·未达标(档位 C, 终态)
 SRC_SITE_RELEASED = "site_released"  # 在线·已核实(放行记录 = 覆盖范围内未列出)
 SRC_SITE_EXEMPT = "site_exempt"  # 在线·已免罪(D 档终态)
-SRC_LOCAL = "local"  # 本地·兜底(行 4: 无有效站点证据, 按本地判据)
-SRC_UNVERIFIED = "unverified"  # 未核实(本地也不触发 HR 条件)
+SRC_LOCAL = "local"  # 本地判据(行 4 无有效站点证据 / 站点未接入, 按本地字段)
 
 
 @dataclass(frozen=True, slots=True)
@@ -323,21 +322,19 @@ def _safety_display_dataclass(safety: str, src: str, text: str) -> "HrSafetyDisp
 def safety_display(judged: Optional[HrJudgement], *, triggered: bool, satisfied: bool) -> HrSafetyDisplay:
     """由判定结果派生「删除安全档位 × 来源档位」—— 不新造判定, 只转译既有结论。
 
-    `judged is None` = 站点未接入 / 全站型 / 调用方回落(judge_record 返回 None), 此时
-    triggered/satisfied 就是本地字段逻辑的结论, 来源记「本地·兜底」。NO_EVIDENCE(行 4)同落
-    本地兜底文案 —— 站点无话可说时本地说了算。命中行的档位即结论: A 考察中 ⇒ 不能删(danger);
+    `judged is None` = 站点未接入 / 全站型 / 调用方回落(judge_record 返回 None), NO_EVIDENCE(行 4)
+    同落本地判据 —— 站点无话可说时本地说了算, 两态走同一「satisfied × triggered」三分
+    (计划 26-09-30-0559 §5): 达标 ⇒ safe「本地·达标」; 未达标+触发 ⇒ danger「本地·未达标」;
+    未达标+未触发 ⇒ warning「本地·未达标(疑似辅种)」(转移种常态, 可能负有义务也可能原机
+    已完成, 黄档警示不拦删)。命中行的档位即结论: A 考察中 ⇒ 不能删(danger);
     C 未达标 ⇒ 不能删(failed 红, 终态); B 已达标 / D 已免罪 / 放行记录 ⇒ 可删。
     """
     if judged is None or judged.identity is HrIdentity.NO_EVIDENCE:
-        if not triggered:
-            if judged is None:
-                return _safety_display_dataclass(SAFETY_NONE, "", "")
-            return _safety_display_dataclass(SAFETY_UNKNOWN, SRC_UNVERIFIED, "未核实(本地不触发)")
-        return _safety_display_dataclass(
-            SAFETY_SAFE if satisfied else SAFETY_DANGER,
-            SRC_LOCAL,
-            "本地·兜底，已达标" if satisfied else "本地·兜底，未达标",
-        )
+        if satisfied:
+            return _safety_display_dataclass(SAFETY_SAFE, SRC_LOCAL, "本地·达标")
+        if triggered:
+            return _safety_display_dataclass(SAFETY_DANGER, SRC_LOCAL, "本地·未达标")
+        return _safety_display_dataclass(SAFETY_WARNING, SRC_LOCAL, "本地·未达标(疑似辅种)")
     if judged.identity is HrIdentity.RELEASED:
         if judged.facts is not None:
             lane = judged.facts.lane
@@ -409,14 +406,13 @@ __all__ = [
     "SAFETY_FAILED",
     "SAFETY_NONE",
     "SAFETY_SAFE",
-    "SAFETY_UNKNOWN",
+    "SAFETY_WARNING",
     "SRC_LOCAL",
     "SRC_SITE_EXEMPT",
     "SRC_SITE_RELEASED",
     "SRC_SITE_SATISFIED",
     "SRC_SITE_SCOPE",
     "SRC_SITE_UNSATISFIED",
-    "SRC_UNVERIFIED",
     "build_site_view",
     "judge_record",
     "resolve_identity",

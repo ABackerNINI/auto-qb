@@ -9,8 +9,8 @@
 - test_category_condition: category 条件匹配
 - test_trackers_condition: trackers 条件匹配
 - test_state_condition: state 条件匹配
-- test_hr_condition: HR 条件(做种时间/分享率/上传量; 无hr站点 satisfied 默认满足)
-- test_hr_condition_no_tracker_conf: 未匹配站点(conf=None)不抛 AttributeError, 保守按未触发/未满足
+- test_hr_condition: HR 条件(condition-met=需管束 / satisfied=义务已了; 无hr站点 satisfied 默认满足)
+- test_hr_condition_no_tracker_conf: 未匹配站点(conf=None)不抛 AttributeError, 保守按未管束/未满足
 - test_date_time_condition: 日期时间条件
 - test_seedtime_condition: 做种时间条件
 - test_upload_ratio_condition: 上传分享率条件
@@ -243,32 +243,35 @@ def test_state_condition():
 
 
 def test_hr_condition():
-    """HR 条件: condition-met / condition-not-met / satisfied / 无配置"""
+    """HR 条件(计划 26-09-30-0559 §6): condition-met = 需管束(hr_managed) / satisfied = 义务已了"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        # tracker 带 hr: 3D@70%
+        # tracker 带 hr: 3D@70%(未接入在线核实 -> 本地判据兜底)
         mgr = make_manager(state_file)
         client = FakeClient()
         tor = FakeTorrent(tags="", downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         ctx = _ctx(mgr, tor, client)
 
-        assert HrCondition("condition-met").match(ctx), "下载比例 0.7 >= 0.7 应触发"
+        assert HrCondition("condition-met").match(ctx), "本地触发 + 未达标 -> 需管束"
         assert HrCondition("condition-not-met").match(ctx) is False
         assert HrCondition("satisfied").match(ctx) is False, "做种时长不足不算 satisfied"
 
-        # satisfied: 做种满 3D+12H
+        # satisfied: 做种满 3D+12H -> 义务已了, 不再管束
         tor.seeding_time = 3 * 86400 + 12 * 3600 + 10
         assert HrCondition("satisfied").match(ctx)
+        assert HrCondition("condition-met").match(ctx) is False, "做种满即义务已了, 需管束解除"
+        assert HrCondition("condition-not-met").match(ctx)
 
-        # condition-not-met: 下载比例不足
+        # condition-met = 需管束(全量纳入): 本地未触发(downloaded 0.1 < 0.7)但未达标 -> 仍管束
+        # (旧语义「未触发 -> condition-not-met」作废: 转移种 downloaded=0 不代表无义务)
         tor2 = FakeTorrent(tags="", downloaded=10 * 1024**2, total_size=100 * 1024**2)
         ctx2 = _ctx(mgr, tor2, client)
-        assert HrCondition("condition-not-met").match(ctx2)
-        assert HrCondition("condition-met").match(ctx2) is False
+        assert HrCondition("condition-met").match(ctx2), "疑似辅种未达标也需管束(全量纳入)"
+        assert HrCondition("condition-not-met").match(ctx2) is False
+        assert HrCondition("satisfied").match(ctx2) is False
 
         # 无 hr 配置的 tracker(用新 tor: 避免复用已带 hr tracker_conf 的 tor):
-        # 2026-09 行为变更 —— check_hr_condition 无 hr 恒 False, 因此:
-        #   condition-met=False / condition-not-met=True(未触发) / satisfied=True(无 HR 约束默认满足)
+        #   condition-met=False / condition-not-met=True(无 HR 约束) / satisfied=True(默认满足)
         mgr3 = make_manager(state_file, tracker_kw={"hr": None})
         ctx3 = _ctx(mgr3, FakeTorrent(tags="", downloaded=70 * 1024**2, total_size=100 * 1024**2), client)
         assert HrCondition("condition-met").match(ctx3) is False

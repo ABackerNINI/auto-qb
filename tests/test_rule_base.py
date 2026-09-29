@@ -497,15 +497,16 @@ def test_rule_context_log_repr_tracker_error():
 
 
 def test_rule_context_hr_dlratio_not_met():
-    """check_hr_condition/check_hr_satisfied: 下载比例未达标 -> 均 False"""
+    """check_hr_condition 只答本地触发(0.5 < 0.7 -> False); satisfied 不设触发门,
+    做种 999D 远超 3D+12H -> True(计划 26-09-30-0559: 旧断言「未触发则未达标」作废)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         tor = FakeTorrent(tags="", downloaded=50 * 1024**2, total_size=100 * 1024**2, seeding_time=999 * 86400)
         ctx = make_ctx(mgr, tor, client)
-        conf = ctx.torrent.tracker_conf
-        assert ctx.torrent.check_hr_condition() is False, "0.5 < 0.7 不满足触发条件"
-        assert ctx.torrent.check_hr_satisfied() is False, "触发条件不满足则 satisfied 为 False"
+        assert ctx.torrent.check_hr_condition() is False, "0.5 < 0.7: 本地不触发(展示辅助判据)"
+        assert ctx.torrent.check_hr_satisfied() is True, "做种事实达标即 satisfied, 与触发无关"
+        assert ctx.torrent.hr_managed() is False, "达标即不需管束"
 
 
 def test_rule_context_hr_satisfied_by_ratio():

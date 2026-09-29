@@ -300,7 +300,12 @@ def _build_name_table() -> Dict[str, NameInfo]:
         table["tor." + attr] = NameInfo("tor." + attr, BOOL, _state(attr))
     table["tor.progress_pct"] = NameInfo("tor.progress_pct", NUM, lambda ctx: ctx.torrent.progress * 100)
     table["tor.tags_count"] = NameInfo("tor.tags_count", NUM, lambda ctx: len(ctx.torrent.tags_set))
-    table["tor.hr_condition_met"] = NameInfo("tor.hr_condition_met", BOOL, _hr("check_hr_condition"))
+    # HR 三名(计划 26-09-30-0559 §6): hr_condition_met 语义从「本机下载触发(带站点侧短路)」
+    # 变更为「需管束」(与打标/规则 condition-met 同源) —— 已发布表达式, 存量规则若用它过滤
+    # 「我下载的种子」应手动迁移到 tor.hr_local_triggered(纯本地触发判据, 辅种判别力);
+    # hr_satisfied = 义务已了单点, 不变。
+    table["tor.hr_condition_met"] = NameInfo("tor.hr_condition_met", BOOL, _hr("hr_managed"))
+    table["tor.hr_local_triggered"] = NameInfo("tor.hr_local_triggered", BOOL, _hr("check_hr_condition"))
     table["tor.hr_satisfied"] = NameInfo("tor.hr_satisfied", BOOL, _hr("check_hr_satisfied"))
     table["tor.age"] = NameInfo("tor.age", NUM, _age)
     table["tor.idle"] = NameInfo("tor.idle", NUM, _idle)

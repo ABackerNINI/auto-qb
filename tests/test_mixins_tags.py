@@ -15,7 +15,10 @@
 - test_set_category_auto_update: auto_categories 内分类自动更新
 - test_set_category_same: 目标分类相同 -> 无操作
 - test_set_category_dry_run: dry-run 只返回不调用
-- test_add_hr_tag_or_category_not_met: HR 未触发 -> 无操作
+- test_add_hr_tag_or_category_transferred_unsatisfied: 转移种/纯辅种(downloaded=0)未做种满 -> 打 HR 标签(全量纳入, 计划 26-09-30-0559)
+- test_add_hr_tag_or_category_seed_exempt: 超额老种跳过不打标(未接入站用 hr 基准 / 已接入站用 hr_check 基准 / 基准 0 不跳过)
+- test_add_hr_tag_or_category_excess_but_scope_still_tags: 超额老种被动命中考察中仍打 HR 标签(站点权威)
+- test_add_hr_tag_or_category_released_no_tag: 放行记录(未列出/终态/免罪)不打标
 - test_add_hr_tag_or_category_not_satisfied: 触发但未达标 -> 加普通标签
 - test_add_tags_empty: 空标签列表 -> False
 - test_add_episode_tags_files_error: 文件列表拉取异常 -> 异常上抛
@@ -221,8 +224,12 @@ def test_set_category_dry_run():
         assert "HASH123" not in mgr.state.get("auto_categories", {})
 
 
-def test_add_hr_tag_or_category_not_met():
-    """_add_hr_tag_or_category: 触发条件未满足(排除辅种) -> 不添加"""
+def test_add_hr_tag_or_category_transferred_unsatisfied():
+    """_add_hr_tag_or_category: 转移种/纯辅种(downloaded=0)未做种满 -> 打 HR 标签(全量纳入, 2026-09-30 拍板)
+
+    旧语义「本地不触发 -> 不打标」作废: downloaded=0 不代表无义务 —— 转移种子在原机可能
+    正在考察期(计划 26-09-30-0559 §4)。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -231,7 +238,105 @@ def test_add_hr_tag_or_category_not_met():
         conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="")
         tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2)
         tor.tracker_conf = conf
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert ("add_tags", ["HR"]) in client.calls
+
+
+def test_add_hr_tag_or_category_seed_exempt():
+    """_add_hr_tag_or_category: 超额老种(做种 >= 3x 基准)跳过不打标, 基准同源三段(计划 26-09-30-0559 §4)
+
+    已接入站用 hr_check.required_seeding_time(与取数侧对象集排除线同源), 未接入站回落
+    hr.required_seeding_time; 基准 0 时跳过线不生效(与取数侧 > 0 前提一致)。
+    """
+    from auto_qb.config.models import SiteHrCheckConfig
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        conf = mgr.config.trackers["HHan"]
+        conf.hr = _hr_rule(add_tag="HR", add_category="", add_tag_for_satisfied="HRDONE", add_category_for_satisfied="")
+        tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2, seeding_time=10 * 86400)
+        tor.tracker_conf = conf
+        # (a) 未接入站: 基准 = hr.required_seeding_time(3D), 做种 10D >= 9D -> 跳过, 零调用
         assert mgr._add_hr_tag_or_category(tor, dry_run=False) is False
+        assert client.calls == []
+        # (b) 已接入站: 基准 = hr_check.required_seeding_time(5D), 10D < 15D -> 不跳过, 做种满打达标标签
+        conf.hr_check = SiteHrCheckConfig(
+            enabled=True, tracker="x", hr_page_url="https://x.com/myhr.php", required_seeding_time=5 * 86400.0
+        )
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert ("add_tags", ["HRDONE"]) in client.calls
+        # (c) 基准 0: 跳过线不生效, 正常分流
+        client.calls.clear()
+        conf.hr_check = None
+        conf.hr = _hr_rule(
+            add_tag="HR",
+            add_category="",
+            add_tag_for_satisfied="HRDONE",
+            add_category_for_satisfied="",
+            required_seeding_time=0,
+            required_seeding_time_raw="",
+        )
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert ("add_tags", ["HRDONE"]) in client.calls
+
+
+def test_add_hr_tag_or_category_excess_but_scope_still_tags():
+    """_add_hr_tag_or_category: 超额老种被动命中考察中仍打 HR 标签(站点绝对权威, 计划 26-09-30-0559 §4)"""
+    from auto_qb.config.models import SiteHrCheckConfig
+    from auto_qb.hr.resolve import HrIdentity, HrJudgement
+    from auto_qb.torrents import TorrentRecord
+
+    class _ScopeLink:
+        def judge(self, site, infohashes, *, anchor=None, now=0.0):
+            return HrJudgement(identity=HrIdentity.HR, reason="清单命中(档位 A)")
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        conf = mgr.config.trackers["HHan"]
+        conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="")
+        conf.hr_check = SiteHrCheckConfig(
+            enabled=True, tracker="x", hr_page_url="https://x.com/myhr.php", required_seeding_time=3 * 86400.0
+        )
+        tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2, seeding_time=10 * 86400)
+        rec = TorrentRecord.from_torrent(tor)
+        rec.tracker_conf = conf
+        rec.hr_link = _ScopeLink()  # 做种 10D 已超 3x3D 基准, 但站点清单命中考察中
+        assert mgr._add_hr_tag_or_category(rec, dry_run=False) is True
+        assert ("add_tags", ["HR"]) in client.calls
+
+
+def test_add_hr_tag_or_category_released_no_tag():
+    """_add_hr_tag_or_category: 放行记录(未列出/终态/免罪)不打标(维持现状, 计划 26-09-30-0559 §4)
+
+    站点没给达标结论(site_satisfied=False -> 本地未达标)也**不许**打标 —— 放行短路在超额与分流之前;
+    基准取 5D 让做种 10D 不触超额线, 保证拦住它的只有放行短路。
+    """
+    from auto_qb.config.models import SiteHrCheckConfig
+    from auto_qb.hr.resolve import HrIdentity, HrJudgement
+    from auto_qb.torrents import TorrentRecord
+
+    class _ReleasedLink:
+        def judge(self, site, infohashes, *, anchor=None, now=0.0):
+            return HrJudgement(identity=HrIdentity.RELEASED, reason="覆盖范围内未列出", site_satisfied=False)
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        conf = mgr.config.trackers["HHan"]
+        conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="HRDONE")
+        conf.hr_check = SiteHrCheckConfig(
+            enabled=True, tracker="x", hr_page_url="https://x.com/myhr.php", required_seeding_time=5 * 86400.0
+        )
+        tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2, seeding_time=10 * 86400)
+        rec = TorrentRecord.from_torrent(tor)
+        rec.tracker_conf = conf
+        rec.hr_link = _ReleasedLink()
+        assert mgr._add_hr_tag_or_category(rec, dry_run=False) is False
         assert client.calls == []
 
 

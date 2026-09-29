@@ -406,12 +406,12 @@
 .hp-dot.danger { background: var(--hr-pending); }
 .hp-dot.failed { background: var(--error); }
 .hp-dot.safe { background: var(--green); }
-.hp-dot.unknown { background: var(--paused); }
+.hp-dot.warning { background: var(--warn); }
 .hp-verdict { font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
 .hp-verdict.danger { color: var(--hr-pending); }
 .hp-verdict.failed { color: var(--error); }
 .hp-verdict.safe { color: var(--green); }
-.hp-verdict.unknown { color: var(--paused); }
+.hp-verdict.warning { color: var(--warn); }
 .hp-cyc { font-size: 10px; line-height: 1.5; border: 1px solid transparent; border-radius: 3px;
   padding: 0 5px; white-space: nowrap; }
 .hp-cyc.ended { color: var(--fg-muted); background: var(--surface-1); border-color: var(--border-soft); }
@@ -423,11 +423,11 @@
 .hg-dot.danger { background: var(--hr-pending); }
 .hg-dot.failed { background: var(--error); }
 .hg-dot.safe { background: var(--green); }
-.hg-dot.unknown { background: var(--paused); }
+.hg-dot.warning { background: var(--warn); }
 .hg-dot.hollow.danger { background: transparent; border: 1.5px solid var(--hr-pending); }
 .hg-dot.hollow.failed { background: transparent; border: 1.5px solid var(--error); }
 .hg-dot.hollow.safe { background: transparent; border: 1.5px solid var(--green); }
-.hg-dot.hollow.unknown { background: transparent; border: 1.5px solid var(--paused); }
+.hg-dot.hollow.warning { background: transparent; border: 1.5px solid var(--warn); }
 .hg-tag { font-size: 10.5px; line-height: 1.5; padding: 1px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
 .hg-tag.danger { color: var(--hr-pending); background: var(--hr-pending-soft); }
 .hg-tag.failed { color: var(--error); background: var(--error-soft); }
@@ -441,7 +441,7 @@
 .fill.danger { background: var(--hr-pending); }
 .fill.failed { background: var(--error); }
 .fill.safe { background: var(--green); }
-.fill.unknown { background: var(--paused); }
+.fill.warning { background: var(--warn); }
 .hg-rail.site .fill { opacity: .55; }
 .hg-site { display: flex; align-items: center; gap: 8px; margin-top: 1px; }
 /* 2.' 档位徽记: 无时间要求(身份层放行/未核实/未配时长)时轨道收起, 不留空轨 */
@@ -451,7 +451,7 @@
 .hp-badge.danger { color: var(--hr-pending); background: var(--hr-pending-soft); border: 1px solid var(--hr-pending-line); }
 .hp-badge.failed { color: var(--error); background: var(--error-soft); border: 1px solid var(--error-line); }
 .hp-badge.safe { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-line); }
-.hp-badge.unknown { color: var(--fg-muted); background: var(--surface-1); border: 1px solid var(--border-soft); }
+.hp-badge.warning { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn-line); }
 /* 3. 数值条: mono 紧排 kv(仅站点侧值 —— 本地值表格行可见, 不上弹窗) */
 .hp-kv { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px 6px; }
 .kv { display: inline-flex; align-items: baseline; gap: 5px; padding: 2.5px 8px;

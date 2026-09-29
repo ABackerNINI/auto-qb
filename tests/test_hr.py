@@ -5,11 +5,11 @@
 - test_tracker_hr_overrides_global: 站点 HR 覆盖全局配置
 - test_hr_required_share_ratio: required_share_ratio 达标判定
 - test_tracker_remove_similar_tags_override: 站点 remove_similar_tags 覆盖全局
-- test_hr_dlratio_trigger: dlratio 条件达标才添加 HR 标签, 未达标排除(辅种保护)
-- test_hr_dlsize_trigger: dlsize 条件(下载量绝对值)达标才触发
+- test_hr_dlratio_trigger: dlratio 条件达线判定; 未触发但未做种满 -> 仍打 HR 标签(全量纳入, 计划 26-09-30-0559)
+- test_hr_dlsize_trigger: dlsize 条件(下载量绝对值)达线判定; 未触发但未做种满 -> 仍打 HR 标签
 - test_hr_satisfied_seeding_time: 做种时长 >= required+extra -> satisfied 分类; 否则普通 HR 分类
 - test_hr_satisfied_share_ratio: 分享率达标(时长不足) -> satisfied 标签
-- test_hr_aux_seed_excluded: downloaded=0(dlratio=0) -> 不触发任何 HR 输出
+- test_hr_aux_seed_excluded: downloaded=0(dlratio=0)本地不触发, 但未做种满 -> 打 HR 标签(疑似辅种全量纳入)
 - test_hr_overwrite_category_semantics: _set_category 覆盖语义(跳过/覆盖/自动分类可更新)
 - test_hr_tracker_without_hr_skips: 站点无 hr 配置 -> 不应用 HR(即使全局有默认)
 - test_hr_exclude_tag_skips_tagging: HR 排除命中标签/分类 -> 不加任何 HR 标签/分类(未命中照常)
@@ -165,7 +165,8 @@ def test_tracker_remove_similar_tags_override():
 
 
 def test_hr_dlratio_trigger():
-    """HR 触发: dlratio 条件(下载比例 >= 阈值)达标才添加标签, 未达标排除(辅种保护)"""
+    """HR 打标分流(计划 26-09-30-0559 §4): 本地触发判据只管「本机下载了吗」;
+    未触发但未做种满的种子(转移种/疑似辅种)同样打 HR 标签 —— 全量纳入"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
@@ -174,25 +175,27 @@ def test_hr_dlratio_trigger():
         mgr.config.trackers["HHan"].hr = _hr_rule(add_tag="!!HR3D!!", add_category="")
         conf = mgr.config.trackers["HHan"]
 
-        # 达标: downloaded/total = 0.7 >= 0.7 -> 添加 HR 标签
+        # 触发(0.7 >= 0.7)+ 未做种满 -> HR 标签
         tor = FakeTorrent(downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor.tracker_conf = conf
+        assert tor.check_hr_condition() is True, "本地触发判据: 0.7 >= 0.7"
         assert mgr._add_hr_tag_or_category(tor, dry_run=False)
         assert ("add_tags", ["!!HR3D!!"]) in client.calls, f"应添加 HR 标签: {client.calls}"
 
-        # 未达标: 0.5 < 0.7 -> 不触发(无任何调用)
+        # 未触发(0.5 < 0.7)+ 未做种满 -> 仍打 HR 标签(旧断言「不触发不打标」作废)
         mgr2 = make_manager(os.path.join(td, "state2.json"))
         client2 = FakeClient()
         mgr2.client = client2
         mgr2.config.trackers["HHan"].hr = _hr_rule(add_tag="!!HR3D!!", add_category="")
         tor2 = FakeTorrent(downloaded=50 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is False
-        assert client2.calls == [], f"未达标不应触发: {client2.calls}"
+        assert tor2.check_hr_condition() is False, "本地未触发(展示辅助判据)"
+        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is True
+        assert ("add_tags", ["!!HR3D!!"]) in client2.calls, f"未触发但未达标 -> 疑似辅种也打 HR 标签: {client2.calls}"
 
 
 def test_hr_dlsize_trigger():
-    """HR 触发: dlsize 条件(下载量绝对值 >= 阈值)达标才触发"""
+    """HR 打标分流: dlsize 条件达线判定; 未触发但未做种满 -> 仍打 HR 标签(全量纳入)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -207,7 +210,7 @@ def test_hr_dlsize_trigger():
         assert mgr._add_hr_tag_or_category(tor, dry_run=False)
         assert ("add_tags", ["DLSIZE-HR"]) in client.calls, f"dlsize 达标应触发: {client.calls}"
 
-        # 下载量不足(即使比例高) -> 不触发
+        # 下载量不足(即使比例高)-> 本地不触发, 但未做种满 -> 仍打 HR 标签
         mgr2 = make_manager(os.path.join(td, "state2.json"))
         client2 = FakeClient()
         mgr2.client = client2
@@ -216,8 +219,9 @@ def test_hr_dlsize_trigger():
         )
         tor2 = FakeTorrent(downloaded=9 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is False
-        assert client2.calls == [], f"下载量不足不应触发: {client2.calls}"
+        assert tor2.check_hr_condition() is False, "9MiB < 10MiB: 本地未触发"
+        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is True
+        assert ("add_tags", ["DLSIZE-HR"]) in client2.calls, f"未触发但未达标 -> 仍打 HR 标签: {client2.calls}"
 
 
 def test_hr_dlsize_small_completed_triggers():
@@ -237,18 +241,18 @@ def test_hr_dlsize_small_completed_triggers():
         assert mgr._add_hr_tag_or_category(tor, dry_run=False)
         assert ("add_tags", ["DLSIZE-HR"]) in client.calls, f"小种子完全下载应触发: {client.calls}"
 
-        # 未完全下载的小种子(amount_left>0)仍排除
+        # 未完全下载的小种子(downloaded < total_size): 本地不触发, 但未做种满 -> 仍打 HR 标签
         mgr2 = make_manager(os.path.join(td, "state2.json"))
         client2 = FakeClient()
         mgr2.client = client2
         mgr2.config.trackers["HHan"].hr = _hr_rule(
             condition=("dlsize", 10 * 1024**2), add_tag="DLSIZE-HR", add_category=""
         )
-        # 未完成的小种子(downloaded < total_size, 即未把种子完整下载完)仍排除
         tor2 = FakeTorrent(downloaded=2 * 1024**2, total_size=5 * 1024**2, amount_left=3 * 1024**2, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is False
-        assert client2.calls == [], f"未完成的小种子不应触发: {client2.calls}"
+        assert tor2.check_hr_condition() is False, "未完整下载: 本地未触发"
+        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is True
+        assert ("add_tags", ["DLSIZE-HR"]) in client2.calls, f"未触发但未达标 -> 仍打 HR 标签: {client2.calls}"
 
 
 def test_hr_satisfied_seeding_time():
@@ -314,25 +318,27 @@ def test_hr_satisfied_share_ratio():
 
 
 def test_hr_aux_seed_excluded():
-    """HR 辅种排除: downloaded=0(total_size>0 时 dlratio=0) -> 不触发任何 HR 输出"""
+    """疑似辅种(downloaded=0, dlratio=0)本地不触发, 但未做种满 -> 打 HR 标签(全量纳入, 计划 26-09-30-0559)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        conf = mgr.config.trackers["HHan"]  # 默认 hr: 3D@70%+12H
+        conf = mgr.config.trackers["HHan"]  # 默认 hr: 3D@70%+12H, add_category=!!HR3D!!
         tor = FakeTorrent(downloaded=0, total_size=100 * 1024**2, seeding_time=0)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is False
-        assert client.calls == [], f"辅种不应触发 HR: {client.calls}"
+        assert tor.check_hr_condition() is False, "本地不触发(展示辅助判据)"
+        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert ("set_category", "!!HR3D!!") in client.calls, f"疑似辅种未做种满 -> 打 HR 分类: {client.calls}"
 
-        # total_size=0 时 dlratio 兜底为 0(除数保护), 同样排除
+        # total_size=0 时 dlratio 兜底为 0(除数保护), 本地同样不触发
         mgr2 = make_manager(os.path.join(td, "state2.json"))
         client2 = FakeClient()
         mgr2.client = client2
         tor2 = FakeTorrent(downloaded=100, total_size=0, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is False
-        assert client2.calls == []
+        assert tor2.check_hr_condition() is False
+        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is True
+        assert ("set_category", "!!HR3D!!") in client2.calls
 
 
 def test_hr_overwrite_category_semantics():

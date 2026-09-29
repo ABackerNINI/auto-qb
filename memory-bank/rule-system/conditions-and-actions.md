@@ -36,7 +36,7 @@ conditions:
 | `trackers` | `["tracker1"]` | 匹配 tracker_conf.name (配置名, 非域名); 或关系; 支持 `:ignore_case` |
 | `tracker_group` | `["国内"]` | 匹配站点 `groups` 字段声明的分组 (站点配置层声明, 不写种子, 与 grouping 辅种种子分组无关); 或关系; 支持 `regex:`/`:ignore_case`; 无 tracker_conf 一律 False (2026-09-15) |
 | `state` | `["is_complete&is_uploading"]` | 组内 `&` 连接为与, 组间或; 直接取 `state_enum` 枚举属性 (is_checking/is_downloading/is_complete/is_uploading/is_errored/is_stopped) |
-| `hr` | `"condition-met"` | `condition-met`(满足触发条件; **完全下载即触发**边界 — 未达触发量/比例的种子 `is_fully_downloaded` (`progress>=1.0` 或 `amount_left==0`, `total_size<=0` 除外) 也视为触发, 2026-09-12) / `condition-not-met` / `satisfied`(触发+做种时长或分享率达标); 依赖 tracker_conf.hr, 无 HR 配置一律 False |
+| `hr` | `"condition-met"` | `condition-met`(需管束 = `hr_managed`: 考察中 ∨ 无站点证据/未接入且未达标, 26-09-30-0559 触发语义重构 —— 旧「本机下载触发」语义迁往表达式 `tor.hr_local_triggered`) / `condition-not-met`(补集) / `satisfied`(义务已了单条件: 站点达标结论 ∨ 做种时长/分享率达标, 不再有触发前置); 依赖 tracker_conf.hr, 无 HR 配置一律 False |
 | `date_time` | `{day_of_month: 1-31, day_of_week: 1-7, time: "10:00-23:00"}` | 全部可省略(省略=不检查); 区间 `a-b` 或单值; time 支持跨午夜; day_of_week 用 isoweekday (1=周一) |
 | `seedtime` | `"<24H"` | 比较 seeding_time (秒) |
 | `upload_ratio` | `">1.5"` | 比较 ratio |

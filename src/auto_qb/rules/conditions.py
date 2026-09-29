@@ -136,32 +136,35 @@ class StateCondition(BaseCondition):
 
 @register_condition
 class HrCondition(BaseCondition):
-    """HR 条件: condition-met / condition-not-met / satisfied"""
+    """HR 条件: condition-met(需管束) / condition-not-met / satisfied(义务已了)
+
+    condition-met / condition-not-met 走 hr_managed(需管束, 与打标/管束同源, 计划 26-09-30-0559 §6);
+    satisfied = check_hr_satisfied 单条件 —— 修掉旧「check_hr_condition and check_hr_satisfied」
+    在无证据+已达标时恒 False 的拧巴。
+    """
     name = "hr"
 
     def __init__(self, spec):
         self.mode = str(spec)
 
-    # TODO: 重新梳理此功能
     def match(self, ctx: RuleContext):
         torrent = ctx.torrent
         conf = torrent.tracker_conf
         # 无 HR 可判定的两种情形**必须显式分支**: 直接读 conf.hr 会在 conf=None 时抛
         # AttributeError, 被上层吞掉后故障表现为"规则没匹配"而不是报错 —— 极难定位。
         if conf is None:
-            # 未匹配站点: 拿不到站点配置, 无从判定 ⇒ 保守按"未触发/未满足"处理
+            # 未匹配站点: 拿不到站点配置, 无从判定 ⇒ 保守按"未管束/未满足"处理
             # (与 trackers / tracker_group 的"无 tracker_conf 恒不匹配"同语义)
             return self.mode == "condition-not-met"
         if conf.hr is None:
-            # 站点已匹配但没配 HR = 没有 HR 要求 ⇒ "已满足"与"未触发"同为真
+            # 站点已匹配但没配 HR = 没有 HR 要求 ⇒ "已满足"与"未管束"同为真
             return self.mode != "condition-met"
         if self.mode == "condition-not-met":
-            return not torrent.check_hr_condition()
+            return not torrent.hr_managed()
         if self.mode == "satisfied":
-            # 括号不可省: `a or b and c` 实为 `a or (b and c)`, 极易被误读成 `(a or b) and c`
-            return torrent.check_hr_condition() and torrent.check_hr_satisfied()
+            return torrent.check_hr_satisfied()
         # condition-met
-        return torrent.check_hr_condition()
+        return torrent.hr_managed()
 
 
 @register_condition

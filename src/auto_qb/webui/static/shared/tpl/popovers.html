@@ -276,11 +276,8 @@
             </div>
           </div>
           <div v-else-if="hrPop.data.badge" class="hp-badge" :class="hrPop.data.lane">
-            <svg v-if="hrPop.data.badge === 'check'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 3l7 2.8v5.4c0 4.5-3 7.6-7 9.8-4-2.2-7-5.3-7-9.8V5.8z"/><path d="M9 12l2.2 2.2L15.5 9.7"/>
-            </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3l7 2.8v5.4c0 4.5-3 7.6-7 9.8-4-2.2-7-5.3-7-9.8V5.8z" stroke-dasharray="3.2 2.6"/><path d="M10.2 9.4a1.9 1.9 0 1 1 2.9 1.6c-.7.5-1.1.9-1.1 1.7"/><path d="M12 15.7h.01"/>
             </svg>
             <span>无时长要求</span>
           </div>

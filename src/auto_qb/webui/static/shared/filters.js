@@ -122,7 +122,7 @@ window.AQB_FILTERS = {
         { kind: "tag", label: "标签", icon: "i-tag", options: this.tagOptions, selected: this.tagFilter, field: "tagFilter" },
         { kind: "category", label: "分类", icon: "i-folder", options: this.categoryOptions, selected: this.categoryFilter, field: "categoryFilter" },
         { kind: "site", label: "站点", icon: "i-globe", options: this.siteOptions, selected: this.siteFilter, field: "siteFilter" },
-        // H&R 筛选(2026-09-25 起四档: 不能删/可删/未核实, 口径见 hr.js hrOptions); 三个视图共用同一条筛选状态
+        // H&R 筛选(四档: 不能删/考核未通过/可删/疑似辅种, 口径见 hr.js hrOptions); 三个视图共用同一条筛选状态
         { kind: "hr", label: "H&R", icon: "i-hr", options: this.hrOptions, selected: this.hrFilter, field: "hrFilter" },
         // HR 来源副筛选(在线核实/本地兜底/策略): 结论来自优先级链哪一档 —— "只看本地兜底"
         // 正是最需要等在线核实结果的一批种子(计划 webui-hr-safety-display §5 P3)

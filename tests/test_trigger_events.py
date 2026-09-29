@@ -34,7 +34,7 @@ import tempfile
 from auto_qb.config import ConfigError, load_config
 from auto_qb.rules import Rule, RuleContext
 from auto_qb.core.taskqueue import FINISHED, PENDING, Task, TaskQueue
-from helpers import FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
+from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager, seed_store
 
 
 # ---------- 事件规则辅助 ----------
@@ -648,25 +648,32 @@ def _maint_mgr(mode, state_file):
 
 
 def _maint_torrent():
-    """未触发 HR 的种子(downloaded=0): HR 部分在 downloaded 增长前不产生任何写动作"""
+    """转移种(downloaded=0, 未做种满): 全量纳入后在添加路径即打 HR 分类(!!HR3D!!)"""
     return FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="", downloaded=0)
 
 
 def test_maintenance_on_change_skips_without_change():
-    """on_change: 添加路径执行一次后, 无变化轮跳过 tags 部分; HR 部分节奏不变(恒执行)"""
+    """on_change: 添加路径执行一次后, 无变化轮跳过 tags 部分; HR 部分节奏不变(恒执行)
+
+    全量纳入后(计划 26-09-30-0559), 转移种(downloaded=0)未做种满在添加路径即打 HR 分类;
+    第二轮用做种时长达标翻转 satisfied —— HR 达标状态随时间演化, on_change 捕捉不到也不该跳过它。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = _maint_mgr("on_change", os.path.join(td, "state.json"))
+        # satisfied 输出走**分类**通道且允许覆盖: spy 只包 _add_tags, 分类通道不会误触它
+        mgr.config.trackers["HHan"].hr = _hr_rule(overwrite_category_for_satisfied=True)
         tor = _maint_torrent()
         mgr.client.torrents["H1"] = tor
         mgr._refresh_torrents()  # 添加路径: tags 部分强制执行一次
         assert ("add_tags", ["HHan"]) in mgr.client.calls, "添加路径应执行站点 tags 补打"
+        assert ("set_category", "!!HR3D!!") in mgr.client.calls, "全量纳入: 未做种满的转移种在添加路径即打 HR 分类"
         rec = mgr.store.get("H1")
         mgr.client.calls.clear()
         spy = _spy_tags_part(mgr)
-        rec.downloaded = rec.total_size  # HR 达标状态随时间演化(与 tags 无关)
+        rec.seeding_time = 3 * 86400 + 12 * 3600 + 10  # 做种时长达标 -> satisfied 翻转(HR 状态随时间演化)
         mgr._handle_maintenance(rec, False)  # interval 任务到期: tags 未变
         assert not spy, "无变化轮应跳过 tags 部分"
-        assert ("set_category", "!!HR3D!!") in mgr.client.calls, "HR 部分应照常执行(节奏不变)"
+        assert ("set_category", "--HR3D--") in mgr.client.calls, "HR 部分应照常执行(节奏不变): satisfied 分类更新"
 
 
 def test_maintenance_on_change_recheck_on_external_change():

@@ -113,7 +113,7 @@
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
 - test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
-- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-unk/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
+- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -1674,7 +1674,8 @@ def test_frontend_hr_safety_wiring():
     src_tokens = set(re.findall(r'^SRC_[A-Z_]+ = "([a-z_]+)"', resolve_py, re.M))
     assert len(
         src_tokens
-    ) == 7, f"resolve.py 的 SRC_* 常量应为 7 个(v3: 删 policy/local_exempt —— 判定语义硬编码无策略桶), 实测 {sorted(src_tokens)}"
+    ) == 6, f"resolve.py 的 SRC_* 常量应为 6 个(v3: 删 policy/local_exempt; 26-09-30 计划 hr-trigger-semantics: 删 unverified), 实测 {sorted(src_tokens)}"
+    assert "unverified" not in src_tokens, "SRC_UNVERIFIED 应已随「未核实」灰档退役(本地统一 SRC_LOCAL)"
 
     def _map_keys(name):
         m = re.search(rf"const {name} = \{{(.*?)\}};", hr_js, re.S)
@@ -1689,9 +1690,10 @@ def test_frontend_hr_safety_wiring():
     assert "hrDurHint" not in hr_js, "hr.js 仍残留 hrDurHint(来源+已排除的 title 组装) —— 原生 title 已移除"
     assert "HR_SRC_TITLES" not in hr_js, "hr.js 仍残留 HR_SRC_TITLES —— 来源文案不再进 title"
     assert "HR_EXCLUDED_TITLE" not in hr_js, "hr.js 仍残留 HR_EXCLUDED_TITLE —— 已排除文案不再进 title"
-    # 四个安全档位(2026-09-25 用户修正起 failed=未达标终态红档): failed 由前端映射 hr-fail 红
+    # 四个安全档位(2026-09-25 用户修正起 failed=未达标终态红档; 2026-09-30 计划
+    # hr-trigger-semantics: unknown 灰档退役, 换 warning 黄档=疑似辅种): warning 由前端映射 hr-warn 黄
     for name in ("HR_SAFETY_CLASSES", "HR_SAFETY_BUCKETS"):
-        assert _map_keys(name) == {"danger", "failed", "safe", "unknown"}, f"{name} 键集应为四个安全档位"
+        assert _map_keys(name) == {"danger", "failed", "safe", "warning"}, f"{name} 键集应为四个安全档位"
 
     # 2. 做种时长列换绑 + 弹窗单例: 两套 UI 各 3 处触发 / 各 1 份弹窗 DOM
     for ui in _UI_ALL:
@@ -1737,7 +1739,7 @@ def test_frontend_hr_safety_wiring():
         (console_css, "console css 聚合(link 序)")
     ):
         for rule in (
-            ".m-pair.hr-unk",
+            ".m-pair.hr-warn",
             ".m-pair.hr-fail",
             ".m-dur .hr-line",
             ".bulk-hr-warn",
@@ -1751,8 +1753,11 @@ def test_frontend_hr_safety_wiring():
         assert ".m-pair .hr-src" not in css, f"{name} 仍留着 .hr-src chip 样式 —— 已无消费方, 应删除"
         assert "z-index: 140" in css, f"{name} 缺弹窗 z-index: 140(须高于 ctx-menu 100 与 speed-pop 131)"
         # 半格线是空 <i>: 只给 left:0 而 width:auto 会收缩成 0 —— 线整条不可见(2026-09-29 实报)
-        for half in (".m-dur .dur-val > .hr-line", ".m-dur.src-local .hr-line", ".m-dur.src-unver .hr-line"):
-            assert half in css, f"{name} 缺 {half} 规则 —— 本地 / 未核实的半格线会消失"
+        for half in (".m-dur .dur-val > .hr-line", ".m-dur.src-local .hr-line"):
+            assert half in css, f"{name} 缺 {half} 规则 —— 本地的半格线会消失"
+        # 死档位样式零残留(2026-09-30 计划 hr-trigger-semantics: unknown/unverified 随灰档退役)
+        assert ".m-pair.hr-unk" not in css, f"{name} 仍留着 .hr-unk 死样式 —— 未核实档已退役"
+        assert ".src-unver" not in css, f"{name} 仍留着 .src-unver 死样式 —— unverified 来源档已退役"
         assert re.search(r"\.m-dur \.dur-val > \.hr-line \{[^}]*width: 100%", css), \
             f"{name} 半格线没写显式 width:100% —— 空 <i> 的 width:auto 会收缩成 0(线整条不可见)"
         # 整格线(在线)必须挂文字包裹层 .dur-body —— 挂 .m-dur 上会随列宽(2026-09-29 真机实报:
@@ -3371,10 +3376,11 @@ def test_hr_view_fields_three_state(tmp_path):
     rec.tracker_conf = conf
 
     # 未接入 hr_check: 三态四项全空(前端据此不显示三态行, 与既有四个字段的空值口径一致);
-    # 本地未触发 => 删除安全 = 不适用(无色无徽标)
+    # 本地未触发 + 未做种满 => 删除安全 = warning 疑似辅种黄档(计划 26-09-30-0559 §5, 旧「不适用」作废)
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_state"] == "" and fields["hr_state_text"] == "" and fields["hr_reason"] == ""
-    assert fields["hr_safety"] == "none" and fields["hr_safety_text"] == "" and fields["hr_safety_src"] == ""
+    assert fields["hr_safety"] == "warning" and fields["hr_safety_src"] == "local"
+    assert fields["hr_safety_text"] == "本地·未达标(疑似辅种)"
 
     conf.hr_check = SiteHrCheckConfig(
         enabled=True, tracker="hhanclub", hr_page_url="https://hhanclub.net/myhr.php", required_seeding_time=86400.0
@@ -3385,7 +3391,8 @@ def test_hr_view_fields_three_state(tmp_path):
     )
     rec.hr_link = link
     fields = QbManager._hr_view_fields(rec)
-    assert fields["hr_triggered"] is True, "站点侧清单命中 => 受管束(本地 downloaded=0 不参与)"
+    assert fields["hr_triggered"] is False, "hr_triggered = 纯本地触发判据(展示辅助), downloaded=0 不触发"
+    assert fields["hr_satisfied"] is False, "命中考察中 => 义务仍在, 恒未达标"
     assert fields["hr_state"] == "hr" and fields["hr_state_text"] == "受管束"
     assert fields["hr_reason"] == "清单命中·考察中(档位 A)"
     # 删除安全档位: 命中考察中 => 在线·考察中, 不能删(v3: identity=HR 恒映射 site_scope)
@@ -3454,7 +3461,7 @@ def test_hr_view_fields_three_state(tmp_path):
     assert fields["hr_safety_text"] == "在线·已免罪"
 
     # 本地兜底路径(judge 返回 None: 站点侧无可查键/未发布视图): triggered/satisfied 就是本地结论,
-    # 来源记「本地·兜底」—— 呈现口径与打标流程同源, 不会出现"标签说达标、徽章说不能删"
+    # 来源统一 local —— 呈现口径与打标流程同源, 不会出现"标签说达标、徽章说不能删"
     rec2 = TorrentRecord.from_torrent(
         FakeTorrent(hash="HB", state="stalledUP", size=512**2, total_size=512**2, downloaded=512**2, seeding_time=3600)
     )
@@ -3464,7 +3471,7 @@ def test_hr_view_fields_three_state(tmp_path):
     fields = QbManager._hr_view_fields(rec2)
     assert fields["hr_triggered"] is True and fields["hr_satisfied"] is False
     assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "local"
-    assert fields["hr_safety_text"] == "本地·兜底，未达标"
+    assert fields["hr_safety_text"] == "本地·未达标"
     rec3 = TorrentRecord.from_torrent(
         FakeTorrent(
             hash="HC", state="stalledUP", size=512**2, total_size=512**2, downloaded=512**2, seeding_time=4 * 86400
@@ -3474,11 +3481,12 @@ def test_hr_view_fields_three_state(tmp_path):
     rec3.hr_link = link
     fields = QbManager._hr_view_fields(rec3)
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "local"
-    assert fields["hr_safety_text"] == "本地·兜底，已达标"
+    assert fields["hr_safety_text"] == "本地·达标"
 
 
 def test_hr_view_fields_excluded(tmp_path):
-    """HR 排除态视图(计划 26-09-28-1805): hr_excluded=True, 触发/达标恒 False, 站点侧字段全空(与未接入同构)"""
+    """HR 排除态视图(计划 26-09-28-1805): hr_excluded=True, 触发/达标恒 False,
+    删除安全档位短路成空串(「不适用」空白由组装层保证, 计划 26-09-30-0559 §5)"""
     from auto_qb.config import HRRule, TrackerConfig
     from auto_qb.config.models import SiteHrCheckConfig
     from auto_qb.core.qbmanager import QbManager
@@ -3500,7 +3508,8 @@ def test_hr_view_fields_excluded(tmp_path):
     fields = QbManager._hr_view_fields(rec)
     assert fields["hr_excluded"] is True
     assert fields["hr_triggered"] is False and fields["hr_satisfied"] is False
-    assert fields["hr_state"] == "" and fields["hr_safety"] == "none" and fields["hr_site_lane"] == ""
+    assert fields["hr_state"] == "" and fields["hr_safety"] == "" and fields["hr_safety_text"] == ""
+    assert fields["hr_safety_src"] == "" and fields["hr_site_lane"] == ""
     rec.hr_link.judge.assert_not_called()
 
     # 未命中排除表: hr_excluded=False, 行为照旧

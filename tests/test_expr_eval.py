@@ -94,6 +94,7 @@ def test_derived_values():
     # 无 tracker_conf / 无 HR 配置 -> 有定义的缺省 false, 不报错
     tor.tracker_conf = None
     assert _val("tor.hr_condition_met", ctx) is False
+    assert _val("tor.hr_local_triggered", ctx) is False
     assert _val("tor.hr_satisfied", ctx) is False
 
 
@@ -290,6 +291,8 @@ def test_legacy_condition_equivalence(monkeypatch):
             (CategoryCondition(["regex:^HR"]), 'tor.category ~ "regex:^HR"'),
             (TrackersCondition(["HHan"]), 'tracker.name ~ "HHan"'),
             (TrackerGroupCondition(["国内"]), '"国内" in tracker.groups'),
+            # 2026-09-30 计划 hr-trigger-semantics: hr_condition_met 与 condition-met 同步换绑
+            # hr_managed(需管束), 等价性不破; 纯本地触发另给 tor.hr_local_triggered(循环后直测)
             (HrCondition("condition-met"), "tor.hr_condition_met"),
             (HrCondition("satisfied"), "tor.hr_satisfied"),
             (HrCondition("condition-not-met"), "not tor.hr_condition_met"),
@@ -309,3 +312,8 @@ def test_legacy_condition_equivalence(monkeypatch):
         assert len(pairs) == 14
         for old, text in pairs:
             assert old.match(ctx) == _val(text, ctx), f"不等价: {old!r} vs {text}"
+        # tor.hr_local_triggered(2026-09-30 新增) = 纯本地下载触发判据:
+        # 本种 downloaded 达 total_size(小种子完整下载兜底) -> 触发; 管束判据 hr_condition_met
+        # 在同一颗已达标种子上为 False —— 两名语义分叉正好由这组断言钉住
+        assert _val("tor.hr_local_triggered", ctx) is True
+        assert _val("tor.hr_condition_met", ctx) is False

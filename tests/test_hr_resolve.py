@@ -20,11 +20,11 @@
 - test_matrix_local_satisfied: 12 格矩阵本地已达标行(A 管束, 其余放行)
 - test_matrix_local_unsatisfied: 12 格矩阵本地未达标行(A 与无证据管束, 终态放行)
 - test_matrix_counts: 管束恰好三格(管束只发生在三格的不变量)
-- test_safety_display_local_fallback: 本地兜底展示(satisfied 决定 danger/safe)
+- test_safety_display_local_fallback: 本地三分(satisfied 决定 safe/danger/warning)
 - test_safety_display_site_scope_danger: 考察中 → danger/site_scope
 - test_safety_display_site_unsatisfied_failed: C 终态 → failed/site_unsatisfied(独立红档)
 - test_safety_display_released_safe: 放行记录 → safe/site_released
-- test_safety_display_no_evidence: 行 4 → 本地兜底 / 未核实展示
+- test_safety_display_no_evidence: 行 4 / 未接入 → satisfied×triggered 三分(达标 safe / 未达标+触发 danger / 未达标+未触发 warning 疑似辅种; 计划 26-09-30-0559)
 """
 from typing import Optional
 
@@ -316,10 +316,13 @@ def test_matrix_counts():
 
 
 def test_safety_display_local_fallback():
+    """未接入(judged None)与行 4 同落本地三分(计划 26-09-30-0559 §5)"""
     d = safety_display(None, triggered=True, satisfied=False)
     assert (d.safety, d.src) == ("danger", "local")
     d = safety_display(None, triggered=True, satisfied=True)
     assert (d.safety, d.src) == ("safe", "local")
+    d = safety_display(None, triggered=False, satisfied=False)
+    assert (d.safety, d.src) == ("warning", "local"), "未达标+未触发 = 疑似辅种黄档"
 
 
 def test_safety_display_site_scope_danger():
@@ -344,9 +347,12 @@ def test_safety_display_released_safe():
 
 
 def test_safety_display_no_evidence():
+    """行 4 三分(计划 26-09-30-0559 §5): 达标 → safe / 未达标+触发 → danger / 未达标+未触发 → warning"""
     view = make_view()
     j = judge_record(view, ("h1", ), anchor=anchor(), now=NOW)
     d = safety_display(j, triggered=True, satisfied=False)
     assert (d.safety, d.src) == ("danger", "local")
     d = safety_display(j, triggered=False, satisfied=False)
-    assert (d.safety, d.src) == ("unknown", "unverified")
+    assert (d.safety, d.src) == ("warning", "local"), "疑似辅种黄档(转移种常态, 不代表无义务)"
+    d = safety_display(j, triggered=False, satisfied=True)
+    assert (d.safety, d.src) == ("safe", "local"), "达标即 safe(触发与否不再影响档位)"
