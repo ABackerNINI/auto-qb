@@ -2,8 +2,8 @@
 
 **Status:** Done
 **Added:** 2026-09-30
-**Updated:** 2026-09-30 07:09
-**Summary:** 计划 plans/26-09-30-0559 全量落地:「触发」降级纯展示辅助(check_hr_condition = 纯本地下载判据), 后端管理全量纳入(check_hr_satisfied 删触发前置成为义务已了单点, 新增 hr_managed 需管束单点), 打标改「放行短路+超额跳过+satisfied 分流」(超额基准 _seed_exempt_baseline 与取数侧同源), 展示三分(疑似辅种 = warning 黄档, SAFETY_UNKNOWN/SRC_UNVERIFIED 退役), 规则 condition-met=hr_managed + satisfied 单条件, 表达式 tor.hr_condition_met 换绑 hr_managed(语义变化) + 新增 tor.hr_local_triggered。test.full 1806 passed + 3 skipped / 91%, 真机 dry-run 零报错。**改动未提交**(等用户显式「提交」)。
+**Updated:** 2026-09-30 07:47
+**Summary:** 计划 plans/26-09-30-0559 全量落地:「触发」降级纯展示辅助(check_hr_condition = 纯本地下载判据), 后端管理全量纳入(check_hr_satisfied 删触发前置成为义务已了单点, 新增 hr_managed 需管束单点), 打标改「放行短路+超额跳过+satisfied 分流」(超额基准 _seed_exempt_baseline 与取数侧同源), 展示三分(疑似辅种 = warning 黄档, SAFETY_UNKNOWN/SRC_UNVERIFIED 退役), 规则 condition-met=hr_managed + satisfied 单条件, 表达式 tor.hr_condition_met 换绑 hr_managed(语义变化) + 新增 tor.hr_local_triggered。test.full 1806 passed + 3 skipped / 91%, 真机 dry-run 零报错。已随 **87d154c** 入库(推 Gitee 核验经后继 87f3437 父链可见)。
 **Topics:** backend-hr-trigger-semantics
 
 ## 原始请求
@@ -36,11 +36,12 @@
 | 7 | 测试改写与新增(8 文件 + helpers) | ✅ 完成 |
 | 8 | test.full 基线 + dry-run 走查 | ✅ 完成 |
 | 9 | 长青文档回写(overview/web-runtime/conditions-and-actions) + 基线切片 | ✅ 完成 |
-| 10 | commit + push | ⬜ 等用户显式「提交」 |
+| 10 | commit + push | ✅ 完成(87d154c, Gitee 已可见) |
 
 ## 进度日志
 
 - **2026-09-30 07:09**: 全量落地。test.full **1806 passed + 3 skipped / 91%**(12602 语句 / 995 未覆盖, 24.9s, rc=0), 较上基线 26-09-30-0555(1802)净增 4 条(打标三分 +3 / 结构断言 +1), 语义反转改写 8 测试文件。真机 dry-run 走查: 零 ERROR/Traceback, 未达标转移种按新语义在维护轮进入 HR 打标分流(dry-run 不落盘), RecursionError 无复发。基线切片 [testing/baselines/26-09-30-0709](../testing/baselines/26-09-30-0709-hr-trigger-semantics.md)。**未提交**。
 - 范围外发现(未动, 待用户决定是否入池): `webui/static/shared/config_hub.js:93` 仍在文档化已废弃配置键 `hr_check.unknown_policy`(26-09-28-1932 判定收口已删该键, models.py 注释可证) —— config 编辑器提示文案漂移。
+- **2026-09-30 07:47**: 上面那条范围外漂移用户拍板直接修(未入池): config_hub.js HUB_HELP 删 `hr_check.unknown_policy` 死条目(8 行, rel 引用的 verified_ttl 同批已删); 「未核实怎么算」v3 语义硬编码为行 4 本地兜底, 由 schema hr.py sites.enabled help 承载, webui grep 无其它残留。先合并远端 87f3437(危险操作独立操作层波)再复测: **1829 passed + 3 skipped / 91%**(基线 [26-09-30-0747](../testing/baselines/26-09-30-0747-webui-config-hub-drift.md)), 与上基线 1210 通过数持平, 零测试增删。修复 + 收尾回写随本轮提交入库。
 
-**Refs:** memory-bank/plans/26-09-30-0559-plan-hr-trigger-semantics.html, memory-bank/testing/baselines/26-09-30-0709-hr-trigger-semantics.md
+**Refs:** memory-bank/plans/26-09-30-0559-plan-hr-trigger-semantics.html, memory-bank/testing/baselines/26-09-30-0709-hr-trigger-semantics.md, memory-bank/testing/baselines/26-09-30-0747-webui-config-hub-drift.md
