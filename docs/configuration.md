@@ -173,11 +173,12 @@ B 已达标 / C 未达标 / D 已免罪 → 放行**(站点结论已定, 终态�
 就可视为完成, 在线核实只是保障准确」)。做种时长 ≥ 3 × 要求时长(程序常量)的种子免除在线对账义务
 (不为它翻页下载), 但被动命中考察中仍照常管束。
 
-- **全局段** `config.hr_check`(6 键): `enabled`(总开关, 默认 false) + 单频控三键 ——
+- **全局段** `config.hr_check`(7 键): `enabled`(总开关, 默认 false) + 单频控三键 ——
   `min_interval`(默认 90S, 相邻请求最小间隔, 页面与 .torrent 统一适用, 抖动只向上 +0~25%)、
   `max_requests_per_day`(默认 240, 站点级日额保险, 零点重置)、`max_pages_per_wave`(默认 30,
   单波页数上限安全阀, 到顶该档截断, 下波从头再翻) + `allow_window`(可选, 仅该时段取数) +
-  `shared_dir`(多实例共享目录) + `channel`。
+  `shared_dir`(多实例共享目录) + `reuse_window`(默认 2H, 数据复用窗 —— 一波取完后的新鲜窗,
+  窗内直接复用不取数, 生效 = min(本值, 拉取间隔)) + `channel`。
 - **取数通道** `hr_check.channel`: `enabled`(本实例是否装了扩展)、`port`(默认 8788; **同机多实例必须各不相同**,
   被占则启动直接报错)、`token`(留空 = 随机生成到 `<data_dir>/hr.token`, 扩展侧逐实例填)、
   `extension_id`(可选: 填了就只放行该扩展 id, 留空 = 靠 token 鉴权; ❗留空时任意扩展 origin 都能带上
@@ -185,8 +186,9 @@ B 已达标 / C 未达标 / D 已免罪 → 放行**(站点结论已定, 终态�
   `request_timeout`(默认 180S: 等扩展回传的上限)。
   安装与配置步骤见 [扩展说明](../extensions/hr-fetch-proxy/README.md)。
 - **站点接入** `hr_check.sites.<站点>`(**唯一站点配置源**, 共 3 键): `enabled`(启用即管) +
-  `tracker`(显式绑定; 留空 = 档案按 announce 域自动映射) + `refresh_interval`(对账波周期, 默认 12H;
-  失败的档位也按本周期自然重试)。页面地址、解析器、种子下载路径、翻页参数、清单形态(listing)这些
+  `tracker`(显式绑定; 留空 = 档案按 announce 域自动映射) + `refresh_interval`(拉取间隔, 默认 12H;
+  自上次健康波起每隔多久重新拉取, 失败的档位随下一轮自然重试; 点「立即拉取」可越过本闸,
+  频控仍生效)。页面地址、解析器、种子下载路径、翻页参数、清单形态(listing)这些
   **程序已知、人易配错**的内容由内置站点档案自动填充, 配置里写这些值不再被接受。
 - **波次与数据有效性**: 每个对账波都从第 1 页开始、以覆盖全部对象(未对账 ∪ 考察中)为目标 ——
   首波深(大站 20 页级), 此后随种子对账/转终态/做满 3× 单调变浅, 稳态一两页即停。拿到有效的数据
@@ -221,12 +223,13 @@ config:
         min_interval: 90S            # 相邻请求最小间隔(页面 + 下载统一)
         max_requests_per_day: 240    # 日额保险
         max_pages_per_wave: 30       # 单波页数上限
+        # reuse_window: 2H           # 数据复用窗(波后新鲜窗, 生效 ≤ 拉取间隔)
         sites:
             btschool:
                 enabled: true
                 # ↓ 两键可省
                 # tracker: BTSchool      # 显式绑定(自动映射未命中/歧义时必填)
-                # refresh_interval: 12H  # 对账波周期
+                # refresh_interval: 12H  # 拉取间隔
 ```
 
 当前内置档案(随版本发布; 新站点/新 adapter 以 `src/auto_qb/config/site_presets.py` 为准):

@@ -189,11 +189,13 @@
                       <span class="bh-n">数据新鲜度 · 索引进度 · 配额与熔断 · 现在为什么不放行</span>
                       <span class="bh-r">
                         <span v-if="hrsPollText()" class="bh-n">{{ hrsPollText() }}</span>
+                        <button class="hb-btn ghost sm" :disabled="hrs.refreshing" @click="hrsRefresh()">全部立即拉取</button>
                         <button class="hb-btn ghost sm" :disabled="hrs.loading" @click="loadHrStatus(true)">刷新</button>
                       </span>
                     </div>
                     <div style="padding:12px 14px">
                       <p v-if="hrs.note" class="logs-note">{{ hrs.note }}</p>
+                      <p v-if="hrs.refreshNote" class="logs-note">{{ hrs.refreshNote }}</p>
                       <p v-if="hrs.loaded && hrs.enabled" class="hrs-channel">{{ hrsChannelText() }}</p>
                       <p v-if="hrs.loading && !hrs.loaded" class="hb-hp">正在读取站点状态…</p>
                       <p v-else-if="hrs.error" class="hb-hp error">{{ hrs.error }}</p>
@@ -211,7 +213,10 @@
                             <span v-if="s.zero_rows && !s.empty_confirmed && !s.count_attested_empty" class="hrs-tag warn">零行未确认</span>
                             <span v-if="s.count_attested_empty" class="hrs-tag ok">计数自证空集</span>
                           </div>
-                          <p class="hrs-line">{{ s.fresh_text }}</p>
+                          <p class="hrs-line">{{ s.fresh_text }}
+                            <button class="hb-btn ghost sm" :disabled="hrs.refreshing"
+                                    @click="hrsRefresh(s.site)">立即拉取</button>
+                          </p>
                           <p class="hrs-line">各档波次:
                             <template v-if="s.lanes && s.lanes.length">
                               <span v-for="ls in s.lanes" :key="ls.lane" class="hrs-tag" :class="hrsLaneClass(ls)">{{ hrsLaneBadge(ls) }}</span>

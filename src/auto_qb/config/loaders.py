@@ -127,7 +127,7 @@ def load_notify_config(spec: dict) -> NotifyConfig:
 
 
 def load_hr_check_config(spec) -> HrCheckConfig:
-    """解析 config.hr_check 段(v3 14 键口径: 功能开关 + 单频控三键 + 本地取数通道 + 站点接入)
+    """解析 config.hr_check 段(v3 15 键口径: 功能开关 + 单频控三键 + 本地取数通道 + 站点接入)
 
     整段缺省 = 空字典 => 全部走字段默认(功能关闭, 保守默认)。
     """
@@ -162,6 +162,7 @@ def load_hr_check_config(spec) -> HrCheckConfig:
         max_pages_per_wave=_get(spec, "max_pages_per_wave", d.max_pages_per_wave, int),
         allow_window=_get(spec, "allow_window", d.allow_window),
         shared_dir=_get(spec, "shared_dir", d.shared_dir),
+        reuse_window=_get(spec, "reuse_window", d.reuse_window, parse_time),
         channel=channel,
         sites=sites,
     )

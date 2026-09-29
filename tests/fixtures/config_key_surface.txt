@@ -92,6 +92,7 @@ hr_check.enabled
 hr_check.max_pages_per_wave
 hr_check.max_requests_per_day
 hr_check.min_interval
+hr_check.reuse_window
 hr_check.shared_dir
 hr_check.sites
 hr_check.sites.*.enabled

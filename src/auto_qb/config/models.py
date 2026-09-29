@@ -90,7 +90,7 @@ class HrChannelConfig:
 
 @dataclass
 class HrCheckConfig:
-    """HR 在线核实全局段(v3 波次模型 14 键口径, 计划 26-09-28-1932 §6.1)
+    """HR 在线核实全局段(v3 波次模型 15 键口径, 计划 26-09-28-1932 §6.1 + 26-09-30-0240)
 
     整段缺省 = 功能关闭; 总开关 enabled 默认 false(保守默认, 黄金法则 2)。
     所有新键都必须进 validate_config 并同步 config/schema(守卫测试会查)。
@@ -111,6 +111,7 @@ class HrCheckConfig:
     max_pages_per_wave: int = 30  # 单波页数上限(安全阀: 防改版/异常导致翻页失控); 到顶该档截断
     allow_window: str = ""  # 仅该时段取数 "HH:MM-HH:MM"(可跨午夜); 空 = 全天。!与 notify.quiet_hours 语义相反
     shared_dir: str = ""  # 空 = 多实例不共享(站点文件落 <data_dir>/hr/); 多实例互通时指向同一目录
+    reuse_window: float = 2 * 3600.0  # 数据复用窗(秒, 计划 26-09-30-0240): 波后窗内直接复用不取数; 生效 = min(本值, 拉取间隔)
     channel: HrChannelConfig = field(default_factory=HrChannelConfig)
     # 站点接入(计划 26-09-27-1318 REV2): 键 = 内置站点档案 id(config/site_presets.py),
     # 值 = enabled + tracker 显式映射 + refresh_interval; 站点启用/微调的唯一配置源。
@@ -139,7 +140,7 @@ class SiteHrCheckConfig:
     # 显式映射目标: 配置源在 hr_check.sites.<id>.tracker, 填 trackers 下的条目名(字符串相等引用,
     # 无匹配语义); 留空 = 用档案默认映射(已知 announce 域查表)。派生视图回填解析出的条目名。
     tracker: str = ""
-    refresh_interval: float = 12 * 3600.0  # 对账波周期(秒)
+    refresh_interval: float = 12 * 3600.0  # 拉取间隔(秒, 26-09-30-0240 改名: 原名「对账波周期」; 展示名见 schema)
     # ---- 以下全部由档案/绑定派生(配置不再接受) ----
     adapter: str = "nexusphp"  # 由站点档案填充
     hr_page_url: str = ""  # 由站点档案按 web 域派生

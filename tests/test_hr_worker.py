@@ -438,3 +438,48 @@ def test_revision_bumps_when_data_changes(tmp_path):
     assert publisher.revision == 2, "数据实质变化(新增一条) => 版本抬升"
     view = publisher.latest().get("pt.example.com")
     assert {e.tid for e in view.lane_terminal.values()} == {TID_A, TID_B}
+
+
+# ---------------- 立即拉取的 force 通路(计划 26-09-30-0240) ----------------
+
+
+def test_request_refresh_consumed_once_and_not_left_behind(tmp_path):
+    """request_refresh 置旗 → 下一轮消费(force 越过复用窗) → 即时清空不残留(旗标一次性)"""
+    fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
+    service = _service(tmp_path, fetcher)
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    worker.run_once()  # 建立数据: 下一轮正常会 REUSED
+    requested = worker.request_refresh()
+    assert requested == ["pt.example.com"]
+    assert [r.action for r in worker.run_once()] == [ACTION_REFRESHED], "force: 复用窗内也应真取数"
+    assert [r.action for r in worker.run_once()] == [ACTION_REUSED], "旗标已消费, 不能残留到下一轮"
+    assert len(fetcher.text_calls) == 6, "第三轮回零请求(前两轮各 3 页)"
+
+
+def test_request_refresh_targets_only_named_site(tmp_path):
+    """按站触发只影响该站: 未点名的站点仍走正常调度(复用窗内 → REUSED)"""
+    fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
+    site_confs = {"alpha": site_conf(), "beta": site_conf()}
+    service = HrRefreshService(
+        data_dir=str(tmp_path),
+        global_conf=global_conf(),
+        site_confs=site_confs,
+        fetcher=fetcher,
+        persist=True,
+        allow_fetch=True,
+    )
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    worker.run_once()
+    assert worker.request_refresh(["alpha", "ghost"]) == ["alpha"], "未启用的站点不受理"
+    actions = {r.site: r.action for r in worker.run_once()}
+    assert actions["alpha"] == ACTION_REFRESHED, "被点名的站点 force 开波"
+    assert actions["beta"] == ACTION_REUSED, "未点名的站点照常复用"
+    assert len(fetcher.text_calls) == 9, "首轮两站各 3 页(6) + alpha 第二轮 3 页(3) —— beta 第二轮零请求"
+
+
+def test_pacing_class_separates_fetch_interval_gate():
+    """「拉取间隔」闸门的等待原因进入节流类别且与 min_interval 的「间隔」区分(不刷屏 + 根因可辨)"""
+    from auto_qb.hr.worker import pacing_class
+    assert pacing_class("未到拉取时刻(拉取间隔, 还差 104s)") == "拉取间隔"
+    assert pacing_class("未到拉取时刻(拉取间隔, 还差 51s)") == "拉取间隔", "倒计时变化不换类别(去重)"
+    assert pacing_class("未到可取时刻(间隔, 还差 104s)") == "间隔", "min_interval 是另一类"

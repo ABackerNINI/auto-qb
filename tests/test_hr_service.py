@@ -42,6 +42,15 @@
 - test_interval_empty_page_keeps_manual_stamp: T52. 分页区间形空表无标记(claim=None) —— 维持 zero_listing 人工戳路径
 - test_counter_truncation_gap_informational: T6 截断差值信息性 —— 非全深度 rows<claim 不告警不冻结, notes 记差值, REASON_BUDGET 语义不变
 - test_fail_streak_resets_on_clean_wave: 失效波数清零 —— 连续失效只跨失效波延续, 恢复波清零, 单次失效不背历史(修复既有从未清零)
+- test_reuse_window_uses_min_of_config_and_interval: 1.复用窗时长 = min(reuse_window, 拉取间隔)(计划 26-09-30-0240), 窗内 REUSED 语义不变
+- test_reuse_window_never_exceeds_interval: 1b. clamp 另一半 —— 复用窗 > 拉取间隔时静默收敛到拉取间隔
+- test_interval_gate_waits_between_waves: 2.复用窗外 + 拉取间隔内 → WAITING「未到拉取时刻(拉取间隔)」(节奏闸门, 防频率放大)
+- test_interval_gate_due_runs_next_wave: 3.健康波 + interval 到点 → 正常开波(默认节奏与解耦前一致)
+- test_force_bypasses_reuse_and_interval_gates: 4.立即拉取(force)→ 跳过复用窗与拉取间隔两道闸
+- test_force_still_respects_min_interval: 5.force 不越账号安全线 —— min_interval 未到仍 WAITING
+- test_all_failed_wave_keeps_short_retry_rhythm: 6.全档失败波 healthy_ts 不前进 → 下一轮重试节奏不变
+- test_partial_wave_advances_healthy_ts_failed_lane_waits: 7.部分失败波 healthy_ts 前进 → 失败档位等下一波
+- test_refresh_all_force_not_blocked_by_gates: 8.走查 refresh_all(force=True)不被两道闸挡(--hr-once 语义)
 """
 import logging
 import time
@@ -1158,3 +1167,133 @@ def test_fail_streak_resets_on_clean_wave(tmp_path):
     run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.lanes["A"].status == "failed" and data.wave.lanes["A"].fail_streak == 1
+
+
+# ---------------- 三参数解耦: 拉取间隔 / 复用窗 / 立即拉取(计划 26-09-30-0240) ----------------
+
+
+def test_reuse_window_uses_min_of_config_and_interval(tmp_path):
+    """1. 复用窗时长 = min(reuse_window, 拉取间隔): 新鲜度不再借用节奏值(12H→2H); 窗内再跑 → REUSED(既有语义不变)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)  # 默认 reuse_window=2H, interval=12H
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.expires_at == clock.now + 2 * 3600.0, "min(2H, 12H) = 2H —— 不再是 12H"
+    result = run_wave(service)
+    assert result.action == "reused"
+
+
+def test_reuse_window_never_exceeds_interval(tmp_path):
+    """1b. clamp 另一半: 复用窗(2H) > 拉取间隔(1H) → 生效 1H(拉取间隔是硬节奏, 静默收敛不报错)"""
+    clock = Clock()
+    service = make_service(
+        tmp_path,
+        FakeFetcher(pages=standard_pages([row(11, "OTHER 11")])),
+        site=site_conf(refresh_interval=3600.0),
+        clock=clock
+    )
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.expires_at == clock.now + 3600.0
+
+
+def test_interval_gate_waits_between_waves(tmp_path):
+    """2. 复用窗外 + 拉取间隔内 → WAITING「未到拉取时刻(拉取间隔)」: 节奏闸门存在,
+    缩短复用窗不会把取数频率放大到「每复用窗一波」(§2 关键正确性 —— 唯一否决点)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, gconf=global_conf(reuse_window=3600.0), clock=clock)
+    run_wave(service)
+    clock.advance(2 * 3600.0)  # 复用窗(1H)已过, 拉取间隔(12H)未到
+    result = run_wave(service)
+    assert result.action == ACTION_WAITING
+    assert "未到拉取时刻" in result.reason and "拉取间隔" in result.reason
+
+
+def test_interval_gate_due_runs_next_wave(tmp_path):
+    """3. 健康波 + interval 到点 → 正常开波: 默认节奏与解耦前一致"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service)
+    clock.advance(12 * 3600.0)  # 复用窗与拉取间隔都已过
+    result = run_wave(service)
+    assert result.action in ("refreshed", "partial")
+
+
+def test_force_bypasses_reuse_and_interval_gates(tmp_path):
+    """4. 立即拉取(force)→ 跳过复用窗与拉取间隔两道闸, 时钟未动也直接开波"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.healthy_ts > 0 and data.expires_at > clock.now, "前置: 处于复用窗 + 拉取间隔内"
+    result = service.refresh_site(SITE, {}, force=True)
+    assert result.action in ("refreshed", "partial"), f"force 应越过两道闸, got: {result.action} {result.reason}"
+
+
+def test_force_still_respects_min_interval(tmp_path):
+    """5. 立即拉取不越过账号安全线: min_interval 未到 → 仍 WAITING(间隔, 非「拉取间隔」)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, gconf=global_conf(min_interval=90.0), clock=clock)
+    run_wave(service)  # 页面请求已发出: last_fetch_ts = now
+    result = service.refresh_site(SITE, {}, force=True)  # 时钟未动: min_interval 必然未到
+    assert result.action == ACTION_WAITING
+    assert "间隔" in result.reason and "拉取间隔" not in result.reason, \
+        f"等待原因应是 min_interval 而非拉取间隔闸门: {result.reason}"
+
+
+def test_all_failed_wave_keeps_short_retry_rhythm(tmp_path):
+    """6. 全档失败波 → healthy_ts 不前进 → 不被拉取间隔闸门拖住: 下一轮(60s 节拍)即可重试"""
+    clock = Clock()
+    # 全档取数失败(三档都抛): expires_at=0(无新数据可复用), healthy_ts 不动
+    fetcher = FakeFetcher(pages=standard_pages(), fail_text_at={"A": "boom", "B": "boom", "C": "boom"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    first = run_wave(service)
+    assert first.action == ACTION_ERROR
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.healthy_ts == 0.0 and data.expires_at == 0.0
+    clock.advance(60.0)  # 一个 poll 节拍后: 失败处置节奏与解耦前一致(下一轮重试, 不等一个拉取间隔)
+    second = run_wave(service)
+    assert second.action == ACTION_ERROR, "失败波不该被拉取间隔闸门挡住(healthy_ts 未前进)"
+    # 失败后恢复: force 立即开波成功(失败残留不锁死人工通路)
+    fetcher.fail_text_at.clear()
+    clock.advance(60.0)
+    recovered = service.refresh_site(SITE, {}, force=True)
+    assert recovered.action in ("refreshed", "partial")
+
+
+def test_partial_wave_advances_healthy_ts_failed_lane_waits(tmp_path):
+    """7. 部分失败波 → healthy_ts 前进(至少一档有效) → 拉取间隔闸门接管: 失败档位等下一波"""
+    clock = Clock()
+    fetcher = FakeFetcher(
+        pages={**standard_pages([row(11, "OTHER 11")])},
+        fail_text_at={
+            "B": "boom",
+            "C": "boom"
+        },  # B/C 失败, A 有效
+    )
+    service = make_service(tmp_path, fetcher, gconf=global_conf(reuse_window=3600.0), clock=clock)
+    first = run_wave(service)
+    assert first.action in (ACTION_PARTIAL, ACTION_ERROR)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.healthy_ts == clock.now, "部分有效 → 健康波前进"
+    clock.advance(2 * 3600.0)  # 复用窗(1H)过, 拉取间隔(12H)未到 → 失败的 B/C 等下一波
+    second = run_wave(service)
+    assert second.action == ACTION_WAITING and "拉取间隔" in second.reason
+
+
+def test_refresh_all_force_not_blocked_by_gates(tmp_path):
+    """8. 走查语义: refresh_all(force=True) 在复用窗/拉取间隔内仍开波(--hr-once 不被新闸门挡)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service)
+    clock.advance(60.0)  # 复用窗(2H)与拉取间隔(12H)都远未到
+    blocked = service.refresh_all()
+    assert blocked[0].action == "reused", "不带 force: 复用窗内照旧复用"
+    forced = service.refresh_all(force=True)
+    assert forced[0].action in ("refreshed", "partial"), "force=True: 走查立即开波"

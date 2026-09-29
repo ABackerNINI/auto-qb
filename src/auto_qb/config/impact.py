@@ -85,6 +85,7 @@ HR_CHECK_FIELD_LEVELS = {
     "max_pages_per_wave": LEVEL_L0,
     "allow_window": LEVEL_L0,
     "shared_dir": LEVEL_L1,
+    "reuse_window": LEVEL_L0,  # 数据复用窗(26-09-30-0240): 取数线程每轮现读, 热重载即时生效
     "channel": LEVEL_L1,
     # 站点接入: 站点条目派生进 trackers.*.hr_check, 而后者是 L0(取数线程每轮现读) ——
     # sites 变更经派生字段同路径生效, 与 TRACKER_FIELD_LEVELS.hr_check 同级

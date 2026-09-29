@@ -492,12 +492,16 @@ async function testEndpoint() {
 }
 
 async function poll() {
+  // 立即拉取(计划 26-09-30-0240): 发 refresh-now = 「请求后端立即开波 + 排空」, 不再只是排空。
+  // 后端旧版本(404)由后台降级为纯排空并在日志提示升级; 状态行汇总「已受理 N 个站点 + 排空结果」。
   setStatus('正在拉取…');
   try {
-    const res = await chrome.runtime.sendMessage({ type: 'poll-now' });
+    const res = await chrome.runtime.sendMessage({ type: 'refresh-now' });
     const got = await chrome.storage.local.get({ status: {} });
     if (res && res.ok) {
-      setStatus(got.status.text || '完成');
+      const n = typeof res.requested === 'number' ? res.requested : null;
+      const head = n === null ? '' : `已受理 ${n} 个站点; `;
+      setStatus(head + (got.status.text || '完成'));
     } else {
       setStatus(`拉取失败: ${(res && res.error) || '未知'}(详见折叠区里的运行日志)`);
     }

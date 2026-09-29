@@ -2,11 +2,14 @@
 
 职责与边界(硬约束):
 
-- 三个端点: `GET /api/hr/tasks` 给扩展「当前可取的清单」, `POST /api/hr/result` 收回传,
-  `GET /api/hr/sites` 给选项页「需要授权的站点清单」(只读辅助, 同样过 token + origin 两道关);
-- 端点线程**只入队** —— 除了内存队列它什么都不碰: 不写 state_file / hr 站点文件 / 任务队列,
-  也不解析页面(解析在取数线程, 见 service.py); 因此「任意网页 JS 打端点」最坏只能污染一条
-  待解析的结果, 而那条结果还得先通过「任务 id 确实派发过 + 域名一致」两道关;
+- 四个端点: `GET /api/hr/tasks` 给扩展「当前可取的清单」, `POST /api/hr/result` 收回传,
+  `GET /api/hr/sites` 给选项页「需要授权的站点清单」(只读辅助, 同样过 token + origin 两道关),
+  `POST /api/hr/refresh` 给选项页「立即拉取一次」(计划 26-09-30-0240);
+- 端点线程**只入队 + 置一次性 force 旗标并唤醒取数线程** —— 除了内存队列与 force 旗标它
+  什么都不碰: 不写 state_file / hr 站点文件 / 任务队列结构, 也不解析页面(解析在取数线程,
+  见 service.py)。force 旗标只活在取数线程(worker)内存里, 由它串行消费; 端点线程不碰
+  站点文件 / state_file / 队列结构, **单一写线程假设不变**。因此「任意网页 JS 打端点」最坏
+  只能污染一条待解析的结果, 而那条结果还得先通过「任务 id 确实派发过 + 域名一致」两道关;
 - 鉴权: 无 token / token 不符 ⇒ **401 且不写任何状态**; 非扩展 origin ⇒ 403(纵深防御);
   真鉴权是 token —— origin 白名单只是第二道(扩展 id 未必定得住, 见计划 §6);
 - URL 白名单(SSRF)在**下发任务时**卡死(见 channel.UrlPolicy), 端点本身不接受任何 URL 入参。
@@ -24,6 +27,7 @@ from socketserver import TCPServer
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from .channel import (
+    API_REFRESH,
     API_RESULT,
     API_SITES,
     API_TASKS,
@@ -100,6 +104,7 @@ class HrChannelServer:
         poll_hint: float = DEFAULT_POLL_HINT,
         now_fn: Callable[[], float] = time.time,
         sites_fn: Optional[Callable[[], List[Tuple[str, str]]]] = None,
+        force_fn: Optional[Callable[[], dict]] = None,
     ) -> None:
         self.queue = queue
         self.token = token
@@ -110,6 +115,9 @@ class HrChannelServer:
         #: 返回 [(站点名, 匹配模式), ...] —— 每次请求现读(不是构造时快照): 热重载加了站点
         #: 不改变端点监听身份(不重绑), 构造期快照会把新站点漏在授权清单外面。
         self.sites_fn = sites_fn
+        #: 「立即拉取」回调(计划 26-09-30-0240, runtime 注入 HrRuntime.request_refresh):
+        #: 端点线程调它只是置 worker 内存里的一次性 force 旗标 + 唤醒, 不碰任何持久状态。
+        self.force_fn = force_fn
         self._now = now_fn
         self._state_lock = threading.Lock()
         self._last_contact_ts = 0.0
@@ -216,6 +224,8 @@ class HrChannelServer:
             if len(body) > MAX_BODY_BYTES:
                 return 413, cors, _json({"error": "body too large"})
             return self._result_response(body, cors)
+        if method == "POST" and route_path == API_REFRESH:
+            return self._refresh_response(cors)
         return 404, cors, _json({"error": "not found"})
 
     def _tasks_response(self) -> bytes:
@@ -264,6 +274,24 @@ class HrChannelServer:
         if rejected:
             logger.warning(f"HR 取数通道 | 本批回传有 {rejected} 条不匹配任务, 已丢弃")
         return 200, cors, _json({"accepted": accepted, "rejected": rejected})
+
+    def _refresh_response(self, cors: Dict[str, str]) -> Tuple[int, Dict[str, str], bytes]:
+        """立即拉取(计划 26-09-30-0240): 调 force_fn 置一次性旗标并唤醒取数线程, 立即回受理结果。
+
+        取数线程未启动 / force_fn 未注入(runtime 未接)时不报 5xx: 旧形态照常排空即可。
+        force_fn 抛异常不该打死端点线程 —— 回 200 + error 文本, 扩展原样展示。
+        """
+        if self.force_fn is None:
+            return 404, cors, _json({"error": "refresh not available"})
+        try:
+            outcome = self.force_fn() or {}
+        except Exception as e:
+            logger.error(f"HR 取数通道 | 立即拉取受理失败: {e}", exc_info=True)
+            return 200, cors, _json({"requested": [], "error": f"受理失败: {e}"})
+        requested = list(outcome.get("requested") or [])
+        note = outcome.get("note") or "已受理, 取数由取数线程执行"
+        logger.info(f"HR 取数通道 | 立即拉取已受理 {len(requested)} 个站点")
+        return 200, cors, _json({"requested": requested, "note": note})
 
     # ---------- 内部 ----------
 

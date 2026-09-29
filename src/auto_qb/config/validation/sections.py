@@ -24,7 +24,7 @@ KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify"}
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
-# hr_check(HR 在线核实, v3 14 键口径, 计划 26-09-28-1932 §6.1); 站点级与全局共用区分两套键集
+# hr_check(HR 在线核实, v3 15 键口径, 计划 26-09-28-1932 §6.1 + 26-09-30-0240); 站点级与全局共用区分两套键集
 KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token", "extension_id", "request_timeout"}
 
 KNOWN_HR_CHECK_KEYS = {
@@ -34,6 +34,7 @@ KNOWN_HR_CHECK_KEYS = {
     "max_pages_per_wave",
     "allow_window",
     "shared_dir",
+    "reuse_window",
     "channel",
     "sites",
 }
@@ -180,6 +181,12 @@ def _validate_hr_check(spec, errors: List[str]) -> None:
                 errors.append(f"config.hr_check.allow_window: 须为 'HH:MM-HH:MM'(可跨午夜): {e}")
     if "shared_dir" in spec and not isinstance(spec["shared_dir"], str):
         errors.append("config.hr_check.shared_dir: 必须是字符串")
+    if "reuse_window" in spec:
+        # 数据复用窗(计划 26-09-30-0240): 上限 7d —— 复用窗只影响数据新鲜度, 调再大也不增加站点访问,
+        # 但过大会让「数据已过期」的假象长期存在; 下限 60s 与站点级 refresh_interval 同款
+        _try_time(
+            spec["reuse_window"], "config.hr_check.reuse_window", errors, positive=True, min_s=60, max_s=7 * 86400
+        )
     if "channel" in spec:
         channel = spec["channel"]
         if not isinstance(channel, dict):

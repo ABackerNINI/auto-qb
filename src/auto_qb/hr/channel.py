@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 API_TASKS = "/api/hr/tasks"
 API_RESULT = "/api/hr/result"
 API_SITES = "/api/hr/sites"
+#: 立即拉取(POST, 计划 26-09-30-0240): 扩展选项页按钮 -> 后端置 force 旗标 + 唤醒取数线程
+API_REFRESH = "/api/hr/refresh"
 #: 鉴权头(扩展逐实例填自己的 token)
 TOKEN_HEADER = "X-Hr-Token"
 ORIGIN_HEADER = "Origin"
@@ -367,6 +369,7 @@ def describe_token_source(configured: str, data_dir: str) -> str:
 
 
 __all__ = [
+    "API_REFRESH",
     "API_RESULT",
     "API_SITES",
     "API_TASKS",

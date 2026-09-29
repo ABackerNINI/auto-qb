@@ -15,7 +15,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Mapping, Optional, Sequence, Tuple
+from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
 from .channel import (
@@ -308,6 +308,9 @@ class HrRuntime:
                     port=conf.channel.port,
                     extension_id=conf.channel.extension_id,
                     sites_fn=self._site_origins,
+                    # 立即拉取(计划 26-09-30-0240): 端点只调本方法置一次性旗标 + 唤醒,
+                    # 不碰站点文件 / state_file / 队列结构(单一写线程假设不变)
+                    force_fn=self.request_refresh,
                 )
         elif not keep_endpoint:
             self.endpoint = None
@@ -319,6 +322,19 @@ class HrRuntime:
             poll_interval=POLL_INTERVAL,  # 常量化(v3, 计划 §6.2: 配置键 poll_interval 删除)
             anchors_fn=self._anchors,
         )
+
+    def request_refresh(self, sites: Optional[Iterable[str]] = None) -> dict:
+        """「立即拉取」的汇合点(计划 26-09-30-0240): 插件端点与 WebUI 按钮都走这里。
+
+        委托取数线程置一次性 force 旗标并唤醒(worker 负责以 force=True 跳过复用窗与
+        拉取间隔, min_interval / 日额 / Retry-After / 时间窗照常)。取数线程未启动时
+        如实返回提示 —— 不顺手启动线程(启动语义归 rebuild/start 管)。
+        """
+        worker = self.worker
+        if worker is None or not worker.started:
+            return {"requested": [], "note": "取数线程未启动"}
+        requested = worker.request_refresh(sites)
+        return {"requested": requested, "note": "已受理, 取数由取数线程执行"}
 
     def _site_origins(self) -> list:
         """需要授权的站点清单(扩展选项页「勾选站点 → 一键申请权限」的数据源)。

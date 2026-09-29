@@ -19,7 +19,7 @@ import logging
 import re
 import threading
 import time
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from . import events
 from .resolve import HrSiteView, HrViewSet
@@ -43,6 +43,8 @@ _DIGITS = re.compile(r"\d+")
 
 #: 节流原因类别(按此次序匹配第一个命中): 同一根因不论本轮返回 partial 还是 waiting 都算**同一种状态**
 _PACING_CLASSES = (
+    # 「拉取间隔」须先于「间隔」匹配(计划 26-09-30-0240): 它是独立闸门, 节流类别单列
+    ("拉取间隔", "拉取间隔"),
     ("间隔", "间隔"),
     ("日配额", "日配额"),
     ("Retry-After", "Retry-After"),
@@ -163,6 +165,9 @@ class HrWorker:
         self._pacing_key: Dict[str, str] = {}
         self._pacing_at: Dict[str, float] = {}
         self._silence_warned_at = 0.0
+        #: 立即拉取的一次性 force 旗标(计划 26-09-30-0240): None = 无; set = 受理的站点;
+        #: 空集 = 全部启用站点。只活在 worker 内存, 不落盘(重启丢失无副作用), run_once 消费即清。
+        self._force: Optional[set] = None
         #: 静默告警的时间基准: 构造即记(否则「只调 run_once 不 start」的用法会拿 0 当基准, 立刻误报)
         self._started_at = self._now()
 
@@ -215,6 +220,25 @@ class HrWorker:
             self._wake_seq += 1
             self._cond.notify_all()
 
+    def request_refresh(self, sites: Optional[Iterable[str]] = None) -> List[str]:
+        """登记一次「立即拉取」并唤醒取数线程(计划 26-09-30-0240)
+
+        sites=None 表示全部启用站点; 指定站点则逐个受理。旗标一次性: 下一轮 run_once
+        消费后即清, 不残留。线程安全(self._cond 保护); 无持久化 —— 重启丢失无副作用(幂等)。
+        返回实际受理的站点清单(只含已启用的站点)。
+        """
+        enabled = set(self.service.enabled_sites())
+        with self._cond:
+            want = enabled if sites is None else (enabled & {str(s) for s in sites})
+            if self._force is None:
+                self._force = set()
+            self._force |= want
+            self._wake_seq += 1
+            self._cond.notify_all()
+        if want:
+            logger.info("HR 收到立即拉取请求: %s(取数线程将跳过复用窗与拉取间隔, 频控仍生效)", ", ".join(sorted(want)))
+        return sorted(want)
+
     @property
     def started(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -261,11 +285,19 @@ class HrWorker:
                 self._cond.wait_for(lambda: self._stopped or self._wake_seq != seq, timeout=self.poll_interval)
 
     def run_once(self) -> List[HrRefreshResult]:
-        """跑一轮: 逐站点刷新(站点之间互不阻塞) -> 发布视图 -> 通道静默检查"""
+        """跑一轮: 逐站点刷新(站点之间互不阻塞) -> 发布视图 -> 通道静默检查
+
+        立即拉取(计划 26-09-30-0240): 消费本轮登记的 force 旗标并**即时清空**(一次性, 不残留) ——
+        受理站点以 force=True 刷新(跳过复用窗与拉取间隔, min_interval/日额/Retry-After/时间窗照常)。
+        """
         anchors_by_site = self._collect_anchors()
+        with self._cond:
+            force_sites = self._force
+            self._force = None
         results: List[HrRefreshResult] = []
         for site in self.service.enabled_sites():
-            result = self.service.refresh_site(site, anchors_by_site.get(site))
+            force = force_sites is not None and site in force_sites
+            result = self.service.refresh_site(site, anchors_by_site.get(site), force=force)
             results.append(result)
             self._note(site, result)
         if results:

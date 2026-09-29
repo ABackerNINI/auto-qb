@@ -18,6 +18,10 @@
 - test_route_result_unknown_task_is_400: 未派发过的任务 -> 400 且不入任何状态(防伪造注入)
 - test_route_result_malformed_is_400: 畸形 JSON / 畸形结果 -> 400 不崩
 - test_route_result_oversize_is_413: 超限请求体 -> 413
+- test_route_refresh_same_gates_as_tasks: 立即拉取(26-09-30-0240)同一道门 —— 无 token 401 / 网页 origin 403, 且不触 force_fn
+- test_route_refresh_accepts_and_returns_requested: 带 token POST -> 调 force_fn 并回受理清单
+- test_route_refresh_404_when_no_force_fn: force_fn 未注入 -> 404(插件侧降级纯排空)
+- test_route_refresh_survives_force_fn_error: force_fn 抛异常 -> 200 + error(端点线程不死)
 - test_route_options_preflight: OPTIONS 预检返回允许的方法与头
 - test_route_unknown_path_is_404: 未登记路径 404
 - test_token_never_echoed: 响应体里绝不出现 token
@@ -41,7 +45,7 @@ from http.client import HTTPConnection
 
 import pytest
 
-from auto_qb.hr.channel import API_RESULT, API_SITES, API_TASKS, TOKEN_HEADER, HrChannelBindError
+from auto_qb.hr.channel import API_REFRESH, API_RESULT, API_SITES, API_TASKS, TOKEN_HEADER, HrChannelBindError
 from auto_qb.hr.queue import HrTaskQueue
 from auto_qb.hr.server import HrChannelServer
 
@@ -51,7 +55,7 @@ URL = "https://pt.example.com/myhr.php?hrtype=A"
 DL = "https://pt.example.com/download.php?id=313852"
 
 
-def make_server(*, queue=None, token=TOKEN, extension_id="", now_fn=time.time, sites_fn=None):
+def make_server(*, queue=None, token=TOKEN, extension_id="", now_fn=time.time, sites_fn=None, force_fn=None):
     return HrChannelServer(
         queue=queue or HrTaskQueue(),
         token=token,
@@ -59,6 +63,7 @@ def make_server(*, queue=None, token=TOKEN, extension_id="", now_fn=time.time, s
         extension_id=extension_id,
         now_fn=now_fn,
         sites_fn=sites_fn,
+        force_fn=force_fn,
     )
 
 
@@ -180,6 +185,42 @@ def test_route_result_oversize_is_413():
     server = make_server()
     huge = b"x" * (12 * 1024 * 1024 + 1)
     assert server.route("POST", API_RESULT, {TOKEN_HEADER: TOKEN}, huge)[0] == 413
+
+
+# ---------- 1b. 立即拉取路由(计划 26-09-30-0240) ----------
+
+
+def test_route_refresh_same_gates_as_tasks():
+    """立即拉取与其它端点同一道门: 无 token 401 / 网页 origin 403"""
+    calls = []
+    server = make_server(force_fn=lambda: calls.append(1) or {"requested": ["s"]})
+    assert server.route("POST", API_REFRESH, {})[0] == 401
+    status, headers, _ = server.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN, "Origin": "https://evil.example.com"})
+    assert status == 403 and "Access-Control-Allow-Origin" not in headers
+    assert not calls, "401/403 都不得触达 force_fn"
+
+
+def test_route_refresh_accepts_and_returns_requested():
+    """带 token POST: 调 force_fn 置旗并回受理清单(非阻塞 —— 取数由取数线程执行)"""
+    server = make_server(force_fn=lambda: {"requested": ["pt.example.com"], "note": "已受理, 取数由取数线程执行"})
+    status, headers, body = server.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN, "Origin": ORIGIN})
+    assert status == 200 and "Access-Control-Allow-Origin" in headers
+    payload = json.loads(body)
+    assert payload["requested"] == ["pt.example.com"] and "已受理" in payload["note"]
+
+
+def test_route_refresh_404_when_no_force_fn():
+    """force_fn 未注入(runtime 未接 / 旧形态) -> 404: 插件侧降级为纯排空"""
+    server = make_server()
+    status, _h, body = server.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN, "Origin": ORIGIN})
+    assert status == 404 and b"not available" in body
+
+
+def test_route_refresh_survives_force_fn_error():
+    """force_fn 抛异常 -> 200 + error 文本(端点线程不得死)"""
+    server = make_server(force_fn=lambda: (_ for _ in ()).throw(RuntimeError("boom")))
+    status, _h, body = server.route("POST", API_REFRESH, {TOKEN_HEADER: TOKEN, "Origin": ORIGIN})
+    assert status == 200 and "boom" in body.decode("utf-8")
 
 
 def test_route_options_preflight():

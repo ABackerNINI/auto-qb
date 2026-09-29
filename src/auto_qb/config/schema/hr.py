@@ -1,4 +1,4 @@
-"""schema: HR 在线核实段(v3 14 键口径, 计划 26-09-28-1932 §6; 全局 config.hr_check + sites 子段)。
+"""schema: HR 在线核实段(v3 15 键口径, 计划 26-09-28-1932 §6 + 26-09-30-0240; 全局 config.hr_check + sites 子段)。
 
 站点段沿用 26-09-27-1318 REV2 的上收口径: 站点启用/微调的唯一配置源是 hr_check.sites.<档案 id>
 (键 = config/site_presets.py 的内置档案), 页面事实(adapter/页面路径/下载路径/翻页参数/清单形态)
@@ -79,11 +79,12 @@ HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
     ),
     Field(
         "refresh_interval",
-        "对账波周期",
+        "拉取间隔",
         "time",
         default="12H",
         unit_default="H",
-        help="在线对账多久跑一波; 失败的档位也按本周期自然重试(无独立退避)",
+        help="自上次健康波起, 每隔多久重新拉取一次站点清单(在线对账的节奏); 失败的档位随下一轮自然重试(无独立退避)。"
+        "站点访问节奏由本值与频控(最小间隔/日额/时间窗)共同决定; 点『立即拉取』可越过本闸(频控仍生效)",
     ),
 )
 
@@ -134,6 +135,15 @@ HR_CHECK_FIELDS: Tuple[Field, ...] = (
         default="",
         help="多实例共享站点数据时的目录(留空 = 落 <data_dir>/hr/)。需支持文件锁且各实例看到同一份文件; "
         "云同步盘(OneDrive/坚果云)不可用",
+    ),
+    Field(
+        "reuse_window",
+        "数据复用窗",
+        "time",
+        default="2H",
+        unit_default="H",
+        help="一波取完后的数据新鲜窗: 窗内直接复用不取数(多实例去重 + 界面新鲜度); 实际生效不超过拉取间隔。"
+        "调大不增加站点访问, 只让数据显得更新",
     ),
     Field(
         "channel",

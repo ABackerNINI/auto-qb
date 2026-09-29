@@ -25,6 +25,8 @@ window.AQB_HR_STATUS = {
         workerRunning: false,
         pollInterval: 0,
         confirming: false,
+        refreshing: false,
+        refreshNote: "",
       },
     };
   },
@@ -88,6 +90,26 @@ window.AQB_HR_STATUS = {
         if (!e.auth) alert(e.message || "确认写入失败");
       } finally {
         this.hrs.confirming = false;
+      }
+    },
+    /* 立即拉取(计划 26-09-30-0240): 请求后端置一次性 force 旗标, 取数线程跳过复用窗与
+     * 拉取间隔立即开波(账号频控 min_interval/日额/Retry-After/时间窗仍生效)。
+     * site 缺省 = 全部启用站点。受理后立即刷新状态; 波启动后首任务数秒内入队,
+     * 后续任务由取数线程/扩展的既有轮询接管 —— 本页不需要轮询, 刷一次看「上次取波」即可。 */
+    async hrsRefresh(site = "") {
+      if (this.hrs.refreshing) return;
+      this.hrs.refreshing = true;
+      try {
+        const r = await this.api("/api/hr/refresh", { method: "POST", body: JSON.stringify(site ? { site } : {}) });
+        const n = (r.requested || []).length;
+        this.hrs.refreshNote = n
+          ? `已受理 ${n} 个站点, 取数线程执行中(跳过复用窗与拉取间隔, 频控仍生效)`
+          : "";
+        await this.loadHrStatus(true);
+      } catch (e) {
+        if (!e.auth) alert(e.message || "立即拉取请求失败");
+      } finally {
+        this.hrs.refreshing = false;
       }
     },
     hrsPct(v) {

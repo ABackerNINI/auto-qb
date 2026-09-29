@@ -106,7 +106,9 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
     _print_channel(config, service, out)
     print("-" * 92, file=out)
     started = time.time()
-    results = service.refresh_all()
+    # force=True(计划 26-09-30-0240): 走查本义就是「人工立即跑一波给人看」, 不带 force
+    # 会被拉取间隔闸门挡成「未到拉取时刻」, 失去走查意义(频控本身仍生效)
+    results = service.refresh_all(force=True)
     for result in results:
         # 走查不写盘 ⇒ 已落盘视图必然是旧的; 用本轮内存快照预览, 否则报告会误显示「无可判数据」
         view = service.build_view_for(result.site, result.snapshot) if result.snapshot is not None else None

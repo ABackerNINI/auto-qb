@@ -1,4 +1,4 @@
-"""HR 在线核实状态路由: `/api/hr/status`(只读)。
+"""HR 在线核实状态路由: `/api/hr/status`(只读) / `/api/hr/refresh`(立即拉取, 计划 26-09-30-0240)。
 
 回答的问题: **每个站点的 HR 数据现在到哪一步了** —— 通道通不通、数据多新、覆盖证明成不成立、
 索引与回填进度、配额与熔断、以及「为什么现在不放行」。
@@ -6,6 +6,8 @@
 !与 `--hr-status` 同一口径: 字段全部来自 `hr.status` 层(单一事实源), 本端点**只读** ——
 不取数、不加锁、不写盘, 不碰取数线程的任何状态(那是唯一写者)。要看「现在能不能取到数」得跑
 `--hr-once`; 界面只回答「已落盘的数据是什么样」。
+`/api/hr/refresh` 是唯一的写通路, 但也只到「置一次性 force 旗标 + 唤醒取数线程」为止
+(manager.hr.request_refresh 单点, 与插件端点同一实现) —— 取数仍由取数线程串行执行。
 """
 import time
 from typing import Dict, List
@@ -46,6 +48,38 @@ def build_router(ctx: WebContext) -> APIRouter:
         if code != 0:
             raise HTTPException(status_code=409, detail="写入失败(站点锁被占用或锁自检失败), 稍后再试")
         return {"ok": True, "site": site}
+
+    @router.post("/api/hr/refresh")
+    def api_hr_refresh(body: dict = None):
+        """立即拉取(计划 26-09-30-0240): 请求后端跳过复用窗与拉取间隔立即开波(频控仍生效)
+
+        body 可带 site 单站触发; 缺省 = 全部启用站点。与插件端点同一实现
+        (manager.hr.request_refresh 单点); 线程未启动回 409(不是错误形态, 是「现在拉不了」)。
+        """
+        manager.touch_web_client()
+        runtime = getattr(manager, "hr", None)
+        if runtime is None:
+            raise HTTPException(status_code=409, detail="HR 取数线程未启动")
+        conf = getattr(manager.config, "hr_check", None)
+        if conf is None or not conf.enabled:
+            raise HTTPException(status_code=400, detail="HR 在线核实未启用")
+        b = body or {}
+        site = str(b.get("site") or "").strip()
+        sites = None
+        if site:
+            enabled = {
+                name
+                for name, tc in manager.config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled
+            }
+            if site not in enabled:
+                raise HTTPException(status_code=400, detail=f"站点 {site} 未启用 hr_check(已启用: {sorted(enabled)})")
+            sites = [site]
+        outcome = runtime.request_refresh(sites)
+        requested = list(outcome.get("requested") or [])
+        if not requested and outcome.get("note"):
+            # 线程未启动 / 受理清单为空: 如实回 409, 让按钮亮出原因而不是假装成功
+            raise HTTPException(status_code=409, detail=str(outcome["note"]))
+        return {"ok": True, "requested": requested, "note": outcome.get("note") or ""}
 
     @router.get("/api/hr/status")
     def api_hr_status():

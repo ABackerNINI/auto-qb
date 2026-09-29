@@ -622,3 +622,24 @@ def test_site_origins_served_live_for_extension(tmp_path):
         assert [s for s, _o in runtime._site_origins()] == ["pt.example.com"]
     finally:
         runtime.stop()
+
+
+# ---------------- 立即拉取: runtime 汇合点(计划 26-09-30-0240) ----------------
+
+
+def test_request_refresh_without_worker_reports_note(tmp_path):
+    """取数线程未启动时: 不顺手拉起线程, 如实返回提示(启动语义归 start/apply 管)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    outcome = runtime.request_refresh()
+    assert outcome == {"requested": [], "note": "取数线程未启动"}
+
+
+def test_request_refresh_delegates_to_worker_and_accepts(tmp_path):
+    """线程在跑: 受理全部启用站点(返回清单), 由取数线程串行消费"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    runtime.start()
+    try:
+        outcome = runtime.request_refresh()
+        assert outcome["requested"] == ["pt.example.com"] and "已受理" in outcome["note"]
+    finally:
+        runtime.stop()

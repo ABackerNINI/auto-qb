@@ -1,4 +1,4 @@
-"""test_hr_config 测试计划: hr_check 配置段(v3 14 键口径, 计划 26-09-28-1932 §6/§7)
+"""test_hr_config 测试计划: hr_check 配置段(v3 15 键口径, 计划 26-09-28-1932 §6/§7 + 26-09-30-0240)
 
 配置是 fail-fast 的第一道闸门: 站点启用(enabled)却没配 hr 段时, 保护会**静默失效**
 (check_hr_condition 第一行 `if not self.tracker_conf.hr: return False`), 故必须在配置期拦下。
@@ -12,6 +12,8 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 ## 测试计划(每个测试函数一条)
 - test_defaults_when_absent: 整段缺省 -> 全默认(功能关闭), 不报错
 - test_global_section_parsed: 全局段解析(时间串 -> 秒 / channel 子段)
+- test_reuse_window_default_and_parsed: 数据复用窗(26-09-30-0240)默认 2H / 自定义时间串解析
+- test_reuse_window_range: 复用窗边界 —— 60s 下限与 7d 上限, 之外报错
 - test_sites_entry_parsed: sites 条目解析 + 绑定派生(三键来自配置 / 页面事实来自档案 / tracker 回填)
 - test_page_url_derived_from_web_domain: HR 页地址恒为档案 web 域派生, 与用户 domains 写法无关
 - test_carpt_default_mapping_binds_without_web_domain: CarPT 回归锚 —— domains 只配 announce 域也能绑定
@@ -36,6 +38,7 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_impact_hr_check_field_is_l0: hr_check 字段变更 -> L0 字段级路径
 - test_impact_channel_field_is_l1: channel 子段变更 -> L1(端点监听身份, 要重挂)
 - test_impact_shared_dir_is_l1: shared_dir 变更 -> L1(站点文件目录变了, 服务与线程要重建)
+- test_impact_reuse_window_is_l0: reuse_window 变更 -> L0 字段级路径(取数线程每轮现读)
 - test_impact_sites_is_l0: sites 子段变更 -> hr_check.sites 一条 L0
 - test_impact_site_hr_check_is_l0: 派生站点 hr_check 变更 -> trackers.<站点>.hr_check 一条 L0
 - test_config_error_message_points_to_section: 校验失败经 ConfigError 抛出, 消息里带具体路径
@@ -87,6 +90,7 @@ def test_defaults_when_absent(tmp_path):
     assert cfg.hr_check.max_pages_per_wave == 30
     assert cfg.hr_check.allow_window == ""
     assert cfg.hr_check.shared_dir == ""
+    assert cfg.hr_check.reuse_window == 2 * 3600.0
     assert cfg.hr_check.channel.enabled is False
     assert cfg.hr_check.channel.port == 8788
     assert cfg.hr_check.sites == {}
@@ -106,6 +110,7 @@ def test_global_section_parsed(tmp_path):
                         "max_pages_per_wave": "40",
                         "allow_window": "01:00-06:00",
                         "shared_dir": "//nas/share",
+                        "reuse_window": "3H",
                         "channel":
                             {
                                 "enabled": "true",
@@ -125,6 +130,7 @@ def test_global_section_parsed(tmp_path):
     assert hr_check.max_pages_per_wave == 40
     assert hr_check.allow_window == "01:00-06:00"
     assert hr_check.shared_dir == "//nas/share"
+    assert hr_check.reuse_window == 3 * 3600.0
     assert (hr_check.channel.enabled, hr_check.channel.port, hr_check.channel.token) == (True, 8899, "abc")
     assert hr_check.channel.extension_id == "a" * 32
     assert hr_check.channel.request_timeout == 90.0
@@ -619,6 +625,21 @@ def test_ranges_and_formats():
     assert "shared_dir" in joined
 
 
+def test_reuse_window_default_and_parsed(tmp_path):
+    """数据复用窗(26-09-30-0240): 缺省 2H, 自定义时间串正常解析(节奏归 refresh_interval, 新鲜度归本键)"""
+    cfg = load_config(_write(tmp_path, {"hr_check": {"enabled": "true", "reuse_window": "30M"}}))
+    assert cfg.hr_check.reuse_window == 30 * 60.0
+
+
+def test_reuse_window_range():
+    """复用窗边界: 60s 下限 / 7d 上限(调大只影响数据新鲜度, 但过大会让陈旧数据长期存活)"""
+    assert _validate({"hr_check": {"reuse_window": "1M"}}) == []
+    assert _validate({"hr_check": {"reuse_window": "7D"}}) == []
+    for bad in ("59S", "7D1S", "8D"):
+        errors = _validate({"hr_check": {"reuse_window": bad}})
+        assert any("reuse_window" in e for e in errors), (bad, errors)
+
+
 def test_channel_extension_id_format():
     """extension_id 只接受 32 位 a~p(形态错 = 写了也不会生效, 必须配置期拦下)"""
     errors = _validate({"hr_check": {"channel": {"extension_id": "z" * 32}}})
@@ -659,6 +680,15 @@ def test_impact_shared_dir_is_l1():
     new.hr_check.shared_dir = "//nas/share"
     changes = diff_config_impacts(old, new)
     assert [(c.path, c.level) for c in changes] == [("hr_check.shared_dir", LEVEL_L1)]
+
+
+def test_impact_reuse_window_is_l0():
+    """reuse_window 变更 -> L0 字段级路径(取数线程每轮现读, 热重载即时生效)"""
+    old, new = Config(), Config()
+    old.hr_check.reuse_window = 2 * 3600.0
+    new.hr_check.reuse_window = 4 * 3600.0
+    changes = diff_config_impacts(old, new)
+    assert [(c.path, c.level) for c in changes] == [("hr_check.reuse_window", LEVEL_L0)]
 
 
 def test_impact_sites_is_l0():

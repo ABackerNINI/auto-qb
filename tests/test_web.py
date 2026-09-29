@@ -3516,6 +3516,7 @@ def _hr_status_env(mgr, tmp_path, *, complete=True):
     import time
 
     from auto_qb.hr.runtime import HrRuntimeStatus, HrRefreshService
+    from auto_qb.config.models import SiteHrCheckConfig
     from hr_helpers import Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
 
     # !假时钟要落在**真实当前时间**附近: 端点用真 `time.time()` 取 now, 若测试时钟是
@@ -3534,6 +3535,8 @@ def _hr_status_env(mgr, tmp_path, *, complete=True):
     )
     svc.refresh_site("HHan")
     mgr.config.hr_check = HrCheckConfig(enabled=True)
+    # 写类路由(confirm-empty / refresh)按 trackers.*.hr_check 判「站点已接入」——替身条目补真模型
+    mgr.config.trackers["HHan"].hr_check = SiteHrCheckConfig(enabled=True, tracker="HHan")
     mgr.hr = SimpleNamespace(
         service=svc,
         status=lambda: HrRuntimeStatus(
@@ -3596,6 +3599,49 @@ def test_api_hr_status_names_the_blocking_step(web_env, tmp_path):
     assert "blocking" in site, f"要说清卡在哪一步: {site}"
 
 
+# ---------- 立即拉取(计划 26-09-30-0240): POST /api/hr/refresh ----------
+
+
+def test_api_hr_refresh_accepts_and_returns_requested(web_env, tmp_path):
+    """成功受理: 调 manager.hr.request_refresh(与插件端点同一实现)并回受理清单"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    calls = []
+
+    def _fake_request_refresh(sites=None):
+        calls.append(sites)
+        return {"requested": ["HHan"], "note": "已受理, 取数由取数线程执行"}
+
+    mgr.hr.request_refresh = _fake_request_refresh
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    body = client.post("/api/hr/refresh", json={}, headers=auth).json()
+    assert body["ok"] is True and body["requested"] == ["HHan"]
+    assert calls == [None], "缺省 = 全部启用站点(不逐站点名)"
+
+
+def test_api_hr_refresh_requires_enabled_hr(web_env, tmp_path):
+    """HR 未启用 -> 400; 未接入的站点 -> 400(不受理无档案站点)"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    mgr.hr.request_refresh = lambda sites=None: {"requested": ["HHan"], "note": ""}
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    mgr.config.hr_check.enabled = False
+    assert client.post("/api/hr/refresh", json={}, headers=auth).status_code == 400
+    mgr.config.hr_check.enabled = True
+    r = client.post("/api/hr/refresh", json={"site": "Nope"}, headers=auth)
+    assert r.status_code == 400 and "Nope" in r.json()["detail"]
+
+
+def test_api_hr_refresh_409_when_worker_not_running(web_env, tmp_path):
+    """取数线程未启动 -> 409(「现在拉不了」的如实形态, 不假装成功)"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    mgr.hr.request_refresh = lambda sites=None: {"requested": [], "note": "取数线程未启动"}
+    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    r = client.post("/api/hr/refresh", json={}, headers=auth)
+    assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
+
+
 def test_frontend_hr_status_fields_match_backend():
     """前端 HR 状态块引用的字段必须在后端快照里存在 —— 打错一个字段名就是**整段静默空白**
 
@@ -3608,7 +3654,7 @@ def test_frontend_hr_status_fields_match_backend():
     site_keys = set(SiteStatus(site="probe").to_dict().keys())
     hrs_keys = {
         "loaded", "loading", "error", "enabled", "note", "sites", "channel", "fetchEnabled", "workerRunning",
-        "pollInterval", "confirming"
+        "pollInterval", "confirming", "refreshing", "refreshNote"
     }
     # 锚点必须指向合并块自身: v-if 只在「HR 在线核实」分区模板块这一处出现, 重复出现说明块被复制
     # (2026-09-27 起块内含「站点接入」+「站点状态」两个块, 扫描窗放大到 8000 字符)
@@ -7534,6 +7580,7 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/categories/remove"),
     ("GET", "/api/cmd/{cmd_id}"),
     ("POST", "/api/hr/confirm-empty"),
+    ("POST", "/api/hr/refresh"),  # 26-09-30-0240: 立即拉取(置一次性 force 旗标 + 唤醒取数线程)
     ("GET", "/api/config"),
     ("PUT", "/api/config"),
     ("POST", "/api/config/preview"),

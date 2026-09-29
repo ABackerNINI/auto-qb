@@ -294,6 +294,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true; // 异步 sendResponse
   }
+  if (msg && msg.type === 'refresh-now') {
+    // 立即拉取(计划 26-09-30-0240): 请求后端立即开波(置一次性 force 旗标, 跳过复用窗与
+    // 拉取间隔; 账号频控后端自己守) + 排空已生成的任务。首任务通常在波启动后数秒内入队,
+    // 后续任务由 1 分钟定时轮询接管 —— 本消息不等取数完成。
+    log('info', '命令', '收到命令: 立即拉取(来自选项页)');
+    requestBackendRefresh()
+      .then((requested) => pollAll('手动(选项页)').then(() => requested))
+      .then((requested) => sendResponse({ ok: true, requested }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
   if (msg && msg.type === 'clear-logs') {
     // 清空必须走后台: 后台内存里留着环形缓冲, 选项页直接改 storage 会在下一次落盘时被盖回去
     clearLogs()
@@ -303,6 +314,58 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   return false;
 });
+
+/**
+ * 逐实例请求后端立即开波(计划 26-09-30-0240)。返回全部实例受理的站点总数。
+ * - 404 = 旧后端: 降级为纯排空, 日志提示升级 —— 不报错(新旧版本共存是常态);
+ * - 网络层失败: 走 explainFetchError 排查清单(与轮询同一套降噪口径, 不另起一套);
+ * - 401/其它非 200: 记日志跳过该实例, 不中断其它实例。
+ */
+async function requestBackendRefresh() {
+  const conf = await readConfig();
+  if (!conf.enabled || !conf.instances.length) return 0;
+  let total = 0;
+  for (const inst of conf.instances) {
+    const label = inst.name || inst.endpoint || '(未命名)';
+    const base = safeEndpoint(inst.endpoint);
+    if (!base) continue;
+    const url = `${base}/api/hr/refresh`;
+    const t0 = Date.now();
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, headers(inst)),
+        body: '{}',
+      });
+    } catch (e) {
+      log('error', '请求', `立即拉取失败: ${explainFetchError(url, e)}`, reqDetail('立即拉取', url, t0, { 实例: label }));
+      continue;
+    }
+    if (res.status === 404) {
+      log(
+        'warn',
+        '请求',
+        `${label}: 后端版本较旧, 请升级主程序后才有立即拉取(本次仅排空既有任务)`,
+        reqDetail('立即拉取', url, t0, { 实例: label, HTTP: '404' })
+      );
+      continue;
+    }
+    if (res.status === 401) {
+      log('warn', '请求', '立即拉取被拒(401, token 或 channel.enabled 未开)', reqDetail('立即拉取', url, t0, { 实例: label, HTTP: '401' }));
+      continue;
+    }
+    if (!res.ok) {
+      log('error', '请求', `立即拉取失败 HTTP ${res.status}`, reqDetail('立即拉取', url, t0, { 实例: label, HTTP: String(res.status) }));
+      continue;
+    }
+    const data = await res.json().catch(() => ({}));
+    const n = Array.isArray(data.requested) ? data.requested.length : 0;
+    total += n;
+    log('info', '命令', `${label}: 后端已受理立即拉取(${n} 个站点)`, reqDetail('立即拉取', url, t0, { 实例: label, HTTP: '200' }));
+  }
+  return total;
+}
 
 chrome.permissions.onAdded.addListener(() => noteStatus({ text: '站点权限已更新' }));
 

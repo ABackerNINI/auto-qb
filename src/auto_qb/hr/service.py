@@ -68,7 +68,7 @@ ACTION_DISABLED = "disabled"
 ACTION_REUSED = "reused"
 ACTION_REFRESHED = "refreshed"
 ACTION_PARTIAL = "partial"  # 波跑了一部分(预算截断/页面失败) —— 截断点之前的数据仍然有效
-ACTION_WAITING = "waiting"  # 未到可取时刻(间隔 / 日额 / Retry-After / 时间窗 / 复用窗)
+ACTION_WAITING = "waiting"  # 未到可取时刻(拉取间隔 / min_interval / 日额 / Retry-After / 时间窗 / 复用窗)
 ACTION_LOCKED = "skipped-locked"
 ACTION_NO_CHANNEL = "no-channel"
 ACTION_ERROR = "error"
@@ -385,11 +385,15 @@ class HrRefreshService:
 
     # ---------- 波次入口 ----------
 
-    def refresh_site(self, site: str, anchors: Optional[Mapping[str, HrAnchor]] = None) -> HrRefreshResult:
+    def refresh_site(
+        self, site: str, anchors: Optional[Mapping[str, HrAnchor]] = None, force: bool = False
+    ) -> HrRefreshResult:
         """跑单个站点的一波; 任何异常都不外抛(单站点失败不拖垮其它站点)
 
         anchors: 本地种子锚点(infohash -> HrAnchor, 含 name)。由主循环在唤醒取数线程时
         **以不可变数据**交接, 取数线程不用读 store(线程边界不变)。
+        force: 「立即拉取」(计划 26-09-30-0240) —— 跳过复用窗与拉取间隔两道调度闸;
+        min_interval / 日额 / Retry-After / 时间窗(账号安全线与站点指令)照常生效。
         """
         started = self._now()
         site_conf = self.site_confs.get(site)
@@ -419,7 +423,7 @@ class HrRefreshService:
                     result.reason = (result.reason + "; " if result.reason else "") + \
                         "站点文件 schema 比程序新, 已跳过取数与写盘(请先升级程序)"
                     return result
-                self._refresh_locked(site, site_conf, adapter, session, result, anchors or {})
+                self._refresh_locked(site, site_conf, adapter, session, result, anchors or {}, force=force)
         except HrLockBusy as e:
             result.action = ACTION_LOCKED
             result.reason = str(e)
@@ -431,22 +435,33 @@ class HrRefreshService:
         result.elapsed_s = max(0.0, self._now() - started)
         return result
 
-    def refresh_all(self,
-                    anchors_by_site: Optional[Mapping[str, Mapping[str, HrAnchor]]] = None) -> List[HrRefreshResult]:
+    def refresh_all(
+        self,
+        anchors_by_site: Optional[Mapping[str, Mapping[str, HrAnchor]]] = None,
+        force: bool = False,
+    ) -> List[HrRefreshResult]:
         anchors_by_site = anchors_by_site or {}
-        return [self.refresh_site(site, anchors_by_site.get(site)) for site in self.enabled_sites()]
+        return [self.refresh_site(site, anchors_by_site.get(site), force=force) for site in self.enabled_sites()]
 
     # ---------- 锁内主流程 ----------
 
     def _refresh_locked(
-        self, site: str, site_conf: SiteHrCheckConfig, adapter, session, result, anchors: Mapping[str, HrAnchor]
+        self,
+        site: str,
+        site_conf: SiteHrCheckConfig,
+        adapter,
+        session,
+        result,
+        anchors: Mapping[str, HrAnchor],
+        force: bool = False,
     ) -> None:
         data = session.data
         limits = self.limits_for(site)
         now = self._now()
 
-        if data.fetched_at > 0 and data.expires_at > now:
-            # 复用窗内的数据直接采用(可能是别的实例刚抓的): 站点访问频率由复用窗决定
+        # 复用窗(新鲜度闸): 窗内数据直接采用(可能是别的实例刚抓的)。force(立即拉取)跳过本闸 ——
+        # 两道调度闸(复用窗 + 拉取间隔)都可被人工意志越过, 账号安全线(min_interval 等)不在此列
+        if not force and data.fetched_at > 0 and data.expires_at > now:
             result.action = ACTION_REUSED
             result.entries = len(data.index)
             result.verified_count = len(data.verified)
@@ -454,6 +469,18 @@ class HrRefreshService:
             result.reason = f"数据仍在复用窗(至 {data.expires_at:.0f}), 直接复用"
             result.snapshot = data
             return
+
+        # 拉取间隔闸门(计划 26-09-30-0240): 节奏硬闸, 与复用窗(新鲜度)解耦 ——
+        # 下次拉取 = 上次健康波 + refresh_interval。失败波不推进 healthy_ts ⇒ 失败的档位
+        # 仍按「下一轮(60s)重试」, 与现状一致。force(立即拉取)跳过本闸;
+        # min_interval / 日额 / Retry-After / 时间窗在下方照常生效(账号安全线不被越过)。
+        healthy = data.wave.healthy_ts
+        if not force and healthy > 0:
+            due_wave = healthy + site_conf.refresh_interval
+            if now < due_wave:
+                result.action = ACTION_WAITING
+                result.reason = f"未到拉取时刻(拉取间隔, 还差 {due_wave - now:.0f}s)"
+                return
 
         if not self.allow_fetch:
             result.action = ACTION_WAITING
@@ -1026,9 +1053,10 @@ class HrRefreshService:
         )
         data.fetched_at = now
         any_ok = any(st.ok for st in lane_states.values())
-        # 复用窗: 有效波按周期挡住其它实例的重复取数; 全档失败无新数据可复用 → 不设窗
+        # 复用窗(计划 26-09-30-0240): 时长 = min(reuse_window, 拉取间隔), clamp 保证新鲜窗永不把
+        # 节奏拖过拉取间隔(拉取间隔是硬节奏)。有效波才设窗; 全档失败无新数据可复用 → 不设窗
         # (下一个 poll 节拍即可重试 —— 失败处置 = 档位截断 + 周期自然重试, §5.2)
-        data.expires_at = now + site_conf.refresh_interval if any_ok else 0.0
+        data.expires_at = now + min(self.global_conf.reuse_window, site_conf.refresh_interval) if any_ok else 0.0
         result.entries = len(data.index)
         result.verified_count = len(data.verified)
         result.releases_signed = signed + exits
