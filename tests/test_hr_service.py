@@ -33,7 +33,7 @@
 - test_retry_after_on_download_escalates_to_wave: .torrent 下载的 Retry-After 上抛波级, 不计种子失败
 - test_login_expired_marks_interval: 登录失效路径同样前进间隔基准(重试节奏受 min_interval 约束)
 - test_version_mismatch_skips_wave: 站点文件 schema 比程序新 → 跳过取数与写盘(不覆写新版文件)
-- test_fuzzy_name_match_unit: 宽泛名称粗配单元(连续重合段 ≥ K)
+- test_fuzzy_name_match_unit: 宽泛名称粗配单元(信号串重合段 ≥ K; 技术噪声整词不构成判据 —— 含真实数据假重合回归)
 """
 import time
 from datetime import datetime
@@ -872,3 +872,33 @@ def test_fuzzy_name_match_unit():
     assert not fuzzy_name_match("Example.Ultra", "Completely.Different.Show.2026")
     assert not fuzzy_name_match("短名", "Completely.Different.Show.2026")  # 短于 K 不误配
     assert len("Example.Ultra") >= FUZZY_NAME_K or True
+    # ---- 技术噪声整词不构成判据(2026-09-29 收紧) ----
+    assert not fuzzy_name_match("Some.Show.1080p.WEB-DL.x264", "Other.Show.1080p.WEB-DL.x264")
+    assert not fuzzy_name_match("1080p.WEB-DL.x264", "1080p.WEB-DL.x264")  # 整名都是噪声 ⇒ 撤不上判据
+
+
+#: 2026-09-29 真实数据回归(用户实例 108 本地名 × 50 活跃行): 旧判据这些对全命中, 全是**质量标签**
+#: 拼出的假重合段(括号内为旧判据的重合段) —— 它们使 .torrent 下载成片白烧站点配额。
+#: 断言的是「不再误配」而不是「完全没重合」: 允许标题段仍有短重合, 只是达不到判据下限。
+def test_fuzzy_name_match_rejects_noise_only_overlap():
+    local = "隐藏大佬扮猪吃虎.1080p.WEB-DL.H265.AAC-HHWEB"
+    assert not fuzzy_name_match(local, "Taste of Crime 2018 1080P WEB-DL H264 AAC-BtsTV")  # 1080pwebdlh26
+    assert not fuzzy_name_match(
+        local, "Yiran's Silver Linings 2026 S01E01-S01E27 2160p WEB-DL H265 AAC-UBWEB"
+    )  # 0pwebdlh265aac
+    assert not fuzzy_name_match(
+        "Though.I.Am.an.Inept.Villainess.S01.2026.1080p.NF.WEB-DL.H.264.AAC",
+        "My Husband Wont Fit S01 1080p NF WEB-DL DDP2 0 x264-AOWEB",
+    )  # 1080pnfwebdl
+    # 20 字符的噪声段(年份 + 季标 + Complete + 1080p): 光提高 K 拦不住, 必须剔噪声
+    assert not fuzzy_name_match(
+        "[虽然我不是完美恶女～雏宫蝶鼠替换传～].Futsutsuka.na.Akujo.dewa.Gozaimasu.ga.Suuguu.Chouso.Torikae.Den.2026.S01.1080p.WEB-DL.AAC.H.264",
+        "Our Sticky Love 2026 S01 Complete 1080p NF WEB-DL H264 DDP5.1 Atmos-BtsTV",
+    )  # 2026s01complete1080p
+    # ---- 真命中必须保住(同一批数据里的两族真重合) ----
+    pack = "The.Cat.and.the.Dragon.S01.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb"
+    assert fuzzy_name_match(pack, "The Cat and the Dragon S01E05 1080p friDay WEB-DL AAC2.0 H.264-MWeb")
+    assert fuzzy_name_match(
+        "[虽然我不是完美恶女～雏宫蝶鼠替换传～].Futsutsuka.na.Akujo.dewa.Gozaimasu.ga.Suuguu.Chouso.Torikae.Den.2026.S01.1080p.WEB-DL.AAC.H.264",
+        "Futsutsuka na Akujo dewa Gozaimasu ga Suuguu Chouso Torikae Den 2026 S01 1080p WEB-DL AAC H.264",
+    )

@@ -17,6 +17,7 @@
 - `hr.once` 真机只读走查: `allow_fetch=True, persist=False`(出报告, 不写文件、不联动 qB)
 """
 import logging
+import re
 import time
 from dataclasses import dataclass, replace
 from typing import Callable, Dict, List, Mapping, Optional, Set, Tuple
@@ -109,9 +110,31 @@ MISSING_GRACE_WAVES = 2
 #: 不达标 ⇒ 批量「未列出」签发冻结(防 A 段定向吞行被当「未列出」整批误放行)。
 LANE_RETENTION_MIN = 0.7
 
-#: B/C/D 终态行宽泛名称粗配阈值(§4.5 D1 拍板): 本地名称与行名称存在足够长的连续重合段
-#: 即判疑似本地(宁可误配不漏配); 粗配只是下载触发器, 定论一律 infohash 精配。
+#: B/C/D 终态行宽泛名称粗配阈值(§4.5 D1 拍板): **去掉技术噪声后**本地名称与行名称存在足够长的
+#: 连续重合段即判疑似本地; 粗配只是下载触发器, 定论一律 infohash 精配。
+#: ❗2026-09-29 收紧: K 仍是 12, 变的是「拿哪部分参与重合」(见 FUZZY_NOISE_TOKEN)。
 FUZZY_NAME_K = 12
+
+#: 粗配前必须剔除的**技术噪声整词**: 分辨率 / 来源 / 编码 / 音轨 / 发布类型 / 字幕标记。
+#: 做法是**先按分隔符切词再逐词判**(不做子串替换 —— 免得把标题里的字符一起啃掉)。
+#: 这些词在几乎每个发布里都一样, 任由它们参与重合会造出成片的假重合。
+#: 实证(2026-09-29, 用户真实数据 108 本地名 × 50 活跃行): 旧判据 159 对命中里 128 对是纯噪声段
+#: (`1080pwebdlh26` / `0pwebdlh265aac` / `2026s01complete1080p` 这类 —— 注意最后一条 20 字符,
+#: 光提高 K 拦不住), 真命中只有 Futsutsuka 与 Cat&Dragon 两族名称; 剔除后剩 31 对全真、**零新增**。
+#: 顺带验过「再剔发布组后缀(最后一个 `-` 后的短段)」在本批数据上零收益(4 对 → 4 对), 故不做。
+FUZZY_NOISE_TOKEN = re.compile(
+    r"^(?:"
+    r"(?:2160|1080|720|540|480|360)p|4k|8k|uhd|fhd|hd|sd|"
+    r"(?:x|h)26[45]|26[45]|hevc|avc|av1|xvid|divx|vc1|"
+    r"(?:10|8)bit|hi10p|"
+    r"(?:aac|ac3|eac3|ddp?|dts|truehd|atmos|flac|mp3|opus|vorbis)\d*(?:ch)?|"
+    r"web|webdl|webrip|dl|bd|blu|bluray|bdrip|brrip|hdtv|dvd|dvdrip|remux|rip|"
+    r"nf|cr|amzn|dsnp|hmax|atvp|itunes|friday|hulu|pcok|"
+    r"complete|repack|proper|internal|limited|multi|dual|"
+    r"hdr|hdr10|sdr|dv|dolbyvision|"
+    r"chs|cht|chtw|eng|jpn|kor|sc|tc"
+    r")$"
+)
 
 #: 页面快照条目的陈旧淘汰(不触碰永久层 hr_downloaded)
 INDEX_RETENTION = 30 * 86400.0
@@ -134,23 +157,31 @@ LANE_FAIL_ALERT_STREAK = 3
 ALL_FAILED_REUSE_WINDOW = 120.0
 
 
-def fuzzy_name_match(local_name: str, row_name: str, k: int = FUZZY_NAME_K) -> bool:
-    """宽泛名称粗配(D1 拍板, §4.5): 两名称存在长度 >= k 的连续重合段即判疑似本地。
+def _fuzzy_signal(name: str) -> str:
+    """归一化到「信号串」: 小写 → 按分隔符切词 → 剔除技术噪声整词 → 拼回。
 
-    不是完整/前缀匹配 —— 宁可误配不漏配: 误配 = 多下载一次(由 A 档全下载的精配自愈),
-    漏配最坏误管束(保守)。比较前折叠大小写并去掉全部非字母数字/CJK 字符(空格与
-    . - _ 等分隔符形态差异不应造成漏配)。
+    切词时保留 CJK 连续段(汉字无分隔符, 整段即一个词)。拼回后分隔符形态差异(. - _ 空格)
+    自然消失, 与旧判据「折叠全部非字母数字」行为一致 —— 只是中间多一道噪声过滤。
     """
-    import re as _re
+    tokens = re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]+", (name or "").lower())
+    return "".join(t for t in tokens if not FUZZY_NOISE_TOKEN.match(t))
 
-    def norm(s: str) -> str:
-        return _re.sub(r"[^a-z0-9\u4e00-\u9fff]", "", (s or "").lower())
 
-    a, b = norm(local_name), norm(row_name)
+def fuzzy_name_match(local_name: str, row_name: str, k: int = FUZZY_NAME_K) -> bool:
+    """宽泛名称粗配(D1 拍板, §4.5): 两侧**信号串**存在长度 >= k 的连续重合段即判疑似本地。
+
+    不是完整 / 前缀匹配, 判据仍偏宽: 误配 = 多下载一次(由 A 档全下载的精配自愈), 漏配最坏误管束
+    (保守)。但「宽」只体现在**标题段**上 —— 分辨率/来源/编码/音轨这些每个发布都一样的词不参与
+    重合(见 `FUZZY_NOISE_TOKEN`), 否则 12 字符的下限会被质量标签整段占满。
+
+    信号串完全相等时不受 K 下限约束: 这是**短标题**的兜底通路(例: 同一中文标题在两个站点后缀
+    不同)。已知残余(不修, 属行 4 本地兜底): 标题段短于 K 且两侧组标不同 ⇒ 不触发粗配。
+    """
+    a, b = _fuzzy_signal(local_name), _fuzzy_signal(row_name)
     if not a or not b:
         return False
     if a == b:
-        return True  # 归一后完全相等: 不受 K 下限约束(短名精确同名也判疑似)
+        return True  # 信号串完全相等: 不受 K 下限约束(短名精确同名也判疑似)
     if len(b) < k:
         return False
     return any(b[i:i + k] in a for i in range(len(b) - k + 1))

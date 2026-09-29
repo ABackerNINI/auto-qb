@@ -12,6 +12,8 @@
   hr_site v1→v2 迁移, 档案 listing 字段); `--hr-resume` 删 / `--hr-confirm-empty` 增(含 WebUI
   按钮)。HR 测试按新模型重写约 200 条; 全量 1743 passed + 3 skipped; 基线切片 26-09-29;
   档案 [tasks/26-09-22-backend-partial-hr-verify.md](../tasks/26-09-22-backend-partial-hr-verify.md)。
+  **追记(2026-09-29)**: 粗配判据收紧(剔技术噪声整词后再算 ≥K 重合, K 仍 12) —— 真实数据 159 → 31 对、
+  新增 0; 坑档 [pitfalls/backend/fuzzy-match-noise.md](../pitfalls/backend/fuzzy-match-noise.md)。
 
 - **HR 状态模型重新梳理 + D 档已免罪来源单列 (2026-09-26, 计划 v3.4)**: 用户指令钉死「优先级
   在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息(= v3.0 已落码), 最终态

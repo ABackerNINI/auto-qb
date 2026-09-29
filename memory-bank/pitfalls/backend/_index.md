@@ -15,6 +15,7 @@
 | [concurrency.md](concurrency.md) | 七条线程 / 状态机硬约束, 违反即引入难以复现的 bug。 | 加线程, 改队列, 改 state_file, 改校验流程, 视图组装, QbApi 写方法, 阻塞等待, 关停, stop, join |
 | [format-driven-parse.md](format-driven-parse.md) | 解析"按 format 渲染出来的文本"(日志行首当其冲)时, 把字段的**书写形状**写死成字面量 —— 默认配置下侥幸能跑, 用户换一种 format 就**静默失效**; 过滤类失效的表现是"恒空", 与"确实没有"完全同形。 | 日志过滤, 按等级, 日志行解析, levelname, 日志格式, format, 正则提取, 文本解析, 恒空, 结果为空 |
 | [fs-pathmap-tristate.md](fs-pathmap-tristate.md) | 文件访问层(2026-09-27 审查轮)踩出的两条 —— ①casefold 折叠空间匹配后回原串切片, | casefold, 大小写无关, 前缀匹配, 路径映射, path_map, 切片, 变长折叠, UNDETERMINED, |
+| [fuzzy-match-noise.md](fuzzy-match-noise.md) | 用「够长的连续重合段」判两个发布名是否同一内容时, 若不先把分辨率 / 来源 / 编码 / 音轨这些 | 粗配, 相似度, 重合段, 名称匹配, fuzzy, 阈值 K, 假重合, 假阳性, 质量标签, 判据收紧, 白烧配额, 下载触发器 |
 | [high-risk-ops.md](high-risk-ops.md) | 代码里已有防护的高风险动作 —— 改动时**不得削弱**这些防护; 删种重加、强制汇报、限速覆盖都属于这一类。 | 跳检, reannounce, qB 版本兼容, 删除种子, 限速, or 默认值, 死防御, 状态观测 |
 | [hot-reload-held-config.md](hot-reload-held-config.md) | 影响分级标 L0 只保证「新配置对象已被替换」; 若消费方(服务/线程)构造时把配置**按值**拷走, | 加配置键, 定热重载级别, impact, L0, 热重载, apply, 按值持有, 站点接入, 服务重建 |
 | [page-scraping.md](page-scraping.md) | 从 HTML 里抽一段小数字 / 小文本时, 不锤定结构的正则会匹配到页面上别处的同类文本 —— 结果**看着合法但值是错的**, 且不报错。 | 爬页面, 抓页面, 解析 HTML, 正则提取, 页脚区间, 分页判据, HR 统计页, 站点改版, 数字提取 |
