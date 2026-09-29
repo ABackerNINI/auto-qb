@@ -485,9 +485,9 @@ window.AQB_DIALOGS = {
     escBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
         this.metaOpen || this.filePrio.visible || this.drawer.open || this.historyOpen || this.headMenu.visible ||
-        this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible ||
-        this.selGroups.length || this.selMembers.length || this.expandedKey || this.expandedShowEp ||
-        this.expandedShows.length);
+        this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.kbHelpOpen || this.filterMenu ||
+        this.menu.visible || this.selGroups.length || this.selMembers.length || this.expandedKey ||
+        this.expandedShowEp || this.expandedShows.length);
     },
     async submitSpeedDialog() {
       const okMain = await this.submitSpeedOverride();

@@ -1,4 +1,4 @@
-/* auto-qb WEB UI · 键盘快捷键引擎 + 动作注册表(计划 26-09-28-0354 W1-W4 第一波)
+/* auto-qb WEB UI · 键盘快捷键引擎 + 动作注册表 + 自定义面板(计划 26-09-28-0354 W1-W7)
  *
  * 设计单点(计划 §05, 沿袭 0822 前案):
  *   - 注册表 AQB_SHORTCUT_DEFS 是**键位单一事实源**: 默认键表 / 面板(W6) / 冲突检测 / 守阵断言
@@ -13,14 +13,18 @@
  *     删除双入口, 不占键表槽位、不进面板改键列表)。
  *   - 黑名单 KB_BLACKLIST = 浏览器不可拦组合(Ctrl+W/T/N/Q 及 Shift 变体 / 标签页族 / 开发者工具
  *     / Meta 全族), 依据 §3.3 经验边界: Ctrl+S/F/P 可拦不在名单; 面板(W6)拒绑 + 守阵断言默认键不碰。
- *   - 适配器 window.AQB_KEYS.load()/save() 是引擎唯一的存储出口(W1 是内存桩, W6 接
- *     GET/PUT /api/keys 与 webui-keys.json) —— 引擎对存储介质无感知, 反悔路径见计划 §4.6。
+ *   - 适配器 window.AQB_KEYS.load()/save() 是引擎唯一的存储出口(W6 起接 GET/PUT /api/keys 与
+ *     后端 webui-keys.json, 仍保持 load 同步快照语义) —— 引擎对存储介质无感知, 反悔路径见计划 §4.6。
  *
  * !接线(三份 index.html 的 tpl-manifest 清单序, 守阵 test_web.py::_scan_mixin_wiring):
  *   - 本文件必须排在 app.js **之前**(app.js 末尾 app.mixin(window.AQB_SHORTCUTS))。
  *   - keydown 监听在 lifecycle.js mounted 里注册, 排在既有 Esc 退栈链**之后**; data 字段
- *     kbCursor 在 state.js(根选项展开, 不许进 app.mixin —— pitfalls web-ui/frontend-split)。
- *   - W1-W4 只激活 A-D 组(E/F/G/H/I 组 run: null, W5/W6 接线), 波次验收口径见计划 §06。
+ *     kbCursor / kbHelpOpen / 面板与录制器状态(kbDraft 等)在 state.js(根选项展开, 不许进
+ *     app.mixin —— pitfalls web-ui/frontend-split)。
+ *   - W5 局部作用域: scope 五值全量生效 —— drawer(抽屉 Alt+1-4) / settings(设置页 Ctrl+S,
+ *     inputSafe 输入框内也放行) / modal(模态层白名单: 模态内只响应模态键位, 本期无条目, 引擎已留位)。
+ *   - W6 自定义: 设置页「快捷键」分区(录制器 VS Code 按下即录模式 / 冲突三选一 / 黑名单拒绑 /
+ *     单条与全部重置 / 保存 PUT 落盘) + ? 帮助浮层(只读速查)。Esc 是唯一 fixed 键, 面板不可改。
  *   - 光标滚动跟随**禁用 scrollIntoView**(逐层滚动可滚祖先会连带滚整页, pitfalls
  *     web-ui/hover-keynav-fight): 渲染行用 getBoundingClientRect+scrollBy 差值, 窗口化未渲染行
  *     用 _rowWindow 前缀和换算(columns.js 已留存 this._rowPre[kind])。
@@ -71,17 +75,41 @@ function kbInBlacklist(serial) {
   return KB_BLACKLIST.has(serial);
 }
 
+/* 条目生效键位 = 模板基准(def) ⊕ 草稿 overrides(恒胜出); 空串 = 显式禁用(§4.7) */
+function kbSerialWithDraft(item, draft) {
+  const ov = (draft && draft.overrides) || {};
+  return Object.prototype.hasOwnProperty.call(ov, item.id) ? ov[item.id] : item.def;
+}
+
+/* code -> 人类键名(显示用, §3.3): 命中表直接用; Key/Digit/Numpad 前缀取后缀; F 键原样 */
+const KB_CODE_NAMES = {
+  Escape: "Esc", Delete: "Del", Insert: "Ins",
+  ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→",
+  Comma: ",", Period: ".", Slash: "/", Backslash: "\\", Semicolon: ";", Quote: "'",
+  BracketLeft: "[", BracketRight: "]", Minus: "-", Equal: "=", Backquote: "`",
+};
+
+function kbDisplayName(serial) {
+  return String(serial).split("+").map((part) => {
+    if (part === "Ctrl" || part === "Alt" || part === "Shift" || part === "Meta") return part;
+    if (KB_CODE_NAMES[part]) return KB_CODE_NAMES[part];
+    const m = part.match(/^(?:Key|Digit|Numpad)(.+)$/);
+    if (m) return m[1];
+    return part;
+  }).join(" + ");
+}
+
 /* 默认键位归一化串合法形态: 修饰键按固定序出现至多一次 + 单个 e.code(守阵逐条断言) */
 const KB_DEF_RE = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$/;
 
 /* ---------------- 动作注册表(单一事实源) ----------------
  * 条目形状: { id, group, label, def, scope, danger?, fixed?, run }
  *   def  = 默认键位归一化串; "" = 默认不绑定(空位, 可被自定义); fixed = 不可改键(Esc)。
- *   scope = global(任何非输入态) | list(三数据视图) | drawer | settings | modal(后三档 W5)。
+ *   scope = global(任何非输入态) | list(三数据视图) | drawer(抽屉内) | settings(设置页)
+ *           | modal(模态层内, 本期无条目, 引擎已留位)。
  *   danger = 危险档(§08 清单): 键盘路径必经确认框, 面板行内标 WARN; 危险档默认键一律二键组合。
- *   run(vm) = 动作出口, 只映射既有方法不另写实现; run: null = 本波未激活(W5/W6 接线)。
- * A-D 组为第一波(计划 §06 拍板⑤); E/F/G/H 组默认键已定但 run: null, 2026-09-30 决策③
- * 保留 Shift 族全部进默认表 —— 先占键位防冲突, W5 接线即活。 */
+ *   run(vm) = 动作出口, 只映射既有方法不另写实现; W5 全波接线完成(E/F/G/H/I 组激活)。
+ * A-D 组为第一波(计划 §06 拍板⑤), E-H 第二波接线; 2026-09-30 决策③保留 Shift 族全部进默认表。 */
 const AQB_SHORTCUT_DEFS = [
   // ---- A · 视图与全局导航 ----
   { id: "view-groups", group: "视图与导航", label: "切到辅种页",
@@ -183,96 +211,145 @@ const AQB_SHORTCUT_DEFS = [
   { id: "act-delete", group: "一级动作", label: "删除所选",
     def: "Shift+KeyD", scope: "list", danger: true,
     run: (vm) => vm._kbDelete() },
-  // ---- E · 次要动作(Shift 族, §08 决策③保留; W5 接线) ----
+  // ---- E · 次要动作(Shift 族, §08 决策③保留; 单目标动作: 目标解析须唯一 hash, §5.2) ----
   { id: "edit-move", group: "次要动作", label: "移动位置",
     def: "Shift+KeyV", scope: "list",
-    run: null },  // W5: vm.editMove(hash)
+    run: (vm) => vm._kbEditAct("editMove") },
   { id: "edit-rename", group: "次要动作", label: "重命名",
     def: "Shift+KeyR", scope: "list",
-    run: null },  // W5: vm.editRename(hash)
+    run: (vm) => vm._kbEditAct("editRename") },
   { id: "export-torrent", group: "次要动作", label: "导出 .torrent",
     def: "Shift+KeyE", scope: "list",
-    run: null },  // W5: 目标解析接 vm.exportTorrent()
+    run: (vm) => vm._kbEditAct("exportTorrent") },
   { id: "copy-name", group: "次要动作", label: "复制名称",
     def: "Shift+KeyC", scope: "list",
-    run: null },  // W5: vm.copyTorrentInfo("name")
+    run: (vm) => vm._kbEditAct("copyTorrentInfo", "name") },
   { id: "copy-hash", group: "次要动作", label: "复制哈希",
     def: "Shift+KeyH", scope: "list",
-    run: null },  // W5: vm.copyTorrentInfo("hash")
+    run: (vm) => vm._kbEditAct("copyTorrentInfo", "hash") },
   { id: "copy-magnet", group: "次要动作", label: "复制 magnet",
     def: "Shift+KeyG", scope: "list",
-    run: null },  // W5: vm.copyTorrentInfo("magnet")
+    run: (vm) => vm._kbEditAct("copyTorrentInfo", "magnet") },
   { id: "col-picker", group: "次要动作", label: "列选择器",
     def: "KeyK", scope: "list",
-    run: null },  // W5: vm.toggleColMenu(null)
-  // ---- F · 队列与开关(W5 接线; §08 决策③: F5/F6 保留默认键) ----
+    run: (vm) => vm.toggleColMenu(null) },  // 按钮路径(常规 CSS 定位); 键盘再按被浮层屏蔽, 关闭走 Esc
+  // ---- F · 队列与开关(§08 决策③: F5/F6 保留默认键; 均为单种子命令, 复用右键菜单同链) ----
   { id: "queue-up", group: "队列与开关", label: "队列上移",
     def: "Ctrl+ArrowUp", scope: "list",
-    run: null },  // W5: 目标解析 + torrentCmd("queue", {action:"up"})
+    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "up" }), "队列上移") },
   { id: "queue-down", group: "队列与开关", label: "队列下移",
     def: "Ctrl+ArrowDown", scope: "list",
-    run: null },  // W5: 同上(action:"down")
+    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "down" }), "队列下移") },
   { id: "queue-top", group: "队列与开关", label: "队列置顶",
     def: "Ctrl+Home", scope: "list",
-    run: null },  // W5: 同上(action:"top")
+    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "top" }), "队列置顶") },
   { id: "queue-bottom", group: "队列与开关", label: "队列置底",
     def: "Ctrl+End", scope: "list",
-    run: null },  // W5: 同上(action:"bottom")
+    run: (vm) => vm._kbTorrentCmd("queue", () => ({ action: "bottom" }), "队列置底") },
   { id: "auto-tmm", group: "队列与开关", label: "自动种子管理(TMM)切换",
     def: "Shift+KeyT", scope: "list",
-    run: null },  // W5: 目标解析 + torrentCmd("auto-tmm")
+    run: (vm) => vm._kbTorrentToggle("auto-tmm", "auto_tmm", "自动种子管理") },
   { id: "force-start", group: "队列与开关", label: "强制开始切换",
     def: "Shift+KeyF", scope: "list",
-    run: null },  // W5: 目标解析 + torrentCmd("force-start"); 可逆故不入危险档(§08)
-  // ---- G · 局部作用域(W5 接线) ----
+    run: (vm) => vm._kbTorrentToggle("force-start", "force_start", "强制开始") },  // 可逆故不入危险档(§08)
+  // ---- G · 局部作用域(焦点在抽屉/设置页时才响应, W5) ----
   { id: "drawer-tab-general", group: "局部作用域", label: "抽屉 · 常规页",
     def: "Alt+Digit1", scope: "drawer",
-    run: null },  // W5: vm.drawerTab("general")
+    run: (vm) => vm.drawerTab("general") },
   { id: "drawer-tab-trackers", group: "局部作用域", label: "抽屉 · Tracker 页",
     def: "Alt+Digit2", scope: "drawer",
-    run: null },  // W5: vm.drawerTab("trackers")
+    run: (vm) => vm.drawerTab("trackers") },
   { id: "drawer-tab-peers", group: "局部作用域", label: "抽屉 · 用户页",
     def: "Alt+Digit3", scope: "drawer",
-    run: null },  // W5: vm.drawerTab("peers")
+    run: (vm) => vm.drawerTab("peers") },
   { id: "drawer-tab-content", group: "局部作用域", label: "抽屉 · 内容页",
     def: "Alt+Digit4", scope: "drawer",
-    run: null },  // W5: vm.drawerTab("content")
+    run: (vm) => vm.drawerTab("content") },
   { id: "settings-save", group: "局部作用域", label: "设置页 · 保存配置",
     def: "Ctrl+KeyS", scope: "settings", inputSafe: true,
-    run: null },  // W5: vm.cfgSave()(inputSafe: 输入框内也放行; 浏览器保存网页可拦, §3.3)
+    run: (vm) => vm.cfgSave() },  // inputSafe: 输入框内也放行; 浏览器保存网页可拦, §3.3
   // 设置页"放弃改动"(G6)危险且无撤销, 默认不绑定也不注册(§08: 默认留给鼠标)
-  // ---- H · 面板(W6 接线) ----
+  // ---- H · 面板(W6) ----
   { id: "help-panel", group: "面板", label: "打开快捷键帮助面板",
     def: "Shift+Slash", scope: "global",
-    run: null },  // W6: 帮助浮层(只读速查 + 前往设置链接); 面板内 Esc 取消录制归 W6 面板自身
-  // ---- I · 默认不绑定空位(可自定义; W5/W6 随面板接线) ----
+    run: (vm) => vm.kbOpenHelp() },  // 只读速查浮层(附「前往设置自定义」); 面板内 Esc 关闭归退栈链
+  // ---- I · 默认不绑定空位(可自定义) ----
   { id: "super-seeding", group: "更多动作", label: "超级做种切换",
     def: "", scope: "list", danger: true,
-    run: null },  // W5: 目标解析 + torrentCmd("super-seeding"); 静默改变做种语义故标危险(§08)
+    run: (vm) => vm._kbTorrentToggle("super-seeding", "super_seeding", "超级做种") },  // 静默改变做种语义故标危险(§08; 切换可逆, 无确认框, 面板标 ⚠)
   { id: "share-limits", group: "更多动作", label: "分享率限制",
     def: "", scope: "list",
-    run: null },  // W5: vm.editShareLimits(hash)
+    run: (vm) => vm._kbEditAct("editShareLimits") },
   { id: "clear-filters", group: "更多动作", label: "清除全部筛选",
     def: "", scope: "list",
-    run: null },  // W5: vm.clearFilters()
+    run: (vm) => vm.clearFilters() },
   { id: "invert-select", group: "更多动作", label: "反选当前视图",
     def: "", scope: "list",
-    run: null },  // W5: _kbInvertSel()(大库反选代价高, 默认不给键, 0822 I6)
+    run: (vm) => vm._kbInvertSel() },  // 大库反选代价高, 默认不给键(0822 I6)
 ];
 
-/* ---------------- 存储适配器(单一出口, 计划 §4.4) ----------------
- * W1 内存桩: 纯默认表可跑; W6 换 GET/PUT /api/keys(后端 webui-keys.json), 引擎与面板零改动。
- * 结构按 §4.7 预埋: { schema_version, template, overrides } —— overrides 只存用户改过的条目,
- * 未提及的 action 用当前模板基准; 空串 = 显式禁用。
+/* ---------------- 存储适配器(单一出口, 计划 §4.4; W6 接通 GET/PUT /api/keys) ----------------
+ * 后端 auto-qb-data/webui-keys.json(web 线程独占, 与 state.json 互不干扰); 结构按 §4.7 预埋:
+ * { schema_version, template, overrides } —— overrides 只存用户改过的条目, 未提及的 action 用
+ * 当前模板基准; 空串 = 显式禁用。
+ * 语义: load() 保持**同步快照**(引擎在 keydown 里现取, 不 await); 服务端真值由 reload() 异步
+ * 拉进来后由调用方失效 _kbTableCache; save() 整份 PUT, 失败返回 {ok:false} 由调用方本地回滚。
  * (先 const 后挂 window: 它是被本文件 _kbTable 直接消费的适配器单例, 不是 Vue mixin 片段 ——
- *  不走 app.mixin, 也别写成 `window.X = {` 字面量形态, 那会被片段接线守阵当漏注入。)
- */
+ *  不走 app.mixin, 也别写成 `window.X = {` 字面量形态, 那会被片段接线守阵当漏注入。) */
+const AQB_KEYS_DEFAULT = () => ({ schema_version: 1, template: "aqb-default", overrides: {} });
 const AQB_KEYS_ADAPTER = {
+  _doc: null,  // 最近一次生效的配置(服务端真值或面板即时试用稿); null = 用默认表
+  /* 引擎唯一同步出口: 未拉到/拉取失败一律回默认表(启动失败由调用方 toast 提示, 不阻塞按键) */
   load() {
-    return { schema_version: 1, template: "aqb-default", overrides: {} };
+    return this._doc || AQB_KEYS_DEFAULT();
   },
-  save(_cfg) {
-    return false;  // W6 接通: PUT 落盘, 失败由调用方本地回滚
+  /* 面板即时试用/回滚单点: 换稿后由调用方失效 this._kbTableCache */
+  apply(doc) {
+    this._doc = doc;
+  },
+  /* 启动/打开面板时拉服务端真值; 网络失败/非 2xx 返回 false(不炸, 维持现有内存稿) */
+  async reload(token) {
+    try {
+      const headers = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const r = await fetch("/api/keys", { headers });
+      if (!r.ok) return false;
+      this._doc = this._sanitize(await r.json());
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  /* PUT 整份替换; 失败返回 {ok:false, error}(调用方本地回滚 + 报错, 计划 §4.4) */
+  async save(doc, token) {
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const r = await fetch("/api/keys", { method: "PUT", headers, body: JSON.stringify(doc) });
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({}));
+        return { ok: false, error: detail.detail || `HTTP ${r.status}` };
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message || "网络错误" };
+    }
+  },
+  /* 服务端脏数据第二道兜底(后端读时已兜一层): 版本不识别/结构不符回默认, 非法值条目丢弃 */
+  _sanitize(doc) {
+    if (!doc || typeof doc !== "object" || doc.schema_version !== 1) return AQB_KEYS_DEFAULT();
+    const overrides = {};
+    if (doc.overrides && typeof doc.overrides === "object") {
+      for (const k of Object.keys(doc.overrides)) {
+        const v = doc.overrides[k];
+        if (typeof v === "string" && (!v || KB_DEF_RE.test(v))) overrides[k] = v;
+      }
+    }
+    return {
+      schema_version: 1,
+      template: typeof doc.template === "string" && doc.template ? doc.template : "aqb-default",
+      overrides,
+    };
   },
 };
 window.AQB_KEYS = AQB_KEYS_ADAPTER;
@@ -296,16 +373,20 @@ window.AQB_SHORTCUTS = {
       this._kbTableCache = map;
       return map;
     },
-    /* 当前作用域(W1-W4 两档): 设置页 / 列表; 抽屉与模态档 W5 随局部作用域引入 */
+    /* 当前作用域(五值之三; modal 在派发处单独分流, 抽屉优先级低于设置页 —— 两者互斥打开):
+     * 设置页 / 抽屉 / 列表(W5 全量生效) */
     _kbScope() {
-      return this.page === "settings" ? "settings" : "list";
+      if (this.page === "settings") return "settings";
+      if (this.drawer.open) return "drawer";
+      return "list";
     },
     /* 模态层名单: 与 dialogs.js escBusy 的**浮层名单**同形, 但不含选择/展开兜底段
      * (有选中时快捷键必须照常可用 —— 目标解析走选中集合; escBusy 是 Esc 退栈专用, 不能混用)。 */
     _kbOverlayBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
         this.metaOpen || this.filePrio.visible || this.drawer.open || this.historyOpen || this.headMenu.visible ||
-        this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible);
+        this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible ||
+        this.kbHelpOpen);
     },
     /* 引擎入口(lifecycle.js mounted 注册在 Esc 退栈链之后; unmounted 撤除) */
     _kbOnKeyDown(e) {
@@ -318,25 +399,32 @@ window.AQB_SHORTCUTS = {
       const item = this._kbTable().get(kbSerializeEvent(e));
       const t = e.target;
       const inInput = !!(t && t.closest && t.closest("input, textarea, select, [contenteditable]"));
-      if (inInput) {
-        // 输入元素内只放行显式标记 inputSafe 的绑定(本波无; W5 的设置页 Ctrl+S 在此放行)
-        if (!item || !item.inputSafe) return;
-      } else {
-        if (this._kbOverlayBusy()) return;             // 模态层打开: 列表键位一律失效
-        if (item) {
-          if (item.scope !== "global" && item.scope !== this._kbScope()) return;  // 非焦点页不串扰
-          e.preventDefault();
-          item.run(this);
-          return;
-        }
+      if (!item) {
         // Delete 键是注册表**外**的"额外删除操作"(§08 决策 v4): 直连删除链(_kbDelete 内部走
         // _deleteFlow 的确认框 + HR 风险点名, 与批量浮条同链), 不占键表槽位、不进面板改键列表。
         // 上游 qB WebUI 习惯对齐(Delete 删除所选); Shift+Delete 同走确认框, 无"永久删"分支。
-        if (e.code === "Delete" && !e.ctrlKey && !e.altKey && !e.metaKey && this._kbScope() === "list") {
+        if (!inInput && e.code === "Delete" && !e.ctrlKey && !e.altKey && !e.metaKey &&
+            !this._kbOverlayBusy() && this._kbScope() === "list") {
           e.preventDefault();
           this._kbDelete();
         }
+        return;
       }
+      if (inInput && !item.inputSafe) return;          // 输入元素内只放行显式标记 inputSafe 的绑定
+      const scope = this._kbScope();
+      if (item.scope === "modal") {
+        if (!this.modal.visible) return;               // 模态键位仅在模态层内响应(§5.1 三段之三)
+      } else if (this.modal.visible) {
+        return;                                        // 模态层打开: 只响应模态键位, 其余一律失效
+      } else if (!inInput && this._kbOverlayBusy()) {
+        // 浮层打开: 只放行焦点局部(抽屉 Alt+1-4 / 设置页 Ctrl+S)自身的键位 —— 抽屉页切换
+        // 不与全局键冲突(W5 验收口径); 列表键位在浮层下仍然失效(同 W1-W4)
+        if (item.scope !== scope || (scope !== "drawer" && scope !== "settings")) return;
+      } else if (item.scope !== "global" && item.scope !== scope) {
+        return;                                        // 非焦点页不串扰
+      }
+      e.preventDefault();
+      item.run(this);
     },
     /* ---------------- W2: 光标模型(按身份不按下标) ---------------- */
     /* 光标线性链: 辅种页=组行; 种子页=平铺行; 追剧页=剧/集单元(决策②: 成员行 vNext)。
@@ -683,6 +771,267 @@ window.AQB_SHORTCUTS = {
         el.focus();
         el.select();
       }
+    },
+    /* ---------------- W5: 单目标动作的键盘目标解析 ----------------
+     * E/F/I 组的编辑/复制/导出/队列族都是**单种子**动作(右键菜单只在单目标上提供):
+     * 目标解析要求恰有一个 hash —— 多选/整组/剧集单元一律提示, 不猜第一个(静默错目标
+     * 比不动作更糟)。选中集合走 _kbTargets 同一口径, 无选中用光标行。 */
+    _kbSingleHash() {
+      const t = this._kbTargets();
+      if (t.groupKeys.length || t.memberHashes.length !== 1) return "";
+      return t.memberHashes[0];
+    },
+    /* 单目标编辑/复制族: 既有方法读 menu.hash(与右键菜单同一入口), 这里只做解析与挂载 */
+    _kbEditAct(fn, arg) {
+      const h = this._kbSingleHash();
+      if (!h) {
+        this._kbHint();
+        return;
+      }
+      this.menu.hash = h;
+      if (arg === undefined) return this[fn]();
+      return this[fn](arg);
+    },
+    /* 单目标种子命令族(队列/TMM/强制开始/超级做种): 复用 torrentCmd 回执链(右键菜单同链) */
+    _kbTorrentCmd(action, makeBody, okText) {
+      const h = this._kbSingleHash();
+      if (!h) {
+        this._kbHint();
+        return;
+      }
+      this.menu.hash = h;
+      return this.torrentCmd(action, makeBody(), okText);
+    },
+    _kbTorrentToggle(action, field, label) {
+      const h = this._kbSingleHash();
+      if (!h) {
+        this._kbHint();
+        return;
+      }
+      const m = this.memberByHash.get(h) || {};
+      this.menu.hash = h;
+      return this.torrentCmd(action, { enable: !m[field] }, `${m[field] ? "关闭" : "开启"}${label}`);
+    },
+    /* 反选当前视图(空位动作, 默认不绑键): 三视图各自的全集做差; FX-11 两类选择口径互斥 */
+    _kbInvertSel() {
+      if (this.viewMode === "torrents") {
+        const sel = new Set(this.selMembers);
+        this.selGroups = [];
+        this.selAnchorGroup = null;
+        this.selMembers = this.filteredTorrents.map((m) => m.hash).filter((h) => !sel.has(h));
+        return;
+      }
+      if (this.viewMode === "shows") {
+        const sel = new Set(this.selMembers);
+        const all = new Set();
+        for (const u of this._kbShowUnits()) for (const h of u.hashes) all.add(h);
+        this.selGroups = [];
+        this.selAnchorGroup = null;
+        this.selMembers = [...all].filter((h) => !sel.has(h));
+        return;
+      }
+      const sel = new Set(this.selGroups);
+      this.selMembers = [];  // FX-11: 两类选择口径互斥
+      this.selAnchorMember = null;
+      this.selGroups = this.filteredGroups.map((g) => g.key).filter((k) => !sel.has(k));
+    },
+    /* ---------------- W6: 服务端键位装载 ----------------
+     * startPolling 是两条鉴权放行路径(密钥验证/本机免鉴权)的唯一汇合点, 键位真值在那里拉;
+     * 失败不阻塞主流程(默认表可用), 只提示。拉完/换稿后必须失效 _kbTableCache(引擎缓存)。 */
+    async _kbReloadKeys(quiet = false) {
+      const ok = await window.AQB_KEYS.reload(this.token);
+      this._kbTableCache = null;
+      if (!ok && !quiet) this.toast("快捷键配置加载失败, 已用默认键位", "warn");
+      return ok;
+    },
+    /* ---------------- W6: 帮助浮层(H 组, Shift+Slash) ---------------- */
+    kbOpenHelp() {
+      this.kbHelpOpen = true;
+    },
+    kbGoSettings() {
+      this.kbHelpOpen = false;
+      this.openSettings();
+      this.hubGo("keys");
+    },
+    /* ---------------- W6: 自定义面板(设置页「快捷键」分区) ----------------
+     * 面板语义(计划 §5.2): 改动先本地生效(即时试用) → 「保存」PUT 落盘; 离开未保存 → 提示。
+     * 草稿 = kbDraft(工作副本), 基准 = kbSaved(最近保存的服务端真值); 每次改稿同步进
+     * AQB_KEYS(引擎即时生效)并失效 _kbTableCache。 */
+    kbPanelEnter() {
+      this.kbRecId = "";
+      this.kbConflict = null;
+      this.kbKeysLoading = true;
+      return this._kbReloadKeys(true).then(() => {
+        this.kbSaved = JSON.parse(JSON.stringify(window.AQB_KEYS.load()));
+        this.kbDraft = JSON.parse(JSON.stringify(this.kbSaved));
+        this.kbKeysLoading = false;
+      });
+    },
+    /* 面板离开守卫(config_hub hubGo/hubBack 调): 未保存先确认; 确认后回滚再继续导航 */
+    kbGuardLeave(target) {
+      if (this.hub.view !== "keys" || target === "keys" || !this.kbDirty()) return false;
+      this.confirmDialog("快捷键改动还未保存",
+        "离开将放弃本次试用的改动; 点「保存」才会写入服务端(所有浏览器共享)。",
+        { okText: "放弃并离开", cancelText: "留在此页" }).then((ok) => {
+        if (!ok) return;
+        this.kbDraftRevert();
+        if (target === "hub") this.hubBack();
+        else {
+          this.hubCloseHelp();
+          this.hub.view = target;
+          window.scrollTo({ top: 0 });
+        }
+      });
+      return true;
+    },
+    kbDirty() {
+      if (!this.kbDraft || !this.kbSaved) return false;
+      return JSON.stringify(this.kbDraft) !== JSON.stringify(this.kbSaved);
+    },
+    /* 注册表按 group 分组(保持声明序, 面板与帮助浮层共用) */
+    kbGroups() {
+      const out = [];
+      for (const it of AQB_SHORTCUT_DEFS) if (!out.includes(it.group)) out.push(it.group);
+      return out;
+    },
+    kbEntriesOf(group) {
+      return AQB_SHORTCUT_DEFS.filter((it) => it.group === group);
+    },
+    /* 条目当前生效键位(草稿 ⊕ 模板基准): 与引擎 _kbTable 同口径, 空串 = 显式禁用 */
+    kbSerialOf(item) {
+      return kbSerialWithDraft(item, this.kbDraft);
+    },
+    kbIsOverridden(item) {
+      return !!(this.kbDraft && this.kbDraft.overrides && Object.prototype.hasOwnProperty.call(this.kbDraft.overrides, item.id));
+    },
+    /* danger 条目的确认框标注: 三条确认框兜底动作标注"(有确认框)", 其余(超级做种)只标 ⚠(§08) */
+    kbHasConfirm(item) {
+      return ["act-delete", "act-recheck", "act-reannounce"].includes(item.id);
+    },
+    _kbApplyOverrides(overrides) {
+      this.kbDraft = {
+        schema_version: 1,
+        template: (this.kbDraft && this.kbDraft.template) || "aqb-default",
+        overrides,
+      };
+      window.AQB_KEYS.apply(JSON.parse(JSON.stringify(this.kbDraft)));  // 即时试用(引擎可见)
+      this._kbTableCache = null;
+    },
+    /* 落一条键位: 回到模板默认即删掉 override(草稿最小化, 重置语义与之合一);
+     * danger 条目绑裸键提示但允许(§08 v4: 确认框兜底)。 */
+    _kbCommitSerial(item, serial) {
+      const ov = { ...((this.kbDraft && this.kbDraft.overrides) || {}) };
+      if (serial === item.def) delete ov[item.id];
+      else ov[item.id] = serial;
+      this._kbApplyOverrides(ov);
+      if (item.danger && serial && !serial.includes("+")) {
+        this.toast(`「${item.label}」已绑定为裸键 —— 该动作是危险操作, 触发时有确认框兜底`, "warn", 5000);
+      }
+    },
+    /* ---------------- W6: 录制器(VS Code 按下即录模式, §3.3/§5.2) ----------------
+     * 捕获段(capture)监听: 录制态按键 preventDefault + stopPropagation, 引擎/退栈链/hubOnKey
+     * 都收不到(§5.2 "引擎屏蔽层保证录制态不触发其它动作")。纯修饰键拒收; Esc 取消;
+     * 黑名单当场拒绑; 冲突进三选一(交换/覆盖对方置空/取消)。 */
+    kbRecord(id) {
+      if (this.kbRecId === id) {
+        this.kbRecordCancel();
+        return;
+      }
+      this.kbConflict = null;
+      this.kbRecId = id;
+      if (this._kbRecHandler) document.removeEventListener("keydown", this._kbRecHandler, true);
+      this._kbRecHandler = (e) => this._kbOnRecordKey(e);
+      document.addEventListener("keydown", this._kbRecHandler, true);
+    },
+    kbRecordCancel() {
+      this.kbRecId = "";
+      if (this._kbRecHandler) {
+        document.removeEventListener("keydown", this._kbRecHandler, true);
+        this._kbRecHandler = null;
+      }
+    },
+    _kbOnRecordKey(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.isComposing || e.keyCode === 229) return;  // IME 组合期不判定(§3.4)
+      if (KB_MODIFIER_CODES.has(e.code)) return;       // 纯修饰键拒收(§3.3)
+      if (e.key === "Escape") {
+        this.kbRecordCancel();
+        return;
+      }
+      if (e.repeat) return;
+      const serial = kbSerializeEvent(e);
+      const item = AQB_SHORTCUT_DEFS.find((it) => it.id === this.kbRecId);
+      this.kbRecordCancel();
+      if (!item) return;
+      if (kbInBlacklist(serial)) {
+        this.toast(`浏览器保留该组合键(Ctrl+W/T/N/Q 等), 无法绑定: ${kbDisplayName(serial)}`, "error", 6000);
+        return;
+      }
+      const other = AQB_SHORTCUT_DEFS.find((it) => it.id !== item.id && !it.fixed && kbSerialWithDraft(it, this.kbDraft) === serial);
+      if (other) {
+        this.kbConflict = { id: item.id, serial, other: other.id, otherLabel: other.label };
+        return;
+      }
+      this._kbCommitSerial(item, serial);
+    },
+    /* 冲突三选一(§5.2): 交换 = 对方拿我原来的键位; 覆盖 = 对方置空(显式禁用); 取消 = 不动 */
+    kbConflictResolve(mode) {
+      const c = this.kbConflict;
+      if (!c) return;
+      const item = AQB_SHORTCUT_DEFS.find((it) => it.id === c.id);
+      const other = AQB_SHORTCUT_DEFS.find((it) => it.id === c.other);
+      this.kbConflict = null;
+      if (!item || !other) return;
+      const ov = { ...((this.kbDraft && this.kbDraft.overrides) || {}) };
+      if (mode === "swap") {
+        const mine = kbSerialWithDraft(item, this.kbDraft);
+        ov[item.id] = c.serial;
+        if (mine === other.def) delete ov[other.id];
+        else ov[other.id] = mine;
+      } else if (mode === "steal") {
+        ov[item.id] = c.serial;
+        ov[other.id] = "";  // 对方置空 = 显式禁用(语义保留, 不能当缺省丢)
+      } else {
+        return;
+      }
+      this._kbApplyOverrides(ov);
+    },
+    kbDisableRow(item) {
+      this._kbCommitSerial(item, "");  // 空串 = 显式禁用该动作(计划 §5.2)
+    },
+    kbResetRow(item) {
+      this._kbCommitSerial(item, item.def);
+    },
+    kbResetAll() {
+      this.kbRecordCancel();
+      this.kbConflict = null;
+      this._kbApplyOverrides({});  // 全部重置 = 清空派生, 回到纯模板(§4.7)
+    },
+    async kbSaveKeys() {
+      const doc = JSON.parse(JSON.stringify(this.kbDraft));
+      const r = await window.AQB_KEYS.save(doc, this.token);
+      if (!r.ok) {
+        this.toast("快捷键保存失败: " + r.error + "(本地已回滚)", "error", 8000);
+        this.kbDraftRevert();
+        return;
+      }
+      this.kbSaved = JSON.parse(JSON.stringify(doc));
+      window.AQB_KEYS.apply(JSON.parse(JSON.stringify(doc)));
+      this._kbTableCache = null;
+      this.toast("快捷键已保存(其它浏览器/标签刷新后生效)", "ok", 3500);
+    },
+    kbDraftRevert() {
+      this.kbRecordCancel();
+      this.kbConflict = null;
+      const base = this.kbSaved || AQB_KEYS_DEFAULT();
+      this.kbDraft = JSON.parse(JSON.stringify(base));
+      window.AQB_KEYS.apply(JSON.parse(JSON.stringify(base)));  // 回滚到最近保存的服务端真值
+      this._kbTableCache = null;
+    },
+    /* 键位显示名(物理 code -> 人类键名, §3.3): 录制/面板/帮助浮层共用 */
+    kbDisplayName(serial) {
+      return kbDisplayName(serial);
     },
   },
 };

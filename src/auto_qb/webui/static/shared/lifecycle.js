@@ -63,6 +63,7 @@ window.AQB_LIFECYCLE = {
       else if (this.colMenuOpen) this.colMenuOpen = false;  // 列选择器弹层(pop)
       else if (this.uiMenuOpen) this.uiMenuOpen = false;  // 顶栏界面切换下拉(pop)
       else if (this.searchHelpOpen) this.searchHelpOpen = false;  // 搜索语法浮卡(pop)
+      else if (this.kbHelpOpen) this.kbHelpOpen = false;  // 快捷键帮助浮层(W6, H 组 Shift+Slash 打开)
       else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
       else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
       else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)

@@ -46,6 +46,9 @@ window.AQB_POLL = {
       this.stopPolling();
       this.startEvents();  // P2: 先接上推送通道(失败也无害, 轮询仍在)
       this.loadSpeedMode();  // 限速托管状态(非轮询: 登录/重连时取一次, 卡内可手动刷新)
+      // 键盘快捷键服务端真值(W6, 计划 26-09-28-0354 §4.4): 同为两条登录路径的唯一汇合点,
+      // 鉴权已放行请求必带得上凭证; 失败静默回默认表(不阻塞登录), 打开面板时会重拉一次
+      this._kbReloadKeys(true);
       // 状态栏常显统计(server_state)已随 /api/state.status.server 每轮回传 —— 登录首轮的
       // refresh() 即可填上, 不再需要为"限制速度/连接/剩余"单独补一次 /api/stats(FX-08 旧做法)。
       this.refresh();

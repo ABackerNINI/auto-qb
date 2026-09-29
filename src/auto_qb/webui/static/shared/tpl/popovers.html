@@ -294,3 +294,34 @@
         </template>
       </div>
     </teleport>
+
+    <!-- 键盘快捷键帮助浮层(W6, 计划 26-09-28-0354 §5.2: H 组 Shift+Slash 打开, 只读速查;
+         Esc 关闭归 lifecycle 退栈链, 名单三处同步: 退栈链 / escBusy / _kbOverlayBusy) -->
+    <div v-if="kbHelpOpen" class="modal-mask" @click.self="kbHelpOpen = false">
+      <div class="modal kb-help" role="dialog" aria-modal="true" aria-label="键盘快捷键">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
+          <h3>键盘快捷键</h3>
+          <button class="bt icon add-dialog-x" title="关闭" @click="kbHelpOpen = false">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div class="kb-help-body">
+          <div v-for="grp in kbGroups()" :key="grp" class="kb-help-grp">
+            <div class="kb-help-grp-t">{{ grp }}</div>
+            <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-help-row">
+              <span class="kb-help-label">
+                {{ it.label }}
+                <span v-if="it.danger" class="kb-danger">⚠</span>
+              </span>
+              <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>
+              <span v-else class="kb-none">未绑定</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <span class="kb-note">键位存于服务端, 所有浏览器共享</span>
+          <button class="bt primary" @click="kbGoSettings()">前往设置自定义</button>
+        </div>
+      </div>
+    </div>

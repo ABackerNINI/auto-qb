@@ -199,6 +199,21 @@ window.CONFIG_HUB = {
       // 运行日志不再单列首页卡(2026-09-26 并入「常规」分区页尾, 随分区模板渲染);
       // HR 站点状态同理(2026-09-25 合并): 它是只读现状不是配置项,
       // 并进「HR 在线核实」分区页尾, 打开分区时随 hubGo 拉一次 /api/hr/status。
+      // 键盘快捷键(W6, 计划 26-09-28-0354 §5.2): 同为客户端块(不进配置 schema),
+      // 数据走 GET/PUT /api/keys; 读数 = 当前派生条数(overrides)。
+      const keysDoc = window.AQB_KEYS ? window.AQB_KEYS.load() : null;
+      const nKeys = keysDoc ? Object.keys(keysDoc.overrides || {}).length : 0;
+      cards.push({
+        key: "keys",
+        icon: "i-select-all",
+        title: "快捷键",
+        label: "快捷键",
+        desc: "查看与自定义键盘快捷键：录制新键位、冲突交换、恢复默认。",
+        lede: "键盘快捷键的查看与自定义。每条动作可重新录制键位（按下即录），冲突时可交换或覆盖并置空对方，浏览器保留键当场拒绑；键位存于服务端，所有浏览器共享，保存后其它标签刷新生效。",
+        led: "on",
+        readout: nKeys ? `${nKeys} 条已自定义` : "默认键位",
+        badges: [],
+      });
       return cards;
     },
     /* 等宽读数: 「N 个分区 · 共 M 项 · K 项尚未保存」 */
@@ -222,6 +237,13 @@ window.CONFIG_HUB = {
     },
     /* 当前二级页的分区元信息 */
     hubNow() {
+      if (this.hub.view === "keys") {
+        // 键盘快捷键分区(W6): 客户端块不进 schema, 元信息在此补齐(首页卡/面包屑/页头共用)
+        return {
+          key: "keys", label: "快捷键", icon: "i-select-all", title: "快捷键",
+          lede: "键盘快捷键的查看与自定义。每条动作可重新录制键位（按下即录），冲突时可交换或覆盖并置空对方，浏览器保留键当场拒绑；键位存于服务端，所有浏览器共享，保存后其它标签刷新生效。",
+        };
+      }
       const schema = this.cfg.schema;
       if (!schema) return { key: "", title: "", lede: "", icon: "i-settings" };
       const g = schema.groups.find((x) => x.key === this.hub.view);
@@ -348,6 +370,7 @@ window.CONFIG_HUB = {
   methods: {
     /* ---------------------------------------------------------- 视图跳转(首页 ↔ 二级页) */
     hubGo(key) {
+      if (this.kbGuardLeave(key)) return;  // 离开快捷键分区且有未保存改动: 先确认(W6, §5.2)
       this.hubCloseHelp();
       this.hubTrackerStageClose(false); // 离开分区即清空站点搜索并复位聚焦层, 不带残留状态(计划 §06 + 方案C)
       this.hub.view = key;
@@ -360,11 +383,14 @@ window.CONFIG_HUB = {
         this.cfg.ruleGroupKey = names.length ? names[0] : null;
       }
       // 运行日志已并入「常规」分区页尾且默认折叠(2026-09-28): 首次展开才拉一次,
-      // 之后手动刷新(不自动轮询); 分区打开本身不再预取
+      // 之后手动刷新不轮询 —— 折叠态不预取, 省掉打开分区就背一次最多 2000 行 tail 的请求
       if (key === "hr_check" && !this.hrs.loaded) this.loadHrStatus();
+      // 键盘快捷键分区(W6): 每次进入都重拉服务端真值对齐草稿(他处保存后刷新可见)
+      if (key === "keys") this.kbPanelEnter();
       window.scrollTo({ top: 0 });
     },
     hubBack() {
+      if (this.kbGuardLeave("hub")) return;  // 同 hubGo: 未保存先确认(W6)
       this.hubCloseHelp();
       this.hubTrackerStageClose(false); // 同 hubGo: 返回首页不带站点搜索残留
       this.hub.view = "hub";
@@ -398,7 +424,8 @@ window.CONFIG_HUB = {
       let v = this.hub.view;
       if (v === "__logs") v = "basic"; // 旧版「运行日志」分区已并入常规(2026-09-26), 存量偏好映射过去
       if (!v || v === "hub") return;
-      const known = !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
+      // "keys" 是客户端块(不进 schema), 与 schema 分区一样允许从存储恢复(刷新停在快捷键面板)
+      const known = v === "keys" || !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
       if (!known) {
         this.hub.view = "hub";
         return;

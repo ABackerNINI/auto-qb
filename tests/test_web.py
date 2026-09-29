@@ -166,6 +166,11 @@
 - test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
   「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径)
 - test_api_hr_status_names_the_blocking_step: 覆盖证明不成立时要说清卡在哪一步(用户看到种子没放行时最想知道的一句)
+- test_api_keys_get_default_when_missing: 快捷键配置文件不存在 -> GET 回默认表(计划 26-09-28-0354 W6 §4.4)
+- test_api_keys_put_roundtrip: PUT 合法配置落盘(atomic_write)且 GET 原样回读; 空串=显式禁用语义保留
+- test_api_keys_put_invalid_rejected: PUT 结构非法(schema_version/模板/overrides 形状/归一化串) -> 422 且不触碰磁盘
+- test_api_keys_read_corrupt_fallback: 主文件坏 JSON -> WARN + 默认表; .bak 完好 -> 回备份(读时兜底链)
+- test_api_keys_unknown_schema_version_fallback: schema_version 不识别 -> 回默认表 + WARN(升级链口径: 宁可回默认不带病生效)
 """
 import base64
 import errno
@@ -178,6 +183,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -7595,6 +7601,8 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/groups/{key}/pause"),
     ("POST", "/api/groups/{key}/reannounce"),
     ("POST", "/api/groups/{key}/resume"),
+    ("GET", "/api/keys"),  # 键盘快捷键 W6(计划 26-09-28-0354): webui-keys.json 读(兜底链)
+    ("PUT", "/api/keys"),  # 同上: 整份替换写(结构校验 422)
     ("GET", "/api/log"),
     ("POST", "/api/open-path"),
     ("GET", "/api/paths"),
@@ -7691,3 +7699,136 @@ def test_create_app_is_thin_assembly():
     n = len(src.splitlines())
     assert n <= 150, f"create_app 长回 {n} 行(上限 150) —— 端点请进 routes/ 对应域模块, 别再塞回工厂"
     assert "@app." not in src, "组装壳里不得出现内联路由装饰器 —— 端点一律放 routes/ 模块"
+
+
+# ---------------- 键盘快捷键 /api/keys(W6, 计划 26-09-28-0354 §4.4; 前端接线守阵在 test_web_shortcuts.py) ----------------
+
+
+def _keys_headers(mgr):
+    return {"Authorization": f"Bearer {mgr._web_token}"}
+
+
+def test_api_keys_get_default_when_missing(web_env):
+    """快捷键配置文件不存在(用户从未自定义) -> GET 回默认表, 不报错不建文件"""
+    mgr, client = web_env
+    r = client.get("/api/keys", headers=_keys_headers(mgr))
+    assert r.status_code == 200
+    assert r.json() == {"schema_version": 1, "template": "aqb-default", "overrides": {}}
+
+
+def test_api_keys_put_roundtrip(web_env):
+    """PUT 合法配置落盘且 GET 原样回读; 空串(显式禁用)语义在存储层原样保留"""
+    import json as _json
+
+    from auto_qb.webui.server.routes.keys import keys_file_path
+
+    mgr, client = web_env
+    doc = {"schema_version": 1, "template": "aqb-default", "overrides": {"act-pause": "Ctrl+KeyP", "act-resume": ""}}
+    r = client.put("/api/keys", headers=_keys_headers(mgr), json=doc)
+    assert r.status_code == 200, r.text
+    assert r.json() == doc
+    # 落盘: 同目录文件存在且内容与响应一致(读回是合法 JSON)
+    stored = _json.loads(Path(keys_file_path(mgr)).read_text(encoding="utf-8"))
+    assert stored == doc
+    # 回读
+    r2 = client.get("/api/keys", headers=_keys_headers(mgr))
+    assert r2.status_code == 200 and r2.json() == doc
+
+
+def test_api_keys_put_invalid_rejected(web_env):
+    """PUT 结构非法 -> 422, 且不触碰磁盘(合法旧值原样保留)"""
+    import json as _json
+
+    from auto_qb.webui.server.routes.keys import keys_file_path
+
+    mgr, client = web_env
+    good = {"schema_version": 1, "template": "aqb-default", "overrides": {"act-pause": "KeyP"}}
+    assert client.put("/api/keys", headers=_keys_headers(mgr), json=good).status_code == 200
+    bad_cases = [
+        # schema_version 错 / 缺 template / overrides 非表 / 值非字符串 / 归一化串非法(修饰序乱/小写)
+        {
+            "schema_version": 2,
+            "template": "aqb-default",
+            "overrides": {}
+        },
+        {
+            "schema_version": 1,
+            "overrides": {}
+        },
+        {
+            "schema_version": 1,
+            "template": "aqb-default",
+            "overrides": []
+        },
+        {
+            "schema_version": 1,
+            "template": "aqb-default",
+            "overrides": {
+                "act-pause": 1
+            }
+        },
+        {
+            "schema_version": 1,
+            "template": "aqb-default",
+            "overrides": {
+                "act-pause": "Shift+Ctrl+KeyP"
+            }
+        },
+        {
+            "schema_version": 1,
+            "template": "aqb-default",
+            "overrides": {
+                "act-pause": "ctrl+keyp"
+            }
+        },
+    ]
+    for bad in bad_cases:
+        r = client.put("/api/keys", headers=_keys_headers(mgr), json=bad)
+        assert r.status_code == 422, f"{bad} 应 422, 实得 {r.status_code}"
+    # 磁盘未被触碰
+    import json as _json2
+    stored = _json2.loads(Path(keys_file_path(mgr)).read_text(encoding="utf-8"))
+    assert stored == good
+
+
+def test_api_keys_read_corrupt_fallback(web_env, caplog):
+    """读时兜底链: 主文件坏 JSON -> WARN + 默认表; .bak 完好 -> 回备份(§4.4)"""
+    import json as _json
+    import logging as _logging
+
+    from auto_qb.webui.server.routes.keys import keys_file_path
+
+    mgr, client = web_env
+    path = Path(keys_file_path(mgr))
+    # 主文件坏 + 无备份 -> 默认表 + WARN
+    path.write_text("{oops", encoding="utf-8")
+    with caplog.at_level(_logging.WARNING, logger="auto_qb.web"):
+        r = client.get("/api/keys", headers=_keys_headers(mgr))
+    assert r.status_code == 200
+    assert r.json() == {"schema_version": 1, "template": "aqb-default", "overrides": {}}
+    assert any("快捷键配置" in rec.message for rec in caplog.records), "损坏必须 WARN(失效模式可测可查)"
+    # .bak 完好 -> 回备份
+    bak = {"schema_version": 1, "template": "aqb-default", "overrides": {"act-pause": "KeyP"}}
+    (path.parent / (path.name + ".bak")).write_text(_json.dumps(bak), encoding="utf-8")
+    r2 = client.get("/api/keys", headers=_keys_headers(mgr))
+    assert r2.json() == bak
+
+
+def test_api_keys_unknown_schema_version_fallback(web_env, caplog):
+    """schema_version 不识别(未来版本) -> 回默认表 + WARN(宁可回默认, 不带病生效)"""
+    import json as _json
+    import logging as _logging
+
+    from auto_qb.webui.server.routes.keys import keys_file_path
+
+    mgr, client = web_env
+    Path(keys_file_path(mgr)
+        ).write_text(_json.dumps({
+            "schema_version": 99,
+            "template": "x",
+            "overrides": {}
+        }), encoding="utf-8")
+    with caplog.at_level(_logging.WARNING, logger="auto_qb.web"):
+        r = client.get("/api/keys", headers=_keys_headers(mgr))
+    assert r.json() == {"schema_version": 1, "template": "aqb-default", "overrides": {}}
+    assert any("结构不符" in rec.message for rec in caplog.records)

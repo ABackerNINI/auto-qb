@@ -1,14 +1,17 @@
-"""键盘快捷键守阵 (计划 26-09-28-0354 W1-W4 第一波; 引擎在 shared/shortcuts.js)。
+"""键盘快捷键守阵 (计划 26-09-28-0354 W1-W7 全波; 引擎与面板在 shared/shortcuts.js)。
 
 守什么: 注册表是键位**单一事实源**(表外无键位), 而前端无 JS 测试框架 —— 键位冲突、黑名单
 越界、危险档键位形态、run 指到不存在的方法, 这些错误全部**静默**(不报错只是键不响/误触),
 只能靠静态断言钉住。挂载成对(三份 tpl-manifest + app.mixin)由本文件与 test_web.py 的
 _scan_mixin_wiring 双保险。光标滚动跟随禁 scrollIntoView、模态默认焦点/Enter 确认(§08)、
-Delete 直连注册表外, 均为本波拍板的口径, 逐条落断言。
+Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部作用域(drawer/settings/modal
+三档 + 浮层放行焦点局部)与 W6 自定义(适配器 /api/keys / 录制器 / 冲突三选一 / 帮助浮层 /
+设置页分区)逐条接线断言见下半部; 后端端点行为测试在 test_web.py(GET 兜底链 / PUT 422 / 金清单)。
 
 ## 测试计划
 
-- test_registry_single_source: 注册表 id 唯一 / def 归一化串合法 / scope 合法 / group+label 非空
+- test_registry_single_source: 注册表 id 唯一 / def 归一化串合法 / scope 合法 / group+label 非空;
+  全波激活: 非 fixed 条目必须带 run(run: null 仅允许 fixed 的 Esc 展示条目)
 - test_danger_keys_two_combo_and_pinned: 危险档默认键一律二键组合(修饰键+字母), 且 §08 v4 三条
   逐字钉住(删除 Shift+KeyD / 重新校验 Shift+KeyY / 强制汇报 Shift+KeyA; 超级做种空位)
 - test_default_keys_no_conflict_and_no_blacklist: 非 fixed 非空默认键两两不同, 且不碰浏览器黑名单
@@ -26,6 +29,21 @@ Delete 直连注册表外, 均为本波拍板的口径, 逐条落断言。
   (Enter 即确认 = 按钮原生行为; Esc 取消走退栈链)
 - test_cursor_scroll_follow_without_scrollintoview: shortcuts.js 无 scrollIntoView;
   columns.js 留存 _rowPre 前缀和; 光标视觉 .kb-cursor 在共用 CSS 与三张行模板成对
+- test_local_scope_wiring: G 组抽屉四条 scope=drawer + run 走 drawerTab; settings-save
+  inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope 五值三档(settings/drawer/list)齐全;
+  浮层打开只放行焦点局部(drawer/settings)键位; 非 inputSafe 条目不得标 inputSafe
+- test_modal_whitelist_branch: 引擎含模态白名单分流(modal 条目仅模态内响应, 模态内非模态键位一律失效)
+- test_recorder_and_panel_wiring: 录制器按下即录(捕获段监听+stopPropagation) / 纯修饰键拒收 /
+  Esc 取消 / 黑名单当场拒绑 / 冲突三选一(交换/覆盖对方置空/取消) / 单条与全部重置 /
+  空串=显式禁用语义保留 / danger 裸键提示但允许 / 面板保存 PUT 失败本地回滚 /
+  离开守卫挂 hubGo+hubBack 且未保存先确认
+- test_adapter_and_backend_endpoints: AQB_KEYS.load 同步快照 / save PUT /api/keys / reload GET /
+  脏数据 sanitize 兜底; keys.py 落 routes 注册表; 存储路径与 web.token 同寻址(state_file 同目录)
+- test_help_overlay_wiring: help-panel run -> kbOpenHelp; kbHelpOpen 在 state.js 根选项;
+  Esc 退栈链 / escBusy / _kbOverlayBusy 三处名单同步; 帮助浮层模板(只读速查 + 前往设置链接)
+- test_settings_panel_section: settings-detail 有 hub.view === 'keys' 分支(录制/禁用/重置/
+  冲突三选一/保存放弃全套钮); config_hub 首页卡+hubNow+hubRestore 认 "keys";
+  console_hub.css 有 .kb-row 样式
 """
 
 from __future__ import annotations
@@ -111,8 +129,10 @@ def _bundle_method_names() -> set[str]:
 BLACKLIST = set()
 for _c in ("KeyW", "KeyT", "KeyN", "KeyQ"):
     BLACKLIST |= {f"Ctrl+{_c}", f"Ctrl+Shift+{_c}"}
-BLACKLIST |= {"Ctrl+Tab", "Ctrl+Shift+Tab", "F5", "F11", "F12", "Ctrl+Shift+KeyN",
-              "Ctrl+Shift+KeyI", "Ctrl+Shift+KeyJ", "Ctrl+Shift+KeyC"}
+BLACKLIST |= {
+    "Ctrl+Tab", "Ctrl+Shift+Tab", "F5", "F11", "F12", "Ctrl+Shift+KeyN", "Ctrl+Shift+KeyI", "Ctrl+Shift+KeyJ",
+    "Ctrl+Shift+KeyC"
+}
 BLACKLIST |= {f"Ctrl+Digit{i}" for i in range(1, 9)}
 
 
@@ -125,12 +145,13 @@ def test_registry_single_source() -> None:
         assert it["scope"] in KB_SCOPES, f"{it['id']} scope 非法: {it['scope']}"
         assert not it["def"] or KB_DEF_RE.match(it["def"]), f"{it['id']} def 归一化串非法: {it['def']!r}"
         # 修饰键必须按固定序出现(Ctrl,Alt,Shift,Meta), 否则同一键位有两种写法, 冲突检测失明
-        assert not it["def"] or re.fullmatch(r"(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*", it["def"]), it["id"]
+        assert not it["def"] or re.fullmatch(r"(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*",
+                                             it["def"]), it["id"]
         if it["def"]:
             assert not it["def"].startswith("Meta"), f"{it['id']} 默认键用 Meta(mac Cmd 全族不可拦)"
-        # 本波(W1-W4)只激活 A-D 组: 未激活条目必须 run: null, 防"注册了就活"越波次
+        # 全波激活(W1-W7): 非 fixed 条目必须带 run; run: null 仅允许 fixed 的 Esc 展示条目
         if it["run_null"]:
-            assert not it["runs"], f"{it['id']} 声明 run: null 却带 vm 调用"
+            assert it["fixed"], f"{it['id']} 未激活(run: null)却不是 fixed —— 波次收尾后表外无空条目"
         else:
             assert it["runs"], f"{it['id']} 激活条目必须有 run"
 
@@ -143,9 +164,8 @@ def test_danger_keys_two_combo_and_pinned() -> None:
         if not v:
             continue
         parts = v.split("+")
-        assert len(parts) == 2 and parts[0] in ("Ctrl", "Alt", "Shift") and parts[1].startswith("Key"), (
-            f"危险档 {k} 默认键 {v!r} 不是二键组合(修饰键+字母)"
-        )
+        assert len(parts) == 2 and parts[0] in ("Ctrl", "Alt", "Shift"
+                                               ) and parts[1].startswith("Key"), (f"危险档 {k} 默认键 {v!r} 不是二键组合(修饰键+字母)")
     # 逐字钉住 §08 v4 终版(改键必须先改拍板, 再改这里与计划)
     assert danger.get("act-delete") == "Shift+KeyD", "删除默认键必须是 Shift+KeyD(另有 Delete 直连)"
     assert danger.get("act-recheck") == "Shift+KeyY", "重新校验默认键必须是 Shift+KeyY"
@@ -160,9 +180,7 @@ def test_default_keys_no_conflict_and_no_blacklist() -> None:
         if not it["def"] or it["fixed"]:
             continue
         assert it["def"] not in BLACKLIST, f"{it['id']} 默认键 {it['def']} 撞浏览器黑名单(preventDefault 无效)"
-        assert it["def"] not in seen, (
-            f"默认键 {it['def']} 被 {it['id']} 与 {seen[it['def']]} 同时占用 —— 后者被静默覆盖"
-        )
+        assert it["def"] not in seen, (f"默认键 {it['def']} 被 {it['id']} 与 {seen[it['def']]} 同时占用 —— 后者被静默覆盖")
         seen[it["def"]] = it["id"]
 
 
@@ -190,12 +208,8 @@ def test_mount_pairing_three_shells() -> None:
     life = _read("lifecycle.js")
     esc_chain_at = life.find('e.key !== "Escape"')
     kb_at = life.find('document.addEventListener("keydown", this._kbKeyDown)')
-    assert esc_chain_at >= 0 and kb_at > esc_chain_at, (
-        "引擎 keydown 必须注册在 Esc 退栈链之后(注册序 = 触发序; 链序不回归是 W1 验收口径)"
-    )
-    assert 'document.removeEventListener("keydown", this._kbKeyDown)' in life, (
-        "unmounted 必须撤掉引擎监听(防热重载句柄堆叠)"
-    )
+    assert esc_chain_at >= 0 and kb_at > esc_chain_at, ("引擎 keydown 必须注册在 Esc 退栈链之后(注册序 = 触发序; 链序不回归是 W1 验收口径)")
+    assert 'document.removeEventListener("keydown", this._kbKeyDown)' in life, ("unmounted 必须撤掉引擎监听(防热重载句柄堆叠)")
 
 
 def test_engine_input_suppression() -> None:
@@ -218,12 +232,11 @@ def test_delete_direct_outside_registry() -> None:
     for it in _registry():
         assert it["def"] != "Delete", "Delete 键不进注册表(§08 v4: 额外删除操作直连, 不占键表槽位)"
     eng = _read("shortcuts.js")
-    m = re.search(r'if \(e\.code === "Delete"(.*?)\n        \}', eng, re.S)
+    m = re.search(r'if \(!inInput && e\.code === "Delete"(.*?)\n        \}', eng, re.S)
     assert m and "_kbDelete()" in m.group(1), "引擎未直连 Delete -> _kbDelete(§08 决策 v4)"
+    assert "_kbOverlayBusy()" in m.group(1) and '"list"' in m.group(1), ("Delete 直连必须带浮层屏蔽与 list 作用域守卫(输入态/浮层下不得误删)")
     body = re.search(r"async _kbDelete\(\) \{(.*?)\n  \},", eng, re.S)
-    assert body and "_deleteFlow(" in body.group(1), (
-        "_kbDelete 必须走 _deleteFlow(与批量浮条同链: 确认框 + HR 风险点名不可绕过)"
-    )
+    assert body and "_deleteFlow(" in body.group(1), ("_kbDelete 必须走 _deleteFlow(与批量浮条同链: 确认框 + HR 风险点名不可绕过)")
 
 
 def test_danger_kbact_has_confirm() -> None:
@@ -245,9 +258,8 @@ def test_modal_default_focus_and_enter() -> None:
     assert m, "模态确定钮缺 ref=modalOk(计划 §08: 默认焦点在确定, Enter 即确认)"
     fb = _read("ui_feedback.js")
     open_at = fb.find("_openModal(cfg)")
-    assert open_at >= 0 and fb.find("this.$refs.modalOk", open_at) > open_at, (
-        "_openModal 必须在无输入形态时把默认焦点落到 modalOk(Enter 即确认; Esc 取消走退栈链)"
-    )
+    assert open_at >= 0 and fb.find("this.$refs.modalOk",
+                                    open_at) > open_at, ("_openModal 必须在无输入形态时把默认焦点落到 modalOk(Enter 即确认; Esc 取消走退栈链)")
 
 
 def test_cursor_scroll_follow_without_scrollintoview() -> None:
@@ -256,16 +268,12 @@ def test_cursor_scroll_follow_without_scrollintoview() -> None:
         "光标滚动跟随禁用 scrollIntoView(逐层滚动可滚祖先会连带滚整页, "
         "pitfalls web-ui/hover-keynav-fight) —— 用 getBoundingClientRect/前缀和差值"
     )
-    assert "this._rowPre" in eng and "_rowPre[kind]" in eng, (
-        "窗口化未渲染行必须用 _rowWindow 留存的前缀和换算 y(计划 W2)"
-    )
+    assert "this._rowPre" in eng and "_rowPre[kind]" in eng, ("窗口化未渲染行必须用 _rowWindow 留存的前缀和换算 y(计划 W2)")
     cols = _read("columns.js")
-    assert re.search(r"this\._rowPre\[kind\] = pre;", cols), (
-        "columns.js._rowWindow 必须把前缀和留存进 this._rowPre[kind](键盘光标滚动进视口依赖)"
-    )
-    assert ".kb-cursor" in (SHARED / "console_hub.css").read_text(encoding="utf-8"), (
-        "光标行视觉 .kb-cursor 必须在共用层 CSS(三套 UI 同载)"
-    )
+    assert re.search(r"this\._rowPre\[kind\] = pre;",
+                     cols), ("columns.js._rowWindow 必须把前缀和留存进 this._rowPre[kind](键盘光标滚动进视口依赖)")
+    assert ".kb-cursor" in (SHARED / "console_hub.css").read_text(encoding="utf-8"
+                                                                 ), ("光标行视觉 .kb-cursor 必须在共用层 CSS(三套 UI 同载)")
     for tpl, kind, idexpr in [
         ("groups.html", "group", "g.key"),
         ("torrents.html", "torrent", "m.hash"),
@@ -276,3 +284,130 @@ def test_cursor_scroll_follow_without_scrollintoview() -> None:
     shows = (SHARED / "tpl" / "shows.html").read_text(encoding="utf-8")
     assert ':data-key="s.key"' in shows, "剧行缺 data-key(光标定位锚点, W2)"
     assert ':data-key="showEpRowId(' in shows, "集行缺 data-key(光标定位锚点, W2)"
+
+
+def test_local_scope_wiring() -> None:
+    """W5 局部作用域: G 组接线 + 引擎 scope 三档齐全 + 浮层放行焦点局部"""
+    items = {it["id"]: it for it in _registry()}
+    for tid, tab in [
+        ("drawer-tab-general", "general"), ("drawer-tab-trackers", "trackers"), ("drawer-tab-peers", "peers"),
+        ("drawer-tab-content", "content")
+    ]:
+        it = items[tid]
+        assert it["scope"] == "drawer", f"{tid} 必须是 drawer 作用域"
+        assert it["def"].startswith("Alt+Digit"), f"{tid} 默认键应为 Alt+1-4"
+        assert f'vm.drawerTab("{tab}")' in _read("shortcuts.js"), f"{tid} run 未走 drawerTab"
+    save = items["settings-save"]
+    assert save["scope"] == "settings" and save["inputSafe"], "settings-save 必须 settings 作用域 + inputSafe"
+    assert save["def"] == "Ctrl+KeyS", "settings-save 默认键必须是 Ctrl+KeyS"
+    eng = _read("shortcuts.js")
+    # scope 三档(设置页/抽屉/列表; modal 在派发处分流)
+    for needle in ('this.page === "settings"', "this.drawer.open", 'return "list";'):
+        assert needle in eng, f"_kbScope 缺档: {needle}"
+    # 浮层打开只放行焦点局部(drawer/settings)自身的键位, 其余一律失效
+    assert 'scope !== "drawer" && scope !== "settings"' in eng, ("浮层放行分支必须只认 drawer/settings 局部键位(列表键位在浮层下仍失效)")
+    # inputSafe 只允许 settings 作用域(输入框内放行的键位不该作用于列表页)
+    for it in _registry():
+        if it["inputSafe"]:
+            assert it["scope"] == "settings", f"{it['id']} inputSafe 条目必须 settings 作用域"
+
+
+def test_modal_whitelist_branch() -> None:
+    """W5: 模态层白名单 —— 模态内只响应模态键位(计划 §5.1 输入态三段之三)"""
+    eng = _read("shortcuts.js")
+    assert 'item.scope === "modal"' in eng and "!this.modal.visible" in eng, ("引擎必须含 modal 白名单分流: modal 条目仅模态层内响应")
+    assert "} else if (this.modal.visible) {" in eng, ("模态打开时非模态条目必须一律失效(列表/全局键位不得穿透模态)")
+
+
+def test_recorder_and_panel_wiring() -> None:
+    """W6 面板与录制器(§5.2): 录制/取消/黑名单/冲突三选一/重置/禁用/保存/离开守卫"""
+    eng = _read("shortcuts.js")
+    # 录制器: 捕获段监听 + stopPropagation(录制态按键不进引擎/退栈链/hubOnKey)
+    for needle, why in [
+        ('document.addEventListener("keydown", this._kbRecHandler, true)', "录制走捕获段监听(先于引擎)"),
+        ("e.stopPropagation()", "录制态按键必须截断, 引擎与退栈链收不到"),
+        ("KB_MODIFIER_CODES.has(e.code)", "纯修饰键拒收(§3.3)"),
+        ('e.key === "Escape"', "Esc 取消录制"),
+        ("kbInBlacklist(serial)", "黑名单当场拒绑(§3.3 边界)"),
+        ("kbSerializeEvent(e)", "按下即录走归一化序列(与引擎同一序列化单点)"),
+    ]:
+        assert needle in eng, f"录制器缺实现: {why}"
+    # 冲突三选一: 交换 / 覆盖(对方置空) / 取消
+    body = re.search(r"kbConflictResolve\(mode\) \{(.*?)\n  \},", eng, re.S)
+    assert body, "缺 kbConflictResolve(冲突三选一落点)"
+    text = body.group(1)
+    assert 'mode === "swap"' in text and 'mode === "steal"' in text, "冲突必须含交换/覆盖两支"
+    assert 'ov[other.id] = ""' in text, "覆盖语义 = 对方置空(空串=显式禁用, 不能丢)"
+    # 重置单条/全部 + 空串禁用
+    assert "kbResetAll" in eng and "kbResetRow" in eng and "kbDisableRow" in eng, "缺重置/禁用入口"
+    # 保存语义: PUT 失败本地回滚; 成功提示跨浏览器刷新生效
+    save = re.search(r"async kbSaveKeys\(\) \{(.*?)\n  \},", eng, re.S)
+    assert save and "kbDraftRevert()" in save.group(1), "保存失败必须本地回滚(§4.4)"
+    # 危险档: danger 裸键提示但允许(§08 v4)
+    assert 'item.danger && serial && !serial.includes("+"' in eng, "danger 绑裸键必须提示(允许)"
+    # 面板离开守卫: 未保存先确认, 且同时挂在 hubGo 与 hubBack
+    hub = _read("config_hub.js")
+    for fn in ("hubGo(key) {", "hubBack() {"):
+        at = hub.find(fn)
+        assert at >= 0 and hub.find("kbGuardLeave",
+                                    at) < hub.find("this.hub.view",
+                                                   at), (f"{fn.split('(')[0]} 必须先过 kbGuardLeave 离开守卫(未保存提示, §5.2)")
+    assert "kbGuardLeave(target)" in eng and 'this.hub.view !== "keys"' in eng, "缺离开守卫实现"
+
+
+def test_adapter_and_backend_endpoints() -> None:
+    """W6 存储链: 适配器三口(load 同步/save PUT/reload GET) + 后端单点路由"""
+    eng = _read("shortcuts.js")
+    assert "/api/keys" in eng, "适配器未指向 /api/keys"
+    for needle, why in [
+        ("async reload(token)", "reload: GET 服务端真值(启动/开面板时拉)"),
+        ("async save(doc, token)", "save: PUT 整份替换(§4.4)"),
+        ("load() {", "load 必须保持同步快照(引擎 keydown 内现取, 不 await)"),
+        ("_sanitize(doc)", "服务端脏数据第二道兜底(版本不识别/结构不符回默认)"),
+    ]:
+        assert needle in eng, f"适配器缺口: {why}"
+    keys_py = (ROOT / "src" / "auto_qb" / "webui" / "server" / "routes" / "keys.py").read_text(encoding="utf-8")
+    assert "webui-keys.json" in keys_py, "后端存储文件名必须是 webui-keys.json(计划 §4.4)"
+    assert "manager.state_file" in keys_py, "存储路径必须与 web.token 同寻址(state_file 同目录)"
+    assert "atomic_write(" in keys_py and "keep_backup=True" in keys_py, "写盘必须走 atomic_write + .bak"
+    init = (ROOT / "src" / "auto_qb" / "webui" / "server" / "routes" / "__init__.py").read_text(encoding="utf-8")
+    assert "_keys.build_router" in init, "keys 路由未注册进 ROUTE_BUILDERS"
+    # state.js 根选项: 面板/浮层状态不许进 app.mixin(pitfalls web-ui/frontend-split)
+    state_js = _read("state.js")
+    for field in ("kbHelpOpen: false", "kbDraft: null", "kbSaved: null", "kbRecId:", "kbConflict: null"):
+        assert field in state_js, f"state.js 缺根选项字段 {field.split(':')[0]}"
+    polling = _read("polling.js")
+    assert "_kbReloadKeys(true)" in polling, "startPolling(两条登录路径唯一汇合点)必须拉一次键位真值"
+
+
+def test_help_overlay_wiring() -> None:
+    """W6 H 组: 帮助浮层(只读速查 + 前往设置自定义)"""
+    eng = _read("shortcuts.js")
+    assert "kbOpenHelp()" in eng, "help-panel run 未接 kbOpenHelp"
+    assert "kbGoSettings()" in eng, "帮助浮层缺「前往设置自定义」链路"
+    life = _read("lifecycle.js")
+    chain_at = life.find('e.key !== "Escape"')
+    kb_at = life.find("this.kbHelpOpen = false")
+    assert chain_at >= 0 and kb_at > chain_at, "帮助浮层必须进 lifecycle Esc 退栈链"
+    assert "this.kbHelpOpen" in _read("dialogs.js"), "escBusy 必须同步 kbHelpOpen(新增浮层两处同步守则)"
+    assert "this.kbHelpOpen" in eng, "_kbOverlayBusy 必须同步 kbHelpOpen(浮层打开时列表键位失效)"
+    pop = (SHARED / "tpl" / "popovers.html").read_text(encoding="utf-8")
+    for needle in ('v-if="kbHelpOpen"', "kbGroups()", "kbEntriesOf(grp)", "kbGoSettings()"):
+        assert needle in pop, f"帮助浮层模板缺 {needle}"
+
+
+def test_settings_panel_section() -> None:
+    """W6 设置页「快捷键」分区: 模板分支 + 首页卡/元信息/恢复 + CSS"""
+    detail = (SHARED / "tpl" / "settings-detail.html").read_text(encoding="utf-8")
+    assert "hub.view === 'keys'" in detail, "settings-detail 缺快捷键分区分支"
+    for needle in (
+        "kbRecord(it.id)", "kbDisableRow(it)", "kbResetRow(it)", "kbResetAll()", "kbSaveKeys()", "kbDraftRevert()",
+        "kbConflictResolve(", "kbDisplayName(kbSerialOf(it))"
+    ):
+        assert needle in detail, f"快捷键面板缺交互 {needle}"
+    hub = _read("config_hub.js")
+    for needle in ('key: "keys"', 'hub.view === "keys"', 'v === "keys"'):
+        assert needle in hub, f"config_hub 缺 keys 分区接线: {needle}"
+    css = (SHARED / "console_hub.css").read_text(encoding="utf-8")
+    for cls in (".kb-row", ".kb-grp-t", ".kb-help", ".kb-conflict", ".kb-danger"):
+        assert cls in css, f"console_hub.css 缺 {cls}(挂件类名必须有对应规则)"

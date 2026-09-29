@@ -123,6 +123,60 @@
                 </template>
               </template>
 
+              <!-- 快捷键分区(W6, 计划 26-09-28-0354 §5.2): 客户端块, 不进配置 schema
+                   (与「运行日志」块同款先例); 数据走 GET/PUT /api/keys, 方法在 shortcuts.js -->
+              <template v-else-if="hub.view === 'keys'">
+                <div class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">键位自定义</span>
+                    <span class="bh-n">点「录制」后按下组合键即录入 · Esc 取消录制 · 禁用 = 空键位</span>
+                    <span class="bh-r">
+                      <button class="hb-btn ghost sm" :disabled="kbKeysLoading" @click="kbPanelEnter()">重新加载</button>
+                      <button class="hb-btn ghost sm" :disabled="!kbDirty()" @click="kbDraftRevert()">放弃改动</button>
+                      <button class="hb-btn ghost sm" :disabled="kbKeysLoading" @click="kbResetAll()">全部重置</button>
+                      <button class="hb-btn primary sm" :disabled="!kbDirty() || kbKeysLoading" @click="kbSaveKeys()">保存</button>
+                    </span>
+                  </div>
+                  <div style="padding:12px 14px">
+                    <p v-if="kbKeysLoading" class="hb-hp">正在读取服务端键位…</p>
+                    <p class="kb-note">
+                      键位存于服务端 webui-keys.json, 所有浏览器共享; 保存后当前页即时生效,
+                      其它标签/浏览器刷新后生效。浏览器保留键(Ctrl+W/T/N/Q 等)不可绑定;
+                      标 ⚠ 的危险操作触发时有确认框兜底。
+                    </p>
+                    <div v-for="grp in kbGroups()" :key="grp" class="kb-grp">
+                      <div class="kb-grp-t">{{ grp }}</div>
+                      <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-row"
+                           :class="{ rec: kbRecId === it.id }">
+                        <span class="kb-row-label">
+                          {{ it.label }}
+                          <span v-if="it.danger" class="kb-danger">⚠ 危险操作{{ kbHasConfirm(it) ? ' (有确认框)' : '' }}</span>
+                          <span v-if="it.fixed" class="hb-badge on">固定</span>
+                        </span>
+                        <span class="kb-row-keys">
+                          <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>
+                          <span v-else class="kb-none">未绑定</span>
+                        </span>
+                        <span class="kb-row-acts">
+                          <template v-if="!it.fixed">
+                            <button class="hb-btn ghost sm" @click="kbRecord(it.id)">{{ kbRecId === it.id ? '取消' : '录制' }}</button>
+                            <button v-if="kbSerialOf(it)" class="hb-btn ghost sm" title="禁用该动作(空键位)" @click="kbDisableRow(it)">禁用</button>
+                            <button v-if="kbIsOverridden(it)" class="hb-btn ghost sm" title="恢复默认键位" @click="kbResetRow(it)">重置</button>
+                          </template>
+                        </span>
+                        <span v-if="kbRecId === it.id" class="kb-rec-tip">按下组合键…(Esc 取消, 纯修饰键不收)</span>
+                        <div v-if="kbConflict && kbConflict.id === it.id" class="kb-conflict">
+                          <span>{{ kbDisplayName(kbConflict.serial) }} 已绑定为「{{ kbConflict.otherLabel }}」</span>
+                          <button class="hb-btn sm" @click="kbConflictResolve('swap')">交换</button>
+                          <button class="hb-btn sm" @click="kbConflictResolve('steal')">覆盖(对方置空)</button>
+                          <button class="hb-btn ghost sm" @click="kbConflict = null">取消</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
               <!-- 运行日志(2026-09-26 并入「常规」分区页尾, 不再单列首页卡/独立分区; 2026-09-28 起默认折叠):
                    等级/行数变更与刷新均手动触发, 不自动轮询; 首次展开才拉一次(config_hub.js hubLogsToggle) -->
 

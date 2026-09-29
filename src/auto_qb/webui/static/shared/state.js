@@ -174,6 +174,13 @@ window.AQB_STATE = {
       // 按身份不按下标(轮询整表替换/排序后由 _kbMove 按身份重定位); 视觉为虚线描边,
       // 与选中底色是两套语义, 不合并(0822 §04)
       kbCursor: null,
+      // 键盘快捷键 W6(计划 26-09-28-0354): 帮助浮层 + 设置页自定义面板/录制器(方法在 shortcuts.js)
+      kbHelpOpen: false,      // ? 帮助浮层(只读速查, Shift+Slash 打开; Esc/导航关闭 —— 归退栈链)
+      kbDraft: null,          // 面板工作副本 {schema_version, template, overrides}(null = 未初始化)
+      kbSaved: null,          // 最近一次保存的服务端真值副本(面板脏检测基准)
+      kbRecId: "",            // 正在录制的 action id("" = 不在录制态)
+      kbConflict: null,       // 录制冲突待决 {id, serial, other, otherLabel}(三选一: 交换/覆盖/取消)
+      kbKeysLoading: false,   // 面板打开/重载时拉取服务端真值中
       selAnchorGroup: null,   // 分组表 Shift 锚点(组 key; shift 后不更新, 便于多次扩展同一范围)
       selAnchorMember: null,  // 明细表 Shift 锚点(成员 hash)
       selAnchorUnit: null,    // FX-12: 追剧页 Shift 锚点(剧/集单元 id)

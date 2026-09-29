@@ -1018,3 +1018,69 @@
   outline: 1px dashed var(--accent, #5cc0cf);
   outline-offset: -1px;
 }
+
+/* ---------------- 键盘快捷键: 自定义面板(W6)与帮助浮层(计划 26-09-28-0354 §5.2) ----------------
+ * 面板在设置页「快捷键」分区(共用 .hb-blk 外壳), 行内三段: 动作名 / 当前键帽 / 录制-禁用-重置;
+ * 帮助浮层是只读速查(分组 + 键帽), 与面板共用键帽(kbd)与危险标注样式。颜色全走主题令牌。 */
+.kb-note { color: var(--fg-muted); font-size: 12px; margin: 0 0 10px; }
+.kb-grp { margin-bottom: 14px; }
+.kb-grp-t {
+  font: 600 11px/1 var(--hb-font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hi, var(--accent));
+  padding: 6px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+.kb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 2px;
+  border-bottom: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+.kb-row.rec { background: var(--accent-soft); }
+.kb-row-label { flex: 1 1 200px; min-width: 160px; }
+.kb-danger { color: var(--warn); font-size: 12px; }
+.kb-row-keys kbd, .kb-help-row kbd {
+  font: 500 11px/1 var(--hb-font-mono);
+  color: var(--fg);
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+}
+.kb-none { color: var(--fg-muted); font-size: 12px; }
+.kb-row-acts { display: inline-flex; gap: 6px; }
+.kb-rec-tip { color: var(--accent-hi, var(--accent)); font-size: 12px; }
+.kb-conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  border: 1px solid var(--warn-soft, var(--border));
+  background: var(--warn-soft);
+  font-size: 12px;
+}
+.kb-help { width: min(560px, 92vw); }
+.kb-help-body { max-height: 60vh; overflow-y: auto; padding: 4px 18px 10px; }
+.kb-help-grp-t {
+  font: 600 11px/1 var(--hb-font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hi, var(--accent));
+  padding: 10px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+.kb-help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 2px;
+  border-bottom: 1px dashed var(--border);
+}
+.kb-help-label { flex: 1; }
+.modal-actions .kb-note { margin: 0; }

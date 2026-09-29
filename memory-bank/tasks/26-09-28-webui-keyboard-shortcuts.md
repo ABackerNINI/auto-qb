@@ -30,8 +30,8 @@
 | 1 | 前案 0822 可行性分析 | Done (26-09-26) |
 | 2 | 成熟方案调研(产品/库/坑/上游) + 存储对比分析 → 计划 26-09-28-0354 | Done |
 | 3 | §08 六个决策点拍板(核心: 存储定案) | Done (2026-09-30 全部拍板, ①③改向见进度日志) |
-| 4 | W1-W7 实施 | In Progress (W1-W4 Done 2026-09-30, 未提交; W5-W7 待开工) |
-| 5 | 收尾回写(基线/progress/pitfalls) | In Progress (当波基线切片已立; 全波收尾待 W7) |
+| 4 | W1-W7 实施 | Done (W1-W4 2026-09-30 第一波; W5-W7 2026-09-30 第二波, 未提交) |
+| 5 | 收尾回写(基线/progress/pitfalls) | Done (两波基线切片 26-09-30-0555 / 26-09-30-0702; 新坑 js-comment-terminator) |
 
 ## 进度日志
 
@@ -45,3 +45,8 @@
   - 与计划文字偏差两处: ①注册表落地 55 条(51 默认+4 空位)而非 58 —— H2(面板 Esc)归 W6 面板自身不进注册表; I 组文件优先级 x4 / 按列排序未注册(0822 自评「需二层光标, 复杂度不划算」/「绑键不现实」), W6 面板动工时再议补齐。②危险档确认框无逐条接线 —— 模态原语统一实现默认焦点+Enter 确认(§08 对确认框的要求由 _openModal 单点满足, 删除类既有确认框同样受益)。
   - 实施前既有红 3 条(计划会话遗留, 已修): 任务档案 Status「Ready」与计划 doc-status「拍板齐, 待实施」不在守阵词表 → 改 In Progress + kb.index 重建。
   - 冒烟既有失败 3 项(dev.harness, stash 前后对照确认先在、与本波无关): 追剧集行 CTX-03 多选右键(确定性)、辅种组行 CTX-03(抖动)、列设置隐藏列宽保留(确定性) —— 未修(范围守恒), 已入池 issues/26-09-30-0602-test-ui-smoke-ctx03-multiselect 与 26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve(2026-09-30)。
+- 2026-09-30 06:00 W1-W4 第一波提交入库(38ffec5, 用户「提交」指令)。
+- 2026-09-30 07:02 **W5-W7 第二波实施完成, 未提交**(等用户「提交」指令; 基线 [26-09-30-0702](../testing/baselines/26-09-30-0702-webui-keyboard-w5w7.md), test.full **1813 passed + 3 skipped / 91%**, 较第一波 +11 条):
+  - **W5 绑定+局部作用域**: E/F/I 组 run 全量接线(单目标动作目标解析要求恰一 hash —— `_kbSingleHash`, 多选/整组/剧集单元一律提示不猜第一个; 复用 editMove/editRename/copyTorrentInfo/exportTorrent/torrentCmd 既有单种链, 不另写实现); `_kbScope` 三档全量生效(设置页/抽屉/列表), 抽屉 Alt+1-4 切页, 设置页 Ctrl+S inputSafe, 引擎模态白名单分流(模态内只响应模态键位, 本期注册表无 modal 条目, 预留分支由静态守阵钉住); 浮层打开只放行焦点局部(drawer/settings)键位, 列表键位在浮层下仍失效; Delete 直连分支随引擎重构并入无条目路径并补浮层+作用域守卫。
+  - **W6 后端持久化+面板**: 新 routes/keys.py —— GET/PUT /api/keys, 存储 auto-qb-data/webui-keys.json(与 web.token 同寻址), 读时兜底链 主文件→.bak→默认表(逐级 WARN), PUT 结构校验 422 不触碰磁盘 + atomic_write keep_backup, 金清单 +2; 适配器接通(AQB_KEYS.reload/save, **load 保持同步快照**——引擎 keydown 内现取不 await; startPolling 作为两条登录路径唯一汇合点拉真值, 失败静默回默认表); 设置页「快捷键」分区(首页卡+hubNow+hubRestore 认 keys, 客户端块同「运行日志」先例): VS Code 按下即录录制器(捕获段监听+stopPropagation, 引擎/退栈链/hubOnKey 都收不到), 纯修饰键拒收 / Esc 取消 / 黑名单当场拒绑 / 冲突三选一(交换/覆盖对方置空/取消) / 单条与全部重置 / 空串=显式禁用 / danger 裸键提示但允许 / 保存 PUT 失败本地回滚 / 离开未保存先确认(hubGo+hubBack 双挂 kbGuardLeave); 帮助浮层 Shift+Slash(只读速查 + 前往设置自定义; Esc 归退栈链, 名单三处同步: 退栈链/escBusy/_kbOverlayBusy)。
+  - **W7 守阵+验证**: test_web_shortcuts.py 10→16(+6), test_web.py 金清单+2 与 keys 后端 +5; Playwright 探针 28 项全过(面板/录制器/冲突/保存刷新生效/抽屉 Alt 切页/E-F 组/设置页 Ctrl+S), dev.harness 96 项 prism 无新增失败(同败 2 项既有, 抖动项本轮未复现); 新坑入档 pitfalls/web-ui/js-comment-terminator.md(块注释内 `*/` 提前终止, node --check 仍绿运行时才炸 —— 实测踩中, 探针 pageerror 抓到)。

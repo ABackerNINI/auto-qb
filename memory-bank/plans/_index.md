@@ -12,7 +12,6 @@
 - [26-09-29-2036] [HR 计数对平集成 — 修改计划 (v3.1)](26-09-29-2036-plan-hr-counter-integration.html) — `backend-partial-hr-verify`
 - [26-09-29-1905] [HR 来源标记 · 非文字化设计模板](26-09-29-1905-plan-webui-hr-src-underline.html) — `webui-hr-src-underline`
 - [26-09-28-1805] [计划 · HR 排除功能: 按标签/分类把种子排除出 HR 体系](26-09-28-1805-plan-hr-exclude-tag-category.html) — `hr-exclude-tag-category`
-- [26-09-28-0354] [计划 · WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)](26-09-28-0354-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
 - [26-09-27-1407] [计划 · 文件访问层包装 + 下载目录只读挂载 + 路径映射(docker 兼容)](26-09-27-1407-plan-docker-fs-wrapper-pathmap.html) — `docker-deploy`
 - [26-09-27-1232] [计划 · 暂时移除不成熟的限速统计设计 (upload_size 四条件 + begin_round)](26-09-27-1232-plan-remove-upload-stats.html) — `remove-upload-stats`
 - [26-09-26-0031] [HR 取数代理 · 选项页风格选型(三选一)](26-09-26-0031-plan-hr-ext-options-style.html) — `backend-partial-hr-verify`
@@ -39,6 +38,7 @@
 - [26-09-29-0003] [计划 · WEBUI 设置页「?」说明全面核对与改写](26-09-29-0003-plan-webui-settings-help-rewrite.html) — `webui-settings-help`
 - [26-09-28-1932] [HR 在线核实 · 模型推翻重建计划 · auto-qb](26-09-28-1932-plan-hr-verify-rebuild.html) — `backend-partial-hr-verify`
 - [26-09-28-1834] [计划 · 配置版本升级守卫: 键面基线冻结快照](26-09-28-1834-plan-config-version-guard.html) — `config-version-guard`
+- [26-09-28-0354] [计划 · WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)](26-09-28-0354-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
 - [26-09-28-0201] [auto-qb WEB UI · 搜索框帮助按钮 · 3 版模板(供挑选)](26-09-28-0201-plan-search-help-button-3-proposals.html) — `webui-search-query-syntax`
 - [26-09-28-0157] [沉默即成功 — my-commit-flow 输出契约 v3 (26-09-28-0157)](26-09-28-0157-plan-commands-shipflow-v3.html) — `commands-shipflow-v3`
 - [26-09-28-0037] [备用速度切换按钮 · 三套设计模板 (26-09-28-0037)](26-09-28-0037-plan-alt-speed-toggle.html) — `webui-alt-speed-toggle`
