@@ -332,21 +332,22 @@
 .m-pair.reached { color: var(--green); }
 /* 删除安全档位(2026-09-25, 计划 webui-hr-safety-display): hr-unk = 未核实(中性灰, 与"不适用"
  * 的默认 teal 区分); hr-fail = 未达标终态(2026-09-25 用户修正: 考核期已过、结果已成立,
- * 独立醒目红档, 不与考察中的 pending 橙混用、也不是可删绿); hr-src = 来源徽标(结论来自
- * 优先级链哪一档: 在线/本地/策略/未核, 2 字芯片)。
+ * 独立醒目红档, 不与考察中的 pending 橙混用、也不是可删绿)。
  * 两套 UI 必须同口径 —— 改这里时同步 atlas/style.css 的同名规则。 */
 .m-pair.hr-unk { color: var(--paused); }
 .m-pair.hr-fail { color: var(--error); }
-.m-pair .hr-src {
-  color: var(--fg-muted);
-  font-size: 10px;
-  line-height: 1.5;
-  border: 1px solid var(--border-soft);
-  border-radius: 3px;
-  padding: 0 3px;
-  align-self: center;
-  white-space: nowrap;
-}
+/* HR 来源标记(2026-09-29, 计划 webui-hr-src-underline): 「在线/本地/未核」两字芯片换成非文字底线 ——
+ * 长度(在线整格 / 本地与未核实半格) + 线型(未核实点线) + 明暗(本地 50% 兜底) 三重编码;
+ * 线色一律 currentColor 跟随上面的档位色, 不引入新令牌。已排除 / 无 HR 不产线(无线 = 没有来源结论),
+ * 文案进 title。三套 UI 同口径 —— 改这里时同步 atlas/css/views.css 与 console/css/views.css。
+ * ❗半格线是空 <i>: 绝对定位只给 left:0 而 width:auto 会收缩成 0(整条不可见), 必须显式 width:100%。 */
+.m-pair.m-dur { position: relative; --dur-pad: 6px; padding-bottom: var(--dur-pad); }
+.m-dur .dur-val { position: relative; display: inline-block; }
+.m-dur .hr-line { position: absolute; left: 0; height: 2px; background: currentColor; }
+.m-dur > .hr-line { bottom: 0; width: 100%; }                                    /* 整格: 在线 */
+.m-dur .dur-val > .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; }   /* 半格: 本地/未核实 */
+.m-dur.src-local .hr-line { opacity: .5; }
+.m-dur.src-unver .hr-line { height: 0; border-bottom: 2px dotted currentColor; opacity: .8; }
 
 /* 校验中呼吸 */
 .g-status.k-checking .ico, .member-row.checking .m-state .dot { animation: pulse-soft 1.6s ease-in-out infinite; }

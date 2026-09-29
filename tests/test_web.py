@@ -111,7 +111,7 @@
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
 - test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
-- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcBadge/hrPopEnter 触发 + 弹窗单例 DOM 每套 UI 恰一份、两套 CSS 的 hr-unk/hr-src/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
+- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-unk/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -1606,14 +1606,17 @@ def test_frontend_hr_safety_wiring():
     """删除安全档位的前端接线守阵(2026-09-25, 计划 webui-hr-safety-display)
 
     四类"字段/令牌打错 = pytest 全绿但页面静默空白或配色失效"的故障形态, 一律机械钉住:
-    ① hr.js 的 token 映射表(HR_SRC_BADGES / HR_SRC_BUCKETS)必须与后端 resolve.py 的 SRC_* 常量
-      逐字一致 —— 来源档位是前后端契约, 打错字徽标静默消失;
-    ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + 挂 hrSrcBadge/
-      hrPopEnter 触发 —— 漏一处那一列就不显示安全档位/悬停弹窗; 弹窗单例 DOM(teleport body)
-      每套 UI 恰一份(26-09-26-webui-hr-popup 起 :title 换成悬停弹窗触发);
+    ① hr.js 的 token 映射表(HR_SRC_CLASSES / HR_SRC_BUCKETS)必须与后端 resolve.py 的 SRC_* 常量
+      逐字一致 —— 来源档位是前后端契约, 打错字来源标记静默消失; 三档类名还各需一份非空 title 文案
+      (2026-09-29 起徽标非文字化: 线画在单元格里, 文字只进 title —— 缺一份即该档来源读不出来);
+    ② 做种时长列在两套 UI 各 3 处(组内成员/种子页/明细)都必须换绑 hrDurClass + hrSrcClass, 并由
+      hrSrcFull/hrSrcHalf 挂底线 + hrPopEnter 触发 —— 漏一处那一列就不显示安全档位/来源线/悬停弹窗;
+      来源与「已排除」两条文案都经 hrDurHint 进单元格 title(2026-09-29 起行内不留任何文字 chip ——
+      chip 是撑宽这一列的元凶; 已排除 chip 与来源芯片同款, 一并撤掉);
+      弹窗单例 DOM(teleport body)每套 UI 恰一份(26-09-26-webui-hr-popup 起 :title 换成悬停弹窗触发);
       要求时长的渲染门只认「已做种非空 + 有要求」, 不得依赖 hr_triggered(2026-09-29 实报:
       未核/在线行被一并藏掉要求, 只剩孤立的来源芯片);
-    ③ hr-unk / hr-fail / hr-src / bulk-hr-warn 新样式必须两套 CSS 成对定义(改这里时同步另一套的纪律);
+    ③ hr-unk / hr-fail / hr-line / bulk-hr-warn 新样式必须三套 CSS 成对定义(改这里时同步另一套的纪律);
       hr-pop 弹窗规则(浮层/箭头/双轨)同理成对;
     ④ 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
       M4 设置页守阵同款思路)。
@@ -1636,8 +1639,19 @@ def test_frontend_hr_safety_wiring():
         assert m, f"hr.js 缺 const {name}"
         return set(re.findall(r"([a-z_]+):", m.group(1)))
 
-    assert _map_keys("HR_SRC_BADGES") == src_tokens, "HR_SRC_BADGES 键与后端 SRC_* 不一致"
+    assert _map_keys("HR_SRC_CLASSES") == src_tokens, "HR_SRC_CLASSES 键与后端 SRC_* 不一致"
     assert _map_keys("HR_SRC_BUCKETS") == src_tokens, "HR_SRC_BUCKETS 键与后端 SRC_* 不一致"
+    # 非文字化后的来源文案单点: 三档类名各一份非空 title(桶名表不能复用 —— unverified 桶名是空串)
+    m_titles = re.search(r"const HR_SRC_TITLES = \{(.*?)\};", hr_js, re.S)
+    assert m_titles, "hr.js 缺 const HR_SRC_TITLES(来源 title 文案单点)"
+    titles = dict(re.findall(r'"(src-[a-z]+)":\s*"([^"]*)"', m_titles.group(1)))
+    assert set(titles) == {"src-online", "src-local", "src-unver"}, \
+        f"HR_SRC_TITLES 应覆盖三档来源类名, 实测 {sorted(titles)}"
+    assert all(v.strip() for v in titles.values()), "HR_SRC_TITLES 有空文案 —— 该档来源的 title 会是空白"
+    # 「已排除」提示同走 title(2026-09-29: 行内 chip 撤掉后文案不能再散在模板里, 否则改一处漏两处)
+    m_excl = re.search(r'const HR_EXCLUDED_TITLE = "([^"]+)"', hr_js)
+    assert m_excl and m_excl.group(1).strip(), "hr.js 缺 const HR_EXCLUDED_TITLE(已排除 title 文案单点)"
+    assert 'hrDurHint' in hr_js, "hr.js 缺 hrDurHint(来源 + 已排除 的 title 组装)"
     # 四个安全档位(2026-09-25 用户修正起 failed=未达标终态红档): failed 由前端映射 hr-fail 红
     for name in ("HR_SAFETY_CLASSES", "HR_SAFETY_BUCKETS"):
         assert _map_keys(name) == {"danger", "failed", "safe", "unknown"}, f"{name} 键集应为四个安全档位"
@@ -1646,8 +1660,10 @@ def test_frontend_hr_safety_wiring():
     for ui in _UI_ALL:
         html = _ui_aggregate(ui)
         for needle, want in (
-            (':class="hrDurClass(m)"', 3),
-            ('v-if="hrSrcBadge(m)"', 3),
+            (':class="[hrDurClass(m), hrSrcClass(m)]"', 3),
+            (':title="hrDurHint(m)"', 3),  # 来源 + 已排除 文案进 title(行内不再有任何文字 chip)
+            ('v-if="hrSrcHalf(m)"', 3),  # 半格线(本地 / 未核实)画在数值上
+            ('v-if="hrSrcFull(m)"', 3),  # 整格线(在线)画在单元格上
             ('@mouseenter="hrPopEnter($event, m)"', 3),
             ('@mouseleave="hrPopLeave"', 4),  # 3 处触发面 + 弹窗自身(移入弹窗不隐藏)
             ('<teleport to="body">', 1),
@@ -1657,7 +1673,11 @@ def test_frontend_hr_safety_wiring():
             assert got == want, f"{ui} 里 `{needle}` 应出现 {want} 处, 实测 {got}"
         # 旧绑定不得残留(换绑遗漏的形态)
         assert ':class="hrTimeClass(m)"' not in html, f"{ui} 仍有做种时长列挂着旧 hrTimeClass —— 漏换绑"
+        assert "hrSrcBadge" not in html, f"{ui} 仍挂着旧的 2 字来源徽标 hrSrcBadge —— 漏换绑"
         assert "hrDurTitle" not in html, f"{ui} 仍有做种时长列挂原生 :title —— 应已换悬停弹窗触发"
+        # 行内文字 chip 零残留(2026-09-29 非文字化的对象就是这两个 chip, 复活即列宽问题回归)
+        assert 'class="hr-src"' not in html, f"{ui} 做种时长列仍有 .hr-src 文字 chip —— 文案应只走 title"
+        assert ">已排除<" not in html, f"{ui} 做种时长列仍有「已排除」文字 chip —— 应已撤进 title"
         # 要求时长必须「有要求就显示」(2026-09-29 用户实报: 未核/在线行只剩来源芯片, 看不到要求):
         # 门只能是「已做种非空 + 有要求」—— 依赖 hr_triggered 会把未触发行连要求一起藏掉
         assert '"cellSeedingTime(m) && m.hr_req_time"' in html, \
@@ -1673,19 +1693,30 @@ def test_frontend_hr_safety_wiring():
     # ③ 新样式两套 CSS 成对
     atlas_css = _ui_css_aggregate("atlas")
     prism_css = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
-    for css, name in ((atlas_css, "atlas css 聚合(link 序)"), (prism_css, "prism/css/views.css")):
+    console_css = _ui_css_aggregate("console")
+    for css, name in (
+        (atlas_css, "atlas css 聚合(link 序)"), (prism_css, "prism/css/views.css"),
+        (console_css, "console css 聚合(link 序)")
+    ):
         for rule in (
             ".m-pair.hr-unk",
             ".m-pair.hr-fail",
-            ".m-pair .hr-src",
+            ".m-dur .hr-line",
             ".bulk-hr-warn",
             ".hr-pop",
             ".hp-arrow",
             ".hp-gauge",
             ".hp-badge",
         ):
-            assert rule in css, f"{name} 缺 {rule} 规则 —— 两套 UI 必须成对定义"
+            assert rule in css, f"{name} 缺 {rule} 规则 —— 三套 UI 必须成对定义"
+        # 死样式零残留: 最后一个 .hr-src 消费方(已排除 chip)已撤进 title
+        assert ".m-pair .hr-src" not in css, f"{name} 仍留着 .hr-src chip 样式 —— 已无消费方, 应删除"
         assert "z-index: 140" in css, f"{name} 缺弹窗 z-index: 140(须高于 ctx-menu 100 与 speed-pop 131)"
+        # 半格线是空 <i>: 只给 left:0 而 width:auto 会收缩成 0 —— 线整条不可见(2026-09-29 实报)
+        for half in (".m-dur .dur-val > .hr-line", ".m-dur.src-local .hr-line", ".m-dur.src-unver .hr-line"):
+            assert half in css, f"{name} 缺 {half} 规则 —— 本地 / 未核实的半格线会消失"
+        assert re.search(r"\.m-dur \.dur-val > \.hr-line \{[^}]*width: 100%", css), \
+            f"{name} 半格线没写显式 width:100% —— 空 <i> 的 width:auto 会收缩成 0(线整条不可见)"
 
     # ④ 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
     from auto_qb.core.qbmanager import QbManager

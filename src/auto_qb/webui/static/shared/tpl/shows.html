@@ -162,11 +162,10 @@
                             <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
                             <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
                           </span>
-                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="hrDurClass(m)" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
-                            {{ cellSeedingTime(m) }}
+                          <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[hrDurClass(m), hrSrcClass(m)]" :title="hrDurHint(m)" @mouseenter="hrPopEnter($event, m)" @mouseleave="hrPopLeave">
+                            <span class="dur-val">{{ cellSeedingTime(m) }}<i v-if="hrSrcHalf(m)" class="hr-line"></i></span>
                             <span v-if="cellSeedingTime(m) && m.hr_req_time" class="req">/ {{ fmtDuration(m.hr_req_time) }}</span>
-                            <span v-if="hrSrcBadge(m)" class="hr-src">{{ hrSrcBadge(m) }}</span>
-                            <span v-if="m.hr_excluded" class="hr-src" title="已排除出 HR 管理(排除标签/分类命中)">已排除</span>
+                            <i v-if="hrSrcFull(m)" class="hr-line"></i>
                           </span>
                           <span v-else-if="col.key === 'ratio'" class="m-pair m-ratio" :class="hrRatioClass(m)">
                             {{ cellRatio(m) }}

@@ -240,7 +240,8 @@ class WebviewMixin:
         - hr_tag / hr_tag_done: 已触发未达标 / 已达标时应有的标签(供前端按文本着色)
         - hr_triggered / hr_satisfied: 是否触发 HR / 是否已达成要求
         - hr_excluded: 是否命中 HR 排除表(计划 26-09-28-1805) —— True 时触发/达标恒 False、
-          站点侧字段全空, 前端显示「已排除」徽标(不得在 JS 里重算匹配, 只消费本布尔)
+          站点侧字段全空, 前端在做种时长列的 title 里提示(2026-09-29 起撤掉行内「已排除」徽标,
+          与来源标记同批非文字化; 不得在 JS 里重算匹配, 只消费本布尔)
         - hr_req_time: 要求做种时长(秒) = required_seeding_time + extra_seeding_time
         - hr_req_ratio: 要求分享率(0 = 不要求)
         - hr_state / hr_state_text / hr_reason: 站点侧判定(hr / verified_non_hr / unknown /

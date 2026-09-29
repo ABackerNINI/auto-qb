@@ -12,17 +12,26 @@
  * token 由后端 hr.resolve.safety_display 单点派生, 前端只做映射与着色 —— 判定与来源不得在 JS 重算。
  * 颜色编码安全档位五档(2026-09-25 用户修正): danger 橙=考察中进行中 / failed 红=未达标终态
  * (考核期已过, 独立醒目色, 不与考察中混橙、更不是可删绿) / safe 绿 / unknown 灰;
- * danger 与 failed 同属「不能删」桶。来源用 2 字徽标编码。 */
+ * danger 与 failed 同属「不能删」桶。来源用非文字底线编码(2026-09-29 起, 原 2 字徽标已退役)。 */
 const HR_SAFETY_CLASSES = { danger: "pending", failed: "hr-fail", safe: "reached", unknown: "hr-unk" };
 /* 桶名(2026-09-25 用户修正): failed = 考核期已过仍未达标, 结果已成立的**终态** —— 删除不会新增
  * 惩罚, 叫「不能删」不符合实际, 独立成「考核未通过」桶(红), 不进 delete_flow 的删除点名集合 */
 const HR_SAFETY_BUCKETS = { danger: "不能删", failed: "考核未通过", safe: "可删", unknown: "未核实" };
 /* v3.4(2026-09-26 用户指令): site_exempt = D 档已免罪, 站点的明确终态结论 —— 与 site_released
- * (完整刷新未列出 = 缺席证据)分开编码, 同属「在线」徽标与「在线核实」来源桶 */
-const HR_SRC_BADGES = {
-  site_scope: "在线", site_satisfied: "在线", site_unsatisfied: "在线", site_released: "在线", site_exempt: "在线",
-  local: "本地", unverified: "未核",
+ * (完整刷新未列出 = 缺席证据)分开编码, 同属「在线」徽标与「在线核实」来源桶。
+ * 2026-09-29(计划 webui-hr-src-underline): 徽标从「2 字芯片」换成非文字底线 —— token -> 类名,
+ * 由 CSS 编码长度/线型, 文字只进单元格 title; 旧 HR_SRC_BADGES 随之退役(它是唯一的消费方)。 */
+const HR_SRC_CLASSES = {
+  site_scope: "src-online", site_satisfied: "src-online", site_unsatisfied: "src-online",
+  site_released: "src-online", site_exempt: "src-online",
+  local: "src-local", unverified: "src-unver",
 };
+/* title 文案单独一份: HR_SRC_BUCKETS 的 unverified 是空串(筛选器语义里不属于任何桶),
+ * 拿它当提示会得到空白 title —— 桶名表仍只服务筛选器, 不被展示层复用。 */
+const HR_SRC_TITLES = { "src-online": "来源: 在线核实", "src-local": "来源: 本地兜底", "src-unver": "来源: 未核实" };
+/* 已排除(命中排除标签/分类)的提示文案单点(2026-09-29): 原本是行内「已排除」文字 chip ——
+ * 与已退役的来源芯片同款, 同样撑宽做种时长列; 撤到 title 后不再占宽, 也不再产线(无线 = 没有结论)。 */
+const HR_EXCLUDED_TITLE = "已排除出 HR 管理(排除标签/分类命中)";
 const HR_SRC_BUCKETS = {
   site_scope: "在线核实", site_satisfied: "在线核实", site_unsatisfied: "在线核实", site_released: "在线核实", site_exempt: "在线核实",
   local: "本地兜底", unverified: "",
@@ -85,9 +94,30 @@ window.AQB_HR = {
       if (!m.hr_safety) return this.hrTimeClass(m);
       return HR_SAFETY_CLASSES[m.hr_safety] || "";
     },
-    /* 来源徽标(2 字芯片): 当前结论来自 v3.0 优先级链哪一档 —— 在线 / 本地 / 策略 / 未核 */
-    hrSrcBadge(m) {
-      return m.hr_safety ? (HR_SRC_BADGES[m.hr_safety_src] || "") : "";
+    /* 来源标记(2026-09-29 起非文字底线): 类名交 CSS 画线, 文字只进 title ——
+     * 未接入(hr_safety 空)既不产线也不产 title; 判定仍全在后端(hr_safety_src), 前端不重算。 */
+    hrSrcClass(m) {
+      return m.hr_safety ? (HR_SRC_CLASSES[m.hr_safety_src] || "") : "";
+    },
+    hrSrcText(m) {
+      return HR_SRC_TITLES[this.hrSrcClass(m)] || "";
+    },
+    /* 单元格 title = 来源文案 + 已排除说明(2026-09-29: 两者都从行内文字 chip 撤进 title, 不占列宽)。
+     * 已排除行 hr_safety 恒为 none ⇒ 来源文案为空, 实际只出现一条; 仍走拼接以防两种状态并存。 */
+    hrDurHint(m) {
+      const parts = [];
+      const src = this.hrSrcText(m);
+      if (src) parts.push(src);
+      if (m.hr_excluded) parts.push(HR_EXCLUDED_TITLE);
+      return parts.join(" · ");
+    },
+    /* 整格 = 在线(站点结论覆盖到要求值); 半格 = 本地 / 未核实(只对实际值负责) */
+    hrSrcFull(m) {
+      return this.hrSrcClass(m) === "src-online";
+    },
+    hrSrcHalf(m) {
+      const c = this.hrSrcClass(m);
+      return c === "src-local" || c === "src-unver";
     },
     /* ---------------- HR 悬停弹窗: 触发调度 + 数据组装(渲染规则单点见文件头) ---------------- */
 
