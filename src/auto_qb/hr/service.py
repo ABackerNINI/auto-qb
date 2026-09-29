@@ -958,6 +958,12 @@ class HrRefreshService:
         zero_rows = total_rows == 0
         if total_rows > 0:
             data.empty_confirmed_at = 0.0  # 清单再现任何非零行 → 确认戳自动失效(§5.3)
+        # ---- 失效波数清零(model.py「干净波清零」口径): 「连续失效」只跨失效波延续 ——
+        #      本波跑通的档不背历史计数。既有实现从未清零, 恢复后单次失效会把陈旧波数
+        #      一并计入, ERROR 升级虚报「已连续 N 波」。失效波自身(非 ok)不清, 照常累加。 ----
+        for st in lane_states.values():
+            if st.ok:
+                st.fail_streak = 0
         # ---- 计数对平记账(计划 26-09-29-2036 §2.2/§2.4): 声明落档 + mismatch 定界 ----
         # mismatch 只在「本波承认了全深度」的档上成立; 截断/①③停翻波 rows<claim 是预期差值
         # (还没翻完), 只记量化差值不告警不冻结。无计数(claim=None)一律降级现状。

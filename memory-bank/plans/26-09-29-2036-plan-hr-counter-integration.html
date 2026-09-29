@@ -396,6 +396,7 @@
       <li><strong>键缺 = 无证据 = None 降级</strong>，绝不猜测、绝不拿「目前为止的行数」冒充总数。</li>
       <li><strong>未实证口径不覆写</strong>：子类只在样张实证「计数 == 全深度翻页实抓行数」后才覆写本方法（§6 R1 铁律）。</li>
     </ul>
+    <p class="wide"><strong>实施期补充（M1 落地后核对代码时识别，M2 定形时必核）</strong>：本签名不带档位参数 —— tab / 摘要形无碍（计数条同页带全档），但<strong>分页区间形站点须由页面自身辨认所属档位</strong>（如 CarPT 页内的活动 tab 标记 / 档位标题），样张核对时先确认页面确实携带这一信息；若页面不带，M2 需回到计划改签名（如 <code>parse_counters(lane, html)</code>），不可让 adapter 记「上一页 scope」之类的隐式状态去猜。</p>
     <p>service 侧合并规则：<strong>每档取首个非 None</strong>（<code>wave.counter_claims.setdefault(lane, v)</code>）。tab 形即第 1 页的值（波内最早快照）；分页区间形中途页无键、末页才非 None，自然胜出。波内声明的临时账挂在 <code>_WaveContext</code>（service.py:292 区）新增字段 <code>counter_claims: Dict[str, int]</code>，随波生灭；持久化走 <code>HrLaneState</code> 的 additive 字段（§2.3）。</p>
     <p>提取调用点：波次引擎每页 <code>parsed = adapter.parse_page(lane, html)</code>（service.py:614）成功解析之后、停翻判定之前 —— 与解析同源同一份 HTML，零额外请求，频控面零变化。</p>
 
@@ -472,7 +473,7 @@ releases_enabled = ( 既有三条件 ) <span class="kw">and not</span> depth_bro
       <tr><td class="m">hr/events.py:63 区</td><td>新文案 <code>counter_mismatch(site, lane, seen, claimed)</code></td><td><code>[HR 页面改版]</code> 前缀族；含口径校准引导（§2.4）；<code>__all__</code> 同步</td></tr>
       <tr><td class="m">hr/status.py:198-210</td><td>档位行补 <code>rows/claim</code> 与 <code>对不平</code> 标记</td><td>CLI 与 WebUI 同一套数（<code>site_status</code> 单点）</td></tr>
       <tr><td class="m">hr/report.py<br>档位段</td><td>走查报告补计数列 + 截断差值行</td><td>复用 lane_texts 同源数据</td></tr>
-      <tr><td class="m">hr/adapters/carpt.py <span class="mid">(M2)</span></td><td>覆写 <code>parse_counters</code>：末页分页区间终点即档内总数</td><td>推导规则按 CarPT 存档钉死（<code>&lt;b&gt;1 - 17&lt;/b&gt;</code>，1 起含端）；非末页 / 空表返回空 dict</td></tr>
+      <tr><td class="m">hr/adapters/carpt.py <span class="mid">(M2)</span></td><td>覆写 <code>parse_counters</code>：末页分页区间终点即档内总数</td><td>推导规则按 CarPT 存档钉死（<code>&lt;b&gt;1 - 17&lt;/b&gt;</code>，1 起含端）；非末页 / 空表返回空 dict。<strong>校准必验</strong>：①签名无档位参数，页面须自身可辨所属档位（§2.1 实施期补充）；②「②停翻波的 rows vs claim」（§6 R7 —— tab 形若把到期段深处行计入总数，②停翻波会持续 mismatch 冻结批量签发）</td></tr>
       <tr><td class="m">adapters/btschool（M2，视样张）</td><td>载体定形后：新薄子类或 <code>NexusPhpMyhrAdapter</code>（nexusphp.py:73）参数扩展</td><td>注册进 <code>ADAPTERS</code>（adapters/__init__.py:28）；前置 = D2 样张</td></tr>
       <tr><td class="m">docs/configuration.md <span class="mid">(M2)</span></td><td>adapter 接入指南补「计数口径校准」节：铁律 + 样张归档要求</td><td>让下一个接入站点的人有可照抄的规程</td></tr>
     </table>
@@ -563,6 +564,11 @@ releases_enabled = ( 既有三条件 ) <span class="kw">and not</span> depth_bro
         <td class="bad">旧档案 count_claim 被读成 0 ⇒ 全站假 mismatch 永久冻结</td>
         <td>from_json 显式判空（§2.3）+ T3 旧档案加载守阵 + 红验</td>
       </tr>
+      <tr>
+        <td><strong>R7 ②停翻 × tab 形计数</strong>（M1 实施期识别）</td>
+        <td class="bad">②到期段停翻的档 full_depth=True 但深处到期行未翻 —— tab 形计数若把它们计入总数，rows &lt; claim 每波成立 ⇒ 批量签发持续冻结且不 self-heal（假冻结，R1 同款症状但非校准错误）</td>
+        <td>M2 校准<strong>必验项</strong>：样张核对「②停翻波的 rows vs claim」——计数口径若含到期段深处行，则该口径对 ②停翻波不可用（按铁律该站不启用计数，或 M2 另立计划给 ②来源的 full_depth 加可区分标记后再豁免该门，取舍届时拍板）</td>
+      </tr>
     </table>
   </section>
 
@@ -594,13 +600,14 @@ releases_enabled = ( 既有三条件 ) <span class="kw">and not</span> depth_bro
     <table class="compact">
       <tr><th style="width:22%">版本</th><th>内容</th></tr>
       <tr><td class="m">v1.0 · 26-09-29-2036</td><td>初稿：按报告 26-09-29-1803 §7 草案对照代码收口 —— 三处定稿（parse_counters 逐页契约与首非 None 合并、收紧落点改 releases_enabled 单点闸门而非 full_depth 赋值折叠、mismatch 判定边界排除截断波）+ T1 迁移陷阱 + 六类测试与里程碑拆分。</td></tr>
+      <tr><td class="m">v1.1 · 26-09-29 22:10</td><td>M1 落地（commit 35aa8af，全量 1757 passed + 3 skipped / 91%，T1–T6 七守阵 + 红验闭环；无计数站点行为与基线逐位一致）。拍板：P2 校准策略 = 方案 A（样张实证后硬编码，M2 暂不执行），P3/P4 后续定。实施期补两处 M2 校准要求：①签名无档位参数 —— 区间形站点须由页面自身辨认所属档位（§2.1 实施期补充）；②新增 R7「②停翻 × tab 形计数」——「②停翻波的 rows vs claim」列为 M2 样张必验项。</td></tr>
     </table>
   </section>
 
   <!-- ================= colophon ================= -->
   <footer class="colophon">
-    PLAN 26-09-29-2036-plan-hr-counter-integration · TOPIC backend-partial-hr-verify · STATUS Open（待拍板）<br>
-    代码基线 b6ce666（行号本轮逐一实测核实）· 可行性依据 reports/26-09-29-1803（doc-updated 26-09-29-2001）· 测试基线 1749 passed / 3 skipped (90%, 提交轮 ae29a4f 实测)<br>
+    PLAN 26-09-29-2036-plan-hr-counter-integration · TOPIC backend-partial-hr-verify · STATUS In Progress（M1 Done · M2/M3 待样张与拍板）<br>
+    代码基线 b6ce666（行号本轮逐一实测核实；M1 落地于 35aa8af，基于 develop 616676a）· 可行性依据 reports/26-09-29-1803（doc-updated 26-09-29-2001）· 测试基线 1757 passed / 3 skipped (91%, M1 落地轮 35aa8af 实测)<br>
     同专题链：报告 <a href="../reports/26-09-29-1803-report-hr-counter-verify.html">26-09-29-1803 (计数可行性)</a> ·
     计划 <a href="../plans/26-09-28-1932-plan-hr-verify-rebuild.html">26-09-28-1932 (v3 rebuild, Done)</a> ·
     审计 <a href="../reports/26-09-29-0404-report-hr-verify-v3-audit.html">26-09-29-0404</a> ·

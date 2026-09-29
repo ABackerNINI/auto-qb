@@ -41,6 +41,7 @@
 - test_counter_positive_zero_rows_page_changed: T5① 计数>0∧行数=0 —— page_changed 硬告警 + 不签发
 - test_interval_empty_page_keeps_manual_stamp: T5② 分页区间形空表无标记(claim=None) —— 维持 zero_listing 人工戳路径
 - test_counter_truncation_gap_informational: T6 截断差值信息性 —— 非全深度 rows<claim 不告警不冻结, notes 记差值, REASON_BUDGET 语义不变
+- test_fail_streak_resets_on_clean_wave: 失效波数清零 —— 连续失效只跨失效波延续, 恢复波清零, 单次失效不背历史(修复既有从未清零)
 """
 import logging
 import time
@@ -75,6 +76,7 @@ from auto_qb.hr.service import (
 
 from hr_helpers import (
     EMPTY_TABLE_PAGE,
+    REVISED_PAGE,
     Clock,
     FakeFetcher,
     counter_bar,
@@ -1111,3 +1113,31 @@ def test_counter_truncation_gap_informational(tmp_path, monkeypatch, caplog):
     # 差值写进 notes(走查报告与 WebUI 直接可见缺口)
     assert "实抓 1/声明 30, 差 29 行" in result.reason
     assert result.reason_kind == REASON_BUDGET  # 截断波归 budget, 不误报 parse
+
+
+def test_fail_streak_resets_on_clean_wave(tmp_path):
+    """失效波数清零(model.py「干净波清零」口径): 连续失效只跨失效波延续 —— 恢复波清零,
+    之后的单次失效从 1 起算, 不把历史波数一并计入(修复: 既有实现从未清零, ERROR 升级会虚报)。"""
+    clock = Clock()
+    failed_pages = {**standard_pages(), url_of("A"): REVISED_PAGE}  # A 首页表头缺失 → 该档失效
+    fetcher = FakeFetcher(pages=failed_pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].status == "failed" and data.wave.lanes["A"].fail_streak == 1
+    clock.advance(13 * 3600)
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].fail_streak == 2  # 连续失效照常累加
+    # 恢复波: A 跑通 → 清零
+    fetcher.pages = standard_pages(rows_b=five_expired_rows(20))
+    clock.advance(13 * 3600)
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].status == "ok" and data.wave.lanes["A"].fail_streak == 0
+    # 恢复后单次失效: streak 从 1 起算(旧实现会是 3, 直接触发 ERROR 升级虚报)
+    fetcher.pages = failed_pages
+    clock.advance(13 * 3600)
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].status == "failed" and data.wave.lanes["A"].fail_streak == 1

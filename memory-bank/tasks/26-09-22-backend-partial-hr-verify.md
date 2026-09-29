@@ -93,6 +93,22 @@ M1 核心对平机制(上线即现状, 零拍板依赖) / M2 两站启用(前置
 
 ## 进度日志
 
+- **2026-09-29 22:12 (M1 修复轮: fail_streak 清零 + events 重复常量 + 计划 v1.1)** — 用户令
+  「修复问题1/2，问题3更新文档，之后提交」。①**fail_streak 从未清零**(实施期发现①): model.py
+  注释称「干净波清零」但代码无任何清零点 —— 恢复波后陈旧波数一直背着, ERROR 升级文案虚报
+  「已连续 N 波」、status 展示常挂「连续失效 N 波」。修法: `_finish_wave` 对平记账前补清零循环
+  (本波 ok 的档归零; 失效波自身照常累加, multisite 既有守阵「连续 3 波失效 = 3」不受影响);
+  新守阵 `test_fail_streak_resets_on_clean_wave` 四波断言(失效1→失效2→恢复清0→再失效从1起算),
+  红验: 禁用清零 ⇒ 仅该守阵红, 还原绿。②**events.py `LANE_RETENTION_MIN` 重复定义**(实施期发现②):
+  :77 与 :130 两处同值 —— 删后者, 保留紧邻消费方 `retention_violation` 的第一处。③**计划文档 v1.1**
+  (实施期发现③回写): [plans/26-09-29-2036](../plans/26-09-29-2036-plan-hr-counter-integration.html)
+  §2.1 补「签名无档位参数 —— 区间形站点须由页面自身辨认所属档位」实施期补充、§3 carpt 行补两项
+  校准必验、§6 新增 R7「②停翻 × tab 形计数」(若 tab 形计数把到期段深处行计入总数, ②停翻波持续
+  mismatch 冻结批量签发且不 self-heal —— 「②停翻波的 rows vs claim」列为 M2 样张必验项)、§+ 变更记录
+  v1.1 与页脚状态 In Progress。基线切片 26-09-29-2147 追加修复轮复测段。全量 **1758 passed +
+  3 skipped / 91%**(12370 语句 / 999 未覆盖, test.full 24.3s, 基于 develop d65f831 合并基线);
+  6 条 warnings 为既有依赖级告警, 与本轮无关。随后按用户指令提交。
+
 - **2026-09-29 21:47 (v3.1 计数集成 M1 落地 —— 代码轮)** — 用户令「按计划实施 M1 (plans/26-09-29-2036), 有待拍板的询问」。
   开工前 sync 至 616676a (本地回写与远端在 plans/_index.md 相邻行重叠 ⇒ stash→sync→pop 无冲突合流)。
   触点 7 文件: ①`model.py` HrLaneState +count_claim/count_match/count_mismatch_streak (additive,
@@ -180,16 +196,4 @@ M1 核心对平机制(上线即现状, 零拍板依赖) / M2 两站启用(前置
   test_record_hr_no_evidence_row4_no_recursion(触发/未达标/达标 + 纯辅种不触发);
   test.quick 1736 passed + 3 skipped。
 
-- **2026-09-29 (复审落地: 骤降保护移除 + 复审缺陷 H1/M1/M2 修复)** — 全面复审
-  (reports/26-09-29-0404)后按用户裁决实施四项: ①**骤降保护移除**(裁决: 流转守恒是骤降的升级版,
-  A 只流向 B/C/D, 骤降不构成漏 HR 面; 基线高水位永不回落会在站点合法清账后永久冻结批量签发) ——
-  service/model(`HrWaveMeta.plunge/baseline_rows` 删除, hr_site 迁移不再产出, 读侧对旧键容忍不 bump
-  schema)/status/events/report/WebUI/configuration.md 全链清理, 防伪收敛为「守恒 + 零行戳」两道;
-  ②**H1**: Retry-After 指令落盘(`_do_wave` 分支 commit + mark; .torrent 下载路径带 retry_after
-  上抛波级, 不再计成种子失败) —— 修复前 hold() 每波重读盘导致指令跨波即丢, 60s 节奏重试到日额烧尽;
-  ③**M1**: 登录失效路径 `budget.mark()` 前进间隔基准(修复前每 poll 立即重发烧日额); ④**M2**: 站点
-  文件 schema 比程序新(`HrLockSession.version_mismatch`)时跳过取数与写盘(修复前空壳数据照常跑波
-  覆写新版文件)。测试: FakeFetcher 扩展 login_at/retry_after_at/retry_bytes_at; 骤降用例删除;
-  test_light_wave_when_no_objects 重写为 test_no_objects_sweeps_to_last_page(钉裁决行为 —— 旧用例
-  名不符实, 断言靠 fixture 缺页报错凑成); 新增 4 回归。**test.full 1739 passed + 3 skipped(90%)**,
-  基线切片 26-09-29-0550。**未提交**(等显式指令); 真机走查开放。
+- **2026-09-29 (复审落地: 骤降保护移除 + 复审缺陷 H1/M1/M2 修复)** — 已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md); 摘要见报告 [26-09-29-0404](../reports/26-09-29-0404-report-hr-verify-v3-audit.html)与本表「v3 波次模型重建」前后行。

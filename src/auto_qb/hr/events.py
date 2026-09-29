@@ -127,9 +127,6 @@ def summarize_sites(sites: Iterable[str]) -> str:
     return ", ".join(sorted(sites))
 
 
-#: 流转守恒下限(与 service.LANE_RETENTION_MIN 同值; 文案模块不反依赖 service, 就地声明)
-LANE_RETENTION_MIN = 0.7
-
 __all__ = [
     "EVENT_LOGIN",
     "EVENT_PARSE",
