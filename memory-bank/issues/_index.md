@@ -15,15 +15,18 @@
 | 类型 | 条数 |
 |---|---|
 | bug | 7 |
-| perf | 2 |
+| perf | 3 |
 | docs | 3 |
 | test | 2 |
 | refactor | 2 |
-| feat | 3 |
+| feat | 5 |
 | chore | 4 |
 
 ## Open
 
+- [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
+- [feat] [HR 计数：looks_like_login 补计数文本佐证（P3 缓做项）](26-09-30-0052-feat-hr-login-counter-attest.html) — 登录态判定 looks_like_login 补页头计数文本负信号佐证（报告 26-09-29-1803 §6 登录态负信号 / HR 计划 §7 P3），依赖 D4 口径实证，缓做
+- [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做
 - [feat] [WEBUI 设置页支持只读字段: 程序托管/R 级字段改为只读展示](26-09-28-2135-feat-webui-readonly-fields.html) — schema_version/data_dir/state_file/fs.path_map 渲染为可编辑但保存必然被覆盖或静默回退, 且反馈误导; 需 Field 只读标志 + 前端禁用渲染 + 写盘防线
 - [docs] [插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免](26-09-28-1946-docs-config-plugin-spec-docs.html) — conditions/actions 插件名之下的 spec 键在 keys.md 与 rule-system/conditions-and-actions.md 均无逐键覆盖, test_config_key_surface 出处检查对该层豁免(权威单点=schema 插件表)
 - [bug] [commit.py 逐路径 git add 撞「已暂存删除」路径必败](26-09-28-0128-bug-my-commit-flow-staged-delete-add.html) — ship.commit 逐路径 add 对已暂存删除(D )路径 pathspec 落空直接 FAIL; workaround=退回未暂存( D)后重跑即过, 根修应对删除路径改用 git rm --cached 口径
