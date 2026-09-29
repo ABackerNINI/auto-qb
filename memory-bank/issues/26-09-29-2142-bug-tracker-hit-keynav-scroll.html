@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-sites-search">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="站点搜索命中列表超一屏后 ↑↓ 无滚动跟随, 活动项走出视野">
 <meta name="issue-summary" content="站点搜索命中列表(max-height 300px)超出后, 键盘 ↑↓ 移动活动项无 scrollIntoView/滚动跟随, 活动项高亮走出可视区, 键盘选择在长列表上不可用">
 <title>站点搜索命中列表超一屏后 ↑↓ 无滚动跟随, 活动项走出视野 · bug · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修 · 2026-09-29 22:06 认领并验证）· bug</div>
     <h1>站点搜索命中列表超一屏后 ↑↓ 无滚动跟随, 活动项走出视野</h1>
     <p class="lede">站点搜索命中列表(max-height 300px)超出后, 键盘 ↑↓ 移动活动项无 scrollIntoView/滚动跟随, 活动项高亮走出可视区, 键盘选择在长列表上不可用</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-29-2142-bug-tracker-hit-keynav-scroll</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-29 21:42</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -156,11 +156,17 @@ src/auto_qb/webui/static/shared/config_hub.js:378:        if (el) el.scrollIntoV
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-29 21:42 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-09-29 22:06 — 认领并修完，状态 <strong>Done</strong>。实际修法见下方「修复后补充」</li>
     </ul>
     <h3>复验</h3>
-    <p>未开工；认领后先重跑 §02 锚点确认 <code>hubTrackerKeydown</code> 仍无滚动调用。</p>
+    <p>2026-09-29 22:00 认领后重跑 §02 锚点：<code>hubTrackerKeydown</code> 仍只改 <code>trackerHitIdx</code> 无滚动调用（<code>4ecd222b</code> 上 <code>git grep</code> 复核，锚点行号漂移至 config_hub.js:778 / console_hub.css:724）；<code>.hb-tr-drop-list</code> 仍 <code>max-height: 300px; overflow-y: auto</code>。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与 §06 建议一致，未改道）：</p>
+    <ul>
+      <li><code>config_hub.js</code> 新增 <code>hubTrackerScrollActIntoView()</code>：<code>getBoundingClientRect</code> 差值手动调 <code>scrollTop</code>（block:"nearest" 语义，行在视野内不动、出视野才滚最小距离），选择器 <code>.hb-tr-stage.on .hb-tr-drop-list</code> 内找 <code>.hb-tr-hit.act</code>；<strong>不用 <code>scrollIntoView</code></strong> —— 它会逐层滚动所有可滚祖先，连带滚动暗幕后面的整页产生二次干扰。挂接点在 <code>hubTrackerKeydown</code> 的 ↑↓ 分支改完 idx 后 <code>$nextTick</code> 调用（等 Vue 把 <code>.act</code> 类挪到新行再量）。程序滚动不产生光标位移，浏览器即便补发合成 mousemove 也被同日已修的 <code>hubTrackerHoverIdx</code> 3px 门限挡掉，不复发闪烁（pitfalls/web-ui/hover-keynav-fight 处置④的依赖关系兑现）。</li>
+      <li><code>tests/test_web.py</code> 守阵 <code>test_frontend_tracker_search_wiring</code> 扩 4 断言（②b）：keydown 必须调 <code>hubTrackerScrollActIntoView</code> / 实现必须存在 / 必须是 getBoundingClientRect+scrollTop 差值法 / 实现内禁 <code>scrollIntoView</code>。</li>
+    </ul>
+    <p><strong>验证方式与测试数字</strong>：test.quick <strong>1751 passed + 2 skipped</strong>（28.9s，含新断言全绿）；test.full 数字见基线切片 <code>memory-bank/testing/baselines/26-09-29-2210-webui-tracker-keynav-scroll.md</code>。同族弹窗分类/标签下拉（<a href="26-09-29-2142-bug-dialog-hover-keynav-fight.html">26-09-29-2142-bug-dialog-hover-keynav-fight</a>）不在本条范围，仍 Open。</p>
   </section>
 
   <footer>

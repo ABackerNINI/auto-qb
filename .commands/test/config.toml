@@ -31,7 +31,7 @@ silent_success = true
 run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest .commands .agents/skills/commands -q --no-cov -n 0']
 timeout = 300
 when    = "改了 .commands/ 下的包脚本或 commands 引擎 —— 它们的测试不在 testpaths(tests/) 里, 全量测试收不到"
-note    = "串行 -n 0: 并行反而慢在 worker 启动; 收集面含 .agents/skills/commands(引擎测试贴着引擎放, 2026-09-27 起)。⚠ 2026-09-28 起也要 TMPDIR 前缀: my-commit-flow 的真实仓库场景测试用 tmp_path 夹具, 会建 pytest 临时目录(原『不建临时目录』的说法随 v3 场景测试过时)"
+note    = "串行 -n 0: 并行反而慢在 worker 启动; 收集面含 .agents/skills/commands(引擎测试贴着引擎放, 2026-09-27 起)。注意: 2026-09-28 起也要 TMPDIR 前缀: my-commit-flow 的真实仓库场景测试用 tmp_path 夹具, 会建 pytest 临时目录(原『不建临时目录』的说法随 v3 场景测试过时)"
 
 [tasks."test.one"]
 run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest <args> -q -n 0']

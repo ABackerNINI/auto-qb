@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 8 |
 | perf | 2 |
 | docs | 3 |
 | test | 2 |
@@ -25,7 +25,6 @@
 ## Open
 
 - [bug] [弹窗分类/标签下拉仍是 mouseenter 高亮 + 键盘活动项同源并存(站点搜索闪烁同族)](26-09-29-2142-bug-dialog-hover-keynav-fight.html) — add_torrent/dialogs 的分类/标签下拉沿用 @mouseenter 直写高亮 + 键盘 ArrowDown/Up 活动项, 与站点搜索已修的闪烁同族(静止光标合成 hover 事件夺高亮)
-- [bug] [站点搜索命中列表超一屏后 ↑↓ 无滚动跟随, 活动项走出视野](26-09-29-2142-bug-tracker-hit-keynav-scroll.html) — 站点搜索命中列表(max-height 300px)超出后, 键盘 ↑↓ 移动活动项无 scrollIntoView/滚动跟随, 活动项高亮走出可视区, 键盘选择在长列表上不可用
 - [feat] [WEBUI 设置页支持只读字段: 程序托管/R 级字段改为只读展示](26-09-28-2135-feat-webui-readonly-fields.html) — schema_version/data_dir/state_file/fs.path_map 渲染为可编辑但保存必然被覆盖或静默回退, 且反馈误导; 需 Field 只读标志 + 前端禁用渲染 + 写盘防线
 - [docs] [插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免](26-09-28-1946-docs-config-plugin-spec-docs.html) — conditions/actions 插件名之下的 spec 键在 keys.md 与 rule-system/conditions-and-actions.md 均无逐键覆盖, test_config_key_surface 出处检查对该层豁免(权威单点=schema 插件表)
 - [bug] [commit.py 逐路径 git add 撞「已暂存删除」路径必败](26-09-28-0128-bug-my-commit-flow-staged-delete-add.html) — ship.commit 逐路径 add 对已暂存删除(D )路径 pathspec 落空直接 FAIL; workaround=退回未暂存( D)后重跑即过, 根修应对删除路径改用 git rm --cached 口径
@@ -56,6 +55,7 @@
 
 ## Done
 
+- [bug] [站点搜索命中列表超一屏后 ↑↓ 无滚动跟随, 活动项走出视野](26-09-29-2142-bug-tracker-hit-keynav-scroll.html) — 站点搜索命中列表(max-height 300px)超出后, 键盘 ↑↓ 移动活动项无 scrollIntoView/滚动跟随, 活动项高亮走出可视区, 键盘选择在长列表上不可用
 - [test] [test_file_access 两条 symlink 端到端用例依赖宿主建链能力: 本机 os.symlink 假成功(建出的不是重解析点)时断言红而非 skip, 卡住提交闸门](26-09-29-2031-test-file-access-symlink-host-capability.html) — _dir_symlink_or_skip 只捕获 OSError 而未做 os.path.islink() 判定 —— 本机 os.symlink 返回成功却建不出重解析点(R 盘与 C 盘实测均如此), 两条端到端用例因此 failed 而非 skip, test.quick 闸门恒红
 - [test] [既有: 26-09-26-2345 旧计划缺 doc meta, test_docs_forms 两条守阵红](26-09-27-1153-test-plan-shipflow-v2-missing-meta.html) — plans/26-09-26-2345-plan-commands-shipflow-v2.html 缺 doc-status/doc-topic/doc-added/doc-updated, test_docs_forms::test_artifacts_meta_complete 与 test_status_vocabulary 恒红(HEAD 上复验同红)
 - [test] [throttle 守阵 elapsed 容差无 sleep 精度余量, 文件级/全量跑偶发假红](26-09-22-2052-test-throttle-test-sleep-tolerance.html) — test_run_loop_throttles_without_stop_event 的 mock 场景断言 elapsed >= 0.05, Windows sleep(50ms) 实测可 46ms(定时器精度), 文件级跑时前序测试改变定时器状态即红; 单跑恒绿

@@ -785,12 +785,28 @@ window.CONFIG_HUB = {
         this.hub.trackerHitIdx = e.key === "ArrowDown"
           ? (cur + 1) % n
           : (cur < 0 ? n - 1 : (cur - 1 + n) % n);
+        this.$nextTick(() => this.hubTrackerScrollActIntoView()); // 滚动跟随(26-09-29-2142)
       } else if (e.key === "Enter") {
         if (this.hub.trackerHitIdx >= 0 && hits[this.hub.trackerHitIdx]) {
           e.preventDefault();
           this.hubTrackerPick(hits[this.hub.trackerHitIdx].name);
         }
       }
+    },
+
+    /* 键盘活动项滚动跟随(26-09-29-2142): 命中列表 max-height 300px 可滚, 但 ↑↓ 只改 idx 不推滚动条,
+     * 长列表上高亮走出可视区 = 键盘选择不可用。↑↓ 改 idx 后把 .act 行滚进列表视野。
+     * 手动差值调 scrollTop(block:"nearest" 语义: 行在视野内不动, 出视野才滚最小距离);
+     * 不用 scrollIntoView —— 它会逐层滚动所有可滚祖先, 连带滚动暗幕后面的整页产生二次干扰。
+     * $nextTick 等 Vue 把 .act 类挪到新行之后再量。程序滚动不产生光标位移,
+     * 浏览器即便补发合成 mousemove 也被 hubTrackerHoverIdx 的 3px 门限挡掉(不复发闪烁)。 */
+    hubTrackerScrollActIntoView() {
+      const list = document.querySelector(".hb-tr-stage.on .hb-tr-drop-list");
+      const row = list && list.querySelector(".hb-tr-hit.act");
+      if (!list || !row) return;
+      const lr = list.getBoundingClientRect(), rr = row.getBoundingClientRect();
+      if (rr.top < lr.top) list.scrollTop += rr.top - lr.top; // 行在上方视野外 → 上滚
+      else if (rr.bottom > lr.bottom) list.scrollTop += rr.bottom - lr.bottom; // 行在下方视野外 → 下滚
     },
 
     /* ---------------------------------------------------------- 行 / 控件辅助 */

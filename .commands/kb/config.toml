@@ -10,7 +10,7 @@ run     = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py",
 timeout = 120
 pin     = true
 when    = "收尾回写知识库后重建索引（不要手改 _index.md）"
-note    = "❗集合必须与 my-commit-flow 的 `memory-bank/` 闸门**同集**: 闸门能判红的生成物, 这里就得有重建入口 —— 2026-09-24 实测漏项导致报错文案指到跑完仍红的命令; 2026-09-29 _doc-map.md 物化退役(改查询 kb.docmap)后为三条"
+note    = "集合必须与 my-commit-flow 的 `memory-bank/` 闸门**同集**: 闸门能判红的生成物, 这里就得有重建入口 —— 2026-09-24 实测漏项导致报错文案指到跑完仍红的命令; 2026-09-29 _doc-map.md 物化退役(改查询 kb.docmap)后为三条"
 
 [tasks."kb.docmap"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_doc_map.py <args>"]
