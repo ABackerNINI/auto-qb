@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-09-29-2036">
+<meta name="doc-updated" content="26-09-29-2147">
+<meta name="doc-refs" content="memory-bank/reports/26-09-29-1803-report-hr-counter-verify.html,memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html,memory-bank/reports/26-09-29-0404-report-hr-verify-v3-audit.html,memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html,memory-bank/tasks/26-09-22-backend-partial-hr-verify.md">
+<title>HR 计数对平集成 — 修改计划 (v3.1)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #d9dee3;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6b757e;
+    --hairline: rgba(255, 255, 255, 0.09);
+    --hairline-soft: rgba(255, 255, 255, 0.055);
+    --accent: #d8a441;
+    --accent-dim: #8a6a2e;
+    --ok: #7fb069;
+    --bad: #c96a5f;
+    --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", monospace;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-dim); color: #f2e9d8; }
+
+  .layout {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 40px 96px;
+    display: grid;
+    grid-template-columns: 208px minmax(0, 1fr);
+    gap: 56px;
+  }
+  @media (max-width: 1080px) {
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    nav.toc { position: static; border-right: none; border-bottom: 1px solid var(--hairline); padding: 20px 0 24px; margin-bottom: 40px; }
+  }
+
+  /* ---------- 封面 ---------- */
+  .cover {
+    grid-column: 1 / -1;
+    padding: 88px 0 56px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.09em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 26px;
+  }
+  .cover h1 {
+    font-size: 44px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    max-width: 21em;
+  }
+  .cover .sub {
+    margin-top: 18px;
+    font-size: 17px;
+    color: var(--ink-dim);
+    max-width: 44em;
+    line-height: 1.7;
+  }
+  .ledger {
+    margin-top: 40px;
+    font-family: var(--mono);
+    font-size: 14.5px;
+    color: var(--ink-dim);
+    border: 1px solid var(--hairline);
+    display: inline-block;
+    padding: 14px 20px;
+    background: var(--paper);
+  }
+  .ledger .kw { color: var(--ink); }
+  .ledger .op { color: var(--accent); }
+  .ledger .note { display: block; margin-top: 8px; font-size: 11.5px; color: var(--ink-faint); letter-spacing: 0.02em; }
+  .meta-row {
+    margin-top: 44px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+  }
+  .meta-row b { color: var(--ink-dim); font-weight: 500; display: block; margin-bottom: 3px; }
+
+  /* ---------- TOC ---------- */
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    padding: 48px 0 32px;
+    border-right: 1px solid var(--hairline-soft);
+    font-size: 13px;
+  }
+  nav.toc .toc-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 16px;
+  }
+  nav.toc ol { list-style: none; }
+  nav.toc li { margin-bottom: 9px; }
+  nav.toc a {
+    color: var(--ink-dim);
+    text-decoration: none;
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+  }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc .no { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); min-width: 2em; }
+
+  /* ---------- 章节 ---------- */
+  main { min-width: 0; }
+  section { padding-top: 64px; }
+  section:first-of-type { padding-top: 48px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 14px;
+    margin-bottom: 28px;
+  }
+  .sec-no {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .sec-head h2 {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  section h3 {
+    font-size: 16.5px;
+    font-weight: 600;
+    margin: 34px 0 12px;
+  }
+  p { margin-bottom: 14px; max-width: 70ch; }
+  p.wide { max-width: none; }
+  ul.plain { margin: 0 0 16px 1.4em; max-width: 68ch; }
+  ul.plain li { margin-bottom: 7px; }
+  strong { font-weight: 600; color: #e8ecf0; }
+  em { font-style: normal; color: var(--ink-dim); }
+  code, .m {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--paper-2);
+    border: 1px solid var(--hairline-soft);
+    padding: 1px 5px;
+    color: #cfd6dc;
+  }
+  .file { font-family: var(--mono); font-size: 0.86em; color: var(--ink-dim); }
+  .ok { color: var(--ok); font-weight: 500; }
+  .bad { color: var(--bad); font-weight: 500; }
+  .mid { color: var(--accent); font-weight: 500; }
+
+  /* 表 */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0 26px;
+    font-size: 13.5px;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--ink-dim);
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--hairline);
+    padding: 8px 14px 8px 0;
+    vertical-align: bottom;
+  }
+  td {
+    border-bottom: 1px solid var(--hairline-soft);
+    padding: 9px 14px 9px 0;
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  table.compact td, table.compact th { padding: 6px 12px 6px 0; }
+
+  /* 代码块 */
+  pre.snip {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+    background: var(--paper);
+    border: 1px solid var(--hairline-soft);
+    padding: 14px 18px;
+    overflow-x: auto;
+    color: #b9c2ca;
+    margin: 18px 0 24px;
+  }
+  pre.snip .cm { color: var(--ink-faint); }
+  pre.snip .kw { color: var(--accent); }
+
+  /* 里程碑 */
+  .milestone {
+    border: 1px solid var(--hairline);
+    background: var(--paper);
+    padding: 20px 24px 8px;
+    margin: 22px 0 30px;
+  }
+  .milestone .m-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 12px;
+  }
+  .milestone .m-no {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+  .milestone .m-head h3 { margin: 0; font-size: 17px; }
+  .milestone .m-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+    margin-left: auto;
+  }
+
+  /* 裁决点 */
+  .decision { counter-reset: d; }
+  .decision > div {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 0 18px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .decision > div::before {
+    counter-increment: d;
+    content: "P" counter(d);
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    padding-top: 2px;
+  }
+
+  .verdict-lead {
+    font-size: 17px;
+    line-height: 1.75;
+    max-width: 66ch;
+    color: #e4e9ee;
+  }
+  .matrix-note { font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim); margin: 6px 0 24px; letter-spacing: 0.02em; }
+
+  .colophon {
+    margin-top: 80px;
+    border-top: 1px solid var(--hairline);
+    padding-top: 28px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 2;
+    color: var(--ink-faint);
+  }
+  .colophon a { color: var(--ink-dim); text-decoration: none; }
+  .colophon a:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ================= 封面 ================= -->
+  <header class="cover">
+    <div class="kicker">HR Verify · Counter Integration · Plan v3.1 · 26-09-29</div>
+    <h1>HR 计数对平集成 — 修改计划</h1>
+    <p class="sub">把报告 26-09-29-1803 的结论落成代码：站点 HR 页计数作为每档一枚「当波自报的绝对行数真值」，对平才承认全深度、缺口即冻结批量签发。纯增量、缺数降级、无配置键 —— 本计划给出设计定稿（含与报告草案的三处收口）、触点清单、里程碑与测试计划。</p>
+    <div class="ledger">
+      <span class="kw">releases_enabled</span> <span class="op">&amp;=&amp;</span> <span class="kw">not</span> depth_broken<br>
+      <span class="kw">depth_broken</span> <span class="op">=</span> ∃ lane: full_depth <span class="op">∧</span> count_claim <span class="op">≠</span> rows
+      <span class="note">唯一的行为变更点 = 批量「未列出」签发闸门多一个 AND 条件（报告 §5.2 收束语的原话落地）。</span>
+    </div>
+    <div class="meta-row">
+      <div><b>PLAN</b>26-09-29-2036</div>
+      <div><b>TOPIC</b>backend-partial-hr-verify</div>
+      <div><b>前置</b>报告 §9 D2 样张（仅阻塞 M2）· 代码基线 b6ce666</div>
+      <div><b>状态</b>待拍板（Open）</div>
+    </div>
+  </header>
+
+  <!-- ================= TOC ================= -->
+  <nav class="toc">
+    <div class="toc-title">目录</div>
+    <ol>
+      <li><a href="#s0"><span class="no">0</span>结论速览</a></li>
+      <li><a href="#s1"><span class="no">1</span>背景与目标</a></li>
+      <li><a href="#s2"><span class="no">2</span>设计定稿</a></li>
+      <li><a href="#s3"><span class="no">3</span>触点清单</a></li>
+      <li><a href="#s4"><span class="no">4</span>里程碑 M1–M3</a></li>
+      <li><a href="#s5"><span class="no">5</span>测试计划</a></li>
+      <li><a href="#s6"><span class="no">6</span>风险推演</a></li>
+      <li><a href="#s7"><span class="no">7</span>拍板点</a></li>
+      <li><a href="#s8"><span class="no">8</span>影响面与不变式</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <!-- ================= 0 结论速览 ================= -->
+  <section id="s0">
+    <div class="sec-head"><span class="sec-no">§0</span><h2>结论速览</h2></div>
+    <p class="verdict-lead">三步走：<strong>M1 核心对平机制</strong>（上线即现状 —— 所有 adapter 默认无计数，全路径逐字节等价今天）；<strong>M2 首批站点启用</strong>（CarPT 分页区间形 + BTSchool，前置样张与口径校准）；<strong>M3 退役与打磨</strong>（计数站点免人工零行戳、告警升级、可选优化）。M1 不依赖任何拍板即可开工，行为变更点只有一个：批量「未列出」签发闸门多一个 AND 条件。</p>
+    <table>
+      <tr><th style="width:24%">问题</th><th style="width:22%">本计划的答案</th><th>依据</th></tr>
+      <tr>
+        <td>改多大？</td>
+        <td class="ok">纯增量，~6 文件</td>
+        <td>model 加 3 个 additive 字段、adapter 基类加 1 个默认空钩子、service ~40 行、events 1 条文案、status/report 展示、测试；无配置键、无 schema 版本抬升、无迁移脚本</td>
+      </tr>
+      <tr>
+        <td>行为变更点在哪？</td>
+        <td class="mid">唯一一处</td>
+        <td><code>releases_enabled</code>（service.py:953）追加 AND 门；命中 / 管束 / 终态冻结 / 观察期出口全部不碰（§2.2）</td>
+      </tr>
+      <tr>
+        <td>无计数站点受影响吗？</td>
+        <td class="ok">零影响</td>
+        <td>adapter 默认返回空 dict ⇒ count_claim 恒 None ⇒ 门恒开、零行戳路径不变；既有守阵原样全绿即是证明（§5 不变量）</td>
+      </tr>
+      <tr>
+        <td>最大风险？</td>
+        <td class="bad">口径校准错误 ⇒ 永久假冻结</td>
+        <td>铁律「宁可不用，不可错用」写进 adapter 覆写约定；告警文案自带引导；M1/M2 分离让机制先行、启用后行（§6 R1）</td>
+      </tr>
+      <tr>
+        <td>什么必须先拍板？</td>
+        <td class="mid">只拍 P1–P3</td>
+        <td>M1 开工不需要等样张；M2 需要 D2 样张（用户侧动作）+ 校准策略（推荐方案 A）（§7）</td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- ================= 1 背景与目标 ================= -->
+  <section id="s1">
+    <div class="sec-head"><span class="sec-no">§1</span><h2>背景与目标</h2></div>
+    <h3>1.1 报告结论承接</h3>
+    <p>可行性报告 <span class="file">26-09-29-1803</span> 已论证：站点 HR 页计数是<strong>清单的校验和，不是清单的替代品</strong> —— 它补上现有防线（守恒 / 零行戳 / 行序 / 末页标记）全部缺失的「绝对量」轴，唯一能在当波报警 B / C 档翻页标记失效导致的<strong>批量误放行</strong>（报告 §3.1：C 档深处未达标种子被当作「未列出」签发放行，站点侧仍在计它未达标）。两站真机实测均有计数，收益即期。本计划把报告 §7 集成草案落成可执行的修改项。</p>
+    <h3>1.2 目标</h3>
+    <ul class="plain">
+      <li><strong>堵误放行洞</strong>：站点报了计数的档，「翻到末页」还必须「行数对平」才承认全深度覆盖；对不平当波冻结批量签发，下一波自愈。</li>
+      <li><strong>零行人机环节退役</strong>（限计数自证空集的站点）：<code>count=0 ∧ rows=0</code> 视同人工确认戳，无需 <code>--hr-confirm-empty</code>。</li>
+      <li><strong>截断可量化</strong>：预算截断波的 <code>rows vs claim</code> 差值写进 <code>wave.notes</code> 与走查报告，排障直接看缺口。</li>
+      <li><strong>改版检测双通道</strong>：计数与表格结构在页面上是解耦的两个区域，表格塌了计数还在（或反之）可当波报 parse 类告警，不再等连续 3 波失效升级。</li>
+    </ul>
+    <h3>1.3 非目标（本轮明确不做）</h3>
+    <ul class="plain">
+      <li><strong>不加任何配置键</strong> —— 计数可用性是 adapter 层的站点事实而非用户决策（黄金法则 4 的配置校验面自动免疫）。</li>
+      <li><strong>不缩短失踪观察期</strong>（报告 §5.1 已裁：省的只是保守方向的管束时长，换来的风险敞口不值）。</li>
+      <li><strong>不动 HR 上限的处罚面</strong>（用户裁决）；徽章总数轴互证列为备选项缓做（§7 P3）。</li>
+      <li><strong>不做末页追翻省略</strong>（报告 §5.1 定性为优化非简化，收益偶有，风险面新增 —— 缓做，§7 P3）。</li>
+      <li><strong>不改 <code>config.yml</code> / 不动红线文件</strong>；不引入绕开单一写线程的并发代码（计数随 <code>HrLaneState</code> 走站点文件，多实例无感）。</li>
+    </ul>
+  </section>
+
+  <!-- ================= 2 设计定稿 ================= -->
+  <section id="s2">
+    <div class="sec-head"><span class="sec-no">§2</span><h2>设计定稿</h2></div>
+    <p>报告 §7 是草案；本章是对照代码实况（基线 b6ce666）收口后的定稿，与草案的差异点逐一说明理由。</p>
+
+    <h3>2.1 提取契约：adapter 逐页上交「本页能证到的档位声明数」</h3>
+    <p>采用报告草案的签名 <code>parse_counters(html) -&gt; dict[lane, int|None]</code>，落点在 <span class="file">adapters/base.py</span> 的 <code>HrAdapter</code>（:34），基类默认返回空 dict（= 现状）：<code>dict</code> 而非逐档单值，是因为 <strong>tab 形站点的计数条在任何一档的任何一页都同时带着全部档位的数</strong>（<code>考察中 (12) · 已达标 (3) · 未达标 (2)</code>）—— 第 1 页一次解析即全档有据。契约三条：</p>
+    <ul class="plain">
+      <li><strong>只在本页能证到该档总数时才返回该键</strong>：tab / 摘要形任意页可证；分页区间形（CarPT 实证）只有「无下一页」的末页能证（区间终点 = 档内累计行数，1 起含端），早停波拿不到总数；空表页无标记 ⇒ 无键。</li>
+      <li><strong>键缺 = 无证据 = None 降级</strong>，绝不猜测、绝不拿「目前为止的行数」冒充总数。</li>
+      <li><strong>未实证口径不覆写</strong>：子类只在样张实证「计数 == 全深度翻页实抓行数」后才覆写本方法（§6 R1 铁律）。</li>
+    </ul>
+    <p>service 侧合并规则：<strong>每档取首个非 None</strong>（<code>wave.counter_claims.setdefault(lane, v)</code>）。tab 形即第 1 页的值（波内最早快照）；分页区间形中途页无键、末页才非 None，自然胜出。波内声明的临时账挂在 <code>_WaveContext</code>（service.py:292 区）新增字段 <code>counter_claims: Dict[str, int]</code>，随波生灭；持久化走 <code>HrLaneState</code> 的 additive 字段（§2.3）。</p>
+    <p>提取调用点：波次引擎每页 <code>parsed = adapter.parse_page(lane, html)</code>（service.py:614）成功解析之后、停翻判定之前 —— 与解析同源同一份 HTML，零额外请求，频控面零变化。</p>
+
+    <h3>2.2 收紧落点：改 <code>releases_enabled</code> 一处，不改 <code>full_depth</code> 字段本身</h3>
+    <p>报告草案写的是「<code>full_depth and (count_claim is None or rows == count_claim)</code>」。对照代码，<code>full_depth</code> 有两个赋值点（service.py:646 ②到期段停翻 / :656 末页）和四类消费点（<code>releases_enabled</code> :954、缺席证明 <code>_absence_proven_all</code> :1325、观察期位置覆盖 <code>_position_covered</code> :1305、状态展示）。把 AND 折进赋值点会连带收紧观察期出口与终态冻结 —— 超出报告划定的「只影响缺席证明 → 批量签发」范围。<strong>定稿：字段语义不动，闸门单点收紧</strong>：</p>
+    <pre class="snip"><span class="cm"># service.py::_finish_wave，在 releases_enabled 计算(:953)之前，~12 行</span>
+<span class="kw">for</span> st <span class="kw">in</span> lane_states.values():
+    claim = wave.counter_claims.get(st.lane)
+    st.count_claim = claim
+    st.count_match = <span class="kw">None if</span> claim <span class="kw">is None else</span> (st.rows == claim)
+
+depth_broken = <span class="kw">any</span>(st.ok <span class="kw">and</span> st.full_depth <span class="kw">and</span> st.count_match <span class="kw">is False</span>
+                   <span class="kw">for</span> st <span class="kw">in</span> lane_states.values())
+
+releases_enabled = ( 既有三条件 ) <span class="kw">and not</span> depth_broken</pre>
+    <p class="wide">为什么这等价于报告的语义表达式且范围更精确：批量签发的缺席证明唯一入口是 <code>_sign_releases</code>（:1117）→ <code>_absence_proven_all</code>（:1310），而它只在 <code>releases_enabled</code> 为真时被调（:959-960）—— 闸门在源头关死，下游 <code>_absence_proven_all</code> 的 <code>if st.full_depth: continue</code>（:1325）<strong>一行不用改</strong>就自动继承收紧。<code>full_depth</code> 字段保持「结构性翻页到底 / ②到期段」的原始语义，「计数对平的全深度」由 <code>count_match</code> 联合表达，二者在唯一消费闸门处合流。连带效应逐项核对：</p>
+    <table class="compact">
+      <tr><th style="width:30%">路径</th><th style="width:14%">受影响？</th><th>说明</th></tr>
+      <tr><td>批量「未列出」签发（:959-960 → :1117）</td><td class="bad">是（唯一行为变更）</td><td><code>depth_broken</code> 波整波不签发，下一波自愈 —— 与守恒违约同款处置方向</td></tr>
+      <tr><td>观察期出口（:943 <code>_advance_observation</code>）</td><td class="ok">否</td><td>执行序在闸门之前，且既有注释已明示「观察期出口与批量签发解耦」（:957）—— 语义自洽</td></tr>
+      <tr><td>终态冻结（:962 <code>_freeze_terminal</code>）</td><td class="ok">否</td><td>走位置覆盖证明（:1293），不依赖本闸门；报告口径「终态冻结不动」逐字成立</td></tr>
+      <tr><td>命中 / 管束（:633 行处理、判定侧 resolve.py）</td><td class="ok">否</td><td>行处理在闸门上游；判定侧只读档位结论，不读覆盖证明</td></tr>
+      <tr><td>新鲜度 / 健康 / 复用窗（:966、:986）</td><td class="ok">否</td><td><code>healthy</code> 看 <code>rows &gt; 0 or full_depth</code>，与计数无关；有效波照常设复用窗</td></tr>
+    </table>
+
+    <h3>2.3 状态面：HrLaneState 加 3 个 additive 字段</h3>
+    <table class="compact">
+      <tr><th style="width:30%">字段</th><th style="width:22%">类型 / 默认</th><th>语义</th></tr>
+      <tr><td class="m">count_claim</td><td class="m">int | None = None</td><td>本波该档站点声明行数（None = 无计数 / 未证到）</td></tr>
+      <tr><td class="m">count_match</td><td class="m">bool | None = None</td><td>None = 无从对平；True/False = 实抓 rows 与声明是否对平</td></tr>
+      <tr><td class="m">count_mismatch_streak</td><td class="m">int = 0</td><td>连续 mismatch 波数（对平或无计数清零）；≥3 触发 ERROR 升级（§2.4）</td></tr>
+    </table>
+    <p><code>to_json / from_json</code>（model.py:330 / :343）同步三键；<strong>不抬 schema 版本</strong>（先例：v3 观测字段 additive 不抬版；旧程序读新文件时 <code>from_json</code> 忽略未知键，双向兼容）。</p>
+    <div class="milestone" style="border-left: 2px solid var(--bad); border-radius: 0;">
+      <div class="m-head"><span class="m-no">⚠ 陷阱 T1</span><h3>旧档案反序列化的 None 语义</h3></div>
+      <p><code>from_json</code> 里 <code>count_claim</code> <strong>不能走 <code>_as_int(raw.get(...))</code> 缺省路径</strong> —— 旧站点文件没有该键，<code>raw.get</code> 返回 None，<code>_as_int</code> 会把它变成 0，于是所有存量档案瞬间变成「声明 0 行」⇒ 全站永久 mismatch ⇒ 批量签发永久冻结（正是要防的那个事故，换了个入口）。必须显式判空：<code>claim = raw.get("count_claim"); count_claim=None if claim is None else _as_int(claim)</code>。守阵：旧版站点文件（无三键）加载后 <code>count_claim is None</code> 且 <code>releases_enabled</code> 判定与旧逻辑逐位一致（§5 T3）。</p>
+    </div>
+
+    <h3>2.4 mismatch 的判定边界与告警</h3>
+    <p><strong>mismatch ≠ 行数不等</strong>。只有「本波承认了全深度」的档才可能 mismatch —— 预算截断 / ①③停翻的波 <code>rows &lt; claim</code> 是<strong>预期内的量化差值</strong>（还没翻完），写进 <code>wave.notes</code>（如 <code>档位 C 截断: 实抓 20/声明 50, 差 30 行</code>）与走查报告，<strong>不告警不冻结</strong>。判定矩阵（报告 §3 记忆点的落地版）：</p>
+    <div class="matrix-note">full_depth ∧ claim≠rows → mismatch: 冻签发 + counter_mismatch 告警 · claim=0 ∧ rows=0（全档）→ site-attested empty · claim&gt;0 ∧ rows=0 → page_changed 硬告警 · claim=None → 现状不变 · 截断波 rows&lt;claim → notes 量化差值（信息性）</div>
+    <ul class="plain">
+      <li><strong>当波告警</strong>：mismatch 走 <code>_warn_parse</code>（service.py:1231，已含节流）+ 新事件 <code>events.counter_mismatch(site, lane, seen, claimed)</code>（events.py，<code>[HR 页面改版]</code> 前缀族，:63 <code>order_broken</code> 同款）；文案必须带 §6 R1 的引导：「若连续多波对不平，可能是计数口径校准错误 —— 请跑 <code>--hr-once</code> 走查核对或摘除该站计数覆写」。</li>
+      <li><strong>升级</strong>：<code>count_mismatch_streak ≥ LANE_FAIL_ALERT_STREAK</code>（=3，service.py:154）时以 ERROR 级再报一次（模式照抄 <code>_maybe_alert_lane_fail</code> :1241，只提示人不改行为）—— 这是对「服务端缓存陈旧偶发不平」与「口径校准错误永久不平」的区分信号（§6 R1/R2）。</li>
+      <li><strong>计数&gt;0 ∧ 行数=0</strong>：整表被吃光 / 第 1 页即被截的显式信号，按报告草案走 <code>events.page_changed</code>（:58）硬告警，同样冻结（<code>0 ≠ claim</code> 自动使 <code>depth_broken</code> 成立）。</li>
+    </ul>
+
+    <h3>2.5 零行自证：确认戳的计数等价物</h3>
+    <p>现口径：<code>confirmed_empty = zero_rows and data.empty_confirmed_at &gt; 0</code>（service.py:952）。追加 OR 分支：</p>
+    <pre class="snip">confirmed_empty = zero_rows <span class="kw">and</span> (data.empty_confirmed_at &gt; 0
+                                  <span class="kw">or</span> <span class="kw">all</span>(st.count_claim == 0 <span class="kw">for</span> st <span class="kw">in</span> lane_states.values()))</pre>
+    <p>语义：三档声明<strong>全部非 None 且全为 0</strong> 才算站点自证空 —— 任一档 None（分页区间形空表无标记、或计数站点个别档未证到）都自动落回人工戳路径，<strong>None 参与全称量词即为假</strong>，保守方向自动成立。计数自证空的波：<code>zero_listing</code> 软提示不再触发（:992-995 的 <code>not confirmed_empty</code> 条件天然覆盖），签发照常 —— 报告 §5.1「人机环节整个退役」在 M1 机制层一次到位（M2 启用站点后才实际生效；M3 收尾改 CLI / WebUI 提示语）。分页区间形站点（CarPT 若仅此形态）<strong>维持人工戳不变</strong> —— 空表页无标记，无法自证空集，这是设计而非缺陷。</p>
+
+    <h3>2.6 展示面</h3>
+    <ul class="plain">
+      <li><strong>CLI <code>--hr-status</code></strong>（status.py:198-210）：档位行在 <code>{pages}页{rows}行(全)</code> 基础上补计数 —— <code>rows/claim</code> 形态（如 <code>17行/声明17</code>），<code>count_match is False</code> 时显式标 <code>对不平</code>。</li>
+      <li><strong>走查报告</strong>（report.py 档位段）：同口径补一列；截断波的差值行直接可见（§1.2 第三条目标）。</li>
+      <li><strong>WebUI</strong>：M3 打磨项（站点状态块档位行补计数徽章），不在 M1。</li>
+    </ul>
+  </section>
+
+  <!-- ================= 3 触点清单 ================= -->
+  <section id="s3">
+    <div class="sec-head"><span class="sec-no">§3</span><h2>触点清单</h2></div>
+    <p>行号为基线 b6ce666 实测（本轮逐一核实，含报告 20:01 校正轮的全部锚点）。M1 触点 7 文件；M2 增 2 文件。</p>
+    <table>
+      <tr><th style="width:26%">文件 / 位置</th><th style="width:38%">改动</th><th>说明</th></tr>
+      <tr><td class="m">hr/model.py:303-355<br><code>HrLaneState</code></td><td>+3 additive 字段（§2.3）+ to_json / from_json 同步</td><td><strong>T1 陷阱</strong>：from_json 显式判空，禁 <code>_as_int</code> 缺省路径；不抬 schema 版本</td></tr>
+      <tr><td class="m">hr/adapters/base.py:34<br><code>HrAdapter</code></td><td>新方法 <code>parse_counters(html) -&gt; dict[str, int|None]</code>，默认返回 <code>{}</code></td><td>契约三条（§2.1）写进 docstring —— 覆写约定即铁律载体</td></tr>
+      <tr><td class="m">hr/service.py:292 区<br><code>_WaveContext</code></td><td>+<code>counter_claims: Dict[str, int]</code>（波内临时账，首非 None 胜出）</td><td>不持久化；持久化面在 HrLaneState</td></tr>
+      <tr><td class="m">hr/service.py:614 后<br>波次引擎取页处</td><td>每页成功解析后调 <code>adapter.parse_counters(html)</code> 并合并，~6 行</td><td>零额外请求；排序 / 字段校验失败页不上交（在 :619-630 截断之后调用）</td></tr>
+      <tr><td class="m">hr/service.py:947-956<br><code>_finish_wave</code></td><td>对平记账 + <code>depth_broken</code> + <code>releases_enabled</code> AND 门（§2.2）+ 零行自证 OR 分支（§2.5）</td><td><strong>唯一行为变更点</strong>；mismatch 告警与 streak 推进同址</td></tr>
+      <tr><td class="m">hr/service.py:991-1009<br>收尾 notes / result</td><td>截断波量化差值进 notes；mismatch 波 <code>result.reason_kind</code> 归 REASON_PARSE</td><td>走查报告与 WebUI notes 直接可见缺口</td></tr>
+      <tr><td class="m">hr/events.py:63 区</td><td>新文案 <code>counter_mismatch(site, lane, seen, claimed)</code></td><td><code>[HR 页面改版]</code> 前缀族；含口径校准引导（§2.4）；<code>__all__</code> 同步</td></tr>
+      <tr><td class="m">hr/status.py:198-210</td><td>档位行补 <code>rows/claim</code> 与 <code>对不平</code> 标记</td><td>CLI 与 WebUI 同一套数（<code>site_status</code> 单点）</td></tr>
+      <tr><td class="m">hr/report.py<br>档位段</td><td>走查报告补计数列 + 截断差值行</td><td>复用 lane_texts 同源数据</td></tr>
+      <tr><td class="m">hr/adapters/carpt.py <span class="mid">(M2)</span></td><td>覆写 <code>parse_counters</code>：末页分页区间终点即档内总数</td><td>推导规则按 CarPT 存档钉死（<code>&lt;b&gt;1 - 17&lt;/b&gt;</code>，1 起含端）；非末页 / 空表返回空 dict</td></tr>
+      <tr><td class="m">adapters/btschool（M2，视样张）</td><td>载体定形后：新薄子类或 <code>NexusPhpMyhrAdapter</code>（nexusphp.py:73）参数扩展</td><td>注册进 <code>ADAPTERS</code>（adapters/__init__.py:28）；前置 = D2 样张</td></tr>
+      <tr><td class="m">docs/configuration.md <span class="mid">(M2)</span></td><td>adapter 接入指南补「计数口径校准」节：铁律 + 样张归档要求</td><td>让下一个接入站点的人有可照抄的规程</td></tr>
+    </table>
+  </section>
+
+  <!-- ================= 4 里程碑 ================= -->
+  <section id="s4">
+    <div class="sec-head"><span class="sec-no">§4</span><h2>里程碑 M1–M3</h2></div>
+
+    <div class="milestone">
+      <div class="m-head"><span class="m-no">M1</span><h3>核心对平机制</h3><span class="m-tag">零拍板依赖 · 上线即现状</span></div>
+      <p>§3 前 9 行触点一次落地（carpt/btschool/docs 除外）。关键性质：<strong>所有 adapter 默认无计数 ⇒ 全部站点行为与今天逐字节等价</strong>，机制先上、启用后行 —— 这把「口径校准」风险与「机制正确性」风险彻底解耦。</p>
+      <ul class="plain">
+        <li>测试六类 + 不变量全绿（§5），含 T1 陷阱守阵与旧档案加载守阵。</li>
+        <li>红验一条：临时移除 <code>releases_enabled</code> 的 <code>depth_broken</code> 门 ⇒ T2（不对平冻结）守阵红，还原后绿。</li>
+        <li>验收：<code>commands run test.full</code> 全绿，无计数站点既有守阵（零行戳 / 守恒 / 截断）原样通过；无新配置键（<code>test_hr_config</code> 键面守阵不新增即证明）。</li>
+      </ul>
+    </div>
+
+    <div class="milestone">
+      <div class="m-head"><span class="m-no">M2</span><h3>首批站点启用（CarPT + BTSchool）</h3><span class="m-tag">前置：D2 样张 + P2 拍板</span></div>
+      <p>用户侧采两站<strong>当期</strong>样张（考察中 / 已达标 / 未达标三档，含翻页中途页与空表页）→ 定形各站计数载体与口径（报告 §9 D2；CarPT 分页区间形的推导基线已由存档实证：<code>1 - 17</code> 终点 = 17 行精确对平）→ 按拍板策略启用（推荐方案 A：样张实证后硬编码覆写，§7 P2）→ 覆写实现 + adapter 用例 + 真机走查。</p>
+      <ul class="plain">
+        <li>真机走查判据：连续 ≥2 波「站点声明 == 实抓行数」逐档对平，<code>--hr-status</code> 显示 <code>rows/claim</code> 一致；人为制造一次缺口（走查 fixture 或站点侧）验证冻结与自愈。</li>
+        <li>口径校准记录（样张路径 / 载体形态 / 推导规则 / 实证日期）随覆写进 adapter docstring —— 下个人接手时证据链完整。</li>
+        <li>验收：全量测试绿 + 走查实测数字记入档案进度日志。</li>
+      </ul>
+    </div>
+
+    <div class="milestone">
+      <div class="m-head"><span class="m-no">M3</span><h3>退役与打磨</h3><span class="m-tag">依赖 M2 实证</span></div>
+      <ul class="plain">
+        <li><strong>提示语收尾</strong>：<code>--hr-confirm-empty</code> 帮助文案与 WebUI 确认戳按钮说明补「计数自证空集的站点无需人工确认」；机制本身（人工戳）保留给分页区间形与非计数站点。</li>
+        <li><strong>WebUI</strong>：站点状态块档位行补计数徽章（<code>rows/claim</code> + 对不平态）。</li>
+        <li><strong>备选项</strong>（默认缓做，§7 P3 逐项拍板）：末页追翻省略 / HR 上限徽章总数轴互证（Σ分档 == 总数 == 实抓，三者两两互证）/ <code>looks_like_login</code> 补计数文本佐证（报告 §6 登录态负信号）。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= 5 测试计划 ================= -->
+  <section id="s5">
+    <div class="sec-head"><span class="sec-no">§5</span><h2>测试计划</h2></div>
+    <p>落在 <span class="file">tests/test_hr_service.py</span>（引擎行为）+ <span class="file">tests/test_hr_parse.py</span>（carpt 区间解析，M2）。夹具扩展：<span class="file">tests/hr_helpers.py:66</span> <code>myhr_page()</code> 增可选计数条参数（tab 形 HTML 片段）；新增 <code>myhr_page_interval()</code>（分页区间形，末页 <code>&lt;b&gt;1 - 17&lt;/b&gt;</code>）；测试用 adapter 子类覆写 <code>parse_counters</code> 上交合成值。<strong>同步本文件头部 docstring 的「测试计划」清单</strong>（守卫要求）。</p>
+    <table>
+      <tr><th style="width:8%">#</th><th style="width:20%">用例</th><th style="width:34%">设置</th><th>期望</th></tr>
+      <tr><td class="m">T1</td><td>对平放行</td><td>三档 claim == rows，末页到达</td><td><code>full_depth</code> 承认、<code>releases_enabled</code> True、<code>count_match</code> True、签发数与无计数基线一致</td></tr>
+      <tr><td class="m">T2</td><td>不对平冻结</td><td>C 档 claim=50、实抓 20、翻到末页</td><td><code>depth_broken</code> ⇒ 0 签发、<code>counter_mismatch</code> WARNING、<code>count_mismatch_streak</code>=1；连续 3 波 ⇒ ERROR 升级；<strong>命中与管束路径照常</strong>（不变量）；下一波对平 ⇒ 自愈签发、streak 清零</td></tr>
+      <tr><td class="m">T3</td><td>无计数降级</td><td>默认 adapter（空 dict）+ 旧版站点文件（无三键）加载</td><td>全路径与旧逻辑逐位一致；<code>count_claim is None</code>（<strong>T1 迁移陷阱守阵</strong>：不得变 0）</td></tr>
+      <tr><td class="m">T4</td><td>计数零自证空</td><td>三档 claim=0 ∧ rows=0</td><td>视同 <code>confirmed_empty</code> ⇒ 签发放行；<code>zero_listing</code> 软提示不出现；无需人工戳</td></tr>
+      <tr><td class="m">T5</td><td>计数&gt;0 行=0 / 空表两形态</td><td>①tab 形 claim&gt;0、rows=0 ②分页区间形空表（无标记，claim=None）</td><td>① <code>page_changed</code> 硬告警 + 不签发；② 维持 <code>zero_listing</code> 人工戳路径（自证空不可用）</td></tr>
+      <tr><td class="m">T6</td><td>截断差值信息性</td><td>预算截断（<code>full_depth</code> False）、rows&lt;claim</td><td>不告警、不冻结；notes 记 <code>实抓 N/声明 M</code> 差值；<code>ACTION_PARTIAL</code> 语义不变</td></tr>
+    </table>
+    <p><strong>不变量</strong>（横切断言，写在 T2 内）：<code>depth_broken</code> 门只拦批量「未列出」签发 —— mismatch 波的命中登记（<code>_record_hit</code>）、观察期推进、终态冻结、新鲜度与复用窗全部不变；既有守阵（守恒 / 零行戳 / 截断 / 多站点隔离）零改动全绿即为第二重证明。</p>
+  </section>
+
+  <!-- ================= 6 风险推演 ================= -->
+  <section id="s6">
+    <div class="sec-head"><span class="sec-no">§6</span><h2>风险推演</h2></div>
+    <table>
+      <tr><th style="width:26%">风险</th><th style="width:30%">后果</th><th>处置（设计内消化）</th></tr>
+      <tr>
+        <td><strong>R1 口径校准错误</strong>（首要，报告 §8.1）</td>
+        <td class="bad">永久 mismatch = 批量签发永久冻结（骤降保护同款误触面换入口）</td>
+        <td>铁律「<strong>宁可不用，不可错用</strong>」进 <code>parse_counters</code> 覆写约定：样张未实证「计数 == 全深度实抓行数」一律返回空 dict；告警文案自带「可能是口径校准错误」引导摘除；连续 3 波 ERROR 升级；M1/M2 分离保证机制错误与校准错误可分别定位</td>
+      </tr>
+      <tr>
+        <td><strong>R2 服务端缓存陈旧</strong>（§8.2）</td>
+        <td>偶发 mismatch</td>
+        <td>该波不签发、下一波自愈（方向保守，代价一轮波）；偶发与持久的区分靠 streak 升级信号</td>
+      </tr>
+      <tr>
+        <td><strong>R3 站点改版把计数移走 / 改名</strong></td>
+        <td>解析不到计数</td>
+        <td>返回空 dict ⇒ 自动降级现状（fail-open 到今天的行为）；与表头结构区分器（<code>ParsedScope.header_found</code>，base.py:19）是解耦双通道，谁先报警都行</td>
+      </tr>
+      <tr>
+        <td><strong>R4 分页区间形空表无标记</strong></td>
+        <td>该形态站点无法自证空集</td>
+        <td>设计内：人工戳机制原样保留（§2.5）；只有 tab / 摘要形兑现零行戳退役</td>
+      </tr>
+      <tr>
+        <td><strong>R5 波内清单漂移 TOCTOU</strong>（§3.3）</td>
+        <td>页间计数 / 行数不一致</td>
+        <td>首非 None 取第 1 页声明；行数对不平时冻签发下波自愈；只冻签发不撤命中，与既有防伪失败方向一致</td>
+      </tr>
+      <tr>
+        <td><strong>R6 迁移陷阱 T1</strong></td>
+        <td class="bad">旧档案 count_claim 被读成 0 ⇒ 全站假 mismatch 永久冻结</td>
+        <td>from_json 显式判空（§2.3）+ T3 旧档案加载守阵 + 红验</td>
+      </tr>
+    </table>
+  </section>
+
+  <!-- ================= 7 拍板点 ================= -->
+  <section id="s7">
+    <div class="sec-head"><span class="sec-no">§7</span><h2>拍板点</h2></div>
+    <div class="decision">
+      <div><div><strong>立项与排期。</strong>按本计划 M1 → M2 → M3 推进（推荐）。M1 零拍板依赖、上线即现状，可即刻开工；M2 等样张；M3 等 M2 实证。若只批 M1，机制与展示先落库，两站启用延后，无任何半成品风险。</div></div>
+      <div><div><strong>校准策略（报告 D3）。</strong>方案 A：样张实证后硬编码启用（<strong>推荐</strong>，与现有 adapter「站点事实」口径一致 —— carpt 当年即此路径）；方案 B：前 N 波影子模式只记录不执行。取 A 则 §6 R1 铁律随 docstring 落地；取 B 需另加观测面与切换判据，成本高一截。</div></div>
+      <div><div><strong>备选项取舍。</strong>末页追翻省略 / HR 上限总数轴互证 / 登录态佐证，默认全部缓做（报告定性：优化非简化 / 依赖 D4 口径实证）。同意缓做则 M3 只做提示语与 WebUI 两件小事。</div></div>
+      <div><div><strong>样张采集（报告 D2，用户侧动作，不阻塞 M1）。</strong>两站各采当期三档样张（含翻页中途页与空表页），定形载体（tab / 摘要 / 分页区间）与口径（B 档是否含自动通过、免罪后减不减、区间终点语义）。</div></div>
+    </div>
+  </section>
+
+  <!-- ================= 8 影响面 ================= -->
+  <section id="s8">
+    <div class="sec-head"><span class="sec-no">§8</span><h2>影响面与不变式</h2></div>
+    <ul class="plain">
+      <li><strong>代码</strong>：M1 触点 7 文件（model / adapter base / service / events / status / report / tests），M2 增 carpt + btschool + docs 共 3 文件；无新依赖、无新配置键、无 schema 版本抬升、无迁移脚本。</li>
+      <li><strong>红线</strong>：<code>config.yml</code> / <code>auto-qb-data/</code> 不碰；<code>config/schema.py</code> 无新键（黄金法则 4 无适用面）。</li>
+      <li><strong>黄金法则逐条核对</strong>：幂等 —— 计数对平是波内纯函数，重复波不重复罚；保守默认 —— 缺数一律降级现状；状态持久化 —— 三字段随 <code>HrLaneState</code> 走既有落盘链；fail-fast —— 无新配置故无新校验面；单一写线程 —— 无新线程无新锁；范围守恒 —— 本计划范围内改动全部来自报告结论，无顺手修。</li>
+      <li><strong>测试基线</strong>：M1 完成后 <code>commands run test.full</code> 实测数字记入 <code>testing/baselines/</code> 新切片并写进档案进度日志。</li>
+    </ul>
+  </section>
+
+  <!-- ================= 变更记录 ================= -->
+  <section id="changes">
+    <div class="sec-head"><span class="sec-no">§+</span><h2>变更记录</h2></div>
+    <table class="compact">
+      <tr><th style="width:22%">版本</th><th>内容</th></tr>
+      <tr><td class="m">v1.0 · 26-09-29-2036</td><td>初稿：按报告 26-09-29-1803 §7 草案对照代码收口 —— 三处定稿（parse_counters 逐页契约与首非 None 合并、收紧落点改 releases_enabled 单点闸门而非 full_depth 赋值折叠、mismatch 判定边界排除截断波）+ T1 迁移陷阱 + 六类测试与里程碑拆分。</td></tr>
+    </table>
+  </section>
+
+  <!-- ================= colophon ================= -->
+  <footer class="colophon">
+    PLAN 26-09-29-2036-plan-hr-counter-integration · TOPIC backend-partial-hr-verify · STATUS Open（待拍板）<br>
+    代码基线 b6ce666（行号本轮逐一实测核实）· 可行性依据 reports/26-09-29-1803（doc-updated 26-09-29-2001）· 测试基线 1749 passed / 3 skipped (90%, 提交轮 ae29a4f 实测)<br>
+    同专题链：报告 <a href="../reports/26-09-29-1803-report-hr-counter-verify.html">26-09-29-1803 (计数可行性)</a> ·
+    计划 <a href="../plans/26-09-28-1932-plan-hr-verify-rebuild.html">26-09-28-1932 (v3 rebuild, Done)</a> ·
+    审计 <a href="../reports/26-09-29-0404-report-hr-verify-v3-audit.html">26-09-29-0404</a> ·
+    <a href="../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html">26-09-28-0030</a> ·
+    档案 <a href="../tasks/26-09-22-backend-partial-hr-verify.md">26-09-22-backend-partial-hr-verify</a>
+  </footer>
+
+  </main>
+</div>
+</body>
+</html>

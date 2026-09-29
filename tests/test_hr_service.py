@@ -34,20 +34,32 @@
 - test_login_expired_marks_interval: 登录失效路径同样前进间隔基准(重试节奏受 min_interval 约束)
 - test_version_mismatch_skips_wave: 站点文件 schema 比程序新 → 跳过取数与写盘(不覆写新版文件)
 - test_fuzzy_name_match_unit: 宽泛名称粗配单元(信号串重合段 ≥ K; 技术噪声整词不构成判据 —— 含真实数据假重合回归)
+- test_counter_match_releases: T1 计数对平放行 —— 三档 claim==rows 全深度, 签发与无计数基线一致
+- test_counter_mismatch_freezes_batch: T2 不对平冻结 —— depth_broken 整波不签发, 连续 3 波 ERROR 升级, 对平自愈清零; 命中/管束/复用窗不变
+- test_counter_absent_degrades_to_legacy: T3 无计数降级 —— 默认 adapter + 旧档案(无三键)加载 count_claim None(T1 迁移陷阱守阵, 不得变 0)
+- test_counter_zero_claims_self_attest_empty: T4 计数零自证空 —— 三档 claim=0∧rows=0 视同人工戳, 零行软提示不出现
+- test_counter_positive_zero_rows_page_changed: T5① 计数>0∧行数=0 —— page_changed 硬告警 + 不签发
+- test_interval_empty_page_keeps_manual_stamp: T5② 分页区间形空表无标记(claim=None) —— 维持 zero_listing 人工戳路径
+- test_counter_truncation_gap_informational: T6 截断差值信息性 —— 非全深度 rows<claim 不告警不冻结, notes 记差值, REASON_BUDGET 语义不变
 """
+import logging
 import time
 from datetime import datetime
+from typing import Dict
 
 import pytest
 
+import auto_qb.hr.service as hr_service
 from auto_qb.hr import events
 from auto_qb.hr.fetcher import HrFetchError
 from auto_qb.hr.model import (
+    FETCH_LANES,
     LANE_SATISFIED,
     LANE_SCOPE,
     LANE_UNSATISFIED,
     SOURCE_NOT_LISTED,
     SOURCE_SATISFIED,
+    HrLaneState,
     HrSiteData,
 )
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, judge_record
@@ -57,6 +69,7 @@ from auto_qb.hr.service import (
     ACTION_WAITING,
     FUZZY_NAME_K,
     HrRefreshService,
+    REASON_BUDGET,
     fuzzy_name_match,
 )
 
@@ -64,8 +77,10 @@ from hr_helpers import (
     EMPTY_TABLE_PAGE,
     Clock,
     FakeFetcher,
+    counter_bar,
     global_conf,
     myhr_page,
+    myhr_page_interval,
     row,
     site_conf,
     torrent_blob,
@@ -902,3 +917,197 @@ def test_fuzzy_name_match_rejects_noise_only_overlap():
         "[虽然我不是完美恶女～雏宫蝶鼠替换传～].Futsutsuka.na.Akujo.dewa.Gozaimasu.ga.Suuguu.Chouso.Torikae.Den.2026.S01.1080p.WEB-DL.AAC.H.264",
         "Futsutsuka na Akujo dewa Gozaimasu ga Suuguu Chouso Torikae Den 2026 S01 1080p WEB-DL AAC H.264",
     )
+
+
+# ---------------- 计数对平(计划 26-09-29-2036 §5) ----------------
+
+
+def counter_adapter(monkeypatch, claims: Dict[str, int]):
+    """把 build_adapter 换成「按 claims 表上交计数」的测试 adapter(§5: 覆写 parse_counters 上交合成值)。
+
+    claims 波间可变: 测试直接改字典, 下一波 build_adapter 重建的 adapter 读到新表;
+    键缺 = 该档不上交(降级 None)。返回 claims 本体方便波间改写。
+    """
+    from auto_qb.hr.adapters.nexusphp import NexusPhpMyhrAdapter
+
+    class _CounterNexus(NexusPhpMyhrAdapter):
+        def parse_counters(self, html):
+            return {lane: v for lane, v in claims.items()}
+
+    monkeypatch.setattr(
+        hr_service,
+        "build_adapter",
+        lambda site, conf: _CounterNexus(
+            site,
+            hr_page_url=conf.hr_page_url,
+            download_path=conf.download_path,
+            scopes=FETCH_LANES,
+            page_param=conf.page_param,
+        ),
+    )
+    return claims
+
+
+def test_counter_match_releases(tmp_path, monkeypatch):
+    """T1 对平放行: 三档 claim == rows 且全深度 → 照常签发(与无计数基线一致), count_match 全 True"""
+    clock = Clock()
+    counter_adapter(monkeypatch, {"A": 0, "B": 5, "C": 0})
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" in data.verified and data.verified["h1"].source == SOURCE_NOT_LISTED
+    assert result.releases_signed >= 1 and data.wave.releases_enabled is True
+    assert [data.wave.lanes[l].count_match for l in "ABC"] == [True, True, True]
+    assert data.wave.lanes["B"].count_claim == 5
+
+
+def test_counter_mismatch_freezes_batch(tmp_path, monkeypatch, caplog):
+    """T2 不对平冻结: 全深度档 claim≠rows → depth_broken 整波不签发; 连续 3 波 ERROR 升级;
+    对平自愈 + streak 清零。不变量: 命中登记 / 管束 / 复用窗照常(门只拦批量「未列出」签发)。"""
+    caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
+    clock = Clock()
+    claims = counter_adapter(monkeypatch, {"B": 50})
+    blob11, h11 = mk_blob("EXAMPLE 11")
+    pages = {
+        url_of("A"): myhr_page([row(11, "EXAMPLE 11")]),  # 命中行(A 档, 全深度)
+        url_of("B"): myhr_page(five_expired_rows(20)),  # ② 停翻全深度, 实抓 5 行 vs 声明 50
+        url_of("C"): myhr_page([]),
+    }
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob11})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {
+        "h1": anchor_for("h1", completion_on=T_DONE_NEW),
+        h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW)
+    }
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    # 冻结: h1 不签发(无计数基线会签), releases_enabled False, streak=1, WARNING 告警
+    assert "h1" not in data.verified and result.releases_signed == 0
+    assert data.wave.releases_enabled is False
+    assert data.wave.lanes["B"].count_claim == 50 and data.wave.lanes["B"].count_match is False
+    assert data.wave.lanes["B"].count_mismatch_streak == 1
+    assert "计数对不平" in caplog.text
+    # 不变量: 命中登记照常(行 11 与本地种子对上) + 复用窗照常(有效波)
+    assert any(e.tid == 11 and e.infohash_v1 == h11 for e in data.index.values())
+    assert data.expires_at > 0
+    # 连续 3 波 → ERROR 升级(只提示人, 行为仍是「不签发」)
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    clock.advance(13 * 3600)
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["B"].count_mismatch_streak == 3
+    assert "已连续 3 波" in caplog.text
+    assert "h1" not in data.verified
+    # 下一波对平 → 自愈签发 + streak 清零
+    claims["B"] = 5
+    clock.advance(13 * 3600)
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" in data.verified and result.releases_signed >= 1
+    assert data.wave.lanes["B"].count_mismatch_streak == 0
+
+
+def test_counter_absent_degrades_to_legacy(tmp_path):
+    """T3 无计数降级: 默认 adapter(parse_counters 默认空 dict) → 全路径与旧逻辑逐位一致;
+    旧版站点文件(无三键)加载 count_claim/count_match 为 None(T1 迁移陷阱守阵: 不得变 0)。"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    # 无计数: 签发与既有基线(test_release_signed_on_full_coverage)逐位一致 + 新字段全 None
+    assert "h1" in data.verified and result.releases_signed >= 1
+    assert data.wave.releases_enabled is True
+    assert all(st.count_claim is None and st.count_match is None for st in data.wave.lanes.values())
+    # 旧档案反序列化: 键缺 = None(走 _as_int 缺省路径会折成 0 ⇒ 全站假 mismatch, 正是要防的事故)
+    legacy = {"lane": "B", "status": "ok", "pages": 2, "rows": 5, "full_depth": True}
+    st = HrLaneState.from_json(legacy)
+    assert st.count_claim is None and st.count_match is None and st.count_mismatch_streak == 0
+    # 新档案 JSON 往返: 三键不丢
+    st2 = HrLaneState.from_json(st.to_json() | {"count_claim": 7, "count_match": False, "count_mismatch_streak": 2})
+    assert st2.count_claim == 7 and st2.count_match is False and st2.count_mismatch_streak == 2
+
+
+def test_counter_zero_claims_self_attest_empty(tmp_path, monkeypatch, caplog):
+    """T4 计数零自证空: 三档 claim=0 ∧ rows=0 → 视同人工确认戳, 签发放行;
+    zero_listing 软提示不出现, 无需 --hr-confirm-empty。"""
+    caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
+    clock = Clock()
+    counter_adapter(monkeypatch, {"A": 0, "B": 0, "C": 0})
+    fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in "ABC"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" in data.verified and data.wave.releases_enabled is True
+    assert "清单为 0" not in result.reason and "零行" not in result.reason
+    assert "若确认账号的 HR 清单确实为空" not in caplog.text
+
+
+def test_counter_positive_zero_rows_page_changed(tmp_path, monkeypatch, caplog):
+    """T5① 计数>0 ∧ 行数=0(tab 形): 整表被吃光/首页即被截的显式信号 → page_changed 硬告警 + 不签发。"""
+    caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
+    clock = Clock()
+    counter_adapter(monkeypatch, {"B": 3})
+    pages = {
+        url_of("A"): myhr_page(five_expired_rows(20)),  # A 有行(避免零行波噪声), 全深度
+        url_of("B"): EMPTY_TABLE_PAGE,  # B 空表但站点声明 3 行
+        url_of("C"): EMPTY_TABLE_PAGE,
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" not in data.verified and data.wave.releases_enabled is False
+    assert data.wave.lanes["B"].count_claim == 3 and data.wave.lanes["B"].count_match is False
+    assert "声明 3 行但实抓 0 行" in caplog.text  # page_changed 硬告警
+    assert "计数对不平" not in caplog.text  # 与 mismatch 节流告警不重复
+
+
+def test_interval_empty_page_keeps_manual_stamp(tmp_path, monkeypatch, caplog):
+    """T5② 分页区间形空表(无标记 ⇒ claim=None): 自证空不可用 → 维持 zero_listing 人工戳路径。"""
+    caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
+    clock = Clock()
+    counter_adapter(monkeypatch, {})  # 区间形空表无计数标记: 覆写了也拿不到键
+    fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in "ABC"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert "h1" not in data.verified and data.wave.releases_enabled is False
+    assert "清单为 0" in result.reason  # 人工对账戳路径保留(--hr-confirm-empty)
+    assert "若确认账号的 HR 清单确实为空" in caplog.text
+
+
+def test_counter_truncation_gap_informational(tmp_path, monkeypatch, caplog):
+    """T6 截断差值信息性: 预算截断(非全深度) rows<claim → 不告警不冻结; notes 记差值;
+    REASON_BUDGET 语义不变(与解析问题分层)。"""
+    caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
+    clock = Clock()
+    counter_adapter(monkeypatch, {"A": 30, "B": 30, "C": 30})
+    pages = {
+        url_of("A", 1):
+            myhr_page([row(11, "EXAMPLE 11")], has_next=True),
+        url_of("B", 1):
+            myhr_page(five_expired_rows(20)[:1], has_next=True),
+        url_of("C", 1):
+            myhr_page([row(31, "OTHER 31", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")], has_next=True),
+    }
+    fetcher = FakeFetcher(pages=pages, blobs={11: torrent_blob(name="EXAMPLE 11")})
+    gconf = global_conf(max_pages_per_wave=3)
+    service = make_service(tmp_path, fetcher, gconf=gconf, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert all(st.ok and not st.full_depth for st in data.wave.lanes.values())  # 各 1 页截断
+    # 不告警不冻结: counter 门开着(签发没发生是位置覆盖不够, 与计数无关)
+    assert "计数对不平" not in caplog.text
+    assert data.wave.releases_enabled is True
+    # 差值写进 notes(走查报告与 WebUI 直接可见缺口)
+    assert "实抓 1/声明 30, 差 29 行" in result.reason
+    assert result.reason_kind == REASON_BUDGET  # 截断波归 budget, 不误报 parse

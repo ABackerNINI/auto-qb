@@ -1,33 +1,31 @@
-# HR 计数可行性分析 (数据完整性佐证 / 模型简化 / 安全稳定)
+# HR 计数: M1 核心对平机制已落地 → M2 等样张与拍板
 
-> 摘要: 应用户提问「站点 HR 页计数(考察中/未达标/HR上限)能否佐证数据完整性、简化模型、增强安全稳定」做的可行性分析。**结论: 高价值低成本的增量校验, 非结构性简化** —— 「计数是清单的校验和, 不是清单的替代品」。核心发现: ①现有防伪全是相对量/结构性检查(守恒/零行戳/行序/末页标记), 计数补上**绝对量轴**且不重蹈骤降保护覆辙(真值来源从本地高水位换成站点当波自报, 无陈化); ②最强论点: B/C 档 full_depth 唯一依据是「下一页」标记, 改版吞标记 ⇒ 第 1 页即"到底" ⇒ C 档深处未达标对象被批量误放行 —— 当前无独立防线覆盖的洞, 计数是唯一能当波报警的信号; ③简化收益: 零行人工确认戳可退役(计数=0 是站点自证空), 档位/身份/守恒/观察期全是本质复杂度不可省; ④**实证(26-09-29 用户实测 + 20:01 更新轮核实): 两站 myhr 页均有计数** —— CarPT 存档样张 tab 无数字后缀但**分页区有累计行区间标记 `1 - 17`, 与实测 17 行首列 ID 精确对平**(回溯性校验实证, 终点即档内总数); 形态两分: tab/摘要形(全波可用+零行自证) vs 分页区间形(末页才有总数, 空表无标记无法自证空集, 早停波降级 None); ⑤集成草案: adapter parse_counters + HrLaneState 加 count_claim/count_match + full_depth 收紧一个 AND 条件, 不加配置键, ~40 行, additive 无迁移; **两站为首批启用站点, 收益即期**。报告出厂 reports/26-09-29-1803 (doc-updated 26-09-29-2001)。
-> 触发: HR 计数, 完整性, 校验和, counter, count_claim, full_depth, 骤降保护, 零行确认戳, 误放行, 分页区间, adapter 降级
-> 最后活动: 2026-09-29 20:30 (提交轮: 同步到 ae29a4f 后校正报告全部行号引用与基线数字 —— 远端粗配收紧动了 service.py, 防伪段 +60 行, 新基线 1748/4)
+> 摘要: 专题三轮 —— ①可行性分析 (报告 26-09-29-1803, Done): 计数是清单的校验和非替代品, 补绝对量轴堵 B/C 档翻页标记失效的批量误放行洞。②修改计划 (plans/26-09-29-2036, M1 Done / M2 Open): 三处设计定稿 (adapter 逐页 parse_counters + 首非 None 合并; 收紧落点 = releases_enabled 单点 AND 门, full_depth 字段不动; 截断波差值信息性) + T1 迁移陷阱守阵。③**M1 实施轮 (2026-09-29 21:47)**: 五代码文件 (model +3 字段 / adapter base 默认钩子 / service 波内临时账 + 闸门 + 零行自证 / events 文案 / status 展示; report.py 走 lane_texts 单点零直改) + T1–T6 七守阵 + 红验闭环 (移门 T2/T5① 红, 还原绿); 全量 1756 passed + 3 skipped / 90%。全部 adapter 默认无计数 ⇒ 无计数站点行为与基线逐位一致 (上线即现状)。
+> 触发: HR 计数, count_claim, count_match, count_mismatch_streak, full_depth, releases_enabled, depth_broken, parse_counters, 分页区间, 零行自证, T1 迁移陷阱
+> 最后活动: 2026-09-29 21:47 (M1 落地 + 红验 + 基线切片 26-09-29-2147, 未提交)
 
 ## 状态
 
-**分析完成, 报告已出厂并按用户实测更新(Done)** —— [26-09-29-1803-report-hr-counter-verify](../reports/26-09-29-1803-report-hr-counter-verify.html)。
-纯分析轮: 零代码改动; 认领链四处回写(计划 1932 / v3 审计 0404 / v2 审计 0030 / 任务档案 0922)已闭环;
-提交轮先 stash → sync 到 ae29a4f(远端 3 提交: 粗配收紧/要求门显示/视图发布链) → pop → 报告引用在新基线重校
-(_retention_check 1104 / _sign_releases 1117 / 骤降注释 944 / MISSING_GRACE_WAVES 107 / FAIL_STREAK 154,
-基线数字 1749 passed + 3 skipped (90%) 提交轮实测; 最近切片 26-09-29-1938 记 1748/4), 无代码变更不新建基线切片。
-**未开工任何实现** —— 报告 §9 留了 4 个裁决点等用户拍板。
+**M1 已实施未提交** —— 代码改动 7 文件 (src/auto_qb/hr/{model,events,service,status}.py、adapters/base.py、tests/{test_hr_service,hr_helpers}.py), 基线切片 [26-09-29-2147](../testing/baselines/26-09-29-2147-hr-counter-m1.md)。
+唯一行为变更点 = 批量「未列出」签发闸门多一个 AND 条件 (service.py `releases_enabled … and not depth_broken`)。
 
 ## 未完成
 
-- **裁决点 D1-D4**(报告 §9, 等用户拍板): D1 是否立项(建议立, **两站实测有计数, 收益即期**);
-  D2 样张采集与载体定形(两站各采当期三档样张含翻页与空表, 定形 tab/摘要/分页区间载体与口径;
-  CarPT 存档的「1-17 终点即总数」是分页区间形推导基线); D3 校准策略(倾向样张实证后硬编码启用,
-  §8.1 铁律「宁可不用不可错用」写进 adapter 覆写约定); D4 HR 上限总数轴(x/y 的 x 若口径可实证,
-  与分档计数两两互证)是否纳入。
-- 若立项: 实现按报告 §7 触点清单走(adapter parse_counters / HrLaneState 字段 / full_depth 收紧 /
-  零行站点自证路径(限 tab/摘要形) / events.counter_mismatch / 五类测试用例 + 命中不受影响不变量)。
+- **拍板结果 (2026-09-29 21:55 当面询问)**: P1 立项 = 已实施 M1 ✓; **P2 校准策略 = 方案 A**(样张实证后
+  硬编码启用, 用户拍板, **暂不执行** —— M2 不开工); P3 备选项取舍 = **后续决定**(暂按计划默认缓做);
+  P4 样张采集安排 = **后续确定**(用户侧动作, 只阻塞 M2)。
+- **M2** (CarPT + BTSchool 启用, 待 P4 样张后启动): 覆写 parse_counters + adapter 用例 + 真机走查。
+  实施注意: ①计划签名 `parse_counters(html)` 不带档位参数 —— 区间形站点须从页面自身辨认所属档位
+  (tab 形无此问题), 定形时核对样张; ②tab 形计数若把「到期段深处行」计入总数, ②停翻波会持续 mismatch
+  冻结批量签发 —— M2 校准须把「②停翻波的 rows vs claim」列为样张必验项。
+- **M3**: 提示语收尾 (--hr-confirm-empty 帮助文案) + WebUI 计数徽章; 备选项默认缓做。
+- **提交中**: 用户已下「先提交」指令, 随主提交入库。
 
 ## 指针
 
-- [分析报告 26-09-29-1803 (本轮, Done)](../reports/26-09-29-1803-report-hr-counter-verify.html) ·
-  [v3 审计 26-09-29-0404](../reports/26-09-29-0404-report-hr-verify-v3-audit.html) ·
-  [v3 计划 26-09-28-1932](../plans/26-09-28-1932-plan-hr-verify-rebuild.html) ·
+- [集成修改计划 26-09-29-2036 (M1 Done / M2 Open)](../plans/26-09-29-2036-plan-hr-counter-integration.html) ·
+  [基线切片 26-09-29-2147](../testing/baselines/26-09-29-2147-hr-counter-m1.md) ·
+  [可行性报告 26-09-29-1803 (Done)](../reports/26-09-29-1803-report-hr-counter-verify.html) ·
   [任务档案](../tasks/26-09-22-backend-partial-hr-verify.md)
 
-**Refs:** memory-bank/reports/26-09-29-1803-report-hr-counter-verify.html
+**Refs:** memory-bank/plans/26-09-29-2036-plan-hr-counter-integration.html, memory-bank/testing/baselines/26-09-29-2147-hr-counter-m1.md

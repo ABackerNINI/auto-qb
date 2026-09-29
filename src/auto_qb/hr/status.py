@@ -69,6 +69,8 @@ class LaneStatus:
     cutoff_done: float = 0.0
     full_depth: bool = False
     fail_streak: int = 0
+    count_claim: Optional[int] = None  #: 站点声明行数(None = 无计数, 计划 26-09-29-2036 §2.6)
+    count_match: Optional[bool] = None  #: None = 无从对平; False = 对不平
     detail: str = ""
     text: str = ""
 
@@ -197,17 +199,23 @@ def _lane_statuses(data: HrSiteData, now: float) -> Tuple[List[LaneStatus], str]
             cutoff_done=st.cutoff_done,
             full_depth=st.full_depth,
             fail_streak=st.fail_streak,
+            count_claim=st.count_claim,
+            count_match=st.count_match,
             detail=st.detail,
         )
         ls.text = (
             f"{LANE_TEXTS.get(lane, lane)} {ls.status_text}: {ls.pages} 页 / {ls.rows} 行" +
-            ("(全深度)" if ls.full_depth else "") + (f", {ls.detail}" if ls.detail else "") +
+            ("(全深度)" if ls.full_depth else "") + (f" / 声明 {ls.count_claim} 行" if ls.count_claim is not None else "") +
+            (" 对不平" if ls.count_match is False else "") + (f", {ls.detail}" if ls.detail else "") +
             (f", 连续失效 {ls.fail_streak} 波" if ls.fail_streak > 1 else "")
         )
         out.append(ls)
         parts.append(
             f"{lane}:{'✓' if st.status == LANE_OK else ('✗' if st.status == LANE_FAILED else '-')}"
-            f"{st.pages}页{st.rows}行" + ("(全)" if st.full_depth else "")
+            f"{st.pages}页{st.rows}行" + ("(全)" if st.full_depth else "") + (
+                f"/声明{st.count_claim}" +
+                (" 对不平" if st.count_match is False else "") if st.count_claim is not None else ""
+            )
         )
     return out, " ".join(parts)
 

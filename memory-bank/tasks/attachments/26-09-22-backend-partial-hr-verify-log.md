@@ -6,6 +6,91 @@
 本文件是 [../26-09-22-backend-partial-hr-verify.md](../26-09-22-backend-partial-hr-verify.md) 的附件;
 最近的纪要仍在档案本体里。以下按原顺序(最近在上)。
 
+- **2026-09-28 00:30 (v2 实施核对 + 安全/稳定性审计 —— 纯审计轮, 代码/文档零改动)** — 用户令「分析
+  plans/26-09-27-1815 实施情况, 重点是安全性/稳定性/BUG, 并写报告含 HR 在线核实现状 (配置/默认节奏/
+  限流)」。开工预检 `my-commit-flow.sync` PASS (与主线齐平 c7dfbd20)。产出:
+  [reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html](../../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html)。
+  **核对结论**: M5.1-M5.5 共 33 个修改项逐条以 file:line 对到当前代码, 全部落地无缺席; 三个实施期收口
+  (滚动窗口=max_pages_per_refresh / max_pages_per_round=9 / P 公式勘误) 均证实; 零静默变更成立
+  (激活门 legacy 默认 + 新键全默认关/旧值)。**新发现 (均未改代码, 待拍板)**:
+  ① **F1 (P2)**: 早停② 的 P 一致性机检空真 —— `period_ok` 初始 True 且只有 remain>0 的行参与反算
+  (service.py:477/561-572), 整页 remain==0 时机检从未运行却被当作通过; 轮尾 meta 的
+  `period_consistent=bool(period_values) and period_ok` (service.py:828) 却是 False —— 两道机检口径
+  不一致。触发链: C 档(未达标)行 remain 若以可解析 0 展示 (实现注释自认「已到期行被站点截 0」) ⇒
+  C 第 1 页即早停 ⇒ complete=True ⇒ C 第 2 页起种子走反应式「完整刷新未列出」放行 (resolve.py:260-273)
+  ⇒ 漏管。B 档同形态无害 (本就可删); remain 空白形态则触发 S2 停站 (remain 是必填字段)。收口建议:
+  早停②加 period_values 非空前置或限 A 档 + M0 补第④项实测 B/C 档 remain 形态。
+  ② **F2 (P3)**: 跨页 S1 判据 `max(cur) > min(prev)` (parse.py:329-330) 对「轮内清单顶端插入」零容忍
+  —— 相邻两页间隔 90~113s, 其间 ≥2 个新完成进清单顶端 ⇒ 判「跨页乱序」⇒ 本轮失败计熔断失败,
+  连续 3 轮 ⇒ 12H 熔断 + suspended 人工恢复。fail-safe 方向无损, 是可用性风险; 与 2026-09-26
+  「哪怕 1 处」定稿 (针对页面改版) 存在张力, 需单独拍板。
+  ③ **F3 (P3)**: `parse_missing_rate_max` 被 S2 零容忍架空 —— service.py:551 任何缺失率>0 即中止,
+  :806 的阈值分支不可达; keys.md:30 仍是旧语义 (死配置+文档漂移)。
+  ④ **F4 (P4)**: status.py:143/190 注释仍写勘误前公式 (实现已正确); `covered_local_any`
+  (service.py:486/596) 只写不读。
+  **安全/稳定性结论**: 端点五道边界 (loopback/token 常数时间+0600 生成/origin/SSRF 白名单/回传双道校验)、
+  存储自愈链 (.bad 留证→.bak→锁失效只读退化)、增量落盘、可中断停机、告警三档分级全部代码证实;
+  残余在配置面 (extension_id 空 / token:123456, M5.5 WARNING 已就位)。
+  **现状盘点** (报告 §5): 配置全表 3 张 (全局 23 键 + channel 5 键 + 站点 13 键含默认值) /
+  默认节奏 (legacy: 12H 完整有效期, 抓取轮 ≤9 页·每档 ≤5 页·间隔 90~113s·配额 12/时·60/天 合并,
+  15 页站点典型 2~3 轮 ~1-2h 收敛; split opt-in: 页面 40/时·下载 20/时双桶) / 限流全景 14 道 /
+  站点文件字段 / 错误处理九分类 / 观测口子 (--hr-status/--hr-once/--hr-resume)。
+  **基线复验与同步**: 分析轮开工时与主线齐平 c7dfbd2, test.full = 1811+3 (91%) 与切片 26-09-27-2326
+  逐位一致; 提交轮预检发现远端进 aef2462 (webui 站点页搜索, hr/ 未动) ⇒ 按先同步后提交弃生成物
+  _doc-map 后 ff 快进, 合并基线复跑 test.full = **1812 passed + 3 skipped (TOTAL 91%)** 与最新切片
+  26-09-28-0014 逐位一致, 不新建重复切片。收尾动作: 报告按认领链协议补 5 处反向声明 (1815/2204/
+  1628/档案/切片); _doc-map 因本报告入图超 cap —— 先按守卫指引收口**生成器头部说明** (省 147 字符),
+  远端同期把 index-auto cap 提至 12100, 两相叠加后 12881 字节 (~11.5K 字符) 达标; activeContext 切片
+  同轮蒸馏回 cap 内 (9579 → ~4.4K, 已完成明细沉降本档案)。
+
+- **2026-09-27 22:18 (M5.1–M5.5 全部落地 —— 在线核实 v2 代码侧完成)** — 用户令「实施计划
+  plans/26-09-27-1815, 拍板按推荐」。开工先同步: 远端 045ea27 比本地 cbc4b80 新两笔且纯落后
+  (本地未提交的 10 个 memory-bank 文档与远端零重叠) ⇒ `merge --ff-only` 快进后再动代码。
+  **五步各全量绿 + 一红验**:
+  ① **M5.1 判据与观测** (1763 passed): `parse.order_violations` 纯函数(方向自适应由首两可比行推断,
+  翻转视同逆序, 缺字段行不计比较但计「证据不足」)+ `cross_page_violation` 跨页证据; service 页内/跨页/
+  方向翻转三路接线(判定前置 = 成功取回 + 表头 + 可比行 ≥ 2)+ `maxpage/currentpage` 进翻页判据**并集**
+  (堵 P1 英文站「下一页」只认中文的缺口)+ 轮级骤降观测(`plunge_suspect`, 基线 = 最近结构完好且非零轮,
+  可疑轮不计入 —— 堵「0 vs 0」自愈洞)+ `--hr-status` 观测面四行(排序 ✓/✗/未判定 · 考核期 P 分布 ·
+  骤降观测 · 档位计数「上轮→本轮」)+ HrRefreshMeta 观测字段(order_ok/order_detail/entry_baseline/
+  plunge_suspect/plunge_rounds/scope_counts/prev_scope_counts, 不抬 schema 版本)。
+  ② **M5.2 信号处置与停用** (1774): S1 排序违反 / S2 必填字段缺失(均**不设阈值**, 2026-09-26 定稿)
+  ⇒ `_SignalAbort` 停翻 + `ACTION_ERROR`(不产生放行)+ 计入熔断失败 + `signal_rounds` 累计
+  (干净轮清零 = 三道隔离之三); 处置文案 S1/S2 分开(`events.order_broken` / `field_missing`, 节流共用);
+  连续 3 轮(`SUSPEND_ROUNDS`)⇒ `HrSuspension` 停站: 取数侧**零请求**(连复用轮下载也让位)、
+  判定侧 `judge_record` 返回 None **回落本地逻辑**(❗只停取数不停判定 = 拿旧清单继续放行, 比不停更危险)、
+  恢复 = 新 CLI `--hr-resume <站点>`(锁内清 suspended + reason 留痕), 熔断到期不自动恢复;
+  骤降保护生效(判不完备不产生放行, `accept_empty_listing` 站点级口子默认关; 持续 3 轮零 + 结构完好
+  ⇒ WARNING 指引, 刻意不自动接受); 回填/清单**双路对账撤销放行**(P2: `_retract_on_backfill` 新算出/
+  永久层复用 + `_retract_on_listing` 行重回清单 hash 继承的兜底, partial 轮即时收放行);
+  登录失效指数退避(2^(n-1)×poll 封顶 refresh_interval, 退避期零请求/不计失败/不动 fetched_at,
+  登录恢复清零); 多实例引导补「配额翻倍(2×12/时)」后果(D3=a)。
+  ③ **M5.3 配额拆分** (1787): 激活门 `quota_model` 站点级默认 legacy(逐字节一致)+ 双令牌桶
+  (HrLimits 扩展 split 字段 + `split_next_allowed_at`/`split_try_consume`; tokens/refill_ts 持久化,
+  按「上次补充时刻+速率」恢复 —— 幂等跨重启消除整点突发; tokens=None ⇒ 首次满桶)+ 站点文件
+  `torrent_quota`(不抬 schema 版本; 旧数据 quota 含下载计数 ⇒ split 初期页面用量高估, 保守方向)+
+  页面只在新轮/下载只在复用轮(§3.4)+ `--hr-status` 页面/下载两组展示 + 速率×间隔自洽机检(3.6)+
+  扩展 caps 上调 60/时·600/天(D6)+ `max_torrents_per_day` Optional 化(未配置按模型取 legacy 60 /
+  split 200)。实施决策: 站点覆盖键 page_rate_per_hour/torrent_rate_per_hour 新增, 旧键
+  max_torrents_per_hour 在 split 下映射为下载桶速率覆盖(已有配置不失效)。
+  ④ **M5.4 早停与豁免** (1795): 预算**轮转起点**(D9=b: 上轮未完成档位优先, 跨轮语义不变)+
+  单轮页面总量 `max_pages_per_round=9`(D5=a, 全局键, 0=不限)+ 早停② `remain==0` 连续 5 行
+  (`AGE_STOP_STREAK`) + P 一致性机检(±1 天容差, 不过 ⇒ 告警 + 早停②/豁免 A 双禁用, 机检不是文档承诺)
+  + 早停③ 覆盖本地严格版(本地种子 ⊆ 已抓行且索引无待回填 ⇒ 本档停翻但**绝不置 complete**)+
+  豁免 A `auto_age_limit`(取数侧反算 P 喂豁免线, 判定与早停②同源, 默认关)+ 豁免 B
+  `seeding_exempt_ratio`(本地做种 ≥ 要求 × 倍数 ⇒ 「义务已超额完成」, 压过清单命中, 默认关,
+  不参与早停; `HrAnchor` 加 `seeding_time`, record.hr_anchor() 带出)。**实施决策与勘误**:
+  滚动窗口收口 = `max_pages_per_refresh` 即窗口页数不另设键; P 反算公式**勘误**(三份制品同源笔误
+  「P ≈ done + remain − now」数学上恒为负偏移 —— 正确 P = (now − done) + remain, 已按唯一正确方向
+  实现, 主计划 §15 v3.6 注明); P 参与行 = remain>0 的行(已到期行 remain 被站点截 0, 反算负值不参与)。
+  ⑤ **M5.5 收尾** (1796): 新键全链路(schema/validate/impact L0/keys.md/configuration.md)+
+  端点纵深提示(extension_id 留空启动 WARNING —— 有意推通知, 配好即不再出现; 文档写明 token 自动生成
+  与 config.yml 由用户手改, 红线不动)+ 扩展 README caps 表更新 + 零静默变更回归
+  (legacy 站点行为逐字节一致独立守阵)。红验 ×4(翻页判据并集 / 骤降保护 / 激活门 / 早停②,
+  临时还原 ⇒ 对应守阵红, 还原后全绿)。**最终 test.full 1796 passed + 3 skipped(91%)**,
+  基线切片 26-09-27-2035; 主计划 §15 v3.6 + 计划 1815 v1.2 已回写。**未提交**(等用户显式指令);
+  真机走查 + M0 前置实测三项(排序倒序 / P 恒定 / 英文站分页)仍开放。
+
 - **2026-09-25 17:10 (计划 v3.0: 达标判定来源优先级 —— 仅计划修订, 代码待落地)** — 用户指令: 「HR在线核实优先级:
   在线信息.考察中 > 在线信息.已达标 > 在线信息.未达标 > 本地信息」。核查现行实现, 两处与该优先级冲突:
   ① `hr/model.py::satisfied_verdict` 对 A/D 档用「剩余达标时间 == 0 ⇒ 已达标」推导 —— v2.8 已实证该字段是

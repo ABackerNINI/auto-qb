@@ -2,7 +2,7 @@
 
 **Status:** Open
 **Added:** 2026-09-22
-**Updated:** 2026-09-28
+**Updated:** 2026-09-29
 **Summary:** 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
 (2026-09-24/25): M1 = 新包 `src/auto_qb/hr/` 离线管道 + 配置全链路 + `--hr-once`; M2 = 本地端点
 (`/api/hr/tasks` + `/api/hr/result`, token + origin + URL 白名单) + 取数线程 (`hr/worker.py`) + 只读视图发布 +
@@ -41,8 +41,11 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
 **下载规则**(下载=身份登记一次, 同 tid 永不重下, 状态追踪靠 tid 读页面档位; **已见 A 档行无条件全下载**硬规则; B/C/D 终态行 = 覆盖区间+宽泛名称粗配(D1 已拍板 21:53: 连续重合段≥K 即疑似本地, 宁误配不漏配; 漏配后果全方向安全无漏 HR; 粗配=疑似触发器, 定论一律 infohash 精配); 本地没有的种子不下载; 完成时间可信度分层, 纯辅种不参与条件①) + **超额线 SEED_EXEMPT_RATIO=3**(做种 ≥3×required+extra ⇒ 放行并免除在线对账 — 不进覆盖对象集, 特别老藏深的种子不再拉深覆盖深度, 纯辅种做满 3× 同样出集; 网站绝对权威 — 被动命中「考察中」仍转管束) +
 单频控三键 + 熔断/停用/退避全删(档位级数据有效性截断式, 证据无时效 — 整波覆盖证据与两级证据年龄退役; 排序失效 = 强制早停立即停翻(之前数据有效, 等下周期))+ 证据防伪三道校验(A 档流转守恒: 上波考察中行在本波 A/B/C 留存 ≥0.7 首要; 总行数骤降 30% 粗保险; 零行对账戳)+ 失踪观察期(22:38 收紧: 失踪者一律当作无证据 — 无小样本豁免无快路径; streak 用局部覆盖证明推进 2 波判移出, 与整波校验解耦防死锁; 行 4 特例: 没看到不终结考察中); 22:15 梳理轮修 17 处漂移并补齐骤降保护/空对象集两个完备性缺口(§3 重编号 3.3 超额线/3.4 证据健康);
 配置 40→14 键(completed_age_limit/auto_age_limit/seeding_exempt_ratio/hr_page_scopes/accept_empty_listing/quota_model/mode/unknown_policy 全删); M1-M5 里程碑与验收判据见计划 §8; v2 审计 F1-F4 由该计划整体消解。
+**v3.1 HR 计数对平集成修改计划已产出 (2026-09-29, 代码未动)**: 可行性报告 26-09-29-1803 转化为
+[plans/26-09-29-2036](../plans/26-09-29-2036-plan-hr-counter-integration.html) (doc-status Open, 拍板点 P1-P4 待用户) ——
+M1 核心对平机制(上线即现状, 零拍板依赖) / M2 两站启用(前置 D2 样张) / M3 退役与打磨。
 **Topics:** backend-partial-hr-verify
-**Refs:** memory-bank/reports/26-09-29-1803-report-hr-counter-verify.html, memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html, memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html
+**Refs:** memory-bank/reports/26-09-29-1803-report-hr-counter-verify.html, memory-bank/plans/26-09-29-2036-plan-hr-counter-integration.html, memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html, memory-bank/plans/26-09-28-1932-plan-hr-verify-rebuild.html, memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html, memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/tasks/26-09-25-webui-hr-safety-display.md, memory-bank/plans/26-09-26-0031-plan-hr-ext-options-style.html, memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html
 
 ## 原始请求
 
@@ -85,8 +88,50 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
 | v3 波次模型重建 (计划 26-09-28-1932 M1–M5) | **Done** (代码侧, 真机走查待) | 2026-09-29: 四行判定表重写 `hr/resolve.py`(HrIdentity: HR/RELEASED/NO_EVIDENCE, 12 格矩阵单测) + 波次引擎重写 `hr/service.py`(单波型 + A/B/C 轮流 + 三停翻条件①②③ + 档位级截断式有效性 + 失踪观察期 + 三道防伪 + 身份登记一次下载规则) + 单频控重写 `hr/ratelimit.py` + 熔断/停用/退避删除 + 配置 40→14 键 (config v2→v3 迁移 / hr_site v1→v2 迁移 / 档案 listing 字段) + `--hr-resume` 删 / `--hr-confirm-empty` 增 + WebUI 状态块重写与确认戳按钮 + keys.md 回写与键面基线重生成; 全量 1743 passed + 3 skipped; 真机走查(M0 剩余项 + 扩展 reload)仍开放 |
 | 实报修复: 放行签发即作废 + 端点未监听 (v3 落地三缺陷) | **Done** | 2026-09-29 18:21: 用户实报「HR 热重载后种子仍显示本地兜底 + 扩展连不上端点 + NameError」⇒ 三处同族缺陷: ①`service.py::_freeze_terminal` 引用**未导入**的 `LANE_SATISFIED`(v3 重建起潜伏, 真机走到那一行才炸并崩整波) ②冻结/观察期签发的放行记录**漏带锚点快照** ⇒ `drift_reason` 把 `anchor_downloaded=0` 读成「downloaded 增长」, 记录**签发当刻作废**(用户症状「已在线核实过却显示本地兜底」; 计划 §7.2 明写 verified 含锚点) ③`HrRuntime.apply` L0 重建路径新建端点却不 `start()` ⇒ 端口从未绑定(扩展连不上, 取数线程照样派发任务白等 180s)。修复: 三处签发收敛单点 `_release_record`(带快照) + `HrVerified.has_anchor_snapshot`(无快照不作废) + L0 路径补端点启动; 既有守阵 `test_terminal_vanish_writes_release` 被揭穿常年**假绿灯**(夹具让目标分支不可达), 重塑并红验 4 条。全量 **1743 passed + 4 skipped (91%)**, 基线 26-09-29-1821(final: 同会话追加「端点未监听快速失败 + 观测期守阵加固」后 **1745 passed + 4 skipped**); 档案 [tasks/26-09-29-backend-hr-release-deadend.md](26-09-29-backend-hr-release-deadend.md) |
 | v2 实施核对 + 安全/稳定性审计 | **Done** (纯审计, 代码未动) | 2026-09-28 00:30: 报告 [26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) —— M5.1-M5.5 共 33 项逐条以 file:line 核对全落地; 安全面五道边界/稳定性六维度全核对; 新发现 F1(P2)/F2(P3)/F3(P3)/F4(P4) 见报告 §2 与切片「未完成」; 处置待用户拍板 |
+| v3.1 计数集成修改计划产出 (报告 1803 转化) | **Done** (纯文档, 代码未动) | 2026-09-29 20:36: [plans/26-09-29-2036](../plans/26-09-29-2036-plan-hr-counter-integration.html) (doc-status Open) —— 报告 §7 草案对照代码基线 b6ce666 收口成触点清单 (M1 七文件) + 里程碑 M1-M3 + 六类测试 + 命中不受影响不变量; 三处设计定稿 (逐页提取首非 None 合并 / 收紧落点改 releases_enabled 单点 AND 门 / 截断波差值≠mismatch) + 新识别 T1 迁移陷阱 (旧档案 count_claim 误读 0 ⇒ 全站假 mismatch); 拍板点 P1-P4 待用户, M1 零拍板依赖可开工 |
+| v3.1 计数集成 M1 核心对平机制 | **Done** (代码侧; M2 等样张+拍板, M3 缓做) | 2026-09-29 21:47: 用户令「按计划实施 M1」⇒ 触点 7 文件落地: `model.py` HrLaneState +3 additive 字段 (from_json 显式判空挡 T1 陷阱, 不抬 schema 版) / `adapters/base.py` 默认钩子 `parse_counters(html)={}` (契约三条进 docstring) / `service.py` 波内 counter_claims 首非 None 胜出 + `_finish_wave` 对平记账 + **唯一行为变更点** (releases_enabled 追加 `and not depth_broken`) + 零行自证 OR 分支 (三档 claim=0 视同人工戳) + 截断差值进 notes / `events.py` counter_mismatch 文案 (含口径校准引导) / `status.py` LaneStatus +2 字段与 rows/claim·对不平 展示 / report.py 走 lane_texts 单点零直改; 测试 T1–T6 七用例 + 红验闭环 (移门 T2/T5① 红 → 还原绿); 全量 **1756 passed + 3 skipped / 90%**, 基线 26-09-29-2147; M1 全 adapter 默认无计数 ⇒ 无计数站点行为与基线逐位一致 |
 
 ## 进度日志
+
+- **2026-09-29 21:47 (v3.1 计数集成 M1 落地 —— 代码轮)** — 用户令「按计划实施 M1 (plans/26-09-29-2036), 有待拍板的询问」。
+  开工前 sync 至 616676a (本地回写与远端在 plans/_index.md 相邻行重叠 ⇒ stash→sync→pop 无冲突合流)。
+  触点 7 文件: ①`model.py` HrLaneState +count_claim/count_match/count_mismatch_streak (additive,
+  to_json/from_json 同步; **from_json 显式判空** —— 旧档案无键必须得 None, 走 _as_int 会折成 0 造成
+  全站假 mismatch 永久冻结, T1 陷阱守阵钉死); ②`adapters/base.py` 新默认钩子 `parse_counters(html)`
+  返回 `{}` (契约三条写进 docstring: 只上交本页能证到的总数 / 键缺即降级绝不猜测 / 样张未实证不得覆写);
+  ③`service.py` _WaveContext +counter_claims 波内临时账 (首非 None 胜出, 校验失败页不上交) +
+  _do_wave 跨波延续 mismatch streak + _finish_wave 对平记账 (**唯一行为变更点**: releases_enabled 追加
+  `and not depth_broken`; mismatch 只在全深度档成立, 截断/①③波 rows<claim 只记差值进 notes) +
+  零行自证 OR 分支 (三档 claim==0 视同人工确认戳, None 参与全称量词即为假) + depth_broken 并入
+  reason_kind(REASON_PARSE)/alerted; ④`events.py` counter_mismatch (含口径校准引导, streak≥2 点名);
+  ⑤`status.py` LaneStatus +2 字段, 详/简两形态补 rows/claim·对不平 (CLI --hr-status 与 WebUI 同套数);
+  ⑥report.py 零直改 (走查报告走 result.lane_texts 单点); ⑦测试: test_hr_service.py 尾部「计数对平」节
+  T1–T6 七用例 (adapter 覆写注入器经 monkeypatch build_adapter) + hr_helpers 计数条片段/分页区间形页面
+  夹具 + docstring 测试计划同步。**红验闭环**: 临时移除 `and not depth_broken` ⇒ T2/T5① 变红 (其余
+  1754 绿), 还原后全绿 —— 守阵钉在闸门上。全量 **1756 passed + 3 skipped / 90%** (12358/999,
+  test.full 22.9s), 基线切片 [26-09-29-2147](../testing/baselines/26-09-29-2147-hr-counter-m1.md);
+  HR 模块新增行全覆盖 (base 100%, 其余未覆盖行均为既有遗留)。P1 拍板已由「实施 M1」实质成立;
+  P2 校准策略 / P3 备选项 / P4 样张采集已当面询问用户待答。**未提交**(等用户显式指令)。
+  实施中发现的计划外事项 (未动, 待拍板): ①既有 `fail_streak` 无清零点 (model.py 注释称「干净波清零」
+  但代码从未清), 恢复后 ERROR 升级文案会虚报连续波数; ②events.py `LANE_RETENTION_MIN` 重复定义两次
+  (:77 与 :114); ③计划签名 `parse_counters(html)` 无档位参数, 区间形站点须从页面辨认所属档位 (M2 定形时核对)。
+  踩坑复发 2 条 (已各 +1): heredoc 追加被截断 (pitfalls/git/editing-traps.md —— 图省事走了 heredoc, 没路由到
+  git 类) 与档案追加未量余量触顶 (pitfalls/kb/cap-counting.md —— 追加前未过 kb 类), 均已按条目处置收口。
+  **拍板结果 (21:55 当面询问)**: P2 校准策略 = **方案 A** (样张实证后硬编码启用; 用户拍板, 暂不执行 ——
+  M2 不开工); P3 备选项与 P4 样张安排 = 后续决定。用户随后下「先提交」指令 ⇒ 随主提交入库。
+
+- **2026-09-29 20:36 (v3.1 计数集成修改计划产出 —— 纯文档轮, 代码未动)** — 用户令「按照报告出一个修改计划」。
+  [plans/26-09-29-2036-plan-hr-counter-integration.html](../plans/26-09-29-2036-plan-hr-counter-integration.html) 出厂
+  (doc-status Open)。设计定稿相对报告 §7 草案三处收口: ①提取契约 = adapter 逐页 `parse_counters(html)` +
+  service 侧首非 None 合并 (tab 形第 1 页全档有据, 分页区间形末页才有据); ②收紧落点改 `releases_enabled`
+  单点 AND 门 (`depth_broken`), 不折叠 `full_depth` 赋值 —— 观察期出口 (:943 在闸门之前) 与终态冻结
+  (:962 走位置覆盖) 逐字不动, 报告「只影响批量签发」口径精确成立; ③mismatch 判定边界排除截断/早停波
+  (rows<claim 是量化差值进 notes, 不告警不冻结)。**新识别 T1 迁移陷阱**: from_json 若走 `_as_int` 缺省路径,
+  旧档案无键会被读成 count_claim=0 ⇒ 全站假 mismatch ⇒ 批量签发永久冻结 —— 守阵钉死。里程碑: M1 核心
+  机制 (全 adapter 默认无计数 ⇒ 上线即现状, 零拍板依赖) / M2 两站启用 (前置 D2 样张 + P2 校准策略,
+  推荐方案 A 硬编码) / M3 退役与打磨。测试六类 + 不变量 + 红验。认领链五处回写 (报告 1803 / 计划 1932 /
+  审计 0404 / 审计 0030 / 本档案); test.full 首跑 2 红均为守卫按预期拦截 (索引未重建 + 认领链单向),
+  回写后复跑全绿 1749 passed + 3 skipped (90%, 与基线一致, 无代码变更不新建基线切片)。
 
 - **2026-09-29 (HR 计数可行性分析 —— 纯文档轮)** — 用户问「HR 页计数能否佐证完整性/简化模型/增强安全稳定」。报告出厂
   [reports/26-09-29-1803-report-hr-counter-verify.html](../reports/26-09-29-1803-report-hr-counter-verify.html) —— 结论: 计数是清单的
@@ -110,90 +155,9 @@ F4(P4: 注释漂移×2+死变量), 均只记录待拍板; test.full 1811+3(91%) 
   multisite 5), 键面基线 `commands run test.keys-update` 重生成, keys.md 同步; 全量 **1743 passed +
   3 skipped**(test.quick 实测; 基线切片另记)。**未提交**(等用户显式指令); 真机走查仍开放。
 
-- **2026-09-28 00:30 (v2 实施核对 + 安全/稳定性审计 —— 纯审计轮, 代码/文档零改动)** — 用户令「分析
-  plans/26-09-27-1815 实施情况, 重点是安全性/稳定性/BUG, 并写报告含 HR 在线核实现状 (配置/默认节奏/
-  限流)」。开工预检 `my-commit-flow.sync` PASS (与主线齐平 c7dfbd20)。产出:
-  [reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html)。
-  **核对结论**: M5.1-M5.5 共 33 个修改项逐条以 file:line 对到当前代码, 全部落地无缺席; 三个实施期收口
-  (滚动窗口=max_pages_per_refresh / max_pages_per_round=9 / P 公式勘误) 均证实; 零静默变更成立
-  (激活门 legacy 默认 + 新键全默认关/旧值)。**新发现 (均未改代码, 待拍板)**:
-  ① **F1 (P2)**: 早停② 的 P 一致性机检空真 —— `period_ok` 初始 True 且只有 remain>0 的行参与反算
-  (service.py:477/561-572), 整页 remain==0 时机检从未运行却被当作通过; 轮尾 meta 的
-  `period_consistent=bool(period_values) and period_ok` (service.py:828) 却是 False —— 两道机检口径
-  不一致。触发链: C 档(未达标)行 remain 若以可解析 0 展示 (实现注释自认「已到期行被站点截 0」) ⇒
-  C 第 1 页即早停 ⇒ complete=True ⇒ C 第 2 页起种子走反应式「完整刷新未列出」放行 (resolve.py:260-273)
-  ⇒ 漏管。B 档同形态无害 (本就可删); remain 空白形态则触发 S2 停站 (remain 是必填字段)。收口建议:
-  早停②加 period_values 非空前置或限 A 档 + M0 补第④项实测 B/C 档 remain 形态。
-  ② **F2 (P3)**: 跨页 S1 判据 `max(cur) > min(prev)` (parse.py:329-330) 对「轮内清单顶端插入」零容忍
-  —— 相邻两页间隔 90~113s, 其间 ≥2 个新完成进清单顶端 ⇒ 判「跨页乱序」⇒ 本轮失败计熔断失败,
-  连续 3 轮 ⇒ 12H 熔断 + suspended 人工恢复。fail-safe 方向无损, 是可用性风险; 与 2026-09-26
-  「哪怕 1 处」定稿 (针对页面改版) 存在张力, 需单独拍板。
-  ③ **F3 (P3)**: `parse_missing_rate_max` 被 S2 零容忍架空 —— service.py:551 任何缺失率>0 即中止,
-  :806 的阈值分支不可达; keys.md:30 仍是旧语义 (死配置+文档漂移)。
-  ④ **F4 (P4)**: status.py:143/190 注释仍写勘误前公式 (实现已正确); `covered_local_any`
-  (service.py:486/596) 只写不读。
-  **安全/稳定性结论**: 端点五道边界 (loopback/token 常数时间+0600 生成/origin/SSRF 白名单/回传双道校验)、
-  存储自愈链 (.bad 留证→.bak→锁失效只读退化)、增量落盘、可中断停机、告警三档分级全部代码证实;
-  残余在配置面 (extension_id 空 / token:123456, M5.5 WARNING 已就位)。
-  **现状盘点** (报告 §5): 配置全表 3 张 (全局 23 键 + channel 5 键 + 站点 13 键含默认值) /
-  默认节奏 (legacy: 12H 完整有效期, 抓取轮 ≤9 页·每档 ≤5 页·间隔 90~113s·配额 12/时·60/天 合并,
-  15 页站点典型 2~3 轮 ~1-2h 收敛; split opt-in: 页面 40/时·下载 20/时双桶) / 限流全景 14 道 /
-  站点文件字段 / 错误处理九分类 / 观测口子 (--hr-status/--hr-once/--hr-resume)。
-  **基线复验与同步**: 分析轮开工时与主线齐平 c7dfbd2, test.full = 1811+3 (91%) 与切片 26-09-27-2326
-  逐位一致; 提交轮预检发现远端进 aef2462 (webui 站点页搜索, hr/ 未动) ⇒ 按先同步后提交弃生成物
-  _doc-map 后 ff 快进, 合并基线复跑 test.full = **1812 passed + 3 skipped (TOTAL 91%)** 与最新切片
-  26-09-28-0014 逐位一致, 不新建重复切片。收尾动作: 报告按认领链协议补 5 处反向声明 (1815/2204/
-  1628/档案/切片); _doc-map 因本报告入图超 cap —— 先按守卫指引收口**生成器头部说明** (省 147 字符),
-  远端同期把 index-auto cap 提至 12100, 两相叠加后 12881 字节 (~11.5K 字符) 达标; activeContext 切片
-  同轮蒸馏回 cap 内 (9579 → ~4.4K, 已完成明细沉降本档案)。
+- **2026-09-28 00:30 (v2 实施核对 + 安全/稳定性审计 —— 纯审计轮)** — 已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md); 摘要见本档案子任务状态表「v2 实施核对」行与报告 [26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html)。
 
-- **2026-09-27 22:18 (M5.1–M5.5 全部落地 —— 在线核实 v2 代码侧完成)** — 用户令「实施计划
-  plans/26-09-27-1815, 拍板按推荐」。开工先同步: 远端 045ea27 比本地 cbc4b80 新两笔且纯落后
-  (本地未提交的 10 个 memory-bank 文档与远端零重叠) ⇒ `merge --ff-only` 快进后再动代码。
-  **五步各全量绿 + 一红验**:
-  ① **M5.1 判据与观测** (1763 passed): `parse.order_violations` 纯函数(方向自适应由首两可比行推断,
-  翻转视同逆序, 缺字段行不计比较但计「证据不足」)+ `cross_page_violation` 跨页证据; service 页内/跨页/
-  方向翻转三路接线(判定前置 = 成功取回 + 表头 + 可比行 ≥ 2)+ `maxpage/currentpage` 进翻页判据**并集**
-  (堵 P1 英文站「下一页」只认中文的缺口)+ 轮级骤降观测(`plunge_suspect`, 基线 = 最近结构完好且非零轮,
-  可疑轮不计入 —— 堵「0 vs 0」自愈洞)+ `--hr-status` 观测面四行(排序 ✓/✗/未判定 · 考核期 P 分布 ·
-  骤降观测 · 档位计数「上轮→本轮」)+ HrRefreshMeta 观测字段(order_ok/order_detail/entry_baseline/
-  plunge_suspect/plunge_rounds/scope_counts/prev_scope_counts, 不抬 schema 版本)。
-  ② **M5.2 信号处置与停用** (1774): S1 排序违反 / S2 必填字段缺失(均**不设阈值**, 2026-09-26 定稿)
-  ⇒ `_SignalAbort` 停翻 + `ACTION_ERROR`(不产生放行)+ 计入熔断失败 + `signal_rounds` 累计
-  (干净轮清零 = 三道隔离之三); 处置文案 S1/S2 分开(`events.order_broken` / `field_missing`, 节流共用);
-  连续 3 轮(`SUSPEND_ROUNDS`)⇒ `HrSuspension` 停站: 取数侧**零请求**(连复用轮下载也让位)、
-  判定侧 `judge_record` 返回 None **回落本地逻辑**(❗只停取数不停判定 = 拿旧清单继续放行, 比不停更危险)、
-  恢复 = 新 CLI `--hr-resume <站点>`(锁内清 suspended + reason 留痕), 熔断到期不自动恢复;
-  骤降保护生效(判不完备不产生放行, `accept_empty_listing` 站点级口子默认关; 持续 3 轮零 + 结构完好
-  ⇒ WARNING 指引, 刻意不自动接受); 回填/清单**双路对账撤销放行**(P2: `_retract_on_backfill` 新算出/
-  永久层复用 + `_retract_on_listing` 行重回清单 hash 继承的兜底, partial 轮即时收放行);
-  登录失效指数退避(2^(n-1)×poll 封顶 refresh_interval, 退避期零请求/不计失败/不动 fetched_at,
-  登录恢复清零); 多实例引导补「配额翻倍(2×12/时)」后果(D3=a)。
-  ③ **M5.3 配额拆分** (1787): 激活门 `quota_model` 站点级默认 legacy(逐字节一致)+ 双令牌桶
-  (HrLimits 扩展 split 字段 + `split_next_allowed_at`/`split_try_consume`; tokens/refill_ts 持久化,
-  按「上次补充时刻+速率」恢复 —— 幂等跨重启消除整点突发; tokens=None ⇒ 首次满桶)+ 站点文件
-  `torrent_quota`(不抬 schema 版本; 旧数据 quota 含下载计数 ⇒ split 初期页面用量高估, 保守方向)+
-  页面只在新轮/下载只在复用轮(§3.4)+ `--hr-status` 页面/下载两组展示 + 速率×间隔自洽机检(3.6)+
-  扩展 caps 上调 60/时·600/天(D6)+ `max_torrents_per_day` Optional 化(未配置按模型取 legacy 60 /
-  split 200)。实施决策: 站点覆盖键 page_rate_per_hour/torrent_rate_per_hour 新增, 旧键
-  max_torrents_per_hour 在 split 下映射为下载桶速率覆盖(已有配置不失效)。
-  ④ **M5.4 早停与豁免** (1795): 预算**轮转起点**(D9=b: 上轮未完成档位优先, 跨轮语义不变)+
-  单轮页面总量 `max_pages_per_round=9`(D5=a, 全局键, 0=不限)+ 早停② `remain==0` 连续 5 行
-  (`AGE_STOP_STREAK`) + P 一致性机检(±1 天容差, 不过 ⇒ 告警 + 早停②/豁免 A 双禁用, 机检不是文档承诺)
-  + 早停③ 覆盖本地严格版(本地种子 ⊆ 已抓行且索引无待回填 ⇒ 本档停翻但**绝不置 complete**)+
-  豁免 A `auto_age_limit`(取数侧反算 P 喂豁免线, 判定与早停②同源, 默认关)+ 豁免 B
-  `seeding_exempt_ratio`(本地做种 ≥ 要求 × 倍数 ⇒ 「义务已超额完成」, 压过清单命中, 默认关,
-  不参与早停; `HrAnchor` 加 `seeding_time`, record.hr_anchor() 带出)。**实施决策与勘误**:
-  滚动窗口收口 = `max_pages_per_refresh` 即窗口页数不另设键; P 反算公式**勘误**(三份制品同源笔误
-  「P ≈ done + remain − now」数学上恒为负偏移 —— 正确 P = (now − done) + remain, 已按唯一正确方向
-  实现, 主计划 §15 v3.6 注明); P 参与行 = remain>0 的行(已到期行 remain 被站点截 0, 反算负值不参与)。
-  ⑤ **M5.5 收尾** (1796): 新键全链路(schema/validate/impact L0/keys.md/configuration.md)+
-  端点纵深提示(extension_id 留空启动 WARNING —— 有意推通知, 配好即不再出现; 文档写明 token 自动生成
-  与 config.yml 由用户手改, 红线不动)+ 扩展 README caps 表更新 + 零静默变更回归
-  (legacy 站点行为逐字节一致独立守阵)。红验 ×4(翻页判据并集 / 骤降保护 / 激活门 / 早停②,
-  临时还原 ⇒ 对应守阵红, 还原后全绿)。**最终 test.full 1796 passed + 3 skipped(91%)**,
-  基线切片 26-09-27-2035; 主计划 §15 v3.6 + 计划 1815 v1.2 已回写。**未提交**(等用户显式指令);
-  真机走查 + M0 前置实测三项(排序倒序 / P 恒定 / 英文站分页)仍开放。
+- **2026-09-27 22:18 (M5.1–M5.5 全部落地 —— 在线核实 v2 代码侧完成)** — 已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md); 摘要见本档案子任务状态表 M5.1–M5.5 行与报告 [26-09-28-0030](../reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html)。
 
 - **2026-09-27 18:15 (v2 修改计划产出 = plans/26-09-27-1815) 与 12:54/12:46 (提交轮 + v3.5 补验「双 id 空间」真缺陷修复) 三条日志已外迁**: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md)(档案触顶处置); 摘要见 activeContext 切片。
 - （本段更早的进度纪要已外迁: [attachments/26-09-22-backend-partial-hr-verify-log.md](attachments/26-09-22-backend-partial-hr-verify-log.md) —— 触顶处置见 `.agents/skills/memory-bank/scripts/_common.py` 的 `TASK_LOG_CAP`）

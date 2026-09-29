@@ -63,10 +63,28 @@ def torrent_blob(
     return b"d8:announce25:http://t.example/announce4:info" + info + tail + b"e"
 
 
-def myhr_page(rows: Sequence[Tuple[int, str, str, str, str, str, str, str]], has_next: bool = False) -> str:
+def counter_bar(a: int, b: int, c: int) -> str:
+    """tab 形计数条 HTML 片段(计划 26-09-29-2036 §2.1: 同页带全档声明数 —— 考察中 (a) · 已达标 (b) · 未达标 (c))。
+
+    M1 引擎行为测试经 adapter 覆写 parse_counters 上交合成值, 不解析本片段;
+    它是 M2 tab 形站点覆写的解析对象, 行为测试里作页面装饰保持同构。
+    """
+    return (
+        '<p align="center" class="switches">'
+        f'<span class="active">考察中 ({a})</span><span>已达标 ({b})</span><span>未达标 ({c})</span></p>'
+    )
+
+
+def myhr_page(
+    rows: Sequence[Tuple[int, str, str, str, str, str, str, str]],
+    has_next: bool = False,
+    *,
+    counter_bar_html: str = ""
+) -> str:
     """构造与真实 myhr.php 同构的 HR 页(含 <td class="embedded"> 包裹表)。
 
     rows 每项: (tid, 名称, 上传量, 下载量, 分享率, 还需做种, 完成时间, 剩余达标)
+    counter_bar_html: 可选计数条片段(见 counter_bar), 插在表格前 —— 计数站点任意页都带。
     解析测试用真实样张 fixture; 行为测试用本构造器裁剪出恰好需要的行。
     """
     body = ""
@@ -90,13 +108,34 @@ def myhr_page(rows: Sequence[Tuple[int, str, str, str, str, str, str, str]], has
         if has_next else '<font class="gray"><b title="Alt+Pagedown">下一页&nbsp;&gt;&gt;</b></font>'
     )
     return (
-        '<h1>H&amp;R记录</h1><table class="main"><tbody><tr><td class="embedded"><table width="100%"><tbody><tr>'
+        '<h1>H&amp;R记录</h1>' + counter_bar_html +
+        '<table class="main"><tbody><tr><td class="embedded"><table width="100%"><tbody><tr>'
         '<td class="colhead">HR编号</td><td class="colhead">种子名称</td><td class="colhead">上传量</td>'
         '<td class="colhead">下载量</td><td class="colhead">分享率</td><td class="colhead">还需做种时间</td>'
         '<td class="colhead">完成时间</td><td class="colhead">剩余达标时间</td>'
         '<td class="colhead">20000魔力值免罪</td>' + "</tr>" + body + "</tbody></table><p>" + next_link +
         "</p></td></tr></tbody></table>"
     )
+
+
+def myhr_page_interval(
+    rows: Sequence[Tuple[int, str, str, str, str, str, str, str]],
+    has_next: bool = False,
+    *,
+    first: int = 1,
+    last: Optional[int] = None
+) -> str:
+    """分页区间形 HR 页(CarPT 实证形态, 计划 26-09-29-2036 §2.1): 区间标记 <b>first - last</b>。
+
+    last = 档内累计行数(1 起含端) —— 只有「无下一页」的末页能证到总数; 非末页 last=None
+    ⇒ 无标记(早停波拿不到总数)。空表页 rows=[] 且 last=None = 无标记(无法自证空集, §2.5)。
+    表格结构同 myhr_page(参数名/表头名差异对引擎行为无影响; M2 carpt 覆写解析才涉及)。
+    """
+    page = myhr_page(rows, has_next=has_next)
+    if last is None:
+        return page
+    marker = f'<p align="center"><font class="gray"><b>{first}&nbsp;-&nbsp;{last}</b></font></p>'
+    return page.replace("</p></td></tr></tbody></table>", marker + "</p></td></tr></tbody></table>")
 
 
 def row(

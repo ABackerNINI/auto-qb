@@ -289,6 +289,9 @@ class _WaveContext:
         self.zero_remain_streaks: Dict[str, int] = {}  # 档位 -> 跨页 remain==0 连续行数
         self.trusted_done: Dict[str, float] = {}  # infohash -> 可信完成时刻(①的判据, §4.2 分层)
         self.current_lane: str = ""  # 当前正在取页的档位(页面级失败时定位截断档)
+        # 档位 -> 站点声明行数(计划 26-09-29-2036 §2.1 波内临时账; 首个非 None 胜出 —— tab 形
+        # 第 1 页即有值, 分页区间形中途页无键、末页才非 None 自然胜出; 随波生灭, 持久化面在 HrLaneState)
+        self.counter_claims: Dict[str, int] = {}
         self.parse_problem = False
         self.budget_limited = False
         self.had_error = False
@@ -480,7 +483,7 @@ class HrRefreshService:
         wave = _WaveContext(anchors)
         wave.dl_by_hash = _dl_by_hash(data)
         wave.trusted_done = self._trusted_done_map(objects, observing)
-        #: 各档本波状态(fail_streak 跨波延续, 其余波内重置)
+        #: 各档本波状态(fail_streak / count_mismatch_streak 跨波延续, 其余波内重置)
         lane_states: Dict[str, HrLaneState] = {}
         for lane in FETCH_LANES:
             prev = data.wave.lanes.get(lane, HrLaneState(lane=lane))
@@ -488,6 +491,7 @@ class HrRefreshService:
                 lane=lane,
                 status=LANE_IDLE,
                 fail_streak=prev.fail_streak,
+                count_mismatch_streak=prev.count_mismatch_streak,
                 wave_ts=prev.wave_ts if prev.ok else 0.0,
             )
         pages_left = max(1, int(self.global_conf.max_pages_per_wave))
@@ -629,6 +633,11 @@ class HrRefreshService:
                         active.remove(lane)
                         continue  # 该档强制早停, 同轮其它档照常推进
                     st.pages += 1  # 页面有效才计入(无效页不计覆盖进度)
+                    # ---- 计数上交(计划 26-09-29-2036 §2.1): 与解析同源同一份 HTML, 零额外请求 ----
+                    # 表头/字段/排序校验失败的页不上交(在上面各分支已截断); 首个非 None 胜出
+                    for cl, claimed in (adapter.parse_counters(html) or {}).items():
+                        if claimed is not None:
+                            wave.counter_claims.setdefault(cl, claimed)
                     # ---- 行处理: 命中定论 + 身份登记(§4.3 STEP 2) ----
                     self._process_rows(lane, parsed.entries, data, wave)
                     st.rows += len(parsed.entries)
@@ -949,10 +958,40 @@ class HrRefreshService:
         zero_rows = total_rows == 0
         if total_rows > 0:
             data.empty_confirmed_at = 0.0  # 清单再现任何非零行 → 确认戳自动失效(§5.3)
-        confirmed_empty = zero_rows and data.empty_confirmed_at > 0
+        # ---- 计数对平记账(计划 26-09-29-2036 §2.2/§2.4): 声明落档 + mismatch 定界 ----
+        # mismatch 只在「本波承认了全深度」的档上成立; 截断/①③停翻波 rows<claim 是预期差值
+        # (还没翻完), 只记量化差值不告警不冻结。无计数(claim=None)一律降级现状。
+        depth_broken = False
+        for st in lane_states.values():
+            claim = wave.counter_claims.get(st.lane)
+            st.count_claim = claim
+            st.count_match = None if claim is None else (st.rows == claim)
+            if st.ok and st.full_depth and st.count_match is False:
+                st.count_mismatch_streak += 1
+                depth_broken = True
+                if st.rows == 0 and claim > 0:
+                    # 计数>0 ∧ 行数=0: 整表被吃光 / 首页即被截的显式信号 —— 硬告警不经节流
+                    logger.error(events.page_changed(site, ACTION_PARTIAL, f"档位 {st.lane} 声明 {claim} 行但实抓 0 行"))
+                else:
+                    wave.notes.append(f"档位 {st.lane} 计数对不平: 实抓 {st.rows}/声明 {claim}, 批量「未列出」签发冻结")
+                    self._warn_parse(
+                        site, events.counter_mismatch(site, st.lane, st.rows, claim, st.count_mismatch_streak)
+                    )
+                    if st.count_mismatch_streak >= LANE_FAIL_ALERT_STREAK:
+                        logger.error(events.counter_mismatch(site, st.lane, st.rows, claim, st.count_mismatch_streak))
+            else:
+                st.count_mismatch_streak = 0  # 对平 / 无计数 / 截断波 / 失效档: 不构成对不平证据
+            if claim is not None and not st.full_depth and st.rows < claim:
+                wave.notes.append(f"档位 {st.lane} 未翻完: 实抓 {st.rows}/声明 {claim}, 差 {claim - st.rows} 行(预期内)")
+        confirmed_empty = zero_rows and (
+            data.empty_confirmed_at > 0 or all(st.count_claim == 0
+                                               for st in lane_states.values())  # 站点自证空集(§2.5): None 参与即为假
+        )
+        # ---- 唯一行为变更点: 批量「未列出」签发闸门多一个 AND 条件(报告 §5.2 收束语落地) ----
         releases_enabled = (
             all(st.ok for st in lane_states.values()) and
-            all(st.pages > 0 or st.full_depth for st in lane_states.values()) and (not zero_rows or confirmed_empty)
+            all(st.pages > 0 or st.full_depth for st in lane_states.values()) and (not zero_rows or confirmed_empty) and
+            not depth_broken
         )
         # ---- 放行签发(§5.3): 批量「未列出」只走防伪全通的波; 观察期出口与批量签发解耦 ----
         signed = 0
@@ -998,15 +1037,17 @@ class HrRefreshService:
             self._warn_parse(site, events.retention_violation(site, retention_ratio))
         if frozen:
             notes.append(f"终态冻结 {frozen} 条")
-        result.reason_kind = REASON_BUDGET if (wave.budget_limited and not wave.parse_problem
-                                              ) else (REASON_PARSE if wave.parse_problem else REASON_NONE)
+        result.reason_kind = REASON_BUDGET if (wave.budget_limited and not wave.parse_problem) else (
+            REASON_PARSE if (wave.parse_problem or depth_broken) else REASON_NONE
+        )
         all_failed = all(not st.ok for st in lane_states.values())
         result.action = ACTION_ERROR if all_failed else (
             ACTION_PARTIAL if (wave.parse_problem or wave.had_error) else ACTION_REFRESHED
         )
-        # 本波产生处已打过 WARNING(页面失败/改版/防伪/零行) ⇒ worker 状态层只记 INFO 不重复
+        # 本波产生处已打过 WARNING/ERROR(页面失败/改版/防伪/零行/计数对不平) ⇒ worker 状态层只记 INFO 不重复
         result.alerted = bool(
-            wave.had_error or wave.parse_problem or not retention_ok or (zero_rows and not confirmed_empty)
+            wave.had_error or wave.parse_problem or not retention_ok or depth_broken or
+            (zero_rows and not confirmed_empty)
         )
         result.reason = "; ".join(notes)
         result.snapshot = data
@@ -1348,7 +1389,10 @@ def _lanes_summary_from(lane_states) -> str:
             parts.append(f"{lane}:无")
             continue
         tag = {"ok": "✓", LANE_FAILED: "✗", LANE_IDLE: "-"}.get(st.status, st.status)
-        parts.append(f"{lane}:{tag}{st.pages}页{st.rows}行" + ("(全深度)" if st.full_depth else ""))
+        counter = ""
+        if st.count_claim is not None:  # 计数对平展示(计划 26-09-29-2036 §2.6)
+            counter = f"/声明{st.count_claim}" + (" 对不平" if st.count_match is False else "")
+        parts.append(f"{lane}:{tag}{st.pages}页{st.rows}行" + ("(全深度)" if st.full_depth else "") + counter)
     return " ".join(parts)
 
 

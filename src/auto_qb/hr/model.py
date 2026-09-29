@@ -322,6 +322,12 @@ class HrLaneState:
     detail: str = ""  #: 截断/失效原因(展示与排障)
     #: 连续失效波数(§5.2 告警升级: 连续 3 波同档失效 → ERROR 告警疑似改版; 干净波清零)
     fail_streak: int = 0
+    #: 本波该档站点声明行数(计划 26-09-29-2036 §2.3; None = 无计数 / 本波未证到 —— 键缺即降级, 绝不猜 0)
+    count_claim: Optional[int] = None
+    #: None = 无从对平; True/False = 实抓 rows 与声明是否对平(只有全深度档的 False 才冻批量签发)
+    count_match: Optional[bool] = None
+    #: 连续全深度对不平波数(对平/无计数/截断波清零); ≥3 触发 ERROR 升级(疑似口径校准错误, §2.4)
+    count_mismatch_streak: int = 0
 
     @property
     def ok(self) -> bool:
@@ -338,10 +344,18 @@ class HrLaneState:
             "full_depth": self.full_depth,
             "detail": self.detail,
             "fail_streak": self.fail_streak,
+            "count_claim": self.count_claim,
+            "count_match": self.count_match,
+            "count_mismatch_streak": self.count_mismatch_streak,
         }
 
     @classmethod
     def from_json(cls, raw: Dict[str, Any]) -> "HrLaneState":
+        # ❗count_claim/count_match 必须显式判空(计划 §2.3 陷阱 T1): 旧站点文件没有这些键,
+        # raw.get 返回 None —— 走 _as_int 缺省路径会被折成 0, 全部存量档案瞬间变「声明 0 行」
+        # ⇒ 全站假 mismatch ⇒ 批量签发永久冻结。None 语义必须原样穿过。
+        claim = raw.get("count_claim")
+        match = raw.get("count_match")
         return cls(
             lane=str(raw.get("lane") or ""),
             wave_ts=_as_float(raw.get("wave_ts")),
@@ -352,6 +366,9 @@ class HrLaneState:
             full_depth=bool(raw.get("full_depth")),
             detail=str(raw.get("detail") or ""),
             fail_streak=_as_int(raw.get("fail_streak")),
+            count_claim=None if claim is None else _as_int(claim),
+            count_match=None if match is None else bool(match),
+            count_mismatch_streak=_as_int(raw.get("count_mismatch_streak")),
         )
 
 

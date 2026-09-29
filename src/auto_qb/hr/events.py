@@ -66,6 +66,22 @@ def order_broken(site: str, detail: str) -> str:
             "(失效点之前数据有效) —— 请核对 HR 页是否改版")
 
 
+def counter_mismatch(site: str, lane: str, seen: int, claimed: int, streak: int = 0) -> str:
+    """计数对不平(计划 26-09-29-2036 §2.4): 站点声明行数与全深度实抓行数不等 ⇒ 批量签发冻结。
+
+    文案自带口径校准引导(§6 R1): 对不平既可能是站点缓存陈旧(下波自愈), 也可能是覆写的
+    计数口径错了(永久假冻结) —— 后者要人跑走查核对或直接摘除计数覆写。streak 由调用点
+    传入连续对不平波数, ≥2 时在文案里点名, 与 ERROR 升级信号呼应。
+    """
+    streak_tail = f"(已连续 {streak} 波)" if streak > 1 else ""
+    return (
+        f"{prefix(EVENT_PARSE)} 站点 {site} | 档位 {lane} 计数对不平{streak_tail}: 实抓 {seen} 行, "
+        f"站点声明 {claimed} 行 ⇒ 本波批量「未列出」签发已冻结(下波对平自愈; 命中与管束不受影响) | "
+        "若持续对不平, 可能是计数口径校准错误而非站点改版 —— 请跑 --hr-once 走查核对, "
+        "或摘除该站点的计数覆写恢复现状"
+    )
+
+
 def lane_persistent_failure(site: str, lane: str, streak: int, detail: str) -> str:
     """连续多波同档失效(§5.2 告警升级): 疑似改版, 建议走查"""
     return (
@@ -120,6 +136,7 @@ __all__ = [
     "EVENT_SILENCE",
     "LABELS",
     "channel_silent",
+    "counter_mismatch",
     "fetch_failed",
     "lane_persistent_failure",
     "login_expired",

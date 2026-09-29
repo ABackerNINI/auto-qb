@@ -10,7 +10,7 @@
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from ..model import HrEntry
 
@@ -53,6 +53,22 @@ class HrAdapter(ABC):
     @abstractmethod
     def download_url(self, tid: int) -> str:
         """.torrent 下载地址(相对站点根拼出; passkey 这类页面参数由取数通道在页面上下文补)"""
+
+    def parse_counters(self, html: str) -> Dict[str, Optional[int]]:
+        """从一页 HTML 提取「本页能证到的档位声明行数」(计划 26-09-29-2036 §2.1; 默认无计数)。
+
+        默认返回 {} = 站点未接入计数 = 与无此机制完全等价(门恒开, 现状不变)。
+
+        覆写契约三条 —— **覆写即承诺**, 违反 = 口径校准事故 ⇒ 批量签发永久冻结:
+        1. 只在本页能证到该档**总数**时才返回该键: tab / 摘要形任意页可证(计数条同页带全档);
+           分页区间形只有「无下一页」的末页能证(区间终点 = 档内累计行数, 1 起含端),
+           早停波拿不到总数; 空表页无标记 ⇒ 无键。
+        2. 键缺 = 无证据 = None 降级: 绝不猜测, 绝不拿「目前为止的行数」冒充总数。
+        3. 铁律「宁可不用, 不可错用」: 只在样张实证「计数 == 全深度翻页实抓行数」后才允许
+           覆写本方法; 未实证一律保持默认返回 {}。口径校准记录(样张路径/载体形态/推导规则/
+           实证日期)随覆写写进子类 docstring, 证据链留档。
+        """
+        return {}
 
     def looks_like_login(self, html: str) -> bool:
         """页面是否像登录页/未登录(默认按 NexusPHP 通用特征; 站点可覆写)"""
