@@ -1,7 +1,7 @@
 # AGENTS.md
 
 > 所有 AI 编码代理的统一入口 (Copilot / Codex / Cursor / Gemini CLI / Claude Code / ZCode / Trae 通用)。完整知识库在 `memory-bank/` (Memory Bank 模式) — 本文件只放**路由与硬约束**; 不要凭印象回答项目问题, 按路由深入后再动代码。
-> ⚠ **本文件有 8000 字符硬上限** —— IDE 注入时超出即被 `slice` 掉, 尾部内容模型根本看不到。改完用 `commands run doc.caps` 自查 (已挂 `my-commit-flow` 包的闸门, 改动本文件时预检会自动提示)。
+> ⚠ **本文件有 8000 字符硬上限** —— IDE 注入时超出即被 `slice` 掉, 尾部内容模型根本看不到。改完用 `commands run doc.caps` 自查。
 
 ## 知识库路由 (两层: 本文件粗路由 → `memory-bank/README.md` 细路由)
 
@@ -14,7 +14,7 @@
 
 > 完整规程 (会话开始 / 收尾 DoD 5 步 / 立档阈值 4 条 / 任务档案模板) 见 [memory-bank skill](.agents/skills/memory-bank/SKILL.md); 机械守卫 `tests/test_memory_bank.py`。本节只留入口。
 
-- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `commands run my-commit-flow.sync`: 自动 fetch + 快进 / 分叉自动 rebase(保线性, 拍板 2026-09-28), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑, **禁止在落后分支上改代码**。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片(全量按最后活动倒序 + 陈旧标记, 只打印不写文件); 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
+- **开始**: ①**先同步** (问答/只读轮次跳过; **首个执行动作 —— 改文件 / 跑测试 / 任何 git 写操作 —— 之前必须完成**) —— `commands run my-commit-flow.sync`: 自动 fetch + 快进 / 分叉自动 rebase(保线性, 拍板 2026-09-28), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑, **禁止在落后分支上改代码**。②看会话滚动状态: `commands run kb.active` 列 [memory-bank/activeContext/](memory-bank/activeContext/_about.md) 切片; 该读哪份文档走上面的路由。③**只动当前这一个 clone** —— 跨仓库操作**绝对禁止**, 须用户显式说「授权」(见「🔴 跨仓库操作」节)。
 - **收尾**: 按 skill 的 5 步 DoD —— 更新 activeContext 切片(已完成条目**迁出**到 progress) / 达阈值则立档 + `commands run kb.index` 重建索引 / 代码事实变更回写 `memory-bank/` 与根 README / 跑 `commands run test.full` 并新建基线切片记实测数字(`testing/baselines/`, 体例见 `testing/baseline.md` 口径段) / **新坑按动作写进 `pitfalls/<类>/<主题>.md`(补三行头元数据)并重跑 `commands run kb.index`**。若这一轮踩到了**已记的坑**, 把该条 `复发` +1, 并在档案里写一句为什么没命中(路由没到 / 文件没读 / 读了没照做)。
 - **冲突裁决**: 代码 > `memory-bank/` > 根 `README.md` > `想法.md`; 漂移以代码为准并回写。
 
@@ -23,6 +23,10 @@
 - **计划文档**: 用 `delivery-artifact` skill, 放 `memory-bank/plans/`; **一律单文件 HTML** (出现 `.md` 即违规)。
 - **报告**: 审计 / 故障取证 / 可行性分析 → `memory-bank/reports/`; 四工位决策树与 `doc-*` 协议单点见 [conventions/doc-forms.md](memory-bank/conventions/doc-forms.md)。
 - **HTML 一律 dark 主题**: 深色底 + 浅色字 + 样式里写 `color-scheme: dark`, **禁止浅底黑字**; 配色规格与文件命名见 [conventions/webui.md](memory-bank/conventions/webui.md)「HTML 文档一律 dark 主题」。
+
+## 编码约束: 非 ASCII 图形符号
+
+- 代码/配置禁 emoji/图形符号→ASCII 替代;文档(.md/交付 html)可用。见 conventions/code-style.md
 
 ## 黄金法则 (来自设计原则, 违反即破坏设计)
 
@@ -69,7 +73,7 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## ⚠️ 环境硬约束: Git 操作 (AI 工具 shell 特有)
 
-> **工作区模式: 多 clone 并行** (2026-09-20 用户决定, **已弃用 git worktree**): 每个 AI 实例用**一份独立克隆**, 跨 clone 同步一律走 Gitee `develop`。细则见 [conventions/collaboration.md](memory-bank/conventions/collaboration.md)「协作约定」。
+> **工作区模式: 多 clone 并行** (2026-09-20 起): 每个 AI 实例用**一份独立克隆**, 跨 clone 同步一律走 Gitee `develop`。细则见 [conventions/collaboration.md](memory-bank/conventions/collaboration.md)「协作约定」。
 > **完整判据与事故档案单点在 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md)**; 本节只留最容易致命的几条:
 
 - ✅ **rebase / merge / stash 禁令已解除** (2026-09-25): 历史上删除拦截层会在这几类操作写入 `.git` 时批量删对象 (3 次事故), 该问题已修复, 恢复可用 —— 高风险历史整合前仍建议先 `cp -a .git <备份>`。落后 / 分叉一律 `commands run my-commit-flow.sync` (自动快进 / rebase 保线性; 树脏会给失败行, 先提交或 stash 再重跑)。
