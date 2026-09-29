@@ -407,7 +407,7 @@ def test_skip_checking_readd_preserves_values():
         tor.ratio_limit = 0  # qB 分享率限制(有语义)
         tor.seeding_time_limit = 0
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.rules.actions.skip_checking.time.sleep"):
+        with patch("auto_qb.core.mixins.ops.time.sleep"):
             r = action.execute(ctx)
         assert r.is_ok, f"{r}"
         add = next(c for c in client.calls if c[0] == "add")
@@ -429,7 +429,7 @@ def test_skip_checking_readd_restores_store_record():
         client.torrents["HASH123"] = tor
         seed_store(mgr, [tor])
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.rules.actions.skip_checking.time.sleep"):
+        with patch("auto_qb.core.mixins.ops.time.sleep"):
             r = action.execute(ctx := make_ctx(mgr, tor, client))
         assert r.is_ok, f"{r}"
         # 快照记录已恢复(对象身份 = 删除前捕获的 tor), tracker_conf 保留
@@ -460,7 +460,7 @@ def test_skip_checking_content_layout_inferred():
             client.files_map = {"HASH123": files}
             seed_store(mgr, [tor])
             ctx = make_ctx(mgr, tor, client)
-            return action._infer_content_layout(tor, client)
+            return mgr._infer_content_layout(tor, client)  # 方法已迁 ops 层(OpsMixin/manager)
 
         def f(n):
             return SimpleNamespace(name=n, size=1)
@@ -480,12 +480,19 @@ def test_skip_checking_delete_not_confirmed():
     """checking skip-checking: 删除后轮询确认失败(torrents_info 异常) -> 放弃跳检, 不重加"""
     with tempfile.TemporaryDirectory() as td:
 
-        def boom(h=None, **kw):
-            raise RuntimeError("info failed")
+        ctx, client = _skip_ctx(os.path.join(td, "state.json"))
+        # !R2 实时复核发生在删除前: info 故障必须从"删除生效后"才开始 —— 种子还在客户端时
+        #   正常应答, 删除(pop 出 client.torrents)后再查即抛, 精确模拟"确认消失轮询失败"
+        orig_info = client.torrents_info
 
-        ctx, client = _skip_ctx(os.path.join(td, "state.json"), torrents_info=boom)
+        def info_after_delete(torrent_hashes=None, **kw):
+            if torrent_hashes not in client.torrents:
+                raise RuntimeError("info failed")
+            return orig_info(torrent_hashes=torrent_hashes, **kw)
+
+        client.torrents_info = info_after_delete
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.rules.actions.skip_checking.time.sleep"):
+        with patch("auto_qb.core.mixins.ops.time.sleep"):
             r = action.execute(ctx)
         assert r.is_failed and "仍在客户端" in r.message, f"应失败: {r}"
         assert not any(c[0] == "add" for c in client.calls), "未确认消失前不得重加"

@@ -44,6 +44,11 @@ def build_router(ctx: WebContext) -> APIRouter:
     def api_t_recheck(hash: str):
         return _enqueue("recheck_torrent", {"hash": hash})
 
+    @router.post("/api/torrents/{hash}/skip-check")
+    def api_t_skip_check(hash: str):
+        """右键跳检(高风险): 删除并以跳过校验方式重加, 清空本地统计 —— 前端另有危险确认框"""
+        return _enqueue("skip_check_torrent", {"hash": hash})
+
     @router.post("/api/torrents/{hash}/super-seeding")
     def api_t_super_seeding(hash: str, body: dict = None):
         enable = bool((body or {}).get("enable", False))

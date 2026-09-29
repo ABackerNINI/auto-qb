@@ -6,9 +6,9 @@
 <title>危险操作独立操作层 · 工程计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="dangerous-op-consolidation">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-09-30-0109">
-<meta name="doc-updated" content="26-09-30-0531">
+<meta name="doc-updated" content="26-09-30-1200">
 <style>
   :root {
     color-scheme: dark;
@@ -199,7 +199,7 @@
     <div class="cover-meta">
       <div><span class="k">日期</span><span class="v">2026-09-30</span></div>
       <div><span class="k">分支</span><span class="v">develop</span></div>
-      <div><span class="k">状态</span><span class="v">草案 v3.1 · 待评审</span></div>
+      <div><span class="k">状态</span><span class="v">已实施 · Done</span></div>
       <div><span class="k">涉及</span><span class="v">rules / webui / core（新增 mixins/ops.py · 零配置键）</span></div>
       <div><span class="k">起草</span><span class="v">ZCode (AI) · 待用户拍板 §06</span></div>
     </div>
@@ -531,8 +531,9 @@
     <div class="colophon">
       auto-qb · memory-bank/plans/26-09-30-0109-plan-dangerous-op-consolidation.html<br>
       v3 完全重写（26-09-30 04:59）：用户评审 v2 两条修订——WEB 汇报限频致「不生效」困惑（R3 废止，C3 降级）· web×规则交织难维护（收编改独立操作层抽取），否决记录见 §02.2 · 代码事实核对截至 develop@da860d2（25aacd9 → da860d2 引用锚点未漂移）<br>
-      v3.1 口径一致性修订（26-09-30 05:31）：FIG.1 检查点编号断档（③→②，R3 废止后残留）/ ops 方法名统一（_ops_skip_check → ops_skip_check，torrent 改可选参与调用式自洽）/「P1 不变」与砍补矛盾解除 / P2 与 P2' 期名统一 / §3.5 标注 D1 待拍板
-      起草 ZCode (AI) · 评审通过后按 P1 → P2' 顺序实施
+      v3.1 口径一致性修订（26-09-30 05:31）：FIG.1 检查点编号断档（③→②，R3 废止后残留）/ ops 方法名统一（_ops_skip_check → ops_skip_check，torrent 改可选参与调用式自洽）/「P1 不变」与砍补矛盾解除 / P2 与 P2' 期名统一 / §3.5 标注 D1 待拍板<br>
+      已实施（26-09-30）：§06 四决策点按建议拍板（D1 采纳 / D2 不做 / D3 接受 / D4 仅抽 recheck+skip_check），P1 与 P2' 一次落地。ops 层 = core/mixins/ops.py（474 行，OpsMixin 组合进 QbManager）；full_checking.py 保留 1.5/1.6 闸门与常量 helper（178 行），skip_checking.py 剩一行委托（28 行）；WEB recheck 单发 + bulk 第二入口经 ops 提交，右键跳检（POST /api/torrents/{hash}/skip-check + 确认框）落地；webui 不 import rules 静态守阵（test_webui_no_rules_import）。注意：常量与冷却 helper 单点留在 full_checking.py（ops 反向 import 会经 rules.base 成环，已在 ops.py 头注明）。测试 +12（test_ops 7 / test_checking R2 1 / test_web 4），基线见 testing/baselines/。
+      起草 ZCode (AI) · 评审通过后按 P1 → P2' 顺序实施（已实施）
     </div>
 
     </main>

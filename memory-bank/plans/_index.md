@@ -28,12 +28,12 @@
 ## Open
 
 - [26-09-30-0240] [修改计划 · HR 在线核实三参数解耦 — 拉取间隔 / 复用窗 / 立即拉取](26-09-30-0240-plan-hr-reuse-window-decouple.html) — `backend-partial-hr-verify`
-- [26-09-30-0109] [危险操作独立操作层 · 工程计划 · auto-qb](26-09-30-0109-plan-dangerous-op-consolidation.html) — `dangerous-op-consolidation`
 - [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
 
 ## Done
 
 - [26-09-30-0559] [修改计划 · HR 触发语义重构 — 移除「本地不触发」,全量纳入管理](26-09-30-0559-plan-hr-trigger-semantics.html) — `backend-hr-verify`
+- [26-09-30-0109] [危险操作独立操作层 · 工程计划 · auto-qb](26-09-30-0109-plan-dangerous-op-consolidation.html) — `dangerous-op-consolidation`
 - [26-09-29-0323] [站点搜索 × 列表交互 · 三方案(计划)](26-09-29-0323-plan-webui-sites-search-3-proposals.html) — `webui-sites-page-search`
 - [26-09-29-0003] [计划 · WEBUI 设置页「?」说明全面核对与改写](26-09-29-0003-plan-webui-settings-help-rewrite.html) — `webui-settings-help`
 - [26-09-28-1932] [HR 在线核实 · 模型推翻重建计划 · auto-qb](26-09-28-1932-plan-hr-verify-rebuild.html) — `backend-partial-hr-verify`

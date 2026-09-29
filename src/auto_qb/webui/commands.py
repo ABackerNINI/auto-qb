@@ -56,12 +56,24 @@ RESYNC_COMMANDS = frozenset(
         "rename_fs",
         "bulk_torrents",
         "add_torrents",
+        "skip_check_torrent",
     }
 )
 
 # **延迟回执**命令: handler 只发指令并登记确认跟踪, 真正的结果由后续 tick(tracker 确认)或
 # handler 内部(依 qB 返回串写)写入 —— 它们不是"执行完即 ok", 所以 drain 侧**不**补写回执。
-DEFERRED_RECEIPT_COMMANDS = frozenset({"reannounce_group", "reannounce_torrent", "bulk_torrents", "add_torrents"})
+# recheck_torrent / skip_check_torrent 属 P1/P2' 提交点拒绝族(plan 26-09-30-0109): handler
+# 经 ops 层提交并把结果**映射成回执**(拒绝回执带自解释文案), 同走本族。
+DEFERRED_RECEIPT_COMMANDS = frozenset(
+    {
+        "reannounce_group",
+        "reannounce_torrent",
+        "bulk_torrents",
+        "add_torrents",
+        "recheck_torrent",
+        "skip_check_torrent",
+    }
+)
 
 
 def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
@@ -136,6 +148,7 @@ class WebCommandsMixin:
             "reannounce_torrent": self._cmd_reannounce_torrent,
             "delete_torrent": self._cmd_delete_torrent,
             "recheck_torrent": self._cmd_recheck_torrent,
+            "skip_check_torrent": self._cmd_skip_check_torrent,
             "super_seeding": self._cmd_super_seeding,
             "force_start": self._cmd_force_start,
             "set_torrent_limits": self._cmd_set_torrent_limits,
@@ -301,10 +314,41 @@ class WebCommandsMixin:
             self.api.torrents_delete(torrent_hashes=[hash], delete_files=delete_files)
             logger.info(f"WEB UI | 删除种子 {hash[:8]}(delete_files={delete_files})")
 
-    def _cmd_recheck_torrent(self, hash: str):
-        if self.store.get(hash) is not None:
-            self.api.torrents_recheck(torrent_hashes=[hash])
+    def _cmd_recheck_torrent(self, hash: str, cmd_id: str = ""):
+        """WEB UI 命令: 重新校验单发 —— 经 ops 层提交(在途互斥 R1 + 在途登记), handler 只做回执映射
+
+        ops 拒绝(校验进行中)时回执 error 带自解释文案; 种子不在快照给显式 error
+        (与 reannounce_torrent 同口径, 旧版静默无回执易被误读为已执行)。
+        """
+        if self.store.get(hash) is None:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", "种子不存在或已被删除")
+            return
+        r = self.ops_recheck(hash, source="web")
+        if r.is_ok or r.is_pending:
+            if cmd_id:
+                self._set_web_result(cmd_id, "ok")
             logger.info(f"WEB UI | 重新校验种子 {hash[:8]}")
+        else:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", r.message)
+            logger.info(f"WEB UI | 重新校验拒绝 {hash[:8]}: {r.message}")
+
+    def _cmd_skip_check_torrent(self, hash: str, cmd_id: str = ""):
+        """WEB UI 命令: 右键跳检 —— 经 ops 层执行四阶段(与规则跳检同闸门/同去重/天然串行)
+
+        阻塞 ~6s(删除->轮询->重加), 期间其它命令排队 —— 与规则跳检执行时现状一致;
+        拒绝(今日已跳检过/种子已被移除/部分下载)回执 error 带自解释文案。
+        """
+        r = self.ops_skip_check(hash, source="web")
+        if r.is_ok:
+            if cmd_id:
+                self._set_web_result(cmd_id, "ok")
+            logger.info(f"WEB UI | 右键跳检完成 {hash[:8]}")
+        else:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", r.message)
+            logger.info(f"WEB UI | 右键跳检未执行 {hash[:8]}: {r.message}")
 
     def _cmd_super_seeding(self, hash: str, enable: bool = False):
         if self.store.get(hash) is not None:
@@ -450,13 +494,13 @@ class WebCommandsMixin:
     # extra = {"tags": [...], "category": str}: add_tags/remove_tags/set_category 的载荷,
     # 其余动作忽略它(签名统一 4 参, 免得逐动作特判)。add_tags/remove_tags 的 tags 已在
     # 入口校验非空; set_category 的 category 允许空串(qB 语义 = 清除分类), None 时不会走到。
+    # !recheck 不在此表: 它走 _bulk_recheck_via_ops 逐个经 ops 层提交(R1 第二入口 —— 在途
+    #   hash 过滤 + 在途登记 + 聚合回执带跳过计数; 直调 API 会给批量路径留下 C1 旁路)。
     _BULK_ACTIONS = {
         "pause":
             lambda api, hashes, delete_files, extra: api.torrents_pause(torrent_hashes=hashes),
         "resume":
             lambda api, hashes, delete_files, extra: api.torrents_resume(torrent_hashes=hashes),
-        "recheck":
-            lambda api, hashes, delete_files, extra: api.torrents_recheck(torrent_hashes=hashes),
         "delete":
             lambda api, hashes, delete_files, extra: api.
             torrents_delete(torrent_hashes=hashes, delete_files=delete_files),
@@ -487,6 +531,8 @@ class WebCommandsMixin:
         """WEB UI 命令: 批量操作(单命令批量, 平铺视图多选); 回执由本 handler 聚合写
 
         - 未知 action / 空 hash 列表 -> error 回执
+        - recheck 走 ops 层逐个提交(在途互斥+登记), 聚合回执带「N 个校验进行中已跳过」计数
+          (_bulk_recheck_via_ops); 其余动作单次 API 调用传全部 hashes
         - 不在快照中的 hash 跳过(删除守阵), 仍有缺失时回执 error 带缺失计数(部分成功也报错,
           前端可据列表刷新后重试); 全部命中 -> ok
         - API 只调一次: hashes 整体传给既有 api 调用(qB 端点原生接受批量)
@@ -499,7 +545,8 @@ class WebCommandsMixin:
         req = [h for h in (hashes or []) if h]
         keys = [k for k in (keys or []) if k]
         fn = self._BULK_ACTIONS.get(action)
-        if fn is None:
+        # recheck 不在 _BULK_ACTIONS(走 ops 层), 放行到 known 展开后分流(见下方分支)
+        if fn is None and action != "recheck":
             if cmd_id:
                 self._set_web_result(
                     cmd_id, "error",
@@ -530,6 +577,10 @@ class WebCommandsMixin:
                 known.extend(members)
             else:
                 missing_groups += 1
+        if action == "recheck":
+            # R1 第二入口(plan 26-09-30-0109): 批量 recheck 逐个经 ops 层提交, 不直调 API
+            self._bulk_recheck_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys))
+            return
         if known:
             fn(self.api, known, delete_files, extra)
         msgs = []
@@ -546,6 +597,52 @@ class WebCommandsMixin:
             if cmd_id:
                 self._set_web_result(cmd_id, "ok")
             logger.info(f"WEB UI | 批量 {action}({len(known)}个种子, delete_files={delete_files})")
+
+    def _bulk_recheck_via_ops(
+        self,
+        hashes: List[str],
+        cmd_id: str,
+        missing: int = 0,
+        n_req: int = 0,
+        missing_groups: int = 0,
+        n_keys: int = 0,
+    ) -> None:
+        """批量 recheck 经 ops 层逐个提交(R1 第二入口): 在途互斥对每个 hash 生效, 聚合回执带跳过计数
+
+        与单发同一提交点(ops_recheck, source="web"): 在途/校验中的 hash 被拒绝并计数,
+        不重启其校验; 提交成功的 hash 经 ops 登记在途 -> 决策链 1.5 组内串行化可见。
+        回执口径与 bulk 其余动作一致: 任何缺失/跳过/失败都进 error 文案(部分成功也报错,
+        拒绝计数必须可见), 全部正常提交才 ok。
+        """
+        ok_n = skip_n = fail_n = 0
+        fail_msgs: List[str] = []
+        for h in hashes:
+            r = self.ops_recheck(h, source="web")
+            if r.is_skipped:
+                skip_n += 1
+            elif r.is_failed:
+                fail_n += 1
+                fail_msgs.append(r.message)
+            else:
+                ok_n += 1
+        msgs = []
+        if missing:
+            msgs.append(f"{missing}/{n_req} 个种子不存在或已被删除")
+        if missing_groups:
+            msgs.append(f"{missing_groups}/{n_keys} 个组不存在或成员为空")
+        if skip_n:
+            msgs.append(f"{skip_n} 个校验进行中已跳过")
+        if fail_n:
+            msgs.append(f"{fail_n} 个发送失败: {'; '.join(fail_msgs[:3])}")
+        if msgs:
+            msg = "; ".join(msgs)
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", msg)
+            logger.info(f"WEB UI | 批量 recheck(提交 {ok_n}, 跳过 {skip_n}, 失败 {fail_n}): {msg}")
+            return
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok")
+        logger.info(f"WEB UI | 批量 recheck(提交 {ok_n} 个种子)")
 
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)

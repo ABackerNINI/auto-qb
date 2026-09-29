@@ -6,9 +6,12 @@
 - GroupingMixin      种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
 - TrackerMixin       tracker 配置匹配/tracker 级单种限速
 - SpeedCurveMixin    全局限速曲线: Traffic Monitor 流量数据 -> qB 全局速度限制
+- OpsMixin           危险操作独立操作层(rules → ops ← web): recheck/跳检的执行体 +
+                     提交点检查 + 按 source 保护策略(plan 26-09-30-0109)
 """
 from .checking import CheckingMixin
 from .grouping import GroupingMixin
+from .ops import OpsMixin
 from .rule_engine import RuleEngineMixin
 from .tags import TagsMixin
 from .tracker import TrackerMixin
@@ -21,4 +24,5 @@ __all__ = [
     "GroupingMixin",
     "TrackerMixin",
     "SpeedCurveMixin",
+    "OpsMixin",
 ]

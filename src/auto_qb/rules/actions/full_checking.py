@@ -1,8 +1,10 @@
-"""full-checking 执行与组内校验串行化(FullCheckingMixin)
+"""full-checking 组内校验串行化(FullCheckingMixin)
 
-包含: 校验常量(轮询间隔/失败上限/启动宽限/等待上限)、当日失败计数 helper、
-full-checking 提交+轮询(_execute_full_checking)、组内串行闸门
-(_wait_for_group_checking, 决策链 1.5)与失败推断闸门
+full-checking 提交+轮询执行体已迁入 core/mixins/ops.py(OpsMixin, rules → ops ← web,
+plan 26-09-30-0109 P2'), 本模块保留: 校验常量与当日失败计数 helper(ops 层经 import 取用;
+注意本模块**不得**反向 import ops —— ops -> rules.base 会触发 rules 包初始化到此处, 反向
+导入成环)、full-checking 委托入口(_execute_full_checking, 一行委托 ctx 字段 -> ops 参数)、
+组内串行闸门(_wait_for_group_checking, 决策链 1.5)与失败推断闸门
 (_skip_on_group_check_failed, 决策链 1.6, 含假失败自愈)。
 """
 import logging
@@ -53,127 +55,28 @@ def _bump_recheck_fail(manager, hash: str) -> int:
 
 
 class FullCheckingMixin:
-    """full-checking 执行与组内校验串行化: 由 CheckAction 组合, 依赖 self 的
+    """full-checking 委托入口与组内校验串行化: 由 CheckAction 组合, 依赖 self 的
     basic_check/with_reference/without_reference(checking.py 解析)"""
     def _execute_full_checking(self, ctx: RuleContext, segment: dict):
-        """full-checking: 先登记校验结果轮询子任务(快速队列, interval=CHECK_RESULT_INTERVAL), 再同步发送 recheck
+        """full-checking 委托入口: ctx 字段 -> ops 参数, 执行体在 manager.ops_recheck(ops 层)
 
-        触发流程:
-          1) 先 add_task 登记轮询子任务(在途去重: 已在途则 skip, 不重复发 recheck),
-             再同步发送 torrents_recheck(API 同步返回, 校验后台异步); 发送失败返回 fail
-             (不返回 pending, 规则不留断点; 已登记的子任务下轮见「未发送」标记直接消亡,
-             释放在途登记 —— 发送失败不得遗留等待中的轮询)
-          2) 发送成功动作返回 pending(规则断点), 规则任务本轮不重入队(_handle_rule 检测断点) ——
-             origin 的恢复完全由轮询子任务负责: 队列对"暂停/恢复"无感知
-          3) 轮询子任务每 CHECK_RESULT_INTERVAL 秒检查 store 快照, 退出 checking* 即完成:
-             成功(progress>=1) -> on_success()(晋升 verified_references + auto_start) +
-               add_task(origin, keep_progress=True) 重新入队(断点续跑后续动作)
-             失败(曾见 checking 后落回未完成, 或 CHECK_START_GIVEUP 宽限耗尽仍未开检)/
-               异常/种子删除 -> add_task(origin)(默认重置, 重走完整决策链; 种子删除时由
-               origin 的删除守卫判死); 宽限窗口内「未见 checking」的样本只 REQUEUE 不计败
-               (首样本竞态修复: 不把快照滞后当校验失败)
-          4) 子任务经 add_task 自动登记在途(_active_checks, 决策链 1.5 组内串行化依赖),
-             消亡时释放
+        规则侧只保留自己的语义回调: on_success = 晋升 verified_references(仅内存, 不写
+        state_file; 执行历史由 origin 重新入队后的续跑 Rule.process 统一记录)。失败冷却 /
+        冷却清除 / auto_start / 轮询 / origin 重入队都是操作语义, 单点在 ops 层。
         """
         manager = ctx.manager
         hash = ctx.hash
 
-        # 失败冷却: 当日连续校验失败达上限后不再重试(防损坏文件导致 recheck 死循环), 次日重置
-        # (INFO 提级: 这是在拒绝校验, 生产 INFO 日志下必须可见 —— 2026-09-25 排障时 skip 全是 DEBUG 盲区)
-        if _recheck_fail_count(manager, hash) >= RECHECK_FAIL_LIMIT:
-            logger.info(f"规则[{ctx.rule_name}] {ctx.torrent.log_repr} | 校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
-            return ActionResult.skip(f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
-
-        tq = ctx.manager.task_queue
-        origin = getattr(ctx, "task", None)  # 触发本次校验的规则任务(任务队列驱动); 外部入口为 None
-        rule_name = ctx.rule_name
-        api = ctx.api
-        auto_start = segment["auto_start"]
-
         def on_success():
-            """校验成功完成处理: 晋升参考(仅内存, 不写 state_file) + auto_start
-            执行历史由 origin 重新入队后的续跑(Rule.process 断点续跑)统一记录
-            """
             manager.store.verified_references.add(hash)
-            manager.state.get("recheck_fails", {}).pop(hash, None)  # 校验通过: 清除失败冷却计数
-            if auto_start and not ctx.dry_run:
-                api.torrents_start(torrent_hashes=hash)
-                logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | 校验成功自动开始")
 
-        def poll(task: Task, dry_run: bool) -> bool:
-            nonlocal seen_checking
-            try:
-                if not submitted:
-                    return FINISHED  # recheck 发送失败: 登记的轮询直接消亡(释放在途登记)
-                if manager.store.get(hash) is None:
-                    # 种子已删除: 默认重置重新入队 origin, 由其删除守卫(_handle_rule)判死
-                    logger.warning(f"规则[{rule_name}] {hash[:8]} | 校验轮询: 种子已删除")
-                    manager.state.get("recheck_fails", {}).pop(hash, None)
-                    if origin is not None:
-                        tq.add_task(origin)
-                    return FINISHED
-                if ctx.torrent.state_enum.is_checking:
-                    seen_checking = True
-                    return REQUEUE  # 仍在校验中, 下一轮轮询
-                if ctx.torrent.progress >= 1.0:
-                    logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | 校验成功")
-                    on_success()
-                    if origin is not None:
-                        tq.add_task(origin, keep_progress=True)  # 显式保存进度: 断点续跑后续动作
-                elif seen_checking:
-                    # 曾见 checking 后落回未完成: 真实校验未通过
-                    fail_count = _bump_recheck_fail(manager, hash)
-                    logger.warning(
-                        f"规则[{rule_name}] {ctx.torrent.log_repr} | "
-                        f"校验未通过(第{fail_count}次, progress={ctx.torrent.progress})"
-                    )
-                    if origin is not None:
-                        tq.add_task(origin)  # 默认重置: 重走完整决策链(重新校验)
-                elif time.time() - submitted_at >= CHECK_START_GIVEUP:
-                    # 宽限耗尽仍未见校验启动: 判败防轮询活锁(qB 重启丢请求等极端情形);
-                    # 判败后 origin 重走决策链会重新提交, 请求恢复生效后自然续上
-                    fail_count = _bump_recheck_fail(manager, hash)
-                    logger.warning(
-                        f"规则[{rule_name}] {ctx.torrent.log_repr} | "
-                        f"校验启动超时({CHECK_START_GIVEUP:.0f}s 未见 checking, "
-                        f"第{fail_count}次, progress={ctx.torrent.progress})"
-                    )
-                    if origin is not None:
-                        tq.add_task(origin)  # 默认重置: 重走完整决策链(重新校验)
-                else:
-                    # 未见 checking 且宽限未耗尽: recheck 尚未被 qB 应用(异步应用 + 快照滞后)
-                    # 或排队未开检 —— 继续轮询, 不计失败(首样本竞态修复)
-                    return REQUEUE
-                return FINISHED  # 轮询子任务消亡(释放在途登记)
-            except Exception as e:
-                logger.error(f"规则[{rule_name}] {hash[:8]} | 校验轮询异常: {e}")
-                if origin is not None:
-                    tq.add_task(origin)  # 默认重置: 重走完整决策链
-                return FINISHED
-
-        submitted = False  # recheck 是否发送成功(先登记后发送; 失败时轮询子任务据此消亡)
-        submitted_at = time.time()  # 校验启动宽限窗口起点(recheck 发送成功时刻)
-        seen_checking = False  # 本轮询周期内是否观察到过 checking 态(失败判定前提)
-
-        task = Task(
-            "check",
-            "check-checking-result",
-            hash=hash,
-            store=manager.store,
-            interval=CHECK_RESULT_INTERVAL,
-            handler=poll,
+        return manager.ops_recheck(
+            hash,
+            source="rule",
+            auto_start=segment["auto_start"],
+            on_success=on_success,
+            origin=getattr(ctx, "task", None),  # 触发本次校验的规则任务(任务队列驱动); 外部入口为 None
         )
-        if not tq.add_task(task):
-            return ActionResult.skip("该校验任务已在队列中")
-        try:
-            api.torrents_recheck(torrent_hashes=hash)
-            submitted = True
-            submitted_at = time.time()
-        except Exception as e:
-            return ActionResult.fail(f"发送 recheck 失败: {e}")
-        logger.info(f"规则[{rule_name}] {ctx.torrent.log_repr} | full-checking 校验已提交")
-        # pending: 规则记录断点, 规则任务本轮不重入队 —— 恢复由轮询子任务负责
-        return ActionResult.pending("full-checking 校验已提交")
 
     def _wait_for_group_checking(self, ctx: RuleContext, members: list) -> Optional[ActionResult]:
         """决策链 1.5: 组内已有其它成员 full-checking 在途 -> 推迟执行(组内共享同一物理文件, 并行全量校验只有重复 I/O)

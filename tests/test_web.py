@@ -158,7 +158,11 @@
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt): 63 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check): 66 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
+- test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
+- test_drain_web_commands_skip_check_torrent: 右键跳检命令(P2') —— 经 ops 层四阶段全流程, 回执 ok 且记录同日去重
+- test_webui_no_rules_import: 边界守阵(P2') —— webui 操作链不得 import 规则模块; 其余 webui 模块不得触碰规则动作插件(rules.actions/registry)
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 - test_hr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
 - test_hr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰)
@@ -2941,7 +2945,7 @@ def test_group_key_codec_roundtrip():
 
 def test_build_group_view(tmp_path):
     """分组视图快照组装: 组级聚合求和 + 成员明细 + 编码 key(回归真机 utils.encode_group_key 缺失)"""
-    from helpers import FakeClient, FakeTorrent, make_manager
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.config.grouping.enabled = True
@@ -3004,7 +3008,7 @@ def test_build_group_view_member_num_seeds_fields(tmp_path):
     前端成员列/种子页展示连接数与可用性的数据源: _member_view 是组视图 members 与
     singles 未归组种子的共同投影, 字段在成员层透出后两处同形。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.client = FakeClient()
@@ -3060,7 +3064,7 @@ def test_build_group_view_group_aggregates(tmp_path):
     - seeding_time 取平均(成员值已量化到分钟, 平均后再取整)
     - ratio = 总上传 ÷ 单份大小(分母不能是 total_size, N 份会稀释 N 倍)
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.config.grouping.enabled = True
@@ -3135,7 +3139,7 @@ def test_member_view_extended_fields(tmp_path):
     last_activity)必须经 view_field_value 分钟量化(与 store 重建判定同一步长, 否则做种中的
     种子每轮置脏、惰性重建失效); 哨兵原样带过(负数不量化, 见 view_field_value)。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.client = FakeClient()
@@ -3186,7 +3190,7 @@ def test_error_reason_from_tracker_msg(tmp_path):
     msg 取; 预取结果写在记录上, 视图组装只读缓存 —— 视图可能每 tick 重建, 不能在里面发 API。
     取不到报错 msg 的错误种子(磁盘/IO 类)回退状态文本, 不留空串(否则前端显示空白状态)。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     client = FakeClient()
@@ -3226,7 +3230,7 @@ def test_error_reason_from_tracker_msg(tmp_path):
 
 def test_error_reason_missing_files_without_api(tmp_path):
     """missingFiles 的原因由状态本身给出("文件丢失"), 不需要任何 tracker 请求"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     client = FakeClient()
@@ -3247,7 +3251,7 @@ def test_refresh_error_reasons_budget_and_ttl(tmp_path, monkeypatch):
     错误种子成片时(整组文件丢失)不能一轮打满 tracker 请求 —— 与搜索索引同一限流哲学。
     """
     from auto_qb.webui import views as web_view
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     monkeypatch.setattr(web_view, "ERROR_REASON_BUDGET", 1)
     mgr = make_manager(str(tmp_path / "state.json"))
@@ -3271,7 +3275,7 @@ def test_refresh_error_reasons_budget_and_ttl(tmp_path, monkeypatch):
 
 def test_refresh_error_reasons_clears_when_recovered(tmp_path):
     """状态恢复(离开错误态)后清空原因缓存 —— 否则恢复做种仍挂着旧原因"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.client = FakeClient()
@@ -3740,7 +3744,7 @@ def test_build_group_view_added_on_is_latest_member(tmp_path):
 
     用 max 而非 min: "刚补进来的那个辅种"才是用户最关心的新条目。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.client = FakeClient()
@@ -3828,7 +3832,7 @@ def test_views_published_atomically_when_rebuilt_concurrently(tmp_path):
 
 def test_build_search_index_files():
     """_build_search_index: 主循环构建索引(hash -> name+files), 单条文件拉取失败跳过该种子"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -3938,7 +3942,7 @@ def test_build_search_index_aborts_when_disconnected():
 
 def test_search_torrents_name_match():
     """search_torrents: 种子名匹配(即时, 无需文件索引), 大小写不敏感"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -3960,7 +3964,7 @@ def test_search_torrents_separator_normalized():
     回归(26-09-25): "The.Cat.and.the.Dragon.S01.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb"
     搜 "cat and" 不命中 —— 旧实现裸子串匹配, 查询词里的空格对不上名里的点号。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store, _fake_file
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4021,7 +4025,7 @@ def test_search_torrents_cross_row_and():
     (见 negative_term / negative_torrent_veto); 全称行全覆盖的命中排前, 需文件行补词的以 file
     兜底排后。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store, _fake_file
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4062,7 +4066,7 @@ def test_search_torrents_cross_row_and():
 def test_search_torrents_negative_term():
     """search_torrents 负词种子级(2026-09-27 定案): 任一候选行含负词 ⇒ 该种子整体排除 —— 单个
     种子内包含的合集(季包文件)统一计算; 多种子集合(辅种组/追剧)里的每个种子单独计算"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store, _fake_file
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4171,7 +4175,7 @@ def test_search_torrents_facet_rows():
 
 def test_search_torrents_phrase():
     """search_torrents 短语: "…" 整段归一为**连续**子串(可含分隔符), 词序敏感 —— 与词间 AND 的区分用例"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4195,7 +4199,7 @@ def test_search_torrents_regression_envnv10():
     旧口径整句连续子串匹配: 「恶女 10」要求两词连续, 而文件名里「恶女」后跟「雏宫蝶鼠替换传」、
     「10」在远处的 s01e10 里 —— 必不命中。现行逐词跨行 AND 口径下两词同行照常命中。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4218,7 +4222,7 @@ def test_search_torrents_regression_envnv10():
 
 def test_search_torrents_negative_only_empty():
     """search_torrents 仅负词/空查询: 无正判据返回空 + negative_only 标记(前端提示依据), 不投递索引构建"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4237,7 +4241,7 @@ def test_search_torrents_negative_only_empty():
 
 def test_search_torrents_file_match():
     """search_torrents: 文件列表匹配(依赖已构建的索引), 命中文件名"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -4272,7 +4276,7 @@ def test_search_torrents_file_match():
 
 def test_search_torrents_building_triggers():
     """search_torrents: 索引脏(种子集变化后)时返回 building=true 并投递构建命令"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, _fake_file
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store, _fake_file
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -5083,7 +5087,7 @@ def test_drain_web_commands_torrent_write_actions():
         for cmd, payload in cmds:
             mgr.web_commands.put((cmd, payload))
         mgr._drain_web_commands()
-        assert client.calls[0] == ("recheck", None) and client.recheck_hashes_calls[0] == ["HA"]
+        assert client.calls[0] == ("recheck", None) and client.recheck_hashes_calls[0] == "HA"
         assert client.calls[1] == ("set_super_seeding", True)
         assert client.calls[2] == ("set_force_start", True)
         assert client.calls[3] == ("set_upload_limit", 1024)
@@ -5100,10 +5104,14 @@ def test_drain_web_commands_torrent_write_actions():
         # !D2 之后回执**在 drain 阶段就写**(不再扣住等真值)—— 真机实测 qB 翻状态要 1258ms,
         #   扣着回执等 = 撤下被钉死在 1.25s+(实测撤下 2947ms)。回执只表示"命令已执行"。
         assert mgr._web_results["c1"]["status"] == "ok", "回执必须立即发, 不再等真值落地"
+        # recheck_torrent 已入延迟回执族(plan 26-09-30-0109: handler 经 ops 提交并自写回执,
+        # 拒绝时回执带自解释文案) —— 它不再走 RESYNC 的 defer_receipt 真值登记; 校验态由
+        # 正常快照刷新可见, 乐观 UI 也不做 recheck(结果在远端)
+        assert "c1" not in mgr.web.truth_pending, "recheck 由 handler 自写回执, 不登记真值待推"
         # 回执**不带 truth**: 带上未落地的真值 = 让前端采纳命令前的旧值 ⇒ 弹回(红线)
         assert "truth" not in mgr._web_results["c1"], "回执不得带真值(真值改由 truth 事件推送)"
         # 真值登记为待推, 由 run() 无条件 flush(幂等; 漏调会让前端一直挂着乐观值)
-        assert "c1" in mgr.web.truth_pending, "RESYNC 命令应登记待推真值"
+        assert "c2" in mgr.web.truth_pending, "RESYNC 命令应登记待推真值"
         mgr._flush_truths()
         assert mgr._flush_truths() is None, "重复 flush 必须是安全的空操作"
         # 全部命令回执 ok
@@ -5274,10 +5282,11 @@ def test_drain_web_commands_bulk_torrents():
         mgr._drain_web_commands()
         assert client.calls[-1] == ("pause", ["HA", "HB"]), client.calls[-1]
         assert mgr._web_results["b1"]["status"] == "ok"
-        # recheck: hash 级作用范围一次传入
+        # recheck: 经 ops 层逐个提交(R1 第二入口) —— 每 hash 一次提交并各自登记在途,
+        # 不再是"一次 API 传全部"(直调 API 会让批量路径绕过在途互斥, 留下 C1 旁路)
         mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "b2"}))
         mgr._drain_web_commands()
-        assert client.recheck_hashes_calls[-1] == ["HA", "HB"]
+        assert client.recheck_hashes_calls == ["HA", "HB"], client.recheck_hashes_calls
         assert mgr._web_results["b2"]["status"] == "ok"
         # delete: delete_files 透传, 成员从快照移除
         mgr.web_commands.put(
@@ -5895,7 +5904,7 @@ def test_build_speed_totals_covers_ungrouped(tmp_path):
     又在种子页因 groups 不回传而恒为 0(issue 26-09-20-1646)。合计范围必须是
     `store.by_hash` 全量 —— 与种子页平铺视图同源。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.client = FakeClient()
@@ -5926,7 +5935,7 @@ def test_api_state_speed_totals_survives_view_scoping():
     """
     from fastapi.testclient import TestClient
 
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -6994,7 +7003,7 @@ def test_seed_flat_view_fields_and_gating():
     字段集与前端契约一字不差(详见实施 prompt); eta/time_active 按分钟量化(与重建判定
     同一步长); HR 字段与分组成员视图同源; 同版本请求不回传 torrents(与 groups/singles 同门控)。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -7113,7 +7122,7 @@ def test_flat_view_refreshed_by_main_loop_tick():
 
     本用例钉住端到端事实: 主循环 tick 之后, Web 请求拿到的 torrents 必须是**新**速度。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -7144,7 +7153,7 @@ def test_rebuild_views_single_entry_point():
 
     在调用点各建一部分必然漏建(历史漏了 flat/singles/shows)—— 新增视图只能挂在这里。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -7430,7 +7439,7 @@ def _mk_mgr_with_one_torrent(state="pausedDL", progress=1.0):
     """
     import tempfile
 
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     tmpdir = tempfile.TemporaryDirectory(prefix="autoqb-web-")
     mgr = make_manager(os.path.join(tmpdir.name, "state.json"))
@@ -7503,7 +7512,7 @@ def test_affected_truth_reads_qb_directly_not_sync_snapshot():
     !这条守阵要能挡住"改回读 store.by_hash": 那样 truth 会变成 paused, 断言立刻红。
     """
     with tempfile.TemporaryDirectory() as td:
-        from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+        from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -7646,6 +7655,7 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/torrents/{hash}/rename-fs"),
     ("POST", "/api/torrents/{hash}/resume"),
     ("POST", "/api/torrents/{hash}/share-limits"),
+    ("POST", "/api/torrents/{hash}/skip-check"),  # P2' 右键跳检(plan 26-09-30-0109)
     ("POST", "/api/torrents/{hash}/super-seeding"),
     ("GET", "/api/torrents/{hash}/trackers"),
     ("POST", "/api/torrents/{hash}/trackers/add"),
@@ -7676,7 +7686,7 @@ def _iter_api_routes(routes):
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 61 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 66 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、
@@ -7841,3 +7851,103 @@ def test_api_keys_unknown_schema_version_fallback(web_env, caplog):
         r = client.get("/api/keys", headers=_keys_headers(mgr))
     assert r.json() == {"schema_version": 1, "template": "aqb-default", "overrides": {}}
     assert any("结构不符" in rec.message for rec in caplog.records)
+
+
+def test_drain_web_commands_recheck_rejected_while_checking():
+    """R1 单发拒绝(plan 26-09-30-0109 §3.2): 规则校验在途时 WEB recheck -> 回执 error「校验进行中」, qB 不重启校验
+
+    C1 的 WEB->规则半边: WEB recheck 直调 API 会重启规则正在轮询的校验, 进度回落可能触发
+    CHECK_START_GIVEUP 误判失败并污染当日失败计数。提交点检查在 ops 层单点, handler 只映射回执。
+    """
+    from auto_qb.core.taskqueue import REQUEUE, Task
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        inflight = Task("check", "check-checking-result", hash="HA", store=mgr.store, handler=lambda t, d: REQUEUE)
+        assert mgr.task_queue.add_task(inflight)
+        mgr.web_commands.put(("recheck_torrent", {"hash": "HA", "cmd_id": "r1"}))
+        mgr._drain_web_commands()
+        assert client.recheck_hashes_calls == [], f"拒绝时 qB 不得收到 recheck: {client.recheck_hashes_calls}"
+        assert mgr._web_results["r1"]["status"] == "error", mgr._web_results
+        assert "校验进行中" in mgr._web_results["r1"]["error"], mgr._web_results["r1"]
+
+
+def test_drain_web_commands_bulk_recheck_skips_inflight():
+    """R1 bulk 第二入口(plan 26-09-30-0109 §3.2): 在途 hash 逐个经 ops 过滤, 聚合回执带跳过计数
+
+    bulk recheck 直调 API 是 C1 的第二入口(批量路径旁路); 现逐个走 ops_recheck(source="web"):
+    在途/校验中的 hash 被拒绝并计数, 其余正常提交并登记在途(决策链 1.5 可见)。
+    """
+    from auto_qb.core.taskqueue import REQUEUE, Task
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        inflight = Task("check", "check-checking-result", hash="HB", store=mgr.store, handler=lambda t, d: REQUEUE)
+        assert mgr.task_queue.add_task(inflight)
+        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "b9"}))
+        mgr._drain_web_commands()
+        assert client.recheck_hashes_calls == ["HA"], f"仅非在途的 HA 提交: {client.recheck_hashes_calls}"
+        assert "HA" in mgr.task_queue.active_check_hashes(), "提交的 hash 应登记在途"
+        assert mgr._web_results["b9"]["status"] == "error", mgr._web_results
+        assert "1 个校验进行中已跳过" in mgr._web_results["b9"]["error"], mgr._web_results["b9"]
+
+
+def test_drain_web_commands_skip_check_torrent():
+    """右键跳检命令(P2', plan 26-09-30-0109 §3.6): 经 ops 层四阶段全流程, 回执 ok 且记录同日去重
+
+    WEB 触发的跳检与规则跳检同一闸门/同一去重/同一执行体(天然串行于主循环线程);
+    hash 用 FakeClient 重加固定回的 HASH123, 使重加确认走通全流程。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        t = FakeTorrent(hash="HASH123", name="Show", state="pausedDL", progress=0.0)
+        client.torrents["HASH123"] = t
+        seed_store(mgr, [t])
+        mgr.web_commands.put(("skip_check_torrent", {"hash": "HASH123", "cmd_id": "s1"}))
+        mgr._drain_web_commands()
+        names = [c[0] for c in client.calls]
+        assert "export" in names and "delete" in names and "add" in names, f"应走跳检四阶段: {client.calls}"
+        assert mgr._web_results["s1"]["status"] == "ok", mgr._web_results
+        assert mgr.state["skip_check_day"]["HASH123"], "web 跳检应记录跨来源同日去重"
+
+
+def test_webui_no_rules_import():
+    """边界守阵(P2', plan 26-09-30-0109 §3.4/FIG.2): webui 不触碰规则动作插件 —— 操作语义单点在 ops 层
+
+    依赖方向 rules -> ops <- web: WEB 的操作执行链不得 import 规则模块(v2 收编方案做不到
+    这一点 —— 它要求 WEB 调进规则模块内部)。两层口径:
+    - 操作链模块(webui/{__init__,commands,runtime,views}.py): 不得 import auto_qb.rules 任何部分;
+    - 其余 webui 模块: 不得 import 规则**根包**(会传递拉起动作插件注册)与 rules.actions /
+      rules.registry; rules.expr / rules.base 仅限 config 编辑器表达式试算
+      (server/routes/config.py 既有合法用途, 不属操作语义)。
+    """
+    import re
+
+    import auto_qb.webui as _webui_pkg
+
+    webui_root = os.path.dirname(os.path.abspath(_webui_pkg.__file__))
+    op_chain = {"__init__.py", "commands.py", "runtime.py", "views.py"}
+    plugin_prefixes = ("rules", "rules.actions", "rules.registry")
+    rx = re.compile(r"^\s*(?:from|import)\s+(auto_qb\.rules[\w.]*|(?:\.{2,4})rules[\w.]*)")
+    violations = []
+    for dirpath, _dirs, files in os.walk(webui_root):
+        for fn in files:
+            if not fn.endswith(".py"):
+                continue
+            full = os.path.join(dirpath, fn)
+            rel = os.path.relpath(full, webui_root).replace("\\", "/")
+            is_op_chain = "/" not in rel and fn in op_chain
+            with open(full, encoding="utf-8") as f:
+                for i, line in enumerate(f, 1):
+                    m = rx.match(line)
+                    if not m:
+                        continue
+                    mod = m.group(1).lstrip(".") or "rules"
+                    if is_op_chain or mod in plugin_prefixes:
+                        violations.append(f"{rel}:{i}: import {m.group(1).strip()}")
+    assert not violations, ("webui 出现规则模块引用(依赖方向做反, 操作语义必须单点在 core/mixins/ops.py): "
+                            f"{violations}")

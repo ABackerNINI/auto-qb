@@ -1,18 +1,13 @@
-# 危险操作独立操作层 · 计划 v3 重写完成（未开工）
+# 危险操作独立操作层 · 已实施 (P1+P2' 落地, 未提交)
 
-> 摘要: v2「提交点检查 + 收编」骨架经用户评审部分否决, v3 同文件重写为「独立操作层」: 依赖方向摆正 rules → ops ← web——recheck/skip_check 执行体与保护策略抽进 `core/mixins/ops.py`（OpsMixin 组合进 QbManager）, 规则只留决策与断点续跑（origin 重入队转正为 on_success 回调）, WEB 只留入口与回执; **保护策略按来源区分**（防自动化失控的 3次/日冷却·600s 只挂 rule, 防真实冲突的在途互斥·R2·同日去重挂所有来源; 判据 = 被拒时用户能否从界面自行看出原因）。改动: R3（WEB reannounce 600s 对齐）整条废止, C3 降级「已知无害现状」与 C4 同口径（WEB 汇报是用户显式选择, 限频 = 「按钮为什么不生效」; 且与 C4 口径不一致）; D1-A「全收编」废弃改抽取（v2 让 WEB 调 full_checking 提交路径 = 依赖做反: 伪造 ctx / 适配 origin / WEB 计入冷却同款困惑）。P1 = R2 + R1 提交点拒绝（补 bulk recheck 第二入口 commands.py:458-459, v2 漏了旁路）; P2' = 抽取 + 右键跳检 + webui 不 import rules 静态守阵; `_active_checks` 留 TaskQueue。P1 ≤60 行, P2' 搬运 ~430 行逻辑等价 + 净新增 ≤150 行。计划 v3（[plans/26-09-30-0109-plan-dangerous-op-consolidation.html](../plans/26-09-30-0109-plan-dangerous-op-consolidation.html)）待评审, 拍板 §06 四决策点: D1 来源策略 / D2 在途视图 / D3 C3+C4 接受现状 / D4 抽取范围（仅 recheck+skip_check）。
-> 最后活动: 2026-09-30 05:31
+> 摘要: 用户指令「实施计划」—— §06 四决策点按建议拍板(D1 采纳 / D2 不做 / D3 接受现状 / D4 仅抽 recheck+skip_check), P1+P2' 一轮落地。ops 层 = `core/mixins/ops.py`(474 行 OpsMixin: ops_recheck/ops_skip_check, R1 提交点检查 + R2 实时复核 + 保护按 source 区分); full_checking.py 留 1.5/1.6 闸门与常量 helper(178 行), skip_checking.py 剩一行委托(28 行); WEB recheck 单发+bulk 第二入口经 ops 提交(handler 自写回执, 入 DEFERRED_RECEIPT), 右键跳检(POST /api/torrents/{hash}/skip-check + 前端确认框)落地; webui 不 import rules 静态守阵 test_webui_no_rules_import。**导入防环决策**: 常量/冷却 helper 单点留 full_checking.py, ops 反向 import 它(反向即成环)。提交时合并远端 87d154c7(键盘快捷键+HR 触发语义, stash→sync→pop 交集 4 文件); 合并后基线 **1829 passed + 3 skipped / 91%**(test.full 24.82s)。计划 doc 已置 Done; 档案 [tasks/26-09-30-rule-dangerous-op-layer.md](../tasks/26-09-30-rule-dangerous-op-layer.md); 基线 [testing/baselines/26-09-30-1210-dangerous-ops-layer.md](../testing/baselines/26-09-30-1210-dangerous-ops-layer.md)。
+> 最后活动: 2026-09-30 12:40
 
 ## 正在进行
 
-- 无 —— 等用户评审 v3 计划 + 拍板 §06 四个决策点。
-
-## 历史（v1 → v2, 细节已沉淀进计划 §02）
-
-- v1 全局队列模式否决（7 条原因在计划 §02.1）; v2 重写为提交点检查（C2 机理修正: 单一写线程 + 阻塞执行体 = 天然串行器, 真实竞态是任务线按陈旧快照执行可复活刚删的种子）。
-- v3.1（05:31）口径一致性修订（用户指出更新后部分口径对不上, 复查出 6 处残留）: FIG.1 检查点编号 ①③ 断档（R3=② 废止后未重排）→ ②; `_ops_skip_check` → `ops_skip_check` 与 §3.4 单点签名统一, torrent 改可选参使调用式自洽; §04「P1 不变(砍R3/补bulk)」字面矛盾解除; 封面/TOC/§02.2 的 P2 统一为期名 P2'; §3.5 标注 D1 待拍板（不再把建议写成定论）; §3.2 代价表述限定单发路径。
+- 无 —— 已按「提交」指令走 ship.commit(合并远端 → 闸门 → 提交 → 推 Gitee)。
 
 ## 下一步（候选, 未拍板）
 
-- 拍板后按 P1 开工: R2 跳检闸门复核 + R1 提交点拒绝（单发 + bulk, 两个独立 commit）; P2': ops 抽取（搬运等价 + 接缝/来源策略/守阵）→ 右键跳检。
-- 注: 按 memory-bank 立档阈值 4 本专题应建 `tasks/` 档案（slug 候选 `rule-dangerous-op-layer`, 跨 clone 查重无同名）, 属新建文件, 待用户确认后补建（v2 轮已记, 两轮累计）。
+- 用户验收后提交(建议提交信息: ✨ 危险操作独立操作层: ops 抽取 + R1/R2 + 右键跳检)。
+- 未来第三来源(HR 联动 / 外部 API)接入时按 §3.8 红线扩 ops(新增 source 调 ops, 不开旁路); C3/C4 实证冲击后分别立专项(材料在计划 §06 D3)。

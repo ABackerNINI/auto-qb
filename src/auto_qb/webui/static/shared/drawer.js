@@ -40,6 +40,34 @@ window.AQB_DRAWER = {
       this.menu.hash = this.drawer.hash;
       this.torrentCmd(action, body, okText);
     },
+    /* ---------------- 右键跳检(P2', plan 26-09-30-0109 §3.6) ----------------
+     * 高风险操作: 删除并以跳过校验方式重加, 本地统计(上传/下载量、做种时间)被清空,
+     * 数据未经哈希校验 —— 危险确认框显式确认后才投递(风险告知在前端承担, 与规则侧
+     * 「无参考跳检」告警同一条红线的前端半边)。执行走 ops 层四阶段, 阻塞主循环 ~6s,
+     * 期间其它命令排队 —— 与规则跳检执行时现状一致, 故 waitCmd 放宽到 60s。 */
+    async skipCheckTorrent() {
+      this.menu.visible = false;
+      const hash = this.menu.hash;
+      if (!hash) return;
+      const m = this.memberByHash.get(hash) || {};
+      const ok = await this._openModal({
+        title: "跳检(跳过校验重加)",
+        body: `将删除种子"${m.name || hash.slice(0, 12)}"并以跳过校验方式重加: 本地统计(上传/下载量、做种时间)会被清空, 数据未经哈希校验。确认继续?`,
+        okText: "跳检",
+        cancelText: "取消",
+        danger: true,
+        icon: "#i-bolt",
+      });
+      if (!ok) return;
+      try {
+        const resp = await this.api(`/api/torrents/${hash}/skip-check`, { method: "POST" });
+        const r = await this.waitCmd(resp.cmd_id, 60000);
+        if (r.ok) this.toast(`已跳检: ${m.name || hash.slice(0, 12)}`, "ok", 3000);
+        else this.toast(`跳检未执行: ${r.error}`, "error", 8000);
+      } catch (e) {
+        if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
+      }
+    },
     /* ---------------- 种子编辑对话框(D 轮): 限速/分享率限制/移动/重命名 ----------------
      * 统一形态: 多字段 .modal(modal.fields) + 回执 toast; 预填当前值, 空输入 = 不修改。
      * hash 约定: 菜单调用不传参取 menu.hash, 抽屉调用显式传 drawer.hash(与 drawerCmd 同约定)。 */

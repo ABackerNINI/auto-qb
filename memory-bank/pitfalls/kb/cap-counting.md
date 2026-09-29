@@ -114,3 +114,7 @@
   `**Topics:**` 跨形态主键缺失拖到 ship.commit 闸门才红。**为什么没命中**: 把「新建档案」当归档动作
   而非 KB 回写动作, 没触发「写完立刻 kb.check」—— 口径自此明确: **任何 memory-bank 文件新建/修改后,
   `kb.index` 与 KB 守卫(`kb.check` + `tests/test_docs_forms.py`)一并重跑再进 ship**。
+- **复发**: 7 —— 同日再踩(危险操作层档案): 建档时漏 `**Topics:**` 行, 这次在 test.quick 里被
+  test_doc_topics_complete 拦住(未拖到 ship 闸门)。**为什么没命中**: 复发 6 的收口口径是「重跑守卫」,
+  本轮照做了且守卫确实拦住 —— 但**建档模板本身**没把 Topics 行当必备行带上, 仍靠守卫兜底而非建档
+  时写入; 口径补全: 建档模板 = 状态行四件套 + `**Topics:** <slug>`(slug 与文件名一致)。

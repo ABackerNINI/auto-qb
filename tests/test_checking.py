@@ -38,6 +38,7 @@
 - test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
 - test_checking_recheck_fail_cooldown: 校验连续失败达上限 -> 当日不再重试(防 recheck 死循环)
 - test_checking_skip_dedup_across_rules: 跨规则同日去重(同种子当日只跳检一次)
+- test_checking_skip_reread_gone_aborts_clean: R2 实时复核(plan 26-09-30-0109) —— 跳检任务运行前种子已被删除(快照仍在) -> skip 干净放弃, 零副作用无孤儿备份(修 C2 复活竞态)
 - test_checking_dry_run: dry-run 不发送请求
 - test_checking_full_checking_pending: 全检任务 pending 保留
 - test_checking_full_checking_dup_ignore: 全检重复提交忽略
@@ -570,7 +571,7 @@ def test_checking_recheck_fail_cooldown():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
 
-    with patch("auto_qb.rules.actions.full_checking.CHECK_START_GIVEUP", 0.0):
+    with patch("auto_qb.core.mixins.ops.CHECK_START_GIVEUP", 0.0):
         # 第 1 次执行: 提交 recheck -> 让位; 轮询(+0.5)判失败(count=1) -> origin 重入队
         run_queue(mgr, t0)
         run_queue(mgr, t0 + 0.5)
@@ -626,7 +627,7 @@ def test_checking_no_reference_skip_checking_warns():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "stalledUP"}
     t = make_target()
-    with patch("auto_qb.rules.actions.skip_checking.logger.warning") as mw:
+    with patch("auto_qb.core.mixins.ops.logger.warning") as mw:
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
         assert handled
         assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"{client.calls}"
@@ -651,12 +652,15 @@ def test_checking_skip_readd_unconfirmed_backs_up():
             self.torrents.pop("HASH123", None)  # add 成功但客户端里查不到
             return ret
 
+    # !R2 实时复核(跳检前)读客户端: 初始必须放一个, add 时才由上面的 pop 摘掉
+
     with tempfile.TemporaryDirectory() as td:  # state_file 必须给真实路径: 留空会让 atomic_write 往 CWD 的父目录写临时文件
         cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=True)
         cfg.state_file = os.path.join(td, "state.json")
         mgr = make_mgr(cfg)
         client = _NotAppearedClient()
         mgr.client = client
+        client.torrents["HASH123"] = {"state": "pausedUP"}
         t = make_target()
         process_rule(mgr, client, t, dry_run=False)
 
@@ -720,7 +724,7 @@ def test_checking_skip_delete_unconfirmed_clears_backup():
         client.calls.append(("delete", delete_files))  # 只记调用, 不真删
 
     client.torrents_delete = noop_delete
-    with patch("auto_qb.rules.actions.skip_checking.time.sleep"):  # 10 × 0.5s 确认轮询
+    with patch("auto_qb.core.mixins.ops.time.sleep"):  # 10 × 0.5s 确认轮询
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled, "放弃跳检以 fail 返回(fail 视为已处理)"
     assert not any(c[0] == "add" for c in client.calls), f"未确认消失前不得重加: {client.calls}"
@@ -731,7 +735,7 @@ def test_checking_skip_delete_unconfirmed_clears_backup():
 
 def test_checking_skip_backup_failure_aborts_before_delete():
     """测试: 备份写不进去 -> 不删除(无损失), 直接 fail —— 备份是删除的前置条件"""
-    from auto_qb.rules.actions.skip_checking import SkipCheckingMixin
+    from auto_qb.core.mixins.ops import OpsMixin
 
     cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False)
     mgr = make_mgr(cfg)
@@ -739,7 +743,7 @@ def test_checking_skip_backup_failure_aborts_before_delete():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "pausedUP"}
     t = make_target()
-    with patch.object(SkipCheckingMixin, "_backup_torrent", side_effect=OSError("disk full")):
+    with patch.object(OpsMixin, "_backup_torrent", side_effect=OSError("disk full")):
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert [c[0] for c in client.calls] == ["export"], f"备份失败不得删除/重加: {client.calls}"
@@ -1377,7 +1381,7 @@ def test_checking_full_checking_giveup_condemns():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
-    with patch("auto_qb.rules.actions.full_checking.CHECK_START_GIVEUP", 0.0):
+    with patch("auto_qb.core.mixins.ops.CHECK_START_GIVEUP", 0.0):
         seed_store(mgr, [make_target()])  # 快照恒为提交前状态: 永未见 checking
         run_queue(mgr, t0 + 2.5)
     assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1, "宽限耗尽应判败"
@@ -1400,6 +1404,7 @@ def test_checking_group_full_checking_serialized():
         a = make_target(hash="HA")
         b = make_target(hash="HB")
         seed_store(mgr, [a, b])
+        client.torrents["HB"] = b  # R2 实时复核读客户端(非快照): 跳检前种子必须在客户端
         inject_group(mgr, "HA", "HB")
         rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
         t0 = time.time()
@@ -1472,6 +1477,7 @@ def test_checking_group_fail_record_healed_when_member_completed():
     a = make_target(hash="HA", state="pausedUP", progress=1.0)  # A 已完成: 记录必为假失败
     b = make_target(hash="HB")
     seed_store(mgr, [a, b])
+    client.torrents["HB"] = b  # R2 实时复核读客户端(非快照): 跳检前种子必须在客户端
     inject_group(mgr, "HA", "HB")
     key = mgr.store.member_to_key["HA"]
     mgr.store.group_sizes.setdefault(key, {})["HA"] = {"movie.mkv": 100}
@@ -1581,3 +1587,28 @@ def test_recheck_fail_flushed_immediately():
     with open(mgr.state_file, "r", encoding="utf-8") as f:
         on_disk = json.load(f)
     assert on_disk.get("recheck_fails", {}).get("HASH123", {}).get("count") == 1, "冷却计数必须已写上盘"
+
+
+# ============================================================
+# C5. R2 跳检实时复核(plan 26-09-30-0109): 闸门后、动手前重拉实时状态
+# ============================================================
+def test_checking_skip_reread_gone_aborts_clean():
+    """测试: R2 实时复核 —— 跳检任务运行前种子已被删除(快照仍在) -> skip 干净放弃
+
+    修 C2: 跳检任务按上一轮快照创建, 闸门读陈旧记录; WEB 删除先于规则任务执行时,
+    旧流程会走 导出->备份->删除(空操作)->确认消失->重加 —— 把用户刚删的种子复活。
+    复核夹在前置闸门与导出之间: 拒绝发生在备份与删除之前, 零副作用、无孤儿备份,
+    残余方向安全(最坏导出失败干净放弃)。
+    """
+    cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=True)
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    t = make_target(progress=0.0)  # 暂停未完成: 闸门 0 / 部分下载闸门都通过
+    seed_store(mgr, [t])  # 快照仍在(陈旧)
+    # client.torrents 不灌该种子 = 客户端里已被删除(qB 端已生效, 快照尚未跟上)
+    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    assert not handled, "复核发现种子已不在, 应 skip 干净放弃(skip 不算 handled)"
+    assert client.calls == [], f"零副作用: 不得导出/删除/重加/打标: {client.calls}"
+    assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "未跳检不得记录同日去重"
+    assert not mgr.state.get("skip_check_backup"), "不得留下孤儿备份元数据"

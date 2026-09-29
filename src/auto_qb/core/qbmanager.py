@@ -15,6 +15,8 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 - mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
 - mixins.tracker      TrackerMixin     tracker 配置匹配/单种限速
 - mixins.speed_curve  SpeedCurveMixin  全局限速曲线(Traffic Monitor 流量聚合 -> qB 全局限速)
+- mixins.ops          OpsMixin         危险操作独立操作层(rules → ops ← web): recheck/跳检执行体
+                                       + 提交点检查 + 按 source 保护策略(plan 26-09-30-0109)
 - webui.views         WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
 - webui.commands      WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
 - web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排)
@@ -36,6 +38,7 @@ from ..infra.locking import SingleInstanceLock
 from .mixins import (
     CheckingMixin,
     GroupingMixin,
+    OpsMixin,
     RuleEngineMixin,
     SpeedCurveMixin,
     TagsMixin,
@@ -131,6 +134,7 @@ class QbManager(
     GroupingMixin,
     TrackerMixin,
     SpeedCurveMixin,
+    OpsMixin,
     WebviewMixin,
     WebCommandsMixin,
 ):

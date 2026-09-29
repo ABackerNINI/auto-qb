@@ -23,7 +23,7 @@
 | 旧 | 新 |
 |----|----|
 | `qbmanager.py` / `taskqueue.py` / `qbapi.py` / `qbclient.py` / `curves.py` / `episodes.py` / `tvshows.py` / `exporter.py` | `core/` 同名 |
-| `mixins/`（rule_engine / tags / checking / grouping / tracker / speed_curve） | `core/mixins/` |
+| `mixins/`（rule_engine / tags / checking / grouping / tracker / speed_curve; 新增 ops 危险操作层） | `core/mixins/` |
 | `mixins/web_view.py` / `mixins/web_commands.py` | `webui/views.py` / `webui/commands.py`（W3 先行迁出） |
 | `errors.py` / `locking.py` / `logging.py` / `utils.py` / `notify.py` / `autostart.py` | `infra/` 同名 |
 | `web_runtime.py` | `webui/runtime.py` |
