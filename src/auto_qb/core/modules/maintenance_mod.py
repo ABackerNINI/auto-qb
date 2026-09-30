@@ -8,8 +8,8 @@ TagsMixin 全部 + QbManager 本体的 _handle_maintenance + delete_tags 全局�
 
 !站点 tags 部分的节奏由 maintenance_tag_mode 决定(计划 26-09-27-1438): interval(默认)
   每 interval 执行; on_change 仅添加路径或外部标签变化时重检 —— HR 部分不受影响, 恒按
-  interval 节奏。维护任务本身仍由内核 _create_torrent_tasks 创建(P5 随规则模块收口),
-  经 manager 的单行委托落到本模块。
+  interval 节奏。维护任务本身由 rules 模块建任务时经 ctx.maintenance 句柄绑定
+  (plan P5 收口); 逐新增种子的「维护/集数」两步经 torrents_added 相位由本模块执行。
 !client 经 ctx.api.client **现取**(不缓存): 重连换客户端时 QbApi.bind 同步更新。
 """
 import logging
@@ -67,10 +67,23 @@ class MaintenanceModule(BaseModule):
 
     def subscribe(self, phases) -> None:
         phases.on("queue_rebuilt", self._on_queue_rebuilt)
+        phases.on("torrents_added", self._on_torrent_added)
 
     def _on_queue_rebuilt(self, event) -> None:
         """L2 热重载整体重建队列后重新入队(delete_tags* 是 L2 级配置, 重建即按新值生效)"""
         self._register_global_tasks(self._ctx)
+
+    def _on_torrent_added(self, event) -> None:
+        """逐新增种子管线的「维护」与「集数」两步(plan §4.2; P5 收口前经内核委托调用):
+        维护 tags 部分强制执行(添加路径: on_change 模式的"添加时收敛一次"), 集数标签
+        仅种子添加时触发 —— 两者都属本模块, 单订阅内按原顺序连续执行"""
+        torrent = self._ctx.store.get(event.payload["hash"])
+        if torrent is None:
+            return
+        dry_run = event.payload.get("dry_run", False)
+        self.handle_maintenance(torrent, dry_run, force_tags=True)
+        if self._ctx.config.add_episode_tags.enabled:
+            self.add_episode_tags(torrent, dry_run)
 
     def _register_global_tasks(self, ctx: AppContext) -> None:
         """全局标签清理任务自注册: 已在当前队列的幂等跳过(黄金法则 1, 判据 TaskQueue.has_named);

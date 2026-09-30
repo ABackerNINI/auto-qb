@@ -22,7 +22,6 @@ import re
 import pytest
 
 from auto_qb.config import schema
-from auto_qb.config.impact import HR_CHECK_FIELD_LEVELS
 from auto_qb.config.validation import (
     CHECKING_ACTION_KNOWN_KEYS,
     DELETED_TRIGGER_ALLOWED_ACTIONS,
@@ -116,11 +115,6 @@ def test_tracker_hr_fields_match_validation():
 def test_hr_sites_fields_match_validation():
     """hr_check.sites 条目字段集合 == KNOWN_HR_SITE_KEYS(站点接入卡片的数据驱动依据)"""
     assert set(_field_map(schema.HR_CHECK_SITES_FIELDS)) == KNOWN_HR_SITE_KEYS
-
-
-def test_hr_check_field_levels_cover_validation_keys():
-    """impact 的 hr_check 字段级别表必须覆盖全部已知键(漏登记 = 默认 L2 保守, 但会让分级结果失真)"""
-    assert set(HR_CHECK_FIELD_LEVELS) == KNOWN_HR_CHECK_KEYS
 
 
 def test_rule_fields_cover_rule_known_keys():

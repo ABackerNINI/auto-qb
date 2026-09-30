@@ -13,14 +13,14 @@ logger = logging.getLogger(__name__)
 
 
 class SkipCheckingMixin:
-    """skip-checking 委托入口: 由 CheckAction 组合, 执行体在 manager.ops_skip_check(ops 层)"""
+    """skip-checking 委托入口: 由 CheckAction 组合, 执行体在 ctx.ops.skip_check(ops 层)"""
     def _execute_skip_checking(self, ctx: RuleContext, segment: dict, has_reference: bool):
-        """辅种跳检: ctx 字段 -> ops 参数, 一行委托(闸门/备份/重加等语义全部在 ops 层)
+        """辅种跳检: ctx 字段 -> ops 参数, 一行委托(闸门/备份/重加等语义全部在 ops 层; P5 经 ctx.ops)
 
         has_reference 只用于规则侧「无参考跳检(高风险)」告警 —— 该告警是规则语义,
         WEB 源不产生(前端危险确认框已承担风险告知), 由 ops 层按 source 区分。
         """
-        return ctx.manager.ops_skip_check(
+        return ctx.manager.ctx.ops.skip_check(
             ctx.hash,
             source="rule",
             auto_start=segment["auto_start"],

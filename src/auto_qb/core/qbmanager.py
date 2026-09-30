@@ -10,8 +10,6 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 字段(2026-09-20 拆出, 见 memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html)。
 
 职责拆分(mixins 包, 各模块组合进本类):
-- mixins.rule_engine  RuleEngineMixin  规则加载/种子级规则任务/事件分派
-                                      (状态持久化已迁 core/state.py 的 StateService, plan P0)
 - webui.views         WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
 - webui.commands      WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
 - web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排; P2 起经
@@ -23,10 +21,10 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
   ctx.trackers 服务 + full_round 相位重匹配)/speed_curve(曲线任务自注册 + 流量快照经
   ctx.web.set_traffic_view 推送)/maintenance(标签/分类/HR 标签/集数标签/维护任务 + 全局
   标签清理任务自注册) → P4 grouping(四刷新相位 transitions/torrents_added/removed_scan/
-  post 认领, _refresh_torrents 的分组调用点改相位广播)/ops(+checking 并入, 决策点 D2;
-  危险操作层升 ctx.ops 服务, web 命令与规则动作的执行体单点; rules 常量反向 import 迁
-  rules 包中性叶 checking_meta 单向化) —— 四者已从 mixins 包迁出, 本类旧名方法只剩单行
-  委托(§7.2 测试兼容)。
+  post 认领)/ops(+checking 并入, 决策点 D2; 危险操作层升 ctx.ops 服务) → P5 rules(规则
+  引擎整体迁 RulesModule, 事件分派/建任务改相位认领, L2 结构重建收进 rules.apply ——
+  刷新管线收口为「同步 + 相位广播」, 内核不再点名任何业务步骤, 也不再 import rules)。
+  本类旧名方法只剩单行委托(§7.2 测试兼容)。
 
 内核地基(plan kernel-module-refactor): 构造期立 AppContext(ctx)并把能力服务挂上
 (store/api/state/task_queue/web/trackers/maintenance/ops), 本类同名属性自此刻起全部是
@@ -46,7 +44,6 @@ from ..config.writer import materialize_schema_migration
 from ..infra import file_access
 from ..infra.errors import AutoQbError
 from ..infra.locking import SingleInstanceLock
-from .mixins import RuleEngineMixin
 from .module import AppContext, EventBus, ModuleHost
 from .modules import (
     GroupingModule,
@@ -54,6 +51,7 @@ from .modules import (
     MaintenanceModule,
     NotifyModule,
     OpsModule,
+    RulesModule,
     SpeedCurveModule,
     TrackerModule,
 )
@@ -62,7 +60,6 @@ from ..webui.commands import WebCommandsMixin
 from ..webui.views import WebviewMixin
 from .qbapi import QbApi
 from .qbclient import _new_client
-from ..rules import Rule
 from .taskqueue import Task, TaskQueue
 from ..webui import WebUIRuntime
 from ..webui.module import WebUIModule
@@ -142,7 +139,6 @@ def _wait_next(stop_event: Optional[threading.Event], wake_event: threading.Even
 
 
 class QbManager(
-    RuleEngineMixin,
     WebviewMixin,
     WebCommandsMixin,
 ):
@@ -202,7 +198,7 @@ class QbManager(
         self.host = ModuleHost(self.ctx, self.events)
         # 装配清单(plan §3.3): 顺序 = 相位内消费序 = 生命周期序, 内核唯一「知道模块名字」的
         # 地方。P1 基建两模块(logging/notify), P2 门面转正(webui/hr), P3 小模块三件
-        # (tracker/speed_curve/maintenance), P4 中坚两件(grouping/ops); P5 补 rules
+        # (tracker/speed_curve/maintenance), P4 中坚两件(grouping/ops), P5 收官 rules
         # (rules 最后: 它消费前面所有人的服务)。
         self.host.register(LoggingModule())
         self.ctx.notify = NotifyModule(self.ctx)  # 托盘经 ctx.notify 调公开方法(plan §3.2)
@@ -228,9 +224,8 @@ class QbManager(
         self._bind_field_snapshots()  # 字段变化基线挂到 state 顶层键(计划 26-09-27-1438)
         # 周期落盘计时器(见 StateService.maybe_flush): run() 加载状态后重置为首个到期点
         self._next_state_flush_at: float = 0.0
-        # 规则结构初始化(规则加载在 run() 中进行: --export-yaml 等只导出模式不需要)
-        self.rules: List[Rule] = []
-        self.enabled_rules: List[Rule] = []
+        # 规则结构初始化移入 RulesModule(P5; 规则加载在 run() 中进行: --export-yaml 等
+        # 只导出模式不需要), mgr.rules/enabled_rules 变委托属性(§7.2)
         # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
         # (P3 起挂 ctx: speed_curve/maintenance 模块的任务自注册经 ctx.task_queue 现取当前队列;
         #  本属性只是委托, L2 整体重建也经 setter 落回 ctx)
@@ -279,6 +274,9 @@ class QbManager(
         self.host.register(GroupingModule(self.ctx))
         self.ctx.ops = OpsModule(self.ctx)
         self.host.register(self.ctx.ops)
+        # 装配清单 P5 收官(plan §3.3): rules 最后 —— 事件分派/建任务改相位认领, L2 结构
+        # 重建收进 rules.apply(W3), 级别分派层与三张手写表退役(W4)
+        self.host.register(RulesModule(self))
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。
@@ -288,8 +286,6 @@ class QbManager(
         # Client(含 netrc / 代理解析), 纯属空转。连接成功即在 _reset_reconnect_backoff 归零。
         self._reconnect_at: float = 0.0
         self._reconnect_interval: float = 0.0
-        # 热重载后首轮抑制事件分派(全量重建的 added 重放保护)
-        self._suppress_events = False
         # 暂停事件(run() 注入; UI 线程切换, 主循环线程只读)
         self._pause_event = None
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
@@ -426,6 +422,18 @@ class QbManager(
             logger.error(f"连接 qBittorrent 失败: {e}")
             self._last_conn_ok = False
             return False
+
+    def reconnect(self) -> None:
+        """重建 qB 客户端连接(热重载共用口, plan P5): client 换新 + rid 失效(下轮全量)
+
+        连接管理属内核(plan §3.1): 热重载 L1 的 qbittorrent 段变由 apply_new_config 调用,
+        L2 结构重建由 RulesModule.rebuild_runtime 调用 —— 模块不直写 client/_last_conn_ok
+        私有面。原 apply_new_config 两个分支的 `client=None + _last_conn_ok=None + connect()`
+        三行序列收敛于此。
+        """
+        self.client = None
+        self._last_conn_ok = None
+        self.connect()
 
     def wake(self) -> None:
         """唤醒主循环立即消费一次 WEB 控制命令(命令线; **不触发 tick**)
@@ -633,58 +641,47 @@ class QbManager(
     # ---------- 单种子命令(WEB 明细行右键) ----------
 
     def apply_new_config(self, config: Config) -> dict:
-        """应用新配置(热重载, 主循环线程经命令队列调用): 替换配置对象 + 模块广播 + 分级收尾
+        """应用新配置(热重载, 主循环线程经命令队列调用): 换配置对象 + 无条件广播 apply + 汇报动作
 
-        - L0 即时生效(仅替换 Config 对象): main_tick/state_save_interval/max_tasks_per_tick/remove_similar_tags/
-          skip_checking_tag/grouping.*/add_episode_tags.*/trackers.X.tags|remove_tags|remove_similar_tags|
-          limits|hr.*(运行时动态读取, 数据/任务/分组全保留)
-        - L1 轻量应用: qbittorrent 重连(连接管理属内核)。web 服务器启停自 P2 起并入
-          WebUIModule.apply(仅"监听身份"enabled/host/port 变化才重启, 次序: 停旧并等其线程
-          退出 -> 启新); logging/notify 重挂自 P1、HR 重挂自 P2 起均改经模块 apply —— 每次
-          热重载无条件广播(host.apply_all), 模块自判整段短路, 级别分派对它们只剩重连一项
-        - L2 结构重建: 重建任务队列与规则 + 全部记录重匹配 tracker(保留 store 记录/分组/执行历史)
-        - R(state_file/data_dir 变更): 拒绝热应用, 返回 restart_required 提示重启进程
+        统一挂载口(hot-reload-simplify 方向一, plan §4.3; 级别分派层与三张手写表 W4 退役):
+        - R 闸留在内核: state_file/data_dir/fs 变更拒绝热应用, 返回 restart_required 提示重启;
+        - L0 即换 Config 对象(运行时现读键即刻生效, ctx.config 为单一真相);
+        - 其余语义全部由各模块 apply 自判: 每模块**无条件**被调, 相关段整段相等即短路
+          (web 重启/HR 重挂/日志通知重挂/L2 队列与规则重建各自单点在模块);
+        - qbittorrent 段变由内核自判重连(连接管理属内核, plan §3.1)。
+        回执按 W4 从 levels 换 actions(各模块 ApplyResult 汇总)。
         """
-        from ..config.impact import diff_config_impacts
+        from ..config.impact import diff_config_impacts, restart_required_paths
 
         changes = diff_config_impacts(self.config, config)
-        restart_required = [c.path for c in changes if c.level == "R"]
+        restart_required = restart_required_paths(changes)
         if restart_required:
             logger.info(f"以下配置需重启进程才能生效: {restart_required}")
-        levels = sorted({c.level for c in changes if c.level != "R"})
         # 旧配置先留底(替换后旧对象不可达): 模块 apply 的整段对比与监听身份判定都要用
         old = self.config
         # L0: 替换配置对象(动态读取项即刻生效)
         self.config = config
-        # 统一挂载口(plan P1/P2, hot-reload 方向一): 每模块**无条件** apply, 自判短路/重启 ——
-        # web 重启(_apply_web_config)与 HR 重挂自 L1/L0 手工分派迁入各自模块; HR 例外语义
-        # (每次热重载必过, 站点接入是 L0)由 HrRuntime.apply 自判短路承担, 见 hr/module.py;
-        # L1 分支只剩 qb 重连(影子并行收尾, P5 评估归属)
-        self.host.apply_all(old, config)
-        if "L1" in levels:
-            self.client = None
-            self._last_conn_ok = None
-            self.connect()
-        if "L2" in levels:
-            logger.info("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
-            self.task_queue = TaskQueue()
-            self.store.reset_runtime()
-            # 不重读磁盘 state: state 平时不落盘, 磁盘上只有上次退出的旧版, 重读 = 回滚
-            # 运行期内存态(exec_history/skip_check_day 等)。内存态即真相(issue 26-09-21-1347)。
-            self._load_rules()
-            # 全局任务重入队(plan P3): 具体任务归各模块, 这里只广播队列重建相位
-            self._create_global_tasks()
-            self._suppress_events = True
-            self.client = None
-            self._last_conn_ok = None
-            self.connect()
+        # 每模块无条件 apply, 自判短路/重启/重建 —— 「统一挂载口」的落地形态(plan §4.3)
+        actions = self.host.apply_all(old, config)
+        # qb 重连(原 L1 分支的最后一项): 段变由内核自判, 不经级别表
+        if old.qbittorrent != config.qbittorrent:
+            self.reconnect()
         # 生命周期消息按 INFO 记(pitfalls/ops/alert-levels.md: 按配置做的动作不许用 WARNING,
         # 否则 notify 开启时每次保存配置都弹一条通知); "需重启进程"仍保留在消息文本里
         logger.info(
-            f"配置热重载完成: 级别 {levels or ['L0']}, 变更 {len(changes)} 项" +
+            f"配置热重载完成: 变更 {len(changes)} 项, 动作 {[f'{a.module}:{a.action}' for a in actions if a.action != 'none']}" +
             (f", 需重启进程: {restart_required}" if restart_required else "")
         )
-        return {"applied": True, "levels": levels, "changes": len(changes), "restart_required": restart_required}
+        return {
+            "applied": True,
+            "actions": [{
+                "module": a.module,
+                "action": a.action,
+                "detail": a.detail
+            } for a in actions],
+            "changes": len(changes),
+            "restart_required": restart_required,
+        }
 
     def _sync_line(self, dry_run: bool, flush: bool = True, force: bool = False) -> None:
         """同步线(sync_interval 节拍): 拉 qB 增量 -> 推进快照/事件/分组 -> 视图惰性重建
@@ -757,41 +754,30 @@ class QbManager(
             raise QbCompatError(f"qBittorrent torrent info 缺少字段: {missing}; 请检查 qBittorrent 版本兼容性")
         self._schema_validated = True
 
-    def _hr_anchors(self) -> dict:
-        """本地种子锚点: {站点: {infohash: HrAnchor}} —— 供取数线程提前作废「本实例又下载了」的放行
-
-        锚点是**辅助信号**(计划 §9): 它只能让**本实例**的放行失效(二次下载 / 删种重加 /
-        文件重下), 覆盖不到别的客户端 —— 故放行仍以「刷新背书」为主, 锚点只把可疑的收回来。
-        !线程: 取数线程经 `HrRuntime._anchors` 异步要这份数据, 而 `store.by_hash` 由主循环
-        整体替换引用(读者看到的永远是某个完整快照)。故本方法**只读**: 不写状态、不发 API,
-        `rec.hr_anchor()` 也只把快照字段拷成不可变对象。
-        !站点键用 `tracker_conf.name`(= config.trackers 的键), 与取数线程的视图键同源。
-        """
-        out: dict = {}
-        for rec in self.store.all():
-            conf = rec.tracker_conf
-            if conf is None:
-                continue
-            site_conf = conf.hr_check
-            if site_conf is None or not site_conf.enabled:
-                continue
-            anchor = rec.hr_anchor()
-            site = out.setdefault(conf.name, {})
-            for h in (rec.infohash_v1, rec.infohash_v2):
-                if h:
-                    site[h] = anchor
-        return out
+    # _hr_anchors 已迁 HrRuntime._anchors(plan §05: 门面经 ctx/store 取锚点数据,
+    # 不再 getattr 窥内核私有方法); mgr._hr_anchors 测试兼容委托见委托层。
 
     def _refresh_torrents(self, dry_run: bool = False):
-        """种子列表刷新: 增量同步 -> 增删检测 -> 新种子创建内置+规则任务并归组,
-        删除种子移除任务, 分组事件(新增归组+大小一致性/删除/上传转暂停)检测到即立即处理,
-        更新状态快照。本 tick 刷新后所有读取操作都只通过 store 接口, 不再重复拉取 API。
+        """种子列表刷新(P5 收口): 增量同步 -> 按 §4.2 相位表广播 -> 数据面收尾
+
+        内核只报「何时」: 同步完成后按相位表(plan §4.2, 现 _refresh_torrents 历史调用顺序的
+        忠实编码)依次广播, 业务步骤全部由认领模块执行 —— full_round(tracker 重匹配)/
+        transitions(分组状态转移)/events_removed + events_added(规则事件分派)/
+        torrents_added(逐种子管线: 维护→限速→建任务→归组→集数, 由
+        maintenance/tracker/rules/grouping 按装配序认领)/removed_scan(缺文件扫描)/
+        post(重归组 + 冲突检查)。内核保留: schema 校验 / fs 自检(fail-fast, 兼容性职责)、
+        事件重放保护窗口(总线 suppress, 仅覆盖两个事件分派相位)、
+        store.update_state_snapshot / field_snapshots(数据面收尾)。
 
         增量同步(/sync/maindata)只取自上轮 rid 起的变化(未变化种子不出现在响应中),
-        故 store 只更新变化的记录; 本轮变化集(state_changed/path_changed)供分组与
+        故 store 只更新变化的记录; 本轮变化集(state_changed/field_changed)供分组与
         事件分派把 O(N) 全量扫描降为 O(变化数)。
         """
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
+        # 事件重放保护请求(plan §4.3): rules 模块 L2 重建时置位, 本轮消费 —— 窗口只在
+        # events_removed 相位前重挂、events_added 相位后关闭, 同轮其余相位照常广播
+        # (语义等价原 _suppress_events 只闸 _dispatch_events 两个调用点)
+        suppress_pending = self.events.take_suppressed()
         added, removed = self.store.apply_sync(self.api)
         if self.store.need_validate:
             self._validate_torrent_schema(self.store.validate_sample)
@@ -814,28 +800,34 @@ class QbManager(
         # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)。
         # 必须在本轮任何自有动作之前观测: 新增归组的大小一致性停种经快照同步会当场改写
         # by_hash 状态, 放在后面会把自家停种误判为外部"上传转暂停"。
-        # 相位广播(plan P4 §4.2): 每轮无条件 emit —— enabled 开关与缺文件扫描去重集合的
-        # 按轮清零都归 grouping 模块自判(原 _missing_scanned_keys.clear() 随迁其入口)
+        # 相位广播(plan §4.2): 每轮无条件 emit —— enabled 开关与缺文件扫描去重集合的
+        # 按轮清零都归 grouping 模块自判
         self.events.emit("transitions", {"dry_run": dry_run})
 
-        # 事件分派(on_torrent_deleted / on_torrent_state_enum_changed): 在自有动作之前、
-        # 状态快照更新之前同步即时执行(新增种子本轮不触发状态变化; added 事件在下方匹配后触发);
-        # 热重载后首轮抑制(全量重建的 added 重放保护), 一轮后恢复
-        if not self._suppress_events:
-            self._dispatch_events(
-                [], removed, dry_run, removed_snapshots=removed_snapshots, state_changed=True, field_changed=True
-            )
+        # 事件分派相位(plan §4.2 events_removed): on_torrent_deleted / on_torrent_state_enum_changed /
+        # on_torrent_field_changed 在自有动作之前、状态快照更新之前同步即时执行(新增种子本轮
+        # 不触发状态变化; added 事件在下方匹配后触发); 热重载首轮重放保护窗口在此开启
+        if suppress_pending:
+            self.events.set_suppressed(True)
+        self.events.emit(
+            "events_removed",
+            {
+                "removed": list(removed),
+                "snapshots": removed_snapshots,
+                "dry_run": dry_run
+            },
+        )
 
+        matched_added: List[str] = []
         if added:
             logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
-            # 先为所有新增种子匹配 tracker 配置(事件分派与后续自有动作都需要)
-            matched_added = []
+            # 先为所有新增种子匹配 tracker 配置(事件分派与后续自有动作都需要; D3 服务)
             for h in added:
                 torrent = self.store.get(h)
                 if torrent is None:
                     continue
                 if torrent.tracker_conf is None:
-                    torrent.tracker_conf = self._match_tracker_conf(torrent)
+                    torrent.tracker_conf = self.ctx.trackers.match(torrent)
                 if not torrent.tracker_conf:
                     try:
                         trackers_info = torrent.trackers_info(self.client)
@@ -845,32 +837,22 @@ class QbManager(
                     logger.warning(f"种子[{h[:8]}] | 未匹配 tracker 配置, 域名: {', '.join(all_domains)}")
                     continue  # 未匹配tracker配置, 直接跳过
                 matched_added.append(h)
-            # 事件分派(on_torrent_added): 新增种子已匹配 tracker 配置, 同步触发事件规则
-            if not self._suppress_events:
-                self._dispatch_events(matched_added, [], dry_run, removed_snapshots=None)
-            # 自有动作: 内置任务/限速/创建任务/归组/集数标签
-            for h in matched_added:
-                torrent = self.store.get(h)
-                tracker_conf = torrent.tracker_conf
-                # 立即运行一次内置任务(添加路径: tags 部分强制执行 —— on_change 模式的"添加时收敛一次")
-                self._handle_maintenance(torrent, dry_run, force_tags=True)
-                # tracker单种限速
-                self._apply_speed_limit(torrent, tracker_conf, dry_run)
-                # 创建种子级任务: 内置 maintenance + 所有符合条件的规则任务
-                self._create_torrent_tasks(h)
-                # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 归组时检查大小一致性
-                # (相位广播 plan P4: 归组是 torrents_added 相位当前的唯一认领者 —— 维护/限速/
-                #  建任务/集数 P5 随逐种子管线一起分派为该相位的模块订阅, 次序 见 §4.2)
-                self.events.emit("torrents_added", {"hash": h, "dry_run": dry_run})
-                # 自动添加集数标签(仅种子添加时触发): 名称不含集数标记时从文件列表解析, 如 E1-5
-                if self.config.add_episode_tags.enabled:
-                    self._add_episode_tags(torrent, dry_run)
+            # 事件分派相位(plan §4.2 events_added): on_torrent_added —— 新增种子已匹配
+            # tracker 配置, 同步触发事件规则
+            self.events.emit("events_added", {"added": list(matched_added), "dry_run": dry_run})
+        # 重放保护窗口关闭: 抑制仅覆盖热重载后的首轮事件分派(两个事件相位)
+        self.events.set_suppressed(False)
+
+        # 逐新增种子管线(plan §4.2 torrents_added 相位): 维护/限速/建任务/归组/集数由
+        # maintenance/tracker/rules/grouping 按装配序认领, 内核不再点名
+        for h in matched_added:
+            self.events.emit("torrents_added", {"hash": h, "dry_run": dry_run})
 
         if removed:
             # 已删种子的任务不显式清理: 由 run_due 到期执行时 handler 检测种子缺失自然消亡
             logger.info(f"检测到删除种子 {len(removed)} 个")
             # 组内种子被删除 -> 立即触发缺文件扫描(剩余种子可能文件丢失), 不等下一轮
-            # (相位广播 plan P4: removed_scan 相位, enabled 由 grouping 模块自判)
+            # (相位广播 plan §4.2 removed_scan 相位, enabled 由 grouping 模块自判)
             self.events.emit("removed_scan", {"hashes": list(removed), "dry_run": dry_run})
 
         # 保存路径变化重归组(文件列表变化会走新增种子重新归组) + 下载冲突检查(每轮):
@@ -883,49 +865,11 @@ class QbManager(
         # 字段变化基线同步刷新(事件分派 on_torrent_field_changed 的跨轮对比口径, 计划 26-09-27-1438)
         self.store.update_field_snapshots()
 
-        self._suppress_events = False  # 事件抑制仅覆盖热重载后的首轮全量重建
-
-    def _create_torrent_tasks(self, hash: str):
-        """
-        为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务
-
-        缺文件检查统一由分组事件驱动承担(_refresh_torrents 检测到删除/状态变化/
-        保存路径变化立即触发组内扫描), 不再创建逐种子 missing_files 任务。
-        每个任务有内置 interval(规则任务用规则自身 interval), 规则任务加入队列即立即到期(下一 tick 执行)。
-        内置种子任务加入队列后下一个interval到期。
-        """
-
-        torrent = self.store.get(hash)
-        if not torrent:
-            return
-
-        # 创建内置种子任务
-        self.task_queue.add_task(
-            Task(
-                "internal",
-                "maintenance",
-                hash=hash,
-                store=self.store,
-                interval=self.config.interval,
-                handler=self._handle_maintenance_task_interface
-            ),
-            time.time() + self.config.interval
-        )
-
-        # 创建种子规则任务(仅 interval 规则建周期任务; on_* 事件规则不建, 由事件分派即时处理)
-        tasks = []
-        for rule in self._rules_for_torrent(torrent):
-            task = self._create_rule_task(rule, hash)
-            if task is not None:
-                tasks.append(task)
-        self.task_queue.add_tasks(tasks)
-
-    # ---------- 模块方法委托(plan kernel-module-refactor P3/P4 过渡层) ----------
+    # ---------- 模块方法委托(plan kernel-module-refactor P3/P4/P5 过渡层) ----------
     # 实现单点已迁 SpeedCurveModule / MaintenanceModule / TrackerModule / GroupingModule /
-    # OpsModule(core/modules/); 保留旧名字让测试(mgr._xxx 直调)、相邻 mixin(规则引擎经
-    # self 调用)与 rules 动作(manager.ops_* / manager.check_filelist)零改动 ——
-    # 与 _WEB_STATE_ALIAS 同款迁移惯用法(plan §7.2)。全部是单行转发, 不含状态、不含判据。
-    # 清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
+    # OpsModule / RulesModule(core/modules/); 保留旧名字让测试(mgr._xxx 直调)与 run()
+    # 的启动加载零改动 —— 与 _WEB_STATE_ALIAS 同款迁移惯用法(plan §7.2)。全部是单行转发,
+    # 不含状态、不含判据。清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
 
     def _match_tracker_conf(self, torrent: TorrentRecord):
         return self.ctx.trackers.match(torrent)
@@ -1011,8 +955,8 @@ class QbManager(
         return self.host.get("grouping")._group_reference_candidates(members)
 
     # ---------- ops 委托(plan kernel-module-refactor P4 过渡层) ----------
-    # 实现单点在 OpsModule(ctx.ops 服务, 决策点 D2: checking 前置检查并入); WEB 命令已改走
-    # ctx.ops(plan P4), rules 动作与测试经本组旧名转发(P5 规则模块化时一并改 ctx.ops)。
+    # 实现单点在 OpsModule(ctx.ops 服务, 决策点 D2: checking 前置检查并入); WEB 命令与
+    # rules 动作均已改走 ctx.ops(plan P4/P5), 本组只剩测试兼容转发。
 
     def ops_recheck(
         self, hash: str, source: str = "rule", torrent=None, auto_start: bool = False, on_success=None, origin=None
@@ -1030,6 +974,56 @@ class QbManager(
 
     def check_filelist(self, api, torrent) -> str:
         return self.ctx.ops.check_filelist(api, torrent)
+
+    # ---------- 规则引擎委托(plan kernel-module-refactor P5 过渡层) ----------
+    # 实现单点在 RulesModule(事件分派/建任务改相位认领, L2 重建收进 rules.apply); 这里保留
+    # 被测试与 run() 启动加载点名的旧名。rules/enabled_rules 是属性委托(模块为单一真相),
+    # 与服务委托(config/store/...)同款。mgr._hr_anchors 同批迁 HrRuntime(plan §05)。
+
+    @property
+    def rules(self) -> list:
+        """已加载规则集(RulesModule 单一真相; 加载在 run() 中进行)"""
+        return self.host.get("rules").rules
+
+    @rules.setter
+    def rules(self, value: list) -> None:
+        self.host.get("rules").rules = value
+
+    @property
+    def enabled_rules(self) -> list:
+        """启用规则子集(RulesModule 单一真相)"""
+        return self.host.get("rules").enabled_rules
+
+    @enabled_rules.setter
+    def enabled_rules(self, value: list) -> None:
+        self.host.get("rules").enabled_rules = value
+
+    def _load_rules(self):
+        return self.host.get("rules")._load_rules()
+
+    def _rules_for_torrent(self, torrent) -> list:
+        return self.host.get("rules")._rules_for_torrent(torrent)
+
+    def _create_rule_task(self, rule, hash: str):
+        return self.host.get("rules")._create_rule_task(rule, hash)
+
+    def _handle_rule(self, rule, task, dry_run: bool) -> bool:
+        return self.host.get("rules")._handle_rule(rule, task, dry_run)
+
+    def _handle_event_rule(self, rule, task, snapshot, dry_run: bool) -> bool:
+        return self.host.get("rules")._handle_event_rule(rule, task, snapshot, dry_run)
+
+    def _apply_event_rule(self, rule, hash: str, dry_run: bool = False, snapshot=None):
+        return self.host.get("rules")._apply_event_rule(rule, hash, dry_run=dry_run, snapshot=snapshot)
+
+    def _resolve_refs(self, refs: list) -> list:
+        return self.host.get("rules")._resolve_refs(refs)
+
+    def _create_torrent_tasks(self, hash: str):
+        return self.host.get("rules")._create_torrent_tasks(hash)
+
+    def _hr_anchors(self) -> dict:
+        return self.hr._anchors()
 
     def export_torrents_info(self, path):
         """导出种子信息, 用于debug"""

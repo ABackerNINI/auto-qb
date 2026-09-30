@@ -70,10 +70,11 @@ def test_grouping_ops_on_ctx_and_registered():
 
 
 def test_grouping_phases_wired():
-    """transitions/torrents_added/removed_scan/post 四相位各恰有 grouping 一个订阅者
+    """transitions/removed_scan/post 三相位各恰有 grouping 一个订阅者
 
     订阅在装配点一次性登记(EventBus 持注册期绑定的 handler), 故以登记计数 + emit 返回值
-    锁定接线; 行为由本文件其余用例直接验证。
+    锁定接线; 行为由本文件其余用例直接验证。torrents_added 相位自 P5 起由四家认领
+    (tracker/maintenance/grouping/rules, plan §4.2), 订阅面在 test_modules_p5 锁定。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
@@ -82,10 +83,6 @@ def test_grouping_phases_wired():
         seed_store(mgr, [t])  # torrents_added 相位直驱 _assign_new_torrent, 需要库内活记录
         payloads = {
             "transitions": {
-                "dry_run": True
-            },
-            "torrents_added": {
-                "hash": "H1",
                 "dry_run": True
             },
             "removed_scan": {
@@ -125,17 +122,19 @@ def test_torrents_added_phase_assigns_new_torrent():
         mgr = _mgr(td)
         mgr.client = FakeClient()
         t = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
+        t.tracker_conf = mgr.config.trackers["HHan"]  # 相位契约: conf 已就位(内核 added 循环先行匹配)
         client = mgr.client
         client.torrents["H1"] = t
         client.files_map["H1"] = [_fake_file("movie.mkv", 100)]
         seed_store(mgr, [t])
         n = mgr.events.emit("torrents_added", {"hash": "H1", "dry_run": True})
-        assert n == 1
+        assert n == 4, f"torrents_added 相位应有四家订阅(tracker/maintenance/grouping/rules): {n}"
         assert len(mgr.store.groups) == 1, f"相位应驱动增量归组: {mgr.store.groups}"
 
         # disabled: 相位仍广播, 模块自判零动作
         mgr.config.grouping.enabled = False
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
+        t2.tracker_conf = mgr.config.trackers["HHan"]  # 同上: conf 已就位
         client.torrents["H2"] = t2
         client.files_map["H2"] = [_fake_file("movie.mkv", 100)]
         seed_store(mgr, [t2])

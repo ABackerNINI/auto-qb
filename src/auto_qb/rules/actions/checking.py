@@ -117,7 +117,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
 
         # 决策链 4: 前置检查: 文件全部存在且大小一致
         # 虽然同group文件已经确定存在且大小一致, 但为了安全, 再次检查
-        err = manager.check_filelist(ctx.api, ctx.torrent)
+        err = manager.ctx.ops.check_filelist(ctx.api, ctx.torrent)
         if err is not None:
             return ActionResult.skip(f"全量校验前置检查未通过: {err}")
 

@@ -2,6 +2,7 @@
 
 由 pytest.ini 的 pythonpath=src 处理 src 导入, 无需 sys.path 处理。
 """
+import copy
 import json
 import os
 import tempfile
@@ -858,6 +859,18 @@ class FakeTracker:
 
 # ---------- 模拟 Config ----------
 class FakeConfig:
+    def __init__(self):
+        # !类属性里的 dataclass/dict/list 是**共享可变对象**: 任一测试原地改
+        #   (mgr.config.grouping.enabled = True / mgr.config.web.port = ...) 都会泄漏到
+        #   之后所有 make_manager 的实例 —— 是否爆雷只取决于 xdist 把哪些测试分到同一
+        #   worker(2026-10-01 P5 期间实报: test_build_group_view 污染
+        #   test_refresh_removed_grouping_disabled)。每实例深拷贝一份可变默认,
+        #   测试间隔离(与真实 Config 每次构造独立实例同形); 标量默认仍走类属性。
+        for name, default in vars(type(self)).items():
+            if name.startswith("_") or isinstance(default, (str, int, float, bool, type(None))):
+                continue
+            setattr(self, name, copy.deepcopy(default))
+
     qbittorrent = QbittorrentConfig(host="127.0.0.1", port=16585, username="u", password="p")
     trackers = {"HHan": FakeTracker("HHan")}
     state_file = ""  # 由测试设置

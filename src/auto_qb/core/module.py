@@ -181,8 +181,11 @@ class EventBus:
     - 相位清单与次序 = 现 _refresh_torrents 调用顺序的忠实编码(transitions 先于规则事件、
       事件分派先于内置动作……), 不是重设计; P5 收口时 _refresh_torrents 的「内核点名」
       改为 emit, 本骨架即生效点。
-    - suppress: 热重载首轮全量重建的 added 事件重放保护 —— 总线级开关, 置位期间 emit
-      直接跳过(语义等价现 manager._suppress_events, P5 收口时迁移到此处)。
+    - suppress: 热重载首轮全量重建的 added 事件重放保护(plan §4.3) —— 总线级开关。
+      置位方是 rules 模块(L2 结构重建时); 消费方是内核刷新轮: take_suppressed 在轮首
+      读走请求, events_removed 相位前按需重挂、events_added 相位后关闭 —— 窗口精确覆盖
+      两个事件分派相位(full_round/transitions 等同轮照常广播, 与原 manager._suppress_events
+      只闸 _dispatch_events 的语义等价)。
     - 分发是**同步**的: 相位消费都在主循环线程内(单一写线程, 黄金法则 5), 无锁。
     """
     def __init__(self) -> None:
@@ -214,6 +217,17 @@ class EventBus:
     def set_suppressed(self, value: bool) -> None:
         """置位/解除总线级抑制(热重载首轮: 置位 -> 全量重建一轮 -> 解除)"""
         self._suppressed = bool(value)
+
+    def take_suppressed(self) -> bool:
+        """原子读走抑制请求(读走即解除置位), 返回读走前的置位状态
+
+        内核刷新轮在轮首消费 L2 置位的重放保护请求, 在 events_removed 相位前按需重挂、
+        events_added 相位后关闭 —— 让总线抑制只覆盖两个事件分派相位, 同轮其余相位
+        (full_round/transitions/torrents_added/removed_scan/post)照常广播。
+        """
+        value = self._suppressed
+        self._suppressed = False
+        return value
 
 
 # ---------- 模块宿主(注册表 + 生命周期编排, plan §3.1) ----------

@@ -28,7 +28,7 @@ import yaml
 from ..infra.errors import SchemaVersionError
 from ..infra.versioning import CURRENT_VERSIONS, VERSION_KEY, detect_version
 from .errors import ConfigError
-from .impact import LEVEL_R, ConfigChange, diff_config_impacts
+from .impact import RESTART_SECTIONS, ConfigChange, diff_config_impacts, restart_required_paths
 from .loaders import load_config, migrate_config_schema, normalize_schema_version
 
 # 树根键(与 validate_config 的"根节点仅允许 config"一致)
@@ -212,9 +212,10 @@ def _prepare(config_path: str, tree: Dict[str, Any], old_config) -> Tuple[List[C
     new_config = _validate_tree(tree)
     old_tree = read_tree(config_path)
     changes = diff_config_impacts(old_config, new_config)
-    restart_required = [c.path for c in changes if c.level == LEVEL_R]
+    restart_required = restart_required_paths(changes)
     if restart_required:
-        _fallback_restart_fields(tree, old_tree, changes)
+        # 只回退命中 R 闸的段(W4 后 changes 含全部变更段, 不能整表回退)
+        _fallback_restart_fields(tree, old_tree, [c for c in changes if c.path in RESTART_SECTIONS])
     return changes, restart_required
 
 
@@ -262,10 +263,8 @@ def _validate_tree(tree: Dict[str, Any]) -> Any:
 
 
 def _fallback_restart_fields(tree: dict, old_tree: dict, changes: List[ConfigChange]) -> None:
-    """R 级字段回退为磁盘旧值: 旧值存在则覆盖, 旧值不存在则删除该键(走默认值)"""
+    """R 级字段(段)回退为磁盘旧值: 旧值存在则覆盖, 旧值不存在则删除该键(走默认值)"""
     for change in changes:
-        if change.level != LEVEL_R:
-            continue
         parts = [ROOT_KEY, *change.path.split(".")]
         old_value = _get_path(old_tree, parts)
         if old_value is None:

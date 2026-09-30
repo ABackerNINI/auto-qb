@@ -339,6 +339,14 @@ def _make_web_manager(tmp_path, config_text):
         # 命令唤醒(真实 manager 置位 _wake_event 让主循环立即消费); 此处记录调用供断言
         wake=lambda: wake_calls.append(1),
     )
+    # 模块宿主替身(schema 端点的段认领由模块 sections() 派生, W4 级别表退役)
+    mgr.host = SimpleNamespace(
+        modules=lambda: [
+            SimpleNamespace(name="webui", sections=lambda: ("web", )),
+            SimpleNamespace(name="tracker", sections=lambda: ("trackers", )),
+            SimpleNamespace(name="rules", sections=lambda: ("rules_config", "interval")),
+        ]
+    )
     # 详情端点的 HR 展示字段由 WebviewMixin 静态方法提供; stub 直接引用同一实现
     from auto_qb.core.qbmanager import QbManager
 
@@ -2485,10 +2493,10 @@ def test_config_schema_endpoint(web_env):
         assert f["kind"] == "object" and not f.get("open"), f["key"]
     assert {p["name"] for p in data["plugins"]["condition"]} >= {"size", "tags", "state", "freespace"}
     assert {p["name"] for p in data["plugins"]["action"]} >= {"add_tags", "checking", "reannounce"}
-    # 热重载级别与 impact 同源(R 级字段前端需标"需重启")
-    assert data["levels"]["sections"]["data_dir"] == "R"
-    assert data["levels"]["sections"]["main_tick"] == "L0"
-    assert data["levels"]["tracker_fields"]["domains"] == "L2"
+    # 段认领由模块 sections() 派生(W4 级别表退役; 前端不消费, 留给排障对照)
+    assert data["levels"]["claimed_sections"]["web"] == ["webui"]
+    assert data["levels"]["claimed_sections"]["trackers"] == ["tracker"]
+    assert data["levels"]["claimed_sections"]["rules_config"] == ["rules"]
 
 
 def test_config_tree_roundtrip(web_env):
@@ -2503,7 +2511,7 @@ def test_config_tree_roundtrip(web_env):
     resp = client.put("/api/config", headers=auth, json={"tree": tree})
     assert resp.status_code == 200, resp.text
     assert resp.json()["applied"] is True
-    assert "main_tick" in [c["path"] for c in resp.json()["changes"]]
+    assert "main_tick" in resp.json()["changes"], "PUT 回执应报变更段路径(W4: 路径字符串)"
     with open(mgr.config_path, encoding="utf-8") as f:
         assert "5s" in f.read(), "新配置应写回 config 文件"
     cmd, payload = mgr.web_commands.get_nowait()
@@ -5993,15 +6001,36 @@ def test_state_kind_maps_states(state, kind):
     assert QbManager._state_kind(FakeTorrent(hash="H", name="t", state=state)) == kind
 
 
+def _pin_noop_sections(new_cfg, mgr):
+    """把与「本次验证无关」的段钉到现行配置同对象: 模块 apply 整段短路(P1-P5)。
+
+    logging/notify/web 是 P1/P2 模块段; rules 六段是 RulesModule 的重建判据段
+    (_rebuild_needed: rules_config/interval/delete_tags*/global_speed_limit_curve/trackers
+    —— 不钉的话 Mock 段会被整段不等误判成 L2 重建)。
+    """
+    new_cfg.logging = mgr.config.logging
+    new_cfg.notify = mgr.config.notify
+    new_cfg.web = mgr.config.web
+    new_cfg.qbittorrent = mgr.config.qbittorrent
+    new_cfg.rules_config = mgr.config.rules_config
+    new_cfg.interval = mgr.config.interval
+    new_cfg.delete_tags = mgr.config.delete_tags
+    new_cfg.delete_tags_if_has_no_torrents = mgr.config.delete_tags_if_has_no_torrents
+    new_cfg.global_speed_limit_curve = mgr.config.global_speed_limit_curve
+    new_cfg.trackers = mgr.config.trackers
+
+
 def test_apply_new_config_levels(monkeypatch):
-    """apply_new_config: 按影响级别应用 —— L0 仅换配置; L1 只剩重连(web 重启自 P2、HR 重挂
-    自 P2、日志/通知重挂自 P1 起全部改经模块 apply 整段短路, 段变守阵在 test_core_modules /
-    test_facade_modules); L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用;
-    完成消息按 INFO 记(alert-levels 契约: 热重载是预期动作, WARNING 会被 notify 推成通知)"""
+    """apply_new_config(W4 后): 换配置对象 + 无条件广播 apply + 段变内核自判重连 + R 闸
+
+    级别分派层已退役 —— 零动作段由模块 apply 自判短路(钉段对象), web 重启/规则重建/
+    事件抑制各自单点在模块; qbittorrent 段变由内核自判重连; R 段仅提示重启。
+    完成消息按 INFO 记(alert-levels 契约: 热重载是预期动作, WARNING 会被 notify 推成通知)。
+    """
     import logging as std_logging
 
     from auto_qb.config.impact import ConfigChange
-    from helpers import make_manager
+    from helpers import FakeConfig, make_manager
 
     # 日志抓取用挂在目标 logger 上的 Grab handler —— 不用 caplog:
     # make_manager 会走 setup_logging 清空 root handlers(logging.py:98), caplog 挂在 root 上抓不到
@@ -6018,53 +6047,51 @@ def test_apply_new_config_levels(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         new_cfg = mock.MagicMock(name="new_config")
-        # 模块 apply 的整段判定(P1-P2): 新配置钉住与现行相同的 logging/notify/web 段对象 ——
-        # 本测试只验证分级分支; web 段不钉的话 WebUIModule.apply 会把 Mock 监听身份误判成
-        # 段变而真启服务器(P2), 模块段变守阵在 test_core_modules / test_facade_modules
-        new_cfg.logging = mgr.config.logging
-        new_cfg.notify = mgr.config.notify
-        new_cfg.web = mgr.config.web
-        # 副作用隔离: 重连/规则加载均替身(本测试只验证分级分支)
-        mgr._load_rules = mock.MagicMock()
-        mgr._create_global_tasks = mock.MagicMock()
         mgr.connect = mock.MagicMock(return_value=True)
+        # make_manager 把 rules_config 设为实例属性(遮蔽类属性), 后面替身 SimpleNamespace
+        # 的段对象都要与它同对象, 否则 RulesModule.apply 会被误判成段变触发重建
+        rules_config_orig = mgr.config.rules_config
 
         def _apply(changes):
-            # diff 结果受控(变更判定本身由 config/impact 单测覆盖)
+            # diff 结果受控(变更判定本身由 impact 单测覆盖)
             monkeypatch.setattr("auto_qb.config.impact.diff_config_impacts", lambda old, new: changes)
             return mgr.apply_new_config(new_cfg)
 
-        # 1. L0: 仅替换配置对象, 任务队列保持不变(运行时动态读取项)
-        # !HR 路由守阵(2026-09-29 实报「取数线程未启动」): 站点接入是 L0, hr.apply 必须在
-        # L0 下也被调到(由 HrRuntime.apply 自判重建/短路), 不能只挂在 L1 分支
+        # 1. 零动作热重载: 仅替换配置对象, 任务队列保持不变, 各模块 apply 全部短路
+        # !HR 路由守阵(2026-09-29 实报「取数线程未启动」): 站点接入不走任何分支, hr.apply
+        # 必须每次热重载都被调到(由 HrRuntime.apply 自判重建/短路), 不能只挂在特定级别
         mgr.hr = mock.MagicMock()
         queue_before = mgr.task_queue
+        _pin_noop_sections(new_cfg, mgr)
         try:
-            res = _apply([ConfigChange("main_tick", "L0", 1, 2)])
+            res = _apply([ConfigChange("main_tick", 1, 2)])
         finally:
             qbm_logger.removeHandler(grab)  # 先摘 handler, 断言失败也不跨测试泄漏
-        assert res == {"applied": True, "levels": ["L0"], "changes": 1, "restart_required": []}, res
+        assert res["applied"] is True and res["changes"] == 1 and res["restart_required"] == []
+        assert all(a["action"] == "none" for a in res["actions"]), res["actions"]
         assert mgr.config is new_cfg
-        assert mgr.task_queue is queue_before, "L0 不应重建任务队列"
-        mgr.hr.apply.assert_called_once(), "HR 运行时每次热重载都要过一遍 apply(站点接入是 L0)"
+        assert mgr.task_queue is queue_before, "零动作热重载不应重建任务队列"
+        assert not mgr.events.suppressed, "零动作热重载不置事件重放保护"
+        mgr.hr.apply.assert_called_once(), "HR 运行时每次热重载都要过一遍 apply(站点接入无分支)"
         # 生命周期消息守阵: 完成消息必须是 INFO, 不得用 WARNING(否则 notify 开启时每次保存配置弹通知)
         done_logs = [r for r in grabbed if "配置热重载完成" in r.getMessage()]
         assert done_logs, "热重载完成应留一行日志"
-        assert done_logs[-1].levelno == std_logging.INFO, \
-            f"热重载完成是预期动作, 应记 INFO(实为 {done_logs[-1].levelname})"
+        assert done_logs[-1].levelno == std_logging.INFO, f"热重载完成是预期动作, 应记 INFO(实为 {done_logs[-1].levelname})"
 
-        # 2. L1: 重连(web 监听身份变化时重启自 P2 起经 WebUIModule.apply 处理, 时序: 先停旧
-        #    并等其线程退出 -> 启新, 发生在 host.apply_all 广播内); 日志/通知重挂自 P1、HR
-        #    重挂自 P2 均已迁入模块 apply —— 本节新旧 logging/notify/web 段中, 仅 web 段端口
-        #    变化 -> 只有 webui 模块动服务器
-        # 旧配置(复现真实新旧对比): hr_check 也要给上 —— HrModule.apply 要拿旧 hr_check 段
-        # 与新的 channel/shared_dir 比对(见 HrRuntime.apply), 缺了会 AttributeError;
-        # logging/notify 段同样钉住(与新配置同对象 -> 模块短路)
+        # 2. web 监听身份变化: 仅 webui 模块动服务器(先停旧并等其线程退出 -> 启新),
+        #    不重连 qB(重连只由 qbittorrent 段变触发)
         mgr.config = SimpleNamespace(
+            qbittorrent=FakeConfig.qbittorrent,
             web=_web_stub(port=38080),
             hr_check=HrCheckConfig(),
             logging=new_cfg.logging,
             notify=new_cfg.notify,
+            rules_config=rules_config_orig,
+            interval=FakeConfig.interval,
+            delete_tags=FakeConfig.delete_tags,
+            delete_tags_if_has_no_torrents=FakeConfig.delete_tags_if_has_no_torrents,
+            global_speed_limit_curve=FakeConfig.global_speed_limit_curve,
+            trackers=FakeConfig.trackers,
         )
         new_cfg.web = _web_stub(port=38081)  # 仅端口变化 -> 需重启
         old_handle = mock.MagicMock()
@@ -6081,34 +6108,45 @@ def test_apply_new_config_levels(monkeypatch):
 
         monkeypatch.setattr("auto_qb.webui.stop_web_server", _fake_stop)
         monkeypatch.setattr("auto_qb.webui.start_web_server", _fake_start)
-        res = _apply([ConfigChange("web.port", "L1", 38080, 38081)])
-        assert res["levels"] == ["L1"]
-        mgr.connect.assert_called_once()
+        res = _apply([ConfigChange("web", None, None)])
+        assert all(a["action"] != "none" for a in res["actions"] if a["module"] == "webui")
+        mgr.connect.assert_not_called(), "web 端口变化不重连 qB(重连只由 qbittorrent 段变触发)"
         assert calls == [("stop", old_handle), ("start", mgr)], "必须先停旧服务(并等其线程退出)再启新服务"
         assert mgr._web_handle == "新句柄", "web 句柄应换为新服务句柄"
 
-        # 3. L2: 重建任务队列/规则 + 抑制下一轮事件分派
-        queue_before = mgr.task_queue
-        res = _apply([ConfigChange("interval", "L2", 1, 2)])
-        assert res["levels"] == ["L2"]
-        assert mgr.task_queue is not queue_before, "L2 应重建任务队列"
-        assert mgr._suppress_events is True
-        mgr._load_rules.assert_called_once()
-        mgr._create_global_tasks.assert_called_once()
+        # 3. qbittorrent 段变: 内核自判重连(连接管理属内核, plan §3.1)
+        mgr.connect.reset_mock()
+        mgr.config = SimpleNamespace(
+            qbittorrent=SimpleNamespace(host="old", port=1, username="u", password="p"),
+            web=new_cfg.web,
+            hr_check=HrCheckConfig(),
+            logging=new_cfg.logging,
+            notify=new_cfg.notify,
+            rules_config=rules_config_orig,
+            interval=FakeConfig.interval,
+            delete_tags=FakeConfig.delete_tags,
+            delete_tags_if_has_no_torrents=FakeConfig.delete_tags_if_has_no_torrents,
+            global_speed_limit_curve=FakeConfig.global_speed_limit_curve,
+            trackers=FakeConfig.trackers,
+        )
+        new_cfg.qbittorrent = SimpleNamespace(host="new", port=1, username="u", password="p")
+        _apply([ConfigChange("qbittorrent", None, None)])
+        mgr.connect.assert_called_once(), "qbittorrent 段变由内核自判重连"
 
-        # 4. R: 仅提示重启, 不计入应用级别
-        res = _apply([ConfigChange("state_file", "R", "a", "b")])
+        # 4. R 段: 仅提示重启, 配置对象照常替换(实际拦截在 webui PUT 侧回退 R 字段)
+        res = _apply([ConfigChange("state_file", "a", "b")])
         assert res["restart_required"] == ["state_file"]
-        assert res["levels"] == []
+        assert res["applied"] is True
 
 
 def test_apply_new_config_l2_preserves_runtime_state(monkeypatch):
     """守阵(2026-09-22, issue 26-09-21-1347): L2 热重载不得重读磁盘 state 回滚运行期内存态
 
     state 平时不落盘(仅优雅退出/跳检重加落盘), 磁盘上的 state.json 永远是「上次退出」
-    的旧版 —— L2 分支若 _load_state() 会把本次运行累计的 exec_history/skip_check_day/
-    recheck_fails 等整体回滚到旧版, Web UI 改规则保存即确定性触发。断言用「对象同一性
-    + 内容保留」双断言, 不 mock _load_state 本身(避免耦合实现符号)。
+    的旧版 —— L2 重建(rules 模块 rebuild_runtime)若重读 state 会把本次运行累计的
+    exec_history/skip_check_day/recheck_fails 等整体回滚到旧版, Web UI 改规则保存即
+    确定性触发。断言用「对象同一性 + 内容保留」双断言, 不 mock _load_state 本身
+    (避免耦合实现符号)。P5 起重建在 RulesModule: 队列重建 + 抑制置位经回执与总线断言。
     """
     from auto_qb.config.impact import ConfigChange
     from helpers import make_manager
@@ -6138,24 +6176,29 @@ def test_apply_new_config_l2_preserves_runtime_state(monkeypatch):
         # 磁盘上是「上次退出版本」的旧版(内容与内存不同)
         with open(os.path.join(td, "state.json"), "w", encoding="utf-8") as f:
             json.dump({"stale_marker": True}, f)
-        # 替身: 与分级测试同款(只验证 L2 分支行为, 变更判定由 impact 单测覆盖);
-        # logging/notify/web 段钉住现行对象 -> 模块 apply 整段短路(P1-P2), 本守阵只钉 state 语义
+        # 替身: rules 重建判据段钉住, 仅 interval 留 Mock -> RulesModule.apply 判段变触发重建;
+        # logging/notify/web 段钉住 -> 其余模块整段短路(P1-P2)
         new_cfg = mock.MagicMock(name="new_config")
         new_cfg.logging = mgr.config.logging
         new_cfg.notify = mgr.config.notify
         new_cfg.web = mgr.config.web
-        mgr._load_rules = mock.MagicMock()
-        mgr._create_global_tasks = mock.MagicMock()
+        new_cfg.qbittorrent = mgr.config.qbittorrent
+        new_cfg.rules_config = mgr.config.rules_config
+        new_cfg.delete_tags = mgr.config.delete_tags
+        new_cfg.delete_tags_if_has_no_torrents = mgr.config.delete_tags_if_has_no_torrents
+        new_cfg.global_speed_limit_curve = mgr.config.global_speed_limit_curve
+        new_cfg.trackers = mgr.config.trackers
         mgr.connect = mock.MagicMock(return_value=True)
         monkeypatch.setattr(
-            "auto_qb.config.impact.diff_config_impacts", lambda old, new: [ConfigChange("interval", "L2", 1, 2)]
+            "auto_qb.config.impact.diff_config_impacts", lambda old, new: [ConfigChange("interval", 1, 2)]
         )
 
         queue_before = mgr.task_queue
         res = mgr.apply_new_config(new_cfg)
 
-        assert res["levels"] == ["L2"]
+        assert any(a["module"] == "rules" and a["action"] == "rebuilt" for a in res["actions"]), res["actions"]
         assert mgr.task_queue is not queue_before, "L2 仍应重建任务队列(本守阵只钉 state 语义)"
+        assert mgr.events.suppressed, "L2 重建应置总线事件重放保护(窗口协议见 EventBus)"
         assert mgr.state is state_before, "L2 热重载不得替换 state 对象(重读磁盘 = 回滚运行期内存态)"
         assert mgr.state["exec_history"] == runtime["exec_history"], "执行历史不得被磁盘旧版回滚"
         assert mgr.state["skip_check_day"] == runtime["skip_check_day"], "跨日跳检去重不得被回滚"

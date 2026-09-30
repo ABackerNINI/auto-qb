@@ -49,7 +49,7 @@ import pytest
 import yaml
 
 from auto_qb.config import ConfigError, load_config
-from auto_qb.config.impact import LEVEL_L0, LEVEL_L1, diff_config_impacts
+from auto_qb.config.impact import diff_config_impacts, restart_required_paths
 from auto_qb.config.migrations import _migrate_config_1_2, _migrate_config_2_3
 from auto_qb.config.models import Config
 from auto_qb.config.validation import validate_config
@@ -655,53 +655,22 @@ def test_channel_request_timeout_range():
     assert any("request_timeout" in e for e in errors), errors
 
 
-def test_impact_hr_check_field_is_l0():
-    """hr_check 字段变更 -> L0 字段级路径"""
-    old, new = Config(), Config()
-    old.hr_check.min_interval = 90.0
-    new.hr_check.min_interval = 120.0
-    changes = diff_config_impacts(old, new)
-    assert [(c.path, c.level) for c in changes] == [("hr_check.min_interval", LEVEL_L0)]
+def test_impact_hr_check_is_single_section_change():
+    """hr_check 段变更 -> 整段一条(W4 级别表退役后粒度 = 段, 无字段级展开)
 
-
-def test_impact_channel_field_is_l1():
-    """channel 子段变更 -> L1(端点监听身份, 要重挂)"""
+    段内的「重挂/现读」语义(channel/shared_dir 重挂端点, min_interval 等运行时现读)
+    由 HrRuntime.apply 自判(其行为守阵在 test_hr_runtime), diff 只负责「变没变」。
+    """
     old, new = Config(), Config()
     old.hr_check.channel.port = 8788
     new.hr_check.channel.port = 8899
     changes = diff_config_impacts(old, new)
-    assert [(c.path, c.level) for c in changes] == [("hr_check.channel", LEVEL_L1)], "channel 段级 L1(整段重挂)"
+    assert [c.path for c in changes] == ["hr_check"]
+    assert restart_required_paths(changes) == [], "hr_check 不在 R 闸内, 可热应用"
 
 
-def test_impact_shared_dir_is_l1():
-    """shared_dir 变更 -> L1(站点文件目录变了, 服务与线程要重建)"""
-    old, new = Config(), Config()
-    old.hr_check.shared_dir = ""
-    new.hr_check.shared_dir = "//nas/share"
-    changes = diff_config_impacts(old, new)
-    assert [(c.path, c.level) for c in changes] == [("hr_check.shared_dir", LEVEL_L1)]
-
-
-def test_impact_reuse_window_is_l0():
-    """reuse_window 变更 -> L0 字段级路径(取数线程每轮现读, 热重载即时生效)"""
-    old, new = Config(), Config()
-    old.hr_check.reuse_window = 2 * 3600.0
-    new.hr_check.reuse_window = 4 * 3600.0
-    changes = diff_config_impacts(old, new)
-    assert [(c.path, c.level) for c in changes] == [("hr_check.reuse_window", LEVEL_L0)]
-
-
-def test_impact_sites_is_l0():
-    """sites 子段变更 -> hr_check.sites 一条 L0(随 hr_check 走动态应用)"""
-    old, new = Config(), Config()
-    from auto_qb.config.models import SiteHrCheckConfig
-    new.hr_check.sites = {"btschool": SiteHrCheckConfig(enabled=True)}
-    changes = diff_config_impacts(old, new)
-    assert [(c.path, c.level) for c in changes] == [("hr_check.sites", LEVEL_L0)]
-
-
-def test_impact_site_hr_check_is_l0():
-    """派生站点 hr_check 变更 -> trackers.<站点>.hr_check 一条 L0"""
+def test_impact_trackers_whole_section_change():
+    """trackers 段变更(含派生站点 hr_check) -> 整段一条; 重匹配语义归 tracker 模块 full_round"""
     from auto_qb.config.models import SiteHrCheckConfig, TrackerConfig
     old, new = Config(), Config()
     old.trackers["s"] = TrackerConfig(
@@ -711,7 +680,8 @@ def test_impact_site_hr_check_is_l0():
         name="s", domains=["a.example"], hr_check=SiteHrCheckConfig(enabled=True, refresh_interval=6 * 3600.0)
     )
     changes = diff_config_impacts(old, new)
-    assert [(c.path, c.level) for c in changes] == [("trackers.s.hr_check", LEVEL_L0)], "派生视图段级 L0"
+    assert [c.path for c in changes] == ["trackers"]
+    assert restart_required_paths(changes) == [], "trackers 不在 R 闸内, 可热应用"
 
 
 def test_config_error_message_points_to_section(tmp_path):

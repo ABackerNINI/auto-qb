@@ -156,10 +156,11 @@ def test_apply_new_config_notify_remount_only_on_change(monkeypatch):
         new_cfg.notify = NotifyConfig(min_level="WARNING")
         monkeypatch.setattr(
             "auto_qb.config.impact.diff_config_impacts",
-            lambda old, new: [ConfigChange("notify.min_level", "L1", "ERROR", "WARNING")],
+            lambda old, new: [ConfigChange("notify", "ERROR", "WARNING")],
         )
         res = mgr.apply_new_config(new_cfg)
-        assert res["levels"] == ["L1"]
+        assert res["applied"] is True and not res["restart_required"]
+        assert any(a["module"] == "notify" and a["action"] == "remounted" for a in res["actions"])
         assert notify_setup.call_count == 1, "改 notify 段 -> 重挂一次"
         assert mgr.ctx.notify.enabled_state() is True
         assert logging_setup.call_count == 0, "无关段(logging 未变)零动作 —— 过度重启族的模块化防线"
@@ -170,10 +171,11 @@ def test_apply_new_config_notify_remount_only_on_change(monkeypatch):
         new_cfg2.main_tick = 9.9
         monkeypatch.setattr(
             "auto_qb.config.impact.diff_config_impacts",
-            lambda old, new: [ConfigChange("main_tick", "L0", 2.0, 9.9)],
+            lambda old, new: [ConfigChange("main_tick", 2.0, 9.9)],
         )
         res = mgr.apply_new_config(new_cfg2)
-        assert res["levels"] == ["L0"]
+        assert res["applied"] is True
+        assert all(a["action"] == "none" for a in res["actions"]), "无关保存零动作(各模块全短路)"
         notify_setup.assert_not_called()
         assert logging_setup.call_count == 0, "无关保存零动作(notify 段与 logging 段都未变)"
 
@@ -182,10 +184,10 @@ def test_apply_new_config_notify_remount_only_on_change(monkeypatch):
         new_cfg3.logging = LoggingConfig(level="DEBUG")
         monkeypatch.setattr(
             "auto_qb.config.impact.diff_config_impacts",
-            lambda old, new: [ConfigChange("logging.level", "L1", "INFO", "DEBUG")],
+            lambda old, new: [ConfigChange("logging", "INFO", "DEBUG")],
         )
         res = mgr.apply_new_config(new_cfg3)
-        assert res["levels"] == ["L1"]
+        assert any(a["module"] == "logging" and a["action"] != "none" for a in res["actions"])
         assert logging_setup.call_count == 1 and logging_setup.call_args[0][1] == "DEBUG"
         assert notify_setup.call_count == 0, "notify 段未变, 不得再重挂(计数已随第 2 轮清零)"
 

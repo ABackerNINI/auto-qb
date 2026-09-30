@@ -23,7 +23,7 @@
 | 旧 | 新 |
 |----|----|
 | `qbmanager.py` / `taskqueue.py` / `qbapi.py` / `qbclient.py` / `curves.py` / `episodes.py` / `tvshows.py` / `exporter.py` | `core/` 同名 |
-| `mixins/`（rule_engine / tags / checking / grouping / tracker / speed_curve; 新增 ops 危险操作层） | `core/mixins/` |
+| `mixins/`（rule_engine / tags / checking / grouping / tracker / speed_curve; 新增 ops 危险操作层） | `core/mixins/`（P0-P5 已再迁 `core/modules/` 功能模块, 见 plan 26-09-30-1819; 包内只剩 webui views/commands 组合入口） |
 | `mixins/web_view.py` / `mixins/web_commands.py` | `webui/views.py` / `webui/commands.py`（W3 先行迁出） |
 | `errors.py` / `locking.py` / `logging.py` / `utils.py` / `notify.py` / `autostart.py` | `infra/` 同名 |
 | `web_runtime.py` | `webui/runtime.py` |

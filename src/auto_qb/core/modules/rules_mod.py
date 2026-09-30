@@ -1,48 +1,162 @@
-"""规则引擎 mixin: 规则加载 / 种子级规则任务 / 事件分派
+"""RulesModule: 规则引擎的模块化封装(plan kernel-module-refactor P5 最大一刀)
 
-由 QbManager 组合(mixin), 依赖实例属性: config/rules/enabled_rules/logger/client/task_queue。
-状态持久化(执行历史/上传量快照/迁移)已于 2026-09-30 迁 `core/state.py` 的 StateService
-(plan kernel-module-refactor P0) —— 能力服务不是规则引擎的私产; 执行历史经 manager 的
-委托方法(record_execution / get_exec_record)走 ctx.state。
+RuleEngineMixin(状态持久化已于 P0 迁 core/state.py)整体迁入, 三条接线改相位/服务:
+- 事件分派: events_removed / events_added 相位(plan §4.2) —— 内核 _dispatch_events
+  的两个调用点改广播, 分派知识(按 tracker 引用绑定 + trigger 分流)收进本模块;
+- 逐种子管线: torrents_added 相位的「建任务」一步(plan §4.2: 维护→限速→建任务→归组→
+  集数, 各家按装配序认领) —— 内核不再点名 _create_torrent_tasks;
+- L2 结构重建(hot-reload W3 合并点): 重建任务队列与规则收进 apply, 整段相等即短路;
+  级别分派层与三张手写表退役(W4), 重建判据单点在 _rebuild_needed。
+
+!Rule/RuleContext 的宿主面仍是 **QbManager**(构造期传入, 不换对象): 规则动作消费
+  manager.store/state/task_queue/api/ctx.ops/group_* —— 换宿主面是 rules 动作层的
+  独立改动面, 不混进本段。执行历史经 manager 委托走 ctx.state(P0 单点)。
+!危险操作入口(P5 收口): 规则动作调 recheck/skip_check/check_filelist 改经
+  manager.ctx.ops(P4 已把实现单点迁 OpsModule), manager 旧名只剩测试兼容委托。
+
+!热重载语义(W4 表退役后, 消费知识单点在本模块):
+  - apply 每次热重载无条件被调, _rebuild_needed 判整段相等即短路(§3.3 规则 1);
+  - 重建判据 = 「创建时固化」的消费段: rules_config(规则定义)/interval(任务节奏)/
+    delete_tags*/global_speed_limit_curve(全局任务集合)/trackers 绑定三元组
+    (domains/rules/groups —— 匹配与规则绑定固化; tags/remove_tags/limits/hr_check
+    运行时现读, 不触发重建, 过度重启族防线);
+  - 重建不重读磁盘 state(运行期内存态 exec_history/skip_check_day 原对象保留,
+    issue 26-09-21-1347); 重连复用内核 reconnect(client 换新 + rid 失效 → 下轮全量);
+  - 事件重放保护: 置位总线 suppress, 窗口协议见 EventBus.take_suppressed(内核刷新轮
+    把它收敛到 events_removed/events_added 两个相位)。
 """
 import logging
+import time
 from typing import List, Optional
-from qbittorrentapi import Client
 
-from ...config import Config
-from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from ...rules import Rule, RuleContext
-from ...torrents import TorrentRecord
+from ..module import AppContext, ApplyResult, BaseModule
+from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 
 logger = logging.getLogger(__name__)
 
 
-class RuleEngineMixin:
-    """规则引擎: 规则加载/种子级规则任务/事件分派"""
+class RulesModule(BaseModule):
+    """rules 模块: 规则加载 / 种子级规则任务 / 事件分派 / L2 结构重建"""
 
-    config: Config
-    client: Optional[Client]
-    rules: List[Rule]
-    enabled_rules: List[Rule]
-    task_queue: TaskQueue
+    name = "rules"
 
-    # ---------- 规则: 加载 / 状态持久化 ----------
+    def __init__(self, manager) -> None:
+        # Rule/RuleContext 的宿主面(见模块 docstring): 规则动作仍按 QbManager 消费
+        self._manager = manager
+        # 规则结构(规则加载在 run() 中进行: --export-yaml 等只导出模式不需要)
+        self.rules: List[Rule] = []
+        self.enabled_rules: List[Rule] = []
+
+    @property
+    def _ctx(self) -> AppContext:
+        """服务上下文(manager 现取, 与门面模块的「现取不缓存」同款)"""
+        return self._manager.ctx
+
+    def sections(self) -> tuple[str, ...]:
+        return ("rules_config", "interval")
+
+    # ---------- 相位订阅(plan §4.2: events_removed / events_added / torrents_added) ----------
+
+    def subscribe(self, phases) -> None:
+        phases.on("events_removed", self._on_events_removed)
+        phases.on("events_added", self._on_events_added)
+        phases.on("torrents_added", self._on_torrents_added)
+
+    def _on_events_removed(self, event) -> None:
+        """删除种子事件分派(带删除前快照); state/field 变化分派由同一相位承担
+        (原内核调用点固定传 state_changed=True/field_changed=True, 见 qbmanager 相位表)"""
+        p = event.payload
+        self._dispatch_events(
+            [],
+            p.get("removed") or [],
+            p.get("dry_run", False),
+            removed_snapshots=p.get("snapshots") or {},
+            state_changed=True,
+            field_changed=True,
+        )
+
+    def _on_events_added(self, event) -> None:
+        """新增种子(已匹配 tracker 配置)的事件规则分派"""
+        p = event.payload
+        self._dispatch_events(p.get("added") or [], [], p.get("dry_run", False))
+
+    def _on_torrents_added(self, event) -> None:
+        """逐新增种子管线的「建任务」一步(装配序在 maintenance/tracker/grouping 之后)"""
+        self._create_torrent_tasks(event.payload["hash"])
+
+    # ---------- 热重载(W3 合并点: L2 重建收进 apply; W4: 判据单点在本模块) ----------
+
+    def apply(self, old, new) -> ApplyResult:
+        if not self._rebuild_needed(old, new):
+            return ApplyResult(self.name)
+        logger.info("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
+        self.rebuild_runtime()
+        return ApplyResult(self.name, "rebuilt")
+
+    def _rebuild_needed(self, old, new) -> bool:
+        """L2 重建判据(W4 表退役后唯一单点; 整段相等即短路, hot-reload-simplify §3.3 规则 1)
+
+        判据 = 创建/绑定时固化的消费段(判据依据见模块 docstring); 其余段要么运行时
+        现读(换 config 对象即生效), 要么归各自模块 apply 认领。
+        """
+        if (
+            old.rules_config != new.rules_config or old.interval != new.interval or
+            old.delete_tags != new.delete_tags or
+            old.delete_tags_if_has_no_torrents != new.delete_tags_if_has_no_torrents or
+            old.global_speed_limit_curve != new.global_speed_limit_curve
+        ):
+            return True
+        return self._tracker_bindings_changed(old.trackers, new.trackers)
+
+    @staticmethod
+    def _tracker_bindings_changed(old_t: dict, new_t: dict) -> bool:
+        """tracker 绑定三元组(domains/rules/groups)是否变化; tracker 增删也视为绑定变化"""
+        if old_t == new_t:
+            return False
+        for name in set(old_t) | set(new_t):
+            o, n = old_t.get(name), new_t.get(name)
+            if o is None or n is None:
+                return True
+            if (o.domains, o.rules, o.groups) != (n.domains, n.rules, n.groups):
+                return True
+        return False
+
+    def rebuild_runtime(self) -> None:
+        """L2 结构重建: 重建任务队列与规则, 运行期内存态原对象保留(issue 26-09-21-1347)
+
+        - 不重读磁盘 state: state 平时不落盘, 磁盘上只有上次退出的旧版, 重读 = 回滚
+          运行期内存态(exec_history/skip_check_day 等)。内存态即真相。
+        - store.reset_runtime: 清分组索引/缓存, tracker_conf 置空 → 下轮全量 refresh 经
+          full_round 相位重匹配(plan §4.2; 客户端重连使 rid 失效保证下轮是全量轮)。
+        - queue_rebuilt 相位: 全局任务(delete_tags*/speed_limit_curve)由各模块自注册重入队。
+        - 总线 suppress 置位: 热重载首轮的 added 事件重放保护(窗口协议见 EventBus)。
+        """
+        self._manager.task_queue = TaskQueue()
+        self._ctx.store.reset_runtime()
+        self._load_rules()
+        self._manager.events.emit("queue_rebuilt")
+        self._manager.events.set_suppressed(True)
+        self._manager.reconnect()
+
+    # ---------- 规则: 加载(RuleEngineMixin 原样迁入, self.* 改 ctx/manager 现取) ----------
 
     def _load_rules(self):
-        """从 config 的 `*_rules` 段加载规则集(条件+动作插件); Rule 的 manager 即本对象
+        """从 config 的 `*_rules` 段加载规则集(条件+动作插件); Rule 的 manager 即宿主
 
         幂等: 重复调用先清空(init 与 run 都会调用)。
         收尾推导字段变化检测的监听集合(计划 26-09-27-1438): 所有 on_torrent_field_changed
         规则的 watch_fields 并集 ∪ (maintenance on_change 模式的 tags) —— 单点注入 store,
         无监听时 store 检测整体关闭(零基线、零对比开销)。
         """
+        config = self._ctx.config
         self.rules = []
         self.enabled_rules = []
-        for group_name, group in self.config.rules_config.items():
+        for group_name, group in config.rules_config.items():
             if not isinstance(group, dict):
                 continue
             for rule_name, spec in group.items():
-                self.rules.append(Rule(f"{group_name}.{rule_name}", spec, self))
+                self.rules.append(Rule(f"{group_name}.{rule_name}", spec, self._manager))
         self.enabled_rules = [r for r in self.rules if r.enabled]
         if self.rules:
             logger.info(f"加载规则 {len(self.rules)} 条(启用 {len(self.enabled_rules)} 条)")
@@ -50,13 +164,13 @@ class RuleEngineMixin:
         for r in self.rules:
             if r.trigger == "on_torrent_field_changed":
                 watch.update(r.watch_fields)
-        if getattr(self.config, "maintenance_tag_mode", "interval") == "on_change":
+        if getattr(config, "maintenance_tag_mode", "interval") == "on_change":
             watch.add("tags")  # maintenance B 路径: 外部 tags 变化检测不依赖任何规则配置(计划 §05)
-        self.store.set_watch_fields(watch)
+        self._ctx.store.set_watch_fields(watch)
 
     # ---------- 规则: 种子级任务 ----------
 
-    def _rules_for_torrent(self, torrent: TorrentRecord) -> list:
+    def _rules_for_torrent(self, torrent) -> list:
         """该种子应绑定的规则集: 匹配 tracker 的 rules 引用(@rule_set)
 
         torrent_conf 在 _refresh_torrents 阶段已匹配完成, 这里直接读取。
@@ -82,7 +196,7 @@ class RuleEngineMixin:
             "rule",
             rule.name,
             hash=hash,
-            store=self.store,
+            store=self._ctx.store,
             interval=rule.interval,
             handler=lambda t, d, r=rule: self._handle_rule(r, t, d),
         )
@@ -97,7 +211,7 @@ class RuleEngineMixin:
         """
         if task.torrent is None:
             return FINISHED
-        ctx = RuleContext(self, self.client, self.config, task.hash, dry_run, task=task)
+        ctx = RuleContext(self._manager, self._manager.client, self._ctx.config, task.hash, dry_run, task=task)
         try:
             handled, _stop = rule.process(ctx)
         except Exception as e:
@@ -126,8 +240,8 @@ class RuleEngineMixin:
         各事件规则按种子的 tracker 引用(rules: @规则集)绑定, 与 interval 规则同语义 ——
         `_torrent_event_rules` 取"该种子引用规则 ∩ 指定触发器"的交集。
 
-        - on_torrent_added: 新增种子匹配 tracker 配置(复用 _match_tracker_conf, 与主循环
-          added 循环同语义)后触发; 未匹配的种子由主循环 added 循环负责告警。
+        - on_torrent_added: 新增种子匹配 tracker 配置(与内核 added 循环同语义)后触发;
+          未匹配的种子由内核 added 循环负责告警。
         - on_torrent_deleted: 种子已从 store 移除, 用删除前快照副本作 ctx.torrent,
           只读动作(print_torrent_details)仍可打印留档。
         - on_torrent_state_enum_changed: 用 store.state_changed(增量应用时按 **fetch 时状态**
@@ -159,11 +273,11 @@ class RuleEngineMixin:
 
         # on_torrent_state_enum_changed: 本轮 state 字段变化的种子(增量应用时收集, O(变化数))
         if state_changed and self._rules_by_trigger("on_torrent_state_enum_changed"):
-            prev = self.store.state_snapshot
-            for h, cur in self.store.state_changed:
+            prev = self._ctx.store.state_snapshot
+            for h, cur in self._ctx.store.state_changed:
                 if h not in prev or prev[h] == cur:
                     continue
-                tor = self.store.get(h)
+                tor = self._ctx.store.get(h)
                 if tor is None or tor.tracker_conf is None:
                     continue
                 for rule in self._torrent_event_rules(tor, "on_torrent_state_enum_changed"):
@@ -172,8 +286,8 @@ class RuleEngineMixin:
 
         # on_torrent_field_changed: 本轮监听字段的净变化种子(store 侧已对比持久化基线, O(变化数))
         if field_changed and self._rules_by_trigger("on_torrent_field_changed"):
-            for h, fields in self.store.field_changed:
-                tor = self.store.get(h)
+            for h, fields in self._ctx.store.field_changed:
+                tor = self._ctx.store.get(h)
                 if tor is None or tor.tracker_conf is None:
                     continue
                 for rule in self._torrent_event_rules(tor, "on_torrent_field_changed"):
@@ -182,16 +296,16 @@ class RuleEngineMixin:
                     self._apply_event_rule(rule, h, dry_run=dry_run)
                     triggered.append(h)
 
-        # on_torrent_added: 匹配 tracker 配置并触发(命中者由主循环做后续自有动作)
+        # on_torrent_added: 匹配 tracker 配置并触发(命中者由内核做后续自有动作)
         if self._rules_by_trigger("on_torrent_added") and added:
             for h in added:
-                tor = self.store.get(h)
+                tor = self._ctx.store.get(h)
                 if tor is None:
                     continue
                 if tor.tracker_conf is None:
-                    tor.tracker_conf = self._match_tracker_conf(tor)
+                    tor.tracker_conf = self._ctx.trackers.match(tor)
                 if tor.tracker_conf is None:
-                    continue  # 未匹配 tracker: 主循环 added 循环负责告警
+                    continue  # 未匹配 tracker: 内核 added 循环负责告警
                 for rule in self._torrent_event_rules(tor, "on_torrent_added"):
                     self._apply_event_rule(rule, h, dry_run=dry_run)
                     triggered.append(h)
@@ -214,11 +328,13 @@ class RuleEngineMixin:
             "rule-event",
             rule.name,
             hash=hash,
-            store=self.store,
+            store=self._ctx.store,
             interval=rule.interval,
             handler=lambda t, d, r=rule, s=snapshot: self._handle_event_rule(r, t, s, d),
         )
-        ctx = RuleContext(self, self.client, self.config, hash, dry_run, task=task, snapshot=snapshot)
+        ctx = RuleContext(
+            self._manager, self._manager.client, self._ctx.config, hash, dry_run, task=task, snapshot=snapshot
+        )
         try:
             rule.process(ctx)
         except Exception as e:
@@ -235,7 +351,9 @@ class RuleEngineMixin:
         """
         if task.torrent is None:
             return FINISHED
-        ctx = RuleContext(self, self.client, self.config, task.hash, dry_run, task=task, snapshot=snapshot)
+        ctx = RuleContext(
+            self._manager, self._manager.client, self._ctx.config, task.hash, dry_run, task=task, snapshot=snapshot
+        )
         try:
             rule.process(ctx)
         except Exception as e:
@@ -261,3 +379,39 @@ class RuleEngineMixin:
                         result.append(r)
                         seen.add(r.name)
         return result
+
+    # ---------- 种子级任务创建(原 qbmanager._create_torrent_tasks, torrents_added 相位认领) ----------
+
+    def _create_torrent_tasks(self, hash: str):
+        """
+        为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务
+
+        缺文件检查统一由分组事件驱动承担(_refresh_torrents 检测到删除/状态变化/
+        保存路径变化立即触发组内扫描), 不再创建逐种子 missing_files 任务。
+        每个任务有内置 interval(规则任务用规则自身 interval), 规则任务加入队列即立即到期(下一 tick 执行)。
+        内置种子任务加入队列后下一个interval到期。
+        """
+        torrent = self._ctx.store.get(hash)
+        if not torrent:
+            return
+
+        # 创建内置种子任务(handler 经 ctx.maintenance 模块句柄取, 不 import 兄弟模块)
+        self._ctx.task_queue.add_task(
+            Task(
+                "internal",
+                "maintenance",
+                hash=hash,
+                store=self._ctx.store,
+                interval=self._ctx.config.interval,
+                handler=self._ctx.maintenance.handle_maintenance_task_interface,
+            ),
+            time.time() + self._ctx.config.interval,
+        )
+
+        # 创建种子规则任务(仅 interval 规则建周期任务; on_* 事件规则不建, 由事件分派即时处理)
+        tasks = []
+        for rule in self._rules_for_torrent(torrent):
+            task = self._create_rule_task(rule, hash)
+            if task is not None:
+                tasks.append(task)
+        self._ctx.task_queue.add_tasks(tasks)

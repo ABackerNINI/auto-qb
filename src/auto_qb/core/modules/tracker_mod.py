@@ -34,10 +34,11 @@ class TrackerModule(BaseModule):
     def sections(self) -> tuple[str, ...]:
         return ("trackers", )
 
-    # ---------- 相位订阅(plan §4.2 full_round) ----------
+    # ---------- 相位订阅(plan §4.2 full_round + torrents_added) ----------
 
     def subscribe(self, phases) -> None:
         phases.on("full_round", self._on_full_round)
+        phases.on("torrents_added", self._on_torrent_added)
 
     def _on_full_round(self, event) -> None:
         """全量轮重匹配: 热重载 L2 置空的 tracker_conf 在此兑现(存量记录不走 added 分支,
@@ -45,6 +46,14 @@ class TrackerModule(BaseModule):
         for rec in self._ctx.store.by_hash.values():
             if rec.tracker_conf is None:
                 rec.tracker_conf = self.match(rec)
+
+    def _on_torrent_added(self, event) -> None:
+        """逐新增种子管线的「限速」一步(plan §4.2; P5 收口前经内核委托调用):
+        tracker_conf 由内核 added 循环先行匹配, 这里只消费"""
+        torrent = self._ctx.store.get(event.payload["hash"])
+        if torrent is None:
+            return
+        self.apply_speed_limit(torrent, torrent.tracker_conf, event.payload.get("dry_run", False))
 
     # ---------- 能力服务(plan §3.2: ctx.trackers.match, rules / store 都消费) ----------
 
@@ -63,7 +72,7 @@ class TrackerModule(BaseModule):
             logger.warning(f"种子匹配到多个 tracker 配置, 使用第一个: {desc} {torrent.log_repr}")
         return confs[0] if confs else None
 
-    # ---------- 单种限速(added 管线的 tracker 认领项, P5 收口前经内核委托调用) ----------
+    # ---------- 单种限速(added 管线的 tracker 认领项, 经 torrents_added 相位调用) ----------
 
     def apply_speed_limit(self, torrent: TorrentRecord, tracker_conf: TrackerConfig, dry_run: bool) -> None:
         self._apply_single_speed_limit(torrent, "torrents_set_upload_limit", tracker_conf.upload_speed_limit, dry_run)

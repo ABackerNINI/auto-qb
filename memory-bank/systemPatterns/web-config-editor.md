@@ -8,7 +8,7 @@
 
 - **模式**: 设置页不再直接编辑 YAML 全文 —— 每个配置项经图形控件增删改。(2026-09-25 注: 旧版「只读 YAML 预览」按钮随经典设置页移除, `POST /api/config/preview` 端点仍在但前端已无调用方。)
 - **数据模型**: 前端持有与磁盘**同构的 YAML 树**(标量全为字符串, 与 `yaml.BaseLoader` 语义一致) → 编辑即就地增删改, 无格式往返转换、零语义漂移; 脏检测用 JSON 快照对比。
-- **端点**: `GET /api/config/schema`(UI 元数据 + `impact` 的热重载级别表合并)、`GET /api/config`(树)、`PUT /api/config`(保存)、`POST /api/config/preview`(只读预览; 2026-09-25 起前端无调用方)。旧的 `GET/PUT /api/config/raw` 已移除。
+- **端点**: `GET /api/config/schema`(UI 元数据 + 各模块 `sections()` 派生的段认领表; W4 级别表已退役, plan 26-09-30-1819)、`GET /api/config`(树)、`PUT /api/config`(保存)、`POST /api/config/preview`(只读预览; 2026-09-25 起前端无调用方)。旧的 `GET/PUT /api/config/raw` 已移除。
 - **保存管线 (config/writer.py)**: 结构自检(必须有 `config` 根段) → 落临时文件跑 `load_config`(与启动同一校验路径, 失败 400 且不碰磁盘) → `diff_config_impacts` 判定变更 → **R 级字段回退为磁盘旧值** → 备份到 **`<data_dir>/<配置名>.bak`**(备份路径由调用方传入, 不再在项目根目录产生 `config.yml.bak`; 父目录按需创建) → ruamel round-trip 写盘 → 投递 `reload_config` 命令(仍由主循环线程应用)。
 - **注释与格式策略**: 已存在键的注释保留(`_sync_mapping` 递归同步 CommentedMap); **值未变化的键跳过赋值**, 从而保留磁盘原标量形态(否则 ruamel 会把无引号的 `16585`/`true` 重写为 `'16585'`/`'true'`); 新增/修改的标量走 `_plain_scalar`(数字/布尔样式写成原生标量, BaseLoader 下语义等价); **列表整体替换(项级注释不保留)**。
 - **schema.py 的地位**: 纯声明的 UI 元数据(分组/字段/控件类型/单位/枚举/帮助/必填/可选段/插件 spec 表), **不承载正确性规则**(合法性唯一入口仍是 `validate_config`); 键集合与插件表由 `tests/test_config_schema.py` 守卫 —— 新增配置键或插件忘登记会直接测试失败。

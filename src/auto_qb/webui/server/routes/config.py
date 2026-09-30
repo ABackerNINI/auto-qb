@@ -63,13 +63,19 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/config/schema")
     def api_config_schema():
-        """配置表单元数据(分组/字段/控件/帮助) + 热重载级别(唯一来源: config.impact)"""
+        """配置表单元数据(分组/字段/控件/帮助) + 段认领(唯一来源: 各模块 sections() 派生)
+
+        热重载级别表已于 W4 退役(plan kernel-module-refactor §4.3): 「段变了之后做什么」
+        是各模块 apply 的自判知识, 这里只暴露认领关系(段 -> 认领模块)供前端/排障对照。
+        """
         from ....config import schema as config_schema
-        from ....config.impact import SECTION_LEVELS, TRACKER_FIELD_LEVELS
 
         payload = config_schema.schema_payload()
-        # 级别表由 impact 单一维护(与热重载实际分级同源), API 层只做合并
-        payload["levels"] = {"sections": SECTION_LEVELS, "tracker_fields": TRACKER_FIELD_LEVELS}
+        claimed: dict = {}
+        for m in manager.host.modules():
+            for section in m.sections():
+                claimed.setdefault(section, []).append(m.name)
+        payload["levels"] = {"claimed_sections": claimed}
         # WARN: 这里**不能**改 JSONResponse 直返(与 /api/state 不同): schema_payload() 里是
         # dataclass 实例(Group / Field / Plugin), 靠 FastAPI 的 jsonable_encoder 转成 dict;
         # 直返会在 json.dumps 处抛 `Object of type Group is not JSON serializable` 变 500
@@ -117,10 +123,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         _enqueue("reload_config", {"config": load_config(manager.config_path)})
         return {
             "applied": True,
-            "changes": [{
-                "path": c.path,
-                "level": c.level
-            } for c in result.changes],
+            # 级别表退役(W4): 回执只报变更段路径 + 需重启段(前端只消费计数与 restart_required)
+            "changes": [c.path for c in result.changes],
             "restart_required": result.restart_required,
         }
 

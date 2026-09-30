@@ -32,7 +32,7 @@ class FullCheckingMixin:
     """full-checking 委托入口与组内校验串行化: 由 CheckAction 组合, 依赖 self 的
     basic_check/with_reference/without_reference(checking.py 解析)"""
     def _execute_full_checking(self, ctx: RuleContext, segment: dict):
-        """full-checking 委托入口: ctx 字段 -> ops 参数, 执行体在 manager.ops_recheck(ops 层)
+        """full-checking 委托入口: ctx 字段 -> ops 参数, 执行体在 ctx.ops.recheck(ops 层)
 
         规则侧只保留自己的语义回调: on_success = 晋升 verified_references(仅内存, 不写
         state_file; 执行历史由 origin 重新入队后的续跑 Rule.process 统一记录)。失败冷却 /
@@ -44,7 +44,7 @@ class FullCheckingMixin:
         def on_success():
             manager.store.verified_references.add(hash)
 
-        return manager.ops_recheck(
+        return manager.ctx.ops.recheck(
             hash,
             source="rule",
             auto_start=segment["auto_start"],

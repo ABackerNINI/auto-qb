@@ -2,9 +2,11 @@
 
 > 摘要: `QbManager` 的 mixin 拆分与组合方式。
 > ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
-> ⚠ **内核化重构 P0-P4 已迁出**(plan 26-09-30-1819): tags/tracker/speed_curve(P3)与
-> grouping/ops+checking(P4)已成 `core/modules/` 功能模块, rule_engine 迁 RulesModule 后
-> 本档整体退役 —— 下表仅为历史快照, 现状以 `core/modules/` 各模块 docstring 为准。
+> ⚠ **内核化重构 P0-P5 已全部迁出**(plan 26-09-30-1819): tags/tracker/speed_curve(P3)、
+> grouping/ops+checking(P4)、rule_engine(P5 → [core/modules/rules_mod.py](../../src/auto_qb/core/modules/rules_mod.py) RulesModule,
+> 事件分派/建任务改相位认领, L2 重建收进 rules.apply)均已成 `core/modules/` 功能模块。
+> **本包只剩表现层两 mixin**(webui views/commands 的组合入口), 下表仅为历史快照,
+> 现状以 `core/modules/` 各模块 docstring 为准。
 > 触发: mixins, 职责拆分, 组合, QbManager
 
 ## mixins/ (QbManager 的职责拆分, 组合进宿主)

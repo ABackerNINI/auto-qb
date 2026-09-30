@@ -356,12 +356,31 @@ class HrRuntime:
         return out
 
     def _anchors(self) -> Mapping[str, Mapping[str, object]]:
-        """本地种子锚点: 由主循环以不可变数据交接(M3 接入; 现在没有提供者)"""
-        provider = getattr(self._manager, "_hr_anchors", None)
-        if provider is None:
-            return {}
-        got = provider() if callable(provider) else provider
-        return got or {}
+        """本地种子锚点: {站点: {infohash: HrAnchor}} —— 供取数线程提前作废「本实例又下载了」的放行
+
+        锚点是**辅助信号**(计划 §9): 它只能让**本实例**的放行失效(二次下载 / 删种重加 /
+        文件重下), 覆盖不到别的客户端 —— 故放行仍以「刷新背书」为主, 锚点只把可疑的收回来。
+        实现自 QbManager._hr_anchors 迁入(plan kernel-module-refactor §05: 门面经 store
+        只读取数, 不再 getattr 窥内核私有方法)。
+        !线程: 取数线程异步要这份数据, 而 `store.by_hash` 由主循环整体替换引用(读者看到的
+        永远是某个完整快照)。故本方法**只读**: 不写状态、不发 API,
+        `rec.hr_anchor()` 也只把快照字段拷成不可变对象。
+        !站点键用 `tracker_conf.name`(= config.trackers 的键), 与取数线程的视图键同源。
+        """
+        out: dict = {}
+        for rec in self._manager.store.all():
+            conf = rec.tracker_conf
+            if conf is None:
+                continue
+            site_conf = conf.hr_check
+            if site_conf is None or not site_conf.enabled:
+                continue
+            anchor = rec.hr_anchor()
+            site = out.setdefault(conf.name, {})
+            for h in (rec.infohash_v1, rec.infohash_v2):
+                if h:
+                    site[h] = anchor
+        return out
 
     def _advise_shared_dir(self) -> None:
         if self.config.hr_check.shared_dir:

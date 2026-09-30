@@ -305,7 +305,9 @@ def test_run_hr_status_rows_limit(tmp_path):
     text = buf.getvalue()
     assert "最多显示 1 行" in text
     assert "还有 2 行未显示" in text
-    assert "103" not in text, "超出行数的条目不该出现在明细里(但站点文件里仍有)"
+    # !断言用「默认种子名」特征串而非裸 tid: text 含临时目录路径, 裸 "103" 会撞上
+    # pytest-of-<user>/pytest-<counter> 的计数编号(2026-10-01 实报 pytest-1033 假红)
+    assert "EXAMPLE 103" not in text, "超出行数的条目不该出现在明细里(但站点文件里仍有)"
 
 
 def test_run_hr_status_rows_aligned_and_truncated(tmp_path):

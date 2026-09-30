@@ -55,12 +55,17 @@ from auto_qb.hr.runtime import HrRuntime
 H1 = "aa" * 20
 
 
+class _FakeStore:
+    """锚点构建只读 store.all()(plan §05: 实现迁门面后经 manager.store 只读取数)"""
+    def all(self):
+        return []
+
+
 class _FakeManager:
-    """门面只用到 config(以及可选的锚点提供者)"""
+    """门面只用到 config 与 store(锚点构建的只读数据源)"""
     def __init__(self, config, anchors=None):
         self.config = config
-        if anchors is not None:
-            self._hr_anchors = anchors
+        self.store = _FakeStore()  # anchors 参数已无消费方(P5 后 _anchors 自持实现), 留参兼容旧调用
 
 
 def make_config(
@@ -505,20 +510,24 @@ def test_production_service_gets_a_sleeper(tmp_path):
 
 
 def test_runtime_uses_anchors_provider(tmp_path):
+    """取数线程经门面 _anchors 提供者拿本地锚点(M3 的交接面; plan §05 后实现自持在门面)"""
     calls = []
 
-    def anchors():
-        calls.append(1)
-        return {}
-
     config = make_config(tmp_path, enabled=True, channel=False)
-    runtime = HrRuntime(_FakeManager(config, anchors=anchors))
+    runtime = HrRuntime(_FakeManager(config))
+    real = runtime._anchors
+
+    def counting():
+        calls.append(1)
+        return real()
+
+    runtime._anchors = counting  # 实例属性遮蔽: HrWorker 构造时绑定的就是这个包装
     runtime.start()
     try:
         deadline = time.monotonic() + 3.0
         while not calls and time.monotonic() < deadline:
             time.sleep(0.02)
-        assert calls, "取数线程应经主循环提供的锚点提供者拿本地锚点(M3 的交接面)"
+        assert calls, "取数线程应经门面 _anchors 拿本地锚点(M3 的交接面)"
     finally:
         runtime.stop()
 
