@@ -126,7 +126,7 @@
                       <!-- 集成员行同样走窗口(通常不到阈值; 超 200 个版本的集才真正生效) -->
                       <div v-if="memberPadTop(e.members)" class="row-pad" :style="{ height: memberPadTop(e.members) + 'px' }" aria-hidden="true"></div>
                       <div v-for="m in winMembers(e.members)" :key="m.hash" class="member-row" data-table="detail" :data-hash="m.hash"
-                           :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash) }]"
+                           :class="[m.kind, { 'search-hit': m.hit, selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash) }]"
                            :style="gridStyle('detail')"
                            @click="onMemberClick(m, $event)"
                            @contextmenu.prevent="openMemberMenu($event, m)">

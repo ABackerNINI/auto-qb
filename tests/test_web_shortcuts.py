@@ -30,7 +30,10 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_modal_default_focus_and_enter: 模态确定钮有 ref="modalOk" 且 _openModal 默认焦点落它
   (Enter 即确认 = 按钮原生行为; Esc 取消走退栈链)
 - test_cursor_scroll_follow_without_scrollintoview: shortcuts.js 无 scrollIntoView;
-  columns.js 留存 _rowPre 前缀和; 光标视觉 .kb-cursor 在共用 CSS 与三张行模板成对
+  columns.js 留存 _rowPre 前缀和; 光标视觉 .kb-cursor 在共用 CSS 与五处行模板成对
+- test_click_lands_cursor_and_viewport_fallback: 键鼠衔接(报告 26-09-30-1806 方案 B) ——
+  selection.js 五点击入口按所在行回写 kbCursor(写在修饰键分支之前, Ctrl/Shift 点击同样落光标);
+  _kbMove 无光标回落走 _kbViewportRow(前缀和同源校验 / 渲染行可见性扫描, 解析失败退回旧口径)
 - test_local_scope_wiring: G 组抽屉四条 scope=drawer + run 走 drawerTab; settings-save
   inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope 五值三档(settings/drawer/list)齐全;
   浮层打开只放行焦点局部(drawer/settings)键位; 非 inputSafe 条目不得标 inputSafe
@@ -293,12 +296,46 @@ def test_cursor_scroll_follow_without_scrollintoview() -> None:
         ("groups.html", "group", "g.key"),
         ("torrents.html", "torrent", "m.hash"),
         ("shows.html", "show", "s.key"),
+        ("groups.html", "torrent", "m.hash"),  # 明细成员行(点击落光标的视觉落点, 方案 B)
+        ("shows.html", "torrent", "m.hash"),  # 集明细成员行(同上)
     ]:
         text = (SHARED / "tpl" / tpl).read_text(encoding="utf-8")
         assert f"'kb-cursor': isKbCursor('{kind}'" in text, f"{tpl} 缺 {kind} 行光标绑定"
     shows = (SHARED / "tpl" / "shows.html").read_text(encoding="utf-8")
     assert ':data-key="s.key"' in shows, "剧行缺 data-key(光标定位锚点, W2)"
     assert ':data-key="showEpRowId(' in shows, "集行缺 data-key(光标定位锚点, W2)"
+
+
+def test_click_lands_cursor_and_viewport_fallback() -> None:
+    """键鼠衔接(报告 26-09-30-1806 方案 B): 五个点击入口回写 kbCursor(落光标 ≠ 选中);
+    无光标/光标失效回落 = 视口就近行(修「鼠标在列表顶部按一下 ↑ 视口跳到底」的 S1 根因)"""
+    sel = _read("selection.js")
+    for fn, write in [
+        ("onGroupClick", 'this.kbCursor = { kind: "group", id: g.key };'),
+        ("onMemberClick", 'this.kbCursor = { kind: "torrent", id: m.hash };'),
+        ("onTorrentClick", 'this.kbCursor = { kind: "torrent", id: m.hash };'),
+        ("onShowClick", 'this.kbCursor = { kind: "show", id: s.key };'),
+        ("onShowEpClick", 'this.kbCursor = { kind: "ep", id };'),
+    ]:
+        m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
+        assert m, f"selection.js 找不到 {fn}(五点击入口被改名/搬走? 同步本守阵)"
+        body = m.group(1)
+        assert write in body, f"{fn} 缺点击落光标回写(键鼠衔接被静默丢掉: {write})"
+        at = body.find("this.kbCursor")
+        ctrl_at = body.find("event.ctrlKey")
+        assert 0 <= at < ctrl_at, f"{fn} 落光标必须写在修饰键分支之前(Ctrl/Shift+点击同样落光标)"
+    eng = _read("shortcuts.js")
+    move = re.search(r"_kbMove\(delta\) \{(.*?)\n    \},", eng, re.S)
+    assert move, "shortcuts.js 找不到 _kbMove(回落口径落点)"
+    assert "_kbViewportRow(rows, delta)" in move.group(1), "无光标回落必须走视口就近解析(方案 B)"
+    assert "(delta > 0 ? 0 : rows.length - 1)" not in move.group(1), "_kbMove 不得直写极值回落(必须经 _kbViewportRow)"
+    vp = re.search(r"_kbViewportRow\(rows, delta\) \{(.*?)\n    \},", eng, re.S)
+    assert vp, "缺 _kbViewportRow(视口就近回落解析单点)"
+    vb = vp.group(1)
+    assert "_rowPre" in vb and "rows.length + 1" in vb, "窗口化视图必须用 _rowPre 前缀和换算且做长度同源校验(不符放弃, P1-2 口径)"
+    assert "getBoundingClientRect" in vb, "非窗口化/前缀失效时必须扫渲染行可见性(v-if 保证 DOM 只有当前视图)"
+    assert ".scrollIntoView(" not in vb, "回落解析只读几何, 禁 scrollIntoView(pitfalls web-ui/hover-keynav-fight)"
+    assert "rows.length - 1" in vb, "解析失败的保守退路 = 旧口径(↓ 首行 / ↑ 末行)"
 
 
 def test_local_scope_wiring() -> None:

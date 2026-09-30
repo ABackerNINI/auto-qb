@@ -28,6 +28,9 @@
  *   - 光标滚动跟随**禁用 scrollIntoView**(逐层滚动可滚祖先会连带滚整页, pitfalls
  *     web-ui/hover-keynav-fight): 渲染行用 getBoundingClientRect+scrollBy 差值, 窗口化未渲染行
  *     用 _rowWindow 前缀和换算(columns.js 已留存 this._rowPre[kind])。
+ *   - 键鼠衔接(26-09-30-1806 方案 B): 鼠标点击入口(selection.js 五个 on*Click)按所在行回写
+ *     kbCursor —— 落光标 ≠ 选中(focus 语义), 键盘从点击处出发; 无光标回落 = 视口就近行
+ *     (_kbViewportRow), 不再落极值行。滚动跟随仍只发生在键盘路径(_kbApplyCursor)。
  */
 
 /* 纯修饰键: 自身发 keydown, 匹配器等非修饰键落定才判定(录制器把"只按了 Shift"判无效) */
@@ -463,12 +466,54 @@ window.AQB_SHORTCUTS = {
         return;
       }
       const cur = this.kbCursor ? rows.findIndex((r) => r.kind === this.kbCursor.kind && r.id === this.kbCursor.id) : -1;
-      // 光标失效(刷新换人/切视图回落): 下移落首行, 上移落末行; 找得到则裁剪夹取(就近回落口径)
+      // 光标失效(无光标/刷新换人/切视图/点击的明细行不在链上): 回落**视口就近行**(26-09-30-1806
+      // 方案 B) —— 下移落视口内首行, 上移落视口内末行, 一次按键落在眼前, 不再跳极值行(大库上
+      // 即「鼠标在顶部按一下 ↑ 视口跳到底」); 解析不出视口信息才退回旧口径(下移首行/上移末行)。
+      // 找得到光标则裁剪夹取(就近步进口径)。
       const idx = cur < 0
-        ? (delta > 0 ? 0 : rows.length - 1)
+        ? this._kbViewportRow(rows, delta)
         : Math.max(0, Math.min(rows.length - 1, cur + delta));
       if (idx === cur) return;
       this._kbApplyCursor(rows, idx);
+    },
+    /* 无光标回落: 视口就近行(报告 26-09-30-1806 方案 B)。↓(delta>0) 落视口内首行, ↑ 落视口内
+     * 末行。两条解析路: ①窗口化视图(group/torrent)用 _rowPre 前缀和换算文档 y(与
+     * _kbScrollRowIntoView 同源, 长度不符视为失效, 沿用 P1-2 退避口径); ②其余情形(追剧页全量
+     * 渲染 / 小列表不开窗 / 前缀和失效)扫渲染行可见性 —— 视图切换是 v-if, DOM 里只有当前视图。
+     * 都解析不出 → 退回旧口径: ↓ 首行 / ↑ 末行(保守, 不猜错)。只读几何, 滚动仍归 _kbApplyCursor。 */
+    _kbViewportRow(rows, delta) {
+      const headH = this._headH || 0;
+      const vTop = window.scrollY + headH + 4;
+      const vBot = window.scrollY + window.innerHeight - 4;
+      const kind = rows[0].kind === "torrent" || rows[0].kind === "group" ? rows[0].kind : null;
+      const pre = kind && this._rowPre && this._rowPre[kind];
+      if (pre && pre.length === rows.length + 1) {
+        const top = this._winTop[kind] || 0;
+        if (delta > 0) {
+          for (let i = 0; i < rows.length; i++) {
+            if (pre[i + 1] + top > vTop) return i;  // 首个底边伸进视口的行
+          }
+        } else {
+          for (let i = rows.length - 1; i >= 0; i--) {
+            if (pre[i] + top < vBot) return i;  // 末个顶边伸进视口的行
+          }
+        }
+        return delta > 0 ? 0 : rows.length - 1;
+      }
+      const byId = new Map(rows.map((r, i) => [r.id, i]));
+      let first = -1;
+      let last = -1;
+      for (const el of document.querySelectorAll("[data-key], [data-hash]")) {
+        const dk = el.getAttribute("data-key");
+        const i = byId.get(dk !== null ? dk : el.getAttribute("data-hash"));
+        if (i === undefined) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom <= vTop || rect.top >= vBot) continue;  // 完全出视口(display:none 恒 0 也被挡)
+        if (first < 0 || i < first) first = i;
+        if (i > last) last = i;
+      }
+      if (delta > 0) return first >= 0 ? first : 0;
+      return last >= 0 ? last : rows.length - 1;
     },
     _kbMoveTo(idx) {
       const rows = this._kbRows();
@@ -570,7 +615,7 @@ window.AQB_SHORTCUTS = {
     },
     /* ---------------- W2/W3: 选择与目标解析 ---------------- */
     _kbHint() {
-      this.toast("先用 ↑↓ 移到一行, 或点选/框选目标(空列表无动作)", "info", 2500);
+      this.toast("先点选一行, 或用 ↑↓ / Home / End 定位目标(空列表无动作)", "info", 2500);
     },
     /* 追剧页与 _kbRows 同序的单元链(剧单元 + 展开的集单元), 供 _toggleUnit/_extendUnit */
     _kbShowUnits() {

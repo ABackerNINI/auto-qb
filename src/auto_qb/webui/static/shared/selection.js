@@ -1,8 +1,13 @@
-/* auto-qb WEB UI · 跨视图选择(单击/多选/Shift 区间/批量目标聚合)
+/* auto-qb WEB UI · 跨视图选择(单击/多选/Shift 区间/批量目标聚合) + 键鼠衔接(点击落光标)
  *
  * app.js 按域拆分出的片段(2026-09-20)。约定与 config_editor.js / config_rules.js 同一范式:
  * 挂到 window.AQB_SELECTION, 由 app.js 末尾 app.mixin(window.AQB_SELECTION) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
+ *
+ * !键鼠衔接(报告 26-09-30-1806 方案 B): 五个点击入口(onGroupClick / onMemberClick /
+ *   onTorrentClick / onShowClick / onShowEpClick)一律按所在行回写 kbCursor —— 落光标 ≠ 选中
+ *   (focus 语义, 与 2026-09-17「普通点击不选中」口径不冲突), 键盘 ↑↓ / 动作键从刚点击的行出发;
+ *   Ctrl/Shift+点击在原有选中语义之外同样落光标。点击行必在视口内, 不触发滚动跟随。
  *
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_SELECTION);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
@@ -14,6 +19,7 @@ window.AQB_SELECTION = {
       return this.selGroups.includes(g.key);
     },
     onGroupClick(g, event) {
+      this.kbCursor = { kind: "group", id: g.key };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       this.menu.visible = false;
       if (event.ctrlKey || event.metaKey) {
         this.toggleGroupSel(g);
@@ -53,6 +59,7 @@ window.AQB_SELECTION = {
     onMemberClick(m, event) {
       // 普通点击**不再选中**(用户 2026-09-17 明确: 点击种子不触发选择); 仅修饰键选择:
       // Ctrl/⌘ 切换单行, Shift 从锚点整段范围
+      this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接): 只写 focus 语义, 不动选择集合
       if (event.ctrlKey || event.metaKey) {
         this.toggleMemberSel(m);
         return;
@@ -90,6 +97,7 @@ window.AQB_SELECTION = {
     },
     /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围); 普通点击不选中 */
     onTorrentClick(m, event) {
+      this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       this.menu.visible = false;
       if (event.ctrlKey || event.metaKey) {
         this.toggleMemberSel(m);
@@ -195,6 +203,7 @@ window.AQB_SELECTION = {
       this.selMembers = [...new Set([...this.selMembers, ...add])];
     },
     onShowClick(s, event) {
+      this.kbCursor = { kind: "show", id: s.key };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       if (event.ctrlKey || event.metaKey) {
         this._toggleUnit(this._showUnits().find((u) => u.id === "show|" + s.key));
         return;
@@ -207,6 +216,7 @@ window.AQB_SELECTION = {
     },
     onShowEpClick(s, sn, e, event) {
       const id = this.showEpRowId(s.key, sn.season, e.epKeyStr);
+      this.kbCursor = { kind: "ep", id };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       const units = this._epUnits(s);
       if (event.ctrlKey || event.metaKey) {
         this._toggleUnit(units.find((u) => u.id === id));
