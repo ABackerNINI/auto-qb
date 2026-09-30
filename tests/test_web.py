@@ -145,7 +145,7 @@
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
-- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用; L0 下 hr.apply 也必须被调到(HR 路由守阵)
+- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用; L1 只剩重连+web 重启(logging/notify 重挂改经模块 apply, P1); L0 下 hr.apply 也必须被调到(HR 路由守阵)
 - test_apply_new_config_l2_preserves_runtime_state: L2 热重载保留运行期内存 state —— 不得重读磁盘旧版回滚 exec_history/skip_check_day/recheck_fails(issue 26-09-21-1347 守阵)
 - test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
 - test_start_web_server_started_message_is_info: 「WEB UI 已启动」按 INFO 记(alert-levels 契约: 生命周期消息不许 WARNING, 否则 notify 开启时每次启动弹通知)
@@ -5994,12 +5994,12 @@ def test_state_kind_maps_states(state, kind):
 
 
 def test_apply_new_config_levels(monkeypatch):
-    """apply_new_config: 按影响级别应用 —— L0 仅换配置; L1 重挂日志/通知+重连+web 重启;
+    """apply_new_config: 按影响级别应用 —— L0 仅换配置; L1 重连+web 重启(日志/通知重挂自 P1
+    起改经模块 apply 整段短路, 段变才动的守阵在 test_core_modules);
     L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用;
     完成消息按 INFO 记(alert-levels 契约: 热重载是预期动作, WARNING 会被 notify 推成通知)"""
     import logging as std_logging
 
-    from auto_qb.core import qbmanager as qbm
     from auto_qb.config.impact import ConfigChange
     from helpers import make_manager
 
@@ -6018,12 +6018,14 @@ def test_apply_new_config_levels(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         new_cfg = mock.MagicMock(name="new_config")
-        # 副作用隔离: 日志重挂/通知/重连/规则加载均替身(本测试只验证分级分支)
-        mgr._setup_logging = mock.MagicMock()
+        # 模块 apply 的整段相等判定(P1): 新配置钉住与现行相同的 logging/notify 段对象 ——
+        # 本测试只验证分级分支, 模块在新旧段相等时零动作(段变才重挂的守阵在 test_core_modules)
+        new_cfg.logging = mgr.config.logging
+        new_cfg.notify = mgr.config.notify
+        # 副作用隔离: 重连/规则加载均替身(本测试只验证分级分支)
         mgr._load_rules = mock.MagicMock()
         mgr._create_global_tasks = mock.MagicMock()
         mgr.connect = mock.MagicMock(return_value=True)
-        monkeypatch.setattr(qbm, "setup_notify", mock.MagicMock(return_value=std_logging.NullHandler()))
 
         def _apply(changes):
             # diff 结果受控(变更判定本身由 config/impact 单测覆盖)
@@ -6049,11 +6051,18 @@ def test_apply_new_config_levels(monkeypatch):
         assert done_logs[-1].levelno == std_logging.INFO, \
             f"热重载完成是预期动作, 应记 INFO(实为 {done_logs[-1].levelname})"
 
-        # 2. L1: 重挂日志/通知 + 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新)
-        mgr._notify_handler = std_logging.NullHandler()
+        # 2. L1: 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新);
+        #    日志/通知重挂自本段迁入模块 apply(plan P1) —— 本节新旧 logging/notify 段相同,
+        #    模块必须零动作(整段短路), 短路本身的守阵在 test_core_modules
         # 旧配置(复现真实新旧对比): hr_check 也要给上 —— apply_new_config 的 L1 分支要拿旧值
-        # 与新的 channel/shared_dir 比对(见 HrRuntime.apply), 缺了会 AttributeError
-        mgr.config = SimpleNamespace(web=_web_stub(port=38080), hr_check=HrCheckConfig())
+        # 与新的 channel/shared_dir 比对(见 HrRuntime.apply), 缺了会 AttributeError;
+        # logging/notify 段同样钉住(与新配置同对象 -> 模块短路)
+        mgr.config = SimpleNamespace(
+            web=_web_stub(port=38080),
+            hr_check=HrCheckConfig(),
+            logging=new_cfg.logging,
+            notify=new_cfg.notify,
+        )
         new_cfg.web = _web_stub(port=38081)  # 仅端口变化 -> 需重启
         old_handle = mock.MagicMock()
         mgr._web_handle = old_handle
@@ -6071,7 +6080,6 @@ def test_apply_new_config_levels(monkeypatch):
         monkeypatch.setattr("auto_qb.webui.start_web_server", _fake_start)
         res = _apply([ConfigChange("web.port", "L1", 38080, 38081)])
         assert res["levels"] == ["L1"]
-        mgr._setup_logging.assert_called_once()
         mgr.connect.assert_called_once()
         assert calls == [("stop", old_handle), ("start", mgr)], "必须先停旧服务(并等其线程退出)再启新服务"
         assert mgr._web_handle == "新句柄", "web 句柄应换为新服务句柄"
@@ -6127,8 +6135,11 @@ def test_apply_new_config_l2_preserves_runtime_state(monkeypatch):
         # 磁盘上是「上次退出版本」的旧版(内容与内存不同)
         with open(os.path.join(td, "state.json"), "w", encoding="utf-8") as f:
             json.dump({"stale_marker": True}, f)
-        # 替身: 与分级测试同款(只验证 L2 分支行为, 变更判定由 impact 单测覆盖)
-        mgr._setup_logging = mock.MagicMock()
+        # 替身: 与分级测试同款(只验证 L2 分支行为, 变更判定由 impact 单测覆盖);
+        # logging/notify 段钉住现行对象 -> 模块 apply 整段短路(P1), 本守阵只钉 state 语义
+        new_cfg = mock.MagicMock(name="new_config")
+        new_cfg.logging = mgr.config.logging
+        new_cfg.notify = mgr.config.notify
         mgr._load_rules = mock.MagicMock()
         mgr._create_global_tasks = mock.MagicMock()
         mgr.connect = mock.MagicMock(return_value=True)
@@ -6137,7 +6148,7 @@ def test_apply_new_config_l2_preserves_runtime_state(monkeypatch):
         )
 
         queue_before = mgr.task_queue
-        res = mgr.apply_new_config(mock.MagicMock(name="new_config"))
+        res = mgr.apply_new_config(new_cfg)
 
         assert res["levels"] == ["L2"]
         assert mgr.task_queue is not queue_before, "L2 仍应重建任务队列(本守阵只钉 state 语义)"

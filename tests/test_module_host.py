@@ -44,8 +44,9 @@ def test_ctx_services_are_same_objects():
         assert mgr.ctx.config is mgr.config, "ctx.config 与 manager.config 必须同对象"
         assert mgr.ctx.state.data is mgr.state, "manager.state 是 ctx.state 服务载荷本身(同一 dict)"
         assert mgr.ctx.state.state_file == mgr.state_file
-        # 宿主与总线挂在内核侧, 指向同一 ctx
-        assert mgr.host is not None and mgr.host.modules() == (), "P0 注册零个模块(纯编排骨架)"
+        # 宿主与总线挂在内核侧, 指向同一 ctx; P1 起装配清单挂入基建两模块(plan §3.3 顺序前缀)
+        assert [m.name for m in mgr.host.modules()] == ["logging", "notify"]
+        assert mgr.ctx.notify is mgr.host.get("notify"), "托盘经 ctx.notify 调公开方法(单一真相)"
 
 
 def test_state_dict_identity_survives_reassignment():

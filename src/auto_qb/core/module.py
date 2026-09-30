@@ -2,8 +2,8 @@
 
 目标模型(plan §3/§4): QbManager 瘦身为纯调度内核 —— 只知「何时」(节拍/相位/生命周期),
 不知「何事」(标签/归组/规则语义); 业务各自成模块, 经统一契约被宿主编排。本文件是契约与
-编排机制的**单点定义**, 只立骨架、零行为变化: P0 阶段 QbManager 构造 ctx 与宿主但注册零个
-模块, start_all / apply_all 均为空操作, 自 P1 起模块逐个挂入。
+编排机制的**单点定义**: P0 立骨架(注册零个模块), P1 起装配清单(core/qbmanager)逐段
+挂入模块 —— logging/notify 先行, 清单见 qbmanager 构造期(plan §3.3)。
 
 三件东西的学名与出处(plan §2):
 - AppContext        IoC 服务定位器变体 —— 服务(store/api/state)挂上下文, 模块经 ctx 取能力,
@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol, runtime_che
 if TYPE_CHECKING:
     from ..config import Config
     from ..torrents import TorrentStore
+    from .modules.notify_mod import NotifyModule
     from .qbapi import QbApi
     from .state import StateService
 
@@ -39,12 +40,15 @@ class AppContext:
       manager.config 自 P0 起只是这里的委托, 测试整对象替换(mgr.config = ...)同样经此生效。
     - store / api / state 由 QbManager.__init__ 按构造序挂入(同一对象, manager 同名属性
       全部委托这里; P0 守阵断言 ctx.store is manager.store)。
+    - notify(P1 起)是模块句柄而非服务: 托盘等外围运行形态经 ctx.notify 调模块**公开方法**
+      (plan §3.2), 不再直写内核私有字段 —— 模块对外暴露面单点在这里。
     """
     def __init__(self, config) -> None:
         self._config = config
         self.store: Optional["TorrentStore"] = None
         self.api: Optional["QbApi"] = None
         self.state: Optional["StateService"] = None
+        self.notify: Optional["NotifyModule"] = None
 
     @property
     def config(self):
@@ -202,7 +206,7 @@ class ModuleHost:
     - register 时回调 module.subscribe(events) —— 相位认领发生在装配点, 宿主不追认;
     - start_all / apply_all 按装配序, stop_all 逆序(后建的先拆);
     - loop hooks 按「有则调用无则跳过」的 getattr 探测执行(见 Module 契约注释);
-    - P0 阶段注册零个模块: 下列方法全部是空操作, 守阵用假模块锁编排语义。
+    - P0 守阵期曾注册零模块锁编排语义; P1 起装配清单挂入真实模块(守阵同时锁两者)。
     """
     def __init__(self, ctx: AppContext, events: EventBus) -> None:
         self._ctx = ctx

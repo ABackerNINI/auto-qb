@@ -23,10 +23,10 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 - web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排)
 - qbclient            (独立模块)       qB 客户端构造(本地地址关闭 trust_env)
 
-内核地基(plan kernel-module-refactor P0): 构造期立 AppContext(ctx)并把能力服务挂上
+内核地基(plan kernel-module-refactor): 构造期立 AppContext(ctx)并把能力服务挂上
 (store/api/state), 本类同名属性自此刻起全部是**委托**(ctx 为单一真相, 守阵断言同对象);
-ModuleHost / EventBus 骨架同步建立(plan §3/§4) —— P0 注册零个模块(纯编排机制, 空操作),
-自 P1 起模块逐个挂入, 最终收敛为「宿主只知何时, 不知何事」。
+ModuleHost / EventBus 编排机制 + 装配清单在构造期建立 —— P0 立骨架, P1 起挂入真实模块
+(logging/notify 基建样板), 最终收敛为「宿主只知何时, 不知何事」。
 """
 import logging
 import os
@@ -51,10 +51,10 @@ from .mixins import (
     TrackerMixin,
 )
 from .module import AppContext, EventBus, ModuleHost
+from .modules import LoggingModule, NotifyModule
 from .state import StateService
 from ..webui.commands import WebCommandsMixin
 from ..webui.views import WebviewMixin
-from ..infra.notify import NotifyHandler, setup_notify
 from .qbapi import QbApi
 from .qbclient import _new_client
 from ..rules import Rule
@@ -69,7 +69,6 @@ from ..torrents import (
     missing_torrent_fields,
 )
 from ..infra import utils
-from ..infra.logging import setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -197,15 +196,23 @@ class QbManager(
         # 内核地基(plan kernel-module-refactor P0): ctx 先立 —— config/store/api/state 挂上
         # ctx, 本类同名属性自此刻起全部委托 ctx(单一真相; 见下方服务委托属性区)。
         self.ctx = AppContext(config or load_config(config_path))
-        # 事件总线与模块宿主(plan §3/§4 骨架): P0 注册零个模块, start_all/apply_all 均为
-        # 空操作, 纯编排机制先行; 装配清单(MODULES)自 P1 起在此逐个 register。
+        # 事件总线与模块宿主(plan §3/§4): 宿主持注册表并编排生命周期, 总线供相位广播
         self.events = EventBus()
         self.host = ModuleHost(self.ctx, self.events)
+        # 装配清单(plan §3.3): 顺序 = 相位内消费序 = 生命周期序, 内核唯一「知道模块名字」的
+        # 地方。P1 挂入基建两模块(logging/notify); P2+ 按此顺序逐段补齐: webui → hr →
+        # tracker → speed_curve → maintenance → grouping → ops → rules(rules 最后: 它消费
+        # 前面所有人的服务)。
+        self.host.register(LoggingModule())
+        self.ctx.notify = NotifyModule(self.ctx)  # 托盘经 ctx.notify 调公开方法(plan §3.2)
+        self.host.register(self.ctx.notify)
         # 文件访问层单点(plan 26-09-27-1407): 下载数据目录的全部本地访问经此包装;
         # fs 段 R 级热重载 —— 单例在此按配置构建一次, 运行期不切换
         file_access.init_file_access(self.config)
         self._fs_path_map_checked = False  # 映射自检一次性闸门(首轮全量同步后跑, 见 _refresh_torrents)
-        self._setup_logging()
+        # 日志初始化经 logging 模块(plan P1): 实现单点在 LoggingModule; dry_run 与日志无关
+        # (dry-run/导出模式同样要日志), 故这里恒传 False, run() 的 start_all 靠 start 幂等合流
+        self.host.get("logging").start(self.ctx, dry_run=False)
         # 种子信息数据层: 增量同步 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
         # 每 main_tick 只拉变化部分(sync/maindata)后, 本 tick 内所有读取操作都只通过 self.store 接口访问
         self.store = TorrentStore()
@@ -230,8 +237,6 @@ class QbManager(
         # 连接状态(节流重复连接错误日志): None=未知/首次, True=已连接, False=已断开
         # 仅状态转换时记录, 断开期间静默(qB 宕机时不刷屏)
         self._last_conn_ok: Optional[bool] = None
-        # 主动通知 handler(run() 启用时挂载; dry-run/export 模式不挂载)
-        self._notify_handler: Optional[NotifyHandler] = None
         # WEB UI: 表现层门面 —— 视图快照 / 版本号 / 脏标记 / 活跃心跳 / 回执 / 命令队列 /
         # 搜索索引 / 密钥与句柄 全部收在 WebUIRuntime 里, 主循环只见它暴露的少数语义方法。
         # (2026-09-20 从本类拆出: 原先 19 个表现层字段平铺在 __init__, 主循环因此要替表现层
@@ -342,10 +347,6 @@ class QbManager(
     def _next_state_flush_at(self, value: float) -> None:
         self.ctx.state.next_flush_at = value
 
-    def _setup_logging(self):
-        logging_conf = self.config.logging
-        setup_logging(logging_conf.file, logging_conf.level, logging_conf.max_bytes, logging_conf.format)
-
     def _reset_reconnect_backoff(self) -> None:
         """连接成功后清零退避(下次断开从最短间隔重新开始)"""
         self._reconnect_at = 0.0
@@ -441,8 +442,9 @@ class QbManager(
         # 端口被占 => HrChannelBindError 直接穿透到 CLI 干净退出(fail-fast, 不静默降级)。
         if not dry_run:
             self.hr.start()
-        if not dry_run:
-            self._notify_handler = setup_notify(self.config.notify)
+        # 模块启用(plan P1): 通知挂载改经 NotifyModule.start(dry-run/未启用 = 无操作, 模块
+        # 自判), logging 已在构造期初始化(start 幂等跳过)。P2 起 web/hr 启动块并入 start_all。
+        self.host.start_all(dry_run)
         try:
             main_tick = self.config.main_tick
             # 首连失败: 托管模式按 main_tick 重试直至成功/停止; 非托管模式 fail-fast 抛
@@ -607,10 +609,11 @@ class QbManager(
         - L0 即时生效(仅替换 Config 对象): main_tick/state_save_interval/max_tasks_per_tick/remove_similar_tags/
           skip_checking_tag/grouping.*/add_episode_tags.*/trackers.X.tags|remove_tags|remove_similar_tags|
           limits|hr.*(运行时动态读取, 数据/任务/分组全保留)
-          !HR 例外: 服务对象按值持有站点表, 「仅替换对象」对它不够 —— hr.apply 在 L0/L2 下也会被调
-          (见下方调用点), 由它自判重建/短路
-        - L1 轻量应用: logging 重挂 / 通知 handler 重挂 / qbittorrent 重连 / web 服务器
-          **仅在"监听身份"(enabled/host/port)变化时重启**(次序: 停旧并等其线程退出 -> 启新, 见 _apply_web_config)
+          !HR 例外: 服务对象按值持有站点表, 「仅替换对象」对它不够 —— hr.apply 每次热重载都会
+          被调(见下方调用点), 由它自判重建/短路
+        - L1 轻量应用: qbittorrent 重连 / web 服务器**仅在"监听身份"(enabled/host/port)变化时重启**
+          (次序: 停旧并等其线程退出 -> 启新, 见 _apply_web_config); logging/notify 重挂自 P1 起
+          改经模块 apply(host.apply_all 广播, 整段相等即短路), 不再走本分支
         - L2 结构重建: 重建任务队列与规则 + 全部记录重匹配 tracker(保留 store 记录/分组/执行历史)
         - R(state_file/data_dir 变更): 拒绝热应用, 返回 restart_required 提示重启进程
         """
@@ -621,20 +624,19 @@ class QbManager(
         if restart_required:
             logger.info(f"以下配置需重启进程才能生效: {restart_required}")
         levels = sorted({c.level for c in changes if c.level != "R"})
-        # L1 分支需对比新旧 web 段(替换后旧对象不可达)
-        old_web = self.config.web
-        old_hr_check = self.config.hr_check
+        # 旧配置先留底(替换后旧对象不可达): 模块 apply 的整段相等对比与 web/hr 的 L1/L0 判定都要用
+        old = self.config
+        old_web = old.web
+        old_hr_check = old.hr_check
         # L0: 替换配置对象(动态读取项即刻生效)
         self.config = config
         # 分组视图含由配置派生的展示值(HR 标签模板如 ${required_seeding_time}, 见 _hr_view_fields),
         # 配置变了视图内容就可能变 —— 与 store 视图字段变化无关, 需显式置脏
         self.web.mark_dirty()
+        # 统一挂载口(plan P1, hot-reload W1+W2 子集): 每模块**无条件** apply, 自判整段短路 ——
+        # logging/notify 的重挂知识自 L1 分支迁入各自模块; L1 分支暂留 qb 重连 + web 重启(影子并行, P2 迁出)
+        self.host.apply_all(old, config)
         if "L1" in levels:
-            self._setup_logging()
-            if self._notify_handler is not None:
-                logging.getLogger("auto_qb").removeHandler(self._notify_handler)
-                self._notify_handler = None
-            self._notify_handler = setup_notify(config.notify, force=True)
             self.client = None
             self._last_conn_ok = None
             self.connect()

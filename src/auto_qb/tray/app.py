@@ -23,7 +23,7 @@ from collections import deque
 
 from ..infra import autostart, utils
 from ..infra.errors import AutoQbError
-from ..infra.notify import WINDOWS_TOAST_APPID, setup_notify
+from ..infra.notify import WINDOWS_TOAST_APPID
 from ..core.qbmanager import QbManager
 
 logger = logging.getLogger(__name__)
@@ -401,10 +401,11 @@ class TrayUi:
         self.badge.configure(text=badge, text_color=color)
         self.pause_btn.configure(text="恢复自动管理" if snap["paused"] else "暂停自动管理")
         # 通知开关同步: handler 由 manager 线程的 run() 挂载, 晚于窗口构建(配置已启用时
-        # Switch 初始为未选中, 此处按 handler 实际状态补正; 用户切换时两边即时一致)
-        handler = self.manager._notify_handler
-        if handler is not None and bool(self.notify_switch.get()) != handler.enabled:
-            if handler.enabled:
+        # Switch 初始为未选中, 此处按模块实际状态补正; 用户切换时两边即时一致) ——
+        # 经 ctx.notify 公开口读状态(plan P1), 不直写内核私有字段
+        state = self.manager.ctx.notify.enabled_state()
+        if state is not None and bool(self.notify_switch.get()) != state:
+            if state:
                 self.notify_switch.select()
             else:
                 self.notify_switch.deselect()
@@ -423,8 +424,7 @@ class TrayUi:
         return f"{seconds // 86400}天{(seconds % 86400) // 3600:02d}时"
 
     def _notify_on(self) -> bool:
-        handler = self.manager._notify_handler
-        return handler is not None and handler.enabled
+        return bool(self.manager.ctx.notify.enabled_state())
 
     # ---------- 动作 ----------
 
@@ -453,11 +453,11 @@ class TrayUi:
         logger.info("已暂停自动管理" if paused else "已恢复自动管理")
 
     def _toggle_notify(self):
-        handler = self.manager._notify_handler
-        if handler is None:
+        notify = self.manager.ctx.notify
+        if notify.enabled_state() is None:
             # 配置未启用通知: 会话内动态挂载(重启后回到配置状态); 平台不支持则弹窗提示, 开关由勾选态回弹
             try:
-                self.manager._notify_handler = setup_notify(self.manager.config.notify, force=True)
+                notify.set_enabled(True)
             except AutoQbError as e:
                 from tkinter import messagebox
 
@@ -466,12 +466,13 @@ class TrayUi:
             self.notify_switch.select()
             logger.info("主动通知已开启(会话级, 重启后回到配置状态)")
             return
-        handler.enabled = not handler.enabled
-        if handler.enabled:
+        on = not notify.is_enabled()
+        notify.set_enabled(on)
+        if on:
             self.notify_switch.select()
         else:
             self.notify_switch.deselect()
-        logger.info("主动通知已%s", "开启" if handler.enabled else "关闭")
+        logger.info("主动通知已%s", "开启" if on else "关闭")
 
     def _toggle_autostart(self):
         try:
