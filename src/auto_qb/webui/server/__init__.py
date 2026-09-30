@@ -1,8 +1,8 @@
 """WEB UI 后端(包): FastAPI 应用工厂(只读快照 + 命令投递, 不直接触碰主循环状态)
 
 线程模型: uvicorn 在独立线程运行; 本包的所有请求处理器只做两件事——
-1) 读取 manager 暴露的只读快照(_group_view/status_snapshot, 主循环每 tick 原子替换);
-2) 向 manager.web_commands 投递控制命令(由主循环线程消费执行, 写操作只在主循环线程)。
+1) 读取 manager.web 暴露的只读快照(group_view/status_snapshot, 主循环每 tick 原子替换);
+2) 向 manager.web.commands 投递控制命令(由主循环线程消费执行, 写操作只在主循环线程)。
 
 鉴权: 所有 /api/* 请求校验 Bearer 密钥; 密钥来自 config.web.token, 留空则随机生成并
 持久化到 <data_dir>/web.token(0600), 启动日志打印一次。默认仅监听 127.0.0.1。
