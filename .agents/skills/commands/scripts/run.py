@@ -11,11 +11,14 @@ EVIDENCE: 协议行收尾(语义单点在脚本), 失败时紧跟 [FAIL] 行转�
 输出**一律全文透传, 引擎不做有损摘要**: 「略过 N 行 + show 拿命令直接跑」的提示会把调用方逼成
 show → 裸跑两步返工, 会话后期每步都是带全量历史的整轮请求, 省几行换两轮 token 永远亏。
 省 token 走**声明式静默**: 任务自己在包配置里标 silent_success —— 成功只出结论行, 失败照旧全文。
+编码口径(2026-09-30): 引擎**自身**的 stdout/stderr 在 main() 入口锁 UTF-8 —— 管道下不再按
+本地码页出中文(否则部分终端乱码, 详单在 pitfalls/ops/console-encoding.md)。
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import locale
 import os
@@ -233,6 +236,24 @@ def _decode(raw: bytes | None) -> str:
     return data.decode("utf-8", errors="replace")
 
 
+def _utf8_self_stdio(*streams: io.TextIOBase | None) -> None:
+    """把引擎**自己**的 stdout/stderr 锁成 UTF-8 —— "部分终端乱码"的根因(2026-09-30)。
+
+    子进程侧已有 `_CHILD_ENV` + `_decode` 兜住, 但引擎自己 print 的中文(协议行 / 包摘要 /
+    透传的子进程正文)走的是 Python 自己的 stdio: 真控制台上走 WriteConsoleW(Unicode, 与
+    码页无关, 永不乱); stdout 一旦是**管道**(Git Bash 的 mintty、AI 工具捕获、`| tee`、
+    CI 日志), 编码就回退本地码页 cp936 —— 实测 `show kb.active` 的 `何时用` 在管道下按
+    GBK 出字节, 按 UTF-8 解的对端看到的就是乱码, 且退出码照旧 0; Windows Terminal /
+    VS Code 这类真控制台终端正常 —— 这就是"部分终端"的分界线
+    (详单: pitfalls/ops/console-encoding.md)。
+    errors=replace 与 `_decode` 同款: 编不出的字符降级显示, 不让打印本身抛
+    UnicodeEncodeError 把整条命令打死。
+    """
+    for stream in streams or (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def _protocol_lines(out: str) -> list[str]:
     """输出里的协议行(RESULT / WHY / NEXT / EVIDENCE), 原样保序 —— 失败转述用。"""
     return [ln for ln in out.splitlines() if _RESULT.match(ln)]
@@ -307,6 +328,7 @@ def _toml_block(args: argparse.Namespace) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _utf8_self_stdio()  # 引擎自己的输出先锁 UTF-8 —— 管道对端一律按 UTF-8 解(见函数 docstring)
     parser = argparse.ArgumentParser(
         prog="run.py",
         description="项目命令的统一调用面 —— 只认 task id, 命令本体在包里单点定义。",

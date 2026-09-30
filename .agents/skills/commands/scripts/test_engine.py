@@ -22,9 +22,13 @@ test.pkg 收集面 = .commands + .agents/skills/commands, 改引擎必被收到(
 - test_run_success_keeps_evidence                成功路径协议行(证据)存活
 - test_run_selfcheck_compressed                  risky 自证 = 首条 + 条数, 不再全量打印
 - test_run_timeout_names_command                 超时指名卡住的命令
+- test_utf8_self_stdio_reconfigures_text_layer   引擎自身 stdio 锁 UTF-8: cp936 文本层重配后中文按 UTF-8 出
+- test_engine_self_stdio_utf8_in_pipes           管道 + 剥离 UTF-8 变量子进程: 引擎输出 strict UTF-8 解码必过
 """
 
 import argparse
+import io
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -213,3 +217,37 @@ def test_extra_run_type_quoted_on_substitution():
     task = tree.tasks["dev.fmt"]
     cmds = C.task_commands(task, tree.root, ["R:/Temp/x y/a b.py"])
     assert 'yapf -i "R:/Temp/x y/a b.py"' in cmds[0]
+
+
+def test_utf8_self_stdio_reconfigures_text_layer():
+    """助手单测: cp936 文本层被重配成 UTF-8 —— 与系统码页无关, 全平台确定。"""
+    buf = io.BytesIO()
+    stream = io.TextIOWrapper(buf, encoding="cp936")
+    engine._utf8_self_stdio(stream)
+    stream.write("何时用")
+    stream.flush()
+    assert buf.getvalue() == "何时用".encode("utf-8")
+
+
+def test_engine_self_stdio_utf8_in_pipes():
+    """管道 + 剥离全局 UTF-8 变量: 引擎自己的输出必须仍是 UTF-8(部分终端乱码的端到端回归)。
+
+    真控制台走 WriteConsoleW 永不乱; 乱的是 stdout 被管道接住且进程没开 UTF-8 模式的
+    场景(mintty / AI 工具捕获 / CI 日志) —— 剥变量就是在模拟它。strict 解码: 引擎若仍
+    按本地码页出, 这里当场 UnicodeDecodeError, 静默乱码变硬失败。系统码页本就是 UTF-8
+    的机器上本测试失去分辨力(不假红, 与 _local_codepage 的口径一致)。
+    """
+    env = {
+        k: v
+        for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING", "PYTHONLEGACYWINDOWSSTDIO")
+    }
+    proc = subprocess.run(
+        [sys.executable, str(Path(engine.__file__)), "show", "no-such.task"],
+        capture_output=True,
+        env=env,
+        timeout=60,
+        cwd=str(C.find_root()),
+    )
+    assert proc.returncode == 1
+    text = proc.stderr.decode("utf-8")  # strict —— 引擎仍按 GBK 出的话这里当场炸
+    assert "没有这个 task" in text
