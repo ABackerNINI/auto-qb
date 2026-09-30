@@ -36,9 +36,9 @@ user-invocable: true
 | `show <task>` | 打印展开命令与 `doc` 深读指针,不执行(排障/自证) |
 | `add` | 收录一条命令进包(默认 dry-run) |
 
-`run` 默认只回摘要;`requires`/`risky` 任务先自证**首条**命令(共 N 条, 全量 `show`)再跑。
-摘要 = **末几行结论 + 异常行**(`[WARN]`/`[FAIL]`/`Traceback`,封顶 8 行)—— ❗检查表的 WARN 内容在中段, 只取末几行等于逼调用方重跑。协议行 `RESULT/WHY/NEXT/EVIDENCE:` 与异常行**同权必保**, 失败时紧跟 `[FAIL]` 转述; **文本无裸 rc**。
-结论行(`N passed`/`TOTAL`)**无条件必保**(警告明细可能打在其后)。`silent_success = true`(test.full/quick): 成功只出结论行、无略过提示; 信息类不加, 有损摘要靠提示兜底。
+`run` 输出**全文透传, 引擎不做有损摘要**;`requires`/`risky` 任务先自证**首条**命令(共 N 条, 全量 `show`)再跑。
+❗「有损摘要 + 略过 N 行提示」是反模式(2026-09-30 定调): 提示会把调用方逼成 show → 裸跑两步返工, 会话后期每步都是带全量历史的整轮请求 —— 省 3 行换两轮 token, 永远亏。协议行 `RESULT/WHY/NEXT/EVIDENCE:` 失败时紧跟 `[FAIL]` 转述(正文剥掉不重复); **文本无裸 rc**。
+省 token 走**声明式静默**: 任务在包配置标 `silent_success = true`(test.full/quick/pkg) → 成功只出结论行(`N passed`/`TOTAL`), 失败照旧全文; 想看明细 = 主动 `show` 加参数, 不是被提示逼的返工。内部命令「能静默尽量静默」靠这条旗标, 不靠引擎截断。
 
 ## 引导:一次平铺, 不下钻
 

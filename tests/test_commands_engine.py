@@ -1,14 +1,16 @@
-"""test_commands_engine 测试计划: commands 引擎(`.agents/skills/commands/scripts/`)的输出预算与 id 解析
+"""test_commands_engine 测试计划: commands 引擎(`.agents/skills/commands/scripts/`)的输出契约与 id 解析
 
 引擎不在 `src/` 下(pytest.ini 的 pythonpath 只含 src), 用路径显式装载。
+输出契约守阵(2026-09-30 定调): 默认**全文透传**, 无有损摘要、无「略过 N 行」提示;
+省 token 走声明式 silent_success(成功只出结论行)—— 摘要 + 提示会逼 agent 调用方
+show → 裸跑两步返工, 会话后期每步都是带全量历史的整轮请求(token 税)。
+输出契约的完整行为矩阵在 .agents/skills/commands/scripts/test_engine.py(随 test.pkg 跑)。
 
 ## 测试计划(每个测试函数一条)
-- test_digest_keeps_anomaly_lines: 摘要必须留住**中段**的异常行 —— 只取末 N 行会让"2 项 WARN"的**内容**消失(实测: 预检因此被跑了两遍)
-- test_digest_keeps_preflight_warn_rows: 回归守阵 —— 预检形态的输出(结论行在最后、WARN 行在中段)摘要里必须同时有两者
-- test_digest_short_output_untouched: 输出本身就短 → 原样返回, 不报"略过"
-- test_digest_caps_anomaly_lines: 异常行也要封顶(病态输出不能把上下文灌满)
-- test_digest_ignores_lowercase_noise: 小写 warnings/error 是正常输出的一部分, 不算异常行
-- test_emit_prints_truncation_note: 有省略时必须打印一行"略过 N 行 + 怎么看全文", 不能静默截断
+- test_passthrough_keeps_middle_warn_lines: 全文透传 —— 检查表中段的 WARN 内容原样可见(有损摘要两版均已被推翻)
+- test_passthrough_preserves_short_output: 短输出原样透传(两格缩进, 无别的加工)
+- test_emit_no_truncation_note: 「略过 N 行 + show 怎么看全文」的提示不得出现
+- test_conclusions_keep_only_conclusion_lines: 声明式静默只留结论行(N passed / TOTAL)
 - test_pick_accepts_pack_qualified_id: 包路径限定写法(`包/子包.<task>` 与 `包.<task>`)与短 id 等价 —— 只认一种会在"看起来对"的另一种上 STOP
 - test_pick_unknown_id_stops_with_howto: 未知 id → STOP 且提示里给出可解析的写法(不是只说"没有这个 task")
 - test_wrapper_bodies_are_platform_specific: POSIX 只给 `commands`, Windows 多一份 `commands.cmd`(cmd/PowerShell 按 PATHEXT 解析)
@@ -73,52 +75,40 @@ def _preflight_like_output() -> str:
     )
 
 
-def test_digest_keeps_anomaly_lines():
-    """摘要留住中段异常行: 只取末 3 行时, "2 项 WARN"的**内容**会被截掉(实测代价 = 重跑一次预检)"""
-    lines, skipped = _engine()._digest(_preflight_like_output())
-    text = "\n".join(lines)
-
-    assert "[WARN] 上游" in text, "中段的 WARN 行必须留下(否则调用方只能重跑一遍)"
-    assert "[WARN] 工作区" in text
+def test_passthrough_keeps_middle_warn_lines(capsys):
+    """全文透传(2026-09-30 定调): 检查表中段的 WARN **内容**必须原样可见 —— 摘要的两版
+    (只取末 N 行 / 末 N + 异常行 + 略过提示)都被实测推翻: 前者丢内容, 后者的提示逼调用方重跑或 show 返工"""
+    _engine()._passthrough(_preflight_like_output())
+    text = capsys.readouterr().out
+    assert "[WARN] 上游" in text and "[WARN] 工作区" in text, "中段 WARN 行必须可见"
     assert "可以继续" in text, "结论行照旧保留"
-    assert skipped > 0, "确实略过了若干行"
+    assert "略过" not in text, "全文透传没有省略, 也就没有提示"
 
 
-def test_digest_keeps_preflight_warn_rows():
-    """回归守阵: 结论行 + 中段 WARN 行同时要在 —— 缺任一半都会让人再跑一次"""
-    picked, _ = _engine()._digest(_preflight_like_output())
-    assert any("[WARN]" in ln for ln in picked) and any("无 STOP" in ln for ln in picked)
+def test_passthrough_preserves_short_output(capsys):
+    """短输出原样透传: 只加两格缩进与去空行, 不做任何挑行"""
+    _engine()._passthrough("第一行\n第二行")
+    assert capsys.readouterr().out == "  第一行\n  第二行\n"
 
 
-def test_digest_short_output_untouched():
-    """短输出原样返回(不截断、不报略过)"""
-    picked, skipped = _engine()._digest("第一行\n第二行")
-    assert picked == ["第一行", "第二行"] and skipped == 0
-
-
-def test_digest_caps_anomaly_lines():
-    """异常行封顶: 病态输出(满屏 FAILED)不能把上下文灌满"""
-    mod = _engine()
-    out = "\n".join(f"FAILED test_{i}" for i in range(50))
-    picked, skipped = mod._digest(out)
-    assert len(picked) <= mod.SUMMARY_LINES + mod.ANOMALY_MAX
-    assert skipped == len(out.splitlines()) - len(picked)
-
-
-def test_digest_ignores_lowercase_noise():
-    """小写 warnings / error 是正常输出的一部分(pytest 收尾行), 不该被当成异常行抽出来"""
-    mod = _engine()
-    out = "\n".join(["line 0", "6 warnings in 1.0s"] + [f"line {i}" for i in range(2, 12)])
-    picked, _ = mod._digest(out)
-    assert "6 warnings in 1.0s" not in picked, "小写 warnings 不是异常行"
-    assert picked == ["line 9", "line 10", "line 11"], "只保留末 3 行"
-
-
-def test_emit_prints_truncation_note(capsys):
-    """截断必须可见: 打印"略过 N 行 + 怎么看全文", 不静默丢"""
-    _engine()._emit("\n".join(f"line {i}" for i in range(20)), "test.quick")
+def test_emit_no_truncation_note(capsys):
+    """「略过 N 行 + show 拿命令直接跑」的提示不得出现 —— 它会把 agent 调用方逼成
+    show → 裸跑两步返工, 会话后期每步都是带全量历史的整轮请求(token 税, 2026-09-30 定调)"""
+    _engine()._emit("\n".join(f"line {i}" for i in range(20)))
     out = capsys.readouterr().out
-    assert "略过 17 行" in out and "show test.quick" in out
+    assert "line 0" in out and "line 19" in out, "默认成功 = 全文透传, 首尾都在"
+    assert "略过" not in out and "show " not in out
+
+
+def test_conclusions_keep_only_conclusion_lines():
+    """声明式静默(silent_success 任务): 成功只留结论行(N passed / TOTAL), 明细不上屏"""
+    mod = _engine()
+    out = "\n".join(
+        [f"cov row {i:02d}"
+         for i in range(10)] + ["1818 passed, 3 skipped, 6 warnings in 20.09s", "TOTAL 12504 914 4204 388 91%"]
+    )
+    picked = mod._conclusions(out)
+    assert picked == ["1818 passed, 3 skipped, 6 warnings in 20.09s", "TOTAL 12504 914 4204 388 91%"]
 
 
 def test_pick_accepts_pack_qualified_id():

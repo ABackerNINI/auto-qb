@@ -5,9 +5,12 @@
 
 退出码: 0 成功 · 1 失败(配置写错 / 占位符展不开 / 前置不满足 / 命令本身非 0 —— 统一 0/1, 语义只在输出)
 
-输出契约(2026-09-27 P1, 计划 26-09-26-2345): 包脚本可用 RESULT: / WHY: / NEXT: / EVIDENCE:
-协议行收尾(语义单点在脚本); 引擎保证协议行不被摘要截掉, 失败时紧跟 [FAIL] 行转述。
-文本输出**不出现裸 rc 数字** —— 退出码只走进程通道, 语义只在协议行, 免得调用方去查码表。
+输出契约(2026-09-27 P1, 计划 26-09-26-2345; 2026-09-30 修订): 包脚本可用 RESULT: / WHY: / NEXT: /
+EVIDENCE: 协议行收尾(语义单点在脚本), 失败时紧跟 [FAIL] 行转述; 文本输出**不出现裸 rc 数字** ——
+退出码只走进程通道, 语义只在协议行, 免得调用方去查码表。
+输出**一律全文透传, 引擎不做有损摘要**: 「略过 N 行 + show 拿命令直接跑」的提示会把调用方逼成
+show → 裸跑两步返工, 会话后期每步都是带全量历史的整轮请求, 省几行换两轮 token 永远亏。
+省 token 走**声明式静默**: 任务自己在包配置里标 silent_success —— 成功只出结论行, 失败照旧全文。
 """
 
 from __future__ import annotations
@@ -29,16 +32,11 @@ import _tree as T  # noqa: E402
 
 STOP = 1
 FAILED = 1  # 命令本身非 0 —— 与 STOP 同为失败; 语义全在输出里, 码表没有存在的必要(计划 26-09-28-0157)
-SUMMARY_LINES = 3  # 成功时回的最后几行(结论行, 如 "1207 passed")
-ANOMALY_MAX = 8  # 额外保留的异常行上限
-FAILURE_LINES = 40  # 失败时最多回多少行(要细节, 但也不是整段)
-# 异常行判据: 只认工具自己的分级标记与大写关键字 —— 小写的 "warnings"/"error" 是正常输出的一部分。
-_ANOMALY = re.compile(r"\[(?:WARN|STOP|FAIL)\]|\b(?:FAILED|ERROR|Traceback)\b")
-# 协议行判据(输出契约): 与异常行同权必保 —— 成功证据不再靠"恰好落在末 N 行"的运气存活。
+SUMMARY_LINES = 3  # silent_success 任务无结论形态时的兜底末几行
+# 协议行判据(输出契约): 失败时从正文剥出来紧跟 [FAIL] 转述 —— 全文透传后若不剥, 协议行会出现两遍。
 _RESULT = re.compile(r"^\s*(?:RESULT|WHY|NEXT|EVIDENCE):")
-# 结论行判据(W2, 计划 26-09-28-0157 §10): pytest 的 "N passed…" 与覆盖率的 "TOTAL …" 是任务
-# 的存在意义本身, 但 pytest 的警告明细可能打在它们之后 —— 末 N 行会被噪音挤掉结论(实测
-# test.full: 可见区只剩 RequestsDependencyWarning)。结论行无条件必保, 不参与 break 竞争。
+# 结论行判据(silent_success, 计划 26-09-28-0157 §10): pytest 的 "N passed…" 与覆盖率的 "TOTAL …" 是
+# 任务的存在意义本身, 但警告/覆盖率明细可能打在其前其后 —— 声明式静默只留这类行, 其余不上屏。
 _CONCLUSION = re.compile(r"^\s*\d+ (?:passed|failed)\b|^\s*TOTAL\s|^\s*no tests ran\b")
 
 # 子进程必须说 UTF-8。Windows 上 Python 子进程的 stdout 一旦被管道接住, 编码取的是
@@ -90,10 +88,10 @@ def cmd_run(args: argparse.Namespace) -> int:
             body = _strip_protocol(out) if proto else out
             for ln in proto:  # 协议行紧跟 [FAIL] —— 语义单点在脚本, 引擎只负责让它可见
                 print(f"  {ln}")
-            _emit(body, task.id, limit=FAILURE_LINES)
+            _passthrough(body)
             return FAILED
         print(f"[ok] {task.id} ({spent:.1f}s)")
-        _emit(out, task.id, silent_success=task.silent_success)
+        _emit(out, silent_success=task.silent_success)
     return 0
 
 
@@ -245,47 +243,39 @@ def _strip_protocol(out: str) -> str:
     return "\n".join(ln for ln in out.splitlines() if not _RESULT.match(ln))
 
 
-def _digest(out: str, limit: int = SUMMARY_LINES, conclusions_only: bool = False) -> tuple[list[str], int]:
-    """把输出压成"结论 + 异常行", 返回 (要打印的行, 被略过的行数)。
+def _passthrough(out: str) -> None:
+    """全文透传 —— 引擎不做有损摘要(2026-09-30 定调, 见模块 docstring)。
 
-    ❗**只取末 N 行是错的**: 检查表这类输出的末几行是"无 STOP; 2 项 WARN"这类**结论**,
-    而 WARN 的**内容**在中段 —— 截掉之后调用方只能把整条命令重跑一遍才能看到,
-    省下的几行换来一整次重跑(实测: 预检被跑了两遍)。异常行必须留下。
-    行序保持原样 —— 摘要是"挑行", 不是"重排"。
-    ❗结论行(N passed / TOTAL)无条件必保, 不与异常行竞争 break 名额 —— pytest 的警告
-    明细打在结论行之后, 末 N 行会把结论挤成"略过"(W2 实测)。
-    `conclusions_only`(对应任务旗标 silent_success): 成功输出只留结论行 —— 一条没中
-    (输出形态变了)就退回末 N 行, 不让输出彻底变盲; 配合 _emit 不打略过提示。
+    有损摘要 + 「略过 N 行; show 拿命令直接跑」的提示会把调用方逼成 show → 裸跑两步返工:
+    会话后期每步都是带全量历史的整轮请求, 省 3 行换两轮 token 永远亏(实测教训, 详见
+    pitfalls/kb/scripts.md)。空行不打印 —— 两格缩进会把空行打成尾随空白; 内容行一个不丢。
+    """
+    for ln in out.splitlines():
+        if ln.strip():
+            print(f"  {ln.rstrip()}")
+
+
+def _conclusions(out: str, limit: int = SUMMARY_LINES) -> list[str]:
+    """silent_success 任务的成功输出: 只留结论行(N passed / TOTAL / no tests ran)。
+
+    与已退役的通用有损摘要不同, 这是任务在包配置里**声明**的静默 —— 不打「略过」提示,
+    调用方要明细是主动 show 取命令加参数, 不是被提示逼出的两步返工。
+    一条结论都没中(输出形态变了)就退回末 N 行, 不让输出彻底变盲。
     """
     lines = [ln.rstrip() for ln in out.splitlines() if ln.strip()]
     if len(lines) <= limit:
-        return lines, 0
-    if conclusions_only:
-        picked = [ln for ln in lines if _CONCLUSION.match(ln)]
-        if picked:
-            return picked, len(lines) - len(picked)
-        return lines[-limit:], len(lines) - limit
-    keep = set(range(len(lines) - limit, len(lines)))
-    for i, line in enumerate(lines):
-        if _CONCLUSION.match(line):
-            keep.add(i)
-    for i, line in enumerate(lines):
-        if len(keep) >= limit + ANOMALY_MAX:
-            break
-        if _ANOMALY.search(line) or _RESULT.match(line):
-            keep.add(i)
-    picked = [lines[i] for i in sorted(keep)]
-    return picked, len(lines) - len(picked)
+        return lines
+    picked = [ln for ln in lines if _CONCLUSION.match(ln)]
+    return picked if picked else lines[-limit:]
 
 
-def _emit(out: str, task_id: str, limit: int = SUMMARY_LINES, silent_success: bool = False) -> None:
-    """silent_success(W2-4): 成功路径只出结论行、不打「略过 N 行」提示 —— 给"成功即静默"的任务
-    (test.full / test.quick)声明; 信息类命令(kb.active 等)不加旗标, 有损摘要的提示照旧兜底。"""
-    picked, skipped = _digest(out, limit, conclusions_only=silent_success)
-    for line in picked:
-        print(f"  {line}")
-    if skipped and not silent_success:
-        print(f"  …(略过 {skipped} 行; 要看全文: show {task_id} 拿到命令后直接跑)")
+def _emit(out: str, silent_success: bool = False) -> None:
+    """成功输出: 默认全文透传; silent_success 任务只出结论行 —— 两种形态都不打「略过」提示。"""
+    if silent_success:
+        for line in _conclusions(out):
+            print(f"  {line}")
+        return
+    _passthrough(out)
 
 
 def _toml_block(args: argparse.Namespace) -> str:

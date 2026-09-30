@@ -1,23 +1,27 @@
-"""引擎输出契约测试 —— RESULT 协议 / 无裸 rc / 自证压缩 / 超时指名(计划 26-09-26-2345 P1)。
+"""引擎输出契约测试 —— RESULT 协议 / 无裸 rc / 全文透传 / 声明式静默 / 自证压缩 / 超时指名。
 
 被测对象是 commands 引擎本体(.agents/skills/commands/scripts/run.py), 测试贴着引擎放;
 test.pkg 收集面 = .commands + .agents/skills/commands, 改引擎必被收到(修复"闸门空转")。
 不碰真实仓库状态: cmd_run 的 _shell 全部 monkeypatch, load_tree 只读真实包配置。
 
+输出形态(2026-09-30 定调): 默认**全文透传**, 引擎不做有损摘要、不打「略过 N 行」提示 ——
+摘要 + 提示会逼调用方 show → 裸跑两步返工(会话后期每步都是带全量历史的整轮请求, token 税)。
+省 token 走声明式: 任务标 silent_success → 成功只出结论行, 失败照旧全文。
+
 ## 测试计划
-- test_digest_keeps_result_lines         摘要必保 RESULT/WHY/NEXT/EVIDENCE 协议行
-- test_digest_fallback_without_protocol  无协议行 → 维持"末 N 行 + 异常行"旧行为
-- test_digest_keeps_conclusion_line      W2: 结论行(N passed / TOTAL)无条件必保, 警告明细挤不掉
-- test_digest_conclusion_patterns_are_anchored  结论判据钉锚(行中 passed 不算)
-- test_silent_success_flag_parsed_from_config   W2-4: test.full/quick 从配置解析 silent_success 旗标
-- test_silent_success_suppresses_hint_and_keeps_conclusions  成功只出结论行, 略过提示不给
-- test_silent_success_falls_back_when_no_conclusion  无结论形态 → 退回末 N 行不变盲
-- test_info_command_keeps_truncation_hint  信息类命令的有损摘要提示必须保留
-- test_run_failure_transcribes_protocol  失败路径: [FAIL] 行后转述协议行, 文本无裸 rc
-- test_run_failure_without_protocol      失败且无协议行 → 退回旧摘要, 不炸
-- test_run_success_keeps_evidence        成功路径协议行(证据)存活
-- test_run_selfcheck_compressed          risky 自证 = 首条 + 条数, 不再全量打印
-- test_run_timeout_names_command         超时指名卡住的命令
+- test_conclusions_keep_conclusion_line          声明式静默: 结论行(N passed / TOTAL)必留, 噪音明细不上屏
+- test_conclusions_fallback_when_no_conclusion   无结论形态 → 退回末 N 行, 不变盲
+- test_conclusion_patterns_are_anchored          结论判据钉锚(行中 passed 不算)
+- test_silent_success_flag_parsed_from_config    test.full/quick/pkg 从配置解析 silent_success, 信息类不声明
+- test_silent_success_success_is_quiet           静默任务成功只出结论行; 「略过」提示不给
+- test_silent_success_falls_back_at_cmd_run      静默任务输出形态变了 → cmd_run 层面退回末 N 行, 仍无提示
+- test_run_success_passthrough_full              默认成功: 全文透传, 中段内容原样可见, 无「略过」提示
+- test_run_failure_passthrough_full              失败: [FAIL] + 协议行转述一遍 + 全文, 中段异常行可见, 无提示
+- test_run_failure_transcribes_protocol          失败路径: [FAIL] 行后转述协议行, 文本无裸 rc
+- test_run_failure_without_protocol              失败且无协议行 → 原文透传, 不炸
+- test_run_success_keeps_evidence                成功路径协议行(证据)存活
+- test_run_selfcheck_compressed                  risky 自证 = 首条 + 条数, 不再全量打印
+- test_run_timeout_names_command                 超时指名卡住的命令
 """
 
 import argparse
@@ -35,57 +39,45 @@ def _shell_returning(ok: bool, out: str):
     return lambda *a, **k: (ok, out)
 
 
-def test_digest_keeps_result_lines():
-    lines = [f"noise {i:02d}" for i in range(30)]
-    lines[5] = "RESULT: FAIL 落后远端 3 个提交"
-    lines += ["EVIDENCE: remote=abc local=def", "WHY: 收尾回写必须落在合并后的新基线上", "NEXT: git fetch gitee develop"]
-    picked, _ = engine._digest("\n".join(lines), limit=3)
-    text = "\n".join(picked)
-    for needle in ("RESULT: FAIL", "EVIDENCE: remote=abc", "WHY: 收尾回写", "NEXT: git fetch"):
-        assert needle in text, f"协议行被摘要截掉: {needle}"
-
-
-def test_digest_fallback_without_protocol():
-    lines = [f"noise {i:02d}" for i in range(30)]
-    lines[10] = "[WARN] 中段的警告内容"
-    picked, skipped = engine._digest("\n".join(lines), limit=3)
-    text = "\n".join(picked)
-    assert "[WARN] 中段的警告内容" in text  # 异常行照旧保留
-    assert "noise 29" in text  # 末 N 行照旧
-    assert skipped == 30 - len(picked)
-
-
-def test_digest_keeps_conclusion_line():
-    """W2(计划 §10): pytest 警告明细打在结论行之后 —— 末 N 行必须挤不掉 'N passed' / 'TOTAL'。"""
+def test_conclusions_keep_conclusion_line():
+    """声明式静默只留结论行: pytest 警告明细 / 覆盖率表打在结论行前后, 都不上屏。"""
     lines = [f"coverage row {i:02d}" for i in range(20)]
     lines[2] = "1818 passed, 3 skipped, 6 warnings in 20.09s"  # 结论在 coverage 表之前
     lines[-1] = "src\\auto_qb\\webui\\views.py  305  6  130  3  97%"  # 末行是表尾噪音
     lines[6] = "TOTAL 12504 914 4204 388 91%"
-    picked, _ = engine._digest("\n".join(lines), limit=3)
+    picked = engine._conclusions("\n".join(lines))
     text = "\n".join(picked)
-    assert "1818 passed" in text  # 结论行无条件必保, 不与异常行竞争
+    assert "1818 passed" in text  # 结论行必留
     assert "TOTAL 12504" in text
-    assert "views.py" in text  # 末 N 行照旧
+    assert "views.py" not in text  # 噪音明细不上屏
 
 
-def test_digest_conclusion_patterns_are_anchored():
-    """结论判据钉锚: 表格中段含 'passed' 字样的行不算结论, 免得摘要被撑爆。"""
+def test_conclusions_fallback_when_no_conclusion():
+    """无结论形态 → 退回末 N 行, 不让输出彻底变盲。"""
+    lines = [f"plain line {i}" for i in range(10)]
+    picked = engine._conclusions("\n".join(lines))
+    assert picked == [f"plain line {i}" for i in range(7, 10)]
+
+
+def test_conclusion_patterns_are_anchored():
+    """结论判据钉锚: 表格中段含 'passed' 字样的行不算结论, 免得静默输出被撑爆。"""
     lines = [f"noise {i:02d}" for i in range(30)]
     lines[10] = "  it passed the sanity check of module x"  # 行中 passed, 非结论形态
-    picked, _ = engine._digest("\n".join(lines), limit=3)
+    picked = engine._conclusions("\n".join(lines))
     assert "it passed the sanity check" not in "\n".join(picked)
 
 
 def test_silent_success_flag_parsed_from_config():
-    """W2-4: test.full/test.quick 声明了 silent_success —— 引擎从真实包配置解析出该旗标。"""
+    """test.full/quick/pkg 声明了 silent_success —— 引擎从真实包配置解析出该旗标; 信息类不声明。"""
     mod = engine
     tree = mod.C.load_tree()
     assert tree.tasks["test.full"].silent_success is True
     assert tree.tasks["test.quick"].silent_success is True
-    assert tree.tasks["kb.index"].silent_success is False  # 信息类不声明, 有损摘要靠提示兜底
+    assert tree.tasks["test.pkg"].silent_success is True
+    assert tree.tasks["kb.index"].silent_success is False  # 信息类: 成功全文透传, 靠声明而非引擎摘要省 token
 
 
-def test_silent_success_suppresses_hint_and_keeps_conclusions(monkeypatch, capsys):
+def test_silent_success_success_is_quiet(monkeypatch, capsys):
     out = "\n".join(
         [
             "=" * 40, "1818 passed, 3 skipped in 20.17s", "TOTAL 12512 914 4204 388 91%",
@@ -98,12 +90,12 @@ def test_silent_success_suppresses_hint_and_keeps_conclusions(monkeypatch, capsy
     assert rc == 0
     assert "[ok] test.full" in captured
     assert "1818 passed" in captured and "TOTAL 12512" in captured  # 结论行在
-    assert "略过" not in captured  # 成功静默: 位置提示不给
+    assert "略过" not in captured  # 「略过」提示任何形态都不给
     assert "cov row" not in captured  # 明细不上屏
 
 
-def test_silent_success_falls_back_when_no_conclusion(monkeypatch, capsys):
-    """旗标任务输出形态变了(一条结论都没有) → 退回末 N 行, 不让输出彻底变盲; 提示仍不打。"""
+def test_silent_success_falls_back_at_cmd_run(monkeypatch, capsys):
+    """旗标任务输出形态变了(一条结论都没有) → 退回末 N 行, 不变盲; 提示仍不打。"""
     out = "\n".join(f"plain line {i}" for i in range(10))
     monkeypatch.setattr(engine, "_shell", _shell_returning(True, out))
     rc = engine.cmd_run(argparse.Namespace(task="test.full", extra=[]))
@@ -114,14 +106,32 @@ def test_silent_success_falls_back_when_no_conclusion(monkeypatch, capsys):
     assert "略过" not in captured
 
 
-def test_info_command_keeps_truncation_hint(monkeypatch, capsys):
-    """未声明旗标的信息类命令: 有损摘要的「略过 N 行」提示必须保留(kb.active 依赖它)。"""
+def test_run_success_passthrough_full(monkeypatch, capsys):
+    """默认(未声明静默)成功 = 全文透传: 首尾与中段全部可见, 无「略过」提示 —— 修两步返工的 token 税。"""
     out = "\n".join(f"slice {i}" for i in range(30))
     monkeypatch.setattr(engine, "_shell", _shell_returning(True, out))
-    rc = engine.cmd_run(argparse.Namespace(task="kb.index", extra=[]))
+    rc = engine.cmd_run(argparse.Namespace(task="doc.links", extra=[]))
     captured = capsys.readouterr().out
     assert rc == 0
-    assert "略过" in captured  # 信息类不许静默丢内容
+    assert "slice 0" in captured and "slice 29" in captured  # 首尾都在
+    assert "slice 15" in captured  # 中段不被截
+    assert "略过" not in captured
+
+
+def test_run_failure_passthrough_full(monkeypatch, capsys):
+    """失败 = 协议行转述一遍 + 全文透传: 中段的异常内容必须可见, 失败不该再逼一次重跑。"""
+    lines = [f"noise {i:02d}" for i in range(40)]
+    lines[10] = "  [STOP] 中段的具体原因"
+    lines += ["RESULT: FAIL 预检未过", "NEXT: 处理后重跑"]
+    monkeypatch.setattr(engine, "_shell", _shell_returning(False, "\n".join(lines)))
+    rc = engine.cmd_run(argparse.Namespace(task="doc.links", extra=[]))
+    captured = capsys.readouterr().out
+    assert rc == engine.FAILED
+    assert "[FAIL] doc.links" in captured
+    assert "[STOP] 中段的具体原因" in captured  # 中段异常行不被截
+    assert captured.count("RESULT: FAIL 预检未过") == 1  # 转述一遍, 正文里已剥掉
+    assert captured.count("NEXT: 处理后重跑") == 1
+    assert "略过" not in captured
 
 
 def test_run_failure_transcribes_protocol(monkeypatch, capsys):
@@ -150,8 +160,8 @@ def test_run_failure_without_protocol(monkeypatch, capsys):
     rc = engine.cmd_run(argparse.Namespace(task="doc.links", extra=[]))
     captured = capsys.readouterr().out
     assert rc == engine.FAILED
-    assert "[FAIL] doc.links" in captured  # 退回旧 [FAIL] 摘要, 不炸
-    assert "ValueError: boom" in captured
+    assert "[FAIL] doc.links" in captured  # [FAIL] 行照旧
+    assert "ValueError: boom" in captured  # 原文透传, 不炸
 
 
 def test_run_success_keeps_evidence(monkeypatch, capsys):

@@ -1,15 +1,16 @@
-# commands-shipflow-output-contract — my-commit-flow 输出契约 v3
+# commands-shipflow-output-contract — commands/shipflow 输出契约
 
-> 摘要: v3(成功一行/失败=原因+下一步/退出码 0/1)已实施并真机验收(提交 4ba6cb7f)。**W2 推广四件已全部落地(计划 §10 Done)**: W2-1 根治 charset_normalizer 半装损坏(授权普查 7 个 auto-qb 目录, clone1 修复/clone2 待其进程退出后重跑/其余 5 处正常); W2-2 引擎 `_digest` 结论行(N passed/TOTAL)无条件必保; W2-3 警告 6→0(test_web.py docstring \p 转义修 + starlette/anyio 按消息前缀过滤进 pytest.ini); **W2-4 silent_success 旗标**(test.full/quick 成功只出结论行不打略过提示, 信息类不加)。真机验收: test.full = [ok]+TOTAL+passed 三行, test.quick 两行; 全量 1818 passed / 0 failed / 0 warnings(基线切片 26-09-28-0445)。
-> 最后活动: 2026-09-28 04:45
+> 摘要: v3(成功一行/失败=原因+下一步/退出码 0/1, 4ba6cb7f)与 W2 推广(W2-1 charset 半装 / W2-2 结论行必保 / W2-3 警告 6→0 / W2-4 silent_success)已验收。**2026-09-30 终态修订: 引擎 run 全文透传不做有损摘要** —— 「略过 N 行」提示逼 agent show→裸跑两步返工(token 税, 用户定调), W2-2 的 `_digest` 退役; 静默改**声明式** silent_success(test.full/quick/pkg 成功只出结论行, 失败照旧全文)。全量 1827 passed + 3 skipped / 91%(基线 26-09-30-0805)。修订记录: 档案 08:10 条; pitfalls/kb/scripts.md「输出摘要」条目处置已反写。
+> 最后活动: 2026-09-30 08:10
 
 ## 正在进行
 
-- 无。计划 26-09-28-0157 全章节 Done; 收尾文档(本切片/档案/计划状态/基线)待随下次「提交」入库。
-- 遗留观察: clone2 的 cd.pyd 混态(纯美容, 进程退出后按档案 04:19 条的定向重装配方在 clone2 重跑一遍即彻底修复); doc-map 余压由 pitfalls/kb/cap-counting.md「两个出口」跟踪。
+- 2026-09-30 方向修订(全文透传 + 声明式静默)代码/守阵/文档/基线全部落盘, **待「提交」入库**。
+- 遗留观察: 6 条 starlette per-request cookies DeprecationWarning 回潮(pytest.ini 消息前缀过滤与本版 starlette 新消息不匹配, W2-3 机制仍在) —— 与修订无关, 待定调后入池; clone2 的 cd.pyd 混态(纯美容, 按档案 04:19 条配方重跑即修复)。
 
 ## 已完成
 
 - v3 全量落地 + 真机验收(4ba6cb7f): 档案进度日志 03:21/03:30 条。
 - W2 推广(含 W2-4 成功静默): 档案进度日志 04:07/04:19/04:32/04:45 条。
 - 计划文档: memory-bank/plans/26-09-28-0157-plan-commands-shipflow-v3.html(status Done)。
+- 2026-09-30 方向修订: 档案进度日志 08:10 条; 基线切片 testing/baselines/26-09-30-0805-commands-output-full-passthrough.md。
