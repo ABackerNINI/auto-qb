@@ -1,10 +1,12 @@
-"""OpsMixin: 危险操作独立操作层(rules → ops ← web, plan 26-09-30-0109 P2')
+"""OpsModule: 危险操作独立操作层的模块化封装(rules → ops ← web, plan 26-09-30-0109 P2')
 
-recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本层; 规则(CheckAction 执行体)
-与 WEB(webui/commands)都只做调用方 —— 修正 v2「WEB 接到规则侧体系」的反向依赖
-(WEB 伪造 RuleContext / 适配规则私有 state 键, 依赖方向做反)。
+OpsMixin(474 行) + CheckingMixin(39 行, 决策点 D2: 与 recheck/跳检同属「动种子文件」域)
+整体迁入本模块, 经 ctx.ops 服务暴露(plan kernel-module-refactor P4, §3.2) —— 规则动作
+(CheckAction 执行体)与 WEB 命令都只做调用方; WEB 命令改走 ctx.ops(plan P4), 规则侧经
+manager 旧名单行委托(plan §7.2, P5 收口时随规则模块一起改 ctx.ops)。
 
-保护策略按来源(source)区分(计划 §3.5, D1 拍板口径):
+recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本模块。保护策略按来源(source)
+区分(计划 §3.5, D1 拍板口径):
 - 防「自动化频率失控」的保护只作用 source="rule": 3 次/日校验失败冷却(recheck_fails)。
   WEB 源是手动排障, 不受限 —— 限制它就是「按钮为什么不生效」。
 - 防「真实冲突」的作用所有来源: 在途互斥(_active_checks 登记 / 快照 checking 态, R1)、
@@ -12,12 +14,19 @@ recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本
   原因 —— checking 态种子列表可见(拒绝可自解释), 保留; 不可见窗口的拒绝一律不对 WEB 设。
 
 执行模型不变: 两个调用方都在主循环线程(WEB 命令线 drain + 规则任务线), 单一写线程约束
-原样成立。阻塞执行体 + 单一写线程是当前安全模型的一半 —— ops 方法必须留在主循环线程调用;
-新来源(HR 联动 / 外部 API / 定时任务)接入 = 新增一个 source 调 ops, 不复制操作语义、不开旁路。
+原样成立。阻塞执行体 + 单一写线程是当前安全模型的一半 —— recheck/skip_check 必须留在
+主循环线程调用; 新来源(HR 联动 / 外部 API / 定时任务)接入 = 新增一个 source, 不复制操作
+语义、不开旁路。
 
-导入方向(防环): 本模块 -> rules.actions.full_checking 取轮询常量与冷却 helper(它们仍定义在
-彼处, 供决策链 1.6 与既有测试导入路径使用); rules.actions.full_checking **不得**反向 import
-本模块 —— 否则 ops -> rules.base(触发 rules 包 __init__ -> actions -> full_checking)成环。
+依赖方向(单向, 防环): 本模块 -> rules 包**中性叶**(rules/checking_meta: 轮询常量与冷却
+helper)与 rules.base(ActionResult) —— 这是 ops 与 rules 之间唯一允许的 import 方向
+(plan §5「ops 与 rules 单向依赖」); rules 侧消费本模块一律经 ctx.ops 运行时调用,
+**不得**反向 import 本模块 —— 否则 ops -> rules 包初始化 -> actions 成环。
+
+!state / save_state 经 ctx.state 门面(冷却计数与跳检去重的落盘载荷): 模块暴露同名属性/
+方法供 checking_meta 的 helper 鸭子类型使用(manager 与本模块都满足「.state dict +
+.save_state()」面, 测试直传 mgr 亦然)。
+!client 经 ctx.api.client **现取**(不缓存): 重连换客户端时 QbApi.bind 同步更新。
 """
 import logging
 import os
@@ -25,16 +34,17 @@ import time
 from datetime import date
 from typing import Optional
 
-from ...infra import utils
-from ...rules.actions.full_checking import (
+from ...infra import file_access, utils
+from ...rules.base import ActionResult
+from ...rules.checking_meta import (
     CHECK_RESULT_INTERVAL,
     CHECK_START_GIVEUP,
     RECHECK_FAIL_LIMIT,
     _bump_recheck_fail,
     _recheck_fail_count,
 )
-from ...rules.base import ActionResult
 from ...torrents import TorrentRecord
+from ..module import AppContext, BaseModule
 from ..taskqueue import FINISHED, REQUEUE, Task
 
 logger = logging.getLogger(__name__)
@@ -59,8 +69,31 @@ def _poll_until(predicate, attempts: int, interval: float) -> bool:
     return False
 
 
-class OpsMixin:
-    """危险操作独立操作层: 组合进 QbManager, 依赖宿主的 api / store / state / task_queue / config"""
+class OpsModule(BaseModule):
+    """ops 模块: recheck/跳检执行体 + 提交点检查 + 按 source 保护策略 + 文件完整性检查
+
+    sections 认领 skip_checking_tag(跳检成功打标的标签名, 全局键); 其余消费面(api/store/
+    state/task_queue)都是 ctx 服务, 无配置段。
+    """
+
+    name = "ops"
+
+    def __init__(self, ctx: AppContext) -> None:
+        self._ctx = ctx
+
+    def sections(self) -> tuple[str, ...]:
+        return ("skip_checking_tag", )
+
+    # ---------- ctx.state 门面(checking_meta 冷却 helper 的鸭子类型面) ----------
+
+    @property
+    def state(self) -> dict:
+        """运行期状态 dict(ctx.state 服务的落盘载荷, 与 manager.state 同一对象)"""
+        return self._ctx.state.data
+
+    def save_state(self) -> None:
+        """状态立即落盘(冷却计数/跳检去重/备份元数据等非常规路径的即时写)"""
+        self._ctx.state.save()
 
     # ---------- 日志 ----------
 
@@ -71,7 +104,7 @@ class OpsMixin:
 
     # ---------- full-checking: 提交点检查 + 提交 + 轮询 ----------
 
-    def ops_recheck(
+    def recheck(
         self,
         hash: str,
         source: str = "rule",
@@ -87,8 +120,8 @@ class OpsMixin:
         - source: 保护策略按来源区分 —— 失败冷却(recheck_fails)仅 rule 源生效(D1);
           WEB 源手动排障不受冷却限制, on_success=None(成功即消亡, 无晋升无重入队)。
         - on_success: 校验成功时的**语义回调**(规则侧传晋升 verified_references; WEB 源 None),
-          冷却清除与 auto_start 由本层统一收尾(它们是操作语义, 不属调用方)。
-        - origin: 规则任务(重入队由本层负责: 成功 keep_progress 断点续跑, 失败/删除/
+          冷却清除与 auto_start 由本模块统一收尾(它们是操作语义, 不属调用方)。
+        - origin: 规则任务(重入队由本模块负责: 成功 keep_progress 断点续跑, 失败/删除/
           宽限耗尽/异常 默认重置重走决策链); WEB 源 None —— 轮询结束即消亡, 无重入队副作用。
         - torrent: 可选活记录; None 时经 store 取(store 原地更新的活记录, 显式传参与缺省等价)。
 
@@ -99,11 +132,13 @@ class OpsMixin:
 
         # ---- R1 提交点检查(在途互斥, 全来源): 规则轮询在途或快照已在校验态 -> 拒绝 ----
         # WEB->规则半边: 不重启规则正在轮询的校验(进度回落会误判失败/污染当日计数);
-        # 规则->WEB/规则: 决策链 1.5 组内串行化经 _active_checks 感知到本层登记(双向闭环)。
-        if hash in self.task_queue.active_check_hashes():
-            logger.info(f"{prefix} {self._ops_repr(torrent or self.store.get(hash))} | recheck 拒绝: {_RECHECK_BUSY_MSG}")
+        # 规则->WEB/规则: 决策链 1.5 组内串行化经 _active_checks 感知到本模块登记(双向闭环)。
+        if hash in self._ctx.task_queue.active_check_hashes():
+            logger.info(
+                f"{prefix} {self._ops_repr(torrent or self._ctx.store.get(hash))} | recheck 拒绝: {_RECHECK_BUSY_MSG}"
+            )
             return ActionResult.skip(_RECHECK_BUSY_MSG)
-        snap = self.store.get(hash)
+        snap = self._ctx.store.get(hash)
         if snap is not None and snap.state_enum.is_checking:
             logger.info(f"{prefix} {snap.log_repr} | recheck 拒绝: {_RECHECK_BUSY_MSG}(快照 checking 态)")
             return ActionResult.skip(_RECHECK_BUSY_MSG)
@@ -115,7 +150,7 @@ class OpsMixin:
             return ActionResult.skip(f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
 
         tor = torrent if torrent is not None else snap
-        tq = self.task_queue
+        tq = self._ctx.task_queue
 
         def poll(task: Task, dry_run: bool) -> bool:
             """校验结果轮询: 读 store 活记录(原地更新, 不发 API 重查真值), 每 CHECK_RESULT_INTERVAL 一次
@@ -128,7 +163,7 @@ class OpsMixin:
             try:
                 if not submitted:
                     return FINISHED  # recheck 发送失败: 登记的轮询直接消亡(释放在途登记)
-                rec = self.store.get(hash)
+                rec = self._ctx.store.get(hash)
                 if rec is None:
                     # 种子已删除: 规则源默认重置重新入队 origin, 由其删除守卫(_handle_rule)判死
                     logger.warning(f"{prefix} {hash[:8]} | 校验轮询: 种子已删除")
@@ -145,7 +180,7 @@ class OpsMixin:
                         on_success()
                     self.state.get("recheck_fails", {}).pop(hash, None)  # 校验通过: 清除失败冷却计数
                     if auto_start:
-                        self.api.torrents_start(torrent_hashes=hash)
+                        self._ctx.api.torrents_start(torrent_hashes=hash)
                         logger.info(f"{prefix} {rec.log_repr} | 校验成功自动开始")
                     if origin is not None:
                         tq.add_task(origin, keep_progress=True)  # 显式保存进度: 断点续跑后续动作
@@ -193,7 +228,7 @@ class OpsMixin:
             "check",
             "check-checking-result",
             hash=hash,
-            store=self.store,
+            store=self._ctx.store,
             interval=CHECK_RESULT_INTERVAL,
             handler=poll,
         )
@@ -201,7 +236,7 @@ class OpsMixin:
             # R1 已先行拒绝在途, 这里是单线程模型下的兜底(不可达; 保留防将来有第二个登记点)
             return ActionResult.skip("该校验任务已在队列中")
         try:
-            self.api.torrents_recheck(torrent_hashes=hash)
+            self._ctx.api.torrents_recheck(torrent_hashes=hash)
             submitted = True
             submitted_at = time.time()
         except Exception as e:
@@ -214,7 +249,7 @@ class OpsMixin:
 
     # ---------- skip-checking: 跳检四阶段(含 R2 实时复核) ----------
 
-    def ops_skip_check(
+    def skip_check(
         self,
         hash: str,
         source: str = "rule",
@@ -236,7 +271,7 @@ class OpsMixin:
         - torrent: 可选活记录; None 时经 store 取(规则侧 ctx.torrent 与缺省取值等价)。
         """
         prefix = f"ops[{source}]"
-        tor = torrent if torrent is not None else self.store.get(hash)
+        tor = torrent if torrent is not None else self._ctx.store.get(hash)
         if tor is None:
             return ActionResult.skip(_SKIP_GONE_MSG)
 
@@ -248,7 +283,7 @@ class OpsMixin:
         # ---- R2 实时复核: 闸门读的是快照(≤2s 龄), 动手前重拉一次实时状态 ----
         # 种子已不在 -> 干净放弃: 发生在备份与删除之前, 零副作用、无孤儿备份(修 C2)。
         try:
-            live = self.api.torrents_info(torrent_hashes=hash)
+            live = self._ctx.api.torrents_info(torrent_hashes=hash)
         except Exception as e:
             return ActionResult.fail(f"跳检前实时复核失败(未执行任何变更): {e}")
         if not live:
@@ -257,7 +292,7 @@ class OpsMixin:
 
         # ---- 阶段 2: 准备 (导出/校验属性/布局推断, 均须在删除前完成) ----
         try:
-            data = self.api.torrents_export(torrent_hash=hash)
+            data = self._ctx.api.torrents_export(torrent_hash=hash)
         except Exception as e:
             return ActionResult.fail(f"导出 .torrent 失败: {e}")
         if not data:
@@ -269,7 +304,7 @@ class OpsMixin:
 
         # 布局推断依赖 content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充);
         # 删除后 store 记录已移除, 必须在此之前完成
-        content_layout = self._infer_content_layout(tor, self.client)
+        content_layout = self._infer_content_layout(tor, self._ctx.api.client)
 
         # 备份先于删除(崩溃安全): 删除是整条链上第一个不可逆步骤。备份若挂在重加的失败路径上,
         # 那么「删除已生效 → 重加未被 qB 接受」这一缝隙(含删除确认轮询的约 5s)内崩溃/强杀,
@@ -296,16 +331,16 @@ class OpsMixin:
         # 跳检成功打标(skip_checking_tag): 标记该种子未经哈希校验, 后续查找参考种子时排除;
         # 标签名直接读全局 config.skip_checking_tag(默认 zSkipChecked, 不按规则覆盖);
         # 打标失败不影响跳检结果(跳检本身已完成), 仅记 warning
-        skip_tag = self.config.skip_checking_tag
+        skip_tag = self._ctx.config.skip_checking_tag
         if skip_tag and skip_tag not in tor.tags_set:
             try:
-                self.api.torrents_add_tags(tags=[skip_tag], torrent_hashes=hash)
+                self._ctx.api.torrents_add_tags(tags=[skip_tag], torrent_hashes=hash)
                 logger.info(f"{prefix} {tor.log_repr} | 跳检完成, 已打标签 {skip_tag}(该种子不作参考种子)")
             except Exception as e:
                 logger.warning(f"{prefix} {tor.log_repr} | 跳检打标签失败(不影响跳检结果): {e}")
         if auto_start:
             try:
-                self.api.torrents_start(torrent_hashes=hash)
+                self._ctx.api.torrents_start(torrent_hashes=hash)
             except Exception as e:
                 return ActionResult.fail(f"自动开始失败: {e}")
             return ActionResult.ok("skip-checking 跳检完成并自动开始")
@@ -340,10 +375,10 @@ class OpsMixin:
         """
         try:
             logger.info(f"{prefix} {tor.log_repr} | 跳检删除种子(保留文件)")
-            self.api.torrents_delete(torrent_hashes=hash, delete_files=False)
+            self._ctx.api.torrents_delete(torrent_hashes=hash, delete_files=False)
         except Exception as e:
             return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
-        gone = _poll_until(lambda: not self.api.torrents_info(torrent_hashes=hash), attempts=10, interval=0.5)
+        gone = _poll_until(lambda: not self._ctx.api.torrents_info(torrent_hashes=hash), attempts=10, interval=0.5)
         if not gone:
             # 种子没删掉(删除未生效) —— 删除前的备份也就没了意义, 清掉: 留着只剩一个孤儿
             # .torrent 文件 + 一条"待恢复"的误导性元数据(state 会指引用户去恢复一个还在的种子)
@@ -363,7 +398,7 @@ class OpsMixin:
         返回 None = 成功; ActionResult = 失败(种子已从客户端移除, 已备份提示手动恢复)。
         """
         try:
-            self.api.torrents_add(
+            self._ctx.api.torrents_add(
                 torrent_files=[data],
                 save_path=tor.save_path,
                 category=tor.category or None,
@@ -385,7 +420,7 @@ class OpsMixin:
             backup = self._backup_torrent(tor, data)
             return ActionResult.fail(f"重加种子失败: {e}; 种子已从客户端移除(文件保留), "
                                      f".torrent 已备份: {backup}, 请手动重加")
-        appeared = _poll_until(lambda: self.api.torrents_info(torrent_hashes=hash), attempts=3, interval=0.3)
+        appeared = _poll_until(lambda: self._ctx.api.torrents_info(torrent_hashes=hash), attempts=3, interval=0.3)
         if not appeared:
             # 种子已从客户端移除, 备份已在删除前落盘 —— 保留它(不清), 用户凭
             # skip-check-backup/<hash>.torrent + state 元数据可手动恢复; store 此刻也无记录,
@@ -393,7 +428,7 @@ class OpsMixin:
             backup = self._backup_torrent(tor, data)
             return ActionResult.fail(f"重加后未确认到种子(客户端可能尚未处理完), 请检查客户端; "
                                      f"种子已从客户端移除(文件保留), .torrent 已备份: {backup}")
-        self.store.restore_torrent(tor)
+        self._ctx.store.restore_torrent(tor)
         # 跳检完成: 记录跨规则同日去重(此后同种子当日任何来源的 checking 都不再跳检)
         self.state.setdefault("skip_check_day", {})[hash] = date.today().isoformat()
         # 去重标记即时落盘: 这是"今天已跳检过"的唯一凭据, 只靠退出/周期落盘的话, 跳检后
@@ -457,7 +492,7 @@ class OpsMixin:
         调用时机是崩溃安全的关键: 必须**先于** torrents_delete(第一个不可逆步骤), 而不是
         挂在重加的失败路径上 —— 重加前那几秒缝隙内崩溃, 谁也来不及备份(issue 26-09-21-1347)。
         """
-        backup_dir = os.path.join(os.path.dirname(self.state_file) or ".", "skip-check-backup")
+        backup_dir = os.path.join(os.path.dirname(self._ctx.state.state_file) or ".", "skip-check-backup")
         os.makedirs(backup_dir, exist_ok=True)
         path = os.path.join(backup_dir, f"{tor.hash}.torrent")
         with open(path, "wb") as f:
@@ -472,3 +507,31 @@ class OpsMixin:
         }
         self.save_state()
         return path
+
+    # ---------- 文件完整性检查(checking 前置检查, 决策点 D2 并入 ops) ----------
+
+    @staticmethod
+    def check_filelist(api, torrent: TorrentRecord) -> str:
+        """检查种子文件是否存在且大小一致(api 为 QbApi Facade或兼容客户端). 返回错误描述字符串, 全部通过返回 None"""
+        logger.debug(f"{torrent.log_repr} | 检查文件完整性")
+        try:
+            files = api.torrents_files(torrent.hash)
+        except Exception as e:
+            return f"获取文件列表失败: {e}"
+        save_path = torrent.save_path
+        fa = file_access.get_file_access()
+        for f in files:
+            full_path = os.path.normpath(os.path.join(save_path, f.name))
+            exists = fa.exists(full_path)
+            if exists is file_access.UNDETERMINED:
+                # 映射 miss: 存在性不可判定 —— 显式报「不可判定」而非「文件缺失」,
+                # 让跳检前置保守停住但不误报缺失语义(报告 §05 红线)
+                return f"路径不可判定: '{full_path}'(未命中 fs.path_map 映射)"
+            if not exists:
+                return f"文件缺失: {f.name}"
+            try:
+                if fa.getsize(full_path) != f.size:
+                    return f"文件大小不一致: {f.name}"
+            except OSError:
+                return f"无法读取文件: {f.name}"
+        return None

@@ -27,7 +27,7 @@
 
 ## 异步校验 (full-checking) 全流程 — 子任务重入队 + 断点续跑
 
-发起方 `CheckAction._execute_full_checking` (一行委托) -> `manager.ops_recheck` (core/mixins/ops.py 的 OpsMixin — rules → ops ← web 独立操作层, plan 26-09-30-0109; R1 提交点检查: 在途登记或快照 checking 态即 skip 拒绝, 全来源生效):
+发起方 `CheckAction._execute_full_checking` (一行委托) -> `manager.ops_recheck` (core/modules/ops_mod.py 的 OpsModule — rules → ops ← web 独立操作层, plan 26-09-30-0109, P4 起升 ctx.ops 服务; R1 提交点检查: 在途登记或快照 checking 态即 skip 拒绝, 全来源生效):
 
 1. 前置检查全通过后, `tq.add_task(poll_task)` 入队轮询子任务 (interval=2s; check kind 自动登记在途, 重复提交返回 False → skip)。
 2. `api.torrents_recheck(...)` 同步发送, 失败返回 `ActionResult.fail` (子任务已登记, 下轮消亡自愈)。

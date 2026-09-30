@@ -16,7 +16,7 @@
 - test_match_path_patterns: 路径模式匹配
 - test_match_pattern_parse: MatchPattern.parse 统一语法解析(regex: 前缀/:ignore_case 后缀/body/suffix)
 - test_match_value_normalize: match_value 核心(normalize 规范化语义, 空模式跳过)
-- test_check_filelist_all_ok: 文件列表全部一致(CheckingMixin.check_filelist)
+- test_check_filelist_all_ok: 文件列表全部一致(OpsModule.check_filelist)
 - test_check_filelist_missing: 文件缺失
 - test_check_filelist_size_mismatch: 文件大小不一致
 - test_check_filelist_api_error: 文件列表 API 错误
@@ -36,7 +36,7 @@
 - test_add_long_path_prefix_unc: UNC 路径 -> \\?\\UNC 前缀
 - test_add_long_path_prefix_already_prefixed: 已加前缀 -> 原样返回
 - test_parse_compare_invalid: 无效比较表达式 -> ValueError
-- test_check_filelist_oserror: 读取文件异常 -> 无法读取文件(CheckingMixin.check_filelist)
+- test_check_filelist_oserror: 读取文件异常 -> 无法读取文件(OpsModule.check_filelist)
 - test_extract_tracker_hostnames_invalid_url: url 解析异常 -> 跳过
 - test_match_tracker_confs_invalid_url: url 解析异常 -> 不匹配
 - test_match_tag_patterns_empty_pattern: 空模式跳过
@@ -68,7 +68,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from auto_qb.infra import utils
-from auto_qb.core.mixins.checking import CheckingMixin
+from auto_qb.core.modules.ops_mod import OpsModule
 from helpers import FakeClient, FakeTorrent
 
 
@@ -232,7 +232,7 @@ def test_match_value_normalize():
 
 
 def test_check_filelist_all_ok():
-    """文件齐全且大小一致 -> None(CheckingMixin.check_filelist)"""
+    """文件齐全且大小一致 -> None(OpsModule.check_filelist)"""
     with tempfile.TemporaryDirectory() as td:
         fpath = os.path.join(td, "movie.mkv")
         with open(fpath, "wb") as f:
@@ -240,7 +240,7 @@ def test_check_filelist_all_ok():
         client = FakeClient()
         tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
         client.files = [SimpleNamespace(name="movie.mkv", size=100)]
-        assert CheckingMixin.check_filelist(client, tor) is None
+        assert OpsModule.check_filelist(client, tor) is None
 
 
 def test_check_filelist_missing():
@@ -249,7 +249,7 @@ def test_check_filelist_missing():
         client = FakeClient()
         tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
         client.files = [SimpleNamespace(name="not_exists.mkv", size=100)]
-        result = CheckingMixin.check_filelist(client, tor)
+        result = OpsModule.check_filelist(client, tor)
         assert result is not None and "文件缺失" in result
 
 
@@ -262,7 +262,7 @@ def test_check_filelist_size_mismatch():
         client = FakeClient()
         tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
         client.files = [SimpleNamespace(name="movie.mkv", size=200)]
-        result = CheckingMixin.check_filelist(client, tor)
+        result = OpsModule.check_filelist(client, tor)
         assert result is not None and "文件大小不一致" in result
 
 
@@ -273,7 +273,7 @@ def test_check_filelist_api_error():
             raise RuntimeError("boom")
 
     tor = FakeTorrent(hash="H1", name="Movie", save_path="")
-    result = CheckingMixin.check_filelist(Boom(), tor)
+    result = OpsModule.check_filelist(Boom(), tor)
     assert result is not None and "获取文件列表失败" in result
 
 
@@ -404,7 +404,7 @@ def test_check_filelist_oserror(monkeypatch):
         client = FakeClient()
         tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
         client.files = [SimpleNamespace(name="movie.mkv", size=100)]
-        result = CheckingMixin.check_filelist(client, tor)
+        result = OpsModule.check_filelist(client, tor)
         assert result is not None and "无法读取文件" in result
 
 

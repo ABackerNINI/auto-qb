@@ -71,9 +71,9 @@
 | 类别 | 模板 | 使用处 |
 |------|------|--------|
 | 规则动作结果 | `规则[{name}] {log_repr} \| 动作[{action}] 成功/失败/等待异步/跳过: {详情}` | Rule.process 单通道输出 (动作不打自己的 INFO) |
-| 内置维护 | `维护 {log_repr} \| {事件}: {详情}` | TagsMixin/tracker 限速 (_add_tags 等) |
+| 内置维护 | `维护 {log_repr} \| {事件}: {详情}` | MaintenanceModule/TrackerModule(维护与限速, plan P3) |
 | 任务调度 | `任务[{task.log_tag}] \| {事件}: {详情}` | qbmanager/taskqueue/rule_engine (log_tag = `kind:name[#hash8]`) |
-| 分组事件 | `辅种组({n}个) \| {事件}: {详情}` | GroupingMixin |
+| 分组事件 | `辅种组({n}个) \| {事件}: {详情}` | GroupingModule |
 | 系统级 | `{事件}: {详情}` (无前缀) | 启动/连接/曲线/导出/全局标签清理 |
 
 - **种子标识唯一入口** = `torrent.log_repr` (`'name' [站点] (hash8)`); 仅种子已从客户端消失时退化为 `hash[:8]`

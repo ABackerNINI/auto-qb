@@ -52,7 +52,7 @@ import requests
 # ---- 仓库内导入 (src/ 归组纯函数是唯一被本计划放行的 src/ 改动, 见 §04 第 5 步) ----
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO / "src"))
-from auto_qb.core.mixins.grouping import group_key_of  # noqa: E402
+from auto_qb.core.modules.grouping_mod import group_key_of  # noqa: E402
 from auto_qb.infra import utils  # noqa: E402
 from auto_qb.torrents.compat import _SNAPSHOT_FIELDS, REQUIRED_TORRENT_FIELDS  # noqa: E402
 
@@ -862,7 +862,7 @@ class Capture:
     # ---------- 真值分组 (计划 §04 第 5 步) ----------
     @staticmethod
     def truth_groups(torrents: dict, files_map: dict, sanitize: bool = False, san: Sanitizer | None = None) -> dict:
-        """用 auto_qb.mixins.grouping.group_key_of 的同一套公式算真机分组(单一事实源)"""
+        """用 auto_qb.core.modules.grouping_mod.group_key_of 的同一套公式算真机分组(单一事实源)"""
         groups: dict = {}
         for h, tv in torrents.items():
             files = files_map.get(h) or []

@@ -1139,7 +1139,7 @@ def test_missing_scan_dedup_within_round():
         assert client.calls.count(("stop", None)) == 1, f"同轮重复触发应只扫一次: {client.calls}"
 
         # 新的一轮(去重集合清空, 语义同 _refresh_torrents 每轮开头) -> 可再次扫描
-        mgr._missing_scanned_keys.clear()
+        mgr.host.get("grouping")._missing_scanned_keys.clear()
         client.calls.clear()
         mgr._check_missing_files([rep], sizes, dry_run=False, key=key)
         assert client.calls.count(("stop", None)) == 1, "跨轮应重新扫描"
@@ -1152,7 +1152,7 @@ def test_group_key_of_is_single_source_of_truth():
     import 同一份公式; 若将来有人把 _assign_to_group 改回内联、或改了内联忘了改纯函数,
     这条会红(否则 CORPUS.group_exact 会拿"错误的期望"判"正确的实现")。
     """
-    from auto_qb.core.mixins.grouping import group_key_of
+    from auto_qb.core.modules.grouping_mod import group_key_of
 
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")

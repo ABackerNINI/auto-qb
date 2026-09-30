@@ -6,12 +6,22 @@
 
 挂入进度(P1 起逐段补齐): P1 logging/notify(基建样板, 在本包) -> P2 webui/hr(门面转正,
 模块类随门面住各自包: webui/module.py + hr/module.py) -> P3 tracker/speed_curve/maintenance
--> P4 grouping/ops -> P5 rules + 刷新管线收口。
+-> P4 grouping/ops(+checking 并入) -> P5 rules + 刷新管线收口。
 """
 from .logging_mod import LoggingModule
 from .notify_mod import NotifyModule
 from .tracker_mod import TrackerModule
 from .speed_curve_mod import SpeedCurveModule
 from .maintenance_mod import MaintenanceModule
+from .grouping_mod import GroupingModule
+from .ops_mod import OpsModule
 
-__all__ = ["LoggingModule", "NotifyModule", "TrackerModule", "SpeedCurveModule", "MaintenanceModule"]
+__all__ = [
+    "LoggingModule",
+    "NotifyModule",
+    "TrackerModule",
+    "SpeedCurveModule",
+    "MaintenanceModule",
+    "GroupingModule",
+    "OpsModule",
+]

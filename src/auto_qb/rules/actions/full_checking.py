@@ -1,57 +1,31 @@
 """full-checking 组内校验串行化(FullCheckingMixin)
 
-full-checking 提交+轮询执行体已迁入 core/mixins/ops.py(OpsMixin, rules → ops ← web,
-plan 26-09-30-0109 P2'), 本模块保留: 校验常量与当日失败计数 helper(ops 层经 import 取用;
-注意本模块**不得**反向 import ops —— ops -> rules.base 会触发 rules 包初始化到此处, 反向
-导入成环)、full-checking 委托入口(_execute_full_checking, 一行委托 ctx 字段 -> ops 参数)、
-组内串行闸门(_wait_for_group_checking, 决策链 1.5)与失败推断闸门
-(_skip_on_group_check_failed, 决策链 1.6, 含假失败自愈)。
+full-checking 提交+轮询执行体已迁入 ops 模块(core/modules/ops_mod.OpsModule, rules → ops
+← web, plan 26-09-30-0109 P2'), 本模块保留: full-checking 委托入口(_execute_full_checking,
+一行委托 ctx 字段 -> ops 参数)、组内串行闸门(_wait_for_group_checking, 决策链 1.5)与失败
+推断闸门(_skip_on_group_check_failed, 决策链 1.6, 含假失败自愈)。
+
+校验常量与冷却计数 helper 的单点在 ../checking_meta.py(rules 包中性叶, plan
+kernel-module-refactor P4): 本模块经它取用并**再导出**(既有测试导入路径
+`auto_qb.rules.actions.full_checking._bump_recheck_fail` 不变); 本模块**不得** import ops
+—— ops -> rules 包初始化会走到此处, 反向导入成环(方向说明见 checking_meta 头注)。
 """
 import logging
 import time
-from datetime import date
 from typing import Optional
 
 from ...core.taskqueue import FINISHED, REQUEUE, Task
 from ..base import ActionResult, RuleContext
+from ..checking_meta import (  # noqa: F401  中性单点再导出(测试/外部导入路径兼容)
+    CHECK_RESULT_INTERVAL,
+    CHECK_START_GIVEUP,
+    GROUP_CHECK_WAIT_LIMIT,
+    RECHECK_FAIL_LIMIT,
+    _bump_recheck_fail,
+    _recheck_fail_count,
+)
 
 logger = logging.getLogger(__name__)
-
-# full-checking 校验结果轮询间隔(秒): 与主循环 MAIN_TICK 对齐, 需求指定 2s
-CHECK_RESULT_INTERVAL = 2.0
-
-# 同一种子当日连续校验失败上限: 防止损坏文件导致 recheck 死循环(次日重置)
-RECHECK_FAIL_LIMIT = 3
-
-# 组内校验等待上限(秒): 防在途标记异常泄漏导致等待任务活锁(大种子全量校验可超 1h, 取宽松值)
-GROUP_CHECK_WAIT_LIMIT = 2 * 3600.0
-
-# 校验启动宽限上限(秒): recheck 提交后 qB 异步应用 + 同步快照按 sync_interval 节拍滞后,
-# 首个轮询样本常落在「尚未开检」窗口内 —— 未见 checking 态不计失败(2026-09-25 首样本
-# 竞态误判故障: progress=0.0 被记当日失败, 经决策链 1.6 毒化全组); 宽限耗尽仍未见开检
-# 才判败(qB 重启丢请求等极端情形的活锁保险丝, 判败后经 origin 重走决策链自然重试)
-CHECK_START_GIVEUP = 600.0
-
-
-def _recheck_fail_count(manager, hash: str) -> int:
-    """同一种子当日连续校验失败次数(按自然日重置)"""
-    rec = manager.state.get("recheck_fails", {}).get(hash)
-    if rec and rec.get("date") == date.today().isoformat():
-        return rec.get("count", 0)
-    return 0
-
-
-def _bump_recheck_fail(manager, hash: str) -> int:
-    """累加当日校验失败次数并返回当前次数"""
-    fails = manager.state.setdefault("recheck_fails", {})
-    rec = fails.setdefault(hash, {"date": "", "count": 0})
-    today = date.today().isoformat()
-    if rec.get("date") != today:
-        rec["date"] = today
-        rec["count"] = 0
-    rec["count"] += 1
-    manager.save_state()  # 冷却计数即时落盘: 丢了会对同一损坏文件多试 recheck(当日上限闸门失效一次); 上界 3 次/日/种, 频率天然低
-    return rec["count"]
 
 
 class FullCheckingMixin:

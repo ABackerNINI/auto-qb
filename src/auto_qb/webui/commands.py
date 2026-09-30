@@ -324,7 +324,7 @@ class WebCommandsMixin:
             if cmd_id:
                 self._set_web_result(cmd_id, "error", "种子不存在或已被删除")
             return
-        r = self.ops_recheck(hash, source="web")
+        r = self.ctx.ops.recheck(hash, source="web")  # plan kernel-module-refactor P4: 改走 ctx.ops
         if r.is_ok or r.is_pending:
             if cmd_id:
                 self._set_web_result(cmd_id, "ok")
@@ -340,7 +340,7 @@ class WebCommandsMixin:
         阻塞 ~6s(删除->轮询->重加), 期间其它命令排队 —— 与规则跳检执行时现状一致;
         拒绝(今日已跳检过/种子已被移除/部分下载)回执 error 带自解释文案。
         """
-        r = self.ops_skip_check(hash, source="web")
+        r = self.ctx.ops.skip_check(hash, source="web")  # plan kernel-module-refactor P4: 改走 ctx.ops
         if r.is_ok:
             if cmd_id:
                 self._set_web_result(cmd_id, "ok")
@@ -617,7 +617,7 @@ class WebCommandsMixin:
         ok_n = skip_n = fail_n = 0
         fail_msgs: List[str] = []
         for h in hashes:
-            r = self.ops_recheck(h, source="web")
+            r = self.ctx.ops.recheck(h, source="web")  # plan kernel-module-refactor P4: 改走 ctx.ops
             if r.is_skipped:
                 skip_n += 1
             elif r.is_failed:

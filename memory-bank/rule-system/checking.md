@@ -3,7 +3,7 @@
 > 摘要: `CheckAction` 的决策链与七道防护 —— 高风险动作单独成篇, 与 pitfalls/backend/high-risk-ops.md 互指。
 > 触发: checking, 校验, full-checking, skip-checking, 跳检, 七道防护
 
-## `checking` 动作 (rules/actions/checking.py 的 CheckAction, 决策链; full_checking.py/skip_checking.py 以 Mixin 组合进 CheckAction — 执行体已迁 core/mixins/ops.py 的 OpsMixin, 两 Mixin 只剩一行委托; WEB recheck / 右键跳检同走 ops 层, 保护按 source 区分: 失败冷却/高风险告警仅 rule, 在途互斥·R2 复核·同日去重全来源, plan 26-09-30-0109)
+## `checking` 动作 (rules/actions/checking.py 的 CheckAction, 决策链; full_checking.py/skip_checking.py 以 Mixin 组合进 CheckAction — 执行体已迁 core/modules/ops_mod.py 的 OpsModule(P4 起经 ctx.ops 服务), 两 Mixin 只剩一行委托; WEB recheck / 右键跳检同走 ops 层, 保护按 source 区分: 失败冷却/高风险告警仅 rule, 在途互斥·R2 复核·同日去重全来源, plan 26-09-30-0109)
 
 配置 (dict, fail-fast 校验, 未知键报错):
 ```yaml

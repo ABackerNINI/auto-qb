@@ -21,7 +21,7 @@ from .basic import (
     StopAction,
 )
 from .checking import CheckAction
-from .full_checking import CHECK_RESULT_INTERVAL, GROUP_CHECK_WAIT_LIMIT, RECHECK_FAIL_LIMIT
+from ..checking_meta import CHECK_RESULT_INTERVAL, GROUP_CHECK_WAIT_LIMIT, RECHECK_FAIL_LIMIT
 from .transfer import DownloadSpeedLimitAction, MoveToAction, ReannounceAction, UploadSpeedLimitAction
 
 __all__ = [

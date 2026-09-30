@@ -12,10 +12,6 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 职责拆分(mixins 包, 各模块组合进本类):
 - mixins.rule_engine  RuleEngineMixin  规则加载/种子级规则任务/事件分派
                                       (状态持久化已迁 core/state.py 的 StateService, plan P0)
-- mixins.checking     CheckingMixin    文件存在性/大小一致性检查(checking 动作前置检查复用)
-- mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
-- mixins.ops          OpsMixin         危险操作独立操作层(rules → ops ← web): recheck/跳检执行体
-                                       + 提交点检查 + 按 source 保护策略(plan 26-09-30-0109)
 - webui.views         WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
 - webui.commands      WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
 - web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排; P2 起经
@@ -26,12 +22,16 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 - P1 logging/notify(基建样板) → P2 webui/hr(门面转正) → P3 tracker(tracker 匹配升
   ctx.trackers 服务 + full_round 相位重匹配)/speed_curve(曲线任务自注册 + 流量快照经
   ctx.web.set_traffic_view 推送)/maintenance(标签/分类/HR 标签/集数标签/维护任务 + 全局
-  标签清理任务自注册) —— 三者已从 mixins 包迁出, 本类旧名方法只剩单行委托(§7.2 测试兼容)。
+  标签清理任务自注册) → P4 grouping(四刷新相位 transitions/torrents_added/removed_scan/
+  post 认领, _refresh_torrents 的分组调用点改相位广播)/ops(+checking 并入, 决策点 D2;
+  危险操作层升 ctx.ops 服务, web 命令与规则动作的执行体单点; rules 常量反向 import 迁
+  rules 包中性叶 checking_meta 单向化) —— 四者已从 mixins 包迁出, 本类旧名方法只剩单行
+  委托(§7.2 测试兼容)。
 
 内核地基(plan kernel-module-refactor): 构造期立 AppContext(ctx)并把能力服务挂上
-(store/api/state/task_queue/web/trackers), 本类同名属性自此刻起全部是**委托**(ctx 为单一
-真相, 守阵断言同对象); ModuleHost / EventBus 编排机制 + 装配清单在构造期建立 ——
-最终收敛为「宿主只知何时, 不知何事」。
+(store/api/state/task_queue/web/trackers/maintenance/ops), 本类同名属性自此刻起全部是
+**委托**(ctx 为单一真相, 守阵断言同对象); ModuleHost / EventBus 编排机制 + 装配清单在
+构造期建立 —— 最终收敛为「宿主只知何时, 不知何事」。
 """
 import logging
 import os
@@ -46,14 +46,17 @@ from ..config.writer import materialize_schema_migration
 from ..infra import file_access
 from ..infra.errors import AutoQbError
 from ..infra.locking import SingleInstanceLock
-from .mixins import (
-    CheckingMixin,
-    GroupingMixin,
-    OpsMixin,
-    RuleEngineMixin,
-)
+from .mixins import RuleEngineMixin
 from .module import AppContext, EventBus, ModuleHost
-from .modules import LoggingModule, MaintenanceModule, NotifyModule, SpeedCurveModule, TrackerModule
+from .modules import (
+    GroupingModule,
+    LoggingModule,
+    MaintenanceModule,
+    NotifyModule,
+    OpsModule,
+    SpeedCurveModule,
+    TrackerModule,
+)
 from .state import StateService
 from ..webui.commands import WebCommandsMixin
 from ..webui.views import WebviewMixin
@@ -140,9 +143,6 @@ def _wait_next(stop_event: Optional[threading.Event], wake_event: threading.Even
 
 class QbManager(
     RuleEngineMixin,
-    CheckingMixin,
-    GroupingMixin,
-    OpsMixin,
     WebviewMixin,
     WebCommandsMixin,
 ):
@@ -202,7 +202,7 @@ class QbManager(
         self.host = ModuleHost(self.ctx, self.events)
         # 装配清单(plan §3.3): 顺序 = 相位内消费序 = 生命周期序, 内核唯一「知道模块名字」的
         # 地方。P1 基建两模块(logging/notify), P2 门面转正(webui/hr), P3 小模块三件
-        # (tracker/speed_curve/maintenance); P4+ 按此顺序逐段补齐: grouping → ops → rules
+        # (tracker/speed_curve/maintenance), P4 中坚两件(grouping/ops); P5 补 rules
         # (rules 最后: 它消费前面所有人的服务)。
         self.host.register(LoggingModule())
         self.ctx.notify = NotifyModule(self.ctx)  # 托盘经 ctx.notify 调公开方法(plan §3.2)
@@ -269,7 +269,16 @@ class QbManager(
         self.ctx.trackers = TrackerModule(self.ctx)
         self.host.register(self.ctx.trackers)
         self.host.register(SpeedCurveModule(self.ctx))
-        self.host.register(MaintenanceModule(self.ctx))
+        # maintenance 句柄挂 ctx(P4): grouping 打标经 ctx.maintenance.add_tags, 不 import 兄弟模块
+        self.ctx.maintenance = MaintenanceModule(self.ctx)
+        self.host.register(self.ctx.maintenance)
+        # 装配清单 P4(plan §3.3 中坚模块): grouping 认领四个刷新相位(transitions /
+        # torrents_added / removed_scan / post, _refresh_torrents 的分组调用点改相位广播,
+        # enabled 开关模块自判); ops(+checking 并入, 决策点 D2)升 ctx.ops 服务 —— 规则
+        # 动作与 WEB 命令的危险操作执行体单点, web 命令改走 ctx.ops(plan P4)
+        self.host.register(GroupingModule(self.ctx))
+        self.ctx.ops = OpsModule(self.ctx)
+        self.host.register(self.ctx.ops)
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。
@@ -283,9 +292,6 @@ class QbManager(
         self._suppress_events = False
         # 暂停事件(run() 注入; UI 线程切换, 主循环线程只读)
         self._pause_event = None
-        # 缺文件扫描轮内去重: 移动种子等场景同一轮会命中多个触发源(状态转移+路径变化),
-        # 同组 key 同轮只扫一次(_refresh_torrents 每轮开始清空)
-        self._missing_scanned_keys: set = set()
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
         self._lock = None
         if not no_lock:
@@ -785,7 +791,6 @@ class QbManager(
         故 store 只更新变化的记录; 本轮变化集(state_changed/path_changed)供分组与
         事件分派把 O(N) 全量扫描降为 O(变化数)。
         """
-        self._missing_scanned_keys.clear()  # 缺文件扫描去重按轮重置
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
         added, removed = self.store.apply_sync(self.api)
         if self.store.need_validate:
@@ -806,11 +811,12 @@ class QbManager(
         # 删除种子的删除前快照: 种子已从 store 移除后, ctx.torrent 回退此副本供只读动作留档
         removed_snapshots = {h: prev_records[h] for h in removed if h in prev_records}
 
-        if self.config.grouping.enabled:
-            # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)。
-            # 必须在本轮任何自有动作之前观测: 新增归组的大小一致性停种经快照同步会当场改写
-            # by_hash 状态, 放在后面会把自家停种误判为外部"上传转暂停"
-            self._handle_state_transitions(dry_run)
+        # 组内种子由上传(做种)转暂停 -> 立即触发缺文件扫描(用上一轮状态快照, 不等下一轮)。
+        # 必须在本轮任何自有动作之前观测: 新增归组的大小一致性停种经快照同步会当场改写
+        # by_hash 状态, 放在后面会把自家停种误判为外部"上传转暂停"。
+        # 相位广播(plan P4 §4.2): 每轮无条件 emit —— enabled 开关与缺文件扫描去重集合的
+        # 按轮清零都归 grouping 模块自判(原 _missing_scanned_keys.clear() 随迁其入口)
+        self.events.emit("transitions", {"dry_run": dry_run})
 
         # 事件分派(on_torrent_deleted / on_torrent_state_enum_changed): 在自有动作之前、
         # 状态快照更新之前同步即时执行(新增种子本轮不触发状态变化; added 事件在下方匹配后触发);
@@ -853,8 +859,9 @@ class QbManager(
                 # 创建种子级任务: 内置 maintenance + 所有符合条件的规则任务
                 self._create_torrent_tasks(h)
                 # 增量归组: 新种子(含程序启动首轮的现有种子)按文件列表自动归组, 归组时检查大小一致性
-                if self.config.grouping.enabled:
-                    self._assign_new_torrent(h, dry_run)
+                # (相位广播 plan P4: 归组是 torrents_added 相位当前的唯一认领者 —— 维护/限速/
+                #  建任务/集数 P5 随逐种子管线一起分派为该相位的模块订阅, 次序 见 §4.2)
+                self.events.emit("torrents_added", {"hash": h, "dry_run": dry_run})
                 # 自动添加集数标签(仅种子添加时触发): 名称不含集数标记时从文件列表解析, 如 E1-5
                 if self.config.add_episode_tags.enabled:
                     self._add_episode_tags(torrent, dry_run)
@@ -863,14 +870,12 @@ class QbManager(
             # 已删种子的任务不显式清理: 由 run_due 到期执行时 handler 检测种子缺失自然消亡
             logger.info(f"检测到删除种子 {len(removed)} 个")
             # 组内种子被删除 -> 立即触发缺文件扫描(剩余种子可能文件丢失), 不等下一轮
-            if self.config.grouping.enabled:
-                self._handle_removed_torrents(removed, dry_run)
+            # (相位广播 plan P4: removed_scan 相位, enabled 由 grouping 模块自判)
+            self.events.emit("removed_scan", {"hashes": list(removed), "dry_run": dry_run})
 
-        if self.config.grouping.enabled:
-            # 保存路径变化重归组(文件列表变化会走新增种子重新归组)
-            self._handle_save_path_changes(dry_run)
-            # 下载冲突检查(每轮): 同组多个同时下载/已完成与下载中并存 -> 警告+整组暂停
-            self._check_download_conflicts(dry_run)
+        # 保存路径变化重归组(文件列表变化会走新增种子重新归组) + 下载冲突检查(每轮):
+        # post 相位(plan §4.2 收尾), enabled 由 grouping 模块自判
+        self.events.emit("post", {"dry_run": dry_run})
 
         # 更新状态快照(本轮 by_hash 的状态; 新增种子本轮不视为状态变化)
         # 事件分派(on_torrent_state_enum_changed)依赖此上一轮快照对比, 故不局限于 grouping 启用时
@@ -915,9 +920,10 @@ class QbManager(
                 tasks.append(task)
         self.task_queue.add_tasks(tasks)
 
-    # ---------- 模块方法委托(plan kernel-module-refactor P3 过渡层) ----------
-    # 实现单点已迁 SpeedCurveModule / MaintenanceModule / TrackerModule(core/modules/);
-    # 保留旧名字让测试(mgr._xxx 直调)与相邻 mixin(分组/规则引擎经 self 调用)零改动 ——
+    # ---------- 模块方法委托(plan kernel-module-refactor P3/P4 过渡层) ----------
+    # 实现单点已迁 SpeedCurveModule / MaintenanceModule / TrackerModule / GroupingModule /
+    # OpsModule(core/modules/); 保留旧名字让测试(mgr._xxx 直调)、相邻 mixin(规则引擎经
+    # self 调用)与 rules 动作(manager.ops_* / manager.check_filelist)零改动 ——
     # 与 _WEB_STATE_ALIAS 同款迁移惯用法(plan §7.2)。全部是单行转发, 不含状态、不含判据。
     # 清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
 
@@ -962,6 +968,68 @@ class QbManager(
 
     def _handle_delete_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
         return self.host.get("maintenance").handle_delete_tags_if_has_no_torrents(task, dry_run)
+
+    # ---------- 分组委托(plan kernel-module-refactor P4 过渡层) ----------
+    # 实现单点在 GroupingModule(四刷新相位: transitions/torrents_added/removed_scan/post);
+    # 这里只保留被测试与 rules 动作(checking 决策链的组上下文)点名的旧名 —— _refresh_torrents
+    # 的四个分组调用点已改相位广播, 不再经过本组转发。
+
+    def _handle_state_transitions(self, dry_run: bool) -> None:
+        return self.host.get("grouping")._handle_state_transitions(dry_run)
+
+    def _handle_removed_torrents(self, removed_hashes: list[str], dry_run: bool) -> None:
+        return self.host.get("grouping")._handle_removed_torrents(removed_hashes, dry_run)
+
+    def _handle_save_path_changes(self, dry_run: bool) -> None:
+        return self.host.get("grouping")._handle_save_path_changes(dry_run)
+
+    def _assign_new_torrent(self, hash: str, dry_run: bool = False) -> None:
+        return self.host.get("grouping")._assign_new_torrent(hash, dry_run)
+
+    def _assign_to_group(self, torrent: TorrentRecord, file_map: dict, dry_run: bool = False) -> None:
+        return self.host.get("grouping")._assign_to_group(torrent, file_map, dry_run)
+
+    def _leave_group(self, hash: str):
+        return self.host.get("grouping")._leave_group(hash)
+
+    def _check_missing_files(self, members, sizes: dict, dry_run: bool, key: str) -> None:
+        return self.host.get("grouping")._check_missing_files(members, sizes, dry_run, key)
+
+    def _check_download_conflicts(self, dry_run: bool) -> None:
+        return self.host.get("grouping")._check_download_conflicts(dry_run)
+
+    def _group_members(self, hash: str) -> list:
+        return self.host.get("grouping")._group_members(hash)
+
+    def _group_by_hash(self) -> dict:
+        return self.host.get("grouping")._group_by_hash()
+
+    def _group_has_downloading(self, members: list[str]) -> bool:
+        return self.host.get("grouping")._group_has_downloading(members)
+
+    def _group_reference_candidates(self, members: list[str]) -> list:
+        return self.host.get("grouping")._group_reference_candidates(members)
+
+    # ---------- ops 委托(plan kernel-module-refactor P4 过渡层) ----------
+    # 实现单点在 OpsModule(ctx.ops 服务, 决策点 D2: checking 前置检查并入); WEB 命令已改走
+    # ctx.ops(plan P4), rules 动作与测试经本组旧名转发(P5 规则模块化时一并改 ctx.ops)。
+
+    def ops_recheck(
+        self, hash: str, source: str = "rule", torrent=None, auto_start: bool = False, on_success=None, origin=None
+    ):
+        return self.ctx.ops.recheck(
+            hash, source=source, torrent=torrent, auto_start=auto_start, on_success=on_success, origin=origin
+        )
+
+    def ops_skip_check(
+        self, hash: str, source: str = "rule", torrent=None, auto_start: bool = False, has_reference: bool = True
+    ):
+        return self.ctx.ops.skip_check(
+            hash, source=source, torrent=torrent, auto_start=auto_start, has_reference=has_reference
+        )
+
+    def check_filelist(self, api, torrent) -> str:
+        return self.ctx.ops.check_filelist(api, torrent)
 
     def export_torrents_info(self, path):
         """导出种子信息, 用于debug"""

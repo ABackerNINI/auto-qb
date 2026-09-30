@@ -24,7 +24,7 @@ class TorrentStore:
     增量同步态(qB /api/v2/sync/maindata rid 语义, 见 apply_sync):
       - rid: 上次响应 ID(0 = 下轮需全量); need_validate: 本轮是否全量(校验闸门);
       - using_fallback: 已降级全量(旧版 qB, 告警去重); validate_sample: 全量轮校验样本。
-    分组相关结构(供 GroupingMixin 直接读写, 保持增量语义):
+    分组相关结构(供 GroupingModule 直接读写, 保持增量语义):
       - groups:        key=(save_path, 排序文件路径元组) -> [hash...]
       - group_sizes:   key -> {hash: {规范化相对路径: 大小}}
       - member_to_key: hash -> 组 key(O(1) 定位)
@@ -77,7 +77,7 @@ class TorrentStore:
         self.external_tag_changes: Set[str] = set()
         self.self_caused_fields: Dict[str, Dict[str, Any]] = {}
         # 需重算下载冲突的组 key: 变化字段/成员增删/归组/自有停种打标时登记,
-        # 由 GroupingMixin._check_download_conflicts 取出并复位(跨轮累积, 不随 _apply 清空)
+        # 由 GroupingModule._check_download_conflicts 取出并复位(跨轮累积, 不随 _apply 清空)
         self.dirty_groups: Set[Any] = set()
         # 轮次基线: >0 表示快照由主循环轮次驱动(变化集可用), 冲突检查走增量;
         # 直接驱动(_apply 未跑过, 如白盒测试)时为 0, 冲突检查退回全量扫描以保证正确

@@ -7966,5 +7966,5 @@ def test_webui_no_rules_import():
                     mod = m.group(1).lstrip(".") or "rules"
                     if is_op_chain or mod in plugin_prefixes:
                         violations.append(f"{rel}:{i}: import {m.group(1).strip()}")
-    assert not violations, ("webui 出现规则模块引用(依赖方向做反, 操作语义必须单点在 core/mixins/ops.py): "
+    assert not violations, ("webui 出现规则模块引用(依赖方向做反, 操作语义必须单点在 core/modules/ops_mod.py): "
                             f"{violations}")

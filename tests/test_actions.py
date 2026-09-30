@@ -407,7 +407,7 @@ def test_skip_checking_readd_preserves_values():
         tor.ratio_limit = 0  # qB 分享率限制(有语义)
         tor.seeding_time_limit = 0
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.core.mixins.ops.time.sleep"):
+        with patch("auto_qb.core.modules.ops_mod.time.sleep"):
             r = action.execute(ctx)
         assert r.is_ok, f"{r}"
         add = next(c for c in client.calls if c[0] == "add")
@@ -429,7 +429,7 @@ def test_skip_checking_readd_restores_store_record():
         client.torrents["HASH123"] = tor
         seed_store(mgr, [tor])
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.core.mixins.ops.time.sleep"):
+        with patch("auto_qb.core.modules.ops_mod.time.sleep"):
             r = action.execute(ctx := make_ctx(mgr, tor, client))
         assert r.is_ok, f"{r}"
         # 快照记录已恢复(对象身份 = 删除前捕获的 tor), tracker_conf 保留
@@ -460,7 +460,7 @@ def test_skip_checking_content_layout_inferred():
             client.files_map = {"HASH123": files}
             seed_store(mgr, [tor])
             ctx = make_ctx(mgr, tor, client)
-            return mgr._infer_content_layout(tor, client)  # 方法已迁 ops 层(OpsMixin/manager)
+            return mgr.ctx.ops._infer_content_layout(tor, client)  # 方法已迁 ops 模块(plan P4, 经 ctx.ops)
 
         def f(n):
             return SimpleNamespace(name=n, size=1)
@@ -492,7 +492,7 @@ def test_skip_checking_delete_not_confirmed():
 
         client.torrents_info = info_after_delete
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.core.mixins.ops.time.sleep"):
+        with patch("auto_qb.core.modules.ops_mod.time.sleep"):
             r = action.execute(ctx)
         assert r.is_failed and "仍在客户端" in r.message, f"应失败: {r}"
         assert not any(c[0] == "add" for c in client.calls), "未确认消失前不得重加"

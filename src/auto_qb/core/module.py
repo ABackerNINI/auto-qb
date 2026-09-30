@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from ..torrents import TorrentStore
     from ..webui.runtime import WebUIRuntime
     from .modules.notify_mod import NotifyModule
+    from .modules.ops_mod import OpsModule
+    from .modules.maintenance_mod import MaintenanceModule
     from .modules.tracker_mod import TrackerModule
     from .qbapi import QbApi
     from .state import StateService
@@ -52,6 +54,9 @@ class AppContext:
       替换 mgr.web 也经 setter 生效)。
     - trackers(P3 起, 决策点 D3)是模块句柄而非服务: tracker 匹配升 ctx.trackers.match(),
       规则上下文与全量轮重匹配都消费 —— 服务化避免事件回传的时序绕弯。
+    - maintenance / ops(P4 起)是模块句柄: grouping 打标经 ctx.maintenance.add_tags(不
+      import 兄弟模块); 规则动作与 WEB 命令经 ctx.ops 调危险操作层 —— 模块对外暴露面
+      单点在 ctx(与 notify 同口径), ops 与 rules 的 import 单向化见 ops_mod 头注。
     """
     def __init__(self, config) -> None:
         self._config = config
@@ -62,6 +67,8 @@ class AppContext:
         self.web: Optional["WebUIRuntime"] = None
         self.task_queue: Optional[Any] = None  # TaskQueue(内核机械, 不引入以保契约层零依赖)
         self.trackers: Optional["TrackerModule"] = None
+        self.maintenance: Optional["MaintenanceModule"] = None
+        self.ops: Optional["OpsModule"] = None
 
     @property
     def config(self):

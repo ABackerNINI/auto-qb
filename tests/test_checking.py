@@ -571,7 +571,7 @@ def test_checking_recheck_fail_cooldown():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
 
-    with patch("auto_qb.core.mixins.ops.CHECK_START_GIVEUP", 0.0):
+    with patch("auto_qb.core.modules.ops_mod.CHECK_START_GIVEUP", 0.0):
         # 第 1 次执行: 提交 recheck -> 让位; 轮询(+0.5)判失败(count=1) -> origin 重入队
         run_queue(mgr, t0)
         run_queue(mgr, t0 + 0.5)
@@ -627,7 +627,7 @@ def test_checking_no_reference_skip_checking_warns():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "stalledUP"}
     t = make_target()
-    with patch("auto_qb.core.mixins.ops.logger.warning") as mw:
+    with patch("auto_qb.core.modules.ops_mod.logger.warning") as mw:
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
         assert handled
         assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"{client.calls}"
@@ -724,7 +724,7 @@ def test_checking_skip_delete_unconfirmed_clears_backup():
         client.calls.append(("delete", delete_files))  # 只记调用, 不真删
 
     client.torrents_delete = noop_delete
-    with patch("auto_qb.core.mixins.ops.time.sleep"):  # 10 × 0.5s 确认轮询
+    with patch("auto_qb.core.modules.ops_mod.time.sleep"):  # 10 × 0.5s 确认轮询
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled, "放弃跳检以 fail 返回(fail 视为已处理)"
     assert not any(c[0] == "add" for c in client.calls), f"未确认消失前不得重加: {client.calls}"
@@ -735,7 +735,7 @@ def test_checking_skip_delete_unconfirmed_clears_backup():
 
 def test_checking_skip_backup_failure_aborts_before_delete():
     """测试: 备份写不进去 -> 不删除(无损失), 直接 fail —— 备份是删除的前置条件"""
-    from auto_qb.core.mixins.ops import OpsMixin
+    from auto_qb.core.modules.ops_mod import OpsModule
 
     cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=False)
     mgr = make_mgr(cfg)
@@ -743,7 +743,7 @@ def test_checking_skip_backup_failure_aborts_before_delete():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "pausedUP"}
     t = make_target()
-    with patch.object(OpsMixin, "_backup_torrent", side_effect=OSError("disk full")):
+    with patch.object(OpsModule, "_backup_torrent", side_effect=OSError("disk full")):
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert [c[0] for c in client.calls] == ["export"], f"备份失败不得删除/重加: {client.calls}"
@@ -1381,7 +1381,7 @@ def test_checking_full_checking_giveup_condemns():
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
-    with patch("auto_qb.core.mixins.ops.CHECK_START_GIVEUP", 0.0):
+    with patch("auto_qb.core.modules.ops_mod.CHECK_START_GIVEUP", 0.0):
         seed_store(mgr, [make_target()])  # 快照恒为提交前状态: 永未见 checking
         run_queue(mgr, t0 + 2.5)
     assert mgr.state["recheck_fails"]["HASH123"]["count"] == 1, "宽限耗尽应判败"

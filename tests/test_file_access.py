@@ -50,8 +50,8 @@ from auto_qb.infra.file_access import (
     init_file_access,
     path_map_selfcheck,
 )
-from auto_qb.core.mixins.grouping import GroupingMixin
-from auto_qb.core.mixins.checking import CheckingMixin
+from auto_qb.core.modules.grouping_mod import GroupingModule
+from auto_qb.core.modules.ops_mod import OpsModule
 from auto_qb.rules.conditions import FreespaceCondition
 from auto_qb.rules.expr.errors import ExprError
 
@@ -444,7 +444,7 @@ def test_check_filelist_undetermined(fa):
     """跳检前置映射 miss -> 「路径不可判定」错误串(不误报「文件缺失」, 跳检保守停住)"""
     api = SimpleNamespace(torrents_files=lambda h: [SimpleNamespace(name="a.mkv", size=1)])
     init_file_access(SimpleNamespace(fs=SimpleNamespace(path_map=(PathMapEntry(src="D:/Downloads", dst="/m"), ))))
-    result = CheckingMixin.check_filelist(api, _fake_torrent("E:/Elsewhere"))
+    result = OpsModule.check_filelist(api, _fake_torrent("E:/Elsewhere"))
     assert "路径不可判定" in result
 
 
@@ -482,17 +482,19 @@ def tmp_dir():
 
 
 def _bare_grouping():
-    """构造绕过 __init__ 的 GroupingMixin 宿主(只供 _check_missing_files 的依赖面)"""
+    """构造绕过 __init__ 的 GroupingModule 宿主(只供 _check_missing_files 的依赖面)"""
     stopped, tagged = [], []
 
-    class _G(GroupingMixin):
+    class _G(GroupingModule):
         pass
 
     g = _G.__new__(_G)
-    g.config = SimpleNamespace(grouping=SimpleNamespace(check_missing_files=True, missing_tag="MISSING"))
+    g._ctx = SimpleNamespace(
+        config=SimpleNamespace(grouping=SimpleNamespace(check_missing_files=True, missing_tag="MISSING")),
+        api=SimpleNamespace(torrents_stop=lambda **kw: stopped.append(kw)),
+        maintenance=SimpleNamespace(add_tags=lambda t, tags, dry, log_level=None: tagged.append((t.hash, tuple(tags)))),
+    )
     g._missing_scanned_keys = set()
-    g.api = SimpleNamespace(torrents_stop=lambda **kw: stopped.append(kw))
-    g._add_tags = lambda t, tags, dry, log_level=None: tagged.append((t.hash, tuple(tags)))
     return g, stopped, tagged
 
 
