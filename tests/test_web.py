@@ -145,12 +145,12 @@
 - test_api_torrent_peers_endpoint: /api/torrents/{hash}/peers 走 sync_torrent_peers(torrent_hash=..)整包透传(404/503)
 - test_api_stats_endpoint: /api/stats 透出 store.server_state(未同步时 null)
 - test_state_kind_maps_states: 状态语义分类映射(暂停态优先于下载/做种)
-- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用; L1 只剩重连+web 重启(logging/notify 重挂改经模块 apply, P1); L0 下 hr.apply 也必须被调到(HR 路由守阵)
+- test_apply_new_config_levels: 配置热重载按 L0/L1/L2/R 级别应用; L1 只剩重连(web 重启/logging/notify/HR 全部改经模块 apply, P1-P2); L0 下 hr.apply 也必须被调到(HR 路由守阵)
 - test_apply_new_config_l2_preserves_runtime_state: L2 热重载保留运行期内存 state —— 不得重读磁盘旧版回滚 exec_history/skip_check_day/recheck_fails(issue 26-09-21-1347 守阵)
 - test_stop_web_server_releases_port_for_restart: 停止后服务线程真正退出, 同端口可再次监听(10048 回归守阵)
 - test_start_web_server_started_message_is_info: 「WEB UI 已启动」按 INFO 记(alert-levels 契约: 生命周期消息不许 WARNING, 否则 notify 开启时每次启动弹通知)
-- test_apply_web_config_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥
-- test_apply_web_config_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄)
+- test_webui_module_apply_skips_restart_when_bind_unchanged: 监听身份未变 -> 不重启, 仅刷新密钥(经 WebUIModule.apply 驱动, P2)
+- test_webui_module_apply_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄; 经 WebUIModule.apply 驱动, P2)
 - test_start_web_server_reports_failure_when_port_taken: 端口被占用 -> 句柄未就绪 + ERROR 日志(不再静默)
 - test_web_loop_exception_handler_downgrades_connection_reset: 网络波动(WinError 10054 对端强迫关闭)降级为一行 INFO, 不再 ERROR + traceback
 - test_web_loop_noise_log_throttled_in_window: 断连日志按窗口节流(窗口内只记首条, 出窗口附抑制条数)
@@ -5994,9 +5994,9 @@ def test_state_kind_maps_states(state, kind):
 
 
 def test_apply_new_config_levels(monkeypatch):
-    """apply_new_config: 按影响级别应用 —— L0 仅换配置; L1 重连+web 重启(日志/通知重挂自 P1
-    起改经模块 apply 整段短路, 段变才动的守阵在 test_core_modules);
-    L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用;
+    """apply_new_config: 按影响级别应用 —— L0 仅换配置; L1 只剩重连(web 重启自 P2、HR 重挂
+    自 P2、日志/通知重挂自 P1 起全部改经模块 apply 整段短路, 段变守阵在 test_core_modules /
+    test_facade_modules); L2 重建任务队列/规则并抑制事件一轮; R 仅提示重启不应用;
     完成消息按 INFO 记(alert-levels 契约: 热重载是预期动作, WARNING 会被 notify 推成通知)"""
     import logging as std_logging
 
@@ -6018,10 +6018,12 @@ def test_apply_new_config_levels(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         new_cfg = mock.MagicMock(name="new_config")
-        # 模块 apply 的整段相等判定(P1): 新配置钉住与现行相同的 logging/notify 段对象 ——
-        # 本测试只验证分级分支, 模块在新旧段相等时零动作(段变才重挂的守阵在 test_core_modules)
+        # 模块 apply 的整段判定(P1-P2): 新配置钉住与现行相同的 logging/notify/web 段对象 ——
+        # 本测试只验证分级分支; web 段不钉的话 WebUIModule.apply 会把 Mock 监听身份误判成
+        # 段变而真启服务器(P2), 模块段变守阵在 test_core_modules / test_facade_modules
         new_cfg.logging = mgr.config.logging
         new_cfg.notify = mgr.config.notify
+        new_cfg.web = mgr.config.web
         # 副作用隔离: 重连/规则加载均替身(本测试只验证分级分支)
         mgr._load_rules = mock.MagicMock()
         mgr._create_global_tasks = mock.MagicMock()
@@ -6051,10 +6053,11 @@ def test_apply_new_config_levels(monkeypatch):
         assert done_logs[-1].levelno == std_logging.INFO, \
             f"热重载完成是预期动作, 应记 INFO(实为 {done_logs[-1].levelname})"
 
-        # 2. L1: 重连 + web 监听身份变化时重启(次序: 先停旧并等其线程退出 -> 启新);
-        #    日志/通知重挂自本段迁入模块 apply(plan P1) —— 本节新旧 logging/notify 段相同,
-        #    模块必须零动作(整段短路), 短路本身的守阵在 test_core_modules
-        # 旧配置(复现真实新旧对比): hr_check 也要给上 —— apply_new_config 的 L1 分支要拿旧值
+        # 2. L1: 重连(web 监听身份变化时重启自 P2 起经 WebUIModule.apply 处理, 时序: 先停旧
+        #    并等其线程退出 -> 启新, 发生在 host.apply_all 广播内); 日志/通知重挂自 P1、HR
+        #    重挂自 P2 均已迁入模块 apply —— 本节新旧 logging/notify/web 段中, 仅 web 段端口
+        #    变化 -> 只有 webui 模块动服务器
+        # 旧配置(复现真实新旧对比): hr_check 也要给上 —— HrModule.apply 要拿旧 hr_check 段
         # 与新的 channel/shared_dir 比对(见 HrRuntime.apply), 缺了会 AttributeError;
         # logging/notify 段同样钉住(与新配置同对象 -> 模块短路)
         mgr.config = SimpleNamespace(
@@ -6136,10 +6139,11 @@ def test_apply_new_config_l2_preserves_runtime_state(monkeypatch):
         with open(os.path.join(td, "state.json"), "w", encoding="utf-8") as f:
             json.dump({"stale_marker": True}, f)
         # 替身: 与分级测试同款(只验证 L2 分支行为, 变更判定由 impact 单测覆盖);
-        # logging/notify 段钉住现行对象 -> 模块 apply 整段短路(P1), 本守阵只钉 state 语义
+        # logging/notify/web 段钉住现行对象 -> 模块 apply 整段短路(P1-P2), 本守阵只钉 state 语义
         new_cfg = mock.MagicMock(name="new_config")
         new_cfg.logging = mgr.config.logging
         new_cfg.notify = mgr.config.notify
+        new_cfg.web = mgr.config.web
         mgr._load_rules = mock.MagicMock()
         mgr._create_global_tasks = mock.MagicMock()
         mgr.connect = mock.MagicMock(return_value=True)
@@ -6218,23 +6222,24 @@ def test_start_web_server_started_message_is_info(tmp_path):
         restore()
 
 
-def test_apply_web_config_skips_restart_when_bind_unchanged(monkeypatch):
+def test_webui_module_apply_skips_restart_when_bind_unchanged(monkeypatch):
     """监听身份(enabled/host/port)未变 -> 不重启服务器, 仅刷新密钥(鉴权每请求实时读取)
 
-    否则改个日志级别之类的 L1 变更也会把 WEB 服务器拆了重建, 白白放大端口竞态窗口。
+    否则改个日志级别之类的变更也会把 WEB 服务器拆了重建, 白白放大端口竞态窗口。
+    P2 起该语义单点在 WebUIModule.apply(_apply_web_config 迁入), 经模块入口驱动。
     """
     from helpers import make_manager
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        # 真实调用点: self.config 已是新配置; 参数是旧 web 段(仅用于对比监听身份)
+        # 真实调用点: self.config 已是新配置; 模块拿到的是(旧配置, 新配置)整对象
         mgr.config.web = _web_stub(port=8080, token="新密钥")
         old_handle = mock.MagicMock()
         mgr._web_handle = old_handle
         monkeypatch.setattr("auto_qb.webui.start_web_server", mock.MagicMock())
         monkeypatch.setattr("auto_qb.webui.stop_web_server", mock.MagicMock())
 
-        mgr._apply_web_config(_web_stub(port=8080, token="旧密钥"))
+        mgr.host.get("webui").apply(SimpleNamespace(web=_web_stub(port=8080, token="旧密钥")), mgr.config)
 
         from auto_qb.webui import start_web_server, stop_web_server
 
@@ -6980,8 +6985,8 @@ def test_api_log_note_when_level_unfilterable(web_env):
     assert data["lines"] == lines and data["note"] == ""
 
 
-def test_apply_web_config_toggle_enabled(monkeypatch):
-    """web.enabled 热开关: 关 -> 开(启动服务器); 开 -> 关(停止并清空句柄)"""
+def test_webui_module_apply_toggle_enabled(monkeypatch):
+    """web.enabled 热开关(经 WebUIModule.apply, P2): 关 -> 开(启动服务器); 开 -> 关(停止并清空句柄)"""
     from helpers import make_manager
 
     with tempfile.TemporaryDirectory() as td:
@@ -6990,17 +6995,18 @@ def test_apply_web_config_toggle_enabled(monkeypatch):
         stopped = mock.MagicMock()
         monkeypatch.setattr("auto_qb.webui.start_web_server", started)
         monkeypatch.setattr("auto_qb.webui.stop_web_server", stopped)
+        mod = mgr.host.get("webui")
 
         # 关 -> 开(旧句柄为 None, 原先该场景完全不生效)
         mgr.config.web = _web_stub(enabled=True, port=8080)
         mgr._web_handle = None
-        mgr._apply_web_config(_web_stub(enabled=False, port=8080))
+        mod.apply(SimpleNamespace(web=_web_stub(enabled=False, port=8080)), mgr.config)
         started.assert_called_once()
         assert mgr._web_handle == "新句柄"
 
         # 开 -> 关: 停止并清空句柄
         mgr.config.web = _web_stub(enabled=False, port=8080)
-        mgr._apply_web_config(_web_stub(enabled=True, port=8080))
+        mod.apply(SimpleNamespace(web=_web_stub(enabled=True, port=8080)), mgr.config)
         stopped.assert_called_once()
         assert mgr._web_handle is None
 

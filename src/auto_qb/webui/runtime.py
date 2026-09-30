@@ -509,6 +509,39 @@ class WebUIRuntime:
             #   常态下的耗时看前端 `[perf]` 那一行即可(五段更全), 异常慢才由上面升 WARNING。
             logger.debug(msg)
 
+    # ------------------------------------------------------------------ 服务器生命周期(plan P2 门面转正)
+
+    def ensure_token(self) -> str:
+        """确定访问密钥(显式配置优先, 否则随机生成并持久化到 data_dir/web.token)并落 self.token
+
+        自 P2 起令牌生命周期内聚本门面: start_web_server 不再直写 manager._web_token(plan
+        §05「外围绕过边界直写内核私有面」清零)。!密钥内容不进日志(server/common 契约)。
+        """
+        from .server.common import ensure_web_token
+
+        self.token = ensure_web_token(self._host)
+        return self.token
+
+    def start_server(self) -> None:
+        """启动 WEB 服务器(独立线程): 先确定密钥再拉起 —— 启用时的启动与热重载重启共用
+
+        WebUIModule 是宿主侧唯一调用方(run() 的 web 启动块已退役, plan P2)。
+        """
+        from . import start_web_server
+
+        self.ensure_token()
+        self.handle = start_web_server(self._host)
+
+    def stop_server(self) -> None:
+        """请求服务器退出(进程关停路径): 只置退出位**不等**线程
+
+        uvicorn 每 0.1s 才读一次 should_exit, 服务线程是 daemon 随进程终灭 —— 与原 run()
+        finally 的 `handle.stop()` 口径逐字一致; 只有热重载重启才需要 stop_web_server
+        的"停旧并等线程退出"(见 server/lifecycle 的 10048 回归说明)。
+        """
+        if self.handle is not None:
+            self.handle.stop()
+
     # ------------------------------------------------------------------ 命令投递(Web 线程)
 
     def post_command(self, cmd: str, payload: Optional[dict] = None) -> dict:

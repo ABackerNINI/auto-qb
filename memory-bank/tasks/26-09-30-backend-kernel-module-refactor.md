@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-30
 **Updated:** 2026-09-30
-**Summary:** 计划 26-09-30-1819 拍板按推荐(D1-D5)滚动实施: P0 内核地基(新增 core/module.py(Module 契约/AppContext/ModuleHost/EventBus 骨架)+ core/state.py(StateService, 状态持久化自 RuleEngineMixin 迁出), qbmanager 构造 ctx 挂服务、属性全委托; 1751 计划标 Superseded(被 D1 吸收)); P1 基建模块化(新增 core/modules 包 LoggingModule/NotifyModule 契约样板, 热重载 L1 手工重挂改 host.apply 无条件广播+整段短路, 托盘 4 处 _notify_handler 直写改 ctx.notify 公开方法)。P2-P6 待续。
+**Summary:** 计划 26-09-30-1819 拍板按推荐(D1-D5)滚动实施: P0 内核地基(新增 core/module.py(Module 契约/AppContext/ModuleHost/EventBus 骨架)+ core/state.py(StateService, 状态持久化自 RuleEngineMixin 迁出), qbmanager 构造 ctx 挂服务、属性全委托; 1751 计划标 Superseded(被 D1 吸收)); P1 基建模块化(新增 core/modules 包 LoggingModule/NotifyModule 契约样板, 热重载 L1 手工重挂改 host.apply 无条件广播+整段短路, 托盘 4 处 _notify_handler 直写改 ctx.notify 公开方法); P2 门面转正(新增 webui/module.py WebUIModule + hr/module.py HrModule, run() 启停改 host.start_all/stop_all, _apply_web_config 并入 webui.apply, 主循环五语义调用改 loop hooks, store.hr_link 注入移进装配, start_web_server 不再写 manager._web_token)。P3-P6 待续。
 
 **Topics:** backend-kernel-module-refactor
 
@@ -32,7 +32,7 @@ P0-P6 见 [计划 26-09-30-1819](../plans/26-09-30-1819-plan-kernel-module-refac
 |---|---|---|
 | P0 | 契约 + 状态服务(纯加法) | Done (2026-09-30) |
 | P1 | logging/notify 模块化 + 托盘改 ctx.notify | Done (2026-09-30) |
-| P2 | webui/hr 门面转正 Module 契约 | Open |
+| P2 | webui/hr 门面转正 Module 契约 | Done (2026-09-30) |
 | P3 | tracker / speed_curve / maintenance 小模块 | Open |
 | P4 | grouping / ops(+checking) 中坚模块 | Open |
 | P5 | rules 模块化 + 刷新管线收口 | Open |
@@ -58,3 +58,13 @@ P0-P6 见 [计划 26-09-30-1819](../plans/26-09-30-1819-plan-kernel-module-refac
   - 守阵: 新建 `tests/test_core_modules.py` 7 例(段变才重挂/无关保存零动作 P1 指定守阵、托盘 API 契约、托盘+内核源码私有面清零静态守阵); test_module_host 装配断言改 ["logging","notify"]+ctx.notify 单一真相; test_web 两热重载守阵改写(L1 断言重连+web 重启, 替身区钉 logging/notify 段对象防 Mock 段被误判段变)。
   - 闸门: test.full 全绿(1850 passed + 3 skipped / 91%, 较 P0 基线 +7), 基线切片 `testing/baselines/26-09-30-2000-p1-foundation-modules.md`。
   - P2 待办注记: run() 的 web 启动块/hr.start/finally 停止序列改 host.start_all/stop_all 时, 装配序(logging→notify→webui→hr)与现启动次序(web→hr→notify)在 notify/web 之间换位 —— notify 不依赖 web, 无风险; LoggingModule.start 幂等闸届时仍兜构造期早建。
+
+- **2026-09-30 P2 实施完成**(本 clone):
+  - 新增 `webui/module.py`(106 行, WebUIModule)与 `hr/module.py`(41 行, HrModule): 门面转正走**契约封装**而非「只换基类」—— WebUIRuntime 的 SSE `subscribe()` 与 Module.subscribe 撞名、HrRuntime.start/apply 签名有内外调用点, 且 plan §3.3 装配清单本就点名 WebUIModule/HrModule 类。两模块经 manager 现取门面对象(不缓存引用): 测试整体替换 mgr.web/mgr.hr(test_apply_new_config_levels 的 `mgr.hr = MagicMock()` 等)时模块自动跟随。
+  - WebUIModule: start(dry-run/未启用无操作 + handle 幂等闸)/stop(只 handle.stop() 不等线程, 原 finally 口径)/apply(_apply_web_config 语义迁入: mark_dirty 有差异即置脏(plan §4.3「不能完全短路」) + 监听身份对比, 相等 ensure_token / 不等先 stop_web_server 等退出再启新或停净)/loop hooks(on_command_line/on_sync_line/on_task_line)。WebUIRuntime 增 ensure_token/start_server/stop_server —— 令牌生命周期内聚门面, start_web_server 删 `manager._web_token` 直写。
+  - HrModule: apply 透传 old.hr_check(短路/重建判据单点仍在 HrRuntime.apply); sections 认领 ("hr_check","trackers") —— 站点绑定派生自 trackers.X.hr_check, 只认 hr_check 会在 P6 段认领守阵漏判。
+  - qbmanager.py 1060→1023: 装配清单挂入两模块 + `store.hr_link = self.hr` 注入移进装配块; run() web 启动块/hr.start/finally 手工停止序列删除(改 host.start_all/stop_all, 逆序 hr→webui→notify→logging); 主循环命令线改 host.run_command_line, _sync_line/_task_line 收尾改 run_sync_line/run_task_line; apply_new_config 删 mark_dirty 手工行/old_web/old_hr_check 捕获/L1 web 重启/hr.apply 手工调, L1 分支只剩 qb 重连; `_apply_web_config` 方法删除。
+  - 行为变化仅限计划内(三处, 均评估过): ①advance_error_reasons 自任务执行**前**移至任务线收尾 hook(预取变更经置脏同轮可见, 无顺序钉点); ②token 同步时机自「L1 且身份未变」扩展为「每次热重载且身份未变且在跑」(ensure_web_token 幂等); ③零差异保存不再置脏视图(原无条件 mark_dirty)。关停顺序 web 先于 hr 换为 hr 先于 web(装配逆序, 资源独立)。
+  - 守阵: 新建 `tests/test_facade_modules.py` 9 例(webui start 语义/stop 口径/置脏判据/仅身份变化才重启/loop hooks 次序/hr 契约/run 接线守阵「主循环不再点名 self.web.* 五调用、flush_truths 留内核」/装配+判定桥/start_server 先密钥后服务); test_module_host 装配断言改四模块; test_web 两守阵改经 `mgr.host.get("webui").apply(old, new)` 驱动并更名, 两处 MagicMock 配置补钉 `new_cfg.web = mgr.config.web`(Mock 段不钉会被误判身份变化而真启服务器)。web stop+wait 竞态/hr 从无到有三件套/别名代理层既有守阵零改动全绿。
+  - 闸门: test.full 全绿(1860 passed + 3 skipped / 91%, 较上基线 +9), 基线切片 `testing/baselines/26-09-30-2048-p2-facade-modules.md`。
+  - P3 待办注记: `_create_global_tasks` 的 delete_tags/speed_limit_curve 任务随 MaintenanceModule/SpeedCurveModule 自注册; `_match_tracker_conf` 升 ctx.trackers 服务(D3); `_hr_anchors` 经 ctx 回调取锚点(plan §05, HrRuntime getattr 窥探届时清)。

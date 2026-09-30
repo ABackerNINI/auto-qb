@@ -5,8 +5,9 @@
 rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执行全部启用规则")。
 
 **本类只管核心域**: 连接 / 主循环节拍 / 状态同步 / 任务执行 / 种子刷新。WEB UI 的表现层状态
-与节拍判据在 `web_runtime.WebUIRuntime`(门面), 主循环通过 `self.web` 的四个语义方法与它交互,
-不持有也不判断任何表现层字段(2026-09-20 拆出, 见 memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html)。
+与节拍判据在 `web_runtime.WebUIRuntime`(门面), 主循环经宿主 loop hooks 与它交互
+(命令线/同步线收尾/任务线收尾, plan kernel-module-refactor P2), 不持有也不判断任何表现层
+字段(2026-09-20 拆出, 见 memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html)。
 
 职责拆分(mixins 包, 各模块组合进本类):
 - mixins.rule_engine  RuleEngineMixin  规则加载/种子级规则任务/事件分派
@@ -20,13 +21,14 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
                                        + 提交点检查 + 按 source 保护策略(plan 26-09-30-0109)
 - webui.views         WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
 - webui.commands      WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
-- web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排)
+- web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排; P2 起经
+                                       WebUIModule 接入宿主, 见 webui/module.py)
 - qbclient            (独立模块)       qB 客户端构造(本地地址关闭 trust_env)
 
 内核地基(plan kernel-module-refactor): 构造期立 AppContext(ctx)并把能力服务挂上
 (store/api/state), 本类同名属性自此刻起全部是**委托**(ctx 为单一真相, 守阵断言同对象);
-ModuleHost / EventBus 编排机制 + 装配清单在构造期建立 —— P0 立骨架, P1 起挂入真实模块
-(logging/notify 基建样板), 最终收敛为「宿主只知何时, 不知何事」。
+ModuleHost / EventBus 编排机制 + 装配清单在构造期建立 —— P0 立骨架, P1 挂入基建两模块
+(logging/notify), P2 门面转正(webui/hr), 最终收敛为「宿主只知何时, 不知何事」。
 """
 import logging
 import os
@@ -36,7 +38,7 @@ from typing import List, Optional
 
 from qbittorrentapi import APIConnectionError, Client
 
-from ..config import Config, WebConfig, load_config
+from ..config import Config, load_config
 from ..config.writer import materialize_schema_migration
 from ..infra import file_access
 from ..infra.errors import AutoQbError
@@ -60,8 +62,10 @@ from .qbclient import _new_client
 from ..rules import Rule
 from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 from ..webui import WebUIRuntime
+from ..webui.module import WebUIModule
 # HR 在线核实运行时门面(端点 + 取数线程 + 只读视图): 与 WebUIRuntime 同级, 见 __init__ 说明
 from ..hr.runtime import HrRuntime
+from ..hr.module import HrModule
 from ..torrents import (
     QbCompatError,
     TorrentRecord,
@@ -200,9 +204,9 @@ class QbManager(
         self.events = EventBus()
         self.host = ModuleHost(self.ctx, self.events)
         # 装配清单(plan §3.3): 顺序 = 相位内消费序 = 生命周期序, 内核唯一「知道模块名字」的
-        # 地方。P1 挂入基建两模块(logging/notify); P2+ 按此顺序逐段补齐: webui → hr →
-        # tracker → speed_curve → maintenance → grouping → ops → rules(rules 最后: 它消费
-        # 前面所有人的服务)。
+        # 地方。P1 挂入基建两模块(logging/notify), P2 门面转正(webui/hr); P3+ 按此顺序逐段
+        # 补齐: tracker → speed_curve → maintenance → grouping → ops → rules(rules 最后:
+        # 它消费前面所有人的服务)。
         self.host.register(LoggingModule())
         self.ctx.notify = NotifyModule(self.ctx)  # 托盘经 ctx.notify 调公开方法(plan §3.2)
         self.host.register(self.ctx.notify)
@@ -241,16 +245,24 @@ class QbManager(
         # 搜索索引 / 密钥与句柄 全部收在 WebUIRuntime 里, 主循环只见它暴露的少数语义方法。
         # (2026-09-20 从本类拆出: 原先 19 个表现层字段平铺在 __init__, 主循环因此要替表现层
         #  做"要不要重建 / 要不要补刷新"的判断。详见 web_runtime.py 的模块 docstring。)
+        # P2 门面转正: 服务器启停/热重载语义/loop hooks 内聚 WebUIModule(webui/module.py)。
         self.web = WebUIRuntime(self)
         # HR 在线核实运行时: 本地取数端点 + 取数线程 + 只读视图(计划 §8)。
         # 同 WebUIRuntime 的思路 —— 附属线程与文件句柄的生命周期不进核心域, 主循环只见门面:
         # 取数线程按 poll_interval 自唤醒, 主循环与判定路径只读视图(hr.view_set(), 零等待、
         # 读取时现算三态); hr.wake() 是留给主循环的**可选**叫醒口(非阻塞, 当前无调用点)。
         # 未启用(总开关关 / 无站点 enabled)时它什么都建, 也不会起任何线程。
+        # P2 门面转正: 启停/热重载语义内聚 HrModule(hr/module.py)。
         self.hr = HrRuntime(self)
+        # 装配清单 P2(plan §3.2 门面转正): webui/hr 实现 Module 契约, 启停与热重载语义
+        # 内聚模块 —— 服务器启动/HR 端点与取数线程的启停都改经 host.start_all/stop_all,
+        # 热重载广播经各自 apply(web 服务器重启/hr 重挂自 apply_new_config 的手工分派迁出)。
+        self.host.register(WebUIModule(self))
         # 判定桥: 记录持有门面的**稳定引用**(热重载不换对象), 读取时现算三态 ——
         # 故锚点漂移/站点视图更新都不需要"记录置脏"或全库重建记录(计划 §9)。
+        # 注入属装配的一部分(plan P2): 桥接在装配点一次成形, 记录侧只认这个稳定引用。
         self.store.hr_link = self.hr
+        self.host.register(HrModule(self))
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。
@@ -430,20 +442,10 @@ class QbManager(
         elif desc:
             logger.info(f"配置 schema 已迁移 {desc} 并落盘(迁移前备份: {backup})")
         logger.info(f"启动 qB 管理器: 主循环 {self.config.main_tick}s, 默认任务间隔 {self.config.interval}s")
-        # 主动通知: 启用后全项目 WARNING/ERROR 日志推送平台原生通知(notify.py);
-        # dry_run 判定在调用点(项目约定: dry-run 只打日志), 内部检查 enabled, 未启用返回 None
-        # WEB UI: 启用后伴随启动(浏览器访问, 辅种管理/设置); 密钥随机生成并持久化
-        if not dry_run and self.config.web.enabled:
-            from ..webui import start_web_server
-
-            # 密钥由 start_web_server 内部确定(显式配置或随机生成持久化到 data_dir/web.token)
-            self.web.handle = start_web_server(self)
-        # HR 在线核实: 端点 + 取数线程(独立于 qB 连接 —— 扩展要能随时拉到清单)。
-        # 端口被占 => HrChannelBindError 直接穿透到 CLI 干净退出(fail-fast, 不静默降级)。
-        if not dry_run:
-            self.hr.start()
-        # 模块启用(plan P1): 通知挂载改经 NotifyModule.start(dry-run/未启用 = 无操作, 模块
-        # 自判), logging 已在构造期初始化(start 幂等跳过)。P2 起 web/hr 启动块并入 start_all。
+        # 模块启用(plan P1/P2): web 服务器(启用时)/HR 端点与取数线程/通知挂载全部在各自模块
+        # 的 start(dry-run/未启用 = 无操作, 模块自判), 内核只按装配序调 —— web 启动失败(端口
+        # 被占)记 ERROR 由句柄呈现; HR 端口被占抛 HrChannelBindError 穿透到 CLI 干净退出
+        # (fail-fast 契约原样)。logging 已在构造期初始化(start 幂等跳过)。
         self.host.start_all(dry_run)
         try:
             main_tick = self.config.main_tick
@@ -492,11 +494,10 @@ class QbManager(
                     sync_interval = min(self.config.sync_interval, main_tick)
                     # 命令线: WEB 控制命令(暂停/开始/删除/强制汇报/热重载)由主循环线程执行写操作。
                     # 先清唤醒位再 drain —— drain 期间新到的命令会再次置位, 下一轮立即消费。
-                    # 门面内部承担命令表分发 / 回执 / 写序号 / 自投递判据, 这里只取"本批是否改了
-                    # qB 种子状态"这一个语义结果。
+                    # 命令表分发/回执/写序号/自投递判据归 webui 模块的 on_command_line hook
+                    # (plan P2), 这里只取"本批是否改了 qB 种子状态"这一个语义结果(P0-5 判据)。
                     self._wake_event.clear()
-                    state_changed = self.web.consume_commands()
-                    self.web.check_pending()
+                    state_changed = self.host.run_command_line()
                     if pause_event is not None and pause_event.is_set():
                         # 已暂停: 完全旁观; 等待保持对停止信号与命令的响应
                         if _wait_next(stop_event, self._wake_event, main_tick):
@@ -585,9 +586,9 @@ class QbManager(
             except KeyboardInterrupt:
                 logger.info("停止")
         finally:
-            if self.web.handle is not None:
-                self.web.handle.stop()
-            self.hr.stop()
+            # 模块停用(plan P2): 装配逆序 stop(hr → webui → notify → logging)—— 状态落盘与
+            # 锁释放是内核生命周期, 留在 stop_all 之后
+            self.host.stop_all()
             if not dry_run:
                 self.save_state()
             if self._lock is not None:
@@ -604,16 +605,15 @@ class QbManager(
     # ---------- 单种子命令(WEB 明细行右键) ----------
 
     def apply_new_config(self, config: Config) -> dict:
-        """应用新配置(热重载, 主循环线程经命令队列调用): 按变更影响分级执行
+        """应用新配置(热重载, 主循环线程经命令队列调用): 替换配置对象 + 模块广播 + 分级收尾
 
         - L0 即时生效(仅替换 Config 对象): main_tick/state_save_interval/max_tasks_per_tick/remove_similar_tags/
           skip_checking_tag/grouping.*/add_episode_tags.*/trackers.X.tags|remove_tags|remove_similar_tags|
           limits|hr.*(运行时动态读取, 数据/任务/分组全保留)
-          !HR 例外: 服务对象按值持有站点表, 「仅替换对象」对它不够 —— hr.apply 每次热重载都会
-          被调(见下方调用点), 由它自判重建/短路
-        - L1 轻量应用: qbittorrent 重连 / web 服务器**仅在"监听身份"(enabled/host/port)变化时重启**
-          (次序: 停旧并等其线程退出 -> 启新, 见 _apply_web_config); logging/notify 重挂自 P1 起
-          改经模块 apply(host.apply_all 广播, 整段相等即短路), 不再走本分支
+        - L1 轻量应用: qbittorrent 重连(连接管理属内核)。web 服务器启停自 P2 起并入
+          WebUIModule.apply(仅"监听身份"enabled/host/port 变化才重启, 次序: 停旧并等其线程
+          退出 -> 启新); logging/notify 重挂自 P1、HR 重挂自 P2 起均改经模块 apply —— 每次
+          热重载无条件广播(host.apply_all), 模块自判整段短路, 级别分派对它们只剩重连一项
         - L2 结构重建: 重建任务队列与规则 + 全部记录重匹配 tracker(保留 store 记录/分组/执行历史)
         - R(state_file/data_dir 变更): 拒绝热应用, 返回 restart_required 提示重启进程
         """
@@ -624,28 +624,19 @@ class QbManager(
         if restart_required:
             logger.info(f"以下配置需重启进程才能生效: {restart_required}")
         levels = sorted({c.level for c in changes if c.level != "R"})
-        # 旧配置先留底(替换后旧对象不可达): 模块 apply 的整段相等对比与 web/hr 的 L1/L0 判定都要用
+        # 旧配置先留底(替换后旧对象不可达): 模块 apply 的整段对比与监听身份判定都要用
         old = self.config
-        old_web = old.web
-        old_hr_check = old.hr_check
         # L0: 替换配置对象(动态读取项即刻生效)
         self.config = config
-        # 分组视图含由配置派生的展示值(HR 标签模板如 ${required_seeding_time}, 见 _hr_view_fields),
-        # 配置变了视图内容就可能变 —— 与 store 视图字段变化无关, 需显式置脏
-        self.web.mark_dirty()
-        # 统一挂载口(plan P1, hot-reload W1+W2 子集): 每模块**无条件** apply, 自判整段短路 ——
-        # logging/notify 的重挂知识自 L1 分支迁入各自模块; L1 分支暂留 qb 重连 + web 重启(影子并行, P2 迁出)
+        # 统一挂载口(plan P1/P2, hot-reload 方向一): 每模块**无条件** apply, 自判短路/重启 ——
+        # web 重启(_apply_web_config)与 HR 重挂自 L1/L0 手工分派迁入各自模块; HR 例外语义
+        # (每次热重载必过, 站点接入是 L0)由 HrRuntime.apply 自判短路承担, 见 hr/module.py;
+        # L1 分支只剩 qb 重连(影子并行收尾, P5 评估归属)
         self.host.apply_all(old, config)
         if "L1" in levels:
             self.client = None
             self._last_conn_ok = None
             self.connect()
-            self._apply_web_config(old_web)
-        # HR 运行时**每次热重载都要过一遍 apply, 不限 L1**: 站点接入(hr_check.sites /
-        # trackers.X.hr_check)是 L0, 只替换 config 对象重建不了按值持配置的服务 —— 漏调会让
-        # 「启动时无站点、热接入第一个站点」永远停在取数线程未启动(2026-09-29 实报)。
-        # HR 侧无实质变化时 apply 内部短路返回, 无关配置的保存不会重启取数线程。
-        self.hr.apply(old_hr_check)
         if "L2" in levels:
             logger.info("应用结构级配置变更: 重建任务队列/规则, 全部记录重匹配 tracker")
             self.task_queue = TaskQueue()
@@ -666,62 +657,34 @@ class QbManager(
         )
         return {"applied": True, "levels": levels, "changes": len(changes), "restart_required": restart_required}
 
-    def _apply_web_config(self, old_web: WebConfig) -> None:
-        """WEB 服务器热应用: 仅"监听身份"(enabled/host/port)变化才重启
-
-        - 监听身份未变: 只同步密钥(鉴权每请求实时读 self.web.token, 无需重启 —— 否则改个
-          日志级别也会把 web 服务器拆了重建, 白白放大竞态窗口)
-        - 变化时: 按目标态启停; 重启必须"先停旧服务并等其线程退出"再启新服务
-          (uvicorn 的 should_exit 是异步生效的, 直接重启会与新服务竞抢端口 -> WinError 10048)
-        """
-        from ..webui import ensure_web_token, start_web_server, stop_web_server
-
-        enabled = bool(self.config.web.enabled)
-        want = (enabled, self.config.web.host, self.config.web.port)
-        have = (bool(old_web.enabled), old_web.host, old_web.port)
-        if want == have:
-            if self.web.handle is not None:
-                self.web.token = ensure_web_token(self)
-            return
-        if self.web.handle is not None:
-            stop_web_server(self.web.handle)
-            self.web.handle = None
-        if enabled:
-            self.web.handle = start_web_server(self)
-        else:
-            logger.info("WEB UI 已停止(web.enabled=false)")
-
     def _sync_line(self, dry_run: bool, flush: bool = True, force: bool = False) -> None:
         """同步线(sync_interval 节拍): 拉 qB 增量 -> 推进快照/事件/分组 -> 视图惰性重建
 
         只做状态同步、**不跑任务** —— 状态新鲜度不再被任务节拍(main_tick)拖累。
         sync_interval 取 1.5s 与 qB 自带 WebUI(1500ms)同量级: 比 qB 自身数据粒度更快没有意义。
 
-        视图那一步整体转交门面: 「要不要重建」的判据(客户端活跃窗口 / 上一版有没有被取走)
-        属于表现层, 不再出现在核心域(见 WebUIRuntime.flush_views)。
+        视图那一步整体转交 webui 模块的 on_sync_line hook(plan P2): 「要不要重建」的判据
+        (客户端活跃窗口 / 上一版有没有被取走)属于表现层, 不再出现在核心域。
         """
         self._refresh_torrents(dry_run)
         if flush:
-            self.web.flush_views(force=force)
+            self.host.run_sync_line(force)
 
     def _task_line(self, dry_run: bool, force: bool = False) -> None:
-        """任务线(main_tick 节拍): 错误原因预取 + 执行到期任务 + 视图/搜索索引推进
+        """任务线(main_tick 节拍): 执行到期任务 + 表现层收尾(错误原因预取/视图发布/搜索索引)
 
         tracker 预取与文件 API 批量调用**仍跟 main_tick, 不跟随快档**: 它们不是状态新鲜度的
         瓶颈, 提频只会线性放大 qB 请求量(见计划附录 A3 的五动作归档)。
 
-        「错误原因预取」与「搜索索引推进」都是表现层的慢路径(Tracker/文件 API), 只在 Web
-        客户端活跃时才有意义 —— 门控在门面里, 核心域只负责在节拍上调用它。
+        「错误原因预取」「视图发布」「搜索索引推进」都是表现层的慢路径(Tracker/文件 API),
+        只在 Web 客户端活跃时才有意义 —— 门控在 webui 模块与门面里, 内核只负责在节拍上
+        调 on_task_line hook(plan P2), 收尾次序(预取 -> 发布 -> 索引)是模块内聚知识。
         """
         now = time.time()
 
-        self.web.advance_error_reasons()
-
         self.task_queue.run_due(dry_run, now=now, max_tasks=self.config.max_tasks_per_tick)
 
-        self.web.flush_views(force=force)
-
-        self.web.advance_search_index()
+        self.host.run_task_line(force)
 
     def _tick(self, dry_run: bool, force: bool = False):
         """完整一轮 = 同步线 + 任务线(执行与收尾统一由 TaskQueue.run_due 管理)

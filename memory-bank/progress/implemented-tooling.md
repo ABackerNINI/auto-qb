@@ -51,4 +51,13 @@
   ⑩**`<each:>` / `<changed:>` 只盯本次改动清单**, 不是文件系统 glob —— 没匹配上的 WARN 是**按设计跳过**, 不是闸门失效(WARN 文案已点明, 曾误读)。
   ⑪**`doc` 指针基准由子包继承父包**(否则子包写 `references/pipeline.md` 会 STOP), 5 个 task 的 `show` 均打印出父包那份绝对路径。
 
+- **my-commit-flow 同步判据修复 (2026-09-24, 从同名切片迁出)**: 外部走查发现两处潜在缺陷 ——
+  ①`classify_merge_probe` 返回二元组致检查表打印 ValueError(expected 3, got 2), 改返回三元组
+  (级别/「合流预判」/说明)并钉四分支; ②push/preflight 落后判据回退读 `refs/remotes/gitee/*`
+  跟踪 ref, 本 clone 拦截层静默丢弃其写入 → 陈年快照给假「落后 5」拒推 —— 判据一律 `ls-remote`
+  现查远端 tip 比对本地 HEAD, 取不到远端真值如实 STOP/ WARN 不凑数; push 后 status -sb 输出删除
+  (跟踪 ref 被丢弃时 behind 是假象); 落后提示改 merge --ff-only(当时代码还是 rebase 红线)。
+  `test_preflight.py` +5 项回归(含源码扫描守阵禁 `--left-right` 快照判据); 实测 39 项全过 +
+  test.full 1201+1 与基线一致。
+
 - **W3 遗留的文档漂移订正 (2026-09-24, 从 commands 切片迁出)**: `AGENTS.md` 那 3 处死链(指向已删除的 skill 与已搬走的 `.commit-flow.toml`)改指 `.commands/my-commit-flow/README.md` 与 `.my-commit-flow.toml`; `pitfalls/ops/_about.md`(连带两份 `_index.md`)/ `pitfalls/ops/prod-files.md` / `pitfalls/git/push.md` / `pitfalls/testing/tmpdir.md` / `conventions/collaboration.md` / `conventions/process.md` 的旧名一并订正。**刻意没动**: `plans/*.html` 与 `tasks/*.md`(冻结快照 / 纪要)、`progress/suggestions.md`(叙述)、`test_preflight.py` 的 glob 夹具字符串、别的专题的切片(按「各 clone 只写自己的切片」约定)。
