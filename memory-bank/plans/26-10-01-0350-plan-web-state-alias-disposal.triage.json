@@ -1,0 +1,1485 @@
+{
+ "_legend": {
+  "category": "alias=_WEB_STATE_ALIAS 字段(经 __getattr__/__setattr__ 转发 web.*) | forward=单行委托(测试/路由旧名) | facade=D1 拍板永久保留的属性面 | kernel=内核自有方法",
+  "wave": "W1=有 src 消费方(先行迁移) | W2=仅测试消费方 | W3=无外部消费方直接删/随删除内联自调 | 保留=不删。名字本体删除一律发生在 W3(facade/kernel 除外); 测试面消费方一律 W2",
+  "target": "调用方应改写的新名口(W2 测试迁移与 W1 src 迁移的施工目标)",
+  "test_consumers": "接收者级精确计数: {测试文件: 处数}, 接收者限 mgr/mgr2/mgr3/manager/self.manager/ctx.manager/_manager —— 已排除模块同名方法(ctx.ops.X / host.get(...).X)的新名调用与误计",
+  "src_consumers": "真实代码消费方(行级); 注释/docstring 提及写入 note 不占条目"
+ },
+ "meta": {
+  "plan": "memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.html",
+  "topic": "web-state-alias-disposal",
+  "baseline_commit": "82330d45",
+  "guard_test": "tests/test_qbmanager_alias_freeze.py",
+  "counts": {
+   "alias_fields": 20,
+   "dunders": 2,
+   "forward": 57,
+   "facade": 7,
+   "kernel": 17
+  }
+ },
+ "alias_layer": {
+  "dunders": [
+   "__getattr__",
+   "__setattr__"
+  ],
+  "fields": {
+   "web_commands": {
+    "new": "commands",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 8,
+     "tests/test_web.py": 64
+    },
+    "src_consumers": [],
+    "note": "src 仅 docstring 提及(webui/server/__init__.py:5); 测试面大(test_qbmanager/test_web)"
+   },
+   "_web_write_seq": {
+    "new": "write_seq",
+    "wave": "W1",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 7,
+     "tests/test_web.py": 1
+    },
+    "src_consumers": [
+     {
+      "ref": "src/auto_qb/webui/server/context.py:32",
+      "recv": "getattr(self._manager, \"_web_write_seq\", 0)",
+      "fix": "manager.web.write_seq"
+     }
+    ],
+    "note": "真实 src 消费方是 getattr 字符串形态, manager._ 直引 grep 扫不到"
+   },
+   "_web_results": {
+    "new": "results",
+    "wave": "W1",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 1,
+     "tests/test_web.py": 52
+    },
+    "src_consumers": [
+     {
+      "ref": "src/auto_qb/webui/server/routes/system.py:50",
+      "recv": "manager",
+      "fix": "manager.web.results"
+     }
+    ],
+    "note": ""
+   },
+   "_reannounce_pending": {
+    "new": "reannounce_pending",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_web.py": 3
+    },
+    "src_consumers": [],
+    "note": ""
+   },
+   "_truth_pending": {
+    "new": "truth_pending",
+    "wave": "W3",
+    "test_consumers": {},
+    "src_consumers": [],
+    "note": "无任何消费方(仅别名表自身), W3 直接删"
+   },
+   "_group_view": {
+    "new": "group_view",
+    "wave": "W1",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 1,
+     "tests/test_web.py": 5
+    },
+    "src_consumers": [
+     {
+      "ref": "src/auto_qb/webui/server/routes/state.py:27",
+      "recv": "manager",
+      "fix": "manager.web.group_view"
+     },
+     {
+      "ref": "src/auto_qb/webui/server/routes/state.py:55",
+      "recv": "manager",
+      "fix": "manager.web.group_view"
+     }
+    ],
+    "note": ""
+   },
+   "_singles_view": {
+    "new": "singles_view",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_web.py": 1
+    },
+    "src_consumers": [],
+    "note": ""
+   },
+   "_flat_view": {
+    "new": "flat_view",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_web.py": 2
+    },
+    "src_consumers": [],
+    "note": ""
+   },
+   "_shows_view": {
+    "new": "shows_view",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_web.py": 1
+    },
+    "src_consumers": [],
+    "note": ""
+   },
+   "_shows_pending": {
+    "new": "shows_pending",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_web.py": 3
+    },
+    "src_consumers": [],
+    "note": "src 仅 WebviewMixin docstring 提及"
+   },
+   "_group_view_ver": {
+    "new": "group_view_ver",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 3,
+     "tests/test_web.py": 7
+    },
+    "src_consumers": [],
+    "note": ""
+   },
+   "_group_view_dirty": {
+    "new": "group_view_dirty",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 6,
+     "tests/test_web.py": 18
+    },
+    "src_consumers": [],
+    "note": "src 仅 WebviewMixin docstring 提及"
+   },
+   "_web_last_seen": {
+    "new": "last_seen",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 1
+    },
+    "src_consumers": [],
+    "note": ""
+   },
+   "_web_pending_ver": {
+    "new": "pending_ver",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 2
+    },
+    "src_consumers": [],
+    "note": ""
+   },
+   "_view_lock": {
+    "new": "view_lock",
+    "wave": "W3",
+    "test_consumers": {},
+    "src_consumers": [],
+    "note": "无任何消费方(仅别名表自身), W3 直接删"
+   },
+   "_search_index": {
+    "new": "search_index",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_qbmanager.py": 1,
+     "tests/test_web.py": 9
+    },
+    "src_consumers": [],
+    "note": "src 仅 WebviewMixin docstring 提及"
+   },
+   "_search_index_dirty": {
+    "new": "search_index_dirty",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_web.py": 8
+    },
+    "src_consumers": [],
+    "note": "src 仅 WebviewMixin docstring 提及"
+   },
+   "_web_token": {
+    "new": "token",
+    "wave": "W1",
+    "test_consumers": {
+     "tests/test_facade_modules.py": 1,
+     "tests/test_web.py": 69
+    },
+    "src_consumers": [
+     {
+      "ref": "src/auto_qb/webui/server/auth.py:59",
+      "recv": "manager",
+      "fix": "manager.web.token"
+     },
+     {
+      "ref": "src/auto_qb/webui/server/auth.py:67",
+      "recv": "manager",
+      "fix": "manager.web.token"
+     }
+    ],
+    "note": ""
+   },
+   "_web_handle": {
+    "new": "handle",
+    "wave": "W2",
+    "test_consumers": {
+     "tests/test_facade_modules.py": 2,
+     "tests/test_web.py": 7
+    },
+    "src_consumers": [],
+    "note": ""
+   },
+   "_traffic_view": {
+    "new": "traffic_view",
+    "wave": "W1",
+    "test_consumers": {
+     "tests/test_modules_p3.py": 3,
+     "tests/test_qbmanager.py": 1,
+     "tests/test_speed_curve.py": 10,
+     "tests/test_web.py": 5
+    },
+    "src_consumers": [
+     {
+      "ref": "src/auto_qb/webui/server/routes/state.py:29",
+      "recv": "manager",
+      "fix": "manager.web.traffic_view"
+     },
+     {
+      "ref": "src/auto_qb/webui/server/routes/state.py:59",
+      "recv": "manager",
+      "fix": "manager.web.traffic_view"
+     },
+     {
+      "ref": "src/auto_qb/webui/server/routes/state.py:116",
+      "recv": "manager",
+      "fix": "manager.web.traffic_view"
+     },
+     {
+      "ref": "src/auto_qb/webui/server/routes/torrent_detail.py:137",
+      "recv": "manager",
+      "fix": "manager.web.traffic_view"
+     }
+    ],
+    "note": ""
+   }
+  }
+ },
+ "members": [
+  {
+   "name": "_match_tracker_conf",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.trackers.match(torrent)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/helpers.py": 1,
+    "tests/test_rule_engine.py": 1,
+    "tests/test_tracker.py": 6
+   },
+   "note": ""
+  },
+  {
+   "name": "_apply_speed_limit",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.trackers.apply_speed_limit(torrent, tracker_conf, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_tracker.py": 4
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "_handle_speed_limit_curve",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "host.get(\"speed_curve\").handle_speed_limit_curve(task, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_speed_curve.py": 2
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "_handle_maintenance_task_interface",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "host.get(\"maintenance\").handle_maintenance(task.torrent, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 1
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "_handle_maintenance",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "host.get(\"maintenance\").handle_maintenance(torrent, dry_run, force_tags)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_hr.py": 7,
+    "tests/test_trigger_events.py": 6
+   },
+   "note": ""
+  },
+  {
+   "name": "_add_tags",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.maintenance.add_tags(torrent, tags, dry_run, log_level)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_mixins_tags.py": 4
+   },
+   "note": ""
+  },
+  {
+   "name": "_remove_tags",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.maintenance.remove_tags(torrent, patterns, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_mixins_tags.py": 2
+   },
+   "note": ""
+  },
+  {
+   "name": "_remove_similar_tags",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.maintenance.remove_similar_tags(torrent, tags, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_mixins_tags.py": 2
+   },
+   "note": ""
+  },
+  {
+   "name": "_set_category",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.maintenance.set_category(torrent, category, overwrite, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_hr.py": 3,
+    "tests/test_mixins_tags.py": 6
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "_create_category_if_not_exists",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.maintenance.create_category_if_not_exists(category, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_mixins_tags.py": 2
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "_add_hr_tag_or_category",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.maintenance.add_hr_tag_or_category(torrent, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_hr.py": 16,
+    "tests/test_mixins_tags.py": 11
+   },
+   "note": ""
+  },
+  {
+   "name": "_add_episode_tags",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "ctx.maintenance.add_episode_tags(torrent, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_mixins_tags.py": 2
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "_handle_delete_tags",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "host.get(\"maintenance\").handle_delete_tags(task, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_delete_tags.py": 6,
+    "tests/test_mixins_tags.py": 3
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "_handle_delete_tags_if_has_no_torrents",
+   "category": "forward",
+   "block": "P3 模块方法委托(tracker/speed_curve/maintenance)",
+   "wave": "W2",
+   "target": "host.get(\"maintenance\").handle_delete_tags_if_has_no_torrents(task, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_delete_tags.py": 2,
+    "tests/test_mixins_tags.py": 5,
+    "tests/test_snapshot_sync.py": 2
+   },
+   "note": ""
+  },
+  {
+   "name": "_handle_state_transitions",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W3",
+   "target": "host.get(\"grouping\")._handle_state_transitions(dry_run)",
+   "src_consumers": [],
+   "test_consumers": {},
+   "note": ""
+  },
+  {
+   "name": "_handle_removed_torrents",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W3",
+   "target": "host.get(\"grouping\")._handle_removed_torrents(removed_hashes, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {},
+   "note": ""
+  },
+  {
+   "name": "_handle_save_path_changes",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W2",
+   "target": "host.get(\"grouping\")._handle_save_path_changes(dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_grouping.py": 1
+   },
+   "note": ""
+  },
+  {
+   "name": "_assign_new_torrent",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W2",
+   "target": "host.get(\"grouping\")._assign_new_torrent(hash, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_grouping.py": 2,
+    "tests/test_web.py": 2
+   },
+   "note": ""
+  },
+  {
+   "name": "_assign_to_group",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W2",
+   "target": "host.get(\"grouping\")._assign_to_group(torrent, file_map, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_grouping.py": 1
+   },
+   "note": ""
+  },
+  {
+   "name": "_leave_group",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W2",
+   "target": "host.get(\"grouping\")._leave_group(hash)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_grouping.py": 3
+   },
+   "note": ""
+  },
+  {
+   "name": "_check_missing_files",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W2",
+   "target": "host.get(\"grouping\")._check_missing_files(members, sizes, dry_run, key)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_grouping.py": 14
+   },
+   "note": ""
+  },
+  {
+   "name": "_check_download_conflicts",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W2",
+   "target": "host.get(\"grouping\")._check_download_conflicts(dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_checking.py": 10,
+    "tests/test_grouping.py": 19
+   },
+   "note": "src 仅 grouping 模块自身调用 + store/webui 注释"
+  },
+  {
+   "name": "_group_members",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W1",
+   "target": "host.get(\"grouping\")._group_members(hash)",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/rules/actions/checking.py:92",
+     "recv": "manager",
+     "fix": "manager.host.get(\"grouping\")._group_members(hash)"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_grouping.py": 2
+   },
+   "note": ""
+  },
+  {
+   "name": "_group_by_hash",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W1",
+   "target": "host.get(\"grouping\")._group_by_hash()",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/rules/actions/checking.py:165",
+     "recv": "ctx.manager",
+     "fix": "manager.host.get(\"grouping\")._group_by_hash()"
+    }
+   ],
+   "test_consumers": {},
+   "note": ""
+  },
+  {
+   "name": "_group_has_downloading",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W1",
+   "target": "host.get(\"grouping\")._group_has_downloading(members)",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/rules/actions/checking.py:93",
+     "recv": "manager",
+     "fix": "manager.host.get(\"grouping\")._group_has_downloading(members)"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_grouping.py": 6,
+    "tests/test_state_matrix.py": 1
+   },
+   "note": ""
+  },
+  {
+   "name": "_group_reference_candidates",
+   "category": "forward",
+   "block": "P4 分组委托(grouping)",
+   "wave": "W1",
+   "target": "host.get(\"grouping\")._group_reference_candidates(members)",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/rules/actions/checking.py:143",
+     "recv": "ctx.manager",
+     "fix": "manager.host.get(\"grouping\")._group_reference_candidates(members)"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_grouping.py": 1
+   },
+   "note": ""
+  },
+  {
+   "name": "ops_recheck",
+   "category": "forward",
+   "block": "P4 ops 委托(ctx.ops 服务)",
+   "wave": "W2",
+   "target": "ctx.ops.recheck(hash, source=..., torrent=..., auto_start=..., on_success=..., origin=...)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_modules_p4.py": 1,
+    "tests/test_ops.py": 7
+   },
+   "note": "src 仅注释提及; 生产已走 ctx.ops"
+  },
+  {
+   "name": "ops_skip_check",
+   "category": "forward",
+   "block": "P4 ops 委托(ctx.ops 服务)",
+   "wave": "W2",
+   "target": "ctx.ops.skip_check(hash, source=..., torrent=..., auto_start=..., has_reference=...)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_ops.py": 3
+   },
+   "note": "src 仅注释提及; 生产已走 ctx.ops"
+  },
+  {
+   "name": "check_filelist",
+   "category": "forward",
+   "block": "P4 ops 委托(ctx.ops 服务)",
+   "wave": "W2",
+   "target": "ctx.ops.check_filelist(api, torrent)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_modules_p4.py": 1
+   },
+   "note": "src 已走 manager.ctx.ops.check_filelist(checking.py:120); OpsModule.check_filelist 是实现本体"
+  },
+  {
+   "name": "rules",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\").rules(属性读写)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 3
+   },
+   "note": "src 无外部消费方(rules_mod self.* 是模块自有属性); 测试侧读多写少(test_rule_engine.py:529 整体赋值)"
+  },
+  {
+   "name": "enabled_rules",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\").enabled_rules(属性读写)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_checking.py": 15,
+    "tests/test_rule_engine.py": 3,
+    "tests/test_trigger_events.py": 6
+   },
+   "note": ""
+  },
+  {
+   "name": "_load_rules",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\")._load_rules()",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/helpers.py": 1,
+    "tests/test_checking.py": 1,
+    "tests/test_modules_p5.py": 1,
+    "tests/test_ops.py": 1,
+    "tests/test_rule_engine.py": 1,
+    "tests/test_rules_core.py": 1,
+    "tests/test_trigger_events.py": 2
+   },
+   "note": "run() 启动加载自调(__init__ 注释声明加载在 run())—— W3 内联时与 run() 同波"
+  },
+  {
+   "name": "_rules_for_torrent",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\")._rules_for_torrent(torrent)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 8,
+    "tests/test_rules_core.py": 4
+   },
+   "note": ""
+  },
+  {
+   "name": "_create_rule_task",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\")._create_rule_task(rule, hash)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_checking.py": 14,
+    "tests/test_rule_engine.py": 1,
+    "tests/test_rules_core.py": 1
+   },
+   "note": ""
+  },
+  {
+   "name": "_handle_rule",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\")._handle_rule(rule, task, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 4
+   },
+   "note": ""
+  },
+  {
+   "name": "_handle_event_rule",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W3",
+   "target": "host.get(\"rules\")._handle_event_rule(rule, task, snapshot, dry_run)",
+   "src_consumers": [],
+   "test_consumers": {},
+   "note": ""
+  },
+  {
+   "name": "_apply_event_rule",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\")._apply_event_rule(rule, hash, dry_run=..., snapshot=...)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_trigger_events.py": 5
+   },
+   "note": ""
+  },
+  {
+   "name": "_resolve_refs",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\")._resolve_refs(refs)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 4
+   },
+   "note": ""
+  },
+  {
+   "name": "_create_torrent_tasks",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "host.get(\"rules\")._create_torrent_tasks(hash)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_grouping.py": 2,
+    "tests/test_qbmanager.py": 2
+   },
+   "note": ""
+  },
+  {
+   "name": "_hr_anchors",
+   "category": "forward",
+   "block": "P5 规则引擎委托(RulesModule)",
+   "wave": "W2",
+   "target": "hr._anchors()",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 3
+   },
+   "note": "实现已迁 HrRuntime._anchors(hr/runtime.py:363)"
+  },
+  {
+   "name": "_load_state",
+   "category": "forward",
+   "block": "P0 状态持久化委托(StateService)",
+   "wave": "W2",
+   "target": "ctx.state.load()",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 11
+   },
+   "note": "qm 自调 __init__/run; src 仅 core/state.py docstring 提及"
+  },
+  {
+   "name": "save_state",
+   "category": "forward",
+   "block": "P0 状态持久化委托(StateService)",
+   "wave": "W1",
+   "target": "ctx.state.save()",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/rules/checking_meta.py:51",
+     "recv": "manager",
+     "fix": "manager.ctx.state.save()"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_checking.py": 1,
+    "tests/test_hr.py": 1,
+    "tests/test_rule_engine.py": 8,
+    "tests/test_rules_core.py": 2,
+    "tests/test_trigger_events.py": 1
+   },
+   "note": "rules/checking_meta.py 宿主参数是鸭子类型契约「有 .state dict 与 .save_state() 的对象」(checking_meta.py:13) —— W1 改 ctx.state.save 时同步核对; OpsModule.save_state 是模块自有同名方法(非本层)"
+  },
+  {
+   "name": "_maybe_flush_state",
+   "category": "forward",
+   "block": "P0 状态持久化委托(StateService)",
+   "wave": "W2",
+   "target": "ctx.state.maybe_flush(now, config.state_save_interval)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 7
+   },
+   "note": "qm 自调 run(周期落盘)"
+  },
+  {
+   "name": "_bind_field_snapshots",
+   "category": "forward",
+   "block": "P0 状态持久化委托(StateService)",
+   "wave": "W2",
+   "target": "ctx.state.bind_field_snapshots(store)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_module_host.py": 1
+   },
+   "note": "qm 自调 __init__/run(state 整体替换后重挂); src 仅 store.py 注释"
+  },
+  {
+   "name": "_cleanup_orphan_tmp",
+   "category": "forward",
+   "block": "P0 状态持久化委托(StateService)",
+   "wave": "W2",
+   "target": "ctx.state.cleanup_orphan_tmp()",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 4
+   },
+   "note": "qm 自调 __init__(持锁后清理)"
+  },
+  {
+   "name": "_materialize_state_migration",
+   "category": "forward",
+   "block": "P0 状态持久化委托(StateService)",
+   "wave": "W2",
+   "target": "ctx.state.materialize_migration(dry_run)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 3
+   },
+   "note": "qm 自调 run(持锁后物化)"
+  },
+  {
+   "name": "record_execution",
+   "category": "forward",
+   "block": "P0 状态持久化委托(StateService)",
+   "wave": "W1",
+   "target": "ctx.state.record_execution(rule_name, hash)",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/rules/base.py:267",
+     "recv": "self.manager",
+     "fix": "manager.ctx.state.record_execution(...)"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_module_host.py": 1,
+    "tests/test_rule_engine.py": 3
+   },
+   "note": "实现单点 StateService.record_execution(core/state.py:203)"
+  },
+  {
+   "name": "get_exec_record",
+   "category": "forward",
+   "block": "P0 状态持久化委托(StateService)",
+   "wave": "W1",
+   "target": "ctx.state.get_exec_record(rule_name, hash)",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/rules/base.py:300",
+     "recv": "self.manager",
+     "fix": "manager.ctx.state.get_exec_record(...)"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_module_host.py": 2,
+    "tests/test_rule_engine.py": 2
+   },
+   "note": "实现单点 StateService.get_exec_record(core/state.py:213)"
+  },
+  {
+   "name": "_drain_web_commands",
+   "category": "forward",
+   "block": "WEB 兼容转发(WebUIRuntime)",
+   "wave": "W2",
+   "target": "web.consume_commands()",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 5,
+    "tests/test_web.py": 45
+   },
+   "note": "src 无消费方(主循环已改 host.run_command_line)"
+  },
+  {
+   "name": "_check_reannounce_pending",
+   "category": "forward",
+   "block": "WEB 兼容转发(WebUIRuntime)",
+   "wave": "W2",
+   "target": "web.check_pending()",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_web.py": 4
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "_flush_truths",
+   "category": "forward",
+   "block": "WEB 兼容转发(WebUIRuntime)",
+   "wave": "W2",
+   "target": "web.flush_truths()",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_web.py": 2
+   },
+   "note": "src 无消费方(run() 已直调 self.web.flush_truths)"
+  },
+  {
+   "name": "_flush_views",
+   "category": "forward",
+   "block": "WEB 兼容转发(WebUIRuntime)",
+   "wave": "W2",
+   "target": "web.flush_views(force=...)",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 4
+   },
+   "note": "src 无消费方"
+  },
+  {
+   "name": "rebuild_views",
+   "category": "forward",
+   "block": "WEB 兼容转发(WebUIRuntime)",
+   "wave": "W2",
+   "target": "web.rebuild_views()",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_web.py": 2
+   },
+   "note": "src 仅 WebUIRuntime 自有同名方法(runtime.py:576/316)"
+  },
+  {
+   "name": "ensure_group_view",
+   "category": "forward",
+   "block": "WEB 兼容转发(WebUIRuntime)",
+   "wave": "W1",
+   "target": "web.ensure_view()",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/webui/server/routes/state.py:90",
+     "recv": "manager",
+     "fix": "manager.web.ensure_view()"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_web.py": 5
+   },
+   "note": ""
+  },
+  {
+   "name": "ensure_group_state",
+   "category": "forward",
+   "block": "WEB 兼容转发(WebUIRuntime)",
+   "wave": "W1",
+   "target": "web.ensure_state(rid, view)",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/webui/server/routes/state.py:48",
+     "recv": "manager",
+     "fix": "manager.web.ensure_state(rid, view)"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 2,
+    "tests/test_web.py": 14
+   },
+   "note": ""
+  },
+  {
+   "name": "touch_web_client",
+   "category": "forward",
+   "block": "WEB 兼容转发(WebUIRuntime)",
+   "wave": "W1",
+   "target": "web.touch()",
+   "src_consumers": [
+    {
+     "ref": "src/auto_qb/webui/server/routes/events.py:48,51",
+     "recv": "manager",
+     "fix": "manager.web.touch()"
+    },
+    {
+     "ref": "src/auto_qb/webui/server/routes/fs.py:91,136,227",
+     "recv": "manager",
+     "fix": "manager.web.touch()"
+    },
+    {
+     "ref": "src/auto_qb/webui/server/routes/hr.py:33,59,90",
+     "recv": "manager",
+     "fix": "manager.web.touch()"
+    },
+    {
+     "ref": "src/auto_qb/webui/server/routes/sites.py:38",
+     "recv": "manager",
+     "fix": "manager.web.touch()"
+    },
+    {
+     "ref": "src/auto_qb/webui/server/routes/state.py:21,43,88,95,105,115",
+     "recv": "manager",
+     "fix": "manager.web.touch()"
+    },
+    {
+     "ref": "src/auto_qb/webui/server/routes/system.py:28,49",
+     "recv": "manager",
+     "fix": "manager.web.touch()"
+    },
+    {
+     "ref": "src/auto_qb/webui/server/routes/torrent_detail.py:29,41,51,64,79,88,136,197",
+     "recv": "manager",
+     "fix": "manager.web.touch()"
+    }
+   ],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 3,
+    "tests/test_web.py": 3
+   },
+   "note": ""
+  },
+  {
+   "name": "_next_state_flush_at",
+   "category": "forward",
+   "block": "P0 服务委托(纯内部属性对)",
+   "wave": "W2",
+   "target": "ctx.state.next_flush_at",
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_rule_engine.py": 4
+   },
+   "note": "run() 字面量 + test_periodic_flush_is_wired_in_run 守阵钉源码 —— 清理必须连同守阵改写同波入库(计划风险表)"
+  },
+  {
+   "name": "config",
+   "category": "facade",
+   "block": "内核(何时域)",
+   "wave": "保留(D1)",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/helpers.py": 3,
+    "tests/test_actions.py": 2,
+    "tests/test_cli.py": 2,
+    "tests/test_core_modules.py": 3,
+    "tests/test_expr_eval.py": 2,
+    "tests/test_facade_modules.py": 12,
+    "tests/test_hr.py": 33,
+    "tests/test_hr_runtime.py": 1,
+    "tests/test_local_qb_service.py": 3,
+    "tests/test_mixins_tags.py": 18,
+    "tests/test_module_host.py": 4,
+    "tests/test_modules_p3.py": 12,
+    "tests/test_modules_p4.py": 4,
+    "tests/test_modules_p5.py": 7,
+    "tests/test_modules_p6.py": 3,
+    "tests/test_qbmanager.py": 20,
+    "tests/test_rule_engine.py": 12,
+    "tests/test_rules_core.py": 1,
+    "tests/test_snapshot_sync.py": 3,
+    "tests/test_speed_curve.py": 4,
+    "tests/test_sync.py": 1,
+    "tests/test_tracker.py": 6,
+    "tests/test_trigger_events.py": 7,
+    "tests/test_ui.py": 6,
+    "tests/test_web.py": 59
+   },
+   "note": "manager 即外观的公共属性面, 与 ctx 同对象; 测试/路由/mixin 直读面"
+  },
+  {
+   "name": "store",
+   "category": "facade",
+   "block": "内核(何时域)",
+   "wave": "保留(D1)",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/helpers.py": 5,
+    "tests/test_actions.py": 5,
+    "tests/test_checking.py": 27,
+    "tests/test_expr_eval.py": 2,
+    "tests/test_facade_modules.py": 1,
+    "tests/test_grouping.py": 126,
+    "tests/test_hr_runtime.py": 1,
+    "tests/test_local_qb_service.py": 2,
+    "tests/test_module_host.py": 3,
+    "tests/test_modules_p3.py": 1,
+    "tests/test_modules_p4.py": 4,
+    "tests/test_modules_p5.py": 2,
+    "tests/test_ops.py": 4,
+    "tests/test_qbmanager.py": 12,
+    "tests/test_rule_engine.py": 3,
+    "tests/test_snapshot_sync.py": 28,
+    "tests/test_sync.py": 15,
+    "tests/test_trigger_events.py": 14,
+    "tests/test_web.py": 69
+   },
+   "note": "manager 即外观的公共属性面, 与 ctx 同对象; 测试/路由/mixin 直读面"
+  },
+  {
+   "name": "api",
+   "category": "facade",
+   "block": "内核(何时域)",
+   "wave": "保留(D1)",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/helpers.py": 2,
+    "tests/test_actions.py": 2,
+    "tests/test_checking.py": 3,
+    "tests/test_cli.py": 1,
+    "tests/test_grouping.py": 6,
+    "tests/test_local_qb_service.py": 1,
+    "tests/test_module_host.py": 2,
+    "tests/test_snapshot_sync.py": 27,
+    "tests/test_speed_curve.py": 1,
+    "tests/test_trigger_events.py": 1,
+    "tests/test_web.py": 5
+   },
+   "note": "manager 即外观的公共属性面, 与 ctx 同对象; 测试/路由/mixin 直读面"
+  },
+  {
+   "name": "state",
+   "category": "facade",
+   "block": "内核(何时域)",
+   "wave": "保留(D1)",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_actions.py": 4,
+    "tests/test_checking.py": 38,
+    "tests/test_hr.py": 5,
+    "tests/test_mixins_tags.py": 5,
+    "tests/test_module_host.py": 6,
+    "tests/test_modules_p5.py": 4,
+    "tests/test_ops.py": 4,
+    "tests/test_rule_engine.py": 10,
+    "tests/test_rules_core.py": 5,
+    "tests/test_speed_curve.py": 4,
+    "tests/test_trigger_events.py": 23,
+    "tests/test_web.py": 7
+   },
+   "note": "manager 即外观的公共属性面, 与 ctx 同对象; 测试/路由/mixin 直读面"
+  },
+  {
+   "name": "state_file",
+   "category": "facade",
+   "block": "内核(何时域)",
+   "wave": "保留(D1)",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_checking.py": 3,
+    "tests/test_module_host.py": 1,
+    "tests/test_trigger_events.py": 1,
+    "tests/test_web_shortcuts.py": 1
+   },
+   "note": "manager 即外观的公共属性面, 与 ctx 同对象; 测试/路由/mixin 直读面"
+  },
+  {
+   "name": "task_queue",
+   "category": "facade",
+   "block": "内核(何时域)",
+   "wave": "保留(D1)",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_checking.py": 39,
+    "tests/test_delete_tags.py": 2,
+    "tests/test_grouping.py": 4,
+    "tests/test_module_host.py": 2,
+    "tests/test_modules_p3.py": 14,
+    "tests/test_modules_p4.py": 1,
+    "tests/test_modules_p5.py": 3,
+    "tests/test_ops.py": 8,
+    "tests/test_qbmanager.py": 17,
+    "tests/test_rule_engine.py": 1,
+    "tests/test_speed_curve.py": 6,
+    "tests/test_trigger_events.py": 14,
+    "tests/test_web.py": 7
+   },
+   "note": "manager 即外观的公共属性面, 与 ctx 同对象; 测试/路由/mixin 直读面"
+  },
+  {
+   "name": "web",
+   "category": "facade",
+   "block": "内核(何时域)",
+   "wave": "保留(D1)",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_facade_modules.py": 9,
+    "tests/test_module_host.py": 2,
+    "tests/test_modules_p3.py": 2,
+    "tests/test_qbmanager.py": 13,
+    "tests/test_web.py": 6
+   },
+   "note": "manager 即外观的公共属性面, 与 ctx 同对象; 测试/路由/mixin 直读面"
+  },
+  {
+   "name": "__init__",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {},
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "client",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/helpers.py": 2,
+    "tests/test_actions.py": 1,
+    "tests/test_checking.py": 61,
+    "tests/test_delete_tags.py": 4,
+    "tests/test_episodes.py": 5,
+    "tests/test_grouping.py": 42,
+    "tests/test_hr.py": 24,
+    "tests/test_local_qb_service.py": 3,
+    "tests/test_mixins_tags.py": 31,
+    "tests/test_modules_p3.py": 1,
+    "tests/test_modules_p4.py": 5,
+    "tests/test_modules_p5.py": 6,
+    "tests/test_ops.py": 7,
+    "tests/test_qbmanager.py": 16,
+    "tests/test_rule_engine.py": 11,
+    "tests/test_rules_core.py": 12,
+    "tests/test_snapshot_sync.py": 3,
+    "tests/test_speed_curve.py": 3,
+    "tests/test_state_matrix.py": 1,
+    "tests/test_sync.py": 6,
+    "tests/test_tracker.py": 10,
+    "tests/test_trigger_events.py": 47,
+    "tests/test_ui.py": 5,
+    "tests/test_web.py": 62
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "connect",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_cli.py": 5,
+    "tests/test_core_modules.py": 1,
+    "tests/test_local_qb_service.py": 2,
+    "tests/test_modules_p5.py": 4,
+    "tests/test_qbmanager.py": 16,
+    "tests/test_ui.py": 6,
+    "tests/test_web.py": 5
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "reconnect",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {},
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "wake",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 4,
+    "tests/test_web.py": 1
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "run",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_cli.py": 12,
+    "tests/test_local_qb_service.py": 1,
+    "tests/test_qbmanager.py": 11,
+    "tests/test_ui.py": 6
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "status_snapshot",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_ui.py": 2
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "apply_new_config",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_core_modules.py": 3,
+    "tests/test_modules_p6.py": 3,
+    "tests/test_web.py": 3
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "_sync_line",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 2
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "_task_line",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 3
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "_tick",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_local_qb_service.py": 2,
+    "tests/test_qbmanager.py": 17,
+    "tests/test_ui.py": 2,
+    "tests/test_web.py": 2
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "_refresh_torrents",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_checking.py": 1,
+    "tests/test_episodes.py": 6,
+    "tests/test_grouping.py": 35,
+    "tests/test_local_qb_service.py": 1,
+    "tests/test_modules_p5.py": 4,
+    "tests/test_qbmanager.py": 12,
+    "tests/test_sync.py": 12,
+    "tests/test_trigger_events.py": 12
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "_create_global_tasks",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_delete_tags.py": 1,
+    "tests/test_modules_p3.py": 3,
+    "tests/test_qbmanager.py": 2,
+    "tests/test_speed_curve.py": 4
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "_validate_torrent_schema",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {},
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "_reset_reconnect_backoff",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {},
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "_reconnect_due",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_qbmanager.py": 5
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  },
+  {
+   "name": "export_torrents_info",
+   "category": "kernel",
+   "block": "内核(何时域)",
+   "wave": "保留",
+   "target": null,
+   "src_consumers": [],
+   "test_consumers": {
+    "tests/test_cli.py": 2,
+    "tests/test_qbmanager.py": 1
+   },
+   "note": "形似旧名实为内核自有(连接/节拍/相位/生命周期), 分诊显式标保留防误删"
+  }
+ ]
+}
