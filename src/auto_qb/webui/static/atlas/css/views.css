@@ -119,7 +119,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .g-status.k-checking .ico, .member-row.checking .m-state .dot { animation: pulse-soft 1.6s ease-in-out infinite; }
 @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: .32; } }
 /* chip / pill: 统一的悬浮反馈(含轻微上浮, 让"可交互"更明确) */
-.tag-chip, .cat-chip, .site-chip, .tag-more, .diff-mark, .topbar .ver {
+.tag-chip, .cat-chip, .site-chip, .diff-mark, .topbar .ver {
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease),
     filter var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease-out); }

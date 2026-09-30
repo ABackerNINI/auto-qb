@@ -159,10 +159,9 @@
                             <span v-else class="zero"></span>
                           </span>
                           <span v-else-if="col.key === 'tags'" class="m-tags">
-                            <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip"
+                            <span v-for="t in mTags(m)" :key="t" class="tag-chip"
                                   :class="[tagClass(t, m), { 'f-on': isFilterOn('tagFilter', t) }]"
                                   @click.stop="filterFromChip('tag', t)">{{ t }}</span>
-                            <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
                             <span v-if="!mTags(m).length" class="zero"></span>
                           </span>
                           <span v-else-if="col.key === 'progress'" class="m-progress">

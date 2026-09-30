@@ -60,10 +60,9 @@
                 <!-- 已下载求和 = 多站切换下载的流量总消耗 -->
                 <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, numTone(g.downloaded, g.size)]">{{ fmtSizeOrDash(g.downloaded) }}</div>
                 <div v-else-if="col.key === 'tags'" class="g-tags">
-                  <span v-for="t in g.commonTags.list.slice(0, 3)" :key="t" class="tag-chip"
+                  <span v-for="t in g.commonTags.list" :key="t" class="tag-chip"
                         :class="[tagClass(t, g.members[0]), { 'f-on': isFilterOn('tagFilter', t) }]"
                         @click.stop="filterFromChip('tag', t)">{{ t }}</span>
-                  <span v-if="g.commonTags.list.length > 3" class="tag-more">+{{ g.commonTags.list.length - 3 }}</span>
                   <span v-if="!g.commonTags.list.length" class="zero"></span>
                   <span v-if="g.commonTags.diff" class="diff-mark" title="组内标签不一致(此处仅显示共同标签)">±</span>
                 </div>
@@ -160,10 +159,9 @@
                   <span v-else-if="col.key === 'up_limit'" class="m-stat">{{ fmtLimitBytes(m.up_limit) }}</span>
                   <span v-else-if="col.key === 'dl_limit'" class="m-stat">{{ fmtLimitBytes(m.dl_limit) }}</span>
                   <span v-else-if="col.key === 'tags'" class="m-tags">
-                    <span v-for="t in tagSlice(mTags(m), 2)" :key="t" class="tag-chip"
+                    <span v-for="t in mTags(m)" :key="t" class="tag-chip"
                           :class="[tagClass(t, m), { 'f-on': isFilterOn('tagFilter', t) }]"
                           @click.stop="filterFromChip('tag', t)">{{ t }}</span>
-                    <span v-if="mTags(m).length > 2" class="tag-more">+{{ mTags(m).length - 2 }}</span>
                     <span v-if="!mTags(m).length" class="zero"></span>
                   </span>
                   <span v-else-if="col.key === 'category'" class="m-cat">

@@ -298,8 +298,8 @@
 .site-chip.paused, .site-chip.other { background: var(--paused-soft); color: var(--paused);
   box-shadow: inset 0 0 0 1px var(--paused-line); }
 .site-chip.error { background: var(--error-soft); color: var(--error); }
-/* 标签/分类列: chip 制 */
-.g-tags, .m-tags { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+/* 标签/分类列: chip 制, 标签列全量展开允许换行(2026-09-30 移除 +N 折叠) */
+.g-tags, .m-tags { display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 4px; min-width: 0; overflow: hidden; }
 .g-cat, .m-cat { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
 .tag-chip { display: inline-flex; align-items: center; padding: 1px 7px;
   background: var(--surface-1); border: 1px solid var(--border-soft); color: var(--fg-muted); font-size: 11px;
@@ -342,7 +342,6 @@
 .f-cell:hover { background-image: linear-gradient(rgba(127, 127, 127, .16), rgba(127, 127, 127, .16)); }
 .f-cell.f-on { box-shadow: inset 0 0 0 1px currentColor; font-weight: 600; }
 
-.tag-more { font-size: 11px; color: var(--fg-dim); flex: 0 0 auto; }
 /* ± / 多分类 = 组内该字段不一致: 中性低调 */
 .diff-mark { flex: 0 0 auto; padding: 0 5px; background: var(--surface-2);
   color: var(--fg-dim); font-size: 11px; white-space: nowrap; }

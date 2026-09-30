@@ -92,10 +92,6 @@ window.AQB_DECORATE = {
         paused: "#i-pause", error: "#i-warn", other: "#i-info",
       }[kind] || "#i-info";
     },
-    tagSlice(list, n) {
-      // 标签 chip 最多显示 n 个(其余折叠为 +N), 保持行高与列宽稳定
-      return (list || []).slice(0, n);
-    },
     /* HR 标签分类色(与后端 qbmanager._hr_view_tags 对应)
      *
      * pending = 已触发 HR 条件但尚未满足做种时长/分享率(需关注, 用最鲜亮的颜色);
