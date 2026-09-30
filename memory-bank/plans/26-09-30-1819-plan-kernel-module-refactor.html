@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="kernel-module-refactor">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-09-30-1819">
-<meta name="doc-updated" content="26-09-30-1819">
+<meta name="doc-updated" content="26-09-30-1907">
 <meta name="doc-refs" content="memory-bank/plans/26-09-30-1751-plan-hot-reload-simplify.html,memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html,memory-bank/plans/26-09-15-1124-backend-file-split-plan.html">
 <title>计划 · QbManager 内核化重构 — 微内核 + 插件式模块</title>
 <style>
@@ -197,11 +197,11 @@
   <a href="#s08"><span class="n">08</span>风险与代价</a>
   <a href="#s09"><span class="n">09</span>决策点清单</a>
   <div class="toc-meta">
-    <div>status <b>Open 待拍板</b></div>
+    <div>status <b>In Progress 实施中</b></div>
     <div>topic <b>kernel-module-refactor</b></div>
     <div>added <b>26-09-30-1819</b></div>
     <div>refs <b>hot-reload-simplify</b></div>
-    <div style="margin-top:6px">拍板后本件冻结<br>执行滚动进 tasks/</div>
+    <div style="margin-top:6px">已拍板按推荐 D1-D5<br>执行滚动进 tasks/</div>
   </div>
 </nav>
 
@@ -212,7 +212,7 @@
   <h1>QbManager 内核化重构<br>微内核 + 插件式模块</h1>
   <div class="subtitle">把 mixin / 日志 / 通知 / qB 客户端 / Web 服务 / 任务队列与规则 / HR / 配置 / WebUI / 托盘 / 状态落盘从 QbManager 中聚拢为自治模块, 由统一宿主调度 —— 宿主只知「何时」, 不知「何事」。</div>
   <div class="meta-row">
-    <div>状态<b>Open · 待拍板</b></div>
+    <div>状态<b>In Progress · 已拍板按推荐</b></div>
     <div>added<b>26-09-30-1819</b></div>
     <div>专题<b>kernel-module-refactor</b></div>
     <div>关联<b>26-09-30-1751 hot-reload-simplify</b></div>
@@ -553,7 +553,12 @@ MODULES = [LoggingModule, NotifyModule, WebUIModule, HrModule,
 
 <!-- ============================================================ 09 -->
 <section id="s09">
-  <div class="sec-head"><span class="no">09</span><h2>决策点清单 (待拍板)</h2></div>
+  <div class="sec-head"><span class="no">09</span><h2>决策点清单</h2></div>
+
+  <div class="note">
+    <div class="t">拍板记录 (2026-09-30)</div>
+    <p>D1-D5 全部按推荐执行: D1 两案合并, 1751 号计划标 Superseded(被吸收), 其 W1-W4 波次映射进本计划 P1/P2/P5; D2 checking 并入 ops; D3 tracker 匹配做 ctx 服务; D4 别名层处置另立后续计划; D5 保留 QbManager 命名。P0(内核地基)已实施, 执行滚动进 <a href="javascript:void(0)">tasks/26-09-30-backend-kernel-module-refactor.md</a>。</p>
+  </div>
 
   <div class="decision">
     <div class="d-no">D1 · 与热重载计划的关系</div>
@@ -582,7 +587,7 @@ MODULES = [LoggingModule, NotifyModule, WebUIModule, HrModule,
   </div>
 
   <div class="colophon">
-    plan · kernel-module-refactor · Open 待拍板<br>
+    plan · kernel-module-refactor · In Progress (2026-09-30 拍板按推荐 D1-D5, P0 已实施)<br>
     勘察基线 fa54f02b (develop, 2026-09-30 同步) · 数字为该基线实测 · 拍板后本件冻结, 执行滚动进 tasks/<br>
     refs: 26-09-30-1751-plan-hot-reload-simplify (方向一协议来源) · 26-09-20-0234-webui-decoupling (门面先例) · 26-09-15-1124-backend-file-split (上一轮瘦身)
   </div>

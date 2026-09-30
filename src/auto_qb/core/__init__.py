@@ -2,6 +2,10 @@
 
 由根目录平铺文件归拢而来（plan 26-09-22-2112 · 方案 C · W4b）:
 - qbmanager.py  QbManager 主协调者（8 mixin 组合 + self.web 门面; 主循环唯一写线程）
+- module.py     内核地基（plan kernel-module-refactor P0）: Module 契约 / AppContext /
+                ModuleHost / EventBus 骨架 —— 宿主只知「何时」, 不知「何事」
+- state.py      状态持久化服务 StateService（state.json 读写/迁移/周期落盘/执行历史单点;
+                自 RuleEngineMixin 迁出, 26-09-30）
 - taskqueue.py  单任务队列（add_task / run_due 两动词）
 - qbapi.py      qB API Facade（写后同步快照）
 - qbclient.py   qB 客户端构造（本地直连 trust_env 处理）

@@ -6,9 +6,9 @@
 <title>计划 · 热重载机制简化: 统一挂载口 vs 保存即重启</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hot-reload-simplify">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Superseded">
 <meta name="doc-added" content="26-09-30-1751">
-<meta name="doc-updated" content="26-09-30-1751">
+<meta name="doc-updated" content="26-09-30-1907">
 <meta name="doc-refs" content="memory-bank/plans/26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html,memory-bank/plans/26-09-30-1819-plan-kernel-module-refactor.html">
 <style>
 :root {
@@ -95,7 +95,7 @@ footer a { color: var(--dim); }
   <a href="#s6"><span class="no">06</span>推荐与实施路线</a>
   <a href="#s7"><span class="no">07</span>验收口径</a>
   <a href="#s8"><span class="no">08</span>决策点清单</a>
-  <div class="toc-foot">状态 Open(待拍板)<br>拍板后本件冻结,<br>执行滚动进 tasks/</div>
+  <div class="toc-foot">状态 Superseded<br>方向一协议被吸收,<br>执行进 kernel-module-refactor</div>
 </nav>
 
 <header class="cover">
@@ -103,11 +103,12 @@ footer a { color: var(--dim); }
   <h1>热重载机制简化: 统一挂载口 vs 保存即重启</h1>
   <p class="lede">配置热重载机制四类失效反复复发, 根因是「谁需要知道配置变了」这一知识分散在中央分级表、分派分支、消费方钩子、测试守阵四处, 各自演化各自腐烂。本文对比两条彻底简化路线 —— 方向一「统一挂载口」(Spring RefreshScope 同族) 与方向二「保存即重启进程」(nginx / uvicorn 同族), 附成熟方案调研、对比矩阵与推荐路线, 供拍板。</p>
   <div class="meta-row">
-    <div class="item"><div class="k">类型</div><div class="v">plan · <span class="badge">Open 待拍板</span></div></div>
+    <div class="item"><div class="k">类型</div><div class="v">plan · <span class="badge">Superseded 被吸收</span></div></div>
     <div class="item"><div class="k">Added</div><div class="v">26-09-30-1751</div></div>
     <div class="item"><div class="k">专题</div><div class="v">hot-reload-simplify</div></div>
     <div class="item"><div class="k">Refs</div><div class="v"><a href="26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html">L2 回滚修复计划</a></div></div>
   </div>
+  <div class="note"><p><b>已被吸收 (Superseded, 2026-09-30)</b>: 本计划推荐的方向一「统一挂载口」随 26-09-30-1819「QbManager 内核化重构」拍板执行 —— 其模块契约的 apply 语义(每模块无条件 apply + 自判整段短路)整体吸收本方案, W1-W4 波次映射进该计划 P1/P2/P5。执行进度看 tasks/26-09-30-backend-kernel-module-refactor.md, 本件保留作调研依据, 不再单独排期。</p></div>
 </header>
 
 <section id="s1">
@@ -265,7 +266,7 @@ footer a { color: var(--dim); }
 <footer>
   <p>依据: 2026-09-30 分析轮 (机制全景与四失效族定位) · 同专题前案 26-09-22-1857 (L2 回滚修复) · 坑档 pitfalls/backend/hot-reload-held-config.md · tasks/26-09-29-backend-hr-hot-apply.md。</p>
   <p style="margin-top:8px">调研来源: <a href="https://nginx.org/en/docs/control.html">nginx — Controlling nginx (SIGHUP reload)</a> · <a href="https://docs.spring.io/spring-cloud-config/reference/">Spring Cloud Config Reference (@RefreshScope)</a> · <a href="https://dynaconf.com/advanced/">Dynaconf Advanced Usage</a> · <a href="https://oneuptime.com/blog/post/2026-01-22-config-hot-reload-python/view">OneUptime — Config Hot Reload in Python (2026-01)</a> · <a href="https://softwareengineering.stackexchange.com/questions/456812">SE — Reload configuration without restart</a>。</p>
-  <p style="margin-top:8px">doc-topic hot-reload-simplify · 状态 Open(待拍板) · 拍板后冻结, 执行进 tasks/。</p>
+  <p style="margin-top:8px">doc-topic hot-reload-simplify · 状态 Superseded(2026-09-30 被吸收) · 方向一协议并入 kernel-module-refactor 执行。</p>
 </footer>
 
 </div>

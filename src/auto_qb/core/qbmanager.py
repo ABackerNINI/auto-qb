@@ -9,7 +9,8 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 不持有也不判断任何表现层字段(2026-09-20 拆出, 见 memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html)。
 
 职责拆分(mixins 包, 各模块组合进本类):
-- mixins.rule_engine  RuleEngineMixin  规则加载/状态持久化/种子级规则任务
+- mixins.rule_engine  RuleEngineMixin  规则加载/种子级规则任务/事件分派
+                                      (状态持久化已迁 core/state.py 的 StateService, plan P0)
 - mixins.tags         TagsMixin        标签/分类/HR 辅助
 - mixins.checking     CheckingMixin    文件存在性/大小一致性检查(checking 动作前置检查复用)
 - mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
@@ -21,6 +22,11 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 - webui.commands      WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
 - web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排)
 - qbclient            (独立模块)       qB 客户端构造(本地地址关闭 trust_env)
+
+内核地基(plan kernel-module-refactor P0): 构造期立 AppContext(ctx)并把能力服务挂上
+(store/api/state), 本类同名属性自此刻起全部是**委托**(ctx 为单一真相, 守阵断言同对象);
+ModuleHost / EventBus 骨架同步建立(plan §3/§4) —— P0 注册零个模块(纯编排机制, 空操作),
+自 P1 起模块逐个挂入, 最终收敛为「宿主只知何时, 不知何事」。
 """
 import logging
 import os
@@ -44,6 +50,8 @@ from .mixins import (
     TagsMixin,
     TrackerMixin,
 )
+from .module import AppContext, EventBus, ModuleHost
+from .state import StateService
 from ..webui.commands import WebCommandsMixin
 from ..webui.views import WebviewMixin
 from ..infra.notify import NotifyHandler, setup_notify
@@ -186,7 +194,13 @@ class QbManager(
 
     def __init__(self, config_path: str, config: Config = None, no_lock: bool = False):
         self.config_path = config_path
-        self.config = config or load_config(config_path)
+        # 内核地基(plan kernel-module-refactor P0): ctx 先立 —— config/store/api/state 挂上
+        # ctx, 本类同名属性自此刻起全部委托 ctx(单一真相; 见下方服务委托属性区)。
+        self.ctx = AppContext(config or load_config(config_path))
+        # 事件总线与模块宿主(plan §3/§4 骨架): P0 注册零个模块, start_all/apply_all 均为
+        # 空操作, 纯编排机制先行; 装配清单(MODULES)自 P1 起在此逐个 register。
+        self.events = EventBus()
+        self.host = ModuleHost(self.ctx, self.events)
         # 文件访问层单点(plan 26-09-27-1407): 下载数据目录的全部本地访问经此包装;
         # fs 段 R 级热重载 —— 单例在此按配置构建一次, 运行期不切换
         file_access.init_file_access(self.config)
@@ -198,13 +212,13 @@ class QbManager(
         self._client: Optional[Client] = None  # 由 client 属性管理, 与 store.client 同步
         # qB API Facade: 统一封装客户端调用 + 写操作后同步 store 快照(快照一致性)
         self.api = QbApi(self._client, self.store)
-        # 状态持久化: 规则执行历史 / 上传量快照 / 跳检备份元数据
-        self.state_file = self.config.state_file
+        # 状态持久化服务(plan P0 自 RuleEngineMixin 迁出): state.json 读写/迁移/周期落盘单点
+        self.ctx.state = StateService(self.config.state_file)
         # 数据目录(state/锁/日志/跳检备份同处): 显式建目录, 不依赖日志文件配置(console-only 时无日志建目录)
         os.makedirs(os.path.dirname(self.state_file) or ".", exist_ok=True)
         self.state = self._load_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
         self._bind_field_snapshots()  # 字段变化基线挂到 state 顶层键(计划 26-09-27-1438)
-        # 周期落盘计时器(见 RuleEngineMixin._maybe_flush_state): run() 加载状态后重置为首个到期点
+        # 周期落盘计时器(见 StateService.maybe_flush): run() 加载状态后重置为首个到期点
         self._next_state_flush_at: float = 0.0
         # 规则结构初始化(规则加载在 run() 中进行: --export-yaml 等只导出模式不需要)
         self.rules: List[Rule] = []
@@ -272,6 +286,61 @@ class QbManager(
         self.api.bind(value, self.store)
         # 重连/换客户端 -> 旧 rid 失效: 重置同步基线, 下轮强制全量重建
         self.store.reset_sync()
+
+    # ---------- 服务委托(plan kernel-module-refactor P0 过渡层) ----------
+    # config/store/api/state/state_file 的实现单点在 ctx(AppContext/StateService); 这组
+    # 属性对使 76 处构造点 / 279 处 make_manager 测试 / mixin 与门面的直读全部零改动,
+    # 热重载的整体替换(self.config = config)与测试整对象替换(mgr.api = ...)也经 setter
+    # 落回 ctx。清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
+
+    @property
+    def config(self) -> Config:
+        """当前生效配置(热重载时整体替换; ctx 为单一真相)"""
+        return self.ctx.config
+
+    @config.setter
+    def config(self, value: Config) -> None:
+        self.ctx.config = value
+
+    @property
+    def store(self) -> TorrentStore:
+        """种子信息数据层(与 ctx.store 同一对象)"""
+        return self.ctx.store
+
+    @store.setter
+    def store(self, value: TorrentStore) -> None:
+        self.ctx.store = value
+
+    @property
+    def api(self) -> QbApi:
+        """qB API Facade(与 ctx.api 同一对象)"""
+        return self.ctx.api
+
+    @api.setter
+    def api(self, value: QbApi) -> None:
+        self.ctx.api = value
+
+    @property
+    def state(self) -> dict:
+        """运行期状态 dict(执行历史/去重/备份元数据...): ctx.state 服务的落盘载荷, 同一对象"""
+        return self.ctx.state.data
+
+    @state.setter
+    def state(self, value: dict) -> None:
+        self.ctx.state.data = value
+
+    @property
+    def state_file(self) -> str:
+        """state.json 路径(构造期确定, 运行期不变; R 级热重载拒绝项)"""
+        return self.ctx.state.state_file
+
+    @property
+    def _next_state_flush_at(self) -> float:
+        return self.ctx.state.next_flush_at
+
+    @_next_state_flush_at.setter
+    def _next_state_flush_at(self, value: float) -> None:
+        self.ctx.state.next_flush_at = value
 
     def _setup_logging(self):
         logging_conf = self.config.logging
@@ -956,3 +1025,34 @@ class QbManager(
 
     def touch_web_client(self) -> None:
         self.web.touch()
+
+    # ---------- 状态持久化委托(plan kernel-module-refactor P0 过渡层) ----------
+    # 实现单点在 StateService(ctx.state), 迁移自 RuleEngineMixin(2026-09-30); 保留旧名字
+    # 让 run() 接线守阵与测试 31 处调用点(load 11 / save 13 / flush 7)零改动。
+    # 清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
+
+    def _load_state(self) -> dict:
+        return self.ctx.state.load()
+
+    def save_state(self) -> None:
+        self.ctx.state.save()
+
+    def _maybe_flush_state(self, now: float) -> None:
+        # 间隔现读传入(L0 语义: 热重载改 state_save_interval 即刻生效), 服务自身不持配置
+        self.ctx.state.maybe_flush(now, self.config.state_save_interval)
+
+    def _bind_field_snapshots(self) -> None:
+        self.ctx.state.bind_field_snapshots(self.store)
+
+    def _cleanup_orphan_tmp(self) -> None:
+        self.ctx.state.cleanup_orphan_tmp()
+
+    def _materialize_state_migration(self, dry_run: bool) -> None:
+        self.ctx.state.materialize_migration(dry_run)
+
+    def record_execution(self, rule_name: str, hash: str) -> None:
+        """规则执行历史登记(rules/base.py 经 manager 消费; 单点在 ctx.state)"""
+        self.ctx.state.record_execution(rule_name, hash)
+
+    def get_exec_record(self, rule_name: str, hash: str):
+        return self.ctx.state.get_exec_record(rule_name, hash)

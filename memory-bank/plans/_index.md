@@ -9,6 +9,7 @@
 
 ## In Progress
 
+- [26-09-30-1819] [计划 · QbManager 内核化重构 — 微内核 + 插件式模块](26-09-30-1819-plan-kernel-module-refactor.html) — `kernel-module-refactor`
 - [26-09-29-2036] [HR 计数对平集成 — 修改计划 (v3.1)](26-09-29-2036-plan-hr-counter-integration.html) — `backend-partial-hr-verify`
 - [26-09-29-1905] [HR 来源标记 · 非文字化设计模板](26-09-29-1905-plan-webui-hr-src-underline.html) — `webui-hr-src-underline`
 - [26-09-28-1805] [计划 · HR 排除功能: 按标签/分类把种子排除出 HR 体系](26-09-28-1805-plan-hr-exclude-tag-category.html) — `hr-exclude-tag-category`
@@ -27,8 +28,6 @@
 
 ## Open
 
-- [26-09-30-1819] [计划 · QbManager 内核化重构 — 微内核 + 插件式模块](26-09-30-1819-plan-kernel-module-refactor.html) — `kernel-module-refactor`
-- [26-09-30-1751] [计划 · 热重载机制简化: 统一挂载口 vs 保存即重启](26-09-30-1751-plan-hot-reload-simplify.html) — `hot-reload-simplify`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`
 - [26-09-30-0240] [修改计划 · HR 在线核实三参数解耦 — 拉取间隔 / 复用窗 / 立即拉取](26-09-30-0240-plan-hr-reuse-window-decouple.html) — `backend-partial-hr-verify`
 - [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
@@ -103,6 +102,7 @@
 
 ## Superseded
 
+- [26-09-30-1751] [计划 · 热重载机制简化: 统一挂载口 vs 保存即重启](26-09-30-1751-plan-hot-reload-simplify.html) — `hot-reload-simplify`
 - [26-09-26-0822] [计划 · WEB UI 键盘快捷键（可自定义）· 可行性分析与实施计划](26-09-26-0822-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
 - [26-09-15-0910] [auto-qb · WEB UI 第七轮优化计划](26-09-15-0910-webui-optimization-plan-v2.html) — `webui-optimization`
 - [26-09-15-0658] [auto-qb · WEB UI 优化计划](26-09-15-0658-webui-optimization-plan.html) — `webui-optimization`

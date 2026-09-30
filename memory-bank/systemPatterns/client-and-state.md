@@ -21,7 +21,9 @@
 - **全局限速 (qB 5.0+)**: `get_global_speed_limits`/`set_global_speed_limits` 走 `transfer_*` 端点 (bytes/s), 不用 `app/preferences` 旧键 (已失效)。内部 KiB/s ↔ bytes/s 换算。
 - dry_run 判定**不在Facade内**, 由调用点负责。
 
-## 状态持久化 (RuleEngineMixin)
+## 状态持久化 (StateService, `core/state.py`)
+
+> **2026-09-30 P0 自 RuleEngineMixin 迁出**(plan kernel-module-refactor): 实现单点在 `core/state.py` 的 `StateService`(qbmanager 构造期挂 `ctx.state`), manager 的 `_load_state`/`save_state`/`_maybe_flush_state`/`record_execution`/`get_exec_record`/`_bind_field_snapshots`/`_cleanup_orphan_tmp`/`_materialize_state_migration` 留**单行委托**保持旧调用面(31 处测试调用点零改动); 下述语义全部不变, 属性名对应: `self.state`(dict) → `StateService.data`、`_state_migration_desc` → `migration_desc`、`_next_state_flush_at` → `next_flush_at`。
 
 - `_load_state()`: JSON 读入 `self.state` (**构造时 + run() 启动各一次**); **L2 热重载不重读 state (2026-09-22 修, issue 26-09-21-1347)**: 磁盘上只有「上次退出/上个周期」的快照, 运行期重读 = 把 exec_history/skip_check_day/recheck_fails 等运行期内存态回滚 —— **内存态即真相**, 守阵 `test_apply_new_config_l2_preserves_runtime_state` 钉死。`save_state()`: 优雅退出(run 的 finally)+ 主循环周期调用 (`_maybe_flush_state`, 间隔 `state_save_interval` 默认 120s / 配置端下限 30s / 0=关闭 —— 2026-09-22 起, issue 26-09-21-1347 推翻「仅退出落盘」的旧取舍)。**写点即时落盘的例外**: `skip_check_day`(跳检完成标记)与 `recheck_fails`(失败冷却)在动作写点直接 save —— 重放代价最高; 其余键靠周期兜底, 新增写点无需插桩。
 - **损坏回退 (2026-09-22, issue 26-09-21-1347)**: `_load_state` 经 `_read_state_file` 判**三态** —— `dict` 可用 / `None` 文件不存在(首启, **静默**) / `_CORRUPT` 存在但非法 JSON、非 dict、非法 UTF-8(**损坏**)。损坏时记 WARNING(损坏文件**原样保留、不删**)并回退 `<state_file>.bak`(`save_state` 的 `keep_backup` 每次写盘前复制的上一代内容), 读到合法 dict 即用以 INFO 记「用了备份」, 并**自愈写回主文件**(刻意不带 `keep_backup`: 否则下次 `save_state` 会把损坏内容复制成新的 `.bak`, 把唯一一份好备份盖掉); 备份也不可用才返回 `{}` 并再告警说清后果。`OSError`(权限等)**故意不吞** —— 那是环境问题不是内容问题。备份后缀单点常量 `utils.BACKUP_SUFFIX`(写侧 `atomic_write` 与读侧共用)。

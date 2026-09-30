@@ -49,7 +49,7 @@ from unittest import mock
 import pytest
 
 from auto_qb.infra import utils, versioning
-from auto_qb.core.mixins import rule_engine
+from auto_qb.core import state as qb_state
 from auto_qb.infra.errors import SchemaVersionError
 from auto_qb.rules.base import Rule
 
@@ -118,8 +118,8 @@ def test_load_state_corrupt_falls_back_to_bak():
 
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")  # 模拟磁盘/外部改写造成的损坏
-        with mock.patch.object(rule_engine.logger, "warning") as warn, \
-             mock.patch.object(rule_engine.logger, "info") as info:
+        with mock.patch.object(qb_state.logger, "warning") as warn, \
+             mock.patch.object(qb_state.logger, "info") as info:
             got = mgr._load_state()
 
         assert got == {**first, "schema_version": STATE_V}, "损坏时应回退到 .bak 的内容, 而不是静默清空"
@@ -137,8 +137,8 @@ def test_load_state_corrupt_without_backup_warns():
         mgr = make_manager(state_file)
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")
-        with mock.patch.object(rule_engine.logger, "warning") as warn, \
-             mock.patch.object(rule_engine.logger, "error") as err:
+        with mock.patch.object(qb_state.logger, "warning") as warn, \
+             mock.patch.object(qb_state.logger, "error") as err:
             assert mgr._load_state() == {}
         warn_msgs = [c[0][0] for c in warn.call_args_list]
         err_msgs = [c[0][0] for c in err.call_args_list]
@@ -150,7 +150,7 @@ def test_load_state_missing_file_is_silent():
     """首启(文件不存在)属正常, 不得告警 —— 与"损坏"必须分开处置"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "nope.json"))
-        with mock.patch.object(rule_engine.logger, "warning") as warn:
+        with mock.patch.object(qb_state.logger, "warning") as warn:
             assert mgr._load_state() == {}
         assert warn.call_count == 0, "首次启动不该报 WARNING"
 
@@ -170,8 +170,8 @@ def test_load_state_recovered_writeback_failure_is_nonfatal():
         mgr.save_state()
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")
-        with mock.patch.object(rule_engine.utils, "atomic_write", side_effect=OSError("disk full")), \
-             mock.patch.object(rule_engine.logger, "warning") as warn:
+        with mock.patch.object(qb_state.utils, "atomic_write", side_effect=OSError("disk full")), \
+             mock.patch.object(qb_state.logger, "warning") as warn:
             got = mgr._load_state()
         assert got == {"exec_history": {"r:h": {"ts": 1.0}}, "schema_version": STATE_V}, \
             "写回失败不能把已恢复出的状态也搭进去(.bak 由 save_state 写出, 自带版本章)"
@@ -242,7 +242,7 @@ def test_materialize_state_migration():
         mgr = make_manager(state_file)
         mgr._materialize_state_migration(dry_run=False)
         assert not os.path.exists(state_file), "无迁移不得落盘(启动即无意义重写)"
-        mgr._state_migration_desc = f"v1→v{STATE_V}"
+        mgr.ctx.state.migration_desc = f"v1→v{STATE_V}"
         mgr._materialize_state_migration(dry_run=True)
         assert not os.path.exists(state_file), "dry-run 仅内存生效, 不落盘"
         mgr._materialize_state_migration(dry_run=False)
@@ -294,8 +294,8 @@ def test_cleanup_orphan_tmp_missing_dir_is_nonfatal():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         # 目录"列不出来"用打桩模拟: 真造一个不可列目录跨平台不可靠(Windows 上 chmod 无效)
-        with mock.patch.object(rule_engine.os, "listdir", side_effect=OSError("denied")), \
-             mock.patch.object(rule_engine.logger, "warning") as warn:
+        with mock.patch.object(qb_state.os, "listdir", side_effect=OSError("denied")), \
+             mock.patch.object(qb_state.logger, "warning") as warn:
             mgr._cleanup_orphan_tmp()  # 不应抛
         assert warn.call_count == 1
 
@@ -320,8 +320,8 @@ def test_cleanup_orphan_tmp_delete_failure_is_nonfatal():
                 raise OSError("locked")
             real_remove(path)
 
-        with mock.patch.object(rule_engine.os, "remove", side_effect=flaky), \
-             mock.patch.object(rule_engine.logger, "warning") as warn:
+        with mock.patch.object(qb_state.os, "remove", side_effect=flaky), \
+             mock.patch.object(qb_state.logger, "warning") as warn:
             mgr._cleanup_orphan_tmp()  # 不应抛
         assert os.path.exists(locked)
         assert not os.path.exists(other), "一个删不掉不该挡住其余"
@@ -361,7 +361,7 @@ def test_maybe_flush_state_periodic():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.config.state_save_interval = 120.0
         mgr._next_state_flush_at = 1000.0
-        with mock.patch.object(mgr, "save_state") as m_save:
+        with mock.patch.object(mgr.ctx.state, "save") as m_save:
             mgr._maybe_flush_state(999.0)
             assert m_save.call_count == 0, "未到期不落盘"
             mgr._maybe_flush_state(1000.0)
@@ -378,7 +378,7 @@ def test_maybe_flush_state_disabled_zero():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.config.state_save_interval = 0.0
         mgr._next_state_flush_at = 0.0
-        with mock.patch.object(mgr, "save_state") as m_save:
+        with mock.patch.object(mgr.ctx.state, "save") as m_save:
             mgr._maybe_flush_state(10**12)
             assert m_save.call_count == 0, "关闭时即使远超任何到期点也不落盘"
 
