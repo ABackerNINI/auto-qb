@@ -226,7 +226,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         tor.tracker_conf = cfg.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配
         seed_store(mgr, [tor])
 
-        mgr._create_torrent_tasks("H1")
+        mgr.host.get("rules")._create_torrent_tasks("H1")
         names = {t.name for t in mgr.task_queue._fast}
         assert "missing_files" not in names, f"不应创建逐种子检查: {names}"
 
@@ -236,7 +236,7 @@ def test_grouping_replaces_per_torrent_missing_files():
         mgr2 = QbManager("", config=cfg2, no_lock=True)  # 测试不持锁
         mgr2.client = FakeClient()
         seed_store(mgr2, [tor])
-        mgr2._create_torrent_tasks("H1")
+        mgr2.host.get("rules")._create_torrent_tasks("H1")
         names2 = {t.name for t in mgr2.task_queue._fast}
         assert "missing_files" not in names2, f"未启用分组也不应创建逐种子检查: {names2}"
 
@@ -397,10 +397,10 @@ def test_is_downloading_excludes_checking():
             FakeTorrent(hash="H3", state="checkingResumeData", amount_left=100),
         ]
     )
-    assert mgr._group_has_downloading(["H1"]) is False, "checkingDL 不应算下载中"
-    assert mgr._group_has_downloading(["H2"]) is False, "checkingUP 不应算下载中"
-    assert mgr._group_has_downloading(["H3"]) is False, "checkingResumeData 不应算下载中"
-    assert mgr._group_has_downloading(["H1", "H2", "H3"]) is False, "组内只有强制校验种子不应算活跃下载"
+    assert mgr.host.get("grouping")._group_has_downloading(["H1"]) is False, "checkingDL 不应算下载中"
+    assert mgr.host.get("grouping")._group_has_downloading(["H2"]) is False, "checkingUP 不应算下载中"
+    assert mgr.host.get("grouping")._group_has_downloading(["H3"]) is False, "checkingResumeData 不应算下载中"
+    assert mgr.host.get("grouping")._group_has_downloading(["H1", "H2", "H3"]) is False, "组内只有强制校验种子不应算活跃下载"
 
 
 def test_grouping_force_checking_not_conflict():
@@ -445,22 +445,22 @@ def test_grouping_download_conflict_multi_dl():
         # mock 掉 api.torrents_stop: QbApi 的 stop 会同步 store 把成员状态改为暂停,
         # 污染 by_hash 快照(真实场景下轮 refresh 才校准), 干扰去重语义验证
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert stop_mock.call_count == 1, f"多下载应整组暂停: {stop_mock.call_count}"
             assert (key, "multi-dl") in mgr.store.download_conflict_warned
 
             # 冲突持续 -> 不重复暂停(去重)
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert stop_mock.call_count == 1, f"冲突持续不应重复暂停: {stop_mock.call_count}"
 
             # 冲突消除(H1 转暂停) -> 去重记录清除
             t1.state = "pausedDL"
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert mgr.store.download_conflict_warned == set()
 
             # 冲突重现 -> 再次警告+暂停
             t1.state = "downloading"
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert stop_mock.call_count == 2, f"冲突重现应再次暂停: {stop_mock.call_count}"
             assert (key, "multi-dl") in mgr.store.download_conflict_warned
 
@@ -480,7 +480,7 @@ def test_grouping_download_conflict_mixed():
         mgr.store.group_sizes = {key: {}}
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
-        mgr._check_download_conflicts(dry_run=False)
+        mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert client.calls.count(("stop", None)) == 1, f"已完成与下载中并存应整组暂停: {client.calls}"
         assert (key, "mixed") in mgr.store.download_conflict_warned
 
@@ -500,12 +500,12 @@ def test_grouping_download_conflict_dry_run():
         mgr.store.group_sizes = {key: {}}
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
-        mgr._check_download_conflicts(dry_run=True)
+        mgr.host.get("grouping")._check_download_conflicts(dry_run=True)
         assert client.calls == [], f"dry-run 不应暂停: {client.calls}"
         assert mgr.store.download_conflict_warned == set(), "dry-run 不记录去重"
 
         # 真实执行仍会警告+暂停
-        mgr._check_download_conflicts(dry_run=False)
+        mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert client.calls.count(("stop", None)) == 1, f"真实执行应整组暂停: {client.calls}"
 
 
@@ -525,7 +525,7 @@ def test_download_conflict_meta_dl_mixed():
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert stop_mock.call_count == 1, f"metaDL 与已完成并存应整组暂停: {stop_mock.call_count}"
         assert (key, "mixed") in mgr.store.download_conflict_warned
 
@@ -546,7 +546,7 @@ def test_download_conflict_checking_up_mixed():
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert stop_mock.call_count == 1, f"校验中已完成成员与下载中并存应触发 mixed: {stop_mock.call_count}"
         assert (key, "mixed") in mgr.store.download_conflict_warned
 
@@ -567,7 +567,7 @@ def test_download_conflict_forced_queued_dl():
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert stop_mock.call_count == 1, f"双下载应触发 multi-dl: {stop_mock.call_count}"
         assert (key, "multi-dl") in mgr.store.download_conflict_warned
 
@@ -587,7 +587,7 @@ def test_download_conflict_paused_dl_pair():
         mgr.store.group_sizes = {key: {}}
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
-        mgr._check_download_conflicts(dry_run=False)
+        mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert client.calls == [], f"暂停的下载不应触发冲突暂停: {client.calls}"
         assert mgr.store.download_conflict_warned == set()
 
@@ -608,21 +608,21 @@ def test_download_conflict_resolve_by_complete():
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert stop_mock.call_count == 1
             assert (key, "mixed") in mgr.store.download_conflict_warned
 
             # 下载完成: 状态转做种 + amount_left=0 -> 冲突消除, 去重记录清除
             t1.state = "stalledUP"
             t1.amount_left = 0
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert mgr.store.download_conflict_warned == set(), "下载完成应清除去重记录"
             assert stop_mock.call_count == 1
 
             # 新种子又开始下载 -> 冲突重现, 再次暂停
             t1.state = "downloading"
             t1.amount_left = 100
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert stop_mock.call_count == 2, f"冲突重现应再次暂停: {stop_mock.call_count}"
             assert (key, "mixed") in mgr.store.download_conflict_warned
 
@@ -646,14 +646,14 @@ def test_download_conflict_two_groups_independent():
         mgr.store.member_to_key = {"H1": key_a, "H2": key_a, "H3": key_b, "H4": key_b}
 
         with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert stop_mock.call_count == 2, f"两组各暂停一次: {stop_mock.call_count}"
             assert (key_a, "multi-dl") in mgr.store.download_conflict_warned
             assert (key_b, "mixed") in mgr.store.download_conflict_warned
 
             # 组A 冲突消除(H1 暂停) -> 仅组A 去重清除, 组B 保留且不重复暂停
             t1.state = "pausedDL"
-            mgr._check_download_conflicts(dry_run=False)
+            mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
             assert (key_a, "multi-dl") not in mgr.store.download_conflict_warned
             assert (key_b, "mixed") in mgr.store.download_conflict_warned
             assert stop_mock.call_count == 2
@@ -662,7 +662,7 @@ def test_download_conflict_two_groups_independent():
 def test_group_members_not_in_group():
     """_group_members: 未归组 -> [自身 hash] 单种子(无参考)"""
     mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
-    assert mgr._group_members("H1") == ["H1"]
+    assert mgr.host.get("grouping")._group_members("H1") == ["H1"]
 
 
 def test_group_members_in_group():
@@ -670,7 +670,7 @@ def test_group_members_in_group():
     mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
     mgr.store.member_to_key = {"H1": "g1", "H2": "g1"}
     mgr.store.groups = {"g1": ["H1", "H2"]}
-    assert mgr._group_members("H1") == ["H1", "H2"]
+    assert mgr.host.get("grouping")._group_members("H1") == ["H1", "H2"]
 
 
 def test_leave_group_removes():
@@ -679,7 +679,7 @@ def test_leave_group_removes():
     mgr.store.member_to_key = {"H1": "g1", "H2": "g1"}
     mgr.store.groups = {"g1": ["H1", "H2"]}
     mgr.store.group_sizes = {"g1": {"H1": {}, "H2": {}}}
-    assert mgr._leave_group("H1") == "g1"
+    assert mgr.host.get("grouping")._leave_group("H1") == "g1"
     assert mgr.store.groups["g1"] == ["H2"]
     assert "H1" not in mgr.store.member_to_key
     assert "H1" not in mgr.store.group_sizes["g1"]
@@ -691,7 +691,7 @@ def test_leave_group_empty_deletes():
     mgr.store.member_to_key = {"H1": "g1"}
     mgr.store.groups = {"g1": ["H1"]}
     mgr.store.group_sizes = {"g1": {"H1": {}}}
-    assert mgr._leave_group("H1") is None
+    assert mgr.host.get("grouping")._leave_group("H1") is None
     assert mgr.store.groups == {}
     assert mgr.store.group_sizes == {}
 
@@ -699,7 +699,7 @@ def test_leave_group_empty_deletes():
 def test_leave_group_not_in_group():
     """_leave_group: 种子不在任何组 -> None 且不抛异常"""
     mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
-    assert mgr._leave_group("NOPE") is None
+    assert mgr.host.get("grouping")._leave_group("NOPE") is None
 
 
 def test_group_has_downloading():
@@ -709,8 +709,8 @@ def test_group_has_downloading():
         FakeTorrent(hash="H1", state="stalledDL"),
         FakeTorrent(hash="H2", state="stalledUP"),
     ])
-    assert mgr._group_has_downloading(["H1", "H2"]) is True
-    assert mgr._group_has_downloading(["H2"]) is False
+    assert mgr.host.get("grouping")._group_has_downloading(["H1", "H2"]) is True
+    assert mgr.host.get("grouping")._group_has_downloading(["H2"]) is False
 
 
 def test_group_reference_candidates():
@@ -725,7 +725,7 @@ def test_group_reference_candidates():
             FakeTorrent(hash="H4", state="downloading"),  # 未完成: 排除
         ]
     )
-    cands = mgr._group_reference_candidates(["H1", "H2", "H3", "H4"])
+    cands = mgr.host.get("grouping")._group_reference_candidates(["H1", "H2", "H3", "H4"])
     assert [t.hash for t in cands] == ["H1", "H2"]
 
 
@@ -741,7 +741,7 @@ def test_grouping_save_path_change_no_cache():
         seed_store(mgr, [t1])
         mgr.store.member_to_key["H1"] = (r"R:\DownloadsA", ("movie.mkv", ))
         mgr.store.group_sizes = {}  # 无缓存映射
-        mgr._handle_save_path_changes(dry_run=False)
+        mgr.host.get("grouping")._handle_save_path_changes(dry_run=False)
         # 无旧映射 -> 不重归组也不触发扫描
         assert client.calls == []
         assert "H1" not in mgr.store.groups
@@ -755,7 +755,7 @@ def test_assign_new_torrent_missing():
         client = FakeClient()
         mgr.client = client
         with pytest.raises(AttributeError):
-            mgr._assign_new_torrent("NOPE", dry_run=False)
+            mgr.host.get("grouping")._assign_new_torrent("NOPE", dry_run=False)
         assert client.files_calls == 0, "tor 不存在不应拉文件列表"
 
 
@@ -774,7 +774,7 @@ def test_assign_new_torrent_files_error():
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
         seed_store(mgr, [t1])
         with pytest.raises(RuntimeError, match="api down"):
-            mgr._assign_new_torrent("H1", dry_run=False)
+            mgr.host.get("grouping")._assign_new_torrent("H1", dry_run=False)
         assert client.calls == []
         assert "H1" not in mgr.store.member_to_key
 
@@ -787,7 +787,7 @@ def test_assign_to_group_empty_map():
         client = FakeClient()
         mgr.client = client
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
-        mgr._assign_to_group(t1, {}, dry_run=False)
+        mgr.host.get("grouping")._assign_to_group(t1, {}, dry_run=False)
         assert mgr.store.groups == {}
         assert client.calls == []
 
@@ -800,12 +800,16 @@ def test_check_missing_files_no_seeding_rep():
         client = FakeClient()
         mgr.client = client
         members = [FakeTorrent(hash="H1", name="T1", state="pausedUP", amount_left=100)]
-        mgr._check_missing_files(members, {}, dry_run=False, key="K")
+        mgr.host.get("grouping")._check_missing_files(members, {}, dry_run=False, key="K")
         assert client.calls == [], "未完成成员不应作为代表扫描"
         # 暂停已完成(amount_left=0): is_complete 判定下路径同样可扫, 缺文件触发暂停 + MISSING
         # (独立 key: 同 key 第二次调用会被轮内去重跳过, 此处单测的是参数变体而非多触发源)
         paused_done = FakeTorrent(hash="H2", name="T2", state="pausedUP", save_path=td, amount_left=0)
-        mgr._check_missing_files([paused_done], {"H2": {"movie.mkv": 100}}, dry_run=False, key="K2")
+        mgr.host.get("grouping")._check_missing_files(
+            [paused_done], {"H2": {
+                "movie.mkv": 100
+            }}, dry_run=False, key="K2"
+        )
         assert client.calls.count(("stop", None)) == 1, f"暂停完成代表缺文件应暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -822,7 +826,7 @@ def test_check_missing_files_size_mismatch():
             f.write(b"x" * 10)
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 999}}  # 期望 999, 实际 10
-        mgr._check_missing_files([rep], sizes, dry_run=False, key="K")
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key="K")
         assert client.calls.count(("stop", None)) == 1, f"大小不符应整组暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -840,7 +844,7 @@ def test_check_missing_files_getsize_error():
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 10}}
         with mock.patch("os.path.getsize", side_effect=OSError("denied")):
-            mgr._check_missing_files([rep], sizes, dry_run=False, key="K")
+            mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key="K")
         assert client.calls.count(("stop", None)) == 1, f"读取失败应整组暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -857,13 +861,13 @@ def test_check_missing_files_checking_up_not_rep():
         # checkingUP: is_complete 但 is_checking -> 排除出有效代表, 不扫描
         checking_up = FakeTorrent(hash="H1", name="T1", state="checkingUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
-        mgr._check_missing_files([checking_up], sizes, dry_run=False, key="K")
+        mgr.host.get("grouping")._check_missing_files([checking_up], sizes, dry_run=False, key="K")
         assert client.calls == [], f"checkingUP 非有效代表不应触发扫描: {client.calls}"
 
         # 对照: stalledUP 作代表 -> 缺文件暂停 + MISSING
         stalled_up = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=td, amount_left=0)
         sizes2 = {"H2": {"movie.mkv": 100}}
-        mgr._check_missing_files([stalled_up], sizes2, dry_run=False, key="K")
+        mgr.host.get("grouping")._check_missing_files([stalled_up], sizes2, dry_run=False, key="K")
         assert client.calls.count(("stop", None)) == 1, f"stalledUP 作代表缺文件应暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -882,11 +886,11 @@ def test_check_missing_files_first_done_rep():
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=td, amount_left=0)
         # 代表 H1 大小正确; 非代表 H2 期望大小错误(仅扫代表, 不应触发)
         sizes = {"H1": {"movie.mkv": 10}, "H2": {"movie.mkv": 999}}
-        mgr._check_missing_files([t1, t2], sizes, dry_run=False, key="K")
+        mgr.host.get("grouping")._check_missing_files([t1, t2], sizes, dry_run=False, key="K")
         assert client.calls == [], f"非代表成员大小差异不应触发: {client.calls}"
         # 代表 H1 大小错误 -> 触发(独立 key: 避开同轮去重, 单测参数变体)
         sizes2 = {"H1": {"movie.mkv": 999}, "H2": {"movie.mkv": 10}}
-        mgr._check_missing_files([t1, t2], sizes2, dry_run=False, key="K2")
+        mgr.host.get("grouping")._check_missing_files([t1, t2], sizes2, dry_run=False, key="K2")
         assert client.calls.count(("stop", None)) == 1, f"代表大小不符应整组暂停: {client.calls}"
         assert "MISSING" in client.tags
 
@@ -899,7 +903,7 @@ def test_check_missing_files_empty_sizes_map():
         client = FakeClient()
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
-        mgr._check_missing_files([rep], {}, dry_run=False, key="K")
+        mgr.host.get("grouping")._check_missing_files([rep], {}, dry_run=False, key="K")
         assert client.calls == [], f"空大小映射不应触发扫描: {client.calls}"
 
 
@@ -912,7 +916,7 @@ def test_check_missing_files_member_has_tag():
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0, tags="MISSING")
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
-        mgr._check_missing_files([rep], sizes, dry_run=False, key="K")
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key="K")
         assert client.calls.count(("stop", None)) == 1, f"缺文件仍应暂停: {client.calls}"
         assert ("add_tags", ["MISSING"]) not in client.calls, "已有标签不应重复添加"
 
@@ -926,7 +930,7 @@ def test_check_missing_files_dry_run():
         mgr.client = client
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
-        mgr._check_missing_files([rep], sizes, dry_run=True, key="K")
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=True, key="K")
         assert client.calls == [], f"dry-run 不应暂停/加标签: {client.calls}"
         assert "MISSING" not in client.tags
 
@@ -1092,13 +1096,13 @@ def test_download_conflict_missing_done_excluded():
         mgr.store.group_sizes = {key: {}}
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
-        mgr._check_download_conflicts(dry_run=False)
+        mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert client.calls == [], f"MISSING 组的重新下载不应被 mixed 冲突拦截: {client.calls}"
         assert (key, "mixed") not in mgr.store.download_conflict_warned
 
         # 对照: 完成成员无 MISSING 标签(健康组)-> 照旧触发
         t2.tags = ""
-        mgr._check_download_conflicts(dry_run=False)
+        mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert client.calls.count(("stop", None)) == 1, f"健康完成成员与下载中并存应照旧暂停: {client.calls}"
         assert (key, "mixed") in mgr.store.download_conflict_warned
 
@@ -1118,7 +1122,7 @@ def test_download_conflict_multi_dl_with_missing_tag():
         mgr.store.group_sizes = {key: {}}
         mgr.store.member_to_key = {"H1": key, "H2": key}
 
-        mgr._check_download_conflicts(dry_run=False)
+        mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
         assert client.calls.count(("stop", None)) == 1, f"MISSING 组内 multi-dl 仍应拦截: {client.calls}"
         assert (key, "multi-dl") in mgr.store.download_conflict_warned
 
@@ -1134,14 +1138,14 @@ def test_missing_scan_dedup_within_round():
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
         key = ("R:/Downloads", ("movie.mkv", ))
 
-        mgr._check_missing_files([rep], sizes, dry_run=False, key=key)
-        mgr._check_missing_files([rep], sizes, dry_run=False, key=key)
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key=key)
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key=key)
         assert client.calls.count(("stop", None)) == 1, f"同轮重复触发应只扫一次: {client.calls}"
 
         # 新的一轮(去重集合清空, 语义同 _refresh_torrents 每轮开头) -> 可再次扫描
         mgr.host.get("grouping")._missing_scanned_keys.clear()
         client.calls.clear()
-        mgr._check_missing_files([rep], sizes, dry_run=False, key=key)
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key=key)
         assert client.calls.count(("stop", None)) == 1, "跨轮应重新扫描"
 
 

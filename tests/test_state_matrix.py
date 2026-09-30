@@ -74,7 +74,7 @@ def test_group_has_downloading_matrix(state):
         mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")), no_lock=True)  # 测试不持锁
         mgr.client = FakeClient()
         seed_store(mgr, [FakeTorrent(hash="H1", state=state.value)])
-        assert mgr._group_has_downloading(["H1"]) is _dl_expected(state), f"state={state.value}"
+        assert mgr.host.get("grouping")._group_has_downloading(["H1"]) is _dl_expected(state), f"state={state.value}"
 
 
 @pytest.mark.parametrize("attr", _ATTR_NAMES)
