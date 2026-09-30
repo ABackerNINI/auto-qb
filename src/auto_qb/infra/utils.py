@@ -13,6 +13,7 @@ from functools import lru_cache
 import re
 import subprocess
 import sys
+import threading
 import time
 import logging
 from dataclasses import dataclass
@@ -587,8 +588,9 @@ def _win_shell_open(path: str) -> bool:
     314 字符裸路径分别抛 `FileNotFoundError(WinError 2)` 与**静默打开"桌面"**(误导性失败);
     加 `\\\\?\\` 前缀也不行 —— ShellExecute 系不吃该前缀(实测 `SHParseDisplayName` 对它返回
     `0x80070057 E_INVALIDARG`)。PIDL 路线绕开字符串: `SHParseDisplayName(裸路径)` ->
-    `SHOpenFolderAndSelectItems(pidl)`。传**目录** pidl = 打开该目录; 传**文件** pidl =
-    打开父目录并选中该文件(正是 R10-10 的"定位选中"语义)。
+    `SHOpenFolderAndSelectItems(pidl)`。实测(2026-09-30, Win11)目录/文件 pidl 行为一致:
+    **都是打开父窗口并选中该条目**(旧注释"传目录 pidl = 打开该目录"与实测不符, 见
+    `_win_reuse_title_candidates`)。
 
     实测约束(勿改):
     - `SHParseDisplayName` **只认反斜杠**, 正斜杠与 `\\\\?\\` 前缀都判 E_INVALIDARG;
@@ -669,6 +671,141 @@ def _win_string_open(path: str, select: bool) -> None:
         os.startfile(cand)  # noqa: S606  仅 Windows 存在
 
 
+# Explorer 文件夹主窗口的窗口类名 —— open_path 前后快照差集 = 本次新弹出的窗口
+_EXPLORER_WND_CLASS = "CabinetWClass"
+# 新弹出的 Explorer 窗口从创建到可被 EnumWindows 枚举到的等待上限与轮询步长。
+# 上限不能太短: Shell 建窗偶发慢(冷启动 / 杀软扫描), 太长则多占一个后台线程。
+_EXPLORER_FG_TIMEOUT = 2.0
+_EXPLORER_FG_POLL = 0.1
+
+
+def _win_explorer_hwnds() -> set:
+    """当前所有 Explorer 文件夹窗口的 HWND 集合(EnumWindows 按类名过滤)。
+
+    只读窗口枚举, 不产生任何系统副作用; 任何失败返回空集, 绝不抛错 —— 快照失败时调用方
+    跳过置前, 行为退化为修复前。ctypes 惰性取用(跨平台约束同 `_win_shell_open`)。
+    """
+    if not is_windows():
+        return set()
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        hwnds = set()
+        enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def _on_window(hwnd, _lparam):
+            buf = ctypes.create_unicode_buffer(32)
+            if user32.GetClassNameW(hwnd, buf, 32) and buf.value == _EXPLORER_WND_CLASS:
+                hwnds.add(hwnd)
+            return True
+
+        proc = enum_proc(_on_window)  # 局部引用防回调被 GC
+        user32.EnumWindows(proc, 0)
+        return hwnds
+    except (ImportError, AttributeError, OSError):
+        return set()
+
+
+def _win_force_foreground(hwnd) -> None:
+    """把窗口强推到前台并激活(最小化先还原), 绕过 Windows 前台锁。
+
+    为何要绕: Windows 规定后台进程不得抢前台 —— open_path 跑在托盘 / uvicorn 线程池线程里
+    属于后台, Shell 新弹的资源管理器窗口因此**有概率被压在当前前台窗口后面**(用户报的
+    "不弹出至顶层")。绕法是经典的 AttachThreadInput: 把本线程输入队列暂时挂到当前前台
+    窗口的线程上, 借它的前台权限完成 SetForegroundWindow, 再拆开。任何失败静默 ——
+    置前是锦上添花, 窗口本体已经打开了。
+    """
+    try:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        SW_RESTORE = 9
+        if user32.IsWindow(hwnd) and user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        fg = user32.GetForegroundWindow()
+        cur = kernel32.GetCurrentThreadId()
+        fg_thread = user32.GetWindowThreadProcessId(fg, None) if fg else 0
+        attached = bool(fg) and fg_thread != cur and user32.AttachThreadInput(cur, fg_thread, True)
+        try:
+            user32.SetForegroundWindow(hwnd)
+        finally:
+            if attached:
+                user32.AttachThreadInput(cur, fg_thread, False)
+        user32.BringWindowToTop(hwnd)
+    except (AttributeError, OSError):
+        pass
+
+
+def _win_reuse_title_candidates(target: str) -> set:
+    """复用已有窗口场景下, 目标所在 Explorer 窗口可能的标题名集合。
+
+    实测(2026-09-30, Win11): `SHOpenFolderAndSelectItems` 传目录/文件 pidl 都是**打开父窗口
+    并选中目标**(目录也一样 —— 上面"传目录 pidl = 打开该目录"的旧描述与实测不符) —— 所以
+    复用窗口的标题可能是父目录名(本次导航落点), 也可能是目标名(窗口本来就开着该目录)。
+    盘根两候选都为空, 调用方据此跳过兜底。
+    """
+    t = os.path.normpath(target)
+    names = {os.path.basename(t)}
+    parent = os.path.dirname(t)
+    if parent and parent != t:
+        names.add(os.path.basename(parent))
+    return {n for n in names if n}
+
+
+def _win_foreground_new_explorer(before: set, target: str) -> None:
+    """找出本次新弹出的 Explorer 窗口并强推前台(同步版, 轮询上限 `_EXPLORER_FG_TIMEOUT`)。
+
+    before = open 之前的 `_win_explorer_hwnds()` 快照; 差集非空即命中。超时仍无新窗口的
+    情形是 **目标文件夹本就开着, Explorer 复用已有窗口导航** —— 此时退而按窗口标题匹配
+    (候选见 `_win_reuse_title_candidates`; Win11 标题带 " - 文件资源管理器" 类本地化后缀,
+    用 `名字 + " - "` 前缀匹配绕开语言差异)。匹配不上就静默放弃, 绝不误推无关窗口。
+    """
+    hwnd = None
+    deadline = time.monotonic() + _EXPLORER_FG_TIMEOUT
+    while hwnd is None and time.monotonic() < deadline:
+        new = _win_explorer_hwnds() - set(before)
+        if new:
+            hwnd = sorted(new)[0]  # 一般只有一个; 多个时取任一(都是本次弹出)
+        else:
+            time.sleep(_EXPLORER_FG_POLL)
+    if hwnd is None:
+        names = _win_reuse_title_candidates(target)
+        for h in _win_explorer_hwnds():
+            if h not in before:
+                continue
+            title = _win_window_text(h)
+            if any(title == n or title.startswith(n + " - ") for n in names):
+                hwnd = h
+                break
+    if hwnd is not None:
+        _win_force_foreground(hwnd)
+
+
+def _win_window_text(hwnd) -> str:
+    """窗口标题文本(GetWindowTextW); 失败返回空串, 绝不抛错(仅置前兜底匹配用)"""
+    try:
+        import ctypes
+
+        buf = ctypes.create_unicode_buffer(256)
+        ctypes.windll.user32.GetWindowTextW(hwnd, buf, 256)
+        return buf.value
+    except (AttributeError, OSError):
+        return ""
+
+
+def _win_foreground_explorer_async(before: set, target: str) -> None:
+    """后台线程执行 `_win_foreground_new_explorer`(不阻塞调用线程, daemon 随进程退场)。
+
+    open_path 的调用方是 WebUI 端点 / 托盘菜单 —— 轮询等待窗口创建最多 2s, 不能挂住它们。
+    """
+    threading.Thread(
+        target=_win_foreground_new_explorer, args=(before, target), name="open-path-foreground", daemon=True
+    ).start()
+
+
 def open_path(path: str, select: bool = False) -> None:
     """用系统默认方式打开文件/目录(跨平台: Windows 资源管理器 / macOS open / Linux xdg-open)
 
@@ -686,17 +823,25 @@ def open_path(path: str, select: bool = False) -> None:
 
     !`_win_shell_open` 只在 `is_windows()` 分支内调用 —— 它在 POSIX 上是空转, 而测试期副作用
     记账器把该入口整体计入 LAUNCH(放行清单为空), 无谓调用会变成假阳性。
+
+    弹出置前: Shell 新开的资源管理器窗口对**后台进程调用方**(托盘 / uvicorn 线程池)有概率
+    被前台锁压在后面(不弹到顶层) —— 打开前快照 Explorer 窗口集合, 打开后后台线程找新窗口
+    强推前台(见 `_win_foreground_new_explorer`; 置前属锦上添花, 任何失败静默, 不影响打开本体)。
     """
     if is_windows():
-        if select and _exists_file(path):
-            if _win_shell_open(path):  # 文件 pidl -> 打开父目录并选中该文件
+        before = _win_explorer_hwnds()
+        try:
+            if select and _exists_file(path):
+                if _win_shell_open(path):  # 文件 pidl -> 打开父目录并选中该文件
+                    return
+                _win_string_open(path, select=True)
                 return
-            _win_string_open(path, select=True)
+            if _exists_dir(path) and _win_shell_open(path):  # 目录 pidl -> 打开父窗口并选中该目录(实测)
+                return
+            _win_string_open(path, select=False)
             return
-        if _exists_dir(path) and _win_shell_open(path):  # 目录 pidl -> 打开该目录
-            return
-        _win_string_open(path, select=False)
-        return
+        finally:
+            _win_foreground_explorer_async(before, path)
     # ---- macOS / Linux: 以下与改动前逐字一致 ----
     if select and os.path.isfile(path):
         if is_mac():

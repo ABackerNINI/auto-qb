@@ -39,8 +39,10 @@
   **ShellExecute 系不吃该前缀**。其它路线同样不可靠: 8.3 短名 `GetShortPathNameW`(取决于卷的 8dot3 设置,
   实测 H 卷未启用时原样返回); `os.symlink` 需特权(实测 WinError 1314); junction 目标传前缀会
   **写坏 reparse 数据**(WinError 123); `DefineDosDevice` 映射盘符可用但要占盘符 + 清理。
-- **处置**: `SHParseDisplayName(裸路径)` → `SHOpenFolderAndSelectItems(pidl, 0, NULL, 0)` —— 传**目录** pidl
-  即打开该目录、传**文件** pidl 即打开父目录并选中该文件(正好替代 `explorer /select,` 的定位语义)。
+- **处置**: `SHParseDisplayName(裸路径)` → `SHOpenFolderAndSelectItems(pidl, 0, NULL, 0)` —— 实测
+  (2026-09-30, Win11)传**目录** pidl 与**文件** pidl 行为一致: **都是打开父窗口并选中该条目**
+  (目录也一样, 不是"打开进入该目录"; 实证: 开 `repo\memory-bank\pitfalls` 得到的窗口标题是
+  `memory-bank`, 开 `repo\memory-bank` 得到的是 `auto-qb-clone1`)。
   ⚠ **每次调用都要 `CoInitializeEx`**: 该入口跑在 uvicorn/anyio 的线程池 worker 里, 而 Python 线程默认
   **不初始化 COM** —— 实测 worker 内不初始化时返回 `0x800401F0 CO_E_NOTINITIALIZED`
   (`S_OK`/`S_FALSE` 均需配对 `CoUninitialize`)。

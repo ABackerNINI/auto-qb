@@ -49,6 +49,10 @@
 - test_open_path_windows_long_path_uses_shell_pidl: Windows 长路径目录/定位选中走 Shell PIDL, 绝不触达 os.startfile 与 explorer
 - test_open_path_windows_falls_back_to_string_route: PIDL 返回 False 时退回字符串路线(不静默什么都不做)
 - test_open_path_non_windows_never_calls_shell_pidl: 非 Windows 平台绝不触达 PIDL 路线(防守阵假阳性)
+- test_open_path_windows_schedules_foreground_bringup: Windows 打开后调度后台置前(参数 = 打开前快照 + 目录名), 非 Windows 不调度
+- test_win_foreground_new_explorer_new_window: 快照差集命中新窗口 -> 强推前台
+- test_win_foreground_new_explorer_reused_window_title_match: 无新窗口(复用已有窗口) -> 按标题匹配置前; 标题不匹配不置前
+- test_win_explorer_hwnds_non_windows_empty: 非 Windows 快照恒空集(不碰 ctypes)
 - test_win_shell_open_non_windows_returns_false: 非 Windows 上 _win_shell_open 前置返回 False, 不碰 ctypes
 - test_win_string_open_degrades_long_path_to_ancestor: 字符串路线遇超长路径上溯到最近的可达祖先
 - test_exists_dir_file_apply_long_path_prefix: _exists_dir/_exists_file 对判定过长路径前缀 helper
@@ -563,8 +567,10 @@ def test_open_path_select_file_per_platform(tmp_path, monkeypatch):
     missing = tmp_path / "nope.mkv"
 
     # Windows: PIDL 路线不可用时退回 explorer /select,(打开父目录并选中该文件, 不是打开文件本身)
+    # 置前调度一并 stub: 真跑会起后台线程去枚举/推前台真实窗口(测试期不得碰)
     _fake_windows(monkeypatch)
     with mock.patch.object(utils, "_win_shell_open", return_value=False), \
+            mock.patch.object(utils, "_win_foreground_explorer_async"), \
             mock.patch.object(utils.os, "startfile", create=True) as sfile, \
             mock.patch.object(utils.subprocess, "run") as run:
         utils.open_path(str(f), select=True)
@@ -611,6 +617,7 @@ def test_open_path_windows_long_path_uses_shell_pidl(tmp_path, monkeypatch):
 
     with mock.patch.object(utils, "_win_shell_open", return_value=True) as pidl, \
             mock.patch.object(utils, "_exists_dir", return_value=True), \
+            mock.patch.object(utils, "_win_foreground_explorer_async"), \
             mock.patch.object(utils.os, "startfile", create=True) as sfile, \
             mock.patch.object(utils.subprocess, "run") as run:
         utils.open_path(long_dir)  # 目录 -> 打开该目录
@@ -620,6 +627,7 @@ def test_open_path_windows_long_path_uses_shell_pidl(tmp_path, monkeypatch):
 
     with mock.patch.object(utils, "_win_shell_open", return_value=True) as pidl, \
             mock.patch.object(utils, "_exists_file", return_value=True), \
+            mock.patch.object(utils, "_win_foreground_explorer_async"), \
             mock.patch.object(utils.os, "startfile", create=True) as sfile, \
             mock.patch.object(utils.subprocess, "run") as run:
         utils.open_path(long_file, select=True)  # 单文件种子 -> 打开父目录并选中
@@ -634,11 +642,13 @@ def test_open_path_windows_falls_back_to_string_route(tmp_path, monkeypatch):
     d = str(tmp_path)
     with mock.patch.object(utils, "_win_shell_open", return_value=False), \
             mock.patch.object(utils, "_exists_dir", return_value=True), \
+            mock.patch.object(utils, "_win_foreground_explorer_async"), \
             mock.patch.object(utils, "_win_string_open") as fallback:
         utils.open_path(d)
         fallback.assert_called_once_with(d, select=False)
     with mock.patch.object(utils, "_win_shell_open", return_value=False), \
             mock.patch.object(utils, "_exists_file", return_value=True), \
+            mock.patch.object(utils, "_win_foreground_explorer_async"), \
             mock.patch.object(utils, "_win_string_open") as fallback:
         utils.open_path(d + "/a.mkv", select=True)
         fallback.assert_called_once_with(d + "/a.mkv", select=True)
@@ -659,6 +669,79 @@ def test_open_path_non_windows_never_calls_shell_pidl(tmp_path, monkeypatch):
             utils.open_path(str(f))
             utils.open_path(str(tmp_path), select=True)
             assert pidl.call_count == 0, f"{plat} 不得触达 PIDL 路线"
+
+
+def test_open_path_windows_schedules_foreground_bringup(tmp_path, monkeypatch):
+    """Windows 打开后调度后台置前: 参数 = (打开前窗口快照, 目录名); 非 Windows 不调度
+
+    用户报"打开目标文件夹有概率不弹出至顶层": 根因是后台进程调用 Shell 时新窗口被前台锁压住。
+    open_path 负责快照 + 调度, 具体置前逻辑由 _win_foreground_new_explorer 单独覆盖。
+    """
+    _fake_windows(monkeypatch)
+    f = tmp_path / "a.mkv"
+    f.write_bytes(b"x")
+    with mock.patch.object(utils, "_win_explorer_hwnds", return_value={7, 8}), \
+            mock.patch.object(utils, "_win_shell_open", return_value=True), \
+            mock.patch.object(utils, "_exists_file", return_value=True), \
+            mock.patch.object(utils, "_win_foreground_explorer_async") as fg:
+        utils.open_path(str(f), select=True)
+        fg.assert_called_once_with({7, 8}, os.path.normpath(str(f)))
+    # 目录目标同样调度
+    with mock.patch.object(utils, "_win_explorer_hwnds", return_value=set()), \
+            mock.patch.object(utils, "_win_shell_open", return_value=True), \
+            mock.patch.object(utils, "_exists_dir", return_value=True), \
+            mock.patch.object(utils, "_win_foreground_explorer_async") as fg:
+        utils.open_path(str(tmp_path))
+        fg.assert_called_once_with(set(), os.path.normpath(str(tmp_path)))
+    # 非 Windows: 不调度(也不做快照)
+    for plat in ("linux", "darwin"):
+        monkeypatch.setattr(sys, "platform", plat)
+        with mock.patch.object(utils, "_win_explorer_hwnds") as snap, \
+                mock.patch.object(utils, "_win_foreground_explorer_async") as fg, \
+                mock.patch.object(utils.subprocess, "run"):
+            utils.open_path(str(f))
+            assert snap.call_count == 0
+            assert fg.call_count == 0
+
+
+def test_win_foreground_new_explorer_new_window(monkeypatch):
+    """快照差集命中新窗口 -> 立即强推前台(不空等超时)"""
+    before = {1, 2}
+    seq = [before, before | {42}]
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: seq.pop(0) if seq else before | {42})
+    fg = mock.MagicMock()
+    monkeypatch.setattr(utils, "_win_force_foreground", fg)
+    utils._win_foreground_new_explorer(before, "dir")
+    fg.assert_called_once_with(42)
+
+
+def test_win_foreground_new_explorer_reused_window_title_match(monkeypatch):
+    """无新窗口(Explorer 复用已有窗口导航) -> 按窗口标题匹配置前; 匹配不上不置前
+
+    实测 SHOpenFolderAndSelectItems 打开的是**父窗口**并选中目标, 所以候选名含父目录名;
+    Win11 标题带 " - 文件资源管理器" 后缀, 用 `名字 + " - "` 前缀匹配。
+    """
+    before = {5, 6}
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: before)
+    # 目标 X:/downloads/f1.mkv: 窗口停在父目录 downloads(标题带本地化后缀) -> 命中
+    texts = {5: "其它目录", 6: "downloads - 文件资源管理器"}
+    monkeypatch.setattr(utils, "_win_window_text", lambda h: texts.get(h, ""))
+    fg = mock.MagicMock()
+    monkeypatch.setattr(utils, "_win_force_foreground", fg)
+    utils._win_foreground_new_explorer(before, os.path.join("X:", "downloads", "f1.mkv"))
+    fg.assert_called_once_with(6)
+    # 标题对不上 -> 静默放弃, 绝不误推无关窗口
+    fg.reset_mock()
+    texts[6] = "别的 - 文件资源管理器"
+    monkeypatch.setattr(utils, "_win_window_text", lambda h: texts.get(h, ""))
+    utils._win_foreground_new_explorer(before, os.path.join("X:", "downloads", "f1.mkv"))
+    assert fg.call_count == 0
+
+
+def test_win_explorer_hwnds_non_windows_empty(monkeypatch):
+    """非 Windows 上窗口快照恒空集, 不碰 ctypes(windll 在 POSIX 不存在)"""
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert utils._win_explorer_hwnds() == set()
 
 
 def test_win_shell_open_non_windows_returns_false(monkeypatch):
