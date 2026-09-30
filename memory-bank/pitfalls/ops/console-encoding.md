@@ -1,7 +1,7 @@
 # 管道下按错的编码出/解中文 = 乱码但静默(子进程 + 引擎自身)
 
 > 摘要: Windows 上被管道接住的 Python 子进程按**本地码页(cp936)**输出 stdout, 而调用方按 UTF-8 硬解 ⇒ 中文变一串 U+FFFD; 退出码照旧 0, **一个报错都没有** —— 只有人读输出时才发现。**反方向也一样会炸**: 非 Python 子进程(如 node)输出就是 UTF-8, 而 `text=True` 按 locale 去解 ⇒ 直接抛 `UnicodeDecodeError`。
-> 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio
+> 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY
 
 ## 反向: 非 Python 子进程输出是 UTF-8, 别用 `text=True` 让 locale 去猜
 
@@ -44,6 +44,34 @@
   (系统码页本就是 UTF-8 的机器上失去分辨力, 与 `_local_codepage` 口径一致, 不假红)。
 - **为什么 9-24 那轮没修到**: 本档案当时的「同族旧账, 别只修一处」只点名了崩打印层与写盘方向两族,
   没把"引擎自身 stdout"列为待查向 —— 用户 6 天后从"部分终端"打进来的正是这一向。
+- **复发**: 1 —— 2026-10-01 用户再报「代码已同步的仓库中仍乱码」: 引擎侧修复本身有效(管道字节实测已
+  是 UTF-8), 乱码源在**解码侧消费端** —— 上轮「管道对端本来就按 UTF-8 解, 只修不破」的假设漏掉了
+  按控制台码页解管道的消费端(PowerShell 捕获类 / AI 工具外壳), 见下节。
+
+## 解码侧: PS 捕获类按 GBK 解 UTF-8, 运行中 chcp 救不了(2026-10-01 补)
+
+- **触发**: 引擎已锁 UTF-8 后, 用户报「已同步的仓库里, AI 编码工具的终端跑 `commands run kb.active`
+  仍乱码」。乱码形如 `创建` → `鍒涘缓`(合法汉字但全错), 不是 U+FFFD —— 这是「按 GBK 去解 UTF-8 字节」
+  的指纹, 与上节「按 GBK 出、按 UTF-8 解」的 U+FFFD 指纹方向相反。
+- **判别**: 分界线不在引擎, 在**消费端怎么解管道字节**。ConPTY 伪控制台实测(2026-10-01): 交互真控制台
+  (cmd / PS5.1 / pwsh7)直连渲染全干净(WriteConsoleW); 乱的是**捕获后再解**路径 —— PS 的管道 / 赋值 /
+  `-Command` 外壳把原生命令 stdout 接进自己管线, 按 `[Console]::OutputEncoding`(中文 Windows = GBK)
+  去解。AI 编码工具若经 `powershell -NoProfile -Command` 跑命令, 内层 PS 同样按 GBK 解, 工具本身再按
+  UTF-8 读 → 必乱, 与工具自身无关。自检一句话: 乱码终端里跑
+  `powershell -Command "[Console]::OutputEncoding.WebName"`, `gb2312` 即中此条, `utf-8` 即已修。
+- **机制**: PS 在**进程启动瞬间**快照控制台码页 —— 实测: PS 运行中 `chcp 65001` 后再捕获仍乱; 而
+  **启动前**控制台已是 65001 时, 连 `-NoProfile` 的捕获解码都正确。⇒ 运行中改码页对 PS 无效,
+  唯一杠杆是「PS 启动前」(profile 在加载时机上赶得上, wrapper 内的 chcp 赶不上)。
+- **处置**: ①引擎侧**无可修也不许回退** —— 管道对端按什么码解无法从字节流探测, 引擎回退 GBK 会打碎
+  mintty / AI 工具链(9-30 修复的对象), 别走回头路; ②profile 一行锁解码(用户已授权, PS7+PS5.1 两份
+  均落地): `try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}` —— 覆盖交互
+  PS 与加载 profile 的外壳, 对 git / node 等 UTF-8 工具链同为净收益; ③`-NoProfile` 外壳类(AI 工具
+  常见)profile 不加载: 系统级「区域设置 → Beta: 使用 Unicode UTF-8」(全局生效, 有旧 GBK 程序兼容
+  代价, 需用户自拍板)或把该工具的 shell 换 Git Bash; ④cmd 侧捕获(`for /f`、`| more`)吃的是**实时**
+  控制台码页, wrapper 内 `chcp 65001` 对它们有效 —— 但对 PS 无效(见机制条), 两个结论别混用。
+- **守阵**: 解码侧属环境问题, 引擎行为无变化, 不设常规守阵; 修复验证走真机(2026-10-01 实测: 改
+  profile 前后, `pwsh -Command "commands run kb.active | Select-Object -First 2"` 由 `鍒涘缓` 变
+  `创建`, PS5.1 同)。
 
 ## 同族旧账(互补, 别只修一处)
 
