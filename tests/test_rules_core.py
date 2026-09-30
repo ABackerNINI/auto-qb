@@ -37,7 +37,7 @@ def _run_rules(mgr, client, tor, dry_run=False):
     # _rules_for_torrent, 否则 conf=None 直接抛 AttributeError (按项目哲学早暴露).
     make_ctx(mgr, tor, client, dry_run=dry_run)
     handled = False
-    for rule in mgr._rules_for_torrent(tor):
+    for rule in mgr.host.get("rules")._rules_for_torrent(tor):
         ctx = make_ctx(mgr, tor, client, dry_run=dry_run)
         h, _stop = rule.process(ctx)
         handled = handled or h
@@ -69,7 +69,7 @@ def test_category_auto_update_from_state():
         ctx = make_ctx(mgr, tor, client)
 
         assert AddCategoryAction({"format": "AUTO-A"}).execute(ctx).is_ok
-        mgr.save_state()
+        mgr.ctx.state.save()
         assert mgr.state["auto_categories"] == {"HASH123": "AUTO-A"}
 
         mgr2 = make_manager(state_file)
@@ -125,7 +125,7 @@ def test_hr_satisfied():
         assert client.category == "HR-DONE", f"分类错误: {client.category}"
 
         # daily 去重: 持久化执行记录, 重新加载后同一天不应重复执行
-        mgr.save_state()
+        mgr.ctx.state.save()
         client2 = FakeClient()
         mgr2 = make_manager(state_file, tracker_rules=["@example_rules.hr_done"])  # 重新加载 state
         mgr2.client = client2
@@ -187,7 +187,7 @@ def test_tracker_rules_ref():
         mgr.client = client
         tor = FakeTorrent(tags="", ratio=0.1, state="stoppedDL")
         make_ctx(mgr, tor, client)  # 设 tor.tracker_conf 后, _rules_for_torrent 才能读
-        bound = mgr._rules_for_torrent(tor)
+        bound = mgr.host.get("rules")._rules_for_torrent(tor)
         assert [r.name for r in bound] == ["example_rules.add_site_tag"], \
             f"种子应只绑定被引用的规则: {[r.name for r in bound]}"
         # 重置 tags 避免第二段执行后影响第一段断言
@@ -202,7 +202,7 @@ def test_tracker_rules_ref():
         mgr2.client = client2
         tor.tracker_conf = None  # 强制 mgr2 重新 _match (tracker_rules 不同的 cfg)
         make_ctx(mgr2, tor, client2)
-        bound = mgr2._rules_for_torrent(tor)
+        bound = mgr2.host.get("rules")._rules_for_torrent(tor)
         assert [r.name for r in bound] == ["example_rules.add_site_tag", "example_rules.hr_done", "example_rules.stop_low_ratio"], \
             f"引用整个规则集: {[r.name for r in bound]}"
         tor.tags = ""
@@ -247,7 +247,7 @@ def test_rule_interval():
                 }
         }
         mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-        mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+        mgr.host.get("rules")._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="", ratio=0.1, state="uploading")
@@ -257,11 +257,11 @@ def test_rule_interval():
         tor.tracker_conf = mgr.config.trackers["HHan"]
         # 模拟 _create_torrent_tasks: 为种子创建规则任务(独立队列, 排除 refresh 任务干扰)
         tq = TaskQueue()
-        rules = mgr._rules_for_torrent(tor)
+        rules = mgr.host.get("rules")._rules_for_torrent(tor)
         assert {r.name for r in rules} == {"example_rules.add_site_tag", "example_rules.stop_low_ratio"}
         now = time.time()  # 统一时间起点: add_task 与 due 使用同一 now
         for r in rules:
-            tq.add_task(mgr._create_rule_task(r, tor.hash), now=now)
+            tq.add_task(mgr.host.get("rules")._create_rule_task(r, tor.hash), now=now)
 
         # 第 1 轮: 所有规则任务初始立即到期, 均执行
         assert tq.run_due(False, now=now) == 2, "第 1 轮应全部到期"

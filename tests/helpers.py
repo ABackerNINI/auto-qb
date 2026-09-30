@@ -975,7 +975,7 @@ def make_manager(state_file, tracker_rules=None, tracker_kw=None):
     }
     cfg.rules_config = config_dict
     mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+    mgr.host.get("rules")._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
     return mgr
 
 
@@ -1006,10 +1006,10 @@ def make_ctx(mgr, tor, client, dry_run=False):
     # 1. client 绑定: 动作走 ctx.api -> manager.api(QbApi), 未绑 client 时自动绑定
     if getattr(mgr, "_client", None) is None:
         mgr.client = client
-    # 3. tracker_conf 匹配(未显式设置时; 模拟新增种子进 refresh 后由 _match_tracker_conf 赋值)
+    # 3. tracker_conf 匹配(未显式设置时; 模拟新增种子进 refresh 后由 ctx.trackers.match 赋值)
     if tor.tracker_conf is None:
         try:
-            tor.tracker_conf = mgr._match_tracker_conf(tor)
+            tor.tracker_conf = mgr.ctx.trackers.match(tor)
         except Exception:
             tor.tracker_conf = None
     # 2. 对象身份注入: by_hash[h] is tor(已存在则原地替换/更新)

@@ -166,11 +166,11 @@ def test_removed_scan_and_post_phases_drive_grouping():
             conflicts.assert_called_once_with(True)
 
 
-# ---------- ops 服务(ctx.ops 直调与旧名委托同源) ----------
+# ---------- ops 服务(ctx.ops 直调) ----------
 
 
-def test_ops_service_via_ctx_matches_manager_delegate():
-    """ctx.ops.recheck/skip_check 直调可用(web 源); 与 manager 旧名委托是同一执行体"""
+def test_ops_service_direct_call_and_inflight_mutex():
+    """ctx.ops.recheck/skip_check 直调可用(web 源); 重复提交受在途互斥(同一 _active_checks)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
         mgr.client = FakeClient()
@@ -178,22 +178,21 @@ def test_ops_service_via_ctx_matches_manager_delegate():
         seed_store(mgr, [t])
         # 直调: web 源提交 -> 在途登记(决策链 1.5 可见)
         r = mgr.ctx.ops.recheck("HA", source="web")
-        assert r.is_ok, f"ctx.ops 直调应等价旧入口: {r}"
+        assert r.is_ok, f"ctx.ops 直调应登记在途: {r}"
         assert "HA" in mgr.task_queue.active_check_hashes(), "ctx.ops 提交同样登记在途"
-        # 委托: 在途互斥对 manager 旧名入口同样生效(同一 _active_checks)
-        r2 = mgr.ops_recheck("HA", source="web")
-        assert r2.is_skipped and "校验进行中" in r2.message, "旧名委托与 ctx.ops 共享在途互斥"
+        # 重复提交: 在途互斥生效(同一 _active_checks)
+        r2 = mgr.ctx.ops.recheck("HA", source="web")
+        assert r2.is_skipped and "校验进行中" in r2.message, "重复提交受在途互斥"
 
 
 def test_check_filelist_merged_into_ops():
-    """checking 前置检查并入 ops(决策点 D2): ctx.ops 与 manager 委托双路可达同一静态方法"""
+    """checking 前置检查并入 ops(决策点 D2): ctx.ops.check_filelist 是唯一入口(实现本体)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
         client = FakeClient()
         client.files = []  # 空 = 全部通过
         tor = FakeTorrent(hash="H1", save_path=r"R:\Downloads")
         assert mgr.ctx.ops.check_filelist(client, tor) is None
-        assert mgr.check_filelist(client, tor) is None, "manager 旧名委托(供 rules 决策链)保持可用"
 
 
 def test_p4_modules_sections_claims():

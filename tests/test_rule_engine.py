@@ -63,13 +63,13 @@ def test_load_rules_from_config():
     """从 config rules_config 加载规则, 规则名带规则集前缀, enabled 过滤"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        names = {r.name for r in mgr.rules}
+        names = {r.name for r in mgr.host.get("rules").rules}
         assert names == {
             "example_rules.add_site_tag",
             "example_rules.hr_done",
             "example_rules.stop_low_ratio",
         }
-        assert len(mgr.enabled_rules) == 3
+        assert len(mgr.host.get("rules").enabled_rules) == 3
 
 
 def test_load_state_missing_or_broken():
@@ -77,15 +77,15 @@ def test_load_state_missing_or_broken():
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "missing.json")
         mgr = make_manager(state_file)
-        assert mgr._load_state() == {}
+        assert mgr.ctx.state.load() == {}
         # 损坏 JSON
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")
-        assert mgr._load_state() == {}
+        assert mgr.ctx.state.load() == {}
         # 非 dict JSON 也返回 {}
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("[1,2,3]")
-        assert mgr._load_state() == {}
+        assert mgr.ctx.state.load() == {}
 
 
 def test_load_state_valid():
@@ -95,7 +95,7 @@ def test_load_state_valid():
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump({"exec_history": {"k": 1}, "schema_version": STATE_V}, f)
         mgr = make_manager(state_file)
-        assert mgr._load_state() == {"exec_history": {"k": 1}, "schema_version": STATE_V}
+        assert mgr.ctx.state.load() == {"exec_history": {"k": 1}, "schema_version": STATE_V}
 
 
 def test_load_state_corrupt_falls_back_to_bak():
@@ -110,9 +110,9 @@ def test_load_state_corrupt_falls_back_to_bak():
         mgr = make_manager(state_file)
         first = {"exec_history": {"r:h": {"ts": 1.0}}}
         mgr.state = dict(first)
-        mgr.save_state()  # 第一版: state.json=first, 无 .bak(无旧文件不凭空造)
+        mgr.ctx.state.save()  # 第一版: state.json=first, 无 .bak(无旧文件不凭空造)
         mgr.state = {"exec_history": {"r:h": {"ts": 2.0}}, "skip_check_day": "2026-09-21"}
-        mgr.save_state()  # 第二版: .bak=first, state.json=second
+        mgr.ctx.state.save()  # 第二版: .bak=first, state.json=second
         # save_state 写前盖 schema_version 章(计划 26-09-26-0506), 两版文件都带版本标记
         assert json.loads(open(bak_file, encoding="utf-8").read()) == {**first, "schema_version": STATE_V}
 
@@ -120,7 +120,7 @@ def test_load_state_corrupt_falls_back_to_bak():
             f.write("{not json")  # 模拟磁盘/外部改写造成的损坏
         with mock.patch.object(qb_state.logger, "warning") as warn, \
              mock.patch.object(qb_state.logger, "info") as info:
-            got = mgr._load_state()
+            got = mgr.ctx.state.load()
 
         assert got == {**first, "schema_version": STATE_V}, "损坏时应回退到 .bak 的内容, 而不是静默清空"
         assert any("损坏" in c[0][0] for c in warn.call_args_list), "损坏必须留 WARNING(此前是完全静默)"
@@ -139,7 +139,7 @@ def test_load_state_corrupt_without_backup_warns():
             f.write("{not json")
         with mock.patch.object(qb_state.logger, "warning") as warn, \
              mock.patch.object(qb_state.logger, "error") as err:
-            assert mgr._load_state() == {}
+            assert mgr.ctx.state.load() == {}
         warn_msgs = [c[0][0] for c in warn.call_args_list]
         err_msgs = [c[0][0] for c in err.call_args_list]
         assert any("损坏" in m for m in warn_msgs), "损坏必须有告警(修复前静默清空, 无任何线索)"
@@ -151,7 +151,7 @@ def test_load_state_missing_file_is_silent():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "nope.json"))
         with mock.patch.object(qb_state.logger, "warning") as warn:
-            assert mgr._load_state() == {}
+            assert mgr.ctx.state.load() == {}
         assert warn.call_count == 0, "首次启动不该报 WARNING"
 
 
@@ -165,14 +165,14 @@ def test_load_state_recovered_writeback_failure_is_nonfatal():
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
         mgr.state = {"exec_history": {"r:h": {"ts": 1.0}}}
-        mgr.save_state()
+        mgr.ctx.state.save()
         mgr.state = {"exec_history": {"r:h": {"ts": 2.0}}}
-        mgr.save_state()
+        mgr.ctx.state.save()
         with open(state_file, "w", encoding="utf-8") as f:
             f.write("{not json")
         with mock.patch.object(qb_state.utils, "atomic_write", side_effect=OSError("disk full")), \
              mock.patch.object(qb_state.logger, "warning") as warn:
-            got = mgr._load_state()
+            got = mgr.ctx.state.load()
         assert got == {"exec_history": {"r:h": {"ts": 1.0}}, "schema_version": STATE_V}, \
             "写回失败不能把已恢复出的状态也搭进去(.bak 由 save_state 写出, 自带版本章)"
         assert any("写回" in c[0][0] for c in warn.call_args_list), "写回失败要留痕"
@@ -185,10 +185,10 @@ def test_load_state_no_version_field_then_save_stamps():
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump({"exec_history": {"k": 1}}, f)  # 存量文件: 无 schema_version
         mgr = make_manager(state_file)
-        assert mgr._load_state() == {"exec_history": {"k": 1}, "field_snapshots": {}, "schema_version": STATE_V}, \
+        assert mgr.ctx.state.load() == {"exec_history": {"k": 1}, "field_snapshots": {}, "schema_version": STATE_V}, \
             "字段缺失 = v1, 内存沿链迁到当前版本(v1→v3 补空 field_snapshots)"
         mgr.state = {"exec_history": {"k": 1}}
-        mgr.save_state()
+        mgr.ctx.state.save()
         assert json.loads(open(state_file, encoding="utf-8").read()) == {
             "exec_history": {
                 "k": 1
@@ -203,13 +203,13 @@ def test_load_state_future_version_fails_fast_keeps_bak():
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
         mgr.state = {"exec_history": {"k": 1}}
-        mgr.save_state()
+        mgr.ctx.state.save()
         mgr.state = {"exec_history": {"k": 2}}
-        mgr.save_state()  # 造出 .bak
+        mgr.ctx.state.save()  # 造出 .bak
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump({"schema_version": 99, "exec_history": {"k": 9}}, f)
         with pytest.raises(SchemaVersionError):
-            mgr._load_state()
+            mgr.ctx.state.load()
         # 主文件原样保留(留证); .bak 未被"回退"写坏 —— 备份里也是同一体系, 回退没有意义
         assert json.loads(open(state_file, encoding="utf-8").read())["schema_version"] == 99
         assert json.loads(open(state_file + utils.BACKUP_SUFFIX, encoding="utf-8").read())["schema_version"] == STATE_V
@@ -230,7 +230,7 @@ def test_load_state_bak_recovery_passes_migration_chain(monkeypatch):
         with open(bak_file, "w", encoding="utf-8") as f:
             json.dump({"exec_history": {"k": 1}}, f)  # 备份是旧版本(无字段 = v1)
         mgr = make_manager(state_file)
-        got = mgr._load_state()
+        got = mgr.ctx.state.load()
         assert got["v2"] is True and got["schema_version"] == 2, "备份恢复出的状态也必须过链"
         assert json.loads(open(state_file, encoding="utf-8").read())["schema_version"] == 2, "自愈写回带新版本章"
 
@@ -240,12 +240,12 @@ def test_materialize_state_migration():
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
-        mgr._materialize_state_migration(dry_run=False)
+        mgr.ctx.state.materialize_migration(dry_run=False)
         assert not os.path.exists(state_file), "无迁移不得落盘(启动即无意义重写)"
         mgr.ctx.state.migration_desc = f"v1→v{STATE_V}"
-        mgr._materialize_state_migration(dry_run=True)
+        mgr.ctx.state.materialize_migration(dry_run=True)
         assert not os.path.exists(state_file), "dry-run 仅内存生效, 不落盘"
-        mgr._materialize_state_migration(dry_run=False)
+        mgr.ctx.state.materialize_migration(dry_run=False)
         assert json.loads(open(state_file, encoding="utf-8").read())["schema_version"] == STATE_V
 
 
@@ -278,13 +278,13 @@ def test_cleanup_orphan_tmp_removes_only_state_leftovers():
         for p in orphans + keeps:
             with open(p, "w", encoding="utf-8") as f:
                 f.write("x")
-        mgr._cleanup_orphan_tmp()
+        mgr.ctx.state.cleanup_orphan_tmp()
         for p in orphans:
             assert not os.path.exists(p), f"孤儿临时文件应被清理: {p}"
         for p in keeps:
             assert os.path.exists(p), f"不该被清理: {p}"
         # 幂等: 再跑一次(已无孤儿)不得误伤任何保留项
-        mgr._cleanup_orphan_tmp()
+        mgr.ctx.state.cleanup_orphan_tmp()
         for p in keeps:
             assert os.path.exists(p), f"二次清理后不该消失: {p}"
 
@@ -296,7 +296,7 @@ def test_cleanup_orphan_tmp_missing_dir_is_nonfatal():
         # 目录"列不出来"用打桩模拟: 真造一个不可列目录跨平台不可靠(Windows 上 chmod 无效)
         with mock.patch.object(qb_state.os, "listdir", side_effect=OSError("denied")), \
              mock.patch.object(qb_state.logger, "warning") as warn:
-            mgr._cleanup_orphan_tmp()  # 不应抛
+            mgr.ctx.state.cleanup_orphan_tmp()  # 不应抛
         assert warn.call_count == 1
 
 
@@ -322,7 +322,7 @@ def test_cleanup_orphan_tmp_delete_failure_is_nonfatal():
 
         with mock.patch.object(qb_state.os, "remove", side_effect=flaky), \
              mock.patch.object(qb_state.logger, "warning") as warn:
-            mgr._cleanup_orphan_tmp()  # 不应抛
+            mgr.ctx.state.cleanup_orphan_tmp()  # 不应抛
         assert os.path.exists(locked)
         assert not os.path.exists(other), "一个删不掉不该挡住其余"
         assert any("删除孤儿临时文件失败" in c[0][0] for c in warn.call_args_list)
@@ -352,7 +352,7 @@ def test_save_state_error_swallowed():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.state = {"a": 1}
         with mock.patch("builtins.open", side_effect=OSError("disk full")):
-            mgr.save_state()  # 不应抛异常
+            mgr.ctx.state.save()  # 不应抛异常
 
 
 def test_maybe_flush_state_periodic():
@@ -360,15 +360,15 @@ def test_maybe_flush_state_periodic():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.config.state_save_interval = 120.0
-        mgr._next_state_flush_at = 1000.0
+        mgr.ctx.state.next_flush_at = 1000.0
         with mock.patch.object(mgr.ctx.state, "save") as m_save:
-            mgr._maybe_flush_state(999.0)
+            mgr.ctx.state.maybe_flush(999.0, mgr.config.state_save_interval)
             assert m_save.call_count == 0, "未到期不落盘"
-            mgr._maybe_flush_state(1000.0)
+            mgr.ctx.state.maybe_flush(1000.0, mgr.config.state_save_interval)
             assert m_save.call_count == 1, "到期落盘"
-            mgr._maybe_flush_state(1119.0)
+            mgr.ctx.state.maybe_flush(1119.0, mgr.config.state_save_interval)
             assert m_save.call_count == 1, "间隔内不重复"
-            mgr._maybe_flush_state(1120.0)
+            mgr.ctx.state.maybe_flush(1120.0, mgr.config.state_save_interval)
             assert m_save.call_count == 2, "新周期到期再落盘"
 
 
@@ -377,9 +377,9 @@ def test_maybe_flush_state_disabled_zero():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.config.state_save_interval = 0.0
-        mgr._next_state_flush_at = 0.0
+        mgr.ctx.state.next_flush_at = 0.0
         with mock.patch.object(mgr.ctx.state, "save") as m_save:
-            mgr._maybe_flush_state(10**12)
+            mgr.ctx.state.maybe_flush(10**12, mgr.config.state_save_interval)
             assert m_save.call_count == 0, "关闭时即使远超任何到期点也不落盘"
 
 
@@ -392,9 +392,9 @@ def test_dirty_exit_keeps_exec_history_after_periodic_flush():
         path = os.path.join(td, "state.json")
         mgr = make_manager(path)
         mgr.config.state_save_interval = 30.0
-        mgr._next_state_flush_at = 0.0  # 立即到期
-        mgr.record_execution("example_rules.add_site_tag", "HASH1")
-        mgr._maybe_flush_state(time.time())  # 真实写盘(非 mock)
+        mgr.ctx.state.next_flush_at = 0.0  # 立即到期
+        mgr.ctx.state.record_execution("example_rules.add_site_tag", "HASH1")
+        mgr.ctx.state.maybe_flush(time.time(), mgr.config.state_save_interval)  # 真实写盘(非 mock)
         mgr2 = make_manager(path)  # 新实例 = 重启; 旧实例的 finally 从未执行
         assert mgr2.state["exec_history"]["example_rules.add_site_tag:HASH1"], "周期落盘后脏退出不得丢执行历史"
 
@@ -405,9 +405,9 @@ def test_dirty_exit_interval_zero_loses_runtime_state():
         path = os.path.join(td, "state.json")
         mgr = make_manager(path)
         mgr.config.state_save_interval = 0.0
-        mgr._next_state_flush_at = 0.0
-        mgr.record_execution("example_rules.add_site_tag", "HASH1")
-        mgr._maybe_flush_state(time.time())  # 关闭: no-op
+        mgr.ctx.state.next_flush_at = 0.0
+        mgr.ctx.state.record_execution("example_rules.add_site_tag", "HASH1")
+        mgr.ctx.state.maybe_flush(time.time(), mgr.config.state_save_interval)  # 关闭: no-op
         mgr2 = make_manager(path)
         assert "exec_history" not in mgr2.state, "关闭周期落盘时运行期状态不上盘(旧行为)"
 
@@ -416,25 +416,25 @@ def test_record_and_get_exec_record():
     """记录/查询执行历史: key = '规则名:hash'"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        mgr.record_execution("example_rules.add_site_tag", "HASH123")
-        rec = mgr.get_exec_record("example_rules.add_site_tag", "HASH123")
+        mgr.ctx.state.record_execution("example_rules.add_site_tag", "HASH123")
+        rec = mgr.ctx.state.get_exec_record("example_rules.add_site_tag", "HASH123")
         assert rec is not None and "ts" in rec and "date" in rec and "hour" in rec
-        assert mgr.get_exec_record("other.rule", "HASH123") is None
+        assert mgr.ctx.state.get_exec_record("other.rule", "HASH123") is None
 
 
 def test_resolve_refs_exact_and_prefix():
     """规则引用解析: 精确 '集合.规则' / 前缀 '集合' / 去重"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        exact = mgr._resolve_refs(["example_rules.add_site_tag"])
+        exact = mgr.host.get("rules")._resolve_refs(["example_rules.add_site_tag"])
         assert [r.name for r in exact] == ["example_rules.add_site_tag"]
-        prefix = mgr._resolve_refs(["example_rules"])
+        prefix = mgr.host.get("rules")._resolve_refs(["example_rules"])
         assert len(prefix) == 3
         # 前缀+精确去重
-        both = mgr._resolve_refs(["example_rules", "example_rules.add_site_tag"])
+        both = mgr.host.get("rules")._resolve_refs(["example_rules", "example_rules.add_site_tag"])
         assert len(both) == 3
         # 未知引用 -> 空
-        assert mgr._resolve_refs(["nope"]) == []
+        assert mgr.host.get("rules")._resolve_refs(["nope"]) == []
 
 
 def test_tracker_rule_refs():
@@ -445,7 +445,7 @@ def test_tracker_rule_refs():
         mgr.client = client
         tor = FakeTorrent(tags="")
         tor.tracker_conf = mgr.config.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配结果
-        bound = mgr._rules_for_torrent(tor)
+        bound = mgr.host.get("rules")._rules_for_torrent(tor)
         assert [r.name for r in bound] == ["example_rules.add_site_tag"]
 
 
@@ -457,12 +457,12 @@ def test_rule_task_executes_only_refs():
         mgr.client = client
         tor = FakeTorrent(tags="")
         seed_store(mgr, [tor])
-        tor.tracker_conf = mgr._match_tracker_conf(tor)  # 等效 _refresh_torrents 对新增种子的处理
-        rules = mgr._rules_for_torrent(tor)
+        tor.tracker_conf = mgr.ctx.trackers.match(tor)  # 等效 _refresh_torrents 对新增种子的处理
+        rules = mgr.host.get("rules")._rules_for_torrent(tor)
         assert [r.name for r in rules] == ["example_rules.add_site_tag"], "只应绑定被引用的规则"
         for rule in rules:
-            task = mgr._create_rule_task(rule, tor.hash)
-            assert mgr._handle_rule(rule, task, dry_run=False) is True
+            task = mgr.host.get("rules")._create_rule_task(rule, tor.hash)
+            assert mgr.host.get("rules")._handle_rule(rule, task, dry_run=False) is True
         # 只应执行 add_site_tag(加标签); 未引用的 hr_done(设分类)/stop_low_ratio 不执行
         assert ("add_tags", ["HHan", "seed-3D"]) in client.calls
         assert all(c[0] != "set_category" for c in client.calls), f"未引用规则不应执行: {client.calls}"
@@ -476,7 +476,7 @@ def test_handle_rule_missing_torrent():
         mgr.client = client
         task = Task("rule", "t", hash="H1", store=mgr.store, interval=0)
         real = Rule("t", {"conditions": [{"state": "is_complete&is_uploading"}], "actions": []}, mgr)
-        assert mgr._handle_rule(real, task, dry_run=False) is False
+        assert mgr.host.get("rules")._handle_rule(real, task, dry_run=False) is False
         assert client.calls == [], "种子不存在不应执行动作"
         # 任务清理: 种子删除后任务由 run_due 到期执行时自然消亡(handler 返回 False), 不再显式移除
         tq = mgr.task_queue
@@ -504,7 +504,7 @@ def test_handle_rule_process_ok():
         seed_store(mgr)
         rule = Rule("t", {"actions": [{"add_tags": ["X"]}]}, mgr)
         task = Task("rule", "t", hash="HASH123", store=mgr.store, interval=0)
-        assert mgr._handle_rule(rule, task, dry_run=False) is True
+        assert mgr.host.get("rules")._handle_rule(rule, task, dry_run=False) is True
         assert ("add_tags", ["X"]) in client.calls
 
 
@@ -519,14 +519,14 @@ def test_handle_rule_process_error():
         rule = mock.MagicMock()
         rule.process.side_effect = RuntimeError("boom")
         task = Task("rule", "t", hash="HASH123", store=mgr.store, interval=0)
-        assert mgr._handle_rule(rule, task, dry_run=False) is True
+        assert mgr.host.get("rules")._handle_rule(rule, task, dry_run=False) is True
 
 
 def test_load_rules_skips_non_dict_group():
     """_load_rules: 非 dict 规则组 -> 跳过该组不崩溃"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        mgr.rules = []
+        mgr.host.get("rules").rules = []
         mgr.config.rules_config = {
             "bad_group": ["not", "a", "dict"],
             "example_rules": {
@@ -535,9 +535,9 @@ def test_load_rules_skips_non_dict_group():
                 }
             },
         }
-        mgr._load_rules()
-        assert [r.name for r in mgr.rules] == ["example_rules.only_rule"]
-        assert [r.name for r in mgr.enabled_rules] == ["example_rules.only_rule"]
+        mgr.host.get("rules")._load_rules()
+        assert [r.name for r in mgr.host.get("rules").rules] == ["example_rules.only_rule"]
+        assert [r.name for r in mgr.host.get("rules").enabled_rules] == ["example_rules.only_rule"]
 
 
 def test_rules_for_torrent_uninitialized_conf_raises():
@@ -551,7 +551,7 @@ def test_rules_for_torrent_uninitialized_conf_raises():
         client = FakeClient()
         mgr.client = client
         with pytest.raises(AttributeError):
-            mgr._rules_for_torrent(FakeTorrent(tags=""))
+            mgr.host.get("rules")._rules_for_torrent(FakeTorrent(tags=""))
 
 
 def test_rule_task_no_enabled_rules():
@@ -560,10 +560,10 @@ def test_rule_task_no_enabled_rules():
         mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules"])
         client = FakeClient()
         mgr.client = client
-        mgr.enabled_rules = []
+        mgr.host.get("rules").enabled_rules = []
         tor = FakeTorrent(tags="")
         tor.tracker_conf = mgr.config.trackers["HHan"]
-        assert mgr._rules_for_torrent(tor) == []
+        assert mgr.host.get("rules")._rules_for_torrent(tor) == []
 
 
 def test_rules_for_torrent_all_refs():
@@ -574,7 +574,7 @@ def test_rules_for_torrent_all_refs():
         mgr.client = client
         tor = FakeTorrent(tags="")
         tor.tracker_conf = mgr.config.trackers["HHan"]
-        bound = mgr._rules_for_torrent(tor)
+        bound = mgr.host.get("rules")._rules_for_torrent(tor)
         names = {r.name for r in bound}
         assert names == {"example_rules.add_site_tag", "example_rules.hr_done", "example_rules.stop_low_ratio"}
         # 无 tracker 引用: 种子不绑定任何规则(不再回退执行全部启用规则)
@@ -583,7 +583,7 @@ def test_rules_for_torrent_all_refs():
         mgr2.client = client2
         tor2 = FakeTorrent(tags="")
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
-        assert mgr2._rules_for_torrent(tor2) == []
+        assert mgr2.host.get("rules")._rules_for_torrent(tor2) == []
 
 
 def test_rules_for_torrent_unresolved_refs():
@@ -594,7 +594,7 @@ def test_rules_for_torrent_unresolved_refs():
         mgr.client = client
         tor = FakeTorrent(tags="")
         tor.tracker_conf = mgr.config.trackers["HHan"]
-        assert mgr._rules_for_torrent(tor) == []
+        assert mgr.host.get("rules")._rules_for_torrent(tor) == []
 
 
 def test_rules_for_torrent_ignores_non_ref():
@@ -608,5 +608,5 @@ def test_rules_for_torrent_ignores_non_ref():
         mgr.client = client
         tor = FakeTorrent(tags="")
         tor.tracker_conf = mgr.config.trackers["HHan"]
-        bound = mgr._rules_for_torrent(tor)
+        bound = mgr.host.get("rules")._rules_for_torrent(tor)
         assert [r.name for r in bound] == ["example_rules.add_site_tag"]

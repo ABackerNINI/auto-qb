@@ -65,7 +65,7 @@ def _event_mgr(rules, tracker_rules=None, state_file=None):
     if holder is not None:
         mgr._test_tmpdir = holder  # 生命周期锚点: 见 docstring
     mgr.config.rules_config = {"event_rules": rules}
-    mgr._load_rules()
+    mgr.host.get("rules")._load_rules()
     return mgr
 
 
@@ -164,7 +164,9 @@ def test_rule_event_not_self_cycled():
         tor = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
         mgr.client = FakeClient()
         mgr.client.torrents["H1"] = tor
-        task = mgr._apply_event_rule(next(r for r in mgr.enabled_rules if r.name == "event_rules.r1"), "H1")
+        task = mgr.host.get("rules")._apply_event_rule(
+            next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1"), "H1"
+        )
         assert isinstance(task, Task) and task.kind == "rule-event"
         # 无 pending -> 不入队(事件即时分派), 自然消亡
         assert task not in mgr.task_queue._fast, "正常完成的事件任务不入队"
@@ -252,8 +254,8 @@ def test_dry_run():
         mgr.client = client
         tor2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
         mgr.client.torrents["H2"] = tor2
-        rule = next(r for r in mgr.enabled_rules if r.name == "event_rules.r1")
-        task = mgr._apply_event_rule(rule, "H2", dry_run=True)
+        rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1")
+        task = mgr.host.get("rules")._apply_event_rule(rule, "H2", dry_run=True)
         assert not task.has_breakpoint, "dry-run 无 pending"
 
 
@@ -295,9 +297,9 @@ def test_event_checking_resume_success():
         seed_store(mgr, [tor])  # 快照注入(dispatch 前种子已在 store)
         t0 = __import__("time").time()
         # 直接分派(不整轮 refresh, 便于确定推进队列) —— 模拟 refresh 的 added 分派
-        rule = next(r for r in mgr.enabled_rules if r.name == "event_rules.r1")
+        rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1")
         tor.tracker_conf = mgr.config.trackers["HHan"]
-        task = mgr._apply_event_rule(rule, "H1")
+        task = mgr.host.get("rules")._apply_event_rule(rule, "H1")
         # 事件分派即提交: recheck 已发送, 规则记录断点, 事件任务不入队
         assert ("recheck", None) in mgr.client.calls, "分派时应同步发送 recheck"
         assert task.resume_index == 1, f"checking 提交应记录断点: {task.resume_index}"
@@ -331,9 +333,9 @@ def test_event_checking_resume_fail():
         mgr.client = FakeClient()
         seed_store(mgr, [tor])
         t0 = __import__("time").time()
-        rule = next(r for r in mgr.enabled_rules if r.name == "event_rules.r1")
+        rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1")
         tor.tracker_conf = mgr.config.trackers["HHan"]
-        task = mgr._apply_event_rule(rule, "H1")
+        task = mgr.host.get("rules")._apply_event_rule(rule, "H1")
         assert task.resume_index == 1 and ("recheck", None) in mgr.client.calls
         # 校验中(见过 checking 态, 满足失败判定前提) -> 轮询续延
         seed_store(mgr, [_pause_target(state="checkingDL")])
@@ -357,9 +359,9 @@ def test_event_checking_deleted():
         mgr.client = FakeClient()
         seed_store(mgr, [tor])
         t0 = __import__("time").time()
-        rule = next(r for r in mgr.enabled_rules if r.name == "event_rules.r1")
+        rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1")
         tor.tracker_conf = mgr.config.trackers["HHan"]
-        task = mgr._apply_event_rule(rule, "H1")
+        task = mgr.host.get("rules")._apply_event_rule(rule, "H1")
         assert task.resume_index == 1
         # 校验中种子删除: store 无该种子 -> 轮询销毁, origin 重入队后由删除守卫判死
         mgr.store.by_hash.pop("H1", None)
@@ -497,7 +499,7 @@ def test_field_changed_restart_catchup():
         tor_a = FakeTorrent(hash="HA", name="A", state="stalledUP", tags="A")
         tor_b = FakeTorrent(hash="HB", name="B", state="stalledUP", tags="X")
         _refresh(mgr, [tor_a, tor_b])  # 建基线并落盘(首轮维护已补打站点标签)
-        mgr.save_state()
+        mgr.ctx.state.save()
         # 重启: 重建 manager(同 state_file), 停机期间仅 HA 的 tags 被外部改动
         mgr2 = _event_mgr({"r1": _field_rule()}, state_file=sf)
         assert mgr2.store.field_snapshots == {"HA": {"tags": ["A", "HHan"]}, "HB": {"tags": ["HHan", "X"]}}, \
@@ -614,7 +616,7 @@ def test_watch_fields_valid():
                 "r2": _ev("interval", _add_tags_action()),
             }, state_file=sf
         )
-        rule = next(r for r in mgr.enabled_rules if r.name == "event_rules.r1")
+        rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1")
         assert rule.watch_fields == ("tags", "category")
         assert mgr.store.watch_fields == {"tags", "category"}, "监听集合应为全部规则 watch_fields 并集"
 
@@ -647,7 +649,7 @@ def _maint_mgr(mode, state_file):
     """
     mgr = make_manager(state_file)
     mgr.config.maintenance_tag_mode = mode
-    mgr._load_rules()
+    mgr.host.get("rules")._load_rules()
     mgr.client = FakeClient()
     return mgr
 

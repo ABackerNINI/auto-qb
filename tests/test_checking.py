@@ -164,7 +164,7 @@ def make_mgr(cfg, with_tq=False):
     if not cfg.state_file:
         cfg.state_file = os.path.join(_TMP_STATE_DIR.name, f"state-{uuid.uuid4().hex}.json")
     mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    mgr._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+    mgr.host.get("rules")._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
     if with_tq:
         mgr.task_queue = TaskQueue()
     return mgr
@@ -188,7 +188,7 @@ def process_rule(mgr, client, tor, dry_run=False):
     hash 出现; 与 test_actions._skip_ctx 同思路): 包装 torrents_delete, 真实删除后恢复
     快照记录(不改 src)。
     """
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     store = mgr.store
     ctx = make_ctx(mgr, tor, client, dry_run=dry_run)  # 1. 注入 by_hash(make_ctx 后捕获, 覆盖未 seed_store 的测试)
     prev = dict(store.by_hash)
@@ -272,9 +272,9 @@ def test_download_conflict_multi_dl():
         ]
     )
     inject_group(mgr, "D1", "D2")
-    mgr._check_download_conflicts(dry_run=True)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=True)
     assert ("stop", None) not in client.calls, f"dry-run 不应暂停: {client.calls}"
-    mgr._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1, f"整组应暂停一次: {client.calls}"
 
 
@@ -291,7 +291,7 @@ def test_download_conflict_mixed():
         ]
     )
     inject_group(mgr, "U1", "D1")
-    mgr._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1, f"混合并存应整组暂停: {client.calls}"
 
 
@@ -308,9 +308,9 @@ def test_download_conflict_no_repeat():
         ]
     )
     inject_group(mgr, "D1", "D2")
-    mgr._check_download_conflicts(dry_run=False)
-    mgr._check_download_conflicts(dry_run=False)
-    mgr._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1, f"冲突持续不应重复暂停: {client.calls}"
 
 
@@ -323,7 +323,7 @@ def test_download_conflict_resolve_recur():
     d2 = FakeTorrent(hash="D2", name="D2", state="downloading", amount_left=1)
     seed_store(mgr, [d1, d2])
     inject_group(mgr, "D1", "D2")
-    mgr._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1
 
     # 冲突消除(全组完成, 无下载中): 不再暂停, 去重记录清除
@@ -332,14 +332,14 @@ def test_download_conflict_resolve_recur():
     d2.state = "stalledUP"
     d2.amount_left = 0
     seed_store(mgr, [d1, d2])
-    mgr._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 1, f"冲突消除后不应暂停: {client.calls}"
 
     # 冲突重现(D2 重新下载): 再次暂停(记录已清除, 新冲突类型 mixed)
     d2.state = "downloading"
     d2.amount_left = 1
     seed_store(mgr, [d1, d2])
-    mgr._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
     assert client.calls.count(("stop", None)) == 2, f"冲突重现应再次暂停: {client.calls}"
 
 
@@ -357,7 +357,7 @@ def test_download_conflict_single_dl():
     )
     inject_group(mgr, "D1", key=("K1", ))
     inject_group(mgr, "U1", key=("K2", ))
-    mgr._check_download_conflicts(dry_run=False)
+    mgr.host.get("grouping")._check_download_conflicts(dry_run=False)
     assert ("stop", None) not in client.calls, f"单下载中不应暂停: {client.calls}"
 
 
@@ -566,8 +566,8 @@ def test_checking_recheck_fail_cooldown():
     t = make_target(state="stoppedDL", progress=0.5)
     seed_store(mgr, [t])
     t0 = time.time()
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
 
@@ -608,7 +608,7 @@ def test_checking_skip_dedup_across_rules():
     assert handled and mgr.state["skip_check_day"]["HASH123"], "规则A应完成跳检并记录"
 
     # 模拟另一条规则B: 换规则名但同种子, 同日再跳检
-    rule_b = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+    rule_b = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     client.calls.clear()
     ctx = make_ctx(mgr, t, client, dry_run=False)
     from auto_qb.rules.actions import CheckAction
@@ -879,7 +879,7 @@ def test_checking_verified_references_not_persisted():
         seed_store(mgr, [make_target(state="pausedUP", progress=1.0)])  # 完成
         run_queue(mgr, t0 + 2.5)
         assert mgr.store.verified_references == {"HASH123"}, "完成后应晋升"
-        mgr.save_state()
+        mgr.ctx.state.save()
 
         mgr2 = QbManager("", config=cfg, no_lock=True)  # 测试不持锁  # 重新加载同一 state 文件
         assert mgr2.store.verified_references == set(), "verified 参考不应持久化"
@@ -1172,8 +1172,8 @@ def test_checking_full_checking_pending_resume():
     t = make_target()
     seed_store(mgr, [t])
     t0 = time.time()
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     # 首次执行: checking 提交 -> pending 中断 + 记录断点 + 不重入队(由轮询子任务负责恢复)
@@ -1208,8 +1208,8 @@ def test_checking_full_checking_resume_continues_actions():
     t = make_target()
     seed_store(mgr, [t])
     t0 = time.time()
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -1240,8 +1240,8 @@ def test_checking_full_checking_resume_skips_conditions():
     t = make_target()
     seed_store(mgr, [t])
     t0 = time.time()
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -1270,8 +1270,8 @@ def test_checking_full_checking_resume_skips_dedup():
     t = make_target()
     seed_store(mgr, [t])
     t0 = time.time()
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -1302,8 +1302,8 @@ def test_checking_full_checking_fail_retry():
     t = make_target()
     seed_store(mgr, [t])
     t0 = time.time()
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -1342,8 +1342,8 @@ def test_checking_full_checking_first_sample_race_not_failed():
     mgr.client = client
     seed_store(mgr, [make_target()])
     t0 = time.time()
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)  # 提交 recheck + 登记轮询
@@ -1376,8 +1376,8 @@ def test_checking_full_checking_giveup_condemns():
     mgr.client = client
     seed_store(mgr, [make_target()])
     t0 = time.time()
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    origin = mgr._create_rule_task(rule, "HASH123")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
     origin.interval = 60.0
     mgr.task_queue.add_task(origin, t0)
     run_queue(mgr, t0)
@@ -1406,10 +1406,10 @@ def test_checking_group_full_checking_serialized():
         seed_store(mgr, [a, b])
         client.torrents["HB"] = b  # R2 实时复核读客户端(非快照): 跳检前种子必须在客户端
         inject_group(mgr, "HA", "HB")
-        rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
+        rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
         t0 = time.time()
-        ta = mgr._create_rule_task(rule, "HA")
-        tb = mgr._create_rule_task(rule, "HB")
+        ta = mgr.host.get("rules")._create_rule_task(rule, "HA")
+        tb = mgr.host.get("rules")._create_rule_task(rule, "HB")
         ta.interval = 60.0
         tb.interval = 60.0
         # A 先执行: 提交 recheck(在途登记) + 让位; HA 进入校验态后 B 再执行
@@ -1456,8 +1456,8 @@ def test_checking_group_skip_on_same_data_fail():
     mgr.store.group_sizes.setdefault(key, {})["HA"] = {"movie.mkv": 100}
     mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 100}
     mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    tb = mgr._create_rule_task(rule, "HB")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    tb = mgr.host.get("rules")._create_rule_task(rule, "HB")
     mgr.task_queue.add_task(tb, time.time())
     run_queue(mgr)
     assert client.calls.count(("recheck", None)) == 0, f"同数据失败推断: B 不应提交 recheck: {client.calls}"
@@ -1483,8 +1483,8 @@ def test_checking_group_fail_record_healed_when_member_completed():
     mgr.store.group_sizes.setdefault(key, {})["HA"] = {"movie.mkv": 100}
     mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 100}
     mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    tb = mgr._create_rule_task(rule, "HB")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    tb = mgr.host.get("rules")._create_rule_task(rule, "HB")
     mgr.task_queue.add_task(tb, time.time())
     run_queue(mgr)
     assert "HA" not in mgr.state.get("recheck_fails", {}), "假失败记录应被自愈清除"
@@ -1507,8 +1507,8 @@ def test_checking_group_no_infer_when_sizes_differ():
     mgr.store.group_sizes.setdefault(key, {})["HA"] = {"movie.mkv": 100}
     mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 200}  # 大小不一致
     mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    tb = mgr._create_rule_task(rule, "HB")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    tb = mgr.host.get("rules")._create_rule_task(rule, "HB")
     mgr.task_queue.add_task(tb, time.time())
     run_queue(mgr)
     assert ("recheck", None) in client.calls, "映射不一致不应推断, B 照常校验"
@@ -1541,8 +1541,8 @@ def test_checking_group_wait_timeout_force_resume():
     b = make_target(hash="HB")
     seed_store(mgr, [a, b])
     inject_group(mgr, "HA", "HB")
-    rule = next(r for r in mgr.enabled_rules if r.name == "example_rules.check_rule")
-    tb = mgr._create_rule_task(rule, "HB")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    tb = mgr.host.get("rules")._create_rule_task(rule, "HB")
     tb.interval = 60.0
     t0 = time.time()
     mgr.task_queue.add_task(tb, t0)

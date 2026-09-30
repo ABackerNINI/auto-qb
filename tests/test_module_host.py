@@ -65,7 +65,7 @@ def test_state_dict_identity_survives_reassignment():
         new_state = {"exec_history": {"r:h": {"ts": 1.0}}}
         mgr.state = new_state
         assert mgr.ctx.state.data is new_state
-        mgr._bind_field_snapshots()
+        mgr.ctx.state.bind_field_snapshots(mgr.store)
         assert mgr.store.field_snapshots is new_state["field_snapshots"], "基线必须重绑到新 state 顶层键"
 
 
@@ -84,11 +84,11 @@ def test_manager_state_delegate_roundtrip():
     """record_execution/get_exec_record 经委托走 ctx.state —— 规则侧旧调用面(manager.*)不变"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        mgr.record_execution("example_rules.add_site_tag", "HASH1")
-        rec = mgr.get_exec_record("example_rules.add_site_tag", "HASH1")
+        mgr.ctx.state.record_execution("example_rules.add_site_tag", "HASH1")
+        rec = mgr.ctx.state.get_exec_record("example_rules.add_site_tag", "HASH1")
         assert rec is not None and "ts" in rec
         assert "example_rules.add_site_tag:HASH1" in mgr.state["exec_history"], "历史落在同一份 state dict 上"
-        assert mgr.get_exec_record("nope", "nope") is None
+        assert mgr.ctx.state.get_exec_record("nope", "nope") is None
 
 
 # ---------- StateService(迁移自 RuleEngineMixin, 语义原样) ----------

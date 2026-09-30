@@ -30,7 +30,7 @@ def make_mgr(cfg):
     if not cfg.state_file:
         cfg.state_file = os.path.join(_TMP_STATE_DIR.name, f"state-{uuid.uuid4().hex}.json")
     mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    mgr._load_rules()
+    mgr.host.get("rules")._load_rules()
     mgr.task_queue = TaskQueue()
     return mgr
 
@@ -56,7 +56,7 @@ def test_ops_web_recheck_registers_and_releases():
     client = FakeClient()
     mgr.client = client
     t = seed_paused(mgr, client)
-    r = mgr.ops_recheck("HA", source="web")
+    r = mgr.ctx.ops.recheck("HA", source="web")
     assert r.is_ok, f"web 源提交应成功: {r}"
     assert "HA" in mgr.task_queue.active_check_hashes(), "提交后必须登记在途(决策链 1.5 可见)"
     # 轮询推进: 校验中 -> 完成(add_task 以真实时钟到期, 推进点一律 +1/+3s 避开时间粒度)
@@ -79,7 +79,7 @@ def test_ops_web_recheck_rejected_when_inflight():
     seed_paused(mgr, client)
     inflight = Task("check", "check-checking-result", hash="HA", store=mgr.store, handler=lambda t, d: REQUEUE)
     assert mgr.task_queue.add_task(inflight)
-    r = mgr.ops_recheck("HA", source="web")
+    r = mgr.ctx.ops.recheck("HA", source="web")
     assert r.is_skipped and "校验进行中" in r.message, f"在途应拒绝: {r}"
     assert client.calls == [], f"拒绝时不得调 qB API: {client.calls}"
 
@@ -92,7 +92,7 @@ def test_ops_web_recheck_rejected_when_snapshot_checking():
     t = FakeTorrent(hash="HA", state="checkingDL", progress=0.5)
     seed_store(mgr, [t])
     client.torrents["HA"] = t
-    r = mgr.ops_recheck("HA", source="web")
+    r = mgr.ctx.ops.recheck("HA", source="web")
     assert r.is_skipped and "校验进行中" in r.message, f"checking 态应拒绝: {r}"
     assert client.calls == [], f"拒绝时不得调 qB API: {client.calls}"
 
@@ -105,7 +105,7 @@ def test_ops_web_recheck_no_cooldown_no_promotion():
     t = seed_paused(mgr, client)
     now = time.time()
     for i in range(RECHECK_FAIL_LIMIT + 1):
-        r = mgr.ops_recheck("HA", source="web")
+        r = mgr.ctx.ops.recheck("HA", source="web")
         assert r.is_ok, f"web 源不受冷却限制(第{i}次): {r}"
         t.state = "checkingDL"
         run_queue(mgr, now + i * 10 + 1)  # 见 checking
@@ -117,7 +117,7 @@ def test_ops_web_recheck_no_cooldown_no_promotion():
     # 成功路径: 不晋升
     t.state = "pausedDL"
     t.progress = 0.0
-    r = mgr.ops_recheck("HA", source="web")
+    r = mgr.ctx.ops.recheck("HA", source="web")
     assert r.is_ok
     t.state = "pausedUP"
     t.progress = 1.0
@@ -132,7 +132,7 @@ def test_ops_rule_recheck_cooldown_and_requeue_regression():
     mgr.client = client
     t = seed_paused(mgr, client)
     origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
-    r = mgr.ops_recheck("HA", source="rule", origin=origin, on_success=lambda: None)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin, on_success=lambda: None)
     assert r.is_pending, f"rule 源应返回 pending(规则断点): {r}"
     now = time.time()
     t.state = "checkingDL"
@@ -146,7 +146,7 @@ def test_ops_rule_recheck_cooldown_and_requeue_regression():
     while _bump_recheck_fail(mgr.ctx.state, "HA") < RECHECK_FAIL_LIMIT:
         pass
     n_calls = len(client.calls)
-    r = mgr.ops_recheck("HA", source="rule", origin=origin)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
     assert r.is_skipped and "今日不再重试" in r.message, f"达上限应拒绝: {r}"
     assert len(client.calls) == n_calls, f"拒绝时不得再提交 recheck: {client.calls}"
 
@@ -160,10 +160,10 @@ def test_ops_skip_check_day_shared_across_sources():
     client = FakeClient()
     mgr.client = client
     t = seed_paused(mgr, client, hash="HASH123")  # FakeClient 重加固定回 HASH123
-    r = mgr.ops_skip_check("HASH123", source="web")
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
     assert r.is_ok, f"web 跳检应完成: {r}"
     assert mgr.state["skip_check_day"]["HASH123"] == date.today().isoformat(), "web 跳检应记录同日去重"
-    r2 = mgr.ops_skip_check("HASH123", source="rule")
+    r2 = mgr.ctx.ops.skip_check("HASH123", source="rule")
     assert r2.is_skipped and "今日已跳检过" in r2.message, f"跨来源同日应去重: {r2}"
 
 
@@ -173,6 +173,6 @@ def test_ops_web_skip_check_no_highrisk_warning():
     client = FakeClient()
     mgr.client = client
     t = seed_paused(mgr, client, hash="HASH123")
-    r = mgr.ops_skip_check("HASH123", source="web", has_reference=False)
+    r = mgr.ctx.ops.skip_check("HASH123", source="web", has_reference=False)
     assert r.is_ok, f"web 跳检应完成: {r}"
     assert mgr.state["skip_check_day"].get("HASH123"), "跳检应完成并记录"
