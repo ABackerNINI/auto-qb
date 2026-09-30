@@ -50,9 +50,17 @@
 - test_open_path_windows_falls_back_to_string_route: PIDL 返回 False 时退回字符串路线(不静默什么都不做)
 - test_open_path_non_windows_never_calls_shell_pidl: 非 Windows 平台绝不触达 PIDL 路线(防守阵假阳性)
 - test_open_path_windows_schedules_foreground_bringup: Windows 打开后调度后台置前(参数 = 打开前快照 + 目录名), 非 Windows 不调度
-- test_win_foreground_new_explorer_new_window: 快照差集命中新窗口 -> 强推前台
-- test_win_foreground_new_explorer_reused_window_title_match: 无新窗口(复用已有窗口) -> 按标题匹配置前; 标题不匹配不置前
+- test_win_foreground_new_explorer_new_window: 快照差集命中新窗口 -> 抬到顶层
+- test_win_foreground_new_explorer_reused_window_title_match: 无新窗口(复用已有窗口) -> 按标题匹配抬到顶层; 标题不匹配不置前
 - test_win_explorer_hwnds_non_windows_empty: 非 Windows 快照恒空集(不碰 ctypes)
+- test_win_wait_explorer_prefers_new_window_over_title_match: 新窗口优先于标题匹配的复用窗口; 两者都无 -> None(超时)
+- test_win_force_foreground_zorder_raised_even_when_focus_denied: 取焦被前台锁拒绝时 Z 序提升照做 + SwitchToThisWindow 兜底
+- test_win_force_foreground_true_when_focus_taken: 抢到焦点即返回 True, 不再走兜底硬切
+- test_win_force_foreground_dead_hwnd_silent: 句柄已失效 -> 零 API 调用, 返回 False
+- test_win_topmost_once_toggles_and_clears: TOPMOST 挂一下立刻摘 + SWP_NOACTIVATE(只动顺序不抢焦)
+- test_win_force_foreground_retries_until_focus: 单次被拒后有封顶重试(不无限执念)
+- test_win_user32_kernel32_non_windows_none: 非 Windows 上句柄取用返回 None(靠早退而非"恰好抛异常")
+- test_win_user32_binds_signatures: 每个 user32 API 必须绑死 argtypes —— 不绑时 x64 传参静默失效(本轮真根因的守阵)
 - test_win_shell_open_non_windows_returns_false: 非 Windows 上 _win_shell_open 前置返回 False, 不碰 ctypes
 - test_win_string_open_degrades_long_path_to_ancestor: 字符串路线遇超长路径上溯到最近的可达祖先
 - test_exists_dir_file_apply_long_path_prefix: _exists_dir/_exists_file 对判定过长路径前缀 helper
@@ -705,37 +713,233 @@ def test_open_path_windows_schedules_foreground_bringup(tmp_path, monkeypatch):
 
 
 def test_win_foreground_new_explorer_new_window(monkeypatch):
-    """快照差集命中新窗口 -> 立即强推前台(不空等超时)"""
+    """快照差集命中新窗口 -> 立即抬到顶层(不空等超时)
+
+    轮询超时压到极短: 本用例只验证"命中新窗口"这一条路径, 命中与否与超时长度无关。
+    """
+    monkeypatch.setattr(utils, "_EXPLORER_FG_TIMEOUT", 0.05)
+    monkeypatch.setattr(utils, "_EXPLORER_FG_POLL", 0.01)
     before = {1, 2}
     seq = [before, before | {42}]
     monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: seq.pop(0) if seq else before | {42})
-    fg = mock.MagicMock()
+    monkeypatch.setattr(utils, "_win_window_text", lambda h: "")
+    fg = mock.MagicMock(return_value=True)
     monkeypatch.setattr(utils, "_win_force_foreground", fg)
-    utils._win_foreground_new_explorer(before, "dir")
+    assert utils._win_foreground_new_explorer(before, "dir") is True
     fg.assert_called_once_with(42)
 
 
 def test_win_foreground_new_explorer_reused_window_title_match(monkeypatch):
-    """无新窗口(Explorer 复用已有窗口导航) -> 按窗口标题匹配置前; 匹配不上不置前
+    """无新窗口(Explorer 复用已有窗口导航) -> 按窗口标题匹配抬到顶层; 匹配不上不置前
 
     实测 SHOpenFolderAndSelectItems 打开的是**父窗口**并选中目标, 所以候选名含父目录名;
     Win11 标题带 " - 文件资源管理器" 后缀, 用 `名字 + " - "` 前缀匹配。
     """
+    monkeypatch.setattr(utils, "_EXPLORER_FG_TIMEOUT", 0.05)
+    monkeypatch.setattr(utils, "_EXPLORER_FG_POLL", 0.01)
     before = {5, 6}
     monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: before)
     # 目标 X:/downloads/f1.mkv: 窗口停在父目录 downloads(标题带本地化后缀) -> 命中
     texts = {5: "其它目录", 6: "downloads - 文件资源管理器"}
     monkeypatch.setattr(utils, "_win_window_text", lambda h: texts.get(h, ""))
-    fg = mock.MagicMock()
+    fg = mock.MagicMock(return_value=True)
     monkeypatch.setattr(utils, "_win_force_foreground", fg)
-    utils._win_foreground_new_explorer(before, os.path.join("X:", "downloads", "f1.mkv"))
+    assert utils._win_foreground_new_explorer(before, os.path.join("X:", "downloads", "f1.mkv")) is True
     fg.assert_called_once_with(6)
     # 标题对不上 -> 静默放弃, 绝不误推无关窗口
     fg.reset_mock()
     texts[6] = "别的 - 文件资源管理器"
     monkeypatch.setattr(utils, "_win_window_text", lambda h: texts.get(h, ""))
-    utils._win_foreground_new_explorer(before, os.path.join("X:", "downloads", "f1.mkv"))
+    assert utils._win_foreground_new_explorer(before, os.path.join("X:", "downloads", "f1.mkv")) is False
     assert fg.call_count == 0
+
+
+class _FakeUser32:
+    """user32 替身: 记录全部调用, 且**前台结果可控** —— 取焦被拒/成功的两条分支都能钉住
+
+    为何要替身: 置前链路的 bug("有概率不弹到顶层")恰恰出在"某个 API 调用被系统静默拒绝"上,
+    真调 user32 根本测不出这种分支(且会把开发机的窗口摆弄乱)。
+    """
+    def __init__(self, hwnd=42, fg=7, focus_after=None, switch_after=None, alive=(42, ), iconic=(), invisible=()):
+        self.hwnd = hwnd
+        self.fg = fg  # 当前前台窗口
+        self.focus_after = focus_after  # SetForegroundWindow 之后的前台(None = 不变)
+        self.switch_after = switch_after  # SwitchToThisWindow 之后的前台
+        self.alive = set(alive)
+        self.iconic = set(iconic)
+        self.invisible = set(invisible)
+        self.calls = []
+
+    # ---- 查询 ----
+    def IsWindow(self, h):
+        return h in self.alive
+
+    def IsIconic(self, h):
+        return h in self.iconic
+
+    def IsWindowVisible(self, h):
+        return h not in self.invisible
+
+    def GetForegroundWindow(self):
+        return self.fg
+
+    def GetWindowThreadProcessId(self, h, _lp):
+        return 100
+
+    # ---- 动作 ----
+    def ShowWindow(self, h, cmd):
+        self.calls.append(("ShowWindow", h, cmd))
+
+    def SetWindowPos(self, h, insert, x, y, w, hh, flags):
+        self.calls.append(("SetWindowPos", insert, flags))
+
+    def AttachThreadInput(self, a, b, on):
+        self.calls.append(("AttachThreadInput", a, b, on))
+        return True
+
+    def SetForegroundWindow(self, h):
+        self.calls.append(("SetForegroundWindow", h))
+        if self.focus_after is not None:
+            self.fg = self.focus_after
+
+    def SwitchToThisWindow(self, h, _alt):
+        self.calls.append(("SwitchToThisWindow", h))
+        if self.switch_after is not None:
+            self.fg = self.switch_after
+
+    def BringWindowToTop(self, h):
+        self.calls.append(("BringWindowToTop", h))
+
+
+def _install_fake_win(monkeypatch, **kw):
+    """装上假 user32 / kernel32(只替换 `_win_user32` / `_win_kernel32`, 不碰 ctypes)"""
+    monkeypatch.setattr(sys, "platform", "win32")
+    u32 = _FakeUser32(**kw)
+    monkeypatch.setattr(utils, "_win_user32", lambda: u32)
+
+    class _K32:
+        def GetCurrentThreadId(self):
+            return 999
+
+    monkeypatch.setattr(utils, "_win_kernel32", lambda: _K32())
+    return u32
+
+
+def test_win_wait_explorer_prefers_new_window_over_title_match(monkeypatch):
+    """新窗口优先于标题匹配的复用窗口; 两条策略都落空 -> None(超时即放弃, 不无限等)
+
+    旧实现把"复用/复用标题匹配"放在 2s 超时之后才做一次, 慢于 2s 的复用导航整个漏掉 ——
+    这是本轮修复的核心回归面: 两条策略必须**每轮都试**。
+    """
+    monkeypatch.setattr(utils, "_EXPLORER_FG_TIMEOUT", 0.05)
+    monkeypatch.setattr(utils, "_EXPLORER_FG_POLL", 0.01)
+    before = {5, 6}
+    # 既有新窗口 42, 也有标题匹配的旧窗口 6 -> 取新窗口
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: {5, 6, 42})
+    monkeypatch.setattr(utils, "_win_window_text", lambda h: "downloads - 文件资源管理器" if h == 6 else "")
+    target = os.path.join("X:", "downloads", "f1.mkv")
+    assert utils._win_wait_explorer(before, target) == 42
+    # 没有新窗口 -> 退到标题匹配的复用窗口
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: {5, 6})
+    assert utils._win_wait_explorer(before, target) == 6
+    # 两条都落空 -> 超时 None
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: {5, 6})
+    monkeypatch.setattr(utils, "_win_window_text", lambda h: "无关窗口")
+    assert utils._win_wait_explorer(before, target) is None
+
+
+def test_win_topmost_once_toggles_and_clears(monkeypatch):
+    """TOPMOST 挂一下立刻摘掉 + `SWP_NOACTIVATE`(只动 Z 序, 不抢焦点)
+
+    摘是必须的: 留着 topmost 会让资源管理器长期钉在所有窗口之上, 比原来的 bug 更烦人;
+    NOACTIVATE 是它能被后台进程受理的原因 —— 不受前台锁约束。
+    """
+    u32 = _install_fake_win(monkeypatch)
+    utils._win_topmost_once(42)
+    pos = [c for c in u32.calls if c[0] == "SetWindowPos"]
+    assert pos == [("SetWindowPos", -1, 0x53), ("SetWindowPos", -2, 0x53)], "必须是 TOPMOST -> NOTOPMOST 成对调用"
+    assert pos[0][2] & 0x0010, "必须带 SWP_NOACTIVATE: 靠它绕开前台锁"
+
+
+def test_win_force_foreground_zorder_raised_even_when_focus_denied(monkeypatch):
+    """前台锁拒绝取焦时, **Z 序提升照做** + 走 SwitchToThisWindow 兜底
+
+    这是用户报障"有概率不弹出至顶层"的根因面: 后台进程 SetForegroundWindow 被静默拒绝 =>
+    资源管理器留在浏览器后面。Window allows后台进程改 Z 序, 所以"看得见"必须与"抢得到焦点"解耦,
+    且抬到顶层**不能**依赖任何一层成功。
+    """
+    u32 = _install_fake_win(monkeypatch, hwnd=42, fg=7, focus_after=7, switch_after=7)
+    assert utils._win_force_foreground(42) is False
+    kinds = [c[0] for c in u32.calls]
+    assert "SetWindowPos" in kinds, "取焦失败也必须把窗口抬到顶层(Z 序)"
+    assert "SetForegroundWindow" in kinds
+    assert "SwitchToThisWindow" in kinds, "兜底硬切必须走到"
+    # 连带效果: AttachThreadInput 必须成对(借了前台权限要还回去)
+    attach = [c for c in u32.calls if c[0] == "AttachThreadInput"]
+    assert [a[-1] for a in attach] == [True, False]
+
+
+def test_win_force_foreground_true_when_focus_taken(monkeypatch):
+    """抢到焦点即返回 True, 且不再多此一举走兜底硬切"""
+    u32 = _install_fake_win(monkeypatch, hwnd=42, fg=7, focus_after=42)
+    assert utils._win_force_foreground(42) is True
+    kinds = [c[0] for c in u32.calls]
+    assert "SwitchToThisWindow" not in kinds
+    assert "BringWindowToTop" not in kinds
+
+
+def test_win_force_foreground_dead_hwnd_silent(monkeypatch):
+    """句柄已失效 -> 一个 user32 调用都不发, 返回 False(窗口可能早被关了)"""
+    u32 = _install_fake_win(monkeypatch, hwnd=42, alive=())
+    assert utils._win_force_foreground(42) is False
+    assert u32.calls == []
+
+
+def test_win_force_foreground_retries_until_focus(monkeypatch):
+    """单次被拒后有**封顶**重试(前台锁是概率性的), 全部失败也返回 False 且不抛错"""
+    monkeypatch.setattr(utils, "_EXPLORER_FG_RETRY_GAP", 0.0)
+    monkeypatch.setattr(utils, "_win_wait_explorer", lambda before, target: 42)
+    attempts = iter([False, False, True])
+    monkeypatch.setattr(utils, "_win_force_foreground", lambda h: next(attempts))
+    assert utils._win_foreground_new_explorer(set(), "dir") is True
+    # 全部被拒: 不抛错, 只返回 False(置前是锦上添花)
+    monkeypatch.setattr(utils, "_win_force_foreground", lambda h: False)
+    assert utils._win_foreground_new_explorer(set(), "dir") is False
+
+
+def test_win_user32_binds_signatures(monkeypatch):
+    """`_win_user32` 必须给每个 API 绑死 argtypes(x64 ABI 陷阱的守阵)
+
+    不绑时 ctypes 把 HWND 按 **32 位 int** 传, 指针宽度参数的高 32 位是寄存器残留:
+    `SetWindowPos(hwnd, HWND_TOPMOST=0xFFFFFFFFFFFFFFFF, ...)` 收到畸形值 -> **返回 0 且
+    GetLastError 仍为 0**(静默无效果)。2026-09-30 实测: 同一窗口同一时刻, 未绑 ret=0 Z 序不动,
+    绑了 ret=1 立刻抬到顶层。这就是"有概率不弹到顶层"的真根因 —— 所以这一条不许退化。
+    Windows 上跑真验收: 签名表里的函数必须全部绑上。
+    """
+    monkeypatch.setattr(sys, "platform", "win32")
+    u32 = utils._win_user32()
+    if u32 is None:  # POSIX 宿主: 早退本身由另一条覆盖, 这里只跳过真验收
+        pytest.skip("非 Windows 宿主, 跳过签名绑定验收")
+    for name, argtypes, _ in utils._WIN_USER32_SIGNATURES():
+        fn = getattr(u32, name, None)
+        assert fn is not None, f"{name} 在 user32 里不存在"
+        assert fn.argtypes == list(argtypes), f"{name} 的 argtypes 没绑或绑错了(x64 传参会静默失效)"
+    k32 = utils._win_kernel32()
+    assert k32.GetCurrentThreadId.argtypes == []
+
+
+def test_win_user32_kernel32_non_windows_none(monkeypatch):
+    """非 Windows 上 user32 / kernel32 句柄取用返回 None(早退, 不靠"恰好抛异常")
+
+    不为别的: `ctypes.windll` 在 POSIX 上不存在 —— 让行为依赖 AttributeError 会让 Linux CI
+    变成偶然通过(本坑另有守阵 `test_win_shell_open_non_windows_returns_false`)。
+    """
+    for plat in ("linux", "darwin"):
+        monkeypatch.setattr(sys, "platform", plat)
+        assert utils._win_user32() is None
+        assert utils._win_kernel32() is None
+        assert utils._win_force_foreground(42) is False
+        assert utils._win_window_text(42) == ""
 
 
 def test_win_explorer_hwnds_non_windows_empty(monkeypatch):

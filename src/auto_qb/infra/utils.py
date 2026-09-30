@@ -624,6 +624,10 @@ def _win_shell_open(path: str) -> bool:
     shell32.SHOpenFolderAndSelectItems.argtypes = [ctypes.c_void_p, wintypes.UINT, ctypes.c_void_p, wintypes.DWORD]
     shell32.SHOpenFolderAndSelectItems.restype = ctypes.c_long
     shell32.ILFree.argtypes = [ctypes.c_void_p]
+    # ole32 的 COM 初始化/卸载同样要绑: 第一参数是 LPVOID(指针宽度), 不绑会踩与
+    # `_win_user32` 同一类 x64 传参问题(实测教训见该处 docstring)
+    _win_bind(getattr(ole32, "CoInitializeEx", None), [ctypes.c_void_p, wintypes.DWORD], ctypes.c_long)
+    _win_bind(getattr(ole32, "CoUninitialize", None), [], None)
 
     target = os.path.normpath(path).replace("/", "\\")
     if target.startswith("\\\\?\\"):  # 前缀与 PIDL 路线互斥, 传进去必 E_INVALIDARG
@@ -674,24 +678,124 @@ def _win_string_open(path: str, select: bool) -> None:
 # Explorer 文件夹主窗口的窗口类名 —— open_path 前后快照差集 = 本次新弹出的窗口
 _EXPLORER_WND_CLASS = "CabinetWClass"
 # 新弹出的 Explorer 窗口从创建到可被 EnumWindows 枚举到的等待上限与轮询步长。
-# 上限不能太短: Shell 建窗偶发慢(冷启动 / 杀软扫描), 太长则多占一个后台线程。
-_EXPLORER_FG_TIMEOUT = 2.0
+# 上限必须够长: Shell 是走 DCOM 把请求交给已在跑的 explorer.exe 慢慢建窗, 冷启动 / 杀软
+# 扫描 / 大量 Shell 扩展时实测可达数秒(旧实现的 2s 上限正是"仍有概率不置前"的根因之一);
+# 太长则多占一个 daemon 线程。
+_EXPLORER_FG_TIMEOUT = 5.0
 _EXPLORER_FG_POLL = 0.1
+# 窗口找到后强推前台的重试次数与间隔: 单次 SetForegroundWindow 会被前台锁随机拒绝,
+# 重试能把命中率拉满; 次数必须封顶 —— 它只是锦上添花, 不该让后台线程执念太久。
+_EXPLORER_FG_RETRY = 4
+_EXPLORER_FG_RETRY_GAP = 0.12
+
+
+def _win_bind(fn, argtypes, restype) -> bool:
+    """给一个 windll 函数对象绑签名; 该导出不存在(老系统)时返回 False —— 绑不动不致命"""
+    try:
+        fn.argtypes = argtypes
+        fn.restype = restype
+        return True
+    except (AttributeError, OSError, TypeError):
+        return False
+
+
+def _WIN_USER32_SIGNATURES():
+    """user32 各 API 的 (名字, argtypes, restype) 清单 —— x64 上**必须**逐个绑死, 理由见 `_win_user32`"""
+    import ctypes
+    from ctypes import wintypes
+
+    HWND, BOOL, UINT, DWORD = wintypes.HWND, wintypes.BOOL, wintypes.UINT, wintypes.DWORD
+    INT, LPWSTR, LPARAM = ctypes.c_int, wintypes.LPWSTR, wintypes.LPARAM
+    PDWORD, ENUMPROC = ctypes.POINTER(DWORD), ctypes.WINFUNCTYPE(BOOL, HWND, LPARAM)
+    return (
+        ("IsWindow", [HWND], BOOL),
+        ("IsIconic", [HWND], BOOL),
+        ("IsWindowVisible", [HWND], BOOL),
+        ("GetForegroundWindow", [], HWND),
+        ("SetForegroundWindow", [HWND], BOOL),
+        ("BringWindowToTop", [HWND], BOOL),
+        ("SwitchToThisWindow", [HWND, BOOL], None),  # 非公开导出, 老系统可能没有
+        ("ShowWindow", [HWND, INT], BOOL),
+        ("SetWindowPos", [HWND, HWND, INT, INT, INT, INT, UINT], BOOL),
+        ("GetWindowThreadProcessId", [HWND, PDWORD], DWORD),
+        ("AttachThreadInput", [DWORD, DWORD, BOOL], BOOL),
+        ("GetClassNameW", [HWND, LPWSTR, INT], INT),
+        ("GetWindowTextW", [HWND, LPWSTR, INT], INT),
+        ("EnumWindows", [ENUMPROC, LPARAM], BOOL),
+    )
+
+
+_bound_user32 = None
+_bound_kernel32 = None
+
+
+def _win_user32():
+    """user32 句柄(惰性取用 + **逐个绑签名** + 拿不到返回 None)
+
+    ⚠ 签名必须绑死 —— 2026-09-30 实测(同一窗口、同一时刻, 唯一变量是有没有 argtypes):
+      未绑 -> `SetWindowPos(hwnd, HWND_TOPMOST, ...)` **ret=0**, Z 序纹丝不动, 且
+      `GetLastError()` 仍为 0(典型的"静默无效"); 绑了 -> ret=1, 窗口立刻抬到顶层。
+    根因: 不绑 argtypes 时 ctypes 把所有参数按 **32 位 int** 传, 而 `HWND` 与"可插图句柄"
+    (`HWND_TOPMOST = (HWND)-1`) 是**指针宽度**的 —— x64 寄存器高 32 位留着上一个调用的
+    残留值, 于是 -1 被当成真实窗口句柄、目标 hwnd 被当成无效句柄。凡**取 HWND 参数**的调用
+    (`GetClassNameW` / `GetWindowTextW` / `SetForegroundWindow` …) 都吃同一套随机概率:
+    窗口<｜hy_place▁holder▁no▁813｜>查不到、标题取空、焦点抢不上 —— 这才是"**有概率**不弹到顶层"的真根因,
+    与前台锁、与 Z 序手段都无关(旧单测注入的是假 user32, 永远测不出这一类 x64 ABI 问题)。
+    POSIX 上 `ctypes.windll` 不存在, 顶层引用会让 CI ImportError(见 testing/file-conventions.md)
+    —— 返回 None 让调用方早退, 而不是靠"恰好抛了异常"决定行为。
+    测试可 monkeypatch 本函数注入假 user32(理由同 `_WIN_USER32_SIGNATURES` 的存在: 真调
+    shell API 会把开发机窗口摆弄乱)。
+    """
+    global _bound_user32
+    if not is_windows():
+        return None
+    if _bound_user32 is not None:
+        return _bound_user32
+    try:
+        import ctypes
+
+        u = ctypes.windll.user32
+    except (ImportError, AttributeError, OSError):
+        return None
+    for name, argtypes, restype in _WIN_USER32_SIGNATURES():
+        _win_bind(getattr(u, name, None), argtypes, restype)
+    _bound_user32 = u
+    return u
+
+
+def _win_kernel32():
+    """kernel32 句柄(同上: 惰性 + 绑签名; 目前只需 `GetCurrentThreadId`)"""
+    global _bound_kernel32
+    if not is_windows():
+        return None
+    if _bound_kernel32 is not None:
+        return _bound_kernel32
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        k = ctypes.windll.kernel32
+    except (ImportError, AttributeError, OSError):
+        return None
+    _win_bind(getattr(k, "GetCurrentThreadId", None), [], wintypes.DWORD)
+    _bound_kernel32 = k
+    return k
 
 
 def _win_explorer_hwnds() -> set:
     """当前所有 Explorer 文件夹窗口的 HWND 集合(EnumWindows 按类名过滤)。
 
     只读窗口枚举, 不产生任何系统副作用; 任何失败返回空集, 绝不抛错 —— 快照失败时调用方
-    跳过置前, 行为退化为修复前。ctypes 惰性取用(跨平台约束同 `_win_shell_open`)。
+    跳过置前, 行为退化为修复前。句柄一律经 `_win_user32()` 拿(签名已绑: 未绑时
+    `GetClassNameW` 会 sporadically 返回垃圾, 差集快照跟着随机失灵 —— 见该处实测)。
     """
-    if not is_windows():
+    user32 = _win_user32()
+    if user32 is None:
         return set()
     try:
         import ctypes
         from ctypes import wintypes
 
-        user32 = ctypes.windll.user32
         hwnds = set()
         enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
@@ -708,23 +812,68 @@ def _win_explorer_hwnds() -> set:
         return set()
 
 
-def _win_force_foreground(hwnd) -> None:
-    """把窗口强推到前台并激活(最小化先还原), 绕过 Windows 前台锁。
+def _win_topmost_once(hwnd) -> None:
+    """把窗口压到**所有非 topmost 窗口之上**(TOPMOST 挂一下立刻摘, 即经典开关式提升)。
 
-    为何要绕: Windows 规定后台进程不得抢前台 —— open_path 跑在托盘 / uvicorn 线程池线程里
-    属于后台, Shell 新弹的资源管理器窗口因此**有概率被压在当前前台窗口后面**(用户报的
-    "不弹出至顶层")。绕法是经典的 AttachThreadInput: 把本线程输入队列暂时挂到当前前台
-    窗口的线程上, 借它的前台权限完成 SetForegroundWindow, 再拆开。任何失败静默 ——
-    置前是锦上添花, 窗口本体已经打开了。
+    为何必须有这一层: `SetForegroundWindow` 受 Windows 前台锁约束 —— 后台进程(WebUI 的
+    uvicorn 线程池 / 托盘线程)没拿到前台权限时它会被**静默拒绝**, 新开的资源管理器因此留在
+    浏览器后面(用户报的"不弹出至顶层")。而 Z 序调整不受前台锁约束: `SetWindowPos` 配
+    `SWP_NOACTIVATE`(不抢焦点, 只动顺序)后台进程调用也必定被受理 —— "看得见"这一层单独
+    兜住, 与"抢得到焦点"解耦。抬完立刻摘掉 topmost, 避免它长期钉在所有窗口之上。
     """
+    user32 = _win_user32()
+    if user32 is None:
+        return
     try:
-        import ctypes
+        HWND_TOPMOST, HWND_NOTOPMOST = -1, -2
+        SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_SHOWWINDOW = 0x0001, 0x0002, 0x0010, 0x0040
+        flags = SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW
+        user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
+        user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags)
+    except (AttributeError, OSError):
+        pass
 
-        user32 = ctypes.windll.user32
-        kernel32 = ctypes.windll.kernel32
-        SW_RESTORE = 9
-        if user32.IsWindow(hwnd) and user32.IsIconic(hwnd):
+
+def _win_switch_to_this_window(hwnd) -> bool:
+    """兜底硬切: `user32.SwitchToThisWindow`(Win95 起在 user32 里导出, Win11 仍在)
+
+    它绕的是前台锁本身( shell 内部切窗口就走这条路), 因此比 AttachThreadInput 那套更硬;
+    代价是非公开接口 —— 取不到就 False, 绝不因为少了它影响前面两层的成果。
+    """
+    user32 = _win_user32()
+    if user32 is None:
+        return False
+    try:
+        user32.SwitchToThisWindow(hwnd, True)
+        return True
+    except (AttributeError, OSError):
+        return False
+
+
+def _win_force_foreground(hwnd) -> bool:
+    """把窗口抬到顶层并争取前台焦点; 返回它是否**真的**成了前台窗口。
+
+    三层升级, 每层独立失败静默、互不为前置条件(见 `_win_topmost_once` 的为何必须):
+      1. **Z 序**(必定受理): TOPMOST -> NOTOPMOST 提升 —— 用户看到的"不弹到顶层"由这层解决;
+      2. **焦点**(可能被拒): AttachThreadInput 借前台线程的权限 -> SetForegroundWindow -> 拆开;
+      3. **硬切**(兜底): 仍没拿到焦点才试 `SwitchToThisWindow`。
+    窗口不可见 / 最小化的先还原、先显示 —— 被别的手段藏起来的窗口拿到焦点也看不见。
+    三步跑完仍没焦点也**不算失败**: 它已经压在所有普通窗口之上, 用户点一下即可 —— 重试由
+    调用方按 `_EXPLORER_FG_RETRY` 封顶地做, 这里不做无限执念。
+    """
+    user32 = _win_user32()
+    kernel32 = _win_kernel32()
+    if user32 is None or kernel32 is None:
+        return False
+    try:
+        SW_SHOW, SW_RESTORE = 5, 9
+        if not user32.IsWindow(hwnd):
+            return False
+        if user32.IsIconic(hwnd):
             user32.ShowWindow(hwnd, SW_RESTORE)
+        elif not user32.IsWindowVisible(hwnd):
+            user32.ShowWindow(hwnd, SW_SHOW)
+        _win_topmost_once(hwnd)
         fg = user32.GetForegroundWindow()
         cur = kernel32.GetCurrentThreadId()
         fg_thread = user32.GetWindowThreadProcessId(fg, None) if fg else 0
@@ -734,9 +883,13 @@ def _win_force_foreground(hwnd) -> None:
         finally:
             if attached:
                 user32.AttachThreadInput(cur, fg_thread, False)
+        if user32.GetForegroundWindow() == hwnd:
+            return True
+        _win_switch_to_this_window(hwnd)
         user32.BringWindowToTop(hwnd)
+        return user32.GetForegroundWindow() == hwnd
     except (AttributeError, OSError):
-        pass
+        return False
 
 
 def _win_reuse_title_candidates(target: str) -> set:
@@ -755,42 +908,77 @@ def _win_reuse_title_candidates(target: str) -> set:
     return {n for n in names if n}
 
 
-def _win_foreground_new_explorer(before: set, target: str) -> None:
-    """找出本次新弹出的 Explorer 窗口并强推前台(同步版, 轮询上限 `_EXPLORER_FG_TIMEOUT`)。
+def _win_match_reused_explorer(hwnds: set, before: set, names: set):
+    """在**打开前就存在**的 Explorer 窗口里按标题找本次导航落点(HWND / 找不到 None)
 
-    before = open 之前的 `_win_explorer_hwnds()` 快照; 差集非空即命中。超时仍无新窗口的
-    情形是 **目标文件夹本就开着, Explorer 复用已有窗口导航** —— 此时退而按窗口标题匹配
-    (候选见 `_win_reuse_title_candidates`; Win11 标题带 " - 文件资源管理器" 类本地化后缀,
-    用 `名字 + " - "` 前缀匹配绕开语言差异)。匹配不上就静默放弃, 绝不误推无关窗口。
+    只在这些窗口里找: 差集(新窗口)优先, 复用场景根本没有新窗口; Win11 标题带
+    " - 文件资源管理器" 类本地化后缀, 用 `名字 + " - "` 前缀匹配绕开语言差异。
     """
-    hwnd = None
+    for h in sorted(hwnds):
+        if h not in before:
+            continue
+        title = _win_window_text(h)
+        if any(title == n or title.startswith(n + " - ") for n in names):
+            return h
+    return None
+
+
+def _win_wait_explorer(before: set, target: str):
+    """等本次打开的资源管理器窗口出现并返回 HWND(超时 None)
+
+    两条策略**每轮都试**(命中就停): ①快照差集 = 本次新建的 Explorer 窗口(最常见);
+    ②按标题在旧窗口里找 = Explorer **复用已有窗口/标签页**导航, 不新建窗口 —— 这是上一轮
+    修复的主要漏网点: 旧实现把②当"新窗口等不到"的兜底放在 2s 超时之后才做一次, 慢于 2s 的
+    复用导航整个漏掉, 表现为"有概率不置前"。
+    两条都不中有两种可能: Shell 还在慢慢建窗(继续轮询到 `_EXPLORER_FG_TIMEOUT`), 或本次
+    打开压根没出窗口(PIDL/字符串路线都失败) —— 两者都静默处理, 返回 None 让调用方跳过置前。
+    """
+    before = set(before)
+    names = _win_reuse_title_candidates(target)
     deadline = time.monotonic() + _EXPLORER_FG_TIMEOUT
-    while hwnd is None and time.monotonic() < deadline:
-        new = _win_explorer_hwnds() - set(before)
+    while True:
+        hwnds = _win_explorer_hwnds()
+        new = sorted(hwnds - before)
         if new:
-            hwnd = sorted(new)[0]  # 一般只有一个; 多个时取任一(都是本次弹出)
-        else:
-            time.sleep(_EXPLORER_FG_POLL)
+            return new[0]  # 一般只有一个; 多个时任一都属本次打开
+        if names:
+            reused = _win_match_reused_explorer(hwnds, before, names)
+            if reused is not None:
+                return reused
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(_EXPLORER_FG_POLL)
+
+
+def _win_foreground_new_explorer(before: set, target: str) -> bool:
+    """找到本次打开的资源管理器窗口并把它抬到顶层; 返回是否成功拿到前台焦点。
+
+    只解决"用户看得见"(Z 序): 焦点靠 `_win_force_foreground` 尽力争取, 争不到也**不再有任何
+    后果** —— 窗口已压在所有普通窗口之上, 用户点一下即可。失败一律静默(debug 留痕),
+    绝不影响打开本体 —— 置前是锦上添花。
+    """
+    hwnd = _win_wait_explorer(before, target)
     if hwnd is None:
-        names = _win_reuse_title_candidates(target)
-        for h in _win_explorer_hwnds():
-            if h not in before:
-                continue
-            title = _win_window_text(h)
-            if any(title == n or title.startswith(n + " - ") for n in names):
-                hwnd = h
-                break
-    if hwnd is not None:
-        _win_force_foreground(hwnd)
+        logger.debug(f"打开目标文件夹: 未定位到本次的资源管理器窗口, 跳过置前 | {target}")
+        return False
+    for i in range(_EXPLORER_FG_RETRY):
+        if _win_force_foreground(hwnd):
+            return True
+        time.sleep(_EXPLORER_FG_RETRY_GAP * (i + 1))  # 渐进间隔: 等 Shell 建窗动画落地再争取焦点
+    logger.debug(f"打开目标文件夹: 窗口已抬到顶层但未取得前台焦点(前台锁) | hwnd={hwnd} {target}")
+    return False
 
 
 def _win_window_text(hwnd) -> str:
     """窗口标题文本(GetWindowTextW); 失败返回空串, 绝不抛错(仅置前兜底匹配用)"""
+    user32 = _win_user32()
+    if user32 is None:
+        return ""
     try:
         import ctypes
 
         buf = ctypes.create_unicode_buffer(256)
-        ctypes.windll.user32.GetWindowTextW(hwnd, buf, 256)
+        user32.GetWindowTextW(hwnd, buf, 256)
         return buf.value
     except (AttributeError, OSError):
         return ""
@@ -799,7 +987,8 @@ def _win_window_text(hwnd) -> str:
 def _win_foreground_explorer_async(before: set, target: str) -> None:
     """后台线程执行 `_win_foreground_new_explorer`(不阻塞调用线程, daemon 随进程退场)。
 
-    open_path 的调用方是 WebUI 端点 / 托盘菜单 —— 轮询等待窗口创建最多 2s, 不能挂住它们。
+    open_path 的调用方是 WebUI 端点 / 托盘菜单 —— 找窗口最多轮询 `_EXPLORER_FG_TIMEOUT`,
+    不能挂住它们。
     """
     threading.Thread(
         target=_win_foreground_new_explorer, args=(before, target), name="open-path-foreground", daemon=True
@@ -824,9 +1013,9 @@ def open_path(path: str, select: bool = False) -> None:
     !`_win_shell_open` 只在 `is_windows()` 分支内调用 —— 它在 POSIX 上是空转, 而测试期副作用
     记账器把该入口整体计入 LAUNCH(放行清单为空), 无谓调用会变成假阳性。
 
-    弹出置前: Shell 新开的资源管理器窗口对**后台进程调用方**(托盘 / uvicorn 线程池)有概率
-    被前台锁压在后面(不弹到顶层) —— 打开前快照 Explorer 窗口集合, 打开后后台线程找新窗口
-    强推前台(见 `_win_foreground_new_explorer`; 置前属锦上添花, 任何失败静默, 不影响打开本体)。
+    弹出置前: Shell 打开的资源管理器窗口对**后台进程调用方**(托盘 / uvicorn 线程池)有概率
+    留在浏览器后面(不弹到顶层) —— 打开前快照 Explorer 窗口集合, 打开后后台线程找本次窗口
+    抬到顶层(见 `_win_foreground_new_explorer`; 置前属锦上添花, 任何失败静默, 不影响打开本体)。
     """
     if is_windows():
         before = _win_explorer_hwnds()
