@@ -45,10 +45,10 @@ def build_router(ctx: WebContext) -> APIRouter:
                     except queue.Empty:
                         # 心跳: 一是保活(防代理/浏览器掐连接), 二是把客户端标记为活跃
                         # (间隔必须 < WEB_VIEW_TTL, 否则主循环停止组装视图 ⇒ 自锁)
-                        manager.touch_web_client()
+                        manager.web.touch()
                         yield ": keepalive\n\n"
                         continue
-                    manager.touch_web_client()
+                    manager.web.touch()
                     yield frame(ev.get("type") or "msg", ev.get("payload") or {})
             except GeneratorExit:
                 pass

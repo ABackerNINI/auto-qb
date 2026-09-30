@@ -88,7 +88,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         无陈旧条目); 2.store 现有种子的 save_path(经 path_normalize 归一分隔符后参与去重, 与组 key
         同径不重复出现)。只读快照, 无副作用(不触发视图重建/不投命令)。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         paths = {key[0] for key in manager.store.groups if key and key[0]}
         paths.update(path_normalize(rec.save_path) for rec in manager.store.by_hash.values() if rec.save_path)
         return {"paths": sorted(paths)}
@@ -133,7 +133,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         旧实现先 realpath 再扫描, 现改为词法基准 + 逐条白名单 realpath, 对无符号链接的
         普通目录行为一致。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         roots = _browse_roots()
         if not roots:
             return {"path": "", "parent": "", "roots": [], "dirs": []}
@@ -224,7 +224,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         容器(Mapped)实现 open_path 恒 NotSupported —— 优雅降级为 501 + 引导「复制路径」
         (把原先 404/500 两层根因收敛成一句话, 报告 §05)。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         b = body or {}
         kind = str(b.get("kind") or "").strip()
         select = False

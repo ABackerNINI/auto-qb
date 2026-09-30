@@ -35,7 +35,7 @@ def build_router(ctx: WebContext) -> APIRouter:
           填入编辑器并提示用户核对后保存
         - 种子量大时本端点耗时随种子数线性增长(逐种查 tracker), 前端按钮置 loading
         """
-        manager.touch_web_client()
+        manager.web.touch()
         _require_client()  # 断连即 503: 绝不能拿空扫描结果冒充"没有缺失站点"
         try:
             torrents = manager.api.torrents_info()

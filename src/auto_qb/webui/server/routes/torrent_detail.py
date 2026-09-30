@@ -26,19 +26,19 @@ def build_router(ctx: WebContext) -> APIRouter:
     def api_torrent_detail(hash: str):
         """单种子全量详情: TorrentRecord.to_dict 全字段(含 _raw 前向兼容字段)
         + site(站点名) + HR 展示字段(与分组成员视图同源) —— 详情抽屉 General tab 数据源"""
-        manager.touch_web_client()
+        manager.web.touch()
         rec = _require_torrent(hash)
         return JSONResponse(
             content={"torrent": {
                 **rec.to_dict(), "site": rec.tracker_name,
-                **manager._hr_view_fields(rec)
+                **manager.hr_view_fields(rec)
             }}
         )
 
     @router.get("/api/torrents/{hash}/trackers")
     def api_torrent_trackers(hash: str):
         """单种子 tracker 列表(qB 透传; 含 **/[DHT]/[PeX]/[LSD] 虚拟条目, 前端自行弱化)"""
-        manager.touch_web_client()
+        manager.web.touch()
         _require_torrent(hash)
         client = _require_client()  # 断开即 503: 绝不能拿缓存里的旧值冒充"还连着"
         return JSONResponse(
@@ -48,7 +48,7 @@ def build_router(ctx: WebContext) -> APIRouter:
     @router.get("/api/torrents/{hash}/files")
     def api_torrent_files(hash: str):
         """单种子文件列表(qB 透传; 详情抽屉 Content tab 数据源)"""
-        manager.touch_web_client()
+        manager.web.touch()
         _require_torrent(hash)
         client = _require_client()  # 同上: 断连优先于缓存
         return JSONResponse(content=_cached_read(f"files:{hash}", lambda: list(client.torrents_files(hash) or [])))
@@ -61,7 +61,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         AttributeError): 响应整包含 rid/full_update/peers/peers_removed, 前端对 peers 键
         做 dict/数组双形态归一。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         _require_torrent(hash)
         client = _require_client()  # 同上: 断连优先于缓存
         # peers 是"活"数据: 窗口更短(1s), 抽屉 5s 轮询本就在窗口外
@@ -76,7 +76,7 @@ def build_router(ctx: WebContext) -> APIRouter:
     @router.get("/api/categories")
     def api_categories_list():
         """全部分类(name -> {save_path,...}, 读 store 缓存; 首次访问可能触发一次 qB 拉取)"""
-        manager.touch_web_client()
+        manager.web.touch()
         return {"categories": _cached_read("categories", lambda: manager.api.torrents_categories())}
 
     @router.get("/api/tags")
@@ -85,7 +85,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         utils.auto_managed_tag_rules: 站点/HR 精确集 + 集数模板形状) —— 添加种子窗口与
         「标签/分类…」弹窗的候选源用本参, 避免站点名等程序标签刷屏; 标签管理对话框不带
         本参保持全量。选中种子已携带的标签由前端并回候选(胶囊是唯一摘除入口, 不能藏)。"""
-        manager.touch_web_client()
+        manager.web.touch()
         tags = _cached_read("tags", lambda: manager.api.torrents_tags())
         if exclude_auto:
             exact, patterns = auto_managed_tag_rules(manager.config)
@@ -131,10 +131,10 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/speed/mode")
     def api_speed_mode():
-        """限速托管状态(D2): 曲线目标来自限速曲线任务快照(_traffic_view);
+        """限速托管状态(D2): 曲线目标来自限速曲线任务快照(traffic_view);
         qB 当前全局限速直读(只读, 无状态副作用 —— 与 peers 透传同一先例)"""
-        manager.touch_web_client()
-        view = manager._traffic_view
+        manager.web.touch()
+        view = manager.web.traffic_view
         curve_enabled = view.get("state") not in (None, "", "disabled")
         # 曲线存在但 enabled=False: 功能整体停用, 视为未启用(快照滞后/未发布时也兜底正确)
         gslc = manager.config.global_speed_limit_curve
@@ -194,7 +194,7 @@ def build_router(ctx: WebContext) -> APIRouter:
     @router.get("/api/torrents/{hash}/export")
     def api_torrent_export(hash: str):
         """导出 .torrent(QbApi 透传原始字节): Content-Disposition 附种子名(浏览器下载)"""
-        manager.touch_web_client()
+        manager.web.touch()
         rec = _require_torrent(hash)
         client = _require_client()
         data = client.torrents_export(torrent_hash=hash)

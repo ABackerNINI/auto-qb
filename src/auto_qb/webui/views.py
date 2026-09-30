@@ -234,7 +234,7 @@ class WebviewMixin:
             self.web.mark_dirty()
 
     @staticmethod
-    def _hr_view_fields(rec: TorrentRecord) -> dict:
+    def hr_view_fields(rec: TorrentRecord) -> dict:
         """该成员的 HR 展示字段(标签文本 + 要求/达成布尔 + 三态与依据), 供前端渲染 H&R 栏与对照列
 
         - hr_tag / hr_tag_done: 已触发未达标 / 已达标时应有的标签(供前端按文本着色)
@@ -383,8 +383,8 @@ class WebviewMixin:
             "tracker": r.tracker,
             "infohash_v2": r.infohash_v2,
             "seen_complete": r.seen_complete,
-            # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 _hr_view_fields
-            **self._hr_view_fields(r),
+            # HR 展示字段(标签语义色 + 要求/达成布尔): 判定与打标签流程同源, 见 hr_view_fields
+            **self.hr_view_fields(r),
             # 连接数快照(TorrentRecord 已有): 成员/未归组种子直接透出, 供前端种子页与成员列展示
             "num_seeds": r.num_seeds,
             "num_leechs": r.num_leechs,
@@ -591,7 +591,7 @@ class WebviewMixin:
         - 状态逐个记录, 出口处按优先级归并为节点状态
         """
         kind = self._state_kind(rec)
-        hr = self._hr_view_fields(rec)
+        hr = self.hr_view_fields(rec)
         node["members"].append(rec.hash)
         node["kinds"].append(kind)
         node["dlspeed"] += rec.dlspeed
@@ -853,7 +853,7 @@ class WebviewMixin:
                 "ratio": round(rec.ratio, 3),
                 "added_on": rec.added_on,
                 # 未归组命中种子以单种子虚拟行展示, 同样需要 HR 列所需字段
-                **self._hr_view_fields(rec),
+                **self.hr_view_fields(rec),
                 "by": by,
             }
 

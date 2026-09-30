@@ -143,7 +143,7 @@ def test_ops_rule_recheck_cooldown_and_requeue_regression():
     assert mgr.state["recheck_fails"]["HA"]["count"] == 1, "rule 源失败应计入冷却"
     assert any(task is origin for task in mgr.task_queue._fast), "失败后 origin 应被默认重置重入队"
     # 达上限 -> 当日拒绝(冷却闸门在提交点, qB 不再收到 recheck)
-    while _bump_recheck_fail(mgr, "HA") < RECHECK_FAIL_LIMIT:
+    while _bump_recheck_fail(mgr.ctx.state, "HA") < RECHECK_FAIL_LIMIT:
         pass
     n_calls = len(client.calls)
     r = mgr.ops_recheck("HA", source="rule", origin=origin)

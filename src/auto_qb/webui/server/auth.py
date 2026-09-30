@@ -56,7 +56,7 @@ def make_require_token(manager):
         # 查询串 ?token= 上作为兜底。代价: 密钥可能出现在访问日志里; 本机 skip_local_verify
         # 场景(默认)根本走不到这条路径。
         qtok = request.query_params.get("token") or ""
-        if qtok and secrets.compare_digest(qtok, manager._web_token):
+        if qtok and secrets.compare_digest(qtok, manager.web.token):
             return
         scheme = "Bearer "
         if not authorization.startswith(scheme):
@@ -64,7 +64,7 @@ def make_require_token(manager):
         token = authorization[len(scheme):].strip()
         if not token:
             raise HTTPException(status_code=401, detail="invalid token")
-        if not secrets.compare_digest(token, manager._web_token):
+        if not secrets.compare_digest(token, manager.web.token):
             logger.warning("WEB 鉴权失败: 密钥不匹配")
             raise HTTPException(status_code=401, detail="invalid token")
 

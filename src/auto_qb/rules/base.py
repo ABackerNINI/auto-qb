@@ -264,7 +264,7 @@ class Rule:
             task.resume_index = None
 
         if self.actions and not ctx.dry_run and ok_action:
-            self.manager.record_execution(self.name, ctx.hash)
+            self.manager.ctx.state.record_execution(self.name, ctx.hash)
 
         return executed or ok_action, self._should_stop(failed)
 
@@ -297,7 +297,7 @@ class Rule:
         """execute_once/cooldown 去重判断"""
         if self.execute_once == "never" and self.cooldown <= 0:
             return True
-        rec = self.manager.get_exec_record(self.name, ctx.torrent.hash)
+        rec = self.manager.ctx.state.get_exec_record(self.name, ctx.torrent.hash)
         now = datetime.now()
         if rec is not None:
             if self.cooldown > 0 and (now.timestamp() - rec.get("ts", 0)) < self.cooldown:

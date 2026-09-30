@@ -92,7 +92,7 @@ window.AQB_DECORATE = {
         paused: "#i-pause", error: "#i-warn", other: "#i-info",
       }[kind] || "#i-info";
     },
-    /* HR 标签分类色(与后端 qbmanager._hr_view_tags 对应)
+    /* HR 标签分类色(与后端 WebviewMixin._hr_view_tags 对应)
      *
      * pending = 已触发 HR 条件但尚未满足做种时长/分享率(需关注, 用最鲜亮的颜色);
      * done    = 已满足(可以放宽, 用另一组镇静的颜色)。判定依据是后端解析后的标签文本

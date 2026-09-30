@@ -16,7 +16,7 @@ class RoCache:
     P1-4: 打开抽屉会连打一串这类请求(trackers / files / peers + categories / tags),
     加 1~2s TTL 后同一时间窗内的重复请求合并为一次 qB 调用。数据最多旧 1~2s ——
     抽屉是观察用途, 可接受。
-    !失效靠 `manager._web_write_seq`(任何写命令执行成功即自增, 见 WebCommandsMixin):
+    !失效靠 `manager.web.write_seq`(任何写命令执行成功即自增, 见 WebUIRuntime.post_command):
     不加这道保险会出现"刚改完文件优先级、重取还拿到缓存旧值"这种**看起来没生效**的假象。
     """
     def __init__(self, manager) -> None:
@@ -29,7 +29,7 @@ class RoCache:
         """带写失效的短缓存: 键里带上写序号, 任何写命令后自动换键(= 缓存失效)"""
         if ttl is None:
             ttl = self.ttl
-        full_key = (key, getattr(self._manager, "_web_write_seq", 0))
+        full_key = (key, self._manager.web.write_seq)
         now = time.time()
         with self._lock:
             hit = self._cache.get(full_key)

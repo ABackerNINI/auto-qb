@@ -2,9 +2,9 @@
 
 WebUIRuntime 仍是表现层门面(状态/判据/命令编排单点), 本模块只把它接入 Module 契约:
 - start:      服务器启动(启用时) —— 密钥确定 + 服务线程拉起, 生命周期自 P2 起内聚 webui 包
-              (run() 的 web 启动块退役, start_web_server 也不再直写 manager._web_token);
+              (run() 的 web 启动块退役, 令牌经 ensure_token 内聚本门面);
 - stop:       进程关停路径只请求退出不等线程(与原 run() finally 口径一致);
-- apply:      热重载语义(qbmanager._apply_web_config 迁入) —— 有差异即置脏 + 仅"监听身份"
+- apply:      热重载语义(原 qbmanager web 段 apply 迁入) —— 有差异即置脏 + 仅"监听身份"
               (enabled/host/port)变化才重启服务器(plan §4.3);
 - loop hooks: 主循环五个语义调用中的四个经宿主按装配序调用 —— consume_commands /
               check_pending -> on_command_line, flush_views -> on_sync_line/on_task_line,

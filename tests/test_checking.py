@@ -593,7 +593,7 @@ def test_checking_recheck_fail_cooldown():
         # 第 4 次执行: 冷却生效 -> skip, 不再提交(失败计数保留, 次日重置)
         run_queue(mgr, t0 + 182.0)
     assert client.calls.count(("recheck", None)) == 3, "冷却期内不应再提交"
-    assert _recheck_fail_count(mgr, "HASH123") == 3
+    assert _recheck_fail_count(mgr.ctx.state, "HASH123") == 3
 
 
 def test_checking_skip_dedup_across_rules():
@@ -1583,7 +1583,7 @@ def test_recheck_fail_flushed_immediately():
     一次)。直接驱动生产写点 _bump_recheck_fail 断言盘上内容。
     """
     mgr = make_mgr(make_check_cfg())
-    assert _bump_recheck_fail(mgr, "HASH123") == 1
+    assert _bump_recheck_fail(mgr.ctx.state, "HASH123") == 1
     with open(mgr.state_file, "r", encoding="utf-8") as f:
         on_disk = json.load(f)
     assert on_disk.get("recheck_fails", {}).get("HASH123", {}).get("count") == 1, "冷却计数必须已写上盘"

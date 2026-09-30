@@ -30,7 +30,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         复用 CLI `--hr-confirm-empty` 的实现(run_hr_confirm_empty, 单点): 锁内写站点文件的
         empty_confirmed_at。写操作与正常实例靠站点锁互斥; 站点名必须已启用 hr_check。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         b = body or {}
         site = str(b.get("site") or "").strip()
         if not site:
@@ -56,7 +56,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         body 可带 site 单站触发; 缺省 = 全部启用站点。与插件端点同一实现
         (manager.hr.request_refresh 单点); 线程未启动回 409(不是错误形态, 是「现在拉不了」)。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         runtime = getattr(manager, "hr", None)
         if runtime is None:
             raise HTTPException(status_code=409, detail="HR 取数线程未启动")
@@ -87,7 +87,7 @@ def build_router(ctx: WebContext) -> APIRouter:
 
         `limit` 不设: 站点数是配置量(个位到十位数), 一次全给比让前端分页简单得多。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         conf = getattr(manager.config, "hr_check", None)
         runtime = getattr(manager, "hr", None)
         service = getattr(runtime, "service", None)

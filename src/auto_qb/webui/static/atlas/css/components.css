@@ -375,7 +375,7 @@
 .tag-chip { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 999px;
   background: var(--surface-2); color: var(--fg-muted); font-size: 11px; white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
-/* HR 标签语义色(后端 qbmanager._hr_view_tags 逐字匹配后才加类):
+/* HR 标签语义色(后端 WebviewMixin._hr_view_tags 逐字匹配后才加类):
  * hr-pending = 已触发 HR 条件但尚未满足做种时长/分享率 —— 最需要关注, 用最鲜亮的一组色;
  * hr-done    = 已满足要求 —— 可以放宽, 用另一组镇静的冷暖对照色。
  * 两者都比普通标签(中性灰)显眼, 但彼此一眼可区分。

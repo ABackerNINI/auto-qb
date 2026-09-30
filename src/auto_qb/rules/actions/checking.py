@@ -89,8 +89,9 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
             return ActionResult.skip("种子非暂停中未完成状态, 无需校验")
 
         # 决策链 1: 组内有活跃下载种子 -> 整组未完成, 不进行任何校验(包括跳检)
-        members = manager._group_members(ctx.hash)
-        if manager._group_has_downloading(members):
+        grouping = manager.host.get("grouping")
+        members = grouping._group_members(ctx.hash)
+        if grouping._group_has_downloading(members):
             return ActionResult.skip("组内有种子正在下载, 整组未完成, 不进行任何校验")
 
         # 决策链 1.5: 组内已有其它成员 full-checking 在途 -> 让位等待, 完成后重走决策链按结果分流
@@ -139,8 +140,9 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
             return bool(tag) and tag in t.tags_set
 
         # 候选即排除带标种子(避免 piecehashes 模式对其发无意义的 API 请求)
+        grouping = ctx.manager.host.get("grouping")
         candidates = [
-            c for c in ctx.manager._group_reference_candidates(members) if c.hash != ctx.hash and not _is_tagged(c)
+            c for c in grouping._group_reference_candidates(members) if c.hash != ctx.hash and not _is_tagged(c)
         ]
         refs = []
         if self.basic_check == "filelist":
@@ -162,7 +164,7 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         else:  # custom: 运行自定义程序判定候选
             refs = [c for c in candidates if self._run_custom_check(ctx, c)]
         # 内存 verified_references 并集: 历史 full-checking 通过的种子也可作参考(重启后重新积累)
-        by_hash = ctx.manager._group_by_hash()
+        by_hash = grouping._group_by_hash()
         own = ctx.hash
         for h in ctx.manager.store.verified_references:
             if h in members and h != own and h in by_hash:

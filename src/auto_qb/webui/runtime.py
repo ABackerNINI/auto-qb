@@ -523,7 +523,7 @@ class WebUIRuntime:
     def ensure_token(self) -> str:
         """确定访问密钥(显式配置优先, 否则随机生成并持久化到 data_dir/web.token)并落 self.token
 
-        自 P2 起令牌生命周期内聚本门面: start_web_server 不再直写 manager._web_token(plan
+        自 P2 起令牌生命周期内聚本门面: start_web_server 不再直写令牌字段(plan
         §05「外围绕过边界直写内核私有面」清零)。!密钥内容不进日志(server/common 契约)。
         """
         from .server.common import ensure_web_token

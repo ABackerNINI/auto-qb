@@ -138,7 +138,7 @@ class FullCheckingMixin:
         if not mine:
             return None
         for h in members:
-            if h == hash or _recheck_fail_count(manager, h) <= 0:
+            if h == hash or _recheck_fail_count(manager.ctx.state, h) <= 0:
                 continue
             rec = manager.store.get(h)
             if rec is None or rec.progress >= 1.0:

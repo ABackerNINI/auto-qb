@@ -161,7 +161,7 @@ def start_web_server(manager) -> WebServerHandle:
 
     就绪(或确认失败)后才打日志: 起线程后立即打印会掩盖 bind 失败(端口被占用时依然显示"已启动")。
     !密钥不由本函数确定(plan P2): 调用方(WebUIRuntime.start_server)先 ensure_token ——
-    令牌生命周期内聚表现层门面, 本函数不再直写 manager._web_token。
+    令牌生命周期内聚表现层门面, 本函数不再直写令牌。
     """
     app = create_app(manager)
     config = _QuietLoopConfig(

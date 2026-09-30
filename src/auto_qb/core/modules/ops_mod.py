@@ -23,9 +23,9 @@ helper)与 rules.base(ActionResult) —— 这是 ops 与 rules 之间唯一允�
 (plan §5「ops 与 rules 单向依赖」); rules 侧消费本模块一律经 ctx.ops 运行时调用,
 **不得**反向 import 本模块 —— 否则 ops -> rules 包初始化 -> actions 成环。
 
-!state / save_state 经 ctx.state 门面(冷却计数与跳检去重的落盘载荷): 模块暴露同名属性/
-方法供 checking_meta 的 helper 鸭子类型使用(manager 与本模块都满足「.state dict +
-.save_state()」面, 测试直传 mgr 亦然)。
+!冷却计数 helper 的宿主是 StateService: 本模块传 self._ctx.state(checking_meta 契约,
+plan 别名层处置 W1 起 manager 侧同样传 manager.ctx.state)。state / save_state 门面属性
+仍保留, 供本模块自有落盘路径(冷却清零 / 跳检去重 / 备份元数据)使用。
 !client 经 ctx.api.client **现取**(不缓存): 重连换客户端时 QbApi.bind 同步更新。
 """
 import logging
@@ -144,7 +144,7 @@ class OpsModule(BaseModule):
             return ActionResult.skip(_RECHECK_BUSY_MSG)
 
         # ---- 失败冷却: 仅规则源(自动化 recheck 死循环自限频; WEB 手动排障不受限, D1) ----
-        if source == "rule" and _recheck_fail_count(self, hash) >= RECHECK_FAIL_LIMIT:
+        if source == "rule" and _recheck_fail_count(self._ctx.state, hash) >= RECHECK_FAIL_LIMIT:
             logger.info(f"{prefix} {self._ops_repr(torrent or snap)} | "
                         f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
             return ActionResult.skip(f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
@@ -187,7 +187,7 @@ class OpsModule(BaseModule):
                 elif seen_checking:
                     # 曾见 checking 后落回未完成: 真实校验未通过(冷却仅规则源, D1)
                     if source == "rule":
-                        fail_count = _bump_recheck_fail(self, hash)
+                        fail_count = _bump_recheck_fail(self._ctx.state, hash)
                         logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(第{fail_count}次, progress={rec.progress})")
                     else:
                         logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(progress={rec.progress})")
@@ -197,7 +197,7 @@ class OpsModule(BaseModule):
                     # 宽限耗尽仍未见校验启动: 判败防轮询活锁(qB 重启丢请求等极端情形);
                     # 判败后 origin 重走决策链会重新提交, 请求恢复生效后自然续上
                     if source == "rule":
-                        fail_count = _bump_recheck_fail(self, hash)
+                        fail_count = _bump_recheck_fail(self._ctx.state, hash)
                         logger.warning(
                             f"{prefix} {rec.log_repr} | "
                             f"校验启动超时({CHECK_START_GIVEUP:.0f}s 未见 checking, 第{fail_count}次, progress={rec.progress})"

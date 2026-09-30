@@ -25,7 +25,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         `%(asctime)s - %(levelname)s - %(message)s`(不带方括号), 按 `[WARNING` 捞会恒空。
         筛不了时(格式无等级字段 / 已存行与当前格式不符)仍回全部行 + note 说明, 不静默给空。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         path = getattr(manager.config.logging, "file", "") or ""
         out: List[str] = []
         note = ""
@@ -46,8 +46,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         reannounce 的回执由主循环的 tracker 确认跟踪器在确认成功/失败/超时后写入,
         其余命令执行完立即写入。结果只由主循环线程写, 此处只读。
         """
-        manager.touch_web_client()
-        result = manager._web_results.get(cmd_id)
+        manager.web.touch()
+        result = manager.web.results.get(cmd_id)
         return dict(result) if result else {"status": "pending"}
 
     return router

@@ -10,8 +10,9 @@ actions / core 任何模块, ops 层(core/modules/ops_mod)经它取常量不会�
 - actions/full_checking -> 本模块: 决策链 1.5/1.6 同源取用;
 - 本模块**不得** import 任何一侧 —— 否则 ops -> rules 包初始化 -> actions -> 本模块成环。
 
-冷却 helper 的宿主参数按鸭子类型收敛为「有 .state dict 与 .save_state() 的对象」:
-manager(QbManager 委托)与 ops 模块(ctx.state 门面)都满足, 测试直传 mgr 亦然。
+冷却 helper 的宿主参数自 P0 起收敛为 StateService(ctx.state 服务): 计数读写走 .data,
+即时落盘走 .save() —— manager(QbManager)侧传 manager.ctx.state, ops 模块传 self._ctx.state,
+测试直传 mgr.ctx.state 亦然。
 """
 from datetime import date
 
@@ -31,22 +32,22 @@ GROUP_CHECK_WAIT_LIMIT = 2 * 3600.0
 CHECK_START_GIVEUP = 600.0
 
 
-def _recheck_fail_count(manager, hash: str) -> int:
+def _recheck_fail_count(state, hash: str) -> int:
     """同一种子当日连续校验失败次数(按自然日重置)"""
-    rec = manager.state.get("recheck_fails", {}).get(hash)
+    rec = state.data.get("recheck_fails", {}).get(hash)
     if rec and rec.get("date") == date.today().isoformat():
         return rec.get("count", 0)
     return 0
 
 
-def _bump_recheck_fail(manager, hash: str) -> int:
+def _bump_recheck_fail(state, hash: str) -> int:
     """累加当日校验失败次数并返回当前次数"""
-    fails = manager.state.setdefault("recheck_fails", {})
+    fails = state.data.setdefault("recheck_fails", {})
     rec = fails.setdefault(hash, {"date": "", "count": 0})
     today = date.today().isoformat()
     if rec.get("date") != today:
         rec["date"] = today
         rec["count"] = 0
     rec["count"] += 1
-    manager.save_state()  # 冷却计数即时落盘: 丢了会对同一损坏文件多试 recheck(当日上限闸门失效一次); 上界 3 次/日/种, 频率天然低
+    state.save()  # 冷却计数即时落盘: 丢了会对同一损坏文件多试 recheck(当日上限闸门失效一次); 上界 3 次/日/种, 频率天然低
     return rec["count"]

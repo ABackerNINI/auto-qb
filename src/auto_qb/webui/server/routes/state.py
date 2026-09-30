@@ -18,15 +18,15 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/status")
     def api_status():
-        manager.touch_web_client()
+        manager.web.touch()
         snap = manager.status_snapshot()
         return {
             "connected": snap["connected"],
             "paused": snap["paused"],
             "torrents": snap["torrents"],
-            "groups": len(manager._group_view),
+            "groups": len(manager.web.group_view),
             "version": _app_version(),
-            "traffic": manager._traffic_view,
+            "traffic": manager.web.traffic_view,
         }
 
     @router.get("/api/state")
@@ -40,23 +40,23 @@ def build_router(ctx: WebContext) -> APIRouter:
         响应体降到约 1/4(序列化/网络/JSON.parse 与重渲染成本同步下降)。
         缺省或未知值 ⇒ 回传四份(保守默认, 老客户端不受影响)。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         snap = manager.status_snapshot()
-        # !**先**取分组状态再拼 status: ensure_group_state 才是真正触发"视图发布"的地方
+        # !**先**取分组状态再拼 status: ensure_state 才是真正触发"视图发布"的地方
         # (脏则重建四视图 + 速度合计)。若把它写在 status 字典之后(作为 `**` 展开项),
         # 字典字面量会**先**求值 ⇒ 读到的是上一轮的旧值: 首次请求拿到全 0, 之后每轮慢一拍。
-        group_state = manager.ensure_group_state(rid, view or None)
+        group_state = manager.web.ensure_state(rid, view or None)
         payload = {
             "status":
                 {
                     "connected": snap["connected"],
                     "paused": snap["paused"],
                     "torrents": snap["torrents"],
-                    "groups": len(manager._group_view),
+                    "groups": len(manager.web.group_view),
                     "version": _app_version(),
                     # 限速/流量快照: 恒回传(不受 rid 门控) —— 数据源是限速曲线任务而非分组视图,
                     # 若参与版本门控会与 groups 的脏语义耦合, 反而可能长时间不刷新
-                    "traffic": manager._traffic_view,
+                    "traffic": manager.web.traffic_view,
                     # qB 全局状态(server_state: 连接状态/全局速度/累计流量/磁盘剩余等)。
                     # 与 traffic 同为"恒回传"口径: 数据源是 sync 快照而非分组视图, 不参与
                     # rid 门控。此前前端状态栏要为此**单独再打一次 /api/stats**, 两条链路
@@ -85,14 +85,14 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/groups")
     def api_groups():
-        manager.touch_web_client()
+        manager.web.touch()
         # 同 /api/state: 返回裸 dict 会让 FastAPI 白跑一遍 jsonable_encoder(见那里的注释)
-        return JSONResponse(content={"groups": manager.ensure_group_view()})
+        return JSONResponse(content={"groups": manager.web.ensure_view()})
 
     @router.get("/api/search")
     def api_search(q: str = ""):
         """按种子名/文件列表搜索种子(主循环构建的缓存索引, Web 线程只读; 索引脏时投递构建命令)"""
-        manager.touch_web_client()
+        manager.web.touch()
         return JSONResponse(content=manager.search_torrents(q))
 
     @router.get("/api/stats")
@@ -102,7 +102,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         数据源是主循环增量同步时原子替换的只读引用; 降级全量(无 sync 端点)或
         尚未同步到响应时为 null, 前端按空态渲染。
         """
-        manager.touch_web_client()
+        manager.web.touch()
         return {"server": manager.store.server_state}
 
     @router.get("/api/traffic/history")
@@ -112,8 +112,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         数据源是限速曲线任务每轮发布的只读快照(_traffic_view["history"]), Web 线程只读;
         未启用限速曲线或数据源不可用时 history 为空数组, state 供前端判断展示分支。
         """
-        manager.touch_web_client()
-        view = manager._traffic_view
+        manager.web.touch()
+        view = manager.web.traffic_view
         return {"state": view.get("state"), "history": view.get("history") or []}
 
     return router

@@ -301,7 +301,7 @@ class TorrentRecord:
         在 qB 里加/删排除标签, 下一轮判定即生效或恢复管束, 无需重启、无需记录置脏。
         空表快速路径: 两个列表都空(默认) = 一次布尔判断, 三个判定入口的热路径零成本。
 
-        公开方法(webui/views.py 的 _hr_view_fields 也要读排除态做展示); 本文件内四个
+        公开方法(webui/views.py 的 hr_view_fields 也要读排除态做展示); 本文件内四个
         判定入口(hr_managed / check_hr_condition / check_hr_satisfied / hr_judgement)顶部各有一行短路。
         """
         hr = self.tracker_conf.hr
@@ -323,7 +323,7 @@ class TorrentRecord:
         !HR 排除优先: 命中排除表(hr_excluded)返回 None —— 用户显式排除压过站点侧判定,
         WebUI 的站点侧字段随之留空, 与「站点未接入」呈现同构。
         !线程: 只读(快照字段 + tracker_conf + 站点视图的不可变快照), 无状态、无 API、无写盘,
-        故 Web 线程也安全(`_hr_view_fields` 与主循环同域)。
+        故 Web 线程也安全(`hr_view_fields` 与主循环同域)。
         判定表(v3, 计划 26-09-28-1932 §3.1): identity=NO_EVIDENCE 即行 4 —— 站点无话可说,
         调用方按本地判据兜底(达标放行 / 未达标管束, 硬编码无配置)。
         """

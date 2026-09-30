@@ -57,7 +57,7 @@ const GROUP_COLUMNS = [
   { key: "category", label: "分类", tpl: "minmax(100px, 1.1fr)", align: "left" },
   { key: "tags", label: "标签", tpl: "minmax(130px, 1.4fr)", align: "left" },
   { key: "sites", label: "站点", tpl: "minmax(170px, 1.6fr)", align: "left" },
-  // H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(组级计数由后端算好, 见 qbmanager._build_group_view)
+  // H&R: 未满足做种时长/分享率的成员数 / 已触发 HR 的成员数(组级计数由后端算好, 见 WebviewMixin._build_group_view)
   { key: "hr", label: "H&R", tpl: "minmax(88px, 1fr)", sortable: true, align: "center" },
   { key: "count", label: "站数", tpl: "56px", sortable: true, align: "center" },
   // TBL-06: 组级"最近添加"(组内成员最大 added_on, 后端 _build_group_view 已透出);

@@ -53,3 +53,5 @@
 manager 上的旧名单行委托(§7.2)与 `_WEB_STATE_ALIAS`(19 字段 + `__getattr__`/`__setattr__` 转发)是迁移过渡层: 被测试/路由点名的旧名在实现迁模块后留单行转发。**新代码一律用新名**(模块方法 / `self.web.*` / ctx 服务), 不要再往委托层加东西; 处置计划见 memory-bank/plans/(别名层清理, 2026-10-01 立计划)。
 
 **冻结机检已生效**(处置计划 W0, 2026-10-01): 逐名分诊清单在 `plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json`(名字/类别/消费方/目标名/波次, W1/W2 施工图), 守阵 `tests/test_qbmanager_alias_freeze.py` 用 AST 比对 qbmanager 单行转发面与清单 —— **清单之外新增旧名单行委托 / 别名表加字段即测试红**; 删名字必须同波更新清单。属性对(config/store/api/state/web/task_queue/state_file)经 D1 拍板**永久保留**(manager 即外观的公共面), 不在清理范围。
+
+**src 侧旧名已清零**(处置计划 W1, 2026-10-01): 路由/规则动作等真实代码消费方全部改新名口(`manager.web.*` / `host.get(...)` / `ctx.state.*`), `grep "manager\._" src/auto_qb/webui/` 为空; WebviewMixin 静态方法 `_hr_view_fields` 随路由直调公开化为 `hr_view_fields`; checking_meta 冷却 helper 宿主收敛为 StateService(`.data` + `.save()`)。兼容层本体(转发与别名表)仍在, 仅服务测试旧名, W2 迁完测试面后 W3 删除。

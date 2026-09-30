@@ -113,7 +113,7 @@
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
 - test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
-- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 _hr_view_fields 键集里(字段打错 = 页面静默空白)
+- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -164,8 +164,8 @@
 - test_drain_web_commands_skip_check_torrent: 右键跳检命令(P2') —— 经 ops 层四阶段全流程, 回执 ok 且记录同日去重
 - test_webui_no_rules_import: 边界守阵(P2') —— webui 操作链不得 import 规则模块; 其余 webui 模块不得触碰规则动作插件(rules.actions/registry)
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
-- test_hr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
-- test_hr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰)
+- testhr_view_fields_three_state: 详情字段透出站点侧三态与依据(接入站点才有值, 未接入全空)
+- testhr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰)
 - test_api_hr_status_disabled_returns_empty_state: 未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端空态, 不报错)
 - test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
   「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径)
@@ -308,7 +308,6 @@ def _make_web_manager(tmp_path, config_text):
         }
     ]
     mgr = SimpleNamespace(
-        _web_token="",
         _group_view=view,
         _flat_view=[],
         web_commands=__import__("queue").Queue(),
@@ -323,19 +322,8 @@ def _make_web_manager(tmp_path, config_text):
         config_path=config_file,
         store=SimpleNamespace(groups=groups, by_hash={}, get=lambda h: None, server_state=None),
         client=None,
-        _web_last_seen=0.0,
         _group_view_dirty=False,
         _group_view_ver=0,
-        # 限速/流量只读快照(真实 manager 由 SpeedCurveMixin 整体替换; 此处为未启用态)
-        _traffic_view={
-            "state": "disabled",
-            "periods": [],
-            "history": [],
-            "limit": {}
-        },
-        # 命令执行结果回执(真实 manager 由主循环写; 端点测试直接预置)
-        _web_results={},
-        _web_write_seq=0,  # P1-4 只读端点短缓存的失效键(写命令执行后自增)
         # 命令唤醒(真实 manager 置位 _wake_event 让主循环立即消费); 此处记录调用供断言
         wake=lambda: wake_calls.append(1),
     )
@@ -356,12 +344,15 @@ def _make_web_manager(tmp_path, config_text):
 
     mgr.web = WebUIRuntime(mgr)
     mgr.web.commands = mgr.web_commands
-    mgr._hr_view_fields = QbManager._hr_view_fields
+    # routes 走 web.* 新名口(plan 别名层处置 W1): 视图/回执/流量/写序号数据接线到门面,
+    # 替身数据仍住命名空间(_group_view 等), 门面方法覆盖为读替身数据
+    mgr.web.group_view = view
+    mgr.web.traffic_view = {"state": "disabled", "periods": [], "history": [], "limit": {}}
+    mgr.hr_view_fields = QbManager.hr_view_fields
     mgr._wake_calls = wake_calls  # 供端点测试断言"投递命令是否唤醒主循环"
-    # 性能修复后 API 调用的替身方法: touch_web_client(心跳) / ensure_group_view(懒视图) /
-    # ensure_group_state(带 rid 的增量状态)
-    mgr.touch_web_client = lambda: setattr(mgr, "_web_last_seen", __import__("time").time())
-    mgr.ensure_group_view = lambda: mgr._group_view
+    # 视图替身方法(原 ensure_group_view / ensure_group_state 旧名挂点): routes 现调
+    # web.ensure_view / web.ensure_state, 这里把门面方法指到替身数据上
+    mgr.web.ensure_view = lambda: mgr._group_view
 
     def _ensure_group_state(rid, view=None):
         # 与真实实现同形: 默认回全部; P1-1 带 view 时只回该视图的数组
@@ -383,7 +374,7 @@ def _make_web_manager(tmp_path, config_text):
                 state[k] = arrays[k]
         return state
 
-    mgr.ensure_group_state = _ensure_group_state
+    mgr.web.ensure_state = _ensure_group_state
     return mgr
 
 
@@ -398,7 +389,7 @@ def web_env(tmp_path):
         tmp_path,
         "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
     )
-    mgr._web_token = ensure_web_token(mgr)
+    mgr._web_token = mgr.web.token = ensure_web_token(mgr)  # 双写: web.token 是 routes 的读点, 旧名留 W2 测试面迁移
     app = create_app(mgr)
     client = TestClient(app)
     return mgr, client
@@ -1672,7 +1663,7 @@ def test_frontend_hr_safety_wiring():
       hr-pop 弹窗规则(浮层/箭头/双轨)同理成对;
       整格线(在线)必须挂**文字包裹层** .dur-body 而不是单元格 .m-dur —— 行是 grid, 单元格被拉满整列宽,
       挂它上面 width:100% 的空 <i> 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报);
-    4. 前端 js 里引用的 m.hr_* 字段必须都在后端 _hr_view_fields 的键集里(字段一致性守阵,
+    4. 前端 js 里引用的 m.hr_* 字段必须都在后端 hr_view_fields 的键集里(字段一致性守阵,
       M4 设置页守阵同款思路)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
@@ -1781,13 +1772,13 @@ def test_frontend_hr_safety_wiring():
         assert ".m-dur > .hr-line" not in css, \
             f"{name} 整格线仍挂在单元格 .m-dur 上 —— 单元格是 grid item 会被拉满列宽, 线随列宽不随文字"
 
-    # 4. 前端引用的 m.hr_* 字段 ⊆ 后端 _hr_view_fields 键集(字段一致性)
+    # 4. 前端引用的 m.hr_* 字段 ⊆ 后端 hr_view_fields 键集(字段一致性)
     from auto_qb.core.qbmanager import QbManager
     from auto_qb.torrents import TorrentRecord
     from helpers import FakeTorrent
 
-    keys = set(QbManager._hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HX"))))
-    assert keys, "_hr_view_fields 连空配置分支都该返回全键集"
+    keys = set(QbManager.hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HX"))))
+    assert keys, "hr_view_fields 连空配置分支都该返回全键集"
     used = set()
     for name in sorted(os.listdir(shared)):
         if name.endswith(".js"):
@@ -2453,7 +2444,7 @@ def test_api_cmd_result_endpoint(web_env):
     cmd_id = resp.json()["cmd_id"]
     assert cmd_id, "投递响应应携带 cmd_id"
     assert client.get(f"/api/cmd/{cmd_id}", headers=auth).json() == {"status": "pending"}
-    mgr._web_results[cmd_id] = {"status": "ok", "error": "", "ts": 123.0}
+    mgr.web.results[cmd_id] = {"status": "ok", "error": "", "ts": 123.0}
     assert client.get(f"/api/cmd/{cmd_id}", headers=auth).json() == {"status": "ok", "error": "", "ts": 123.0}
     # 其余命令端点同样携带 cmd_id(delete 返回体保留 delete_files 标志)
     enc = encode_group_key(KEY)
@@ -2467,7 +2458,7 @@ def test_api_traffic_history_endpoint(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr._web_token}"}
     assert client.get("/api/traffic/history", headers=auth).json() == {"state": "disabled", "history": []}
-    mgr._traffic_view = {
+    mgr.web.traffic_view = {
         "state": "ok",
         "history": [{
             "date": "2026-09-14",
@@ -3371,7 +3362,7 @@ def test_build_group_view_hr_tags(tmp_path):
     assert members["NoHR.Show"]["hr_triggered"] is False
 
 
-def test_hr_view_fields_three_state(tmp_path):
+def testhr_view_fields_three_state(tmp_path):
     """详情字段透出站点侧三态与依据 + 删除安全档位×来源(WebUI 可观测性): 接入站点才有值, 未接入全空"""
     from auto_qb.config import HRRule, TrackerConfig
     from auto_qb.config.models import SiteHrCheckConfig
@@ -3389,7 +3380,7 @@ def test_hr_view_fields_three_state(tmp_path):
 
     # 未接入 hr_check: 三态四项全空(前端据此不显示三态行, 与既有四个字段的空值口径一致);
     # 本地未触发 + 未做种满 => 删除安全 = warning 疑似辅种黄档(计划 26-09-30-0559 §5, 旧「不适用」作废)
-    fields = QbManager._hr_view_fields(rec)
+    fields = QbManager.hr_view_fields(rec)
     assert fields["hr_state"] == "" and fields["hr_state_text"] == "" and fields["hr_reason"] == ""
     assert fields["hr_safety"] == "warning" and fields["hr_safety_src"] == "local"
     assert fields["hr_safety_text"] == "本地·未达标(疑似辅种)"
@@ -3402,7 +3393,7 @@ def test_hr_view_fields_three_state(tmp_path):
         identity=HrIdentity.HR, reason="清单命中·考察中(档位 A)", site_satisfied=False, site="HHan"
     )
     rec.hr_link = link
-    fields = QbManager._hr_view_fields(rec)
+    fields = QbManager.hr_view_fields(rec)
     assert fields["hr_triggered"] is False, "hr_triggered = 纯本地触发判据(展示辅助), downloaded=0 不触发"
     assert fields["hr_satisfied"] is False, "命中考察中 => 义务仍在, 恒未达标"
     assert fields["hr_state"] == "hr" and fields["hr_state_text"] == "受管束"
@@ -3419,7 +3410,7 @@ def test_hr_view_fields_three_state(tmp_path):
         facts=HrSiteFacts(lane="A"),
         site="HHan",
     )
-    fields = QbManager._hr_view_fields(rec)
+    fields = QbManager.hr_view_fields(rec)
     assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "site_scope"
     assert fields["hr_safety_text"] == "在线·考察中"
 
@@ -3431,7 +3422,7 @@ def test_hr_view_fields_three_state(tmp_path):
         facts=HrSiteFacts(lane="B", remain_seconds=0, ratio=1.5),
         site="HHan",
     )
-    fields = QbManager._hr_view_fields(rec)
+    fields = QbManager.hr_view_fields(rec)
     assert fields["hr_satisfied"] is True
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_satisfied"
     assert fields["hr_safety_text"] == "在线·已达标"
@@ -3447,13 +3438,13 @@ def test_hr_view_fields_three_state(tmp_path):
         facts=HrSiteFacts(lane="C"),
         site="HHan",
     )
-    fields = QbManager._hr_view_fields(rec)
+    fields = QbManager.hr_view_fields(rec)
     assert fields["hr_triggered"] is False and fields["hr_state"] == "released_non_hr"
     assert fields["hr_safety"] == "failed" and fields["hr_safety_src"] == "site_unsatisfied"
 
     # 放行记录(覆盖范围内未列出): 可删, 来源「在线·已核实」
     link.judge.return_value = HrJudgement(identity=HrIdentity.RELEASED, reason="放行记录(覆盖范围内未列出)")
-    fields = QbManager._hr_view_fields(rec)
+    fields = QbManager.hr_view_fields(rec)
     assert fields["hr_triggered"] is False and fields["hr_state"] == "released_non_hr"
     assert fields["hr_state_text"] == "已核实·放行"
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_released"
@@ -3468,7 +3459,7 @@ def test_hr_view_fields_three_state(tmp_path):
         reason="放行记录(D 档已免罪)",
         released_src=SOURCE_EXEMPT,
     )
-    fields = QbManager._hr_view_fields(rec)
+    fields = QbManager.hr_view_fields(rec)
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_exempt"
     assert fields["hr_safety_text"] == "在线·已免罪"
 
@@ -3480,7 +3471,7 @@ def test_hr_view_fields_three_state(tmp_path):
     rec2.tracker_conf = conf
     rec2.hr_link = link
     link.judge.return_value = None
-    fields = QbManager._hr_view_fields(rec2)
+    fields = QbManager.hr_view_fields(rec2)
     assert fields["hr_triggered"] is True and fields["hr_satisfied"] is False
     assert fields["hr_safety"] == "danger" and fields["hr_safety_src"] == "local"
     assert fields["hr_safety_text"] == "本地·未达标"
@@ -3491,12 +3482,12 @@ def test_hr_view_fields_three_state(tmp_path):
     )
     rec3.tracker_conf = conf
     rec3.hr_link = link
-    fields = QbManager._hr_view_fields(rec3)
+    fields = QbManager.hr_view_fields(rec3)
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "local"
     assert fields["hr_safety_text"] == "本地·达标"
 
 
-def test_hr_view_fields_excluded(tmp_path):
+def testhr_view_fields_excluded(tmp_path):
     """HR 排除态视图(计划 26-09-28-1805): hr_excluded=True, 触发/达标恒 False,
     删除安全档位短路成空串(「不适用」空白由组装层保证, 计划 26-09-30-0559 §5)"""
     from auto_qb.config import HRRule, TrackerConfig
@@ -3517,7 +3508,7 @@ def test_hr_view_fields_excluded(tmp_path):
     )
     rec.tracker_conf = conf
     rec.hr_link = mock.Mock()  # 排除种子连判定桥都不该被打扰
-    fields = QbManager._hr_view_fields(rec)
+    fields = QbManager.hr_view_fields(rec)
     assert fields["hr_excluded"] is True
     assert fields["hr_triggered"] is False and fields["hr_satisfied"] is False
     assert fields["hr_state"] == "" and fields["hr_safety"] == "" and fields["hr_safety_text"] == ""
@@ -3527,10 +3518,10 @@ def test_hr_view_fields_excluded(tmp_path):
     # 未命中排除表: hr_excluded=False, 行为照旧
     rec2 = TorrentRecord.from_torrent(FakeTorrent(hash="HE", state="stalledUP", downloaded=0, tags="HHan"))
     rec2.tracker_conf = conf
-    assert QbManager._hr_view_fields(rec2)["hr_excluded"] is False
+    assert QbManager.hr_view_fields(rec2)["hr_excluded"] is False
 
     # 空配置分支也带 hr_excluded 键(前端字段一致性守阵消费全键集)
-    assert QbManager._hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HF")))["hr_excluded"] is False
+    assert QbManager.hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HF")))["hr_excluded"] is False
 
 
 def _hr_status_env(mgr, tmp_path, *, complete=True):
@@ -7349,7 +7340,7 @@ def test_api_readonly_endpoints_short_cache(web_env):
     assert client.get("/api/torrents/HA/files", headers=auth).json() == first
     assert fake.files_calls == 1, "同一时间窗内的重复请求应合并为一次 qB 调用"
     # 写命令后失效(模拟主循环消费了一条写命令)
-    mgr._web_write_seq += 1
+    mgr.web.write_seq += 1
     assert client.get("/api/torrents/HA/files", headers=auth).json() == first
     assert fake.files_calls == 2, "写命令后缓存必须失效, 否则用户会看到'改了没生效'"
     # 断连优先于缓存: 仍 503, 不拿旧值冒充还连着
