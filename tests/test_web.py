@@ -308,9 +308,6 @@ def _make_web_manager(tmp_path, config_text):
         }
     ]
     mgr = SimpleNamespace(
-        _group_view=view,
-        _flat_view=[],
-        web_commands=__import__("queue").Queue(),
         status_snapshot=lambda: {
             "connected": True,
             "paused": False,
@@ -322,8 +319,6 @@ def _make_web_manager(tmp_path, config_text):
         config_path=config_file,
         store=SimpleNamespace(groups=groups, by_hash={}, get=lambda h: None, server_state=None),
         client=None,
-        _group_view_dirty=False,
-        _group_view_ver=0,
         # 命令唤醒(真实 manager 置位 _wake_event 让主循环立即消费); 此处记录调用供断言
         wake=lambda: wake_calls.append(1),
     )
@@ -338,37 +333,36 @@ def _make_web_manager(tmp_path, config_text):
     # 详情端点的 HR 展示字段由 WebviewMixin 静态方法提供; stub 直接引用同一实现
     from auto_qb.core.qbmanager import QbManager
 
-    # 命令投递经表现层门面(WebUIRuntime.post_command): 替身挂一个, 并与上面那个
-    # web_commands 共用同一队列 —— 端点测试直投命令的断言才仍然成立
+    # 命令投递经表现层门面(WebUIRuntime.post_command): post_command 与 consume_commands
+    # 共用 runtime 自带的 commands 队列 —— 端点测试直投 mgr.web.commands, 断言仍然成立
     from auto_qb.webui import WebUIRuntime
 
     mgr.web = WebUIRuntime(mgr)
-    mgr.web.commands = mgr.web_commands
-    # routes 走 web.* 新名口(plan 别名层处置 W1): 视图/回执/流量/写序号数据接线到门面,
-    # 替身数据仍住命名空间(_group_view 等), 门面方法覆盖为读替身数据
+    # routes 走 web.* 新名口(plan 别名层处置 W1/W2): 替身数据挂门面命名空间,
+    # 门面方法覆盖为读替身数据
     mgr.web.group_view = view
+    mgr.web.flat_view = []
     mgr.web.traffic_view = {"state": "disabled", "periods": [], "history": [], "limit": {}}
     mgr.hr_view_fields = QbManager.hr_view_fields
     mgr._wake_calls = wake_calls  # 供端点测试断言"投递命令是否唤醒主循环"
-    # 视图替身方法(原 ensure_group_view / ensure_group_state 旧名挂点): routes 现调
-    # web.ensure_view / web.ensure_state, 这里把门面方法指到替身数据上
-    mgr.web.ensure_view = lambda: mgr._group_view
+    # 视图替身方法: routes 现调 web.ensure_view / web.ensure_state, 这里把门面方法指到替身数据上
+    mgr.web.ensure_view = lambda: mgr.web.group_view
 
     def _ensure_group_state(rid, view=None):
         # 与真实实现同形: 默认回全部; P1-1 带 view 时只回该视图的数组
         from auto_qb.webui.views import VIEW_ARRAYS
 
-        updated = rid != mgr._group_view_ver
-        state = {"rid": mgr._group_view_ver, "updated": updated}
+        updated = rid != mgr.web.group_view_ver
+        state = {"rid": mgr.web.group_view_ver, "updated": updated}
         if updated:
             arrays = {
-                "groups": mgr._group_view,
+                "groups": mgr.web.group_view,
                 "singles": [],  # 与真实 ensure_group_state 同形: singles 随 groups 同门控回传
                 "shows": {
                     "list": [],
                     "unrecognized": []
                 },
-                "torrents": mgr._flat_view,  # 种子平铺视图同门控(与真实实现同形)
+                "torrents": mgr.web.flat_view,  # 种子平铺视图同门控(与真实实现同形)
             }
             for k in (VIEW_ARRAYS.get(view) if view else None) or arrays:
                 state[k] = arrays[k]
@@ -389,7 +383,7 @@ def web_env(tmp_path):
         tmp_path,
         "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
     )
-    mgr._web_token = mgr.web.token = ensure_web_token(mgr)  # 双写: web.token 是 routes 的读点, 旧名留 W2 测试面迁移
+    mgr.web.token = ensure_web_token(mgr)
     app = create_app(mgr)
     client = TestClient(app)
     return mgr, client
@@ -422,10 +416,10 @@ def test_api_requires_token(web_env, caplog):
     assert client.get("/api/status", headers={"Authorization": "Bearer wrong"}).status_code == 401
     warns = [r for r in caplog.records if r.name == web_logger and r.levelno == logging.WARNING]
     assert len(warns) == 1
-    assert mgr._web_token not in warns[0].getMessage()
-    assert mgr._web_token[:8] not in warns[0].getMessage()
+    assert mgr.web.token not in warns[0].getMessage()
+    assert mgr.web.token[:8] not in warns[0].getMessage()
     # 正确密钥放行
-    assert client.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).status_code == 200
+    assert client.get("/api/status", headers={"Authorization": f"Bearer {mgr.web.token}"}).status_code == 200
 
 
 def test_config_public_endpoint_no_auth(web_env):
@@ -436,7 +430,7 @@ def test_config_public_endpoint_no_auth(web_env):
     assert resp.status_code == 200
     assert resp.json() == {"web": {"skip_local_verify": False}}
     # 不泄露访问密钥
-    assert str(mgr._web_token) not in resp.text
+    assert str(mgr.web.token) not in resp.text
 
 
 def test_skip_local_verify_loopback_bypass(web_env, caplog):
@@ -474,7 +468,7 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     assert not [r for r in caplog.records if r.name == "auto_qb.web" and "skip_local_verify" in r.getMessage()]
     # 对外/远端连接: 仍强制鉴权(错密钥 401, 对密钥 200)
     assert remote.get("/api/status").status_code == 401
-    assert remote.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).status_code == 200
+    assert remote.get("/api/status", headers={"Authorization": f"Bearer {mgr.web.token}"}).status_code == 200
 
 
 def test_skip_local_verify_default_off(web_env):
@@ -493,7 +487,7 @@ def test_skip_local_verify_default_off(web_env):
 def test_api_status_and_groups(web_env):
     """状态与分组快照读取: 徽章数据/组名/站点明细齐全; status 携带版本号(顶栏展示)"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     status = client.get("/api/status", headers=auth).json()
     assert status["connected"] is True and status["torrents"] == 2
     assert status["version"] == __version__, "status 应透出包版本号"
@@ -511,7 +505,7 @@ def test_api_expr_eval_endpoint(web_env):
     每个取值到底取到了什么(中间值), 这是排查"条件为什么不匹配"最有用的一条信息。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     # 替身 store 默认 get() 恒 None: 塞一条合成种子进去(试算要读它的字段)
     from auto_qb.torrents import TorrentRecord
 
@@ -553,7 +547,7 @@ def test_static_assets_disable_heuristic_cache(web_env):
         resp = client.get(path)
         assert resp.status_code == 200, f"{path} 应可访问"
         assert resp.headers.get("cache-control") == "no-cache", f"{path} 应带 no-cache"
-    api = client.get("/api/status", headers={"Authorization": f"Bearer {mgr._web_token}"})
+    api = client.get("/api/status", headers={"Authorization": f"Bearer {mgr.web.token}"})
     assert api.headers.get("cache-control") != "no-cache", "/api 响应不应被静态策略影响"
 
 
@@ -2396,12 +2390,12 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
 def test_api_group_commands_enqueue(web_env):
     """pause/resume/reannounce 命令入队: key 解码回原 tuple, 主循环侧执行"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     enc = encode_group_key(KEY)
     for action in ("pause", "resume", "reannounce"):
         resp = client.post(f"/api/groups/{enc}/{action}", headers=auth)
         assert resp.status_code == 200, resp.text
-    cmds = [mgr.web_commands.get_nowait() for _ in range(3)]
+    cmds = [mgr.web.commands.get_nowait() for _ in range(3)]
     assert [c for c, _ in cmds] == ["pause_group", "resume_group", "reannounce_group"]
     assert all(p["key"] == KEY for _, p in cmds), "key 应解码回原 tuple"
 
@@ -2413,7 +2407,7 @@ def test_api_group_malformed_key_returns_400(web_env):
     TypeError/IndexError; 不拦截就是 500 + 栈回溯 —— 手输或被篡改的 URL 都能打出服务端错误页。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     bad_keys = [
         "!!!not-base64!!!",  # 非法 base64 → binascii.Error
         base64.urlsafe_b64encode(b"not json{").decode(),  # 合法 base64, 解出非法 JSON
@@ -2422,23 +2416,23 @@ def test_api_group_malformed_key_returns_400(web_env):
     for bad in bad_keys:
         resp = client.post(f"/api/groups/{bad}/pause", headers=auth)
         assert resp.status_code == 400, f"{bad!r} 应回 400, 实际 {resp.status_code}: {resp.text}"
-        assert mgr.web_commands.empty(), "畸形 key 不该投递命令"
+        assert mgr.web.commands.empty(), "畸形 key 不该投递命令"
 
 
 def test_api_delete_with_files_flag(web_env):
     """delete 命令透传 delete_files 标志(默认 False 保留文件)"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     enc = encode_group_key(KEY)
     client.post(f"/api/groups/{enc}/delete", headers=auth, json={"delete_files": True})
-    cmd, payload = mgr.web_commands.get_nowait()
+    cmd, payload = mgr.web.commands.get_nowait()
     assert cmd == "delete_group" and payload["delete_files"] is True
 
 
 def test_api_cmd_result_endpoint(web_env):
     """命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     resp = client.post("/api/torrents/HA/reannounce", headers=auth)
     assert resp.status_code == 200
     cmd_id = resp.json()["cmd_id"]
@@ -2456,7 +2450,7 @@ def test_api_cmd_result_endpoint(web_env):
 def test_api_traffic_history_endpoint(web_env):
     """/api/traffic/history: 透出限速曲线任务发布的按日 history; 未启用时返回空数组"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     assert client.get("/api/traffic/history", headers=auth).json() == {"state": "disabled", "history": []}
     mgr.web.traffic_view = {
         "state": "ok",
@@ -2473,7 +2467,7 @@ def test_api_traffic_history_endpoint(web_env):
 def test_config_schema_endpoint(web_env):
     """图形化配置元数据端点: 分组/站点字段/规则字段/插件表/热重载级别齐全"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     data = client.get("/api/config/schema", headers=auth).json()
     # 2026-09-26: 日志/WebUI/通知 三个短段并入 basic(设置页不再单列三张卡)
     assert [g["key"] for g in data["groups"]] == ["basic", "maintenance", "hr_check", "speed", "trackers", "rules"]
@@ -2493,7 +2487,7 @@ def test_config_schema_endpoint(web_env):
 def test_config_tree_roundtrip(web_env):
     """配置树读取与保存: 树为 YAML 同构(标量字符串), 写回文件 + 热重载命令入队"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     data = client.get("/api/config", headers=auth).json()
     tree = data["tree"]
     assert tree["config"]["qbittorrent"]["host"] == "h", "树应为 YAML 同构的字符串标量"
@@ -2505,14 +2499,14 @@ def test_config_tree_roundtrip(web_env):
     assert "main_tick" in resp.json()["changes"], "PUT 回执应报变更段路径(W4: 路径字符串)"
     with open(mgr.config_path, encoding="utf-8") as f:
         assert "5s" in f.read(), "新配置应写回 config 文件"
-    cmd, payload = mgr.web_commands.get_nowait()
+    cmd, payload = mgr.web.commands.get_nowait()
     assert cmd == "reload_config" and payload["config"].main_tick == 5.0
 
 
 def test_config_tree_invalid_rejected(web_env):
     """非法配置树 -> 400, config 文件不被覆盖"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["main_tick"] = "abc"
     before = open(mgr.config_path, encoding="utf-8").read()
@@ -2520,13 +2514,13 @@ def test_config_tree_invalid_rejected(web_env):
     assert resp.status_code == 400
     assert "main_tick" in resp.json()["detail"]
     assert open(mgr.config_path, encoding="utf-8").read() == before
-    assert mgr.web_commands.empty(), "校验失败不应投递热重载"
+    assert mgr.web.commands.empty(), "校验失败不应投递热重载"
 
 
 def test_config_tree_requires_config_root(web_env):
     """缺少 config 根段 -> 400(防止误删整段被当作"全默认"静默接受)"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     resp = client.put("/api/config", headers=auth, json={"tree": {"qbittorrent": {}}})
     assert resp.status_code == 400
     assert "config" in resp.json()["detail"]
@@ -2535,7 +2529,7 @@ def test_config_tree_requires_config_root(web_env):
 def test_config_tree_restart_field_fallback(web_env):
     """R 级字段提交后回退为磁盘旧值(进程身份不可热切换), 并回报 restart_required"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
         f.write("config:\n  schema_version: 3\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
 
@@ -2553,7 +2547,7 @@ def test_config_tree_restart_field_fallback(web_env):
 def test_config_tree_preserves_comments(web_env):
     """round-trip 写盘保留已有键注释(列表项注释为已记录的取舍)"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
         f.write("config:\n  schema_version: 3\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
 
@@ -2595,7 +2589,7 @@ def test_config_tree_masks_secrets(web_env):
     只掩码不还原的话, 一次保存就会毁掉生产配置。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     data = client.get("/api/config", headers=auth).json()
     assert data["masked"] is True
     assert data["tree"]["config"]["qbittorrent"]["password"] == data["mask_sentinel"]
@@ -2638,7 +2632,7 @@ def test_sites_missing_scans_and_builds_defaults(web_env):
             }],
         },
     )
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     data = client.get("/api/sites/missing", headers=auth).json()
     assert data["torrents"] == 2 and data["domains"] == 2
     assert [s["name"] for s in data["sites"]] == ["tracker_newsite_org"]
@@ -2662,7 +2656,7 @@ def test_sites_missing_name_conflict_suffix(web_env):
         }]},
     )
     mgr.config.trackers["a_b_com"] = SimpleNamespace(domains=["zzz.com"])  # 占用目标名但域名不覆盖缺失域
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     data = client.get("/api/sites/missing", headers=auth).json()
     assert [s["name"] for s in data["sites"]] == ["a_b_com_1", "a_b_com_2"]
 
@@ -2670,7 +2664,7 @@ def test_sites_missing_name_conflict_suffix(web_env):
 def test_sites_missing_all_covered_returns_empty(web_env):
     """全部域名已被配置覆盖 -> sites 空数组(前端据此提示"没有发现未配置的站点")"""
     mgr, client = _site_scan_env(web_env, {"T1": [{"url": "https://tracker.d.com/announce"}]})
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     data = client.get("/api/sites/missing", headers=auth).json()
     assert data["sites"] == []
 
@@ -2678,7 +2672,7 @@ def test_sites_missing_all_covered_returns_empty(web_env):
 def test_sites_missing_requires_connected_client(web_env):
     """qB 断连 -> 503(不得拿空扫描结果冒充"没有缺失站点")"""
     mgr, client = web_env  # stub 默认 client=None
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     assert client.get("/api/sites/missing", headers=auth).status_code == 503
 
 
@@ -2692,7 +2686,7 @@ def test_sites_missing_api_failure_maps_502(web_env):
     mgr, client = web_env
     mgr.client = object()
     mgr.api = SimpleNamespace(torrents_info=_boom)
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     resp = client.get("/api/sites/missing", headers=auth)
     assert resp.status_code == 502 and "boom" in resp.json()["detail"]
 
@@ -3216,11 +3210,11 @@ def test_error_reason_from_tracker_msg(tmp_path):
     no_msg = FakeTorrent(hash="HB", name="Show", state="error")
     seed_store(mgr, [err, no_msg])
 
-    mgr._group_view_dirty = False
+    mgr.web.group_view_dirty = False
     mgr.refresh_error_reasons()
 
     assert err.tracker_error_msg == "torrent not registered", "取第一条非空错误 msg(虚拟条目跳过)"
-    assert mgr._group_view_dirty is True, "原因变化须显式置脏(非快照字段, store.view_changed 覆盖不到)"
+    assert mgr.web.group_view_dirty is True, "原因变化须显式置脏(非快照字段, store.view_changed 覆盖不到)"
     assert mgr._member_view(err)["error_reason"] == "torrent not registered"
     assert mgr._seed_view(err)["error_reason"] == "torrent not registered"
     assert no_msg.tracker_error_msg == "" and mgr._member_view(no_msg)["error_reason"] == "错误"
@@ -3281,15 +3275,15 @@ def test_refresh_error_reasons_clears_when_recovered(tmp_path):
     t = FakeTorrent(hash="HA", name="A", state="error", tracker_error_msg="unregistered", tracker_error_ts=time.time())
     seed_store(mgr, [t])
 
-    mgr._group_view_dirty = False
+    mgr.web.group_view_dirty = False
     mgr.refresh_error_reasons()
     assert t.tracker_error_msg == "unregistered", "错误态且未过期: 原样保留"
-    assert mgr._group_view_dirty is False, "无变化不置脏"
+    assert mgr.web.group_view_dirty is False, "无变化不置脏"
 
     t.state = "stalledUP"
     mgr.refresh_error_reasons()
     assert t.tracker_error_msg == "" and t.tracker_error_ts == 0.0
-    assert mgr._group_view_dirty is True, "清空也是视图变化"
+    assert mgr.web.group_view_dirty is True, "清空也是视图变化"
 
 
 def test_refresh_error_reasons_skips_when_disconnected(tmp_path):
@@ -3575,7 +3569,7 @@ def _hr_status_env(mgr, tmp_path, *, complete=True):
 def test_api_hr_status_disabled_returns_empty_state(web_env):
     """未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端据此显示空态, 而不是报错)"""
     mgr, client = web_env
-    r = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr._web_token}"})
+    r = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr.web.token}"})
     assert r.status_code == 200
     body = r.json()
     assert body["enabled"] is False and body["sites"] == [] and body["channel"] == {}
@@ -3589,7 +3583,7 @@ def test_api_hr_status_reports_site_state(web_env, tmp_path):
     """
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
-    r = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr._web_token}"})
+    r = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr.web.token}"})
     assert r.status_code == 200
     body = r.json()
     assert body["enabled"] is True and body["fetch_enabled"] is True and body["worker_running"] is True
@@ -3611,7 +3605,7 @@ def test_api_hr_status_names_the_blocking_step(web_env, tmp_path):
     """覆盖证明不成立时, 状态里要直接说出「现在为什么不放行」(用户看到种子没放行时最想知道的一句)"""
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path, complete=False)
-    body = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr._web_token}"}).json()
+    body = client.get("/api/hr/status", headers={"Authorization": f"Bearer {mgr.web.token}"}).json()
     site = body["sites"][0]
     assert site["releases_enabled"] is False
     assert "blocking" in site, f"要说清卡在哪一步: {site}"
@@ -3631,7 +3625,7 @@ def test_api_hr_refresh_accepts_and_returns_requested(web_env, tmp_path):
         return {"requested": ["HHan"], "note": "已受理, 取数由取数线程执行"}
 
     mgr.hr.request_refresh = _fake_request_refresh
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     body = client.post("/api/hr/refresh", json={}, headers=auth).json()
     assert body["ok"] is True and body["requested"] == ["HHan"]
     assert calls == [None], "缺省 = 全部启用站点(不逐站点名)"
@@ -3642,7 +3636,7 @@ def test_api_hr_refresh_requires_enabled_hr(web_env, tmp_path):
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
     mgr.hr.request_refresh = lambda sites=None: {"requested": ["HHan"], "note": ""}
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     mgr.config.hr_check.enabled = False
     assert client.post("/api/hr/refresh", json={}, headers=auth).status_code == 400
     mgr.config.hr_check.enabled = True
@@ -3655,7 +3649,7 @@ def test_api_hr_refresh_409_when_worker_not_running(web_env, tmp_path):
     mgr, client = web_env
     _hr_status_env(mgr, tmp_path)
     mgr.hr.request_refresh = lambda sites=None: {"requested": [], "note": "取数线程未启动"}
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     r = client.post("/api/hr/refresh", json={}, headers=auth)
     assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
 
@@ -3799,7 +3793,7 @@ def test_views_published_atomically_when_rebuilt_concurrently(tmp_path):
 
     def _main_loop_path():
         try:
-            mgr.rebuild_views()  # 主循环 _tick 走的重建路径(持锁)
+            mgr.web.rebuild_views()  # 主循环 _tick 走的重建路径(持锁)
         except Exception as e:  # 线程内异常不能静默吞掉
             errors.append(e)
 
@@ -3809,13 +3803,13 @@ def test_views_published_atomically_when_rebuilt_concurrently(tmp_path):
 
     # 关键: 置脏为 False, 让读取路径**不需要重建** —— 于是它是否返回只取决于"有没有锁",
     # 不再受线程调度影响(若改成依赖交错时序, 用例会变 flaky)。
-    mgr._group_view_dirty = False
+    mgr.web.group_view_dirty = False
 
     read_done = _threading.Event()
 
     def _web_path():
         try:
-            mgr.ensure_group_view()  # Web 线程路径
+            mgr.web.ensure_view()  # Web 线程路径
         finally:
             read_done.set()
 
@@ -3853,8 +3847,8 @@ def test_build_search_index_files():
         client.torrents_files = boom
 
         mgr._build_search_index()
-        assert mgr._search_index_dirty is False
-        idx = mgr._search_index
+        assert mgr.web.search_index_dirty is False
+        idx = mgr.web.search_index
         assert idx["HA"]["name"] == "Alpha"
         assert "movie.mkv" in idx["HA"]["files"]
         assert idx["HB"]["files"] == [], "文件拉取失败的种子 files 应为空"
@@ -3877,21 +3871,21 @@ def test_build_search_index_incremental_and_evict():
         assert first_calls == 1
 
         # 种子集未变: 不重复拉文件列表, 仅刷新名称, 且整体替换引用(原子交换契约)
-        idx_before = mgr._search_index
+        idx_before = mgr.web.search_index
         ha.name = "Alpha.Renamed"
         mgr._build_search_index()
         assert client.files_calls == first_calls, "已建条目不重复拉取文件列表"
-        assert mgr._search_index["HA"]["name"] == "Alpha.Renamed", "名称应刷新"
-        assert mgr._search_index is not idx_before, "索引应整体替换引用(Web 线程并发只读安全), 不就地增删"
+        assert mgr.web.search_index["HA"]["name"] == "Alpha.Renamed", "名称应刷新"
+        assert mgr.web.search_index is not idx_before, "索引应整体替换引用(Web 线程并发只读安全), 不就地增删"
 
         # HA 消失 + HB 新增: 只补拉新种子, 已删种子淘汰
         client.files_map["HB"] = [_fake_file("anime.mkv", 0)]
         seed_store(mgr, [FakeTorrent(hash="HB", name="Beta")])
-        mgr._search_index_dirty = True
+        mgr.web.search_index_dirty = True
         mgr._build_search_index()
-        assert set(mgr._search_index.keys()) == {"HB"}, "已消失种子应被淘汰"
+        assert set(mgr.web.search_index.keys()) == {"HB"}, "已消失种子应被淘汰"
         assert client.files_calls == first_calls + 1, "只补拉新增种子的文件列表"
-        assert mgr._search_index_dirty is False
+        assert mgr.web.search_index_dirty is False
 
 
 def test_build_search_index_budget_resumes(monkeypatch):
@@ -3909,12 +3903,12 @@ def test_build_search_index_budget_resumes(monkeypatch):
         seed_store(mgr, [FakeTorrent(hash="HA", name="Alpha"), FakeTorrent(hash="HB", name="Beta")])
 
         mgr._build_search_index()
-        assert mgr._search_index_dirty is True, "预算用尽应保持脏(待续建)"
-        assert set(mgr._search_index.keys()) == {"HA"}, "单次只拉预算条数的文件列表"
+        assert mgr.web.search_index_dirty is True, "预算用尽应保持脏(待续建)"
+        assert set(mgr.web.search_index.keys()) == {"HA"}, "单次只拉预算条数的文件列表"
 
         mgr._build_search_index()
-        assert mgr._search_index_dirty is False, "续建后应不再脏"
-        assert set(mgr._search_index.keys()) == {"HA", "HB"}
+        assert mgr.web.search_index_dirty is False, "续建后应不再脏"
+        assert set(mgr.web.search_index.keys()) == {"HA", "HB"}
 
 
 def test_build_search_index_aborts_when_disconnected():
@@ -3930,13 +3924,13 @@ def test_build_search_index_aborts_when_disconnected():
 
         mgr.client = None  # 模拟 qB 断连(setter 同步解绑 store/api)
         mgr._build_search_index()
-        assert mgr._search_index_dirty is True, "断连时应保持脏, 待连接恢复后重建"
-        assert mgr._search_index is None, "断连时不得写入空文件索引"
+        assert mgr.web.search_index_dirty is True, "断连时应保持脏, 待连接恢复后重建"
+        assert mgr.web.search_index is None, "断连时不得写入空文件索引"
 
         mgr.client = client  # 连接恢复
         mgr._build_search_index()
-        assert mgr._search_index_dirty is False
-        assert mgr._search_index["HA"]["files"] == ["movie.mkv"]
+        assert mgr.web.search_index_dirty is False
+        assert mgr.web.search_index["HA"]["files"] == ["movie.mkv"]
 
 
 def test_search_torrents_name_match():
@@ -4232,7 +4226,7 @@ def test_search_torrents_negative_only_empty():
 
         r = mgr.search_torrents("-dv")
         assert r == {"results": [], "building": False, "negative_only": True}
-        assert mgr.web_commands.empty(), "仅负词无从起搜, 不应投递构建命令"
+        assert mgr.web.commands.empty(), "仅负词无从起搜, 不应投递构建命令"
         # 空查询: 同样空结果, 但 negative_only=False(前端按普通空态处理)
         r2 = mgr.search_torrents("")
         assert r2 == {"results": [], "building": False, "negative_only": False}
@@ -4285,12 +4279,12 @@ def test_search_torrents_building_triggers():
         t1 = FakeTorrent(hash="HA", name="Alpha", state="stalledUP")
         seed_store(mgr, [t1])
 
-        mgr._search_index_dirty = True  # 模拟种子集变化后未构建
+        mgr.web.search_index_dirty = True  # 模拟种子集变化后未构建
         r = mgr.search_torrents("movie")
         assert r["building"] is True, "索引脏时 building 应为 True"
         # 名称未命中, 文件索引未就绪 -> 无结果, 但投递了构建命令
         assert r["results"] == []
-        cmd, payload = mgr.web_commands.get_nowait()
+        cmd, payload = mgr.web.commands.get_nowait()
         assert cmd == "build_search_index" and payload == {}
 
         # 主循环构建后再查 -> building 消除且文件匹配生效
@@ -4303,7 +4297,7 @@ def test_search_torrents_building_triggers():
 def test_api_search_endpoint(web_env):
     """GET /api/search: 端点返回搜索结果(名称匹配即时), 空查询返回空"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     # mock 替身: 直接返回固定结果(端点仅做转发, 逻辑由 search_torrents 单测覆盖); 空查询返回空
     mgr.search_torrents = lambda q: (
         {
@@ -4333,7 +4327,7 @@ def test_api_paths_endpoint(web_env):
     与组同径不重复); 空路径跳过; 只读快照无副作用; 鉴权沿用 /api/* 依赖。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     mgr.store.groups = {
         ("R:/Downloads", ("a.mkv", "b.mkv")): ["HA", "HB"],
         ("D:/ISO", ("x.iso", )): ["HC"],
@@ -4362,7 +4356,7 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     **客户端额外传入的 path 被忽略**(安全红线: 否则等于把"任意文件执行"暴露给 WEB 端点) / 鉴权 401。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     d_content = tmp_path / "content"
     d_content.mkdir()
     f_file = d_content / "movie.mkv"
@@ -4416,7 +4410,7 @@ def test_api_open_path_endpoint(web_env, tmp_path):
         assert post({"kind": "wat"}).status_code == 400
         spy.assert_not_called()
     # 只读无副作用: 不入命令队列
-    assert mgr.web_commands.empty()
+    assert mgr.web.commands.empty()
     # 鉴权: 无密钥 401
     assert client.post("/api/open-path", json={"kind": "wat"}).status_code == 401
 
@@ -4430,7 +4424,7 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     7.指向根外的符号链接不出现在列表里(逃逸防护); 8.无密钥 401; 9.只读不入命令队列。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     root = tmp_path / "root"
     (root / "sub" / "deep").mkdir(parents=True)
     (root / "b.txt").write_bytes(b"x")
@@ -4475,7 +4469,7 @@ def test_api_fs_dirs_endpoint(web_env, tmp_path):
     assert get().json() == {"path": "", "parent": "", "roots": [], "dirs": []}
     # 7. 鉴权 + 只读无副作用
     assert client.get("/api/fs/dirs").status_code == 401
-    assert mgr.web_commands.empty()
+    assert mgr.web.commands.empty()
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="只有大小写敏感的 FS(ext4)上两个名字才是两个目录; NTFS 上是同一个, 断言无意义")
@@ -4488,7 +4482,7 @@ def test_api_fs_dirs_case_sibling_is_outside_whitelist(web_env, tmp_path):
     WARN: 本条只能在 Linux 上真跑(NTFS 上根本建不出"仅大小写不同"的两个目录), 由 CI 验。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     root = tmp_path / "Media"
     root.mkdir()
     sibling = tmp_path / "media"  # 仅大小写不同
@@ -4510,7 +4504,7 @@ def test_api_fs_mkdir_endpoint(web_env, tmp_path):
     无密钥 401 / 不入命令队列(只建目录, 不碰任务队列与 state)。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     root = tmp_path / "root"
     root.mkdir()
     outside = tmp_path / "outside"
@@ -4537,7 +4531,7 @@ def test_api_fs_mkdir_endpoint(web_env, tmp_path):
     assert post({"path": norm(root / "missing"), "name": "x"}).status_code == 404
     # 6. 鉴权 + 不入命令队列(不绕过单一写线程: 只建目录)
     assert client.post("/api/fs/mkdir", json={"path": norm(root), "name": "x"}).status_code == 401
-    assert mgr.web_commands.empty()
+    assert mgr.web.commands.empty()
 
 
 def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path, monkeypatch):
@@ -4557,7 +4551,7 @@ def test_fs_endpoints_route_fs_calls_through_long_path_prefix(web_env, tmp_path,
     from auto_qb.infra.utils import add_long_path_prefix_for_win as real_prefix
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     root = tmp_path / "root"
     (root / "sub").mkdir(parents=True)
     norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
@@ -4603,7 +4597,7 @@ def test_fs_endpoints_unmapped_root_semantic_404(web_env, tmp_path):
         (PathMapEntry(src="D:/Downloads", dst=str(tmp_path / "mnt")), )
     )
     try:
-        auth = {"Authorization": f"Bearer {mgr._web_token}"}
+        auth = {"Authorization": f"Bearer {mgr.web.token}"}
         unmapped = tmp_path / "unmapped"
         unmapped.mkdir()  # 宿主真实存在, 但前缀不在映射表里 -> 逻辑空间不可判定
         norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径
@@ -4686,15 +4680,15 @@ def test_drain_web_commands_group_actions():
     """_drain_web_commands: 组级暂停/开始/汇报/删除命令在主循环侧执行, 作用于整组 hash"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        mgr.web_commands.put(("pause_group", {"key": key}))
-        mgr.web_commands.put(("resume_group", {"key": key}))
-        mgr.web_commands.put(("reannounce_group", {"key": key}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("pause_group", {"key": key}))
+        mgr.web.commands.put(("resume_group", {"key": key}))
+        mgr.web.commands.put(("reannounce_group", {"key": key}))
+        mgr.web.consume_commands()
         # reannounce 走 FakeClient 旧约定(记 None; test_actions 多处断言依赖), pause/resume 记 hash 列表
         assert client.calls == [("pause", ["HA", "HB"]), ("resume", ["HA", "HB"]), ("reannounce", None)], client.calls
         # 删除整组: delete_files 透传, 成员从快照移除
-        mgr.web_commands.put(("delete_group", {"key": key, "delete_files": True}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("delete_group", {"key": key, "delete_files": True}))
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("delete", True), f"delete_group: {client.calls}"
         assert mgr.store.by_hash == {}, "删除整组后成员应已从快照移除"
 
@@ -4704,22 +4698,22 @@ def test_drain_web_commands_torrent_actions():
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
         for cmd in ("pause_torrent", "resume_torrent", "reannounce_torrent"):
-            mgr.web_commands.put((cmd, {"hash": "HA"}))
-        mgr._drain_web_commands()
+            mgr.web.commands.put((cmd, {"hash": "HA"}))
+        mgr.web.consume_commands()
         assert [c[0] for c in client.calls] == ["pause", "resume", "reannounce"], client.calls
         assert client.calls[0][1] == ["HA"] and client.calls[1][1] == ["HA"], "单种子命令只作用于该 hash"
         # 删除守阵: 种子已不在快照 -> 不调 API
         before = list(client.calls)
-        mgr.web_commands.put(("pause_torrent", {"hash": "GONE"}))
-        mgr.web_commands.put(("delete_torrent", {"hash": "GONE", "delete_files": True}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("pause_torrent", {"hash": "GONE"}))
+        mgr.web.commands.put(("delete_torrent", {"hash": "GONE", "delete_files": True}))
+        mgr.web.consume_commands()
         assert client.calls == before, "种子不在快照应跳过(删除守阵)"
 
 
 def test_api_torrent_write_endpoints_enqueue(web_env):
     """二轮种子写端点(15个) POST 转发: cmd 与参数正确入队; 无密钥 401(鉴权沿用 /api/* 依赖)"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     cases = [
         ("/api/torrents/HA/recheck", None, "recheck_torrent", {
             "hash": "HA"
@@ -4859,7 +4853,7 @@ def test_api_torrent_write_endpoints_enqueue(web_env):
         assert resp.status_code == 200, f"{path}: {resp.text}"
         data = resp.json()
         assert data["queued"] is True and data["cmd_id"], path
-        got_cmd, got_payload = mgr.web_commands.get_nowait()
+        got_cmd, got_payload = mgr.web.commands.get_nowait()
         assert got_cmd == want_cmd, f"{path}: {got_cmd}"
         got_payload.pop("cmd_id")
         got_payload.pop("_queued_ts", None)  # P0-0 埋点元数据, 不参与入队参数断言
@@ -4876,7 +4870,7 @@ def test_api_t_bulk_group_keys_enqueue(web_env):
     纯 hash 调用不带 keys 键(队列载荷与历史形态完全一致, 不碰既有断言); 无密钥 401。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     key = encode_group_key(("R:/Downloads", ("a.mkv", "b.mkv")))
     # 混合选择: hashes + keys(解码回原组键 tuple) 同 payload 入队
     resp = client.post(
@@ -4890,7 +4884,7 @@ def test_api_t_bulk_group_keys_enqueue(web_env):
         },
     )
     assert resp.status_code == 200 and resp.json()["queued"] is True
-    cmd, payload = mgr.web_commands.get_nowait()
+    cmd, payload = mgr.web.commands.get_nowait()
     payload.pop("cmd_id")
     payload.pop("_queued_ts", None)  # 同上
     payload.pop("_queued_ts", None)  # 同上
@@ -4903,7 +4897,7 @@ def test_api_t_bulk_group_keys_enqueue(web_env):
     }, payload
     # 纯 hash 调用: 载荷不含 keys 键(历史形态不变)
     client.post("/api/torrents/bulk", headers=auth, json={"hashes": ["HA"], "action": "pause"})
-    _, payload2 = mgr.web_commands.get_nowait()
+    _, payload2 = mgr.web.commands.get_nowait()
     assert "keys" not in payload2
     # 鉴权: 无密钥 401
     assert client.post("/api/torrents/bulk", json={"keys": [key], "action": "delete"}).status_code == 401
@@ -4913,7 +4907,7 @@ def test_api_t_bulk_tags_category_enqueue(web_env):
     """bulk 标签/分类动作入队: tags 过滤空段非空才透传; category 按键存在性透传(空串=清除分类要保留);
     未提供时载荷不带这两个键(纯 pause 调用的队列载荷与历史形态完全一致); 无密钥 401"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     cases = [
         # add_tags: 空段过滤后透传
         (
@@ -4986,7 +4980,7 @@ def test_api_t_bulk_tags_category_enqueue(web_env):
         resp = client.post("/api/torrents/bulk", headers=auth, json=body)
         assert resp.status_code == 200, f"{body}: {resp.text}"
         assert resp.json()["queued"] is True
-        cmd, payload = mgr.web_commands.get_nowait()
+        cmd, payload = mgr.web.commands.get_nowait()
         assert cmd == "bulk_torrents"
         payload.pop("cmd_id")
         payload.pop("_queued_ts", None)  # P0-0 埋点元数据, 不参与入队参数断言
@@ -5084,8 +5078,8 @@ def test_drain_web_commands_torrent_write_actions():
             ),
         ]
         for cmd, payload in cmds:
-            mgr.web_commands.put((cmd, payload))
-        mgr._drain_web_commands()
+            mgr.web.commands.put((cmd, payload))
+        mgr.web.consume_commands()
         assert client.calls[0] == ("recheck", None) and client.recheck_hashes_calls[0] == "HA"
         assert client.calls[1] == ("set_super_seeding", True)
         assert client.calls[2] == ("set_force_start", True)
@@ -5102,19 +5096,19 @@ def test_drain_web_commands_torrent_write_actions():
         assert client.calls[13] == ("rename_file", ("HA", "old/file.mkv", "new/file.mkv"))
         # !D2 之后回执**在 drain 阶段就写**(不再扣住等真值)—— 真机实测 qB 翻状态要 1258ms,
         #   扣着回执等 = 撤下被钉死在 1.25s+(实测撤下 2947ms)。回执只表示"命令已执行"。
-        assert mgr._web_results["c1"]["status"] == "ok", "回执必须立即发, 不再等真值落地"
+        assert mgr.web.results["c1"]["status"] == "ok", "回执必须立即发, 不再等真值落地"
         # recheck_torrent 已入延迟回执族(plan 26-09-30-0109: handler 经 ops 提交并自写回执,
         # 拒绝时回执带自解释文案) —— 它不再走 RESYNC 的 defer_receipt 真值登记; 校验态由
         # 正常快照刷新可见, 乐观 UI 也不做 recheck(结果在远端)
         assert "c1" not in mgr.web.truth_pending, "recheck 由 handler 自写回执, 不登记真值待推"
         # 回执**不带 truth**: 带上未落地的真值 = 让前端采纳命令前的旧值 ⇒ 弹回(红线)
-        assert "truth" not in mgr._web_results["c1"], "回执不得带真值(真值改由 truth 事件推送)"
+        assert "truth" not in mgr.web.results["c1"], "回执不得带真值(真值改由 truth 事件推送)"
         # 真值登记为待推, 由 run() 无条件 flush(幂等; 漏调会让前端一直挂着乐观值)
         assert "c2" in mgr.web.truth_pending, "RESYNC 命令应登记待推真值"
-        mgr._flush_truths()
-        assert mgr._flush_truths() is None, "重复 flush 必须是安全的空操作"
+        mgr.web.flush_truths()
+        assert mgr.web.flush_truths() is None, "重复 flush 必须是安全的空操作"
         # 全部命令回执 ok
-        assert all(mgr._web_results[f"c{i}"]["status"] == "ok" for i in range(1, 14)), mgr._web_results
+        assert all(mgr.web.results[f"c{i}"]["status"] == "ok" for i in range(1, 14)), mgr.web.results
         # 限速/保存路径写后快照同步(QbApi update_torrent_fields)
         rec = mgr.store.get("HA")
         assert rec.up_limit == 1024 and rec.dl_limit == 2048 and rec.save_path == "R:/Moved"
@@ -5191,8 +5185,8 @@ def test_drain_web_commands_torrent_write_unknown_hash_skips():
             }),
         ]
         for cmd, payload in cmds:
-            mgr.web_commands.put((cmd, payload))
-        mgr._drain_web_commands()
+            mgr.web.commands.put((cmd, payload))
+        mgr.web.consume_commands()
         assert client.calls == [] and client.recheck_hashes_calls == [], client.calls
 
 
@@ -5204,19 +5198,19 @@ def test_drain_web_commands_share_limits_and_queue_mapping():
         for action, want in (
             ("top", "queue_top"), ("up", "queue_up"), ("down", "queue_down"), ("bottom", "queue_bottom")
         ):
-            mgr.web_commands.put(("queue_torrent", {"hash": "HA", "action": action}))
-            mgr._drain_web_commands()
+            mgr.web.commands.put(("queue_torrent", {"hash": "HA", "action": action}))
+            mgr.web.consume_commands()
             assert client.calls[-1] == (want, ["HA"]), f"{action}: {client.calls[-1]}"
         # share-limits 缺省维度 -2 补齐(库不过滤 None, 直传会以字面量 "None" 发给 qB)
-        mgr.web_commands.put(("set_share_limits", {"hash": "HA", "ratio_limit": 2.0}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("set_share_limits", {"hash": "HA", "ratio_limit": 2.0}))
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("set_share_limits", (2.0, -2, -2)), client.calls[-1]
         # 未知队列动作 -> error 回执且不调 API
         before = list(client.calls)
-        mgr.web_commands.put(("queue_torrent", {"hash": "HA", "action": "middle", "cmd_id": "qerr"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("queue_torrent", {"hash": "HA", "action": "middle", "cmd_id": "qerr"}))
+        mgr.web.consume_commands()
         assert client.calls == before
-        r = mgr._web_results["qerr"]
+        r = mgr.web.results["qerr"]
         assert r["status"] == "error" and "middle" in r["error"], r
 
 
@@ -5264,12 +5258,12 @@ def test_drain_web_commands_torrent_write_param_errors():
             }, "e8"),
         ]
         for cmd, payload, cmd_id in errs:
-            mgr.web_commands.put((cmd, {**payload, "cmd_id": cmd_id}))
-        mgr.web_commands.put(("pause_torrent", {"hash": "HA"}))  # 后续命令不受影响
-        mgr._drain_web_commands()
+            mgr.web.commands.put((cmd, {**payload, "cmd_id": cmd_id}))
+        mgr.web.commands.put(("pause_torrent", {"hash": "HA"}))  # 后续命令不受影响
+        mgr.web.consume_commands()
         assert client.calls == [("pause", ["HA"])], client.calls
         for _, _, cmd_id in errs:
-            assert mgr._web_results[cmd_id]["status"] == "error", (cmd_id, mgr._web_results[cmd_id])
+            assert mgr.web.results[cmd_id]["status"] == "error", (cmd_id, mgr.web.results[cmd_id])
 
 
 def test_drain_web_commands_bulk_torrents():
@@ -5277,18 +5271,18 @@ def test_drain_web_commands_bulk_torrents():
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
         # pause: 一次调用传全部 hashes(单条 call 即单次调用), 全部命中 -> ok
-        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "pause", "cmd_id": "b1"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "pause", "cmd_id": "b1"}))
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("pause", ["HA", "HB"]), client.calls[-1]
-        assert mgr._web_results["b1"]["status"] == "ok"
+        assert mgr.web.results["b1"]["status"] == "ok"
         # recheck: 经 ops 层逐个提交(R1 第二入口) —— 每 hash 一次提交并各自登记在途,
         # 不再是"一次 API 传全部"(直调 API 会让批量路径绕过在途互斥, 留下 C1 旁路)
-        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "b2"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "b2"}))
+        mgr.web.consume_commands()
         assert client.recheck_hashes_calls == ["HA", "HB"], client.recheck_hashes_calls
-        assert mgr._web_results["b2"]["status"] == "ok"
+        assert mgr.web.results["b2"]["status"] == "ok"
         # delete: delete_files 透传, 成员从快照移除
-        mgr.web_commands.put(
+        mgr.web.commands.put(
             ("bulk_torrents", {
                 "hashes": ["HA"],
                 "action": "delete",
@@ -5296,26 +5290,26 @@ def test_drain_web_commands_bulk_torrents():
                 "cmd_id": "b3"
             })
         )
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("delete", True)
         assert mgr.store.get("HA") is None
-        assert mgr._web_results["b3"]["status"] == "ok"
+        assert mgr.web.results["b3"]["status"] == "ok"
         # 部分缺失: 已知种子仍执行, 回执 error 带缺失计数
-        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HB", "GONE"], "action": "resume", "cmd_id": "b4"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HB", "GONE"], "action": "resume", "cmd_id": "b4"}))
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("resume", ["HB"])
-        r = mgr._web_results["b4"]
+        r = mgr.web.results["b4"]
         assert r["status"] == "error" and "1/2" in r["error"], r
         # 未知动作 -> error 回执, 不调 API
         before = list(client.calls)
-        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HB"], "action": "purge", "cmd_id": "b5"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HB"], "action": "purge", "cmd_id": "b5"}))
+        mgr.web.consume_commands()
         assert client.calls == before
-        assert mgr._web_results["b5"]["status"] == "error" and "purge" in mgr._web_results["b5"]["error"]
+        assert mgr.web.results["b5"]["status"] == "error" and "purge" in mgr.web.results["b5"]["error"]
         # 空 hash 列表 -> error 回执
-        mgr.web_commands.put(("bulk_torrents", {"hashes": [], "action": "pause", "cmd_id": "b6"}))
-        mgr._drain_web_commands()
-        assert mgr._web_results["b6"]["status"] == "error"
+        mgr.web.commands.put(("bulk_torrents", {"hashes": [], "action": "pause", "cmd_id": "b6"}))
+        mgr.web.consume_commands()
+        assert mgr.web.results["b6"]["status"] == "error"
 
 
 def test_drain_web_commands_bulk_torrents_group_keys():
@@ -5327,7 +5321,7 @@ def test_drain_web_commands_bulk_torrents_group_keys():
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
         # 组键删除: 级联全组(一次调用传全部成员), delete_files 透传, 成员从快照移除, 回执 ok
-        mgr.web_commands.put(
+        mgr.web.commands.put(
             ("bulk_torrents", {
                 "keys": [key],
                 "action": "delete",
@@ -5335,10 +5329,10 @@ def test_drain_web_commands_bulk_torrents_group_keys():
                 "cmd_id": "g1"
             })
         )
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("delete", True), client.calls
         assert mgr.store.get("HA") is None and mgr.store.get("HB") is None
-        assert mgr._web_results["g1"]["status"] == "ok"
+        assert mgr.web.results["g1"]["status"] == "ok"
 
 
 def test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing():
@@ -5346,7 +5340,7 @@ def test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing():
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
         # 混合: 组(含 HA/HB) + 散种子 HA(重叠) + 散种子 GONE(缺失) -> 去重后 [HA, HB] 一次调用; 回执带缺失计数
-        mgr.web_commands.put(
+        mgr.web.commands.put(
             ("bulk_torrents", {
                 "hashes": ["HA", "GONE"],
                 "keys": [key],
@@ -5354,24 +5348,24 @@ def test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing():
                 "cmd_id": "g2"
             })
         )
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("pause", ["HA", "HB"]), client.calls[-1]
-        r = mgr._web_results["g2"]
+        r = mgr.web.results["g2"]
         assert r["status"] == "error" and "1/2" in r["error"], r
         # 组键不存在/成员不在快照 -> 计缺失组, 不调 API
         before = list(client.calls)
         gone_key = ("R:/gone", ("x.mkv", ))
-        mgr.web_commands.put(("bulk_torrents", {"keys": [gone_key], "action": "pause", "cmd_id": "g3"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"keys": [gone_key], "action": "pause", "cmd_id": "g3"}))
+        mgr.web.consume_commands()
         assert client.calls == before, "缺失组不应调用 qB API"
-        r = mgr._web_results["g3"]
+        r = mgr.web.results["g3"]
         assert r["status"] == "error" and "1/1 个组" in r["error"], r
         # 组部分成员仍在: 只作用于在册成员, 组不算缺失
         mgr.store.by_hash.pop("HA")
-        mgr.web_commands.put(("bulk_torrents", {"keys": [key], "action": "resume", "cmd_id": "g4"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"keys": [key], "action": "resume", "cmd_id": "g4"}))
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("resume", ["HB"]), client.calls[-1]
-        assert mgr._web_results["g4"]["status"] == "ok"
+        assert mgr.web.results["g4"]["status"] == "ok"
 
 
 def test_drain_web_commands_bulk_torrents_tags_category():
@@ -5380,7 +5374,7 @@ def test_drain_web_commands_bulk_torrents_tags_category():
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
         # add_tags: 一次调用(tags 由替身记录; 作用范围/缺失过滤与 pause 共用同一链路), 部分缺失回执 error 带计数
-        mgr.web_commands.put(
+        mgr.web.commands.put(
             (
                 "bulk_torrents",
                 {
@@ -5391,12 +5385,12 @@ def test_drain_web_commands_bulk_torrents_tags_category():
                 },
             )
         )
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("add_tags", ["HR", "Keep"]), client.calls[-1]
-        r = mgr._web_results["t1"]
+        r = mgr.web.results["t1"]
         assert r["status"] == "error" and "1/3" in r["error"], r
         # remove_tags
-        mgr.web_commands.put(
+        mgr.web.commands.put(
             ("bulk_torrents", {
                 "hashes": ["HA"],
                 "action": "remove_tags",
@@ -5404,11 +5398,11 @@ def test_drain_web_commands_bulk_torrents_tags_category():
                 "cmd_id": "t2"
             })
         )
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("remove_tags", ["HR"]), client.calls[-1]
-        assert mgr._web_results["t2"]["status"] == "ok"
+        assert mgr.web.results["t2"]["status"] == "ok"
         # set_category: 非空
-        mgr.web_commands.put(
+        mgr.web.commands.put(
             ("bulk_torrents", {
                 "hashes": ["HA", "HB"],
                 "action": "set_category",
@@ -5416,11 +5410,11 @@ def test_drain_web_commands_bulk_torrents_tags_category():
                 "cmd_id": "t3"
             })
         )
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("set_category", "电影"), client.calls[-1]
-        assert mgr._web_results["t3"]["status"] == "ok"
+        assert mgr.web.results["t3"]["status"] == "ok"
         # set_category: category="" = 清除分类, 合法(只有 None/缺键才 error)
-        mgr.web_commands.put(
+        mgr.web.commands.put(
             ("bulk_torrents", {
                 "hashes": ["HA"],
                 "action": "set_category",
@@ -5428,21 +5422,21 @@ def test_drain_web_commands_bulk_torrents_tags_category():
                 "cmd_id": "t4"
             })
         )
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("set_category", ""), client.calls[-1]
-        assert mgr._web_results["t4"]["status"] == "ok"
+        assert mgr.web.results["t4"]["status"] == "ok"
         # add_tags 缺 tags -> error 回执, 不调 API
         before = list(client.calls)
-        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA"], "action": "add_tags", "cmd_id": "t5"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA"], "action": "add_tags", "cmd_id": "t5"}))
+        mgr.web.consume_commands()
         assert client.calls == before, "缺 tags 不应调用 qB API"
-        r = mgr._web_results["t5"]
+        r = mgr.web.results["t5"]
         assert r["status"] == "error" and "标签" in r["error"], r
         # set_category 缺 category 键(None) -> error 回执
-        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA"], "action": "set_category", "cmd_id": "t6"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA"], "action": "set_category", "cmd_id": "t6"}))
+        mgr.web.consume_commands()
         assert client.calls == before, "缺 category 不应调用 qB API"
-        r = mgr._web_results["t6"]
+        r = mgr.web.results["t6"]
         assert r["status"] == "error" and "分类" in r["error"], r
 
 
@@ -5455,13 +5449,13 @@ def test_cmd_trackers_write_invalidates_lazy_cache():
         assert rec.trackers_info(mgr.client)[0]["url"] == "https://tracker.hhanclub.net/announce.php"
         assert rec._trackers_info is not None
         client.trackers_map["HA"] = [{"url": "https://new.example.com/announce"}]
-        mgr.web_commands.put(("add_trackers", {"hash": "HA", "urls": ["https://extra.example.com/announce"]}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("add_trackers", {"hash": "HA", "urls": ["https://extra.example.com/announce"]}))
+        mgr.web.consume_commands()
         assert rec._trackers_info is None, "add_trackers 应失效惰性缓存"
         assert rec.trackers_info(mgr.client) == [{"url": "https://new.example.com/announce"}]
         # edit: 再次失效
         rec.trackers_info(mgr.client)  # 重新预热
-        mgr.web_commands.put(
+        mgr.web.commands.put(
             (
                 "edit_tracker", {
                     "hash": "HA",
@@ -5470,12 +5464,12 @@ def test_cmd_trackers_write_invalidates_lazy_cache():
                 }
             )
         )
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert rec._trackers_info is None, "edit_tracker 应失效惰性缓存"
         # remove: 再次失效
         rec.trackers_info(mgr.client)  # 重新预热
-        mgr.web_commands.put(("remove_tracker", {"hash": "HA", "url": "https://new.example.com/announce"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("remove_tracker", {"hash": "HA", "url": "https://new.example.com/announce"}))
+        mgr.web.consume_commands()
         assert rec._trackers_info is None, "remove_tracker 应失效惰性缓存"
 
 
@@ -5483,19 +5477,19 @@ def test_drain_web_commands_unknown_and_error_continues():
     """_drain_web_commands: 未知命令(KeyError)与执行异常只记日志, 不中断后续命令消费"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        mgr.web_commands.put(("no_such_command", {}))  # KeyError 分支
-        mgr.web_commands.put(("build_search_index", {"bogus": 1}))  # 参数错误 -> TypeError 分支
-        mgr.web_commands.put(("pause_group", {"key": key}))  # 后续命令仍应执行
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("no_such_command", {}))  # KeyError 分支
+        mgr.web.commands.put(("build_search_index", {"bogus": 1}))  # 参数错误 -> TypeError 分支
+        mgr.web.commands.put(("pause_group", {"key": key}))  # 后续命令仍应执行
+        mgr.web.consume_commands()
         assert client.calls[-1] == ("pause", ["HA", "HB"]), f"异常命令不应中断消费: {client.calls}"
-        assert mgr.web_commands.empty()
+        assert mgr.web.commands.empty()
 
 
 def test_drain_web_commands_empty_queue():
     """_drain_web_commands: 队列为空时直接返回(queue.Empty 分支), 无任何 API 调用"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        mgr._drain_web_commands()
+        mgr.web.consume_commands()
         assert client.calls == []
 
 
@@ -5510,22 +5504,22 @@ def test_reannounce_confirm_success_and_timeout():
         mgr, client, key = _make_grouped_manager(td)
         client.trackers_map = {"HA": [_tracker(1, 10_000)]}
         # 确认前不写回执(登记 pending), tracker 无变化时继续等待
-        mgr.web_commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd1"}))
-        mgr._drain_web_commands()
-        assert "cmd1" in mgr._reannounce_pending and "cmd1" not in mgr._web_results
-        mgr._check_reannounce_pending()
-        assert "cmd1" not in mgr._web_results, "tracker 无变化应继续等待"
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd1"}))
+        mgr.web.consume_commands()
+        assert "cmd1" in mgr.web.reannounce_pending and "cmd1" not in mgr.web.results
+        mgr.web.check_pending()
+        assert "cmd1" not in mgr.web.results, "tracker 无变化应继续等待"
         client.trackers_map["HA"][0]["next_announce"] = 9_000  # next_announce 被重置(提前)
-        mgr._check_reannounce_pending()
-        assert mgr._web_results["cmd1"]["status"] == "ok"
-        assert mgr._reannounce_pending == {}, "全部确认后跟踪应移除"
+        mgr.web.check_pending()
+        assert mgr.web.results["cmd1"]["status"] == "ok"
+        assert mgr.web.reannounce_pending == {}, "全部确认后跟踪应移除"
         # 超时: deadline 已过仍未确认 -> error 回执
-        mgr.web_commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd2"}))
-        mgr._drain_web_commands()
-        mgr._reannounce_pending["cmd2"]["deadline"] = _time.time() - 1
-        mgr._check_reannounce_pending()
-        assert mgr._web_results["cmd2"]["status"] == "error"
-        assert "超时" in mgr._web_results["cmd2"]["error"]
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd2"}))
+        mgr.web.consume_commands()
+        mgr.web.reannounce_pending["cmd2"]["deadline"] = _time.time() - 1
+        mgr.web.check_pending()
+        assert mgr.web.results["cmd2"]["status"] == "error"
+        assert "超时" in mgr.web.results["cmd2"]["error"]
 
 
 def test_reannounce_confirm_group_aggregate():
@@ -5539,11 +5533,11 @@ def test_reannounce_confirm_group_aggregate():
             "HA": [_tracker(3, 10_000)],  # updating = 正在汇报 -> 成功
             "HB": [_tracker(4, 10_000, "rejected")],  # not working + 错误消息 -> 失败
         }
-        mgr.web_commands.put(("reannounce_group", {"key": key, "cmd_id": "cmd3"}))
-        mgr._drain_web_commands()
-        assert "cmd3" not in mgr._web_results
-        mgr._check_reannounce_pending()
-        result = mgr._web_results["cmd3"]
+        mgr.web.commands.put(("reannounce_group", {"key": key, "cmd_id": "cmd3"}))
+        mgr.web.consume_commands()
+        assert "cmd3" not in mgr.web.results
+        mgr.web.check_pending()
+        result = mgr.web.results["cmd3"]
         assert result["status"] == "error" and "1/2" in result["error"]
 
 
@@ -5575,9 +5569,9 @@ def test_cmd_group_actions_skip_missing_group():
         mgr.store.groups[gone] = ["NOT_IN_STORE"]  # 成员不在快照 -> _group_hashes 过滤为空
         assert mgr._group_hashes(gone) == []
         for cmd in ("pause_group", "resume_group", "reannounce_group", "delete_group"):
-            mgr.web_commands.put((cmd, {"key": gone}))
-        mgr.web_commands.put(("pause_group", {"key": ("R:/nonexistent", ("y.mkv", ))}))  # 组 key 不存在
-        mgr._drain_web_commands()
+            mgr.web.commands.put((cmd, {"key": gone}))
+        mgr.web.commands.put(("pause_group", {"key": ("R:/nonexistent", ("y.mkv", ))}))  # 组 key 不存在
+        mgr.web.consume_commands()
         assert client.calls == [], f"空组不应调用 qB API: {client.calls}"
 
 
@@ -5588,8 +5582,8 @@ def test_cmd_reload_config_delegates():
         applied = []
         mgr.apply_new_config = lambda cfg: applied.append(cfg) or {"applied": True}
         new_cfg = object()
-        mgr.web_commands.put(("reload_config", {"config": new_cfg}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("reload_config", {"config": new_cfg}))
+        mgr.web.consume_commands()
         assert applied == [new_cfg], "reload_config 命令应把新配置交给 apply_new_config"
 
 
@@ -5600,34 +5594,34 @@ def test_ensure_group_view_rebuilds_when_dirty():
     """ensure_group_view: 脏时立即重建(Web 请求侧兜底), 干净时直接返回当前引用(不重建)"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        mgr._group_view = []
-        mgr._group_view_dirty = True
-        view = mgr.ensure_group_view()
+        mgr.web.group_view = []
+        mgr.web.group_view_dirty = True
+        view = mgr.web.ensure_view()
         assert len(view) == 1 and view[0]["count"] == 2, f"脏时应重建分组视图: {view}"
-        assert mgr._group_view_dirty is False
-        assert mgr.ensure_group_view() is view, "干净时直接返回当前引用(不重建)"
+        assert mgr.web.group_view_dirty is False
+        assert mgr.web.ensure_view() is view, "干净时直接返回当前引用(不重建)"
 
 
 def test_ensure_group_state_versioning():
     """ensure_group_state: 重建分组视图时版本号自增; rid 一致时不回传 groups(体积极小)"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        mgr._group_view = []
-        mgr._group_view_dirty = True
-        start_ver = mgr._group_view_ver
-        state = mgr.ensure_group_state(rid=None)  # 首次: 版本不匹配 -> 全量
+        mgr.web.group_view = []
+        mgr.web.group_view_dirty = True
+        start_ver = mgr.web.group_view_ver
+        state = mgr.web.ensure_state(rid=None)  # 首次: 版本不匹配 -> 全量
         assert state["updated"] is True
         assert state["rid"] == start_ver + 1, "重建后版本号应自增"
         assert len(state["groups"]) == 1
         assert state["singles"] == [], "未归组种子为空时 singles 应为空列表(键必须存在, 前端按同门控替换)"
         # 同版本再次请求: 不回传 groups
-        again = mgr.ensure_group_state(rid=state["rid"])
+        again = mgr.web.ensure_state(rid=state["rid"])
         assert again["updated"] is False
         assert again["rid"] == state["rid"]
         assert "groups" not in again and "singles" not in again
         # 视图变化后版本自增, 旧 rid 失效 -> 重新回传
-        mgr._group_view_dirty = True
-        bumped = mgr.ensure_group_state(rid=state["rid"])
+        mgr.web.group_view_dirty = True
+        bumped = mgr.web.ensure_state(rid=state["rid"])
         assert bumped["updated"] is True
         assert bumped["rid"] == state["rid"] + 1
         assert "groups" in bumped and "singles" in bumped
@@ -5645,8 +5639,8 @@ def test_ensure_group_state_show_view_carries_member_index():
     """
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        mgr._group_view_dirty = True
-        state = mgr.ensure_group_state(rid=None, view="show")
+        mgr.web.group_view_dirty = True
+        state = mgr.web.ensure_state(rid=None, view="show")
         assert "shows" in state, "追剧页应回 shows"
         assert "groups" in state and "singles" in state, \
             "追剧页必须连带成员索引(groups+singles), 否则前端 memberByHash 为空 -> 整页空白"
@@ -5661,14 +5655,14 @@ def test_build_singles_view_ungrouped_only():
         from helpers import FakeTorrent, seed_store
 
         seed_store(mgr, [FakeTorrent(hash="HZ", name="Lone", save_path=r"R:\Elsewhere")])
-        mgr._group_view_dirty = True
-        state = mgr.ensure_group_state(rid=None)
+        mgr.web.group_view_dirty = True
+        state = mgr.web.ensure_state(rid=None)
         assert [s["hash"] for s in state["singles"]] == ["HZ"], f"singles 应只含未归组种子: {state['singles']}"
         assert state["singles"][0]["save_path"] == r"R:\Elsewhere"
         assert "hr_triggered" in state["singles"][0] and "name" in state["singles"][0]
         grouped_hashes = {m["hash"] for g in state["groups"] for m in g["members"]}
         assert not (grouped_hashes & {s["hash"] for s in state["singles"]}), "已归组种子不得出现在 singles"
-        again = mgr.ensure_group_state(rid=state["rid"])
+        again = mgr.web.ensure_state(rid=state["rid"])
         assert "singles" not in again and "groups" not in again
         assert "shows" not in again, "追剧视图与 groups 同版本门控: 版本一致不回传"
 
@@ -5692,8 +5686,8 @@ def test_build_singles_view_num_seeds_fields():
                 )
             ]
         )
-        mgr._group_view_dirty = True
-        state = mgr.ensure_group_state(rid=None)
+        mgr.web.group_view_dirty = True
+        state = mgr.web.ensure_state(rid=None)
         singles = {s["hash"]: s for s in state["singles"]}
         assert "HZ" in singles, f"singles 应只含未归组种子: {state['singles']}"
         s = singles["HZ"]
@@ -5737,12 +5731,12 @@ def test_build_shows_view_aggregation():
         dates = seasons[None]["episodes"]
         assert dates[0]["key"] == ["date", "2026-09-15"], f"日期型集键: {dates}"
         # 同门控回传: 首次全量带 shows, 同版本不回传
-        mgr._group_view = []
-        mgr._group_view_dirty = True
-        state = mgr.ensure_group_state(rid=None)
+        mgr.web.group_view = []
+        mgr.web.group_view_dirty = True
+        state = mgr.web.ensure_state(rid=None)
         assert "shows" in state and state["shows"]["list"] == view["list"]
         assert "unrecognized" in state["shows"]
-        again = mgr.ensure_group_state(rid=state["rid"])
+        again = mgr.web.ensure_state(rid=state["rid"])
         assert "shows" not in again
 
 
@@ -5760,21 +5754,21 @@ def test_shows_view_files_fallback_hook():
         ]
         seed_store(mgr, [FakeTorrent(hash="HP", name="Show.Name.S01.Complete.1080p", save_path=r"R:\Downloads")])
         view = mgr._build_shows_view()
-        assert mgr._shows_pending is True, "季包种子索引未覆盖: 应标记待解析"
-        assert ("build_search_index", {}) in list(mgr.web_commands.queue), "应投递索引构建命令"
+        assert mgr.web.shows_pending is True, "季包种子索引未覆盖: 应标记待解析"
+        assert ("build_search_index", {}) in list(mgr.web.commands.queue), "应投递索引构建命令"
         node = view["list"][0]["seasons"][0]["episodes"][0]
         assert node["key"] == ["pack"], f"索引未建成前整季包无范围: {node['key']}"
         # 消费构建命令(真实链路: 主循环 _drain -> _build_search_index), 文件就位 -> 清 pending + 置脏
-        mgr._drain_web_commands()
-        assert mgr._shows_pending is False
-        assert mgr._group_view_dirty is True, "索引推进是文件兑底唯一信号, 应触发追剧视图重建"
-        mgr._group_view_dirty = True
+        mgr.web.consume_commands()
+        assert mgr.web.shows_pending is False
+        assert mgr.web.group_view_dirty is True, "索引推进是文件兑底唯一信号, 应触发追剧视图重建"
+        mgr.web.group_view_dirty = True
         view = mgr._build_shows_view()
         node = view["list"][0]["seasons"][0]["episodes"][0]
         assert node["key"] == ["range", 1, 3], f"季包从文件列表展开集数范围: {node['key']}"
         # 索引已覆盖全部种子: 不再重复投递
-        assert ("build_search_index", {}) not in list(mgr.web_commands.queue)
-        assert mgr._shows_pending is False
+        assert ("build_search_index", {}) not in list(mgr.web.commands.queue)
+        assert mgr.web.shows_pending is False
 
 
 def test_group_view_ver_seeded_from_start_time():
@@ -5783,13 +5777,13 @@ def test_group_view_ver_seeded_from_start_time():
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        assert mgr._group_view_ver > 1_600_000_000, "应为时间戳量级, 而非 0/1 小整数"
+        assert mgr.web.group_view_ver > 1_600_000_000, "应为时间戳量级, 而非 0/1 小整数"
 
 
 def test_api_state_rid_gate(web_env):
     """/api/state 带 rid: 版本一致时 updated=False 且无 groups; 缺省/不匹配回传全量"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     full = client.get("/api/state", headers=auth).json()
     assert full["updated"] is True and len(full["groups"]) == 1
     assert full["status"]["torrents"] == 2, "status 与版本无关, 恒回传"
@@ -5822,7 +5816,7 @@ def test_api_state_skips_jsonable_encoder(web_env, monkeypatch):
     from auto_qb.torrents import TorrentRecord
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     # 详情族需要一个存在的种子 + 一个"连着的"客户端(否则 404/503, 测不到响应管线)
     mgr.store.get = lambda h: {"HA": TorrentRecord(hash="HA", name="X")}.get(h)
     # web_env 的 manager 是 SimpleNamespace 替身, 没有真实方法 —— 补上被测端点要用到的那几个
@@ -5870,7 +5864,7 @@ def test_api_state_view_scoped_payload(web_env):
     风险面: 前端**必须**按"键不存在则保留原引用"赋值, 不能用 `|| []` 把没回的视图抹空。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     base = client.get("/api/state", headers=auth).json()
     assert {"groups", "singles", "shows", "torrents"} <= set(base), "不带 view 时四份全回(保守默认)"
 
@@ -5939,7 +5933,7 @@ def test_api_state_speed_totals_survives_view_scoping():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        mgr._web_token = "t"
+        mgr.web.token = "t"
         grouped = [
             FakeTorrent(hash="HA", name="Show", save_path=r"R:/s", dlspeed=1000, upspeed=2000),
             FakeTorrent(hash="HB", name="Show", save_path=r"R:/s", dlspeed=2000, upspeed=3000),
@@ -6086,7 +6080,7 @@ def test_apply_new_config_levels(monkeypatch):
         )
         new_cfg.web = _web_stub(port=38081)  # 仅端口变化 -> 需重启
         old_handle = mock.MagicMock()
-        mgr._web_handle = old_handle
+        mgr.web.handle = old_handle
         calls = []
 
         def _fake_stop(handle, timeout=0.0):
@@ -6103,7 +6097,7 @@ def test_apply_new_config_levels(monkeypatch):
         assert all(a["action"] != "none" for a in res["actions"] if a["module"] == "webui")
         mgr.connect.assert_not_called(), "web 端口变化不重连 qB(重连只由 qbittorrent 段变触发)"
         assert calls == [("stop", old_handle), ("start", mgr)], "必须先停旧服务(并等其线程退出)再启新服务"
-        assert mgr._web_handle == "新句柄", "web 句柄应换为新服务句柄"
+        assert mgr.web.handle == "新句柄", "web 句柄应换为新服务句柄"
 
         # 3. qbittorrent 段变: 内核自判重连(连接管理属内核, plan §3.1)
         mgr.connect.reset_mock()
@@ -6269,7 +6263,7 @@ def test_webui_module_apply_skips_restart_when_bind_unchanged(monkeypatch):
         # 真实调用点: self.config 已是新配置; 模块拿到的是(旧配置, 新配置)整对象
         mgr.config.web = _web_stub(port=8080, token="新密钥")
         old_handle = mock.MagicMock()
-        mgr._web_handle = old_handle
+        mgr.web.handle = old_handle
         monkeypatch.setattr("auto_qb.webui.start_web_server", mock.MagicMock())
         monkeypatch.setattr("auto_qb.webui.stop_web_server", mock.MagicMock())
 
@@ -6279,8 +6273,8 @@ def test_webui_module_apply_skips_restart_when_bind_unchanged(monkeypatch):
 
         start_web_server.assert_not_called()
         stop_web_server.assert_not_called()
-        assert mgr._web_handle is old_handle, "监听身份未变时不应重启"
-        assert mgr._web_token == "新密钥", "密钥变更应即时刷新(无需重启)"
+        assert mgr.web.handle is old_handle, "监听身份未变时不应重启"
+        assert mgr.web.token == "新密钥", "密钥变更应即时刷新(无需重启)"
 
 
 def test_start_web_server_reports_failure_when_port_taken(tmp_path):
@@ -6446,7 +6440,7 @@ def test_uvicorn_config_installs_loop_exception_handler():
 def test_api_category_tag_endpoints(web_env):
     """分类/标签 CRUD 端点: 正常入队返回 cmd_id; 空名/空列表 400"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     assert client.post("/api/categories", json={
         "name": "电影",
         "save_path": "R:/mv"
@@ -6496,15 +6490,15 @@ def test_api_speed_mode_and_override():
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        mgr._web_token = "t"
-        mgr._traffic_view = {"state": "enabled", "limit": {"target": {"up": 100, "down": 50}}}
+        mgr.web.token = "t"
+        mgr.web.traffic_view = {"state": "enabled", "limit": {"target": {"up": 100, "down": 50}}}
         tc = TestClient(create_app(mgr))
         auth = {"Authorization": "Bearer t"}
         data = tc.get("/api/speed/mode", headers=auth).json()
         assert data["curve_enabled"] is True
         assert data["curve_target"] == {"upload_kib": 100, "download_kib": 50}
         assert data["current"] == {"upload_limit": 0, "download_limit": 0}
-        mgr._traffic_view = {"state": "disabled", "limit": {}}
+        mgr.web.traffic_view = {"state": "disabled", "limit": {}}
         data = tc.get("/api/speed/mode", headers=auth).json()
         assert data["curve_enabled"] is False and data["curve_target"] is None
         # 覆盖命令: 入队 + 主循环消费 -> transfer 端点写入(bytes)
@@ -6512,8 +6506,8 @@ def test_api_speed_mode_and_override():
             "upload_kib": 2048,
             "download_kib": 1024
         }, headers=auth).json()["cmd_id"]
-        mgr._drain_web_commands()
-        assert mgr._web_results[cmd_id]["status"] == "ok"
+        mgr.web.consume_commands()
+        assert mgr.web.results[cmd_id]["status"] == "ok"
         assert ("transfer_set_upload_limit", 2048 * 1024) in client.calls
         assert ("transfer_set_download_limit", 1024 * 1024) in client.calls
 
@@ -6530,8 +6524,8 @@ def test_api_speed_alt_and_toggle():
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        mgr._web_token = "t"
-        mgr._traffic_view = {"state": "disabled", "limit": {}}
+        mgr.web.token = "t"
+        mgr.web.traffic_view = {"state": "disabled", "limit": {}}
         tc = TestClient(create_app(mgr))
         auth = {"Authorization": "Bearer t"}
 
@@ -6545,8 +6539,8 @@ def test_api_speed_alt_and_toggle():
             "upload_kib": 1024,
             "download_kib": 512
         }, headers=auth).json()["cmd_id"]
-        mgr._drain_web_commands()
-        assert mgr._web_results[cmd_id]["status"] == "ok"
+        mgr.web.consume_commands()
+        assert mgr.web.results[cmd_id]["status"] == "ok"
         assert client.alt_up_limit_value == 1024 * 1024
         assert client.alt_dl_limit_value == 512 * 1024
         assert ("app_set_preferences", ["alt_dl_limit", "alt_up_limit"]) in client.calls
@@ -6555,8 +6549,8 @@ def test_api_speed_alt_and_toggle():
         data = tc.get("/api/speed/mode", headers=auth).json()
         assert data["alt_current"] == {"upload_limit": 1024, "download_limit": 512}
         cmd_id = tc.post("/api/speed/alt/toggle", headers=auth).json()["cmd_id"]
-        mgr._drain_web_commands()
-        assert mgr._web_results[cmd_id]["status"] == "ok"
+        mgr.web.consume_commands()
+        assert mgr.web.results[cmd_id]["status"] == "ok"
         assert client.speed_limits_mode_value == 1
         data = tc.get("/api/speed/mode", headers=auth).json()
         assert data["alt_on"] is True
@@ -6606,13 +6600,13 @@ def test_api_speed_mode_curve_config_disabled():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        mgr._web_token = "t"
+        mgr.web.token = "t"
         mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
             dat_path="x.dat",
             curves=[PeriodCurve(period="day", upload_points=[CurvePoint(threshold_bytes=1, speed_bytes_per_s=1)])],
             enabled=False,
         )
-        mgr._traffic_view = {"state": "ok", "limit": {"target": {"up": 100, "down": 50}}}  # 滞后快照
+        mgr.web.traffic_view = {"state": "ok", "limit": {"target": {"up": 100, "down": 50}}}  # 滞后快照
         tc = TestClient(create_app(mgr))
         auth = {"Authorization": "Bearer t"}
         data = tc.get("/api/speed/mode", headers=auth).json()
@@ -6637,7 +6631,7 @@ def test_api_add_torrent_endpoint():
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        mgr._web_token = "t"
+        mgr.web.token = "t"
         tc = TestClient(create_app(mgr))
         auth = {"Authorization": "Bearer t"}
         r = tc.post(
@@ -6658,15 +6652,15 @@ def test_api_add_torrent_endpoint():
         )
         assert r.status_code == 200
         cmd_id = r.json()["cmd_id"]
-        cmd, payload = mgr.web_commands.queue[0]  # peek 不消费: drain 才是回执写入者
+        cmd, payload = mgr.web.commands.queue[0]  # peek 不消费: drain 才是回执写入者
         assert cmd == "add_torrents"
         assert payload["files"] == [b"d8:announce"]
         assert payload["urls"] == ["magnet:?xt=urn:btih:X"]
         assert payload["paused"] is True and payload["auto_tmm"] is True
         assert payload["sequential"] is True and payload["skip_checking"] is False
         assert payload["tags"] == ["4K", "HDR"]
-        mgr._drain_web_commands()
-        assert mgr._web_results[cmd_id]["status"] == "ok"
+        mgr.web.consume_commands()
+        assert mgr.web.results[cmd_id]["status"] == "ok"
         adds = [c for c in client.calls if c[0] == "add"]
         assert len(adds) == 2, "文件与链接各一次 torrents_add"
         assert adds[0][1]["paused"] is True and adds[0][1]["use_auto_torrent_management"] is True
@@ -6715,7 +6709,7 @@ def test_add_torrent_receipt_and_optional_flags():
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        mgr._web_token = "t"
+        mgr.web.token = "t"
         tc = TestClient(create_app(mgr))
         auth = {"Authorization": "Bearer t"}
         orig_add = client.torrents_add
@@ -6739,7 +6733,7 @@ def test_add_torrent_receipt_and_optional_flags():
                 )
                 assert r.status_code == 200
                 cmd_id = r.json()["cmd_id"]
-                mgr._drain_web_commands()
+                mgr.web.consume_commands()
                 return cmd_id
 
             def add_logs():
@@ -6756,7 +6750,7 @@ def test_add_torrent_receipt_and_optional_flags():
                     }
                 )
             )
-            assert mgr._web_results[post_add(False)]["status"] == "ok"
+            assert mgr.web.results[post_add(False)]["status"] == "ok"
             assert [lvl for lvl, _ in add_logs()] == [logging.INFO], "受理成功不得走 WARNING(通知联动会直推桌面弹窗)"
 
             # 2. 部分失败 -> error 回执(部分成功也报错, 与 bulk 同一口径)且走 WARNING
@@ -6772,8 +6766,8 @@ def test_add_torrent_receipt_and_optional_flags():
                 )
             )
             cid = post_add(False)
-            assert mgr._web_results[cid]["status"] == "error"
-            assert "成功 1 / 失败 1" in mgr._web_results[cid]["error"]
+            assert mgr.web.results[cid]["status"] == "error"
+            assert "成功 1 / 失败 1" in mgr.web.results[cid]["error"]
             assert [lvl for lvl, _ in add_logs()] == [logging.WARNING]
 
             # 3. 仅 pending(magnet 元数据未就绪)也是受理, 不是失败
@@ -6787,13 +6781,13 @@ def test_add_torrent_receipt_and_optional_flags():
                     }
                 )
             )
-            assert mgr._web_results[post_add(False)]["status"] == "ok"
+            assert mgr.web.results[post_add(False)]["status"] == "ok"
 
             # 4. 旧形态文本仍认(API < 2.14.0 的 "Ok."/"Fails.")
             add_returns("Ok.")
-            assert mgr._web_results[post_add(False)]["status"] == "ok"
+            assert mgr.web.results[post_add(False)]["status"] == "ok"
             add_returns("Fails.")
-            assert mgr._web_results[post_add(False)]["status"] == "error"
+            assert mgr.web.results[post_add(False)]["status"] == "error"
 
             # 5. 两个 optional 选项必须**显式**下发(省略 = 吃 qB 会话/全局默认, 勾选框失效):
             #    停止位 + 自动种子管理。`use_auto_torrent_management` 由替身记 kw.get(...) ——
@@ -6832,7 +6826,7 @@ def test_api_export_endpoint(web_env):
     mgr.store.get = lambda h: {"HA": rec, "HB": cn}.get(h)
     fake = FakeClient()
     mgr.client = fake
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     r = client.get("/api/torrents/HA/export", headers=auth)
     assert r.status_code == 200 and r.content == b"TORRENT-DATA"
     assert "attachment" in r.headers["content-disposition"]
@@ -6882,7 +6876,7 @@ def test_api_category_tag_list_endpoints(web_env):
         }},
         torrents_tags=lambda: ["4K", "HDR"],
     )
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     assert client.get("/api/categories", headers=auth).json() == {"categories": {"mv": {"save_path": "R:/mv"}}}
     assert client.get("/api/tags", headers=auth).json() == {"tags": ["4K", "HDR"]}
 
@@ -6906,7 +6900,7 @@ def test_api_tags_exclude_auto(web_env):
         add_tag_multi="zE${episode_first}-${episode_last}",
     )
     mgr.api = SimpleNamespace(torrents_tags=lambda: ["4K", "HHan", "HR-3D", "zE1", "zE1-12", "zE1x", "MISSING"], )
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     assert client.get("/api/tags?exclude_auto=1", headers=auth).json() == {"tags": ["4K", "zE1x", "MISSING"]}
     assert client.get("/api/tags", headers=auth).json() == {
         "tags": ["4K", "HHan", "HR-3D", "zE1", "zE1-12", "zE1x", "MISSING"]
@@ -6929,7 +6923,7 @@ def test_api_log_endpoint(web_env):
     from auto_qb.config.models import LoggingConfig
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     log_path = os.path.join(mgr.data_dir, "auto-qb.log")
     fmt = mgr.config.logging.format = LoggingConfig().format  # 未配置 log.format 时的默认
     lines = _log_lines(
@@ -6955,7 +6949,7 @@ def test_api_log_level_filter_follows_config_format(web_env):
     `%(asctime)s - %(levelname)s - %(message)s`(无方括号), 旧实现按 `[WARNING` 捞 ⇒ 恒空,
     界面只剩"日志文件暂无内容"(2026-09-25 真机报告)。"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     log_path = os.path.join(mgr.data_dir, "auto-qb.log")
     mgr.config.logging.format = "%(asctime)s - %(levelname)s - %(message)s"  # 与 config.yml 同形
     lines = _log_lines(
@@ -6977,7 +6971,7 @@ def test_api_log_level_filter_keeps_multiline_record(web_env):
     """多行日志(exc_info=True 打出的整段 traceback)折行后每行都不带等级标记 —— 过滤按"记录"
     取舍, 否则筛 ERROR 只剩标题行、用户真正要看的栈被丢掉。"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     log_path = os.path.join(mgr.data_dir, "auto-qb.log")
     fmt = mgr.config.logging.format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     header = _log_lines(fmt, [("auto_qb.core", logging.ERROR, "主循环异常: boom")])[0]
@@ -6996,7 +6990,7 @@ def test_api_log_note_when_level_unfilterable(web_env):
     from auto_qb.infra.logging import NOTE_FORMAT_MISMATCH, NOTE_NO_LEVEL_FIELD
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     log_path = os.path.join(mgr.data_dir, "auto-qb.log")
     mgr.config.logging.format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     lines = _log_lines(
@@ -7033,16 +7027,16 @@ def test_webui_module_apply_toggle_enabled(monkeypatch):
 
         # 关 -> 开(旧句柄为 None, 原先该场景完全不生效)
         mgr.config.web = _web_stub(enabled=True, port=8080)
-        mgr._web_handle = None
+        mgr.web.handle = None
         mod.apply(SimpleNamespace(web=_web_stub(enabled=False, port=8080)), mgr.config)
         started.assert_called_once()
-        assert mgr._web_handle == "新句柄"
+        assert mgr.web.handle == "新句柄"
 
         # 开 -> 关: 停止并清空句柄
         mgr.config.web = _web_stub(enabled=False, port=8080)
         mod.apply(SimpleNamespace(web=_web_stub(enabled=True, port=8080)), mgr.config)
         stopped.assert_called_once()
-        assert mgr._web_handle is None
+        assert mgr.web.handle is None
 
 
 # ---------- 种子中心视图(WEB UI 替代 qB 界面: 种子页/详情抽屉/全局统计) ----------
@@ -7072,7 +7066,7 @@ def test_seed_flat_view_fields_and_gating():
             max_ratio=1.5,
         )
         seed_store(mgr, [t1])
-        state = mgr.ensure_group_state(rid=None)
+        state = mgr.web.ensure_state(rid=None)
         items = state["torrents"]
         assert [t["hash"] for t in items] == ["H1"]
         item = items[0]
@@ -7159,7 +7153,7 @@ def test_seed_flat_view_fields_and_gating():
         assert item["magnet_uri"] == "magnet:?xt=urn:btih:H1" and item["max_ratio"] == 1.5
         assert item["hr_triggered"] is False, "HR 字段与成员视图同源(未配置站点为 False)"
         # 同版本: torrents 与 groups/singles/shows 同门控不回传
-        again = mgr.ensure_group_state(rid=state["rid"])
+        again = mgr.web.ensure_state(rid=state["rid"])
         assert "torrents" not in again and "groups" not in again and "singles" not in again
 
 
@@ -7182,16 +7176,16 @@ def test_flat_view_refreshed_by_main_loop_tick():
         client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="downloading", dlspeed=100, progress=0.5)
         client.torrents["H2"] = FakeTorrent(hash="H2", name="T2", state="downloading", dlspeed=200, progress=0.5)
         mgr.config.grouping.enabled = True
-        mgr.touch_web_client()  # Web 活跃(否则主循环跳过组装)
+        mgr.web.touch()  # Web 活跃(否则主循环跳过组装)
         mgr._tick(dry_run=False)
-        first = mgr.ensure_group_state(rid=None)
+        first = mgr.web.ensure_state(rid=None)
         assert sorted(t["dlspeed"] for t in first["torrents"]) == [100, 200], "首轮应建出平铺视图"
 
         client.torrents["H1"].dlspeed = 999
         client.torrents["H2"].dlspeed = 888
-        mgr.touch_web_client()
+        mgr.web.touch()
         mgr._tick(dry_run=False)  # 速度变化 -> 置脏 -> 主循环重建
-        second = mgr.ensure_group_state(rid=first["rid"])
+        second = mgr.web.ensure_state(rid=first["rid"])
         assert second["updated"] is True, "视图版本号应随速度变化自增"
         got = {t["hash"]: t["dlspeed"] for t in second["torrents"]}
         assert got == {"H1": 999, "H2": 888}, f"种子页速度应随主循环刷新(修前恒为旧快照): {got}"
@@ -7210,17 +7204,17 @@ def test_rebuild_views_single_entry_point():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
         seed_store(mgr, [FakeTorrent(hash="H1", name="T1", dlspeed=1), FakeTorrent(hash="H2", name="T2", dlspeed=2)])
-        mgr._group_view_dirty = True
-        ver = mgr._group_view_ver
-        mgr.rebuild_views()
-        assert mgr._group_view_dirty is False, "重建后脏标记复位"
-        assert mgr._group_view_ver == ver + 1, "版本号自增"
-        assert sorted(t["dlspeed"] for t in mgr._flat_view) == [1, 2], "平铺视图同次重建"
-        assert sorted(t["dlspeed"] for t in mgr._singles_view) == [1, 2], "单种子视图同次重建"
-        assert mgr._shows_view["unrecognized"] == ["H1", "H2"], "追剧视图同次重建(T1/T2 无集数标记)"
+        mgr.web.group_view_dirty = True
+        ver = mgr.web.group_view_ver
+        mgr.web.rebuild_views()
+        assert mgr.web.group_view_dirty is False, "重建后脏标记复位"
+        assert mgr.web.group_view_ver == ver + 1, "版本号自增"
+        assert sorted(t["dlspeed"] for t in mgr.web.flat_view) == [1, 2], "平铺视图同次重建"
+        assert sorted(t["dlspeed"] for t in mgr.web.singles_view) == [1, 2], "单种子视图同次重建"
+        assert mgr.web.shows_view["unrecognized"] == ["H1", "H2"], "追剧视图同次重建(T1/T2 无集数标记)"
         # 幂等: 标记已清 -> 不重复重建(惰性语义不被破坏)
-        mgr.ensure_group_view()
-        assert mgr._group_view_ver == ver + 1
+        mgr.web.ensure_view()
+        assert mgr.web.group_view_ver == ver + 1
 
 
 def test_api_state_status_carries_server_state(web_env):
@@ -7231,7 +7225,7 @@ def test_api_state_status_carries_server_state(web_env):
     1 条请求, 且两者**同源同轮**。
     """
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     body = client.get("/api/state", headers=auth).json()
     assert "server" in body["status"], "status 须带 server_state(恒回传)"
     assert body["status"]["server"] is None, "未同步时为 null(前端显示未同步文案)"
@@ -7277,7 +7271,7 @@ def test_api_torrent_detail_endpoint(web_env):
         hash="HA",
     )
     mgr.store.get = lambda h: {"HA": rec}.get(h)
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     resp = client.get("/api/torrents/HA", headers=auth)
     assert resp.status_code == 200
     t = resp.json()["torrent"]
@@ -7302,7 +7296,7 @@ def test_api_torrent_subresources(web_env):
     fake.files_map["HA"] = [{"index": 0, "name": "a.mkv", "size": 1}]
     fake.peers_map["HA"] = {"peers": [{"ip": "1.2.3.4", "client": "qB"}]}
     mgr.client = fake
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     assert client.get("/api/torrents/HA/trackers", headers=auth).json() == fake.trackers_map["HA"]
     assert client.get("/api/torrents/HA/files", headers=auth).json() == fake.files_map["HA"]
     peers = client.get("/api/torrents/HA/peers", headers=auth).json()
@@ -7332,7 +7326,7 @@ def test_api_readonly_endpoints_short_cache(web_env):
     fake = FakeClient()
     fake.files_map["HA"] = [{"index": 0, "name": "a.mkv", "size": 1}]
     mgr.client = fake
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     first = client.get("/api/torrents/HA/files", headers=auth).json()
     assert first == fake.files_map["HA"]
     assert fake.files_calls == 1
@@ -7377,7 +7371,7 @@ def test_api_torrent_peers_endpoint(web_env):
         "peers_removed": [],
     }
     mgr.client = fake
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     resp = client.get("/api/torrents/HA/peers", headers=auth)
     assert resp.status_code == 200
     assert resp.json() == fake.peers_map["HA"], "sync 响应整包透传(前端按 peers 键归一)"
@@ -7391,7 +7385,7 @@ def test_api_torrent_peers_endpoint(web_env):
 def test_api_stats_endpoint(web_env):
     """GET /api/stats: 透出 store.server_state(qB 全局状态); 未同步/降级时 null"""
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     assert client.get("/api/stats", headers=auth).json() == {"server": None}
     mgr.store.server_state = {"dl_info_speed": 1024, "dht_nodes": 9}
     data = client.get("/api/stats", headers=auth).json()
@@ -7409,7 +7403,7 @@ def test_api_enqueue_wakes_main_loop(web_env):
     from auto_qb.webui.commands import SELF_POSTED_COMMANDS
 
     mgr, client = web_env
-    auth = {"Authorization": f"Bearer {mgr._web_token}"}
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
     mgr._wake_calls.clear()
     assert client.post("/api/torrents/HA/recheck", headers=auth).status_code == 200
     assert len(mgr._wake_calls) == 1, f"用户命令投递后应唤醒主循环, 实际 {len(mgr._wake_calls)} 次"
@@ -7775,7 +7769,7 @@ def test_create_app_is_thin_assembly():
 
 
 def _keys_headers(mgr):
-    return {"Authorization": f"Bearer {mgr._web_token}"}
+    return {"Authorization": f"Bearer {mgr.web.token}"}
 
 
 def test_api_keys_get_default_when_missing(web_env):
@@ -7916,11 +7910,11 @@ def test_drain_web_commands_recheck_rejected_while_checking():
         mgr, client, key = _make_grouped_manager(td)
         inflight = Task("check", "check-checking-result", hash="HA", store=mgr.store, handler=lambda t, d: REQUEUE)
         assert mgr.task_queue.add_task(inflight)
-        mgr.web_commands.put(("recheck_torrent", {"hash": "HA", "cmd_id": "r1"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("recheck_torrent", {"hash": "HA", "cmd_id": "r1"}))
+        mgr.web.consume_commands()
         assert client.recheck_hashes_calls == [], f"拒绝时 qB 不得收到 recheck: {client.recheck_hashes_calls}"
-        assert mgr._web_results["r1"]["status"] == "error", mgr._web_results
-        assert "校验进行中" in mgr._web_results["r1"]["error"], mgr._web_results["r1"]
+        assert mgr.web.results["r1"]["status"] == "error", mgr.web.results
+        assert "校验进行中" in mgr.web.results["r1"]["error"], mgr.web.results["r1"]
 
 
 def test_drain_web_commands_bulk_recheck_skips_inflight():
@@ -7935,12 +7929,12 @@ def test_drain_web_commands_bulk_recheck_skips_inflight():
         mgr, client, key = _make_grouped_manager(td)
         inflight = Task("check", "check-checking-result", hash="HB", store=mgr.store, handler=lambda t, d: REQUEUE)
         assert mgr.task_queue.add_task(inflight)
-        mgr.web_commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "b9"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA", "HB"], "action": "recheck", "cmd_id": "b9"}))
+        mgr.web.consume_commands()
         assert client.recheck_hashes_calls == ["HA"], f"仅非在途的 HA 提交: {client.recheck_hashes_calls}"
         assert "HA" in mgr.task_queue.active_check_hashes(), "提交的 hash 应登记在途"
-        assert mgr._web_results["b9"]["status"] == "error", mgr._web_results
-        assert "1 个校验进行中已跳过" in mgr._web_results["b9"]["error"], mgr._web_results["b9"]
+        assert mgr.web.results["b9"]["status"] == "error", mgr.web.results
+        assert "1 个校验进行中已跳过" in mgr.web.results["b9"]["error"], mgr.web.results["b9"]
 
 
 def test_drain_web_commands_skip_check_torrent():
@@ -7958,11 +7952,11 @@ def test_drain_web_commands_skip_check_torrent():
         t = FakeTorrent(hash="HASH123", name="Show", state="pausedDL", progress=0.0)
         client.torrents["HASH123"] = t
         seed_store(mgr, [t])
-        mgr.web_commands.put(("skip_check_torrent", {"hash": "HASH123", "cmd_id": "s1"}))
-        mgr._drain_web_commands()
+        mgr.web.commands.put(("skip_check_torrent", {"hash": "HASH123", "cmd_id": "s1"}))
+        mgr.web.consume_commands()
         names = [c[0] for c in client.calls]
         assert "export" in names and "delete" in names and "add" in names, f"应走跳检四阶段: {client.calls}"
-        assert mgr._web_results["s1"]["status"] == "ok", mgr._web_results
+        assert mgr.web.results["s1"]["status"] == "ok", mgr.web.results
         assert mgr.state["skip_check_day"]["HASH123"], "web 跳检应记录跨来源同日去重"
 
 

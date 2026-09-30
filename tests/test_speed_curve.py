@@ -840,7 +840,7 @@ def test_speed_curve_enabled_false_short_circuits(tmp_path):
     assert client.transfer.calls == []  # 不动 qB 限速
     assert client.transfer.limits["upload_limit"] == 999 * 1024
     assert "speed_limit_curve" not in mgr.state  # 不记录曲线 state
-    assert mgr._traffic_view["state"] == "disabled"  # Web 端据此渲染为未启用
+    assert mgr.web.traffic_view["state"] == "disabled"  # Web 端据此渲染为未启用
 
 
 def test_speed_curve_dat_all_bad_lines_noop(tmp_path):
@@ -957,10 +957,10 @@ def test_traffic_view_disabled_without_config(tmp_path):
     """未启用曲线 -> state=disabled(前端据此不渲染流量/限速 pill)"""
     mgr = make_manager(str(tmp_path / "state.json"))
     mgr.config.global_speed_limit_curve = None
-    assert mgr._traffic_view["state"] == "disabled"
+    assert mgr.web.traffic_view["state"] == "disabled"
 
     assert _run_curve(mgr) is True
-    assert mgr._traffic_view["state"] == "disabled"
+    assert mgr.web.traffic_view["state"] == "disabled"
 
 
 def test_traffic_view_ok_reports_periods_and_limits(tmp_path):
@@ -971,7 +971,7 @@ def test_traffic_view_ok_reports_periods_and_limits(tmp_path):
     mgr, client = _make_mgr(tmp_path, gslc)
 
     assert _run_curve(mgr)
-    tv = mgr._traffic_view
+    tv = mgr.web.traffic_view
     assert tv["state"] == "ok"
     assert tv["date"] == today.isoformat()
     assert tv["periods"] == [{"period": "day", "label": "今日", "up": 15 * GIB, "down": 5 * GIB}]
@@ -991,7 +991,7 @@ def test_traffic_view_manual_reason_on_odd_kib(tmp_path):
     client.transfer.limits["upload_limit"] = 2001 * 1024  # 用户手动 2001KiB/s(奇数)
 
     assert _run_curve(mgr)
-    tv = mgr._traffic_view
+    tv = mgr.web.traffic_view
     assert tv["limit"]["target"]["up"] == 6144  # 5GiB -> 首档 6MiB/s
     assert tv["limit"]["actual"]["up"] == 2001  # 未被覆盖, 仍是手动值 -> 前端显示两者不一致
     assert [r["code"] for r in tv["limit"]["reasons"]] == ["manual"]
@@ -1006,7 +1006,7 @@ def test_traffic_view_dry_run_has_target_without_actual(tmp_path):
     mgr, client = _make_mgr(tmp_path, gslc)
 
     assert _run_curve(mgr, dry_run=True)
-    tv = mgr._traffic_view
+    tv = mgr.web.traffic_view
     assert tv["state"] == "dry_run"
     assert tv["limit"]["target"] == {"up": 5120, "down": None}
     assert tv["limit"]["actual"] == {"up": None, "down": None}
@@ -1019,7 +1019,7 @@ def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
     mgr, client = _make_mgr(tmp_path, gslc)
 
     assert _run_curve(mgr) is True
-    tv = mgr._traffic_view
+    tv = mgr.web.traffic_view
     assert tv["state"] == "stale"
     assert tv["periods"] == []
     assert tv["limit"]["reasons"][0]["code"] == "dat_missing"
@@ -1029,8 +1029,8 @@ def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
     bad.write_text('lines: "2"\nnot-a-date\n', encoding="utf-8")
     mgr.config.global_speed_limit_curve = _gslc(str(bad), _pc("day", up=_points(FULL_UPLOAD)))
     assert _run_curve(mgr) is True
-    assert mgr._traffic_view["state"] == "stale"
-    assert mgr._traffic_view["limit"]["reasons"][0]["code"] == "dat_empty"
+    assert mgr.web.traffic_view["state"] == "stale"
+    assert mgr.web.traffic_view["limit"]["reasons"][0]["code"] == "dat_empty"
 
 
 # ---------- 手动保护的日志节流(持续状态不逐轮刷屏) ----------
@@ -1052,7 +1052,7 @@ def test_speed_curve_manual_log_throttled_same_state(tmp_path):
 
     assert client.transfer.calls == []  # 两方向都被保护, 一次都不写
     # 去重不丢信号: Web UI 快照的 reasons 照旧逐轮带 code=manual(前端锁图标的数据源)
-    assert [r["code"] for r in mgr._traffic_view["limit"]["reasons"]] == ["manual", "manual"]
+    assert [r["code"] for r in mgr.web.traffic_view["limit"]["reasons"]] == ["manual", "manual"]
 
 
 def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path, monkeypatch):

@@ -289,11 +289,11 @@ def test_drain_web_commands_reports_resync_needed():
         mgr._cmd_pause_torrent = mock.Mock()
         mgr._cmd_reload_config = mock.Mock()
         mgr._cmd_build_search_index = mock.Mock()
-        mgr.web_commands.put(("reload_config", {"cmd_id": "c1"}))
-        mgr.web_commands.put(("build_search_index", {"cmd_id": "c2"}))
-        assert mgr._drain_web_commands() is False, "配置热重载/索引构建改的不是种子状态, 不补刷新"
-        mgr.web_commands.put(("pause_torrent", {"cmd_id": "c3", "hash": "HA"}))
-        assert mgr._drain_web_commands() is True
+        mgr.web.commands.put(("reload_config", {"cmd_id": "c1"}))
+        mgr.web.commands.put(("build_search_index", {"cmd_id": "c2"}))
+        assert mgr.web.consume_commands() is False, "配置热重载/索引构建改的不是种子状态, 不补刷新"
+        mgr.web.commands.put(("pause_torrent", {"cmd_id": "c3", "hash": "HA"}))
+        assert mgr.web.consume_commands() is True
 
 
 def test_command_batch_triggers_single_resync():
@@ -321,7 +321,7 @@ def test_command_batch_triggers_single_resync():
         def poster():
             time.sleep(0.15)
             for i in range(5):
-                mgr.web_commands.put(("pause_torrent", {"cmd_id": f"c{i}", "hash": "HA"}))
+                mgr.web.commands.put(("pause_torrent", {"cmd_id": f"c{i}", "hash": "HA"}))
             mgr.wake()
             # 兜底: 补刷新缺失时循环不会自行退出(刷新停在 1 次), 这里兜住避免用例挂死
             time.sleep(0.8)
@@ -346,15 +346,15 @@ def test_drain_web_commands_bumps_write_seq():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr._cmd_reload_config = mock.Mock()
         mgr._cmd_build_search_index = mock.Mock()
-        before = mgr._web_write_seq
+        before = mgr.web.write_seq
 
-        mgr.web_commands.put(("reload_config", {"cmd_id": "c1"}))
-        mgr._drain_web_commands()
-        assert mgr._web_write_seq == before + 1, "写命令执行后写序号必须自增(否则只读缓存永不失效)"
+        mgr.web.commands.put(("reload_config", {"cmd_id": "c1"}))
+        mgr.web.consume_commands()
+        assert mgr.web.write_seq == before + 1, "写命令执行后写序号必须自增(否则只读缓存永不失效)"
 
-        mgr.web_commands.put(("build_search_index", {"cmd_id": "c2"}))
-        mgr._drain_web_commands()
-        assert mgr._web_write_seq == before + 1, "自投递命令不得自增(否则建索引期间缓存全废)"
+        mgr.web.commands.put(("build_search_index", {"cmd_id": "c2"}))
+        mgr.web.consume_commands()
+        assert mgr.web.write_seq == before + 1, "自投递命令不得自增(否则建索引期间缓存全废)"
 
 
 def test_drain_bumps_write_seq_before_writing_receipt():
@@ -370,13 +370,13 @@ def test_drain_bumps_write_seq_before_writing_receipt():
         real_set = mgr.web.set_result
 
         def spy(cmd_id, status, error="", timing=None, truth=None):
-            seen["seq"] = mgr._web_write_seq  # 回执写入那一刻的序号
+            seen["seq"] = mgr.web.write_seq  # 回执写入那一刻的序号
             return real_set(cmd_id, status, error, timing, truth)
 
         mgr.web.set_result = spy  # 回执的唯一落点在门面(见 WebUIRuntime.set_result)
-        before = mgr._web_write_seq
-        mgr.web_commands.put(("reload_config", {"cmd_id": "c1"}))
-        mgr._drain_web_commands()
+        before = mgr.web.write_seq
+        mgr.web.commands.put(("reload_config", {"cmd_id": "c1"}))
+        mgr.web.consume_commands()
         assert seen.get("seq") == before + 1, (f"回执写入时写序号应已自增(先失效缓存再宣布成功), 实际 {seen.get('seq')} vs 期望 {before + 1}")
 
 
@@ -497,7 +497,7 @@ def test_create_torrent_tasks_tor_missing():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        assert mgr._create_torrent_tasks("NOPE") is None
+        assert mgr.host.get("rules")._create_torrent_tasks("NOPE") is None
         assert mgr.task_queue._fast == []
 
 
@@ -511,7 +511,7 @@ def test_create_torrent_tasks_with_rules():
         tor.tracker_conf = mgr.config.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配
         client.torrents["HASH123"] = tor
         seed_store(mgr)
-        mgr._create_torrent_tasks("HASH123")
+        mgr.host.get("rules")._create_torrent_tasks("HASH123")
         names = [t.name for t in mgr.task_queue._fast]
         assert "maintenance" in names, f"应创建内置任务: {names}"
         assert "example_rules.add_site_tag" in names, f"应创建规则任务: {names}"
@@ -523,7 +523,7 @@ def test_handle_maintenance_tor_missing():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
         task = Task("internal", "maintenance", hash="NOPE", store=mgr.store)
-        assert mgr._handle_maintenance_task_interface(task, dry_run=False) is False
+        assert mgr.host.get("maintenance").handle_maintenance(task.torrent, dry_run=False) is False
 
 
 def test_run_save_state_on_exit():
@@ -742,7 +742,7 @@ def test_tick_rebuilds_all_views_when_changed():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
         mgr.config.grouping.enabled = True
-        mgr.touch_web_client()  # Web 活跃
+        mgr.web.touch()  # Web 活跃
         with mock.patch.object(mgr, "_refresh_torrents"), \
              mock.patch.object(mgr, "_build_group_view", return_value=[]) as g, \
              mock.patch.object(mgr, "_build_singles_view", return_value=[]) as s, \
@@ -759,14 +759,14 @@ def test_tick_rebuilds_all_views_when_changed():
             mgr.store.view_changed = True
             mgr._tick(dry_run=False)
             assert counts() == (1, 1, 1, 1)  # 上一版没人取 -> 不重建(脏标记保留)
-            mgr.ensure_group_state(mgr._group_view_ver)  # 客户端取走当前版本
+            mgr.web.ensure_state(mgr.web.group_view_ver)  # 客户端取走当前版本
             mgr._tick(dry_run=False)
             assert counts() == (2, 2, 2, 2)  # 已取走 + 仍脏 -> 重建, 且四份同次
             mgr.store.view_changed = True
-            mgr._web_last_seen = 0.0  # Web 不活跃(超过 TTL)
+            mgr.web.last_seen = 0.0  # Web 不活跃(超过 TTL)
             mgr._tick(dry_run=False)
             assert counts() == (2, 2, 2, 2)  # 不重建
-            assert mgr._group_view_dirty is True  # 脏标记保留, 待 Web 恢复后重建
+            assert mgr.web.group_view_dirty is True  # 脏标记保留, 待 Web 恢复后重建
 
 
 def test_view_rebuild_waits_for_client_consume():
@@ -784,7 +784,7 @@ def test_view_rebuild_waits_for_client_consume():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        mgr.touch_web_client()  # Web 活跃
+        mgr.web.touch()  # Web 活跃
         with mock.patch.object(mgr, "_refresh_torrents"), mock.patch.object(
             mgr, "_build_group_view", return_value=[]
         ) as g, mock.patch.object(mgr, "_build_singles_view", return_value=[]), mock.patch.object(
@@ -795,29 +795,29 @@ def test_view_rebuild_waits_for_client_consume():
         ), mock.patch.object(mgr, "_build_flat_view", return_value=[]):
             # 1. 首版: 无 pending -> 重建, 并登记"这一版还没人取走"
             mgr.store.view_changed = True
-            mgr._flush_views()
+            mgr.web.flush_views()
             assert g.call_count == 1
-            assert mgr._web_pending_ver == mgr._group_view_ver
+            assert mgr.web.pending_ver == mgr.web.group_view_ver
 
             # 2. 又脏了但上一版还没人取 -> **不生产**(这就是省掉的那一次)
             mgr.store.view_changed = True
-            mgr._flush_views()
+            mgr.web.flush_views()
             assert g.call_count == 1, "上一版没人取就再产一版 = 白烧 CPU(节拍错配的症状)"
-            assert mgr._group_view_dirty is True, "脏标记必须保留, 否则这次变化会被丢掉"
+            assert mgr.web.group_view_dirty is True, "脏标记必须保留, 否则这次变化会被丢掉"
 
             # 3. 命令驱动: force=True 必须绕过门控(P0-5: 真值不能等客户端轮询)
-            mgr._flush_views(force=True)
+            mgr.web.flush_views(force=True)
             assert g.call_count == 2, "命令改了状态就必须立刻重建, 不能等客户端轮询"
-            assert mgr._group_view_dirty is False
+            assert mgr.web.group_view_dirty is False
 
             # 4. 客户端取走当前版本(此时不脏, 不会顺带重建) -> pending 清空
-            mgr.ensure_group_state(mgr._group_view_ver)
-            assert mgr._web_pending_ver is None
+            mgr.web.ensure_state(mgr.web.group_view_ver)
+            assert mgr.web.pending_ver is None
             assert g.call_count == 2
 
             # 5. 已被取走 -> 门控重新打开, 再脏就能重建
             mgr.store.view_changed = True
-            mgr._flush_views()
+            mgr.web.flush_views()
             assert g.call_count == 3
 
 
@@ -832,7 +832,7 @@ def test_tick_rebuilds_views_when_grouping_disabled():
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
         mgr.config.grouping.enabled = False
-        mgr.touch_web_client()
+        mgr.web.touch()
         with mock.patch.object(mgr, "_refresh_torrents"), \
              mock.patch.object(mgr, "_build_group_view", return_value=[]) as g, \
              mock.patch.object(mgr, "_build_singles_view", return_value=[]) as s, \
@@ -841,7 +841,7 @@ def test_tick_rebuilds_views_when_grouping_disabled():
             mgr.store.view_changed = True
             mgr._tick(dry_run=False)
             assert (g.call_count, s.call_count, sh.call_count, f.call_count) == (1, 1, 1, 1)
-            assert mgr._group_view_dirty is False  # 标记被真正消费(不是被吞掉)
+            assert mgr.web.group_view_dirty is False  # 标记被真正消费(不是被吞掉)
 
 
 def test_qbmanager_source_has_no_web_state_fields():
@@ -902,7 +902,7 @@ def test_hr_anchors_from_store():
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         assert mgr.store.hr_link is mgr.hr, "判定桥必须构造时就挂上(记录读取时现算, 不靠遍历刷新)"
-        assert mgr._hr_anchors() == {}, "站点未接入 hr_check -> 不上交任何锚点"
+        assert mgr.hr._anchors() == {}, "站点未接入 hr_check -> 不上交任何锚点"
 
         site = mgr.config.trackers["HHan"]
         site.hr_check = SiteHrCheckConfig(
@@ -915,10 +915,10 @@ def test_hr_anchors_from_store():
         got.infohash_v1 = "aa" * 20
         got.added_on = 11
         got.downloaded = 123
-        anchors = mgr._hr_anchors()  # H2 未匹配 tracker_conf -> 不进锚点
+        anchors = mgr.hr._anchors()  # H2 未匹配 tracker_conf -> 不进锚点
         assert set(anchors) == {"HHan"} and set(anchors["HHan"]) == {"aa" * 20}
         assert anchors["HHan"]["aa" * 20
                               ] == HrAnchor(added_on=11, downloaded=123, completion_on=-1, progress=0.0, name="Test")
 
         site.hr_check = SiteHrCheckConfig(enabled=False)  # 站点关掉 -> 同样不上交
-        assert mgr._hr_anchors() == {}
+        assert mgr.hr._anchors() == {}

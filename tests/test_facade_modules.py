@@ -2,7 +2,7 @@
 
 P2 内容: WebUIRuntime/HrRuntime 门面接入 Module 契约(webui/module.py + hr/module.py)/
 run() 启停改 host.start_all/stop_all/_apply_web_config 并入 webui.apply/主循环对表现层的
-语义调用改 loop hooks/store.hr_link 注入属装配/start_web_server 不再写 manager._web_token。
+语义调用改 loop hooks/store.hr_link 注入属装配/start_web_server 不再写 manager.web.token。
 本文件锁五件事:
 1. webui 模块生命周期契约(start 门控与幂等 / stop 只请求退出不等线程);
 2. webui 模块热重载语义(有差异即置脏 / 仅监听身份变化才重启 / 密钥即时刷新 / 停止路径);
@@ -122,13 +122,13 @@ def test_webui_module_apply_restarts_only_on_listen_identity_change(monkeypatch)
         mgr.config.web = _web_stub(port=8081)
         mod.apply(SimpleNamespace(web=_web_stub(port=8080)), mgr.config)
         assert stopped.call_count == 1 and started.call_count == 1
-        assert mgr._web_handle == "新句柄", "重启后句柄应换新"
+        assert mgr.web.handle == "新句柄", "重启后句柄应换新"
 
         # 关闭(enabled=false): 停止并清空句柄
         mgr.config.web = _web_stub(enabled=False, port=8081)
         mod.apply(SimpleNamespace(web=_web_stub(port=8081)), mgr.config)
         assert stopped.call_count == 2
-        assert mgr._web_handle is None, "关闭后句柄必须清空"
+        assert mgr.web.handle is None, "关闭后句柄必须清空"
 
 
 def test_webui_module_loop_hooks(monkeypatch):

@@ -9,7 +9,7 @@ MaintenanceModule(tags + _handle_maintenance + delete_tags 全局任务 + 集数
 2. full_round 相位: 内核 emit -> tracker 模块重匹配 conf 置空记录(全量轮契约兑现);
 3. 全局任务自注册: start 按配置入队 + 重复 start 幂等(has_named) + 队列重建(queue_rebuilt
    相位 / _create_global_tasks 兼容转发)后按新配置重新入队;
-4. 流量快照发布走 ctx.web.set_traffic_view 服务方法(manager._traffic_view 别名同源可见);
+4. 流量快照发布走 ctx.web.set_traffic_view 服务方法(manager.web.traffic_view 同源可见);
 5. sections 认领清单(P6 段认领完备守阵上线前的基线锁定)。
 
 行为细节(限速/标签/集数/曲线节流)的守阵仍在原位: test_tracker / test_mixins_tags /
@@ -141,13 +141,13 @@ def test_create_global_tasks_delegate_idempotent_on_same_queue():
 
 
 def test_traffic_publish_goes_through_ctx_web_service():
-    """_publish_traffic 经 ctx.web.set_traffic_view 发布; manager._traffic_view 别名同源可见"""
+    """_publish_traffic 经 ctx.web.set_traffic_view 发布; manager.web.traffic_view 同源可见"""
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
         with mock.patch.object(mgr.web, "set_traffic_view", wraps=mgr.web.set_traffic_view) as pub:
             mgr.host.get("speed_curve")._publish_traffic("ok", periods=[{"period": "day"}], target={"up": 1, "down": 2})
         assert pub.call_count == 1
-        view = mgr._traffic_view  # 旧名别名 -> self.web.traffic_view(同一份)
+        view = mgr.web.traffic_view  # 旧名别名 -> self.web.traffic_view(同一份)
         assert view["state"] == "ok" and view["periods"] == [{"period": "day"}]
         assert view["limit"]["target"] == {"up": 1, "down": 2}
 
