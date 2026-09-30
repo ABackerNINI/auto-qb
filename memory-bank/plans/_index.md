@@ -28,6 +28,7 @@
 
 ## Open
 
+- [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`
 - [26-09-30-0240] [修改计划 · HR 在线核实三参数解耦 — 拉取间隔 / 复用窗 / 立即拉取](26-09-30-0240-plan-hr-reuse-window-decouple.html) — `backend-partial-hr-verify`
 - [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`

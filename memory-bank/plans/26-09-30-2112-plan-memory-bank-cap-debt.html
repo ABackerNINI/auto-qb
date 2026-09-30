@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cap 守卫改债务制 · 工程计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-cap-debt">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-30-2112">
+<meta name="doc-updated" content="26-09-30-2159">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-30-memory-bank-cap-debt.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101418;
+    --paper: #151a20;
+    --ink: #d9dee3;
+    --ink-dim: #97a1ab;
+    --ink-faint: #6b7580;
+    --accent: #56b4a4;
+    --accent-dim: rgba(86, 180, 164, .13);
+    --warn: #c9a35c;
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --mono: "JetBrains Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
+    --sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1260px; margin: 0 auto; padding: 0 40px; }
+
+  /* ---------- 封面 ---------- */
+  .cover { padding: 92px 0 68px; border-bottom: 1px solid var(--line-strong); }
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .cover h1 {
+    font-size: 50px; font-weight: 600; line-height: 1.14;
+    letter-spacing: -.02em; margin: 22px 0 18px;
+  }
+  .cover .sub { font-size: 18.5px; color: var(--ink-dim); max-width: 47em; line-height: 1.65; }
+  .cover-meta { display: flex; gap: 36px; margin-top: 42px; flex-wrap: wrap; }
+  .cover-meta div { font-size: 13px; }
+  .cover-meta .k {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    color: var(--ink-faint); text-transform: uppercase; display: block; margin-bottom: 3px;
+  }
+  .cover-meta .v { color: var(--ink); font-family: var(--mono); white-space: nowrap; }
+  .cover-meta .v.open { color: var(--accent); }
+
+  /* ---------- 双栏布局 ---------- */
+  .layout { display: grid; grid-template-columns: 216px 1fr; gap: 56px; padding-top: 8px; }
+  aside { align-self: start; position: sticky; top: 0; padding: 40px 0 40px; }
+  aside .toc-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    color: var(--ink-faint); text-transform: uppercase; margin-bottom: 14px;
+  }
+  aside nav a {
+    display: block; color: var(--ink-dim); text-decoration: none;
+    font-size: 13.5px; padding: 5px 0 5px 14px; border-left: 1px solid var(--line);
+    line-height: 1.45;
+  }
+  aside nav a:hover { color: var(--ink); border-left-color: var(--line-strong); }
+  aside nav a .n { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-right: 8px; }
+
+  main { padding: 40px 0 0; min-width: 0; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-bottom: 84px; scroll-margin-top: 32px; }
+  .sec-head { margin-bottom: 26px; }
+  .sec-no {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+    color: var(--accent); display: block; margin-bottom: 8px;
+  }
+  .sec-head h2 { font-size: 27px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+  .sec-head .lead { color: var(--ink-dim); margin-top: 10px; max-width: 46em; }
+
+  h3 {
+    font-size: 17.5px; font-weight: 600; margin: 34px 0 12px;
+    padding-top: 18px; border-top: 1px solid var(--line);
+  }
+  h3 .hno { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 10px; }
+  p { margin: 10px 0; max-width: 52em; }
+  ul, ol { margin: 10px 0 10px 1.4em; max-width: 52em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--ink-faint); }
+  strong { color: #eef1f4; }
+  code {
+    font-family: var(--mono); font-size: .88em; background: var(--paper);
+    border: 1px solid var(--line); padding: 1px 6px; border-radius: 3px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- 表格 ---------- */
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    font-size: 13.5px; line-height: 1.6;
+  }
+  th {
+    text-align: left; font-weight: 600; color: var(--ink-dim);
+    font-size: 12px; letter-spacing: .05em; text-transform: uppercase;
+    padding: 8px 12px; border-bottom: 1px solid var(--line-strong);
+    white-space: nowrap;
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td code { white-space: nowrap; }
+  table code { font-size: 12px; }
+
+  /* ---------- 代码块 / 引用块 ---------- */
+  pre {
+    background: var(--paper); border: 1px solid var(--line);
+    padding: 14px 18px; margin: 14px 0; overflow-x: auto;
+    font-family: var(--mono); font-size: 13px; line-height: 1.65; color: #c7d1cd;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: inherit; }
+  .callout {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--paper); padding: 12px 18px; margin: 16px 0; max-width: 52em;
+  }
+  .callout .t {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    color: var(--accent); text-transform: uppercase; display: block; margin-bottom: 4px;
+  }
+  .callout p { margin: 4px 0; font-size: 14px; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.warn .t { color: var(--warn); }
+
+  /* ---------- 证据卡 ---------- */
+  .facts { margin: 18px 0; }
+  .fact {
+    border: 1px solid var(--line); background: var(--paper);
+    padding: 14px 18px; margin-bottom: 10px;
+  }
+  .fact .ft {
+    font-weight: 600; font-size: 14.5px; margin-bottom: 4px; color: #eef1f4;
+  }
+  .fact .fd { font-size: 13.5px; color: var(--ink-dim); }
+  .fact .fd code { font-size: 12px; }
+
+  /* ---------- 标签 ---------- */
+  .tag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+    padding: 1px 7px; border: 1px solid var(--line-strong); border-radius: 3px;
+    color: var(--ink-dim); white-space: nowrap;
+  }
+  .tag.keep { color: var(--accent); border-color: var(--accent); }
+  .tag.debt { color: var(--warn); border-color: var(--warn); }
+  .tag.rec { color: var(--accent); border-color: var(--accent); }
+
+  footer {
+    border-top: 1px solid var(--line-strong); padding: 28px 0 56px;
+    color: var(--ink-faint); font-size: 12.5px; font-family: var(--mono);
+  }
+
+  @media (max-width: 900px) {
+    .frame { padding: 0 22px; }
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    aside { position: static; padding: 24px 0; }
+    aside nav { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+    aside nav a { border-left: none; padding: 3px 0; }
+    .cover h1 { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="frame">
+    <span class="kicker">Engineering Plan · memory-bank</span>
+    <h1>cap 守卫改债务制</h1>
+    <p class="sub">字符上限从「提交前置条件」改为「债务」：提交时 WARN 并由 agent 转告用户、债务由脚本现算、清理由用户另开新会话执行。AGENTS.md 例外 —— 它是硬规定，不能超，也不进债务体系。</p>
+    <div class="cover-meta">
+      <div><span class="k">状态</span><span class="v open">Open · D1/D3 已定, D2 待拍板</span></div>
+      <div><span class="k">专题主键</span><span class="v">memory-bank-cap-debt</span></div>
+      <div><span class="k">入库</span><span class="v">2026-09-30 21:12 (UTC+8)</span></div>
+      <div><span class="k">关联档案</span><span class="v">tasks/26-09-30-memory-bank-cap-debt.md</span></div>
+      <div><span class="k">前序</span><span class="v">memory-bank-token-budget (Done)</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="frame layout">
+  <aside>
+    <div class="toc-title">目录</div>
+    <nav>
+      <a href="#s1"><span class="n">01</span>背景与根因</a>
+      <a href="#s2"><span class="n">02</span>目标与非目标</a>
+      <a href="#s3"><span class="n">03</span>方案设计</a>
+      <a href="#s4"><span class="n">04</span>改动清单</a>
+      <a href="#s5"><span class="n">05</span>执行步骤</a>
+      <a href="#s6"><span class="n">06</span>验收标准</a>
+      <a href="#s7"><span class="n">07</span>边界与风险</a>
+      <a href="#s8"><span class="n">08</span>变更记录</a>
+    </nav>
+  </aside>
+
+  <main>
+
+    <!-- ================================================== 01 -->
+    <section id="s1">
+      <div class="sec-head">
+        <span class="sec-no">01</span>
+        <h2>背景与根因</h2>
+        <p class="lead">用户命题：cap 守卫在任务后期触发，此时改字数要带着满载的会话历史反复返工，token 成本巨大 —— 应改为「只提示 WARNING、不当场修改」，知识库清理另开会话。</p>
+      </div>
+
+      <div class="facts">
+        <div class="fact">
+          <div class="ft">触发面已到「每次编辑必触」</div>
+          <div class="fd">实测（<code>commands run doc.caps</code>，2026-09-30）：<code>AGENTS.md</code> <strong>7,975 / 8,000 字符，余量 25</strong>；任一此刻发生的 AGENTS.md 编辑都会被闸门拦下。其余三份同类文件的余量都很充足（commands SKILL 2,702/5,200 · memory-bank SKILL 6,347/15,000 · 包 README 1,789/6,000）—— 疼痛是 AGENTS.md 一处的结构性余量不足。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">现行处置要求「提交前砍掉一半」</div>
+          <div class="fd">2026-09-29 定调：触顶一律「精简/外迁到上限的 50%」。对 KB 主题文件这是机械外迁（切到同目录 <code>attachments/</code>、原位留指针）；对 AGENTS.md 却等于<strong>砍 3,975 字符的入口文档手术</strong>，且必须保住「常驻可见」的硬约束语义（黄金法则 / 红线 / git 硬约束）。同一句口径套在两类完全不同的操作上，是这次返工税的直接来源。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">债务记了，但清偿时机永远不对</div>
+          <div class="fd">切片 <code>memory-bank/activeContext/26-09-27-1812-commit-msg-consume-delete.md</code> 待办①写着「AGENTS.md 削薄……下次收尾时顺手做」，记于 09-27；到 09-30 实测仍是 7,975 —— 因为「收尾」恰好是全流程最贵的时刻（满载历史 + 已有多轮返工）。记账点与执行时机错配，所以债务不是没记，是<strong>记了也还不上</strong>。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">拦截面有四处，其中两处不在提交闸门里</div>
+          <div class="fd">只改提交闸门不足以解决 —— 测试侧会用同一次提交在 test.full 上再拦一次。</div>
+        </div>
+      </div>
+
+      <h3><span class="hno">1.1</span>现行拦截面盘点（2026-09-30 实测）</h3>
+      <table>
+        <tr><th>执行体</th><th>管什么</th><th>谁消费</th><th>后果</th></tr>
+        <tr>
+          <td><code>scripts/check_context_caps.py</code></td>
+          <td>IDE 注入上限（AGENTS.md + 两份 SKILL.md）+ 包内阅读预算</td>
+          <td>提交闸门（命中 <code>AGENTS.md</code> / <code>.agents/skills/</code> 才跑）+ <code>doc.caps</code></td>
+          <td>超限且本次改动命中 → rc=1，提交 STOP</td>
+        </tr>
+        <tr>
+          <td><code>check_kb_structure.check_caps</code></td>
+          <td>知识库角色 cap（含 <code>agents</code> 角色的 AGENTS.md）</td>
+          <td><strong>只经 <code>tests/test_memory_bank.py</code> 四条用例</strong>（无提交闸门接线）</td>
+          <td>收尾 DoD 必跑 test.full → 红 → 基线记不下来 → 事实上阻塞收尾</td>
+        </tr>
+        <tr>
+          <td><code>gen_active_recent.py --check</code></td>
+          <td>会话切片尺寸 + 三行头 + 命名 + 条数阈值</td>
+          <td>提交闸门（命中 <code>memory-bank/activeContext/</code>）</td>
+          <td>切片超 12,000 → 提交 STOP</td>
+        </tr>
+        <tr>
+          <td><code>gen_baseline_recent.py --check</code></td>
+          <td>基线切片尺寸（8,000）</td>
+          <td><code>kb.check</code></td>
+          <td>收尾时红 → 同一轮返工</td>
+        </tr>
+      </table>
+
+      <div class="callout">
+        <span class="t">分析结论 · 合理，但要补三件事</span>
+        <p>方向成立：cap 是文档维护问题，却被接成了提交前置条件 —— 守卫在最贵的时刻（会话尾部）索要最贵的工作（入口文档重构），还常常拦住与文档无关的提交。</p>
+        <p>补强一：<strong>债务可见性必须是派生的，且必须在提交那一刻把话交到用户手里</strong> —— agent 开不了新会话，所以「会话开始跑 <code>doc.caps</code>、在该会话首件清理」并不省成本（改动历史照样累积进同一场会话），只是把返工挪了个位置。可行路径只有一条：提交时脚本现算并 WARN → agent 把「文档数字已超标」转告用户 → <strong>由用户自行新开会话清理</strong>。</p>
+        <p>补强二：<strong>AGENTS.md 必须单列</strong> —— 它是<strong>硬规定</strong>（用户 2026-09-30 拍板）：不能超、不套 50% 收缩口径、不进债务体系；超限仍按硬闸门 STOP，与主题文件完全分开处理。</p>
+        <p>补强三：<strong>测试侧的尺寸断言必须一起降级</strong> —— 只改闸门的话，test.full 仍会红，降级不生效。</p>
+      </div>
+    </section>
+
+    <!-- ================================================== 02 -->
+    <section id="s2">
+      <div class="sec-head">
+        <span class="sec-no">02</span>
+        <h2>目标与非目标</h2>
+      </div>
+
+      <h3><span class="hno">2.1</span>目标</h3>
+      <ul>
+        <li><strong>G1 不阻塞</strong>：字符 cap 不再阻塞任何提交与收尾 —— 超限只是 WARN。</li>
+        <li><strong>G2 必然可见且可转告</strong>：债务在<strong>提交时</strong>以派生方式（现算）输出，且警告文案自带「提醒用户另开新会话清理」的处置指令；清理由<strong>用户</strong>新开一个会话执行，收口可机检。</li>
+        <li><strong>G3 AGENTS.md 硬规定不动摇</strong>：超 8,000 且本次改动命中 → 仍 STOP（不进债务通道、不套 50% 收缩口径）。</li>
+        <li><strong>G4 守卫不回退</strong>：结构类守卫（命名 / 双向一致 / 状态词 / 坏链 / 存根合法 / 条目三字段）一条不放松。</li>
+      </ul>
+
+      <h3><span class="hno">2.2</span>非目标</h3>
+      <ul>
+        <li>不抬 cap 数值 —— 2026-09-29 已全表 ×2；AGENTS.md 的 8,000 不可抬（抬了守卫就是假的，尾部照旧被截断）。</li>
+        <li>不改 KB 主题文件的 50% 外迁口径 —— 机械外迁仍是对的做法，本计划只把它从「提交前必做」挪到「清理会话做」。</li>
+        <li>不做自动清理 / 自动改写文档 —— 路由手术需要判断，脚本只负责发现与收口校验。</li>
+        <li>不在闸门里引入任何写文件副作用 —— 债务记录由收尾流程写进切片待办，不靠检查脚本动文件。</li>
+      </ul>
+    </section>
+
+    <!-- ================================================== 03 -->
+    <section id="s3">
+      <div class="sec-head">
+        <span class="sec-no">03</span>
+        <h2>方案设计</h2>
+        <p class="lead">一条严重度政策（预算型 → 债务 / 结构型 → 保持红 / AGENTS.md → 硬规定）+ 一条派生可见通道（<code>doc.caps</code> 单一入口）+ 一份清理会话规程。</p>
+      </div>
+
+      <h3><span class="hno">3.1</span>一类 cap，两种性质</h3>
+      <p>判别标准：违反之后是「<em>读起来更贵</em>」还是「<em>事实源 / 跨会话连续性被破坏</em>」。前者是预算，降级为债务；后者是结构，保持红。</p>
+      <table>
+        <tr><th>性质</th><th>条目</th><th>降级后的行为</th></tr>
+        <tr>
+          <td><span class="tag keep">硬规定 · 不降级</span></td>
+          <td><code>agents</code> 角色 = <code>AGENTS.md</code>（全库唯一）</td>
+          <td>不能超：超 8,000 且本次改动命中 → STOP；不套 50% 收缩、不进债务清单（用户 2026-09-30 拍板）</td>
+        </tr>
+        <tr>
+          <td><span class="tag debt">预算型 · 债务</span></td>
+          <td>其余角色 cap 尺寸项（<code>index</code> / <code>index-auto</code> / <code>pitfall</code> / <code>evergreen</code> / <code>reference</code> / <code>log</code> / <code>task</code> / <code>volatile</code> / <code>slice</code> / <code>baseline-slice</code>）· 两份 SKILL.md 与包内阅读预算 · 切片条数阈值</td>
+          <td>WARN，提交不拦；提交时必现并由 agent 转告用户；用户另开会话清理、<code>--strict</code> 收口</td>
+        </tr>
+        <tr>
+          <td><span class="tag keep">结构型 · 保持红</span></td>
+          <td>存根 ≤2 KB（守「内容确已外迁」，防两处权威）· 三行头元数据 · 类名与文件名 · 索引双向一致与生成物自洽 · 状态词 · 相对链接 · 条目三字段 · 切片命名定宽</td>
+          <td>照旧判红 —— 它们守的不是尺寸</td>
+        </tr>
+        <tr>
+          <td><span class="tag">本来就只有 WARN</span></td>
+          <td>下限 <code>CAP_MIN_WARN</code>（过小提示）</td>
+          <td>不动</td>
+        </tr>
+      </table>
+
+      <h3><span class="hno">3.2</span>债务的可见性通道：提交时派生输出 + 转告用户</h3>
+      <ul>
+        <li><strong>派生</strong>：债务清单每次由脚本从真实文件尺寸现算，<strong>不设手写债务表</strong> —— 手记会陈旧、会漏、会与事实分叉，而尺寸不会。</li>
+        <li><strong>单一入口</strong>：<code>doc.caps</code> 扩为三组输出（IDE 注入上限 / 阅读预算 / 知识库角色 cap）。KB 组直接调用 skill 的 <code>check_kb_structure.check_caps</code>（进程内 import，先例：<code>tests/test_memory_bank.py</code>）—— 严重度判定与遍历逻辑都留在源码单点，不在两处各写一份。<strong>AGENTS.md 不在债务清单里</strong>：它以「硬规定」行单独打印（超限即拦、也不累计进债务数）—— 它不常改，一旦改了就该顺手改到合规，而不是挂账。</li>
+        <li><strong>触发点 = 提交时</strong>（<code>ship.commit</code> 的闸门输出）：那一刻 agent 必读输出、用户就在会话另一端，信息一步到位。<strong>不挂会话开始协议</strong> —— agent 无法自开新会话，在会话里清理与在任务末尾清理没有区别（历史照样累积），挂上去只把返工换个位置。</li>
+        <li><strong>警告文案自带处置指令</strong>：输出直接写「本会话不修；请在回复中提醒用户：文档数字已超标，需另开新会话清理」—— 读到输出的人（agent）不必先查规则就知道该做什么，也把「转告」变成提交后回复的固定动作。</li>
+        <li><strong>接线</strong>：提交闸门保留现行 <code>[[gates]]</code> 条目（信息出现在提交流水里，只是不再能拦）；<code>doc.caps</code> 的 <code>run</code> 补 <code>&lt;args&gt;</code> 占位符（今天传 <code>--strict</code> 会被引擎拒绝，实测），清理会话用它收口。</li>
+      </ul>
+      <pre><code>上下文上限检查:
+  硬规定 (不降级 · 不挂账):
+    [PASS] AGENTS.md  7,975/8,000 字符 (余量 25)
+  知识库角色 cap (债务):
+    [债务] memory-bank/pitfalls/kb/xxx.md  12,430/12,000 (超 430) —— 目标 ≤ 6,000; 本会话不修
+  两份 SKILL.md / 包内阅读预算 (债务):
+    [PASS] .agents/skills/commands/SKILL.md  2,702/5,200 字符 (余量 2,498)
+
+cap 债务 1 项 —— 请在回复中提醒用户: 文档数字已超标, 需另开新会话清理
+  → 提交照常: 债务不拦提交; AGENTS.md 除外 —— 它超限即拦
+  → 清理会话收口: commands run doc.caps -- --strict (债务非空即 rc=1)</code></pre>
+      <p><code>--strict</code> 是留给<strong>清理会话</strong>的收口开关：平时谁都不会被它拦住，清理会话用它做「债务清零」的机检结论。</p>
+
+      <h3><span class="hno">3.3</span>AGENTS.md：硬规定，不进债务体系（2026-09-30 用户拍板）</h3>
+      <p>AGENTS.md 的 8,000 与其他 cap 性质不同：越过它发生的是 <strong>IDE 注入截断</strong>（<code>slice(0, 8000)</code>，尾部对模型真不可见），不是「读起来贵一点」。用户定调三条：</p>
+      <ul>
+        <li><strong>不能超</strong> —— 超 8,000 且本次改动命中 → 仍 STOP，照旧拦提交（硬闸门不降级）。</li>
+        <li><strong>不套 50% 收缩动作</strong> —— 它是常驻注入的入口文档，内容「外迁」= 硬约束降为按需读，是设计回退；削薄只需<strong>回到 ≤ 8,000</strong>，并按需留出能容纳一次常规追加的余量，不预设 50% / 90% 之类的比例。</li>
+        <li><strong>不进债务体系</strong> —— 它不常改：一旦改了就该顺手改到合规，而不是挂账等下一次会话；<code>doc.caps</code> 里它单列「硬规定」行，不累计进债务数。</li>
+      </ul>
+      <p>唯一保留的宽松处：判据仍是「<strong>本次改动命中才拦</strong>」—— 避免一个陈旧超限的 AGENTS.md 去拦无关提交（那种情况只报告，不拦）。</p>
+
+      <h3><span class="hno">3.4</span>目标值口径修正：AGENTS.md 不设比例，KB 角色维持 50%</h3>
+      <p>2026-09-29 的「全表 50%」把两类操作混同了。修正为按性质分档（AGENTS.md 已由用户定调为硬规定，不设比例）：</p>
+      <table>
+        <tr><th>角色</th><th>清理目标</th><th>理由</th></tr>
+        <tr>
+          <td>KB 角色（主题 / 切片 / 流水 / 档案 …）</td>
+          <td>cap × 50%（<code>TRIM_KEEP</code> 不变）</td>
+          <td>机械外迁到 <code>attachments/</code>，一次留足半桶便宜且无风险</td>
+        </tr>
+        <tr>
+          <td><code>agents</code>（AGENTS.md）</td>
+          <td>不设比例 —— 回到 <strong>≤ 8,000</strong> 即可</td>
+          <td>硬规定 + 不常改：内容「外迁」= 硬约束降为按需读（设计回退），所以不套 50%；也不入债务清单，超限走硬闸门</td>
+        </tr>
+      </table>
+
+      <h3><span class="hno">3.5</span>清理会话规程：由「用户」开启，agent 只负责转告</h3>
+      <ol>
+        <li><strong>谁开</strong>：<strong>用户</strong> —— agent 无法新建会话，这是整条链的硬边界。agent 的职责止于「在提交后的回复里转告超标事实 + 建议另开会话清理」，<strong>不在本会话动文档</strong>。</li>
+        <li><strong>触发</strong>：提交时输出出现债务行 → agent 转告 → 用户择机新开一个会话专门清债。</li>
+        <li><strong>清理会话的起手</strong>：跑 <code>commands run doc.caps</code> 拿当前债务清单（不需要谁转抄，脚本现算），按清单逐项外迁 / 精简。</li>
+        <li><strong>范围</strong>：清空全部债务行（KB 角色按 50% 外迁）。AGENTS.md <strong>不在债务清单里</strong> —— 它若超限由硬闸门拦下，同一次会话内就地削薄回 ≤ 8,000（路由手术：细节下沉 <code>memory-bank/README.md</code> / <code>conventions/</code> / <code>pitfalls/</code>，原位留指针）。</li>
+        <li><strong>收口</strong>：<code>commands run doc.caps -- --strict</code> 绿 = 债务清零的机检结论。</li>
+        <li><strong>升级条款</strong>：若债务的成因是机制本身（如余量结构性不足、口径不可执行），清理会话就地升级为设计任务 —— 本计划即首例（AGENTS.md 余量 25 逼出的入口文档削薄 + 「50% 对入口文档不可执行」的口径修正）。</li>
+      </ol>
+
+      <h3><span class="hno">3.6</span>债务的记录点</h3>
+      <ul>
+        <li><strong>发现</strong>由派生通道负责：<code>doc.caps</code> 在每次提交时现算输出，任何时候也可手工跑它拿全量清单 —— 债务清单不落盘、不手抄，故永不陈旧。</li>
+        <li><strong>转告</strong>由收尾动作负责：agent 在提交后的回复里把债务事实告诉用户（警告文案自带该指令，见 §3.2）。</li>
+        <li><strong>背景</strong>（可选、一行）由收尾 DoD 负责：顺手在 <code>activeContext</code> 切片待办记一行（文件 / 当前值 / 上限 / 目标值 + 成因），好让用户开清理会话时接手有上下文。手写侧只承载判断，不承担发现职责。</li>
+        <li>两者刻意分开：手写的一侧只承载判断，不承担发现职责。</li>
+      </ul>
+
+      <h3><span class="hno">3.7</span>决策点（D1 / D3 已定，D2 待拍板）</h3>
+      <table>
+        <tr><th>#</th><th>决策</th><th>选项</th><th>推荐</th></tr>
+        <tr>
+          <td>D1</td>
+          <td>AGENTS.md 清理目标</td>
+          <td colspan="2"><strong>已定（用户 2026-09-30 拍板）</strong>：AGENTS.md 是硬规定 —— 不能超、<strong>不套 50% 收缩动作</strong>、也不进债务体系；削薄只需回到 ≤ 8,000（按需留一次追加余量）</td>
+        </tr>
+        <tr>
+          <td>D2</td>
+          <td>切片条数阈值（<code>SLICE_COUNT_LIMIT=70</code>）</td>
+          <td>① 归入债务通道（WARN）　② 保持 pytest 红</td>
+          <td><span class="tag rec">① 待拍板</span> 违反后只是「该蒸馏没蒸馏」，清理动作与尺寸债同为一场会话的活；且该阈值曾两次校准、留红会继续逼出「违规归档」</td>
+        </tr>
+        <tr>
+          <td>D3</td>
+          <td>AGENTS.md 的拦法</td>
+          <td colspan="2"><strong>已定（用户 2026-09-30 拍板）</strong>：不设「1.25× 止损线」—— AGENTS.md 恒为硬闸门（超 8,000 且本次改动命中即拦），不需要中间档</td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- ================================================== 04 -->
+    <section id="s4">
+      <div class="sec-head">
+        <span class="sec-no">04</span>
+        <h2>改动清单</h2>
+      </div>
+
+      <table>
+        <tr><th>文件</th><th>改动</th><th>要点</th></tr>
+        <tr>
+          <td><code>scripts/check_context_caps.py</code></td>
+          <td>SKILL / 阅读预算超限降级为债务；<strong>AGENTS.md 保持 STOP（硬规定）</strong>；追加 KB 角色 cap 组；加汇总行；<code>--strict</code> 语义改为「债务非空即 rc=1」</td>
+          <td>KB 组调用 skill 的 <code>check_kb_structure.check_caps</code>（零逻辑重复），但<strong>剔除 <code>agents</code> 角色</strong>（它走「硬规定」行）；rc=1 只剩「AGENTS.md 超 8,000 且本次改动命中」</td>
+        </tr>
+        <tr>
+          <td><code>.agents/skills/memory-bank/scripts/check_kb_structure.py</code></td>
+          <td>除 <code>agents</code> 外的角色尺寸超限从 <code>problems</code> 移入 <code>warns</code>；<strong><code>agents</code>（AGENTS.md）尺寸保持 <code>problems</code></strong></td>
+          <td>严重度在源码单点决定，两个消费者（测试 / <code>doc.caps</code>）不再各判一次；AGENTS.md 的硬约束语义不因本次改造动摇</td>
+        </tr>
+        <tr>
+          <td><code>gen_active_recent.py</code> · <code>gen_baseline_recent.py</code></td>
+          <td>切片尺寸超限 → warn 通道；条数阈值 → warn（D2）；命名 / 三行头保持 problem</td>
+          <td><code>--check</code> 退出码不再因尺寸红</td>
+        </tr>
+        <tr>
+          <td><code>tests/test_memory_bank.py</code></td>
+          <td>删除对 KB 角色<strong>现行文档尺寸</strong>的断言（含切片条数，按 D2）；替换为「债务可发现性」断言（tmp 造超限文件 → 必须报成 warn）；<strong>保留 AGENTS.md ≤ 8,000 的硬断言</strong>；结构断言与 cap 表漂移守卫不动</td>
+          <td>头部「## 测试计划」清单必须同步（项目硬性要求）</td>
+        </tr>
+        <tr>
+          <td><code>.commands/doc/config.toml</code></td>
+          <td><code>doc.caps</code> 的 <code>run</code> 补 <code>&lt;args&gt;</code>；<code>when</code> / <code>note</code> 改写</td>
+          <td>今天传 <code>--strict</code> 会被引擎拒绝（实测），清理会话收口依赖它</td>
+        </tr>
+        <tr>
+          <td><code>.commands/my-commit-flow/.my-commit-flow.toml</code></td>
+          <td>闸门 note 改写：债务不再 STOP；唯一例外 = AGENTS.md 超 8,000 且本次改动命中（硬规定照拦）</td>
+          <td>闸门条目保留，信息继续出现在提交流水里</td>
+        </tr>
+        <tr>
+          <td><code>.agents/skills/memory-bank/SKILL.md</code></td>
+          <td>cap 表注的触顶处置改为债务制 + <code>agents</code> 例外注明「硬规定：超限即拦、不套 50% 收缩、不入债务清单」；收尾 DoD 加一行「提交输出出现 cap 债务 → 在回复中提醒用户另开新会话清理，不在本会话修」</td>
+          <td>余量 8,653，改动无压力；<strong>会话开始协议不动</strong>（agent 开不了新会话，挂那里等于把返工留在同一场会话）</td>
+        </tr>
+        <tr>
+          <td><code>AGENTS.md</code></td>
+          <td><strong>无必改项</strong>（会话开始协议不写入）。削薄降为<strong>独立清理项</strong>：7,975 → 回到 ≤ 8,000（不套 50%），并入任意一次用户开启的清理会话即可</td>
+          <td>与本计划<strong>解耦</strong>：守卫改造不再依赖 AGENTS.md 的余量；但它仍是硬规定 —— 超 8,000 且本次改动命中会被拦</td>
+        </tr>
+      </table>
+
+      <h3><span class="hno">4.1</span>附带发现（同一批 cap 资产，建议实施会话随手收口）</h3>
+      <ul>
+        <li><code>TASK_LOG_CAP = 16000</code>（<code>_common.py:66</code>）<strong>无任何消费者</strong> —— 声明了却没人查的 cap，是「执行力不均」的活证据。</li>
+        <li><code>ALL_ROLES = DEFAULT_ROLES + ("volatile", "task")</code> 是重复项（前者已含后两者）。</li>
+        <li>两者若不属于实施会话范围，则按纪律入池 <code>memory-bank/issues/</code>，不顺手改。</li>
+      </ul>
+    </section>
+
+    <!-- ================================================== 05 -->
+    <section id="s5">
+      <div class="sec-head">
+        <span class="sec-no">05</span>
+        <h2>执行步骤</h2>
+        <p class="lead">顺序敏感：先降级守卫（AGENTS.md 除外），再回写协议口径，最后索引收口。AGENTS.md 削薄是<strong>独立清理项</strong>（可并入任意一次用户开启的清理会话），不再阻塞本场。</p>
+      </div>
+
+      <ol>
+        <li><strong>同步</strong>：<code>commands run my-commit-flow.sync</code>，确认在远端最新基线上。</li>
+        <li><strong>降级守卫（AGENTS.md 除外）</strong>：改 <code>check_context_caps.py</code> + <code>check_kb_structure.py</code> + 两个切片脚本 + 测试断言 + 闸门 note + <code>doc.caps</code> 参数口 —— 做完后，<strong>除 AGENTS.md 外的</strong>任何尺寸都不再拦提交。</li>
+        <li><strong>机检</strong>：<code>commands run test.quick</code> / <code>test.pkg</code> 绿；用 tmp 超限样例验证「报成债务而不是红」。</li>
+        <li><strong>协议回写</strong>：<code>memory-bank/SKILL.md</code>（cap 表注 + 收尾 DoD 一行：债务 → 提醒用户另开会话清理）。<strong>会话开始协议与 <code>AGENTS.md</code> 均不动</strong>。</li>
+        <li><strong>索引与收口</strong>：<code>commands run kb.index</code> 重建；<code>commands run doc.caps -- --strict</code>（应绿）· <code>commands run kb.check</code> · <code>doc.links</code> · <code>doc.drift</code> 全绿。</li>
+        <li><strong>收尾 DoD</strong>：切片 / 基线（<code>commands run test.full</code> 实测数字）/ 事实回写 / 新坑入库（本场可能产出「债务通道」相关的坑档）。</li>
+        <li><strong>AGENTS.md 削薄（独立清理项，可另场执行）</strong>：7,975 → 回到 ≤ 8,000（不套 50%）—— 手法 = 路由手术：细节下沉 <code>memory-bank/README.md</code> / <code>conventions/</code> / <code>pitfalls/</code>，原位留指针；<strong>必须仍在 AGENTS.md 的条目</strong>：7 条黄金法则、红线、git 硬约束三处纪律、提交口径 —— 这些是常驻可见性语义，不许下沉。它不再与守卫改造耦合，并入任意一次用户开启的清理会话即可。</li>
+      </ol>
+    </section>
+
+    <!-- ================================================== 06 -->
+    <section id="s6">
+      <div class="sec-head">
+        <span class="sec-no">06</span>
+        <h2>验收标准</h2>
+      </div>
+      <table>
+        <tr><th>#</th><th>判据</th><th>怎么验</th></tr>
+        <tr><td>AC-1</td><td>尺寸超限不再阻塞提交</td><td>把某 KB 文档推超限（或 tmp 样例）→ 提交路径照常走完，输出含债务行，且该行含「请在回复中提醒用户：需另开新会话清理」指令；<code>doc.caps</code> rc=0</td></tr>
+        <tr><td>AC-2</td><td>债务视图完整且单点</td><td><code>doc.caps</code> 三组齐备；KB 组条目 == <code>check_kb_structure.check_caps</code> 的 warn 输出（同一单点，无第二份遍历逻辑）</td></tr>
+        <tr><td>AC-3</td><td>清理会话可收口</td><td>债务非空时 <code>doc.caps -- --strict</code> rc=1；清零后 rc=0</td></tr>
+        <tr><td>AC-4</td><td>AGENTS.md 硬规定不降级</td><td>AGENTS.md 造 8,001+ 且本次改动命中 → <code>doc.caps</code> rc=1、提交路径 STOP；未改动时不拦（只报告）</td></tr>
+        <tr><td>AC-5</td><td>结构守卫零回退</td><td>tmp 样例验证：命名 / 双向一致 / 状态词 / 坏链 / 存根 ≤2 KB / 条目三字段仍能判红</td></tr>
+        <tr><td>AC-6</td><td>测试与守卫全绿</td><td><code>test.full</code> + <code>test.pkg</code> + <code>kb.check</code> + <code>doc.links</code> + <code>doc.drift</code> 全绿，并落新基线切片</td></tr>
+        <tr><td>AC-7</td><td>尺寸断言已退出阻塞集</td><td>把任一 live 文档推超限（临时）→ pytest 不因它红；同时该超限必须出现在 <code>doc.caps</code> 债务行里</td></tr>
+        <tr><td>AC-8</td><td>AGENTS.md 达标且语义未损<br>（独立清理项，可另场）</td><td>实测 ≤ 8,000（不套 50%）；人工对照清单核 7 条黄金法则 / 红线 / git 三处纪律 / 提交口径仍在文件内</td></tr>
+      </table>
+    </section>
+
+    <!-- ================================================== 07 -->
+    <section id="s7">
+      <div class="sec-head">
+        <span class="sec-no">07</span>
+        <h2>边界与风险</h2>
+      </div>
+
+      <div class="facts">
+        <div class="fact">
+          <div class="ft">风险 1（最大）：warn 了但没人清（或 agent 不转告）</div>
+          <div class="fd">缓解：提交时派生输出（现算，不依赖记忆）+ 警告文案自带「提醒用户另开新会话清理」的指令 + 收尾 DoD 把「转告」列为固定动作。代价：债务到期日取决于用户何时开清理会话 —— 这一族只有阅读预算与加载 token 成本、无截断，晚几天无实质危害。AGENTS.md 不在此风险内 —— 它保持硬拦，不带债过夜。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">风险 2：「守卫不靠自觉」原则被削弱</div>
+          <div class="fd">本计划换掉的是<strong>不可便宜强制</strong>的不变量（文件永远小），换成<strong>可强制</strong>的不变量（债务必然可见 + 可机检收口）；AGENTS.md 的硬拦不动，恰好是这个「可强制」体系不必覆盖的那一类。守卫的牙齿从「拦提交」移到「现身 + 收口」，不是放弃纪律。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">风险 3：尺寸失控无人知</div>
+          <div class="fd">由 <code>doc.caps</code> 在每次<strong>提交</strong>时承担（任何时候也可手工跑它拿全量债务清单）；输出保留「本次改动命中」标记，让人区分「刚加的债」与「存量债」。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">风险 4：<code>--strict</code> 被误挂回闸门</div>
+          <div class="fd">会在闸门 note 里钉死「闸门只用默认模式」；<code>--strict</code> 只许出现在清理会话的收口命令里。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">风险 5：AGENTS.md 削薄把硬约束下沉过头</div>
+          <div class="fd">由 AC-8 的「必须仍在 AGENTS.md」清单钉住；下沉只针对解释性细节，纪律条目留原位留指针。</div>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <span class="t">明确的非目标边界</span>
+        <p>不做自动清理；不再抬 cap 数值；不改结构守卫；不给闸门加写文件副作用。任何超出这四条的动作都需要新计划。</p>
+      </div>
+    </section>
+
+    <!-- ================================================== 08 -->
+    <section id="s8">
+      <div class="sec-head">
+        <span class="sec-no">08</span>
+        <h2>变更记录</h2>
+      </div>
+      <table>
+        <tr><th>时间</th><th>版本</th><th>变更</th></tr>
+        <tr><td>26-09-30-2112</td><td>初版</td><td>分析 + 方案成形：债务制（WARN + 派生可见 + 独立清理会话），AGENTS.md 单列 90% 目标与 1.25× 止损线，三个决策点待拍板</td></tr>
+        <tr><td>26-09-30-2136</td><td>用户拍板 D1 / D3</td><td>AGENTS.md = <strong>硬规定</strong>：不能超、不套 50% 收缩动作、不进债务体系（不常改）；取消 1.25× 止损线（恒为硬闸门，无需中间档）；削薄目标改为「回到 ≤ 8,000」。D2（切片条数阈值去留）仍待拍板</td></tr>
+        <tr><td>26-09-30-2159</td><td>用户修正债务通道的触发点</td><td>撤销「会话开始跑 <code>doc.caps</code> 并在该会话首件清理」—— agent 无法新建会话，清理留在同一场会话等于没省（历史照样累积）。改为：<strong>提交时 WARN + 警告文案自带「提醒用户另开新会话清理」+ 用户自行开会话清理</strong>。会话开始协议与 <code>AGENTS.md</code> 均不动；AGENTS.md 削薄降为独立清理项（与守卫改造解耦）</td></tr>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <div class="frame">auto-qb · memory-bank/plans/26-09-30-2112-plan-memory-bank-cap-debt.html · 专题 memory-bank-cap-debt · D1/D3 已定, D2 待拍板</div>
+</footer>
+
+</body>
+</html>

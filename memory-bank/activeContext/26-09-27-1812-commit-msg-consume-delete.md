@@ -19,8 +19,9 @@
 
 ## 待办(下一步从这里接)
 
-1. **AGENTS.md 削薄**: doc.caps 建议留 10% 余量削到 7200, 本轮压缩措辞后仅勉强过 8000 上限
-   (余量个位数), 下次收尾时顺手做。
+1. ~~**AGENTS.md 削薄**~~ → **已移交专题 `memory-bank-cap-debt`** (2026-09-30): 「下次收尾时顺手做」
+   被证伪 —— 收尾恰是最贵时刻, 债务记了 3 天未清偿; 现改为「cap 守卫债务制 + 独立清理会话」,
+   计划见 `plans/26-09-30-2112-plan-memory-bank-cap-debt.html`, 本项不再由本切片跟踪。
 2. **my-commit-flow.sync 远端真值探测疑似写死远端名**: 本 clone 远端叫 `origin`(Gitee 主线),
    sync 报「拿不到远端真值」但手动 `git ls-remote origin develop` 成功 —— 疑为脚本按 `gitee`
    探测, 待核实; 若属实属计划外缺陷, 应入池 issue 而非顺手改。
