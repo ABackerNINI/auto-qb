@@ -6,8 +6,8 @@
  *   - 匹配用 e.code 物理键位 + 固定修饰序 Ctrl,Alt,Shift,Meta 归一化串, 不用布局相关的 e.key
  *     (录制/重绑在任意布局下可往返; 显示名由 code 映射, 极端布局差异由"可重绑"兜底)。
  *   - 输入态屏蔽: isComposing/keyCode 229 双保险 -> 输入元素(input/textarea/select/contenteditable)
- *     -> 模态层(任一浮层/对话框打开时列表键位一律失效); 另有 repeat / 纯修饰键 / defaultPrevented
- *     三道前置拦截。
+ *     -> 模态层(任一浮层/对话框打开时列表键位一律失效); 另有 repeat(默认丢弃, 仅标记条目
+ *     放行长按连发) / 纯修饰键 / defaultPrevented 三道前置拦截。
  *   - Esc 是唯一固定键: 归 lifecycle.js 既有退栈链(FIX-07), 引擎永不接(监听注册序也排在其后,
  *     双保险)。Delete 键是注册表**外**的"额外删除操作", 引擎直连 _deleteFlow(§08 决策 v4:
  *     删除双入口, 不占键表槽位、不进面板改键列表)。
@@ -103,8 +103,10 @@ function kbDisplayName(serial) {
 const KB_DEF_RE = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$/;
 
 /* ---------------- 动作注册表(单一事实源) ----------------
- * 条目形状: { id, group, label, def, scope, danger?, fixed?, run }
+ * 条目形状: { id, group, label, def, scope, danger?, fixed?, repeat?, run }
  *   def  = 默认键位归一化串; "" = 默认不绑定(空位, 可被自定义); fixed = 不可改键(Esc)。
+ *   repeat = 长按连发: e.repeat 自动重复事件默认被引擎丢弃, 标记后放行(只给光标/选择扩展
+ *   上下键族 —— 每按一次就发一条后端命令的键位(队列移动)不开, 免得长按刷爆命令)。
  *   scope = global(任何非输入态) | list(三数据视图) | drawer(抽屉内) | settings(设置页)
  *           | modal(模态层内, 本期无条目, 引擎已留位)。
  *   danger = 危险档(§08 清单): 键盘路径必经确认框, 面板行内标 WARN; 危险档默认键一律二键组合。
@@ -144,10 +146,10 @@ const AQB_SHORTCUT_DEFS = [
     run: (vm) => vm.openSpeedAt(null, "up") },
   // ---- B · 光标与导航(追剧页走 剧/集 单元; 辅种页只走组行线性链, 成员行 vNext, §08 决策②) ----
   { id: "cursor-up", group: "光标与导航", label: "光标上移一行",
-    def: "ArrowUp", scope: "list",
+    def: "ArrowUp", scope: "list", repeat: true,
     run: (vm) => vm._kbMove(-1) },
   { id: "cursor-down", group: "光标与导航", label: "光标下移一行",
-    def: "ArrowDown", scope: "list",
+    def: "ArrowDown", scope: "list", repeat: true,
     run: (vm) => vm._kbMove(1) },
   { id: "row-expand", group: "光标与导航", label: "展开当前行",
     def: "ArrowRight", scope: "list",
@@ -175,10 +177,10 @@ const AQB_SHORTCUT_DEFS = [
     def: "Space", scope: "list",
     run: (vm) => vm._kbToggleSelect() },
   { id: "extend-up", group: "选择", label: "向上扩展选择",
-    def: "Shift+ArrowUp", scope: "list",
+    def: "Shift+ArrowUp", scope: "list", repeat: true,
     run: (vm) => vm._kbExtend(-1) },
   { id: "extend-down", group: "选择", label: "向下扩展选择",
-    def: "Shift+ArrowDown", scope: "list",
+    def: "Shift+ArrowDown", scope: "list", repeat: true,
     run: (vm) => vm._kbExtend(1) },
   { id: "select-all", group: "选择", label: "全选当前视图",
     def: "Ctrl+KeyA", scope: "list",
@@ -394,9 +396,9 @@ window.AQB_SHORTCUTS = {
       if (e.defaultPrevented) return;                  // 多 handler 礼仪: 先到先得
       if (e.isComposing || e.keyCode === 229) return;  // IME 组合期双保险(§3.4)
       if (KB_MODIFIER_CODES.has(e.code)) return;       // 纯修饰键不判定
-      if (e.repeat) return;                            // 长按自动重复一律不吃
       if (!this.authOk) return;                        // 登录遮罩期不响应
       const item = this._kbTable().get(kbSerializeEvent(e));
+      if (e.repeat && !(item && item.repeat)) return;  // 长按自动重复默认丢弃; repeat 条目(上下键族)放行连发
       const t = e.target;
       const inInput = !!(t && t.closest && t.closest("input, textarea, select, [contenteditable]"));
       if (!item) {

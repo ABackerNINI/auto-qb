@@ -21,6 +21,8 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   引擎 keydown 注册在 lifecycle.js Esc 退栈链之后且 unmounted 撤除
 - test_engine_input_suppression: IME 双保险 / defaultPrevented / repeat / 纯修饰键 /
   输入元素屏蔽 / Escape 早退(引擎永不接 Esc) 六道拦截齐全
+- test_arrow_repeat_continuous: 长按连发只给上下键族 —— 引擎 repeat 拦截放行标记条目,
+  注册表 repeat 标记恰为 cursor-up/down + extend-up/down 且 scope=list
 - test_delete_direct_outside_registry: 注册表无 def="Delete" 条目; 引擎 Delete 直连 _kbDelete;
   _kbDelete 走 _deleteFlow(与批量浮条同链, 确认框 + HR 点名不可绕过)
 - test_danger_kbact_has_confirm: _kbAct 对 recheck / reannounce 先 confirmDialog 再 _actCore
@@ -81,6 +83,7 @@ def _registry() -> list[dict]:
             "danger": 'danger: true' in chunk,
             "fixed": 'fixed: true' in chunk,
             "inputSafe": 'inputSafe: true' in chunk,
+            "repeat": 'repeat: true' in chunk,
             "run_null": "run: null" in chunk,
             "runs": re.findall(r"run: \(vm\) => vm\.(\w+)\(", chunk),
         }
@@ -226,6 +229,18 @@ def test_engine_input_suppression() -> None:
         ("_kbScope()", "作用域判定(非焦点页不串扰, W1 验收口径)"),
     ]:
         assert needle in eng, f"shortcuts.js 缺引擎拦截: {why}"
+
+
+def test_arrow_repeat_continuous() -> None:
+    """长按连发(2026-09-30): 上下键族按住不动连续触发, 其余键位自动重复仍一律丢弃"""
+    eng = _read("shortcuts.js")
+    assert "e.repeat && !(item && item.repeat)" in eng, ("引擎必须保留 repeat 拦截且只放行标记条目(逐键查询后判定)")
+    items = {it["id"]: it for it in _registry()}
+    expected = {"cursor-up", "cursor-down", "extend-up", "extend-down"}
+    marked = {tid for tid, it in items.items() if it["repeat"]}
+    assert marked == expected, f"repeat 标记漂移: 多出 {marked - expected} / 缺 {expected - marked}(每按一次发一条后端命令的键位不许开连发)"
+    for tid in sorted(expected):
+        assert items[tid]["scope"] == "list", f"{tid} repeat 条目必须 list 作用域(连发不该越过输入态/浮层屏蔽)"
 
 
 def test_delete_direct_outside_registry() -> None:
