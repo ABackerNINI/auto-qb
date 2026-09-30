@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="kernel-module-refactor">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-30-1819">
+<meta name="doc-updated" content="26-09-30-1819">
+<meta name="doc-refs" content="26-09-30-1751-plan-hot-reload-simplify.html,26-09-20-0234-webui-decoupling-plan.html,26-09-15-1124-backend-file-split-plan.html">
+<title>计划 · QbManager 内核化重构 — 微内核 + 插件式模块</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --paper: #14181d;
+    --paper-2: #181d23;
+    --ink: #d9dee3;
+    --muted: #8b949e;
+    --faint: #6b7480;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #7ab3c4;
+    --accent-soft: rgba(122,179,196,.13);
+    --warn: #c9a86a;
+    --disp: "Bahnschrift", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --body: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* ---------- 布局: 左侧 sticky TOC + 主画布 ---------- */
+  .frame { display: flex; max-width: 1280px; margin: 0 auto; }
+  nav.toc {
+    flex: 0 0 224px;
+    position: sticky; top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    padding: 44px 20px 40px 28px;
+    border-right: 1px solid var(--hairline);
+    overflow-y: auto;
+  }
+  nav.toc .toc-kicker {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .14em;
+    color: var(--faint); text-transform: uppercase; margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--muted); text-decoration: none;
+    font-size: 12.5px; line-height: 1.5; padding: 4.5px 0;
+  }
+  nav.toc a .n { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-right: 8px; }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc .toc-meta { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--hairline); }
+  nav.toc .toc-meta div { font-family: var(--mono); font-size: 10.5px; color: var(--faint); line-height: 1.9; }
+  nav.toc .toc-meta b { color: var(--muted); font-weight: 400; }
+  main { flex: 1; min-width: 0; padding: 0 56px 90px; }
+  @media (max-width: 1080px) {
+    nav.toc { display: none; }
+    main { padding: 0 28px 70px; }
+  }
+  /* ---------- 封面 ---------- */
+  header.cover { padding: 64px 0 40px; border-bottom: 1px solid var(--hairline-strong); }
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+  }
+  h1 {
+    font-family: var(--disp); font-weight: 600;
+    font-size: 40px; line-height: 1.16; letter-spacing: -.02em;
+    max-width: 20em;
+  }
+  .subtitle { margin-top: 14px; font-size: 16px; color: var(--muted); max-width: 46em; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 28px;
+    margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--hairline);
+  }
+  .meta-row div { font-family: var(--mono); font-size: 11px; color: var(--faint); line-height: 1.7; }
+  .meta-row b { display: block; color: var(--ink); font-weight: 400; font-size: 12px; }
+  .lede {
+    margin-top: 34px; font-size: 16.5px; line-height: 1.75; color: var(--ink);
+    max-width: 62em;
+  }
+  .lede em { font-style: normal; color: var(--accent); }
+  /* ---------- 章节 ---------- */
+  section { padding-top: 56px; }
+  section > .sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+  section > .sec-head .no {
+    font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: .1em;
+  }
+  h2 {
+    font-family: var(--disp); font-weight: 600; font-size: 25px;
+    letter-spacing: -.01em; line-height: 1.2;
+  }
+  h3 {
+    font-family: var(--disp); font-weight: 600; font-size: 16.5px;
+    margin: 34px 0 10px; color: var(--ink);
+  }
+  h3 .h3n { font-family: var(--mono); font-size: 11.5px; color: var(--accent); margin-right: 10px; font-weight: 400; }
+  p { max-width: 66em; margin: 12px 0; color: var(--ink); }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  strong { font-weight: 600; }
+  a { color: var(--accent); text-decoration: none; }
+  ul, ol { margin: 10px 0 14px; padding-left: 1.5em; max-width: 64em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--faint); }
+  code {
+    font-family: var(--mono); font-size: .86em;
+    background: var(--paper-2); border: 1px solid var(--hairline);
+    padding: 1px 5px; border-radius: 3px; color: var(--ink);
+  }
+  /* ---------- 表格 ---------- */
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 18px 0 8px; font-size: 13px; line-height: 1.6;
+  }
+  th {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 400;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+    text-align: left; padding: 7px 12px 7px 0;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+  td .dim { color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  .tbl-note { font-size: 12px; color: var(--faint); margin-top: 6px; }
+  /* ---------- 代码块 ---------- */
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    background: var(--paper); border: 1px solid var(--hairline);
+    padding: 18px 20px; overflow-x: auto; margin: 16px 0;
+    color: var(--ink);
+  }
+  pre .cm { color: var(--faint); }
+  pre .kw { color: var(--accent); }
+  pre .st { color: var(--warn); }
+  /* ---------- callout ---------- */
+  .note {
+    border: 1px solid var(--hairline); border-left: 2px solid var(--accent);
+    background: var(--paper); padding: 14px 18px; margin: 18px 0; max-width: 64em;
+  }
+  .note .t {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
+  .note p { margin: 4px 0; font-size: 13.5px; }
+  /* ---------- 相位图 ---------- */
+  .diagram { margin: 22px 0 6px; border: 1px solid var(--hairline); background: var(--paper); padding: 10px; }
+  .diagram svg { display: block; width: 100%; height: auto; }
+  .diagram .cap { font-family: var(--mono); font-size: 10.5px; color: var(--faint); padding: 8px 6px 2px; letter-spacing: .06em; }
+  /* ---------- 阶段卡(非卡片墙: 顺序编号的排版段落) ---------- */
+  .phase { border-top: 1px solid var(--hairline-strong); padding: 26px 0 8px; margin-top: 26px; }
+  .phase .ph-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .phase .ph-no {
+    font-family: var(--mono); font-size: 12px; color: var(--bg);
+    background: var(--accent); padding: 2px 8px; letter-spacing: .08em;
+  }
+  .phase h3 { margin: 0; font-size: 18px; }
+  .phase .ph-sub { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+  .phase .ph-sub b { color: var(--ink); font-weight: 500; }
+  /* ---------- 决策点 ---------- */
+  .decision { border-top: 1px solid var(--hairline); padding: 18px 0 4px; }
+  .decision .d-no { font-family: var(--mono); font-size: 11px; color: var(--accent); letter-spacing: .1em; }
+  .decision .d-q { font-weight: 600; margin: 4px 0 4px; }
+  .decision p { font-size: 13.5px; margin: 4px 0; }
+  .decision .rec { color: var(--muted); font-size: 13px; }
+  .decision .rec b { color: var(--ink); font-weight: 600; }
+  /* ---------- 尾部 ---------- */
+  .colophon {
+    margin-top: 70px; padding-top: 22px; border-top: 1px solid var(--hairline-strong);
+    font-family: var(--mono); font-size: 11px; color: var(--faint); line-height: 2;
+  }
+  section { scroll-margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<nav class="toc">
+  <div class="toc-kicker">Contents</div>
+  <a href="#s01"><span class="n">01</span>背景与问题定性</a>
+  <a href="#s02"><span class="n">02</span>这套思路的学名</a>
+  <a href="#s03"><span class="n">03</span>目标模型: 三层结构</a>
+  <a href="#s04"><span class="n">04</span>模块契约与事件相位</a>
+  <a href="#s05"><span class="n">05</span>职责搬迁对照</a>
+  <a href="#s06"><span class="n">06</span>分段实施 P0–P6</a>
+  <a href="#s07"><span class="n">07</span>不变量与兼容策略</a>
+  <a href="#s08"><span class="n">08</span>风险与代价</a>
+  <a href="#s09"><span class="n">09</span>决策点清单</a>
+  <div class="toc-meta">
+    <div>status <b>Open 待拍板</b></div>
+    <div>topic <b>kernel-module-refactor</b></div>
+    <div>added <b>26-09-30-1819</b></div>
+    <div>refs <b>hot-reload-simplify</b></div>
+    <div style="margin-top:6px">拍板后本件冻结<br>执行滚动进 tasks/</div>
+  </div>
+</nav>
+
+<main>
+
+<header class="cover">
+  <div class="kicker">Plan · kernel-module-refactor · 只计划不改代码</div>
+  <h1>QbManager 内核化重构<br>微内核 + 插件式模块</h1>
+  <div class="subtitle">把 mixin / 日志 / 通知 / qB 客户端 / Web 服务 / 任务队列与规则 / HR / 配置 / WebUI / 托盘 / 状态落盘从 QbManager 中聚拢为自治模块, 由统一宿主调度 —— 宿主只知「何时」, 不知「何事」。</div>
+  <div class="meta-row">
+    <div>状态<b>Open · 待拍板</b></div>
+    <div>added<b>26-09-30-1819</b></div>
+    <div>专题<b>kernel-module-refactor</b></div>
+    <div>关联<b>26-09-30-1751 hot-reload-simplify</b></div>
+    <div>勘察基线<b>fa54f02b · src 27,090 行</b></div>
+  </div>
+  <p class="lede">现状: <code>QbManager</code> 以 9 个 mixin 多重继承组合, 本体 958 行, 连同 mixin 合计约 3,300 行共享一个 <code>self</code> 命名空间; 表现层构建器、规则引擎、状态持久化、连接管理、热重载分派全部住在核心类里。目标: 抽象出一份<strong>通用模块契约</strong>(生命周期 + 配置认领 + 事件相位), 业务各自成模块, QbManager 瘦身为纯调度内核 —— 这套结构的学名是<em>微内核架构 (Microkernel / Plug-in)</em>, 成熟参照为 Home Assistant 的「hass 上下文 + 集成生命周期」与 Spring 的 ApplicationContext / @RefreshScope。本计划与「热重载简化」计划同构: 其方向一「统一挂载口」协议被本计划的模块契约整体吸收。</p>
+</header>
+
+<!-- ============================================================ 01 -->
+<section id="s01">
+  <div class="sec-head"><span class="no">01</span><h2>背景与问题定性</h2></div>
+
+  <h3><span class="h3n">1.1</span>现状盘点 (勘察基线 fa54f02b, 数字为实测)</h3>
+  <p>QbManager 由 7 个 core mixin + 2 个 webui mixin 多重继承组成 (<code>core/qbmanager.py:130-140</code>), 所有 mixin 与本体共享同一个 <code>self</code>:</p>
+
+  <table>
+    <thead><tr><th style="width:30%">组件</th><th style="width:9%">行数</th><th>对共享面的引用 (grep 实测次数)</th><th style="width:34%">问题</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">core/qbmanager.py 本体</td><td class="mono">958</td><td class="mono">web×41 · config×37 · store×24 · task_queue×6 · client×6 · hr×5 · api×5</td><td>主循环 + 连接管理 + 热重载分派 + 全局任务 + 兼容代理层, 五种职责同体</td></tr>
+      <tr><td class="mono">mixins/rule_engine.py</td><td class="mono">453</td><td class="mono">rules×12 · store×10 · state_file×8 · config×6 · state×5 · client×3</td><td>规则引擎之外还背着<strong>全部状态持久化</strong> (_load_state / save_state / _maybe_flush_state / 迁移物化) —— 计划外职责</td></tr>
+      <tr><td class="mono">mixins/ops.py</td><td class="mono">474</td><td class="mono">api×10 · store×6 · state×6 · task_queue×2</td><td>反向 import <code>rules.actions.full_checking</code> (ops.py:29-35), 模块边界已破</td></tr>
+      <tr><td class="mono">mixins/grouping.py</td><td class="mono">387</td><td class="mono">store×42 · config×6 · api×3</td><td>业务自治度高, 本可独立, 却经宿主共享面耦合</td></tr>
+      <tr><td class="mono">webui/views.py <span class="dim">(WebviewMixin)</span></td><td class="mono">908</td><td class="mono">web×21 · store×14 · client×4</td><td>表现层构建器以 mixin 形态住进核心类</td></tr>
+      <tr><td class="mono">webui/commands.py <span class="dim">(WebCommandsMixin)</span></td><td class="mono">763</td><td class="mono">api×35 · store×20 · web×5</td><td>同上; 37 条命令的手工 dict 分发表, 每次 drain 重建</td></tr>
+      <tr><td class="mono">mixins/speed_curve.py</td><td class="mono">261</td><td class="mono">api×3 · web×2 · state×1</td><td>跨层直写表现层快照 <code>_traffic_view</code></td></tr>
+      <tr><td class="mono">mixins/tags.py</td><td class="mono">247</td><td class="mono">api×7 · store×4 · config×3</td><td>标签 + 集数标签 + HR 标签 + 全局标签清理任务混装</td></tr>
+      <tr><td class="mono">mixins/tracker.py / checking.py</td><td class="mono">60+39</td><td class="mono">少量</td><td>体量小, 可并入近邻模块</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">参照形态: <code>hr/runtime.py</code> HrRuntime(422 行) 对宿主的反向依赖只有 <code>config</code> + 可选锚点回调两处 —— 这正是模块化后的目标形态, 也是 2026-09-20 WebUIRuntime 门面拆分 (plan webui-decoupling) 以来的既定方向。</p>
+
+  <h3><span class="h3n">1.2</span>四个结构性病灶</h3>
+  <ul>
+    <li><strong>共享命名空间无边界的隐式耦合</strong> —— mixin 之间不互相 import, 却经由 <code>self.store / self.state / self.api</code> 互相读写 (grouping 对 store 42 次引用里混着 webui 的视图字段消费)。任何属性的语义都是「全类公约」, 改一处要靠全量测试兜底。</li>
+    <li><strong>主循环替业务模块做判断</strong> —— <code>_refresh_torrents</code> 硬编码了归组/规则/维护/限速/集数五家的调用次序; <code>_create_global_tasks</code> 在内核里逐个点名业务任务。内核每长一个业务点, 就多一分「必须知道模块在干什么」。</li>
+    <li><strong>配置热重载的消费知识分散</strong> —— apply_new_config 按 L0/L1/L2/R 分级分派, 每个消费方钩子挂哪一级是一个决策点。四类失效族 (过度重启 / 重启竞态 / 语义回滚 / 漏调) 已在 plan hot-reload-simplify 定性为同一根因, 其推荐方向一「统一挂载口」(组件自认领 + 每轮无条件 apply + 自判短路) 与本计划是同一件事的两个切面。</li>
+    <li><strong>外围绕过边界直写内核私有面</strong> —— 托盘 4 处直写 <code>manager._notify_handler</code> (tray/app.py:405,426,456,460); <code>start_web_server</code> 直写 <code>manager._web_token</code> (webui/server/lifecycle.py:165); 路由与测试 279 处 make_manager 调用钉在 <code>_WEB_STATE_ALIAS</code> 兼容层 (19 字段 + 8 转发方法) 的旧名字上。</li>
+  </ul>
+
+  <div class="note">
+    <div class="t">既有进展, 不是从零开始</div>
+    <p>项目已经在往这个方向走了三步: ① <code>TaskQueue</code> 已是通用调度器 (handler + REQUEUE/FINISHED 契约, 内核无关); ② WebUIRuntime / HrRuntime 两个门面已拆出, HrRuntime.apply 已实现「每轮必调 + 自判短路」的目标语义; ③ <code>rules/registry.py</code> 已有装饰器注册的条件/动作插件表。本计划是把这三个孤立的正确决策<strong>升格为统一制度</strong>。</p>
+  </div>
+</section>
+
+<!-- ============================================================ 02 -->
+<section id="s02">
+  <div class="sec-head"><span class="no">02</span><h2>这套思路的学名</h2></div>
+
+  <p>「中央管理器只调度、不含业务、甚至不知道模块具体干什么」—— 这在架构模式语汇里叫<strong>微内核架构 (Microkernel Architecture)</strong>, 又称<strong>插件式架构 (Plug-in pattern)</strong>。它由三件东西拼成, 各有专名:</p>
+  <ul>
+    <li><strong>微内核 + 插件</strong> —— 内核只提供注册表、生命周期编排与通用机制 (调度 / 事件 / 配置广播); 业务全部住进带统一契约的插件。对应本计划: QbManager = 内核, tags/grouping/rules/webui/… = 插件。</li>
+    <li><strong>控制反转 / 依赖注入 (IoC / DI), 服务定位器变体</strong> —— 内核构造一个共享上下文 (AppContext), 模块从上下文取能力 (store/api/state…), 而不是内核把业务逐个喂给谁。「宿主不知道模块是什么」的法律保障就是依赖倒置: 模块依赖抽象契约, 不依赖内核。</li>
+    <li><strong>调停者 (Mediator) 的事件总线变体 (Pub/Sub)</strong> —— 模块之间不直接调用, 通过内核广播的领域事件 (种子增删 / 状态变化 / 刷新相位) 协作。内核做路由不做解释, 这是 Mediator 退化成 broker 的形态。</li>
+  </ul>
+
+  <h3><span class="h3n">2.1</span>成熟方案参照</h3>
+  <table>
+    <thead><tr><th style="width:22%">参照</th><th style="width:44%">机制要点</th><th>对本计划的映射</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">Home Assistant core</td><td><code>hass</code> 上下文对象 + 集成 (integration) 统一生命周期 <code>async_setup / async_unload</code>; 配置条目变更走 reload, 组件自判重建</td><td>同构度最高: 单进程常驻 Python、集成即模块、hass 即 ctx。模块契约的 ctx + start/stop/apply 直接对标</td></tr>
+      <tr><td class="mono">Spring ApplicationContext<br>+ @RefreshScope</td><td>容器统一管理 bean 生命周期; refresh 事件广播 → 作用域 bean 自毁缓存 → 惰性重建</td><td>热重载语义 (apply 每轮必调 + 自判短路) 的原型; hot-reload-simplify 已调研并推荐</td></tr>
+      <tr><td class="mono">OSGi / Eclipse RCP</td><td>bundle 生命周期状态机 (install→start→stop→uninstall) + 扩展点 (extension point) 声明式贡献</td><td>「内核只认契约不认实现」的法理来源; 扩展点思想落在事件相位与命令表上</td></tr>
+      <tr><td class="mono">VS Code extension host</td><td>宿主只管激活事件与 API 面贡献, 扩展之间经贡献点协作, 互不知晓</td><td>「qbmanager 甚至不需要知道模块具体是干什么的」的严格形态; 本项目单进程无 IPC 需求, 取其模型不取其进程隔离</td></tr>
+      <tr><td class="mono">pytest pluggy hooks</td><td>钩子注册表 + 按注册序 / hookwrapper 分层调用</td><td>事件相位的订阅者排序机制 (按注册序, 见 §4.3)</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>选型结论</strong>: 取 Home Assistant 的「上下文 + 集成生命周期」为骨架 (同构度最高、单进程 Python 无需 OSGi 的进程隔离), 取 Spring @RefreshScope 的「广播 + 自判短路」为热重载语义 (即 hot-reload-simplify 方向一), 取 pluggy 的注册序调用为相位分发规则。不引第三方框架 —— 生态里没有现成的「消费方重建」库 (hot-reload-simplify §2.3 已调研), 契约自写约百余行。</p>
+</section>
+
+<!-- ============================================================ 03 -->
+<section id="s03">
+  <div class="sec-head"><span class="no">03</span><h2>目标模型: 内核 / 能力服务 / 功能模块 三层</h2></div>
+
+  <h3><span class="h3n">3.1</span>分层判据</h3>
+  <ul>
+    <li><strong>内核 (kernel, 即瘦身后 QbManager)</strong> —— 只含: 主循环三条时间线 (同步线 / 任务线 / 命令线)、模块宿主 ModuleHost (注册表 + 生命周期编排)、事件总线、qB 连接管理 (重连退避)、周期落盘计时、status_snapshot。判据: <strong>知道「何时」(节拍 / 相位 / 生命周期), 不知道「何事」(标签 / 归组 / 规则语义)</strong>。</li>
+    <li><strong>能力服务 (services, 挂在 ctx 上的单例)</strong> —— 无启用开关、无线程、无热重载语义、被多方消费的纯能力: <code>store</code> (种子数据层)、<code>api</code> (qB API 门面)、<code>client</code> (连接与绑定)、<code>state</code> (状态持久化服务, 从 rule_engine 迁出)、<code>file_access</code>。服务不是模块: 没有生命周期, 内核与模块都可调用。</li>
+    <li><strong>功能模块 (modules, 实现 Module 契约)</strong> —— 有启用开关、可能持有线程 / 服务器 / 队列任务、有配置认领与热重载语义的自治单元。模块之间<strong>不互相 import</strong>, 需要别人能力时经 <code>ctx</code> 取服务或事件协作。</li>
+  </ul>
+
+  <div class="diagram">
+    <svg viewBox="0 0 1080 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="目标架构分层图">
+      <defs>
+        <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L8,4 L0,8 z" fill="#7ab3c4"/>
+        </marker>
+      </defs>
+      <style>
+        .band { fill:#181d23; stroke:rgba(255,255,255,.16); }
+        .bx   { fill:#0f1216; stroke:rgba(255,255,255,.09); }
+        .lbl  { font-family:'Cascadia Code','Consolas',monospace; font-size:12px; fill:#d9dee3; }
+        .sm   { font-family:'Cascadia Code','Consolas',monospace; font-size:10px; fill:#8b949e; }
+        .cap  { font-family:'Cascadia Code','Consolas',monospace; font-size:10px; fill:#7ab3c4; letter-spacing:2px; }
+        .arw  { stroke:#7ab3c4; stroke-width:1; fill:none; }
+        .hln  { stroke:rgba(255,255,255,.09); }
+      </style>
+      <!-- 内核带 -->
+      <rect x="20" y="18" width="1040" height="96" class="band"/>
+      <text x="36" y="40" class="cap">KERNEL — QbManager (瘦身后 ≈450 行, 只知何时不知何事)</text>
+      <rect x="36" y="52" width="190" height="46" class="bx"/><text x="48" y="72" class="lbl">主循环三时间线</text><text x="48" y="88" class="sm">sync / task / command</text>
+      <rect x="242" y="52" width="180" height="46" class="bx"/><text x="254" y="72" class="lbl">ModuleHost</text><text x="254" y="88" class="sm">注册表 + 生命周期编排</text>
+      <rect x="438" y="52" width="150" height="46" class="bx"/><text x="450" y="72" class="lbl">EventBus</text><text x="450" y="88" class="sm">刷新相位广播</text>
+      <rect x="604" y="52" width="170" height="46" class="bx"/><text x="616" y="72" class="lbl">连接管理</text><text x="616" y="88" class="sm">重连退避 / 连接状态</text>
+      <rect x="790" y="52" width="254" height="46" class="bx"/><text x="802" y="72" class="lbl">落盘计时 / 快照 / 唤醒</text><text x="802" y="88" class="sm">_maybe_flush 节拍 / wake / 暂停</text>
+      <!-- 广播箭头 -->
+      <line x1="332" y1="98" x2="332" y2="148" class="arw" marker-end="url(#arr)"/>
+      <text x="344" y="128" class="sm">start / stop / apply / 相位事件 (单向广播)</text>
+      <!-- 服务带 -->
+      <rect x="20" y="152" width="1040" height="88" class="band"/>
+      <text x="36" y="174" class="cap">SERVICES — ctx.* 能力服务 (无生命周期, 内核与模块共同消费)</text>
+      <rect x="36" y="186" width="150" height="40" class="bx"/><text x="48" y="211" class="lbl">store</text>
+      <rect x="202" y="186" width="150" height="40" class="bx"/><text x="214" y="211" class="lbl">api (QbApi)</text>
+      <rect x="368" y="186" width="150" height="40" class="bx"/><text x="380" y="211" class="lbl">client / 连接</text>
+      <rect x="534" y="186" width="150" height="40" class="bx"/><text x="546" y="211" class="lbl">state (持久化)</text>
+      <rect x="700" y="186" width="160" height="40" class="bx"/><text x="712" y="211" class="lbl">file_access</text>
+      <rect x="876" y="186" width="168" height="40" class="bx"/><text x="888" y="211" class="lbl">ops / trackers (注册)</text>
+      <!-- 消费箭头 -->
+      <line x1="540" y1="332" x2="540" y2="244" class="arw" marker-end="url(#arr)"/>
+      <text x="552" y="296" class="sm">ctx.* 只消费服务, 不 import 彼此</text>
+      <!-- 模块带 -->
+      <rect x="20" y="248" width="1040" height="204" class="band"/>
+      <text x="36" y="270" class="cap">MODULES — Module 契约 (name / sections / start / stop / apply / subscribe)</text>
+      <rect x="36" y="284" width="118" height="40" class="bx"/><text x="48" y="309" class="lbl">logging</text>
+      <rect x="170" y="284" width="118" height="40" class="bx"/><text x="182" y="309" class="lbl">notify</text>
+      <rect x="304" y="284" width="118" height="40" class="bx"/><text x="316" y="309" class="lbl">webui</text>
+      <rect x="438" y="284" width="118" height="40" class="bx"/><text x="450" y="309" class="lbl">hr</text>
+      <rect x="572" y="284" width="118" height="40" class="bx"/><text x="584" y="309" class="lbl">rules</text>
+      <rect x="706" y="284" width="150" height="40" class="bx"/><text x="718" y="309" class="lbl">maintenance</text>
+      <rect x="872" y="284" width="172" height="40" class="bx"/><text x="884" y="309" class="lbl">grouping</text>
+      <rect x="36" y="340" width="118" height="40" class="bx"/><text x="48" y="365" class="lbl">tracker</text>
+      <rect x="170" y="340" width="150" height="40" class="bx"/><text x="182" y="365" class="lbl">speed_curve</text>
+      <rect x="336" y="340" width="118" height="40" class="bx"/><text x="348" y="365" class="lbl">ops</text>
+      <text x="480" y="365" class="sm">每个模块: 配置认领 sections() · 热重载 apply() 自判短路</text>
+      <text x="480" y="383" class="sm">线程 / 服务器 / 队列任务的生命周期全部内聚在模块内</text>
+      <line x1="36" y1="410" x2="1044" y2="410" class="hln"/>
+      <text x="36" y="434" class="sm">托盘 (tray) 与 CLI 是宿主的两种运行形态, 不是模块 —— 它们经 ctx 调用模块公开方法 (如 ctx.notify.set_enabled), 不再直写内核私有字段。</text>
+    </svg>
+    <div class="cap">图 01 · 目标架构: 内核广播 (向下) + ctx 服务 (向上), 模块横向零依赖</div>
+  </div>
+
+  <h3><span class="h3n">3.2</span>模块清单 (10 个)</h3>
+  <table>
+    <thead><tr><th style="width:15%">模块</th><th style="width:22%">现载体 → 新家</th><th style="width:31%">对内聚 (搬进去的)</th><th>对外暴露 (ctx 服务 / 事件订阅)</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">logging</td><td>infra/logging + qbmanager._setup_logging → <code>core/modules/logging_mod.py</code></td><td>setup_logging 重挂 / 作用域钳制; 热重载时自判重挂</td><td>无 (最简模块, 立契约样板)</td></tr>
+      <tr><td class="mono">notify</td><td>infra/notify 挂载管理 → <code>core/modules/notify_mod.py</code></td><td>handler 挂载 / 卸载 / force 重挂; 托盘开关 API</td><td><code>ctx.notify.set_enabled()</code>; tray 4 处直写改此口</td></tr>
+      <tr><td class="mono">webui</td><td>WebUIRuntime + WebviewMixin + WebCommandsMixin + server/lifecycle → webui 包整体为模块</td><td>视图发布 / 命令表 / 服务器启停 / _apply_web_config / 真值回执 / 搜索索引</td><td>loop hooks (命令线 / 同步线 / 任务线); <code>set_traffic_view</code> 等服务方法; routes 经 ctx 取数</td></tr>
+      <tr><td class="mono">hr</td><td>HrRuntime (已达标) → 加实现 Module 契约</td><td>现状即目标形态, 只换基类</td><td>view / judge / status (现状不变)</td></tr>
+      <tr><td class="mono">rules</td><td>mixins/rule_engine.py + rules 包 → <code>core/modules/rules_mod.py</code></td><td>规则加载 / 种子级任务创建 / 事件规则分派 / 执行历史 (经 ctx.state)</td><td>订阅 events_added / events_removed 相位; <code>create_torrent_tasks</code>; L2 重建收进 apply</td></tr>
+      <tr><td class="mono">maintenance</td><td>mixins/tags.py + qbmanager._handle_maintenance → <code>core/modules/maintenance_mod.py</code></td><td>标签 / 分类 / HR 标签 / 集数标签 / 全局标签清理任务自注册</td><td>订阅 torrents_added 相位; 全局任务 start() 时入队</td></tr>
+      <tr><td class="mono">grouping</td><td>mixins/grouping.py → <code>core/modules/grouping_mod.py</code></td><td>分组 / 大小一致性 / 缺文件联动 / 冲突检查 / 保存路径重归组</td><td>订阅 transitions / torrents_added / removed_scan / post 相位</td></tr>
+      <tr><td class="mono">tracker</td><td>mixins/tracker.py → <code>core/modules/tracker_mod.py</code></td><td>tracker 配置匹配 + 单种限速; 全量轮重匹配 (经 full_round 相位)</td><td><code>ctx.trackers.match()</code> 服务 (rules / store 都消费)</td></tr>
+      <tr><td class="mono">speed_curve</td><td>mixins/speed_curve.py → <code>core/modules/speed_curve_mod.py</code></td><td>曲线任务自注册; traffic 快照改经 ctx.web 服务方法推送</td><td>全局任务 speed_limit_curve</td></tr>
+      <tr><td class="mono">ops</td><td>mixins/ops.py + mixins/checking.py → <code>core/modules/ops_mod.py</code></td><td>recheck / 跳检执行体 + 提交点检查 + source 保护; checking 前置检查并入</td><td><code>ctx.ops</code> 服务 (rules 动作与 web 命令消费); 反向 import rules 常量迁回 rules 包</td></tr>
+    </tbody>
+  </table>
+
+  <h3><span class="h3n">3.3</span>装配点 (composition root)</h3>
+  <p>内核在构造时按固定顺序实例化模块并注册进 ModuleHost —— 这是内核唯一「知道模块名字」的地方 (VS Code 宿主同样只持扩展清单)。装配顺序即事件相位内的消费顺序, 全项目单点可见:</p>
+  <pre><span class="cm"># core/qbmanager.py — 装配清单 (顺序 = 相位内消费序 = 生命周期序)</span>
+MODULES = [LoggingModule, NotifyModule, WebUIModule, HrModule,
+           TrackerModule, SpeedCurveModule, MaintenanceModule,
+           GroupingModule, OpsModule, RulesModule]   <span class="cm"># rules 最后: 它消费前面所有人的服务</span></pre>
+</section>
+
+<!-- ============================================================ 04 -->
+<section id="s04">
+  <div class="sec-head"><span class="no">04</span><h2>模块契约与事件相位</h2></div>
+
+  <h3><span class="h3n">4.1</span>Module 契约</h3>
+  <pre><span class="kw">class</span> Module(Protocol):
+    name: str
+    <span class="kw">def</span> sections(self) -&gt; tuple[str, ...]: ...
+    <span class="cm"># 声明消费的配置顶层段; 守阵保证每段至少被一个模块认领 (hot-reload-simplify §3.3 原文采纳)</span>
+
+    <span class="kw">def</span> start(self, ctx: AppContext, dry_run: bool) -&gt; None: ...
+    <span class="cm"># 幂等启用: 起线程 / 服务器 / 注册队列任务都在这里; 未启用 = 无操作</span>
+
+    <span class="kw">def</span> stop(self) -&gt; None: ...
+    <span class="cm"># 幂等停用; 先叫停后 join (pitfalls/backend/concurrency.md 第 1 条)</span>
+
+    <span class="kw">def</span> apply(self, old: Config, new: Config) -&gt; ApplyResult: ...
+    <span class="cm"># 每次热重载无条件调用; 相关段整段相等即短路返回 none</span>
+    <span class="cm"># (统一挂载口语义; hr.apply 已是此形态, 2026-09-29 修复即样板)</span>
+
+    <span class="kw">def</span> subscribe(self, phases: PhaseRegistry) -&gt; None: ...
+    <span class="cm"># 声明消费哪些刷新相位 (§4.2); 同相位内按装配序调用</span>
+
+    <span class="cm"># 可选 loop hooks (有则被主循环按装配序调用, 无则跳过):</span>
+    <span class="cm">#   on_command_line() -&gt; bool    消费控制命令, 返回「本批是否改了 qB 状态」</span>
+    <span class="cm">#   on_sync_line(force)          同步线收尾 (webui: 视图发布)</span>
+    <span class="cm">#   on_task_line(force)          任务线收尾 (webui: 错误原因预取 / 搜索索引)</span></pre>
+
+  <div class="note">
+    <div class="t">契约边界的诚实声明</div>
+    <p>内核仍然知道<strong>契约本身</strong> (生命周期动词 / loop hooks / 相位清单) 与装配清单里的模块名 —— 这就是「仅调度」的准确含义: <strong>内核知道每个模块「何时」被调用, 不知道任何模块「干什么」</strong>。主循环里不再出现 web / hr / rules / grouping 字样, apply_new_config 里不再出现 L1/L2 业务分支。</p>
+  </div>
+
+  <h3><span class="h3n">4.2</span>刷新管线相位表 (现 _refresh_torrents 顺序的忠实编码)</h3>
+  <p>现有 <code>_refresh_torrents</code> 的调用次序是经验过的正确语义 (分组状态转移必须先于规则事件、事件分派先于内置动作……), 全部保留, 只是「内核点名」改为「内核广播相位、模块认领」:</p>
+  <table>
+    <thead><tr><th style="width:16%">相位</th><th style="width:38%">时机 (= 现顺序)</th><th style="width:22%">认领模块</th><th>现状调用点</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">synced</td><td>增量同步后, 种子集有增删</td><td class="mono">webui</td><td class="mono">mark_search_index_dirty (qbmanager:777)</td></tr>
+      <tr><td class="mono">transitions</td><td>任何自有动作之前 (上传转暂停观测, 用上一轮快照)</td><td class="mono">grouping</td><td class="mono">_handle_state_transitions (qbmanager:786)</td></tr>
+      <tr><td class="mono">events_removed</td><td>删除种子事件分派 (带删除前快照)</td><td class="mono">rules</td><td class="mono">_dispatch_events([], removed) (qbmanager:792)</td></tr>
+      <tr><td class="mono">events_added</td><td>新增种子匹配 tracker 配置后的事件分派</td><td class="mono">rules</td><td class="mono">_dispatch_events(matched_added) (qbmanager:817)</td></tr>
+      <tr><td class="mono">torrents_added</td><td>逐新增种子: 维护 → 限速 → 建任务 → 归组 → 集数</td><td class="mono">maintenance → tracker → rules → grouping</td><td class="mono">qbmanager:819-833 逐行</td></tr>
+      <tr><td class="mono">removed_scan</td><td>删除后组内缺文件扫描</td><td class="mono">grouping</td><td class="mono">_handle_removed_torrents (qbmanager:840)</td></tr>
+      <tr><td class="mono">post</td><td>保存路径重归组 + 下载冲突检查</td><td class="mono">grouping</td><td class="mono">qbmanager:842-846</td></tr>
+      <tr><td class="mono">full_round</td><td>全量轮 (need_validate) 的 tracker 重匹配</td><td class="mono">tracker</td><td class="mono">qbmanager:772-774</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">内核保留: schema 校验 / fs 自检 (fail-fast, 兼容性职责)、store.update_state_snapshot / field_snapshots (数据面收尾)、<code>_suppress_events</code> 热重载首轮重放保护 (总线级 suppress)。相位的合法性由现有 1,685 条测试守阵整体背书, 另加相位顺序断言守阵。</p>
+
+  <h3><span class="h3n">4.3</span>热重载收敛 (与 hot-reload-simplify 的合并)</h3>
+  <p>apply_new_config 瘦身为「替换 config 对象 + 广播 apply + 汇报动作」, 级别分派层与三张手写表退役 —— 这正是 hot-reload-simplify 方向一 W2-W4 的内容, 本计划吸收其协议并按模块边界落地:</p>
+  <pre><span class="kw">def</span> apply_new_config(self, config) -&gt; dict:
+    changes = diff_config_impacts(self.config, config)
+    restart = [c.path <span class="kw">for</span> c <span class="kw">in</span> changes <span class="kw">if</span> c.level == <span class="st">"R"</span>]   <span class="cm"># R 闸留在内核</span>
+    old = self.config
+    self.config = config                       <span class="cm"># L0: 换对象, 现读键即刻生效</span>
+    actions = self.host.apply(old, config)     <span class="cm"># 每模块无条件 apply, 自判短路</span>
+    <span class="kw">return</span> {<span class="st">"applied"</span>: <span class="kw">True</span>, <span class="st">"actions"</span>: actions, ...}</pre>
+  <p>两个语义细节必须保留并写进守阵: ① webui.apply <strong>不能完全短路</strong> —— 视图含配置派生展示值 (HR 标签模板等), 现状是每次热重载无条件 mark_dirty, 模块化后保持「有差异即置脏、仅监听身份变化才重启服务器」; ② rules 模块的 L2 重建只重建队列与规则, <strong>运行期内存态 (exec_history / skip_check_day) 原对象保留</strong> (issue 26-09-21-1347 的教训)。</p>
+</section>
+
+<!-- ============================================================ 05 -->
+<section id="s05">
+  <div class="sec-head"><span class="no">05</span><h2>职责搬迁对照 (现状 → 目标)</h2></div>
+  <table>
+    <thead><tr><th style="width:34%">现在住在哪</th><th style="width:8%">搬去</th><th>边界变化</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">qbmanager._refresh_torrents 五家硬编码调用</td><td class="mono">EventBus</td><td>内核只广播相位; 业务次序编码为相位表 (§4.2), 由守阵锁定</td></tr>
+      <tr><td class="mono">qbmanager._create_global_tasks</td><td class="mono">各模块</td><td>delete_tags / speed_limit_curve 任务由所属模块 start() 自注册; 内核不再点名</td></tr>
+      <tr><td class="mono">qbmanager.apply_new_config L1/L2 分支 + _apply_web_config</td><td class="mono">各模块 apply</td><td>web 服务器启停归 webui 模块; logging/notify 重挂归各自模块; 级别表退役</td></tr>
+      <tr><td class="mono">rule_engine._load_state / save_state / _maybe_flush_state / 迁移物化 / _bind_field_snapshots / _cleanup_orphan_tmp</td><td class="mono">ctx.state</td><td>状态持久化是能力服务不是规则引擎的私产; 规则执行历史经 ctx.state 存取</td></tr>
+      <tr><td class="mono">qbmanager._handle_maintenance + mixins/tags.py</td><td class="mono">maintenance 模块</td><td>maintenance_tag_mode 判据随迁; HR 标签判定仍经 store.hr_link 只读门面</td></tr>
+      <tr><td class="mono">qbmanager._hr_anchors</td><td class="mono">rules→ctx 或 maintenance</td><td>HrRuntime 经 ctx 回调取锚点, 不再 getattr 窥内核私有方法</td></tr>
+      <tr><td class="mono">tray 直写 manager._notify_handler (4 处)</td><td class="mono">ctx.notify</td><td>托盘改调 notify 模块公开方法; 私有字段访问清零</td></tr>
+      <tr><td class="mono">start_web_server 直写 manager._web_token</td><td class="mono">webui 模块内</td><td>令牌生命周期内聚到 webui; lifecycle.py 与 manager 解耦</td></tr>
+      <tr><td class="mono">ops → rules.actions.full_checking 反向 import</td><td class="mono">rules 包单点</td><td>轮询常量 / 冷却 helper 迁到 rules 包中性位置; ops 与 rules 单向依赖</td></tr>
+      <tr><td class="mono">qbmanager._WEB_STATE_ALIAS (19 字段) + 8 兼容转发方法</td><td class="mono">P6 处置</td><td>过渡层保留至 routes / 测试改新名, 处置独立成后续计划 (决策点 D4)</td></tr>
+      <tr><td class="mono">qbmanager._throttle / _wait_next / 三时间线 / 重连退避</td><td class="mono">留在内核</td><td>这些是「何时」的机制, 本来就是内核的事; 回归注释原样随迁</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ 06 -->
+<section id="s06">
+  <div class="sec-head"><span class="no">06</span><h2>分段实施 P0–P6 (每段独立入库、全量绿、可回退)</h2></div>
+  <p>排序原则: 风险递增, 先立契约再搬家, 已验证形态 (hr / 门面) 先行, 最大一刀 (规则 + 刷新管线) 放最后。每段验收统一为 <code>commands run test.full</code> 全绿 + 段内指定守阵; 每段结束新建基线切片记实测数字。</p>
+
+  <div class="phase">
+    <div class="ph-head"><span class="ph-no">P0</span><h3>内核地基: 契约 + 状态服务 (纯加法, 零行为变化)</h3></div>
+    <p class="ph-sub"><b>内容</b>: 新增 <code>core/module.py</code> (Module 协议 / AppContext / ModuleHost / EventBus 骨架, 约 250 行新写); 新增 <code>core/state.py</code> —— 从 rule_engine 迁出全部状态持久化 (约 230 行搬家), qbmanager 构造 ctx 并把既有属性挂上 ctx (同一对象, manager 属性变委托)。<b>改动面</b>: 纯新增 + rule_engine 内部搬家; 测试 31 处状态方法调用 (load 11 / save 13 / flush 7) 经委托保持不动。<b>守阵</b>: 新增「ctx.store is manager.store 同对象」断言; 全量绿。<b>回退</b>: revert 即回, 无迁移。</p>
+  </div>
+
+  <div class="phase">
+    <div class="ph-head"><span class="ph-no">P1</span><h3>基建模块化: logging / notify + 外围改走模块口</h3></div>
+    <p class="ph-sub"><b>内容</b>: LoggingModule / NotifyModule 立契约样板 (sections 认领 + apply 整段短路); run() 内 setup_notify / _setup_logging 改经模块; 热重载 L1 的手工重挂两段改 host.apply 广播, <b>影子并行</b> (旧分支保留, 新循环先只挂 logging/notify —— hot-reload W1+W2 的子集); 托盘 4 处 <code>manager._notify_handler</code> 直写改 <code>ctx.notify</code> 公开方法。<b>守阵</b>: tray 开关通知守阵; 「改 notify 段才重挂、无关保存零动作」断言。<b>回退</b>: 删模块恢复旧分支。</p>
+  </div>
+
+  <div class="phase">
+    <div class="ph-head"><span class="ph-no">P2</span><h3>门面转正: webui / hr 实现 Module 契约</h3></div>
+    <p class="ph-sub"><b>内容</b>: WebUIRuntime / HrRuntime 挂上 Module 协议 (二者已有 start/stop/apply, 主要是签名对齐与 sections 认领); run() 的 web 启动块 / hr.start / finally 停止序列改 host.start_all / stop_all; _apply_web_config 并入 webui.apply; 主循环对 <code>self.web.*</code> 的五个语义调用 (consume_commands / check_pending / flush_truths / flush_views / advance_*) 改为 loop hooks 按装配序调用, <b>P0-5 补刷新、flush_truths 在刷新后、TRUTH_RETRY_S、SELF_POSTED_COMMANDS 不唤醒等次序语义原样留在内核</b>; store.hr_link 注入移进装配; start_web_server 不再写 manager._web_token。<b>守阵</b>: web stop+wait 竞态守阵 / hr 从无到有三件套 / 别名代理层全绿。<b>回退</b>: 段内无配置格式变化, revert 即回。</p>
+  </div>
+
+  <div class="phase">
+    <div class="ph-head"><span class="ph-no">P3</span><h3>小模块先行: tracker / speed_curve / maintenance+集数</h3></div>
+    <p class="ph-sub"><b>内容</b>: TrackerModule (<code>_match_tracker_conf</code> 升为 ctx.trackers 服务; 全量轮重匹配改订阅 full_round 相位); SpeedCurveModule (曲线任务自注册; <code>_traffic_view</code> 跨层直写改 ctx.web 服务方法); MaintenanceModule (tags mixin + qbmanager 本体的 _handle_maintenance + delete_tags 全局任务 + 集数标签, 一起搬); _create_global_tasks 从内核删除。<b>守阵</b>: 限速 / 标签 / 集数 / 曲线手动保护节流守阵; 全局任务创建断言改指模块。<b>回退</b>: revert。</p>
+  </div>
+
+  <div class="phase">
+    <div class="ph-head"><span class="ph-no">P4</span><h3>中坚模块: grouping / ops(+checking)</h3></div>
+    <p class="ph-sub"><b>内容</b>: GroupingModule (387 行搬家, 订阅 transitions / torrents_added / removed_scan / post 四相位); OpsModule (474+39 行, 注册为 ctx.ops; rules→ops 常量反向 import 迁回 rules 包单向化); web commands 的 ops 调用改走 ctx.ops。<b>守阵</b>: grouping 52 处构造点测试绿; ops 保护策略守阵 (plan 26-09-30-0109); 「缺文件扫描与跳检代表种两口径不混」断言保留。<b>回退</b>: revert。</p>
+  </div>
+
+  <div class="phase">
+    <div class="ph-head"><span class="ph-no">P5</span><h3>最大一刀: rules 模块化 + 刷新管线收口</h3></div>
+    <p class="ph-sub"><b>内容</b>: RulesModule (rule_engine 453 行: 规则加载 / 种子级任务 / 事件分派 / 执行历史走 ctx.state); _dispatch_events 改走 EventBus (相位表 §4.2 生效, 相位顺序断言守阵上线); _refresh_torrents 收口为「同步 + 相位广播」—— added 逐种子管线 (维护/限速/建任务/归组/集数) 分派为模块订阅; L2 重建收进 rules.apply 整段短路 (hot-reload W3 合并点, 5000 种子模拟下短路/重建耗时实测入档); 热重载级别分派层与三张表退役 (W4)。<b>守阵</b>: 规则全量守阵 + 事件相位顺序断言 + L2 运行期内存态保留断言迁移改写。<b>回退</b>: revert; 本段后 qbmanager.py 预计 ≤500 行, 内核不再 import rules/tags/grouping/tracker/curve。</p>
+  </div>
+
+  <div class="phase">
+    <div class="ph-head"><span class="ph-no">P6</span><h3>收尾: 回写 + 基线 + 真机走查</h3></div>
+    <p class="ph-sub"><b>内容</b>: 文档回写 (根 README 架构段 / memory-bank core-domain / 新增 conventions/modules 单点); test.full 基线切片; dry-run 真机四场景走查 (借 hot-reload-simplify §07: 改 main_tick 零动作 / 改 web.token 不重启 / 热接入首个 HR 站点从无到有 / 改一条规则仅队列重建且内存态保留); 别名层处置另立计划 (决策点 D4)。<b>守阵</b>: 段认领完备守阵 (配置每段至少被一个模块认领, 未认领段变更落 WARN + 全量兜底)。</p>
+  </div>
+</section>
+
+<!-- ============================================================ 07 -->
+<section id="s07">
+  <div class="sec-head"><span class="no">07</span><h2>不变量与兼容策略 (全程不许破)</h2></div>
+  <h3><span class="h3n">7.1</span>运行时不变量 (来源: pitfalls/backend + qbmanager 回归注释)</h3>
+  <table>
+    <thead><tr><th style="width:36%">不变量</th><th>要害</th></tr></thead>
+    <tbody>
+      <tr><td>单一写线程 (黄金法则 5)</td><td>只有主循环线程改队列结构 / state_file / store 分组索引; 模块线程只投递意图 (命令队列模型), apply 只在主循环线程跑</td></tr>
+      <tr><td>_throttle 非托管必须真实睡眠</td><td>2026-09-14 空转事故: stop_event 判断改写必须保语义, 回归注释随迁内核</td></tr>
+      <tr><td>命令线 ≠ tick</td><td>wake 只 drain 命令不触发任务线, 否则速率语义 (max_tasks_per_tick) 失效 + 自投递命令自激打满 CPU</td></tr>
+      <tr><td>flush_truths 次序</td><td>补刷新之后 / 兜底只在正常路径没跑到时补, 漏调 = 前端 waitCmd 干等 40s</td></tr>
+      <tr><td>_suppress_events 首轮重放保护</td><td>热重载全量重建的 added 事件抑制, 收口进总线 suppress, 语义等价</td></tr>
+      <tr><td>重连退避 + 连接状态转换日志</td><td>断开期静默不刷屏, 退避上限 30s; connect 仅启动调用一次的恢复检测路径保留</td></tr>
+      <tr><td>hr.judge 只读契约</td><td>无状态 / 无写 / 无 API / 零等待; 判定桥经 store.hr_link 稳定引用</td></tr>
+      <tr><td>代表种两口径不混</td><td>缺文件扫描 (is_complete or is_errored) 与跳检参考 (仅 is_complete) 判据不同, 分模块后仍各自单点</td></tr>
+      <tr><td>校验先登记在途再发请求</td><td>ops 模块内保留顺序与返回值语义 (重复校验 / 假 pending 防线)</td></tr>
+      <tr><td>dry-run 只打日志不落盘</td><td>模块 start(dry_run) 全量透传; 落盘 / 通知 / web 启用的 dry-run 判定口径不变</td></tr>
+    </tbody>
+  </table>
+
+  <h3><span class="h3n">7.2</span>测试兼容策略 (279 处 make_manager 不动)</h3>
+  <ul>
+    <li><strong>构造签名不动</strong>: <code>QbManager(config_path, config=None, no_lock=False)</code> 全程保持, 76 处构造点零改动。</li>
+    <li><strong>属性委托</strong>: manager.store / api / state / task_queue / web / hr / config 保持为属性 (指向 ctx 同一对象), 测试 340 处 mgr.client / 309 处 mgr.store / 134 处 mgr.config 直读不受影响。</li>
+    <li><strong>方法委托逐段保留</strong>: 被测试点名的 mixin 方法 (_load_rules / _handle_maintenance / _create_global_tasks / _match_tracker_conf / _check_download_conflicts 等) 搬家后在 manager 留单行委托 —— 这正是 _WEB_STATE_ALIAS 已经验证过的迁移惯用法。</li>
+    <li><strong>别名层处置后置</strong>: routes 与测试改新名涉及 webui 11 个路由文件 + 20 个测试文件, 独立成后续计划, 不混进本重构的任何一段。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 08 -->
+<section id="s08">
+  <div class="sec-head"><span class="no">08</span><h2>风险与代价</h2></div>
+  <table>
+    <thead><tr><th style="width:30%">风险</th><th style="width:12%">档位</th><th>对策</th></tr></thead>
+    <tbody>
+      <tr><td>相位化后事件次序回归 (本重构最大风险)</td><td class="mono">高</td><td>相位表是现顺序的忠实编码而非重设计; 现有 1,685 条守阵整体背书 + P5 新增相位顺序断言; grouping 52 处构造点测试覆盖最敏感区</td></tr>
+      <tr><td>热重载行为漂移 (四失效族复发)</td><td class="mono">高</td><td>影子并行 (P1) + hr 已验证形态先行 (P2) + 四场景真机走查 (P6); 协议本身来自 hot-reload-simplify 已调研拍板推荐</td></tr>
+      <tr><td>委托层滞留成新脏面</td><td class="mono">中</td><td>每段委托方法带清理标注 (与 _WEB_STATE_ALIAS 同款); 别名层处置独立计划, 不烂尾在主线上</td></tr>
+      <tr><td>段认领遗漏 → 配置变更不生效</td><td class="mono">中</td><td>sections() 认领守阵 + 未认领段 WARN + 全量重建兜底 (hot-reload-simplify §3.3 原对策)</td></tr>
+      <tr><td>迁移动作量大导致长分支</td><td class="mono">中</td><td>七段各自独立入库, 每段全量绿 + 基线切片; 多 clone 协作走 Gitee develop 常规合流</td></tr>
+    </tbody>
+  </table>
+
+  <h3><span class="h3n">8.1</span>代价估算</h3>
+  <p>以搬家为主: 新写约 250–300 行 (module.py 契约 + EventBus + ModuleHost), 搬家约 2,600 行 (mixin / state / 门面对齐), 删除约 200 行 (级别分派层 + 三张表 + 内核点名代码); 守阵新增 / 改写估 25–35 例。完成后 qbmanager.py 958 → ≈450 行, 「内核不知道业务」成为可用 grep 验证的事实 (内核文件零业务 import)。</p>
+</section>
+
+<!-- ============================================================ 09 -->
+<section id="s09">
+  <div class="sec-head"><span class="no">09</span><h2>决策点清单 (待拍板)</h2></div>
+
+  <div class="decision">
+    <div class="d-no">D1 · 与热重载计划的关系</div>
+    <div class="d-q">本计划吸收 hot-reload-simplify 方向一 (统一挂载口) 作为模块契约的 apply 语义 —— 两案合并执行还是并行?</div>
+    <p class="rec">推荐: <b>拍板本计划即视为方向一拍板</b>, 1751 号计划标 Superseded (被吸收), 其 W1-W4 波次映射进本计划 P1/P2/P5。两案分头执行会在 apply 语义上互相踩。</p>
+  </div>
+  <div class="decision">
+    <div class="d-no">D2 · checking mixin 归属</div>
+    <div class="d-q">39 行的 CheckingMixin (文件存在性 / 大小一致性) 并入 ops 模块还是独立成模块?</div>
+    <p class="rec">推荐: <b>并入 ops</b> —— 与 recheck / 跳检同属「动种子文件」域, 消费方同为 rules 动作; 独立模块的管理成本大于体量。</p>
+  </div>
+  <div class="decision">
+    <div class="d-no">D3 · tracker 匹配的形态</div>
+    <div class="d-q">_match_tracker_conf 做成 ctx 服务 (rules / store 都消费) 还是模块私有方法经事件回传?</div>
+    <p class="rec">推荐: <b>ctx.trackers 服务</b> —— 规则上下文 (ctx.tracker_confs) 与全量轮重匹配都要用, 服务化可避免事件回传的时序绕弯。</p>
+  </div>
+  <div class="decision">
+    <div class="d-no">D4 · 别名层处置时机</div>
+    <div class="d-q">_WEB_STATE_ALIAS (19 字段) + 8 兼容转发方法的清理放本计划 P6 还是另立后续计划?</div>
+    <p class="rec">推荐: <b>另立后续计划</b> —— 改动面在 webui 路由与 20 个测试文件, 与内核重构的风险正交, 混在一起会拉长每段验证面。</p>
+  </div>
+  <div class="decision">
+    <div class="d-no">D5 · QbManager 命名</div>
+    <div class="d-q">内核瘦身后是否更名 (AppKernel / AppHost)?</div>
+    <p class="rec">推荐: <b>保留 QbManager</b> —— 构造签名与 76 处测试引用零成本; 名字语义仍成立 (它管理的对象仍是 qB 生态), 更名收益纯审美。</p>
+  </div>
+
+  <div class="colophon">
+    plan · kernel-module-refactor · Open 待拍板<br>
+    勘察基线 fa54f02b (develop, 2026-09-30 同步) · 数字为该基线实测 · 拍板后本件冻结, 执行滚动进 tasks/<br>
+    refs: 26-09-30-1751-plan-hot-reload-simplify (方向一协议来源) · 26-09-20-0234-webui-decoupling (门面先例) · 26-09-15-1124-backend-file-split (上一轮瘦身)
+  </div>
+</section>
+
+</main>
+</div>
+</body>
+</html>
