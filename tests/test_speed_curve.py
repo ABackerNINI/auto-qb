@@ -134,8 +134,10 @@ def _write_dat(tmp_path, rows, name="history_traffic.dat") -> str:
 
 def _run_curve(mgr, dry_run: bool = False) -> bool:
     """直接执行全局限速曲线 handler(等价到期任务执行)"""
-    task = Task("internal", "speed_limit_curve", interval=60, handler=mgr._handle_speed_limit_curve)
-    return mgr._handle_speed_limit_curve(task, dry_run=dry_run)
+    task = Task(
+        "internal", "speed_limit_curve", interval=60, handler=mgr.host.get("speed_curve").handle_speed_limit_curve
+    )
+    return mgr.host.get("speed_curve").handle_speed_limit_curve(task, dry_run=dry_run)
 
 
 def _make_mgr(tmp_path, gslc, with_app: bool = True):

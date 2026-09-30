@@ -33,7 +33,7 @@ def test_builtin_hr_category_auto_update_from_state():
         seed_store(mgr)
         tor.tracker_conf = mgr.config.trackers["HHan"]
 
-        assert mgr._handle_maintenance(tor, dry_run=False)
+        assert mgr.host.get("maintenance").handle_maintenance(tor, dry_run=False)
         mgr.save_state()
         assert mgr.state["auto_categories"]["HASH123"] == "!!HR3D!!"
 
@@ -45,7 +45,7 @@ def test_builtin_hr_category_auto_update_from_state():
         seed_store(mgr2)
         tor.tracker_conf = mgr2.config.trackers["HHan"]
         mgr2.config.trackers["HHan"].hr = _hr_rule(add_category="NEW-HR")
-        mgr2._handle_maintenance(tor, dry_run=False)
+        mgr2.host.get("maintenance").handle_maintenance(tor, dry_run=False)
         assert client2.category == "NEW-HR"
         assert mgr2.state["auto_categories"]["HASH123"] == "NEW-HR"
 
@@ -74,7 +74,7 @@ def test_tracker_hr_overrides_global():
         seed_store(mgr)
         tor.tracker_conf = cfg.trackers["HHan"]
 
-        mgr._handle_maintenance(tor, dry_run=False)
+        mgr.host.get("maintenance").handle_maintenance(tor, dry_run=False)
 
         # 站点覆盖: 分类应为 SITE-HR!!(非全局 GLOBAL-HR)
         assert client.category == "SITE-HR!!", f"站点分类覆盖失败: {client.category}"
@@ -91,7 +91,7 @@ def test_tracker_hr_overrides_global():
         client2.torrents["HASH123"] = tor2
         seed_store(mgr2)
         tor2.tracker_conf = cfg.trackers["HHan"]
-        mgr2._handle_maintenance(tor2, dry_run=False)
+        mgr2.host.get("maintenance").handle_maintenance(tor2, dry_run=False)
         assert client2.category == "SITE-DONE!!", f"站点 satisfied 分类覆盖失败: {client2.category}"
 
 
@@ -113,7 +113,7 @@ def test_hr_required_share_ratio():
         client.torrents["HASH123"] = tor
         seed_store(mgr)
         tor.tracker_conf = mgr.config.trackers["HHan"]
-        handled = mgr._handle_maintenance(tor, dry_run=False)
+        handled = mgr.host.get("maintenance").handle_maintenance(tor, dry_run=False)
         assert handled, "分享率达标应视为 HR satisfied"
         assert client.category == "--HR3D--", f"分享率达标应加 satisfied 分类: {client.category}"
 
@@ -131,7 +131,7 @@ def test_hr_required_share_ratio():
         client2.torrents["HASH123"] = tor2
         seed_store(mgr2)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
-        mgr2._handle_maintenance(tor2, dry_run=False)
+        mgr2.host.get("maintenance").handle_maintenance(tor2, dry_run=False)
         assert client2.category != "--HR3D--", "时长与分享率均不达标不应 satisfied"
 
 
@@ -156,7 +156,7 @@ def test_tracker_remove_similar_tags_override():
         seed_store(mgr)
         tor.tracker_conf = cfg.trackers["HHan"]
 
-        mgr._handle_maintenance(tor, dry_run=False)
+        mgr.host.get("maintenance").handle_maintenance(tor, dry_run=False)
 
         # 全局关闭 + 站点开启 -> 应删除类似标签 hhan
         assert ("remove_tags", {"hhan"}) in client.calls or any(
@@ -179,7 +179,7 @@ def test_hr_dlratio_trigger():
         tor = FakeTorrent(downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor.tracker_conf = conf
         assert tor.check_hr_condition() is True, "本地触发判据: 0.7 >= 0.7"
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False)
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False)
         assert ("add_tags", ["!!HR3D!!"]) in client.calls, f"应添加 HR 标签: {client.calls}"
 
         # 未触发(0.5 < 0.7)+ 未做种满 -> 仍打 HR 标签(旧断言「不触发不打标」作废)
@@ -190,7 +190,7 @@ def test_hr_dlratio_trigger():
         tor2 = FakeTorrent(downloaded=50 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
         assert tor2.check_hr_condition() is False, "本地未触发(展示辅助判据)"
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is True
+        assert mgr2.ctx.maintenance.add_hr_tag_or_category(tor2, dry_run=False) is True
         assert ("add_tags", ["!!HR3D!!"]) in client2.calls, f"未触发但未达标 -> 疑似辅种也打 HR 标签: {client2.calls}"
 
 
@@ -207,7 +207,7 @@ def test_hr_dlsize_trigger():
 
         tor = FakeTorrent(downloaded=10 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False)
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False)
         assert ("add_tags", ["DLSIZE-HR"]) in client.calls, f"dlsize 达标应触发: {client.calls}"
 
         # 下载量不足(即使比例高)-> 本地不触发, 但未做种满 -> 仍打 HR 标签
@@ -220,7 +220,7 @@ def test_hr_dlsize_trigger():
         tor2 = FakeTorrent(downloaded=9 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
         assert tor2.check_hr_condition() is False, "9MiB < 10MiB: 本地未触发"
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is True
+        assert mgr2.ctx.maintenance.add_hr_tag_or_category(tor2, dry_run=False) is True
         assert ("add_tags", ["DLSIZE-HR"]) in client2.calls, f"未触发但未达标 -> 仍打 HR 标签: {client2.calls}"
 
 
@@ -238,7 +238,7 @@ def test_hr_dlsize_small_completed_triggers():
         # 完全下载但总量小于触发量: downloaded=5MiB < 10MiB, progress=1.0 -> 应触发
         tor = FakeTorrent(downloaded=5 * 1024**2, total_size=5 * 1024**2, progress=1.0, seeding_time=0)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False)
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False)
         assert ("add_tags", ["DLSIZE-HR"]) in client.calls, f"小种子完全下载应触发: {client.calls}"
 
         # 未完全下载的小种子(downloaded < total_size): 本地不触发, 但未做种满 -> 仍打 HR 标签
@@ -251,7 +251,7 @@ def test_hr_dlsize_small_completed_triggers():
         tor2 = FakeTorrent(downloaded=2 * 1024**2, total_size=5 * 1024**2, amount_left=3 * 1024**2, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
         assert tor2.check_hr_condition() is False, "未完整下载: 本地未触发"
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is True
+        assert mgr2.ctx.maintenance.add_hr_tag_or_category(tor2, dry_run=False) is True
         assert ("add_tags", ["DLSIZE-HR"]) in client2.calls, f"未触发但未达标 -> 仍打 HR 标签: {client2.calls}"
 
 
@@ -265,7 +265,7 @@ def test_hr_satisfied_seeding_time():
         conf = mgr.config.trackers["HHan"]  # 默认: 分类 !!/--HR3D!!/--HR3D--
         tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=3 * 86400 + 12 * 3600 + 10)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False)
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False)
         assert client.category == "--HR3D--", f"时长达标应加 satisfied 分类: {client.category}"
 
         # 时长不足 -> 普通 HR 分类
@@ -275,7 +275,7 @@ def test_hr_satisfied_seeding_time():
         conf2 = mgr2.config.trackers["HHan"]
         tor2 = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100)
         tor2.tracker_conf = conf2
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False)
+        assert mgr2.ctx.maintenance.add_hr_tag_or_category(tor2, dry_run=False)
         assert client2.category == "!!HR3D!!", f"时长不足应加普通 HR 分类: {client2.category}"
 
 
@@ -297,7 +297,7 @@ def test_hr_satisfied_share_ratio():
         # 时长不足但 ratio 2.5 >= 2.0 -> satisfied
         tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100, ratio=2.5)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False)
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False)
         assert ("add_tags", ["DONE"]) in client.calls, f"分享率达标应加 satisfied 标签: {client.calls}"
 
         # 分享率与时长均不达标 -> 无输出(输出字段为空)
@@ -313,7 +313,7 @@ def test_hr_satisfied_share_ratio():
         )
         tor2 = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=100, ratio=1.0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is False
+        assert mgr2.ctx.maintenance.add_hr_tag_or_category(tor2, dry_run=False) is False
         assert client2.calls == [], f"均不达标不应有输出: {client2.calls}"
 
 
@@ -327,7 +327,7 @@ def test_hr_aux_seed_excluded():
         tor = FakeTorrent(downloaded=0, total_size=100 * 1024**2, seeding_time=0)
         tor.tracker_conf = conf
         assert tor.check_hr_condition() is False, "本地不触发(展示辅助判据)"
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("set_category", "!!HR3D!!") in client.calls, f"疑似辅种未做种满 -> 打 HR 分类: {client.calls}"
 
         # total_size=0 时 dlratio 兜底为 0(除数保护), 本地同样不触发
@@ -337,7 +337,7 @@ def test_hr_aux_seed_excluded():
         tor2 = FakeTorrent(downloaded=100, total_size=0, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
         assert tor2.check_hr_condition() is False
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is True
+        assert mgr2.ctx.maintenance.add_hr_tag_or_category(tor2, dry_run=False) is True
         assert ("set_category", "!!HR3D!!") in client2.calls
 
 
@@ -350,12 +350,12 @@ def test_hr_overwrite_category_semantics():
         tor = FakeTorrent(category="MANUAL")
 
         # overwrite=False: 已有非自动分类 -> 跳过(已处理但无 API 调用)
-        assert mgr._set_category(tor, "HR-CAT", overwrite=False, dry_run=False)
+        assert mgr.ctx.maintenance.set_category(tor, "HR-CAT", overwrite=False, dry_run=False)
         assert client.calls == [], f"不应覆盖已有分类: {client.calls}"
         assert tor.category == "MANUAL"
 
         # overwrite=True: 强制覆盖
-        assert mgr._set_category(tor, "HR-CAT", overwrite=True, dry_run=False)
+        assert mgr.ctx.maintenance.set_category(tor, "HR-CAT", overwrite=True, dry_run=False)
         assert ("set_category", "HR-CAT") in client.calls, f"强制覆盖应设置分类: {client.calls}"
         assert client.category == "HR-CAT"
         assert "HR-CAT" not in mgr.state.get("auto_categories", {}), "强制覆盖不记录自动分类"
@@ -364,7 +364,7 @@ def test_hr_overwrite_category_semantics():
         mgr.state.setdefault("auto_categories", {})[tor.hash] = "AUTO-OLD"
         client.calls.clear()
         tor.category = "AUTO-OLD"
-        assert mgr._set_category(tor, "AUTO-NEW", overwrite=False, dry_run=False)
+        assert mgr.ctx.maintenance.set_category(tor, "AUTO-NEW", overwrite=False, dry_run=False)
         assert ("set_category", "AUTO-NEW") in client.calls, f"自动分类应可更新: {client.calls}"
         assert mgr.state["auto_categories"][tor.hash] == "AUTO-NEW"
 
@@ -383,7 +383,7 @@ def test_hr_tracker_without_hr_skips():
         mgr.client = client
         tor = FakeTorrent(downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=3 * 86400 + 12 * 3600 + 10)
         tor.tracker_conf = cfg.trackers["HHan"]
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is False
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is False
         assert client.calls == [], f"站点无 hr 不应应用全局 HR: {client.calls}"
 
 
@@ -405,7 +405,7 @@ def test_hr_exclude_tag_skips_tagging():
         # 命中排除标签: 零写入(不打标也不打分类)
         tor = FakeTorrent(tags="HHan,noHR", downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is False
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is False
         assert client.calls == [], f"排除种子不应有任何写入: {client.calls}"
 
         # 命中排除分类同理
@@ -415,7 +415,7 @@ def test_hr_exclude_tag_skips_tagging():
         mgr2.config.trackers["HHan"].hr = _hr_rule(add_tag="!!HR3D!!", exclude_categories=["free"])
         tor2 = FakeTorrent(category="free", downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor2.tracker_conf = mgr2.config.trackers["HHan"]
-        assert mgr2._add_hr_tag_or_category(tor2, dry_run=False) is False
+        assert mgr2.ctx.maintenance.add_hr_tag_or_category(tor2, dry_run=False) is False
         assert client2.calls == [], f"排除分类不应有任何写入: {client2.calls}"
 
         # 对照: 排除表配了但未命中 -> 照常打标
@@ -425,5 +425,5 @@ def test_hr_exclude_tag_skips_tagging():
         mgr3.config.trackers["HHan"].hr = _hr_rule(add_tag="!!HR3D!!", add_category="", exclude_tags=["noHR"])
         tor3 = FakeTorrent(tags="HHan", downloaded=70 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor3.tracker_conf = mgr3.config.trackers["HHan"]
-        assert mgr3._add_hr_tag_or_category(tor3, dry_run=False) is True
+        assert mgr3.ctx.maintenance.add_hr_tag_or_category(tor3, dry_run=False) is True
         assert ("add_tags", ["!!HR3D!!"]) in client3.calls, f"未命中排除表应照常打标: {client3.calls}"

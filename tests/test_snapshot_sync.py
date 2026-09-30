@@ -47,7 +47,7 @@ def test_delete_tags_if_has_no_torrents_not_deleted_after_same_tick_add():
 
         # 无种子标签清理: D 已有种子使用 -> 不应删除
         mgr.config.delete_tags_if_has_no_torrents = ["D"]
-        assert mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
+        assert mgr.host.get("maintenance").handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
         assert ("delete_tags", {"D"}) not in client.calls, f"D 被误删: {client.calls}"
 
         # 对照: 真正无种子的标签 X 应被删除
@@ -56,7 +56,7 @@ def test_delete_tags_if_has_no_torrents_not_deleted_after_same_tick_add():
         assert "X" in mgr.store.all_tags()
         assert mgr.store.tag_usage().get("X", 0) == 0
         mgr.config.delete_tags_if_has_no_torrents = ["X"]
-        assert mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
+        assert mgr.host.get("maintenance").handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
         assert ("delete_tags", {"X"}) in client.calls
         assert "X" not in mgr.store.all_tags()
 

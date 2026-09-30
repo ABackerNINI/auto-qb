@@ -36,7 +36,7 @@ def test_match_tracker_domain():
         mgr.client = client
         mgr.config.trackers = {"HHan": _conf("HHan", ["tracker.hhanclub.net"])}
         tor = FakeTorrent(hash="H1")
-        conf = mgr._match_tracker_conf(tor)
+        conf = mgr.ctx.trackers.match(tor)
         assert conf is not None and conf.name == "HHan"
 
 
@@ -48,7 +48,7 @@ def test_match_tracker_no_match():
         mgr.client = client
         mgr.config.trackers = {"Kufirc": _conf("Kufirc", ["kufirc.com"])}
         tor = FakeTorrent(hash="H1")
-        assert mgr._match_tracker_conf(tor) is None
+        assert mgr.ctx.trackers.match(tor) is None
 
 
 def test_match_tracker_multi_domain():
@@ -59,7 +59,7 @@ def test_match_tracker_multi_domain():
         mgr.client = client
         mgr.config.trackers = {"Kufirc": _conf("Kufirc", ["kufirc.com", "tracker.hhanclub.net"])}
         tor = FakeTorrent(hash="H1")
-        assert mgr._match_tracker_conf(tor).name == "Kufirc"
+        assert mgr.ctx.trackers.match(tor).name == "Kufirc"
 
 
 def test_match_tracker_subdomain():
@@ -71,7 +71,7 @@ def test_match_tracker_subdomain():
         mgr.client = client
         mgr.config.trackers = {"HHan": _conf("HHan", ["hhanclub.net"])}
         tor = FakeTorrent(hash="H1")
-        assert mgr._match_tracker_conf(tor).name == "HHan"
+        assert mgr.ctx.trackers.match(tor).name == "HHan"
 
 
 def test_match_tracker_no_substring_match():
@@ -83,7 +83,7 @@ def test_match_tracker_no_substring_match():
         mgr.client = client
         mgr.config.trackers = {"HHan": _conf("HHan", ["hhanclub.net"])}
         tor = FakeTorrent(hash="H1")
-        assert mgr._match_tracker_conf(tor) is None
+        assert mgr.ctx.trackers.match(tor) is None
 
 
 def test_match_tracker_conf_multi_match_warning_log():
@@ -108,7 +108,7 @@ def test_match_tracker_conf_multi_match_warning_log():
         handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
         lg.addHandler(handler)
         try:
-            conf = mgr._match_tracker_conf(tor)
+            conf = mgr.ctx.trackers.match(tor)
         finally:
             lg.removeHandler(handler)
         assert conf is not None and conf.name == "HHan"  # 返回配置序中第一个
@@ -131,7 +131,7 @@ def test_apply_speed_limit_sets_both_directions():
         conf = _conf("HHan", ["hhanclub.net"])
         conf.upload_speed_limit = 5 * 1024 * 1024
         conf.download_speed_limit = 2 * 1024 * 1024
-        mgr._apply_speed_limit(tor, conf, dry_run=False)
+        mgr.ctx.trackers.apply_speed_limit(tor, conf, dry_run=False)
         assert client.calls == [
             ("set_upload_limit", 5 * 1024 * 1024),
             ("set_download_limit", 2 * 1024 * 1024),
@@ -148,7 +148,7 @@ def test_apply_speed_limit_skips_when_equal():
         conf = _conf("HHan", ["hhanclub.net"])
         conf.upload_speed_limit = 5 * 1024 * 1024
         conf.download_speed_limit = 5 * 1024 * 1024
-        mgr._apply_speed_limit(tor, conf, dry_run=False)
+        mgr.ctx.trackers.apply_speed_limit(tor, conf, dry_run=False)
         assert client.calls == []
 
 
@@ -163,7 +163,7 @@ def test_apply_speed_limit_odd_manual_skip():
         conf = _conf("HHan", ["hhanclub.net"])
         conf.upload_speed_limit = 5 * 1024 * 1024
         conf.download_speed_limit = 5 * 1024 * 1024
-        mgr._apply_speed_limit(tor, conf, dry_run=False)
+        mgr.ctx.trackers.apply_speed_limit(tor, conf, dry_run=False)
         assert client.calls == [("set_download_limit", 5 * 1024 * 1024)]
 
 
@@ -177,5 +177,5 @@ def test_apply_speed_limit_dry_run_no_api():
         conf = _conf("HHan", ["hhanclub.net"])
         conf.upload_speed_limit = 5 * 1024 * 1024
         conf.download_speed_limit = 2 * 1024 * 1024
-        mgr._apply_speed_limit(tor, conf, dry_run=True)
+        mgr.ctx.trackers.apply_speed_limit(tor, conf, dry_run=True)
         assert client.calls == []

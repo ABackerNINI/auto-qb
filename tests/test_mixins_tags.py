@@ -58,14 +58,14 @@ def test_add_tags_direct():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="A,B")
-        assert mgr._add_tags(tor, ["B", "C"], dry_run=False) is True
+        assert mgr.ctx.maintenance.add_tags(tor, ["B", "C"], dry_run=False) is True
         assert client.calls[-1] == ("add_tags", ["C"])
         # 全部已存在 -> False, 不调用
         client.calls.clear()
-        assert mgr._add_tags(tor, ["A"], dry_run=False) is False
+        assert mgr.ctx.maintenance.add_tags(tor, ["A"], dry_run=False) is False
         assert client.calls == []
         # dry-run 不调用
-        assert mgr._add_tags(tor, ["D"], dry_run=True) is True
+        assert mgr.ctx.maintenance.add_tags(tor, ["D"], dry_run=True) is True
         assert client.calls == []
 
 
@@ -77,9 +77,9 @@ def test_remove_tags_direct():
         mgr.client = client
         client.tags = {"HHan", "seed-3D"}
         tor = FakeTorrent(tags="HHan,seed-3D")
-        assert mgr._remove_tags(tor, ["regex:^seed-"], dry_run=False) is True
+        assert mgr.ctx.maintenance.remove_tags(tor, ["regex:^seed-"], dry_run=False) is True
         assert client.calls[-1] == ("remove_tags", ["seed-3D"])
-        assert mgr._remove_tags(tor, ["NOPE"], dry_run=False) is False
+        assert mgr.ctx.maintenance.remove_tags(tor, ["NOPE"], dry_run=False) is False
 
 
 def test_remove_similar_tags():
@@ -90,7 +90,7 @@ def test_remove_similar_tags():
         mgr.client = client
         tor = FakeTorrent(tags="hhan,HHan")
         # 保留精确匹配, 移除其它大小写变体
-        removed = mgr._remove_similar_tags(tor, ["HHan"], dry_run=False)
+        removed = mgr.ctx.maintenance.remove_similar_tags(tor, ["HHan"], dry_run=False)
         assert removed
         assert ("remove_tags", ["hhan"]) in client.calls
 
@@ -102,11 +102,11 @@ def test_create_category_if_not_exists():
         client = FakeClient()
         mgr.client = client
         # 不存在 -> 创建
-        mgr._create_category_if_not_exists("NEW-CAT", dry_run=False)
+        mgr.ctx.maintenance.create_category_if_not_exists("NEW-CAT", dry_run=False)
         assert ("create_category", "NEW-CAT") in client.calls
         # dry-run -> 不调用
         client.calls.clear()
-        mgr._create_category_if_not_exists("OTHER", dry_run=True)
+        mgr.ctx.maintenance.create_category_if_not_exists("OTHER", dry_run=True)
         assert client.calls == []
 
 
@@ -126,7 +126,7 @@ def test_add_hr_tag_or_category_satisfied():
         conf = mgr.config.trackers["HHan"]
         # seeding_time 4D >= 3D+12H, ratio 1.0: satisfied
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("set_category", "--HR3D--") in client.calls
 
 
@@ -138,7 +138,7 @@ def test_handle_delete_tags():
         client = FakeClient()
         mgr.client = client
         client.tags = {"seed-3D", "HHan"}
-        mgr._handle_delete_tags(None, dry_run=False)
+        mgr.host.get("maintenance").handle_delete_tags(None, dry_run=False)
         assert ("delete_tags", {"seed-3D"}) in client.calls
 
 
@@ -151,7 +151,7 @@ def test_handle_delete_tags_if_has_no_torrents():
         mgr.client = client
         client.tags = {"orphan-1", "orphan-2"}
         # 无种子使用该标签 -> 删除
-        mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False)
+        mgr.host.get("maintenance").handle_delete_tags_if_has_no_torrents(None, dry_run=False)
         assert ("delete_tags", {"orphan-1", "orphan-2"}) in client.calls
 
 
@@ -162,7 +162,7 @@ def test_set_category_empty():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(category="")
-        assert mgr._set_category(tor, "HR-DONE", overwrite=False, dry_run=False) is True
+        assert mgr.ctx.maintenance.set_category(tor, "HR-DONE", overwrite=False, dry_run=False) is True
         assert ("set_category", "HR-DONE") in client.calls
         assert mgr.state["auto_categories"]["HASH123"] == "HR-DONE"
 
@@ -174,7 +174,7 @@ def test_set_category_overwrite():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(category="OLD")
-        assert mgr._set_category(tor, "NEW", overwrite=True, dry_run=False) is True
+        assert mgr.ctx.maintenance.set_category(tor, "NEW", overwrite=True, dry_run=False) is True
         assert ("set_category", "NEW") in client.calls
         assert mgr.state["auto_categories"]["HASH123"] == "NEW"
 
@@ -186,7 +186,7 @@ def test_set_category_no_overwrite():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(category="OLD")
-        assert mgr._set_category(tor, "NEW", overwrite=False, dry_run=False) is True
+        assert mgr.ctx.maintenance.set_category(tor, "NEW", overwrite=False, dry_run=False) is True
         assert client.calls == []
 
 
@@ -198,7 +198,7 @@ def test_set_category_auto_update():
         mgr.client = client
         mgr.state.setdefault("auto_categories", {})["HASH123"] = "OLD"
         tor = FakeTorrent(category="OLD")
-        assert mgr._set_category(tor, "NEW", overwrite=False, dry_run=False) is True
+        assert mgr.ctx.maintenance.set_category(tor, "NEW", overwrite=False, dry_run=False) is True
         assert ("set_category", "NEW") in client.calls
         assert mgr.state["auto_categories"]["HASH123"] == "NEW"
 
@@ -210,7 +210,7 @@ def test_set_category_same():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(category="SAME")
-        assert mgr._set_category(tor, "SAME", overwrite=True, dry_run=False) is False
+        assert mgr.ctx.maintenance.set_category(tor, "SAME", overwrite=True, dry_run=False) is False
         assert client.calls == []
 
 
@@ -221,7 +221,7 @@ def test_set_category_dry_run():
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(category="")
-        assert mgr._set_category(tor, "NEW", overwrite=False, dry_run=True) is True
+        assert mgr.ctx.maintenance.set_category(tor, "NEW", overwrite=False, dry_run=True) is True
         assert client.calls == []
         assert "HASH123" not in mgr.state.get("auto_categories", {})
 
@@ -240,7 +240,7 @@ def test_add_hr_tag_or_category_transferred_unsatisfied():
         conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="")
         tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HR"]) in client.calls
 
 
@@ -261,13 +261,13 @@ def test_add_hr_tag_or_category_seed_exempt():
         tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2, seeding_time=10 * 86400)
         tor.tracker_conf = conf
         # (a) 未接入站: 基准 = hr.required_seeding_time(3D), 做种 10D >= 9D -> 跳过, 零调用
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is False
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is False
         assert client.calls == []
         # (b) 已接入站: 基准 = hr_check.required_seeding_time(5D), 10D < 15D -> 不跳过, 做种满打达标标签
         conf.hr_check = SiteHrCheckConfig(
             enabled=True, tracker="x", hr_page_url="https://x.com/myhr.php", required_seeding_time=5 * 86400.0
         )
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HRDONE"]) in client.calls
         # (c) 基准 0: 跳过线不生效, 正常分流
         client.calls.clear()
@@ -280,7 +280,7 @@ def test_add_hr_tag_or_category_seed_exempt():
             required_seeding_time=0,
             required_seeding_time_raw="",
         )
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HRDONE"]) in client.calls
 
 
@@ -307,7 +307,7 @@ def test_add_hr_tag_or_category_excess_but_scope_still_tags():
         rec = TorrentRecord.from_torrent(tor)
         rec.tracker_conf = conf
         rec.hr_link = _ScopeLink()  # 做种 10D 已超 3x3D 基准, 但站点清单命中考察中
-        assert mgr._add_hr_tag_or_category(rec, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(rec, dry_run=False) is True
         assert ("add_tags", ["HR"]) in client.calls
 
 
@@ -338,7 +338,7 @@ def test_add_hr_tag_or_category_released_no_tag():
         rec = TorrentRecord.from_torrent(tor)
         rec.tracker_conf = conf
         rec.hr_link = _ReleasedLink()
-        assert mgr._add_hr_tag_or_category(rec, dry_run=False) is False
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(rec, dry_run=False) is False
         assert client.calls == []
 
 
@@ -352,7 +352,7 @@ def test_add_hr_tag_or_category_not_satisfied():
         conf.hr = _hr_rule(add_tag="HR", add_category="", add_category_for_satisfied="")
         tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=0)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HR"]) in client.calls
 
 
@@ -362,7 +362,7 @@ def test_add_tags_empty():
         mgr = _mgr(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        assert mgr._add_tags(FakeTorrent(tags=""), [], dry_run=False) is False
+        assert mgr.ctx.maintenance.add_tags(FakeTorrent(tags=""), [], dry_run=False) is False
         assert client.calls == []
 
 
@@ -381,7 +381,7 @@ def test_add_episode_tags_files_error():
     tor = FakeTorrent(hash="H1", tags="")
     seed_store(mgr, [tor])
     with pytest.raises(RuntimeError, match="api down"):
-        mgr._add_episode_tags(tor, dry_run=False)
+        mgr.ctx.maintenance.add_episode_tags(tor, dry_run=False)
     assert client.calls == []
 
 
@@ -393,7 +393,7 @@ def test_add_episode_tags_no_episodes():
         mgr.client = client
         tor = FakeTorrent(hash="H1", tags="")
         seed_store(mgr, [tor])
-        mgr._add_episode_tags(tor, dry_run=False)
+        mgr.ctx.maintenance.add_episode_tags(tor, dry_run=False)
         assert client.calls == [], "无集数不应加标签"
 
 
@@ -403,7 +403,7 @@ def test_remove_similar_tags_empty():
         mgr = _mgr(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
-        assert mgr._remove_similar_tags(FakeTorrent(tags="HHan"), [], dry_run=False) is False
+        assert mgr.ctx.maintenance.remove_similar_tags(FakeTorrent(tags="HHan"), [], dry_run=False) is False
         assert client.calls == []
 
 
@@ -415,7 +415,9 @@ def test_add_hr_tag_or_category_no_hr():
         mgr.client = client
         conf = mgr.config.trackers["HHan"]
         conf.hr = None
-        assert mgr._add_hr_tag_or_category(FakeTorrent(tags="", tracker_conf=conf), dry_run=False) is False
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(
+            FakeTorrent(tags="", tracker_conf=conf), dry_run=False
+        ) is False
         assert client.calls == []
 
 
@@ -434,7 +436,7 @@ def test_add_hr_tag_or_category_dlsize():
         )
         tor = FakeTorrent(tags="", downloaded=60 * 1024**2, seeding_time=0)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HR"]) in client.calls
 
 
@@ -453,7 +455,7 @@ def test_add_hr_tag_or_category_satisfied_tag():
         )
         tor = FakeTorrent(tags="", downloaded=100 * 1024**2, total_size=100 * 1024**2, seeding_time=4 * 86400)
         tor.tracker_conf = conf
-        assert mgr._add_hr_tag_or_category(tor, dry_run=False) is True
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["SATISFIED"]) in client.calls
 
 
@@ -464,7 +466,7 @@ def test_handle_delete_tags_no_patterns():
         mgr.config.delete_tags = []
         client = FakeClient()
         mgr.client = client
-        assert mgr._handle_delete_tags(None, dry_run=False) is True
+        assert mgr.host.get("maintenance").handle_delete_tags(None, dry_run=False) is True
         assert client.calls == []
 
 
@@ -480,7 +482,7 @@ def test_handle_delete_tags_tags_error():
             raise RuntimeError("api down")
 
         client.torrents_tags = boom
-        assert mgr._handle_delete_tags(None, dry_run=False) is True
+        assert mgr.host.get("maintenance").handle_delete_tags(None, dry_run=False) is True
         assert client.calls == []
 
 
@@ -491,7 +493,7 @@ def test_handle_delete_tags_if_has_no_torrents_no_patterns():
         mgr.config.delete_tags_if_has_no_torrents = []
         client = FakeClient()
         mgr.client = client
-        assert mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
+        assert mgr.host.get("maintenance").handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
         assert client.calls == []
 
 
@@ -507,7 +509,7 @@ def test_handle_delete_tags_if_has_no_torrents_tags_error():
             raise RuntimeError("api down")
 
         client.torrents_tags = boom
-        assert mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
+        assert mgr.host.get("maintenance").handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
         assert client.calls == []
 
 
@@ -519,7 +521,7 @@ def test_handle_delete_tags_if_has_no_torrents_no_tags():
         client = FakeClient()
         mgr.client = client
         client.tags = set()
-        assert mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
+        assert mgr.host.get("maintenance").handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
         assert client.calls == []
 
 
@@ -532,5 +534,5 @@ def test_handle_delete_tags_if_has_no_torrents_no_match():
         mgr.client = client
         client.tags = {"orphan-1"}
         seed_store(mgr, [FakeTorrent(hash="H1", tags="orphan-1")])
-        assert mgr._handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
+        assert mgr.host.get("maintenance").handle_delete_tags_if_has_no_torrents(None, dry_run=False) is True
         assert client.calls == [], "有种子使用时不删除"
