@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>计划 · 热重载机制简化: 统一挂载口 vs 保存即重启</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hot-reload-simplify">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-30-1751">
+<meta name="doc-updated" content="26-09-30-1751">
+<meta name="doc-refs" content="26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html">
+<style>
+:root {
+  --bg: #10151a;
+  --ink: #e4eaef;
+  --dim: #a2b0bd;
+  --faint: #6f7d8a;
+  --hair: #26313a;
+  --hair-soft: #1c252d;
+  --accent: #5cc0cf;
+  --accent-ink: #7fd3de;
+  --code-bg: #171e26;
+  --mark: #161e26;
+  --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  color-scheme: dark;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+::selection { background: #24424a; color: #fff; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+.sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+
+nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+
+header.cover { grid-column: 2; margin-bottom: 8px; }
+.kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+.lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+.meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+.meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+.meta-row .item .v a { color: var(--accent-ink); text-decoration: none; }
+.badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--mark); color: var(--accent-ink); border: 1px solid var(--hair); }
+
+section { grid-column: 2; margin-top: 48px; }
+h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; font-weight: 400; }
+h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+p { margin-bottom: 12px; max-width: 74ch; }
+ul, ol { margin: 0 0 12px 22px; max-width: 74ch; }
+li { margin-bottom: 6px; }
+code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; border: 1px solid var(--hair-soft); }
+pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); font-weight: 400; white-space: nowrap; }
+td .path { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+.callout { background: var(--mark); border: 1px solid var(--hair-soft); padding: 12px 16px; margin: 0 0 14px; max-width: 74ch; font-size: 14px; }
+.callout .ck { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+blockquote { margin: 0 0 14px; padding: 2px 0 2px 16px; border-left: 1px solid var(--hair); color: var(--dim); max-width: 74ch; }
+.hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+.yes { color: var(--accent-ink); }
+.no2 { color: var(--dim); }
+footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+footer a { color: var(--dim); }
+@media (max-width: 900px) {
+  .sheet { grid-template-columns: 1fr; gap: 24px; padding: 32px 20px 60px; }
+  nav.toc { position: static; }
+  header.cover, section, footer { grid-column: 1; }
+}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<nav class="toc">
+  <div class="toc-label">目录</div>
+  <a href="#s1"><span class="no">01</span>背景与问题定性</a>
+  <a href="#s2"><span class="no">02</span>成熟方案调研</a>
+  <a href="#s3"><span class="no">03</span>方向一 · 统一挂载口</a>
+  <a href="#s4"><span class="no">04</span>方向二 · 保存即重启</a>
+  <a href="#s5"><span class="no">05</span>对比矩阵</a>
+  <a href="#s6"><span class="no">06</span>推荐与实施路线</a>
+  <a href="#s7"><span class="no">07</span>验收口径</a>
+  <a href="#s8"><span class="no">08</span>决策点清单</a>
+  <div class="toc-foot">状态 Open(待拍板)<br>拍板后本件冻结,<br>执行滚动进 tasks/</div>
+</nav>
+
+<header class="cover">
+  <div class="kicker">Plan · hot-reload-simplify</div>
+  <h1>热重载机制简化: 统一挂载口 vs 保存即重启</h1>
+  <p class="lede">配置热重载机制四类失效反复复发, 根因是「谁需要知道配置变了」这一知识分散在中央分级表、分派分支、消费方钩子、测试守阵四处, 各自演化各自腐烂。本文对比两条彻底简化路线 —— 方向一「统一挂载口」(Spring RefreshScope 同族) 与方向二「保存即重启进程」(nginx / uvicorn 同族), 附成熟方案调研、对比矩阵与推荐路线, 供拍板。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">类型</div><div class="v">plan · <span class="badge">Open 待拍板</span></div></div>
+    <div class="item"><div class="k">Added</div><div class="v">26-09-30-1751</div></div>
+    <div class="item"><div class="k">专题</div><div class="v">hot-reload-simplify</div></div>
+    <div class="item"><div class="k">Refs</div><div class="v"><a href="26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html">L2 回滚修复计划</a></div></div>
+  </div>
+</header>
+
+<section id="s1">
+  <h2><span class="no">01</span>背景与问题定性</h2>
+  <p>现有机制 (<code class="path">config/impact.py</code> + <code class="path">qbmanager.apply_new_config</code> + <code class="path">HrRuntime.apply</code> + <code class="path">webui/server/lifecycle.py</code>, 核心约 800 行): WebUI 保存 → 写盘 YAML → 命令队列投 <code>reload_config</code> → 主循环线程 diff 新旧配置, 每项变更按 L0(换对象即生效) / L1(轻量重挂) / L2(结构重建) / R(拒绝, 须重启进程) 分级应用。分级靠三张手写表 (<code>SECTION_LEVELS</code> / <code>TRACKER_FIELD_LEVELS</code> / <code>HR_CHECK_FIELD_LEVELS</code>), 未列出键默认 L2。</p>
+  <p>四类失效族 (明细见各档案, 这里只列机制责任):</p>
+  <table>
+    <tr><th>失效族</th><th>实报</th><th>机制责任</th></tr>
+    <tr><td>过度重启</td><td>2026-09-14 改日志级别把 web 服务器拆了重建</td><td>「顺带重启」语义, 无身份比对</td></tr>
+    <tr><td>重启竞态</td><td>Errno 10048 抢端口 (<code class="path">lifecycle.py</code> 整段 WARN 在防它)</td><td>停旧-等退出-启新纪律靠每处自觉</td></tr>
+    <tr><td>语义回滚</td><td>issue 26-09-21-1347: L2 分支重读磁盘 state, 运行期内存态回滚 (修于 commit <code>bfc0bf85</code>)</td><td>重建派生结构与持久化状态纠缠</td></tr>
+    <tr><td>漏调 / 从无到有</td><td>2026-09-29 一日三连: <code>hr.apply</code> 只挂 L1 而站点接入是 L0 / <code>running</code> 守卫挡新建 / 新建端点未 <code>start()</code> (commits <code>5215b74f</code> + <code>81a3674c</code>, 坑档 hot-reload-held-config.md)</td><td>分派分支天然制造「钩子挂哪级」决策点</td></tr>
+  </table>
+  <div class="callout"><div class="ck">问题定性</div>四族 bug 是同一根因的四种表现: 配置消费知识没有单点。L0 的成立前提「消费方每轮现读」是散落在几十个类里的实现细节, 中央表把它们编码成静态分类后必然腐化 —— 2026-09-29 实报时 impact.py 注释写「取数线程每轮现读」, 与实现 (<code>HrRefreshService.__init__</code> 按值拷贝) 完全相反; 旧守阵还把反语义钉死。任何简化必须让这个知识回到单点。</div>
+</section>
+
+<section id="s2">
+  <h2><span class="no">02</span>成熟方案调研</h2>
+  <h3>2.1 进程级重启 —— 工业界的默认答案</h3>
+  <p>Unix 守护进程四十年的惯例是 <code>SIGHUP</code> → 重读配置; nginx 把它做成教科书: master 收 HUP 后<b>先校验新配置语法</b>(不合法则旧配置继续跑, 什么都不变), 再用新配置起新 worker, 旧 worker 停止接新连接、排空在途请求后退出 —— 监听 socket 由 master 持有, 全程不关, 所以零宕机。uvicorn 的 <code>--reload</code> 更简单粗暴: 文件变了就 kill 进程重新 spawn (开发场景)。systemd / supervisor / docker 的 <code>restart</code> 策略则是「外部监督者拉起」的通用形态。这一族全部映射到本仓的方向二。</p>
+  <h3>2.2 组件级刷新 —— Spring 已证明的另一条路</h3>
+  <p>Spring Cloud 的 <code>@RefreshScope</code> 是「不重启进程、按组件重建」的旗舰实现: <code>/actuator/refresh</code> 事件触发 <code>RefreshScope.refreshAll()</code>, <b>只销毁标注了刷新作用域的 bean 缓存</b>, 下次访问时用新 <code>Environment</code> 惰性重建; <code>@ConfigurationProperties</code> bean 由 rebinder 单独重绑。机制核心与方向一同构: 「刷新事件广播 → 组件自判重建 → 惰性/短路兜底」。同族还有各守护进程的 rehash 惯例。</p>
+  <h3>2.3 Python 生态的边界 —— 没有现成库</h3>
+  <p>Python 侧的配置库只解决「设置对象」不解决「消费方」: dynaconf 的 <code>settings.reload()</code> 只刷新设置对象本身; watchdog / watchfiles 只探测文件变更; HMR 类库 (promplate/hmr 等) 是开发期模块热替换, 不是生产配置面。2026-01 还有人写「生产 Python 系统自建 config hot-reload」的指南 (OneUptime blog), 佐证消费方重建这一段<b>生态里没有可引用的现成品</b>。</p>
+  <div class="callout"><div class="ck">调研结论</div>两条路线在工业界都是成熟模式、无现成库: 方向二的对应物 (nginx / uvicorn / supervisor) 成熟到无聊, 方向一的对应物 (@RefreshScope) 证明该模式可长期演进。能抄的是模式 (nginx 的「先验证后切换」、RefreshScope 的「销毁缓存 + 惰性重建」), 不是代码 —— 「消费方重建」这部分纪律注定是本仓自有代码。两个方向的真正差别, 是把这部分纪律做多小。</div>
+</section>
+
+<section id="s3">
+  <h2><span class="no">03</span>方向一 · 统一挂载口</h2>
+  <p>把 2026-09-29 修复中 HR 已被迫走通的模式 (<b>每次热重载都调 + 组件内部自判短路</b>) 升格为唯一模式, 删掉级别分派层。</p>
+  <h3>3.1 协议</h3>
+  <pre><code>class ConfigConsumer(Protocol):
+    def sections(self) -> tuple[str, ...]:
+        """声明消费哪些顶层段 (守阵: 配置里每个段至少被一个组件认领)"""
+    def apply(self, old: Config, new: Config) -> ApplyResult:
+        """每次热重载无条件调用; 内部做整段相等比较, 相等即短路 return"""
+# ApplyResult = (组件名, 动作: none | remount | rebind | rebuild, 摘要)</code></pre>
+  <p>编排退化为一行循环: <code>diff</code> 只剩两个职责 —— 生成用户可读的变更报告 + 把守 R 级闸门 (state_file / data_dir / fs 变更不进组件循环, 维持「须重启进程」提示); 其余全交给组件。主循环节拍现读键 (<code>main_tick</code> / <code>sync_interval</code> / <code>state_save_interval</code> 等) 不属于任何组件, 天然零动作。</p>
+  <h3>3.2 组件清单与现状差距</h3>
+  <table>
+    <tr><th>组件</th><th>段依赖</th><th>短路判据 → 重挂动作</th><th>现状差距</th></tr>
+    <tr><td>logging</td><td><code>logging</code></td><td>段相等 → 重挂 handler</td><td>L1 分支无条件 → 补短路</td></tr>
+    <tr><td>notify</td><td><code>notify</code></td><td>段相等 → 重挂 handler</td><td>同上</td></tr>
+    <tr><td>qb client</td><td><code>qbittorrent</code></td><td>段相等 → 重建 Client + connect</td><td>L1/L2 无条件重连 → 补短路</td></tr>
+    <tr><td>web server</td><td><code>web</code></td><td>段相等短路; 真变时仅监听身份 (enabled/host/port) 变化才停旧-等退出-启新</td><td>只在 L1 分支被调 → 移出分支, 身份元组留作内部实现</td></tr>
+    <tr><td>hr runtime</td><td><code>hr_check</code> + <code>trackers.*.hr_check</code></td><td>全局段+派生站点表相等短路; 监听身份变化才重绑端点; enabled ⇒ 在跑</td><td><span class="yes">已合规</span> (2026-09-29 修复即目标形态)</td></tr>
+    <tr><td>queue + rules</td><td><code>interval</code> / <code>rules_config</code> / <code>delete_tags*</code> / <code>global_speed_limit_curve</code> + <code>trackers.{domains,rules,groups}</code></td><td>相关段相等短路 → 重建队列 + 重载规则 + 全量重匹配 (运行期内存态不动)</td><td>L2 无条件全量 → 补短路 (最大收益: 无关保存不再全量重建)</td></tr>
+    <tr><td>R 闸</td><td><code>state_file</code> / <code>data_dir</code> / <code>fs</code></td><td>diff 阶段拒绝, 不进组件循环</td><td>不变</td></tr>
+  </table>
+  <h3>3.3 四条设计规则</h3>
+  <ol>
+    <li><b>整段相等, 不做逐字段白名单</b> —— dataclass <code>==</code> 自动覆盖段内新增键, 「新键忘登记」从「静默失效 / 全量重建」变成「被认领组件自动看到」;</li>
+    <li><b>比较与状态同居组件侧</b> —— 消费知识单点化, 中央表不再编码实现细节;</li>
+    <li><b>认领守阵</b> —— 配置每个段至少被一个组件 <code>sections()</code> 认领, 未认领段的变更落 WARN 日志 + 全量重建兜底 (保守性可解释);</li>
+    <li><b>从无到有收敛 enabled ⇒ 在跑</b> —— 坑档既有结论, 端点与线程一体适用, 不再靠守卫放行。</li>
+  </ol>
+  <h3>3.4 迁移波次</h3>
+  <table>
+    <tr><th>波次</th><th>内容</th><th>改动面</th><th>验收</th></tr>
+    <tr><td>W1</td><td>定协议 + 编排改造, 影子并行: 组件循环先只挂已合规的 hr, 行为等价</td><td><code class="path">qbmanager.apply_new_config</code> + 新协议壳</td><td>既有 <code>test_apply_new_config_levels</code> 全绿</td></tr>
+    <tr><td>W2</td><td>logging / notify / qb / web 迁入组件, 删 L1 分支</td><td>四组件壳 + 删分支</td><td>web 竞态 (stop+wait) 与令牌守阵保留全绿</td></tr>
+    <tr><td>W3</td><td>queue+rules 组件化 + 整段短路, 删 L2 分支</td><td>TaskQueue/规则重建收进组件</td><td><code>test_apply_new_config_l2_preserves_runtime_state</code> 迁移改写; 5000 种子模拟下短路/重建耗时实测入档</td></tr>
+    <tr><td>W4</td><td>三表退役: impact.py 只留 diff+R 闸; <code>/api/config/schema</code> 的 levels 改由组件 <code>sections()</code> 派生; receipt 从 levels 换 actions, 前端适配</td><td>impact.py / schema 路由 / 前端 receipt 展示</td><td>test_impact 17 例收缩改写为 diff+R 闸用例</td></tr>
+    <tr><td>W5</td><td>文档回写 (modules / systemPatterns / 坑档标注「已由模型消除」) + test.full 基线 + dry-run 走查</td><td>memory-bank 回写</td><td>基线切片 (数字实施时实测) + 四场景走查 (§07)</td></tr>
+  </table>
+  <h3>3.5 代价与风险</h3>
+  <p>核心改动估 300-400 行 (其中相当部分是「搬家」而非新写), 守阵改写估 15-20 例。风险两条: ①段认领遗漏 → 变更不生效, 对策是认领守阵 + 未认领段全量重建兜底; ②receipt 形态变化的前端适配 (改动集中在 config_hub 一处)。</p>
+</section>
+
+<section id="s4">
+  <h2><span class="no">04</span>方向二 · 保存即重启</h2>
+  <p>任何配置保存 → 写盘 → 主循环收到 <code>reload_config</code> 后不再 apply, 而是走优雅停机 → 外部拉起。热重载机制 (分级表 / 分派 / 组件钩子, 约 800 行 + 三个测试文件的相关守阵) 整体退役, 模型退化为「冷启动唯一路径」。</p>
+  <h3>4.1 流程</h3>
+  <pre><code>PUT /api/config (写盘, 校验不变)
+  -> 主循环 consume reload_config
+       -> save_state()            # 优雅退出落盘, 丢失窗口 = 0
+       -> 停 hr / web / notify    # 复用现有 stop 纪律
+       -> 退出 (退出码 0)
+  -> 外部拉起 (见 4.2 宿主形态)
+  -> 前端轮询 /api/state 直到服务回来, 自动恢复</code></pre>
+  <p>可行性支撑: 周期落盘 (commit <code>ffb74409</code>, <code>state_save_interval</code>) 已把非优雅终止的丢失窗口压到 ≤ 间隔, 优雅路径丢失为 0; 单一写线程保证停机时刻无写在途。</p>
+  <h3>4.2 宿主形态 —— 方向二的真正成本在这里</h3>
+  <table>
+    <tr><th>宿主</th><th>拉起方式</th><th>评估</th></tr>
+    <tr><td>docker / compose</td><td><code>restart</code> 策略 + 退出码契约 (<code class="path">qbmanager.py:350</code> 既有)</td><td class="yes">零新增, 最顺</td></tr>
+    <tr><td>宿主直跑 CLI</td><td>进程退出即停</td><td class="no2">用户手动重跑, 或外层脚本循环 —— 谁来保证外层活着?</td></tr>
+    <tr><td>托盘 (Windows 桌面, 主场景)</td><td>托盘与主程序<b>同进程</b> (<code class="path">tray/app.py</code> 直接持 QbManager)</td><td class="no2">进程退出 = 托盘一起消失, 桌面无人拉起 —— 必须补 launcher 外壳 (批处理循环 / 计划任务) 或 <code>os.execv</code> 自我替换; Windows 下 execv 的控制台与 stdio 继承有历史坑, 需真机验证</td></tr>
+  </table>
+  <h3>4.3 体验与变体</h3>
+  <p>每次保存断连约 3-5 秒 (进程重启 + 连接重建), 调参期连续保存时明显; <code>web.port</code> 变更时旧页面永远连不回, 只能人工换地址 (docker 端口映射固定则无此题)。变体「方向二′」: 保留 L0 现读 (节拍类零成本), 仅 L1/L2 变更重启 —— 但这意味着级别表留下了一半, 简化不彻底, 只作为体验折中候选。</p>
+  <h3>4.4 代价与风险</h3>
+  <p>净删约 500 行 (删 800 增 ~250: 停机序列 ~100 + 前端重连 ~80 + 桌面拉起 ~50-100, 均为估算), 测试侧热重载守阵大半退役。新故障面一条:<b>拉起链</b> —— launcher 挂了 = 程序失踪, 且三种宿主形态都要验证。换来的是机制彻底不存在, 四族 bug 连根拔。</p>
+</section>
+
+<section id="s5">
+  <h2><span class="no">05</span>对比矩阵</h2>
+  <table>
+    <tr><th>维度</th><th>方向一 · 统一挂载口</th><th>方向二 · 保存即重启</th></tr>
+    <tr><td>删掉的复杂度</td><td>分派层 + 三张级别表 (~200 行), 消费知识单点化到组件</td><td>整个热重载机制 (~800 行) + 守阵大半</td></tr>
+    <tr><td>新增代码</td><td>协议壳 ~100 行 (估算)</td><td>停机序列 + 前端重连 + 桌面拉起 ~250 行 (估算)</td></tr>
+    <tr><td>四失效族覆盖</td><td>漏调/从无到有<b>结构性消灭</b> (无分支可漏); 过度重启由段相等短路消灭; 竞态族不变 (join 纪律保留); 回滚族已修且模型不再诱惑重读</td><td>四族连根拔 (机制不存在)</td></tr>
+    <tr><td>新故障面</td><td>段认领遗漏 (有守阵 + 兜底)</td><td>拉起链 (launcher 失踪 = 程序失踪), 三宿主形态验证面</td></tr>
+    <tr><td>保存体验</td><td class="yes">零回退 (保存无感)</td><td class="no2">每次保存断连 3-5s, 调参期明显</td></tr>
+    <tr><td>迁移方式</td><td>五波行为等价迁移, 每波独立入库可回退</td><td>一步切换, 简单但宿主验证面广</td></tr>
+    <tr><td>测试改写量</td><td>估 15-20 例改写</td><td>热重载守阵大半退役 + 新增停机/拉起测试</td></tr>
+    <tr><td>黄金法则兼容</td><td>单一写线程不变 (apply 仍在主循环); 幂等由短路保证</td><td>状态持久化已备; 「进程身份操作」变常态, 与保守默认需对齐说明</td></tr>
+    <tr><td>可逆性</td><td class="yes">落地后仍可退到方向二 (组件协议不设障碍)</td><td class="no2">落地后再想要热重载 = 重写</td></tr>
+    <tr><td>工业对应物</td><td>Spring @RefreshScope (成熟, 长期演进中)</td><td>nginx / uvicorn / supervisor (成熟到无聊)</td></tr>
+  </table>
+  <p>怎么读这张表: 真正的分歧只有两点 —— 愿不愿为「删干净」支付保存体验与拉起链代价; 以及是否要保留通往对方的退路。机制复杂度本身, 两个方向都能删到可维护线以下。</p>
+</section>
+
+<section id="s6">
+  <h2><span class="no">06</span>推荐与实施路线</h2>
+  <p><b>推荐方向一</b>, 四条理由:</p>
+  <ol>
+    <li>保存体验零回退 —— 本工具是常驻自动化 + WebUI 调参场景, 保存即断连伤调参效率;</li>
+    <li>已被半验证 —— <code>hr.apply</code> 2026-09-29 修复后就是目标形态, 且再未复发, 方向一是把既成事实升格为制度, 不是赌新设计;</li>
+    <li>bug 族结构性消灭 —— 漏调/从无到有族的老家 (分派分支) 被删除, 而不只是修补;</li>
+    <li>留退路 —— 组件协议与方向二不冲突, 若落地后同族 bug 再犯, 随时可切换方向二作为终局解 (届时唯一要补的工程是桌面拉起)。</li>
+  </ol>
+  <p>实施按 §3.4 五波走, 每波独立入库: W1 影子并行 (行为等价) → W2/W3 逐组件迁移 (每波删一个分支) → W4 表退役 → W5 回写与基线。拍板后本件冻结, 执行滚动进 <code class="path">tasks/</code> 档案。</p>
+</section>
+
+<section id="s7">
+  <h2><span class="no">07</span>验收口径</h2>
+  <h3>守阵清单 (方向一)</h3>
+  <table>
+    <tr><th>处置</th><th>守阵</th></tr>
+    <tr><td>保留</td><td><code>test_apply_new_config_l2_preserves_runtime_state</code> (迁到 queue+rules 组件); web stop+wait 竞态守阵; R 闸用例; <code>test_hr_runtime.py</code> 从无到有三件套 (服务/线程/端点)</td></tr>
+    <tr><td>新增</td><td>每组件「段变才动 / 段不变短路」各一例; 段认领完备守阵 (每段至少一组件认领, 未认领段变更落 WARN + 全量兜底)</td></tr>
+    <tr><td>改写退役</td><td>test_impact 17 例中的分级表用例收缩为 diff 报告 + R 闸; <code>test_apply_new_config_levels</code> 改写为组件循环等价断言</td></tr>
+  </table>
+  <h3>真机走查四场景 (dry-run)</h3>
+  <ul>
+    <li>改 <code>main_tick</code>: 纯现读键, 零组件动作, 日志无重挂行;</li>
+    <li>改 <code>web.token</code>: web 组件短路, 不重绑端口 (反向验证过度重启族);</li>
+    <li>启动后热接入第一个 HR 站点: worker + 端点从无到有全部起来 (回归 2026-09-29 三连);</li>
+    <li>改一条规则: queue+rules 重建一次且运行期内存态 (exec_history / skip_check_day) 原对象保留。</li>
+  </ul>
+  <p class="hint">test.full 基线数字实施时实测入档, 本件不预写。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="no">08</span>决策点清单</h2>
+  <table>
+    <tr><th>#</th><th>拍板项</th><th>选项</th><th>建议</th></tr>
+    <tr><td>1</td><td>方向选择</td><td>方向一 / 方向二 / 方向二′ (L0 保留现读)</td><td class="yes">方向一</td></tr>
+    <tr><td>2</td><td>receipt 形态 (方向一)</td><td>组件动作列表 actions / 保留 levels 派生展示</td><td>actions, levels 由段依赖派生仅作 UI 标签</td></tr>
+    <tr><td>3</td><td>未认领段兜底</td><td>WARN + 全量重建 (保守) / 仅 WARN (激进)</td><td>WARN + 全量重建, 保守性可解释</td></tr>
+    <tr><td>4</td><td>若选方向二: 桌面拉起</td><td>launcher 外壳 / os.execv 自我替换</td><td>launcher 外壳 (execv 的 Windows 控制台行为需先真机验证)</td></tr>
+  </table>
+</section>
+
+<footer>
+  <p>依据: 2026-09-30 分析轮 (机制全景与四失效族定位) · 同专题前案 26-09-22-1857 (L2 回滚修复) · 坑档 pitfalls/backend/hot-reload-held-config.md · tasks/26-09-29-backend-hr-hot-apply.md。</p>
+  <p style="margin-top:8px">调研来源: <a href="https://nginx.org/en/docs/control.html">nginx — Controlling nginx (SIGHUP reload)</a> · <a href="https://docs.spring.io/spring-cloud-config/reference/">Spring Cloud Config Reference (@RefreshScope)</a> · <a href="https://dynaconf.com/advanced/">Dynaconf Advanced Usage</a> · <a href="https://oneuptime.com/blog/post/2026-01-22-config-hot-reload-python/view">OneUptime — Config Hot Reload in Python (2026-01)</a> · <a href="https://softwareengineering.stackexchange.com/questions/456812">SE — Reload configuration without restart</a>。</p>
+  <p style="margin-top:8px">doc-topic hot-reload-simplify · 状态 Open(待拍板) · 拍板后冻结, 执行进 tasks/。</p>
+</footer>
+
+</div>
+</body>
+</html>
