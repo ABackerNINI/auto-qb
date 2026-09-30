@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="web-state-alias-disposal">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-01-0350">
+<meta name="doc-updated" content="26-10-01-0350">
+<meta name="doc-refs" content="memory-bank/plans/26-09-30-1819-plan-kernel-module-refactor.html">
+<title>计划 · 别名层处置 — _WEB_STATE_ALIAS 与旧名委托层的退役路线</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --paper: #14181d;
+    --paper-2: #181d23;
+    --ink: #d9dee3;
+    --muted: #8b949e;
+    --faint: #6b7480;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #7ab3c4;
+    --accent-soft: rgba(122,179,196,.13);
+    --warn: #c9a86a;
+    --disp: "Bahnschrift", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --body: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { display: flex; max-width: 1280px; margin: 0 auto; }
+  nav.toc {
+    flex: 0 0 224px;
+    position: sticky; top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    padding: 44px 20px 40px 28px;
+    border-right: 1px solid var(--hairline);
+    overflow-y: auto;
+  }
+  nav.toc .toc-kicker {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .14em;
+    color: var(--faint); text-transform: uppercase; margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--muted); text-decoration: none;
+    font-size: 12.5px; line-height: 1.5; padding: 4.5px 0;
+  }
+  nav.toc a .n { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-right: 8px; }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc .toc-meta { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--hairline); }
+  nav.toc .toc-meta div { font-family: var(--mono); font-size: 10.5px; color: var(--faint); line-height: 1.9; }
+  nav.toc .toc-meta b { color: var(--muted); font-weight: 400; }
+  main { flex: 1; min-width: 0; padding: 0 56px 90px; }
+  @media (max-width: 1080px) {
+    nav.toc { display: none; }
+    main { padding: 0 28px 70px; }
+  }
+  header.cover { padding: 64px 0 40px; border-bottom: 1px solid var(--hairline-strong); }
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+  }
+  h1 {
+    font-family: var(--disp); font-weight: 600;
+    font-size: 40px; line-height: 1.16; letter-spacing: -.02em;
+    max-width: 20em;
+  }
+  .subtitle { margin-top: 14px; font-size: 16px; color: var(--muted); max-width: 44em; }
+  .statusline { margin-top: 26px; display: flex; gap: 28px; flex-wrap: wrap; }
+  .statusline div { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .statusline b { display: block; color: var(--ink); font-weight: 500; font-size: 13px; margin-top: 3px; }
+  .statusline .st { color: var(--accent); }
+  h2 {
+    font-family: var(--disp); font-weight: 600; font-size: 24px;
+    letter-spacing: -.01em;
+    padding: 52px 0 6px;
+  }
+  h2 .no {
+    font-family: var(--mono); font-weight: 400; font-size: 12px;
+    color: var(--accent); vertical-align: 4px; margin-right: 10px; letter-spacing: .1em;
+  }
+  h3 { font-family: var(--disp); font-weight: 600; font-size: 16.5px; margin: 26px 0 8px; }
+  p { margin: 10px 0; max-width: 46em; }
+  .lead { font-size: 16.5px; color: var(--ink); }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  code {
+    font-family: var(--mono); font-size: .92em;
+    background: var(--paper-2); border: 1px solid var(--hairline);
+    padding: 1px 5px; border-radius: 3px;
+  }
+  pre {
+    font-family: var(--mono); font-size: 12.8px; line-height: 1.6;
+    background: var(--paper); border: 1px solid var(--hairline);
+    border-left: 2px solid var(--accent);
+    padding: 14px 18px; margin: 14px 0; overflow-x: auto;
+    color: var(--ink);
+  }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; margin: 14px 0; width: 100%; font-size: 13.5px; }
+  th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--faint); text-align: left; font-weight: 500;
+    border-bottom: 1px solid var(--hairline-strong); padding: 8px 12px 8px 0;
+  }
+  td { border-bottom: 1px solid var(--hairline); padding: 9px 12px 9px 0; vertical-align: top; }
+  td code, th code { font-size: .95em; }
+  .callout {
+    border: 1px solid var(--hairline); border-left: 2px solid var(--warn);
+    background: var(--paper); padding: 12px 18px; margin: 16px 0; max-width: 46em;
+  }
+  .callout.accent { border-left-color: var(--accent); }
+  .callout .t { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--warn); margin-bottom: 6px; }
+  .callout.accent .t { color: var(--accent); }
+  ul, ol { margin: 8px 0 8px 1.4em; max-width: 44em; }
+  li { margin: 5px 0; }
+  hr.sep { border: none; border-top: 1px solid var(--hairline); margin: 34px 0 0; }
+  footer.colophon {
+    margin-top: 70px; padding-top: 18px; border-top: 1px solid var(--hairline-strong);
+    font-size: 12.5px; color: var(--faint); max-width: none;
+  }
+  footer.colophon code { font-size: 11.5px; }
+  .wave { border: 1px solid var(--hairline); background: var(--paper); padding: 16px 20px; margin: 14px 0; max-width: none; }
+  .wave .w-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+  .wave .w-id { font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: .08em; }
+  .wave .w-title { font-family: var(--disp); font-weight: 600; font-size: 16px; }
+  .wave .w-body { font-size: 13.5px; color: var(--muted); }
+  .wave .w-body b { color: var(--ink); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="frame">
+<nav class="toc">
+  <div class="toc-kicker">Contents</div>
+  <a href="#s1"><span class="n">01</span>现状与问题定性</a>
+  <a href="#s2"><span class="n">02</span>处置原则</a>
+  <a href="#s3"><span class="n">03</span>分波实施 W0–W3</a>
+  <a href="#s4"><span class="n">04</span>不变量与风险</a>
+  <a href="#s5"><span class="n">05</span>决策点清单</a>
+  <div class="toc-meta">
+    <div>status <b>Open 待拍板</b></div>
+    <div>topic <b>web-state-alias-disposal</b></div>
+    <div>added <b>26-10-01-0350</b></div>
+    <div>refs <b>kernel-module-refactor</b></div>
+  </div>
+</nav>
+<main>
+
+<header class="cover">
+  <div class="kicker">Plan · web-state-alias-disposal · 只计划不改代码</div>
+  <h1>别名层处置</h1>
+  <p class="subtitle">_WEB_STATE_ALIAS(20 字段 + 双 dunder)与七节旧名委托层(81 个成员)的退役路线 —— 内核化重构(plan kernel-module-refactor)决策点 D4 的后续计划。</p>
+  <div class="statusline">
+    <div>状态<span class="st"><b>Open · 待拍板</b></span></div>
+    <div>来源<b>1819 计划 §5/§7.2 · 决策点 D4</b></div>
+    <div>added<b>26-10-01-0350</b></div>
+    <div>勘察基线<b>54c83ac3(P6 守阵落位后实测)</b></div>
+  </div>
+</header>
+
+<h2 id="s1"><span class="no">01</span>现状与问题定性</h2>
+<p class="lead">内核化重构 P0–P6 已把全部业务迁出 <code>core/qbmanager.py</code>;为了让 76 处构造点 / 279 处 make_manager 测试 / 路由零改动,每段迁移都在 manager 上留了<strong>旧名兼容层</strong>。它们是当时验证过的迁移惯用法(plan §7.2),但按设计就是<strong>待清理的过渡层</strong> —— 现在重构已收官,这层成了内核上唯一一块「知道所有模块内部方法名」的脏面。</p>
+
+<h3>1.1 现状盘点(勘察基线 54c83ac3,数字为实测)</h3>
+<table>
+  <tr><th>兼容层</th><th>体量(实测)</th><th>内容</th><th>消费方</th></tr>
+  <tr>
+    <td><code>_WEB_STATE_ALIAS</code></td>
+    <td>20 字段 + <code>__getattr__</code>/<code>__setattr__</code> 两个 dunder</td>
+    <td>表现层旧字段名 → <code>self.web.*</code> 的读写转发(19 字段为 1819 计划勘察值,+1 为 P3 的 <code>_traffic_view</code>)</td>
+    <td>webui routes 3 个文件 8 处直引; 测试 27 个文件命中 <code>mgr._*</code> 共 727 处(含内核自有方法, 需分诊)</td>
+  </tr>
+  <tr>
+    <td>服务委托(P0)</td>
+    <td>22 个成员(含 7 setter)</td>
+    <td>config/store/api/state/state_file/task_queue/web 及 _next_state_flush_at —— ctx 为单一真相</td>
+    <td>测试与门面直读; 340 处 mgr.client / 309 处 mgr.store 级别的测试面</td>
+  </tr>
+  <tr>
+    <td>模块方法委托(P3/P4/P5)</td>
+    <td>14 + 12 + 3 个</td>
+    <td>maintenance/tags 族、grouping 族、ops 族的旧名单行转发</td>
+    <td>测试直调(mgr._add_tags / mgr._check_download_conflicts …)</td>
+  </tr>
+  <tr>
+    <td>规则引擎委托(P5)</td>
+    <td>14 个(含 2 setter)</td>
+    <td>rules/enabled_rules 属性对 + _load_rules 等 9 个单行方法 + _hr_anchors</td>
+    <td>测试直调; run() 启动加载走 host 新名</td>
+  </tr>
+  <tr>
+    <td>状态持久化委托(P0)</td>
+    <td>8 个</td>
+    <td>_load_state / save_state / _maybe_flush_state … → ctx.state</td>
+    <td>测试 31 处调用点 + run() 接线守阵(钉 run() 源码字面量)</td>
+  </tr>
+  <tr>
+    <td>WEB 兼容转发(过渡层)</td>
+    <td>8 个</td>
+    <td>_drain_web_commands / _flush_truths / rebuild_views / ensure_group_* … → self.web.*</td>
+    <td>web.py 与测试的旧入口名</td>
+  </tr>
+</table>
+
+<h3>1.2 三个结构性问题</h3>
+<p><strong>脏面集中在宿主</strong> —— 81 个成员让 qbmanager.py 行数停在 1092(plan §8 估的 ≤450 目标被兼容层盖住,P5 档案已注记「该目标随 D4 清理才可达」);「内核不知道模块内部方法名」的可验证事实被这层打破,任何模块改名都要回头改 manager。</p>
+<p><strong>dunder 转发遮蔽拼写错误</strong> —— <code>__getattr__</code> 对 20 个别名之外的未知属性抛 AttributeError,但别名内的旧名永远「存在」:新代码误写旧名不会在定义处报错,只在运行期转发,IDE 与静态检查全部失明。</p>
+<p><strong>双名并存是持续税</strong> —— 每个被兼容的名字都有两份文档语义(旧名注释 vs 模块 docstring),memory-bank 的模块文档必须同时维护两套指称。</p>
+
+<h2 id="s2"><span class="no">02</span>处置原则</h2>
+<ul>
+  <li><strong>逐名分诊, 不一刀切</strong> —— 81 + 20 个名字逐个归三类:①纯转发 → 调用方改新名后删除;②内核自有方法(如 _refresh_torrents/_tick/_throttle 等「何时」域方法, 形似旧名实非委托)→ 保留并从清单里摘出;③测试专用 seam → 评估改经 host.get("…") / ctx 取用后删除。分诊结果落一份清单文件进本计划附件(tasks 档案引用), 作为 W1 的施工图。</li>
+  <li><strong>先改调用方, 后删名字; 每波独立入库全量绿</strong> —— 与内核化重构同款节奏:删名字的提交里不允许同时有行为变更。</li>
+  <li><strong>行为零变化</strong> —— 本计划只做改名/删转发, 不改任何语义;唯一「行为」变化是旧名真正消失时的 AttributeError(由全量测试兜底)。</li>
+  <li><strong>属性委托(config/store/api/state/web/task_queue)最后处置</strong> —— 它们的消费面最大(测试上千处直读), 且 76 处构造签名不动是全程不变量;是否值得清(收益 vs 727 处测试点改动)单独拍板, 允许「永久保留属性面」的结论。</li>
+</ul>
+
+<h2 id="s3"><span class="no">03</span>分波实施 W0–W3(每波独立入库、全量绿、可回退)</h2>
+
+<div class="wave">
+  <div class="w-head"><span class="w-id">W0</span><span class="w-title">分诊清单 + 守阵立桩(纯文档与测试, 零产品代码)</span></div>
+  <div class="w-body">逐名分诊 81 + 20 个名字落清单(名字 / 类别 / 消费方清单 / 目标名 / 波次);新增守阵:旧名清单冻结 —— 清单之外不得新增 manager 旧名委托(<code>conventions/modules.md</code> 已明文禁止), 守阵用 AST 扫 qbmanager.py 的 def/属性对与清单比对。验收:清单评审通过 + 守阵绿。</div>
+</div>
+<div class="wave">
+  <div class="w-head"><span class="w-id">W1</span><span class="w-title">路由与 src 侧改新名(消费方最少的一刀)</span></div>
+  <div class="w-body">webui routes 3 个文件 8 处 <code>manager._*</code> 直引改 <code>manager.web.*</code>/ctx 口;web.py 与 src 内 8 个 WEB 兼容转发方法的调用方改 <code>self.web.*</code> 新名。验收:全量绿;src 侧旧名引用清零(守阵:<code>grep -rn "manager\._" src/auto_qb/webui/</code> 为空)。</div>
+</div>
+<div class="wave">
+  <div class="w-head"><span class="w-id">W2</span><span class="w-title">测试面迁移(最大改动面, 分文件批次提交)</span></div>
+  <div class="w-body">27 个测试文件的 727 处 <code>mgr._*</code>/manager._* 引用按分诊清单逐类改新名:模块方法改 <code>mgr.host.get("…")</code> 或 ctx 口;状态方法改 <code>mgr.ctx.state.*</code>;别名字段改 <code>mgr.web.*</code>。分 3–4 批提交(每批一个模块域), 批内全量绿。<b>决策点 D2′:状态/服务属性对(config/store/api/web/task_queue/state_file)是「改测试直读 ctx」还是「属性面永久保留」—— 属性保留可省数百处机械改动, 建议按推荐保留。</b>验收:全量绿;分诊清单里标记「删除」的名字引用清零。</div>
+</div>
+<div class="wave">
+  <div class="w-head"><span class="w-id">W3</span><span class="w-title">删除兼容层本体 + 回写</span></div>
+  <div class="w-body">删 <code>_WEB_STATE_ALIAS</code> 与两个 dunder、删 W2 清空的各委托节(预计 qbmanager.py 1092 → ≈950 行, 距 plan ≤450 目标的差额即内核自有方法与主循环本体, 属合理终态);memory-bank 回写(conventions/modules.md 兼容层现状节、core-domain.md 注记、qbmanager docstring)。验收:全量绿 + 四场景走查回放(借 1819 P6 的 sim 走查驱动, 确认路由/热重载全链路无旧名残留症状)。</div>
+</div>
+
+<h2 id="s4"><span class="no">04</span>不变量与风险</h2>
+<table>
+  <tr><th>不变量 / 风险</th><th>要害</th><th>对策</th></tr>
+  <tr><td>构造签名不动(全程)</td><td><code>QbManager(config_path, config=None, no_lock=False)</code> 76 处构造点零改动</td><td>本计划不触碰 __init__ 签名; 守阵沿用 1819 的同对象断言</td></tr>
+  <tr><td>内核自有方法误删</td><td>_refresh_torrents/_tick/_sync_line/_task_line 形似旧名实为内核「何时」域</td><td>W0 分诊清单把它们显式标「保留」; 删除提交只允许包含清单标「删除」的名字</td></tr>
+  <tr><td>run() 接线守阵钉源码字面量</td><td>test_periodic_flush_is_wired_in_run 钉 run() 含 <code>_next_state_flush_at</code> 等字面量</td><td>涉及字面量的清理必须连同守阵改写同波入库, 不许拆开</td></tr>
+  <tr><td>改动量大导致长分支</td><td>W2 预计 27 文件 / 数百处机械替换</td><td>分 3–4 批提交、每批全量绿; 机械替换用脚本化 sed + 人工复核 diff, 禁止盲替换(<code>_flush_views(force)</code> 与 <code>web.flush_views(force)</code> 签名对齐核对)</td></tr>
+  <tr><td>「清完又长出来」</td><td>兼容层复活是历史上别名层的成因</td><td>W0 的冻结守阵常驻; conventions/modules.md 明文禁止新代码走旧名</td></tr>
+</table>
+
+<h2 id="s5"><span class="no">05</span>决策点清单</h2>
+<table>
+  <tr><th>#</th><th>拍板项</th><th>选项</th><th>建议</th></tr>
+  <tr>
+    <td>D1</td>
+    <td>属性对处置(config/store/api/state/web/task_queue/state_file)</td>
+    <td>改测试直读 ctx(彻底) / 属性面永久保留(务实)</td>
+    <td><b>属性面永久保留</b> —— 340/309/134 处直读是「manager 即外观」的合理公共面, 不是别名; 强改纯机械、零行为收益, 还会让 make_manager 帮助函数复杂化。仅删其中 4 个纯内部属性对(_next_state_flush_at 等)。</td>
+  </tr>
+  <tr>
+    <td>D2</td>
+    <td>W2 测试迁移的批粒度</td>
+    <td>一次性单提交 / 按模块域 3–4 批</td>
+    <td><b>按模块域分批</b> —— 单提交 27 文件回滚粒度太粗; 分批让 bisect 有意义。</td>
+  </tr>
+  <tr>
+    <td>D3</td>
+    <td>执行时机</td>
+    <td>紧跟 P6 立即执行 / 攒到下次触及 webui 的大改动前</td>
+    <td><b>独立排期</b> —— 与内核重构风险正交(D4 原判词), 不必紧跟; 但 W0 分诊清单建议随本计划拍板先行产出, 让「冻结旧名」守阵尽早生效。</td>
+  </tr>
+</table>
+
+<hr class="sep">
+<footer class="colophon">
+  plan · web-state-alias-disposal · Open (2026-10-01 立计划, 待拍板)<br>
+  勘察基线 54c83ac3(develop, kernel-module-refactor P6 落位后)· 数字为该基线实测 · 拍板后本件冻结, 执行滚动进 tasks/<br>
+  refs: <code>26-09-30-1819-plan-kernel-module-refactor.html</code>(兼容层成因与 D4 决策点出处) · <code>conventions/modules.md</code>(模块契约单点与「禁止新增旧名」约定)
+</footer>
+
+</main>
+</div>
+</body>
+</html>

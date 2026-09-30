@@ -226,6 +226,19 @@ uv run auto-qb --tray --dry-run   # 托盘模式同样支持试运行
 
 > 想了解代码结构与内部实现?开发者请看 [memory-bank/README.md](memory-bank/README.md) 知识库。
 
+## 架构
+
+auto-qb 是**微内核 + 插件式模块**结构(2026-09 内核化重构落地):
+
+- **内核**(`core/qbmanager.py`):只管「何时」—— 主循环三条时间线(同步 / 任务 / 命令)、qB 连接管理、周期落盘计时、模块生命周期编排;不知道任何业务语义,也不 import 业务包。
+- **能力服务**(`ctx.*`):store(种子数据层)/ api(qB 门面)/ state(状态持久化)等单例,内核与模块共同消费,无生命周期。
+- **功能模块**(`core/modules/`):logging / notify / webui / hr / tracker / speed_curve / maintenance / grouping / ops / rules 十个自治模块,实现统一契约(name / sections / start / stop / apply / subscribe):
+  - `sections()` 认领消费的配置顶层段 —— 热重载时每模块无条件 apply、相关段整段相等即短路,没有中央级别表;
+  - `subscribe()` 认领刷新相位 —— 种子刷新管线是内核广播相位、模块各自认领执行,相位顺序由守阵锁定;
+  - 模块之间不互相 import:协作只经 ctx 服务或事件相位,需要别人能力就把对方的公开方法挂上 ctx。
+
+托盘与 CLI 是宿主的两种运行形态,不是模块。模块契约与扩展规则的单点定义见 [memory-bank/conventions/modules.md](memory-bank/conventions/modules.md)。
+
 ## 开发测试
 
 想参与开发或验证行为?测试全部使用替身,不连真实 qBittorrent,可随时全量运行:

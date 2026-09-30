@@ -44,13 +44,20 @@ def _recorder(order, label):
 # 契约与接线
 # ============================================================
 def test_p5_modules_sections_claims():
-    """P5 相关模块的 sections 认领锁定: rules 两段(重建判据), tracker/maintenance 不变"""
+    """P5 相关模块的 sections 认领锁定: rules 两段(重建判据), tracker 不变;
+    maintenance 六段(P6 补登 hr/remove_similar_tags, 见 maintenance_mod.sections 注)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
         assert mgr.host.get("rules").sections() == ("rules_config", "interval")
         assert mgr.host.get("tracker").sections() == ("trackers", )
-        assert mgr.host.get("maintenance").sections(
-        ) == ("delete_tags", "delete_tags_if_has_no_torrents", "add_episode_tags", "maintenance_tag_mode")
+        assert mgr.host.get("maintenance").sections() == (
+            "delete_tags",
+            "delete_tags_if_has_no_torrents",
+            "add_episode_tags",
+            "maintenance_tag_mode",
+            "remove_similar_tags",
+            "hr",
+        )
 
 
 def test_kernel_does_not_import_business_packages():

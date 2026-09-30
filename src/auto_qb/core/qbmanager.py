@@ -651,18 +651,30 @@ class QbManager(
         - qbittorrent 段变由内核自判重连(连接管理属内核, plan §3.1)。
         回执按 W4 从 levels 换 actions(各模块 ApplyResult 汇总)。
         """
-        from ..config.impact import diff_config_impacts, restart_required_paths
+        from ..config.impact import KERNEL_SECTIONS, RESTART_SECTIONS, diff_config_impacts, restart_required_paths
 
         changes = diff_config_impacts(self.config, config)
         restart_required = restart_required_paths(changes)
         if restart_required:
             logger.info(f"以下配置需重启进程才能生效: {restart_required}")
+        # 段认领兜底(plan P6; hot-reload-simplify §3.3 规则 3): 变更段若没有任何认领面
+        # (模块 sections / 内核段)覆盖, 说明新增配置键没有消费方登记 —— 保守起见 WARN +
+        # 全量重建(拍板决策 3: 保守性可解释), 经 rebuild_runtime 相位由 rules 模块执行,
+        # 语义与 L2 一致(全量重匹配按新配置兑现合并默认值)。认领完备时不可达
+        # (守阵锁定), 这里只防认领面漂移(如模块 sections 漏登 / 装配裁剪)。
+        claimed = self.host.claimed_sections() | KERNEL_SECTIONS | RESTART_SECTIONS
+        unclaimed = sorted({c.path for c in changes} - claimed)
+        if unclaimed:
+            logger.warning(f"以下配置段变更未被任何模块认领(缺 sections 声明?), 按全量重建兜底: {unclaimed}")
         # 旧配置先留底(替换后旧对象不可达): 模块 apply 的整段对比与监听身份判定都要用
         old = self.config
         # L0: 替换配置对象(动态读取项即刻生效)
         self.config = config
         # 每模块无条件 apply, 自判短路/重启/重建 —— 「统一挂载口」的落地形态(plan §4.3)
         actions = self.host.apply_all(old, config)
+        # 未认领段兜底的重建放在模块 apply 之后: 重建按**新配置**重载规则与重匹配
+        if unclaimed:
+            self.events.emit("rebuild_runtime", {"sections": unclaimed})
         # qb 重连(原 L1 分支的最后一项): 段变由内核自判, 不经级别表
         if old.qbittorrent != config.qbittorrent:
             self.reconnect()
@@ -672,13 +684,18 @@ class QbManager(
             f"配置热重载完成: 变更 {len(changes)} 项, 动作 {[f'{a.module}:{a.action}' for a in actions if a.action != 'none']}" +
             (f", 需重启进程: {restart_required}" if restart_required else "")
         )
+        action_list = [{"module": a.module, "action": a.action, "detail": a.detail} for a in actions]
+        if unclaimed:
+            action_list.append(
+                {
+                    "module": "kernel",
+                    "action": "rebuild_fallback",
+                    "detail": f"未认领段: {', '.join(unclaimed)}",
+                }
+            )
         return {
             "applied": True,
-            "actions": [{
-                "module": a.module,
-                "action": a.action,
-                "detail": a.detail
-            } for a in actions],
+            "actions": action_list,
             "changes": len(changes),
             "restart_required": restart_required,
         }

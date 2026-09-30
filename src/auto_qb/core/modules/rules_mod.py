@@ -1,12 +1,14 @@
 """RulesModule: 规则引擎的模块化封装(plan kernel-module-refactor P5 最大一刀)
 
-RuleEngineMixin(状态持久化已于 P0 迁 core/state.py)整体迁入, 三条接线改相位/服务:
+RuleEngineMixin(状态持久化已于 P0 迁 core/state.py)整体迁入, 相位/服务接线:
 - 事件分派: events_removed / events_added 相位(plan §4.2) —— 内核 _dispatch_events
   的两个调用点改广播, 分派知识(按 tracker 引用绑定 + trigger 分流)收进本模块;
 - 逐种子管线: torrents_added 相位的「建任务」一步(plan §4.2: 维护→限速→建任务→归组→
   集数, 各家按装配序认领) —— 内核不再点名 _create_torrent_tasks;
 - L2 结构重建(hot-reload W3 合并点): 重建任务队列与规则收进 apply, 整段相等即短路;
-  级别分派层与三张手写表退役(W4), 重建判据单点在 _rebuild_needed。
+  级别分派层与三张手写表退役(W4), 重建判据单点在 _rebuild_needed;
+- 段认领兜底(P6): rebuild_runtime 相位 —— 内核对「无认领面的变更段」广播, 本模块执行
+  全量重建(与 L2 同一单点), 见 qbmanager.apply_new_config 与 impact.KERNEL_SECTIONS。
 
 !Rule/RuleContext 的宿主面仍是 **QbManager**(构造期传入, 不换对象): 规则动作消费
   manager.store/state/task_queue/api/ctx.ops/group_* —— 换宿主面是 rules 动作层的
@@ -62,6 +64,15 @@ class RulesModule(BaseModule):
         phases.on("events_removed", self._on_events_removed)
         phases.on("events_added", self._on_events_added)
         phases.on("torrents_added", self._on_torrents_added)
+        phases.on("rebuild_runtime", self._on_rebuild_runtime)
+
+    def _on_rebuild_runtime(self, event) -> None:
+        """段认领兜底(plan P6): 未认领段变更的保守全量重建, 语义与 L2 apply 同一单点
+
+        内核只报「有变更段无人认领」这个时机(广播 rebuild_runtime 相位), 重建知识在本模块
+        —— 与 queue_rebuilt 相位同款的非刷新类相位(P3 先例)。
+        """
+        self.rebuild_runtime()
 
     def _on_events_removed(self, event) -> None:
         """删除种子事件分派(带删除前快照); state/field 变化分派由同一相位承担

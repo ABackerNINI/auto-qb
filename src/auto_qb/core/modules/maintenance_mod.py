@@ -44,8 +44,9 @@ def _seed_exempt_baseline(rec: TorrentRecord) -> float:
 class MaintenanceModule(BaseModule):
     """maintenance 模块: 标签/分类/HR 标签/集数标签 + 全局标签清理任务自注册
 
-    sections 认领四个顶层段(段认领完备守阵 P6 上线时核对): delete_tags* 是全局清理任务的
-    配置源, add_episode_tags/maintenance_tag_mode 是种子级维护的消费段。
+    sections 认领六个顶层段: delete_tags* 是全局清理任务的配置源, add_episode_tags/
+    maintenance_tag_mode 是种子级维护的消费段, hr/remove_similar_tags 经载入期合并进
+    tracker 后由本模块消费(P6 段认领补登, 见 sections() 注)。
     """
 
     name = "maintenance"
@@ -54,7 +55,17 @@ class MaintenanceModule(BaseModule):
         self._ctx = ctx
 
     def sections(self) -> tuple[str, ...]:
-        return ("delete_tags", "delete_tags_if_has_no_torrents", "add_episode_tags", "maintenance_tag_mode")
+        # hr / remove_similar_tags(P6 段认领补登): 全局默认在**载入期**合并进各 tracker
+        # (站点优先, 见 config/loaders.load_tracker_hr), 运行期经 tracker_conf 消费 ——
+        # 段变无重挂动作, 新匹配种子即生效(存量记录待 L2 重匹配兑现)
+        return (
+            "delete_tags",
+            "delete_tags_if_has_no_torrents",
+            "add_episode_tags",
+            "maintenance_tag_mode",
+            "remove_similar_tags",
+            "hr",
+        )
 
     # ---------- 生命周期 ----------
 

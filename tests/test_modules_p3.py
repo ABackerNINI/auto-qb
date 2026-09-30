@@ -182,8 +182,14 @@ def test_maintenance_queue_rebuilt_reregisters():
 
 
 def test_p3_modules_sections_claims():
-    """三模块 sections 认领清单锁定(P6 段认领完备守阵上线前的基线)"""
+    """三模块 sections 认领清单锁定(maintenance 六段: P6 补登 hr/remove_similar_tags)"""
     assert TrackerModule(None).sections() == ("trackers", )
     assert SpeedCurveModule(None).sections() == ("global_speed_limit_curve", )
-    assert MaintenanceModule(None).sections(
-    ) == ("delete_tags", "delete_tags_if_has_no_torrents", "add_episode_tags", "maintenance_tag_mode")
+    assert MaintenanceModule(None).sections() == (
+        "delete_tags",
+        "delete_tags_if_has_no_torrents",
+        "add_episode_tags",
+        "maintenance_tag_mode",
+        "remove_similar_tags",
+        "hr",
+    )

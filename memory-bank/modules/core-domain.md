@@ -2,6 +2,15 @@
 
 > 行数为 2026-09-05 快照。所有路径相对 `src/auto_qb/`(除注明)。
 
+> ⚠ **内核化重构已落地**(plan [26-09-30-1819](../plans/26-09-30-1819-plan-kernel-module-refactor.html), P0-P6 于 2026-09-30~10-01 实施):
+> `core/` 现为**微内核 + 插件式模块** —— `qbmanager.py`(1092 行)只剩调度内核(主循环三时间线 /
+> 连接管理 / 落盘计时 / ModuleHost 编排, 内核零业务 import 可 AST 验证); `module.py` 是模块契约
+> 单点(Module / AppContext / ModuleHost / EventBus); `state.py` 是状态持久化服务(自 rule_engine
+> 迁出); rule_engine / tags / tracker / speed_curve / grouping / ops+checking 全部迁为
+> `core/modules/` 十功能模块(模块契约与扩展规则单点见 [conventions/modules.md](../conventions/modules.md))。
+> `mixins/` 只剩 webui views/commands 组合入口; manager 旧名方法只剩 §7.2 单行委托(处置见
+> 别名层处置计划, 决策点 D4)。本表其余行仍为 2026-09-05 快照(web.py 等旧路径已随 2026-09-22 迁移)。
+
 > 摘要: 种子数据层 / 通知 / 托盘 / 自启 / WEB 后端与前端 / 曲线 / 集数 / 剧集 / 导出。
 > ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
 > 触发: torrents, notify, ui, autostart, web, static, curves, episodes, tvshows, exporter

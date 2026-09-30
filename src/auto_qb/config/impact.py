@@ -22,6 +22,21 @@ RESTART_SECTIONS = frozenset(
     )
 )
 
+# 内核自认领段(非模块消费, plan kernel-module-refactor §3.1): 主循环三条时间线与周期落盘
+# 计时每轮现读(L0 换对象即生效), qbittorrent 连接管理属内核(段变 apply_new_config 自判重连)。
+# R 级三段同属内核面 —— 单点在 RESTART_SECTIONS(R 闸), 段认领完备守阵(P6)取两者并集。
+# 新增配置顶层段必须落到「某模块 sections() 认领 or 本表 or RESTART_SECTIONS」之一, 否则
+# 守阵 test_modules_p6 红表 + 运行期落「未认领段 WARN + 全量重建兜底」。
+KERNEL_SECTIONS = frozenset(
+    (
+        "main_tick",  # 主循环节拍(run() 每轮现读)
+        "sync_interval",  # 同步线节拍(每轮现读, 钳制 <= main_tick)
+        "max_tasks_per_tick",  # 任务线速率语义(任务线现读)
+        "state_save_interval",  # 周期落盘间隔(maybe_flush 每次现读传入)
+        "qbittorrent",  # 连接管理属内核(plan §3.1): 段变自判重连
+    )
+)
+
 
 @dataclass
 class ConfigChange:

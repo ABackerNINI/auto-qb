@@ -267,6 +267,18 @@ class ModuleHost:
                 return m
         return None
 
+    def claimed_sections(self) -> set:
+        """全部模块 sections() 认领面的并集(段认领完备守阵 P6 的模块侧数据源)
+
+        段认领的单一真相在各模块 sections(), 不落中央表(W4 退役的正是表); /api/config/schema
+        的 claimed_sections 与内核 apply_new_config 的未认领段兜底都从这里派生。与内核认领面
+        (impact.KERNEL_SECTIONS ∪ RESTART_SECTIONS)的并集应覆盖配置全部顶层段(守阵锁定)。
+        """
+        claimed: set = set()
+        for m in self._modules:
+            claimed.update(m.sections())
+        return claimed
+
     # ---------- 生命周期编排 ----------
 
     def start_all(self, dry_run: bool) -> None:

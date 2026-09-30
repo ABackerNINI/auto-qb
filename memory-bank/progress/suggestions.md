@@ -5,6 +5,10 @@
 
 ## 给 AI 的实现建议 (基于现有架构的延伸方向)
 
+> ⚠ **2026-10-01 注**: 下面三条「事件触发」建议已随内核化重构 P5(plan 26-09-30-1819)整体实现 ——
+> events_removed/events_added 相位分派(带删除前快照 payload)+ torrents_added 相位建任务,
+> 单点在 `core/modules/rules_mod.py`; 相位表与模块契约见 [conventions/modules.md](../conventions/modules.md)。下列原文留作设计动机存档。
+
 - **新触发时机** (`on_torrent_added`): `_refresh_torrents` 的 added 循环已经是事件点; 按 09 事件触发规划, `_dispatch_events` 同步分派 added 事件规则 (不建周期任务), 复用 `_apply_event_rule` + rule-event origin 机制。
 - **状态变化触发** (`on_torrent_state_enum_changed`): `store.state_snapshot` 已保存上一轮枚举状态, `_handle_state_transitions` 是现成的"状态转移检测"参考实现 (grouping 内部用); 事件分派用它对比上轮/本轮状态枚举筛选触发。
 - **删除触发** (`on_torrent_deleted`): 用 `store.refresh` 返回的 removed 及其删除前快照副本触发; 白名单只允许 `print_torrent_details` 只读留档。
