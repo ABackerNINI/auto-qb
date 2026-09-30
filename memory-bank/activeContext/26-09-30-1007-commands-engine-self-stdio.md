@@ -15,7 +15,7 @@
 **守阵**: `test_engine.py` +2(cp936 文本层单测 / 剥变量+管道子进程端到端 strict 解码)。test.pkg 74 passed。
 
 - [坑 (ops/console-encoding)](../pitfalls/ops/console-encoding.md)
-- [上一轮: 子进程方向](26-09-24-2029-commands-engine-encoding.md)
+- [上一轮: 子进程方向](../pitfalls/ops/console-encoding.md)（原切片 26-09-24-2029 已随 26-09-30 切片数守卫蒸馏, 内容归坑档）
 - [测试基线](../testing/baseline.md)
 
 ## 实测

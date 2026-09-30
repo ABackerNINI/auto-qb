@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEBUI 列表键鼠交互割裂 · 业界成熟方案调研与推荐 · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-keyboard-shortcuts">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-09-30-1806">
+<meta name="doc-updated" content="26-09-30-1806">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-28-webui-keyboard-shortcuts.md">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b; --surface-2:#1b1e23;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c; --good:#2fa874; --bad:#d05c4e; --warn:#c8a45c; --blue:#4d9fd6;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:31px;line-height:1.25;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:78ch;margin:0 0 20px}
+  .lede strong{color:var(--ink)}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px}
+  .toc a:hover{color:var(--ink);text-decoration:none;border-left-color:var(--accent)}
+  .toc .no{font-family:var(--mono);color:var(--ink-3);margin-right:6px}
+
+  h2{font-size:21px;font-weight:600;margin:56px 0 18px;padding-top:18px;border-top:1px solid var(--line);letter-spacing:-.01em}
+  h2:first-of-type{margin-top:8px;border-top:none;padding-top:0}
+  h3{font-size:15.5px;font-weight:600;margin:30px 0 10px;color:var(--ink)}
+  h4{font-size:14px;font-weight:600;margin:22px 0 8px;color:var(--ink-2);font-family:var(--mono);letter-spacing:.04em}
+  p{margin:10px 0;color:var(--ink-2)} p strong,li strong{color:var(--ink);font-weight:600}
+  ul,ol{margin:10px 0;padding-left:22px;color:var(--ink-2)} li{margin:5px 0}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink)}
+  pre{font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow-x:auto;line-height:1.65;color:var(--ink-2)}
+  pre code{background:none;border:none;padding:0}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:left;font-weight:500}
+  th,td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  td{color:var(--ink-2)} td strong{color:var(--ink)}
+  tr:last-child td{border-bottom:none}
+  .ok{color:var(--good);font-family:var(--mono);font-size:12px;white-space:nowrap}
+  .miss{color:var(--bad);font-family:var(--mono);font-size:12px;white-space:nowrap}
+  .part{color:var(--warn);font-family:var(--mono);font-size:12px;white-space:nowrap}
+
+  .callout{border:1px solid var(--line-2);border-left:3px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0;padding:14px 18px;margin:18px 0}
+  .callout p{margin:6px 0}
+  .callout.gold{border-left-color:var(--accent)}
+  .callout.red{border-left-color:var(--bad)}
+  .callout.green{border-left-color:var(--good)}
+  .callout .cap{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px}
+
+  .badge{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;border:1px solid var(--line-2);border-radius:999px;padding:1px 9px;color:var(--ink-2);margin-right:6px}
+  .badge.rec{border-color:var(--good);color:var(--good)}
+  .badge.hold{border-color:var(--ink-3);color:var(--ink-3)}
+
+  .src{font-size:12.5px;color:var(--ink-3);line-height:1.8}
+  .src li{margin:3px 0}
+  .foot{border-top:1px solid var(--line);margin-top:60px;padding:22px 0 40px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker">Research Report · WEBUI Keyboard × Mouse</p>
+    <h1>WEBUI 列表键鼠交互割裂<br>业界成熟方案调研与推荐</h1>
+    <p class="lede">现象：鼠标在列表顶部操作，按一下 ↑↓，视图却跳到列表底部。本文档记录<strong>代码取证</strong>（割裂的确切机制与三个触发场景）、<strong>业界成熟方案调研</strong>（WAI-ARIA / VS Code / Gmail / 桌面文件管理器 / 主流组件库）与<strong>方案推荐</strong>。只调研不改代码；若拍板实施，另出计划文档。</p>
+    <p class="meta"><b>Status:</b> Done（快照即终态）　<b>Added:</b> 2026-09-30 18:06　<b>Updated:</b> 2026-09-30 18:06<br>
+    <b>Topic:</b> webui-keyboard-shortcuts　<b>Refs:</b> <a href="../tasks/26-09-28-webui-keyboard-shortcuts.md">tasks/26-09-28-webui-keyboard-shortcuts.md</a> · <a href="../plans/26-09-28-0354-plan-webui-keyboard-shortcuts.html">plan 26-09-28-0354</a> · <a href="../issues/26-09-29-2142-bug-dialog-hover-keynav-fight.html">issue 26-09-29-2142</a></p>
+  </div>
+</header>
+
+<main class="wrap">
+<div class="layout">
+
+<nav class="toc">
+  <p>Contents</p>
+  <a href="#s1"><span class="no">01</span>结论 TL;DR</a>
+  <a href="#s2"><span class="no">02</span>问题现场（代码取证）</a>
+  <a href="#s3"><span class="no">03</span>已有底子（做对了什么）</a>
+  <a href="#s4"><span class="no">04</span>业界方案调研</a>
+  <a href="#s5"><span class="no">05</span>共识提炼与差距对照</a>
+  <a href="#s6"><span class="no">06</span>方案比选与推荐</a>
+  <a href="#s7"><span class="no">07</span>实施风险与坑</a>
+  <a href="#s8"><span class="no">08</span>来源清单</a>
+</nav>
+
+<article>
+
+<!-- ============ 01 ============ -->
+<h2 id="s1">01 · 结论 TL;DR</h2>
+
+<p><strong>割裂的根因不是滚动实现，而是两套互不知晓的状态机</strong>：键盘光标 <code>kbCursor</code>（shortcuts.js）与鼠标操作锚点 <code>selAnchor*</code>（selection.js）各自为政——鼠标路径从不回写键盘光标，且光标为空/失效时引擎的回落口径是「↓ 落首行、<strong>↑ 落末行</strong>」，在几千行的种子列表上，一次按键就把视口滚到底。</p>
+
+<p>业界对「列表里键盘与鼠标不打架」有稳定共识，可归纳为三条法则：</p>
+
+<ol>
+  <li><strong>单一事实源</strong>：焦点/光标（focus）、选中（selection）、悬停（hover）三者独立建模。hover 只是纯视觉临时态，<strong>永不回写任何事实源</strong>。</li>
+  <li><strong>点击是键鼠的衔接点</strong>：点击某行即设置键盘光标/焦点——<strong>鼠标操作的终点就是键盘导航的起点</strong>，键盘绝不清零重置、绝不经由 hover 移动。</li>
+  <li><strong>视口最小跟随</strong>：目标行已在视口内就不滚动，出视口才滚到「刚好可见」（nearest 语义）；数据轮询/重渲染路径<strong>绝不触发滚动</strong>。</li>
+</ol>
+
+<div class="callout gold">
+  <p class="cap">推荐</p>
+  <p><strong>方案 B</strong>：① 把无光标回落口径从「极值行」改为「视口就近行」；② 四个鼠标点击入口回写 <code>kbCursor</code>（落光标 ≠ 选中，不违反 2026-09-17「普通点击不选中」的既定口径，恰是 VS Code / Gmail 的 focus 语义）。两处小改，不碰滚动实现，视觉双轨（<code>kb-cursor</code> 与 <code>selected</code>）已经就位。详见 §06。</p>
+</div>
+
+<!-- ============ 02 ============ -->
+<h2 id="s2">02 · 问题现场（代码取证）</h2>
+
+<h3>2.1 三个触发场景</h3>
+
+<table>
+  <tr><th style="width:64px">场景</th><th style="width:38%">用户操作</th><th>实际行为</th></tr>
+  <tr>
+    <td><strong>S1</strong></td>
+    <td>页面刚打开（或光标已被清空），鼠标在列表顶部浏览，按一下 <kbd>↑</kbd></td>
+    <td><code>_kbMove</code> 发现 <code>kbCursor</code> 为空（<code>cur = -1</code>），按 <code>delta &lt; 0</code> 回落到 <code>rows.length - 1</code> —— <strong>光标落到列表末行</strong>，<code>_kbScrollRowIntoView</code> 随即把整页滚到底部。几千行的大库上就是「一按键跳到最下面」。</td>
+  </tr>
+  <tr>
+    <td><strong>S2</strong></td>
+    <td>用鼠标点选 / 展开某一行，然后按 ↑↓</td>
+    <td>鼠标点击路径（<code>onGroupClick</code> / <code>onMemberClick</code> / <code>onTorrentClick</code> / <code>onShowClick</code> 等）<strong>从不写 <code>kbCursor</code></strong>——全仓写点只有 <code>state.js:176</code> 的初始 <code>null</code> 与 shortcuts.js 的键盘路径。键盘从「上次键盘停留处」出发，与刚点击的位置毫无关系。</td>
+  </tr>
+  <tr>
+    <td><strong>S3</strong></td>
+    <td>早先用键盘走过一遍（光标停在列表中部/底部），之后一直用鼠标+滚轮在顶部操作，按一下 ↑↓</td>
+    <td>光标仍在旧位置（身份重定位让它在轮询下一直存活），按键后视口<strong>跳回旧光标行</strong>——同样表现为「视图自己跑了」。</td>
+  </tr>
+</table>
+
+<h3>2.2 机制：两套互不知晓的状态机</h3>
+
+<table>
+  <tr><th style="width:26%">状态</th><th style="width:20%">权威文件</th><th>语义</th></tr>
+  <tr><td><code>kbCursor</code>（kind + id）</td><td><code>shared/shortcuts.js</code></td><td>键盘光标：↑↓ 移动的对象，Enter/Space/动作键的目标兜底；带 <code>kb-cursor</code> 视觉类。</td></tr>
+  <tr><td><code>selGroups</code> / <code>selMembers</code> + <code>selAnchorGroup</code> / <code>selAnchorMember</code> / <code>selAnchorUnit</code></td><td><code>shared/selection.js</code></td><td>鼠标选择与 Shift 区间锚点；Ctrl/Shift+点击维护；<strong>不与 kbCursor 联动</strong>。</td></tr>
+</table>
+
+<p>证据位置（本轮实测）：</p>
+
+<pre><code>shortcuts.js:465-469   _kbMove: cur &lt; 0 时 delta&gt;0 → 首行 / delta&lt;0 → 末行
+                       （注释自称「就近回落口径」，实际是极值回落 —— S1 直接来源）
+shortcuts.js:455-458   _kbApplyCursor: 设光标 + 滚动跟随（只在键盘路径调用）
+shortcuts.js:489-514   _kbScrollRowIntoView: getBoundingClientRect 差值最小滚动
+                       （渲染行）+ 窗口化前缀和换算（未渲染行，长度不符则放弃）
+selection.js:16,53,92,197,208   五个鼠标点击入口 —— 均无 kbCursor 写入
+state.js:176           kbCursor: null（唯一非键盘写点 = 初始化）</code></pre>
+
+<p>另外值得记录：<code>_kbHint</code> 的提示文案是「先用 ↑↓ 移到一行，或点选/框选目标」——产品语义上已经承认光标与点选是两条独立通道，但用户心智模型里它们应该是<em>同一个</em>位置感。</p>
+
+<!-- ============ 03 ============ -->
+<h2 id="s3">03 · 已有底子（做对了什么）</h2>
+
+<p>对照业界共识（§05），本项目的底子比预期好——<strong>六个差距点里四个已经达标</strong>，要补的只有「点击衔接」与「回落口径」两处：</p>
+
+<ul>
+  <li><strong>光标按身份而非下标定位</strong>（<code>{kind, id}</code>）：轮询整表替换 / 排序 / 筛选后按身份重定位，刷新不丢光标、不跳行——与 VS Code「focus 持有身份，刷新只 diff 数据」同款（§4.2）。</li>
+  <li><strong>滚动跟随已是「最小滚动」手工实现</strong>：行可见则不动（<code>rect</code> 差值只补出界部分），窗口化未渲染行用前缀和换算、口径不符宁可放弃本次滚动（P1-2 退避口径）。业界推荐的手工 <code>getBoundingClientRect</code> 差值路线（§4.5），且禁用 <code>scrollIntoView</code> 有坑档背书（<a href="../../memory-bank/pitfalls/web-ui/hover-keynav-fight.md">pitfalls/web-ui/hover-keynav-fight.md</a>：它逐层滚动可滚祖先会连带滚整页）。</li>
+  <li><strong>hover 不回写状态</strong>：主列表行的悬停是纯 CSS <code>:hover</code> 视觉，不写任何 Vue 状态（模板里的 <code>@mouseenter</code> 都属于 HR 浮层 / 图表 / 右键子菜单 / 下拉组合框等既有协议，与列表高亮无关）——天然符合法则 1。</li>
+  <li><strong>视觉双轨已分立</strong>：四个视图模板的行类都同时挂 <code>selected</code>（选中）与 <code>kb-cursor</code>（键盘光标）两套类名——「焦点 ≠ 选中」的视觉语言已就位，衔接后不需要新视觉。</li>
+  <li><strong>同族问题在下拉面板已修过一轮</strong>：站点搜索命中面板与弹窗三下拉的「hover 与键盘活动项打架」（issue 26-09-29-2142）已按坑档处置（mousemove + 3px 位移门限 + CSS 单路高亮 + 手工滚动跟随），参考实现都在（<code>config_hub.js hubTrackerHoverIdx / hubTrackerScrollActIntoView</code>、<code>add_torrent.js comboHoverIdx</code>）——主列表的问题不是打架，是<strong>锚定</strong>，但工程先例与红线都齐了。</li>
+  <li><strong>目标解析已双轨</strong>：动作键（暂停/删除等）目标解析「有选中走选中集合，无选中用光标行」（<code>_kbTargets</code>）——点击落光标后，这套语义无需改动即自然成立。</li>
+</ul>
+
+<!-- ============ 04 ============ -->
+<h2 id="s4">04 · 业界方案调研</h2>
+
+<h3>4.1 WAI-ARIA APG 官方模式（规范层）</h3>
+
+<p>APG Listbox Pattern 规定 ↑↓「把焦点移到下/上一个 option」；单选时 selection 可跟随 focus，多选时二者明确分离（Space 改选中、Ctrl+Arrow 只移焦点、Shift+Space 选连续区）。对初始状态有一条直接对口的规则：<strong>「若已有选中项，初始焦点落在选中项上」</strong>——键盘从既有状态出发，而非重置到极值。规范原文明确「DOM focus（active element）与 selected state 是功能上不同的两件事」。焦点管理两种做法：<strong>roving tabindex</strong>（组内仅一项 <code>tabindex="0"</code>，箭头键调 <code>element.focus()</code> 移动）或容器统一接管 + <strong>aria-activedescendant</strong>（DOM focus 恒在容器，属性指向当前项——适合虚拟列表，被滚走的行可以没有 DOM focus）。</p>
+<p class="src">来源：<a href="https://www.w3.org/WAI/ARIA/apg/patterns/listbox/">APG Listbox Pattern</a> · <a href="https://www.w3.org/WAI/ARIA/apg/patterns/">APG Patterns</a></p>
+
+<h3>4.2 VS Code（工程标杆）</h3>
+
+<p>列表/树把 <strong>focus、selection、anchor 建为三个独立 trait</strong>（源码自述）：focus 是唯一键盘光标（画 focus 边框、接收按键），selection 可多选可清空，Enter/Space 作用于 selection 而箭头键只动 focus；hover 纯视觉永不改 selection；键盘导航永远从当前 focus 出发，不重置。滚动跟随 <code>List.reveal(index)</code> 是<strong>最小滚动</strong>语义——源码里对已在视口内的元素直接 no-op；惯用法是 <code>getRelativeTop(index)</code> 返回 <code>null</code>（不可见）才调 <code>reveal</code>。focus 持有身份，轮询刷新只 diff 数据、不动 focus。</p>
+<p class="src">来源：<a href="https://github.com/microsoft/vscode/wiki/Lists-And-Trees">VS Code Wiki: Lists And Trees</a> · <a href="https://github.com/microsoft/vscode/blob/main/src/vs/base/browser/ui/list/listWidget.ts">listWidget.ts</a></p>
+
+<h3>4.3 Gmail / Superhuman / Linear（键盘光标叠加）</h3>
+
+<p>Gmail 的 <code>j</code>/<code>k</code> 在会话列表上维护一个<strong>独立键盘光标</strong>（Vim 传统）：叠加高亮一行但不算「选中」，<code>x</code> 选中、<code>o</code>/Enter 打开、动作键对光标行生效；鼠标 hover 只是临时高亮，<strong>不移动光标</strong>；<strong>点击某行则把光标设到该行</strong>——这就是键鼠衔接点。实现上就是与列表同构的 <code>cursorIndex</code> 状态：<code>onClick</code> 写 <code>cursorIndex = i</code>，<code>j/k</code> 时 ±1 并触发最小滚动，渲染为叠加样式类（非 hover 类）。Superhuman / Linear 同把键盘导航当一等公民（鼠标 optional）。</p>
+<p class="src">来源：<a href="https://support.google.com/mail/answer/6594">Gmail 快捷键官方文档</a> · <a href="https://blog.superhuman.com/superhuman-is-built-for-speed/">Superhuman: built for speed</a> · <a href="https://linear.app/docs">Linear docs</a></p>
+
+<h3>4.4 桌面文件管理器（对照系）</h3>
+
+<p>Windows Explorer 与 macOS Finder 行为一致：<strong>点击 = 该项获得焦点（focus rect）并设置 selection mark / anchor</strong>；此后方向键从焦点项（你刚点的那行）出发，Shift+箭头在 anchor 与焦点之间扩展选区。Windows 把 anchor 做成了显式 API（<code>LVM_SETSELECTIONMARK</code>——多选起点的 item index，独立于选中态本身）；「焦点项」与「选中项」在 Win32 / NSTableView 里本就是两个字段。三十年 GUI 桌面的同一答案，值得当作默认口径。</p>
+<p class="src">来源：<a href="https://learn.microsoft.com/en-us/windows/win32/controls/lvm-setselectionmark">LVM_SETSELECTIONMARK</a> · <a href="https://learn.microsoft.com/en-us/windows/win32/uxguide/inter-keyboard">Windows UX Guide: Keyboard</a> · <a href="https://support.apple.com/en-us/102650">Apple 键盘快捷键</a></p>
+
+<h3>4.5 通用实现原语</h3>
+
+<ul>
+  <li><strong>最小滚动</strong>：<code>scrollIntoView({block:'nearest'})</code> 的契约是「已可见则不滚，否则尽量少滚」——视口跟随应只用 nearest（裸调默认 <code>block:'start'</code> 会把行顶到头上造成跳动）。需要给 sticky 表头留边时用 CSS <code>scroll-margin</code>（目标侧）/ <code>scroll-padding</code>（容器侧）。</li>
+  <li><strong>手工最小滚动</strong>：<code>getBoundingClientRect()</code> 比较行与容器矩形，只在出界时补差价——比 <code>scrollIntoView</code> 可控（不受多级嵌套滚动祖先影响），正是本项目 <code>_kbScrollRowIntoView</code> 的既有路线。</li>
+  <li><strong>重渲染禁止无条件滚动</strong>：轮询刷新若触发 <code>scrollIntoView</code> 会与用户正在进行的滚动打架（Downshift 官方 issue 结论：检测到用户在滚动就不调）。规则：<strong>滚动只允许由「键盘移动光标」与「显式定位指令」两类事件触发</strong>。</li>
+  <li><strong>虚拟列表</strong>：react-window <code>scrollToItem(i,'auto')</code> / TanStack Virtual <code>scrollToIndex(i,{align:'auto'})</code> 的 <code>auto</code> 即最小滚动；键盘导航应在数据层维护 index 调 <code>scrollToIndex</code>，不依赖离屏行的 DOM focus——这也是 aria-activedescendant 适合虚拟化的原因。</li>
+</ul>
+<p class="src">来源：<a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/scrollIntoView">MDN scrollIntoView</a> · <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-padding">MDN scroll-padding</a> · <a href="https://tanstack.com/virtual/latest/docs/api/virtualizer">TanStack Virtual API</a> · <a href="https://github.com/downshift-js/downshift/issues/281">Downshift issue #281</a></p>
+
+<h3>4.6 成熟组件库的默认行为</h3>
+
+<table>
+  <tr><th style="width:18%">库</th><th>与本议题对口的默认行为</th></tr>
+  <tr><td><strong>react-aria</strong></td><td>箭头键移动 focus（keyboardDelegate 可覆写）；<code>selectionBehavior:'replace'</code> 下 selection 跟随 focus，<code>'toggle'</code> 下二者独立、Space/Ctrl 切换；Shift 区间不受 behavior 影响；虚拟化走 <code>isVirtualized</code> + <code>scrollToItem</code>。</td></tr>
+  <tr><td><strong>Downshift</strong></td><td><code>highlightedIndex</code>（键盘高亮）与 <code>selectedItem</code>（真选中）<strong>天然分离</strong>；高亮项变化时自动最小滚动，可替换或禁用。</td></tr>
+  <tr><td><strong>AG Grid</strong></td><td>键盘模型以 focused cell 为中心：方向键移焦点、网格自动把焦点滚入视口；提供 <code>navigateToNextCell</code> / <code>setFocusedCell</code> / <code>ensureIndexVisible</code>——与「键盘从当前焦点出发 + 视口跟随」完全同构。</td></tr>
+</table>
+<p class="src">来源：<a href="https://react-aria.adobe.com/ListBox/useListBox">react-aria useListBox</a> · <a href="https://downshift-js.com/use-select/">Downshift useSelect</a> · <a href="https://www.ag-grid.com/javascript-data-grid/keyboard-navigation/">AG Grid Keyboard Interaction</a></p>
+
+<!-- ============ 05 ============ -->
+<h2 id="s5">05 · 共识提炼与差距对照</h2>
+
+<p>所有成熟实现收敛为同一条心智模型：<strong>focus / selection / hover 三分，点击落焦点，滚动最小跟随，刷新不动焦点</strong>。逐条对照本项目：</p>
+
+<table>
+  <tr><th style="width:22%">法则</th><th style="width:34%">业界做法</th><th>本项目现状</th><th style="width:52px">判定</th></tr>
+  <tr><td><strong>光标独立建模</strong></td><td>focus/cursor 是独立字段，与 selection 分离</td><td><code>kbCursor</code>（kind+id）已独立存在，<code>kb-cursor</code> 视觉类已分立</td><td class="ok">达标</td></tr>
+  <tr><td><strong>点击衔接</strong>（核心差距）</td><td>点击行 → 写 focus/cursor（Win32 selection mark、Gmail、VS Code 全体一致）</td><td>五个鼠标点击入口均不写 <code>kbCursor</code>，键盘从旧位置出发</td><td class="miss">缺失</td></tr>
+  <tr><td><strong>无焦点回落口径</strong>（跳底直接来源）</td><td>初始焦点 = 已选中项（APG）；至少是「就近」而非极值</td><td><code>cur&lt;0</code> 时 ↓→首行 / <strong>↑→末行</strong>（极值回落）</td><td class="miss">偏差</td></tr>
+  <tr><td><strong>视口最小跟随</strong></td><td>nearest / no-op 语义；手工 rect 差值</td><td><code>_kbScrollRowIntoView</code> 已是差值补差价，行可见不动</td><td class="ok">达标</td></tr>
+  <tr><td><strong>刷新不动光标</strong></td><td>刷新只 diff 数据，focus 持身份</td><td>身份重定位（kind+id），轮询天然安全</td><td class="ok">达标</td></tr>
+  <tr><td><strong>hover 不回写</strong></td><td>hover 纯视觉</td><td>主列表 hover 为 CSS <code>:hover</code>，不写状态</td><td class="ok">达标</td></tr>
+  <tr><td><strong>数据刷新不触发滚动</strong></td><td>滚动只由键盘移动/显式定位触发</td><td>滚动只在键盘路径（<code>_kbApplyCursor</code>）内发生</td><td class="ok">达标</td></tr>
+</table>
+
+<p>结论：本项目差的是<strong>两处状态口径</strong>（点击衔接、回落口径），不是架构——不需要引入 roving tabindex 式的重构才能解决割裂感。</p>
+
+<!-- ============ 06 ============ -->
+<h2 id="s6">06 · 方案比选与推荐</h2>
+
+<h3><span class="badge">方案 A</span> 仅改回落口径</h3>
+<p><code>cur &lt; 0</code> 时不再落极值行：↓ → 视口内第一行，↑ → 视口内最后一行（实现可借 <code>_rowWindow</code> 窗口信息或对 <code>_kbRows</code> 做一次可见性扫描；无窗口信息时退化为「↓ 首行 / ↑ 末可见行」的保守版）。</p>
+<p><strong>能</strong>消掉 S1（跳底）；<strong>不能</strong>消 S2/S3（点击后键盘仍从旧位置出发）——割裂感只解决一半。改动最小（一处分支），可作为方案 B 的子集先行。</p>
+
+<h3><span class="badge rec">方案 B（推荐）</span> A + 点击落光标</h3>
+<p>在 A 之上，把「点击行」作为键鼠衔接点：五个鼠标点击入口（<code>onGroupClick</code> / <code>onMemberClick</code> / <code>onTorrentClick</code> / <code>onShowClick</code> / <code>onShowEpClick</code>）按所在行回写 <code>kbCursor</code>，与既有 <code>selAnchor*</code> 维护并存。要点：</p>
+
+<ul>
+  <li><strong>落光标 ≠ 选中</strong>：写的是 focus 语义（<code>kbCursor</code>），不动 <code>selGroups/selMembers</code>——与 2026-09-17「普通点击不触发选择」的既定口径<strong>不冲突</strong>，恰是 VS Code / Gmail 的 focus 模型。Ctrl/Shift+点击在原有选中语义之外同样落光标。</li>
+  <li><strong>普通点击获得轻量视觉反馈</strong>：行上出现 <code>kb-cursor</code> 光标环——这正是「键盘起点在这里」的可见承诺，也是衔接感的来源（Gmail/VS Code 同款）。是否接受这一视觉变化是本方案唯一的口径决策点。</li>
+  <li><strong>S3（残留光标）在业界属「焦点持久」的正常语义</strong>：VS Code 同样保留焦点、按键跳回。B 落地后点击高频重锚，残留窗口大幅缩短；如仍有体感问题，可加可选加固「光标出视口且用户滚动超过一屏后，首次按键回落到可见行」——默认不建议做，避免过度工程。</li>
+</ul>
+
+<h3><span class="badge hold">方案 C</span> 完整 roving tabindex / aria-activedescendant 改造</h3>
+<p>把列表纳入 WAI-ARIA 官方焦点管理（Tab 可进入列表、读屏可感知、DOM focus 随箭头移动）。可访问性收益真实，但需改四份模板的 tabindex/DOM focus 管理并处理窗口化离屏行，改动面大；当前无读屏诉求，<strong>缓议</strong>——B 的状态模型与 C 完全兼容，将来要补 a11y 时不需要推翻 B。</p>
+
+<div class="callout green">
+  <p class="cap">推荐理由（B）</p>
+  <p>① 三个触发场景全部消除（S1 靠回落口径、S2 靠点击落光标、S3 因高频重锚自然缓解）；② 改动集中在 <code>_kbMove</code> 回落分支 + 五个点击入口各一行回写，不碰滚动实现、不碰模板视觉；③ 六条业界法则全数达标；④ 与既有双轨目标解析（<code>_kbTargets</code>）无缝：点击 → 光标 → Space/Enter/动作键一气呵成。</p>
+</div>
+
+<!-- ============ 07 ============ -->
+<h2 id="s7">07 · 实施风险与坑（实施时注意）</h2>
+
+<ul>
+  <li><strong>禁用 <code>scrollIntoView</code> 是既有红线</strong>（pitfalls/web-ui/hover-keynav-fight.md：逐层滚动可滚祖先连带滚整页）——落光标若伴随滚动跟随，必须继续走 <code>_kbScrollRowIntoView</code> 的差值路线，并在 <code>$nextTick</code> 里量（等 Vue 把 <code>kb-cursor</code> 类挪到新行）。</li>
+  <li><strong>点击落光标的滚动天然安全</strong>：被点的行本来就在视口内，最小滚动语义下 no-op——不会出现「点一下滚一下」。</li>
+  <li><strong>长按连发交互</strong>（26-09-30 刚落地）：回落口径改后，连发首拍落视口就近行、后续正常步进，无额外处理；注意 <code>repeat</code> 放行条目仍限于上下键族。</li>
+  <li><strong>窗口化未渲染行</strong>：回落口径若基于「可见行」，注意与 <code>_rowPre</code> 前缀和同源校验（长度不符放弃，沿用 P1-2 退避口径）。</li>
+  <li><strong>注释与实际口径不符</strong>：现注释自称「就近回落口径」但行为是极值回落——实施时一并修正注释与 <code>_kbHint</code> 文案（提示语无需再教「先 ↑↓ 移到一行」，点过就行）。</li>
+  <li><strong>守阵联动</strong>：点击回写 <code>kbCursor</code> 涉及 selection.js，建议随实施补静态守阵（grep 式断言五入口都有回写），避免后续改鼠标路径时悄悄丢掉衔接。</li>
+</ul>
+
+<!-- ============ 08 ============ -->
+<h2 id="s8">08 · 来源清单</h2>
+
+<ul class="src">
+  <li>WAI-ARIA APG — <a href="https://www.w3.org/WAI/ARIA/apg/patterns/listbox/">Listbox Pattern</a> / <a href="https://www.w3.org/WAI/ARIA/apg/patterns/">Patterns 索引</a></li>
+  <li>VS Code — <a href="https://github.com/microsoft/vscode/wiki/Lists-And-Trees">Wiki: Lists And Trees</a> / <a href="https://github.com/microsoft/vscode/blob/main/src/vs/base/browser/ui/list/listWidget.ts">listWidget.ts</a></li>
+  <li><a href="https://support.google.com/mail/answer/6594">Gmail 快捷键</a> / <a href="https://blog.superhuman.com/superhuman-is-built-for-speed/">Superhuman</a> / <a href="https://linear.app/docs">Linear</a></li>
+  <li><a href="https://learn.microsoft.com/en-us/windows/win32/controls/lvm-setselectionmark">LVM_SETSELECTIONMARK</a> / <a href="https://learn.microsoft.com/en-us/windows/win32/uxguide/inter-keyboard">Windows UX Guide: Keyboard</a> / <a href="https://support.apple.com/en-us/102650">Apple 键盘快捷键</a></li>
+  <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Element/scrollIntoView">MDN scrollIntoView</a> / <a href="https://developer.mozilla.org/en-US/docs/Web/CSS/scroll-padding">MDN scroll-padding</a> / <a href="https://tanstack.com/virtual/latest/docs/api/virtualizer">TanStack Virtual</a> / <a href="https://github.com/downshift-js/downshift/issues/281">Downshift #281</a></li>
+  <li><a href="https://react-aria.adobe.com/ListBox/useListBox">react-aria useListBox</a> / <a href="https://downshift-js.com/use-select/">Downshift useSelect</a> / <a href="https://www.ag-grid.com/javascript-data-grid/keyboard-navigation/">AG Grid Keyboard Interaction</a></li>
+</ul>
+
+<div class="foot">auto-qb · 调研报告 · 26-09-30-1806 · Topic: webui-keyboard-shortcuts · 快照即终态 (report 恒 Done)</div>
+
+</article>
+</div>
+</main>
+</body>
+</html>

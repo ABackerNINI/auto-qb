@@ -3,9 +3,9 @@
 **Status:** In Progress
 **Added:** 2026-09-28
 **Updated:** 2026-09-30
-**Summary:** 前案 26-09-26-0822 (localStorage 预选) 经成熟方案调研与存储对比后被 26-09-28-0354 取代(0822 置 Superseded): 定案后端独立文件 auto-qb-data/webui-keys.json + GET/PUT /api/keys(金清单+2); 引擎不引库自写 ~200 行(tinykeys 为参照), 沿 0822 注册表/e.code/作用域/三段屏蔽设计; 自定义面板进设置页「快捷键」分区 + ? 浮层。§08 六决策点已全部拍板(2026-09-30, ① 五轮收敛至 v4 终版): ①危险档一律二键组合(修饰键+字母, 非裸键非三键)+确认框兜底(默认确定/Enter 确认)—— 删除=Shift+D(另有 Delete 键作为额外删除操作无需绑定, 直连 _deleteFlow, 即删除双快捷键入口), 重新校验=Shift+Y, 强制汇报=Shift+A; 裸键 D/C/F 释放空位; ②光标只走组行; ③Shift 族保留; ④不加顶栏按钮; ⑤取消一次做完, W1-W4 第一波先行、W5-W7 第二波; ⑥后端文件。注册表 58 条(52 默认+6 空位)。存储 schema 预埋 {template, overrides}, 绑定模板机制确认缓议仅预埋(§4.7)。
+**Summary:** 前案 26-09-26-0822 (localStorage 预选) 经成熟方案调研与存储对比后被 26-09-28-0354 取代(0822 置 Superseded): 定案后端独立文件 auto-qb-data/webui-keys.json + GET/PUT /api/keys(金清单+2); 引擎不引库自写 ~200 行(tinykeys 为参照), 沿 0822 注册表/e.code/作用域/三段屏蔽设计; 自定义面板进设置页「快捷键」分区 + ? 浮层。§08 六决策点已全部拍板(2026-09-30, ① 五轮收敛至 v4 终版): ①危险档一律二键组合(修饰键+字母, 非裸键非三键)+确认框兜底(默认确定/Enter 确认)—— 删除=Shift+D(另有 Delete 键作为额外删除操作无需绑定, 直连 _deleteFlow, 即删除双快捷键入口), 重新校验=Shift+Y, 强制汇报=Shift+A; 裸键 D/C/F 释放空位; ②光标只走组行; ③Shift 族保留; ④不加顶栏按钮; ⑤取消一次做完, W1-W4 第一波先行、W5-W7 第二波; ⑥后端文件。注册表 58 条(52 默认+6 空位)。存储 schema 预埋 {template, overrides}, 绑定模板机制确认缓议仅预埋(§4.7)。2026-09-30 追加: 用户报键鼠割裂(鼠标顶部按键跳底), 调研报告 26-09-30-1806 落地(根因=点击不回写 kbCursor + 无光标↑落末行的极值回落; 推荐方案 B 点击落光标+回落改视口就近), 待拍板另出计划。
 **Topics:** webui-keyboard-shortcuts
-**Refs:** memory-bank/plans/26-09-28-0354-plan-webui-keyboard-shortcuts.html, memory-bank/plans/26-09-26-0822-plan-webui-keyboard-shortcuts.html, memory-bank/tasks/26-09-28-webui-settings-back-nav.md
+**Refs:** memory-bank/plans/26-09-28-0354-plan-webui-keyboard-shortcuts.html, memory-bank/plans/26-09-26-0822-plan-webui-keyboard-shortcuts.html, memory-bank/tasks/26-09-28-webui-settings-back-nav.md, memory-bank/reports/26-09-30-1806-report-webui-keymouse-cohesion.html
 
 ## 原始请求
 
@@ -32,6 +32,7 @@
 | 3 | §08 六个决策点拍板(核心: 存储定案) | Done (2026-09-30 全部拍板, ①③改向见进度日志) |
 | 4 | W1-W7 实施 | Done (W1-W4 2026-09-30 第一波; W5-W7 2026-09-30 第二波, 未提交) |
 | 5 | 收尾回写(基线/progress/pitfalls) | Done (两波基线切片 26-09-30-0555 / 26-09-30-0702; 新坑 js-comment-terminator) |
+| 6 | 键鼠割裂调研(用户报障) → 报告 + 方案推荐 | Done (26-09-30, 报告 [26-09-30-1806](../reports/26-09-30-1806-report-webui-keymouse-cohesion.html), 方案 B 待拍板) |
 
 ## 进度日志
 
@@ -50,3 +51,4 @@
   - **W5 绑定+局部作用域**: E/F/I 组 run 全量接线(单目标动作目标解析要求恰一 hash —— `_kbSingleHash`, 多选/整组/剧集单元一律提示不猜第一个; 复用 editMove/editRename/copyTorrentInfo/exportTorrent/torrentCmd 既有单种链, 不另写实现); `_kbScope` 三档全量生效(设置页/抽屉/列表), 抽屉 Alt+1-4 切页, 设置页 Ctrl+S inputSafe, 引擎模态白名单分流(模态内只响应模态键位, 本期注册表无 modal 条目, 预留分支由静态守阵钉住); 浮层打开只放行焦点局部(drawer/settings)键位, 列表键位在浮层下仍失效; Delete 直连分支随引擎重构并入无条目路径并补浮层+作用域守卫。
   - **W6 后端持久化+面板**: 新 routes/keys.py —— GET/PUT /api/keys, 存储 auto-qb-data/webui-keys.json(与 web.token 同寻址), 读时兜底链 主文件→.bak→默认表(逐级 WARN), PUT 结构校验 422 不触碰磁盘 + atomic_write keep_backup, 金清单 +2; 适配器接通(AQB_KEYS.reload/save, **load 保持同步快照**——引擎 keydown 内现取不 await; startPolling 作为两条登录路径唯一汇合点拉真值, 失败静默回默认表); 设置页「快捷键」分区(首页卡+hubNow+hubRestore 认 keys, 客户端块同「运行日志」先例): VS Code 按下即录录制器(捕获段监听+stopPropagation, 引擎/退栈链/hubOnKey 都收不到), 纯修饰键拒收 / Esc 取消 / 黑名单当场拒绑 / 冲突三选一(交换/覆盖对方置空/取消) / 单条与全部重置 / 空串=显式禁用 / danger 裸键提示但允许 / 保存 PUT 失败本地回滚 / 离开未保存先确认(hubGo+hubBack 双挂 kbGuardLeave); 帮助浮层 Shift+Slash(只读速查 + 前往设置自定义; Esc 归退栈链, 名单三处同步: 退栈链/escBusy/_kbOverlayBusy)。
   - **W7 守阵+验证**: test_web_shortcuts.py 10→16(+6), test_web.py 金清单+2 与 keys 后端 +5; Playwright 探针 28 项全过(面板/录制器/冲突/保存刷新生效/抽屉 Alt 切页/E-F 组/设置页 Ctrl+S), dev.harness 96 项 prism 无新增失败(同败 2 项既有, 抖动项本轮未复现); 新坑入档 pitfalls/web-ui/js-comment-terminator.md(块注释内 `*/` 提前终止, node --check 仍绿运行时才炸 —— 实测踩中, 探针 pageerror 抓到)。
+- 2026-09-30 18:06 **键鼠割裂调研落地(纯调研, 未动代码)**: 用户报「上下键与鼠标点击割裂感很强, 鼠标在顶部操作按一下键盘跳到最下方」。代码取证三场景: S1 无光标回落口径( `_kbMove` cur<0 时 ↓→首行/**↑→末行**, shortcuts.js:465-469, 注释自称「就近」实为极值回落) → 跳底直接来源; S2 五个鼠标点击入口(selection.js)从不回写 kbCursor(全仓写点仅 state.js:176 + shortcuts.js), 键盘从旧位置出发; S3 残留光标(身份重定位让旧光标跨轮询存活, 按键跳回)。业界调研(WAI-ARIA APG 初始焦点=选中项 / VS Code focus·selection·anchor 三 trait + reveal 最小滚动 no-op / Gmail 点击落光标 / Win32 LVM_SETSELECTIONMARK / Downshift·react-aria·AG Grid 默认行为)收敛三法则: 光标三分独立建模 / **点击是键鼠衔接点** / 视口最小跟随+刷新不滚动。对照六项达标四项(身份光标/最小滚动/刷新不动/hover 纯 CSS), 缺「点击衔接」与「回落口径」两处。报告 [26-09-30-1806](../reports/26-09-30-1806-report-webui-keymouse-cohesion.html): 推荐方案 B(回落改视口就近 + 点击入口回写 kbCursor; 落光标≠选中, 不违反 2026-09-17 普通点击不选中口径; 唯一口径决策点=普通点击出现 kb-cursor 视觉反馈), 方案 C(roving tabindex/aria-activedescendant)缓议。**待用户拍板后另出计划文档实施**(范围守恒: 本轮只出报告)。
