@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _common import (  # noqa: E402
     LAST_ACTIVE_RE,
+    SLICE_COUNT_LIMIT,
     SLICE_DIR,
     SLICE_FILE_RE,
     SUMMARY_RE,
@@ -89,10 +90,20 @@ def parse_last_active(text: str) -> datetime | None:
         return None
 
 
-def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str]]:
-    """扫切片目录 → (按最后活动倒序的行, 问题清单)。"""
+def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str], list[str]]:
+    """扫切片目录 → (按最后活动倒序的行, 问题清单, 债务清单)。
+
+    **问题的判据是"结构坏了"**: 命名不合定宽前缀 / 三行头缺失 —— 它们守的是可解析性, 坏了就
+    没有"下一次读"了。
+
+    **债务的判据只是"该蒸馏了"**(2026-09-30 债务制, 计划 26-09-30-2112): 单个切片超 cap 与
+    切片总数超阈值, 违反后读起来更贵、但事实源完好 —— 报进 `warns`, 提交不拦, 由 `doc.caps` /
+    `kb.active` 现算输出并转告用户, 清理另开会话。旧口径是判红, 实测后果是在会话最贵的时刻
+    (满载历史) 逼出一轮蒸馏返工, 而阈值原就是按 ~5 片/日校准的估计值。
+    """
     rows: list[dict] = []
     problems: list[str] = []
+    warns: list[str] = []
 
     for path in sorted(slice_dir.glob("*.md")):
         if path.name.startswith("_"):
@@ -118,7 +129,10 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str]]:
 
         cap = cap_of(rel)
         if len(text) > cap:
-            problems.append(f"{rel}: {len(text)} 字符 > 切片 cap {cap} (超了就该归档, 不是继续往上堆)")
+            warns.append(
+                f"{rel}: {len(text)} 字符 > 切片 cap {cap} —— **债务**: 不拦提交; 本会话不修, "
+                "转告用户另开会话清理(清理口径: 蒸馏进 progress/ 或任务档案, 不是调 cap)"
+            )
 
         last = parse_last_active(text) or created
         slug = path.name[len(_CREATED_RE.match(path.name).group(0)) + 1:-len(".md")]
@@ -133,7 +147,13 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str]]:
         )
 
     rows.sort(key=lambda r: r["last"], reverse=True)
-    return rows, problems
+
+    if len(rows) > SLICE_COUNT_LIMIT:
+        warns.append(
+            f"切片数 {len(rows)} > {SLICE_COUNT_LIMIT} —— **债务**: 不拦提交; 本会话不修, "
+            "转告用户另开会话清理(把 14 天未动的切片蒸馏进 progress/ 或任务档案后删除)"
+        )
+    return rows, problems, warns
 
 
 def _pad(text: str, width: int) -> str:
@@ -178,7 +198,7 @@ def main() -> int:
         sys.stderr.write(f"尚无 {slice_dir.name}/ 目录 (仍是单文件 activeContext.md), 本脚本在 W1 目录化后生效\n")
         return 0
 
-    rows, problems = collect(slice_dir, root)
+    rows, problems, warns = collect(slice_dir, root)
 
     if args.check:
         for p in problems:
@@ -186,11 +206,17 @@ def main() -> int:
         if problems:
             sys.stderr.write(f"请修正后重跑 {gen_cmd(root, 'gen_active_recent.py')}\n")
             return 1
+        for w in warns:
+            sys.stderr.write(f"[债务] {w}\n")
+        if warns:
+            sys.stderr.write(f"cap 债务 {len(warns)} 项 —— 不拦提交; 本会话不修, 转告用户另开会话清理。\n")
         return 0
 
     print(render(rows, args.stale_days, datetime.now()))
     for p in problems:
         sys.stderr.write(f"[warn] {p}\n")
+    for w in warns:
+        sys.stderr.write(f"[债务] {w}\n")
     return 0
 
 

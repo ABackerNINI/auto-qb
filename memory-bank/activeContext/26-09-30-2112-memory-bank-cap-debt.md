@@ -1,12 +1,14 @@
 # 26-09-30-2112-memory-bank-cap-debt — cap 守卫改债务制 (WARN 不拦提交 + 独立清理会话)
 
-> 摘要: 用户命题: cap 守卫在任务后期触发, 当场改字数要带着满载会话历史反复返工、token 成本巨大 —— 要求改为「只提示 WARNING、不当场修改, 知识库清理单独开会话」。本轮只做分析与计划: 判定**合理 + 三处补强** (债务须在**提交时**派生输出并由 agent 转告用户 / **AGENTS.md 为硬规定, 不入债务体系** / 测试侧尺寸断言一起降级), 拦截面四处盘点完毕 (AGENTS.md 实测 7,975/8,000 余量 25, KB 角色 cap 全绿)。**计划已入档 (plans/26-09-30-2112-plan-memory-bank-cap-debt.html, Open), 实施待用户显式启动** —— 实施会话 = 守卫改造; 文档清理由用户在收到转告后另开会话。
-> 最后活动: 2026-09-30 21:59
+> 摘要: 用户命题: cap 守卫在任务后期触发, 当场改字数要带着满载会话历史反复返工、token 成本巨大 —— 要求改为「只提示 WARNING、不当场修改, 知识库清理单独开会话」。**守卫改造已实施完成 (2026-09-30 22:xx)**: 除 AGENTS.md 外的尺寸全部降级为**债务** (提交不拦、提交时派生输出并转告用户、清理另开会话), AGENTS.md 保持**硬规定** (超 8,000 且本次改动命中仍 STOP, 不入债务体系、不套 50%); 严重度单点在 skill 的 `HARD_CAP_ROLES`, `doc.caps` 为派生可见单一入口。**实测 cap 债务 0 项** (`doc.caps -- --strict` 绿), 全量 1874 passed + 3 skipped / 91%。剩余 = **AGENTS.md 削薄 (独立清理项, 余量 25)**, 待用户另开清理会话。
+> 最后活动: 2026-09-30 22:35
 
 ## 状态
 
-- 计划文档: `plans/26-09-30-2112-plan-memory-bank-cap-debt.html` (doc-status Open, D1/D3 已定 · D2 待拍板); 档案: `tasks/26-09-30-memory-bank-cap-debt.md` (Status Open, 仅入档轮)。
-- **D1/D3 已拍板 (2026-09-30 用户)**: AGENTS.md = **硬规定** —— 不能超 (超 8,000 且本次改动命中仍 STOP)、**不套 50% 收缩动作**、不常改故**不进债务体系**; 取消原设计的 1.25× 止损线; 削薄目标 = 回到 ≤ 8,000。D2 (切片条数阈值归债务通道) 待拍板。
+- 计划文档: `plans/26-09-30-2112-plan-memory-bank-cap-debt.html` (doc-status Open, 守卫改造段已实施); 档案: `tasks/26-09-30-memory-bank-cap-debt.md` (Status **In Progress**, 子任务 1–6/8–10 完成, 7 待清理会话)。
+- **D1/D2/D3 全部拍板 (2026-09-30)**: D1/D3 —— AGENTS.md = **硬规定** (不能超 / 不套 50% 收缩 / 不入债务体系 / 无止损线; 削薄目标 = 回到 ≤ 8,000); D2 按推荐**①** —— 切片条数阈值**归债务通道** (`_common.SLICE_COUNT_LIMIT`, 由 `gen_active_recent` 报成债务, 不再判红)。
+- **改造后的三档输出** (`commands run doc.caps`): ①**硬规定** AGENTS.md —— 超限即拦; ②**债务** 两份 SKILL.md / 包内阅读预算 / KB 角色 cap (由 skill 现算) —— `[债务]` 行 + 汇总行「请在回复中提醒用户: 文档数字已超标, 需另开新会话清理」, 不拦提交; ③`--strict` = 清理会话的收口开关 (债务非空即 rc=1), **闸门只用默认模式**。
+- **当前债务 = 0 项**: `doc.caps -- --strict` 绿; KB 角色 cap 全在限内。唯一未清的是 AGENTS.md 的**结构性余量** 7,975/8,000 (余量 25) —— 它是独立清理项, 不是债务。
 - **触发点二次修正 (2026-09-30 用户)**: 债务可见性**不放会话开始** —— agent 开不了新会话, 会话内清理与任务末尾修没区别(历史照样累积); 改为**提交时 WARN + 文案自带「提醒用户另开新会话清理」+ 用户自行开会话**。会话开始协议与 AGENTS.md 均不动; AGENTS.md 削薄降为**独立清理项** (与守卫改造解耦)。
 - 根因二条: ①作用点错位 —— cap 是文档维护问题却被接成提交前置条件 (在最贵时刻索要最贵工作); ②2026-09-29「全表 50%」口径把机械外迁 (主题文件 → `attachments/`) 与入口文档手术 (AGENTS.md 砍 3,975 字符) 混为一谈, 导致债务「记了还不上」(切片 26-09-27-1812 待办① 记 3 天未清偿)。
 - 债务归属已移交本专题: 原挂在切片 `26-09-27-1812-commit-msg-consume-delete.md` 待办① 的「AGENTS.md 削薄」现由本计划接管。
@@ -14,9 +16,10 @@
 
 ## 正在进行
 
-- 无 —— D1/D3 已拍板, 仅剩 D2 (切片条数阈值归债务通道) 待定; 实施待用户显式启动。
+- 无 —— 守卫改造已完成并收口。本轮改动落在: `scripts/check_context_caps.py`(重写为三档) · `.agents/skills/memory-bank/scripts/{check_kb_structure,_common,gen_active_recent,gen_baseline_recent}.py` · `tests/test_memory_bank.py`(净 +3 用例) · `.commands/doc/config.toml` · `.commands/my-commit-flow/.my-commit-flow.toml` · `.agents/skills/memory-bank/SKILL.md` · `memory-bank/testing/guards.md`; 新坑档 `pitfalls/kb/cap-debt.md`。
 
 ## 下一步
 
-- 用户说「实施 / 拍板」→ 按计划 §05 推进, 顺序敏感: ①sync ②**先降级守卫 (AGENTS.md 除外)** (脚本 + 测试 + 闸门口径) ③机检 ④协议回写 (SKILL.md cap 表注 + 收尾 DoD 一行「债务 → 提醒用户另开会话清理」; **会话开始协议与 AGENTS.md 不动**) ⑤`kb.index` + `doc.caps --strict` + `kb.check` + `doc.links` + `doc.drift` 收口 ⑥收尾 DoD ⑦AGENTS.md 削薄 = **独立清理项** (回到 ≤ 8,000 不套 50%; 可并入任意一次用户开启的清理会话)。
-- 附带发现待定去向 (实施会话随手收口或入池): `_common.py:66` `TASK_LOG_CAP=16000` 无消费者; `ALL_ROLES` 重复项。
+- **AGENTS.md 削薄 (唯一剩余项, 独立清理会话)**: 7,975 → 回到 ≤ 8,000 (不套 50%)。手法 = 路由手术 —— 细节下沉 `memory-bank/README.md` / `conventions/` / `pitfalls/`, 原位留指针; **必须仍在 AGENTS.md**: 7 条黄金法则、红线、git 硬约束三处纪律、提交口径 (常驻可见性语义, 不许下沉)。验收 = `doc.caps` 绿 + 人工对照清单。
+- 平时: 提交时若出现 `[债务]` 行 → **在回复里提醒用户另开会话清理**, 不在本会话动手; 清理由用户在**新会话**里跑 `commands run doc.caps` 拿现算清单, 收口 `commands run doc.caps -- --strict`。
+- 附带发现已随手收口: `_common.TASK_LOG_CAP`(无消费者) 删除; `ALL_ROLES` 改为 `DEFAULT_ROLES` 别名。

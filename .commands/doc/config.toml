@@ -10,10 +10,10 @@ when    = "改名 / 搬家后查相对链接坏没坏"
 note    = "坏链不会让任何用例失败，只能机检；--quiet 只报问题"
 
 [tasks."doc.caps"]
-run     = ["python scripts/check_context_caps.py"]
+run     = ["python scripts/check_context_caps.py <args>"]
 timeout = 120
-when    = "改了 AGENTS.md 或 commands 的 SKILL.md 后自查"
-note    = "AGENTS.md 超 8000 字符注入时尾部被静默截断(写了也看不到); SKILL.md 有恒定大小硬上限"
+when    = "查上下文字符上限与 cap 债务(提交闸门每次都跑默认模式); 清理会话用 --strict 收口"
+note    = "2026-09-30 债务制: 只有 AGENTS.md 是硬规定(超 8000 注入时尾部被静默截断, 超限即拦、不挂账); 其余尺寸超限是**债务** —— 默认只报告不拦提交, 输出自带「提醒用户另开新会话清理」指令。<args> 可传 --strict(债务非空即 rc=1, 只许用在清理会话收口, 闸门只用默认模式) / --quiet"
 
 [tasks."doc.drift"]
 run     = ["python scripts/check_command_drift.py <args>"]

@@ -86,10 +86,15 @@ def parse_baseline_time(text: str) -> datetime | None:
         return None
 
 
-def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str]]:
-    """扫切片目录 → (按基线时间倒序的行, 问题清单)。排序 = 基线时间为主键、文件名为次级稳定键。"""
+def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str], list[str]]:
+    """扫切片目录 → (按基线时间倒序的行, 问题清单, 债务清单)。排序 = 基线时间为主键、文件名为次级稳定键。
+
+    与 `gen_active_recent.collect` 同口径 (2026-09-30 债务制): 命名/三行头是**结构**(坏了判红),
+    切片尺寸是**预算** —— 超限只是读起来更贵, 报进 `warns`, 不拦提交。
+    """
     rows: list[dict] = []
     problems: list[str] = []
+    warns: list[str] = []
 
     for path in sorted(slice_dir.glob("*.md")):
         if path.name.startswith("_"):
@@ -115,7 +120,10 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str]]:
 
         cap = cap_of(rel)
         if len(text) > cap:
-            problems.append(f"{rel}: {len(text)} 字符 > 切片 cap {cap} (明细下沉对应任务档案, 不是调 cap)")
+            warns.append(
+                f"{rel}: {len(text)} 字符 > 切片 cap {cap} —— **债务**: 不拦提交; 本会话不修, "
+                "转告用户另开会话清理(清理口径: 明细下沉对应任务档案, 不是调 cap)"
+            )
 
         when = parse_baseline_time(text) or created
         prefix_len = len(_CREATED_RE.match(path.name).group(0))
@@ -131,7 +139,7 @@ def collect(slice_dir: Path, root: Path) -> tuple[list[dict], list[str]]:
         )
 
     rows.sort(key=lambda r: (r["when"], r["rel"]), reverse=True)
-    return rows, problems
+    return rows, problems, warns
 
 
 def render(rows: list[dict], limit: int | None) -> str:
@@ -174,7 +182,7 @@ def main() -> int:
         sys.stderr.write(f"尚无 {BASELINE_DIR.as_posix()}/ 目录, 本脚本在基线切片化后生效\n")
         return 0
 
-    rows, problems = collect(slice_dir, root)
+    rows, problems, warns = collect(slice_dir, root)
 
     if args.check:
         for p in problems:
@@ -182,11 +190,17 @@ def main() -> int:
         if problems:
             sys.stderr.write(f"请修正后重跑 {gen_cmd(root, 'gen_baseline_recent.py')}\n")
             return 1
+        for w in warns:
+            sys.stderr.write(f"[债务] {w}\n")
+        if warns:
+            sys.stderr.write(f"cap 债务 {len(warns)} 项 —— 不拦提交; 本会话不修, 转告用户另开会话清理。\n")
         return 0
 
     print(render(rows, None if args.all else max(1, args.n)))
     for p in problems:
         sys.stderr.write(f"[warn] {p}\n")
+    for w in warns:
+        sys.stderr.write(f"[债务] {w}\n")
     return 0
 
 

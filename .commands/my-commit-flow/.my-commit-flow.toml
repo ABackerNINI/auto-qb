@@ -114,13 +114,20 @@ timeout = 60
 note  = "skill 链接同步(幂等): 拉取来的改动靠每次提交兜一次"
 
 [[gates]]
-# 两处都要盯: AGENTS.md 是项目引导(超 8000 字符注入时被截断), 各 skill 的 SKILL.md 是
-# 每次加载该 skill 都要读的恒定大小文件 —— 它一臃肿, 省 token 的初衷就没了。
-match = ["AGENTS.md", ".agents/skills/"]
+# 2026-09-30 起分两档 (cap 债务制, 计划 memory-bank/plans/26-09-30-2112):
+#   · **AGENTS.md 是硬规定** —— 超 8000 字符注入时**尾部被静默截断**(写了也看不到),
+#     所以超了且本次改动命中 → 仍 STOP(不套 50% 收缩、不进债务体系、没有挂账通道)。
+#   · 其余一切尺寸(SKILL.md / 包内阅读预算 / KB 角色 cap)是**债务** —— 提交时派生输出,
+#     只报告不拦; agent 读到输出后在回复里提醒用户另开会话清理。
+# `memory-bank/` 也在 match 里: 债务是**编辑知识库时**欠下的, 只在改 AGENTS.md / skill 时跑
+# 的话, 触发点等于没接线(G2 要求"提交时必然可见")。
+# ❗闸门只用**默认模式**: `--strict` 是清理会话的收口开关(债务非空即 rc=1), 挂进闸门等于
+#   把债务重新变成提交前置条件 —— 那正是本计划要取消的东西。
+match = ["AGENTS.md", ".agents/skills/", "memory-bank/"]
 run   = ["python scripts/check_context_caps.py"]
 auto  = true
 timeout = 60
-note  = "上下文字符上限: 引导文件被静默截断 / skill 文档超硬上限 —— 都要先精简"
+note  = "上下文字符上限: AGENTS.md 超限即拦(硬规定); 其余尺寸是债务 —— 输出含「提醒用户另开新会话清理」, 不拦提交"
 
 [[gates]]
 # 空串 = 每次提交都跑: 手抄可能出现在**任何**文档里, 按路径匹配必然漏。

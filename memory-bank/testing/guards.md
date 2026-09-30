@@ -25,7 +25,11 @@
 | `test_kb_index_is_regenerated` | 各目录 `_index.md` == `gen_kb_index.py` 输出 | 手改任一 `_index.md` |
 | `test_kb_index_and_files_are_bijective` | 索引 ↔ 目录双向一致(含类目录) | 删一个主题文件 |
 | `test_kb_topic_files_have_metadata` | 主题文件与 `_about.md` 都有三行头 | 去掉 `> 触发:` 行 |
-| `test_kb_files_respect_caps` | 每个文件 ≤ 其角色 cap | 往某文件塞内容超 cap |
+| `test_kb_files_respect_caps` | **硬规定** cap 必须绿(2026-09-30 后 `check_caps` 的 problems 只剩 `agents` = AGENTS.md) + 硬规定角色集不许被搬走 | 把 `AGENTS.md` 撑到 8,001 字符 / 把 `agents` 从 `HARD_CAP_ROLES` 里拿掉 |
+| `test_kb_cap_debt_is_discoverable_not_blocking` | 尺寸超限必须报成 **warn(债务)** 而不是 problem —— 降级后"断言现行文档都不超"会退化成恒绿 | 把尺寸超限塞回 `problems` |
+| `test_agents_md_cap_is_hard_not_debt` | AGENTS.md 超限仍是 problem, 且**不出现在债务清单里** | 把 `agents` 挪进债务组 |
+| `test_kb_slice_cap_and_count_are_debt_not_blocking` | 切片尺寸 / 条数 → warns(债务); 命名 / 三行头 → problems | 把尺寸/条数塞回 `problems`, 或把命名塞进 warns |
+| `test_context_caps_hard_and_debt_split` | `check_context_caps.py`: AGENTS.md 只在 `HARD_CAPS`, 不进任何债务组 | 把它挪进 `SKILL_CAPS` |
 | `test_kb_class_names_and_topic_filenames` | 类名 ∈ 固定枚举 + 文件名 `^[a-z0-9]+(-[a-z0-9]+)*\.md$` | 建一个枚举外的类目录 |
 | `test_kb_no_orphan_index_dirs` | 每个顶层 `_index.md` 都被 `memory-bank/README.md` 引用 | 新建目录不在 README 登记 |
 | `test_kb_stubs_are_valid` | 被拆文档原路径是 ≤1 KB 存根(含「已迁至」、无 `##`/列表) | 往存根里写正文 |

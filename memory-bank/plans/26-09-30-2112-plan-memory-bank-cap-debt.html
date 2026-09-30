@@ -8,7 +8,7 @@
 <meta name="doc-topic" content="memory-bank-cap-debt">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-09-30-2112">
-<meta name="doc-updated" content="26-09-30-2159">
+<meta name="doc-updated" content="26-09-30-2253">
 <meta name="doc-refs" content="memory-bank/tasks/26-09-30-memory-bank-cap-debt.md">
 <style>
   :root {
@@ -181,7 +181,7 @@
     <h1>cap 守卫改债务制</h1>
     <p class="sub">字符上限从「提交前置条件」改为「债务」：提交时 WARN 并由 agent 转告用户、债务由脚本现算、清理由用户另开新会话执行。AGENTS.md 例外 —— 它是硬规定，不能超，也不进债务体系。</p>
     <div class="cover-meta">
-      <div><span class="k">状态</span><span class="v open">Open · D1/D3 已定, D2 待拍板</span></div>
+      <div><span class="k">状态</span><span class="v open">实施完成 (守卫改造) · 剩 AGENTS.md 削薄 (独立清理项)</span></div>
       <div><span class="k">专题主键</span><span class="v">memory-bank-cap-debt</span></div>
       <div><span class="k">入库</span><span class="v">2026-09-30 21:12 (UTC+8)</span></div>
       <div><span class="k">关联档案</span><span class="v">tasks/26-09-30-memory-bank-cap-debt.md</span></div>
@@ -560,6 +560,7 @@ cap 债务 1 项 —— 请在回复中提醒用户: 文档数字已超标, 需�
         <tr><td>26-09-30-2112</td><td>初版</td><td>分析 + 方案成形：债务制（WARN + 派生可见 + 独立清理会话），AGENTS.md 单列 90% 目标与 1.25× 止损线，三个决策点待拍板</td></tr>
         <tr><td>26-09-30-2136</td><td>用户拍板 D1 / D3</td><td>AGENTS.md = <strong>硬规定</strong>：不能超、不套 50% 收缩动作、不进债务体系（不常改）；取消 1.25× 止损线（恒为硬闸门，无需中间档）；削薄目标改为「回到 ≤ 8,000」。D2（切片条数阈值去留）仍待拍板</td></tr>
         <tr><td>26-09-30-2159</td><td>用户修正债务通道的触发点</td><td>撤销「会话开始跑 <code>doc.caps</code> 并在该会话首件清理」—— agent 无法新建会话，清理留在同一场会话等于没省（历史照样累积）。改为：<strong>提交时 WARN + 警告文案自带「提醒用户另开新会话清理」+ 用户自行开会话清理</strong>。会话开始协议与 <code>AGENTS.md</code> 均不动；AGENTS.md 削薄降为独立清理项（与守卫改造解耦）</td></tr>
+        <tr><td>26-09-30-2253</td><td>实施完成（守卫改造）</td><td>用户「按推荐」启动实施，<strong>D2 按推荐 ① 拍板</strong>（切片条数阈值归债务通道，常量迁入 <code>_common.SLICE_COUNT_LIMIT</code>）。除 AGENTS.md 外的尺寸全部降级为债务（提交不拦），AGENTS.md 保持硬规定（超 8,000 且本次改动命中仍 STOP）。落地：<code>check_context_caps.py</code> 重写为三档 + <code>--strict</code> 收口语义；skill 侧 <code>HARD_CAP_ROLES</code> / <code>DEBT_MARK</code>；两个切片脚本 <code>collect()</code> 改三元组；测试删 live 尺寸断言、换 4 条可发现性守阵（净 +3）；<code>doc.caps</code> 补 <code>&lt;args&gt;</code>；闸门 <code>match</code> 补 <code>memory-bank/</code>（否则触发点等于没接线）；SKILL.md cap 表注 + 收尾 DoD 第 7 条。实测：<strong>cap 债务 0 项</strong>，1874 passed + 3 skipped / 91%，test.pkg 74 passed，四项机检全绿（基线切片 26-09-30-2253）。剩余 = <strong>AGENTS.md 削薄</strong>（7,975 → ≤ 8,000，不套 50%），待用户另开清理会话</td></tr>
       </table>
     </section>
 

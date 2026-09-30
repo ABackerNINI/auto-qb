@@ -50,7 +50,21 @@ from _common import (  # noqa: E402
 
 # 默认参与 cap 检查的角色 (易变层与任务档案在迁移完成后才纳入 —— 见 `--all`)
 DEFAULT_ROLES = ("index", "index-auto", "pitfall", "evergreen", "reference", "log", "volatile", "task", "agents")
-ALL_ROLES = DEFAULT_ROLES + ("volatile", "task")
+# `ALL_ROLES` 只是 `DEFAULT_ROLES` 的别名 —— 2026-09-30 前写成 `DEFAULT_ROLES + ("volatile","task")`,
+# 而后两者**已经在** DEFAULT_ROLES 里, 是个重复项。保留名字只是 CLI 可读性, 不再重复枚举。
+ALL_ROLES = DEFAULT_ROLES
+
+# 尺寸超限里**唯一**的硬规定角色 (2026-09-30 用户拍板, 计划 26-09-30-2112):
+# `agents` = AGENTS.md —— 越过 8,000 发生的是 IDE 注入 `slice(0, 8000)` **截断** (尾部对模型真不可见),
+# 不是「读起来贵一点」, 所以只有它留在 problems (超了仍拦提交)。
+# 其余角色的尺寸是**预算**: 违反只是多花阅读 token, 无截断 —— 2026-09-30 起降级为**债务**
+# (报进 warns: 提交时由 `doc.caps` 派生输出并转告用户, 清理另开会话, 不拦提交)。
+HARD_CAP_ROLES = ("agents", )
+
+# 债务行的**前缀标记**: `check_caps` 的 warns 里混着两类 —— 尺寸超限(债务) 与 下限 `CAP_MIN_WARN`
+# 提示(本来就只是建议, 不是债)。消费者 `scripts/check_context_caps.py` 靠这个前缀把**债务**
+# 挑出来累计进"cap 债务 N 项" —— 否则"文件过小"这类建议会被当成欠债, 债务数字永远清零不了。
+DEBT_MARK = "cap 债务: "
 
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 
@@ -142,8 +156,35 @@ def _cap_candidates(root: Path, mb: Path, roles: tuple[str, ...]) -> list[Path]:
     return sorted(set(files))
 
 
+def trim_hint(role: str, cap: int) -> str:
+    """超 cap 后的收缩口径 —— 单行返回 (`doc.caps` 要把这些行排进一张表, 多行会打乱对齐)。
+
+    `agents` 例外 (2026-09-30 用户拍板): AGENTS.md 是**硬规定**, **不套** 50% 收缩 ——
+    它的内容「外迁」等于把常驻可见的硬约束降为按需读 (设计回退), 所以只需回到 ≤ cap。
+    """
+    if role in HARD_CAP_ROLES:
+        return f"硬规定: 必须回到 ≤ {cap:,} 字符 (不套 50% 收缩, 也不挂账 —— 它是 IDE 注入入口, 超了尾部被截断)"
+    target = f"{int(cap * TRIM_KEEP):,}"
+    if role == "log":
+        # `log` 是 append-only, 超了不是"该删", 而是"该轮转" —— 把切到哪、搬到哪写进消息。
+        # ❌ 只搬"最老的一条": 最老条目大小不受控, 下次追加立刻又触顶。
+        return (
+            f"它是 append-only 流水, 按设计会一直长: 从**最老一端**切到 ≤ {target} 字符 "
+            f"(收缩到 ~{TRIM_KEEP:.0%}), 外迁同目录 `attachments/` 并原位留一行指针"
+        )
+    # 削到贴线等于下次追加立刻再触顶 —— 一次留足半桶
+    return (f"触顶处置: 精简/外迁到 ≤ {target} 字符 (最大值的 ~{TRIM_KEEP:.0%}), "
+            "外迁同目录 `attachments/` 并原位留一行指针")
+
+
 def check_caps(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> tuple[list[str], list[str]]:
-    """每个文件 ≤ 其角色的 cap。返回 (问题, 警告) —— 下限只 WARN, 不算问题。"""
+    """每个文件 ≤ 其角色的 cap。返回 (问题, 警告=债务)。
+
+    严重度**在源码单点决定**, 两个消费者 (pytest / `doc.caps`) 都不再各判一次 (2026-09-30):
+    - 角色 ∈ `HARD_CAP_ROLES`(只有 `agents` = AGENTS.md)→ **problems**(硬规定, 超了仍拦提交);
+    - 其余角色的尺寸超限 → **warns**(债务: 不拦提交, 提交时派生输出 + 转告用户, 清理另开会话);
+    - 下限 `CAP_MIN_WARN` 本来就只 WARN —— 不动。
+    """
     problems: list[str] = []
     warns: list[str] = []
     for path in _cap_candidates(root, mb, roles):
@@ -154,21 +195,12 @@ def check_caps(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> 
         size = char_count(path)
         cap = CAP_POLICY[role]
         if size > cap:
-            # 报错即给修法: 触顶处置统一是"收缩到最大值的 50%"(TRIM_KEEP) —— 削到贴线等于下次
-            # 追加立刻再触顶; `log` 是 append-only, 超了不是"该删", 而是"该轮转", 把切到哪、搬到哪写进消息
-            target = f"{int(cap * TRIM_KEEP):,}"
-            if role == "log":
-                hint = (
-                    f"\n    → 它是 append-only 流水, 按设计会一直长: 从**最老一端**切到 ≤ "
-                    f"{target} 字符 (收缩到 ~{TRIM_KEEP:.0%}), 外迁同目录 `attachments/` "
-                    "并原位留一行指针; 别只搬最老一条 —— 那样下次追加立刻再触顶"
-                )
+            head = f"{rel} 超 cap: {size:,} > {cap:,} 字符 (角色 {role})"
+            if role in HARD_CAP_ROLES:
+                problems.append(f"{head} —— {trim_hint(role, cap)}")
             else:
-                hint = (
-                    f"\n    → 触顶处置: 精简/外迁到 ≤ {target} 字符 (最大值的 ~{TRIM_KEEP:.0%}),"
-                    " 外迁同目录 `attachments/` 并原位留一行指针"
-                )
-            problems.append(f"{rel} 超 cap: {size:,} > {cap:,} 字符 (角色 {role}){hint}")
+                warns.append(f"{DEBT_MARK}{head} —— {trim_hint(role, cap)}"
+                             " (不拦提交; 本会话不修, 转告用户另开会话清理)")
         elif is_topic_file(path) and size < CAP_MIN_WARN:
             warns.append(f"{rel} 过小: {size:,} < {CAP_MIN_WARN:,} 字符 —— 考虑并入邻文件")
     return problems, warns
@@ -255,16 +287,22 @@ def check_stubs(root: Path, mb: Path) -> list[str]:
 # --------------------------------------------------------------------------- 8 易变层硬顶
 
 
-def check_active_context_cap(root: Path, mb: Path) -> list[str]:
-    """`activeContext.md` ≤24 KB —— 超了就是内容该外迁的信号, 不是「这次先写着」。"""
+def check_active_context_cap(root: Path, mb: Path) -> tuple[list[str], list[str]]:
+    """`activeContext.md` ≤24 KB —— 超了就是内容该外迁的信号, 不是「这次先写着」。
+
+    2026-09-30 起与 `check_caps` 同口径: `volatile` 是**预算型**角色, 超限进 warns(债务) 而不是
+    problems —— 违反它只是「易变层读起来贵」, 不是事实源被破坏。
+    """
     path = mb / "activeContext.md"
     if not path.is_file():
-        return [f"{_mb_rel(root, path)} 缺失"]
+        return [f"{_mb_rel(root, path)} 缺失"], []
     size = char_count(path)
     cap = CAP_POLICY["volatile"]
     if size > cap:
-        return [f"{_mb_rel(root, path)} 超 cap: {size:,} > {cap:,} 字符 (易变层硬顶)"]
-    return []
+        head = f"{_mb_rel(root, path)} 超 cap: {size:,} > {cap:,} 字符 (角色 volatile)"
+        return [], [f"{DEBT_MARK}{head} —— {trim_hint('volatile', cap)}"
+                    " (不拦提交; 本会话不修, 转告用户另开会话清理)"]
+    return [], []
 
 
 # --------------------------------------------------------------------------- 9 条目字段
@@ -293,15 +331,16 @@ def check_pitfall_entries(root: Path, mb: Path) -> list[str]:
 def run_all(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> dict[str, list[str]]:
     """跑全部检查, 返回 {检查名: 问题清单}。"""
     cap_problems, _warns = check_caps(root, mb, roles)
+    # `check_caps` 的 warns 就是 cap 债务清单; 易变层同口径, 也只贡献 warns
+    ac_problems, _ac_warns = check_active_context_cap(root, mb) if "volatile" in roles else ([], [])
     return {
         "索引是生成物": check_index_regenerated(root, mb),
         "索引双向一致": check_bijection(root, mb),
         "头部元数据": check_metadata(root, mb),
-        "cap 策略": cap_problems,
+        "cap 策略(硬规定)": cap_problems + ac_problems,
         "类名与文件名": check_names(root, mb),
         "无孤儿索引": check_orphan_indexes(root, mb),
         "存根合法": check_stubs(root, mb),
-        "易变层硬顶": check_active_context_cap(root, mb) if "volatile" in roles else [],
         "条目三字段": check_pitfall_entries(root, mb),
     }
 
@@ -328,6 +367,8 @@ def main() -> int:
 
     results = run_all(root, mb, roles)
     _, warns = check_caps(root, mb, roles)
+    _, ac_warns = check_active_context_cap(root, mb) if "volatile" in roles else ([], [])
+    warns = warns + ac_warns
     total = sum(len(v) for v in results.values())
 
     print(f"memory-bank 结构检查 (角色: {', '.join(roles)})\n")
@@ -342,6 +383,8 @@ def main() -> int:
         if not args.quiet:
             print(f"  [WARN] {line}")
     print(f"\n共 {total} 项不通过。" if total else "\n全部通过。")
+    if warns:
+        print(f"cap 债务 {len(warns)} 项 —— 不拦提交; 本会话不修, 转告用户另开会话清理。")
     return 1 if total else 0
 
 

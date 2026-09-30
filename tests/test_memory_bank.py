@@ -8,6 +8,12 @@
 2026-09-18 起档案命名由 `TASKnnn-<slug>.md` 改为 `YY-MM-DD-<slug>.md`(全局序号在 9 个并行
 worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, 主键一律取"去掉编号 / 日期前缀后的 slug"。
 
+2026-09-30 **cap 债务制**改造 (计划 `memory-bank/plans/26-09-30-2112-plan-memory-bank-cap-debt.html`):
+尺寸类 cap 从"提交前置条件"降级为**债务**(超限只是读起来更贵, 事实源完好) —— 除 `AGENTS.md`
+(越过它发生的是 IDE 注入**截断**, 尾部对模型真不可见, 是硬规定, 超了仍拦)。所以本文件删掉了
+对 KB 角色**现行文档尺寸**的断言, 换成「债务可发现性」断言: 造一个超限文件, 它必须被报成
+warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不是"今天的文件恰好不超"。
+
 ## 测试计划
 
 - test_tasks_index_and_files_are_bijective: `_index.md` 登记的键与 `tasks/*.md` 文件双向一致
@@ -22,12 +28,15 @@ worktree 下必然撞号)。本文件在兼容期内同时接受两种命名, �
 知识库目录化守卫 (检查器在 memory-bank skill 的 `scripts/check_kb_structure.py`, 进程内 import):
 
 - test_kb_index_is_regenerated / test_kb_index_and_files_are_bijective: 索引 == 生成结果; 索引与目录双向一致
-- test_kb_topic_files_have_metadata / test_kb_files_respect_caps / test_kb_class_names_and_topic_filenames: 三行头元数据 / cap 分级 / 类名与文件名
+- test_kb_topic_files_have_metadata / test_kb_files_respect_caps / test_kb_class_names_and_topic_filenames: 三行头元数据 / **硬规定** cap / 类名与文件名
 - test_kb_no_orphan_index_dirs / test_kb_stubs_are_valid: 顶层索引都被 README 引用; 被拆文档留合法存根
 - test_kb_pitfall_entries_have_required_fields: pitfalls 条目含 触发 / 判别 / 处置
 - test_kb_active_context_within_cap: `activeContext.md` 是 ≤2 KB 合法存根 (2026-09-23 起滚动状态已迁 `activeContext/`)
-- test_kb_active_context_slices_are_valid: 切片命名定宽 / 三行头齐 / 每个 ≤ 切片 cap / 总数 ≤ 阈值
-- test_kb_task_archives_within_cap: `tasks/*.md` ≤48 KB (超了移 `tasks/attachments/`)
+- test_kb_active_context_slices_are_valid: 切片命名定宽 / 三行头齐 (结构); 尺寸与条数是**债务**, 不判红
+- test_kb_cap_debt_is_discoverable_not_blocking: 造超限文件 → 必须报成 warn(债务) 而不是 problem
+- test_agents_md_cap_is_hard_not_debt: AGENTS.md 超 8,000 仍是 problem(硬规定), 且不出现在债务清单里
+- test_kb_slice_cap_and_count_are_debt_not_blocking: 切片尺寸 / 条数 → warns(债务); 命名 / 三行头仍判红
+- test_context_caps_hard_and_debt_split: `check_context_caps.py` 的 AGENTS.md 只在 `HARD_CAPS`、不进债务组
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 `scripts/check_doc_links.py`)
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
@@ -51,11 +60,6 @@ SKILL = ROOT / ".agents" / "skills" / "memory-bank" / "SKILL.md"
 
 STATUSES = ("In Progress", "Open", "Done", "Dropped")
 
-# `memory-bank/activeContext/` 切片数上限 —— 切片无界增长是这个方案的已知代价, 给个可判定的收口线
-# 70 = 14 天蒸馏窗口 × 日均 ~5 篇(2026-09-29 二次校准: 56 在 26-09-29 打满且窗口内 57/57 全部活跃,
-# 无可归档; 实测 14 天产出 57 篇 ≈ 4.1/天, 取整 5/天留余量 —— 上限须 ≥ 14 天节奏, 否则守卫必红逼人违规归档;
-# 2026-09-28 首次校准 48→56 的口径见 git 历史)
-SLICE_COUNT_LIMIT = 70
 REQUIRED_SECTIONS = ("## 原始请求", "## 思考过程与决策", "## 实现计划", "## 子任务状态表", "## 进度日志")
 
 DATE_PREFIX_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-")
@@ -231,9 +235,26 @@ def test_kb_topic_files_have_metadata() -> None:
 
 
 def test_kb_files_respect_caps() -> None:
-    """每个文件 ≤ 其角色的 cap (角色策略单点在 skill 的 `_common.CAP_POLICY`)。"""
+    """**硬规定** cap 必须绿 —— 2026-09-30 债务制后, `check_caps` 的 problems 只剩这一类。
+
+    尺寸类 cap 降级前后, 本用例的名字没变、语义变了: 它现在只拦 `HARD_CAP_ROLES`
+    (唯一成员 `agents` = AGENTS.md —— 越过 8,000 是 IDE 注入**截断**, 尾部对模型真不可见)。
+    其余角色的尺寸超限进了 warns(债务): 不拦提交, 由 `doc.caps` 在提交时现算并转告用户,
+    清理另开会话 —— 判红的代价是在会话最贵的时刻逼出文档手术返工(计划 §01 根因)。
+    """
     problems, _warns = _kb_checker().check_caps(ROOT, MB)
     assert not problems, "\n".join(problems)
+
+    # 硬规定单点: AGENTS.md 的 8,000 不由本文件定义, 但"它必须仍在硬规定里"要钉住 ——
+    # 万一有人把它搬进债务组, 上面那条 assert 会变成恒绿(AGENTS.md 超限也不再有人拦)。
+    checker = _kb_checker()
+    assert checker.HARD_CAP_ROLES == ("agents",
+                                     ), (f"硬规定角色集变了: {checker.HARD_CAP_ROLES} —— AGENTS.md 的截断语义必须留在 problems 侧")
+    agents_size = checker.char_count(ROOT / "AGENTS.md")
+    assert agents_size <= checker.CAP_POLICY["agents"], (
+        f"AGENTS.md {agents_size:,} 字符 > 硬上限 {checker.CAP_POLICY['agents']:,} —— "
+        "超出部分注入时被 slice 掉, 必须就地削薄(不套 50% 收缩, 也没有挂账通道)"
+    )
 
 
 def test_kb_class_names_and_topic_filenames() -> None:
@@ -272,31 +293,123 @@ def test_kb_active_context_within_cap() -> None:
 
 
 def test_kb_active_context_slices_are_valid() -> None:
-    """切片命名定宽 / 三行头齐 / 每个 ≤ 切片 cap / 总数 ≤ 阈值 —— 防目录无界膨胀。
+    """切片命名定宽 / 三行头齐 —— 这两个是**结构**, 坏了就解析不了, 判红。
 
-    切片是「每会话重写文件头同一段」的替代物: 冲突在结构上消掉了, 代价是文件数不再有界
-    (初稿按 clone 拆是 4+N 个)。所以把「该归档了」变成可判定的数字, 而不是靠自觉。
+    尺寸与条数不再在本用例里判红(2026-09-30, D2 拍板归债务通道): 切片是「每会话重写文件头
+    同一段」的替代物, 冲突在结构上消掉了, 代价是文件数不再有界 —— 但"该蒸馏了"与"切片的
+    命名坏了"性质不同: 前者只是读起来更贵, 后者是事实源残缺。旧口径把它俩都判红, 实测后果是
+    阈值(按 ~5 片/日校准的估计值)打满时, 逼出"为了过守卫而违规归档"(切片 26-09-30-2112 记的实例)。
     """
     checker = _kb_checker()
     import gen_active_recent
 
     slice_dir = MB / "activeContext"
     assert slice_dir.is_dir(), "缺少 memory-bank/activeContext/ 切片目录"
-    rows, problems = gen_active_recent.collect(slice_dir, ROOT)
+    rows, problems, _warns = gen_active_recent.collect(slice_dir, ROOT)
     assert not problems, "\n".join(problems)
     assert checker.role_of("memory-bank/activeContext/x.md") == "slice", "切片路径未被 _common.role_of 认成 slice 角色"
     assert rows, "切片目录是空的 —— 滚动状态没有归宿"
-    assert len(rows
-              ) <= SLICE_COUNT_LIMIT, (f"切片数 {len(rows)} > {SLICE_COUNT_LIMIT} —— 把 14 天未动的切片蒸馏进 progress/ 或任务档案后删除")
 
 
-def test_kb_task_archives_within_cap() -> None:
-    """任务档案 ≤48 KB(其中「历史会话纪要」段 ≤16 KB) —— 超了把纪要段 / 较早日志移 `tasks/attachments/`。
+def test_kb_cap_debt_is_discoverable_not_blocking(tmp_path: Path) -> None:
+    """尺寸债务**必须可发现**: 造一个超限文件, 它得报成 warn(债务) 而不是 problem(判红)。
 
-    `attachments/` 是**子目录**而不是平铺: 索引守卫按 `tasks/*.md` 扫描**不递归**, 故附件天然不被当档案。
+    为什么改成这样断言: 降级之后, "断言现行文档都不超"会退化成恒绿 —— 债务制**允许**文件超限,
+    那时守卫不响, 但 `doc.caps` 必须响。所以这里守的是"严重度仍然正确", 而不是"今天恰好不超"。
     """
-    problems, _warns = _kb_checker().check_caps(ROOT, MB, ("task", ))
-    assert not problems, "\n".join(problems)
+    checker = _kb_checker()
+    root, mb = tmp_path, tmp_path / "memory-bank"
+    (mb / "evergreen").mkdir(parents=True)
+    (mb / "evergreen" / "_about.md").write_text("# t\n> 摘要: x\n> 触发: y\n", encoding="utf-8")
+    big = mb / "evergreen" / "big.md"
+    big.write_text("# 大\n> 摘要: x\n> 触发: y\n" + "x" * 30_000, encoding="utf-8")
+
+    problems, warns = checker.check_caps(root, mb)
+
+    assert not problems, f"尺寸超限不该再进 problems(它已是债务): {problems}"
+    assert any("big.md" in w and "超 cap" in w for w in warns), f"超限文件没被报成债务: {warns}"
+    assert any("债务" in w for w in warns), f"债务行必须自带处置口径(转告用户另开会话清理): {warns}"
+
+
+def test_agents_md_cap_is_hard_not_debt(tmp_path: Path) -> None:
+    """AGENTS.md 超 8,000 仍是 problem(硬规定), 且**不出现在债务清单里**。
+
+    它越过的不是预算而是**截断点**: IDE 注入 `slice(0, 8000)`, 尾部对模型真不可见 ——
+    所以 2026-09-30 用户拍板: 不能超、不套 50% 收缩、不进债务体系(它不常改, 一旦改了就该顺手合规)。
+    """
+    checker = _kb_checker()
+    root, mb = tmp_path, tmp_path / "memory-bank"
+    mb.mkdir()
+    (root / "AGENTS.md").write_text("x" * 8_001, encoding="utf-8")
+
+    problems, warns = checker.check_caps(root, mb)
+    assert any("AGENTS.md" in p and "超 cap" in p for p in problems), f"AGENTS.md 超限必须仍是 problem: {problems}"
+    assert not any("AGENTS.md" in w for w in warns), f"AGENTS.md 不该进债务清单: {warns}"
+
+    # 剔除硬规定角色后(这正是 `doc.caps` 的调用形态), 它既不进债务、也不该留下 problems
+    debt_roles = tuple(r for r in checker.DEFAULT_ROLES if r not in checker.HARD_CAP_ROLES)
+    debt_problems, debt_warns = checker.check_caps(root, mb, debt_roles)
+    assert not debt_problems and not debt_warns, (
+        f"剔除 {checker.HARD_CAP_ROLES} 后不该再有任何输出: {debt_problems} / {debt_warns}"
+    )
+
+
+def test_kb_slice_cap_and_count_are_debt_not_blocking(tmp_path: Path, monkeypatch) -> None:
+    """切片尺寸 / 条数 → warns(债务); 命名 / 三行头 → problems(判红)。
+
+    `collect()` 返回三元组 (行, 问题, 债务): 债务侧的判据是"该蒸馏了", 问题侧的判据是"结构坏了"。
+    条数阈值用 monkeypatch 压到 2 —— 真造 71 个文件既慢又与校准数字耦合。
+    """
+    import gen_active_recent
+    import gen_baseline_recent
+
+    monkeypatch.setattr(gen_active_recent, "SLICE_COUNT_LIMIT", 2)
+
+    slice_dir = tmp_path / "activeContext"
+    slice_dir.mkdir()
+    for i in range(3):
+        (slice_dir / f"26-01-0{i + 1}-0000-s{i}.md"
+        ).write_text(f"# s{i}\n> 摘要: x\n> 最后活动: 2026-01-0{i + 1} 00:00\n", encoding="utf-8")
+    rows, problems, warns = gen_active_recent.collect(slice_dir, tmp_path)
+    assert not problems, f"合规切片不该报问题: {problems}"
+    assert len(rows) == 3
+    assert len(warns) == 1 and "债务" in warns[0], f"条数超限必须报成一条债务: {warns}"
+
+    # 命名坏了 = 结构问题, 仍判红(不因债务制放松)
+    (slice_dir / "bad-name.md").write_text("# bad\n", encoding="utf-8")
+    _rows, problems, _warns = gen_active_recent.collect(slice_dir, tmp_path)
+    assert any("文件名不合" in p for p in problems), f"不合规命名必须仍是 problem: {problems}"
+
+    # 基线切片同口径: 尺寸超限是债务
+    base_dir = tmp_path / "memory-bank" / "testing" / "baselines"
+    base_dir.mkdir(parents=True)
+    # root 传 tmp_path, rel 才会是 `memory-bank/testing/baselines/...` → 命中 baseline-slice 档 (8,000)
+    (base_dir / "26-01-01-0000-b0.md").write_text("# b\n> 摘要: x\n" + "x" * 9_000, encoding="utf-8")
+    _rows2, problems2, warns2 = gen_baseline_recent.collect(base_dir, tmp_path)
+    assert not problems2, f"基线切片尺寸不该判红: {problems2}"
+    assert any("债务" in w for w in warns2), f"基线切片超限必须报成债务: {warns2}"
+
+
+def test_context_caps_hard_and_debt_split() -> None:
+    """`scripts/check_context_caps.py` 的分档: AGENTS.md 只在 `HARD_CAPS`, **不进**任何债务组。
+
+    钉住它的理由: 债务制的牙齿全在"债务必然可见", 而 AGENTS.md 是**唯一**不许挂账的文件 ——
+    一旦有人把它挪进 `SKILL_CAPS` / `READ_BUDGET_CAPS`, 它超限就只剩一行提示, 尾部静默截断
+    会重新变成"写了但没人看见"。
+    """
+    import importlib.util
+
+    path = ROOT / "scripts" / "check_context_caps.py"
+    spec = importlib.util.spec_from_file_location("check_context_caps", path)
+    assert spec and spec.loader, "缺少 scripts/check_context_caps.py"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert set(module.HARD_CAPS) == {"AGENTS.md"}, f"硬规定组应是 AGENTS.md 一份: {set(module.HARD_CAPS)}"
+    assert module.HARD_CAPS["AGENTS.md"] == 8000, "AGENTS.md 的 8000 是 IDE 注入常量, 不是可调预算"
+    assert "AGENTS.md" not in module.SKILL_CAPS and "AGENTS.md" not in module.READ_BUDGET_CAPS, (
+        "AGENTS.md 不得出现在债务组 —— 它没有挂账通道"
+    )
 
 
 def test_memory_bank_instructions_match_current_structure() -> None:
