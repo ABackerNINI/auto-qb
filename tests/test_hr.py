@@ -34,7 +34,7 @@ def test_builtin_hr_category_auto_update_from_state():
         tor.tracker_conf = mgr.config.trackers["HHan"]
 
         assert mgr.host.get("maintenance").handle_maintenance(tor, dry_run=False)
-        mgr.save_state()
+        mgr.ctx.state.save()
         assert mgr.state["auto_categories"]["HASH123"] == "!!HR3D!!"
 
         mgr2 = make_manager(state_file)

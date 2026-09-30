@@ -678,7 +678,7 @@ def test_maintenance_on_change_skips_without_change():
         mgr.client.calls.clear()
         spy = _spy_tags_part(mgr)
         rec.seeding_time = 3 * 86400 + 12 * 3600 + 10  # 做种时长达标 -> satisfied 翻转(HR 状态随时间演化)
-        mgr._handle_maintenance(rec, False)  # interval 任务到期: tags 未变
+        mgr.host.get("maintenance").handle_maintenance(rec, False)  # interval 任务到期: tags 未变
         assert not spy, "无变化轮应跳过 tags 部分"
         assert ("set_category", "--HR3D--") in mgr.client.calls, "HR 部分应照常执行(节奏不变): satisfied 分类更新"
 
@@ -694,11 +694,11 @@ def test_maintenance_on_change_recheck_on_external_change():
         mgr.client.calls.clear()
         tor.tags = "B"  # 外部改动(站点标签一并被清 -> 重检可观察到真实补打)
         mgr._refresh_torrents()  # 增量报告 -> external_tag_changes 登记
-        mgr._handle_maintenance(rec, False)
+        mgr.host.get("maintenance").handle_maintenance(rec, False)
         assert ("add_tags", ["HHan"]) in mgr.client.calls, "tags 外部变化应触发重检"
         assert "H1" not in mgr.store.external_tag_changes, "登记应消费一次"
         mgr.client.calls.clear()
-        mgr._handle_maintenance(rec, False)
+        mgr.host.get("maintenance").handle_maintenance(rec, False)
         assert ("add_tags", ["HHan"]) not in mgr.client.calls, "重检后无变化应继续跳过"
 
 
@@ -712,7 +712,7 @@ def test_maintenance_interval_unchanged():
         rec = mgr.store.get("H1")
         mgr.client.calls.clear()
         spy = _spy_tags_part(mgr)
-        mgr._handle_maintenance(rec, False)
+        mgr.host.get("maintenance").handle_maintenance(rec, False)
         assert spy, "interval 模式无变化也应执行 tags 部分(现状)"
 
 
@@ -726,12 +726,12 @@ def test_maintenance_on_change_hot_reload_full_convergence():
         rec = mgr.store.get("H1")
         mgr.client.calls.clear()
         spy = _spy_tags_part(mgr)
-        mgr._handle_maintenance(rec, False)
+        mgr.host.get("maintenance").handle_maintenance(rec, False)
         assert not spy, "前置: 无变化时跳过"
         # 模拟 apply_new_config L2 尾段: reset_runtime + client 重连(rid 失效 -> 下轮全量)
         mgr.store.reset_runtime()
         mgr.store.reset_sync()
         mgr._refresh_torrents()  # 全量轮: conf 重匹配 + 待重检标记全量登记
         assert rec.tracker_conf is not None, "全量轮应重匹配 tracker_conf(reset_runtime 契约)"
-        mgr._handle_maintenance(rec, False)
+        mgr.host.get("maintenance").handle_maintenance(rec, False)
         assert spy, "热重载后首轮应全量收敛"

@@ -4671,8 +4671,8 @@ def _make_grouped_manager(td):
     for t in tors:
         client.torrents[t.hash] = t
     seed_store(mgr, tors)
-    mgr._assign_new_torrent("HA")
-    mgr._assign_new_torrent("HB")
+    mgr.host.get("grouping")._assign_new_torrent("HA")
+    mgr.host.get("grouping")._assign_new_torrent("HB")
     return mgr, client, mgr.store.member_to_key["HA"]
 
 
