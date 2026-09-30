@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>memory-bank 取时间标准化 · 工程计划 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-timekit">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-09-30-0931">
+<meta name="doc-updated" content="26-09-30-0931">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-30-memory-bank-timekit.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101418;
+    --paper: #151a20;
+    --ink: #d9dee3;
+    --ink-dim: #97a1ab;
+    --ink-faint: #6b7580;
+    --accent: #56b4a4;
+    --accent-dim: rgba(86, 180, 164, .13);
+    --line: rgba(255, 255, 255, .09);
+    --line-strong: rgba(255, 255, 255, .16);
+    --mono: "JetBrains Mono", "Cascadia Code", ui-monospace, Consolas, monospace;
+    --sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { max-width: 1260px; margin: 0 auto; padding: 0 40px; }
+
+  /* ---------- 封面 ---------- */
+  .cover { padding: 92px 0 68px; border-bottom: 1px solid var(--line-strong); }
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    color: var(--accent); text-transform: uppercase;
+  }
+  .cover h1 {
+    font-size: 50px; font-weight: 600; line-height: 1.14;
+    letter-spacing: -.02em; margin: 22px 0 18px;
+  }
+  .cover .sub { font-size: 18.5px; color: var(--ink-dim); max-width: 47em; line-height: 1.65; }
+  .cover-meta { display: flex; gap: 36px; margin-top: 42px; flex-wrap: wrap; }
+  .cover-meta div { font-size: 13px; }
+  .cover-meta .k {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    color: var(--ink-faint); text-transform: uppercase; display: block; margin-bottom: 3px;
+  }
+  .cover-meta .v { color: var(--ink); font-family: var(--mono); white-space: nowrap; }
+  .cover-meta .v.open { color: var(--accent); }
+
+  /* ---------- 双栏布局 ---------- */
+  .layout { display: grid; grid-template-columns: 216px 1fr; gap: 56px; padding-top: 8px; }
+  aside { align-self: start; position: sticky; top: 0; padding: 40px 0 40px; }
+  aside .toc-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    color: var(--ink-faint); text-transform: uppercase; margin-bottom: 14px;
+  }
+  aside nav a {
+    display: block; color: var(--ink-dim); text-decoration: none;
+    font-size: 13.5px; padding: 5px 0 5px 14px; border-left: 1px solid var(--line);
+    line-height: 1.45;
+  }
+  aside nav a:hover { color: var(--ink); border-left-color: var(--line-strong); }
+  aside nav a .n { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-right: 8px; }
+
+  main { padding: 40px 0 0; min-width: 0; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-bottom: 84px; scroll-margin-top: 32px; }
+  .sec-head { margin-bottom: 26px; }
+  .sec-no {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+    color: var(--accent); display: block; margin-bottom: 8px;
+  }
+  .sec-head h2 { font-size: 27px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+  .sec-head .lead { color: var(--ink-dim); margin-top: 10px; max-width: 46em; }
+
+  h3 {
+    font-size: 17.5px; font-weight: 600; margin: 34px 0 12px;
+    padding-top: 18px; border-top: 1px solid var(--line);
+  }
+  h3 .hno { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 10px; }
+  p { margin: 10px 0; max-width: 52em; }
+  ul, ol { margin: 10px 0 10px 1.4em; max-width: 52em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--ink-faint); }
+  strong { color: #eef1f4; }
+  code {
+    font-family: var(--mono); font-size: .88em; background: var(--paper);
+    border: 1px solid var(--line); padding: 1px 6px; border-radius: 3px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- 表格 ---------- */
+  table {
+    width: 100%; border-collapse: collapse; margin: 16px 0;
+    font-size: 13.5px; line-height: 1.6;
+  }
+  th {
+    text-align: left; font-weight: 600; color: var(--ink-dim);
+    font-size: 12px; letter-spacing: .05em; text-transform: uppercase;
+    padding: 8px 12px; border-bottom: 1px solid var(--line-strong);
+    white-space: nowrap;
+  }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td code { white-space: nowrap; }
+  table code { font-size: 12px; }
+
+  /* ---------- 代码块 / 引用块 ---------- */
+  pre {
+    background: var(--paper); border: 1px solid var(--line);
+    padding: 14px 18px; margin: 14px 0; overflow-x: auto;
+    font-family: var(--mono); font-size: 13px; line-height: 1.65; color: #c7d1cd;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: inherit; }
+  .callout {
+    border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    background: var(--paper); padding: 12px 18px; margin: 16px 0; max-width: 52em;
+  }
+  .callout .t {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    color: var(--accent); text-transform: uppercase; display: block; margin-bottom: 4px;
+  }
+  .callout p { margin: 4px 0; font-size: 14px; }
+
+  /* ---------- 根因证据卡 ---------- */
+  .facts { margin: 18px 0; }
+  .fact {
+    border: 1px solid var(--line); background: var(--paper);
+    padding: 14px 18px; margin-bottom: 10px;
+  }
+  .fact .ft {
+    font-weight: 600; font-size: 14.5px; margin-bottom: 4px; color: #eef1f4;
+  }
+  .fact .fd { font-size: 13.5px; color: var(--ink-dim); }
+  .fact .fd code { font-size: 12px; }
+
+  footer {
+    border-top: 1px solid var(--line-strong); padding: 28px 0 56px;
+    color: var(--ink-faint); font-size: 12.5px; font-family: var(--mono);
+  }
+
+  @media (max-width: 900px) {
+    .frame { padding: 0 22px; }
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    aside { position: static; padding: 24px 0; }
+    aside nav { display: flex; flex-wrap: wrap; gap: 2px 14px; }
+    aside nav a { border-left: none; padding: 3px 0; }
+    .cover h1 { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="frame">
+    <span class="kicker">Engineering Plan · memory-bank</span>
+    <h1>memory-bank 取时间标准化</h1>
+    <p class="sub">UTC+8 单点取时脚本 + 三层日期守卫 + 守卫脚本随 skill 移植 —— 让「时间戳用命令取当前值」这条早已写进约定的规则第一次变得可执行、可机检。</p>
+    <div class="cover-meta">
+      <div><span class="k">状态</span><span class="v open">Open · 计划就绪待实施</span></div>
+      <div><span class="k">专题主键</span><span class="v">memory-bank-timekit</span></div>
+      <div><span class="k">入库</span><span class="v">2026-09-30 09:31 (UTC+8)</span></div>
+      <div><span class="k">关联档案</span><span class="v">tasks/26-09-30-memory-bank-timekit.md</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="frame layout">
+  <aside>
+    <div class="toc-title">目录</div>
+    <nav>
+      <a href="#s1"><span class="n">01</span>背景与根因</a>
+      <a href="#s2"><span class="n">02</span>目标与非目标</a>
+      <a href="#s3"><span class="n">03</span>方案设计</a>
+      <a href="#s4"><span class="n">04</span>改动清单</a>
+      <a href="#s5"><span class="n">05</span>执行步骤</a>
+      <a href="#s6"><span class="n">06</span>验收标准</a>
+      <a href="#s7"><span class="n">07</span>边界与风险</a>
+      <a href="#s8"><span class="n">08</span>变更记录</a>
+    </nav>
+  </aside>
+
+  <main>
+
+    <!-- ================================================== 01 -->
+    <section id="s1">
+      <div class="sec-head">
+        <span class="sec-no">01</span>
+        <h2>背景与根因</h2>
+        <p class="lead">文档日期时准时不准、体例漂移、文件名出现未来时间 —— 探索结论：不是没人守规矩，是规矩从未具备执行条件。</p>
+      </div>
+
+      <div class="facts">
+        <div class="fact">
+          <div class="ft">约定早已存在，但那条命令根本不存在</div>
+          <div class="fd"><code>conventions/doc-forms.md:31</code>「时间戳用命令取当前值」、<code>webui.md:59</code>「日期时间用命令取当前值，不靠记忆」—— 但 <code>.commands/</code> 全部包里 grep 取时命令 <strong>0 命中</strong>，全仓库也不存在任何 UTC+8 单点。日期实际上全是 agent 按会话上下文手敲的：系统提示里的日期、记忆、推算，哪个都能写进去，未来时间与错值由此而来。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">守卫只查形状，不查值</div>
+          <div class="fd"><code>tests/test_memory_bank.py</code>（441 行 / 24 测试）校验文件名形状、章节结构、索引一致性，但<strong>不校验任何日期值</strong>；<code>gen_active_recent.py:87</code> 对格式坏的「最后活动」strptime 失败后<strong>静默回退</strong>文件名时间 —— 坏数据永远不红。</div>
+        </div>
+        <div class="fact">
+          <div class="ft">唯一的脚本化取时点未钉时区</div>
+          <div class="fd">create-issue <code>scripts/_common.py:56</code> 的 <code>stamp()</code> 用裸 <code>datetime.now()</code> —— 机器本地时区，未钉 +08。它是唯一往 KB 文件名写时间戳的脚本，换个时区的机器跑就会产出错值文件名。</div>
+        </div>
+      </div>
+
+      <h3><span class="hno">1.1</span>存量盘点（2026-09-30 实测）</h3>
+      <table>
+        <tr><th>项</th><th>实测</th><th>说明</th></tr>
+        <tr><td>文件名未来日期</td><td><strong>0 个</strong></td><td>当前库存干净；价值在防再生</td></tr>
+        <tr><td>内容未来日期</td><td><strong>0 处</strong></td><td>同上</td></tr>
+        <tr><td>正文 <code>YYYY-MM-DD</code> 补零 ISO</td><td>2,610 处</td><td>主流体例，高度统一</td></tr>
+        <tr><td>正文 <code>YYYY-MM-DD HH:MM</code> 带时刻</td><td>770 处</td><td>同上</td></tr>
+        <tr><td>「最后活动」解析失败</td><td><strong>8 处</strong></td><td>3 处只写日期 + 5 处时刻后拖注释，<code>gen_active_recent</code> 全部静默吞掉</td></tr>
+        <tr><td>「最后活动」整行缺失</td><td>1 处</td><td>66 个切片中 65 个有该行</td></tr>
+        <tr><td>紧凑 8 位 <code>YYYYMMDD</code></td><td><strong>10 处</strong></td><td>散在 tasks / issues / plans</td></tr>
+        <tr><td>ISO-T 分隔 <code>T</code></td><td>1 处</td><td>plans HTML 里的 JSON 样例（机器数据）</td></tr>
+        <tr><td>斜杠 / 中文日期 / 不补零</td><td>0 处</td><td>—</td></tr>
+      </table>
+
+      <div class="callout">
+        <span class="t">结论</span>
+        <p>本计划的价值在<strong>防再生</strong>（单点取时 + 值校验守卫），而非清洗存量 —— 存量只有 20 处左右体例噪音，顺手清干净即可。</p>
+      </div>
+    </section>
+
+    <!-- ================================================== 02 -->
+    <section id="s2">
+      <div class="sec-head">
+        <span class="sec-no">02</span>
+        <h2>目标与非目标</h2>
+      </div>
+      <h3><span class="hno">2.1</span>目标</h3>
+      <ol>
+        <li><strong>时间单点</strong>：KB 一切日期只有一个来源 —— 脚本 <code>timekit.py</code>，UTC+8 钉死，与机器时区无关。</li>
+        <li><strong>流程可执行</strong>：把「时间戳用命令取」从一句空话落成真实存在的 <code>commands run kb.time</code>，SKILL.md 挂硬性步骤。</li>
+        <li><strong>守卫可机检</strong>：未来日期、坏体例、非法文件名日期全部判红，接进 <code>kb.check</code> 与提交闸门。</li>
+        <li><strong>守卫脚本随 skill 走</strong>：memory-bank 相关守卫全部收进 <code>.agents/skills/memory-bank/scripts/</code>，整目录拷走即可移植。</li>
+      </ol>
+      <h3><span class="hno">2.2</span>非目标</h3>
+      <ul>
+        <li><strong>不兜「过去日期的错值」</strong>（如把 09 写成 06）—— 无真值可比，守卫做不到；靠「只从 kb.time 取」的流程规避。</li>
+        <li><strong>不查正文的未来日期</strong> —— 正文可合法引用未来日程（排期、里程碑）；值检查只做文件名与元数据。</li>
+        <li><strong>不动项目级脚本</strong>：<code>check_context_caps</code> / <code>check_command_drift</code> / <code>sync_agent_skills</code> 含项目专属值，留根。</li>
+      </ul>
+    </section>
+
+    <!-- ================================================== 03 -->
+    <section id="s3">
+      <div class="sec-head">
+        <span class="sec-no">03</span>
+        <h2>方案设计</h2>
+      </div>
+
+      <h3><span class="hno">3.1</span>时间单点 timekit.py（skill 第 9 个脚本）</h3>
+      <p>位置 <code>.agents/skills/memory-bank/scripts/timekit.py</code>，纯 stdlib，复用 <code>_common</code> 的根/目录探测。时区实现：</p>
+      <pre><code>datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)</code></pre>
+      <p>即 <strong>naive UTC+8 墙钟</strong>：与全库现有 naive 解析（<code>gen_active_recent</code> 等）一致，不引入 aware/naive 混算；与机器时区无关，TZ 无关性用测试钉住。子命令：</p>
+      <table>
+        <tr><th>子命令</th><th>输出</th><th>用途</th></tr>
+        <tr><td><code>date</code></td><td><code>2026-09-30</code></td><td>Added / Updated / 正文日期</td></tr>
+        <tr><td><code>time</code></td><td><code>2026-09-30 09:31</code></td><td>最后活动 / 正文时刻</td></tr>
+        <tr><td><code>stamp</code></td><td><code>26-09-30-0931</code></td><td>文件名前缀 <code>YY-MM-DD-HHMM</code>（沿用现行定宽约定）</td></tr>
+        <tr><td>（无参数）</td><td>三行全打</td><td><code>commands run kb.time</code> 默认形态，一次取全</td></tr>
+        <tr><td><code>check</code> / <code>--check</code></td><td>违规清单</td><td>时间守卫（见 3.3），有违规退出码 1</td></tr>
+      </table>
+      <pre><code>$ commands run kb.time
+date:  2026-09-30
+time:  2026-09-30 09:31
+stamp: 26-09-30-0931</code></pre>
+
+      <h3><span class="hno">3.2</span>流程接入（让约定第一次可执行）</h3>
+      <ul>
+        <li><strong>新 task <code>kb.time</code></strong>（<code>.commands/kb/config.toml</code>）：<code>timekit.py &lt;args&gt;</code>；<code>kb.check</code> run 列表追加 <code>timekit.py --check</code>。</li>
+        <li><strong>SKILL.md 新增「时间口径与取时」节</strong>（现 6,347 / 15,000 字符，余量充足）：KB 内任何日期（文件名前缀 / Added / Updated / 最后活动 / doc-added / 正文）<strong>一律取自 <code>commands run kb.time</code> 输出，禁用模型上下文里的日期与手工推算</strong>；会话开始 / 收尾 / 任务档案规范相应挂钩；附格式表。</li>
+        <li><strong>conventions 两处指针落地</strong>：<code>doc-forms.md:31</code> 与 <code>webui.md:59</code> 的「用命令取」写到真命令 <code>commands run kb.time</code>。</li>
+        <li><strong>AGENTS.md 不动</strong>：7978 / 8000 字符，余量仅 22；路由经 skill 收尾链路自然触达。</li>
+      </ul>
+
+      <h3><span class="hno">3.3</span>守卫规则（三层）</h3>
+      <table>
+        <tr><th>层</th><th>范围</th><th>规则</th></tr>
+        <tr>
+          <td>文件名</td>
+          <td>tasks 的 <code>YY-MM-DD</code>；切片与 HTML 制品的 <code>YY-MM-DD-HHMM</code></td>
+          <td>合法日期 + 不晚于当前时刻，<strong>未来 = 违规</strong>；时分位合法性一并校验</td>
+        </tr>
+        <tr>
+          <td>元数据</td>
+          <td><code>**Added:**</code> / <code>**Updated:**</code> / <code>&gt; 最后活动:</code> / HTML meta <code>doc-added</code> / <code>doc-updated</code></td>
+          <td>合法 + <strong>未来 = 违规</strong>；「最后活动」必须严格 <code>YYYY-MM-DD HH:MM</code></td>
+        </tr>
+        <tr>
+          <td>正文</td>
+          <td>全部 .md / .html 的日期 token</td>
+          <td>非规范变体（斜杠 / 不补零 / 中文日期 / 紧凑 8 位 / ISO-T）= 违规；规范 token <strong>不查未来</strong>（正文可合法引用未来日程）</td>
+        </tr>
+      </table>
+      <p>豁免机制：md 跳过围栏代码块与行内代码；行内 <code>&lt;!-- time:allow --&gt;</code> 标记豁免所在行（HTML 注释渲染不可见，适合 plans 制品里的机器数据样例）。输出 <code>file:line + 违规类型 + 修复提示</code>。</p>
+
+      <h3><span class="hno">3.4</span>守卫脚本收进 skill（移植性）</h3>
+      <ul>
+        <li><strong>迁移 <code>scripts/check_doc_links.py</code> → skill scripts</strong>（第 10 个脚本）：已核实耦合极低 —— 根探测改用 <code>_common.find_root()</code> 即可；同步改两处引用：提交闸门 run 改 <code>&lt;skill-dir:memory-bank&gt;</code> 占位符、<code>tests/test_memory_bank.py</code> 的 importlib 加载路径。原路径删除。</li>
+        <li><strong>接线天然兼容</strong>：<code>kb.*</code> 与闸门命令全走 <code>&lt;skill-dir:memory-bank&gt;</code> 占位符（<code>SKILL_DIR_CANDIDATES</code> 动态解析），脚本随 skill 目录整体搬迁时 config 零改动。</li>
+        <li><strong><code>references/PORTING.md</code>（新）</strong>：移植清单 —— 拷 skill 目录 → 建 memory-bank/ 骨架 → 可选挂 pytest 薄壳 / <code>.commands/kb</code> 包 / 闸门。</li>
+      </ul>
+
+      <h3><span class="hno">3.5</span>收口静默回退 + create-issue 钉 +08</h3>
+      <ul>
+        <li><strong><code>gen_active_recent.py:87</code></strong>：「最后活动」<em>存在但格式坏</em>时 <code>--check</code> 报红（不再静默回退）；整行缺失仍按设计回退文件名时间。收口在存量清洗<strong>之后</strong>做，保证闸门全程不红。</li>
+        <li><strong>create-issue <code>_common.py</code> 的 <code>stamp()</code> / <code>long_date()</code></strong> 改用同一 UTC+8 naive 墙钟（本地内联常量，不跨 skill import）—— 它是唯一往 KB 文件名写时间戳的脚本，不钉则非 +08 机器上 issue 名仍会错。</li>
+      </ul>
+    </section>
+
+    <!-- ================================================== 04 -->
+    <section id="s4">
+      <div class="sec-head">
+        <span class="sec-no">04</span>
+        <h2>改动清单</h2>
+        <p class="lead">文件级清单；实施时如有出入，以本表为基准做增删并在变更记录里写明。</p>
+      </div>
+      <h3><span class="hno">4.1</span>新增</h3>
+      <table>
+        <tr><th>文件</th><th>内容</th></tr>
+        <tr><td><code>.agents/skills/memory-bank/scripts/timekit.py</code></td><td>时间单点：date / time / stamp / check（3.1）</td></tr>
+        <tr><td><code>.agents/skills/memory-bank/references/PORTING.md</code></td><td>移植到其它项目的清单（3.4）</td></tr>
+        <tr><td><code>memory-bank/plans/26-09-30-0931-plan-memory-bank-timekit.html</code></td><td>本计划文档</td></tr>
+        <tr><td><code>memory-bank/tasks/26-09-30-memory-bank-timekit.md</code></td><td>任务档案（立档阈值 #4：产出 plans 制品）</td></tr>
+      </table>
+      <h3><span class="hno">4.2</span>迁移</h3>
+      <table>
+        <tr><th>从</th><th>到</th><th>改动</th></tr>
+        <tr><td><code>scripts/check_doc_links.py</code></td><td><code>.agents/skills/memory-bank/scripts/</code></td><td>根探测改 <code>_common.find_root()</code>；改闸门与 pytest 两处引用；原路径删除</td></tr>
+      </table>
+      <h3><span class="hno">4.3</span>修改</h3>
+      <table>
+        <tr><th>文件</th><th>改动</th></tr>
+        <tr><td><code>.agents/skills/memory-bank/SKILL.md</code></td><td>「时间口径与取时」节 + 会话开始 / 收尾 / 档案规范挂钩</td></tr>
+        <tr><td><code>memory-bank/conventions/doc-forms.md:31</code> · <code>webui.md:59</code></td><td>「用命令取」落到 <code>commands run kb.time</code></td></tr>
+        <tr><td><code>.commands/kb/config.toml</code></td><td>新 task <code>kb.time</code>；<code>kb.check</code> += <code>timekit.py --check</code></td></tr>
+        <tr><td><code>.commands/my-commit-flow/.my-commit-flow.toml</code></td><td>memory-bank 索引闸门 run += <code>timekit.py --check</code></td></tr>
+        <tr><td><code>tests/test_memory_bank.py</code></td><td>新守卫用例（3.3 三层 + TZ 无关性 + 存量零违规）；<code>test_kb_scripts_import_cleanly</code> 名单补 timekit / check_doc_links；doc_links 加载路径；docstring「测试计划」同步</td></tr>
+        <tr><td><code>.agents/skills/memory-bank/scripts/gen_active_recent.py</code></td><td>「最后活动」坏格式在 --check 报红（3.5）</td></tr>
+        <tr><td><code>.agents/skills/create-issue/scripts/_common.py</code></td><td><code>stamp()</code> / <code>long_date()</code> 钉 UTC+8 naive 墙钟（3.5）</td></tr>
+        <tr><td>存量清洗约 15 个文件</td><td>8 处坏「最后活动」规范化（时刻未知者取文件名前缀值）、缺行 1 处补齐、紧凑 8 位 10 处与 ISO-T 1 处规范化或加豁免标记</td></tr>
+      </table>
+      <div class="callout">
+        <span class="t">配套检查</span>
+        <p><code>_common.GEN_CMD_BY_SCRIPT</code> 无需登记 timekit（它不产出文件、不调 <code>gen_cmd</code>）；新脚本自动被闸门「脚本冒烟」（<code>&lt;each:...*.py&gt; --help</code>）覆盖，需保证 <code>--help</code> 可用（argparse 天然满足）。</p>
+      </div>
+    </section>
+
+    <!-- ================================================== 05 -->
+    <section id="s5">
+      <div class="sec-head">
+        <span class="sec-no">05</span>
+        <h2>执行步骤</h2>
+      </div>
+      <table>
+        <tr><th>#</th><th>动作</th><th>说明</th></tr>
+        <tr><td>0</td><td><code>commands run my-commit-flow.sync</code></td><td>首个写动作前硬性同步</td></tr>
+        <tr><td>1</td><td><code>timekit.py</code> + 单测</td><td>先有单点，后续一切时间戳取自它</td></tr>
+        <tr><td>2</td><td>立档 + 计划文档落盘</td><td>时间戳取自 kb.time —— 本流程首个使用者（本件即如此产出）</td></tr>
+        <tr><td>3</td><td>SKILL.md 时间口径节 + conventions 两处指针</td><td>跑 <code>doc.caps</code> 自查字符上限</td></tr>
+        <tr><td>4</td><td>kb config（kb.time / kb.check）+ 提交闸门</td><td>—</td></tr>
+        <tr><td>5</td><td>create-issue 钉 +08</td><td>—</td></tr>
+        <tr><td>6</td><td>存量清洗 → gen_active_recent 收口静默回退</td><td>顺序不可反，否则闸门中途红</td></tr>
+        <tr><td>7</td><td>check_doc_links.py 迁入 skill</td><td>改闸门 + pytest 引用</td></tr>
+        <tr><td>8</td><td><code>references/PORTING.md</code></td><td>—</td></tr>
+        <tr><td>9</td><td><code>dev.fmt</code> → <code>test.full</code> → 收尾 DoD</td><td>切片 / kb.index / 基线切片 / 新坑入 pitfalls/kb/</td></tr>
+      </table>
+    </section>
+
+    <!-- ================================================== 06 -->
+    <section id="s6">
+      <div class="sec-head">
+        <span class="sec-no">06</span>
+        <h2>验收标准</h2>
+      </div>
+      <ul>
+        <li><code>commands run test.full</code> 全绿，含新增守卫用例（未来文件名日期 / 坏「最后活动」/ 斜杠日期三种种子经 <code>--mb-dir</code> 指向 tmp 夹具全部逮住）。</li>
+        <li><strong>时区无关性</strong>：<code>TZ=America/New_York</code> 子进程跑 <code>timekit.py</code> 输出仍是 UTC+8（测试钉住）。</li>
+        <li><code>timekit --check</code> 对存量 KB 零违规（清洗完成后）。</li>
+        <li><code>kb.check</code> 与提交闸门都含时间检查；<code>kb.time</code> 三行输出可用。</li>
+        <li><code>doc.caps</code> 绿（SKILL.md ≤ 15,000 字符）。</li>
+        <li>收尾时新坑入 <code>pitfalls/kb/</code>：「约定命令不存在 → agent 凭记忆写日期；日期值无机检」（触发 / 判别 / 处置三必填）。</li>
+      </ul>
+    </section>
+
+    <!-- ================================================== 07 -->
+    <section id="s7">
+      <div class="sec-head">
+        <span class="sec-no">07</span>
+        <h2>边界与风险</h2>
+      </div>
+      <ul>
+        <li><strong>过去日期错值兜不住</strong>：守卫只能校验「体例 + 未来」，无法发现把 09 写成 06 这类过去错值 —— 如实承认，靠流程（只从 kb.time 取）规避，git 历史可回查。</li>
+        <li><strong>正文未来日程不查值</strong>：只查体例；需要豁免的机器数据用 <code>&lt;!-- time:allow --&gt;</code> 行内标记。</li>
+        <li><strong>红线</strong>：不碰 <code>config.yml</code> / <code>auto-qb-data/</code> / AGENTS.md（余量仅 22 字符）。</li>
+        <li><strong>范围守恒</strong>：实施中撞见的计划外缺陷一律入池 <code>issues/</code>，不顺手改。</li>
+        <li><strong>提交</strong>：实施完成 ≠ 提交 —— commit / push 仍需用户显式说「提交」。</li>
+      </ul>
+    </section>
+
+    <!-- ================================================== 08 -->
+    <section id="s8">
+      <div class="sec-head">
+        <span class="sec-no">08</span>
+        <h2>变更记录</h2>
+      </div>
+      <table>
+        <tr><th>时间 (UTC+8)</th><th>变更</th></tr>
+        <tr>
+          <td><code>2026-09-30 09:31</code></td>
+          <td>首版：计划定稿并入档（探索两轮确认根因与现状数字；方案含 timekit 单点 / 三层守卫 / 守卫脚本随 skill 移植 / 存量清洗 / 收口静默回退）。<strong>用户指令：暂不实施</strong> —— 实施待用户显式启动，届时按 05 执行步骤走。</td>
+        </tr>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <div class="frame">memory-bank-timekit · plan · 2026-09-30 09:31 (UTC+8) · 状态 Open</div>
+</footer>
+
+</body>
+</html>
