@@ -1,4 +1,6 @@
-"""test_tracker 测试计划: mixins/tracker tracker 配置匹配
+"""test_tracker 测试计划: tracker 配置匹配/单种限速(tracker 模块, plan P3 迁入)
+
+经 QbManager 旧名单行委托调用(plan §7.2), 实现单点在 core/modules/tracker_mod.py。
 
 ## 测试计划(每个测试函数一条)
 - test_match_tracker_domain: 域名匹配(hostname 精确匹配)
@@ -100,7 +102,7 @@ def test_match_tracker_conf_multi_match_warning_log():
             "HHanTracker": _conf("HHanTracker", ["tracker.hhanclub.net"]),
         }
         tor = FakeTorrent(hash="H1")
-        lg = logging.getLogger("auto_qb.core.mixins.tracker")
+        lg = logging.getLogger("auto_qb.core.modules.tracker_mod")
         buf = io.StringIO()
         handler = logging.StreamHandler(buf)
         handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))

@@ -12,11 +12,8 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 职责拆分(mixins 包, 各模块组合进本类):
 - mixins.rule_engine  RuleEngineMixin  规则加载/种子级规则任务/事件分派
                                       (状态持久化已迁 core/state.py 的 StateService, plan P0)
-- mixins.tags         TagsMixin        标签/分类/HR 辅助
 - mixins.checking     CheckingMixin    文件存在性/大小一致性检查(checking 动作前置检查复用)
 - mixins.grouping     GroupingMixin    种子分组管理(辅种管理): 分组 + 组内大小一致性 + 缺文件联动
-- mixins.tracker      TrackerMixin     tracker 配置匹配/单种限速
-- mixins.speed_curve  SpeedCurveMixin  全局限速曲线(Traffic Monitor 流量聚合 -> qB 全局限速)
 - mixins.ops          OpsMixin         危险操作独立操作层(rules → ops ← web): recheck/跳检执行体
                                        + 提交点检查 + 按 source 保护策略(plan 26-09-30-0109)
 - webui.views         WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
@@ -25,10 +22,16 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
                                        WebUIModule 接入宿主, 见 webui/module.py)
 - qbclient            (独立模块)       qB 客户端构造(本地地址关闭 trust_env)
 
+已模块化(plan kernel-module-refactor, 见 core/modules/ 与 webui/hr 各自 module.py):
+- P1 logging/notify(基建样板) → P2 webui/hr(门面转正) → P3 tracker(tracker 匹配升
+  ctx.trackers 服务 + full_round 相位重匹配)/speed_curve(曲线任务自注册 + 流量快照经
+  ctx.web.set_traffic_view 推送)/maintenance(标签/分类/HR 标签/集数标签/维护任务 + 全局
+  标签清理任务自注册) —— 三者已从 mixins 包迁出, 本类旧名方法只剩单行委托(§7.2 测试兼容)。
+
 内核地基(plan kernel-module-refactor): 构造期立 AppContext(ctx)并把能力服务挂上
-(store/api/state), 本类同名属性自此刻起全部是**委托**(ctx 为单一真相, 守阵断言同对象);
-ModuleHost / EventBus 编排机制 + 装配清单在构造期建立 —— P0 立骨架, P1 挂入基建两模块
-(logging/notify), P2 门面转正(webui/hr), 最终收敛为「宿主只知何时, 不知何事」。
+(store/api/state/task_queue/web/trackers), 本类同名属性自此刻起全部是**委托**(ctx 为单一
+真相, 守阵断言同对象); ModuleHost / EventBus 编排机制 + 装配清单在构造期建立 ——
+最终收敛为「宿主只知何时, 不知何事」。
 """
 import logging
 import os
@@ -48,19 +51,16 @@ from .mixins import (
     GroupingMixin,
     OpsMixin,
     RuleEngineMixin,
-    SpeedCurveMixin,
-    TagsMixin,
-    TrackerMixin,
 )
 from .module import AppContext, EventBus, ModuleHost
-from .modules import LoggingModule, NotifyModule
+from .modules import LoggingModule, MaintenanceModule, NotifyModule, SpeedCurveModule, TrackerModule
 from .state import StateService
 from ..webui.commands import WebCommandsMixin
 from ..webui.views import WebviewMixin
 from .qbapi import QbApi
 from .qbclient import _new_client
 from ..rules import Rule
-from .taskqueue import FINISHED, REQUEUE, Task, TaskQueue
+from .taskqueue import Task, TaskQueue
 from ..webui import WebUIRuntime
 from ..webui.module import WebUIModule
 # HR 在线核实运行时门面(端点 + 取数线程 + 只读视图): 与 WebUIRuntime 同级, 见 __init__ 说明
@@ -140,11 +140,8 @@ def _wait_next(stop_event: Optional[threading.Event], wake_event: threading.Even
 
 class QbManager(
     RuleEngineMixin,
-    TagsMixin,
     CheckingMixin,
     GroupingMixin,
-    TrackerMixin,
-    SpeedCurveMixin,
     OpsMixin,
     WebviewMixin,
     WebCommandsMixin,
@@ -204,9 +201,9 @@ class QbManager(
         self.events = EventBus()
         self.host = ModuleHost(self.ctx, self.events)
         # 装配清单(plan §3.3): 顺序 = 相位内消费序 = 生命周期序, 内核唯一「知道模块名字」的
-        # 地方。P1 挂入基建两模块(logging/notify), P2 门面转正(webui/hr); P3+ 按此顺序逐段
-        # 补齐: tracker → speed_curve → maintenance → grouping → ops → rules(rules 最后:
-        # 它消费前面所有人的服务)。
+        # 地方。P1 基建两模块(logging/notify), P2 门面转正(webui/hr), P3 小模块三件
+        # (tracker/speed_curve/maintenance); P4+ 按此顺序逐段补齐: grouping → ops → rules
+        # (rules 最后: 它消费前面所有人的服务)。
         self.host.register(LoggingModule())
         self.ctx.notify = NotifyModule(self.ctx)  # 托盘经 ctx.notify 调公开方法(plan §3.2)
         self.host.register(self.ctx.notify)
@@ -235,6 +232,8 @@ class QbManager(
         self.rules: List[Rule] = []
         self.enabled_rules: List[Rule] = []
         # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
+        # (P3 起挂 ctx: speed_curve/maintenance 模块的任务自注册经 ctx.task_queue 现取当前队列;
+        #  本属性只是委托, L2 整体重建也经 setter 落回 ctx)
         self.task_queue = TaskQueue()
         # 版本兼容校验: 首次拉到非空种子信息时执行一次(qB 版本运行期不变)
         self._schema_validated = False
@@ -246,6 +245,8 @@ class QbManager(
         # (2026-09-20 从本类拆出: 原先 19 个表现层字段平铺在 __init__, 主循环因此要替表现层
         #  做"要不要重建 / 要不要补刷新"的判断。详见 web_runtime.py 的模块 docstring。)
         # P2 门面转正: 服务器启停/热重载语义/loop hooks 内聚 WebUIModule(webui/module.py)。
+        # (P3 起 web 挂 ctx: speed_curve 模块经 ctx.web.set_traffic_view 推送流量快照,
+        #  本属性只是委托, 测试整对象替换也经 setter 落回 ctx)
         self.web = WebUIRuntime(self)
         # HR 在线核实运行时: 本地取数端点 + 取数线程 + 只读视图(计划 §8)。
         # 同 WebUIRuntime 的思路 —— 附属线程与文件句柄的生命周期不进核心域, 主循环只见门面:
@@ -263,6 +264,12 @@ class QbManager(
         # 注入属装配的一部分(plan P2): 桥接在装配点一次成形, 记录侧只认这个稳定引用。
         self.store.hr_link = self.hr
         self.host.register(HrModule(self))
+        # 装配清单 P3(plan §3.3 小模块先行): tracker 匹配升 ctx 服务(决策点 D3), 曲线与
+        # 全局标签清理任务由模块 start() 自注册 —— 内核 _create_global_tasks 的任务点名退役
+        self.ctx.trackers = TrackerModule(self.ctx)
+        self.host.register(self.ctx.trackers)
+        self.host.register(SpeedCurveModule(self.ctx))
+        self.host.register(MaintenanceModule(self.ctx))
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。
@@ -279,10 +286,6 @@ class QbManager(
         # 缺文件扫描轮内去重: 移动种子等场景同一轮会命中多个触发源(状态转移+路径变化),
         # 同组 key 同轮只扫一次(_refresh_torrents 每轮开始清空)
         self._missing_scanned_keys: set = set()
-        # 限速曲线手动保护的日志节流: {方向: (手动值 KiB/s, 上次记 INFO 时刻)} —— 手动值是持续状态,
-        # 逐轮 INFO 会刷屏, 故状态变化才报 + 周期提醒(见 SpeedCurveMixin._log_manual_skip);
-        # 退出手动保护时清键, 下次再进入重新说明白。
-        self._curve_manual_log: dict = {}
         # 单实例锁: 仅正常 run 模式持锁(--export-yaml 等只读模式传 no_lock=True 跳过, 允许并发)
         self._lock = None
         if not no_lock:
@@ -350,6 +353,24 @@ class QbManager(
     def state_file(self) -> str:
         """state.json 路径(构造期确定, 运行期不变; R 级热重载拒绝项)"""
         return self.ctx.state.state_file
+
+    @property
+    def task_queue(self) -> TaskQueue:
+        """任务队列(与 ctx.task_queue 同一对象; speed_curve/maintenance 模块自注册经 ctx 现取)"""
+        return self.ctx.task_queue
+
+    @task_queue.setter
+    def task_queue(self, value: TaskQueue) -> None:
+        self.ctx.task_queue = value
+
+    @property
+    def web(self) -> WebUIRuntime:
+        """WEB 表现层门面(与 ctx.web 同一对象; speed_curve 模块经 ctx.web 推送流量快照)"""
+        return self.ctx.web
+
+    @web.setter
+    def web(self, value: WebUIRuntime) -> None:
+        self.ctx.web = value
 
     @property
     def _next_state_flush_at(self) -> float:
@@ -446,6 +467,8 @@ class QbManager(
         # 的 start(dry-run/未启用 = 无操作, 模块自判), 内核只按装配序调 —— web 启动失败(端口
         # 被占)记 ERROR 由句柄呈现; HR 端口被占抛 HrChannelBindError 穿透到 CLI 干净退出
         # (fail-fast 契约原样)。logging 已在构造期初始化(start 幂等跳过)。
+        # P3 起 speed_curve/maintenance 的全局任务自注册也发生在 start_all(原 _create_global_tasks
+        # 在连接成功后手工调用, 入队时点前移到启动 —— 队列在首个任务线才被 drain, 行为等价)。
         self.host.start_all(dry_run)
         try:
             main_tick = self.config.main_tick
@@ -471,7 +494,6 @@ class QbManager(
             # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
             self._next_state_flush_at = time.time() + max(self.config.state_save_interval, 0.0)
             self._load_rules()
-            self._create_global_tasks()
 
             try:
                 # 两条独立时间线(分层节拍):
@@ -644,6 +666,7 @@ class QbManager(
             # 不重读磁盘 state: state 平时不落盘, 磁盘上只有上次退出的旧版, 重读 = 回滚
             # 运行期内存态(exec_history/skip_check_day 等)。内存态即真相(issue 26-09-21-1347)。
             self._load_rules()
+            # 全局任务重入队(plan P3): 具体任务归各模块, 这里只广播队列重建相位
             self._create_global_tasks()
             self._suppress_events = True
             self.client = None
@@ -698,44 +721,15 @@ class QbManager(
     # ---------- 全局任务 ----------
 
     def _create_global_tasks(self):
-        """创建全局任务(非种子级): 彻底删除标签 / 彻底删除无种子的标签, 加入队列统一管理
+        """全局任务注册的内核触发口(plan P3 §7.2 兼容转发): 具体任务归各模块, 这里只广播相位
 
-        对应配置为空时跳过; 标签清理任务使用主 interval。种子分组为事件驱动
-        (_refresh_torrents 检测到增删/状态变化立即处理), 不再创建周期轮询任务。
+        delete_tags / speed_limit_curve 等任务的知识已迁 SpeedCurveModule / MaintenanceModule
+        (start 自注册, plan §3.2), 内核不再点名。本方法只剩一个语义: 队列(可能刚被 L2 重建)
+        请求各模块按当前配置注册全局任务 —— 经 EventBus 的 queue_rebuilt 相位, 已注册的模块
+        幂等跳过(TaskQueue.has_named), 新队列则重新入队。run() 启动路径由 start_all 的
+        模块 start() 承担, 不再经过这里; L2 分支与测试入口仍走本方法(test_web 守阵点名)。
         """
-        tasks = []
-        if self.config.delete_tags:
-            tasks.append(
-                Task(
-                    "internal",
-                    "delete_tags",
-                    interval=self.config.interval,
-                    handler=self._handle_delete_tags,
-                )
-            )
-        if self.config.delete_tags_if_has_no_torrents:
-            tasks.append(
-                Task(
-                    "internal",
-                    "delete_tags_if_has_no_torrents",
-                    interval=self.config.interval,
-                    handler=self._handle_delete_tags_if_has_no_torrents,
-                )
-            )
-        # 全局限速曲线(Traffic Monitor): 读 dat -> 聚合 -> 查档 -> 写 qB 全局速度限制
-        gslc = self.config.global_speed_limit_curve
-        if gslc is not None:
-            tasks.append(
-                Task(
-                    "internal",
-                    "speed_limit_curve",
-                    interval=gslc.interval or self.config.interval,  # 缺省回退主 interval
-                    handler=self._handle_speed_limit_curve,
-                )
-            )
-        if tasks:
-            self.task_queue.add_tasks(tasks)
-            logger.info(f"创建全局任务 {len(tasks)} 个: {[t.log_tag for t in tasks]}")
+        self.events.emit("queue_rebuilt")
 
     # ---------- 种子级任务 ----------
 
@@ -802,10 +796,9 @@ class QbManager(
                 self._fs_path_map_checked = True
                 file_access.path_map_selfcheck([rec.save_path for rec in self.store.by_hash.values()])
             # 全量轮兑现 reset_runtime 的契约: 热重载 L2 置空的 tracker_conf 在此重匹配
-            # (存量记录不走 added 分支, 事件分派/维护任务都依赖 conf 已就位)
-            for rec in self.store.by_hash.values():
-                if rec.tracker_conf is None:
-                    rec.tracker_conf = self._match_tracker_conf(rec)
+            # (存量记录不走 added 分支, 事件分派/维护任务都依赖 conf 已就位) —— 相位广播
+            # (plan §4.2): 重匹配知识在 tracker 模块(ctx.trackers), 内核只报「全量轮」时机
+            self.events.emit("full_round")
         # 分组视图过期由 store.view_changed 精确驱动(仅视图字段/成员变化时置脏), 不再每轮无条件置脏
         # 种子集变化(新增/删除) -> 搜索索引需反映新/删种子, 标记脏(Web 搜索时重建)
         if added or removed:
@@ -922,39 +915,53 @@ class QbManager(
                 tasks.append(task)
         self.task_queue.add_tasks(tasks)
 
+    # ---------- 模块方法委托(plan kernel-module-refactor P3 过渡层) ----------
+    # 实现单点已迁 SpeedCurveModule / MaintenanceModule / TrackerModule(core/modules/);
+    # 保留旧名字让测试(mgr._xxx 直调)与相邻 mixin(分组/规则引擎经 self 调用)零改动 ——
+    # 与 _WEB_STATE_ALIAS 同款迁移惯用法(plan §7.2)。全部是单行转发, 不含状态、不含判据。
+    # 清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
+
+    def _match_tracker_conf(self, torrent: TorrentRecord):
+        return self.ctx.trackers.match(torrent)
+
+    def _apply_speed_limit(self, torrent: TorrentRecord, tracker_conf, dry_run: bool) -> None:
+        self.ctx.trackers.apply_speed_limit(torrent, tracker_conf, dry_run)
+
+    def _handle_speed_limit_curve(self, task: Task, dry_run: bool) -> bool:
+        return self.host.get("speed_curve").handle_speed_limit_curve(task, dry_run)
+
     def _handle_maintenance_task_interface(self, task: Task, dry_run: bool) -> bool:
-        return self._handle_maintenance(task.torrent, dry_run)
+        return self.host.get("maintenance").handle_maintenance(task.torrent, dry_run)
 
     def _handle_maintenance(self, torrent: TorrentRecord, dry_run: bool, force_tags: bool = False) -> bool:
-        """内置种子级任务: 添加/删除/相似标签 + HR 标签分类
+        return self.host.get("maintenance").handle_maintenance(torrent, dry_run, force_tags)
 
-        站点 tags 部分的节奏由 maintenance_tag_mode 决定(计划 26-09-27-1438):
-        - interval(默认): 每 interval 执行 —— 与迁移前逐字节等价;
-        - on_change: 仅 force_tags(添加路径)或该种子 tags 发生过**外部**变化时重检
-          (store.external_tag_changes, 消费一次); HR 部分不受影响 —— 达标状态随时间演化,
-          tags 变化捕捉不到, 恒按 interval 节奏。
-        """
-        if torrent is None:
-            return FINISHED
+    def _add_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool, log_level: int = logging.INFO):
+        return self.host.get("maintenance").add_tags(torrent, tags, dry_run, log_level)
 
-        tracker_conf = torrent.tracker_conf
+    def _remove_tags(self, torrent: TorrentRecord, patterns: List[str], dry_run: bool):
+        return self.host.get("maintenance").remove_tags(torrent, patterns, dry_run)
 
-        on_change = getattr(self.config, "maintenance_tag_mode", "interval") == "on_change"
-        recheck_tags = force_tags or not on_change or torrent.hash in self.store.external_tag_changes
-        if recheck_tags and on_change:
-            self.store.external_tag_changes.discard(torrent.hash)  # 待重检登记消费一次
-        handled = False
-        if recheck_tags:
-            handled |= self._add_tags(torrent, tracker_conf.tags, dry_run)
-            handled |= self._remove_tags(torrent, tracker_conf.remove_tags, dry_run)
-            if tracker_conf.remove_similar_tags:  # 站点覆盖全局后的值
-                handled |= self._remove_similar_tags(torrent, tracker_conf.tags, dry_run)
-        if tracker_conf.hr:  # 站点合并全局默认后的 HR 设置
-            handled |= self._add_hr_tag_or_category(torrent, dry_run)
-        # if handled:
-        #     self._log_torrent_details(torrent, tracker_conf)
-        #     logger.info(f"--------------------------------------------------------------------------")
-        return REQUEUE
+    def _remove_similar_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool):
+        return self.host.get("maintenance").remove_similar_tags(torrent, tags, dry_run)
+
+    def _set_category(self, torrent: TorrentRecord, category: str, overwrite: bool, dry_run: bool):
+        return self.host.get("maintenance").set_category(torrent, category, overwrite, dry_run)
+
+    def _create_category_if_not_exists(self, category: str, dry_run: bool):
+        return self.host.get("maintenance").create_category_if_not_exists(category, dry_run)
+
+    def _add_hr_tag_or_category(self, torrent: TorrentRecord, dry_run: bool):
+        return self.host.get("maintenance").add_hr_tag_or_category(torrent, dry_run)
+
+    def _add_episode_tags(self, torrent: TorrentRecord, dry_run: bool):
+        return self.host.get("maintenance").add_episode_tags(torrent, dry_run)
+
+    def _handle_delete_tags(self, task, dry_run: bool) -> bool:
+        return self.host.get("maintenance").handle_delete_tags(task, dry_run)
+
+    def _handle_delete_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
+        return self.host.get("maintenance").handle_delete_tags_if_has_no_torrents(task, dry_run)
 
     def export_torrents_info(self, path):
         """导出种子信息, 用于debug"""

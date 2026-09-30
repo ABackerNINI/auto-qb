@@ -1,4 +1,6 @@
-"""test_mixins_tags 测试计划: mixins/tags 标签/分类/HR 辅助方法
+"""test_mixins_tags 测试计划: 标签/分类/HR 辅助方法(maintenance 模块, plan P3 迁入)
+
+经 QbManager 旧名单行委托调用(plan §7.2), 实现单点在 core/modules/maintenance_mod.py。
 
 ## 测试计划(每个测试函数一条)
 - test_add_tags_direct: _add_tags 直接调用 client

@@ -23,7 +23,9 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Protocol, runtime_che
 if TYPE_CHECKING:
     from ..config import Config
     from ..torrents import TorrentStore
+    from ..webui.runtime import WebUIRuntime
     from .modules.notify_mod import NotifyModule
+    from .modules.tracker_mod import TrackerModule
     from .qbapi import QbApi
     from .state import StateService
 
@@ -42,6 +44,14 @@ class AppContext:
       全部委托这里; P0 守阵断言 ctx.store is manager.store)。
     - notify(P1 起)是模块句柄而非服务: 托盘等外围运行形态经 ctx.notify 调模块**公开方法**
       (plan §3.2), 不再直写内核私有字段 —— 模块对外暴露面单点在这里。
+    - task_queue(P3 起)挂入: 任务自注册(SpeedCurve/MaintenanceModule start/queue_rebuilt)
+      要往当前队列入队 —— manager.task_queue 是这里的委托(L2 整体重建也经 setter 落回),
+      模块侧现取 ctx.task_queue, 不缓存队列引用。
+    - web(P3 起)挂入: speed_curve 模块经 ctx.web.set_traffic_view 服务方法推送流量快照,
+      不再跨层直写 _traffic_view 字段(plan §5); manager.web 同为这里的委托(测试整对象
+      替换 mgr.web 也经 setter 生效)。
+    - trackers(P3 起, 决策点 D3)是模块句柄而非服务: tracker 匹配升 ctx.trackers.match(),
+      规则上下文与全量轮重匹配都消费 —— 服务化避免事件回传的时序绕弯。
     """
     def __init__(self, config) -> None:
         self._config = config
@@ -49,6 +59,9 @@ class AppContext:
         self.api: Optional["QbApi"] = None
         self.state: Optional["StateService"] = None
         self.notify: Optional["NotifyModule"] = None
+        self.web: Optional["WebUIRuntime"] = None
+        self.task_queue: Optional[Any] = None  # TaskQueue(内核机械, 不引入以保契约层零依赖)
+        self.trackers: Optional["TrackerModule"] = None
 
     @property
     def config(self):

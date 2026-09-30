@@ -189,6 +189,15 @@ class WebUIRuntime:
         """核心域 → 表现层: 种子集变化, 搜索索引需重建"""
         self.search_index_dirty = True
 
+    def set_traffic_view(self, view: dict) -> None:
+        """限速/流量只读快照发布口(plan kernel-module-refactor P3)
+
+        speed_curve 模块经 ctx.web 的这个服务方法推送快照, 不再跨层直写 self.traffic_view
+        字段(外围绕过边界直写内核/门面私有面清零, 同 plan P1 托盘改 ctx.notify 的口径)。
+        主循环线程**整体替换**引用, Web 线程只读该引用 —— 无锁即可保证读到自洽的一份。
+        """
+        self.traffic_view = view
+
     # ------------------------------------------------------------------ 主循环接口
 
     def consume_commands(self) -> bool:

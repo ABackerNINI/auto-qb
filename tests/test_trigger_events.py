@@ -395,15 +395,20 @@ def _keep_refresh(mgr, torrents, dry_run=False):
 
 
 def _spy_tags_part(mgr):
-    """给维护 tags 部分装 spy(_add_tags 是幂等补打, 无变化时无 API 调用, 须探调用而非调用记录)"""
+    """给维护 tags 部分装 spy(_add_tags 是幂等补打, 无变化时无 API 调用, 须探调用而非调用记录)
+
+    plan P3 起 tags 实现迁 maintenance 模块, handle_maintenance 内部直调模块方法 ——
+    spy 装在模块实例的 add_tags 上(manager 的旧名委托已不在这条调用路径上)。
+    """
     calls = []
-    orig = mgr._add_tags
+    mod = mgr.host.get("maintenance")
+    orig = mod.add_tags
 
     def wrapper(*a, **k):
         calls.append(1)
         return orig(*a, **k)
 
-    mgr._add_tags = wrapper
+    mod.add_tags = wrapper
     return calls
 
 

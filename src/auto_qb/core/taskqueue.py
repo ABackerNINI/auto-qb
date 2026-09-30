@@ -153,6 +153,16 @@ class TaskQueue:
         for t in tasks:
             self.add_task(t, now)
 
+    def has_named(self, name: str) -> bool:
+        """队列中是否已有同名全局任务(kind=internal 且不带 hash)
+
+        模块任务自注册的幂等守卫(plan kernel-module-refactor P3): 重复注册(重复 start /
+        重复 queue_rebuilt 相位)按黄金法则 1 必须无副作用, 而队列本身只对 check 任务去重
+        (见 add_task) —— 全局任务的「已在队列即跳过」判据单点在这里。按 internal+无 hash
+        匹配, 与种子级同名任务(如内置 maintenance 带 hash)不混淆。
+        """
+        return any(t.kind == "internal" and t.name == name and not t.hash for t in self._fast)
+
     def active_check_hashes(self) -> Set[str]:
         """在途校验 hash 集合快照(已提交 full-checking 且轮询任务未结束, 消亡时释放)
 

@@ -10,5 +10,8 @@
 """
 from .logging_mod import LoggingModule
 from .notify_mod import NotifyModule
+from .tracker_mod import TrackerModule
+from .speed_curve_mod import SpeedCurveModule
+from .maintenance_mod import MaintenanceModule
 
-__all__ = ["LoggingModule", "NotifyModule"]
+__all__ = ["LoggingModule", "NotifyModule", "TrackerModule", "SpeedCurveModule", "MaintenanceModule"]

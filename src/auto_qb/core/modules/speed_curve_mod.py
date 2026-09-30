@@ -1,9 +1,16 @@
-"""全局限速曲线 mixin: Traffic Monitor 流量数据 -> qB 全局速度限制
+"""SpeedCurveModule: 全局限速曲线的模块化封装(plan kernel-module-refactor P3)
 
-由 QbManager 组合。对应 config.global_speed_limit_curve(缺省 None 或 enabled: false = 不启用), 作为
-global 任务按 config.interval 周期执行: 读取 history_traffic.dat, 按每条 period 曲线
-聚合当前累计上传/下载量, 查档得到该方向限速(方案B 全程分档覆盖), 同方向多条曲线
-取最严(最小非零)速度, 有变化时经 QbApi.set_global_speed_limits 写 qB 全局偏好。
+Traffic Monitor 流量数据 -> qB 全局速度限制, 知识从 SpeedCurveMixin 整体迁入:
+- 曲线任务**自注册**(plan §3.2): start 时入队, 队列重建(L2 热重载)经 queue_rebuilt
+  相位重新入队 —— 内核的 _create_global_tasks 不再点名业务任务;
+- 流量快照改经 ctx.web.set_traffic_view **服务方法**推送(plan §5), 不再跨层直写
+  _traffic_view 字段 —— 外围绕过边界直写私有面清零(与 P1 托盘改 ctx.notify 同口径);
+- 手动保护的日志节流状态(_curve_manual_log)收进模块实例, 内核不再代持。
+
+对应 config.global_speed_limit_curve(缺省 None 或 enabled: false = 不启用), 作为全局
+任务按 config.interval 周期执行: 读取 history_traffic.dat, 按每条 period 曲线聚合当前
+累计上传/下载量, 查档得到该方向限速(方案B 全程分档覆盖), 同方向多条曲线取最严(最小
+非零)速度, 有变化时经 QbApi.set_global_speed_limits 写 qB 全局偏好。
 
 规则:
 - 档位速度 0 = 不限速; 目标与当前均为 0 时幂等不写
@@ -22,8 +29,9 @@ import time
 from datetime import date
 from typing import List, Optional, Tuple
 
-from .. import curves
 from ...infra import utils
+from .. import curves
+from ..module import AppContext, BaseModule
 from ..taskqueue import REQUEUE, Task
 
 logger = logging.getLogger(__name__)
@@ -69,11 +77,59 @@ def _fmt_global_limit(kib: Optional[int]) -> str:
     return f"{kib}KiB/s"
 
 
-class SpeedCurveMixin:
-    """全局限速曲线(全局任务): Traffic Monitor 数据 -> qB 全局速度限制"""
-    def _handle_speed_limit_curve(self, task: Task, dry_run: bool) -> bool:
+class SpeedCurveModule(BaseModule):
+    """speed_curve 模块: 曲线任务自注册 + 流量快照经 ctx.web 服务方法推送"""
+
+    name = "speed_curve"
+
+    def __init__(self, ctx: AppContext) -> None:
+        self._ctx = ctx
+        # 手动保护日志节流: {方向: (手动值 KiB/s, 上次记 INFO 时刻)} —— 模块实例自持
+        # (手动值是持续状态, 状态变化才报 + 周期提醒; 退出手动保护时清键, 见 _log_manual_skip)
+        self._curve_manual_log: dict = {}
+
+    def sections(self) -> tuple[str, ...]:
+        return ("global_speed_limit_curve", )
+
+    # ---------- 生命周期 ----------
+
+    def start(self, ctx: AppContext, dry_run: bool) -> None:
+        # 曲线任务自注册(plan §3.2): dry_run 不影响注册(任务 handler 自带 dry_run 口径,
+        # 原 _create_global_tasks 也不判 dry_run); 未配置 = 无操作
+        self._register_global_task(ctx)
+
+    # ---------- 相位订阅 ----------
+
+    def subscribe(self, phases) -> None:
+        phases.on("queue_rebuilt", self._on_queue_rebuilt)
+
+    def _on_queue_rebuilt(self, event) -> None:
+        """L2 热重载整体重建队列后重新入队(新 interval/新配置; 已注册则幂等跳过)"""
+        self._register_global_task(self._ctx)
+
+    def _register_global_task(self, ctx: AppContext) -> None:
+        """曲线任务自注册: 已在当前队列则幂等跳过(黄金法则 1, 判据单点 TaskQueue.has_named);
+        队列引用现取 ctx.task_queue(L2 重建后 manager 委托落回 ctx, 不存在旧队列)"""
+        queue = ctx.task_queue
+        if queue is None or queue.has_named("speed_limit_curve"):
+            return
+        gslc = ctx.config.global_speed_limit_curve
+        if gslc is None:  # 未启用该功能: 不建任务(与原 _create_global_tasks 同判据)
+            return
+        task = Task(
+            "internal",
+            "speed_limit_curve",
+            interval=gslc.interval or ctx.config.interval,  # 缺省回退主 interval
+            handler=self.handle_speed_limit_curve,
+        )
+        queue.add_task(task)
+        logger.info(f"创建全局任务 1 个: ['{task.log_tag}']")
+
+    # ---------- 全局任务执行体 ----------
+
+    def handle_speed_limit_curve(self, task: Task, dry_run: bool) -> bool:
         """全局任务: 读 TM dat -> 逐曲线聚合查档 -> 同方向取最严 -> 写 qB 全局限速"""
-        conf = self.config.global_speed_limit_curve
+        conf = self._ctx.config.global_speed_limit_curve
         if conf is None:  # 未启用该功能
             self._publish_traffic("disabled")
             return REQUEUE
@@ -132,7 +188,7 @@ class SpeedCurveMixin:
             return REQUEUE
 
         # 4. 读当前全局限速 -> 手动保护/幂等 -> 有变化才写
-        current = self.api.get_global_speed_limits()
+        current = self._ctx.api.get_global_speed_limits()
         apply_kwargs = {}
         reasons: List[dict] = []
         for label, cur_key, dir_key, kib in (
@@ -158,7 +214,7 @@ class SpeedCurveMixin:
                 continue  # 幂等: 目标 == 当前(含均不限速), 不写
             apply_kwargs["upload_kib" if cur_key == "upload_limit" else "download_kib"] = kib
         if apply_kwargs:
-            self.api.set_global_speed_limits(**apply_kwargs)
+            self._ctx.api.set_global_speed_limits(**apply_kwargs)
             applied = ", ".join(
                 f"{'上传' if k == 'upload_kib' else '下载'}限速: {_fmt_global_limit(v)}" for k, v in apply_kwargs.items()
             )
@@ -174,7 +230,7 @@ class SpeedCurveMixin:
         actual = dict(current)
         if apply_kwargs:
             try:
-                actual = self.api.get_global_speed_limits()
+                actual = self._ctx.api.get_global_speed_limits()
             except Exception as e:
                 logger.warning(f"限速曲线 | 回读全局限速失败: {e}")
                 reasons.append({"dir": "", "code": "read_failed", "text": f"回读实际限速失败: {e}"})
@@ -192,6 +248,8 @@ class SpeedCurveMixin:
             history=history,
         )
         return REQUEUE
+
+    # ---------- 内部 ----------
 
     def _log_manual_skip(self, dir_key: str, label: str, cur: int) -> None:
         """手动保护命中时的日志(状态变化 / 周期提醒, 其余轮次降 DEBUG)
@@ -213,7 +271,7 @@ class SpeedCurveMixin:
 
     def _record_curve_state(self, today: date, upload_kib: Optional[int], download_kib: Optional[int], dry_run: bool):
         """记录当日曲线计算结果到 state(供调试; 落盘走周期 save_state + 优雅退出)"""
-        self.state.setdefault("speed_limit_curve", {})[today.isoformat()] = {
+        self._ctx.state.data.setdefault("speed_limit_curve", {})[today.isoformat()] = {
             "upload_kib": upload_kib,
             "download_kib": download_kib,
             "dry_run": dry_run,
@@ -230,8 +288,8 @@ class SpeedCurveMixin:
     ) -> None:
         """发布限速/流量只读快照(Web UI 顶栏 pill 的数据来源)
 
-        由主循环线程**整体替换** `self.web.traffic_view`(Web 线程只读该引用, 不原地修改) ——
-        无锁即可保证 Web 侧读到自洽的一份数据。state 语义(前端的渲染分支依据):
+        经 ctx.web.set_traffic_view 服务方法**整体替换**(plan P3; Web 线程只读该引用,
+        不原地修改) —— 无锁即可保证 Web 侧读到自洽的一份数据。state 语义(前端的渲染分支依据):
         - disabled: 未启用限速曲线 -> 不渲染流量/限速 pill
         - ok:       本轮正常读取并(必要时)写入限速, actual 为回读值
         - dry_run:  试运行: 只有目标限速, actual 为 None(不读不写 qB)
@@ -240,22 +298,24 @@ class SpeedCurveMixin:
         单位: periods 为**字节**; target/actual 为 **KiB/s**(0 = 不限速, None = 该方向不管理);
         history 为按日升序的原始行(仅 ok/dry_run 发布), Web 端经 /api/traffic/history 读取。
         """
-        self.web.traffic_view = {
-            "ts": time.time(),
-            "date": date.today().isoformat(),
-            "state": state,
-            "periods": periods or [],
-            "history": history or [],
-            "limit":
-                {
-                    "target": target or {
-                        "up": None,
-                        "down": None
+        self._ctx.web.set_traffic_view(
+            {
+                "ts": time.time(),
+                "date": date.today().isoformat(),
+                "state": state,
+                "periods": periods or [],
+                "history": history or [],
+                "limit":
+                    {
+                        "target": target or {
+                            "up": None,
+                            "down": None
+                        },
+                        "actual": actual or {
+                            "up": None,
+                            "down": None
+                        },
+                        "reasons": reasons or [],
                     },
-                    "actual": actual or {
-                        "up": None,
-                        "down": None
-                    },
-                    "reasons": reasons or [],
-                },
-        }
+            }
+        )

@@ -44,9 +44,15 @@ def test_ctx_services_are_same_objects():
         assert mgr.ctx.config is mgr.config, "ctx.config 与 manager.config 必须同对象"
         assert mgr.ctx.state.data is mgr.state, "manager.state 是 ctx.state 服务载荷本身(同一 dict)"
         assert mgr.ctx.state.state_file == mgr.state_file
-        # 宿主与总线挂在内核侧, 指向同一 ctx; 装配清单随 P1(基建两模块)与 P2(门面转正)推进
-        assert [m.name for m in mgr.host.modules()] == ["logging", "notify", "webui", "hr"]
+        # P3 起任务队列与表现层门面也挂 ctx: 全局任务自注册与流量快照发布经 ctx 现取
+        assert mgr.ctx.task_queue is mgr.task_queue, "ctx.task_queue 与 manager.task_queue 必须同对象"
+        assert mgr.ctx.web is mgr.web, "ctx.web 与 manager.web 必须同对象"
+        # 宿主与总线挂在内核侧, 指向同一 ctx; 装配清单随 P1/P2/P3 逐段推进
+        assert [m.name for m in mgr.host.modules()] == [
+            "logging", "notify", "webui", "hr", "tracker", "speed_curve", "maintenance"
+        ]
         assert mgr.ctx.notify is mgr.host.get("notify"), "托盘经 ctx.notify 调公开方法(单一真相)"
+        assert mgr.ctx.trackers is mgr.host.get("tracker"), "tracker 匹配经 ctx.trackers 服务(决策点 D3)"
 
 
 def test_state_dict_identity_survives_reassignment():

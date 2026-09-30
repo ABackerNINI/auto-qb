@@ -52,7 +52,7 @@ import yaml
 from auto_qb.core import curves
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve, load_config
 from auto_qb.config import ConfigError
-from auto_qb.core.mixins.speed_curve import (
+from auto_qb.core.modules.speed_curve_mod import (
     _MANUAL_REMIND_GAP, _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
 )
 from auto_qb.core.taskqueue import Task
@@ -157,7 +157,7 @@ class _CurveLogCapture:
         self.buf = io.StringIO()
 
     def __enter__(self):
-        self._lg = logging.getLogger("auto_qb.core.mixins.speed_curve")
+        self._lg = logging.getLogger("auto_qb.core.modules.speed_curve_mod")
         self._handler = logging.StreamHandler(self.buf)
         self._handler.setLevel(self._level)
         self._old_level = self._lg.level
@@ -888,7 +888,7 @@ def test_speed_curve_success_logs_period_stats(tmp_path):
         _pc("30D", up=_points([(50, 4)])),
     )
     mgr, client = _make_mgr(tmp_path, gslc)
-    lg = logging.getLogger("auto_qb.core.mixins.speed_curve")
+    lg = logging.getLogger("auto_qb.core.modules.speed_curve_mod")
     buf = io.StringIO()
     handler = logging.StreamHandler(buf)
     handler.setLevel(logging.INFO)
@@ -1064,7 +1064,7 @@ def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path, mon
     client.transfer.limits["upload_limit"] = 2001 * 1024
 
     clock = {"now": 1_000_000.0}
-    monkeypatch.setattr("auto_qb.core.mixins.speed_curve.time.time", lambda: clock["now"])
+    monkeypatch.setattr("auto_qb.core.modules.speed_curve_mod.time.time", lambda: clock["now"])
 
     with _CurveLogCapture() as cap:
         assert _run_curve(mgr)
@@ -1093,7 +1093,8 @@ def test_speed_curve_manual_log_resets_after_release(tmp_path):
     with _CurveLogCapture() as cap:
         assert _run_curve(mgr)
         assert cap.info_count() == 1
-        assert "up" in mgr._curve_manual_log  # 节流记忆已建立
+        curve_mod = mgr.host.get("speed_curve")
+        assert "up" in curve_mod._curve_manual_log  # 节流记忆已建立(状态在模块实例, plan P3)
         assert _run_curve(mgr)
         assert cap.info_count() == 1  # 同状态不重复
 
@@ -1101,7 +1102,7 @@ def test_speed_curve_manual_log_resets_after_release(tmp_path):
         client.transfer.limits["upload_limit"] = 2000 * 1024
         assert _run_curve(mgr)
         assert client.transfer.limits["upload_limit"] == 6144 * 1024  # 5GiB -> 首档 6MiB/s
-        assert "up" not in mgr._curve_manual_log
+        assert "up" not in curve_mod._curve_manual_log
         assert cap.info_count() == 1  # 释放本身不额外刷日志(可见性由"设置全局限速"那条承载)
 
         # 再次手动设置(奇数) -> 重新说明白

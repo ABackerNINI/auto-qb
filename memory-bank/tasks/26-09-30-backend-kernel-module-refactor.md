@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-09-30
 **Updated:** 2026-09-30
-**Summary:** 计划 26-09-30-1819 拍板按推荐(D1-D5)滚动实施: P0 内核地基(新增 core/module.py(Module 契约/AppContext/ModuleHost/EventBus 骨架)+ core/state.py(StateService, 状态持久化自 RuleEngineMixin 迁出), qbmanager 构造 ctx 挂服务、属性全委托; 1751 计划标 Superseded(被 D1 吸收)); P1 基建模块化(新增 core/modules 包 LoggingModule/NotifyModule 契约样板, 热重载 L1 手工重挂改 host.apply 无条件广播+整段短路, 托盘 4 处 _notify_handler 直写改 ctx.notify 公开方法); P2 门面转正(新增 webui/module.py WebUIModule + hr/module.py HrModule, run() 启停改 host.start_all/stop_all, _apply_web_config 并入 webui.apply, 主循环五语义调用改 loop hooks, store.hr_link 注入移进装配, start_web_server 不再写 manager._web_token)。P3-P6 待续。
+**Summary:** 计划 26-09-30-1819 拍板按推荐(D1-D5)滚动实施: P0 内核地基(新增 core/module.py(Module 契约/AppContext/ModuleHost/EventBus 骨架)+ core/state.py(StateService, 状态持久化自 RuleEngineMixin 迁出), qbmanager 构造 ctx 挂服务、属性全委托; 1751 计划标 Superseded(被 D1 吸收)); P1 基建模块化(新增 core/modules 包 LoggingModule/NotifyModule 契约样板, 热重载 L1 手工重挂改 host.apply 无条件广播+整段短路, 托盘 4 处 _notify_handler 直写改 ctx.notify 公开方法); P2 门面转正(新增 webui/module.py WebUIModule + hr/module.py HrModule, run() 启停改 host.start_all/stop_all, _apply_web_config 并入 webui.apply, 主循环五语义调用改 loop hooks, store.hr_link 注入移进装配, start_web_server 不再写 manager._web_token); P3 小模块先行(新增 tracker_mod/speed_curve_mod/maintenance_mod 三模块: tracker 匹配升 ctx.trackers 服务(D3)+full_round 相位重匹配, 曲线任务自注册+流量快照改 ctx.web.set_traffic_view 服务方法, TagsMixin+_handle_maintenance+delete_tags+集数标签一起搬+全局任务自注册, _create_global_tasks 任务点名退役只剩 queue_rebuilt 相位兼容转发, mixins 包删三文件, AppContext 增 task_queue/web/trackers, TaskQueue 增 has_named 幂等守卫, WebUIRuntime 增 set_traffic_view, manager 旧名方法留单行委托)。P4-P6 待续。
 
 **Topics:** backend-kernel-module-refactor
 
@@ -33,7 +33,7 @@ P0-P6 见 [计划 26-09-30-1819](../plans/26-09-30-1819-plan-kernel-module-refac
 | P0 | 契约 + 状态服务(纯加法) | Done (2026-09-30) |
 | P1 | logging/notify 模块化 + 托盘改 ctx.notify | Done (2026-09-30) |
 | P2 | webui/hr 门面转正 Module 契约 | Done (2026-09-30) |
-| P3 | tracker / speed_curve / maintenance 小模块 | Open |
+| P3 | tracker / speed_curve / maintenance 小模块 | Done (2026-09-30) |
 | P4 | grouping / ops(+checking) 中坚模块 | Open |
 | P5 | rules 模块化 + 刷新管线收口 | Open |
 | P6 | 回写 + 基线 + 真机走查 + 段认领守阵 | Open |
@@ -68,3 +68,14 @@ P0-P6 见 [计划 26-09-30-1819](../plans/26-09-30-1819-plan-kernel-module-refac
   - 守阵: 新建 `tests/test_facade_modules.py` 9 例(webui start 语义/stop 口径/置脏判据/仅身份变化才重启/loop hooks 次序/hr 契约/run 接线守阵「主循环不再点名 self.web.* 五调用、flush_truths 留内核」/装配+判定桥/start_server 先密钥后服务); test_module_host 装配断言改四模块; test_web 两守阵改经 `mgr.host.get("webui").apply(old, new)` 驱动并更名, 两处 MagicMock 配置补钉 `new_cfg.web = mgr.config.web`(Mock 段不钉会被误判身份变化而真启服务器)。web stop+wait 竞态/hr 从无到有三件套/别名代理层既有守阵零改动全绿。
   - 闸门: test.full 全绿(1860 passed + 3 skipped / 91%, 较上基线 +9), 基线切片 `testing/baselines/26-09-30-2048-p2-facade-modules.md`。
   - P3 待办注记: `_create_global_tasks` 的 delete_tags/speed_limit_curve 任务随 MaintenanceModule/SpeedCurveModule 自注册; `_match_tracker_conf` 升 ctx.trackers 服务(D3); `_hr_anchors` 经 ctx 回调取锚点(plan §05, HrRuntime getattr 窥探届时清)。
+
+- **2026-09-30 P3 实施完成**(本 clone):
+  - 新增 `core/modules/tracker_mod.py`(93 行, TrackerModule): `match()`=原 `_match_tracker_conf`(utils.match_tracker_confs 同语义, 多匹配 WARNING 随迁)+ `apply_speed_limit` 单种限速; subscribe 订阅 **full_round 相位**(plan §4.2)—— `_refresh_torrents` 全量轮的重匹配循环改 `events.emit("full_round")`, 内核只报时机; client 经 `ctx.api.client` 现取(重连换客户端随 QbApi.bind 同步链); apply 恒短路(匹配每轮现读 config, 存量重匹配只在全量轮)。
+  - 新增 `core/modules/speed_curve_mod.py`(321 行, SpeedCurveModule): `handle_speed_limit_curve` 逐字节随迁(聚合/查档/取最严/手动保护/回读); 曲线任务 **start 自注册**(gslc None 不建, interval=gslc.interval or 主 interval)+ subscribe 订阅 **queue_rebuilt 相位**(L2 队列重建后按新配置重入队); `_curve_manual_log` 节流状态收进模块实例(manager 代持删除); `_publish_traffic` 改经 `ctx.web.set_traffic_view` 服务方法(plan §5 跨层直写清零); `_record_curve_state` 经 ctx.state.data。
+  - 新增 `core/modules/maintenance_mod.py`(339 行, MaintenanceModule): TagsMixin 全部方法公开名迁入(add_tags/remove_tags/add_episode_tags/remove_similar_tags/set_category/create_category_if_not_exists/add_hr_tag_or_category, `_seed_exempt_baseline` 随迁)+ qbmanager 本体的 `_handle_maintenance`(maintenance_tag_mode 判据随迁)+ delete_tags 两全局任务(start 自注册 + queue_rebuilt 重入队)+ sections 四段认领(delete_tags/delete_tags_if_has_no_torrents/add_episode_tags/maintenance_tag_mode)。
+  - 内核退役: `_create_global_tasks` **任务点名本体删除**(plan §3.2/§5), 只剩 §7.2 兼容转发 —— 单行 emit("queue_rebuilt")(L2 分支与 test_web 守阵仍走它); run() 删该调用(start_all 已自注册, 入队时点自「连接成功后」前移到启动, 队列首个任务线才 drain, 行为等价); mixins 包删 tags.py/tracker.py/speed_curve.py 三文件, manager 新增 P3 委托层 14 个单行方法(§7.2: mgr._xxx 直调与相邻 mixin 引用零改动)。
+  - 契约层: AppContext 增 task_queue/web/trackers 三挂点(manager 属性对委托, ctx 单一真相; task_queue 支撑模块自注册现取当前队列, web 支撑流量快照发布, trackers 是 D3 服务句柄); TaskQueue 增 `has_named(name)`(kind=internal 且无 hash)—— 全局任务自注册的幂等守卫单点(黄金法则 1; 队列本身只对 check 任务去重); WebUIRuntime 增 `set_traffic_view(view)` 发布口。
+  - 守阵: 新建 `tests/test_modules_p3.py` 11 例(ctx.trackers 装配本体+装配序 / full_round 重匹配 conf 置空记录 / 曲线 start 入队+重复幂等 / 未配置不建任务 / 队列重建按新 interval 重入队 / 兼容转发双模块入队+同队列幂等 / ctx.web 服务方法发布+别名同源 / delete_tags 按配置入队 / 队列重建重入队 / sections 认领锁定); test_module_host 装配断言改七模块 + task_queue/web/trackers 同对象; test_speed_curve import/logger 名/节流白盒断言改指模块(host.get("speed_curve")._curve_manual_log); test_tracker logger 名随迁; test_trigger_events `_spy_tags_part` 改装模块实例的 add_tags(handle_maintenance 内部直调模块方法, manager 委托已不在调用路径上 —— 测试 seam 跟实现走)。
+  - 设计取舍(本段唯一的机制发明): **queue_rebuilt 相位** —— L2 重建队列后全局任务重入队需要内核→模块触发, 复调 host.start_all 不可行(HrRuntime.start 先 stop 再重建会真重启取数线程), 级别分派表又是 P5 退役对象; 用既有 EventBus 广播「队列重建」领域事件(plan §2 调停者语义), 模块订阅自注册, 内核知道「何时」不知道「何事」; P5 L2 重建收进 rules.apply 后由其继续 emit, 机制可存活。
+  - 未动项注记: HrRuntime._anchors 对 manager._hr_anchors 的 getattr 窥探归 P5(plan §05 目标「经 ctx 回调」随 rules 模块化收口); 分组 mixin 对 `_add_tags` 的一处调用经 manager 委托保持(P4 grouping 模块化时改 ctx 口)。
+  - 闸门: test.full 全绿(1871 passed + 3 skipped / 91%, 较上基线 +11), 基线切片 `testing/baselines/26-09-30-2142-p3-small-modules.md`(合流 83e56f1f 后实测)。
