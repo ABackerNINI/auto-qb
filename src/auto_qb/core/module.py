@@ -181,16 +181,19 @@ class EventBus:
     - 相位清单与次序 = 现 _refresh_torrents 调用顺序的忠实编码(transitions 先于规则事件、
       事件分派先于内置动作……), 不是重设计; P5 收口时 _refresh_torrents 的「内核点名」
       改为 emit, 本骨架即生效点。
-    - suppress: 热重载首轮全量重建的 added 事件重放保护(plan §4.3) —— 总线级开关。
-      置位方是 rules 模块(L2 结构重建时); 消费方是内核刷新轮: take_suppressed 在轮首
-      读走请求, events_removed 相位前按需重挂、events_added 相位后关闭 —— 窗口精确覆盖
-      两个事件分派相位(full_round/transitions 等同轮照常广播, 与原 manager._suppress_events
-      只闸 _dispatch_events 的语义等价)。
+    - suppress: 热重载首轮全量重建的 added 事件重放保护(plan §4.3) —— 两个字段协议:
+      「请求位」(_replay_requested)由 rules 模块在 L2 结构重建时挂, 内核刷新轮轮首
+      take_suppressed() 读走; 「live 旗标」(_suppressed)emit 直接检查, 只由内核刷新轮在
+      events_removed 相位前重挂、events_added 相位后关闭 —— 抑制精确覆盖两个事件分派相位
+      (full_round/transitions 等同轮照常广播, 与原 manager._suppress_events 只闸
+      _dispatch_events 的语义等价)。两字段分离(issue 26-10-01-0750): 挂请求不置 live
+      旗标, 置位点到下轮轮首之间的相位(含连续第二次 L2 重建的 queue_rebuilt)照常送达。
     - 分发是**同步**的: 相位消费都在主循环线程内(单一写线程, 黄金法则 5), 无锁。
     """
     def __init__(self) -> None:
         self._handlers: dict[str, list[PhaseHandler]] = {}
-        self._suppressed = False
+        self._suppressed = False  # live 旗标: emit 直接检查(仅内核刷新轮两事件相位窗口内为 True)
+        self._replay_requested = False  # 请求位: L2 重建挂, 轮首 take_suppressed 读走(挂位不吞相位)
 
     def on(self, phase: str, handler: PhaseHandler) -> None:
         """登记相位订阅者(注册序即调用序; 同名相位重复登记合法, 依次调用)"""
@@ -215,18 +218,31 @@ class EventBus:
         return self._suppressed
 
     def set_suppressed(self, value: bool) -> None:
-        """置位/解除总线级抑制(热重载首轮: 置位 -> 全量重建一轮 -> 解除)"""
+        """置位/解除 live 旗标(emit 直接检查; 唯一消费方是内核刷新轮的两事件相位窗口开关)"""
         self._suppressed = bool(value)
 
-    def take_suppressed(self) -> bool:
-        """原子读走抑制请求(读走即解除置位), 返回读走前的置位状态
+    @property
+    def replay_requested(self) -> bool:
+        return self._replay_requested
 
-        内核刷新轮在轮首消费 L2 置位的重放保护请求, 在 events_removed 相位前按需重挂、
-        events_added 相位后关闭 —— 让总线抑制只覆盖两个事件分派相位, 同轮其余相位
+    def request_suppression(self) -> None:
+        """挂「下轮两个事件分派相位抑制」请求位: 不置 live 旗标, 挂位到消费前的相位照常广播
+
+        L2 重建方(rules.rebuild_runtime)挂请求, 消费方是内核刷新轮轮首 take_suppressed()。
+        请求位与 live 旗标分离(issue 26-10-01-0750): 置位到下轮轮首之间的相位不再被吞 ——
+        连续两次重建时第二次的 queue_rebuilt 照常送达, 全局任务不丢。
+        """
+        self._replay_requested = True
+
+    def take_suppressed(self) -> bool:
+        """原子读走抑制请求位(读走即清除), 返回读走前的请求状态
+
+        内核刷新轮在轮首消费 L2 挂的重放保护请求, 在 events_removed 相位前按需重挂 live
+        旗标、events_added 相位后关闭 —— 让总线抑制只覆盖两个事件分派相位, 同轮其余相位
         (full_round/transitions/torrents_added/removed_scan/post)照常广播。
         """
-        value = self._suppressed
-        self._suppressed = False
+        value = self._replay_requested
+        self._replay_requested = False
         return value
 
 

@@ -740,9 +740,9 @@ class QbManager(
         事件分派把 O(N) 全量扫描降为 O(变化数)。
         """
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
-        # 事件重放保护请求(plan §4.3): rules 模块 L2 重建时置位, 本轮消费 —— 窗口只在
-        # events_removed 相位前重挂、events_added 相位后关闭, 同轮其余相位照常广播
-        # (语义等价原 _suppress_events 只闸 _dispatch_events 两个调用点)
+        # 事件重放保护请求(plan §4.3): rules 模块 L2 重建时挂请求位(不置 live 旗标, issue
+        # 26-10-01-0750), 本轮轮首读走 —— events_removed 相位前重挂 live 旗标、events_added
+        # 相位后关闭, 同轮其余相位照常广播(语义等价原 _suppress_events 只闸 _dispatch_events)
         suppress_pending = self.events.take_suppressed()
         added, removed = self.store.apply_sync(self.api)
         if self.store.need_validate:

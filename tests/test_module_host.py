@@ -17,7 +17,8 @@ P0 是纯加法(契约 + 状态服务 + ctx 接线), 本文件锁住三件事:
 - test_module_host_register_invokes_subscribe: 装配点回调 subscribe, 相位认领发生在注册时
 - test_module_host_lifecycle_order: start_all/apply_all 装配序, stop_all 逆序
 - test_module_host_loop_hooks_skipped_when_absent: loop hooks 有则按装配序调用, 无则跳过
-- test_eventbus_registration_order_and_suppress: emit 按注册序同步分发; 抑制期零调用; 解除后恢复
+- test_eventbus_registration_order_and_suppress: emit 按注册序同步分发; live 旗标抑制期零调用;
+  解除后恢复; 请求位/live 旗标两字段协议(挂请求不吞相位, take 读走请求位, issue 26-10-01-0750)
 """
 import json
 import os
@@ -245,3 +246,9 @@ def test_eventbus_registration_order_and_suppress():
     assert len(seen) == 2
     bus.set_suppressed(False)
     assert bus.emit("transitions", {}) == 2, "解除后恢复分发"
+    # 请求位/live 旗标两字段协议(issue 26-10-01-0750): 挂请求不吞相位, take 读走的是请求位
+    bus.request_suppression()
+    assert bus.replay_requested and not bus.suppressed, "挂请求不置 live 旗标"
+    assert bus.emit("transitions", {}) == 2, "请求位挂起期间相位照常分发(连续重建的 queue_rebuilt 不被吞)"
+    assert bus.take_suppressed() and not bus.replay_requested, "take 读走请求位"
+    assert not bus.take_suppressed(), "请求位读走即清除(一轮只消费一次)"

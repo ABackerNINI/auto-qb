@@ -6056,7 +6056,7 @@ def test_apply_new_config_levels(monkeypatch):
         assert all(a["action"] == "none" for a in res["actions"]), res["actions"]
         assert mgr.config is new_cfg
         assert mgr.task_queue is queue_before, "零动作热重载不应重建任务队列"
-        assert not mgr.events.suppressed, "零动作热重载不置事件重放保护"
+        assert not mgr.events.suppressed and not mgr.events.replay_requested, "零动作热重载不置事件重放保护(请求位/live 旗标都不动)"
         mgr.hr.apply.assert_called_once(), "HR 运行时每次热重载都要过一遍 apply(站点接入无分支)"
         # 生命周期消息守阵: 完成消息必须是 INFO, 不得用 WARNING(否则 notify 开启时每次保存配置弹通知)
         done_logs = [r for r in grabbed if "配置热重载完成" in r.getMessage()]
@@ -6183,7 +6183,8 @@ def test_apply_new_config_l2_preserves_runtime_state(monkeypatch):
 
         assert any(a["module"] == "rules" and a["action"] == "rebuilt" for a in res["actions"]), res["actions"]
         assert mgr.task_queue is not queue_before, "L2 仍应重建任务队列(本守阵只钉 state 语义)"
-        assert mgr.events.suppressed, "L2 重建应置总线事件重放保护(窗口协议见 EventBus)"
+        assert mgr.events.replay_requested, "L2 重建应挂总线事件重放保护请求位(窗口协议见 EventBus)"
+        assert not mgr.events.suppressed, "挂请求不置 live 旗标(窗口内相位照常送达, issue 26-10-01-0750)"
         assert mgr.state is state_before, "L2 热重载不得替换 state 对象(重读磁盘 = 回滚运行期内存态)"
         assert mgr.state["exec_history"] == runtime["exec_history"], "执行历史不得被磁盘旧版回滚"
         assert mgr.state["skip_check_day"] == runtime["skip_check_day"], "跨日跳检去重不得被回滚"

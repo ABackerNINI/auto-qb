@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="events-suppress-window">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="L2 重建抑制窗内二次重建会吞 queue_rebuilt: 全局任务从新队列丢失">
 <meta name="issue-summary" content="rebuild_runtime 置位总线 live 抑制旗标(请求语义应只盖下轮两个事件相位), 窗口内(重建→下轮刷新轮首, 约 1 个 sync_interval)若发生第二次 L2 重建, 其 queue_rebuilt emit 被吞 -&gt; 全局任务(delete_tags 等)不重注册, 新队列永久缺失该任务至下次重建/重启">
 <title>L2 重建抑制窗内二次重建会吞 queue_rebuilt: 全局任务从新队列丢失 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-0750-bug-events-suppress-window-queue-rebuilt</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 07:50</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -165,11 +165,24 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 07:50 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 08:24 — 用户指派认领，状态 <strong>In Progress</strong>（按建议修法方向实施：请求位 / live 旗标拆分）</li>
+      <li>2026-10-01 08:38 — 修复完成并全量验证，状态 <strong>Done</strong>（实际修法 = 建议修法方向：两字段拆分；基线 26-10-01-0838）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-01 08:24 仍复现 —— 锚点 4/4 全部核实未漂移（<code>module.py:204</code> emit 全相位吞 / <code>rules_mod.py:149-150</code> emit 先于置位 / <code>qbmanager.py:746</code> 轮首 take / <code>maintenance_mod.py:83-85</code> 收到事件才重注册）；另以红验测试坐实（<code>tests/test_modules_p5.py::test_rebuild_within_window_still_delivers_queue_rebuilt</code>，当前基线 <code>1 failed</code>，断言窗内二次重建 queue_rebuilt 被吞 + 新队列缺 delete_tags）。附带发现：同一窗口还会吞 <code>qbmanager.py:626</code> 的「未认领段兜底重建」广播（rebuild_runtime 相位），与 L2 重建同轮热重载时兜底静默失效 —— 同根，拆请求位一并恢复。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（2026-10-01 08:38，按建议修法方向实施，无改道）</strong>：EventBus 拆两个字段 ——
+      <code>_replay_requested</code>（请求位：<code>request_suppression()</code> 挂 / <code>take_suppressed()</code> 轮首原子读走 /
+      <code>replay_requested</code> 只读属性）与 <code>_suppressed</code>（live 旗标：<code>emit</code> 直接检查，仅内核刷新轮
+      events_removed 前重挂、events_added 后关闭）。<code>rules_mod.rebuild_runtime</code> 置位改挂请求位；
+      <code>qbmanager._refresh_torrents</code> 的 take→arm→close 消费结构不变。挂请求不再吞置位点到下轮轮首
+      之间的任何相位 —— 连续重建的第二次 <code>queue_rebuilt</code> 照常送达（全局任务重注册进新队列），
+      附带恢复同窗内 <code>qbmanager.apply_new_config</code>「未认领段兜底重建」广播（rebuild_runtime 相位）的正确送达。</p>
+    <p><strong>验证方式</strong>：红验先行 —— 新增回归用例 <code>tests/test_modules_p5.py::test_rebuild_within_window_still_delivers_queue_rebuilt</code>
+      修复前单跑 1 failed（现象复现坐实），修复后转绿（断言二次 queue_rebuilt 送达 + 新队列含 delete_tags 全局任务）。
+      守阵演进 3 文件（test_modules_p5 / test_web / test_module_host 改判请求位并加「挂请求不得置 live 旗标」）。
+      全量 <code>test.full</code>：<strong>1895 passed + 3 skipped / 91%</strong>（基线切片
+      <a href="../testing/baselines/26-10-01-0838-eventbus-suppress-request-bit.md">26-10-01-0838</a>）。</p>
   </section>
 
   <footer>

@@ -13,6 +13,7 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_torrents_added_pipeline_order: 逐种子管线四家按装配序(限速→维护→归组→建任务)
 - test_suppress_window_covers_only_event_phases: 重放保护窗口只覆盖两个事件相位
 - test_rules_apply_rebuild_on_section_change: L2 重建收进 rules.apply(整段短路 + 段变重建)
+- test_rebuild_within_window_still_delivers_queue_rebuilt: 抑制窗内二次重建 queue_rebuilt 不被吞(issue 26-10-01-0750)
 - test_rebuild_preserves_runtime_memory_state: 重建不重读磁盘, exec_history 原对象保留
 - test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时实测(数字入档任务档案)
 """
@@ -223,10 +224,10 @@ def test_suppress_window_covers_only_event_phases():
         assert ("add_tags", ["event-tag"]) in client.calls
         assert order == ["full_round", "transitions", "events_removed", "events_added", "torrents_added", "post"]
 
-        # 模拟 rules L2 重建置位(plan §4.3): 下轮事件分派被抑制(订阅者不被调用),
+        # 模拟 rules L2 重建挂请求(plan §4.3): 下轮事件分派被抑制(订阅者不被调用),
         # 其余相位照常广播 —— full_round/transitions/torrents_added/post 都在序
         order.clear()
-        mgr.events.set_suppressed(True)
+        mgr.events.request_suppression()
         client = _round("HB")
         assert order == ["full_round", "transitions", "torrents_added", "post"], (f"窗口只覆盖两个事件相位, 其余照常: {order}")
         assert ("add_tags", ["event-tag"]) not in client.calls, "抑制期内 added 事件规则不得触发(重放保护)"
@@ -274,8 +275,31 @@ def test_rules_apply_rebuild_on_section_change():
         assert mgr.task_queue is not queue_before and isinstance(mgr.task_queue, TaskQueue)
         assert mgr.store.get("H1").tracker_conf is None, "reset_runtime 契约: conf 置空待 full_round 重匹配"
         assert rebuilt, "queue_rebuilt 相位应广播(全局任务各模块自注册重入队)"
-        assert mgr.events.suppressed, "事件重放保护应置位(窗口协议见 EventBus)"
+        assert mgr.events.replay_requested, "重建应挂事件重放保护请求位(窗口协议见 EventBus)"
+        assert not mgr.events.suppressed, "挂请求不得置 live 旗标(窗口内相位照常送达, issue 26-10-01-0750)"
         mgr.connect.assert_called_once(), "重建尾段重连(rid 失效 -> 下轮全量)"
+
+
+def test_rebuild_within_window_still_delivers_queue_rebuilt():
+    """抑制窗内二次重建: 首次重建挂的重放保护不得吞第二次重建的 queue_rebuilt(issue 26-10-01-0750)
+
+    原实现 rebuild 置 live 旗标(emit 直接检查), 置位点到下轮轮首 take 之间所有相位一律
+    被吞 —— 连续两次 L2 重建时第二次的 queue_rebuilt 丢失, 全局任务不重注册进新队列。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.config.delete_tags = ["issue-format"]  # 全局任务注册判据(夹具默认空 = 不注册)
+        mgr.client = FakeClient()
+        mgr.connect = mock.MagicMock(return_value=True)
+        rebuilt = []
+        mgr.events.on("queue_rebuilt", lambda e: rebuilt.append(1))
+        rules = mgr.host.get("rules")
+
+        rules.rebuild_runtime()  # 第一次重建: 挂重放保护请求(原实现置 live 旗标)
+        rules.rebuild_runtime()  # 下轮轮首消费前第二次重建: queue_rebuilt 不得被吞
+
+        assert len(rebuilt) == 2, "抑制窗内二次重建的 queue_rebuilt 不得被吞(issue 26-10-01-0750)"
+        assert mgr.task_queue.has_named("delete_tags"), "全局任务必须重注册进最后一次重建出的队列"
 
 
 def test_rebuild_preserves_runtime_memory_state():

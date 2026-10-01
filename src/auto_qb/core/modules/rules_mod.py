@@ -24,8 +24,8 @@ RuleEngineMixin(状态持久化已于 P0 迁 core/state.py)整体迁入, 相位/
     运行时现读, 不触发重建, 过度重启族防线);
   - 重建不重读磁盘 state(运行期内存态 exec_history/skip_check_day 原对象保留,
     issue 26-09-21-1347); 重连复用内核 reconnect(client 换新 + rid 失效 → 下轮全量);
-  - 事件重放保护: 置位总线 suppress, 窗口协议见 EventBus.take_suppressed(内核刷新轮
-    把它收敛到 events_removed/events_added 两个相位)。
+  - 事件重放保护: 挂总线 suppress 请求位(不置 live 旗标), 窗口协议见 EventBus.take_suppressed
+    (内核刷新轮把它收敛到 events_removed/events_added 两个相位)。
 """
 import logging
 import time
@@ -141,13 +141,14 @@ class RulesModule(BaseModule):
         - store.reset_runtime: 清分组索引/缓存, tracker_conf 置空 → 下轮全量 refresh 经
           full_round 相位重匹配(plan §4.2; 客户端重连使 rid 失效保证下轮是全量轮)。
         - queue_rebuilt 相位: 全局任务(delete_tags*/speed_limit_curve)由各模块自注册重入队。
-        - 总线 suppress 置位: 热重载首轮的 added 事件重放保护(窗口协议见 EventBus)。
+        - 总线 suppress 请求位: 热重载首轮的 added 事件重放保护 —— 挂请求不置 live 旗标
+          (挂位到下轮轮首消费之间的相位照常送达, issue 26-10-01-0750), 窗口协议见 EventBus。
         """
         self._manager.task_queue = TaskQueue()
         self._ctx.store.reset_runtime()
         self._load_rules()
         self._manager.events.emit("queue_rebuilt")
-        self._manager.events.set_suppressed(True)
+        self._manager.events.request_suppression()
         self._manager.reconnect()
 
     # ---------- 规则: 加载(RuleEngineMixin 原样迁入, self.* 改 ctx/manager 现取) ----------
