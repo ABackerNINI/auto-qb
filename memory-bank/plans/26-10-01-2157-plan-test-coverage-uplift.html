@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="test-coverage-uplift">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-01-2157">
 <meta name="doc-updated" content="26-10-01-2157">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-01-test-coverage-uplift.md">
@@ -115,7 +115,7 @@
     <h1>测试覆盖率提升 · 分阶段执行计划</h1>
     <p class="lede">从综合 91% 出发, 按缺口形态分四阶段推进到 96% 区间, 并以阈值与基线切片防回沉。全部缺口数字实测于 2026-10-01 <code>develop @ 40334066</code> 的 <code>test.full</code> 覆盖率导出, 不是估算基数。</p>
     <div class="metaline">
-      <span><b>状态</b> Open</span>
+      <span><b>状态</b> Done</span>
       <span><b>立计划</b> 2026-10-01 21:57</span>
       <span><b>基线</b> develop @ 40334066 · 1,924 passed + 3 skipped · 27.4s</span>
       <span><b>覆盖分母</b> 17,718 单位</span>
@@ -386,6 +386,7 @@
         <tr><td class="p">26-10-01-2157</td><td>初版: 基线实测 (develop @ 40334066, 综合 90.83%) + 四形态缺口地图 + P0–P3 阶段计划 + 防回沉机制。</td></tr>
         <tr><td class="p">26-10-02-0025</td><td><b>P0 快赢轮完成</b> (develop @ 41aa9f00): T0.1–T0.7 落地, 目标文件全部清偿到 0 missing 行 + 0 missing 分支; 综合 90.83% → <b>93.24%</b> (16,616/17,821 单位, 语句 12,603/13,377 · 分支 4,013/4,444), 1,997 passed + 3 skipped (test.full 20.53/20.57s 两采样, Windows 侧; Linux 待补)。变异红验 6/6 全红后精确还原; P3-M1 阈值抬到 <code>--cov-fail-under=92</code>; 基线切片 26-10-02-0025-p0-coverage-uplift。</td></tr>
         <tr><td class="p">26-10-02-0203</td><td><b>P1 服务与路由层完成</b> (develop @ effa6e2c): T1.1–T1.4 落地 (hr/service 错误路径 25 测 + hr 二线 15 文件 60 测 + webui 二线 21 测 + infra 长尾 20 测, 只改 tests/), 综合 93.24% → <b>96.49%</b> (17,196/17,822 单位, 语句 12,982/13,378 · 分支 4,214/4,444), 2,143 passed + 3 skipped (test.full 28.50s, Windows 侧; Linux 待补); 实测 +580 单位超出预估 +400±50, hr 包行覆盖 99.71% (验收线 ≥96%)。变异红验 7/7 全红后精确还原 (含两轮 mutant 选点修正: bencode 夹具按 unreached-branch-guard 收紧、commands 补齐维度换种子); P3-M1 阈值抬到 <code>--cov-fail-under=94</code>; 基线切片 26-10-02-0203-p1-coverage-uplift。范围外发现 3 项只记录不修 (service HrFetchError 尾段不可达 / _finish_wave 无条件清告警去重集 / _prune_index 双体重复), 详见切片。</td></tr>
+        <tr><td class="p">26-10-02-0426</td><td><b>P2 完成, 三阶段收官, 计划转 Done</b> (develop @ 1c237504): P2-a T2.2+T2.3 core/torrents/rules 长尾 (8b7831cd, 96.49%→97.53%) + P2-b T2.1 tray 逻辑缝与逐块豁免 (1c237504, tests/test_tray.py 新建 45 函数/59 例, tray 行覆盖 36%→98.43%) 落地; P0–P2 三阶段综合 90.83% → <b>99.06%</b> (17,541/17,708 单位, 语句 13,201/13,284 · 分支 4,340/4,424), 2,278 passed + 3 skipped (test.full 30.09/30.26s 两采样, Windows 侧; Linux 待补), 大幅越过 96% 终点。红验累计 25/25 (P0 6 · P1 7 · P2-a 7 · P2-b 5) 全红后精确还原; P3-M1 阈值按 §5「实测 −1」单点规则抬到 <code>--cov-fail-under=98</code> 而非 P2 DoD 字面预估档 95 (95 按 96% 终点倒推, 实测已越过); 基线切片 26-10-02-0426-p2-coverage-uplift; 豁免台账 2 处/52 行 → 6 处/217 行 (P2 新增 4 处逐块注明理由)。</td></tr>
       </tbody>
     </table>
   </section>
