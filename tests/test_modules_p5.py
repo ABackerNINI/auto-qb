@@ -18,11 +18,13 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_rebuild_needed_matrix_tracker_runtime_fields_do_not_rebuild: 判据矩阵负例(审计 M2): tracker 运行时现读字段变化不重建(过度重启族防线)
 - test_rebuild_within_window_still_delivers_queue_rebuilt: 抑制窗内二次重建 queue_rebuilt 不被吞(issue 26-10-01-0750)
 - test_rebuild_preserves_runtime_memory_state: 重建不重读磁盘, exec_history 原对象保留
-- test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时实测(数字入档任务档案)
+- test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时回归阈值(基线化, 审计 L9)
 """
+import json
 import os
 import tempfile
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -480,13 +482,47 @@ def test_rebuild_preserves_runtime_memory_state():
 
 
 # ============================================================
-# 5000 种子模拟: 短路/重建耗时实测(W3 验收数字, 入档任务档案)
+# 5000 种子模拟: 短路/重建耗时回归阈值(审计 26-10-01-0918 L9 基线化)
 # ============================================================
+PERF_BASELINE_PATH = Path(__file__).parent / "fixtures" / "perf_baseline.json"
+
+
+def _median_ms(fn, repeats: int = 5) -> float:
+    """重复执行 fn(repeats) 次取中位耗时(ms); 单次毛刺(调度/GC)被中位吸收, 持续劣化才上移"""
+    times = []
+    for _ in range(repeats):
+        t0 = time.perf_counter()
+        fn()
+        times.append((time.perf_counter() - t0) * 1000)
+    return sorted(times)[repeats // 2]
+
+
 def test_rebuild_benchmark_5000_seeds(capsys):
-    """5000 种子下: 整段短路 apply 耗时 vs L2 重建耗时(实测入档, 不做脆弱的时间断言)
+    """5000 种子下: 整段短路 apply 耗时 vs L2 重建耗时(审计 26-10-01-0918 L9: 回归阈值基线化)
 
     场景即 W3 验收口径: 热重载保存时「零规则相关变更」应接近零成本(短路), 「规则变更」
     的重建一次性成本应可接受(队列重建 + conf 置空 + 规则重载, 不含 API 调用)。
+
+    阈值设计(替代旧「只拦灾难」的 1s/30s 单断言, 上限数字单点在基线文件):
+    - 上限 = 基线实测中位 × 安全系数; 基线在 tests/fixtures/perf_baseline.json
+      (实测分布 / 采样口径 / 机器 / commit / 采样日期), 断言运行时读入。
+    - 测试内计时口径 median-of-5: 单次毛刺(调度 / GC)被中位吸收, 持续性劣化才触发 ——
+      防抖动靠中位口径, 不靠放大系数。
+    - 短路 0.1ms(中位 0.01ms × 5, 向上取整到 0.1ms 整刻度); 重建 4.0ms(中位 0.85ms × ~4.7,
+      2.7x 于 20 样本最大值)。均远紧于旧灾难线(紧 4 个数量级), 旧 1s/30s 保留为第二道兜底。
+    - 插桩注意: 基线在 coverage 插桩下采集(与 pytest-cov 断言环境同源, 插桩使重建约慢 2x);
+      裸跑数字只作对照, 不要拿裸跑数当基线。
+
+    基线重采样流程(人工; 何时 + 如何):
+    - 何时: ①换机器 / 换 Python 大版本; ②本测试在正常机器上稳定红(先重采样排除基线过时,
+      再判断真回归); ③相关代码大改后想复核余量。
+    - 如何(零脚本): ①`uv run pytest tests/test_modules_p5.py -k rebuild_benchmark -q -rP -n 0`
+      连跑 ≥6 次(每次独立进程即冷启动), 从 PASSES 段抓 `[5000-seed benchmark]` 行 ——
+      中位数 print 在 capsys.readouterr() 之后, 常规输出被吞, 只有 -rP 能看到; 该命令带
+      pytest.ini 默认 --cov, 天然与断言环境同源(想看裸跑对照加 --no-cov);
+      ②取中位, 阈值 = 中位 × 3-5(向上取整到整数 / 一位小数刻度);
+      ③连同实测分布 / 采样日期 / 当时 commit 更新 perf_baseline.json, 并同步本 docstring
+      的两处阈值数字。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
@@ -503,9 +539,9 @@ def test_rebuild_benchmark_5000_seeds(capsys):
             "interval"
         ):
             setattr(new, attr, getattr(old, attr))
-        t0 = time.perf_counter()
+        # 短路/重建均幂等(纯比较 / 全新队列 + reset, 无累积), 重复计时无状态漂移 —— median-of-5 前提
         assert rules.apply(old, new).action == "none"
-        t_short = time.perf_counter() - t0
+        t_short = _median_ms(lambda: rules.apply(old, new))
 
         new2 = mock.MagicMock()
         for attr in (
@@ -513,12 +549,24 @@ def test_rebuild_benchmark_5000_seeds(capsys):
         ):
             setattr(new2, attr, getattr(old, attr))
         new2.interval = 888.0
-        t0 = time.perf_counter()
         assert rules.apply(old, new2).action == "rebuilt"
-        t_rebuild = time.perf_counter() - t0
-        out = (f"[5000-seed benchmark] short-circuit={t_short * 1000:.2f}ms "
-               f"rebuild={t_rebuild * 1000:.2f}ms")
+        t_rebuild = _median_ms(lambda: rules.apply(old, new2))
+
+        baseline = json.loads(PERF_BASELINE_PATH.read_text(encoding="utf-8"))
+        hint = f"若非真回归而是机器/环境变化, 按本测试 docstring「基线重采样流程」重采样并更新 {PERF_BASELINE_PATH.name}"
+        assert t_short < baseline["short_circuit"]["threshold"], (
+            f"短路 median-of-5 {t_short:.3f}ms >= 回归阈值 {baseline['short_circuit']['threshold']}ms"
+            f"(基线中位 {baseline['short_circuit']['median']}ms); {hint}"
+        )
+        assert t_rebuild < baseline["rebuild"]["threshold"], (
+            f"重建 median-of-5 {t_rebuild:.3f}ms >= 回归阈值 {baseline['rebuild']['threshold']}ms"
+            f"(基线中位 {baseline['rebuild']['median']}ms); {hint}"
+        )
+        # 第二道兜底: 原灾难线(数字单点也在基线文件)
+        assert t_short < baseline["short_circuit"]["disaster_line_ms"], "短路路径必须近似零成本(整段相等直接返回)"
+        assert t_rebuild < baseline["rebuild"]["disaster_line_ms"], "重建在 5000 种子下必须完成(纯内存操作, 无 API)"
+
+        out = (f"[5000-seed benchmark] median-of-5 short-circuit={t_short:.3f}ms "
+               f"rebuild={t_rebuild:.3f}ms")
+        capsys.readouterr()  # 常规输出保持安静; 其后的 print 仅供重采样时 -rP 从 PASSES 段抓取
         print(out)
-        capsys.readouterr()  # 数字入档由任务档案记录, 不做脆弱断言
-        assert t_short < 1.0, "短路路径必须近似零成本(整段相等直接返回)"
-        assert t_rebuild < 30.0, "重建在 5000 种子下必须完成(纯内存操作, 无 API)"

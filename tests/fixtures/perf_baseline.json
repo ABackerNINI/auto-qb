@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "purpose": "tests/test_modules_p5.py::test_rebuild_benchmark_5000_seeds 回归阈值基线 (审计 26-10-01-0918 L9)。阈值 = 实测中位 x 安全系数, 测试内 median-of-5 计时口径; 何时及如何重采样见该测试 docstring「基线重采样流程」。",
+    "machine": "AMD Ryzen 9 7950X (16C/32T), Windows 10.0.26300 x64, CPython 3.13.14",
+    "sampled_at_commit": "f3564847",
+    "sampled_date": "2026-10-01",
+    "methodology": "coverage run --branch --source=src 插桩下采样 (与 pytest-cov 断言环境同源; 插桩使 rebuild 约慢 2x), 2 进程 x 10 轮 (每进程第 1 轮为冷轮), 共 20 样本/操作; 另有无插桩裸跑 10 样本作对照 (rebuild 中位 0.43ms)。",
+    "timing": "time.perf_counter, 打印精度 0.01ms"
+  },
+  "short_circuit": {
+    "op": "rules.apply(old, new) 整段相等短路, 5000 种子",
+    "unit": "ms",
+    "n": 20,
+    "min": 0.01,
+    "median": 0.01,
+    "max": 0.03,
+    "threshold": 0.1,
+    "threshold_rationale": "中位 0.01ms x5 = 0.05ms, 向上取整到 0.1ms 整刻度 (亚毫秒量级下计时粒度与调度抖动绝对量主导, 0.05ms 刻度过脆); median-of-5 口径下需持续 10x 劣化才触发",
+    "disaster_line_ms": 1000.0
+  },
+  "rebuild": {
+    "op": "rules.apply(old, new2) interval 变更触发 L2 重建, 5000 种子",
+    "unit": "ms",
+    "n": 20,
+    "min": 0.74,
+    "median": 0.85,
+    "max": 1.48,
+    "per_process_median": [0.87, 0.82],
+    "threshold": 4.0,
+    "threshold_rationale": "中位 0.85ms x~4.7 = 4ms (3-5x 建议带内), 2.7x 于 20 样本最大值; median-of-5 口径下需持续 ~5x 劣化才触发",
+    "disaster_line_ms": 30000.0
+  }
+}

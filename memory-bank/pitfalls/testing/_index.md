@@ -18,6 +18,7 @@
 | [corpus-fs-mock.md](corpus-fs-mock.md) | 脱敏要连"藏在 .gz 里的第二层 key"一起做; 窗口合并必须按序推进; 回放 config 的 tracker 段不能只信权威映射。 | 语料回放, disk.json, fs mock, 窗口合并, tracker 段, 脱敏 key, 反查表, group_exact |
 | [event-handler-mock.md](event-handler-mock.md) | `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真 handler。 | EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵 |
 | [fake-config-shared-mutables.md](fake-config-shared-mutables.md) | helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改 | FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置 |
+| [ghost-pkg-residue.md](ghost-pkg-residue.md) | 包源码迁走后, 旧目录在 git 里已删但磁盘残留只含 `__pycache__` 的空壳目录 (gitignored 未跟踪, 检出/同步不清掉), 被幽灵包守阵 (test_no_ghost_pkg_dirs) 判红 —— 是环境残留不是代码缺陷, 整目录删除即绿。 | 跑 pytest 时 test_src_has_no_ghost_pkg_dirs 红, 报 src/ 下某目录; 或排障时发现某包「还在」但 import 不到。 |
 | [hot-reload-mock-sections.md](hot-reload-mock-sections.md) | apply_new_config 的守阵惯用 `mock.MagicMock()` 当新配置(替身区只钉住自己关心的段)。内核化 | 改 apply_new_config / 新增模块 apply / 热重载守阵, 见到 MagicMock 配置 + 新模块段短路判据 |
 | [hot-reload-section-choice-side-effects.md](hot-reload-section-choice-side-effects.md) | 驱动 apply_new_config 的测试(段认领兜底/回执/级别语义类)如果改的是 notify 这类「apply 有 | 写热重载/兜底类测试选驱动段时; 见「单跑绿全量红」且红在 logging 全局面断言 |
 | [log-capture.md](log-capture.md) | caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。 | caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager |
