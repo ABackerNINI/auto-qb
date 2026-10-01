@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="tray-join-timeout-abandons-save">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="托盘退出 join(5s) 超时即放弃主循环线程, 本次状态不落盘">
 <meta name="issue-summary" content="托盘 manager 线程 daemon=True + join(timeout=5), 优雅退出超时则放弃落盘">
 <title>托盘退出 join(5s) 超时即放弃主循环线程, 本次状态不落盘 · bug · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>托盘退出 join(5s) 超时即放弃主循环线程, 本次状态不落盘</h1>
     <p class="lede">托盘 manager 线程 daemon=True + join(timeout=5), 优雅退出超时则放弃落盘</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1347-bug-tray-join-timeout-abandons-save</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 13:47</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -169,11 +169,26 @@ self.ipc.stop()
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 13:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 20:51 — 按建议修法<strong>候选 A</strong> 实施并验证（join 预算 10s + 超时 WARNING，快测 1913 passed），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-01 @ 5965cc07 仍复现，锚点已漂移 —— 原 <code>ui.py</code> L466-478（取证 2026-09-21 @ 239082c）→ 现
+      <code>src/auto_qb/tray/app.py:512</code> 附近（TrayUi.run，托盘 UI 已从 ui.py 拆出），退出编排语义未变：<code>join(timeout=5)</code>
+      超时即放弃、无任何告警；主循环落盘动作在 <code>QbManager.run</code> 的 finally（<code>qbmanager.py:573-580</code>，<code>ctx.state.save()</code>）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（候选 A，未改道）</b>：<code>tray/app.py</code> TrayUi.run 退出编排 —— join 预算 <code>5s → 10s</code>（字面量原地改，
+      无命名常量、无其它引用）；join 返回后 <code>is_alive()</code> 判定，仍存活则
+      <code>logger.warning("主循环未在 10s 退出预算内收尾, 本次运行期状态未落盘")</code>（用模块既有的
+      <code>logger</code>，未引入新日志设施）。<b>不做候选 B</b>：超时后 UI 线程不补写 state —— 维持「主循环线程是 state_file 唯一写者」纪律。</p>
+    <p><b>验证方式</b>：新增单测 <code>tests/test_ui.py::test_run_join_timeout_warns</code> —— TrayUi 依赖 GUI 栈
+      （<code>__init__</code> 即 <code>_build_window</code> 加载 customtkinter/pystray），测试环境无法正常实例化，故
+      <code>object.__new__</code> 跳过 <code>__init__</code>、假 root/ipc 只驱动 <code>run()</code> 退出编排；
+      manager.run 换成挂起替身 + monkeypatch <code>Thread.join</code> 模拟"超时返回但线程仍存活"（不真等 10s）。
+      断言：join 预算 == 10s；超时路径打出「状态未落盘」WARNING；<code>run()</code> 返回 0 不抛；IPC 仍清理。
+      WARNING 断言用直挂 handler（同文件 <code>test_connect_failure_throttles_logging</code> 先例）—— caplog 依赖
+      propagate 到 root，受同 worker 先跑的 setup_logging 类测试残留状态影响，判定不确定。</p>
+    <p><b>测试数字</b>（2026-10-01，<code>commands run test.quick</code>）：<b>1913 passed / 3 skipped</b>（含新增用例），21.76s；
+      <code>dev.fmt</code> 已过。正常退出路径（join 快速返回、不打 WARNING）为既有行为，未新增断言。</p>
   </section>
 
   <footer>

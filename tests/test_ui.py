@@ -2,6 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_run_stop_event_exit: stop_event 置位 -> run 立即退出并落盘
+- test_run_join_timeout_warns: TrayUi.run 退出 join 预算 10s, 超时未退打 WARNING(状态未落盘)且退出不抛
 - test_run_unmanaged_connect_fail_raises: 非托管模式首连失败抛 QbConnectError(fail-fast, 不重试)
 - test_run_managed_connect_retry: 托管模式首连失败按 tick 重试直至成功, 期间不退出
 - test_run_pause_event_skips_ticks: pause_event 置位期间完全不执行 _tick, 停止信号仍响应
@@ -296,3 +297,79 @@ def test_connect_failure_throttles_logging(tmp_path):
             assert len(records) == first, "断开期间重试不应重复 ERROR(节流)"
         finally:
             qbm_logger.removeHandler(grab)
+
+
+def test_run_join_timeout_warns(tmp_path, monkeypatch):
+    """TrayUi.run 退出编排: join 预算 10s, 超时仍未退打 WARNING 明示状态未落盘, 退出不抛
+
+    (issue 26-09-21-1347) TrayUi 依赖 GUI 栈(__init__ 即 _build_window 加载 customtkinter/
+    pystray), 测试环境无法正常实例化 —— object.__new__ 跳过 __init__, 用假 root/ipc 只驱动
+    run() 的退出编排; monkeypatch Thread.join 记录预算并模拟"超时返回但线程仍存活"(不真等 10s)。
+    """
+    ui = TrayUi.__new__(TrayUi)
+    mgr = make_manager(str(tmp_path / "state.json"))
+    release = threading.Event()
+
+    def stuck_run(dry_run, stop_event, pause_event):
+        release.wait(timeout=30)  # 模拟长 qB 调用/大库 tick: 10s 预算内不退出
+
+    mgr.run = stuck_run
+    ui.manager = mgr
+    ui.dry_run = True
+    ui.stop_event = threading.Event()
+    ui.pause_event = threading.Event()
+    ui.log_handler = UiLogHandler()
+    ipc_calls = []
+
+    class FakeIpc:
+        def start(self):
+            ipc_calls.append("start")
+
+        def stop(self):
+            ipc_calls.append("stop")
+
+    class FakeRoot:
+        def after(self, ms, fn):
+            pass
+
+        def mainloop(self):
+            pass
+
+    ui.ipc = FakeIpc()
+    ui._icon = None
+    ui.root = FakeRoot()
+
+    joins = []
+
+    def fake_join(self, timeout=None):
+        joins.append(timeout)  # 不等待: 模拟超时返回(线程仍 alive)
+
+    monkeypatch.setattr(threading.Thread, "join", fake_join)
+    # WARNING 断言用直挂 handler(同文件 test_connect_failure_throttles_logging 先例):
+    # caplog 依赖 propagate 到 root, 而运行期 root/auto_qb 的 handler 状态受同 worker 先跑的
+    # setup_logging 类测试残留影响 —— 直挂 originating logger 与 propagate 链路解耦, 判定确定。
+    records = []
+
+    class Grab(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    grab = Grab()
+    grab.setLevel(logging.WARNING)
+    tray_logger = logging.getLogger("auto_qb.tray.app")
+    saved_level = tray_logger.level
+    tray_logger.setLevel(logging.INFO)
+    tray_logger.addHandler(grab)
+    try:
+        rc = ui.run()
+    finally:
+        tray_logger.removeHandler(grab)
+        tray_logger.setLevel(saved_level)
+    assert rc == 0, "超时路径不应抛异常, 退出码 0"
+    assert joins == [10], "join 预算应为 10s"
+    assert ui._manager_thread.is_alive(), "模拟超时: join 返回后线程应仍存活"
+    assert any("状态未落盘" in m for m in records), "超时应记 WARNING 明示本次状态未落盘"
+    assert ipc_calls == ["start", "stop"], "放弃等待后仍应清理 IPC"
+    monkeypatch.undo()
+    release.set()
+    ui._manager_thread.join(timeout=5)  # 收尾: 放掉被挂起的假主循环, 不留悬挂线程

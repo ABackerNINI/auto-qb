@@ -509,7 +509,11 @@ class TrayUi:
         if self._icon is not None:
             self._icon.stop()
         if self._manager_thread is not None:
-            self._manager_thread.join(timeout=5)
+            # issue 26-09-21-1347: 预算 5s -> 10s(长 qB 调用/大库 tick 可能吃满 5s); 超时仍未退
+            # 只能放弃(daemon 线程随进程终止) —— UI 线程不得补写 state(唯一写者纪律), 但须明示。
+            self._manager_thread.join(timeout=10)
+            if self._manager_thread.is_alive():
+                logger.warning("主循环未在 10s 退出预算内收尾, 本次运行期状态未落盘")
         self.ipc.stop()
         logging.getLogger("auto_qb").removeHandler(self.log_handler)
         return 0
