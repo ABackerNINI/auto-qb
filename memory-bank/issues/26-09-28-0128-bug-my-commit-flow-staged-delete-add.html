@@ -7,8 +7,9 @@
 <meta name="issue-stamp" content="26-09-28-0128">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="my-commit-flow-staged-delete-add">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-01-commands-shipflow-staged-delete-fix.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="commit.py 逐路径 git add 撞「已暂存删除」路径必败">
 <meta name="issue-summary" content="ship.commit 逐路径 add 对已暂存删除(D )路径 pathspec 落空直接 FAIL; workaround=退回未暂存( D)后重跑即过, 根修应对删除路径改用 git rm --cached 口径">
 <title>commit.py 逐路径 git add 撞「已暂存删除」路径必败 · bug · 计划外问题</title>
@@ -101,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-28-0128-bug-my-commit-flow-staged-delete-add</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-28 01:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">my-commit-flow</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -167,11 +168,14 @@ D  memory-bank/activeContext/26-09-23-1959-memory-bank-doc-forms.md   # 首列 D
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-28 01:28 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 18:30 — 复验认领，状态 <strong>In Progress</strong>（现象已随 my-commit-flow v3 重构落库消失，本次补清偿链；任务档案：<a href="../tasks/26-10-01-commands-shipflow-staged-delete-fix.md">tasks/26-10-01-commands-shipflow-staged-delete-fix.md</a>）</li>
+      <li>2026-10-01 18:35 — 清偿完成，状态 <strong>Done</strong>（实际修法已在库：暂存循环按文件存在性三分流；守阵补未暂存删除用例，test.pkg 75 passed）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-01 18:30 <strong>已消失</strong>（以现场为准）—— 入池锚点 <code>commit.py:162-167</code> 的逐路径 add 循环已不存在：my-commit-flow v3 重写（commit <code>4ba6cb7f</code>，2026-09-28 03:21 落地）把暂存循环改为按文件存在性三分流（现场 <code>.commands/my-commit-flow/scripts/commit.py:160-175</code>），docstring 与 <code>references/pipeline.md:56</code> 均已注明修本 issue；v3 守阵已带已暂存删除用例 <code>test_commit.py::test_staged_delete_skips_add</code>。与入池描述的出入：修复先于清偿落库（同日随 v3「顺带修复」进代码，见档案 26-09-28-commands-shipflow-output-contract.md），issue 状态推进当时没跟着走 —— 本次只补清偿链，未再动修复代码。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（随 commit 4ba6cb7f 落库，2026-10-01 复验清偿）</strong>：建议方向 A 成立且已实现，实际比方向 A 更精确 —— 暂存循环按文件存在性三分流：工作区存在 → <code>git add -- &lt;path&gt;</code>；工作区无而索引有（ls-files 命中，即 <code>&nbsp;D</code> 未暂存删除）→ <code>git rm --cached -- &lt;path&gt;</code> 把删除登记进暂存区；两处都不在（<code>D&nbsp;</code> 已暂存删除）→ 跳过（删除已在暂存区，add 本就无处匹配，跳过即幂等）。方向 B（单路径 <code>add -A</code>）未采用。</p>
+    <p><strong>验证方式</strong>：真实临时仓库守阵 —— <code>test_commit.py::test_staged_delete_skips_add</code>（<code>git rm</code> 进暂存区后 ship.commit 全流程成功且删除进提交，随 v3 落库）+ 本次补 <code>test_unstaged_delete_uses_rm_cached</code>（工作区 unlink 不暂存，断言删除经 rm --cached 进提交），两例均绿；<code>commands run test.pkg</code> <strong>75 passed</strong>（20.70s，含新增用例）。任务档案：<a href="../tasks/26-10-01-commands-shipflow-staged-delete-fix.md">tasks/26-10-01-commands-shipflow-staged-delete-fix.md</a>。</p>
   </section>
 
   <footer>

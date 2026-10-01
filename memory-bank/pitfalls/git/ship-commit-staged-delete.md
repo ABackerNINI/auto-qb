@@ -8,9 +8,12 @@
   (2026-09-28 实测, 删除已随前次失败留在暂存区)。
 - **判别**: `git status --porcelain` 看该路径首列 —— `D `(删除已暂存)必踩: 索引已无此文件、工作区也没有,
   `git add -- <path>` 无处匹配; ` D`(删除未暂存)则索引还留着条目, `git add -- <path>` 能正常登记删除。
-- **处置**: `git restore --staged <path>` 把删除退回未暂存态(` D`)后重跑 ship.commit 即过;
-  根修在 commit.py(对 `D`/` D` 路径改用 `git rm --cached -- <path>` 或带 `--ignore-missing` 的登记方式),
-  本轮未动脚本(范围守恒)。
+- **处置**: `git restore --staged <path>` 把删除退回未暂存态(` D`)后重跑 ship.commit 即过
+  （旧版脚本的 workaround, 仍有效）。
+  **根修已落**（issue 26-09-28-0128, 随 my-commit-flow v3 commit 4ba6cb7f, 2026-09-28）:
+  commit.py 暂存循环按文件存在性三分流 —— 工作区存在 → `git add`; 工作区无而索引有(` D`)→
+  `git rm --cached` 登记删除; 都不在(`D `)→ 跳过(删除已在暂存区), 逐路径 add 不再撞 pathspec 落空。
+  守阵: `test_commit.py::test_staged_delete_skips_add` + `test_unstaged_delete_uses_rm_cached`。
 
 ## 变体: 撤文件出版本库时「补 .gitignore」与「git add」互相打架(2026-09-29 实测)
 

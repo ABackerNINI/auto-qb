@@ -6,6 +6,7 @@
 - test_message_missing_fails_early        消息缺失 → 提交失败一行, 不碰 git 写操作
 - test_full_commit_push_one_line          全流程成功 → 恰好一行「提交成功 <hash>」; 消息文件消费即删
 - test_staged_delete_skips_add            已暂存的删除: 逐路径 add 不再撞 pathspec 落空(issue 26-09-28-0128)
+- test_unstaged_delete_uses_rm_cached     未暂存的删除: 工作区无而索引有 → rm --cached 登记删除(issue 26-09-28-0128)
 - test_sync_failure_blocks_commit         未与主线同步 → 提交失败 + sync 失败详情, 不产生提交
 - test_gate_failure_blocks_commit         闸门红 → 提交失败 + 闸门名 + 失败输出, 不产生提交
 - test_push_failure_is_partial            推送未完成 → 退出码仍 0 + 补推提示; 消息文件照常消费
@@ -147,6 +148,19 @@ def test_staged_delete_skips_add(repo, monkeypatch, capsys):
     assert rc == 0 and "提交成功" in out
     assert not msg.exists()
     assert _git(repo, "show", "--stat", "--name-status", "HEAD").count("D") >= 1  # 删除真的进了提交
+
+
+def test_unstaged_delete_uses_rm_cached(repo, monkeypatch, capsys):
+    # issue 26-09-28-0128 方向 A 的另一半: 未暂存删除( D)时工作区已无该文件而索引还有条目 ——
+    # 逐路径暂存按存在性分流走 `git rm --cached`, 把删除登记进暂存区后照常提交。
+    _patch_ok_flow(monkeypatch)
+    (repo / "base.txt").unlink()  # 只删工作区, 不进暂存区(porcelain 形态 ` D`)
+    msg = _write_msg(repo)
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0 and "提交成功" in out
+    assert not msg.exists()
+    assert _git(repo, "show", "--stat", "--name-status", "HEAD").count("D") >= 1  # 删除经 rm --cached 进了提交
 
 
 def test_sync_failure_blocks_commit(repo, monkeypatch, capsys):
