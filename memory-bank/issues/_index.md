@@ -14,17 +14,23 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 11 |
+| bug | 15 |
 | perf | 5 |
 | docs | 4 |
-| test | 1 |
-| refactor | 4 |
+| test | 2 |
+| refactor | 5 |
 | feat | 22 |
 | chore | 3 |
 | question | 7 |
 
 ## Open
 
+- [bug] [主循环 except Exception 吞 _tick 的 StopIteration: 一旦触发即静默空转死循环](26-10-02-0442-bug-mainloop-stopiteration-swallowed.html) — qbmanager 主循环对 _tick 的 except Exception 会吞 StopIteration, 触发即 while True 空转死循环(无限快转不干活); 目前仅测试 mock 耗尽场景复现, 生产触发面未证实
+- [bug] [hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发](26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail.html) — _do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after>0; 与已修的 last_seen 死分支同族
+- [bug] [hr/service._finish_wave 末尾无条件 discard 三个告警去重集合, 每波重报与注释设计不符](26-10-02-0441-bug-hr-finish-wave-warn-dedupe-reset.html) — _finish_wave 无条件 discard 登录失效/无通道等三个告警去重集合, 「每站只报一次」的注释设计与实际每波重报不符; P1 覆盖提升时测试按实测行为断言
+- [bug] [tray._set_windows_appid 读回校验在非打包进程恒假: GetApplicationUserModelId 返回 15703 而非 122](26-10-02-0441-bug-tray-appid-readback-dead-branch.html) — _set_windows_appid 设置成功(hr=0)但读回校验对非打包进程恒返回 APPMODEL 15703, app.py:155 的 ==122 分支永不命中; 任务栏 python 图标 issue 的排查不可依赖此读回校验
+- [refactor] [HrRefreshService._prune_index 静态方法与模块级 _prune_index 同体重复, 静态版无生产调用方](26-10-02-0441-refactor-hr-prune-index-duplicate.html) — hr/service.py 内 HrRefreshService._prune_index 静态方法与模块级 _prune_index 函数同体重复, 静态版无生产调用方(仅测试双口径各钉一条); 待合并单点
+- [test] [qbmanager.py:529/539 web resync/truth_pending 主循环弧 4 单位单测不可达(web 未启用路径)](26-10-02-0441-test-qbmanager-web-arc-unreached.html) — qbmanager 主循环 web 真值弧(529/539, 取证 26-10-02)在 web 未启用的单测环境不可达, 覆盖提升后仅剩的 4 单位长尾; 归后续长尾轮或 web/tray 集成测试
 - [test] [test_budget_unit_wait_and_caps xdist 全量下偶发失败(单跑/整文件均绿)](26-10-02-0306-test-hr-budget-wait-flaky.html) — 覆盖提升 P1 T1.1 新增的 _Budget 等待记账用例在 xdist 全量下偶发 AssertionError, 单跑与整文件(77 passed)均绿; 与 throttle/mainloop sleep 容差族同族
 - [perf] [渐进灌入期主循环掉拍: max_tasks_per_tick 自适应](26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — --ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s), 灌入期每拍还债; 给 max_tasks_per_tick 做自适应(候选列于 W5, 未实施)
 - [perf] [/api/state 全量构建拖垮主循环: 增量 rid 用满 + 分页/按需字段(5000 种子实测)](26-10-01-2218-perf-webui-api-state-full-scan.html) — 5000 种子下 /api/state 全量单次约 0.6s 抢占同进程主循环; 方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖, 方向②已由 shows-view issue 跟踪

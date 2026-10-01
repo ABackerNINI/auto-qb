@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="issue-slug" content="hr-budget-wait-flaky">
-<meta name="issue-stamp" content="26-10-02-0306">
-<meta name="issue-type" content="test">
-<meta name="doc-topic" content="test-timing-tolerance">
+<meta name="issue-slug" content="hr-do-wave-hrfetcherror-dead-tail">
+<meta name="issue-stamp" content="26-10-02-0441">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="hr-do-wave-hrfetcherror-dead-tail">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
-<meta name="issue-title" content="test_budget_unit_wait_and_caps xdist 全量下偶发失败(单跑/整文件均绿)">
-<meta name="issue-summary" content="覆盖提升 P1 T1.1 新增的 _Budget 等待记账用例在 xdist 全量下偶发 AssertionError, 单跑与整文件(77 passed)均绿; 与 throttle/mainloop sleep 容差族同族">
-<title>test_budget_unit_wait_and_caps xdist 全量下偶发失败(单跑/整文件均绿) · test · 计划外问题</title>
+<meta name="issue-title" content="hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发">
+<meta name="issue-summary" content="_do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after&gt;0; 与已修的 last_seen 死分支同族">
+<title>hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发 · bug · 计划外问题</title>
 <style>
   :root {
     --bg: #10151a;
@@ -88,84 +88,74 @@
     <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
     <a href="#s7"><span class="no">07</span>状态变更日志</a>
     <div class="toc-foot">
-      类型 test · 档位 standard<br>
+      类型 bug · 档位 standard<br>
       入池不改码 · 规范见 create-issue skill
     </div>
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
-    <h1>test_budget_unit_wait_and_caps xdist 全量下偶发失败(单跑/整文件均绿)</h1>
-    <p class="lede">覆盖提升 P1 T1.1 新增的 _Budget 等待记账用例在 xdist 全量下偶发 AssertionError, 单跑与整文件(77 passed)均绿; 与 throttle/mainloop sleep 容差族同族</p>
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发</h1>
+    <p class="lede">_do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after&gt;0; 与已修的 last_seen 死分支同族</p>
     <div class="meta-row">
-      <div class="item"><div class="k">编号</div><div class="v">26-10-02-0306-test-hr-budget-wait-flaky</div></div>
-      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 03:06</div></div>
-      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">编号</div><div class="v">26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 04:41</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
       <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
-      <div class="item"><div class="k">涉及模块</div><div class="v">tests/test_hr_service.py · hr/service.py(_Budget)</div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">hr</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>发现于 issue 清偿路线图 v2 改版收尾(2026-10-02 02:4x, HEAD 29f1841a): <code>commands run test.full</code> 第二跑报该用例 AssertionError, 同一工作树前后共四跑全量, 该用例<b>两次绿两次红随机翻转</b>(首跑绿 → 二跑红 → 单跑绿 → 末跑全量绿), 期间零代码/配置变更。用例本身是覆盖率提升 P1 阶段 T1.1(<code>29f1841a</code>)新增的 hr 错误路径补齐批次之一。</p>
+    <p>覆盖提升 P1 给 hr/service.py 补错误路径测试时发现：<code>_do_wave</code> 末尾的 <code>except HrFetchError</code> 兜底段在当期实现下不可达 —— <code>_run_pages</code> 内层已就地截断「无 Retry-After 的页面失败」，能上抛到 <code>_do_wave</code> 的 HrFetchError 必然 retry_after&gt;0, 尾段兜底永不触发。覆盖率报表该段恒 missing。</p>
   </section>
 
   <section id="s2">
     <h2><span class="no">02</span>证据</h2>
     <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
-<pre><code># 取证 2026-10-02 02:40-02:54, HEAD 29f1841a, Windows / commands run test.full
-# 二跑(红):
-  FAILED tests/test_hr_service.py::test_budget_unit_wait_and_caps - AssertionEr...(输出截断, 完整断言原文待复跑抓取)
-  1 failed, 2142 passed, 3 skipped in 26.91s
-# 单跑(绿):
-  uv run pytest "tests/test_hr_service.py::test_budget_unit_wait_and_caps" --no-cov -q
-  1 passed in 1.34s
-# 整文件(绿):
-  uv run pytest tests/test_hr_service.py --no-cov -q
-  77 passed in 1.98s
-# 末跑全量(绿, 同一工作树零变更):
-  2143 passed, 3 skipped in 28.08s</code></pre>
+<pre><code># P1 实施报告 (2026-10-02) 原文:
+# "`hr/service.py` `_do_wave` 的 `except HrFetchError` 尾段(582-585)不可达
+#  —— `_run_pages` 内层已就地截断无 Retry-After 的页面失败,
+#  能上抛的只有 retry_after>0。"
+# 覆盖率口径: test.full term-missing 报表该尾段恒在 missing 列 (2026-10-02)。</code></pre>
   </section>
 
   <section id="s3">
     <h2><span class="no">03</span>影响面</h2>
     <table>
       <tr><th>维度</th><th>结论</th></tr>
-      <tr><td>触发条件</td><td>xdist 全量并发跑(test.full)偶发, ~50% 翻转率(四跑两红); 单跑与文件级跑未复现</td></tr>
-      <tr><td>影响范围</td><td>仅测试闸门 —— test.full 偶发假红挡收尾; 无产品代码风险</td></tr>
-      <tr><td>严重度</td><td>低(闸门噪音; 但假红会污染收尾基线的可信度)</td></tr>
+      <tr><td>触发条件</td><td>当前实现下不可达（无触发条件）; 若 _run_pages 行为日后变化会突然激活</td></tr>
+      <tr><td>影响范围</td><td>hr 波次失败兜底路径 —— 设计想兜的场景实际无人兜, 且该段从未被任何测试钉过</td></tr>
+      <tr><td>严重度</td><td>低（当前无用户可见错误, 风险在「以为有兜底实际没有」）</td></tr>
     </table>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>定位锚点</h2>
     <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
-    <ul>
-      <li><code>tests/test_hr_service.py:1561</code>（取证 2026-10-02 03:06）· 符号 <code>test_budget_unit_wait_and_caps</code> · grep <code>test_budget_unit_wait_and_caps</code></li>
-      <li><code>src/auto_qb/hr/service.py:222</code>（同上）· 符号 <code>class _Budget</code>(构造已收 <code>sleeper</code> 可注入参数, <code>sleep_max</code> 两档上限) · grep <code>_Budget</code></li>
-      <li>用例来源: 覆盖提升 P1 T1.1(提交 <code>29f1841a</code>, 基线切片 26-10-02-0203 "T1.1 ... _Budget 等待记账与双上限")</li>
+    <ul class="todo">
+      <li><code>src/auto_qb/hr/service.py</code> · <code>_do_wave</code> 尾段 · grep <code>except HrFetchError</code>（取证 2026-10-02 04:41, 当时约 582-585 行）</li>
     </ul>
   </section>
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：产品代码回归 —— 同一 HEAD 四跑全量中仅此用例绿红翻转且单跑/整文件恒绿; 已排除：环境漂移 —— 四跑之间零代码/配置变更）。与已记同族 26-09-22-2052(throttle elapsed 无 sleep 精度余量, Done)/26-09-20-0952(mainloop 节拍无容差, Done)同族: 疑真实 sleep 在 Windows 定时器精度 + xdist 并发负载下越过等待时长断言的边界。</div>
+    <div class="callout">待查（疑点: _run_pages 内层截断演进后未清尾段; 不可达判定来自 P1 代码走读 + 覆盖率恒 missing, 认领后先复验）</div>
   </section>
 
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-    <p>两条候选(认领时先复验断言原文再选): ① 对等待时长类断言补 sleep 精度容差(同族 Done issue 26-09-22-2052 的修法口径); ② 用例改走 <code>_Budget</code> 已有的 <code>sleeper</code> 注入参数(service.py:237), 以假钟/记录器替代真实 sleep, 让等待记账确定性地触发 —— ② 更根修但改动面大一点。另建议复跑一次全量抓完整 AssertionError 原文补进本报告证据段。</p>
+    <p>开工先复验不可达仍成立（直调 _do_wave 注入失败 + 覆盖率）, 然后二选一: 删尾段（死代码清理）, 或让「无 Retry-After 失败」重新上抛使兜底可达（按设计意图定）。同族参照: Done issue 26-10-01-2335（last_seen 死分支）。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
-      <li>2026-10-02 03:06 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-    <li>2026-10-02 04:41 — 覆盖提升 P2-a 复现补强: 干净基线（stash 后）test.full 10 连跑红 4 次; 抖动实测 86.50/86.67 &lt; 断言下界 90（「抖动只向上 +0~25%」口径与实现偶发向下不符）; A/B 归因非 P2-a 改动引入; ship.commit 闸门因此复跑过一次。</li>
+      <li>2026-10-02 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
@@ -174,7 +164,7 @@
   </section>
 
   <footer>
-    26-10-02-0306-test-hr-budget-wait-flaky.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+    26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
   </footer>
 
 </div>
