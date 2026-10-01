@@ -19,6 +19,10 @@ P0 是纯加法(契约 + 状态服务 + ctx 接线), 本文件锁住三件事:
 - test_module_host_loop_hooks_skipped_when_absent: loop hooks 有则按装配序调用, 无则跳过
 - test_eventbus_registration_order_and_suppress: emit 按注册序同步分发; live 旗标抑制期零调用;
   解除后恢复; 请求位/live 旗标两字段协议(挂请求不吞相位, take 读走请求位, issue 26-10-01-0750)
+- test_eventbus_subscriber_exception_aborts_phase_and_propagates: 订阅者异常契约(审计 M3):
+  无逐订阅者隔离 —— 异常中断同相位剩余订阅者并原样上抛, 总线状态不损坏下轮照常
+- test_loop_hook_exception_propagates_and_skips_rest: loop hooks 同口径 —— 某 hook 异常
+  上抛且剩余模块 hook 跳过(三条线逐线验证)
 """
 import json
 import os
@@ -252,3 +256,77 @@ def test_eventbus_registration_order_and_suppress():
     assert bus.emit("transitions", {}) == 2, "请求位挂起期间相位照常分发(连续重建的 queue_rebuilt 不被吞)"
     assert bus.take_suppressed() and not bus.replay_requested, "take 读走请求位"
     assert not bus.take_suppressed(), "请求位读走即清除(一轮只消费一次)"
+
+
+# ---------- 订阅者异常契约(审计 M3: 明文契约的守阵面) ----------
+
+
+def test_eventbus_subscriber_exception_aborts_phase_and_propagates():
+    """订阅者异常契约(审计 M3): 总线无逐订阅者隔离 —— 异常中断同相位剩余订阅者并原样上抛
+
+    「模块异常 = 牺牲本轮剩余管线, 由主循环兜底」是明文契约(conventions/modules.md
+    「订阅者异常约定」): emit 不吞异常, 内核刷新轮当轮就此中断; 改「单订阅者隔离 +
+    记错不中断」属行为变更须单独拍板, 本守阵即其红线。
+    """
+    bus = EventBus()
+    seen = []
+
+    def boom(_event):
+        raise RuntimeError("订阅者炸了")
+
+    bus.on("transitions", lambda e: seen.append("first"))
+    bus.on("transitions", boom)
+    bus.on("transitions", lambda e: seen.append("third"))
+    bus.on("full_round", lambda e: seen.append("later-phase"))
+    with pytest.raises(RuntimeError, match="订阅者炸了"):
+        bus.emit("transitions")
+    assert seen == ["first"], "异常订阅者之后的同相位剩余订阅者不得被调用"
+    bus.emit("full_round")  # 主循环兜底后的下一轮: 总线自身状态不损坏, 其余相位照常分发
+    assert seen == ["first", "later-phase"], "异常不损坏总线状态, 下一轮分发照常"
+
+
+def test_loop_hook_exception_propagates_and_skips_rest():
+    """loop hooks 异常契约(审计 M3, 与总线同口径): 某 hook 抛异常上抛且剩余模块 hook 跳过
+
+    三条线(on_command_line/on_sync_line/on_task_line)逐线验证 —— 宿主三个分发循环
+    是三份独立代码, 契约必须逐线锁住; 任一条改成「隔离吞错」即红。
+    """
+    log = []
+
+    class Boom(BaseModule):
+        name = "boom"
+
+        def on_command_line(self):
+            raise RuntimeError("hook 炸了")
+
+        def on_sync_line(self, force):
+            raise RuntimeError("hook 炸了")
+
+        def on_task_line(self, force):
+            raise RuntimeError("hook 炸了")
+
+    class Ok(BaseModule):
+        name = "ok"
+
+        def __init__(self):
+            self.outer = log
+
+        def on_command_line(self):
+            self.outer.append("cmd:ok")
+
+        def on_sync_line(self, force):
+            self.outer.append(f"sync:ok:{force}")
+
+        def on_task_line(self, force):
+            self.outer.append(f"task:ok:{force}")
+
+    host = ModuleHost(object(), EventBus())
+    host.register(Boom())  # 装配序在前: Ok 是「同线剩余模块」
+    host.register(Ok())
+    with pytest.raises(RuntimeError, match="hook 炸了"):
+        host.run_command_line()
+    with pytest.raises(RuntimeError, match="hook 炸了"):
+        host.run_sync_line(force=False)
+    with pytest.raises(RuntimeError, match="hook 炸了"):
+        host.run_task_line(force=False)
+    assert log == [], "异常 hook 之后的剩余模块 hooks 不得被调用(三条线同口径)"

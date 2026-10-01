@@ -1,7 +1,7 @@
 # 功能模块契约与扩展约定(plan kernel-module-refactor)
 
-> 摘要: core/modules 十功能模块的统一契约(name/sections/start/stop/apply/subscribe)、装配清单、热重载语义(整段短路 + 未认领段兜底)、刷新相位表、ctx 服务面与模块协作纪律 —— 新增/修改功能模块前先读这份单点。
-> 触发: 模块契约, 新增模块, sections 认领, 段认领, 热重载, 相位, 刷新管线, EventBus, ModuleHost, 微内核, 插件, AppContext, ctx 服务, loop hooks
+> 摘要: core/modules 十功能模块的统一契约(name/sections/start/stop/apply/subscribe)、装配清单、热重载语义(整段短路 + 未认领段兜底)、刷新相位表、订阅者异常约定、ctx 服务面与模块协作纪律 —— 新增/修改功能模块前先读这份单点。
+> 触发: 模块契约, 新增模块, sections 认领, 段认领, 热重载, 相位, 刷新管线, EventBus, ModuleHost, 微内核, 插件, AppContext, ctx 服务, loop hooks, 订阅者异常, 异常约定, 主循环异常
 
 ## 三层结构(谁是内核、谁是服务、谁是模块)
 
@@ -32,6 +32,12 @@
 
 内核 `_refresh_torrents` = 同步 + 相位广播, 顺序是历史调用次序的忠实编码: `full_round → transitions → events_removed → events_added → torrents_added(逐种子) → removed_scan → post`; 非刷新类相位: `queue_rebuilt`(L2 队列重建后全局任务重入队)/ `rebuild_runtime`(未认领段兜底重建)。同相位内消费序 = 装配序; **改相位顺序必须是有意行为**(守阵会红, 意图变更要同步 plan/守阵)。
 
+## 订阅者异常约定(明文契约, 审计 M3)
+
+- **无逐订阅者隔离**: `EventBus.emit` 与三条 loop hooks 都不 try/except —— 某订阅者/hook 抛异常, 同相位(或同线)剩余订阅者**不再调用**, 异常原样上抛内核, 被主循环兜底 `except Exception` 捕获记「主循环异常」; 该轮剩余相位与数据面收尾(`store.update_state_snapshot` / `update_field_snapshots` 双快照)全部跳过, 下一轮照常恢复, 总线自身状态不受损。
+- 与重构前内联代码逐行同构, 是**有意保留**的契约(非回归非疏漏)。模块作者义务: 不得假设「同相位前面的模块炸了我还会被调」; 订阅者/hook 的自身状态必须容忍任意一轮中途夭折(幂等 + 下一轮补齐, 黄金法则 1)。
+- **改「单订阅者隔离 + 记错不中断」属行为变更**: 影响全部模块的错误可见性与当轮一致性, 须单独拍板, 不得顺手改。守阵: `tests/test_module_host.py` 两例 —— 总线上抛 + 剩余订阅者跳过 + 总线状态不损坏; 三条 hook 线逐线同口径。
+
 ## 模块协作纪律
 
 - **模块之间不互相 import**。需要别人的能力: ①对方是服务 → 经 ctx 现取; ②对方是模块 → 把它需要的公开方法经 ctx 句柄暴露(既有先例: `ctx.notify` 托盘口 / `ctx.trackers.match` / `ctx.maintenance.add_tags` / `ctx.ops.recheck`)。
@@ -43,7 +49,7 @@
 
 | 文件 | 锁什么 |
 |---|---|
-| `tests/test_module_host.py` | 契约编排: 注册序/fail-fast/生命周期序/loop hooks/ctx 同对象 |
+| `tests/test_module_host.py` | 契约编排: 注册序/fail-fast/生命周期序/loop hooks/ctx 同对象/订阅者异常契约(M3) |
 | `tests/test_core_modules.py` / `test_facade_modules.py` | logging/notify 与 webui/hr 的段变才动 + 段不变短路 |
 | `tests/test_modules_p3.py` ~ `p5.py` | 各模块装配本体、相位订阅面、刷新相位顺序、L2 短路/重建 |
 | `tests/test_modules_p6.py` | **段认领完备**(配置全段有主 + 认领面无幽灵段)与未认领兜底 WARN/重建 |

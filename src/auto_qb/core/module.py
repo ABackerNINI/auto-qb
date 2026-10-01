@@ -205,6 +205,8 @@ class EventBus:
         """广播相位: 按注册序同步调用订阅者, 返回实际触发的订阅者数(测试/日志用)
 
         抑制期返回 0 且不调用任何订阅者 —— 热重载首轮全量重建的 added 重放保护语义。
+        无逐订阅者隔离(明文契约, 审计 M3): 订阅者异常中断同相位剩余订阅者并原样上抛,
+        由主循环兜底捕获 —— 契约全文见 conventions/modules.md「订阅者异常约定」。
         """
         if self._suppressed:
             return 0
@@ -259,7 +261,8 @@ class ModuleHost:
     - 注册即装配: modules 列表顺序 = 相位内消费序 = 生命周期序(plan §3.3), 全项目单点;
     - register 时回调 module.subscribe(events) —— 相位认领发生在装配点, 宿主不追认;
     - start_all / apply_all 按装配序, stop_all 逆序(后建的先拆);
-    - loop hooks 按「有则调用无则跳过」的 getattr 探测执行(见 Module 契约注释);
+    - loop hooks 按「有则调用无则跳过」的 getattr 探测执行(见 Module 契约注释); 异常约定
+      与总线分发同口径 —— 无隔离, 异常上抛主循环兜底(conventions/modules.md「订阅者异常约定」);
     - P0 守阵期曾注册零模块锁编排语义; P1 起装配清单挂入真实模块(守阵同时锁两者)。
     """
     def __init__(self, ctx: AppContext, events: EventBus) -> None:
