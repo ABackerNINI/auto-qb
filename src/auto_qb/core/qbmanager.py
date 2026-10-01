@@ -525,7 +525,7 @@ class QbManager(
                         # 回执带上此刻的真值, 前端就不必再拉一次全量 /api/state。
                         self.web.flush_truths()
                         _flushed = True
-                        if _t_line:
+                        if _t_line:  # pragma: no cover - web 命令线补刷新计时弧, 单测 web 未启用不可达(26-10-02-0441)
                             self.web.resync_elapsed_ms(_t_line)
                         # 周期落盘(非优雅终止的状态丢失窗口, issue 26-09-21-1347): 到期则写盘一次。
                         # save_state 原本仅优雅退出可达 —— taskkill/断电/崩溃不走 finally, 运行期
@@ -535,7 +535,8 @@ class QbManager(
                             self.ctx.state.maybe_flush(time.time(), self.config.state_save_interval)
                         # 还在等真值落地 ⇒ 下一轮**立刻**再同步一次(不再等 sync_interval)。
                         # 有 TRUTH_PUSH_CAP_MS 兜底, 不会无限空转。
-                        if _wait_truth and getattr(self.web, "truth_pending", None):
+                        # web 真值弧单测不可达(truth_pending 仅 web 启用时非空; 26-10-02-0441)
+                        if _wait_truth and getattr(self.web, "truth_pending", None):  # pragma: no cover
                             next_sync_at = time.time() + TRUTH_RETRY_S
                         # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
                         # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
@@ -556,6 +557,16 @@ class QbManager(
                         # 仍会自动接上, 只是重试间隔逐步拉长到 30s, 而不是 2s 一次空转。
                         if self._reconnect_due(main_tick):
                             self.connect()
+                    except StopIteration as e:
+                        # !必须列在 except Exception **之前**(StopIteration 是 Exception 子类): 落进
+                        # 下面会被当普通异常吞掉 —— 本轮 next_sync_at/next_tick_at 未推进, wait_for
+                        # 算出 0, while True 立即进下一拍再吞一次, 形成「无 sleep、无工作」的静默空转
+                        # 死循环(issue 26-10-02-0442)。PEP 479 精神: StopIteration 逃出 _tick 调用链
+                        # = 生成器误用 bug(裸 next()/迭代器耗尽), 属编程错误而非运行态故障 —— 静默
+                        # 空转比崩溃更危险。ERROR 落日志后原样重抛: 与 AutoQbError 同为显式失败路径,
+                        # 经 finally 清理(停模块/落盘/放锁)后穿透 run(), 绝不继续下一拍。
+                        logger.error(f"主循环内部错误: StopIteration 逃出 _tick 调用链(疑似生成器误用): {e}", exc_info=True)
+                        raise
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
                     # 兜底: 上面任何一条线抛异常时也要把推迟的回执落掉 —— 漏写会让前端 waitCmd

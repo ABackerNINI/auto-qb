@@ -8,7 +8,7 @@
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="qbmanager-web-arc-unreached">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="qbmanager.py:529/539 web resync/truth_pending 主循环弧 4 单位单测不可达(web 未启用路径)">
 <meta name="issue-summary" content="qbmanager 主循环 web 真值弧(529/539, 取证 26-10-02)在 web 未启用的单测环境不可达, 覆盖提升后仅剩的 4 单位长尾; 归后续长尾轮或 web/tray 集成测试">
 <title>qbmanager.py:529/539 web resync/truth_pending 主循环弧 4 单位单测不可达(web 未启用路径) · test · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0441-test-qbmanager-web-arc-unreached</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 04:41</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -95,6 +95,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 06:34 — 认领（主会话实施单）, 状态 <strong>In Progress</strong> — 复验: 2026-10-02 06:26 @ 4a883385 仍复现 —— coverage 实测 qbmanager.py 缺 <code>529/539</code> 两语句 + <code>:528/:538</code> 两个 partial branch, 行号未漂移</li>
+      <li>2026-10-02 06:34 — 处置完成, 状态 <strong>Done</strong> — 按仓库既有惯例（hr/store.py:93 / infra/utils.py:666 / tray/app.py:190 同样式）两弧各加 <code># pragma: no cover</code> + 一行中文原因注释（web 命令线补刷新计时弧 / web 真值重试弧, 单测 web 未启用不可达, 指向本 issue 编号）; 未上重型 mock（与「03 建议」一致）。验证: <code>commands run test.full</code> 2290 passed / 3 skipped, qbmanager.py 100%（0 miss / 0 partial）, 2026-10-02 06:42 实测（基线 5100e7b6）</li>
     </ul>
   </section>
 

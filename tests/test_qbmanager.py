@@ -31,6 +31,7 @@
 - test_run_dry_run_no_save: dry_run=True 退出后不写状态文件
 - test_periodic_flush_is_wired_in_run_loop: 接线守阵——周期落盘必须挂在主循环(not dry_run 门内), run() 加载状态后重置到期点
 - test_tick_refresh_error_continues: 主循环内 _refresh_torrents 抛异常被捕获, 下一 tick 继续
+- test_run_stopiteration_from_tick_not_swallowed: 守阵(26-10-02-0442)——_tick 的 StopIteration 在 except Exception 之前单独接住并重抛, 不得吞掉后继续下一拍
 - test_execute_due_respects_max: 每 tick 最多执行 max_tasks_per_tick 个, 超额留队列
 - test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
 - test_refresh_added_no_tracker_match_skips: 新增种子未匹配 tracker 配置 -> 警告并跳过
@@ -585,6 +586,27 @@ def test_tick_refresh_error_continues():
         with mock.patch("auto_qb.core.qbmanager.time.sleep"):
             mgr.run(dry_run=False)
         assert mgr._refresh_torrents.call_count == 2, "第一次异常应被捕获, 第二次 tick 继续执行"
+
+
+def test_run_stopiteration_from_tick_not_swallowed():
+    """回归守阵(issue 26-10-02-0442): _tick 抛 StopIteration 不得被 except Exception 吞掉后继续下一拍
+
+    StopIteration 是 Exception 子类, 修复前被吞后本轮 next_sync_at/next_tick_at 未推进,
+    wait_for=0, while True 立即进下一拍 —— 「无 sleep、无工作」的静默空转死循环。修法:
+    主循环在 except Exception 之前单独接住, ERROR 落日志后重抛(PEP 479 精神: StopIteration
+    逃出 _tick 调用链 = 生成器误用 bug, 显式失败优于静默空转)。红验(修复前): StopIteration
+    被吞, run() 正常返回, _tick 被调到第 2 个兜底退出点 —— 本用例当时判红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        mgr.connect = mock.Mock(return_value=True)
+        # 连续 StopIteration: 修复前每一拍都被吞下去(第 2 个 KeyboardInterrupt 只是红验时的兜底退出点)
+        mgr._tick = mock.Mock(side_effect=[StopIteration(), KeyboardInterrupt()])
+        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
+            with pytest.raises(StopIteration):
+                mgr.run(dry_run=False)
+        assert mgr._tick.call_count == 1, "StopIteration 必须当场穿透 run(), 不得进入下一拍"
 
 
 def test_connect_throttle_repeated_failures():

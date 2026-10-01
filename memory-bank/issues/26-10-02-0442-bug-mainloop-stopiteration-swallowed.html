@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="mainloop-stopiteration-swallowed">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="主循环 except Exception 吞 _tick 的 StopIteration: 一旦触发即静默空转死循环">
 <meta name="issue-summary" content="qbmanager 主循环对 _tick 的 except Exception 会吞 StopIteration, 触发即 while True 空转死循环(无限快转不干活); 目前仅测试 mock 耗尽场景复现, 生产触发面未证实">
 <title>主循环 except Exception 吞 _tick 的 StopIteration: 一旦触发即静默空转死循环 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0442-bug-mainloop-stopiteration-swallowed</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 04:42</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -143,7 +143,7 @@
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">机制事实已核（StopIteration ∈ Exception）; 生产触发面待查 —— 需盘点 _tick 调用链上的 next()/生成器使用</div>
+    <div class="callout">机制事实已核（StopIteration ∈ Exception）。<b>生产触发面盘点结论（2026-10-02 06:30, 实施轮）</b>: <code>_tick</code> 调用链向下两层（<code>_tick</code> → <code>_sync_line</code>/<code>_task_line</code> → <code>_refresh_torrents</code> / <code>TaskQueue.run_due</code> / <code>ModuleHost.run_sync_line</code>/<code>run_task_line</code>, 即 qbmanager.py / taskqueue.py / module.py）内<b>无</b>裸 <code>next()</code>、无生成器（<code>yield</code>）、无显式 <code>raise StopIteration</code>; <code>iter(</code> 命中仅为 <code>re.finditer</code>（for 循环内部消费不外泄）。且 PEP 479 生效后（Py3.7+）生成器内逃逸的 StopIteration 会转 RuntimeError。结论: 调用链两层范围内不存在能产生 StopIteration 的生产代码路径, 现实触发面仅测试 mock 的 side_effect 耗尽; 更深层（各模块相位 handler 内部）按实施边界未展开。守阵仍按方案②加上 —— 防调用链未来演化出新误用点。</div>
   </section>
 
   <section id="s6">
@@ -156,11 +156,14 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 04:42 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 06:34 — 认领（主会话实施单, 用户已拍板方案②接住+调用链根修组合实施）, 状态 <strong>In Progress</strong></li>
+      <li>2026-10-02 06:34 — 修复完成, 状态 <strong>Done</strong>（实际修法与验证见「修复后补充」; test.full 2290 passed / 3 skipped, qbmanager.py 100%）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-10-02 06:26 @ 4a883385 仍复现 —— 锚点未漂移: <code>qbmanager.py:514</code> <code>self._tick(dry_run, force=cmd_forced)</code> 仍在主循环 <code>except Exception</code>（时值 <code>:559</code>）保护下。红测试 <code>tests/test_qbmanager.py::test_run_stopiteration_from_tick_not_swallowed</code> 在修复前判红（<code>Failed: DID NOT RAISE StopIteration</code>, 捕获输出显示 StopIteration 被记作「主循环异常」吞掉、循环继续到下一拍）—— 吞异常行为的直接证据（取证 2026-10-02 06:29）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（按用户拍板方案②组合实施; 候选③连续零 sleep 熔断未实施 —— 用户未选）: ① <b>接住</b> —— 主循环在 <code>except Exception</code> 之前新增 <code>except StopIteration</code>（qbmanager.py:559, 取证 2026-10-02 06:30, grep <code>except StopIteration</code>）: ERROR 级日志（带堆栈）后原样重抛, 与 <code>AutoQbError</code> 同为显式失败路径, 经 finally 清理（停模块/落盘/放锁）后穿透 run(), 绝不继续下一拍; 注释写明 PEP 479 精神与空转机理（next_sync_at/next_tick_at 未推进 → wait_for=0 → 立即进下一拍）。其余异常（含 APIConnectionError 退避、AutoQbError 穿透）的处理路径一字未动, 节拍/退避机制（<code>_throttle</code>/<code>_wait_next</code>/<code>_reconnect_due</code>）未触碰。② <b>调用链根修</b> —— 盘点结论见「05 根因」: 两层内不存在可就地修的误用点, 接住逻辑按守阵保留。</p>
+    <p><b>验证方式</b>: 红→绿测试 <code>test_run_stopiteration_from_tick_not_swallowed</code>（mock <code>_tick</code> 连续抛 StopIteration）—— 修复前红（见上「复验」）, 修复后绿（StopIteration 当场穿透 run(), <code>_tick.call_count == 1</code> 不得进入下一拍）。<b>测试数字</b>（2026-10-02 06:42 实测, 基线 5100e7b6 已合流并行 clone）: <code>commands run test.full</code> 2290 passed / 3 skipped（本轮改动前基线 2288; +1 本轮新增守阵, +1 并行 clone 合流）, TOTAL 99%（35.6s）, qbmanager.py 100%（362 stmts / 94 branch, 0 miss / 0 partial）。</p>
   </section>
 
   <footer>
