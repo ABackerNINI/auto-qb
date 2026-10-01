@@ -16,14 +16,19 @@
 |---|---|
 | bug | 12 |
 | perf | 3 |
-| docs | 3 |
-| refactor | 3 |
+| docs | 4 |
+| refactor | 4 |
 | feat | 24 |
 | chore | 4 |
-| question | 5 |
+| question | 8 |
 
 ## Open
 
+- [docs] [config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS](26-10-01-2212-docs-schema-docstring-tracker-field-levels.html) — TRACKER_FIELD_LEVELS 级别表随内核化重构整体退役后, config/schema/__init__.py 的 docstring 仍提及它, 与代码相反的文档漂移; 不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内
+- [question] [配置切分(每站点一份)是否做(存疑)](26-10-01-2212-question-config-split-per-site.html) — (存疑)把站点配置拆为每站点一份文件, 涉及加载/热重载/校验面, 待拍板
+- [question] [基于搜索的辅种方式可行性(存疑)](26-10-01-2212-question-search-based-recheck-feasibility.html) — (可行性存疑)用站点搜索发现可辅种资源的思路, 待可行性结论
+- [question] [兼容 Transmission 可行性分析](26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
+- [refactor] [重新梳理 ignore_next_action_error / stop_following_rules_if 语义](26-10-01-2211-refactor-rules-keys-semantics-review.html) — 两个规则容错键的语义/交互需要重新梳理(命名、默认值、组合行为)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [bug] [--tray 模式下 Ctrl+C 无法关闭程序](26-10-01-2203-bug-tray-ctrl-c-not-exit.html) — (未计划)托盘模式下 Ctrl+C 信号不退出进程, Windows 控制台信号处理与托盘生命周期冲突
 - [feat] [现场重建: 硬盘/qB 损坏后重建辅种现场](26-10-01-2203-feat-disaster-site-rebuild.html) — 防灾难(硬盘损坏/qB 损坏)后难以重建辅种现场, 需要重建能力(备份/导出/重放方向待设计)
