@@ -1352,6 +1352,11 @@ async function smokeUi(browser, ui) {
 
   // 守阵 3: 隐藏列宽度保留 —— 固化页 隐藏一列 -> 再拖宽 -> 重新显示, 该列 px 必须原样回来
   // (旧模型 _renderedWidths 只含可见列却整段替换, 失败分析 S4 实测 11→10 键)
+  // !被隐藏列的 key 必须在隐藏**前**从 _visibleCols 取 —— 2026-09-28 辅种扩列给列定义加了
+  //   hide:true 默认隐藏列后, colHidden.group 里常驻 amount_left 等默认隐藏键, 隐藏后取
+  //   colHidden[0] 拿到的是从未有过意图宽度的默认隐藏列(固化只固化**可见列**), 它"读不回 px"
+  //   是双轨模型的正确行为(显示时由 toggleColumn 按 templateMinPx 合成), 不是回归 —— 用例
+  //   26-09-30-0602 的 前=undefined 后=92px 即此。断言的对象应是"被本用例隐藏的那一列"。
   try {
     const ph = await ctx.newPage();
     await ph.goto(`${BASE}/${ui}/`, { waitUntil: "domcontentloaded" });
@@ -1360,15 +1365,15 @@ async function smokeUi(browser, ui) {
     await ph.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 30000 });
     await dragCol(ph);   // 固化 group
     const s1 = JSON.parse(await colState(ph));
-    await ph.evaluate(`${INST}.toggleColumn("group", ${INST}._visibleCols("group")[2].key)`);
+    const k = await ph.evaluate(`${INST}._visibleCols("group")[2].key`);   // 被隐藏列(隐藏前取, 见上)
+    await ph.evaluate(`${INST}.toggleColumn("group", ${JSON.stringify(k)})`);
     await ph.waitForTimeout(200);
     const s2 = JSON.parse(await colState(ph));
-    const k = (s2.h.group || [])[0];
     await dragCol(ph);   // 再拖宽(旧模型此处抹掉隐藏列 px)
     await ph.evaluate(`(() => { ${INST}.toggleColumn("group", ${JSON.stringify(k)}); })()`);
     await ph.waitForTimeout(300);
     const s3 = JSON.parse(await colState(ph));
-    const okKeep = !!(k && s1.w.group && s1.w.group[k] && s3.w.group && s3.w.group[k] === s1.w.group[k]);
+    const okKeep = !!(k && s2.h.group && s2.h.group.includes(k) && s1.w.group && s1.w.group[k] && s3.w.group && s3.w.group[k] === s1.w.group[k]);
     add(ui, "列设置·隐藏列宽度保留", okKeep, `key=${k} 前=${JSON.stringify(s1.w.group && s1.w.group[k])} 后=${JSON.stringify(s3.w.group && s3.w.group[k])}`);
     await ph.close();
   } catch (e) {

@@ -8,7 +8,8 @@
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="ui-smoke-colwidth-hidden-preserve">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-01-test-ui-smoke-clearance.md">
 <meta name="issue-title" content="冒烟「列设置·隐藏列宽保留」确定性失败: 隐藏列的意图宽度读不回">
 <meta name="issue-summary" content="dev.harness 列设置用例「隐藏列宽度保留」双 UI 100% 失败(key=amount_left 前=undefined 后=92px), stash 对照确认先在于键盘快捷键 W1-W4 之前, 与列偏好双轨模型的意图/生效分轨有关, 待查">
 <title>冒烟「列设置·隐藏列宽保留」确定性失败: 隐藏列的意图宽度读不回 · test · 计划外问题</title>
@@ -101,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-30 06:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -159,11 +160,13 @@ FAIL  [atlas] 列设置·隐藏列宽度保留 — key=amount_left 前=undefined
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-30 06:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 19:30 — 复验认领，状态 <strong>In Progress</strong>（桩服务实测仍复现; 定性为用例选键缺陷 —— hide:true 默认隐藏列使 colHidden[0] 从未固化过意图宽度, 产品无缺陷; 任务档案：<a href="../tasks/26-10-01-test-ui-smoke-clearance.md">tasks/26-10-01-test-ui-smoke-clearance.md</a>）</li>
+      <li>2026-10-01 19:52 — 清偿完成，状态 <strong>Done</strong>（harness 守阵 3 改隐藏前直取被隐藏列 key; prism 实测 key=upspeed 前=后="88px" PASS）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-01 19:30 <strong>仍复现</strong> —— 桩服务 <code>scripts/ui_harness.py --port 8139</code> + <code>ui_smoke.cjs --ui prism</code> 实测 <code>FAIL 列设置·隐藏列宽度保留 — key=amount_left 前=undefined 后="92px"</code>, 与入池记录逐字一致。仪器化探针 + 代码走读定性: <strong>用例选键缺陷, 产品无缺陷</strong>。2026-09-28 辅种扩列(plan 26-09-28-0354)给 GROUP_COLUMNS 加 <code>hide:true</code> 默认隐藏列(amount_left 等 4 列), <code>loadColState</code> 空存储按 hide 标志播种 colHidden —— 用例 <code>clearCols</code> 后隐藏第 3 个可见列(upspeed), 再取 <code>colHidden.group[0]</code> 拿到的是 amount_left; 而固化只固化<strong>可见列</strong>(startResize up 分支 merge), 默认隐藏列从未有过意图 px, 「前=undefined」是双轨模型<strong>正确行为</strong>, 「后=92px」是 <code>toggleColumn</code> 显示分支按 <code>templateMinPx</code> 合成的默认意图。§5 候选假设(用例前置假设错误)成立。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（harness, 2026-10-01）</strong>: <code>scripts/ui_smoke.cjs</code> 守阵 3 改为在隐藏<strong>前</strong>直取被隐藏列 key(<code>${INST}._visibleCols("group")[2].key</code>), 不再从 <code>colHidden[0]</code> 推断; 断言补 <code>s2.h.group.includes(k)</code> 防漏检。§6 「toggleColumn 隐藏分支升格」不采纳: 固化页可见列拖拽时已全部升格入意图, 自动页升格反而违反守阵 2(全自动页不落 px)。与建议修法不同的改道原因: 产品行为本就正确, 缺陷在用例的键选取假设。<strong>验证</strong>: prism 冒烟实测 <code>PASS 列设置·隐藏列宽度保留 — key=upspeed 前="88px" 后="88px"</code>(2026-10-01 19:52), 全轮其余用例无回归。任务档案: <a href="../tasks/26-10-01-test-ui-smoke-clearance.md">tasks/26-10-01-test-ui-smoke-clearance.md</a>。</p>
   </section>
 
   <footer>
