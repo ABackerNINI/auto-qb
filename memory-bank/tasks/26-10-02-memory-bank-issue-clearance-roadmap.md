@@ -6,7 +6,7 @@
 **Summary:** issue 池全量清偿路线图的滚动档案:v1(26-10-01-1758)摸排 31 条分七波;v2(26-10-02-0234)在清偿 12 条 + 新入池 46 条后改版,未决 31→59 条重排九波(W1 后端速赢 → W2 WebUI 正确性 → W3 数据安全大件 → W4 性能 → W5 HR/统计拍板 → W6 体验批 → W7 扩展 → W8 穿插 → W9 挂账)。波次推进待用户逐波显式授权。
 
 **Topics:** issue-clearance-roadmap
-**Refs:** memory-bank/plans/26-10-01-1758-plan-issue-clearance-roadmap.html
+**Refs:** memory-bank/plans/26-10-01-1758-plan-issue-clearance-roadmap.html, memory-bank/tasks/26-10-02-backend-issues-clearance.md
 
 ## 原始请求
 
