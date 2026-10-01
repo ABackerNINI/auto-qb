@@ -8,9 +8,10 @@
 <meta name="issue-type" content="question">
 <meta name="doc-topic" content="transmission-compat-feasibility">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="兼容 Transmission 可行性分析">
 <meta name="issue-summary" content="(需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)">
+<meta name="doc-refs" content="memory-bank/reports/26-10-01-2347-report-transmission-compat-feasibility.html,memory-bank/tasks/26-10-01-backend-transmission-compat.md">
 <title>兼容 Transmission 可行性分析 · question · 计划外问题（便签）</title>
 <style>
   :root {
@@ -68,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2212-question-transmission-compat-feasibility</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 22:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -82,7 +83,8 @@
     <h2><span class="no">02</span>位置</h2>
     <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
     <ul>
-      <li>qb client 抽象面：待查（取证 2026-10-01）—— 内核化重构（计划 26-09-30-1819，Done）后模块边界已清，盘点未定位到具体符号</li>
+      <li><strong>已定位（2026-10-01，报告 26-10-01-2347 填平「待查」栏）</strong>：写操作收口在 <code>core/qbapi.py</code>（49 个端点调用点 / 49 个不同方法 / 413 LOC）；类型面在 <code>torrents/record.py</code>（70 个槽名逐字等于 qB 字段名、无翻译层）；全仓 <code>downloader</code> / <code>client_type</code> / <code>backend_type</code> <strong>零命中</strong>（无后端抽象位）。</li>
+      <li>qb client 抽象面：原「待查（取证 2026-10-01）」—— 内核化重构（计划 26-09-30-1819，Done）后模块边界已清，盘点未定位到具体符号</li>
     </ul>
   </section>
 
@@ -95,6 +97,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 22:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 23:47 — 认领，状态 <strong>In Progress</strong>：可行性报告已出（[reports/26-10-01-2347](../reports/26-10-01-2347-report-transmission-compat-feasibility.html)，取证基线 826f25e6）—— 技术可行性**中**、业务可行性**低**、全量 38–58 人日（最小只读子集 8–12 人日）、**建议暂不做**。核心理由：跳检（辅种立身之本）在 tr 4.0+ 只能靠 <code>torrent-added-verify-mode: fast</code> 条件跳过，从「确定性」降级为「启发式」，失败模式是静默的完整校验。另立档案 [tasks/26-10-01-backend-transmission-compat](../tasks/26-10-01-backend-transmission-compat.md)，三方认领链已互链。<strong>结论待用户拍板</strong>：拍「不做」→ 转 Dropped；拍「做」→ 转计划文档，不走 issue 实施。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行（L216）由末阶段统一移除，本报告不回改 TODO.md。</p>
   </section>

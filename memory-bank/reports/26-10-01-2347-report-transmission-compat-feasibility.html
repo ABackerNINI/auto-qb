@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="transmission-compat-feasibility">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-01-2347">
+<meta name="doc-updated" content="26-10-01-2347">
+<meta name="doc-refs" content="memory-bank/issues/26-10-01-2212-question-transmission-compat-feasibility.html,memory-bank/tasks/26-10-01-backend-transmission-compat.md">
+<title>兼容 Transmission 可行性分析 · qB 耦合面盘点 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2027;
+    --accent: #5cc0cf;
+    --accent-ink: #86d7e0;
+    --ok: #7fc08a;
+    --ok-bg: #16241a;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --bad: #e0796f;
+    --bad-bg: #2a1a18;
+    --code-bg: #171d24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1000px; margin: 0 auto; padding: 52px 44px 80px; }
+
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 30px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.2; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+
+  section { margin-top: 34px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.006em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: var(--ink); }
+  p { margin-bottom: 11px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  a { color: var(--accent-ink); }
+
+  .verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 18px 0 6px; }
+  .vcard { background: var(--paper); border: 1px solid var(--hair); border-radius: 4px; padding: 14px 16px; }
+  .vcard .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; }
+  .vcard .v { font-family: var(--display); font-size: 19px; font-weight: 600; }
+  .vcard .n { font-size: 12.5px; color: var(--ink-dim); margin-top: 5px; line-height: 1.5; }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--paper); padding: 12px 16px; margin: 14px 0; border-radius: 0 4px 4px 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout p { margin-bottom: 6px; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); border-bottom: 1px solid var(--hair); white-space: nowrap; }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  tbody tr:hover { background: var(--paper); }
+
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.04em; }
+  .tag.a { background: var(--ok-bg); color: var(--ok); border: 1px solid #2c4531; }
+  .tag.b { background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .tag.c { background: var(--bad-bg); color: var(--bad); border: 1px solid #4d2b28; }
+
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px; padding: 12px 14px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: var(--ink-dim); margin: 10px 0 14px; }
+
+  .hint { color: var(--ink-faint); font-size: 13px; max-width: 78ch; }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">可行性分析 · report · auto-qb</div>
+    <h1>兼容 Transmission 可行性分析</h1>
+    <p class="lede">把 Transmission（tr）加成第二个下载器后端，到底要动多少、卡在哪、值不值 —— 基于 2026-10-01 HEAD（<code>826f25e6</code>）的 qB 耦合面全量盘点。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-01-2347</div></div>
+      <div class="item"><div class="k">专题</div><div class="v">transmission-compat-feasibility</div></div>
+      <div class="item"><div class="k">取证基线</div><div class="v">826f25e6 · 2026-10-01</div></div>
+      <div class="item"><div class="k">关联</div><div class="v"><a href="../issues/26-10-01-2212-question-transmission-compat-feasibility.html">issue 26-10-01-2212</a></div></div>
+      <div class="item"><div class="k">状态</div><div class="v">Done（快照终态）</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论速览</h2>
+    <p>先给答案，后面是证据。</p>
+    <div class="verdict">
+      <div class="vcard"><div class="k">技术可行性</div><div class="v">中</div><div class="n">tr 4.0+ 大幅缩小了能力差距，多数端点有对应物；不再是「能力缺失」问题</div></div>
+      <div class="vcard"><div class="k">业务可行性</div><div class="v">低</div><div class="n">辅种主流程（跳检）从「确定性免校验」退化为「启发式跳过」，核心可靠性降级</div></div>
+      <div class="vcard"><div class="k">改造成本</div><div class="v">35–53 人日</div><div class="n">全量对齐估算；最小只读子集 8–12 人日（不含跳检）</div></div>
+      <div class="vcard"><div class="k">建议</div><div class="v">暂不做</div><div class="n">不封死：触发条件见 §10，届时重开本文档而非重写</div></div>
+    </div>
+    <div class="callout warn">
+      <p><strong>一句话结论：</strong>auto-qb 从来没把「下载器」设计成可替换插槽（全仓 <code>src/</code> 搜 <code>downloader</code> / <code>client_type</code> / <code>backend_type</code> <strong>零命中</strong>），但它恰好在下载器写入点上有一个足够干净的单例收口（<code>core/qbapi.py</code>，49 个端点全在一个文件里）。所以「换一个 HTTP 客户端」这一步便宜得惊人；真正的代价在<strong>类型面</strong>——<code>TorrentRecord</code> 的 70 个槽名逐字等于 qB 字段名，向上穿透前端、向外穿透用户 YAML 的规则 DSL、向下穿透磁盘持久化键。</p>
+      <p>值不值得，取决于<strong>跳检</strong>这一条：它是辅种工具的立身之本，而它在 tr 上从「我说了算」变成「看条件」。</p>
+    </div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>前置查证：是否已有同类分析</h2>
+    <p>开工前按纪律先查重（知识库 758 份文档，<code>memory-bank/</code> 下按索引与 grep 定位，未整读目录）。</p>
+    <table>
+      <thead><tr><th>查证动作</th><th>范围</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>关键词 <code>transmission</code>（大小写不敏感）</td><td>全仓</td><td class="num">2 命中 — 仅 issue 本体与其在 <code>issues/_index.md</code> 的登记行</td></tr>
+        <tr><td>关键词 <code>多后端 / 后端抽象 / tr 后端</code></td><td>全仓</td><td class="num">0 命中（其他命中均为无关的「后端」泛指）</td></tr>
+        <tr><td><code>reports/_index.md</code> 现役 21 份报告</td><td>reports/</td><td>无下载器可替换性主题；最近的形态参考是 <code>26-09-27-1352</code>（Docker 路径映射可行性）与 <code>26-09-29-1803</code>（HR 计数可行性）</td></tr>
+        <tr><td>专题视图主键查重</td><td><code>doc-topic</code></td><td><code>transmission-compat-feasibility</code> 此前仅 issue 声明，无计划/报告/档案占位</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>结论：此前不存在同类分析报告。</strong>本报告是该专题的第一份制品，issue <code>26-10-01-2212</code> 里「qB client 抽象面：待查」那一栏即由本报告填平。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>盘点口径与总览数字</h2>
+    <p>全部数字为 2026-10-01 在 <code>826f25e6</code> 上实测（grep / wc，排除 <code>__pycache__</code>），不是估算。</p>
+    <table>
+      <thead><tr><th>维度</th><th class="num">数字</th><th>取证方式</th></tr></thead>
+      <tbody>
+        <tr><td>后端源码规模</td><td class="num">123 .py / 28,401 LOC</td><td><code>find src/auto_qb -name "*.py" | xargs wc -l</code></td></tr>
+        <tr><td>qB HTTP 端点调用点</td><td class="num">49 处 / 49 个不同方法</td><td><code>grep self\._client\. core/qbapi.py</code>（另有 2 处 tags/categories 走 store 侧惰性缓存，不计入）</td></tr>
+        <tr><td>带 qB 痕迹的文件</td><td class="num">46 / 123（37%）</td><td>grep <code>qbittorrent|qbapi|QbApi|torrents_</code></td></tr>
+        <tr><td>快照字段数（= 对外契约）</td><td class="num">70</td><td><code>torrents/compat.py</code>：21 必需 + 6 重加 + 43 扩展</td></tr>
+        <tr><td><code>category</code> 耦合</td><td class="num">142 处 / 22 文件</td><td>grep <code>category</code></td></tr>
+        <tr><td><code>tags</code> 耦合</td><td class="num">345 处 / 35 文件</td><td>grep <code>tags</code></td></tr>
+        <tr><td><code>save_path</code> 耦合</td><td class="num">73 处 / 17 文件</td><td>grep <code>save_path</code></td></tr>
+        <tr><td>hash 作主键的符号面</td><td class="num">35 文件</td><td>grep <code>\.hash|by_hash|torrent_hash|infohash</code> 并集</td></tr>
+        <tr><td>自有前端 JS</td><td class="num">29 文件 / 10,742 LOC</td><td>直接消费 qB 字段名（<code>tags</code> 76 / <code>category</code> 51 / <code>save_path</code> 29 / <code>dlspeed</code> 18 处…）</td></tr>
+        <tr><td>Vue 模板</td><td class="num">8 个 / 54 处字段命中</td><td><code>webui/static/shared/tpl/</code></td></tr>
+        <tr><td>规则 DSL 暴露给用户的变量</td><td class="num">70 个 <code>tor.*</code> + 7 个 <code>tor.is_*</code></td><td><code>rules/expr/env.py</code> 由 <code>TorrentRecord</code> 注解自动注册</td></tr>
+        <tr><td>测试面</td><td class="num">75 文件 / 1,697 测试函数 / 41,865 LOC</td><td>其中约 917（54%）依赖 qB 替身</td></tr>
+        <tr><td>文件访问层（<strong>唯一干净的解耦样板</strong>）</td><td class="num">393 LOC / 9 文件 ~24 处调用</td><td><code>infra/file_access.py</code></td></tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <p><strong>一个意外的好消息：</strong>文件访问层（<code>infra/file_access.py</code>）是全仓唯一做到真正与 qB 解耦的模块 —— 接口只有 <code>exists/isdir/getsize/scandir/open_path</code> 五件套，不含任何下载器概念，且模块 docstring 里写死了「逻辑路径进 → 逻辑路径出，回传给 qB 的字符串永不经过映射」这条红线。<strong>这一层可直接复用到 tr，零改造。</strong>它是本报告里唯一一个 A 档满分项。</p>
+    </div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>耦合的形状：集中，还是渗透</h2>
+    <p>两者都是，但在不同层上。这是判断成本的关键。</p>
+    <h3>调用面：高度集中（好消息）</h3>
+    <p>49 个 qB 端点全部收在 <code>src/auto_qb/core/qbapi.py</code>（413 LOC）一个文件的 <code>self._client.*</code> 上。全仓 84 处 <code>api.&lt;method&gt;(</code> 调用分布在 19 个文件，但<strong>一律流经这个唯一门面</strong>。单看「换一个 HTTP 客户端」，工作量小得惊人。</p>
+    <h3>类型面：全栈渗透（坏消息）</h3>
+    <p><code>src/auto_qb/torrents/record.py</code> 的 docstring 把设计意图写得毫无歧义：</p>
+    <pre>种子快照记录: 字段名与 TorrentDictionary 一致, 鸭子类型兼容
+种子数据的**唯一所有者**(无需中间投影视图) ...</pre>
+    <ul>
+      <li><strong>没有翻译层</strong> —— <code>src/</code> 内不存在任何 torrent 字段的 <code>from_qb</code> / <code>normalize</code> / 投影（同名命中全部与 torrent 无关）。</li>
+      <li><strong>70 个槽名逐字等于 qB 字段名</strong>，哨兵值也是 qB 的（<code>-1</code>=未设、<code>-2</code>=跟随全局、<code>eta=8640000</code>=无 ETA）。</li>
+      <li><strong>向外穿透到用户契约</strong>：<code>rules/expr/env.py:286-292</code> 把 <code>TorrentRecord</code> 的注解自动注册成规则表达式里的 <code>tor.*</code> —— 用户可以在 <code>config.yml</code> 里写 <code>tor.num_seeds &gt; 5</code>。这不是内部耦合，是<strong>已发布的对外契约</strong>，改字段名即等于破坏存量配置。</li>
+      <li><strong>向下穿透到持久化</strong>：<code>hash</code> 被当稳定全局 ID 用在内存索引、<code>state</code> 的 <code>auto_categories[hash]</code> / <code>skip_check_day[hash]</code>、以及备份文件名 <code>skip-check-backup/&lt;hash&gt;.torrent</code> 三处。</li>
+    </ul>
+    <p class="hint">对照组：项目在别的领域其实很会用抽象 —— <code>core/module.py</code> 的 <code>Module(Protocol)</code>、<code>hr/adapters/base.py</code> 的 <code>HrAdapter(ABC)</code>、<code>rules/base.py</code> 的 <code>BaseCondition/BaseAction</code>。<strong>唯独下载器没被当成可替换插槽设计过。</strong></p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>A 档：已有抽象 / 容易替换</h2>
+    <table>
+      <thead><tr><th>项</th><th>位置</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>文件访问层</td><td><code>infra/file_access.py</code></td><td><span class="tag a">A</span> 五件套接口 + Local/Mapped 两实现，可直接复用</td></tr>
+        <tr><td>下载器写操作收口</td><td><code>core/qbapi.py</code>（413 LOC）</td><td><span class="tag a">A</span> 49 端点全在一个文件，即第二后端的实现契约</td></tr>
+        <tr><td>危险操作层</td><td><code>core/modules/ops_mod.py</code></td><td><span class="tag a">A</span> 规则侧与 WebUI 侧都已收口到 <code>ctx.ops</code>，本身后端无感</td></tr>
+        <tr><td>能力挂载点</td><td><code>core/module.py:100-172</code></td><td><span class="tag a">A</span> <code>AppContext</code> / <code>Module(Protocol)</code> 现成的插槽机制</td></tr>
+        <tr><td>全局 / 备用限速</td><td><code>qbapi.py:347-413</code></td><td><span class="tag a">A</span> tr 的 <code>speed-limit-*</code> / <code>alt-speed-*</code> 语义基本同构</td></tr>
+        <tr><td>单种限速 / 队列移动</td><td><code>qbapi.py:127-143, 222-232</code></td><td><span class="tag a">A</span> tr 有 per-torrent limit 与 <code>queue-move-{top,up,down,bottom}</code></td></tr>
+        <tr><td>校验 / 重新公告 / 启停 / 重命名</td><td>多处</td><td><span class="tag a">A</span> 对应 <code>torrent-verify</code> / <code>torrent-reannounce</code> / <code>torrent-start|stop</code> / <code>torrent-rename-path</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>B 档：散落但可收敛到一个适配器</h2>
+    <table>
+      <thead><tr><th>项</th><th class="num">规模</th><th>收敛点</th></tr></thead>
+      <tbody>
+        <tr><td>适配器契约本身</td><td class="num">49 个方法签名</td><td>让 <code>QbApi</code> 接口长出第二份实现；84 处调用点无需改动</td></tr>
+        <tr><td><code>tags</code></td><td class="num">345 处 / 35 文件</td><td>tr 3.00+ 有 <code>labels</code>；需 <code>str(逗号串) ↔ list</code> 转换（qB 是字符串，tr 是数组）</td></tr>
+        <tr><td><code>save_path</code></td><td class="num">73 处 / 17 文件</td><td>归组 key 单点在 <code>grouping_mod.py:41-49</code>；tr 的 <code>torrent-set-location</code> 带 <code>move</code> 布尔，且无 <code>auto_tmm</code> 语义</td></tr>
+        <tr><td>tracker 编辑三件套</td><td class="num">3 个端点</td><td>tr 4.0 起统一为 <code>trackerList</code>（<code>trackerAdd/Remove/Replace</code> 已 DEPRECATED）</td></tr>
+        <tr><td>前端字段名</td><td class="num">29 JS / 54 模板命中</td><td>需在 view 层做一次投影，否则前端直接吃 qB 字段名</td></tr>
+        <tr><td>规则 DSL 变量名</td><td class="num">70 + 7</td><td><strong>对外契约</strong>：改名会破坏存量 <code>config.yml</code>；只能在适配层保证同义，不能改名字</td></tr>
+        <tr><td>配置段</td><td class="num">5 处</td><td><code>models.py:24-29,358</code> / <code>loaders.py:81-88,525</code> / <code>schema/groups.py:14-39</code> / <code>validation/sections.py:121-135</code> / <code>impact.py:26,36</code> —— 加一个「后端类型」键要穿透这 5 处</td></tr>
+        <tr><td>测试替身</td><td class="num">917 / 1,697 测试函数</td><td>需复制 <code>FakeClient</code>（57 方法）+ <code>FakeTorrent</code>，可选再写一份真 HTTP 的 <code>FakeQbServer</code>（13 路由）对标件</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>C 档：语义缺口（决定成败的部分）</h2>
+    <p>下表按「对本项目的杀伤力」排序。每一条都写了 <strong>tr 实测对应物</strong>（依据 tr 官方 RPC spec 与 4.0/4.1 变更日志，非推测）与 <strong>能否模拟</strong>。</p>
+    <table>
+      <thead><tr><th>#</th><th>缺口</th><th>依赖位置</th><th>tr 对应物（实测）</th><th>能否模拟 / 代价</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="num">C1</td>
+          <td><strong>跳检：强制跳过哈希校验</strong></td>
+          <td><code>ops_mod.py:415</code> <code>is_skip_checking=True</code>；<code>webui/commands.py:718</code></td>
+          <td>无 per-add 开关。但 4.0+ 有 <strong><code>torrent-added-verify-mode: fast</code></strong>（默认）：满足条件即跳过完整校验、立即做种、按片惰性校验</td>
+          <td><span class="tag c">C</span> <strong>能近似，但语义从「确定性」变「启发式」</strong> —— 详见 §08</td>
+        </tr>
+        <tr>
+          <td class="num">C2</td>
+          <td><strong><code>torrents/export</code>：导出 .torrent</strong></td>
+          <td><code>ops_mod.py:295</code>（跳检备份的输入）</td>
+          <td>RPC 无此端点。tr 把 <code>.torrent</code> 存在 daemon 配置目录（<code>&lt;config&gt;/torrents/*.torrent</code>）</td>
+          <td><span class="tag c">C</span> 需走文件系统读 daemon 目录 —— 会<strong>超出文件访问层现行范围口径</strong>（该层只收编「下载数据目录」），容器部署要再配一条 path_map</td>
+        </tr>
+        <tr>
+          <td class="num">C3</td>
+          <td><code>category</code> 一等公民（含 category→savePath 绑定）</td>
+          <td>142 处 / 22 文件；<code>qbapi.py:292</code> <code>editCategory(name, save_path)</code></td>
+          <td>tr 3.00+ <code>labels</code>（数组）；4.0+ 另有 <code>group</code> / <code>group-set</code></td>
+          <td><span class="tag c">C</span> 前缀标签可模拟「属于哪个分类」，但模拟不了<strong>单值约束</strong>与<strong>分类自带默认保存路径</strong>这两条语义</td>
+        </tr>
+        <tr>
+          <td class="num">C4</td>
+          <td><strong>hash 作稳定主键</strong></td>
+          <td>35 文件；<code>store.by_hash</code>、<code>skip_check_day[hash]</code>、备份文件名</td>
+          <td>tr 用<strong>整数 <code>id</code></strong> 作主键（daemon 重启可能漂移），hash 只是 <code>hashString</code> 副属性</td>
+          <td><span class="tag c">C</span> 必须引入 <code>id ↔ hashString</code> 双向映射 + 处理重启后 id 漂移；<strong>持久化键是否重写需要单独拍板</strong>（改了 = 存量 state 迁移，不改 = 两套语义并存）</td>
+        </tr>
+        <tr>
+          <td class="num">C5</td>
+          <td>22 态 <code>TorrentState</code> 枚举</td>
+          <td><code>record.py:7</code> 直接 <code>import TorrentState</code>；<code>conditions.py:121-133</code>；<code>views.py:174</code> 判 <code>missingFiles</code></td>
+          <td>tr <code>status</code> 只有 0–6 七个值，无 <code>forced*</code> / <code>stalled*</code> / <code>queued*</code> / <code>allocating</code> / <code>metaDL</code> / <code>missingFiles</code></td>
+          <td><span class="tag c">C</span> 需自写谓词枚举替掉 imported 的 <code>TorrentState</code>，且<strong>必须保持用户 YAML 里 7 个 <code>is_*</code> 名字同义</strong>；<code>missingFiles</code> 是缺文件扫描的触发判据，属业务关键路径。<code>tests/test_state_matrix.py</code> 的全成员参数化矩阵要整体重写</td>
+        </tr>
+        <tr>
+          <td class="num">C6</td>
+          <td><code>sync/maindata</code> 的 <code>rid</code> 增量同步</td>
+          <td><code>store.py:108-155</code></td>
+          <td>tr 只有全量 <code>torrent-get</code>；但有 <code>ids: "recently-active"</code>（返回近期活跃 + 已移除）</td>
+          <td><span class="tag b">B</span> 可用 <code>recently-active</code> 做近似增量；代价是丢失 qB 的 O(变化量) 传输优势，大库每 tick 成本上升，可能影响既有 <code>main_tick=2S</code> / <code>sync_interval=1.5S</code> 的调参前提</td>
+        </tr>
+        <tr>
+          <td class="num">C7</td>
+          <td><code>seeding_time_limit</code>（做种时长限制）</td>
+          <td><code>compat.py:45-52</code>；<code>ops_mod.py:412</code></td>
+          <td>tr 只有 <code>seedIdleLimit</code>（<strong>空闲</strong>时限），不是「做种多久」</td>
+          <td><span class="tag c">C</span> 语义不同，不是缺失但会<strong>静默错配</strong>。「做种满 X 天删除」类规则在 tr 上会失效或误删</td>
+        </tr>
+        <tr>
+          <td class="num">C8</td>
+          <td><code>contentLayout</code> 三态布局</td>
+          <td><code>ops_mod.py:410, 443-464</code></td>
+          <td>无</td>
+          <td><span class="tag c">C</span> <code>_infer_content_layout</code> 在 tr 侧失去纠偏依据；推断错的后果在 qB 是 <code>missingFiles</code>（可发现），在 tr 是静默错位</td>
+        </tr>
+        <tr>
+          <td class="num">C9</td>
+          <td>Super seeding</td>
+          <td><code>qbapi.py:176-179</code>；<code>commands.py:355</code></td>
+          <td>无</td>
+          <td><span class="tag c">C</span> UI 上只能禁用该开关，功能降级</td>
+        </tr>
+        <tr>
+          <td class="num">C10</td>
+          <td>First/last piece priority</td>
+          <td><code>compat.py:47</code>；<code>ops_mod.py:409</code></td>
+          <td>无</td>
+          <td><span class="tag c">C</span> 跳检重加时会丢该属性（<code>_skip_readd</code> 显式传参），且无替代表达</td>
+        </tr>
+        <tr>
+          <td class="num">C11</td>
+          <td><code>auto_tmm</code> 自动种子管理</td>
+          <td><code>qbapi.py:215-218</code>；<code>commands.py:742</code></td>
+          <td>无（tr 是 <code>download-dir</code> + <code>incomplete-dir</code> 双目录模型）</td>
+          <td><span class="tag c">C</span> 移动语义需重做；与 <code>save_path</code> 归组逻辑有交互</td>
+        </tr>
+        <tr>
+          <td class="num">C12</td>
+          <td><code>torrents/pieceHashes</code>（参考种子比对）</td>
+          <td><code>rules/actions/checking.py:151-160</code></td>
+          <td>无</td>
+          <td><span class="tag c">C</span> 参考种子筛选的严格模式语义会退化（安全性下降）</td>
+        </tr>
+        <tr>
+          <td class="num">C13</td>
+          <td><code>share_limit_action</code>（到达限制后的动作）</td>
+          <td><code>qbapi.py:184-207</code>；<code>commands.py:373-395</code></td>
+          <td>无</td>
+          <td><span class="tag c">C</span> 与 <code>-1/-2</code> 哨兵体系一起需重新定义</td>
+        </tr>
+        <tr>
+          <td class="num">C14</td>
+          <td><code>is_sequential_download</code>（顺序下载）</td>
+          <td><code>compat.py:46</code>；<code>ops_mod.py:408</code></td>
+          <td>tr <strong>4.1.0+</strong> 才有 <code>sequentialDownload</code></td>
+          <td><span class="tag b">B</span> 需版本门禁；4.0.x 用户不可用</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">C1–C5 是「必须解决才能谈可用」；C6–C14 是「可用但降级」。注意 C7 这类<strong>语义不同而非缺失</strong>的项最危险 —— 它会静默错配，而不是报错。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>跳检专项：唯一真正需要拍板的一条</h2>
+    <p>辅种工具的立身之本是「同一份数据，换个站的种子文件加进去，不要重新校验几十 GB」。当前实现是 <code>ops_mod.py:401-418</code> 的一次 <code>torrents_add(...)</code>，其中 <code>is_skip_checking=True</code> 是<strong>强制</strong>的：qB 会把所有 piece 标为有效，立刻开始做种。</p>
+    <h3>tr 4.0+ 的 <code>torrent-added-verify-mode: fast</code></h3>
+    <p>2023-02 发布的 Transmission 4.0.0 引入该设置（默认 <code>fast</code>）。官方描述的跳过完整校验条件是：</p>
+    <pre>种子有元数据（不是磁力链接）
+所有文件都存在
+所有文件都不是未完成（.part）文件
+所有文件的大小都与 .torrent 中列出的大小相匹配
+所有文件的 mtime 都早于添加 torrent 的时刻
+第一段通过校验和测试</pre>
+    <div class="callout">
+      <p><strong>一个值得注意的对齐：</strong>上面第 2、4 条，恰好就是 auto-qb 自己在跳检前做的 filelist 前置检查（<code>ops_mod.py</code> 的「文件存在 + 大小对比」）。也就是说 <strong>auto-qb 的跳检闸门与 tr 的跳过条件是同向的</strong>——正常情况下条件会满足。</p>
+    </div>
+    <h3>但语义变了：从「我说了算」到「看条件」</h3>
+    <table>
+      <thead><tr><th>维度</th><th>qB <code>is_skip_checking=True</code></th><th>tr <code>fast</code> 模式</th></tr></thead>
+      <tbody>
+        <tr><td>控制点</td><td>per-add，调用方强制</td><td><strong>daemon 全局设置</strong>（per-add 无覆盖参数）</td></tr>
+        <tr><td>可控性</td><td>确定性</td><td>依赖 3 个前置条件 + 首片校验通过</td></tr>
+        <tr><td>条件不满足时</td><td>（不会发生）</td><td>退化为<strong>完整校验</strong> —— 几十 GB 的种子代价极高</td></tr>
+        <tr><td>坏数据行为</td><td>全部标有效 → 可能上传垃圾<br><span class="hint">（auto-qb 用 <code>zSkipChecked</code> 标签排除它作参考种子来兜底）</span></td><td>按片惰性校验 → 坏片在被请求时才暴露，随后重下<br><span class="hint">更安全，但原种子可能被覆写（cross-seed 社区已报此案例）</span></td></tr>
+        <tr><td>用户配置反向干预</td><td>无</td><td>用户把 <code>torrent-added-verify-mode</code> 设为 <code>full</code> 即全局失效</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <p><strong>这是本报告最实质的一条发现，也修正了「tr 完全不支持跳检」的直觉。</strong>tr 4.0+ 不是能力缺失，而是<strong>能力不可控</strong>：auto-qb 无法在 per-add 层面保证「这次一定跳过」，只能依赖 daemon 全局配置与运行时条件。</p>
+      <p>对一个以「确定性」为卖点的自动化工具，把核心流程从<strong>保证</strong>降级为<strong>大概率</strong>，且失败模式是静默的完整校验（用户体感：辅种完卡住几十分钟到几小时），这是产品层面的风险，不只是工程量。</p>
+    </div>
+    <p class="hint">另注：社区存在 <code>torrent-skip-verify</code> 的第三方 fork（基于 tr 3.0 的补丁，未合流上游）。依赖它等于要求用户换非官方二进制，不在可行范围内。</p>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>工作量估算</h2>
+    <p>分档估算，单位为「人日」，含自测但不含用户侧验收往返。<strong>这是估算，不是实测</strong>——本报告不含任何实施动作。</p>
+    <table>
+      <thead><tr><th>阶段</th><th>内容</th><th class="num">估算</th></tr></thead>
+      <tbody>
+        <tr><td>P1 连接与读路径</td><td>tr RPC 客户端（含 <code>X-Transmission-Session-Id</code> 409 重试）、<code>torrent-get</code> 全量/近期活跃、状态映射骨架</td><td class="num">5–8</td></tr>
+        <tr><td>P2 适配器主体</td><td>49 个方法的 tr 实现；<code>labels↔tags</code> 转换；配置层 5 处加「后端类型」键</td><td class="num">12–18</td></tr>
+        <tr><td>P3 C 档跨层重构</td><td>C4 hash→id 主键重建（35 文件）+ C5 谓词状态枚举 + C6 增量同步替代 + C3 category 模拟</td><td class="num">10–15</td></tr>
+        <tr><td>P4 前端与 DSL</td><td>view 层字段投影；保证 70 个 <code>tor.*</code> 与 7 个 <code>is_*</code> 同义（不改名的前提下）</td><td class="num">3–5</td></tr>
+        <tr><td>P5 测试基建</td><td><code>FakeTr</code> 替身（对标 57 方法）+ 可选真 HTTP 服务器；917 个受影响测试函数的迁移/双跑</td><td class="num">8–12</td></tr>
+        <tr><td colspan="2"><strong>全量对齐合计</strong></td><td class="num"><strong>38–58</strong></td></tr>
+        <tr><td colspan="2">最小可行子集（只读 + 启停/限速/移动/标签，<strong>不含跳检</strong>）</td><td class="num"><strong>8–12</strong></td></tr>
+      </tbody>
+    </table>
+    <p>还有一项<strong>不进估算但长期存在</strong>的成本：双后端之后，每一个下载器相关的新功能都要在两套语义上各验证一遍 —— 这是一笔永久性的维护税。按当前 issue 池里下载器相关的 feat 密度（批量移动/批量跳检、整组迁移原子性、限速曲线…），这笔税不会小。</p>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>建议与重开条件</h2>
+    <h3>本轮建议：不做（Dropped 候选）</h3>
+    <ol>
+      <li><strong>核心能力降级不可接受</strong> —— 跳检从确定性变启发式（§08），而跳检正是本项目的价值所在。</li>
+      <li><strong>投入产出比最差的一档</strong> —— 38–58 人日换来一个「功能集更弱、可靠性更低」的后端，且永久增加双后端维护税。</li>
+      <li><strong>目标用户重叠度低</strong> —— 本项目的使用场景（PT 站辅种 + 规则自动化）在 tr 用户群里需求稀薄；tr 主打轻量与低占用，与「常驻主循环 + 规则引擎 + WebUI」的用法画像本就不重合。</li>
+    </ol>
+    <div class="callout">
+      <p><strong>如果一定要做，唯一划算的形态是「最小只读子集」</strong>（8–12 人日）：连接 tr、读状态、启停、限速、移动、标签管理，<strong>明确不支持跳检与辅种</strong>，作为监控/轻量管理入口。这样既不碰 C1/C4/C5 三条硬骨头，也不用付全量维护税。</p>
+    </div>
+    <h3>重开条件（满足任一即重新评估，不必从头调研）</h3>
+    <ul>
+      <li>tr 上游提供 <strong>per-add 的校验控制</strong>（RPC 参数或 <code>torrent-skip-verify</code> 合流）—— 直接消除 C1。</li>
+      <li>出现<strong>具体的、可点名的真实用户需求</strong>（不是「支持一下更好」），≥1 个愿意参与验收的 tr 用户。</li>
+      <li>因其它原因要建下载器抽象层（例如未来接 Deluge / libtorrent 直连），届时 tr 的边际成本会大幅下降 —— 这是最值得等的时机。</li>
+    </ul>
+    <p class="hint">本报告是快照（report 恒 Done，出厂即冻结）。若上述条件触发，重开时应<strong>新建计划文档</strong>（<code>plans/</code>）并引用本报告，而不是修改本报告。</p>
+  </section>
+
+  <section id="s11">
+    <h2><span class="no">11</span>附录 A：49 个 qB 端点 → tr RPC 映射</h2>
+    <p>逐端点对照。档位含义：<span class="tag a">A</span> 直接对应 / <span class="tag b">B</span> 需适配 / <span class="tag c">C</span> 无对应物。</p>
+    <table>
+      <thead><tr><th>qB Web API 端点</th><th>tr RPC</th><th>档</th><th>备注</th></tr></thead>
+      <tbody>
+        <tr><td><code>auth/login</code></td><td>（无；HTTP Basic 可选）</td><td><span class="tag b">B</span></td><td>tr 需处理 <code>X-Transmission-Session-Id</code> 的 409 重试</td></tr>
+        <tr><td><code>sync/maindata</code></td><td><code>torrent-get</code>（<code>ids:"recently-active"</code>）</td><td><span class="tag c">C</span></td><td>无 rid 增量语义（C6）</td></tr>
+        <tr><td><code>torrents/info</code></td><td><code>torrent-get</code></td><td><span class="tag a">A</span></td><td>tr 4.0 支持 table 模式降负载</td></tr>
+        <tr><td><code>torrents/add</code></td><td><code>torrent-add</code>（<code>metainfo</code> base64）</td><td><span class="tag b">B</span></td><td>注意：<code>filename</code> 走的是 <strong>daemon 本机路径</strong>，不能用；字节必须走 <code>metainfo</code></td></tr>
+        <tr><td><code>torrents/delete</code></td><td><code>torrent-remove</code>（<code>delete-local-data:false</code>）</td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>torrents/recheck</code></td><td><code>torrent-verify</code></td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>torrents/reannounce</code></td><td><code>torrent-reannounce</code></td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>torrents/start</code> / <code>resume</code></td><td><code>torrent-start</code></td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>torrents/stop</code> / <code>pause</code></td><td><code>torrent-stop</code></td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>torrents/setLocation</code></td><td><code>torrent-set-location</code>（<code>move</code>）</td><td><span class="tag b">B</span></td><td>无 <code>auto_tmm</code>（C11）</td></tr>
+        <tr><td><code>torrents/setUploadLimit</code></td><td><code>torrent-set</code> <code>uploadLimit</code>+<code>uploadLimited</code></td><td><span class="tag b">B</span></td><td>qB 一个参数 → tr 两个（值 + 开关）</td></tr>
+        <tr><td><code>torrents/setDownloadLimit</code></td><td><code>torrent-set</code> <code>downloadLimit</code>+<code>downloadLimited</code></td><td><span class="tag b">B</span></td><td>同上</td></tr>
+        <tr><td><code>torrents/setSuperSeeding</code></td><td>—</td><td><span class="tag c">C</span></td><td>C9</td></tr>
+        <tr><td><code>torrents/setForceStart</code></td><td><code>torrent-start-now</code>（近似）</td><td><span class="tag b">B</span></td><td>语义不完全等价</td></tr>
+        <tr><td><code>torrents/addTags</code> / <code>removeTags</code></td><td><code>torrent-set</code> <code>labels</code></td><td><span class="tag b">B</span></td><td>逗号串 ↔ 数组转换</td></tr>
+        <tr><td><code>torrents/deleteTags</code></td><td><code>torrent-set</code> <code>labels</code>（全量重写）</td><td><span class="tag b">B</span></td><td>需取全量种子后逐个改写</td></tr>
+        <tr><td><code>torrents/createTags</code></td><td>（无需操作）</td><td><span class="tag a">A</span></td><td>tr 的 labels 隐式创建</td></tr>
+        <tr><td><code>torrents/createCategory</code> / <code>setCategory</code></td><td><code>torrent-set</code> <code>labels</code> 或 <code>group</code></td><td><span class="tag c">C</span></td><td>C3，单值与路径绑定语义丢失</td></tr>
+        <tr><td><code>torrents/editCategory</code></td><td>—</td><td><span class="tag c">C</span></td><td>含 savePath 绑定，无法映射</td></tr>
+        <tr><td><code>torrents/removeCategories</code></td><td>—</td><td><span class="tag c">C</span></td><td></td></tr>
+        <tr><td><code>torrents/setAutoManagement</code></td><td>—</td><td><span class="tag c">C</span></td><td>C11</td></tr>
+        <tr><td><code>topPrio</code> / <code>increasePrio</code> / <code>decreasePrio</code> / <code>bottomPrio</code></td><td><code>queue-move-top|up|down|bottom</code></td><td><span class="tag a">A</span></td><td>四个端点一一对应</td></tr>
+        <tr><td><code>addTrackers</code> / <code>editTracker</code> / <code>removeTrackers</code></td><td><code>torrent-set</code> <code>trackerList</code></td><td><span class="tag b">B</span></td><td>tr 4.0 起统一；旧三参数已 DEPRECATED</td></tr>
+        <tr><td><code>torrents/trackers</code></td><td><code>torrent-get</code> <code>trackerStats</code></td><td><span class="tag b">B</span></td><td>字段名需映射</td></tr>
+        <tr><td><code>torrents/filePrio</code></td><td><code>torrent-set</code> <code>priority-high|low|normal</code></td><td><span class="tag b">B</span></td><td>三档 vs qB 数值优先级</td></tr>
+        <tr><td><code>torrents/renameFile</code> / <code>renameFolder</code></td><td><code>torrent-rename-path</code></td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>torrents/files</code></td><td><code>torrent-get</code> <code>files</code></td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>torrents/setShareLimits</code></td><td><code>seedRatioLimit</code>/<code>seedRatioMode</code>/<code>seedIdleLimit</code>/<code>seedIdleMode</code></td><td><span class="tag c">C</span></td><td>缺做种时长与 <code>share_limit_action</code>（C7/C13）</td></tr>
+        <tr><td><code>torrents/rename</code></td><td>—</td><td><span class="tag c">C</span></td><td>tr 无重命名 torrent 名</td></tr>
+        <tr><td><code>torrents/pieceHashes</code></td><td>—</td><td><span class="tag c">C</span></td><td>C12</td></tr>
+        <tr><td><code>torrents/export</code></td><td>—</td><td><span class="tag c">C</span></td><td>C2，需读 daemon 目录</td></tr>
+        <tr><td><code>transfer/uploadLimit</code> / <code>downloadLimit</code></td><td><code>session-get</code> <code>speed-limit-up|down</code></td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>transfer/setUploadLimit</code> / <code>setDownloadLimit</code></td><td><code>session-set</code> <code>speed-limit-up|down</code>(+<code>-enabled</code>)</td><td><span class="tag a">A</span></td><td></td></tr>
+        <tr><td><code>transfer/speedLimitsMode</code> / <code>toggleSpeedLimitsMode</code></td><td><code>session-get|set</code> <code>alt-speed-enabled</code></td><td><span class="tag b">B</span></td><td>乌龟模式语义基本对齐</td></tr>
+        <tr><td><code>app/preferences</code> / <code>setPreferences</code></td><td><code>session-get</code> / <code>session-set</code></td><td><span class="tag b">B</span></td><td>键名全表需映射</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">另有 2 处（<code>torrents/tags</code>、<code>torrents/categories</code>）在 <code>QbApi</code> 内不直接发请求，走 <code>TorrentStore</code> 的惰性缓存（<code>store.py:386-401</code>），未计入 49。</p>
+  </section>
+
+  <footer>
+    26-10-01-2347-report-transmission-compat-feasibility.html · 专题 transmission-compat-feasibility · 快照终态（report 恒 Done）
+    · 取证基线 826f25e6（2026-10-01）· 认领 issue
+    <a href="../issues/26-10-01-2212-question-transmission-compat-feasibility.html">26-10-01-2212</a>
+    · 本报告不含任何代码改动；结论待用户拍板
+  </footer>
+
+</div>
+</body>
+</html>
