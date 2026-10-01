@@ -7,8 +7,9 @@
 <meta name="issue-stamp" content="26-09-20-2212">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="duplicate-test-name-shadowed-guard">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-01-test-truth-hold-shadowed-guard.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_truth_hold_budget_matches_backend 同名定义了两次, 前一条守阵从未执行">
 <meta name="issue-summary" content="同名函数后者覆盖前者, 前端/后端真值宽限一致性守阵实际是死测试">
 <title>test_truth_hold_budget_matches_backend 同名定义了两次, 前一条守阵从未执行 · test · 计划外问题（便签）</title>
@@ -68,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-20-2212-test-duplicate-test-name-shadowed-guard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-20 22:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -94,9 +95,20 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>复验与清偿</h2>
+    <h3>复验</h3>
+    <p>复验：2026-10-01 19:00 <strong>已消失</strong>（以现场为准）—— 入池锚点 <code>grep -n "def test_truth_hold_budget_matches_backend" tests/test_web.py</code> 现输出零行，该符号名整个文件不复存在。现役守阵为 <code>test_truth_hold_matches_truth_push_cap</code>（<code>tests/test_web.py:7582</code>，取证 2026-10-01），其 docstring 明确注明合并自本 issue 的两条同名守阵。与入池描述的出入：修复先于清偿落库 —— 入池（09-20 22:12）在前，合并（commit <code>0c18fcda</code>，09-21 00:31，乐观 UI 撤下重构）在后，相隔 2 小时 19 分；修是修了，issue 报告的状态推进当时没跟着走。本次只补清偿链，未再动修复代码。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法（随 commit 0c18fcda 落库，2026-10-01 复验清偿）</strong>：建议的「合并成一条」成立且已实现 —— 缺陷源头是 commit <code>40bcdc33</code>（09-20 10:46）引入守阵时把同一块代码贴了两遍；逐字比对两份函数体空白归一后<strong>完全相同</strong>（同一 docstring + 同一断言：前端 hold 常数 == 后端 cap 常数），语义纯重复，合并成一条<strong>零断言弃置</strong>。合并后断言对象随常数退役升级：前端 <code>TRUTH_HOLD_BUDGET_MS</code> → <code>TRUTH_HOLD_MS</code>，后端 <code>RECEIPT_WAIT_CAP_MS</code> → <code>TRUTH_PUSH_CAP_MS</code>（D2 新契约：值覆盖保持窗 == 真值推送上限窗）。守阵复活实测：<code>pytest -k truth_hold</code> → <strong>1 passed, 196 deselected</strong>（3.12s）—— 真实被收集、真实在跑。</p>
+    <p><strong>全库核查（建议 03）</strong>：扫全部 <code>tests/*.py</code> 顶层 <code>def test_</code>（1685 条），同文件重名仅剩 <code>tests/test_config.py</code> 一处共 <strong>5 对</strong>（test_validate_gslc / test_validate_empty_file / test_config_error_wraps_io_and_yaml / test_models_default_sources / test_validate_section_type_errors，行号 718/793、732/835、739/842、749/852、766/869，取证 2026-10-01）。逐对 diff：4 对逐字相同，1 对仅 YAML 样本一字之差（<code>[, 5]</code> vs <code>[" ", 5]</code>，断言意图同）。同类缺陷但超出本 issue 范围，本轮只记不修；建议 02 的防复发守阵（扫重复顶层 test 名）宜随 test_config.py 清偿一并落，届时零豁免干净上闸 —— 待用户定调另开一轮。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-09-20 22:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 19:00 — 复验认领，状态 <strong>In Progress</strong>（现象已随 0c18fcda 合并落库消失，本次补清偿链；任务档案：<a href="../tasks/26-10-01-test-truth-hold-shadowed-guard.md">tasks/26-10-01-test-truth-hold-shadowed-guard.md</a>）</li>
+      <li>2026-10-01 19:05 — 清偿完成，状态 <strong>Done</strong>（守阵复活实测 1 passed；全库核查另发现 test_config.py 5 对同文件重名，只记不修待定调）</li>
     </ul>
   </section>
 

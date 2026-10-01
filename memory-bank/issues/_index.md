@@ -17,7 +17,7 @@
 | bug | 6 |
 | perf | 3 |
 | docs | 5 |
-| test | 4 |
+| test | 3 |
 | refactor | 2 |
 | feat | 5 |
 | chore | 4 |
@@ -48,7 +48,6 @@
 - [refactor] [WebUIRuntime 经 self._host 回调 QbManager 私有方法, 无 Protocol 约束](26-09-21-1408-refactor-web-runtime-host-protocol.html) — web_runtime.py:312/317/479 调 _build_search_index/_state_kind 等; 建议 HostCapabilities Protocol + 单写者假设注释
 - [bug] [托盘退出 join(5s) 超时即放弃主循环线程, 本次状态不落盘](26-09-21-1347-bug-tray-join-timeout-abandons-save.html) — 托盘 manager 线程 daemon=True + join(timeout=5), 优雅退出超时则放弃落盘
 - [bug] [web.token 生成是非原子写, 半截文件导致鉴权密钥静默漂移](26-09-21-1347-bug-web-token-non-atomic-write.html) — ensure_web_token 用 O_TRUNC 直写, 非空半截 token 会被持久化, 已存浏览器密钥 401
-- [test] [test_truth_hold_budget_matches_backend 同名定义了两次, 前一条守阵从未执行](26-09-20-2212-test-duplicate-test-name-shadowed-guard.html) — 同名函数后者覆盖前者, 前端/后端真值宽限一致性守阵实际是死测试
 - [chore] [grill-me skill 是 2 行占位 stub](26-09-20-1427-chore-skill-grill-me-empty-stub.html) — grill-me 仅含 openai.yaml 与 2 行 SKILL.md, 无实际内容却占一个技能位
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [docs] [两个 skill 对写 USER.md 的口径相反](26-09-20-1427-docs-skill-user-md-write-conflict.html) — aesthetic-preset-library 要求写入 USER.md, autoclaw INTERACTIONS.md 明令禁止回写
@@ -74,6 +73,7 @@
 - [bug] [后端状态仅优雅退出时落盘, 非优雅终止丢失整个运行期状态](26-09-21-1347-bug-backend-state-save-only-on-exit.html) — save_state 仅优雅退出可达, 强杀/断电/关机丢 exec_history/skip_check_day/recheck_fails/上传基线
 - [bug] [跳检「删除→重加」之间存在无备份崩溃窗口, 崩溃后种子无恢复凭据](26-09-21-1347-bug-skip-checking-readd-no-backup-window.html) — 删除确认后重加前崩溃: .torrent 仅在内存、备份只在重加失败路径, 重启后无任何恢复标记
 - [bug] [state.json 损坏时静默清空, .bak 备份从不用于恢复](26-09-21-1347-bug-state-load-corrupt-silent-reset.html) — _load_state 吞 JSONDecodeError 静默返回 {}; atomic_write 维护的 .bak 全库无读取方
+- [test] [test_truth_hold_budget_matches_backend 同名定义了两次, 前一条守阵从未执行](26-09-20-2212-test-duplicate-test-name-shadowed-guard.html) — 同名函数后者覆盖前者, 前端/后端真值宽限一致性守阵实际是死测试
 - [test] [sim_qb 缺「/sync/maindata 快照滞后」模型, 本地无法复现/验证真值直查的收益](26-09-20-2145-test-sim-qb-maindata-snapshot-lag.html) — 仿真端状态瞬时翻转, 掩盖一切'真值尚未落地'类缺陷; 需加 1.5s 快照滞后模型
 - [bug] [状态栏今日流量: 图标与数值同色且非真图标, 易被读成数值的一部分](26-09-20-1840-bug-webui-statusbar-traffic-icon.html) — 今日流量块图标(#i-chart)与 ↑/↓ 数值同色同排, 易误读为数值一部分; 棱镜侧同病且图标无颜色
 - [bug] [WebUI 列设置(顺序/显示/宽度)经常被重置](26-09-20-1800-bug-webui-column-prefs-reset.html) — 表格列的顺序/显隐/宽度偏好偶发丢失, 刷新后回到默认布局
