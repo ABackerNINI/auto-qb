@@ -19,10 +19,13 @@ run() 启停改 host.start_all/stop_all/_apply_web_config 并入 webui.apply/主
 - test_hr_module_contract: start 的 dry-run 门 / start/stop/apply 透传(apply 拿旧 hr_check 段)/ sections 认领
 - test_kernel_run_wiring_delegates_to_host: run() 启停经 host.start_all/stop_all; 主循环五调用改 loop hooks(flush_truths 次序语义留内核)
 - test_facade_modules_in_assembly_and_bridge: 装配清单含 webui/hr 且顺序正确; hr_link 判定桥在装配期挂上
+- test_runtime_start_server_ensures_token_first: WebUIRuntime.start_server 先 ensure_token 确定密钥再拉起服务(令牌生命周期内聚门面, start_web_server 不再代写)
 """
+import ast
 import inspect
 import os
 import tempfile
+import textwrap
 from types import SimpleNamespace
 from unittest import mock
 
@@ -188,20 +191,88 @@ def test_hr_module_contract():
 # ---------- 内核接线 ----------
 
 
-def test_kernel_run_wiring_delegates_to_host():
-    """P2 接线守阵: run() 启停经宿主, 主循环不再点名表现层调用(flush_truths 次序语义留内核)"""
-    run_src = inspect.getsource(QbManager.run)
-    assert "host.start_all" in run_src and "host.stop_all" in run_src, "web/hr 启停必须改经模块宿主(plan P2)"
-    assert "start_web_server" not in run_src, "web 启动块已迁 WebUIModule.start"
-    assert "self.hr.start" not in run_src and "self.hr.stop" not in run_src, "HR 启停已迁 HrModule"
-    assert "consume_commands" not in run_src and "check_pending" not in run_src, "命令线改经 host.run_command_line"
-    assert "flush_views" not in run_src and "advance_" not in run_src, "同步线/任务线收尾改经 loop hooks"
-    assert "flush_truths" in run_src, "flush_truths 在刷新后落回执的次序语义留在内核(plan P2)"
+def _dotted(node):
+    """Name/Attribute 链的点名(self.host.start_all -> "self.host.start_all"); 链中含调用/下标返回 None"""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return ".".join(reversed(parts))
 
-    sync_src = inspect.getsource(QbManager._sync_line)
-    assert "host.run_sync_line" in sync_src and "self.web." not in sync_src
-    task_src = inspect.getsource(QbManager._task_line)
-    assert "host.run_task_line" in task_src and "self.web." not in task_src
+
+def _attr_ref(tree, receiver, attr):
+    """存在 <…receiver>.<attr> 形态的属性访问点(调用/读写皆是), 命中返回位置描述"""
+    tail = receiver.split(".")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr == attr:
+            dotted = _dotted(node.value)
+            if dotted and dotted.split(".")[-len(tail):] == tail:
+                return f"line {node.lineno}: {dotted}.{attr}"
+    return None
+
+
+def _name_ref(tree, name):
+    """name 的任一结构引用(Attribute 属性 / Name 标识 / import 别名), 命中返回位置描述"""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr == name:
+            return f"line {node.lineno}: .{name}"
+        if isinstance(node, ast.Name) and node.id == name:
+            return f"line {node.lineno}: 标识 {name}"
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name.split(".")[-1] == name or alias.asname == name:
+                    return f"line {node.lineno}: import {alias.name}"
+    return None
+
+
+def _prefix_ref(tree, prefix):
+    """属性/标识名以 prefix 开头的任一结构引用(advance_* 族), 命中返回位置描述"""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr.startswith(prefix):
+            return f"line {node.lineno}: .{node.attr}"
+        if isinstance(node, ast.Name) and node.id.startswith(prefix):
+            return f"line {node.lineno}: 标识 {node.id}"
+    return None
+
+
+def _receiver_ref(tree, receiver):
+    """以 receiver(如 self.web)为接收者的属性访问(任意属性, 调用/读写皆是), 命中返回首个位置描述"""
+    tail = receiver.split(".")
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            dotted = _dotted(node.value)
+            if dotted and dotted.split(".")[-len(tail):] == tail:
+                return f"line {node.lineno}: {dotted}.{node.attr}"
+    return None
+
+
+def test_kernel_run_wiring_delegates_to_host():
+    """P2 接线守阵: run() 启停经宿主, 主循环不再点名表现层调用(flush_truths 次序语义留内核)
+
+    AST 式断言(L5 升级): 正向锁属性访问结构(接收者点名 + 属性名), 反向锁标识引用
+    (Attribute 属性 / Name 标识 / import 名) —— 注释与字符串字面量提及目标词不再误红。
+    """
+    run_tree = ast.parse(textwrap.dedent(inspect.getsource(QbManager.run)))
+    assert _attr_ref(run_tree, "host", "start_all") and _attr_ref(run_tree, "host", "stop_all"), \
+        "web/hr 启停必须改经模块宿主(plan P2)"
+    assert not _name_ref(run_tree, "start_web_server"), "web 启动块已迁 WebUIModule.start"
+    assert not _attr_ref(run_tree, "self.hr", "start") and not _attr_ref(run_tree, "self.hr", "stop"), \
+        "HR 启停已迁 HrModule"
+    assert not _name_ref(run_tree, "consume_commands") and not _name_ref(run_tree, "check_pending"), \
+        "命令线改经 host.run_command_line"
+    assert not _name_ref(run_tree, "flush_views") and not _prefix_ref(run_tree, "advance_"), \
+        "同步线/任务线收尾改经 loop hooks"
+    assert _name_ref(run_tree, "flush_truths"), "flush_truths 在刷新后落回执的次序语义留在内核(plan P2)"
+
+    sync_tree = ast.parse(textwrap.dedent(inspect.getsource(QbManager._sync_line)))
+    assert _attr_ref(sync_tree, "host", "run_sync_line"), "同步线视图步转交 webui on_sync_line hook(plan P2)"
+    assert not _receiver_ref(sync_tree, "self.web"), "同步线不得直驱表现层(经 host.run_sync_line)"
+    task_tree = ast.parse(textwrap.dedent(inspect.getsource(QbManager._task_line)))
+    assert _attr_ref(task_tree, "host", "run_task_line"), "任务线收尾转交 webui on_task_line hook(plan P2)"
+    assert not _receiver_ref(task_tree, "self.web"), "任务线不得直驱表现层(经 host.run_task_line)"
 
 
 def test_facade_modules_in_assembly_and_bridge():

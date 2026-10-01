@@ -8,23 +8,25 @@ torrents_added / removed_scan / post, §4.2 相位表), enabled 开关与缺文�
 本文件锁六件事:
 1. ctx 服务/句柄装配: ctx.ops / ctx.maintenance 是已注册模块本体, 装配序在 maintenance
    之后(webui/hr -> tracker/speed_curve/maintenance -> grouping -> ops);
-2. 四相位接线: 内核 emit -> grouping 响应, 订阅者计数锁定(避免隐式双订阅);
+2. 相位接线: transitions/removed_scan/post 三相位内核 emit -> grouping 响应, 订阅者计数
+   锁定(避免隐式双订阅); torrents_added 自 P5 起四家认领, 订阅面在 test_modules_p5 锁定;
 3. enabled 自判 + 去重集合归属: disabled 时零动作、去重清零随 transitions 相位入口;
-4. ctx.ops 直调(recheck web 源提交 + skip_check 跨来源去重)与 manager 旧名委托同源;
-5. checking 前置检查并入 ops(check_filelist 经 ctx.ops 与 manager 委托都可达);
+4. ctx.ops 直调: web 源 recheck 提交登记在途, 重复提交受在途互斥(同一 _active_checks);
+5. checking 前置检查并入 ops(决策点 D2): ctx.ops.check_filelist 是唯一入口;
 6. sections 认领清单(P6 段认领完备守阵上线前的基线锁定)。
 
 行为细节(缺文件扫描/大小一致性/冲突检查/保护策略)的守阵仍在原位: test_grouping /
-test_file_access / test_checking / test_ops(经 manager 旧名单行委托, plan §7.2)。
+test_file_access / test_checking / test_ops(W3 起 manager 旧名委托已内联删除, 经
+ctx.ops / host.get("<模块>") 模块入口驱动, plan §7.2)。
 
 ## 测试计划
 - test_grouping_ops_on_ctx_and_registered: ctx.ops/ctx.maintenance 是宿主注册表里的模块本体, 装配序锁定
-- test_grouping_phases_wired: 四相位各恰有一个订阅者(grouping), emit 返回计数为 1
+- test_grouping_phases_wired: transitions/removed_scan/post 三相位各恰有 grouping 一个订阅者, emit 返回计数为 1(torrents_added 四家订阅面在 test_modules_p5 锁定)
 - test_transitions_phase_guards_enabled_and_clears_dedup: disabled 零动作; 去重集合每轮经该相位入口清零
-- test_torrents_added_phase_assigns_new_torrent: 逐新增种子相位驱动归组(enabled 自判)
-- test_removed_scan_and_post_phases_drive_grouping: 删除扫描与收尾两相位驱动 grouping
-- test_ops_service_via_ctx_matches_manager_delegate: ctx.ops.recheck/skip_check 直调与 mgr.ops_* 委托同源同效
-- test_check_filelist_merged_into_ops: check_filelist 经 ctx.ops 与 manager 委托双路可达
+- test_torrents_added_phase_assigns_new_torrent: 逐新增种子相位驱动归组(enabled 自判), disabled 时同一 emit 零归组
+- test_removed_scan_and_post_phases_drive_grouping: 删除扫描与收尾两相位驱动 grouping(调用点与原 _refresh_torrents 同序)
+- test_ops_service_direct_call_and_inflight_mutex: ctx.ops.recheck 直调提交登记在途(web 源), 重复提交受在途互斥
+- test_check_filelist_merged_into_ops: check_filelist 并入 ops(决策点 D2), ctx.ops.check_filelist 是唯一入口
 - test_p4_modules_sections_claims: 两模块 sections 认领清单锁定
 """
 import os

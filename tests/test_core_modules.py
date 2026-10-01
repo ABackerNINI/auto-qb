@@ -21,6 +21,7 @@ import copy
 import inspect
 import os
 import tempfile
+import textwrap
 from types import SimpleNamespace
 from unittest import mock
 
@@ -196,11 +197,27 @@ def test_apply_new_config_notify_remount_only_on_change(monkeypatch):
 
 
 def test_no_private_notify_access_from_outside():
-    """托盘 4 处 manager._notify_handler 直写改 ctx.notify 后, 私有字段访问必须保持清零"""
+    """托盘 4 处 manager._notify_handler 直写改 ctx.notify 后, 私有字段访问必须保持清零
+
+    AST 式断言(L5 升级, 先例 test_modules_p5.test_kernel_does_not_import_business_packages):
+    只认结构访问(Attribute 属性访问 / Name 标识引用), 注释或文档字符串提及
+    _notify_handler 不再误红(旧子串守阵的假红面, 红验记录见任务档案)。
+    """
+    import ast
     import auto_qb.core.qbmanager as qbm
     import auto_qb.tray.app as tray_app
 
-    tray_src = inspect.getsource(tray_app)
-    assert "_notify_handler" not in tray_src, "托盘必须经 ctx.notify 公开方法(plan P1)"
-    qm_src = inspect.getsource(qbm.QbManager)
-    assert "_notify_handler" not in qm_src, "handler 归属 NotifyModule, 内核不再持有该私有字段"
+    def _private_refs(tree):
+        """树里对 _notify_handler 的结构引用(Attribute 属性 / Name 标识), 带行号"""
+        hits = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr == "_notify_handler":
+                hits.append(f"line {node.lineno}: 属性访问 ._notify_handler")
+            elif isinstance(node, ast.Name) and node.id == "_notify_handler":
+                hits.append(f"line {node.lineno}: 标识引用 _notify_handler")
+        return hits
+
+    tray_hits = _private_refs(ast.parse(inspect.getsource(tray_app)))
+    assert not tray_hits, f"托盘必须经 ctx.notify 公开方法(plan P1): {tray_hits}"
+    qm_hits = _private_refs(ast.parse(textwrap.dedent(inspect.getsource(qbm.QbManager))))
+    assert not qm_hits, f"handler 归属 NotifyModule, 内核不再持有该私有字段: {qm_hits}"
