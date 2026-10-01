@@ -71,6 +71,8 @@ config:
         add_category_for_satisfied: '--HR${required_seeding_time}--'    # 做种时长满足要求时添加的分类格式
         overwrite_category_for_satisfied: false                         # 做种时长满足要求时是否覆盖分类
 
+        exclude_categories:
+          - IYUU自动辅种
     hr_check:
         enabled: true
         channel:
@@ -78,13 +80,14 @@ config:
             port: 18788
             token: 123456
 
+            extension_id: obdcncpkinclbpjhfmnakkgcjobbenig
         sites:
             btschool:
-                mode: partial
+                enabled: false
+                refresh_interval: 5H
             carpt:
-                mode: partial
-
-    # 全局限速曲线
+                enabled: false
+                refresh_interval: 5H
     global_speed_limit_curve:
         interval: 10M
         traffic_source:
@@ -499,4 +502,4 @@ config:
             rules:
               - '@add_drive_letter_tag_rules'
               - "@skip_checking_rules"
-    schema_version: 2
+    schema_version: 3
