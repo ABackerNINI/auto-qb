@@ -589,66 +589,6 @@ def test_corpus_sync_full_then_increment(tmp_path):
     assert inc["torrents"] == {}, "无变化时增量轮不带种子"
 
 
-# --------------------------------------------------------------------------- 两层状态模型
-def _make_sim(tmp_path, cmd_latency_ms: float, md_lag_ms: float, status: str = "ok"):
-    """用极小语料构造一个 SimQb(不起 HTTP, 直接打方法)"""
-    d = _write_corpus(tmp_path, status=status)
-    args = simqb.build_parser().parse_args(
-        [
-            "--source=corpus:%s" % d, "--root",
-            str(tmp_path / "root"), "--command-latency-ms",
-            str(cmd_latency_ms), "--maindata-lag-ms",
-            str(md_lag_ms)
-        ]
-    )
-    args.root = str(tmp_path / "root")
-    args.run_dir = simqb.make_run_dir(args.root, "t")
-    return simqb.SimQb(args)
-
-
-def test_two_layer_state_info_newer_than_maindata(tmp_path):
-    """计划 §07 两层状态: 命令效果对 info 先可见, 对 sync/maindata 后可见(md 额外滞后)
-
-    这是 issue 26-09-20-2145 的复现载体: 没有它, "真值尚未落地"这一类缺陷在本地永远测不出来。
-    """
-    sim = _make_sim(tmp_path, cmd_latency_ms=0, md_lag_ms=200)
-    h = next(iter(sim.torrents))
-    assert sim.torrents[h]["state"] == "stalledUP"
-
-    sim.apply_write("torrents/stop", {"hashes": h})
-    # 流状态(base)必须**不动** —— 命令效果一律走 overlay, base 只由录制流推进
-    assert sim.torrents[h]["state"] == "stalledUP", "命令不得直接改流状态"
-
-    now = time.time()
-    assert sim._live(h, now)["state"] == "pausedUP", "info 侧应立刻可见(torrents/stop -> pausedUP)"
-    assert sim._snapshot_view(h, now)["state"] == "stalledUP", "maindata 侧此刻还不该可见"
-
-    later = now + 0.5
-    assert sim._snapshot_view(h, later)["state"] == "pausedUP", "过了 md 滞后线后 maindata 才可见"
-
-
-def test_two_layer_state_red_without_lag(tmp_path):
-    """**红验**: 把两个滞后都设 0 => 两端同刻可见。若这一条不成立, 上一条也没在测滞后(只是恒绿)"""
-    sim = _make_sim(tmp_path, cmd_latency_ms=0, md_lag_ms=0)
-    h = next(iter(sim.torrents))
-    sim.apply_write("torrents/stop", {"hashes": h})
-    now = time.time()
-    assert sim._live(h, now)["state"] == "pausedUP"
-    assert sim._snapshot_view(h, now)["state"] == "pausedUP", "无滞后时两端必须同刻可见(红验: 判据能区分)"
-
-
-def test_corpus_sync_full_then_increment(tmp_path):
-    """语料档 sync: rid 失配走全量(87 种子全给), rid 一致走增量(只给脏集合)"""
-    sim = _make_sim(tmp_path, cmd_latency_ms=0, md_lag_ms=0)
-    full = sim.sync_maindata(0)
-    assert full["full_update"] is True
-    assert len(full["torrents"]) == len(sim.torrents)
-    assert full["server_state"]["free_space_on_disk"] == 123, "server_state 必须来自流的首帧"
-    inc = sim.sync_maindata(full["rid"])
-    assert inc["full_update"] is False
-    assert inc["torrents"] == {}, "无变化时增量轮不带种子"
-
-
 # --------------------------------------------------------------------------- 时间轴回放(W4)
 def _write_timeline_corpus(tmp_path: Path) -> Path:
     """4 帧: T0 + 2 条带 dt_ms 的增量 + 末帧 closure; 第 2 条增量带 fs_delta"""

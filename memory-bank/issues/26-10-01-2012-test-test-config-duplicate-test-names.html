@@ -8,7 +8,7 @@
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="duplicate-test-name-shadowed-guard">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests/test_config.py 另有 5 对同文件重名测试, 顶层 def 遮蔽致前一条死测试">
 <meta name="issue-summary" content="test_config.py 存在 5 对重名顶层测试(718/793 等), 后者遮蔽前者; 前 4 对逐字相同、第 5 对仅 YAML 样本一字之差; 待重命名/合并并落防复发守阵">
 <title>tests/test_config.py 另有 5 对同文件重名测试, 顶层 def 遮蔽致前一条死测试 · test · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2012-test-test-config-duplicate-test-names</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 20:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 20:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 20:44 — 修复，状态 <strong>Open → Done</strong>。处置: 5 对全部按「合并保留一份」处理, 不走改名 —— 复活第 5 对时实证其差异样本 <code>[, 5]</code> 是<strong>非法 YAML</strong>(flow node 解析直接报错, 到不了段校验), 修成合法的 <code>[~, 5]</code> 后也不触发 <code>delete_tags</code> 报错 —— <code>load_config</code> 用 <code>yaml.BaseLoader</code> 把所有标量读成字符串(<code>~</code>→"~"、<code>5</code>→"5"), 两样本不存在可断言的行为差异, "保留两份断言体"无实体可保, 故按纯重复合并(行号漂移: 4 对删 718-763 前份, 第 5 对删改名后残留, 保留 793/835/842/852/869 侧)。守阵: 新增 <code>tests/test_no_duplicate_test_names.py</code>(ast.parse 扫 tests/*.py 顶层 test_ 名, 同文件重复零豁免即红, 含造重名文件的红验用例)。守阵拦截到<strong>另一文件</strong> <code>tests/test_sim_corpus.py</code> 也有 3 对同文件重名(549/609、570/630、580/640, 函数体逐字相同, 连同重复的 <code>_make_sim</code> 助手整段复制), 同口径合并, 跨文件重名只扫不拦。实测: 修复前 test_config.py 56 个顶层 test def 仅 51 个被收集(5 对死测试), test_sim_corpus.py 36/33; 修复后重名清零, <code>commands run test.quick</code> 1911 passed + 3 skipped(基线 1909 + 守阵 2)。</li>
     </ul>
   </section>
 
