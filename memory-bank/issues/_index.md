@@ -15,7 +15,7 @@
 | 类型 | 条数 |
 |---|---|
 | bug | 12 |
-| perf | 3 |
+| perf | 5 |
 | docs | 4 |
 | refactor | 4 |
 | feat | 24 |
@@ -24,6 +24,8 @@
 
 ## Open
 
+- [perf] [渐进灌入期主循环掉拍: max_tasks_per_tick 自适应](26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — --ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s), 灌入期每拍还债; 给 max_tasks_per_tick 做自适应(候选列于 W5, 未实施)
+- [perf] [/api/state 全量构建拖垮主循环: 增量 rid 用满 + 分页/按需字段(5000 种子实测)](26-10-01-2218-perf-webui-api-state-full-scan.html) — 5000 种子下 /api/state 全量单次约 0.6s 抢占同进程主循环; 方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖, 方向②已由 shows-view issue 跟踪
 - [docs] [config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS](26-10-01-2212-docs-schema-docstring-tracker-field-levels.html) — TRACKER_FIELD_LEVELS 级别表随内核化重构整体退役后, config/schema/__init__.py 的 docstring 仍提及它, 与代码相反的文档漂移; 不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内
 - [question] [配置切分(每站点一份)是否做(存疑)](26-10-01-2212-question-config-split-per-site.html) — (存疑)把站点配置拆为每站点一份文件, 涉及加载/热重载/校验面, 待拍板
 - [question] [基于搜索的辅种方式可行性(存疑)](26-10-01-2212-question-search-based-recheck-feasibility.html) — (可行性存疑)用站点搜索发现可辅种资源的思路, 待可行性结论
