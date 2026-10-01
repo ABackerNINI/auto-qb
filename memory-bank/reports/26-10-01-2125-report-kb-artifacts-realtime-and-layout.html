@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="memory-bank-dir-refactor">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-01-2125">
+<meta name="doc-updated" content="26-10-01-2125">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-22-memory-bank-dir-refactor.md">
+<title>memory-bank 生成物实时化与四工位专题目录化 · 可行性分析</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --paper: #14181d;
+    --paper-2: #181d23;
+    --ink: #d9dee3;
+    --muted: #8b949e;
+    --faint: #6b7480;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #7ab3c4;
+    --accent-soft: rgba(122,179,196,.13);
+    --warn: #c9a86a;
+    --bad: #c47a7a;
+    --good: #8fbc8f;
+    --disp: "Bahnschrift", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --body: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.75; }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 48px 32px 80px; }
+  header { border-bottom: 1px solid var(--hairline-strong); padding-bottom: 22px; margin-bottom: 34px; }
+  .kicker { font-family: var(--disp); font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+  h1 { font-family: var(--disp); font-size: 27px; font-weight: 600; line-height: 1.35; margin: 0 0 12px; }
+  .metaline { color: var(--muted); font-size: 13px; }
+  .metaline code { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  h2 { font-family: var(--disp); font-size: 19px; font-weight: 600; margin: 46px 0 6px; padding-top: 18px; border-top: 1px solid var(--hairline); }
+  h2 .no { color: var(--accent); margin-right: 8px; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 24px 0 8px; }
+  p { margin: 10px 0; }
+  .lede { color: var(--muted); margin: 4px 0 18px; font-size: 14px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 18px 0 6px; }
+  .card { background: var(--paper); border: 1px solid var(--hairline); border-radius: 8px; padding: 16px 18px; }
+  .card .tag { font-family: var(--disp); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; }
+  .card.keep .tag { color: var(--good); }
+  .card.no .tag { color: var(--bad); }
+  .card.opt .tag { color: var(--warn); }
+  .card b { display: block; font-size: 15px; margin-bottom: 6px; }
+  .card p { font-size: 13.5px; color: var(--muted); margin: 0; line-height: 1.65; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 8px; font-size: 13.5px; }
+  th { font-family: var(--disp); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hairline-strong); font-weight: 600; white-space: nowrap; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  td.num { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); } .mut { color: var(--muted); }
+  code { font-family: var(--mono); font-size: .88em; background: var(--paper-2); border: 1px solid var(--hairline); border-radius: 4px; padding: 1px 5px; }
+  .bar { position: relative; background: var(--paper-2); border: 1px solid var(--hairline); border-radius: 4px; height: 14px; min-width: 110px; overflow: hidden; }
+  .bar i { position: absolute; inset: 0 auto 0 0; background: var(--accent-soft); border-right: 2px solid var(--accent); }
+  .bar.hot i { background: rgba(201,168,106,.18); border-right-color: var(--warn); }
+  .panel { background: var(--paper); border: 1px solid var(--hairline); border-left: 3px solid var(--accent); border-radius: 6px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+  .panel.warnbox { border-left-color: var(--warn); }
+  .panel.badbox { border-left-color: var(--bad); }
+  .panel .t { font-weight: 600; margin-bottom: 4px; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--faint); }
+  .footnote { color: var(--faint); font-size: 12.5px; margin-top: 6px; }
+  footer { margin-top: 52px; border-top: 1px solid var(--hairline-strong); padding-top: 16px; color: var(--faint); font-size: 12.5px; }
+  .refs li { margin: 3px 0; }
+  @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } .wrap { padding: 28px 16px 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">可行性分析 · memory-bank 结构</div>
+  <h1>memory-bank 生成物实时化与四工位专题目录化 · 可行性分析</h1>
+  <div class="metaline">
+    报告 <code>26-10-01-2125</code> · 专题 <code>memory-bank-dir-refactor</code> · 2026-10-01 · develop @ f3564847 ·
+    数据为当日 <code>kb.docmap --all</code> / 目录实测 / <code>doc.caps</code> 现算值
+  </div>
+</header>
+
+<h2><span class="no">0</span>结论</h2>
+<p class="lede">两个命题分开裁定：生成物（各目录 <code>_index.md</code>）是否改为脚本实时生成；四工位（issues / plans / reports / tasks）是否改 pitfalls 式按专题分目录。</p>
+<div class="cards">
+  <div class="card keep">
+    <div class="tag">维持 · 生成物落盘</div>
+    <b>_index.md 不改全量实时生成</b>
+    <p>索引是「每次路由都读、每轮收尾才写一次」的高读低写件。落盘 + 生成器 + 三层守卫的现架构在 token 上不比现算贵（输出相同），却保住了零依赖直读、diff 审阅面、守卫载体。库内已有现算先例（kb.docmap / kb.active / kb.baseline），分界线已经画对。</p>
+  </div>
+  <div class="card no">
+    <div class="tag">不做 · 专题目录化</div>
+    <b>四工位维持平铺 + doc-topic 逻辑归组</b>
+    <p>pitfalls 模型成立的三条前提（封闭小分类学、扫读式访问、单件自足）在四工位全部不成立：doc-topic 是开放集（实测 162 个，69% 为单件），访问是点查，件有状态与跨件链。物理按专题归堆等于把已退役的物化路线换个更重的形态再来一遍。</p>
+  </div>
+  <div class="card opt">
+    <div class="tag">可选 · 低风险增强</div>
+    <b>摘要截断 + 状态归档预案</b>
+    <p>真要对症做点什么：① issues 索引生成端补 <code>SUMMARY_MAX</code> 式截断（现无截断，20.2KB）；② tasks 索引已到 cap 的 95%，触顶时按<b>状态</b>归档 Done/Superseded 冻结件（冷占 71%），不是按专题分目录。</p>
+  </div>
+</div>
+
+<h2><span class="no">1</span>实测底盘</h2>
+<p>分析前先量库。全库 701 件 ≈ 8.0MB，分布如下（2026-10-01 实测）：</p>
+<table>
+  <tr><th>目录</th><th>件数</th><th>字节</th><th>单件均</th><th>性质</th></tr>
+  <tr><td>plans/</td><td class="num">92</td><td class="num">3.75 MB</td><td class="num">42 KB</td><td>制品（HTML，拍板后冻结）</td></tr>
+  <tr><td>tasks/</td><td class="num">96</td><td class="num">1.08 MB</td><td class="num">10 KB</td><td>制品（md 档案，唯一滚动件）</td></tr>
+  <tr><td>issues/</td><td class="num">63</td><td class="num">900 KB</td><td class="num">14 KB</td><td>制品（HTML，终态即冻结）</td></tr>
+  <tr><td>pitfalls/</td><td class="num">106</td><td class="num">463 KB</td><td class="num">4.4 KB</td><td>知识（7 类目录，单件自足）</td></tr>
+  <tr><td>testing/</td><td class="num">172</td><td class="num">441 KB</td><td class="num">2.6 KB</td><td>基线切片（一次性快照）+ 口径</td></tr>
+  <tr><td>reports/</td><td class="num">22</td><td class="num">732 KB</td><td class="num">33 KB</td><td>制品（HTML，出厂即冻结）</td></tr>
+  <tr><td>activeContext/</td><td class="num">82</td><td class="num">208 KB</td><td class="num">2.5 KB</td><td>会话滚动状态切片</td></tr>
+  <tr><td>常青主题 6 目录</td><td class="num">39</td><td class="num">274 KB</td><td class="num">7 KB</td><td>知识（modules / systemPatterns / conventions / rule-system / config-reference / checklists）</td></tr>
+  <tr><td>progress/ + 库根</td><td class="num">29</td><td class="num">204 KB</td><td class="num">7 KB</td><td>长期结论 / 路由</td></tr>
+</table>
+<p class="footnote">token 换算口径：UTF-8 中文 3 字节/字、混合文本粗估 1KB ≈ 250–400 token。下列数字为字节实测，token 为推算估值。</p>
+
+<h3>索引层（生成物）盘点</h3>
+<table>
+  <tr><th>索引</th><th>字节</th><th>cap（25,200）</th><th>占用</th><th>状态分区（条数）</th></tr>
+  <tr><td>tasks/_index.md</td><td class="num">23,850</td><td class="num"><div class="bar hot"><i style="width:95%"></i></div></td><td class="num bad">95%</td><td>In Progress 23 · Open 3 · <b>Done 65</b> · Dropped 0</td></tr>
+  <tr><td>issues/_index.md</td><td class="num">20,186</td><td class="num"><div class="bar"><i style="width:80%"></i></div></td><td class="num">80%</td><td>Open 21 · In Progress 1 · <b>Done 39</b> · Superseded 1</td></tr>
+  <tr><td>plans/_index.md</td><td class="num">15,050</td><td class="num"><div class="bar"><i style="width:60%"></i></div></td><td class="num">60%</td><td>In Progress 15 · Open 5 · <b>Done 64</b> · Superseded 4</td></tr>
+  <tr><td>pitfalls 族（8 份）</td><td class="num">46,561</td><td class="num"><div class="bar"><i style="width:23%"></i></div></td><td class="num">—</td><td>根索引 2.7KB + 7 类索引 2.9–10.3KB（类 cap 12,000）</td></tr>
+  <tr><td>reports/_index.md</td><td class="num">4,432</td><td class="num"><div class="bar"><i style="width:18%"></i></div></td><td class="num">18%</td><td><b>Done 21</b>（报告恒终态）</td></tr>
+  <tr><td>常青主题 12 份</td><td class="num">24,551</td><td class="num"><div class="bar"><i style="width:13%"></i></div></td><td class="num">—</td><td>1.2–3.5KB/份，无压力</td></tr>
+</table>
+<p>生成物合计 <b>20 份 <code>_index.md</code> ≈ 135KB</b>，占全库 <b>1.7%</b>；另有 17 份 <code>_about.md</code> ≈ 8.5KB（手写，是生成器的数据源，不算生成物）。当前 <code>doc.caps</code> 无债务（09-29 全表翻倍后），但 tasks 索引距 cap 只剩 ~1.3KB 余量。</p>
+
+<h3>生成器与守卫现状</h3>
+<table>
+  <tr><th>层</th><th>成员</th><th>机制</th></tr>
+  <tr><td>落盘生成 ×4</td><td><code>gen_kb_index</code>（19 个目录索引，pitfalls 两级同一实现）/ <code>gen_tasks_index</code> / <code>gen_docs_index</code>（plans+reports）/ <code>gen_issues_index</code></td><td>扫三行头 / <code>doc-*</code> / <code>issue-*</code> / <code>Status·Summary</code> 元数据 → 写 <code>_index.md</code>；<code>kb.index</code> 一条命令跑齐（2026-10-01 收编 issues 生成器后为四条）</td></tr>
+  <tr><td>现算查询 ×3</td><td><code>kb.docmap</code> / <code>kb.active</code> / <code>kb.baseline</code></td><td>只打印不落盘（<code>_doc-map.md</code> 物化 2026-09-29 退役；<code>_recent.md</code> 类缓存列为反模式）</td></tr>
+  <tr><td>守卫 ×3 层</td><td>① pytest（<code>test_memory_bank.py</code> 27 例 + <code>test_docs_forms.py</code>）② 提交闸门（<code>my-commit-flow.toml</code> 对 memory-bank/ / issues/ / activeContext/ 的变更跑对应生成器 <code>--check</code>）③ 手动 <code>kb.check</code>（7 条 <code>--check</code>）</td><td>「索引 == 生成结果」双向一致 / meta 完整 / 命名合规 / dark 主题 / cap（债务制）</td></tr>
+</table>
+
+<h2><span class="no">2</span>命题一：生成物能否脚本实时生成（不落盘）</h2>
+
+<h3>先把「生成物」分对类</h3>
+<p>「实时生成」只对<b>可从库内其它数据推导</b>的东西成立。逐类盘点后，命题实际收敛为 20 份 <code>_index.md</code>：</p>
+<table>
+  <tr><th>类别</th><th>成员</th><th>可否实时生成</th><th>判据</th></tr>
+  <tr><td>纯派生</td><td>20 份 <code>_index.md</code></td><td class="good">可</td><td>数据源是各件的三行头 / doc-* / issue-* meta / Status·Summary，生成器已在维护</td></tr>
+  <tr><td>已现算</td><td>docmap / active / baseline 查询</td><td class="good">已是实时</td><td>2026-09-29 起查询现算不落盘，库已完成这一步</td></tr>
+  <tr><td>点时快照</td><td>plans / issues / reports HTML、tasks 档案、activeContext 切片</td><td class="bad">不可</td><td>制品是当时的现场与决策（拍板后冻结），切片是 agent 写的状态，无源可推</td></tr>
+  <tr><td>需真跑才有</td><td>testing/baselines/ 基线切片</td><td class="bad">不可</td><td>数字来自真跑 test.full（35s 级）且历史数字不可重算，本就是一次性快照</td></tr>
+</table>
+
+<h3>三个方案的对比（对象：20 份 _index.md）</h3>
+<table>
+  <tr><th>维度</th><th>A · 落盘 + 生成器 + 守卫（现状）</th><th>B · 全实时生成（不落盘）</th><th>C · 混合：骨干落盘 + 过滤查询</th></tr>
+  <tr><td>单次读 token</td><td class="good">索引全文直读（1.2–24KB/次）</td><td class="mut">全量输出同 A；加过滤参数后点查 0.3–2KB</td><td class="good">路由扫读 = A；点查 = B 的过滤输出</td></tr>
+  <tr><td>读路径依赖</td><td class="good">零依赖：Read 即得。IDE 注入上下文、未装 wrapper 的 agent、fresh clone、只读会话全部可达</td><td class="bad">每次读取经 commands 引擎（子进程 0.3–1s）；wrapper 未装即断；路由可达性被绑死在工具链上</td><td class="mut">扫读走 A，点查走 B</td></tr>
+  <tr><td>写路径成本</td><td class="warn">每轮 KB 回写后跑一次 kb.index（约 1s）；索引合并冲突靠「重跑即解」</td><td class="good">零写、零冲突</td><td class="warn">同 A</td></tr>
+  <tr><td>新鲜度与守卫</td><td class="good">三层守卫兜住：陈旧索引带着提交会红。红灯防的不只是过期，更是<b>生成器漏跑、集合漂移、生成器本身坏掉</b>（26-09-24 集合漏项事故、26-10-01 收编 issues 生成器都是这条线的维护记录）</td><td class="bad">天然不过期，但「索引 == 生成结果」红灯失去比较对象，提交闸门对 memory-bank/ 的检查集合变空，生成器质量回归（<code>test_index_is_regenerated</code>）失去真实载体</td><td class="good">同 A</td></tr>
+  <tr><td>审阅与回溯</td><td class="good">索引进 git：diff 可审、历史可查</td><td class="bad">输出不留痕，PR 里看不到索引变化</td><td class="good">同 A</td></tr>
+  <tr><td>实现面</td><td class="good">已有，零改动</td><td class="warn">需统一查询入口覆盖 4 生成器 × 过滤参数；每加一个查询面都是新的脚本面积（生成器集合是事故易发区）</td><td class="warn">给 4 个落盘生成器补 <code>--topic/--status</code> 过滤参数，闸门 note 同步</td></tr>
+</table>
+
+<div class="panel">
+  <div class="t">裁定：A 为主，选择性吸收 B 的一个局部优点 → C 的增量可选项</div>
+  <p>关键账是<b>读写比与收益倒挂</b>：索引每次会话都要读、每轮收尾才写一次；B 省下的只有「收尾跑 1 次 kb.index（约 1s）」和「偶发索引冲突（重跑即解，零思考动作）」，付出的却是每次读取子进程化、非命令上下文不可达、审阅面丢失、闸门收窄。而 B 唯一的 token 优势（过滤后点查省 80–98%）不需要放弃落盘就能拿到——C 在 A 之上加过滤参数即可。</p>
+  <p>更重要的视角校准：<b>索引层全量 135KB 只占库的 1.7%</b>。组织层优化的收益上限就是这 1.7% 里的路由差额；token 大头在制品层（plans+tasks+issues+reports ≈ 5.7MB，占 71%），而制品成本已经被「三行头 + 摘要 + 索引路由、禁止整读」压到「读一两个件」的水平。为路由层做架构手术，天花板很低。</p>
+</div>
+
+<div class="panel warnbox">
+  <div class="t">库内先例（本分析最强的经验证据）</div>
+  <p>这个库不是没试过实时化，而是已经画对了一条分界线：<b>路由骨干（低频写、高频读）落盘；点查视图与易变聚合（高频写或写热点）现算</b>。2026-09-29 <code>_doc-map.md</code> 物化退役（写热点 + index-auto cap 反复触顶）改 <code>kb.docmap</code> 查询；<code>kb-structure.md</code> 把「生成 <code>_recent.md</code> 之类摘要缓存」列为反模式——「一个看着可读、实际是上次运行快照的文件比没跑脚本更危险」。本报告的裁定就是把这条已被实践校准过的分界线维持住。</p>
+</div>
+
+<h2><span class="no">3</span>命题二：四工位改 pitfalls 式专题目录</h2>
+
+<h3>pitfalls 模型为什么成立（三条前提）</h3>
+<p>2026-09-22 目录化重构（本专题的上一轮工作）把 pitfalls 做成 7 类目录 + 两级索引，它有效靠的是三条同时成立：</p>
+<ol>
+  <li><b>分类学小而封闭</b>：7 类按<b>动作域</b>划分（backend / git / web-ui / testing / ops / kb / docs），枚举单点 <code>PITFALL_CLASSES</code>，「没有合适的类先扩枚举」——类是封闭集，不随项目功能线增长。</li>
+  <li><b>访问方式是扫读</b>：每次改代码前「按动作选类 → 进类索引 → 选主题文件」，类级 cap（条目集 12,000）把单次扫读压在 4–10KB。</li>
+  <li><b>单件自足</b>：一条陷阱一个文件，无状态机、无跨件链，文件即全部事实。</li>
+</ol>
+
+<h3>四工位逐条对照（前提全部不成立）</h3>
+<table>
+  <tr><th>维度</th><th>pitfalls（7 类）</th><th>四工位现状（实测）</th><th>若按专题建目录</th></tr>
+  <tr><td>分类学</td><td class="good">封闭 7 类，枚举单点</td><td class="bad">doc-topic 是<b>开放集</b>：<code>kb.docmap --all</code> 实测 <b>51 个跨形态专题 + 111 个单件专题 ≈ 162 个键</b>，且随每件新制品增长</td><td class="bad">160+ 个目录，69% 的目录只装 1–2 件——归组变碎片，目录数追上文件数</td></tr>
+  <tr><td>访问方式</td><td>扫读：改码前按动作选类</td><td>点查：认领 issue、查状态、出件前查主键（docmap）。现行索引<b>按状态分区</b>（热分区 In Progress/Open 在前，冷 Done 在后）正对点查</td><td class="warn">「全库还开着什么」从一份索引的状态分区，打散进 160 个目录索引；点查多一跳</td></tr>
+  <tr><td>件形态</td><td>单件自足，无生命周期</td><td>5 状态词 + doc-topic 主键 + doc-refs 双向链 + 认领链闸门——<b>逻辑归组已经存在且是现算的</b>（docmap 一行一专题串起 issue/计划/报告/档案）</td><td class="bad">把逻辑专题视图物化成目录——与 <code>_doc-map.md</code> 同思路，那条路线 2026-09-29 已因写热点与 cap 触顶退役</td></tr>
+  <tr><td>检索路径</td><td>类索引是必经层</td><td>索引优先，物理布局不进检索路径（<code>ls</code> 与 grep 都不是主检索手段）</td><td class="mut">检索成本零改善；tasks 文件名本就带领域前缀（webui/backend/… 8 类枚举），<code>ls tasks/ | grep webui</code> 已等价于分目录</td></tr>
+  <tr><td>结构成本</td><td>已消化（三处同步 + 守卫）</td><td>—</td><td class="bad">273 件 git mv + doc-refs / README / AGENTS / skill 路径接线 + 五步配方守恒核对；索引总量 +15–20%（多出 N 份目录级 <code>_index.md</code> + <code>_about.md</code>）；tasks 索引生成器现按 <code>tasks/*.md</code> 不递归扫描，attachments 豁免依赖这一点，全要改</td></tr>
+</table>
+
+<div class="panel badbox">
+  <div class="t">裁定：不做专题目录化</div>
+  <p>决定性数据是专题基数：162 个专题键、69% 单件——「不同的专题放入不同的文件夹」在四工位得到的不是归组而是碎片化。pitfalls 的类是「动作域」（改代码、跑 git、写测试），天然少而稳；四工位的专题是「项目功能线」（hr-verify、docker-deploy、webui-keyboard-shortcuts…），天然多而散。两者访问模式也不同：陷阱要扫，事件要点查。物理布局改变不了任何一次真实检索的 token 账。</p>
+</div>
+
+<h3>那索引触 cap 了怎么办（真问题的真解法）</h3>
+<p>tasks/_index.md 已达 cap 的 95%，这是本分析里唯一真实迫近的结构压力。对症的顺手顺序：</p>
+<ol>
+  <li><b>生成端摘要截断</b>（token 立减）：tasks 已有 <code>SUMMARY_MAX=80</code>，issues 生成器<b>无截断</b>——20.2KB / 62 条、均行 ~325B，长摘要是大头。对齐补一个截断策略，预计索引 -30~50%，一处生成器常量，无结构改动。</li>
+  <li><b>按状态归档，不是按专题</b>：实测冷数据（Done + Superseded）占各索引 63–77%。Done/Superseded 是<b>冻结终态</b>（协议本身规定「终态即冻结」「拍板后冻结」），几乎只做考古。预案：冻结件移 <code>*/archive/</code>（或按年分），索引只保活跃分区 + 归档汇总一行。判冷数据的字段是 <b>status</b>，不是 topic——状态会终结，专题不会，这就是状态归档对症而专题目录不对症的根本原因。</li>
+  <li><b>领域子目录留作远期预案</b>：仅当单目录件数失控（如 plans &gt; 200 件）或归档后索引二次触顶再议；届时 tasks 的 slug 领域枚举（8 类）是现成的分类学，pitfalls 的「扩类三处同步」配方也是现成的。</li>
+</ol>
+
+<h2><span class="no">4</span>建议清单（待拍板，本轮未动手）</h2>
+<table>
+  <tr><th>#</th><th>建议</th><th>性质</th><th>成本 / 收益</th></tr>
+  <tr><td>1</td><td>维持生成物落盘 + 生成器 + 三层守卫；维持 kb.docmap / kb.active / kb.baseline 现算</td><td class="good">维持现状</td><td>零成本；架构判断已被库内先例与读写比支持</td></tr>
+  <tr><td>2</td><td>四工位维持平铺 + doc-topic 逻辑归组；不做专题目录化</td><td class="good">维持现状</td><td>零成本；避免一次 273 件的大迁移</td></tr>
+  <tr><td>3</td><td>issues（可含 plans/reports）索引生成端补 <code>SUMMARY_MAX</code> 式截断</td><td class="warn">低风险增强</td><td>一处生成器常量 + 闸门重跑；索引 token 预计 -30~50%</td></tr>
+  <tr><td>4</td><td>tasks 索引触顶预案 = 状态归档（Done/Superseded 移 archive，索引保活跃分区 + 汇总行）</td><td class="warn">预案（触发式）</td><td>触发条件写死：索引触 25,200（现余 ~1.3KB）；实施时需动生成器扫描约定与守卫</td></tr>
+  <tr><td>5</td><td>（可选）给落盘生成器补 <code>--topic/--status</code> 过滤参数，点查大池子省 token</td><td class="warn">可选</td><td>增加生成器脚本面积——生成器集合是事故易发区（26-09-24 / 26-10-01 两次教训），建议与 docmap 已覆盖面比对后再决定，避免功能重复</td></tr>
+</table>
+
+<h2><span class="no">5</span>口径与局限</h2>
+<ul>
+  <li>件数 / 字节 / 分区条数 / cap 占用 / 专题数均为 2026-10-01 当日实测（<code>find</code> 统计、<code>kb.docmap --all</code>、<code>doc.caps</code>）；token 数字为字节推算估值（混合文本 1KB ≈ 250–400 token），未做端到端 tokenizer 实测。</li>
+  <li>方案 B 的「读取子进程 0.3–1s」取自本轮 <code>commands run</code> 实测区间（sync 1.0s / doc.caps 0.3s / docmap 0.1s）。</li>
+  <li>本报告只做分析与建议，未改任何结构、生成器与守卫；若采纳 #3 / #4，应按流程立计划（delivery-artifact）并同步「扩目录三处同步」涉及的接线清单。</li>
+  <li>相关历史：目录化重构方案见 <code>plans/26-09-22-1248</code>，cap 债务制定案见 <code>plans/26-09-30-2112</code>；本报告挂同一专题 <code>memory-bank-dir-refactor</code>。</li>
+</ul>
+
+<footer>
+  <ul class="refs">
+    <li><b>Refs:</b> tasks/26-09-22-memory-bank-dir-refactor.md(双向)。相关件(仅文本提及, 不进协议链): plans/26-09-22-1248-memory-bank-dir-refactor-plan.html · plans/26-09-30-2112-plan-memory-bank-cap-debt.html</li>
+    <li>数据快照：develop @ f3564847 · 701 件 / 8.0MB · 专题 51+111 · doc.caps 无债务 · tasks 索引 23,850/25,200</li>
+  </ul>
+</footer>
+
+</div>
+</body>
+</html>

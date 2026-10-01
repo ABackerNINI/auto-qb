@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-01-2125] [memory-bank 生成物实时化与四工位专题目录化 · 可行性分析](26-10-01-2125-report-kb-artifacts-realtime-and-layout.html) — `memory-bank-dir-refactor`
 - [26-10-01-0918] [审计报告 · QbManager 内核化重构实施评估](26-10-01-0918-report-kernel-module-refactor-audit.html) — `kernel-module-refactor`
 - [26-09-30-1806] [WEBUI 列表键鼠交互割裂 · 业界成熟方案调研与推荐 · auto-qb](26-09-30-1806-report-webui-keymouse-cohesion.html) — `webui-keyboard-shortcuts`
 - [26-09-29-1803] [HR 计数: 数据完整性的校验和 — 可行性分析](26-09-29-1803-report-hr-counter-verify.html) — `backend-partial-hr-verify`

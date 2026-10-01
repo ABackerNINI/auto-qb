@@ -2,9 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-09-22
-**Updated:** 2026-09-22
-**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; **W0–W8 全部完成** —— 8 份超标文档拆成 9 目录 / 40+ 主题文件 + tasks 消肿 + 链接机检, 12 条结构性守卫; 余 instructions 漂移重写待做
+**Updated:** 2026-10-01
+**Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; **W0–W8 全部完成** —— 8 份超标文档拆成 9 目录 / 40+ 主题文件 + tasks 消肿 + 链接机检, 12 条结构性守卫; 余 instructions 漂移重写待做; 26-10-01 后继可行性分析落报告(生成物实时化 / 四工位专题目录化), 裁定维持「落盘 + 平铺」并留两项增强待拍板
 **Topics:** memory-bank-dir-refactor
+**Refs:** memory-bank/reports/26-10-01-2125-report-kb-artifacts-realtime-and-layout.html
 
 ## 原始请求
 
@@ -316,5 +317,19 @@
   处置: 读入先归一化成 LF 做替换, 回写时整份恢复 CRLF; 提交时 git 归一化回 LF, blob 行尾不变。
 - 全量实测(并入上游后的新树, 提交那一刻): **1156 passed + 1 skipped in 29.91s**(覆盖率 TOTAL 90%,
   7500 语句 / 623 未覆盖 —— 基线随上游从 1152 上移到 1156), sidefx 越界 0。
+
+### 2026-10-01 (后继可行性分析: 生成物实时化与四工位专题目录化)
+- 用户命题两项: ①memory-bank 生成物可否改脚本实时生成(不落盘) ②issues/reports/plans/tasks 可否改
+  pitfalls 式按专题分目录。产出报告
+  [reports/26-10-01-2125-report-kb-artifacts-realtime-and-layout.html](../reports/26-10-01-2125-report-kb-artifacts-realtime-and-layout.html)(本专题, Done)。
+- 实测底盘: 全库 701 件 ≈ 8.0MB; 生成物 = 20 份 `_index.md` ≈ 135KB(占库 1.7%); `kb.docmap --all` 专题
+  51 跨形态 + 111 单件(单件占 69%); 冷数据(Done+Superseded)占各索引 63–77%; tasks 索引 23,850/25,200 = 95%。
+- 裁定: ①**生成物维持落盘** —— 索引是高读低写件, 全现算省「收尾 1s + 冲突重跑」却失守卫载体 / diff 审阅面 /
+  非命令上下文可达性, 收益倒挂; 库已画对分界线: 路由骨干落盘、点查视图现算(docmap / active / baseline 先例,
+  `_doc-map.md` 物化退役)。②**四工位不做专题目录** —— pitfalls 三前提(封闭分类学 / 扫读访问 / 单件自足)全不成立;
+  物理专题目录 = 已退役的 `_doc-map.md` 物化路线的更重形态, 且 273 件迁移换零检索收益(检索路径本就索引优先)。
+- 增强项(**待拍板, 未动手**): issues 索引补 `SUMMARY_MAX` 式截断(现无截断, 20.2KB); tasks 索引触顶预案 =
+  按**状态**归档 Done/Superseded(冷占 71%, 非按专题); 落盘生成器加 `--topic/--status` 过滤参数(可选, 生成器
+  集合是事故易发区, 先比对 docmap 已覆盖面)。
 
 > 较早的进度日志(3,816 字符)**已外迁** → [attachments/memory-bank-dir-refactor-log.md](attachments/memory-bank-dir-refactor-log.md)
