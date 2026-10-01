@@ -18,11 +18,16 @@
 | perf | 3 |
 | docs | 3 |
 | refactor | 2 |
-| feat | 5 |
+| feat | 8 |
 | chore | 4 |
+| question | 1 |
 
 ## Open
 
+- [feat] [快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发](26-10-01-2108-feat-webui-selection-follow-mouse.html) — 键盘高亮选中与鼠标点击选中是两套状态, 需合并为单一套随最后操作源移动
+- [feat] [浏览种子详情抽屉时支持键盘上下键切换种子](26-10-01-2108-feat-webui-shortcuts-drawer-nav.html) — 键盘快捷键引擎与可自定义已落地, 补「抽屉打开时上下键切到上/下一个种子」这一动作
+- [feat] [Alt+1~4 从列表直接打开选中种子的详情抽屉并转到对应页](26-10-01-2108-feat-webui-shortcuts-drawer-open.html) — 现 Alt+1~4 仅在抽屉已聚焦时切页(scope=drawer), 需升级为列表侧直接唤起抽屉定位对应页
+- [question] [WEBUI 按 ESC 清除筛选器 —— 定键与否待拍板](26-10-01-2108-question-webui-esc-clear-filter.html) — [?]想法: 按 ESC 清除筛选器; 快捷键引擎已有未绑定的 clear-filters 动作, 只差是否把 ESC 定给它的决策
 - [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
 - [feat] [HR 计数：looks_like_login 补计数文本佐证（P3 缓做项）](26-09-30-0052-feat-hr-login-counter-attest.html) — 登录态判定 looks_like_login 补页头计数文本负信号佐证（报告 26-09-29-1803 §6 登录态负信号 / HR 计划 §7 P3），依赖 D4 口径实证，缓做
 - [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做
