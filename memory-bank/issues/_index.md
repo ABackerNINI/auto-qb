@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 4 |
+| bug | 8 |
 | perf | 3 |
 | docs | 3 |
 | refactor | 3 |
@@ -24,6 +24,10 @@
 
 ## Open
 
+- [bug] [WEBUI 批量操作引发 WARNING 桌面通知](26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
+- [bug] [删除种子(同时删除文件)会引起缺文件 WARNING](26-10-01-2129-bug-webui-delete-files-missing-warning.html) — 连文件一起删除的种子被缺文件扫描误报 WARNING, 删除路径需与缺文件检测互斥
+- [bug] [「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局](26-10-01-2129-bug-webui-delete-tag-scope-confusion.html) — 删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置
+- [bug] [配置热重载后辅种消失; 「变更 N 项」计数与实际不符](26-10-01-2129-bug-webui-hotreload-ext-vanish.html) — 热重载回执报「变更 9 项」实际只加了 1 个 exclude_categories, 且辅种列表疑似因此消失 —— 内核化重构后先复验是否仍复现
 - [feat] [WEBUI 自定义站点名/分类/标签字体颜色](26-10-01-2120-feat-webui-custom-chip-colors.html) — 允许用户为站点名/分类/标签 chip 自定义字体颜色(未排期增强)
 - [refactor] [管理标签/分类窗口重构](26-10-01-2120-refactor-webui-tag-category-dialog.html) — 「管理标签/分类」弹窗结构陈旧需要重构(TODO 未给细节, 开工先复验现状)
 - [feat] [批量移动/批量跳检](26-10-01-2119-feat-webui-batch-move-skipcheck.html) — WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用
