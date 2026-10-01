@@ -16,14 +16,16 @@
 |---|---|
 | bug | 6 |
 | perf | 3 |
-| docs | 5 |
+| docs | 6 |
 | test | 1 |
 | refactor | 2 |
 | feat | 5 |
-| chore | 4 |
+| chore | 5 |
 
 ## Open
 
+- [chore] [src/auto_qb/core/mixins/__pycache__/ 残留 .pyc 删除后会再生, 根因待查](26-10-01-1946-chore-core-mixins-pycache-regen.html) — git 零跟踪的 core/mixins/__pycache__/ 残留已退役模块的 .pyc, 修复期间删过两次跑测试后又再生; 疑似测试以残留包名导入, 需断根
+- [docs] [roadmap.md「剩余: WebSocket 推送/多用户」与 SSE 推送已实现现状表述张力](26-10-01-1946-docs-roadmap-sse-websocket-drift.html) — roadmap.md:8 仍把推送列为剩余项, 但 webui/runtime.py:116-164 已有 SSE /api/events 推送节; 非计数断言, 需核对口径后改写
 - [docs] [代码内注释残留 4 处: 仍描述已退役的委托层与旧路径](26-10-01-1738-docs-code-comment-drift.html) — 内核化重构+别名层退役后, 4 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring)
 - [docs] [create-issue SKILL.md 记载的脚本路径不解析](26-10-01-1738-docs-create-issue-skill-script-refs.html) — SKILL.md:60/107-108 写 agents/skills/... 缺 .agents/ 前缀, docs_drift 判 missing-script-file; 脚本实存于 .agents/skills/create-issue/scripts/
 - [test] [冒烟 CTX-03 多选右键批量菜单: 追剧集行确定性失败 + 辅种组行抖动](26-09-30-0602-test-ui-smoke-ctx03-multiselect.html) — dev.harness 两条 CTX-03 多选用例失败(追剧集行 100% 复现/辅种组行间歇), stash 前后对照确认先在于键盘快捷键 W1-W4 之前; Ctrl+click 选择在冒烟完整链路下不生效而孤立探针正常, 疑似轮询重渲染与 ElementHandle 的竞态或真实 UI 缺陷, 待查
