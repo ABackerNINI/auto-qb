@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="test-coverage-uplift">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-01-2157">
+<meta name="doc-updated" content="26-10-01-2157">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-01-test-coverage-uplift.md">
+<title>测试覆盖率提升 — 分阶段执行计划 (91% → 96%)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1114;
+    --paper: #14171b;
+    --ink: #dadee3;
+    --mut: #99a2ac;
+    --dim: #5f6873;
+    --line: rgba(255,255,255,.09);
+    --line-soft: rgba(255,255,255,.05);
+    --acc: #8fc3d4;
+    --acc-dim: rgba(143,195,212,.14);
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; }
+  a { color: var(--acc); text-decoration: none; border-bottom: 1px solid rgba(143,195,212,.35); }
+  code { font-family: var(--mono); font-size: .88em; background: var(--paper); border: 1px solid var(--line-soft); border-radius: 3px; padding: 1px 5px; }
+
+  /* 封面 */
+  .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--acc); margin-bottom: 18px; }
+  h1 { font-size: 40px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; max-width: 900px; }
+  .lede { color: var(--mut); font-size: 17px; max-width: 74ch; margin-top: 18px; }
+  .metaline { display: flex; flex-wrap: wrap; gap: 28px; margin-top: 30px; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12.5px; color: var(--dim); }
+  .metaline b { color: var(--mut); font-weight: 500; }
+
+  /* 目录 */
+  nav.toc { margin: 36px 0 8px; }
+  nav.toc .toc-k { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 10px; }
+  nav.toc ol { list-style: none; columns: 2; column-gap: 48px; }
+  nav.toc li { padding: 7px 0; border-bottom: 1px solid var(--line-soft); break-inside: avoid; }
+  nav.toc a { color: var(--ink); border: 0; display: flex; justify-content: space-between; }
+  nav.toc .n { font-family: var(--mono); color: var(--acc); margin-right: 12px; }
+
+  /* 章节 */
+  section { margin-top: 72px; }
+  .s-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 26px; }
+  .s-head .no { font-family: var(--mono); font-size: 15px; color: var(--acc); }
+  h2 { font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+  h3 { font-size: 17.5px; font-weight: 600; margin: 34px 0 14px; }
+  .s-head + h3, h3:first-of-type { margin-top: 0; }
+  p { max-width: 72ch; margin: 12px 0; }
+  p.small-note { font-size: 13px; color: var(--dim); }
+  ul.plain { max-width: 72ch; margin: 10px 0 10px 20px; }
+  ul.plain li { margin: 7px 0; }
+  .prose em { font-style: normal; color: var(--acc); }
+
+  /* 大数字组 */
+  .figures { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); margin: 26px 0; }
+  .figures .fig { flex: 1 1 200px; padding: 22px 24px; border-right: 1px solid var(--line); }
+  .figures .fig:last-child { border-right: 0; }
+  .figures .v { font-family: var(--mono); font-size: 32px; font-weight: 600; letter-spacing: -0.02em; }
+  .figures .v.acc { color: var(--acc); }
+  .figures .k { font-size: 12.5px; color: var(--mut); margin-top: 6px; }
+
+  /* 表格 */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 8px; font-size: 13.5px; }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--dim); font-weight: 500; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  td.m, th.m { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+  td.p { font-family: var(--mono); }
+  tr.hl td { background: var(--acc-dim); }
+  td .sub { color: var(--dim); font-size: 12px; }
+
+  /* callout: 直角 + hairline, 无彩条 */
+  .callout { border: 1px solid var(--line); background: var(--paper); padding: 18px 22px; margin: 22px 0; max-width: 100%; }
+  .callout .c-k { font-family: var(--mono); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--acc); margin-bottom: 8px; }
+  .callout p { margin: 6px 0; }
+
+  /* 阶段块 */
+  .phase { border: 1px solid var(--line); margin: 30px 0; }
+  .ph-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px; padding: 16px 22px; border-bottom: 1px solid var(--line); background: var(--paper); }
+  .ph-head .tag { font-family: var(--mono); font-size: 13px; color: var(--acc); }
+  .ph-head h3 { margin: 0; font-size: 18px; }
+  .ph-head .goal { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--mut); }
+  .ph-body { padding: 8px 22px 18px; }
+  .dod { font-size: 13px; color: var(--mut); margin-top: 10px; }
+  .dod b { color: var(--ink); font-weight: 500; }
+
+  /* 里程碑纵列 */
+  .gates { border-left: 1px solid var(--line); margin: 20px 0 0 6px; padding-left: 24px; }
+  .gates .g { position: relative; padding: 4px 0 18px; }
+  .gates .g::before { content: ""; position: absolute; left: -29px; top: 9px; width: 9px; height: 9px; background: var(--bg); border: 1px solid var(--acc); }
+  .gates .g-t { font-family: var(--mono); font-size: 13px; color: var(--acc); }
+  .gates .g-d { color: var(--mut); font-size: 13.5px; }
+
+  footer.colophon { margin-top: 90px; padding-top: 18px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--dim); line-height: 1.9; }
+  @media (max-width: 860px) {
+    .wrap { padding: 40px 20px 60px; }
+    h1 { font-size: 30px; }
+    nav.toc ol { columns: 1; }
+    .figures .fig { flex: 1 1 46%; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="kicker">Plan · Test Coverage Uplift · doc-topic: test-coverage-uplift</div>
+    <h1>测试覆盖率提升 · 分阶段执行计划</h1>
+    <p class="lede">从综合 91% 出发, 按缺口形态分四阶段推进到 96% 区间, 并以阈值与基线切片防回沉。全部缺口数字实测于 2026-10-01 <code>develop @ 40334066</code> 的 <code>test.full</code> 覆盖率导出, 不是估算基数。</p>
+    <div class="metaline">
+      <span><b>状态</b> Open</span>
+      <span><b>立计划</b> 2026-10-01 21:57</span>
+      <span><b>基线</b> develop @ 40334066 · 1,924 passed + 3 skipped · 27.4s</span>
+      <span><b>覆盖分母</b> 17,718 单位</span>
+      <span><b>预期终点</b> 96%±0.3</span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-k">目录</div>
+    <ol>
+      <li><a href="#s1"><span><span class="n">§1</span>基线口径与单位经济学</span></a></li>
+      <li><a href="#s2"><span><span class="n">§2</span>缺口地图 — 分包与四种形态</span></a></li>
+      <li><a href="#s3"><span><span class="n">§3</span>阶段计划 P0–P2 与防回沉 P3</span></a></li>
+      <li><a href="#s4"><span><span class="n">§4</span>执行纪律 — 已知坑引用清单</span></a></li>
+      <li><a href="#s5"><span><span class="n">§5</span>机制建设 — 让覆盖率不再回落</span></a></li>
+      <li><a href="#s6"><span><span class="n">§6</span>范围外 · 变更记录</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- ============ §1 ============ -->
+  <section id="s1">
+    <div class="s-head"><span class="no">§1</span><h2>基线口径与单位经济学</h2></div>
+
+    <div class="figures">
+      <div class="fig"><div class="v acc">91%</div><div class="k">综合覆盖率 (行 + 分支)</div></div>
+      <div class="fig"><div class="v">92.3%</div><div class="k">语句 12,270 / 13,300</div></div>
+      <div class="fig"><div class="v">86.5%</div><div class="k">分支 3,823 / 4,418</div></div>
+      <div class="fig"><div class="v">1,625</div><div class="k">未覆盖单位合计 (1,030 行 + 595 分支出口)</div></div>
+    </div>
+
+    <p>本计划一切换算基于一个口径: <em>覆盖率分母 = 13,300 语句 + 4,418 分支出口 = 17,718 单位</em>, 当前已覆盖 16,093 单位 (90.83%, 报表显示 91%)。因此<strong>每补齐 1 个单位 (1 行语句或 1 个分支出口) ≈ +0.0056%</strong>。据此, 各目标档位的代价是:</p>
+
+    <table>
+      <thead><tr><th>目标</th><th class="m">需新增单位</th><th class="m">折合未覆盖池消耗</th><th>对应阶段</th></tr></thead>
+      <tbody>
+        <tr><td>93%</td><td class="m">+385</td><td class="m">24%</td><td>P0 快赢轮</td></tr>
+        <tr><td>95%</td><td class="m">+740</td><td class="m">46%</td><td>P0 + P1</td></tr>
+        <tr><td class="p">96%</td><td class="m">+917</td><td class="m">56%</td><td>P0 + P1 + P2 (本计划终点)</td></tr>
+        <tr><td>97%</td><td class="m">+1,094</td><td class="m">67%</td><td>超出本计划, 见 §6 范围外</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <div class="c-k">口径警告 (照抄 baseline.md 常驻警告)</div>
+      <p>并行 (<code>-n 4</code>) 下分支 partial 与串行差 1; 对比数字必须用同口径, 换并行方式要重刷。<code>test.quick</code> 带 <code>--no-cov</code>, <strong>提交闸门不产出覆盖率</strong> —— 覆盖率数字一律以 <code>commands run test.full</code> 为准。Windows 与 Linux 两侧收集数相同但 passed 可能不同, 改基线要两侧都重测。</p>
+    </div>
+  </section>
+
+  <!-- ============ §2 ============ -->
+  <section id="s2">
+    <div class="s-head"><span class="no">§2</span><h2>缺口地图 — 分包与四种形态</h2></div>
+
+    <h3>2.1 分包欠账 (按未覆盖行 + 缺失分支排序)</h3>
+    <table>
+      <thead><tr><th>包</th><th class="m">语句</th><th class="m">未覆盖行</th><th class="m">缺失分支</th><th class="m">文件数</th><th class="m">行覆盖</th><th>主攻阶段</th></tr></thead>
+      <tbody>
+        <tr><td class="p">auto_qb/hr</td><td class="m">3,461</td><td class="m">234</td><td class="m">162</td><td class="m">23</td><td class="m">93.2%</td><td>P1 为主</td></tr>
+        <tr class="hl"><td class="p">auto_qb/tray</td><td class="m">342</td><td class="m">219</td><td class="m">58</td><td class="m">2</td><td class="m">36.0%</td><td>P2 专项</td></tr>
+        <tr><td class="p">auto_qb/webui</td><td class="m">2,033</td><td class="m">146</td><td class="m">84</td><td class="m">24</td><td class="m">92.8%</td><td>P0/P1</td></tr>
+        <tr><td class="p">auto_qb/rules</td><td class="m">1,516</td><td class="m">134</td><td class="m">105</td><td class="m">18</td><td class="m">91.2%</td><td>P0 主攻</td></tr>
+        <tr><td class="p">auto_qb/infra</td><td class="m">1,176</td><td class="m">120</td><td class="m">33</td><td class="m">9</td><td class="m">89.8%</td><td>P0/P1</td></tr>
+        <tr><td class="p">auto_qb/config</td><td class="m">1,616</td><td class="m">70</td><td class="m">64</td><td class="m">19</td><td class="m">95.7%</td><td>P0</td></tr>
+        <tr><td class="p">auto_qb/core</td><td class="m">2,447</td><td class="m">68</td><td class="m">60</td><td class="m">20</td><td class="m">97.2%</td><td>P2 长尾</td></tr>
+        <tr><td class="p">auto_qb/torrents</td><td class="m">597</td><td class="m">19</td><td class="m">16</td><td class="m">5</td><td class="m">96.8%</td><td>P2 长尾</td></tr>
+        <tr><td class="p">auto_qb 直属 (cli / __main__ 等)</td><td class="m">108</td><td class="m">16</td><td class="m">11</td><td class="m">3</td><td class="m">85.2%</td><td>P0</td></tr>
+        <tr><td class="p">src/auto-qb.py (启动壳)</td><td class="m">4</td><td class="m">4</td><td class="m">2</td><td class="m">1</td><td class="m">0%</td><td>P0</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.2 缺口的四种形态 — 计划的核心洞察</h3>
+    <p>把 1,625 个未覆盖单位按<em>「为什么没被测到」</em>分四类, 直接决定各阶段的手法与难度:</p>
+    <table>
+      <thead><tr><th>形态</th><th class="m">可捕预估</th><th>代表位置 (实测行区间)</th><th>手法</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>A · 整块功能空洞</b><div class="sub">整个函数 / 端点从没被测过</div></td>
+          <td class="m">~180</td>
+          <td><code>versioning.py:46-73</code> _migrate_hr_site_1_2 整函数 0 覆盖; <code>routes/events.py:33-58</code> SSE 生成器全部; <code>routes/hr.py:33-50,62,76</code>; <code>infra/utils.py:625-673</code> 约 48 行整块; <code>webui/runtime.py:128-163</code>; <code>hr/service.py:402-434</code> 一簇</td>
+          <td>优先清偿 — 「没测过」比「测不到」危险得多; 每处按行为写正例 + 边界</td>
+        </tr>
+        <tr>
+          <td><b>B · 错误分支长尾</b><div class="sub">散布的报错路径 / 边界条件</div></td>
+          <td class="m">~500</td>
+          <td><code>rules/expr/</code> 四件 (env 77 + eval 69 + types 34 + lexer 12); <code>config/validation/sections.py</code> 61; <code>hr/service.py</code> 散布 ~160; <code>config/writer.py</code> + <code>migrations.py</code> ~45</td>
+          <td>参数化矩阵批量清 — 纯函数 / 纯校验逻辑, 桌面即测</td>
+        </tr>
+        <tr>
+          <td><b>C · GUI 主体</b><div class="sub">窗口 / 菜单 / 轮询事件循环</div></td>
+          <td class="m">~150</td>
+          <td><code>tray/app.py:191-277, 299-530</code> CustomTkinter 窗口构建 + pystray 菜单 + after() 轮询主体</td>
+          <td>逻辑缝可测 (UiLogHandler / IPC 端口协议 / 队列消费), widget 块抽取或豁免 — 见 P2</td>
+        </tr>
+        <tr>
+          <td><b>D · 入口壳与 CLI 分支</b><div class="sub">启动壳 / 子命令分支</div></td>
+          <td class="m">~35</td>
+          <td><code>src/auto-qb.py</code> 全部 6 单位; <code>__main__.py:7</code>; <code>cli.py:126-164, 195-211</code></td>
+          <td>导入触发 / 子命令调用 — 小而便宜, 搭车 P0</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>2.3 单文件欠账 Top 20 (miss 行 + 缺失分支)</h3>
+    <table>
+      <thead><tr><th>#</th><th>文件</th><th class="m">语句</th><th class="m">未覆盖行</th><th class="m">缺失分支</th><th class="m">行覆盖</th></tr></thead>
+      <tbody>
+        <tr><td class="m">1</td><td class="p">tray/app.py</td><td class="m">340</td><td class="m">219</td><td class="m">58</td><td class="m">31.4%</td></tr>
+        <tr><td class="m">2</td><td class="p">hr/service.py</td><td class="m">848</td><td class="m">110</td><td class="m">70</td><td class="m">84.6%</td></tr>
+        <tr><td class="m">3</td><td class="p">infra/utils.py</td><td class="m">585</td><td class="m">70</td><td class="m">23</td><td class="m">88.4%</td></tr>
+        <tr><td class="m">4</td><td class="p">rules/expr/env.py</td><td class="m">254</td><td class="m">51</td><td class="m">26</td><td class="m">76.4%</td></tr>
+        <tr><td class="m">5</td><td class="p">rules/expr/eval.py</td><td class="m">142</td><td class="m">35</td><td class="m">34</td><td class="m">70.0%</td></tr>
+        <tr><td class="m">6</td><td class="p">config/validation/sections.py</td><td class="m">390</td><td class="m">34</td><td class="m">27</td><td class="m">90.9%</td></tr>
+        <tr><td class="m">7</td><td class="p">webui/runtime.py</td><td class="m">326</td><td class="m">40</td><td class="m">15</td><td class="m">87.4%</td></tr>
+        <tr><td class="m">8</td><td class="p">webui/commands.py</td><td class="m">351</td><td class="m">16</td><td class="m">31</td><td class="m">91.0%</td></tr>
+        <tr><td class="m">9</td><td class="p">webui/server/routes/hr.py</td><td class="m">62</td><td class="m">17</td><td class="m">10</td><td class="m">67.1%</td></tr>
+        <tr><td class="m">10</td><td class="p">config/writer.py</td><td class="m">238</td><td class="m">14</td><td class="m">15</td><td class="m">91.5%</td></tr>
+        <tr><td class="m">11</td><td class="p">rules/expr/types.py</td><td class="m">67</td><td class="m">16</td><td class="m">18</td><td class="m">69.4%</td></tr>
+        <tr><td class="m">12</td><td class="p">hr/bencode.py</td><td class="m">114</td><td class="m">13</td><td class="m">13</td><td class="m">85.6%</td></tr>
+        <tr><td class="m">13</td><td class="p">cli.py</td><td class="m">100</td><td class="m">15</td><td class="m">10</td><td class="m">81.9%</td></tr>
+        <tr><td class="m">14</td><td class="p">hr/server.py</td><td class="m">233</td><td class="m">16</td><td class="m">7</td><td class="m">92.0%</td></tr>
+        <tr><td class="m">15</td><td class="p">core/modules/ops_mod.py</td><td class="m">255</td><td class="m">15</td><td class="m">11</td><td class="m">92.5%</td></tr>
+        <tr><td class="m">16</td><td class="p">hr/report.py</td><td class="m">207</td><td class="m">15</td><td class="m">10</td><td class="m">90.6%</td></tr>
+        <tr><td class="m">17</td><td class="p">infra/versioning.py</td><td class="m">57</td><td class="m">17</td><td class="m">4</td><td class="m">72.0%</td></tr>
+        <tr><td class="m">18</td><td class="p">hr/store.py</td><td class="m">173</td><td class="m">16</td><td class="m">4</td><td class="m">90.2%</td></tr>
+        <tr><td class="m">19</td><td class="p">webui/server/routes/events.py</td><td class="m">31</td><td class="m">19</td><td class="m">0</td><td class="m">38.7%</td></tr>
+        <tr><td class="m">20</td><td class="p">core/modules/grouping_mod.py</td><td class="m">271</td><td class="m">8</td><td class="m">15</td><td class="m">94.2%</td></tr>
+      </tbody>
+    </table>
+    <p class="small-note">注: 前 20 文件合计欠账约 850 单位, 占总欠账 52% — 集中度高, 适合按文件逐个清偿而非面面俱到。</p>
+  </section>
+
+  <!-- ============ §3 ============ -->
+  <section id="s3">
+    <div class="s-head"><span class="no">§3</span><h2>阶段计划 P0–P2 与防回沉 P3</h2></div>
+
+    <p>排序原则: <em>先清「没测过」(A 类), 再扫「测不全」(B 类), 最后攻「难测」(C 类)</em>。每阶段是一个可独立提交、可独立验收的闭环; 预估单位均按 §1 换算, 完成时以 <code>test.full</code> 实测为准, 不达标的差额在下一阶段任务表里滚动补齐。</p>
+
+    <!-- P0 -->
+    <div class="phase">
+      <div class="ph-head"><span class="tag">P0</span><h3>快赢轮 — 纯逻辑与整块空洞</h3><span class="goal">目标 91% → 93% · 预估 +360±40 单位</span></div>
+      <div class="ph-body">
+        <table>
+          <thead><tr><th>#</th><th>任务</th><th>落点 (测试文件)</th><th class="m">预估单位</th><th class="m">难度</th></tr></thead>
+          <tbody>
+            <tr><td class="m">T0.1</td><td>补 <code>_migrate_hr_site_1_2</code> 整函数: quota→rate / refresh→wave 两个 dict 支路 + 非 dict 入参 + 非法数值兜底</td><td class="p">tests/test_versioning.py (已有, 扩展)</td><td class="m">21</td><td class="m">低</td></tr>
+            <tr><td class="m">T0.2</td><td>表达式引擎四件错误路径与边界: env 77 / eval 69 / types 34 / lexer 12 — 报错分支、空值、类型强转、运算边界, 参数化批量</td><td class="p">tests/test_expr_eval.py · test_expr_parse.py (扩展)</td><td class="m">160</td><td class="m">低-中</td></tr>
+            <tr><td class="m">T0.3</td><td>校验参数化矩阵: sections.py 散布 61 单位 — 逐条对应非法配置样例 (消息断言 + 分支抵达)</td><td class="p">tests/test_config.py (扩展)</td><td class="m">55</td><td class="m">低</td></tr>
+            <tr><td class="m">T0.4</td><td>SSE 生成器整块: hello 帧 / 事件帧 / keepalive / GeneratorExit / unsubscribe 全路径</td><td class="p">tests/test_web.py (TestClient 流式读)</td><td class="m">19</td><td class="m">低</td></tr>
+            <tr><td class="m">T0.5</td><td>HR 路由端点 33-50, 62, 76 三段</td><td class="p">tests/test_web.py (扩展)</td><td class="m">27</td><td class="m">低</td></tr>
+            <tr><td class="m">T0.6</td><td>入口壳与 CLI 分支: auto-qb.py / __main__.py 导入触发; cli.py 126-164, 195-211 子命令与错误分支</td><td class="p">tests/test_cli.py (扩展)</td><td class="m">35</td><td class="m">低</td></tr>
+            <tr><td class="m">T0.7</td><td>config/writer.py (29) + migrations.py (~16) 长尾</td><td class="p">tests/test_config_writer.py (扩展)</td><td class="m">45</td><td class="m">低-中</td></tr>
+          </tbody>
+        </table>
+        <p class="dod"><b>验收 DoD</b>: test.full 全绿且 TOTAL ≥ 93% → 记基线切片 (Windows 侧) → P3-M1 阈值抬到 <code>--cov-fail-under=92</code> → 新测试按 §4 抽验红验。若 T0.2 捕获率不足 93%, 从 A 类 <code>hr/service.py:402-434</code> 簇 (~35 单位) 前移垫上。</p>
+      </div>
+    </div>
+
+    <!-- P1 -->
+    <div class="phase">
+      <div class="ph-head"><span class="tag">P1</span><h3>服务与路由层 — hr 错误路径 + webui 二线</h3><span class="goal">目标 93% → 95% · 预估 +400±50 单位</span></div>
+      <div class="ph-body">
+        <table>
+          <thead><tr><th>#</th><th>任务</th><th>落点 (测试文件)</th><th class="m">预估单位</th><th class="m">难度</th></tr></thead>
+          <tbody>
+            <tr><td class="m">T1.1</td><td>hr/service.py 错误路径系统补齐: 重试 / 超时 / 异常 / 部分失败分支 (散布 ~160, 含 P0 未清的 402-434 簇)</td><td class="p">tests/test_hr_service.py (扩展)</td><td class="m">120</td><td class="m">中</td></tr>
+            <tr><td class="m">T1.2</td><td>hr 二线长尾: bencode 26 / server 23 / store 20 / report 25 / resolve 22 / channel 18 / status / parse / worker</td><td class="p">tests/test_hr_bencode.py 等对应文件 (扩展)</td><td class="m">110</td><td class="m">中</td></tr>
+            <tr><td class="m">T1.3</td><td>webui 二线: runtime.py 整块 128-163 + 散布 / commands.py 分支 47 / routes 其余 (config 26 · fs 12+ · torrent_cmds 14 · torrent_detail · keys)</td><td class="p">tests/test_web.py (扩展)</td><td class="m">120</td><td class="m">中</td></tr>
+            <tr><td class="m">T1.4</td><td>infra 长尾: utils.py 625-673 整块 (~55) + 其余散布; locking / file_access / autostart</td><td class="p">tests/test_utils.py · test_file_access.py (扩展)</td><td class="m">75</td><td class="m">中</td></tr>
+          </tbody>
+        </table>
+        <p class="dod"><b>验收 DoD</b>: TOTAL ≥ 95% → 基线切片 → P3-M1 阈值抬到 <code>--cov-fail-under=94</code> → 抽验红验。hr 包整体行覆盖应 ≥ 96%。</p>
+      </div>
+    </div>
+
+    <!-- P2 -->
+    <div class="phase">
+      <div class="ph-head"><span class="tag">P2</span><h3>难点攻坚 — tray 逻辑缝 + 内核长尾</h3><span class="goal">目标 95% → 96%± · 预估 +200±30 单位</span></div>
+      <div class="ph-body">
+        <table>
+          <thead><tr><th>#</th><th>任务</th><th>落点 (测试文件)</th><th class="m">预估单位</th><th class="m">难度</th></tr></thead>
+          <tbody>
+            <tr><td class="m">T2.1</td><td>tray 逻辑缝 (headless 可测): UiLogHandler 边界 / IPC 端口文件协议 (写读残) / poll 队列消费 / 状态→UI 映射; mock 掉 CustomTkinter + pystray 导入。widget 构建块 (191-277, 299-530 主体) 按豁免口径加 <code># pragma: no cover</code> 并逐块注明豁免理由</td><td class="p">tests/test_tray.py (新建)</td><td class="m">90-130</td><td class="m">高</td></tr>
+            <tr><td class="m">T2.2</td><td>core/modules 长尾: ops_mod 26 / grouping_mod 23 / qbmanager 22 / rules_mod / maintenance_mod / tvshows</td><td class="p">tests/test_core_modules.py 等 (扩展)</td><td class="m">70</td><td class="m">中</td></tr>
+            <tr><td class="m">T2.3</td><td>torrents + rules/actions 长尾 (~51)</td><td class="p">tests/test_torrents.py · test_actions.py (扩展)</td><td class="m">30</td><td class="m">低-中</td></tr>
+          </tbody>
+        </table>
+        <div class="callout">
+          <div class="c-k">P2 决策点 · tray 治本需另立项</div>
+          <p>本阶段只做「逻辑缝 + 豁免」组合, 把 tray 从 36% 抬到 60%±。若要把 widget 主体真正测起来 (headless 依赖注入 / 抽 testable core), 那是架构改动, <strong>不在本计划范围</strong> — 达成后另立计划单独立项。当前全仓仅 2 处 pragma 显式豁免, P2 新增豁免必须逐块写明理由, 防止豁免变成习惯。</p>
+        </div>
+        <p class="dod"><b>验收 DoD</b>: TOTAL ≥ 96% 且 tray 行覆盖 ≥ 60% → 基线切片 → P3-M1 阈值抬到 <code>--cov-fail-under=95</code> → 抽验红验。</p>
+      </div>
+    </div>
+
+    <!-- P3 -->
+    <div class="phase">
+      <div class="ph-head"><span class="tag">P3</span><h3>防回沉机制 — 与 P0 同步落地, 之后常态化</h3><span class="goal">持续 · 无单位指标</span></div>
+      <div class="ph-body">
+        <table>
+          <thead><tr><th>#</th><th>机制</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td class="m">M1</td><td><code>pytest.ini</code> 加 <code>--cov-fail-under</code> 阈值</td><td>随阶段抬: 92 (P0 后) → 94 (P1 后) → 95 (P2 后)。阈值恒低于当期实测 1 个点, 给并行分支 partial ±1 的口径波动留余量。<code>test.quick</code> 走 <code>--no-cov</code> 不受影响, 提交闸门速度不变 — 有意设计, 不要改 quick。</td></tr>
+            <tr><td class="m">M2</td><td>每阶段收尾记基线切片</td><td>按 <code>memory-bank/testing/baseline.md</code> 口径: 一条基线一个切片, 覆盖率 TOTAL + passed + 耗时区间; Windows 与 Linux 两侧都重测再落数字。</td></tr>
+            <tr><td class="m">M3</td><td>红验纪律 (每阶段抽 ≥10%)</td><td>新测试抽样做变异红验: 临时注入缺陷确认测试能红。夹具必须让目标分支真正抵达 — 防「覆盖率涨了但测的是另一条路」的假绿 (pitfalls/testing/unreached-branch-guard.md)。</td></tr>
+            <tr><td class="m">M4</td><td>增量不欠账</td><td>本计划执行期间及之后, 新功能 / 新模块一律带测试落地 (现有惯例); 缺口只减不增, 否则 M1 阈值会直接拦住。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <h3>阶段闸门总览</h3>
+    <div class="gates">
+      <div class="g"><div class="g-t">P0 完成</div><div class="g-d">TOTAL ≥ 93% · A 类空洞清零 · fail-under 92 · 基线切片 +1</div></div>
+      <div class="g"><div class="g-t">P1 完成</div><div class="g-d">TOTAL ≥ 95% · hr ≥ 96% · fail-under 94 · 基线切片 +1</div></div>
+      <div class="g"><div class="g-t">P2 完成</div><div class="g-d">TOTAL ≥ 96%± · tray ≥ 60% · fail-under 95 · 基线切片 +1 · 计划转 Done</div></div>
+    </div>
+  </section>
+
+  <!-- ============ §4 ============ -->
+  <section id="s4">
+    <div class="s-head"><span class="no">§4</span><h2>执行纪律 — 已知坑引用清单</h2></div>
+    <p>以下全部是 <code>memory-bank/pitfalls/testing/</code> 已记录的坑, 执行各阶段前按主题点开对应文件, 不要凭印象写测试:</p>
+    <table>
+      <thead><tr><th>纪律</th><th>约束</th><th>单点</th></tr></thead>
+      <tbody>
+        <tr><td>测试命令</td><td>一律 <code>commands run test.full / test.one</code>, TMPDIR 已内置, 禁手工加前缀</td><td><a href="../pitfalls/testing/tmpdir.md">testing/tmpdir.md</a></td></tr>
+        <tr><td>断言有效性</td><td>禁恒真 / 恒红 / 安慰剂断言; 每阶段抽验变异红验</td><td><a href="../pitfalls/testing/assertions.md">testing/assertions.md</a></td></tr>
+        <tr><td>分支真抵达</td><td>夹具数据必须让被测分支真正执行, 防覆盖率涨但测的是别的路</td><td><a href="../pitfalls/testing/unreached-branch-guard.md">testing/unreached-branch-guard.md</a></td></tr>
+        <tr><td>副作用台账</td><td>新测试不得产生真实系统副作用, sidefx.py 记账兜底; tray 的 IPC 端口文件必须落 gettempdir()</td><td><a href="../pitfalls/testing/side-effects.md">testing/side-effects.md</a></td></tr>
+        <tr><td>替身保真</td><td>SSE / 路由测试沿用现有 TestClient + manager.web 惯例, 不自造假 manager; 「长得像」不等于「够用」</td><td><a href="../pitfalls/testing/stubs-sim.md">testing/stubs-sim.md</a></td></tr>
+        <tr><td>计时容差</td><td>节流 / 轮询类断言 (tray poll 100ms, SSE keepalive) 下界必须留 15.6ms 刻度余量</td><td><a href="../pitfalls/testing/timing-tolerance.md">testing/timing-tolerance.md</a></td></tr>
+        <tr><td>日志断言</td><td>不用 caplog, 挂模块 logger 自建 handler + 显式 setLevel</td><td><a href="../pitfalls/testing/log-capture.md">testing/log-capture.md</a></td></tr>
+        <tr><td>共享可变夹具</td><td>FakeConfig 段对象是类属性, 需要原地改时先拷贝, 防 xdist 偶发</td><td><a href="../pitfalls/testing/fake-config-shared-mutables.md">testing/fake-config-shared-mutables.md</a></td></tr>
+        <tr><td>并行口径</td><td>-n 4 默认; 分支 partial 与串行差 1; 数字对比同口径</td><td><a href="../pitfalls/testing/parallel-run.md">testing/parallel-run.md</a></td></tr>
+        <tr><td>覆盖率文件</td><td>覆盖率导出文件不留仓库根 (分析用临时件用完即删, .gitignore 不兜底所有命名)</td><td><a href="../pitfalls/testing/tmpdir.md">testing/tmpdir.md</a></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ §5 ============ -->
+  <section id="s5">
+    <div class="s-head"><span class="no">§5</span><h2>机制建设 — 让覆盖率不再回落</h2></div>
+    <p>历史规律: 覆盖率这类「没人拦就缓慢回落」的指标, 靠自觉守不住。P3-M1 的 <code>--cov-fail-under</code> 是本计划的机制抓手, 落地要点:</p>
+    <ul class="plain">
+      <li><strong>生效面</strong>: pytest.ini 的 addopts 全局生效, <code>test.full</code> 必查; <code>test.quick</code> 的 <code>--no-cov</code> 有意豁免 — 提交闸门保持约 7s 速度, 覆盖率检查由 test.full 与基线切片承担。</li>
+      <li><strong>阈值节奏</strong>: 永远 = 当期实测 − 1 个点。抬阈值是阶段验收动作的一部分, 与基线切片同一轮落地, 不单独提前。</li>
+      <li><strong>豁免治理</strong>: 全仓 pragma 豁免当前仅 2 处 / 52 排除行。P2 新增的 tray 豁免逐块注明理由后, 该数字进入基线切片的记录面 — 豁免行数只减不增。</li>
+      <li><strong>与 issue 清偿路线图的关系</strong>: 本计划与 <a href="26-10-01-1758-plan-issue-clearance-roadmap.html">Issue 全量清偿路线图</a> 并行不冲突 — 测试补齐不改产品代码, 不会动到 issue 认领链; 若某条 issue 的修复顺带覆盖了本计划的目标行, 在该阶段任务表标注「由 issue X 顺带清偿」即可, 不重复补。</li>
+    </ul>
+  </section>
+
+  <!-- ============ §6 ============ -->
+  <section id="s6">
+    <div class="s-head"><span class="no">§6</span><h2>范围外 · 变更记录</h2></div>
+
+    <h3>6.1 明确范围外 (本计划不做)</h3>
+    <ul class="plain">
+      <li><strong>前端静态 JS</strong>: 不在 <code>--cov=src</code> 覆盖面内, 前端质量由 ui_harness 冒烟承担。</li>
+      <li><strong>.commands 包脚本测试</strong>: 47 条已有独立通道 <code>test.pkg</code>, 与 src 覆盖率口径无关。</li>
+      <li><strong>tray widget 主体的架构级可测化</strong>: 属抽取重构, P2 达成后另立项。</li>
+      <li><strong>97% 以上</strong>: 剩余 ~700 单位集中在 GUI 主体与深层长尾, 96% 后边际成本陡增, 是否继续届时另行决策。</li>
+      <li><strong>性能基线</strong>: L9 性能守阵有独立基线切片 (26-10-01-2125), 本计划只动覆盖率口径。</li>
+    </ul>
+
+    <h3>6.2 变更记录</h3>
+    <table>
+      <thead><tr><th>日期</th><th>变更</th></tr></thead>
+      <tbody>
+        <tr><td class="p">26-10-01-2157</td><td>初版: 基线实测 (develop @ 40334066, 综合 90.83%) + 四形态缺口地图 + P0–P3 阶段计划 + 防回沉机制。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer class="colophon">
+    数据来源: 2026-10-01 <code>commands run test.full</code> 于 develop @ 40334066 (1,924 passed + 3 skipped, 27.4s),
+    覆盖率经 <code>coverage json</code> 导出逐文件聚合; 与上基线切片 26-10-01-2145 (9968433a) 数字持平。
+    行区间引用自 <code>--show-missing</code> 实测输出。执行时以当期 <code>test.full</code> 实测为准。
+  </footer>
+
+</div>
+</body>
+</html>
