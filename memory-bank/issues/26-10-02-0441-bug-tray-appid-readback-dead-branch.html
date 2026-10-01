@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="tray-appid-readback-dead-branch">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tray._set_windows_appid 读回校验在非打包进程恒假: GetApplicationUserModelId 返回 15703 而非 122">
 <meta name="issue-summary" content="_set_windows_appid 设置成功(hr=0)但读回校验对非打包进程恒返回 APPMODEL 15703, app.py:155 的 ==122 分支永不命中; 任务栏 python 图标 issue 的排查不可依赖此读回校验">
 <title>tray._set_windows_appid 读回校验在非打包进程恒假: GetApplicationUserModelId 返回 15703 而非 122 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0441-bug-tray-appid-readback-dead-branch</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 04:41</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">tray</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -156,11 +156,29 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 06:54 — 认领开工（主会话实施单指派，处置已定 = 删读回校验），状态 <strong>In Progress</strong>；复验先行（见下）</li>
+      <li>2026-10-02 06:54 — 已实施并验证（test.full 全绿），状态 <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-02 06:50 仍复现 —— grep <code>GetApplicationUserModelId</code> / <code>122</code> 定位到
+      <code>app.py:155</code>（与取证行号一致）。停手条件核查：全仓无 frozen/打包判定，该函数<strong>没有打包场景调用方</strong>；
+      进一步发现 <code>_set_windows_appid</code> 自 9891c030 引入起在生产代码中<strong>零调用点</strong>（仅
+      tests/test_tray.py 驱动，tray/__init__.py 亦未导出）—— 不触发「打包场景也存在则停手」条件，按既定处置实施。
+      ⚠ 附带事实修正：原影响面表「源码直跑每次启动都会走读回校验」与代码不符 —— 读回在生产中本就不会执行（函数无调用方）；
+      该发现与任务栏 python 图标排查（26-10-01-2203）的关联（AUMID 设置调用本身同样无生产调用点）交后续人工决断，本单不展开。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（建议修法两候选中实施「删读回校验」，另一候选「把 15703 识别为非打包预期值」经主会话定调不实施）：
+      删除 <code>_set_windows_appid</code> 内整段读回块（kernel32.GetApplicationUserModelId 绑定 / 探长 / 读值 / 一致性判定），
+      保留 <code>SetCurrentProcessExplicitAppUserModelID</code> 设置调用与 hr!=0 warning 路径；成功路径留一条
+      <code>AppUserModelID 已设置</code> debug（替代原恒死不可达的「已生效」读回 debug），日志措辞不再宣称读回校验；
+      docstring 补「hr=0 即成功、为何无读回」说明防 regression。</p>
+    <p><strong>测试同步</strong>（tests/test_tray.py）：删 <code>test_set_windows_appid_mismatch_warns</code>（针对已删分支）；
+      <code>success_reads_back_aumid</code> 改钉 <code>success_no_readback</code>（替身 windll 不含 kernel32 —— 读回若回归，
+      AttributeError 被函数吞掉只留「设置失败」debug，被成功用例的精确断言判红）；<code>set_failure_warns</code> 改精确断言；
+      删读回专用替身 <code>_FakeQueryAumid</code>；文件头「测试计划」清单同步。</p>
+    <p><strong>验证方式与数字</strong>：<code>commands run test.full</code> 全绿 —— 2289 passed / 3 skipped / 35.06s，
+      覆盖率 99%（13251 语句 / 86 miss / 81 partial 分支）。边界：真机 Win32 下 hr=0 后任务栏实际表现属替身覆盖不到的
+      真机行为，未做托盘真机启动验证（按 P2-b 实测先例，非打包进程读回恒 15703）。</p>
   </section>
 
   <footer>

@@ -49,9 +49,8 @@ ctx.notify 用四公开口替身 (enabled_state/is_enabled/set_enabled) —— �
 - test_toggle_autostart_error_shows_warning: enable 抛 AutoQbError -> 弹窗不外抛
 - test_run_tray_wraps_generic_init_failure: 初始化任意异常 -> 包成 AutoQbError ("托盘 UI 初始化失败")
 - test_run_tray_reraises_autoqb_error: AutoQbError 原样重抛 (不二次包装)
-- test_set_windows_appid_success_reads_back_aumid: (Win32 替身) hr=0 + 读回一致 -> 全流程走通
-- test_set_windows_appid_set_failure_warns: hr != 0 -> warning 且不读回
-- test_set_windows_appid_mismatch_warns: 读回不一致 -> warning
+- test_set_windows_appid_success_no_readback: (Win32 替身) hr=0 -> 留「已设置」debug, 无读回动作 (读回判据已删, issue 26-10-02-0441)
+- test_set_windows_appid_set_failure_warns: hr != 0 -> warning 后直接返回
 - test_set_windows_appid_setter_raises_is_swallowed: 设置 API 抛错 -> 吞掉 (进程静默继续)
 """
 import contextlib
@@ -837,7 +836,8 @@ def test_run_tray_reraises_autoqb_error(monkeypatch, tmp_path):
         _cleanup_tray_handlers()
 
 
-# ---------- _set_windows_appid: Win32 边界替身 (真实 AUMID 读回对非打包进程恒返回 APPMODEL_ERROR, 无法真验) ----------
+# ---------- _set_windows_appid: Win32 边界替身 (设置调用 hr=0 即成功; 读回校验已删 ——
+# 非打包进程读回恒 APPMODEL_ERROR(15703) 而非 122, 判据无真实命中场景, issue 26-10-02-0441) ----------
 
 
 class _ListHandler(logging.Handler):
@@ -866,68 +866,39 @@ class _FakeSetter:
         return self.hr
 
 
-class _FakeQueryAumid:
-    """GetApplicationUserModelId 替身: 首查(无缓冲)报所需长度, 二查回填值 (经 byref._obj 取底层 c_uint)"""
-    def __init__(self, needed_len, value, first_rc=122, second_rc=0):
-        self.needed_len = needed_len
-        self.value = value
-        self.first_rc = first_rc
-        self.second_rc = second_rc
-        self.calls = []
-        self.argtypes = None
-        self.restype = None
+def _patch_windll(monkeypatch, setter):
+    """把 ctypes.windll 换成只含 shell32 的替身 (函数内 import ctypes 拿到同一模块对象)
 
-    def __call__(self, _proc, ref_len, buf):
-        self.calls.append(buf)
-        if buf is None:
-            ref_len._obj.value = self.needed_len
-            return self.first_rc
-        buf.value = self.value
-        return self.second_rc
-
-
-def _patch_windll(monkeypatch, setter, query):
-    """把 ctypes.windll 换成替身 (函数内 import ctypes 拿到同一模块对象, 边界外全真实)"""
-    fake = types.SimpleNamespace(
-        shell32=types.SimpleNamespace(SetCurrentProcessExplicitAppUserModelID=setter),
-        kernel32=types.SimpleNamespace(GetApplicationUserModelId=query, GetCurrentProcess=lambda: -1),
-    )
+    不给 kernel32: 删读回校验后函数不应再触碰它 —— 读回若回归, windll.kernel32 属性
+    AttributeError 会被函数吞掉并留「设置失败」debug, 被用例的精确断言判红。
+    """
+    fake = types.SimpleNamespace(shell32=types.SimpleNamespace(SetCurrentProcessExplicitAppUserModelID=setter), )
     monkeypatch.setattr(ctypes, "windll", fake)
 
 
-def test_set_windows_appid_success_reads_back_aumid(monkeypatch):
+def test_set_windows_appid_success_no_readback(monkeypatch):
     setter = _FakeSetter(hr=0)
-    query = _FakeQueryAumid(needed_len=10, value=tray_app.WINDOWS_TOAST_APPID)
-    _patch_windll(monkeypatch, setter, query)
-    tray_app._set_windows_appid()  # 不抛即通过
+    _patch_windll(monkeypatch, setter)
+    probe = _ListHandler()
+    with _capture_on_module_logger(probe, level=logging.DEBUG):
+        tray_app._set_windows_appid()
     assert setter.calls == [tray_app.WINDOWS_TOAST_APPID], "AUMID 必须取 toast 来源身份"
-    assert len(query.calls) == 2, "读回校验: 先探长度(122)再读值"
+    assert probe.messages == [f"AppUserModelID 已设置: {tray_app.WINDOWS_TOAST_APPID}"
+                             ], ("hr=0 即成功且无任何读回动作 (有读回会触碰不存在的 kernel32, 只留「设置失败」debug)")
 
 
 def test_set_windows_appid_set_failure_warns(monkeypatch):
     setter = _FakeSetter(hr=5)
-    query = _FakeQueryAumid(needed_len=10, value="X")
-    _patch_windll(monkeypatch, setter, query)
+    _patch_windll(monkeypatch, setter)
     probe = _ListHandler()
     with _capture_on_module_logger(probe, level=logging.WARNING):
         tray_app._set_windows_appid()
-    assert any("AppUserModelID 设置失败: HRESULT=5" in m for m in probe.messages), "hr != 0 必须 warning"
-    assert query.calls == [], "设置失败必须直接返回, 不得读回"
-
-
-def test_set_windows_appid_mismatch_warns(monkeypatch):
-    setter = _FakeSetter(hr=0)
-    query = _FakeQueryAumid(needed_len=32, value="SOME.OTHER.APPID")  # 缓冲区必须装得下替身值
-    _patch_windll(monkeypatch, setter, query)
-    probe = _ListHandler()
-    with _capture_on_module_logger(probe, level=logging.WARNING):
-        tray_app._set_windows_appid()
-    assert any("读回不一致" in m for m in probe.messages), "读回值 != 设置值 必须 warning"
+    assert probe.messages == ["AppUserModelID 设置失败: HRESULT=5"], "hr != 0 必须 warning, 且此后不得再有动作"
 
 
 def test_set_windows_appid_setter_raises_is_swallowed(monkeypatch):
     setter = _FakeSetter(error=OSError("no shell32"))
-    _patch_windll(monkeypatch, setter, _FakeQueryAumid(10, "X"))
+    _patch_windll(monkeypatch, setter)
     probe = _ListHandler()
     with _capture_on_module_logger(probe, level=logging.DEBUG):
         tray_app._set_windows_appid()  # 异常被吞, 进程静默继续
