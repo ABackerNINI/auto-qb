@@ -9,9 +9,9 @@
 <meta name="doc-topic" content="doc-drift-repair">
 <meta name="issue-tier" content="light">
 <meta name="issue-status" content="Open">
-<meta name="issue-title" content="代码内注释残留 4 处: 仍描述已退役的委托层与旧路径">
-<meta name="issue-summary" content="内核化重构+别名层退役后, 4 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring)">
-<title>代码内注释残留 4 处: 仍描述已退役的委托层与旧路径 · docs · 计划外问题（便签）</title>
+<meta name="issue-title" content="代码内注释残留 6 处: 仍描述已退役的委托层与旧路径">
+<meta name="issue-summary" content="内核化重构+别名层退役后, 6 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring / rules/actions/checking.py:4 / skip_checking.py:4)">
+<title>代码内注释残留 6 处: 仍描述已退役的委托层与旧路径 · docs · 计划外问题（便签）</title>
 <style>
   :root {
     --bg: #10151a;
@@ -62,8 +62,8 @@
 
   <header class="cover">
     <div class="kicker">计划外问题（便签）· docs</div>
-    <h1>代码内注释残留 4 处: 仍描述已退役的委托层与旧路径</h1>
-    <p class="lede">内核化重构+别名层退役后, 4 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring)</p>
+    <h1>代码内注释残留 6 处: 仍描述已退役的委托层与旧路径</h1>
+    <p class="lede">内核化重构+别名层退役后, 6 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring / rules/actions/checking.py:4 / skip_checking.py:4)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-1738-docs-code-comment-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 17:38</div></div>
@@ -75,7 +75,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
-    <p>内核化重构与别名层处置 W3 落地后, 4 处<b>代码内</b>注释 / docstring 仍描述旧世界: 与现行代码相反 (委托层已整体删除) 或指向已不存在的路径。逻辑本身无错, 属纯注释漂移; 但未来照注释找代码会踩空 (审计面: <code>memory-bank/plans/26-10-01-1728-plan-doc-drift-repair.html</code> §6 待决事项)。</p>
+    <p>内核化重构与别名层处置 W3 落地后, 6 处<b>代码内</b>注释 / docstring 仍描述旧世界: 与现行代码相反 (委托层已整体删除) 或指向已不存在的路径。逻辑本身无错, 属纯注释漂移; 但未来照注释找代码会踩空 (审计面: <code>memory-bank/plans/26-10-01-1728-plan-doc-drift-repair.html</code> §6 待决事项)。初档 4 处 (2026-10-01 17:38), 后并入同类 2 处 (05/06 号条目, 见状态日志)。</p>
   </section>
 
   <section id="s2">
@@ -86,6 +86,8 @@
       <li><code>src/auto_qb/core/qbmanager.py:398</code>（同上）· grep「mixins/web_commands」—— 注释「见 mixins/web_commands.py 的 SELF_POSTED_COMMANDS」; 该文件已不存在, 符号现单点在 <code>src/auto_qb/webui/commands.py:31</code>。</li>
       <li><code>src/auto_qb/webui/runtime.py:237</code>（同上）· grep「flush_receipts」—— 注释引用旧名; 现名 <code>flush_truths</code> (同文件 :328)。</li>
       <li><code>src/auto_qb/core/mixins/__init__.py:1-14</code> docstring（同上）—— 自称「收尾中的过渡包」「QbManager 旧名方法只剩单行委托(plan §7.2)」; W3 后委托已删, 该包只剩 2 mixin 的 re-export shim, docstring 停在 P5 时点。</li>
+      <li><code>src/auto_qb/rules/actions/checking.py:4</code>（取证 2026-10-01 19:53）· grep「core/mixins/ops」—— docstring 称「执行体经 FullCheckingMixin / SkipCheckingMixin 一行委托到 core/mixins/ops.py (OpsMixin ...)」; 该路径已不存在 (<code>core/mixins/</code> 下已无任何 .py 源文件), 职责现单点在 <code>src/auto_qb/core/modules/ops_mod.py</code> 的 <code>OpsModule</code> (grep OpsMixin/ops_recheck/ops_skip_check 现名命中 ops_mod.py, 执行体 <code>ctx.ops.recheck</code>, 见 full_checking.py:35)。</li>
+      <li><code>src/auto_qb/rules/actions/skip_checking.py:4</code>（同上）· grep「core/mixins/ops」—— docstring 称「跳检四阶段执行体已迁入 core/mixins/ops.py (OpsMixin ...)」; 同样指向已删路径。同类兄弟文件 <code>full_checking.py:3</code> 已改为「core/modules/ops_mod.OpsModule」新提法, 唯此两处停在旧世界。</li>
     </ul>
   </section>
 
@@ -98,6 +100,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 17:38 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 19:53 — 并入同类发现 2 处（rules/actions/checking.py:4 / skip_checking.py:4 的模块 docstring 仍指已不存在的 core/mixins/ops.py，职责现居 core/modules/ops_mod.OpsModule）；原 4 处证据未改动，状态仍 <strong>Open</strong></li>
     </ul>
   </section>
 
