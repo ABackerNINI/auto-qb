@@ -581,7 +581,12 @@ def test_ui_root_and_legacy_newui_redirect(web_env):
             "autoqb_ui": "../prism"
         }, "/atlas/"),  # 形状不合法(路径逃逸形状不得进重定向目标)
     ):
-        root = client.get("/", follow_redirects=False, cookies=cookie)
+        # starlette 1.6 弃用逐请求 cookies=<...>(审计 L8, b 类: 测试代码用了弃用 API), 按官方迁移路径
+        # 改设到 client 实例; 每档先清空再写入, 保持"该次请求只带本档 cookie"的独立语义
+        # (307 应答不带 Set-Cookie, 不存在串档; 清空是防未来路由加 Set-Cookie 后跨档污染)。
+        client.cookies.clear()
+        client.cookies.update(cookie)
+        root = client.get("/", follow_redirects=False)
         assert root.status_code == 307, f"cookie={cookie} 根路径应 307 重定向"
         assert root.headers["location"] == expect, f"cookie={cookie} 应重定向到 {expect}"
     for old, new in (
