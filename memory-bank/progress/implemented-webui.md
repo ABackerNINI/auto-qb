@@ -5,6 +5,13 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- WEB UI **web.token 生成改走 atomic_write**(2026-10-01, 清偿 issue
+  [26-09-21-1347-bug-web-token-non-atomic-write](../issues/26-09-21-1347-bug-web-token-non-atomic-write.html)):
+  ensure_web_token 原用 O_TRUNC 直写, 生成瞬间非优雅终止会留下非空半截 token 被持久化 ⇒ 已存浏览器密钥 401。
+  修法 = 改走 utils.atomic_write 单点(mkstemp 默认 0600, 落盘字节逐字节等价), 读取侧零改动;
+  守阵暂不并入 O_TRUNC 静态扫描(hr/channel.py:104 同族直写未清, 待一并收)。守阵 +3(test_web:
+  生成可读回 / 已有 token 不漂移 / 写一半中断自愈)。**已入库 `5965cc07`**(W2 清偿 1/3)
+
 - WEB UI **标签列全量展开, 移除「+1/+2」折叠**(2026-09-30): 用户要求标签不再折叠。4 处模板(种子明细 / 组级+组内成员 / 追剧集行)去 `tagSlice(...,3)`/`slice(0,3)` 截断与 `+N` 徽标, 改 `v-for` 全量渲染; 三皮肤 `.g-tags, .m-tags` 加 `flex-wrap: wrap`(行高逐行实测的虚拟滚动承接变高行), 清 `.tag-more` 死样式; `decorate.js` 删 `tagSlice()`。单个超长标签仍 ellipsis(完整值在悬浮)。纯前端改动, 无 Python 源改动; 档案 [tasks/26-09-30-webui-tags-unfold](../tasks/26-09-30-webui-tags-unfold.md); **随本提交入库**
 
 - WEB UI **键盘快捷键全量落地(可自定义)**(2026-09-30, plans/26-09-28-0354 W1-W7 两波): ①引擎 `shared/shortcuts.js` 注册表单一事实源 55 条(e.code+固定修饰序归一化 / IME isComposing+229 双保险 / 输入元素+模态层屏蔽 / repeat+纯修饰键+defaultPrevented 前置 / 浏览器保留键黑名单 Ctrl+W/T/N/Q 族; 适配器 `window.AQB_KEYS` 单一存储出口) ②光标模型 kbCursor 按身份不按下标(滚动进视口走 getBoundingClientRect 差值+`_rowPre` 前缀和, **禁 scrollIntoView**; 26-09-30 方案 B 键鼠衔接追加: selection.js 五个点击入口按所在行回写 kbCursor —— 落光标≠选中, 无光标回落改**视口就近行** `_kbViewportRow`, 明细成员行补 kb-cursor 视觉, 守阵 test_click_lands_cursor_and_viewport_fallback) ③`commands._actCore` 统一动作出口(act/actTorrent/bulkAct/actEpisode 四入口收敛) ④默认键位 A-I 组(§08 v4 危险档一律二键组合: 删除 Shift+D/重新校验 Shift+Y/强制汇报 Shift+A + 确认框默认「确定」Enter 确认; Delete 键额外删除入口直连 `_deleteFlow` 注册表外; E 组 Shift 族/F 组队列开关/G 组局部作用域 Alt+1-4+设置页 Ctrl+S inputSafe/H 组帮助浮层 Shift+Slash) ⑤作用域五值(global/list/drawer/settings/modal)全量生效, 模态白名单分流 ⑥后端持久化: `routes/keys.py` GET/PUT `/api/keys`(存储 `auto-qb-data/webui-keys.json` 与 web.token 同寻址, 读时兜底链 主文件→.bak→默认表, PUT 结构校验 422, 金清单 +2; 存储定案=后端独立文件, 决策点⑥) ⑦自定义面板: 设置页「快捷键」分区(按下即录录制器捕获段监听/纯修饰键拒收/黑名单拒绑/冲突三选一 交换-覆盖对方置空-取消/单条全部重置/空串=显式禁用/保存失败本地回滚/离开未保存先确认)+ 帮助浮层只读速查。守阵 test_web_shortcuts.py 16 条 + test_web.py keys 后端 5 条; 探针 28 项全过。全量 **1813 passed + 3 skipped**(TOTAL 91%, 基线 [26-09-30-0555 W1-W4](../testing/baselines/26-09-30-0555-webui-keyboard-w1w4.md) / [26-09-30-0702 W5-W7](../testing/baselines/26-09-30-0702-webui-keyboard-w5w7.md)); 档案 [tasks/26-09-28-webui-keyboard-shortcuts](../tasks/26-09-28-webui-keyboard-shortcuts.md); W1-W4 **已入库 `38ffec5`**, W5-W7 **未提交**

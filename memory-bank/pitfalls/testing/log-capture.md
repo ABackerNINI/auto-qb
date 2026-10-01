@@ -15,5 +15,9 @@
 - **处置**: 挂**模块 logger** 自建 handler + **显式 setLevel** + `finally` 恢复原 level 与 handlers
   —— 对 root 级别 / handlers / 传播链全部免疫。守阵: `test_web.py::_grab_web_logger`
   (web 生命周期 5 个测试已切换)。不要因此放弃日志断言 —— 日志级别即通知语义。
-- **复发**: 1(原记于 stubs-sim「make_manager 清 root handlers」条, 2026-09-27 外迁至此。
-  为什么没命中: 旧判别只写"用例体内建 manager"这层, 没料到 root level 与 xdist 两个更底层的伤害面。)
+- **复发**: 2(原记于 stubs-sim「make_manager 清 root handlers」条, 2026-09-27 外迁至此。
+  为什么没命中(首次): 旧判别只写"用例体内建 manager"这层, 没料到 root level 与 xdist 两个更底层的伤害面。
+  2026-10-01 W2 issue 清偿轮再踩: **两个独立认领子智能体先后撞同一坑** —— QbManager 构造链执行
+  setup_logging(src/auto_qb/infra/logging.py:98)清空 root handlers, caplog.text 恒空, 均改临时 handler
+  直挂模块 logger 才断言到(web.token 自愈 / 托盘 join 超时 WARNING 两条守阵); 为什么没命中(二次):
+  认领轮按 issue 档案直接动码, 没走「动代码前先读 pitfalls/testing/ 索引」的路由。)

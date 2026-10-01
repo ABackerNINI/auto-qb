@@ -5,6 +5,23 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **缺文件扫描过渡态容忍: .!qB 孪生存在不判缺失 (2026-10-01, 清偿 issue
+  [26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck](../issues/26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html),
+  按计划 [26-09-22-2038](../plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) 修法 1 主体)**:
+  qB 移动种子搬运窗口内文件被临时改名 .!qB, 缺文件扫描把过渡态读成永久缺失 ⇒ 误停整组 + MISSING 标签。
+  修法 = grouping_mod.py 汇聚点单点容忍(.!qB 孪生存在不判缺失) + 连续 3 次上限兜底残留; 计数为会话级
+  内存态(store.transitional_missing_skips)**不落盘**; 孪生探测经 fa.exists() 三态语义适配文件访问层
+  (docker 逻辑路径直探 syscall 恒 False, 否则容忍静默失效)。测试 +8(grouping 5 / utils 2 / file_access 1,
+  红验 5 failed → 落码 7 passed); 计划 doc-status 完档 Done。**已入库 `c353e899`**(W2 清偿 3/3);
+  档案 [tasks/26-09-22-backend-qb-move-missing-tolerance.md](../tasks/26-09-22-backend-qb-move-missing-tolerance.md)。
+
+- **托盘退出 join 超时 5s→10s + 超时 WARNING (2026-10-01, 清偿 issue
+  [26-09-21-1347-bug-tray-join-timeout-abandons-save](../issues/26-09-21-1347-bug-tray-join-timeout-abandons-save.html))**:
+  主循环 daemon 线程 join(5s) 超时即放弃 ⇒ 优雅退出撞上长任务时本次运行期 state 不落盘(黄金法则 3 收口)。
+  修法 = issue 候选 A: 落盘收尾预算 5→10s + 超时 is_alive 判定后 WARNING 明示未落盘; 否决候选 B
+  (UI 线程补写 state 违反 state_file 唯一写者纪律)。守阵 +1(test_ui: 预算 10s / 超时 WARNING /
+  退出码 0 / IPC 仍清理; GUI 栈不可实例化, object.__new__ + 直挂 handler)。**已入库 `9f73b6d8`**(W2 清偿 2/3)。
+
 - **HR 在线核实 v3 波次模型重建 (2026-09-29, 计划 26-09-28-1932 M1–M5)**: 判定=四行判定表
   (考察中管束/终态放行/无证据本地兜底硬编码, 12 格矩阵单测); 取数=单波型波次引擎(全量对账 +
   A/B/C 轮流 + 三停翻条件 + 档位级截断有效性 + 失踪观察期 + 流转守恒/骤降/零行戳三道防伪 +

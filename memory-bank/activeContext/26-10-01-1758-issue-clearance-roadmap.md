@@ -8,21 +8,18 @@
 > W4 性能(2)→ W5 设计拍板大件(1)→ W6 轻量收尾(9,可穿插)→ W7 挂靠与缓做(5,不排期)。
 > 关键挂账: 两条 26-10-01 docs issue 已确认被 doc-drift-repair 计划(26-10-01-1728)覆盖;
 > 3 条 HR P3 缓做依赖 D4;In Progress 的 26-09-21-0219 报告无 doc-refs,认领前先对齐前史。
-> **已完成: W1 流程与闸门卡点 5/5 全清**(每条单独提交, 复验/修复/清偿链见各自 tasks/ 档案, 此处不复写):
-> ①26-09-28-0128 → 931e231d(根修已在库, 补守阵 test_unstaged_delete_uses_rm_cached);②26-09-20-2212
-> → 2fc34fc2(根修 0c18fcda 合并同名守阵);③26-09-22-2311 → 9486a7cd(根修 54c83ac3 deepcopy, 零代码改动);
-> ④⑤26-09-30-0602 两条 → 9aeb4400(colwidth 用例选键)/ 59725443(ctx03 点击落点), 同档案
-> tasks/26-10-01-test-ui-smoke-clearance.md。收尾基线切片见 `commands run kb.baseline` 最新一条。
-> **计划外事项(a/b/c 已于 2026-10-01 20:12 统一入池, 均未修待认领; d) 已落坑档无需 issue)**:
-> a) kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 issues 索引生成器
-> → issue 26-10-01-2012-chore-kb-index-missing-issues-gen(2026-10-01 已定调收编进 kb.index, 状态 Done);
-> b) tests/test_config.py 另有 **5 对同文件重名测试遮蔽**(4 对逐字相同, 同类缺陷)→ issue
-> 26-10-01-2012-test-test-config-duplicate-test-names(挂专题 duplicate-test-name-shadowed-guard,
-> 与 2212 串线)—— 清偿轮(含防复发守阵)待授权;
-> c) tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享」理由写, deepcopy 根修后过时(保守无害)→
-> issue 26-10-01-2012-docs-test-ui-stale-fakeconfig-comment;
-> d) 冒烟「行内交互后代(@click.stop 的 site-chip)吞修饰键点击」新坑已按动作写进
-> pitfalls/testing/smoke.md(S4)。
-> **待办**: W2 状态完整性与数据安全(4)起逐波推进, 每波待用户显式授权;路线图口径余 26 条
-> (其后又有新入池, 实时以 issues/_index.md 为准;路线图 HTML 本体不改, 未全清不转 Done)。
-> 最后活动: 2026-10-01 20:15
+> **已完成: W1 流程与闸门卡点 5/5 全清**(持久层 = 四份 tasks/ 档案 + issues Done 分区, 收尾基线
+> 26-10-01-2003; 此处只留路标, 明细不在切片)。
+> **已完成: W2 状态完整性与数据安全 3/4 清偿**(明细已迁 progress/implemented-core.md ·
+> implemented-webui.md + issues Done 分区, 此处只留路标): ①1347-token(web.token 非原子写)
+> → 5965cc07(ensure_web_token 改走 utils.atomic_write, +3 守阵); ②1347-tray(托盘 join 超时弃落盘)
+> → 9f73b6d8(join 5s→10s + 超时 WARNING, +1 守阵); ③0219(.!qB 过渡态误判缺文件) → c353e899
+> (按计划 26-09-22-2038 过渡态容忍, grouping_mod 汇聚点 + store/utils/ops_mod 配套, +8 守阵,
+> 计划 doc-status 已完档 Done)。**W2 第 4 条 26-09-22-2221(feat 跨组文件交叉冲突)用户明确排除, 未动待后续**。
+> **计划外事项 a-d 已全部了结**(后续轮次清偿, 状态以 issues/_index.md Done 分区为准):
+> a) kb.index 已收编 issues 索引生成器(f3564847); b) test_config 5 对重名死测试已清偿 + 全仓
+> 防复发守阵(d1c25fcb); c) test_ui 过时注释已随漂移修复批次校正(2501698e); d) 冒烟「行内交互
+> 后代吞修饰键点击」新坑已入 pitfalls/testing/smoke.md。
+> **待办**: W3 WebUI 健壮性与安全(5)起逐波推进, 每波待用户显式授权;路线图 HTML 本体不改,
+> 未全清不转 Done(W1/W2 同口径);实时以 issues/_index.md 为准。
+> 最后活动: 2026-10-01 21:36
