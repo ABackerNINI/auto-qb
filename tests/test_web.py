@@ -120,7 +120,7 @@
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2) —— 设置分区表① 模板绑定(档位 chips 本地过滤/明细行/空态/失踪行挂钩/「数据截至」时间戳/「上次核实(放行判定)」独立列名)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
-- test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助三函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 已知幻键 ls.lane_text(LaneStatus 无此字段, 渲染为空, 阶段3 存量缺陷)以白名单钉死恰为一条, 修复后白名单须收空
+- test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助三函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表② 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -175,7 +175,7 @@
 - testhr_view_fields_excluded: HR 排除态视图(hr_excluded=True, 触发/达标 False, 站点侧全空, 桥不被打扰)
 - test_api_hr_status_disabled_returns_empty_state: 未启用 HR 时 /api/hr/status 回 enabled=false + 说明(前端空态, 不报错)
 - test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
-  「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径)
+  「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径) + 波次明细 lane_text 徽章人话逐档正确(LANE_TEXTS 单点)
 - test_api_hr_status_names_the_blocking_step: 覆盖证明不成立时要说清卡在哪一步(用户看到种子没放行时最想知道的一句)
 - test_api_hr_site_entries_full_fields: 种子明细端点(计划 26-10-01-2216 §7 阶段1)200 全字段 —— 行键面 = §3 P0+P1 全集
 - test_api_hr_site_entries_verified_two_states: verified 有/无两态同表(无记录→未核实; 有记录→verified_ts+source 原值+人话)
@@ -1983,17 +1983,11 @@ def test_frontend_hr_contract_keys_match_backend():
     phantom_s = sorted(used_s - set(SiteStatus(site="probe").to_dict()))
     assert not phantom_s, f"表② 消费了 SiteStatus 不导出的键 {phantom_s}(kv 行静默落空)"
     used_ls = set(re.findall(r"\bls\.([a-z_]+)\b", js_code)) | set(re.findall(r"\bls\.([a-z_]+)\b", frag_diag.group(1)))
-    assert {"full_depth", "count_claim"} <= used_ls, f"表② 波次级消费键提取失效(只扫到 {sorted(used_ls)}) —— 同步提取器"
-    # 「已知幻键」白名单: 波次表档位徽章消费 ls.lane_text, 但 LaneStatus 没有该字段(to_dict
-    # 不含), 该格**当前实际渲染为空**(只剩档位字母, 色义仍走 hrsLaneCls(ls.lane)) —— 这是
-    # 本守阵 26-10-01 首次通电时抓出的存量缺陷(阶段3 交付, 修复属 src/ 改动不在阶段4 范围,
-    # 已汇报待拍板)。修复(给 LaneStatus 补 lane_text 或模板改口径)后此断言会**反向变红**,
-    # 提醒把白名单收空 —— 幻键集合必须归零, 不许新幻键从这里溜进。
-    phantom_ls = used_ls - set(LaneStatus().to_dict())
-    assert phantom_ls == {
-        "lane_text"
-    }, (f"表② 波次级幻键集变了: {sorted(phantom_ls)}(预期恰为 ['lane_text']) —— "
-        "新增幻键即真缺陷; 若 lane_text 已修, 到这里把白名单收成空集")
+    assert {"full_depth", "count_claim", "lane_text"} <= used_ls, f"表② 波次级消费键提取失效(只扫到 {sorted(used_ls)}) —— 同步提取器"
+    # 严格闭集(2026-10-01 收空): 曾有已知幻键 ls.lane_text(徽章人话渲染为空), 修法 = LaneStatus
+    # 补该字段由 _lane_statuses 填充(LANE_TEXTS 单点), 白名单已收 —— 任何幻键在这里都是真缺陷。
+    phantom_ls = sorted(used_ls - set(LaneStatus().to_dict()))
+    assert not phantom_ls, f"表② 波次级消费了 LaneStatus 不导出的键 {phantom_ls}(渲染成空, 打错/上游改名都会这样)"
 
 
 def test_frontend_member_window_functions_live_in_methods():
@@ -3921,6 +3915,14 @@ def test_api_hr_status_reports_site_state(web_env, tmp_path):
     assert site["pending_infohash"] == 0 and site["backfill_ratio"] == 1.0
     assert site["managed"] == 0 and site["keys"] == 2, "行名不粗配本地名 → 考察中命中 0; 身份键在终态档占 v1/v2 两个"
     assert all(l["status"] == "ok" for l in site["lanes"]), "三档波次状态全有效"
+    # 表② 波次表档位徽章人话(计划 26-10-01-2216 §6.2 mockup「A 考察中」形态): 曾因 LaneStatus
+    # 缺字段渲染为空(幻键), 修后逐档钉值 + 钉「取自 LANE_TEXTS 单点」双断言
+    from auto_qb.hr.model import FETCH_LANES
+    from auto_qb.hr.status import LANE_TEXTS
+
+    lane_texts = {l["lane"]: l["lane_text"] for l in site["lanes"]}
+    assert lane_texts == {"A": "考察中", "B": "已达标", "C": "未达标"}, f"徽章人话逐档不对: {lane_texts}"
+    assert lane_texts == {k: LANE_TEXTS[k] for k in FETCH_LANES}, "lane_text 必须取自 LANE_TEXTS 单点, 不另写第二份映射"
     assert "上次取波" in site["fresh_text"] and "复用窗至" in site["fresh_text"]
     assert site["next_wave_at"] > site["fetched_at"], "下次取波 = 上次取数 + 周期"
     assert "今天" in site["quota"]["text"] and site["quota"]["day_max"] > 0

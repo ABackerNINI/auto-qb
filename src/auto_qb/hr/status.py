@@ -74,6 +74,7 @@ class LaneStatus:
     lane: str = ""
     status: str = ""
     status_text: str = ""
+    lane_text: str = ""  #: 档位人话(表② 波次表徽章「A 考察中」; 取自 LANE_TEXTS 单点, 计划 26-10-01-2216 §6.2)
     wave_ts: float = 0.0
     pages: int = 0
     rows: int = 0
@@ -232,6 +233,7 @@ def _lane_statuses(data: HrSiteData, now: float) -> Tuple[List[LaneStatus], str]
             lane=lane,
             status=st.status,
             status_text=LANE_STATUS_TEXTS.get(st.status, st.status),
+            lane_text=LANE_TEXTS.get(lane, lane),
             wave_ts=st.wave_ts,
             pages=st.pages,
             rows=st.rows,
