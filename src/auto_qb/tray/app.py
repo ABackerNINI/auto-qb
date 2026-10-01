@@ -185,7 +185,9 @@ class TrayUi:
 
     # ---------- 窗口 ----------
 
-    def _build_window(self):
+    # 豁免(plan 26-10-01-2157 §3 T2.1): CustomTkinter 窗口/控件构建, 需真实显示器与 Tk 事件循环,
+    # headless 环境不可实例化; 架构级可测化(headless 依赖注入/抽 testable core)属另立项
+    def _build_window(self):  # pragma: no cover
         # GUI 栈延迟导入: 本模块的 IPC/日志设施在无 GUI 的 CI/Linux 可导入可测,
         # 仅托盘模式实例化 TrayUi 时才加载 customtkinter/pystray/PIL
         import customtkinter as ctk
@@ -298,7 +300,8 @@ class TrayUi:
     def _open_logs(self):
         utils.open_path(self._log_dir(self.manager))
 
-    def _card(self, parent, column: int, title: str):
+    # 豁免(plan 26-10-01-2157 §3 T2.1): 状态卡控件构建, 同属真实窗口域, headless 不可实例化
+    def _card(self, parent, column: int, title: str):  # pragma: no cover
         card = self._ctk.CTkFrame(parent, fg_color=COLOR_BG_CARD, corner_radius=10)
         card.grid(row=0, column=column, sticky="ew", padx=(0 if column == 0 else 8, 0))
         self._ctk.CTkLabel(card, text=title, text_color="gray60",
@@ -309,7 +312,9 @@ class TrayUi:
 
     # ---------- 托盘 ----------
 
-    def _build_tray(self):
+    # 豁免(plan 26-10-01-2157 §3 T2.1): pystray 托盘图标与菜单构建, 需真实系统托盘与桌面会话,
+    # 菜单回调本体(事件投递)已由 poll 分派测试覆盖, 此处只剩托盘栈自身的构建
+    def _build_tray(self):  # pragma: no cover
         self._icon = self._pystray.Icon(
             "auto-qb",
             self._pil_image.open(ICON_PNG),
@@ -489,7 +494,9 @@ class TrayUi:
 
     # ---------- 编排 ----------
 
-    def run(self) -> int:
+    # 豁免(plan 26-10-01-2157 §3 T2.1): 阻塞式真实 Tk mainloop + manager 后台线程完整生命周期
+    # (连接 qB/状态落盘/退出预算), 任何替身跑法都只是假编排 —— 只能真窗口验证
+    def run(self) -> int:  # pragma: no cover
         """阻塞运行直至用户退出; 返回进程退出码"""
         self.ipc.start()
         self._manager_thread = threading.Thread(
