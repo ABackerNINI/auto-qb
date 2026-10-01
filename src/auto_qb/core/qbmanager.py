@@ -24,12 +24,14 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
   post 认领)/ops(+checking 并入, 决策点 D2; 危险操作层升 ctx.ops 服务) → P5 rules(规则
   引擎整体迁 RulesModule, 事件分派/建任务改相位认领, L2 结构重建收进 rules.apply ——
   刷新管线收口为「同步 + 相位广播」, 内核不再点名任何业务步骤, 也不再 import rules)。
-  本类旧名方法只剩单行委托(§7.2 测试兼容)。
+  旧名兼容层(_WEB_STATE_ALIAS + 五节单行委托)已随别名层处置 W3 整体退役(2026-10-01,
+  plan web-state-alias-disposal; 反复活守阵 tests/test_qbmanager_alias_freeze.py)。
 
 内核地基(plan kernel-module-refactor): 构造期立 AppContext(ctx)并把能力服务挂上
 (store/api/state/task_queue/web/trackers/maintenance/ops), 本类同名属性自此刻起全部是
 **委托**(ctx 为单一真相, 守阵断言同对象); ModuleHost / EventBus 编排机制 + 装配清单在
-构造期建立 —— 最终收敛为「宿主只知何时, 不知何事」。
+构造期建立 —— 最终收敛为「宿主只知何时, 不知何事」。属性对按处置计划 D1 拍板**永久
+保留**(manager 即外观的公共面), 旧名方法与别名字段不再存在。
 """
 import logging
 import os
@@ -60,7 +62,7 @@ from ..webui.commands import WebCommandsMixin
 from ..webui.views import WebviewMixin
 from .qbapi import QbApi
 from .qbclient import _new_client
-from .taskqueue import Task, TaskQueue
+from .taskqueue import TaskQueue
 from ..webui import WebUIRuntime
 from ..webui.module import WebUIModule
 # HR 在线核实运行时门面(端点 + 取数线程 + 只读视图): 与 WebUIRuntime 同级, 见 __init__ 说明
@@ -68,7 +70,6 @@ from ..hr.runtime import HrRuntime
 from ..hr.module import HrModule
 from ..torrents import (
     QbCompatError,
-    TorrentRecord,
     TorrentStore,
     missing_torrent_fields,
 )
@@ -142,52 +143,6 @@ class QbManager(
     WebviewMixin,
     WebCommandsMixin,
 ):
-    # ---- 兼容代理(过渡层) ----
-    # 表现层状态已迁到 self.web(WebUIRuntime); 这里把**旧字段名**转发过去, 让既有调用
-    # (测试 / 尚未改名的入口)零改动。代理只做转发、不存值, 故不存在"两份真相"。
-    # 清理路径: 调用方全部改用 self.web.<新名> 之后, 删掉本表与下面两个 dunder。
-    _WEB_STATE_ALIAS = {
-        "web_commands": "commands",
-        "_web_write_seq": "write_seq",
-        "_web_results": "results",
-        "_reannounce_pending": "reannounce_pending",
-        "_truth_pending": "truth_pending",
-        "_group_view": "group_view",
-        "_singles_view": "singles_view",
-        "_flat_view": "flat_view",
-        "_shows_view": "shows_view",
-        "_shows_pending": "shows_pending",
-        "_group_view_ver": "group_view_ver",
-        "_group_view_dirty": "group_view_dirty",
-        "_web_last_seen": "last_seen",
-        "_web_pending_ver": "pending_ver",
-        "_view_lock": "view_lock",
-        "_search_index": "search_index",
-        "_search_index_dirty": "search_index_dirty",
-        "_web_token": "token",
-        "_web_handle": "handle",
-        "_traffic_view": "traffic_view",
-    }
-
-    def __getattr__(self, name: str):
-        """旧字段名 -> self.web 的只读转发(仅在普通属性查找失败时被调用)
-
-        !'web' 自身不在别名表里, 故 __init__ 之前访问任何别名都会在这里抛 AttributeError
-        而不是递归 —— 别名属性必须在 self.web 建立之后才可用。
-        """
-        alias = self._WEB_STATE_ALIAS.get(name)
-        if alias is None:
-            raise AttributeError(f"{type(self).__name__!r} 对象没有属性 {name!r}")
-        return getattr(self.web, alias)
-
-    def __setattr__(self, name: str, value) -> None:
-        """旧字段名的写入同样转发到 self.web(与 __getattr__ 成对, 否则写会创建第二份真相)"""
-        alias = self._WEB_STATE_ALIAS.get(name)
-        if alias is None:
-            super().__setattr__(name, value)
-        else:
-            setattr(self.web, alias, value)
-
     def __init__(self, config_path: str, config: Config = None, no_lock: bool = False):
         self.config_path = config_path
         # 内核地基(plan kernel-module-refactor P0): ctx 先立 —— config/store/api/state 挂上
@@ -220,12 +175,12 @@ class QbManager(
         self.ctx.state = StateService(self.config.state_file)
         # 数据目录(state/锁/日志/跳检备份同处): 显式建目录, 不依赖日志文件配置(console-only 时无日志建目录)
         os.makedirs(os.path.dirname(self.state_file) or ".", exist_ok=True)
-        self.state = self._load_state()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
-        self._bind_field_snapshots()  # 字段变化基线挂到 state 顶层键(计划 26-09-27-1438)
+        self.state = self.ctx.state.load()  # 从文件加载(run() 时再次加载覆盖; 直接使用(测试/process_torrent 入口)也含历史)
+        self.ctx.state.bind_field_snapshots(self.store)  # 字段变化基线挂到 state 顶层键(计划 26-09-27-1438)
         # 周期落盘计时器(见 StateService.maybe_flush): run() 加载状态后重置为首个到期点
-        self._next_state_flush_at: float = 0.0
+        self.ctx.state.next_flush_at = 0.0
         # 规则结构初始化移入 RulesModule(P5; 规则加载在 run() 中进行: --export-yaml 等
-        # 只导出模式不需要), mgr.rules/enabled_rules 变委托属性(§7.2)
+        # 只导出模式不需要); rules/enabled_rules 旧名委托属性已随别名层处置 W3 删除
         # 任务队列: 统一管理所有任务(种子刷新/规则/种子级内置功能/异步校验/全局标签清理/分组)
         # (P3 起挂 ctx: speed_curve/maintenance 模块的任务自注册经 ctx.task_queue 现取当前队列;
         #  本属性只是委托, L2 整体重建也经 setter 落回 ctx)
@@ -294,7 +249,7 @@ class QbManager(
             self._lock = SingleInstanceLock(self.state_file)
             self._lock.acquire()
             # 持锁后才清: 锁住了说明没有别的实例在写, 状态目录里的 <state_file>.*.tmp 全是上次崩溃的遗留
-            self._cleanup_orphan_tmp()
+            self.ctx.state.cleanup_orphan_tmp()
 
     @property
     def client(self) -> Optional[Client]:
@@ -309,11 +264,13 @@ class QbManager(
         # 重连/换客户端 -> 旧 rid 失效: 重置同步基线, 下轮强制全量重建
         self.store.reset_sync()
 
-    # ---------- 服务委托(plan kernel-module-refactor P0 过渡层) ----------
+    # ---------- 服务委托(外观属性面, D1 拍板永久保留) ----------
     # config/store/api/state/state_file 的实现单点在 ctx(AppContext/StateService); 这组
     # 属性对使 76 处构造点 / 279 处 make_manager 测试 / mixin 与门面的直读全部零改动,
     # 热重载的整体替换(self.config = config)与测试整对象替换(mgr.api = ...)也经 setter
-    # 落回 ctx。清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
+    # 落回 ctx。别名层处置 D1 拍板(2026-10-01): 属性面永久保留 —— 340/309/134 处直读是
+    # 「manager 即外观」的合理公共面, 不是别名; 纯内部属性对 _next_state_flush_at 已随
+    # W3 删除(读写改经 ctx.state.next_flush_at)。
 
     @property
     def config(self) -> Config:
@@ -373,14 +330,6 @@ class QbManager(
     @web.setter
     def web(self, value: WebUIRuntime) -> None:
         self.ctx.web = value
-
-    @property
-    def _next_state_flush_at(self) -> float:
-        return self.ctx.state.next_flush_at
-
-    @_next_state_flush_at.setter
-    def _next_state_flush_at(self, value: float) -> None:
-        self.ctx.state.next_flush_at = value
 
     def _reset_reconnect_backoff(self) -> None:
         """连接成功后清零退避(下次断开从最短间隔重新开始)"""
@@ -500,14 +449,14 @@ class QbManager(
                         )
                     return
                 logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
-            self.state = self._load_state()
-            self._bind_field_snapshots()  # state 被整体替换, 字段变化基线重新挂接
+            self.state = self.ctx.state.load()
+            self.ctx.state.bind_field_snapshots(self.store)  # state 被整体替换, 字段变化基线重新挂接
             # schema 迁移物化(计划 26-09-26-0506): 磁盘版本 < CURRENT 时立即落盘一次新版本。
-            # 此处已持锁(与 __init__ 的 _cleanup_orphan_tmp 同判据); __init__ 的早期加载只做内存迁移。
-            self._materialize_state_migration(dry_run)
+            # 此处已持锁(与 __init__ 的 cleanup_orphan_tmp 同判据); __init__ 的早期加载只做内存迁移。
+            self.ctx.state.materialize_migration(dry_run)
             # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
-            self._next_state_flush_at = time.time() + max(self.config.state_save_interval, 0.0)
-            self._load_rules()
+            self.ctx.state.next_flush_at = time.time() + max(self.config.state_save_interval, 0.0)
+            self.host.get("rules")._load_rules()
 
             try:
                 # 两条独立时间线(分层节拍):
@@ -583,7 +532,7 @@ class QbManager(
                         # 状态全丢; 间隔 state_save_interval(0=关闭), dry-run 不落盘(与退出路径
                         # `if not dry_run` 口径一致), 暂停分支已在上面 continue(暂停期无变更)。
                         if not dry_run:
-                            self._maybe_flush_state(time.time())
+                            self.ctx.state.maybe_flush(time.time(), self.config.state_save_interval)
                         # 还在等真值落地 ⇒ 下一轮**立刻**再同步一次(不再等 sync_interval)。
                         # 有 TRUTH_PUSH_CAP_MS 兜底, 不会无限空转。
                         if _wait_truth and getattr(self.web, "truth_pending", None):
@@ -626,7 +575,7 @@ class QbManager(
             # 锁释放是内核生命周期, 留在 stop_all 之后
             self.host.stop_all()
             if not dry_run:
-                self.save_state()
+                self.ctx.state.save()
             if self._lock is not None:
                 self._lock.release()
 
@@ -772,7 +721,7 @@ class QbManager(
         self._schema_validated = True
 
     # _hr_anchors 已迁 HrRuntime._anchors(plan §05: 门面经 ctx/store 取锚点数据,
-    # 不再 getattr 窥内核私有方法); mgr._hr_anchors 测试兼容委托见委托层。
+    # 不再 getattr 窥内核私有方法); 旧名测试兼容委托已随别名层处置 W3 删除(退役名单见分诊清单)。
 
     def _refresh_torrents(self, dry_run: bool = False):
         """种子列表刷新(P5 收口): 增量同步 -> 按 §4.2 相位表广播 -> 数据面收尾
@@ -882,228 +831,9 @@ class QbManager(
         # 字段变化基线同步刷新(事件分派 on_torrent_field_changed 的跨轮对比口径, 计划 26-09-27-1438)
         self.store.update_field_snapshots()
 
-    # ---------- 模块方法委托(plan kernel-module-refactor P3/P4/P5 过渡层) ----------
-    # 实现单点已迁 SpeedCurveModule / MaintenanceModule / TrackerModule / GroupingModule /
-    # OpsModule / RulesModule(core/modules/); 保留旧名字让测试(mgr._xxx 直调)与 run()
-    # 的启动加载零改动 —— 与 _WEB_STATE_ALIAS 同款迁移惯用法(plan §7.2)。全部是单行转发,
-    # 不含状态、不含判据。清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
-
-    def _match_tracker_conf(self, torrent: TorrentRecord):
-        return self.ctx.trackers.match(torrent)
-
-    def _apply_speed_limit(self, torrent: TorrentRecord, tracker_conf, dry_run: bool) -> None:
-        self.ctx.trackers.apply_speed_limit(torrent, tracker_conf, dry_run)
-
-    def _handle_speed_limit_curve(self, task: Task, dry_run: bool) -> bool:
-        return self.host.get("speed_curve").handle_speed_limit_curve(task, dry_run)
-
-    def _handle_maintenance_task_interface(self, task: Task, dry_run: bool) -> bool:
-        return self.host.get("maintenance").handle_maintenance(task.torrent, dry_run)
-
-    def _handle_maintenance(self, torrent: TorrentRecord, dry_run: bool, force_tags: bool = False) -> bool:
-        return self.host.get("maintenance").handle_maintenance(torrent, dry_run, force_tags)
-
-    def _add_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool, log_level: int = logging.INFO):
-        return self.host.get("maintenance").add_tags(torrent, tags, dry_run, log_level)
-
-    def _remove_tags(self, torrent: TorrentRecord, patterns: List[str], dry_run: bool):
-        return self.host.get("maintenance").remove_tags(torrent, patterns, dry_run)
-
-    def _remove_similar_tags(self, torrent: TorrentRecord, tags: List[str], dry_run: bool):
-        return self.host.get("maintenance").remove_similar_tags(torrent, tags, dry_run)
-
-    def _set_category(self, torrent: TorrentRecord, category: str, overwrite: bool, dry_run: bool):
-        return self.host.get("maintenance").set_category(torrent, category, overwrite, dry_run)
-
-    def _create_category_if_not_exists(self, category: str, dry_run: bool):
-        return self.host.get("maintenance").create_category_if_not_exists(category, dry_run)
-
-    def _add_hr_tag_or_category(self, torrent: TorrentRecord, dry_run: bool):
-        return self.host.get("maintenance").add_hr_tag_or_category(torrent, dry_run)
-
-    def _add_episode_tags(self, torrent: TorrentRecord, dry_run: bool):
-        return self.host.get("maintenance").add_episode_tags(torrent, dry_run)
-
-    def _handle_delete_tags(self, task, dry_run: bool) -> bool:
-        return self.host.get("maintenance").handle_delete_tags(task, dry_run)
-
-    def _handle_delete_tags_if_has_no_torrents(self, task, dry_run: bool) -> bool:
-        return self.host.get("maintenance").handle_delete_tags_if_has_no_torrents(task, dry_run)
-
-    # ---------- 分组委托(plan kernel-module-refactor P4 过渡层) ----------
-    # 实现单点在 GroupingModule(四刷新相位: transitions/torrents_added/removed_scan/post);
-    # 这里只保留被测试与 rules 动作(checking 决策链的组上下文)点名的旧名 —— _refresh_torrents
-    # 的四个分组调用点已改相位广播, 不再经过本组转发。
-
-    def _handle_state_transitions(self, dry_run: bool) -> None:
-        return self.host.get("grouping")._handle_state_transitions(dry_run)
-
-    def _handle_removed_torrents(self, removed_hashes: list[str], dry_run: bool) -> None:
-        return self.host.get("grouping")._handle_removed_torrents(removed_hashes, dry_run)
-
-    def _handle_save_path_changes(self, dry_run: bool) -> None:
-        return self.host.get("grouping")._handle_save_path_changes(dry_run)
-
-    def _assign_new_torrent(self, hash: str, dry_run: bool = False) -> None:
-        return self.host.get("grouping")._assign_new_torrent(hash, dry_run)
-
-    def _assign_to_group(self, torrent: TorrentRecord, file_map: dict, dry_run: bool = False) -> None:
-        return self.host.get("grouping")._assign_to_group(torrent, file_map, dry_run)
-
-    def _leave_group(self, hash: str):
-        return self.host.get("grouping")._leave_group(hash)
-
-    def _check_missing_files(self, members, sizes: dict, dry_run: bool, key: str) -> None:
-        return self.host.get("grouping")._check_missing_files(members, sizes, dry_run, key)
-
-    def _check_download_conflicts(self, dry_run: bool) -> None:
-        return self.host.get("grouping")._check_download_conflicts(dry_run)
-
-    def _group_members(self, hash: str) -> list:
-        return self.host.get("grouping")._group_members(hash)
-
-    def _group_by_hash(self) -> dict:
-        return self.host.get("grouping")._group_by_hash()
-
-    def _group_has_downloading(self, members: list[str]) -> bool:
-        return self.host.get("grouping")._group_has_downloading(members)
-
-    def _group_reference_candidates(self, members: list[str]) -> list:
-        return self.host.get("grouping")._group_reference_candidates(members)
-
-    # ---------- ops 委托(plan kernel-module-refactor P4 过渡层) ----------
-    # 实现单点在 OpsModule(ctx.ops 服务, 决策点 D2: checking 前置检查并入); WEB 命令与
-    # rules 动作均已改走 ctx.ops(plan P4/P5), 本组只剩测试兼容转发。
-
-    def ops_recheck(
-        self, hash: str, source: str = "rule", torrent=None, auto_start: bool = False, on_success=None, origin=None
-    ):
-        return self.ctx.ops.recheck(
-            hash, source=source, torrent=torrent, auto_start=auto_start, on_success=on_success, origin=origin
-        )
-
-    def ops_skip_check(
-        self, hash: str, source: str = "rule", torrent=None, auto_start: bool = False, has_reference: bool = True
-    ):
-        return self.ctx.ops.skip_check(
-            hash, source=source, torrent=torrent, auto_start=auto_start, has_reference=has_reference
-        )
-
-    def check_filelist(self, api, torrent) -> str:
-        return self.ctx.ops.check_filelist(api, torrent)
-
-    # ---------- 规则引擎委托(plan kernel-module-refactor P5 过渡层) ----------
-    # 实现单点在 RulesModule(事件分派/建任务改相位认领, L2 重建收进 rules.apply); 这里保留
-    # 被测试与 run() 启动加载点名的旧名。rules/enabled_rules 是属性委托(模块为单一真相),
-    # 与服务委托(config/store/...)同款。mgr._hr_anchors 同批迁 HrRuntime(plan §05)。
-
-    @property
-    def rules(self) -> list:
-        """已加载规则集(RulesModule 单一真相; 加载在 run() 中进行)"""
-        return self.host.get("rules").rules
-
-    @rules.setter
-    def rules(self, value: list) -> None:
-        self.host.get("rules").rules = value
-
-    @property
-    def enabled_rules(self) -> list:
-        """启用规则子集(RulesModule 单一真相)"""
-        return self.host.get("rules").enabled_rules
-
-    @enabled_rules.setter
-    def enabled_rules(self, value: list) -> None:
-        self.host.get("rules").enabled_rules = value
-
-    def _load_rules(self):
-        return self.host.get("rules")._load_rules()
-
-    def _rules_for_torrent(self, torrent) -> list:
-        return self.host.get("rules")._rules_for_torrent(torrent)
-
-    def _create_rule_task(self, rule, hash: str):
-        return self.host.get("rules")._create_rule_task(rule, hash)
-
-    def _handle_rule(self, rule, task, dry_run: bool) -> bool:
-        return self.host.get("rules")._handle_rule(rule, task, dry_run)
-
-    def _handle_event_rule(self, rule, task, snapshot, dry_run: bool) -> bool:
-        return self.host.get("rules")._handle_event_rule(rule, task, snapshot, dry_run)
-
-    def _apply_event_rule(self, rule, hash: str, dry_run: bool = False, snapshot=None):
-        return self.host.get("rules")._apply_event_rule(rule, hash, dry_run=dry_run, snapshot=snapshot)
-
-    def _resolve_refs(self, refs: list) -> list:
-        return self.host.get("rules")._resolve_refs(refs)
-
-    def _create_torrent_tasks(self, hash: str):
-        return self.host.get("rules")._create_torrent_tasks(hash)
-
-    def _hr_anchors(self) -> dict:
-        return self.hr._anchors()
-
     def export_torrents_info(self, path):
         """导出种子信息, 用于debug"""
         torrents = self.client.torrents_info()
         with open(path, "w") as f:
             for tor in torrents:
                 f.write(f"{tor}\n\n")
-
-    # ---------- 兼容转发(过渡层): WEB 表现层入口的旧名字 ----------
-    # 主循环一律走 self.web.* 的新名; 下面这些只保留给既有调用方(web.py / 测试),
-    # 全部是单行转发 —— 不含状态、不含判据。清理方式与 _WEB_STATE_ALIAS 相同。
-
-    def _drain_web_commands(self) -> bool:
-        return self.web.consume_commands()
-
-    def _check_reannounce_pending(self) -> None:
-        self.web.check_pending()
-
-    def _flush_truths(self) -> None:
-        self.web.flush_truths()
-
-    def _flush_views(self, force: bool = False) -> None:
-        self.web.flush_views(force=force)
-
-    def rebuild_views(self) -> None:
-        self.web.rebuild_views()
-
-    def ensure_group_view(self) -> List[dict]:
-        return self.web.ensure_view()
-
-    def ensure_group_state(self, rid: Optional[int] = None, view: Optional[str] = None) -> dict:
-        return self.web.ensure_state(rid, view)
-
-    def touch_web_client(self) -> None:
-        self.web.touch()
-
-    # ---------- 状态持久化委托(plan kernel-module-refactor P0 过渡层) ----------
-    # 实现单点在 StateService(ctx.state), 迁移自 RuleEngineMixin(2026-09-30); 保留旧名字
-    # 让 run() 接线守阵与测试 31 处调用点(load 11 / save 13 / flush 7)零改动。
-    # 清理随别名层处置(决策点 D4)统一评估, 不烂尾在主线上。
-
-    def _load_state(self) -> dict:
-        return self.ctx.state.load()
-
-    def save_state(self) -> None:
-        self.ctx.state.save()
-
-    def _maybe_flush_state(self, now: float) -> None:
-        # 间隔现读传入(L0 语义: 热重载改 state_save_interval 即刻生效), 服务自身不持配置
-        self.ctx.state.maybe_flush(now, self.config.state_save_interval)
-
-    def _bind_field_snapshots(self) -> None:
-        self.ctx.state.bind_field_snapshots(self.store)
-
-    def _cleanup_orphan_tmp(self) -> None:
-        self.ctx.state.cleanup_orphan_tmp()
-
-    def _materialize_state_migration(self, dry_run: bool) -> None:
-        self.ctx.state.materialize_migration(dry_run)
-
-    def record_execution(self, rule_name: str, hash: str) -> None:
-        """规则执行历史登记(rules/base.py 经 manager 消费; 单点在 ctx.state)"""
-        self.ctx.state.record_execution(rule_name, hash)
-
-    def get_exec_record(self, rule_name: str, hash: str):
-        return self.ctx.state.get_exec_record(rule_name, hash)

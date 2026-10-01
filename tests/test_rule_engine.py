@@ -38,7 +38,7 @@
 - test_load_state_future_version_fails_fast_keeps_bak: 未来版本 fail-fast 抛 SchemaVersionError(不算 _CORRUPT), 不触碰 .bak
 - test_load_state_bak_recovery_passes_migration_chain: .bak 回退路径同样过迁移链, 写回文件带新版本章
 - test_materialize_state_migration: 物化方法: 无迁移/描述为空不落盘, dry-run 仅内存, 正常路径落盘新版本
-- test_state_migration_materialize_is_wired_in_run: 接线守阵: 物化必须挂在 run() 的 _load_state() 之后
+- test_state_migration_materialize_is_wired_in_run: 接线守阵: 物化必须挂在 run() 的 ctx.state.load() 之后
 """
 import json
 import os
@@ -250,14 +250,14 @@ def test_materialize_state_migration():
 
 
 def test_state_migration_materialize_is_wired_in_run():
-    """接线守阵: 物化必须挂在 run() 的 `self.state = self._load_state()` 之后 —— 加载才有迁移描述"""
+    """接线守阵: 物化必须挂在 run() 的 `self.state = self.ctx.state.load()` 之后 —— 加载才有迁移描述"""
     import inspect
 
     from auto_qb.core.qbmanager import QbManager
 
     src = inspect.getsource(QbManager.run)
-    i_load = src.find("self._load_state()")
-    i_mat = src.find("_materialize_state_migration")
+    i_load = src.find("self.ctx.state.load()")
+    i_mat = src.find("materialize_migration")
     assert i_load >= 0 and i_mat > i_load, "物化必须在加载之后(run() 内, 已持锁)"
 
 
@@ -341,7 +341,7 @@ def test_cleanup_orphan_tmp_is_wired_after_lock():
 
     src = inspect.getsource(QbManager.__init__)
     i_lock = src.find("self._lock.acquire()")
-    i_clean = src.find("_cleanup_orphan_tmp")
+    i_clean = src.find("cleanup_orphan_tmp")
     assert i_lock >= 0 and i_clean > i_lock, "清理必须在 acquire() 之后"
     assert "if not no_lock" in src[:i_clean], "清理必须只在持锁(非 no_lock)分支内"
 

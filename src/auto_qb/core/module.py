@@ -50,7 +50,7 @@ class AppContext:
       要往当前队列入队 —— manager.task_queue 是这里的委托(L2 整体重建也经 setter 落回),
       模块侧现取 ctx.task_queue, 不缓存队列引用。
     - web(P3 起)挂入: speed_curve 模块经 ctx.web.set_traffic_view 服务方法推送流量快照,
-      不再跨层直写 _traffic_view 字段(plan §5); manager.web 同为这里的委托(测试整对象
+      不再跨层直写表现层流量字段(plan §5); manager.web 同为这里的委托(测试整对象
       替换 mgr.web 也经 setter 生效)。
     - trackers(P3 起, 决策点 D3)是模块句柄而非服务: tracker 匹配升 ctx.trackers.match(),
       规则上下文与全量轮重匹配都消费 —— 服务化避免事件回传的时序绕弯。

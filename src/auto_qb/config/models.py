@@ -324,7 +324,7 @@ class Config:
 
     remove_similar_tags: bool = False
 
-    # 维护任务站点 tags 部分(_add_tags/_remove_tags/_remove_similar_tags)的执行节奏
+    # 维护任务站点 tags 部分(add_tags/remove_tags/remove_similar_tags, 经 ctx.maintenance)的执行节奏
     # (计划 26-09-27-1438 D5): interval = 每个内置任务间隔执行(默认 = 迁移前行为);
     # on_change = 添加时执行一次, 之后仅在种子 tags 被外部改动时重检(HR 部分不受影响)
     maintenance_tag_mode: str = "interval"

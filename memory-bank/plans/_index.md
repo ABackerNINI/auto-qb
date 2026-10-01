@@ -9,7 +9,6 @@
 
 ## In Progress
 
-- [26-10-01-0350] [计划 · 别名层处置 — _WEB_STATE_ALIAS 与旧名委托层的退役路线](26-10-01-0350-plan-web-state-alias-disposal.html) — `web-state-alias-disposal`
 - [26-09-29-2036] [HR 计数对平集成 — 修改计划 (v3.1)](26-09-29-2036-plan-hr-counter-integration.html) — `backend-partial-hr-verify`
 - [26-09-29-1905] [HR 来源标记 · 非文字化设计模板](26-09-29-1905-plan-webui-hr-src-underline.html) — `webui-hr-src-underline`
 - [26-09-28-1805] [计划 · HR 排除功能: 按标签/分类把种子排除出 HR 体系](26-09-28-1805-plan-hr-exclude-tag-category.html) — `hr-exclude-tag-category`
@@ -35,6 +34,7 @@
 
 ## Done
 
+- [26-10-01-0350] [计划 · 别名层处置 — _WEB_STATE_ALIAS 与旧名委托层的退役路线](26-10-01-0350-plan-web-state-alias-disposal.html) — `web-state-alias-disposal`
 - [26-09-30-1819] [计划 · QbManager 内核化重构 — 微内核 + 插件式模块](26-09-30-1819-plan-kernel-module-refactor.html) — `kernel-module-refactor`
 - [26-09-30-0559] [修改计划 · HR 触发语义重构 — 移除「本地不触发」,全量纳入管理](26-09-30-0559-plan-hr-trigger-semantics.html) — `backend-hr-verify`
 - [26-09-30-0109] [危险操作独立操作层 · 工程计划 · auto-qb](26-09-30-0109-plan-dangerous-op-consolidation.html) — `dangerous-op-consolidation`

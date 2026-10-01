@@ -191,7 +191,7 @@ def _restore_state(mgr, hashes):
         tor.state = orig[h]
         touched = True
     if touched:
-        mgr.rebuild_views()
+        mgr.web.rebuild_views()
 
 
 def _revert_after_consume(mgr, hashes, wait_ms: int):
@@ -199,11 +199,11 @@ def _revert_after_consume(mgr, hashes, wait_ms: int):
 
     !不能直接 `Timer(revert_ms)` 定时回弹: 回弹可能跑在前端看到真值**之前**(实测一次"整组暂停"
     的撤下因此被拖到 4149ms —— 真值被回弹改回去了, 前端要等到下一次回弹才碰巧对上)。以
-    `_web_pending_ver` 判"这一版已被消费"(它在 `ensure_group_state` 里被清空), 再等一小段,
+    `web.pending_ver` 判"这一版已被消费"(它在 `web.ensure_state` 里被清空), 再等一小段,
     回弹就一定落在前端观测之后。
     """
     deadline = time.time() + 8.0
-    while time.time() < deadline and getattr(mgr, "_web_pending_ver", None) is not None:
+    while time.time() < deadline and getattr(mgr.web, "pending_ver", None) is not None:
         time.sleep(0.05)
     time.sleep(max(0, wait_ms) / 1000.0)
     _restore_state(mgr, hashes)
@@ -236,7 +236,7 @@ def _apply_truth(mgr, cmd: str, body: dict, revert_ms: int = 0):
             tor.state = _PAUSED_STATE
         else:
             tor.state = _RESUME_DONE if getattr(tor, "progress", 0) >= 1 else _RESUME_TODO
-    mgr.rebuild_views()  # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
+    mgr.web.rebuild_views()  # 版本号自增 ⇒ 前端下一次 /api/state 拿到新数组(而不是"版本未变"空响应)
     if revert_ms > 0 and hashes:
         threading.Thread(target=_revert_after_consume, args=(mgr, hashes, revert_ms), daemon=True).start()
 
@@ -256,7 +256,7 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
             try:
                 # !队列元素是 **2 元组** (cmd, body), cmd_id 在 body 里 —— 按 3 元组解包会抛
                 # ValueError, 命令被吃掉且永远没有回执(前端一直轮询, 表现为"点了没反应")。
-                _cmd, body = mgr.web_commands.get(timeout=0.2)
+                _cmd, body = mgr.web.commands.get(timeout=0.2)
             except queue.Empty:
                 continue
             except Exception:
@@ -267,14 +267,14 @@ def _start_command_pump(mgr, mode: str, revert_ms: int = 0, wait_ms: int = 0):
                 continue
             if mode == "error":
                 # 失败**不改状态**: 前端必须回滚到原值(回滚干净由冒烟 error 模式断言)
-                mgr._web_results[cmd_id] = {"status": "error", "error": "桩服务注入的失败(用于验证乐观 UI 回滚)"}
+                mgr.web.results[cmd_id] = {"status": "error", "error": "桩服务注入的失败(用于验证乐观 UI 回滚)"}
             else:
                 if wait_ms:
                     # !模拟真机「主循环正忙着, 命令排在后面」: 回执与真值是**同一轮主循环**里
                     # 出来的, 所以两者一起延后 —— 不是只延后回执。本地桩没有主循环, wait_ms 恒为 0,
                     # 于是"命令投递到回执"这一段在本地从来测不到, 而真机上它恰恰是最长的那一段。
                     time.sleep(wait_ms / 1000.0)
-                mgr._web_results[cmd_id] = {
+                mgr.web.results[cmd_id] = {
                     "status": "ok",
                     "wait_ms": round(wait_ms, 1),  # 埋点口径与后端 _timing() 一致: 排队等主循环
                     "exec_ms": 1,
@@ -364,7 +364,7 @@ def main() -> int:
             b.name = a.name  # 同组同名(真机: 同文件不同站)
             groups[(a.name, ())] = [a.hash, b.hash]
         mgr.store.groups = groups
-    mgr.rebuild_views()
+    mgr.web.rebuild_views()
     _start_command_pump(mgr, args.cmd_result, args.state_revert_ms, args.cmd_wait_ms)
 
     app = create_app(mgr)

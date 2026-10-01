@@ -1,22 +1,28 @@
-"""QbManager 旧名委托面冻结守阵(plan web-state-alias-disposal W0)。
+"""QbManager 旧名兼容层退役守阵(plan web-state-alias-disposal, W3 起为反复活守阵)。
 
 守什么: 内核化重构在 `core/qbmanager.py` 上留下的迁移过渡层 —— `_WEB_STATE_ALIAS`(20 字段 +
-`__getattr__`/`__setattr__` 双 dunder)与七节旧名单行委托 —— 已由分诊清单逐名定性
-(`memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json`)。处置纪律
-(conventions/modules.md「兼容层现状」)是**新代码一律用新名, 不再往委托层加东西**; 本守阵把
-这句纪律变成机检: 清单之外出现新的单行转发 / 别名表加字段, 立即红。清单与代码的双向一致
-同时保证 W1–W3 各波删除时清单同步更新(删除提交只允许包含清单标「转发」的名字)。
+`__getattr__`/`__setattr__` 双 dunder)与五节旧名单行委托 —— 已于 W3(2026-10-01)整体删除。
+退役名单与类别永久留档在分诊清单
+(`memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json`), 本守阵据此做
+**反复活机检**: 往 QbManager 加回清单里的旧名 / 重建别名表或转发 dunder, 立即红 —— 「清完又
+长出来」正是历史上别名层的成因(plan §04 风险表), conventions/modules.md「兼容层现状」明文
+禁止新代码走旧名。
+
+同面机检两块不删的面: D1 拍板**永久保留**的属性对(config/store/api/state/web/task_queue/
+state_file, manager 即外观的公共面)与 17 个内核自有方法(连接/节拍/相位, 内核语义)—— 属性对
+缺失 / 内核方法缺失或退化为单行转发, 同样红。
 
 判定是纯 AST 静态扫描, 不构造 QbManager(零运行期依赖)。形状判定 = 去掉 docstring 后恰一条
 语句, 且该语句的自表达式/赋值目标以 `self.<svc>`(svc ∈ ctx/web/hr/host/store/api/state/
 config/task_queue)起链 —— 即「单行委托」的形态学定义; 内核自有方法(多语句体 / 事件广播 /
-`self._client` 一类自有属性)天然不命中, 分诊清单把它们显式标「kernel/保留」防误删。
+`self._client` 一类自有属性)天然不命中。
 
 ## 测试计划
 
-- test_alias_table_matches_triage: `_WEB_STATE_ALIAS` 字段与映射 == 清单 alias_layer(双向), dunder 存在性与清单一致
-- test_delegation_surface_is_frozen: AST 扫出的单行转发集合 == 清单标 forward/facade 的成员集合(双向: 清单外新增 / 清单内已删)
-- test_kernel_members_stay_non_forward: 清单标 kernel 的成员不得退化为单行转发
+- test_alias_layer_stays_gone: `_WEB_STATE_ALIAS` 表与 `__getattr__`/`__setattr__` dunder 不得复活
+- test_retired_names_stay_gone: 清单 alias 字段 + forward 成员不得作为 QbManager 成员复活
+- test_facade_members_stay: 清单标 facade(D1 永久保留)的属性对必须在位
+- test_kernel_members_stay_non_forward: 清单标 kernel 的成员必须在位且不得退化为单行转发
 - test_triage_counts_are_consistent: 清单 meta.counts 与条目自洽
 """
 import ast
@@ -32,7 +38,7 @@ _SERVICE_ROOTS = {"ctx", "web", "hr", "host", "store", "api", "state", "config",
 
 
 def _triage() -> dict:
-    assert TRIAGE.exists(), f"分诊清单缺失: {TRIAGE} —— 旧名冻结以清单为基准, 缺了先补清单"
+    assert TRIAGE.exists(), f"分诊清单缺失: {TRIAGE} —— 退役名单以清单为基准, 缺了先补清单"
     return json.loads(TRIAGE.read_text(encoding="utf-8"))
 
 
@@ -91,41 +97,40 @@ def _scan_qbmanager():
     return alias_table, dunders, forwards, defs
 
 
-def test_alias_table_matches_triage():
+def test_alias_layer_stays_gone():
     alias_table, dunders, _, _ = _scan_qbmanager()
+    assert alias_table is None, (
+        "_WEB_STATE_ALIAS 别名表复活 —— 旧字段名转发层已随别名层处置 W3 退役; "
+        "新代码一律走 self.web.<新名>(conventions/modules.md「兼容层现状」)"
+    )
+    assert not dunders, f"转发 dunder 复活: {dunders} —— __getattr__/__setattr__ 旧名转发已随 W3 删除"
+
+
+def test_retired_names_stay_gone():
+    _, _, _, defs = _scan_qbmanager()
     doc = _triage()
-    fields = doc["alias_layer"]["fields"]
-    assert alias_table is not None, ("_WEB_STATE_ALIAS 已被删除? 只允许发生在 W3(删别名层本体), 且同波更新分诊清单")
-    expected = {old: spec["new"] for old, spec in fields.items()}
-    added = sorted(set(alias_table) - set(expected))
-    removed = sorted(set(expected) - set(alias_table))
-    changed = sorted(k for k in set(alias_table) & set(expected) if alias_table[k] != expected[k])
-    assert not (added or removed or changed), (
-        f"别名表与分诊清单不一致 —— 新增 {added} / 缺失 {removed} / 映射变更 {changed}; "
-        "清单之外不得新增旧字段(conventions/modules.md), 确需变更先改清单再改表"
+    retired = set(doc["alias_layer"]["fields"]) | {m["name"] for m in doc["members"] if m["category"] == "forward"}
+    resurrected = sorted(retired & set(defs))
+    assert not resurrected, (
+        f"退役旧名在 QbManager 上复活: {resurrected} —— 兼容层已随 W3 删除, 调用方一律走新名口"
+        "(self.web.* / ctx.* / host.get(...)); 确需恢复先更新分诊清单并在任务档案记录理由"
     )
-    assert sorted(dunders) == sorted(
-        doc["alias_layer"]["dunders"]
-    ), (f"别名层 dunder 集合变化: 代码 {sorted(dunders)} vs 清单 {sorted(doc['alias_layer']['dunders'])}")
 
 
-def test_delegation_surface_is_frozen():
-    _, _, forwards, _ = _scan_qbmanager()
-    frozen = {m["name"] for m in _triage()["members"] if m["category"] in ("forward", "facade")}
-    unexpected = sorted(forwards - frozen)
-    stale = sorted(frozen - forwards)
-    assert not unexpected, (
-        f"清单之外新增旧名单行委托: {unexpected} —— conventions/modules.md 明文禁止新代码走旧名; "
-        "确属迁移过渡需要的, 先更新分诊清单 JSON 并在任务档案记录理由"
-    )
-    assert not stale, (f"清单成员已不是单行转发(已删除或改写?): {stale} —— 同步更新分诊清单 JSON; "
-                       "删除提交只允许包含清单标「forward」的名字")
+def test_facade_members_stay():
+    _, _, _, defs = _scan_qbmanager()
+    facade = {m["name"] for m in _triage()["members"] if m["category"] == "facade"}
+    missing = sorted(facade - set(defs))
+    assert not missing, (f"D1 拍板永久保留的外观属性对缺失: {missing} —— manager 即外观的公共面(340/309/134 处直读), "
+                         "删除属决策点 D1 范围, 不是普通清理")
 
 
 def test_kernel_members_stay_non_forward():
     _, _, forwards, defs = _scan_qbmanager()
-    kernel = [m["name"] for m in _triage()["members"] if m["category"] == "kernel" and m["name"] in defs]
-    became_forward = sorted(n for n in kernel if n in forwards)
+    kernel = [m["name"] for m in _triage()["members"] if m["category"] == "kernel"]
+    missing = sorted(n for n in kernel if n not in defs)
+    became_forward = sorted(n for n in kernel if n in defs and n in forwards)
+    assert not missing, f"内核自有方法缺失: {missing} —— 连接/节拍/相位方法是内核语义, 不随兼容层清理删除"
     assert not became_forward, (f"内核自有方法退化为单行转发: {became_forward} —— 分诊清单标「kernel/保留」的连接/节拍/相位"
                                 "方法是内核语义, 不是委托层成员")
 

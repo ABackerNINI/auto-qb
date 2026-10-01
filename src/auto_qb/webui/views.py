@@ -205,7 +205,7 @@ class WebviewMixin:
         记录已离开错误状态时清空缓存 —— 否则恢复做种后仍挂着旧原因。
 
         原因不是快照字段, `store.view_changed` 覆盖不到它, 故变化时显式置
-        `_group_view_dirty`(与"由配置派生的展示值"同一判别法: 种子数据一字未变时该值也会变)。
+        `web.group_view_dirty`(与"由配置派生的展示值"同一判别法: 种子数据一字未变时该值也会变)。
         """
         client = self.client
         if client is None:
@@ -623,7 +623,7 @@ class WebviewMixin:
 
         文件列表兑底: 季包/名称无标记的种子从搜索索引缓存解析集数
         (tvshows.refine_with_files); 索引尚未覆盖的种子暂按名称解析结果展示,
-        标记 _shows_pending 并投递构建命令 —— 索引推进后由 _build_search_index
+        标记 web.shows_pending 并投递构建命令 —— 索引推进后由 _build_search_index
         置脏触发重建归位(种子名无标记不会自动置脏, 这是唯一需要动重建时序的点)。
 
         返回 {"list": [剧…], "unrecognized": [hash…]}:
@@ -758,7 +758,7 @@ class WebviewMixin:
         "dictionary changed size during iteration"。已建条目只刷新名称(值替换不改结构, 并发只读安全),
         新种子拉取文件列表(rec.files 惰性拉取 + 记录 _files 跨 tick 缓存, 只在主循环线程), 单条失败
         跳过(记空文件列表)不阻塞整体。
-        限流: 单次最多拉取 SEARCH_INDEX_BUILD_BUDGET 条, 未拉完保持 _search_index_dirty=True,
+        限流: 单次最多拉取 SEARCH_INDEX_BUILD_BUDGET 条, 未拉完保持 web.search_index_dirty=True,
         由后续调用(下一 tick 推进 / 前端据 building 重查投递)续建 —— 避免首轮 N 次 API 长时间阻塞主循环。
         """
         if self.client is None:
@@ -795,7 +795,7 @@ class WebviewMixin:
     def _trigger_shows_rebuild_if_pending(self, added: int) -> None:
         """追剧视图文件兑底触发: 种子名无标记不会进 _VIEW_FIELDS 置脏 —— 索引推进
         (新增条目)是文件列表就位的唯一信号, 此处置脏让下一轮重建用文件列表归位。
-        本方法只在主循环线程调用(与 _group_view_dirty 的既有跨线程语义一致: 竞争
+        本方法只在主循环线程调用(与 web.group_view_dirty 的既有跨线程语义一致: 竞争
         最坏结果是多重建一次, 无正确性风险)。"""
         if added and self.web.shows_pending:
             self.web.mark_shows_pending(False)

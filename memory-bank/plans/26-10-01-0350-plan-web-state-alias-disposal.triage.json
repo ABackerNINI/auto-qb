@@ -17,6 +17,12 @@
    "forward": 57,
    "facade": 7,
    "kernel": 17
+  },
+  "disposal": {
+   "status": "completed",
+   "wave": "W3",
+   "date": "2026-10-01",
+   "note": "兼容层本体已删(_WEB_STATE_ALIAS + 双 dunder + 五节单行委托, qbmanager.py 1109→838 行); 本清单转为退役名单永久留档, 反复活守阵 tests/test_qbmanager_alias_freeze.py 据此机检 —— 清单内旧名在 QbManager 复活即红; facade(D1)/kernel 成员在位性同面机检"
   }
  },
  "alias_layer": {

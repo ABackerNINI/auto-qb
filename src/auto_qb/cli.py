@@ -48,7 +48,7 @@ def _sigterm_to_keyboardinterrupt(signum, frame):
 def _install_sigterm_handler() -> None:
     """注册 SIGTERM -> 优雅退出(容器/服务化场景: docker stop / systemctl stop 发 SIGTERM)
 
-    SIGTERM 默认处置直接杀进程, 主循环 finally 的停 WEB/HR -> save_state -> 放锁全不走,
+    SIGTERM 默认处置直接杀进程, 主循环 finally 的停 WEB/HR -> 状态落盘 -> 放锁全不走,
     运行态丢失上界 = state_save_interval(默认 120s)。handler 在主线程执行, 抛出的
     KeyboardInterrupt 从主循环栈冒出, 写点全在主循环线程, 不破单一写线程红线。
     注册失败(非主线程 / 平台不支持)静默跳过 —— 与改动前行为一致, Ctrl+C 不受影响。

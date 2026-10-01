@@ -48,10 +48,10 @@
 | `tests/test_modules_p3.py` ~ `p5.py` | 各模块装配本体、相位订阅面、刷新相位顺序、L2 短路/重建 |
 | `tests/test_modules_p6.py` | **段认领完备**(配置全段有主 + 认领面无幽灵段)与未认领兜底 WARN/重建 |
 
-## 兼容层现状(决策点 D4, 处置另立计划)
+## 兼容层终态(W0-W3 已退役, 反复活机检常驻)
 
-manager 上的旧名单行委托(§7.2)与 `_WEB_STATE_ALIAS`(19 字段 + `__getattr__`/`__setattr__` 转发)是迁移过渡层: 被测试/路由点名的旧名在实现迁模块后留单行转发。**新代码一律用新名**(模块方法 / `self.web.*` / ctx 服务), 不要再往委托层加东西; 处置计划见 memory-bank/plans/(别名层清理, 2026-10-01 立计划)。
+manager 上的旧名兼容层(`_WEB_STATE_ALIAS` 20 字段 + `__getattr__`/`__setattr__` 双 dunder + 五节单行委托 57 名)已于别名层处置 **W3 整体删除**(2026-10-01, plan `plans/26-10-01-0350`): qbmanager.py 1109 → 838 行, 类体只剩**内核自有方法 17 个**与 **D1 拍板永久保留的外观属性对 7 个**(config/store/api/state/state_file/task_queue/web —— manager 即外观的公共面, 不是别名, 删除属 D1 决策范围)。run()/__init__ 的旧名自调用已内联为 `ctx.state.*` / `host.get("rules")._load_rules()` 新名口。
 
-**冻结机检已生效**(处置计划 W0, 2026-10-01): 逐名分诊清单在 `plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json`(名字/类别/消费方/目标名/波次, W1/W2 施工图), 守阵 `tests/test_qbmanager_alias_freeze.py` 用 AST 比对 qbmanager 单行转发面与清单 —— **清单之外新增旧名单行委托 / 别名表加字段即测试红**; 删名字必须同波更新清单。属性对(config/store/api/state/web/task_queue/state_file)经 D1 拍板**永久保留**(manager 即外观的公共面), 不在清理范围。
+**反复活机检常驻**(兼容层复活是历史上别名层的成因): 退役名单永久留档在 `plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json`(逐名类别/消费方/目标名/波次 + meta.disposal 注记), 守阵 `tests/test_qbmanager_alias_freeze.py` 据此 AST 机检 —— **退役名在 QbManager 复活 / 别名表或转发 dunder 重建即红**, facade 在位性与 kernel 不退化同面机检; 另有 `test_qbmanager_source_has_no_web_state_fields`(名单读分诊清单)防主循环源码直写表现层旧字段。**新代码一律用新名**(模块方法 / `self.web.*` / ctx 服务 / `host.get(...)`), 往 manager 加回旧名 = 守阵红。
 
-**src 侧旧名已清零**(处置计划 W1, 2026-10-01): 路由/规则动作等真实代码消费方全部改新名口(`manager.web.*` / `host.get(...)` / `ctx.state.*`), `grep "manager\._" src/auto_qb/webui/` 为空; WebviewMixin 静态方法 `_hr_view_fields` 随路由直调公开化为 `hr_view_fields`; checking_meta 冷却 helper 宿主收敛为 StateService(`.data` + `.save()`)。兼容层本体(转发与别名表)仍在。**测试面旧名已清零**(处置计划 W2, 2026-10-01): 分诊 W2 名的测试消费方按模块域四批全部改新名口(`mgr.web.*` / `host.get(...)` / `ctx.state.*` / `ctx.ops.*`), tests/ 整仓 grep 残留仅剩 test_qbmanager 别名守阵同对象断言(计划 §04 豁免, W3 同删); 兼容层现无任何生产与测试消费方, W3 删除本体 + run() 接线内联(连守阵同波)。
+处置四波留档: W0 逐名分诊 + 冻结守阵立桩; W1 src 侧消费方改新名口(路由/规则动作/checking_meta 宿主收敛 StateService, `_hr_view_fields` 公开化); W2 测试面按模块域四批 + 补漏迁净; W3 删本体 + 守阵转反复活 + 四场景 sim 走查回放全 PASS(基线 `baselines/26-10-01-0800-w3-alias-layer-retired.md`)。

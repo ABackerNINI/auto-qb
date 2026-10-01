@@ -165,11 +165,11 @@ def scan_log(path: str) -> dict:
 
 
 def graceful_stop(proc: subprocess.Popen, grace: float = 12) -> int:
-    """优雅停 auto-qb: 让它走 KeyboardInterrupt -> finally -> save_state()
+    """优雅停 auto-qb: 让它走 KeyboardInterrupt -> finally -> 状态落盘
 
     !直接 terminate()/kill() 在 Windows 上是 TerminateProcess —— 进程没有机会跑 finally,
     state.json 永远不落盘, D5「状态持久化」判据就成了空转(实测: 目录里只有 state.lock)。
-    CTRL_BREAK_EVENT 会触发 Python 的 KeyboardInterrupt, 才会走到 save_state()。
+    CTRL_BREAK_EVENT 会触发 Python 的 KeyboardInterrupt, 才会走到 finally 的状态落盘。
     """
     sig = getattr(signal, "CTRL_BREAK_EVENT", None)
     if sig is not None:
@@ -408,7 +408,7 @@ def build_checks(
     else:
         add("SYNC.drift_max_s", sync["drift_max_s"], "<=", THRESH.get("SYNC.drift_max_s", 1.0), "纯主循环稳态单轮漂移上限(已排除首轮)")
 
-    # 优雅停机: rc=0 说明走完 finally(save_state 已落盘); 非 0 多为被硬杀
+    # 优雅停机: rc=0 说明走完 finally(状态已落盘); 非 0 多为被硬杀
     add("RUN.graceful_exit", rc, "==", 0, "auto-qb 必须优雅退出, 否则 state_file 不落盘")
 
     # 完整层日志体检(硬信号)

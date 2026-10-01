@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="web-state-alias-disposal">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-01-0350">
 <meta name="doc-updated" content="26-10-01-0545">
 <meta name="doc-refs" content="memory-bank/plans/26-09-30-1819-plan-kernel-module-refactor.html,memory-bank/tasks/26-10-01-backend-web-state-alias-disposal.md">
@@ -149,7 +149,7 @@
   <a href="#s4"><span class="n">04</span>不变量与风险</a>
   <a href="#s5"><span class="n">05</span>决策点清单</a>
   <div class="toc-meta">
-    <div>status <b>In Progress 执行中</b></div>
+    <div>status <b>Done 已实施</b></div>
     <div>topic <b>web-state-alias-disposal</b></div>
     <div>added <b>26-10-01-0350</b></div>
     <div>refs <b>kernel-module-refactor</b></div>
@@ -162,7 +162,7 @@
   <h1>别名层处置</h1>
   <p class="subtitle">_WEB_STATE_ALIAS(20 字段 + 双 dunder)与七节旧名委托层(81 个成员)的退役路线 —— 内核化重构(plan kernel-module-refactor)决策点 D4 的后续计划。</p>
   <div class="statusline">
-    <div>状态<span class="st"><b>In Progress · W0-W2 完成</b></span></div>
+    <div>状态<span class="st"><b>Done · W0-W3 全部完成</b></span></div>
     <div>来源<b>1819 计划 §5/§7.2 · 决策点 D4</b></div>
     <div>added<b>26-10-01-0350</b></div>
     <div>勘察基线<b>54c83ac3(P6 守阵落位后实测)</b></div>
@@ -280,10 +280,10 @@
 
 <hr class="sep">
 <footer class="colophon">
-  plan · web-state-alias-disposal · In Progress (2026-10-01 立计划并按推荐拍板 D1-D3; W0 分诊+守阵、W1 路由与 src 侧改新名、W2 测试面四批+补漏迁移完成, 执行滚动进 tasks/26-10-01-backend-web-state-alias-disposal)<br>
+  plan · web-state-alias-disposal · Done (2026-10-01 立计划并按推荐拍板 D1-D3; W0 分诊+守阵、W1 路由与 src 侧改新名、W2 测试面四批+补漏迁移、W3 删兼容层本体+守阵转反复活+四场景走查回放全 PASS, 计划收官)<br>
   勘察基线 54c83ac3(develop, kernel-module-refactor P6 落位后)· 分诊以 82330d45 实测为准<br>
   refs: <code>26-09-30-1819-plan-kernel-module-refactor.html</code>(兼容层成因与 D4 决策点出处) ·
-  <code>26-10-01-0350-plan-web-state-alias-disposal.triage.json</code>(W0 分诊清单, W1/W2 施工图, 守阵 tests/test_qbmanager_alias_freeze.py 直读) ·
+  <code>26-10-01-0350-plan-web-state-alias-disposal.triage.json</code>(W0 分诊清单, W1/W2 施工图, W3 起为退役名单永久留档 + 反复活守阵基准) ·
   <code>conventions/modules.md</code>(模块契约单点与「禁止新增旧名」约定)
 </footer>
 

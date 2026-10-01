@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="events-suppress-window-queue-rebuilt">
+<meta name="issue-stamp" content="26-10-01-0750">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="events-suppress-window">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="L2 重建抑制窗内二次重建会吞 queue_rebuilt: 全局任务从新队列丢失">
+<meta name="issue-summary" content="rebuild_runtime 置位总线 live 抑制旗标(请求语义应只盖下轮两个事件相位), 窗口内(重建→下轮刷新轮首, 约 1 个 sync_interval)若发生第二次 L2 重建, 其 queue_rebuilt emit 被吞 -&gt; 全局任务(delete_tags 等)不重注册, 新队列永久缺失该任务至下次重建/重启">
+<title>L2 重建抑制窗内二次重建会吞 queue_rebuilt: 全局任务从新队列丢失 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>L2 重建抑制窗内二次重建会吞 queue_rebuilt: 全局任务从新队列丢失</h1>
+    <p class="lede">rebuild_runtime 置位总线 live 抑制旗标(请求语义应只盖下轮两个事件相位), 窗口内(重建→下轮刷新轮首, 约 1 个 sync_interval)若发生第二次 L2 重建, 其 queue_rebuilt emit 被吞 -&gt; 全局任务(delete_tags 等)不重注册, 新队列永久缺失该任务至下次重建/重启</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-01-0750-bug-events-suppress-window-queue-rebuilt</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 07:50</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>别名层处置 W3 的四场景 sim 走查(S3 热接入 HR 站点 → S4 改规则, 两次 PUT 间隔仅约 0.5s)中, S4 的 L2 重建照常发生(<code>rules:rebuilt</code> 回执 + <code>应用结构级配置变更</code> 日志各恰一次), 但 <code>queue_rebuilt</code> 相位被总线抑制吞掉 —— 全局任务(delete_tags)没有重注册进重建后的新队列。两次重建间隔拉开(> 一个 sync_interval, 让抑制窗口先被刷新轮首消费)后同场景全绿, 证明是窗口时序问题而非重建逻辑损坏。发现于 2026-10-01 W3 走查(run <code>%TEMP%/autoqb-w3-walk/runs/20261001-074722-W3</code>), 非本波改动引入(rebuild/suppress 全是 P5 代码, W3 只删旧名委托)。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+<pre><code># 走查 run autoqb.log(2026-10-01 07:47:22 起的 run, 时间线原样):
+296: 07:47:28,061 rules_mod: 应用结构级配置变更: 重建任务队列/规则  (S3 的重建, tracker 绑定变化触发)
+298: 07:47:28,061 maintenance_mod: 创建全局任务 1 个: ['internal:delete_tags']   (S3 的 queue_rebuilt 正常送达)
+300: 07:47:28,541 rules_mod: 应用结构级配置变更: 重建任务队列/规则  (S4 的重建, rules_config 变化触发)
+302: 07:47:28,580 manager: 配置热重载完成: 变更 1 项, 动作 ['rules:rebuilt']
+# S4 重建之后**没有**第三条「创建全局任务」—— 其 queue_rebuilt 被吞, 新队列无 delete_tags 任务
+
+# 机理(EventBus.emit):
+    if self._suppressed:
+        return 0   # 抑制期内**所有**相位一律不送达
+# 而 rebuild_runtime 的顺序是:
+    self._manager.events.emit("queue_rebuilt")      # 单次重建: emit 在置位前, 正常送达
+    self._manager.events.set_suppressed(True)       # 置位 live 旗标
+# 置位后到下一轮刷新轮首 take_suppressed() 消费之间(最长约一个 sync_interval), 任何 emit
+# 一律被吞 —— 包括第二次 L2 重建自己的 queue_rebuilt。</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>两次 L2 结构重建(规则/tracker 绑定变化的热重载)间隔小于一个刷新周期(默认 sync_interval 1.5s); 单次重建不受影响(emit 先于置位)</td></tr>
+      <tr><td>影响范围</td><td>重建出的新 TaskQueue 永久缺失全局任务(delete_tags / speed_limit_curve 等), 直到下一次重建或重启; 站点档案批量导入 / 连续保存两次规则类配置时可触发</td></tr>
+      <tr><td>严重度</td><td>中(静默功能丢失, 无报错; 但触发窗口窄、需连续两次重建)</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>src/auto_qb/core/module.py:199-211</code>(取证 2026-10-01 07:50)· <code>EventBus.emit</code> · grep <code>if self._suppressed</code> —— 抑制期吞掉一切相位, 不分相位类别</li>
+      <li><code>src/auto_qb/core/modules/rules_mod.py</code> · <code>RulesModule.rebuild_runtime</code> · grep <code>set_suppressed(True)</code> —— 置位 live 旗标(而非挂「下一轮消费」的请求位), 与 docstring「窗口精确覆盖两个事件分派相位」的口径不符</li>
+      <li><code>src/auto_qb/core/modules/maintenance_mod.py</code> · <code>_on_queue_rebuilt</code> / <code>_register_global_tasks</code> · grep <code>queue_rebuilt</code> —— 吞掉即不重注册(幂等判据 has_named 对新队列恒 False, 但根本收不到事件)</li>
+      <li>对照口径: <code>EventBus</code> docstring「同轮其余相位照常广播」+ take_suppressed 的「请求位」注释 —— 设计意图是窗口只盖两个事件相位, 实现把窗口放大到了「重建→下轮刷新轮首」</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout"><code>set_suppressed(True)</code> 置的是 <code>emit</code> 直接检查的 live 旗标, 而 take_suppressed 的注释把它描述成「读走即解除」的请求位 —— 两个语义混在一个字段上。置位方(重建)的本意是「给下一轮刷新挂重放保护请求」, 但 live 旗标让置位立即生效, 把置位点到下一轮轮首之间的所有相位(含别的重建的 queue_rebuilt)一起吞掉。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>方向: 把「重放保护请求」与「事件分派相位的抑制」拆成两个字段(或改成 PendingRequest 语义), rebuild 只挂请求位; emit 不再检查请求位, 只在内核刷新轮 <code>_refresh_torrents</code> 的 events_removed/events_added 相位判据处消费。代价: 动 EventBus + rebuild_runtime + _refresh_torrents 三点, 需重跑 test_modules_p5 的抑制窗口守阵; 备选最小修: rebuild_runtime 里把 emit(queue_rebuilt) 挪到 set_suppressed(True) 之后不解决(仍吞), 最小修是「emit(queue_rebuilt) 前先 take 掉旧请求再置位」—— 只救连续重建场景, 窗口吞其它相位的问题仍在, 不推荐。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-01 07:50 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-01-0750-bug-events-suppress-window-queue-rebuilt.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

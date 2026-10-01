@@ -2,7 +2,7 @@
 
 为什么需要这一层:
     驱动器要在 duration 到点时停掉 auto-qb。直接 terminate()/kill() 在 Windows 上是
-    TerminateProcess —— 进程没有机会执行 finally, 于是 `save_state()` 永远不跑,
+    TerminateProcess —— 进程没有机会执行 finally, 于是退出路径的状态落盘永远不跑,
     state.json 不落盘(实测目录里只剩 state.lock)。这会连带把「跨轮次状态持久化」
     (项目黄金法则 #3)这条判据变成空转。
 
@@ -10,7 +10,7 @@
     0xC000013A(STATUS_CONTROL_C_EXIT)退出 —— 同样没有 finally。
 
     所以这里在子进程里显式给 SIGBREAK 装一个抛 KeyboardInterrupt 的处理器, 驱动器的
-    graceful_stop() 就能让 auto-qb 走完 `except KeyboardInterrupt -> finally -> save_state()`。
+    graceful_stop() 就能让 auto-qb 走完 `except KeyboardInterrupt -> finally -> 状态落盘`。
 
 用法(与 `python -m auto_qb <config>` 等价, 只是多了信号处理 + 可选的 FS mock):
     python scripts/sim_autoqb.py <config.yml> [--dry-run]

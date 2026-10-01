@@ -16,7 +16,7 @@
 - test_wake_drains_commands_without_extra_ticks: 命令唤醒只走命令线, 命令风暴下 tick 次数不增加
 - test_drain_web_commands_reports_resync_needed: P0-5 门控——只有改种子状态的命令置 changed
 - test_command_batch_triggers_single_resync: P0-5 一批命令后补**一次**完整刷新(整批合单)
-- test_drain_web_commands_bumps_write_seq: P1-4 失效接线——写命令自增 _web_write_seq, 自投递不自增
+- test_drain_web_commands_bumps_write_seq: P1-4 失效接线——写命令自增 web.write_seq, 自投递不自增
 - test_drain_bumps_write_seq_before_writing_receipt: BUG-5 顺序——回执写入时写序号须已自增
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
 - test_run_due_dies: handler 返回 False -> 不重入(消亡)
@@ -41,8 +41,7 @@
 - test_view_rebuild_waits_for_client_consume: 节拍对齐门控 —— 上一版没被 /api/state 取走就不生产下一版(>3000 种子时约一半 rebuild 无人消费), 且**脏标记必须保留**; 命令驱动的那一轮 force=True **必须绕过**(P0-5 要求真值几十毫秒内进快照, 不能等客户端轮询)
 - test_tick_rebuilds_all_views_when_changed: 视图变化且 Web 活跃 -> 四份视图同一入口**同次**重建
 - test_tick_rebuilds_views_when_grouping_disabled: 分组未启用时脏标记不被吞, 视图照样重建
-- test_qbmanager_source_has_no_web_state_fields: 静态守阵(2026-09-20 解耦)——主循环源码不得再直接读写 19 个表现层字段(代理会静默转发, 只能靠扫描抓回潮)
-- test_web_state_alias_proxies_to_runtime: 兼容代理守阵——旧字段名与 self.web 的字段必须是同一份(读同一对象 / 写双向可见), 防"两份真相"
+- test_qbmanager_source_has_no_web_state_fields: 静态守阵(2026-09-20 解耦, W3 起名单读分诊清单)——主循环源码不得直接读写表现层旧字段(别名层已删, 写回即静默造第二份真相, 只能靠扫描抓回潮)
 - test_hr_anchors_from_store: HR 判定桥在构造时挂上 + 锚点按站点分组给出(QB 侧给取数线程的交接面)
 """
 import json
@@ -60,7 +59,7 @@ from qbittorrentapi import APIConnectionError, Client
 from auto_qb.config import QbittorrentConfig
 from auto_qb.infra.errors import AutoQbError
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, _new_client
-from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
@@ -555,7 +554,7 @@ def test_run_dry_run_no_save():
 def test_periodic_flush_is_wired_in_run_loop():
     """接线守阵: 周期落盘必须挂在主循环正常路径(not dry_run 门内), 到期点在加载状态后重置
 
-    _maybe_flush_state 只在主循环线程调用是单一写线程约束的一部分; dry_run 门保证观察
+    maybe_flush 只在主循环线程调用是单一写线程约束的一部分; dry_run 门保证观察
     模式零磁盘写入(与退出路径 `if not dry_run` 口径一致); 启动即到期会造成无意义重写。
     """
     import inspect
@@ -563,10 +562,10 @@ def test_periodic_flush_is_wired_in_run_loop():
     from auto_qb.core.qbmanager import QbManager
 
     src = inspect.getsource(QbManager.run)
-    i_hook = src.find("_maybe_flush_state")
+    i_hook = src.find("maybe_flush")
     assert i_hook >= 0, "run() 必须接线周期落盘"
     assert "not dry_run" in src[max(0, i_hook - 200):i_hook], "周期落盘必须在 not dry_run 门内(dry-run 零磁盘写入)"
-    assert "self._next_state_flush_at = time.time()" in src, "run() 加载状态后必须重置周期落盘到期点"
+    assert "self.ctx.state.next_flush_at = time.time()" in src, "run() 加载状态后必须重置周期落盘到期点"
 
 
 def test_tick_refresh_error_continues():
@@ -845,49 +844,37 @@ def test_tick_rebuilds_views_when_grouping_disabled():
 
 
 def test_qbmanager_source_has_no_web_state_fields():
-    """静态守阵: 主循环源码不得再直接读写表现层字段(防回潮)
+    """静态守阵: 主循环源码不得直接读写表现层旧字段(防回潮)
 
     2026-09-20 解耦后 19 个表现层字段归 WebUIRuntime, QbManager 只经 `self.web` 的门面方法
-    交互。若有人图省事写回 `self._group_view = ...`, 兼容代理会**静默转发** —— 代码照样能跑,
-    但状态归属又散回核心域(且下一次读走的是代理, 人眼在 diff 里看不出问题)。这类回潮只能
-    靠扫描源码抓住。别名表本身是豁免的: 它存的是字符串, 不含 `self.` 前缀。
+    交互; 兼容代理曾把旧字段名**静默转发** —— 代码照样能跑, 状态归属却散回核心域。别名层处置
+    W3 已把代理删除, 现在写 `self._group_view = ...` 会在实例上直接造出第二份真相(与 runtime
+    那份互不可见且不报错), 比转发期更隐蔽, 仍只能靠扫描源码抓住。旧字段名单以分诊清单为准
+    (退役名单永久留档, 守阵 tests/test_qbmanager_alias_freeze.py 同源); 别名表已不存在, 无需豁免。
     """
+    import json
     import re
 
     src = open(
         os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "core", "qbmanager.py"), encoding="utf-8"
     ).read()
-    assert QbManager._WEB_STATE_ALIAS, "别名表为空 —— 兼容代理被拆掉了? 同步更新本守阵"
-    hits = [old for old in QbManager._WEB_STATE_ALIAS if re.search(rf"self\.{re.escape(old)}\b", src)]
+    triage = json.loads(
+        open(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "memory-bank",
+                "plans",
+                "26-10-01-0350-plan-web-state-alias-disposal.triage.json",
+            ),
+            encoding="utf-8",
+        ).read()
+    )
+    hits = [old for old in triage["alias_layer"]["fields"] if re.search(rf"self\.{re.escape(old)}\b", src)]
     assert not hits, (
-        f"主循环源码又直接引用了表现层字段 {hits} —— 应改用 self.web 的门面方法"
+        f"主循环源码又直接引用了表现层旧字段 {hits} —— 应改用 self.web 的门面方法"
         "(consume_commands / flush_views / flush_receipts / mark_dirty …)"
     )
-
-
-def test_web_state_alias_proxies_to_runtime():
-    """兼容代理守阵: 旧字段名与 self.web 的字段必须是**同一份**(读同一对象 / 写互相可见)
-
-    代理只做转发、不存值。若哪天退化成"赋值进实例字典", 就会出现两份真相: 主循环改 runtime
-    那份、Web 线程读 manager 那份, 视图静默停在旧快照上 —— 而且不会报错。
-    """
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        # 读: 拿到的是同一个对象(不是副本)
-        assert mgr.web_commands is mgr.web.commands, "命令队列必须只有一份"
-        assert mgr._group_view is mgr.web.group_view
-        assert mgr._web_results is mgr.web.results
-        assert mgr._search_index is mgr.web.search_index
-        assert mgr._traffic_view is mgr.web.traffic_view
-        # 写: 双向可见
-        mgr._group_view_dirty = False
-        assert mgr.web.group_view_dirty is False, "旧名字的写入必须落到 runtime"
-        mgr.web.mark_dirty()
-        assert mgr._group_view_dirty is True, "runtime 的写入必须对旧名字可见"
-        mgr._web_write_seq = 7
-        assert mgr.web.write_seq == 7
-        mgr.web.write_seq = 8
-        assert mgr._web_write_seq == 8
 
 
 def test_hr_anchors_from_store():

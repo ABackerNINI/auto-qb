@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 7 |
+| bug | 8 |
 | perf | 3 |
 | docs | 3 |
 | test | 4 |
@@ -24,6 +24,7 @@
 
 ## Open
 
+- [bug] [L2 重建抑制窗内二次重建会吞 queue_rebuilt: 全局任务从新队列丢失](26-10-01-0750-bug-events-suppress-window-queue-rebuilt.html) — rebuild_runtime 置位总线 live 抑制旗标(请求语义应只盖下轮两个事件相位), 窗口内(重建→下轮刷新轮首, 约 1 个 sync_interval)若发生第二次 L2 重建, 其 queue_rebuilt emit 被吞 -> 全局任务(delete_tags 等)不重注册, 新队列永久缺失该任务至下次重建/重启
 - [test] [冒烟「列设置·隐藏列宽保留」确定性失败: 隐藏列的意图宽度读不回](26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve.html) — dev.harness 列设置用例「隐藏列宽度保留」双 UI 100% 失败(key=amount_left 前=undefined 后=92px), stash 对照确认先在于键盘快捷键 W1-W4 之前, 与列偏好双轨模型的意图/生效分轨有关, 待查
 - [test] [冒烟 CTX-03 多选右键批量菜单: 追剧集行确定性失败 + 辅种组行抖动](26-09-30-0602-test-ui-smoke-ctx03-multiselect.html) — dev.harness 两条 CTX-03 多选用例失败(追剧集行 100% 复现/辅种组行间歇), stash 前后对照确认先在于键盘快捷键 W1-W4 之前; Ctrl+click 选择在冒烟完整链路下不生效而孤立探针正常, 疑似轮询重渲染与 ElementHandle 的竞态或真实 UI 缺陷, 待查
 - [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
