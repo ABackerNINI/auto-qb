@@ -8,7 +8,7 @@
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="doc-drift-repair">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="src/auto_qb/core/mixins/__pycache__/ 残留 .pyc 删除后会再生, 根因待查">
 <meta name="issue-summary" content="git 零跟踪的 core/mixins/__pycache__/ 残留已退役模块的 .pyc, 修复期间删过两次跑测试后又再生; 疑似测试以残留包名导入, 需断根">
 <title>src/auto_qb/core/mixins/__pycache__/ 残留 .pyc 删除后会再生, 根因待查 · chore · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· chore</div>
+    <div class="kicker">计划外问题（已修）· chore</div>
     <h1>src/auto_qb/core/mixins/__pycache__/ 残留 .pyc 删除后会再生, 根因待查</h1>
     <p class="lede">git 零跟踪的 core/mixins/__pycache__/ 残留已退役模块的 .pyc, 修复期间删过两次跑测试后又再生; 疑似测试以残留包名导入, 需断根</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-1946-chore-core-mixins-pycache-regen</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 19:46</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -163,11 +163,18 @@ $ git ls-files src/auto_qb/core/mixins | wc -l
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 19:46 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 20:52 — 修复，状态 <strong>Open → Done</strong>（不复现：删目录 + 两次 test.full 共 1915 passed 均未再生，判定残留 .pyc 为历史产物；改走清理 + 幽灵包目录守阵 <code>tests/test_no_ghost_pkg_dirs.py</code> 兜底）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-01 20:49 已消失后再验证不复现 —— 删掉 <code>src/auto_qb/core/mixins/</code> 整目录（取证时含 16 个 .pyc, mtime 全 ≤ 09-30 23:06, 比入池时少 1 个 314 版本件）→ 跑 <code>commands run test.full</code> → <code>find src -name "__pycache__" -path "*core/mixins*"</code> 零命中; 20:52 第二次全量复跑仍零命中。全仓 grep <code>mixins</code>（src+tests+pyproject）确认无一处真实 import（命中仅 logger 名字符串字面量与 docstring 提及）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>改道说明：按建议修法复现失败（见复验），根因修复无对象，改走「清理 + 防误导」口径。实际修法：</p>
+    <ul>
+      <li>删除幽灵目录 <code>src/auto_qb/core/mixins/</code>（16 个历史 .pyc, 含 cpython-312/313/314 三种解释器版本, 佐证历史上多解释器导入过, 均为 9b3c50f8 退役前产物）；</li>
+      <li>.gitignore 第 1 行已有 <code>__pycache__/</code>, 覆盖无缺口；</li>
+      <li>落守阵 <code>tests/test_no_ghost_pkg_dirs.py</code>：src 下任何目录若子树含 <code>__pycache__</code> 却无一个 .py 即红（已双向验证: 注入假幽灵目录会红, 清理后绿）。</li>
+    </ul>
+    <p>验证：<code>commands run test.full</code> 全绿 —— <strong>1915 passed, 3 skipped</strong>（守阵 +1）, 91% 覆盖；两次全量跑完幽灵目录均未再生。残留 .pyc 的「再生」目击（10-01 修复期间两次）无法归因到测试面, 不排除非测试源（IDE 语言服务器等）, 守阵对该类来源同样兜底。</p>
   </section>
 
   <footer>
