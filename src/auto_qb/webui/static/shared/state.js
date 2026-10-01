@@ -316,6 +316,12 @@ window.AQB_STATE = {
         this.recomputeEffective();
       });
     },
+    /* 未保存改动防护(U1-b, 报告 26-10-02-0508): 原生 beforeunload 兜底**随脏态**挂载 / 摘除 ——
+     * 常驻挂载会让 Firefox 放弃 bfcache, 且没改动也弹框 = 弹框疲劳(报告 §6)。判据与挂载点
+     * 都在 config_editor.js(cfgGuardSync), 这里只负责把脏态变化喂过去。 */
+    cfgDirty(v) {
+      this.cfgGuardSync(v);
+    },
     // CTX-02: 任一浮层菜单关闭 -> 撤掉触发源强调(浮层可以多种方式关闭: Esc/点空白/执行动作)
     "menu.visible"(v) {
       if (!v) {

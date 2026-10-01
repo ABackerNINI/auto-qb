@@ -75,6 +75,11 @@ window.AQB_LIFECYCLE = {
     // 引擎自身对 Escape 也直接放行, 双保险。句柄存实例, unmounted 撤掉防热重载堆叠。
     this._kbKeyDown = (e) => this._kbOnKeyDown(e);
     document.addEventListener("keydown", this._kbKeyDown);
+    // 未保存改动防护(U1-b, 报告 26-10-02-0508): 键盘刷新(F5 / Ctrl+R 族)拦截, 排在快捷键
+    // 引擎**之后** —— 引擎不接管这两个键(键位黑名单且不注册), 两条链不打架; 录制器是捕获
+    // 阶段 + stopPropagation, 录制态天然先手, 不会误弹守卫框。
+    this._cfgGuardKey = (e) => this._cfgOnReloadKey(e);
+    document.addEventListener("keydown", this._cfgGuardKey);
     // 生效宽度: 全自动页按当前渲染现算(见 recomputeEffective); 窗口变化后重算, 保持
     // "填满容器 + 自适应"的观感; 固化页(colW 非空)用意图值, 不随窗口变(拖一列不再影响其它列)
     let resizeTimer = null;
@@ -162,6 +167,12 @@ window.AQB_LIFECYCLE = {
       document.removeEventListener("keydown", this._kbKeyDown);
       this._kbKeyDown = null;
     }
+    // 未保存改动防护(U1-b): 键盘拦截与原生 beforeunload 兜底一并撤掉(同上, 防热重载后句柄堆叠)
+    if (this._cfgGuardKey) {
+      document.removeEventListener("keydown", this._cfgGuardKey);
+      this._cfgGuardKey = null;
+    }
+    this.cfgGuardRelease();
     // P1-2: 滚动/缩放监听随组件销毁撤掉(否则热重载后句柄堆叠, 滚动一次算 N 次)
     if (this._winListening) {
       window.removeEventListener("scroll", this._onWinScroll);

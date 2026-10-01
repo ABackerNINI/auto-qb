@@ -8,8 +8,8 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-settings-unsaved-changes">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
-<meta name="doc-refs" content="memory-bank/reports/26-10-02-0508-report-webui-unsaved-changes-guard.html">
+<meta name="issue-status" content="Done">
+<meta name="doc-refs" content="memory-bank/reports/26-10-02-0508-report-webui-unsaved-changes-guard.html,memory-bank/tasks/26-10-02-webui-unsaved-changes-guard.md">
 <meta name="issue-title" content="设置页有未保存改动时刷新会丢改动(无任何提醒)">
 <meta name="issue-summary" content="设置页(唯一 Console Hub)编辑配置后按 F5 / 关标签 / 后退会静默丢弃未保存改动 —— 全仓无 beforeunload 提醒, cfg.tree 是内存态, 重载即被服务端树覆盖">
 <title>设置页有未保存改动时刷新会丢改动(无任何提醒) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-25-1702-bug-webui-settings-unsaved-changes-lost</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-25 17:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -212,6 +212,10 @@ $ grep -n "cfgLoad()" src/auto_qb/webui/static/shared/app.js
       <li>2026-10-02 05:08 — 用户指派认领，状态 <strong>In Progress</strong>；方案调研出报告
         <a href="../reports/26-10-02-0508-report-webui-unsaved-changes-guard.html">26-10-02-0508</a>
         （成熟方案谱系 + 「刷新弹框 / 刷新后清零」对比，结论待拍板；本步未改码）</li>
+      <li>2026-10-02 06:0x — <strong>实施完成</strong>，状态 <strong>Done</strong>：用户拍板走报告里的
+        <strong>U1-b（自绘框 + 原生兜底）</strong>（而非报告倾向的 U1-a 纯原生），落地见档案
+        <a href="../tasks/26-10-02-webui-unsaved-changes-guard.md">tasks/26-10-02-webui-unsaved-changes-guard.md</a>
+        与 §「修复后补充」</li>
     </ul>
     <h3>复验</h3>
     <p><strong>复验：2026-10-02 05:08 取证 / 05:24 合并远端后复核（基线 <code>c37f3674</code>）仍复现 —— 静态复验，未起浏览器实测。</strong>
@@ -226,7 +230,34 @@ $ grep -n "cfgLoad()" src/auto_qb/webui/static/shared/app.js
       正好落在 <code>beforeunload</code> 的覆盖区间；且「看得见」那一半已有（<code>settings-detail.html:407-418</code>
       常驻脏指示 + 放弃/保存按钮，<code>cfgDiscard()</code> 已挂 <code>confirmDialog</code>）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（报告路线 U1-b：自绘框 + 原生兜底；与 §06 建议 A 同源，框的形态由用户拍板成 U1-b）</b>：
+      判据沿用 <code>cfgDirty</code>（与页面上「有改动还没保存」同一条），<strong>两条链各管一段</strong> ——
+      ①<b>键盘刷新</b>（<code>F5</code> 族 / <code>Ctrl+R</code>·<code>Cmd+R</code> 族）：
+      <code>config_editor.js::_cfgOnReloadKey</code> 里 <code>preventDefault()</code> 拦掉默认刷新，弹<strong>自绘三选一框</strong>
+      （<code>保存并刷新</code> / <code>放弃改动并刷新</code> / <code>留在此页</code>；监听在
+      <code>lifecycle.js</code> mounted 注册、unmounted 撤除）；
+      ②<b>其余真实导航</b>（地址栏回车 / 关标签 / 后退）：JS 取消不了导航，靠
+      <code>beforeunload</code> 原生框兜底 —— 由 <code>state.js</code> 的 <code>cfgDirty</code> watcher 驱动
+      <code>cfgGuardSync()</code> <strong>随脏态挂载 / 摘除</strong>（常驻挂载会伤 bfcache 且制造弹框疲劳）。
+      自绘框里点了任一「刷新」分支都先 <code>cfgGuardRelease()</code> 摘兜底再 <code>location.reload()</code>
+      —— 否则紧接着的 reload 会再弹一次原生框（双框连击）。
+      <b>「保存并刷新」先判 <code>cfgSave()</code> 的成败</b>（<code>cfgSave</code> 由无返回值改为返回布尔）：
+      保存失败留在页面看报错，绝不带着改动刷新。
+      <b>不做草稿恢复</b>（报告 §4 决定二）：刷新即回到磁盘配置，配置树不进 Web Storage
+      （<code>qbittorrent.password</code> 的 XSS 面）。</p>
+    <p><b>与报告 §8 待拍板项的差异（一处）</b>：报告倾向「挂载范围收窄到<i>设置页且 dirty</i>」，实施时按
+      <strong>只要 dirty</strong> —— 配置树是内存常驻的，在设置页改完没保存就切到辅种页，那棵树仍是脏的，
+      按页收窄会在那条路径上留下一个静默丢失的洞；dirty 本身只可能在设置页被造出来（保存 / 放弃 / 登出即清零），
+      判据已足够窄，不制造弹框疲劳。</p>
+    <p><b>验证方式</b>：静态守阵 <code>tests/test_web.py::test_frontend_unsaved_changes_guard_wiring</code>
+      （六类不变量：三选一框基础设施 / 兜底挂摘成对 / 只拦 F5·Ctrl+R 族且脏态为假放行、已有弹窗不叠框 /
+      三分支语义含保存成败判定 / 刷新前摘兜底 / lifecycle 注册撤除 + state watcher 接线），
+      另含反向断言「<code>config_editor.js</code> 不得碰 Web Storage」。
+      <b>测试数字</b>：<code>commands run test.full</code> → <strong>2289 passed + 3 skipped / 99%</strong>
+      （守阵 +1；上一条基线 26-10-02-0459 为 2288 passed / 99.01%），
+      <code>test.quick</code> 2289 passed + 3 skipped（38.4s）。
+      ⚠ <b>未做</b>：报告 §8-4 的 chromium 实测（本轮未起真浏览器），键盘路径的实弹验证留给下次走查
+      （<code>commands run dev.harness</code>，记 dialogs 计数：改一个字段 → F5 应弹 1 次自绘框）。</p>
   </section>
 
   <footer>

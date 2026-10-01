@@ -31,6 +31,7 @@
 - test_frontend_cols_legacy_keys_have_migration: LEGACY_COLS_KEYS 键链必须伴随 migrateLegacyToV5 迁移(v3->v4 清零事故的机检)
 - test_frontend_cols_empty_hint_names_browser_clear_cause: 空存储提示必须点名浏览器站点级"关闭窗口时清除 Cookie 和站点数据"这条通道 + 给自查路径 + sessionStorage 会话级去重(2026-09-24 取证: cookie 例外 127.0.0.1,* setting=4)
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
+- test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
@@ -2578,6 +2579,102 @@ def test_frontend_page_location_persisted():
     assert "this.hubGo(" in body, "hubRestore 应复用 hubGo(否则漏掉 trackers/rules 选中项与日志/HR 懒加载)"
     ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
     assert "this.hubRestore()" in ed, "cfgLoad 成功后未调 hubRestore(schema 到手那一刻才校验得了分区 key)"
+
+
+def test_frontend_unsaved_changes_guard_wiring():
+    """设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508, 路线 U1-b)
+
+    现象: 设置页改了配置没保存就刷新, 整棵树被服务端配置整体替换, 改动**静默丢**。
+    定性: 页签切换是纯内存态(全仓无 pushState / location.hash), 丢失只发生在**真实页面重载**
+    这一条路径上 —— 正好是 beforeunload 的覆盖区间。选的路线是 **U1-b 自绘框 + 原生兜底**:
+      · 键盘刷新(F5 / Ctrl+R 族): keydown 里 preventDefault 拦掉默认刷新, 弹**自绘**三选一框
+        (可写中文, 且多出「保存并刷新」这一支 —— 这是选 U1-b 而不选 U1-a 唯一买到的东西);
+      · 其余真实导航(地址栏回车 / 关标签 / 后退): JS **取消不了**导航, 只能靠原生 beforeunload 框。
+    两条链少一条就漏一半; 且**主动刷新前必须先摘掉原生兜底**(否则自绘框答完接着 reload 又弹一次
+    原生框 = 双框连击, 报告 §6 的"去重")。不做草稿恢复(刷新即回到磁盘配置), 判据沿用 cfgDirty 单点。
+
+    静态守阵钉住六件事(全是"pytest 全绿、界面行为退化"的形态):
+    1. 自绘三选一框的基础设施(模板第三钮 + confirmThreeDialog + resolveModal("extra") 结算);
+    2. 原生兜底随脏态**挂载 / 摘除成对**(常驻挂载 => Firefox 放弃 bfcache + 无改动也弹框的疲劳);
+    3. 只拦 F5 / Ctrl+R 族(不抢任何其它键), 脏态为假时一声不吭, 已有弹窗时不叠框(交给原生兜底);
+    4. 三分支语义(保存并刷新必须先看 cfgSave 的成败 / 放弃并刷新 / 留在此页);
+    5. 主动刷新前摘兜底;
+    6. 键盘监听在 lifecycle 注册、unmounted 撤除, 脏态 watcher 在 state.js 接线(漏接 = 整块静默消失)。
+    """
+    ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    fb = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
+    pop = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
+    st = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
+    lc = open(os.path.join(STATIC_ROOT, "shared", "lifecycle.js"), encoding="utf-8").read()
+
+    # 1. 自绘三选一框: 第三钮(模板) + 入口(confirmThreeDialog) + "extra" 结算(resolveModal)
+    assert 'v-if="modal.extraText"' in pop and "@click=\"resolveModal('extra')\"" in pop, \
+        "popovers.html 缺第三钮渲染(三选一框退化成两钮 = 白选 U1-b)"
+    assert 'extraText: "",' in fb, "ui_feedback.js _modalInit 缺 extraText(漏声明 = 模板键 undefined)"
+    three = re.search(r"confirmThreeDialog\(title, body, opts = \{\}\) \{(.*?)\n    \},", fb, re.S)
+    assert three and "extraText: opts.extraText" in three.group(1), \
+        "缺 confirmThreeDialog(自绘刷新守卫的入口; 改名或挪走了? 同步本守阵)"
+    assert 'resolve(choice === "extra" ? "extra" : true)' in fb, \
+        "resolveModal 未把第三钮结算为 \"extra\"(三分支拿不到区分 = 只会保存或只会丢弃)"
+    # 反向: 既有两钮契约不得被第三钮污染(confirmDialog 仍返回布尔)
+    assert "okText: opts.okText || \"确认\", cancelText: opts.cancelText || \"取消\", danger: !!opts.danger," in fb
+
+    # 2. 原生兜底: 挂 / 摘成对 + 幂等(只在 dirty 期存在)
+    sync = re.search(r"cfgGuardSync\(on\) \{(.*?)\n    \},", ed, re.S)
+    assert sync, "config_editor.js 缺 cfgGuardSync(原生兜底的挂摘单点; 改名? 同步本守阵)"
+    body = sync.group(1)
+    assert 'window.addEventListener("beforeunload"' in body and 'window.removeEventListener("beforeunload"' in body, \
+        "beforeunload 必须挂摘成对 —— 只挂不摘 = 常驻监听(伤 bfcache + 无改动也弹框)"
+    assert "if (want === !!this._cfgGuardOn) return;" in body, "cfgGuardSync 必须幂等(重复挂载 = 句柄堆叠)"
+    # 判据单点: 与 actbar「有改动还没保存」同一条 cfgDirty, 不另立状态机
+    guard = re.search(r"cfgGuardActive\(\) \{(.*?)\n    \},", ed, re.S)
+    assert guard and "this.cfgDirty" in guard.group(1), \
+        "守卫判据必须是 cfgDirty(另立判据 = 与页面上「有改动还没保存」两处各说各话)"
+    # 反向: 不做草稿恢复 —— 配置树含 qbittorrent.password, 一律不得进 Web Storage(报告 §6)
+    assert "sessionStorage" not in ed and "localStorage" not in ed, \
+        "config_editor.js 不得碰 Web Storage(整树入存会把 qbittorrent.password 摆上 XSS 面; 草稿另开议题)"
+
+    # 3. 只拦 F5 / Ctrl+R 族; 无改动放行; 已有弹窗不叠框
+    key = re.search(r"_cfgOnReloadKey\(e\) \{(.*?)\n    \},", ed, re.S)
+    assert key, "config_editor.js 缺 _cfgOnReloadKey(键盘刷新拦截; 改名? 同步本守阵)"
+    body = key.group(1)
+    assert 'e.code === "F5"' in body, "键盘拦截必须覆盖 F5(硬刷新 Ctrl/Shift+F5 同族)"
+    assert 'e.code === "KeyR"' in body and "e.ctrlKey || e.metaKey" in body, \
+        "键盘拦截必须覆盖 Ctrl+R / Cmd+R 族(用 e.code 物理键位, 与快捷键引擎同口径)"
+    assert "e.preventDefault();" in body, "命中刷新键必须 preventDefault(不取消默认刷新 = 自绘框白弹)"
+    assert "if (!this.cfgGuardActive()) return;" in body, \
+        "无未保存改动时必须放行(每次刷新都弹 = 弹框疲劳, 用户会闭眼点离开)"
+    assert "if (this.modal.visible) return;" in body, \
+        "已有弹窗时必须放行(自绘框叠在弹窗上 = 上一个悬空 Promise 被静默结算为取消)"
+
+    # 4. 三分支语义: 保存并刷新必须先看 cfgSave 成败(保存失败带着改动刷新 = 白丢)
+    rel = re.search(r"async cfgReloadGuard\(\) \{(.*?)\n    \},", ed, re.S)
+    assert rel, "config_editor.js 缺 cfgReloadGuard(自绘刷新守卫; 改名? 同步本守阵)"
+    body = rel.group(1)
+    assert "confirmThreeDialog(" in body, "刷新守卫必须弹自绘三选一框(U1-b 的落点)"
+    for token in ("保存并刷新", "放弃改动并刷新", "留在此页"):
+        assert token in body, f"三选一框缺「{token}」分支(自绘的意义就在这三个选项上)"
+    assert "await this.cfgSave()" in body and "if (!saved) return;" in body, \
+        "「保存并刷新」必须判 cfgSave 的成败 —— 保存失败却刷新 = 改动照样丢"
+    save = re.search(r"async cfgSave\(\) \{(.*?)\n    \},", ed, re.S)
+    assert save and "return true;" in save.group(1) and "return false;" in save.group(1), \
+        "cfgSave 必须返回成败布尔(「保存并刷新」靠它决定刷不刷新)"
+
+    # 5. 主动刷新前摘兜底(否则 reload 会再弹一次原生框 = 双框连击)
+    assert "this.cfgGuardRelease();" in body and "location.reload()" in body, \
+        "刷新前必须 cfgGuardRelease() + location.reload()(漏摘 = 自绘框答完又答一遍原生框)"
+    assert "cfgGuardSync(false)" in re.search(r"cfgGuardRelease\(\) \{(.*?)\n    \},", ed, re.S).group(1)
+
+    # 6. 接线: lifecycle 注册 / 撤除 + state.js 脏态 watcher
+    assert 'this._cfgGuardKey = (e) => this._cfgOnReloadKey(e);' in lc and \
+        'document.addEventListener("keydown", this._cfgGuardKey)' in lc, \
+        "lifecycle.js 未注册键盘刷新拦截(漏注册 = 整块功能静默消失)"
+    unm = re.search(r"unmounted\(\) \{(.*?)\n  \},", lc, re.S)
+    assert unm and 'removeEventListener("keydown", this._cfgGuardKey)' in unm.group(1), \
+        "lifecycle.js unmounted 未撤除键盘拦截(热重载后句柄堆叠, 一次按键弹 N 个框)"
+    assert "this.cfgGuardRelease();" in unm.group(1), "unmounted 未摘原生兜底(同上, 防堆叠)"
+    assert re.search(r"cfgDirty\(v\) \{\s*this\.cfgGuardSync\(v\);", st), \
+        "state.js 缺 cfgDirty watcher —— 兜底不随脏态挂载(要么永不弹, 要么常驻弹)"
 
 
 def test_frontend_expand_state_survives_view_switch():

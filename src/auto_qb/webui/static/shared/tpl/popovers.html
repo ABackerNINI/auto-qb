@@ -154,6 +154,9 @@
         </div>
         <div class="modal-actions">
           <button class="bt ghost" @click="resolveModal(false)">{{ modal.cancelText }}</button>
+          <!-- 第三个钮(三选一框, 见 confirmThreeDialog): 破坏性分支("放弃改动并刷新"这类),
+               缺省不渲染(extraText 为空) —— 既有两钮对话框零变化 -->
+          <button v-if="modal.extraText" class="bt danger-solid" @click="resolveModal('extra')">{{ modal.extraText }}</button>
           <!-- ref="modalOk": 确认类默认焦点落此(计划 26-09-28-0354 §08) —— Enter 即确认 -->
           <button ref="modalOk" class="bt" :class="modal.danger ? 'danger-solid' : 'primary'" @click="resolveModal(true)">
             {{ modal.okText }}

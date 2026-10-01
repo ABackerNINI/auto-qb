@@ -165,6 +165,8 @@ window.CONFIG_EDITOR = {
       this.cfg.tree = tree;
       this.cfg.baseline = JSON.stringify(tree);
     },
+    /* 返回 Boolean: 保存是否成功 —— 「保存并刷新」那条路径要靠它决定刷不刷新
+     * (保存失败却刷新 = 白丢改动; 既有按钮路径拿返回值不用, 零影响) */
     async cfgSave() {
       this.cfg.saving = true;
       try {
@@ -181,8 +183,10 @@ window.CONFIG_EDITOR = {
         } else {
           this.toast(`已保存并热重载(变更 ${n} 项)`, "ok", 3500);
         }
+        return true;
       } catch (e) {
         this.toast("保存失败: " + (e.message || "未知错误"), "error", 9000);
+        return false;
       } finally {
         this.cfg.saving = false;
       }
@@ -214,6 +218,86 @@ window.CONFIG_EDITOR = {
       this.searchHelpOpen = false;  // 离开辅种页顶栏: 语法浮卡收起, 不带残留进设置页
       this.page = "settings";
       if (!this.cfg.schema) await this.cfgLoad();
+    },
+
+    /* ---------------------------------------------------------- 未保存改动防护(U1-b)
+     *
+     * issue 26-09-25-1702 / 报告 26-10-02-0508: 「有改动时刷新弹确认框, 刷新后改动清零」。
+     * 框的形态选了 **U1-b(自绘框 + 原生兜底)** —— 两条链各管一段, 缺一不可:
+     *   · **键盘刷新**(F5 / Ctrl+R 族): keydown 里 preventDefault 拦住默认刷新, 弹**自绘**三选一框
+     *     (可写中文、多出「保存并刷新」这一支)。监听在 lifecycle.js mounted 注册(快捷键引擎之后)。
+     *   · **其余离开路径**(地址栏回车 / 关标签 / 后退 / 一切真实导航): JS **取消不了**导航,
+     *     唯一能拦的是原生 beforeunload 框 —— 文案由浏览器给(防钓鱼)、只有「留下 / 离开」两选项。
+     * 之所以不改成纯自绘: 自绘 modal 拦不住导航; 之所以不改成纯原生: 原生框写不出中文也说不清
+     * "可以先保存"。两套框并存是 U1-b 明知的代价(报告 §6), 换来的是键盘路径上可定制。
+     *
+     * 「刷新后清零」= **不做草稿恢复**(报告 §4 决定二): 现状 cfgLoad() 就用服务端树整体替换并
+     * 重置 baseline, 这里只是把它从"静默发生"变成"用户点了离开之后发生" —— 语义极简
+     * (要么你保存了, 要么它没存在过), 且天然免疫"敏感字段进 Web Storage"与"陈旧草稿幽灵"。
+     *
+     * 判据沿用 cfgDirty(全树 JSON 对比 baseline, 与 actbar「有改动还没保存」同源单点), 零新增状态机。
+     * 挂载范围 = **只要 dirty**, 不额外收窄到设置页: 配置树是内存常驻的, 在设置页改完没保存就
+     * 切走, 那棵树仍是脏的 —— 按页收窄会在那条路径上留下一个静默丢失的洞。dirty 只可能在
+     * 设置页被造出来(且保存/放弃/登出即清零), 判据本身已经足够窄: 既不弹框疲劳,
+     * 也不会因常驻监听让 Firefox 放弃 bfcache(报告 §6)。
+     */
+    cfgGuardActive() {
+      return this.cfgDirty;
+    },
+    /* 原生兜底的挂载 / 摘除(幂等): 只在 dirty 期存在 —— 脏态由 state.js 的 watcher 驱动 */
+    cfgGuardSync(on) {
+      const want = !!on && this.cfgGuardActive();
+      if (want === !!this._cfgGuardOn) return;
+      if (!this._cfgBeforeUnload) this._cfgBeforeUnload = (e) => this._cfgOnBeforeUnload(e);
+      this._cfgGuardOn = want;
+      if (want) window.addEventListener("beforeunload", this._cfgBeforeUnload);
+      else window.removeEventListener("beforeunload", this._cfgBeforeUnload);
+    },
+    /* 主动刷新(自绘框里点了任一"刷新"分支)前必须摘掉兜底 —— 否则紧接着的 reload 会再弹一次
+     * 原生框, 变成"自绘框答完又答一遍"的双框连击(报告 §6 的"去重") */
+    cfgGuardRelease() {
+      this.cfgGuardSync(false);
+    },
+    _cfgOnBeforeUnload(e) {
+      if (!this.cfgGuardActive()) return undefined;
+      e.preventDefault();
+      e.returnValue = "";  // 旧浏览器要赋值才弹; 文案由浏览器给, 写了也不显示
+      return "";
+    },
+    /* 键盘刷新拦截: 命中即取消默认刷新并弹自绘框; 不命中一律放行(不抢任何其它键) */
+    _cfgOnReloadKey(e) {
+      if (e.defaultPrevented) return;                  // 多 handler 礼仪: 先到先得
+      if (e.isComposing || e.keyCode === 229) return;  // IME 组合期(与快捷键引擎同口径)
+      if (!this.cfgGuardActive()) return;              // 无未保存改动: 刷新照旧, 一声不吭
+      if (this.modal.visible) return;                  // 已有弹窗: 不叠框, 交给原生兜底
+      // F5 族(含 Ctrl/Shift+F5 硬刷新) + Ctrl/Cmd+R 族(含 Ctrl+Shift+R); 用 e.code 物理键位
+      // (与快捷键引擎同口径, 不受布局影响)。注意与 KB_BLACKLIST 的分工: 那条黑名单管的是
+      // "业务动作不许绑到这些键", 本守卫管的是"拦掉浏览器默认刷新", 两者目标不同 ——
+      // 桌面上 F5 / Ctrl+R 的 preventDefault 确实能取消默认刷新(移动端不可靠, 见报告 §6)。
+      const reloadKey = e.code === "F5" || (e.code === "KeyR" && (e.ctrlKey || e.metaKey));
+      if (!reloadKey) return;
+      e.preventDefault();
+      this.cfgReloadGuard();
+    },
+    /* 自绘三选一(报告 U1-b 多出来的就是「保存并刷新」这一支) */
+    async cfgReloadGuard() {
+      const choice = await this.confirmThreeDialog(
+        "有改动还没保存",
+        "刷新会丢弃当前编辑的配置(不做草稿恢复, 刷新后回到磁盘上的配置)。",
+        { okText: "保存并刷新", extraText: "放弃改动并刷新", cancelText: "留在此页" }
+      );
+      if (choice === true) {
+        const saved = await this.cfgSave();
+        if (!saved) return;  // 保存失败: 留在页面看报错(toast 已给原因), 绝不能带着改动刷新
+        this.cfgGuardRelease();
+        location.reload();
+        return;
+      }
+      if (choice === "extra") {
+        this.cfgGuardRelease();
+        location.reload();
+      }
+      // false = 留在此页(Esc / 点暗幕 / 取消): 什么都不做, 改动仍在
     },
 
     /* ---------------------------------------------------------- 路径读写 */

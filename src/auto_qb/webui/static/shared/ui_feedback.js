@@ -34,6 +34,7 @@ window.AQB_FEEDBACK = {
     _modalInit() {
       return {
         visible: false, title: "", body: "", okText: "", cancelText: "",
+        extraText: "",  // 第三个按钮文案(三选一框, 见 confirmThreeDialog); 空 = 不渲染该钮
         danger: false, input: false, value: "", placeholder: "",
         checkbox: "", checked: false,  // 额外选项勾选框(如删除时"同时删除磁盘文件")
         checks: null,   // 多选项 [{key,label,checked}](删除确认框: 强制汇报 + 删除文件并存)
@@ -48,6 +49,21 @@ window.AQB_FEEDBACK = {
       return this._openModal({
         title, body, input: false,
         okText: opts.okText || "确认", cancelText: opts.cancelText || "取消", danger: !!opts.danger,
+      });
+    },
+    /* 三选一确认框: 返回 Promise<true|"extra"|false>(留在此类分支的语义由调用方给)
+     *
+     * 只有"刷新守卫"那类三分支才用得上 —— 两钮对话框表达不了「先保存再走 / 直接走 / 不走」
+     * (报告 26-10-02-0508 U1-b: 键盘刷新弹自绘框, 之所以值得自绘就是因为多了「保存并刷新」这一支)。
+     * 与 confirmDialog 的**布尔契约分开**, 互不影响: extraText 缺省为空 = 第三个钮不渲染,
+     * 既有全部两钮对话框零变化。第三个钮一律按**破坏性分支**渲染(danger-solid): 它代表
+     * "放弃这批改动"这类不可逆选择, 排在「取消」与「确认」之间。
+     */
+    confirmThreeDialog(title, body, opts = {}) {
+      return this._openModal({
+        title, body, input: false,
+        okText: opts.okText || "确认", extraText: opts.extraText || "", cancelText: opts.cancelText || "取消",
+        danger: !!opts.danger,
       });
     },
     /* 带"额外选项勾选框"的确认框: 返回 Promise<{checked:boolean}|null>(取消 = null)
@@ -90,7 +106,9 @@ window.AQB_FEEDBACK = {
         });
       });
     },
-    resolveModal(ok) {
+    /* choice: true(确认) | false(取消/Esc/点暗幕) | "extra"(第三个钮, 见 confirmThreeDialog)。
+     * 既有调用点全走 true/false 两态, "extra" 只有三选一框会传, 老契约不变。 */
+    resolveModal(choice) {
       if (!this.modal.visible) return;
       const { input, value, checkbox, checked, checks, fields } = this.modal;
       const resolve = this._modalResolve;
@@ -99,6 +117,7 @@ window.AQB_FEEDBACK = {
       if (!resolve) return;
       const hasChecks = !!(checkbox || (checks && checks.length));
       const hasFields = !!(fields && fields.length);
+      const ok = choice === true || choice === "extra";
       if (ok) {
         if (input) resolve(value);
         else if (hasFields) {
@@ -111,7 +130,7 @@ window.AQB_FEEDBACK = {
           const map = {};
           for (const c of checks || []) map[c.key] = c.checked;
           resolve({ checked, checks: map });
-        } else resolve(true);
+        } else resolve(choice === "extra" ? "extra" : true);
       } else resolve(input || hasChecks || hasFields ? null : false);
     },
     /* 锚点左缘 + 弹层宽度是否超出视口(留 8px 边距); ev.currentTarget 在同步代码内有效 */
