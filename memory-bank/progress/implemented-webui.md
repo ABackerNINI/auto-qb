@@ -20,7 +20,7 @@
   禁 `scrollIntoView` / FX-11 互斥清理不变 / 无 Python src·配置键·后端改动。守阵
   `test_web_shortcuts.py` 18 → 19(`test_shift_anchor_unified`); test.full **2290 passed + 3 skipped /
   99%**(基线 [testing/baselines/26-10-02-0635](../testing/baselines/26-10-02-0635-webui-shift-anchor.md));
-  档案 [tasks/26-09-28-webui-keyboard-shortcuts](../tasks/26-09-28-webui-keyboard-shortcuts.md); **未提交**
+  档案 [tasks/26-09-28-webui-keyboard-shortcuts](../tasks/26-09-28-webui-keyboard-shortcuts.md); **已入库 `fa79d526`**
 
 - WEB UI **HR 在线核实详情两张表**(2026-10-01/02, 清偿 issue
   [26-10-01-2137-feat-webui-hr-detail-table](../issues/26-10-01-2137-feat-webui-hr-detail-table.html),
