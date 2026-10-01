@@ -63,6 +63,11 @@ EVENT_QUEUE_MAX = 200
 # SSE 空闲心跳间隔(秒): 必须 **< WEB_VIEW_TTL**, 否则连着的客户端会被判成不活跃
 # ⇒ 主循环停止组装视图 ⇒ 推送自己也没内容可发(自锁)。
 SSE_KEEPALIVE_S = 5.0
+# SSE 一次性票据(查询串 ?ticket= 换票): 短 TTL + 单次消费 —— 查询串会进反代/中间层
+# 访问日志, 只放短命票据, 不再放长期访问密钥(issue 26-09-21-1408 B-01)
+EVENT_TICKET_TTL_S = 30.0
+# 未消费票据上限: 防签发端无界堆积(签发需要凭证, 上限只是内存卫生)
+EVENT_TICKET_MAX = 64
 
 
 class WebUIRuntime:
@@ -120,6 +125,9 @@ class WebUIRuntime:
         self._subscribers: list = []
         self._sub_lock = threading.Lock()
         self.notify_dropped: int = 0
+        # SSE 一次性票据(ticket -> 签发时刻): Web 线程签发/消费, 锁保护(端点跑在线程池)
+        self._event_tickets: dict = {}
+        self._event_tickets_lock = threading.Lock()
 
     # ------------------------------------------------------------------ 事件推送
 
@@ -142,6 +150,34 @@ class WebUIRuntime:
     def subscriber_count(self) -> int:
         with self._sub_lock:
             return len(self._subscribers)
+
+    # ------------------------------------------------------------------ SSE 换票
+
+    def issue_event_ticket(self) -> str:
+        """签发一条 SSE 一次性票据(短 TTL); 未消费满额时回 ""(端点转 503, 前端轮询兜底)
+
+        EventSource 发不出 Authorization 头, 前端以带鉴权的 POST /api/events/ticket 换票,
+        再把票据放查询串开流 —— 查询串会进反代访问日志, 所以只放**单次消费的短命票据**,
+        不再放长期访问密钥(26-10-02 加固, 取代旧 ?token= 兜底)。
+        """
+        now = time.time()
+        with self._event_tickets_lock:
+            if len(self._event_tickets) >= EVENT_TICKET_MAX:
+                # 先清过期再判满额; 仍满则拒签(都是没被消费的活票, 退避比挤掉别人合理)
+                expired = [t for t, ts in self._event_tickets.items() if now - ts > EVENT_TICKET_TTL_S]
+                for t in expired:
+                    del self._event_tickets[t]
+                if len(self._event_tickets) >= EVENT_TICKET_MAX:
+                    return ""
+            ticket = secrets.token_urlsafe(24)
+            self._event_tickets[ticket] = now
+            return ticket
+
+    def consume_event_ticket(self, ticket: str) -> bool:
+        """消费票据: **取即删**(单次有效), TTL 外按无效; 重放/过期/未知一律 False"""
+        with self._event_tickets_lock:
+            issued_at = self._event_tickets.pop(ticket, None)
+        return issued_at is not None and (time.time() - issued_at) <= EVENT_TICKET_TTL_S
 
     def notify(self, etype: str, payload: dict) -> int:
         """广播一条事件; 返回送达的订阅者数

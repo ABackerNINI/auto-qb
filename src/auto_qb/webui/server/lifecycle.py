@@ -169,6 +169,10 @@ def start_web_server(manager) -> WebServerHandle:
         host=manager.config.web.host,
         port=manager.config.web.port,
         log_level="warning",
+        # 直连监听, 不信任反代头(uvicorn 默认 proxy_headers=True): 否则本机反代转发的
+        # X-Forwarded-For 会改写 request.client.host, XFF 伪造成 loopback 可造成
+        # skip_local_verify 免鉴权误判(issue 26-09-21-1408 B-03)
+        proxy_headers=False,
     )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=_run_server, args=(server, ), name="auto-qb-web", daemon=True)

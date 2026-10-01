@@ -11,6 +11,10 @@
 - test_skip_local_verify_cross_site_guard_credentials_bypass: 携带凭证的请求绕过跨站闸(浏览器跨站伪造不了凭证, 持密不在威胁模型内) —— 既有分支照旧裁决(loopback 免鉴权放行 / 远端对密钥 200、错密钥 401)
 - test_skip_local_verify_default_off_no_cross_site_guard: 默认关闭零变化 —— 外部 Host/Origin 不触发 403(仍走既有 401 路径)
 - test_auth_host_origin_parsing_helpers: Host 头解析与 Origin 判定纯函数单测(host:port / [::1]:port 形态 / 解析失败 fail-closed / 端口一致性)
+- test_sse_ticket_flow: SSE 一次性票据(B-01) —— 带鉴权 POST 换票, 单次消费/过期无效/重放无效/无凭证 401/满额拒签
+- test_sse_ticket_in_require_token_and_query_token_removed: require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token= 查询串兜底已删除(密钥正确也不再是凭证)
+- test_start_web_server_config_disables_proxy_headers: uvicorn Config 显式 proxy_headers=False(B-03, 防反代 XFF 改写 client.host 造成免鉴权误判)
+- test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token= 通道不得回潮
 - test_api_status_and_groups: 状态与分组快照读取(经注入的 manager; status 含 version)
 - test_api_expr_eval_endpoint: 表达式试算端点(校验-only / 按种子求值 + 中间值 / 名字错误 / 种子不存在)
 - test_static_assets_disable_heuristic_cache: 静态资源带 no-cache(/api 不受影响), 防升级后仍加载旧前端(UI 目录化路径: atlas/prism/shared)
@@ -479,10 +483,20 @@ def test_api_requires_token(web_env, caplog):
 
 
 def test_config_public_endpoint_no_auth(web_env):
-    """公开只读端点 /api/config/public: 免 token 可读, 只暴露本机免鉴权标志(不含任何机密)"""
+    """公开只读端点 /api/config/public: 免 token 可读但**仅限 loopback**, 只暴露本机免鉴权标志
+
+    该标志只对本机浏览器有用(免鉴权本就只对 loopback 生效); 远端可读等于向攻击者
+    广播「CSRF 面开关」状态(issue 26-09-21-1408 B-02) —— 403 明确拒绝, 前端读取失败
+    自然回落密钥表单(TestClient 缺省对端 testclient 非 loopback, 正好充当远端)。
+    """
+    from fastapi.testclient import TestClient
+
     mgr, client = web_env
-    # 默认关闭: 公开端点仍可无密钥访问, 且暴露值为 false
-    resp = client.get("/api/config/public")
+    # 远端(非 loopback): 403, 不广播开关状态
+    assert client.get("/api/config/public").status_code == 403
+    # loopback: 免密钥可读, 默认关闭值 false
+    loopback = TestClient(client.app, client=("127.0.0.1", 50000))
+    resp = loopback.get("/api/config/public")
     assert resp.status_code == 200
     assert resp.json() == {"web": {"skip_local_verify": False}}
     # 不泄露访问密钥
@@ -679,6 +693,126 @@ def test_auth_host_origin_parsing_helpers():
     assert not _origin_allowed("http://127.0.0.1:9999", allowed, 8080)  # 端口不一致
     assert not _origin_allowed("ftp://127.0.0.1", allowed, None)  # 非 http(s)
     assert not _origin_allowed("not a url", allowed, None)  # 无 host
+
+
+def _auth_request(path="/api/events", query="", host="127.0.0.1:8080", client=("127.0.0.1", 50000), method="GET"):
+    """构造 require_token 直调用的 Request(绕开 TestClient 的流式端点阻塞)"""
+    from starlette.requests import Request as StarletteRequest
+
+    scope = {
+        "type": "http",
+        "asgi": {
+            "version": "3.0"
+        },
+        "http_version": "1.1",
+        "method": method,
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": query.encode(),
+        "root_path": "",
+        "headers": [(b"host", host.encode())],
+        "client": client,
+        "server": ("127.0.0.1", 8080),
+    }
+    return StarletteRequest(scope)
+
+
+def test_sse_ticket_flow(web_env):
+    """SSE 一次性票据(B-01): 带鉴权 POST 换票 -> 单次消费 / 过期无效 / 重放无效 / 无凭证 401
+
+    EventSource 发不出 Authorization 头; 换票端点让长期密钥彻底退出查询串 —— 票据
+    30s TTL + 取即删, 泄漏面收敛为"用完即弃"。
+    """
+    from auto_qb.webui.runtime import EVENT_TICKET_TTL_S
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    resp = client.post("/api/events/ticket", headers=auth)
+    assert resp.status_code == 200
+    body = resp.json()
+    ticket = body["ticket"]
+    assert ticket and ticket != mgr.web.token, "票据不得是密钥复用"
+    assert body["ttl"] == EVENT_TICKET_TTL_S
+    # 单次消费: 首次 True, 重放 False; 未知票据 False
+    assert mgr.web.consume_event_ticket(ticket) is True
+    assert mgr.web.consume_event_ticket(ticket) is False
+    assert mgr.web.consume_event_ticket("unknown-ticket") is False
+    # 过期票据无效(签发时刻拨回 TTL 之外)
+    stale = mgr.web.issue_event_ticket()
+    mgr.web._event_tickets[stale] = time.time() - (EVENT_TICKET_TTL_S + 1)
+    assert mgr.web.consume_event_ticket(stale) is False
+    # 无凭证换票 -> 401(默认 skip 关闭); 满额拒签回 ""(签发方法层语义)
+    assert client.post("/api/events/ticket").status_code == 401
+    from auto_qb.webui.runtime import EVENT_TICKET_MAX
+
+    tickets = [mgr.web.issue_event_ticket() for _ in range(EVENT_TICKET_MAX)]
+    assert all(tickets) and len(set(tickets)) == EVENT_TICKET_MAX, "满额前每次签发必须唯一非空"
+    assert mgr.web.issue_event_ticket() == "", "满额必须拒签(回空串, 端点转 503)"
+
+
+def test_sse_ticket_in_require_token_and_query_token_removed(web_env):
+    """require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token= 查询串兜底已删除
+
+    查询串放长期密钥的通道必须保持关闭: 即使密钥正确, ?token= 也不再是有效凭证
+    (B-01 的核心语义 —— 防反代访问日志留下密钥)。
+    """
+    from fastapi import HTTPException
+
+    from auto_qb.webui.server.auth import make_require_token
+
+    mgr, _client = web_env
+    require_token = make_require_token(mgr)
+    # 有效票据放行(消费即删)
+    ticket = mgr.web.issue_event_ticket()
+    assert require_token(_auth_request(query=f"ticket={ticket}"), authorization="") is None
+    assert mgr.web.consume_event_ticket(ticket) is False, "require_token 必须已消费该票据"
+    # 票据只认 /api/events 路径: 挂到别的端点不生效(401)且不被误消费
+    ticket2 = mgr.web.issue_event_ticket()
+    with pytest.raises(HTTPException) as ei:
+        require_token(_auth_request(path="/api/state", query=f"ticket={ticket2}"), authorization="")
+    assert ei.value.status_code == 401
+    assert mgr.web.consume_event_ticket(ticket2) is True, "非 SSE 路径不得误消费票据"
+    # ?token= 已删: 密钥正确的查询串也不再是有效凭证
+    with pytest.raises(HTTPException) as ei:
+        require_token(_auth_request(query=f"token={mgr.web.token}"), authorization="")
+    assert ei.value.status_code == 401
+
+
+def test_start_web_server_config_disables_proxy_headers(web_env, monkeypatch):
+    """uvicorn Config 显式 proxy_headers=False(B-03): 不信任反代 XFF/Forwarded 头
+
+    uvicorn 默认 proxy_headers=True 会把本机反代转发的 X-Forwarded-For 写回
+    request.client.host —— XFF 伪造成 loopback 可造成 skip_local_verify 免鉴权误判。
+    装配点断言(lifecycle 的 _QuietLoopConfig 直传)。
+    """
+    from auto_qb.webui.server import lifecycle
+
+    captured = {}
+
+    class _FakeServer:
+        def __init__(self, config):
+            captured["config"] = config
+            self.started = True
+            self.should_exit = False
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(lifecycle.uvicorn, "Server", _FakeServer)
+    handle = lifecycle.start_web_server(web_env[0])
+    assert handle.started
+    assert captured["config"].proxy_headers is False
+
+
+def test_frontend_sse_ticket_wiring():
+    """SSE 换票前端接线守阵(B-01): polling.js 必须走 POST /api/events/ticket + ?ticket=
+    并带重连换票路径; ?token= 查询串(长期密钥进查询串的通道)不得回潮。"""
+    src = Path(os.path.join(STATIC_ROOT, "shared", "polling.js")).read_text(encoding="utf-8")
+    assert "/api/events/ticket" in src, "startEvents 必须先换票"
+    assert "encodeURIComponent(ticket)" in src, "EventSource 必须以 ?ticket= 连流"
+    assert "?token=" not in src, "查询串放长期密钥的旧通道不得回潮"
+    assert "_esRetry" in src, "一次性票据重连必失效: 必须有关连接换新票重开的重试路径"
 
 
 def test_skip_local_verify_default_off(web_env):
@@ -8405,6 +8539,7 @@ def test_cmd_trackers_log_sanitized(caplog):
 # 从拆分前的 web.py 用 AST 提取的全部路由(取证 2026-09-22, develop @ 975e146):
 # 57 个 /api 端点 + 3 个 UI 重定向(/, /newui, /newui/{rest:path})。拆分全程必须逐条保持。
 # (2026-09-28 ALT-01 增 POST /api/speed/alt 与 /api/speed/alt/toggle 两条, 计划 26-09-28-0037)
+# (2026-10-02 增 POST /api/events/ticket —— SSE 一次性票据换票, issue 26-09-21-1408 B-01)
 _GOLDEN_ROUTES = {
     ("GET", "/"),
     ("GET", "/api/categories"),
@@ -8420,6 +8555,7 @@ _GOLDEN_ROUTES = {
     ("GET", "/api/config/public"),
     ("GET", "/api/config/schema"),
     ("GET", "/api/events"),
+    ("POST", "/api/events/ticket"),  # SSE 换票(26-10-02 加固: ?ticket= 取代 ?token= 查询串)
     ("POST", "/api/expr/eval"),
     ("GET", "/api/fs/dirs"),
     ("POST", "/api/fs/mkdir"),
@@ -8496,7 +8632,7 @@ def _iter_api_routes(routes):
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 67 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 68 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

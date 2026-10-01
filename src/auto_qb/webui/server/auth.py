@@ -4,7 +4,8 @@
 "免鉴权提示只记一次"标志经闭包保持**每 app 实例一份**(测试会对同一 manager 多次
 create_app, 不得提升为模块级全局)。鉴权语义逐字保留: /api/config/public 免 token;
 web.skip_local_verify=true 时 loopback 免密钥(INFO 只记一次); 非 /api 路径放行;
-SSE ?token= 查询串兜底; compare_digest 防时序侧信道; 错密钥恰好一条不含密钥内容的 WARNING。
+SSE ?ticket= 一次性票据兜底(26-10-02 起取代 ?token= —— 长期密钥不再进查询串);
+compare_digest 防时序侧信道; 错密钥恰好一条不含密钥内容的 WARNING。
 
 跨站防护(issue 26-09-21-1408): skip_local_verify **开启**时, 无凭证请求先过
 ``_reject_cross_site`` —— Host 白名单(全部路径, 废 DNS rebinding)+ 写方法 Origin
@@ -113,12 +114,13 @@ def make_require_token(manager):
 
     def require_token(request: Request, authorization: str = Header(default="")):
         nonlocal _local_skip_logged
-        # 跨站防护闸(issue 26-09-21-1408): 仅 skip_local_verify **开启**时生效 —— 默认
-        # 关闭路径行为零变化; 携带任意凭证(Authorization 头/查询串 token)的请求绕过本闸,
-        # 交由下方既有 token 逻辑裁决(凭证是跨站伪造不出来的, 持密即可信方)。
-        if manager.config.web.skip_local_verify and not (
-            (authorization or "").strip() or (request.query_params.get("token") or "")
-        ):
+        # 携带凭证判定: Authorization 头或查询串票据。凭证是浏览器跨站伪造不出来的
+        # (自定义头触发 CORS 预检必失败), 持密请求不在 CSRF/rebinding 威胁模型内。
+        qticket = request.query_params.get("ticket") or ""
+        presented = bool((authorization or "").strip() or qticket)
+        # 跨站防护闸(issue 26-09-21-1408): 仅 skip_local_verify **开启**且**无凭证**时生效
+        # —— 默认关闭路径行为零变化; 持密请求绕过本闸, 交由下方既有逻辑裁决。
+        if manager.config.web.skip_local_verify and not presented:
             _reject_cross_site(request, manager.config.web.host)
         # 公开只读端点: 前端登录前读取本机免鉴权等标志(不含任何机密), 免 token 放行
         if request.url.path == "/api/config/public":
@@ -141,11 +143,11 @@ def make_require_token(manager):
         # 内容的 WARNING, 保留真实错密钥/探测信号。比较走 compare_digest 防时序侧信道。
         if not request.url.path.startswith("/api"):
             return
-        # SSE(/api/events)用的是 EventSource, **发不出** Authorization 头 —— 允许把密钥放在
-        # 查询串 ?token= 上作为兜底。代价: 密钥可能出现在访问日志里; 本机 skip_local_verify
-        # 场景(默认)根本走不到这条路径。
-        qtok = request.query_params.get("token") or ""
-        if qtok and secrets.compare_digest(qtok, manager.web.token):
+        # SSE(/api/events)用的是 EventSource, **发不出** Authorization 头 —— 前端以带鉴权的
+        # POST /api/events/ticket 换**一次性短时票据**, 这里只认 /api/events 路径上的 ?ticket=
+        # (取即删, 见 WebUIRuntime.consume_event_ticket)。旧 ?token= 查询串兜底已删: 长期
+        # 密钥会留在反代/中间层访问日志里, 票据把泄漏面收敛为"用完即弃"(issue 26-09-21-1408 B-01)。
+        if qticket and request.url.path == "/api/events" and manager.web.consume_event_ticket(qticket):
             return
         scheme = "Bearer "
         if not authorization.startswith(scheme):

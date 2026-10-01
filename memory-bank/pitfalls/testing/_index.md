@@ -35,3 +35,4 @@
 | [tmpdir.md](tmpdir.md) | 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设收尾会崩, 别手工加前缀。 | 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集 |
 | [ui-preview-harness.md](ui-preview-harness.md) | 前端视觉改动的真浏览器冒烟: Vue 生产版拿不到 `app._instance`、无头 Edge 的 virtual-time 与 SSE 坑 —— 都有固定解法。 | UI 冒烟, 截图, 无头浏览器, 弹窗驱动, Vue 实例, createApp, 截图工装 |
 | [unreached-branch-guard.md](unreached-branch-guard.md) | 一个测试名字/断言都对, 但**夹具数据让被测分支根本进不去**, 于是它测的是另一条路; | 红验, 守阵, 假绿灯, 假绿, 分支不可达, 未导入, NameError, 未执行行, 覆盖率盲区, 夹具, 注入 bug, 原地改配置, 热重载短路 |
+| [web-auth-test-forms.md](web-auth-test-forms.md) | TestClient 缺省 Host=testserver / client=testclient 都不是本机形态, 跨站闸(Host 白名单)开启后必 403; loopback 免鉴权分支**先于** token 校验 —— skip 开启时 loopback 对端连错密钥也 200。 | 改 webui 鉴权, 写鉴权测试, skip_local_verify, Host 白名单, 跨站, 403, 错密钥 200, TestClient, client 参数 |

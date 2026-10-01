@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="web-auth-hardening">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-02-web-auth-hardening.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="WebUI 鉴权面三个低危加固点: SSE token 查询串 / config-public 暴露 / proxy_headers">
 <meta name="issue-summary" content="SSE ticket 化或 fetch 流消费; /api/config/public 限 loopback; uvicorn 显式 proxy_headers=False 防反代 XFF 误判">
 <title>WebUI 鉴权面三个低危加固点: SSE token 查询串 / config-public 暴露 / proxy_headers · bug · 计划外问题（便签）</title>
@@ -62,14 +62,14 @@
 <div class="sheet">
 
   <header class="cover">
-    <div class="kicker">计划外问题（便签）· bug</div>
+    <div class="kicker">计划外问题（便签 · 已修 · 2026-10-02 认领并验证）· bug</div>
     <h1>WebUI 鉴权面三个低危加固点: SSE token 查询串 / config-public 暴露 / proxy_headers</h1>
     <p class="lede">SSE ticket 化或 fetch 流消费; /api/config/public 限 loopback; uvicorn 显式 proxy_headers=False 防反代 XFF 误判</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1408-bug-web-auth-hardening-minors</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 14:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,7 @@
     <ul>
       <li>2026-09-21 14:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-02 — 认领（issue 清偿路线图 W1 波 3/3，用户已授权），补 doc-refs 双向登记档案 <code>memory-bank/tasks/26-10-02-web-auth-hardening.md</code>（与 26-09-21-1408-bug-web-skip-local-verify-csrf 同批加固）</li>
+      <li>2026-10-02 — 三小件同日修复，状态 <strong>Done</strong>：① SSE 改 <strong>ticket 化</strong>（POST /api/events/ticket 带鉴权换一次性 30s 票据 → EventSource 以 <code>?ticket=</code> 连流，<code>?token=</code> 长期密钥查询串兜底删除；票据存 WebUIRuntime 锁保护、取即删、上限 64；前端 polling.js 换票 + 重连换新票，落点 src/auto_qb/webui/runtime.py · server/routes/events.py · server/auth.py · static/shared/polling.js）；② <code>/api/config/public</code> 限 loopback（非 loopback 403，routes/config.py，前端读取失败自然回落密钥表单）；③ uvicorn.Config 显式 <code>proxy_headers=False</code>（lifecycle.py，防反代 XFF 改写 client.host 造成 loopback 免鉴权误判）。守阵 +5（票据三态与满额拒签 / require_token 收 ?ticket= 且 ?token= 移除 / config-public 非 loopback 403 / proxy_headers 装配断言 / polling.js 换票接线与 ?token= 不回潮）；金清单 67→68。测试数字 @ 收官基线：test.full <strong>2288 passed + 3 skipped / 99.01%</strong>（切片 26-10-02-0459）</li>
     </ul>
   </section>
 

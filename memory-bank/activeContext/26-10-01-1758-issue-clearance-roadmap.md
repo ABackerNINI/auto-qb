@@ -11,9 +11,11 @@
 > 关键标记: 26-09-22-2221(跨组交叉)用户曾排除, 开工需单独授权; transmission-compat 停在拍板(报告 26-10-01-2347);
 > 热重载两条 / EXT 两条 / tag-category-dialog 开工先复验。滚动档案 = tasks/26-10-02-memory-bank-issue-clearance-roadmap.md。
 > **待办**: W1 起逐波推进, 每波待用户显式授权; 未全清计划不转 Done; 实时以 issues/_index.md 为准。
-> **W1 进行中**(用户已授权本波, 26-10-02): 2/3 已清偿 —— ① hr.token 生成改原子写(issue 26-10-01-2151
+> **W1 已收官(3/3, 用户授权后 26-10-02 当日完成)**: ① hr.token 生成改原子写(issue 26-10-01-2151
 > → Done, 档案 [tasks/26-10-02-hr-token-atomic-write.md](../tasks/26-10-02-hr-token-atomic-write.md));
 > ② HrEntry.last_seen 写入点 + INDEX_RETENTION 清理复活(issue 26-10-01-2335 → Done,
-> 档案 [tasks/26-10-02-hr-entry-last-seen-prune.md](../tasks/26-10-02-hr-entry-last-seen-prune.md),
-> 基线 26-10-02-0412: 2219+3 / 97.53%); 余 CSRF / 鉴权加固(3/3)待续。
-> 最后活动: 2026-10-02 04:12
+> 档案 [tasks/26-10-02-hr-entry-last-seen-prune.md](../tasks/26-10-02-hr-entry-last-seen-prune.md));
+> ③ web 鉴权加固双件(issue 26-09-21-1408 CSRF + 鉴权三小件 → Done,
+> 档案 [tasks/26-10-02-web-auth-hardening.md](../tasks/26-10-02-web-auth-hardening.md))。
+> 收官基线 26-10-02-0459: 2288+3 / 99.01%(阈值 98)。**下一步: W2(WebUI 正确性 7 条)待用户显式授权。**
+> 最后活动: 2026-10-02 05:11

@@ -8,15 +8,28 @@ import json
 import queue
 from fastapi.responses import StreamingResponse
 
-from ...runtime import SSE_KEEPALIVE_S
+from ...runtime import EVENT_TICKET_TTL_S, SSE_KEEPALIVE_S
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from ..context import WebContext
 
 
 def build_router(ctx: WebContext) -> APIRouter:
     manager = ctx.manager
     router = APIRouter()
+
+    @router.post("/api/events/ticket")
+    def api_events_ticket():
+        """SSE 换票: 用**带鉴权的一次性 POST** 换短时票据, EventSource 以 ?ticket= 连流
+
+        EventSource 发不出 Authorization 头 —— 旧兜底把长期访问密钥放查询串, 会留在
+        反代/中间层访问日志里(issue 26-09-21-1408 B-01)。票据单次消费 + 30s TTL,
+        泄漏面收敛为"用完即弃"; 满额拒签回 503, 前端退轮询兜底。
+        """
+        ticket = manager.web.issue_event_ticket()
+        if not ticket:
+            raise HTTPException(status_code=503, detail="event ticket quota exhausted, retry later")
+        return {"ticket": ticket, "ttl": EVENT_TICKET_TTL_S}
 
     @router.get("/api/events")
     def api_events():
@@ -27,8 +40,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         !只推**信号与小真值**, 绝不推全量状态 —— 3000 种子一轮全量要 63ms(序列化+网络+
           JSON.parse), 频繁推会把主线程打满(本项目踩过同类坑: 搜索索引阻塞主循环)。
 
-        WARN: 两个前端侧注意: EventSource 发不出 Authorization 头(密钥走 ?token=, 见 require_token);
-          经过反代时要关掉响应缓冲(已带 X-Accel-Buffering: no)。
+        WARN: 两个前端侧注意: EventSource 发不出 Authorization 头(鉴权走 ?ticket= 一次性
+          票据, 见 require_token 与 POST /api/events/ticket); 经过反代时要关掉响应缓冲(已带 X-Accel-Buffering: no)。
         """
         q = manager.web.subscribe()
 

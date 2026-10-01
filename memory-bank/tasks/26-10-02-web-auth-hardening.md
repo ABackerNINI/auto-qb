@@ -1,9 +1,9 @@
 # 26-10-02-web-auth-hardening — WebUI 鉴权面加固(CSRF/Host + 三小件)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-02
 **Updated:** 2026-10-02
-**Summary:** 清偿 issue 清偿路线图 W1 波 3/3(收官): A) skip_local_verify 开启时补跨站防护 —— Host 白名单(废 DNS rebinding)+ 写方法 Origin 同源校验(废 CSRF), 全部写端点经全局依赖单点覆盖, 默认关闭路径零变化; B) 三小件 —— SSE 换一次性票据(?ticket= 取代 ?token= 长期密钥进查询串) / /api/config/public 限 loopback / uvicorn 显式 proxy_headers=False。
+**Summary:** 清偿 issue 清偿路线图 W1 波 3/3(收官): A) skip_local_verify 开启时补跨站防护 —— Host 白名单(废 DNS rebinding)+ 写方法 Origin 同源校验(废 CSRF), 全部写端点经全局依赖单点覆盖, 默认关闭路径零变化(提交 36dc8ba6); B) 三小件 —— SSE 换一次性票据(?ticket= 取代 ?token= 长期密钥进查询串) / /api/config/public 限 loopback / uvicorn 显式 proxy_headers=False。收官基线 test.full 2288 passed + 3 skipped / 99.01%(17,532/17,707, 切片 26-10-02-0459)。
 
 **Topics:** web-auth-hardening
 **Refs:** memory-bank/issues/26-09-21-1408-bug-web-skip-local-verify-csrf.html, memory-bank/issues/26-09-21-1408-bug-web-auth-hardening-minors.html
@@ -42,13 +42,16 @@
 
 | 段 | 内容 | 状态 |
 |----|------|------|
-| A 代码 | auth.py 跨站闸(Host 白名单 + 写方法 Origin) | 待办 |
-| A 守阵 | 放行/拒绝/默认零变化/写路由穷举 | 待办 |
-| B 代码 | SSE 票据 / config-public 限 loopback / proxy_headers=False | 待办 |
-| B 守阵 | 票据三态 / token= 移除 / 403 / 装配断言 | 待办 |
-| 收尾回写 | 双 issue Done / kb.index / activeContext / 基线切片 | 待办 |
-| 提交 | A、B 各一笔 ship.commit 推 Gitee | 待办 |
+| A 代码 | auth.py 跨站闸(Host 白名单 + 写方法 Origin) | 完成(26-10-02, 提交 36dc8ba6) |
+| A 守阵 | 放行/拒绝/默认零变化/写路由穷举 +6 | 完成(26-10-02) |
+| B 代码 | SSE 票据 / config-public 限 loopback / proxy_headers=False | 完成(26-10-02) |
+| B 守阵 | 票据三态 / token= 移除 / 403 / 装配断言 +5 | 完成(26-10-02) |
+| 收尾回写 | 双 issue Done / kb.index / activeContext / 基线切片 26-10-02-0459 | 完成(26-10-02) |
+| 提交 | A 36dc8ba6 + B 各一笔 ship.commit 推 Gitee | 完成(26-10-02) |
 
 ## 进度日志
 
 - **2026-10-02 开工**: sync 至 1c237504(带上阶段 1/2 的 bc24631b、54db09f2); 摸清拆分后落点(见思考过程); 双 issue 认领建档(本文件), issue 头部补 doc-refs 双向登记; Status In Progress。
+- **2026-10-02 实施**: A(auth.py 跨站闸 + 守阵 6)与 B(runtime 票据存储 + events 换票端点 + auth 收 ?ticket= 删 ?token= + config/public 限 loopback + lifecycle proxy_headers=False + polling.js 换票重连 + 守阵 5 + 金清单 67→68)全部落地; 中途远端推进(21b8db24 覆盖率收官 + 328a6704 入池, 阈值抬 98), A 态按提交拆分先落(还原生成物 _index.md 后 sync 快进合流, 合流基线 test.quick 2284+3)。
+- **2026-10-02 提交 A**: ship.commit 成功 **36dc8ba6**(A 修复 + 守阵 + 认领链), 内部闸门(含 test.quick)全绿。
+- **2026-10-02 收尾**: 恢复 B 终态后跑收官闸门 test.full **2288 passed + 3 skipped / 99.01%**(17,532/17,707: 语句 13,171/13,259 = 99.34%, 分支 4,361/4,448 = 98.04%, 28.39s, rc=0), 基线切片 26-10-02-0459; 双 issue 翻 Done(封面徽标 + meta + 状态变更日志 + 复验/修复后补充); activeContext 路线图切片更新 W1 3/3; Status → Done。

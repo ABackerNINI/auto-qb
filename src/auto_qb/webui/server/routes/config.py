@@ -4,8 +4,9 @@
 鉴权由 factory 的全局 dependencies 单点覆盖, 本模块不另挂依赖。
 日志命名空间见包 __init__(K3)。"""
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
+from ..auth import _is_loopback_host
 from ..common import config_backup_path as _config_backup_path
 
 from fastapi import APIRouter
@@ -18,8 +19,15 @@ def build_router(ctx: WebContext) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/config/public")
-    def api_config_public():
-        """前端登录前读取的公开只读标志(不含密钥等机密): 本机免鉴权开关"""
+    def api_config_public(request: Request):
+        """前端登录前读取的公开只读标志(不含密钥等机密): 本机免鉴权开关
+
+        **仅限 loopback**(issue 26-09-21-1408 B-02): 该标志只对本机浏览器有用(免鉴权本就
+        只对 loopback 生效), 远端可读等于向攻击者广播「CSRF 面开关」状态 —— 403 明确拒绝;
+        前端读取失败自然回落密钥表单(lifecycle.js 对非 2xx 一律按"无标志"处理)。
+        """
+        if not _is_loopback_host(request.client.host if request.client else None):
+            raise HTTPException(status_code=403, detail="loopback only")
         return {"web": {"skip_local_verify": manager.config.web.skip_local_verify}}
 
     @router.post("/api/expr/eval")

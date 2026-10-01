@@ -6,15 +6,26 @@ window.AQB_POLL = {
      * 目的: 把「命令回执」与「视图版本变更」从轮询改成推送 ——
      *   前者省掉回执轮询的退避粒度(0→150→300→500ms), 后者省掉 1.5/2/3s 的定时触发。
      * !轮询**保留**作为兜底: 断线 / 首帧 / 浏览器不支持 / 反代缓冲时自动退回, 语义不变。
-     * WARN: EventSource 发不出 Authorization 头 ⇒ 密钥走 ?token=(服务端已放行, 见 web.py);
-     *   本机 skip_local_verify(默认)下不需要带密钥。
+     * WARN: EventSource 发不出 Authorization 头 ⇒ 先用带鉴权的 POST /api/events/ticket 换
+     *   **一次性短时票据**再以 ?ticket= 连流(26-10-02 加固: 查询串不再放长期密钥 ——
+     *   反代日志只会留下用完即弃的票据); 本机 skip_local_verify(默认)下换票免密钥。
      */
-    startEvents() {
-      if (this._es || typeof EventSource === "undefined") return;
-      const q = this.token ? `?token=${encodeURIComponent(this.token)}` : "";
+    async startEvents() {
+      if (this._es || this._esBusy || typeof EventSource === "undefined") return;
+      this._esBusy = true;  // 换票是异步的, 防重入(async 后 if(this._es) 挡不住并发进入)
+      let ticket = "";
+      try {
+        const r = await this.api("/api/events/ticket", { method: "POST" });
+        ticket = (r && r.ticket) || "";
+      } catch (e) {
+        this._esBusy = false;
+        return;  // 换票失败(未鉴权/服务不可达): 不开推送, 轮询兜底照旧
+      }
+      this._esBusy = false;
+      if (!ticket) return;
       let es = null;
       try {
-        es = new EventSource(`/api/events${q}`);
+        es = new EventSource(`/api/events?ticket=${encodeURIComponent(ticket)}`);
       } catch (e) {
         return;  // 不支持就用轮询, 不报错(推送是加速手段, 不是必需)
       }
@@ -35,10 +46,19 @@ window.AQB_POLL = {
         this._verTimer = setTimeout(() => { this._verTimer = null; this.refresh(); }, 60);
       });
       es.onerror = () => {
-        // EventSource 自带重连(默认 3s); 这里不干预, 轮询兜底照旧在跑
+        // 一次性票据在重连时必失效(服务端取即删) —— EventSource 自带重连会一直拿旧票
+        // 撞 401, 必须关掉旧连接换新票重开(3s, 与 EventSource 默认重连同拍); 服务不可达时
+        // 换票请求失败, startEvents 直接返回, 不会空转
+        if (this._es) { this._es.close(); this._es = null; }
+        if (this._esRetry) return;
+        this._esRetry = setTimeout(() => {
+          this._esRetry = null;
+          if (this.authOk) this.startEvents();
+        }, 3000);
       };
     },
     stopEvents() {
+      if (this._esRetry) { clearTimeout(this._esRetry); this._esRetry = null; }
       if (this._verTimer) { clearTimeout(this._verTimer); this._verTimer = null; }
       if (this._es) { this._es.close(); this._es = null; }
     },

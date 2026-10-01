@@ -31,7 +31,7 @@
 | 波次 | 内容 | 状态 |
 |------|------|------|
 | v1-已清偿 | v1 所列 31 条中的 12 条(v1-W1 5/5 闸门波、v1-W2 3/4、v1-W3 1/5、v1-W6 1/9、v1-W7 2/5) | 完成(26-10-01/02, 见 issues Done 分区) |
-| W1 | 后端速赢:凭据/状态/鉴权(4 bug: hr-token 原子写 · last-seen 死代码 · CSRF · 鉴权加固) | Open |
+| W1 | 后端速赢:凭据/状态/鉴权(4 bug: hr-token 原子写 · last-seen 死代码 · CSRF · 鉴权加固) | 完成(26-10-02, 3/3 阶段全清: bc24631b · 54db09f2 · 36dc8ba6) |
 | W2 | WebUI 正确性 bug 簇(7: 热重载对 · 误报对 · 设置页对 · 删除标签作用域) | Open |
 | W3 | 数据安全大件(3 feat: 跨组交叉[需重新授权] · 整组迁移 · 现场重建) | Open |
 | W4 | 性能专项(4: api-state · shows-view · poll-gate · max-tasks 自适应) | Open |
@@ -44,3 +44,4 @@
 ## 进度日志
 
 - **2026-10-02 02:34 v2 改版完成**: 池实测 103 条记录 = 59 未决(58 Open + 1 In Progress)+ 43 Done + 1 Superseded;类型分布 bug 13 · feat 22 · question 8 · perf 5 · refactor 4 · docs 4 · chore 3 · test 0,档位 standard 39 / light 19。计划 HTML 同文件改版(doc-updated → 26-10-02-0234),变更记录补 v2 行;本轮零代码变更,收尾基线另记切片。
+- **2026-10-02 05:11 W1 波收官(3/3)**: 阶段 3/3(web 鉴权加固双件)同批落地 —— A) skip_local_verify 开启时跨站防护(Host 白名单 + 写方法 Origin, 默认路径零变化); B) SSE 票据化 / config-public 限 loopback / uvicorn proxy_headers=False(档案 tasks/26-10-02-web-auth-hardening.md, 提交 36dc8ba6 + B 笔); 收官基线 test.full 2288 passed + 3 skipped / 99.01%(切片 26-10-02-0459)。W1 四条 bug 全清, 下一波 W2 待用户授权。
