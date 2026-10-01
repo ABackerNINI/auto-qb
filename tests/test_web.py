@@ -35,6 +35,9 @@
 - test_config_tree_requires_config_root: 缺少 config 根段 -> 400
 - test_config_tree_preserves_comments: round-trip 写盘保留已有键的注释
 - test_web_token_not_printed_in_logs: 生成的访问密钥不进任何日志(WARNING 会被 notify 推送, 且 /api/log 可读回)
+- test_web_token_generated_atomic_and_readable: 首次生成密钥落盘 web.token 且读回一致, 无临时文件残留(走 atomic_write, issue 26-09-21-1347)
+- test_web_token_existing_file_reused_without_rewrite: 已有合法 token 时直接复用文件现值, 不触达写盘路径(不重写不漂移)
+- test_web_token_write_interrupt_leaves_no_half_token: 写盘中断不留非空半截 token —— 经真实 atomic_write 跑"写一半抛错", 旧文件不被破坏、临时文件被清理, 下次调用重新生成(自愈)
 - test_config_tree_masks_secrets: /api/config 掩码敏感字段, 且"读取→原样保存"不会把密码写成占位串
 - test_sites_missing_scans_and_builds_defaults: GET /api/sites/missing 未配置域名生成默认条目(domains/tags/占位限速/hr 示例值与 --export-yaml 同源); 已配置域名双向包含不重复
 - test_sites_missing_name_conflict_suffix: 站点名冲突(既有配置占用/批内同名) -> _N 后缀(与 CLI 导出同一套 gen_tracker_name)
@@ -2580,6 +2583,76 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
     for r in caplog.records:
         assert token not in r.getMessage(), f"密钥不得出现在日志: {r.getMessage()}"
         assert token[:8] not in r.getMessage(), f"密钥前缀也不得出现: {r.getMessage()}"
+
+
+_WEB_MGR_CFG = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
+
+
+def test_web_token_generated_atomic_and_readable(tmp_path):
+    """首次生成: 密钥落盘 web.token 且读回一致, 同目录无临时文件残留(issue 26-09-21-1347)
+
+    ensure_web_token 走 utils.atomic_write(mkstemp 0600 + os.replace): 写盘成功后目标文件
+    即完整可读 —— 半截状态只可能存在于临时文件, replace 前对读取侧不可见。
+    """
+    from auto_qb.webui import ensure_web_token
+
+    mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
+    token = ensure_web_token(mgr)
+    assert re.fullmatch(r"[0-9a-f]{64}", token), "token_hex(32) 应为 64 位小写 hex"
+    token_file = tmp_path / "web.token"
+    assert token_file.read_text(encoding="ascii") == token, "落盘内容必须与返回值逐字节一致"
+    assert not list(tmp_path.glob("web.token.*")), "不得残留临时文件"
+
+
+def test_web_token_existing_file_reused_without_rewrite(tmp_path, monkeypatch):
+    """已有合法 token 时不重写: 直接返回文件现值, 写盘路径一次都不触发(不重写不漂移)"""
+    from auto_qb.webui import ensure_web_token
+    from auto_qb.webui.server import common
+
+    existing = "ab" * 32
+    (tmp_path / "web.token").write_text(existing, encoding="ascii")
+    mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
+
+    def _must_not_write(*_a, **_kw):
+        raise AssertionError("已有合法 token 时不得触达写盘路径")
+
+    monkeypatch.setattr(common, "atomic_write", _must_not_write)
+    assert ensure_web_token(mgr) == existing, "应复用文件现值而非重新生成"
+    assert (tmp_path / "web.token").read_text(encoding="ascii") == existing
+
+
+def test_web_token_write_interrupt_leaves_no_half_token(tmp_path, monkeypatch):
+    """写盘中断不留非空半截 token(issue 26-09-21-1347): 旧文件不被破坏, 下次调用重新生成(自愈)
+
+    经真实 atomic_write 跑"写一半抛错": 回调写入半截后抛 RuntimeError, 由 atomic_write 负责
+    清理临时文件并重抛 —— 目标路径保持旧内容。若实现退回 O_TRUNC 直写, 同一时刻半截内容已落
+    目标文件, 本条在 raises 处即红。
+    """
+    from auto_qb.webui import ensure_web_token
+    from auto_qb.webui.server import common
+
+    mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
+    token_file = tmp_path / "web.token"
+    token_file.write_text("", encoding="ascii")  # 空文件: 读取侧判空后走重新生成分支
+
+    real_atomic_write = common.atomic_write
+
+    def _crash_mid(path, write_fn, **kw):
+        def _half(_f):
+            _f.write("deadbeef")  # 半截密钥, 模拟写盘途中被杀
+            raise RuntimeError("simulated kill mid-write")
+
+        return real_atomic_write(path, _half, **kw)
+
+    monkeypatch.setattr(common, "atomic_write", _crash_mid)
+    with pytest.raises(RuntimeError):
+        ensure_web_token(mgr)
+    assert token_file.read_text(encoding="ascii") == "", "中断后不得留下非空半截 token"
+    assert not list(tmp_path.glob("web.token.*")), "中断的临时文件必须被清理"
+
+    monkeypatch.undo()
+    token = ensure_web_token(mgr)  # 自愈: 下次启动重新生成并完整落盘
+    assert token_file.read_text(encoding="ascii") == token
 
 
 def test_config_tree_masks_secrets(web_env):

@@ -15,7 +15,7 @@ from urllib.parse import quote
 from fastapi import HTTPException
 
 from ...infra.file_access import get_file_access
-from ...infra.utils import decode_group_key
+from ...infra.utils import atomic_write, decode_group_key
 
 logger = logging.getLogger("auto_qb.web")
 
@@ -66,9 +66,11 @@ def ensure_web_token(manager) -> str:
         if token:
             return token
     token = secrets.token_hex(32)
-    fd = os.open(token_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="ascii") as f:
-        f.write(token)
+    # 原子写(issue 26-09-21-1347): O_TRUNC 直写在写盘途中被杀会留下非空半截 token,
+    # 被读取侧当作有效密钥持久化 -> 已存浏览器密钥 401。atomic_write 的 mkstemp 权限 0600
+    # 与原 os.open(..., 0o600) 等价; token 是纯 ASCII hex, utf-8 落盘与原 ascii 编码逐字节相同,
+    # 读取侧(ascii 读回)不变。
+    atomic_write(token_file, lambda f: f.write(token))
     # 密钥内容**不进日志**: 记 WARNING 及以上会被 notify 处理器(min_level 默认 ERROR,
     # 排障调低后会更高频)推到系统通知, 且落到日志文件后 /api/log 可读回 ——
     # 拿到密钥即等于拿到改配置/删种子的能力。
