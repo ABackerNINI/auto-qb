@@ -5,6 +5,19 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- WEB UI **HR 在线核实详情两张表**(2026-10-01/02, 清偿 issue
+  [26-10-01-2137-feat-webui-hr-detail-table](../issues/26-10-01-2137-feat-webui-hr-detail-table.html),
+  计划 [plans/26-10-01-2216](../plans/26-10-01-2216-plan-webui-hr-detail-table.html) 拍板六项全按推荐):
+  ①后端导出单点 `hr/status.py` `EntryDetail`/`entry_details()`(P0+P1 全集, 人话字段后端算好,
+  档位·下载量排序含失踪行)+ 只读端点 `GET /api/hr/sites/{site}/entries`(未启用 400 / 未接入 404 /
+  线程未启动 409; f5ce07bd); ②站点卡片**表① 全量详情表**(打开分区/手动刷新各拉一次不轮询,
+  档位筛选 chips 本地过滤, 「数据截至」时间戳, 「上次核实(放行判定)」独立口径, 单元格不挂原生 title;
+  d3d4d987); ③**表② 排障视图**(站点级 kv 行 `hrsKvRows` 拼行单点 + 各档波次明细, 原生 `<details>`
+  默认收起, 数据全来自 /api/hr/status 零新请求, 展开态不持久化; b2b1e96d); `.hr-detail-table` 等
+  三套 UI CSS 成对。阶段4 契约守阵 `test_frontend_hr_contract_keys_match_backend`(前端消费键 ⊆
+  后端 to_dict 键集)钉两表字段面; 基线数字见 `commands run kb.baseline`;
+  档案 [tasks/26-10-01-webui-hr-detail-table](../tasks/26-10-01-webui-hr-detail-table.md); **随本提交入库**
+
 - WEB UI **设置页只读字段(程序托管/R 级)**(2026-10-01, 清偿 issue
   [26-09-28-2135-feat-webui-readonly-fields](../issues/26-09-28-2135-feat-webui-readonly-fields.html)):
   schema_version/data_dir/state_file/fs 段此前渲染为可编辑但保存必然被盖章/回退, 反馈还谎报「需重启才生效」。

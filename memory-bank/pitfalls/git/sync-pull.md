@@ -41,4 +41,5 @@
 - **触发**: 多 clone 并行下收到「提交」, 直接按收尾 DoD 回写 (基线切片 / activeContext 切片 / 各 _index) 再提交 —— 开工时同步过, 但会话期间别的 clone 已推进 develop (2026-09-26 用户点名: "baseline 总是撞")。
 - **判别**: 齐平与否交给 `commands run my-commit-flow.sync` 判(内部 ls-remote 现查远端真值, 不信 `status -sb` 快照), **不需要手工对比**; 撞车现场是 push 被拒后已分叉, `apply --3way` 在 baseline.md / 切片上报冲突 (两边都在文件尾追加)。
 - **处置**: 收到「提交」先 `commands run my-commit-flow.sync`(自动合流, 落后即快进 / 分叉自动 rebase) → **然后**才收尾回写 → `commands run ship.commit`(内部同步 + 闸门 + 提交 + 内联推送, 一行契约)。流程单点: `.commands/my-commit-flow/references/pipeline.md`。
-- **复发**: 1 —— 2026-10-01 (auto-qb-clone2): 收到「提交」时点已按本条 sync 过, 会话中途远端仍被并行 clone 推进(f0ddd486), `ship.commit` 首跑失败(重叠文件为生成物 `plans/_index.md`); 按失败行指引合流重跑成功, 无实际冲突。**为什么没命中**: 本条处置只保证「提交时点齐平」, 会话中途的推进属 sync 的固有窗口防不住 —— 本轮正是靠 ship.commit 内部同步 + 失败行拦下的; 处置无需改, 复踩代价 ≈ 一次重跑, 勿为消掉这次失败加手工预检。
+- **复发**: 3(1 + 计划 26-10-01-2216 阶段1/阶段2 两度) —— 2026-10-01 (auto-qb-clone2): 收到「提交」时点已按本条 sync 过, 会话中途远端仍被并行 clone 推进(f0ddd486), `ship.commit` 首跑失败(重叠文件为生成物 `plans/_index.md`); 按失败行指引合流重跑成功, 无实际冲突。**为什么没命中**: 本条处置只保证「提交时点齐平」, 会话中途的推进属 sync 的固有窗口防不住 —— 本轮正是靠 ship.commit 内部同步 + 失败行拦下的; 处置无需改, 复踩代价 ≈ 一次重跑, 勿为消掉这次失败加手工预检。
+- **复发** +2 —— 2026-10-01 (auto-qb-clone1, 同一计划阶段1/阶段2 的提交点): `ship.commit` 内部同步两度撞「远端前移 + 树脏」, 均按 `cp -a .git <备份>` → stash → sync → pop 预案**命中即化解**, 无冲突无损(数字以最终重跑的 test.full 为准); 处置照旧, 无需改。

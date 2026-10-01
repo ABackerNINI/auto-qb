@@ -9,7 +9,6 @@
 
 ## In Progress
 
-- [26-10-01-2216] [修改计划 · WEBUI HR 在线核实详情表 — 全量详情表与排障视图](26-10-01-2216-plan-webui-hr-detail-table.html) — `backend-partial-hr-verify`
 - [26-09-29-2036] [HR 计数对平集成 — 修改计划 (v3.1)](26-09-29-2036-plan-hr-counter-integration.html) — `backend-partial-hr-verify`
 - [26-09-29-1905] [HR 来源标记 · 非文字化设计模板](26-09-29-1905-plan-webui-hr-src-underline.html) — `webui-hr-src-underline`
 - [26-09-28-1805] [计划 · HR 排除功能: 按标签/分类把种子排除出 HR 体系](26-09-28-1805-plan-hr-exclude-tag-category.html) — `hr-exclude-tag-category`
@@ -36,6 +35,7 @@
 
 ## Done
 
+- [26-10-01-2216] [修改计划 · WEBUI HR 在线核实详情表 — 全量详情表与排障视图](26-10-01-2216-plan-webui-hr-detail-table.html) — `backend-partial-hr-verify`
 - [26-10-01-1728] [计划 · 知识库文档漂移分段修复 — 内核化重构后四波欠账的回写路线](26-10-01-1728-plan-doc-drift-repair.html) — `doc-drift-repair`
 - [26-10-01-0350] [计划 · 别名层处置 — _WEB_STATE_ALIAS 与旧名委托层的退役路线](26-10-01-0350-plan-web-state-alias-disposal.html) — `web-state-alias-disposal`
 - [26-09-30-1819] [计划 · QbManager 内核化重构 — 微内核 + 插件式模块](26-09-30-1819-plan-kernel-module-refactor.html) — `kernel-module-refactor`

@@ -120,6 +120,7 @@
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2) —— 设置分区表① 模板绑定(档位 chips 本地过滤/明细行/空态/失踪行挂钩/「数据截至」时间戳/「上次核实(放行判定)」独立列名)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
+- test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助三函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 已知幻键 ls.lane_text(LaneStatus 无此字段, 渲染为空, 阶段3 存量缺陷)以白名单钉死恰为一条, 修复后白名单须收空
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -1931,6 +1932,68 @@ def test_frontend_hr_diag_view_wiring():
     ):
         for cls in (".hrs-diag", ".hr-diag-kv", ".hr-wave-table"):
             assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5.6)"
+
+
+def test_frontend_hr_contract_keys_match_backend():
+    """HR 两张表「前端消费键 ⊆ 后端导出键」契约守阵(2026-10-01, 计划 26-10-01-2216 阶段4)
+
+    表① 行字段的后端导出面已由 test_hr_status.test_entry_details_field_surface 钉死(闭集),
+    但那是**后端侧**钉法: 上游改键名 + 同步改那条 expected 后 pytest 照样全绿, 前端消费的
+    旧键名却静默落空 —— 渲染成空串/undefined, 不报错不看页面发现不了(与
+    test_frontend_hr_status_fields_match_backend 同一故障族, 但那里只扫模板里的 `s.*`,
+    表② 的 kv 拼行与波次取数在 hr_status.js 里, 模板只有 hrsKvRows(s) 一个调用点, 扫不到)。
+
+    这里从**前端源码**提取消费键(双向都能红: 前端新增幻键 / 上游改键名都会撞):
+    - 表① 行: 共享模板 aqb:hr-detail-table 段的直接 `e.*` + hr_status.js 三个行辅助函数
+      (hrsVerifiedText/hrsSrcCls/hrsStatusText, 行对象经参数 `e` 传入)的 `e.*`,
+      对照 EntryDetail.to_dict; 全文件扫 `e.*` 会误吞 catch(e) 的 auth/message, 故按函数体提;
+    - 表② 站点级: hr_status.js 全文件(拼行单点 hrsKvRows 与摘要层 hrsState*/hrsLaneText
+      的参数都叫 s)`s.*` + aqb:hr-diag 模板段, 对照 SiteStatus.to_dict;
+    - 表② 波次级: hr_status.js 全文件 `ls.*`(hrsWaveCutoff/hrsWaveCount/hrsLaneClass)
+      + aqb:hr-diag 模板段, 对照 LaneStatus.to_dict。
+    每组都带「核心键必须在场」断言 —— 提取器本身失效(函数改名/文件挪走)时守阵变红而不是
+    静默变恒真。
+    """
+    from auto_qb.hr.status import EntryDetail, LaneStatus, SiteStatus
+
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl = open(os.path.join(shared, "tpl", "settings-detail.html"), encoding="utf-8").read()
+    js = open(os.path.join(shared, "hr_status.js"), encoding="utf-8").read()
+    # 判定只认代码态(与 test_frontend_hr_diag_view_wiring 的 localStorage 检查同款剥注释)
+    js_code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    js_code = re.sub(r"//[^\n]*", "", js_code)
+
+    frag_table = re.search(r"<!-- aqb:hr-detail-table:begin.*?-->(.*?)<!-- aqb:hr-detail-table:end.*?-->", tpl, re.S)
+    frag_diag = re.search(r"<!-- aqb:hr-diag:begin.*?-->(.*?)<!-- aqb:hr-diag:end.*?-->", tpl, re.S)
+    assert frag_table and frag_diag, "settings-detail.html 缺 aqb 扫描锚(表①/表②) —— 模板被移走? 同步本守阵"
+
+    # --- 表① 行字段: 模板直接消费 + JS 行辅助函数(经参数 e 传整行对象) ---
+    used_e = set(re.findall(r"\be\.([a-z_]+)\b", frag_table.group(1)))
+    for fn in ("hrsVerifiedText", "hrsSrcCls", "hrsStatusText"):
+        m = re.search(rf"\n    {fn}\(e\) \{{\n(.*?)\n    \}},", js, re.S)
+        assert m, f"hr_status.js 找不到 {fn}(e) 函数体 —— 表① 行消费单点被移走或改名? 同步本守阵"
+        used_e |= set(re.findall(r"\be\.([a-z_]+)\b", m.group(1)))
+    assert {"tid", "verified_ts", "last_seen"} <= used_e, f"表① 消费键提取失效(只扫到 {sorted(used_e)}) —— 守阵变恒真, 同步提取器"
+    phantom_e = sorted(used_e - set(EntryDetail(tid=0).to_dict()))
+    assert not phantom_e, f"表① 消费了 EntryDetail 不导出的键 {phantom_e}(渲染成空, 打错/上游改名都会这样)"
+
+    # --- 表② 站点级(s.*)与波次级(ls.*) ---
+    used_s = set(re.findall(r"\bs\.([a-z_]+)\b", js_code)) | set(re.findall(r"\bs\.([a-z_]+)\b", frag_diag.group(1)))
+    assert {"fresh_text", "index_total", "empty_confirmed"} <= used_s, f"表② 站点级消费键提取失效(只扫到 {sorted(used_s)}) —— 同步提取器"
+    phantom_s = sorted(used_s - set(SiteStatus(site="probe").to_dict()))
+    assert not phantom_s, f"表② 消费了 SiteStatus 不导出的键 {phantom_s}(kv 行静默落空)"
+    used_ls = set(re.findall(r"\bls\.([a-z_]+)\b", js_code)) | set(re.findall(r"\bls\.([a-z_]+)\b", frag_diag.group(1)))
+    assert {"full_depth", "count_claim"} <= used_ls, f"表② 波次级消费键提取失效(只扫到 {sorted(used_ls)}) —— 同步提取器"
+    # 「已知幻键」白名单: 波次表档位徽章消费 ls.lane_text, 但 LaneStatus 没有该字段(to_dict
+    # 不含), 该格**当前实际渲染为空**(只剩档位字母, 色义仍走 hrsLaneCls(ls.lane)) —— 这是
+    # 本守阵 26-10-01 首次通电时抓出的存量缺陷(阶段3 交付, 修复属 src/ 改动不在阶段4 范围,
+    # 已汇报待拍板)。修复(给 LaneStatus 补 lane_text 或模板改口径)后此断言会**反向变红**,
+    # 提醒把白名单收空 —— 幻键集合必须归零, 不许新幻键从这里溜进。
+    phantom_ls = used_ls - set(LaneStatus().to_dict())
+    assert phantom_ls == {
+        "lane_text"
+    }, (f"表② 波次级幻键集变了: {sorted(phantom_ls)}(预期恰为 ['lane_text']) —— "
+        "新增幻键即真缺陷; 若 lane_text 已修, 到这里把白名单收成空集")
 
 
 def test_frontend_member_window_functions_live_in_methods():

@@ -18,7 +18,7 @@
 | perf | 5 |
 | docs | 4 |
 | refactor | 4 |
-| feat | 23 |
+| feat | 22 |
 | chore | 3 |
 | question | 7 |
 
@@ -48,7 +48,6 @@
 - [feat] [追剧视图完善: 同剧判定调研与分组排序打磨](26-10-01-2138-feat-webui-shows-grouping-research.html) — 追剧视图已加但不完善: 同剧判定需调研头脑风暴, 组内按季/集排序, 多站点辅种不分开显示
 - [feat] [tracker error/warning 状态展示, 且可配置忽略错误或警告](26-10-01-2138-feat-webui-tracker-error-warning-state.html) — 为种子/组的 tracker 状态增加 error/warning 呈现, 并支持配置忽略(不告警不阻断)
 - [question] [WEBUI 流量历史图做不做(待取舍)](26-10-01-2138-question-webui-traffic-history-chart.html) — [待取舍] 是否为 WEBUI 增加流量历史图, 与单种/全局统计重设计同族
-- [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui
 - [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 - [feat] [设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色](26-10-01-2137-feat-webui-settings-help-followup.html) — 「?」说明全面改写(Done)后的遗漏: 站点设置「删除标签格式」、自动化「彻底删除标签」等; 且「?」按钮边框与发光颜色应随选项色(危险项红等)
 - [bug] [WEBUI 批量操作引发 WARNING 桌面通知](26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
@@ -90,6 +89,7 @@
 
 ## Done
 
+- [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui
 - [chore] [kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py](26-10-01-2012-chore-kb-index-missing-issues-gen.html) — kb.index 的 16 个索引不含 create-issue 的 gen_issues_index.py, 改 issue 状态后跑 kb.index 不迁移 issues/_index.md 状态分区, 须单独补跑; 收编与否待定调
 - [docs] [tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享实例」口径, 深拷贝根修后过时](26-10-01-2012-docs-test-ui-stale-fakeconfig-comment.html) — FakeConfig 根修(54c83ac3 改 deepcopy 实例属性)后, test_ui.py:41 注释理由已失效; 保守无害, 随下次触碰 test_ui 顺手校正
 - [test] [tests/test_config.py 另有 5 对同文件重名测试, 顶层 def 遮蔽致前一条死测试](26-10-01-2012-test-test-config-duplicate-test-names.html) — test_config.py 存在 5 对重名顶层测试(718/793 等), 后者遮蔽前者; 前 4 对逐字相同、第 5 对仅 YAML 样本一字之差; 待重命名/合并并落防复发守阵

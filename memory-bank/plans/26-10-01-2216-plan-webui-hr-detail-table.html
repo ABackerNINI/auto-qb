@@ -6,9 +6,9 @@
 <title>修改计划 · WEBUI HR 在线核实详情表 — 全量详情表与排障视图</title>
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="doc-type" content="plan">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-01-2216">
-<meta name="doc-updated" content="26-10-01-2319">
+<meta name="doc-updated" content="26-10-02-0135">
 <meta name="doc-refs" content="memory-bank/issues/26-10-01-2137-feat-webui-hr-detail-table.html">
 <style>
   :root {
@@ -768,6 +768,10 @@
         <tr>
           <td class="t-mono">v2 · 26-10-01-2319</td>
           <td>用户拍板六项全按推荐项(①a ②b ③a ④b ⑤a ⑥a, §10 已回填), 默认项(表① 含失踪行)维持; <b>阶段 1 开工并落地</b>: ① 明细导出 <code>hr/status.py</code> 新增 <code>EntryDetail</code>/<code>entry_details()</code>(§3 P0+P1 全集, 档位·下载量排序含失踪行, need_seed 人话由 CLI <code>_need_seed_text</code> 上收为同文件口径单点 <code>need_seed_text</code>, CLI 行为不变) + 放行来源人话 <code>SOURCE_TEXTS</code>; ② 新端点 <code>GET /api/hr/sites/{site}/entries</code>(routes/hr.py, 只读, 未启用 400 / 未接入 404 / 线程未启动 409); ③ 测试: 新增 tests/test_hr_status.py(6 例)+ test_web.py 端点 5 例 + 路由金清单 67 条。阶段 2-4 未动。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">v3 · 26-10-02-0135</td>
+          <td><b>四阶段实施完成, doc-status → Done</b>: 阶段1 后端导出(f5ce07bd, 顺带入池 <code>HrEntry.last_seen</code> 无写入点 issue 26-10-01-2335 = 964a55ba) → 阶段2 表① 渲染(d3d4d987) → 阶段3 表② 排障视图(b2b1e96d) → 阶段4 收官(本笔): 契约守阵 <code>test_frontend_hr_contract_keys_match_backend</code>(两表前端消费键 ⊆ 后端 to_dict 键集, 通电即抓出存量幻键 <code>ls.lane_text</code> —— LaneStatus 无此字段致波次表档位徽章人话渲染为空, 属阶段3 交付缺陷, 守阵以「已知幻键白名单恰为一条」钉住, 修复待拍板) + test.full <b>2000 passed + 3 skipped / 93%</b>(综合口径 16,517/17,723 = 93.20%, 基线切片 testing/baselines/26-10-02-0135) + TODO.md 核实(计划点名的 L15+L196 两条已在开工前清账 c1b6d53f 先行移除, 原文核实确为本诉求) + 收尾回写(issue/档案/切片/progress/modules/README/pitfalls)。遗留: §11 手动走查(需真实 qB 与 HR 站点数据)留用户。</td>
         </tr>
       </tbody>
     </table>
