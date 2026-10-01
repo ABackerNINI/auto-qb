@@ -1,9 +1,9 @@
 # 26-10-01-test-ui-smoke-clearance — issue 0602 双案清偿: 冒烟列宽守阵选键 + CTX-03 多选落点
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-01
-**Updated:** 2026-10-01 19:42
-**Summary:** 同一认领清偿两条 26-09-30-0602 UI 冒烟失败。A(隐藏列宽度保留): 定性为用例选键缺陷 —— 2026-09-28 辅种扩列加 hide:true 默认隐藏列后 colHidden[0] 常驻 amount_left, 从未固化过意图宽度, 读不回是双轨模型正确行为; 修 harness 改为隐藏前直取 _visibleCols[2].key, prism 实测 key=upspeed 前=后="88px" 转绿。B(CTX-03 多选): 定性为 harness 落点缺陷 —— 行几何中心被行内 .site-chip(@click.stop=按站点筛选, 设计行为)占据, 修饰键点击被芯片吞掉到不了行 handler; 排除 ElementHandle 脱挂(节点 24/24 存活)与真实 UI 缺陷(改落点后语义不变)。B 修复随第二笔提交。
+**Updated:** 2026-10-01 20:10
+**Summary:** 同一认领清偿两条 26-09-30-0602 UI 冒烟失败(分两笔提交, 第一笔 9aeb4400)。A(隐藏列宽度保留): 定性为用例选键缺陷 —— 2026-09-28 辅种扩列加 hide:true 默认隐藏列后 colHidden[0] 常驻 amount_left, 从未固化过意图宽度, 读不回是双轨模型正确行为; 修 harness 隐藏前直取 _visibleCols[2].key。B(CTX-03 多选): 定性为 harness 落点缺陷 —— 行几何中心被行内 .site-chip(@click.stop=按站点筛选, 设计行为)占据, 修饰键点击被芯片吞掉到不了行 handler; 探针实测排除 ElementHandle 脱挂(节点 24/24 存活)与真实 UI 缺陷; 修法 = Ctrl+click 落点改行左缘 (8,8)。双 UI 全量冒烟 96 项失败 0 项; test.quick 1909 passed。
 **Topics:** test-ui-smoke-clearance-issue-clearance
 **Refs:** memory-bank/issues/26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve.html, memory-bank/issues/26-09-30-0602-test-ui-smoke-ctx03-multiselect.html
 
@@ -39,12 +39,13 @@
 | A 定性(选键缺陷, 产品正确) | ✅ 完成 | hide:true 播种 + 固化只含可见列; 92px=templateMinPx 合成 |
 | A 修复 + 验证 | ✅ 完成 | 守阵 3 改隐藏前取 key; prism key=upspeed 前=后="88px" PASS |
 | B 定性(落点缺陷, 非产品) | ✅ 完成 | 探针实测点击落 .site-chip 被 @click.stop 吞; 节点未脱挂 |
-| B 修复 + 验证 | ⬜ 待第二笔 | 落点 (8,8); 提交 2 前实测 |
-| 双 UI 全量冒烟 + test.quick | ⬜ 待第二笔后 | 全绿数字随第二笔 |
-| issue A 清偿 + 索引 + 提交 1 | ✅ 完成 | 见进度日志 |
-| issue B 清偿 + 索引 + 提交 2 | ⬜ 待第二笔 | 档案随提交 2 翻 Done |
+| B 修复 + 验证 | ✅ 完成 | 两处 Ctrl+click 落点 (8,8); prism 两条 CTX-03 PASS |
+| 双 UI 全量冒烟 + test.quick | ✅ 完成 | 双 UI 96 项失败 0 项; test.quick 1909 passed 3 skipped |
+| issue A 清偿 + 索引 + 提交 1 | ✅ 完成 | hash 9aeb4400 |
+| issue B 清偿 + 索引 + 提交 2 | ✅ 完成 | hash 见本笔提交输出(档案随提交 2 入库) |
 
 ## 进度日志
 
 - **2026-10-01 19:30** 同步成功 9486a7cd。读两份 issue / pitfalls 索引(web-ui+testing: columns-persist / smoke)/ memory-bank SKILL / 参照 2212 清偿链写法。起桩服务(8139)复现三条 FAIL。跨工作区查重(5 个 clone)无 ui-smoke 同名 slug, 建本档案。
-- **2026-10-01 19:52** A 修复落盘(守阵 3 隐藏前取 key); prism 实测 **列设置·隐藏列宽度保留 PASS — key=upspeed 前="88px" 后="88px"**, 其余用例无回归(CTX-03 辅种组行本轮自绿, 间歇性再次佐证)。issue A 报告 Done + doc-refs 回指本档案, 索引重建, 待提交 1。
+- **2026-10-01 19:52** A 修复落盘(守阵 3 隐藏前取 key); prism 实测 **列设置·隐藏列宽度保留 PASS — key=upspeed 前="88px" 后="88px"**, 其余用例无回归(CTX-03 辅种组行本轮自绿, 间歇性再次佐证)。issue A 报告 Done + doc-refs 回指本档案, 索引重建。首跑 ship.commit 被拦(远端 c486a4ee 与本地改动重叠): 按 failure 行指引 stash -u → sync(同步成功 c486a4ee) → pop → tasks/_index.md 冲突以 HEAD 版 + kb.index 重新生成化解 → 合并基线上复测 test.quick **1909 passed, 3 skipped (21.23s)** → 重跑 ship.commit **提交成功 9aeb4400**。注: issue B 报告的 doc-refs 回指 meta 随第一笔先落(认领链守阵 test_claim_chain_is_bidirectional 要求每笔闭环), 状态翻转与清偿内容仍随第二笔。
+- **2026-10-01 20:05** B 修复落盘(两处 CTX-03 Ctrl+click 落点 (8,8)); prism 实测 **CTX-03 追剧集行 PASS(菜单升级批量暂停) / CTX-03 辅种组行 PASS(选中 2 组)**; 双 UI 全量冒烟 **96 项失败 0 项**。issue B 报告 Done(徽标/meta/状态日志/复验/修复后补充), 本档案翻 Done, 索引重建(kb.index + gen_issues_index.py), 合并基线 test.quick 复测后随第二笔提交。

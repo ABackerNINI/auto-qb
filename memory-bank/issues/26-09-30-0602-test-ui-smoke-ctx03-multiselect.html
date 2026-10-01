@@ -8,7 +8,7 @@
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="ui-smoke-ctx03-multiselect">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-01-test-ui-smoke-clearance.md">
 <meta name="issue-title" content="冒烟 CTX-03 多选右键批量菜单: 追剧集行确定性失败 + 辅种组行抖动">
 <meta name="issue-summary" content="dev.harness 两条 CTX-03 多选用例失败(追剧集行 100% 复现/辅种组行间歇), stash 前后对照确认先在于键盘快捷键 W1-W4 之前; Ctrl+click 选择在冒烟完整链路下不生效而孤立探针正常, 疑似轮询重渲染与 ElementHandle 的竞态或真实 UI 缺陷, 待查">
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-30-0602-test-ui-smoke-ctx03-multiselect</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-30 06:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -164,11 +164,13 @@ FAIL  [atlas] CTX-03 辅种视图: 选中多组右键 -&gt; 批量菜单 — 选
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-30 06:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 19:30 — 复验认领，状态 <strong>In Progress</strong>（桩服务实测追剧集行仍复现; 仪器化探针开始定性 —— 修饰键点击落在行内 .site-chip 被 @click.stop 吞掉; 任务档案：<a href="../tasks/26-10-01-test-ui-smoke-clearance.md">tasks/26-10-01-test-ui-smoke-clearance.md</a>）</li>
+      <li>2026-10-01 20:05 — 清偿完成，状态 <strong>Done</strong>（定性 = harness 落点缺陷, 排除 ElementHandle 脱挂与真实 UI 缺陷; 修法 = Ctrl+click 落点改行左缘 (8,8); prism 两条 CTX-03 PASS, 双 UI 全量 96 项失败 0 项）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-01 19:30 <strong>仍复现</strong> —— 桩服务 <code>scripts/ui_harness.py --port 8139</code> + <code>ui_smoke.cjs --ui prism</code> 实测追剧集行 FAIL(菜单单目标), 与入池记录一致。仪器化探针(document 捕获级事件落点记录 + vm 方法覆写 + 行 DOM expando 存活检查)定性: <strong>harness 落点缺陷, 非真实 UI 缺陷</strong>。实测 ctrl+click 追剧集行 ep-1 的 mousedown/mouseup/click <strong>全部落在行内 <code>.site-chip</code></strong>(722,551) —— 芯片挂 <code>@click.stop="filterFromChip('site',...)"</code>(tpl/shows.html:87, 按站点筛选是芯片自身的交互设计), 行 handler 根本收不到(kbCursor 不变, onShowEpClick 未被调用); 右键 ep-1 时选择集不含 ep-1 → <code>_ctxMulti</code> inSel=false → 单目标菜单 —— 断言失败的每一环都是<strong>选择根本没发生</strong>。辅种组行两次 ctrl+click 同样全落 <code>.site-chip</code>(tpl/groups.html:79 同款)且附赠把 siteFilter 置 f-on。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（harness, 2026-10-01）</strong>: 两处 CTX-03 的 Ctrl+click 加 <code>position: { x: 8, y: 8 }</code> 落到行左缘名称列(无任何 .stop 交互后代), 真实修饰键路径(selection.js <code>_toggleUnit</code>/<code>toggleGroupSel</code>)不变; 右键不动(chip 无 contextmenu.stop, 冒泡到行, 实测一直正常)。<strong>定性改判</strong>: §5 剩余假设二选一<strong>两个都不成立</strong> —— a) ElementHandle 脱挂: 行 DOM expando 24/24 存活, 节点未被轮询重渲染替换, 点击真实落在了行内元素上(只是落错了元素); b) 真实 UI 缺陷: 点击到达行 handler 时修饰键选择工作正常(孤立探针 + 本探针 ep-2 行均证)。「间歇」的来源 = 行 0/1 的芯片布局随前序步骤(成员 paused 状态文案/筛选 f-on)变化, 行几何中心是否被芯片盖住随之漂移。<strong>验证</strong>: prism 冒烟实测两条 CTX-03 均 PASS(追剧集行菜单升级批量暂停 / 辅种组行选中 2 组), 双 UI 全量 <strong>96 项失败 0 项</strong>(2026-10-01 20:05)。§6 方向一(改测试工具落点)采纳, 方向二不适用。任务档案: <a href="../tasks/26-10-01-test-ui-smoke-clearance.md">tasks/26-10-01-test-ui-smoke-clearance.md</a>。</p>
   </section>
 
   <footer>

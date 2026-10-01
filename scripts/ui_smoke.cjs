@@ -1138,12 +1138,20 @@ async function smokeUi(browser, ui) {
      * 本条的职责是证明 menu.multi 在**三条视图**上都接上了, 不是只在种子页生效
      * (三视图各有独立的 open*Menu: openMenu / openMemberMenu / openShowMenu / openShowEpMenu)。
      */
+    /*
+     * !落点必须在行左缘(名称列, 无 .stop 交互后代), 不能用默认的行几何中心 ——
+     * 行内的 .site-chip 挂着 @click.stop="filterFromChip(...)"(按站点筛选, 芯片自身的
+     * 交互设计), 集行/组行中心恰被芯片占据时修饰键点击被芯片吞掉, 行 handler 根本
+     * 收不到, 表现成"Ctrl+click 多选不生效"(issue 26-09-30-0602, 探针实测点击落在
+     * site-chip 上; ElementHandle 未脱挂 —— data-probe 节点 24/24 存活)。右键不动:
+     * chip 无 contextmenu.stop, 事件冒泡到行, openShowEpMenu/toggleGroupSel 照常。
+     */
     {
       const ep2 = await page.$$(".group-row.ep-row");
       let texts = [];
       if (ep2.length >= 2) {
-        await ep2[0].click({ modifiers: ["Control"] });   // 真实修饰键路径(selection.js 的 _toggleUnit)
-        await ep2[1].click({ modifiers: ["Control"] });
+        await ep2[0].click({ modifiers: ["Control"], position: { x: 8, y: 8 } });   // 真实修饰键路径(selection.js 的 _toggleUnit)
+        await ep2[1].click({ modifiers: ["Control"], position: { x: 8, y: 8 } });
         await ep2[0].click({ button: "right" });
         await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
         texts = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
@@ -1168,8 +1176,8 @@ async function smokeUi(browser, ui) {
       const g2 = await page.$$('.group-row[data-table="group"]');
       let texts = [];
       if (g2.length >= 2) {
-        await g2[0].click({ modifiers: ["Control"] });    // 真实修饰键路径(toggleGroupSel)
-        await g2[1].click({ modifiers: ["Control"] });
+        await g2[0].click({ modifiers: ["Control"], position: { x: 8, y: 8 } });    // 真实修饰键路径(toggleGroupSel); 落点理由见上面追剧集行那条
+        await g2[1].click({ modifiers: ["Control"], position: { x: 8, y: 8 } });
         const selN = await readInst(page, "vm.selGroups.length");
         await g2[0].click({ button: "right" });
         await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
