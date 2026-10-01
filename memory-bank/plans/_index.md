@@ -26,6 +26,7 @@
 
 ## Open
 
+- [26-10-01-2216] [修改计划 · WEBUI HR 在线核实详情表 — 全量详情表与排障视图](26-10-01-2216-plan-webui-hr-detail-table.html) — `backend-partial-hr-verify`
 - [26-10-01-2157] [测试覆盖率提升 — 分阶段执行计划 (91% → 96%)](26-10-01-2157-plan-test-coverage-uplift.html) — `test-coverage-uplift`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
