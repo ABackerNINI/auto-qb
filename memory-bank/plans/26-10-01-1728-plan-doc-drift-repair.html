@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="doc-drift-repair">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-01-1728">
+<meta name="doc-updated" content="26-10-01-1728">
+<meta name="doc-refs" content="memory-bank/plans/26-09-30-1819-plan-kernel-module-refactor.html,memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.html,memory-bank/reports/26-10-01-0918-report-kernel-module-refactor-audit.html">
+<title>计划 · 知识库文档漂移分段修复 — 内核化重构后四波欠账的回写路线</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #11151a;
+    --paper: #151b22;
+    --ink: #dde4ec;
+    --ink-2: #b3bdc8;
+    --mut: #8593a1;
+    --line: rgba(255,255,255,.09);
+    --line-soft: rgba(255,255,255,.05);
+    --acc: #d9a35a;
+    --code-bg: #1b222b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: auto; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Source Han Sans SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    font-size: 15.5px;
+    line-height: 1.68;
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono {
+    font-family: "Cascadia Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 40px 96px;
+    display: grid;
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: 56px;
+  }
+  /* ---- TOC ---- */
+  nav.toc { position: sticky; top: 40px; align-self: start; font-size: 12.5px; }
+  nav.toc .toc-head {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--mut); margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--ink-2); text-decoration: none;
+    padding: 4px 0 4px 14px; border-left: 1px solid var(--line);
+  }
+  nav.toc a + a { margin-top: 1px; }
+  @media (max-width: 900px) {
+    .wrap { grid-template-columns: minmax(0, 1fr); padding: 40px 22px 72px; }
+    nav.toc { display: none; }
+  }
+  /* ---- header ---- */
+  header.doc { margin-bottom: 8px; }
+  .kicker {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--mut); margin-bottom: 18px;
+  }
+  h1 {
+    font-size: 38px; line-height: 1.16; font-weight: 600;
+    letter-spacing: -0.02em; margin-bottom: 14px;
+  }
+  .lede { font-size: 16.5px; color: var(--ink-2); max-width: 68ch; margin-bottom: 26px; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center;
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 11.5px; color: var(--mut);
+    padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  }
+  .chip {
+    border: 1px solid var(--line); padding: 2px 9px; border-radius: 2px;
+    color: var(--acc);
+  }
+  .meta-row b { color: var(--ink-2); font-weight: 500; }
+  /* ---- sections ---- */
+  section { margin-top: 58px; }
+  .sec-kicker {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--mut); margin-bottom: 6px;
+  }
+  h2 {
+    font-size: 23px; font-weight: 600; letter-spacing: -0.01em;
+    line-height: 1.25; margin-bottom: 18px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 16px; font-weight: 600; margin: 30px 0 10px;
+  }
+  p { max-width: 74ch; margin-bottom: 12px; color: var(--ink); }
+  p.dim { color: var(--ink-2); }
+  ul.plain { max-width: 74ch; margin: 0 0 14px 0; padding-left: 20px; }
+  ul.plain li { margin-bottom: 6px; }
+  code {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 12.5px; background: var(--code-bg);
+    padding: 1px 5px; border-radius: 2px; color: var(--ink);
+  }
+  a { color: var(--acc); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  /* ---- tables ---- */
+  table {
+    width: 100%; border-collapse: collapse; margin: 14px 0 20px;
+    font-size: 13.5px; line-height: 1.55;
+  }
+  th {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--mut); text-align: left;
+    padding: 7px 12px 7px 0; border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line-soft);
+    vertical-align: top; color: var(--ink-2);
+  }
+  td:first-child { color: var(--ink); }
+  td code, th code { font-size: 11.5px; }
+  .num { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; }
+  /* ---- callout (hairline, no card) ---- */
+  .note {
+    border-left: 1px solid var(--line);
+    padding: 2px 0 2px 18px; margin: 16px 0; max-width: 74ch;
+    color: var(--ink-2); font-size: 14px;
+  }
+  .note b { color: var(--ink); font-weight: 550; }
+  /* ---- phase block ---- */
+  .phase-head {
+    display: flex; align-items: baseline; gap: 14px; margin: 34px 0 4px;
+  }
+  .phase-no {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 12px; letter-spacing: .06em; color: var(--ink);
+    border: 1px solid var(--line); padding: 2px 8px; border-radius: 2px;
+    white-space: nowrap;
+  }
+  .phase-title { font-size: 17px; font-weight: 600; }
+  .phase-scale {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 11px; color: var(--mut); margin-left: auto; letter-spacing: .06em;
+  }
+  /* ---- colophon ---- */
+  footer.colophon {
+    margin-top: 72px; padding-top: 18px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--mut); line-height: 1.7;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="toc">
+    <div class="toc-head">目录</div>
+    <a href="#s0">0 · 结论</a>
+    <a href="#s1">1 · 背景与动机</a>
+    <a href="#s2">2 · 审计方法与证据面</a>
+    <a href="#s3">3 · 漂移清单总览</a>
+    <a href="#s4">4 · 分段实施 S1–S5</a>
+    <a href="#s5">5 · 范围与豁免</a>
+    <a href="#s6">6 · 待决事项</a>
+    <a href="#s7">7 · 执行守则 (机检面)</a>
+    <a href="#s8">8 · 收尾 DoD</a>
+    <a href="#s9">变更记录</a>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <div class="kicker">Plan · memory-bank/plans · doc-drift-repair</div>
+      <h1>知识库文档漂移分段修复</h1>
+      <p class="lede">内核化重构 P0–P6 与别名层处置 W0–W3 落地后, 全库文档相对代码出现四波欠账式漂移。本计划把审计确认的漂移按「误导风险优先」切成五段回写, 每段带文件清单、修法与验收口径。</p>
+      <div class="meta-row">
+        <span class="chip">Open</span>
+        <span>added <b>26-10-01-1728</b></span>
+        <span>审计基线 <b>1616ea1a</b></span>
+        <span>规模 <b>P1×9 · P2×63 · P3≈45</b></span>
+        <span>涉及 <b>25 份文件</b></span>
+        <span>重写级 <b>6 份</b></span>
+      </div>
+    </header>
+
+    <section id="s0">
+      <div class="sec-kicker">Section 00</div>
+      <h2>0 · 结论</h2>
+      <p>全库活文档按 4 个方向逐条对照代码核查完毕 (只读, 未改任何文件): <b>P1×9、P2×63、P3 约 45 处, 分布在 25 份文件</b>, 其中 6 份需要重写级回写。用户面文档 (<code>README.md</code> + <code>docs/</code>) 整体健康、无 P1; 最重的是 <code>productContext.md</code> (4 处机制反转) 与 <code>memory-bank/systemPatterns/</code> 三份架构文档。</p>
+      <div class="note"><b>关键盲区:</b> 现有机检只守结构与坏链 (<code>tests/test_memory_bank.py</code> + <code>doc.links</code>), <b>没有任何「文档内容 vs 代码」机检</b> —— 本批漂移全部游离在守卫之外, 只能按本计划人工分批回写, 每段收尾靠抽查兜底。</div>
+    </section>
+
+    <section id="s1">
+      <div class="sec-kicker">Section 01</div>
+      <h2>1 · 背景与动机</h2>
+      <p>2026-09-30 至 10-01, 仓库完成了两场相邻的结构改造: 内核化重构 P0–P6 (QbManager 瘦身为核心域, 能力迁至 ctx 服务与十个 Module, 见 <code>memory-bank/plans/26-09-30-1819-plan-kernel-module-refactor.html</code>) 与别名层处置 W0–W3 (<code>_WEB_STATE_ALIAS</code> 与五节委托整体退役, 见 <code>memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.html</code>)。重构期已对当事文档做了多轮回写 (P6 文档回写、W3 五件回写、实施审计报告 <code>memory-bank/reports/26-10-01-0918-report-kernel-module-refactor-audit.html</code> 已交付并通过验收), 但外围知识库与用户面文档仍残留大量旧世界表述。</p>
+      <p>用户 26-10-01 判定「底层经过重构, 文档可能出现很多漂移」, 要求先审计再出分段修复计划; 本计划即审计产物, 立档前已获用户确认。</p>
+    </section>
+
+    <section id="s2">
+      <div class="sec-kicker">Section 02</div>
+      <h2>2 · 审计方法与证据面</h2>
+      <ul class="plain">
+        <li><b>机械检查</b>: <code>docs_drift.py --top 400</code> 共 322 条发现, 过滤后项目自身文档面仅个位数 —— 主体是 vendored 第三方 skill 资产的坏链 (见 §5 豁免)。</li>
+        <li><b>四个只读探查面</b> (逐文件通读 + grep/read 对照代码, 附 <code>路径:行号</code> 双侧证据): ① <code>memory-bank/modules/</code> 全部 9 份 + <code>conventions/modules.md</code>; ② <code>systemPatterns/</code> 全部 10 份 + <code>techContext.md</code> + 库 README; ③ 根 <code>README.md</code> + <code>docs/</code> 5 份; ④ <code>conventions/</code> + <code>pitfalls/</code> 全类 + <code>config-reference/</code> + productContext / projectbrief / progress + <code>tests/test_memory_bank.py</code> 守卫面。</li>
+        <li><b>主会话抽查</b>: 载荷最大的 P1 断言逐条复核 —— <code>QbManager</code> 类声明仅剩 2 个 mixin (<code>core/qbmanager.py:142-145</code>)、<code>_WEB_STATE_ALIAS</code> 全库仅存于反复活守阵、<code>taskqueue.py</code> 无 <code>remove_torrent</code>、<code>@register_condition</code> 计 13、<code>core/state.py:183</code> <code>maybe_flush</code> 周期落盘在位。</li>
+        <li><b>口径</b>: 坑档 / 切片 / 档案等历史记录中「当时」的路径按时间点记录豁免, 只把「面向未来动作的指引踩空」与「机制描述与代码相反」计为漂移。</li>
+      </ul>
+    </section>
+
+    <section id="s3">
+      <div class="sec-kicker">Section 03</div>
+      <h2>3 · 漂移清单总览</h2>
+
+      <h3>3.1 四波根因</h3>
+      <table>
+        <tr><th style="width:26%">波次</th><th>内容</th><th style="width:38%">主要受害面</th></tr>
+        <tr><td>① 内核化重构未回写</td><td>mixin→十模块、host hooks、ctx 服务化、相位广播; 文档仍写 8-mixin 组合、「注册零模块」、内核直调业务步骤</td><td><code>systemPatterns/overview.md</code> · <code>main-loop.md</code> · <code>web-runtime.md</code> · <code>modules/core-runtime.md</code></td></tr>
+        <tr><td>② 别名层处置未回写</td><td>文档仍把 <code>_WEB_STATE_ALIAS</code> 转发层与 qbmanager 单行委托描述为现存 (已删, 有反复活守阵)</td><td><code>web-runtime.md</code> · <code>client-and-state.md</code> · <code>core-runtime.md</code> · <code>techContext.md</code></td></tr>
+        <tr><td>③ 更早演进欠账</td><td>state 落盘改周期制 (120s)、torrents 包化、视图字段扩容、前端三层拆分 + console 第三 UI、规则 13 条件 / 5 触发、schema v3</td><td><code>productContext.md</code> · <code>techContext.md</code> · <code>config-reference/</code> · <code>data-layer.md</code></td></tr>
+        <tr><td>④ 旧文件名指路</td><td><code>web.py</code> / <code>config.py</code> / <code>config/schema.py</code> / <code>config/validation.py</code> / <code>core/mixins/tags.py</code> / <code>ai/</code> 等 8 处, 照找必踩空</td><td>pitfalls 3 份 · <code>config-reference/</code> 2 份 · <code>code-style.md</code> · <code>productContext.md</code></td></tr>
+      </table>
+
+      <h3>3.2 重写级文件 (6 份)</h3>
+      <table>
+        <tr><th style="width:34%">文件</th><th>重写理由</th></tr>
+        <tr><td><code>systemPatterns/overview.md</code></td><td>P1×2 (8-mixin 组合、注册零模块) + P2×2, 架构主图整体过时</td></tr>
+        <tr><td><code>systemPatterns/main-loop.md</code></td><td>P1×1 (<code>task_queue.remove_torrent</code> 已不存在) + P2×5, run() 伪代码与相位管线整体过时</td></tr>
+        <tr><td><code>systemPatterns/web-runtime.md</code></td><td>P1×1 (<code>_WEB_STATE_ALIAS</code>) + P2×5, 字段名 / 归属 / 常量位置成批过时, SSE 缺位</td></tr>
+        <tr><td><code>modules/core-runtime.md</code></td><td>P1×2 (别名层仍描述为现存、core/modules「3 文件两模块」) + P2×4</td></tr>
+        <tr><td><code>systemPatterns/client-and-state.md</code></td><td>P1×1 (qbmanager 单行委托 8 方法已删) + P3×3, 状态入口需整体改写为 ctx.state.*</td></tr>
+        <tr><td><code>productContext.md</code></td><td>P2×4 机制反转 (仅退出落盘、无变化退避、触发仅 interval、<code>ai/</code> 目录), 成段重写</td></tr>
+      </table>
+      <p class="dim">其余 19 份为单点修 (1–4 处/份), 明细已并入 §4 各段表格。</p>
+    </section>
+
+    <section id="s4">
+      <div class="sec-kicker">Section 04</div>
+      <h2>4 · 分段实施 S1–S5</h2>
+      <p>排序原则: 先修会误导改代码的 (P1 架构描述), 再修指路与机制反转, 再中度批, 再用户面, 最后清扫。每段收尾跑结构机检 (<code>tests/test_memory_bank.py</code> 覆盖的结构 / 坏链判红) + <code>commands run kb.check</code>; 动了主题文件三行头就重跑 <code>commands run kb.index</code>。</p>
+
+      <div class="phase-head" id="s4-p1">
+        <span class="phase-no">S1</span>
+        <span class="phase-title">P1 架构描述重写 (5 份, 7 处 P1)</span>
+        <span class="phase-scale">规模 大</span>
+      </div>
+      <table>
+        <tr><th style="width:30%">文件</th><th>修成什么 (证据坐标)</th></tr>
+        <tr>
+          <td><code>systemPatterns/overview.md</code></td>
+          <td>L14-17 8-mixin 组合 → 「2 表现层 mixin + 十模块注册」(<code>qbmanager.py:142-145</code>, 装配序 <code>:158-234</code>); L32「注册零模块」→ 已全注册; L29 仅退出落盘 → 周期 <code>maybe_flush</code> 120s + 退出即落盘 (<code>qbmanager.py:530-535/577-578</code>); L27 15 条件 / 11 动作 → 13 / 12; L20-24 数据图 <code>torrents.py</code> → <code>torrents/</code> 包, 补 kind=<code>rule-event</code></td>
+        </tr>
+        <tr>
+          <td><code>systemPatterns/main-loop.md</code></td>
+          <td>L86 <code>task_queue.remove_torrent</code> → 整段改为「不显式清理, run_due 到期时 handler 检测种子缺失自然消亡」(<code>qbmanager.py:818</code>; TaskQueue 无该方法); L12/18-19/27/29-38 run() 伪代码 → 经宿主 hooks (<code>run_command_line / run_sync_line / run_task_line</code>, <code>qbmanager.py:485/663/679</code>, 三步收尾在 <code>webui/module.py:82-106</code>); L49/68 重连语义 → 非托管首连抛 <code>QbConnectError</code> 干净退出, 运行期指数退避至 30s (<code>qbmanager.py:441-449/339-351</code>); L74-88 步骤清单 → 相位广播表 (full_round / transitions / events_removed / events_added / torrents_added / removed_scan / post + queue_rebuilt / rebuild_runtime, <code>qbmanager.py:726-832</code>), 更正 3 个旧方法名 (<code>_match_tracker_conf</code> / <code>_apply_speed_limit</code> / <code>_add_episode_tags</code>)</td>
+        </tr>
+        <tr>
+          <td><code>systemPatterns/web-runtime.md</code></td>
+          <td>L9 <code>_WEB_STATE_ALIAS</code> 过渡层段 → 已退役 (2026-10-01 W3, 反复活守阵 <code>tests/test_qbmanager_alias_freeze.py</code>); L10 <code>manager._web_token</code> → <code>manager.web.token</code> (<code>webui/server/auth.py:59/67</code>); L11 常量位置 <code>web_runtime.py</code> → <code>webui/runtime.py:52</code>; L12 <code>ensure_group_state</code> → <code>ensure_state(rid, view)</code> (<code>runtime.py:613-642</code>); L13 <code>_search_index</code> → <code>search_index</code>; L26 <code>SpeedCurveMixin._publish_traffic</code> 整体替换 → <code>ctx.web.set_traffic_view()</code> 推送 (<code>speed_curve_mod.py:134/239</code>); L16 <code>qbmanager._hr_view_fields</code> → views 装配期统一计算 (<code>webui/views.py:240-339</code>); 增补 SSE 推送节 (<code>runtime.py:116-164</code>, EVENT_QUEUE_MAX / SSE_KEEPALIVE_S)</td>
+        </tr>
+        <tr>
+          <td><code>systemPatterns/client-and-state.md</code></td>
+          <td>L26 「8 方法留单行委托 (31 处测试调用点零改动)」→ 整段改写为 <code>ctx.state.*</code> 单点入口 (<code>StateService</code>: save / maybe_flush / record_execution / get_exec_record / cleanup_orphan_tmp, <code>core/state.py:117/149/183</code>; 委托已随 W3 删除, <code>qbmanager.py:27-28/272-273</code>); L33 补「state.json 当前 v3」(<code>infra/versioning.py:28</code>)</td>
+        </tr>
+        <tr>
+          <td><code>modules/core-runtime.md</code></td>
+          <td>L14 「兼容层 <code>_WEB_STATE_ALIAS</code> 供既有调用方」→ 已退役 + 守阵指向; L14 8-mixin → 2 mixin; L14 已迁方法清单更正 (<code>_create_torrent_tasks</code>→<code>rules_mod.py:397</code>, <code>_handle_maintenance</code>→MaintenanceModule, <code>_apply_web_config</code>→WebUIModule.apply); L16 core/modules「140 行 / 3 文件 / 两模块」→ 9 文件 2348 行 8 模块 + webui/hr 两门面共十模块; L18 <code>flush_receipts</code> → <code>flush_truths</code> (<code>webui/runtime.py:328</code>); L19 routes 8 域 → 11 域 (<code>routes/__init__.py:6-20</code>, 多 keys / hr / sites); L15 <code>core/module.py</code> 291 → 353 行</td>
+        </tr>
+      </table>
+      <p class="dim">验收: 退役名 grep 零残留 (<code>_WEB_STATE_ALIAS</code> / <code>remove_torrent</code> / <code>flush_receipts</code> / <code>_hr_view_fields</code> / <code>SpeedCurveMixin._publish_traffic</code> / <code>ops_recheck</code> / <code>_web_token</code> / <code>web_runtime.py</code>); 每条新断言带代码坐标; <code>commands run kb.check</code> 绿。</p>
+
+      <div class="phase-head" id="s4-p2">
+        <span class="phase-no">S2</span>
+        <span class="phase-title">误导指路与机制反转单点修 (9 份, 2 处 P1)</span>
+        <span class="phase-scale">规模 中</span>
+      </div>
+      <table>
+        <tr><th style="width:30%">文件</th><th>修什么</th></tr>
+        <tr><td><code>modules/overview.md</code></td><td>L46 HR 打标消费点 <code>core/mixins/tags.py</code> (文件已不存在) → <code>core/modules/maintenance_mod.py:277-298</code> (P1); L39-43 四处 <code>config/validation.py</code> → <code>config/validation/</code> 包; L46 hr 本地端点 3 → 4 (补 API_REFRESH, <code>hr/server.py:219-227</code>); hr 子模块清单补 <code>fetcher.py</code> / <code>model.py</code></td></tr>
+        <tr><td><code>techContext.md</code></td><td>L59 「程序退出时才写盘」(P1) → 周期落盘默认 120s + 动作写点即时 save (<code>qbmanager.py:535</code>, <code>ops_mod.py:438/483/508</code>); L10 <code>web.py</code> → <code>webui/server/</code> (factory.py), 静态目录补 console; L17 依赖 12 → 10 (pyproject dependencies); L62 <code>qbmanager._new_client()</code> → <code>core/qbclient.py:29</code></td></tr>
+        <tr><td><code>productContext.md</code></td><td>成段重写: L40 仅退出落盘 → 周期制; L37 无变化自适应退避已移除 (恒定分档 1.5/2/3s + 失败退避, <code>webui/static/shared/polling.js:91-94</code>); L35 触发时机 5 种 / 条件 13 / 动作 12; L69 目录树 <code>ai/</code> → <code>memory-bank/</code>; L60 测试 29 → 73; L7 版本与 pyproject 对齐</td></tr>
+        <tr><td><code>pitfalls/ops/prod-files.md</code></td><td>L20 「state.json 只在程序退出时覆写」机制句更正为周期落盘 (<code>core/state.py:184-199</code>); 「不许动生产文件」红线结论不动</td></tr>
+        <tr><td><code>pitfalls/web-ui/template-render.md</code></td><td>L27 <code>web.py</code> middleware → <code>webui/server/static_ui.py:49-58</code> (<code>_static_no_cache</code>)</td></tr>
+        <tr><td><code>pitfalls/web-ui/search-views.md</code></td><td>L51-52 <code>WebviewMixin.rebuild_views()</code> → <code>WebUIRuntime.rebuild_views</code> (<code>webui/runtime.py:576</code>, 唯一入口契约不变); L109-116 <code>config/schema.py</code> → <code>config/schema/</code> 包</td></tr>
+        <tr><td><code>config-reference/keys.md</code></td><td>L18 schema_version 默认 2 → 3 (<code>infra/versioning.py:27-31</code>, <code>writer.py:121</code>); L106 <code>web.py</code> 传入 → <code>routes/config.py:111-118</code> + 备份路径单点 <code>server/common.py:52</code></td></tr>
+        <tr><td><code>config-reference/loading-and-write.md</code></td><td>L9 标题 <code>config.py load_config</code> → <code>config/loaders.py:448</code>; L25 <code>web.py</code> 同上; L47 <code>single_instance_lock</code> 「接受但不生效」→ 已无任何接受逻辑, 删该句 (与「未知键拒绝」自洽); L29 <code>config/schema.py</code> → 包</td></tr>
+        <tr><td><code>conventions/code-style.md</code></td><td>L92 <code>config.py</code> 顶部 DEFAULT_* → 默认值单点在 <code>config/models.py</code> dataclass 字段; L102 logging 同名遮蔽前提已消失 → 改为 infra 层相对导入守则 (<code>from ..infra.logging import …</code>); 顺带 L46/L64 mixin 提法、L36 「16 条件」→ 13</td></tr>
+      </table>
+
+      <div class="phase-head" id="s4-p3">
+        <span class="phase-no">S3</span>
+        <span class="phase-title">modules/ 中度批 (6 份)</span>
+        <span class="phase-scale">规模 中</span>
+      </div>
+      <table>
+        <tr><th style="width:30%">文件</th><th>修什么</th></tr>
+        <tr><td><code>modules/core-config.md</code></td><td>models.py 176 → 362 行, 类清单补 HrChannelConfig / HrCheckConfig / SiteHrCheckConfig / WebConfig / NotifyConfig; loaders.py 309 → 550 行, 函数面补 load_web_config / load_notify_config / load_hr_check_config / load_site_hr_check_config / load_fs_config / normalize_schema_version / migrate_config_schema (load_add_episode_tags 已更名 _get_episode_tags); schema/ 5 → 6 文件补 hr.py; 补 config/site_presets.py 与 config/migrations.py 条目; impact.py 补 KERNEL_SECTIONS</td></tr>
+        <tr><td><code>modules/core-domain.md</code></td><td>L29 双界面 → 三界面 (补 webui/static/console/); L29 <code>autoqb_cols_v4</code> → <code>v5</code> (shared/app.js:207, v4 已入 LEGACY_COLS_KEYS, 与 webui-static-contract.md 自相矛盾处一并收口); app.js 411 → 488 行</td></tr>
+        <tr><td><code>modules/rules-and-deps.md</code></td><td>L17 tests 33 → 73 个 test_*.py (补守阵清单); L13 条件 16 → 13; L15 动作 12 确认 (行数更正); L24 依赖图补 qbmanager → webui / hr / core.module+state / infra 边 (内核零 rules import 口径保留); L29 schema 图补 hr.py</td></tr>
+        <tr><td><code>modules/webui-static-contract.md</code></td><td>L9 「app.js 1001 行 + 15 域片段」(09-20 旧口径) → 09-27 三层拆分现状 (app.js 488 行, shared/ 27 个 JS, state/lifecycle 进根组件选项); L11 两套 UI → 三套 (补 console)</td></tr>
+        <tr><td><code>modules/mixins.md</code></td><td>摘要转「历史快照」定位 (现仅剩 2 mixin 组合入口); L5-6 tags 并非独立模块 → 并入 MaintenanceModule (ctx.maintenance, qbmanager.py:222-224)</td></tr>
+        <tr><td><code>conventions/modules.md</code></td><td>L12 十模块目录归属注记 (8 个在 core/modules/ + 2 个门面); L53 838 → 839 行口径; 「内核自有方法 17 / 属性对 7」逐项核实 (client 对是否计入需定口径); L57 baselines 路径补全前缀</td></tr>
+      </table>
+
+      <div class="phase-head" id="s4-p4">
+        <span class="phase-no">S4</span>
+        <span class="phase-title">用户面文档 (4 份)</span>
+        <span class="phase-scale">规模 小</span>
+      </div>
+      <table>
+        <tr><th style="width:30%">文件</th><th>修什么</th></tr>
+        <tr><td><code>README.md</code></td><td>L84 「?? 种条件」占位 → 13, 触发时机补全 5 种; L214 16 → 13 条件; L235 十模块归属更正 (8 个在 core/modules/ + webui/hr 两门面)</td></tr>
+        <tr><td><code>docs/configuration.md</code></td><td>L410 / L495 条件 16 → 13, 条件表补 expr 行 (rules/conditions.py:217-224); L418 / L486-491 触发表补 on_torrent_field_changed + 配套 watch_fields 键 (config/validation/rules.py:159-164); L176 hr_check 键数口径统一 (7 键 vs 8 项列举, 对齐 models.py v3 口径); L244-245 v2→v3 → v1→v2 (config/migrations.py:41)</td></tr>
+        <tr><td><code>docs/deployment.md</code></td><td>L241 <code>core/mixins/grouping.py</code> + 旧代码片段 → <code>core/modules/grouping_mod.py:273</code> 现状 (file_access 抽象 fa.exists + UNDETERMINED 分支, :301-307); L374 state schema v2 → v3 (infra/versioning.py:28); L146-152 卷名示例 <code>auto-qb-clone4_</code> → 泛化或改 clone2 前缀</td></tr>
+        <tr><td><code>docs/hr-online-verify-docs.md</code></td><td>L17 / L85 引用 <code>activeContext/26-09-22-2204-backend-partial-hr-verify.md</code> (不存在, 且 :85 列为「先读」入口) 与 L25 <code>26-09-25-0555-webui-ext-hr-logging.md</code> (不存在) → 改指现存档案 (如 26-09-29-0404-hr-verify-v3-audit) 或删</td></tr>
+      </table>
+
+      <div class="phase-head" id="s4-p5">
+        <span class="phase-no">S5</span>
+        <span class="phase-title">P3 清扫 + 待决件 + 收尾基线</span>
+        <span class="phase-scale">规模 小</span>
+      </div>
+      <table>
+        <tr><th style="width:30%">项</th><th>口径</th></tr>
+        <tr><td>P3 行数 / 计数快照</td><td>只修<b>无</b>「快照披露」头注的 (有披露的按既例豁免); 修时统一标注「实测于 26-10-01」口径, 免得下次无头绪。散布在 modules/ 各份与 productContext / projectbrief / roadmap / code-style 等</td></tr>
+        <tr><td>生成物收口</td><td>全部段完成后统一重跑 <code>commands run kb.index</code> + <code>kb.check</code> + <code>doc.links</code>; plans/_index.md 由生成器重建, 不手改</td></tr>
+        <tr><td>代码注释残留 (待拍板, 见 §6)</td><td>core/state.py:4-5 docstring 仍称单行委托存在 · qbmanager.py:398 引用 mixins/web_commands.py · webui/runtime.py:237 残留 flush_receipts 旧名 · core/mixins/__init__.py docstring 停在 P5 时点 —— 并入本段修, 或按范围守恒入池</td></tr>
+        <tr><td>收尾基线</td><td><code>commands run test.full</code> 立新基线切片 (testing/baselines/, 记实测数字) + activeContext 切片 + progress 迁出</td></tr>
+      </table>
+    </section>
+
+    <section id="s5">
+      <div class="sec-kicker">Section 05</div>
+      <h2>5 · 范围与豁免</h2>
+      <ul class="plain">
+        <li><b>历史件一律不改</b>: activeContext/ 切片、tasks/ 档案、reports/、plans/ 旧件、坑档中「当时」的事故记录 —— 它们是时间点快照, 改了反而毁证据链。豁免口径见 §2。</li>
+        <li><b>AGENTS.md 不动</b>: 8000 字符硬 cap (唯一非债务 cap), 且本次内容无需变更。</li>
+        <li><b>vendored 第三方资产不修</b>: <code>.agents/skills/autoclaw-design-capability/审美相关skill/</code> 等自带文件的坏链与缺脚本引用是 docs_drift 322 条的主体, 属外部资产, 不在本计划范围。</li>
+        <li><b>范围外既有缺陷 (建议届时入池)</b>: <code>.agents/skills/create-issue/SKILL.md</code> 引用不存在的脚本 (<code>agents/skills/create-issue/scripts/new_issue.py</code> / <code>gen_issues_index.py</code>) —— 与本次重构无关, 按范围守恒不入本计划, 需用户确认后入池。</li>
+        <li><b>顺手项</b>: <code>src/auto_qb/mixins/</code> 顶层残留未跟踪的 <code>__pycache__</code> (git 零跟踪, 无任何引用), 修复期间可顺手删除。</li>
+      </ul>
+    </section>
+
+    <section id="s6">
+      <div class="sec-kicker">Section 06</div>
+      <h2>6 · 待决事项</h2>
+      <table>
+        <tr><th style="width:34%">事项</th><th>状态</th></tr>
+        <tr><td>代码注释残留 4 处 (S5 表内) 的归属: 并入 S5 一起修, 还是按范围守恒入池 issue</td><td>用户 26-10-01 未拍板; 默认不动代码文件</td></tr>
+        <tr><td><code>.agents/skills/create-issue/SKILL.md</code> 缺脚本引用入池与否</td><td>建议入池, 待确认</td></tr>
+      </table>
+    </section>
+
+    <section id="s7">
+      <div class="sec-kicker">Section 07</div>
+      <h2>7 · 执行守则 (机检面)</h2>
+      <ul class="plain">
+        <li>主题文件三行头 (标题 + 摘要 + 触发) 改后必跑 <code>commands run kb.index</code> —— 各 <code>_index.md</code> 是生成物, 手改即红 (test_kb_index_is_regenerated)。</li>
+        <li>主题文件名 <code>^[a-z0-9]+(-[a-z0-9]+)*\.md</code>、类名枚举单点在 skill <code>_common.py</code> —— 修复过程<b>不改文件名</b>、不新建目录 (改目录须同步库 README 细路由)。</li>
+        <li>pitfalls 条目的 <code>- **触发** / **判别** / **处置**</code> 三字段行不可删。</li>
+        <li>改名 / 搬家指路修复后跑 <code>commands run doc.links</code> —— 全库相对链接存在性有机检。</li>
+        <li>修「机制描述」类条目时逐条对照本计划附的代码坐标; 机检不守内容, 靠坐标抽查兜底。</li>
+      </ul>
+    </section>
+
+    <section id="s8">
+      <div class="sec-kicker">Section 08</div>
+      <h2>8 · 收尾 DoD</h2>
+      <ul class="plain">
+        <li>每段收尾: <code>commands run kb.check</code> (+ 动了主题文件头则 <code>kb.index</code>); 涉及 <code>docs/</code> / README 的段落加跑 <code>doc.links</code>。</li>
+        <li>全部段收尾: <code>commands run test.full</code> 新建基线切片 (<code>memory-bank/testing/baselines/</code>, 体例按 baseline.md 口径段), activeContext 切片记录本计划各段完成态, 已完成条目迁出 progress。</li>
+        <li>实施本体在 tasks/ 立档案滚动 (跨会话专题, ≥2 会话 / 出现波次表述即满足立档阈值); 本计划冻结方案与取舍, 档案只记执行与验证数字。</li>
+      </ul>
+    </section>
+
+    <section id="s9">
+      <div class="sec-kicker">Section 09</div>
+      <h2>变更记录</h2>
+      <table>
+        <tr><th style="width:22%">时间</th><th>变更</th></tr>
+        <tr><td class="num">26-10-01-1728</td><td>初版立档: 四面审计结论 + S1–S5 分段修复路线; 状态 Open (待逐段实施)。</td></tr>
+      </table>
+    </section>
+
+    <footer class="colophon">
+      形态协议: memory-bank/conventions/doc-forms.md (plan 工位) · 深色口径: conventions/webui.md「HTML 文档一律 dark 主题」 · 索引: plans/_index.md 由生成器重建 (<code>commands run kb.index</code>) · 专题视图: <code>commands run kb.docmap --topic doc-drift-repair</code>
+    </footer>
+  </main>
+</div>
+</body>
+</html>

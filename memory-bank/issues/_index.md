@@ -16,7 +16,7 @@
 |---|---|
 | bug | 7 |
 | perf | 3 |
-| docs | 3 |
+| docs | 5 |
 | test | 4 |
 | refactor | 2 |
 | feat | 5 |
@@ -24,6 +24,8 @@
 
 ## Open
 
+- [docs] [代码内注释残留 4 处: 仍描述已退役的委托层与旧路径](26-10-01-1738-docs-code-comment-drift.html) — 内核化重构+别名层退役后, 4 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring)
+- [docs] [create-issue SKILL.md 记载的脚本路径不解析](26-10-01-1738-docs-create-issue-skill-script-refs.html) — SKILL.md:60/107-108 写 agents/skills/... 缺 .agents/ 前缀, docs_drift 判 missing-script-file; 脚本实存于 .agents/skills/create-issue/scripts/
 - [test] [冒烟「列设置·隐藏列宽保留」确定性失败: 隐藏列的意图宽度读不回](26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve.html) — dev.harness 列设置用例「隐藏列宽度保留」双 UI 100% 失败(key=amount_left 前=undefined 后=92px), stash 对照确认先在于键盘快捷键 W1-W4 之前, 与列偏好双轨模型的意图/生效分轨有关, 待查
 - [test] [冒烟 CTX-03 多选右键批量菜单: 追剧集行确定性失败 + 辅种组行抖动](26-09-30-0602-test-ui-smoke-ctx03-multiselect.html) — dev.harness 两条 CTX-03 多选用例失败(追剧集行 100% 复现/辅种组行间歇), stash 前后对照确认先在于键盘快捷键 W1-W4 之前; Ctrl+click 选择在冒烟完整链路下不生效而孤立探针正常, 疑似轮询重渲染与 ElementHandle 的竞态或真实 UI 缺陷, 待查
 - [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
