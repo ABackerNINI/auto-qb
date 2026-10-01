@@ -209,7 +209,7 @@ def test_suppress_window_covers_only_event_phases():
                     }
                 }
         }
-        mgr.host.get("rules")._load_rules()
+        mgr.host.get("rules").load_rules()
         order = []
         for phase in ("full_round", "transitions", "events_removed", "events_added", "torrents_added", "post"):
             mgr.events.on(phase, _recorder(order, phase))
@@ -262,7 +262,7 @@ def test_suppression_request_survives_failed_round():
                     }
                 }
         }
-        mgr.host.get("rules")._load_rules()
+        mgr.host.get("rules").load_rules()
         order = []
         for phase in ("full_round", "transitions", "events_removed", "events_added", "torrents_added", "post"):
             mgr.events.on(phase, _recorder(order, phase))

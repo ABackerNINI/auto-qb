@@ -146,14 +146,14 @@ class RulesModule(BaseModule):
         """
         self._manager.task_queue = TaskQueue()
         self._ctx.store.reset_runtime()
-        self._load_rules()
+        self.load_rules()
         self._manager.events.emit("queue_rebuilt")
         self._manager.events.request_suppression()
         self._manager.reconnect()
 
     # ---------- 规则: 加载(RuleEngineMixin 原样迁入, self.* 改 ctx/manager 现取) ----------
 
-    def _load_rules(self):
+    def load_rules(self):
         """从 config 的 `*_rules` 段加载规则集(条件+动作插件); Rule 的 manager 即宿主
 
         幂等: 重复调用先清空(init 与 run 都会调用)。

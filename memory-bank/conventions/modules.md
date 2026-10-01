@@ -56,7 +56,7 @@
 
 ## 兼容层终态(W0-W3 已退役, 反复活机检常驻)
 
-manager 上的旧名兼容层(`_WEB_STATE_ALIAS` 20 字段 + `__getattr__`/`__setattr__` 双 dunder + 五节单行委托 57 名)已于别名层处置 **W3 整体删除**(2026-10-01, plan `plans/26-10-01-0350`): qbmanager.py 1109 → 838 行, 类体只剩**内核自有方法 17 个**与 **D1 拍板永久保留的外观属性对 7 个**(config/store/api/state/state_file/task_queue/web —— manager 即外观的公共面, 不是别名, 删除属 D1 决策范围)。run()/__init__ 的旧名自调用已内联为 `ctx.state.*` / `host.get("rules")._load_rules()` 新名口。
+manager 上的旧名兼容层(`_WEB_STATE_ALIAS` 20 字段 + `__getattr__`/`__setattr__` 双 dunder + 五节单行委托 57 名)已于别名层处置 **W3 整体删除**(2026-10-01, plan `plans/26-10-01-0350`): qbmanager.py 1109 → 838 行, 类体只剩**内核自有方法 17 个**与 **D1 拍板永久保留的外观属性对 7 个**(config/store/api/state/state_file/task_queue/web —— manager 即外观的公共面, 不是别名, 删除属 D1 决策范围)。run()/__init__ 的旧名自调用已内联为 `ctx.state.*` / `host.get("rules").load_rules()` 新名口。
 
 **反复活机检常驻**(兼容层复活是历史上别名层的成因): 退役名单永久留档在 `plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json`(逐名类别/消费方/目标名/波次 + meta.disposal 注记), 守阵 `tests/test_qbmanager_alias_freeze.py` 据此 AST 机检 —— **退役名在 QbManager 复活 / 别名表或转发 dunder 重建即红**, facade 在位性与 kernel 不退化同面机检; 另有 `test_qbmanager_source_has_no_web_state_fields`(名单读分诊清单)防主循环源码直写表现层旧字段。**新代码一律用新名**(模块方法 / `self.web.*` / ctx 服务 / `host.get(...)`), 往 manager 加回旧名 = 守阵红。
 

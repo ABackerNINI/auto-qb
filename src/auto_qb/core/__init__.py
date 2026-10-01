@@ -17,8 +17,6 @@
 - episodes.py   集数解析（第x集 > S01E05 > EP05 > E05）
 - tvshows.py    剧集识别（追剧视图聚合键）
 - exporter.py   YAML 配置模板导出
-- mixins/       过渡包: 仅剩表现层两 mixin 的组合入口(webui views/commands);
-                核心域切片已全部迁 core/modules/(P0-P5, 2026-09-30)
 
 依赖方向: core → config / infra / torrents / rules（单向）;
 表现层（webui/tray）→ core 经门面与模块 ctx 口, core 不 import 表现层。

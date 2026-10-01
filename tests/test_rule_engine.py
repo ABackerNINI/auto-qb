@@ -523,7 +523,7 @@ def test_handle_rule_process_error():
 
 
 def test_load_rules_skips_non_dict_group():
-    """_load_rules: 非 dict 规则组 -> 跳过该组不崩溃"""
+    """load_rules: 非 dict 规则组 -> 跳过该组不崩溃"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.host.get("rules").rules = []
@@ -535,7 +535,7 @@ def test_load_rules_skips_non_dict_group():
                 }
             },
         }
-        mgr.host.get("rules")._load_rules()
+        mgr.host.get("rules").load_rules()
         assert [r.name for r in mgr.host.get("rules").rules] == ["example_rules.only_rule"]
         assert [r.name for r in mgr.host.get("rules").enabled_rules] == ["example_rules.only_rule"]
 

@@ -30,7 +30,7 @@ def make_mgr(cfg):
     if not cfg.state_file:
         cfg.state_file = os.path.join(_TMP_STATE_DIR.name, f"state-{uuid.uuid4().hex}.json")
     mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    mgr.host.get("rules")._load_rules()
+    mgr.host.get("rules").load_rules()
     mgr.task_queue = TaskQueue()
     return mgr
 

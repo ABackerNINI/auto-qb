@@ -9,7 +9,7 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 (命令线/同步线收尾/任务线收尾, plan kernel-module-refactor P2), 不持有也不判断任何表现层
 字段(2026-09-20 拆出, 见 memory-bank/plans/26-09-20-0234-webui-decoupling-plan.html)。
 
-职责拆分(mixins 包, 各模块组合进本类):
+职责拆分(表现层 mixin, 各模块组合进本类):
 - webui.views         WebviewMixin     WEB 视图**构建器**(纯读 store/config, 产出 dict)
 - webui.commands      WebCommandsMixin WEB 控制命令**处理器**与命令表(主循环线程执行写操作)
 - web_runtime         WebUIRuntime     WEB 表现层门面(状态 + 节拍判据 + 命令编排; P2 起经
@@ -456,7 +456,7 @@ class QbManager(
             self.ctx.state.materialize_migration(dry_run)
             # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
             self.ctx.state.next_flush_at = time.time() + max(self.config.state_save_interval, 0.0)
-            self.host.get("rules")._load_rules()
+            self.host.get("rules").load_rules()
 
             try:
                 # 两条独立时间线(分层节拍):

@@ -3824,7 +3824,7 @@ def test_views_published_atomically_when_rebuilt_concurrently(tmp_path):
 
 
 def test_build_search_index_files():
-    """_build_search_index: 主循环构建索引(hash -> name+files), 单条文件拉取失败跳过该种子"""
+    """build_search_index: 主循环构建索引(hash -> name+files), 单条文件拉取失败跳过该种子"""
     from helpers import FakeClient, FakeTorrent, make_manager, seed_store, seed_store
 
     with tempfile.TemporaryDirectory() as td:
@@ -3846,7 +3846,7 @@ def test_build_search_index_files():
 
         client.torrents_files = boom
 
-        mgr._build_search_index()
+        mgr.build_search_index()
         assert mgr.web.search_index_dirty is False
         idx = mgr.web.search_index
         assert idx["HA"]["name"] == "Alpha"
@@ -3856,7 +3856,7 @@ def test_build_search_index_files():
 
 
 def test_build_search_index_incremental_and_evict():
-    """_build_search_index 增量维护: 已建条目只刷新名称(不重拉文件), 新种子补拉, 已消失种子淘汰"""
+    """build_search_index 增量维护: 已建条目只刷新名称(不重拉文件), 新种子补拉, 已消失种子淘汰"""
     from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
@@ -3866,14 +3866,14 @@ def test_build_search_index_incremental_and_evict():
         client.files_map["HA"] = [_fake_file("movie.mkv", 0)]
         ha = FakeTorrent(hash="HA", name="Alpha")
         seed_store(mgr, [ha])
-        mgr._build_search_index()
+        mgr.build_search_index()
         first_calls = client.files_calls
         assert first_calls == 1
 
         # 种子集未变: 不重复拉文件列表, 仅刷新名称, 且整体替换引用(原子交换契约)
         idx_before = mgr.web.search_index
         ha.name = "Alpha.Renamed"
-        mgr._build_search_index()
+        mgr.build_search_index()
         assert client.files_calls == first_calls, "已建条目不重复拉取文件列表"
         assert mgr.web.search_index["HA"]["name"] == "Alpha.Renamed", "名称应刷新"
         assert mgr.web.search_index is not idx_before, "索引应整体替换引用(Web 线程并发只读安全), 不就地增删"
@@ -3882,14 +3882,14 @@ def test_build_search_index_incremental_and_evict():
         client.files_map["HB"] = [_fake_file("anime.mkv", 0)]
         seed_store(mgr, [FakeTorrent(hash="HB", name="Beta")])
         mgr.web.search_index_dirty = True
-        mgr._build_search_index()
+        mgr.build_search_index()
         assert set(mgr.web.search_index.keys()) == {"HB"}, "已消失种子应被淘汰"
         assert client.files_calls == first_calls + 1, "只补拉新增种子的文件列表"
         assert mgr.web.search_index_dirty is False
 
 
 def test_build_search_index_budget_resumes(monkeypatch):
-    """_build_search_index 限流: 单次最多拉预算条, 未拉完保持脏, 下次调用续建至完成"""
+    """build_search_index 限流: 单次最多拉预算条, 未拉完保持脏, 下次调用续建至完成"""
     from auto_qb.webui import views as web_view
     from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
 
@@ -3902,17 +3902,17 @@ def test_build_search_index_budget_resumes(monkeypatch):
         client.files_map["HB"] = [_fake_file("b.mkv", 0)]
         seed_store(mgr, [FakeTorrent(hash="HA", name="Alpha"), FakeTorrent(hash="HB", name="Beta")])
 
-        mgr._build_search_index()
+        mgr.build_search_index()
         assert mgr.web.search_index_dirty is True, "预算用尽应保持脏(待续建)"
         assert set(mgr.web.search_index.keys()) == {"HA"}, "单次只拉预算条数的文件列表"
 
-        mgr._build_search_index()
+        mgr.build_search_index()
         assert mgr.web.search_index_dirty is False, "续建后应不再脏"
         assert set(mgr.web.search_index.keys()) == {"HA", "HB"}
 
 
 def test_build_search_index_aborts_when_disconnected():
-    """_build_search_index: qB 断开(client None)时中止并保持脏——不把空文件列表当成"已建完"""
+    """build_search_index: qB 断开(client None)时中止并保持脏——不把空文件列表当成"已建完"""
     from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
@@ -3923,12 +3923,12 @@ def test_build_search_index_aborts_when_disconnected():
         seed_store(mgr, [FakeTorrent(hash="HA", name="Alpha")])
 
         mgr.client = None  # 模拟 qB 断连(setter 同步解绑 store/api)
-        mgr._build_search_index()
+        mgr.build_search_index()
         assert mgr.web.search_index_dirty is True, "断连时应保持脏, 待连接恢复后重建"
         assert mgr.web.search_index is None, "断连时不得写入空文件索引"
 
         mgr.client = client  # 连接恢复
-        mgr._build_search_index()
+        mgr.build_search_index()
         assert mgr.web.search_index_dirty is False
         assert mgr.web.search_index["HA"]["files"] == ["movie.mkv"]
 
@@ -3970,7 +3970,7 @@ def test_search_torrents_separator_normalized():
         client.files_map["HA"] = [_fake_file("The.Cat.and.the.Dragon.S01E01.1080p.WEB-DL.mkv", 0)]
         client.files_map["HB"] = [_fake_file("the_cat_and_dragon_e02.mkv", 0)]
         seed_store(mgr, [t1, t2])
-        mgr._build_search_index()
+        mgr.build_search_index()
 
         r = mgr.search_torrents("cat and")
         # HA 名字命中(回归主案例), HB 的下划线文件名归一后也含 "cat and"(file 路径顺带覆盖)
@@ -4035,7 +4035,7 @@ def test_search_torrents_cross_row_and():
             _fake_file("Gamma.E03.mkv", 2)
         ]
         seed_store(mgr, [t1, t2, t3])
-        mgr._build_search_index()
+        mgr.build_search_index()
 
         # 同行 AND 照常; 全称行跨行(名字×标签)照常(「minions mteam」同型)
         assert [(x["hash"], x["by"]) for x in mgr.search_torrents("alpha s01")["results"]] == [("HA", "name")]
@@ -4072,7 +4072,7 @@ def test_search_torrents_negative_term():
         # 多种子集合里的另一颗单集种子: 干净 ⇒ 留下
         t3 = FakeTorrent(hash="HC", name="Show.S01E10.1080p.CR.WEB-DL", state="stalledUP")
         seed_store(mgr, [t1, t2, t3])
-        mgr._build_search_index()
+        mgr.build_search_index()
 
         # "show 10 -dv": HA 名行含 dv ⇒ 排除; HB 的 E09.DV 文件行含 dv ⇒ 整包排除; HC 干净 ⇒ 名字命中
         r = mgr.search_torrents("show 10 -dv")
@@ -4110,7 +4110,7 @@ def test_search_torrents_negative_torrent_veto():
         t3 = FakeTorrent(hash="HC", name="E11.REPACK", state="stalledUP")
         client.files_map["HC"] = [_fake_file("Show.1080p.mkv", 0)]
         seed_store(mgr, [t1, t2, t3])
-        mgr._build_search_index()
+        mgr.build_search_index()
 
         # 报障1.回归: HA 名字行含 "11" ⇒ 整种子否决, 保存路径行("cat and" 齐、无 "11")不得捞回
         assert mgr.search_torrents("cat and -11")["results"] == []
@@ -4152,7 +4152,7 @@ def test_search_torrents_facet_rows():
         )
         t2 = FakeTorrent(hash="HB", name="Beta.S01E02", state="stalledUP")
         seed_store(mgr, [t1, t2])
-        mgr._build_search_index()
+        mgr.build_search_index()
 
         # 站点/分类/标签/路径行: 各词只落在 HA 的对应行, 不在任何名字/文件里
         assert [(x["hash"], x["by"]) for x in mgr.search_torrents("MDCx")["results"]] == [("HA", "site")]
@@ -4253,7 +4253,7 @@ def test_search_torrents_file_match():
             hash="HC", name="The.Cat.and.the.Dragon.S01.1080p.friDay.WEB-DL.AAC2.0.H.264-MWeb", state="stalledUP"
         )
         seed_store(mgr, [t1, t2, t3])
-        mgr._build_search_index()  # 先构建索引
+        mgr.build_search_index()  # 先构建索引
 
         # 文件命中: soundtrack 只在 HB 的文件里, 不在任何种子名中
         r = mgr.search_torrents("soundtrack")
@@ -5758,7 +5758,7 @@ def test_shows_view_files_fallback_hook():
         assert ("build_search_index", {}) in list(mgr.web.commands.queue), "应投递索引构建命令"
         node = view["list"][0]["seasons"][0]["episodes"][0]
         assert node["key"] == ["pack"], f"索引未建成前整季包无范围: {node['key']}"
-        # 消费构建命令(真实链路: 主循环 _drain -> _build_search_index), 文件就位 -> 清 pending + 置脏
+        # 消费构建命令(真实链路: 主循环 _drain -> build_search_index), 文件就位 -> 清 pending + 置脏
         mgr.web.consume_commands()
         assert mgr.web.shows_pending is False
         assert mgr.web.group_view_dirty is True, "索引推进是文件兑底唯一信号, 应触发追剧视图重建"
@@ -5979,11 +5979,11 @@ def test_api_state_speed_totals_survives_view_scoping():
     ]
 )
 def test_state_kind_maps_states(state, kind):
-    """_state_kind: 状态语义分类(前端着色) —— 暂停态优先于下载/做种, errored/checking 最前"""
+    """state_kind: 状态语义分类(前端着色) —— 暂停态优先于下载/做种, errored/checking 最前"""
     from auto_qb.core.qbmanager import QbManager
     from helpers import FakeTorrent
 
-    assert QbManager._state_kind(FakeTorrent(hash="H", name="t", state=state)) == kind
+    assert QbManager.state_kind(FakeTorrent(hash="H", name="t", state=state)) == kind
 
 
 def _pin_noop_sections(new_cfg, mgr):

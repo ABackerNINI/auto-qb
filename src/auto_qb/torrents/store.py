@@ -313,7 +313,7 @@ class TorrentStore:
         return rec.category or ""
 
     def set_watch_fields(self, fields) -> None:
-        """注入监听字段并集(由 _load_rules 从规则 watch_fields ∪ maintenance on_change 推导)
+        """注入监听字段并集(由 load_rules 从规则 watch_fields ∪ maintenance on_change 推导)
 
         空 = 检测关闭: 不建基线、零对比开销(黄金法则: 无消费不付费)。
         """

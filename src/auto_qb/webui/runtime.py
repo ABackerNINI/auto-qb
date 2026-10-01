@@ -323,7 +323,7 @@ class WebUIRuntime:
     def advance_search_index(self) -> None:
         """任务线末尾: 搜索索引限流推进(仅 Web 活跃时), 关闭网页后不发多余的文件 API"""
         if self.search_index_dirty and self.is_active():
-            self._host._build_search_index()
+            self._host.build_search_index()
 
     def flush_truths(self) -> None:
         """直查真值, 落地了就推 `truth` 事件; 未落地继续等(上限 TRUTH_PUSH_CAP_MS)
@@ -485,7 +485,7 @@ class WebUIRuntime:
                     # 真机是 TorrentDictionary(有 .get/.hash); 测试桩 FakeTorrent 只有属性
                     h = getattr(t, "hash", None) or (t.get("hash") if hasattr(t, "get") else None)
                     if h in want:
-                        truth[h] = {"kind": self._host._state_kind(t)}
+                        truth[h] = {"kind": self._host.state_kind(t)}
         except Exception as e:
             logger.warning(f"[cmd] 真值直查失败(不回落同步快照): {e}")
             return None

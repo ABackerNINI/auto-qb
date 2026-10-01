@@ -141,7 +141,7 @@ def _max_valid_ts(values) -> int:
 
 class WebviewMixin:
     @staticmethod
-    def _state_kind(rec: TorrentRecord) -> str:
+    def state_kind(rec: TorrentRecord) -> str:
         """状态语义分类(前端着色): 错误红/校验蓝/下载蓝/做种绿/暂停灰
 
         注意 is_stopped 须先于 is_downloading/is_uploading 判定: 暂停的种子
@@ -214,7 +214,7 @@ class WebviewMixin:
         budget = ERROR_REASON_BUDGET
         changed = False
         for rec in self.store.by_hash.values():
-            if self._state_kind(rec) != "error" or rec.state_enum is TorrentState.MISSING_FILES:
+            if self.state_kind(rec) != "error" or rec.state_enum is TorrentState.MISSING_FILES:
                 if rec.tracker_error_msg:
                     rec.tracker_error_msg = ""
                     rec.tracker_error_ts = 0.0
@@ -348,7 +348,7 @@ class WebviewMixin:
             "name": r.name,
             "site": r.tracker_name,
             "state": r.state,
-            "kind": self._state_kind(r),
+            "kind": self.state_kind(r),
             # 错误状态的具体原因(文件丢失 / tracker 报错原文; 非错误状态为空串) ——
             # 前端状态列以它替代笼统的"错误", 见 _error_reason
             "error_reason": self._error_reason(r),
@@ -590,7 +590,7 @@ class WebviewMixin:
         - 集进度 = 最差版本(全部版本完成才算这一集完成)
         - 状态逐个记录, 出口处按优先级归并为节点状态
         """
-        kind = self._state_kind(rec)
+        kind = self.state_kind(rec)
         hr = self.hr_view_fields(rec)
         node["members"].append(rec.hash)
         node["kinds"].append(kind)
@@ -623,7 +623,7 @@ class WebviewMixin:
 
         文件列表兑底: 季包/名称无标记的种子从搜索索引缓存解析集数
         (tvshows.refine_with_files); 索引尚未覆盖的种子暂按名称解析结果展示,
-        标记 web.shows_pending 并投递构建命令 —— 索引推进后由 _build_search_index
+        标记 web.shows_pending 并投递构建命令 —— 索引推进后由 build_search_index
         置脏触发重建归位(种子名无标记不会自动置脏, 这是唯一需要动重建时序的点)。
 
         返回 {"list": [剧…], "unrecognized": [hash…]}:
@@ -750,7 +750,7 @@ class WebviewMixin:
             self.web.mark_shows_pending(False)
         return {"list": out, "unrecognized": sorted(unrecognized)}
 
-    def _build_search_index(self) -> None:
+    def build_search_index(self) -> None:
         """主循环线程调用: 增量构建搜索索引(hash -> {name, files[文件名], files_q[归一文件名]}), 单次限流拉取。
 
         **原子交换契约**: 每轮在**新字典**上重组(消失的种子不进新字典即淘汰), 完成后整体替换
@@ -839,7 +839,7 @@ class WebviewMixin:
                 "hash": rec.hash,
                 "name": rec.name,
                 "site": rec.tracker_name,
-                "kind": self._state_kind(rec),
+                "kind": self.state_kind(rec),
                 "error_reason": self._error_reason(rec),
                 "dlspeed": rec.dlspeed,
                 "upspeed": rec.upspeed,

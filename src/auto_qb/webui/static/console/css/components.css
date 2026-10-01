@@ -130,7 +130,7 @@
 .pop-value { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pop-count { color: var(--fg-dim); font-size: 11px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .pop-empty { margin: 4px 8px; color: var(--fg-dim); font-size: 12px; }
-/* 状态语义配色(分布条/chip/明细圆点共用; 与后端 _state_kind 的 kind 一一对应) */
+/* 状态语义配色(分布条/chip/明细圆点共用; 与后端 state_kind 的 kind 一一对应) */
 .k-seeding, .k-seeding .swatch { color: var(--green); }
 .k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch { color: var(--blue); }
 .k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--paused); }

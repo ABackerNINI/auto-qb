@@ -247,7 +247,7 @@ def test_rule_interval():
                 }
         }
         mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-        mgr.host.get("rules")._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+        mgr.host.get("rules").load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
         client = FakeClient()
         mgr.client = client
         tor = FakeTorrent(tags="", ratio=0.1, state="uploading")

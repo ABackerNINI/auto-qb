@@ -164,7 +164,7 @@ def make_mgr(cfg, with_tq=False):
     if not cfg.state_file:
         cfg.state_file = os.path.join(_TMP_STATE_DIR.name, f"state-{uuid.uuid4().hex}.json")
     mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    mgr.host.get("rules")._load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+    mgr.host.get("rules").load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
     if with_tq:
         mgr.task_queue = TaskQueue()
     return mgr

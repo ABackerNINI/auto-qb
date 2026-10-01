@@ -65,7 +65,7 @@ def _event_mgr(rules, tracker_rules=None, state_file=None):
     if holder is not None:
         mgr._test_tmpdir = holder  # 生命周期锚点: 见 docstring
     mgr.config.rules_config = {"event_rules": rules}
-    mgr.host.get("rules")._load_rules()
+    mgr.host.get("rules").load_rules()
     return mgr
 
 
@@ -644,12 +644,12 @@ def test_maintenance_tag_mode_validation():
 def _maint_mgr(mode, state_file):
     """构造 on_change/interval 模式的 manager(内置示例规则集, tracker=HHan)
 
-    !改模式后必须重跑 _load_rules: 生产中 maintenance_tag_mode 是 L2 热重载(整体重建 manager,
-    规则随新配置重载), store 的监听集合在 _load_rules 收尾推导 —— 测试同口径。
+    !改模式后必须重跑 load_rules: 生产中 maintenance_tag_mode 是 L2 热重载(整体重建 manager,
+    规则随新配置重载), store 的监听集合在 load_rules 收尾推导 —— 测试同口径。
     """
     mgr = make_manager(state_file)
     mgr.config.maintenance_tag_mode = mode
-    mgr.host.get("rules")._load_rules()
+    mgr.host.get("rules").load_rules()
     mgr.client = FakeClient()
     return mgr
 
