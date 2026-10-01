@@ -6,6 +6,11 @@
  *
  * !加载时机: 打开「HR 在线核实」分区时拉一次(config_hub.js hubGo), 之后手动刷新
  *   (不轮询: 站点数据的小时级节奏不需要前端高频拉, 而轮询会给 Web 线程添无谓负载)。
+ * !种子明细(表①, 计划 26-10-01-2216 阶段2): /api/hr/sites/<site>/entries 按站点**按需**
+ *   拉一次(打开分区/手动刷新时随 loadHrStatus 触发, 拍板②b), 不进 /api/hr/status 全量
+ *   响应也不进 /api/state 轮询载荷(pitfalls/web-ui/contract-api.md: 只在用户显式动作时才
+ *   需要的字段不塞轮询载荷); 单站点失败只置该站错误态(.empty 错误行), 不阻塞分区其余内容;
+ *   无新增定时器。
  * !入口只有一个(2026-09-25 合并): Console Hub「HR 在线核实」分区页尾 —— 曾经的经典设置页
  *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
@@ -27,6 +32,10 @@ window.AQB_HR_STATUS = {
         confirming: false,
         refreshing: false,
         refreshNote: "",
+        /* 表① 逐站点明细(键 = 站点名): { loading, loaded, error, entries, readError, now }
+         * laneSel(键 = 站点名): 档位筛选 chips 的本地选择("" = 全部), 前端过滤不回后端 */
+        details: {},
+        laneSel: {},
       },
     };
   },
@@ -46,11 +55,118 @@ window.AQB_HR_STATUS = {
         this.hrs.fetchEnabled = !!r.fetch_enabled;
         this.hrs.workerRunning = !!r.worker_running;
         this.hrs.pollInterval = r.poll_interval || 0;
+        /* 表① 明细随站点各拉一次: 打开分区(loadHrStatus())首拉, 手动刷新/立即拉取
+         * (loadHrStatus(true))重拉 —— 每站点自有 loaded/loading 守卫, 失败不阻塞彼此 */
+        for (const s of this.hrs.sites) this.loadHrSiteEntries(s.site, force);
       } catch (e) {
         if (!e.auth) this.hrs.error = e.message || "状态读取失败";
       } finally {
         this.hrs.loading = false;
       }
+    },
+    /* ---------------- 表① 种子明细(计划 26-10-01-2216 阶段2) ----------------
+     * 端点校验: HR 未启用 400 / 站点未接入 404 / 取数线程未启动 409; 站点文件读坏不抛,
+     * read_error 随响应带出(前端单独显示, 与「明细请求本身失败」分开)。行字段与人话
+     * (lane_text/need_seed_text/verified_source_text)全部后端算好, 排序(档位·下载量)与
+     * 行集(含失踪行)也是后端口径 —— 这里只存取与筛选, 不重算任何 HR 语义。 */
+    async loadHrSiteEntries(site, force = false) {
+      const prev = this.hrs.details[site];
+      if (prev && prev.loading) return;
+      if (prev && prev.loaded && !force) return;
+      /* force 重拉(手动刷新/立即拉取)期间保留旧行(loaded 维持 true), 表格不闪回加载态;
+       * 只有首拉才显示 loading 占位 —— 手动刷新的语义是「换数据」不是「清空重来」 */
+      const keep = !!(force && prev && prev.loaded);
+      this.hrs.details[site] = {
+        loading: true,
+        loaded: keep,
+        error: "",
+        entries: keep ? prev.entries : [],
+        readError: "",
+        now: keep ? prev.now : 0,
+      };
+      try {
+        const r = await this.api(`/api/hr/sites/${encodeURIComponent(site)}/entries`);
+        this.hrs.details[site] = {
+          loading: false,
+          loaded: true,
+          error: "",
+          entries: r.entries || [],
+          readError: r.read_error || "",
+          now: r.now || 0,
+        };
+      } catch (e) {
+        /* auth 失败由全局登出兜底, 不留站点级错误行 */
+        this.hrs.details[site] = {
+          loading: false,
+          loaded: false,
+          error: e.auth ? "" : (e.message || "站点明细读取失败"),
+          entries: [],
+          readError: "",
+          now: 0,
+        };
+      }
+    },
+    /* 明细状态读取(模板经 v-for 单元素别名取一次, 避免 undefined 链) */
+    hrsDetailOf(site) {
+      return this.hrs.details[site] || { loading: false, loaded: false, error: "", entries: [], readError: "", now: 0 };
+    },
+    /* 档位筛选 chips(全部/A 考察中/B 达标/C 未达标/D 免罪; 拍板只筛 lane 字母, 文案单点在这) */
+    hrsLaneChips() {
+      return [["", "全部"], ["A", "A 考察中"], ["B", "B 达标"], ["C", "C 未达标"], ["D", "D 免罪"]];
+    },
+    hrsLaneSelOf(site) {
+      return this.hrs.laneSel[site] || "";
+    },
+    hrsSetLaneSel(site, lane) {
+      this.hrs.laneSel[site] = lane;
+    },
+    /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端、不重排序) */
+    hrsDetailRows(site) {
+      const d = this.hrs.details[site];
+      if (!d || !d.entries) return [];
+      const sel = this.hrsLaneSelOf(site);
+      return sel ? d.entries.filter((e) => e.lane === sel) : d.entries;
+    },
+    /* 档位徽章色义(§5.4): A=warn(考察中) / B=green(达标) / C=error(未达标) / D=blue(免罪);
+     * 失踪行由 CSS tr.missing 统一换 --paused 描边弱化, 这里不管 */
+    hrsLaneCls(lane) {
+      return `hr-lane-${String(lane || "").toLowerCase()}`;
+    },
+    /* 字节数复用共享 fmtSize(AQB_FORMAT 单点); null/undefined = 站点没给 → — (0 是真值, 照显) */
+    hrsSize(v) {
+      return v === null || v === undefined ? "—" : this.fmtSize(v);
+    },
+    hrsRatio(v) {
+      return v === null || v === undefined ? "—" : Number(v).toFixed(2);
+    },
+    /* 还需做种人话由后端给; 它的缺失占位是 "-"(need_seed_text 单点), 表格里统一 — */
+    hrsNeedSeed(t) {
+      return !t || t === "-" ? "—" : t;
+    },
+    /* 完成时间: 站点 ISO 字符串取日期段; 缺失 → — */
+    hrsDone(iso) {
+      return iso ? String(iso).slice(0, 10) : "—";
+    },
+    /* 上次核实(放行判定): 0 = 无放行记录 → —(fmtTs 的 0 哨兵本就回空, 这里补 —);
+     * last_seen 上游恒 0(issue 26-10-01-2335), 未知时不缀「最近被见到」—— 绝不显示 epoch */
+    hrsVerifiedText(e) {
+      return e.verified_ts ? this.fmtTs(e.verified_ts) : "—";
+    },
+    /* 来源小徽章: satisfied(B 毕业)=绿 / 其余有记录(absent 免罪, not-listed 未列出)=蓝 /
+     * 无记录=默认中性(未核实)。token 是后端 SOURCE_* 契约值, 只映射不重算。
+     * 类名 hr-vsrc(verified source): hr-src 是列表页已退役的文字 chip 族
+     * (hr-tooltip-overlap, 守阵钉了 class="hr-src" 零残留), 新件不得复用该名字 */
+    hrsSrcCls(e) {
+      if (!e.verified_source) return "";
+      return e.verified_source === "satisfied" ? "hr-vsrc-b" : "hr-vsrc-d";
+    },
+    /* 状态列: 在列(观察期 N) / 失踪 N 波; 「最近被见到」只在 last_seen 已知时缀 */
+    hrsStatusText(e) {
+      let t = e.active ? "在列" : `失踪 ${e.missing_streak} 波`;
+      if (e.active && e.missing_streak > 0) t += ` · 观察期 ${e.missing_streak}`;
+      const seen = this.fmtTs(e.last_seen);
+      if (seen) t += ` · 最近被见到 ${seen}`;
+      return t;
     },
     /* ---------------- 展示辅助(值全由后端算好, 这里只挑文案与配色) ---------------- */
     hrsStateText(s) {

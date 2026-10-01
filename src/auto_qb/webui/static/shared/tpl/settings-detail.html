@@ -275,6 +275,50 @@
                             <button class="hb-btn ghost sm" :disabled="hrs.refreshing"
                                     @click="hrsRefresh(s.site)">立即拉取</button>
                           </p>
+                          <!-- 表① 全量详情表(计划 26-10-01-2216 阶段2, 拍板②b③a④b⑤a⑥a): 逐种子清单,
+                               按站点按需拉一次(hr_status.js loadHrSiteEntries, 打开分区/手动刷新, 不轮询);
+                               档位 chips 前端本地过滤不回后端; 骨架照 .drawer-table 范式(同挂一类);
+                               单元格一律不挂原生 title(hr-tooltip-overlap), 名称过长靠 .wrap 换行;
+                               人话(lane_text/need_seed_text/verified_source_text)全由后端算好, 前端不重算 -->
+                          <!-- aqb:hr-detail-table:begin (守阵 test_frontend_hr_detail_table_wiring 的扫描锚) -->
+                          <template v-for="d in [hrsDetailOf(s.site)]" :key="'hrd-' + s.site">
+                            <div v-if="d.loaded && !d.error" class="hr-detail-table-bar">
+                              <span v-for="c in hrsLaneChips()" :key="c[0]" class="hrs-tag hr-chip"
+                                    :class="{ on: hrsLaneSelOf(s.site) === c[0] }"
+                                    @click="hrsSetLaneSel(s.site, c[0])">{{ c[1] }}</span>
+                              <span v-if="d.now" class="hr-detail-table-fresh">数据截至 {{ fmtTs(d.now) }}</span>
+                            </div>
+                            <p v-if="d.loading && !d.loaded" class="hb-hp">正在读取站点明细…</p>
+                            <div v-else-if="d.error" class="empty"><span>{{ d.error }}</span></div>
+                            <div v-else-if="d.readError" class="empty"><span>站点文件读取失败: {{ d.readError }}</span></div>
+                            <table v-else-if="hrsDetailRows(s.site).length" class="drawer-table hr-detail-table">
+                              <thead>
+                                <tr>
+                                  <th>档位</th><th>名称</th><th>tid</th>
+                                  <th class="num">上传量</th><th class="num">下载量</th><th class="num">分享率</th>
+                                  <th class="num">还需做种</th>
+                                  <th>完成时间</th><th>上次核实(放行判定)</th><th>状态</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr v-for="e in hrsDetailRows(s.site)" :key="e.tid" :class="{ missing: !e.active }">
+                                  <td><span class="hr-lane" :class="hrsLaneCls(e.lane)">{{ e.lane }} {{ e.lane_text }}</span></td>
+                                  <td class="wrap">{{ e.name || "—" }}</td>
+                                  <td class="mono-cell">{{ e.tid }}</td>
+                                  <td class="num">{{ hrsSize(e.uploaded_bytes) }}</td>
+                                  <td class="num">{{ hrsSize(e.downloaded_bytes) }}</td>
+                                  <td class="num">{{ hrsRatio(e.ratio) }}</td>
+                                  <td class="num">{{ hrsNeedSeed(e.need_seed_text) }}</td>
+                                  <td class="mono-cell">{{ hrsDone(e.done_iso) }}</td>
+                                  <td><span class="mono-cell">{{ hrsVerifiedText(e) }}</span><span class="hr-vsrc"
+                                       :class="hrsSrcCls(e)">{{ e.verified_source_text }}</span></td>
+                                  <td class="mono-cell">{{ hrsStatusText(e) }}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                            <div v-else class="empty"><span>{{ hrsLaneSelOf(s.site) ? "该档位暂无 HR 种子" : "该站点暂无 HR 种子" }}</span></div>
+                          </template>
+                          <!-- aqb:hr-detail-table:end -->
                           <p class="hrs-line">各档波次:
                             <template v-if="s.lanes && s.lanes.length">
                               <span v-for="ls in s.lanes" :key="ls.lane" class="hrs-tag" :class="hrsLaneClass(ls)">{{ hrsLaneBadge(ls) }}</span>

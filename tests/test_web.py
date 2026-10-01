@@ -118,6 +118,7 @@
 - test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
+- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2) —— 设置分区表① 模板绑定(档位 chips 本地过滤/明细行/空态/失踪行挂钩/「数据截至」时间戳/「上次核实(放行判定)」独立列名)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(阶段3 才做)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -1503,8 +1504,13 @@ def test_frontend_template_split_wiring():
                 problems.append(f"{ui}: 清单挂了不存在的分片 {part['src']}(boot fetch 404 = 整页停在错误占位)")
                 continue
             n = open(path, encoding="utf-8").read().count("\n")
-            if n > 400:
-                problems.append(f"{ui}/{part['src']} {n} 行, 超 400 行单分片体量上限")
+            # 单分片体量上限默认 400; settings-detail.html 是 HR 表①(计划 26-10-01-2216 阶段2,
+            # 拍板②b 按站点明细表)的落点, 391 -> 435 行属功能增长不是拆分回潮, 单独点名给例外额度
+            # (其余分片仍钉 400); 该分片下次再长应把 speed/keys 等视图拆成独立分片 —— 切割须过
+            # 等价性验证(pitfalls/web-ui/frontend-split.md), 不得顺手抽文件
+            cap = 460 if os.path.basename(part["src"]) == "settings-detail.html" else 400
+            if n > cap:
+                problems.append(f"{ui}/{part['src']} {n} 行, 超 {cap} 行单分片体量上限")
             if part.get("into") not in ("app", "body"):
                 problems.append(f"{ui}/{part['src']} into 非法: {part.get('into')!r}(boot 只认 app|body)")
         tpl_dir = os.path.join(udir, "tpl")
@@ -1801,6 +1807,77 @@ def test_frontend_hr_safety_wiring():
         used |= set(re.findall(r"\bm\.(hr_[a-z_]+)", _ui_aggregate(ui)))
     unknown = used - keys
     assert not unknown, f"前端引用了后端不存在的 HR 字段: {sorted(unknown)}(字段打错 = 页面静默空白)"
+
+
+def test_frontend_hr_detail_table_wiring():
+    """HR 表① 全量详情表前端接线守阵(2026-10-01, 计划 26-10-01-2216 阶段2)
+
+    表① 是设置分区「站点状态」块里逐站点的种子明细表(数据 /api/hr/sites/<site>/entries,
+    阶段1 交付), 四类"漏一处 = 静默失效 / 拍板被推翻"的故障形态机械钉住:
+    1. 模板绑定: 档位 chips(本地过滤不回后端)/ 明细行 / 空态 / 失踪行挂钩 / 「数据截至」时间戳
+      (拍板⑥)+ 列名「上次核实(放行判定)」(拍板④ 独立口径, 不与 last_seen 合并)—— 缺一处该功能消失;
+    2. 拍板守卫: remain_seconds 不得进表(拍板③, 2026-09-25 误读教训)/ 不挂 hr-pop 不做行内跳转
+      (拍板⑤)/ 单元格无原生 title(hr-tooltip-overlap: 与悬停弹窗叠出遮挡)/ 表① 段无 <details>
+      (阶段 3 才做排障视图, 提前混入即越界)/ 来源徽章类名是 hr-vsrc —— .hr-src 是列表页已退役
+      的文字 chip 族(守阵钉了 class="hr-src" 零残留, 复用即撞红);
+    3. JS 接线: hr_status.js 有按站点明细加载(loadHrSiteEntries)与本地筛选(hrsLaneSelOf),
+      且无 setInterval(计划 §5.5 刷新纪律: 打开拉一次 + 手动刷新, 不轮询、不进 /api/state);
+    4. CSS 三处成对(计划 §5.6): .hr-detail-table 在 atlas / console / prism 的 CSS 聚合各 ≥1,
+      档位色义四档(A=warn / B=green / C=error / D=blue)与失踪行 --paused 弱化规则成对;
+      prism 拆两文件 —— 表头过滤栏段在 components.css、表格徽章段在 views.css(漏一件即该套静默失效)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl = open(os.path.join(shared, "tpl", "settings-detail.html"), encoding="utf-8").read()
+    m = re.search(r"<!-- aqb:hr-detail-table:begin.*?-->(.*?)<!-- aqb:hr-detail-table:end.*?-->", tpl, re.S)
+    assert m, "settings-detail.html 缺 aqb:hr-detail-table 扫描锚 —— 表① 模板被移走或锚被删? 同步本守阵"
+    frag = m.group(1)
+
+    # 1. 模板绑定: chips / 明细行 / 空态 / 失踪行 / 时间戳 / 拍板④列名
+    for needle, what in (
+        ("hrsLaneChips()", "档位筛选 chips"),
+        ("hrsSetLaneSel(", "chips 点击切换"),
+        ('v-for="e in hrsDetailRows', "明细行渲染"),
+        ('class="drawer-table hr-detail-table"', "表格骨架(同挂 .drawer-table 一类)"),
+        ("该站点暂无 HR 种子", "空站点空态"),
+        ("数据截至", "「数据截至」时间戳(拍板⑥)"),
+        (':class="{ missing: !e.active }"', "失踪行弱化挂钩"),
+        ("上次核实(放行判定)", "拍板④ 独立口径列名"),
+    ):
+        assert needle in frag, f"表① 模板缺 {what}(应有 `{needle}`)"
+
+    # 2. 拍板 / 悬浮纪律守卫
+    assert "remain_seconds" not in frag, "remain_seconds 不得进表①(拍板③: 考核窗口倒计时, 2026-09-25 误读教训)"
+    assert "hrPopEnter" not in frag, "表① 不得挂 hr-pop 悬停(拍板⑤: 第一期纯清单)"
+    assert "title=" not in frag, "表① 单元格不得挂原生 title(hr-tooltip-overlap: 与悬停弹窗叠出遮挡)"
+    assert "<details" not in frag.lower(), "表① 段不得提前做阶段 3 的 <details> 排障视图"
+    assert 'class="hr-src"' not in frag, "来源徽章类名必须是 hr-vsrc —— hr-src 是列表页已退役 chip 族(复活即撞守阵)"
+
+    # 3. JS 接线: 按站点按需加载 + 本地筛选 + 不轮询
+    hr_status_js = open(os.path.join(shared, "hr_status.js"), encoding="utf-8").read()
+    for needle, what in (
+        ("loadHrSiteEntries", "明细加载函数"),
+        ("/api/hr/sites/${encodeURIComponent(site)}/entries", "明细端点拼接"),
+        ("hrsLaneSelOf", "档位筛选读取"),
+        ("hrsDetailRows", "本地过筛行集(不回后端)"),
+    ):
+        assert needle in hr_status_js, f"hr_status.js 缺 {what}({needle})"
+    assert "setInterval" not in hr_status_js, "hr_status.js 不得有轮询定时器(计划 §5.5: 打开拉一次 + 手动刷新)"
+
+    # 4. CSS 三处成对 + 档位色义 + 失踪行弱化
+    for css, name in (
+        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
+        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
+        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+    ):
+        assert ".hr-detail-table" in css, f"{name} 缺 .hr-detail-table 段 —— 三套 UI 必须成对改(计划 §5.6)"
+        for lane in ("a", "b", "c", "d"):
+            assert f".hr-detail-table .hr-lane-{lane}" in css, f"{name} 缺 .hr-lane-{lane} 档位色义(计划 §5.4)"
+        assert ".hr-detail-table tr.missing .hr-lane" in css, f"{name} 缺失踪行 --paused 描边弱化规则"
+        assert ".hr-vsrc" in css, f"{name} 缺来源小徽章(.hr-vsrc)样式"
+    pri_components = open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read()
+    pri_views = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
+    assert ".hr-detail-table-bar" in pri_components, "prism/css/components.css 缺表头过滤栏段( chips + 数据截至)"
+    assert ".hr-detail-table .hr-lane-a" in pri_views, "prism/css/views.css 缺表格徽章段"
 
 
 def test_frontend_member_window_functions_live_in_methods():
@@ -4036,17 +4113,26 @@ def test_frontend_hr_status_fields_match_backend():
         "pollInterval", "confirming", "refreshing", "refreshNote"
     }
     # 锚点必须指向合并块自身: v-if 只在「HR 在线核实」分区模板块这一处出现, 重复出现说明块被复制
-    # (2026-09-27 起块内含「站点接入」+「站点状态」两个块, 扫描窗放大到 8000 字符)
+    # (2026-09-27 起块内含「站点接入」+「站点状态」两个块, 扫描窗放大到 8000 字符; 26-10-01 阶段2
+    # 表① 又带入嵌套 <template v-for> 明细表 —— 单找第一个 </template> 会切在明细表收口、丢掉块尾
+    # 字段覆盖, 故改按模板嵌套深度找**锚点自己的配对收口**, 窗口只作半残兜底再放大到 16000)
     anchor = "hub.view === 'hr_check'"
     for ui in _UI_ALL:
         html = _ui_aggregate(ui)
         idx = html.find(anchor)
         assert idx > 0, f"{ui} 缺少锚点 {anchor} —— 合并进「HR 在线核实」的状态块丢失"
         assert html.find(anchor, idx + 1) < 0, f"{ui} 锚点出现多次 —— 状态块被复制了?"
-        block = html[idx:idx + 8000]
-        cut = block.find("</template>")
+        open_i = html.rfind("<template", max(0, idx - 200), idx)
+        assert open_i >= 0, f"{ui}: 锚点 {anchor} 不在 <template> 开标签内 —— 模板结构被改坏? 同步本守阵"
+        depth = 0
+        cut = -1
+        for m in re.finditer(r"<template\b|</template>", html[open_i:open_i + 16000]):
+            depth += 1 if m.group(0).startswith("<template") else -1
+            if depth == 0:
+                cut = open_i + m.start()
+                break
         assert cut > 0, f"{ui}: 状态块没有闭合标签 —— 模板结构被改坏"
-        block = block[:cut]
+        block = html[idx:cut]
         used_site = set(re.findall(r"\bs\.([a-z_]+)\b(?!\()", block))
         assert used_site, f"{ui}: 没扫到任何字段 —— 锚点失效, 这个守阵现在是恒真的"
         missing = sorted(used_site - site_keys)

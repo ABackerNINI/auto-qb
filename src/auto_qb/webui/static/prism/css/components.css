@@ -507,6 +507,12 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .row-btn.danger:hover { background: var(--error-soft); color: var(--error); }
 .drawer-table td.clickable { cursor: pointer; }
 .drawer-table tr.sel td { background: var(--accent-soft); }
+/* HR 明细表① 表头过滤栏(计划 26-10-01-2216 阶段2, prism 侧; 与 views.css 的表格徽章段成对):
+ * chips 复用 .hrs-tag 底形, on 态走 accent 既有令牌; 「数据截至」时间戳靠右 */
+.hr-detail-table-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; }
+.hr-chip { cursor: pointer; user-select: none; }
+.hr-chip.on { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
+.hr-detail-table-fresh { margin-left: auto; color: var(--fg-dim); font-size: 11.5px; }
 .prio-btn { padding: 2px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: transparent; color: var(--fg-soft); font: inherit; font-size: 11.5px; cursor: pointer;
   transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }

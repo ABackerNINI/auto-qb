@@ -590,6 +590,22 @@
  * 只引既有令牌族不散写色值; skipped(优先级=跳过)仍由 tr.skipped 统一弱化 */
 .drawer-table .dir-name.dir { color: var(--fg-soft); font-weight: 600; }
 .drawer-table tr.skipped td { color: var(--fg-muted); }
+/* ---------------- HR 明细表①(计划 26-10-01-2216 阶段2, prism 侧) ----------------
+ * 骨架复用 .drawer-table(模板同挂一类); 表头 chips 过滤栏在 components.css 的
+ * drawer-table 命中处(.drawer-toolbar 旁), 本文件补表格内的 HR 专属件: 档位徽章色义
+ * (A=warn / B=green / C=error / D=blue, 计划 §5.4)+ 失踪行徽章 --paused 描边弱化(不铺底)。
+ * 色值全取五主题既有令牌(各主题声明处), 不写死 hex; 三套 UI 成对改。 */
+.hr-detail-table .hr-lane { display: inline-block; padding: 0 7px; border-radius: 3px; border: 1px solid var(--fg-dim);
+  color: var(--fg-dim); font-size: 11px; white-space: nowrap; }
+.hr-detail-table .hr-lane-a { border-color: var(--warn-line); color: var(--warn); background: var(--warn-soft); }
+.hr-detail-table .hr-lane-b { border-color: var(--green-line); color: var(--green); background: var(--green-soft); }
+.hr-detail-table .hr-lane-c { border-color: var(--error-line); color: var(--error); background: var(--error-soft); }
+.hr-detail-table .hr-lane-d { border-color: var(--blue-line); color: var(--blue); background: var(--blue-soft); }
+.hr-detail-table tr.missing .hr-lane { border-color: var(--paused); color: var(--paused); background: transparent; }
+.hr-detail-table .hr-vsrc { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--border-soft);
+  border-radius: 999px; color: var(--fg-dim); font-size: 10.5px; white-space: nowrap; }
+.hr-detail-table .hr-vsrc.hr-vsrc-b { border-color: var(--green-line); color: var(--green); }
+.hr-detail-table .hr-vsrc.hr-vsrc-d { border-color: var(--blue-line); color: var(--blue); }
 .drawer-raw { margin-top: 6px; }
 .drawer-raw summary { cursor: pointer; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 8px; }
 
