@@ -495,6 +495,22 @@ def match_path_patterns(path: str, patterns: List[str]) -> bool:
     return match_value(path, patterns, normalize=path_normalize)
 
 
+# qB 搬运未完成文件的临时后缀: qBittorrent 对未完成/被占用的搬运文件加 .!qB, 完成后改回原名。
+# 全项目单一事实源(issue 26-09-21-0219 / plan 26-09-22-2038): 判定与日志文案一律引用本常量,
+# 避免散落副本悄悄分叉。
+QB_INCOMPLETE_SUFFIX = ".!qB"
+
+
+def qb_incomplete_twin_path(path: str) -> str:
+    """原名路径 -> 其 qB 未完成孪生路径(原名 + .!qB 后缀)
+
+    纯字符串函数, 只负责后缀拼接的单点定义; 存在性探测由调用方经文件访问层
+    (file_access.exists 三态语义)完成 —— 不在本函数里直接 os.path.exists:
+    逻辑路径直探 syscall 会绕开 fs.path_map 映射(docker 部署下恒 False, 容忍静默失效)。
+    """
+    return path + QB_INCOMPLETE_SUFFIX
+
+
 def timer(unit='s', log_func=print):
     """
     参数：

@@ -6,9 +6,9 @@
 <title>qB 移动已完成种子误判缺文件 · .!qB 过渡态容忍修复计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="backend-qb-move-dot-qb">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-09-22-2038">
-<meta name="doc-updated" content="26-09-22-2038">
+<meta name="doc-updated" content="26-10-01-2118">
 <style>
   :root {
     --bg: #10151a;
@@ -88,7 +88,7 @@
     <a href="#s8"><span class="no">08</span>验收标准</a>
     <div class="toc-foot">
       关联 issue：26-09-21-0219<br>
-      bug · standard 档 · In Progress<br>
+      bug · standard 档 · Done<br>
       认领依据：用户 2026-09-22 指派
     </div>
   </nav>
@@ -100,7 +100,7 @@
     <div class="meta-row">
       <div class="item"><div class="k">计划编号</div><div class="v">26-09-22-2038</div></div>
       <div class="item"><div class="k">关联 issue</div><div class="v"><a href="../../memory-bank/issues/26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html">26-09-21-0219</a></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge open">待用户过目后实施</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">已实施 · 2026-10-01</span></div></div>
       <div class="item"><div class="k">代码基线</div><div class="v">develop @ 676f761</div></div>
       <div class="item"><div class="k">取证时间</div><div class="v">2026-09-22 20:38（命令取）</div></div>
       <div class="item"><div class="k">涉及文件</div><div class="v">utils.py · torrents.py · grouping.py · checking.py · tests/test_grouping.py</div></div>
@@ -265,7 +265,8 @@ if missing:
 
   <footer>
     26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html · 基线 develop @ 676f761（2026-09-22 20:38 快进同步）· 取证均为命令实测，行号仅加速项<br>
-    认领链：用户 2026-09-22 指派「认领 issue」→ issue 置 In Progress → 本计划为其认领凭据，实施待用户过目本计划后开始
+    认领链：用户 2026-09-22 指派「认领 issue」→ issue 置 In Progress → 本计划为其认领凭据，实施待用户过目本计划后开始<br>
+    实施记录：2026-10-01 用户指示实施（W2），实施基线 9f73b6d8 —— 红验 T1/T2/T3/T6 红 → 修复后 8 条守阵全绿，全量 test.quick 1924 passed + 3 skipped；与计划的偏差（文件访问层适配 / 符号漂移重定位）逐条记在 issue 26-09-21-0219「修复后补充」
   </footer>
 
 </div>

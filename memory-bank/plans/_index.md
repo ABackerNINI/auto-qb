@@ -22,7 +22,6 @@
 - [26-09-23-2008] [commands — 项目命令统一调用面 · 工程方案](26-09-23-2008-commands-plan.html) — `commands-unified-command-surface`
 - [26-09-22-2350] [activeContext 多 clone 冲突治理 — 工程方案](26-09-22-2350-activecontext-conflict-plan.html) — `memory-bank-activecontext-conflict`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
-- [26-09-22-2038] [qB 移动已完成种子误判缺文件 · .!qB 过渡态容忍修复计划](26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) — `backend-qb-move-dot-qb`
 - [26-09-22-1801] [tracker URL 源头脱敏 · 可行性分析与实施计划](26-09-22-1801-tracker-url-source-sanitize-plan.html) — `tracker-url-source-sanitize`
 
 ## Open
@@ -63,6 +62,7 @@
 - [26-09-25-1823] [计划 · HR 在线核实的 WEB UI 呈现（删除安全档位 × 来源档位）](26-09-25-1823-plan-webui-hr-safety-display.html) — `webui-hr-safety-display`
 - [26-09-23-1959] [文档形态统一 — 计划与报告入库 · 工程方案](26-09-23-1959-memory-bank-doc-forms-plan.html) — `memory-bank-doc-forms`
 - [26-09-22-2112] [src/auto_qb 目录结构优化 · 分层归拢计划（方案 C 定稿）](26-09-22-2112-src-layout-restructure-plan.html) — `src-layout-restructure`
+- [26-09-22-2038] [qB 移动已完成种子误判缺文件 · .!qB 过渡态容忍修复计划](26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) — `backend-qb-move-dot-qb`
 - [26-09-22-1912] [运行期状态周期落盘 · 修复「非优雅终止丢失整个运行期状态」](26-09-22-1912-backend-state-periodic-flush-plan.html) — `backend-state-persistence`
 - [26-09-22-1857] [修复计划 · 热重载 L2 分支重读磁盘 state, 运行期内存态被回滚](26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html) — `hot-reload-l2-state-rollback-fix`
 - [26-09-22-1857] [web.py create_app 拆分计划 · 926 行工厂函数 → web/ 包 + 按域 Router](26-09-22-1857-web-create-app-split-plan.html) — `web-create-app`

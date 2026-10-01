@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="backend-qb-move-dot-qb">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="qB 移动已完成种子时有概率把文件改名为 .!qB 后缀, 导致重新校验并误触缺文件检查">
 <meta name="issue-summary" content="qB 移动种子时偶发追加 .!qB 后缀, 触发重新校验并误判缺文件">
 <title>qB 移动已完成种子时有概率把文件改名为 .!qB 后缀, 导致重新校验并误触缺文件检查 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 02:19</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">grouping(缺文件扫描) / rules.actions.transfer</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">用户现场反馈</div></div>
     </div>
@@ -179,11 +179,22 @@ qB 移动已完成的种子 -> 文件被临时改名为 "原名.!qB"
     <ul>
       <li>2026-09-21 02:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-09-22 20:38 — 认领（用户指派；计划：<a href="../plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html">.!qB 过渡态容忍修复计划</a>），状态 <strong>In Progress</strong>。方案取建议修法 1 为主体 + 连续 3 次上限兜底残留（修法 2 降为备选，修法 3 已被现有代码部分覆盖）</li>
+      <li>2026-10-01 21:18 — 修复完成，状态 <strong>Done</strong>（实施 <a href="../plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html">26-09-22-2038 修复计划</a>；红验 T1/T2/T3/T6 红 → 修复后 8 条守阵全绿，全量 1924 passed + 3 skipped；实际修法与偏差见下方「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-09-22 20:38 —— 快进同步 676f761 后重跑锚点：<code>_check_missing_files</code> / <code>_handle_save_path_changes</code> / <code>_handle_state_transitions</code> / <code>_valid_for_representative</code> / <code>check_filelist</code> / <code>MoveToAction</code> 符号全部仍在，误判链路逻辑成立；现象未本地复现（无真机 qB），后缀成因维持「假设」定性，取证要求保留在计划 §07。</p>
+    <p>复验：2026-10-01 21:18 —— 实施前快进同步 9f73b6d8 后重跑锚点：误判链路符号仍在，位置随内核化重构漂移（<code>_check_missing_files</code> 现 <code>core/modules/grouping_mod.py:279</code>，<code>check_filelist</code> 现 <code>core/modules/ops_mod.py:519</code>，取证 2026-10-01）；现象仍未真机复现，取证要求保留。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（2026-10-01 实施，基线 develop @ 9f73b6d8，按计划 26-09-22-2038）</strong>：</p>
+    <ul>
+      <li><code>grouping_mod._check_missing_files</code>（三类触发源唯一汇聚点）：原名缺失时才探测 <code>原名.!qB</code> 孪生（健康路径零新增 stat），孪生存在 → 本轮整轮放弃判定（不暂停、不打标，warning「疑似 qB 搬运过渡态(.!qB)」），会话级连续计数 +1；连续 <code>TRANSITIONAL_SKIP_LIMIT = 3</code> 次未消除 → 按真实缺失走原暂停 + MISSING 分支（warning「未消除」）；正常判定（含真实缺失/大小不符/文件齐全）即清零重计。大小不一致 / OSError / UNDETERMINED 分支不动。</li>
+      <li><code>TorrentStore.transitional_missing_skips</code>：会话级内存计数（组 key → 连续次数），不落盘（黄金法则 3/5；重启归零的丢失方向是「更早恢复判定」，保守），跨轮存活不随轮清点清空，热重载 <code>reset_runtime</code> 随分组索引一并清空。</li>
+      <li><code>utils.QB_INCOMPLETE_SUFFIX</code> + <code>utils.qb_incomplete_twin_path()</code>：「.!qB」字符串全项目单点（utils.py:501），缺文件扫描与 checking 前置检查共用。</li>
+      <li><code>ops_mod.check_filelist</code>（checking 前置检查）：缺失且孪生存在时文案追加「(疑似 qB .!qB 过渡态)」，返回语义不变（计划修改点 5，跳检前置仍按缺失保守停住）。</li>
+    </ul>
+    <p><strong>与计划的偏差（语义等价适配；计划写于 676f761，实施基线 9f73b6d8）</strong>：①计划伪码 <code>utils.has_qb_incomplete_twin(path)</code> 直探 <code>os.path.exists</code>；计划写作后文件访问层（plan 26-09-27-1407）收编了下载目录全部访问，孪生探测改经 <code>fa.exists()</code> 三态语义（非 True 一律按无孪生），utils 侧只保留后缀常量与纯字符串拼接 —— 否则 docker 部署下逻辑路径直探 syscall 恒 False，容忍会静默失效（映射环境层交互由新增的 test_file_access 用例钉住）。②计划的文件锚点随内核化重构漂移：mixins/grouping.py → core/modules/grouping_mod.py、mixins/checking.py → core/modules/ops_mod.py，单点仍在扫描汇聚处。③计数键类型按实际组 key（元组）标 <code>Dict[Any, int]</code>（计划写 Dict[str, int]）。④T2 的日志断言不用 caplog —— QbManager 构造链会执行 <code>setup_logging</code> 清空 root handlers，caplog 实测恒空，改用临时 handler 直挂模块 logger。</p>
+    <p><strong>验证方式与实测数字（2026-10-01 21:18 实测）</strong>：按计划 §05 先写守阵跑红验 —— T1/T2/T3/T6 在现码上红（误停全组 + 打标被用例咬住；T3 现码第一轮即停、无计数语义），T4/T5 现码即绿，与计划红验预期一致；修复后 8 条新守阵全绿（test_grouping 5 + test_utils 2 + test_file_access 1）。全量 <code>commands run test.quick</code>：<strong>1924 passed + 3 skipped</strong>（改前 1916 passed，+8 新用例，0 既有失败），改动文件经 <code>commands run dev.fmt</code> 格式化。</p>
+    <p><strong>取证口径</strong>：现象仍未真机复现（无真机 qB），后缀成因维持「假设」定性，计划 §07 的取证要求保留 —— 现场再发生时 grep「疑似 qB 搬运过渡态」（容忍分支）/「未消除」（上限分支）即可对日志定案。</p>
   </section>
 
   <footer>

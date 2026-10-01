@@ -528,6 +528,10 @@ class OpsModule(BaseModule):
                 # 让跳检前置保守停住但不误报缺失语义(报告 §05 红线)
                 return f"路径不可判定: '{full_path}'(未命中 fs.path_map 映射)"
             if not exists:
+                # 孪生(.!qB)存在 -> 文案提示疑似 qB 搬运过渡态(仅诊断信息, 返回语义不变:
+                # 跳检前置仍按缺失保守停住); 探测同样经文件访问层, 非 True 按无孪生处理
+                if fa.exists(utils.qb_incomplete_twin_path(full_path)) is True:
+                    return f"文件缺失: {f.name}(疑似 qB {utils.QB_INCOMPLETE_SUFFIX} 过渡态)"
                 return f"文件缺失: {f.name}"
             try:
                 if fa.getsize(full_path) != f.size:

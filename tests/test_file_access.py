@@ -27,6 +27,7 @@
 - test_check_filelist_undetermined: 跳检前置映射 miss -> 「路径不可判定」(不误报文件缺失)
 - test_grouping_missing_scan_undetermined_skips: 缺文件扫描映射 miss -> 跳过该组(不暂停不打标)
 - test_grouping_missing_scan_local_stops: Local 缺文件 -> 整组暂停 + MISSING 标签(既有行为不劣化)
+- test_grouping_missing_scan_mapped_transitional_twin: 映射环境原名缺失但容器内 .!qB 孪生存在 -> 过渡态跳过; 无孪生照旧暂停(孪生探测走文件访问层)
 - test_expr_exists_and_disk_undetermined: exists()/disk_* 表达式映射 miss -> ExprError(显式报错优于静默)
 - test_freespace_condition_undetermined: freespace 条件映射 miss -> ExprError; 真实 OSError 仍静默 False
 - test_fs_config_validation_errors: fs.path_map 校验聚合(空值/相对路径/to 无根斜杠/重复/前缀歧义)
@@ -476,6 +477,38 @@ def test_grouping_missing_scan_local_stops(fa):
     assert not stopped and not tagged
 
 
+def test_grouping_missing_scan_mapped_transitional_twin(fa, tmp_path):
+    """映射环境: 原名缺失但容器内 .!qB 孪生存在 -> 过渡态跳过(不暂停不打标); 无孪生照旧暂停
+
+    孪生探测必须走文件访问层(plan 26-09-22-2038 适配): 容器空间里逻辑路径直探 syscall
+    恒不存在, 只有经映射才能看到容器内真实的 a.mkv.!qB —— 本条钉住该语义。
+    """
+    file_access._instance = _mapped(tmp_path)
+    g, stopped, tagged = _bare_grouping()
+    sizes = {"HA": {"a.mkv": 1}}
+    logical = _fake_torrent("D:/Downloads")
+
+    # 原名缺失, 容器内存在孪生 a.mkv.!qB -> 过渡态: 不暂停不打标, 计数 +1
+    twin = tmp_path / "a.mkv.!qB"
+    twin.write_bytes(b"x")
+    g._check_missing_files([logical], sizes, dry_run=False, key="k")
+    assert not stopped and not tagged
+    assert g._ctx.store.transitional_missing_skips["k"] == 1
+
+    # qB 改回原名(大小一致) -> 正常判定零动作, 计数清零
+    twin.rename(tmp_path / "a.mkv")
+    g._missing_scanned_keys.clear()
+    g._check_missing_files([logical], sizes, dry_run=False, key="k")
+    assert not stopped and not tagged
+    assert "k" not in g._ctx.store.transitional_missing_skips
+
+    # 对照: 无孪生(真实缺失) -> 照旧暂停 + 打标
+    (tmp_path / "a.mkv").unlink()
+    g._missing_scanned_keys.clear()
+    g._check_missing_files([logical], sizes, dry_run=False, key="k")
+    assert stopped and tagged
+
+
 def tmp_dir():
     import tempfile
     return tempfile.mkdtemp()
@@ -493,6 +526,8 @@ def _bare_grouping():
         config=SimpleNamespace(grouping=SimpleNamespace(check_missing_files=True, missing_tag="MISSING")),
         api=SimpleNamespace(torrents_stop=lambda **kw: stopped.append(kw)),
         maintenance=SimpleNamespace(add_tags=lambda t, tags, dry, log_level=None: tagged.append((t.hash, tuple(tags)))),
+        # 过渡态容忍计数(plan 26-09-22-2038): _check_missing_files 的新增依赖面, 白盒替身给空计数即可
+        store=SimpleNamespace(transitional_missing_skips={}),
     )
     g._missing_scanned_keys = set()
     return g, stopped, tagged

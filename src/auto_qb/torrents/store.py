@@ -30,6 +30,7 @@ class TorrentStore:
       - member_to_key: hash -> 组 key(O(1) 定位)
       - state_snapshot: hash -> 上一轮 state_enum(上传转暂停检测)
       - download_conflict_warned: (组key, 冲突类型) 去重集合
+      - transitional_missing_skips: 组key -> 连续「.!qB 过渡态」命中次数(仅内存, 见 __init__)
     本轮变化集(供主循环把 O(N) 扫描降为 O(变化数)):
       - delta_fields:  {hash: 变化字段名集合} 本轮发生变化的种子
       - state_changed: [(hash, fetch 时 state_enum)] state 字段变化的种子
@@ -88,6 +89,11 @@ class TorrentStore:
         self.member_to_key: Dict[str, Any] = {}
         self.state_snapshot: Dict[str, Any] = {}
         self.download_conflict_warned: Set[Tuple[Any, str]] = set()
+        # 缺文件扫描的过渡态容忍计数(仅内存, 重启归零): 组key -> 连续「原名缺失但 .!qB 孪生
+        # 存在」命中次数(issue 26-09-21-0219 / plan 26-09-22-2038)。软信号不落盘 —— 丢失方向
+        # 是"更早恢复判定"(保守, 沿用 verified_references 仅内存先例); 跨轮存活, 不随每轮
+        # 变化集清空(与 _missing_scanned_keys 的轮清不同); 热重载 reset_runtime 随分组索引清空。
+        self.transitional_missing_skips: Dict[Any, int] = {}
         # 内存参考种子集合(仅内存, 重启后重新积累): full-checking 校验通过的种子, 可作为同组参考
         self.verified_references: Set[str] = set()
         # 全局标签/分类缓存
@@ -422,6 +428,7 @@ class TorrentStore:
         self.member_to_key.clear()
         self.state_snapshot.clear()
         self.verified_references.clear()
+        self.transitional_missing_skips.clear()  # 组 key 随分组索引重建, 过渡态计数一并清零
         self.invalidate_tags()
         self.invalidate_categories()
         self.view_changed = True  # 分组索引已清空, 视图必须重建

@@ -18,8 +18,10 @@
 - test_match_value_normalize: match_value 核心(normalize 规范化语义, 空模式跳过)
 - test_check_filelist_all_ok: 文件列表全部一致(OpsModule.check_filelist)
 - test_check_filelist_missing: 文件缺失
+- test_check_filelist_qb_transitional_twin_hint: 缺失且 .!qB 孪生存在 -> 文案含疑似过渡态提示(返回语义不变)
 - test_check_filelist_size_mismatch: 文件大小不一致
 - test_check_filelist_api_error: 文件列表 API 错误
+- test_qb_incomplete_twin_path: .!qB 后缀单点常量与孪生路径拼接(纯函数)
 - test_timer: 计时器
 - test_os_platform_helpers: 平台判定(is_windows/is_linux/is_mac/is_posix)
 - test_parse_time_empty: 空串 -> 0
@@ -259,6 +261,33 @@ def test_check_filelist_missing():
         client.files = [SimpleNamespace(name="not_exists.mkv", size=100)]
         result = OpsModule.check_filelist(client, tor)
         assert result is not None and "文件缺失" in result
+
+
+def test_check_filelist_qb_transitional_twin_hint():
+    """文件缺失但 <原名>.!qB 孪生存在 -> 文案追加疑似 qB 过渡态提示(返回语义不变, 仍非 None)"""
+    with tempfile.TemporaryDirectory() as td:
+        client = FakeClient()
+        tor = FakeTorrent(hash="H1", name="Movie", save_path=td)
+        client.files = [SimpleNamespace(name="movie.mkv", size=100)]
+        with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
+            f.write(b"x" * 100)
+        result = OpsModule.check_filelist(client, tor)
+        assert result is not None, "孪生存在不改变返回语义(仍报缺失)"
+        assert "文件缺失" in result
+        assert "疑似 qB .!qB 过渡态" in result, f"应含过渡态提示(取证锚): {result}"
+
+        # 对照: 无孪生 -> 纯缺失文案, 不带提示
+        os.remove(os.path.join(td, "movie.mkv.!qB"))
+        result2 = OpsModule.check_filelist(client, tor)
+        assert result2 is not None and "文件缺失" in result2
+        assert "过渡态" not in result2, f"无孪生不应带过渡态提示: {result2}"
+
+
+def test_qb_incomplete_twin_path():
+    """.!qB 后缀单点定义: QB_INCOMPLETE_SUFFIX 常量与 qb_incomplete_twin_path 拼接(纯字符串函数)"""
+    assert utils.QB_INCOMPLETE_SUFFIX == ".!qB"
+    assert utils.qb_incomplete_twin_path(r"D:/dl/movie.mkv") == r"D:/dl/movie.mkv.!qB"
+    assert utils.qb_incomplete_twin_path("plain") == "plain.!qB"
 
 
 def test_check_filelist_size_mismatch():

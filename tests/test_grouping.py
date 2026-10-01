@@ -42,6 +42,11 @@
 - test_check_missing_files_empty_sizes_map: 大小映射为空 -> 无文件可检查不误报
 - test_check_missing_files_member_has_tag: 成员已带 MISSING 标签 -> 不重复 add_tags(仍暂停)
 - test_check_missing_files_dry_run: 缺文件 dry-run -> 不暂停不加标签
+- test_check_missing_files_qb_transitional_suffix_skips: 原名缺失但 .!qB 孪生存在 -> 过渡态本轮不判缺失(不暂停不打标, 计数+1)
+- test_check_missing_files_transitional_skip_limit_reaches_missing: 过渡态连续 3 次未消除 -> 第 3 次按真实缺失暂停 + MISSING(残留兜底)
+- test_check_missing_files_transitional_counter_resets_on_clean: 过渡态跳过后一次正常判定 -> 计数清零, 之后需重新连续 3 次
+- test_check_missing_files_real_missing_no_twin: 原名缺失且无孪生 -> 照旧判缺失(回归保护)
+- test_check_missing_files_dry_run_transitional: dry-run 下过渡态命中 -> 零外部副作用(不暂停不打标)
 - test_grouping_errored_transition_pauses_group: 重校验发现缺失(进入 errored)-> 同轮整组暂停 + MISSING; 持续 errored 不重复触发
 - test_grouping_errored_via_checking_transition: 经 checkingUP/checkingResumeData 中间态 -> 校验拍不触发, missingFiles 拍触发
 - test_grouping_errored_files_intact_no_action: errored 转换但磁盘文件齐全 -> 无动作(保守)
@@ -52,6 +57,7 @@
 - test_missing_scan_dedup_within_round: 同组同轮多触发源只扫一次(轮内去重), 跨轮清空后可再扫
 - test_group_key_of_is_single_source_of_truth: 归组 key 纯函数 group_key_of 与真实 mixin 输出一致(语料计划 §04 守阵)
 """
+import logging
 import os
 import tempfile
 from types import SimpleNamespace
@@ -932,6 +938,141 @@ def test_check_missing_files_dry_run():
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
         mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=True, key="K")
         assert client.calls == [], f"dry-run 不应暂停/加标签: {client.calls}"
+        assert "MISSING" not in client.tags
+
+
+def test_check_missing_files_qb_transitional_suffix_skips():
+    """过渡态容忍(issue 26-09-21-0219): 原名缺失但 <原名>.!qB 孪生存在 -> 本轮不判缺失
+
+    qB 移动种子时偶发把磁盘文件临时改名为 原名.!qB(qB 搬运未完成后缀), 改名窗口内
+    原路径不存在属过渡态 —— 本轮整轮放弃判定: 不暂停、不打 MISSING 标签; 会话级
+    连续计数 +1(残留兜底见 test_check_missing_files_transitional_skip_limit_reaches_missing)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+        # 磁盘上只有 qB 搬运期的孪生文件(原名不存在) —— 模拟改名窗口
+        with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
+            f.write(b"x" * 100)
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key="K")
+        assert client.calls == [], f"过渡态不应暂停: {client.calls}"
+        assert "MISSING" not in client.tags, "过渡态不应打标"
+        assert mgr.store.transitional_missing_skips.get("K") == 1, "过渡态命中应计数 +1"
+
+
+def test_check_missing_files_transitional_skip_limit_reaches_missing():
+    """过渡态连续 3 次未消除 -> 第 3 次按真实缺失处理(暂停 + MISSING), 兜底 qB 残留后缀
+
+    每次调用前清轮内去重集合模拟跨轮独立触发事件(事件驱动扫描, 同组同轮只扫一次)。
+    日志断言用临时 handler 直挂模块 logger: QbManager 构造链会执行 setup_logging 清空
+    root handlers, pytest 的 caplog 挂在 root 上会一并被清(实测 caplog.text 恒空)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+        grouping = mgr.host.get("grouping")
+        with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
+            f.write(b"x" * 100)
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}
+
+        records = []
+
+        class _Capture(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        glog = logging.getLogger("auto_qb.core.modules.grouping_mod")
+        cap = _Capture(level=logging.WARNING)
+        glog.addHandler(cap)
+        try:
+            for _ in range(3):
+                grouping._missing_scanned_keys.clear()  # 模拟跨轮: 下一个触发事件再判
+                grouping._check_missing_files([rep], sizes, dry_run=False, key="K")
+        finally:
+            glog.removeHandler(cap)
+
+        assert client.calls.count(("stop", None)) == 1, f"第 3 次应按真实缺失暂停: {client.calls}"
+        assert "MISSING" in client.tags, "上限触发应添加 MISSING 标签"
+        assert any("未消除" in m for m in records), f"上限分支应有可 grep 的「未消除」日志: {records}"
+        assert any("疑似 qB 搬运过渡态" in m for m in records), "前两次容忍应有过渡态日志(取证锚)"
+
+
+def test_check_missing_files_transitional_counter_resets_on_clean():
+    """过渡态计数只在相邻过渡态间累积: 一次正常判定(文件恢复原名)后清零, 需重新连续 3 次"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+        grouping = mgr.host.get("grouping")
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}
+        original = os.path.join(td, "movie.mkv")
+        twin = os.path.join(td, "movie.mkv.!qB")
+
+        # 第 1 轮: 过渡态 -> 跳过, 计数 = 1
+        with open(twin, "wb") as f:
+            f.write(b"x" * 100)
+        grouping._check_missing_files([rep], sizes, dry_run=False, key="K")
+        assert client.calls == [] and mgr.store.transitional_missing_skips.get("K") == 1
+
+        # 第 2 轮: qB 改回原名且大小一致 -> 正常判定, 计数清零
+        os.rename(twin, original)
+        grouping._missing_scanned_keys.clear()
+        grouping._check_missing_files([rep], sizes, dry_run=False, key="K")
+        assert client.calls == [], "文件齐全不应触发动作"
+        assert "K" not in mgr.store.transitional_missing_skips, "正常判定应清零过渡态计数"
+
+        # 第 3/4 轮: 再次过渡态 -> 计数从 1 重计, 两轮仍不判缺失(证明需重新连续 3 次)
+        os.remove(original)
+        with open(twin, "wb") as f:
+            f.write(b"x" * 100)
+        for _ in range(2):
+            grouping._missing_scanned_keys.clear()
+            grouping._check_missing_files([rep], sizes, dry_run=False, key="K")
+            assert client.calls == [], f"清零后连续 2 次仍不应判缺失: {client.calls}"
+
+        # 第 5 轮: 第 3 次连续过渡态 -> 兜底判缺失
+        grouping._missing_scanned_keys.clear()
+        grouping._check_missing_files([rep], sizes, dry_run=False, key="K")
+        assert client.calls.count(("stop", None)) == 1, f"重新连续 3 次应兜底判缺失: {client.calls}"
+        assert "MISSING" in client.tags
+
+
+def test_check_missing_files_real_missing_no_twin():
+    """回归保护: 原名缺失且无 .!qB 孪生 -> 照旧判缺失(暂停 + MISSING), 不受容忍逻辑影响"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在, 也无孪生
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key="K")
+        assert client.calls.count(("stop", None)) == 1, f"真实缺失应照旧暂停: {client.calls}"
+        assert "MISSING" in client.tags
+
+
+def test_check_missing_files_dry_run_transitional():
+    """dry-run 下过渡态命中 -> 零外部副作用(不暂停、不加标签; 计数为会话内报告态)"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        client = FakeClient()
+        mgr.client = client
+        with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
+            f.write(b"x" * 100)
+        rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
+        sizes = {"H1": {"movie.mkv": 100}}
+        mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=True, key="K")
+        assert client.calls == [], f"dry-run 过渡态不应暂停/加标签: {client.calls}"
         assert "MISSING" not in client.tags
 
 

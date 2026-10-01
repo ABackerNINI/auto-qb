@@ -31,6 +31,12 @@ from ..module import AppContext, BaseModule
 
 logger = logging.getLogger(__name__)
 
+# 「原名缺失但 .!qB 孪生存在」过渡态的连续容忍上限(issue 26-09-21-0219 / plan 26-09-22-2038):
+# 三个触发源(删除事件 / save_path 变化 / 状态转移)在移动场景常同轮命中同一组, 轮内去重后
+# 只扫一次 —— 连续 3 次独立事件都撞上改名窗口, 大概率是 qB 残留而非窗口, 兜底按真实缺失处理。
+# 常量不进配置: 触发条件本身已足够窄(原名缺失 且 孪生存在), 默认开启符合最小惊讶。
+TRANSITIONAL_SKIP_LIMIT = 3
+
 
 def group_key_of(save_path: str, file_map: Mapping[str, int]):
     """归组 key 的单一事实源: (规范化 save_path, 排序后的文件相对路径元组)
@@ -281,6 +287,16 @@ class GroupingModule(BaseModule):
         sizes: 组内缓存的文件大小映射 {hash: {规范化相对路径: 大小}}(增量归组时拉取, 复用)
         key: 组 key, 用于轮内去重 —— 移动种子等场景同一轮会同时命中多个触发源(如状态转移+路径变化),
         同组同轮只扫一次(跨轮不抑制, 各轮事件仍各自检测)
+
+        过渡态容忍(plan 26-09-22-2038, issue 26-09-21-0219): qB 移动种子时偶发把磁盘文件临时
+        改名为 原名.!qB(搬运未完成后缀, 完成后改回), 改名窗口内原路径不存在属过渡态 —— 命中
+        (原名缺失 且 原名+.!qB 孪生存在, 后缀成因保持中立, 只看可观测状态)时**整轮放弃判定**
+        (目录处于改名窗口, 部分文件在、部分带后缀, 任何部分结论都不可靠): 不暂停、不打标, 等
+        下一个触发事件再判; 连续 TRANSITIONAL_SKIP_LIMIT 次未消除视为 qB 残留, 按真实缺失兜底。
+        连续计数存 store.transitional_missing_skips(仅内存, 不落盘, 跨轮存活) —— 正常判定
+        (含真实缺失/大小不符/文件齐全)即清零重计; 大小不一致 / OSError 分支与窗口无关(原名存在),
+        保持原判定; UNDETERMINED 早退路径未发生判定, 计数不动。dry-run 下容忍分支同样只报告,
+        外部动作由下方原有 dry_run 闸门拦截。
         """
         if not self._ctx.config.grouping.check_missing_files:
             return  # 配置禁用缺文件检查
@@ -297,6 +313,7 @@ class GroupingModule(BaseModule):
         logger.debug(f"辅种组({len(members)}个) | 检查文件丢失(代表种: {rep.log_repr})")
         fa = file_access.get_file_access()
         missing = False
+        transitional = False
         for fname, fsize in sizes.get(rep.hash, {}).items():
             full_path = os.path.normpath(os.path.join(rep.save_path, fname))
             exists = fa.exists(full_path)
@@ -306,6 +323,11 @@ class GroupingModule(BaseModule):
                 logger.warning(f"辅种组 | 路径不可判定: '{full_path}'(未命中 fs.path_map 映射), 跳过本组缺文件扫描")
                 return
             if not exists:
+                # 原名缺失时才探测孪生(健康路径零新增 stat); 存在性同样经文件访问层三态语义,
+                # 非 True(含 UNDETERMINED)一律按无孪生处理, 维持原判定
+                if fa.exists(utils.qb_incomplete_twin_path(full_path)) is True:
+                    transitional = True  # 改名窗口: 整轮放弃, 单文件结论不可靠
+                    break
                 logger.warning(f"辅种组 | 文件缺失: '{full_path}'")
                 missing = True
                 break
@@ -318,6 +340,22 @@ class GroupingModule(BaseModule):
                 logger.warning(f"辅种组 | 文件无法读取: '{full_path}'")
                 missing = True
                 break
+
+        skips = self._ctx.store.transitional_missing_skips
+        if transitional:
+            n = skips.get(key, 0) + 1
+            skips[key] = n
+            if n < TRANSITIONAL_SKIP_LIMIT:
+                logger.warning(
+                    f"辅种组 | 疑似 qB 搬运过渡态({utils.QB_INCOMPLETE_SUFFIX}), 本轮不判缺文件"
+                    f"(第{n}次): 代表种 {rep.log_repr}"
+                )
+                return  # 不暂停、不打标; 下一个触发事件再判
+            logger.warning(f"辅种组 | 过渡态({utils.QB_INCOMPLETE_SUFFIX})连续 {n} 次未消除, 按真实缺失处理")
+            missing = True  # 落入下方原有整组暂停 + MISSING 分支(残留兜底)
+        else:
+            # 正常判定结束(含真实缺失/大小不符/文件齐全): 清零重计, 连续次数只在相邻过渡态间累积
+            skips.pop(key, None)
 
         if missing:
             # 文件丢失: 同组所有种子全部触发丢失动作(暂停 + MISSING 标签)
