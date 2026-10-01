@@ -7,6 +7,8 @@
 
 **Topics:** backend-kernel-module-refactor
 
+**Refs:** memory-bank/reports/26-10-01-0918-report-kernel-module-refactor-audit.html
+
 **Legacy-ID:** 无
 
 ## 原始请求

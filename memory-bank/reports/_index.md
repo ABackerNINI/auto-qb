@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-01-0918] [审计报告 · QbManager 内核化重构实施评估](26-10-01-0918-report-kernel-module-refactor-audit.html) — `kernel-module-refactor`
 - [26-09-30-1806] [WEBUI 列表键鼠交互割裂 · 业界成熟方案调研与推荐 · auto-qb](26-09-30-1806-report-webui-keymouse-cohesion.html) — `webui-keyboard-shortcuts`
 - [26-09-29-1803] [HR 计数: 数据完整性的校验和 — 可行性分析](26-09-29-1803-report-hr-counter-verify.html) — `backend-partial-hr-verify`
 - [26-09-29-0404] [HR 在线核实 v3 · 重构后全面复审(安全/稳定性/缺陷) · 审查报告 · auto-qb](26-09-29-0404-report-hr-verify-v3-audit.html) — `backend-partial-hr-verify`

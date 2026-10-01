@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="kernel-module-refactor">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-01-0918">
+<meta name="doc-updated" content="26-10-01-0918">
+<meta name="doc-refs" content="memory-bank/plans/26-09-30-1819-plan-kernel-module-refactor.html,memory-bank/tasks/26-09-30-backend-kernel-module-refactor.md,memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.html,memory-bank/testing/baselines/26-10-01-0359-p6-closeout.md">
+<title>审计报告 · QbManager 内核化重构实施评估</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1216;
+    --paper: #14181d;
+    --paper-2: #181d23;
+    --ink: #d9dee3;
+    --muted: #8b949e;
+    --faint: #6b7480;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.16);
+    --accent: #7ab3c4;
+    --accent-soft: rgba(122,179,196,.13);
+    --warn: #c9a86a;
+    --bad: #c47a7a;
+    --disp: "Bahnschrift", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --body: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .frame { display: flex; max-width: 1280px; margin: 0 auto; }
+  nav.toc {
+    flex: 0 0 224px;
+    position: sticky; top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    padding: 44px 20px 40px 28px;
+    border-right: 1px solid var(--hairline);
+    overflow-y: auto;
+  }
+  nav.toc .toc-kicker {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .14em;
+    color: var(--faint); text-transform: uppercase; margin-bottom: 14px;
+  }
+  nav.toc a {
+    display: block; color: var(--muted); text-decoration: none;
+    font-size: 12.5px; line-height: 1.5; padding: 4.5px 0;
+  }
+  nav.toc a .n { font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-right: 8px; }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc .toc-meta { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--hairline); }
+  nav.toc .toc-meta div { font-family: var(--mono); font-size: 10.5px; color: var(--faint); line-height: 1.9; }
+  nav.toc .toc-meta b { color: var(--muted); font-weight: 400; }
+  main { flex: 1; min-width: 0; padding: 0 56px 90px; }
+  @media (max-width: 1080px) {
+    nav.toc { display: none; }
+    main { padding: 0 28px 70px; }
+  }
+  header.cover { padding: 64px 0 40px; border-bottom: 1px solid var(--hairline-strong); }
+  .kicker {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+  }
+  h1 {
+    font-family: var(--disp); font-weight: 600;
+    font-size: 38px; line-height: 1.16; letter-spacing: -.02em;
+    max-width: 22em;
+  }
+  .subtitle { margin-top: 14px; font-size: 16px; color: var(--muted); max-width: 48em; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 28px;
+    margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--hairline);
+  }
+  .meta-row div { font-family: var(--mono); font-size: 11px; color: var(--faint); line-height: 1.7; }
+  .meta-row b { display: block; color: var(--ink); font-weight: 400; font-size: 12px; }
+  .lede {
+    margin-top: 34px; font-size: 16px; line-height: 1.75; color: var(--ink);
+    max-width: 64em;
+  }
+  .lede em { font-style: normal; color: var(--accent); }
+  section { padding-top: 56px; scroll-margin-top: 20px; }
+  section > .sec-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+  section > .sec-head .no {
+    font-family: var(--mono); font-size: 12px; color: var(--accent); letter-spacing: .1em;
+  }
+  h2 {
+    font-family: var(--disp); font-weight: 600; font-size: 25px;
+    letter-spacing: -.01em; line-height: 1.2;
+  }
+  h3 {
+    font-family: var(--disp); font-weight: 600; font-size: 16.5px;
+    margin: 34px 0 10px; color: var(--ink);
+  }
+  h3 .h3n { font-family: var(--mono); font-size: 11.5px; color: var(--accent); margin-right: 10px; font-weight: 400; }
+  p { max-width: 66em; margin: 12px 0; color: var(--ink); }
+  p.small, .small { font-size: 13px; color: var(--muted); }
+  strong { font-weight: 600; }
+  a { color: var(--accent); text-decoration: none; }
+  ul, ol { margin: 10px 0 14px; padding-left: 1.5em; max-width: 64em; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--faint); }
+  code {
+    font-family: var(--mono); font-size: .86em;
+    background: var(--paper-2); border: 1px solid var(--hairline);
+    padding: 1px 5px; border-radius: 3px; color: var(--ink);
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 18px 0 8px; font-size: 13px; line-height: 1.6;
+  }
+  th {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 400;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--muted);
+    text-align: left; padding: 7px 12px 7px 0;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+  td .dim { color: var(--muted); }
+  tr:last-child td { border-bottom: none; }
+  .tbl-note { font-size: 12px; color: var(--faint); margin-top: 6px; }
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    background: var(--paper); border: 1px solid var(--hairline);
+    padding: 18px 20px; overflow-x: auto; margin: 16px 0;
+    color: var(--ink);
+  }
+  pre .cm { color: var(--faint); }
+  .note {
+    border: 1px solid var(--hairline); border-left: 2px solid var(--accent);
+    background: var(--paper); padding: 14px 18px; margin: 18px 0; max-width: 64em;
+  }
+  .note.warn { border-left-color: var(--warn); }
+  .note.bad { border-left-color: var(--bad); }
+  .note .t {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+  }
+  .note.warn .t { color: var(--warn); }
+  .note.bad .t { color: var(--bad); }
+  .note p { margin: 4px 0; font-size: 13.5px; }
+  .verdict {
+    border: 1px solid var(--hairline-strong); background: var(--paper);
+    padding: 20px 24px; margin: 26px 0 8px; max-width: 66em;
+  }
+  .verdict .v-k {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 8px;
+  }
+  .verdict p { margin: 6px 0; font-size: 14.5px; }
+  .colophon {
+    margin-top: 70px; padding-top: 22px; border-top: 1px solid var(--hairline-strong);
+    font-family: var(--mono); font-size: 11px; color: var(--faint); line-height: 2;
+  }
+  .ok   { color: #8fbf8f; }
+  .warn { color: var(--warn); }
+  .bad  { color: var(--bad); }
+</style>
+</head>
+<body>
+<div class="frame">
+
+<nav class="toc">
+  <div class="toc-kicker">Contents</div>
+  <a href="#s01"><span class="n">01</span>审计方法与证据面</a>
+  <a href="#s02"><span class="n">02</span>总体结论</a>
+  <a href="#s03"><span class="n">03</span>完整性: P0-P6 逐段核对</a>
+  <a href="#s04"><span class="n">04</span>结构性目标与不变量核验</a>
+  <a href="#s05"><span class="n">05</span>偏差清单 (7 项)</a>
+  <a href="#s06"><span class="n">06</span>问题清单 (3 中 + 9 低)</a>
+  <a href="#s07"><span class="n">07</span>分维度评估</a>
+  <a href="#s08"><span class="n">08</span>测试与守阵评估</a>
+  <a href="#s09"><span class="n">09</span>建议与后续</a>
+  <div class="toc-meta">
+    <div>status <b>Done 快照</b></div>
+    <div>topic <b>kernel-module-refactor</b></div>
+    <div>added <b>26-10-01-0918</b></div>
+    <div>审计基线 <b>18c2c40c</b></div>
+    <div style="margin-top:6px">test.full 实测<br><b>1895 passed + 3 skip</b><br>91% · 27.4s</div>
+  </div>
+</nav>
+
+<main>
+
+<header class="cover">
+  <div class="kicker">Report · kernel-module-refactor · 实施审计</div>
+  <h1>QbManager 内核化重构<br>实施情况全面评估</h1>
+  <div class="subtitle">计划 26-09-30-1819 (微内核 + 插件式模块, P0-P6 七段) 的独立审计: 实施完整性 / 偏离度 / 安全 / 稳定 / 可维护 / 可测试 / 缺陷 / 测试 / 性能。</div>
+  <div class="meta-row">
+    <div>审计对象<b>plans/26-09-30-1819 (Done)</b></div>
+    <div>审计基线<b>develop @ 18c2c40c</b></div>
+    <div>实施提交<b>P0-P6 七笔 + W3 + 修复</b></div>
+    <div>test.full<b>1895 passed + 3 skipped / 91%</b></div>
+    <div>审计日期<b>2026-10-01</b></div>
+  </div>
+  <p class="lede">一句话结论: <strong>实施完整、质量高, 通过验收</strong>。计划 P0-P6 全部条目逐项落地且每段的指定守阵都在位; 7 项实施偏差全部有文档记录 (5 项明确文档化, 2 项轻微未单列), 无隐瞒性偏离; 结构性目标 (内核零业务 import / 模块横向零 import / 外围私有面清零 / 段认领完备) 全部核实成立且有机检。审计新发现 1 个低概率错误路径语义差异 (M1) 与 2 个测试缺口 (M2/M3), 均不阻塞验收。</p>
+
+  <div class="verdict">
+    <div class="v-k">Verdict</div>
+    <p><strong>完整性</strong> — P0-P6 七段全部实施, 声称数字与实物一致 (仅 P5 守阵例数档案写 9 实为 10, 多出的是回归补例)。</p>
+    <p><strong>偏离度</strong> — 7 项偏差, 全部可解释: 其中「逐种子管线次序重排」源于计划 §4.2 与 §3.3 自身矛盾, 实现取装配序并论证了数据独立性, 守阵锁定。</p>
+    <p><strong>质量</strong> — 守阵 62 例行为驱动、负例充分; 重构期自引入的 1 个 bug (issue 26-10-01-0750) 被自家守阵抓出并修复, 是测试体系有效性的正面证据。</p>
+    <p><strong>遗留</strong> — 3 项中低严重度发现 (抑制窗口错误路径 / 重建判据矩阵缺口 / 总线异常约定空缺) + 9 项低severity观察项, 建议入池另排 (见 §09)。</p>
+  </div>
+</header>
+
+<!-- ============================================================ 01 -->
+<section id="s01">
+  <div class="sec-head"><span class="no">01</span><h2>审计方法与证据面</h2></div>
+  <ul>
+    <li><strong>计划与档案</strong>: 通读计划 26-09-30-1819 全文 (§1-§9 含拍板记录) 与任务档案 <code>tasks/26-09-30-backend-kernel-module-refactor.md</code> (P0-P6 滚动日志), 提取全部可核验声明。</li>
+    <li><strong>代码精读</strong>: 审计者逐行读完内核化改造后的全部核心文件, 共 14 个 3,914 行 —— <code>core/qbmanager.py</code> (839) / <code>core/module.py</code> (353) / <code>core/state.py</code> (227) / <code>core/modules/</code> 八模块 (2,348) / <code>webui/module.py</code> (106) / <code>hr/module.py</code> (41)。</li>
+    <li><strong>历史比对</strong>: 用 git 提取 P5 前夜 (8ef82f48) 的 <code>_refresh_torrents</code> / <code>apply_new_config</code> / <code>impact.py</code> 原文, 与新实现逐行比对语义等价性 —— 覆盖事件分派参数、逐种子管线次序、L2 重建序列、<code>global_speed_limit_curve</code> 级别归属、未知段默认级别。</li>
+    <li><strong>并行核查</strong>: 两个只读探索代理分别做「守阵测试质量评估」(7 个测试文件 62 例) 与「外围耦合清零核查」(8 组 grep / AST 扫描)。</li>
+    <li><strong>实测</strong>: 本审计独立重跑 <code>commands run test.full</code> —— <strong>1895 passed + 3 skipped / 91% 覆盖, 27.4s, rc=0</strong> (2026-10-01 实测, 较 P6 基线 1890 又 +5, 系别名处置 W2 增补)。</li>
+    <li><strong>制品核验</strong>: 7 个分段基线切片、README 架构段、<code>conventions/modules.md</code>、计划 _index 登记逐一确认存在。</li>
+  </ul>
+  <p class="small">提交轨迹 (每段独立一笔, 符合计划「每段独立入库、全量绿、可回退」): P0 <code>01e47169</code> → P1 <code>2174a568</code> → P2 <code>83e56f1f</code> → P3 <code>ed514e30</code> → P4 <code>8ef82f48</code> → P5 <code>54c83ac3</code> → P6 <code>82330d45</code> → (别名处置 W3 <code>84473206</code>) → (suppress 修复 <code>18c2c40c</code>)。</p>
+</section>
+
+<!-- ============================================================ 02 -->
+<section id="s02">
+  <div class="sec-head"><span class="no">02</span><h2>总体结论</h2></div>
+  <table>
+    <thead><tr><th style="width:16%">维度</th><th style="width:12%">评级</th><th>依据 (详见对应章节)</th></tr></thead>
+    <tbody>
+      <tr><td>实施完整性</td><td class="ok">高 · 达成</td><td>P0-P6 全条目落地, 指定守阵全在位, 每段基线切片与独立提交齐备 (§03)</td></tr>
+      <tr><td>计划符合度</td><td class="ok">高 · 无隐瞒偏离</td><td>7 项偏差全可解释, 5 项文档化 + 2 项轻微未单列; 1 处计划内部矛盾被合理裁决 (§05)</td></tr>
+      <tr><td>安全性</td><td class="ok">保持</td><td>危险操作保护策略逐行随迁核实; 私有面直写清零反而收紧边界 (§07)</td></tr>
+      <tr><td>稳定性</td><td class="ok">保持 +</td><td>10 条运行时不变量逐条核实保留; 1 个错误路径边界差异 (M1, §06)</td></tr>
+      <tr><td>可维护性</td><td class="ok">显著提升</td><td>内核零业务 import (AST 机检) / 模块横向零 import / 契约与段认领单点文档; 残留 3 处小脏面 (§07)</td></tr>
+      <tr><td>可测试性</td><td class="ok">显著提升</td><td>62 例新守阵 + 模块可独立构造 + 测试基建根修; 2 个覆盖缺口 (M2/M3, §08)</td></tr>
+      <tr><td>缺陷 (BUG)</td><td class="warn">1 已修 + 1 新发现</td><td>重构期自引入 bug (0750) 被守阵抓出已修; 审计新发现 M1 低概率边界差异; 无阻塞性缺陷 (§06)</td></tr>
+      <tr><td>优化 / 性能</td><td class="ok">达标</td><td>5000 种子短路 0.01ms vs 重建 0.7ms; 无关保存零动作消除了过度重启族 (§07)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <div class="t">守阵有效性的正面证据</div>
+    <p>P5 将原「立即置位抑制旗标」收口进总线时引入了一个自伤 bug: 抑制窗内连续第二次 L2 重建的 <code>queue_rebuilt</code> 相位被吞, 全局任务丢失 (issue 26-10-01-0750)。该问题被守阵 <code>test_rebuild_within_window_still_delivers_queue_rebuilt</code> 抓出, 以「请求位 / live 旗标两字段协议」修复 (<code>18c2c40c</code>) 并留回归例 —— 这正是本计划「相位语义靠守阵背书」策略按设计工作的实证。</p>
+  </div>
+</section>
+
+<!-- ============================================================ 03 -->
+<section id="s03">
+  <div class="sec-head"><span class="no">03</span><h2>完整性: P0-P6 逐段核对</h2></div>
+  <table>
+    <thead><tr><th style="width:8%">段</th><th style="width:44%">计划承诺 (要点)</th><th style="width:34%">核验证据</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">P0</td>
+        <td><code>core/module.py</code> 契约层 + <code>core/state.py</code> 状态服务; qbmanager 属性委托; 守阵「ctx.store is manager.store 同对象」</td>
+        <td class="mono">module.py 353 行 (Protocol/BaseModule/AppContext/EventBus/ModuleHost) · state.py 227 行全族收拢 · test_module_host 11 例含九面同对象断言</td>
+        <td class="ok">落地</td>
+      </tr>
+      <tr>
+        <td class="mono">P1</td>
+        <td>Logging/Notify 模块样板; 热重载 L1 重挂改广播; 托盘 4 处直写改 <code>ctx.notify</code></td>
+        <td class="mono">logging_mod/notify_mod 落位 · tray/app.py 私有面 grep 清零 (406/427/456-470 改公开口) · 段变才重挂守阵</td>
+        <td class="ok">落地</td>
+      </tr>
+      <tr>
+        <td class="mono">P2</td>
+        <td>webui/hr 门面转正; run() 改 host.start_all/stop_all; loop hooks; start_web_server 不再写 <code>_web_token</code></td>
+        <td class="mono">webui/module.py 106 行 + hr/module.py 41 行 · <code>_web_token</code> 词边界 grep 全库零命中, 令牌写点唯一在 WebUIRuntime.ensure_token · run 接线守阵</td>
+        <td class="ok">落地</td>
+      </tr>
+      <tr>
+        <td class="mono">P3</td>
+        <td>tracker/speed_curve/maintenance 三模块; <code>ctx.trackers</code> 服务 (D3); 全局任务自注册; <code>_create_global_tasks</code> 点名退役</td>
+        <td class="mono">三模块落位 (102/321/363 行) · full_round + queue_rebuilt 相位 · TaskQueue.has_named 幂等 · 内核只剩单行 emit 兼容转发</td>
+        <td class="ok">落地</td>
+      </tr>
+      <tr>
+        <td class="mono">P4</td>
+        <td>grouping 四相位; ops(+checking 并入 D2) 升 <code>ctx.ops</code>; ops→rules 反向 import 单向化</td>
+        <td class="mono">grouping_mod 440 行四相位订阅 · ops_mod 537 行含 check_filelist · <code>rules/checking_meta.py</code> 中性叶成立, ops_mod 只 import rules.base + checking_meta, 方向无环</td>
+        <td class="ok">落地</td>
+      </tr>
+      <tr>
+        <td class="mono">P5</td>
+        <td>RulesModule; 相位表生效; L2 重建收进 rules.apply (W3); 三表退役 (W4); 内核零 rules import; 抑制窗口协议</td>
+        <td class="mono">rules_mod 429 行 · impact.py 96→52 行只留 diff+R 闸 · AST 守阵 <code>test_kernel_does_not_import_business_packages</code> · 相位顺序守阵与 §4.2 表一致 (synced 除外, 见 §05-7)</td>
+        <td class="ok">落地</td>
+      </tr>
+      <tr>
+        <td class="mono">P6</td>
+        <td>段认领完备守阵 + 未认领段 WARN/兜底; 文档回写; 四场景真机走查; 别名处置另立计划 (D4)</td>
+        <td class="mono">KERNEL_SECTIONS + claimed_sections() + 兜底代码 (qbmanager.py:614-644) · 守阵双向完备 (24 段全有主) · 4 场景 sim 走查实录入基线切片 · 计划 26-10-01-0350 已立 (且后续已实施完)</td>
+        <td class="ok">落地</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">配套核验: 7 个基线切片 (1912/2000/2048/2142/2250/0245/0359) 全在; 测试轨迹 1843 → 1850 → 1860 → 1871 → 1879 → 1876 (三表退役收缩 -13) → 1890 → 现 1895, 与档案逐段吻合。</p>
+
+  <h3><span class="h3n">3.1</span>「行为等价」声明的抽样深检 (git 比对)</h3>
+  <ul>
+    <li><strong>事件分派参数</strong>: 原版 removed 分派固定传 <code>state_changed=True, field_changed=True</code>、added 分派走默认 False —— 新 <code>_on_events_removed/_on_events_added</code> 传参逐字一致。</li>
+    <li><strong>L2 重建序列</strong>: 原版七行 (换队列 → reset_runtime → _load_rules → 全局任务 → 抑制 → 三行重连) 与新 <code>rebuild_runtime()</code> 六步逐项对应 (<code>queue_rebuilt</code> emit 即原 <code>_create_global_tasks</code> 转发; <code>request_suppression</code> 即原抑制置位; <code>reconnect()</code> 即原三行序列)。</li>
+    <li><strong>L2 判据无漂移</strong>: 原版 impact.py 中 <code>global_speed_limit_curve</code> 本就是 L2 级、未登记段默认 L2 —— 新 <code>_rebuild_needed</code> 六判据与「未认领段兜底重建」正是原语义的显式化。</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 04 -->
+<section id="s04">
+  <div class="sec-head"><span class="no">04</span><h2>结构性目标与不变量核验</h2></div>
+  <h3><span class="h3n">4.1</span>八项「耦合清零」声明 — 全部核实成立</h3>
+  <table>
+    <thead><tr><th style="width:36%">声明</th><th style="width:48%">核验方式与结果</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td>内核零 rules import</td><td class="mono">qbmanager/module/state 三文件 import 面核查 + AST 守阵在位</td><td class="ok">成立</td></tr>
+      <tr><td>模块横向零 import</td><td class="mono">10 个模块文件全量 import 清单, 无任何兄弟模块引用; 协作全经 ctx 句柄与相位</td><td class="ok">成立</td></tr>
+      <tr><td>托盘私有面清零</td><td class="mono">tray/ 下 (manager|mgr)._ 零代码命中; 4 处改经 ctx.notify 公开口</td><td class="ok">成立</td></tr>
+      <tr><td>_web_token 直写清零</td><td class="mono">字段名全库零命中; 令牌写点唯一 (runtime.py:531)</td><td class="ok">成立</td></tr>
+      <tr><td>ops/rules 单向化</td><td class="mono">ops_mod→rules.{base,checking_meta} 单向; checking_meta 零依赖; full_checking 不 import ops</td><td class="ok">成立</td></tr>
+      <tr><td>_WEB_STATE_ALIAS 退役</td><td class="mono">仅存退役注释; 别名冻结守阵 test_qbmanager_alias_freeze 常驻 (随处置计划 W3)</td><td class="ok">成立</td></tr>
+      <tr><td>全局私有写扫描</td><td class="mono">全 src 非 self 的 ._x= 赋值仅 5 处, 全部与 manager 无关 (store 缓存失效 / 第三方窗口标志)</td><td class="ok">成立</td></tr>
+      <tr><td>mixins 业务件退役</td><td class="mono">tags/tracker/speed_curve/grouping/ops/checking/rule_engine 七文件全删; 包只剩 webui 组合入口</td><td class="ok">成立</td></tr>
+    </tbody>
+  </table>
+
+  <h3><span class="h3n">4.2</span>十条运行时不变量 (计划 §7.1) — 逐条在代码中核实</h3>
+  <table>
+    <thead><tr><th style="width:30%">不变量</th><th>核验点</th><th style="width:10%">判定</th></tr></thead>
+    <tbody>
+      <tr><td>单一写线程</td><td class="mono">EventBus 同步分发无锁, 相位消费全在主循环线程 (module.py:191); 模块线程只投递意图</td><td class="ok">保留</td></tr>
+      <tr><td>_throttle 非托管真实睡眠</td><td class="mono">函数与回归注释原样随迁内核 (qbmanager.py:97-112)</td><td class="ok">保留</td></tr>
+      <tr><td>命令线 ≠ tick</td><td class="mono">wake 只 drain 命令; SELF_POSTED_COMMANDS 不唤醒语义在门面 (qbmanager.py:387-401)</td><td class="ok">保留</td></tr>
+      <tr><td>flush_truths 次序</td><td class="mono">补刷新后无条件落 + 异常兜底只在未跑到时补 (qbmanager.py:523-565)</td><td class="ok">保留</td></tr>
+      <tr><td>首轮重放保护</td><td class="mono">总线两字段协议, 窗口精确覆盖两个事件相位; 正常路径语义等价 (错误路径见 M1)</td><td class="warn">基本保留</td></tr>
+      <tr><td>重连退避 + 转换日志</td><td class="mono">退避上限 30s / 状态转换记录 / connect 仅启动一次 + 恢复检测路径 (qbmanager.py:334-373, 540-545)</td><td class="ok">保留</td></tr>
+      <tr><td>hr.judge 只读契约</td><td class="mono">HrModule 透传, 判据单点在 HrRuntime.apply; store.hr_link 稳定引用注入移进装配</td><td class="ok">保留</td></tr>
+      <tr><td>代表种两口径不混</td><td class="mono">grouping_mod 两判据 docstring 互指, 各自单点 (grouping_mod.py:258-271, 425-440)</td><td class="ok">保留</td></tr>
+      <tr><td>校验先登记在途再发请求</td><td class="mono">ops_mod.recheck 先 add_task 后发 API, 失败登记自消亡 (ops_mod.py:223-243)</td><td class="ok">保留</td></tr>
+      <tr><td>dry-run 只打日志不落盘</td><td class="mono">start(dry_run) 全量透传; 落盘/web/HR 启用判定口径逐模块核实</td><td class="ok">保留</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ 05 -->
+<section id="s05">
+  <div class="sec-head"><span class="no">05</span><h2>偏差清单 (7 项)</h2></div>
+  <p>实施与计划文本的 全部差异如下。审计立场: 偏差本身不扣分, <strong>隐瞒才扣分</strong> —— 7 项中 5 项在任务档案/代码注释中有明确记录与论证, 2 项轻微未单列 (6/7)。</p>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:26%">偏差</th><th style="width:44%">内容与成因</th><th style="width:16%">审计评价</th><th>记录状态</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="mono">1</td>
+        <td>逐种子管线次序重排</td>
+        <td>计划 §4.2 认领列 (维护→限速→建任务→归组→集数) 与 §3.3 装配序矛盾, 「单订阅+装配序」语义下不可双全; 实现取装配序 = 限速→维护+集数→归组→建任务, 论证相位内各步数据互不依赖</td>
+        <td class="ok">合理裁决</td>
+        <td>档案 P5 文档化 + 守阵锁定</td>
+      </tr>
+      <tr>
+        <td class="mono">2</td>
+        <td>qbmanager 行数 839 vs 计划 ≈450</td>
+        <td>计划估算未扣兼容/委托层; P5 峰值 1084, 别名处置 W3 后 839; 结构性目标 (零业务 import) 已达成且可机检, 纯行数目标未达 (docstring 与 D1 永久保留的 7 组外观属性对占约 160 行)</td>
+        <td class="warn">部分达成</td>
+        <td>档案 P5 行数账文档化</td>
+      </tr>
+      <tr>
+        <td class="mono">3</td>
+        <td>state 委托语义</td>
+        <td>plan §7.2 的「指向 ctx 同一对象」对 state 取「载荷同对象」解释 (manager.state = ctx.state.data 的 dict), 8 处测试整体替换语义保持</td>
+        <td class="ok">合理取舍</td>
+        <td>档案 P0 文档化</td>
+      </tr>
+      <tr>
+        <td class="mono">4</td>
+        <td>client 未单列 ctx 服务</td>
+        <td>连接管理属内核 (plan §3.1 本就如此列), client 绑定逻辑留内核 client property, 未成为 ctx 能力服务</td>
+        <td class="ok">符合计划本意</td>
+        <td>档案 P0 文档化</td>
+      </tr>
+      <tr>
+        <td class="mono">5</td>
+        <td>P5 守阵 10 例 vs 档案称 9 例</td>
+        <td>多出的 1 例是 issue 0750 回归补例 (docstring 已列 10 条), 档案句尾数字未同步</td>
+        <td class="ok">无害误差</td>
+        <td>本报告勘误</td>
+      </tr>
+      <tr>
+        <td class="mono">6</td>
+        <td>file_access 未挂 ctx</td>
+        <td>plan §3.1 能力服务清单含 file_access, 实现保留模块级单例 (init_file_access 构造期一次, fs 为 R 级不热切换)</td>
+        <td class="warn">轻微</td>
+        <td><span class="warn">未单列</span> (P0「最小集」表述隐含)</td>
+      </tr>
+      <tr>
+        <td class="mono">7</td>
+        <td>synced 相位未落成事件</td>
+        <td>plan §4.2 相位表第一行 (synced → webui 认领) 未实现为相位, 内核保留直调 <code>self.web.mark_search_index_dirty()</code> (qbmanager.py:762); 表中 8 相位落了 7 个。「同步 + 相位广播」的表述对此略有夸大</td>
+        <td class="warn">轻微</td>
+        <td><span class="warn">未单列</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <div class="t">关于偏差 1 的独立复核</div>
+    <p>审计对「数据互不依赖」做了独立验证而非采信档案: 限速只写 qB API、维护/集数只加标签 (非 missing_tag, 不影响归组冲突判定的 done 计数)、归组只写 store 索引、建任务只入队 (执行期才读种子状态) —— 互不读对方产物, 重排成立。且 P5 前夜原版代码中「维护」本就先于「限速」运行, 两步相对次序的调换无观察者。</p>
+  </div>
+</section>
+
+<!-- ============================================================ 06 -->
+<section id="s06">
+  <div class="sec-head"><span class="no">06</span><h2>问题清单 (3 中低 + 9 低)</h2></div>
+
+  <h3><span class="h3n">6.1</span>中低严重度 (M1-M3)</h3>
+
+  <div class="note warn">
+    <div class="t">M1 · 抑制窗口请求位在错误路径上丢失 → 事件规则全量重放 (稳定 · 低概率)</div>
+    <p><strong>现象</strong>: <code>take_suppressed()</code> 在 <code>apply_sync</code> <em>之前</em>消费请求位 (qbmanager.py:746), 而 live 旗标在 transitions 相位后才挂 (:776-777)。若 L2 重建后的首轮刷新恰在 <code>apply_sync</code> 抛异常 (qB 连接抖动), 请求位已被读走而旗标未挂 —— 原实现中 <code>_suppress_events=True</code> 会跨失败轮存活到下一个成功轮末尾, 新实现则抑制丢失: 下一轮全量同步 (rid 已失效) 把全部存量种子判为 added, <code>on_torrent_added</code> 事件规则对全库重放。</p>
+    <p><strong>影响</strong>: 低概率 (需重建 + 首同步恰好失败两个条件叠加), 后果是事件规则重放 (如重复通知 / 重复动作); 与计划 §7.1「语义等价」的声明在错误路径上不符。<strong>方向</strong>: 把请求位消费点移到「确认挂旗标处」, 或在刷新异常路径重新武装请求位。</p>
+  </div>
+
+  <div class="note warn">
+    <div class="t">M2 · <code>_rebuild_needed</code> 判据矩阵守阵缺口 (测试)</div>
+    <p>六个判据段 (rules_config / interval / delete_tags / delete_tags_if_has_no_torrents / global_speed_limit_curve / trackers 绑定三元组) 中只有 <code>interval</code> 被单测单独触发过; 实现若漏掉任一成员, 现有守阵全绿。热重载「该重建不重建」正是计划点名的四失效族之一, 建议补参数化矩阵用例。</p>
+  </div>
+
+  <div class="note warn">
+    <div class="t">M3 · EventBus 订阅者异常行为零约定零测试 (可维护 · 非回归)</div>
+    <p><code>EventBus.emit</code> 无 try/except (module.py:202-214): 某相位订阅者抛异常会中断同相位剩余订阅者并上抛 (被主循环兜底 except 捕获记「主循环异常」), 该轮后续相位与 store 双快照收尾全部跳过。此行为与重构前内联代码一致 (非回归), 但模块化后它是横跨 10 个模块的隐式契约 —— 「模块异常 = 牺牲本轮剩余管线」应当写进 <code>conventions/modules.md</code> 并配守阵 (loop hooks 同理); 若要收敛为「单订阅者隔离 + 记错不中断」则是行为变更, 须走有意决策。</p>
+  </div>
+
+  <h3><span class="h3n">6.2</span>低severity观察项 (L1-L9)</h3>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th style="width:20%">项</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">L1</td><td>内核触模块私有方法</td><td class="mono">run() 直调 <code>host.get("rules")._load_rules()</code> (qbmanager.py:459, W3 内联产物) —— 内核「知道何事」的残留口, 建议改为模块公开方法或 start 语义承担</td></tr>
+      <tr><td class="mono">L2</td><td>死代码残留</td><td class="mono"><code>core/mixins/__init__.py</code> (15 行 shim) 全库无人 import; <code>src/auto_qb/mixins/</code> 空目录残留</td></tr>
+      <tr><td class="mono">L3</td><td>私有名经宿主回环</td><td class="mono">webui/runtime.py:326 <code>_host._build_search_index()</code> / :488 <code>_host._state_kind(t)</code> 实际定义在自家 WebviewMixin —— 命名面回环, 应公开化或直调</td></tr>
+      <tr><td class="mono">L4</td><td>测试 docstring 漂移</td><td class="mono">test_facade_modules 清单漏 1 条; test_modules_p4 清单函数名失配且承诺已随 W3 过时</td></tr>
+      <tr><td class="mono">L5</td><td>子串式守阵脆弱</td><td class="mono">run() 接线守阵与私有面清零守阵用源码子串匹配, 注释提及目标词即误红; AST 式 (P5) 更稳, 建议统一升级</td></tr>
+      <tr><td class="mono">L6</td><td>下划线名跨包共享</td><td class="mono">checking_meta 的 <code>_bump_recheck_fail/_recheck_fail_count</code> 被 ops_mod 与 full_checking 双向 import (有意单点, 但私有命名跨包)</td></tr>
+      <tr><td class="mono">L7</td><td>私有函数跨文件</td><td class="mono">内核内部 <code>from .qbclient import _new_client</code> (qbmanager.py:64)</td></tr>
+      <tr><td class="mono">L8</td><td>warnings 未定性</td><td class="mono">test.full 报 6 warnings, 本审计未逐条定性 (量级无害)</td></tr>
+      <tr><td class="mono">L9</td><td>benchmark 门槛宽</td><td class="mono">5000 种子守除断言 1s/30s 只拦灾难性退化, 非回归阈值; 「数字入档」靠人工流程无强制</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ 07 -->
+<section id="s07">
+  <div class="sec-head"><span class="no">07</span><h2>分维度评估</h2></div>
+
+  <h3><span class="h3n">7.1</span>安全性 — 保持, 边界反而收紧</h3>
+  <p>危险操作层 (recheck/跳检) 的全部保护策略逐行随迁并经审计核实: R1 在途互斥 (队列登记 + 快照 checking 态)、R2 动手前实时复核、规则源失败冷却 (3 次/日)、跨规则同日去重、部分下载禁跳检、备份先于删除、失败路径清备份不留孤儿 (ops_mod.py 全文精读)。原「外围绕过边界直写内核私有面」的 5 处 (托盘 4 + web 令牌 1) 清零后, 危险操作入口收敛为 <code>ctx.ops</code> 单点, 可审计性提升。文件访问 UNDETERMINED 保守语义 (不可判定 ≠ 缺失) 在 grouping 与 ops 两处消费点均保留。未发现安全面回归。</p>
+
+  <h3><span class="h3n">7.2</span>稳定性 — 不变量全保留, 一处错误路径边界 (M1)</h3>
+  <p>计划 §7.1 十条运行时不变量逐条在代码中核实保留 (§04.2 表)。重构期唯一实报 bug (0750, 抑制窗内二次重建吞 queue_rebuilt) 已修并有回归例。审计新发现 M1 (抑制请求位错误路径丢失, 低概率) 为唯一语义差异点。主循环异常兜底、优雅退出落盘、暂停旁观等路径与重构前逐行同构。</p>
+
+  <h3><span class="h3n">7.3</span>可维护性 — 显著提升, 残留 3 处小脏面</h3>
+  <p>「内核不知道何事」从口号变成可机检事实: AST 守阵锁内核零 rules import, 模块横向零 import 经全量 import 清单核实, 装配清单单点可读 (qbmanager.py:158-234 十模块顺序即相位内消费序)。契约、段认领红线、相位表、协作纪律、守阵地图收拢在 <code>conventions/modules.md</code> 单点, 新增配置键不落认领面即守阵红。残留: L1 (内核触 rules 私有方法) / L2 (死 shim) / L3 (webui 私有名回环), 均为低severity且位置明确。</p>
+
+  <h3><span class="h3n">7.4</span>可测试性 — 显著提升</h3>
+  <p>十模块全部可经 fake-ctx 独立构造 (test_file_access 的 <code>_bare_grouping</code> 先例), 不再需要拉起整个 QbManager; 门面模块「现取不缓存」的设计让测试整体替换 <code>mgr.web/mgr.hr</code> 自动生效。62 例新守阵以行为驱动为主 (真实刷新管线 / 真实 apply 路径 / 真实 Config), 负例充分。附带收益: P5 期间根修了测试基建的 <code>FakeConfig</code> 类属性共享可变对象缺陷 (xdist 下跨测试泄漏, 单跑恒绿那种最阴的 flaky), 并立坑档。</p>
+
+  <h3><span class="h3n">7.5</span>优化 / 性能 — 达标且有两处正向收益</h3>
+  <p>实测 (W3 验收, 5000 种子): rules.apply 整段短路 0.01ms vs L2 重建 0.7ms (纯内存), 热重载保存的零规则变更成本趋近于零。行为改进两处: ① 无关配置保存不再重挂 logging/notify (过度重启族消除, P1); ② webui 仅监听身份变化才重启服务器 (P2)。相位广播的间接层为同步直调, 开销可忽略。未发现性能回归证据。</p>
+</section>
+
+<!-- ============================================================ 08 -->
+<section id="s08">
+  <div class="sec-head"><span class="no">08</span><h2>测试与守阵评估</h2></div>
+  <p>七个守阵文件 62 例 (module_host 11 / core_modules 7 / facade 9 / p3 11 / p4 8 / p5 10 / p6 6), 计划承诺的 12 类关键守阵逐项核对<strong>全部在位且无恒真断言</strong>。亮点: 相位顺序守阵走真实 <code>_refresh_torrents</code> 管线断言精确序列; 段认领守阵双向 (配置全段 ⊆ 认领并集 + 认领面无幽灵段, 拼写漂移也红); 两个历史 issue (26-09-21-1347 内存态 / 26-10-01-0750 两字段协议) 都编成了针对性回归。</p>
+  <table>
+    <thead><tr><th style="width:40%">缺口 / 弱点</th><th style="width:16%">严重度</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">_rebuild_needed 逐判据矩阵 (M2)</td><td class="warn">中低</td><td>六判据只测过 interval, 丢成员不红</td></tr>
+      <tr><td class="mono">EventBus/loop hooks 异常约定 (M3)</td><td class="warn">中低</td><td>零测试零文档, 隐式契约</td></tr>
+      <tr><td class="mono">子串式源码守阵 (L5)</td><td>低</td><td>误红风险, 建议升级 AST 式</td></tr>
+      <tr><td class="mono">测试 docstring 漂移 (L4)</td><td>低</td><td>2 处, 与实体失配</td></tr>
+      <tr><td class="mono">run() 异常路径 finally 只有静态检查</td><td>低</td><td>无行为级验证 (轻微)</td></tr>
+    </tbody>
+  </table>
+  <p class="small">测试量口径: 新守阵 + 迁移改写合计使 test.full 从重构前 ~1832 例增至 1895 例; 每段验收均以全量绿 + 基线切片收口, 符合计划「每段全量绿 + 段内指定守阵」。</p>
+</section>
+
+<!-- ============================================================ 09 -->
+<section id="s09">
+  <div class="sec-head"><span class="no">09</span><h2>建议与后续</h2></div>
+  <ol>
+    <li><strong>M1 (抑制窗口错误路径)</strong>: 建议入池 issue 排修 —— 修法小 (消费点后移或异常路径重武装), 但属热重载失效族的边缘形态, 值得补一个失败路径守阵。</li>
+    <li><strong>M2 (判据矩阵)</strong>: 补参数化用例, 六判据逐段触发断言 rebuilt; 半小时内的工作量, 收益是把「该重建不重建」从靠人眼变成靠守阵。</li>
+    <li><strong>M3 (异常约定)</strong>: 先在 <code>conventions/modules.md</code> 把「订阅者异常 = 牺牲本轮剩余管线, 由主循环兜底」写成明文契约并配一条守阵; 是否改为订阅者隔离属行为变更, 需单独拍板。</li>
+    <li><strong>L1/L2/L3 清扫</strong>: 适合并入下一个例行清扫波次 (死 shim 删除 / <code>_load_rules</code> 公开化 / webui 私有名回环公开化), 均为机械改动。</li>
+    <li><strong>不需要动的</strong>: 偏差 1 (次序重排) 已有守阵锁定与论证留档, 不建议「改回计划原文次序」 —— 那反而是无依据的行为变更。</li>
+  </ol>
+  <p class="small">以上均为建议, 未动任何代码、未入池任何 issue —— 入池与排修请拍板后另行指派。</p>
+
+  <div class="colophon">
+    report · kernel-module-refactor · 实施审计快照 (出厂即冻结)<br>
+    审计基线 develop @ 18c2c40c (2026-10-01 同步) · test.full 1895 passed + 3 skipped / 91% / 27.4s 为审计当日实测<br>
+    方法: 计划+档案通读 / 14 核心文件 3,914 行精读 / git 历史语义比对 (8ef82f48 对照) / 双探索代理 (守阵质量 + 耦合清零) / 独立复跑全量测试<br>
+    refs: plans/26-09-30-1819 (审计对象, Done) · tasks/26-09-30-backend-kernel-module-refactor (执行档案) · plans/26-10-01-0350 (D4 后续, 已实施) · baselines/26-10-01-0359-p6-closeout (P6 收官基线)
+  </div>
+</section>
+
+</main>
+</div>
+</body>
+</html>
