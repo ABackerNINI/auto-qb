@@ -44,10 +44,11 @@
 - 2026-10-02 06:44 — 阶段 3 完成: f89ceada, test.full 2290 passed + 3 skipped / 99%(35.6s); qbmanager.py 覆盖率 100%。
 - 2026-10-02 07:01 — 阶段 4 完成: 49d933b5, test.full 2289 passed + 3 skipped / 99%(35.06s)。
 - 2026-10-02 07:07 — 收尾: 本档案 + activeContext 切片 + 基线切片(baselines/26-10-02-0707-*) + ghost-pkg 坑复发 +1; 计划外发现四项转报用户(见下)。
+- 2026-10-02 07:27 — 用户指示计划外发现入池(除 kb 债务): ①→26-10-02-0727-bug-tray-appid-setter-no-call-site(bug/standard), ②→26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff(bug/standard), ③→26-10-02-0728-docs-aumid-docs-drift(docs/light, ①③同挂 tray-aumid 专题); kb.index 重建后随本轮提交入库。
 
-## 计划外发现(均未处置, 转报用户)
+## 计划外发现(①②③ 已按用户指示入池, ④ 按用户明确排除不入池)
 
-1. **`_set_windows_appid` 本身是死函数**: 自 9891c030 引入起生产代码零调用点(tray/__init__.py 未导出, 仅测试驱动) —— 生产进程从未设置显式 AUMID, issue 26-10-01-2203(任务栏 python 图标)的「已设 AUMID」前提可能不成立; 需人工决断(补调用点 / 删函数 / 另案)。
-2. **首轮 tick 任意异常无退避快速重试**: wait_for=0 机理下首轮 tick 抛**任何**异常(不止 StopIteration)在 next_*_at 未推进时都会形成无退避快速重试循环 —— 有 ERROR 日志不静默, 是否要退避待决。
-3. tray/app.py docstring「对应开始菜单 AutoQB.UI.lnk」疑似漂移(9891c030 已改注册表键机制并清理 lnk); core-domain.md:27「进程须先设显式 AppUserModelID」表述与代码事实(无调用点)不符 —— 均为先在漂移, 未改。
-4. **kb 债务**: activeContext 切片数 87 > 70、cap 债务 1 —— 按 DoD 口径需另开会话清理。
+1. **`_set_windows_appid` 本身是死函数** → 已入池 [26-10-02-0727-bug-tray-appid-setter-no-call-site](../issues/26-10-02-0727-bug-tray-appid-setter-no-call-site.html)(Open, 与 ③ 同挂 tray-aumid 专题): 自 9891c030 引入起生产代码零调用点(tray/__init__.py 未导出, 仅测试驱动) —— 生产进程从未设置显式 AUMID, issue 26-10-01-2203(任务栏 python 图标)的「已设 AUMID」前提可能不成立; 修法三选一待拍板(补调用点 / 删函数 / 先实测再定)。
+2. **首轮 tick 任意异常无退避快速重试** → 已入池 [26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff](../issues/26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html)(Open): wait_for=0 机理下首轮 tick 抛**任何**异常(不止 StopIteration)在 next_*_at 未推进时都会形成无退避快速重试循环 —— 有 ERROR 日志不静默; 退避方向待拍板。
+3. **AUMID 机制文档漂移两处** → 已入池 [26-10-02-0728-docs-aumid-docs-drift](../issues/26-10-02-0728-docs-aumid-docs-drift.html)(Open, 便签): tray/app.py docstring「对应开始菜单 AutoQB.UI.lnk」漂移(9891c030 已改注册表键机制) + core-domain.md:27「进程须先设显式 AppUserModelID」与零调用点事实不符 —— 跟 ① 的拍板结果联动回写。
+4. **kb 债务**: activeContext 切片数 87 > 70、cap 债务 1 —— 按 DoD 口径需另开会话清理(用户明确排除入池, 仅提醒)。
