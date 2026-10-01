@@ -1,9 +1,9 @@
 # 26-10-01-docs-doc-drift-repair — 知识库文档漂移分段修复
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-01
 **Updated:** 2026-10-01
-**Summary:** 内核化重构+别名层处置后的全库文档漂移, 按 plans/26-10-01-1728 分五段(S1-S5)回写; S1(P1 架构描述重写 5 份)、S2(误导指路与机制反转单点修 9 份)、S3(modules 中度批 6 份)与 S4(用户面文档 4 份)已完成并过验收, 余 S5。
+**Summary:** 内核化重构+别名层处置后的全库文档漂移, 按 plans/26-10-01-1728 分五段(S1-S5)回写; **S1-S5 全部完成并过验收**(S5 = P3 计数清扫 + 豁免核实 + 顺手项 + 机检三连 + 收尾基线 1909 passed / 91% 切片 26-10-01-1930; 代码注释残留 3 处待用户拍板未动)。
 
 **Topics:** docs-doc-drift-repair
 
@@ -29,7 +29,7 @@
 | S2 | 误导指路与机制反转单点修(9 份, 2 处 P1) | 完成(26-10-01) |
 | S3 | modules/ 中度批(6 份) | 完成(26-10-01) |
 | S4 | 用户面文档(4 份: README + docs/) | 完成(26-10-01) |
-| S5 | P3 清扫 + 待决件 + 收尾基线(test.full 基线切片) | 待做 |
+| S5 | P3 清扫 + 待决件 + 收尾基线(test.full 基线切片) | 完成(26-10-01) |
 
 ## 进度日志
 
@@ -54,3 +54,10 @@
   - `docs/hr-online-verify-docs.md`: 删两行坏链索引(26-09-22-2204-backend-partial-hr-verify 与 26-09-25-0555-webui-ext-hr-logging 两个 activeContext 切片, ls 实证不存在); 「想了解功能全貌」先读入口改指任务档案(现存) + 26-09-29-0404-hr-verify-v3-audit 切片(现存)。
   - 与计划的偏差(以代码为准): 计划称 configuration L495 为「16」实测该处写「12 种」(同一文档 L410 与表头自身就互斥), 一并统一为 13; 其余坐标全部命中。
   - 机检: `doc.links` 绿 + `kb.check` 绿(切片 81>70 为既有债务, 不拦提交); 档案/slice 摘要有动 → `kb.index` 重建。test.full 基线按计划留给 S5。
+- **2026-10-01 S5 完成并过验收(全段收尾; 随本段单独提交入库)**:
+  - **P3 计数清扫**(逐条 `wc -l`/grep 实测, 只修无「快照披露」头注的, 修处统一标实测口径): `projectbrief.md` 15→13 种筛选条件(`@register_condition` 计 13); `progress/roadmap.md` 图形化配置编辑行 16→13 条件; `modules/rules-and-deps.md` base.py 274→314 / expr/ ~700·6 文件→1245·7 文件(含 `__init__.py` 46) / actions/ 934→673、full_checking 178→152 —— 后两处为 S3 沿用旧文未复测的残留, 实测校正。
+  - **豁免未动**(有披露头注, 按计划 §4-S5 既例): productContext.md(「内容基线 2026-09-05」头注; 其 `src/auto_qb/ ~6300 行` 实测 123 文件 28266 行, 属披露快照, 列汇报)、modules/overview.md 与 core-domain.md(「行数为 2026-09-05 快照」头注; core-domain torrents/ 行 816 实测 1262, 同属披露面)、core-runtime.md(「快照口径以行内标注为准」)、mixins.md(历史快照定位)、webui-static-contract.md 与 core-config.md(已标 26-10-01 实测)、conventions/code-style.md(实测无残留计数断言)。
+  - **顺手项**: `src/auto_qb/mixins/`(仅 __pycache__, 26-10-01-1835 基线删过一次后被测试进程再生)再次确认 git 零跟踪后删除。
+  - **代码注释残留**: 按计划 §6 用户未拍板, **未动任何 .py**; 实存 3 处(core/state.py docstring / qbmanager.py:398 / webui/runtime.py:237; 第 4 处 core/mixins/__init__.py 已随审计 L2 删除), 仍待拍板。
+  - **机检三连全绿**: `kb.index` 再生 16 个索引(plans/_index.md 随 doc-status=Done 重建); `kb.check` 256 文档 / 159 专题无缺主键(既有债务: 切片 81>70 + cap 债务 1, 未新增); `doc.links` 绿。
+  - **收尾基线**: test.full **1909 passed + 3 skipped / 91%**(13278 语句 / 1051 未覆盖 / 4408 分支 / 435 partial, test.full 31.2s, rc=0), 切片 [testing/baselines/26-10-01-1930-doc-drift-repair-s5.md](../testing/baselines/26-10-01-1930-doc-drift-repair-s5.md)(基线 develop @ 7f046ca0, S4 已提交、工作树含 S5 文档改动); 通过数与 26-10-01-1835 基线持平(纯文档零代码变更)。已完成条目迁出 progress/implemented-tooling.md; 计划 doc-status Open→Done(26-10-01-1930) + 变更记录行。

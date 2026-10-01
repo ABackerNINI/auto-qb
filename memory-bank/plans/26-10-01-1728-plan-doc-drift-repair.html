@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="doc-drift-repair">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-01-1728">
-<meta name="doc-updated" content="26-10-01-1728">
+<meta name="doc-updated" content="26-10-01-1930">
 <meta name="doc-refs" content="memory-bank/plans/26-09-30-1819-plan-kernel-module-refactor.html,memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.html,memory-bank/reports/26-10-01-0918-report-kernel-module-refactor-audit.html,memory-bank/plans/26-10-01-1758-plan-issue-clearance-roadmap.html">
 <title>计划 · 知识库文档漂移分段修复 — 内核化重构后四波欠账的回写路线</title>
 <style>
@@ -179,7 +179,7 @@
       <h1>知识库文档漂移分段修复</h1>
       <p class="lede">内核化重构 P0–P6 与别名层处置 W0–W3 落地后, 全库文档相对代码出现四波欠账式漂移。本计划把审计确认的漂移按「误导风险优先」切成五段回写, 每段带文件清单、修法与验收口径。</p>
       <div class="meta-row">
-        <span class="chip">Open</span>
+        <span class="chip">Done</span>
         <span>added <b>26-10-01-1728</b></span>
         <span>审计基线 <b>1616ea1a</b></span>
         <span>规模 <b>P1×9 · P2×63 · P3≈45</b></span>
@@ -384,6 +384,7 @@
       <table>
         <tr><th style="width:22%">时间</th><th>变更</th></tr>
         <tr><td class="num">26-10-01-1728</td><td>初版立档: 四面审计结论 + S1–S5 分段修复路线; 状态 Open (待逐段实施)。</td></tr>
+        <tr><td class="num">26-10-01-1930</td><td>S1–S5 全部实施完成 (doc-status → Done): S1 <span class="num">6f474098</span> · S2 <span class="num">0b422396</span> · S3 <span class="num">58a88928</span> · S4 <span class="num">7f046ca0</span> · S5 本段提交 (滚动档案 tasks/26-10-01-docs-doc-drift-repair.md 记全段执行与验证数字)。收尾基线: test.full 1909 passed + 3 skipped / 91% (切片 testing/baselines/26-10-01-1930)。代码注释残留 3 处仍待用户拍板 (§6)。</td></tr>
       </table>
     </section>
 
