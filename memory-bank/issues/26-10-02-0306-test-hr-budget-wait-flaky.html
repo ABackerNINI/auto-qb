@@ -8,7 +8,7 @@
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="test-timing-tolerance">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_budget_unit_wait_and_caps xdist 全量下偶发失败(单跑/整文件均绿)">
 <meta name="issue-summary" content="覆盖提升 P1 T1.1 新增的 _Budget 等待记账用例在 xdist 全量下偶发 AssertionError, 单跑与整文件(77 passed)均绿; 与 throttle/mainloop sleep 容差族同族">
 <title>test_budget_unit_wait_and_caps xdist 全量下偶发失败(单跑/整文件均绿) · test · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>test_budget_unit_wait_and_caps xdist 全量下偶发失败(单跑/整文件均绿)</h1>
     <p class="lede">覆盖提升 P1 T1.1 新增的 _Budget 等待记账用例在 xdist 全量下偶发 AssertionError, 单跑与整文件(77 passed)均绿; 与 throttle/mainloop sleep 容差族同族</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0306-test-hr-budget-wait-flaky</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 03:06</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">tests/test_hr_service.py · hr/service.py(_Budget)</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -143,7 +143,7 @@
     <h2><span class="no">04</span>定位锚点</h2>
     <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
     <ul>
-      <li><code>tests/test_hr_service.py:1561</code>（取证 2026-10-02 03:06）· 符号 <code>test_budget_unit_wait_and_caps</code> · grep <code>test_budget_unit_wait_and_caps</code></li>
+      <li><code>tests/test_hr_service.py:1655</code>（取证 2026-10-02 06:08; 入池时 :1561, 其后行号漂移）· 符号 <code>test_budget_unit_wait_and_caps</code> · grep <code>test_budget_unit_wait_and_caps</code></li>
       <li><code>src/auto_qb/hr/service.py:222</code>（同上）· 符号 <code>class _Budget</code>(构造已收 <code>sleeper</code> 可注入参数, <code>sleep_max</code> 两档上限) · grep <code>_Budget</code></li>
       <li>用例来源: 覆盖提升 P1 T1.1(提交 <code>29f1841a</code>, 基线切片 26-10-02-0203 "T1.1 ... _Budget 等待记账与双上限")</li>
     </ul>
@@ -152,7 +152,7 @@
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：产品代码回归 —— 同一 HEAD 四跑全量中仅此用例绿红翻转且单跑/整文件恒绿; 已排除：环境漂移 —— 四跑之间零代码/配置变更）。与已记同族 26-09-22-2052(throttle elapsed 无 sleep 精度余量, Done)/26-09-20-0952(mainloop 节拍无容差, Done)同族: 疑真实 sleep 在 Windows 定时器精度 + xdist 并发负载下越过等待时长断言的边界。</div>
+    <div class="callout">已定位（2026-10-02 06:08 复验证实, <b>非计时器精度</b>）: 测试时钟起点 1005 与记账基准 <code>last_fetch_ts=1000</code> 错开 5s —— <code>take()</code> 记账的等待 = 抖动间隔 − 5s = 85 + 22.5u ∈ [85, 107.5), 抽样 u &lt; 5/22.5 ≈ 0.2222 时击穿断言下界 90（实测 86.50/86.67/89.69 全落此区间）。红验: 旧初始条件直跑该用例 60 次 10 红; 机制算术抽样 200000 次破界率 22.10%, 时钟对齐后 0.00%。xdist 与失败机制无关（单跑直跑循环同样可红）—— 单跑/整文件「恒绿」是小样本巧合, 全量下每次进程随机流不同, 该用例每次执行以 ~22% 概率击穿, 故呈「偶发」。</div>
   </section>
 
   <section id="s6">
@@ -166,11 +166,15 @@
     <ul>
       <li>2026-10-02 03:06 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     <li>2026-10-02 04:41 — 覆盖提升 P2-a 复现补强: 干净基线（stash 后）test.full 10 连跑红 4 次; 抖动实测 86.50/86.67 &lt; 断言下界 90（「抖动只向上 +0~25%」口径与实现偶发向下不符）; A/B 归因非 P2-a 改动引入; ship.commit 闸门因此复跑过一次。</li>
+    <li>2026-10-02 06:08 — 认领（用户指派, issue 清偿路线图阶段 2）, 状态 <strong>In Progress</strong>; 同轮完成机制定位并红验（见「复验」与「根因」）。</li>
+    <li>2026-10-02 06:13 — 修复并验证, 状态 <strong>Done</strong>: 测试时钟起点对齐 <code>last_fetch_ts</code>（详见「修复后补充」）; test.full 连续 10 跑全绿（10/10）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-02 06:08 仍复现, <strong>机制已定位</strong> —— 锚点重定位: 用例现于 <code>tests/test_hr_service.py:1655</code>, <code>_Budget</code>(sleeper 注入) 在 <code>src/auto_qb/hr/service.py:222</code>; 红验: 旧初始条件（clock=1005 / last_fetch_ts=1000）直跑该用例 60 次 10 红（期望 ~22%, 二项抽样方差内）, 报错原文即「抖动只向上 +0~25%」。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（改道说明: 未走①容差、未走②sleeper 推进假钟, 采用阶段 1 线索的第三候选「时钟起点对齐 last_fetch_ts」）—— <code>tests/test_hr_service.py</code> <code>test_budget_unit_wait_and_caps</code>: <code>Clock(start=1005.0)</code> → <code>Clock(start=1000.0)</code> 并注释对齐不变式; 等待记账恢复为抖动间隔本身 ∈ [90, 112.5), 断言 <code>90.0 ≤ waits[0] ≤ 113.0</code> 双界原样全保（下界恰 = min_interval, 上界 &gt; 抖动上限 112.5）, 零产品代码改动, 断言力未放松。</p>
+    <p><strong>改道原因</strong>: ②（sleeper 推进假钟）经推演会引入新非确定 —— 本用例从不调 <code>mark()</code>, <code>last_fetch_ts</code> 恒 1000, sleeper 推进时钟后首个 take 使时钟落入 [1090, 1112.5), caps 子检查重采样抖动后 P(due≤now)≈50% 会随机放行, 反而击穿 <code>not ok</code> 断言, 要可行须重构用例, 改动面大于收益; ①（下界压到 85）丢失「等待 ≥ min_interval」的抖动语义, 断言力受损。</p>
+    <p><strong>验证方式与实测数字</strong>: ①红验（修前）: 旧初始条件直跑该用例 60 次 10 红, 机制算术抽样 200000 次破界率 22.10%（时钟对齐条件 0.00%）; ②绿验（修后）: 该用例直跑 60 次 0 红; ③验收: <code>commands run test.full</code> 连续 10 跑全绿（10/10, 每跑 2288 passed, 3 skipped, 单跑 28.0–35.5s）。</p>
   </section>
 
   <footer>

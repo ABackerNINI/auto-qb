@@ -63,7 +63,7 @@
 - test_missing_fields_abort_after_valid_page: 必填字段缺失页在第 2 页 -> 截断点之前数据有效(LANE_OK 非全深度)
 - test_daily_quota_exhausted_truncates_rest_lane: 日额用尽 -> 剩余档「预算受限」截断(首页即败 = LANE_FAILED)
 - test_budget_take_gives_up_without_sleeper: 无 sleeper 时等不起 -> 该档本轮放弃(不持锁干等)
-- test_budget_unit_wait_and_caps: _Budget 单元: waited 记账 / sleep_max / round_wait_max 上限
+- test_budget_unit_wait_and_caps: _Budget 单元: waited 记账 / sleep_max / round_wait_max 上限(时钟起点与 last_fetch_ts 对齐, 等待记账 == 抖动间隔)
 - test_pages_exhausted_mid_round_lane_not_scheduled: 页数上限耗尽 -> 未轮到的档「本波未轮到取数」
 - test_order_direction_flip_forces_stop: 波内方向翻转 -> 强制早停(失效点之前有效)
 - test_cross_page_disorder_forces_stop: 跨页乱序 -> 强制早停
@@ -1660,7 +1660,9 @@ def test_budget_unit_wait_and_caps(tmp_path):
     data = HrSiteData()
     data.rate.last_fetch_ts = 1000.0
     limits = HrLimits(min_interval=90.0, max_requests_per_day=100)
-    clock = Clock(start=1005.0)
+    # 时钟起点必须与 last_fetch_ts 对齐: 等待记账 = 抖动间隔 - (now - last_fetch_ts),
+    # 起点错开会让实测等待低于 min_interval, 下界断言偶发假红(issue 26-10-02-0306)
+    clock = Clock(start=1000.0)
     waits = []
     budget = _Budget(data, limits, clock, waits.append)
     ok, why = budget.take()
