@@ -15,7 +15,7 @@ from typing import Dict, List
 from fastapi import APIRouter, HTTPException
 
 from ....hr.report import run_hr_confirm_empty
-from ....hr.status import build_site_statuses
+from ....hr.status import build_site_statuses, entry_details
 from ..context import WebContext
 
 
@@ -128,6 +128,38 @@ def build_router(ctx: WebContext) -> APIRouter:
                     "extensions_seen": list(channel.extensions_seen),
                     "note": channel.note,
                 } if channel is not None else {},
+        }
+
+    @router.get("/api/hr/sites/{site}/entries")
+    def api_hr_site_entries(site: str):
+        """站点种子明细(只读; 计划 26-10-01-2216 §7 阶段1, 表① 全量详情表的数据源)
+
+        决策点②(b): 新端点按站点按需拉 —— 逐种子明细是「打开才需要」的数据, 不进 /api/state
+        轮询载荷也不塞进 /api/hr/status 全量响应。校验与 confirm-empty 同款(总开关未启用 400);
+        站点未接入是路径层面的不存在, 回 404 并点名已接入清单。数据读取与 --hr-status 同款
+        只读口径(store.read_unlocked), 字段全部来自 hr.status.entry_details 单点(含失踪行,
+        排序与人话均由后端算好); 站点文件读坏不抛, read_error 原样带出。
+        """
+        manager.web.touch()
+        conf = getattr(manager.config, "hr_check", None)
+        if conf is None or not conf.enabled:
+            raise HTTPException(status_code=400, detail="HR 在线核实未启用")
+        enabled = {
+            name
+            for name, tc in manager.config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled
+        }
+        if site not in enabled:
+            raise HTTPException(status_code=404, detail=f"站点 {site} 未接入 hr_check(已接入: {sorted(enabled)})")
+        runtime = getattr(manager, "hr", None)
+        service = getattr(runtime, "service", None)
+        if service is None:
+            raise HTTPException(status_code=409, detail="HR 取数线程未启动")
+        data, err = service.store(site).read_unlocked()
+        return {
+            "site": site,
+            "entries": [d.to_dict() for d in entry_details(data)],
+            "read_error": err or "",
+            "now": time.time(),
         }
 
     return router

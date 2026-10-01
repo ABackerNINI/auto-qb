@@ -30,6 +30,9 @@ from .model import (
     LANE_FAILED,
     LANE_IDLE,
     LANE_OK,
+    SOURCE_EXEMPT,
+    SOURCE_NOT_LISTED,
+    SOURCE_SATISFIED,
     HrSiteData,
 )
 from .ratelimit import day_key, next_allowed_at, next_day_reset, quota_left
@@ -54,6 +57,13 @@ LANE_STATUS_TEXTS = {
     LANE_OK: "有效",
     LANE_FAILED: "失效",
     LANE_IDLE: "-",
+}
+
+#: 放行来源人话(种子明细导出用; 原始值一并透出, 前端不重算。计划 26-10-01-2216 §3)
+SOURCE_TEXTS = {
+    SOURCE_EXEMPT: "D 免罪",
+    SOURCE_NOT_LISTED: "未列出",
+    SOURCE_SATISFIED: "B 毕业",
 }
 
 
@@ -173,6 +183,21 @@ def ago_text(ts: float, now: float) -> str:
 def stamp_text(ts: float) -> str:
     """绝对时刻(报告用; 0 = 未设置)"""
     return time.strftime("%m-%d %H:%M:%S", time.localtime(ts)) if ts and ts > 0 else "-"
+
+
+def need_seed_text(seconds: Optional[int]) -> str:
+    """还需做种时间, 镜像站点书写形态(「16:57:06」/「9天06:05:11」)方便逐格核对; 缺字段 = -
+
+    原是 CLI 报告的私有件(report.py `_need_seed_text`), 随种子明细导出上收为本模块的口径单点
+    (计划 26-10-01-2216 §7 阶段1): CLI 明细表与 WebUI 表① 必须是同一份人话, 不另写第二份。
+    """
+    if seconds is None:
+        return "-"
+    days, rem = divmod(max(0, int(seconds)), 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, secs = divmod(rem, 60)
+    prefix = f"{days}天" if days else ""
+    return f"{prefix}{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def lane_counts(data: HrSiteData) -> Dict[str, int]:
@@ -320,6 +345,86 @@ def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: flo
     )
 
 
+@dataclass(slots=True)
+class EntryDetail:
+    """单条 HR 种子明细(WebUI 表① 的行; 计划 26-10-01-2216 §3 P0+P1 全集)
+
+    数值字段原样透传, 人话(lane_text / need_seed_text / verified_source_text)由后端算好
+    —— 前端只展示不重算(契约: 前端消费后端算好字段)。`verified_ts`(放行判定时刻)与
+    `last_seen`(被站点见到时刻)是**两个独立口径**, 分键呈现(决策点④); `remain_seconds`
+    刻意不导出(决策点③ —— 考核窗口倒计时不是还需做种的量, 2026-09-25 误读教训)。
+    """
+
+    tid: int
+    dl_id: Optional[int] = None
+    name: str = ""
+    lane: str = ""
+    lane_text: str = ""
+    uploaded_bytes: Optional[int] = None
+    downloaded_bytes: Optional[int] = None
+    ratio: Optional[float] = None
+    need_seed_seconds: Optional[int] = None
+    need_seed_text: str = ""
+    infohash_v1: str = ""
+    infohash_v2: str = ""
+    verified_ts: float = 0.0
+    verified_source: str = ""
+    verified_source_text: str = ""
+    done_iso: Optional[str] = None
+    active: bool = True
+    missing_streak: int = 0
+    first_seen: float = 0.0
+    last_seen: float = 0.0
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+
+def entry_details(data: HrSiteData) -> List[EntryDetail]:
+    """种子明细导出(WebUI 表① 行集; 计划 26-10-01-2216 §7 阶段1) —— 与 CLI 明细表同一套口径
+
+    - 排序沿用 CLI 明细表的 key(档位·下载量, report._print_status_rows 同一公式);
+    - 行集**含失踪行**(active=False 也导出 —— 「哪些种子已核实/未核实」的全量清单一览是
+      issue 本意; CLI 明细表只显示活跃行, 失踪行在界面上靠状态列弱化呈现);
+    - verified join 走 data.verified(infohash→放行记录): v1 优先、缺失落 v2(终态冻结给
+      v1/v2 各写一条, 观察期出口只写主键 —— 任一命中即该种子的放行记录);
+    - remain_seconds 与 P2 字段(已取/失败记录、本地对照 join)刻意不导出(决策点③ / §8)。
+    """
+    entries = sorted(data.index.values(), key=lambda e: (e.lane, -(e.downloaded_bytes or 0)))
+    out: List[EntryDetail] = []
+    for e in entries:
+        ver = None
+        for h in (e.infohash_v1, e.infohash_v2):
+            ver = data.verified.get(h) if h else None
+            if ver is not None:
+                break
+        out.append(
+            EntryDetail(
+                tid=e.tid,
+                dl_id=e.dl_id,
+                name=e.name,
+                lane=e.lane,
+                lane_text=LANE_TEXTS.get(e.lane, e.lane),
+                uploaded_bytes=e.uploaded_bytes,
+                downloaded_bytes=e.downloaded_bytes,
+                ratio=e.ratio,
+                need_seed_seconds=e.need_seed_seconds,
+                need_seed_text=need_seed_text(e.need_seed_seconds),
+                infohash_v1=e.infohash_v1,
+                infohash_v2=e.infohash_v2,
+                verified_ts=ver.verified_ts if ver else 0.0,
+                verified_source=ver.source if ver else "",
+                verified_source_text=SOURCE_TEXTS.get(ver.source, ver.source) if ver else "未核实",
+                done_iso=e.done_iso,
+                active=e.active,
+                missing_streak=e.missing_streak,
+                first_seen=e.first_seen,
+                last_seen=e.last_seen,
+            )
+        )
+    return out
+
+
 def site_conf_interval(conf) -> float:
     """站点拉取间隔(秒, 计划 26-09-30-0240 改名: 原名「对账波周期」); 单独提出来是为了让
     「下次拉取」这类字段的算法只有一处"""
@@ -360,16 +465,20 @@ def build_site_statuses(service, now: float, sites: Optional[Sequence[str]] = No
 
 __all__ = [
     "CHANNEL_TEXTS",
+    "EntryDetail",
     "LaneStatus",
     "QuotaStatus",
     "SiteStatus",
+    "SOURCE_TEXTS",
     "ago_text",
     "blocking_reason",
     "build_site_statuses",
     "count_attested_empty",
     "duration_text",
+    "entry_details",
     "lane_counts",
     "LANE_TEXTS",
+    "need_seed_text",
     "site_status",
     "stamp_text",
 ]

@@ -6,9 +6,9 @@
 <title>修改计划 · WEBUI HR 在线核实详情表 — 全量详情表与排障视图</title>
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="doc-type" content="plan">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-01-2216">
-<meta name="doc-updated" content="26-10-01-2216">
+<meta name="doc-updated" content="26-10-01-2319">
 <meta name="doc-refs" content="memory-bank/issues/26-10-01-2137-feat-webui-hr-detail-table.html">
 <style>
   :root {
@@ -216,7 +216,7 @@
     </p>
     <div class="meta-row">
       <div><b>日期</b>2026-10-01</div>
-      <div><b>状态</b>Open · 待拍板(见 §9/§10)</div>
+      <div><b>状态</b>In Progress · 六项决策点已拍板(§10), 阶段 1 已落地</div>
       <div><b>关联</b>issue 26-10-01-2137 · T1-T3 弹窗计划(26-09-25-2043)</div>
       <div><b>影响面</b>webui 路由 1 文件 · hr 状态导出 1-2 文件 · 前端模板/JS 2-3 文件 · 三套 UI CSS 成对 3 处 · 不碰扩展侧</div>
     </div>
@@ -703,22 +703,23 @@
   <section>
     <div class="sec-head"><span class="sec-no">§10</span><h2>拍板记录</h2></div>
 
-    <div class="note warn">
-      <span class="note-t">待用户调整后决定 · 拍板前不动工</span>
-      <p>下表当前为空。请对 §9 六个决策点逐条拍板(可改推荐项、可补充新约束); 拍板后本计划抬 <code>doc-status</code> →
-      In Progress 并回填此表, 实施按 §7 阶段顺序开工。</p>
+    <div class="note">
+      <span class="note-t">已拍板 · 2026-10-01 · 按拍板实施</span>
+      <p>用户已对 §9 六个决策点逐条拍板:<b>六项全部按推荐项</b>(① a · ② b · ③ a · ④ b · ⑤ a · ⑥ a,
+      见下表); 非阻塞默认项(表① 行集含失踪行)维持默认。本计划随即抬 <code>doc-status</code> →
+      In Progress, 实施按 §7 阶段顺序开工。</p>
     </div>
 
     <table>
       <thead><tr><th style="width:8%">日期</th><th style="width:20%">决策点</th><th>拍板</th></tr></thead>
       <tbody>
-        <tr><td class="t-mono">(待填)</td><td>① 表②读法</td><td class="t-mono">(待拍板)</td></tr>
-        <tr><td class="t-mono">(待填)</td><td>② 表① API 形态</td><td class="t-mono">(待拍板)</td></tr>
-        <tr><td class="t-mono">(待填)</td><td>③ remain_seconds 是否进表</td><td class="t-mono">(待拍板)</td></tr>
-        <tr><td class="t-mono">(待填)</td><td>④ 「上次核实时间」措辞</td><td class="t-mono">(待拍板)</td></tr>
-        <tr><td class="t-mono">(待填)</td><td>⑤ 行内悬停 / 链到本地种子</td><td class="t-mono">(待拍板)</td></tr>
-        <tr><td class="t-mono">(待填)</td><td>⑥ 数据未回提示方式</td><td class="t-mono">(待拍板)</td></tr>
-        <tr><td class="t-mono">(待填)</td><td>其它调整(如有)</td><td class="t-mono">(待拍板)</td></tr>
+        <tr><td class="t-mono">2026-10-01</td><td>① 表②读法</td><td class="t-mono">按推荐项(① a): --hr-status 文本表格化 + 排障视图, 不复制扩展取数活动表</td></tr>
+        <tr><td class="t-mono">2026-10-01</td><td>② 表① API 形态</td><td class="t-mono">按推荐项(② b): 新端点按站点按需拉 —— GET /api/hr/sites/&lt;site&gt;/entries</td></tr>
+        <tr><td class="t-mono">2026-10-01</td><td>③ remain_seconds 是否进表</td><td class="t-mono">按推荐项(③ a): 不进(与 CLI 一致, 防误读)</td></tr>
+        <tr><td class="t-mono">2026-10-01</td><td>④ 「上次核实时间」措辞</td><td class="t-mono">按推荐项(④ b): 「上次核实(放行判定)」独立口径, verified_ts 与 last_seen 分键呈现</td></tr>
+        <tr><td class="t-mono">2026-10-01</td><td>⑤ 行内悬停 / 链到本地种子</td><td class="t-mono">按推荐项(⑤ a): 第一期不挂 hr-pop、不做行内跳转, 纯清单</td></tr>
+        <tr><td class="t-mono">2026-10-01</td><td>⑥ 数据未回提示方式</td><td class="t-mono">按推荐项(⑥ a): 沿用现有 refreshNote + 表头「数据截至」时间戳(前端阶段处理)</td></tr>
+        <tr><td class="t-mono">2026-10-01</td><td>其它调整(如有)</td><td class="t-mono">无 —— 默认项维持默认: 表① 行集含失踪行(active=False 也导出, 前端状态列弱化呈现)</td></tr>
       </tbody>
     </table>
   </section>
@@ -763,6 +764,10 @@
         <tr>
           <td class="t-mono">v1 · 26-10-01-2216</td>
           <td>初稿: 依 issue 26-10-01-2137 与阶段1只读调研产出(字段/锚点全部引自调研报告); 六个待定决策点待拍板, 拍板前不动工(§10)。改版一律同文件追加本表 + 抬 <code>doc-updated</code>, 不堆 -v2 新文件(doc-forms.md 命名协议)。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">v2 · 26-10-01-2319</td>
+          <td>用户拍板六项全按推荐项(①a ②b ③a ④b ⑤a ⑥a, §10 已回填), 默认项(表① 含失踪行)维持; <b>阶段 1 开工并落地</b>: ① 明细导出 <code>hr/status.py</code> 新增 <code>EntryDetail</code>/<code>entry_details()</code>(§3 P0+P1 全集, 档位·下载量排序含失踪行, need_seed 人话由 CLI <code>_need_seed_text</code> 上收为同文件口径单点 <code>need_seed_text</code>, CLI 行为不变) + 放行来源人话 <code>SOURCE_TEXTS</code>; ② 新端点 <code>GET /api/hr/sites/{site}/entries</code>(routes/hr.py, 只读, 未启用 400 / 未接入 404 / 线程未启动 409); ③ 测试: 新增 tests/test_hr_status.py(6 例)+ test_web.py 端点 5 例 + 路由金清单 67 条。阶段 2-4 未动。</td>
         </tr>
       </tbody>
     </table>

@@ -162,7 +162,7 @@
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check): 66 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries): 67 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
 - test_drain_web_commands_skip_check_torrent: 右键跳检命令(P2') —— 经 ops 层四阶段全流程, 回执 ok 且记录同日去重
@@ -174,6 +174,11 @@
 - test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
   「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径)
 - test_api_hr_status_names_the_blocking_step: 覆盖证明不成立时要说清卡在哪一步(用户看到种子没放行时最想知道的一句)
+- test_api_hr_site_entries_full_fields: 种子明细端点(计划 26-10-01-2216 §7 阶段1)200 全字段 —— 行键面 = §3 P0+P1 全集
+- test_api_hr_site_entries_verified_two_states: verified 有/无两态同表(无记录→未核实; 有记录→verified_ts+source 原值+人话)
+- test_api_hr_site_entries_empty_site: 站点已接入但没有 HR 行 -> 200 + 空数组(前端空态)
+- test_api_hr_site_entries_guards: HR 未启用 400 / 站点未接入 404(与 confirm-empty 同款话术)
+- test_api_state_excludes_hr_entry_details: 体积守卫 —— 种子明细键不得进 /api/state 轮询载荷(计划 §8)
 - test_api_keys_get_default_when_missing: 快捷键配置文件不存在 -> GET 回默认表(计划 26-09-28-0354 W6 §4.4)
 - test_api_keys_put_roundtrip: PUT 合法配置落盘(atomic_write)且 GET 原样回读; 空串=显式禁用语义保留
 - test_api_keys_put_invalid_rejected: PUT 结构非法(schema_version/模板/overrides 形状/归一化串) -> 422 且不触碰磁盘
@@ -3638,11 +3643,12 @@ def testhr_view_fields_excluded(tmp_path):
     assert QbManager.hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HF")))["hr_excluded"] is False
 
 
-def _hr_status_env(mgr, tmp_path, *, complete=True):
+def _hr_status_env(mgr, tmp_path, *, complete=True, pages=None):
     """给 web 替身挂上一个**真** HR 服务(跑过一轮), 返回它 —— 站点文件与视图都是真的
 
     替身 manager 的 config 是 SimpleNamespace(没有 hr_check 段), 所以这里显式补上, 并挂一个
     `hr` 门面替身(真门面需要端点/线程, 与本端点的只读口径无关)。
+    pages 可整组替换三档页面(种子明细端点的空站点用例用全零行页)。
     """
     from types import SimpleNamespace
     import time
@@ -3654,9 +3660,10 @@ def _hr_status_env(mgr, tmp_path, *, complete=True):
     # !假时钟要落在**真实当前时间**附近: 端点用真 `time.time()` 取 now, 若测试时钟是
     # hr_helpers 默认的 2023 基准, 数据必然被判「已过有效期」—— 测的就不是想测的东西了
     clock = Clock(start=time.time())
-    pages = {"A": myhr_page([row(101)]), "B": myhr_page([row(101)]), "C": myhr_page([row(101)])}
-    if not complete:
-        pages["C"] = "<html><body>没有表格</body></html>"
+    if pages is None:
+        pages = {"A": myhr_page([row(101)]), "B": myhr_page([row(101)]), "C": myhr_page([row(101)])}
+        if not complete:
+            pages["C"] = "<html><body>没有表格</body></html>"
     svc = HrRefreshService(
         data_dir=str(tmp_path),
         global_conf=global_conf(),
@@ -3772,6 +3779,104 @@ def test_api_hr_refresh_409_when_worker_not_running(web_env, tmp_path):
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     r = client.post("/api/hr/refresh", json={}, headers=auth)
     assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
+
+
+# ---------- 种子明细(计划 26-10-01-2216 §7 阶段1): GET /api/hr/sites/{site}/entries ----------
+
+
+def test_api_hr_site_entries_full_fields(web_env, tmp_path):
+    """200 全字段: 行键面 = 计划 §3 P0+P1 全集(前端只消费后端算好字段, 不重算)"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    r = client.get("/api/hr/sites/HHan/entries", headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["site"] == "HHan" and body["read_error"] == "" and body["now"] > 0
+    assert len(body["entries"]) == 1
+    row = body["entries"][0]
+    assert set(row) == {
+        "tid",
+        "dl_id",
+        "name",
+        "lane",
+        "lane_text",
+        "uploaded_bytes",
+        "downloaded_bytes",
+        "ratio",
+        "need_seed_seconds",
+        "need_seed_text",
+        "infohash_v1",
+        "infohash_v2",
+        "verified_ts",
+        "verified_source",
+        "verified_source_text",
+        "done_iso",
+        "active",
+        "missing_streak",
+        "first_seen",
+        "last_seen",
+    }
+    assert row["tid"] == 101 and row["name"]
+    assert row["infohash_v1"] and row["infohash_v2"], "取过 .torrent 的行 v1/v2 都已回填"
+    assert row["need_seed_seconds"] is not None and row["need_seed_text"] not in ("", None)
+    assert row["lane"] and row["lane_text"], "档位原值 + 人话都要给"
+    assert row["active"] is True and "done_iso" in row
+    assert row["first_seen"] >= 0.0 and row["last_seen"] >= 0.0, "first_seen/last_seen 原样透传(写入行为属取数管道, 不在此钉)"
+
+
+def test_api_hr_site_entries_verified_two_states(web_env, tmp_path):
+    """verified 有/无两态同表: 无记录→未核实(0/""/"未核实"); 有记录→verified_ts + source 原值 + 人话"""
+    mgr, client = web_env
+    svc = _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    row = client.get("/api/hr/sites/HHan/entries", headers=auth).json()["entries"][0]
+    assert row["verified_ts"] == 0.0
+    assert row["verified_source"] == "" and row["verified_source_text"] == "未核实"
+    # 注入放行记录(持锁会话写站点文件 —— 与端点读的是同一份数据), 再验有记录态
+    from auto_qb.hr.model import SOURCE_EXEMPT, HrVerified
+
+    ts = 1_759_000_000.0
+    with svc.store("HHan").hold() as session:
+        h = session.data.index[101].infohash_v1
+        session.data.verified[h] = HrVerified(infohash=h, tid=101, verified_ts=ts, source=SOURCE_EXEMPT)
+        assert session.commit(time.time()) == "written"
+    row = client.get("/api/hr/sites/HHan/entries", headers=auth).json()["entries"][0]
+    assert row["verified_ts"] == ts
+    assert row["verified_source"] == "absent" and row["verified_source_text"] == "D 免罪"
+
+
+def test_api_hr_site_entries_empty_site(web_env, tmp_path):
+    """站点已接入但没有 HR 行 -> 200 + 空数组(前端显示空态, 不当错误)"""
+    mgr, client = web_env
+    from hr_helpers import EMPTY_TABLE_PAGE
+
+    _hr_status_env(mgr, tmp_path, pages={"A": EMPTY_TABLE_PAGE, "B": EMPTY_TABLE_PAGE, "C": EMPTY_TABLE_PAGE})
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    r = client.get("/api/hr/sites/HHan/entries", headers=auth)
+    assert r.status_code == 200
+    assert r.json()["entries"] == []
+
+
+def test_api_hr_site_entries_guards(web_env, tmp_path):
+    """HR 未启用 -> 400; 站点未接入 -> 404 并点名已接入清单(与 confirm-empty 同款话术)"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    mgr.config.hr_check.enabled = False
+    assert client.get("/api/hr/sites/HHan/entries", headers=auth).status_code == 400
+    mgr.config.hr_check.enabled = True
+    r = client.get("/api/hr/sites/Nope/entries", headers=auth)
+    assert r.status_code == 404 and "Nope" in r.json()["detail"]
+
+
+def test_api_state_excludes_hr_entry_details(web_env):
+    """体积守卫: 种子明细键不得进 /api/state 轮询载荷(计划 §8) —— 明细只随表①按站点按需拉"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    text = json.dumps(client.get("/api/state", headers=auth).json(), ensure_ascii=False)
+    for key in ("need_seed_text", "verified_source_text", "lane_text", "missing_streak"):
+        assert f'"{key}"' not in text, f"/api/state 轮询载荷混入了明细键 {key}"
 
 
 def test_frontend_hr_status_fields_match_backend():
@@ -7831,6 +7936,7 @@ _GOLDEN_ROUTES = {
     ("GET", "/newui"),
     ("GET", "/newui/{rest:path}"),
     ("GET", "/api/hr/status"),  # M4: HR 站点级状态快照(只读; 与 --hr-status 同一口径)
+    ("GET", "/api/hr/sites/{site}/entries"),  # 种子明细(计划 26-10-01-2216 §7 阶段1; 决策点②b 按站点按需拉)
     ("GET", "/api/sites/missing"),  # 站点导入: 未配置站点扫描(只读; 与 --export-yaml --only-missing 同口径)
 }
 
@@ -7852,7 +7958,7 @@ def _iter_api_routes(routes):
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 66 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 67 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

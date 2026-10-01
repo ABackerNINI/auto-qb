@@ -30,7 +30,7 @@ from .channel import API_TASKS, describe_token_source, token_path
 from .fetcher import HrChannelUnavailable, HrFetcher, NullFetcher
 from .model import HrEntry, HrSiteData
 from .service import DIAGNOSTIC_MAX_WAIT, HrRefreshResult, HrRefreshService
-from .status import CHANNEL_TEXTS, LANE_TEXTS, SiteStatus, ago_text, site_status, stamp_text
+from .status import CHANNEL_TEXTS, LANE_TEXTS, SiteStatus, ago_text, need_seed_text, site_status, stamp_text
 from .store import HrLockBusy, instance_id
 
 logger = logging.getLogger(__name__)
@@ -286,21 +286,10 @@ def _status_row_cells(entry: HrEntry) -> Tuple[str, ...]:
         fmt_size(entry.uploaded_bytes or 0),
         fmt_size(entry.downloaded_bytes or 0),
         "-" if entry.ratio is None else f"{entry.ratio:.3f}",
-        _need_seed_text(entry.need_seed_seconds),
+        need_seed_text(entry.need_seed_seconds),
         _ellipsis(entry.name, 40),
         ihash[:12] or "-",
     )
-
-
-def _need_seed_text(seconds: Optional[int]) -> str:
-    """还需做种时间, 镜像站点书写形态(「16:57:06」/「9天06:05:11」)方便逐格核对; 缺字段 = -"""
-    if seconds is None:
-        return "-"
-    days, rem = divmod(max(0, int(seconds)), 86400)
-    hours, rem = divmod(rem, 3600)
-    minutes, secs = divmod(rem, 60)
-    prefix = f"{days}天" if days else ""
-    return f"{prefix}{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
 def _dwidth(text: str) -> int:
