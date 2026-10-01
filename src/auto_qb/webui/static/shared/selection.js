@@ -9,17 +9,66 @@
  *   (focus 语义, 与 2026-09-17「普通点击不选中」口径不冲突), 键盘 ↑↓ / 动作键从刚点击的行出发;
  *   Ctrl/Shift+点击在原有选中语义之外同样落光标。点击行必在视口内, 不触发滚动跟随。
  *
+ * !起点统一(计划 26-10-02-0608 方案 B): 光标之外, 区间起点(anchor)也纳入键鼠统一模型 ——
+ *   普通/Ctrl 点击与键盘 Shift 手势原点落起点(_selSetAnchor), 起点单点解析走 _selAnchor
+ *   (兜底链: 显式锚点 -> 当前光标 -> 展开的组 -> 列表首行), 不再四处各写一遍 list[0]。
+ *   落起点 ≠ 选中; Shift 不重置起点(扩展期间起点不动, 便于同一起点多次扩段)。
+ *
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_SELECTION);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_SELECTION = {
   methods: {
+    /* ---------------- 起点(anchor)解析单点(计划 26-10-02-0608 方案 B) ----------------
+     * 起点 = 最近一次"显式落位"的位置: 鼠标普通点击 / Ctrl(⌘)+点击某行, 或键盘 Shift 手势的
+     * 原点(按下 Shift 前光标所在行)。起点与光标(focus)是**两件事** —— 扩展期间起点不动,
+     * 便于多次 Shift 从同一起点扩段(法则 2); 落起点 != 选中, 只写 selAnchor*, 不碰
+     * selGroups/selMembers(与 2026-09-17「普通点击不选中」及方案 B「落光标 != 选中」一致)。
+     * 兜底链: 显式锚点(有效) -> 当前光标(有效) -> [group: 展开的组] -> 列表首行。
+     * 此前四处消费者各写一遍 list[0] 兜底, 起点与光标脱节(点第 5 行 Shift 选却从表头起),
+     * 收成这两个方法后口径只有一处。 */
+    _selAnchorField(kind) {
+      return kind === "group" ? "selAnchorGroup" : kind === "member" ? "selAnchorMember" : "selAnchorUnit";
+    },
+    /* 光标 -> 本 kind 的起点 id(kind 不匹配 / 无光标返回 null; 是否落在本列表由调用方校验) */
+    _selCursorId(kind) {
+      const c = this.kbCursor;
+      if (!c) return null;
+      if (kind === "group") return c.kind === "group" ? c.id : null;
+      if (kind === "member") return c.kind === "torrent" ? c.id : null;
+      if (c.kind === "show") return "show|" + c.id;
+      if (c.kind === "ep") return c.id;
+      return null;
+    },
+    /* 起点单点解析: list 传 id 串数组(group/member)或单元数组 {id,hashes}(unit) */
+    _selAnchor(kind, list) {
+      const ids = (list || []).map((x) => (kind === "unit" ? x.id : x));
+      const field = this._selAnchorField(kind);
+      if (ids.includes(this[field])) return this[field];
+      const fromCursor = this._selCursorId(kind);
+      if (fromCursor !== null && ids.includes(fromCursor)) return fromCursor;
+      if (kind === "group" && ids.includes(this.expandedKey)) return this.expandedKey;
+      return ids.length ? ids[0] : null;
+    },
+    /* 落起点(单点写入口): 按 kind 写对应 selAnchor* 字段 */
+    _selSetAnchor(kind, id) {
+      this[this._selAnchorField(kind)] = id;
+    },
+    /* 当前视图的起点上下文 {kind, ids}: 键盘手势原点据此判定"当前上下文有无有效起点" */
+    _selContext() {
+      if (this.page !== "groups") return null;
+      if (this.viewMode === "torrents") return { kind: "member", ids: this.filteredTorrents.map((m) => m.hash) };
+      if (this.viewMode === "shows") return { kind: "unit", ids: this._kbShowUnits().map((u) => u.id) };
+      return { kind: "group", ids: this.filteredGroups.map((g) => g.key) };
+    },
     /* ---------------- 多选与批量操作(Ctrl/⌘ 选中, Shift 范围; 普通点击行为不变) ---------------- */
     isGroupSelected(g) {
       return this.selGroups.includes(g.key);
     },
     onGroupClick(g, event) {
       this.kbCursor = { kind: "group", id: g.key };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
+      // 点击落起点(≠ 选中; 写在修饰键分支之前, 与展开/收起无关 —— 决策点③); Shift 不重置起点(法则 2)
+      if (!event.shiftKey) this._selSetAnchor("group", g.key);
       this.menu.visible = false;
       if (event.ctrlKey || event.metaKey) {
         this.toggleGroupSel(g);
@@ -45,11 +94,9 @@ window.AQB_SELECTION = {
       this.selMembers = [];
       this.selAnchorMember = null;
       // 从锚点到当前行整段加入选择(锚点不更新: 多次 Shift 可从同一起点扩展)
-      // 锚点解析: Ctrl+点击设置的锚点 -> 当前展开的组(用户要求) -> 可见列表首行
+      // 起点解析走单点 _selAnchor: 显式锚点 -> 当前光标 -> 当前展开的组(用户要求) -> 可见列表首行
       const list = this.filteredGroups.map((x) => x.key);
-      let anchor = this.selAnchorGroup;
-      if (!list.includes(anchor) && list.includes(this.expandedKey)) anchor = this.expandedKey;
-      if (!list.includes(anchor)) anchor = list[0];
+      const anchor = this._selAnchor("group", list);
       const from = list.indexOf(anchor);
       const to = list.indexOf(g.key);
       if (from < 0 || to < 0) return;
@@ -60,6 +107,8 @@ window.AQB_SELECTION = {
       // 普通点击**不再选中**(用户 2026-09-17 明确: 点击种子不触发选择); 仅修饰键选择:
       // Ctrl/⌘ 切换单行, Shift 从锚点整段范围
       this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接): 只写 focus 语义, 不动选择集合
+      // 点击落起点(普通点击原为 no-op, 现补起点); Shift 不重置起点(法则 2)
+      if (!event.shiftKey) this._selSetAnchor("member", m.hash);
       if (event.ctrlKey || event.metaKey) {
         this.toggleMemberSel(m);
         return;
@@ -82,7 +131,7 @@ window.AQB_SELECTION = {
       const g = this.filteredGroups.find((x) => x.key === this.expandedKey);
       if (!g) return;
       const list = g.members.map((x) => x.hash);
-      const anchor = list.includes(this.selAnchorMember) ? this.selAnchorMember : list[0];
+      const anchor = this._selAnchor("member", list);
       const from = list.indexOf(anchor);
       const to = list.indexOf(m.hash);
       if (from < 0 || to < 0) return;
@@ -98,6 +147,8 @@ window.AQB_SELECTION = {
     /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围); 普通点击不选中 */
     onTorrentClick(m, event) {
       this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
+      // 点击落起点(平铺种子行); Shift 不重置起点(法则 2)
+      if (!event.shiftKey) this._selSetAnchor("member", m.hash);
       this.menu.visible = false;
       if (event.ctrlKey || event.metaKey) {
         this.toggleMemberSel(m);
@@ -108,9 +159,9 @@ window.AQB_SELECTION = {
     shiftTorrentSel(m) {
       this.selGroups = [];  // FX-11: 同 toggleMemberSel
       this.selAnchorGroup = null;
-      // 平铺列表内的连续范围选择(锚点不更新, 可从同一起点多次扩展)
+      // 平铺列表内的连续范围选择(锚点不更新, 可从同一起点多次扩展); 起点走单点解析
       const list = this.filteredTorrents.map((x) => x.hash);
-      const anchor = list.includes(this.selAnchorMember) ? this.selAnchorMember : list[0];
+      const anchor = this._selAnchor("member", list);
       const from = list.indexOf(anchor);
       const to = list.indexOf(m.hash);
       if (from < 0 || to < 0) return;
@@ -189,7 +240,9 @@ window.AQB_SELECTION = {
     _extendUnit(unit, list) {
       if (!unit) return;
       const units = list || [];
-      const anchorIdx = units.findIndex((u) => u.id === this.selAnchorUnit);
+      // 起点单点解析(计划 26-10-02-0608 W4): 起点缺失时以光标单元 / 首单元起算, 形成"起点->目标"
+      // 区间, 不再退化为单单元切换(修 M7/M8 首拍只切换目标单元); 仅当目标也解析不出单元时才兜底切换
+      const anchorIdx = units.findIndex((u) => u.id === this._selAnchor("unit", units));
       const curIdx = units.findIndex((u) => u.id === unit.id);
       if (anchorIdx < 0 || curIdx < 0) {
         this._toggleUnit(unit);
@@ -204,6 +257,8 @@ window.AQB_SELECTION = {
     },
     onShowClick(s, event) {
       this.kbCursor = { kind: "show", id: s.key };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
+      // 点击落起点(单元 id 与 _showUnits 同构); Shift 不重置起点(法则 2)
+      if (!event.shiftKey) this._selSetAnchor("unit", "show|" + s.key);
       if (event.ctrlKey || event.metaKey) {
         this._toggleUnit(this._showUnits().find((u) => u.id === "show|" + s.key));
         return;
@@ -217,6 +272,8 @@ window.AQB_SELECTION = {
     onShowEpClick(s, sn, e, event) {
       const id = this.showEpRowId(s.key, sn.season, e.epKeyStr);
       this.kbCursor = { kind: "ep", id };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
+      // 点击落起点(集单元 id = showEpRowId); Shift 不重置起点(法则 2)
+      if (!event.shiftKey) this._selSetAnchor("unit", id);
       const units = this._epUnits(s);
       if (event.ctrlKey || event.metaKey) {
         this._toggleUnit(units.find((u) => u.id === id));

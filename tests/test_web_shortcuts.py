@@ -34,6 +34,10 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_click_lands_cursor_and_viewport_fallback: 键鼠衔接(报告 26-09-30-1806 方案 B) ——
   selection.js 五点击入口按所在行回写 kbCursor(写在修饰键分支之前, Ctrl/Shift 点击同样落光标);
   _kbMove 无光标回落走 _kbViewportRow(前缀和同源校验 / 渲染行可见性扫描, 解析失败退回旧口径)
+- test_shift_anchor_unified: 起点统一(计划 26-10-02-0608 方案 B) —— 五点击入口普通/Ctrl 路径落
+  起点且排除 Shift(法则 2); 四处消费者走 _selAnchor 单点解析、无裸 list[0]; _selAnchor 兜底链
+  齐全(显式 -> 光标 -> 展开组 -> 首行); _selSetAnchor 不碰选中集合; _kbExtend 先落手势原点
+  (_selSeedAnchorFromCursor) 再移动光标, 且已有有效起点不动
 - test_local_scope_wiring: G 组抽屉四条 scope=drawer + run 走 drawerTab; settings-save
   inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope 五值三档(settings/drawer/list)齐全;
   浮层打开只放行焦点局部(drawer/settings)键位; 非 inputSafe 条目不得标 inputSafe
@@ -336,6 +340,73 @@ def test_click_lands_cursor_and_viewport_fallback() -> None:
     assert "getBoundingClientRect" in vb, "非窗口化/前缀失效时必须扫渲染行可见性(v-if 保证 DOM 只有当前视图)"
     assert ".scrollIntoView(" not in vb, "回落解析只读几何, 禁 scrollIntoView(pitfalls web-ui/hover-keynav-fight)"
     assert "rows.length - 1" in vb, "解析失败的保守退路 = 旧口径(↓ 首行 / ↑ 末行)"
+
+
+def test_shift_anchor_unified() -> None:
+    """起点统一(计划 26-10-02-0608 方案 B): 区间起点(anchor)与光标一样纳入键鼠统一模型 ——
+    点击落起点(Shift 不重置, 法则 2) / 四处消费者走单点解析(不再各写一遍 list[0]) /
+    键盘 Shift 手势原点先于移动光标(否则区间塌成单行, G2)。"""
+    sel = _read("selection.js")
+    # ① 五入口普通/Ctrl 路径落起点, 写在修饰键分支之前, 且排除 Shift 分支(法则 2)
+    for fn, write in [
+        ("onGroupClick", 'this._selSetAnchor("group", g.key)'),
+        ("onMemberClick", 'this._selSetAnchor("member", m.hash)'),
+        ("onTorrentClick", 'this._selSetAnchor("member", m.hash)'),
+        ("onShowClick", 'this._selSetAnchor("unit", "show|" + s.key)'),
+        ("onShowEpClick", 'this._selSetAnchor("unit", id)'),
+    ]:
+        m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
+        assert m, f"selection.js 找不到 {fn}(五点击入口被改名/搬走? 同步本守阵)"
+        body = m.group(1)
+        at = body.find("_selSetAnchor")
+        ctrl_at = body.find("event.ctrlKey")
+        assert at >= 0, f"{fn} 缺点击落起点(起点与光标脱节: 点第 5 行 Shift 选却从表头起)"
+        assert 0 <= at < ctrl_at, f"{fn} 落起点必须写在修饰键分支之前"
+        line = next(ln for ln in body.splitlines() if "_selSetAnchor" in ln)
+        assert "event.shiftKey" in line and "!" in line, (f"{fn} 落起点必须排除 Shift 分支(法则 2: 否则 Shift+点击只选目标单行, M1 回归)")
+        assert write in body, f"{fn} 落起点值不对(起点 id 形态漂移: {write})"
+    # ② 四处消费者统一走单点解析, 不再出现裸 list[0] 兜底
+    for fn, call in [
+        ("shiftGroupSel", 'this._selAnchor("group", list)'),
+        ("shiftMemberSel", 'this._selAnchor("member", list)'),
+        ("shiftTorrentSel", 'this._selAnchor("member", list)'),
+        ("_extendUnit", 'this._selAnchor("unit", units)'),
+    ]:
+        m = re.search(rf"{fn}\([^)]*\) \{{(.*?)\n    \}},", sel, re.S)
+        assert m, f"selection.js 找不到 {fn}(起点消费者被改名/搬走? 同步本守阵)"
+        body = m.group(1)
+        assert call in body, f"{fn} 未走起点单点解析 {call}(四处各写兜底 = 口径漂移源)"
+        assert "list[0]" not in body, f"{fn} 仍残留裸 list[0] 兜底(起点脱节根因)"
+    # ③ 起点解析单点: 兜底链齐全 + 落起点不碰选中集合
+    anchor = re.search(r"_selAnchor\(kind, list\) \{(.*?)\n    \},", sel, re.S)
+    assert anchor, "缺 _selAnchor(起点解析单点)"
+    ab = anchor.group(1)
+    for needle, why in [
+        ("_selCursorId(kind)", "兜底链缺「当前光标」一环(键盘走到第 20 行 Shift 选却从表头起)"),
+        ("this.expandedKey", "辅种页缺「展开的组」次选兜底(既有产品规则 menu.js/toggleExpand)"),
+        ("ids[0]", "缺最后兜底(列表首行)"),
+    ]:
+        assert needle in ab, f"_selAnchor {why}"
+    setter = re.search(r"_selSetAnchor\(kind, id\) \{(.*?)\n    \},", sel, re.S)
+    assert setter and "this[this._selAnchorField(kind)] = id;" in setter.group(1), (
+        "_selSetAnchor 必须只写 selAnchor* 字段(落起点 != 选中)"
+    )
+    sb = setter.group(1)
+    assert "selGroups" not in sb and "selMembers" not in sb, ("_selSetAnchor 不得触碰选中集合(与 2026-09-17「普通点击不选中」冲突)")
+    # ④ 键盘手势原点: 先落起点再移动光标, 且已有有效起点不动(法则 2)
+    eng = _read("shortcuts.js")
+    ext = re.search(r"_kbExtend\(delta\) \{(.*?)\n    \},", eng, re.S)
+    assert ext, "shortcuts.js 找不到 _kbExtend(键盘 Shift 扩展落点)"
+    eb = ext.group(1)
+    seed_at = eb.find("_selSeedAnchorFromCursor()")
+    move_at = eb.find("this._kbMove(delta)")
+    assert seed_at >= 0, "_kbExtend 缺手势原点落起点(首次 Shift 扩展从列表首行起算的根因)"
+    assert 0 <= seed_at < move_at, "_kbExtend 必须先落起点再移动光标(顺序反了区间塌成单行)"
+    seed = re.search(r"_selSeedAnchorFromCursor\(\) \{(.*?)\n    \},", eng, re.S)
+    assert seed, "缺 _selSeedAnchorFromCursor(键盘手势原点)"
+    seedb = seed.group(1)
+    assert "ctx.ids.includes(this[field])" in seedb, ("已有有效起点必须不动(法则 2: 同一起点多次 Shift 扩展)")
+    assert "this[field] = fromCursor" in seedb, "无有效起点时必须以当前光标落起点"
 
 
 def test_local_scope_wiring() -> None:

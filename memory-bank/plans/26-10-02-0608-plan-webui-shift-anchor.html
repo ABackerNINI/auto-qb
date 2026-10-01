@@ -6,9 +6,9 @@
 <title>修改计划 · WEBUI Shift 连选起点与键鼠联动统一 — auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-keyboard-shortcuts">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-02-0608">
-<meta name="doc-updated" content="26-10-02-0608">
+<meta name="doc-updated" content="26-10-02-0635">
 <style>
   *{box-sizing:border-box}
   :root{
@@ -89,9 +89,9 @@
   <div class="wrap">
     <p class="kicker">Modification Plan · WEBUI Selection Anchor × Keyboard-Mouse</p>
     <h1>WEBUI Shift 连选起点<br>与键鼠联动机制统一</h1>
-    <p class="lede">现象：<strong>Shift 连选的「起点」与键鼠光标各说各话</strong> —— 鼠标点过第 5 行、按 <kbd>Shift</kbd>+<kbd>↓</kbd>，选中的却是从<strong>列表第一行</strong>到第 6 行的整段；点第 5 行再 <kbd>Shift</kbd>+点击第 20 行，同样从表头开始选。本计划在报告 <a href="../reports/26-09-30-1806-report-webui-keymouse-cohesion.html">26-09-30-1806</a>（方案 B 已落地：点击落光标 + 视口就近回落）的基础上，把<strong>选择起点（anchor）</strong>也纳入键鼠统一模型。只出计划，不改代码。</p>
-    <p class="meta"><b>Status:</b> Open（待拍板）　<b>Added:</b> 2026-10-02 06:08　<b>Updated:</b> 2026-10-02 06:08<br>
-    <b>Topic:</b> webui-keyboard-shortcuts　<b>代码事实核对截至:</b> develop @ 2359a3d1(2026-10-02)<br>
+    <p class="lede">现象：<strong>Shift 连选的「起点」与键鼠光标各说各话</strong> —— 鼠标点过第 5 行、按 <kbd>Shift</kbd>+<kbd>↓</kbd>，选中的却是从<strong>列表第一行</strong>到第 6 行的整段；点第 5 行再 <kbd>Shift</kbd>+点击第 20 行，同样从表头开始选。本计划在报告 <a href="../reports/26-09-30-1806-report-webui-keymouse-cohesion.html">26-09-30-1806</a>（方案 B 已落地：点击落光标 + 视口就近回落）的基础上，把<strong>选择起点（anchor）</strong>也纳入键鼠统一模型。<strong>本计划已按方案 B 实施完成（W1–W5 全落地，2026-10-02 06:35）</strong>，正文保留出件时的取证与决策口径。</p>
+    <p class="meta"><b>Status:</b> Done（方案 B 已实施）　<b>Added:</b> 2026-10-02 06:08　<b>Updated:</b> 2026-10-02 06:35<br>
+    <b>Topic:</b> webui-keyboard-shortcuts　<b>代码事实核对截至:</b> develop @ 2359a3d1(2026-10-02)　<b>实施基线:</b> eae2aede<br>
     <b>前置件:</b> <a href="../reports/26-09-30-1806-report-webui-keymouse-cohesion.html">报告 26-09-30-1806(方案 B 调研)</a> · <a href="../plans/26-09-28-0354-plan-webui-keyboard-shortcuts.html">计划 26-09-28-0354(快捷键全波)</a> · <a href="../tasks/26-09-28-webui-keyboard-shortcuts.md">档案 26-09-28</a></p>
   </div>
 </header>
@@ -401,9 +401,10 @@ _selSetAnchor(kind, id)  // 按 kind 写对应 selAnchor* 字段(单点落起点
 <table>
   <tr><th style="width:110px">版本</th><th style="width:140px">日期</th><th>说明</th></tr>
   <tr><td>v1</td><td>26-10-02-0608</td><td>首版：代码取证 G1–G5、复现矩阵 M1–M8、方案 A/B/C 比选（推荐 B）、实施波次 W1–W5、验收与守阵、风险、待拍板 4 点、范围外。</td></tr>
+  <tr><td>v2</td><td>26-10-02-0635</td><td>方案 B 实施完成（用户指令「按推荐实施计划」= 拍板方案 B + §09 四决策点建议案）。W1 起点单点化（<code>_selAnchor</code>/<code>_selSetAnchor</code>，四处消费者改调用）/ W2 五入口落起点（<code>!event.shiftKey</code> 守卫排除 Shift —— 计划文字「不写 Shift 分支」与「写在修饰键分支之前」只能靠该守卫同时满足）/ W3 <code>_selSeedAnchorFromCursor</code> 先于 <code>_kbMove</code> / W4 <code>_extendUnit</code> 区间化 / W5 守阵 18→19 + 文档回写。test.full 2290+3 / 99%（基线 26-10-02-0635）。doc-status Open→Done。</td></tr>
 </table>
 
-<div class="foot">auto-qb · memory-bank/plans · 26-10-02-0608 · Topic: webui-keyboard-shortcuts · 现状代码事实核对截至 2359a3d1(2026-10-02) · 待拍板</div>
+<div class="foot">auto-qb · memory-bank/plans · 26-10-02-0608 · Topic: webui-keyboard-shortcuts · 现状代码事实核对截至 2359a3d1(2026-10-02) · 方案 B 已实施(W1-W5, 基线 26-10-02-0635)</div>
 
 </article>
 </div>

@@ -5,6 +5,23 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- WEB UI **Shift 连选起点与键鼠联动统一**(2026-10-02, 计划
+  [plans/26-10-02-0608](../plans/26-10-02-0608-plan-webui-shift-anchor.html) 方案 B, 用户指令
+  「按推荐实施计划」直接拍板 + 4 决策点按建议案): 修「鼠标点过第 5 行, 按 Shift+↓ 却从**列表第一行**
+  起选」—— 根因是方案 B 只统一了**光标**(`kbCursor`), 区间**起点**(`selAnchor*`)仍是另一套状态机
+  (仅 Ctrl/⌘ 点击与展开写入), 为空时四处消费者一律兜底 `list[0]`。修法四条: ①起点解析/写入单点
+  `_selAnchor(kind, list)` / `_selSetAnchor(kind, id)`(`selection.js`), 兜底链 **显式锚点 → 当前光标
+  → [group: 展开的组] → 列表首行**, `shiftGroupSel`/`shiftMemberSel`/`shiftTorrentSel`/`_extendUnit`
+  四处改调用, 消掉「四处各写一遍 `list[0]`」的口径漂移源; ②五个点击入口普通/Ctrl 路径补落起点,
+  **`!event.shiftKey` 守卫排除 Shift**(法则 2: 起点在扩展期间不动, 否则 Shift+点击只选目标单行);
+  ③`shortcuts.js` 新增 `_selSeedAnchorFromCursor`, `_kbExtend` 在 `_kbMove` **之前**以当前光标落
+  「手势原点」(已有有效起点则不动); ④追剧页起点缺失改走 `_selAnchor("unit", units)` 形成区间, 不再
+  退化为单单元切换。**行为口径未变**: 普通点击仍不选中(只写 `selAnchor*`) / 滚动仍只在键盘路径 /
+  禁 `scrollIntoView` / FX-11 互斥清理不变 / 无 Python src·配置键·后端改动。守阵
+  `test_web_shortcuts.py` 18 → 19(`test_shift_anchor_unified`); test.full **2290 passed + 3 skipped /
+  99%**(基线 [testing/baselines/26-10-02-0635](../testing/baselines/26-10-02-0635-webui-shift-anchor.md));
+  档案 [tasks/26-09-28-webui-keyboard-shortcuts](../tasks/26-09-28-webui-keyboard-shortcuts.md); **未提交**
+
 - WEB UI **HR 在线核实详情两张表**(2026-10-01/02, 清偿 issue
   [26-10-01-2137-feat-webui-hr-detail-table](../issues/26-10-01-2137-feat-webui-hr-detail-table.html),
   计划 [plans/26-10-01-2216](../plans/26-10-01-2216-plan-webui-hr-detail-table.html) 拍板六项全按推荐):

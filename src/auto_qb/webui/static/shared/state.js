@@ -181,8 +181,12 @@ window.AQB_STATE = {
       kbRecId: "",            // 正在录制的 action id("" = 不在录制态)
       kbConflict: null,       // 录制冲突待决 {id, serial, other, otherLabel}(三选一: 交换/覆盖/取消)
       kbKeysLoading: false,   // 面板打开/重载时拉取服务端真值中
-      selAnchorGroup: null,   // 分组表 Shift 锚点(组 key; shift 后不更新, 便于多次扩展同一范围)
-      selAnchorMember: null,  // 明细表 Shift 锚点(成员 hash)
+      // 区间起点(anchor)三字段(计划 26-10-02-0608 方案 B 起与光标同属键鼠统一模型):
+      // 由鼠标普通/Ctrl(⌘)点击或键盘 Shift 手势原点落定(落起点 ≠ 选中, 只写这里);
+      // **Shift 扩展期间不更新**(便于同一起点多次扩段)。解析/写入单点在 selection.js
+      // (_selAnchor 兜底链: 显式锚点 -> 当前光标 -> [group: 展开的组] -> 列表首行 / _selSetAnchor)
+      selAnchorGroup: null,   // 分组表 Shift 锚点(组 key)
+      selAnchorMember: null,  // 明细表/平铺种子表 Shift 锚点(成员 hash)
       selAnchorUnit: null,    // FX-12: 追剧页 Shift 锚点(剧/集单元 id)
       // 历史流量弹层(今日流量面板入口; 数据源 /api/traffic/history, 按日原始行)
       historyOpen: false,

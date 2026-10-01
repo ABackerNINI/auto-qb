@@ -31,6 +31,10 @@
  *   - 键鼠衔接(26-09-30-1806 方案 B): 鼠标点击入口(selection.js 五个 on*Click)按所在行回写
  *     kbCursor —— 落光标 ≠ 选中(focus 语义), 键盘从点击处出发; 无光标回落 = 视口就近行
  *     (_kbViewportRow), 不再落极值行。滚动跟随仍只发生在键盘路径(_kbApplyCursor)。
+ *   - 起点统一(26-10-02-0608 方案 B): 区间起点(anchor)与光标一样纳入键鼠统一模型 —— 点击落
+ *     起点在 selection.js, 键盘侧在 _kbExtend 移动光标**之前**用 _selSeedAnchorFromCursor 落
+ *     "手势原点"(无有效起点时才落), 使 Shift+↑↓ 首次扩展即从当前光标起算, 不再从列表首行起。
+ *     起点解析/写入单点在 selection.js(_selAnchor / _selSetAnchor)。
  */
 
 /* 纯修饰键: 自身发 keydown, 匹配器等非修饰键落定才判定(录制器把"只按了 Shift"判无效) */
@@ -654,8 +658,21 @@ window.AQB_SHORTCUTS = {
       }
       this._toggleUnit(this._kbUnitOf(c));  // 剧/集单元: 整单元切换(与鼠标 Ctrl+点击同语义)
     },
+    /* Shift 手势原点(计划 26-10-02-0608 W3): 首次 Shift 扩展前, 若当前上下文没有有效起点,
+     * 以当前光标落起点。**必须在 _kbMove 之前**调用 —— 否则光标已移动, 区间会塌成单行(G2)。
+     * 已有有效起点(点击 / Ctrl 点击 / 上次手势落定)一律不动 —— 保证"同一起点多次 Shift 扩展"
+     * (法则 2)。光标为 null 时不落, 由 _selAnchor 最后兜底列表首行。 */
+    _selSeedAnchorFromCursor() {
+      const ctx = this._selContext();
+      if (!ctx) return;
+      const field = this._selAnchorField(ctx.kind);
+      if (ctx.ids.includes(this[field])) return;
+      const fromCursor = this._selCursorId(ctx.kind);
+      if (fromCursor !== null && ctx.ids.includes(fromCursor)) this[field] = fromCursor;
+    },
     _kbExtend(delta) {
-      this._kbMove(delta);  // 先移动光标, 再把锚点到新光标整段并入选择(锚点语义沿用既有实现)
+      this._selSeedAnchorFromCursor();  // 先落起点(手势原点), 再移动光标 —— 顺序不可换(否则区间塌成单行)
+      this._kbMove(delta);  // 移动光标, 再把锚点到新光标整段并入选择(锚点语义沿用既有实现)
       const c = this.kbCursor;
       if (!c) return;
       if (c.kind === "group") {

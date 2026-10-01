@@ -26,7 +26,6 @@
 
 ## Open
 
-- [26-10-02-0608] [修改计划 · WEBUI Shift 连选起点与键鼠联动统一 — auto-qb](26-10-02-0608-plan-webui-shift-anchor.html) — `webui-keyboard-shortcuts`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`
@@ -35,6 +34,7 @@
 
 ## Done
 
+- [26-10-02-0608] [修改计划 · WEBUI Shift 连选起点与键鼠联动统一 — auto-qb](26-10-02-0608-plan-webui-shift-anchor.html) — `webui-keyboard-shortcuts`
 - [26-10-01-2216] [修改计划 · WEBUI HR 在线核实详情表 — 全量详情表与排障视图](26-10-01-2216-plan-webui-hr-detail-table.html) — `backend-partial-hr-verify`
 - [26-10-01-2157] [测试覆盖率提升 — 分阶段执行计划 (91% → 96%)](26-10-01-2157-plan-test-coverage-uplift.html) — `test-coverage-uplift`
 - [26-10-01-1728] [计划 · 知识库文档漂移分段修复 — 内核化重构后四波欠账的回写路线](26-10-01-1728-plan-doc-drift-repair.html) — `doc-drift-repair`

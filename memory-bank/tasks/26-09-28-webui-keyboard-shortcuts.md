@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Added:** 2026-09-28
-**Updated:** 2026-09-30
+**Updated:** 2026-10-02
 **Summary:** 前案 26-09-26-0822 (localStorage 预选) 经成熟方案调研与存储对比后被 26-09-28-0354 取代(0822 置 Superseded): 定案后端独立文件 auto-qb-data/webui-keys.json + GET/PUT /api/keys(金清单+2); 引擎不引库自写 ~200 行(tinykeys 为参照), 沿 0822 注册表/e.code/作用域/三段屏蔽设计; 自定义面板进设置页「快捷键」分区 + ? 浮层。§08 六决策点已全部拍板(2026-09-30, ① 五轮收敛至 v4 终版): ①危险档一律二键组合(修饰键+字母, 非裸键非三键)+确认框兜底(默认确定/Enter 确认)—— 删除=Shift+D(另有 Delete 键作为额外删除操作无需绑定, 直连 _deleteFlow, 即删除双快捷键入口), 重新校验=Shift+Y, 强制汇报=Shift+A; 裸键 D/C/F 释放空位; ②光标只走组行; ③Shift 族保留; ④不加顶栏按钮; ⑤取消一次做完, W1-W4 第一波先行、W5-W7 第二波; ⑥后端文件。注册表 58 条(52 默认+6 空位)。存储 schema 预埋 {template, overrides}, 绑定模板机制确认缓议仅预埋(§4.7)。2026-09-30 追加: 用户报键鼠割裂(鼠标顶部按键跳底), 调研报告 26-09-30-1806 落地(根因=点击不回写 kbCursor + 无光标↑落末行的极值回落; 推荐方案 B); 同日用户拍板按方案 B 实施, 已落地(五入口回写 kbCursor / 回落改视口就近 _kbViewportRow / 明细成员行补光标视觉 / 守阵 17 条), 随本提交入库。
 **Topics:** webui-keyboard-shortcuts
 **Refs:** memory-bank/plans/26-09-28-0354-plan-webui-keyboard-shortcuts.html, memory-bank/plans/26-09-26-0822-plan-webui-keyboard-shortcuts.html, memory-bank/tasks/26-09-28-webui-settings-back-nav.md, memory-bank/reports/26-09-30-1806-report-webui-keymouse-cohesion.html
@@ -34,6 +34,7 @@
 | 5 | 收尾回写(基线/progress/pitfalls) | Done (两波基线切片 26-09-30-0555 / 26-09-30-0702; 新坑 js-comment-terminator) |
 | 6 | 键鼠割裂调研(用户报障) → 报告 + 方案推荐 | Done (26-09-30, 报告 [26-09-30-1806](../reports/26-09-30-1806-report-webui-keymouse-cohesion.html), 方案 B 待拍板) |
 | 7 | 方案 B 实施(点击落光标 + 回落视口就近) | Done (2026-09-30, 未提交等指令) |
+| 8 | Shift 连选起点统一(计划 26-10-02-0608 方案 B) | Done (2026-10-02, W1-W5 全落地, 未提交等指令) |
 
 ## 进度日志
 
@@ -60,3 +61,14 @@
   - **文案与注释**: `_kbHint` 改「先点选一行, 或用 ↑↓ / Home / End 定位目标」(不再教「先用 ↑↓ 移到一行」—— 点过就行); shortcuts.js 头注 + state.js kbCursor 注释同步方案 B 口径。
   - **守阵**: test_web_shortcuts.py 16→17 —— 新增 test_click_lands_cursor_and_viewport_fallback(五入口回写断言+必须写在修饰键分支之前 / `_kbMove` 不得直写极值回落 / `_kbViewportRow` 前缀和同源校验+渲染行扫描+保守退路+禁 scrollIntoView); test_cursor_scroll_follow_without_scrollintoview 模板断言 3→5 行(补两处成员行)。
   - 实测: test.full **1851 passed + 3 skipped / 90%**(基线 [26-09-30-1953](../testing/baselines/26-09-30-1953-webui-keymouse-planb.md); 19:53 初测 01e47169+本轮 1844+3, 提交前合流内核 P1(2174a568, 与本轮无关的后端模块化)后复核 20:10, P1 带 +7)。node --check 三 JS 全绿。方案 C(roving tabindex)仍缓议 —— B 的状态模型与 C 兼容。
+- 2026-10-02 06:08 **Shift 连选起点计划入库(纯计划, 未动代码)**: 用户报「Shift 连选起点与键鼠联动脱节 —— 鼠标点过第 5 行按 Shift+↓ 却从列表第一行起选」。出计划 [plans/26-10-02-0608](../plans/26-10-02-0608-plan-webui-shift-anchor.html)(Open, 待拍板): 根因=方案 B 统一了**光标**(focus)却没统一**起点**(anchor) —— 点击落 kbCursor, 但 Shift 区间起点仍走另一套 `selAnchor*` 状态机(仅由 Ctrl/⌘ 点击与展开写入), 为空时四处消费者一律兜底 `list[0]`。取证 G1-G5 / 复现矩阵 M1-M8 / 方案 A(只改兜底)/B(推荐)/C(起点与光标合并, 不可行)比选 / 实施波次 W1-W5 / 4 个口径决策点。代码事实核对截至 2359a3d1。
+- 2026-10-02 06:35 **Shift 连选起点实施完成, 未提交**(用户指令「按推荐实施计划 26-10-02-0608」= 拍板方案 B + 4 决策点建议案; 基线 [26-10-02-0635](../testing/baselines/26-10-02-0635-webui-shift-anchor.md), test.full **2290 passed + 3 skipped / 99%**, 守阵 18→19)。改动 4 文件(纯前端):
+  - **W1 起点解析单点化(selection.js)**: 新增 `_selAnchorField(kind)` / `_selCursorId(kind)` / `_selAnchor(kind, list)` / `_selSetAnchor(kind, id)` / `_selContext()`; 兜底链收敛为 **显式锚点(有效) → 当前光标(有效) → [group: `expandedKey`] → 列表首行**(`_selAnchor` 内唯一一处 `ids[0]`)。四处消费者改调用: `shiftGroupSel`(`_selAnchor("group", list)`) / `shiftMemberSel` / `shiftTorrentSel`(均 `"member"`) / `_extendUnit`(`"unit", units`) —— 消掉「四处各写一遍 `list[0]`」的口径漂移源。
+  - **W2 点击落起点(selection.js 五入口)**: `onGroupClick`/`onMemberClick`/`onTorrentClick`/`onShowClick`/`onShowEpClick` 在修饰键分支**之前**补 `if (!event.shiftKey) this._selSetAnchor(...)`。**关键口径修正**: 计划文字说「不写 Shift 分支」又要求「写在修饰键分支之前」—— 两者只能靠 `!event.shiftKey` 守卫同时满足(无条件早写会让 Shift+点击把起点重置到目标行, M1 退化成只选一行; 已按验收表 §7.1 的 M1=5–20 定夺)。Ctrl/⌘ 路径值与 `toggle*Sel` 写入相同, 幂等无害。
+  - **W3 键盘手势原点(shortcuts.js)**: 新增 `_selSeedAnchorFromCursor()`(走 `_selContext()` 取当前视图 {kind, ids}, 已有有效起点则**不动** —— 法则 2), `_kbExtend` 开头在 `this._kbMove(delta)` **之前**调用(顺序反了光标已移动 ⇒ 区间塌成单行, 即 G2)。
+  - **W4 追剧页区间化(selection.js)**: `_extendUnit` 的起点解析改走 `_selAnchor("unit", units)`; 只有 units 为空或目标不在 units 时才保留 `_toggleUnit` 兜底(修 M7/M8 首拍退化为单单元切换)。
+  - **W5 守阵+回写**: `tests/test_web_shortcuts.py` 新增 `test_shift_anchor_unified`(五入口落起点+排除 Shift+写在 ctrlKey 前 / 四消费者无裸 `list[0]` / `_selAnchor` 兜底链三环 / `_selSetAnchor` 不碰选中集合 / `_kbExtend` 落起点先于 `_kbMove`), docstring 测试计划清单 +1; `state.js` 三锚点字段注释、`selection.js`/`shortcuts.js` 头注同步。
+  - **行为口径未变**: 普通点击仍不选中(落起点只写 `selAnchor*`) / Shift 不重置起点 / 滚动仍只在键盘路径(`_kbApplyCursor`, 点击路径不滚) / 禁 `scrollIntoView` / FX-11 组-成员互斥清理不变 / 无 Python src / 配置键 / 后端改动。
+  - 冒烟: dev.harness + ui_smoke.cjs(3000 种子)80 PASS + 2 FAIL, 失败项 = 既有的吸顶遮挡间歇失败(**stash 前后对照同行号同项数**确认先在, 与本笔无关, 范围守恒未修); 提交前并入 `eae2aede`(改 console_hub.css / xtpl.html)后重测仍同 80 PASS + 同 2 项同行号; 无 pageerror / console.error。
+  - 未做: 真机实弹走查(计划 §07.1 的 M1-M8 行为验收)留给用户。
+
