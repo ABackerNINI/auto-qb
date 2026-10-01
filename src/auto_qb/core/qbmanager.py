@@ -740,10 +740,6 @@ class QbManager(
         事件分派把 O(N) 全量扫描降为 O(变化数)。
         """
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
-        # 事件重放保护请求(plan §4.3): rules 模块 L2 重建时挂请求位(不置 live 旗标, issue
-        # 26-10-01-0750), 本轮轮首读走 —— events_removed 相位前重挂 live 旗标、events_added
-        # 相位后关闭, 同轮其余相位照常广播(语义等价原 _suppress_events 只闸 _dispatch_events)
-        suppress_pending = self.events.take_suppressed()
         added, removed = self.store.apply_sync(self.api)
         if self.store.need_validate:
             self._validate_torrent_schema(self.store.validate_sample)
@@ -772,8 +768,12 @@ class QbManager(
 
         # 事件分派相位(plan §4.2 events_removed): on_torrent_deleted / on_torrent_state_enum_changed /
         # on_torrent_field_changed 在自有动作之前、状态快照更新之前同步即时执行(新增种子本轮
-        # 不触发状态变化; added 事件在下方匹配后触发); 热重载首轮重放保护窗口在此开启
-        if suppress_pending:
+        # 不触发状态变化; added 事件在下方匹配后触发); 热重载首轮重放保护窗口在此开启。
+        # 请求位(rules L2 重建挂, plan §4.3)也在此消费 —— take 即 arm, 相邻无窗(审计 M1):
+        # apply_sync/full_round/transitions 抛异常的失败轮走不到这里, 请求位留待下一个成功轮,
+        # 抑制跨失败轮存活(原 _suppress_events 语义); 若在轮首消费, 失败轮读走请求而旗标未挂,
+        # 下一轮全量同步(rid 已失效)把存量种子全判 added, 事件规则对全库重放
+        if self.events.take_suppressed():
             self.events.set_suppressed(True)
         self.events.emit(
             "events_removed",

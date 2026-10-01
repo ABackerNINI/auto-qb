@@ -182,12 +182,14 @@ class EventBus:
       事件分派先于内置动作……), 不是重设计; P5 收口时 _refresh_torrents 的「内核点名」
       改为 emit, 本骨架即生效点。
     - suppress: 热重载首轮全量重建的 added 事件重放保护(plan §4.3) —— 两个字段协议:
-      「请求位」(_replay_requested)由 rules 模块在 L2 结构重建时挂, 内核刷新轮轮首
-      take_suppressed() 读走; 「live 旗标」(_suppressed)emit 直接检查, 只由内核刷新轮在
-      events_removed 相位前重挂、events_added 相位后关闭 —— 抑制精确覆盖两个事件分派相位
+      「请求位」(_replay_requested)由 rules 模块在 L2 结构重建时挂, 内核刷新轮在
+      events_removed 相位前消费(take 即 arm); 「live 旗标」(_suppressed)emit 直接检查,
+      同一窗口开启、events_added 相位后关闭 —— 抑制精确覆盖两个事件分派相位
       (full_round/transitions 等同轮照常广播, 与原 manager._suppress_events 只闸
       _dispatch_events 的语义等价)。两字段分离(issue 26-10-01-0750): 挂请求不置 live
-      旗标, 置位点到下轮轮首之间的相位(含连续第二次 L2 重建的 queue_rebuilt)照常送达。
+      旗标, 挂位到消费点之间的相位(含连续第二次 L2 重建的 queue_rebuilt)照常送达。
+      消费点贴着 arm 处而非轮首(审计 M1): apply_sync/full_round/transitions 抛异常的
+      失败轮不消费请求位, 抑制跨失败轮存活到下一个成功轮(原 _suppress_events 语义)。
     - 分发是**同步**的: 相位消费都在主循环线程内(单一写线程, 黄金法则 5), 无锁。
     """
     def __init__(self) -> None:
@@ -228,8 +230,9 @@ class EventBus:
     def request_suppression(self) -> None:
         """挂「下轮两个事件分派相位抑制」请求位: 不置 live 旗标, 挂位到消费前的相位照常广播
 
-        L2 重建方(rules.rebuild_runtime)挂请求, 消费方是内核刷新轮轮首 take_suppressed()。
-        请求位与 live 旗标分离(issue 26-10-01-0750): 置位到下轮轮首之间的相位不再被吞 ——
+        L2 重建方(rules.rebuild_runtime)挂请求, 消费方是内核刷新轮 events_removed 相位前的
+        take_suppressed()(take 即 arm, 审计 M1: 失败轮不消费, 抑制跨失败轮存活)。
+        请求位与 live 旗标分离(issue 26-10-01-0750): 挂位到消费点之间的相位不再被吞 ——
         连续两次重建时第二次的 queue_rebuilt 照常送达, 全局任务不丢。
         """
         self._replay_requested = True
@@ -237,9 +240,10 @@ class EventBus:
     def take_suppressed(self) -> bool:
         """原子读走抑制请求位(读走即清除), 返回读走前的请求状态
 
-        内核刷新轮在轮首消费 L2 挂的重放保护请求, 在 events_removed 相位前按需重挂 live
-        旗标、events_added 相位后关闭 —— 让总线抑制只覆盖两个事件分派相位, 同轮其余相位
-        (full_round/transitions/torrents_added/removed_scan/post)照常广播。
+        内核刷新轮在 events_removed 相位前消费(take 即 arm, 相邻无窗): 失败轮
+        (apply_sync/full_round/transitions 抛异常)走不到这里, 请求位留待下一个成功轮,
+        抑制跨失败轮存活(审计 M1)。消费后按需重挂 live 旗标、events_added 相位后关闭 ——
+        总线抑制只覆盖两个事件分派相位, 同轮其余相位照常广播。
         """
         value = self._replay_requested
         self._replay_requested = False

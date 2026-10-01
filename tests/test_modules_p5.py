@@ -12,7 +12,10 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_refresh_phase_order_matches_plan_table: 刷新轮相位广播顺序 == plan §4.2 相位表
 - test_torrents_added_pipeline_order: 逐种子管线四家按装配序(限速→维护→归组→建任务)
 - test_suppress_window_covers_only_event_phases: 重放保护窗口只覆盖两个事件相位
+- test_suppression_request_survives_failed_round: 失败轮不丢重放保护请求(审计 M1, 消费点贴挂旗标处)
 - test_rules_apply_rebuild_on_section_change: L2 重建收进 rules.apply(整段短路 + 段变重建)
+- test_rebuild_needed_matrix_each_criterion_alone_triggers_rebuild: 判据矩阵(审计 M2): 六判据段/三元组逐成员/trackers 增删各自单独变更必触发重建
+- test_rebuild_needed_matrix_tracker_runtime_fields_do_not_rebuild: 判据矩阵负例(审计 M2): tracker 运行时现读字段变化不重建(过度重启族防线)
 - test_rebuild_within_window_still_delivers_queue_rebuilt: 抑制窗内二次重建 queue_rebuilt 不被吞(issue 26-10-01-0750)
 - test_rebuild_preserves_runtime_memory_state: 重建不重读磁盘, exec_history 原对象保留
 - test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时实测(数字入档任务档案)
@@ -27,7 +30,7 @@ import pytest
 
 from auto_qb.core.modules import maintenance_mod, rules_mod, tracker_mod
 from auto_qb.core.taskqueue import TaskQueue
-from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+from helpers import FakeClient, FakeTracker, FakeTorrent, make_manager, seed_store
 
 
 def _mgr(td):
@@ -237,6 +240,55 @@ def test_suppress_window_covers_only_event_phases():
         assert ("add_tags", ["event-tag"]) in client.calls, "抑制仅一轮(窗口随轮关闭)"
 
 
+def test_suppression_request_survives_failed_round():
+    """失败轮不丢重放保护请求(审计 M1): 请求位消费点必须贴着挂旗标处(events_removed 相位前)
+
+    轮首消费时, 重建挂请求后的首轮刷新若在 apply_sync 抛异常(qB 连接抖动), 请求位已被
+    读走而 live 旗标未挂 —— 下一轮全量同步(rid 已失效)把全部存量种子判为 added,
+    on_torrent_added 事件规则对全库重放。消费点在 events_removed 相位前(take 即 arm),
+    失败轮不消费, 抑制跨失败轮存活到下一个成功轮(原 _suppress_events 语义)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@event_rules"])
+        mgr.config.rules_config = {
+            "event_rules":
+                {
+                    "r1": {
+                        "enabled": True,
+                        "trigger": "on_torrent_added",
+                        "actions": [{
+                            "add_tags": ["event-tag"]
+                        }],
+                    }
+                }
+        }
+        mgr.host.get("rules")._load_rules()
+        order = []
+        for phase in ("full_round", "transitions", "events_removed", "events_added", "torrents_added", "post"):
+            mgr.events.on(phase, _recorder(order, phase))
+
+        tor = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = tor
+        mgr.events.request_suppression()  # L2 重建挂请求
+
+        # 首轮刷新在 apply_sync 抛异常(qB 连接抖动): 请求位不得被消费
+        with mock.patch.object(mgr.store, "apply_sync", side_effect=RuntimeError("qB 连接抖动")):
+            with pytest.raises(RuntimeError, match="qB 连接抖动"):
+                mgr._refresh_torrents()
+        assert mgr.events.replay_requested, "失败轮不得消费重放保护请求(审计 M1)"
+        assert not mgr.events.suppressed, "失败轮不得开启抑制窗口"
+
+        # 下一个成功轮(全量, 存量种子判 added): added 事件规则被抑制, 其余相位照常
+        order.clear()
+        client.calls.clear()
+        mgr._refresh_torrents()
+        assert ("add_tags", ["event-tag"]) not in client.calls, "成功轮 added 事件规则必须被抑制(重放保护, 审计 M1)"
+        assert order == ["full_round", "transitions", "torrents_added", "post"], (f"窗口只覆盖两个事件相位: {order}")
+        assert not mgr.events.replay_requested, "请求位随成功轮消费(take 即 arm)"
+
+
 # ============================================================
 # L2 重建收进 rules.apply(W3) + 内存态保留
 # ============================================================
@@ -278,6 +330,115 @@ def test_rules_apply_rebuild_on_section_change():
         assert mgr.events.replay_requested, "重建应挂事件重放保护请求位(窗口协议见 EventBus)"
         assert not mgr.events.suppressed, "挂请求不得置 live 旗标(窗口内相位照常送达, issue 26-10-01-0750)"
         mgr.connect.assert_called_once(), "重建尾段重连(rid 失效 -> 下轮全量)"
+
+
+# ============================================================
+# L2 重建判据矩阵(审计 26-10-01-0918 M2: 六判据此前只有 interval 被单测单独触发, 漏任一成员守阵全绿)
+# ============================================================
+_REBUILD_SECTIONS = (
+    "rules_config",
+    "interval",
+    "delete_tags",
+    "delete_tags_if_has_no_torrents",
+    "global_speed_limit_curve",
+    "trackers",
+)
+
+
+def _new_cfg_like(old):
+    """矩阵用例的 new 配置替身: 六判据段全部与 old 同对象, 用例在此之上只动一段"""
+    new = mock.MagicMock()
+    for attr in _REBUILD_SECTIONS:
+        setattr(new, attr, getattr(old, attr))
+    return new
+
+
+def _tracker_variant(old_t, changed):
+    """old_t 的替身 tracker: 三元组(domains/rules/groups)同构拷贝, 仅 changed 成员换新值"""
+    t = FakeTracker(old_t.name, hr=old_t.hr, rules=list(old_t.rules), groups=list(old_t.groups))
+    t.domains = list(old_t.domains)
+    if changed == "domains":
+        t.domains = ["matrix.example.net"]
+    elif changed == "rules":
+        t.rules = ["@example_rules.add_site_tag"]
+    elif changed == "groups":
+        t.groups = ["matrix_group"]
+    return t
+
+
+@pytest.mark.parametrize(
+    "criterion",
+    [
+        "rules_config",
+        "interval",
+        "delete_tags",
+        "delete_tags_if_has_no_torrents",
+        "global_speed_limit_curve",
+        "trackers.domains",
+        "trackers.rules",
+        "trackers.groups",
+        "trackers.added",
+        "trackers.removed",
+    ],
+)
+def test_rebuild_needed_matrix_each_criterion_alone_triggers_rebuild(criterion):
+    """_rebuild_needed 判据矩阵(审计 M2): 判据段逐段单独变更必须触发 L2 重建
+
+    「该重建不重建」是计划点名的热重载四失效族之一 —— 矩阵把漏判从靠人眼变成靠守阵。
+    trackers 判据按 _tracker_bindings_changed 的三元组逐成员 + 增删各一例; 重建副作用
+    (队列换新/conf 置空/抑制请求位/重连)由 test_rules_apply_rebuild_on_section_change 的
+    interval 例承担, 此处只断言判定本身。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        rules = mgr.host.get("rules")
+        old = mgr.config
+        new = _new_cfg_like(old)
+
+        if criterion == "rules_config":
+            new.rules_config = {**old.rules_config, "matrix_group": dict(old.rules_config["example_rules"])}
+        elif criterion == "interval":
+            new.interval = old.interval + 1
+        elif criterion == "delete_tags":
+            new.delete_tags = ["matrixDelete"]
+        elif criterion == "delete_tags_if_has_no_torrents":
+            new.delete_tags_if_has_no_torrents = ["matrixEmpty"]
+        elif criterion == "global_speed_limit_curve":
+            new.global_speed_limit_curve = [("00:00", 10240)]  # 判据只做段级不等比较, 替身无需全型
+        elif criterion in ("trackers.domains", "trackers.rules", "trackers.groups"):
+            new.trackers = {"HHan": _tracker_variant(old.trackers["HHan"], criterion.split(".")[1])}
+        elif criterion == "trackers.added":
+            new.trackers = {**old.trackers, "NEW": _tracker_variant(old.trackers["HHan"], None)}
+        elif criterion == "trackers.removed":
+            new.trackers = {}
+        else:
+            raise AssertionError(f"未知判据: {criterion}")
+
+        mgr.connect = mock.MagicMock(return_value=True)  # rebuild_runtime 尾段重连, 不真连
+        assert rules.apply(old, new).action == "rebuilt", f"判据段 {criterion} 单独变更必须触发 L2 重建"
+
+
+def test_rebuild_needed_matrix_tracker_runtime_fields_do_not_rebuild():
+    """判据矩阵负例(审计 M2): tracker 三元组外的运行时现读字段变化不得触发重建
+
+    判据只看创建时固化的三元组(domains/rules/groups); tags/remove_tags/限速/hr_check
+    运行时现读即生效(模块 docstring), 变化触发重建反而是过度重启族 + 丢运行态。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        rules = mgr.host.get("rules")
+        old = mgr.config
+        t = _tracker_variant(old.trackers["HHan"], None)
+        t.tags = ["OTHER"]
+        t.remove_tags = ["zGone"]
+        t.remove_similar_tags = True
+        t.upload_speed_limit = 1024
+        t.download_speed_limit = 2048
+        t.hr_check = SimpleNamespace(endpoint="matrix")
+        new = _new_cfg_like(old)
+        new.trackers = {"HHan": t}
+        assert rules.apply(old, new).action == "none", "三元组外字段变化必须短路(过度重启族防线)"
 
 
 def test_rebuild_within_window_still_delivers_queue_rebuilt():

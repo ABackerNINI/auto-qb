@@ -17,9 +17,11 @@
 ## 处置
 
 - 拆两个字段: 请求位(`_replay_requested`, `request_suppression()` 挂 / `take_suppressed()` 原子读走)与 live 旗标(`_suppressed`, emit 直接检查, 仅内核刷新轮两事件相位窗口内为 True)。2026-10-01 已落地, 协议单点在 `core/module.py` EventBus docstring; 置位方语义是"下一轮才生效"时只准挂请求位, live 旗标唯一开关点在 `_refresh_torrents`(arm/close)。
+- 消费点必须贴着 arm 处(`_refresh_torrents` 的 events_removed 相位前, take 即 arm 相邻无窗), 不准提前到轮首(2026-10-01 审计 M1): 轮首消费时, 挂请求后的首轮刷新若在 apply_sync/full_round/transitions 抛异常, 请求位已被读走而旗标未挂, 下一轮全量同步(rid 已失效)把存量种子全判 added, 事件规则对全库重放; 贴 arm 处则失败轮不消费, 抑制跨失败轮存活到下一个成功轮(原 `_suppress_events` 语义)。
 - 修复走红验先行: 先写复现用例坐实红, 再改, 同用例转绿 —— 注释与实现漂移的场景里, 注释不可信, 用例才是判据。
 
 ## 守阵
 
 - `tests/test_module_host.py::test_eventbus_registration_order_and_suppress`(两字段协议段: 挂请求不吞相位 / take 读走请求位 / 读走即清除)。
 - `tests/test_modules_p5.py::test_rebuild_within_window_still_delivers_queue_rebuilt`(抑制窗内二次重建 queue_rebuilt 不被吞, issue 26-10-01-0750 回归)。
+- `tests/test_modules_p5.py::test_suppression_request_survives_failed_round`(失败轮不丢请求位 + 下一成功轮抑制生效, 审计 M1 回归)。

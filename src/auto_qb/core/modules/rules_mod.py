@@ -142,7 +142,7 @@ class RulesModule(BaseModule):
           full_round 相位重匹配(plan §4.2; 客户端重连使 rid 失效保证下轮是全量轮)。
         - queue_rebuilt 相位: 全局任务(delete_tags*/speed_limit_curve)由各模块自注册重入队。
         - 总线 suppress 请求位: 热重载首轮的 added 事件重放保护 —— 挂请求不置 live 旗标
-          (挂位到下轮轮首消费之间的相位照常送达, issue 26-10-01-0750), 窗口协议见 EventBus。
+          (挂位到消费点之间的相位照常送达, issue 26-10-01-0750), 窗口协议见 EventBus。
         """
         self._manager.task_queue = TaskQueue()
         self._ctx.store.reset_runtime()
