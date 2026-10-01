@@ -17,5 +17,11 @@
 > 档案 [tasks/26-10-02-hr-entry-last-seen-prune.md](../tasks/26-10-02-hr-entry-last-seen-prune.md));
 > ③ web 鉴权加固双件(issue 26-09-21-1408 CSRF + 鉴权三小件 → Done,
 > 档案 [tasks/26-10-02-web-auth-hardening.md](../tasks/26-10-02-web-auth-hardening.md))。
-> 收官基线 26-10-02-0459: 2288+3 / 99.01%(阈值 98)。**下一步: W2(WebUI 正确性 7 条)待用户显式授权。**
-> 最后活动: 2026-10-02 05:11
+> 收官基线 26-10-02-0459: 2288+3 / 99.01%(阈值 98)。
+> **W1 收官后范围外发现统一入池(26-10-02, 用户授权)**: ① `_sign_releases` 对已 verified
+> infohash 不查重整条覆写(26-10-02-0526 bug/疑点, 可达性待核) ② hr/service.py 直调 time.time()
+> 绕过 now_fn(26-10-02-0526 refactor/light) ③ O_TRUNC 直写静态守阵并入(26-10-02-0527 test/light,
+> 生效条件已达成)。池内实测 Open 63 + In Progress 2(transmission + 26-09-25-1702 已被并行
+> clone 认领出调研报告 be74bbe1; 含并行 clone 328a6704 入池 6 条);
+> 新条目并入波次待路线图下次改版。**下一步: W2(WebUI 正确性 7 条)待用户显式授权。**
+> 最后活动: 2026-10-02 05:36

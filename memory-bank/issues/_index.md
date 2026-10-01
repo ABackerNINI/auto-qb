@@ -14,17 +14,20 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 12 |
+| bug | 13 |
 | perf | 5 |
 | docs | 4 |
-| test | 2 |
-| refactor | 5 |
+| test | 3 |
+| refactor | 6 |
 | feat | 22 |
 | chore | 3 |
 | question | 7 |
 
 ## Open
 
+- [test] [O_TRUNC 直写静态守阵并入: 全 src O_TRUNC 清零条件已达成](26-10-02-0527-test-otrunc-static-guard.html) — 1347-token 悬置的 O_TRUNC 直写静态守阵, 生效条件「全 src O_TRUNC 代码清零」已由 bc24631b(hr.token 改 atomic_write)达成, 可并入守阵
+- [bug] [_sign_releases 批量签发对已 verified 的 infohash 不查重, 整条覆写既有放行记录(生产可达性未核实)](26-10-02-0526-bug-hr-sign-releases-verified-overwrite.html) — _sign_releases 对已在 data.verified 的 infohash 不查重, data.verified[h]= 直接整条覆写(源/verified_ts/锚点全换), 与「放行永续有效(终态不可逆)」语义冲突; 生产可达性待核实
+- [refactor] [hr/service.py 多处直调 time.time() 与 now_fn 注入不一致, 假时钟测试不可控](26-10-02-0526-refactor-hr-service-clock-injection-inconsistent.html) — hr/service.py 两处直调 time.time()(fail.last_ts / _advance_observation)绕过 now_fn 注入, 假时钟下行为不可控; 26-10-02 _merge_seen 收编时仅处理同函数一处
 - [bug] [主循环 except Exception 吞 _tick 的 StopIteration: 一旦触发即静默空转死循环](26-10-02-0442-bug-mainloop-stopiteration-swallowed.html) — qbmanager 主循环对 _tick 的 except Exception 会吞 StopIteration, 触发即 while True 空转死循环(无限快转不干活); 目前仅测试 mock 耗尽场景复现, 生产触发面未证实
 - [bug] [hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发](26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail.html) — _do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after>0; 与已修的 last_seen 死分支同族
 - [bug] [hr/service._finish_wave 末尾无条件 discard 三个告警去重集合, 每波重报与注释设计不符](26-10-02-0441-bug-hr-finish-wave-warn-dedupe-reset.html) — _finish_wave 无条件 discard 登录失效/无通道等三个告警去重集合, 「每站只报一次」的注释设计与实际每波重报不符; P1 覆盖提升时测试按实测行为断言
