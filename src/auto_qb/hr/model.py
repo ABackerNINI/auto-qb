@@ -100,6 +100,9 @@ class HrEntry:
     infohash_v1: str = ""
     infohash_v2: str = ""
     first_seen: float = 0.0
+    #: 最近一次在站点清单见到本条的时刻(service._merge_seen 波合并时刷新; 条目退役后不再
+    #: 前进, 作为 INDEX_RETENTION 陈旧淘汰的计时起点; 恒 0 = 修复 issue 26-10-01-2335 前
+    #: 的存量条目, 淘汰条件视为未知不淘汰)
     last_seen: float = 0.0
     #: 是否仍被站点列出(最近一次见到的位置)。v3 语义: 命中即 True; 消失的处理分档 ——
     #: A 档(考察中)失踪走观察期(missing_streak, 维持管束), 终态档消失且位置被证明才置 False

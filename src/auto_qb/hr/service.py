@@ -672,7 +672,7 @@ class HrRefreshService:
                     # ---- 回填下载(§4.5): A 档行无条件 / 终态行粗配疑似; 每条受同一频控 ----
                     self._run_downloads(site, adapter, data, budget, wave, result, session)
                     # ---- 增量落盘(分钟级波内 Ctrl+C 不丢已抓数据) ----
-                    self._merge_seen(data, wave)
+                    self._merge_seen(data, wave, self._now())
                     if self.persist:
                         session.commit(self._now())
                     # ---- 停翻条件(§4.2, 任一成立即该档停翻) ----
@@ -974,7 +974,7 @@ class HrRefreshService:
         unmatched,
     ) -> None:
         now = self._now()
-        self._merge_seen(data, wave)
+        self._merge_seen(data, wave, now)
         # ---- 观察期推进(§3.4): 没看到不终结「考察中」; 出口要自身位置被覆盖 ----
         exits = self._advance_observation(data, lane_states, wave)
         # ---- 证据防伪(§5.3): 流转守恒 + 零行戳。骤降保护已按 26-09-29 裁决移除: A 只流向
@@ -1097,21 +1097,19 @@ class HrRefreshService:
         self._login_warned.discard(site)
 
     @staticmethod
-    def _merge_seen(data: HrSiteData, wave: _WaveContext) -> None:
-        """本波已见行合并进索引: 更新字段, 保留 first_seen 与已回填的 infohash。"""
+    def _merge_seen(data: HrSiteData, wave: _WaveContext, now: float) -> None:
+        """本波已见行合并进索引: 更新字段, 保留 first_seen 与已回填的 infohash。
+
+        last_seen 在此刷新(issue 26-10-01-2335): 「最近一次在站点清单见到」= 合并进索引的
+        时刻; 条目退役(终态冻结/观察期出口/换 tid 接管)后不再进入本口, last_seen 冻结在
+        最后一次见到的时刻 —— 即 INDEX_RETENTION 陈旧淘汰的计时起点。恒 0 是修复前的
+        存量条目, 淘汰条件视为未知不淘汰。
+        """
         for tid, row in wave.seen.items():
             old = data.index.get(tid)
-            row.first_seen = (old.first_seen if old is not None else 0.0) or row.first_seen or time.time()
+            row.first_seen = (old.first_seen if old is not None else 0.0) or row.first_seen or now
+            row.last_seen = now
             data.index[tid] = row
-
-    @staticmethod
-    def _prune_index(data: HrSiteData, now: float) -> None:
-        """非活跃条目的陈旧淘汰(观察期/终态存续的条目都保持活跃, 不在淘汰面)。"""
-        if INDEX_RETENTION > 0:
-            for tid in list(data.index):
-                entry = data.index[tid]
-                if not entry.active and entry.last_seen and now - entry.last_seen > INDEX_RETENTION:
-                    del data.index[tid]
 
     @staticmethod
     def _freeze_terminal(data: HrSiteData, lane_states, wave: _WaveContext, now: float) -> int:
@@ -1407,7 +1405,11 @@ def _absence_proven_all(lane_states, wave: _WaveContext, anchor: HrAnchor) -> bo
 
 
 def _prune_index(data: HrSiteData, now: float) -> None:
-    """非活跃条目的陈旧淘汰(观察期/终态存续的条目都保持活跃, 不在淘汰面)。"""
+    """非活跃条目的陈旧淘汰(观察期/终态存续的条目都保持活跃, 不在淘汰面)。
+
+    计时起点 = entry.last_seen(_merge_seen 波合并时刷新, 退役后不再前进); 恒 0
+    (issue 26-10-01-2335 修复前的存量条目)视为未知, 不淘汰。
+    """
     if INDEX_RETENTION > 0:
         for tid in list(data.index):
             entry = data.index[tid]

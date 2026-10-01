@@ -11,7 +11,9 @@
 > 关键标记: 26-09-22-2221(跨组交叉)用户曾排除, 开工需单独授权; transmission-compat 停在拍板(报告 26-10-01-2347);
 > 热重载两条 / EXT 两条 / tag-category-dialog 开工先复验。滚动档案 = tasks/26-10-02-memory-bank-issue-clearance-roadmap.md。
 > **待办**: W1 起逐波推进, 每波待用户显式授权; 未全清计划不转 Done; 实时以 issues/_index.md 为准。
-> **W1 进行中**(用户已授权本波, 26-10-02): 1/3 已清偿 —— hr.token 生成改原子写(issue 26-10-01-2151
-> → Done, 档案 [tasks/26-10-02-hr-token-atomic-write.md](../tasks/26-10-02-hr-token-atomic-write.md),
-> 基线 26-10-02-0345: 2217+3 / 97.51%); 余 last-seen 死代码 / CSRF / 鉴权加固待续。
-> 最后活动: 2026-10-02 03:45
+> **W1 进行中**(用户已授权本波, 26-10-02): 2/3 已清偿 —— ① hr.token 生成改原子写(issue 26-10-01-2151
+> → Done, 档案 [tasks/26-10-02-hr-token-atomic-write.md](../tasks/26-10-02-hr-token-atomic-write.md));
+> ② HrEntry.last_seen 写入点 + INDEX_RETENTION 清理复活(issue 26-10-01-2335 → Done,
+> 档案 [tasks/26-10-02-hr-entry-last-seen-prune.md](../tasks/26-10-02-hr-entry-last-seen-prune.md),
+> 基线 26-10-02-0412: 2219+3 / 97.53%); 余 CSRF / 鉴权加固(3/3)待续。
+> 最后活动: 2026-10-02 04:12

@@ -151,7 +151,7 @@ window.AQB_HR_STATUS = {
       return iso ? String(iso).slice(0, 10) : "—";
     },
     /* 上次核实(放行判定): 0 = 无放行记录 → —(fmtTs 的 0 哨兵本就回空, 这里补 —);
-     * last_seen 上游恒 0(issue 26-10-01-2335), 未知时不缀「最近被见到」—— 绝不显示 epoch */
+     * last_seen 0 = 未知(issue 26-10-01-2335 修复前的存量条目), 不缀「最近被见到」—— 绝不显示 epoch */
     hrsVerifiedText(e) {
       return e.verified_ts ? this.fmtTs(e.verified_ts) : "—";
     },

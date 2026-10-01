@@ -8,9 +8,10 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HrEntry.last_seen 全库无写入点, INDEX_RETENTION 过期清理分支永不触发">
 <meta name="issue-summary" content="HrEntry.last_seen 无任何写入点恒 0.0, service 两处 INDEX_RETENTION 过期清理分支成死代码">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-02-hr-entry-last-seen-prune.md">
 <title>HrEntry.last_seen 全库无写入点, INDEX_RETENTION 过期清理分支永不触发 · bug · 计划外问题</title>
 <style>
   :root {
@@ -101,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2335-bug-hr-entry-last-seen-dead-prune</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 23:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">hr · webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">实施子智能体（计划 26-10-01-2216 阶段 1）</div></div>
     </div>
@@ -167,11 +168,14 @@ src\auto_qb\hr\adapters\nexusphp.py:182:        return HrEntry(    # _map_row: �
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 23:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 04:12 — 状态 <strong>Done</strong>（W1 波阶段 2/3 认领清偿, 认领建档与实施同轮完成未及单独记 In Progress; 实际修法见「修复后补充」, 基线 2219+3 / 97.53%）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-10-02 04:05 @ bc24631b 仍复现 —— grep <code>last_seen</code> 全库仍无写入点(仅 from_json 读回 / 视图透传 / WebUiRuntime 无关心跳), <code>_merge_seen</code> 仍只回填 <code>first_seen</code>, 两处 <code>_prune_index</code> 条件仍恒假。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>(与建议修法同向, 按 §6 留给认领人的两项决定落定): ① <code>service._merge_seen</code> 增 <code>now</code> 参, 对 <code>wave.seen</code> 每行 <code>row.last_seen = now</code> —— 「最近一次在站点清单见到」= 合并进索引的时刻; 条目退役(终态冻结 / 观察期出口 / 换 tid 接管)后不再进合并口, last_seen 冻结在最后见到时刻, 即 INDEX_RETENTION 计时起点; <code>first_seen</code> 兜底同函数一并改用 <code>now</code>(时钟统一走 <code>now_fn</code>, 生产行为不变, 假时钟测试可断言)。② 两处逐字重复的 <code>_prune_index</code> 合并为模块级单点(类内静态方法版生产零调用、仅一测试引用, 已删), 清理条件表达式原样复活。</p>
+    <p><b>残留口径</b>: 修复前存量的非活跃条目 last_seen 恒 0(falsy)不淘汰 —— 有界存量集、判定无害(非活跃条目不进反查表, 放行凭 verified 永久层); 条目被站点重新列出后经合并口重获 last_seen, 之后再退役即可正常淘汰。属保守取舍, 不加 first_seen 兜底(last_seen ≥ first_seen, 兜底会提前淘汰)。</p>
+    <p><b>验证方式 / 测试数字</b>: 新增 <code>test_merge_seen_refreshes_last_seen</code>(写点刷新 / 未重见冻结 / 详情表导出有值)与 <code>test_index_retention_prune_revives</code>(见到→29 天退役→31 天超期清理 / 活跃不误清 / 放行记录不随索引清理丢失 / 淘汰落盘); 既有 prune 单元收敛到单点并补恒 0 存量不淘汰断言。test.full <b>2219 passed + 3 skipped / 97.53%</b>(基线切片 26-10-02-0412); webui 契约守阵随全量绿, EntryDetail 字段面零变更。档案: <code>memory-bank/tasks/26-10-02-hr-entry-last-seen-prune.md</code>。</p>
   </section>
 
   <footer>

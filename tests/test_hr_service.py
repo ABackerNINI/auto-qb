@@ -73,7 +73,9 @@
 - test_download_invalid_blob_counted_as_fail: .torrent 内容非法 -> 计种子失败不外抛
 - test_readonly_degradation_noted_in_result: 锁自检失败(只读退化) -> 波照跑但不写盘, reason 注明
 - test_persist_false_reports_readonly_mode: 只读走查(persist=False)不写盘且 reason 注明「只读模式」
-- test_lane_summary_and_prune_and_position_units: 波次纯函数单元: 档位摘要 / 陈旧淘汰 / 位置覆盖 / 缺席证明 / 下载反查
+- test_lane_summary_and_prune_and_position_units: 波次纯函数单元: 档位摘要 / 陈旧淘汰(模块级单点, 含恒 0 存量不淘汰) / 位置覆盖 / 缺席证明 / 下载反查
+- test_merge_seen_refreshes_last_seen: 合并口刷新 last_seen(本波已见行=合并时刻, 未重见条目冻结在最后见到时刻) —— issue 26-10-01-2335 写入点, 详情表导出契约随点亮
+- test_index_retention_prune_revives: INDEX_RETENTION 复活链 —— 退役条目距 last_seen 超期被清理 / 活跃条目与观察期条目不误清 / 放行记录不随索引清理丢失 / 淘汰落盘
 - test_build_objects_unit_guards: 对象集现算单元: 空 hash / 非活跃条目 / 锚点漂移回炉
 - test_build_views_skips_disabled_and_channel_states: 视图构建跳过未启用站点; 通道状态 ok/silent/disabled 与无锁读
 - test_lane_fail_streak_alerts_error: 连续 3 波同档失效 -> ERROR 升级(只提示人, 不改行为)
@@ -103,7 +105,7 @@ from auto_qb.hr.model import (
     HrVerified,
 )
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, judge_record
-from auto_qb.hr.status import build_site_statuses
+from auto_qb.hr.status import build_site_statuses, entry_details
 from auto_qb.hr.store import HrSiteStore
 from auto_qb.hr.service import (
     ACTION_ERROR,
@@ -811,6 +813,88 @@ def test_terminal_vanish_unproven_kept(tmp_path):
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].active is True  # 未被证明消失: 维持原状
     assert h21 not in data.verified
+
+
+# ---------------- last_seen 写入点与 INDEX_RETENTION 复活(issue 26-10-01-2335) ----------------
+
+
+def test_merge_seen_refreshes_last_seen(tmp_path):
+    """合并口刷新 last_seen: 本波已见行 = 合并时刻; 未重见条目冻结在最后见到时刻(写入点修复)"""
+    clock = Clock()
+    pages = standard_pages(
+        rows_b=[row(21, "OTHER 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")],
+        rows_c=[row(22, "OTHER 22", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")],
+    )
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    t0 = clock()
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].last_seen == t0, "本波已见行: last_seen = 合并进索引的时刻"
+    assert data.index[21].first_seen == t0, "新条目 first_seen 兜底同源(假时钟, 不再真挂钟)"
+    assert data.index[22].last_seen == t0
+    # 第二波: B 档空表(全深度) → 条目 21 退役; C 档重见 22 → last_seen 前进
+    fetcher.pages = {
+        url_of("A"):
+            myhr_page([], has_next=False),
+        url_of("B"):
+            myhr_page([], has_next=False),
+        url_of("C"):
+            myhr_page([row(22, "OTHER 22", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")], has_next=False),
+    }
+    clock.advance(13 * 3600)
+    t1 = clock()
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].active is False
+    assert data.index[21].last_seen == t0, "退役条目不再进合并口: last_seen 冻结在最后见到时刻(淘汰计时起点)"
+    assert data.index[22].active is True and data.index[22].last_seen == t1, "重见条目 last_seen 刷新"
+    # 详情表导出契约(webui 表①「最近被见到」列): last_seen 随写入点亮起
+    details = {d.tid: d for d in entry_details(data)}
+    assert details[21].last_seen == t0 and details[22].last_seen == t1
+
+
+def test_index_retention_prune_revives(tmp_path):
+    """INDEX_RETENTION 复活链: 退役条目超期(距 last_seen > 30 天)被清理 / 活跃与未超期退役条目保留 /
+    放行记录不随索引清理丢失 / 淘汰结果落盘"""
+    clock = Clock()
+    blob11, _h11 = mk_blob("OTHER 11")
+    blob21, h21 = mk_blob("EXAMPLE 21")
+    pages = standard_pages(
+        rows_a=[row(11, "OTHER 11", done=DONE_NEW)],
+        rows_b=[row(21, "EXAMPLE 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")],
+    )
+    fetcher = FakeFetcher(pages=pages, blobs={11: blob11, 21: blob21})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {h21: anchor_for("EXAMPLE 21", completion_on=T_DONE_NEW)}
+    t0 = clock()
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[11].active and data.index[11].last_seen == t0
+    assert data.index[21].active and data.index[21].last_seen == t0
+    # 第二波(+29 天): 全档空表 → 条目 21 退役落放行记录; last_seen 冻结在 t0
+    fetcher.pages = {url_of(l): myhr_page([], has_next=False) for l in ("A", "B", "C")}
+    clock.advance(29 * 86400)
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].active is False and data.index[21].last_seen == t0
+    assert h21 in data.verified, "终态退役落放行记录(永久层)"
+    assert data.index[11].active and data.index[11].last_seen == t0, "观察期条目未重见: 维持活跃, last_seen 不前进"
+    # 第三波(+31 天, 距 t0 超保留期): A 档重见 11; 清理分支复活 → 21 被淘汰
+    fetcher.pages = {
+        url_of("A"): myhr_page([row(11, "OTHER 11", done=DONE_NEW)], has_next=False),
+        url_of("B"): myhr_page([], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    clock.advance(2 * 86400)
+    t2 = clock()
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert 21 not in data.index, "退役条目距 last_seen 超过 INDEX_RETENTION: 被清理"
+    assert data.index[11].active and data.index[11].last_seen == t2, "活跃条目不被误清且 last_seen 持续刷新"
+    assert h21 in data.verified, "放行记录是永久层, 不随索引清理丢失"
+    assert result.entries == len(data.index) == 1, "淘汰结果反映进波次回执(索引只剩活跃条目 11)"
+    assert 21 not in service.store(SITE).read_unlocked()[0].index, "淘汰结果已落盘(下一波不会复活)"
 
 
 # ---------------- 覆盖收敛(空对象集, 轻量波已否决) ----------------
@@ -1808,7 +1892,7 @@ def test_persist_false_reports_readonly_mode(tmp_path):
 
 
 def test_wave_pure_function_units():
-    """波次纯函数单元: 档位摘要缺档形态 / 陈旧淘汰(模块函数与静态方法) / 位置覆盖 / 缺席证明"""
+    """波次纯函数单元: 档位摘要缺档形态 / 陈旧淘汰(模块级单点) / 位置覆盖 / 缺席证明"""
     from auto_qb.hr.service import _absence_proven_all, _dl_by_hash, _position_covered, _prune_index
 
     # 档位摘要: 缺档 -> "无"
@@ -1818,7 +1902,7 @@ def test_wave_pure_function_units():
     data.downloaded[1] = HrDownloaded(tid=1, infohash_v1="H", infohash_v2="")
     data.downloaded[2] = HrDownloaded(tid=2, infohash_v1="H", infohash_v2="")
     assert _dl_by_hash(data) == {"H": 1}
-    # 陈旧淘汰(模块级): 非活跃且超保留期的条目删除, 活跃/近期保留
+    # 陈旧淘汰(模块级单点, issue 26-10-01-2335 合并): 非活跃且超保留期的条目删除, 活跃/近期保留
     old = HrEntry(tid=1, name="gone")
     old.active, old.last_seen = False, 1.0
     fresh = HrEntry(tid=2, name="fresh")
@@ -1828,10 +1912,10 @@ def test_wave_pure_function_units():
     now = time.time()
     _prune_index(data, now)
     assert set(data.index) == {2, 3}
-    # 静态方法版(同体): 直接调用守同一口径
-    data.index = {1: HrEntry(tid=1, name="x", active=False, last_seen=1.0)}
-    HrRefreshService._prune_index(data, now)
-    assert set(data.index) == set()
+    # 恒 0(修复前存量)视为未知不淘汰
+    data.index = {4: HrEntry(tid=4, name="legacy", active=False)}
+    _prune_index(data, now)
+    assert set(data.index) == {4}
     # 位置覆盖: 缺完成时间 / 档位缺失或失效 / 深度不足 都不算覆盖
     entry = HrEntry(tid=9, name="e", done_iso=None)
     assert _position_covered(entry, {}) is False
