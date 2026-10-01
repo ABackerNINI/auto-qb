@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="hr-do-wave-hrfetcherror-dead-tail">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Dropped">
 <meta name="issue-title" content="hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发">
 <meta name="issue-summary" content="_do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after&gt;0; 与已修的 last_seen 死分支同族">
 <title>hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 04:41</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">hr</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -156,11 +156,16 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 05:45 — 认领（用户指派实施：3 个 hr issue 合并一阶段一提交），状态 <strong>In Progress</strong>；复验推翻不可达判定</li>
+      <li>2026-10-02 05:45 — 落地，状态 <strong>Dropped</strong>（复验证伪: 尾段实际可达且有测试钉住, 无可修 —— 详见「复验」与「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-02 05:45 <strong>已消失（不可达判定不成立）</strong> —— 尾段是活代码:</p>
+    <p>①代码路径: <code>_run_pages</code> 的挑战页 raise（取证时 643-644 行, v3 重写 be83d611 起即存在）在页级 try/except <strong>之外</strong>, 且 <code>HrFetchError</code> 默认 <code>retry_after=0.0</code>（fetcher.py:21）—— 该异常直落 <code>_do_wave</code> 尾段 else 分支。「能上抛的只有 retry_after&gt;0」漏数了这条。</p>
+    <p>②实测覆盖: 单跑 <code>tests/test_hr_service.py::test_challenge_page_truncates_wave</code>（P1 同批新增, 断言挑战页 → 波级截断 ACTION_ERROR）的 term-missing 报表中 574-581（retry_after&gt;0 支）在 missing 列而 <strong>582-585 不在</strong>（区间从 574-581 直接跳到 610）—— 尾段被该用例执行。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>未改代码, 停手转人工复决</strong>（按拍板前置条件: 复验发现可达即停手, 不自行改道）: 拍板方案是「复验不可达成立 → 删尾段」; 复验结论为尾段可达（证据见上）, 删除会连带打破挑战页波级截断路径与既有测试, 故本项不动 service.py。同族参照的 26-10-01-2335（last_seen 死分支）是「真死代码」, 与本条的「误判活代码」不同。若认为挑战页失败不该走尾段兜底（如想改为档位级截断）, 那是新语义决策, 需重新拍板后另立阶段。</p>
+    <p><strong>阶段验证数字</strong>（同阶段 A/C 的回归面）: <code>commands run test.full</code> — 2284 passed + 3 skipped / 99.02%（13,231 语句 / 87 未覆盖 / 4,438 分支 / 83 partial, 28.05s）。</p>
   </section>
 
   <footer>

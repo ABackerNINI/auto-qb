@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="hr-finish-wave-warn-dedupe-reset">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/service._finish_wave 末尾无条件 discard 三个告警去重集合, 每波重报与注释设计不符">
 <meta name="issue-summary" content="_finish_wave 无条件 discard 登录失效/无通道等三个告警去重集合, 「每站只报一次」的注释设计与实际每波重报不符; P1 覆盖提升时测试按实测行为断言">
 <title>hr/service._finish_wave 末尾无条件 discard 三个告警去重集合, 每波重报与注释设计不符 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0441-bug-hr-finish-wave-warn-dedupe-reset</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 04:41</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">hr</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -156,11 +156,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 05:45 — 认领（用户指派实施：3 个 hr issue 合并一阶段一提交），状态 <strong>In Progress</strong>；复验仍复现</li>
+      <li>2026-10-02 05:45 — 修复，状态 <strong>Done</strong>（按拍板方案①: discard 移至站点恢复点 —— 详见「修复后补充」; test.full 2284 passed + 3 skipped / 99.02%）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-02 05:45 仍复现 —— grep <code>discard</code> 定位 <code>_finish_wave</code> 末尾 3 行无条件清集合（取证时 src/auto_qb/hr/service.py:1095-1097），<code>test_login_page_detected_by_adapter_and_warned_once</code> 当时按「每波重报 2 次」断言。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（按拍板方案①实施, 未改道）: 删除 <code>_finish_wave</code> 末尾 3 行无条件 discard; 新增 <code>HrRefreshService._reset_warned_on_recovery(site)</code>（清同一组三个去重集合）, 调用点在 <code>_run_pages</code> 页级登录页/挑战页检查通过之后（现 service.py:647）—— 语义为「本波拿到正常内容页 = 通道/额度/登录态都通」, 即注释口径的站点恢复点。无现成终态钩子, 以恢复点作最小侵入终态时机: 进程退出时标记随实例消亡; 配置重载若重建服务实例则集合天然重置, 均无需额外钩子。</p>
+    <p><strong>测试</strong>: <code>test_login_page_detected_by_adapter_and_warned_once</code> 改按新行为断言 —— 登录恢复前每站只报 1 次（原断言每波重报 2 次）、第二波走去重早退 INFO、恢复波后再次登录失效重新告警（钉住重置）; 直调去重子检查改用未告警过的站名（标记不再被每波清空）。文件头「测试计划」清单同步。</p>
+    <p><strong>验证</strong>: <code>commands run test.full</code> — 2284 passed + 3 skipped / 99.02%（13,231 语句 / 87 未覆盖 / 4,438 分支 / 83 partial, 28.05s）; 新增代码行（647 / 1288-1295）覆盖率报表不在 missing 列。</p>
   </section>
 
   <footer>

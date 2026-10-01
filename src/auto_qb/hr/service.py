@@ -642,6 +642,9 @@ class HrRefreshService:
                     raise HrLoginExpired(f"命中登录页(档位 {lane} 第 {page_no} 页): 登录态失效, 需人工处理")
                 if adapter.looks_like_challenge(html):
                     raise HrFetchError(f"命中挑战页(档位 {lane} 第 {page_no} 页)")
+                # ---- 站点恢复重置(§5.2 告警口径): 正常内容页到手 = 通道/额度/登录态都通 ——
+                # 清三个「已告警过」去重标记, 同类事件再次发生时重新报一次。
+                self._reset_warned_on_recovery(site)
                 parsed = adapter.parse_page(lane, html)
                 if st.wave_ts <= 0:
                     # 新鲜度闸门用本档**首页**取数时刻(该档快照的最早时刻, 最保守基准)
@@ -1092,9 +1095,6 @@ class HrRefreshService:
                 result.reason = (result.reason + "; " if result.reason else "") + "锁自检失败, 未写盘(只读退化)"
         else:
             result.reason = (result.reason + "; " if result.reason else "") + "只读模式, 未写盘"
-        self._no_channel_warned.discard(site)
-        self._ext_quota_warned.discard(site)
-        self._login_warned.discard(site)
 
     @staticmethod
     def _merge_seen(data: HrSiteData, wave: _WaveContext, now: float) -> None:
@@ -1284,6 +1284,16 @@ class HrRefreshService:
         return CHANNEL_OK
 
     # ---------- 告警(升级但行为不变, §5.2) ----------
+
+    def _reset_warned_on_recovery(self, site: str) -> None:
+        """站点恢复(本波拿到正常内容页) → 清通道/额度/登录三类「已告警过」去重标记。
+
+        「每站只报一次」的准确语义是**每次状态变化报一次**: 恢复即重置,
+        下次同类事件重新告警(此前无条件在 _finish_wave 末尾清, 每波都重报)。
+        """
+        self._no_channel_warned.discard(site)
+        self._ext_quota_warned.discard(site)
+        self._login_warned.discard(site)
 
     def _warn_no_channel(self, site: str, err: Exception) -> None:
         """无通道告警: **每个站点只报一次**(直到通道恢复)"""

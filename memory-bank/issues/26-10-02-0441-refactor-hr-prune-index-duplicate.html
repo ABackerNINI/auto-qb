@@ -8,7 +8,7 @@
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="hr-prune-index-duplicate">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HrRefreshService._prune_index 静态方法与模块级 _prune_index 同体重复, 静态版无生产调用方">
 <meta name="issue-summary" content="hr/service.py 内 HrRefreshService._prune_index 静态方法与模块级 _prune_index 函数同体重复, 静态版无生产调用方(仅测试双口径各钉一条); 待合并单点">
 <title>HrRefreshService._prune_index 静态方法与模块级 _prune_index 同体重复, 静态版无生产调用方 · refactor · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0441-refactor-hr-prune-index-duplicate</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 04:41</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -95,7 +95,11 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 04:41 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 05:45 — 认领（用户指派实施：3 个 hr issue 合并一阶段一提交），状态 <strong>In Progress</strong>；复验<strong>已消失</strong></li>
+      <li>2026-10-02 05:45 — 落地，状态 <strong>Done</strong>（现象已由先行提交修复，本阶段零改动 —— 见下）</li>
     </ul>
+    <p><strong>复验（2026-10-02 05:45）</strong>: grep <code>_prune_index</code> 全仓仅两处 —— service.py 调用点与模块级定义（取证时 1036 / 1407 行），静态方法版已不存在；测试也已收敛到模块级单点（<code>tests/test_hr_service.py</code> 仅 <code>from auto_qb.hr.service import _prune_index</code> 一条口径）。</p>
+    <p><strong>实际修法</strong>: 与建议一致（留模块级单点、静态版删除、测试双口径合一），但由 issue 26-10-01-2335 的先行提交 <code>54db09f2</code>（2026-10-02 04:16「HR 索引条目补 last_seen 写入点」）在本 issue 入池之前完成 —— 本阶段无需再动代码。<strong>验证</strong>: <code>commands run test.full</code> — 2284 passed + 3 skipped / 99.02%（13,231 语句 / 87 未覆盖 / 4,438 分支 / 83 partial, 28.05s）。</p>
   </section>
 
   <footer>

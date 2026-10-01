@@ -58,7 +58,7 @@
 - test_refresh_site_lock_busy_returns_locked: 站点锁被其它实例持有 -> ACTION_LOCKED
 - test_refresh_site_internal_error_contained: 非取数异常 -> ACTION_ERROR + alerted, 不外抛
 - test_channel_quota_lets_wave_yield_and_warns_once: 扩展侧硬上限 -> 本波让位 + 每站只告警一次
-- test_login_page_detected_by_adapter_and_warned_once: 登录页由 adapter 形态识别(非扩展异常) + 登录告警每站一次
+- test_login_page_detected_by_adapter_and_warned_once: 登录页由 adapter 形态识别(非扩展异常) + 登录告警每站一次(恢复重置: 正常波清标记, 再失效重新报)
 - test_challenge_page_truncates_wave: 挑战页 = 页面取数失败(无 Retry-After) -> 波级截断
 - test_missing_fields_abort_after_valid_page: 必填字段缺失页在第 2 页 -> 截断点之前数据有效(LANE_OK 非全深度)
 - test_daily_quota_exhausted_truncates_rest_lane: 日额用尽 -> 剩余档「预算受限」截断(首页即败 = LANE_FAILED)
@@ -1541,7 +1541,7 @@ def test_channel_quota_lets_wave_yield_and_warns_once(tmp_path):
 
 
 def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
-    """登录页由 adapter 页面形态识别(与扩展回传异常同一波级出口); 登录告警每站一次"""
+    """登录页由 adapter 页面形态识别(与扩展回传异常同一波级出口); 登录告警每站一次, 恢复后重置"""
     clock = Clock()
     fetcher = FakeFetcher(pages={url_of(l): LOGIN_PAGE for l in "ABC"})
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -1553,13 +1553,23 @@ def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
         clock.advance(120.0)
         second = run_wave(service, {})
         assert second.action == ACTION_ERROR
-    login_errors = [m for m in messages if "登录态失效" in m]
-    assert len(login_errors) == 2, "每波登录页都会重报(实测: _finish_wave 会清每站去重标记)"
-    # 去重分支本体(同一波内不重复): 直接连调 _warn_login, 第二次走「已告警过」早退
+    login_errors = [m for m in messages if "页面是登录页 ⇒" in m]
+    assert len(login_errors) == 1, "登录恢复前每站只报一次(状态变化报一次), 不再每波重报"
+    assert sum("登录态仍未恢复(已告警过" in m for m in messages) == 1, "第二波走去重早退(INFO)"
+    # 去重分支本体: 直接连调 _warn_login(用未告警过的站名), 第一次真告警, 第二次走「已告警过」早退
     with service_log() as repeat_messages:
-        service._warn_login(SITE, RuntimeError("仍未登录"))
-        service._warn_login(SITE, RuntimeError("仍未登录"))
+        service._warn_login("example2", RuntimeError("仍未登录"))
+        service._warn_login("example2", RuntimeError("仍未登录"))
     assert sum("登录态仍未恢复(已告警过" in m for m in repeat_messages) == 1
+    # 恢复重置: 中间正常波拿到内容页 -> 清去重标记; 再次登录失效重新报一次
+    fetcher.pages.update(standard_pages())
+    assert run_wave(service, {}).action == "refreshed"  # 登录波不设复用窗, 恢复波直接可跑
+    fetcher.pages.update({url_of(l): LOGIN_PAGE for l in "ABC"})
+    clock.advance(12 * 3600.0 + 60.0)  # 跳出复用窗(2h)与拉取间隔(12h, 恢复波推进了 healthy_ts)
+    with service_log() as relogin:
+        third = run_wave(service, {})
+        assert third.action == ACTION_ERROR
+    assert len([m for m in relogin if "页面是登录页 ⇒" in m]) == 1, "恢复后再失效 -> 重新告警(状态变化报一次)"
 
 
 def test_challenge_page_truncates_wave(tmp_path):
