@@ -14,17 +14,24 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 10 |
 | perf | 3 |
 | docs | 3 |
 | refactor | 3 |
-| feat | 17 |
+| feat | 20 |
 | chore | 4 |
-| question | 2 |
+| question | 5 |
 
 ## Open
 
 - [bug] [hr.token 生成是非原子写, 半截文件导致通道密钥静默漂移 (与 web.token 同族)](26-10-01-2151-bug-hr-channel-credential-atomic-write.html) — hr.channel resolve_token 用 O_TRUNC 直写 hr.token, 非空半截密钥被持久化, 扩展侧鉴权 401
+- [bug] [添加新站点热重载后不触发种子的内置维护任务](26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) — WEBUI 添加新站点并热重载后, 受影响种子的内置维护任务没有被触发
+- [feat] [整组迁移防进度丢失(qB 逐个移动同组种子的问题)](26-10-01-2147-feat-group-move-atomicity.html) — qB 一次设定多个种子位置会依次移动, 同组多个种子随机丢进度, 需要整组迁移方案
+- [feat] [HR 在线核实同步修改 HR 标签/分类](26-10-01-2147-feat-hr-verify-sync-hr-tags.html) — 在线核实结论变化时同步增删 HR 相关标签/分类(考核中/未达标等), 当前无此联动(grep hr/ 无标签同步逻辑)
+- [feat] [命中的限速曲线强调显示 + 限速时可配置弹窗提醒](26-10-01-2147-feat-speedlimit-curve-emphasis.html) — 当前生效的限速档位在曲线上强调显示; 被限速时可选配置弹窗提醒
+- [question] [「在线核实」与「全站HR」两个选项的区别说明/取舍](26-10-01-2147-question-hr-online-vs-sitewide-option.html) — 设置中两个 HR 选项语义不清: 补文档说明或合并冗余选项, 待定
+- [question] [HR 在线核实同组间优先核实下载量高的种子(前提待商榷)](26-10-01-2147-question-hr-same-group-download-priority.html) — [?]想法: 同组优先确认下载量高者; 前提「种子在 A 站考核中就不会在 B 站考核」待商榷
+- [question] [同组中无已完成种子时拒绝跳检](26-10-01-2147-question-skipcheck-no-completed-in-group.html) — [?]规则想法: 组内没有任何已完成成员时拒绝跳检(防误跳), 待拍板
 - [feat] [追剧视图完善: 同剧判定调研与分组排序打磨](26-10-01-2138-feat-webui-shows-grouping-research.html) — 追剧视图已加但不完善: 同剧判定需调研头脑风暴, 组内按季/集排序, 多站点辅种不分开显示
 - [feat] [tracker error/warning 状态展示, 且可配置忽略错误或警告](26-10-01-2138-feat-webui-tracker-error-warning-state.html) — 为种子/组的 tracker 状态增加 error/warning 呈现, 并支持配置忽略(不告警不阻断)
 - [question] [WEBUI 流量历史图做不做(待取舍)](26-10-01-2138-question-webui-traffic-history-chart.html) — [待取舍] 是否为 WEBUI 增加流量历史图, 与单种/全局统计重设计同族
