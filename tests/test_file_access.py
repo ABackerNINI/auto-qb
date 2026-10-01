@@ -31,6 +31,10 @@
 - test_expr_exists_and_disk_undetermined: exists()/disk_* 表达式映射 miss -> ExprError(显式报错优于静默)
 - test_freespace_condition_undetermined: freespace 条件映射 miss -> ExprError; 真实 OSError 仍静默 False
 - test_fs_config_validation_errors: fs.path_map 校验聚合(空值/相对路径/to 无根斜杠/重复/前缀歧义)
+- test_fold_prefix_len_casefold_edges: 变长折叠(ß→ss)按原串码点定位边界; 失配/越界 -1
+- test_file_access_abstract_guards: FileAccess 抽象方法漏覆写即 NotImplementedError
+- test_mapped_root_contained_and_unmapped_listdir: 容器根包含判定(rp==root) + 未映射列目录报不可判定
+- test_path_map_selfcheck_probe_failure_logged: 挂载点可写探测非权限失败记 INFO
 """
 import os
 import shutil
@@ -615,3 +619,86 @@ def test_fs_config_validation_errors(tmp_path):
     for body, needle in cases:
         with pytest.raises(ConfigError, match=needle):
             _write_cfg(tmp_path, body)
+
+
+def test_fold_prefix_len_casefold_edges():
+    """折叠前缀边界: 变长折叠(ß→ss)按原串码点定位; 不命中与失配都 -1"""
+    from auto_qb.infra.file_access import _fold_prefix_len
+
+    assert _fold_prefix_len("ßabc", "ss") == 1, "ß 折叠成 ss, 原串边界在码点 1(ß 之后)"
+    assert _fold_prefix_len("İx", "i̇") == 1
+    assert _fold_prefix_len("abc", "abx") == -1, "失配提前退出"
+    assert _fold_prefix_len("abc", "abcd") == -1, "折叠串比原串长"
+
+
+def test_file_access_abstract_guards():
+    """FileAccess 抽象方法本体 raise NotImplementedError(实现漏覆写即暴露)"""
+    from auto_qb.infra.file_access import FileAccess
+
+    obj = FileAccess.__new__(FileAccess)
+    for name in (
+        "exists",
+        "isdir",
+        "isfile",
+        "getsize",
+        "disk_usage",
+        "scandir",
+        "mkdir",
+        "realpath_lexical",
+        "open_path",
+    ):
+        with pytest.raises(NotImplementedError):
+            getattr(obj, name)("p")
+
+
+def test_mapped_root_contained_and_unmapped_listdir(tmp_path):
+    """容器根包含判定(rp==root 即真); 未映射路径列目录 -> FileAccessError(不可判定)"""
+    from auto_qb.infra.file_access import FileAccessError, MappedFileAccess
+
+    mount = str(tmp_path).replace(os.sep, "/")
+    fa = MappedFileAccess((PathMapEntry(src="D:/Downloads", dst=mount), ))
+    assert fa._root_contained(mount, mount) is True, "解析后等于根本身也算包含"
+    (tmp_path / "s.bin").write_bytes(b"x")
+    with pytest.raises(FileAccessError, match="不可判定"):
+        fa.scandir("E:/Elsewhere")
+
+
+def test_path_map_selfcheck_probe_failure_logged(tmp_path, monkeypatch):
+    """挂载点可写探测的非权限失败 -> INFO(以真实 syscall 结果为准, 不误报只读)"""
+    import errno
+    import logging
+
+    from auto_qb.infra import file_access
+
+    class _H(logging.Handler):
+        def __init__(self):
+            super().__init__()
+            self.messages = []
+
+        def emit(self, record):
+            self.messages.append(record.getMessage())
+
+    mount = tmp_path / "mnt"
+    mount.mkdir()
+    monkeypatch.setattr(
+        file_access, "get_file_access",
+        lambda: file_access.MappedFileAccess((PathMapEntry(src="D:/Downloads", dst=str(mount)), ))
+    )
+
+    def boom(p):
+        raise OSError(errno.EIO, "IO 错误")
+
+    monkeypatch.setattr(file_access.os, "mkdir", boom)
+    logger = logging.getLogger("auto_qb.infra.file_access")
+    h = _H()
+    old_level, old_prop = logger.level, logger.propagate
+    logger.addHandler(h)
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+    try:
+        file_access.path_map_selfcheck(["D:/Downloads"])
+    finally:
+        logger.removeHandler(h)
+        logger.setLevel(old_level)
+        logger.propagate = old_prop
+    assert any("可写探测失败" in m for m in h.messages)

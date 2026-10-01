@@ -483,3 +483,113 @@ def test_pacing_class_separates_fetch_interval_gate():
     assert pacing_class("未到拉取时刻(拉取间隔, 还差 104s)") == "拉取间隔"
     assert pacing_class("未到拉取时刻(拉取间隔, 还差 51s)") == "拉取间隔", "倒计时变化不换类别(去重)"
     assert pacing_class("未到可取时刻(间隔, 还差 104s)") == "间隔", "min_interval 是另一类"
+
+
+# ==================== P1 覆盖率提升轮: 取数线程长尾 ====================
+
+
+class _BoomPublisher:
+    """publish 必炸的发布器(验证启动期发布失败不打死取数线程)"""
+    revision = 0
+
+    def publish(self, views):
+        raise RuntimeError("发布炸了")
+
+
+def test_start_twice_is_idempotent(tmp_path):
+    """start 幂等: 线程已在跑时不重复起(否则会出现两个取数线程抢同一把站点锁)"""
+    fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
+    service = _service(tmp_path, fetcher, clock=Clock())
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    worker.start()
+    first_thread = worker._thread
+    worker.start()
+    assert worker._thread is first_thread, "第二次 start 复用同一线程"
+    assert worker.stop(), "正常关停"
+
+
+def test_stop_timeout_reports_error(tmp_path):
+    """线程超时未退出 -> stop 返回 False 并 ERROR(可能仍在等扩展回传)"""
+    fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
+    service = _service(tmp_path, fetcher, clock=Clock())
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=3600.0)
+    stuck = threading.Thread(target=time.sleep, args=(30, ), name="stuck-hr-worker", daemon=True)
+    stuck.start()  # join 需要线程已启动
+    worker._thread = stuck  # 注入一个不退出的线程, 验证超时分支的判定与返回值
+    assert worker.stop(timeout=0.05) is False
+    worker._thread = None
+
+
+def test_request_refresh_site_filtering(tmp_path):
+    """request_refresh: 未点名站点 = 全部启用站点; 点名未启用站点 = 空受理(不告警)"""
+    fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
+    service = _service(tmp_path, fetcher, clock=Clock())
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    assert worker.request_refresh(["ghost"]) == [], "未启用站点不受理"
+    assert worker._force in (set(), None) or not worker._force, "空受理不残留旗标"
+    assert worker.request_refresh(["pt.example.com"]) == ["pt.example.com"]
+
+
+def test_loop_survives_startup_publish_failure(tmp_path, monkeypatch):
+    """冷启动发布既有视图失败(读盘异常) -> ERROR 但线程照常进入取数循环"""
+    fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
+    clock = Clock()
+    service = _service(tmp_path, fetcher, clock=clock)
+    worker = HrWorker(service=service, publisher=_BoomPublisher(), poll_interval=60.0, now_fn=clock)
+
+    calls = []
+
+    def fake_run_once():
+        calls.append(1)
+        with worker._cond:
+            worker._stopped = True  # 跑一轮就停(测试内联驱动 _loop)
+        raise RuntimeError("单轮也炸")
+
+    monkeypatch.setattr(worker, "run_once", fake_run_once)
+    worker._loop()  # 内联跑: 发布炸 -> 记 ERROR -> run_once 炸 -> 记 ERROR -> 收敛退出
+    assert len(calls) == 1
+    monkeypatch.undo()
+
+
+def test_record_status_warns_on_partial_and_error(tmp_path):
+    """刷新不完备(partial/error)且产生处未告警 -> 取数线程补一条 WARNING(改版让放行证明不成立)"""
+    fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
+    service = _service(tmp_path, fetcher, clock=Clock())
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
+    with worker_log() as messages:
+        result = HrRefreshResult(site="pt.example.com", action=ACTION_PARTIAL, reason="页面取数失败", alerted=False)
+        worker._note("pt.example.com", result)
+        assert any("页面取数失败" in m for m in messages), "partial 未告警 -> 线程补 WARNING"
+        # 状态不变 + 节流窗口内: 不重复
+        worker._note("pt.example.com", result)
+        assert sum("页面取数失败" in m for m in messages) == 1, "同状态节流期内不重复记"
+
+
+class _ListLogHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+class worker_log:
+    """挂在 auto_qb.hr.worker 模块 logger 上的自足采集(pitfalls/testing/log-capture: 禁 caplog)"""
+    def __init__(self, level=logging.DEBUG):
+        self._handler = _ListLogHandler()
+        self._logger = logging.getLogger("auto_qb.hr.worker")
+        self._level = level
+
+    def __enter__(self):
+        self._old_level, self._old_propagate = self._logger.level, self._logger.propagate
+        self._logger.addHandler(self._handler)
+        self._logger.setLevel(self._level)
+        self._logger.propagate = False
+        return self._handler.messages
+
+    def __exit__(self, *exc):
+        self._logger.removeHandler(self._handler)
+        self._logger.setLevel(self._old_level)
+        self._logger.propagate = self._old_propagate
+        return False

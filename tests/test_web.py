@@ -77,6 +77,30 @@
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
 - test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + facet 行负词整种子排除 —— 三页同源(26-09-26 单点化; 负词种子级 26-09-27 定案)
+### P1 覆盖率提升轮: webui 运行时与命令长尾
+- test_web_runtime_notify_drops_are_counted: SSE 广播非阻塞(慢/坏订阅者各计丢弃)
+- test_web_runtime_check_pending_paths: 在途汇报确认全路径(完成跳过/超时/断连/异常/成败聚合)
+- test_web_runtime_resync_elapsed_ms_logs_by_threshold: 补刷新计时按阈值分级(慢 WARNING / 正常 DEBUG)
+- test_web_runtime_set_result_prunes_stale_and_carries_truth: 回执表 TTL 淘汰 + truth 附带
+- test_web_runtime_affected_hashes_shapes: 受影响种子三种取法 + 异常退化
+- test_web_runtime_affected_truth_queries_live_api: 真值直查 qB, 失败回 None 不回落快照
+- test_web_commands_delete_with_files_and_reannounce_gone_receipt: 删除透传 delete_files; 汇报缺失显式回执
+- test_web_commands_recheck_and_skip_check_receipts: recheck/skip-check 拒绝回执带文案
+- test_web_commands_limits_partial_directions: 限速只下发提供的方向; 分享限制缺省 -2 补齐
+- test_web_commands_rename_fs_folder_branch: 重命名文件夹分支
+- test_web_commands_bulk_argument_errors: 批量参数四类错误回执
+- test_web_commands_bulk_missing_targets_reported: 批量缺失种子/组分列计数
+- test_web_commands_bulk_recheck_via_ops: 批量 recheck 经 ops 聚合回执
+- test_web_commands_add_torrents_receipt: 添加种子受理/拒绝回执
+- test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
+- test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
+- test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘
+- test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
+- test_api_keys_endpoint_roundtrip_and_validation: 快捷键默认表/422 校验/保存读回
+- test_api_keys_sanitize_rejects_non_dict: _sanitize 非 dict 一律 None
+- test_api_category_and_tag_empty_rejections: 分类/标签空入参 400
+- test_api_speed_mode_reads_client_with_alt_fields: 限速托管直读 qB(含 ALT 双组) + 读失败回 None
+- test_api_fs_error_semantics: fs 端点错误语义化(404/501/403/400)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
 - test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
@@ -216,6 +240,14 @@ from auto_qb.config.models import HrCheckConfig
 from auto_qb.infra import file_access
 from auto_qb.infra.utils import decode_group_key, encode_group_key
 from auto_qb.webui import create_app
+from auto_qb.webui.runtime import (
+    CMD_SLOW_MS,
+    EVENT_QUEUE_MAX,
+    REANNOUNCE_CONFIRM_TIMEOUT,
+    WEB_RESULT_MAX,
+    WEB_RESULT_TTL,
+    WebUIRuntime,
+)
 
 KEY = ("R:/seeds", ("a.mkv", "b.mkv"))
 
@@ -8569,3 +8601,586 @@ def test_webui_no_rules_import():
                         violations.append(f"{rel}:{i}: import {m.group(1).strip()}")
     assert not violations, ("webui 出现规则模块引用(依赖方向做反, 操作语义必须单点在 core/modules/ops_mod.py): "
                             f"{violations}")
+
+
+# ==================== P1 覆盖率提升轮: webui 运行时与命令长尾 ====================
+
+
+class _ListLogHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+class module_log:
+    """挂在指定模块 logger 上的自足采集(pitfalls/testing/log-capture: 禁 caplog)"""
+    def __init__(self, name, level=logging.DEBUG):
+        self._handler = _ListLogHandler()
+        self._logger = logging.getLogger(name)
+        self._level = level
+
+    def __enter__(self):
+        self._old_level, self._old_propagate = self._logger.level, self._logger.propagate
+        self._logger.addHandler(self._handler)
+        self._logger.setLevel(self._level)
+        self._logger.propagate = False
+        return self._handler.messages
+
+    def __exit__(self, *exc):
+        self._logger.removeHandler(self._handler)
+        self._logger.setLevel(self._old_level)
+        self._logger.propagate = self._old_propagate
+        return False
+
+
+def test_web_runtime_notify_drops_are_counted():
+    """SSE 广播非阻塞: 慢消费者(队列满)与坏消费者(异常)各计一次丢弃, 不影响其它订阅者"""
+    from auto_qb.webui.runtime import EVENT_QUEUE_MAX
+
+    mgr = SimpleNamespace()  # notify 不读 host
+    rt = WebUIRuntime(mgr)
+    slow = rt.subscribe()  # 有界队列: 灌满即丢
+    broken = rt.subscribe()
+    broken.put_nowait = lambda ev: (_ for _ in ()).throw(RuntimeError("坏订阅者"))  # 每次都炸
+    good = rt.subscribe()
+    for _ in range(EVENT_QUEUE_MAX):
+        slow.put_nowait({"type": "x", "payload": {}, "ts": 0.0})
+    assert rt.subscriber_count() == 3
+    hit = rt.notify("state", {"v": 1})
+    assert hit == 1, "只有健康订阅者送达"
+    assert rt.notify_dropped == 2, "队列满 + 异常各记一次丢弃"
+    assert good.qsize() == 1
+
+
+def test_web_runtime_check_pending_paths():
+    """在途强制汇报确认: 已完成跳过 / 超时判失败 / 断连等待 / 读 tracker 异常 / 确认成功与失败"""
+    from auto_qb.webui.runtime import REANNOUNCE_CONFIRM_TIMEOUT
+
+    verdicts = {"H_OK": True, "H_FAIL": False, "H_WAIT": None}
+    client = SimpleNamespace(
+        torrents_trackers=lambda h: (_ for _ in ()).throw(RuntimeError("读取失败")) if h == "H_ERR" else [h]
+    )
+    host = SimpleNamespace(
+        client=client,
+        _confirm_reannounce_result=lambda trackers, baseline: verdicts.get(trackers[0]),
+    )
+    rt = WebUIRuntime(host)
+    rt.reannounce_pending["c1"] = {
+        "deadline": time.time() + REANNOUNCE_CONFIRM_TIMEOUT,
+        "items":
+            {
+                "H_DONE": {
+                    "done": True,
+                    "ok": False,
+                    "err": "x",
+                    "baseline": {}
+                },
+                "H_OK": {
+                    "done": False,
+                    "ok": False,
+                    "err": "",
+                    "baseline": {}
+                },
+                "H_FAIL": {
+                    "done": False,
+                    "ok": False,
+                    "err": "",
+                    "baseline": {}
+                },
+                "H_WAIT": {
+                    "done": False,
+                    "ok": False,
+                    "err": "",
+                    "baseline": {}
+                },
+                "H_ERR": {
+                    "done": False,
+                    "ok": False,
+                    "err": "",
+                    "baseline": {}
+                },
+            },
+    }
+    rt.reannounce_pending["c_timeout"] = {
+        "deadline": time.time() - 1.0,  # 已超时: 不读 tracker 直接判失败
+        "items": {
+            "H_TIMEOUT": {
+                "done": False,
+                "ok": False,
+                "err": "",
+                "baseline": {}
+            }
+        },
+    }
+    rt.reannounce_pending["c_disconnected"] = {
+        "deadline": time.time() + REANNOUNCE_CONFIRM_TIMEOUT,
+        "items": {
+            "H_D": {
+                "done": False,
+                "ok": False,
+                "err": "",
+                "baseline": {}
+            }
+        },
+    }
+    rt.check_pending()
+    assert rt.results["c_timeout"]["status"] == "error" and "超时" in rt.results["c_timeout"]["error"]
+    # 仍在进行(确认 None)的条目: 不出结论, 条目留在途; 其余已定论的先记进条目
+    assert "c1" in rt.reannounce_pending, "确认未决(None)不出结论"
+    items = rt.reannounce_pending["c1"]["items"]
+    assert items["H_OK"]["ok"] is True and items["H_FAIL"]["ok"] is False
+    assert items["H_ERR"]["done"] is True and "读取失败" in items["H_ERR"]["err"]
+    # 断连: client None -> 本轮跳过(等恢复), 保持在途
+    host.client = None
+    rt.check_pending()
+    assert "c_disconnected" in rt.reannounce_pending, "断连不判失败, 等恢复继续确认"
+    # 最后一个未决出结论 -> 聚合(有失败项 -> error 回执)
+    host.client = client
+    verdicts["H_WAIT"] = True
+    rt.check_pending()
+    assert "c1" not in rt.reannounce_pending, "全部种子出结论后聚合并移除"
+    assert rt.results["c1"]["status"] == "error", "有失败项 -> 聚合 error 回执"
+    assert "汇报确认失败" in rt.results["c1"]["error"]
+    # 恢复后成功 -> ok 回执
+    host.client = SimpleNamespace(torrents_trackers=lambda h: ["H_D"])
+    verdicts["H_D"] = True
+    rt.check_pending()
+    assert rt.results["c_disconnected"]["status"] == "ok"
+    assert rt.reannounce_pending == {}
+
+
+def test_web_runtime_resync_elapsed_ms_logs_by_threshold():
+    """命令后补刷新计时: 异常慢升 WARNING, 正常只 DEBUG(不刷满日志)"""
+    rt = WebUIRuntime(SimpleNamespace())
+    with module_log("auto_qb.webui.runtime") as messages:
+        rt.resync_elapsed_ms(time.time() - (float(CMD_SLOW_MS) / 1000.0 + 1.0))
+        assert any("命令后补刷新" in m and "真值" in m for m in messages), "超阈值 -> WARNING"
+        rt.resync_elapsed_ms(time.time())
+    assert any("命令后补刷新" in m for m in messages), "正常耗时也落 DEBUG(排障可查)"
+
+
+def test_web_runtime_set_result_prunes_stale_and_carries_truth():
+    """回执表: 超量时按 TTL 淘汰旧回执; truth 附带进回执供前端撤乐观态"""
+    rt = WebUIRuntime(SimpleNamespace())
+    now = time.time()
+    for i in range(WEB_RESULT_MAX + 8):
+        rt.results[f"stale{i}"] = {"status": "ok", "error": "", "ts": now - WEB_RESULT_TTL - 10.0}
+    rt.results["fresh"] = {"status": "ok", "error": "", "ts": now}
+    rt.set_result("new1", "ok", truth={"HA": {"kind": "seeding"}})
+    assert "new1" in rt.results
+    assert rt.results["new1"]["truth"] == {"HA": {"kind": "seeding"}}
+    assert all(k.startswith("stale") is False or k == "fresh" for k in rt.results), "过期回执被清理"
+    assert len(rt.results) <= WEB_RESULT_MAX
+
+
+def test_web_runtime_affected_hashes_shapes():
+    """受影响种子的三种取法(单种子 / 组 / 批量含组键) + 异常退化空表"""
+    host = SimpleNamespace(store=SimpleNamespace(groups={("R:/X", ("a.mkv", )): ["HA", "HB"]}))
+    rt = WebUIRuntime(host)
+    assert rt._affected_hashes("pause_torrent", {"hash": "HA"}) == ["HA"]
+    assert rt._affected_hashes("pause_torrent", {}) == [], "无 hash 不猜"
+    assert rt._affected_hashes("pause_group", {"key": ("R:/X", ("a.mkv", ))}) == ["HA", "HB"]
+    assert rt._affected_hashes("bulk_torrents", {
+        "hashes": ["HC"],
+        "keys": [("R:/X", ("a.mkv", ))]
+    }) == ["HC", "HA", "HB"]
+    broken = SimpleNamespace(store=None)
+    assert WebUIRuntime(broken)._affected_hashes("pause_group", {"key": "k"}) == [], "桩/异常配置退化空表"
+
+
+def test_web_runtime_affected_truth_queries_live_api():
+    """真值直查 qB(不读同步快照); 查不到回 None(不回落旧值伪装)"""
+    torrent = SimpleNamespace(hash="HA")
+    host = SimpleNamespace(
+        api=SimpleNamespace(torrents_info=lambda torrent_hashes=None: [torrent]),
+        state_kind=lambda t: "seeding",
+    )
+    rt = WebUIRuntime(host)
+    truth = rt._affected_truth("pause_torrent", {"hash": "HA"})
+    assert truth == {"HA": {"kind": "seeding"}}
+    assert rt._affected_truth("pause_torrent", {}) is None, "无受影响种子 -> None"
+
+    def boom(torrent_hashes=None):
+        raise RuntimeError("qB 断了")
+
+    rt2 = WebUIRuntime(SimpleNamespace(api=SimpleNamespace(torrents_info=boom), state_kind=lambda t: "x"))
+    with module_log("auto_qb.webui.runtime") as messages:
+        assert rt2._affected_truth("pause_torrent", {"hash": "HA"}) is None
+    assert any("真值直查失败" in m for m in messages), "直查失败落 WARNING(不回落快照)"
+
+
+def test_web_commands_delete_with_files_and_reannounce_gone_receipt():
+    """删除透传 delete_files; 汇报种子已不存在 -> 显式 error 回执(不静默)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.web.commands.put(("delete_torrent", {"hash": "HA", "delete_files": True, "cmd_id": "d1"}))
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "GONE", "cmd_id": "r1"}))
+        mgr.web.consume_commands()
+        assert client.calls[-1] == ("delete", True), "delete_files 透传给 API"
+        assert mgr.web.results["d1"]["status"] == "ok"
+        assert mgr.web.results["r1"]["status"] == "error" and "不存在" in mgr.web.results["r1"]["error"]
+
+
+def test_web_commands_recheck_and_skip_check_receipts():
+    """重新校验/右键跳检经 ops 提交: 拒绝时回执带自解释文案; 种子不存在同样显式报"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.web.commands.put(("recheck_torrent", {"hash": "GONE", "cmd_id": "c-gone"}))
+        mgr.web.commands.put(("skip_check_torrent", {"hash": "GONE", "cmd_id": "s-gone"}))
+        mgr.web.consume_commands()
+        assert mgr.web.results["c-gone"]["status"] == "error" and "不存在" in mgr.web.results["c-gone"]["error"]
+        assert mgr.web.results["s-gone"]["status"] == "error", "跳检拒绝(种子消失) -> error 回执带文案"
+        assert mgr.web.results["s-gone"]["error"], "拒绝文案不为空"
+
+
+def test_web_commands_limits_partial_directions():
+    """限速只下发提供的方向(up/dl 可各自缺省); 分享限制同理"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr._cmd_set_torrent_limits("HA", up_limit=1024)
+        mgr._cmd_set_torrent_limits("HA", dl_limit=2048)
+        mgr._cmd_set_share_limits("HA", ratio_limit=1.5)
+        kinds = [c[0] for c in client.calls]
+        assert kinds.count("set_upload_limit") == 1 and kinds.count("set_download_limit") == 1
+        assert client.calls[-1] == ("set_share_limits", (1.5, -2, -2)), "缺失维度按 -2(全局默认)补齐"
+
+
+def test_web_commands_rename_fs_folder_branch():
+    """重命名文件夹走 torrents_rename_folder(文件走 rename_file 已有守阵)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr._cmd_rename_fs("HA", old_path="old/dir", new_path="new/dir", is_folder=True)
+        assert client.calls[-1] == ("rename_folder", ("HA", "old/dir", "new/dir"))
+
+
+def test_web_commands_bulk_argument_errors():
+    """批量动作参数四类错误: 未知动作 / 空目标 / 标签动作无标签 / set_category 无分类"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        cases = [
+            ({
+                "hashes": ["HA"],
+                "action": "purge"
+            }, "purge"),
+            ({
+                "action": "pause"
+            }, "未提供任何 hash"),
+            ({
+                "hashes": ["HA"],
+                "action": "add_tags"
+            }, "未提供标签"),
+            ({
+                "hashes": ["HA"],
+                "action": "set_category"
+            }, "未提供分类"),
+        ]
+        for i, (payload, want) in enumerate(cases):
+            mgr.web.commands.put(("bulk_torrents", dict(payload, cmd_id=f"b{i}")))
+            mgr.web.consume_commands()
+            assert mgr.web.results[f"b{i}"]["status"] == "error", (payload, mgr.web.results)
+            assert want in mgr.web.results[f"b{i}"]["error"]
+        assert client.calls == [], "参数错误不触达 qB"
+
+
+def test_web_commands_bulk_missing_targets_reported():
+    """批量: 缺失种子与缺失组分列计数(部分缺失也进 error 文案, 拒绝计数可见)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        ghost_key = ("R:/Nowhere", ("none.mkv", ))
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA", "GONE"],
+                "keys": [ghost_key],
+                "action": "pause",
+                "cmd_id": "bm"
+            })
+        )
+        mgr.web.consume_commands()
+        rec = mgr.web.results["bm"]
+        assert rec["status"] == "error"
+        assert "1/2 个种子不存在" in rec["error"] and "1/1 个组不存在" in rec["error"]
+
+
+def test_web_commands_bulk_recheck_via_ops():
+    """批量 recheck 经 ops 逐个提交: 提交/跳过/缺失聚合进回执(部分成功也报错)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        with module_log("auto_qb.webui.commands") as messages:
+            mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA", "GONE"], "action": "recheck", "cmd_id": "br"}))
+            mgr.web.consume_commands()
+        rec = mgr.web.results["br"]
+        assert rec["status"] == "error" and "1/2 个种子不存在" in rec["error"]
+        assert any("批量 recheck(提交 1" in m for m in messages), "提交/跳过计数落日志(回执只带缺失文案)"
+
+
+def test_web_commands_add_torrents_receipt():
+    """添加种子: 文件+链接都受理 -> ok 回执; qB 未接受 -> error 回执带详情"""
+    from hr_helpers import torrent_blob
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        blob = torrent_blob(name="added.bin")
+        mgr.web.commands.put(
+            (
+                "add_torrents",
+                {
+                    "files": [blob],
+                    "urls": ["magnet:?xt=urn:btih:xyz"],
+                    "save_path": "R:/Drop",
+                    "category": "cat",
+                    "tags": ["t1"],
+                    "paused": False,
+                    "skip_checking": False,
+                    "sequential": False,
+                    "first_last_piece_prio": False,
+                    "auto_tmm": False,
+                    "cmd_id": "a1",
+                },
+            )
+        )
+        mgr.web.consume_commands()
+        assert mgr.web.results["a1"]["status"] == "ok", mgr.web.results["a1"]
+        assert any(c[0] == "add" for c in client.calls)
+        # qB 拒绝(旧文本形态 "Fails.") -> error 回执(新形态元数据由既有守阵钉)
+        client.torrents_add = lambda *a, **kw: "Fails."
+        mgr.web.commands.put(("add_torrents", {"files": [blob], "urls": [], "cmd_id": "a2"}))
+        mgr.web.consume_commands()
+        assert mgr.web.results["a2"]["status"] == "error" and "qB 未接受" in mgr.web.results["a2"]["error"]
+
+
+# ==================== P1 覆盖率提升轮: webui 路由长尾 ====================
+
+
+def test_api_torrent_write_endpoints_extra_enqueue(web_env):
+    """种子写端点补遗: pause/resume/delete(带 delete_files)/skip-check/limits(部分方向)/share-limits(部分维度)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    post = lambda path, body=None: client.post(f"/api/torrents/HA{path}", json=body, headers=auth)  # noqa: E731
+    cases = [
+        ("/pause", None, "pause_torrent", {
+            "hash": "HA"
+        }),
+        ("/resume", None, "resume_torrent", {
+            "hash": "HA"
+        }),
+        ("/delete", {
+            "delete_files": True
+        }, "delete_torrent", {
+            "hash": "HA",
+            "delete_files": True
+        }),
+        ("/skip-check", None, "skip_check_torrent", {
+            "hash": "HA"
+        }),
+        ("/limits", {
+            "up_limit": 1024
+        }, "set_torrent_limits", {
+            "hash": "HA",
+            "up_limit": 1024
+        }),
+        ("/share-limits", {
+            "ratio_limit": 1.5
+        }, "set_share_limits", {
+            "hash": "HA",
+            "ratio_limit": 1.5
+        }),
+    ]
+    for path, body, cmd, want in cases:
+        resp = post(path, body)
+        assert resp.status_code == 200, (path, resp.text)
+        got_cmd, payload = mgr.web.commands.get_nowait()
+        assert got_cmd == cmd
+        payload.pop("cmd_id")
+        payload.pop("_queued_ts", None)
+        assert payload == want, path
+    # 鉴权沿用 /api/* 全局依赖
+    assert client.post("/api/torrents/HA/pause").status_code == 401
+
+
+def test_api_torrents_add_endpoint_errors_and_enqueue(web_env):
+    """/api/torrents/add: base64 坏 -> 400; 空载荷 -> 400; 合法载荷入队(文件+链接)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    assert client.post("/api/torrents/add", json={"files_b64": ["!!not-b64!!"]}, headers=auth).status_code == 400
+    assert client.post("/api/torrents/add", json={}, headers=auth).status_code == 400
+    assert client.post("/api/torrents/add", json={"files_b64": ["!!not-b64!!"]}).status_code == 401
+    blob = base64.b64encode(b"d4:infod4:name4:abcee").decode("ascii")
+    resp = client.post(
+        "/api/torrents/add",
+        json={
+            "files_b64": [blob, ""],
+            "urls": ["magnet:?xt=urn:btih:abc"],
+            "save_path": "R:/Drop",
+            "tags": ["t"]
+        },
+        headers=auth,
+    )
+    assert resp.status_code == 200 and resp.json()["queued"] is True
+    cmd, payload = mgr.web.commands.get_nowait()
+    assert cmd == "add_torrents"
+    assert payload["files"] == [b"d4:infod4:name4:abcee"], "空串条目被过滤, base64 解出原始字节"
+    assert payload["urls"] == ["magnet:?xt=urn:btih:abc"] and payload["save_path"] == "R:/Drop"
+
+
+def test_api_config_put_and_preview_tree_shape(web_env):
+    """配置树: PUT/preview 的 tree 非对象都 400; preview 返回 YAML 文本不落盘"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    assert client.put("/api/config", json={"tree": "nope"}, headers=auth).status_code == 400
+    assert client.post("/api/config/preview", json={"tree": [1]}, headers=auth).status_code == 400
+    assert client.put("/api/config", json={"tree": "nope"}).status_code == 401
+    tree = client.get("/api/config", headers=auth).json()["tree"]
+    resp = client.post("/api/config/preview", json={"tree": tree}, headers=auth)
+    assert resp.status_code == 200 and "yaml" in resp.json()
+    before = Path(mgr.config_path).read_text(encoding="utf-8")
+    assert Path(mgr.config_path).read_text(encoding="utf-8") == before, "preview 不落盘"
+
+
+def test_api_expr_eval_runtime_error(web_env):
+    """表达式试算: 编译/校验通过但**求值期**失败(除零) -> ok=False 带错误文案与 used 清单"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    mgr.store.get = lambda h: SimpleNamespace(uploaded=100, downloaded=0)
+    resp = client.post(
+        "/api/expr/eval",
+        json={
+            "text": "(tor.uploaded / tor.downloaded) > 1",
+            "hash": "HA"
+        },
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False and "除数为 0" in body["error"]
+    assert body["used"] == ["tor.downloaded", "tor.uploaded"]
+
+
+def test_api_keys_endpoint_roundtrip_and_validation(web_env):
+    """快捷键配置: 默认表 / 非法结构 422 / 合法保存后读回一致"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    assert client.get("/api/keys", headers=auth).json()["template"] == "aqb-default"
+    bad = {"schema_version": 1, "template": "", "overrides": {}}
+    assert client.put("/api/keys", json=bad, headers=auth).status_code == 422
+    bad2 = {"schema_version": 1, "template": "aqb-default", "overrides": {"k": "Bad Serial!"}}
+    assert client.put("/api/keys", json=bad2, headers=auth).status_code == 422
+    assert client.put("/api/keys", json=bad2).status_code == 401
+    good = {"schema_version": 1, "template": "aqb-default", "overrides": {"openSearch": "Ctrl+K", "x": ""}}
+    assert client.put("/api/keys", json=good, headers=auth).status_code == 200
+    assert client.get("/api/keys", headers=auth).json()["overrides"]["openSearch"] == "Ctrl+K"
+
+
+def test_api_keys_sanitize_rejects_non_dict():
+    """_sanitize 结构校验单点: 非 dict 文档一律 None(走默认表兜底链)"""
+    from auto_qb.webui.server.routes.keys import _sanitize
+
+    assert _sanitize(None) is None
+    assert _sanitize([1, 2]) is None
+    assert _sanitize("x") is None
+
+
+def test_api_category_and_tag_empty_rejections(web_env):
+    """分类/标签写端点的空入参 400(与既有详情端点同一校验口径)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    assert client.post("/api/categories", json={"name": "  "}, headers=auth).status_code == 400
+    assert client.post("/api/categories/edit", json={}, headers=auth).status_code == 400
+    assert client.post("/api/tags/remove", json={"tags": []}, headers=auth).status_code == 400
+    resp = client.post("/api/tags", json={"tags": ["新标签"]}, headers=auth)
+    assert resp.status_code == 200
+    cmd, payload = mgr.web.commands.get_nowait()
+    assert cmd == "create_tags" and payload["tags"] == ["新标签"]
+
+
+def test_api_speed_mode_reads_client_with_alt_fields(web_env):
+    """限速托管状态: qB 在连时直读当前限速与 ALT 双组; 读失败不炸(回 None)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    api = SimpleNamespace(
+        get_global_speed_limits=lambda: {"up_limit": 1024},
+        get_speed_limits_mode=lambda: 1,
+        get_alt_speed_limits=lambda: {"up_limit": 512},
+    )
+    mgr.client = SimpleNamespace()
+    mgr.api = api
+    body = client.get("/api/speed/mode", headers=auth).json()
+    assert body["current"] == {"up_limit": 1024} and body["alt_on"] is True
+    assert body["alt_current"] == {"up_limit": 512}
+    # 读失败 -> 字段回 None, 端点不 500
+    mgr.api = SimpleNamespace(
+        get_global_speed_limits=lambda: (_ for _ in ()).throw(RuntimeError("断连")),
+        get_speed_limits_mode=lambda: 0,
+        get_alt_speed_limits=lambda: {},
+    )
+    body = client.get("/api/speed/mode", headers=auth).json()
+    assert body["current"] is None and body["alt_on"] is None and body["alt_current"] is None, "任一读取失败整组回 None(不拿旧缓存冒充)"
+
+
+def test_api_fs_error_semantics(web_env, tmp_path, monkeypatch):
+    """fs 端点错误语义化: 目录不可读 404 / mkdir 不支持 501 / 只读挂载 403 / 其它失败 400 / open 不支持 501"""
+    from auto_qb.infra import file_access as fa_mod
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    root = tmp_path / "fsroot"
+    root.mkdir()
+    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path=str(root), content_path=str(root))}
+    norm = lambda p: str(p).replace("\\", "/")  # noqa: E731
+
+    class _FakeFA:
+        def isdir(self, p):
+            return True
+
+        def isfile(self, p):
+            return True
+
+        def exists(self, p):
+            return False
+
+        def realpath_lexical(self, p):
+            return p
+
+        def scandir(self, p):
+            raise PermissionError(13, "拒绝访问")
+
+        def mkdir(self, p):
+            raise OSError(errno.EACCES, "拒绝访问")
+
+    monkeypatch.setattr(file_access, "get_file_access", lambda: _FakeFA())
+    # 目录浏览: scandir 失败 -> 404 带原因(不是裸 500)
+    resp = client.get("/api/fs/dirs", params={"path": norm(root)}, headers=auth)
+    assert resp.status_code == 404 and "目录不可读" in resp.json()["detail"]
+    # mkdir: EACCES -> 403(只读挂载语义化)
+    resp = client.post("/api/fs/mkdir", json={"name": "nd", "path": norm(root)}, headers=auth)
+    assert resp.status_code == 403 and "只读" in resp.json()["detail"]
+
+    # mkdir: 其它 OSError -> 400
+    class _OtherFA(_FakeFA):
+        def mkdir(self, p):
+            raise OSError(errno.EINVAL, "无效参数")
+
+    monkeypatch.setattr(file_access, "get_file_access", lambda: _OtherFA())
+    resp = client.post("/api/fs/mkdir", json={"name": "nd", "path": norm(root)}, headers=auth)
+    assert resp.status_code == 400 and "新建失败" in resp.json()["detail"]
+
+    # mkdir: 环境不支持 -> 501
+    class _NoFA(_FakeFA):
+        def mkdir(self, p):
+            raise fa_mod.NotSupported("nope")
+
+    monkeypatch.setattr(file_access, "get_file_access", lambda: _NoFA())
+    assert client.post("/api/fs/mkdir", json={"name": "nd", "path": norm(root)}, headers=auth).status_code == 501
+    # open-path: 打开动作不支持 -> 501 引导「复制路径」(patch 地址 = common.open_path, 与既有守阵一致)
+    import auto_qb.webui.server.common as fs_common
+
+    def _unsupported(path, select=False):
+        raise fa_mod.NotSupported("nope")
+
+    monkeypatch.setattr(fs_common, "open_path", _unsupported)
+    mgr.store.groups = {(norm(root), ("a.mkv", )): ["HA"]}
+    encoded = encode_group_key((norm(root), ("a.mkv", )))
+    resp = client.post("/api/open-path", json={"kind": "group", "key": encoded}, headers=auth)
+    assert resp.status_code == 501 and "复制路径" in resp.json()["detail"]

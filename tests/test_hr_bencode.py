@@ -10,6 +10,11 @@
 - test_torrent_display_name: 名字解码与缺失兜底
 - test_rejects_malformed_input: 非字典开头 / 缺 info / 长度越界 / 截断 / 非法整数 / 嵌套过深
 - test_rejects_non_canonical_integers: 前导零与 -0 一律拒(避免算出与站点不一致的 hash)
+- test_bdecode_rejects_malformed_direct: bdecode 直调畸形(缺分隔符/意外结束/未闭合/非字节串键/非法字节)
+- test_skip_rejects_malformed_direct: _skip 同一套拒绝 + 合法列表/字典整段跳跃
+- test_info_span_rejects_unclosed_and_missing_info: 顶层字典未闭合 / 顶层没有 info 键
+- test_compute_infohashes_rejects_non_dict_info: info 值不是字典 -> 拒绝
+- test_read_bytes_rejects_missing_colon: 字节串长度后没有冒号
 """
 import base64
 import hashlib
@@ -143,3 +148,61 @@ def test_rejects_deep_nesting():
     deep = b"l" * 200 + b"e" * 200
     with pytest.raises(ValueError):
         bdecode(deep)
+
+
+# ==================== P1 覆盖率提升轮: 错误路径长尾 ====================
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        b"5",  # 字节串缺长度分隔符
+        b"",  # 数据意外结束(bdecode 直调)
+        b"l",  # 列表未闭合
+        b"d",  # 字典未闭合
+        b"di1e1:xe",  # 字典键不是字节串(守卫摘除后会解析出 {1: b"x"}, 判别力看这里)
+        b"x",  # 非法首字节
+    ],
+)
+def test_bdecode_rejects_malformed_direct(data):
+    """bdecode 直调的畸形形态(不经 info_span 的前置校验)一律 ValueError"""
+    with pytest.raises(ValueError):
+        bdecode(data)
+
+
+def test_skip_rejects_malformed_direct():
+    """_skip(定位 info 跨度的字节跳跃)与 bdecode 同一套畸形拒绝"""
+    from auto_qb.hr.bencode import _skip
+
+    with pytest.raises(ValueError):
+        _skip(b"l" * 200, 0)  # 嵌套过深
+    with pytest.raises(ValueError):
+        _skip(b"", 0)  # 数据意外结束
+    with pytest.raises(ValueError):
+        _skip(b"l", 0)  # 列表未闭合
+    with pytest.raises(ValueError):
+        _skip(b"d", 0)  # 字典未闭合
+    assert _skip(b"l1:ae", 0) == 5, "合法列表整段跳过"
+    assert _skip(b"d1:ai1ee", 0) == 8, "合法字典整段跳过"
+
+
+def test_info_span_rejects_unclosed_and_missing_info():
+    """顶层字典未闭合 / 顶层没有 info 键 各自的报错路径"""
+    with pytest.raises(ValueError, match="顶层字典未闭合"):
+        info_span(b"d")
+    with pytest.raises(ValueError, match="没有 info"):
+        info_span(b"d1:ai1ee")
+
+
+def test_compute_infohashes_rejects_non_dict_info():
+    """info 的值不是字典(如整数) -> 拒绝, 不产出错误 hash"""
+    with pytest.raises(ValueError, match="不是字典"):
+        compute_infohashes(b"d4:infoi1ee")
+
+
+def test_read_bytes_rejects_missing_colon():
+    """字节串长度后没有冒号 -> ValueError"""
+    from auto_qb.hr.bencode import _read_bytes
+
+    with pytest.raises(ValueError):
+        _read_bytes(b"5", 0)

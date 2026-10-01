@@ -13,6 +13,10 @@
 - test_abort_clears_task: 显式放弃单条等待
 - test_cancel_all_wakes_waiters: 叫停 -> 等待方立刻醒来(不等满超时), 表清空且晚到回传被拒
 - test_resume_clears_cancel: 恢复后能重新正常等回传(重启/热重载靠它)
+
+### P1 覆盖率提升轮: 结果 TTL 长尾
+- test_ttl_expires_unclaimed_results: 没人取走的回执超 TTL 清空
+- test_received_at_missing_does_not_crash_expiry: received_at=0 按当下起算不立刻过期
 """
 import threading
 
@@ -150,3 +154,32 @@ def test_resume_clears_cancel():
     queue.submit(HrResult(task_id=task.task_id, ok=True, url=URL, body=b"ok"))
     got = queue.wait(task.task_id, 1.0)
     assert got is not None and got.body == b"ok"
+
+
+# ==================== P1 覆盖率提升轮: 结果 TTL 长尾 ====================
+
+
+def test_ttl_expires_unclaimed_results():
+    """已回传但没人取走的结果超 TTL 也清掉(两个方向都会自然到期, 不无限堆积)"""
+    clock = Clock()
+    queue = HrTaskQueue(now_fn=clock, ttl=10.0)
+    task = queue.put("pt.example.com", TASK_PAGE, URL)
+    queue.take_batch()
+    assert queue.submit(HrResult(task_id=task.task_id, ok=True, url=URL, body=b"<html/>")) is True
+    assert queue.stats()["results"] == 1
+    clock.advance(11.0)
+    stats = queue.stats()
+    assert stats["results"] == 0, "没人取走的回执超 TTL 清空(经 stats 的 _expire_locked 生效)"
+
+
+def test_received_at_missing_does_not_crash_expiry():
+    """received_at 缺失(0)的回执按「当下」起算, 不立刻过期也不除零"""
+    clock = Clock()
+    queue = HrTaskQueue(now_fn=clock, ttl=10.0)
+    task = queue.put("pt.example.com", TASK_PAGE, URL)
+    queue.take_batch()
+    result = HrResult(task_id=task.task_id, ok=True, url=URL, body=b"x")
+    result.received_at = 0.0
+    assert queue.submit(result) is True
+    clock.advance(5.0)
+    assert queue.stats()["results"] == 1, "received_at=0 视为刚收到"

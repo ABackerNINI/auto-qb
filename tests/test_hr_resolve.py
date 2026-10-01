@@ -25,6 +25,14 @@
 - test_safety_display_site_unsatisfied_failed: C 终态 → failed/site_unsatisfied(独立红档)
 - test_safety_display_released_safe: 放行记录 → safe/site_released
 - test_safety_display_no_evidence: 行 4 / 未接入 → satisfied×triggered 三分(达标 safe / 未达标+触发 danger / 未达标+未触发 warning 疑似辅种; 计划 26-09-30-0559)
+
+### P1 覆盖率提升轮: 判定与漂移长尾
+- test_drift_reason_all_branches: 漂移四条人话分支 + 无快照可比不判漂移
+- test_state_text_three_states: state_text 三态人话
+- test_site_view_empty_and_has_evidence: HrSiteView.empty 与 has_evidence 三来源判据
+- test_row3_release_without_anchor_skips_drift_check: 行 3 不传锚点跳过漂移检查
+- test_safety_display_exempt_and_graduation_labels: 免罪/毕业展示标签(带事实按档位, 无事实按来源)
+- test_build_site_view_skips_unknown_lane_entries: 空档位条目不进判定面
 """
 from typing import Optional
 
@@ -42,12 +50,19 @@ from auto_qb.hr.model import (
     HrVerified,
 )
 from auto_qb.hr.resolve import (
+    SAFETY_SAFE,
+    SRC_SITE_EXEMPT,
+    SRC_SITE_SATISFIED,
     HrAnchor,
     HrIdentity,
+    HrJudgement,
     HrSiteView,
+    build_site_view,
     judge_record,
+    resolve_identity,
     safety_display,
 )
+from auto_qb.hr.model import CHANNEL_OK
 
 NOW = 1_700_000_000.0
 TID = 101
@@ -356,3 +371,93 @@ def test_safety_display_no_evidence():
     assert (d.safety, d.src) == ("warning", "local"), "疑似辅种黄档(转移种常态, 不代表无义务)"
     d = safety_display(j, triggered=False, satisfied=True)
     assert (d.safety, d.src) == ("safe", "local"), "达标即 safe(触发与否不再影响档位)"
+
+
+# ==================== P1 覆盖率提升轮: 判定与漂移长尾 ====================
+
+
+def _ver(**kw):
+    from auto_qb.hr.model import HrVerified
+
+    base = dict(
+        infohash="H",
+        tid=1,
+        verified_ts=1.0,
+        source=SOURCE_NOT_LISTED,
+        anchor_added_on=100,
+        anchor_downloaded=1000,
+        anchor_completion_on=500,
+        anchor_progress=1.0,
+    )
+    base.update(kw)
+    return HrVerified(**base)
+
+
+def test_drift_reason_all_branches():
+    """锚点漂移四条人话分支(added_on / downloaded 缩水 / downloaded 增长 / completion_on / progress 退回)"""
+    a = HrAnchor(added_on=100, downloaded=1000, completion_on=500, progress=1.0)
+    assert a.drift_reason(_ver()) == "", "全等不算漂移"
+    assert "added_on" in a.drift_reason(_ver(anchor_added_on=999))
+    assert "变小" in HrAnchor(added_on=100, downloaded=900, completion_on=500, progress=1.0).drift_reason(_ver())
+    assert "增长" in HrAnchor(added_on=100, downloaded=2000, completion_on=500, progress=1.0).drift_reason(_ver())
+    assert "completion_on" in HrAnchor(added_on=100, downloaded=1000, completion_on=501,
+                                       progress=1.0).drift_reason(_ver())
+    assert "progress" in HrAnchor(added_on=100, downloaded=1000, completion_on=500, progress=0.5).drift_reason(_ver())
+    # 记录侧未记的字段不参与漂移(缺省快照不凭空判)
+    no_snap = _ver(anchor_added_on=0, anchor_downloaded=0, anchor_completion_on=-1, anchor_progress=0.0)
+    assert a.drift_reason(no_snap) == "", "无快照可比"
+
+
+def test_state_text_three_states():
+    """state_text 三态人话(管束 / 放行 / 无证据)"""
+    assert HrJudgement(identity=HrIdentity.HR).state_text == "受管束"
+    assert HrJudgement(identity=HrIdentity.RELEASED).state_text == "已核实·放行"
+    assert HrJudgement(identity=HrIdentity.NO_EVIDENCE).state_text == "无站点证据(本地兜底)"
+
+
+def test_site_view_empty_and_has_evidence():
+    """HrSiteView.empty 工厂与 has_evidence 判据(三来源任一即有证据)"""
+    v = HrSiteView.empty("s")
+    assert v.site == "s" and v.has_evidence is False
+    from auto_qb.hr.model import HrEntry
+
+    entry = HrEntry(tid=1, name="x")
+    with_hit = HrSiteView(site="s", lane_a={"H": entry})
+    assert with_hit.has_evidence is True
+    with_verified = HrSiteView(site="s", verified={"H": _ver()})
+    assert with_verified.has_evidence is True
+
+
+def test_row3_release_without_anchor_skips_drift_check():
+    """行 3 放行记录不传锚点 -> 不做漂移检查, 直接放行(别的客户端下载本地看不见)"""
+    from auto_qb.hr.resolve import resolve_identity
+
+    view = HrSiteView(site="s", verified={"H": _ver()})
+    res = resolve_identity(view, "H", anchor=None)
+    assert res.identity is HrIdentity.RELEASED
+
+
+def test_safety_display_exempt_and_graduation_labels():
+    """免罪/毕业两类放行的展示标签(带命中行事实时按档位, 无事实时按放行来源)"""
+    from auto_qb.hr.model import HrEntry
+    from auto_qb.hr.resolve import HrSiteFacts, HrJudgement
+
+    j = HrJudgement(identity=HrIdentity.RELEASED, facts=HrSiteFacts.of(HrEntry(tid=1, lane=LANE_EXEMPT)))
+    d = safety_display(j, triggered=False, satisfied=True)
+    assert (d.safety, d.src) == (SAFETY_SAFE, SRC_SITE_EXEMPT)
+    j2 = HrJudgement(identity=HrIdentity.RELEASED, released_src=SOURCE_SATISFIED)
+    d2 = safety_display(j2, triggered=False, satisfied=True)
+    assert (d2.safety, d2.src) == (SAFETY_SAFE, SRC_SITE_SATISFIED)
+
+
+def test_build_site_view_skips_unknown_lane_entries():
+    """档位为空(IDLE)的条目不进任何判定面(既非考察中也非终态)"""
+    from auto_qb.hr.model import HrEntry, HrSiteData
+
+    data = HrSiteData()
+    idle = HrEntry(tid=1, name="x")
+    idle.lane = ""
+    idle.infohash_v1 = "H1"
+    data.index[1] = idle
+    view = build_site_view("s", "list", data, channel_state=CHANNEL_OK, generated_at=1.0)
+    assert view.lane_a == {} and view.lane_terminal == {}

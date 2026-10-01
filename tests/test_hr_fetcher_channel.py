@@ -17,6 +17,10 @@
 - test_cancelled_queue_reports_channel_unavailable: 通道被叫停 -> HrChannelStopped(可区分, 不计失败/熔断)
 - test_endpoint_not_listening_fails_fast: 端点未在监听 -> 立刻报无通道(不下发任务 / 不等满 request_timeout)
 - test_requests_counter: 排障用的下发计数
+
+### P1 覆盖率提升轮: 无通道与 URL 解析长尾
+- test_null_fetcher_rejects_both_kinds: NullFetcher 对页面与 .torrent 都报不可用
+- test_tid_of_malformed_and_missing: 非数字 id 与无 id 都回 0
 """
 import threading
 import time
@@ -259,3 +263,24 @@ def test_requests_counter():
         assert fetcher.requests == 2
     finally:
         auto.close()
+
+
+# ==================== P1 覆盖率提升轮: 无通道与 URL 解析长尾 ====================
+
+
+def test_null_fetcher_rejects_both_kinds():
+    """NullFetcher 对页面与 .torrent 都报「通道不可用」(不静默直连)"""
+    fetcher = NullFetcher("未启用")
+    with pytest.raises(HrChannelUnavailable):
+        fetcher.get_text("https://pt.example.com/myhr.php")
+    with pytest.raises(HrChannelUnavailable):
+        fetcher.get_bytes("https://pt.example.com/download.php?id=1")
+
+
+def test_tid_of_malformed_and_missing():
+    """排障展示用的 tid 提取: 非数字 id 与无 id 参数都回 0"""
+    from auto_qb.hr.fetcher import _tid_of
+
+    assert _tid_of("https://pt.example.com/download.php?id=abc") == 0
+    assert _tid_of("https://pt.example.com/download.php") == 0
+    assert _tid_of("https://pt.example.com/download.php?id=42") == 42

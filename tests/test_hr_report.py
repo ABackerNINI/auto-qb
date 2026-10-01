@@ -25,6 +25,16 @@
   尾注标「计数自证空集, 无需人工确认」, 全文不再出现 --hr-confirm-empty 话术(计划 26-09-29-2036 §2.5)
 - test_period_stats_consistency_and_gap: P 反算一致率与离散(前置实测2.的证据口径)
 - test_run_hr_resume_clears_suspension: --hr-resume 清停用 + 记恢复痕迹; 未停用如实说明
+
+### P1 覆盖率提升轮: 报告层长尾
+- test_scope_of_url_variants: URL 档位提取(hrtype=/status=/都没有)
+- test_confirm_empty_disabled_reports_hint: 确认戳在总开关关闭时明确提示非 0
+- test_confirm_empty_readonly_and_lock_busy: 只读退化与锁占用各自的提示 + 非 0
+- test_status_row_cells_marks_observation: 观察期行的档位文案后缀
+- test_ellipsis_respects_cjk_double_width: CJK 双宽截断(保最后 1 格给 …)
+- test_stamp_text_ts_zero_is_dash: 无时刻显示 "-"
+- test_print_channel_lists_shared_dir_when_configured: 配了共享目录时明示
+- test_print_site_includes_view_line: 走查报告视图行(view 非空输出)
 """
 import io
 import pathlib
@@ -36,7 +46,7 @@ import pytest
 
 from auto_qb.config.models import Config, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 from auto_qb.hr.fetcher import HrChannelUnavailable, NullFetcher
-from auto_qb.hr.model import FETCH_LANES
+from auto_qb.hr.model import FETCH_LANES, HrEntry
 from auto_qb.hr.adapters.nexusphp import NexusPhpMyhrAdapter
 from auto_qb.hr.ratelimit import day_key
 from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_confirm_empty, run_hr_once, run_hr_status
@@ -491,3 +501,111 @@ def test_run_hr_status_zero_row_counter_attested_tail(tmp_path, monkeypatch):
     assert "计数自证空集, 无需人工确认" in text
     assert "未确认 —— 零行波不签发放行" not in text
     assert "--hr-confirm-empty" not in text, "计数自证的站点不再被引导去人工对账"
+
+
+# ==================== P1 覆盖率提升轮: 报告层长尾 ====================
+
+
+def test_scope_of_url_variants():
+    """URL 档位提取: hrtype= / status=(CarPT 变体) / 都没有 -> ?"""
+    from auto_qb.hr.report import _scope_of
+
+    assert _scope_of("https://pt.example.com/myhr.php?hrtype=A&page=2") == "A"
+    assert _scope_of("https://carpt.net/myhr.php?status=1") == "1"
+    assert _scope_of("https://pt.example.com/index.php") == "?"
+
+
+def test_confirm_empty_disabled_reports_hint(tmp_path):
+    """--hr-confirm-empty 在总开关关闭时明确提示并返回非 0(不静默成功)"""
+    out = io.StringIO()
+    code = run_hr_confirm_empty(_config(tmp_path, enabled=False), [SITE], out=out)
+    assert code == 1 and "hr_check.enabled=false" in out.getvalue()
+
+
+def test_confirm_empty_readonly_and_lock_busy(tmp_path, monkeypatch):
+    """写戳遇只读退化(锁自检失败)/锁被占用 -> 各自明确提示并返回非 0"""
+    cfg = _config(tmp_path)
+    # 只读退化(锁自检判不生效): run_hr_confirm_empty 每次新建服务/存储, 锁自检基线从 0 起算,
+    # 无法经文件制造回退 —— 在自检决策点注入退化条件, 验证报告层的提示与退出码
+    monkeypatch.setattr(HrSiteStore, "_check_lock_effective", lambda self, data: False)
+    out = io.StringIO()
+    assert run_hr_confirm_empty(cfg, [SITE], out=out) == 1
+    assert "锁自检失败" in out.getvalue()
+    monkeypatch.undo()
+    # 锁被占用(真实互斥: 其它实例持锁)
+    out2 = io.StringIO()
+    outsider = HrSiteStore(SITE, str(pathlib.Path(cfg.data_dir) / "hr"), lock_timeout=0.0, owner="other")
+    with outsider.hold():
+        code = run_hr_confirm_empty(cfg, [SITE], out=out2)
+    assert code == 1 and "锁被占用" in out2.getvalue()
+
+
+def test_status_row_cells_marks_observation():
+    """观察期中的行: 档位文案带「观察期N」后缀(明细表一眼可辨)"""
+    from auto_qb.hr.report import _status_row_cells
+
+    entry = HrEntry(tid=11, name="Example.Show.S01", lane="A", downloaded_bytes=1024**3, missing_streak=1)
+    cells = _status_row_cells(entry)
+    assert cells[1] == "考察中(观察期1)"
+    plain = HrEntry(tid=12, name="Example.Show.S02", lane="B")
+    assert _status_row_cells(plain)[1] == "已达标"
+
+
+def test_ellipsis_respects_cjk_double_width():
+    """按显示格宽截断: CJK 算 2 格, 超宽保最后 1 格给 …"""
+    from auto_qb.hr.report import _dwidth, _ellipsis
+
+    short = "Example.S01"
+    assert _ellipsis(short, 40) == short, "未超宽原样返回"
+    wide = "虽然我不是完美恶女～雏宫蝶鼠替换传～" * 3
+    cut = _ellipsis(wide, 20)
+    assert _dwidth(cut) <= 20 and cut.endswith("…")
+    assert _dwidth(cut[:-1]) <= 19, "正文部分不超可用格宽"
+
+
+def test_stamp_text_ts_zero_is_dash():
+    """无时刻(0/None 语义)显示 '-'(不渲染 1970)"""
+    from auto_qb.hr.report import stamp_text_ts
+
+    assert stamp_text_ts(0.0) == "-"
+    assert stamp_text_ts(1700000000.0).startswith("20")
+
+
+def test_print_channel_lists_shared_dir_when_configured(tmp_path):
+    """配了 shared_dir: 通道自检段明示共享目录(多实例共用同一份数据)"""
+    from auto_qb.hr.report import _print_channel
+
+    cfg = _config(tmp_path)
+    cfg.hr_check.shared_dir = "R:/Shared/hr"
+    service = HrRefreshService(
+        data_dir=str(tmp_path),
+        global_conf=cfg.hr_check,
+        site_confs={SITE: site_conf()},
+        fetcher=NullFetcher("x"),
+        owner="t",
+        persist=False,
+    )
+    out = io.StringIO()
+    _print_channel(cfg, service, out)
+    assert "R:/Shared/hr" in out.getvalue() and "多实例共用" in out.getvalue()
+
+
+def test_print_site_includes_view_line(tmp_path):
+    """走查报告的视图行: 命中/放行/通道人话(view 非空时输出)"""
+    from auto_qb.hr.model import CHANNEL_OK
+    from auto_qb.hr.report import _print_site
+    from auto_qb.hr.service import HrRefreshResult
+    from auto_qb.hr.resolve import HrEntry, HrSiteView
+
+    result = HrRefreshResult(site=SITE, action="refreshed", reason="", pages_fetched=3)
+    view = HrSiteView(
+        site=SITE,
+        listing="list",
+        channel_state=CHANNEL_OK,
+        generated_at=1.0,
+        lane_a={"H": HrEntry(tid=1, name="x")},
+        verified={"H2": None} or {},
+    )
+    out = io.StringIO()
+    _print_site(result, view, out)
+    assert "考察中命中=1" in out.getvalue() and "通道=" in out.getvalue()

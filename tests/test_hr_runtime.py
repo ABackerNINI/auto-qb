@@ -37,6 +37,11 @@
 - test_start_stop_messages_are_info_not_warning: 启动/关闭类消息一律 INFO(它们会被 notify 推成系统通知)
 - test_apply_remount_message_is_info: 热重载重挂端点也是预期动作, 同样只记 INFO
 - test_site_origins_served_live_for_extension: /api/hr/sites 按配置现派生授权清单, 热加站点即生效且 mode=off 不出现
+
+### P1 覆盖率提升轮: 运行时门面长尾
+- test_sleeper_raises_immediately_when_stop_already_set: 关停标记已置 -> 进等待前即抛 HrChannelStopped
+- test_wake_is_safe_and_forwards_to_worker: wake 转发线程(未启动空转)
+- test_events_summaries_direct: events 连续失效文案与站点稳定排序直调
 """
 import logging
 import socket
@@ -652,3 +657,34 @@ def test_request_refresh_delegates_to_worker_and_accepts(tmp_path):
         assert outcome["requested"] == ["pt.example.com"] and "已受理" in outcome["note"]
     finally:
         runtime.stop()
+
+
+# ==================== P1 覆盖率提升轮: 运行时门面长尾 ====================
+
+
+def test_sleeper_raises_immediately_when_stop_already_set(tmp_path):
+    """关停标记已置位时进入 sleeper -> 立刻抛 HrChannelStopped(不进入等待循环)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    runtime._sleep_stop.set()
+    with pytest.raises(HrChannelStopped):
+        runtime.sleeper(30.0)
+
+
+def test_wake_is_safe_and_forwards_to_worker(tmp_path):
+    """wake 转发给取数线程(未启动时也安全不抛)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    runtime.wake()  # 未启动: worker 为 None, 空转
+    runtime.start()
+    try:
+        runtime.wake()  # 已启动: 转发 worker.wake()
+    finally:
+        runtime.stop()
+
+
+def test_events_summaries_direct():
+    """events 文案单点直调: 连续失效升级文案 / 站点清单稳定排序"""
+    from auto_qb.hr import events
+
+    text = events.lane_persistent_failure("example", "A", 3, "表头缺失")
+    assert "已连续 3 波失效" in text and "example" in text
+    assert events.summarize_sites(["beta", "alpha"]) == "alpha, beta"

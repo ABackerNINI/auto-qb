@@ -34,6 +34,14 @@
 - test_http_connection_header_closes: 每请求关闭连接(不在监听套接字上留半开连接)
 - test_handler_survives_broken_connection: 客户端半路断开不打死端点线程, 后续请求照常
 - test_threads_do_not_leak_on_stop: 停止后端点线程真的退出(不残留)
+
+### P1 覆盖率提升轮: 端点 HTTP 适配层长尾
+- test_route_result_mixed_batch_counts_rejections: 混合回传 accepted/rejected 分开计数
+- test_http_options_preflight_hits_handler_layer: 真 HTTP OPTIONS 走 do_OPTIONS(204 无体)
+- test_http_body_too_large_is_413: Content-Length 超限在读体前 413
+- test_http_route_exception_maps_500: 路由异常 -> 500 且线程不死, 后续请求照常
+- test_stop_timeout_and_close_error_are_contained: 停机超时返回 False; 套接字关闭报错吞掉
+- test_header_and_content_length_units: 头解析兼容 dict/Message/异常形状 + Content-Length 容错
 """
 import json
 import socket
@@ -42,6 +50,7 @@ import time
 import urllib.error
 import urllib.request
 from http.client import HTTPConnection
+from types import SimpleNamespace
 
 import pytest
 
@@ -384,3 +393,121 @@ def test_threads_do_not_leak_on_stop():
     assert server.stop()
     time.sleep(0.05)
     assert threading.active_count() <= before + 1, "端点线程要真的退出(不能残留)"
+
+
+# ==================== P1 覆盖率提升轮: 端点 HTTP 适配层长尾 ====================
+
+
+def test_route_result_mixed_batch_counts_rejections():
+    """一批回传里有效与不匹配并存 -> accepted/rejected 分开计数(200, 不整批丢)"""
+    server = make_server()
+    task = server.queue.put("pt.example.com", "page", URL)
+    server.queue.take_batch()
+    payload = json.dumps(
+        {
+            "results":
+                [
+                    {
+                        "id": task.task_id,
+                        "ok": True,
+                        "url": URL,
+                        "text": "<html>hr</html>"
+                    },
+                    {
+                        "id": "ghost-task",
+                        "ok": True,
+                        "url": URL,
+                        "text": "x"
+                    },
+                ]
+        }
+    )
+    status, _h, body = server.route("POST", API_RESULT, {TOKEN_HEADER: TOKEN}, payload.encode())
+    assert status == 200
+    data = json.loads(body)
+    assert data["accepted"] == 1 and data["rejected"] == 1
+
+
+def test_http_options_preflight_hits_handler_layer():
+    """真 HTTP OPTIONS 预检: 走 do_OPTIONS 分派, 204 无响应体(空 payload 不写体)"""
+    server = make_server()
+    handle = server.start()
+    try:
+        conn = HTTPConnection("127.0.0.1", handle.port, timeout=5)
+        conn.request("OPTIONS", API_TASKS, headers={"Origin": ORIGIN})
+        resp = conn.getresponse()
+        assert resp.status == 204
+        assert resp.read() == b""
+        assert resp.getheader("Access-Control-Allow-Methods") is not None
+        conn.close()
+    finally:
+        server.stop()
+
+
+def test_http_body_too_large_is_413():
+    """Content-Length 超限的 POST 在读体之前就 413(不白收几 MB)"""
+    server = make_server()
+    handle = server.start()
+    try:
+        conn = HTTPConnection("127.0.0.1", handle.port, timeout=5)
+        conn.request("POST", API_RESULT, headers={TOKEN_HEADER: TOKEN, "Content-Length": "99999999"})
+        resp = conn.getresponse()
+        assert resp.status == 413
+        assert b"body too large" in resp.read()
+        conn.close()
+    finally:
+        server.stop()
+
+
+def test_http_route_exception_maps_500(monkeypatch):
+    """路由层抛异常(编程错误) -> 500 内部错误, 端点线程不退出, 后续请求照常"""
+    server = make_server()
+    handle = server.start()
+    try:
+        monkeypatch.setattr(server, "route", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("boom")))
+        conn = HTTPConnection("127.0.0.1", handle.port, timeout=5)
+        conn.request("GET", API_TASKS, headers={TOKEN_HEADER: TOKEN})
+        resp = conn.getresponse()
+        assert resp.status == 500
+        assert b"internal error" in resp.read()
+        conn.close()
+        monkeypatch.undo()
+        status, _body = _http("GET", handle.port, API_TASKS, token=TOKEN)
+        assert status == 200, "单请求异常不影响后续请求"
+    finally:
+        server.stop()
+
+
+def test_stop_timeout_and_close_error_are_contained():
+    """停机等待超时(线程未退) -> 返回 False + ERROR; 套接字关闭报错也吞掉(已停止是事实)"""
+    server = make_server()
+    stalled = threading.Thread(target=time.sleep, args=(30, ), name="stalled-endpoint", daemon=True)
+    stalled.start()
+
+    class _StuckHandle:
+        def __init__(self):
+            self.server = SimpleNamespace(server_close=lambda: (_ for _ in ()).throw(OSError(9, "bad fd")))
+
+        def stop(self):
+            pass
+
+        def wait(self, timeout=None):
+            return False
+
+    server._handle = _StuckHandle()
+    ok = server.stop(timeout=0.05)
+    assert ok is False, "线程没退出如实报告 False"
+    server._handle = None  # 句柄已被 stop 置 None 前的兜底清理(stub 场景)
+
+
+def test_header_and_content_length_units():
+    """头解析兼容 dict 与 email.message 两种载体 + 容错(无 get/无 items/坏数字)"""
+    from auto_qb.hr.server import _content_length, _header
+
+    assert _header(None, "X-Hr-Token") == ""
+    assert _header({"X-Hr-Token": "t"}, "x-hr-token") == "t", "dict 载体大小写不敏感"
+    assert _header({"X-Hr-Token": ""}, "X-Hr-Token") == "", "空值按缺失处理(走 items 兜底)"
+    assert _header(42, "X-Hr-Token") == "", "非载体形状 -> 空串"
+    assert _content_length({"Content-Length": "12"}) == 12
+    assert _content_length({"Content-Length": "abc"}) == 0
+    assert _content_length({}) == 0

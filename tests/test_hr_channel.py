@@ -16,6 +16,12 @@
 - test_decode_json_rejects_garbage: 非 JSON 字节 -> HrChannelError
 - test_host_and_path_helpers: host_of/path_of 对端口/查询串/无 scheme/无路径的处理
 - test_describe_token_source: 密钥来源只报来源不报内容
+
+### P1 覆盖率提升轮: 通道与白名单长尾
+- test_token_regenerates_when_file_empty: hr.token 文件存在但为空 -> 重新生成
+- test_url_policy_skips_sites_without_page_url: 无 host 站点不进白名单; download_path 无路径不添; 未登记站点拒绝
+- test_absolute_download_without_base_returns_path_verbatim: 无页面地址时下载路径原样返回 + _scheme_of 边界
+- test_result_to_json_carries_optional_fields: to_json 按需带 error/retry_after/kind
 """
 import logging
 
@@ -215,3 +221,57 @@ def test_describe_token_source(tmp_path):
     assert describe_token_source("", str(tmp_path)) == "none"
     resolve_token("", str(tmp_path))
     assert describe_token_source("", str(tmp_path)) == "file"
+
+
+# ==================== P1 覆盖率提升轮: 通道与白名单长尾 ====================
+
+
+def test_token_regenerates_when_file_empty(tmp_path):
+    """hr.token 文件存在但为空 -> 重新生成并覆写(不沿用空串)"""
+    (tmp_path / "hr.token").write_text("", encoding="ascii")
+    token = resolve_token("", str(tmp_path))
+    assert len(token) == 64
+    assert (tmp_path / "hr.token").read_text(encoding="ascii").strip() == token
+
+
+def test_url_policy_skips_sites_without_page_url():
+    """hr_page_url 解析不出 host 的站点不进白名单; download_path 无路径形态不添路径"""
+    from auto_qb.config.models import SiteHrCheckConfig
+
+    ok_conf = site_conf()
+    confs = {
+        "ok":
+            ok_conf,
+        "bad":
+            SiteHrCheckConfig(enabled=True, tracker="bad", hr_page_url="", download_path=""),
+        "nodl":
+            SiteHrCheckConfig(
+                enabled=True, tracker="nodl", hr_page_url="https://dl.example.com/myhr.php", download_path=""
+            ),
+    }
+    policy = UrlPolicy(confs)
+    assert "bad" not in policy._hosts and "nodl" in policy._hosts
+    assert policy._hosts["nodl"][1] == ("/myhr.php", ), "download_path 无路径形态不添空路径"
+    assert policy.site_of("ftp://x") == "", "无 scheme 的 URL 取不到 host"
+    assert policy.allows("unregistered", ok_conf.hr_page_url) is False, "未登记站点一律拒绝"
+
+
+def test_absolute_download_without_base_returns_path_verbatim():
+    """无 hr_page_url 时相对下载路径原样返回(只用于取路径与域名的辅助函数)"""
+    from auto_qb.config.models import SiteHrCheckConfig
+    from auto_qb.hr.channel import _absolute_download, _scheme_of
+
+    conf = SiteHrCheckConfig(enabled=True, tracker="t", hr_page_url="", download_path="/download.php?id={id}")
+    assert _absolute_download(conf) == "/download.php?id={id}"
+    assert _scheme_of("/no-scheme") == ""
+    assert _scheme_of("HTTPS://x") == "https"
+
+
+def test_result_to_json_carries_optional_fields():
+    """to_json 按需带 error / retry_after / kind(空字段不出键)"""
+    plain = HrResult(task_id="t1", ok=True, status=200, url="https://x", body=b"y").to_json()
+    assert "error" not in plain and "retry_after" not in plain and "kind" not in plain
+    full = HrResult(
+        task_id="t2", ok=False, status=0, url="https://x", body=b"", error="boom", retry_after=12.0, kind="ext-quota"
+    ).to_json()
+    assert full["error"] == "boom" and full["retry_after"] == 12.0 and full["kind"] == "ext-quota"

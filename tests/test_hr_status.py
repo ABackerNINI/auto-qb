@@ -7,6 +7,15 @@
 - test_entry_details_verified_join: verified join —— 有记录→ts+source 原值+人话 / 无记录→未核实 / v2 键也能命中
 - test_entry_details_source_texts: 放行来源人话映射(D 免罪 / 未列出 / B 毕业); 未知原值回落原文不静默丢
 - test_entry_details_field_surface: 导出字段面 = §3 P0+P1 全集; remain_seconds 等 P2 字段不得出现(决策点③)
+
+### P1 覆盖率提升轮: 展示层与模型长尾
+- test_duration_text_tiers: 人话时长四档(天/时/分/秒) + 负数钳 0
+- test_lane_and_quota_status_to_dict_roundtrip_keys: LaneStatus/QuotaStatus 的 to_dict = asdict
+- test_blocking_reason_stale_with_next_wave_text: 过复用窗的兜底文案(带/不写下次拉取时刻)
+- test_model_lane_predicates_and_done_epoch_edges: lane_is_satisfied/exempt + done_epoch 空值与坏值不猜
+- test_model_infohash_of_falls_back_to_downloaded: infohash_of 回落永久层(v1 优先, 缺失回落 v2)
+- test_model_index_by_infohash_skips_inactive_and_empty: 反查表跳过非活跃与空 hash
+- test_model_from_json_drops_invalid_verified_records: 放行记录脏数据(无 hash/无时刻)不入账
 """
 from auto_qb.hr import report
 from auto_qb.hr.model import (
@@ -17,7 +26,16 @@ from auto_qb.hr.model import (
     HrSiteData,
     HrVerified,
 )
-from auto_qb.hr.status import SOURCE_TEXTS, entry_details, need_seed_text
+from auto_qb.hr.resolve import HrSiteView
+from auto_qb.hr.status import (
+    LaneStatus,
+    QuotaStatus,
+    SOURCE_TEXTS,
+    blocking_reason,
+    duration_text,
+    entry_details,
+    need_seed_text,
+)
 
 
 def _site(entries) -> HrSiteData:
@@ -173,3 +191,96 @@ def test_entry_details_field_surface():
     assert "remain_seconds" not in row, "决策点③: 考核窗口倒计时不得进表(2026-09-25 误读教训)"
     assert row["dl_id"] == 173107 and row["done_iso"] == "2026-09-20 10:00:00"
     assert row["lane_text"] == "考察中" and row["first_seen"] == 111.0 and row["last_seen"] == 222.0
+
+
+# ==================== P1 覆盖率提升轮: 展示层与模型长尾 ====================
+
+
+def test_duration_text_tiers():
+    """人话时长四档(天/时/分/秒) —— 报告与界面共用一处口径"""
+    assert duration_text(2 * 86400 + 3 * 3600) == "2d3h"
+    assert duration_text(3 * 3600 + 4 * 60) == "3h4m"
+    assert duration_text(5 * 60 + 6) == "5m6s"
+    assert duration_text(7) == "7s"
+    assert duration_text(-5) == "0s", "负数钳到 0"
+
+
+def test_lane_and_quota_status_to_dict_roundtrip_keys():
+    """两个展示 dataclass 的 to_dict = asdict(WebUI JSON 友好口径)"""
+    lane = LaneStatus(lane="A", status="ok", pages=2, rows=5, text="x")
+    assert lane.to_dict()["lane"] == "A" and lane.to_dict()["pages"] == 2
+    quota = QuotaStatus(day=3, day_max=240, left=237, text="y")
+    assert quota.to_dict()["day"] == 3 and quota.to_dict()["left"] == 237
+
+
+def test_blocking_reason_stale_with_next_wave_text():
+    """数据过复用窗时的兜底文案: 有下次拉取时刻带时刻, 没有则省略"""
+    view = HrSiteView(site="s", lane_a={"H": HrEntry(tid=1, name="x")})
+    data = HrSiteData()
+    data.wave.releases_enabled = True
+    assert "下次拉取" in blocking_reason(view, data, stale=True, next_wave_at=1234.5)
+    assert "立即拉取" in blocking_reason(view, data, stale=True, next_wave_at=0.0)
+    assert blocking_reason(view, data, stale=False) == ""
+
+
+def test_model_lane_predicates_and_done_epoch_edges():
+    """model 判定谓词与完成时间解析边界(空值/坏值不猜)"""
+    from auto_qb.hr.model import lane_is_exempt, lane_is_satisfied
+
+    assert lane_is_satisfied("B") and not lane_is_satisfied("A")
+    assert lane_is_exempt("D") and not lane_is_exempt("B")
+    entry = HrEntry(tid=1, name="x", done_iso="")
+    assert entry.done_epoch is None, "无完成时间 -> None"
+    entry.done_iso = "not-a-date"
+    assert entry.done_epoch is None, "解析不了 -> None(不猜)"
+
+
+def test_model_infohash_of_falls_back_to_downloaded():
+    """infohash_of: 索引无该 tid 时回落永久层已取记录"""
+    from auto_qb.hr.model import HrDownloaded
+
+    data = HrSiteData()
+    assert data.infohash_of(9) == "", "两处都没有 -> 空串"
+    data.downloaded[9] = HrDownloaded(tid=9, infohash_v1="V1", infohash_v2="V2")
+    assert data.infohash_of(9) == "V1"
+    data.downloaded[9] = HrDownloaded(tid=9, infohash_v1="", infohash_v2="V2")
+    assert data.infohash_of(9) == "V2", "v1 缺失回落 v2"
+
+
+def test_model_index_by_infohash_skips_inactive_and_empty():
+    """反查表: 非活跃条目与空 hash 都不收"""
+    active = HrEntry(tid=1, name="a")
+    active.infohash_v1 = "HA"
+    inactive = HrEntry(tid=2, name="b")
+    inactive.infohash_v1 = "HB"
+    inactive.active = False
+    nohash = HrEntry(tid=3, name="c")
+    data = HrSiteData()
+    data.index = {1: active, 2: inactive, 3: nohash}
+    assert data.index_by_infohash() == {"HA": 1}
+
+
+def test_model_from_json_drops_invalid_verified_records():
+    """from_json: 无 infohash / 无时刻的放行记录不入账(脏数据不装进内存)"""
+    raw = {
+        "verified":
+            [
+                {
+                    "infohash": "OK",
+                    "tid": 1,
+                    "verified_ts": 5.0
+                },
+                {
+                    "infohash": "",
+                    "tid": 2,
+                    "verified_ts": 5.0
+                },
+                {
+                    "infohash": "BAD",
+                    "tid": 3,
+                    "verified_ts": 0.0
+                },
+            ]
+    }
+    data = HrSiteData.from_json(raw)
+    assert set(data.verified) == {"OK"}

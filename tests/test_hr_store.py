@@ -36,6 +36,7 @@ from auto_qb.hr.model import (
     HrVerified,
     HrWaveMeta,
 )
+import auto_qb.hr.store as hr_store
 from auto_qb.hr.store import HrLockBusy, HrSiteStore, hr_dir
 
 
@@ -326,3 +327,99 @@ def test_schema_migration_logs_once(tmp_path, monkeypatch, caplog):
             assert err is None
     infos = [r for r in caplog.records if r.levelno == logging.INFO and "已迁移" in r.getMessage()]
     assert len(infos) == 1, f"迁移 INFO 只报一次: {[i.getMessage() for i in infos]}"
+
+
+# ==================== P1 覆盖率提升轮: 存储层错误路径长尾 ====================
+
+
+def test_read_oserror_reports_and_keeps_hint(tmp_path, monkeypatch):
+    """站点文件读取失败(OSError) -> 报「读取失败」, 取证提示带文件大小"""
+    store = HrSiteStore("s", str(tmp_path))
+    store.path.write_text("x" * 128, encoding="utf-8")
+
+    def boom(self, *a, **kw):
+        raise PermissionError(13, "拒绝访问")
+
+    monkeypatch.setattr("pathlib.Path.read_text", boom)
+    data, err, recoverable = store._read_full()
+    assert data.index == {} and err and "站点文件读取失败" in err
+    assert recoverable is True and "(文件 128 字节)" in err, "text 缺失的取证提示按大小描述"
+
+
+def test_root_not_dict_is_bad_file(tmp_path):
+    """根节点不是字典(如数组) -> 「坏文件」可以从 .bak 兜底"""
+    store = HrSiteStore("s", str(tmp_path))
+    store.path.write_text("[1, 2]", encoding="utf-8")
+    data, err, recoverable = store._read_full()
+    assert "根节点不是字典" in err and recoverable is True
+
+
+def test_field_parse_failure_reported(tmp_path, monkeypatch):
+    """字段解析失败(TypeError/ValueError/KeyError) -> 报「字段解析失败」(坏文件, 可恢复)"""
+    store = HrSiteStore("s", str(tmp_path))
+    store.path.write_text(json.dumps({"schema_version": versioning.CURRENT_VERSIONS["hr_site"]}), encoding="utf-8")
+
+    def boom(cls, raw):
+        raise ValueError("坏字段")
+
+    monkeypatch.setattr(hr_store.HrSiteData, "from_json", classmethod(boom))
+    data, err, recoverable = store._parse(store.path.read_text(encoding="utf-8"))
+    assert "字段解析失败" in err and recoverable is True
+    monkeypatch.undo()
+
+
+def test_quarantine_absent_file_returns_empty(tmp_path):
+    """文件不存在时 quarantine 无事可做 -> 空串"""
+    store = HrSiteStore("never", str(tmp_path))
+    assert store.quarantine() == ""
+
+
+def test_quarantine_failure_returns_empty(tmp_path, monkeypatch):
+    """坏文件挪不走(被占用等) -> 返回空串, 调用方继续跑但须知悉"""
+    store = HrSiteStore("s", str(tmp_path))
+    store.path.write_text("{bad json", encoding="utf-8")
+
+    def boom(src, dst):
+        raise OSError(13, "拒绝访问")
+
+    monkeypatch.setattr(hr_store.os, "replace", boom)
+    assert store.quarantine() == ""
+    assert store.path.exists(), "原文件保留现场"
+    monkeypatch.undo()
+
+
+def test_backup_read_failure_reported(tmp_path, monkeypatch):
+    """.bak 存在但读不了 -> 报「备份读取失败」(不抛)"""
+    store = HrSiteStore("s", str(tmp_path))
+    backup = tmp_path / "s.json.bak"
+    backup.write_text("{}", encoding="utf-8")
+
+    def boom(self, *a, **kw):
+        raise PermissionError(13, "拒绝访问")
+
+    monkeypatch.setattr("pathlib.Path.read_text", boom)
+    data, err = store.read_backup()
+    assert data.index == {} and "备份读取失败" in err
+    monkeypatch.undo()
+
+
+def test_warn_unsafe_only_once_per_store(tmp_path):
+    """锁不生效的 ERROR 只报一次: 第二次判定直接静默返回 False"""
+    store = HrSiteStore("s", str(tmp_path), owner="me")
+    with store.hold() as session:
+        session.commit(now=10.0)
+    payload = json.loads((tmp_path / "s.json").read_text(encoding="utf-8"))
+    payload["revision"] = 0
+    (tmp_path / "s.json").write_text(json.dumps(payload), encoding="utf-8")
+    with store.hold() as session:
+        assert store._unsafe_warned is True
+        # 第二次: _warn_unsafe 早退(不重复告警), 判定仍 False
+        assert store._check_lock_effective(session.data) is False
+        assert store._warn_unsafe("再次检测") is None
+
+
+def test_lock_session_site_property(tmp_path):
+    """会话的 site 属性来自被包装的 store(报告与日志用)"""
+    store = HrSiteStore("mysite", str(tmp_path))
+    with store.hold() as session:
+        assert session.site == "mysite"

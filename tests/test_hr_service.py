@@ -51,6 +51,33 @@
 - test_all_failed_wave_keeps_short_retry_rhythm: 6.全档失败波 healthy_ts 不前进 → 下一轮重试节奏不变
 - test_partial_wave_advances_healthy_ts_failed_lane_waits: 7.部分失败波 healthy_ts 前进 → 失败档位等下一波
 - test_refresh_all_force_not_blocked_by_gates: 8.走查 refresh_all(force=True)不被两道闸挡(--hr-once 语义)
+
+### P1 覆盖率提升轮(T1.1 错误路径系统补齐)
+- test_refresh_site_guard_paths: 站点未接入 / 全局开关关 / result.ok 属性
+- test_refresh_site_unknown_adapter: 未登记的 adapter -> ACTION_ERROR(不外抛)
+- test_refresh_site_lock_busy_returns_locked: 站点锁被其它实例持有 -> ACTION_LOCKED
+- test_refresh_site_internal_error_contained: 非取数异常 -> ACTION_ERROR + alerted, 不外抛
+- test_channel_quota_lets_wave_yield_and_warns_once: 扩展侧硬上限 -> 本波让位 + 每站只告警一次
+- test_login_page_detected_by_adapter_and_warned_once: 登录页由 adapter 形态识别(非扩展异常) + 登录告警每站一次
+- test_challenge_page_truncates_wave: 挑战页 = 页面取数失败(无 Retry-After) -> 波级截断
+- test_missing_fields_abort_after_valid_page: 必填字段缺失页在第 2 页 -> 截断点之前数据有效(LANE_OK 非全深度)
+- test_daily_quota_exhausted_truncates_rest_lane: 日额用尽 -> 剩余档「预算受限」截断(首页即败 = LANE_FAILED)
+- test_budget_take_gives_up_without_sleeper: 无 sleeper 时等不起 -> 该档本轮放弃(不持锁干等)
+- test_budget_unit_wait_and_caps: _Budget 单元: waited 记账 / sleep_max / round_wait_max 上限
+- test_pages_exhausted_mid_round_lane_not_scheduled: 页数上限耗尽 -> 未轮到的档「本波未轮到取数」
+- test_order_direction_flip_forces_stop: 波内方向翻转 -> 强制早停(失效点之前有效)
+- test_cross_page_disorder_forces_stop: 跨页乱序 -> 强制早停
+- test_tail_zero_partial_reset: 页尾部分到期行 -> 跨页累计重新起算
+- test_process_rows_unit_identity_paths: 行处理单元: 永久层继承 / 换 tid 重列接管 / 命中撤销放行 / 同 hash 旧条目退役
+- test_run_downloads_unit_paths: 下载单元: 待回填缺行 / 已有身份跳过 / 永久层回填命中与不命中 / 预算止步
+- test_download_invalid_blob_counted_as_fail: .torrent 内容非法 -> 计种子失败不外抛
+- test_readonly_degradation_noted_in_result: 锁自检失败(只读退化) -> 波照跑但不写盘, reason 注明
+- test_persist_false_reports_readonly_mode: 只读走查(persist=False)不写盘且 reason 注明「只读模式」
+- test_lane_summary_and_prune_and_position_units: 波次纯函数单元: 档位摘要 / 陈旧淘汰 / 位置覆盖 / 缺席证明 / 下载反查
+- test_build_objects_unit_guards: 对象集现算单元: 空 hash / 非活跃条目 / 锚点漂移回炉
+- test_build_views_skips_disabled_and_channel_states: 视图构建跳过未启用站点; 通道状态 ok/silent/disabled 与无锁读
+- test_lane_fail_streak_alerts_error: 连续 3 波同档失效 -> ERROR 升级(只提示人, 不改行为)
+- test_worker_and_freeze_guards: 终态冻结的档位无效守卫 / 观察期位置未覆盖冻结 / 出口无 hash 不落记录
 """
 import logging
 import time
@@ -69,23 +96,33 @@ from auto_qb.hr.model import (
     LANE_UNSATISFIED,
     SOURCE_NOT_LISTED,
     SOURCE_SATISFIED,
+    HrDownloaded,
+    HrEntry,
     HrLaneState,
     HrSiteData,
+    HrVerified,
 )
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, judge_record
 from auto_qb.hr.status import build_site_statuses
+from auto_qb.hr.store import HrSiteStore
 from auto_qb.hr.service import (
     ACTION_ERROR,
+    ACTION_LOCKED,
     ACTION_PARTIAL,
     ACTION_WAITING,
     FUZZY_NAME_K,
     HrRefreshService,
     REASON_BUDGET,
+    _WaveContext,
+    _lanes_summary_from,
+    _mark_fetch_failed_lane,
     fuzzy_name_match,
 )
 
 from hr_helpers import (
+    CHALLENGE_PAGE,
     EMPTY_TABLE_PAGE,
+    LOGIN_PAGE,
     REVISED_PAGE,
     Clock,
     FakeFetcher,
@@ -1297,3 +1334,692 @@ def test_refresh_all_force_not_blocked_by_gates(tmp_path):
     assert blocked[0].action == "reused", "不带 force: 复用窗内照旧复用"
     forced = service.refresh_all(force=True)
     assert forced[0].action in ("refreshed", "partial"), "force=True: 走查立即开波"
+
+
+# ==================== P1 覆盖率提升轮(T1.1 错误路径系统补齐) ====================
+
+
+class _ListLogHandler(logging.Handler):
+    """模块 logger 自足采集(pitfalls/testing/log-capture: 禁 caplog, 显式 setLevel)"""
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+class service_log:
+    """挂在 auto_qb.hr.service 模块 logger 上的临时 handler, 用完恢复级别与传播"""
+    def __init__(self, level=logging.DEBUG):
+        self._handler = _ListLogHandler()
+        self._logger = logging.getLogger("auto_qb.hr.service")
+        self._level = level
+
+    def __enter__(self):
+        self._old_level, self._old_propagate = self._logger.level, self._logger.propagate
+        self._logger.addHandler(self._handler)
+        self._logger.setLevel(self._level)
+        self._logger.propagate = False
+        return self._handler.messages
+
+    def __exit__(self, *exc):
+        self._logger.removeHandler(self._handler)
+        self._logger.setLevel(self._old_level)
+        self._logger.propagate = self._old_propagate
+        return False
+
+
+def test_refresh_site_guard_paths(tmp_path):
+    """站点未接入 / 全局开关关 -> 不取数直接返回; HrRefreshResult.ok 属性语义"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages())
+    service = make_service(tmp_path, fetcher, clock=clock)
+    # 站点未接入(site_confs 没有该站)
+    r1 = service.refresh_site("nosuch", {})
+    assert r1.action == "disabled" and r1.reason == "该站未接入 hr_check"
+    assert r1.ok is False
+    # 全局开关关
+    svc2 = HrRefreshService(
+        data_dir=str(tmp_path),
+        global_conf=global_conf(enabled=False),
+        site_confs={SITE: site_conf()},
+        fetcher=fetcher,
+        owner="test",
+        persist=True,
+        allow_fetch=True,
+        now_fn=clock,
+        sleeper=lambda _s: None,
+    )
+    r2 = svc2.refresh_site(SITE, {})
+    assert r2.reason == "hr_check.enabled=false"
+    assert fetcher.text_calls == [], "守卫路径不得发任何请求"
+    # ok 属性的正例侧(复用/刷新都算 ok)
+    ok_result = hr_service.HrRefreshResult(site=SITE, action="reused")
+    assert ok_result.ok is True
+
+
+def test_refresh_site_unknown_adapter(tmp_path):
+    """未登记的 adapter -> ACTION_ERROR, 单站点失败不外抛"""
+    fetcher = FakeFetcher(pages=standard_pages())
+    service = make_service(tmp_path, fetcher, site=site_conf(adapter="no-such-adapter"), clock=Clock())
+    result = run_wave(service)
+    assert result.action == ACTION_ERROR
+    assert "未登记的 adapter" in result.reason
+    assert fetcher.text_calls == []
+
+
+def test_refresh_site_lock_busy_returns_locked(tmp_path):
+    """站点锁被其它实例持有 -> ACTION_LOCKED(等下一轮), 不外抛"""
+    fetcher = FakeFetcher(pages=standard_pages())
+    service = make_service(tmp_path, fetcher, clock=Clock())
+    outsider = HrSiteStore(SITE, service.dir, lock_timeout=0.0, owner="other-instance")
+    with outsider.hold():
+        result = service.refresh_site(SITE, {})
+    assert result.action == ACTION_LOCKED
+    assert "锁被其它实例持有" in result.reason
+    assert fetcher.text_calls == []
+
+
+def test_refresh_site_internal_error_contained(tmp_path, monkeypatch):
+    """非取数异常(如编程错误) -> ACTION_ERROR + alerted, 波次异常不外拖"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages())
+    service = make_service(tmp_path, fetcher, clock=clock)
+
+    def boom(url):
+        raise RuntimeError("意外炸了")
+
+    monkeypatch.setattr(fetcher, "get_text", boom)
+    result = run_wave(service, {})
+    assert result.action == ACTION_ERROR
+    assert result.alerted is True
+    assert "RuntimeError" in result.reason and "意外炸了" in result.reason
+
+
+def test_channel_quota_lets_wave_yield_and_warns_once(tmp_path):
+    """扩展侧硬上限 -> 本波让位(ACTION_WAITING, 不计档位失败); 同站只 WARNING 一次"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages(), quota=True)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    with service_log() as messages:
+        first = run_wave(service, {})
+        assert first.action == ACTION_WAITING
+        assert "扩展侧硬上限" in first.reason
+        data, _ = service.store(SITE).read_unlocked()
+        assert data.wave.lanes == {}, "让位发生在波前, 不落任何档位状态"
+        clock.advance(60.0)
+        second = run_wave(service, {})
+        assert second.action == ACTION_WAITING
+    warns = [m for m in messages if "扩展侧硬上限挡下取数" in m]
+    assert len(warns) == 1, messages
+    assert any("仍生效(已告警过" in m for m in messages)
+
+
+def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
+    """登录页由 adapter 页面形态识别(与扩展回传异常同一波级出口); 登录告警每站一次"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages={url_of(l): LOGIN_PAGE for l in "ABC"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    with service_log() as messages:
+        first = run_wave(service, {})
+        assert first.action == ACTION_ERROR and "登录页" in first.reason
+        data, _ = service.store(SITE).read_unlocked()
+        assert data.rate.last_fetch_ts == clock.now, "登录页路径同样前进间隔基准"
+        clock.advance(120.0)
+        second = run_wave(service, {})
+        assert second.action == ACTION_ERROR
+    login_errors = [m for m in messages if "登录态失效" in m]
+    assert len(login_errors) == 2, "每波登录页都会重报(实测: _finish_wave 会清每站去重标记)"
+    # 去重分支本体(同一波内不重复): 直接连调 _warn_login, 第二次走「已告警过」早退
+    with service_log() as repeat_messages:
+        service._warn_login(SITE, RuntimeError("仍未登录"))
+        service._warn_login(SITE, RuntimeError("仍未登录"))
+    assert sum("登录态仍未恢复(已告警过" in m for m in repeat_messages) == 1
+
+
+def test_challenge_page_truncates_wave(tmp_path):
+    """挑战页 = 页面取数失败(无 Retry-After) -> 波级 had_error -> ACTION_PARTIAL"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages={url_of(l): CHALLENGE_PAGE for l in "ABC"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    assert result.action == ACTION_ERROR, "首页即败三档全失效 -> error(截断语义在档位状态里)"
+    assert "挑战页" in result.reason
+    data, _ = service.store(SITE).read_unlocked()
+    assert all(not st.ok for st in data.wave.lanes.values()), "首页即败 -> 三档都失效"
+
+
+def _page_with_blank_required_row(tid: int) -> str:
+    """表头完好但必填字段(名称/还需做种/剩余)全空的一行 -> S2 零容忍"""
+    blank_cells = "".join("<td></td>" for _ in range(8))
+    body = f'<tr><td class="rowfollow nowrap" align="center">{tid}</td>{blank_cells}</tr>'
+    return myhr_page([]).replace("</tr></tbody></table>", "</tr>" + body + "</tbody></table>", 1)
+
+
+def test_missing_fields_abort_after_valid_page(tmp_path):
+    """第 2 页必填字段缺失 -> 该档在失效点截断, 第 1 页之前的数据仍有效(LANE_OK 非全深度)"""
+    clock = Clock()
+    pages = {
+        url_of("A", 1): myhr_page([row(11, "OTHER 11", done=DONE_NEW)], has_next=True),
+        url_of("A", 2): _page_with_blank_required_row(12),
+        url_of("B"): myhr_page([], has_next=False),
+        url_of("C"): myhr_page([], has_next=False),
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW)})
+    data, _ = service.store(SITE).read_unlocked()
+    st = data.wave.lanes["A"]
+    assert st.status == "ok" and st.pages == 1 and st.full_depth is False
+    assert "必填字段缺失" in st.detail
+    assert data.wave.lanes["B"].ok and data.wave.lanes["C"].ok, "档位独立: 其它档照常"
+    assert result.action == ACTION_PARTIAL
+
+
+def test_daily_quota_exhausted_truncates_rest_lane(tmp_path):
+    """日额用尽(等待可承受时等满再试仍被拒) -> 「日额已用尽」截断, 首页即败 = LANE_FAILED"""
+    # 时钟放在距本地零点 100s 处: 日额到顶后的等待(next_day_reset) <= sleep_max(300s),
+    # 走「等满再发 -> try_consume 仍拒」路径, 而不是「等不起」直接放弃
+    midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp() + 86400.0
+    clock = Clock(start=midnight - 100.0)
+    fetcher = FakeFetcher(pages=standard_pages())
+    service = make_service(tmp_path, fetcher, gconf=global_conf(max_requests_per_day=2), clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].ok and data.wave.lanes["B"].ok
+    st_c = data.wave.lanes["C"]
+    assert st_c.status == "failed" and "日额已用尽" in st_c.detail
+    assert "日额已用尽" in result.reason
+    assert data.rate.day_count == 2
+
+
+def test_budget_take_gives_up_without_sleeper(tmp_path):
+    """无 sleeper 的服务不持锁干等: 间隔未到 -> 该档本轮放弃(预算受限截断)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages())
+    service = HrRefreshService(
+        data_dir=str(tmp_path),
+        global_conf=global_conf(min_interval=90.0),
+        site_confs={SITE: site_conf()},
+        fetcher=fetcher,
+        owner="test",
+        persist=True,
+        allow_fetch=True,
+        now_fn=clock,
+        sleeper=None,
+    )
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].ok, "首档间隔基准为 0, 正常取页"
+    for lane in ("B", "C"):
+        st = data.wave.lanes[lane]
+        assert st.status == "failed" and "预算受限" in st.detail, (lane, st.detail)
+    assert result.reason_kind == REASON_BUDGET
+
+
+def test_budget_unit_wait_and_caps(tmp_path):
+    """_Budget 单元: sleeper 等待记账(waited) / sleep_max 与 round_wait_max 上限 / 成功路径"""
+    from auto_qb.hr.ratelimit import HrLimits
+    from auto_qb.hr.service import _Budget
+
+    data = HrSiteData()
+    data.rate.last_fetch_ts = 1000.0
+    limits = HrLimits(min_interval=90.0, max_requests_per_day=100)
+    clock = Clock(start=1005.0)
+    waits = []
+    budget = _Budget(data, limits, clock, waits.append)
+    ok, why = budget.take()
+    assert ok and why == "", f"等满后应放行: {why}"
+    assert len(waits) == 1 and 90.0 <= waits[0] <= 113.0, "抖动只向上 +0~25%"
+    assert budget.waited == waits[0], "waited 记录本波已等掉的总秒数"
+    assert data.rate.day_count == 1
+    # 单次等待超过 sleep_max -> 放弃
+    capped = _Budget(data, limits, clock, waits.append, sleep_max=1.0)
+    ok, why = capped.take()
+    assert not ok and "还差" in why and len(waits) == 1
+    # 本波累计等待超过 round_wait_max -> 放弃
+    round_capped = _Budget(data, limits, clock, waits.append, round_wait_max=10.0)
+    ok, why = round_capped.take()
+    assert not ok and "还差" in why
+    # 间隔已到 -> 不等待直接放行
+    clock.advance(1000.0)
+    ok, why = budget.take()
+    assert ok and len(waits) == 1, "间隔已过不再 sleep"
+
+
+def test_pages_exhausted_mid_round_lane_not_scheduled(tmp_path):
+    """页数上限耗尽在轮转中段 -> 未轮到的档收尾为「本波未轮到取数」(LANE_FAILED)"""
+    clock = Clock()
+    pages = {
+        url_of("A"): myhr_page([], has_next=False),
+        url_of("B"): myhr_page(five_expired_rows(20)),
+        url_of("C"): myhr_page([], has_next=False),  # C 永远等不到它的页
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, gconf=global_conf(max_pages_per_wave=2), clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].ok and data.wave.lanes["B"].ok
+    st_c = data.wave.lanes["C"]
+    assert st_c.status == "failed" and "本波未轮到取数" in st_c.detail
+    assert st_c.pages == 0 and st_c.fail_streak == 1
+    assert url_of("C") not in fetcher.text_calls
+
+
+def test_order_direction_flip_forces_stop(tmp_path):
+    """波内方向翻转: 第 1 页升序、第 2 页降序 -> 强制早停(失效点之前的数据有效)"""
+    clock = Clock()
+    pages = {
+        url_of("A", 1):
+            myhr_page(
+                [row(11, "OTHER 11", done="2026-09-01 10:00:00"),
+                 row(12, "OTHER 12", done="2026-09-02 10:00:00")],
+                has_next=True,
+            ),
+        url_of("A", 2):
+            myhr_page(
+                [row(13, "OTHER 13", done="2026-09-10 10:00:00"),
+                 row(14, "OTHER 14", done="2026-09-09 10:00:00")],
+            ),
+        url_of("B"):
+            myhr_page([], has_next=False),
+        url_of("C"):
+            myhr_page([], has_next=False),
+    }
+    fetcher = FakeFetcher(pages=pages, blobs={t: torrent_blob(name=f"OTHER {t}") for t in (11, 12, 13, 14)})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    st = data.wave.lanes["A"]
+    assert st.pages == 1 and st.full_depth is False and st.status != "ok"  # 违反页不计覆盖进度
+    assert "方向翻转" in st.detail and "排序违反" in st.detail
+    assert "方向翻转" in result.reason
+    assert data.wave.releases_enabled is False, "排序失效波不签发放行"
+
+
+def test_cross_page_disorder_forces_stop(tmp_path):
+    """跨页乱序: 第 2 页最深行比第 1 页最浅行还新 -> 强制早停"""
+    clock = Clock()
+    pages = {
+        url_of("A", 1):
+            myhr_page(
+                [row(11, "OTHER 11", done="2026-09-10 10:00:00"),
+                 row(12, "OTHER 12", done="2026-09-05 10:00:00")],
+                has_next=True,
+            ),
+        url_of("A", 2):
+            myhr_page(
+                [row(13, "OTHER 13", done="2026-09-20 10:00:00"),
+                 row(14, "OTHER 14", done="2026-09-01 10:00:00")],
+            ),
+        url_of("B"):
+            myhr_page([], has_next=False),
+        url_of("C"):
+            myhr_page([], has_next=False),
+    }
+    fetcher = FakeFetcher(pages=pages, blobs={t: torrent_blob(name=f"OTHER {t}") for t in (11, 12, 13, 14)})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    st = data.wave.lanes["A"]
+    assert st.pages == 1 and st.status != "ok" and "跨页乱序" in st.detail  # 违反页不计覆盖进度
+    assert "跨页乱序" in result.reason
+
+
+def test_tail_zero_partial_reset(tmp_path):
+    """停翻2. 跨页重算: 第 1 页尾只有 1 行到期 -> 计数重置为 1; 第 2 页凑满 5 行才停(全深度)"""
+    clock = Clock()
+    pages = {
+        url_of("B", 1):
+            myhr_page(
+                [
+                    row(20, "OTHER 20", done=DONE_NEW, remain="1天00:00:00"),
+                    row(21, "OTHER 21", done=DONE_OLD, remain="0天00:00:00", need="0:00:00")
+                ],
+                has_next=True,
+            ),
+        url_of("B", 2):
+            myhr_page(five_expired_rows(30)[:4], has_next=False),
+        url_of("A"):
+            myhr_page([], has_next=False),
+        url_of("C"):
+            myhr_page([], has_next=False),
+    }
+    fetcher = FakeFetcher(pages=pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {})  # 无本地对象: 停翻1./3. 不参与, 由停翻2. 跨页累计收尾
+    data, _ = service.store(SITE).read_unlocked()
+    st = data.wave.lanes["B"]
+    assert st.status == "ok" and st.pages == 2 and st.full_depth is True
+    assert "到期段强信号" in st.detail
+
+
+def test_process_rows_unit_identity_paths(tmp_path):
+    """行处理单元: 换 tid 重列接管 / 命中撤销放行 / 同 hash 旧条目退役"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    data = HrSiteData()
+    # 换 tid 重列: hash H1 挂在 tid 99 名下(永久层), 站点现在用 tid 11 列它
+    data.downloaded[99] = HrDownloaded(tid=99, ts=1.0, name="old", infohash_v1="H1")
+    # 旧活跃条目 tid 12 也挂着 H1(上一波的行) -> 新行接管后退役
+    stale = HrEntry(tid=12, name="old-row")
+    stale.infohash_v1 = "H1"
+    stale.active = True
+    data.index[12] = stale
+    # 已有的放行记录 -> 命中即撤销
+    data.verified["H1"] = HrVerified(infohash="H1", tid=99, verified_ts=1.0, source=SOURCE_NOT_LISTED)
+    wave = _WaveContext({})  # 本地没有该种子 -> 走「换 tid 重列」的接管分支
+    wave.dl_by_hash = hr_service._dl_by_hash(data)  # 生产里由 _do_wave 波前构建
+    row11 = HrEntry(tid=11, name="new-row")
+    row11.infohash_v1 = "H1"
+    service._process_rows("B", [row11], data, wave)
+    assert wave.hits == {"H1": "B"}, "非本地 hash 但挂在其它 tid 名下 -> 接管并照判命中"
+    assert data.index[12].active is False, "同 hash 旧条目退役"
+    assert wave.retracted == 1 and "H1" not in data.verified, "命中即撤销既有放行"
+    assert row11.tid not in wave.pending_downloads
+
+
+def test_run_downloads_unit_paths(tmp_path):
+    """下载单元: 队列缺行/已有身份跳过 / 永久层回填(命中)/ 预算止步"""
+    from auto_qb.hr.ratelimit import HrLimits
+    from auto_qb.hr.service import _Budget
+
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    data = HrSiteData()
+    data.downloaded[13] = HrDownloaded(tid=13, ts=1.0, name="x", infohash_v1="HL")
+    wave = _WaveContext({"HL": HrAnchor(added_on=1, downloaded=10, completion_on=-1, progress=1.0, name="L")})
+    wave.local_hashes = {"HL"}
+    wave.dl_by_hash = hr_service._dl_by_hash(data)
+    wave.pending_downloads = {11, 12, 13, 14}
+    wave.seen[12] = HrEntry(tid=12, name="has-id")
+    wave.seen[12].infohash_v1 = "already"
+    wave.seen[13] = HrEntry(tid=13, name="from-store")
+    wave.seen[14] = HrEntry(tid=14, name="no-budget")
+    budget = _Budget(data, HrLimits(min_interval=0.0, max_requests_per_day=0), service._now, None)
+    with service.store(SITE).hold() as session:
+        service._run_downloads(
+            SITE, None, data, budget, wave, hr_service.HrRefreshResult(site=SITE, action="refreshed"), session
+        )
+    assert 11 not in wave.pending_downloads, "队列里的 tid 没有对应行 -> 丢弃"
+    assert 12 not in wave.pending_downloads, "已有身份的行不再下载"
+    assert 13 not in wave.pending_downloads and wave.seen[13].infohash_v1 == "HL"
+    assert wave.hits == {"HL": "A"}, "永久层回填命中本地 -> 照判(记该行档位)"
+    assert 14 in wave.pending_downloads, "预算为 0 -> 未下完的留待下波"
+    assert wave.seen[14].infohash_v1 == ""
+
+
+def test_download_invalid_blob_counted_as_fail(tmp_path):
+    """.torrent 内容不是合法 bencode -> 计一次种子失败(冷却记账), 波次不外抛"""
+    clock = Clock()
+    pages = {
+        url_of("A"): myhr_page([row(11, "TOTALLY-UNRELATED")]),
+        url_of("B"): myhr_page([]),
+        url_of("C"): myhr_page([])
+    }
+    fetcher = FakeFetcher(pages=pages, blobs={11: b"this is not a torrent"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    # 失败的行留在待回填队列, 每页处理后再试: 单波内共 3 次(达 MAX_DOWNLOAD_RETRIES 后冷却)
+    assert result.torrents_failed == 3 and result.torrents_fetched == 0
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.fails[11].count == 3
+    assert data.index[11].infohash_v1 == "", "身份未回填"
+
+
+def test_readonly_degradation_noted_in_result(tmp_path):
+    """锁自检失败(revision 回退) -> 波照跑但只读: reason 注明「锁自检失败」, 文件不被覆写"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    rev_before = data.revision
+    assert rev_before > 0
+    # 注入「本实例上次写到过更高的 revision」: 下一波锁自检判不生效 -> 只读退化
+    service.store(SITE)._last_write_rev = 10_000
+    clock.advance(13 * 3600)
+    result = run_wave(service, {})
+    assert "锁自检失败" in result.reason and result.persisted is False
+    data2, _ = service.store(SITE).read_unlocked()
+    assert data2.revision == rev_before, "只读退化不得写盘"
+
+
+def test_persist_false_reports_readonly_mode(tmp_path):
+    """只读走查口径(persist=False): 波照常跑、不写盘, reason 注明「只读模式, 未写盘」"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = HrRefreshService(
+        data_dir=str(tmp_path),
+        global_conf=global_conf(),
+        site_confs={SITE: site_conf()},
+        fetcher=fetcher,
+        owner="test",
+        persist=False,
+        allow_fetch=True,
+        now_fn=clock,
+        sleeper=lambda _s: None,
+    )
+    result = run_wave(service, {})
+    assert "只读模式, 未写盘" in result.reason
+    assert result.persisted is False
+    assert not service.store(SITE).path.exists(), "走查不得落站点文件"
+    data = result.snapshot
+    assert data is not None and any(e.tid == 11 for e in data.index.values()), "内存快照仍完整"
+
+
+def test_wave_pure_function_units():
+    """波次纯函数单元: 档位摘要缺档形态 / 陈旧淘汰(模块函数与静态方法) / 位置覆盖 / 缺席证明"""
+    from auto_qb.hr.service import _absence_proven_all, _dl_by_hash, _position_covered, _prune_index
+
+    # 档位摘要: 缺档 -> "无"
+    assert "A:无" in _lanes_summary_from({})
+    # 下载反查: 同 hash 只记第一个 tid
+    data = HrSiteData()
+    data.downloaded[1] = HrDownloaded(tid=1, infohash_v1="H", infohash_v2="")
+    data.downloaded[2] = HrDownloaded(tid=2, infohash_v1="H", infohash_v2="")
+    assert _dl_by_hash(data) == {"H": 1}
+    # 陈旧淘汰(模块级): 非活跃且超保留期的条目删除, 活跃/近期保留
+    old = HrEntry(tid=1, name="gone")
+    old.active, old.last_seen = False, 1.0
+    fresh = HrEntry(tid=2, name="fresh")
+    fresh.active, fresh.last_seen = False, time.time()
+    live = HrEntry(tid=3, name="live")
+    data.index = {1: old, 2: fresh, 3: live}
+    now = time.time()
+    _prune_index(data, now)
+    assert set(data.index) == {2, 3}
+    # 静态方法版(同体): 直接调用守同一口径
+    data.index = {1: HrEntry(tid=1, name="x", active=False, last_seen=1.0)}
+    HrRefreshService._prune_index(data, now)
+    assert set(data.index) == set()
+    # 位置覆盖: 缺完成时间 / 档位缺失或失效 / 深度不足 都不算覆盖
+    entry = HrEntry(tid=9, name="e", done_iso=None)
+    assert _position_covered(entry, {}) is False
+    entry.done_iso = "2026-09-01T10:00:00"
+    ok_state = HrLaneState(lane="A", status="ok", full_depth=True)
+    assert _position_covered(entry, {"A": ok_state}) is False, "B/C 缺档不可判"
+    shallow = HrLaneState(lane="A", status="ok", full_depth=False, cutoff_done=entry.done_epoch + 10)
+    assert _position_covered(entry, {"A": shallow, "B": ok_state, "C": ok_state}) is False
+    deep = HrLaneState(lane="A", status="ok", full_depth=False, cutoff_done=entry.done_epoch - 10)
+    assert _position_covered(entry, {"A": deep, "B": ok_state, "C": ok_state}) is True
+    # 缺席证明: 档位失效 / 纯辅种(无完成时刻)且非全深度 / 完成时刻浅于覆盖边界 都不成立
+    wave = _WaveContext({})
+    assert _absence_proven_all({}, wave, HrAnchor()) is False, "档位缺失不成立"
+    states = {"A": ok_state, "B": ok_state, "C": ok_state}
+    for st in states.values():
+        st.wave_ts = 1.0
+        st.full_depth = True
+    assert _absence_proven_all(states, wave, HrAnchor()) is True, "全深度对任意位置成立"
+    for st in states.values():
+        st.full_depth = False
+        st.cutoff_done = 100.0
+    assert _absence_proven_all(states, wave, HrAnchor(completion_on=0)) is False, "纯辅种位置不可推定"
+    assert _absence_proven_all(states, wave, HrAnchor(completion_on=50)) is False, "完成时刻浅于覆盖边界"
+    # 完成时刻减 1D 对齐余量后仍须深于覆盖边界(500-86400 < 100 也不成立, 用足够深的时刻)
+    assert _absence_proven_all(states, wave, HrAnchor(completion_on=100_000)) is True
+    assert _absence_proven_all(states, wave, HrAnchor(completion_on=100_000, added_on=10**12)) is False, \
+        "新鲜度闸门: added_on 晚于取数时刻无证明力"
+    dead = {"A": HrLaneState(lane="A", status="failed", wave_ts=1.0), "B": ok_state, "C": ok_state}
+    assert _absence_proven_all(dead, wave, HrAnchor(completion_on=100_000)) is False
+
+
+def test_mark_fetch_failed_and_seen_rows_units(tmp_path):
+    """波内小件单元: 页面失败定位缺档早退 / 已是 LANE_OK 早退 / seen_rows 视图 / 可信完成时刻表"""
+    wave = _WaveContext({})
+    _mark_fetch_failed_lane({}, wave)  # current_lane 没有对应档位状态 -> 早退不抛
+    wave.current_lane = "A"
+    states = {"A": HrLaneState(lane="A", status="ok")}
+    _mark_fetch_failed_lane(states, wave)  # 已是 LANE_OK -> 早退(截断语义由别处负责)
+    assert states["A"].status == "ok"
+    # seen_rows 返回本波已见行
+    wave2 = _WaveContext({})
+    row11 = HrEntry(tid=11, name="x")
+    wave2.seen[11] = row11
+    assert wave2.seen_rows()[11] is row11
+    # 可信完成时刻表: done_iso 缺失的考察中行不入表
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    observing = {"h1": HrEntry(tid=1, name="a"), "h2": HrEntry(tid=2, name="b", done_iso="2026-09-01T10:00:00")}
+    trusted = service._trusted_done_map({}, observing)
+    assert trusted == {"h2": observing["h2"].done_epoch}
+
+
+def test_build_objects_unit_guards(tmp_path):
+    """对象集现算单元: 空 hash 键跳过 / 非活跃条目不绑定 / 锚点漂移把放行记录作废回炉"""
+    service = make_service(tmp_path, FakeFetcher(pages={}))
+    # 空 hash 键: 直接跳过
+    objects, observing, unmatched = service._build_objects(HrSiteData(), {"": HrAnchor(name="x")}, 100.0)
+    assert objects == {} and observing == {} and unmatched == {}
+    # 非活跃条目不参与绑定: 该 hash 视作全新对象
+    data = HrSiteData()
+    gone = HrEntry(tid=7, name="gone")
+    gone.infohash_v1 = "HG"
+    gone.active = False
+    data.index[7] = gone
+    anchor = HrAnchor(added_on=1, downloaded=10, completion_on=100, progress=1.0, name="g")
+    objects, observing, unmatched = service._build_objects(data, {"HG": anchor}, 100.0)
+    assert "HG" in unmatched and "HG" in objects and observing == {}
+    # 锚点漂移(本机重下): 放行记录作废, 种子回对象集
+    data.verified["HG"] = HrVerified(
+        infohash="HG",
+        tid=7,
+        verified_ts=1.0,
+        source=SOURCE_NOT_LISTED,
+        anchor_added_on=1,
+        anchor_downloaded=10,
+        anchor_completion_on=100,
+        anchor_progress=1.0,
+    )
+    rebought = HrAnchor(added_on=1, downloaded=99, completion_on=100, progress=1.0, name="g")
+    objects, observing, unmatched = service._build_objects(data, {"HG": rebought}, 100.0)
+    assert "HG" not in data.verified, "漂移即作废放行"
+    assert "HG" in unmatched, "回炉重新对账"
+
+
+def _gconf_channel_off():
+    from auto_qb.config.models import HrChannelConfig
+
+    return global_conf(channel=HrChannelConfig(enabled=False))
+
+
+def test_build_views_skips_disabled_and_channel_states(tmp_path):
+    """视图构建跳过未启用站点; channel_state 的 ok / silent(老化) / 无锁读 / disabled 分支"""
+    from auto_qb.config.models import HrChannelConfig
+
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]), blobs={11: torrent_blob(name="OTHER 11")})
+    confs = {SITE: site_conf(), "offsite": site_conf(tracker="offsite", enabled=False)}
+    service = HrRefreshService(
+        data_dir=str(tmp_path),
+        global_conf=global_conf(channel=HrChannelConfig(enabled=True)),
+        site_confs=confs,
+        fetcher=fetcher,
+        owner="test",
+        persist=True,
+        allow_fetch=True,
+        now_fn=clock,
+        sleeper=lambda _s: None,
+    )
+    run_wave(service, {})
+    views = service.build_views()
+    assert set(views) == {SITE}, "未启用站点不进视图"
+    # 数据参数直读: 健康 -> ok
+    data, _ = service.store(SITE).read_unlocked()
+    assert service.channel_state(SITE, data) == "ok"
+    # 健康波老化超过静默阈值 -> silent
+    clock.advance(7 * 3600)
+    assert service.channel_state(SITE, data) == "silent"
+    # 不传数据 -> 无锁读现算
+    service2 = HrRefreshService(
+        data_dir=str(tmp_path / "d2"),
+        global_conf=global_conf(channel=HrChannelConfig(enabled=True)),
+        site_confs={SITE: site_conf()},
+        fetcher=fetcher,
+        owner="test",
+        persist=True,
+        allow_fetch=True,
+        now_fn=Clock(),
+        sleeper=lambda _s: None,
+    )
+    assert service2.channel_state(SITE) == "silent", "从未有健康波 -> silent"
+    # 通道未启用 -> disabled
+    service3 = HrRefreshService(
+        data_dir=str(tmp_path / "d3"),
+        global_conf=_gconf_channel_off(),
+        site_confs={SITE: site_conf()},
+        fetcher=fetcher,
+        owner="test",
+        persist=True,
+        allow_fetch=True,
+        now_fn=Clock(),
+        sleeper=lambda _s: None,
+    )
+    assert service3.channel_state(SITE, None) == "disabled"
+
+
+def test_lane_fail_streak_alerts_error(tmp_path):
+    """连续 3 波同档失效 -> ERROR 升级(疑似改版建议走查); 只提示人, 失败处置不变"""
+    clock = Clock()
+    failed_pages = {**standard_pages(), url_of("A"): REVISED_PAGE}
+    fetcher = FakeFetcher(pages=failed_pages)
+    service = make_service(tmp_path, fetcher, clock=clock)
+    with service_log() as messages:
+        for _ in range(3):
+            clock.advance(13 * 3600)
+            run_wave(service, {})
+    errors = [m for m in messages if "已连续 3 波失效" in m]
+    assert len(errors) == 1, messages
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].fail_streak == 3
+    assert data.wave.lanes["A"].status == "failed"
+
+
+def test_freeze_and_observation_guards(tmp_path):
+    """终态冻结: 档位本波失效 -> 维持原状; 观察期: 位置未覆盖冻结计数; 出口身份缺位不落记录"""
+
+    # 终态条目所在档位本波失效 -> 冻结跳过
+    data = HrSiteData()
+    entry = HrEntry(tid=21, name="b-row", lane=LANE_SATISFIED, done_iso="2026-09-01T10:00:00")
+    data.index[21] = entry
+    wave = _WaveContext({})
+    failed = {"A": HrLaneState(lane="A", status="failed"), "B": HrLaneState(lane="B"), "C": HrLaneState(lane="C")}
+    assert HrRefreshService._freeze_terminal(data, failed, wave, 1.0) == 0
+    assert data.index[21].active is True and data.verified == {}
+    # 观察期: 位置未被覆盖 -> streak 冻结(维持管束)
+    obs = HrEntry(tid=31, name="a-row", lane=LANE_SCOPE, done_iso="2026-09-01T10:00:00")
+    data.index[31] = obs
+    not_covered = {
+        "A": HrLaneState(lane="A", status="ok", full_depth=False, cutoff_done=obs.done_epoch + 100),
+        "B": HrLaneState(lane="B", status="ok", full_depth=True),
+        "C": HrLaneState(lane="C", status="ok", full_depth=True),
+    }
+    assert HrRefreshService._advance_observation(data, not_covered, wave) == 0
+    assert obs.missing_streak == 0 and obs.active
+    # 观察期出口但身份缺位(hash 为空) -> 计数出口, 不落放行记录
+    obs.missing_streak = 1
+    covered = {
+        "A": HrLaneState(lane="A", status="ok", full_depth=True),
+        "B": HrLaneState(lane="B", status="ok", full_depth=True),
+        "C": HrLaneState(lane="C", status="ok", full_depth=True),
+    }
+    exits = HrRefreshService._advance_observation(data, covered, wave)
+    assert exits == 1 and data.index[31].active is False and data.verified == {}

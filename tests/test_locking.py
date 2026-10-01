@@ -5,6 +5,9 @@
 - test_lock_contention_raises_with_holder_info: 第二次获取抛 SingleInstanceLockError, 消息含 PID/时间/路径
 - test_lock_skipped_when_no_lock_flag: QbManager no_lock=True 不创建锁文件 (导出模式)
 - test_lock_file_path_derives_from_state_file: state_file 去掉扩展名, 锁文件为 `<base>.lock`
+- test_single_instance_lock_release_idempotent_and_cm: 未持锁 release 幂等 / with 协议 / 重复 release
+- test_single_instance_lock_release_failure_paths: filelock 释放炸与 meta 删不掉都静默
+- test_single_instance_lock_meta_write_failure: meta 写失败不阻塞持锁
 """
 import os
 import re
@@ -89,3 +92,38 @@ def test_lock_file_path_derives_from_state_file(tmp_path):
     # 多点: foo.bar.json -> foo.bar.lock
     lock3 = SingleInstanceLock(str(tmp_path / "foo.bar.json"))
     assert lock3.lock_path.endswith("foo.bar.lock")
+
+
+def test_single_instance_lock_release_idempotent_and_cm(tmp_path):
+    """锁: 未持锁 release 幂等 / with 协议进入即持锁退出即释放 / 重复 release 不炸"""
+    state = str(tmp_path / "state.json")
+    lock = SingleInstanceLock(state)
+    lock.release()  # 未持锁: 直接清理 meta(不存在 -> FileNotFoundError -> pass)
+    with SingleInstanceLock(state) as lk:
+        assert lk._held is True
+    assert lk._held is False
+    lk.release()  # 第二次: 幂等
+    import pathlib
+
+    assert not pathlib.Path(lk.meta_path).exists()
+
+
+def test_single_instance_lock_release_failure_paths(tmp_path, monkeypatch):
+    """释放失败静默(filelock 释放炸 / meta 删不掉): 不因收尾失败影响主流程"""
+    from auto_qb.infra import locking
+
+    state = str(tmp_path / "state.json")
+    lock = SingleInstanceLock(state)
+    lock.acquire()
+    monkeypatch.setattr(lock._lock, "release", lambda: (_ for _ in ()).throw(RuntimeError("句柄已坏")))
+    monkeypatch.setattr(locking.os, "remove", lambda p: (_ for _ in ()).throw(PermissionError(5, "拒绝")))
+    lock.release()
+    assert lock._held is False
+    monkeypatch.undo()
+
+
+def test_single_instance_lock_meta_write_failure(tmp_path, monkeypatch):
+    """meta 写失败不阻塞持锁(锁是主防线, meta 仅辅助报错)"""
+    lock = SingleInstanceLock(str(tmp_path / "state.json"))
+    lock.meta_path = str(tmp_path / "no-such-dir" / "meta.json")
+    lock._write_meta()  # OSError -> debug, 不外抛

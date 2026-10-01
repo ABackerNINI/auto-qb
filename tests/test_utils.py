@@ -64,6 +64,20 @@
 - test_win_user32_kernel32_non_windows_none: 非 Windows 上句柄取用返回 None(靠早退而非"恰好抛异常")
 - test_win_user32_binds_signatures: 每个 user32 API 必须绑死 argtypes —— 不绑时 x64 传参静默失效(本轮真根因的守阵)
 - test_win_shell_open_non_windows_returns_false: 非 Windows 上 _win_shell_open 前置返回 False, 不碰 ctypes
+
+### P1 覆盖率提升轮: infra 长尾
+- test_atomic_write_backup_failure_continues: 备份失败只 WARNING, 写盘照常
+- test_atomic_write_failure_cleans_temp_and_reraises: 写盘中途失败清理临时文件并上抛
+- test_long_path_prefix_relative_path: 相对路径先转绝对再加前缀
+- test_match_tracker_confs_skips_hostless_urls: 无 hostname 的 URL 跳过
+- test_auto_managed_tag_rules_skips_empty_templates: 集数模板空串跳过不产正则
+- test_timer_units_us_and_ms: timer 三种单位落日志
+- test_win_shell_open_pidl_routes: PIDL 三分支(成功/解析失败/打开失败/COM 异常) + 前缀剥离 + 配对卸载
+- test_win_user32_and_kernel32_bind_signatures: user32/kernel32 惰性句柄绑定与缓存
+- test_win_explorer_hwnds_and_topmost_and_switch: Explorer 枚举/TOPMOST 开关/SwitchToThisWindow + 失败静默
+- test_win_force_foreground_matrix: 三层升级矩阵(还原/显示/焦点/借线程/硬切/异常)
+- test_win_reuse_and_wait_explorer: 复用窗口标题匹配/差集新窗口/超时 None/置前重试封顶
+  (本组 Shell 测试全部用假替身, 不碰真窗口; _win_shell_open 直调经 sidefx._saved 取回原函数避开记账假阳性)
 - test_win_string_open_degrades_long_path_to_ancestor: 字符串路线遇超长路径上溯到最近的可达祖先
 - test_exists_dir_file_apply_long_path_prefix: _exists_dir/_exists_file 对判定过长路径前缀 helper
 - test_sanitize_tracker_url: tracker URL 脱敏只留主地址(query/path/fragment 整段丢, 任意凭据参数名都覆盖; udp 端口/userinfo 处理)
@@ -1138,3 +1152,331 @@ def test_display_host():
     # 非字符串(配置缺失/取错类型)原样返回: 调用方都在日志路径上, 不该炸
     for bad in ("", None, 123):
         assert display_host(bad) == bad
+
+
+def test_atomic_write_backup_failure_continues(tmp_path, monkeypatch):
+    """keep_backup 时备份失败(如权限) -> 只 WARNING, 写盘照常进行(不因备份失败丢新数据)"""
+    target = tmp_path / "state.json"
+    target.write_text("old", encoding="utf-8")
+
+    def boom(src, dst):
+        raise OSError(13, "拒绝访问")
+
+    monkeypatch.setattr(utils.shutil, "copy2", boom)
+    utils.atomic_write(str(target), lambda f: f.write("new"), keep_backup=True)
+    assert target.read_text(encoding="utf-8") == "new"
+
+
+def test_atomic_write_failure_cleans_temp_and_reraises(tmp_path):
+    """写盘中途失败 -> 临时文件清理 + 原异常上抛(不留半截文件)"""
+    target = tmp_path / "state.json"
+
+    def bad_write(f):
+        raise ValueError("序列化炸了")
+
+    with pytest.raises(ValueError):
+        utils.atomic_write(str(target), bad_write)
+    assert list(tmp_path.iterdir()) == [], "临时文件已清理"
+    assert not target.exists()
+
+
+def test_long_path_prefix_relative_path(tmp_path, monkeypatch):
+    """相对路径 -> 先转绝对再加前缀(与已绝对路径不同径)"""
+    monkeypatch.chdir(tmp_path)
+    out = utils.add_long_path_prefix_for_win("sub/dir/file.bin")
+    assert out.startswith("\\\\?\\") and "sub/dir" in out.replace("\\", "/")
+
+
+def test_match_tracker_confs_skips_hostless_urls():
+    """无 hostname 的 URL(畸形)跳过, 不影响其余匹配"""
+    conf = SimpleNamespace(domains=["pt.example.com"])
+    got = utils.match_tracker_confs({"a": conf}, ["not a url", "https://pt.example.com/myhr.php"])
+    assert got == [conf]
+    assert utils.match_tracker_confs({"a": conf}, ["not a url"]) == []
+
+
+def test_auto_managed_tag_rules_skips_empty_templates():
+    """集数模板为空串 -> 跳过不产正则(仅站点 tags 进精确集)"""
+    config = SimpleNamespace(
+        trackers={"t": SimpleNamespace(tags=["SITE"], hr=None)},
+        add_episode_tags=SimpleNamespace(enabled=True, add_tag_single="", add_tag_multi=""),
+    )
+    exact, patterns = utils.auto_managed_tag_rules(config)
+    assert exact == {"SITE"} and patterns == ()
+
+
+def test_timer_units_us_and_ms():
+    """timer 装饰器: 'us'/'ms'/'s' 三种单位都落日志(自定义 log_func)"""
+    lines = []
+    for unit in ("us", "ms", "s"):
+        fn = utils.timer(unit=unit, log_func=lines.append)(lambda: 1)
+        assert fn() == 1
+    assert len(lines) == 3
+    assert lines[0].endswith("us") and lines[1].endswith("ms") and lines[2].endswith(" s")
+    assert lines[0].startswith("<lambda> 耗时"), lines
+
+
+# ---------------- Windows Shell / 窗口置前(全部经替身, 不碰真窗口) ----------------
+
+
+def test_win_shell_open_not_windows(monkeypatch):
+    """非 Windows 恒 False(不进入 ctypes 路线)"""
+    monkeypatch.setattr(utils, "is_windows", lambda: False)
+    assert utils._win_shell_open("D:/x") is False
+
+
+def _fake_shell(parse_result=0, open_result=0, parse_sets_pidl=False, coinit_raises=False):
+    """假 shell32/ole32 替身(记录调用, 不碰真 Shell)"""
+    import ctypes
+    calls = {"parse": [], "open": [], "ilfree": 0, "couninit": 0}
+    pidl_holder = {"value": None}
+
+    def parse(target, _none, byref_pidl, _flags, _byref_sfgao):
+        calls["parse"].append(target)
+        if parse_sets_pidl:
+            byref_pidl._obj.value = 0x1234
+        return parse_result
+
+    def open_items(pidl, _n, _ref, _flags):
+        calls["open"].append(pidl)
+        return open_result
+
+    def coinit(_reserved, _mode):
+        if coinit_raises:
+            raise AttributeError("no COM")
+        return 1  # S_FALSE
+
+    shell32 = SimpleNamespace(
+        SHParseDisplayName=parse,
+        SHOpenFolderAndSelectItems=open_items,
+        ILFree=lambda pidl: calls.__setitem__("ilfree", calls["ilfree"] + 1),
+    )
+    ole32 = SimpleNamespace(
+        CoInitializeEx=coinit,
+        CoUninitialize=lambda: calls.__setitem__("couninit", calls["couninit"] + 1),
+    )
+    return shell32, ole32, calls
+
+
+def _unwrapped_shell_open(monkeypatch):
+    """取回被 sidefx 记账包装前的原 _win_shell_open(仅本测试内直调)
+
+    本测试把 shell32/ole32 全部换成假替身, 不可能产生真实打开 —— 而 sidefx 对该入口的
+    记账包装包在函数外层, 不区分真假, 直调会按 LAUNCH 记成越界假阳性(sidefx.py 自述
+    「没有真实副作用就不该记」)。借记账器自己的 _saved 快照把原函数临时装回去, 测后
+    monkeypatch 自动恢复包装, 守阵对其余用例的拦截力不变。
+    """
+    import sidefx
+
+    for container, name, original in list(getattr(sidefx.SESSION, "_saved", ())):
+        if container is utils and name == "_win_shell_open":
+            monkeypatch.setattr(utils, "_win_shell_open", original)
+            return
+    raise AssertionError("sidefx 未包装 _win_shell_open: 前置条件变化, 请复核本辅助")
+
+
+def test_win_shell_open_pidl_routes(monkeypatch):
+    """_win_shell_open PIDL 路线三分支: 解析失败 / 打开失败 / 成功; 前缀剥离与 COM 配对"""
+    import ctypes
+
+    import auto_qb.infra.utils as u
+
+    _unwrapped_shell_open(monkeypatch)
+    # 成功: parse 0 + open 0 -> True; pidl 置位 -> ILFree; CoUninitialize 配对
+    shell32, ole32, calls = _fake_shell(parse_sets_pidl=True)
+    monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
+    monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
+    assert u._win_shell_open("\\\\?\\D:/长路径目录") is True
+    assert calls["ilfree"] == 1 and calls["couninit"] == 1
+    assert calls["parse"] and not calls["parse"][0].startswith("\\\\?\\"), "前缀与 PIDL 路线互斥, 已剥离"
+    # 解析失败 -> False(退回字符串路线)
+    shell32, ole32, calls = _fake_shell(parse_result=1)
+    monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
+    monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
+    assert u._win_shell_open("D:/nope") is False
+    assert calls["ilfree"] == 0, "pidl 未置位不释放"
+    # 打开失败 -> False
+    shell32, ole32, calls = _fake_shell(parse_result=0, open_result=5)
+    monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
+    monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
+    assert u._win_shell_open("D:/nope") is False
+    # CoInitializeEx 异常 -> False(防御, 绝不抛)
+    shell32, ole32, calls = _fake_shell(coinit_raises=True)
+    monkeypatch.setattr(ctypes.windll, "shell32", shell32, raising=False)
+    monkeypatch.setattr(ctypes.windll, "ole32", ole32, raising=False)
+    assert u._win_shell_open("D:/nope") is False
+
+
+def test_win_user32_and_kernel32_bind_signatures(monkeypatch):
+    """user32/kernel32 惰性句柄: 首次取用绑死 x64 签名(测试重置缓存后真绑定一次, 不调任何 API)"""
+    import auto_qb.infra.utils as u
+
+    monkeypatch.setattr(u, "_bound_user32", None)
+    monkeypatch.setattr(u, "_bound_kernel32", None)
+    user32 = u._win_user32()
+    assert user32 is not None and u._win_user32() is user32, "缓存复用同一句柄"
+    kernel32 = u._win_kernel32()
+    assert kernel32 is not None and u._win_kernel32() is kernel32
+
+
+class _P1FakeUser32:
+    """可编程 user32 替身: 按脚本回答各 API(不碰真窗口)"""
+    def __init__(self, *, is_window=True, iconic=False, visible=True, fg=None, thread_id=7, fg_thread=99):
+        self.scripts = []
+        self.calls = []
+        self._is_window = is_window
+        self._iconic = iconic
+        self._visible = visible
+        self._fg = fg
+        self._thread_id = thread_id
+        self._fg_thread = fg_thread
+
+    def IsWindow(self, hwnd):
+        return self._is_window
+
+    def IsIconic(self, hwnd):
+        return self._iconic
+
+    def IsWindowVisible(self, hwnd):
+        return self._visible
+
+    def GetForegroundWindow(self):
+        self._fg_seq = getattr(self, "_fg_seq", 0) + 1
+        return self._fg(self._fg_seq) if callable(self._fg) else self._fg
+
+    def SetForegroundWindow(self, hwnd):
+        self.calls.append("SetForegroundWindow")
+        return True
+
+    def BringWindowToTop(self, hwnd):
+        self.calls.append("BringWindowToTop")
+        return True
+
+    def SwitchToThisWindow(self, hwnd, toggle):
+        self.calls.append("SwitchToThisWindow")
+
+    def ShowWindow(self, hwnd, cmd):
+        self.calls.append(f"ShowWindow:{cmd}")
+        return True
+
+    def SetWindowPos(self, hwnd, after, x, y, cx, cy, flags):
+        self.calls.append(f"SetWindowPos:{after}")
+        return True
+
+    def GetWindowThreadProcessId(self, hwnd, out):
+        return self._fg_thread
+
+    def AttachThreadInput(self, a, b, attach):
+        self.calls.append("AttachThreadInput" if attach else "DetachThreadInput")
+        return True
+
+    def GetClassNameW(self, hwnd, buf, n):
+        buf.value = "CabinetWClass"
+        return len(buf.value)
+
+    def GetWindowTextW(self, hwnd, buf, n):
+        buf.value = "目标 - 文件资源管理器"
+        return len(buf.value)
+
+    def EnumWindows(self, proc, lparam):
+        proc(101, 0)
+        proc(202, 0)
+        return True
+
+
+class _P1FakeKernel32:
+    def GetCurrentThreadId(self):
+        return 7
+
+
+def test_win_explorer_hwnds_and_topmost_and_switch(monkeypatch):
+    """Explorer 枚举按类名过滤 / TOPMOST 开关式提升 / SwitchToThisWindow 兜底 + 各失败静默"""
+    fake = _P1FakeUser32()
+    monkeypatch.setattr(utils, "_win_user32", lambda: fake)
+    monkeypatch.setattr(utils, "_win_kernel32", lambda: _P1FakeKernel32())
+    hwnds = utils._win_explorer_hwnds()
+    assert hwnds == {101, 202}, "类名 CabinetWClass 的窗口都进集合"
+    utils._win_topmost_once(101)
+    assert "SetWindowPos:-1" in fake.calls and "SetWindowPos:-2" in fake.calls, "TOPMOST 挂一下立刻摘"
+    assert utils._win_switch_to_this_window(101) is True
+    # 失败静默: user32 缺席 / API 缺失
+    monkeypatch.setattr(utils, "_win_user32", lambda: None)
+    assert utils._win_explorer_hwnds() == set()
+    assert utils._win_switch_to_this_window(1) is False
+
+    class _Broken(_P1FakeUser32):
+        def SetWindowPos(self, *a):
+            raise OSError("无窗口")
+
+    monkeypatch.setattr(utils, "_win_user32", lambda: _Broken())
+    utils._win_topmost_once(1)  # 异常吞掉不外抛
+    monkeypatch.setattr(utils, "_win_user32", lambda: None)
+    utils._win_topmost_once(1)  # user32 缺席早退
+    assert utils._win_window_text(1) == "", "user32 缺席标题为空"
+    monkeypatch.setattr(utils, "_win_user32", lambda: _P1FakeUser32())
+    assert utils._win_window_text(1) == "目标 - 文件资源管理器"
+
+
+def test_win_force_foreground_matrix(monkeypatch):
+    """三层升级矩阵: 不可还原 / 最小化先还原 / 隐藏先显示 / 焦点成功 / 借线程失败硬切 / 异常 False"""
+    monkeypatch.setattr(utils, "_win_kernel32", lambda: _P1FakeKernel32())
+    # 1) 焦点直接成功
+    fake = _P1FakeUser32(fg=lambda seq: 101 if seq >= 2 else 202)
+    monkeypatch.setattr(utils, "_win_user32", lambda: fake)
+    assert utils._win_force_foreground(101) is True
+    assert "AttachThreadInput" in fake.calls and "DetachThreadInput" in fake.calls, "借前台线程权限并归还"
+    # 2) 最小化: 先 SW_RESTORE(9)
+    fake = _P1FakeUser32(iconic=True, fg=101)
+    monkeypatch.setattr(utils, "_win_user32", lambda: fake)
+    assert utils._win_force_foreground(101) is True
+    assert "ShowWindow:9" in fake.calls
+    # 3) 隐藏: 先 SW_SHOW(5)
+    fake = _P1FakeUser32(visible=False, fg=101)
+    monkeypatch.setattr(utils, "_win_user32", lambda: fake)
+    assert utils._win_force_foreground(101) is True
+    assert "ShowWindow:5" in fake.calls
+    # 4) 焦点拿不到: 硬切 + BringWindowToTop, 仍失败如实 False
+    fake = _P1FakeUser32(fg=lambda seq: 202)  # 前台永远是别人
+    monkeypatch.setattr(utils, "_win_user32", lambda: fake)
+    assert utils._win_force_foreground(101) is False
+    assert "SwitchToThisWindow" in fake.calls and "BringWindowToTop" in fake.calls
+    # 5) 窗口已不存在 -> False
+    monkeypatch.setattr(utils, "_win_user32", lambda: _P1FakeUser32(is_window=False))
+    assert utils._win_force_foreground(101) is False
+    # 6) user32/kernel32 缺席 -> False
+    monkeypatch.setattr(utils, "_win_user32", lambda: None)
+    assert utils._win_force_foreground(101) is False
+
+
+def test_win_reuse_and_wait_explorer(monkeypatch):
+    """复用窗口按标题匹配(含本地化后缀); 差集新窗口优先; 超时 None; 置前重试封顶"""
+    monkeypatch.setattr(utils, "_win_user32", lambda: _P1FakeUser32())
+    monkeypatch.setattr(utils, "_win_kernel32", lambda: _P1FakeKernel32())
+    # 标题候选: 目标名 + 父目录名
+    names = utils._win_reuse_title_candidates("R:/Media/Show")
+    assert names == {"Show", "Media"}
+    assert utils._win_reuse_title_candidates("R:\\") == set(), "盘根无候选, 跳过复用兜底"
+    # 复用匹配: 只在打开前就存在的窗口里找, 标题带本地化后缀也算
+    hit = utils._win_match_reused_explorer({101, 202}, before={202}, names={"目标"})
+    assert hit == 202
+    assert utils._win_match_reused_explorer({101, 202}, before={202}, names={"无关"}) is None
+    # 等待: 差集新窗口立刻返回
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: {999})
+    assert utils._win_wait_explorer({202}, "R:/Media/Show") == 999
+    # 等待: 无新窗口但旧窗口标题命中 -> 复用
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: {202})
+    assert utils._win_wait_explorer({202}, "R:/Media/目标") == 202
+    # 等待: 超时(上限拨负) -> None; 名字为空跳过复用匹配
+    monkeypatch.setattr(utils, "_EXPLORER_FG_TIMEOUT", -1.0)
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: set())
+    assert utils._win_wait_explorer(set(), "R:/Media/Show") is None
+    assert utils._win_wait_explorer(set(), "") is None
+    # 置前编排: 找不到窗口 -> False(静默); 重试耗尽 -> False(封顶, 不执念)
+    assert utils._win_foreground_new_explorer(set(), "R:/x") is False
+    monkeypatch.setattr(utils, "_EXPLORER_FG_RETRY", 1)
+    monkeypatch.setattr(utils, "_EXPLORER_FG_RETRY_GAP", 0.0)
+    monkeypatch.setattr(utils, "_win_wait_explorer", lambda before, target: 101)
+    monkeypatch.setattr(utils, "_win_force_foreground", lambda hwnd: False)
+    assert utils._win_foreground_new_explorer(set(), "R:/x") is False
+    monkeypatch.setattr(utils, "_win_force_foreground", lambda hwnd: True)
+    assert utils._win_foreground_new_explorer(set(), "R:/x") is True

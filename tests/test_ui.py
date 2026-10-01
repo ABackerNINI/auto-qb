@@ -13,7 +13,8 @@
 - test_notify_handler_enabled_toggle: 通知热开关关闭时 emit 不入队
 - test_autostart_windows_registry: Windows 注册表注册/注销(真注册表, 专属键名, 测试后清理)
 - test_autostart_linux_desktop: XDG autostart desktop 文件写入/注销(平台 patch)
-- test_autostart_macos_plist: macOS LaunchAgents plist 写入/注销(平台 patch)
+- test_autostart_macos_plist: macOS LaunchAgents plist 写入/注销
+- test_autostart_error_paths: 注册失败 OSError 转 AutoQbError / 未注册注销幂等 / 注销失败转 AutoQbError(平台 patch)
 - test_log_dir_resolves_and_creates: 日志目录解析(相对路径绝对化/file 为空兜底 state_file 目录/确保存在)
 - test_run_connection_restored_updates_state: 断开后 tick 成功即恢复 _last_conn_ok(否则 UI 永远显示断开)
 - test_run_autoqb_error_propagates: AutoQbError 致命错误穿透主循环
@@ -21,6 +22,7 @@
 """
 import logging
 import os
+from types import SimpleNamespace
 import sys
 import threading
 import time
@@ -373,3 +375,31 @@ def test_run_join_timeout_warns(tmp_path, monkeypatch):
     monkeypatch.undo()
     release.set()
     ui._manager_thread.join(timeout=5)  # 收尾: 放掉被挂起的假主循环, 不留悬挂线程
+
+
+def test_autostart_error_paths(monkeypatch):
+    """自启注册/注销失败语义: OSError 转 AutoQbError; 未注册注销幂等"""
+    import winreg
+
+    from auto_qb.infra.autostart import AutoQbError, disable, enable
+
+    def reg_boom(*a, **kw):
+        raise OSError(5, "拒绝访问")
+
+    monkeypatch.setattr(winreg, "CreateKeyEx", reg_boom)
+    with pytest.raises(AutoQbError, match="注册失败"):
+        enable("config.yml")
+    monkeypatch.undo()
+    # 未注册: OpenKey 抛 FileNotFoundError -> 幂等返回
+    monkeypatch.setattr(winreg, "OpenKey", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError(2, "未注册")))
+    disable()  # 不抛
+    monkeypatch.undo()
+    # 注销失败(darwin 分支: plist unlink 失败) -> AutoQbError(Win32 分支的 DeleteValue 失败被
+    # 内层「未注册幂等」吞掉, 外层转换只保护非 Win32 的文件系统操作)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        autostart, "MACOS_PLIST",
+        SimpleNamespace(unlink=lambda *a, **kw: (_ for _ in ()).throw(PermissionError(5, "拒绝")))
+    )
+    with pytest.raises(AutoQbError, match="注销失败"):
+        disable()

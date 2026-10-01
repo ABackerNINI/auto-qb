@@ -40,9 +40,11 @@
 import pytest
 
 from auto_qb.hr.adapters import build_adapter
-from auto_qb.hr.adapters.nexusphp import REQUIRED_COLUMNS, header_hr_numbers
+from auto_qb.hr.adapters.nexusphp import REQUIRED_COLUMNS, NexusPhpMyhrAdapter, header_hr_numbers
+import auto_qb.hr.adapters.nexusphp as hr_nexusphp
 from auto_qb.hr.parse import (
     cell_text,
+    flat_rows,
     column_index,
     cross_page_violation,
     extract_table,
@@ -455,3 +457,115 @@ def test_cross_page_violation_desc_and_asc():
     assert cross_page_violation([100.0, 200.0], [150.0, 300.0], "asc") is True  # 150 < 200 比上页最小行还小
     assert cross_page_violation([900.0], [950.0], "") is False  # 方向未知 = 证据不足不判
     assert cross_page_violation([], [950.0], "desc") is False  # 上页没有可比行
+
+
+# ==================== P1 覆盖率提升轮: 解析容错长尾 ====================
+
+
+def test_parse_size_malformed_number_returns_none():
+    """数值段含多个小数点(float 拒收) -> None, 不猜(逗号按千分位剥除, 不算畸形)"""
+    assert parse_size("1.2.3 GB") is None
+
+
+def test_parse_duration_days_only():
+    """只有天数前缀("3天") -> 3 天的秒数"""
+    assert parse_duration("3天") == 3 * 86400
+    assert parse_duration("2d") == 2 * 86400
+
+
+def test_parse_ratio_malformed_returns_none():
+    """多小数点形态(float 抛 ValueError) -> None"""
+    assert parse_ratio("1.2.3") is None
+
+
+def test_table_tree_anchor_without_href_is_ignored():
+    """<a> 无 href 属性不进 hrefs(页内锚点不误当链接)"""
+    rows = flat_rows("<table><tr><td><a name=\"anchor\">text</a></td></tr></table>")
+    assert len(rows) == 1
+    assert rows[0].cells[0].hrefs == []
+    assert cell_text(rows[0].cells[0]) == "text"
+
+
+def test_extract_table_header_not_first_row():
+    """表头行前面还有其它行(页面前言) -> 循环跳过直到锚定表头"""
+    html = (
+        "<table><tbody>"
+        "<tr><td>页面说明文字</td></tr>"
+        "<tr><td>HR编号</td><td>种子名称</td></tr>"
+        "<tr><td>7</td><td>Show.7</td></tr>"
+        "</tbody></table>"
+    )
+    table = extract_table(html, "HR编号")
+    assert table.columns == ("HR编号", "种子名称")
+    assert len(table.rows) == 1 and cell_text(table.rows[0][1]) == "Show.7"
+
+
+def test_page_bounds_no_match_returns_none():
+    """页脚区间 "N - M</b>" 找不到(或被锚定失败) -> None"""
+    assert page_bounds("<p>没有分页</p>") is None
+    assert page_bounds("完成时间 2026-09-21 - 2026-09-22(不在 <b> 里)") is None
+
+
+def test_order_violations_records_only_first_inversion_position():
+    """多处逆序只记第一处(first_at), 后续违反继续累加 inversions"""
+    check = order_violations([3.0, 1.0, 4.0, 2.0, 5.0, 0.0])
+    assert check.direction == "desc" and check.inversions == 2
+    assert check.first_at == 2, "只记第一处违反的行号, 后续违反只累加计数"
+
+
+def test_adapter_row_without_links_falls_back_to_tid():
+    """行内没有任何可认下载链接 -> dl_id None(调用方回落 tid)"""
+    adapter = NexusPhpMyhrAdapter(
+        "example", hr_page_url="https://pt.example.com/myhr.php", download_path="/download.php?id={id}", scopes=("A", )
+    )
+    parsed = adapter.parse_page(
+        "A",
+        "<table><tbody>"
+        "<tr><td>HR编号</td><td>种子名称</td><td>还需做种时间</td><td>剩余达标时间</td></tr>"
+        "<tr><td>11</td><td>Plain.Row</td><td>1:00:00</td><td>2天00:00:00</td></tr>"
+        "</tbody></table>",
+    )
+    assert parsed.entries[0].dl_id is None
+
+
+def test_adapter_row_missing_tid_cell_breaks():
+    """tid 列下标越界的残行(表头在, 行没格子) -> 数据区直接结束"""
+    adapter = NexusPhpMyhrAdapter(
+        "example", hr_page_url="https://pt.example.com/myhr.php", download_path="/download.php?id={id}", scopes=("A", )
+    )
+    parsed = adapter.parse_page(
+        "A",
+        "<table><tbody>"
+        "<tr><td>HR编号</td><td>种子名称</td></tr>"
+        "<tr></tr>"
+        "</tbody></table>",
+    )
+    assert parsed.entries == [] and parsed.header_found
+
+
+def test_adapter_non_digit_tid_ends_data_region():
+    """tid 列非纯数字(页脚/分页区) -> 数据区结束, 不产出行"""
+    adapter = NexusPhpMyhrAdapter(
+        "example", hr_page_url="https://pt.example.com/myhr.php", download_path="/download.php?id={id}", scopes=("A", )
+    )
+    parsed = adapter.parse_page(
+        "A",
+        "<table><tbody>"
+        "<tr><td>HR编号</td><td>种子名称</td><td>还需做种时间</td><td>剩余达标时间</td></tr>"
+        "<tr><td>11</td><td>Show</td><td>1:00:00</td><td>2天00:00:00</td></tr>"
+        "<tr><td>下一页</td><td></td><td></td><td></td></tr>"
+        "</tbody></table>",
+    )
+    assert [e.tid for e in parsed.entries] == [11]
+
+
+def test_adapter_parse_page_without_tid_column_degrades(monkeypatch):
+    """表头在但列集里没有 HR 编号列 -> 空 ParsedScope(交由覆盖证明拒绝)"""
+    from auto_qb.hr.parse import HtmlTable
+
+    adapter = NexusPhpMyhrAdapter(
+        "example", hr_page_url="https://pt.example.com/myhr.php", download_path="/download.php?id={id}", scopes=("A", )
+    )
+    monkeypatch.setattr(hr_nexusphp, "extract_table", lambda html, key: HtmlTable(columns=("种子名称", ), rows=((), )))
+    parsed = adapter.parse_page("A", "<table></table>")
+    assert parsed.entries == [] and parsed.header_found is False

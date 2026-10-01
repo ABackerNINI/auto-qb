@@ -9,6 +9,10 @@
 - test_allow_window: 时段外等到时段起点
 - test_next_allowed_at_returns_now_when_clear: 各门槛满足 → 立即可取
 - test_day_ledger_persisted: 记账落在 HrSiteData.rate 且可 JSON 往返
+
+### P1 覆盖率提升轮: 日额门槛与工具长尾
+- test_next_allowed_at_reports_day_reset_when_quota_exhausted: 日额到顶 -> 下次可取 = 次日零点(原因「日配额」)
+- test_now_ts_returns_positive_epoch: now_ts 返回当前 epoch 秒
 """
 from auto_qb.hr.model import HrSiteData
 from auto_qb.hr.ratelimit import (
@@ -108,3 +112,24 @@ def test_day_ledger_persisted():
     assert raw["rate"]["day_count"] == 1
     restored = HrSiteData.from_json(raw)
     assert restored.rate.day_window == d.rate.day_window
+
+
+# ==================== P1 覆盖率提升轮: 日额门槛与工具长尾 ====================
+
+
+def test_next_allowed_at_reports_day_reset_when_quota_exhausted():
+    """日额到顶 -> 下次可取时刻 = 次日零点, 原因「日配额」(供报告与日志)"""
+    d = data_with(day=day_key(NOW), count=5)
+    due, why = next_allowed_at(d, limits(), NOW)
+    assert due == next_day_reset(NOW) and why == "日配额"
+    assert due > NOW
+
+
+def test_now_ts_returns_positive_epoch():
+    """now_ts 就是当前 epoch 秒(抽出来便于替换)"""
+    import time as _time
+
+    before = _time.time()
+    got = rl.now_ts()
+    after = _time.time()
+    assert before <= got <= after
