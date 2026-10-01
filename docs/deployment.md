@@ -143,12 +143,12 @@ named volume `auto-qb-data` 里有全部运行态(state.json / 日志 / web.toke
 
 ```bash
 # 备份(停机更稳: docker compose stop 先优雅落盘)
-docker run --rm -v auto-qb-clone4_auto-qb-data:/data -v "$(pwd)":/backup alpine \
+docker run --rm -v <项目名>_auto-qb-data:/data -v "$(pwd)":/backup alpine \
     tar czf /backup/auto-qb-data-$(date +%F).tar.gz -C /data .
 
 # 恢复到新机器/新卷
-docker volume create auto-qb-clone4_auto-qb-data
-docker run --rm -v auto-qb-clone4_auto-qb-data:/data -v "$(pwd)":/backup alpine \
+docker volume create <项目名>_auto-qb-data
+docker run --rm -v <项目名>_auto-qb-data:/data -v "$(pwd)":/backup alpine \
     tar xzf /backup/auto-qb-data-$(date +%F).tar.gz -C /data
 ```
 
@@ -238,11 +238,12 @@ interval: 30s / timeout: 5s / retries: 3 / start_period: 15s
 
 ### 11.3 ❗唯一会写坏 qB 的一条: 缺文件扫描
 
-`core/mixins/grouping.py::_check_missing_files` 拿 qB 报回的 `save_path` 拼上文件名后直接 `os.path.exists`:
+`core/modules/grouping_mod.py:273` 的 `_check_missing_files` 拿 qB 报回的 `save_path` 拼上文件名后经文件访问层判存在:
 
 ```python
-full_path = utils.add_long_path_prefix_for_win(os.path.normpath(os.path.join(rep.save_path, fname)))
-if not os.path.exists(full_path):   # 容器里恒 False(A 类)
+fa = file_access.get_file_access()
+exists = fa.exists(full_path)            # 容器里未配映射时「不可判定」, 配好 fs.path_map 后取真值
+if exists is file_access.UNDETERMINED:   # 映射 miss: 跳过该组 + WARNING, 不暂停不打标
 ```
 
 命中后是**真实写操作**: `torrents_stop` 暂停整组 + 给每个成员打 `MISSING` 标签。
@@ -371,5 +372,5 @@ config:
 | 连不上 qB 时 | 退出码 1, 约 1s; Docker 退避重启上限 1 次/分钟 |
 | Web UI 密钥 | 64 位, 持久化 `/data/web.token`, 跨重启复用 |
 | 配置写回 | round-trip 保留注释; `.bak` 落 `<data_dir>/<配置名>.bak`; L0/L1/L2 热重载即时生效, R 级(data_dir/state_file)需重启 |
-| 全功能关闭时 state.json | 基础结构(原常驻的 `upload_snapshots` 已随计划 26-09-27-1232 移除, state schema 升 v2); 91 种子库全程零写入实测通过 |
+| 全功能关闭时 state.json | 基础结构(原常驻的 `upload_snapshots` 已随计划 26-09-27-1232 移除; state schema 现为 v3); 91 种子库全程零写入实测通过 |
 | fs.path_map 映射(26-09-27 代码级) | 缺文件扫描/跳检前置/exists()/disk_*()/目录浏览在映射命中时取真值, miss 一律「不可判定」; **Windows 宿主 + Docker Desktop 真机验收(drvfs disk_usage 数值 / getsize 性能 / :ro·:rw mkdir 双态)待 §11.5 方案二部署后回填** |

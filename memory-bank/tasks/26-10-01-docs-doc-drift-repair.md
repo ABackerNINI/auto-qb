@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-10-01
 **Updated:** 2026-10-01
-**Summary:** 内核化重构+别名层处置后的全库文档漂移, 按 plans/26-10-01-1728 分五段(S1-S5)回写; S1(P1 架构描述重写 5 份)、S2(误导指路与机制反转单点修 9 份)与 S3(modules 中度批 6 份)已完成并过验收, 余 S4-S5。
+**Summary:** 内核化重构+别名层处置后的全库文档漂移, 按 plans/26-10-01-1728 分五段(S1-S5)回写; S1(P1 架构描述重写 5 份)、S2(误导指路与机制反转单点修 9 份)、S3(modules 中度批 6 份)与 S4(用户面文档 4 份)已完成并过验收, 余 S5。
 
 **Topics:** docs-doc-drift-repair
 
@@ -28,7 +28,7 @@
 | S1 | P1 架构描述重写(5 份: systemPatterns/overview · main-loop · web-runtime · client-and-state + modules/core-runtime) | 完成(26-10-01) |
 | S2 | 误导指路与机制反转单点修(9 份, 2 处 P1) | 完成(26-10-01) |
 | S3 | modules/ 中度批(6 份) | 完成(26-10-01) |
-| S4 | 用户面文档(4 份: README + docs/) | 待做 |
+| S4 | 用户面文档(4 份: README + docs/) | 完成(26-10-01) |
 | S5 | P3 清扫 + 待决件 + 收尾基线(test.full 基线切片) | 待做 |
 
 ## 进度日志
@@ -47,3 +47,10 @@
   - `mixins.md`: 摘要转「历史快照」定位; tags 并非独立模块 → 并入 MaintenanceModule(`ctx.maintenance`, qbmanager.py:223); 补两 mixin 类声明坐标 qbmanager.py:142-145。
   - `conventions/modules.md`: 三层结构表十模块目录归属注记(8 本体 core/modules/*_mod.py + 2 门面 webui/hr module.py); 838→839 行; 「内核自有方法 17 / 属性对 7」AST 逐项核实 —— 类体 def 名 24 = 内核自有 17(15 方法 + `__init__` + `state_file` 只读 getter) + 属性 7 名(6 组读写对 + client 绑定对); 原文把 `state_file` 列进「属性对」而漏 `client`, 已按「外观属性面 7 个(config/store/api/state/state_file/task_queue/web, state_file 只读不成对)+ client 非外观绑定对」定口径; baselines 基线路径补全 `memory-bank/testing/` 前缀。
   - 机检: mixins.md 摘要有动 → `kb.index` 重建 → `kb.check` 绿 → `pytest tests/test_memory_bank.py` 27 passed。与计划的偏差均为「以代码为准」: 计划未列的 writer.py/validation/ 行数与 core-domain「双 shell」措辞随同表实测刷新。test.full 基线按计划留给 S5。
+- **2026-10-01 S4 完成并过验收**(4 份全部按计划修毕, 每条断言先实测核对代码坐标; 随本段单独提交入库):
+  - `README.md`: L84 「?? 种条件」→ 13、触发时机补全 5 种(加「字段变化」; TRIGGER_VALUES 实测 5 项, config/validation/rules.py:29-36); 架构节「16 种筛选条件」→ 13; 十模块归属更正为「8 本体 core/modules/*_mod.py + 2 门面 webui/hr module.py」(目录实扫: core/modules/ 恰 8 个 *_mod.py)。
+  - `docs/configuration.md`: L410 条件 16→13; 筛选条件表头 12→13 并补 `expr` 行(ExprCondition, rules/conditions.py:216-234; `@register_condition` 实数 13); 触发表补 `on_torrent_field_changed` 行 + watch_fields 注记(FIELD_WATCH_ALLOWED = tags/category, rules.py:38; 校验在 rules.py:158-171), YAML 示例补 watch_fields 注释行; hr_check 全局段 7 键→8 键(HrCheckConfig 除 sites 外恰 8 字段, models.py:108-119, 与原列举 8 项对齐); 旧键迁移句 v2→v3 → v1→v2 并拆开表述(_migrate_config_1_2 改写到 sites, migrations.py:40; v2→v3 只把 mode 转 enabled)。
+  - `docs/deployment.md`: §11.3 指路 `core/mixins/grouping.py` → `core/modules/grouping_mod.py:273`(`_check_missing_files`), 旧 `os.path.exists` 片段 → `fa.exists` + `UNDETERMINED` 现状(:296-307 实读); §14 state schema v2→v3(infra/versioning.py:28); §8 卷名示例 `auto-qb-clone4_` → `<项目名>_` 占位(节尾本有「以 docker volume ls 实际输出为准」注)。
+  - `docs/hr-online-verify-docs.md`: 删两行坏链索引(26-09-22-2204-backend-partial-hr-verify 与 26-09-25-0555-webui-ext-hr-logging 两个 activeContext 切片, ls 实证不存在); 「想了解功能全貌」先读入口改指任务档案(现存) + 26-09-29-0404-hr-verify-v3-audit 切片(现存)。
+  - 与计划的偏差(以代码为准): 计划称 configuration L495 为「16」实测该处写「12 种」(同一文档 L410 与表头自身就互斥), 一并统一为 13; 其余坐标全部命中。
+  - 机检: `doc.links` 绿 + `kb.check` 绿(切片 81>70 为既有债务, 不拦提交); 档案/slice 摘要有动 → `kb.index` 重建。test.full 基线按计划留给 S5。

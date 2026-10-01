@@ -81,7 +81,7 @@ auto-qb 常驻后台运行,实时跟随 qBittorrent 的状态,自动帮你打理
 ### 🧩 自定义规则引擎🚧
 
 - 触发时机 + 筛选条件 + 动作, 动作顺序执行, 支持去重、冷却与错误处理
-- **?? 种条件 × 12 种动作**, 全部可自由组合; 除固定间隔外还支持种子添加 / 状态变化 / 删除事件触发
+- **13 种条件 × 12 种动作**, 全部可自由组合; 除固定间隔外还支持种子添加 / 状态变化 / 字段变化 / 删除事件触发
 
 ### 🔍 HR 在线核实🚧
 
@@ -211,7 +211,7 @@ uv run auto-qb --tray --dry-run   # 托盘模式同样支持试运行
 - 两种配置方式的对比(Web UI 推荐 / YAML 直改需重启)与通用约定(单位、正则、路径、多实例数据目录)
 - 完整 YAML 配置示例(每个字段的注释说明)
 - 全局限速曲线:周期 / 阈值 / 限速档位的写法与 Traffic Monitor 数据来源接入
-- 规则系统:触发时机、16 种筛选条件、12 种动作、去重与错误处理、状态映射表、checking 校验 / 跳检的风险对照与安全保障
+- 规则系统:触发时机、13 种筛选条件、12 种动作、去重与错误处理、状态映射表、checking 校验 / 跳检的风险对照与安全保障
 
 最常踩的几个点提前说:时间单位 `S/M/H/D`、速度 `[KMG]iB/s`、大小 `[KMGT]iB`(不区分大小写);标签 / 路径匹配用 `regex:` 前缀走正则;多实例运行请为每个实例单独指定 `data_dir`。
 
@@ -232,7 +232,7 @@ auto-qb 是**微内核 + 插件式模块**结构(2026-09 内核化重构落地):
 
 - **内核**(`core/qbmanager.py`):只管「何时」—— 主循环三条时间线(同步 / 任务 / 命令)、qB 连接管理、周期落盘计时、模块生命周期编排;不知道任何业务语义,也不 import 业务包。
 - **能力服务**(`ctx.*`):store(种子数据层)/ api(qB 门面)/ state(状态持久化)等单例,内核与模块共同消费,无生命周期。
-- **功能模块**(`core/modules/`):logging / notify / webui / hr / tracker / speed_curve / maintenance / grouping / ops / rules 十个自治模块,实现统一契约(name / sections / start / stop / apply / subscribe):
+- **功能模块**(十个自治模块,实现统一契约 name / sections / start / stop / apply / subscribe):八个实现在 `core/modules/`(logging / notify / tracker / speed_curve / maintenance / grouping / ops / rules),webui 与 hr 两个为独立门面包装配(`webui/module.py` / `hr/module.py`):
   - `sections()` 认领消费的配置顶层段 —— 热重载时每模块无条件 apply、相关段整段相等即短路,没有中央级别表;
   - `subscribe()` 认领刷新相位 —— 种子刷新管线是内核广播相位、模块各自认领执行,相位顺序由守阵锁定;
   - 模块之间不互相 import:协作只经 ctx 服务或事件相位,需要别人能力就把对方的公开方法挂上 ctx。

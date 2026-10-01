@@ -14,7 +14,6 @@
 | 09-22 22:04 | [partial-hr-site-verify-plan.html](../memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html) | 计划 | 可行性分析与实施计划: 浏览器扩展代取 + 后端解析对账 + 三态判定的总体蓝图, M1–M4 里程碑拆解 | backend-partial-hr-verify |
 | 09-22 | [26-09-22-backend-partial-hr-verify.md](../memory-bank/tasks/26-09-22-backend-partial-hr-verify.md) | 任务档案 | **主档案**: M1 核心管道 → M2 取数通道 → M3 判定联动 → M4 多站点 → 七批实报修复 → v2.9/v3.0/v3.5 → M5.1–M5.5(v2) 全过程记录 | backend-partial-hr-verify |
 | 09-22 | [attachments/…-log.md](../memory-bank/tasks/attachments/26-09-22-backend-partial-hr-verify-log.md) | 档案附件 | 主任务的会话滚动日志 | backend-partial-hr-verify |
-| 09-22 22:04 | [activeContext/…backend-partial-hr-verify.md](../memory-bank/activeContext/26-09-22-2204-backend-partial-hr-verify.md) | 活动切片 | 主任务滚动状态单点: 核心链路 / 频控(legacy 90s·12/时·60/天 与 split 双令牌桶) / v2 审计结论摘要 | backend-partial-hr-verify |
 | 09-24 #1 | [hr-m1-core-pipeline.md](../memory-bank/testing/baselines/26-09-24-0000-hr-m1-core-pipeline.md) | 测试基线 | 1233→1375(+142): 新包 `hr/` 全链路(bencode/parse/adapters/model/store/ratelimit/resolve/service/report/fetcher) + 配置接入 | backend-partial-hr-verify |
 | 09-24 #2 | [hr-m2-fetch-channel.md](../memory-bank/testing/baselines/26-09-24-0000-hr-m2-fetch-channel.md) | 测试基线 | 1375→1466(+91): 端点+队列+fetcher+worker+runtime+MV3 扩展; 新键 `channel.extension_id`/`channel.request_timeout` | backend-partial-hr-verify |
 | 09-24 #5 | [hr-alert-tiers-hr-status.md](../memory-bank/testing/baselines/26-09-24-0000-hr-alert-tiers-hr-status.md) | 测试基线 | 1476→1489(+13): HR 告警按被拦根因三档分级去重 + `--hr-status` 只读摊开已落盘数据 | backend-partial-hr-verify |
@@ -22,7 +21,6 @@
 | 09-25 #5 | [m3-judgement-linkage.md](../memory-bank/testing/baselines/26-09-25-0000-m3-judgement-linkage.md) | 测试基线 | 1504→1520(+16): 三态判定接进 TorrentRecord(判定桥 `hr_link` 稳定引用), 四个消费点零改动 | backend-partial-hr-verify |
 | 09-25 #6 | [hr-fetch-fix-ext-quota.md](../memory-bank/testing/baselines/26-09-25-0000-hr-fetch-fix-ext-quota.md) | 测试基线 | 1526→1542(+15): 三真缺陷(页面饿死下载/不等间隔/无索引键误标)修复 + 扩展侧配额第二道闸 | backend-partial-hr-verify |
 | 09-25 #7 | [m4-multisite.md](../memory-bank/testing/baselines/26-09-25-0000-m4-multisite.md) | 测试基线 | 1542→1562(+20): 四类事件语文化 / 站点级状态单一事实源 / WebUI 出口 / 多站点隔离 | backend-partial-hr-verify |
-| 09-25 05:55 | [activeContext/…webui-ext-hr-logging.md](../memory-bank/activeContext/26-09-25-0555-webui-ext-hr-logging.md) | 活动切片 | 浏览器扩展运行日志: 条数 10–10000 可设、四级分级过滤、明细含毫秒时间/命令/站点/结果 | webui-ext-hr-logging |
 | 09-25 #11 | [ext-hr-logging.md](../memory-bank/testing/baselines/26-09-25-0000-ext-hr-logging.md) | 测试基线 | 1576→1579(+3): 扩展运行日志落码, `chrome.storage.local` 单一事实源; 抓到 flush 链自引用死锁 | webui-ext-hr-logging |
 | 09-25 #13 | [hr-overage-exempt.md](../memory-bank/testing/baselines/26-09-25-0000-hr-overage-exempt.md) | 测试基线 | 1579→1596(+17): HR 超龄豁免——新站点级键 `completed_age_limit`, 判定侧豁免 + 翻页早停 | backend-partial-hr-verify |
 | 09-25 #16 | [hr-v30-source-priority.md](../memory-bank/testing/baselines/26-09-25-0000-hr-v30-source-priority.md) | 测试基线 | 1602(+1): v3.0 达标判定「档位即结论」(`satisfied_verdict` 来源优先级), +2 守阵 | backend-partial-hr-verify |
@@ -82,7 +80,7 @@
 
 ## 三、阅读路径建议
 
-- **想了解功能全貌**: 先读 activeContext 切片 [26-09-22-2204](../memory-bank/activeContext/26-09-22-2204-backend-partial-hr-verify.md)(滚动状态单点), 再按需进 [任务档案](../memory-bank/tasks/26-09-22-backend-partial-hr-verify.md)。
+- **想了解功能全貌**: 先读 [任务档案](../memory-bank/tasks/26-09-22-backend-partial-hr-verify.md)(主档案, 全程记录), v3 重构后的复审现状见 [activeContext 切片 26-09-29-0404](../memory-bank/activeContext/26-09-29-0404-hr-verify-v3-audit.md)。
 - **想了解为什么这么设计**: 计划 [26-09-22-2204](../memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html)(初版) → 审计 [26-09-26-1628](../memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html) → v2 计划 [26-09-27-1815](../memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html)。
 - **想知道 v2 之后还有什么没做**: 最新审计 [26-09-28-0030](../memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html) 的 F1–F4 待拍板项。
 - **想配置/接入新站点**: [docs/configuration.md](configuration.md) 的 `hr_check` 节 + [extensions/hr-fetch-proxy/README.md](../extensions/hr-fetch-proxy/README.md)。

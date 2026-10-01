@@ -173,7 +173,7 @@ B 已达标 / C 未达标 / D 已免罪 → 放行**(站点结论已定, 终态�
 就可视为完成, 在线核实只是保障准确」)。做种时长 ≥ 3 × 要求时长(程序常量)的种子免除在线对账义务
 (不为它翻页下载), 但被动命中考察中仍照常管束。
 
-- **全局段** `config.hr_check`(7 键): `enabled`(总开关, 默认 false) + 单频控三键 ——
+- **全局段** `config.hr_check`(8 键): `enabled`(总开关, 默认 false) + 单频控三键 ——
   `min_interval`(默认 90S, 相邻请求最小间隔, 页面与 .torrent 统一适用, 抖动只向上 +0~25%)、
   `max_requests_per_day`(默认 240, 站点级日额保险, 零点重置)、`max_pages_per_wave`(默认 30,
   单波页数上限安全阀, 到顶该档截断, 下波从头再翻) + `allow_window`(可选, 仅该时段取数) +
@@ -241,8 +241,8 @@ config:
 
 - **绑定 = 映射**: web 域与 announce 域是两个命名空间, **永不互相比对**(CarPT 两域无关正是例证)。
   默认映射查表命中即零配置绑定; 显式 `tracker` 填 trackers 下的条目名直取。
-- **旧键**: `trackers.<站点>.hr_check` 已废除 —— config v2→v3 迁移自动改写(`mode: partial/all`
-  → `enabled: true`), v3 起出现即直接删除, 无常驻兼容。
+- **旧键**: `trackers.<站点>.hr_check` 已废除 —— config v1→v2 迁移自动改写到 `hr_check.sites`
+  (v2→v3 再把条目里残留的 `mode: partial/all` 转为 `enabled: true`), v3 起出现即直接删除, 无常驻兼容。
 
 ### 想接的站点不在档案里怎么办
 
@@ -407,7 +407,7 @@ lines: "30"
 
 ## 规则系统
 
-规则集名称以 `_rules` 结尾，挂在 `config` 段下；tracker 通过 `rules` 引用（`@规则集` 引用整组，`@规则集.规则名` 引用单条）。规则同样可在 Web UI 设置页以卡片 + 选择面板方式编辑（16 种条件 / 12 种动作的选择、排序与参数）。
+规则集名称以 `_rules` 结尾，挂在 `config` 段下；tracker 通过 `rules` 引用（`@规则集` 引用整组，`@规则集.规则名` 引用单条）。规则同样可在 Web UI 设置页以卡片 + 选择面板方式编辑（13 种条件 / 12 种动作的选择、排序与参数）。
 
 ```yaml
 ---
@@ -415,8 +415,9 @@ config:
     example_rules: # 🚧
         rule1:
             enabled: true
-            trigger: interval                      # 触发时机: interval / on_torrent_added / on_torrent_state_enum_changed / on_torrent_deleted
+            trigger: interval                      # 触发时机: interval / on_torrent_added / on_torrent_state_enum_changed / on_torrent_deleted / on_torrent_field_changed
             interval: 60S                          # 执行间隔(interval 触发时使用)
+            # watch_fields: [tags, category]       # 仅 trigger: on_torrent_field_changed 时允许; 列出要监听的字段
             execute_once: never                    # 去重: never/once/daily/hourly 🚧
             cooldown: 0S                           # 距上次执行成功不足该时长则跳过 🚧
             conditions:                            # 筛选条件必须全部满足
@@ -489,10 +490,13 @@ config:
 | `on_torrent_added`               | ✅ 已实现  | 新种子添加时事件触发；checking 等异步动作经 rule-event 断点续跑       |
 | `on_torrent_state_enum_changed`  | ✅ 已实现  | 种子 qB 状态枚举发生变化时事件触发                                   |
 | `on_torrent_deleted`             | ✅ 已实现  | 种子删除时触发（现场为删除前快照）；仅允许 `print_torrent_details`    |
+| `on_torrent_field_changed`       | ✅ 已实现  | 监听字段变化时事件触发；须配 `watch_fields` 键列出监听字段（见下）    |
 
 `interval` 触发的规则未显式配置 `interval` 时，默认每个主循环 tick 检查一次（等价 `0S`，既有行为）；显式配置时必须 > 0。
 
-### 筛选条件（12 种）
+`watch_fields` 仅在 `on_torrent_field_changed` 触发下允许配置（其它触发时机下出现即配置报错）：非空列表，取值限 `tags` / `category`（`state` 已有专属触发时机、`amount_left` 高频变化事件化即噪音，均不入白名单）。
+
+### 筛选条件（13 种）
 
 | 条件                     | 说明                                                                                      |
 |--------------------------|-------------------------------------------------------------------------------------------|
@@ -508,6 +512,7 @@ config:
 | `seedtime`               | 做种时长                                                                                  |
 | `upload_ratio`           | 上传比率                                                                                  |
 | `freespace`              | 指定路径剩余空间                                                                          |
+| `expr`                   | 表达式条件：一行表达式自由组合种子字段与函数（如 `sys.dl_speed > 1`），名字带作用域前缀 `tor.* / tracker.* / sys.*`，编译期校验 |
 
 ### 动作（12 种）
 
