@@ -1,12 +1,14 @@
 # mixins/ 职责拆分
 
-> 摘要: `QbManager` 的 mixin 拆分与组合方式。
+> 摘要: `QbManager` mixin 时代的职责拆分**历史快照** —— 现类体仅剩 2 个表现层 mixin 组合入口, 业务能力已在 `core/modules/` 功能模块。
 > ⚠ **2026-09-22 方案 C 目录迁移已落地**: 文内单文件路径为迁移前快照 —— 旧根平铺 8 文件+mixins/ → `core(/mixins)/`, 6 个基础设施 → `infra/`, web_runtime/web/web_ui/ui → `webui/{runtime,server,static}`/`tray/`; 映射总表见 [overview.md](overview.md)。
-> ⚠ **内核化重构 P0-P5 已全部迁出**(plan 26-09-30-1819): tags/tracker/speed_curve(P3)、
+> ⚠ **内核化重构 P0-P5 已全部迁出**(plan 26-09-30-1819): tracker/speed_curve(P3)、
 > grouping/ops+checking(P4)、rule_engine(P5 → [core/modules/rules_mod.py](../../src/auto_qb/core/modules/rules_mod.py) RulesModule,
-> 事件分派/建任务改相位认领, L2 重建收进 rules.apply)均已成 `core/modules/` 功能模块。
-> **本包只剩表现层两 mixin**(webui views/commands 的组合入口), 下表仅为历史快照,
-> 现状以 `core/modules/` 各模块 docstring 为准。
+> 事件分派/建任务改相位认领, L2 重建收进 rules.apply)均已成 `core/modules/` 功能模块;
+> **tags 并非独立模块** —— 并入 MaintenanceModule(`ctx.maintenance.add_tags` 单点,
+> qbmanager.py:223, 打标消费点 core/modules/maintenance_mod.py)。
+> **本包只剩表现层两 mixin**(WebviewMixin + WebCommandsMixin, webui views/commands 的组合入口,
+> qbmanager.py:142-145 类声明), 下表仅为历史快照, 现状以 `core/modules/` 各模块 docstring 为准。
 > 触发: mixins, 职责拆分, 组合, QbManager
 
 ## mixins/ (QbManager 的职责拆分, 组合进宿主)

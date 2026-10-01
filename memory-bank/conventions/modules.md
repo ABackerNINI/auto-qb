@@ -9,7 +9,7 @@
 |---|---|---|
 | 内核 | `core/qbmanager.py` | 只知「何时」(节拍/相位/生命周期): 主循环三时间线、连接管理、落盘计时、ModuleHost 编排。**零业务 import**(AST 守阵) |
 | 能力服务 | `ctx.store / api / state` 等 | 无启用开关、无线程、无热重载语义、被多方消费的纯能力; 内核与模块共同消费 |
-| 功能模块 | `core/modules/` 十模块 | 有启用开关、可能持线程/服务器/队列任务、有配置认领与热重载语义的自治单元 |
+| 功能模块 | 十模块: 8 个本体在 `core/modules/*_mod.py`, 2 个门面在 `webui/module.py` / `hr/module.py` | 有启用开关、可能持线程/服务器/队列任务、有配置认领与热重载语义的自治单元 |
 
 模块清单与装配序: logging → notify → webui → hr → tracker → speed_curve → maintenance → grouping → ops → **rules 最后**(它消费前面所有人的服务)。
 
@@ -56,8 +56,8 @@
 
 ## 兼容层终态(W0-W3 已退役, 反复活机检常驻)
 
-manager 上的旧名兼容层(`_WEB_STATE_ALIAS` 20 字段 + `__getattr__`/`__setattr__` 双 dunder + 五节单行委托 57 名)已于别名层处置 **W3 整体删除**(2026-10-01, plan `plans/26-10-01-0350`): qbmanager.py 1109 → 838 行, 类体只剩**内核自有方法 17 个**与 **D1 拍板永久保留的外观属性对 7 个**(config/store/api/state/state_file/task_queue/web —— manager 即外观的公共面, 不是别名, 删除属 D1 决策范围)。run()/__init__ 的旧名自调用已内联为 `ctx.state.*` / `host.get("rules").load_rules()` 新名口。
+manager 上的旧名兼容层(`_WEB_STATE_ALIAS` 20 字段 + `__getattr__`/`__setattr__` 双 dunder + 五节单行委托 57 名)已于别名层处置 **W3 整体删除**(2026-10-01, plan `plans/26-10-01-0350`): qbmanager.py 1109 → 839 行(2026-10-01 实测)。类体 def 名 24 个(AST 实测) = **内核自有 17 个**(15 个方法 + `__init__` + `state_file` 只读属性 getter)+ 属性 7 名 —— 6 组读写属性对(config/store/api/state/task_queue/web, setter 落回 ctx: 热重载整体替换与测试整对象替换都走它)+ `client` 读写对(非 ctx 委托: 管 `_client`/store/api 绑定与同步基线重置)。D1 拍板永久保留的**外观属性面 7 个** = config/store/api/state/state_file/task_queue/web(`state_file` 构造期确定、只读不成对) —— manager 即外观的公共面, 不是别名, 删除属 D1 决策范围。run()/__init__ 的旧名自调用已内联为 `ctx.state.*` / `host.get("rules").load_rules()` 新名口。
 
 **反复活机检常驻**(兼容层复活是历史上别名层的成因): 退役名单永久留档在 `plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json`(逐名类别/消费方/目标名/波次 + meta.disposal 注记), 守阵 `tests/test_qbmanager_alias_freeze.py` 据此 AST 机检 —— **退役名在 QbManager 复活 / 别名表或转发 dunder 重建即红**, facade 在位性与 kernel 不退化同面机检; 另有 `test_qbmanager_source_has_no_web_state_fields`(名单读分诊清单)防主循环源码直写表现层旧字段。**新代码一律用新名**(模块方法 / `self.web.*` / ctx 服务 / `host.get(...)`), 往 manager 加回旧名 = 守阵红。
 
-处置四波留档: W0 逐名分诊 + 冻结守阵立桩; W1 src 侧消费方改新名口(路由/规则动作/checking_meta 宿主收敛 StateService, `_hr_view_fields` 公开化); W2 测试面按模块域四批 + 补漏迁净; W3 删本体 + 守阵转反复活 + 四场景 sim 走查回放全 PASS(基线 `baselines/26-10-01-0800-w3-alias-layer-retired.md`)。
+处置四波留档: W0 逐名分诊 + 冻结守阵立桩; W1 src 侧消费方改新名口(路由/规则动作/checking_meta 宿主收敛 StateService, `_hr_view_fields` 公开化); W2 测试面按模块域四批 + 补漏迁净; W3 删本体 + 守阵转反复活 + 四场景 sim 走查回放全 PASS(基线 `memory-bank/testing/baselines/26-10-01-0800-w3-alias-layer-retired.md`)。

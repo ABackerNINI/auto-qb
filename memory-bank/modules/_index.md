@@ -13,7 +13,7 @@
 | [core-config.md](core-config.md) | 配置层: 模型 / 校验 / 解析 / 写回 / UI 元数据 / 影响分级。 | config, 配置, 模型, 校验, 解析, 写回, schema, impact |
 | [core-domain.md](core-domain.md) | 种子数据层 / 通知 / 托盘 / 自启 / WEB 后端与前端 / 曲线 / 集数 / 剧集 / 导出。 | torrents, notify, ui, autostart, web, static, curves, episodes, tvshows, exporter |
 | [core-runtime.md](core-runtime.md) | 入口 / 主协调者 / 模块宿主与模块包 / 表现层门面 / HTTP 层 / 客户端 / 队列 / Facade / 锁 / 工具 / 日志 / 错误根。 | cli, qbmanager, webui-runtime, qbclient, taskqueue, qbapi, locking, utils, logging, errors |
-| [mixins.md](mixins.md) | `QbManager` 的 mixin 拆分与组合方式。 | mixins, 职责拆分, 组合, QbManager |
+| [mixins.md](mixins.md) | `QbManager` mixin 时代的职责拆分**历史快照** —— 现类体仅剩 2 个表现层 mixin 组合入口, 业务能力已在 `core/modules/` 功能模块。 | mixins, 职责拆分, 组合, QbManager |
 | [overview.md](overview.md) | 包入口在哪、要改某功能该动哪个文件 —— 进本目录前先读这一份。 | 包入口, 在哪里改, 改哪个文件, 入口, src 布局 |
 | [rules-and-deps.md](rules-and-deps.md) | 规则插件框架、测试对应关系与单向依赖图。 | rules, 插件框架, tests, 依赖方向, 单向, 无环 |
 | [webui-static-contract.md](webui-static-contract.md) | 前端资产(模板 / 逻辑层 / 样式 / 图标)的契约与目录约定。 | 前端契约, static, 模板, shared, atlas, prism, 图标 |

@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-10-01
 **Updated:** 2026-10-01
-**Summary:** 内核化重构+别名层处置后的全库文档漂移, 按 plans/26-10-01-1728 分五段(S1-S5)回写; S1(P1 架构描述重写 5 份)与 S2(误导指路与机制反转单点修 9 份)已完成并过验收, 余 S3-S5。
+**Summary:** 内核化重构+别名层处置后的全库文档漂移, 按 plans/26-10-01-1728 分五段(S1-S5)回写; S1(P1 架构描述重写 5 份)、S2(误导指路与机制反转单点修 9 份)与 S3(modules 中度批 6 份)已完成并过验收, 余 S4-S5。
 
 **Topics:** docs-doc-drift-repair
 
@@ -27,7 +27,7 @@
 |----|------|------|
 | S1 | P1 架构描述重写(5 份: systemPatterns/overview · main-loop · web-runtime · client-and-state + modules/core-runtime) | 完成(26-10-01) |
 | S2 | 误导指路与机制反转单点修(9 份, 2 处 P1) | 完成(26-10-01) |
-| S3 | modules/ 中度批(6 份) | 待做 |
+| S3 | modules/ 中度批(6 份) | 完成(26-10-01) |
 | S4 | 用户面文档(4 份: README + docs/) | 待做 |
 | S5 | P3 清扫 + 待决件 + 收尾基线(test.full 基线切片) | 待做 |
 
@@ -38,4 +38,12 @@
   - 退役名 grep 零残留 8/8: `_WEB_STATE_ALIAS` / `remove_torrent` / `flush_receipts` / `_hr_view_fields` / `SpeedCurveMixin._publish_traffic` / `ops_recheck` / `_web_token` / `web_runtime.py`。
   - 机检: `kb.index` 重建(4 份三行头有动) → `kb.check` 绿(主键纪律 OK: 251 文档 / 154 专题) → `doc.links` 绿 → `pytest tests/test_memory_bank.py` 27 passed。test.full 基线按计划留给 S5 收尾(本轮纯文档零代码变更)。
 - **2026-10-01 合流 a03c3a8d 后坐标复核**(随「提交」同步合入远端 M1+M2/M3 三提交): `take_suppressed` 消费点自轮首迁 events_removed 臂(qbmanager.py:776, take 即 arm), 747-774 区段 -4 → 修正 3 处相位坐标(full_round :758→:754 / transitions :771→:767 / 删除前快照副本 :764→:760), 其余相位坐标(:778/:808/:815/:822/:826/:818)与总行数(839)经实测均未漂移; main-loop.md 内核保留职责句补 M1 消费点语义。
-- **2026-10-01 S2 完成并过验收**(基线 6f474098, 未提交待用户指令): 9 份全部按计划修毕, 每条新断言先实测核对代码坐标 —— 条件 13(`@register_condition`)/动作 12(`actions/*.py` 7+1+4, `__init__.py` 那处匹配是 docstring)/测试 73 个 test_*.py/pyproject 依赖 10 个/`validation`·`schema` 均包/hr `server.py:219-227` 四端点(补 refresh)/`maintenance_mod.py:268` `add_hr_tag_or_category`/`qbmanager.py:535` maybe_flush + `ops_mod.py:438/483/508` 即时 save/`polling.js:76-95` 恒定分档+失败退避/`state.py:183-199`/`static_ui.py:49-58`/`runtime.py:576`/`versioning.py` config=3/`writer.py:121` 盖章/`routes/config.py:111-118` + `common.py:52` `config_backup_path`/`loaders.py:448`/`single_instance_lock` 全 config 零接受(删句依据)。顺带把 techContext L10 的旧路径 `web_ui/static` 一并更正为 `webui/static`(同句指路, 属该条目修复面); productContext 版本按计划对齐 pyproject(v0.1.0)。退役名 grep 零残留(`core/mixins/tags.py` / `config/validation.py` / `config/schema.py` / `WebviewMixin` / `single_instance_lock` / `qbmanager._new_client` / 机制句 `web.py`·`web_ui/static`; 余留 2 处均合法: `tests/test_web.py` 现存文件名 + overview 迁移映射表历史件)。三行头未动 → 免 kb.index; `kb.check` 绿(253 文档 / 156 专题; 切片数 81>70 为既有债务不拦提交)。test.full 基线按计划留给 S5。
+- **2026-10-01 S2 完成并过验收**(基线 6f474098, 已提交 0b422396): 9 份全部按计划修毕, 每条新断言先实测核对代码坐标 —— 条件 13(`@register_condition`)/动作 12(`actions/*.py` 7+1+4, `__init__.py` 那处匹配是 docstring)/测试 73 个 test_*.py/pyproject 依赖 10 个/`validation`·`schema` 均包/hr `server.py:219-227` 四端点(补 refresh)/`maintenance_mod.py:268` `add_hr_tag_or_category`/`qbmanager.py:535` maybe_flush + `ops_mod.py:438/483/508` 即时 save/`polling.js:76-95` 恒定分档+失败退避/`state.py:183-199`/`static_ui.py:49-58`/`runtime.py:576`/`versioning.py` config=3/`writer.py:121` 盖章/`routes/config.py:111-118` + `common.py:52` `config_backup_path`/`loaders.py:448`/`single_instance_lock` 全 config 零接受(删句依据)。顺带把 techContext L10 的旧路径 `web_ui/static` 一并更正为 `webui/static`(同句指路, 属该条目修复面); productContext 版本按计划对齐 pyproject(v0.1.0)。退役名 grep 零残留(`core/mixins/tags.py` / `config/validation.py` / `config/schema.py` / `WebviewMixin` / `single_instance_lock` / `qbmanager._new_client` / 机制句 `web.py`·`web_ui/static`; 余留 2 处均合法: `tests/test_web.py` 现存文件名 + overview 迁移映射表历史件)。三行头未动 → 免 kb.index; `kb.check` 绿(253 文档 / 156 专题; 切片数 81>70 为既有债务不拦提交)。test.full 基线按计划留给 S5。
+- **2026-10-01 S3 完成并过验收**(6 份全部按计划修毕, 每条断言先实测):
+  - `core-config.md`: 头注快照口径改「2026-10-01 实测」; models.py 176→362(类清单补 HrChannelConfig/HrCheckConfig/SiteHrCheckConfig/WebConfig/NotifyConfig, 顺带补实测存在的 FsConfig/PathMapEntry); loaders.py 309→550(函数面补 load_web/notify/hr_check/site_hr_check/fs_config + normalize_schema_version/migrate_config_schema + materialize 落盘口径; `load_add_episode_tags` 更名 `_get_episode_tags`); validation/ 817→1341(同表顺带刷新); schema/ 932/5→1396/6 补 hr.py; 新增 site_presets.py(111, 三命名空间判定单点)与 migrations.py(146, v1→v2 一次性迁移)两行; writer.py ~215→427(补 materialize_schema_migration); impact.py ~55→69 补 `KERNEL_SECTIONS` 五段及 P6 并集口径。
+  - `core-domain.md`: L6 838→839 行; web_ui/static 行 双界面→三界面(补 console/, V1 深海单主题)+「双 shell」→「三 shell」(守阵 `_UI_ALL` 实扫三套, tests/test_web.py:613); app.js 411→488; 片段口径 15→23 个 `AQB_*` mixin(app.js:464-486 实数); `autoqb_cols_v4`→`v5`(shared/app.js:207-208, v4/v3 入 LEGACY_COLS_KEYS)。
+  - `rules-and-deps.md`: conditions.py 294→261 行、16→13 条件; actions 906→934/6、12 动作确认并补分文件行数; tests 段整体改写 33→73 个 test_*.py, 按六域分组并补守阵清单(alias_freeze/module_host/modules_p3-p6/config_key_surface/memory_bank/docs_forms/commands_engine 等); 依赖图 qbmanager 行补 webui/hr/core.module+state/infra 边(逐条对 qbmanager.py:36-76 import 实测, 内核零 rules import 口径保留), `modules/*`→`core/modules/*`; schema 图补 hr.py(fields 零依赖; hr/trackers/rules→fields; groups→{fields,hr,trackers})。
+  - `webui-static-contract.md`: L9 拆分段整体改写为 09-27 三层拆分现状(app.js 488 行 / shared/ 27 个 JS / state+lifecycle 根选项展开 / 23 个 AQB_* mixin), 硬约束改「shell 清单序」; L11 两套 UI→三套共用 shared/。
+  - `mixins.md`: 摘要转「历史快照」定位; tags 并非独立模块 → 并入 MaintenanceModule(`ctx.maintenance`, qbmanager.py:223); 补两 mixin 类声明坐标 qbmanager.py:142-145。
+  - `conventions/modules.md`: 三层结构表十模块目录归属注记(8 本体 core/modules/*_mod.py + 2 门面 webui/hr module.py); 838→839 行; 「内核自有方法 17 / 属性对 7」AST 逐项核实 —— 类体 def 名 24 = 内核自有 17(15 方法 + `__init__` + `state_file` 只读 getter) + 属性 7 名(6 组读写对 + client 绑定对); 原文把 `state_file` 列进「属性对」而漏 `client`, 已按「外观属性面 7 个(config/store/api/state/state_file/task_queue/web, state_file 只读不成对)+ client 非外观绑定对」定口径; baselines 基线路径补全 `memory-bank/testing/` 前缀。
+  - 机检: mixins.md 摘要有动 → `kb.index` 重建 → `kb.check` 绿 → `pytest tests/test_memory_bank.py` 27 passed。与计划的偏差均为「以代码为准」: 计划未列的 writer.py/validation/ 行数与 core-domain「双 shell」措辞随同表实测刷新。test.full 基线按计划留给 S5。
