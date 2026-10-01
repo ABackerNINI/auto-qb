@@ -1,30 +1,22 @@
-# WEBUI 键盘快捷键 · W1-W7 全波已实施(W5-W7 第二波完成) → W5-W7 待提交
+# WEBUI 键盘快捷键 · 全波已入库 + 键鼠衔接方案 B 已入库 + Shift 连选起点计划待拍板
 
-> 摘要: 计划 plans/26-09-28-0354 全波落地。**W1-W4 第一波已入库 `38ffec5`**(基线
-> 26-09-30-0555); **W5-W7 第二波 2026-09-30 07:02 完成, 未提交**(基线
-> [26-09-30-0702](../testing/baselines/26-09-30-0702-webui-keyboard-w5w7.md), test.full
-> 1813 passed + 3 skipped / 91%)。**W5 绑定+局部作用域**: E/F/I 组 run 全量接线(单目标
-> 动作目标解析要求恰一 hash `_kbSingleHash`, 多选/整组提示不猜第一个; 复用 editMove/
-> copyTorrentInfo/torrentCmd 等既有单种链), `_kbScope` 三档(settings/drawer/list)全量生效,
-> 抽屉 Alt+1-4 / 设置页 Ctrl+S inputSafe / 模态白名单分流(modal 条目本期无, 引擎预留分支
-> 静态守阵钉住), 浮层打开只放行焦点局部键位。**W6 后端持久化+面板**: routes/keys.py
-> GET/PUT /api/keys(webui-keys.json 与 web.token 同寻址, 读时兜底链 主→.bak→默认表, PUT
-> 校验 422, 金清单+2); 适配器 AQB_KEYS.reload/save(load 保持同步快照, startPolling 拉真值);
-> 设置页「快捷键」分区(按下即录录制器捕获段监听/纯修饰键拒收/黑名单拒绑/冲突三选一/单条
-> 全部重置/空串=禁用/保存失败本地回滚/离开未保存先确认 hubGo+hubBack 双挂守卫) + 帮助浮层
-> Shift+Slash(Esc 归退栈链, 名单三处同步)。**W7**: 守阵 +11(前端 6 后端 5), 探针 28 项全过,
-> dev.harness 无新增失败。新坑: pitfalls/web-ui/js-comment-terminator.md(块注释 `*/` 提前
-> 终止, node --check 仍绿运行时才炸, 实测踩中)。
-> 最后活动: 2026-09-30 07:10 (W5-W7 完成收尾, 未提交)
+> 摘要: 计划 plans/26-09-28-0354 全波落地并入库 —— **W1-W4 第一波 `38ffec57`**、**W5-W7 第二波
+> `12b018cf`**(局部作用域 / 后端 webui-keys.json 持久化 / 自定义面板 / 帮助浮层 / 守阵+11);
+> 上下键长按连发 `865593dc`; **键鼠割裂方案 B `9c68cce9`**(点击落光标 + 无光标回落改视口就近,
+> 报告 reports/26-09-30-1806)。
+> **本轮新增(2026-10-02)**: 用户提出 Shift 连选起点与键鼠联动脱节 → 出修改计划
+> plans/26-10-02-0608(**Open, 待拍板**): 起点解析单点化 + 点击落起点 + 键盘手势原点兜底,
+> 修「Shift 连选从列表首行起算」。代码事实核对截至 2359a3d1。
+> 最后活动: 2026-10-02 06:08
 
 ## 正在进行
 
-- **W5-W7 已完成待提交**(改动面 14 文件: 新增 routes/keys.py; 引擎 shortcuts.js; 接线
-  routes/__init__ + polling/state/lifecycle/dialogs/config_hub; 模板/CSS settings-detail/
-  popovers/console_hub.css; 守阵 test_web.py + test_web_shortcuts.py)。下一步: 用户「提交」
-  指令走 ship.commit(提交信息素材在任务档案进度日志 07:02 条)。
+- **Shift 连选起点计划待拍板**(plans/26-10-02-0608, Open): 代码取证 G1-G5(四处 `list[0]` 兜底 /
+  `_kbExtend` 先移动后取起点 / 五入口普通点击不落起点 / 追剧页退化单单元 / 起点与光标两套状态机);
+  推荐方案 B(W1 起点单点化 / W2 点击落起点 / W3 键盘起点建立 / W4 追剧页 / W5 守阵+回写)。
+  4 个口径决策点待用户拍板(该计划 §09)。拍板后按波次实施(纯前端 JS, 无后端/配置键)。
 - 已完成条目已迁出至 [progress/implemented-webui.md](../progress/implemented-webui.md)
-  「键盘快捷键全量落地」条; 计划 doc-status 已置 Done; 档案子任务表已全 Done。
+  「键盘快捷键全量落地」条; 计划 26-09-28-0354 doc-status 已置 Done; 档案子任务表已全 Done。
 
 ## 关键决策
 
