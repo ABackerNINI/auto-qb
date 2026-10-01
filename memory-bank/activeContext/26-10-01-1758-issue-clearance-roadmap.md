@@ -13,14 +13,16 @@
 > → 2fc34fc2(根修 0c18fcda 合并同名守阵);③26-09-22-2311 → 9486a7cd(根修 54c83ac3 deepcopy, 零代码改动);
 > ④⑤26-09-30-0602 两条 → 9aeb4400(colwidth 用例选键)/ 59725443(ctx03 点击落点), 同档案
 > tasks/26-10-01-test-ui-smoke-clearance.md。收尾基线切片见 `commands run kb.baseline` 最新一条。
-> **计划外事项(只记录, 均未修、未建新 issue, 待用户定调)**:
-> a) `commands run kb.index` 的三条生成器不含 issues 索引 —— 改 issue 状态后须单独跑
-> `uv run python .agents/skills/create-issue/scripts/gen_issues_index.py`(S1, 已记各档案);
-> b) tests/test_config.py 另有 **5 对同文件重名测试遮蔽**(4 对逐字相同, 同类缺陷;S2, 已记
-> issue 26-09-20-2212 报告补充段与档案)—— 清偿轮(含防复发守阵)待授权;
-> c) tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享」理由写, deepcopy 根修后过时(保守无害;S3);
+> **计划外事项(a/b/c 已于 2026-10-01 20:12 统一入池, 均未修待认领; d) 已落坑档无需 issue)**:
+> a) kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑
+> `uv run python .agents/skills/create-issue/scripts/gen_issues_index.py` → issue 26-10-01-2012-chore-kb-index-missing-issues-gen(收编与否待定调);
+> b) tests/test_config.py 另有 **5 对同文件重名测试遮蔽**(4 对逐字相同, 同类缺陷)→ issue
+> 26-10-01-2012-test-test-config-duplicate-test-names(挂专题 duplicate-test-name-shadowed-guard,
+> 与 2212 串线)—— 清偿轮(含防复发守阵)待授权;
+> c) tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享」理由写, deepcopy 根修后过时(保守无害)→
+> issue 26-10-01-2012-docs-test-ui-stale-fakeconfig-comment;
 > d) 冒烟「行内交互后代(@click.stop 的 site-chip)吞修饰键点击」新坑已按动作写进
 > pitfalls/testing/smoke.md(S4)。
 > **待办**: W2 状态完整性与数据安全(4)起逐波推进, 每波待用户显式授权;路线图口径余 26 条
 > (其后又有新入池, 实时以 issues/_index.md 为准;路线图 HTML 本体不改, 未全清不转 Done)。
-> 最后活动: 2026-10-01 20:05
+> 最后活动: 2026-10-01 20:15

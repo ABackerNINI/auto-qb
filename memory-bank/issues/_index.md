@@ -16,13 +16,17 @@
 |---|---|
 | bug | 6 |
 | perf | 3 |
-| docs | 6 |
+| docs | 7 |
+| test | 1 |
 | refactor | 2 |
 | feat | 5 |
-| chore | 5 |
+| chore | 6 |
 
 ## Open
 
+- [chore] [kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py](26-10-01-2012-chore-kb-index-missing-issues-gen.html) — kb.index 的 16 个索引不含 create-issue 的 gen_issues_index.py, 改 issue 状态后跑 kb.index 不迁移 issues/_index.md 状态分区, 须单独补跑; 收编与否待定调
+- [docs] [tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享实例」口径, 深拷贝根修后过时](26-10-01-2012-docs-test-ui-stale-fakeconfig-comment.html) — FakeConfig 根修(54c83ac3 改 deepcopy 实例属性)后, test_ui.py:41 注释理由已失效; 保守无害, 随下次触碰 test_ui 顺手校正
+- [test] [tests/test_config.py 另有 5 对同文件重名测试, 顶层 def 遮蔽致前一条死测试](26-10-01-2012-test-test-config-duplicate-test-names.html) — test_config.py 存在 5 对重名顶层测试(718/793 等), 后者遮蔽前者; 前 4 对逐字相同、第 5 对仅 YAML 样本一字之差; 待重命名/合并并落防复发守阵
 - [chore] [src/auto_qb/core/mixins/__pycache__/ 残留 .pyc 删除后会再生, 根因待查](26-10-01-1946-chore-core-mixins-pycache-regen.html) — git 零跟踪的 core/mixins/__pycache__/ 残留已退役模块的 .pyc, 修复期间删过两次跑测试后又再生; 疑似测试以残留包名导入, 需断根
 - [docs] [roadmap.md「剩余: WebSocket 推送/多用户」与 SSE 推送已实现现状表述张力](26-10-01-1946-docs-roadmap-sse-websocket-drift.html) — roadmap.md:8 仍把推送列为剩余项, 但 webui/runtime.py:116-164 已有 SSE /api/events 推送节; 非计数断言, 需核对口径后改写
 - [docs] [代码内注释残留 6 处: 仍描述已退役的委托层与旧路径](26-10-01-1738-docs-code-comment-drift.html) — 内核化重构+别名层退役后, 6 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring / rules/actions/checking.py:4 / skip_checking.py:4)
