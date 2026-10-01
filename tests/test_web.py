@@ -118,7 +118,8 @@
 - test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
-- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2) —— 设置分区表① 模板绑定(档位 chips 本地过滤/明细行/空态/失踪行挂钩/「数据截至」时间戳/「上次核实(放行判定)」独立列名)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(阶段3 才做)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
+- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2) —— 设置分区表① 模板绑定(档位 chips 本地过滤/明细行/空态/失踪行挂钩/「数据截至」时间戳/「上次核实(放行判定)」独立列名)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
+- test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -1818,7 +1819,7 @@ def test_frontend_hr_detail_table_wiring():
       (拍板⑥)+ 列名「上次核实(放行判定)」(拍板④ 独立口径, 不与 last_seen 合并)—— 缺一处该功能消失;
     2. 拍板守卫: remain_seconds 不得进表(拍板③, 2026-09-25 误读教训)/ 不挂 hr-pop 不做行内跳转
       (拍板⑤)/ 单元格无原生 title(hr-tooltip-overlap: 与悬停弹窗叠出遮挡)/ 表① 段无 <details>
-      (阶段 3 才做排障视图, 提前混入即越界)/ 来源徽章类名是 hr-vsrc —— .hr-src 是列表页已退役
+      (排障视图在 aqb:hr-diag 独立段, 阶段3 交付)/ 来源徽章类名是 hr-vsrc —— .hr-src 是列表页已退役
       的文字 chip 族(守阵钉了 class="hr-src" 零残留, 复用即撞红);
     3. JS 接线: hr_status.js 有按站点明细加载(loadHrSiteEntries)与本地筛选(hrsLaneSelOf),
       且无 setInterval(计划 §5.5 刷新纪律: 打开拉一次 + 手动刷新, 不轮询、不进 /api/state);
@@ -1849,7 +1850,7 @@ def test_frontend_hr_detail_table_wiring():
     assert "remain_seconds" not in frag, "remain_seconds 不得进表①(拍板③: 考核窗口倒计时, 2026-09-25 误读教训)"
     assert "hrPopEnter" not in frag, "表① 不得挂 hr-pop 悬停(拍板⑤: 第一期纯清单)"
     assert "title=" not in frag, "表① 单元格不得挂原生 title(hr-tooltip-overlap: 与悬停弹窗叠出遮挡)"
-    assert "<details" not in frag.lower(), "表① 段不得提前做阶段 3 的 <details> 排障视图"
+    assert "<details" not in frag.lower(), "表① 段不得混入 <details>(排障视图在 aqb:hr-diag 独立段, 阶段3 已交付)"
     assert 'class="hr-src"' not in frag, "来源徽章类名必须是 hr-vsrc —— hr-src 是列表页已退役 chip 族(复活即撞守阵)"
 
     # 3. JS 接线: 按站点按需加载 + 本地筛选 + 不轮询
@@ -1878,6 +1879,58 @@ def test_frontend_hr_detail_table_wiring():
     pri_views = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
     assert ".hr-detail-table-bar" in pri_components, "prism/css/components.css 缺表头过滤栏段( chips + 数据截至)"
     assert ".hr-detail-table .hr-lane-a" in pri_views, "prism/css/views.css 缺表格徽章段"
+
+
+def test_frontend_hr_diag_view_wiring():
+    """HR 表② 排障视图前端接线守阵(2026-10-01, 计划 26-10-01-2216 阶段3)
+
+    表② 是站点卡片里原生 <details> 默认收起的排障视图(上半张站点级 kv 行 + 下半张各档波次明细,
+    数据全来自 /api/hr/status 现有载荷, 零新请求零新定时器), 三类"漏一处 = 静默失效 / 拍板被推翻"
+    的故障形态机械钉住:
+    1. 模板绑定: <details> 默认收起(无 open 属性, 计划 §5.3: 默认收起是拍板交互, 浏览器原生
+      open 会让排障噪音常驻)/ summary 文案 / kv 行 v-for(hrsKvRows)/ 波次明细行 v-for
+      (lanes[].detail 首次获得展示位, 拍板①a: --hr-status 文本表格化);
+    2. 展开态不持久化: 排障是临时动作, hr_status.js 不得出现 localStorage(计划 §5.3);
+    3. CSS 三处成对(计划 §5.6): .hrs-diag / .hr-diag-kv / .hr-wave-table 在 atlas / console /
+      prism 聚合各 ≥1 —— 波次表同挂 .hr-detail-table 继承表① 徽章色义, 那一段的成对由
+      test_frontend_hr_detail_table_wiring 钉住, 这里钉表② 自己的新类。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl = open(os.path.join(shared, "tpl", "settings-detail.html"), encoding="utf-8").read()
+    m = re.search(r"<!-- aqb:hr-diag:begin.*?-->(.*?)<!-- aqb:hr-diag:end.*?-->", tpl, re.S)
+    assert m, "settings-detail.html 缺 aqb:hr-diag 扫描锚 —— 表② 排障视图被移走或锚被删? 同步本守阵"
+    frag = m.group(1)
+
+    # 1. details 默认收起 + 模板绑定
+    dm = re.search(r"<details\b[^>]*>", frag)
+    assert dm, "排障视图缺 <details>(收起交互是拍板交互)"
+    assert not re.search(r"<details\b[^>]*\bopen\b", dm.group(0)), "排障视图 <details> 不得带默认 open(计划 §5.3: 默认收起)"
+    for needle, what in (
+        ("排障视图", "summary 文案"),
+        ("hrsKvRows(s)", "站点级 kv 行渲染"),
+        ('v-for="ls in s.lanes"', "各档波次明细行渲染(lanes[].detail 展示位)"),
+        ('class="drawer-table hr-diag-kv"', "kv 表骨架(同挂 .drawer-table 一类)"),
+        ("hr-wave-table", "波次明细表类名(同挂 .hr-detail-table 继承徽章色义)"),
+    ):
+        assert needle in frag, f"排障视图缺 {what}(应有 `{needle}`)"
+
+    # 2. 展开态不持久化 + JS 拼行单点(无新请求/定时器由 hr_detail_table 守阵的 setInterval 断言一并覆盖)
+    js = open(os.path.join(shared, "hr_status.js"), encoding="utf-8").read()
+    for needle in ("hrsKvRows", "hrsWaveCutoff", "hrsWaveCount"):
+        assert needle in js, f"hr_status.js 缺 {needle}(表② 人话拼接单点)"
+    # 剥块注释再查(注释里提到"不写 localStorage"的说明文字不算使用 —— 判定只认代码态)
+    js_code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    js_code = re.sub(r"//[^\n]*", "", js_code)
+    assert "localStorage" not in js_code, "展开态不持久化(计划 §5.3: 排障是临时动作): hr_status.js 代码态不得出现 localStorage"
+
+    # 3. CSS 三处成对(表② 新类)
+    for css, name in (
+        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
+        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
+        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+    ):
+        for cls in (".hrs-diag", ".hr-diag-kv", ".hr-wave-table"):
+            assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5.6)"
 
 
 def test_frontend_member_window_functions_live_in_methods():

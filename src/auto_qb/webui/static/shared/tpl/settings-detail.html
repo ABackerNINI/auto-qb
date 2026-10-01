@@ -319,29 +319,48 @@
                             <div v-else class="empty"><span>{{ hrsLaneSelOf(s.site) ? "该档位暂无 HR 种子" : "该站点暂无 HR 种子" }}</span></div>
                           </template>
                           <!-- aqb:hr-detail-table:end -->
-                          <p class="hrs-line">各档波次:
-                            <template v-if="s.lanes && s.lanes.length">
-                              <span v-for="ls in s.lanes" :key="ls.lane" class="hrs-tag" :class="hrsLaneClass(ls)">{{ hrsLaneBadge(ls) }}</span>
-                            </template>
-                            <template v-else>{{ s.lanes_text || '-' }}</template>
-                          </p>
-                          <p class="hrs-line">
-                            索引 {{ s.index_total }} 条(活跃 {{ s.index_active }}) · 档位 {{ hrsLaneText(s) }} ·
-                            考察中命中 {{ s.managed }} 个 · 观察期 {{ s.observing }} 个 ·
-                            待回填 {{ s.pending_infohash }} 条({{ hrsPct(s.backfill_ratio) }})
-                          </p>
-                          <p class="hrs-line">
-                            已取种子 {{ s.downloaded }} · 取种失败 {{ s.fails }} · 放行记录 {{ s.verified }}
-                          </p>
-                          <p class="hrs-line">{{ s.quota.text }}</p>
-                          <p class="hrs-line">守恒: {{ s.retention_text }}</p>
-                          <p class="hrs-line">时间窗: {{ s.allow_window || '不限' }}
-                            <button v-if="s.zero_rows && !s.empty_confirmed && !s.count_attested_empty" class="hb-btn ghost sm"
-                                    :disabled="hrs.confirming" @click="hrsConfirmEmpty(s.site)">确认空清单</button>
-                          </p>
-                          <p v-if="s.notes" class="hrs-line warn">最近一波备注: {{ s.notes }}</p>
-                          <p v-if="s.blocking" class="hrs-line warn">现在不放行: {{ s.blocking }}</p>
-                          <p v-if="s.read_error" class="hrs-line error">站点文件: {{ s.read_error }}</p>
+                          <!-- 表② 排障视图(计划 26-10-01-2216 阶段3, 拍板①a): 排障性文本(取波/守恒/零行三态/
+                               现在不放行/备注/站点文件/配额/时间窗/存量)收进原生 details **默认收起**, 表格化为
+                               站点级 kv 行 + 各档波次明细(§5.3); 展开态是临时排障动作, 不进 localStorage 不持久化;
+                               数据全来自 /api/hr/status 现有载荷(hrsKvRows 拼行), 无新请求无新定时器;
+                               波次表同挂 .hr-detail-table 继承表① 徽章色义(计划: 阶段3 复用阶段2 骨架与徽章) -->
+                          <!-- aqb:hr-diag:begin (守阵 test_frontend_hr_diag_view_wiring 的扫描锚) -->
+                          <details class="hrs-diag">
+                            <summary>排障视图 · 波次明细与站点诊断</summary>
+                            <table class="drawer-table hr-diag-kv">
+                              <tbody>
+                                <tr v-for="kv in hrsKvRows(s)" :key="kv.k">
+                                  <td>{{ kv.k }}</td>
+                                  <td class="mono-cell" :class="kv.cls">{{ kv.v }}
+                                    <button v-if="kv.act" class="hb-btn ghost sm" :disabled="hrs.confirming"
+                                            @click="hrsConfirmEmpty(s.site)">确认空清单</button>
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                            <table v-if="s.lanes && s.lanes.length" class="drawer-table hr-detail-table hr-wave-table">
+                              <thead>
+                                <tr>
+                                  <th>档位</th><th>状态</th><th class="num">页数</th><th class="num">行数</th>
+                                  <th class="num">截至深度</th><th class="num">连续失效</th><th class="num">对平(声称/命中)</th><th>说明</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr v-for="ls in s.lanes" :key="ls.lane">
+                                  <td><span class="hr-lane" :class="hrsLaneCls(ls.lane)">{{ ls.lane }} {{ ls.lane_text }}</span></td>
+                                  <td class="mono-cell" :class="hrsLaneClass(ls)">{{ ls.status_text }}</td>
+                                  <td class="num">{{ ls.pages }}</td>
+                                  <td class="num">{{ ls.rows }}</td>
+                                  <td class="num">{{ hrsWaveCutoff(ls) }}</td>
+                                  <td class="num">{{ ls.fail_streak }}</td>
+                                  <td class="num">{{ hrsWaveCount(ls) }}</td>
+                                  <td class="mono-cell">{{ ls.detail || "—" }}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                            <p v-else class="hrs-line">各档波次: {{ s.lanes_text || '-' }}</p>
+                          </details>
+                          <!-- aqb:hr-diag:end -->
                         </article>
                       </div>
                     </div>

@@ -11,6 +11,9 @@
  *   响应也不进 /api/state 轮询载荷(pitfalls/web-ui/contract-api.md: 只在用户显式动作时才
  *   需要的字段不塞轮询载荷); 单站点失败只置该站错误态(.empty 错误行), 不阻塞分区其余内容;
  *   无新增定时器。
+ * !排障视图(表②, 计划 26-10-01-2216 阶段3): 站点级 kv 行(hrsKvRows)+ 各档波次明细
+ *   (hrsWaveCutoff/hrsWaveCount)全部取自 /api/hr/status 现有载荷, **零新请求**; 收进
+ *   <details> 默认收起, 展开态不持久化(临时排障动作)。
  * !入口只有一个(2026-09-25 合并): Console Hub「HR 在线核实」分区页尾 —— 曾经的经典设置页
  *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
@@ -181,12 +184,51 @@ window.AQB_HR_STATUS = {
       const l = s.lane_counts || {};
       return `A=${l.A || 0} B=${l.B || 0} C=${l.C || 0} D=${l.D || 0}`;
     },
-    /* 档位波次徽章(计划 26-09-29-2036 M3): 数字全由后端 s.lanes 算好, 这里只拼文案与配色 */
-    hrsLaneBadge(ls) {
-      let t = `${ls.lane} ${ls.status_text}: ${ls.pages}页${ls.rows}行${ls.full_depth ? "(全)" : ""}`;
-      if (ls.count_claim != null) t += ` · ${ls.rows}/声明${ls.count_claim}`;
-      if (ls.count_match === false) t += " 对不平";
-      return t;
+    /* ---------------- 表② 排障视图(计划 26-10-01-2216 阶段3, 拍板①a) ----------------
+     * 排障性文本收进 <details> 默认收起的排障视图, 表格化为站点级 kv 行 + 各档波次明细;
+     * kv 行集在这里拼好(模板 v-for 摆行, 保 settings-detail.html 体量守阵), 字段全来自
+     * /api/hr/status 现有载荷的 SiteStatus/LaneStatus, 措辞与 CLI --hr-status 对齐
+     * (report._print_status_site 同源字段) —— 不重算语义, 只挑文案与配色;
+     * 展开态是临时排障动作: 不写 localStorage、不加定时器(pitfalls/web-ui/ui-location-persist)。 */
+    hrsKvRows(s) {
+      const confirmed = !!s.empty_confirmed;
+      const attested = !!s.count_attested_empty;
+      const unconfirmed = !!s.zero_rows && !confirmed && !attested;
+      const zero = !s.zero_rows
+        ? "非零行(零行未确认 / 计数自证空集均未触发)"
+        : confirmed ? "零行波 · 已人工确认空清单"
+        : attested ? "零行波 · 计数自证空集(无需人工确认)"
+        : "零行波 · 未确认(零行波不签发放行)";
+      const exp = this.fmtTs(s.expires_at);
+      return [
+        { k: "通道", v: s.channel_text || "—" },
+        { k: "数据版本", v: `revision ${s.revision || 0}` },
+        { k: "放行签发", v: s.releases_enabled ? "开" : "冻结", cls: s.releases_enabled ? "" : "warn" },
+        { k: "取波", v: s.fresh_text || "—" },
+        { k: "复用窗至", v: exp ? `${exp}${s.stale ? "(已过)" : ""}` : "—" },
+        { k: "下次拉取", v: this.fmtTs(s.next_wave_at) || "—" },
+        { k: "配额", v: (s.quota && s.quota.text) || "—" },
+        { k: "零行三态", v: zero, cls: unconfirmed ? "warn" : "", act: unconfirmed },
+        { k: "守恒", v: `索引 ${s.index_total} 条(活跃 ${s.index_active}) · 待回填 ${s.pending_infohash} 条(${this.hrsPct(s.backfill_ratio)}) · ${s.retention_text || "—"}` },
+        { k: "存量", v: `档位 ${this.hrsLaneText(s)} · 考察中命中 ${s.managed} 个(键 ${s.keys} 个) · 观察期 ${s.observing} 个 · 已取种子 ${s.downloaded} · 取种失败 ${s.fails} · 放行记录 ${s.verified}` },
+        { k: "时间窗", v: s.allow_window || "不限" },
+        { k: "现在不放行", v: s.blocking || "—— 无", cls: s.blocking ? "warn" : "" },
+        { k: "最近一波备注", v: s.notes || "—", cls: s.notes ? "warn" : "" },
+        { k: "站点文件", v: s.read_error || "正常", cls: s.read_error ? "error" : "" },
+      ];
+    },
+    /* 波次表「截至深度」列: full_depth = 覆盖证明达全深度; 否则显示已见最深行的完成时刻
+     * (cutoff_done 是 epoch, model.HrLaneState 口径; 0 = 没有位置概念 → —) */
+    hrsWaveCutoff(ls) {
+      if (ls.full_depth) return "全深";
+      return this.fmtTs(ls.cutoff_done) || "—";
+    },
+    /* 波次表「对平(声称/命中)」列: 声称 = count_claim; 命中后端只给平/不平两态(count_match),
+     * None = 无从对平 → ?(与 CLI「声明 N 行 / 对不平」同源, 不重算) */
+    hrsWaveCount(ls) {
+      if (ls.count_claim === null || ls.count_claim === undefined) return "—";
+      const m = ls.count_match === null || ls.count_match === undefined ? "?" : (ls.count_match ? "平" : "不平");
+      return `${ls.count_claim} / ${m}`;
     },
     hrsLaneClass(ls) {
       if (ls.count_match === false) return "warn";

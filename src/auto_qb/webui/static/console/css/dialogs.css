@@ -102,6 +102,18 @@
   border-radius: 999px; color: var(--fg-dim); font-size: 10.5px; white-space: nowrap; }
 .hr-detail-table .hr-vsrc.hr-vsrc-b { border-color: var(--green-line); color: var(--green); }
 .hr-detail-table .hr-vsrc.hr-vsrc-d { border-color: var(--blue-line); color: var(--blue); }
+/* ---------------- HR 表② 排障视图(计划 26-10-01-2216 阶段3) ----------------
+ * <details> 默认收起(展开态不持久化); 骨架复用 .drawer-table, 波次明细表同挂 .hr-detail-table
+ * 继承上面的徽章色义; kv 表键列不换行弱化色, 值列 mono 走模板 .mono-cell;
+ * warn/error 值取既有令牌, 不写死 hex。 */
+.hrs-diag { margin-top: 8px; }
+.hrs-diag summary { cursor: pointer; user-select: none; color: var(--fg-muted); font-size: 12px; }
+.hrs-diag summary:hover { color: var(--fg); }
+.hrs-diag td.warn { color: var(--warn); }
+.hrs-diag td.error { color: var(--error); }
+.hr-diag-kv { margin-top: 6px; }
+.hr-diag-kv td:first-child { width: 1%; white-space: nowrap; color: var(--fg-dim); }
+.hr-wave-table { margin-top: 8px; }
 .drawer-raw { margin-top: 6px; }
 .drawer-raw summary { cursor: pointer; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 8px; }
 

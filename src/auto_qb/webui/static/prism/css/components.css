@@ -513,6 +513,18 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .hr-chip { cursor: pointer; user-select: none; }
 .hr-chip.on { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
 .hr-detail-table-fresh { margin-left: auto; color: var(--fg-dim); font-size: 11.5px; }
+/* ---------------- HR 表② 排障视图(计划 26-10-01-2216 阶段3, prism 侧) ----------------
+ * <details> 默认收起(展开态不持久化); 骨架复用 .drawer-table, 波次明细表同挂 .hr-detail-table
+ * 继承 views.css 的徽章色义段; kv 表键列不换行弱化色, 值列 mono 走模板 .mono-cell;
+ * warn/error 值取既有令牌, 不写死 hex。 */
+.hrs-diag { margin-top: 8px; }
+.hrs-diag summary { cursor: pointer; user-select: none; color: var(--fg-muted); font-size: 12px; }
+.hrs-diag summary:hover { color: var(--fg); }
+.hrs-diag td.warn { color: var(--warn); }
+.hrs-diag td.error { color: var(--error); }
+.hr-diag-kv { margin-top: 6px; }
+.hr-diag-kv td:first-child { width: 1%; white-space: nowrap; color: var(--fg-dim); }
+.hr-wave-table { margin-top: 8px; }
 .prio-btn { padding: 2px 9px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: transparent; color: var(--fg-soft); font: inherit; font-size: 11.5px; cursor: pointer;
   transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
