@@ -18,17 +18,37 @@
 - test_traffic_values: 全局流量值(需 traffic_source 数据源)取值正确
 - test_traffic_unconfigured: 未配置数据源 -> ExprError(绝不返回 0)
 - test_config_gate_for_traffic_names: 用到无数据源名字 -> 配置期禁用(配了才放行)
+- test_more_getters_and_funcs: 取值器/函数表补遗(idle 正值/计数谓词/tracker.names/file_count/
+  len/abs·round·min·max·days·hours/disk_total·disk_used/exists/同 ctx 二次取值命中缓存)
+- test_file_access_error_paths: 文件访问层错误映射(FileAccessError 显式报错/OSError 包装/
+  exists UNDETERMINED -> ExprError/traffic 数据源不可读)
+- test_runtime_error_paths_batch: 运行期错误路径参数化(未知名/未知函数/非布尔逻辑操作数/
+  len 不可计长/数值函数吃非数值/in 非容器/比较类型错/未知运算符/未知节点)
+- test_arith_and_compare_runtime: 算术 +-*//% 与字符串比较/== !=/一元负号/列表字面量求值
+- test_static_type_edges: 静态校验补遗(函数参数类型错含无位置字面量/列表与一元/ANY 放行/
+  未知节点兜底 ANY/used_names 遍历 Unary·Call·ListLit)
+- test_trace_walks_all_node_kinds: trace 遍历 Call/Unary/ListLit + _jsonable 容器/inf/异型兜底
+- test_eval_cache_created_on_missing: ctx 无 expr_cache 时求值侧自建缓存
+- test_name_table_skips_unmapped_annotation: 注解无类型映射的快照字段跳过登记(不炸), 全局表不受重建影响
 """
 import os
 import shutil
 import tempfile
 from datetime import date, datetime
+from types import SimpleNamespace
 
 import pytest
 
 from auto_qb.config.models import GlobalSpeedLimitCurve
 from auto_qb.config.validation.rules import _validate_expr_condition_spec, _validate_rules
+from auto_qb.infra import file_access
+from auto_qb.infra.file_access import UNDETERMINED, FileAccessError
 from auto_qb.rules.base import Rule
+from auto_qb.rules.expr import env as expr_env
+from auto_qb.rules.expr import ANY, compile_expr, evaluate, validate
+from auto_qb.rules.expr.errors import ExprError, ExprSyntaxError
+from auto_qb.rules.expr.eval import trace
+from auto_qb.rules.expr.parser import Binary, Lit
 from auto_qb.rules.conditions import (
     CategoryCondition,
     DateTimeCondition,
@@ -44,8 +64,6 @@ from auto_qb.rules.conditions import (
     TrackersCondition,
     UploadRatioCondition,
 )
-from auto_qb.rules.expr import compile_expr, evaluate, validate
-from auto_qb.rules.expr.errors import ExprError, ExprSyntaxError
 from helpers import FakeClient, FakeTorrent, make_ctx, make_manager
 
 _GIB = 1024**3
@@ -317,3 +335,186 @@ def test_legacy_condition_equivalence(monkeypatch):
         # 在同一颗已达标种子上为 False —— 两名语义分叉正好由这组断言钉住
         assert _val("tor.hr_local_triggered", ctx) is True
         assert _val("tor.hr_condition_met", ctx) is False
+
+
+# ---------- T0.2 扩展: 取值器/函数表错误路径与运行期边界 ----------
+
+
+def test_more_getters_and_funcs(monkeypatch):
+    """取值器与函数表补遗: idle 正值 / 全局计数谓词 / tracker.names / file_count / len /
+    abs·round·min·max·days·hours / disk_total·disk_used / exists 真值 / 同 ctx 二次取值命中缓存"""
+    calls = []
+
+    def fake_usage(path):
+        calls.append(path)
+        return shutil._ntuple_diskusage(500 * _GIB, 100 * _GIB, 400 * _GIB)
+
+    monkeypatch.setattr(shutil, "disk_usage", fake_usage)
+    _, tor, ctx = _setup(tags="HR", state="uploading")
+    # last_activity 为正值(> 0)时 idle = now - last_activity, 不再是 inf 哨兵
+    tor.last_activity = datetime.now().timestamp() - 30
+    assert 0 < _val("tor.idle", ctx) < 120
+    # 全局计数谓词: 库里只有本种子 → 按状态类别各归其位
+    assert _val("sys.seeding_count", ctx) == 1
+    assert _val("sys.downloading_count", ctx) == 0
+    # tracker.names = 该种子所有 tracker URL 命中的站点名集合(昂贵, 按 ctx 缓存)
+    assert _val("tracker.names", ctx) == frozenset({"HHan"})
+    assert _val('"HHan" in tracker.names', ctx) is True
+    # file_count: 走 client 拉文件列表
+    ctx.client.files_map[tor.hash] = [{"name": "a.bin"}, {"name": "b.bin"}]
+    assert _val("file_count()", ctx) == 2
+    # len / 数值函数
+    assert _val("len(tor.tags) == 1", ctx) is True
+    assert _val("abs(-5) == 5", ctx) is True
+    assert _val("round(1.5) == 2", ctx) is True
+    assert _val("min(tor.ratio, 1.5) == 1.5", ctx) is True
+    assert _val("max(tor.ratio, 1.5) == 2.0", ctx) is True
+    assert _val("days(2) == 48H", ctx) is True
+    assert _val("hours(2) == 7200", ctx) is True
+    # 同 ctx 第二次取同名值: 命中缓存不重查(disk_total/disk_used 已各查一次 = 2,
+    # 两次 freespace 只新增 1 次真实查询; Local 层会把路径补成长路径前缀)
+    assert _val('disk_total("C:/") == 500GiB', ctx) is True
+    assert _val('disk_used("C:/") == 100GiB', ctx) is True
+    # exists 真值/假值(经 Local 实现, 只读 stat)
+    assert _val('exists("C:/")', ctx) is True
+    assert _val('exists("Z:/__auto_qb_no_such_path__")', ctx) is False
+    n0 = len(calls)
+    assert _val('freespace("C:/")', ctx) == 400 * _GIB
+    assert _val('freespace("C:/")', ctx) == 400 * _GIB
+    assert len(calls) == n0 + 1 and calls[-1] == calls[0] and "C:" in calls[0]
+
+
+def test_file_access_error_paths(monkeypatch):
+    """文件访问层错误映射: FileAccessError -> ExprError(显式不可判定) / OSError -> 「磁盘不可用」/
+    exists UNDETERMINED -> ExprError / traffic 数据源配置了但文件不可读 -> ExprError(不给假 0)"""
+    class _StubFA:
+        def __init__(self, exc):
+            self._exc = exc
+
+        def disk_usage(self, path):
+            raise self._exc
+
+        def exists(self, path):
+            return UNDETERMINED
+
+    _, _, ctx = _setup()
+    monkeypatch.setattr(file_access, "get_file_access", lambda: _StubFA(FileAccessError("映射未命中: 不可判定")))
+    for fn in ("freespace", "disk_total", "disk_used"):
+        with pytest.raises(ExprError, match="不可判定"):
+            _val(f'{fn}("C:/") > 0', ctx)
+    monkeypatch.setattr(file_access, "get_file_access", lambda: _StubFA(OSError("device boom")))
+    for fn in ("freespace", "disk_total", "disk_used"):
+        with pytest.raises(ExprError, match="磁盘不可用"):
+            _val(f'{fn}("C:/") > 0', ctx)
+    with pytest.raises(ExprError, match="路径不可判定"):
+        _val('exists("C:/__missing__")', ctx)
+
+    _, _, ctx2 = _setup()
+    ctx2.manager.config.global_speed_limit_curve = GlobalSpeedLimitCurve(dat_path="Z:/__no_such__.dat", curves=[])
+    with pytest.raises(ExprError, match="数据源不可读"):
+        _val("sys.upload_today > 1GiB", ctx2)
+
+
+def test_runtime_error_paths_batch():
+    """运行期错误路径参数化(raw/名字等 ANY 面只拦在运行期): 每条断言钉住报错语义"""
+    _, tor, ctx = _setup()
+    tor.int_field = 5
+    cases = [
+        ("tor.nope > 1", "未知取值"),
+        ("nope(1) > 1", "未知函数"),
+        ("(tor.size > 1) and tor.name", "'and' 的操作数必须是布尔"),
+        ("tor.name or (tor.size > 1)", "'or' 的操作数必须是布尔"),
+        ('len(raw("int_field")) > 0', "'len' 的参数不可计长"),
+        ("abs(tor.name) > 0", "参数必须是数值"),
+        ("min(tor.name, 1) > 0", "参数必须是数值"),
+        ("1 in tor.size", "不是可容纳取值的容器"),
+        ("tor.name > 1", "同为数值或同为字符串"),
+        ("tor.name == 1", "类型不一致"),
+        ("(tor.size / 0) > 1", "除数为 0"),
+        ("(tor.size % 0) > 1", "除数为 0"),
+    ]
+    for text, match in cases:
+        with pytest.raises(ExprError, match=match):
+            _val(text, ctx)
+    with pytest.raises(ExprError, match="未知运算符"):
+        evaluate(Binary("xor", Lit(True), Lit(False)), ctx)
+    with pytest.raises(ExprError, match="无法求值"):
+        evaluate(object(), ctx)
+
+
+def test_arith_and_compare_runtime():
+    """算术 + - * / % 与取模零、字符串比较、== !=、一元负号、列表字面量求值(运行期各支路)"""
+    _, _, ctx = _setup()
+    assert _val("(tor.size + tor.uploaded) > 0", ctx) is True
+    assert _val("(tor.size - tor.uploaded) < 0", ctx) is True
+    assert _val("(tor.ratio * 2) > 3", ctx) is True
+    assert _val("(tor.uploaded / tor.size) > 1.5", ctx) is True
+    assert _val("(tor.size % 1GiB) == 0", ctx) is True
+    assert _val('tor.name > "A"', ctx) is True
+    assert _val('tor.name == "Test"', ctx) is True
+    assert _val('tor.name != "X"', ctx) is True
+    assert _val("(-tor.size) < 0", ctx) is True
+    assert _val('tor.state in ["stalledUP", "uploading"]', ctx) is True
+    assert _val('tor.state in ["downloading"]', ctx) is False
+
+
+def test_static_type_edges():
+    """静态校验补遗: 函数参数类型错(名字带位置 / 字面量无位置) / 列表与一元节点 /
+    ANY 参与运算静态放行 / 未知节点兜底 ANY / used_names 遍历 Unary·Call·ListLit"""
+    with pytest.raises(ExprSyntaxError, match="参数类型应为 数值"):
+        validate(compile_expr("abs(tor.name) > 0").root)
+    with pytest.raises(ExprSyntaxError, match="参数类型应为 数值"):
+        validate(compile_expr('abs("abc") > 0').root)  # Lit 参数: 无位置信息也要报
+    validate(compile_expr("len(raw('x')) > 0").root)  # ANY 参数放行
+    validate(compile_expr("(raw('x') + 1) > 0").root)  # ANY 参与算术: 静态放行, 运行期才拦
+    validate(compile_expr("(-raw('x')) == 0").root)  # ANY 一元: 静态放行
+    validate(compile_expr('(tor.state in ["uploading"]) and (not tor.is_stopped)').root)
+    assert expr_env.static_type(object()) == ANY
+    ast = compile_expr(
+        '(not (sys.upload_today > 1GiB)) and ((sys.download_today in [1, 2]) or (len(tor.tags) > 0))'
+    ).root
+    assert expr_env.gated_names_in(ast) == ["sys.download_today", "sys.upload_today"]
+
+
+def test_trace_walks_all_node_kinds(monkeypatch):
+    """trace 求值路径: Call/Unary/ListLit 节点遍历 + _jsonable 三类兜底(容器转列表 /
+    inf 转字符串 / 其余对象转字符串) —— WEB 试算面板的显示保真"""
+    monkeypatch.setattr(shutil, "disk_usage", lambda p: shutil._ntuple_diskusage(500 * _GIB, 100 * _GIB, 400 * _GIB))
+    _, tor, ctx = _setup(tags="HR")
+    tor.last_activity = -1  # 从未传输 → idle = inf
+    tor.extra_dict = {"a": 1}
+    # Call 节点 + 参数下钻
+    items = trace(compile_expr('freespace("C:/") > 0').root, ctx)
+    assert {"kind": "call", "name": "freespace", "value": 400 * _GIB} in items
+    # Unary / ListLit 节点
+    items = trace(compile_expr('(not tor.is_stopped) and (tor.state in ["stalledUP"])').root, ctx)
+    assert [i["name"] for i in items if i["kind"] == "name"] == ["tor.is_stopped", "tor.state"]
+    # 集合值转列表(frozenset → ["HR"])
+    items = trace(compile_expr('"HR" in tor.tags').root, ctx)
+    assert items[-1]["value"] == ["HR"]
+    # inf 转字符串
+    items = trace(compile_expr("(tor.idle > 1)").root, ctx)
+    assert items[0]["value"] == "inf"
+    # 其余对象(dict)转字符串
+    items = trace(compile_expr('(raw("extra_dict") == raw("extra_dict"))').root, ctx)
+    assert all(isinstance(i["value"], str) for i in items)
+
+
+def test_eval_cache_created_on_missing():
+    """ctx 无 expr_cache 属性时求值侧自建缓存(外部极简 ctx 的兜底路径)"""
+    ctx = SimpleNamespace(torrent=None, manager=None, config=None, client=None)
+    assert evaluate(compile_expr("sys.now > 0").root, ctx) is True
+    assert ctx.expr_cache, "昂贵取值应把结果落进自建的 expr_cache"
+
+
+def test_name_table_skips_unmapped_annotation(monkeypatch):
+    """名字表构建对「注解不在类型映射里」的快照字段: 跳过登记而非炸表 —— 新增注解类型
+    (如嵌套 dataclass)时引擎优雅降级, 其余字段照常可用; 重建不影响模块级全局表"""
+    patched = dict(expr_env._PY_KIND)
+    del patched["str"]  # str 型快照字段(如 tor.name)全部失去映射
+    monkeypatch.setattr(expr_env, "_PY_KIND", patched)
+    table = expr_env._build_name_table()
+    assert "tor.name" not in table, "无类型映射的字段应被跳过(continue 支路)"
+    assert "tor.size" in table and table["tor.size"].type == expr_env._PY_KIND["int"]
+    assert "tor.tags" in table, "手工登记的派生名不受注解映射影响"
+    assert "tor.name" in expr_env.NAME_TABLE, "重建只产局部表, 模块级全局表保持原样"

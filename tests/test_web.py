@@ -178,12 +178,18 @@
 - test_api_hr_site_entries_verified_two_states: verified 有/无两态同表(无记录→未核实; 有记录→verified_ts+source 原值+人话)
 - test_api_hr_site_entries_empty_site: 站点已接入但没有 HR 行 -> 200 + 空数组(前端空态)
 - test_api_hr_site_entries_guards: HR 未启用 400 / 站点未接入 404(与 confirm-empty 同款话术)
+- test_api_hr_site_entries_409_worker_absent: hr 门面在但取数服务缺席(service=None) -> 409 不假装有数据
 - test_api_state_excludes_hr_entry_details: 体积守卫 —— 种子明细键不得进 /api/state 轮询载荷(计划 §8)
 - test_api_keys_get_default_when_missing: 快捷键配置文件不存在 -> GET 回默认表(计划 26-09-28-0354 W6 §4.4)
 - test_api_keys_put_roundtrip: PUT 合法配置落盘(atomic_write)且 GET 原样回读; 空串=显式禁用语义保留
 - test_api_keys_put_invalid_rejected: PUT 结构非法(schema_version/模板/overrides 形状/归一化串) -> 422 且不触碰磁盘
 - test_api_keys_read_corrupt_fallback: 主文件坏 JSON -> WARN + 默认表; .bak 完好 -> 回备份(读时兜底链)
 - test_api_keys_unknown_schema_version_fallback: schema_version 不识别 -> 回默认表 + WARN(升级链口径: 宁可回默认不带病生效)
+- test_api_events_sse_stream_lifecycle: SSE 生成器整块(hello 帧/事件帧/keepalive 心跳/终结退订;
+  TestClient 会挂死无限流, 直调端点驱动 body_iterator)
+- test_api_events_sse_generator_error_still_unsubscribes: 生成器异常死亡也走 finally 退订
+- test_api_hr_confirm_empty: 人工对账戳端点(缺 site/未启用/未接入 400, 成功 ok, 写入失败 409)
+- test_api_hr_refresh_single_site_and_no_runtime: refresh 指定单站受理 + hr 门面缺席回 409
 """
 import base64
 import errno
@@ -3870,6 +3876,16 @@ def test_api_hr_site_entries_guards(web_env, tmp_path):
     assert r.status_code == 404 and "Nope" in r.json()["detail"]
 
 
+def test_api_hr_site_entries_409_worker_absent(web_env, tmp_path):
+    """hr 门面在但 service 缺席(取数线程未启动的实例形态) -> 409「线程未启动」, 不假装有数据"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    mgr.hr.service = None
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    r = client.get("/api/hr/sites/HHan/entries", headers=auth)
+    assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
+
+
 def test_api_state_excludes_hr_entry_details(web_env):
     """体积守卫: 种子明细键不得进 /api/state 轮询载荷(计划 §8) —— 明细只随表①按站点按需拉"""
     mgr, client = web_env
@@ -3877,6 +3893,132 @@ def test_api_state_excludes_hr_entry_details(web_env):
     text = json.dumps(client.get("/api/state", headers=auth).json(), ensure_ascii=False)
     for key in ("need_seed_text", "verified_source_text", "lane_text", "missing_streak"):
         assert f'"{key}"' not in text, f"/api/state 轮询载荷混入了明细键 {key}"
+
+
+def test_api_hr_refresh_single_site_and_no_runtime(web_env, tmp_path):
+    """refresh 补遗: 指定 site -> request_refresh 收到 ["HHan"](单站受理, 不是全部);
+    hr 门面整个缺席(getattr = None) -> 409「线程未启动」, 不是 500"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    calls = []
+
+    def _fake(sites=None):
+        calls.append(sites)
+        return {"requested": list(sites or []), "note": ""}
+
+    mgr.hr.request_refresh = _fake
+    body = client.post("/api/hr/refresh", json={"site": "HHan"}, headers=auth).json()
+    assert body["ok"] is True and body["requested"] == ["HHan"]
+    assert calls == [["HHan"]], "带 site 时只受理该站"
+    del mgr.hr  # SimpleNamespace: 模拟取数线程从未启动的实例
+    r = client.post("/api/hr/refresh", json={}, headers=auth)
+    assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
+
+
+def test_api_hr_confirm_empty(web_env, tmp_path, monkeypatch):
+    """人工对账戳端点(§5.3): 缺 site / HR 未启用 / 站点未接入 -> 400; 成功 -> ok+site 且
+    run_hr_confirm_empty 收到 [site]; 写入失败(站点锁占用) -> 409"""
+    from auto_qb.webui.server.routes import hr as hr_routes
+
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    r = client.post("/api/hr/confirm-empty", json={}, headers=auth)
+    assert r.status_code == 400 and "缺少 site" in r.json()["detail"]
+    mgr.config.hr_check.enabled = False
+    r = client.post("/api/hr/confirm-empty", json={"site": "HHan"}, headers=auth)
+    assert r.status_code == 400 and "未启用" in r.json()["detail"]
+    mgr.config.hr_check.enabled = True
+    r = client.post("/api/hr/confirm-empty", json={"site": "Nope"}, headers=auth)
+    assert r.status_code == 400 and "Nope" in r.json()["detail"] and "HHan" in r.json()["detail"]
+    calls = []
+    monkeypatch.setattr(hr_routes, "run_hr_confirm_empty", lambda config, sites: calls.append(sites) or 0)
+    body = client.post("/api/hr/confirm-empty", json={"site": "HHan"}, headers=auth).json()
+    assert body == {"ok": True, "site": "HHan"}
+    assert calls == [["HHan"]]
+    monkeypatch.setattr(hr_routes, "run_hr_confirm_empty", lambda config, sites: 1)
+    r = client.post("/api/hr/confirm-empty", json={"site": "HHan"}, headers=auth)
+    assert r.status_code == 409 and "写入失败" in r.json()["detail"]
+
+
+def test_api_events_sse_stream_lifecycle(web_env, monkeypatch):
+    """SSE 生成器整块: hello 帧 -> 广播后事件帧(先 touch) -> 无事件时 keepalive 心跳 ->
+    消费端关闭 -> 生成器终结执行 finally 退订(subscriber_count 归零)。
+
+    !不走 TestClient 流式读: starlette 1.6 TestClient 的 handle_request 用 portal.call 把
+    整个 app 跑到完成为止, 无限 SSE 流永不完成 -> 挂死(实测 90s) —— 改为直调生产路由端点
+    拿 StreamingResponse, anyio 驱动 body_iterator(与真实发送同源, 鉴权是全局依赖另行已测)。
+    keepalive 间隔猴补 0.05s, 挂钟下界留 20ms 余量(pitfalls/testing/timing-tolerance.md)。
+    """
+    import gc
+    import time as _time
+
+    import anyio
+
+    from auto_qb.webui.server.context import WebContext
+    from auto_qb.webui.server.routes import events as events_mod
+
+    mgr, _client = web_env
+    monkeypatch.setattr(events_mod, "SSE_KEEPALIVE_S", 0.05)
+    touches = []
+    monkeypatch.setattr(mgr.web, "touch", lambda: touches.append(1))
+    route = next(r for r in events_mod.build_router(WebContext(mgr)).routes if r.path == "/api/events")
+    resp = route.endpoint()
+    assert resp.media_type == "text/event-stream"
+    assert resp.headers["cache-control"] == "no-cache"
+    assert resp.headers["x-accel-buffering"] == "no"  # 反代不缓冲, SSE 才能逐帧到
+
+    async def _drive():
+        frames = resp.body_iterator
+        # hello 帧: 订阅即发, 不触发 touch(还没进事件循环)
+        assert await frames.__anext__() == 'event: hello\ndata: {"ok": true}\n\n'
+        assert touches == []
+        # 事件帧: 广播 -> 帧名取 ev.type, payload 原样; touch 标记活跃
+        assert mgr.web.notify("cmd_done", {"id": 9}) == 1
+        assert await frames.__anext__() == 'event: cmd_done\ndata: {"id": 9}\n\n'
+        assert len(touches) == 1
+        # keepalive: 队列空 -> Empty 分支 -> 心跳注释帧(必须 < WEB_VIEW_TTL, 自锁防线)
+        t0 = _time.monotonic()
+        assert await frames.__anext__() == ": keepalive\n\n"
+        assert _time.monotonic() - t0 >= 0.05 - 0.02
+        assert len(touches) == 2
+        # 心跳后循环继续(continue): 再广播一条, 事件帧照常送达
+        assert mgr.web.notify("view_changed", {"ver": 2}) == 1
+        assert await frames.__anext__() == 'event: view_changed\ndata: {"ver": 2}\n\n'
+        assert len(touches) == 3
+        await frames.aclose()  # 客户端断开: 消费端关闭
+
+    anyio.run(_drive)
+    # starlette 1.6 不显式 close 同步生成器 —— 断开后由生成器终结执行 finally 退订;
+    # aclose 后引用链已断, collect 使终结确定性发生(生产同语义: 流对象失去引用即退订)
+    del resp
+    gc.collect()
+    assert mgr.web.subscriber_count() == 0, "断流后必须退订, 防句柄堆叠"
+
+
+def test_api_events_sse_generator_error_still_unsubscribes(web_env, monkeypatch):
+    """生成器中途异常死亡(touch/序列化等任何异常)也必须走 finally 退订 —— fail-safe 语义"""
+    import anyio
+
+    from auto_qb.webui.server.context import WebContext
+    from auto_qb.webui.server.routes import events as events_mod
+
+    mgr, _client = web_env
+    monkeypatch.setattr(events_mod, "SSE_KEEPALIVE_S", 0.05)
+    route = next(r for r in events_mod.build_router(WebContext(mgr)).routes if r.path == "/api/events")
+    resp = route.endpoint()
+
+    async def _drive():
+        frames = resp.body_iterator
+        assert await frames.__anext__() == 'event: hello\ndata: {"ok": true}\n\n'
+        monkeypatch.setattr(mgr.web, "touch", lambda: (_ for _ in ()).throw(RuntimeError("view boom")))
+        mgr.web.notify("cmd_done", {"id": 1})
+        with pytest.raises(RuntimeError, match="view boom"):
+            await frames.__anext__()
+
+    anyio.run(_drive)
+    assert mgr.web.subscriber_count() == 0, "生成器异常死亡也要退订, 防句柄堆叠"
 
 
 def test_frontend_hr_status_fields_match_backend():

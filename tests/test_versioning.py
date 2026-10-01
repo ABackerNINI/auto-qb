@@ -16,6 +16,9 @@
 - test_migrate_stamps_version_each_step: 每完成一级由框架盖 schema_version 章(迁移函数不必自己改)
 - test_migrate_idempotent: 对已迁移数据重复 apply 无二次变更(崩溃后重放同一条链即幂等)
 - test_migrate_missing_step_fails_fast: 版本表抬了、迁移表没跟上 -> fail-fast, 不静默跳级
+- test_migrate_hr_site_v1_v2_full: quota->rate / refresh->wave 两个 dict 支路, 旧键清理 + 保留键原样
+- test_migrate_hr_site_v1_v2_non_dict_quota_refresh: quota / refresh 非 dict -> 不派生 rate / wave
+- test_migrate_hr_site_v1_v2_bad_values_fallback: 非法数值兜底(缺键 / 非 int 计数 / 不可转换时间戳)
 """
 import pytest
 
@@ -187,3 +190,87 @@ def test_migrate_missing_step_fails_fast(monkeypatch):
     with pytest.raises(SchemaVersionError) as ei:
         migrate("state", {"schema_version": 1})
     assert "v2→v3" in str(ei.value)
+
+
+def test_migrate_hr_site_v1_v2_full():
+    """生产迁移 hr_site v1→v2(波次模型 v3): quota→rate / refresh→wave 两个 dict 支路,
+    5 个旧键 + refresh 整键清理, 保留键(index/downloaded/fails/verified/revision/
+    fetched_at/expires_at/writer)原样"""
+    kept = {
+        "index": {
+            "h1": {
+                "row": 1
+            }
+        },
+        "downloaded": ["h1"],
+        "fails": 1,
+        "verified": {
+            "h1": 100.0
+        },
+        "revision": 7,
+        "fetched_at": 123.0,
+        "expires_at": 456.0,
+        "writer": "test",
+    }
+    data = {
+        "schema_version": 1,
+        **kept,
+        "quota": {
+            "day_window": "2026-10-01",
+            "day_count": 3,
+            "last_fetch_ts": 100.5
+        },
+        "torrent_quota": {
+            "dl": 1
+        },
+        "fuse": {
+            "trips": 1
+        },
+        "suspended": True,
+        "login_backoff_until": 99.0,
+        "login_expired_streak": 2,
+        "refresh": {
+            "last_success_ts": 55.5,
+            "reason": "ok",
+            "rows_baseline": 10
+        },
+    }
+    out, desc = migrate("hr_site", data)
+    assert desc == "v1→v2" and out["schema_version"] == 2
+    # quota → rate(单账本): day_window / day_count / last_fetch_ts 逐字段对齐
+    assert out["rate"] == {"day_window": "2026-10-01", "day_count": 3, "last_fetch_ts": 100.5}
+    # refresh → wave: last_success_ts 同时喂 wave_ts 与 healthy_ts, reason 变 notes
+    assert out["wave"] == {"wave_ts": 55.5, "healthy_ts": 55.5, "notes": "ok"}
+    for gone in (
+        "quota", "torrent_quota", "fuse", "suspended", "login_backoff_until", "login_expired_streak", "refresh"
+    ):
+        assert gone not in out, f"{gone} 应随 v2 退役"
+    for k, v in kept.items():
+        assert out[k] == v, f"保留键 {k} 必须原样"
+
+
+def test_migrate_hr_site_v1_v2_non_dict_quota_refresh():
+    """quota / refresh 非 dict(损坏或异构存量) -> 两个支路都不派生, 迁移本身不炸"""
+    data = {"schema_version": 1, "revision": 1, "quota": None, "refresh": "bad"}
+    out, desc = migrate("hr_site", data)
+    assert desc == "v1→v2"
+    assert "rate" not in out and "wave" not in out
+    assert out["revision"] == 1
+
+
+def test_migrate_hr_site_v1_v2_bad_values_fallback():
+    """非法数值兜底: day_window 缺失 -> "", day_count 非 int -> 0, 时间戳不可转换(None/
+    非数字串) -> 0.0, reason 缺失 -> "" —— 迁移不因脏数据中断"""
+    data = {
+        "schema_version": 1,
+        "quota": {
+            "day_count": "3",
+            "last_fetch_ts": "abc"
+        },  # day_window 缺失; 计数非 int; ts 非数字
+        "refresh": {
+            "last_success_ts": None
+        },  # reason 缺失; ts None
+    }
+    out, _ = migrate("hr_site", data)
+    assert out["rate"] == {"day_window": "", "day_count": 0, "last_fetch_ts": 0.0}
+    assert out["wave"] == {"wave_ts": 0.0, "healthy_ts": 0.0, "notes": ""}

@@ -23,14 +23,27 @@
 - test_sigterm_handler_raises_keyboard_interrupt: handler 触发即抛 KeyboardInterrupt(复用 Ctrl+C 路径), 且置 SIG_IGN 防清理期被打断
 - test_install_sigterm_handler_registers: 平台允许注册时真注册(Windows/Linux 均允许注册; 真实 SIGTERM 投递由容器 docker stop 实测兜底)
 - test_install_sigterm_handler_registration_failure_ignored: 注册失败(非主线程/平台不支持)静默跳过, 不影响启动
+- test_main_arg_mutex_errors: 参数互斥矩阵(--hr-html-dir 无 --hr-once / --hr-once 与 --tray /
+  --hr-status 与导出 / --hr-status-rows 非正 / --hr-confirm-empty 与其它 HR 模式) -> 退出码 2
+- test_main_hr_confirm_empty: --hr-confirm-empty 站点清单解析(全角逗号归一)并转发, 透传返回码
+- test_main_hr_confirm_empty_blank_errors: 清单解析后为空 -> parser.error 退出码 2
+- test_main_hr_once_runs_report: --hr-once 不构造 manager, 转发 run_hr_once 并透传 hr_html_dir
+- test_main_tray_second_instance_wake_raise_falls_through: 唤起实现自身抛异常 -> 吞掉走常规锁错误退出 1
+- test_compat_entry_shim_runs_main: python auto-qb.py 兼容入口(runpy 进程内执行, __main__ 守卫生效)
+- test_compat_entry_shim_imported_without_main_guard: 兼容入口被当模块导入(非 __main__) -> 只暴露 main, 不触发执行
+- test_dunder_main_module_runs_main: python -m auto_qb(run_module, __main__.py 守卫 -> sys.exit(main()))
+- test_cli_main_guard_under_dunder_main: 直接执行 cli.py 源码时 __main__ 守卫调 main()
 """
 import signal
 import sys
+from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from auto_qb.config import ConfigError
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _patch_argv(*args):
@@ -335,3 +348,138 @@ def test_install_sigterm_handler_registration_failure_ignored():
     from auto_qb import cli
     with mock.patch("auto_qb.cli.signal.signal", side_effect=ValueError("not main thread")):
         cli._install_sigterm_handler()  # 不应抛出
+
+
+# ---------- T0.6 扩展: 参数互斥矩阵 / HR 写模式 / 入口壳 __main__ 守卫 ----------
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("auto-qb", "config.yml", "--hr-html-dir", "pages"),  # 缺 --hr-once
+        ("auto-qb", "config.yml", "--hr-once", "--tray"),  # 与托盘互斥
+        ("auto-qb", "config.yml", "--hr-status", "--export-yaml", "out.yml"),  # 与导出互斥
+        ("auto-qb", "config.yml", "--hr-status", "--hr-status-rows", "0"),  # 行数须正
+        ("auto-qb", "config.yml", "--hr-confirm-empty", "X", "--hr-status"),  # 写模式须独占
+    ],
+    ids=["html-dir-needs-once", "once-vs-tray", "status-vs-export", "rows-positive", "confirm-empty-exclusive"],
+)
+def test_main_arg_mutex_errors(argv):
+    """参数互斥矩阵: 五条 parser.error 支路各自可达, 退出码 2 且不构造 manager"""
+    with _patch_argv(*argv), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb, \
+            mock.patch("auto_qb.cli.load_config") as m_lc:
+        from auto_qb.cli import main
+        with pytest.raises(SystemExit) as ei:
+            main()
+    assert ei.value.code == 2
+    m_qb.assert_not_called()
+    m_lc.assert_not_called()
+
+
+def test_main_hr_confirm_empty():
+    """--hr-confirm-empty: 站点清单解析(全角逗号归一 + 去空白), 转发 run_hr_confirm_empty
+    并透传其返回码; 不构造 manager"""
+    with _patch_argv("auto-qb", "config.yml", "--hr-confirm-empty", "Ａ站，B站, C站"), \
+            mock.patch("auto_qb.hr.report.run_hr_confirm_empty", return_value=0) as m_run, \
+            mock.patch("auto_qb.cli.load_config") as m_lc, \
+            mock.patch("auto_qb.cli.QbManager") as m_qb:
+        from auto_qb.cli import main
+        assert main() == 0
+    m_qb.assert_not_called()
+    assert m_lc.call_args[0][0] == "config.yml"
+    assert m_run.call_args[0][1] == ["Ａ站", "B站", "C站"]
+
+
+def test_main_hr_confirm_empty_blank_errors():
+    """--hr-confirm-empty 清单解析后为空(纯分隔符) -> parser.error 退出码 2"""
+    with _patch_argv("auto-qb", "config.yml", "--hr-confirm-empty", "， , "), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb:
+        from auto_qb.cli import main
+        with pytest.raises(SystemExit) as ei:
+            main()
+    assert ei.value.code == 2
+    m_qb.assert_not_called()
+
+
+def test_main_hr_once_runs_report():
+    """--hr-once: 只读走查不构造 manager(不连 qB), hr_html_dir 透传给 run_hr_once"""
+    with _patch_argv("auto-qb", "config.yml", "--hr-once", "--hr-html-dir", "pages"), \
+            mock.patch("auto_qb.hr.report.run_hr_once", return_value=0) as m_run, \
+            mock.patch("auto_qb.cli.load_config"), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb:
+        from auto_qb.cli import main
+        assert main() == 0
+    m_qb.assert_not_called()
+    assert m_run.call_args[0][1] == "pages"
+
+
+def test_main_tray_second_instance_wake_raise_falls_through(capsys):
+    """--tray 双开: 唤起实现自身抛异常(端口文件损坏等) -> 吞掉, 走常规锁错误干净退出 1"""
+    from auto_qb.infra.locking import SingleInstanceLockError
+    with _patch_argv("auto-qb", "config.yml", "--tray"), \
+            mock.patch("auto_qb.cli.QbManager", side_effect=SingleInstanceLockError("另一实例已持有锁")), \
+            mock.patch("auto_qb.cli.load_config") as m_lc, \
+            mock.patch("auto_qb.tray.send_show", side_effect=OSError("port file corrupt")):
+        m_lc.return_value = mock.MagicMock(state_file="D:/x/state.json")
+        from auto_qb.cli import main
+        ret = main()
+    assert ret == 1
+    err = capsys.readouterr().err
+    assert "另一实例已持有锁" in err
+    assert "Traceback" not in err
+
+
+def test_compat_entry_shim_runs_main():
+    """python auto-qb.py 兼容入口: runpy 以 __main__ 进程内执行(零子进程), __main__ 守卫
+    走到 sys.exit(main()); 参数互斥错误向上传播 SystemExit(2)"""
+    import runpy
+
+    path = str(_REPO_ROOT / "src" / "auto-qb.py")
+    with _patch_argv("auto-qb", "config.yml", "--tray", "--export-yaml", "out.yml"):
+        with pytest.raises(SystemExit) as ei:
+            runpy.run_path(path, run_name="__main__")
+    assert ei.value.code == 2
+
+
+def test_compat_entry_shim_imported_without_main_guard():
+    """兼容入口被当普通模块导入(非 __main__) -> 只完成 main 的暴露, 不触发执行不退出
+    (import auto-qb 侧写面: 导入零副作用)"""
+    import runpy
+
+    path = str(_REPO_ROOT / "src" / "auto-qb.py")
+    with _patch_argv("auto-qb", "config.yml", "--tray", "--export-yaml", "out.yml"):
+        globs = runpy.run_path(path)  # 缺省 run_name != "__main__" -> 守卫走 False 支路
+    import auto_qb.cli as cli_mod
+
+    assert globs["main"] is cli_mod.main
+    assert "sys" in globs
+
+
+def test_dunder_main_module_runs_main():
+    """python -m auto_qb: run_module 以 __main__ 执行包的 __main__.py, 守卫调用 main()"""
+    import runpy
+
+    with _patch_argv("auto-qb", "config.yml", "--hr-html-dir", "pages"):  # 互斥错误快速退出
+        with pytest.raises(SystemExit) as ei:
+            runpy.run_module("auto_qb", run_name="__main__")
+    assert ei.value.code == 2
+
+
+def test_cli_main_guard_under_dunder_main():
+    """cli.py 自身的 __main__ 守卫: 以 __name__='__main__' + __package__='auto_qb' 进程内执行
+    源码(runpy.run_path 解析不了包内相对导入), main() 被真调用一次"""
+    import types
+
+    import auto_qb.cli as cli_mod
+
+    path = cli_mod.__file__
+    code = open(path, encoding="utf-8").read()
+    mod = types.ModuleType("__cli_dunder_main__")
+    mod.__name__ = "__main__"
+    mod.__package__ = "auto_qb"
+    mod.__file__ = path
+    with _patch_argv("auto-qb", "config.yml", "--hr-once", "--tray"):
+        with pytest.raises(SystemExit) as ei:
+            exec(compile(code, path, "exec"), mod.__dict__)
+    assert ei.value.code == 2

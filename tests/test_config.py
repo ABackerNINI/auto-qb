@@ -1185,3 +1185,123 @@ def test_validate_schema_version_shape():
     errors = validate_config({"config": {"schema_version": "-3"}})
     assert any("须 >= 1" in e for e in errors)
     assert validate_config({"config": {"schema_version": "1"}}) == []
+
+
+# ---------- T0.3 扩展: sections.py 校验器缺口矩阵(直接喂 validate_config, 空串不被 strip) ----------
+
+
+def _errs(cfg: dict) -> list:
+    from auto_qb.config.validation import validate_config
+
+    return validate_config({"config": cfg})
+
+
+def test_validate_sections_pass_shapes():
+    """sections 合法形态(无错误支路): add_episode_tags 无 enabled 键 / log 合法等级与区间 /
+    hr 排除表含 regex 前缀 / notify.quiet_hours 留空 / web 无 enabled 键 —— 分支「不报错」侧"""
+    assert _errs({"add_episode_tags": {"add_tag_single": "单集"}}) == []
+    assert _errs({"log": {"level": "INFO", "max_bytes": "10MiB"}}) == []
+    assert _errs({"hr": {"exclude_tags": ["regex:^HR-", "keep"], "exclude_categories": ["cat"]}}) == []
+    assert _errs({"notify": {"quiet_hours": "", "channels": [{"platform": {}}]}}) == []
+    assert _errs({"web": {"host": "127.0.0.1", "port": 8080}}) == []
+
+
+def test_validate_hr_check_type_errors():
+    """hr_check 段类型错误聚合: 整段非字典 / channel 非字典 / port 非整数与越界 / token 非字符串 /
+    allow_window 留空(合法跳过) / sites 非字典"""
+    errors = _errs({"hr_check": "not-dict"})
+    assert any("config.hr_check: 必须是字典" in e for e in errors)
+
+    errors = _errs({
+        "hr_check": {
+            "allow_window": "",  # 留空 = 不限制时段, 合法
+            "channel": "not-dict",
+            "sites": "not-dict",
+        }
+    })
+    assert any("config.hr_check.channel: 必须是字典" in e for e in errors)
+    assert any("config.hr_check.sites: 必须是字典" in e for e in errors)
+
+    errors = _errs({"hr_check": {"channel": {"port": "abc", "token": 123}}})
+    assert any("config.hr_check.channel.port: 必须是整数" in e for e in errors)
+    assert any("config.hr_check.channel.token: 必须是字符串" in e for e in errors)
+
+    errors = _errs({"hr_check": {"channel": {"port": 70000}}})
+    assert any("config.hr_check.channel.port: 超出范围" in e for e in errors)
+
+
+def test_validate_hr_site_entry_errors():
+    """hr_check.sites 条目: 非 dict 条目 / tracker 非字符串(档案 id 已登记的两站)"""
+    errors = _errs({"hr_check": {"sites": {"btschool": "not-dict"}}})
+    assert any("config.hr_check.sites.btschool: 必须是字典" in e for e in errors)
+    errors = _errs({"hr_check": {"sites": {"carpt": {"tracker": 123}}}})
+    assert any("config.hr_check.sites.carpt.tracker: 必须是字符串" in e for e in errors)
+
+
+def test_validate_hr_site_bindings_skips_unparseable_enabled():
+    """站点绑定: enabled 解析失败 -> 键类型错误已由条目校验报告, 绑定层静默跳过(不二次报错)"""
+    errors = _errs(
+        {
+            "trackers": {
+                "T1": {
+                    "domains": ["pt.btschool.club"]
+                }
+            },
+            "hr_check": {
+                "sites": {
+                    "btschool": {
+                        "enabled": "maybe"
+                    }
+                }
+            },
+        }
+    )
+    assert any("config.hr_check.sites.btschool.enabled" in e for e in errors)
+    # 绑定层不再产出重复错误(默认映射未命中那条不会出现 —— 282 行 continue)
+    assert not any("默认映射未命中" in e for e in errors)
+
+
+def test_validate_fs_errors():
+    """fs.path_map 结构与归一错误: 整段非字典 / 条目非字典 / from·to 为空 / 归一后为空"""
+    errors = _errs({"fs": "not-dict"})
+    assert any("config.fs: 必须是字典" in e for e in errors)
+
+    errors = _errs({"fs": {"path_map": ["not-dict"]}})
+    assert any("config.fs.path_map[0]: 必须是字典" in e for e in errors)
+
+    errors = _errs({"fs": {"path_map": [{"from": "", "to": ""}]}})
+    assert any("config.fs.path_map[0].from: 不能为空" in e for e in errors)
+    assert any("config.fs.path_map[0].to: 不能为空" in e for e in errors)
+
+    errors = _errs({"fs": {"path_map": [{"from": "//", "to": "/mnt/a"}]}})
+    assert any("config.fs.path_map[0].from: 归一后为空" in e for e in errors)
+    errors = _errs({"fs": {"path_map": [{"from": "D:/x", "to": "/"}]}})
+    assert any("config.fs.path_map[0].to: 归一后为空" in e for e in errors)
+
+
+def test_validate_web_errors():
+    """web 段类型与范围错误: 整段非字典 / host 空串 / port 非整数与越界 / token 非字符串"""
+    errors = _errs({"web": "not-dict"})
+    assert any("config.web: 必须是字典" in e for e in errors)
+    errors = _errs({"web": {"host": "", "port": "abc", "token": 123}})
+    assert any("config.web.host: 必须是非空字符串" in e for e in errors)
+    assert any("config.web.port: 必须是整数" in e for e in errors)
+    assert any("config.web.token: 必须是字符串" in e for e in errors)
+    errors = _errs({"web": {"port": 70000}})
+    assert any("config.web.port: 超出范围" in e for e in errors)
+
+
+def test_validate_tracker_rules_non_list_skips_refs():
+    """tracker.rules 非列表: 列表类型错误报告, 规则引用检查跳过(不产出引用层错误)"""
+    errors = _errs({"trackers": {"T1": {"domains": ["a.com"], "rules": "not-a-list"}}})
+    assert any("config.trackers.T1.rules: 必须是列表" in e for e in errors)
+    assert not any("@ 开头" in e for e in errors)
+
+
+def test_validate_notify_channels_edges():
+    """notify.channels: 单键映射约束(非 dict / 多键) + 未知渠道 + 合法 platform 条目放行"""
+    errors = _errs({"notify": {"channels": ["not-dict", {"a": {}, "b": {}}, {"slack": {}}]}})
+    assert any("config.notify.channels[0]: 必须是单键映射" in e for e in errors)
+    assert any("config.notify.channels[1]: 必须是单键映射" in e for e in errors)
+    assert any("config.notify.channels[2]: 未知渠道 'slack'" in e for e in errors)
+    assert _errs({"notify": {"channels": [{"platform": {}}]}}) == []

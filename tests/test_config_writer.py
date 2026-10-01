@@ -30,6 +30,23 @@
 - test_materialize_idempotent_and_noop: 已是当前版本零 IO; 二次调用幂等, 不产生新备份
 - test_materialize_invalid_aborts_without_touching_disk: 迁移后校验不过(旧键定位不到档案) -> 不备份不落盘
 - test_materialize_dry_run_probe: write=False(dry-run 探测)只报 desc, 不校验不备份不落盘
+- test_mask_tree_non_dict_passthrough: 掩码只处理映射, 列表整体不动
+- test_unmask_tree_guards_and_sentinel_old_value: 非映射树原样返回; 旧值缺失/本身是哨兵时保持哨兵
+- test_stamp_schema_version_ignores_non_dict_cfg: 树缺 config 段时盖章静默跳过
+- test_reject_stale_version_non_integer_shape_passes_gate: 版本闸门放行非整数形状(交校验层)与当前版本
+- test_write_tree_first_save_on_missing_file: 首存无源可备份(跳过) + 从空文档建树
+- test_write_tree_rebuilds_doc_from_non_mapping_file: 磁盘文件是非映射 YAML 时以空文档重建
+- test_write_tree_roundtrip_list_of_dicts_and_plain_int: 映射列表按 BaseLoader 语义比较; 数字字符串写原生标量
+- test_materialize_bad_version_wraps_config_error: 磁盘 schema_version 非法 -> 包装 ConfigError 且零落盘
+- test_url_host_shapes: host 提取(非串/畸形 IPv6 -> 空串; 正常小写化)
+- test_migrate_config_1_2_legacy_shapes: v1→v2 旧键非字典删除 / mode=off 删除 / 定位不到档案原地保留
+- test_migrate_config_1_2_new_position_wins: v1→v2 新位置已有条目获胜, 旧键只删除
+- test_migrate_config_1_2_creates_entry_with_tuning_keys: v1→v2 正例(建条目+调优键随迁+页面事实键丢弃)
+- test_migrate_config_2_3_site_entry_shapes: v2→v3 非 dict 条目删除 / mode→enabled / 改名与废弃键清理
+- test_materialize_non_mapping_config_section_noop: 树缺 config 映射段 -> 物化按无事可做返回, 零 IO
+- test_backup_versioned_relative_backup_dir: 备份目录为空串(相对裸文件名) -> 跳过建目录, 直写 CWD
+- test_write_tree_backup_relative_path: 备份路径无父目录 -> 跳过 makedirs 分支, 备份照常产生
+- test_path_helpers_mid_node_shapes: _set_path 中途节点非 dict 重建 / _delete_path 中途非 dict 与裸标量树安全返回
 """
 import copy
 import os
@@ -581,3 +598,307 @@ def test_materialize_dry_run_probe(tmp_path):
     assert desc == "v1→v3" and backup == ""
     assert _text(path) == LEGACY_V1, "dry-run 不落盘"
     assert not data_dir.exists()
+
+
+# ---------- T0.7 扩展: 掩码/闸门/首存 round-trip 长尾 + schema 迁移函数缺口 ----------
+
+
+def test_mask_tree_non_dict_passthrough():
+    """掩码只处理映射: 顶层/嵌套列表整体不动(列表项无法与磁盘旧值稳定对应)"""
+    from auto_qb.config.writer import mask_tree
+
+    assert mask_tree(["a", "b"]) == ["a", "b"]
+    assert mask_tree({"config": {
+        "delete_tags": ["X", "Y"],
+        "web": {
+            "token": "secret"
+        }
+    }})["config"]["delete_tags"] == ["X", "Y"]
+    assert mask_tree({"config": {"web": {"token": "secret"}}})["config"]["web"]["token"] == "********"
+
+
+def test_unmask_tree_guards_and_sentinel_old_value():
+    """还原守卫: 非映射树原样返回; 旧值缺失/旧值本身是哨兵时保持哨兵(宁可占位不可静默清密)"""
+    from auto_qb.config.writer import MASK_SENTINEL, unmask_tree
+
+    assert unmask_tree("plain", {}) == "plain"
+    tree = {"config": {"password": MASK_SENTINEL}}
+    # 旧值就是哨兵: 保持不动
+    out = unmask_tree(copy.deepcopy(tree), {"config": {"password": MASK_SENTINEL}})
+    assert out["config"]["password"] == MASK_SENTINEL
+    # 旧值缺失: 同样保持哨兵, 不静默写成空
+    out = unmask_tree(copy.deepcopy(tree), {"config": {}})
+    assert out["config"]["password"] == MASK_SENTINEL
+    # 旧值真实存在: 回填
+    out = unmask_tree(copy.deepcopy(tree), {"config": {"password": "real"}})
+    assert out["config"]["password"] == "real"
+
+
+def test_stamp_schema_version_ignores_non_dict_cfg():
+    """盖章只认 config 段: 树缺 config 段时静默跳过(不炸)"""
+    from auto_qb.config.writer import _stamp_schema_version
+
+    tree = {"other": 1}
+    _stamp_schema_version(tree)
+    assert tree == {"other": 1}
+
+
+def test_reject_stale_version_non_integer_shape_passes_gate():
+    """版本闸门只拦「低于当前/缺失」: 非整数形状(交给校验层报精确错)与合法当前版本原样通过"""
+    from auto_qb.config.writer import _reject_stale_version
+
+    _reject_stale_version({"config": {"schema_version": "abc"}})  # 不抛
+    _reject_stale_version({"config": {"schema_version": []}})  # 不抛
+    _reject_stale_version({"config": {"schema_version": "3"}})  # 当前版本放行
+
+
+def test_write_tree_first_save_on_missing_file(tmp_path):
+    """首存: 目标配置文件尚不存在 -> 无源可备份(跳过) + round-trip 从空文档建树, 写盘成功"""
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    old = load_config(_make(seed_dir, BASE))
+    target = str(tmp_path / "new" / "config.yml")
+    tree = read_tree(str(seed_dir / "config.yml"))
+    write_tree(target, tree, old, _bak(tmp_path))
+    assert os.path.exists(target)
+    assert "qbittorrent" in _text(target)
+    assert not os.path.exists(_bak(tmp_path)), "无源文件不应产生备份"
+
+
+def test_write_tree_rebuilds_doc_from_non_mapping_file(tmp_path):
+    """磁盘文件是非映射 YAML(手改坏掉的纯标量) -> round-trip 以空文档重建, 配置树完整落盘"""
+    seed_dir = tmp_path / "seed"
+    seed_dir.mkdir()
+    old = load_config(_make(seed_dir, BASE))
+    path = _make(tmp_path, "123\n")
+    tree = read_tree(path)  # 非映射 -> 空 config 段
+    tree["config"]["qbittorrent"] = {"host": "h", "port": "1", "username": "u", "password": "p"}
+    tree["config"]["schema_version"] = "3"
+    write_tree(path, tree, old, _bak(tmp_path))
+    text = _text(path)
+    assert "123" not in text, "旧的非映射内容被整体重建"
+    assert "qbittorrent" in text and "schema_version: 3" in text
+    loaded = load_config(path)
+    assert loaded.qbittorrent.host == "h"
+
+
+def test_write_tree_roundtrip_list_of_dicts_and_plain_int(tmp_path):
+    """列表内映射逐项按 BaseLoader 语义比较(值未变整体跳过); 变更的纯数字字符串按原生标量写出"""
+    path = _make(
+        tmp_path, "config:\n"
+        "  schema_version: 3\n"
+        "  qbittorrent:\n"
+        "    host: h\n"
+        "    port: 1\n"
+        "    username: u\n"
+        "    password: p\n"
+        "  notify:\n"
+        "    channels:\n"
+        "      - platform: {}\n"
+        "  web:\n"
+        "    port: 8080\n"
+    )
+    old = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["web"]["port"] = "9999"  # 纯数字字符串 -> 原生 int(421)
+    write_tree(path, tree, old, _bak(tmp_path))
+    text = _text(path)
+    assert "port: 9999" in text, "纯数字字符串应写成原生标量(无引号)"
+    assert "platform" in text, "未变化的映射列表应整体保留"
+    assert load_config(path).web.port == 9999
+
+
+def test_materialize_bad_version_wraps_config_error(tmp_path):
+    """磁盘 schema_version 形状非法 -> SchemaVersionError 包装为 ConfigError(报清文件与原因)"""
+    data_dir = tmp_path / "data"
+    path = _make(tmp_path, BASE.replace("schema_version: 3", "schema_version: abc"))
+    with pytest.raises(ConfigError, match="schema 版本问题"):
+        materialize_schema_migration(path, str(data_dir))
+    assert not data_dir.exists(), "探测阶段失败不应产生备份目录"
+
+
+# ---------- schema 迁移函数缺口(_url_host / v1→v2 改写 / v2→v3 sites 清理) ----------
+
+
+def test_url_host_shapes():
+    """host 提取: 非串/解析失败 -> 空串(定位不到档案, 旧键原地保留); 正常 URL 小写化"""
+    from auto_qb.config.migrations import _url_host
+
+    assert _url_host(None) == ""
+    assert _url_host(123) == ""
+    assert _url_host("http://[::1/x") == "", "畸形 IPv6 -> ValueError -> 空串"
+    assert _url_host("https://PT.BTSchool.club/myhr.php") == "pt.btschool.club"
+
+
+def test_migrate_config_1_2_legacy_shapes(tmp_path=None):
+    """v1→v2 改写: 旧键非字典直接删除; mode=off 等价键不存在; 定位不到档案原地保留"""
+    from auto_qb.config.migrations import _migrate_config_1_2
+
+    # 旧键形状烂: 读不出 mode -> 删除
+    cfg = {"trackers": {"T1": {"hr_check": "junk"}}}
+    out = _migrate_config_1_2(cfg)
+    assert "hr_check" not in out["trackers"]["T1"]
+
+    # mode=off: 新口径下 off = 键不存在
+    cfg = {"trackers": {"T1": {"hr_check": {"mode": "off", "hr_page_url": "https://pt.btschool.club/x"}}}}
+    out = _migrate_config_1_2(cfg)
+    assert "hr_check" not in out["trackers"]["T1"]
+
+    # 非字典 hr_page_url + 陌生 host: 定位不到档案, 原地保留(交校验层报废除错)
+    cfg = {"trackers": {"T1": {"hr_check": {"mode": "all", "hr_page_url": 123}}}}
+    out = _migrate_config_1_2(cfg)
+    assert out["trackers"]["T1"]["hr_check"] == {"mode": "all", "hr_page_url": 123}
+
+
+def test_migrate_config_1_2_new_position_wins():
+    """v1→v2: hr_check/sites 已存在且档案条目已在 -> 新位置获胜, 旧键只删除不覆盖(含调优键丢弃)"""
+    from auto_qb.config.migrations import _migrate_config_1_2
+
+    cfg = {
+        "trackers":
+            {
+                "T1":
+                    {
+                        "hr_check":
+                            {
+                                "mode": "all",
+                                "hr_page_url": "https://pt.btschool.club/myhr.php",
+                                "refresh_interval": "9H",
+                            }
+                    }
+            },
+        "hr_check": {
+            "sites": {
+                "btschool": {
+                    "enabled": True
+                }
+            }
+        },
+    }
+    out = _migrate_config_1_2(cfg)
+    assert out["hr_check"]["sites"]["btschool"] == {"enabled": True}, "新位置已有条目: 旧值不并入"
+    assert "hr_check" not in out["trackers"]["T1"]
+
+
+def test_migrate_config_1_2_creates_entry_with_tuning_keys():
+    """v1→v2 正例: 定位到档案 -> 建 hr_check.sites 条目(mode + 随迁调优键), 页面事实键丢弃"""
+    from auto_qb.config.migrations import _migrate_config_1_2
+
+    cfg = {
+        "trackers":
+            {
+                "T1":
+                    {
+                        "hr_check":
+                            {
+                                "mode": "partial",
+                                "hr_page_url": "https://pt.btschool.club/myhr.php",
+                                "refresh_interval": "2H",
+                                "adapter": "should-be-dropped",
+                            }
+                    }
+            }
+    }
+    out = _migrate_config_1_2(cfg)
+    entry = out["hr_check"]["sites"]["btschool"]
+    assert entry["mode"] == "partial" and entry["refresh_interval"] == "2H"
+    assert "adapter" not in entry, "页面事实四键以档案为准, 一律丢弃"
+    assert "hr_check" not in out["trackers"]["T1"]
+
+
+def test_migrate_config_2_3_site_entry_shapes():
+    """v2→v3 sites 条目: 非 dict 条目整体删除; mode partial/all -> enabled=true(保留 tracker/refresh_interval)"""
+    from auto_qb.config.migrations import _migrate_config_2_3
+
+    cfg = {
+        "hr_check":
+            {
+                "min_torrent_interval": "30S",
+                "max_pages_per_day": 500,
+                "sites":
+                    {
+                        "btschool": "junk",  # 形状烂: 整体删除
+                        "carpt": {
+                            "mode": "partial",
+                            "tracker": "T1",
+                            "refresh_interval": "2H"
+                        },
+                    },
+            }
+    }
+    out = _migrate_config_2_3(cfg)
+    sites = out["hr_check"]["sites"]
+    assert "btschool" not in sites, "非 dict 条目无处可迁: 删除"
+    assert sites["carpt"] == {"enabled": True, "tracker": "T1", "refresh_interval": "2H"}
+    assert "min_interval" in out["hr_check"] and "min_torrent_interval" not in out["hr_check"]
+    assert "max_pages_per_day" not in out["hr_check"], "全局废弃键随 v3 删除"
+
+
+def test_materialize_non_mapping_config_section_noop(tmp_path, monkeypatch):
+    """磁盘树读出来后 config 段不是映射 -> 物化按「无事可做」返回 ("", ""), 零备份零写盘
+
+    read_tree 自身会把非映射 config 归一为空映射, 本用例以替身喂入「绕过归一」的树,
+    钉住物化入口对畸形形状的防御分支(不能在物化里炸)。
+    """
+    from auto_qb.config import writer
+
+    path = _make(tmp_path, BASE)
+    monkeypatch.setattr(writer, "read_tree", lambda p: {"other": 1})
+    desc, backup = materialize_schema_migration(path, str(tmp_path / "data"))
+    assert desc == "" and backup == ""
+    assert not (tmp_path / "data").exists(), "无事可做不应产生备份目录"
+
+
+def test_backup_versioned_relative_backup_dir(tmp_path, monkeypatch):
+    """backup_dir 为空串 -> 备份路径是裸文件名(无父目录), 跳过建目录分支, 直写 CWD"""
+    from auto_qb.config.writer import backup_versioned
+
+    path = _make(tmp_path, BASE)
+    monkeypatch.chdir(tmp_path)
+    backup = backup_versioned(path, "", 3)
+    assert backup == "config.yml.v3.bak"
+    with open(backup, "r", encoding="utf-8") as f:
+        assert f.read() == BASE, "版本号备份内容 = 迁移前原样"
+
+
+def test_write_tree_backup_relative_path(tmp_path, monkeypatch):
+    """备份路径无父目录(dirname 为空) -> 跳过 makedirs, 备份仍产生在 CWD 且内容 = 写盘前原样"""
+    path = _make(tmp_path, BASE)
+    monkeypatch.chdir(tmp_path)
+    tree = read_tree(path)
+    tree["config"]["web"] = {"port": "38080"}
+    write_tree(path, tree, load_config(path), "config.yml.bak")
+    with open("config.yml.bak", "r", encoding="utf-8") as f:
+        assert f.read() == BASE, "备份 = 写盘前的旧内容"
+
+
+def test_path_helpers_mid_node_shapes():
+    """_set_path / _delete_path 的形状防御(纯函数直测): 中途节点非 dict 时 set 重建、delete 静默返回;
+    单段路径打在非映射树上 delete 也是安全空转 —— R 级回退对烂形状的容错底座"""
+    from auto_qb.config.writer import _delete_path, _set_path
+
+    # set: 中途节点是标量 -> 整体替换为新 dict 再落值
+    tree = {"config": {"web": "junk"}}
+    _set_path(tree, ["config", "web", "port"], "123")
+    assert tree["config"]["web"] == {"port": "123"}
+
+    # set: 中途节点缺失 -> 现场建 dict
+    tree = {"config": {}}
+    _set_path(tree, ["config", "fs", "path_map"], [{"from": "a", "to": "b"}])
+    assert tree["config"]["fs"]["path_map"] == [{"from": "a", "to": "b"}]
+
+    # delete: 中途节点是标量 -> 无处可删, 原样返回不炸
+    tree = {"config": {"web": "junk"}}
+    _delete_path(tree, ["config", "web", "port"])
+    assert tree["config"]["web"] == "junk"
+
+    # delete: 中途节点缺失 -> 同样静默返回
+    tree = {"config": {}}
+    _delete_path(tree, ["config", "fs", "path_map"])
+    assert tree == {"config": {}}
+
+    # delete: 路径本身只有一段且树非映射 -> 循环零圈, 树不是 dict 则跳过 pop
+    _delete_path("plain", ["config"])
+    tree = {"config": {"a": 1}}
+    _delete_path(tree, ["config", "a"])
+    assert tree == {"config": {}}, "正常单段删除: 键被移除"

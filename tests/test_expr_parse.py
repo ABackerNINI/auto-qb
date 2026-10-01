@@ -16,10 +16,16 @@
 - test_parse_structural_errors: 空表达式/括号未闭合/空括号/缺操作数/结尾多余内容
 - test_parse_literal_type_conflicts: 字面量之间的类型冲突(算术/比较/not)
 - test_compile_expr_ast_shape: 综合表达式的 AST 形状与原文保留("=" 归一化为 "==")
+- test_tokenize_string_escapes_and_errors: 字符串转义(\\")/未闭合/尾随反斜杠/非法字符/
+  越界时刻(12:99)/无法识别的数字(上标字符)
+- test_parse_more_errors: not 出现在中缀位置 / 右操作数再带一元(该层第二个运算符)
+- test_types_direct_rules: types.py 运算符类型规则直测(数值/比较/相等/in/~ 的报错支路 +
+  ANY 放行 + LIST/ANY 型别判定)
 """
 import pytest
 
 from auto_qb.rules.expr import Binary, Call, Expr, ListLit, Lit, Name, Unary, compile_expr
+from auto_qb.rules.expr import types as expr_types
 from auto_qb.rules.expr.errors import ExprSyntaxError
 from auto_qb.rules.expr.lexer import tokenize
 
@@ -155,3 +161,60 @@ def test_compile_expr_ast_shape():
     assert isinstance(root.right.left, Binary) and root.right.left.right == Lit(22 * 60 + 30)
     assert _root("tor.state = 'uploading'").op == "=="
     assert isinstance(_root("not (tor.a and tor.b)"), Unary)
+
+
+def test_tokenize_string_escapes_and_errors():
+    """字符串转义保留下一字符(\\\" 值里就是引号); 未闭合 / 尾随反斜杠 / 非法字符 /
+    越界时刻 / 非 ASCII 数字 上标字符各自在词法阶段报错"""
+    assert tokenize('"a\\"b"')[0].value == 'a"b'
+    with pytest.raises(ExprSyntaxError, match="缺少结束引号"):
+        tokenize('"abc')
+    with pytest.raises(ExprSyntaxError, match="缺少结束引号"):
+        tokenize('"abc\\')  # 尾随反斜杠: 转义无对象, 引号仍未闭合
+    with pytest.raises(ExprSyntaxError, match="非法字符"):
+        tokenize("tor.a ? 1")
+    with pytest.raises(ExprSyntaxError, match="非法时间字面量"):
+        tokenize("12:99")  # 词法形态对但时间越界, 复用 utils.parse_hm 的口径
+    with pytest.raises(ExprSyntaxError, match="无法识别的数字"):
+        tokenize("²")  # isdigit 为真但非十进制数字
+
+
+def test_parse_more_errors():
+    """not 不是合法中缀运算符(须写 not X 形态); 右操作数再带一元算该层第二个运算符"""
+    with pytest.raises(ExprSyntaxError, match="不能出现在中缀位置"):
+        compile_expr("tor.a not tor.b")
+    with pytest.raises(ExprSyntaxError, match="同一括号内只能有一个运算符"):
+        compile_expr("tor.a + -tor.b")
+
+
+def test_types_direct_rules():
+    """types.py 类型规则直测(与 parser/env 两处调用方同源的单一事实源): 报错支路 + ANY 放行"""
+    t = expr_types
+    assert t.type_name(["a"]) == t.LIST
+    assert t.type_name((1, 2)) == t.LIST
+    assert t.type_name(None) == t.ANY
+    assert t.type_name({"k": 1}) == t.ANY
+    with pytest.raises(ExprSyntaxError, match="两侧都必须是数值"):
+        t.check_op_types("+", t.NUM, t.STR)
+    with pytest.raises(ExprSyntaxError, match="同为数值或同为字符串"):
+        t.check_op_types("<=", t.NUM, t.BOOL)
+    with pytest.raises(ExprSyntaxError, match="类型不一致"):
+        t.check_op_types("==", t.STR, t.NUM)
+    t.check_op_types("==", t.NUM, t.NUM)  # 数字与数字相等比较放行(int/float 互换)
+    with pytest.raises(ExprSyntaxError, match="右侧必须是列表或字符串"):
+        t.check_op_types("in", t.STR, t.NUM)
+    with pytest.raises(ExprSyntaxError, match="两侧都必须是字符串"):
+        t.check_op_types("~", t.NUM, t.STR)
+    with pytest.raises(ExprSyntaxError, match="未知运算符"):
+        t.check_op_types("xor", t.BOOL, t.BOOL)
+    with pytest.raises(ExprSyntaxError, match="操作数必须是布尔"):
+        t.check_unary_types("not", t.NUM)
+    with pytest.raises(ExprSyntaxError, match="操作数必须是数值"):
+        t.check_unary_types("-", t.STR)
+    t.check_unary_types("-", t.ANY)  # ANY 无法静态确定: 一元放行
+    t.check_op_types("+", t.ANY, t.STR)  # ANY 参与运算: 静态放行
+    # 合法组合走 return 支路(不抛)
+    t.check_op_types("+", t.NUM, t.NUM)
+    t.check_op_types("~", t.STR, t.STR)
+    t.check_unary_types("-", t.NUM)
+    t.check_unary_types("?", t.NUM)  # 非 not/-/+ 的一元名: 规则表外静默放行(路由方只送三种)
