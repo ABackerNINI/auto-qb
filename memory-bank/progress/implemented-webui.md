@@ -5,6 +5,19 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- WEB UI **设置页只读字段(程序托管/R 级)**(2026-10-01, 清偿 issue
+  [26-09-28-2135-feat-webui-readonly-fields](../issues/26-09-28-2135-feat-webui-readonly-fields.html)):
+  schema_version/data_dir/state_file/fs 段此前渲染为可编辑但保存必然被盖章/回退, 反馈还谎报「需重启才生效」。
+  修法五条: ①`Field` 加 `readonly` 标志 + 四点位打标(fs 段与叶子 path_map 双标, 前端叶子只认自身标)
+  + `readonly_config_paths()`; ②CE_FIELD_BASE 三 computed(readonly/readonlyComplex/readonlySummary),
+  hub-field 只读摘要分支(fs.path_map 渲染「from: … · to: …」映射对, 替换 `[object Object]` text 控件)
+  + 全控件 `:disabled` + 「程序维护」徽标 + settings-detail 块级 section 开关收口; ③cfgSave 反馈口径改
+  「程序托管字段, 仅能在配置文件中修改, 本次未写入」; ④writer `_fallback_readonly_fields` 键面防线
+  (schema_version 豁免 —— 盖章承担其只读, 回退会吞「高于本程序支持」精确错); ⑤守阵 +5(writer 3 /
+  schema 1 / web 静态 1)。真浏览器定向验证徽标/禁用/摘要全符合设计。test.full **1929 passed + 3 skipped / 91%**
+  (基线 [testing/baselines/26-10-01-2250](../testing/baselines/26-10-01-2250-webui-readonly-fields.md));
+  档案 [tasks/26-10-01-webui-readonly-fields](../tasks/26-10-01-webui-readonly-fields.md); **随本提交入库**
+
 - WEB UI **web.token 生成改走 atomic_write**(2026-10-01, 清偿 issue
   [26-09-21-1347-bug-web-token-non-atomic-write](../issues/26-09-21-1347-bug-web-token-non-atomic-write.html)):
   ensure_web_token 原用 O_TRUNC 直写, 生成瞬间非优雅终止会留下非空半截 token 被持久化 ⇒ 已存浏览器密钥 401。

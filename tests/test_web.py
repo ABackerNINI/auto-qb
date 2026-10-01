@@ -115,6 +115,7 @@
 - test_build_speed_totals_covers_ungrouped: 速度合计 = store 全量(组内成员 ∪ 未归组), 不能只算 groups(漏未归组实测少算 88.7%)
 - test_api_state_speed_totals_survives_view_scoping: status.totals 恒回传 —— 种子页(不回 groups)/辅种页/rid 命中三种情况下都在且等于全量(issue 26-09-20-1646 防复现)
 - test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
+- test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
@@ -2139,6 +2140,47 @@ def test_frontend_hub_field_covers_non_leaf_items():
             "非叶子项仍有掉进兜底 input 的路径")
         assert 'v-if="item.type === \'section\'"' in tpl, (
             f"{skin} 的 tpl-hub-field 首个分支必须带 v-if(链头), 否则 v-else-if 链不成立"
+        )
+
+
+def test_frontend_hub_field_renders_readonly_fields():
+    """schema Field.readonly(程序托管字段)在设置页必须渲染为禁用控件(静态防回潮)
+
+    issue 26-09-28-2135: schema_version/data_dir/state_file/fs 打 readonly 标 —— 这些字段的
+    用户输入会被后端无条件覆盖/回退(程序盖章、R 级回退、readonly 键面防线), UI 若仍渲染
+    可编辑控件, 反馈就是误导性的「已保存」。守阵四查(每套皮肤):
+
+    1. CE_FIELD_BASE 必须有 readonly/readonlyComplex/readonlySummary 三个成员 ——
+       HUB_FIELD_COMPONENT 经 Object.assign 继承, 缺一个模板引用就是 undefined 静默失效;
+    2. tpl-hub-field 控件链**首支**必须是 readonly 的只读摘要分支(readonlyComplex) ——
+       列表/对象值(fs.path_map)落进输入框会 String 化成 "[object Object]";
+    3. 全部可编辑控件都挂 :disabled="readonly"(bool/enum/list/rules_ref/keyed_list/
+       数值+单位两件套/文本 至少 7 处, 漏一处 = 该类 readonly 字段仍可改);
+    4. 叶子行带「程序维护」徽标; settings-detail 的块级 section 开关对 readonly 段换徽标
+       (fs 段的启用/关闭开关在那里, 不禁用就能把整段从 UI 删掉)。
+    """
+    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    for member in ("readonly()", "readonlyComplex()", "readonlySummary()"):
+        assert member in editor, f"config_editor.js 的 CE_FIELD_BASE 缺 computed {member} (模板引用会 undefined 静默失效)"
+
+    for skin in _UI_ALL:
+        html = _ui_aggregate(skin)
+        m = re.search(r'<script type="text/x-template" id="tpl-hub-field">(.*?)\n  </script>', html, re.S)
+        assert m, f"{skin} 找不到 tpl-hub-field 模板(改名/挪走了? 同步本守阵)"
+        tpl = m.group(1)
+        assert 'v-if="readonlyComplex"' in tpl, (
+            f"{skin} 的 tpl-hub-field 缺 readonly 只读摘要分支(链首) —— "
+            "列表/对象值(fs.path_map)会落进输入框 String 化成 '[object Object]'"
+        )
+        n_disabled = tpl.count(':disabled="readonly"')
+        assert n_disabled >= 7, (
+            f"{skin} 的 tpl-hub-field 只有 {n_disabled} 处 :disabled=\"readonly\"(须 >= 7) —— "
+            "bool/enum/list/rules_ref/keyed_list/数值+单位两件套/文本 的控件要全挂禁用"
+        )
+        assert '<span v-if="readonly" class="hb-badge">程序维护</span>' in tpl, (f"{skin} 的 tpl-hub-field 叶子行缺「程序维护」徽标")
+        # 块级 section 开关(settings-detail 分片): readonly 段不渲染启用/关闭, 换「程序维护」徽标
+        assert "b.item.field && b.item.field.readonly" in html, (
+            f"{skin} 的 settings-detail 块级 section 开关未对 readonly 段收口 —— fs 段可从 UI 整段删除"
         )
 
 

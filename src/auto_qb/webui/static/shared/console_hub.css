@@ -235,6 +235,23 @@
 .hb-switch.important input:checked + .hb-sw-track { background: var(--warn); }
 .hb-switch.danger { --tone: var(--error); }
 .hb-switch.danger input:checked + .hb-sw-track { background: var(--error); }
+/* readonly(程序托管)行的禁用控件(issue 26-09-28-2135): 仍可见可读, 但明确不可改 */
+.hb-row.hb-readonly .hb-input:disabled,
+.hb-row.hb-readonly .hb-select:disabled { color: var(--fg-muted); cursor: not-allowed; }
+.hb-switch input:disabled + .hb-sw-track { opacity: .5; cursor: not-allowed; }
+
+/* readonly 字段的只读摘要(列表/对象值, 如 fs.path_map 的映射对): 每条一行, 等宽浅底 */
+.hb-ro { display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 460px; }
+.hb-ro-line {
+  font-family: var(--hb-font-mono);
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  padding: 4px 8px;
+  overflow-wrap: anywhere;
+}
 
 /* ---- 通用小元件: 徽章 / 读数 / 图标 ---- */
 .hb-badge {

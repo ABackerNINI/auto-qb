@@ -10,6 +10,8 @@
 - test_rule_fields_cover_rule_known_keys: 规则级字段(+conditions/actions 专段) == RULE_KNOWN_KEYS
 - test_condition_plugins_cover_registry / test_action_plugins_cover_registry: 插件表覆盖全部已注册插件
 - test_field_kinds_are_declared: 所有 Field.kind 在 KINDS 中
+- test_readonly_fields_are_program_managed: readonly(程序托管)点位清单 == {schema_version, data_dir, state_file, fs};
+  R 级段全部打标; fs 段与其叶子 path_map 都打标(前端叶子分支只认自身 Field.readonly)
 - test_plugin_kinds_are_declared: 所有 Plugin.spec_kind/item_kind 在约定集合中, 且形态自洽
 - test_enum_fields_have_options / test_object_fields_have_children: enum 有选项, object 有子字段
 - test_unit_default_only_on_unit_kinds: unit_default 仅用于 UNIT_KINDS 且在合法单位表内
@@ -189,6 +191,25 @@ def test_optional_only_on_object_fields():
         if f.optional:
             assert f.kind == "object", f"{f.key}: optional 仅适用于 object 字段"
             assert not f.required, f"{f.key}: optional 与 required 互斥"
+
+
+def test_readonly_fields_are_program_managed():
+    """readonly(程序托管)点位清单(issue 26-09-28-2135): 前端禁用渲染与 writer 写盘回退的共同单点
+
+    漏标 = UI 渲染可编辑但保存被覆盖/回退且反馈误导(本 issue 的根因); 多标 = 用户改不了
+    本该能改的字段。清单断言钉住当前 4 个点位; R 级段与 readonly 的包含关系一并钉住
+    (新增 R 级段必须同时打 readonly 标, 否则重演「可编辑但不生效」)。
+    """
+    from auto_qb.config.impact import RESTART_SECTIONS
+
+    assert set(schema.readonly_config_paths()) == {"schema_version", "data_dir", "state_file", "fs"}
+    for key in ("schema_version", "data_dir", "state_file"):
+        assert _top_field(key).readonly, f"{key} 缺 readonly 标"
+    for key in sorted(RESTART_SECTIONS):
+        assert _top_field(key).readonly, f"R 级段 {key} 缺 readonly 标(保存回退但 UI 可编辑, 反馈误导)"
+    # fs 段整体 readonly, 其下叶子(path_map)也要打标 —— 前端叶子分支只认自身 Field.readonly
+    path_map = _nested("fs")["path_map"]
+    assert path_map.readonly, "fs.path_map 缺 readonly 标(叶子会渲染成可编辑控件)"
 
 
 def test_unit_default_only_on_unit_kinds():

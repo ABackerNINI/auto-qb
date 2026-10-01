@@ -8,7 +8,8 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-readonly-fields">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-01-webui-readonly-fields.md">
 <meta name="issue-title" content="WEBUI 设置页支持只读字段: 程序托管/R 级字段改为只读展示">
 <meta name="issue-summary" content="schema_version/data_dir/state_file/fs.path_map 渲染为可编辑但保存必然被覆盖或静默回退, 且反馈误导; 需 Field 只读标志 + 前端禁用渲染 + 写盘防线">
 <title>WEBUI 设置页支持只读字段: 程序托管/R 级字段改为只读展示 · feat · 计划外问题</title>
@@ -94,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· feat</div>
+    <div class="kicker">计划外问题（已修）· feat</div>
     <h1>WEBUI 设置页支持只读字段: 程序托管/R 级字段改为只读展示</h1>
     <p class="lede">schema_version/data_dir/state_file/fs.path_map 渲染为可编辑但保存必然被覆盖或静默回退, 且反馈误导; 需 Field 只读标志 + 前端禁用渲染 + 写盘防线</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-28-2135-feat-webui-readonly-fields</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-28 21:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -180,11 +181,35 @@ this.toast(`已保存并热重载(变更 ${n} 项); 需重启进程才生效: ${
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-28 21:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 22:0x — 认领复验，状态 <strong>In Progress</strong>（锚点重跑全部仍复现；任务档案 [tasks/26-10-01-webui-readonly-fields.md](../tasks/26-10-01-webui-readonly-fields.md)）</li>
+      <li>2026-10-01 22:55 — 实施完成，状态 <strong>Done</strong>（建议修法五条全部落地，test.full 1929 passed + 3 skipped / 91%）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-01 22:0x <strong>仍复现</strong> —— 按锚点重跑: <code>_stamp_schema_version</code> 无条件盖章、
+       <code>_fallback_restart_fields</code> R 级静默回退、R 闸三段(state_file/data_dir/fs, 现单点在
+       <code>impact.py::RESTART_SECTIONS</code>, 入池时写的 <code>SECTION_LEVELS</code> 已随 W4 级别表退役漂移)、
+       <code>config_editor.js</code> 的 <code>CE_FIELD_BASE</code> 全文 grep <code>readonly|disabled</code> 零命中 ——
+       四点位的「可编辑但不生效 + 误导反馈」机制全部原样。入池锚点行号有漂移
+       (CE_FIELD_BASE 现 967 附近; <code>fs</code> 段 help 文案自认「暂不提供逐条编辑」仍在), 符号与 grep 关键词均可命中。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（2026-10-01, 建议修法五条全部落地; 全程记录见任务档案
+       [tasks/26-10-01-webui-readonly-fields.md](../tasks/26-10-01-webui-readonly-fields.md)）</strong>:
+       ①schema: <code>Field</code> 加 <code>readonly: bool = False</code>, schema_version/data_dir/state_file 打标,
+       fs 段与其叶子 path_map 双打标(前端叶子分支只认自身 Field.readonly); 新增 <code>readonly_config_paths()</code>
+       供写盘防线取键面(readonly 段只取段路径不展开子树)。②前端: <code>CE_FIELD_BASE</code> 加
+       readonly/readonlyComplex/readonlySummary 三 computed(HUB_FIELD_COMPONENT 经 Object.assign 自动继承);
+       <code>tpl-hub-field</code> 控件链首支为只读摘要分支(列表/对象值每条映射对一行「from: … · to: …」,
+       替换 <code>[object Object]</code> 的 text 控件), 全部可编辑控件挂 <code>:disabled="readonly"</code>,
+       叶子行挂「程序维护」徽标; section 分支与 settings-detail 块级 section 开关对 readonly 段换徽标(禁删整段)。
+       ③反馈: R 级回退发生时 toast 改「为程序托管字段, 仅能在配置文件中修改, 本次未写入」—— 回退 = 值没写进去,
+       重启也不会生效。④后端防线: <code>writer._prepare</code> 加 <code>_fallback_readonly_fields</code>
+       (与 R 级回退同语义: 旧值覆盖 / 缺失删键), <strong>schema_version 刻意豁免</strong> —— 它的只读由盖章承担,
+       回退会吞掉「高于本程序支持」的精确校验错(守阵钉住)。⑤守阵 +5: writer 3 / schema 清单断言 1 /
+       web 前端接线静态守阵 1。与建议修法的差异仅一处表述: 建议①写「schema_payload() 走 dataclass 序列化自动下发」,
+       实测确认零改动自动生效, 未新增下发代码。验收: <code>test.quick</code> 1929 passed + 3 skipped(21.80s) →
+       <code>test.full</code> <strong>1929 passed + 3 skipped / 91%</strong>(26.28s, 0 warnings); 真浏览器定向验证
+       (harness 桩 + Playwright): 三行 disabled + 徽标、fs 块头徽标且开关不渲染、path_map 摘要行无输入控件 ——
+       全部符合设计; 全量冒烟 96 项仅 1 项 flaky(P0-3 前行乐观时序, 与本改动无关)。</p>
   </section>
 
   <footer>

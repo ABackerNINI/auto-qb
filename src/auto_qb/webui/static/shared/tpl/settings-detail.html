@@ -189,11 +189,15 @@
                     <span class="bh-t">{{ b.label }}</span>
                     <span v-if="b.help" class="bh-n">{{ b.help }}</span>
                     <span class="bh-r">
-                      <label v-if="b.section" class="hb-switch" title="控制该配置段是否写入配置文件">
-                        <input type="checkbox" :checked="cfgExists(b.item.path)"
-                               @change="cfgToggleSection(b.item.path, b.item.field, $event.target.checked)">
-                        <span class="hb-sw-track"></span>
-                      </label>
+                      <!-- readonly(程序托管)段(如 fs): 启用/关闭开关无意义, 换成徽标(issue 26-09-28-2135) -->
+                      <template v-if="b.section">
+                        <span v-if="b.item.field && b.item.field.readonly" class="hb-badge">程序维护</span>
+                        <label v-else class="hb-switch" title="控制该配置段是否写入配置文件">
+                          <input type="checkbox" :checked="cfgExists(b.item.path)"
+                                 @change="cfgToggleSection(b.item.path, b.item.field, $event.target.checked)">
+                          <span class="hb-sw-track"></span>
+                        </label>
+                      </template>
                     </span>
                   </div>
                   <template v-if="!b.section || cfgExists(b.item.path)">

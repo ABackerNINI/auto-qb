@@ -91,6 +91,7 @@ GROUPS: Tuple[Group, ...] = (
                 default="auto-qb-data",
                 help="运行状态、日志、跳检备份等文件的存放目录(相对启动时的工作目录, 或绝对路径)",
                 risk="修改后需重启进程才生效",
+                readonly=True,  # R 级(进程身份): 保存时回退磁盘旧值, 只能在配置文件中改(issue 26-09-28-2135)
             ),
             Field(
                 "state_file",
@@ -98,7 +99,8 @@ GROUPS: Tuple[Group, ...] = (
                 "path",
                 default="",
                 help="运行状态存档(重启后接着上次进度继续); 省略整键 = <data_dir>/state.json。WebUI 中本项只读, 调整需直接编辑 YAML 并重启",
-                risk="修改后需重启进程才生效"
+                risk="修改后需重启进程才生效",
+                readonly=True,  # R 级(进程身份): 同 data_dir, 保存时回退磁盘旧值
             ),
             Field(
                 "schema_version",
@@ -108,6 +110,7 @@ GROUPS: Tuple[Group, ...] = (
                 min=1,
                 help="配置文件格式版本标记(升级链, 计划 26-09-26-0506): 旧版本配置加载时自动逐级迁移, 无需手写",
                 risk="文件格式标记, 程序保存时自动盖章 —— 请勿手改",
+                readonly=True,  # 程序盖章(_stamp_schema_version 无条件覆盖): 手改必然被盖掉
             ),
             # ↓ 日志 / WEB UI / 通知 三个短段并入常规组(2026-09-26 用户要求: 设置首页少几张卡, 设置页不再单列);
             #   不声明 open —— 三段在「常规」分区页里经 hubBlocks 各自成块、永远展开(2026-09-28 用户要求:
@@ -298,17 +301,19 @@ GROUPS: Tuple[Group, ...] = (
                 optional=True,
                 help="下载目录路径映射(fs.path_map, plan 26-09-27-1407): 容器部署且挂载点与 qB 报回的保存路径不一致时配置; "
                 "宿主直跑 / Linux 同路径挂载留空 = 完全现状。修改后需重启进程才生效",
+                readonly=True,  # R 级段(文件访问层单例构造期一次): 整段保存时回退磁盘旧值, WebUI 只读展示
                 fields=(
                     Field(
                         "path_map",
                         "路径映射表",
                         "text",
                         default="",
-                        help="在 config.yml 按 YAML 列表编辑(WebUI 暂不提供逐条编辑): 每条 {from: qB 报回的宿主路径前缀, "
+                        help="在 config.yml 按 YAML 列表编辑(WebUI 只读展示): 每条 {from: qB 报回的宿主路径前缀, "
                         "to: 本容器挂载点}, 如 from: \"D:/Downloads\" / to: \"/mnt/downloads\"。配好映射后缺文件扫描/跳检前置/"
                         "exists()/disk_*()/目录浏览恢复可用, 详见 docs/deployment.md §11.5; 映射 miss 一律「不可判定」,"
                         "绝不误判「不存在」",
                         risk="修改后需重启进程才生效",
+                        readonly=True,  # 段整体 readonly; 叶子再打标一次 —— 前端叶子分支只认自身 Field.readonly
                     ),
                 )
             ),

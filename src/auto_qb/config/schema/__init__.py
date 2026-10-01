@@ -88,6 +88,7 @@ __all__ = [
     "GROUPS",
     "config_fields",
     "real_config_fields",
+    "readonly_config_paths",
     "plugin_table",
     "plugins_by_kind",
     "schema_payload",
@@ -102,6 +103,30 @@ def config_fields() -> Tuple[Field, ...]:
 def real_config_fields() -> Tuple[Field, ...]:
     """对应真实配置键的顶层字段(排除 UI 专段入口)"""
     return tuple(f for f in config_fields() if not f.ui_only)
+
+
+def readonly_config_paths() -> Tuple[str, ...]:
+    """readonly(程序托管)字段的点路径, 不含 "config." 前缀(如 "data_dir" / "fs.path_map")
+
+    消费方是 writer 的写盘防线(_fallback_readonly_fields): 提交树里这些路径的值回退为磁盘旧值。
+    递归进非 readonly 的 object 段找嵌套叶子; readonly 段只取段路径、不再展开 —— 段整体回退时
+    子树已随之覆盖(现 schema 的 fs 段与其叶子 path_map 都打标, 回退按段路径生效)。
+    """
+    out: list = []
+
+    def walk(fields: Tuple[Field, ...], prefix: str) -> None:
+        for f in fields:
+            if f.ui_only:
+                continue
+            path = f"{prefix}.{f.key}" if prefix else f.key
+            if f.readonly:
+                out.append(path)
+                continue  # readonly 段整体回退, 子树不必重复收集
+            if f.kind == "object":
+                walk(f.fields or (), path)
+
+    walk(real_config_fields(), "")
+    return tuple(out)
 
 
 def plugin_table() -> Dict[str, Tuple[Plugin, ...]]:

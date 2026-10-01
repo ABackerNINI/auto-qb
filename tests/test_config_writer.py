@@ -12,6 +12,9 @@
 - test_write_tree_removes_empty_list: 列表被清空后键移除
 - test_write_tree_restart_field_fallback: R 级字段回退为磁盘旧值并回报 restart_required
 - test_write_tree_restart_field_removed_when_absent_on_disk: 磁盘未配置的 R 级字段提交后被删除(走默认值)
+- test_write_tree_readonly_section_fallback: readonly 段(fs, issue 26-09-28-2135)提交改值回退为磁盘旧值(schema 键面写盘防线)
+- test_write_tree_readonly_section_removed_when_absent_on_disk: 磁盘未配置的 readonly 段提交后被删除(走默认值)
+- test_write_tree_rejects_version_higher_than_program: 提交树版本高于程序 -> 校验层精确报错(readonly 防线不回退 schema_version, 不吞掉该错)
 - test_write_tree_updates_derived_state_file: 改 data_dir 时派生的 state_file 一并回退
 - test_write_tree_writes_float_and_negative_scalars_plain: 浮点字符串按原生标量写出
 - test_write_tree_backup_created: 写盘前生成 `data/config.yml.bak` 备份(父目录按需创建)
@@ -217,6 +220,55 @@ def test_write_tree_restart_field_removed_when_absent_on_disk(tmp_path):
     assert "data_dir" in result.restart_required
     assert "data_dir" not in _text(path), "磁盘未配置的 R 级字段不得被写入"
     assert load_config(path).data_dir == "auto-qb-data"
+
+
+def test_write_tree_readonly_section_fallback(tmp_path):
+    """readonly 段(fs, issue 26-09-28-2135)提交改值回退为磁盘旧值 —— schema 键面写盘防线
+
+    R 级回退只认"本次变更命中 R 闸的段"; 本防线按 schema 的 readonly 标全量兜底, 与 R 级回退
+    覆盖面有交集无冲突(都回退到同一磁盘旧值)。fs 段同时是两者, 任一失效另一道仍兜住。
+    """
+    path = _make(tmp_path, BASE + "  fs:\n    path_map:\n      - from: D:/Downloads/Old\n        to: /mnt/old\n")
+    old = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["fs"]["path_map"] = [{"from": "D:/Downloads/New", "to": "/mnt/new"}]
+    result = write_tree(path, tree, old, _bak(tmp_path))
+
+    assert result.changes, "变更列表应包含本次差异(回退不掩盖提交树的 diff)"
+    new_tree = read_tree(path)
+    assert new_tree["config"]["fs"]["path_map"] == [{"from": "D:/Downloads/Old", "to": "/mnt/old"}], "readonly 段应保留磁盘旧值"
+    assert "D:/Downloads/New" not in _text(path), "readonly 段的新值不得写入磁盘"
+
+
+def test_write_tree_readonly_section_removed_when_absent_on_disk(tmp_path):
+    """磁盘未配置的 readonly 段: 提交后被删除(走默认值), 不得被写入 —— 与 R 级回退同语义"""
+    path = _make(tmp_path, BASE)
+    old = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["fs"] = {"path_map": [{"from": "D:/Downloads/New", "to": "/mnt/new"}]}
+    write_tree(path, tree, old, _bak(tmp_path))
+
+    assert "fs" not in read_tree(path)["config"], "磁盘未配置的 readonly 段不得被写入"
+    assert load_config(path).fs.path_map == (), "fs 走默认(空映射)"
+
+
+def test_write_tree_rejects_version_higher_than_program(tmp_path):
+    """提交树版本高于程序: 放行给校验层报精确错(readonly 防线不回退 schema_version, 不吞掉该错)
+
+    issue 26-09-28-2135 的红线: schema_version 的只读由 _stamp_schema_version 盖章承担;
+    若 readonly 回退也碰它, 「文件比程序新」的树会被抹平成磁盘旧值静默保存, 吞掉用户排障的
+    唯一线索(报错须同时说清两个版本号)。
+    """
+    from auto_qb.infra.versioning import CURRENT_VERSIONS
+
+    path = _make(tmp_path, BASE)
+    old = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["schema_version"] = str(CURRENT_VERSIONS["config"] + 1)
+    with pytest.raises(ConfigError) as ei:
+        write_tree(path, tree, old, _bak(tmp_path))
+    assert "高于本程序支持" in str(ei.value)
+    assert read_tree(path)["config"]["schema_version"] == "3", "拒绝时磁盘一字不动"
 
 
 def test_write_tree_writes_float_and_negative_scalars_plain(tmp_path):

@@ -13,7 +13,9 @@
           <span class="bh-t">{{ f.label }}</span>
           <span class="bh-n">{{ sectionSummary }}</span>
           <span class="bh-r">
-            <label class="hb-switch" title="控制该配置段是否写入配置文件">
+            <!-- readonly(程序托管)段: 启用/关闭开关无意义(段的存在性由 config.yml 管理), 换成徽标 -->
+            <span v-if="readonly" class="hb-badge">程序维护</span>
+            <label v-else class="hb-switch" title="控制该配置段是否写入配置文件">
               <input type="checkbox" :checked="sectionExists()" @change="toggleSection($event.target.checked)">
               <span class="hb-sw-track"></span>
               <span class="hb-sw-text">{{ sectionExists() ? '启用' : '关闭' }}</span>
@@ -54,22 +56,30 @@
         <hub-field v-for="sub in item.items" :key="ce.hubKey(sub.path)" :item="sub"></hub-field>
       </div>
 
-      <!-- 叶子字段: 标签 | 控件 | 「?」 -->
-      <div v-else class="hb-row" :class="[ce.hubRowClass(item), { bare: isBare, 'hb-inactive': greyed }]"
+      <!-- 叶子字段: 标签 | 控件 | 「?」; readonly(程序托管, issue 26-09-28-2135)行渲染禁用控件 +
+           「程序维护」徽标, 列表/对象值(如 fs.path_map)改只读摘要 —— 控件形态会把列表 String 化成
+           "[object Object]", 且编辑产出必然被后端回退 -->
+      <div v-else class="hb-row" :class="[ce.hubRowClass(item), { bare: isBare, 'hb-inactive': greyed, 'hb-readonly': readonly }]"
            :data-hb-key="ce.hubKey(path)">
         <div v-if="!isBare" class="hb-lb">
           {{ f.label }}<span v-if="f.required" class="lb-req">*</span>
           <span v-if="isDefault()" class="hb-badge">默认</span>
+          <span v-if="readonly" class="hb-badge">程序维护</span>
         </div>
         <div class="hb-ct">
-          <label v-if="f.kind === 'bool'" class="hb-switch" :class="ce.hubToneOf(item)">
-            <input type="checkbox" :checked="boolValue()" @change="setBool($event.target.checked)">
+          <!-- readonly 的列表/对象值: 不渲染可编辑控件, 改只读摘要(fs.path_map 的映射对等) -->
+          <div v-if="readonlyComplex" class="hb-ro">
+            <span v-for="(line, i) in readonlySummary" :key="i" class="hb-ro-line">{{ line }}</span>
+          </div>
+
+          <label v-else-if="f.kind === 'bool'" class="hb-switch" :class="ce.hubToneOf(item)">
+            <input type="checkbox" :checked="boolValue()" :disabled="readonly" @change="setBool($event.target.checked)">
             <span class="hb-sw-track"></span>
             <span class="hb-sw-text">{{ boolValue() ? '启用' : '关闭' }}</span>
           </label>
 
           <select v-else-if="f.kind === 'enum'" class="hb-select" :class="ce.hubToneOf(item)"
-                  :value="textValue()" @change="set($event.target.value)">
+                  :value="textValue()" :disabled="readonly" @change="set($event.target.value)">
             <option v-if="!f.required" value="">(未配置)</option>
             <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
           </select>
@@ -77,19 +87,19 @@
           <div v-else-if="isList" class="hb-list">
             <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
               <input class="hb-input" :class="{ 'hb-mono': ce.hubMonoOf(item) }" :value="it"
-                     :placeholder="f.placeholder || ''" @input="listSet(i, $event.target.value)">
-              <button class="hb-btn ghost sm" title="删除该项" @click="listRemove(i)">✕</button>
+                     :placeholder="f.placeholder || ''" :disabled="readonly" @input="listSet(i, $event.target.value)">
+              <button v-if="!readonly" class="hb-btn ghost sm" title="删除该项" @click="listRemove(i)">✕</button>
             </div>
-            <button class="hb-btn ghost sm" style="align-self:flex-start" @click="listAdd()">＋ 添加</button>
+            <button v-if="!readonly" class="hb-btn ghost sm" style="align-self:flex-start" @click="listAdd()">＋ 添加</button>
           </div>
 
           <div v-else-if="f.kind === 'rules_ref'" class="hb-list">
             <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
-              <input class="hb-input hb-mono" :value="it" :placeholder="f.placeholder || '@规则集 或 @规则集.规则名'"
+              <input class="hb-input hb-mono" :value="it" :disabled="readonly" :placeholder="f.placeholder || '@规则集 或 @规则集.规则名'"
                      @input="listSet(i, $event.target.value)">
-              <button class="hb-btn ghost sm" title="删除该引用" @click="listRemove(i)">✕</button>
+              <button v-if="!readonly" class="hb-btn ghost sm" title="删除该引用" @click="listRemove(i)">✕</button>
             </div>
-            <select class="hb-select" :value="''" @change="refPick($event)">
+            <select v-if="!readonly" class="hb-select" :value="''" @change="refPick($event)">
               <option value="">从已有规则集/规则中选择…</option>
               <optgroup v-for="g in ce.ceRefOptions()" :key="g.group" :label="g.group">
                 <option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
@@ -99,7 +109,7 @@
 
           <div v-else-if="f.kind === 'keyed_list'" class="hb-checks">
             <label v-for="o in f.options" :key="o" class="hb-check">
-              <input type="checkbox" :checked="checkedKey(o)" @change="toggleKey(o)">
+              <input type="checkbox" :checked="checkedKey(o)" :disabled="readonly" @change="toggleKey(o)">
               <span>{{ o }}</span>
             </label>
           </div>
@@ -107,9 +117,10 @@
           <!-- 数值 + 单位: 写回仍是单个字符串(30M / 10MiB), 与磁盘同构; 合法性由后端夹紧 -->
           <div v-else-if="hasUnit" class="hb-unit">
             <input class="hb-input hb-mono hb-w-sm" type="text" :value="unitParts.num"
-                   :placeholder="f.placeholder || ''"
+                   :placeholder="f.placeholder || ''" :disabled="readonly"
                    @input="ce.cfgSetUnit(path, $event.target.value, unitParts.unit)">
-            <select class="hb-select" :value="unitParts.unit" @change="ce.cfgSetUnit(path, unitParts.num, $event.target.value)">
+            <select class="hb-select" :value="unitParts.unit" :disabled="readonly"
+                    @change="ce.cfgSetUnit(path, unitParts.num, $event.target.value)">
               <option v-for="u in unitOptions" :key="u" :value="u">{{ unitLabel(u) }}</option>
             </select>
           </div>
@@ -117,7 +128,8 @@
           <template v-else>
             <input class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
                    :type="f.kind === 'password' ? 'password' : 'text'" :value="textValue()"
-                   :placeholder="f.placeholder || ''" :min="f.min" :max="f.max" @input="set($event.target.value)">
+                   :placeholder="f.placeholder || ''" :min="f.min" :max="f.max" :disabled="readonly"
+                   @input="set($event.target.value)">
             <span v-if="f.unit" class="hb-dim">{{ f.unit }}</span>
           </template>
 

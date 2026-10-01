@@ -9,6 +9,9 @@
   (版本号备份先行 -> 校验复核 -> 原子写), 幂等、常态零 IO(2026-09-27 生产事故的两道防线)
 - **R 级字段(state_file/data_dir)不可热切换**: 树中对应值回退为磁盘旧值(旧行为不变),
   其余级别字段照常写入并热重载
+- **readonly 字段防线(issue 26-09-28-2135)**: schema 打了 readonly 标的"程序托管"字段
+  (schema_version/data_dir/state_file/fs)提交后一律回退为磁盘旧值 —— R 级回退与版本盖章已实际
+  兜住这四点, 本防线按 schema 键面再兜一层, 防未来新增点位漏配时重演「UI 可编辑但保存不生效」
 - **ruamel round-trip 写盘**: 已存在键的注释保留; 列表项与新增键无注释(设计取舍, 见计划)
 - **备份路径由调用方指定**(`write_tree(..., backup_path)`): 生产落 `<data_dir>/<配置名>.bak`,
   不在项目根目录产生 `config.yml.bak`
@@ -30,6 +33,7 @@ from ..infra.versioning import CURRENT_VERSIONS, VERSION_KEY, detect_version
 from .errors import ConfigError
 from .impact import RESTART_SECTIONS, ConfigChange, diff_config_impacts, restart_required_paths
 from .loaders import load_config, migrate_config_schema, normalize_schema_version
+from .schema import readonly_config_paths
 
 # 树根键(与 validate_config 的"根节点仅允许 config"一致)
 ROOT_KEY = "config"
@@ -216,6 +220,7 @@ def _prepare(config_path: str, tree: Dict[str, Any], old_config) -> Tuple[List[C
     if restart_required:
         # 只回退命中 R 闸的段(W4 后 changes 含全部变更段, 不能整表回退)
         _fallback_restart_fields(tree, old_tree, [c for c in changes if c.path in RESTART_SECTIONS])
+    _fallback_readonly_fields(tree, old_tree)  # readonly 键面防线(issue 26-09-28-2135), 与 R 级回退同语义
     return changes, restart_required
 
 
@@ -266,6 +271,28 @@ def _fallback_restart_fields(tree: dict, old_tree: dict, changes: List[ConfigCha
     """R 级字段(段)回退为磁盘旧值: 旧值存在则覆盖, 旧值不存在则删除该键(走默认值)"""
     for change in changes:
         parts = [ROOT_KEY, *change.path.split(".")]
+        old_value = _get_path(old_tree, parts)
+        if old_value is None:
+            _delete_path(tree, parts)
+        else:
+            _set_path(tree, parts, old_value)
+
+
+def _fallback_readonly_fields(tree: dict, old_tree: dict) -> None:
+    """readonly(程序托管)字段回退为磁盘旧值 —— schema 键面防线(issue 26-09-28-2135)
+
+    与 R 级回退同语义: 旧值存在则覆盖, 旧值不存在则删除该键(走默认值)。R 级回退只认"本次变更
+    命中 R 闸的段", 本防线按 schema 的 readonly 标全量兜底, 两者独立生效、覆盖面有交集无冲突
+    (都回退到同一磁盘旧值)。
+
+    schema_version 不在此列: 它的只读语义由 _stamp_schema_version 盖章承担(本函数执行后、
+    写盘前无条件盖章); 若也在这里回退, 提交树里「比程序新的版本」会被抹平成磁盘旧值 ——
+    那类树要放行给校验层报精确错(「高于本程序支持」), 不能在回退里误伤。
+    """
+    for path in readonly_config_paths():
+        if path == VERSION_KEY:
+            continue
+        parts = [ROOT_KEY, *path.split(".")]
         old_value = _get_path(old_tree, parts)
         if old_value is None:
             _delete_path(tree, parts)

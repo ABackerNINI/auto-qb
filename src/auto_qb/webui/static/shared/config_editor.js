@@ -173,9 +173,11 @@ window.CONFIG_EDITOR = {
         const fresh = await this.api("/api/config");
         this.cfgSetTree(fresh.tree);
         const n = (result.changes || []).length;
-        // 保存结果反馈走全局 toast(timeout 型 = 琥珀色时钟, 恰合「已保存但需重启才生效」的中间态)
+        // 保存结果反馈走全局 toast(timeout 型 = 琥珀色时钟, 恰合「已保存但有未写入项」的中间态)。
+        // 口径(issue 26-09-28-2135): R 级/readonly 字段在写盘前已回退为磁盘旧值 —— 值**没写进去**,
+        // 重启也不会生效, 不能再说「需重启进程才生效」; 如实说「仅能在配置文件中修改, 本次未写入」
         if (result.restart_required && result.restart_required.length) {
-          this.toast(`已保存并热重载(变更 ${n} 项); 需重启进程才生效: ${result.restart_required.join(", ")}`, "timeout", 9000);
+          this.toast(`已保存并热重载(变更 ${n} 项); ${result.restart_required.join(", ")} 为程序托管字段, 仅能在配置文件中修改, 本次未写入`, "timeout", 9000);
         } else {
           this.toast(`已保存并热重载(变更 ${n} 项)`, "ok", 3500);
         }
@@ -1015,6 +1017,32 @@ window.CE_FIELD_BASE = {
     /* 所属功能未启用(grey_if 不满足)时灰显, 但仍可编辑(不阻断, 只提示) */
     greyed() {
       return this.item.type === "field" && this.ce.cfgGreyed(this.item);
+    },
+    /* 程序托管字段(schema Field.readonly, issue 26-09-28-2135): 渲染禁用控件 + 「程序维护」标记,
+     * 值只能经 config.yml 修改 —— 后端写盘前还会按同一张 readonly 键面回退(防线与 UI 同一来源) */
+    readonly() {
+      return !!(this.f && this.f.readonly);
+    },
+    /* readonly 且当前值是列表/对象: 控件形态不适用(输入框 String 化出 "[object Object]"),
+     * 渲染只读摘要(如 fs.path_map 的映射对) */
+    readonlyComplex() {
+      if (!this.readonly) return false;
+      const v = this.ce.cfgRaw(this.path);
+      return v !== null && v !== undefined && typeof v === "object";
+    },
+    /* 只读摘要行(readonlyComplex 分支): 列表逐项一行, 对象平铺为 "k: v" 对(嵌套值 JSON 化) */
+    readonlySummary() {
+      if (!this.readonlyComplex) return [];
+      const v = this.ce.cfgRaw(this.path);
+      const one = (val) => {
+        if (val === null || val === undefined) return "";
+        if (typeof val !== "object") return String(val);
+        return Object.entries(val)
+          .map(([k, x]) => `${k}: ${x !== null && typeof x === "object" ? JSON.stringify(x) : String(x)}`)
+          .join(" · ");
+      };
+      if (Array.isArray(v)) return v.map(one);
+      return Object.entries(v).map(([k, x]) => `${k}: ${one(x)}`);
     },
     /* 可选段(默认折叠): 折叠态仍显示开关与摘要 */
     sectionOpen() {
