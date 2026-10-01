@@ -49,7 +49,7 @@ class LocalQbClient(Client):
         return session
 
 
-def _new_client(qb: QbittorrentConfig) -> Client:
+def new_client(qb: QbittorrentConfig) -> Client:
     """按配置构造 qB 客户端(本地地址用关闭 trust_env 的 LocalQbClient)
 
     REQUESTS_ARGS 是 qbittorrent-api 透传给 requests 的关键字参数, 库内部每次请求都会带上;

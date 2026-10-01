@@ -6,8 +6,9 @@ full-checking 提交+轮询执行体已迁入 ops 模块(core/modules/ops_mod.Op
 推断闸门(_skip_on_group_check_failed, 决策链 1.6, 含假失败自愈)。
 
 校验常量与冷却计数 helper 的单点在 ../checking_meta.py(rules 包中性叶, plan
-kernel-module-refactor P4): 本模块经它取用并**再导出**(既有测试导入路径
-`auto_qb.rules.actions.full_checking._bump_recheck_fail` 不变); 本模块**不得** import ops
+kernel-module-refactor P4): 本模块经它取用并**再导出**(测试导入路径
+`auto_qb.rules.actions.full_checking.bump_recheck_fail` —— 2026-10-01 审计 L6
+公开化为非下划线名, 再导出点同步更名); 本模块**不得** import ops
 —— ops -> rules 包初始化会走到此处, 反向导入成环(方向说明见 checking_meta 头注)。
 """
 import logging
@@ -21,8 +22,8 @@ from ..checking_meta import (  # noqa: F401  中性单点再导出(测试/外部
     CHECK_START_GIVEUP,
     GROUP_CHECK_WAIT_LIMIT,
     RECHECK_FAIL_LIMIT,
-    _bump_recheck_fail,
-    _recheck_fail_count,
+    bump_recheck_fail,
+    recheck_fail_count,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,7 +139,7 @@ class FullCheckingMixin:
         if not mine:
             return None
         for h in members:
-            if h == hash or _recheck_fail_count(manager.ctx.state, h) <= 0:
+            if h == hash or recheck_fail_count(manager.ctx.state, h) <= 0:
                 continue
             rec = manager.store.get(h)
             if rec is None or rec.progress >= 1.0:

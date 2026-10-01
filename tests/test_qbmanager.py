@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_create_global_tasks: 按配置创建 delete_tags 等全局任务
 - test_connect_failure: 连接失败返回 False 且 client 为 None
-- test_connect_success: 连接成功返回 True 并登录(客户端经 _new_client 构造)
+- test_connect_success: 连接成功返回 True 并登录(客户端经 new_client 构造)
 - test_new_client_local_disables_trust_env: 本地地址用 LocalQbClient, Session(含重建)trust_env 恒为 False
 - test_new_client_sets_request_timeout: P1-5 守卫——客户端必须带请求超时(否则 qB 假死时界面永久假死)
 - test_new_client_local_host_variants: localhost/IPv6 本机写法同样判定为本地
@@ -58,7 +58,7 @@ from qbittorrentapi import APIConnectionError, Client
 
 from auto_qb.config import QbittorrentConfig
 from auto_qb.infra.errors import AutoQbError
-from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, _new_client
+from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
 from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
@@ -85,17 +85,17 @@ def test_connect_failure():
     """连接失败返回 False 且 client 保持 None"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        with mock.patch("auto_qb.core.qbmanager._new_client", side_effect=Exception("conn refused")):
+        with mock.patch("auto_qb.core.qbmanager.new_client", side_effect=Exception("conn refused")):
             assert mgr.connect() is False
         assert mgr.client is None
 
 
 def test_connect_success():
-    """连接成功返回 True 并登录(客户端经 _new_client 构造: 本地地址由它选 LocalQbClient)"""
+    """连接成功返回 True 并登录(客户端经 new_client 构造: 本地地址由它选 LocalQbClient)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         fake = mock.Mock()
-        with mock.patch("auto_qb.core.qbmanager._new_client", return_value=fake) as new_client:
+        with mock.patch("auto_qb.core.qbmanager.new_client", return_value=fake) as new_client:
             assert mgr.connect() is True
         new_client.assert_called_once_with(mgr.config.qbittorrent)
         fake.auth_log_in.assert_called_once()
@@ -110,7 +110,7 @@ def test_new_client_local_disables_trust_env():
     _initialize_context() 中就是这样丢弃旧 Session 的)。
     """
     cfg = QbittorrentConfig(host="127.0.0.1", port=1, username="u", password="p")
-    client = _new_client(cfg)
+    client = new_client(cfg)
     assert type(client) is LocalQbClient
     first = client._session
     assert first.trust_env is False
@@ -128,24 +128,24 @@ def test_new_client_sets_request_timeout():
     读超时刻意宽松(10s): /files 在几千文件的种子上响应体很大, 截窄会把它误判成断连。
     """
     cfg = QbittorrentConfig(host="127.0.0.1", port=1, username="u", password="p")
-    client = _new_client(cfg)
+    client = new_client(cfg)
     assert client._REQUESTS_ARGS.get("timeout"
                                     ) == REQUESTS_TIMEOUT, (f"客户端缺少请求超时, 实际 {client._REQUESTS_ARGS} —— qB 假死时请求会无限期挂起")
     # 远程地址同样要带(企业代理下连接阶段更可能卡住)
-    remote = _new_client(QbittorrentConfig(host="qb.example.com", port=8080))
+    remote = new_client(QbittorrentConfig(host="qb.example.com", port=8080))
     assert remote._REQUESTS_ARGS.get("timeout") == REQUESTS_TIMEOUT
 
 
 def test_new_client_local_host_variants():
     """localhost / IPv6 本机写法同样判定为本地(取 base_url 的 hostname, 容忍带端口/带协议)"""
     for host in ("localhost", "[::1]", "127.0.0.1"):
-        client = _new_client(QbittorrentConfig(host=host, port=8080))
+        client = new_client(QbittorrentConfig(host=host, port=8080))
         assert type(client) is LocalQbClient, host
 
 
 def test_new_client_remote_keeps_default_trust_env():
     """远程地址: 用原生 Client 且 trust_env 保持 requests 默认(企业代理/netrc 可能真实需要)"""
-    client = _new_client(QbittorrentConfig(host="qb.example.com", port=8080))
+    client = new_client(QbittorrentConfig(host="qb.example.com", port=8080))
     assert type(client) is Client
     assert client._session.trust_env is True
 
@@ -444,7 +444,7 @@ def test_reconnect_backoff_and_reset():
                 f"退避应封顶 {RECONNECT_MAX_INTERVAL}s: {mgr._reconnect_interval}"
             )
             # 连接成功(走真实 connect)后归零: 下次断开从最短间隔重新开始
-            with mock.patch("auto_qb.core.qbmanager._new_client", return_value=mock.Mock()):
+            with mock.patch("auto_qb.core.qbmanager.new_client", return_value=mock.Mock()):
                 assert mgr.connect() is True
             assert mgr._reconnect_interval == 0.0 and mgr._reconnect_at == 0.0
             assert mgr._reconnect_due(tick) is True, "归零后应能立即重试"
@@ -607,7 +607,7 @@ def test_connect_throttle_repeated_failures():
 def test_connect_recovery_logged():
     """连接恢复: 断开后重新连接成功记录'已重新连接'
 
-    !必须 patch `_new_client`(不是 `Client`): `connect()` 走的是 `qbclient._new_client`,
+    !必须 patch `new_client`(不是 `Client`): `connect()` 走的是 `qbclient.new_client`,
     patch `qbmanager.Client` 根本不生效 ⇒ 会真的去连 `127.0.0.1:16585`。那条路径是否抛异常
     **取决于机器/网络环境**(2026-09-19 Linux CI 上 connect() 返回 False, Windows 本地却绿),
     用例因此时好时坏。换成 patch 真正被调用的那个名字, 用例与网络彻底解耦。
@@ -617,7 +617,7 @@ def test_connect_recovery_logged():
         mgr = make_manager(state_file)
         mgr._last_conn_ok = False  # 模拟此前断开
         fake = mock.Mock()
-        with mock.patch("auto_qb.core.qbmanager._new_client", return_value=fake):
+        with mock.patch("auto_qb.core.qbmanager.new_client", return_value=fake):
             with mock.patch("auto_qb.core.qbmanager.logger") as mock_logger:
                 assert mgr.connect() is True
         assert mgr._last_conn_ok is True, "重连成功后状态应为已连接"

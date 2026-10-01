@@ -73,7 +73,7 @@
 ### 本地 qB 关闭 requests `trust_env`
 
 - **触发**: 改客户端构造 / 代理相关。
-- **判别**: 本地地址经 `qbmanager._new_client()` 构造 `LocalQbClient`(覆盖 `_session` property,
+- **判别**: 本地地址经 `qbmanager.new_client()` 构造 `LocalQbClient`(覆盖 `_session` property,
   每次返回前强制 `trust_env=False`), 跳过每请求代理 / netrc 解析; 远程域名用原生 `Client`。
   ❗ 旧写法 `client._session.trust_env = False` **从未生效** —— `_session` 是**只读 property**,
   且 `build_base_url()` / `_initialize_context()` 会**重建 Session**。

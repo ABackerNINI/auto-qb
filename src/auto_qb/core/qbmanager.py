@@ -61,7 +61,7 @@ from .state import StateService
 from ..webui.commands import WebCommandsMixin
 from ..webui.views import WebviewMixin
 from .qbapi import QbApi
-from .qbclient import _new_client
+from .qbclient import new_client
 from .taskqueue import TaskQueue
 from ..webui import WebUIRuntime
 from ..webui.module import WebUIModule
@@ -351,9 +351,9 @@ class QbManager(
         return True
 
     def connect(self) -> bool:
-        """连接 qBittorrent(本地地址经 _new_client 使用关闭 trust_env 的 LocalQbClient)"""
+        """连接 qBittorrent(本地地址经 new_client 使用关闭 trust_env 的 LocalQbClient)"""
         try:
-            self.client = _new_client(self.config.qbittorrent)
+            self.client = new_client(self.config.qbittorrent)
             self.api.auth_log_in()
             # 连接恢复(此前断开)或首次连接: 记录一次"已连接"状态
             if self._last_conn_ok is False:

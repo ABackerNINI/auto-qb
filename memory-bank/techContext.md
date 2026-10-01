@@ -59,4 +59,4 @@
 - **状态落盘时机**: 跨轮次状态统一进 state_file; **周期落盘** (`state_save_interval`, 默认 120s, 配置端下限 30s, 0=关) 主循环每轮到期检查 (`qbmanager.py:535` `maybe_flush`) + 优雅退出立即落盘 + 危险动作写点即时 save (`ops_mod.py:438/483/508` 跳检备份/重加点)
 - **qB 5.0+ API 语义**: sync/maindata 增量响应、`transfer_*` 限速端点、`TorrentState` 枚举判定 (细节见 [pitfalls/backend/qb-api.md](pitfalls/backend/qb-api.md))
 - **fail-fast**: 配置全量校验后代码假定配置正确, 不做防御性检查
-- **本地 qB 网络**: `core/qbclient.py` 的模块级 `_new_client()` (`:29` `LocalQbClient`) 对本地地址强制 `trust_env=False`, 远程域名保留默认
+- **本地 qB 网络**: `core/qbclient.py` 的模块级 `new_client()` (`:29` `LocalQbClient`) 对本地地址强制 `trust_env=False`, 远程域名保留默认

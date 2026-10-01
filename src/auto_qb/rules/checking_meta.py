@@ -32,7 +32,7 @@ GROUP_CHECK_WAIT_LIMIT = 2 * 3600.0
 CHECK_START_GIVEUP = 600.0
 
 
-def _recheck_fail_count(state, hash: str) -> int:
+def recheck_fail_count(state, hash: str) -> int:
     """同一种子当日连续校验失败次数(按自然日重置)"""
     rec = state.data.get("recheck_fails", {}).get(hash)
     if rec and rec.get("date") == date.today().isoformat():
@@ -40,7 +40,7 @@ def _recheck_fail_count(state, hash: str) -> int:
     return 0
 
 
-def _bump_recheck_fail(state, hash: str) -> int:
+def bump_recheck_fail(state, hash: str) -> int:
     """累加当日校验失败次数并返回当前次数"""
     fails = state.data.setdefault("recheck_fails", {})
     rec = fails.setdefault(hash, {"date": "", "count": 0})

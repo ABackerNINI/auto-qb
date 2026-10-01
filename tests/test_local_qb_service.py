@@ -21,7 +21,7 @@ from unittest import mock
 from qbittorrentapi import Client
 
 from auto_qb.config import QbittorrentConfig
-from auto_qb.core.qbclient import LocalQbClient, _new_client
+from auto_qb.core.qbclient import LocalQbClient, new_client
 from helpers import FakeQbServer, FakeTorrent, make_manager
 
 
@@ -41,7 +41,7 @@ def test_fake_server_sanity_sync_incremental():
     """假服务自检: 登录可用; rid 增量语义与真机一致(全量 -> 无变化省略 -> 只回变化字段)"""
     with FakeQbServer() as srv:
         srv.client.torrents["a" * 40] = FakeTorrent(hash="a" * 40, state="uploading")
-        client = _new_client(_cfg(srv))
+        client = new_client(_cfg(srv))
         client.auth_log_in()
         first = client.sync_maindata(rid=0)
         assert first["full_update"] is True
@@ -76,7 +76,7 @@ def test_connect_keeps_env_lookup_disabled_after_real_request(tmp_path):
 def test_local_request_skips_env_and_netrc_lookup():
     """本地客户端发请求时不解析环境代理与 ~/.netrc(每次请求的固定开销)"""
     with FakeQbServer() as srv:
-        client = _new_client(_cfg(srv))
+        client = new_client(_cfg(srv))
         with mock.patch("requests.sessions.get_environ_proxies", return_value={}) as env, \
                 mock.patch("requests.sessions.get_netrc_auth", return_value=None) as netrc:
             client.auth_log_in()
@@ -119,7 +119,7 @@ def test_fake_server_files_endpoint_serializes_objects(tmp_path):
 
     with FakeQbServer() as srv:
         srv.client.files_map["a" * 40] = [_fake_file("Show.S01E01.mkv", 1024)]
-        client = _new_client(_cfg(srv))
+        client = new_client(_cfg(srv))
         client.auth_log_in()
         files = client.torrents_files("a" * 40)
         assert len(files) == 1

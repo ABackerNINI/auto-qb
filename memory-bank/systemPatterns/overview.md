@@ -14,7 +14,7 @@
                 │  = WebviewMixin + WebCommandsMixin (仅 2 个表现层 mixin,      │
                 │    qbmanager.py:142-145)                                     │
                 │  + 十模块经 ModuleHost 装配注册 (qbmanager.py:158-234)         │
-                │  客户端构造在 core/qbclient.py(_new_client/LocalQbClient)      │
+                │  客户端构造在 core/qbclient.py(new_client/LocalQbClient)       │
                 ├──────────────────────────────────────────────────────────────┤
  每tick增量同步 →│ TorrentStore (torrents/ 包: store/record/view/compat)         │
                 │  快照/惰性缓存/分组索引        (写后同步)  ← QbApi (qbapi.py)   │

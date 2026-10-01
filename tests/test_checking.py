@@ -72,7 +72,7 @@ from unittest.mock import patch
 from auto_qb.config import Config
 from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
-from auto_qb.rules.actions.full_checking import _bump_recheck_fail, _recheck_fail_count
+from auto_qb.rules.actions.full_checking import bump_recheck_fail, recheck_fail_count
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
@@ -593,7 +593,7 @@ def test_checking_recheck_fail_cooldown():
         # 第 4 次执行: 冷却生效 -> skip, 不再提交(失败计数保留, 次日重置)
         run_queue(mgr, t0 + 182.0)
     assert client.calls.count(("recheck", None)) == 3, "冷却期内不应再提交"
-    assert _recheck_fail_count(mgr.ctx.state, "HASH123") == 3
+    assert recheck_fail_count(mgr.ctx.state, "HASH123") == 3
 
 
 def test_checking_skip_dedup_across_rules():
@@ -1580,10 +1580,10 @@ def test_recheck_fail_flushed_immediately():
     """recheck 失败冷却计数即时落盘: bump 后磁盘上已有 recheck_fails
 
     计数只活在内存的话, 崩溃后对同一损坏文件会多试 recheck(当日上限的防死循环闸门失效
-    一次)。直接驱动生产写点 _bump_recheck_fail 断言盘上内容。
+    一次)。直接驱动生产写点 bump_recheck_fail 断言盘上内容。
     """
     mgr = make_mgr(make_check_cfg())
-    assert _bump_recheck_fail(mgr.ctx.state, "HASH123") == 1
+    assert bump_recheck_fail(mgr.ctx.state, "HASH123") == 1
     with open(mgr.state_file, "r", encoding="utf-8") as f:
         on_disk = json.load(f)
     assert on_disk.get("recheck_fails", {}).get("HASH123", {}).get("count") == 1, "冷却计数必须已写上盘"

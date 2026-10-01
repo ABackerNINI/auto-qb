@@ -18,7 +18,7 @@ from datetime import date
 from auto_qb.core.qbmanager import QbManager
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT
-from auto_qb.rules.actions.full_checking import _bump_recheck_fail
+from auto_qb.rules.actions.full_checking import bump_recheck_fail
 from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
 
 # 跳检会真实落盘 .torrent 备份(issue 26-09-21-1347): state_file 必须落临时目录, 与 test_checking 同口径
@@ -143,7 +143,7 @@ def test_ops_rule_recheck_cooldown_and_requeue_regression():
     assert mgr.state["recheck_fails"]["HA"]["count"] == 1, "rule 源失败应计入冷却"
     assert any(task is origin for task in mgr.task_queue._fast), "失败后 origin 应被默认重置重入队"
     # 达上限 -> 当日拒绝(冷却闸门在提交点, qB 不再收到 recheck)
-    while _bump_recheck_fail(mgr.ctx.state, "HA") < RECHECK_FAIL_LIMIT:
+    while bump_recheck_fail(mgr.ctx.state, "HA") < RECHECK_FAIL_LIMIT:
         pass
     n_calls = len(client.calls)
     r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)

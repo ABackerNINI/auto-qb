@@ -40,8 +40,8 @@ from ...rules.checking_meta import (
     CHECK_RESULT_INTERVAL,
     CHECK_START_GIVEUP,
     RECHECK_FAIL_LIMIT,
-    _bump_recheck_fail,
-    _recheck_fail_count,
+    bump_recheck_fail,
+    recheck_fail_count,
 )
 from ...torrents import TorrentRecord
 from ..module import AppContext, BaseModule
@@ -144,7 +144,7 @@ class OpsModule(BaseModule):
             return ActionResult.skip(_RECHECK_BUSY_MSG)
 
         # ---- 失败冷却: 仅规则源(自动化 recheck 死循环自限频; WEB 手动排障不受限, D1) ----
-        if source == "rule" and _recheck_fail_count(self._ctx.state, hash) >= RECHECK_FAIL_LIMIT:
+        if source == "rule" and recheck_fail_count(self._ctx.state, hash) >= RECHECK_FAIL_LIMIT:
             logger.info(f"{prefix} {self._ops_repr(torrent or snap)} | "
                         f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
             return ActionResult.skip(f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
@@ -187,7 +187,7 @@ class OpsModule(BaseModule):
                 elif seen_checking:
                     # 曾见 checking 后落回未完成: 真实校验未通过(冷却仅规则源, D1)
                     if source == "rule":
-                        fail_count = _bump_recheck_fail(self._ctx.state, hash)
+                        fail_count = bump_recheck_fail(self._ctx.state, hash)
                         logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(第{fail_count}次, progress={rec.progress})")
                     else:
                         logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(progress={rec.progress})")
@@ -197,7 +197,7 @@ class OpsModule(BaseModule):
                     # 宽限耗尽仍未见校验启动: 判败防轮询活锁(qB 重启丢请求等极端情形);
                     # 判败后 origin 重走决策链会重新提交, 请求恢复生效后自然续上
                     if source == "rule":
-                        fail_count = _bump_recheck_fail(self._ctx.state, hash)
+                        fail_count = bump_recheck_fail(self._ctx.state, hash)
                         logger.warning(
                             f"{prefix} {rec.log_repr} | "
                             f"校验启动超时({CHECK_START_GIVEUP:.0f}s 未见 checking, 第{fail_count}次, progress={rec.progress})"

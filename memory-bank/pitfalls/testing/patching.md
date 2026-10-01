@@ -16,7 +16,7 @@
   修法是对空路径直接 `raise ValueError`。
   ③ **平台专属模块导入 / 真实 socket 连接** —— `PlatformChannel("win32")` 内的 `import winreg` 在 Linux 抛
   `ModuleNotFoundError`(调用方只 catch `OSError`)⇒ 用例改为 `monkeypatch.setitem(sys.modules,"winreg",替身)`;
-  patch `qbmanager.Client` **无效**(`connect()` 走的是 `qbclient._new_client`)⇒
+  patch `qbmanager.Client` **无效**(`connect()` 走的是 `qbclient.new_client`)⇒
   **patch 真正被调用的名字**, 与网络解耦。
 - **处置**: 见下条判别法。
 
