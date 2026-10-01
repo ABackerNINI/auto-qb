@@ -172,7 +172,7 @@ def test_removed_scan_and_post_phases_drive_grouping():
 
 
 def test_ops_service_direct_call_and_inflight_mutex():
-    """ctx.ops.recheck/skip_check 直调可用(web 源); 重复提交受在途互斥(同一 _active_checks)"""
+    """ctx.ops.recheck 直调可用(web 源); 重复提交受在途互斥(同一 _active_checks)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
         mgr.client = FakeClient()
