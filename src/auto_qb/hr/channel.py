@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from ..config.models import SiteHrCheckConfig
 from ..infra.errors import AutoQbError
+from ..infra.utils import atomic_write
 
 logger = logging.getLogger(__name__)
 
@@ -100,10 +101,11 @@ def resolve_token(configured: str, data_dir: str) -> str:
         if token:
             return token
     token = secrets.token_hex(32)
-    os.makedirs(data_dir, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="ascii") as f:
-        f.write(token)
+    # 原子写(issue 26-10-01-2151): O_TRUNC 直写在写盘途中被杀会留下非空半截密钥被持久化,
+    # 扩展侧持旧密钥 401(通道密钥静默漂移)。atomic_write 的 mkstemp 权限 0600 与原
+    # os.open(..., 0o600) 等价; token 是纯 ASCII hex, utf-8 落盘与原 ascii 编码逐字节相同,
+    # 读取侧(ascii 读回)不变 —— 与 web.token 修法(5965cc07)同范式, 目录创建也由其内建。
+    atomic_write(path, lambda f: f.write(token))
     # 密钥内容**不进日志**: 日志会被 notify 处理器推到系统通知, 也被 /api/log 读回 ——
     # 拿到密钥等于拿到「驱动本机浏览器带登录态请求站点」的能力。只提示文件路径。
     logger.info(f"HR 取数通道密钥已生成: {path}(密钥内容只存该文件、不打印到日志, 需查看请打开它)")

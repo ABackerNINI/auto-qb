@@ -3,6 +3,9 @@
 ## 测试计划(每个测试函数一条)
 - test_token_from_config_wins: 配了 token 就直接用, 不生成密钥文件
 - test_token_generated_then_reused: 留空 -> 随机生成并持久化到 <data_dir>/hr.token, 再调复用同一值
+- test_token_generated_atomic_and_readable: 首次生成走 atomic_write, 落盘可读回且无临时文件残留(issue 26-10-01-2151)
+- test_token_existing_file_reused_without_rewrite: 已有合法 token 直接复用文件现值, 不触达写盘路径(不重写不漂移)
+- test_token_write_interrupt_leaves_no_half_token: 写盘中断不留非空半截密钥 —— 经真实 atomic_write 跑"写一半抛错", 旧文件不破坏、临时文件清理, 下次调用重新生成(自愈)
 - test_generated_token_not_in_logs: 生成的密钥内容不进日志(只提示文件路径) —— 日志会被 /api/log 读回
 - test_origin_allowed_extension_only: 扩展 origin 放行, 普通网页 origin 拒(纵深防御), 空 Origin 放行
 - test_origin_pinned_extension_id: 配了 extension_id 就只认那一个扩展
@@ -24,6 +27,7 @@
 - test_result_to_json_carries_optional_fields: to_json 按需带 error/retry_after/kind
 """
 import logging
+import re
 
 import pytest
 
@@ -77,6 +81,66 @@ def test_generated_token_not_in_logs(tmp_path, caplog):
     assert token not in text, "密钥内容绝不能进日志(/api/log 能读回日志)"
     assert "hr.token" in text, "应提示密钥文件路径供用户查看"
     assert describe_token_source("", str(tmp_path)) == "file"
+
+
+def test_token_generated_atomic_and_readable(tmp_path):
+    """首次生成: 密钥落盘 hr.token 且读回一致, 同目录无临时文件残留(issue 26-10-01-2151)
+
+    resolve_token 走 utils.atomic_write(mkstemp 0600 + os.replace): 写盘成功后目标文件
+    即完整可读 —— 半截状态只可能存在于临时文件, replace 前对读取侧不可见。
+    """
+    token = resolve_token("", str(tmp_path))
+    assert re.fullmatch(r"[0-9a-f]{64}", token), "token_hex(32) 应为 64 位小写 hex"
+    token_file = tmp_path / "hr.token"
+    assert token_file.read_text(encoding="ascii") == token, "落盘内容必须与返回值逐字节一致"
+    assert not list(tmp_path.glob("hr.token.*")), "不得残留临时文件"
+
+
+def test_token_existing_file_reused_without_rewrite(tmp_path, monkeypatch):
+    """已有合法 token 时不重写: 直接返回文件现值, 写盘路径一次都不触发(不重写不漂移)"""
+    from auto_qb.hr import channel
+
+    existing = "ab" * 32
+    (tmp_path / "hr.token").write_text(existing, encoding="ascii")
+
+    def _must_not_write(*_a, **_kw):
+        raise AssertionError("已有合法 token 时不得触达写盘路径")
+
+    monkeypatch.setattr(channel, "atomic_write", _must_not_write)
+    assert resolve_token("", str(tmp_path)) == existing, "应复用文件现值而非重新生成"
+    assert (tmp_path / "hr.token").read_text(encoding="ascii") == existing
+
+
+def test_token_write_interrupt_leaves_no_half_token(tmp_path, monkeypatch):
+    """写盘中断不留非空半截密钥(issue 26-10-01-2151): 旧文件不被破坏, 下次调用重新生成(自愈)
+
+    经真实 atomic_write 跑"写一半抛错": 回调写入半截后抛 RuntimeError, 由 atomic_write 负责
+    清理临时文件并重抛 —— 目标路径保持旧内容。若实现退回 O_TRUNC 直写, 同一时刻半截内容已落
+    目标文件, 本条在 raises 处即红。
+    """
+    from auto_qb.hr import channel
+
+    token_file = tmp_path / "hr.token"
+    token_file.write_text("", encoding="ascii")  # 空文件: 读取侧判空后走重新生成分支
+
+    real_atomic_write = channel.atomic_write
+
+    def _crash_mid(path, write_fn, **kw):
+        def _half(_f):
+            _f.write("deadbeef")  # 半截密钥, 模拟写盘途中被杀
+            raise RuntimeError("simulated kill mid-write")
+
+        return real_atomic_write(path, _half, **kw)
+
+    monkeypatch.setattr(channel, "atomic_write", _crash_mid)
+    with pytest.raises(RuntimeError):
+        resolve_token("", str(tmp_path))
+    assert token_file.read_text(encoding="ascii") == "", "中断后不得留下非空半截 token"
+    assert not list(tmp_path.glob("hr.token.*")), "中断的临时文件必须被清理"
+
+    monkeypatch.undo()
+    token = resolve_token("", str(tmp_path))  # 自愈: 下次启动重新生成并完整落盘
+    assert token_file.read_text(encoding="ascii") == token
 
 
 # ---------- origin 白名单 ----------
