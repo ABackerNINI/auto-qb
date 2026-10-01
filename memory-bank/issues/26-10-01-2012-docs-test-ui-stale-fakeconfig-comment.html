@@ -8,7 +8,7 @@
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="test-ui-stale-fakeconfig-comment">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享实例」口径, 深拷贝根修后过时">
 <meta name="issue-summary" content="FakeConfig 根修(54c83ac3 改 deepcopy 实例属性)后, test_ui.py:41 注释理由已失效; 保守无害, 随下次触碰 test_ui 顺手校正">
 <title>tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享实例」口径, 深拷贝根修后过时 · docs · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2012-docs-test-ui-stale-fakeconfig-comment</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 20:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -95,6 +95,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 20:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 20:28 — 修复，状态 <strong>Open → Done</strong>（test_ui.py:41 注释改述现行口径：FakeConfig.__init__ 对非标量类属性逐个 copy.deepcopy 成实例属性（单点 tests/helpers.py），实例间隔离；换新 LoggingConfig 实例的理由改写为「配置意图局部化，不依赖就地改默认值」）</li>
     </ul>
   </section>
 

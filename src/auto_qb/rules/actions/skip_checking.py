@@ -1,9 +1,9 @@
 """skip-checking 委托入口(SkipCheckingMixin)
 
 跳检四阶段执行体(前置闸门/导出准备/删除-重加/收尾, 含 R2 实时复核与备份/清理)已迁入
-core/mixins/ops.py(OpsMixin, rules → ops ← web, plan 26-09-30-0109 P2'), 本模块只保留
-CheckAction 决策链 4 的委托入口 —— 风险控制语义(部分下载禁止/同日去重/备份先于删除等)
-随执行体迁入 ops 层 docstring, 规则侧行为等价不变。
+ops 模块(core/modules/ops_mod.OpsModule, rules → ops ← web, plan 26-09-30-0109 P2'),
+本模块只保留 CheckAction 决策链 4 的委托入口 —— 风险控制语义(部分下载禁止/同日去重/
+备份先于删除等)随执行体迁入 ops 层 docstring, 规则侧行为等价不变。
 """
 import logging
 

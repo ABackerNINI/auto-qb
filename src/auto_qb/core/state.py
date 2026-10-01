@@ -1,8 +1,9 @@
 """状态持久化服务: state.json 读写的单点(plan kernel-module-refactor P0 从 RuleEngineMixin 迁出)
 
 能力服务不是模块(plan §3.1): 无生命周期、无启用开关, 内核与模块共同消费 —— 规则执行历史、
-跳检冷却、备份元数据、字段变化基线都落在这份 dict 上。QbManager 经委托方法保持旧调用面
-(_load_state / save_state / _maybe_flush_state ...), 测试 31 处状态方法调用零改动。
+跳检冷却、备份元数据、字段变化基线都落在这份 dict 上。调用面经 ctx.state.* 直达本服务
+(QbManager 同名属性按处置 D1 永久委托到 ctx, ctx 为单一真相); 旧名兼容层已随别名层
+处置 W3 整体退役(2026-10-01, 守阵 tests/test_qbmanager_alias_freeze.py)。
 
 !单一写线程约束不变(pitfalls/backend/concurrency.md): save / maybe_flush / record_execution
 只在主循环线程调用; 服务自身无锁、无线程, 不引入绕开该假设的并发代码(黄金法则 5)。

@@ -234,7 +234,7 @@ class WebUIRuntime:
                     timing = _timing(queued_ts, start_ts)
                     if cmd_id and not deferred:
                         if cmd in RESYNC_COMMANDS:
-                            # 改种子状态的命令: 回执**推迟到补刷新之后**再写(见 flush_receipts)。
+                            # 改种子状态的命令: 回执**推迟到补刷新之后**再写(见 flush_truths)。
                             # 原写法在这里就写 ok, 而补刷新还在后面才跑 ⇒ 前端"拿到回执就立刻
                             # refresh"取到的必然是补刷新之前的旧快照(rid 未变), 第一次拉取 100%
                             # 扑空。推迟后第一次拉取即可命中。

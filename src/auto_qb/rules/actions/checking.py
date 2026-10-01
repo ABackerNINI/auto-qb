@@ -1,9 +1,9 @@
 """checking 校验动作(CheckAction): 决策链 + 参考筛选
 
 本模块只做配置解析与决策链编排(0-4 闸门)。执行体经 FullCheckingMixin /
-SkipCheckingMixin 一行委托到 core/mixins/ops.py(OpsMixin, rules → ops ← web,
-plan 26-09-30-0109 P2'): full-checking 提交+轮询在 ops_recheck, 跳检四阶段在
-ops_skip_check; 组内串行化闸门(决策链 1.5)与失败推断闸门(1.6)留在 FullCheckingMixin。
+SkipCheckingMixin 委托到 ops 模块(core/modules/ops_mod.OpsModule, rules → ops ← web,
+plan 26-09-30-0109 P2'): full-checking 提交+轮询在 ctx.ops.recheck, 跳检四阶段在
+ctx.ops.skip_check; 组内串行化闸门(决策链 1.5)与失败推断闸门(1.6)留在 FullCheckingMixin。
 """
 import logging
 

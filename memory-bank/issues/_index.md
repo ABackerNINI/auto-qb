@@ -16,7 +16,7 @@
 |---|---|
 | bug | 6 |
 | perf | 3 |
-| docs | 7 |
+| docs | 3 |
 | test | 1 |
 | refactor | 2 |
 | feat | 5 |
@@ -25,12 +25,8 @@
 ## Open
 
 - [chore] [kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py](26-10-01-2012-chore-kb-index-missing-issues-gen.html) — kb.index 的 16 个索引不含 create-issue 的 gen_issues_index.py, 改 issue 状态后跑 kb.index 不迁移 issues/_index.md 状态分区, 须单独补跑; 收编与否待定调
-- [docs] [tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享实例」口径, 深拷贝根修后过时](26-10-01-2012-docs-test-ui-stale-fakeconfig-comment.html) — FakeConfig 根修(54c83ac3 改 deepcopy 实例属性)后, test_ui.py:41 注释理由已失效; 保守无害, 随下次触碰 test_ui 顺手校正
 - [test] [tests/test_config.py 另有 5 对同文件重名测试, 顶层 def 遮蔽致前一条死测试](26-10-01-2012-test-test-config-duplicate-test-names.html) — test_config.py 存在 5 对重名顶层测试(718/793 等), 后者遮蔽前者; 前 4 对逐字相同、第 5 对仅 YAML 样本一字之差; 待重命名/合并并落防复发守阵
 - [chore] [src/auto_qb/core/mixins/__pycache__/ 残留 .pyc 删除后会再生, 根因待查](26-10-01-1946-chore-core-mixins-pycache-regen.html) — git 零跟踪的 core/mixins/__pycache__/ 残留已退役模块的 .pyc, 修复期间删过两次跑测试后又再生; 疑似测试以残留包名导入, 需断根
-- [docs] [roadmap.md「剩余: WebSocket 推送/多用户」与 SSE 推送已实现现状表述张力](26-10-01-1946-docs-roadmap-sse-websocket-drift.html) — roadmap.md:8 仍把推送列为剩余项, 但 webui/runtime.py:116-164 已有 SSE /api/events 推送节; 非计数断言, 需核对口径后改写
-- [docs] [代码内注释残留 6 处: 仍描述已退役的委托层与旧路径](26-10-01-1738-docs-code-comment-drift.html) — 内核化重构+别名层退役后, 6 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring / rules/actions/checking.py:4 / skip_checking.py:4)
-- [docs] [create-issue SKILL.md 记载的脚本路径不解析](26-10-01-1738-docs-create-issue-skill-script-refs.html) — SKILL.md:60/107-108 写 agents/skills/... 缺 .agents/ 前缀, docs_drift 判 missing-script-file; 脚本实存于 .agents/skills/create-issue/scripts/
 - [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
 - [feat] [HR 计数：looks_like_login 补计数文本佐证（P3 缓做项）](26-09-30-0052-feat-hr-login-counter-attest.html) — 登录态判定 looks_like_login 补页头计数文本负信号佐证（报告 26-09-29-1803 §6 登录态负信号 / HR 计划 §7 P3），依赖 D4 口径实证，缓做
 - [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做
@@ -61,6 +57,10 @@
 
 ## Done
 
+- [docs] [tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享实例」口径, 深拷贝根修后过时](26-10-01-2012-docs-test-ui-stale-fakeconfig-comment.html) — FakeConfig 根修(54c83ac3 改 deepcopy 实例属性)后, test_ui.py:41 注释理由已失效; 保守无害, 随下次触碰 test_ui 顺手校正
+- [docs] [roadmap.md「剩余: WebSocket 推送/多用户」与 SSE 推送已实现现状表述张力](26-10-01-1946-docs-roadmap-sse-websocket-drift.html) — roadmap.md:8 仍把推送列为剩余项, 但 webui/runtime.py:116-164 已有 SSE /api/events 推送节; 非计数断言, 需核对口径后改写
+- [docs] [代码内注释残留 6 处: 仍描述已退役的委托层与旧路径](26-10-01-1738-docs-code-comment-drift.html) — 内核化重构+别名层退役后, 6 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring / rules/actions/checking.py:4 / skip_checking.py:4)
+- [docs] [create-issue SKILL.md 记载的脚本路径不解析](26-10-01-1738-docs-create-issue-skill-script-refs.html) — SKILL.md:60/107-108 写 agents/skills/... 缺 .agents/ 前缀, docs_drift 判 missing-script-file; 脚本实存于 .agents/skills/create-issue/scripts/
 - [bug] [L2 重建抑制窗内二次重建会吞 queue_rebuilt: 全局任务从新队列丢失](26-10-01-0750-bug-events-suppress-window-queue-rebuilt.html) — rebuild_runtime 置位总线 live 抑制旗标(请求语义应只盖下轮两个事件相位), 窗口内(重建→下轮刷新轮首, 约 1 个 sync_interval)若发生第二次 L2 重建, 其 queue_rebuilt emit 被吞 -> 全局任务(delete_tags 等)不重注册, 新队列永久缺失该任务至下次重建/重启
 - [test] [冒烟「列设置·隐藏列宽保留」确定性失败: 隐藏列的意图宽度读不回](26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve.html) — dev.harness 列设置用例「隐藏列宽度保留」双 UI 100% 失败(key=amount_left 前=undefined 后=92px), stash 对照确认先在于键盘快捷键 W1-W4 之前, 与列偏好双轨模型的意图/生效分轨有关, 待查
 - [test] [冒烟 CTX-03 多选右键批量菜单: 追剧集行确定性失败 + 辅种组行抖动](26-09-30-0602-test-ui-smoke-ctx03-multiselect.html) — dev.harness 两条 CTX-03 多选用例失败(追剧集行 100% 复现/辅种组行间歇), stash 前后对照确认先在于键盘快捷键 W1-W4 之前; Ctrl+click 选择在冒烟完整链路下不生效而孤立探针正常, 疑似轮询重渲染与 ElementHandle 的竞态或真实 UI 缺陷, 待查

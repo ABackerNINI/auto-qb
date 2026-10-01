@@ -38,7 +38,9 @@ from helpers import FakeClient, FakeConfig, FakeQbServer, FakeTorrent, make_mana
 def test_log_dir_resolves_and_creates(tmp_path):
     """_log_dir: 相对路径绝对化并确保目录存在; logging.file 为空兜底 state_file 目录(data_dir)
 
-    注意用新 LoggingConfig 实例替换(FakeConfig.logging 是类属性共享实例, 直接改 file 会污染后续测试)。
+    注意用新 LoggingConfig 实例替换而非就地改字段 —— FakeConfig.__init__ 已对非标量类属性
+    逐个 copy.deepcopy 成实例属性(tests/helpers.py, 实例间隔离), 换整实例只是让本测试的
+    配置意图局部化, 不依赖就地改默认值。
     """
     from auto_qb.config import LoggingConfig
 

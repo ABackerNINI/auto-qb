@@ -395,7 +395,7 @@ class QbManager(
         2) 存在**自投递命令**(Web 侧索引脏时自己 put build_search_index), "投递即唤醒跑 tick"
            会形成自激循环: 唤醒 -> drain(单轮 500 条文件 API) -> 索引仍脏 -> 再投递 -> 立刻再唤醒,
            中间没有 tick 兜底 —— 不是变慢, 是打满 CPU 并冲垮 qB。
-        故: 自投递命令不唤醒(见 mixins/web_commands.py 的 SELF_POSTED_COMMANDS),
+        故: 自投递命令不唤醒(见 webui/commands.py 的 SELF_POSTED_COMMANDS),
         且唤醒后只 drain 命令, tick 仍由 sync_interval / main_tick 严格决定。
         """
         self._wake_event.set()

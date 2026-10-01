@@ -8,7 +8,7 @@
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="doc-drift-repair">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="代码内注释残留 6 处: 仍描述已退役的委托层与旧路径">
 <meta name="issue-summary" content="内核化重构+别名层退役后, 6 处代码内注释/docstring 与代码相反或指向已迁路径 (core/state.py:4-5 / qbmanager.py:398 / webui/runtime.py:237 / core/mixins/__init__.py docstring / rules/actions/checking.py:4 / skip_checking.py:4)">
 <title>代码内注释残留 6 处: 仍描述已退役的委托层与旧路径 · docs · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-1738-docs-code-comment-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 17:38</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -101,6 +101,7 @@
     <ul>
       <li>2026-10-01 17:38 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-01 19:53 — 并入同类发现 2 处（rules/actions/checking.py:4 / skip_checking.py:4 的模块 docstring 仍指已不存在的 core/mixins/ops.py，职责现居 core/modules/ops_mod.OpsModule）；原 4 处证据未改动，状态仍 <strong>Open</strong></li>
+      <li>2026-10-01 20:28 — 修复，状态 <strong>Open → Done</strong>（实修 5 处，纯注释零逻辑改动：state.py docstring 改述调用面经 ctx.state.* 直达本服务、旧名兼容层随 W3 退役；qbmanager.py:398 旧路径 mixins/web_commands.py 改 webui/commands.py 的 SELF_POSTED_COMMANDS；webui/runtime.py:237 flush_receipts 改 flush_truths；rules/actions/checking.py 与 skip_checking.py docstring 改述执行体在 core/modules/ops_mod.OpsModule(ctx.ops.recheck / ctx.ops.skip_check)。core/mixins/__init__.py 已随提交 9b3c50f8 删除，该项随文件删除消亡，不适用。验证：test.quick 全绿）</li>
     </ul>
   </section>
 

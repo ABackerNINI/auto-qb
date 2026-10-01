@@ -8,7 +8,7 @@
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="doc-drift-repair">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="roadmap.md「剩余: WebSocket 推送/多用户」与 SSE 推送已实现现状表述张力">
 <meta name="issue-summary" content="roadmap.md:8 仍把推送列为剩余项, 但 webui/runtime.py:116-164 已有 SSE /api/events 推送节; 非计数断言, 需核对口径后改写">
 <title>roadmap.md「剩余: WebSocket 推送/多用户」与 SSE 推送已实现现状表述张力 · docs · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-1946-docs-roadmap-sse-websocket-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 19:46</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 19:46 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 20:28 — 修复，状态 <strong>Open → Done</strong>（核码确认推送已按 SSE 交付：GET /api/events 路由单点在 webui/server/routes/events.py，订阅/有界队列/广播在 webui/runtime.py 事件推送节；roadmap.md:8 规划中段落改写为「事件推送已以 SSE 交付，WebSocket 不再规划；剩余：多用户」）</li>
     </ul>
   </section>
 

@@ -8,7 +8,7 @@
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="create-issue-skill-script-refs">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="create-issue SKILL.md 记载的脚本路径不解析">
 <meta name="issue-summary" content="SKILL.md:60/107-108 写 agents/skills/... 缺 .agents/ 前缀, docs_drift 判 missing-script-file; 脚本实存于 .agents/skills/create-issue/scripts/">
 <title>create-issue SKILL.md 记载的脚本路径不解析 · docs · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-1738-docs-create-issue-skill-script-refs</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 17:38</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 17:38 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 20:28 — 修复，状态 <strong>Open → Done</strong>（复核发现取证有误：SKILL.md:60/107-108 自初版 bc22377d 起即带 .agents/ 前缀，路径本就从仓库根可解析；误报根因在检测器 docs_drift.py 的脚本抽取 lstrip("./") 按字符集剥离，把 ".agents/..." 错剥成 "agents/..." 再判不存在。已改 detector 只剥 "./" 前缀；重跑 docs_drift --top 500，该 3 处 missing-script-file 清零）</li>
     </ul>
   </section>
 
