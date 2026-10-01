@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-02-0508] [设置页未保存改动防护: 成熟方案调研与「刷新弹框 + 刷新后清零」对比 · auto-qb](26-10-02-0508-report-webui-unsaved-changes-guard.html) — `webui-settings-unsaved-changes`
 - [26-10-01-2347] [兼容 Transmission 可行性分析 · qB 耦合面盘点 · auto-qb](26-10-01-2347-report-transmission-compat-feasibility.html) — `transmission-compat-feasibility`
 - [26-10-01-2125] [memory-bank 生成物实时化与四工位专题目录化 · 可行性分析](26-10-01-2125-report-kb-artifacts-realtime-and-layout.html) — `memory-bank-dir-refactor`
 - [26-10-01-0918] [审计报告 · QbManager 内核化重构实施评估](26-10-01-0918-report-kernel-module-refactor-audit.html) — `kernel-module-refactor`

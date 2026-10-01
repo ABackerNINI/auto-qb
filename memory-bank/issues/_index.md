@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 13 |
+| bug | 12 |
 | perf | 5 |
 | docs | 4 |
 | test | 2 |
@@ -74,7 +74,6 @@
 - [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做
 - [docs] [插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免](26-09-28-1946-docs-config-plugin-spec-docs.html) — conditions/actions 插件名之下的 spec 键在 keys.md 与 rule-system/conditions-and-actions.md 均无逐键覆盖, test_config_key_surface 出处检查对该层豁免(权威单点=schema 插件表)
 - [feat] [重新设计单种周期上传/下载量统计 (upload_size 四条件 + begin_round 底座已移除)](26-09-27-1248-feat-stats-redesign-torrent-traffic.html) — upload_size/today/week/month 四条件与 begin_round/upload_delta/upload_snapshots 统计底座已随计划 26-09-27-1232 暂时移除; 待重新设计: 补下载量口径或改 global_* 全局口径
-- [bug] [设置页有未保存改动时刷新会丢改动(无任何提醒)](26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html) — 设置页(唯一 Console Hub)编辑配置后按 F5 / 关标签 / 后退会静默丢弃未保存改动 —— 全仓无 beforeunload 提醒, cfg.tree 是内存态, 重载即被服务端树覆盖
 - [feat] [跨组文件交叉紧急处置: 防止新种子覆盖已下载/已完成文件](26-09-22-2221-feat-cross-group-file-conflict.html) — 不同组之间出现文件交叉(如同名/同路径文件已被其他组下载完成)时需要紧急处置, 防止新种子下载覆盖已有数据
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵](26-09-21-1408-chore-ci-no-windows-runner.html) — pitfalls 已载平台差异史; 托盘/注册表自启/WinRT 通知等 Windows 专属路径只有手动跑测试才被执行
@@ -90,6 +89,7 @@
 ## In Progress
 
 - [question] [兼容 Transmission 可行性分析](26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
+- [bug] [设置页有未保存改动时刷新会丢改动(无任何提醒)](26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html) — 设置页(唯一 Console Hub)编辑配置后按 F5 / 关标签 / 后退会静默丢弃未保存改动 —— 全仓无 beforeunload 提醒, cfg.tree 是内存态, 重载即被服务端树覆盖
 
 ## Done
 

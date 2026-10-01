@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-settings-unsaved-changes">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-02-0508">
+<meta name="doc-updated" content="26-10-02-0508">
+<meta name="doc-refs" content="memory-bank/issues/26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html">
+<title>设置页未保存改动防护: 成熟方案调研与「刷新弹框 + 刷新后清零」对比 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2129;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --bad: #e08a8a;
+    --good: #86c9a0;
+    --code-bg: #151b22;
+    --mark: #151c23;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 52px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--ink-faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--ink-dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--ink-faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--ink-faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--ink-dim); max-width: 64ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: #16232a; color: var(--accent-ink); border: 1px solid #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 80ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 80ch; }
+  li { margin-bottom: 7px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
+  td.y { color: var(--good); }
+  td.n { color: var(--bad); }
+  td.w { color: var(--warn); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 80ch; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .verdict { border: 1px solid #2b4048; background: var(--paper); padding: 18px 20px; border-radius: 4px; margin-bottom: 16px; }
+  .verdict .vlabel { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 8px; }
+  .verdict p { margin-bottom: 8px; }
+  .verdict p:last-child { margin-bottom: 0; }
+  .hint { color: var(--ink-faint); font-size: 13px; max-width: 80ch; }
+  .src { font-size: 12.5px; color: var(--ink-dim); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>结论速览</a>
+    <a href="#s2"><span class="no">02</span>复验: 现象与锚点</a>
+    <a href="#s3"><span class="no">03</span>成熟方案谱系</a>
+    <a href="#s4"><span class="no">04</span>用户方案拆解</a>
+    <a href="#s5"><span class="no">05</span>对比矩阵</a>
+    <a href="#s6"><span class="no">06</span>代价与风险清单</a>
+    <a href="#s7"><span class="no">07</span>推荐落地路径</a>
+    <a href="#s8"><span class="no">08</span>待拍板项</a>
+    <a href="#s9"><span class="no">09</span>参考来源</a>
+    <div class="toc-foot">
+      类型 report · 出厂即冻结<br>
+      取证基线 c37f3674 (2026-10-02)<br>
+      本次不含任何代码改动
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">可行性 / 方案调研 · report</div>
+    <h1>设置页未保存改动防护: 成熟方案调研与「刷新弹框 + 刷新后清零」对比</h1>
+    <p class="lede">issue <code>26-09-25-1702</code> 认领后的第一步: 复验锚点、盘一遍业界对「未保存改动」的成熟做法, 并把用户提出的「有改动时刷新弹确认框、刷新后清零」放进同一张矩阵里比。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-02-0508-report-webui-unsaved-changes-guard</div></div>
+      <div class="item"><div class="k">专题</div><div class="v">webui-settings-unsaved-changes</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">取证时间</div><div class="v">2026-10-02 05:08 / 05:24 复核</div></div>
+      <div class="item"><div class="k">基线</div><div class="v">c37f3674</div></div>
+      <div class="item"><div class="k">认领</div><div class="v">用户指派 (2026-10-02)</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论速览</h2>
+    <div class="verdict">
+      <div class="vlabel">Verdict</div>
+      <p><b>用户方案成立, 且是当前性价比最高的第一步 —— 建议按它落地。</b>「有未保存改动就弹确认框」= 业界方案 S1(原生 <code>beforeunload</code> 条件守卫), 是 MDN 与 Chrome 官方点名的 <code>beforeunload</code> <b>唯一合法用法</b>; 「刷新后清零」= 明确<b>不做</b>草稿恢复, 这一取舍在本项目是对的选择(见 §6: 自动落盘会触发热重载, 整树存 Web Storage 会把 <code>qbittorrent.password</code> 摆上 XSS 面)。</p>
+      <p>它把「<b>静默丢</b>」变成「<b>知情丢</b>」, 但不减少重做量 —— 这是它唯一、也是被明确接受的代价。</p>
+      <p>草稿恢复(S3)是唯一能覆盖「崩溃 / 标签被系统回收」的机制, 但会引入三类新问题(分叉语义 · 敏感字段 · 幽灵草稿), 建议<b>先不排</b>, 等真的丢过一次再升级。</p>
+    </div>
+    <div class="callout warn"><b>一个必须先说清的技术边界</b>: 「弹确认框」若要求<b>覆盖全部重载路径</b>, 那就只能是<b>浏览器原生框</b> —— 文案不可控、只有「留下 / 离开」两个选项。想弹<b>自绘</b>框(可写中文、可加「保存并刷新」), 只能拦住键盘 <code>F5</code> / <code>Ctrl+R</code>, 拦不住地址栏回车 / 关标签 / 后退 —— 那几条还得靠原生框兜底, 于是两套框并存。详见 §4。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>复验: 现象与锚点</h2>
+    <p><b>复验结论: 现象仍成立</b>(2026-10-02 05:08 取证 / 05:24 合并远端后复核, 基线 <code>c37f3674</code>)。方式为<b>静态复验</b> —— 重跑 issue 里的 grep 锚点并核对代码; <b>本轮未起 chromium 实测</b>(本轮任务是调研出报告, 不改码), 浏览器实测留给实施阶段。</p>
+    <table>
+      <tr><th>锚点</th><th>入池时 (09-25)</th><th>现在 (10-02)</th><th>说明</th></tr>
+      <tr><td><code>beforeunload</code></td><td>0 命中</td><td class="n">仍 0 命中</td><td>全仓 <code>src/</code>/<code>extensions/</code> 无监听; 只有 <code>visibilitychange</code> 两处, 且用途与本案无关(<code>lifecycle.js:117</code> 时钟补跳 / <code>columns.js:390</code> 注释)</td></tr>
+      <tr><td><code>cfgDirty()</code></td><td><code>config_editor.js:56</code></td><td><code>config_editor.js:58</code></td><td>判据未变: 全树 <code>JSON.stringify</code> 对比 <code>cfg.baseline</code></td></tr>
+      <tr><td><code>cfgSetTree()</code></td><td><code>:160</code></td><td><code>:162</code></td><td>仍是「覆盖内存树 + 重置 baseline」的唯一位置</td></tr>
+      <tr><td><code>cfgLoad()</code></td><td><code>:143</code></td><td><code>:145</code></td><td>内部必调 <code>cfgSetTree(conf.tree)</code></td></tr>
+      <tr><td>页面加载路径的 <code>cfgLoad()</code></td><td><code>app.js:1003</code></td><td class="w"><code>polling.js:80</code></td><td><b>两处漂移</b>: ① 从 <code>app.js</code> 挪进 <code>polling.js</code> 的 <code>startPolling()</code>(条件不变: <code>page === "settings" &amp;&amp; !cfg.schema</code>); ② 05:08 复验记的是 <code>polling.js:60</code>, 远端 WebUI 鉴权加固提交(基线 <code>328a6704</code> → <code>c37f3674</code>)给它加了 20 行, 复核后为 <code>:80</code> —— <b>行号只作加速项, 靠符号 <code>this.cfgLoad()</code> 定位</b></td></tr>
+    </table>
+    <p>两条对方案选型有直接影响的现状事实:</p>
+    <ul>
+      <li><b>切页不丢, 只有真重载才丢。</b> 全仓无 <code>pushState</code> / 无 <code>location.hash</code>(0 命中) —— 页签切换是<b>纯内存态</b>, 不产生导航, <code>cfg.tree</code> 原样保留(<code>openSettings()</code> 只在 <code>!cfg.schema</code> 时才 <code>cfgLoad()</code>)。所以丢失路径<b>只有</b>「真实页面重载」这一类, 这正好是 <code>beforeunload</code> 的覆盖区间 —— 用户方案与问题形状是吻合的。</li>
+      <li><b>"看得见"那一半已经有了。</b> <code>settings-detail.html:407-418</code> 有常驻脏指示(<code>hb-led</code> + 「有改动还没保存」)与「放弃改动 / 保存并应用」两个按钮; <code>cfgDiscard()</code> 内部已挂 <code>confirmDialog</code>。缺的<b>只有</b>「页面级重载」这一条路径上的守卫。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>成熟方案谱系</h2>
+    <p class="hint">业界对「未保存改动」的解法按机制分只有五类, 差别全在「能看见哪些离开方式」与「改动是保住还是只提醒」。</p>
+
+    <h3>S1 · 原生 beforeunload 条件守卫(文档级离开)</h3>
+    <p>官方定义的标准用法: <b>只在 dirty 时挂监听, 保存后立刻摘掉</b>。Chrome 与 MDN 都明确「不要无条件挂」—— 文案只显示浏览器通用串(防钓鱼), 且需要 <b>sticky activation</b>(页面有过用户交互才弹)。
+    <br><span class="hint">覆盖: 刷新 / 关标签 / 地址栏 / 后退(真实导航) · 不覆盖: 崩溃、后台标签被系统回收、移动端不可靠</span></p>
+<pre><code>const h = (e) =&gt; { e.preventDefault(); e.returnValue = ""; };
+// dirty 变 true: addEventListener("beforeunload", h)
+// 保存成功 / 放弃后: removeEventListener("beforeunload", h)</code></pre>
+
+    <h3>S2 · 页内路由 / 导航守卫(SPA 内部离开)</h3>
+    <p>Angular <code>CanDeactivate</code> · Vue <code>onBeforeRouteLeave</code> · React Router <code>useBlocker</code>: 客户端路由跳转时弹<b>自绘</b>框, 可写具体文案、可给「保存并继续 / 放弃 / 留下」三选项。
+    <br><b>本项目不适用</b> —— 无客户端路由, 页面切换不产生导航(见 §2)。业界共识是「S1 + S2 都要」, 但前提是<b>真有路由</b>; 这里第二条不存在, 反而省了一层。</p>
+
+    <h3>S3 · 浏览器侧草稿自动保存 + 恢复提示条</h3>
+    <p>debounce 写入 Web Storage, 加载时若有草稿则<b>显式询问</b>「恢复 / 丢弃」。业界唯一能覆盖「崩溃 / 标签被回收」的机制 —— 那两类场景<b>任何弹框都救不了</b>。
+    载体选取有明确共识: <b><code>sessionStorage</code> 优于 <code>localStorage</code></b> —— 按标签隔离, 天然避免多标签互相覆盖陈旧草稿; 保存成功后<b>必须立即删键</b>, 否则会出现「一小时前的旧草稿提示恢复」的幽灵。
+    <br><span class="hint">代价: 引入「内存版 vs 磁盘版」分叉语义 · 需 schema 指纹 / TTL / 形状校验 · 敏感字段暴露面 · 恢复 UI 与判据</span></p>
+
+    <h3>S4 · 服务端草稿 / 自动落盘(autosave to server)</h3>
+    <p class="n"><b>本项目不适用, 且危险。</b> <code>PUT /api/config</code> 会<b>立即落盘并触发后端热重载</b> —— 编辑器里的「半截值」(端口改了一半、密码填了三个字符)会被当成真配置应用。文本编辑器那套 autosave 语义在配置页上是反的: 文档的中间态无害, 配置的中间态会改变程序行为。</p>
+
+    <h3>S5 · 字段级即时生效(「无保存按钮」范式)</h3>
+    <p>VS Code 设置 / macOS 系统设置式: 改一个字段立刻写一个字段。彻底消灭「未保存」这个概念, 但要求后端有单字段 PATCH + 单字段校验; 本项目是整树 PUT + 保存后热重载, 逐字段改写会变成逐字段热重载, 成本与风险都高。</p>
+
+    <h3>S6 · 版本 / 冲突检测(正交)</h3>
+    <p>ETag / <code>If-Match</code> / revision: 保存时校验服务端配置是否被别处改过。它防的是<b>另一件事</b>(磁盘被手工编辑 / 另一标签改过导致覆盖), 与本案不冲突但也不替代本案, 可作为后续独立议题。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>用户方案拆解</h2>
+    <p>「有设置未保存刷新时弹出确认框, 刷新后设置重置改动清零」其实是<b>两个独立的决定</b>, 前半句有两条互斥的实现路线, 必须分开选:</p>
+
+    <h3>决定一: 框用哪一种</h3>
+    <table>
+      <tr><th>路线</th><th>能拦住的</th><th>拦不住的</th><th>代价</th></tr>
+      <tr><td><b>U1-a 原生 <code>beforeunload</code></b></td><td class="y">F5 / Ctrl+R / 地址栏回车 / 关标签 / 后退 —— 全部真实导航</td><td class="n">崩溃 · 后台标签被回收 · 部分移动端(根本不触发)</td><td>文案是浏览器通用串, 不可定制; 只有「留下 / 离开」两选项; 需页面有过交互才弹</td></tr>
+      <tr><td><b>U1-b 自绘框(拦 F5 / Ctrl+R 键)</b></td><td>键盘触发的刷新(<code>keydown</code> 里 <code>preventDefault</code>)</td><td class="n">地址栏回车 · 关标签 · 后退 · 崩溃</td><td>可写中文、可给「保存并刷新」; 但其余路径<b>仍需原生框兜底</b> ⇒ 两套框并存、文案与体验不一致</td></tr>
+    </table>
+    <div class="callout"><b>关键事实</b>: JS 无法用自绘 modal 取消真实导航 —— 唯一能取消导航的钩子就是 <code>beforeunload</code> 原生框。所以「全覆盖」与「自定义文案」在这个场景里<b>不可兼得</b>, 只能二选一或双框并存。</div>
+
+    <h3>决定二: 刷新后改动清零(不做草稿恢复)</h3>
+    <p>这就是现状行为(<code>cfgLoad()</code> 用服务端树整体替换, 并重置 baseline), 只是把它从「静默发生」变成「用户点了离开之后发生」。语义极简: <b>要么你保存了, 要么它没存在过</b> —— 没有第三种「半存在」的状态。</p>
+    <ul>
+      <li><b>得到的</b>: 无分叉语义(不需要定义"内存版 vs 磁盘版"谁赢) · 无陈旧草稿幽灵 · 不把密码等敏感字段写进 Web Storage · 与现成判据 <code>cfgDirty</code> 完全一致(单一判据, 零新增状态机)。</li>
+      <li><b>失去的</b>: 崩溃 / 标签被回收 / 误点「离开」这三类仍要重做。前两类本来就超出弹框能力, 第三类是用户<b>自己做的决定</b> —— 从「被偷走」变成「知情放弃」, 这正是本方案要买的东西。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>对比矩阵</h2>
+    <table>
+      <tr>
+        <th>方案</th><th>键盘刷新</th><th>地址栏/关标签/后退</th><th>崩溃·回收</th><th>改动能保住</th><th>半截值落盘风险</th><th>敏感字段暴露</th><th>实现成本</th><th>与现有代码契合</th>
+      </tr>
+      <tr>
+        <td><b>U1-a 原生 beforeunload + 清零</b><br><span class="hint">= 用户方案(推荐)</span></td>
+        <td class="y">✓</td><td class="y">✓</td><td class="n">✗</td><td class="n">否(只提醒)</td><td class="y">无</td><td class="y">无</td><td class="y">极低: 复用 <code>cfgDirty</code>, 只加挂/摘时机</td><td class="y">极高: 判据现成, 单点</td>
+      </tr>
+      <tr>
+        <td><b>U1-b 自绘框 + 原生兜底</b></td>
+        <td class="y">✓(可定制文案)</td><td class="y">✓(原生兜底)</td><td class="n">✗</td><td class="n">否</td><td class="y">无</td><td class="y">无</td><td class="w">中: 两套框 + 键盘拦截 + 去重</td><td class="w">中: 与既有 <code>confirmDialog</code> 风格要对齐</td>
+      </tr>
+      <tr>
+        <td><b>S3 浏览器侧草稿(sessionStorage)</b></td>
+        <td class="y">✓</td><td class="y">✓</td><td class="y">✓</td><td class="y">是</td><td class="y">无(只存浏览器侧)</td><td class="w">⚠ 存整树则含 <code>qbittorrent.password</code> / web 凭据; 改存 diff 可缓解</td><td class="w">中高: schema 指纹 + TTL + 形状校验 + 恢复条 UI + 清理时机</td><td class="w">中: 需新判据与新 UI, 无现成先例(列偏好是"意图 vs 派生"另一套)</td>
+      </tr>
+      <tr>
+        <td><b>S4 服务端自动落盘</b></td>
+        <td class="y">✓</td><td class="y">✓</td><td class="w">部分</td><td class="y">是</td><td class="n">✗ 危险: 半截配置落盘 + 热重载</td><td class="y">无(但已在磁盘)</td><td class="n">高</td><td class="n">与本产品"保存并应用"语义冲突</td>
+      </tr>
+      <tr>
+        <td><b>S5 字段级即时生效</b></td>
+        <td class="y">✓(概念消失)</td><td class="y">✓</td><td class="y">✓</td><td class="y">是</td><td class="n">✗ 每字段一次热重载</td><td class="y">无</td><td class="n">高: 需单字段 PATCH + 校验</td><td class="n">后端不支持</td>
+      </tr>
+      <tr>
+        <td><b>S6 版本冲突检测</b><br><span class="hint">正交项</span></td>
+        <td>—</td><td>—</td><td>—</td><td>—</td><td class="y">无</td><td class="y">无</td><td>中</td><td>防的是另一件事(磁盘被外部改)</td>
+      </tr>
+    </table>
+    <p class="hint">读法: 「崩溃·回收」一列只有 S3 是绿的 —— 那类场景弹框根本不会触发, 这是弹框类方案的结构性上限, 不是实现问题。「改动能保住」一列区分了「提醒你」与「替你留着」两件完全不同的事。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>代价与风险清单</h2>
+    <ul>
+      <li><b>敏感字段(只针对 S3)</b>: 配置树含 <code>qbittorrent.password</code> 与 web 凭据。业界对 Web Storage 的硬性纪律是「不存密码 / token / 支付信息」—— XSS 可读。若将来做草稿, 必须<b>只存相对 baseline 的字段级 diff</b> 并剔除敏感路径, 不能整树 <code>JSON.stringify</code> 丢进去。(U1-a 不写任何存储, 天然免疫。)</li>
+      <li><b>弹框疲劳(只针对弹框类)</b>: 长期被无意义确认框训练过的用户会闭眼点「离开」。缓解: 严格只在 <code>cfgDirty</code> 为真时挂载(而不是常驻), 且只在设置页 —— 脏标记本身已经是全树精确对比, 不会误触发。</li>
+      <li><b>bfcache 与移动端</b>: Firefox 不会把带 <code>beforeunload</code> 监听的页面放进 bfcache; Chrome 移动端在标签被回收时不触发。本项目是单页 SPA, 前后退基本是离开站点, bfcache 影响可忽略; 移动端不可靠属于浏览器策略, 无法绕开 —— 接受即可。</li>
+      <li><b>双框不一致(只针对 U1-b)</b>: 键盘刷新走自绘、其余路径走原生, 同一动作两种观感, 且自绘框里的「保存并刷新」在原生路径上不存在。这是 U1-b 最实的代价。</li>
+      <li><b>幽灵草稿(只针对 S3)</b>: 保存成功后不删键, 下次刷新会提示恢复一个早就写进磁盘的旧版本; 多标签下 <code>localStorage</code> 还会互相覆盖(<code>sessionStorage</code> 按标签隔离可规避)。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>推荐落地路径</h2>
+    <ol>
+      <li><b>第一步(本次拍板后即做): U1-a + 清零。</b> 在设置页且 <code>cfgDirty</code> 为真时挂 <code>beforeunload</code>(<code>preventDefault()</code> + <code>returnValue = ""</code>), <code>cfgSave()</code> 成功与 <code>cfgDiscard()</code> 之后摘除; 退出 / 登出(<code>cfgReset()</code>)一并摘除。退出码零副作用, 可独立验证。</li>
+      <li><b>同步补一条现状说明</b>: 原生框文案不可定制是浏览器策略, 中文说明放在页面上(现有的「有改动还没保存」指示已经在做), 而不是指望弹框里写字。</li>
+      <li><b>第二步(有条件才做): S3-lite。</b> 触发条件 = 真的丢过一次改动(用户或日志可证)。三条硬约束: ① 只存 diff, 剔除敏感路径; ② 带 schema 指纹 + TTL, 形状不符即丢弃; ③ 恢复必须显式确认, 保存成功后立即删键。</li>
+      <li><b>不做的</b>: S4(半截配置落盘 + 热重载)、S5(后端不支持且会逐字段热重载)。S6 若要做, 单开议题。</li>
+    </ol>
+    <p class="hint">守阵建议: 前端守卫测试沿用既有 <code>tests/</code> 前端守阵的写法(静态断言为主) —— 断言「存在 <code>beforeunload</code> 挂载点」与「dirty 假时不挂」, 不必起真浏览器。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>待拍板项</h2>
+    <table>
+      <tr><th>#</th><th>问题</th><th>本报告倾向</th></tr>
+      <tr><td>1</td><td>框的形态: U1-a 原生(全覆盖, 文案不可控) 还是 U1-b 自绘 + 原生兜底(文案可控, 双框并存)</td><td><b>U1-a</b> —— 覆盖优先; 中文说明交给页面已有指示</td></tr>
+      <tr><td>2</td><td>是否接受「知情丢弃」(不做草稿恢复)</td><td><b>接受</b> —— 语义最简、零一致性风险; S3 等真丢过再排</td></tr>
+      <tr><td>3</td><td>挂载范围是否收窄到「设置页且 dirty」</td><td><b>是</b> —— 常驻挂载会伤 bfcache 且制造弹框疲劳</td></tr>
+      <tr><td>4</td><td>实施时是否补一次 chromium 实测(本轮只做了静态复验)</td><td><b>是</b> —— 走查时按 <code>scripts/ui_harness.py</code> 复现路径跑一遍, 记录 dialogs 计数</td></tr>
+    </table>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>参考来源</h2>
+    <p class="src">取证 2026-10-02, 均为厂商 / 规范一手或权威二手:</p>
+    <ul class="src">
+      <li>MDN — <code>Window: beforeunload event</code>: 只显示浏览器通用串; 需 sticky activation; 移动端不可靠; Firefox 下与 bfcache 不兼容; 建议只在有未保存改动时挂、保存后摘。</li>
+      <li>Chrome — <em>Page Lifecycle API</em>: 明确「不要无条件加 <code>beforeunload</code> 监听, 也不要把它当会话结束信号」; <code>visibilitychange</code> 才是可靠的最后保存时机。</li>
+      <li>Chrome — <em>Deprecating the unload event</em>: <code>beforeunload</code> 在后台标签被杀时不触发; 推荐 <code>visibilitychange</code> / <code>pagehide</code> 做状态保存。</li>
+      <li>MDN — <code>Window: unload event</code>: 移动端切后台后杀进程不触发; 建议改用 <code>visibilitychange</code>。</li>
+      <li>Angular <code>CanDeactivate</code> / Vue <code>onBeforeRouteLeave</code> / React Router <code>useBlocker</code>: 页内导航守卫三件套, 与 <code>beforeunload</code> 互补而非替代。</li>
+      <li>表单状态持久化实践(OpenReplay / Flavio Copes): <code>sessionStorage</code> 用于单标签草稿、<code>localStorage</code> 用于长期草稿; debounce 写入; <b>保存成功后立即删键</b>; 不把密码 / token 放 Web Storage。</li>
+      <li>表单守卫实践(client-side-form): 「离开文档」与「离开路由」是两套机制, 只做一套必漏; 草稿是唯一覆盖崩溃与标签回收的机制。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-02-0508-report-webui-unsaved-changes-guard.html · 专题 webui-settings-unsaved-changes · 快照终态 (report 恒 Done)
+    · 取证基线 c37f3674 (2026-10-02, 05:24 合并远端后复核) · 静态复验, 未起浏览器实测 · 认领 issue
+    <a href="../issues/26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html">26-09-25-1702</a>
+    · 本报告不含任何代码改动; 结论待用户拍板
+  </footer>
+
+</div>
+</body>
+</html>
