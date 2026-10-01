@@ -17,13 +17,18 @@
 | bug | 4 |
 | perf | 3 |
 | docs | 3 |
-| refactor | 2 |
-| feat | 8 |
+| refactor | 3 |
+| feat | 12 |
 | chore | 4 |
 | question | 1 |
 
 ## Open
 
+- [feat] [WEBUI 自定义站点名/分类/标签字体颜色](26-10-01-2120-feat-webui-custom-chip-colors.html) — 允许用户为站点名/分类/标签 chip 自定义字体颜色(未排期增强)
+- [refactor] [管理标签/分类窗口重构](26-10-01-2120-refactor-webui-tag-category-dialog.html) — 「管理标签/分类」弹窗结构陈旧需要重构(TODO 未给细节, 开工先复验现状)
+- [feat] [批量移动/批量跳检](26-10-01-2119-feat-webui-batch-move-skipcheck.html) — WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用
+- [feat] [重做优化种子详情抽屉](26-10-01-2119-feat-webui-drawer-redesign.html) — 详情抽屉整体重设计(未排期); 已有标签页记忆与长文本截断等局部改进, 需要一次整体重做
+- [feat] [搜索命中高亮显示 + 无命中时提示命中域(如「文件名」标识)](26-10-01-2119-feat-webui-search-highlight.html) — 搜索结果需标出命中来源域与命中片段, 无匹配时给出「匹配到文件名/标签/站点」类提示
 - [feat] [快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发](26-10-01-2108-feat-webui-selection-follow-mouse.html) — 键盘高亮选中与鼠标点击选中是两套状态, 需合并为单一套随最后操作源移动
 - [feat] [浏览种子详情抽屉时支持键盘上下键切换种子](26-10-01-2108-feat-webui-shortcuts-drawer-nav.html) — 键盘快捷键引擎与可自定义已落地, 补「抽屉打开时上下键切到上/下一个种子」这一动作
 - [feat] [Alt+1~4 从列表直接打开选中种子的详情抽屉并转到对应页](26-10-01-2108-feat-webui-shortcuts-drawer-open.html) — 现 Alt+1~4 仅在抽屉已聚焦时切页(scope=drawer), 需升级为列表侧直接唤起抽屉定位对应页
