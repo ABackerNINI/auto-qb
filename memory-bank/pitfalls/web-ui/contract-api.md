@@ -136,4 +136,4 @@
   (`dl_limit` / `up_limit` 是**单种子级**字段)。
   **全仓 grep 该键名命中 0 处 = 后端根本没这个键。**
 - **处置**: 修口径时收成**单一取数点**。
-- **复发**: 1 —— 2026-10-01 (计划 26-10-01-2216 阶段4 契约守阵首次通电抓出): 表② 波次明细表消费 `ls.lane_text`, 但 `LaneStatus` 没有该字段(`to_dict`=asdict 不含, 路由也不补)⇒ 档位徽章的人话渲染为空、只剩档位字母(色义仍走 `hrsLaneCls(ls.lane)`, 真机不细看发现不了)。守阵 `test_frontend_hr_contract_keys_match_backend`(前端消费键 ⊆ `EntryDetail`/`SiteStatus`/`LaneStatus` 的 to_dict 键集, 从模板锚段 + hr_status.js 源码双向提取)当场抓出; 修复在 src/ 侧, 不在阶段4(只动 tests)范围, 已汇报待拍板 —— 守阵暂以「已知幻键白名单恰为一条 `lane_text`」钉住, 修复后白名单收空(反向变红提醒收口)。
+- **复发**: 1 —— 2026-10-01 (计划 26-10-01-2216 阶段4 契约守阵首次通电抓出): 表② 波次明细表消费 `ls.lane_text`, 但 `LaneStatus` 没有该字段(`to_dict`=asdict 不含, 路由也不补)⇒ 档位徽章的人话渲染为空、只剩档位字母(色义仍走 `hrsLaneCls(ls.lane)`, 真机不细看发现不了)。守阵 `test_frontend_hr_contract_keys_match_backend`(前端消费键 ⊆ `EntryDetail`/`SiteStatus`/`LaneStatus` 的 to_dict 键集, 从模板锚段 + hr_status.js 源码双向提取)当场抓出; 修复在 src/ 侧, 不在阶段4(只动 tests)范围 —— **已修 7cff3adb**(`LaneStatus` 补 `lane_text` 字段由 `_lane_statuses` 填充, 复用 LANE_TEXTS 单点), 守阵白名单已收空恢复严格闭集, 并加 lane_text 逐档值断言。
