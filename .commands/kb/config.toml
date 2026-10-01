@@ -6,11 +6,12 @@ confirmed = true
 [tasks."kb.index"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py",
            "python <skill-dir:memory-bank>/scripts/gen_kb_index.py",
-           "python <skill-dir:memory-bank>/scripts/gen_docs_index.py"]
+           "python <skill-dir:memory-bank>/scripts/gen_docs_index.py",
+           "python <skill-dir:create-issue>/scripts/gen_issues_index.py"]
 timeout = 120
 pin     = true
 when    = "收尾回写知识库后重建索引（不要手改 _index.md）"
-note    = "集合必须与 my-commit-flow 的 `memory-bank/` 闸门**同集**: 闸门能判红的生成物, 这里就得有重建入口 —— 2026-09-24 实测漏项导致报错文案指到跑完仍红的命令; 2026-09-29 _doc-map.md 物化退役(改查询 kb.docmap)后为三条"
+note    = "集合必须与 my-commit-flow 的 `memory-bank/` 闸门**同集**: 闸门能判红的生成物, 这里就得有重建入口 —— 2026-09-24 实测漏项导致报错文案指到跑完仍红的命令; 2026-09-29 _doc-map.md 物化退役(改查询 kb.docmap)后为三条; 2026-10-01 收编 create-issue 的 gen_issues_index.py(issue 状态改完一处跑齐, 不用再单独补跑)后为四条"
 
 [tasks."kb.docmap"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_doc_map.py <args>"]
@@ -36,7 +37,8 @@ run     = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_docs_index.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check",
-           "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check"]
+           "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
+           "python <skill-dir:create-issue>/scripts/gen_issues_index.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。集合 = kb.index 三条的 --check + gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。集合 = kb.index 四条的 --check + gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验"

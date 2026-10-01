@@ -19,11 +19,10 @@
 | docs | 3 |
 | refactor | 2 |
 | feat | 5 |
-| chore | 5 |
+| chore | 4 |
 
 ## Open
 
-- [chore] [kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py](26-10-01-2012-chore-kb-index-missing-issues-gen.html) — kb.index 的 16 个索引不含 create-issue 的 gen_issues_index.py, 改 issue 状态后跑 kb.index 不迁移 issues/_index.md 状态分区, 须单独补跑; 收编与否待定调
 - [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
 - [feat] [HR 计数：looks_like_login 补计数文本佐证（P3 缓做项）](26-09-30-0052-feat-hr-login-counter-attest.html) — 登录态判定 looks_like_login 补页头计数文本负信号佐证（报告 26-09-29-1803 §6 登录态负信号 / HR 计划 §7 P3），依赖 D4 口径实证，缓做
 - [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做
@@ -52,6 +51,7 @@
 
 ## Done
 
+- [chore] [kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py](26-10-01-2012-chore-kb-index-missing-issues-gen.html) — kb.index 的 16 个索引不含 create-issue 的 gen_issues_index.py, 改 issue 状态后跑 kb.index 不迁移 issues/_index.md 状态分区, 须单独补跑; 收编与否待定调
 - [docs] [tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享实例」口径, 深拷贝根修后过时](26-10-01-2012-docs-test-ui-stale-fakeconfig-comment.html) — FakeConfig 根修(54c83ac3 改 deepcopy 实例属性)后, test_ui.py:41 注释理由已失效; 保守无害, 随下次触碰 test_ui 顺手校正
 - [test] [tests/test_config.py 另有 5 对同文件重名测试, 顶层 def 遮蔽致前一条死测试](26-10-01-2012-test-test-config-duplicate-test-names.html) — test_config.py 存在 5 对重名顶层测试(718/793 等), 后者遮蔽前者; 前 4 对逐字相同、第 5 对仅 YAML 样本一字之差; 待重命名/合并并落防复发守阵
 - [chore] [src/auto_qb/core/mixins/__pycache__/ 残留 .pyc 删除后会再生, 根因待查](26-10-01-1946-chore-core-mixins-pycache-regen.html) — git 零跟踪的 core/mixins/__pycache__/ 残留已退役模块的 .pyc, 修复期间删过两次跑测试后又再生; 疑似测试以残留包名导入, 需断根

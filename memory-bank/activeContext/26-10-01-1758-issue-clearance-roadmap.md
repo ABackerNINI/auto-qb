@@ -14,8 +14,8 @@
 > ④⑤26-09-30-0602 两条 → 9aeb4400(colwidth 用例选键)/ 59725443(ctx03 点击落点), 同档案
 > tasks/26-10-01-test-ui-smoke-clearance.md。收尾基线切片见 `commands run kb.baseline` 最新一条。
 > **计划外事项(a/b/c 已于 2026-10-01 20:12 统一入池, 均未修待认领; d) 已落坑档无需 issue)**:
-> a) kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑
-> `uv run python .agents/skills/create-issue/scripts/gen_issues_index.py` → issue 26-10-01-2012-chore-kb-index-missing-issues-gen(收编与否待定调);
+> a) kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 issues 索引生成器
+> → issue 26-10-01-2012-chore-kb-index-missing-issues-gen(2026-10-01 已定调收编进 kb.index, 状态 Done);
 > b) tests/test_config.py 另有 **5 对同文件重名测试遮蔽**(4 对逐字相同, 同类缺陷)→ issue
 > 26-10-01-2012-test-test-config-duplicate-test-names(挂专题 duplicate-test-name-shadowed-guard,
 > 与 2212 串线)—— 清偿轮(含防复发守阵)待授权;

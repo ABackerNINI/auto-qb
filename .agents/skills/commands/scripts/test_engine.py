@@ -187,8 +187,8 @@ def test_run_selfcheck_compressed(monkeypatch, capsys):
     captured = capsys.readouterr().out
     assert rc == 0
     assert "[自证] kb.index 将要执行:" in captured
-    assert "…(共 3 条, 全量: show kb.index)" in captured
-    assert captured.count("gen_tasks_index") == 1  # 只打首条, 其余两条不再全量展开
+    assert "…(共 4 条, 全量: show kb.index)" in captured
+    assert captured.count("gen_tasks_index") == 1  # 只打首条, 其余三条不再全量展开
 
 
 def test_run_timeout_names_command(monkeypatch, capsys):

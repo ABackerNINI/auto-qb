@@ -101,11 +101,12 @@ python .agents/skills/create-issue/scripts/new_issue.py <slug> \
 | `Dropped` | 决定不修(必须写明理由) —— 旧词 `WontFix` |
 | `Superseded` | 与他件重复 / 被取代(写明指向哪一条) —— 旧词 `Duplicate` |
 
-改状态的唯一流程: **改 HTML 的两处状态 → 追加一行状态变更日志 → 重建索引**:
+改状态的唯一流程: **改 HTML 的两处状态 → 追加一行状态变更日志 → 重建索引** —— 生成器
+(`scripts/gen_issues_index.py`)已收编进 kb 包(2026-10-01), 一处跑齐:
 
 ```bash
-python .agents/skills/create-issue/scripts/gen_issues_index.py         # 重建
-python .agents/skills/create-issue/scripts/gen_issues_index.py --check # 只比对(供守卫/CI 用)
+commands run kb.index   # 重建全部索引(含本索引)
+commands run kb.check   # 只比对不写(供守卫/提交闸门用)
 ```
 
 `_index.md` 是**生成物**(与 `tasks/_index.md` 同款): 按状态分区, 每行 = `类型 · 简述 · 报告链接`, 顶部有 Open 状态的按类型计数表。**不要手改它** —— 多个工作区并行时手改必然冲突, 冲突的解法是重跑脚本, 不是人工合并两版文本。

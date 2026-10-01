@@ -8,7 +8,7 @@
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="kb-index-missing-issues-gen">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py">
 <meta name="issue-summary" content="kb.index 的 16 个索引不含 create-issue 的 gen_issues_index.py, 改 issue 状态后跑 kb.index 不迁移 issues/_index.md 状态分区, 须单独补跑; 收编与否待定调">
 <title>kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py · chore · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2012-chore-kb-index-missing-issues-gen</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 20:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 20:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-01 20:57 — 修复，状态 <strong>Open → Done</strong>（定调走①收编：<code>.commands/kb/config.toml</code> 的 <code>kb.index</code> run 列表追加 <code>python &lt;skill-dir:create-issue&gt;/scripts/gen_issues_index.py</code>（写法沿用 my-commit-flow 闸门既有占位符惯例），<code>kb.check</code> 同步追加 <code>--check</code> 变体，脚本本身零改动。验证：篡改 <code>issues/_index.md</code> 状态分区后跑 <code>commands run kb.index</code> 原样重建（16 索引 + issues 索引一条跑齐），再单独跑 <code>gen_issues_index.py</code> 重跑 git diff 零漂移；守阵无需同步（<code>test_gen_cmd_hints_name_real_tasks</code> 不枚举条数、该脚本不走 gen_cmd 表）；<code>commands run test.quick</code> 实测 1915 passed / 3 skipped 全绿）</li>
     </ul>
   </section>
 
