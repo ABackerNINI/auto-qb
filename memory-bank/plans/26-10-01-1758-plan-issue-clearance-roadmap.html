@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="issue-clearance-roadmap">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-01-1758">
+<meta name="doc-updated" content="26-10-01-1758">
+<meta name="doc-refs" content="memory-bank/plans/26-10-01-1728-plan-doc-drift-repair.html,memory-bank/plans/26-09-29-2036-plan-hr-counter-integration.html">
+<title>Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1114;
+    --paper: #14171b;
+    --ink: #dadee3;
+    --mut: #99a2ac;
+    --dim: #5f6873;
+    --line: rgba(255,255,255,.09);
+    --line-soft: rgba(255,255,255,.05);
+    --acc: #8fc3d4;
+    --sans: "Suisse Int'l", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: "IBM Plex Mono", "JetBrains Mono", Consolas, "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1120px; margin: 0 auto; padding: 72px 48px 96px; }
+
+  /* ---------- 封面 ---------- */
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 20px;
+  }
+  h1 {
+    font-size: 40px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    max-width: 21em;
+  }
+  .lede {
+    margin-top: 18px;
+    font-size: 16px;
+    color: var(--mut);
+    max-width: 62ch;
+  }
+  .cover-meta {
+    margin-top: 36px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 40px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+  }
+  .cover-meta b { color: var(--mut); font-weight: 500; }
+
+  /* ---------- 章节骨架 ---------- */
+  section { margin-top: 72px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 24px;
+  }
+  .sec-no {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--acc);
+    letter-spacing: .08em;
+  }
+  h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .sec-head .side {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+  }
+  p.body { max-width: 74ch; color: var(--ink); }
+  p.body + p.body { margin-top: 12px; }
+  p.body .muted { color: var(--mut); }
+
+  /* ---------- 总览表 ---------- */
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--dim);
+    text-align: left;
+    padding: 8px 14px 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 11px 14px 11px 0;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+    font-size: 14px;
+  }
+  td.num { font-family: var(--mono); font-size: 13px; color: var(--mut); white-space: nowrap; }
+  .ovl-topic { font-weight: 550; }
+  .ovl-comp { color: var(--mut); font-family: var(--mono); font-size: 12.5px; }
+
+  /* ---------- 依赖链 ---------- */
+  .chain {
+    margin-top: 20px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--dim);
+    padding: 14px 18px;
+    border: 1px solid var(--line);
+  }
+  .chain b { color: var(--mut); font-weight: 500; }
+  .chain .arr { color: var(--acc); padding: 0 6px; }
+
+  /* ---------- 波次头 ---------- */
+  .wave-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 22px;
+    margin-bottom: 14px;
+  }
+  .wno {
+    font-family: var(--mono);
+    font-size: 34px;
+    font-weight: 500;
+    color: var(--dim);
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    padding-top: 2px;
+  }
+  .wave-head h3 { font-size: 18px; font-weight: 600; padding-top: 4px; }
+  .wave-head .wsub {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+    margin-top: 3px;
+  }
+  .wave-why {
+    max-width: 76ch;
+    color: var(--mut);
+    font-size: 14px;
+    margin: 10px 0 18px 58px;
+  }
+  .issue-tbl td:first-child { white-space: nowrap; }
+  .stamp { font-family: var(--mono); font-size: 12.5px; }
+  .stamp a { color: var(--acc); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  .ttype { font-family: var(--mono); font-size: 12px; color: var(--mut); }
+  .ttier { font-family: var(--mono); font-size: 12px; color: var(--dim); white-space: nowrap; }
+  .ttl { font-weight: 550; font-size: 14px; }
+  .note { color: var(--mut); font-size: 13px; margin-top: 4px; max-width: 72ch; }
+  .flag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    color: var(--mut);
+    border: 1px solid var(--line);
+    padding: 1px 7px;
+    margin-left: 8px;
+    vertical-align: 2px;
+  }
+
+  /* ---------- 规则清单 ---------- */
+  ol.rules { max-width: 78ch; padding-left: 0; list-style: none; counter-reset: r; }
+  ol.rules li {
+    counter-increment: r;
+    padding: 12px 0 12px 44px;
+    border-bottom: 1px solid var(--line-soft);
+    position: relative;
+    color: var(--ink);
+    font-size: 14px;
+  }
+  ol.rules li::before {
+    content: counter(r, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 13px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+  }
+  ol.rules li .muted { color: var(--mut); }
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 1px 6px;
+  }
+
+  /* ---------- 变更记录 / colophon ---------- */
+  .changelog { max-width: 74ch; }
+  .cl-row { display: flex; gap: 24px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
+  .cl-row .v { font-family: var(--mono); color: var(--acc); white-space: nowrap; }
+  .cl-row .d { font-family: var(--mono); color: var(--dim); white-space: nowrap; }
+  .cl-row .t { color: var(--mut); }
+  footer {
+    margin-top: 88px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--dim);
+    line-height: 1.8;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="kicker">memory-bank / plans · issue 清偿路线图</div>
+  <h1>Issue 全量清偿:摸排、分波与执行顺序</h1>
+  <p class="lede">对 issue 池当前全部未决条目做一次只读摸排,按「闸门先绿、数据先于体验、方案先于动手」分七个波次给出清偿顺序。本计划不做代码分析——每条的分析动作留到认领时做,此处只给入口提示与挂账关系。</p>
+  <div class="cover-meta">
+    <span><b>日期</b> 2026-10-01</span>
+    <span><b>状态</b> Open · 待拍板</span>
+    <span><b>范围</b> 31 条未决 (30 Open + 1 In Progress)</span>
+    <span><b>方法</b> issues/_index.md + 31 份报告 meta 扫描</span>
+    <span><b>topic</b> issue-clearance-roadmap</span>
+  </div>
+
+  <!-- ================= §0 ================= -->
+  <section id="s0">
+    <div class="sec-head"><span class="sec-no">§0</span><h2>摸排口径</h2></div>
+    <p class="body">范围 = <span class="muted">issues/_index.md</span> 全部 <b>Open</b> 与 <b>In Progress</b> 条目,共 31 条;28 条 Done、1 条 Superseded 不入列。全部数字为 2026-10-01 17:58 对索引与报告 <span class="muted">issue-*</span> meta 的实测扫描值,无估算。</p>
+    <p class="body">类型分布:bug 8 · feat 5 · docs 5 · test 4 · chore 4 · perf 3 · refactor 2。档位分布:standard 18 · light 13。</p>
+    <p class="body">排序三原则:<b>①</b> 闸门与流程卡点最先——测试与提交流程不绿,后续每条认领的验收都不可信;<b>②</b> 数据与状态完整性先于体验——丢数据、丢状态的风险高于一切交互瑕疵;<b>③</b> 需方案拍板的大件「方案先行」,不与快修混流;已有上游计划承载的条目只挂账、不重复排期。</p>
+  </section>
+
+  <!-- ================= §1 ================= -->
+  <section id="s1">
+    <div class="sec-head"><span class="sec-no">§1</span><h2>波次总览</h2><span class="side">7 波 · 31 条</span></div>
+    <table>
+      <thead><tr><th>波次</th><th>主题</th><th>条数</th><th>构成</th><th>准入说明</th></tr></thead>
+      <tbody>
+        <tr><td class="num">W1</td><td class="ovl-topic">流程与闸门卡点</td><td class="num">5</td><td class="ovl-comp">bug 1 · test 4</td><td>无前置,立即开工</td></tr>
+        <tr><td class="num">W2</td><td class="ovl-topic">状态完整性与数据安全</td><td class="num">4</td><td class="ovl-comp">bug 3 · feat 1</td><td>建议在 W1 后——验收依赖闸门</td></tr>
+        <tr><td class="num">W3</td><td class="ovl-topic">WebUI 健壮性与安全</td><td class="num">5</td><td class="ovl-comp">bug 3 · feat 2</td><td>同域聚簇,可整批摸</td></tr>
+        <tr><td class="num">W4</td><td class="ovl-topic">性能</td><td class="num">2</td><td class="ovl-comp">perf 2</td><td>先定测量口径,依赖 W1 的 harness</td></tr>
+        <tr><td class="num">W5</td><td class="ovl-topic">设计拍板大件</td><td class="num">1</td><td class="ovl-comp">feat 1</td><td>方案先行,口径未定</td></tr>
+        <tr><td class="num">W6</td><td class="ovl-topic">轻量收尾 refactor / chore / docs</td><td class="num">9</td><td class="ovl-comp">refactor 2 · chore 4 · docs 3</td><td>彼此独立,随时可穿插</td></tr>
+        <tr><td class="num">W7</td><td class="ovl-topic">挂靠与缓做</td><td class="num">5</td><td class="ovl-comp">docs 2 · feat 2 · perf 1</td><td>上游计划承载,本计划不排期</td></tr>
+      </tbody>
+    </table>
+    <div class="chain">
+      顺序骨架:<b>W1</b><span class="arr">&#8594;</span><b>W2</b><span class="arr">&#8594;</span><b>W3</b><span class="arr">&#8594;</span><b>W4</b><span class="arr">&#8594;</span><b>W5</b>
+      &nbsp;·&nbsp; <b>W6</b> 可在任意间隙穿插 &nbsp;·&nbsp; <b>W7</b> 只挂账不排期
+    </div>
+    <p class="body" style="margin-top:16px">波次是建议顺序,不是硬闸——跨域条目可并行,波内彼此独立可乱序;细规则见 <a href="#s9" style="color:var(--acc)">§8 执行规则</a>。</p>
+  </section>
+
+  <!-- ================= W1 ================= -->
+  <section id="w1">
+    <div class="sec-head"><span class="sec-no">W1</span><h2>流程与闸门卡点</h2><span class="side">5 条 · 无前置</span></div>
+    <p class="wave-why">为什么最先:后续每一个 issue 的验收都靠测试闸门与 ship 流程;两条冒烟用例确定性红,使一切 UI 类认领的「验收通过」不可信;commit.py 卡点直接挡交付动作。这一波修完,W2 起的每一条才有干净的验证基线。</p>
+    <table class="issue-tbl">
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-28-0128-bug-my-commit-flow-staged-delete-add.html">26-09-28-0128</a></td>
+          <td class="ttype">bug</td><td class="ttier">standard</td>
+          <td><span class="ttl">commit.py 逐路径 git add 撞「已暂存删除」路径必败</span>
+            <div class="note">直接卡 <code>ship.commit</code>;已有 workaround(退回未暂存后重跑)。入池时已给根修方向:删除路径改 <code>git rm --cached</code> 口径——认领时核对。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-20-2212-test-duplicate-test-name-shadowed-guard.html">26-09-20-2212</a></td>
+          <td class="ttype">test</td><td class="ttier">light</td>
+          <td><span class="ttl">test_truth_hold_budget_matches_backend 同名定义了两次</span>
+            <div class="note">同名函数后者覆盖前者,真值宽限一致性守阵实为死测试。认领时先确认两个断言体保留哪个,大概率是重命名/合并级修改。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-22-2311-test-fakeconfig-shared-state-order-pollution.html">26-09-22-2311</a></td>
+          <td class="ttype">test</td><td class="ttier">standard</td>
+          <td><span class="ttl">FakeConfig 类级共享 grouping 实例被 test_web 实例改写</span>
+            <div class="note">顺序敏感 flaky(自定义顺序必红、全量字母序不触发);属测试基建隔离问题,无产品代码风险。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-30-0602-test-ui-smoke-colwidth-hidden-preserve.html">26-09-30-0602</a></td>
+          <td class="ttype">test</td><td class="ttier">standard</td>
+          <td><span class="ttl">冒烟「列设置·隐藏列宽保留」确定性失败<span class="flag">双 UI 100%</span></span>
+            <div class="note">隐藏列的意图宽度读不回(key=amount_left 前=undefined 后=92px);与列偏好双轨模型的意图/生效分轨有关,先在于键盘快捷键波次之前。认领时先读 harness 用例与列偏好实现。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-30-0602-test-ui-smoke-ctx03-multiselect.html">26-09-30-0602</a></td>
+          <td class="ttype">test</td><td class="ttier">standard</td>
+          <td><span class="ttl">冒烟 CTX-03 多选右键批量菜单失败<span class="flag">待查定性</span></span>
+            <div class="note">追剧集行 100% 复现 + 辅种组行间歇;Ctrl+click 在冒烟完整链路下不生效而孤立探针正常——疑似轮询重渲染与 ElementHandle 的竞态,或真实 UI 缺陷。两条 0602 冒烟建议同一认领里一起查。</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= W2 ================= -->
+  <section id="w2">
+    <div class="sec-head"><span class="sec-no">W2</span><h2>状态完整性与数据安全</h2><span class="side">4 条 · 建议 W1 后</span></div>
+    <p class="wave-why">为什么第二:丢状态、丢数据的风险高于一切交互瑕疵。其中两条是 26-09-21-1347 状态落盘族的收尾(同批 4 条已 Done);跨组文件交叉入池时被标「紧急处置」,但因是 feat,认领后先出方案拍板再动手。</p>
+    <table class="issue-tbl">
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html">26-09-21-0219</a></td>
+          <td class="ttype">bug</td><td class="ttier">standard</td>
+          <td><span class="ttl">qB 移动已完成种子偶发改名 .!qB,触发重校验误报缺文件<span class="flag">In Progress</span></span>
+            <div class="note">池里唯一 In Progress,但报告尚无 doc-refs(认领链未挂档案)。认领时先查前史确认实际进展,状态与 doc-refs 对齐后再动;上游 qB 行为定性是入口。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1347-bug-tray-join-timeout-abandons-save.html">26-09-21-1347</a></td>
+          <td class="ttype">bug</td><td class="ttier">standard</td>
+          <td><span class="ttl">托盘退出 join(5s) 超时即放弃主循环线程,本次状态不落盘</span>
+            <div class="note">与黄金法则 3(非优雅终止丢失窗口 ≤ 间隔)直接相关;manager 线程 daemon=True + join 超时路径,认领时对照已 Done 的周期落盘改动收口。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1347-bug-web-token-non-atomic-write.html">26-09-21-1347</a></td>
+          <td class="ttype">bug</td><td class="ttier">standard</td>
+          <td><span class="ttl">web.token 生成是非原子写,半截文件导致鉴权密钥静默漂移</span>
+            <div class="note">O_TRUNC 直写,已存浏览器密钥会 401;修法大概率走既有 atomic_write 单点,小件。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-22-2221-feat-cross-group-file-conflict.html">26-09-22-2221</a></td>
+          <td class="ttype">feat</td><td class="ttier">standard</td>
+          <td><span class="ttl">跨组文件交叉紧急处置:防止新种子覆盖已下载/已完成文件<span class="flag">先出方案</span></span>
+            <div class="note">数据安全大件:不同组文件交叉时新种子可能覆盖已有数据。认领后先出方案拍板(检测口径、处置动作各是什么),拍板前不改码。</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= W3 ================= -->
+  <section id="w3">
+    <div class="sec-head"><span class="sec-no">W3</span><h2>WebUI 健壮性与安全</h2><span class="side">5 条 · 同域聚簇</span></div>
+    <p class="wave-why">为什么第三:五条天然聚成两簇——设置页三件(未保存丢改动 / 伪警示条 / 只读字段)同在一个页面,一次摸清;鉴权两件同日同批(26-09-21-1408)可合并一次加固。均非数据损毁级,故排在 W2 之后。</p>
+    <table class="issue-tbl">
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html">26-09-25-1702</a></td>
+          <td class="ttype">bug</td><td class="ttier">standard</td>
+          <td><span class="ttl">设置页有未保存改动时刷新会丢改动(无任何提醒)</span>
+            <div class="note">全仓无 beforeunload;cfg.tree 是内存态,重载即被服务端树覆盖。与下两条同页,建议同一认领批次摸清设置页生命周期。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-22-2002-bug-webui-config-health-warning.html">26-09-22-2002</a></td>
+          <td class="ttype">bug</td><td class="ttier">standard</td>
+          <td><span class="ttl">设置页警示条是伪警示:复述 schema 文案,不反映配置健康</span>
+            <div class="note">恒亮、静态、与配置健康无关;且 load_config 对 schema 外键静默忽略,升级后失效键无提示。认领时先定「配置健康」的数据源再动 UI。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-28-2135-feat-webui-readonly-fields.html">26-09-28-2135</a></td>
+          <td class="ttype">feat</td><td class="ttier">standard</td>
+          <td><span class="ttl">设置页支持只读字段:程序托管 / R 级字段改为只读展示</span>
+            <div class="note">三段:Field 只读标志 + 前端禁用渲染 + 写盘防线。可与设置页两件 bug 合并出一个设置页小计划,避免同一页面反复动。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1408-bug-web-skip-local-verify-csrf.html">26-09-21-1408</a></td>
+          <td class="ttype">bug</td><td class="ttier">standard</td>
+          <td><span class="ttl">skip_local_verify 开启后无 Origin/Host 校验,本机任意网页可跨站驱动写命令<span class="flag">P2</span></span>
+            <div class="note">CSRF + DNS rebinding,删除/暂停/限速写动作照常入队;默认关闭但开关一开即洞。落点与已 Done 的 web.py 拆分认领时核对。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1408-bug-web-auth-hardening-minors.html">26-09-21-1408</a></td>
+          <td class="ttype">bug</td><td class="ttier">light</td>
+          <td><span class="ttl">WebUI 鉴权面三个低危加固点</span>
+            <div class="note">SSE token 查询串 / config-public 限 loopback / uvicorn 显式 proxy_headers=False。三个小件可合并一次加固,与上一条同批做。</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= W4 ================= -->
+  <section id="w4">
+    <div class="sec-head"><span class="sec-no">W4</span><h2>性能</h2><span class="side">2 条 · 口径先行</span></div>
+    <p class="wave-why">为什么第四:两条都是「先定测量口径再动手」的类型——没有口径,做完无法证明收益;且验收依赖 dev.harness,而 harness 两条冒烟正卡在 W1。</p>
+    <table class="issue-tbl">
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html">26-09-19-2122</a></td>
+          <td class="ttype">perf</td><td class="ttier">standard</td>
+          <td><span class="ttl">节拍门控未减少总重建次数:一半只是从主循环搬到请求路径</span>
+            <div class="note">3s 客户端档实测 41→40 次重建,未省 CPU;省下的 50% 只出现在 6s 档。认领时先复测再拍方向:保留 / 回退 / 换方向。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html">26-09-21-1408</a></td>
+          <td class="ttype">perf</td><td class="ttier">standard</td>
+          <td><span class="ttl">大库下四视图全量重建是单轮成本大头,追剧视图聚合最重<span class="flag">P2</span></span>
+            <div class="note">5000 种子单轮 ~550ms(项目实测);轮询分档已缓解,剩余痛点在 shows 全量聚合与前端全量重算。</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= W5 ================= -->
+  <section id="w5">
+    <div class="sec-head"><span class="sec-no">W5</span><h2>设计拍板大件</h2><span class="side">1 条 · 方案先行</span></div>
+    <p class="wave-why">为什么单列:唯一「纯设计未决」项——底座已被移除、新口径未拍板,插进任何波次都会被拍板阻塞拖住,不如单独立一段,等口径拍板后直接开工。</p>
+    <table class="issue-tbl">
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248</a></td>
+          <td class="ttype">feat</td><td class="ttier">standard</td>
+          <td><span class="ttl">重新设计单种周期上传/下载量统计<span class="flag">待拍板</span></span>
+            <div class="note">upload_size 四条件与 begin_round / upload_delta / upload_snapshots 底座已随计划 26-09-27-1232 暂时移除;待拍板方向:补下载量口径,或改 global_* 全局口径。</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= W6 ================= -->
+  <section id="w6">
+    <div class="sec-head"><span class="sec-no">W6</span><h2>轻量收尾:refactor / chore / docs</h2><span class="side">9 条 · 随时可穿插</span></div>
+    <p class="wave-why">为什么随时可做:九条彼此独立、风险低,适合在大件的等待间隙(拍板、跑测试)插队消化;但不占波次主线——它们不阻塞任何东西,也不该反过来阻塞 W2-W5。</p>
+    <table class="issue-tbl">
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1408-refactor-web-runtime-host-protocol.html">26-09-21-1408</a></td>
+          <td class="ttype">refactor</td><td class="ttier">light</td>
+          <td><span class="ttl">WebUIRuntime 经 self._host 回调 QbManager 私有方法,无 Protocol 约束</span>
+            <div class="note">建议 HostCapabilities Protocol + 单写者假设注释;小件,内核化重构后落点认领时核对。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1408-refactor-type-annotations-mypy.html">26-09-21-1408</a></td>
+          <td class="ttype">refactor</td><td class="ttier">light</td>
+          <td><span class="ttl">类型注解完整覆盖仅 43%,无 mypy/pyright 配置</span>
+            <div class="note">749 个 def 的 AST 实测;走渐进策略:先 torrents/config 后 mixins/web,挂靠后续每次改动顺手补,不宜专项大改。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1408-chore-ci-no-windows-runner.html">26-09-21-1408</a></td>
+          <td class="ttype">chore</td><td class="ttier">light</td>
+          <td><span class="ttl">CI 仅 ubuntu-latest,主力平台 Windows 不在矩阵</span>
+            <div class="note">托盘/注册表自启/WinRT 通知等 Windows 专属路径只有本机手跑才被执行;加 runner 一发即可,注意本机 git 环境硬约束与 CI 环境差异。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1408-chore-version-dual-source.html">26-09-21-1408</a></td>
+          <td class="ttype">chore</td><td class="ttier">light</td>
+          <td><span class="ttl">版本号双源矛盾:__init__ 0.2.0 vs pyproject 0.1.0</span>
+            <div class="note">WebUI 顶栏透出与打包元数据已差一个 minor;方向已给:pyproject 单源 + 动态读取。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-20-1427-chore-skill-grill-me-empty-stub.html">26-09-20-1427</a></td>
+          <td class="ttype">chore</td><td class="ttier">light</td>
+          <td><span class="ttl">grill-me skill 是 2 行占位 stub</span>
+            <div class="note">处置二选一:补实内容或删除占位让出技能位;认领时拍板。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-20-1427-chore-skill-hatch-pet-api-cost.html">26-09-20-1427</a></td>
+          <td class="ttype">chore</td><td class="ttier">light</td>
+          <td><span class="ttl">hatch-pet 调付费 OpenAI 图像 API 且无成本提示</span>
+            <div class="note">在 skill 文档补费用风险标注即可,微件。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-21-1408-docs-docs-readme-modules-drift.html">26-09-21-1408</a></td>
+          <td class="ttype">docs</td><td class="ttier">light</td>
+          <td><span class="ttl">文档漂移:README 称 995 用例(实测 1098),modules.md 行数快照多文件 +34%~+201%</span>
+            <div class="note">易腐数字守阵化或从文档退场;随每次基线更新顺手对齐,与 doc-drift-repair 计划的机制段可呼应。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-20-1427-docs-skill-user-md-write-conflict.html">26-09-20-1427</a></td>
+          <td class="ttype">docs</td><td class="ttier">light</td>
+          <td><span class="ttl">两个 skill 对写 USER.md 的口径相反</span>
+            <div class="note">aesthetic-preset-library 要求写入,autoclaw 明令禁止回写;定一边口径回写另一份,微件。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-28-1946-docs-config-plugin-spec-docs.html">26-09-28-1946</a></td>
+          <td class="ttype">docs</td><td class="ttier">light</td>
+          <td><span class="ttl">插件 spec 内部键无逐键参考文档,键面守卫出处钩暂豁免</span>
+            <div class="note">权威单点 = schema 插件表;补逐键文档或维持豁免并写明理由,认领时拍板。</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= W7 ================= -->
+  <section id="w7">
+    <div class="sec-head"><span class="sec-no">W7</span><h2>挂靠与缓做</h2><span class="side">5 条 · 本计划不排期</span></div>
+    <p class="wave-why">为什么不排:前两条的主题已被 doc-drift-repair 计划(26-10-01-1728,正文覆盖注释残留与 SKILL.md 路径)承载,随该计划执行;后三条是 HR 计划显式拍板的 P3 缓做项,依赖 D4 计数口径实证,落地前不动。本计划只确认挂账关系,防止「看着没人管」。</p>
+    <table class="issue-tbl">
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 挂账关系</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="stamp"><a href="../issues/26-10-01-1738-docs-code-comment-drift.html">26-10-01-1738</a></td>
+          <td class="ttype">docs</td><td class="ttier">light</td>
+          <td><span class="ttl">代码内注释残留 4 处:仍描述已退役的委托层与旧路径</span>
+            <div class="note">&#8594; 挂 <a href="26-10-01-1728-plan-doc-drift-repair.html" style="color:var(--acc)">doc-drift-repair 计划</a>,不独立排期。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-10-01-1738-docs-create-issue-skill-script-refs.html">26-10-01-1738</a></td>
+          <td class="ttype">docs</td><td class="ttier">light</td>
+          <td><span class="ttl">create-issue SKILL.md 记载的脚本路径不解析</span>
+            <div class="note">&#8594; 同上,已在 doc-drift-repair 范围内。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-30-0052-feat-hr-badge-total-crosscheck.html">26-09-30-0052</a></td>
+          <td class="ttype">feat</td><td class="ttier">standard</td>
+          <td><span class="ttl">HR 计数:上限徽章总数轴互证<span class="flag">P3 缓做</span></span>
+            <div class="note">&#8594; 依赖 HR 计划 D4 计数口径实证(<a href="26-09-29-2036-plan-hr-counter-integration.html" style="color:var(--acc)">hr-counter-integration</a> 系);D4 落地前不动。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-30-0052-feat-hr-login-counter-attest.html">26-09-30-0052</a></td>
+          <td class="ttype">feat</td><td class="ttier">standard</td>
+          <td><span class="ttl">HR 计数:looks_like_login 补计数文本佐证<span class="flag">P3 缓做</span></span>
+            <div class="note">&#8594; 同依赖 D4;报告 26-09-29-1803 §6 登录态负信号。</div></td>
+        </tr>
+        <tr>
+          <td class="stamp"><a href="../issues/26-09-30-0052-perf-hr-lastpage-fetch-skip.html">26-09-30-0052</a></td>
+          <td class="ttype">perf</td><td class="ttier">standard</td>
+          <td><span class="ttl">HR 计数:末页追翻省略<span class="flag">P3 缓做</span></span>
+            <div class="note">&#8594; 已定性为优化非简化(收益偶有、风险面新增),D4 落地前不动。</div></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= §8 ================= -->
+  <section id="s9">
+    <div class="sec-head"><span class="sec-no">§8</span><h2>执行规则(认领协议)</h2></div>
+    <ol class="rules">
+      <li>本计划<b>零代码分析</b>——每条的分析动作在认领开工时做;表内摸排注只是入口提示,以现场为准。</li>
+      <li>认领走<span class="muted">认领链</span>:issue 的 <code>doc-refs</code> ↔ 任务档案的 <code>**Refs:**</code> 双向登记,生成器校验,缺链闸门红。</li>
+      <li>四类动作逐项显式确认:<b>新建文件 / 入池 issue / 认领 issue / commit+push</b>;「继续」「接着做」不构成授权。</li>
+      <li>波次是建议顺序不是硬闸:跨域条目可并行(如 W6 docs 与 W2 内核),同域串行;波内彼此独立可乱序。</li>
+      <li>完成一条:issue 报告的封面徽标与 <code>&lt;meta name="issue-status"&gt;</code> 两处一起改 Done,重跑 <code>commands run kb.index</code>;收尾走 DoD 5 步(含 test.full 基线切片记实测数字)。</li>
+      <li>In Progress 条目(26-09-21-0219)认领前先对齐前史:查实际进展,补 doc-refs 认领链,状态如实改回 Open 或继续推进。</li>
+      <li>全部 31 条清完后本计划转 Done;若中途出现新入池 issue,并入最近适配的波次,不为新条目重开计划。</li>
+    </ol>
+  </section>
+
+  <!-- ================= 变更记录 ================= -->
+  <section id="cl">
+    <div class="sec-head"><span class="sec-no">§A</span><h2>变更记录</h2></div>
+    <div class="changelog">
+      <div class="cl-row"><span class="v">v1</span><span class="d">26-10-01-1758</span><span class="t">初版:31 条未决全量摸排,分七波;只读口径,零代码分析。</span></div>
+    </div>
+  </section>
+
+  <footer>
+    数据来源:memory-bank/issues/_index.md + 31 份报告 issue-* meta 扫描 · 2026-10-01 17:58 实测<br>
+    状态:Open 待拍板 · 拍板后按 doc-forms 冻结,改版走「## 变更记录」+ 抬 doc-updated
+  </footer>
+
+</div>
+</body>
+</html>
