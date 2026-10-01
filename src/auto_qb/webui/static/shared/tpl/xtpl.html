@@ -93,7 +93,7 @@
             <button v-if="!readonly" class="hb-btn ghost sm" style="align-self:flex-start" @click="listAdd()">＋ 添加</button>
           </div>
 
-          <div v-else-if="f.kind === 'rules_ref'" class="hb-list">
+          <div v-else-if="f.kind === 'rules_ref'" class="hb-list hb-list-ref">
             <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
               <input class="hb-input hb-mono" :value="it" :disabled="readonly" :placeholder="f.placeholder || '@规则集 或 @规则集.规则名'"
                      @input="listSet(i, $event.target.value)">

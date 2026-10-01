@@ -522,12 +522,24 @@
 .hb-ct .hb-list { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; }
 .hb-list-row { display: flex; gap: 6px; align-items: center; }
 .hb-list-row .hb-input, .hb-list-row .hb-select { flex: 1 1 auto; }
-/* WARN: 独立下拉(rules_ref 的「从已有规则集/规则中选择…」)是 .hb-list 的**直接子项**, 而 .hb-list
- * 是 column 方向 —— 上面 `.hb-ct .hb-input, .hb-ct .hb-select{flex:0 1 250px}` 那条的 flex-basis
- * 会落到**主轴 = 高度**上, 把它撑成 250px 高的竖条(2026-09-25 用户报"按钮变形过高";
- * 真浏览器实测 460×250, 而同一条选择器在 row 方向的 enum 上是正常的 250×37)。
- * 这里显式复位: 主轴回 auto(高度=内容高), 宽度仍由 .hb-list 的 align-items:stretch 拉满。
- * 修法只碰这个方向串味, 不动 .hb-ct 那条 —— 它服务的是横向排布的 enum / unit 下拉。 */
+/* WARN: 独立下拉(rules_ref 的「从已有规则集/规则中选择…」)是 .hb-list 的**直接子项**, 两代坑都在这里:
+ *   1. 2026-09-25: .hb-list 是 column 方向 —— 上面 `.hb-ct .hb-input, .hb-ct .hb-select{flex:0 1 250px}`
+ *      那条的 flex-basis 会落到**主轴 = 高度**上, 把它撑成 250px 高的竖条(用户报"按钮变形过高";
+ *      真浏览器实测 460×250, 同一条选择器在 row 方向的 enum 上是正常的 250×37)。`flex: none` 复位的是这一条。
+ *   2. 2026-10-02: 用户报"太长, 与上方的框不对齐" —— 直接子项被 stretch 拉满 460px, 而上方
+ *      .hb-list-row 里的输入框还要让出「删除按钮 + gap」一截, 两框右缘差一个按钮宽。
+ *      改成 rules_ref 专用 2 列 grid + 行 `display: contents`: 输入框与下拉落进**同一列**,
+ *      宽度由列宽决定 —— 不必复制按钮的 padding / 字号去凑 calc(), 按钮以后改形制也不会再错位。
+ *      只挂 rules_ref(.hb-list-ref), 不动通用列表的 flex 布局(它的「＋ 添加」靠 align-self 收缩)。 */
+.hb-list.hb-list-ref {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+/* 行本身不生成盒子: 输入框与删除按钮按文档顺序成为 grid 的 col1 / col2 项, 与下拉共用 col1 列宽 */
+.hb-list.hb-list-ref > .hb-list-row { display: contents; }
+/* 非 grid 回退(皮肤 / 其它分支): 保留 09-25 的复位语义 */
 .hb-list > .hb-select { flex: none; }
 .hb-unit { display: flex; gap: 6px; align-items: center; }
 .hb-unit .hb-input { flex: 0 0 104px; }
