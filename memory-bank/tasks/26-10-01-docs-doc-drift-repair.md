@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-10-01
 **Updated:** 2026-10-01
-**Summary:** 内核化重构+别名层处置后的全库文档漂移, 按 plans/26-10-01-1728 分五段(S1-S5)回写; S1(P1 架构描述重写 5 份)已完成并过验收, 余 S2-S5。
+**Summary:** 内核化重构+别名层处置后的全库文档漂移, 按 plans/26-10-01-1728 分五段(S1-S5)回写; S1(P1 架构描述重写 5 份)与 S2(误导指路与机制反转单点修 9 份)已完成并过验收, 余 S3-S5。
 
 **Topics:** docs-doc-drift-repair
 
@@ -26,7 +26,7 @@
 | 段 | 内容 | 状态 |
 |----|------|------|
 | S1 | P1 架构描述重写(5 份: systemPatterns/overview · main-loop · web-runtime · client-and-state + modules/core-runtime) | 完成(26-10-01) |
-| S2 | 误导指路与机制反转单点修(9 份, 2 处 P1) | 待做 |
+| S2 | 误导指路与机制反转单点修(9 份, 2 处 P1) | 完成(26-10-01) |
 | S3 | modules/ 中度批(6 份) | 待做 |
 | S4 | 用户面文档(4 份: README + docs/) | 待做 |
 | S5 | P3 清扫 + 待决件 + 收尾基线(test.full 基线切片) | 待做 |
@@ -38,3 +38,4 @@
   - 退役名 grep 零残留 8/8: `_WEB_STATE_ALIAS` / `remove_torrent` / `flush_receipts` / `_hr_view_fields` / `SpeedCurveMixin._publish_traffic` / `ops_recheck` / `_web_token` / `web_runtime.py`。
   - 机检: `kb.index` 重建(4 份三行头有动) → `kb.check` 绿(主键纪律 OK: 251 文档 / 154 专题) → `doc.links` 绿 → `pytest tests/test_memory_bank.py` 27 passed。test.full 基线按计划留给 S5 收尾(本轮纯文档零代码变更)。
 - **2026-10-01 合流 a03c3a8d 后坐标复核**(随「提交」同步合入远端 M1+M2/M3 三提交): `take_suppressed` 消费点自轮首迁 events_removed 臂(qbmanager.py:776, take 即 arm), 747-774 区段 -4 → 修正 3 处相位坐标(full_round :758→:754 / transitions :771→:767 / 删除前快照副本 :764→:760), 其余相位坐标(:778/:808/:815/:822/:826/:818)与总行数(839)经实测均未漂移; main-loop.md 内核保留职责句补 M1 消费点语义。
+- **2026-10-01 S2 完成并过验收**(基线 6f474098, 未提交待用户指令): 9 份全部按计划修毕, 每条新断言先实测核对代码坐标 —— 条件 13(`@register_condition`)/动作 12(`actions/*.py` 7+1+4, `__init__.py` 那处匹配是 docstring)/测试 73 个 test_*.py/pyproject 依赖 10 个/`validation`·`schema` 均包/hr `server.py:219-227` 四端点(补 refresh)/`maintenance_mod.py:268` `add_hr_tag_or_category`/`qbmanager.py:535` maybe_flush + `ops_mod.py:438/483/508` 即时 save/`polling.js:76-95` 恒定分档+失败退避/`state.py:183-199`/`static_ui.py:49-58`/`runtime.py:576`/`versioning.py` config=3/`writer.py:121` 盖章/`routes/config.py:111-118` + `common.py:52` `config_backup_path`/`loaders.py:448`/`single_instance_lock` 全 config 零接受(删句依据)。顺带把 techContext L10 的旧路径 `web_ui/static` 一并更正为 `webui/static`(同句指路, 属该条目修复面); productContext 版本按计划对齐 pyproject(v0.1.0)。退役名 grep 零残留(`core/mixins/tags.py` / `config/validation.py` / `config/schema.py` / `WebviewMixin` / `single_instance_lock` / `qbmanager._new_client` / 机制句 `web.py`·`web_ui/static`; 余留 2 处均合法: `tests/test_web.py` 现存文件名 + overview 迁移映射表历史件)。三行头未动 → 免 kb.index; `kb.check` 绿(253 文档 / 156 专题; 切片数 81>70 为既有债务不拦提交)。test.full 基线按计划留给 S5。

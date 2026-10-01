@@ -7,14 +7,14 @@
 - **语言**: Python 3.12+ (CI 矩阵 3.12 / 3.13)
 - **核心依赖**: `qbittorrent-api` (qB WebUI 客户端), `filelock` (单实例锁), `PyYAML` (配置解析, `yaml.BaseLoader` 全字符串)
 - **托盘/GUI** (仅 `--tray` 分支加载): `customtkinter` + `pystray` + `Pillow`
-- **WEB UI**: `web.py` (FastAPI 栈) + `web_ui/static` 手写 HTML/CSS/JS；2026-09-15 起双界面目录化并存：星图 `web_ui/static/atlas/`（旧·经典深色单主题）与棱镜 `web_ui/static/prism/`（新·CSS 令牌分层 `tokens/themes/base/components/views` + `js/theme.js` 主题引擎，5 套主题），目录即 URL（`/atlas/`、`/prism/`；`/` 307→默认星图，`/newui/*` 307→`/prism/*` 书签兼容），共享逻辑层三件套 + vendor + 图标单一来源收在 `web_ui/static/shared/`
+- **WEB UI**: `webui/server/` (FastAPI 栈, 装配单点 `factory.py`) + `webui/static/` 手写 HTML/CSS/JS；多界面目录化并存：星图 `webui/static/atlas/`（旧·经典深色单主题）与棱镜 `webui/static/prism/`（新·CSS 令牌分层 `tokens/themes/base/components/views` + `js/theme.js` 主题引擎，5 套主题），另有控制台第三 UI `webui/static/console/`，目录即 URL（`/atlas/`、`/prism/`、`/console/`；`/` 307→默认星图，`/newui/*` 307→`/prism/*` 书签兼容），共享逻辑层三件套 + vendor + 图标单一来源收在 `webui/static/shared/`
 - **桌面通知**: `notify.py` 零第三方依赖 (win32=PowerShell WinRT toast / linux=notify-send / darwin=osascript)
 - **格式化**: yapf (`.style.yapf`: facebook 风格, 列宽 120)
 
 ## 开发环境
 
 - 依赖管理: **uv** (2026-09-15 起, pyproject.toml PEP 621 + uv.lock 全量锁; Windows `winget install astral-sh.uv`); `commands run env.sync` 重建 .venv 并把项目 editable 安装; 入口脚本 `auto-qb` = `auto_qb.cli:main`
-- 直接依赖 12 个全部 `==` 精确锁定 (升级时改 pyproject 再 `uv lock --upgrade`); 打包后端 hatchling, `uv build` 可出 sdist/wheel
+- 直接依赖 10 个全部 `==` 精确锁定 (升级时改 pyproject 再 `uv lock --upgrade`); 打包后端 hatchling, `uv build` 可出 sdist/wheel
 - 入口: `commands run dev.run -- config.yml`; 干跑 `--dry-run`; 托盘 `--tray` (等价于 `uv run auto-qb`)
 - 测试: `commands run test.full` (pytest.ini 自带 `--cov-branch` 分支覆盖率; CI 用 astral-sh/setup-uv 固定 commit SHA (v10.1.0) + uv sync —— 该 action 已不发布 `v10` 浮动大版本标签, 只能写 `@v10.1.0` 或 SHA, 写 `@v10` 会报 "unable to find version v10")
 - 历史: 2026-09-15 前用 pip 直装 .venv (无锁), requirements-dev.txt 已由 pyproject 取代 (随 e7fb8d9 删除)
@@ -56,7 +56,7 @@
 ## 关键技术约束
 
 - **单一写线程**: 只有主循环线程修改任务队列结构与 state_file
-- **状态落盘时机**: 跨轮次状态统一进 state_file, 程序退出时才写盘
+- **状态落盘时机**: 跨轮次状态统一进 state_file; **周期落盘** (`state_save_interval`, 默认 120s, 配置端下限 30s, 0=关) 主循环每轮到期检查 (`qbmanager.py:535` `maybe_flush`) + 优雅退出立即落盘 + 危险动作写点即时 save (`ops_mod.py:438/483/508` 跳检备份/重加点)
 - **qB 5.0+ API 语义**: sync/maindata 增量响应、`transfer_*` 限速端点、`TorrentState` 枚举判定 (细节见 [pitfalls/backend/qb-api.md](pitfalls/backend/qb-api.md))
 - **fail-fast**: 配置全量校验后代码假定配置正确, 不做防御性检查
-- **本地 qB 网络**: `qbmanager._new_client()` 对本地地址强制 `trust_env=False` (LocalQbClient), 远程域名保留默认
+- **本地 qB 网络**: `core/qbclient.py` 的模块级 `_new_client()` (`:29` `LocalQbClient`) 对本地地址强制 `trust_env=False`, 远程域名保留默认

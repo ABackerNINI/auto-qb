@@ -33,7 +33,7 @@
 ## 模块职责约定 (用户明示)
 
 - **所有配置校验集中在 config 校验阶段 fail-fast, 插件类不再自查** (2026-09-06): conditions/actions 等插件假定配置正确 (`_validate_plugin_entry` 保证名称已注册 + `_PLUGIN_SPEC_VALIDATORS` 做 spec 深度校验), 构造函数只解析、不加正确性检查 (曾把 state 属性名校验写进 StateCondition, 违背该原则已迁移)。对应测试放 test_config.py (load_config 级), 不在插件测试里构造非法 spec。
-- **新条件字段一律先进 `rules/expr/env.py`, 不再新增固定条件插件** (2026-09-20): 表达式条件 `expr` 落地后, 想按新的种子字段/额外值做判断, 在 `env.py` 的取值面加一个表项即可(名字 + 取值器 + 静态类型 + 昂贵标记), **不要**再走「新条件插件 + 校验 + schema + 前端」那套四处接线。旧 16 个条件冻结保留, 只修 bug 不加能力。取值面是单一事实源, schema/前端/文档都从它派生。
+- **新条件字段一律先进 `rules/expr/env.py`, 不再新增固定条件插件** (2026-09-20): 表达式条件 `expr` 落地后, 想按新的种子字段/额外值做判断, 在 `env.py` 的取值面加一个表项即可(名字 + 取值器 + 静态类型 + 昂贵标记), **不要**再走「新条件插件 + 校验 + schema + 前端」那套四处接线。旧 13 个条件冻结保留, 只修 bug 不加能力。取值面是单一事实源, schema/前端/文档都从它派生。
 
 ## 命名规范 (想法.md 明文规定, 代码严格遵守)
 
@@ -43,7 +43,7 @@
 | `torrent` | 本项目 `TorrentRecord` 对象 (快照记录) |
 | `hash` | 种子 hash 字符串 (不是 `torrent_hash`/`infohash`) |
 
-其它惯用: `tq` = task_queue, `conf` = 配置对象, `ctx` = RuleContext, `task`/`origin` = 队列任务 (origin 指触发校验的规则任务), `tors` = TorrentDictionary 列表, `rec` = TorrentRecord, `handled`/`stop` = process 返回值, `_` 前缀 = QbManager 内部方法 (mixin 方法一律 `_` 开头)。
+其它惯用: `tq` = task_queue, `conf` = 配置对象, `ctx` = RuleContext, `task`/`origin` = 队列任务 (origin 指触发校验的规则任务), `tors` = TorrentDictionary 列表, `rec` = TorrentRecord, `handled`/`stop` = process 返回值, `_` 前缀 = 内部方法 (内核与各功能模块的私有方法约定)。
 
 **计划外问题报告文件名** (create-issue skill, 2026-09-20): `<YY-MM-DD-HHMM>-<type>-<slug>.html` —— type 在文件名第二段, 取值 `bug` / `perf` / `docs` / `test` / `refactor` / `feat` / `chore` / `question`(枚举单点定义在 `.agents/skills/create-issue/scripts/_common.py` 的 `TYPES`)。档位由类型定: 便签档 `light`(docs / refactor / chore / question / test 缺口)只写现象+位置, 标准档 `standard`(bug / perf / feat / test 失败)才取证; 根因与建议修法一律可选, 默认"待查"。
 
@@ -61,7 +61,7 @@
 ## 注释与文档字符串风格
 
 - 全中文注释; docstring 常包含**设计动机/决策链/风险说明** (如 CheckAction 的 docstring 写完整决策链 0-4 步) — 这是本项目最重要的注释传统: 解释"为什么这样设计", 而非复述代码。
-- 模块级 docstring 声明职责与依赖 (mixin 文件头声明依赖宿主的实例属性)。
+- 模块级 docstring 声明职责与依赖 (功能模块文件头声明依赖宿主/ctx 的实例属性)。
 - 关键不变量写在 docstring (如 "先登记成功再让位(顺序保证: 失败绝不 defer, 杜绝原任务永久让位)")。
 
 ## 日志规范 (2026-09-05 统一)
@@ -89,7 +89,7 @@
 
 ## dataclass / 架构模式约定
 
-- 配置项一律 dataclass (`@dataclass` + 类型注解), 常量默认值集中在 `config.py` 顶部 `DEFAULT_*`。
+- 配置项一律 dataclass (`@dataclass` + 类型注解), 默认值单点在 `config/models.py` 的 dataclass 字段上 (解析后空间, 与字段类型注解一致); models 顶部仅存 2 个**非字段默认**常量: `DEFAULT_CONFIG_FILE` 与 `UNLIMITED_SPEED`。
 - 插件注册: 类级 `name` 属性 + `@register_condition`/`@register_action` 装饰器, `registry.py` 按名创建; 未知名抛 ValueError。
 - 跨模块避免循环导入: `rules/base.py` 不 import QbManager (manager 以 `Any` 传入); `curves.py`/`episodes.py` 无项目内依赖。
 - Facade模式: 业务代码**只**调 `self.api` (QbApi), 不直接用 raw client (例外: 数据层惰性缓存内部与测试)。
@@ -99,5 +99,5 @@
 
 - `pytest.ini` 的 addopts 自带 `--cov=src --cov-report=term-missing --cov-branch`: 直接 `pytest` 即带覆盖率。
 - `.gitignore` 覆盖: config 类 (test.yml/torrents.txt)、覆盖率 (`.coverage` / `.coverage.*`); 运行时数据整目录 `auto-qb-data/` 忽略 (内含 `state.json` 状态、`state.lock`/`state.lock.meta.json` 单实例锁、`logs/auto-qb.log` 日志、`skip-check-backup/` 跳检备份)。**注意 `config.yml`/`minimal.yml` 受 git 跟踪且未忽略** —— config.yml 含真实站点凭据, 靠"勿改勿提交"约定保护 (见 08), 不是 gitignore。
-- 包内 `logging.py` 与 stdlib 同名: 包内一律 `from .logging import setup_logging`, stdlib 用绝对 `import logging` (Python3 绝对导入默认, 无冲突, 但不要改成相对导入写法)。
+- 日志模块单点在 `infra/logging.py` (已不与 stdlib 同名遮蔽): 包内使用处一律相对导入 `from ..infra.logging import setup_logging` (点数按所在包深度); stdlib 照常绝对 `import logging`。
 - Windows 兼容: 文件操作过 `utils.add_long_path_prefix_for_win` (支持 >260 字符路径); 路径正斜杠化。

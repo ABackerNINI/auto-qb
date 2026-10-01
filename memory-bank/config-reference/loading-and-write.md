@@ -6,7 +6,7 @@
 > 摘要: `load_config` 加载机制、图形化编辑器的写回、`validate_config` 全量聚合校验。
 > 触发: 配置加载, load_config, 写回, 图形化编辑器, fail-fast, validate_config, 新配置键
 
-## 配置加载机制 (config.py `load_config`)
+## 配置加载机制 (config/loaders.py `load_config`)
 
 - YAML 用 **`yaml.BaseLoader`** 加载 → **所有标量都是字符串** (包括数字/布尔), 随后经 `utils.parse_*` 转换 (`parse_time`/`parse_fsize`/`parse_speed`/`parse_bool`/`int()`)。因此:
   - `parse_bool` 接受 true/1/yes/on (大小写不敏感), 非法值抛 ValueError (fail-fast)。
@@ -22,11 +22,11 @@ WEB UI 设置页的保存路径(取代旧的"直接编辑 YAML 全文"):
 2. `write_tree` 把树落临时文件跑 `load_config` —— **与程序启动完全同一校验路径**, 失败 400 且不碰磁盘;
 3. `diff_config_impacts` 判定变更(热重载级别唯一来源仍是 `impact.py`);
 4. **R 级字段(state_file/data_dir)回退为磁盘旧值**(进程身份不可热切换, 与旧行为一致), 并在响应中回报 `restart_required`;
-5. 备份为 `<data_dir>/<配置文件名>.bak`(备份路径由 `web.py` 传入 `write_tree`, **不再**在项目根目录生成 `config.yml.bak`; 目录不存在时自动创建) → **ruamel round-trip 写盘** → 投递 `reload_config` 命令(仍由主循环线程应用)。
+5. 备份为 `<data_dir>/<配置文件名>.bak`(备份路径单点 `webui/server/common.py` `config_backup_path`, 由 `webui/server/routes/config.py` 传入 `write_tree`, **不再**在项目根目录生成 `config.yml.bak`; 目录不存在时自动创建) → **ruamel round-trip 写盘** → 投递 `reload_config` 命令(仍由主循环线程应用)。
 
 **注释与格式取舍**: 已存在键的注释保留; **值未变化的键跳过赋值**以保留原标量形态(否则 ruamel 会把无引号的 `16585`/`true` 重写为 `'16585'`/`'true'`); 新增/修改的标量走 `_plain_scalar`(数字/布尔写成原生标量, BaseLoader 下语义等价); **列表整体替换, 项级注释不保留**。
 
-**UI 元数据(新增配置键时必看)**: `config/schema.py` 是图形化表单的唯一描述来源, 新增配置键必须同步登记 `GROUPS`(或对应段), 新增条件/动作插件必须同步登记 `CONDITION_PLUGINS`/`ACTION_PLUGINS` —— 否则 `tests/test_config_schema.py` 的守卫测试直接失败(键集合 vs `KNOWN_*_KEYS`, 插件表 vs `registry`)。
+**UI 元数据(新增配置键时必看)**: `config/schema/` 包是图形化表单的唯一描述来源, 新增配置键必须同步登记 `GROUPS`(或对应段), 新增条件/动作插件必须同步登记 `CONDITION_PLUGINS`/`ACTION_PLUGINS` —— 否则 `tests/test_config_schema.py` 的守卫测试直接失败(键集合 vs `KNOWN_*_KEYS`, 插件表 vs `registry`)。
 
 **单位控件的元数据约定 (2026-09-14)**: `Field.kind` 属 `schema.UNIT_KINDS`(`time`/`size`/`speed`)时, 前端把值渲染为**数值框 + 单位下拉**(选项表 `schema.TIME_UNITS`/`SIZE_UNITS`/`SPEED_UNITS`, 由前端 `UNIT_OPTIONS` 镜像 —— 只按 kind 决定单位, 故插件 spec(`spec_kind="speed"`)与配置字段共用同一控件)。`Field.unit_default` 仅在“未配置/无法解析”时作为下拉框初值(如 `extra_seeding_time` 习惯从 `H` 开始), 留空则回退该 kind 的首个单位。**写回仍是单个字符串**(与磁盘同构的 YAML 树不变), 合法性仍由 `validate_config` 把关; 新增 UNIT_KINDS 字段时 `default` 须写成完整的“数值+单位”形式(守测 `test_unit_kind_defaults_are_parseable`)。
 
@@ -44,7 +44,7 @@ WEB UI 设置页的保存路径(取代旧的"直接编辑 YAML 全文"):
 ```
 
 校验范围:
-- **未知键**: 根节点(仅允许 config)/config 顶层/各段(log/qbittorrent/grouping/hr)/tracker 段/站点 hr 段/规则 spec 一律拒绝; `single_instance_lock` 为规划中预留键(接受但不生效)
+- **未知键**: 根节点(仅允许 config)/config 顶层/各段(log/qbittorrent/grouping/hr)/tracker 段/站点 hr 段/规则 spec 一律拒绝
 - **必填项**: tracker 的 `domains`(非空字符串列表)、站点 hr 的 `required_seeding_time`; 其余键有默认值
 - **值格式**: 复用 utils.parse_*(时间/大小/速度/布尔)与 parse_hr_condition; `main_tick` 须 >0; `port` 1-65535; 日志等级须合法; `regex:` 模式须可编译(delete_tags/tracker.remove_tags/tags/category/trackers 条件/remove_tags 动作, 经 `_PLUGIN_SPEC_VALIDATORS` 分发)
 - **取值范围 (2026-09-22 收紧, issue 26-09-22-1937)**: 拦"格式合法但危险"的值 —— `interval` 1s-1D(0 会经 TaskQueue._norm_interval 归一化成 1s → 全部种子级任务每秒跑)/`main_tick` 0.5s-1H/`sync_interval` 1s-10M/`max_tasks_per_tick` 1-500(上界防单 tick 上千任务)/`log.max_bytes` 1MiB-1GiB(0 在 RotatingFileHandler 语义 = 从不轮转 → 磁盘写满)/站点 hr `required_share_ratio` [0,100] 且拦 nan/inf(nan 比较恒 False 永不满足)/`hr.condition` 百分比 (0,100] 与下载量 >0(在 `utils.parse_hr_condition` 解析单点拦, 校验层经 `_try` 复用)/`notify.max_per_hour` ≤100/`notify.dedup_window` ≤24H(0=不去重仍合法)/规则 `interval` 显式配置须 >0(缺省 0S=每 tick 级别是既有行为, 未动)。助手层: 新增 `_try_number`(int/float + `math.isfinite` 拦 nan/inf + 闭区间), `_try_time` 增 `min_s/max_s` 形参, `_try` 成功时返回解析值供调用方续做范围检查(log.max_bytes 用)

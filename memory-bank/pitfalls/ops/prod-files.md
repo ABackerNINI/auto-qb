@@ -17,7 +17,7 @@
 - **触发**: 整理仓库目录 / 统一文件格式 / 写"清理脚本"时。
 - **判别**: 路径是 `auto-qb-data/`, 内容是 `state.json`、锁 `<state_file 去扩展名>.lock` + 伴生 `.meta.json`、
   `logs/auto-qb.log`、`skip-check-backup/`。
-- **处置**: 一律不动。`state.json` **只在程序退出时覆写**, 是活数据 —— 改坏等于让下次启动读到错状态。
+- **处置**: 一律不动。`state.json` 由程序**周期性覆写**(`state_save_interval`, 默认 120s, `core/state.py` `maybe_flush`)且优雅退出立即落盘, 是活数据 —— 改坏等于让下次启动读到错状态。
 
 ### 两者都已 gitignore, 但"看得见"不等于"可以动"
 
