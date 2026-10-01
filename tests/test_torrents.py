@@ -45,10 +45,23 @@
 - test_snapshot_fields_match_record_slots: 守卫: _SNAPSHOT_FIELDS ↔ record 声明字段一一对应, REQUIRED ⊆ SNAPSHOT
 - test_record_from_real_example_payload: 真机 TorrentDictionary 字段样例全量入库(不再丢弃字段)
 - test_store_extension_fields_dirty_view_and_quantum: 视图纪律(缓存≠展示): 扩展字段已进平铺视图置脏; eta 分钟量化; 非展示字段不置脏
+- test_record_getattr_raw_fallback_and_missing: __getattr__ 前向兼容(_raw 命中 / 无键与 _raw 不可读均 AttributeError)
+- test_record_invalidate_trackers_forces_refetch: invalidate_trackers 失效 tracker 惰性缓存, 下次读取重拉
+- test_record_hr_entries_short_circuit_without_hr: 无 hr 配置时三判定入口(hr_excluded/hr_managed/check_hr_condition)恒 False
+- test_record_hr_condition_dlratio_branches: dlratio 判据(total_size=0 兜底 False / 达线 True)与未知条件类型走完成兜底
+- test_store_refresh_skips_hashless_entries: refresh 跳过无 hash 的条目(不以 None 为主键)
+- test_store_field_snapshots_lifecycle: update_field_snapshots 生命周期(空监听清基线 / 恢复监听清残影落新基线)
+- test_store_register_field_changes_self_caused_confirmed: 自写确认(上报值与期望一致 -> 按自写消费, 不进事件候选)
+- test_store_update_fields_idempotent_writes_not_registered: 幂等写(已有标签再加/删不存在标签/同值分类)不登记自写
+- test_store_apply_tag_removal: torrents_delete_tags 全库移除(空表直返 / 命中移除并置脏视图与所在组)
+- test_store_remove_torrent_pending_semantics: remove_torrent 已知 hash 登记 removed / 未知 hash 无操作
+- test_view_dirty_intersection: view_dirty 集合交集判定(触及视图字段 True / 无关字段 False)
 """
 from dataclasses import MISSING, fields as dc_fields
 
-from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentRecord, TorrentStore, view_field_value
+import pytest
+
+from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentRecord, TorrentStore, view_dirty, view_field_value
 from auto_qb.torrents.compat import _SNAPSHOT_FIELDS
 
 from helpers import FakeClient, FakeTorrent
@@ -916,3 +929,168 @@ def test_store_extension_fields_dirty_view_and_quantum():
     # 视图字段照常置脏(同一轮混合变化时)
     store.refresh([{"hash": "H1", "state": "pausedUP"}])
     assert store.consume_view_changed() is True
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def test_record_getattr_raw_fallback_and_missing():
+    """__getattr__ 前向兼容: 未声明字段走 _raw; _raw 无键与 _raw 不可读时仍 AttributeError(与 TorrentDictionary 语义一致)"""
+    rec = TorrentRecord.from_torrent({"hash": "H1", "future_field": "v"})
+    assert rec.future_field == "v"  # _raw 命中(qB 新版本字段数据不丢)
+    with pytest.raises(AttributeError):
+        _ = rec.never_seen_field  # _raw 无键: KeyError 吞掉后 AttributeError
+    del rec._raw  # 槽删除: object.__getattribute__ 抛 AttributeError -> raw=None 兜底分支
+    with pytest.raises(AttributeError):
+        _ = rec.never_seen_field
+
+
+def test_record_invalidate_trackers_forces_refetch():
+    """invalidate_trackers: tracker 写操作后失效惰性缓存, 下次读取重新拉取"""
+    client = _client()
+    counter = _count_trackers(client)
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1"))
+    _ = rec.trackers_info(client)
+    assert counter["n"] == 1
+    rec.invalidate_trackers()
+    _ = rec.trackers_info(client)
+    assert counter["n"] == 2  # 缓存已失效: 真的重新拉取
+
+
+def test_record_hr_entries_short_circuit_without_hr():
+    """无 hr 配置: hr_excluded / hr_managed / check_hr_condition 三入口恒 False(入口短路行直测)"""
+    from auto_qb.config import TrackerConfig
+
+    conf = TrackerConfig(
+        name="X",
+        domains=["d.com"],
+        tags=[],
+        remove_tags=[],
+        upload_speed_limit=0,
+        download_speed_limit=0,
+        hr=None,
+    )
+    rec = TorrentRecord.from_torrent(FakeTorrent(hash="H1", state="stalledUP"))
+    rec.tracker_conf = conf
+    assert rec.hr_excluded() is False
+    assert rec.hr_managed() is False
+    assert rec.check_hr_condition() is False
+
+
+def test_record_hr_condition_dlratio_branches():
+    """dlratio 判据分支: total_size=0 辅种兜底 False / 下载达线 True; 未知条件类型走「下载完」兜底"""
+    from auto_qb.config import HRRule, TrackerConfig
+
+    def mk(total_size, downloaded, cond):
+        conf = TrackerConfig(
+            name="X",
+            domains=["d.com"],
+            tags=[],
+            remove_tags=[],
+            upload_speed_limit=0,
+            download_speed_limit=0,
+            hr=HRRule(condition=cond),
+        )
+        rec = TorrentRecord.from_torrent(
+            FakeTorrent(hash="H1", state="stalledUP", total_size=total_size, downloaded=downloaded)
+        )
+        rec.tracker_conf = conf
+        return rec
+
+    assert mk(0, 0, ("dlratio", 1.0)).check_hr_condition() is False  # total_size=0: 辅种排除兜底
+    assert mk(100, 100, ("dlratio", 1.0)).check_hr_condition() is True  # downloaded/total_size >= 阈值
+    assert mk(100, 100, ("seedsize", 5)).check_hr_condition() is True  # 未知类型: 完整下载兜底
+    assert mk(100, 50, ("seedsize", 5)).check_hr_condition() is False  # 未下载完: 兜底也不触发
+
+
+def test_store_refresh_skips_hashless_entries():
+    """refresh: 无 hash 的条目跳过(防御: 不以 None 为主键)"""
+    store = TorrentStore()
+    added, removed = store.refresh([FakeTorrent(hash="H1"), {"name": "no-hash"}])
+    assert added == ["H1"]
+    assert removed == []
+    assert None not in store.by_hash
+    assert set(store.by_hash) == {"H1"}
+
+
+def test_store_field_snapshots_lifecycle():
+    """update_field_snapshots 生命周期: 空监听清空基线(零持久化开销); 恢复监听后清掉已删种子残影、为现存种子落基线"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1", tags="a")])
+    store.set_watch_fields({"tags"})
+    store.update_field_snapshots()
+    assert store.field_snapshots["H1"] == {"tags": ["a"]}
+
+    store.set_watch_fields(set())
+    store.update_field_snapshots()
+    assert store.field_snapshots == {}  # 监听集合为空: 基线全清
+
+    store.refresh([FakeTorrent(hash="H1", tags="a")])
+    store.field_snapshots["GHOST"] = {"tags": []}  # 已删种子残留(手动注入: 模拟删种后基线未清的历史状态)
+    store.set_watch_fields({"tags"})
+    store.update_field_snapshots()
+    assert "GHOST" not in store.field_snapshots  # 已删种子基线一并清掉
+    assert store.field_snapshots["H1"] == {"tags": ["a"]}
+
+
+def test_store_register_field_changes_self_caused_confirmed():
+    """自写确认: 上报值与登记期望一致 -> 按自写处理(不打外部重检标记、不进事件候选), 登记消费后不残留"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1", tags="x, y")])
+    store.set_watch_fields({"tags"})
+    store.update_field_snapshots()
+    store.self_caused_fields["H1"] = {"tags": ["x", "y"]}  # 自写登记(与 qB 将上报的值一致)
+
+    net = store._register_field_changes("H1", store.get("H1"), frozenset({"tags"}))
+    assert net == frozenset()  # 与自写期望一致 -> 无净变化
+    assert "H1" not in store.self_caused_fields  # 登记已被报告消费
+    assert "H1" not in store.external_tag_changes  # 自写不触发外部重检
+
+
+def test_store_update_fields_idempotent_writes_not_registered():
+    """幂等写不登记自写: 已有标签再加 / 删不存在的标签 / 同值分类 —— qB 不会报告变化, 登记必成残留"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1", tags="a", category="c")])
+    store.update_torrent_fields("H1", tags_add=["a"])  # merged == current
+    store.update_torrent_fields("H1", tags_remove=["zz"])  # remain == current
+    store.update_torrent_fields("H1", category="c")  # 同值写
+    assert store.get("H1").tags == "a"
+    assert store.get("H1").category == "c"
+    assert "H1" not in store.self_caused_fields
+
+
+def test_store_apply_tag_removal():
+    """torrents_delete_tags 后全库移除已删除标签: 空表直接返回; 命中者移除并置脏视图与所在组"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1", tags="a, gone"), FakeTorrent(hash="H2", tags="keep")])
+    store.member_to_key["H1"] = (r"R:\Downloads", "k1")  # 直填成员索引(模拟归组结果): 断言组级脏标记
+    store.consume_view_changed()
+
+    store.apply_tag_removal([])  # 空表: 直接返回
+    assert store.get("H1").tags == "a, gone"
+    assert store.consume_view_changed() is False
+
+    store.apply_tag_removal(["gone"])
+    assert store.get("H1").tags == "a"
+    assert store.get("H2").tags == "keep"  # 未命中的种子不动
+    assert store.consume_view_changed() is True  # 组级共同标签列随标签定义删除而变化
+    assert (r"R:\Downloads", "k1") in store.dirty_groups  # 组内冲突集合需重算
+
+
+def test_store_remove_torrent_pending_semantics():
+    """remove_torrent: 已知 hash 移出快照并登记待报 removed; 未知 hash 无操作"""
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1")])
+    store.remove_torrent("NOPE")
+    assert store._pending_removed == set()  # 未知 hash: 不误报 removed
+    store.remove_torrent("H1")
+    assert store._pending_removed == {"H1"}  # 已知 hash: 下轮增量据此报 removed
+    assert store.get("H1") is None
+
+
+def test_view_dirty_intersection():
+    """view_dirty: 变化字段集触及视图展示字段 -> True; 全是无关字段 -> False"""
+    assert view_dirty({"name"}) is True
+    assert view_dirty({"state", "ratio_limit"}) is True
+    assert view_dirty({"ratio_limit"}) is False
+    assert view_dirty(set()) is False

@@ -56,6 +56,16 @@
 - test_download_conflict_multi_dl_with_missing_tag: multi-dl 不受 MISSING 标签豁免仍拦截
 - test_missing_scan_dedup_within_round: 同组同轮多触发源只扫一次(轮内去重), 跨轮清空后可再扫
 - test_group_key_of_is_single_source_of_truth: 归组 key 纯函数 group_key_of 与真实 mixin 输出一致(语料计划 §04 守阵)
+- test_grouping_removed_event_disabled_check_returns_early: 删除事件 check_missing_files=False 早退 (P2-a)
+- test_grouping_removed_event_group_emptied_no_scan: 组内最后成员删除 -> 组解散不扫描 (P2-a)
+- test_grouping_save_path_change_ghost_and_same_path_skipped: save_path 变化幽灵 hash / 未变路径跳过 (P2-a)
+- test_grouping_save_path_change_no_cached_map_skipped: 无缓存文件映射不重归组 (P2-a)
+- test_grouping_save_path_change_stale_group_no_scan: 原组剩余成员均已不在快照不扫描 (P2-a)
+- test_grouping_state_transitions_first_round_and_empty_paths: 状态转移首轮无快照 / key 缺失 / 空组跳过 (P2-a)
+- test_grouping_size_consistency_dry_run_no_stop: 大小一致性 dry-run 只告警 (P2-a)
+- test_grouping_leave_group_member_index_missing_from_group_list: 索引有组表无的成员移出仍清理映射 (P2-a)
+- test_grouping_missing_files_check_disabled_guard: 缺文件检查入口禁用守卫 (P2-a)
+- test_grouping_conflict_scan_skips_ghost_members: 冲突扫描幽灵成员跳过; _group_has_downloading 幽灵不活跃 (P2-a)
 """
 import logging
 import os
@@ -1330,3 +1340,159 @@ def test_group_key_of_is_single_source_of_truth():
         assert mgr.store.member_to_key["H1"] == mgr.store.member_to_key["H2"], "重复斜杠应被压缩为同组"
         assert mgr.store.member_to_key["H1"] != mgr.store.member_to_key["H3"], "尾斜杠必须 1:1 保留(不同组)"
         assert mgr.store.member_to_key["H1"] != mgr.store.member_to_key["H4"], "大小写形态必须保留(不同组)"
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def _grp_env(state_file, **grouping_kw):
+    """直驱 grouping 模块方法的白盒环境: QbManager + FakeClient, 返回 (mgr, grp, client)"""
+    cfg = FakeConfig()
+    cfg.state_file = state_file
+    cfg.grouping = GroupingConfig(enabled=True, missing_tag="MISSING", **grouping_kw)
+    mgr = QbManager("", config=cfg, no_lock=True)
+    client = FakeClient()
+    mgr.client = client
+    return mgr, mgr.host.get("grouping"), client
+
+
+def _seed_group(store, key, hashes, file_map=None, in_by_hash=None):
+    """直填分组结构(in_by_hash: 只把列出的 hash 灌入 by_hash, 缺省全部)"""
+    store.groups[key] = list(hashes)
+    for h in hashes:
+        store.member_to_key[h] = key
+    store.group_sizes.setdefault(key, {})
+    for h in hashes:
+        store.group_sizes[key][h] = file_map or {"movie.mkv": 100}
+    for h in (in_by_hash if in_by_hash is not None else hashes):
+        if h not in store.by_hash:
+            store.by_hash[h] = FakeTorrent(hash=h, state="stalledUP", save_path=key[0])
+
+
+def test_grouping_removed_event_disabled_check_returns_early():
+    """删除事件: check_missing_files=False -> 直接返回, 分组结构不动"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), check_missing_files=False)
+        _seed_group(mgr.store, (r"R:/D", "k"), ["H1", "H2"])
+        grp._handle_removed_torrents(["H1"], False)
+        assert mgr.store.groups[(r"R:/D", "k")] == ["H1", "H2"], "禁用缺文件检查: 不移出成员"
+        assert client.calls == []
+
+
+def test_grouping_removed_event_group_emptied_no_scan():
+    """删除事件: 组内最后一名成员被删 -> 组解散, 无剩余成员不触发扫描"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        _seed_group(mgr.store, key, ["H1"])
+        grp._handle_removed_torrents(["H1"], False)
+        assert key not in mgr.store.groups, "组应解散"
+        assert "H1" not in mgr.store.member_to_key
+        assert client.calls == [], "无剩余成员不扫描"
+
+
+def test_grouping_save_path_change_ghost_and_same_path_skipped():
+    """save_path 变化处理: 增量里 hash 已不在快照 / 路径未变(与组 key 前缀一致)都跳过"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        _seed_group(mgr.store, key, ["H1"])
+        mgr.store.delta_fields["GHOST"] = {"save_path"}  # 已不在快照: 跳过
+        grp._handle_save_path_changes(False)  # 不崩溃, 分组不动
+        assert mgr.store.member_to_key["H1"] == key
+        # H1 路径与组 key 前缀一致: 非"变化", 跳过
+        _seed_group(mgr.store, key, ["H2"])
+        mgr.store.delta_fields["H2"] = {"save_path"}
+        grp._handle_save_path_changes(False)
+        assert mgr.store.member_to_key["H2"] == key, "路径未变不重归组"
+
+
+def test_grouping_save_path_change_no_cached_map_skipped():
+    """save_path 变化处理: 无缓存文件映射(无法重归组) -> 维持原行为"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        _seed_group(mgr.store, key, ["H1"])
+        tor = mgr.store.by_hash["H1"]
+        tor.save_path = r"R:\Else"  # 路径已变
+        mgr.store.delta_fields["H1"] = {"save_path"}
+        del mgr.store.group_sizes[key]["H1"]  # 无缓存文件映射
+        grp._handle_save_path_changes(False)
+        assert mgr.store.member_to_key["H1"] == key, "无映射不重归组(维持原组)"
+
+
+def test_grouping_save_path_change_stale_group_no_scan():
+    """save_path 变化处理: 原组剩余成员均已不在快照 -> 不触发缺文件扫描"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        _seed_group(mgr.store, key, ["H1", "H2"], in_by_hash=["H1"])  # H2 只在组表, 快照已无
+        tor = mgr.store.by_hash["H1"]
+        tor.save_path = r"R:\Else"
+        mgr.store.delta_fields["H1"] = {"save_path"}
+        grp._handle_save_path_changes(False)
+        assert mgr.store.member_to_key["H1"] != key, "H1 应按新路径重归组"
+        assert client.calls == [], "原组无可扫描成员: 不扫描不暂停"
+
+
+def test_grouping_state_transitions_first_round_and_empty_paths():
+    """状态转移: 首轮无上轮快照跳过; key 缺失不触发; 触发组无可扫成员不扫描"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        prev_up = FakeTorrent(state="stalledUP").state_enum  # 上传中
+        cur_paused = FakeTorrent(state="pausedUP").state_enum  # 完成转暂停: 命中转移判据
+        key = (r"R:/D", "k")
+        # H1: 转移命中但未归组(key None); H2: 归组但快照已无(组内无可扫成员)
+        mgr.store.state_changed = [("H1", cur_paused), ("H2", cur_paused)]
+        mgr.store.state_snapshot["H1"] = prev_up
+        mgr.store.state_snapshot["H2"] = prev_up
+        mgr.store.member_to_key["H2"] = key
+        mgr.store.groups[key] = ["H2"]
+        grp._handle_state_transitions(False)
+        assert client.calls == [], "三种空转路径都不得触发扫描/暂停"
+
+
+def test_grouping_size_consistency_dry_run_no_stop():
+    """大小一致性: dry-run 只告警不暂停"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        _seed_group(mgr.store, key, ["H1", "H2"])
+        mgr.store.group_sizes[key]["H2"] = {"movie.mkv": 999}  # 大小不一致
+        grp._check_size_consistency(key, True)
+        assert client.calls == [], "dry-run 不得整组暂停"
+
+
+def test_grouping_leave_group_member_index_missing_from_group_list():
+    """移出分组: 成员索引有记录但组表已无该成员(索引/组表短暂不一致) -> 仍清理映射返回组 key"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        mgr.store.groups[key] = ["H2"]
+        mgr.store.member_to_key["H1"] = key  # 索引有 H1, 组表没有
+        mgr.store.group_sizes[key] = {"H1": {"movie.mkv": 100}, "H2": {"movie.mkv": 100}}
+        remain = grp._leave_group("H1")
+        assert remain == key, "组内仍有 H2: 返回组 key"
+        assert "H1" not in mgr.store.group_sizes[key], "大小映射应清理"
+        assert mgr.store.groups[key] == ["H2"]
+
+
+def test_grouping_missing_files_check_disabled_guard():
+    """缺文件检查入口: 配置禁用 -> 直接返回零动作(事件路径之外的守卫)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), check_missing_files=False)
+        grp._check_missing_files([FakeTorrent(hash="H1", state="stalledUP")], {}, False, (r"R:/D", "k"))
+        assert client.calls == []
+
+
+def test_grouping_conflict_scan_skips_ghost_members():
+    """下载冲突扫描: 组表成员不在快照(幽灵成员)跳过不崩溃; 幽灵成员直查返回不活跃"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        mgr.store.groups[key] = ["H1", "GHOST"]
+        mgr.store.by_hash["H1"] = FakeTorrent(hash="H1", state="stalledUP")
+        mgr.store.dirty_groups.add(key)  # 增量基线未建立(rounds_applied=0)退回全量; 脏组登记无害
+        grp._check_download_conflicts(False)
+        assert client.calls == []
+        assert grp._group_has_downloading(["GHOST", "H1"]) is False, "stalledUP 非活跃下载"

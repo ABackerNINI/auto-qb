@@ -23,6 +23,15 @@
 - test_skip_checking_content_layout_inferred: contentLayout 由 content_path/save_path/文件列表推断
 - test_skip_checking_auto_start_error: 自动开始失败 -> fail
 - test_speed_limit_fmt_bytes: 小值限速格式化为 B/s
+- test_remove_tags_dry_run: remove_tags dry-run 命中不打 API (P2-a)
+- test_add_category_existing_no_recreate_and_dry_run: add_category 已存在不重建 / dry-run 跳过整段 (P2-a)
+- test_remove_category_dry_run: remove_category dry-run (P2-a)
+- test_start_stop_dry_run: start/stop dry-run (P2-a)
+- test_move_to_dry_run: move_to dry-run (P2-a)
+- test_speed_limit_dry_run_manual_and_same_value_skips: 限速 dry-run / 手动限速不覆盖 / 同值不重设 (P2-a)
+- test_print_details_missing_torrent: print_torrent_details 种子不存在 -> fail (P2-a)
+- test_checking_disabled_segment_skips: checking 未启用段 -> skip 有/无参考两指代 (P2-a)
+- test_checking_verified_reference_union_filters: verified_references 并集过滤(自身/快照外)且去重 (P2-a)
 """
 import os
 import tempfile
@@ -517,3 +526,157 @@ def test_speed_limit_fmt_bytes():
     assert utils.fmt_speed(512) == "512 B/s"
     assert utils.fmt_speed(2048) == "2.00 KiB/s"
     assert utils.fmt_speed(0) == "0 B/s"
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def test_remove_tags_dry_run():
+    """remove_tags dry-run: 命中匹配标签但不打 API"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(tags="a, b")
+        ctx = make_ctx(mgr, tor, client, dry_run=True)
+        result = RemoveTagsAction(["a"]).execute(ctx)
+        assert result.is_ok and "a" in result.message
+        assert not any(c[0] == "remove_tags" for c in client.calls)
+
+
+def test_add_category_existing_no_recreate_and_dry_run():
+    """add_category: 分类已存在(store 惰性缓存)不重复创建; dry-run 跳过创建与设置整段"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        client.torrents_categories = lambda: {"HR-DONE": {"savePath": ""}}  # 分类定义已存在
+        tor = FakeTorrent(tags="")
+        ctx = make_ctx(mgr, tor, client)
+        result = AddCategoryAction({"format": "HR-DONE", "overwrite": False}).execute(ctx)
+        assert result.is_ok
+        assert not any(c[0] == "create_category" for c in client.calls), "已存在分类不应重复创建"
+        assert any(c[0] == "set_category" for c in client.calls)
+
+        before = list(client.calls)
+        tor2 = FakeTorrent(hash="H2", tags="")
+        ctx2 = make_ctx(mgr, tor2, client, dry_run=True)
+        result2 = AddCategoryAction({"format": "NEWCAT", "overwrite": False}).execute(ctx2)
+        assert result2.is_ok
+        assert client.calls == before, "dry-run 不创建也不设置分类"
+
+
+def test_remove_category_dry_run():
+    """remove_category dry-run: 有分类但不打 API"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(category="c")
+        ctx = make_ctx(mgr, tor, client, dry_run=True)
+        result = RemoveCategoryAction(True).execute(ctx)
+        assert result.is_ok and result.message == "清空分类"
+        assert not any(c[0] == "set_category" for c in client.calls)
+
+
+def test_start_stop_dry_run():
+    """start/stop dry-run: 状态语义判定通过但不打 API"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        paused = FakeTorrent(hash="HP", state="pausedUP")
+        ctx = make_ctx(mgr, paused, client, dry_run=True)
+        assert StartAction(True).execute(ctx).is_ok
+        assert not any(c[0] == "start" for c in client.calls)
+        running = FakeTorrent(hash="HR", state="stalledUP")
+        ctx2 = make_ctx(mgr, running, client, dry_run=True)
+        assert StopAction(True).execute(ctx2).is_ok
+        assert not any(c[0] == "stop" for c in client.calls)
+
+
+def test_move_to_dry_run():
+    """move_to dry-run: 不打 set_location"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(tags="")
+        ctx = make_ctx(mgr, tor, client, dry_run=True)
+        result = MoveToAction({"path": r"R:\New"}).execute(ctx)
+        assert result.is_ok and r"R:\New" in result.message
+        assert not any(c[0] == "set_location" for c in client.calls)
+
+
+def test_speed_limit_dry_run_manual_and_same_value_skips():
+    """限速动作: dry-run 整段跳过; 手动限速(奇数 KiB/s)不覆盖; 同值不重设"""
+    from auto_qb.infra import utils
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        value = utils.parse_speed("1MiB/s")
+        # dry-run: 不读当前限速不打 API
+        tor = FakeTorrent(tags="")
+        ctx = make_ctx(mgr, tor, client, dry_run=True)
+        result = DownloadSpeedLimitAction("1MiB/s").execute(ctx)
+        assert result.is_ok and "MiB/s" in result.message
+        assert not any(c[0] == "set_download_limit" for c in client.calls)
+        # 手动限速: 奇数 KiB/s 视为用户设置, 不覆盖
+        tor2 = FakeTorrent(hash="H2", tags="", dl_limit=1025)
+        ctx2 = make_ctx(mgr, tor2, client)
+        result2 = DownloadSpeedLimitAction("1MiB/s").execute(ctx2)
+        assert result2.is_skipped and result2.message == "用户已设置"
+        # 同值: 不重设
+        tor3 = FakeTorrent(hash="H3", tags="", dl_limit=value)
+        ctx3 = make_ctx(mgr, tor3, client)
+        result3 = DownloadSpeedLimitAction("1MiB/s").execute(ctx3)
+        assert result3.is_skipped and result3.message == "已设置"
+        assert not any(c[0] == "set_download_limit" for c in client.calls)
+
+
+def test_print_details_missing_torrent():
+    """print_torrent_details: 种子不存在(实时快照与删除前副本皆无) -> fail"""
+    from auto_qb.rules.actions import PrintTorrentDetailsAction
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(tags="")
+        ctx = make_ctx(mgr, tor, client)
+        mgr.store.by_hash.pop(tor.hash)  # 移除实时快照; ctx.snapshot 亦无 -> ctx.torrent 为 None
+        result = PrintTorrentDetailsAction(True).execute(ctx)
+        assert result.is_failed and "种子不存在" in result.message
+
+
+def test_checking_disabled_segment_skips():
+    """checking: 未启用的校验段 -> skip(有参考/无参考两种指代)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        # 无参考段未启用: 单个未完成种子, 无参考 -> 走 without_reference 段
+        tor = FakeTorrent(hash="H1", tags="", state="pausedDL", progress=0.5)
+        ctx = make_ctx(mgr, tor, client)
+        action = _check_action(without_seg=_seg("full-checking", enabled=False))
+        result = action.execute(ctx)
+        assert result.is_skipped and "无参考" in result.message
+        # 有参考段未启用: 同组 H2 已完成作参考 -> 走 with_reference 段
+        t2 = FakeTorrent(hash="H2", tags="", state="stalledUP", progress=1.0)
+        mgr2 = make_manager(os.path.join(td, "state2.json"))
+        mgr2.store.groups[("KEY", )] = ["H1", "H2"]
+        mgr2.store.member_to_key["H1"] = ("KEY", )
+        mgr2.store.member_to_key["H2"] = ("KEY", )
+        seed_store(mgr2, [tor, t2])
+        ctx2 = make_ctx(mgr2, tor, client)
+        action2 = _check_action(with_seg=_seg("full-checking", enabled=False))
+        result2 = action2.execute(ctx2)
+        assert result2.is_skipped and "有参考" in result2.message
+
+
+def test_checking_verified_reference_union_filters():
+    """checking: verified_references 并集过滤(排除自身/非组内/已删除)且与候选去重"""
+    with tempfile.TemporaryDirectory() as td:
+        t1 = FakeTorrent(hash="H1", name="T1", state="pausedDL", progress=0.5, tags="")
+        t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
+        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": t1, "H2": t2})
+        mgr.store.verified_references = {"H1", "H2", "GHOST"}  # H1=自身 / GHOST=不在快照
+        client = FakeClient()
+        ctx = make_ctx(mgr, t1, client)
+        action = _check_action(basic_check="filelist")
+        refs = action._find_reference(ctx, ["H1", "H2"])
+        assert [t.hash for t in refs] == ["H2"], "自身排除 / 快照外排除 / 与候选去重"

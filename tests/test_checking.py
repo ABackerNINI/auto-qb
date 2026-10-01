@@ -59,6 +59,8 @@
 - test_checking_group_wait_timeout_force_resume: 等待超时强制恢复重判(防在途登记泄漏活锁)
 - test_checking_skip_day_flushed_immediately: 跳检完成标记即时落盘(崩溃后不重复跳检)
 - test_recheck_fail_flushed_immediately: recheck 失败冷却计数即时落盘(防死循环闸门不因崩溃失效)
+- test_checking_group_wait_own_deleted_revives_origin: 组内等待中自身已删除 -> revive origin + 轮询消亡 (P2-a)
+- test_checking_group_wait_poll_error_revives_origin: 组内等待轮询异常 -> revive origin + 消亡 (P2-a)
 """
 import json
 import os
@@ -1612,3 +1614,66 @@ def test_checking_skip_reread_gone_aborts_clean():
     assert client.calls == [], f"零副作用: 不得导出/删除/重加/打标: {client.calls}"
     assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "未跳检不得记录同日去重"
     assert not mgr.state.get("skip_check_backup"), "不得留下孤儿备份元数据"
+
+
+# ============================================================
+# P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02): 组内校验等待轮询的异常出口
+# ============================================================
+def _group_wait_env(td):
+    """构造组内等待场景: A 已提交 recheck 在途, B 让位等待(check-wait 任务已注册)
+
+    返回 (mgr, client, ta, tb); 复用 test_checking_group_full_checking_serialized 的摆法。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    cfg.state_file = os.path.join(td, "state.json")
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    a = make_target(hash="HA")
+    b = make_target(hash="HB")
+    seed_store(mgr, [a, b])
+    inject_group(mgr, "HA", "HB")
+    rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
+    t0 = time.time()
+    ta = mgr.host.get("rules")._create_rule_task(rule, "HA")
+    tb = mgr.host.get("rules")._create_rule_task(rule, "HB")
+    ta.interval = 60.0
+    tb.interval = 60.0
+    mgr.task_queue.add_task(ta, t0)
+    run_queue(mgr, t0)
+    assert mgr.task_queue.active_check_hashes() == {"HA"}, "A 应登记在途"
+    mgr.task_queue.add_task(tb, t0 + 0.1)
+    run_queue(mgr, t0 + 0.1)
+    assert tb.resume_index == 1, "B 应进入等待(断点)"
+    return mgr, client, ta, tb
+
+
+def test_checking_group_wait_own_deleted_revives_origin():
+    """组内校验等待: 等待期间自身种子已删除 -> 告警 + revive origin(由删除守卫判死) + 等待任务消亡"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, ta, tb = _group_wait_env(td)
+        assert client.calls.count(("recheck", None)) == 1, "只有 A 提交 recheck"
+        mgr.store.remove_torrent("HB")  # 等待期间自身被删除
+        run_queue(mgr, time.time() + 5.0)
+        assert not any(t.kind == "check-wait" for t in mgr.task_queue._fast), "等待任务应消亡"
+        assert tb in mgr.task_queue._fast, "origin 应被 revive 重入队(后续由删除守卫判死)"
+        assert client.calls.count(("recheck", None)) == 1, "删除后不得再提交 recheck"
+
+
+def test_checking_group_wait_poll_error_revives_origin():
+    """组内校验等待: 轮询异常 -> 告警 + revive origin + 等待任务消亡(防在途泄漏活锁)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, ta, tb = _group_wait_env(td)
+        orig_get = mgr.store.get
+
+        def boom(h):
+            raise RuntimeError("snapshot boom")
+
+        mgr.store.get = boom  # 让 wait_poll 首步即异常
+        try:
+            run_queue(mgr, time.time() + 5.0)
+        finally:
+            mgr.store.get = orig_get
+        assert not any(t.kind == "check-wait" for t in mgr.task_queue._fast), "等待任务应消亡"
+        assert tb in mgr.task_queue._fast, "origin 应被 revive 重入队"
+        assert client.calls.count(("recheck", None)) == 1, "异常路径不得重复提交 recheck"

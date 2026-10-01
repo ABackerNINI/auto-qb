@@ -20,6 +20,11 @@
 - [x] 未识别: 电影(无标记)/纯噪音 → kind=unknown 或 key 为空
 - [x] parse_files: 目录段季号(Season 01/S01/第1季); 集数来自视频文件名
 - [x] refine_with_files: 季包展开集数范围; unknown 抢救为 episode; 有明确集数不改
+- [x] 中文数字百位进位与非法字符兜底(_cjk_int) (P2-a)
+- [x] 季标记越界季号跳过 + 多模式最早位置保留 (P2-a)
+- [x] 非 bare 集数起点 0 跳过(E0) (P2-a)
+- [x] 剧名归一化 bigram 噪音成对剔除 (P2-a)
+- [x] parse_files 目录段无季标记继续向后 (P2-a)
 """
 import pytest
 
@@ -328,3 +333,44 @@ class TestParsedReleaseContract:
     def test_default_unknown_shared(self):
         # 空/None 名共用同一个不可变实例即可(frozen dataclass)
         assert parse_release("") is parse_release("   ")
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def test_cjk_int_hundred_and_invalid_char():
+    """中文数字: 百位进位(含零/两)与非法字符兜底"""
+    assert tvshows._cjk_int("一百零五") == 105
+    assert tvshows._cjk_int("一百") == 100
+    assert tvshows._cjk_int("两百三十四") == 234
+    assert tvshows._cjk_int("十") == 10
+    assert tvshows._cjk_int("甲") is None  # 非 CJK 数字字符: 解析失败
+    assert tvshows._cjk_int("") is None
+
+
+def test_find_season_out_of_range_and_earliest_kept():
+    """季标记筛选: 越界季号(S00)跳过; 多模式命中时只保留最早位置(后见不取代先见)"""
+    assert tvshows._find_season("S00") is None  # 季号 0 越界: 跳过
+    assert tvshows._find_season("S00 Season 5 2nd Season") == (4, 12, 5)  # 后见的 2nd Season 不取代先见
+    assert tvshows._find_season("S99") == (0, 3, 99)
+
+
+def test_find_episode_non_bare_zero_skipped():
+    """集数标记: 非 bare 模式起点 0(E0)跳过, 正常编号不受影响"""
+    assert tvshows._find_episode("Show.Name.E0.1080p", None) is None
+    assert tvshows._find_episode("Show.Name.E5.1080p", None) is not None
+
+
+def test_normalize_key_bigram_noise():
+    """剧名归一化: 相邻噪音 token 组成 bigram(dual audio/dd plus/hdr10 plus)成对剔除"""
+    assert tvshows._normalize_key("Show Dual Audio 1080p") == "show 1080p"
+    assert tvshows._normalize_key("Show DD Plus 1080p") == "show 1080p"
+    assert tvshows._normalize_key("Show HDR10 Plus 1080p") == "show 1080p"
+
+
+def test_parse_files_season_scan_skips_non_matching_parts():
+    """parse_files: 目录段逐段扫季标记, 无季标记的目录段继续向后(不误报/不中断)"""
+    season, eps = parse_files([r"SomeShow/Extra/file.mkv"])
+    assert season is None
+    season2, _ = parse_files([r"SomeShow/Season 02/file.mkv", r"Other/ep01.mkv"])
+    assert season2 == 2

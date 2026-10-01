@@ -8,6 +8,14 @@
 - test_ops_rule_recheck_cooldown_and_requeue_regression: rule 源失败计冷却 + origin 默认重置重入队 + 达上限当日拒绝(回归不变)
 - test_ops_skip_check_day_shared_across_sources: 跳检同日去重跨来源共享(web 先跳, 规则同日再跳被拒)
 - test_ops_web_skip_check_no_highrisk_warning: web 源不产生「无参考跳检(高风险)」告警(规则侧语义不泄漏进 WEB)
+- test_ops_web_recheck_poll_torrent_deleted_no_origin: 轮询期间种子删除且无 origin -> 消亡无重入队 (P2-a)
+- test_ops_web_recheck_start_giveup_timeout: 宽限耗尽未见 checking(web 源) -> 判败不计冷却 (P2-a)
+- test_ops_recheck_poll_exception_releases_and_requeues: 轮询异常 -> 释放在途; rule 源 origin 重入队 (P2-a)
+- test_ops_recheck_duplicate_task_guard: 登记点兜底 add_task 失败 -> skip 不发送 (P2-a)
+- test_ops_skip_check_live_recheck_api_error: 跳检前实时复核 API 异常 -> fail 零副作用 (P2-a)
+- test_ops_skip_gates_prune_stale_skip_day: 跳检同日去重表跨日残留清理 (P2-a)
+- test_ops_infer_content_layout_empty_content: content_path 为空不推断布局 (P2-a)
+- test_ops_clear_backup_noop_missing_path_and_oserror: _clear_backup 无元数据/path 空/删除失败三态 (P2-a)
 """
 import os
 import tempfile
@@ -176,3 +184,155 @@ def test_ops_web_skip_check_no_highrisk_warning():
     r = mgr.ctx.ops.skip_check("HASH123", source="web", has_reference=False)
     assert r.is_ok, f"web 跳检应完成: {r}"
     assert mgr.state["skip_check_day"].get("HASH123"), "跳检应完成并记录"
+
+
+# ============================================================
+# P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02): recheck 轮询异常出口 + 跳检长尾
+# ============================================================
+def test_ops_web_recheck_poll_torrent_deleted_no_origin():
+    """测试: 轮询期间种子已删除且无 origin(web 源) -> 轮询消亡释放登记, 无重入队副作用"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = seed_paused(mgr, client)
+    r = mgr.ctx.ops.recheck("HA", source="web")
+    assert r.is_ok
+    assert "HA" in mgr.task_queue.active_check_hashes()
+    mgr.store.remove_torrent("HA")  # 轮询期间被删除(规则源默认重置语义轮不到 origin=None)
+    run_queue(mgr, time.time() + 3)
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "轮询应消亡释放在途登记"
+    assert all(task.kind != "rule" for task in mgr.task_queue._fast), "origin 为 None 不得重入队规则任务"
+
+
+def test_ops_web_recheck_start_giveup_timeout():
+    """测试: 宽限耗尽仍未见 checking(web 源) -> 判败防活锁, 不计冷却(origin=None 直接消亡)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = seed_paused(mgr, client)
+    r = mgr.ctx.ops.recheck("HA", source="web")
+    assert r.is_ok
+    t0 = time.time()
+    # 轮询内部用真实 time.time() 对比 submitted_at: 整体平移时钟模拟 600s 宽限耗尽
+    shifted = t0 + 601.0
+    real_time = time.time
+    try:
+        time.time = lambda: shifted
+        run_queue(mgr, shifted)
+    finally:
+        time.time = real_time
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "宽限耗尽判败后轮询应消亡"
+    assert "HA" not in mgr.state.get("recheck_fails", {}), "web 源不计冷却"
+    assert t.state == "pausedDL", "判败不得改动种子状态"
+
+
+def test_ops_recheck_poll_exception_releases_and_requeues():
+    """测试: 轮询异常 -> 告警 + FINISHED 释放在途; rule 源 origin 默认重置重入队, web 源无副作用"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = seed_paused(mgr, client)
+
+    def boom(h):
+        raise RuntimeError("snapshot boom")
+
+    # web 源(origin=None): 异常 -> 释放登记, 无重入队
+    r = mgr.ctx.ops.recheck("HA", source="web")
+    assert r.is_ok
+    orig_get = mgr.store.get
+    mgr.store.get = boom
+    try:
+        run_queue(mgr, time.time() + 3)
+    finally:
+        mgr.store.get = orig_get
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "异常路径必须释放在途登记"
+
+    # rule 源(带 origin): 异常 -> origin 默认重置重入队(重走决策链)
+    t2 = seed_paused(mgr, client, hash="HB")
+    origin = Task("rule", "rule-test-hb", hash="HB", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r2 = mgr.ctx.ops.recheck("HB", source="rule", origin=origin)
+    assert r2.is_pending
+    mgr.store.get = boom
+    try:
+        run_queue(mgr, time.time() + 6)
+    finally:
+        mgr.store.get = orig_get
+    assert "HB" not in mgr.task_queue.active_check_hashes(), "异常路径必须释放在途登记"
+    assert any(task is origin for task in mgr.task_queue._fast), "异常后 origin 应默认重置重入队"
+
+
+def test_ops_recheck_duplicate_task_guard():
+    """测试: 登记点兜底(单线程模型下不可达, 防将来出现第二个登记点) -> add_task 失败时 skip 且不发送"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client)
+    mgr.task_queue.add_task = lambda task, now=None, keep_progress=False: False  # 注入登记失败
+    r = mgr.ctx.ops.recheck("HA", source="web")
+    assert r.is_skipped and "已在队列中" in r.message, f"登记失败应 skip: {r}"
+    assert not any(c[0] == "recheck" for c in client.calls), "未登记成功不得发送 recheck"
+
+
+def test_ops_skip_check_live_recheck_api_error():
+    """测试: 跳检前实时复核 API 异常 -> fail 且零副作用(未导出/删除/重加)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+
+    def boom(**kw):
+        raise RuntimeError("api down")
+
+    client.torrents_info = boom
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "实时复核失败" in r.message, f"复核异常应 fail: {r}"
+    assert not any(c[0] in ("export", "delete", "add") for c in client.calls), "复核失败零副作用"
+
+
+def test_ops_skip_gates_prune_stale_skip_day():
+    """测试: 跳检同日去重表的跨日残留在过闸时清掉(防表无限增长)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    mgr.state.setdefault("skip_check_day", {})["STALE"] = "2000-01-01"  # 跨日残留
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"跳检应完成: {r}"
+    assert "STALE" not in mgr.state["skip_check_day"], "跨日残留应被清理"
+    assert mgr.state["skip_check_day"]["HASH123"] == date.today().isoformat()
+
+
+def test_ops_infer_content_layout_empty_content():
+    """测试: content_path 为空(未知内容路径)时不推断布局, 返回 None"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    tor = FakeTorrent(hash="HA", content_path=None)
+    assert mgr.ctx.ops._infer_content_layout(tor, client) is None
+
+
+def test_ops_clear_backup_noop_missing_path_and_oserror():
+    """测试: _clear_backup 三态 —— 无元数据直接返回 / path 为空跳过删除仍落盘 / 删除失败只告警"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    mgr.ctx.ops._clear_backup("HA")  # 无元数据: 直接返回, 不落盘不报错
+
+    # path 为空: 跳过文件删除, 但元数据仍清理并落盘
+    mgr.state.setdefault("skip_check_backup", {})["HA"] = {"path": ""}
+    mgr.ctx.ops._clear_backup("HA")
+    assert "HA" not in mgr.state["skip_check_backup"]
+
+    # 删除失败: 只告警不崩溃, 元数据照常清理落盘
+    mgr.state.setdefault("skip_check_backup", {})["HB"] = {"path": "R:/Temp/auto-qb/tests/ghost.torrent"}
+    real_remove = os.remove
+
+    def boom(path):
+        raise OSError("locked")
+
+    os.remove = boom
+    try:
+        mgr.ctx.ops._clear_backup("HB")
+    finally:
+        os.remove = real_remove
+    assert "HB" not in mgr.state["skip_check_backup"]

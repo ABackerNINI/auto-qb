@@ -19,6 +19,9 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_rebuild_within_window_still_delivers_queue_rebuilt: 抑制窗内二次重建 queue_rebuilt 不被吞(issue 26-10-01-0750)
 - test_rebuild_preserves_runtime_memory_state: 重建不重读磁盘, exec_history 原对象保留
 - test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时回归阈值(基线化, 审计 L9)
+- test_p2a_dispatch_event_guards_skip_without_side_effects: 事件分派四守卫(快照/配置/首轮/同值)静默跳过 (P2-a)
+- test_p2a_apply_event_rule_process_exception_caught: 事件规则同步执行异常捕获不传播 (P2-a)
+- test_p2a_handle_event_rule_resume_exception_caught: 断点续跑异常捕获, handler 恒 FINISHED (P2-a)
 """
 import json
 import os
@@ -570,3 +573,117 @@ def test_rebuild_benchmark_5000_seeds(capsys):
                f"rebuild={t_rebuild:.3f}ms")
         capsys.readouterr()  # 常规输出保持安静; 其后的 print 仅供重采样时 -rP 从 PASSES 段抓取
         print(out)
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def _p2a_ev(trigger, actions, conditions=None, **kw):
+    """事件规则 spec(与 test_trigger_events._ev 同形, 本文件内联避免跨测试文件导入)"""
+    spec = {"enabled": True, "trigger": trigger, "actions": actions, "stop_following_rules_if": "never"}
+    if conditions:
+        spec["conditions"] = conditions
+    spec.update(kw)
+    return spec
+
+
+def _p2a_event_mgr(state_file, rules):
+    mgr = make_manager(state_file, tracker_rules=["@ev"])
+    mgr.config.rules_config = {"ev": rules}
+    mgr.host.get("rules").load_rules()
+    return mgr
+
+
+def test_p2a_dispatch_event_guards_skip_without_side_effects():
+    """事件分派四守卫直驱: 快照缺失/无 tracker 配置(删除)、无上轮快照/同值(状态)、
+    快照缺失/无配置(字段与 added)、added 匹配不到 tracker —— 全部静默跳过且零动作"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _p2a_event_mgr(
+            os.path.join(td, "state.json"),
+            {
+                "d1": _p2a_ev("on_torrent_deleted", [{
+                    "print_torrent_details": True
+                }]),
+                "s1": _p2a_ev("on_torrent_state_enum_changed", [{
+                    "add_tags": ["st"]
+                }]),
+                "f1": _p2a_ev("on_torrent_field_changed", [{
+                    "add_tags": ["fld"]
+                }], watch_fields=["tags"]),
+                "a1": _p2a_ev("on_torrent_added", [{
+                    "add_tags": ["ad"]
+                }]),
+            },
+        )
+        client = FakeClient()
+        client.torrents_trackers = lambda h: [{"url": "http://unknown.example.com/announce"}]  # 匹配不到任何 tracker
+        mgr.client = client
+        rules = mgr.host.get("rules")
+        store = mgr.store
+
+        # on_torrent_deleted: 快照缺失(removed_snapshots 不含)与快照无 tracker 配置两种 continue
+        assert rules._dispatch_events(added=[], removed=["HMISS"], dry_run=False) == []
+        assert rules._dispatch_events(
+            added=[], removed=["HNC"], removed_snapshots={"HNC": FakeTorrent(hash="HNC")}, dry_run=False
+        ) == []
+
+        # on_torrent_state_enum_changed: 无上轮快照(首轮)/上轮与当前同值 -> 不视为变化(291);
+        # 变化成立(上传转暂停)但快照缺失 / 无 tracker 配置 -> 守卫 continue(294)
+        cur = FakeTorrent(state="pausedUP").state_enum  # 新状态: 转移判据命中(上传转暂停完成)
+        prev_up = FakeTorrent(state="stalledUP").state_enum  # 上轮状态
+        store.state_changed = [("HNP", cur), ("HSAME", cur), ("HDEAD", cur), ("HNC", cur)]
+        store.state_snapshot = {"HSAME": cur, "HDEAD": prev_up, "HNC": prev_up}
+        store.by_hash["HNC"] = FakeTorrent(hash="HNC", state="pausedUP")  # tracker_conf 为 None
+        assert rules._dispatch_events(added=[], removed=[], state_changed=True, dry_run=False) == []
+
+        # on_torrent_field_changed: 快照缺失 / 无 tracker 配置 -> 跳过
+        store.field_changed = [("HFMISS", {"tags"}), ("HFNC", {"tags"})]
+        store.by_hash["HFNC"] = FakeTorrent(hash="HFNC", state="stalledUP")
+        assert rules._dispatch_events(added=[], removed=[], field_changed=True, dry_run=False) == []
+
+        # on_torrent_added: 快照缺失 / 匹配不到 tracker 配置 -> 跳过(告警由内核 added 循环负责)
+        store.by_hash["HB"] = FakeTorrent(hash="HB", state="stalledUP")
+        assert rules._dispatch_events(added=["HAMISS", "HB"], removed=[], dry_run=False) == []
+        assert client.calls == [], "守卫路径零动作"
+
+
+def test_p2a_apply_event_rule_process_exception_caught():
+    """事件规则同步执行异常被捕获记 ERROR 不向上传播(process 抛错为模拟: None 守卫之外的意外异常)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _p2a_event_mgr(
+            os.path.join(td, "state.json"), {"a1": _p2a_ev("on_torrent_added", [{
+                "add_tags": ["ad"]
+            }])}
+        )
+        mgr.client = FakeClient()
+        rules = mgr.host.get("rules")
+        rule = rules._rules_by_trigger("on_torrent_added")[0]
+        with mock.patch.object(rule, "process", side_effect=RuntimeError("boom")):
+            task = rules._apply_event_rule(rule, "H1")
+        assert task is not None and task.resume_index is None, "异常路径不记断点"
+        assert "event_rules.a1:H1" not in mgr.state.get("exec_history", {}), "异常不记执行历史"
+
+
+def test_p2a_handle_event_rule_resume_exception_caught():
+    """事件规则断点续跑异常被捕获记 ERROR, handler 恒 FINISHED 消亡(不自我周期循环)"""
+    from auto_qb.core.taskqueue import FINISHED
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _p2a_event_mgr(
+            os.path.join(td, "state.json"), {"a1": _p2a_ev("on_torrent_added", [{
+                "add_tags": ["ad"]
+            }])}
+        )
+        client = FakeClient()
+        mgr.client = client
+        seed_store(mgr, [FakeTorrent(hash="H1", state="stalledUP")])
+        rules = mgr.host.get("rules")
+        rule = rules._rules_by_trigger("on_torrent_added")[0]
+        task = rules_mod.Task("rule-event", rule.name, hash="H1",
+                              store=mgr.store) if hasattr(rules_mod, "Task") else None
+        from auto_qb.core.taskqueue import Task as _Task
+
+        task = _Task("rule-event", rule.name, hash="H1", store=mgr.store)
+        with mock.patch.object(rule, "process", side_effect=RuntimeError("boom")):
+            assert rules._handle_event_rule(rule, task, None, False) == FINISHED
+        assert client.calls == [], "异常路径零动作"

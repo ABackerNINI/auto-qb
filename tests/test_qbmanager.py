@@ -43,6 +43,12 @@
 - test_tick_rebuilds_views_when_grouping_disabled: 分组未启用时脏标记不被吞, 视图照样重建
 - test_qbmanager_source_has_no_web_state_fields: 静态守阵(2026-09-20 解耦, W3 起名单读分诊清单)——主循环源码不得直接读写表现层旧字段(别名层已删, 写回即静默造第二份真相, 只能靠扫描抓回潮)
 - test_hr_anchors_from_store: HR 判定桥在构造时挂上 + 锚点按站点分组给出(QB 侧给取数线程的交接面)
+- test_p2a_init_with_lock_cleans_orphan_tmp_and_releases: 持锁构造清孤儿 tmp; 释放后可再持锁 (P2-a)
+- test_p2a_run_with_lock_releases_in_finally: run() finally 释放锁 (P2-a)
+- test_p2a_run_managed_stop_event_exits_during_connect_retry: 托管模式连接失败遇停止信号干净返回 (P2-a)
+- test_p2a_run_materializes_schema_migration_dry_run_then_write: run() 启动物化 dry-run 不落盘 / 非 dry-run 迁移+备份 (P2-a)
+- test_p2a_sync_line_flush_propagates_to_host: _sync_line flush=True 经 host.run_sync_line; False 不调 (P2-a)
+- test_p2a_refresh_added_pipeline_skips_ghost_and_unmatched: added 管线幽灵 hash / 未匹配 tracker 跳过 (P2-a)
 """
 import json
 import os
@@ -59,7 +65,7 @@ from qbittorrentapi import APIConnectionError, Client
 from auto_qb.config import QbittorrentConfig
 from auto_qb.infra.errors import AutoQbError
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
-from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, _throttle
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
 
@@ -909,3 +915,146 @@ def test_hr_anchors_from_store():
 
         site.hr_check = SiteHrCheckConfig(enabled=False)  # 站点关掉 -> 同样不上交
         assert mgr.hr._anchors() == {}
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def test_p2a_init_with_lock_cleans_orphan_tmp_and_releases():
+    """持锁构造(no_lock=False): acquire 后清上次崩溃遗留的孤儿 tmp; 释放后可再次持锁"""
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        orphan = state_file + ".crashleft.tmp"
+        with open(orphan, "w", encoding="utf-8") as f:
+            f.write("{}")
+        cfg = FakeConfig()
+        cfg.state_file = state_file
+        mgr = QbManager("", config=cfg, no_lock=False)
+        try:
+            assert not os.path.exists(orphan), "持锁后应清掉孤儿 tmp 文件"
+            assert mgr._lock is not None
+        finally:
+            mgr._lock.release()
+        # 锁已释放: 第二个实例可再次持锁(证明第一个真的持有过)
+        mgr2 = QbManager("", config=cfg, no_lock=False)
+        mgr2._lock.release()
+
+
+def test_p2a_run_with_lock_releases_in_finally():
+    """run() 正常退出路径(finally): 持锁构造下锁必须被释放(停机后其他实例可接管)"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = FakeConfig()
+        cfg.state_file = os.path.join(td, "state.json")
+        mgr = QbManager("", config=cfg, no_lock=False)
+        mgr.connect = mock.Mock(return_value=True)
+        mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
+        mgr.run(dry_run=False)
+        assert mgr.connect.call_count == 1
+        # 锁已释放: 再次持锁应成功
+        from auto_qb.infra.locking import SingleInstanceLock
+
+        SingleInstanceLock(cfg.state_file).acquire()  # 不抛 = 已释放
+        lock2 = SingleInstanceLock(cfg.state_file)
+        lock2.acquire()
+        lock2.release()
+
+
+def test_p2a_run_managed_stop_event_exits_during_connect_retry():
+    """托管模式: 连接失败且停止信号已置位 -> 等待中被唤醒, run 干净返回(不抛 QbConnectError)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.connect = mock.Mock(return_value=False)
+        stop_event = threading.Event()
+        stop_event.set()
+        mgr.run(dry_run=False, stop_event=stop_event)  # 不抛即通过
+        assert mgr.connect.call_count == 1, "停止信号生效: 不无限重试连接"
+
+
+def test_p2a_run_materializes_schema_migration_dry_run_then_write():
+    """run() 启动物化: dry-run 只探测不落盘(425); 非 dry-run 迁移+备份落盘(427)"""
+    from auto_qb.config import load_config
+
+    legacy = (
+        "config:\n"
+        "  qbittorrent:\n"
+        "    host: h\n"
+        "    port: 1\n"
+        "    username: u\n"
+        "    password: p\n"
+        "  trackers:\n"
+        "    BTSchool:\n"
+        "      domains: [pt.btschool.club]\n"
+        "      hr:\n"
+        "        required_seeding_time: 3D\n"
+        "      hr_check:\n"
+        "        mode: partial\n"
+        "        adapter: nexusphp\n"
+        "        hr_page_url: https://pt.btschool.club/myhr.php\n"
+        "        refresh_interval: 6H\n"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        cfg = FakeConfig()
+        cfg.state_file = os.path.join(td, "state.json")
+        cfg.data_dir = os.path.join(td, "data")
+        config_path = os.path.join(td, "config.yml")
+        with open(config_path, "w", encoding="utf-8") as f:
+            f.write(legacy)
+        mgr = make_manager(cfg.state_file)
+        mgr.config.data_dir = cfg.data_dir
+        mgr.config_path = config_path
+        mgr.connect = mock.Mock(return_value=True)
+        mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
+        # dry-run: 迁移只报内存生效, 磁盘一字不动
+        mgr.run(dry_run=True)
+        with open(config_path, encoding="utf-8") as f:
+            assert "schema_version" not in f.read(), "dry-run 不得写盘"
+        # 非 dry-run: 迁移落盘 + 版本号备份(重武装 _tick: 上一次的 side_effect 已耗尽,
+        # StopIteration 会被主循环 except Exception 吞掉导致空转死循环)
+        mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
+        mgr.run(dry_run=False)
+        with open(config_path, encoding="utf-8") as f:
+            assert "schema_version: 3" in f.read(), "磁盘应落当前版本章"
+        backup = os.path.join(cfg.data_dir, "config.yml.v1.bak")
+        assert os.path.exists(backup), "迁移前备份应存在"
+        load_config(config_path)  # 迁移后磁盘可原样通过加载
+
+
+def test_p2a_sync_line_flush_propagates_to_host():
+    """_sync_line flush=True: 视图收尾钩子经 host.run_sync_line 执行; flush=False 不调"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        with mock.patch.object(mgr.host, "run_sync_line") as hook:
+            mgr._sync_line(dry_run=True, flush=True, force=True)
+            hook.assert_called_once_with(True)
+        with mock.patch.object(mgr.host, "run_sync_line") as hook2:
+            mgr._sync_line(dry_run=True, flush=False, force=False)
+            assert hook2.call_count == 0, "flush=False 不执行视图收尾钩子"
+
+
+def test_p2a_refresh_added_pipeline_skips_ghost_and_unmatched():
+    """added 管线守卫: 新增 hash 快照缺失(防御分支)与匹配不到 tracker 且域名拉取抖动 -> 跳过不崩溃"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        client.torrents_trackers = lambda h: [{"url": "http://unknown.example.com/announce"}]  # 匹配不到
+        mgr.client = client
+        t = FakeTorrent(hash="HB", name="T", state="stalledUP")
+        client.torrents["HB"] = t
+        client.torrents["HGONE"] = FakeTorrent(hash="HGONE", name="G", state="stalledUP")
+
+        orig_get = mgr.store.get
+
+        def ghost_get(h):
+            if h == "HGONE":
+                return None  # 模拟 added 里有但快照已取走(防御分支语义)
+            return orig_get(h)
+
+        from auto_qb.torrents import TorrentRecord
+
+        with mock.patch.object(mgr.store, "get", side_effect=ghost_get), mock.patch.object(
+            mgr.ctx.trackers, "match", return_value=None
+        ), mock.patch.object(TorrentRecord, "trackers_info", side_effect=RuntimeError("api down")):
+            mgr._refresh_torrents(False)  # 不崩溃: GHOST 跳过 / HB 匹配失败且域名拉取抖动 -> 空域名告警跳过
+        assert orig_get("HB") is not None, "未匹配种子记录保留(告警由管线负责)"
+        assert not any(c[0].startswith("set_") for c in client.calls), "未匹配种子不限速不建任务"

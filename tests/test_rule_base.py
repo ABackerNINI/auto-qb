@@ -34,6 +34,13 @@
 - test_rule_state_group_combined: 状态组合条件(is_complete&is_uploading)规则层仅对同时满足执行
 - test_rule_action_chain_ignore_continue: 动作链: 失败无 ignore 中断; ignore=true 继续执行后续
 - test_reannounce_without_dedup_warns: reannounce 未配去重 -> 构造期 WARNING; 配置后无告警
+- test_rule_context_api_fallback_to_client: manager 无 api 门面时退化 client (P2-a)
+- test_rule_init_non_dict_condition_skipped: conditions 非 dict 项跳过 (P2-a)
+- test_rule_init_bad_condition_wraps_config_error: 未知条件类型 -> ConfigError 带规则名 (P2-a)
+- test_rule_init_bad_action_wraps_config_error: 未知动作名 -> ConfigError 带规则名 (P2-a)
+- test_rule_process_action_skipped_not_executed: 动作 skip 不记 executed 不记历史 (P2-a)
+- test_rule_condition_error_throttled_to_debug: 条件出错同因节流降 DEBUG (P2-a)
+- test_rule_hourly_record_stale_date_allows_rerun: hourly 记录跨日允许再执行 (P2-a)
 """
 import os
 import tempfile
@@ -658,3 +665,115 @@ def test_reannounce_without_dedup_warns():
         base_logger.removeHandler(grab)
     assert any("封号风险" in m and "g.reann" in m for m in records), records
     assert not any("g.reann2" in m for m in records), "已配置去重不应告警"
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def test_rule_context_api_fallback_to_client():
+    """RuleContext.api: manager 无 api 门面时退化到 client(外部传入种子/测试场景)"""
+    from types import SimpleNamespace
+
+    manager = SimpleNamespace(store=SimpleNamespace(get=lambda h: None))  # 无 api 属性
+    client = FakeClient()
+    ctx = RuleContext(manager, client, None, "H1", dry_run=False)
+    assert ctx.api is client
+
+
+def test_rule_init_non_dict_condition_skipped():
+    """Rule 构造: conditions 中非 dict 项跳过(不崩溃不误建)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        rule = Rule("g.t", {"conditions": ["not-a-dict", {"size": ">=1MiB"}], "actions": []}, mgr)
+        assert len(rule.conditions) == 1
+
+
+def test_rule_init_bad_condition_wraps_config_error():
+    """Rule 构造: 未知条件类型 -> ConfigError 携带规则名(包装原始异常)"""
+    import pytest
+
+    from auto_qb.config import ConfigError
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        with pytest.raises(ConfigError) as ei:
+            Rule("g.badcond", {"conditions": [{"no_such_cond": "x"}], "actions": []}, mgr)
+        assert "g.badcond" in str(ei.value) and "no_such_cond" in str(ei.value)
+
+
+def test_rule_init_bad_action_wraps_config_error():
+    """Rule 构造: 未知动作名 -> ConfigError 携带规则名"""
+    import pytest
+
+    from auto_qb.config import ConfigError
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        with pytest.raises(ConfigError) as ei:
+            Rule("g.badact", {"actions": [{"no_such_action": True}]}, mgr)
+        assert "g.badact" in str(ei.value)
+
+
+def test_rule_process_action_skipped_not_executed():
+    """动作返回 skip: 处理链继续但不记 executed(不记执行历史), 返回 handled=False"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)  # 无标签 -> remove_tags 必 skip
+        rule = Rule("g.test", {"actions": [{"remove_tags": ["nope"]}]}, mgr)
+        handled, _stop = rule.process(ctx)
+        assert handled is False, "skip 不算 executed"
+        assert not client.calls, "skip 动作不打 API"
+        assert mgr.ctx.state.get_exec_record("g.test", ctx.hash) is None, "未执行不记历史"
+
+
+def test_rule_condition_error_throttled_to_debug():
+    """条件求值出错节流: 同因 5 分钟内第二次只 DEBUG(首次 ERROR), 不刷屏"""
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = make_ctx(mgr, FakeTorrent(), FakeClient())
+
+        class Boom:
+            def match(self, ctx):
+                raise RuntimeError("boom-throttle")
+
+        rule = Rule("g.test", {"actions": []}, mgr)
+        rule.conditions = [Boom()]
+        # 挂模块 logger 自建 handler(禁 caplog, 见 pitfalls/testing/log-capture.md)
+        logger = logging.getLogger("auto_qb.rules.base")
+        records = []
+
+        class _Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        handler = _Grab(level=logging.DEBUG)
+        old_level = logger.level
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
+        try:
+            assert rule.process(ctx) == (False, True)  # 首次: ERROR
+            assert rule.process(ctx) == (False, True)  # 同因紧邻第二次: 节流 DEBUG
+        finally:
+            logger.removeHandler(handler)
+            logger.setLevel(old_level)
+        levels = [r.levelno for r in records if "条件求值出错" in r.getMessage()]
+        assert logging.ERROR in levels, "首次必须 ERROR"
+        assert logging.DEBUG in levels, "同因第二次必须降级 DEBUG"
+
+
+def test_rule_hourly_record_stale_date_allows_rerun():
+    """execute_once=hourly: 记录日期非当日(跨日) -> 同小时判据不拦, 允许再执行"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags="", size=100 * 1024**2), client)
+        rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}], "execute_once": "hourly"}, mgr)
+        mgr.ctx.state.record_execution("g.test", ctx.hash)  # 预置执行记录
+        rec = mgr.ctx.state.get_exec_record("g.test", ctx.hash)
+        rec["date"] = "2000-01-01"  # 篡改为昨日: 同小时判据失效 -> 允许再执行
+        handled, _stop = rule.process(ctx)
+        assert handled, "跨日记录不得拦下本次执行"
+        assert ("add_tags", ["X"]) in client.calls

@@ -27,13 +27,21 @@ test_delete_tags / test_speed_curve / test_trigger_events(经 manager 旧名单�
 - test_maintenance_start_registers_delete_tags_per_config: delete_tags 两任务按配置入队, interval=主 interval
 - test_maintenance_queue_rebuilt_reregisters: 队列重建后标签清理任务回到新队列
 - test_p3_modules_sections_claims: 三模块 sections 认领清单锁定
+- test_p2a_maintenance_added_event_unknown_hash_noop: 维护 added 事件 hash 不在快照早退 (P2-a)
+- test_p2a_maintenance_register_global_tasks_without_queue: 队列引用 None 早退; 恢复后按配置入队 (P2-a)
+- test_p2a_maintenance_task_interface_delegates: task 接口委托 handle_maintenance (P2-a)
+- test_p2a_maintenance_remove_tags_dry_run_and_similar_paths: remove_tags/similar dry-run 与 False 路径 (P2-a)
+- test_p2a_maintenance_add_episode_tags_no_episodes: 无集数不加标签 (P2-a)
+- test_p2a_maintenance_create_category_existing_noop: 分类已存在不重建 (P2-a)
+- test_p2a_maintenance_delete_unused_tags_dry_run: 删无种子标签 dry-run 命中不打 API (P2-a)
+- test_p2a_tracker_added_event_unknown_hash_noop: tracker added 事件 hash 不在快照早退 (P2-a)
 """
 import os
 import tempfile
 from unittest import mock
 
 from auto_qb.core.modules import MaintenanceModule, SpeedCurveModule, TrackerModule
-from auto_qb.core.taskqueue import TaskQueue
+from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
 
@@ -193,3 +201,110 @@ def test_p3_modules_sections_claims():
         "remove_similar_tags",
         "hr",
     )
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def test_p2a_maintenance_added_event_unknown_hash_noop():
+    """维护 added 事件: hash 不在快照(已删除) -> 直接返回零动作"""
+    from types import SimpleNamespace
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        maintenance = mgr.host.get("maintenance")
+        maintenance._on_torrent_added(SimpleNamespace(payload={"hash": "GHOST", "dry_run": False}))
+        assert mgr.client.calls == []
+
+
+def test_p2a_maintenance_register_global_tasks_without_queue():
+    """全局任务自注册: 队列引用为 None(L2 重建间隙) -> 直接返回; 恢复队列后按配置入队"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        mgr.config.delete_tags = ["old.*"]
+        maintenance = mgr.host.get("maintenance")
+        mgr.ctx.task_queue = None
+        maintenance._register_global_tasks(mgr.ctx)  # 不崩溃, 无处入队
+        assert mgr.task_queue is None
+        mgr.ctx.task_queue = TaskQueue()
+        maintenance._register_global_tasks(mgr.ctx)
+        assert mgr.task_queue.has_named("delete_tags"), "队列恢复后按配置入队"
+
+
+def test_p2a_maintenance_task_interface_delegates():
+    """task 接口委托: handle_maintenance_task_interface 经 task.torrent 走到 handle_maintenance"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        tor = FakeTorrent(hash="H1", state="stalledUP")
+        seed_store(mgr, [tor])
+        rec = mgr.store.get("H1")
+        rec.tracker_conf = mgr.config.trackers["HHan"]  # 维护读 conf.tags/remove_tags/hr
+        task = Task("rule", "rule-test", hash="H1", store=mgr.store)
+        result = mgr.host.get("maintenance").handle_maintenance_task_interface(task, dry_run=True)
+        assert result is REQUEUE, f"维护任务返回 REQUEUE 语义: {result!r}"
+
+
+def test_p2a_maintenance_remove_tags_dry_run_and_similar_paths():
+    """remove_tags dry-run 命中不打 API; remove_similar_tags dry-run 命中不打 API / 不相似返回 False"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        maintenance = mgr.host.get("maintenance")
+        tor = FakeTorrent(hash="H1", state="stalledUP", tags="ztag")
+        assert maintenance.remove_tags(tor, ["ztag"], dry_run=True) is True
+        assert mgr.client.calls == [], "dry-run 不打 API"
+        tor2 = FakeTorrent(hash="H2", state="stalledUP", tags="ZTag")
+        assert maintenance.remove_similar_tags(tor2, ["ztag"], dry_run=True) is True
+        assert mgr.client.calls == [], "dry-run 不打 API"
+        tor3 = FakeTorrent(hash="H3", state="stalledUP", tags="other")
+        assert maintenance.remove_similar_tags(tor3, ["ztag"], dry_run=False) is False, "无相似标签: False"
+
+
+def test_p2a_maintenance_add_episode_tags_no_episodes():
+    """集数标签: 文件列表解析不出集数(电影/合集) -> 不加标签"""
+    from auto_qb.config import AddEpisodeTagsConfig
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        mgr.client.files = []  # 无文件
+        mgr.config.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
+        tor = FakeTorrent(hash="H1", state="stalledUP")
+        mgr.host.get("maintenance").add_episode_tags(tor, dry_run=False)
+        assert not any(c[0] == "add_tags" for c in mgr.client.calls), "无集数不加标签"
+
+
+def test_p2a_maintenance_create_category_existing_noop():
+    """创建分类: 分类定义已存在 -> 不重复创建"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        mgr.client.torrents_categories = lambda: {"CAT": {"savePath": ""}}
+        mgr.host.get("maintenance").create_category_if_not_exists("CAT", dry_run=False)
+        assert not any(c[0] == "create_category" for c in mgr.client.calls)
+
+
+def test_p2a_maintenance_delete_unused_tags_dry_run():
+    """彻底删除无种子的标签: dry-run 命中但不打 API, 仍 REQUEUE 常驻"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        mgr.client.torrents_tags = lambda: {"unusedTag"}
+        mgr.config.delete_tags_if_has_no_torrents = ["unusedTag"]
+        result = mgr.host.get("maintenance").handle_delete_tags_if_has_no_torrents(object(), dry_run=True)
+        assert result is REQUEUE
+        assert not any(c[0] == "delete_tags" for c in mgr.client.calls), "dry-run 不打 API"
+
+
+def test_p2a_tracker_added_event_unknown_hash_noop():
+    """tracker added 事件: hash 不在快照 -> 直接返回(不匹配不限速)"""
+    from types import SimpleNamespace
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(td)
+        mgr.client = FakeClient()
+        mgr.ctx.trackers._on_torrent_added(SimpleNamespace(payload={"hash": "GHOST", "dry_run": False}))
+        assert not any(c[0].startswith("set_") for c in mgr.client.calls)

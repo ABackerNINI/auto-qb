@@ -31,6 +31,8 @@
 - test_trackers_condition_ignore_case: trackers 条件 :ignore_case(精确+regex 两型)
 - test_tracker_group_condition: tracker_group 条件匹配(命中/列表或/regex/未分组站点不命中/未匹配站点恒不命中)
 - test_tracker_group_condition_ignore_case: tracker_group 条件 :ignore_case(精确+regex 两型)
+- test_tags_condition_empty_pattern_after_var_replace: tags 条件变量替换为空的模式跳过 (P2-a)
+- test_expr_condition_runtime_non_bool_guard_and_repr: expr 运行期非布尔兜底 ExprError + repr (P2-a)
 """
 import os
 import shutil
@@ -38,6 +40,7 @@ import tempfile
 from types import SimpleNamespace
 
 import pytest
+from unittest.mock import patch
 
 from auto_qb.infra import utils
 from auto_qb.rules.conditions import (
@@ -464,3 +467,38 @@ def test_date_time_out_of_range(monkeypatch):
         ctx = _ctx(mgr, FakeTorrent())
         assert DateTimeCondition({"time": "10:00-12:00"}).match(ctx) is False, \
             "14:00 不在 10:00-12:00 内"
+
+
+# ---------------- P2-a 长尾清偿 (计划 26-10-01-2157 §3 P2, 2026-10-02) ----------------
+
+
+def test_tags_condition_empty_pattern_after_var_replace():
+    """tags 条件: 变量替换后为空的模式(如 required_seeding_time_raw 未配置)跳过不判匹配"""
+    with tempfile.TemporaryDirectory() as td:
+        # hr 规则 required_seeding_time_raw="" -> ${required_seeding_time} 替换结果为空串
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_kw={"hr": _hr_rule(required_seeding_time_raw="")})
+        tor = FakeTorrent(tags="HHan")
+        ctx = _ctx(mgr, tor)
+        cond = TagsCondition(["${required_seeding_time}"])  # 纯变量: 替换后为空串
+        assert cond.match(ctx) is True, "空模式跳过后组内无约束 -> 满足"
+        cond2 = TagsCondition(["${required_seeding_time}, HHan"])
+        assert cond2.match(ctx) is True, "同组空模式跳过, 剩余模式正常判定"
+        tor2 = FakeTorrent(hash="H2", tags="other")
+        ctx2 = _ctx(mgr, tor2)
+        assert cond2.match(ctx2) is False, "剩余模式不命中 -> 不满足"
+
+
+def test_expr_condition_runtime_non_bool_guard_and_repr():
+    """expr 条件: 运行期兜底(静态校验已过但运行期得到非布尔 -> ExprError)与 repr"""
+    from auto_qb.rules.conditions import ExprCondition
+    from auto_qb.rules.expr.errors import ExprError
+
+    cond = ExprCondition("tor.seeding_time >= 0")
+    assert "tor.seeding_time >= 0" in repr(cond)
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent())
+        with patch("auto_qb.rules.conditions.evaluate", return_value=1):
+            with pytest.raises(ExprError) as ei:
+                cond.match(ctx)
+            assert "布尔" in str(ei.value)
