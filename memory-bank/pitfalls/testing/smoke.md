@@ -1,7 +1,7 @@
 # 浏览器冒烟 (Windows 上可做, 长期能力)
 
 > 摘要: `ui_harness.py` + `ui_smoke.cjs` 是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法。
-> 触发: 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, NODE_PATH, npx 缓存
+> 触发: 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, NODE_PATH, npx 缓存, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点
 
 ### 能力与定位
 
@@ -98,6 +98,12 @@
 - **处置**: `force: true` 或**断言优先取值**;
   `programmatic btn.click()` **不触发 form submit**(要 `dispatchEvent(new Event("submit"))`);
   断言即时色值可能取到 **transition 中间值** ⇒ 用**语义断言**。
+
+### 行内可交互后代会吞修饰键点击, 冒烟点行必须避开交互后代落点
+
+- **触发**: 冒烟用例对行做 Ctrl+click 多选(或任何要点到"行本体"的动作), 落点用行几何中心(2026-10-01 实测, issue 26-09-30-0602 清偿)。
+- **判别**: 行中部被行内可交互后代占据 —— 追剧集/辅种组行都有 `.site-chip`(`@click.stop="filterFromChip(...)"`, tpl/shows.html / tpl/groups.html), 点击落在芯片上时事件被 `.stop` 吞掉, 行 handler(selection.js `_toggleUnit`/`toggleGroupSel`)**根本不触发**, 症状是"修饰键点击不生效/选中 0 项", 极易误判成轮询重渲染竞态或真实 UI 缺陷。定案用仪器化探针: document **捕获级**记录 mousedown/mouseup/click 落点 + 覆写行 vm 方法看是否被调 + 行 DOM expando 查脱挂 —— 落点全在芯片、行 handler 未被调、节点未脱挂 ⇒ 是落点被吞, 不是竞态也不是产品缺陷。**间歇性**的来源: 芯片布局随前序冒烟步骤(状态文案/筛选态)漂移, 行几何中心有时被盖住有时不被 ⇒ 同一用例忽红忽绿。
+- **处置**: 修饰键点击落点避开交互后代 —— `position: { x: 8, y: 8 }` 落**行左缘名称列**(`.g-name`/`.g-name-text` 无任何 `.stop` 后代); 右键不受影响(chip 无 `contextmenu.stop`, 事件冒泡到行)。修法已随 0602 清偿落 `ui_smoke.cjs`(59725443); 新写冒烟用例点行时照此选落点, 别默认几何中心安全。
 
 ### 整页白屏 = **包级失败**; 骨架在但某块空 = **模板表达式错误**
 
