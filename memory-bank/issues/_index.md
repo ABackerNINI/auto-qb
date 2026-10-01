@@ -14,16 +14,22 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 10 |
+| bug | 12 |
 | perf | 3 |
 | docs | 3 |
 | refactor | 3 |
-| feat | 20 |
+| feat | 24 |
 | chore | 4 |
 | question | 5 |
 
 ## Open
 
+- [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
+- [bug] [--tray 模式下 Ctrl+C 无法关闭程序](26-10-01-2203-bug-tray-ctrl-c-not-exit.html) — (未计划)托盘模式下 Ctrl+C 信号不退出进程, Windows 控制台信号处理与托盘生命周期冲突
+- [feat] [现场重建: 硬盘/qB 损坏后重建辅种现场](26-10-01-2203-feat-disaster-site-rebuild.html) — 防灾难(硬盘损坏/qB 损坏)后难以重建辅种现场, 需要重建能力(备份/导出/重放方向待设计)
+- [feat] [浏览器扩展优化信息展示](26-10-01-2203-feat-ext-info-display.html) — EXT 域一句话 TODO: 扩展侧信息展示优化(无细节, 开工先复验现状与诉求)
+- [feat] [扩展版本号 + 主程序仅支持固定版本 + 扩展高度参数化](26-10-01-2203-feat-ext-version-pinning.html) — 扩展加版本号, 主程序只认固定版本以简化兼容; 扩展行为高度参数化把复杂度交给后端, 最大限度免升级
+- [feat] [支持多语言(低优先级)](26-10-01-2203-feat-i18n-multi-language.html) — (低优先级)WEBUI/通知多语言支持, 未排期
 - [bug] [hr.token 生成是非原子写, 半截文件导致通道密钥静默漂移 (与 web.token 同族)](26-10-01-2151-bug-hr-channel-credential-atomic-write.html) — hr.channel resolve_token 用 O_TRUNC 直写 hr.token, 非空半截密钥被持久化, 扩展侧鉴权 401
 - [bug] [添加新站点热重载后不触发种子的内置维护任务](26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) — WEBUI 添加新站点并热重载后, 受影响种子的内置维护任务没有被触发
 - [feat] [整组迁移防进度丢失(qB 逐个移动同组种子的问题)](26-10-01-2147-feat-group-move-atomicity.html) — qB 一次设定多个种子位置会依次移动, 同组多个种子随机丢进度, 需要整组迁移方案
