@@ -8,7 +8,7 @@
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="web-runtime-host-protocol">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="WebUIRuntime 经 self._host 回调 QbManager 私有方法, 无 Protocol 约束">
 <meta name="issue-summary" content="web_runtime.py:312/317/479 调 _build_search_index/_state_kind 等; 建议 HostCapabilities Protocol + 单写者假设注释">
 <title>WebUIRuntime 经 self._host 回调 QbManager 私有方法, 无 Protocol 约束 · refactor · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1408-refactor-web-runtime-host-protocol</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 14:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 14:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 — 落地确认，状态 <strong>Done</strong>：webui/runtime.py（原 web_runtime.py，内核化重构归拢）的 <code>self._host</code> 私有回调已随审计 L1-L3 清扫公开化落地（commit <code>9b3c50f8</code>）—— <code>_build_search_index</code>/<code>_state_kind</code> 改公开名，现 5 处 host 调用（api/build_search_index/refresh_error_reasons/state_kind/wake）全为公开名，验收口径「不再出现 <code>self._host._</code> 私有调用」满足；<code>HostCapabilities</code> Protocol 未引入（走公开化替代路线，私有名静默耦合风险已根除），「单一写者」假设已在 runtime.py 模块 docstring 落注。roadmap 清偿核对批次 4（W7-W8）静态核实现状后回写。</li>
     </ul>
   </section>
 

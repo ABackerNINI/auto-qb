@@ -637,21 +637,21 @@
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">浏览器扩展优化信息展示<span class="flag">先复验</span></span>
             <div class="note">EXT 域一句话 TODO:扩展侧信息展示优化(无细节,开工先复验现状与诉求)。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">入池后 extensions/ 零提交(末笔 c209f91d 09-30 04:08 早于入池); 一句话 TODO 仍无展开, 信息展示无任何改动痕迹, 复验仍待开工</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-feat-ext-version-pinning.html">26-10-01-2203</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">扩展版本号 + 主程序仅支持固定版本 + 扩展高度参数化</span>
             <div class="note">扩展加版本号,主程序只认固定版本以简化兼容;扩展行为高度参数化把复杂度交给后端,最大限度免升级。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">复验: 前提部分失真 — manifest 早有 version "1.0.0"(5c6e3d37 起既有, 非入池后补); 但核心两诉求未动: 主程序无版本门控(扩展轮询与路由均无版本校验), 窗口高度硬编码 700(background.js:787)未参数化</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-feat-i18n-multi-language.html">26-10-01-2203</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">支持多语言<span class="flag">显式低优先级</span></span>
             <div class="note">WEBUI/通知多语言支持,入池时已标未排期;列在这里只为完整盘点,不建议主动开工。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">全 src 与 webui static 无 i18n/gettext/翻译加载痕迹, 文案仍硬编码中文, 与入池时一致; 低优先级未排期</span></td>
         </tr>
       </tbody>
     </table>
@@ -669,91 +669,91 @@
           <td class="ttype">refactor</td><td class="ttier">light</td>
           <td><span class="ttl">重新梳理 ignore_next_action_error / stop_following_rules_if 语义</span>
             <div class="note">两个规则容错键的语义/交互需要重新梳理(命名、默认值、组合行为);梳理结论可能牵配置面,先出结论再动。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">两键原样存活(schema/rules.py L48 + rules/base.py + validation 三处), 无梳理结论/计划产出, 入池后零改动</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-refactor-web-runtime-host-protocol.html">26-09-21-1408</a></td>
           <td class="ttype">refactor</td><td class="ttier">light</td>
           <td><span class="ttl">WebUIRuntime 经 self._host 回调 QbManager 私有方法, 无 Protocol 约束</span>
             <div class="note">建议 HostCapabilities Protocol + 单写者假设注释;内核化重构后落点认领时核对。v1-W6 保留。</div></td>
-          <td></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">9b3c50f8 · 审计 L1-L3 私有面公开化: _build_search_index/_state_kind 改公开名, webui/runtime.py 现 5 处 host 调用全公开(api/build_search_index/refresh_error_reasons/state_kind/wake), self._host._ 私有调用清零, 验收口径满足; 单写者约定已在模块 docstring 落注; Protocol 未建(走公开化替代路线), 池已改 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-refactor-type-annotations-mypy.html">26-09-21-1408</a></td>
           <td class="ttype">refactor</td><td class="ttier">light</td>
           <td><span class="ttl">类型注解完整覆盖仅 43%, 无 mypy/pyright 配置</span>
             <div class="note">749 个 def 的 AST 实测;渐进接入:先 torrents/config 后 mixins/web,挂靠日常改动顺手补,不宜专项大改。v1-W6 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">pyproject 仍无 mypy/pyright 配置(grep 零命中), 类型回归仍无静态防线, 与入池时一致</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2120-refactor-webui-tag-category-dialog.html">26-10-01-2120</a></td>
           <td class="ttype">refactor</td><td class="ttier">light</td>
           <td><span class="ttl">管理标签/分类窗口重构<span class="flag">先复验</span></span>
             <div class="note">「管理标签/分类」弹窗结构陈旧需要重构(TODO 未给细节,开工先复验现状)。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">mgr-dialog(shared/tpl/popovers.html)结构无重构, dialogs.js 入池后改动均为快捷键两波/下拉悬停修, 弹窗重构未动</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2212-docs-schema-docstring-tracker-field-levels.html">26-10-01-2212</a></td>
           <td class="ttype">docs</td><td class="ttier">light</td>
           <td><span class="ttl">config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS</span>
             <div class="note">与代码相反的文档漂移,微件;不在 doc-drift-repair 计划(已完结)的 6 处清单内。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">config/schema/__init__.py:21 仍提 SECTION_LEVELS/TRACKER_FIELD_LEVELS(grep 全 src 仍此 1 处, 两名均无定义), 漂移原样</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-28-1946-docs-config-plugin-spec-docs.html">26-09-28-1946</a></td>
           <td class="ttype">docs</td><td class="ttier">light</td>
           <td><span class="ttl">插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免</span>
             <div class="note">权威单点 = schema 插件表;补逐键文档或维持豁免并写明理由,认领时拍板。v1-W6 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">_DOC_EXEMPT 豁免仍在(test_config_key_surface.py:61), conditions-and-actions.md 仍仅名级无逐键展开, 与入池时一致</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-docs-docs-readme-modules-drift.html">26-09-21-1408</a></td>
           <td class="ttype">docs</td><td class="ttier">light</td>
           <td><span class="ttl">文档漂移: README 称 995 用例(实测已远超), modules.md 行数快照多文件 +34%~+201%</span>
             <div class="note">易腐数字守阵化或从文档退场;随每次基线更新顺手对齐。v1-W6 保留。</div></td>
-          <td></td>
+          <td><span class="st st-part">🔶 部分修复</span><span class="stwhy">README 半边已修: 「995 用例」数字声明已随 a61d0f47(09-22 README 同步)退场, 现无具体用例数; 行数快照半边仍漂移: modules.md 目录化后 overview.md:5 仍自称「行数为 2026-09-05 快照」, 数字未重扫, 守阵化亦未做</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-20-1427-docs-skill-user-md-write-conflict.html">26-09-20-1427</a></td>
           <td class="ttype">docs</td><td class="ttier">light</td>
           <td><span class="ttl">两个 skill 对写 USER.md 的口径相反</span>
             <div class="note">aesthetic-preset-library 要求写入,autoclaw 明令禁止回写;定一边口径回写另一份,微件。v1-W6 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">冲突原样: aesthetic-preset-library/SKILL.md:600 仍要求写 USER.md, autoclaw INTERACTIONS.md:255 仍明令不得自动写回, 统一口径未定</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-20-1427-chore-skill-hatch-pet-api-cost.html">26-09-20-1427</a></td>
           <td class="ttype">chore</td><td class="ttier">light</td>
           <td><span class="ttl">hatch-pet 调付费 OpenAI 图像 API 且无成本提示</span>
             <div class="note">在 skill 文档补费用风险标注即可,微件。v1-W6 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">hatch-pet 仍在(被 EXCLUDED 包内), generate_pet_images.py:88/129 仍直连 api.openai.com, SKILL.md 无费用提示, 两条建议均未动</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-chore-ci-no-windows-runner.html">26-09-21-1408</a></td>
           <td class="ttype">chore</td><td class="ttier">light</td>
           <td><span class="ttl">CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵</span>
             <div class="note">托盘/注册表自启/WinRT 通知等 Windows 专属路径只有本机手跑才被执行;加 runner 一发即可。v1-W6 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">ci.yml 仍仅 ubuntu-latest(runs-on), matrix 无 windows, 与入池时一致</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-chore-version-dual-source.html">26-09-21-1408</a></td>
           <td class="ttype">chore</td><td class="ttier">light</td>
           <td><span class="ttl">版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0</span>
             <div class="note">WebUI 顶栏透出与打包元数据差一个 minor;方向已给:pyproject 单源 + 动态读取。v1-W6 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">双源矛盾原样: __init__.__version__ 仍 0.2.0 vs pyproject 仍 0.1.0, 单源化未动</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-bug-taskbar-python-icon.html">26-10-01-2203</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">任务栏按钮图标仍为 python 图标<span class="flag">五轮尝试未解</span></span>
             <div class="note">窗口标题栏/托盘已正确(orbit),仅任务栏按钮仍 python;BMP 帧 ico + AUMID + iconbitmap 组合均无效。纯观感,穿插;认领前先读 issue 内五轮尝试记录避免重走。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">五轮结论仍成立: AUMID+iconbitmap 组合原样在 tray/app.py(129-207), 入池后仅 49d933b5 删恒假读回分支(issue 0441, 死代码清理非修复), 任务栏按钮图标未解</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-bug-tray-ctrl-c-not-exit.html">26-10-01-2203</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">--tray 模式下 Ctrl+C 无法关闭程序</span>
             <div class="note">Windows 控制台信号处理与托盘生命周期冲突;与已 Done 的 tray-join-timeout(9f73b6d8)同属托盘退出路径,认领时对照。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">tray/app.py 仍无 signal 注册/KeyboardInterrupt 捕获(mainloop L498), cli.py 优雅退出兜底不覆盖 tray 主循环; 入池后 tray 侧仅覆盖率(1c237504)与死分支(49d933b5)改动</span></td>
         </tr>
       </tbody>
     </table>
@@ -831,6 +831,7 @@
   <section id="cl">
     <div class="sec-head"><span class="sec-no">§A</span><h2>变更记录</h2></div>
     <div class="changelog">
+      <div class="cl-row"><span class="v">v2.4</span><span class="d">26-10-02-1825</span><span class="t">清偿核对批次 4/5: W7-W8 共 16 条 —— ✅ 1 / 🔶 1 / ⏳ 14。✅ 一条: 1408-web-runtime-host-protocol 由 9b3c50f8(审计 L1-L3 私有面公开化)落地, _build_search_index/_state_kind 改公开名, webui/runtime.py 现 5 处 host 调用全公开、self._host._ 私有调用清零(验收口径满足; Protocol 未建走公开化替代, 单写者约定已落模块 docstring), 池回写 Done。🔶 一条: 1408-readme-modules-drift README 半边已修(「995 用例」声明随 a61d0f47 退场), 行数快照半边仍漂移(modules/overview.md:5 仍自称 2026-09-05 快照)。⏳ 14 条逐一静态核实未动: W7 三条(EXT 信息展示零提交; EXT 版本门控/高度参数化未做且复验发现 manifest 早有 version 1.0.0 前提部分失真; i18n 无痕迹), rules 容错键语义、mypy 配置、tag/category 弹窗重构、TRACKER_FIELD_LEVELS docstring(:21 仍漂移)、插件 spec 豁免(_DOC_EXEMPT 仍在)、USER.md 口径冲突、hatch-pet 费用、CI 无 Windows runner、版本双源(0.2.0 vs 0.1.0)、任务栏 python 图标(五轮结论仍成立, 入池后仅 49d933b5 死分支清理)、--tray Ctrl+C(无 signal 注册)均无实现痕迹。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2.3</span><span class="d">26-10-02-1905</span><span class="t">清偿核对批次 3/5: W6 共 13 条 —— ✅ 2 / 🔶 1 / ⏳ 10。✅ 两条: 2108-esc-clear-filter 已拍板方案 A 并落地(0d286cc5 · ESC 接退栈链终端兜底清面筛, 计划 26-10-02-1632, 池回写 Done); 2108-selection-follow-mouse 由 9c68cce9 方案 B(点击落光标)+ fa79d526(起点统一收尾)合流落地(池回写 Done)。🔶 一条: 2137-settings-help-followup 「?」语调色半边 eb575956 已落地, 富文案遗漏项(remove_tags/delete_tags)未补。⏳ 10 条逐一静态核实未动: 抽屉簇两件(无切种子动作/Alt+1~4 仍 scope:drawer)、批量移动跳检、搜索命中域/片段、抽屉重做、tracker 忽略配置、shows 判定调研(排序/归并初版已具备)、限速曲线强调、乐观 UI 扩面、chip 自定义色均无实现痕迹。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2.1</span><span class="d">26-10-02-1705</span><span class="t">清偿核对批次 1/5: 九个波次表加「状态」列(五档图例见 §1), 本批核对 W1-W2 共 11 条 —— ✅ 5 / ⛔ 2 / 🔶 1 / ⏳ 3。✅ 五条池内 26-10-02 已 Done, 修复 commit 逐一确认(2151&#8594;bc24631b, 2335&#8594;54db09f2, 1408-CSRF&#8594;36dc8ba6, 1408-hardening&#8594;c37f3674, 1702&#8594;23f37df6); ⛔ 两条回写池状态(2129-hotreload-ext-vanish&#8594;Superseded 旧机制被取代, 2129-batch-warning-notify&#8594;Dropped min_level=ERROR 前提消失); 🔶 2002 伪警示条核心仍在、失效键半边已被未知键全量校验覆盖; ⏳ 三条无修复证据维持待处理。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2</span><span class="d">26-10-02-0234</span><span class="t">改版:v1 后清偿 12 条、新入池 46 条,未决 31&#8594;59;test 类型清零后重排九波,起点前移到数据与凭据;transmission 挂账更新为「报告已出停在拍板」;26-09-22-2221 标注需重新授权。</span></div>
