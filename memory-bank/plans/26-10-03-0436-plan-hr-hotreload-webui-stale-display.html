@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-topic" content="hr-hotreload-stale-display">
+<meta name="doc-type" content="plan">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-03-0436">
+<meta name="doc-updated" content="26-10-03-0436">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-03-0450-hr-hotreload-stale-display.md">
+<title>修复计划 · HR 在线核实热重载后 WebUI 停留「本地·达标」</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f0f0f;
+    --ink: #f0f0f0;
+    --ink-2: #b9b9b9;
+    --ink-3: #8a8a8a;
+    --hairline: rgba(255,255,255,.09);
+    --hairline-strong: rgba(255,255,255,.18);
+    --accent: #d9a441;
+    --accent-dim: rgba(217,164,65,.14);
+    --danger: #e07a5f;
+    --ok: #7fb069;
+    --mono: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, "Courier New", monospace;
+    --sans: "Segoe UI", "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    padding: 64px 24px 96px;
+  }
+  .page { max-width: 860px; margin: 0 auto; }
+  /* ---------- 头部 ---------- */
+  .doc-meta {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .08em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  h1 {
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    margin: 28px 0 10px;
+  }
+  .lede {
+    font-size: 16.5px;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin-bottom: 8px;
+  }
+  .verdict {
+    margin: 28px 0 0;
+    border: 1px solid var(--hairline-strong);
+    border-left: 3px solid var(--accent);
+    padding: 16px 20px;
+    background: var(--accent-dim);
+  }
+  .verdict .k {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .verdict p { max-width: 68ch; }
+  /* ---------- 章节 ---------- */
+  section { margin-top: 56px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: 10px;
+    margin-bottom: 22px;
+  }
+  .sec-no {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+  }
+  h2 {
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 26px 0 10px;
+  }
+  p { max-width: 72ch; margin-bottom: 12px; color: var(--ink); }
+  p.dim { color: var(--ink-2); }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: rgba(255,255,255,.06);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .ref {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  /* ---------- 链路时间线 ---------- */
+  .chain { border-left: 1px solid var(--hairline-strong); margin: 20px 0 8px 6px; padding-left: 22px; }
+  .chain .step { position: relative; padding-bottom: 18px; }
+  .chain .step::before {
+    content: "";
+    position: absolute;
+    left: -26px; top: 7px;
+    width: 7px; height: 7px;
+    background: var(--bg);
+    border: 1px solid var(--ink-3);
+    border-radius: 50%;
+  }
+  .chain .step.break::before { background: var(--danger); border-color: var(--danger); }
+  .chain .step.ok::before { background: var(--ok); border-color: var(--ok); }
+  .chain .step .t {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    letter-spacing: .04em;
+  }
+  .chain .step .d { margin-top: 2px; max-width: 66ch; }
+  .chain .step.break .d strong { color: var(--danger); }
+  /* ---------- 表格 ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0 18px;
+    font-size: 13.5px;
+  }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    padding: 8px 12px 8px 0;
+    border-bottom: 1px solid var(--hairline-strong);
+  }
+  td {
+    padding: 9px 12px 9px 0;
+    border-bottom: 1px solid var(--hairline);
+    vertical-align: top;
+    color: var(--ink-2);
+  }
+  td:first-child { color: var(--ink); }
+  /* ---------- 步骤块 ---------- */
+  .fixstep {
+    border: 1px solid var(--hairline);
+    padding: 20px 24px 8px;
+    margin-bottom: 20px;
+  }
+  .fixstep .step-tag {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .fixstep h3 { margin-top: 0; font-size: 17px; }
+  .fixstep ul { margin: 0 0 14px 18px; color: var(--ink-2); }
+  .fixstep ul li { margin-bottom: 7px; max-width: 68ch; }
+  .fixstep ul li strong { color: var(--ink); }
+  /* ---------- 清单 ---------- */
+  ul.plain { margin: 0 0 14px 18px; color: var(--ink-2); }
+  ul.plain li { margin-bottom: 7px; max-width: 68ch; }
+  ul.plain li strong { color: var(--ink); }
+  /* ---------- 双列证据 ---------- */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 14px 0; }
+  @media (max-width: 700px) { .duo { grid-template-columns: 1fr; } }
+  .duo .cell { border: 1px solid var(--hairline); padding: 14px 16px; }
+  .duo .cell .k {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+  .duo .cell p { font-size: 13.5px; margin-bottom: 6px; }
+  /* ---------- 状态徽标 ---------- */
+  .tag-ok { color: var(--ok); }
+  .tag-bad { color: var(--danger); }
+  .footnote {
+    margin-top: 64px;
+    padding-top: 14px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    letter-spacing: .04em;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="doc-meta">
+    <span>PLAN · 26-10-03-0436</span>
+    <span>auto-qb / hr · webui</span>
+    <span>分支 develop @ f5f62726</span>
+    <span>状态: 待实施</span>
+  </div>
+
+  <h1>HR 在线核实热重载后, WebUI 停留「本地·达标」</h1>
+  <p class="lede">现象: 热重载开启站点 HR 在线核实后, WEB UI 一直显示「本地·达标」; 重启进程后才显示「在线·已达标」。本文给出完整判定链路取证、两层根因与分步修复计划。</p>
+
+  <div class="verdict">
+    <div class="k">结论 TL;DR</div>
+    <p>两层缺陷叠加。<strong>主因</strong>: 热重载只替换 <code>manager.config</code> 对象, 存量种子的 <code>TorrentRecord.tracker_conf</code> 仍指向旧配置的 <code>TrackerConfig</code>——它的 <code>hr_check</code> 派生视图是 None, 而重绑的两条既有路径(L2 重建判据 / full_round 补绑)都不覆盖 <code>hr_check</code> 类变更, 判定入口 <code>hr_judgement()</code> 因此永远返回 None(「站点未接入」语义), WebUI 走本地兜底显示「本地·达标」。<strong>辅因</strong>: 取数线程随后抓到数据、发布了新判定视图(revision 自增), 但 HR 判定结果不是 store 快照字段, 不会触发 WebUI 视图重建——界面挂在旧值, 只能等重启。</p>
+  </div>
+
+  <!-- ================= 1 ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-no">01</span><h2>现象还原: 逐时刻链路</h2></div>
+    <p class="dim">按用户实测时间线还原, 红点为断链时刻, 绿点为工作正常的环节。</p>
+    <div class="chain">
+      <div class="step ok">
+        <div class="t">t0 · 程序启动, 站点未接入 HR</div>
+        <div class="d">存量种子在首次同步时绑定 <code>TrackerConfig</code>(其 <code>hr_check=None</code>); HR 运行时因无启用站点不启动。</div>
+      </div>
+      <div class="step ok">
+        <div class="t">t1 · 用户改配置热重载「开启站点 HR 在线核实」</div>
+        <div class="d"><code>apply_new_config</code> 先换 <code>manager.config</code>(loaders 已派生填充新 <code>trackers.X.hr_check</code>), 再广播全部模块 apply —— 时序正确。</div>
+      </div>
+      <div class="step ok">
+        <div class="t">t1+ · 取数侧正常重建</div>
+        <div class="d"><code>HrRuntime.apply</code> 现读新配置的站点表, 重建取数线程并补启端点; 随后开始轮询取数(60s 节拍), 抓到数据后写盘并发布视图。</div>
+      </div>
+      <div class="step break">
+        <div class="t">t1+ · 判定输入陈旧 —— 根因 1</div>
+        <div class="d"><strong>存量 <code>rec.tracker_conf</code> 不重绑</strong>: L2 重建判据只比较绑定三元组(domains/rules/groups), <code>hr_check</code> 变化不触发; full_round 只补 <code>tracker_conf is None</code> 的记录。<code>hr_judgement()</code> 读旧对象上的 <code>hr_check=None</code> → 返回 None → 「本地·达标」。</div>
+      </div>
+      <div class="step ok">
+        <div class="t">t1+ · WebUI 视图重建了一次</div>
+        <div class="d">热重载时 <code>WebUIModule.apply</code> 有全量置脏, 视图确实重建了——但重建时判定输入还是旧对象, 重建出的就是「本地·达标」。</div>
+      </div>
+      <div class="step break">
+        <div class="t">t2 · 取数完成, 视图已发布 —— 根因 2</div>
+        <div class="d"><strong>判定结果变化不触发视图重建</strong>: <code>HrViewPublisher.revision</code> 自增没有任何消费方置脏 WebUI, 界面快照停留在 t1 时刻的内容。此刻判定输入明明已能算出「在线·XX」, 界面却看不到。</div>
+      </div>
+      <div class="step ok">
+        <div class="t">t3 · 用户重启进程</div>
+        <div class="d">store 从零构建, 全量按新配置匹配 → <code>tracker_conf.hr_check</code> 就位; worker 冷启动先发布盘上既有视图(不留判定真空); WebUI 视图初始即脏。三者同时满足 → 显示「在线·已达标」。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 2 ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-no">02</span><h2>根因 1(主因): 存量记录的 tracker_conf 不随热重载重绑</h2></div>
+
+    <h3>2.1 重绑只有两条路径, 都不覆盖 hr_check 变更</h3>
+    <p>存量 <code>TorrentRecord.tracker_conf</code> 指向旧 Config 的 <code>TrackerConfig</code> 对象。配置对象按值比较(<code>TrackerConfig</code> 是 dataclass), 但重绑依赖以下两条链, <code>hr_check</code> 派生视图的从无到有在两条链上都不成立:</p>
+    <div class="duo">
+      <div class="cell">
+        <div class="k">路径 A · L2 结构重建(不触发)</div>
+        <p>判据单点 <code>RulesModule._rebuild_needed</code> → <code>_tracker_bindings_changed</code>: 逐站点只比较 <code>(domains, rules, groups)</code> 三元组。<span class="ref">rules_mod.py:124-134</span></p>
+        <p>开启 HR 核实只改 <code>hr_check</code> 派生字段, 三元组不变 → 返回 False → <code>store.reset_runtime()</code>(会把全部 <code>tracker_conf</code> 置空)不执行。<span class="ref">store.py:438-439</span></p>
+      </div>
+      <div class="cell">
+        <div class="k">路径 B · full_round 补绑(够不着)</div>
+        <p><code>TrackerModule._on_full_round</code> 只对 <code>tracker_conf is None</code> 的记录重匹配; 存量记录绑定非 None, 永不重绑。模块 docstring 也明说「apply 无热重载动作」。<span class="ref">tracker_mod.py:43-48, 10-11</span></p>
+      </div>
+    </div>
+
+    <h3>2.2 判定入口读到旧对象, 恒走本地兜底</h3>
+    <p><code>TorrentRecord.hr_judgement()</code> 读的是 <code>self.tracker_conf.hr_check</code>: 旧对象上为 None → 命中「站点未接入」短路, 返回 None。<span class="ref">record.py:356-358</span> 随后 <code>safety_display(None, satisfied=True)</code> 落本地兜底分支 → 「本地·达标」。<span class="ref">resolve.py:332-334</span> WebUI 组装层(<code>hr_view_fields</code>)是现算的, 没有字段缓存——它算得再勤, 输入也是旧对象。<span class="ref">views.py:301-305</span></p>
+
+    <h3>2.3 影响面不止显示</h3>
+    <ul class="plain">
+      <li><strong>取数侧对账管线同样瘫痪</strong>: <code>HrRuntime._anchors()</code> 也读 <code>rec.tracker_conf.hr_check</code>, 旧对象上为 None → 本地锚点收集为空 → 取数波次的覆盖对象集为空 → 本地种子不进对账(命中定论 / 「未列出」放行签发都不发生)。<span class="ref">hr/runtime.py:374-377</span></li>
+      <li><strong>hr 规则段同病</strong>: <code>hr</code>(required_seeding_time / condition / exclude_tags)同样挂在 <code>TrackerConfig</code> 上、同样不在绑定三元组内——热重载改要求做种时长也不会被存量记录感知, 只是用户尚未撞见。本修复一并覆盖。</li>
+    </ul>
+  </section>
+
+  <!-- ================= 3 ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-no">03</span><h2>根因 2(辅因): HR 判定变化不触发 WebUI 视图重建</h2></div>
+    <p>WebUI 分组视图是惰性重建的快照, 重建判据只有两个来源: <code>store.consume_view_changed()</code>(种子快照字段变化)与显式 <code>web.mark_dirty()</code>。<span class="ref">webui/runtime.py:337-352</span></p>
+    <p>HR 判定结果不属于任何快照字段: 取数线程发布新视图(<code>HrViewPublisher.revision</code> 自增)时, <strong>没有</strong>任何代码路径把它翻译成一次置脏。库里已有同构先例——「错误原因」预取注释明说「原因不是快照字段, store.view_changed 覆盖不到它, 故变化时显式置 web.group_view_dirty」, 并在变化时调 <code>mark_dirty()</code>; HR 判定缺的正是这同一个机关。<span class="ref">views.py:207-234</span></p>
+    <p class="dim">该缺陷独立于热重载存在: 运行期任何一次取数刷新改变了判定(考察中转 B 档、签发放行…), WebUI 都要等到别的原因碰巧置脏才能看到。热重载场景只是让它最先被撞见。</p>
+  </section>
+
+  <!-- ================= 4 ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-no">04</span><h2>已排除项(取证过, 避免误修)</h2></div>
+    <table>
+      <tr><th>环节</th><th>结论</th><th>依据</th></tr>
+      <tr><td>热重载时序</td><td class="tag-ok">正常</td><td>先换 config 再广播 apply, <code>site_confs()</code> 现读能拿到新站点表 <span class="ref">qbmanager.py:630-634</span></td></tr>
+      <tr><td>HR 运行时热重挂</td><td class="tag-ok">正常</td><td>apply 每次热重载必达, 短路判据现读派生站点表; 「线程未启动」「扩展连不上端点」两个旧坑已修 <span class="ref">hr/runtime.py:160-209</span></td></tr>
+      <tr><td>worker 冷启动发布</td><td class="tag-ok">正常</td><td>线程启动先发布盘上既有结论, 重启场景不留判定真空 <span class="ref">hr/worker.py:261-271</span></td></tr>
+      <tr><td>loaders 派生填充</td><td class="tag-ok">正常</td><td>热重载加载路径会重跑 <code>_resolve_hr_site_bindings</code>, 新 Config 的 <code>trackers.X.hr_check</code> 已就位 <span class="ref">loaders.py:226-259, 484-485</span></td></tr>
+      <tr><td>WebUI 字段缓存</td><td class="tag-ok">无</td><td><code>hr_view_fields</code> 组装时现算, 无字段级缓存 <span class="ref">views.py:237-351</span></td></tr>
+      <tr><td>热重载当下置脏</td><td class="tag-ok">已有</td><td><code>WebUIModule.apply</code> 有差异即 <code>mark_dirty()</code>; 问题只在重建时输入仍旧 <span class="ref">webui/module.py:52-57</span></td></tr>
+    </table>
+  </section>
+
+  <!-- ================= 5 ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-no">05</span><h2>修复计划(四步)</h2></div>
+    <p class="dim">方案取向: 让「绑定结果」在热重载时收敛到当前配置(修根因 1), 再给 HR 判定新鲜度补上置脏机关(修根因 2)。不改判定语义、不改 L2 重建判据、不动取数链路。</p>
+
+    <div class="fixstep">
+      <div class="step-tag">Step 1 · 修根因 1</div>
+      <h3>TrackerModule 新增 apply: trackers 段变化时立即重绑存量记录</h3>
+      <ul>
+        <li><strong>落点</strong>: <code>src/auto_qb/core/modules/tracker_mod.py</code>(新增 <code>apply(old, new)</code> 方法; 该模块认领 <code>trackers</code> 段, match 知识本就在此, 现在只有恒短路的默认实现)。</li>
+        <li><strong>逻辑</strong>: <code>old.trackers != new.trackers</code>(整段按值比较)时, 遍历 <code>store.by_hash</code> 中 <code>tracker_conf is not None</code> 的记录执行 <code>rec.tracker_conf = self.match(rec)</code>; 返回 <code>ApplyResult(self.name, f"rebound {n}")</code> 供热重载回执可见。相等即短路, 无关保存零动作。</li>
+        <li><strong>成本依据</strong>: <code>tracker_urls()</code> 走 <code>trackers_info</code> 惰性缓存, 存量记录已被全量轮拉过, 重绑是纯内存 O(N) 操作, 零 qB API 调用 <span class="ref">record.py:254-264</span>。</li>
+        <li><strong>防御</strong>: <code>ctx.api.client is None</code>(qB 断开)时跳过重绑并照常返回(留给下轮 full_round / L2 兑现), 不得在 apply 里抛异常打断热重载广播。</li>
+        <li><strong>幂等收敛</strong>: 若绑定三元组同时也变, <code>RulesModule.rebuild_runtime</code> 的置空 + full_round 重匹配与本重绑收敛到同一结果, 先后顺序无影响。</li>
+        <li><strong>顺带修复</strong>: <code>hr</code> 规则段热重载生效; <code>HrRuntime._anchors()</code> 的锚点收集恢复(对账管线随通)。</li>
+      </ul>
+    </div>
+
+    <div class="fixstep">
+      <div class="step-tag">Step 2 · 修根因 2</div>
+      <h3>WebUI 增加 HR 判定新鲜度置脏: hr.revision 变化 → mark_dirty</h3>
+      <ul>
+        <li><strong>落点</strong>: <code>src/auto_qb/webui/runtime.py</code>(<code>WebUIRuntime</code>)+ 视图宿主的取数口; 仿「错误原因」先例的形态 <span class="ref">views.py:207-234</span>。</li>
+        <li><strong>逻辑</strong>: <code>rebuild_views()</code> 重建完成时记录基线 <code>self._hr_rev_at_build = hr.revision</code>(hr 门面经 manager 现取, 判空防御); <code>flush_views()</code>(或 on_task_line 预取同段)先对比当前 <code>hr.revision</code> 与基线, 不等即 <code>mark_dirty()</code>——下一轮重建后基线自然前移, 无循环置脏。</li>
+        <li><strong>效果</strong>: 热接入后的首次取数成功 / 周期刷新 / 「立即拉取」按钮, 判定一变 UI 下一拍即刷新, 与重启后的观感一致。</li>
+        <li><strong>线程口径</strong>: 全部发生在主循环两条线上, 与 <code>web.group_view_dirty</code> 的既有跨线程语义一致 <span class="ref">views.py:807-811</span>。</li>
+      </ul>
+    </div>
+
+    <div class="fixstep">
+      <div class="step-tag">Step 3 · 测试</div>
+      <h3>单测补两个回归面, 同步测试计划清单</h3>
+      <ul>
+        <li><strong>test_tracker.py</strong>: 新增用例——存量记录持旧 <code>TrackerConfig</code>(hr_check=None)→ 构造新旧 Config 调 <code>TrackerModule.apply</code> → 断言 <code>rec.tracker_conf.hr_check</code> 就位、回执含 rebound; 补 client=None 防御用例; 补「trackers 段相等即短路」用例。</li>
+        <li><strong>test_web.py</strong>(或 test_core_modules.py 相应段): 新增用例——变更 <code>hr.revision</code>(直接推 publisher)后 <code>flush_views</code> → 断言 <code>group_view_dirty</code> 置位且重建后基线前移不再置脏。</li>
+        <li><strong>守阵确认</strong>: <code>test_modules_p6.py</code> 段认领不受影响(trackers 已被认领, 无新增顶层段); 检查既有热重载回执断言是否精确枚举 actions, 新增 <code>tracker:rebound N</code> 后同步修正 <span class="ref">test_core_modules.py</span>。</li>
+        <li>两个测试文件头部 docstring 的「测试计划」清单按 AGENTS.md 口径同步补条目。</li>
+      </ul>
+    </div>
+
+    <div class="fixstep">
+      <div class="step-tag">Step 4 · 真机验收 + 收尾回写</div>
+      <h3>按用户原始场景走一遍, 再按收尾 DoD 归档</h3>
+      <ul>
+        <li><strong>场景复现</strong>(需真实 qB 与扩展在线): 启动(站点未接入)→ 确认 WebUI 显示「本地·达标」→ 改配置开启站点 HR 热重载 → 日志应依次出现「HR 取数线程已启动」「配置热重载完成 … tracker:rebound N」→ 取数完成(ACTION_REFRESHED)后 <strong>不重启</strong>, WebUI 判定列应在下一拍变为「在线·XX」。</li>
+        <li><strong>回归场景</strong>: 热重载一段与 trackers/hr 无关的配置 → 日志无 rebound(短路生效); 重启路径照常(既有「重启后正确」不被破坏)。</li>
+        <li><strong>收尾 DoD</strong>: 新坑入 pitfalls/backend(主题: 热重载换对象 ≠ 存量绑定对象自动更新; 非快照字段的判定变化要显式置脏)并重跑 <code>kb.index</code>; activeContext 切片记本轮; 跑 <code>commands run test.full</code> 记基线数字。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= 6 ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-no">06</span><h2>方案取舍(为什么不走另两条路)</h2></div>
+    <table>
+      <tr><th>备选</th><th>做法</th><th>不取的原因</th></tr>
+      <tr><td>扩大 L2 重建判据</td><td>把 <code>hr_check</code> / <code>hr</code> 纳入 <code>_tracker_bindings_changed</code> 的比较, 让它触发全量重建</td><td>会把「开一个 HR 核实」放大成重建任务队列 + qB 重连的全量重建, 代价与语义都不成比例; L2 判据是「结构语义」单点, 塞进展示/配置值比较会污染它的职责</td></tr>
+      <tr><td>判定端现读</td><td><code>hr_judgement()</code> 不读 <code>self.tracker_conf.hr_check</code>, 改按站点名现读 <code>link.config.trackers[name].hr_check</code></td><td>只修 HR 判定一个入口, 修不到 <code>hr</code> 规则段与 <code>_anchors()</code> 锚点收集(同一缺陷的另外两个面), 修完仍有三处各说各话</td></tr>
+    </table>
+    <p class="dim">选定方案(立即重绑)的本质: <code>TrackerConfig</code> 上凡「派生/配置值」类字段的变化, 都让绑定结果一步收敛到当前配置——一处修复覆盖判定入口、规则段、锚点收集三个消费面, 且不触碰 L2 结构语义。</p>
+  </section>
+
+  <!-- ================= 7 ================= -->
+  <section>
+    <div class="sec-head"><span class="sec-no">07</span><h2>风险与兼容</h2></div>
+    <ul class="plain">
+      <li><strong>重绑改变 rec.tracker_conf 引用</strong>: 其余消费方(tags/分组/限速/规则)按字段读值, 除 hr/hr_check 外新旧对象字段值一致, 无行为变化; 三元组真变时 L2 重建路径保持原样。</li>
+      <li><strong>重绑耗时</strong>: 主循环线程 apply 阶段同步执行, O(N) 纯内存; 万级种子也在毫秒量级(无 API 往返)。</li>
+      <li><strong>置脏频率</strong>: <code>hr.revision</code> 只在取数实质变化时自增(<code>publish</code> 内容指纹去重), 不会周期性空转重建视图 <span class="ref">hr/worker.py:79-98, 125-132</span>。</li>
+      <li><strong>零静默变更闸门</strong>: 未接入 HR 的站点判定路径一字不变——重绑后 <code>hr_check</code> 仍为 None 的站点照旧走本地兜底。</li>
+    </ul>
+  </section>
+
+  <div class="footnote">
+    plan 26-10-03-0436 · 分析基线 develop @ f5f62726 · 行号引用以该基线为准 · 修复实施后按收尾 DoD 回写 pitfalls 与 activeContext
+  </div>
+
+</div>
+</body>
+</html>
