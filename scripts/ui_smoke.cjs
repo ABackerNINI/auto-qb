@@ -1027,6 +1027,110 @@ async function smokeUi(browser, ui) {
     }
 
     /*
+     * W4 多选导出(计划 26-10-02-1955, D1 拍板 = 前端循环逐个触发下载): 多选菜单出现「导出 .torrent」
+     * 项, 点击后对**单 hash** 导出端点发起 N 个请求且 N == 选中展开数(串行逐个, 无 bulk 合单)。
+     * 组选中单独验一条: 整组选中必须展开为成员 hash 闭包(selHashSet 全量), 若实现误用
+     * _bulkTargets().memberHashes(组内成员留在 keys 通道)请求数就会小于成员数 —— 在此暴露。
+     * 桩端点(FakeClient.torrents_export)真出字节, 请求真实发生; 只数 /export 的 URL, 不碰下载落盘
+     * (headless 下浏览器可能拦"多文件下载", 但拦的是 a.click 的落盘, fetch 计数不受影响)。
+     */
+    {
+      const N = 3;
+      await page.evaluate("window.scrollTo(0, 0)");
+      await page.waitForTimeout(200);
+      const picked = await page.evaluate(`(() => {
+        const vm = ${INST};
+        vm.selGroups = [];
+        vm.selMembers = vm.filteredTorrents.slice(0, ${N}).map((r) => r.hash);
+        return vm.selMembers.length;
+      })()`);
+      const selHashes = await readInst(page, "vm.selMembers.slice()");
+      let anchor = null;
+      for (const r of await page.$$(".torrent-row")) {   // 行是窗口化的: 从已渲染行里挑选中锚点
+        const h = await r.evaluate((el) => el.getAttribute("data-hash"));
+        if (selHashes.includes(h)) { anchor = r; break; }
+      }
+      let menuTexts = [];
+      if (anchor) {
+        await anchor.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        menuTexts = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+      }
+      add(ui, "W4 批量菜单含导出项",
+        picked === N && menuTexts.some((t) => t.includes("导出 .torrent")),
+        `选中 ${picked} 行 / 菜单: ${menuTexts.slice(0, 11).join(" / ") || "(未打开)"}`);
+
+      // 2. 点击后导出请求数 == 选中展开数: 计数 /export 请求(串行也全都会发, 等 1.2s 足够)
+      let exportHits = 0;
+      const onReq = (r) => {
+        if (/\/api\/torrents\/[^/?]+\/export(\?|$)/.test(r.url())) exportHits++;
+      };
+      page.on("request", onReq);
+      let clicked = false;
+      for (const h of await page.$$(".ctx-item")) {
+        const t = ((await h.textContent()) || "").trim();
+        if (t.includes("导出 .torrent")) { await h.click(); clicked = true; break; }
+      }
+      await page.waitForTimeout(1200);
+      page.off("request", onReq);
+      add(ui, "W4 多选导出逐个请求(数 == 选中展开数)", clicked && exportHits === N,
+        `选中 ${picked} 个 -> 导出请求 ${exportHits} 个(期望 ${N})`);
+      await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
+      await page.waitForTimeout(300);
+    }
+
+    /* W4 组选中场景: 整组右键导出 -> 请求数 == 组成员数(selHashSet 全量展开, 见上块注释)。
+     * !在**辅种页**做: 种子页按视图分片不回 groups(VIEW_ARRAYS), 组选中在种子页展开不出成员;
+     *   选中**两个**组 —— 只选 1 组右键该组行时 _ctxMulti 的"范围一致"判定会降级单目标菜单。
+     *   组从**已渲染行**反挑(行窗口化, 不假设排序把哪组排在前面)。 */
+    {
+      await nav[0].click();  // 回辅种页
+      await page.waitForFunction("document.querySelectorAll('.group-row').length > 0", null, { timeout: 15000 });
+      await page.waitForTimeout(400);
+      const ginfo = await page.evaluate(`(() => {
+        const vm = ${INST};
+        const visible = new Set([...document.querySelectorAll('.group-row[data-table="group"]')].map((el) => el.getAttribute("data-key")));
+        const gs = vm.decoratedGroups.filter((x) => !x.virtual && (x.members || []).length && visible.has(x.key)).slice(0, 2);
+        if (gs.length < 2) return null;
+        vm.selMembers = [];
+        vm.selGroups = gs.map((g) => g.key);
+        return { groups: gs.length, members: gs.reduce((n, g) => n + g.members.length, 0), expanded: vm.selHashSet.size };
+      })()`);
+      let anchor = null;
+      if (ginfo) {
+        const keys = await readInst(page, "vm.selGroups.slice()");
+        for (const r of await page.$$('.group-row[data-table="group"]')) {
+          const k = await r.evaluate((el) => el.getAttribute("data-key"));
+          if (keys.includes(k)) { anchor = r; break; }
+        }
+      }
+      let clicked = false;
+      let exportHits = 0;
+      if (anchor) {
+        const onReq = (r) => {
+          if (/\/api\/torrents\/[^/?]+\/export(\?|$)/.test(r.url())) exportHits++;
+        };
+        page.on("request", onReq);
+        await anchor.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        for (const h of await page.$$(".ctx-item")) {
+          const t = ((await h.textContent()) || "").trim();
+          if (t.includes("导出 .torrent")) { await h.click(); clicked = true; break; }
+        }
+        await page.waitForTimeout(1200);
+        page.off("request", onReq);
+      }
+      add(ui, "W4 组选中导出展开为整组成员",
+        !!ginfo && clicked && exportHits === ginfo.expanded && ginfo.expanded === ginfo.members,
+        `选中 ${ginfo ? ginfo.groups : "-"} 组 / 成员 ${ginfo ? ginfo.members : "-"} 个 -> 导出请求 ${exportHits} 个`);
+      await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
+      await page.waitForTimeout(300);
+      await nav[1].click();  // 回种子页(后续块在此视图)
+      await page.waitForFunction("document.querySelectorAll('.torrent-row').length > 0", null, { timeout: 15000 });
+      await page.waitForTimeout(300);
+    }
+
+    /*
      * CTX-04 / CTX-05 / CTX-06 —— 右键**次级菜单**的三条(2026-09-24 用户报, 都是"pytest 全绿、
      * node --check 全绿、界面废掉"那一类; 判据一律取**可测的事实**, 不靠截图):
      *   1. 图标 hover 变灰(CTX-04): `.ctx-item:hover .ico` 是**后代**选择器, 而 `.ctx-sub` 是父项的

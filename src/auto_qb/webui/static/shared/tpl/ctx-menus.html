@@ -2,13 +2,14 @@
         <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
           <!-- CTX-03 批量菜单: 被右键的行属于当前选中集合时, 菜单升级为对**整个选中集合**生效
                (与批量浮条同一套动作与链路, 见 menu.js _ctxMulti / commands.js ctxAct)。
-               收录口径(plan 26-10-02-1955 W2/W3 改写): 放"对整批同一语义"的动作(开始/暂停/汇报/
-               重新校验/跳检/标签分类/批量删除)与"同一目标值作用于全选"的编辑项(限速/移动 —— 本计划
+               收录口径(plan 26-10-02-1955 W2/W3/W4 改写): 放"对整批同一语义"的动作(开始/暂停/汇报/
+               重新校验/跳检/标签分类/批量删除)、"同一目标值作用于全选"的编辑项(限速/移动 —— 本计划
                推翻旧版"批量菜单刻意不放限速等编辑项"的注释口径, 批量限速留空方向不提交/批量移动
-               目标路径统一, 对 N 个目标语义明确); 跳检是高危项, 由配置开关 flags.skip_check_menu
-               门控(W1, 默认关 = fail-closed, 后端端点同步拒单); 仍不放需要**逐目标现值**的单目标项
-               (详细信息/重命名/导出/复制等, 预填与展示都依赖单个目标的当前值);
-               要单目标操作请不选中任何行再右键。 -->
+               目标路径统一, 对 N 个目标语义明确)与"逐目标同语义"的导出(导出 .torrent —— 每个目标
+               各得一个 .torrent, 前端循环逐个触发下载, 不进 bulk 合单); 跳检是高危项, 由配置开关
+               flags.skip_check_menu 门控(W1, 默认关 = fail-closed, 后端端点同步拒单);
+               仍不放需要**逐目标现值**的单目标项(详细信息/重命名/复制等, 预填与展示都依赖单个
+               目标的当前值); 要单目标操作请不选中任何行再右键。 -->
           <template v-if="menu.multi">
             <div class="ctx-item" @click="ctxAct('resume')">
               <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>批量开始
@@ -38,6 +39,12 @@
             </div>
             <div class="ctx-item" @click="ctxMeta()">
               <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类…
+            </div>
+            <!-- W4 多选导出(计划 26-10-02-1955, D1 拍板 = 前端循环逐个触发下载): 与单选分支同图标
+                 同文案, 排序语义对齐(标签分类之后、批量删除之前); 导出只读不高危, 不吃
+                 flags.skip_check_menu 门控; 分派走 commands.js ctxAct 的 export 分支 -> exportMulti -->
+            <div class="ctx-item" @click="ctxAct('export')">
+              <svg class="ico ico-sm ico-export" viewBox="0 0 16 16"><use href="#i-download"></use></svg>导出 .torrent
             </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="ctxDelete()">

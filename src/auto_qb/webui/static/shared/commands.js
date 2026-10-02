@@ -567,6 +567,10 @@ window.AQB_COMMANDS = {
        * 形态 —— danger 确认框前置 + 60s waitCmd, 不进 _actCore(那里没有对话框前置,
        * 且跳检不在乐观白名单, 行状态由跳检重加后的 RESYNC 自然刷新)。 */
       if (action === "skip_check") return this.skipCheckMulti();
+      /* 多选导出(计划 26-10-02-1955 W4): 前端本地循环逐个触发下载(复用单 hash 导出端点),
+       * **不进 bulk 合单** —— 它不是后端命令, 也没有对话框前置; 目标集合不取 _bulkTargets,
+       * 直接用 selHashSet 全量展开(见 exportMulti 注释, 组选中必须含整组成员)。 */
+      if (action === "export") return this.exportMulti();
       return this.bulkAct(action);
     },
     ctxDelete() {
@@ -611,36 +615,74 @@ window.AQB_COMMANDS = {
     },
     /* 右键菜单复制项: field = name | hash | magnet(数据取 memberByHash 的 SEED_ITEM 完整字段) */
     /* 导出 .torrent(种子页右键 R2 补遗): fetch 字节 → blob 下载(Bearer 走 header, 不能用 a href 直链;
-     * 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流) */
+     * 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流; 下载核心抽在 _exportDownload,
+     * 多选导出(W4)共用同一套, 本方法只补单选的 toast 语义) */
     async exportTorrent() {
       this.menu.visible = false;
       const hash = this.menu.hash;
       if (!hash) return;
       try {
-        const resp = await fetch(`/api/torrents/${hash}/export`, { headers: { Authorization: `Bearer ${this.token}` } });
-        if (resp.status === 401) {
-          this._logout("密钥无效或已更换");
-          return;
-        }
-        if (!resp.ok) {
-          const detail = await resp.json().catch(() => ({}));
-          throw new Error(detail.detail || `HTTP ${resp.status}`);
-        }
-        const buf = await resp.arrayBuffer();
-        const m = this.memberByHash.get(hash) || {};
-        const name = String(m.name || hash).replace(/["\\/]/g, "_") + ".torrent";
-        const url = URL.createObjectURL(new Blob([buf], { type: "application/x-bittorrent" }));
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        await this._exportDownload(hash);
         this.toast("已导出 .torrent", "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("导出失败: " + e.message, "error", 8000);
       }
+    },
+    /* 导出下载核心(单选/多选共用, W4 抽取): 裸 fetch 字节 → Blob 触发浏览器下载(Bearer 走 header,
+     * 不能用 a href 直链; 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流)。
+     * 401 走 _logout 收口后抛 e.auth 错(调用方 catch 静默, 与 api() 的 401 契约同形);
+     * 其余非 2xx 抛 Error(detail) —— 成功/失败的 toast 由调用方按各自语义给。 */
+    async _exportDownload(hash) {
+      const resp = await fetch(`/api/torrents/${hash}/export`, { headers: { Authorization: `Bearer ${this.token}` } });
+      if (resp.status === 401) {
+        this._logout("密钥无效或已更换");
+        const err = new Error("unauthorized");
+        err.auth = true;
+        throw err;
+      }
+      if (!resp.ok) {
+        const detail = await resp.json().catch(() => ({}));
+        throw new Error(detail.detail || `HTTP ${resp.status}`);
+      }
+      const buf = await resp.arrayBuffer();
+      const m = this.memberByHash.get(hash) || {};
+      const name = String(m.name || hash).replace(/["\\/]/g, "_") + ".torrent";
+      const url = URL.createObjectURL(new Blob([buf], { type: "application/x-bittorrent" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    },
+    /* 多选导出(计划 26-10-02-1955 W4, 决策点 D1 拍板 = 前端循环逐个触发下载, 零后端改动):
+     * hashes 取 selHashSet 全量展开(组选中展开为成员 hash 闭包) —— 不用 _bulkTargets().memberHashes,
+     * 后者把真实组的成员留在 keys 通道, 导出会漏掉整组成员(selHashSet 是选中集合的权威派生, 见
+     * selection.js)。逐 hash **串行**走单选同一套裸 fetch + Blob 口径(禁并发扇出; 文件名沿用单
+     * hash 端点的 Content-Disposition 现状); 单个失败不中断整体, 结束 toast 汇总 成功 N / 失败 K。
+     * 401 中途整段终止: _logout 已清会话与 toast, 继续循环只会再发空头。 */
+    async exportMulti() {
+      const hashes = [...this.selHashSet];
+      if (!hashes.length) return;
+      const tid = this.toast(`开始导出 ${hashes.length} 个 .torrent…`, "busy", 0, { sticky: true });
+      const failed = [];
+      let ok = 0;
+      for (const h of hashes) {
+        try {
+          await this._exportDownload(h);
+          ok += 1;
+        } catch (e) {
+          if (e.auth) return;
+          failed.push(h);
+        }
+      }
+      if (!failed.length) {
+        this._finishToast(tid, "ok", `已导出 ${ok} 个 .torrent`, 3000);
+        return;
+      }
+      const heads = failed.slice(0, 3).map((h) => h.slice(0, 8)).join(", ") + (failed.length > 3 ? " …" : "");
+      this._finishToast(tid, "timeout", `导出: 成功 ${ok} / 失败 ${failed.length} (${heads})`, 6000);
     },
   },
   computed: {

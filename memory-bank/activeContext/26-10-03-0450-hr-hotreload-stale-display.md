@@ -11,3 +11,5 @@
 ## 已完成
 
 - 2026-10-03 计划轮: 判定链路取证(record/rules_mod/tracker_mod/resolve/views/webui runtime + hr runtime/worker/service)+ 计划文档产出, 未动代码。
+
+**Refs:** memory-bank/plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html
