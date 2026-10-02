@@ -78,8 +78,10 @@
             <div class="ctx-item" @click="torrentCmd('recheck', null, '重新校验')">
               <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>重新校验
             </div>
-            <!-- P2' 右键跳检(plan 26-09-30-0109 §3.6): 高风险(清空本地统计), 走危险确认框后经 ops 层执行 -->
-            <div class="ctx-item" @click="skipCheckTorrent()">
+            <!-- P2' 右键跳检(plan 26-09-30-0109 §3.6): 高风险(清空本地统计), 走危险确认框后经 ops 层执行;
+                 R2(计划 26-10-02-1955 W1): 配置开关 web.skip_check_menu 门控(默认 false = fail-closed,
+                 后端端点同步 403), flags 由登录后 /api/webui/flags 取真值 -->
+            <div class="ctx-item" v-if="flags.skip_check_menu" @click="skipCheckTorrent()">
               <svg class="ico ico-sm ico-recheck" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>跳检…
             </div>
             <div class="ctx-item" @click="exportTorrent()">

@@ -116,6 +116,7 @@ window.AQB_AUTH = {
         this.pendingToken = "";
         this.tokenInput = "";
         this.startPolling();
+        this.loadWebFlags();  // R2(计划 26-10-02-1955 W1): 登录成功取一次功能旗标(方法在 lifecycle.js); 失败保持 false = fail-closed
       } catch (e) {
         if (!e.auth) {
           // 服务不可达 ≠ 密钥错误: 不否定候选密钥(本地存储亦保留), 给出重试入口, 防误清凭证

@@ -909,7 +909,9 @@ class FakeConfig:
     grouping = GroupingConfig(enabled=False, missing_tag="MISSING")  # 种子分组管理(默认关闭)
     global_speed_limit_curve = None  # 全局限速曲线(未启用; 与 Config 默认一致, 测试按需赋值)
     notify = NotifyConfig()  # 主动通知(默认 disabled)
-    web = WebConfig()  # WEB UI(默认 disabled)
+    web = WebConfig(skip_check_menu=True)  # WEB UI(默认 disabled); skip_check_menu 测试侧默认开 ——
+    # R2 gate 用例(计划 26-10-02-1955 W1)按需实例级置 False(fail-closed 403), 深拷贝不跨测试泄漏,
+    # 既有 skip-check 端点用例(期望入队 200)无需逐个补开
     # HR 在线核实(M2 起 QbManager 会读它): 默认关 = 不建端点、不建取数线程, 与真实默认一致
     hr_check = HrCheckConfig()
     data_dir = ""  # 由测试按需设置(HR 站点文件目录从它派生)

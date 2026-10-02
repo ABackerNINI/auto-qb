@@ -30,6 +30,17 @@ def build_router(ctx: WebContext) -> APIRouter:
             raise HTTPException(status_code=403, detail="loopback only")
         return {"web": {"skip_local_verify": manager.config.web.skip_local_verify}}
 
+    @router.get("/api/webui/flags")
+    def api_webui_flags():
+        """前端功能旗标(登录后消费): webui 行为开关键, 当前只含跳检菜单开关
+
+        R2(计划 26-10-02-1955 W1): 与 /api/config/public 语义不同 —— 那是登录前 loopback
+        免鉴权专用, 本端点走 factory 全局鉴权(登录后才可读), 不扩 public 端点。
+        读**实时配置**: manager.config 是引用, 热重载替换对象后这里现取现真
+        (不按值持有旧 Config, 见 pitfalls/backend/hot-reload-held-config.md)。
+        """
+        return {"skip_check_menu": bool(manager.config.web.skip_check_menu)}
+
     @router.post("/api/expr/eval")
     def api_expr_eval(body: dict = None):
         """表达式**试算**(配置编辑器的「试算」按钮)

@@ -104,6 +104,8 @@
 - test_web_commands_bulk_recheck_via_ops: 批量 recheck 经 ops 聚合回执
 - test_web_commands_add_torrents_receipt: 添加种子受理/拒绝回执
 - test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
+- test_api_webui_flags_endpoint: R2 功能旗标端点(计划 26-10-02-1955 W1) —— 开/关读实时配置 + 未鉴权 401
+- test_api_t_skip_check_gated_by_config: R2 skip-check 端点 gate —— 配置关 403(detail 注明 web.skip_check_menu)/ 开 200 入队, 403 不投递命令
 - test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
 - test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘
 - test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
@@ -201,7 +203,7 @@
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries): 67 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags): 72 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
 - test_drain_web_commands_skip_check_torrent: 右键跳检命令(P2') —— 经 ops 层四阶段全流程, 回执 ok 且记录同日去重
@@ -291,7 +293,15 @@ def _make_web_manager(tmp_path, config_text):
     config_file = os.path.join(tmp_path, "config.yml")
     with open(config_file, "w", encoding="utf-8") as f:
         f.write(config_text)
-    web_cfg = SimpleNamespace(enabled=True, host="127.0.0.1", port=8080, token="", skip_local_verify=False)
+    web_cfg = SimpleNamespace(
+        enabled=True,
+        host="127.0.0.1",
+        port=8080,
+        token="",
+        skip_local_verify=False,
+        # R2(计划 26-10-02-1955 W1): 测试侧默认开 —— gate 用例按需实例级置 False
+        skip_check_menu=True
+    )
     config = SimpleNamespace(
         web=web_cfg,
         trackers={
@@ -507,6 +517,41 @@ def test_config_public_endpoint_no_auth(web_env):
     assert resp.json() == {"web": {"skip_local_verify": False}}
     # 不泄露访问密钥
     assert str(mgr.web.token) not in resp.text
+
+
+def test_api_webui_flags_endpoint(web_env):
+    """R2 功能旗标端点(计划 26-10-02-1955 W1): 开/关读**实时配置** + 未鉴权 401
+
+    FakeConfig 测试侧默认 skip_check_menu=True(helpers, 供既有 skip-check 用例直通);
+    关闭用例实例级置 False(深拷贝, 不跨测试泄漏) —— 端点必须现取 manager.config 引用,
+    不按值持有旧 Config(hot-reload-held-config 坑)。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    assert client.get("/api/webui/flags", headers=auth).json() == {"skip_check_menu": True}
+    mgr.config.web.skip_check_menu = False
+    assert client.get("/api/webui/flags", headers=auth).json() == {"skip_check_menu": False}
+    assert client.get("/api/webui/flags").status_code == 401
+
+
+def test_api_t_skip_check_gated_by_config(web_env):
+    """R2 skip-check 端点 gate(D2=是 · fail-closed): 配置关 403(detail 注明键名) / 配置开 200 入队
+
+    gate 读实时配置 —— 同一 client 内翻转配置键即时生效; 403 时不得投递命令。
+    rule 源跳检回归哨: test_ops.py 全部零改动全绿。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    mgr.config.web.skip_check_menu = False
+    resp = client.post("/api/torrents/HA/skip-check", headers=auth)
+    assert resp.status_code == 403, resp.text
+    assert "web.skip_check_menu" in resp.json()["detail"], "403 detail 必须注明配置键名"
+    assert mgr.web.commands.empty(), "配置关时不得投递命令"
+    mgr.config.web.skip_check_menu = True
+    resp = client.post("/api/torrents/HA/skip-check", headers=auth)
+    assert resp.status_code == 200, resp.text
+    cmd, payload = mgr.web.commands.get_nowait()
+    assert cmd == "skip_check_torrent" and payload["hash"] == "HA"
 
 
 def test_skip_local_verify_loopback_bypass(web_env, caplog):
@@ -8904,6 +8949,7 @@ _GOLDEN_ROUTES = {
     ("GET", "/api/hr/status"),  # M4: HR 站点级状态快照(只读; 与 --hr-status 同一口径)
     ("GET", "/api/hr/sites/{site}/entries"),  # 种子明细(计划 26-10-01-2216 §7 阶段1; 决策点②b 按站点按需拉)
     ("GET", "/api/sites/missing"),  # 站点导入: 未配置站点扫描(只读; 与 --export-yaml --only-missing 同口径)
+    ("GET", "/api/webui/flags"),  # R2 跳检菜单开关(计划 26-10-02-1955 W1): 前端功能旗标(登录后, 读实时配置)
 }
 
 
@@ -8924,7 +8970,7 @@ def _iter_api_routes(routes):
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 68 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 72 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

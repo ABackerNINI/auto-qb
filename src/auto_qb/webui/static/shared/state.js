@@ -119,6 +119,10 @@ window.AQB_STATE = {
       // "点击排序"与"列宽拖拽"互相干扰; 自绘虚影与现有 mousedown 阈值手势完全解耦。
       colGhost: null,                     // {label, x, y} | null
       menu: { visible: false, x: 0, y: 0, key: null, hash: null, multi: false },
+      // R2 跳检菜单开关(计划 26-10-02-1955 W1, 默认 false = fail-closed): 字段必须显式建
+      // (v-if 对 undefined 恰好也隐藏, 但 undefined 是非响应式盲区, 呼应 vue-reactivity 静默坑);
+      // 登录后 loadWebFlags 从 /api/webui/flags 取真值, 设置页保存配置后同步刷新(免重登)。
+      flags: { skip_check_menu: false },
       // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— 一级只有一个「更多操作」子面板,
       // 队列/TMM/超级做种/强制开始/分享率限制/复制族 都在它里面(见 conventions/webui.md)
       subMenu: "",        // "" | "advanced"

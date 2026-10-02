@@ -184,6 +184,11 @@ window.CONFIG_EDITOR = {
         } else {
           this.toast(`已保存并热重载(变更 ${n} 项)`, "ok", 3500);
         }
+        // R2(计划 26-10-02-1955 W1): 保存成功后刷新功能旗标(免重登)。reload_config 是入队等
+        // 主循环应用, PUT 回执先于应用落地 —— 立即拉一次之外再短延时补拉一次收窄竞态窗口
+        // (竞态只朝 fail-closed 方向: 菜单暂藏, 后端 gate 仍真值兜底)。
+        this.loadWebFlags();
+        setTimeout(() => this.loadWebFlags(), 2000);
         return true;
       } catch (e) {
         this.toast("保存失败: " + (e.message || "未知错误"), "error", 9000);

@@ -46,7 +46,15 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post("/api/torrents/{hash}/skip-check")
     def api_t_skip_check(hash: str):
-        """右键跳检(高风险): 删除并以跳过校验方式重加, 清空本地统计 —— 前端另有危险确认框"""
+        """右键跳检(高风险): 删除并以跳过校验方式重加, 清空本地统计 —— 前端另有危险确认框
+
+        R2 gate(计划 26-10-02-1955 W1, D2=是 · fail-closed): 菜单隐藏只是 UX, 直调 API
+        必须同样封禁 —— 配置 web.skip_check_menu 关闭时 403(detail 注明键名);
+        rule 源跳检(ops 层 skip_check)不受影响。读实时配置(ctx.manager.config 引用现取,
+        热重载后立即生效, 不按值持有旧 Config —— pitfalls/backend/hot-reload-held-config.md)。
+        """
+        if not ctx.manager.config.web.skip_check_menu:
+            raise HTTPException(status_code=403, detail="跳检菜单未启用(配置键 web.skip_check_menu)")
         return _enqueue("skip_check_torrent", {"hash": hash})
 
     @router.post("/api/torrents/{hash}/super-seeding")

@@ -157,6 +157,7 @@ window.AQB_LIFECYCLE = {
         this.token = savedToken || "";  // 有旧密钥仍留着: 关掉开关后无需重新输入
         this.lastRid = null;
         this.startPolling();
+        this.loadWebFlags();  // R2(计划 26-10-02-1955 W1): 登录后取一次功能旗标(跳检菜单开关)
         return;
       }
       if (savedToken) {
@@ -228,5 +229,19 @@ window.AQB_LIFECYCLE = {
     // P1-2: 行高/容器偏移都只在签名变化时量(见 _measureRowH / _ensureWinTop), 不是每渲染一次
     this._measureRowH();
     this._ensureWinTop();
+  },
+  methods: {
+    /* R2 跳检菜单开关(计划 26-10-02-1955 W1): 登录后取一次 /api/webui/flags 写入 flags
+     * (调用点: lifecycle 本机免鉴权路径 + auth.js bootstrap 成功路径; 设置页 cfgSave
+     * 成功后再调刷新, 免重登)。请求失败保持 false = fail-closed(菜单不显示, 后端端点
+     * 403 兜底)。整对象替换赋值(非原地改键), 保证 Vue 响应式触发。 */
+    async loadWebFlags() {
+      try {
+        const f = await this.api("/api/webui/flags");
+        this.flags = { skip_check_menu: !!(f && f.skip_check_menu) };
+      } catch (e) {
+        this.flags = { skip_check_menu: false };
+      }
+    },
   },
 };
