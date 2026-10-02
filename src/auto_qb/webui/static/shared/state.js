@@ -246,6 +246,10 @@ window.AQB_STATE = {
         level: "",            // ""=全部 | INFO | WARNING | ERROR(后端按配置格式串定位等级字段)
         num: 300,             // tail 行数(后端钳制 10..2000)
       },
+      // 「站点状态」块折叠态(计划 26-10-02-1936 阶段2): 默认折叠, 「展开」即打开覆盖式全屏弹窗
+      // (两态之间无内嵌展开); 不持久化、每次进分区回折叠(同上 logs.open 先例); 取数时机在
+      // hr_status.js hrsToggle(首次展开才拉, 决策点⑤a)。数据本体 hrs 在 hr_status.js mixin data
+      hrsOpen: false,
       // 限速托管状态(FE-2C D2): /api/speed/mode 展示 + /api/speed/override 临时覆盖
       // ALT-01: altOn/altCurrent 随同一端点回传(备用速度模式 + 备用限速值 KiB/s)
       speedMode: { loaded: false, curveEnabled: false, target: null, current: null, altOn: false, altCurrent: null, error: "" },

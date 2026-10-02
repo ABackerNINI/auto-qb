@@ -171,6 +171,45 @@ window.AQB_HR_STATUS = {
       if (seen) t += ` · 最近被见到 ${seen}`;
       return t;
     },
+    /* ---------------- 折叠 ⇄ 全屏覆盖层(计划 26-10-02-1936 阶段2) ----------------
+     * 「展开」即打开覆盖式全屏弹窗(用户拍板①改判), 两态之间没有内嵌展开态; hrsOpen 在 state.js
+     * 根 data(同 logs.open 先例), 不持久化、每次进分区回折叠(config_hub.js hubGo 复位)。
+     * 取数时机(决策点⑤a): 首次展开才拉 —— 复用 loadHrStatus 既有链路, 无新定时器;
+     * 覆盖层展示的就是同一份已加载明细(单节点 v-show 显隐), 关闭/打开零新请求。 */
+    hrsToggle() {
+      if (this.hrsOpen) {
+        this.hrsCollapse();
+        return;
+      }
+      this.hrsOpen = true;
+      if (!this.hrs.loaded) this.loadHrStatus();
+    },
+    hrsCollapse() {
+      this.hrsOpen = false;
+    },
+    /* 折叠态点「全部立即拉取 / 刷新」= 明确想看: 顺手展开再拉(config_hub.js hubLogsLoad 同款先例);
+     * 已在覆盖层里时就是普通的拉取动作, 展开一步是空操作 */
+    hrsExpandAndRefreshAll() {
+      if (!this.hrsOpen) this.hrsToggle();
+      this.hrsRefresh();
+    },
+    hrsExpandAndReload() {
+      if (!this.hrsOpen) this.hrsToggle();
+      this.loadHrStatus(true);
+    },
+    /* 头部摘要(计划 §3.1): 未加载一句话说明默认态(拉取进行中则说正在读, 覆盖层头部同用此文案);
+     * 已加载给站点数与数据截至 —— 时间取各站点明细 now 的最大值(loadHrStatus 已带回的现成数据,
+     * 不新拉), 一个站点都没拉到明细时只给站点数 */
+    hrsSummaryText() {
+      if (!this.hrs.loaded) return this.hrs.loading ? "正在读取站点状态…" : "默认折叠, 展开后读取";
+      let ts = 0;
+      for (const k of Object.keys(this.hrs.details)) {
+        const d = this.hrs.details[k];
+        if (d && d.loaded && d.now > ts) ts = d.now;
+      }
+      const seen = ts ? ` · 数据截至 ${this.fmtTs(ts)}` : "";
+      return `${this.hrs.sites.length} 站点${seen}`;
+    },
     /* ---------------- 展示辅助(值全由后端算好, 这里只挑文案与配色) ---------------- */
     hrsStateText(s) {
       if (s.listing === "none") return "全站型(本地兜底)";

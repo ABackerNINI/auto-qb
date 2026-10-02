@@ -58,6 +58,7 @@ window.AQB_LIFECYCLE = {
       else if (this.speedOpen) this.closeSpeedDialog();  // 限速弹窗(SPD-04): 与统计面板同层
       else if (this.mgrOpen) this.closeMgr();  // 分类/标签管理对话框: 与添加对话框同层(内部确认框仍最优先)
       else if (this.metaOpen) this.closeMeta();  // 标签/分类编辑对话框: 与管理对话框同层
+      else if (this.hrsOpen) this.hrsCollapse();  // HR 站点状态全屏覆盖层(计划 26-10-02-1936 阶段2): 对话框层级, 先于清筛选兜底; escBusy 已同步(dialogs.js)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;  // 历史弹层(pop): 弹层先于右键菜单关闭

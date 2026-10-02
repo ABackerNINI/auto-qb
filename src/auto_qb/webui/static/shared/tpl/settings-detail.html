@@ -205,8 +205,8 @@
                   </template>
                 </div>
                 <!-- M4+合并(2026-09-25): HR 站点状态(只读端点 /api/hr/status) 并入「HR 在线核实」分区页尾,
-                     不再单列首页卡片; 打开分区时拉一次(config_hub.js hubGo), 之后手动刷新
-                     (站点数据小时级节奏, 不轮询) -->
+                     不再单列首页卡片; 26-10-02-1936 阶段2 起默认折叠, 打开分区不再自动拉数(决策点⑤a),
+                     首次展开才拉(hr_status.js hrsToggle), 之后手动刷新(站点数据小时级节奏, 不轮询) -->
                 <template v-if="hub.view === 'hr_check'">
                   <!-- 站点接入(计划 26-09-27-1318; 绑定改映射制见 26-09-27-1930): 启用的唯一入口 ——
                        卡片键来自内置站点档案(schema.constants.hr_check_site_presets), 点选启用 + 微调,
@@ -244,14 +244,34 @@
                   <div class="hb-blk hb-cut">
                     <div class="hb-blk-hd">
                       <span class="bh-t">站点状态</span>
-                      <span class="bh-n">数据新鲜度 · 索引进度 · 配额与熔断 · 现在为什么不放行</span>
+                      <span class="bh-n">{{ hrsSummaryText() }}</span>
                       <span class="bh-r">
                         <span v-if="hrsPollText()" class="bh-n">{{ hrsPollText() }}</span>
-                        <button class="hb-btn ghost sm" :disabled="hrs.refreshing" @click="hrsRefresh()">全部立即拉取</button>
-                        <button class="hb-btn ghost sm" :disabled="hrs.loading" @click="loadHrStatus(true)">刷新</button>
+                        <button class="hb-btn ghost sm" :disabled="hrs.refreshing" @click="hrsExpandAndRefreshAll()">全部立即拉取</button>
+                        <button class="hb-btn ghost sm" :disabled="hrs.loading" @click="hrsExpandAndReload()">刷新</button>
+                        <button class="hb-btn ghost sm" :aria-expanded="hrsOpen" @click="hrsToggle()">{{ hrsOpen ? '收起' : '展开' }}</button>
                       </span>
                     </div>
-                    <div style="padding:12px 14px">
+                  </div>
+                    <!-- 折叠 ⇄ 全屏覆盖层(计划 26-10-02-1936 阶段2, 用户拍板①改判): 「展开」即打开覆盖式
+                         全屏弹窗(让出顶栏与状态栏), 两态之间没有内嵌展开态 —— 内容区只在覆盖层里可见。
+                         实现是同一节点 v-show + fixed 定位, 不做 DOM 搬迁: 本项目是 Vue 3 运行时模板,
+                         appendChild 搬 Vue 管理的节点会在重渲染时与锚点插入打架; chips 过滤(laneSel)与
+                         阶段3 的排序状态都在组件 state 里, 单节点显隐天然随行, 零新请求。
+                         !覆盖层必须是 .hb-blk 的**兄弟**而不是子节点: atlas 的 .hb-cut 带 clip-path,
+                         会把 fixed 后代的绘制裁剪到块盒内(全屏层只剩与块重叠的部分可点, 其余点穿)。
+                         关闭三路: ✕ / ESC(lifecycle 退栈链 hrsOpen 分支, 先于 26-10-02-1632 清筛选兜底) /
+                         点遮罩(.hr-full-mask, 面板盖满中段时自然兜不到, 保留遮罩点击为面板留缝时的兜底) -->
+                    <!-- aqb:hr-full-modal:begin (守阵 test_frontend_hr_full_modal_wiring 的扫描锚) -->
+                    <div class="hr-full-mask" v-show="hrsOpen" aria-hidden="true" @click="hrsCollapse()"></div>
+                    <section v-show="hrsOpen" class="hr-full-modal" role="dialog" aria-modal="true" aria-label="站点状态(全屏)">
+                      <div class="hr-full-modal-hd">
+                        <span class="hr-full-modal-t">站点状态</span>
+                        <span class="hr-full-modal-sub">{{ hrsSummaryText() }}</span>
+                        <button class="hb-btn ghost sm" aria-label="关闭" @click="hrsCollapse()">✕</button>
+                      </div>
+                      <div class="hr-full-modal-bd">
+                        <div style="padding:12px 14px">
                       <p v-if="hrs.note" class="logs-note">{{ hrs.note }}</p>
                       <p v-if="hrs.refreshNote" class="logs-note">{{ hrs.refreshNote }}</p>
                       <p v-if="hrs.loaded && hrs.enabled" class="hrs-channel">{{ hrsChannelText() }}</p>
@@ -363,8 +383,10 @@
                           <!-- aqb:hr-diag:end -->
                         </article>
                       </div>
-                    </div>
-                  </div>
+                      </div>
+                      </div>
+                    </section>
+                    <!-- aqb:hr-full-modal:end -->
                 </template>
 
                 <!-- 运行日志: 随「常规」分区页尾渲染(hub.view === 'basic'), 不自动轮询;

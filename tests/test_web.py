@@ -155,6 +155,7 @@
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2) —— 设置分区表① 模板绑定(档位 chips 本地过滤/明细行/空态/失踪行挂钩/「数据截至」时间戳/「上次核实(放行判定)」独立列名)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
+- test_frontend_hr_full_modal_wiring: HR 站点状态折叠 + 覆盖式全屏弹窗守阵(计划 26-10-02-1936 阶段2) —— aqb:hr-full-modal 扫描锚段内遮罩/面板/头部(标题+摘要+✕)绑定齐全、有「展开/收起」钮且无独立「全屏」钮、面板无预展开属性(v-show 挂 hrsOpen); hrsOpen 默认 false(state.js)不持久化(hr_status.js/config_hub.js/state.js 无该键的 localStorage 写读); hubGo 不再自动拉数只复位 hrsOpen; ESC 关闭进 lifecycle 退栈链且同步 escBusy 名单(dialogs.js), 先于 1632 清筛选兜底; 首次展开才拉(hrsToggle 未 loaded 即调 loadHrStatus)、无 setInterval; .hr-full-mask/.hr-full-modal 三套 UI CSS 成对(prism 落 components.css)
 - test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助三函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表② 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格)
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
@@ -1839,9 +1840,10 @@ def test_frontend_template_split_wiring():
             n = open(path, encoding="utf-8").read().count("\n")
             # 单分片体量上限默认 400; settings-detail.html 是 HR 表①(计划 26-10-01-2216 阶段2,
             # 拍板②b 按站点明细表)的落点, 391 -> 435 行属功能增长不是拆分回潮, 单独点名给例外额度
-            # (其余分片仍钉 400); 该分片下次再长应把 speed/keys 等视图拆成独立分片 —— 切割须过
+            # (其余分片仍钉 400); 26-10-02-1936 阶段2 折叠头 + 覆盖式全屏覆盖层再涨 454 -> 473,
+            # 额度提到 500 —— 该分片下次再长应把 speed/keys 等视图拆成独立分片 —— 切割须过
             # 等价性验证(pitfalls/web-ui/frontend-split.md), 不得顺手抽文件
-            cap = 460 if os.path.basename(part["src"]) == "settings-detail.html" else 400
+            cap = 500 if os.path.basename(part["src"]) == "settings-detail.html" else 400
             if n > cap:
                 problems.append(f"{ui}/{part['src']} {n} 行, 超 {cap} 行单分片体量上限")
             if part.get("into") not in ("app", "body"):
@@ -2266,6 +2268,110 @@ def test_frontend_hr_diag_view_wiring():
     ):
         for cls in (".hrs-diag", ".hr-diag-kv", ".hr-wave-table"):
             assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5.6)"
+
+
+def test_frontend_hr_full_modal_wiring():
+    """HR 站点状态折叠 + 覆盖式全屏弹窗前端接线守阵(2026-10-02, 计划 26-10-02-1936 阶段2)
+
+    「站点状态」块改两态状态机: 折叠(仅头部) ⇄ 覆盖式全屏弹窗(用户拍板①改判: 「展开」即全屏,
+    无中间内嵌展开态; 决策点⑤a: 首次展开才拉数)。五类"漏一处 = 静默失效 / 拍板被推翻"的
+    故障形态机械钉住:
+    1. 模板绑定: aqb:hr-full-modal 扫描锚段内遮罩(点遮罩关)/面板(v-show 挂 hrsOpen, 无预展开
+      属性)/头部(标题 + 摘要 hrsSummaryText + ✕)齐全; 头部有「展开/收起」钮(:aria-expanded 随态,
+      运行日志块同款范式)且**无独立「全屏」钮**(拍板①改判后工具条全屏钮已取消);
+    2. 状态纪律: hrsOpen 默认 false(state.js, logs.open 同款先例)且不持久化 —— 三个承载文件
+      代码态零 localStorage; hubGo 打开分区不再自动拉数、只复位 hrsOpen(每次进分区回折叠);
+    3. 取数时机(决策点⑤a): hrsToggle 首次展开且未 loaded 才调 loadHrStatus; 折叠态点
+      「全部立即拉取/刷新」顺手展开再拉(hrsExpandAnd* 方法在场); 无 setInterval(不轮询);
+    4. ESC 三路关闭: lifecycle.js 退栈链有 hrsOpen 分支(先于 26-10-02-1632 清筛选兜底,
+      不抢不漏)且 dialogs.js::escBusy 名单同步(否则设置页 Esc 关弹窗会顺带退回设置首页);
+    5. CSS 三处成对: .hr-full-mask / .hr-full-modal 在三套 UI 聚合各 ≥1(prism 落 components.css,
+      与 .modal-mask 同文件), 让出顶栏(--head-h)/状态栏(--statusbar-h)的边界声明成对。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl = open(os.path.join(shared, "tpl", "settings-detail.html"), encoding="utf-8").read()
+    m = re.search(r"<!-- aqb:hr-full-modal:begin.*?-->(.*?)<!-- aqb:hr-full-modal:end.*?-->", tpl, re.S)
+    assert m, "settings-detail.html 缺 aqb:hr-full-modal 扫描锚 —— 覆盖层被移走或锚被删? 同步本守阵"
+    frag = m.group(1)
+
+    # 1. 覆盖层模板绑定(遮罩/面板/头部三件套) + 折叠默认态
+    for needle, what in (
+        ('class="hr-full-mask"', "遮罩(点遮罩关闭路径)"),
+        ('class="hr-full-modal"', "全屏面板"),
+        ("hrsCollapse()", "关闭动作(✕ 与遮罩两处复用)"),
+        ("hrsSummaryText()", "头部摘要(N 站点 · 数据截至)"),
+        ('aria-label="关闭"', "✕ 关闭钮可访问名"),
+        ('v-show="hrsOpen"', "显隐挂 hrsOpen(两态: 折叠 ⇄ 全屏覆盖层)"),
+    ):
+        assert needle in frag, f"全屏覆盖层缺 {what}(应有 `{needle}`)"
+    assert not re.search(r'class="hr-full-modal[^"]*\bopen\b', frag), "全屏面板不得带预展开属性(默认折叠是拍板交互)"
+    # 头部按钮(在 hb-blk-hd, 锚段之外): 展开/收起钮在场, 独立「全屏」钮不得存在(拍板①改判)
+    assert ':aria-expanded="hrsOpen"' in tpl, "头部缺「展开/收起」钮的 aria-expanded 随态绑定"
+    assert "hrsToggle()" in tpl, "头部缺展开/收起切换(hrsToggle)"
+    for legacy in ("hrsSiteFullscreen", ">全屏<", "'全屏'", '"全屏"'):
+        assert legacy not in tpl, f"不得复活独立「全屏」钮(拍板①改判: 展开即全屏) —— 命中 `{legacy}`"
+
+    # 2. 状态纪律: 默认折叠 + 不持久化
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+    assert "hrsOpen: false" in state_js, "state.js 缺 hrsOpen: false(默认折叠, logs.open 同款先例)"
+    # 不持久化只约束 hrsOpen 本身: config_hub.js 存量就有 hub 视图键的 localStorage 读写(合法),
+    # 这里钉的是「展开态不许新增存储通道」—— 任何含 localStorage 的行不得提及 hrsOpen/hrs.open,
+    # 且三个承载文件代码态不得出现新的 hrs 存储键字面量。
+    for name in ("hr_status.js", "config_hub.js", "state.js"):
+        code = open(os.path.join(shared, name), encoding="utf-8").read()
+        code = re.sub(r"/\*.*?\*/", "", code, flags=re.S)
+        code = re.sub(r"//[^\n]*", "", code)
+        for ln in code.splitlines():
+            if "localStorage" in ln:
+                assert "hrsOpen" not in ln and "hrs.open" not in ln, \
+                    f"{name} 把展开态写进 localStorage —— 不持久化被破坏: {ln.strip()}"
+        assert 'localStorage.setItem("autoqb.hrs' not in code, \
+            f"{name} 新增了 hrs 存储键 —— 展开态不持久化(计划 §3.1)"
+
+    # 3. 取数时机: 首次展开才拉 + 折叠态点拉取/刷新顺手展开
+    js = open(os.path.join(shared, "hr_status.js"), encoding="utf-8").read()
+    js_flat = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    for needle, what in (
+        ("hrsToggle()", "展开/收起切换单点"),
+        ("if (!this.hrs.loaded) this.loadHrStatus();", "首次展开才拉(决策点⑤a)"),
+        ("hrsExpandAndRefreshAll()", "折叠态点「全部立即拉取」顺手展开再拉"),
+        ("hrsExpandAndReload()", "折叠态点「刷新」顺手展开再拉"),
+        ("hrsSummaryText()", "摘要拼行单点"),
+    ):
+        assert needle in js_flat, f"hr_status.js 缺 {what}(应有 `{needle}`)"
+    assert "setInterval" not in js, "hr_status.js 不得有轮询定时器(计划 §5.5 刷新纪律)"
+    hub_js = open(os.path.join(shared, "config_hub.js"), encoding="utf-8").read()
+    assert 'if (key === "hr_check") this.hrsOpen = false;' in hub_js, \
+        "hubGo 打开 HR 分区必须复位 hrsOpen(每次进分区回折叠), 且不得再自动 loadHrStatus"
+    assert 'key === "hr_check" && !this.hrs.loaded' not in hub_js, \
+        "hubGo 不得在打开分区时自动 loadHrStatus(决策点⑤a: 取数时机收进 hrsToggle)"
+
+    # 4. ESC 关闭: 退栈链分支 + escBusy 名单两处同步(不抢不漏)
+    lc = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
+    dl = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
+    chain = re.search(r"if \(e\.key !== \"Escape\"\) return;.*?\}\);", lc, re.S)
+    assert chain, "lifecycle.js 找不到 Esc 退栈链 —— 结构变了? 同步本守阵"
+    assert "this.hrsOpen) this.hrsCollapse()" in chain.group(0), \
+        "Esc 退栈链缺 hrsOpen 分支(覆盖层 ESC 关闭不生效或被清筛选兜底抢走)"
+    clear_idx = chain.group(0).find("clearFilters()")
+    hrs_idx = chain.group(0).find("hrsCollapse()")
+    assert 0 <= hrs_idx < clear_idx, "hrsOpen 分支必须排在清筛选兜底之前(26-10-02-1632 优先级: 关弹窗不顺带清筛选)"
+    busy = re.search(r"escBusy\(\) \{\n(.*?)\n    \},", dl, re.S)
+    assert busy and "this.hrsOpen" in busy.group(1), \
+        "escBusy 名单缺 hrsOpen —— 漏同步时设置页按 Esc 关弹窗会顺带退回设置首页(hubOnKey)"
+
+    # 5. CSS 三处成对: 遮罩 + 面板 + 上下边界让出声明
+    for css, name in (
+        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
+        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
+        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+    ):
+        for cls in (".hr-full-mask", ".hr-full-modal"):
+            assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5 阶段2)"
+        assert "--head-h" in css and "--statusbar-h" in css, \
+            f"{name} 的全屏覆盖层缺顶栏/状态栏让出声明(--head-h / --statusbar-h)"
+    pri_components = open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read()
+    assert ".hr-full-modal" in pri_components, "prism/css/components.css 缺全屏覆盖层段(与 .modal-mask 同文件)"
 
 
 def test_frontend_hr_contract_keys_match_backend():

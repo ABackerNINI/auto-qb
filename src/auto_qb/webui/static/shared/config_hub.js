@@ -374,9 +374,10 @@ window.CONFIG_HUB = {
         const names = this.cfgRuleGroupNames();
         this.cfg.ruleGroupKey = names.length ? names[0] : null;
       }
-      // 运行日志已并入「常规」分区页尾且默认折叠(2026-09-28): 首次展开才拉一次,
-      // 之后手动刷新不轮询 —— 折叠态不预取, 省掉打开分区就背一次最多 2000 行 tail 的请求
-      if (key === "hr_check" && !this.hrs.loaded) this.loadHrStatus();
+      // 站点状态块(计划 26-10-02-1936 阶段2): 默认折叠, 打开分区不再自动拉数(决策点⑤a,
+      // 首次展开才拉, 取数时机在 hr_status.js hrsToggle) —— 展开态不持久化, 每次进分区
+      // (含刷新后 hubRestore 恢复到本分区)都回到折叠态
+      if (key === "hr_check") this.hrsOpen = false;
       // 键盘快捷键分区(W6): 每次进入都重拉服务端真值对齐草稿(他处保存后刷新可见)
       if (key === "keys") this.kbPanelEnter();
       window.scrollTo({ top: 0 });

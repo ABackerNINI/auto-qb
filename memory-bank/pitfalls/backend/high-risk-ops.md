@@ -97,3 +97,4 @@
 - **处置**: 保持 ACTION_WAITING(不计失败、不推熔断) + 每个站点只报**一次** WARNING(超限会持续到下一个
   窗口, 逐轮报就是刷屏)。守阵: `test_extension_quota_refusal_yields_waiting_not_failure` ·
   `test_extension_quota_caps_and_refuses`(扩展侧真跑, 验「被拒不等于发了请求」)。
+**Refs:** memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html

@@ -484,7 +484,7 @@ window.AQB_DIALOGS = {
      * 关闭链, 不顺带把设置页退回首页。WARN: 新增浮层时两处同步: 那条 else-if 链 + 本方法(搜「escBusy」)。 */
     escBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
-        this.metaOpen || this.filePrio.visible || this.drawer.open || this.historyOpen || this.headMenu.visible ||
+        this.metaOpen || this.hrsOpen || this.filePrio.visible || this.drawer.open || this.historyOpen || this.headMenu.visible ||
         this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.kbHelpOpen || this.filterMenu ||
         this.menu.visible || this.selGroups.length || this.selMembers.length || this.expandedKey ||
         this.expandedShowEp || this.expandedShows.length);

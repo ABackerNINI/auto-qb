@@ -129,3 +129,5 @@
   `REANNOUNCE_CONFIRM_TIMEOUT=30s` 超时判失败。
   前提是**替身 trackers 带 `status` / `next_announce`** —— FakeClient 默认只返回 url ⇒ **永远无结论**。
 - **处置**: 改这条链路时先补齐替身字段, 否则测的是空壳。
+
+**Refs:** memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html
