@@ -26,6 +26,7 @@
 
 ## Open
 
+- [26-10-02-1621] [修改计划 · 站点引用规则拒绝重复 — auto-qb](26-10-02-1621-plan-rules-ref-duplicate-reject.html) — `rules-ref-duplicate-reject`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`

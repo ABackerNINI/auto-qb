@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>修改计划 · 站点引用规则拒绝重复 — auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="rules-ref-duplicate-reject">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-02-1621">
+<meta name="doc-updated" content="26-10-02-1621">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-02-backend-rules-ref-duplicate-reject.md">
+<style>
+  *{box-sizing:border-box}
+  :root{
+    color-scheme: dark;
+    --bg:#0f1012; --surface:#15171b;
+    --ink:#e3e5e8; --ink-2:#a8b0b9; --ink-3:#727c86;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.17);
+    --accent:#c8a45c;
+    --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"Cascadia Mono",Consolas,"SF Mono",ui-monospace,Menlo,monospace;
+  }
+  html{background:var(--bg)}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+  a{color:var(--ink);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line-2)}
+  a:hover{text-decoration-color:var(--accent)}
+
+  .mast{padding:60px 0 26px;border-bottom:1px solid var(--line-2)}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+  h1{font-size:31px;line-height:1.25;letter-spacing:-.02em;font-weight:600;margin:0 0 14px}
+  .lede{font-size:15.5px;color:var(--ink-2);max-width:78ch;margin:0 0 20px}
+  .lede strong{color:var(--ink)}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:1.9}
+  .meta b{color:var(--ink-2);font-weight:400}
+
+  .layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:56px;align-items:start;padding:40px 0 100px}
+  .toc{position:sticky;top:24px;font-size:12.5px;line-height:1.6}
+  .toc p{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .toc a{display:block;color:var(--ink-2);padding:3px 0;border-left:2px solid transparent;padding-left:10px;text-decoration:none}
+  .toc a:hover{color:var(--ink);border-left-color:var(--accent)}
+
+  section{margin-bottom:64px}
+  .sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:10px;margin:0 0 22px}
+  .sec-no{font-family:var(--mono);font-size:13px;color:var(--accent)}
+  h2{font-size:20px;font-weight:600;letter-spacing:.01em;margin:0}
+  h3{font-size:15.5px;font-weight:600;margin:28px 0 10px}
+  p{margin:0 0 14px;max-width:76ch}
+  ul{margin:0 0 14px;padding-left:22px;max-width:74ch}
+  li{margin-bottom:6px}
+  code{font-family:var(--mono);font-size:.86em;background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:1px 5px}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.6;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 16px;overflow-x:auto;margin:0 0 16px}
+  pre code{background:none;border:none;padding:0;font-size:inherit}
+  .path{font-family:var(--mono);font-size:.86em;color:var(--ink-2);white-space:nowrap}
+
+  table{width:100%;border-collapse:collapse;margin:0 0 16px;font-size:13.5px}
+  th{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:400;text-align:left;padding:8px 12px 8px 0;border-bottom:1px solid var(--line-2)}
+  td{padding:9px 12px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+  td:first-child{white-space:nowrap}
+
+  .verdict{border:1px solid var(--line-2);border-radius:4px;padding:18px 20px;margin:0 0 22px;max-width:78ch}
+  .verdict p{margin:0}
+  .verdict .tag{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:8px}
+  .note{font-size:13px;color:var(--ink-3)}
+  .wave{border-top:1px solid var(--line);padding-top:6px;margin-top:18px}
+  .wave .wno{font-family:var(--mono);font-size:12px;color:var(--accent)}
+
+  .colophon{border-top:1px solid var(--line-2);padding:26px 0 60px;font-family:var(--mono);font-size:12px;color:var(--ink-3);line-height:2}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="kicker">auto-qb · 修改计划</p>
+    <h1>站点引用规则拒绝重复 — rules_ref 判重</h1>
+    <p class="lede">站点的规则引用列表（<code>trackers.&lt;站点&gt;.rules</code>）目前只校验格式与存在性，同一引用写两遍会静默通过。本计划先回答「重复引用有没有实际用途」——结论是<strong>没有</strong>：运行时按规则名去重，重复条目完全惰性，只可能是误操作。据此在配置校验层拒绝重复，并在 WebUI 下拉侧防呆，文案与文档同步。</p>
+    <p class="meta">
+      状态 <b>Open（待拍板）</b> · 取证基线 <b>c02e9e14</b>（develop，已同步） · 当前全量基线参照 <b>2290 passed + 3 skipped / 99%</b>（baselines/26-10-02-0707）<br>
+      撰写 <b>26-10-02-1621</b> · 本轮为分析 + 计划，未改任何生产文件
+    </p>
+  </div>
+</header>
+
+<div class="wrap layout">
+  <nav class="toc">
+    <p>目录</p>
+    <a href="#s1">§1 背景与动机</a>
+    <a href="#s2">§2 现状证据链</a>
+    <a href="#s3">§3 重复引用的用途分析</a>
+    <a href="#s4">§4 方案（四波次）</a>
+    <a href="#s5">§5 测试与验证</a>
+    <a href="#s6">§6 风险与拍板点</a>
+    <a href="#s7">§7 非目标</a>
+    <a href="#s8">§8 变更记录</a>
+  </nav>
+
+  <main>
+
+    <section id="s1">
+      <div class="sec-head"><span class="sec-no">§1</span><h2>背景与动机</h2></div>
+      <p>站点通过 <code>rules</code> 字段声明要执行的规则，填 <code>@规则集</code>（整组）或 <code>@规则集.规则名</code>（单条），既可从下拉选择也可直接粘贴。校验层只回答两件事：是不是 <code>@</code> 开头、引用的目标存不存在——<strong>同一引用出现两次时无人过问</strong>。</p>
+      <p>重复条目进入运行时后被按名称去重，行为上毫无差异，只会在设置页留下两行一模一样的引用，让用户无从判断「写两遍是不是有特殊含义」。这不符合黄金法则 4（fail-fast：配置错误在 <code>validate_config</code> 聚合报错）——错误配置应当被拒绝，而不是带着惰性条目存活。</p>
+    </section>
+
+    <section id="s2">
+      <div class="sec-head"><span class="sec-no">§2</span><h2>现状证据链</h2></div>
+      <table>
+        <tr><th>环节</th><th>位置</th><th>今天的行为</th></tr>
+        <tr><td>字段声明</td><td><span class="path">src/auto_qb/config/schema/trackers.py:152-158</span></td><td><code>rules</code> 字段，kind = <code>rules_ref</code>，默认 <code>[]</code>，help 未提重复</td></tr>
+        <tr><td>配置校验</td><td><span class="path">src/auto_qb/config/validation/rules.py:54-68</span></td><td><code>_check_rule_refs</code>：逐条查 <code>@</code> 前缀与目标存在性；无查重。调用点 <span class="path">sections.py:482-484</span>（仅 <code>_check_str_list</code> 通过后）</td></tr>
+        <tr><td>判重先例</td><td><span class="path">src/auto_qb/config/validation/sections.py:370-407</span></td><td><code>fs.path_map.from</code> 已有「归一后判重 + 引用首现序号」先例，报错口径可直接对齐</td></tr>
+        <tr><td>加载</td><td><span class="path">src/auto_qb/config/loaders.py:218</span></td><td>原样保序进 <code>TrackerConfig.rules</code>，不去重</td></tr>
+        <tr><td>运行时解析</td><td><span class="path">src/auto_qb/core/modules/rules_mod.py:185-196, 377-392</span></td><td><code>_resolve_refs</code> <strong>按规则名去重</strong>（docstring 明言），重复 ref 只产出一条 Rule</td></tr>
+        <tr><td>任务与事件</td><td><span class="path">src/auto_qb/core/modules/rules_mod.py:397+, 327-329</span></td><td>interval 任务与 on_* 事件分派消费的都是去重后列表</td></tr>
+        <tr><td>前端控件</td><td><span class="path">src/auto_qb/webui/static/shared/tpl/xtpl.html:96-107</span></td><td>自由文本行（可粘贴）＋「从已有规则集/规则中选择…」追加下拉</td></tr>
+        <tr><td>前端追加</td><td><span class="path">src/auto_qb/webui/static/shared/config_editor.js:1228-1232, 128-139</span></td><td><code>refPick</code> 选中即追加不查已有；<code>ceRefOptions</code> 不隐藏已引用项——下拉重复选同一条是最容易的误操作入口</td></tr>
+        <tr><td>保存链</td><td><span class="path">src/auto_qb/webui/server/routes/config.py:114-141</span></td><td>PUT → <code>write_tree</code> → <code>_validate_tree</code>（<span class="path">writer.py:216</span>）→ <code>validate_config</code>；校验失败经 <code>cfgSave</code> 以 toast 展示（<span class="path">config_editor.js:170</span>）——后端新报错对 UI 零改动即生效</td></tr>
+      </table>
+    </section>
+
+    <section id="s3">
+      <div class="sec-head"><span class="sec-no">§3</span><h2>重复引用的实际用途分析</h2></div>
+      <div class="verdict">
+        <span class="tag">结论</span>
+        <p>重复引用<strong>没有任何实际用途</strong>。运行时按规则名去重使重复条目完全惰性；引用语法无参数、无次数、无权重语义，重复不承载任何信息——它只可能是误操作，应当拒绝。</p>
+      </div>
+      <h3>论据 1 · 执行幂等：写两遍不会跑两遍</h3>
+      <p><code>_resolve_refs</code> 以规则名为 <code>seen</code> 键去重（rules_mod.py:377-392），种子绑定的规则列表里每条规则至多出现一次。interval 规则按去重后列表逐条建种子级任务（rules_mod.py:425 附近），on_* 事件规则按同一列表过滤分派（rules_mod.py:327-329）——引用次数不进入任何执行路径。</p>
+      <h3>论据 2 · 无次数/权重语义可被重复表达</h3>
+      <p>引用是无参字符串；<code>interval</code> / <code>execute_once</code> / <code>cooldown</code> / <code>stop_following_rules_if</code> 等全部执行语义定义在规则 spec 侧（validation/rules.py:11-21 的 <code>RULE_KNOWN_KEYS</code>）。「引用两次 = 跑两遍 / 优先级更高」这类直觉在实现里不存在，也不存在任何按引用次数加权的机制。</p>
+      <h3>论据 3 · 无顺序增益</h3>
+      <p><code>@规则集</code> 展开按规则声明序（<code>enabled_rules</code> 顺序）追加，重复条目不改变去重后列表的相对顺序；事件规则的执行顺序由<strong>互不相同的</strong>规则的先后决定，与重复无关。</p>
+      <h3>重复从哪来（误操作来源）</h3>
+      <ul>
+        <li>下拉重复选同一条：<code>refPick</code> 追加前不查重、<code>ceRefOptions</code> 不隐藏已引用项，连点两次即得两行相同引用；</li>
+        <li>粘贴或把某行改成与另一行相同（自由文本行始终可编辑）。</li>
+      </ul>
+      <h3>边缘辨析：@A 与 @A.b 同填（本次不处理）</h3>
+      <p>这是另一类冗余——集合包含重叠：绑定集合与只填 <code>@A</code> 完全相同。但二者是不同字符串，且「整组 + 点名一条」存在可读性意图；判包含重叠需要集合关系推导，复杂度与误报风险都不成比例。归入非目标（§7），本次不拒绝、不告警。</p>
+    </section>
+
+    <section id="s4">
+      <div class="sec-head"><span class="sec-no">§4</span><h2>方案（四波次）</h2></div>
+
+      <div class="wave">
+        <p><span class="wno">W1 · 后端校验判重（核心）</span></p>
+        <p>在 <code>_check_rule_refs</code>（validation/rules.py:54）现有逐条循环之后加第二轮判重：</p>
+        <pre><code>seen: dict = {}  # 归一形 -&gt; 首现序号(判重); 仅 @ 开头的合法形参与
+for i, ref in enumerate(refs):
+    r = str(ref).strip()
+    if not r.startswith("@") or not r[1:].strip():
+        continue  # 畸形引用已在第一轮报格式错, 不叠加查重错
+    if r in seen:
+        errors.append(f"{where}[{i}]: 规则引用重复(与第 {seen[r]} 条相同): {r}")
+    else:
+        seen[r] = i</code></pre>
+        <ul>
+          <li>归一键 = <code>str(ref).strip()</code>：与函数现有归一口径一致；<code>"@A"</code> 与 <code>"@A "</code>（尾随空白）判重；<strong>不折叠大小写</strong>（规则名大小写敏感）；序号 0 基，与 path_map 先例（sections.py:406）一致。</li>
+          <li>报错示例：<code>config.trackers.T1.rules[2]: 规则引用重复(与第 0 条相同): @example_rules</code>。存在性错误照旧各报各的（聚合报错不互斥）。</li>
+          <li>备选被否：按 <code>r[1:].strip()</code>（去 @ 后内剥离）归一——能把 <code>"@ A"</code> 判进重复，但那只在规则集名真的带前导空格时才有意义（病态），代价是报错里显示的不是用户原文。</li>
+          <li>loaders 不去重、writer 不改写用户数据——只拒收，不静默修正（见拍板点 B）。</li>
+        </ul>
+      </div>
+
+      <div class="wave">
+        <p><span class="wno">W2 · 前端防呆（WEBUI 设置页）</span></p>
+        <ul>
+          <li><code>ceRefOptions</code> 的下拉选项按当前站点已引用值过滤（行级加 <code>refOptions()</code> 计算属性，模板 <span class="path">xtpl.html:102-105</span> 改用之）——已引用的规则根本不出现在下拉里，误选入口消失；</li>
+          <li><code>refPick</code> 追加前查重 no-op，作双保险（防过滤渲染前的连选竞态）；</li>
+          <li>自由文本行保持可编辑（粘贴体验不动），由此产生的重复由 W1 在保存时报错兜底，toast 通道（<code>cfgSave</code> catch）零改动即展示；</li>
+          <li>不做行内实时红框校验——要动 Vue 行级校验面，收益不成比例（见非目标）。</li>
+        </ul>
+      </div>
+
+      <div class="wave">
+        <p><span class="wno">W3 · 文案与文档同步（4 处）</span></p>
+        <p>统一补一句「重复引用会被配置校验拒绝（同一引用写一次即可）」：</p>
+        <ul>
+          <li>schema help：<span class="path">trackers.py:157</span>（<code>rules</code> 字段 help 尾部）；</li>
+          <li>设置页模板：<span class="path">resources/settings-page-templates/05-console-hub.html:904</span> 的 <code>data-note</code> 与 <span class="path">04-split-explain.html:407-411</span> 的 <code>row-note</code>；</li>
+          <li>使用文档：<span class="path">docs/configuration.md:410</span>（规则系统一节的引用句后）。</li>
+        </ul>
+      </div>
+
+      <div class="wave">
+        <p><span class="wno">W4 · 测试</span> —— 清单见 §5，与各波次同提交。</p>
+      </div>
+    </section>
+
+    <section id="s5">
+      <div class="sec-head"><span class="sec-no">§5</span><h2>测试与验证</h2></div>
+      <ul>
+        <li><span class="path">tests/test_config.py::test_validate_rule_refs</span>（:589）扩展四例：①同一 <code>@</code> 引用写两遍 → 报「规则引用重复」；②<code>"@example_rules"</code> 与 <code>"@example_rules "</code> → 判重；③畸形引用重复（<code>"example_rules"</code> ×2）→ 只报格式错、不叠加查重错；④去重后的合法配置 load 通过且 <code>rules</code> 原样保序（锁「loaders 不静默去重」）。</li>
+        <li><span class="path">tests/test_rules_core.py::test_tracker_rules_ref</span>（:180）追加段：<code>tracker_rules=["@example_rules", "@example_rules"]</code> → <code>_rules_for_torrent</code> 绑定恰一次（运行时去重回归锁）。</li>
+        <li><span class="path">tests/test_web.py</span>：现有 rules_ref 控件静态断言（:2724/:2778 readonly 面）不受 W2 影响；跑一遍确认。目前无测试引用 <code>ceRefOptions</code>/<code>refPick</code>（已核），改名/加过滤无断言负担。</li>
+        <li>文档守卫：<span class="path">tests/test_docs_forms.py</span>（本文件 meta / 命名 / dark 主题）。</li>
+        <li>波次内 <code>commands run test.quick</code>；收尾 <code>commands run test.full</code> + 新基线切片（执行轮 DoD）。</li>
+        <li>W2 浏览器冒烟：设置页站点分区——下拉里已引用项不再出现；人为粘贴重复 → 保存 toast 报错文案可见。</li>
+      </ul>
+    </section>
+
+    <section id="s6">
+      <div class="sec-head"><span class="sec-no">§6</span><h2>风险与拍板点</h2></div>
+      <ul>
+        <li><strong>存量兼容</strong>：若现有 config.yml 已含重复引用，升级后启动/保存即报错——这是 fail-fast 的意图而非回归，修复动作明确（删多余行）。<strong>拍板点 A</strong>：直接报错（推荐）vs 先 WARN 一版观察。</li>
+        <li><strong>不做静默去重迁移</strong>：writer / 迁移链不改写用户数据（黄金法则 2 保守默认）。<strong>拍板点 B</strong>：确认只拒收、不修正。</li>
+        <li><strong>影响面</strong>：<code>rules</code> 在绑定三元组（domains/rules/groups）相等比较里（rules_mod.py:115-133），用户删掉重复行会触发一轮 L2 结构重建——一次性，无害。</li>
+        <li><strong>回滚</strong>：撤销 <code>_check_rule_refs</code> 判重分支与前端过滤即可，无状态、无格式变更。</li>
+      </ul>
+    </section>
+
+    <section id="s7">
+      <div class="sec-head"><span class="sec-no">§7</span><h2>非目标</h2></div>
+      <ul>
+        <li><code>@A</code> 与 <code>@A.b</code> 的包含重叠不拒绝、不告警（§3 边缘辨析）；</li>
+        <li>不做设置页行内实时校验（保存时后端聚合报错已可见）；</li>
+        <li>不做静默去重（迁移链 / writer 均不改写用户数据）；</li>
+        <li>不动 loaders 的保序加载语义与 <code>rules_ref</code> 控件的粘贴交互。</li>
+      </ul>
+    </section>
+
+    <section id="s8">
+      <div class="sec-head"><span class="sec-no">§8</span><h2>变更记录</h2></div>
+      <ul>
+        <li><strong>v1 · 26-10-02-1621</strong> — 初稿：用途分析（三论据 + 边缘辨析）+ 四波次方案 + 拍板点 A/B。</li>
+      </ul>
+    </section>
+
+    <footer class="colophon">
+      auto-qb · plans/26-10-02-1621-plan-rules-ref-duplicate-reject.html · doc-topic: rules-ref-duplicate-reject<br>
+      取证基线 c02e9e14 · 本轮仅分析产出本计划，生产文件零改动
+    </footer>
+
+  </main>
+</div>
+
+</body>
+</html>
