@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-delete-tag-scope-confusion">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-03-0504">
+<meta name="doc-updated" content="26-10-03-0536">
+<meta name="doc-refs" content="memory-bank/issues/26-10-01-2129-bug-webui-delete-tag-scope-confusion.html,memory-bank/tasks/26-10-03-webui-delete-tag-scope-confusion.md">
+<title>「删除类似标签」全局/站点作用域混淆: 三层根因取证与方案选型 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2129;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --bad: #e08a8a;
+    --good: #86c9a0;
+    --code-bg: #151b22;
+    --mark: #151c23;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 210px 1fr; gap: 52px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--ink-faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--ink-dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--ink-faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--ink-faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--ink-dim); max-width: 64ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: #16232a; color: var(--accent-ink); border: 1px solid #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 80ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 80ch; }
+  li { margin-bottom: 7px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); }
+  td.y { color: var(--good); }
+  td.n { color: var(--bad); }
+  td.w { color: var(--warn); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 80ch; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .verdict { border: 1px solid #2b4048; background: var(--paper); padding: 18px 20px; border-radius: 4px; margin-bottom: 16px; }
+  .verdict .vlabel { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 8px; }
+  .verdict p { margin-bottom: 8px; }
+  .verdict p:last-child { margin-bottom: 0; }
+  .hint { color: var(--ink-faint); font-size: 13px; max-width: 80ch; }
+  .src { font-size: 12.5px; color: var(--ink-dim); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>结论速览</a>
+    <a href="#s2"><span class="no">02</span>问题与出处</a>
+    <a href="#s3"><span class="no">03</span>三层缺陷根因</a>
+    <a href="#s4"><span class="no">04</span>影响面: 9 键全量盘点</a>
+    <a href="#s5"><span class="no">05</span>成熟方案调研结论</a>
+    <a href="#s6"><span class="no">06</span>候选方案对比 A/C/B</a>
+    <a href="#s7"><span class="no">07</span>是否填补 config 层缺陷</a>
+    <a href="#s8"><span class="no">08</span>给拍板人的决策项</a>
+    <a href="#s9"><span class="no">09</span>事实来源与核实标注</a>
+    <div class="toc-foot">
+      类型 report · 出厂即冻结<br>
+      取证基线 8cb2da59 (2026-10-03)<br>
+      本次不含任何代码改动
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">根因取证 / 可行性与方案调研 · report</div>
+    <h1>「删除类似标签」全局/站点作用域混淆: 三层根因取证与方案选型</h1>
+    <p class="lede">issue <code>26-10-01-2129</code> 的正式分析报告: 复述问题, 给出 config 层 / WebUI 层 / 显示层的三层缺陷根因 (证据到 file:line), 盘点全部 9 个受影响键, 调研业界「继承 + 覆盖 + 恢复继承」的成熟做法, 并把 A/C/B 三个候选方案与「要不要填补 config 层缺陷」的论证摆到一起, 供拍板。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-03-0504-report-webui-site-scope-confusion</div></div>
+      <div class="item"><div class="k">专题</div><div class="v">webui-site-scope-confusion</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">取证时间</div><div class="v">2026-10-03 (phase1/phase2 同日)</div></div>
+      <div class="item"><div class="k">基线</div><div class="v">8cb2da59</div></div>
+      <div class="item"><div class="k">引用</div><div class="v"><a href="../issues/26-10-01-2129-bug-webui-delete-tag-scope-confusion.html">26-10-01-2129 (issue)</a></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论速览</h2>
+    <div class="verdict">
+      <div class="vlabel">Verdict</div>
+      <p><b>issue 假设的两层缺陷均属实, 且存在第三层「显示失真」缺陷。</b>① config 层 <code>_strip_none</code> 把 str/list 的「显式空」与「未定义」坍缩 (文档化设计取舍; bool 键反而可区分, 见 §3.1); ② WebUI 层 bool 开关恒写值从不删键 → 单向锁死, 恢复入口 <code>cfgResetField</code> 是死代码, 而后端删键链路 (<code>_sync_mapping</code>) 早已存在 —— <b>缺陷 (b) 的修复是纯前端接线</b> (§3.2); ③ 回填显示用 schema 默认而非合并生效值, 用户看到的与生效的不一致 (§3.3)。</p>
+      <p><b>受影响面不止「删除类似标签」一个键</b>: 所有「全局默认 + 站点覆盖」语义的键共 9 个 (7 个覆盖链键 + 2 个并集键) 同病 (§4)。</p>
+      <p><b>推荐方案 C</b> (WebUI 层修齐, config 层零改动): 生效值回填 + 「恢复跟随全局」按钮 (= 删键, 与 git <code>--unset</code> / VS Code Reset / dconf <code>gsettings reset</code> 同构) + 来源徽标, 交互对 9 个键统一。求最小可先交其真子集方案 A; 「站点覆盖为空」若是真实需求则直接上方案 B (config 层三态, 风险中)。<b>「是否填补 config 层缺陷」的裁决: 当前不填, B 挂触发条件待命, 升级路径平滑</b> (§7)。待拍板项见 §8。</p>
+    </div>
+    <div class="callout warn"><b>一个必须先说清的边界</b>: 「站点覆盖为空」(如: 全局配了 <code>hr.add_tag</code>, 某站想「本站不打标」) 在 config 层就不可表达 —— 空串必被 <code>_strip_none</code> 剥掉, <b>任何 WebUI 手法都救不了</b> (phase2 §3)。这是唯一需要拍板人回答「是不是真实需求」的能力缺口; 其余三层缺陷 A/C 均可闭环。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>问题与出处</h2>
+    <p>issue 档案: <a href="../issues/26-10-01-2129-bug-webui-delete-tag-scope-confusion.html"><code>memory-bank/issues/26-10-01-2129-bug-webui-delete-tag-scope-confusion.html</code></a> (bug / standard / <b>Open</b>, 入池 2026-10-01 21:29)。</p>
+    <ul>
+      <li><b>来源</b>: TODO.md L97 未完成项盘点 (入池取证 @ HEAD <code>f9155eaa</code>):</li>
+    </ul>
+<pre><code># TODO.md L97 原文 (取证 2026-10-01 @ HEAD f9155eaa)
+# 「删除类似标签」疑为「删除类标签」笔误, issue 保留原文
+[] 删除类似标签 全局/站点单设置 没有分清, 比如点击开启后就无法切换到全局设置了</code></pre>
+    <ul>
+      <li><b>现象</b>: 「删除类似标签」功能的全局设置与站点单设置没有分清; 在站点侧点击开启后无法再切换回全局设置 —— 一旦落为站点级就回不去 (作用域切换单向锁死)。</li>
+      <li><b>触发条件 / 影响面 / 严重度</b> (入池时登记): 站点单设置里开启后想改回跟随全局; WEBUI 设置页站点设置项与对应配置键的作用域语义; <b>中</b>。</li>
+      <li><b>命名口径</b>: issue/TODO 写「删除类(似)标签」, 代码与 schema 标签为「删除类似标签」(全局 <code>config/schema/groups.py</code> L255; 站点 <code>config/schema/trackers.py</code> L161)。本报告统一用代码标签。</li>
+      <li><b>入池时根因栏</b>: 「待查 —— 是 UI 缺『恢复全局』入口还是配置状态机本身不支持回退, 未定位」。本报告对两者都给出确定答案 (§3): <b>主根因是前端接线缺失; 配置状态机对 bool 键本身支持回退, 后端删键链路也已存在</b>。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>三层缺陷根因</h2>
+    <p class="hint">行号均为 2026-10-03 取证快照, 排障请用符号重定位。先给一个总判断: <b>数据层与保存链路是保真的</b> (§3.4), 三层缺陷集中在前端与一个文档化的设计取舍上。</p>
+
+    <h3>3.1 config 层: <code>_strip_none</code> 使 str/list「显式空 = 未定义」坍缩 (文档化设计取舍)</h3>
+    <ul>
+      <li>YAML 读取用 <code>yaml.BaseLoader</code> (<code>src/auto_qb/config/loaders.py</code> L453) —— 所有标量都是字符串; <code>key:</code> 留空解析为 <code>''</code>。</li>
+      <li><code>_strip_none</code> (<code>src/auto_qb/config/validation/core.py</code> L41-51) 在 <code>load_config</code> (loaders.py L460) 对整棵树递归剔除 <code>None</code> 与 <code>''</code>。其 docstring (core.py L44-45) 自证: BaseLoader 把 <code>key:</code> 留空解析为 <code>''</code>, 与显式 <code>""</code> 无法区分, <b>统一视为未配置</b> —— 即设计上就把「显式空」与「未配置」坍缩为同一结果。</li>
+      <li><b>对 str/list 键成立</b> (如 <code>hr.add_tag</code>): 站点「未定义」= 键缺失; 站点「显式空」= <code>''</code> 被剥 → 与未定义坍缩, 合并结果同为回退全局。站点级<b>永远无法表达「覆盖为空」</b>。</li>
+      <li><b>对 bool 键不成立</b> (<code>remove_similar_tags</code> / <code>overwrite_category*</code>): <code>''</code> 同样被剥 (留空即未定义), 但 <code>"false"</code> 是非空串能穿过 <code>_strip_none</code>, 站点显式 false 是合法覆盖值, 与「未定义」在 YAML 空间可区分 —— <b>config 层对 bool 不坍缩, bool 的问题纯在 WebUI 层</b> (§3.2)。</li>
+      <li>校验角色: <code>validate_config</code> (core.py L150-257) 只校验值格式/未知键, 不做存在性/作用域语义裁决; <code>schema.py</code> (fields.py L68) 自我定位 default「仅作初始值, 非校验依据」。</li>
+    </ul>
+
+    <h3>3.2 WebUI 层: bool 开关恒写值从不删键 → 单向锁死 + 恢复入口死代码 + 后端删键链路已存在</h3>
+    <ul>
+      <li><b>恒写不删</b>: bool 控件 <code>setBool</code> (<code>webui/static/shared/js/config_editor.js</code> L1215-1217) → <code>cfgSetBool</code> L349-351: <code>cfgSetPath(path, checked ? "true" : "false")</code> → <code>cfgSetPath</code> L341-348 无条件 <code>node[key] = value</code>。到达后端的永远是显式字符串标量, <b>键一旦碰过就永久存在于提交树中</b> —— 「站点键缺失」这个状态前端产不出来。</li>
+      <li><b>恢复入口是死代码</b>: <code>cfgResetField</code> (config_editor.js L360-363, 注释明写「恢复字段为默认(移除该键, 让后端走默认值)」, 内部调 <code>cfgDelPath</code> L352-359) <b>在整个 src/ 与模板里零引用</b> (grep 全仓只有定义处一行)。</li>
+      <li><b>后端删键链路已存在</b>: 写回层 <code>write_tree</code> (<code>webui/server/routes/config.py</code> L121-148 → <code>writer.py</code> L128-140) 的 <code>_sync_mapping</code> (writer.py L382-401) —— <b>L388-390: 磁盘有而提交树没有的键会被 <code>del</code> 删掉</b>。即「树中删键 → 磁盘删键」天然支持, 整棵 dump 不丢「未定义」信息。</li>
+      <li><b>结论</b>: 缺陷 (b) 是纯前端接线问题 —— 接上现成的 <code>cfgResetField</code>/<code>cfgDelPath</code> 即得「恢复继承」动作, 后端零改动。</li>
+      <li>现存仅有的三个删键路径都不是答案 (phase1 §3): <code>cfgToggleSection</code> L571-577 删整个 <code>hr</code> 段 (= 本站不做 HR, 不是「回退全局输出」); 整站删除 <code>cfgTrackerRemove</code> L642-655 (破坏性, 丢全部站点配置); 列表清空 <code>cfgItemRemove</code> L380-385 (空列表经 <code>_strip_none</code> 又坍缩回「未配置」)。</li>
+    </ul>
+
+    <h3>3.3 显示层: 回填用 schema 默认而非合并生效值 → 显示失真</h3>
+    <ul>
+      <li>bool 控件选中态 <code>boolValue()</code> (config_editor.js L1179-1181) = <code>cfgBool(this.path, this.f.default)</code> —— <b>回退值用的是 schema 字段默认 ("false"), 不是当前全局配置值</b>; <code>cfgVal</code> L327-331: 键缺失/None/<code>''</code> 一律返回 fallback。</li>
+      <li>文本类 <code>cfgInputValue</code> L589-593 同样: 键缺失 → 显示 schema default 而非全局值。</li>
+      <li>⇒ 全局 <code>remove_similar_tags: true</code> + 站点键未配置时, 站点页开关显示 <b>OFF</b>, 而实际运行行为是 <b>ON</b> (全局回退, loaders.py L222)。L595-600 <code>cfgIsDefault</code> + xtpl.html L66 只给一个「默认」徽标, 无有效值展示。<b>这是用户感知「没分清」的直接来源</b>, 且独立于锁死缺陷存在 —— 即使不加恢复按钮, 站点页展示值也与生效值不符。</li>
+    </ul>
+
+    <h3>3.4 bug 的代码级因果链 (前提: 全局 <code>remove_similar_tags: true</code>)</h3>
+    <ol>
+      <li><b>打开站点设置页</b>: settings.html L189 → hub-field 渲染开关, 选中态 = <code>cfgBool(["config","trackers",n,"remove_similar_tags"], "false")</code>。站点键缺失 → 显示 <b>OFF</b>; 运行期实际值 = 全局 true (loaders.py L222)。看到的与生效的不一致 (缺陷 ③)。</li>
+      <li><b>点开启</b>: <code>setBool(true)</code> → 写树 <code>"true"</code> → PUT /api/config → 校验通过 → <code>_sync_mapping</code> 落盘 <code>trackers.&lt;n&gt;.remove_similar_tags: true</code> → 热重载 → 生效值 true。站点级覆盖落盘。</li>
+      <li><b>想切回「跟随全局」</b>: 只能再点开关 → 写显式 <code>"false"</code> → 载入时 <code>_get</code> 判键存在 (loaders.py L45-50, L222) → 生效值 = 站点 false, <b>全局 true 被永久遮蔽</b>。</li>
+      <li><b>无任何 UI 出口</b>: 前端产不出「键缺失」(L349-351 无删除分支), <code>cfgResetField</code> 死代码; 改全局开关也无效 —— 站点显式 false 优先。<b>单向锁死成立</b> (缺陷 ②)。</li>
+      <li><b>唯一出路</b> (均破坏性/手编): 手改 config.yml 删该行; 或 WebUI 删除整个站点再重建 (丢 domains/tags/hr 等全部配置)。</li>
+      <li><b>运行期消费点</b> (错误结果的表现): <code>core/modules/maintenance_mod.py</code> L155-156 <code>if tracker_conf.remove_similar_tags:</code> → L208-223 <code>remove_similar_tags()</code> 摘除与站点标签仅大小写不同的标签。站点 false 遮蔽全局 true 后, 本应清理的相似标签不再清理 (或反向: 全局 false + 站点被误开启 true 时开始摘标签)。</li>
+    </ol>
+
+    <h3>3.5 反证: 保存链路对「站点键缺失」是保真的</h3>
+    <ul>
+      <li><b>GET /api/config</b> (routes/config.py L104-119): <code>mask_tree(read_tree(...))</code> 把磁盘 YAML 原树整棵给前端 (writer.py L56-69, BaseLoader 同构) —— 前端持有 YAML 同构树, <b>「键缺失」信息保真</b>。</li>
+      <li><b>PUT /api/config</b> (L121-148): <code>_validate_tree</code> (writer.py L257-267) 树 dump 走 <code>load_config</code> 与启动同路径校验 (不过则 400 不碰磁盘) → 版本章 → <code>.bak</code> 备份 (writer.py L333-341) → ruamel round-trip 落盘; <code>_sync_mapping</code> 支持删键 (§3.2)。</li>
+      <li><b>热重载</b>覆盖全链路: 写盘后 <code>load_config</code> 作为 <code>reload_config</code> 投递 (routes/config.py L142), 载入期合并键下轮维护即生效, 无需重启; 站点记录的 <code>tracker_conf</code> 下一轮 refresh 重匹配 (store.py L425-439)。无 R 级重启牵涉 (impact.py RESTART_SECTIONS 仅 state_file/data_dir/fs)。</li>
+      <li>⇒ <b>坍缩不发生在 writer, 也不发生在 <code>_strip_none</code> 对 bool 的处理 —— 只发生在前端永远不产出「键缺失」</b>。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>影响面: 9 键全量盘点</h2>
+    <p>具「全局默认 + 站点覆盖」双层语义的设置键共 <b>9 个</b> (schema 声明: <code>config/schema/trackers.py</code> —— <code>remove_similar_tags</code> L159-165, HR 输出字段 <code>HR_OUTPUT_FIELDS</code> L11-73)。合并单点在载入期 <code>loaders.py</code> (站点合并 L204-223; HR 回退链 <code>out</code>/`out_bool` L303-308; 并集 <code>out_union</code> L310-315, 刻意设计注 L297-299)。</p>
+    <table>
+      <tr><th>#</th><th>键 (全局 → 站点)</th><th>类型</th><th>受「未定义 vs 显式空」坍缩影响</th><th>合并语义 (file:line)</th><th>受影响时的错误行为</th></tr>
+      <tr><td>1</td><td><code>remove_similar_tags</code> → <code>trackers.&lt;n&gt;.remove_similar_tags</code></td><td>bool</td><td class="w">UI 层 (无法删键); config 层可区分</td><td>站点存在→站点, 否则全局 (loaders.py L222, L473)</td><td>开启后无法切回全局; 开关显示 schema 默认非生效值; 显式 false 永久遮蔽全局</td></tr>
+      <tr><td>2</td><td><code>hr.add_tag</code> → <code>trackers.&lt;n&gt;.hr.add_tag</code></td><td>str</td><td class="n">config 层即坍缩 (<code>_strip_none</code> core.py L41-51): <code>''</code> == 缺失</td><td>站点→全局→字段默认 (loaders.py L303-305, L324)</td><td>站点无法「覆盖为空」(本站不打标做不到); UI 回填显示空串非全局值</td></tr>
+      <tr><td>3</td><td><code>hr.add_category</code></td><td>str</td><td>同 #2</td><td>同上 (L325)</td><td>同 #2</td></tr>
+      <tr><td>4</td><td><code>hr.overwrite_category</code></td><td>bool</td><td class="w">同 #1 (UI 层)</td><td>out_bool (L307-308, L326)</td><td>同 #1</td></tr>
+      <tr><td>5</td><td><code>hr.add_tag_for_satisfied</code></td><td>str</td><td>同 #2</td><td>同上 (L327)</td><td>同 #2</td></tr>
+      <tr><td>6</td><td><code>hr.add_category_for_satisfied</code></td><td>str</td><td>同 #2</td><td>同上 (L328)</td><td>同 #2</td></tr>
+      <tr><td>7</td><td><code>hr.overwrite_category_for_satisfied</code></td><td>bool</td><td class="w">同 #1 (UI 层)</td><td>out_bool (L329)</td><td>同 #1</td></tr>
+      <tr><td>8</td><td><code>hr.exclude_tags</code> → <code>trackers.&lt;n&gt;.hr.exclude_tags</code></td><td>pattern_list</td><td class="y">否 (空 == 缺失, 并集下语义等价)</td><td><b>并集</b> 全局∪站点 (out_union L310-315, L330; 设计注 L297-299)</td><td>无错误行为; 但站点无法表达「不并入全局排除表」</td></tr>
+      <tr><td>9</td><td><code>hr.exclude_categories</code></td><td>pattern_list</td><td class="y">否</td><td>同 #8 (L331)</td><td>同 #8</td></tr>
+    </table>
+    <p><b>不属于双层语义的键 (对照, 不受影响)</b>: 站点专属 domains / tags / remove_tags / groups / upload_speed_limit / download_speed_limit / rules、hr 必填四键 (required_seeding_time / required_share_ratio / extra_seeding_time / condition, TRACKER_HR_FIELDS L75-100, 不走回退链); 全局专属 maintenance_tag_mode / skip_checking_tag / delete_tags* / add_episode_tags / grouping / web / notify / qbittorrent / fs / global_speed_limit_curve / hr_check.sites。</p>
+    <ul>
+      <li><b>state.json 不受影响</b>: <code>StateService</code> (<code>core/state.py</code>) 只存 exec_history / auto_categories / recheck_facts / speed_limit_curve 及种子快照, 不持久化任何配置值; <code>TorrentRecord.tracker_conf</code> (torrents/record.py L124) 是运行期派生视图, 不进导出 (record.py L243-245), 热重载后置 None 重匹配 (store.py L425-439)。<b>本 bug 的一切状态都在 config.yml 的键存在性里, 无需数据迁移</b>。</li>
+      <li><b>修复钩子已存在</b> (§3.2): 前端 <code>cfgResetField</code>/<code>cfgDelPath</code> + 后端 <code>_sync_mapping</code> 删键都具备, 缺陷 (b) 大概率纯前端。</li>
+      <li><b>既有交互惯例可参照</b>: enum 控件的「(未配置)」选项 (xtpl.html L83) 写 <code>''</code> → 后端剥掉 = 取消配置 —— 「写空即取消配置」已是既有惯例。</li>
+      <li><b>守卫测试面提醒</b>: schema 键集合与 KNOWN_TRACKER_KEYS 一致性由 <code>tests/test_config_schema.py</code> 守卫 (schema/__init__.py L16-19) —— 若方案引入新键/新标记, 须同步守卫与 validate_config (黄金法则 #4)。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>成熟方案调研结论</h2>
+    <p class="hint">「继承默认 + 局部覆盖 + 恢复继承」三态问题在成熟软件里全部用三件套解决: <b>稀疏覆盖存储 (缺失=继承) + 恢复=删键 + effective 值带来源显示</b>。核实口径见 §9。</p>
+
+    <h3>5.1 数据层: 三态怎么表示</h3>
+    <table>
+      <tr><th>模式</th><th>代表系统与证据</th><th>与本项目对应</th></tr>
+      <tr><td><b>D1 稀疏差量存储</b><br>只存覆盖项, 键缺失=继承</td><td>GNOME dconf/GSettings: 数据库<b>只存与 schema 默认不同的键</b>, <code>gsettings reset</code> 把键从数据库<b>删除</b>, 读值回落 schema 默认 (<b>已联网核实</b>); VS Code user/workspace/folder 三层 JSON 各只写覆盖项, 「Reset Setting」= 从该层删条目 (常识级); git config system/global/local 分层, <code>git config --unset</code> 删当前作用域条目 → 低作用域透出, <code>--show-origin</code> 显示生效值出处 (常识级)</td><td>本项目 YAML 站点段 = dconf 数据库; 全局配置 = schema 默认层; <b>缺键=继承已是现状</b>, writer <code>_sync_mapping</code> (writer.py L388-390) 已支持删键</td></tr>
+      <tr><td><b>D2 值空间哨兵关键字</b></td><td>CSS <code>inherit</code>/<code>initial</code>/<code>unset</code>/<code>revert</code> (常识级)。CSS 能这么做靠全语言保留字机制; 通用配置里用哨兵串 (写死一个串当「未配置」真值) 会污染值空间、与用户真实值撞车, <b>公认反模式</b></td><td>本项目 enum 控件的「(未配置)」(xtpl.html L83) 只是 UI 假象 —— 实际写 <code>''</code> 被后端 <code>_strip_none</code> 剥掉, 并非真哨兵, 恰好绕开了这个坑</td></tr>
+      <tr><td><b>D3 解析后空间哨兵类型</b></td><td>语言内建模用 None/UNSET 区分「未设置」与「设为空」; RFC 7386 JSON Merge Patch 用 <code>null</code> 成员表达删除 (常识级)</td><td>本项目解析后空间 (TrackerConfig/HRRule, models.py L159-173) <b>刻意丢弃</b>存在性信息 (models.py L173 注释「解析后空间存合并后值」), 消费端只看合并值 —— 合理分层, 不动</td></tr>
+      <tr><td><b>D4 effective/raw 双视图</b></td><td>git <code>--list --show-origin</code>、nginx <code>nginx -T</code>、VS Code 设置页 (生效值 + 「Modified in: Workspace」徽标) (常识级)</td><td>本项目 GET /api/config 给的是 raw 树, <b>effective 视图缺位</b> —— 显示失真缺陷 (§3.3) 即源于前端拿 schema 默认冒充 effective; 前端已持整棵树, 可自行合并算出 effective</td></tr>
+    </table>
+
+    <h3>5.2 交互层: 三态怎么操作</h3>
+    <ul>
+      <li><b>逐字段三态控件</b> (Windows 组策略「未配置/已启用/已禁用」; IntelliJ 代码风格逐字段「继承自父级」, 常识级): 适合策略类语义, 对本项目 9 个键略重。</li>
+      <li><b>「恢复全局」按钮 (实质删键)</b>: VS Code Reset Setting、git <code>--unset</code> —— <b>这是主流形态</b>: 平时控件只管覆盖值, 想回继承走一个显式删除动作。</li>
+      <li><b>placeholder 灰字显示继承生效值 + 来源徽标</b> (VS Code 灰字默认值 + 「Modified in」徽标; IntelliJ 灰色显示被继承值): 解决「我看到的是谁的值」—— 对应本项目显示失真缺陷。</li>
+      <li><b>数组/列表继承语义是独立取舍</b>: nginx 多数指令「下层一旦定义则整体替换, 不与上层合并」(常识级); qBittorrent 分类保存路径留空回退默认保存路径 (<b>已联网核实</b>, 宿主软件自身的「空=继承」交互)。本项目 exclude_* 特意选了<b>并集</b> (loaders.py L297-299 注释, 防止站点段写了就静默丢全局排除) —— 与 nginx 相反但属同类合法取舍, 已文档化, <b>本次不动</b>。</li>
+    </ul>
+
+    <h3>5.3 调研对本项目的映射</h3>
+    <p>成熟世界给出的答案: ①<b>存储层本项目已经对了</b> (稀疏 YAML 树 + writer 删键保真); ②前端缺的是「恢复=删键」入口 (<code>cfgResetField</code>/<code>cfgDelPath</code> 死代码, 接上即得) 与 effective 显示 (前端持整棵树可自行合并); ③唯一真正的数据模型缺口是 <code>_strip_none</code> 把 str/list「显式空」剥掉 (bool 不受影响) —— 成熟系统里这不是用哨兵解决的, 是让「空覆盖值」作为合法稀疏条目存在 (= 方案 B 的路线)。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>候选方案对比 A/C/B</h2>
+    <p class="hint">三个方案从小到大; 共同前提: 都必须先修「显示失真」(§3.3, 任何方案的第一刀)。「恢复继承」在数据层的动作一律是<b>删站点键</b> (<code>cfgDelPath</code>), 不是写默认值 —— 与 git/VS Code/dconf 同构。</p>
+
+    <h3>方案 A — 只修 WebUI 层 (最小, issue 字面范围, 工作量 S)</h3>
+    <ul>
+      <li><b>config 层零改动</b>: bool 键「未定义 vs 显式 false」config 层本就可区分 (§3.1); 写回删键 <code>_sync_mapping</code> 已支持。</li>
+      <li><b>WebUI 层</b>: ① 生效值回填 —— <code>boolValue()</code> (L1179-1181) / <code>inlineValue()</code> (L1203-1205) / <code>cfgInputValue()</code> (L589-593) 的 fallback 从 <code>f.default</code> 改为「站点值 → 全局对应键 → schema 默认」合并链, 回退链知识用一张 JS 常量 map 表达 (9 个键); ② bool 控件旁加「恢复跟随全局」按钮 (或来源徽标), 点击调<b>已有死代码</b> <code>cfgResetField</code>/<code>cfgDelPath</code> (L352-363) 删站点键, <code>cfgSetBool</code> 行为不变; ③ 来源徽标: 覆盖行标「站点」, 继承行标「全局」(基于 <code>cfgExists(path)</code>); ④ str/list 维持现状。</li>
+      <li>validate_config / schema.py: <b>无影响</b> (零新键、零新值形态)。兼容性: 完全向后兼容, 无数据迁移; 已落盘的站点覆盖 (含被锁死的显式 false) 用新按钮即可删除恢复。测试面: 后端零改动, 前端手测。三态完整度: bool 完整; str「覆盖为空」不可表达; list 维持并集。</li>
+      <li class="w"><b>风险 (唯一注意点)</b>: 徽标与生效值回填必须一起上, 否则回填反而加重「看不出是谁的值」。改动面: <code>config_editor.js</code> + <code>xtpl.html</code> 两个文件。</li>
+    </ul>
+
+    <h3>方案 C — WebUI 层修齐 (推荐, 工作量 M) — A 的真子集关系: A ⊂ C</h3>
+    <ul>
+      <li><b>= 方案 A 全部</b>, 再加: ④ str 字段统一「跟随全局」交互 —— str 输入框旁加「恢复跟随全局」按钮 (与 bool 同一形态), 语义 = 删站点键; 输入框 placeholder 灰字显示<b>全局生效值</b> (VS Code 模式)。enum 字段已有「(未配置)」选项写 <code>''</code> 的惯例 (语义等价), 保留不动但 help 文案统一为「未配置 = 跟随全局」; ⑤ list 字段: 清空列表已有「空列表→删键」路径 (<code>cfgItemRemove</code> L380-385), help 补一句「清空 = 只用全局排除表 (并集)」, 不加新控件。</li>
+      <li>config 层零改动 (同 A); validate_config / schema.py 无影响; 兼容性完全, 无迁移。<b>C 与 A 在数据模型上等价</b> (都是两态 + 可靠回退), 差异纯在交互一致性 —— 9 个键统一成一套心智模型 (覆盖值 + 「跟随全局」按钮 + 来源徽标), 与项目既有 enum「(未配置)」惯例同向。</li>
+      <li class="w"><b>已知残留</b>: 站点「本站不打标」(覆盖全局 add_tag 为空) 做不到 —— 触发时升级方案 B (§7)。</li>
+    </ul>
+
+    <h3>方案 B — config 层 + WebUI 层都修 (完整三态, 工作量 L, 风险中)</h3>
+    <ul>
+      <li><b>config 层核心: 让「显式空」穿过 <code>_strip_none</code> 成为合法稀疏条目</b>。子变体: <b>B1 (推荐)</b> —— schema 声明驱动豁免: <code>Field</code> (schema/fields.py L62-108) 新增 <code>tri_state</code> 属性, 站点级回退链键标 True (实际只需 str×4 + 视需求 list×2), <code>_strip_none</code> 对声明 tri_state 的站点段路径保留 <code>''</code>, 其余照剥; loaders <code>out()</code> 已按「键存在性」工作, <b>合并逻辑零改动</b>; validate_config 需显式放行这些键的 <code>''</code>。<b>B2 (哨兵串, 否决)</b>: 值空间污染, 见 §5.1 D2。<b>B3 (覆盖差量 map / presence 进解析后空间, 否决)</b>: YAML 树本身就是差量形态, 再造一层属重复建模。</li>
+      <li><b>WebUI 层 = C 全部</b>, 但 str 的「继承」必须改用删键表达 (空串现在有独立含义「覆盖为空」): 输入框可清空保存 (= 本站不打标), 「跟随全局」是独立按钮 (= 删键)。<b>迁移注意</b>: 若 C 先交付过, str 上「清空=跟随」的旧交互习惯必须随 B 一并纠正, help/文档同步。</li>
+      <li class="n"><b>唯一破坏性风险点</b>: 旧 config.yml 里已存在的 <code>站点键: ''</code> (今日被剥=继承, 写了也白写) 语义翻转为「覆盖为空」。缓解: 该形态今天无可观察效果, 存量概率低 (未实测, 待核实); writer 每次写盘有 .bak (writer.py L333-341); 可灰度一版 (遇 <code>''</code> 打 WARNING 按继承处理, 下版转正)。9 个键里无 enum, 不与现有写 <code>''</code> 惯例冲突。触发黄金法则 #4 的精神: 新值形态 + 新 schema 属性, 需一致性守卫测试防漂移。</li>
+    </ul>
+
+    <h3>对比表</h3>
+    <table>
+      <tr><th>维度</th><th>A 只修 WebUI 最小</th><th>C WebUI 修齐 (推荐)</th><th>B config+WebUI 完整</th></tr>
+      <tr><td>config 层</td><td class="y">不动</td><td class="y">不动</td><td class="w"><code>_strip_none</code> 豁免 + loaders parse 容忍 <code>''</code></td></tr>
+      <tr><td>WebUI 层</td><td>bool 恢复继承 + 生效值回填 + 徽标</td><td>A + str「跟随全局」按钮/placeholder + 文案统一</td><td>C + str 清空=覆盖空, 继承改删键语义</td></tr>
+      <tr><td>validate_config / schema.py</td><td class="y">无影响</td><td class="y">无影响</td><td class="w">新 Field 属性 + <code>''</code> 放行 + 一致性守卫 (黄金法则 #4 精神)</td></tr>
+      <tr><td>三态完整度</td><td>bool 完整; str「覆盖为空」✗</td><td>同 A</td><td class="y">bool/str 完整; list 并集仍保留</td></tr>
+      <tr><td>旧 config.yml 兼容</td><td class="y">完全</td><td class="y">完全</td><td class="n">存量 <code>''</code> 语义翻转, 需灰度告警 + .bak</td></tr>
+      <tr><td>已落盘站点覆盖</td><td class="y">新按钮可删恢复</td><td class="y">同 A</td><td class="y">同 A</td></tr>
+      <tr><td>测试面</td><td class="y">手测</td><td>手测 (面略宽: str/enum/list 三种控件形态)</td><td class="w">新增单测 M + 手测 (含 ruamel 空串 round-trip 确认 —— <b>待核实</b>)</td></tr>
+      <tr><td>风险</td><td class="y">低</td><td class="y">低</td><td class="w">中</td></tr>
+      <tr><td>工作量</td><td><b>S</b> (config_editor.js + xtpl.html)</td><td><b>M</b> (同两个文件为主 + str 控件分支与文案)</td><td><b>L</b> (config 3-4 文件 + 校验 + 守卫测试 + UI + 灰度)</td></tr>
+    </table>
+    <p><b>推荐 C 的理由</b>: ① 用户报的三层缺陷 (单向锁死 / 无恢复出口 / 显示失真) 在 C 全部闭环, 交互对 9 个键统一; ② config 层零改动 = 零兼容风险、零守卫测试面变化、零迁移, 修复落在缺陷 (b) 的充分且必要根因上 (纯前端接线); ③ 数据层不做半吊子妥协 (不引入哨兵), 「覆盖为空」明确留给触发条件, 边界干净; ④ A 是 C 的子集, 求最小先交 A 完全成立, 余下部分可随下一批 UI 改动顺路补齐。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>论证: 是否要填补 config 层缺陷 (str/list「显式空」坍缩)</h2>
+    <h3>正方 (填, = 方案 B)</h3>
+    <ol>
+      <li><b>能力缺口真实存在</b>: 「站点覆盖为空」(本站不打标/不加分类) 在 config 层就不可表达, 任何 WebUI 手法都救不了 —— <code>''</code> 必被剥。只要这个需求成立一次, B 就是必经之路。</li>
+      <li><b>数据模型一致性</b>: 同一设置页里 bool 已能「显式 false 遮蔽全局」, str 却不能「显式空遮蔽全局」, 覆盖语义不对称; 每加一个回退链键都要重新解释一遍, 长期认知税。</li>
+      <li><b>成熟系统均收敛于稀疏模型</b> (dconf/VS Code/git, §5.1), 本项目只差 <code>''</code> 这一刀, 修掉即自洽, 不是推倒重来。</li>
+    </ol>
+    <h3>反方 (不填, = 方案 A/C)</h3>
+    <ol>
+      <li><b>YAGNI</b>: issue 原文与 TODO 都只报「切不回全局」, 无任何「覆盖为空」的真实诉求实证; 现实里可用「默认值反转」绕 (全局不配 add_tag, 想打的站单独配), 代价是全局失去默认值 —— 若用户能接受, 缺口就不成立。</li>
+      <li><b>风险收益比</b>: B 用「<code>''</code> 语义翻转」的兼容灰度 + 全 parse 链容忍 <code>''</code> + 交互惯例迁移, 换一个今天没人提的能力; A/C 已把用户可感知的三层缺陷全部清零。</li>
+      <li><b><code>_strip_none</code> 坍缩是文档化设计取舍</b> (core.py L44-45 自证, 根因 BaseLoader 限制), 改它属设计决策而非 bug 修补, 应由真实需求触发, 不该由本 bug 顺手带出 (黄金法则: 范围守恒)。</li>
+      <li><b>成熟软件同样存在「空=回退」的简化先例</b> (qBittorrent 分类路径留空即回退, 已联网核实), 两态 + 可靠回退并非不成熟。</li>
+    </ol>
+    <div class="verdict">
+      <div class="vlabel">裁决</div>
+      <p><b>当前不填补 (选 A/C), B 挂触发条件待命</b>。触发条件满足任意一条时升级 B: ① 出现「站点覆盖为空」的真实使用场景 (如某站禁止打标); ② 回退链键数量继续增长、覆盖语义不对称开始产生第二起同类 bug; ③ 要做「站点 vs 全局」对比审计视图而 presence 信息开始进 API。</p>
+      <p><b>升级路径平滑</b>: C ⊂ B 的 UI 部分, B 只增量改 config 层 + str 交互语义, 前期 C 的投入不报废。</p>
+    </div>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>给拍板人的决策项</h2>
+    <table>
+      <tr><th>#</th><th>决策</th><th>选项</th><th>本报告倾向</th></tr>
+      <tr><td><b>D1</b></td><td>选哪个方案</td><td>A (S, 最小) / C (M, 推荐) / B (L, 完整三态)</td><td><b>C</b> —— 三层缺陷全闭环 + 9 键交互统一 + 零兼容风险; <b>求最小可先交 A</b> (A 是 C 的真子集, 后续补齐即 C)</td></tr>
+      <tr><td><b>D2</b></td><td>「站点覆盖为空」是否真实需求<br><span class="hint">即: 是否存在「某站不打标/不加分类, 但全局配了默认输出」的实际场景</span></td><td>是 → 直接 B (跳过 C 的 str「清空=跟随」过渡交互); 否 / 不确定 → C, B 挂触发条件 (§7)</td><td><b>按 §7 裁决默认「否/不确定」</b> —— 目前无实证诉求; 若拍板人确认有, 则直接 B 并接受中风险与灰度迁移</td></tr>
+    </table>
+    <h3>后续动作建议</h3>
+    <ul>
+      <li><b>拍板后</b>: 按 doc-forms 决策树, 「怎么修、为什么这么修」入 <b>plan 工位</b> (<code>memory-bank/plans/&lt;stamp&gt;-plan-webui-site-scope-confusion.html</code>, 拍板后冻结), 与 issue 侧互记 doc-refs (认领链双向一致, 生成器校验)。</li>
+      <li><b>实施顺序</b> (任一方案): 第一刀先修显示失真 (生效值回填); 徽标与回填必须同批上 (方案 A 风险注, §6); bool 删键入口接现成 <code>cfgResetField</code>/<code>cfgDelPath</code>; 后端预期零改动 (B 除外)。</li>
+      <li><b>测试与档案</b>: 前端无自动化测试设施, 按手测清单走 (回填值 / 徽标 / 删键后显示全局值 / 保存后磁盘键消失); 实施档案进 task 工位滚动更新; 若走 B, 同步守卫测试与 validate_config (黄金法则 #4)。</li>
+      <li><b>issue 状态</b>: issue 26-10-01-2129 维持 Open, 待方案拍板认领后按认领链回写状态。</li>
+    </ul>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>事实来源与核实标注</h2>
+    <p class="src">本报告全部代码事实来自同日两份工作稿 (2026-10-03, 均只读取证, 现存 <code>tmp-analysis/</code>): <code>phase1-findings.md</code> (代码事实取证, 含 9 键盘点表) 与 <code>phase2-options.md</code> (成熟方案调研与选型)。工作稿为临时件, 本报告为自包含正式快照; 行号均为取证时快照, 排障请按符号重定位。取证基线 <code>8cb2da59</code> (2026-10-03); issue 入池取证基线 <code>f9155eaa</code> (2026-10-01)。</p>
+    <ul class="src">
+      <li><b>已联网核实</b> (phase2 附注): dconf 只存非默认值 / <code>gsettings reset</code> 删键回落 schema 默认; qBittorrent 分类保存路径留空回退默认 (社区文档/帖子级佐证)。</li>
+      <li><b>常识级, 未逐条核实</b>: git config 分层与 <code>--unset</code> 语义; VS Code 设置作用域与 Reset Setting; CSS <code>revert</code>/<code>unset</code>; Windows 组策略三态; nginx 指令「下层定义即替换不合并」; RFC 7386 null 删除语义; IntelliJ 代码风格逐字段继承。</li>
+      <li><b>待核实</b> (两份工作稿未覆盖、本报告亦未验证, 禁止当作已证事实使用): ① ruamel 对空串的 round-trip 行为 (仅方案 B 相关, phase2 B 测试面注明「需确认」); ② 存量 config.yml 中「站点键: ''」形态的实际存在概率 (phase2 仅给出「该形态今天无可观察效果、存量概率低」的推断); ③ 前端各控件的实机渲染表现 —— 全部取证为静态代码阅读, 未起浏览器实测。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-03-0504-report-webui-site-scope-confusion.html · 专题 webui-site-scope-confusion · 快照终态 (report 恒 Done)
+    · 取证基线 8cb2da59 (2026-10-03) · 引用 issue <a href="../issues/26-10-01-2129-bug-webui-delete-tag-scope-confusion.html">26-10-01-2129</a>
+    · 本报告不含任何代码改动; 结论与 D1/D2 待用户拍板
+  </footer>
+
+</div>
+</body>
+</html>
