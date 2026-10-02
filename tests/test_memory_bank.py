@@ -36,6 +36,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_kb_cap_debt_is_discoverable_not_blocking: 造超限文件 → 必须报成 warn(债务) 而不是 problem
 - test_agents_md_cap_is_hard_not_debt: AGENTS.md 超 8,000 仍是 problem(硬规定), 且不出现在债务清单里
 - test_kb_slice_cap_and_count_are_debt_not_blocking: 切片尺寸 / 条数 → warns(债务); 命名 / 三行头仍判红
+- test_kb_active_render_respects_byte_budget: kb.active 默认字节预算截取(30KB 内联上限), 页脚留总数, --all / -n N 逃生
 - test_context_caps_hard_and_debt_split: `check_context_caps.py` 的 AGENTS.md 只在 `HARD_CAPS`、不进债务组
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 `scripts/check_doc_links.py`)
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
@@ -309,6 +310,44 @@ def test_kb_active_context_slices_are_valid() -> None:
     assert not problems, "\n".join(problems)
     assert checker.role_of("memory-bank/activeContext/x.md") == "slice", "切片路径未被 _common.role_of 认成 slice 角色"
     assert rows, "切片目录是空的 —— 滚动状态没有归宿"
+
+
+def test_kb_active_render_respects_byte_budget() -> None:
+    """kb.active 默认按字节预算截取 —— AI 工具壳内联上限 30,000 字节 (pitfalls/ops/console-encoding.md)。
+
+    切片 90+ 条后全量输出 ~51KB → 落盘 + 截断点切进多字节字符时预览整段乱码, 「全量」反而不可读。
+    守四点: 预算内必停(按编码后字节计) / 收紧到只够一行也不许输出空表 / 页脚保留总数与省略数
+    (截的是展示不是事实) / 不传预算(--all)仍全量。行内容是合成行, 不与现行切片数耦合。
+    """
+    from datetime import datetime, timedelta
+
+    import gen_active_recent
+
+    now = datetime(2026, 10, 2, 12, 0)
+
+    def row(i: int) -> dict:
+        when = datetime(2026, 1, 1) + timedelta(days=i)
+        return {
+            "rel": f"memory-bank/activeContext/s{i}.md",
+            "slug": f"topic-{i:02d}",
+            "created": when,
+            "last": when,
+            "summary": "摘要" * 150
+        }
+
+    rows = [row(i) for i in range(60)]
+    out = gen_active_recent.render(rows, 14, now, byte_budget=gen_active_recent.DEFAULT_BYTE_BUDGET)
+    assert len(out.encode("utf-8")) < 30_000, "默认预算输出仍可能超 AI 工具壳内联上限"
+    assert "共 60 个切片" in out and "省略" in out, "页脚必须保留总数与省略数"
+
+    tiny = gen_active_recent.render(rows, 14, now, byte_budget=100)
+    assert "省略 59 条" in tiny, "预算只够一行时至少显示 1 行, 不得输出空表"
+
+    full = gen_active_recent.render(rows, 14, now)
+    assert "省略" not in full and "topic-59" in full, "不传预算(--all)必须仍是全量"
+
+    five = gen_active_recent.render(rows, 14, now, limit=5)
+    assert "省略 55 条" in five and "topic-59" not in five, "-n N 按条数截取"
 
 
 def test_kb_cap_debt_is_discoverable_not_blocking(tmp_path: Path) -> None:

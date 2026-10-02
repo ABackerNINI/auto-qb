@@ -23,7 +23,7 @@ note    = "只打印不写文件（_doc-map.md 已退役）; <args> 可传 --top
 run     = ["python <skill-dir:memory-bank>/scripts/gen_active_recent.py <args>"]
 timeout = 60
 when    = "看会话滚动状态（在办专题切片，按最后活动倒序）"
-note    = "只打印不写文件；<args> 可传 --check 只校验（已挂进 kb.check）"
+note    = "只打印不写文件；默认按字节预算取最近 K 条（AI 工具壳 30KB 内联上限, 超限落盘预览乱码, 见 pitfalls/ops/console-encoding.md）；<args> 可传 --all / -n N 全量/改条数（全量会落盘, 读 *-stdout.log）、--check 只校验（已挂进 kb.check）"
 
 [tasks."kb.baseline"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py <args>"]
