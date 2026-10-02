@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · WEBUI 多选右键菜单: 限速 / 移动 / 跳检 / 导出 + 跳检菜单配置开关</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-10-02">
+<meta name="doc-status" content="Open">
+<meta name="doc-topic" content="webui-multi-ctx-actions">
+<meta name="doc-added" content="26-10-02-1955">
+<meta name="doc-updated" content="26-10-02-1955">
+<meta name="doc-refs" content="memory-bank/pitfalls/backend/high-risk-ops.md, memory-bank/pitfalls/web-ui/overlays.md, memory-bank/plans/26-09-30-0109-plan-dangerous-op-consolidation.html">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #14181d;
+    --ink: #e4e8ea;
+    --ink-dim: #99a2a8;
+    --faint: #6b757e;
+    --hair: #262d34;
+    --hair-soft: #1c2228;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #7fc98f;
+    --code-bg: #171d23;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 900px; margin: 0 auto; padding: 52px 44px 80px; }
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 26px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--ink-dim); max-width: 68ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13px; font-family: var(--mono); }
+  .meta-row .item .v a { color: var(--accent-ink); }
+  section { margin-top: 40px; }
+  .sec-head { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--hair-soft); padding-bottom: 8px; margin-bottom: 14px; }
+  .sec-head .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .sec-head h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.005em; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 22px 0 8px; color: var(--ink); }
+  p { margin: 8px 0; }
+  ul, ol { padding-left: 22px; margin: 8px 0; }
+  li { margin: 4px 0; }
+  li::marker { color: var(--faint); }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 1px 5px; border-radius: 2px; color: var(--accent-ink); }
+  strong { color: #fff; font-weight: 600; }
+  em { color: var(--accent-ink); font-style: normal; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13.5px; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code { white-space: nowrap; }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 7px; border: 1px solid var(--hair); color: var(--ink-dim); margin-right: 4px; }
+  .tag.acc { color: var(--accent-ink); border-color: #2a4a52; }
+  .tag.warn { color: var(--warn); border-color: #4a3a26; }
+  .tag.ok { color: var(--ok); border-color: #2a4232; }
+  .note { border-left: 2px solid var(--hair); padding: 6px 14px; margin: 12px 0; color: var(--ink-dim); font-size: 13.5px; }
+  .note.warn { border-left-color: var(--warn); color: var(--warn); background: var(--warn-bg); padding: 10px 14px; }
+  .dcard { border: 1px solid var(--hair); padding: 16px 18px; margin: 14px 0; background: var(--paper); }
+  .dcard .dhead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .dcard .dhead .did { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+  .dcard .dhead .dtitle { font-family: var(--display); font-size: 15px; font-weight: 600; }
+  .wave { border: 1px solid var(--hair); background: var(--paper); margin: 18px 0; }
+  .wave .whead { display: flex; align-items: baseline; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--hair-soft); }
+  .wave .whead .wid { font-family: var(--mono); font-size: 12.5px; color: var(--accent-ink); }
+  .wave .whead .wtitle { font-family: var(--display); font-size: 15.5px; font-weight: 600; }
+  .wave .wbody { padding: 6px 18px 14px; }
+  .wave h4 { font-family: var(--display); font-size: 12px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; font-weight: 600; }
+  .small { font-size: 12.5px; color: var(--faint); }
+  a { color: var(--accent-ink); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">Plan · WebUI · 多选右键动作</div>
+  <h1>WEBUI 多选右键菜单: 限速 / 移动 / 跳检 / 导出 .torrent<br>+ 跳检菜单配置开关</h1>
+  <p class="lede">给种子列表多选右键菜单补齐四个动作(批量限速 / 批量移动 / 批量跳检 / 批量导出), 并给「跳检」菜单项(单选与多选)加配置开关 <code>web.skip_check_menu</code>, 默认关闭, 双层 fail-closed(菜单不显示 + web 端点 403)。全部批量动作复用既有 bulk 合单通道与 OpsModule 守卫, 不新开旁路。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">状态</div><div class="v">Open · 待拍板</div></div>
+    <div class="item"><div class="k">时间戳</div><div class="v">26-10-02-1955</div></div>
+    <div class="item"><div class="k">取证基线</div><div class="v">f0c0f0ed (develop)</div></div>
+    <div class="item"><div class="k">决策点</div><div class="v">D1 / D2 / D3</div></div>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="no">01</span><h2>需求与范围</h2></div>
+  <h3>需求</h3>
+  <ul>
+    <li><strong>R1 · 多选右键菜单新增四项</strong>: 限速… / 移动… / 跳检… / 导出 .torrent。现状多选分支刻意不放这些"单目标项"(<code>tpl/ctx-menus.html:3-6</code> 注释), 本计划推翻该意图并同步改写注释。</li>
+    <li><strong>R2 · 跳检菜单配置开关</strong>: 「跳检」菜单项(单选与多选两处)仅在配置开启时显示, <em>默认关闭</em>。菜单隐藏之外, web 侧端点同步封禁(决策点 D2), rule 源跳检不受影响。</li>
+  </ul>
+  <h3>范围内</h3>
+  <ul>
+    <li><code>static/shared/</code> 模板与 JS(三皮肤 atlas / console / prism 共用, 一处改三处生效); 后端 bulk 动作扩展; 新 flags 端点; 新导出归档端点; 配置键全链路(schema → loader → 校验 → GUI schema → 示例 → 文档); 测试与守阵; 配置文档回写。</li>
+  </ul>
+  <h3>范围外</h3>
+  <ul>
+    <li>键盘快捷键的多目标扩展(<code>shortcuts.js</code> 维持 <code>_kbSingleHash</code> 单目标口径, <code>edit-move</code> / <code>export-torrent</code> 键位照旧); 追剧 / 分组视图明细行多选语义; 浏览器扩展; zip 归档的加密 / 分卷变体; rule 源跳检行为任何改动。</li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">02</span><h2>现状取证 (基线 f0c0f0ed)</h2></div>
+
+  <h3>前端 · 菜单与选中集合</h3>
+  <table>
+    <tr><th style="width:34%">事实</th><th>位置与口径</th></tr>
+    <tr><td>菜单四分支模板</td><td><code>static/shared/tpl/ctx-menus.html</code> — 多选 <code>v-if="menu.multi"</code> 行 7-28(现有: 批量开始 / 批量暂停 / 强制汇报 / 重新校验 / 标签分类… / 批量删除; 头注释 3-6 声明"刻意不放限速 / 导出等单目标项"); 整集整剧 29-48; 单种子 49-145(限速 65 <code>editLimits()</code> / 移动 68 <code>editMove()</code> / 跳检 81-84 <code>skipCheckTorrent()</code> 带危险确认注释 / 导出 85-87 <code>exportTorrent()</code> / 更多子菜单 96-140 / 删除 142); 整组 146-165</td></tr>
+    <tr><td>多选判据</td><td><code>menu.js</code> <code>_ctxMulti()</code> 134-146(右键行属于选中集合且选中范围 ≠ 该行自身 → 升级批量); <code>openMemberMenu</code> 164-175 组装 <code>{hash, multi}</code></td></tr>
+    <tr><td>选中 hashes 权威派生</td><td><code>selection.js</code> <code>selHashSet</code> computed 302-314 — 组选中展开为成员 hash 闭包; <code>_bulkTargets()</code> <code>commands.js:529-539</code> 拆 <code>{groupKeys, memberHashes}</code>(虚拟行转单种子 hash)</td></tr>
+    <tr><td>动作分发</td><td><code>commands.js</code> <code>ctxAct</code> 559-562(多选 → <code>bulkAct</code> 543-552)→ <code>_actCore</code> 435-522(bulk 合单 502-511)</td></tr>
+    <tr><td>单目标对话框(可参照)</td><td><code>drawer.js</code> — <code>editLimits</code> 114-144(KiB/s ×1024 → bytes), <code>editMove</code> 187-203, <code>skipCheckTorrent</code> 48-70(danger 确认框 + <code>waitCmd</code> 60s, 注释 43-47 说明阻塞 ~6s), <code>_editPost</code> 91-112</td></tr>
+    <tr><td>fetch 封装口径</td><td><code>auth.js</code> <code>api()</code> 5-35 只出 JSON; 二进制特例 = 导出 <code>commands.js:606-635</code> 裸 fetch + <code>arrayBuffer()</code> + Blob(604-605 注释写明为何不能用 <code>this.api</code>) — 批量导出 zip 沿用此特例</td></tr>
+    <tr><td>确认框</td><td><code>ui_feedback.js</code> <code>confirmDialog(title, body, {danger})</code> 47-53; 高危惯例: 删除流程 / 跳检(<code>drawer.js:53-60</code>, danger + <code>#i-bolt</code>)/ 快捷键 danger 档必经确认</td></tr>
+    <tr><td>状态初值</td><td><code>state.js:121</code> <code>menu</code> 对象; flags 字段现不存在, 需新增并显式初始化(v-if 对 undefined 恰好隐藏 = fail-closed, 但仍应显式建字段, 呼应 vue-reactivity 静默白屏坑)</td></tr>
+  </table>
+
+  <h3>后端 · 路由与命令队列</h3>
+  <table>
+    <tr><th style="width:34%">事实</th><th>位置与口径</th></tr>
+    <tr><td>逐种子写路由</td><td><code>server/routes/torrent_cmds.py</code> — recheck 43-45, <strong>skip-check 47-50</strong>(无参数无额外守卫, 守卫在 ops 层), <strong>limits 62-71</strong>(up_limit / dl_limit bytes/s 可各自缺省), <strong>location 86-89</strong>; 全部 <code>_enqueue</code> 命令队列</td></tr>
+    <tr><td>bulk 多 hash 入口</td><td><code>torrent_cmds.py:143-168</code> <code>POST /api/torrents/bulk</code> body <code>{hashes, action, delete_files, keys, tags, category}</code>; 动作表 <code>_BULK_ACTIONS</code> <code>commands.py:499-515</code>(pause / resume / delete / add_tags / remove_tags / set_category); <strong>recheck 特判走 ops(549, 580-583)</strong> — 本次 skip_check 特判照此办理</td></tr>
+    <tr><td>bulk recheck 聚合样板</td><td><code>commands.py:601-645</code> <code>_bulk_recheck_via_ops</code>: 逐 hash <code>ctx.ops.recheck(h, source="web")</code> + 聚合回执("N 个校验进行中已跳过") — 批量跳检的文案与结构样板</td></tr>
+    <tr><td>导出</td><td><code>torrent_detail.py:194-205</code> <code>GET /api/torrents/{hash}/export</code> — 单 hash 原始字节 + Content-Disposition; 批量归档端点不存在</td></tr>
+    <tr><td>命令表</td><td><code>commands.py</code> <code>RESYNC_COMMANDS</code> 37-61 与 <code>DEFERRED_RECEIPT_COMMANDS</code> 67-76 <strong>均已含 <code>bulk_torrents</code></strong> — bulk 扩动作 = 两表零改动; 新命令 id 才需同步</td></tr>
+  </table>
+
+  <h3>ops 层与 qB 客户端</h3>
+  <table>
+    <tr><th style="width:34%">事实</th><th>位置与口径</th></tr>
+    <tr><td>OpsModule</td><td><code>core/modules/ops_mod.py</code>(72-85; 装配 <code>qbmanager.py:229-231</code>, <code>ctx.ops</code> <code>module.py:71</code>) — <code>skip_check(hash, source, ...)</code> 252-347: R2 实时复核 283-291(重拉 torrents_info, 拒绝零副作用)、四阶段 导出 295-299 → 备份先行 313-316(<code>_backup_torrent</code> 485-509)→ 删 370-387 / 重加 389-441(<code>is_skip_checking=True, is_stopped=True</code>)→ 打标 <code>skip_checking_tag</code> 334-340; 闸门 <code>_skip_gates</code> 349-368(部分下载 0&lt;progress&lt;1 禁止 fail; <strong>同日去重 <code>state["skip_check_day"]</code> 跨来源共享</strong>)</td></tr>
+    <tr><td>bulk 版跳检</td><td><strong>不存在</strong> — 现只有单 hash 入口; 批量需新聚合层(逐 hash 串行), 不动 <code>skip_check</code> 本体</td></tr>
+    <tr><td>qB API 批量能力</td><td><code>core/qbapi.py</code> <code>HashType = Union[str, List[str]]</code>(行 29) — <code>torrents_set_upload_limit</code> 127-134 / <code>torrents_set_download_limit</code> 136-143 / <code>torrents_set_location</code> 145-152 <strong>原生收 hash 列表, 一次调用</strong>; <code>torrents_export</code> 319-320 仅单 hash</td></tr>
+  </table>
+
+  <h3>配置系统与守阵</h3>
+  <table>
+    <tr><th style="width:34%">事实</th><th>位置与口径</th></tr>
+    <tr><td>web 段现键</td><td><code>config/models.py:202-218</code> <code>WebConfig</code>(enabled / host / port / token / skip_local_verify)— <strong>无任何 UI 行为开关键</strong>; loader <code>loaders.py:100-108</code>; 校验 <code>validation/sections.py:23</code> <code>KNOWN_WEB_KEYS</code> + <code>_validate_web</code> 499-523; GUI schema <code>config/schema/groups.py:150-184</code></td></tr>
+    <tr><td>键面冻结守卫</td><td><code>tests/test_config_key_surface.py</code> + <code>tests/fixtures/config_key_surface.txt</code> — 新键 = 非破坏性变更, 用 <code>scripts/update_config_key_surface.py</code> 重生成基线并回写 <code>memory-bank/config-reference/keys.md</code>(流程见测试头 1-30)</td></tr>
+    <tr><td>前端读配置现状</td><td><code>routes/config.py</code> <code>GET /api/config/public</code> 21-31 <strong>仅 loopback 且只回 skip_local_verify</strong>(登录前消费 <code>lifecycle.js:151-172</code>); <code>GET /api/config</code> 93-108 全树掩码、鉴权后、仅设置页用 — <strong>登录后无轻量 flags 通道</strong>, 需新增</td></tr>
+    <tr><td>路由金清单</td><td><code>tests/test_web.py</code> <code>test_web_route_manifest_frozen</code>(清单体 ~8680, 含 skip-check / bulk / export 条目)— <strong>加路由必须改清单</strong></td></tr>
+    <tr><td>相关测试位</td><td>skip-check 命令 <code>test_web.py:8938-8960</code>(FakeClient 全流程 + skip_check_day 断言)与回执 9220+、R1 8899-8935; bulk 5861 / 6263-6365 / 参数错误 9245+; 导出端点 7808; ops 单测 <code>test_ops.py</code>(头注 4-15 列 11 用例); web 段校验 <code>test_config.py:1351-1355</code>; 冒烟 <code>scripts/ui_harness.py</code>(24-26 用法)+ <code>scripts/ui_smoke.cjs</code>(1-19)</td></tr>
+  </table>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">03</span><h2>设计要点</h2></div>
+  <ul>
+    <li><strong>批量动作全部走既有 bulk 合单通道</strong>(<code>POST /api/torrents/bulk</code> 扩 <code>_BULK_ACTIONS</code>), 不为每个动作开新逐项路由 — 与 recheck 特判先例同构, 路由金清单零新增(W4 导出归档除外)。</li>
+    <li><strong>批量跳检经 ops 层逐 hash 串行</strong>: 新 <code>_bulk_skip_check_via_ops</code>(<code>commands.py</code>, 样板 <code>_bulk_recheck_via_ops</code> 601-645), 逐 hash <code>ctx.ops.skip_check(h, source="web")</code> — <em>R2 复核 / 同日去重 / 备份 / 打标守卫全部原样保留</em>, 只加聚合回执(ok N / 跳过 M 按原因 / 失败 K)。串行是单写线程假设的硬要求(concurrency 坑), 禁止并发扇出。</li>
+    <li><strong>配置键 <code>web.skip_check_menu</code>(bool, 默认 false)只门控 web 面</strong>: 菜单显隐 + web 侧端点; <em>绝不进 <code>OpsModule.skip_check</code> 内部</em> — rule 源跳检(high-risk-ops 防护体系的一部分)不受任何影响。</li>
+    <li><strong>fail-closed 双层</strong>: 菜单项 <code>v-if="flags.skip_check_menu"</code> 不渲染 + web 端点(enqueue 与 bulk 分派处)配置关时 403, detail 文案注明键名。gate 读<em>实时配置</em>(与现有路由取 cfg 同路), 不按值持有旧 Config(hot-reload-held-config 坑)。</li>
+    <li><strong>前端 flags 通道走新端点</strong> <code>GET /api/webui/flags</code>(鉴权后): 不扩 <code>/api/config/public</code> — 它是登录前 loopback 专用, 扩它等于改其安全语义; 新端点登录后取一次入 <code>state.flags</code>(初值 <code>{skip_check_menu: false}</code>), 设置页保存配置后同步刷新。</li>
+    <li><strong>批量导出走后端 zip 归档</strong>(D1 推荐): 新 <code>POST /api/torrents/export-archive</code> body <code>{hashes: [...]}</code>(POST + JSON body, 免 URL 长度问题; 下载走裸 fetch + Blob 特例口径)。服务端逐 hash 校验存在性(缺失即 400 带 missing 明细)→ 逐个 <code>client.torrents_export</code> → <code>io.BytesIO</code> + zipfile 组装; 条目名 = 清洗后的种子名(非法字符 → <code>_</code>), 重名追加 hash 前 8 位防撞。单选导出现状不动。</li>
+    <li><strong>三皮肤共用 shared/</strong>: 模板与 JS 一处改三处生效(frontend-split 聚合口径); 菜单新项排序对齐单选分支语义(开始/暂停 → 强制汇报 → 重新校验 → 跳检 → 限速/移动 → 标签分类 → 导出 → 删除)。</li>
+    <li><strong>批量限速语义</strong>(D3 推荐): 对话框两项(上传 / 下载)留空 = 不改该项, 只提交有值项; KiB/s ×1024 与单选同口径; 0 = qB 语义的"无限制", 允许; 负数路由层拒收。批量移动: promptDialog 空 prefill(多选无意义当前值)→ 确认框展示目标路径与 N。</li>
+  </ul>
+  <div class="note">耗时与回执: 批量跳检耗时随 N 线性增长(单枚阻塞 ~6s 级), 聚合回执可能超过 <code>waitCmd</code> 默认窗口 — 沿单选口径放宽至 60s 并依赖 SSE <code>cmd</code> 事件赛跑兜底(<code>waitCmd</code> 实现 <code>commands.js:100-123</code>), 回执未到前 toast 停留"进行中"。</div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">04</span><h2>决策点 (待拍板 · 不拍板按推荐走)</h2></div>
+
+  <div class="dcard">
+    <div class="dhead"><span class="did">D1</span><span class="dtitle">多选导出的形态</span><span class="tag acc">推荐 B</span></div>
+    <p><strong>B · 后端 zip 归档</strong>(推荐): 一次下载得单个 zip; 任意选中规模可控; 文件名清洗与防撞在服务端单点; 无浏览器"多文件下载"授权摩擦。<br>
+    <strong>A · 前端循环逐个触发下载</strong>: 零后端改动(复用 <code>GET /api/torrents/{hash}/export</code>), 但浏览器首次会弹"允许下载多个文件"、大选中(数百+)不可控、中途失败无汇总。</p>
+  </div>
+
+  <div class="dcard">
+    <div class="dhead"><span class="did">D2</span><span class="dtitle">服务端是否同步封禁 skip-check</span><span class="tag acc">推荐 是</span></div>
+    <p><strong>是 · fail-closed</strong>(推荐): 菜单隐藏 + web 端点(单发路由与 bulk 分派)配置关时 403。理由: 菜单隐藏只是 UX, 直调 API 仍可跳检; 现有单发端点无任何调用方残留(<code>skipCheckTorrent</code> 是唯一入口, 键表无 skip 直达键位), 加 gate 不破坏存量。<br>
+    <strong>否 · 仅菜单隐藏</strong>: 改动更小, 但"配置开启才显示"退化为纯展示层开关, 与高危动作默认关闭的仓库原则(保守默认)不符。</p>
+  </div>
+
+  <div class="dcard">
+    <div class="dhead"><span class="did">D3</span><span class="dtitle">批量限速对话框口径</span><span class="tag acc">推荐 留空不改</span></div>
+    <p><strong>留空 = 不改该项</strong>(推荐): 上传 / 下载两输入各自独立, 只提交有值项; 与单选 <code>_editPost</code> "可各自缺省"口径一致, 多选场景下几乎必有"只想改上传"的需求。<br>
+    <strong>两项必填</strong>: 实现最简, 但多选时把不想动的方向的限速也覆盖掉, 语义粗暴。</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">05</span><h2>分步执行 (W1 → W5, 每波独立提交)</h2></div>
+  <p class="small">依赖: W1 独立且为 W3 前置; W2 / W3 / W4 相互独立可换序; W5 收尾。建议顺序 W1 → W2 → W3 → W4 → W5。</p>
+
+  <div class="wave">
+    <div class="whead"><span class="wid">W1</span><span class="wtitle">跳检配置开关 + 菜单可见性 + web 端点封禁 (R2 全链路)</span></div>
+    <div class="wbody">
+      <h4>改动</h4>
+      <table>
+        <tr><th style="width:36%">文件</th><th>内容</th></tr>
+        <tr><td><code>config/models.py</code> WebConfig</td><td>加 <code>skip_check_menu: bool = False</code>(默认关闭)</td></tr>
+        <tr><td><code>config/loaders.py</code> 100-108</td><td><code>load_web_config</code> 加 <code>_get(spec, "skip_check_menu", ...parse_bool)</code></td></tr>
+        <tr><td><code>config/validation/sections.py</code> 23 / 499-523</td><td><code>KNOWN_WEB_KEYS</code> + 该键; <code>_validate_web</code> 加 <code>_try(parse_bool, ...)</code> 行</td></tr>
+        <tr><td><code>config/schema/groups.py</code> 150-184</td><td>web 段 GUI Field: 标签"右键菜单显示跳检", bool, default "false", help 注明含单选与多选</td></tr>
+        <tr><td><code>server/routes/config.py</code></td><td>新 <code>GET /api/webui/flags</code> → <code>{"skip_check_menu": bool}</code>(全局鉴权; 读实时配置)</td></tr>
+        <tr><td><code>server/routes/torrent_cmds.py</code> 47-50</td><td>skip-check 路由加 gate: 配置关 → 403, detail 注明 <code>web.skip_check_menu</code>(D2=是)</td></tr>
+        <tr><td><code>static/shared/state.js</code></td><td><code>flags: {skip_check_menu: false}</code> 显式初始化</td></tr>
+        <tr><td><code>static/shared/lifecycle.js</code></td><td>登录后(初始数据装载处)取一次 <code>/api/webui/flags</code>; 失败保持 false = fail-closed</td></tr>
+        <tr><td><code>static/shared/tpl/ctx-menus.html</code> 81-84</td><td>单选跳检项加 <code>v-if="flags.skip_check_menu"</code></td></tr>
+        <tr><td>设置页联动</td><td>配置保存成功后同步刷新 <code>flags.skip_check_menu</code>(免重登)</td></tr>
+        <tr><td>示例与文档</td><td><code>minimal.yml</code> web 段注释; <code>docs/configuration.md</code> web 段; <code>memory-bank/config-reference/keys.md</code> web 行</td></tr>
+        <tr><td>键面基线</td><td>跑 <code>scripts/update_config_key_surface.py</code> 重生成 <code>tests/fixtures/config_key_surface.txt</code></td></tr>
+      </table>
+      <h4>测试</h4>
+      <ul>
+        <li><code>test_config.py</code>: 新键合法 / 非法 / 缺省 false 三态(参照 1351-1355 现有 web 段写法)。</li>
+        <li><code>test_web.py</code>: 金清单 +1(<code>("GET","/api/webui/flags")</code>); flags 端点 开 / 关 / 未鉴权 401; skip-check 403(关)/ 200(开)双态 — <em>现有 skip-check 用例的 FakeConfig 需补 <code>skip_check_menu=True</code></em>(helpers.FakeConfig, 注意深拷贝防跨测试泄漏的既有纪律)。</li>
+        <li>顺手核实 <code>shortcuts.js</code> 键表(110-300)确无 skip 直达键位; 若有, 同样吃 flags 门控。</li>
+      </ul>
+      <h4>验收</h4>
+      <ul>
+        <li>默认配置: 单选右键无跳检项, 直调端点 403; 配置开启后: 项现 + 200; rule 源跳检相关既有测试(test_ops.py 全部)零改动全绿。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="whead"><span class="wid">W2</span><span class="wtitle">bulk 扩动作: 批量限速 + 批量移动 (R1 前两项)</span></div>
+    <div class="wbody">
+      <h4>改动</h4>
+      <table>
+        <tr><th style="width:36%">文件</th><th>内容</th></tr>
+        <tr><td><code>torrent_cmds.py</code> 143-168</td><td>bulk body 加可选 <code>up_limit</code> / <code>dl_limit</code>(非负 int, 0=无限制)/ <code>location</code>(非空 str); 按 action 校验: limits 至少一项, location 必带非空路径</td></tr>
+        <tr><td><code>commands.py</code> 499-515 / 521-599</td><td><code>_BULK_ACTIONS</code> + <code>limits</code> / <code>location</code>; 分派 → <code>api.torrents_set_upload_limit / set_download_limit</code>(只调有值方向)/ <code>torrents_set_location</code> — <strong>一次调用传全 hashes</strong>(qbapi 原生批量, 不逐枚循环)</td></tr>
+        <tr><td><code>drawer.js</code></td><td><code>editLimitsMulti()</code>(modal 双输入, 空=不发, KiB/s ×1024 同单选口径)+ <code>editMoveMulti()</code>(promptDialog 空 prefill → confirm 展示路径与 N)</td></tr>
+        <tr><td><code>ctx-menus.html</code> 7-28</td><td>多选分支插 <code>限速…</code> / <code>移动…</code>(重新校验之后); 头注释 3-6 改写为新口径</td></tr>
+        <tr><td><code>commands.js</code></td><td>多选分派接入(ctxAct → bulkAct 既有链, 仅加 action 分支与载荷)</td></tr>
+      </table>
+      <h4>测试</h4>
+      <ul>
+        <li>bulk 参数错误(空 limits / 空 location / 负数 / 未知 action 既有用例不回归)。</li>
+        <li>drain 分派: FakeClient 断言<strong>单次调用</strong>收到全 hashes、只调有值方向。</li>
+        <li><code>ui_smoke.cjs</code> 补两条: 多选菜单出现两项 / 提交载荷形状。</li>
+      </ul>
+      <h4>验收</h4>
+      <ul>
+        <li>多选 3+ 种子限速 → toast 回执, RESYNC 后列表速度上限列反映; 移动 → save_path 更新。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="whead"><span class="wid">W3</span><span class="wtitle">批量跳检 (R1 第三项, 复用 W1 开关)</span></div>
+    <div class="wbody">
+      <h4>改动</h4>
+      <table>
+        <tr><th style="width:36%">文件</th><th>内容</th></tr>
+        <tr><td><code>commands.py</code></td><td>新 <code>_bulk_skip_check_via_ops</code>(样板 601-645): 逐 hash 串行 <code>ctx.ops.skip_check(h, source="web")</code>, 按 ok / skip(原因)/ fail 聚合回执文案; <code>_BULK_ACTIONS</code> + <code>skip_check</code> 特判走 ops; gate: drain 时读实时配置, 关 → 拒单(D2=是)</td></tr>
+        <tr><td><code>drawer.js</code></td><td><code>skipCheckMulti()</code>: danger 确认框(文案列明 N 个 + 后果, 沿单选 53-60 文案骨架)→ bulk 提交 → <code>waitCmd</code> 60s + SSE 兜底</td></tr>
+        <tr><td><code>ctx-menus.html</code> 7-28</td><td>多选分支 <code>跳检…</code> 项 + <code>v-if="flags.skip_check_menu"</code></td></tr>
+      </table>
+      <h4>测试</h4>
+      <ul>
+        <li>逐 hash 混合结果聚合回执: ok N / 同日去重 M / 部分下载禁 K / 失败 J, 文案逐段断言。</li>
+        <li>gate 关闭拒单; <code>skip_check_day</code> 跨来源共享不回归(test_ops.py 既有 11 用例零改动全绿)。</li>
+        <li>确认框不弹不提交(ui_smoke 断言)。</li>
+      </ul>
+      <h4>验收</h4>
+      <ul>
+        <li>多选 2-3 已完成种子跳检成功; 混入一个当日已跳检的 → 回执含"跳过 1 个(今日已跳检)"; 备份目录出现对应 <code>_backup_torrent</code> 产物。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="whead"><span class="wid">W4</span><span class="wtitle">批量导出 (R1 第四项, 形态随 D1)</span></div>
+    <div class="wbody">
+      <h4>改动</h4>
+      <table>
+        <tr><th style="width:36%">文件</th><th>内容</th></tr>
+        <tr><td><code>torrent_detail.py</code></td><td>新 <code>POST /api/torrents/export-archive</code>(body <code>{hashes: [...]}</code>): 去重保序 → 逐 hash 校验存在性(缺失即 400 带 missing 明细)→ 逐个 <code>client.torrents_export</code> → BytesIO + zipfile; 条目名清洗(非法字符 → <code>_</code>)+ 重名追加 hash 前 8 位; <code>Content-Disposition: attachment; filename=torrents-export-&lt;ts&gt;.zip</code>; 软上限(建议 200, 超出 400 提示分批, 实施时按实测调)。<span class="small">.torrent 为元数据文件(KB 级), 内存组装无压力</span></td></tr>
+        <tr><td><code>commands.js</code></td><td><code>exportMulti()</code>: 裸 fetch POST + <code>arrayBuffer()</code> + Blob(沿 exportTorrent 606-635 特例注释口径); hashes 取 <code>selHashSet</code> 全量(<strong>含组选中展开</strong>, 不用 <code>_bulkTargets.memberHashes</code> — 后者把组内成员留给 keys 通道)</td></tr>
+        <tr><td><code>ctx-menus.html</code> 7-28</td><td>多选分支 <code>导出 .torrent</code> 项(批量删除之前)</td></tr>
+      </table>
+      <h4>测试</h4>
+      <ul>
+        <li>端点: 单 hash / 多 hash / 重名清洗 / 含不存在 hash → 400 明细 / 空 hashes → 422; zip 可解且条目数正确。</li>
+        <li>金清单 +1(<code>("POST","/api/torrents/export-archive")</code>)。</li>
+        <li><code>ui_smoke.cjs</code>: 多选导出菜单项在、载荷为全量展开 hashes。</li>
+      </ul>
+      <h4>验收</h4>
+      <ul>
+        <li>多选 3 种子(含组选中)导出 → 单个 zip 含 3 个可被 qB 重新导入的 .torrent。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wave">
+    <div class="whead"><span class="wid">W5</span><span class="wtitle">冒烟走查 + 收尾</span></div>
+    <div class="wbody">
+      <h4>改动</h4>
+      <ul>
+        <li><code>ui_harness.py</code> 起桩(开关开 / 关两态), <code>ui_smoke.cjs</code> 汇总: 多选菜单四项在 / 跳检项 flag 二态 / 危险确认链 / 回执 toast。</li>
+        <li>真实 <code>config.yml</code> <strong>不由本任务改动</strong>(红线)— 用户自配 <code>web.skip_check_menu: true</code> 后真机走查(可选 <code>dev_webui.py</code>)。</li>
+      </ul>
+      <h4>收尾 DoD</h4>
+      <ul>
+        <li><code>commands run test.full</code> → 基线切片 <code>testing/baselines/</code> 记实测数字。</li>
+        <li>任务档案 <code>tasks/</code> 立档(达阈值); 计划 doc-status → Done + <code>commands run kb.index</code>; 已完成条目迁出 <code>progress/implemented-webui.md</code>。</li>
+        <li>配置文档三处(minimal.yml / configuration.md / keys.md)已随 W1 落地, 本波只核对无漂移。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">06</span><h2>风险与红线</h2></div>
+  <ul>
+    <li><span class="tag warn">红线</span><strong>config.yml 与 auto-qb-data/ 禁改</strong>: 新键只进 schema / 示例 / 文档, 开关由用户自己在生产配置里开。</li>
+    <li><span class="tag warn">防护不削弱</span>跳检一律经 <code>OpsModule</code>(R2 复核 / 同日去重 / 备份 / 打标全保留), 批量只是聚合层 — <code>pitfalls/backend/high-risk-ops.md</code> 的硬要求; gate 只放 web 入口, rule 源零改动。</li>
+    <li><span class="tag warn">单写线程</span>批量跳检逐 hash <strong>串行</strong>, 不引入并发扇出 — <code>pitfalls/backend/concurrency.md</code>; 限速 / 移动用 qbapi 原生列表参数, 单次调用天然串行。</li>
+    <li><span class="tag warn">金清单</span>新增两路由(<code>/api/webui/flags</code>、<code>/api/torrents/export-archive</code>)不改 <code>test_web_route_manifest_frozen</code> 即挂 — <code>pitfalls/backend/web-package-split.md</code>。</li>
+    <li><span class="tag warn">静默白屏</span>模板改动吃 Vue 语义: <code>flags</code> 必须在 state 显式初始化(v-if 对 undefined 静默隐藏); 编辑 shared JS 注释时禁 <code>*</code>+<code>/</code> 相邻序列 — <code>pitfalls/web-ui/js-comment-terminator.md</code>(node --check 查不出, 首次执行才白屏)。</li>
+    <li><span class="tag">热重载</span>新键按 L0 处理; flags 端点与 gate 一律现读实时配置, 不按值持有旧 Config — <code>pitfalls/backend/hot-reload-held-config.md</code>。</li>
+    <li><span class="tag">多选导出</span>组选中必须用 <code>selHashSet</code> 全量展开, 漏展开 = "选中组导出少了成员"的静默缺失。</li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="no">07</span><h2>测试与守阵汇总</h2></div>
+  <table>
+    <tr><th style="width:36%">文件</th><th>动作</th></tr>
+    <tr><td><code>tests/test_config.py</code></td><td>web 段新键三态用例(W1)</td></tr>
+    <tr><td><code>tests/fixtures/config_key_surface.txt</code></td><td>脚本重生成(W1)</td></tr>
+    <tr><td><code>tests/test_web.py</code></td><td>金清单 +2; flags 端点用例; skip-check 403/200 双态(存量用例补开关); bulk 参数 / 分派; export-archive 全套(W1-W4)</td></tr>
+    <tr><td><code>tests/test_ops.py</code></td><td>零改动, 作为"rule 源不受影响"的回归哨(W1-W3 每波跑)</td></tr>
+    <tr><td><code>scripts/ui_smoke.cjs</code></td><td>多选菜单四项 / flag 二态 / 确认框链 / 载荷形状(W2-W4 渐补, W5 汇总)</td></tr>
+    <tr><td><code>tests/test_memory_bank.py</code> 等静态守阵</td><td><code>test_frontend_static_bundle_health</code> 自动覆盖 shared 改动; doc 守卫查本计划 dark 主题与 meta</td></tr>
+  </table>
+</section>
+
+</div>
+</body>
+</html>

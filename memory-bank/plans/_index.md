@@ -26,6 +26,7 @@
 
 ## Open
 
+- [26-10-02-1955] [计划 · WEBUI 多选右键菜单: 限速 / 移动 / 跳检 / 导出 + 跳检菜单配置开关](26-10-02-1955-plan-webui-multi-ctx-actions.html) — `webui-multi-ctx-actions`
 - [26-10-02-1936] [修改计划 · WEBUI HR 站点状态区展示层二轮改造 — 折叠 · 全屏 · 筛选排序 · 信息重组](26-10-02-1936-plan-webui-hr-status-display-rework.html) — `webui-hr-status-display`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
