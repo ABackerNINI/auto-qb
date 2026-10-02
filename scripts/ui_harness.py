@@ -350,7 +350,16 @@ def main() -> int:
     state_file = os.path.join(tmp, "state.json")
     mgr = make_manager(state_file)
     mgr.client = FakeClient()
-    mgr.config.web = WebConfig(enabled=True, host=args.host, port=args.port, token="", skip_local_verify=True)
+    # skip_check_menu=True: 冒烟要测「跳检…」菜单项与确认链(计划 26-10-02-1955 W3),
+    # 该键生产默认关(fail-closed), 桩环境显式开 —— 走真实 /api/webui/flags 端点渲染菜单。
+    mgr.config.web = WebConfig(
+        enabled=True,
+        host=args.host,
+        port=args.port,
+        token="",
+        skip_local_verify=True,
+        skip_check_menu=True,
+    )
     mgr._last_conn_ok = True  # 状态栏显示"已连接"(否则前端走断连提示分支)
 
     site_conf = mgr.config.trackers["HHan"]

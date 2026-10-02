@@ -258,6 +258,38 @@ window.AQB_DRAWER = {
       if (!ok) return;
       await this._bulkEditPost(targets, "location", { location }, "批量移动");
     },
+    /* 批量跳检…(计划 26-10-02-1955 W3): 高风险(删除并以跳过校验方式重加, 本地统计清空),
+     * danger 确认框文案沿单选 skipCheckTorrent 骨架、按 N 换算; 确认后才投递 bulk 合单通道
+     * (action=skip_check)。单枚跳检阻塞主循环 ~6s 级, 聚合回执随 N 线性变慢 —— waitCmd 放宽到
+     * 60s + SSE cmd 事件赛跑兜底(waitCmd 实现), 回执未到前常驻 toast 停留「进行中」。
+     * 菜单显隐由 flags.skip_check_menu 门控(W1), 后端 bulk 分派处同样 fail-closed。 */
+    async skipCheckMulti() {
+      this.menu.visible = false;
+      const targets = this._bulkTargets();
+      const n = targets.groupKeys.length + targets.memberHashes.length;
+      if (!n) return;
+      const ok = await this._openModal({
+        title: "批量跳检(跳过校验重加)",
+        body: `将删除选中的 ${n} 个种子并以跳过校验方式重加: 每个种子的本地统计(上传/下载量、做种时间)会被清空, 数据未经哈希校验。确认继续?`,
+        okText: "跳检",
+        cancelText: "取消",
+        danger: true,
+        icon: "#i-bolt",
+      });
+      if (!ok) return;
+      try {
+        const resp = await this.api("/api/torrents/bulk", {
+          method: "POST",
+          body: JSON.stringify({ action: "skip_check", keys: targets.groupKeys, hashes: targets.memberHashes }),
+        });
+        const tid = this.toast(`批量跳检进行中…(${n} 个目标, 每个约需数秒)`, "busy", 0, { sticky: true });
+        const r = await this.waitCmd(resp.cmd_id, 60000);
+        if (r.ok) this._finishToast(tid, "ok", `已执行: 批量跳检(${n} 个目标)`, 3000);
+        else this._finishToast(tid, "error", `批量跳检未完成: ${r.error}`, 8000);
+      } catch (e) {
+        if (!e.auth) this.toast("批量跳检命令发送失败: " + e.message, "error");
+      }
+    },
     /* 批量编辑统一投递: 与 _metaBulk 同链路(api + waitCmd + toast 三态), 目标集合用打开
      * 对话框时刻锁定的 targets; 不做乐观贴片(见本节头注释)。 */
     async _bulkEditPost(targets, action, extra, okText) {

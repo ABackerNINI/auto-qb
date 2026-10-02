@@ -506,8 +506,9 @@ class WebCommandsMixin:
     # extra = {"tags": [...], "category": str}: add_tags/remove_tags/set_category 的载荷,
     # 其余动作忽略它(签名统一 4 参, 免得逐动作特判)。add_tags/remove_tags 的 tags 已在
     # 入口校验非空; set_category 的 category 允许空串(qB 语义 = 清除分类), None 时不会走到。
-    # !recheck 不在此表: 它走 _bulk_recheck_via_ops 逐个经 ops 层提交(R1 第二入口 —— 在途
-    #   hash 过滤 + 在途登记 + 聚合回执带跳过计数; 直调 API 会给批量路径留下 C1 旁路)。
+    # !recheck / skip_check 不在此表: 两者都走 _bulk_*_via_ops 逐个经 ops 层提交(R1 第二入口 /
+    #   计划 26-10-02-1955 W3 —— recheck 在途过滤 + 登记 + 聚合回执; skip_check 逐 hash 串行,
+    #   R2 复核/同日去重/备份/打标全在 ops 层原样生效; 直调 API 会给批量路径留下旁路)。
     # !limits/location(计划 26-10-02-1955 W2): qbapi 原生收 hash 列表, 一次调用传全 hashes,
     #   单次调用天然串行(单写线程); limits 只调有值方向(extra 里 None = 该方向不改, D3 拍板),
     #   快照同步(update_torrent_fields)在 QbApi 写方法内单点完成。
@@ -554,8 +555,11 @@ class WebCommandsMixin:
         """WEB UI 命令: 批量操作(单命令批量, 平铺视图多选); 回执由本 handler 聚合写
 
         - 未知 action / 空 hash 列表 -> error 回执
-        - recheck 走 ops 层逐个提交(在途互斥+登记), 聚合回执带「N 个校验进行中已跳过」计数
-          (_bulk_recheck_via_ops); 其余动作单次 API 调用传全部 hashes
+        - recheck / skip_check 走 ops 层逐个提交(在途互斥+登记 / 跳检四阶段+守卫), 聚合回执带
+          跳过与失败计数(_bulk_recheck_via_ops / _bulk_skip_check_via_ops); 其余动作单次 API
+          调用传全部 hashes
+        - skip_check 门控(计划 26-10-02-1955 W3, D2=是·fail-closed): web.skip_check_menu 关时
+          拒单 error 回执(gate 读实时配置, 在任何展开/调用之前)
         - 不在快照中的 hash 跳过(删除守阵), 仍有缺失时回执 error 带缺失计数(部分成功也报错,
           前端可据列表刷新后重试); 全部命中 -> ok
         - API 只调一次: hashes 整体传给既有 api 调用(qB 端点原生接受批量)
@@ -571,13 +575,20 @@ class WebCommandsMixin:
         req = [h for h in (hashes or []) if h]
         keys = [k for k in (keys or []) if k]
         fn = self._BULK_ACTIONS.get(action)
-        # recheck 不在 _BULK_ACTIONS(走 ops 层), 放行到 known 展开后分流(见下方分支)
-        if fn is None and action != "recheck":
+        # recheck / skip_check 不在 _BULK_ACTIONS(走 ops 层), 放行到 known 展开后分流(见下方分支)
+        if fn is None and action not in ("recheck", "skip_check"):
             if cmd_id:
                 self._set_web_result(
                     cmd_id, "error", f"未知批量动作: {action}"
-                    f"(可选 pause/resume/recheck/delete/add_tags/remove_tags/set_category/limits/location)"
+                    f"(可选 pause/resume/recheck/skip_check/delete/add_tags/remove_tags/set_category/limits/location)"
                 )
+            return
+        if action == "skip_check" and not self.ctx.config.web.skip_check_menu:
+            # D2=是·fail-closed(计划 26-10-02-1955 W3): 菜单隐藏只是 UX, bulk 分派处同样拒单 ——
+            # 读实时配置(ctx.config 引用现取, 热重载后立即生效, 不按值持有旧 Config ——
+            # pitfalls/backend/hot-reload-held-config.md); rule 源跳检不受影响(gate 只在 web 入口)。
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", "跳检菜单未启用(配置键 web.skip_check_menu)")
             return
         if not req and not keys:
             if cmd_id:
@@ -620,6 +631,10 @@ class WebCommandsMixin:
         if action == "recheck":
             # R1 第二入口(plan 26-09-30-0109): 批量 recheck 逐个经 ops 层提交, 不直调 API
             self._bulk_recheck_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys))
+            return
+        if action == "skip_check":
+            # 批量跳检(计划 26-10-02-1955 W3): 逐 hash 串行经 ops 层四阶段, 不直调 API
+            self._bulk_skip_check_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys))
             return
         if known:
             fn(self.api, known, delete_files, extra)
@@ -683,6 +698,57 @@ class WebCommandsMixin:
         if cmd_id:
             self._set_web_result(cmd_id, "ok")
         logger.info(f"WEB UI | 批量 recheck(提交 {ok_n} 个种子)")
+
+    def _bulk_skip_check_via_ops(
+        self,
+        hashes: List[str],
+        cmd_id: str,
+        missing: int = 0,
+        n_req: int = 0,
+        missing_groups: int = 0,
+        n_keys: int = 0,
+    ) -> None:
+        """批量跳检经 ops 层逐 hash 串行提交(计划 26-10-02-1955 W3): 聚合回执按结果分桶
+
+        与单发同一提交点(ops 层 skip_check, source="web"): R2 实时复核 / 同日去重
+        (skip_check_day 跨来源共享)/ 备份 / 打标守卫全部在 ops 层原样生效, 批量只是聚合层 ——
+        **逐 hash 串行**调用是单写线程假设的硬要求(pitfalls/backend/concurrency.md), 禁止并发扇出。
+        跳过按原因分桶计数(同日去重 / 种子已移除, 文案自解释), 失败聚合计数附前 3 条文案;
+        回执口径与 bulk 其余动作一致: 任何缺失/跳过/失败都进 error 文案(部分成功也报错,
+        拒绝计数必须可见), 全部成功才 ok。
+        """
+        ok_n = 0
+        skip_buckets: dict = {}  # 跳过原因 -> 计数(dict 保插入序 = 首现序)
+        fail_n = 0
+        fail_msgs: List[str] = []
+        for h in hashes:
+            r = self.ctx.ops.skip_check(h, source="web")
+            if r.is_skipped:
+                skip_buckets[r.message] = skip_buckets.get(r.message, 0) + 1
+            elif r.is_failed:
+                fail_n += 1
+                fail_msgs.append(r.message)
+            else:
+                ok_n += 1
+        skip_n = sum(skip_buckets.values())
+        msgs = []
+        if missing:
+            msgs.append(f"{missing}/{n_req} 个种子不存在或已被删除")
+        if missing_groups:
+            msgs.append(f"{missing_groups}/{n_keys} 个组不存在或成员为空")
+        for reason, n in skip_buckets.items():
+            msgs.append(f"{n} 个跳过: {reason}")
+        if fail_n:
+            msgs.append(f"{fail_n} 个失败: {'; '.join(fail_msgs[:3])}")
+        if msgs:
+            msg = "; ".join(msgs)
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", msg)
+            logger.info(f"WEB UI | 批量跳检(成功 {ok_n}, 跳过 {skip_n}, 失败 {fail_n}): {msg}")
+            return
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok")
+        logger.info(f"WEB UI | 批量跳检(成功 {ok_n} 个种子)")
 
     def _cmd_reload_config(self, config: Config):
         self.apply_new_config(config)

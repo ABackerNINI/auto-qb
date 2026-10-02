@@ -563,6 +563,10 @@ window.AQB_COMMANDS = {
        * 集合"的形态, 不进 _actCore(那里没有对话框前置, 且限速/移动不在乐观白名单)。 */
       if (action === "limits") return this.editLimitsMulti();
       if (action === "location") return this.editMoveMulti();
+      /* 批量跳检(计划 26-10-02-1955 W3): 与限速/移动同为"先收菜单 + 对话框持有目标集合"
+       * 形态 —— danger 确认框前置 + 60s waitCmd, 不进 _actCore(那里没有对话框前置,
+       * 且跳检不在乐观白名单, 行状态由跳检重加后的 RESYNC 自然刷新)。 */
+      if (action === "skip_check") return this.skipCheckMulti();
       return this.bulkAct(action);
     },
     ctxDelete() {

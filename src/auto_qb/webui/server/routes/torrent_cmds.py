@@ -160,6 +160,10 @@ def build_router(ctx: WebContext) -> APIRouter:
         (bytes/s, 0=qB 语义的"无限制", 允许), location 非空 str —— 均按"提供才透传"
         (队列载荷不带多余键, 纯 pause 调用的历史形态不变)。参数错误(负数 / limits
         两方向全空 / location 空路径)在路由层 400 拒收: 不入队, 前端即时可见。
+
+        skip_check 批量动作(计划 26-10-02-1955 W3): 无额外参数(hashes/keys 即全部载荷),
+        路由层不设独立 gate —— 分派处在 drain 时读实时配置拒单(D2=是·fail-closed,
+        见 commands._cmd_bulk_torrents), 与单发端点的路由层 403 双层并存。
         """
         b = body or {}
         payload = {

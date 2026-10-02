@@ -959,6 +959,74 @@ async function smokeUi(browser, ui) {
     }
 
     /*
+     * W3 批量跳检(计划 26-10-02-1955): flags 门控菜单项 + 危险确认框「取消 = 不提交」。
+     * 判据(harness 开关开 skip_check_menu=true, 走真实 flags 端点 -> state.flags -> v-if 链):
+     *   1. 选中行右键 -> 批量菜单含「跳检…」项(重新校验之后、限速/移动之前, 从宽只要求出现)。
+     *   2. 点「跳检…」-> 弹 danger 确认框(标题含「批量跳检」) -> 点「取消」-> 不发 bulk POST
+     *      (确认框不确认不提交; 后端 gate 双态由 pytest 兜底, 这里只测前端确认链)。
+     */
+    {
+      const N = 3;
+      await page.evaluate("window.scrollTo(0, 0)");
+      await page.waitForTimeout(200);
+      const picked = await page.evaluate(`(() => {
+        const vm = ${INST};
+        vm.selGroups = [];
+        vm.selMembers = vm.filteredTorrents.slice(0, ${N}).map((r) => r.hash);
+        return vm.selMembers.length;
+      })()`);
+      const selHashes = await readInst(page, "vm.selMembers.slice()");
+      let anchor = null;
+      for (const r of await page.$$(".torrent-row")) {   // 行是窗口化的: 从已渲染行里挑选中锚点
+        const h = await r.evaluate((el) => el.getAttribute("data-hash"));
+        if (selHashes.includes(h)) { anchor = r; break; }
+      }
+      let menuTexts = [];
+      if (anchor) {
+        await anchor.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        menuTexts = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+      }
+      add(ui, "W3 批量菜单含跳检项(flags 开)",
+        picked === N && menuTexts.some((t) => t.includes("跳检…")),
+        `选中 ${picked} 行 / 菜单: ${menuTexts.slice(0, 9).join(" / ") || "(未打开)"}`);
+
+      // 2. 确认框取消不提交: 拦截 bulk POST -> 点「跳检…」-> 确认框出现 -> 点「取消」-> 零 POST
+      let bulkBody = null;
+      const onReq = (r) => {
+        if (r.url().includes("/api/torrents/bulk")) bulkBody = r.postData();
+      };
+      page.on("request", onReq);
+      let clicked = false;
+      for (const h of await page.$$(".ctx-item")) {
+        const t = ((await h.textContent()) || "").trim();
+        if (t.includes("跳检…")) { await h.click(); clicked = true; break; }
+      }
+      let modalShown = false;
+      let modalTitle = "";
+      let cancelled = false;
+      if (clicked) {
+        modalShown = !!(await page.waitForSelector(".modal", { timeout: 5000 }).catch(() => null));
+        if (modalShown) {
+          modalTitle = ((await page.$eval(".modal-title", (n) => n.textContent)) || "").trim();
+          const cancel = await page.$(".modal-actions .bt.ghost");
+          if (cancel) { await cancel.click(); cancelled = true; }
+          await page.waitForTimeout(400);
+        }
+      }
+      page.off("request", onReq);
+      add(ui, "W3 跳检确认框取消不提交", clicked && modalShown && cancelled && bulkBody === null,
+        `弹框: ${modalTitle || "(未出现)"} / 取消 ${cancelled ? "是" : "否"} / POST: ${bulkBody ? bulkBody.slice(0, 120) : "(未捕获)"}`);
+      // 收尾: 关掉可能残留的弹层并清选择
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        if (vm.modal && vm.modal.visible) vm.resolveModal(false);
+        vm.clearSelection && vm.clearSelection();
+      })()`);
+      await page.waitForTimeout(300);
+    }
+
+    /*
      * CTX-04 / CTX-05 / CTX-06 —— 右键**次级菜单**的三条(2026-09-24 用户报, 都是"pytest 全绿、
      * node --check 全绿、界面废掉"那一类; 判据一律取**可测的事实**, 不靠截图):
      *   1. 图标 hover 变灰(CTX-04): `.ctx-item:hover .ico` 是**后代**选择器, 而 `.ctx-sub` 是父项的

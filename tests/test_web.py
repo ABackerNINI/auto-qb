@@ -135,6 +135,7 @@
 - test_drain_web_commands_bulk_torrents_group_keys: bulk 组键模式(DLG-02): 组键展开级联全组成员删除; 与 hashes 混合去重; 缺失组计组数; 组不存在不调 API
 - test_drain_web_commands_bulk_torrents_tags_category: bulk 标签/分类命令执行 —— add_tags/remove_tags/set_category 单次调用带全部 hash; 缺 tags / 缺 category 键 error 回执; 空串分类(清除)合法; 标签非空校验
 - test_api_t_bulk_limits_location_enqueue: bulk 限速/移动动作入队(计划 26-10-02-1955 W2) —— up/dl/location 提供才透传(0=不限合法), 负数/limits 全空/location 空路径 400 不入队; 历史载荷形态不变; 无密钥 401
+- test_api_t_bulk_skip_check_enqueue: bulk 跳检动作入队(计划 26-10-02-1955 W3) —— 无额外参数(载荷只有 hashes/action/delete_files); 无密钥 401; gate 在 drain 分派处, 路由层开关关时仍 200 入队
 - test_drain_web_commands_bulk_torrents_limits_location: bulk 限速/移动分派 —— 只调有值方向、每方向一次调用传全 hashes; 写后快照同步(up_limit/dl_limit/save_path); 缺值 error 回执不调 API
 - test_cmd_trackers_write_invalidates_lazy_cache: tracker 三兄弟写后失效 _trackers_info 惰性缓存(重读拉新值)
 - test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
@@ -208,6 +209,8 @@
 - test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags): 72 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
+- test_drain_web_commands_bulk_skip_check_aggregated: bulk 跳检经 ops 逐 hash 串行(计划 26-10-02-1955 W3) —— 混合结果聚合回执分段计数(成功 / 同日去重 skip / 部分下载禁+执行失败 fail); 成功批 ok 回执且记录同日去重(skip_check_day 跨来源共享)
+- test_drain_web_commands_bulk_skip_check_gated: bulk 跳检 gate(D2=是·fail-closed) —— web.skip_check_menu 关时 drain 分派处拒单且零 qB 调用; 同 manager 实时改配置即放行(现读不按值持有)
 - test_drain_web_commands_skip_check_torrent: 右键跳检命令(P2') —— 经 ops 层四阶段全流程, 回执 ok 且记录同日去重
 - test_webui_no_rules_import: 边界守阵(P2') —— webui 操作链不得 import 规则模块; 其余 webui 模块不得触碰规则动作插件(rules.actions/registry)
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
@@ -6342,6 +6345,22 @@ def test_api_t_bulk_limits_location_enqueue(web_env):
     ).status_code == 401
 
 
+def test_api_t_bulk_skip_check_enqueue(web_env):
+    """bulk 跳检动作入队(计划 26-10-02-1955 W3): 无额外参数, 载荷只有 hashes/action/delete_files
+    (多余键不出现); 无密钥 401。gate 在 drain 分派处(路由层不设), 故开关关时这里仍 200 入队"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    resp = client.post("/api/torrents/bulk", headers=auth, json={"hashes": ["HA", "HB"], "action": "skip_check"})
+    assert resp.status_code == 200 and resp.json()["queued"] is True
+    cmd, payload = mgr.web.commands.get_nowait()
+    assert cmd == "bulk_torrents"
+    payload.pop("cmd_id")
+    payload.pop("_queued_ts", None)
+    assert payload == {"hashes": ["HA", "HB"], "action": "skip_check", "delete_files": False}, payload
+    # 鉴权: 无密钥 401
+    assert client.post("/api/torrents/bulk", json={"hashes": ["HA"], "action": "skip_check"}).status_code == 401
+
+
 def test_drain_web_commands_torrent_write_actions():
     """二轮写命令: 参数正确传给 QbApi(真链路), cmd_id 回执 ok, 限速/保存路径写后同步快照"""
     with tempfile.TemporaryDirectory() as td:
@@ -9362,6 +9381,114 @@ def test_drain_web_commands_bulk_recheck_skips_inflight():
         assert "HA" in mgr.task_queue.active_check_hashes(), "提交的 hash 应登记在途"
         assert mgr.web.results["b9"]["status"] == "error", mgr.web.results
         assert "1 个校验进行中已跳过" in mgr.web.results["b9"]["error"], mgr.web.results["b9"]
+
+
+def test_drain_web_commands_bulk_skip_check_aggregated():
+    """bulk 跳检经 ops 逐 hash 串行(计划 26-10-02-1955 W3): 混合结果聚合回执分段计数
+
+    ok(四阶段走通+记同日去重) / 同日去重(skip) / 部分下载禁(fail) / 执行失败(fail) 四类
+    混在一批, 回执文案逐段断言; 成功批回执 ok。gate 关闭拒单见 test_drain_web_commands_bulk_skip_check_gated。
+    """
+    from datetime import date
+
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tors = [
+            FakeTorrent(hash="HASH123", name="Show", state="pausedUP", progress=0.0),
+            FakeTorrent(hash="HDUP", name="Dup", state="pausedUP", progress=0.0),
+            FakeTorrent(hash="HPART", name="Part", state="pausedUP", progress=0.5),
+            FakeTorrent(hash="HEXP", name="Exp", state="pausedUP", progress=0.0),
+            FakeTorrent(hash="HASH456", name="Solo", state="pausedUP", progress=0.0),
+        ]
+        for t in tors:
+            client.torrents[t.hash] = t
+        seed_store(mgr, tors)
+        # 同日去重预置(HDUP 当日已跳检过 —— skip_check_day 跨来源共享, 这里直接预写该表)
+        mgr.state["skip_check_day"] = {"HDUP": date.today().isoformat()}
+        # HEXP 导出失败(四阶段第一步即炸, fail 有文案)
+        orig_export = client.torrents_export
+
+        def export(torrent_hash=None, **kw):
+            if torrent_hash == "HEXP":
+                raise RuntimeError("boom")
+            return orig_export(torrent_hash=torrent_hash, **kw)
+
+        client.torrents_export = export
+        with module_log("auto_qb.webui.commands") as messages:
+            mgr.web.commands.put(
+                (
+                    "bulk_torrents", {
+                        "hashes": ["HASH123", "HDUP", "HPART", "HEXP"],
+                        "action": "skip_check",
+                        "cmd_id": "bs1"
+                    }
+                )
+            )
+            mgr.web.consume_commands()
+        rec = mgr.web.results["bs1"]
+        assert rec["status"] == "error", rec
+        # 文案逐段: ok 之外的三类各占一段(跳过按原因分桶, 失败聚合计数)
+        assert "1 个跳过: 今日已跳检过该种子" in rec["error"], rec["error"]
+        assert "2 个失败: " in rec["error"] and "部分下载的种子禁止跳检" in rec["error"], rec["error"]
+        assert "导出 .torrent 失败" in rec["error"], rec["error"]
+        assert any("批量跳检(成功 1, 跳过 1, 失败 2)" in m for m in messages), messages
+        # ok 的那枚走通四阶段并记录同日去重(跨来源共享不回归)
+        names = [c[0] for c in client.calls]
+        assert "export" in names and "delete" in names and "add" in names, client.calls
+        assert mgr.state["skip_check_day"].get("HASH123"), "web 批量跳检应记录同日去重"
+        # 纯成功批 -> ok 回执(FakeClient 重加固定回 HASH123, 成功标的只能用它; 独立新 manager)
+        with tempfile.TemporaryDirectory() as td2:
+            mgr2 = make_manager(os.path.join(td2, "state.json"))
+            client2 = FakeClient()
+            mgr2.client = client2
+            t2 = FakeTorrent(hash="HASH123", name="Solo", state="pausedUP", progress=0.0)
+            client2.torrents["HASH123"] = t2
+            seed_store(mgr2, [t2])
+            with module_log("auto_qb.webui.commands") as messages2:
+                mgr2.web.commands.put(
+                    ("bulk_torrents", {
+                        "hashes": ["HASH123"],
+                        "action": "skip_check",
+                        "cmd_id": "bs2"
+                    })
+                )
+                mgr2.web.consume_commands()
+            assert mgr2.web.results["bs2"]["status"] == "ok", mgr2.web.results["bs2"]
+            assert any("批量跳检(成功 1 个种子)" in m for m in messages2), messages2
+
+
+def test_drain_web_commands_bulk_skip_check_gated():
+    """bulk 跳检 gate(计划 26-10-02-1955 W3, D2=是·fail-closed): web.skip_check_menu 关 -> drain 分派处拒单
+
+    读实时配置(ctx.config 现取); 拒单不发任何 qB 调用(export/delete/add 零出现)。
+    单发端点 403 双态既有用例不回归(test_api_t_skip_check_gated_by_config)。
+    hash 用 FakeClient 重加固定回的 HASH123, 使重开开关后的放行段走通重加确认。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        t = FakeTorrent(hash="HASH123", name="Show", state="pausedUP", progress=0.0)
+        client.torrents["HASH123"] = t
+        seed_store(mgr, [t])
+        mgr.config.web.skip_check_menu = False
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HASH123"], "action": "skip_check", "cmd_id": "bg1"}))
+        mgr.web.consume_commands()
+        rec = mgr.web.results["bg1"]
+        assert rec["status"] == "error" and "web.skip_check_menu" in rec["error"], rec
+        assert client.calls == [], "gate 拒单不得触达 qB(四阶段零调用)"
+        # 开关重开(实时配置现读, 同一 manager 热改即生效)-> 放行执行
+        mgr.config.web.skip_check_menu = True
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HASH123"], "action": "skip_check", "cmd_id": "bg2"}))
+        mgr.web.consume_commands()
+        assert mgr.web.results["bg2"]["status"] == "ok", mgr.web.results["bg2"]
+        assert any(c[0] == "export" for c in client.calls), client.calls
 
 
 def test_drain_web_commands_skip_check_torrent():
