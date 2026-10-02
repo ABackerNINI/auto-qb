@@ -53,6 +53,10 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_settings_panel_section: settings-detail 有 hub.view === 'keys' 分支(录制/禁用/重置/
   冲突三选一/保存放弃全套钮); config_hub 首页卡+hubNow+hubRestore 认 "keys";
   console_hub.css 有 .kb-row 样式
+- test_esc_chain_clear_filters_fallback: ESC 接退栈链终端兜底清面筛(计划 26-10-02-1632 方案 A) ——
+  兜底在收剧展开之后(链序即退栈序, LIFO 不可倒) / 门条件五件套(authOk / page=groups /
+  !hrPop.open / !inInput / facetsActive) / toast 点名不静默; Escape 仅 clear-esc 一个默认绑定
+  且面板 label 点名清筛选; facetsActive 不含 searchQuery(搜索词归 clearSearch)
 """
 
 from __future__ import annotations
@@ -534,3 +538,21 @@ def test_settings_panel_section() -> None:
     css = (SHARED / "console_hub.css").read_text(encoding="utf-8")
     for cls in (".kb-row", ".kb-grp-t", ".kb-help", ".kb-conflict", ".kb-danger"):
         assert cls in css, f"console_hub.css 缺 {cls}(挂件类名必须有对应规则)"
+
+
+def test_esc_chain_clear_filters_fallback() -> None:
+    """ESC 接退栈链终端兜底清面筛(计划 26-10-02-1632 方案 A): 链序 / 门条件五件套 /
+    toast 点名 / Escape 唯一默认绑定 / facetsActive 不含搜索词"""
+    lc = _read("lifecycle.js")
+    assert lc.index("expandedShows = []") < lc.index("this.clearFilters()"), \
+        "清筛选兜底必须在收剧展开之后(链序即退栈序, LIFO 不可倒)"
+    for frag in ("this.authOk", 'this.page === "groups"', "!this.hrPop.open", "!inInput", "this.facetsActive"):
+        assert frag in lc, f"清筛选兜底缺门条件: {frag}"
+    assert "已清除全部筛选" in lc, "清筛选兜底必须 toast 点名, 不许静默"
+    sc = _read("shortcuts.js")
+    assert sc.count('def: "Escape"') == 1, "Escape 只许固定键 clear-esc 一个默认绑定"
+    assert "清筛选" in sc, "clear-esc 面板 label 必须反映清筛选兜底"
+    fj = _read("filters.js")
+    block = fj[fj.index("facetsActive()"):]
+    block = block[:block.index("},")]
+    assert "searchQuery" not in block, "facetsActive 不得含 searchQuery(搜索词归 clearSearch)"

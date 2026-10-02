@@ -114,6 +114,12 @@ window.AQB_FILTERS = {
       return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length || this.categoryFilter.length ||
         this.siteFilter.length || this.hrFilter.length || this.hrSrcFilter.length || (this.searchQuery || "").trim());
     },
+    /* 面筛(不含搜索词)是否有值: Esc 退栈链「清筛选」兜底的门 —— 与 clearFilters 字段清单
+     * 同源, 新增面筛字段时两处同步; 搜索词不算(归 clearSearch, Esc 兜底不动它) */
+    facetsActive() {
+      return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length ||
+        this.categoryFilter.length || this.siteFilter.length || this.hrFilter.length || this.hrSrcFilter.length);
+    },
     /* 四个筛选器的定义(模板只遍历这一份, 不再手写四块相同结构)
      * 路径筛选器与其它三个同形(多选数组): 选中项存 field 指向的数组, 计数口径见 facetRows
      */

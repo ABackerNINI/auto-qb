@@ -9,7 +9,8 @@
  *     -> 模态层(任一浮层/对话框打开时列表键位一律失效); 另有 repeat(默认丢弃, 仅标记条目
  *     放行长按连发) / 纯修饰键 / defaultPrevented 三道前置拦截。
  *   - Esc 是唯一固定键: 归 lifecycle.js 既有退栈链(FIX-07), 引擎永不接(监听注册序也排在其后,
- *     双保险)。Delete 键是注册表**外**的"额外删除操作", 引擎直连 _deleteFlow(§08 决策 v4:
+ *     双保险)。链终端兜底已含清筛选(26-10-01-2108), 键表侧 clear-filters 仍空位(可自定义)。
+ *     Delete 键是注册表**外**的"额外删除操作", 引擎直连 _deleteFlow(§08 决策 v4:
  *     删除双入口, 不占键表槽位、不进面板改键列表)。
  *   - 黑名单 KB_BLACKLIST = 浏览器不可拦组合(Ctrl+W/T/N/Q 及 Shift 变体 / 标签页族 / 开发者工具
  *     / Meta 全族), 依据 §3.3 经验边界: Ctrl+S/F/P 可拦不在名单; 面板(W6)拒绑 + 守阵断言默认键不碰。
@@ -192,7 +193,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "select-all", group: "选择", label: "全选当前视图",
     def: "Ctrl+KeyA", scope: "list",
     run: (vm) => vm._kbSelectAll() },
-  { id: "clear-esc", group: "选择", label: "清除选择 / 逐层退栈",
+  { id: "clear-esc", group: "选择", label: "清除选择 / 逐层退栈 / 清筛选",
     def: "Escape", scope: "global", fixed: true,
     run: null },  // 既有 lifecycle.js 退栈链(FIX-07)实现, 引擎永不接(注册表登记只为守阵与面板展示)
   // ---- D · 一级动作(§08 决策 v4: 危险档一律二键组合; 裸键 D/C/F 释放为空位) ----
@@ -291,7 +292,7 @@ const AQB_SHORTCUT_DEFS = [
     run: (vm) => vm._kbEditAct("editShareLimits") },
   { id: "clear-filters", group: "更多动作", label: "清除全部筛选",
     def: "", scope: "list",
-    run: (vm) => vm.clearFilters() },
+    run: (vm) => vm.clearFilters() },  // Esc 触发路径走退栈链兜底(lifecycle), 不走键表; 此处保持空位供自定义其它键
   { id: "invert-select", group: "更多动作", label: "反选当前视图",
     def: "", scope: "list",
     run: (vm) => vm._kbInvertSel() },  // 大库反选代价高, 默认不给键(0822 I6)

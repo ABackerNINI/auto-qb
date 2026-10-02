@@ -45,11 +45,13 @@ window.AQB_LIFECYCLE = {
       // FX-08: 限速浮层无遮罩 -> 点空白视为"放弃本次修改"直接收起(与 Esc 同语义)
       if (this.speedOpen) this.closeSpeedDialog();
     });
-    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层/抽屉 → 筛选器下拉/弹层(pop) → 右键菜单 → 清选择/收展开兜底
+    // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层/抽屉 → 筛选器下拉/弹层(pop) → 右键菜单 → 清选择/收展开兜底 → 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
     // WARN: 本链与 dialogs.js::escBusy 是同一份浮层名单(后者给 config_hub 的「Esc 返回设置首页」守门),
     //   新增浮层两处同步; config_hub.js::hubOnKey 的 Esc 分支排在本链之后(链上有层时它不动)
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      const inInput = !!(e.target && e.target.closest &&
+        e.target.closest("input, textarea, select, [contenteditable]"));  // 仅清筛选兜底消费(与引擎同式, 既有分支行为不变)
       if (this.modal.visible) this.resolveModal(false);
       else if (this.addOpen) this.escAddTorrent();  // 添加种子对话框: 先收内部浮层(分类/标签下拉 → 位置面板), 再关对话框
       else if (this.statsOpen) this.closeStats();  // 统计面板对话框: 与添加对话框同层(先后于确认框)
@@ -70,6 +72,13 @@ window.AQB_LIFECYCLE = {
       else if (this.expandedKey) this.expandedKey = null;  // 兜底: 收起分组展开
       else if (this.expandedShowEp) this.expandedShowEp = null;  // 兜底: 收起追剧集展开
       else if (this.expandedShows.length) this.expandedShows = [];  // 兜底: 收起追剧剧展开
+      // 兜底最深一档: 清全部面筛(26-10-01-2108 拍板) —— 仅数据页 + 非输入态 + 无 hrPop 卡;
+      // 搜索词不清(归 clearSearch); 触发即 toast 点名, 不静默。门条件缺一不可:
+      // page 挡设置页(escBusy 无需同步), inInput 挡搜索框, hrPop 让"收卡"独占该次按键
+      else if (this.authOk && this.page === "groups" && !this.hrPop.open && !inInput && this.facetsActive) {
+        this.clearFilters();
+        this.toast("已清除全部筛选(搜索词保留)", "ok", 2500);
+      }
     });
     // 键盘快捷键引擎(计划 26-09-28-0354 W1): 必须注册在 Esc 退栈链**之后**(注册序 = 触发序);
     // 引擎自身对 Escape 也直接放行, 双保险。句柄存实例, unmounted 撤掉防热重载堆叠。
