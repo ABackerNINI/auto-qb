@@ -62,6 +62,8 @@
 - test_group_key_codec_roundtrip: 分组 key 编解码往返(含中文/多文件)
 - test_build_group_view: 分组视图组装(组名/合计/成员站点/单种子大小与总大小/标签/分类/保存路径)
 - test_views_published_atomically_when_rebuilt_concurrently: 并发重建(主循环线程 vs Web 线程)时四份视图与版本号必须**同一轮**发布, 不得出现"半新半旧"
+- test_flush_views_marks_dirty_on_hr_revision_change: HR 判定新鲜度置脏(plan 26-10-03-0436 Step 2) —— hr.revision 变化后 flush_views 置脏, 重建后基线前移、再次 flush 不再置脏(无循环置脏)
+- test_flush_views_hr_facade_missing_null_defense: hr 门面缺失(None)时判空防御 —— 重建记基线与 flush 比对都跳过, 不炸不置脏
 - test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
 - test_build_group_view_group_aggregates: 组视图组级聚合(辅种扩列 2026-09-28) —— 进度/可用性 max、eta 最小有效值(哨兵不参与)、剩余量 min、最近活动 max(-1 不参与)、已下载求和、做种时长平均、分享率=总上传÷单份大小; 全组无效值回 0/None
 - test_member_view_extended_fields: 成员视图透出辅种扩列字段(eta/time_active/last_activity 分钟量化 + downloaded/amount_left/completion_on/seen_complete/availability/限速/tracker/infohash_v2)
@@ -5223,6 +5225,54 @@ def test_views_published_atomically_when_rebuilt_concurrently(tmp_path):
     t.join()
     r.join()
     assert not errors, f"重建线程异常: {errors}"
+
+
+def test_flush_views_marks_dirty_on_hr_revision_change(tmp_path):
+    """HR 判定新鲜度置脏(plan 26-10-03-0436 Step 2): hr.revision 变化 -> flush_views 置脏
+
+    HR 判定结果不是 store 快照字段, store.view_changed 覆盖不到它(与「错误原因」预取
+    同一判别法): 取数线程发布新判定(revision 自增)必须显式翻译成一次置脏, 否则界面
+    挂在旧判定上直到别的原因碰巧重建。基线随重建前移 => 只置一拍, 无循环置脏。
+    """
+    from auto_qb.hr.resolve import HrSiteView, HrViewSet
+
+    from helpers import FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    seed_store(mgr, [FakeTorrent(hash="HA", name="A")])
+    mgr.store.consume_view_changed()  # 排掉 store 构造期置脏(TorrentStore 初始 view_changed=True), 只考察 HR 通道
+    mgr.web.group_view_dirty = False
+    mgr.web.rebuild_views()  # 重建完成: 基线记下当刻 revision(0)
+    assert mgr.web.group_view_dirty is False
+    assert mgr.web._hr_rev_at_build == 0
+
+    # 直接推 publisher 模拟取数线程发布新判定(内容指纹变化 => revision 自增)
+    pushed = mgr.hr.publisher.publish(HrViewSet(views={"HHan": HrSiteView(site="HHan")}, generated_at=1.0))
+    assert pushed is True, "前置: 首个站点视图必须抬 revision"
+
+    mgr.web.flush_views()
+    assert mgr.web.group_view_dirty is True, "revision 变化必须置脏"
+
+    # 重建后基线前移, 再次 flush 不再置脏(无循环置脏)
+    mgr.web.rebuild_views()
+    assert mgr.web.group_view_dirty is False
+    assert mgr.web._hr_rev_at_build == mgr.hr.publisher.revision, "基线必须随重建前移"
+    mgr.web.flush_views()
+    assert mgr.web.group_view_dirty is False, "基线已前移, 不得循环置脏"
+
+
+def test_flush_views_hr_facade_missing_null_defense(tmp_path):
+    """hr 门面缺失(None)时判空防御: 重建记基线与 flush 比对都跳过, 不炸不置脏"""
+    from helpers import make_manager
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.hr = None
+    mgr.store.consume_view_changed()  # 排掉 store 构造期置脏, 只考察 HR 通道
+    mgr.web.group_view_dirty = False
+    mgr.web.rebuild_views()
+    assert mgr.web._hr_rev_at_build is None, "无 HR 运行时: 基线记 None"
+    mgr.web.flush_views()
+    assert mgr.web.group_view_dirty is False, "无 HR 运行时: 新鲜度比对跳过, 不得置脏"
 
 
 def test_build_search_index_files():

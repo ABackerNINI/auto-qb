@@ -99,6 +99,11 @@ class WebUIRuntime:
         self.group_view_ver: int = int(time.time())
         # 快照是否过期(全部 Web 视图共享: 主循环据此惰性重建)
         self.group_view_dirty: bool = True
+        # HR 判定新鲜度基线: 最近一次视图重建完成时的 hr.revision。HR 判定结果不是 store
+        # 快照字段, store.view_changed 覆盖不到它, 取数线程发布新判定后靠 flush_views
+        # 比对基线显式置脏(与「错误原因」预取同一判别法)。None = 尚未重建过或重建时无
+        # HR 运行时; 比对端对 None 一律跳过(经 manager 现取, 判空防御)。
+        self._hr_rev_at_build: Optional[int] = None
         # 最近一次 Web 请求时间(活跃门控的心跳)
         self.last_seen: float = 0.0
         # 已发布但**还没被任何 /api/state 请求取走**的版本号(None = 没有"欠着"的版本)。
@@ -343,6 +348,11 @@ class WebUIRuntime:
         host = self._host
         # store 的视图变化标记是 consume 语义(读后复位), 两条线各取一次即可完整覆盖
         if host.store.consume_view_changed():
+            self.mark_dirty()
+        # HR 判定新鲜度: revision 与重建基线不等即置脏(基线在 _publish_locked 随重建前移,
+        # 故只在 revision 真变的那一拍置一次, 无循环置脏)。发布侧按内容指纹去重, 不会周期空转。
+        hr = getattr(host, "hr", None)
+        if hr is not None and self._hr_rev_at_build != hr.revision:
             self.mark_dirty()
         web_active = self.is_active()
         # 「上一版有没有人取走」门控: 服务端节拍与客户端节拍各自独立定档, 大库下服务端
@@ -635,6 +645,10 @@ class WebUIRuntime:
         # 事件驱动(P2): 新版本**主动推**信号(只推版本号, 绝不推数据 —— 3000 种子一轮
         # 全量要 63ms 序列化+网络+解析, 频繁推会把主线程打满)。前端据此触发一次 refresh。
         self.notify("ver", {"ver": self.group_view_ver})
+        # 重建完成记 HR 判定新鲜度基线: 经 manager 现取 + 判空 —— 无 HR 运行时(测试桩/
+        # 未装配)记 None, 比对端同样跳过, 不得在重建路径抛 AttributeError。
+        hr = getattr(host, "hr", None)
+        self._hr_rev_at_build = hr.revision if hr is not None else None
 
     def ensure_view(self) -> List[dict]:
         """WEB 线程调用: 确保分组视图最新——过期则立即重建(Web 请求触发), 否则返回当前引用
