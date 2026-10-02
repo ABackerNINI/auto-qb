@@ -9,12 +9,14 @@ pitfalls/kb/cap-counting.md「生成式跨形态视图」条的收口注记), �
     plans / reports : `<meta name="doc-topic">` + `doc-status` + `doc-added`
     issues          : `<meta name="doc-topic">` + `issue-status`
     tasks           : `**Topics:**` + `**Status:**` (时间戳取文件名日期)
+    认领链          : HTML `<meta name="doc-refs">` + md `**Refs:**` 行 (仓库根相对路径, 逗号分隔;
+                      --check 校验双向闭环, 2026-10-03 起 —— 单点自 tests/test_docs_forms.py 下沉)
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
     python <skill-dir>/scripts/gen_doc_map.py                   默认: 活跃多件专题全行, 完结/单件专题只列名
     python <skill-dir>/scripts/gen_doc_map.py --topic <key>     单专题全行 (出件前先查主键是否已有)
     python <skill-dir>/scripts/gen_doc_map.py --all             全量全行 (等价退役的物化视图, 审计用)
-    python <skill-dir>/scripts/gen_doc_map.py --check           主键纪律: 任一形态缺主键即退码 1 (挂 kb.check)
+    python <skill-dir>/scripts/gen_doc_map.py --check           主键纪律 + 认领链双向: 任一违规退码 1 (挂 kb.check 与提交闸门)
     python <skill-dir>/scripts/gen_doc_map.py --forks           近似主键提示 (子串包含), 只提示不判红
 
 轮转口径 (「生成器内轮转完结专题」): 状态 ∈ TERMINAL_STATUSES 为完结。默认视图只给**活跃多件
@@ -44,6 +46,8 @@ TASK_TOPICS_RE = re.compile(r"^\*\*Topics:\*\*\s*(.+)$", re.MULTILINE)
 TASK_STATUS_RE = re.compile(r"\*\*Status:\*\*\s*(In Progress|Open|Done|Dropped)")
 TASK_UPDATED_RE = re.compile(r"\*\*Updated:\*\*\s*(\d{4}-\d{2}-\d{2})")
 STAMP_RE = re.compile(r"^(\d\d-\d\d-\d\d)-(\d{4})-")
+HTML_REFS_RE = re.compile(r'<meta name="doc-refs" content="([^"]*)">')
+TASK_REFS_RE = re.compile(r"^\*\*Refs:\*\*\s*(.+)$", re.MULTILINE)
 NAME_WRAP = 4000  # 名录折行宽度, 只影响换行 —— 零信息损失 (150→400→4000 三轮收口, 见 git 历史)
 
 
@@ -75,6 +79,17 @@ def _date_stamp(stamp: str) -> str:
     return stamp[:8] if re.fullmatch(r"\d{2}-\d{2}-\d{2}-\d{4}", stamp or "") else stamp
 
 
+def _split_refs(raw: str) -> list[str]:
+    return [p.strip() for p in raw.split(",") if p.strip()]
+
+
+def _refs_of(path: Path) -> list[str]:
+    """声明引用 (仓库根相对路径列表): HTML 读 `doc-refs` meta, md (档案 / 会话切片) 读 `**Refs:**` 行。"""
+    text = path.read_text(encoding="utf-8")
+    m = HTML_REFS_RE.search(text) if path.suffix == ".html" else TASK_REFS_RE.search(text)
+    return _split_refs(m.group(1)) if m else []
+
+
 def collect(mb: Path) -> list[dict]:
     items: list[dict] = []
     for kind, form in (("plans", "plan"), ("reports", "report")):
@@ -90,6 +105,7 @@ def collect(mb: Path) -> list[dict]:
                     "stamp": _date_stamp(meta.get("doc-added", "")) or _stamp_of(path.name),
                     "title": title.group(1).strip() if title else path.stem,
                     "link": f"{kind}/{path.name}",
+                    "refs": _split_refs(meta.get("doc-refs", "")),
                 }
             )
     for path in sorted((mb / "issues").glob("*.html")):
@@ -102,6 +118,7 @@ def collect(mb: Path) -> list[dict]:
                 "stamp": meta.get("issue-stamp", "") or _stamp_of(path.name),
                 "title": meta.get("issue-title", path.stem),
                 "link": f"issues/{path.name}",
+                "refs": _split_refs(meta.get("doc-refs", "")),
             }
         )
     for path in sorted((mb / "tasks").glob("*.md")):
@@ -111,6 +128,7 @@ def collect(mb: Path) -> list[dict]:
         topics = TASK_TOPICS_RE.search(text)
         status = TASK_STATUS_RE.search(text)
         updated = TASK_UPDATED_RE.search(text)
+        refs = TASK_REFS_RE.search(text)
         title = TASK_TITLE_RE.search(text)
         items.append(
             {
@@ -121,6 +139,7 @@ def collect(mb: Path) -> list[dict]:
                                      updated.group(1) if updated else ""),
                 "title": title.group(2) if title else path.stem,
                 "link": f"tasks/{path.name}",
+                "refs": _split_refs(refs.group(1)) if refs else [],
             }
         )
     return items
@@ -232,6 +251,35 @@ def check_topics(items: list[dict]) -> int:
     return 0
 
 
+def check_claim_chain(items: list[dict], root: Path, mb: Path) -> list[str]:
+    """认领链双向校验: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明本件。
+
+    2026-10-03 自 tests/test_docs_forms.py::test_claim_chain_is_bidirectional 下沉 (单点在本脚本,
+    pytest 同函数复验) —— 机检只活在 pytest 时, 纯文档轮 (test.quick 闸门 match 只盯 src/tests)
+    的单向链一路绿灯入库 (657366c3, 见 issues/26-10-03-0521), 卡死其它 clone 的 test.quick;
+    下沉后提交闸门 (memory-bank/ → 本脚本 --check) 全轮次覆盖。声明方 = 四形态全量
+    (pytest 旧实现漏扫 issue 声明方, 一并补齐)。只校验**声明过引用**的件, 未声明天然豁免。
+    """
+    problems: list[str] = []
+    checked = 0
+    mb_rel = mb.relative_to(root).as_posix()
+    for item in items:
+        refs = item["refs"]
+        if not refs:
+            continue
+        checked += 1
+        self_rel = f"{mb_rel}/{item['link']}"
+        for ref in refs:
+            target = root / ref
+            if not target.exists():
+                problems.append(f"{self_rel}: 引用的目标不存在 → {ref}")
+            elif self_rel not in _refs_of(target):
+                problems.append(f"{self_rel} → {ref}: 目标未反向声明本件 (认领链单向)")
+    if not checked:
+        problems.append("没有任何件声明引用 —— 认领链守阵失去校验对象")
+    return problems
+
+
 def find_forks(groups: dict[str, list[dict]]) -> list[str]:
     """近似主键 (子串包含, 如 webui-hr-popup 与 -t1/t2/t3): 疑似分叉, 只提示不判红。"""
     names = [t for t in groups if t != NO_KEY]
@@ -243,7 +291,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--topic", help="只看一个专题的全行 (未知键退码 1 并列出现有键)")
     parser.add_argument("--all", action="store_true", help="全量全行 (等价退役的 _doc-map.md)")
-    parser.add_argument("--check", action="store_true", help="主键纪律: 缺 doc-topic/Topics 即退码 1 (闸门/守卫用)")
+    parser.add_argument("--check", action="store_true", help="主键纪律 + 认领链双向: 缺 doc-topic/Topics 或单向链即退码 1 (闸门/守卫用)")
     parser.add_argument("--forks", action="store_true", help="近似主键提示 (stderr), 只提示不判红")
     parser.add_argument("--root", help="仓库根 (默认向上找 .git)")
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
@@ -261,7 +309,19 @@ def main() -> int:
             sys.stderr.write("[fork] 无近似主键\n")
 
     if args.check:
-        return check_topics(items)
+        rc = check_topics(items)
+        problems = check_claim_chain(items, root, mb)
+        if problems:
+            sys.stderr.write(
+                "认领链不闭环 (声明 doc-refs / **Refs:** 的件, 目标必须存在且反向声明; 协议见 "
+                "memory-bank/conventions/doc-forms.md「认领链」):\n"
+            )
+            for p in problems:
+                sys.stderr.write(f"  {p}\n")
+            rc = 1
+        else:
+            print("认领链 OK: 声明引用的件全部双向闭环")
+        return rc
     if args.topic:
         return render_topic(items, args.topic)
     if args.all:

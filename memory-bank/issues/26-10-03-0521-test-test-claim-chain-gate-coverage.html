@@ -8,7 +8,7 @@
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="hr-hotreload-stale-display">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest">
 <meta name="issue-summary" content="test.quick 闸门 match 只盯 src/tests, 纯文档轮不触发 pytest; 双向认领链唯一机检 test_claim_chain_is_bidirectional 只活在 pytest, gen_doc_map --check 只查 doc-topic 主键 —— 657366c3 由此带单向链入库卡死主线">
 <title>ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest · test · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-03-0521-test-test-claim-chain-gate-coverage</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-03 05:21</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -105,6 +105,8 @@
     <ul>
       <li>2026-10-03 05:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-03 05:21 — 备注解卡事实: 单向链本体已由并行会话修复(切片补 <code>**Refs:**</code> 随 4c0c6f66 前后入库), <code>test_docs_forms.py</code> 复验 10 passed 全绿; 本条只记<strong>闸门覆盖缺口</strong>本身, 修复认领后可独立于事故收尾。</li>
+      <li>2026-10-03 05:45 — 认领, 状态 <strong>In Progress</strong>(用户指派)。复验: 三锚点全部仍在 —— test.quick 闸门 <code>match=["src/","tests/"]</code>(.my-commit-flow.toml 45 行) / <code>check_topics</code> 只查主键(gen_doc_map.py 221 行) / 双向断言(test_docs_forms.py 172 行), 现象成立。新增实测: 四形态声明方 plan 39 / report 12 / issue 14 / task 37, 全部双向闭环 —— pytest 旧实现不扫 issue 声明方(14 条链无守卫), 下沉时一并纳入。</li>
+      <li>2026-10-03 06:02 — 状态 <strong>Done</strong>。实际修法: 双向链校验下沉 <code>gen_doc_map.py</code>(collect() 四形态补 <code>refs</code> 字段 + 新增 <code>check_claim_chain()</code>, <code>--check</code> = 主键纪律 + 认领链), pytest <code>test_claim_chain_is_bidirectional</code> 改为同函数复验(机检单点, 移除测试侧重复解析); 闸门 toml <strong>零改动</strong> —— memory-bank/ 闸门本就挂 <code>gen_doc_map --check</code>, 纯文档轮自此全覆盖; 协议单点 doc-forms.md「认领链」补三条(声明方式 / 合法目标 / 机检口径), <code>doc-refs</code> 目标口径修正为「认领链目标的仓库根相对路径」。验证: 负向探针 3/3(单向链 / 断链 / 零声明均报红) + <code>--check</code> 绿(主键 347 份 / 认领链全闭环) + test_docs_forms.py 10 passed + test.quick 2308 passed / 1 failed —— 唯一红为既有无关残留(src/auto_qb/core/mixins 幽灵 <code>__pycache__</code>, 26-10-01-1946 现象在本 clone 的本地残留, 本轮未动, 会卡住下一次命中 tests/ 的提交闸门, 待处置)。建议修法保留原文: 与实际修法同向, 「轻量闸门单跑 test_docs_forms」方案被下沉方案吸收故未采用。</li>
     </ul>
   </section>
 

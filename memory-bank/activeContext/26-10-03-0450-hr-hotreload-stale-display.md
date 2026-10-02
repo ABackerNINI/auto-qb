@@ -12,5 +12,6 @@
 
 - 2026-10-03 计划轮: 判定链路取证(record/rules_mod/tracker_mod/resolve/views/webui runtime + hr runtime/worker/service)+ 计划文档产出, 未动代码。
 - 2026-10-03 解卡与入池轮: 闸门缺口排查(ship.commit 的 test.quick 闸门 match 只盯 src/tests, 纯文档轮绕过 pytest, 双向认领链提交时机检零覆盖)→ 并行会话补切片 **Refs:** 后同步复验 `test_docs_forms.py` 10 passed 全绿 → 缺口入池 [issues/26-10-03-0521](../issues/26-10-03-0521-test-test-claim-chain-gate-coverage.html)(Open, 待认领修闸门)。
+- 2026-10-03 修复轮: 0521 认领修毕 —— 双向链机检下沉 `gen_doc_map.py --check`(提交闸门 memory-bank/ 全轮次覆盖, 声明方扩到四形态全量), pytest 同函数复验, doc-forms「认领链」补合法目标口径; 负向探针 3/3 + test_docs_forms 10 passed + test.quick 2308 passed(唯一红为 26-10-01-1946 幽灵目录在本 clone 的无关残留), issue 置 Done。
 
 **Refs:** memory-bank/plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html

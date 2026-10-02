@@ -32,13 +32,10 @@ MB = ROOT / "memory-bank"
 PLANS = MB / "plans"
 REPORTS = MB / "reports"
 ISSUES = MB / "issues"
-TASKS = MB / "tasks"
 SKILL_SCRIPTS = ROOT / ".agents" / "skills" / "memory-bank" / "scripts"
 
 STATUSES = ("Open", "In Progress", "Done", "Dropped", "Superseded")
 META_RE = re.compile(r'<meta name="(doc-[a-z]+)" content="([^"]*)">')
-TASK_REFS_RE = re.compile(r"^\*\*Refs:\*\*\s*(.+)$", re.MULTILINE)
-HTML_REFS_RE = re.compile(r'<meta name="doc-refs" content="([^"]*)">')
 # 命名协议从 2026-09-24 起对新件生效; 存量 51 份豁免 (改名引用面远超收益 —— 见计划 §03)
 NAMING_FROM = "26-09-24"
 NEW_NAME_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-\d{4}-(?:plan|report)-[a-z0-9]+(?:-[a-z0-9]+)*\.html$")
@@ -55,19 +52,6 @@ def _artifacts() -> list[Path]:
 
 def _meta(path: Path) -> dict[str, str]:
     return dict(META_RE.findall(path.read_text(encoding="utf-8")))
-
-
-def _refs_of(path: Path) -> list[str]:
-    """声明引用 (仓库根相对路径列表): HTML 读 `doc-refs` meta, MD 读 `**Refs:**` 行。"""
-    text = path.read_text(encoding="utf-8")
-    raw = ""
-    if path.suffix == ".html":
-        match = HTML_REFS_RE.search(text)
-        raw = match.group(1) if match else ""
-    else:
-        match = TASK_REFS_RE.search(text)
-        raw = match.group(1) if match else ""
-    return [p.strip() for p in raw.split(",") if p.strip()]
 
 
 def test_plans_reports_have_no_md() -> None:
@@ -172,23 +156,11 @@ def test_issue_topics_present() -> None:
 def test_claim_chain_is_bidirectional() -> None:
     """认领链 (issue ↔ 档案 ↔ 计划) 双向可查: 声明了引用就必须被反向声明, 缺链即红。
 
-    只校验**声明过引用**的件 —— 存量绝大多数不声明 `doc-refs` / `**Refs:**`, 天然豁免;
-    新件按协议声明后自动进入校验。
+    2026-10-03 机检单点下沉到 gen_doc_map.check_claim_chain —— 此前校验只活在 pytest, 纯文档轮
+    (test.quick 闸门 match 只盯 src/tests) 的单向链一路绿灯入库 (657366c3, 见
+    issues/26-10-03-0521); 下沉后提交闸门 (gen_doc_map --check) 全轮次覆盖, 本测试与其同源复验。
+    声明方 = 四形态全量 (旧实现漏扫 issue 声明方); 只校验**声明过引用**的件, 未声明天然豁免。
     """
-    problems = []
-    checked = 0
-    for path in list(_artifacts()) + [p for p in sorted(TASKS.glob("*.md")) if not p.name.startswith("_")]:
-        refs = _refs_of(path)
-        if not refs:
-            continue
-        checked += 1
-        rel_self = path.relative_to(ROOT).as_posix()
-        for ref in refs:
-            target = ROOT / ref
-            if not target.exists():
-                problems.append(f"{rel_self}: 引用的目标不存在 → {ref}")
-                continue
-            if rel_self not in _refs_of(target):
-                problems.append(f"{rel_self} → {ref}: 目标未反向声明本件 (认领链单向)")
-    assert checked, "没有任何件声明引用 —— 认领链守阵失去校验对象"
+    gen = _load_generator("gen_doc_map")
+    problems = gen.check_claim_chain(gen.collect(MB), ROOT, MB)
     assert not problems, "认领链不闭环:\n  " + "\n  ".join(problems)

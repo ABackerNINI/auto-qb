@@ -40,7 +40,7 @@
 <meta name="doc-status" content="Open">           <!-- 5 词表, 见下 -->
 <meta name="doc-added" content="26-09-23-1959">
 <meta name="doc-updated" content="26-09-23-1959">
-<meta name="doc-refs" content="同专题其它件的相对路径 (逗号分隔)">
+<meta name="doc-refs" content="认领链目标的仓库根相对路径 (逗号分隔, 见「认领链」)">
 ```
 
 - 档案 (md): `**Status:**` / `**Added:**` / `**Updated:**` / `**Summary:**` 承载同义字段 + `**Topics:** <专题>` 主键, 引用他件写 `**Refs:**`。
@@ -59,10 +59,14 @@
 - 跨形态专题视图 —— `commands run kb.docmap` **查询现算, 不落盘** (2026-09-29 起 `_doc-map.md` 物化退役,
   写热点 + `index-auto` cap 反复触顶): **一行一专题**, 列出该专题名下的 issue / 计划 / 报告 / 档案及状态。
   默认只展**活跃**专题全行 (有任一未完结件), 全完结专题轮转成名录; `--topic <key>` 单专题下钻
-  (出件前先查主键), `--all` 全量, `--check` 缺主键判红, `--forks` 分叉提示。
+  (出件前先查主键), `--all` 全量, `--check` 缺主键 / 单向认领链判红, `--forks` 分叉提示。
 - `issues/_index.md` · `tasks/_index.md` —— 各自生成器; 合并冲突的解法一律是**重跑脚本**。
 
 ## 认领链
 
 issue 被认领 → 两侧都记引用 (issue 的 `doc-refs` ↔ 档案的 `**Refs:**`), 生成器校验双向一致, 缺链即闸门红。
 「要修吗 / 什么时候修」的答案永远在 issue 侧; 「修到哪了」在档案侧。
+
+- **声明方式**: HTML 用 `<meta name="doc-refs">`, md (任务档案 / activeContext 切片) 用正文 `**Refs:**` 行; 值 = **仓库根相对路径**, 逗号分隔。只校验**声明过**的件, 未声明天然豁免。
+- **合法目标**: 任何能反向声明的文件 —— 四形态件与 activeContext 切片都合法 (切片无 meta 头, 反向声明写在正文 `**Refs:**` 行); 引向无法反向声明的文件即单向链, 判红。
+- **机检单点**: `gen_doc_map.py --check` (挂提交闸门 `memory-bank/` 与 `kb.check`, 纯文档轮也覆盖; 2026-10-03 自 tests/test_docs_forms.py 下沉, 该测试同函数复验), 声明方 = 四形态全量。

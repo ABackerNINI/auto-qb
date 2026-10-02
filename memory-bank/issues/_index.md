@@ -17,7 +17,7 @@
 | bug | 9 |
 | perf | 5 |
 | docs | 5 |
-| test | 2 |
+| test | 1 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 3 |
@@ -25,7 +25,6 @@
 
 ## Open
 
-- [test] [ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest](26-10-03-0521-test-test-claim-chain-gate-coverage.html) — test.quick 闸门 match 只盯 src/tests, 纯文档轮不触发 pytest; 双向认领链唯一机检 test_claim_chain_is_bidirectional 只活在 pytest, gen_doc_map --check 只查 doc-topic 主键 —— 657366c3 由此带单向链入库卡死主线
 - [bug] [主循环首轮 tick 任意异常在 next_*_at 未推进时无退避快速重试(wait_for=0 机理)](26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html) — 主循环异常路径不推进 next_*_at, 首轮 tick 抛任意异常(不止 StopIteration)即形成无退避快速重试循环 —— 有 ERROR 日志不静默, 是否要退避待拍板; StopIteration 已由 f89ceada 显式重抛不在此列
 - [docs] [AUMID 机制文档漂移两处: core-domain.md 称进程须设显式 AppUserModelID(与零调用点事实不符) + tray docstring 残留 AutoQB.UI.lnk](26-10-02-0728-docs-aumid-docs-drift.html) — core-domain.md:27「进程须先设显式 AppUserModelID」与 _set_windows_appid 生产零调用点事实不符; tray/app.py _set_windows_appid docstring 残留「对应开始菜单 AutoQB.UI.lnk」(9891c030 已改注册表键机制)
 - [bug] [tray._set_windows_appid 自引入起生产零调用点: AUMID 从未设置, 任务栏图标修复结论前提存疑](26-10-02-0727-bug-tray-appid-setter-no-call-site.html) — tray/app.py 的 _set_windows_appid 自 9891c030 引入起生产代码零调用点(仅测试驱动), 生产进程从未设置显式 AUMID —— 与 core-domain.md 四轮实测结论「AUMID 是任务栏图标决定性变量」矛盾, 26-10-01-2203 修复前提存疑
@@ -85,6 +84,7 @@
 
 ## Done
 
+- [test] [ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest](26-10-03-0521-test-test-claim-chain-gate-coverage.html) — test.quick 闸门 match 只盯 src/tests, 纯文档轮不触发 pytest; 双向认领链唯一机检 test_claim_chain_is_bidirectional 只活在 pytest, gen_doc_map --check 只查 doc-topic 主键 —— 657366c3 由此带单向链入库卡死主线
 - [bug] [ui_harness --hr-site 启动即崩: HrIdentity 枚举 v3 漂移](26-10-02-1900-bug-ui-harness-hr-site.html) — scripts/ui_harness.py --hr-site 启动 AttributeError: 引用已不存在的 HrIdentity.VERIFIED_NON_HR(现行 v3 三态 HR/RELEASED/NO_EVIDENCE), 桩工具与 hr/resolve.py 漂移
 - [bug] [主循环 except Exception 吞 _tick 的 StopIteration: 一旦触发即静默空转死循环](26-10-02-0442-bug-mainloop-stopiteration-swallowed.html) — qbmanager 主循环对 _tick 的 except Exception 会吞 StopIteration, 触发即 while True 空转死循环(无限快转不干活); 目前仅测试 mock 耗尽场景复现, 生产触发面未证实
 - [bug] [hr/service._finish_wave 末尾无条件 discard 三个告警去重集合, 每波重报与注释设计不符](26-10-02-0441-bug-hr-finish-wave-warn-dedupe-reset.html) — _finish_wave 无条件 discard 登录失效/无通道等三个告警去重集合, 「每站只报一次」的注释设计与实际每波重报不符; P1 覆盖提升时测试按实测行为断言
