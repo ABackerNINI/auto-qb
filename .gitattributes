@@ -1,0 +1,13 @@
+# 行尾统一 LF (2026-10-02): 仓库 blob 与检出一律 LF, 本文件压过全局 core.autocrlf
+# 存量工作区 CRLF 由 clean filter 在提交侧归一, 工作区一次性转 LF 另行执行(层3, 暂缓)
+* text=auto eol=lf
+
+# Windows 批处理必须 CRLF (cmd 对 LF 拆错行; tests/test_commands_engine.py::test_wrapper_cmd_written_with_crlf_no_bom 已固化)
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 二进制显式标注, 防 text=auto 误判
+*.png binary
+*.ico binary
+*.pdf binary
+*.mp4 binary

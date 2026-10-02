@@ -18,6 +18,7 @@
   **是行尾不是内容**(行尾幽灵 `M`)。
 - **处置**: 先提交或 stash 承载本地改动(脚本不代做清理), 再重跑 sync。
   行尾幽灵 `M`: `git add <file>` + `git reset -q -- <file>` 刷新索引视图即可 ff, 实测有效。
+  - **2026-10-02**: 仓库根已加 `.gitattributes`(`* text=auto eol=lf`)对 blob 侧设防 —— 存量工作区一次性转 LF(层3, 暂缓)完成后此类幽灵 M 应根除, 完成前本条仍适用。
   ❗旧版「`git diff --output=备份.patch` 移出 → 快进 → 施回」补丁配方**已删除**(rebase/stash 解禁后由
   sync + stash/提交取代); 补丁路线的 PowerShell 编码事故记录见下条, 引以为戒。
 

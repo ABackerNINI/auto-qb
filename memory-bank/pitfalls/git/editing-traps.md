@@ -1,7 +1,13 @@
 # 编辑与工具陷阱 (git / 文本)
 
-> 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一、文本模式写回双重换行(`\r\r\n`)、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。
+> 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一、文本模式写回双重换行(`\r\r\n`)、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。2026-10-02 起仓库 .gitattributes 统一 LF, 行尾类条目适用范围收窄(见首节)。
 > 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 双重换行, write_text, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠
+
+### 2026-10-02 起仓库统一 LF: 行尾类条目适用范围收窄
+
+- **变更**: 仓库根新增 `.gitattributes`(`* text=auto eol=lf`)+ 全局 `core.autocrlf` 改 `input` —— blob 侧提交必归一 LF, 新检出文件为 LF; 此后「编辑导致整文件行尾归一、diff 爆炸」不再可能(git 侧看不到行尾差异)。
+- **仍适用(层3未完成)**: 存量工作区文件磁盘上仍是 CRLF(一次性转 LF 暂缓), 各 clone 跑完工作区转换前, 下文「edit 工具 oldText CRLF 匹配」「Python 文本模式 `\r\r\n`」「heredoc 终止符」等条目照旧适用。
+- **长期适用**: `.cmd` 生成物必须 CRLF(cmd 对 LF 拆错行)与 Python 写模式陷阱, 与仓库行尾统一无关。
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 
