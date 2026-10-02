@@ -535,91 +535,91 @@
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发</span>
             <div class="note">键盘高亮与鼠标点击是两套状态,需合并为单一套随最后操作源移动;方案 B(9c68cce9)已让点击落光标,本条是收尾延展。</div></td>
-          <td></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">9c68cce9 + fa79d526 · 点击落光标+起点统一收尾, 单套 kbCursor 随最后操作源移动(单击/双击前置 click/Ctrl/Shift 均落); 普通点击不选中为 2026-09-17 用户口径保留</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-feat-webui-shortcuts-drawer-nav.html">26-10-01-2108</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">浏览种子详情抽屉时支持键盘上下键切换种子</span>
             <div class="note">快捷键引擎与可自定义已落地,补「抽屉打开时上下键切上/下一个种子」动作,小件。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">动作注册表 58 动作无「抽屉内切上/下一个种子」; 抽屉打开时浮层门只放行 drawer/settings 局部键, 上下键(list 作用域)被拦</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-feat-webui-shortcuts-drawer-open.html">26-10-01-2108</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">Alt+1~4 从列表直接打开选中种子的详情抽屉并转到对应页</span>
             <div class="note">现 Alt+1~4 仅在抽屉已聚焦时切页(scope=drawer),需升级为列表侧直接唤起并定位。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">drawer-tab-* 四动作仍 scope:"drawer"(shortcuts.js), 列表侧(抽屉未开)按压无唤起逻辑, 与入池时现状一致</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-question-webui-esc-clear-filter.html">26-10-01-2108</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">WEBUI 按 ESC 清除筛选器 —— 定键与否待拍板</span>
             <div class="note">快捷键引擎已有未绑定的 clear-filters 动作,只差是否把 ESC 定给它的决策;可与本簇三件一并拍。</div></td>
-          <td></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">0d286cc5 · 已拍板方案 A(计划 26-10-02-1632): ESC 接退栈链终端兜底清全部面筛+toast 点名; 键表 clear-filters 保持空位可自定义; 池已改 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2119-feat-webui-batch-move-skipcheck.html">26-10-01-2119</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">批量移动/批量跳检</span>
             <div class="note">WEBUI 缺批量移动与批量跳检入口;右键单组跳检与危险操作独立操作层已落地可复用。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">全 src 无批量移动/批量跳检入口(仅右键单组跳检既有), 与入池时现状一致</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2119-feat-webui-search-highlight.html">26-10-01-2119</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">搜索命中高亮显示 + 无命中时提示命中域(如「文件名」标识)</span>
             <div class="note">需标出命中来源域与命中片段,无匹配时给「匹配到文件名/标签/站点」类提示。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">行级 search-hit 高亮为入池前既有(filters.js 问 searchHits); 命中域标识/片段高亮/无命中提示均无, /api/search 仍只回 hash 集合</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2119-feat-webui-drawer-redesign.html">26-10-01-2119</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">重做优化种子详情抽屉<span class="flag">簇内排后</span></span>
             <div class="note">详情抽屉整体重设计,已有标签页记忆与长文本截断等局部改进;会触碰 shortcuts-drawer 两件的落点,建议簇内小件先行后再整体重做。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">抽屉仅页签记忆/长文本截断等局部改进, 整体重设计无方案无码, drawer.js 近期提交均与本条无关</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2138-feat-webui-tracker-error-warning-state.html">26-10-01-2138</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">tracker error/warning 状态展示, 且可配置忽略错误或警告</span>
             <div class="note">为种子/组的 tracker 状态增加 error/warning 呈现,并支持配置忽略(不告警不阻断)。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">抽屉 tracker 错误/警告 yes/no 与错误状态列显因(tracker_error_msg)均为入池前既有; 「可配置忽略」无任何配置键, 组级呈面未动</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2137-feat-webui-settings-help-followup.html">26-10-01-2137</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色</span>
             <div class="note">「?」说明全面改写(Done)后的遗漏:站点设置「删除标签格式」、自动化「彻底删除标签」等;与 W2 的删除标签作用域 bug 相关,可对照改。</div></td>
-          <td></td>
+          <td><span class="st st-part">🔶 部分修复</span><span class="stwhy">「?」语调色半边已落地(eb575956 · hubToneOf + hb-ask.danger/important); 富文案遗漏项 remove_tags/delete_tags 仍无 HUB_HELP 条目, 现回退 schema help</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2138-feat-webui-shows-grouping-research.html">26-10-01-2138</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">追剧视图完善: 同剧判定调研与分组排序打磨</span>
             <div class="note">同剧判定需调研头脑风暴,组内按季/集排序,多站点辅种不分开显示;与 W4 的 shows-view 性能条目同域,动手时可对照。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">季升序/集排序与同集多站点归并初版 9e8958af 已具备; 本条核心「同剧判定口径调研头脑风暴」未动, 入池后零改动</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-feat-speedlimit-curve-emphasis.html">26-10-01-2147</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">命中的限速曲线强调显示 + 限速时可配置弹窗提醒</span>
             <div class="note">当前生效的限速档位在曲线上强调显示;被限速时可选配置弹窗提醒。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">曲线图(ce-chart)仅 hover 十字线/数据点, 无「当前命中档」强调; 被限速弹窗提醒无配置键, 两诉求均未动</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2137-feat-webui-optimistic-ui-expansion.html">26-10-01-2137</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示</span>
             <div class="note">将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单),新添加种子当拍可见而非下个 tick;乐观链路前史见 v1 已清偿的 4 条 26-09-19 批次。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">乐观机制本体(pendingOps)为前史既有; 扩面盘点未做, add_torrent.js 提交后仅 toast、无乐观插入, 新种子仍等下个 tick</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2120-feat-webui-custom-chip-colors.html">26-10-01-2120</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">WEBUI 自定义站点名/分类/标签字体颜色</span>
             <div class="note">允许用户为 chip 自定义字体颜色(未排期增强)。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">全 src 无自定义颜色入口/存储/渲染; 站点 chip 配色仍为状态色(2026-09-15 口径, decorate.js 注)</span></td>
         </tr>
       </tbody>
     </table>
@@ -831,7 +831,7 @@
   <section id="cl">
     <div class="sec-head"><span class="sec-no">§A</span><h2>变更记录</h2></div>
     <div class="changelog">
-      <div class="cl-row"><span class="v">v2.2</span><span class="d">26-10-02-1728</span><span class="t">清偿核对批次 2/5: W3-W5 共 13 条 —— ⏳ 12 / ⛔ 1, 无 ✅/🔶。⏳ 12 条逐一静态核实无实现痕迹(W3 三 feat 无方案无码: 全 src 无跨组交叉检测/整组迁移串行化/现场重建; W4 四 perf 未动: api_state 仍缺省 rid=-1 全量、_build_shows_view 仍全量聚合、两生产者门控结构原样、max_tasks_per_tick 仍静态; W5 五条未拍板/无联动); ⛔ 2138-流量历史图入池前提不成立 —— 全局流量历史图 09-15 已落地(/api/traffic/history + 双系列折线图, 数据源为限速曲线 Traffic Monitor, 与被移除的单种统计底座无关), 池已回写 Dropped。issues/_index.md 已重建。</span></div>
+      <div class="cl-row"><span class="v">v2.3</span><span class="d">26-10-02-1905</span><span class="t">清偿核对批次 3/5: W6 共 13 条 —— ✅ 2 / 🔶 1 / ⏳ 10。✅ 两条: 2108-esc-clear-filter 已拍板方案 A 并落地(0d286cc5 · ESC 接退栈链终端兜底清面筛, 计划 26-10-02-1632, 池回写 Done); 2108-selection-follow-mouse 由 9c68cce9 方案 B(点击落光标)+ fa79d526(起点统一收尾)合流落地(池回写 Done)。🔶 一条: 2137-settings-help-followup 「?」语调色半边 eb575956 已落地, 富文案遗漏项(remove_tags/delete_tags)未补。⏳ 10 条逐一静态核实未动: 抽屉簇两件(无切种子动作/Alt+1~4 仍 scope:drawer)、批量移动跳检、搜索命中域/片段、抽屉重做、tracker 忽略配置、shows 判定调研(排序/归并初版已具备)、限速曲线强调、乐观 UI 扩面、chip 自定义色均无实现痕迹。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2.1</span><span class="d">26-10-02-1705</span><span class="t">清偿核对批次 1/5: 九个波次表加「状态」列(五档图例见 §1), 本批核对 W1-W2 共 11 条 —— ✅ 5 / ⛔ 2 / 🔶 1 / ⏳ 3。✅ 五条池内 26-10-02 已 Done, 修复 commit 逐一确认(2151&#8594;bc24631b, 2335&#8594;54db09f2, 1408-CSRF&#8594;36dc8ba6, 1408-hardening&#8594;c37f3674, 1702&#8594;23f37df6); ⛔ 两条回写池状态(2129-hotreload-ext-vanish&#8594;Superseded 旧机制被取代, 2129-batch-warning-notify&#8594;Dropped min_level=ERROR 前提消失); 🔶 2002 伪警示条核心仍在、失效键半边已被未知键全量校验覆盖; ⏳ 三条无修复证据维持待处理。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2</span><span class="d">26-10-02-0234</span><span class="t">改版:v1 后清偿 12 条、新入池 46 条,未决 31&#8594;59;test 类型清零后重排九波,起点前移到数据与凭据;transmission 挂账更新为「报告已出停在拍板」;26-09-22-2221 标注需重新授权。</span></div>
       <div class="cl-row"><span class="v">v1</span><span class="d">26-10-01-1758</span><span class="t">初版:31 条未决全量摸排,分七波;只读口径,零代码分析。</span></div>

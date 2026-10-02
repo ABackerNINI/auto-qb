@@ -8,7 +8,7 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-selection-model">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发">
 <meta name="issue-summary" content="键盘高亮选中与鼠标点击选中是两套状态, 需合并为单一套随最后操作源移动">
 <title>快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发 · feat · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2108-feat-webui-selection-follow-mouse</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -153,6 +153,7 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 — 核对确认功能已落地，状态 <strong>Done</strong>：键盘高亮与鼠标点击已合并为单套 <code>kbCursor</code> 状态、随最后操作源移动 —— ① <code>9c68cce9</code>（方案 B，2026-09-30，报告 26-09-30-1806）：点击落光标（落光标 ≠ 选中，focus 语义）+ 无光标回落改视口就近；② <code>fa79d526</code>（2026-10-02，计划 26-10-02-0608）：Shift 连选起点统一，普通/Ctrl 点击与键盘手势均落起点（<code>selection.js</code> <code>_selAnchor</code>/<code>_selSetAnchor</code> 单点收口），键盘 ↑↓ / Shift 区间从刚点击的行出发。单击/双击都触发（双击前置 click 已落光标）。「普通点击不选中」为用户 2026-09-17 口径保留，与「选中态跟随」诉求以 focus 语义合流。roadmap 清偿核对批次 3（W6）静态核实后回写。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest），TODO 对应行由末阶段统一移除。备注：与冒烟失败 issue 26-09-30-0602-test-ui-smoke-ctx03-multiselect（Ctrl+click 竞态）相邻但不同题。</p>
     <h3>复验</h3>
