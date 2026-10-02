@@ -16,6 +16,8 @@
  *   --shots      截图目录(默认 .workbuddy-ai/tmp/ui-smoke)
  *   --torrents   期望种子总数(用于校验"总数正确", 默认 0=不校验)
  *   --expect-cmd ok|error|hang  与桩服务 --cmd-result 对应(默认 ok)
+ *   --skip-check on|off  与桩服务 --skip-check-menu 对应(默认 on): off 走精简轮,
+ *                只验 fail-closed 门控(单选/多选菜单都不渲染「跳检…」, 其余项照常)
  *
  * 依赖: playwright-core(与已装的 chromium 版本对齐; 见文件末尾"版本对齐"注释)。
  */
@@ -41,6 +43,9 @@ const UI = argv("ui", "both");
 const SHOTS = path.resolve(argv("shots", ".workbuddy-ai/tmp/ui-smoke"));
 const EXPECT_N = parseInt(argv("torrents", "0"), 10);
 const EXPECT_CMD = argv("expect-cmd", "ok");
+/* 跳检菜单旗标两态(W5 汇总, 计划 26-10-02-1955): 与桩服务 --skip-check-menu 必须一致 ——
+ * on(默认)跑全套(多选四项齐/单选跳检项/确认链); off 走精简轮只验 fail-closed 门控。 */
+const SKIP_CHECK = argv("skip-check", "on");
 
 const results = [];
 const add = (ui, name, ok, detail) => {
@@ -196,6 +201,67 @@ async function hangChecks(page, ui) {
     `${before} -> ${after}`);
 }
 
+/*
+ * 跳检菜单旗标「关」态精简轮(W5 汇总, 计划 26-10-02-1955): 桩 --skip-check-menu off 起盘,
+ * 走真实 /api/webui/flags -> state.flags -> v-if 链, 验 fail-closed 门控 ——
+ *   1. flags 取到**布尔 false**(不是"没取到"的 undefined 形态 —— v-if 对 undefined 也隐藏,
+ *      那是另一档故障, 端点断链会被误判成门控生效);
+ *   2. 单选菜单不渲染「跳检…」(限速… 仍在 ⇒ 菜单本身正常, 缺的只是被门控的高危项);
+ *   3. 多选菜单同样不渲染「跳检…」(限速/移动/导出 三项照常 ⇒ 门控只藏高危项)。
+ * 后端 gate 的 403 双态由 pytest 兜底(test_web.py), 这里只管前端渲染面。
+ */
+async function skipCheckOffChecks(page, ui) {
+  await page.waitForFunction(
+    `(() => { const vm = ${INST}; return !!vm.flags && typeof vm.flags.skip_check_menu === "boolean"; })()`,
+    null, { timeout: 10000 }
+  ).catch(() => null);
+  const flag = await readInst(page, "vm.flags ? vm.flags.skip_check_menu : null");
+  add(ui, "W5 off: flags 取到 skip_check_menu=false(fail-closed)", flag === false, `flags.skip_check_menu=${JSON.stringify(flag)}`);
+
+  const nav = await page.$$("nav.tabs button");
+  if (nav.length >= 3) await nav[1].click();  // 种子视图
+  await page.waitForFunction("document.querySelectorAll('.torrent-row').length > 0", null, { timeout: 15000 });
+  await page.waitForTimeout(500);
+  const menuTexts = async () => {
+    await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+    return page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+  };
+  const row0 = (await page.$$(".torrent-row"))[0];
+  if (!row0) {
+    add(ui, "W5 off: 单选/多选菜单无跳检项", false, "页面上没有 .torrent-row 可右键");
+    return;
+  }
+  // 单选: 不选中任何行直接右键
+  await row0.click({ button: "right" });
+  const single = await menuTexts();
+  add(ui, "W5 off: 单选菜单不渲染跳检项(限速仍在)",
+    single.some((t) => t.includes("限速…")) && !single.some((t) => t.includes("跳检…")),
+    `单选菜单: ${single.slice(0, 10).join(" / ") || "(未打开)"}`);
+  // 多选: 选 3 行右键选中锚点
+  const selHashes = await page.evaluate(`(() => {
+    const vm = ${INST};
+    vm.selGroups = [];
+    vm.selMembers = vm.filteredTorrents.slice(0, 3).map((r) => r.hash);
+    return vm.selMembers.slice();
+  })()`);
+  let anchor = null;
+  for (const r of await page.$$(".torrent-row")) {
+    const h = await r.evaluate((el) => el.getAttribute("data-hash"));
+    if (selHashes.includes(h)) { anchor = r; break; }
+  }
+  let multi = [];
+  if (anchor) {
+    await anchor.click({ button: "right" });
+    multi = await menuTexts();
+  }
+  add(ui, "W5 off: 多选菜单不渲染跳检项(限速/移动/导出照常)",
+    multi.some((t) => t.includes("限速…")) && multi.some((t) => t.includes("移动…"))
+      && multi.some((t) => t.includes("导出 .torrent")) && !multi.some((t) => t.includes("跳检…")),
+    `多选菜单: ${multi.slice(0, 11).join(" / ") || "(未打开)"}`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+}
+
 async function smokeUi(browser, ui) {
   // clipboard 权限: "复制磁力/种子名"类断言要真写剪贴板, headless 默认会拒
   const ctx = await browser.newContext({
@@ -224,6 +290,15 @@ async function smokeUi(browser, ui) {
   const groupRows = await page.$$eval(".group-row", (n) => n.length);
   add(ui, "分组视图渲染", groupRows > 0, `${groupRows} 行`);
   await page.screenshot({ path: path.join(SHOTS, `${ui}-1-groups.png`) });
+
+  /* 跳检旗标「关」态精简轮(W5): 只验 fail-closed 门控 —— 主轮那些断言(四项齐/确认链等)都
+   * 假定 flags 开, 在关态下会假红, 故独占一轮(与 hang 模式同款早退)。 */
+  if (SKIP_CHECK === "off") {
+    await skipCheckOffChecks(page, ui);
+    add(ui, "无 console.error / pageerror", errors.length === 0, errors.slice(0, 3).join(" | ") || "干净");
+    await ctx.close();
+    return;
+  }
 
   /*
    * 展开态跨视图记忆(2026-09-25 用户报「辅种页切到种子页再切回, 展开的组收起来了」):
@@ -917,6 +992,11 @@ async function smokeUi(browser, ui) {
       add(ui, "W2 批量菜单含限速/移动两项",
         picked === N && menuTexts.some((t) => t.includes("限速…")) && menuTexts.some((t) => t.includes("移动…")),
         `选中 ${picked} 行 / 菜单: ${menuTexts.slice(0, 8).join(" / ") || "(未打开)"}`);
+      /* W5 汇总: 多选菜单**四项齐**(限速/移动/跳检/导出 同屏在) —— 单项存在性已由 W2/W3/W4
+       * 各条分散兜底, 本条专抓"加了新项挤掉旧项"这类汇总遗漏(收录口径见 ctx-menus.html 注)。 */
+      add(ui, "W5 多选菜单四项齐(限速/移动/跳检/导出)",
+        picked === N && ["限速…", "移动…", "跳检…", "导出 .torrent"].every((k) => menuTexts.some((t) => t.includes(k))),
+        `菜单: ${menuTexts.join(" / ") || "(未打开)"}`);
 
       // 2. 提交载荷形状: 拦截 bulk POST -> 弹对话框 -> 上传填 1024 / 下载留空 -> 提交
       let bulkBody = null;
@@ -949,6 +1029,19 @@ async function smokeUi(browser, ui) {
         && Array.isArray(posted.hashes) && posted.hashes.length === N;
       add(ui, "W2 批量限速载荷形状(留空方向不提交)", clicked && okPayload,
         `载荷: ${bulkBody ? bulkBody.slice(0, 140) : "(未捕获)"}`);
+      /* W5 汇总: 成功回执 toast —— _bulkEditPost 在 waitCmd ok 后弹「已执行: 批量限速(N 个目标)」。
+       * 桩命令泵瞬时回执, 正常 1s 内出现; 轮询 5s 是给慢轮询的余量。 */
+      let limitsToast = null;
+      if (clicked && okPayload) {
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline && !limitsToast) {
+          await page.waitForTimeout(250);
+          const texts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
+          limitsToast = (texts || []).find((s) => s === `ok|已执行: 批量限速(${N} 个目标)`) || null;
+        }
+      }
+      add(ui, "W5 批量限速成功回执 toast", clicked && okPayload && !!limitsToast,
+        `toast: ${limitsToast || "(未出现)"}`);
       // 收尾: 关掉可能残留的弹层并清选择
       await page.evaluate(`(() => {
         const vm = ${INST};
@@ -961,9 +1054,12 @@ async function smokeUi(browser, ui) {
     /*
      * W3 批量跳检(计划 26-10-02-1955): flags 门控菜单项 + 危险确认框「取消 = 不提交」。
      * 判据(harness 开关开 skip_check_menu=true, 走真实 flags 端点 -> state.flags -> v-if 链):
-     *   1. 选中行右键 -> 批量菜单含「跳检…」项(重新校验之后、限速/移动之前, 从宽只要求出现)。
-     *   2. 点「跳检…」-> 弹 danger 确认框(标题含「批量跳检」) -> 点「取消」-> 不发 bulk POST
-     *      (确认框不确认不提交; 后端 gate 双态由 pytest 兜底, 这里只测前端确认链)。
+     *   1. 单选菜单含「跳检…」项(右键未选中行) + 选中行右键 -> 批量菜单也含
+     *      (重新校验之后、限速/移动之前, 从宽只要求出现); 关态两处都不渲染由
+     *      桩 --skip-check-menu off + ui_smoke.cjs --skip-check off 的精简轮兜底。
+     *   2. 点「跳检…」-> 弹 danger 确认框(标题含「批量跳检」) -> 点「取消」-> 不发 bulk POST;
+     *      点「跳检」(确认) -> 恰好 1 条 bulk POST(action=skip_check, 目标 = 选中集合)。
+     *      (后端 gate 双态由 pytest 兜底, 这里只测前端确认链。)
      */
     {
       const N = 3;
@@ -976,6 +1072,20 @@ async function smokeUi(browser, ui) {
         return vm.selMembers.length;
       })()`);
       const selHashes = await readInst(page, "vm.selMembers.slice()");
+      /* W5 汇总: flags 开时**单选**菜单也有跳检项 —— 右键未选中行(= 单目标菜单);
+       * 先做这条, 多选锚点那次右键会整份替换菜单, 不会串台。 */
+      let singleTexts = [];
+      for (const r of await page.$$(".torrent-row")) {
+        const h = await r.evaluate((el) => el.getAttribute("data-hash"));
+        if (!selHashes.includes(h)) {
+          await r.click({ button: "right" });
+          await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+          singleTexts = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+          break;
+        }
+      }
+      add(ui, "W3 单选菜单含跳检项(flags 开)", singleTexts.some((t) => t.includes("跳检…")),
+        `单选菜单: ${singleTexts.slice(0, 10).join(" / ") || "(未打开)"}`);
       let anchor = null;
       for (const r of await page.$$(".torrent-row")) {   // 行是窗口化的: 从已渲染行里挑选中锚点
         const h = await r.evaluate((el) => el.getAttribute("data-hash"));
@@ -1017,6 +1127,45 @@ async function smokeUi(browser, ui) {
       page.off("request", onReq);
       add(ui, "W3 跳检确认框取消不提交", clicked && modalShown && cancelled && bulkBody === null,
         `弹框: ${modalTitle || "(未出现)"} / 取消 ${cancelled ? "是" : "否"} / POST: ${bulkBody ? bulkBody.slice(0, 120) : "(未捕获)"}`);
+
+      // 3. 确认后提交(W5 汇总): 确认框按下「跳检」(danger 框确认钮是 .bt.danger-solid, 非 primary)
+      //    -> 恰好 1 条 bulk POST, action=skip_check、hashes = 选中集合(选择仍是上面那 3 个)。
+      let confirmed = false;
+      let confirmBody = null;
+      const onReq2 = (r) => {
+        if (r.url().includes("/api/torrents/bulk")) confirmBody = r.postData();
+      };
+      page.on("request", onReq2);
+      // 2s 整表重渲染会换掉行节点: 按 hash 现找选中锚点再右键(选择未清, selMembers 仍是 N 个)
+      let a2 = null;
+      const selNow = await readInst(page, "vm.selMembers.slice()");
+      for (const r of await page.$$(".torrent-row")) {
+        const h = await r.evaluate((el) => el.getAttribute("data-hash"));
+        if (selNow.includes(h)) { a2 = r; break; }
+      }
+      let modal2Title = "";
+      if (a2) {
+        await a2.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        for (const h of await page.$$(".ctx-item")) {
+          const t = ((await h.textContent()) || "").trim();
+          if (t.includes("跳检…")) { await h.click(); break; }
+        }
+        const modal2 = await page.waitForSelector(".modal", { timeout: 5000 }).catch(() => null);
+        if (modal2) {
+          modal2Title = ((await page.$eval(".modal-title", (n) => n.textContent)) || "").trim();
+          const okBtn = await page.$(".modal-actions .bt.danger-solid");
+          if (okBtn) { await okBtn.click(); confirmed = true; }
+          await page.waitForTimeout(1200);   // 等 POST + 回执(桩瞬时, 富余给慢轮询)
+        }
+      }
+      page.off("request", onReq2);
+      let confirmPosted = null;
+      try { confirmPosted = confirmBody ? JSON.parse(confirmBody) : null; } catch { confirmPosted = null; }
+      add(ui, "W3 跳检确认后提交 bulk(action=skip_check)",
+        confirmed && !!confirmPosted && confirmPosted.action === "skip_check"
+          && Array.isArray(confirmPosted.hashes) && confirmPosted.hashes.length === N,
+        `弹框: ${modal2Title || "(未出现)"} / POST: ${confirmBody ? confirmBody.slice(0, 140) : "(未捕获)"}`);
       // 收尾: 关掉可能残留的弹层并清选择
       await page.evaluate(`(() => {
         const vm = ${INST};
@@ -1075,6 +1224,18 @@ async function smokeUi(browser, ui) {
       page.off("request", onReq);
       add(ui, "W4 多选导出逐个请求(数 == 选中展开数)", clicked && exportHits === N,
         `选中 ${picked} 个 -> 导出请求 ${exportHits} 个(期望 ${N})`);
+      /* W5 汇总: 导出成功回执 toast —— exportMulti 常驻 busy 在原位结算成「已导出 N 个 .torrent」。
+       * 导出循环是串行 fetch(每个都真出字节), 1.2s 的请求计数等待通常已覆盖, 轮询 5s 是余量。 */
+      let exportToast = null;
+      if (clicked) {
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline && !exportToast) {
+          await page.waitForTimeout(250);
+          const texts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
+          exportToast = (texts || []).find((s) => s === `ok|已导出 ${N} 个 .torrent`) || null;
+        }
+      }
+      add(ui, "W5 导出成功回执 toast", clicked && !!exportToast, `toast: ${exportToast || "(未出现)"}`);
       await page.evaluate(`(() => { const vm = ${INST}; vm.clearSelection && vm.clearSelection(); })()`);
       await page.waitForTimeout(300);
     }

@@ -30,6 +30,9 @@
     --no-groups    不建分组(纯平铺, 测种子页窗口化最快)
     --cmd-result   ok|error|hang(默认 ok): 兜底命令泵给每条命令的回执 ——
                    error 用于验证 P0-3 乐观 UI 的**失败回滚**, hang 用于验证 3s 回落真值
+    --skip-check-menu on|off(默认 on): web.skip_check_menu 桩值两态 ——
+                   on 走「跳检…」菜单项/确认链断言(计划 26-10-02-1955 W3/W5),
+                   off 验 fail-closed 门控(菜单两处都不渲染; 配套 ui_smoke.cjs --skip-check off)
 
 注意
 ----
@@ -318,6 +321,13 @@ def main() -> int:
     )
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
     ap.add_argument(
+        "--skip-check-menu",
+        choices=["on", "off"],
+        default="on",
+        help="web.skip_check_menu 桩值(默认 on): off 起盘验 fail-closed 门控 —— "
+        "「跳检…」在多选与单选菜单都不渲染(配套 ui_smoke.cjs --skip-check off)",
+    )
+    ap.add_argument(
         "--state-revert-ms",
         type=int,
         default=1500,
@@ -350,15 +360,16 @@ def main() -> int:
     state_file = os.path.join(tmp, "state.json")
     mgr = make_manager(state_file)
     mgr.client = FakeClient()
-    # skip_check_menu=True: 冒烟要测「跳检…」菜单项与确认链(计划 26-10-02-1955 W3),
-    # 该键生产默认关(fail-closed), 桩环境显式开 —— 走真实 /api/webui/flags 端点渲染菜单。
+    # skip_check_menu 两态可参数化(W5 汇总): 默认 on —— 既有断言依赖「跳检…」菜单项与确认链
+    # (计划 26-10-02-1955 W3); off 复刻生产默认(fail-closed), 供 ui_smoke.cjs --skip-check off
+    # 验证门控(菜单两处都不渲染)。走真实 /api/webui/flags 端点渲染菜单, 桩只决定旗标值。
     mgr.config.web = WebConfig(
         enabled=True,
         host=args.host,
         port=args.port,
         token="",
         skip_local_verify=True,
-        skip_check_menu=True,
+        skip_check_menu=(args.skip_check_menu == "on"),
     )
     mgr._last_conn_ok = True  # 状态栏显示"已连接"(否则前端走断连提示分支)
 
@@ -383,7 +394,8 @@ def main() -> int:
 
     app = create_app(mgr)
     print(
-        f"[harness] http://{args.host}:{args.port}/atlas/  /prism/  种子={args.torrents} 组={len(mgr.store.groups)} 命令回执={args.cmd_result}",
+        f"[harness] http://{args.host}:{args.port}/atlas/  /prism/  种子={args.torrents} 组={len(mgr.store.groups)} "
+        f"命令回执={args.cmd_result} 跳检菜单={args.skip_check_menu}",
         flush=True
     )
 
