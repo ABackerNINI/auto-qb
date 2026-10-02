@@ -23,6 +23,27 @@ const UNIT_FALLBACK = { time: "S", size: "MiB", speed: "KiB/s" };
 /* 时间单位下拉的中文显示文案(仅改显示, value 仍是 S/M/H/D 与后端解析一致) */
 const UNIT_LABELS = { time: { S: "秒", M: "分", H: "时", D: "天" } };
 
+/* 站点→全局 回退链 map(report 26-10-03-0504 方案 B 阶段2)
+ *
+ * 语义单点在后端 loaders.py: remove_similar_tags 走 load_tracker_config(站点未设回退全局),
+ * hr 输出字段走 load_tracker_hr 的 out/out_bool(站点 spec -> 全局 hr 段 -> 字段默认)。
+ * 键 = 站点段叶子键, 值 = 全局对应键在 config 根下的中间段(叶子键同名, 空数组 = config 顶层)。
+ * 站点绝对路径形如 ["config","trackers",<站点名>,...中间段,叶子键], 全局对应路径 =
+ * ["config",...中间段,叶子键] —— 以路径上的站点名动态展开, 不穷举静态路径。
+ * 仅这 7 个键做「站点值→全局对应键→schema 默认」生效值回填与来源徽标;
+ * hr.exclude_tags / hr.exclude_categories 是并集语义(全局∪站点, loaders out_union, 设计注
+ * 防「站点段写了就静默丢全局排除」), 不进本表 —— 不做回填与徽标(阶段3 只补 help 文案)。
+ */
+const SITE_FALLBACK_GLOBAL = {
+  remove_similar_tags: [],
+  add_tag: ["hr"],
+  add_category: ["hr"],
+  overwrite_category: ["hr"],
+  add_tag_for_satisfied: ["hr"],
+  add_category_for_satisfied: ["hr"],
+  overwrite_category_for_satisfied: ["hr"],
+};
+
 window.CONFIG_EDITOR = {
   data() {
     return {
@@ -362,6 +383,35 @@ window.CONFIG_EDITOR = {
       this.cfgDelPath(path);
     },
 
+    /* ---------------------------------------------------------- 站点回退链(生效值回填 + 来源徽标)
+     *
+     * report 26-10-03-0504 方案 B 阶段2: GET /api/config 给的是磁盘原始树(mask 过敏感值),
+     * 前端持整棵 YAML 同构树, 「生效值」自行合并(报告 §5.1 D4 模式 —— VS Code 的
+     * effective 值 + "Modified in" 来源徽标)。回退链语义单点在后端 loaders.py, 这里的
+     * SITE_FALLBACK_GLOBAL 只是同一张链的渲染侧表达, 服务三件事: 回填 / 徽标 / 占位串。
+     */
+    /* 站点绝对路径 -> 全局对应路径; 不在回退链(全局页 / 非链上键 / 规则页插件 spec)返回 null。
+     * 判据 = 路径形态(config.trackers.<站点名>...) + 叶子键在 SITE_FALLBACK_GLOBAL 表内;
+     * 全局页同名字段(如 config.hr.add_tag)path[1] 不是 "trackers", 天然不命中。 */
+    cfgSiteFallbackPath(path) {
+      if (!Array.isArray(path) || path.length < 4 || path[0] !== "config" || path[1] !== "trackers") return null;
+      const key = path[path.length - 1];
+      const mid = SITE_FALLBACK_GLOBAL[key];
+      if (!mid) return null;
+      return ["config", ...mid, key];
+    },
+    /* 生效值回填(报告 §3.3 显示失真的修复; 铁律: 与来源徽标同批上, 缺一不可):
+     * 站点值 → 全局对应键 → schema 默认。仅对回退链 7 键生效, 其余字段原样返回
+     * schemaDefault, 行为不变。站点 tri_state 键的 '' 是真值(覆盖为空), 调用方(cfgInputValue)
+     * 用 cfgRaw 先判存在性, '' 不会落进这里当缺失; 全局对应键的 '' 不存在(后端 _strip_none 照剥)。 */
+    cfgFallbackValue(path, schemaDefault) {
+      const gp = this.cfgSiteFallbackPath(path);
+      if (!gp) return schemaDefault;
+      const g = this.cfgRaw(gp);
+      if (g === undefined || g === null || g === "") return schemaDefault;
+      return g;
+    },
+
     /* ---------------------------------------------------------- 列表编辑 */
 
     cfgList(path) {
@@ -588,14 +638,19 @@ window.CONFIG_EDITOR = {
     },
     cfgInputValue(field, path) {
       const v = this.cfgRaw(path);
-      if (v === undefined || v === null) return field.default === null || field.default === undefined ? "" : this.cfgScalar(field.default);
+      // 站点回退链键(方案 B 阶段2): 键缺失时回填「全局对应键 → schema 默认」的生效值;
+      // 注意 tri_state 键的站点 '' 是真值(覆盖为空), cfgRaw 判存在性(非 undefined)即原样返回空串
+      if (v === undefined || v === null) return this.cfgScalar(this.cfgFallbackValue(path, field.default));
       return this.cfgScalar(v);
     },
-    /* 未配置的字段显示"默认"标记(仅当 schema 声明了非空默认值时提示, 空默认值不打扰) */
+    /* 未配置的字段显示"默认"标记(仅当 schema 声明了非空默认值时提示, 空默认值不打扰)
+     * 站点回退链 7 键除外(方案 B 阶段2): 站点页这两态由「站点/全局」来源徽标表达 ——
+     * 键缺失时生效值是全局配置值(未必等于 schema 默认), 再标「默认」就是矛盾徽标 */
     cfgIsDefault(item) {
       const d = item.field.default;
       if (d === null || d === undefined || d === "") return false;
       if (Array.isArray(d) && !d.length) return false;
+      if (this.cfgSiteFallbackPath(item.path)) return false;
       return !this.cfgExists(item.path);
     },
 
@@ -1177,7 +1232,9 @@ window.CE_FIELD_BASE = {
       return this.ce.cfgInputValue(this.f, this.path);
     },
     boolValue() {
-      return this.ce.cfgBool(this.path, this.f.default);
+      // 生效值回填(方案 B 阶段2): 站点回退链键缺失时按「全局对应键 → schema 默认」显示,
+      // 不再拿 schema 默认冒充生效值(显示失真, report §3.3); 非链上键行为不变
+      return this.ce.cfgBool(this.path, this.ce.cfgFallbackValue(this.path, this.f.default));
     },
     sectionExists() {
       return this.ce.cfgExists(this.path);
@@ -1201,13 +1258,34 @@ window.CE_FIELD_BASE = {
     },
     /* 内联开关(父字段的布尔从属项): 路径由 cfgFlatten 预先算好 */
     inlineValue(entry) {
-      return this.ce.cfgBool(entry.path, entry.field.default);
+      // 生效值回填同 boolValue: 站点 hr 段的内联开关(overwrite_category 族)按全局生效值回填
+      return this.ce.cfgBool(entry.path, this.ce.cfgFallbackValue(entry.path, entry.field.default));
     },
     setInline(entry, checked) {
       this.ce.cfgSetBool(entry.path, checked);
     },
     isDefault() {
       return this.ce.cfgIsDefault(this.item);
+    },
+    /* 来源徽标(方案 B 阶段2, 与生效值回填同批上 —— report 风险注「徽标与回填必须一起」):
+     * 站点页回退链 7 键, 站点键存在(tri_state 的 '' 也算存在, cfgExists 按树节点判)标「站点」,
+     * 否则标「全局」= 该行生效值来自全局配置。返回 null = 不打徽标(全局页 / 非链上键)。
+     * 内联开关在父行组件上渲染, 传 entry.path; 常规行不传用本行 path。 */
+    siteBadge(path) {
+      const p = path || this.path;
+      if (!this.ce.cfgSiteFallbackPath(p)) return null;
+      return this.ce.cfgExists(p) ? "站点" : "全局";
+    },
+    /* 文本框占位串: 站点回退链键显示全局生效值(VS Code「Modified in」语义) ——
+     * 站点显式空(tri_state, 覆盖为空)时输入框是空串, 灰字占位正是用户该看到的继承值。
+     * 仅当**显示值为空**(cfgInputValue 口径, 含回填)时才换成全局值; 有内容的占位串本不可见,
+     * 原样返回 schema 的 placeholder, 不让派生逻辑漂出可见面。非链上键行为不变。 */
+    sitePlaceholder() {
+      const ph = this.f.placeholder || "";
+      const gp = this.ce.cfgSiteFallbackPath(this.path);
+      if (!gp) return ph;
+      if (this.ce.cfgInputValue(this.f, this.path) !== "") return ph;
+      return this.ce.cfgText(gp, "") || ph;
     },
     set(value) {
       this.ce.cfgSetPath(this.path, value);

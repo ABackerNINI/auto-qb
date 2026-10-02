@@ -63,6 +63,9 @@
            :data-hb-key="ce.hubKey(path)">
         <div v-if="!isBare" class="hb-lb">
           {{ f.label }}<span v-if="f.required" class="lb-req">*</span>
+          <!-- 来源徽标(方案 B 阶段2): 站点页回退链 7 键标「站点(高亮)/全局」, 表示该行生效值出自哪一层;
+               cfgIsDefault 对链上键返回 false —— 同一行不会同时出现「站点/全局」与「默认」矛盾徽标 -->
+          <span v-if="siteBadge()" class="hb-badge" :class="{ on: siteBadge() === '站点' }">{{ siteBadge() }}</span>
           <span v-if="isDefault()" class="hb-badge">默认</span>
           <span v-if="readonly" class="hb-badge">程序维护</span>
         </div>
@@ -129,19 +132,21 @@
           <template v-else>
             <input class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
                    :type="f.kind === 'password' ? 'password' : 'text'" :value="textValue()"
-                   :placeholder="f.placeholder || ''" :min="f.min" :max="f.max" :disabled="readonly"
+                   :placeholder="sitePlaceholder()" :min="f.min" :max="f.max" :disabled="readonly"
                    @input="set($event.target.value)">
             <span v-if="f.unit" class="hb-dim">{{ f.unit }}</span>
           </template>
 
           <button v-if="f.kind === 'expr'" class="hb-btn ghost sm" @click="ce.cfgExprTry(path)">试算</button>
 
-          <!-- 布尔型从属项: 父字段的内联额外开关(比单独占一张子卡更符合从属语义) -->
+          <!-- 布尔型从属项: 父字段的内联额外开关(比单独占一张子卡更符合从属语义);
+               来源徽标同常规行(siteBadge(inl.path)), 站点页 hr 段的 overwrite 族在此显示 -->
           <label v-for="inl in item.inline" :key="inl.field.key" class="hb-switch"
                  :title="inl.field.risk || inl.field.help || ''">
             <input type="checkbox" :checked="inlineValue(inl)" @change="setInline(inl, $event.target.checked)">
             <span class="hb-sw-track"></span>
             <span class="hb-sw-text">{{ inl.field.label }}</span>
+            <span v-if="siteBadge(inl.path)" class="hb-badge" :class="{ on: siteBadge(inl.path) === '站点' }">{{ siteBadge(inl.path) }}</span>
           </label>
         </div>
 

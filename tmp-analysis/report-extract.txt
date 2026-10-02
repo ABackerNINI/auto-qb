@@ -1,0 +1,166 @@
+「删除类似标签」全局/站点作用域混淆: 三层根因取证与方案选型 · auto-qb
+目录
+01结论速览
+02问题与出处
+03三层缺陷根因
+04影响面: 9 键全量盘点
+05成熟方案调研结论
+06候选方案对比 A/C/B
+07是否填补 config 层缺陷
+08给拍板人的决策项
+09事实来源与核实标注
+类型 report · 出厂即冻结
+取证基线 8cb2da59 (2026-10-03)
+本次不含任何代码改动
+根因取证 / 可行性与方案调研 · report
+「删除类似标签」全局/站点作用域混淆: 三层根因取证与方案选型
+issue 26-10-01-2129 的正式分析报告: 复述问题, 给出 config 层 / WebUI 层 / 显示层的三层缺陷根因 (证据到 file:line), 盘点全部 9 个受影响键, 调研业界「继承 + 覆盖 + 恢复继承」的成熟做法, 并把 A/C/B 三个候选方案与「要不要填补 config 层缺陷」的论证摆到一起, 供拍板。
+编号
+26-10-03-0504-report-webui-site-scope-confusion
+专题
+webui-site-scope-confusion
+状态
+Done
+取证时间
+2026-10-03 (phase1/phase2 同日)
+基线
+8cb2da59
+引用
+26-10-01-2129 (issue)
+01结论速览
+Verdict
+issue 假设的两层缺陷均属实, 且存在第三层「显示失真」缺陷。① config 层 _strip_none 把 str/list 的「显式空」与「未定义」坍缩 (文档化设计取舍; bool 键反而可区分, 见 §3.1); ② WebUI 层 bool 开关恒写值从不删键 → 单向锁死, 恢复入口 cfgResetField 是死代码, 而后端删键链路 (_sync_mapping) 早已存在 —— 缺陷 (b) 的修复是纯前端接线 (§3.2); ③ 回填显示用 schema 默认而非合并生效值, 用户看到的与生效的不一致 (§3.3)。
+受影响面不止「删除类似标签」一个键: 所有「全局默认 + 站点覆盖」语义的键共 9 个 (7 个覆盖链键 + 2 个并集键) 同病 (§4)。
+推荐方案 C (WebUI 层修齐, config 层零改动): 生效值回填 + 「恢复跟随全局」按钮 (= 删键, 与 git --unset / VS Code Reset / dconf gsettings reset 同构) + 来源徽标, 交互对 9 个键统一。求最小可先交其真子集方案 A; 「站点覆盖为空」若是真实需求则直接上方案 B (config 层三态, 风险中)。「是否填补 config 层缺陷」的裁决: 当前不填, B 挂触发条件待命, 升级路径平滑 (§7)。待拍板项见 §8。
+一个必须先说清的边界: 「站点覆盖为空」(如: 全局配了 hr.add_tag, 某站想「本站不打标」) 在 config 层就不可表达 —— 空串必被 _strip_none 剥掉, 任何 WebUI 手法都救不了 (phase2 §3)。这是唯一需要拍板人回答「是不是真实需求」的能力缺口; 其余三层缺陷 A/C 均可闭环。
+02问题与出处
+issue 档案: memory-bank/issues/26-10-01-2129-bug-webui-delete-tag-scope-confusion.html (bug / standard / Open, 入池 2026-10-01 21:29)。
+来源: TODO.md L97 未完成项盘点 (入池取证 @ HEAD f9155eaa):
+# TODO.md L97 原文 (取证 2026-10-01 @ HEAD f9155eaa)
+# 「删除类似标签」疑为「删除类标签」笔误, issue 保留原文
+[] 删除类似标签 全局/站点单设置 没有分清, 比如点击开启后就无法切换到全局设置了
+现象: 「删除类似标签」功能的全局设置与站点单设置没有分清; 在站点侧点击开启后无法再切换回全局设置 —— 一旦落为站点级就回不去 (作用域切换单向锁死)。
+触发条件 / 影响面 / 严重度 (入池时登记): 站点单设置里开启后想改回跟随全局; WEBUI 设置页站点设置项与对应配置键的作用域语义; 中。
+命名口径: issue/TODO 写「删除类(似)标签」, 代码与 schema 标签为「删除类似标签」(全局 config/schema/groups.py L255; 站点 config/schema/trackers.py L161)。本报告统一用代码标签。
+入池时根因栏: 「待查 —— 是 UI 缺『恢复全局』入口还是配置状态机本身不支持回退, 未定位」。本报告对两者都给出确定答案 (§3): 主根因是前端接线缺失; 配置状态机对 bool 键本身支持回退, 后端删键链路也已存在。
+03三层缺陷根因
+行号均为 2026-10-03 取证快照, 排障请用符号重定位。先给一个总判断: 数据层与保存链路是保真的 (§3.4), 三层缺陷集中在前端与一个文档化的设计取舍上。
+3.1 config 层: _strip_none 使 str/list「显式空 = 未定义」坍缩 (文档化设计取舍)
+YAML 读取用 yaml.BaseLoader (src/auto_qb/config/loaders.py L453) —— 所有标量都是字符串; key: 留空解析为 ''。
+_strip_none (src/auto_qb/config/validation/core.py L41-51) 在 load_config (loaders.py L460) 对整棵树递归剔除 None 与 ''。其 docstring (core.py L44-45) 自证: BaseLoader 把 key: 留空解析为 '', 与显式 "" 无法区分, 统一视为未配置 —— 即设计上就把「显式空」与「未配置」坍缩为同一结果。
+对 str/list 键成立 (如 hr.add_tag): 站点「未定义」= 键缺失; 站点「显式空」= '' 被剥 → 与未定义坍缩, 合并结果同为回退全局。站点级永远无法表达「覆盖为空」。
+对 bool 键不成立 (remove_similar_tags / overwrite_category*): '' 同样被剥 (留空即未定义), 但 "false" 是非空串能穿过 _strip_none, 站点显式 false 是合法覆盖值, 与「未定义」在 YAML 空间可区分 —— config 层对 bool 不坍缩, bool 的问题纯在 WebUI 层 (§3.2)。
+校验角色: validate_config (core.py L150-257) 只校验值格式/未知键, 不做存在性/作用域语义裁决; schema.py (fields.py L68) 自我定位 default「仅作初始值, 非校验依据」。
+3.2 WebUI 层: bool 开关恒写值从不删键 → 单向锁死 + 恢复入口死代码 + 后端删键链路已存在
+恒写不删: bool 控件 setBool (webui/static/shared/js/config_editor.js L1215-1217) → cfgSetBool L349-351: cfgSetPath(path, checked ? "true" : "false") → cfgSetPath L341-348 无条件 node[key] = value。到达后端的永远是显式字符串标量, 键一旦碰过就永久存在于提交树中 —— 「站点键缺失」这个状态前端产不出来。
+恢复入口是死代码: cfgResetField (config_editor.js L360-363, 注释明写「恢复字段为默认(移除该键, 让后端走默认值)」, 内部调 cfgDelPath L352-359) 在整个 src/ 与模板里零引用 (grep 全仓只有定义处一行)。
+后端删键链路已存在: 写回层 write_tree (webui/server/routes/config.py L121-148 → writer.py L128-140) 的 _sync_mapping (writer.py L382-401) —— L388-390: 磁盘有而提交树没有的键会被 del 删掉。即「树中删键 → 磁盘删键」天然支持, 整棵 dump 不丢「未定义」信息。
+结论: 缺陷 (b) 是纯前端接线问题 —— 接上现成的 cfgResetField/cfgDelPath 即得「恢复继承」动作, 后端零改动。
+现存仅有的三个删键路径都不是答案 (phase1 §3): cfgToggleSection L571-577 删整个 hr 段 (= 本站不做 HR, 不是「回退全局输出」); 整站删除 cfgTrackerRemove L642-655 (破坏性, 丢全部站点配置); 列表清空 cfgItemRemove L380-385 (空列表经 _strip_none 又坍缩回「未配置」)。
+3.3 显示层: 回填用 schema 默认而非合并生效值 → 显示失真
+bool 控件选中态 boolValue() (config_editor.js L1179-1181) = cfgBool(this.path, this.f.default) —— 回退值用的是 schema 字段默认 ("false"), 不是当前全局配置值; cfgVal L327-331: 键缺失/None/'' 一律返回 fallback。
+文本类 cfgInputValue L589-593 同样: 键缺失 → 显示 schema default 而非全局值。
+⇒ 全局 remove_similar_tags: true + 站点键未配置时, 站点页开关显示 OFF, 而实际运行行为是 ON (全局回退, loaders.py L222)。L595-600 cfgIsDefault + xtpl.html L66 只给一个「默认」徽标, 无有效值展示。这是用户感知「没分清」的直接来源, 且独立于锁死缺陷存在 —— 即使不加恢复按钮, 站点页展示值也与生效值不符。
+3.4 bug 的代码级因果链 (前提: 全局 remove_similar_tags: true)
+打开站点设置页: settings.html L189 → hub-field 渲染开关, 选中态 = cfgBool(["config","trackers",n,"remove_similar_tags"], "false")。站点键缺失 → 显示 OFF; 运行期实际值 = 全局 true (loaders.py L222)。看到的与生效的不一致 (缺陷 ③)。
+点开启: setBool(true) → 写树 "true" → PUT /api/config → 校验通过 → _sync_mapping 落盘 trackers.<n>.remove_similar_tags: true → 热重载 → 生效值 true。站点级覆盖落盘。
+想切回「跟随全局」: 只能再点开关 → 写显式 "false" → 载入时 _get 判键存在 (loaders.py L45-50, L222) → 生效值 = 站点 false, 全局 true 被永久遮蔽。
+无任何 UI 出口: 前端产不出「键缺失」(L349-351 无删除分支), cfgResetField 死代码; 改全局开关也无效 —— 站点显式 false 优先。单向锁死成立 (缺陷 ②)。
+唯一出路 (均破坏性/手编): 手改 config.yml 删该行; 或 WebUI 删除整个站点再重建 (丢 domains/tags/hr 等全部配置)。
+运行期消费点 (错误结果的表现): core/modules/maintenance_mod.py L155-156 if tracker_conf.remove_similar_tags: → L208-223 remove_similar_tags() 摘除与站点标签仅大小写不同的标签。站点 false 遮蔽全局 true 后, 本应清理的相似标签不再清理 (或反向: 全局 false + 站点被误开启 true 时开始摘标签)。
+3.5 反证: 保存链路对「站点键缺失」是保真的
+GET /api/config (routes/config.py L104-119): mask_tree(read_tree(...)) 把磁盘 YAML 原树整棵给前端 (writer.py L56-69, BaseLoader 同构) —— 前端持有 YAML 同构树, 「键缺失」信息保真。
+PUT /api/config (L121-148): _validate_tree (writer.py L257-267) 树 dump 走 load_config 与启动同路径校验 (不过则 400 不碰磁盘) → 版本章 → .bak 备份 (writer.py L333-341) → ruamel round-trip 落盘; _sync_mapping 支持删键 (§3.2)。
+热重载覆盖全链路: 写盘后 load_config 作为 reload_config 投递 (routes/config.py L142), 载入期合并键下轮维护即生效, 无需重启; 站点记录的 tracker_conf 下一轮 refresh 重匹配 (store.py L425-439)。无 R 级重启牵涉 (impact.py RESTART_SECTIONS 仅 state_file/data_dir/fs)。
+⇒ 坍缩不发生在 writer, 也不发生在 _strip_none 对 bool 的处理 —— 只发生在前端永远不产出「键缺失」。
+04影响面: 9 键全量盘点
+具「全局默认 + 站点覆盖」双层语义的设置键共 9 个 (schema 声明: config/schema/trackers.py —— remove_similar_tags L159-165, HR 输出字段 HR_OUTPUT_FIELDS L11-73)。合并单点在载入期 loaders.py (站点合并 L204-223; HR 回退链 out/`out_bool` L303-308; 并集 out_union L310-315, 刻意设计注 L297-299)。
+# | 键 (全局 → 站点) | 类型 | 受「未定义 vs 显式空」坍缩影响 | 合并语义 (file:line) | 受影响时的错误行为 |
+1 | remove_similar_tags → trackers.<n>.remove_similar_tags | bool | UI 层 (无法删键); config 层可区分 | 站点存在→站点, 否则全局 (loaders.py L222, L473) | 开启后无法切回全局; 开关显示 schema 默认非生效值; 显式 false 永久遮蔽全局 |
+2 | hr.add_tag → trackers.<n>.hr.add_tag | str | config 层即坍缩 (_strip_none core.py L41-51): '' == 缺失 | 站点→全局→字段默认 (loaders.py L303-305, L324) | 站点无法「覆盖为空」(本站不打标做不到); UI 回填显示空串非全局值 |
+3 | hr.add_category | str | 同 #2 | 同上 (L325) | 同 #2 |
+4 | hr.overwrite_category | bool | 同 #1 (UI 层) | out_bool (L307-308, L326) | 同 #1 |
+5 | hr.add_tag_for_satisfied | str | 同 #2 | 同上 (L327) | 同 #2 |
+6 | hr.add_category_for_satisfied | str | 同 #2 | 同上 (L328) | 同 #2 |
+7 | hr.overwrite_category_for_satisfied | bool | 同 #1 (UI 层) | out_bool (L329) | 同 #1 |
+8 | hr.exclude_tags → trackers.<n>.hr.exclude_tags | pattern_list | 否 (空 == 缺失, 并集下语义等价) | 并集 全局∪站点 (out_union L310-315, L330; 设计注 L297-299) | 无错误行为; 但站点无法表达「不并入全局排除表」 |
+9 | hr.exclude_categories | pattern_list | 否 | 同 #8 (L331) | 同 #8 |
+不属于双层语义的键 (对照, 不受影响): 站点专属 domains / tags / remove_tags / groups / upload_speed_limit / download_speed_limit / rules、hr 必填四键 (required_seeding_time / required_share_ratio / extra_seeding_time / condition, TRACKER_HR_FIELDS L75-100, 不走回退链); 全局专属 maintenance_tag_mode / skip_checking_tag / delete_tags* / add_episode_tags / grouping / web / notify / qbittorrent / fs / global_speed_limit_curve / hr_check.sites。
+state.json 不受影响: StateService (core/state.py) 只存 exec_history / auto_categories / recheck_facts / speed_limit_curve 及种子快照, 不持久化任何配置值; TorrentRecord.tracker_conf (torrents/record.py L124) 是运行期派生视图, 不进导出 (record.py L243-245), 热重载后置 None 重匹配 (store.py L425-439)。本 bug 的一切状态都在 config.yml 的键存在性里, 无需数据迁移。
+修复钩子已存在 (§3.2): 前端 cfgResetField/cfgDelPath + 后端 _sync_mapping 删键都具备, 缺陷 (b) 大概率纯前端。
+既有交互惯例可参照: enum 控件的「(未配置)」选项 (xtpl.html L83) 写 '' → 后端剥掉 = 取消配置 —— 「写空即取消配置」已是既有惯例。
+守卫测试面提醒: schema 键集合与 KNOWN_TRACKER_KEYS 一致性由 tests/test_config_schema.py 守卫 (schema/__init__.py L16-19) —— 若方案引入新键/新标记, 须同步守卫与 validate_config (黄金法则 #4)。
+05成熟方案调研结论
+「继承默认 + 局部覆盖 + 恢复继承」三态问题在成熟软件里全部用三件套解决: 稀疏覆盖存储 (缺失=继承) + 恢复=删键 + effective 值带来源显示。核实口径见 §9。
+5.1 数据层: 三态怎么表示
+模式 | 代表系统与证据 | 与本项目对应 |
+D1 稀疏差量存储
+只存覆盖项, 键缺失=继承 | GNOME dconf/GSettings: 数据库只存与 schema 默认不同的键, gsettings reset 把键从数据库删除, 读值回落 schema 默认 (已联网核实); VS Code user/workspace/folder 三层 JSON 各只写覆盖项, 「Reset Setting」= 从该层删条目 (常识级); git config system/global/local 分层, git config --unset 删当前作用域条目 → 低作用域透出, --show-origin 显示生效值出处 (常识级) | 本项目 YAML 站点段 = dconf 数据库; 全局配置 = schema 默认层; 缺键=继承已是现状, writer _sync_mapping (writer.py L388-390) 已支持删键 |
+D2 值空间哨兵关键字 | CSS inherit/initial/unset/revert (常识级)。CSS 能这么做靠全语言保留字机制; 通用配置里用哨兵串 (写死一个串当「未配置」真值) 会污染值空间、与用户真实值撞车, 公认反模式 | 本项目 enum 控件的「(未配置)」(xtpl.html L83) 只是 UI 假象 —— 实际写 '' 被后端 _strip_none 剥掉, 并非真哨兵, 恰好绕开了这个坑 |
+D3 解析后空间哨兵类型 | 语言内建模用 None/UNSET 区分「未设置」与「设为空」; RFC 7386 JSON Merge Patch 用 null 成员表达删除 (常识级) | 本项目解析后空间 (TrackerConfig/HRRule, models.py L159-173) 刻意丢弃存在性信息 (models.py L173 注释「解析后空间存合并后值」), 消费端只看合并值 —— 合理分层, 不动 |
+D4 effective/raw 双视图 | git --list --show-origin、nginx nginx -T、VS Code 设置页 (生效值 + 「Modified in: Workspace」徽标) (常识级) | 本项目 GET /api/config 给的是 raw 树, effective 视图缺位 —— 显示失真缺陷 (§3.3) 即源于前端拿 schema 默认冒充 effective; 前端已持整棵树, 可自行合并算出 effective |
+5.2 交互层: 三态怎么操作
+逐字段三态控件 (Windows 组策略「未配置/已启用/已禁用」; IntelliJ 代码风格逐字段「继承自父级」, 常识级): 适合策略类语义, 对本项目 9 个键略重。
+「恢复全局」按钮 (实质删键): VS Code Reset Setting、git --unset —— 这是主流形态: 平时控件只管覆盖值, 想回继承走一个显式删除动作。
+placeholder 灰字显示继承生效值 + 来源徽标 (VS Code 灰字默认值 + 「Modified in」徽标; IntelliJ 灰色显示被继承值): 解决「我看到的是谁的值」—— 对应本项目显示失真缺陷。
+数组/列表继承语义是独立取舍: nginx 多数指令「下层一旦定义则整体替换, 不与上层合并」(常识级); qBittorrent 分类保存路径留空回退默认保存路径 (已联网核实, 宿主软件自身的「空=继承」交互)。本项目 exclude_* 特意选了并集 (loaders.py L297-299 注释, 防止站点段写了就静默丢全局排除) —— 与 nginx 相反但属同类合法取舍, 已文档化, 本次不动。
+5.3 调研对本项目的映射
+成熟世界给出的答案: ①存储层本项目已经对了 (稀疏 YAML 树 + writer 删键保真); ②前端缺的是「恢复=删键」入口 (cfgResetField/cfgDelPath 死代码, 接上即得) 与 effective 显示 (前端持整棵树可自行合并); ③唯一真正的数据模型缺口是 _strip_none 把 str/list「显式空」剥掉 (bool 不受影响) —— 成熟系统里这不是用哨兵解决的, 是让「空覆盖值」作为合法稀疏条目存在 (= 方案 B 的路线)。
+06候选方案对比 A/C/B
+三个方案从小到大; 共同前提: 都必须先修「显示失真」(§3.3, 任何方案的第一刀)。「恢复继承」在数据层的动作一律是删站点键 (cfgDelPath), 不是写默认值 —— 与 git/VS Code/dconf 同构。
+方案 A — 只修 WebUI 层 (最小, issue 字面范围, 工作量 S)
+config 层零改动: bool 键「未定义 vs 显式 false」config 层本就可区分 (§3.1); 写回删键 _sync_mapping 已支持。
+WebUI 层: ① 生效值回填 —— boolValue() (L1179-1181) / inlineValue() (L1203-1205) / cfgInputValue() (L589-593) 的 fallback 从 f.default 改为「站点值 → 全局对应键 → schema 默认」合并链, 回退链知识用一张 JS 常量 map 表达 (9 个键); ② bool 控件旁加「恢复跟随全局」按钮 (或来源徽标), 点击调已有死代码 cfgResetField/cfgDelPath (L352-363) 删站点键, cfgSetBool 行为不变; ③ 来源徽标: 覆盖行标「站点」, 继承行标「全局」(基于 cfgExists(path)); ④ str/list 维持现状。
+validate_config / schema.py: 无影响 (零新键、零新值形态)。兼容性: 完全向后兼容, 无数据迁移; 已落盘的站点覆盖 (含被锁死的显式 false) 用新按钮即可删除恢复。测试面: 后端零改动, 前端手测。三态完整度: bool 完整; str「覆盖为空」不可表达; list 维持并集。
+风险 (唯一注意点): 徽标与生效值回填必须一起上, 否则回填反而加重「看不出是谁的值」。改动面: config_editor.js + xtpl.html 两个文件。
+方案 C — WebUI 层修齐 (推荐, 工作量 M) — A 的真子集关系: A ⊂ C
+= 方案 A 全部, 再加: ④ str 字段统一「跟随全局」交互 —— str 输入框旁加「恢复跟随全局」按钮 (与 bool 同一形态), 语义 = 删站点键; 输入框 placeholder 灰字显示全局生效值 (VS Code 模式)。enum 字段已有「(未配置)」选项写 '' 的惯例 (语义等价), 保留不动但 help 文案统一为「未配置 = 跟随全局」; ⑤ list 字段: 清空列表已有「空列表→删键」路径 (cfgItemRemove L380-385), help 补一句「清空 = 只用全局排除表 (并集)」, 不加新控件。
+config 层零改动 (同 A); validate_config / schema.py 无影响; 兼容性完全, 无迁移。C 与 A 在数据模型上等价 (都是两态 + 可靠回退), 差异纯在交互一致性 —— 9 个键统一成一套心智模型 (覆盖值 + 「跟随全局」按钮 + 来源徽标), 与项目既有 enum「(未配置)」惯例同向。
+已知残留: 站点「本站不打标」(覆盖全局 add_tag 为空) 做不到 —— 触发时升级方案 B (§7)。
+方案 B — config 层 + WebUI 层都修 (完整三态, 工作量 L, 风险中)
+config 层核心: 让「显式空」穿过 _strip_none 成为合法稀疏条目。子变体: B1 (推荐) —— schema 声明驱动豁免: Field (schema/fields.py L62-108) 新增 tri_state 属性, 站点级回退链键标 True (实际只需 str×4 + 视需求 list×2), _strip_none 对声明 tri_state 的站点段路径保留 '', 其余照剥; loaders out() 已按「键存在性」工作, 合并逻辑零改动; validate_config 需显式放行这些键的 ''。B2 (哨兵串, 否决): 值空间污染, 见 §5.1 D2。B3 (覆盖差量 map / presence 进解析后空间, 否决): YAML 树本身就是差量形态, 再造一层属重复建模。
+WebUI 层 = C 全部, 但 str 的「继承」必须改用删键表达 (空串现在有独立含义「覆盖为空」): 输入框可清空保存 (= 本站不打标), 「跟随全局」是独立按钮 (= 删键)。迁移注意: 若 C 先交付过, str 上「清空=跟随」的旧交互习惯必须随 B 一并纠正, help/文档同步。
+唯一破坏性风险点: 旧 config.yml 里已存在的 站点键: '' (今日被剥=继承, 写了也白写) 语义翻转为「覆盖为空」。缓解: 该形态今天无可观察效果, 存量概率低 (未实测, 待核实); writer 每次写盘有 .bak (writer.py L333-341); 可灰度一版 (遇 '' 打 WARNING 按继承处理, 下版转正)。9 个键里无 enum, 不与现有写 '' 惯例冲突。触发黄金法则 #4 的精神: 新值形态 + 新 schema 属性, 需一致性守卫测试防漂移。
+对比表
+维度 | A 只修 WebUI 最小 | C WebUI 修齐 (推荐) | B config+WebUI 完整 |
+config 层 | 不动 | 不动 | _strip_none 豁免 + loaders parse 容忍 '' |
+WebUI 层 | bool 恢复继承 + 生效值回填 + 徽标 | A + str「跟随全局」按钮/placeholder + 文案统一 | C + str 清空=覆盖空, 继承改删键语义 |
+validate_config / schema.py | 无影响 | 无影响 | 新 Field 属性 + '' 放行 + 一致性守卫 (黄金法则 #4 精神) |
+三态完整度 | bool 完整; str「覆盖为空」✗ | 同 A | bool/str 完整; list 并集仍保留 |
+旧 config.yml 兼容 | 完全 | 完全 | 存量 '' 语义翻转, 需灰度告警 + .bak |
+已落盘站点覆盖 | 新按钮可删恢复 | 同 A | 同 A |
+测试面 | 手测 | 手测 (面略宽: str/enum/list 三种控件形态) | 新增单测 M + 手测 (含 ruamel 空串 round-trip 确认 —— 待核实) |
+风险 | 低 | 低 | 中 |
+工作量 | S (config_editor.js + xtpl.html) | M (同两个文件为主 + str 控件分支与文案) | L (config 3-4 文件 + 校验 + 守卫测试 + UI + 灰度) |
+推荐 C 的理由: ① 用户报的三层缺陷 (单向锁死 / 无恢复出口 / 显示失真) 在 C 全部闭环, 交互对 9 个键统一; ② config 层零改动 = 零兼容风险、零守卫测试面变化、零迁移, 修复落在缺陷 (b) 的充分且必要根因上 (纯前端接线); ③ 数据层不做半吊子妥协 (不引入哨兵), 「覆盖为空」明确留给触发条件, 边界干净; ④ A 是 C 的子集, 求最小先交 A 完全成立, 余下部分可随下一批 UI 改动顺路补齐。
+07论证: 是否要填补 config 层缺陷 (str/list「显式空」坍缩)
+正方 (填, = 方案 B)
+能力缺口真实存在: 「站点覆盖为空」(本站不打标/不加分类) 在 config 层就不可表达, 任何 WebUI 手法都救不了 —— '' 必被剥。只要这个需求成立一次, B 就是必经之路。
+数据模型一致性: 同一设置页里 bool 已能「显式 false 遮蔽全局」, str 却不能「显式空遮蔽全局」, 覆盖语义不对称; 每加一个回退链键都要重新解释一遍, 长期认知税。
+成熟系统均收敛于稀疏模型 (dconf/VS Code/git, §5.1), 本项目只差 '' 这一刀, 修掉即自洽, 不是推倒重来。
+反方 (不填, = 方案 A/C)
+YAGNI: issue 原文与 TODO 都只报「切不回全局」, 无任何「覆盖为空」的真实诉求实证; 现实里可用「默认值反转」绕 (全局不配 add_tag, 想打的站单独配), 代价是全局失去默认值 —— 若用户能接受, 缺口就不成立。
+风险收益比: B 用「'' 语义翻转」的兼容灰度 + 全 parse 链容忍 '' + 交互惯例迁移, 换一个今天没人提的能力; A/C 已把用户可感知的三层缺陷全部清零。
+_strip_none 坍缩是文档化设计取舍 (core.py L44-45 自证, 根因 BaseLoader 限制), 改它属设计决策而非 bug 修补, 应由真实需求触发, 不该由本 bug 顺手带出 (黄金法则: 范围守恒)。
+成熟软件同样存在「空=回退」的简化先例 (qBittorrent 分类路径留空即回退, 已联网核实), 两态 + 可靠回退并非不成熟。
+裁决
+当前不填补 (选 A/C), B 挂触发条件待命。触发条件满足任意一条时升级 B: ① 出现「站点覆盖为空」的真实使用场景 (如某站禁止打标); ② 回退链键数量继续增长、覆盖语义不对称开始产生第二起同类 bug; ③ 要做「站点 vs 全局」对比审计视图而 presence 信息开始进 API。
+升级路径平滑: C ⊂ B 的 UI 部分, B 只增量改 config 层 + str 交互语义, 前期 C 的投入不报废。
+08给拍板人的决策项
+# | 决策 | 选项 | 本报告倾向 |
+D1 | 选哪个方案 | A (S, 最小) / C (M, 推荐) / B (L, 完整三态) | C —— 三层缺陷全闭环 + 9 键交互统一 + 零兼容风险; 求最小可先交 A (A 是 C 的真子集, 后续补齐即 C) |
+D2 | 「站点覆盖为空」是否真实需求
+即: 是否存在「某站不打标/不加分类, 但全局配了默认输出」的实际场景 | 是 → 直接 B (跳过 C 的 str「清空=跟随」过渡交互); 否 / 不确定 → C, B 挂触发条件 (§7) | 按 §7 裁决默认「否/不确定」 —— 目前无实证诉求; 若拍板人确认有, 则直接 B 并接受中风险与灰度迁移 |
+后续动作建议
+拍板后: 按 doc-forms 决策树, 「怎么修、为什么这么修」入 plan 工位 (memory-bank/plans/<stamp>-plan-webui-site-scope-confusion.html, 拍板后冻结), 与 issue 侧互记 doc-refs (认领链双向一致, 生成器校验)。
+实施顺序 (任一方案): 第一刀先修显示失真 (生效值回填); 徽标与回填必须同批上 (方案 A 风险注, §6); bool 删键入口接现成 cfgResetField/cfgDelPath; 后端预期零改动 (B 除外)。
+测试与档案: 前端无自动化测试设施, 按手测清单走 (回填值 / 徽标 / 删键后显示全局值 / 保存后磁盘键消失); 实施档案进 task 工位滚动更新; 若走 B, 同步守卫测试与 validate_config (黄金法则 #4)。
+issue 状态: issue 26-10-01-2129 维持 Open, 待方案拍板认领后按认领链回写状态。
+09事实来源与核实标注
+本报告全部代码事实来自同日两份工作稿 (2026-10-03, 均只读取证, 现存 tmp-analysis/): phase1-findings.md (代码事实取证, 含 9 键盘点表) 与 phase2-options.md (成熟方案调研与选型)。工作稿为临时件, 本报告为自包含正式快照; 行号均为取证时快照, 排障请按符号重定位。取证基线 8cb2da59 (2026-10-03); issue 入池取证基线 f9155eaa (2026-10-01)。
+已联网核实 (phase2 附注): dconf 只存非默认值 / gsettings reset 删键回落 schema 默认; qBittorrent 分类保存路径留空回退默认 (社区文档/帖子级佐证)。
+常识级, 未逐条核实: git config 分层与 --unset 语义; VS Code 设置作用域与 Reset Setting; CSS revert/unset; Windows 组策略三态; nginx 指令「下层定义即替换不合并」; RFC 7386 null 删除语义; IntelliJ 代码风格逐字段继承。
+待核实 (两份工作稿未覆盖、本报告亦未验证, 禁止当作已证事实使用): ① ruamel 对空串的 round-trip 行为 (仅方案 B 相关, phase2 B 测试面注明「需确认」); ② 存量 config.yml 中「站点键: ''」形态的实际存在概率 (phase2 仅给出「该形态今天无可观察效果、存量概率低」的推断); ③ 前端各控件的实机渲染表现 —— 全部取证为静态代码阅读, 未起浏览器实测。
+26-10-03-0504-report-webui-site-scope-confusion.html · 专题 webui-site-scope-confusion · 快照终态 (report 恒 Done)
+· 取证基线 8cb2da59 (2026-10-03) · 引用 issue 26-10-01-2129
+· 本报告不含任何代码改动; 结论与 D1/D2 待用户拍板
