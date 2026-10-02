@@ -52,7 +52,8 @@ CHECKING_VALID_MODES = ("skip-checking", "full-checking")
 
 
 def _check_rule_refs(refs: List[str], rules_config: dict, where: str, errors: List[str]) -> None:
-    """tracker.rules 引用校验: 必须 @ 开头, 且引用的规则集/规则存在(否则运行时静默不执行)"""
+    """tracker.rules 引用校验: 必须 @ 开头, 且引用的规则集/规则存在(否则运行时静默不执行);
+    同一引用重复出现判重报错(运行时按规则名去重使重复条目完全惰性, 只可能是误操作, 计划 26-10-02-1621)"""
     for ref in refs:
         r = str(ref).strip()
         if not r.startswith("@") or not r[1:].strip():
@@ -66,6 +67,19 @@ def _check_rule_refs(refs: List[str], rules_config: dict, where: str, errors: Li
                 errors.append(f"{where}: 引用的规则不存在: @{r}")
         elif r not in rules_config:
             errors.append(f"{where}: 引用的规则集不存在: @{r}")
+
+    # 第二轮判重: 归一形 = str(ref).strip()(与上面逐条校验同口径, 尾随空白判重; 不折叠大小写, 规则名大小写敏感);
+    # 仅 @ 开头且 @ 后非空的合法形参与判重 —— 畸形引用已在第一轮报格式错, 不叠加查重错;
+    # 序号 0 基, 与 path_map 判重先例(sections.py)口径一致
+    seen: dict = {}  # 归一形 -> 首现序号(判重)
+    for i, ref in enumerate(refs):
+        r = str(ref).strip()
+        if not r.startswith("@") or not r[1:].strip():
+            continue
+        if r in seen:
+            errors.append(f"{where}[{i}]: 规则引用重复(与第 {seen[r]} 条相同): {r}")
+        else:
+            seen[r] = i
 
 
 @dataclass(frozen=True)

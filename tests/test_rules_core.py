@@ -14,7 +14,7 @@ test_rule_interval)。
 - test_stop_if_action_failed: stop 动作对已停种子幂等 skip, 后续动作仍执行
 - test_dry_run: dry-run 不实际执行
 - test_state_mapping: 状态条件语义判定(枚举属性名 is_*)
-- test_tracker_rules_ref: tracker 规则引用 @rule_set / @rule_set.rule_name 过滤绑定
+- test_tracker_rules_ref: tracker 规则引用 @rule_set / @rule_set.rule_name 过滤绑定; 重复引用运行时按名去重绑定恰一次(回归锁)
 - test_rule_interval: 规则 interval 调度(任务队列到期才执行, interval=0 归一化每 tick)
 """
 import os
@@ -208,6 +208,17 @@ def test_tracker_rules_ref():
         tor.tags = ""
         _run_rules(mgr2, client2, tor)
         assert ("add_tags", ["low-ratio"]) in client2.calls, "引用整个规则集应包含 stop_low_ratio"
+
+        # 重复引用回归锁(计划 26-10-02-1621): 同一 @ 引用写两遍, _resolve_refs 按规则名去重,
+        # 种子绑定仍恰一次(校验层 W1 已拒收重复引用, 此处直接构造配置锁运行时去重语义不回归)
+        mgr3 = make_manager(state_file, tracker_rules=["@example_rules", "@example_rules"])
+        client3 = FakeClient()
+        mgr3.client = client3
+        tor.tracker_conf = None  # 强制 mgr3 重新 _match (tracker_rules 不同的 cfg)
+        make_ctx(mgr3, tor, client3)
+        bound = mgr3.host.get("rules")._rules_for_torrent(tor)
+        assert [r.name for r in bound] == ["example_rules.add_site_tag", "example_rules.hr_done", "example_rules.stop_low_ratio"], \
+            f"重复引用应去重, 每条规则绑定恰一次: {[r.name for r in bound]}"
 
 
 def test_rule_interval():

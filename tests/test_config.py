@@ -25,7 +25,7 @@
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
 - test_validate_state_condition_spec: state 条件非法 is_* 属性/裸枚举成员名报错
 - test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键)
-- test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在
+- test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在; 重复引用判重(尾随空白归一判重/畸形只报格式错不叠加/合法配置原样保序不去重)
 - test_validate_regex_patterns: 非法 regex: 模式报错
 - test_validate_condition_and_remove_tags_regex: tags/category/trackers 条件与 remove_tags 动作非法 regex: fail-fast
 - test_validate_notify: notify 段校验(未知键/min_level/quiet_hours/max_per_hour/dedup_window/channels)
@@ -587,7 +587,7 @@ def test_validate_checking_action_spec():
 
 
 def test_validate_rule_refs():
-    """tracker.rules 引用: 必须 @ 开头且规则集/规则存在"""
+    """tracker.rules 引用: 必须 @ 开头且规则集/规则存在; 重复引用判重(计划 26-10-02-1621 W1)"""
     with tempfile.TemporaryDirectory() as td:
         text = (
             "config:\n"
@@ -616,6 +616,70 @@ def test_validate_rule_refs():
         )
         cfg = load_config(_write_raw(td, ok))
         assert cfg.trackers["T1"].rules == ["@example_rules"]
+
+        # -- 重复引用判重(26-10-02-1621 W1): 运行时按规则名去重使重复条目完全惰性, 配置期 fail-fast 拒收 --
+
+        # ① 同一 @ 引用写两遍 -> 报「规则引用重复」(序号 0 基, 与 path_map 判重先例口径一致)
+        dup = (
+            "config:\n"
+            "  example_rules:\n"
+            "    rule1:\n"
+            "      conditions:\n"
+            "        - path: /a\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@example_rules'\n"
+            "        - '@example_rules'\n"
+        )
+        err = _load_errors(td, dup)
+        assert "config.trackers.T1.rules[1]: 规则引用重复(与第 0 条相同): @example_rules" in err, err
+
+        # ② 尾随空白归一后判重("@A" 与 "@A " 同一归一形); 报错显示归一形, 序号仍指首现
+        ws = dup.replace(
+            "        - '@example_rules'\n        - '@example_rules'\n",
+            "        - '@example_rules'\n        - '@example_rules '\n"
+        )
+        err = _load_errors(td, ws)
+        assert "config.trackers.T1.rules[1]: 规则引用重复(与第 0 条相同): @example_rules" in err, err
+
+        # ③ 畸形引用重复: 第一轮只报格式错(逐条各报一次), 不叠加查重错
+        bad = dup.replace(
+            "        - '@example_rules'\n        - '@example_rules'\n",
+            "        - example_rules\n        - example_rules\n"
+        )
+        err = _load_errors(td, bad)
+        assert err.count("规则引用必须以 @ 开头") == 2, err
+        assert "规则引用重复" not in err, err
+
+        # ④ 无重复的合法配置 load 通过且 rules 原样保序(锁「loaders 不静默去重」)
+        # (规则集键约定: config 段下以 _rules 结尾, 见 loaders.py rules_config 提取)
+        ok_multi = (
+            "config:\n"
+            "  setA_rules:\n"
+            "    r1:\n"
+            "      conditions:\n"
+            "        - path: /a\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  setB_rules:\n"
+            "    r2:\n"
+            "      conditions:\n"
+            "        - path: /b\n"
+            "      actions:\n"
+            "        - stop: true\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains: [a.com]\n"
+            "      rules:\n"
+            "        - '@setB_rules'\n"
+            "        - '@setA_rules'\n"
+        )
+        cfg = load_config(_write_raw(td, ok_multi))
+        assert cfg.trackers["T1"].rules == ["@setB_rules", "@setA_rules"], cfg.trackers["T1"].rules
 
 
 def test_validate_regex_patterns():
