@@ -13,11 +13,15 @@
 ### Playwright 从哪来: 本 clone 无 `node_modules` ⇒ 挂 **npx 缓存**的 `NODE_PATH`
 
 - **触发**: `Cannot find module 'playwright'`, 或版本不匹配报 `Executable doesn't exist`(2026-09-25 实测)。
-- **判别**: `node_modules` **不在 `.gitignore` 里** ⇒ 就地 `npm i` 会污染 git status; 而 playwright
-  已在 **npx 缓存**(`npx --no-install playwright --version` 有版本号就是它)。
+- **判别**: `node_modules` **不在 `.gitignore` 里** ⇒ 就地 `npm i` 会污染 git status; playwright 包先查
+  **npx 缓存**(`npx --no-install playwright --version` 有版本号就是它), 缓存目录
+  `%LOCALAPPDATA%\npm-cache\_npx\<hash>\node_modules`。
 - **处置**: `NODE_PATH='…\_npx\<hash>\node_modules' node scripts/ui_smoke.cjs --base …`
   (❗ESM 的 `import` 不认 `NODE_PATH`, 冒烟脚本必须 CJS); 版本对齐 `playwright-core@1.63` ↔ `chromium-1243`;
   换不到退回 `chromium.launch({channel:"msedge"})`(**Edge 恒可用**)。
+  复发: 1 —— 2026-10-02 npx 缓存已空(只剩空 hash 目录; 浏览器二进制 chromium-1243 仍在
+  `%LOCALAPPDATA%\ms-playwright`) ⇒ 新来源: **仓库外**一次性 `npm i playwright-core@1.63`
+  (如 `~/.aqb-smoke-deps`), `NODE_PATH=$HOME/.aqb-smoke-deps/node_modules`; 别装进仓库根。
 
 ### 桩服务没起来 / 起来的是**旧进程** ⇒ 冒烟整轮"整体执行超时", 看着像前端白屏
 

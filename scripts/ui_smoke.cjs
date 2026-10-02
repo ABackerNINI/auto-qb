@@ -263,6 +263,42 @@ async function smokeUi(browser, ui) {
     }
   }
 
+  /*
+   * 导航焦点不变式(2026-10-02 用户报「键盘切页后, 鼠标点选过的页签残留高亮框」):
+   * 鼠标点过的页签持有 DOM 焦点, 键盘切页(1/2/3)不动焦点, 而 Chromium 在 keydown 分发时把
+   * 焦点元素重估为 :focus-visible ⇒ 旧页签画出残留 outline。修法 = goView 后同步导航焦点
+   * (view.js::syncNavFocus): 焦点在非目标页签上就 blur 归还 body; 恰在目标页签上(点击/
+   * Tab+Enter 路径)则保留, 不打断键盘 Tab 序。断言两层: matches(":focus-visible") 是机制
+   * 读数, 框是否真画出以 focused(焦点位置)为准 —— 焦点不在旧页签上就不可能画框。
+   */
+  {
+    const navV = await page.$$("nav.tabs [data-view]");
+    if (navV.length >= 3) {
+      await navV[2].click();  // 鼠标点「追剧」—— 页签持焦但鼠标模态不画 :focus-visible
+      await page.waitForTimeout(100);
+      const base = await page.evaluate(() => {
+        const b = document.querySelectorAll("nav.tabs [data-view]")[2];
+        return { focused: document.activeElement === b, fv: b.matches(":focus-visible") };
+      });
+      add(ui, "导航焦点: 鼠标点页签持焦且无焦点框", base.focused && !base.fv, JSON.stringify(base));
+      await page.keyboard.press("2");  // 键盘切到种子页 —— 复现残留框的关键一步
+      await page.waitForFunction("document.querySelectorAll('.torrent-row').length > 0", null, { timeout: 15000 });
+      const after = await page.evaluate(() => {
+        const btns = [...document.querySelectorAll("nav.tabs [data-view]")];
+        return {
+          stale: btns.filter((b) => document.activeElement === b || b.matches(":focus-visible")).length,
+        };
+      });
+      const mode = await readInst(page, "vm.viewMode");
+      add(ui, "导航焦点: 键盘切页后旧页签不残留焦点框", mode === "torrents" && after.stale === 0,
+        `mode=${mode} / 残留 ${after.stale} 个`);
+      await navV[0].click();  // 还原到辅种页(后续用例按 groups 态写)
+      await page.waitForTimeout(300);
+    } else {
+      add(ui, "导航焦点: 键盘切页后旧页签不残留焦点框", false, "nav.tabs [data-view] 不足 3 个");
+    }
+  }
+
   // 三视图切换(P1-1: 只回传当前视图数组 ⇒ 切过去必须仍有数据, 不能被上一轮抹空)
   const nav = await page.$$("nav.tabs button");
   if (nav.length >= 3) {

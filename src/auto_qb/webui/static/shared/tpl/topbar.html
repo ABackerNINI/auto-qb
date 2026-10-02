@@ -14,14 +14,15 @@
           </div>
           <!-- W4 导航 IA: 左侧一级导航 = 分组/种子/追剧(page 恒为 groups, 切的是 viewMode 三态,
                与表格区视图开关两处入口等价); 设置移右侧独立组; 统计入口在底部状态栏, 日志在设置"常规"章节页尾 -->
+          <!-- data-view: goView 后同步导航焦点用(view.js::syncNavFocus), 三个视图页签的 DOM 身份标识 -->
           <nav class="tabs" aria-label="视图导航">
-            <button :class="{ active: page === 'groups' && viewMode === 'groups' }" :title="`按${l10nGroup}展示`" @click="goView('groups')">
+            <button data-view="groups" :class="{ active: page === 'groups' && viewMode === 'groups' }" :title="`按${l10nGroup}展示`" @click="goView('groups')">
               <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>{{ l10nGroup }}
             </button>
-            <button :class="{ active: page === 'groups' && viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="goView('torrents')">
+            <button data-view="torrents" :class="{ active: page === 'groups' && viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="goView('torrents')">
               <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>种子
             </button>
-            <button :class="{ active: page === 'groups' && viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="goView('shows')">
+            <button data-view="shows" :class="{ active: page === 'groups' && viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="goView('shows')">
               <svg class="ico ico-sm ico-tv" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
             </button>
           </nav>

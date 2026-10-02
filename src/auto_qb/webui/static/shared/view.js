@@ -79,6 +79,18 @@ window.AQB_VIEW = {
       if (this.page !== "groups") this.page = "groups";
       this.searchHelpOpen = false;  // 离开搜索框所在顶栏态: 浮卡跟着收起, 不带残留到其它视图
       this.setViewMode(mode);
+      this.syncNavFocus(mode);
+    },
+    /* 切页后同步导航焦点(键盘切页旧页签残留高亮框, 用户报): 鼠标点过的页签持有焦点, 键盘切页
+     * 不动焦点, 而 Chromium 在 keydown 分发时把焦点元素重估为 :focus-visible ⇒ 旧页签画出残留
+     * outline。分发期间 matches(":focus-visible") 已翻转(实测探针), 没法用它区分焦点来源 ⇒ 直接
+     * 维护不变式: 切页后导航焦点要么恰在新活动页签上(点击/Tab+Enter 路径同值, 保留 —— 不打断
+     * 键盘 Tab 序), 要么归还 body(鼠标残留焦点)。设置页签无 data-view, 不受影响。 */
+    syncNavFocus(mode) {
+      const el = document.activeElement;
+      if (!el || el.tagName !== "BUTTON" || !el.hasAttribute("data-view")) return;
+      if (el.getAttribute("data-view") === mode) return;
+      el.blur();
     },
     /* ---------------- 展开态的跨视图记忆 ----------------
      * 用户报「辅种页切到种子页再切回, 展开的组收起来了」: 旧实现在 setViewMode 里一律置空,
