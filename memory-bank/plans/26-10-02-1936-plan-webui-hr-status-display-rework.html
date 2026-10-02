@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>修改计划 · WEBUI HR 站点状态区展示层二轮改造 — 折叠 · 全屏 · 筛选排序 · 信息重组</title>
+<meta name="doc-topic" content="webui-hr-status-display">
+<meta name="doc-type" content="plan">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-02-1936">
+<meta name="doc-updated" content="26-10-02-1936">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-02-webui-hr-status-display.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101013;
+    --ink: #e9e9e4;
+    --ink-strong: #f6f6f2;
+    --muted: #9c9c94;
+    --faint: #6f6f68;
+    --hairline: rgba(255, 255, 255, 0.09);
+    --hairline-soft: rgba(255, 255, 255, 0.055);
+    --accent: #5ac2ae;
+    --accent-dim: rgba(90, 194, 174, 0.14);
+    --warn: #d9a441;
+    --error: #e08573;
+    --ok: #8fbf9a;
+    --blue: #7aa7c7;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1180px; margin: 0 auto; padding: 72px 48px 96px; }
+
+  /* ---------- 封面 ---------- */
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: 36px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+    margin: 18px 0 14px;
+  }
+  .lede { font-size: 17px; color: var(--muted); max-width: 50em; }
+  .lede strong { color: var(--ink); font-weight: 510; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 28px;
+    margin-top: 34px; padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+  }
+  .meta-row div { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .meta-row b { display: block; color: var(--muted); font-weight: 500; margin-bottom: 3px; letter-spacing: 0.05em; }
+
+  /* ---------- 章节 ---------- */
+  section { margin-top: 76px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--hairline); padding-bottom: 12px; margin-bottom: 26px; }
+  .sec-no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-strong); }
+  h3 { font-size: 17px; font-weight: 600; color: var(--ink-strong); margin: 34px 0 12px; }
+  h3 .ref { font-family: var(--mono); font-size: 12px; color: var(--faint); font-weight: 400; margin-left: 10px; }
+  p { max-width: 76ch; margin-bottom: 12px; }
+  p.wide { max-width: none; }
+  .small { font-size: 13px; color: var(--muted); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ---------- 表 ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 10px; font-size: 13.5px; }
+  th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; text-align: left;
+    padding: 8px 12px; border-bottom: 1px solid var(--hairline);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--hairline-soft); vertical-align: top; }
+  td code { white-space: normal; }
+  .t-mono { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+
+  /* ---------- 标注 ---------- */
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; padding: 1px 7px; border: 1px solid var(--hairline); border-radius: 3px; color: var(--muted); }
+  .tag.accent { color: var(--accent); border-color: rgba(90, 194, 174, 0.4); }
+  .tag.warn { color: var(--warn); border-color: rgba(217, 164, 65, 0.4); }
+  .tag.err { color: var(--error); border-color: rgba(224, 133, 115, 0.4); }
+  .tag.blue { color: var(--blue); border-color: rgba(122, 167, 199, 0.4); }
+  .tag.ok { color: var(--ok); border-color: rgba(143, 191, 154, 0.4); }
+  .note {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-dim);
+    padding: 14px 18px;
+    margin: 20px 0;
+    max-width: none;
+  }
+  .note.warn { border-left-color: var(--warn); background: rgba(217, 164, 65, 0.10); }
+  .note p { margin: 0; max-width: none; }
+  .note .note-t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent); display: block; margin-bottom: 6px; }
+  .note.warn .note-t { color: var(--warn); }
+
+  /* ---------- 清单 ---------- */
+  ul, ol { max-width: 76ch; padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+
+  .file-changes { margin: 14px 0 8px; }
+  .file-changes li { margin-bottom: 12px; }
+  .fc-path { font-family: var(--mono); font-size: 13px; color: var(--ink-strong); }
+  .fc-path .ln { color: var(--faint); }
+
+  footer {
+    margin-top: 90px; padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+
+  /* ================================================================
+     设计模板 (交互式 mockup) —— 模拟改造后的最终观感
+     ================================================================ */
+  .sim {
+    position: relative;
+    height: 700px;
+    border: 1px solid var(--hairline);
+    background: #0d0d10;
+    overflow: hidden;
+    margin: 22px 0 8px;
+  }
+  .sim-topbar {
+    position: absolute; top: 0; left: 0; right: 0; height: 44px; z-index: 6;
+    display: flex; align-items: center; gap: 14px; padding: 0 16px;
+    background: #141419; border-bottom: 1px solid var(--hairline);
+  }
+  .sim-topbar .brand { font-weight: 700; font-size: 14px; color: var(--ink-strong); letter-spacing: 0.2px; }
+  .sim-topbar .crumb { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .sim-topbar .pill { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--muted); border: 1px solid var(--hairline); border-radius: 999px; padding: 2px 10px; }
+  .sim-statusbar {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 30px; z-index: 6;
+    display: flex; align-items: center; gap: 16px; padding: 0 16px;
+    background: #15161b; border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+  }
+  .sim-body { position: absolute; top: 44px; bottom: 30px; left: 0; right: 0; overflow: auto; padding: 14px 16px 24px; }
+
+  /* 模拟 hb-blk 站点状态区 */
+  .sim-blk { border: 1px solid var(--hairline); background: rgba(255,255,255,0.02); }
+  .sim-blk-hd {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid var(--hairline-soft);
+  }
+  .sim-blk-hd .bh-t { font-weight: 600; font-size: 13.5px; color: var(--ink-strong); }
+  .sim-blk-hd .bh-n { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .sim-blk-hd .bh-r { margin-left: auto; display: flex; gap: 8px; }
+  .sim-btn {
+    font-family: var(--mono); font-size: 11px; cursor: pointer;
+    padding: 3px 11px; border: 1px solid var(--hairline); border-radius: 3px;
+    background: transparent; color: var(--muted);
+  }
+  .sim-btn:hover { border-color: rgba(90,194,174,0.45); color: var(--accent); }
+  .sim-btn.primary { color: var(--accent); border-color: rgba(90,194,174,0.45); }
+  .sim-hrs-body { display: none; padding: 12px 14px 16px; }
+  .sim-hrs-body.open { display: block; animation: simslide 0.22s ease; }
+  @keyframes simslide { from { opacity: 0; transform: translateY(-6px); } }
+  .sim-channel { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin: 0 0 12px; }
+
+  /* 模拟站点卡片 */
+  .sim-site { border: 1px solid var(--hairline-soft); background: rgba(255,255,255,0.015); padding: 12px 14px; }
+  .sim-site-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .sim-site-head .name { font-weight: 600; font-size: 13px; color: var(--ink-strong); }
+  .hrs-chip {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    padding: 1px 9px; border: 1px solid var(--hairline); border-radius: 999px; color: var(--muted);
+    cursor: pointer; background: transparent;
+  }
+  .hrs-chip.on { color: var(--accent); border-color: rgba(90, 194, 174, 0.45); }
+  .hrs-chip.static { cursor: default; }
+  .hrs-chip.ok { color: var(--ok); border-color: rgba(143,191,154,0.4); }
+  .sim-fresh { font-family: var(--mono); font-size: 11px; color: var(--faint); margin: 0 0 10px; }
+
+  /* 表格工具条 */
+  .hr-tbl-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+  .hr-tbl-bar .spacer { margin-left: auto; }
+
+  /* 表格(新列结构) */
+  .hr-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .hr-tbl th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; text-align: left;
+    padding: 7px 9px; border-bottom: 1px solid var(--hairline); white-space: nowrap;
+  }
+  .hr-tbl td { padding: 8px 9px; border-bottom: 1px solid var(--hairline-soft); vertical-align: top; }
+  .hr-tbl th.num, .hr-tbl td.num { text-align: right; font-family: var(--mono); }
+  .hr-tbl td.mono-cell { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .hr-tbl td.wrap-cell { max-width: 150px; overflow-wrap: anywhere; color: var(--ink); }
+  .sim-overlay .hr-tbl td.wrap-cell { max-width: none; }
+  .hr-tbl tr.missing td { opacity: 0.62; }
+  .hr-tbl th.sortable { cursor: pointer; user-select: none; }
+  .hr-tbl th.sortable::after {
+    content: ""; display: inline-block; margin-left: 5px; vertical-align: 2px;
+    border: 4px solid transparent; border-top-color: var(--faint); opacity: 0;
+  }
+  .hr-tbl th.sortable:hover::after { opacity: 0.55; }
+  .hr-tbl th.sort-desc::after { opacity: 1; border-top-color: var(--accent); }
+  .hr-tbl th.sort-asc::after { opacity: 1; border-bottom-color: var(--accent); border-top-color: transparent; vertical-align: -5px; }
+
+  /* 徽章: 档位 / 核实结论 / 在列 */
+  .lane-b, .vsrc-b { color: var(--ok); border-color: rgba(143, 191, 154, 0.45); background: rgba(143, 191, 154, 0.08); }
+  .lane-a { color: var(--warn); border-color: rgba(217, 164, 65, 0.45); background: rgba(217, 164, 65, 0.08); }
+  .lane-c { color: var(--error); border-color: rgba(224, 133, 115, 0.45); background: rgba(224, 133, 115, 0.08); }
+  .lane-d, .vsrc-d { color: var(--blue); border-color: rgba(122, 167, 199, 0.45); background: rgba(122, 167, 199, 0.08); }
+  .lane-badge {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    padding: 0 8px; border-radius: 2px; border: 1px solid; white-space: nowrap;
+  }
+  .v-badge {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    padding: 0 8px; border-radius: 999px; border: 1px solid var(--hairline); color: var(--muted); white-space: nowrap;
+  }
+  .sub-line { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 3px; white-space: nowrap; }
+  .chip-active { color: var(--ok); border-color: rgba(143,191,154,0.45); background: rgba(143,191,154,0.08); }
+  .chip-miss { color: var(--muted); }
+
+  /* 覆盖式全屏弹窗(模拟) */
+  .sim-overlay {
+    position: absolute; top: 44px; bottom: 30px; left: 0; right: 0; z-index: 8;
+    background: rgba(13, 14, 18, 0.98);
+    display: none; flex-direction: column;
+  }
+  .sim-overlay.open { display: flex; animation: simfade 0.18s ease; }
+  @keyframes simfade { from { opacity: 0; } }
+  .sim-overlay-hd {
+    display: flex; align-items: center; gap: 12px; flex: 0 0 auto;
+    padding: 12px 18px; border-bottom: 1px solid var(--hairline);
+  }
+  .sim-overlay-hd .name { font-weight: 600; font-size: 15px; color: var(--ink-strong); }
+  .sim-overlay-hd .meta { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .sim-overlay-hd .sim-btn { margin-left: auto; }
+  .sim-overlay-body { flex: 1 1 auto; overflow: auto; padding: 14px 18px 20px; }
+  .sim-close-x {
+    width: 28px; height: 28px; line-height: 26px; text-align: center; cursor: pointer;
+    border: 1px solid var(--hairline); border-radius: 3px; color: var(--muted); font-size: 14px; background: transparent;
+  }
+  .sim-close-x:hover { color: var(--error); border-color: rgba(224,133,115,0.5); }
+
+  /* 问题 6 前后对照 */
+  .ba-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0 8px; }
+  .ba-cell { border: 1px solid var(--hairline); padding: 12px 14px; font-size: 12.5px; }
+  .ba-cell .ba-t { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+  .ba-cell.before .ba-t { color: var(--error); }
+  .ba-cell.after .ba-t { color: var(--accent); }
+  .ba-old-line { font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 2; }
+  .ba-old-line .dim { color: var(--faint); }
+
+  .mock-caption { font-family: var(--mono); font-size: 12px; color: var(--faint); margin: 0 0 30px; }
+  .mock-caption b { color: var(--warn); font-weight: 600; }
+  .kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--hairline); border-bottom-width: 2px; border-radius: 3px; padding: 0 5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ============ 封面 ============ -->
+  <header>
+    <span class="kicker">Delivery Plan · auto-qb · HR 在线核实</span>
+    <h1>WEBUI HR 站点状态区展示层二轮改造:<br>折叠 · 全屏 · 筛选排序 · 信息重组</h1>
+    <p class="lede">
+      上一轮(<a href="26-10-01-2216-plan-webui-hr-detail-table.html">26-10-01-2216</a>)把「站点状态」块改造为
+      <strong>摘要 + 表① 全量详情表 + 表② 排障视图</strong>。真机使用后暴露 6 个展示层问题:
+      信息区不可折叠、表格拥挤换行、老旧(未做种)种子混排、不能排序、「B毕业」文案不清、
+      档位/核实/在列三处信息堆叠难分辨。本计划<strong>只动展示层</strong>(一处后端只读字段 + 文案),
+      逐条给出现状 → 目标, 并附<strong>可交互设计模板</strong>(§4)。
+      <strong>五个待拍板决策点拍板前不动工</strong>(§7)。
+    </p>
+    <div class="meta-row">
+      <div><b>日期</b>2026-10-02</div>
+      <div><b>状态</b>Open · 待拍板(§7)</div>
+      <div><b>关联</b>计划 26-10-01-2216(上轮, Done) · 坑 hr-tooltip-overlap</div>
+      <div><b>影响面</b>后端 3-4 文件(文案 + 只读字段) · 前端模板/JS 2-3 文件 · 三套 UI CSS 成对 3 处 · 不碰判定/取数调度逻辑</div>
+    </div>
+  </header>
+
+  <!-- ============ 1. 背景与 6 条问题清单 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§1</span><h2>背景与 6 条问题清单(逐条: 现状 → 目标)</h2></div>
+
+    <p>上轮改造(26-10-01-2216 四阶段)交付了表① 详情表与表② 排障视图, 信息「一条不删」的目标已达成;
+    但真机使用(2026-10-02 用户反馈)显示<strong>展示层的组织方式</strong>仍有 6 个问题。本计划逐条覆盖:</p>
+
+    <table>
+      <thead><tr><th style="width:4%">#</th><th style="width:20%">问题</th><th style="width:38%">现状</th><th>目标</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="t-mono">1</td>
+          <td><b>站点状态区不可折叠</b></td>
+          <td>「站点状态」块(<code>settings-detail.html:244-365</code>)打开 HR 分区即常驻展开, 站点多、表长时把配置项挤出视野; 打开分区即拉一次 <code>/api/hr/status</code> + 每站点明细(config_hub.js:379)。</td>
+          <td>整块可折叠, <b>默认折叠</b>; 折叠态头部保留一行摘要(站点数 / 数据截至); 展开交互与「运行日志」块同款(hb-blk-hd + 展开/收起钮)。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">2</td>
+          <td><b>表格拥挤多栏换行, 展开后要全屏</b></td>
+          <td>表① 十列塞在设置分区卡片内, 名称/状态等列大量换行, 行高参差难扫读。</td>
+          <td>提供「全屏」入口把表格扩展到<strong>除导航栏(顶栏)与状态栏外的整个视口</strong>; 推荐做成<strong>覆盖式弹窗</strong>(同一表格组件换容器, 关闭即回原位), 备选内嵌全屏 —— 见决策点①。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">3</td>
+          <td><b>老旧(未做种)种子混排</b></td>
+          <td>表① 行集 = 站点 HR 清单全量(含失踪行, 上轮拍板), 其中大量是本地从未下载/已删除的老旧条目, 与本地正在做种的条目混在一起。</td>
+          <td>后端为每行导出「本地做种」标记(与本地库 join); <b>默认只显示本地做种中的行</b>, 工具条提供按钮一键显示老旧行 —— 判定口径见决策点③。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">4</td>
+          <td><b>表头不能排序</b></td>
+          <td>表① 行序固定为后端「档位·下载量」口径(status.py:396), 前端无任何排序控件。</td>
+          <td>表头可点击排序, <b>交互对齐种子页</b>(shared/sort.js <code>setSort</code> 三态: 首点降序 → 再点升序 → 第三次恢复默认; 箭头指示激活列); 本期<strong>不做</strong>拖动列/隐藏列。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">5</td>
+          <td><b>「B毕业」表达不清</b></td>
+          <td>表① 上次核实列来源徽章显示「B 毕业」(status.py:66 <code>SOURCE_TEXTS</code>); 「毕业」是 PT 圈黑话, 与档位「B 已达标」并存时口径混乱。</td>
+          <td>统一替换为「已达标」系文案(与档位人话 <code>LANE_TEXTS.B = "已达标"</code> 对齐); 全部出现位置与替换口径见 §3.5, 是否连带注释/日志一并处理见决策点②。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">6</td>
+          <td><b>信息层级混乱</b></td>
+          <td>一行里「档位: B已达标」「上次核实(放行判定): 未核实」「状态: 在列 · 最近被见到 10-02 18:33」三段文本长相相近、堆在一起, 需逐字分辨才能读出含义。</td>
+          <td>重组为<strong>三段结构化列</strong>: 档位徽章列 / 核实结论列(结论徽章 + 来源·时间小字)/ 在列列(在列·失踪徽章 + 最近被见到小字)—— 版式细节见 §3.6 与决策点④。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 2. 现状诊断 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§2</span><h2>现状诊断:落点与可复用件</h2></div>
+
+    <table>
+      <thead><tr><th style="width:18%">面</th><th style="width:50%">代码事实(取证 2026-10-02)</th><th>对本案的意义</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>站点状态块结构</b></td>
+          <td class="t-mono">shared/tpl/settings-detail.html:244-253 —— 「站点状态」<code>.hb-blk</code> 头部(标题 + 副题 + 全部立即拉取/刷新钮), :254-365 内容区: 每站点一个 <code>&lt;article class="hrs-site"&gt;</code>, 内含站点头 chips(:265-273)、fresh 行(:274-277)、表①(:283-321, 守阵锚 <code>aqb:hr-detail-table</code>)、表② <code>&lt;details class="hrs-diag"&gt;</code>(:327-363, 默认收起)。</td>
+          <td>问题 1 的折叠对象是<strong>整个 hb-blk</strong>; 表①/表② 的锚与守阵已就位, 本轮在其内改造, 不推倒。</td>
+        </tr>
+        <tr>
+          <td><b>折叠先例<br>(直接复用)</b></td>
+          <td class="t-mono">「运行日志」块同文件 :372-397 —— <code>.hb-blk-hd</code> 头部 + 「展开/收起」按钮(<code>logs.open ? '收起' : '展开'</code>) + <code>v-show</code> 内容区; 默认折叠不持久化(state.js:241-249 <code>logs.open: false</code>), <b>首次展开才拉一次</b> /api/log(config_hub.js:399-406 <code>hubLogsToggle</code>); 折叠态按刷新 = 顺手展开再拉(<code>hubLogsLoad</code>)。</td>
+          <td>问题 1 的交互、取数时机、不持久化纪律全部有现成范式 —— HR 块照抄该模式即可, 不发明新交互。</td>
+        </tr>
+        <tr>
+          <td><b>表① 现行列结构<br>(问题 6 落点)</b></td>
+          <td class="t-mono">settings-detail.html:297-315 十列: 档位徽章(<code>{{e.lane}} {{e.lane_text}}</code>) / 名称 / tid / 上传量 / 下载量 / 分享率 / 还需做种 / 完成时间 / 上次核实(放行判定) = 时间 + 来源小徽章(<code>hr-vsrc</code>, hrsSrcCls) / 状态 = <code>hrsStatusText</code> 拼接「在列(· 观察期 N) · 最近被见到 ts」或「失踪 N 波」(hr_status.js:167-172)。</td>
+          <td>问题 6 的三段混淆文本就是第 1、9、10 列; 重组只动这三列的内部结构, 数值五列不动。</td>
+        </tr>
+        <tr>
+          <td><b>明细数据字段</b></td>
+          <td class="t-mono">hr/status.py <code>EntryDetail</code>(:361-394): lane/lane_text/bytes/ratio/need_seed_text/done_iso/verified_ts/verified_source(+text)/active/missing_streak/first_seen/last_seen —— <b>没有本地做种标记</b>; <code>entry_details()</code>(:385+)是纯站点侧口径, 默认排序 = 档位·下载量(:396)。</td>
+          <td>问题 3 需要新增一个只读字段; join 所需原料见下一行。</td>
+        </tr>
+        <tr>
+          <td><b>本地库 join 原料<br>(问题 3)</b></td>
+          <td class="t-mono">routes/hr.py:134-161 <code>api_hr_site_entries</code> 闭包内有 <code>manager</code>; 本地种子库 <code>manager.store.by_hash</code>(torrents/store.py:48, <code>TorrentRecord.hash/state</code>, record.py:17-52); 状态语义分类单点 views.py:143-162(<code>is_uploading</code> ⇒ "seeding", is_stopped/checking/errored 优先); join 键 = <code>entry.infohash_v1/v2</code> ↔ <code>rec.hash</code>。</td>
+          <td>后端 join 成本极低(一次 dict comprehension); 口径(state 分类)收后端单点, 前端零新逻辑 —— 对齐 contract-api.md「前端只消费后端算好字段」。</td>
+        </tr>
+        <tr>
+          <td><b>种子页排序范式<br>(问题 4 对齐对象)</b></td>
+          <td class="t-mono">shared/sort.js <code>setSort(key, scope)</code>(:12-26): 三态 —— 首点 <code>dir=-1</code>(降序) → 再点 <code>dir=1</code>(升序) → 第三次恢复默认; 表头模板 tpl/torrents.html:3-17: <code>.sortable</code> 类 + 激活列才显示 <code>.arrow</code>(SVG <code>#i-arrow-up/#i-arrow-down</code>); 明细表同款(scope="detail")。</td>
+          <td>表① 排序照此三态语义与箭头样式; 实现上是表① 本地小排序(行数几百级, 无虚拟滚动需求), 不搬种子页列设置双轨机制。</td>
+        </tr>
+        <tr>
+          <td><b>「毕业」文案分布<br>(问题 5)</b></td>
+          <td class="t-mono">用户可见 4 处: status.py:66(<code>SOURCE_TEXTS</code> "B 毕业") · resolve.py:234("B 档毕业后移出") · resolve.py:350("在线·已达标(毕业)") · events.py:109(日志行); 注释 6 处: model.py:56 / resolve.py:127 / maintenance_mod.py:272,288 / views.py:292 / record.py:423 / hr_status.js:158; 测试钉文本 2 处: test_hr_status.py:137,142。完整清单与口径见 §3.5。</td>
+          <td>替换面已全量摸清; 档位人话 <code>LANE_TEXTS.B = "已达标"</code>(status.py:52-58)已是要对齐的目标词, 无需新造词。</td>
+        </tr>
+        <tr>
+          <td><b>全屏/浮层基建<br>(问题 2)</b></td>
+          <td class="t-mono">modal 基建: <code>.modal-mask</code>/<code>.modal</code>(atlas/css/components.css:546-551, z-index 130, 三套 UI 各自成对); 状态栏高度令牌 <code>--statusbar-h: 34px</code>(atlas/style.css:128, 棱镜五主题同族); 顶栏高度由 padding 决定(components.css:34, 无专用高度令牌)。</td>
+          <td>覆盖式弹窗 = 新加一个全屏变体(上下边界让出顶栏与状态栏), 复用 mask 思路; 顶栏底缘运行时量取或按布局实测常量, 三套 UI 成对声明。</td>
+        </tr>
+        <tr>
+          <td><b>三套 UI 成对纪律</b></td>
+          <td class="t-mono"><code>.hrs-*</code> 与 <code>.hr-detail-table</code> 样式三处成对: atlas/css/dialogs.css · console/css/dialogs.css · prism(css/components.css + views.css)(上轮计划 §5.6); 模板/内核共享于 static/shared/。</td>
+          <td>本轮所有新样式(折叠钮态/排序箭头/全屏弹窗/新列徽章)同样三处成对, 守阵测试钉住。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <span class="note-t">刷新纪律不变</span>
+      <p>本轮<strong>不新增任何轮询定时器</strong>: 全屏弹窗展示的是<strong>已加载的同一份明细数据</strong>(同一表格组件换容器, 零新请求);
+      要新数据仍走既有「刷新 / 立即拉取」按钮(hr_status.js <code>loadHrStatus(force)</code> 既有链路)。</p>
+    </div>
+  </section>
+
+  <!-- ============ 3. 方案设计 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§3</span><h2>方案设计(逐条)</h2></div>
+
+    <h3>3.1 问题 1 · 站点状态区可折叠, 默认折叠<span class="ref">照抄运行日志范式</span></h3>
+    <ul>
+      <li><b>交互</b>: 「站点状态」<code>.hb-blk-hd</code> 头部加「展开 / 收起」按钮(文案随态), 内容区 <code>v-show</code>; 默认 <code>hrsOpen = false</code>。</li>
+      <li><b>折叠态摘要</b>: 头部副题位显示一行状态 —— 未加载: 「默认折叠, 展开后读取」; 已加载: 「N 站点 · 数据截至 &lt;ts&gt;」(数据在 <code>hrs.loaded</code>/<code>hrs.sites</code> 里现成可取, 不新拉)。</li>
+      <li><b>取数时机</b>(决策点⑤): 推荐「首次展开才拉」—— 打开 HR 分区不再自动 <code>loadHrStatus()</code>(config_hub.js:379 现状), 改由展开触发; 折叠态点「全部立即拉取 / 刷新」= 顺手展开再拉(<code>hubLogsLoad</code> 同款)。</li>
+      <li><b>不持久化</b>: 展开态不进 localStorage —— 与运行日志一致(state.js:241-249 先例), 每次进分区默认折叠; 表② <code>&lt;details&gt;</code> 排障视图的「不持久化」纪律不变。</li>
+    </ul>
+
+    <h3>3.2 问题 2 · 全屏查看: 覆盖式弹窗(推荐) vs 内嵌全屏<span class="ref">决策点①</span></h3>
+    <ul>
+      <li><b>推荐: 覆盖式弹窗</b> —— 站点卡片工具条加「全屏」钮, 打开一个除顶栏与状态栏外占满视口的覆盖层(<code>position: fixed; top: 顶栏底缘; bottom: var(--statusbar-h)</code>), 表格组件<strong>原节点移入</strong>覆盖层(过滤器/排序/数据原样带过去, 零新请求), 关闭(✕ / ESC / 点遮罩)后移回原位。优点: 复用 modal 基建思路、上下文不丢、三套 UI 只需各自一份全屏变体样式。</li>
+      <li><b>备选: 内嵌全屏</b> —— 站点卡片原地扩展铺满内容区。缺点: 要把 <code>.hb-blk</code> 暂时跳出设置分区的栅格/滚动容器, 三套 UI 布局各异, 侵入大、关闭后还要恢复滚动位置, 得不偿失。</li>
+      <li><b>弹窗内布局</b>: 头部 = 站点名 + 数据截至时间 + 关闭钮; 主体 = 工具条(档位 chips / 老旧切换)+ 表格; 表格占满宽, 名称列不再限宽换行。</li>
+      <li><b>ESC 纪律</b>: 2026-10-02 已有计划把 ESC 定为「清除全部筛选」兜底键(26-10-02-1632)—— 全屏弹窗的 ESC 关闭须挂<strong>弹窗层自身的作用域</strong>且在筛选清除之前拦截, 实现时与该计划的行为核对, 不抢不漏。</li>
+    </ul>
+
+    <h3>3.3 问题 3 · 默认只显示做种中的, 按钮查看老旧<span class="ref">后端 join 出标记, 前端本地过滤</span></h3>
+    <ul>
+      <li><b>后端(推荐, 决策点③)</b>: <code>api_hr_site_entries</code> 响应层用 <code>manager.store.by_hash</code> 按 <code>infohash_v1 → v2</code> 顺序探测本地库, 给每行加 <code>local_present: bool</code>(本地库中存在); state 语义分类复用 views.py:143-162 单点。是否细分「做种中 / 暂停」进决策点③(a/b 选项)。</li>
+      <li><b>前端</b>: 工具条在档位 chips 右侧加一个切换按钮 —— 默认「显示老旧种子 (N)」, 点击后变「只看做种中 (M)」; 过滤与档位 chips 叠加(AND), 纯前端本地过滤, 不回后端、不重拉。</li>
+      <li><b>计数</b>: 按钮文案里的 N/M 由当前行集现算(和档位 chips 计数同一层); 过滤后空态文案区分「该站点本地没有 HR 种子」与「该档位暂无」。</li>
+      <li><b>口径提醒</b>: 「本地不存在」≠「无 HR 义务」—— 站点清单里本地从未下载的条目也在此列, 这正是用户要的「老旧」噪音桶; 默认隐藏它们不改变任何判定/打标行为(纯展示层过滤)。</li>
+    </ul>
+
+    <h3>3.4 问题 4 · 表头点击排序, 对齐种子页<span class="ref">三态 + 箭头, 本期不做拖动/隐藏列</span></h3>
+    <ul>
+      <li><b>三态语义</b>(同 sort.js): 首次点击该列 = <b>降序</b> → 再点 = <b>升序</b> → 第三次 = <b>恢复默认序</b>(后端「档位·下载量」口径)。列间切换 = 直接以新列降序开始。</li>
+      <li><b>箭头样式</b>: 仅激活列显示箭头(升序 ▲ / 降序 ▼, accent 色), 非激活列 hover 出浅色箭头位 —— 与种子页「激活列才有 arrow」一致(tpl/torrents.html:9-13)。</li>
+      <li><b>排序键</b>: 按<strong>原始值</strong>排不按人话 —— bytes/ratio/秒数/epoch 数值比较, 名称/tid/done_iso 字符串比较, 档位列按 A&lt;B&lt;C&lt;D 固定秩; 空值(null/—)恒排最后(两个方向都不参与反转)。排序在<strong>当前过滤后的行集</strong>上进行, 纯前端, 不回后端。</li>
+      <li><b>可排序列</b>: 档位 / 核实结论(按 verified_ts)/ 名称 / tid / 上传量 / 下载量 / 分享率 / 还需做种 / 完成时间 / 在列(按 last_seen) —— 全列可排; 表② 波次表不接排序(行数 ≤4)。</li>
+      <li><b>明确不做</b>(用户口径): 拖动列、隐藏列、列宽拖拽、列设置持久化 —— 种子页那套 colDrag/双轨机制不引入。</li>
+    </ul>
+
+    <h3>3.5 问题 5 · 「B毕业」→「已达标」: 全部出现位置与统一替换口径<span class="ref">决策点②</span></h3>
+    <p>统一口径: <strong>用户可见文案一律弃用「毕业」, 对齐档位人话 <code>LANE_TEXTS.B = "已达标"</code></strong>。
+    语义注记: <code>SOURCE_SATISFIED</code> 的含义是「B 档达标后被站点移出清单 ⇒ 放行」—— 替换文案要把「达标」说清,
+    「移出」语义由所在列名(上次核实·放行判定)与上下文承载, 不必逐字保留。</p>
+
+    <table>
+      <thead><tr><th style="width:5%">类</th><th style="width:34%">位置</th><th style="width:22%">现状文案</th><th>替换为 / 处置</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="t-mono">A</td>
+          <td class="t-mono">src/auto_qb/hr/status.py:66<br><span class="ln">SOURCE_TEXTS[SOURCE_SATISFIED]</span></td>
+          <td class="t-mono">"B 毕业"</td>
+          <td><b>"已达标"</b> —— 表① 上次核实列来源徽章直接展示此文本(hr_status.js hrsSrcCls 只按 token 配色不碰文案)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">A</td>
+          <td class="t-mono">src/auto_qb/hr/resolve.py:234<br><span class="ln">放行记录依据文本</span></td>
+          <td class="t-mono">"B 档毕业后移出"</td>
+          <td><b>"已达标移出"</b> —— 进 HrResolution 文本(放行记录依据), 消费面 = hr-pop 结论卡 / CLI; 保留「移出」动作语义</td>
+        </tr>
+        <tr>
+          <td class="t-mono">A</td>
+          <td class="t-mono">src/auto_qb/hr/resolve.py:350<br><span class="ln">safety_display 无事实分支</span></td>
+          <td class="t-mono">"在线·已达标(毕业)"</td>
+          <td><b>"在线·已达标"</b> —— 与带命中行事实分支的既有文案逐字对齐(test_web.py:4163 已按此钉住), 消灭同一结论两种写法</td>
+        </tr>
+        <tr>
+          <td class="t-mono">A</td>
+          <td class="t-mono">src/auto_qb/hr/events.py:109<br><span class="ln">持续零波告警行</span></td>
+          <td class="t-mono">"全部毕业/被清除?"</td>
+          <td><b>"全部已达标移出/被清除?"</b> —— 运行日志可见, 一并统一(低风险)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">B</td>
+          <td class="t-mono">tests/test_hr_status.py:137, :142</td>
+          <td class="t-mono">断言 "B 毕业"</td>
+          <td>随 A 类同步改写(精确断言新文案 + SOURCE_TEXTS 字典全等)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">B</td>
+          <td class="t-mono">tests/test_hr_status.py:8 · test_hr_service.py:745,760 · test_hr_resolve.py:34,441</td>
+          <td class="t-mono">docstring/注释提及「毕业」</td>
+          <td>随改动顺手更新对应 docstring; 未触及的文件不动(范围守恒)</td>
+        </tr>
+        <tr>
+          <td class="t-mono">C</td>
+          <td class="t-mono">src/auto_qb/hr/model.py:56 · resolve.py:127 · core/modules/maintenance_mod.py:272,288 · webui/views.py:292 · torrents/record.py:423 · static/shared/hr_status.js:158</td>
+          <td class="t-mono">代码注释 6 处</td>
+          <td>决策点②: 推荐<b>不改</b>(注释是开发者向, 「毕业」仍是内部域术语, grep 可溯源); 备选一并改掉</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="note warn">
+      <span class="note-t">口径边界</span>
+      <p>CLI <code>--hr-status</code> 自身文本无「毕业」字样(已核); resolve.py:350 的替换只动<strong>无命中行事实、按放行来源</strong>的分支 ——
+      有事实分支本就输出「在线·已达标」, 不动。替换后建议在 test_web.py 加一条<strong>否定守阵</strong>: 用户可见字符串常量来源(SOURCE_TEXTS / resolve 文案表)中 grep「毕业」为零残留。</p>
+    </div>
+
+    <h3>3.6 问题 6 · 信息重组: 三段结构化列<span class="ref">决策点④</span></h3>
+    <p>把长相相近的三段文本拆成<strong>视觉结构各异的三列</strong>, 每列「主徽章 + 小字副行」两层, 层级一眼可分:</p>
+    <table>
+      <thead><tr><th style="width:14%">新列</th><th style="width:30%">主层(徽章)</th><th>副层(小字, --faint 等宽)</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>档位</b></td>
+          <td> lane 色徽章(色义不变): <span class="lane-badge lane-a">A 考察中</span> <span class="lane-badge lane-b">B 已达标</span> <span class="lane-badge lane-c">C 未达标</span> <span class="lane-badge lane-d">D 已免罪</span></td>
+          <td>无(徽章自足) —— 失踪行整行沿用 <code>tr.missing</code> 弱化</td>
+        </tr>
+        <tr>
+          <td><b>核实结论</b></td>
+          <td><span class="v-badge chip-active">已核实</span> (绿 = satisfied / 蓝 = exempt·not-listed, 沿用 hr-vsrc 色义) 或 <span class="v-badge">未核实</span> (中性)</td>
+          <td>已核实: 「&lt;来源人话&gt; · &lt;verified_ts&gt;」(如「已达标 · 09-30 14:22」); 未核实: 「—」</td>
+        </tr>
+        <tr>
+          <td><b>在列</b></td>
+          <td><span class="v-badge chip-active">在列</span> 或 <span class="v-badge chip-miss">失踪 N 波</span></td>
+          <td>「(观察期 N ·)最近被见到 &lt;last_seen&gt;」; last_seen 未知则「—」(绝不显示 epoch, 沿用 hrsVerifiedText 同款哨兵纪律)</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="ba-pair">
+      <div class="ba-cell before">
+        <div class="ba-t">现状 · 三段文本堆叠</div>
+        <div class="ba-old-line">
+          档位 <span class="dim">│</span> B 已达标<br>
+          上次核实(放行判定) <span class="dim">│</span> — 未核实<br>
+          状态 <span class="dim">│</span> 在列 · 最近被见到 10-02 18:33
+        </div>
+      </div>
+      <div class="ba-cell after">
+        <div class="ba-t">目标 · 三列结构化(示例行)</div>
+        <div>
+          <span class="lane-badge lane-b">B 已达标</span>
+          <span class="v-badge">未核实</span><span class="sub-line" style="display:inline"> —</span>
+          <span class="v-badge chip-active">在列</span><span class="sub-line" style="display:inline"> 最近被见到 10-02 18:33</span>
+        </div>
+      </div>
+    </div>
+    <p class="small">要点: ①「核实结论」列名取代「上次核实(放行判定)」, 口径钉在列名上不再逐字读; ② 未核实与在列各自成徽章,
+    不再靠「·」串接; ③ 观察期从主层降级进副层小字(它是考察中的属性, 不是独立结论); ④ 数值五列(上传/下载/分享率/还需做种/完成时间)与名称/tid 列不动。</p>
+  </section>
+
+  <!-- ============ 4. 设计模板 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§4</span><h2>设计模板:可交互 mockup(五项演示合一)</h2></div>
+
+    <p class="small">
+      下方为一个可操作模拟窗(虚构数据, 站点/种子名/数字均非真实)。演示点:
+      <b>①</b> 站点状态区默认折叠, 点「展开」有过渡、首次展开才「拉数」;
+      <b>②</b> 点「全屏」弹出覆盖式弹窗(除顶部导航条与底部状态栏外占满, ✕ / <span class="kbd">ESC</span> 关闭后表格回原位);
+      <b>③</b> 「显示老旧种子」按钮默认只看做种中, 点击展开老旧行;
+      <b>④</b> 点表头三态排序(首点降序 → 再点升序 → 第三次恢复默认), 激活列显示箭头, 对齐种子页交互;
+      <b>⑤</b> 新信息结构: 档位徽章 / 核实结论 / 在列 三列分层。
+    </p>
+
+    <div class="sim" id="sim">
+      <!-- 模拟导航栏 -->
+      <div class="sim-topbar">
+        <span class="brand">auto-qb</span>
+        <span class="crumb">设置 / HR 在线核实 / 站点状态</span>
+        <span class="pill">导航栏(展开弹窗让出此条)</span>
+      </div>
+
+      <!-- 模拟内容区 -->
+      <div class="sim-body">
+        <div class="sim-blk">
+          <div class="sim-blk-hd">
+            <span class="bh-t">站点状态</span>
+            <span class="bh-n" id="simHrsSummary">默认折叠, 展开后读取</span>
+            <span class="bh-r">
+              <button class="sim-btn" id="simHrsPull">全部立即拉取</button>
+              <button class="sim-btn" id="simHrsRefresh">刷新</button>
+              <button class="sim-btn primary" id="simHrsToggle">展开</button>
+            </span>
+          </div>
+          <div class="sim-hrs-body" id="simHrsBody">
+            <p class="sim-channel">扩展通道 · 监听 127.0.0.1:9876 · 本实例可主动取数(示例)</p>
+
+            <!-- 模拟站点卡片 -->
+            <div class="sim-site">
+              <div class="sim-site-head">
+                <span class="name">example-pt(示例)</span>
+                <span class="hrs-chip static">清单型</span>
+                <span class="hrs-chip static ok">放行签发开启</span>
+                <span class="hrs-chip static">通道 正常</span>
+              </div>
+              <p class="sim-fresh">上次取波 10-02 19:00:12 · 下次拉取 10-03 10:00 · 索引 1842 条(活跃 1811)(示例)
+                <button class="sim-btn" style="margin-left:8px">立即拉取</button>
+              </p>
+
+              <!-- 表格(工具条 + 表头 + 行) —— 全屏时整块移入覆盖层 -->
+              <div id="simTableWrap">
+                <div class="hr-tbl-bar">
+                  <button class="hrs-chip on" data-lane="">全部</button>
+                  <button class="hrs-chip" data-lane="A">A 考察中</button>
+                  <button class="hrs-chip" data-lane="B">B 已达标</button>
+                  <button class="hrs-chip" data-lane="C">C 未达标</button>
+                  <button class="hrs-chip" data-lane="D">D 已免罪</button>
+                  <button class="sim-btn" id="simOldToggle">显示老旧种子 (3)</button>
+                  <span class="spacer"></span>
+                  <span class="sim-fresh" style="margin:0">数据截至 10-02 19:00(示例)</span>
+                  <button class="sim-btn primary sim-fullopen" id="simFull">全屏</button>
+                </div>
+                <table class="hr-tbl" id="simTable">
+                  <thead>
+                    <tr>
+                      <th class="sortable" data-k="0">档位</th>
+                      <th class="sortable" data-k="1">核实结论</th>
+                      <th class="sortable" data-k="2">名称</th>
+                      <th class="sortable" data-k="3">tid</th>
+                      <th class="sortable num" data-k="4" data-num>上传量</th>
+                      <th class="sortable num" data-k="5" data-num>下载量</th>
+                      <th class="sortable num" data-k="6" data-num>分享率</th>
+                      <th class="sortable num" data-k="7" data-num>还需做种</th>
+                      <th class="sortable" data-k="8">完成时间</th>
+                      <th class="sortable" data-k="9">在列</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr data-lane="B" data-local="1">
+                      <td data-v="1"><span class="lane-badge lane-b">B 已达标</span></td>
+                      <td data-v="0"><span class="v-badge">未核实</span><span class="sub-line">—</span></td>
+                      <td class="wrap-cell" data-v="Example.Movie.2024.1080p.WEB-DL.H264.HR-Group">Example.Movie.2024.1080p.WEB-DL.H264.HR-Group</td>
+                      <td class="mono-cell" data-v="1034567">1034567</td>
+                      <td class="num" data-v="550091075379">512.3 GiB</td>
+                      <td class="num" data-v="51754355712">48.2 GiB</td>
+                      <td class="num" data-v="10.63">10.63</td>
+                      <td class="num" data-v="">—</td>
+                      <td class="mono-cell" data-v="2026-09-12">26-09-12</td>
+                      <td data-v="1760000000"><span class="v-badge chip-active">在列</span><span class="sub-line">最近被见到 10-02 18:33</span></td>
+                    </tr>
+                    <tr data-lane="A" data-local="1">
+                      <td data-v="0"><span class="lane-badge lane-a">A 考察中</span></td>
+                      <td data-v="0"><span class="v-badge">未核实</span><span class="sub-line">—</span></td>
+                      <td class="wrap-cell" data-v="Example.Anime.S02.1080p.Batch.H264.HR-Group">Example.Anime.S02.1080p.Batch.H264.HR-Group</td>
+                      <td class="mono-cell" data-v="1034569">1034569</td>
+                      <td class="num" data-v="32434206924">30.2 GiB</td>
+                      <td class="num" data-v="21474836480">20.0 GiB</td>
+                      <td class="num" data-v="1.51">1.51</td>
+                      <td class="num" data-v="270000">3 天 2 小时</td>
+                      <td class="mono-cell" data-v="2026-09-25">26-09-25</td>
+                      <td data-v="1759999000"><span class="v-badge chip-active">在列</span><span class="sub-line">观察期 2 · 最近被见到 10-02 18:10</span></td>
+                    </tr>
+                    <tr data-lane="D" data-local="1">
+                      <td data-v="3"><span class="lane-badge lane-d">D 已免罪</span></td>
+                      <td data-v="1759000000"><span class="v-badge vsrc-d">已核实</span><span class="sub-line">已免罪 · 09-28 11:02</span></td>
+                      <td class="wrap-cell" data-v="Example.Game.Pack.2024.REPACK.HR-Group">Example.Game.Pack.2024.REPACK.HR-Group</td>
+                      <td class="mono-cell" data-v="1034570">1034570</td>
+                      <td class="num" data-v="103079215104">96.0 GiB</td>
+                      <td class="num" data-v="12884901888">12.0 GiB</td>
+                      <td class="num" data-v="8.00">8.00</td>
+                      <td class="num" data-v="">—</td>
+                      <td class="mono-cell" data-v="2026-08-30">26-08-30</td>
+                      <td data-v="1759001000"><span class="v-badge chip-miss">失踪 1 波</span><span class="sub-line">最近被见到 09-28 20:00</span></td>
+                    </tr>
+                    <tr class="missing" data-lane="C" data-local="0">
+                      <td data-v="2"><span class="lane-badge lane-c">C 未达标</span></td>
+                      <td data-v="0"><span class="v-badge">未核实</span><span class="sub-line">—</span></td>
+                      <td class="wrap-cell" data-v="Example.Series.S03.COMPLETE.2160p.HR-Group">Example.Series.S03.COMPLETE.2160p.HR-Group</td>
+                      <td class="mono-cell" data-v="1032101">1032101</td>
+                      <td class="num" data-v="2254857830">2.1 GiB</td>
+                      <td class="num" data-v="32212254720">30.0 GiB</td>
+                      <td class="num" data-v="0.07">0.07</td>
+                      <td class="num" data-v="1846800">21 天 8 小时</td>
+                      <td class="mono-cell" data-v="2026-09-28">26-09-28</td>
+                      <td data-v="1759000000"><span class="v-badge chip-miss">失踪 3 波</span><span class="sub-line">最近被见到 09-28 02:00</span></td>
+                    </tr>
+                    <tr class="missing" data-lane="B" data-local="0">
+                      <td data-v="1"><span class="lane-badge lane-b">B 已达标</span></td>
+                      <td data-v="1758000000"><span class="v-badge vsrc-b">已核实</span><span class="sub-line">已达标 · 09-15 09:40</span></td>
+                      <td class="wrap-cell" data-v="Example.Docu.2023.720p.H264.HR-Group">Example.Docu.2023.720p.H264.HR-Group</td>
+                      <td class="mono-cell" data-v="1029887">1029887</td>
+                      <td class="num" data-v="9019431424">8.4 GiB</td>
+                      <td class="num" data-v="4509715660">4.2 GiB</td>
+                      <td class="num" data-v="2.00">2.00</td>
+                      <td class="num" data-v="">—</td>
+                      <td class="mono-cell" data-v="2026-08-11">26-08-11</td>
+                      <td data-v="1758000600"><span class="v-badge chip-miss">失踪 12 波</span><span class="sub-line">最近被见到 09-15 09:30</span></td>
+                    </tr>
+                    <tr data-lane="A" data-local="0">
+                      <td data-v="0"><span class="lane-badge lane-a">A 考察中</span></td>
+                      <td data-v="0"><span class="v-badge">未核实</span><span class="sub-line">—</span></td>
+                      <td class="wrap-cell" data-v="Example.Software.2024.LINUX.X64.HR-Group">Example.Software.2024.LINUX.X64.HR-Group</td>
+                      <td class="mono-cell" data-v="1035210">1035210</td>
+                      <td class="num" data-v="">—</td>
+                      <td class="num" data-v="">—</td>
+                      <td class="num" data-v="">—</td>
+                      <td class="num" data-v="1062000">12 天 6 小时</td>
+                      <td class="mono-cell" data-v="2026-10-01">26-10-01</td>
+                      <td data-v="1759999000"><span class="v-badge chip-active">在列</span><span class="sub-line">最近被见到 10-02 17:55</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 覆盖式全屏弹窗(除导航栏与状态栏外占满) -->
+      <div class="sim-overlay" id="simOverlay">
+        <div class="sim-overlay-hd">
+          <span class="name">example-pt(示例)</span>
+          <span class="meta">HR 种子明细 · 数据截至 10-02 19:00 · 排序/筛选状态随行带入</span>
+          <button class="sim-close-x" id="simClose" aria-label="关闭">✕</button>
+        </div>
+        <div class="sim-overlay-body" id="simOverlayBody"></div>
+      </div>
+
+      <!-- 模拟状态栏 -->
+      <div class="sim-statusbar">
+        <span>状态栏(展开弹窗让出此条 · 高度令牌 --statusbar-h)</span>
+        <span style="margin-left:auto">qB 已连接 · 10-02 19:24</span>
+      </div>
+    </div>
+    <p class="mock-caption">
+      图 M1 · 交互式模拟(<b>虚构示例数据</b>)。全屏弹窗展示的是<strong>同一表格节点换容器</strong>(过滤与排序状态原样保留, 零新请求);
+      卡片内名称列限宽以演示「拥挤换行」现状, 全屏后放开。实现时的视觉权威是三套 UI 既有令牌, 本模板只定结构与交互。
+    </p>
+
+    <h3>4.1 排序箭头样式细节<span class="ref">对齐种子页</span></h3>
+    <ul>
+      <li>激活列: 箭头 accent 色(降序 ▼ / 升序 ▲), 其余列无箭头 —— 种子页「<code>v-if torrentSortKey === col.key</code>」同语义;</li>
+      <li>非激活列 hover: 浅色(faint)箭头占位, 提示可点;</li>
+      <li>第三态(默认序)整表无激活列箭头, 与种子页「恢复默认排序」一致。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 5. 分阶段实施计划 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§5</span><h2>分阶段实施计划(拍板后执行)</h2></div>
+
+    <p>四个阶段强顺序: ②③ 都改同一批前端文件, 串行避免互撞; ① 为 ③ 的数据前提(若决策点③选前端 join 则 ① 相应收缩)。
+    每阶段由一个独立子代理串行执行, 可独立验证、独立提交。</p>
+
+    <h3>阶段 1 · 后端:「本地做种」标记导出 + 「毕业」文案统一<span class="ref">预估 4 src + 2-3 test, ~120-220 行</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">src/auto_qb/webui/server/routes/hr.py<span class="ln">(api_hr_site_entries 响应层)</span></span><br>
+        用 <code>manager.store.by_hash</code> 以 infohash_v1 → v2 顺序探测本地库, 每行追加只读标记
+        <code>local_present</code>(布尔; 是否细分做种/暂停态按决策点③拍板); join 口径注释钉在路由层, entry_details 本体保持纯站点口径。</li>
+      <li><span class="fc-path">src/auto_qb/hr/status.py<span class="ln">(:66 SOURCE_TEXTS; 如决策点③需要可在 EntryDetail 加字段)</span></span><br>
+        <code>SOURCE_TEXTS[SOURCE_SATISFIED]</code> "B 毕业" → "已达标"。</li>
+      <li><span class="fc-path">src/auto_qb/hr/resolve.py<span class="ln">(:234, :350)</span></span><br>
+        "B 档毕业后移出" → "已达标移出"; "在线·已达标(毕业)" → "在线·已达标"。</li>
+      <li><span class="fc-path">src/auto_qb/hr/events.py<span class="ln">(:109)</span></span><br>
+        日志行 "全部毕业/被清除?" → "全部已达标移出/被清除?"。</li>
+      <li><span class="fc-path">tests/test_hr_status.py · tests/test_web.py<span class="ln">(对应断言与新用例)</span></span><br>
+        SOURCE_TEXTS 新文案断言; local_present 三态用例(本地存在/不存在/仅 v2 命中); 用户可见字符串「毕业」零残留守阵。</li>
+    </ul>
+    <p><b>验收</b>: 明细端点每行带 local_present 且语义正确(真实 join 用例); CLI <code>--hr-status</code> 行为与文案核对无「毕业」;
+    config.yml 零改动; <code>commands run test.quick</code> 过。</p>
+    <p><b>阶段完成后由该子代理独立提交 (commands run ship.commit)。</b></p>
+
+    <h3>阶段 2 · 前端骨架:站点状态区默认折叠 + 覆盖式全屏弹窗<span class="ref">预估模板 1 + JS 2 + CSS 3 处, ~200-320 行</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">shared/tpl/settings-detail.html<span class="ln">(站点状态块 :244-365)</span></span><br>
+        头部加「展开/收起」钮与折叠态摘要行; 内容区 <code>v-show="hrsOpen"</code>; 站点卡片工具条加「全屏」钮;
+        新增全屏覆盖层容器(teleport body 单例或分区内 fixed 层, 含头部站点名/数据截至/✕)。</li>
+      <li><span class="fc-path">shared/hr_status.js · shared/config_hub.js<span class="ln">(:379 取数时机)</span></span><br>
+        <code>hrsOpen</code> 状态(默认 false, 不持久化); 首次展开触发 <code>loadHrStatus()</code>(决策点⑤a); 折叠态点拉取/刷新 = 展开再拉;
+        全屏开关方法(表格 wrap 节点在卡片与覆盖层间移动, 过滤/排序状态随节点走); ESC 关闭挂弹窗作用域(与 26-10-02-1632 ESC 计划核对优先级)。</li>
+      <li><span class="fc-path">atlas/css/dialogs.css · console/css/dialogs.css · prism(css/components.css + views.css)<span class="ln">(grep hr-detail-table 命中处成对)</span></span><br>
+        <code>.hr-full-modal</code> 全屏变体(top 让出顶栏、bottom <code>var(--statusbar-h)</code>)+ 头部/过渡动画样式, 三处成对。</li>
+    </ul>
+    <p><b>验收</b>: 默认折叠、首次展开才发请求(网络面板核对仅一次); 全屏占满除顶栏/状态栏视口、ESC/✕/遮罩三路关闭、关闭后表格原位且状态保留;
+    三套 UI 目检一致; 不轮询; 折叠态不持久化(刷新后回折叠)。</p>
+    <p><b>阶段完成后由该子代理独立提交 (commands run ship.commit)。</b></p>
+
+    <h3>阶段 3 · 前端表格:做种中/老旧过滤 + 三态排序 + 信息重组列<span class="ref">预估模板 + JS + CSS 3 处, ~250-380 行</span></h3>
+    <ul class="file-changes">
+      <li><span class="fc-path">shared/tpl/settings-detail.html<span class="ln">(表① :283-321)</span></span><br>
+        工具条加「显示老旧种子 (N) / 只看做种中」切换钮; 表头 th 接 <code>sortable</code> + 箭头位;
+        三列重组: 档位徽章列 / 核实结论列(徽章 + 来源·时间副行)/ 在列列(徽章 + 最近被见到副行), 数值五列与名称/tid 不动。</li>
+      <li><span class="fc-path">shared/hr_status.js<span class="ln">(hrsDetailRows / 新增 hrsSort* 方法族)</span></span><br>
+        过滤叠加(local_present × lane chips); 三态排序状态与比较器(原始值比较、档位固定秩、空值恒末位、恢复后端默认序);
+        新列渲染辅助(hrsVerdictBadge/hrsPresenceText 等, 人话仍全取后端字段, 前端不重算 HR 语义)。</li>
+      <li><span class="fc-path">atlas/css/dialogs.css · console/css/dialogs.css · prism(同上)<span class="ln">(成对)</span></span><br>
+        排序箭头(激活 accent / hover faint)、核实结论与在列徽章 + 副行小字样式、老旧行弱化沿用 <code>tr.missing</code>。</li>
+    </ul>
+    <p><b>验收</b>: 默认仅显示 local_present 行, 按钮切换即时生效且计数正确; 十列三态排序符合 §3.4(含空值恒末位、第三击恢复默认);
+    新三列结构与 §3.6 一致; 表② 波次表不受影响; 守阵(CSS 三处成对 / 表① 无 title / 锚完好)过。</p>
+    <p><b>阶段完成后由该子代理独立提交 (commands run ship.commit)。</b></p>
+
+    <h3>阶段 4 · 回归 / 守阵 / 收尾<span class="ref">测试与文档为主</span></h3>
+    <ul>
+      <li><b>守阵测试</b>: <code>.hr-full-modal</code> 三处 CSS 成对; 折叠默认态(模板无预展开属性); 「毕业」用户可见文案零残留(否定 grep);
+      排序三态方法存在性; 表① 单元格仍无原生 title(hr-tooltip-overlap 复查)。</li>
+      <li><b>真机走查清单</b>(需真实 qB 与 HR 数据): 多站点折叠/展开; 全屏三路关闭; 老旧/做种切换与档位 chips 叠加; 十列逐一三态排序;
+      B 档三态组合(已核实/未核实/失踪)的新列显示; --hr-status 与表② 对照不受文案替换影响。</li>
+      <li><code>commands run test.full</code> + 新基线切片(testing/baselines/, 体例见 testing/baseline.md)。</li>
+      <li>收尾回写(activeContext / plans 索引 / progress)<b>由主会话在用户拍板后统一安排</b>, 不在本阶段子代理范围。</li>
+    </ul>
+    <p><b>阶段完成后由该子代理独立提交 (commands run ship.commit)。</b></p>
+
+    <h3>兼容与迁移<span class="ref">零迁移</span></h3>
+    <ul>
+      <li><b>config.yml 零改动</b>(红线): 无新配置键, 纯展示层 + 只读字段;</li>
+      <li>「站点状态」现有信息一条不删: 折叠只藏不删, 老旧行默认隐藏但一键可达, 文案替换不改任何判定/token(SOURCE_* 契约值不动, 只动人话映射);</li>
+      <li>无存量数据迁移; local_present 为纯响应侧字段, 不落盘。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 6. 明确不做的事 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§6</span><h2>明确不做的事(范围守卫)</h2></div>
+    <ul>
+      <li><b>不做拖动列 / 隐藏列 / 列宽拖拽 / 列设置持久化</b>(用户明示「暂不做」) —— 种子页 colDrag/双轨机制不引入;</li>
+      <li><b>不做读法 (b) 取数活动表</b>、不动扩展侧(extensions/*);</li>
+      <li><b>不改任何 HR 判定 / 签发 / 取数调度逻辑</b> —— local_present 只是展示层只读标记, 过滤纯前端视图操作;</li>
+      <li><b>不进轮询</b>: 全屏/过滤/排序零新请求, 折叠展开不新增定时器;</li>
+      <li><b>不新增第二套悬浮层</b>: 表① 单元格仍不挂原生 title(hr-tooltip-overlap.md), 新徽章不加悬浮提示;</li>
+      <li><b>不动表② 排障视图</b>的结构(本轮只继承其成对样式纪律);</li>
+      <li><b>不碰红线文件</b>(config.yml / auto-qb-data/); 计划外发现的问题一律入池 <code>memory-bank/issues/</code>, 不顺手修。</li>
+    </ul>
+  </section>
+
+  <!-- ============ 7. 待拍板决策点 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§7</span><h2>待拍板决策点(每条含推荐项)</h2></div>
+
+    <table>
+      <thead><tr><th style="width:4%">#</th><th style="width:17%">决策点</th><th style="width:36%">选项</th><th style="width:9%">推荐</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="t-mono">①</td>
+          <td><b>全屏展开方式</b></td>
+          <td>(a) 覆盖式弹窗: fixed 层让出顶栏与状态栏, 表格节点移入, 关闭移回<br>(b) 内嵌全屏: 站点卡片原地铺满内容区<br>(c) 新浏览器标签/窗口</td>
+          <td><span class="tag accent">a</span></td>
+          <td>(a) 复用 modal 基建思路、上下文不丢、过滤/排序状态随节点保留、三套 UI 只需一份全屏变体样式; (b) 要把 hb-blk 暂时跳出设置分区滚动容器, 三套 UI 布局各异侵入大; (c) 脱离应用上下文且多窗口状态不共享。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">②</td>
+          <td><b>「B毕业」替换口径</b></td>
+          <td>(a) 用户可见 4 处全改(§3.5 A 类)+ 测试同步, 注释 6 处不改<br>(b) 注释一并改(全库「毕业」清零)<br>(c) 仅改表① 徽章一处(status.py:66)</td>
+          <td><span class="tag accent">a</span></td>
+          <td>(a) 用户可见面全清、与 LANE_TEXTS.B「已达标」对齐, 注释保留内部域术语便于 grep 溯源、diff 最小; (c) 会留下 hr-pop/CLI 里另两种「毕业」写法, 口径依旧分裂。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">③</td>
+          <td><b>「做种中/老旧」判定口径与过滤位置</b></td>
+          <td>(a) 后端 join, <code>local_present</code> = 本地库存在(含暂停/异常), 本地不存在 = 老旧<br>(b) 后端 join, 严格 <code>state 分类 == seeding</code> 才算做种中<br>(c) 前端本地 join(零后端改动)</td>
+          <td><span class="tag accent">a</span></td>
+          <td>(a) 暂停/异常的 HR 种子仍是义务对象, 折进「老旧」会造成「已无义务」错觉; 主噪音恰是本地从未有过的清单行。后端 join 让键(v1/v2/大小写)与 state 分类口径收单点(views.py:143-162), 前端零新逻辑; (c) 违反 contract-api「前端消费后端算好字段」纪律。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">④</td>
+          <td><b>信息重组版式</b></td>
+          <td>(a) 三列结构化: 档位徽章 / 核实结论(徽章+来源·时间副行)/ 在列(徽章+最近被见到副行)<br>(b) 档位+核实合并一列双行<br>(c) 维持三列仅微调措辞不改结构</td>
+          <td><span class="tag accent">a</span></td>
+          <td>(a) 三段信息视觉结构各异(色徽章/圆角徽章+副行/描边徽章+副行), 不再靠逐字分辨; 列名「核实结论」「在列」直接承载口径; (b) 合并后 B 档+已核实重复出现「已达标」两词; (c) 不解决「三段文本堆叠难分辨」的主诉。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">⑤</td>
+          <td><b>折叠后取数时机</b></td>
+          <td>(a) 首次展开才拉(运行日志 hubLogsToggle 同款)<br>(b) 打开 HR 分区仍立即后台预拉(折叠只藏 UI)</td>
+          <td><span class="tag accent">a</span></td>
+          <td>(a) 默认折叠的本意就是「不常看的东西不为它常备请求」—— 打开分区不再背一次全量状态 + 每站点明细; 折叠态点拉取/刷新 = 顺手展开再拉, 已有先例无新交互。</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="small">除上表五点外, 本计划还有两处<b>默认值</b>(非阻塞, 可随拍板一并调整):
+    ① 展开态不持久化(与运行日志一致, 每次进分区默认折叠); ② 表② 波次表不接排序(行数 ≤4 无意义)。</p>
+  </section>
+
+  <!-- ============ 8. 测试计划 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§8</span><h2>测试计划</h2></div>
+    <table>
+      <thead><tr><th style="width:26%">落点</th><th>用例</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="t-mono">tests/test_hr_status.py<br>(阶段 1)</td>
+          <td>SOURCE_TEXTS 新文案全等断言(替换 :137/:142); local_present: 本地存在(v1 命中)/ 不存在 / 仅 v2 命中 / 大小写差异命中。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/test_web.py<br>(阶段 1 + 守阵)</td>
+          <td>明细端点行含 local_present; hr_safety_text 无事实分支输出「在线·已达标」(精确); 用户可见文案来源(SOURCE_TEXTS / resolve 文案表 / events 告警行)grep「毕业」零残留(否定守阵); /api/state 载荷不含 local_present(体积守卫)。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">tests/test_web.py<br>(前端静态守阵, 阶段 2-3)</td>
+          <td><code>.hr-full-modal</code> 样式三处 CSS 各出现 ≥1; 站点状态块默认无展开属性(折叠默认态); 排序方法/箭头标记存在; 表① 单元格无原生 title; 表格移动式全屏的前后容器锚存在。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">手动走查<br>(阶段 4, 需真实数据)</td>
+          <td>三套 UI: 折叠/展开/首次拉数一次; 全屏三路关闭与状态保留; 老旧/做种切换 × 档位 chips 叠加; 十列三态排序(含空值列); B 档三种组合(已核实/未核实/失踪)新列显示; --hr-status 同站点对照。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">收尾</td>
+          <td><code>commands run test.full</code> + 新基线切片; 新增测试同步各文件头部 docstring「## 测试计划」清单。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 9. 变更记录 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§9</span><h2>变更记录</h2></div>
+    <table>
+      <thead><tr><th style="width:20%">版本 / 日期</th><th>变更</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="t-mono">v1 · 26-10-02-1936</td>
+          <td>初稿: 用户 2026-10-02 提出 6 条展示层问题, 逐条现状 → 目标(§1); 现状取证(§2)含折叠先例(运行日志块)、排序范式(shared/sort.js)、本地 join 原料(store.by_hash + views 状态分类单点)、「毕业」文案全量清单(§3.5); 可交互设计模板(§4)覆盖折叠/全屏/老旧切换/排序/信息重组五项; 四阶段拆分(§5)与五项待拍板决策点(§7)。拍板前不动工。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    <span>auto-qb · memory-bank/plans · 26-10-02-1936 · doc-topic: webui-hr-status-display</span>
+    <span>现状代码事实取证 2026-10-02(只读调研, 未改任何生产文件)</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- 演示 ① 站点状态区折叠(默认折叠 + 首次展开才"拉数") ---------- */
+  var hrsOpen = false, hrsLoaded = false;
+  var hrsBody = $("simHrsBody"), hrsToggle = $("simHrsToggle"), hrsSummary = $("simHrsSummary");
+  function fakeLoad() {
+    hrsLoaded = true;
+    hrsSummary.textContent = "正在读取站点状态…";
+    setTimeout(function () {
+      hrsSummary.textContent = "1 站点 · 数据截至 10-02 19:00(示例)";
+    }, 500);
+  }
+  hrsToggle.addEventListener("click", function () {
+    hrsOpen = !hrsOpen;
+    hrsToggle.textContent = hrsOpen ? "收起" : "展开";
+    hrsBody.classList.toggle("open", hrsOpen);
+    if (hrsOpen && !hrsLoaded) fakeLoad();
+  });
+  $("simHrsRefresh").addEventListener("click", function () {
+    if (!hrsOpen) { hrsOpen = true; hrsToggle.textContent = "收起"; hrsBody.classList.add("open"); }
+    fakeLoad();
+  });
+  $("simHrsPull").addEventListener("click", function () {
+    if (!hrsOpen) { hrsOpen = true; hrsToggle.textContent = "收起"; hrsBody.classList.add("open"); }
+    fakeLoad();
+  });
+
+  /* ---------- 表格: 过滤(档位 chips × 做种中/老旧) + 三态排序 ---------- */
+  var wrap = $("simTableWrap");
+  var slot = wrap.parentNode;
+  var tbl = $("simTable");
+  var tbody = tbl.querySelector("tbody");
+  var ths = [].slice.call(tbl.querySelectorAll("th.sortable"));
+  var chips = [].slice.call(document.querySelectorAll(".hrs-chip[data-lane]"));
+  var oldBtn = $("simOldToggle");
+  var lane = "", localOnly = true;
+  var origOrder = [].slice.call(tbody.querySelectorAll("tr"));
+
+  function applyFilter() {
+    var rows = [].slice.call(tbody.querySelectorAll("tr"));
+    rows.forEach(function (r) {
+      var okLane = !lane || r.getAttribute("data-lane") === lane;
+      var okLocal = !localOnly || r.getAttribute("data-local") === "1";
+      r.style.display = okLane && okLocal ? "" : "none";
+    });
+    var localN = origOrder.filter(function (r) { return r.getAttribute("data-local") === "1"; }).length;
+    var oldN = origOrder.length - localN;
+    oldBtn.textContent = localOnly ? "显示老旧种子 (" + oldN + ")" : "只看做种中 (" + localN + ")";
+  }
+  chips.forEach(function (c) {
+    c.addEventListener("click", function () {
+      chips.forEach(function (x) { x.classList.remove("on"); });
+      c.classList.add("on");
+      lane = c.getAttribute("data-lane");
+      applyFilter();
+    });
+  });
+  oldBtn.addEventListener("click", function () {
+    localOnly = !localOnly;
+    applyFilter();
+  });
+
+  var sortKey = null, sortDir = -1;
+  function clearArrows() {
+    ths.forEach(function (t) { t.classList.remove("sort-asc", "sort-desc"); });
+  }
+  function sortRows(k, dir) {
+    var th = ths.filter(function (t) { return t.getAttribute("data-k") === String(k); })[0];
+    if (!th) return;
+    var isNum = th.hasAttribute("data-num");
+    var rows = [].slice.call(tbody.querySelectorAll("tr"));
+    var val = function (r) {
+      var td = r.cells[Number(k)];
+      return td ? td.getAttribute("data-v") : "";
+    };
+    var nonEmpty = rows.filter(function (r) { return val(r) !== ""; });
+    var empties = rows.filter(function (r) { return val(r) === ""; });
+    nonEmpty.sort(function (a, b) {
+      var va = val(a), vb = val(b), r;
+      if (isNum) r = parseFloat(va) - parseFloat(vb);
+      else r = va.localeCompare(vb, "zh");
+      return r * dir;
+    });
+    nonEmpty.concat(empties).forEach(function (r) { tbody.appendChild(r); });
+  }
+  ths.forEach(function (th) {
+    th.addEventListener("click", function () {
+      var k = th.getAttribute("data-k");
+      if (sortKey !== k) {            /* 首点: 降序 */
+        sortKey = k; sortDir = -1;
+        clearArrows(); th.classList.add("sort-desc");
+      } else if (sortDir === -1) {    /* 再点: 升序 */
+        sortDir = 1;
+        clearArrows(); th.classList.remove("sort-desc"); th.classList.add("sort-asc");
+      } else {                        /* 第三次: 恢复默认序 */
+        sortKey = null;
+        clearArrows();
+        origOrder.forEach(function (r) { tbody.appendChild(r); });
+        applyFilter();
+        return;
+      }
+      sortRows(k, sortDir);
+    });
+  });
+
+  /* ---------- 演示 ② 覆盖式全屏弹窗(同一表格节点换容器) ---------- */
+  var overlay = $("simOverlay"), overlayBody = $("simOverlayBody");
+  $("simFull").addEventListener("click", function () {
+    overlay.classList.add("open");
+    overlayBody.appendChild(wrap);
+  });
+  function closeFull() {
+    overlay.classList.remove("open");
+    slot.appendChild(wrap);
+  }
+  $("simClose").addEventListener("click", closeFull);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && overlay.classList.contains("open")) closeFull();
+  });
+
+  applyFilter();
+})();
+</script>
+</body>
+</html>
