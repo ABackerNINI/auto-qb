@@ -1,7 +1,7 @@
 # 桩与仿真保真度
 
 > 摘要: 测试替身"长得像"不等于"够用"; 仿真端最容易变成"自以为在测"的测假陷阱。
-> 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, 回执判定, FakeConfig, 假配置, 新配置键
+> 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, 回执判定, FakeConfig, 假配置, 新配置键, 替身漂移, 枚举成员, dev 脚本, ui_harness
 
 ### `helpers.FakeConfig` 是**手写**桩: 真实 `Config` 新增字段时要同步补, 否则一批用例集体炸
 
@@ -127,6 +127,19 @@
 - **判别**: 规则块必须落在 `config:` **之内**且键名**以 `_rules` 结尾**
   (顶层 `xxx_rules:` 是旧格式, 照抄会报"根节点: 未知键"); 规则内**没有** `log_level` 键。
 - **处置**: 配置校验是 **fail-fast 且聚合报错**的, 一次列全。
+
+### 替身引用生产 API 符号(枚举成员 / 构造 kwarg): 生产演进即漂移, dev 脚本只有运行时才炸
+
+- **触发**: 生产 API 重构(枚举成员删改 / dataclass 字段转 property)之后; 或给带替身注入开关的
+  dev 脚本排障。
+- **判别**: `scripts/ui_harness.py --hr-site` 的替身按旧版 `HrIdentity` API 写(单态
+  `VERIFIED_NON_HR` + `EXEMPT`/`UNKNOWN`, `HrJudgement(is_hr=...)` 构造 kwarg),
+  `hr/resolve.py` 演进到 v3 三态后成员被删 ⇒ 桩起盘 AttributeError(2026-10-02 实测, issue
+  26-10-02-1900)。`scripts/` 下 dev 脚本不在 pytest 面, 编译期也不查属性存在性 ⇒ 漂移静默
+  潜伏到下一次真跑。第二断点藏得更深: `is_hr` 从字段变 property, 只改枚举成员仍 TypeError。
+- **处置**: 生产枚举 / 字段删改时全局 grep 替身脚本里的符号引用(范围含 `src/` 之外的
+  `scripts/`); 替身构造生产 dataclass 只传真实字段(对照 dataclass 定义, 不凭记忆);
+  dev 脚本的桩开关改动后必须**真跑一次**(起盘 + 抽一个端点), 光编译通过不算验证。
 
 ### 顺带实测到的真实开销
 

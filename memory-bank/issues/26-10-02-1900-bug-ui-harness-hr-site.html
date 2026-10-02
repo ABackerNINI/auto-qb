@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="ui-harness">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="ui_harness --hr-site 启动即崩: HrIdentity 枚举 v3 漂移">
 <meta name="issue-summary" content="scripts/ui_harness.py --hr-site 启动 AttributeError: 引用已不存在的 HrIdentity.VERIFIED_NON_HR(现行 v3 三态 HR/RELEASED/NO_EVIDENCE), 桩工具与 hr/resolve.py 漂移">
 <title>ui_harness --hr-site 启动即崩: HrIdentity 枚举 v3 漂移 · bug · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修复）· bug</div>
     <h1>ui_harness --hr-site 启动即崩: HrIdentity 枚举 v3 漂移</h1>
     <p class="lede">scripts/ui_harness.py --hr-site 启动 AttributeError: 引用已不存在的 HrIdentity.VERIFIED_NON_HR(现行 v3 三态 HR/RELEASED/NO_EVIDENCE), 桩工具与 hr/resolve.py 漂移</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-1900-bug-ui-harness-hr-site</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 19:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">scripts</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -182,11 +182,15 @@ AttributeError: type object 'HrIdentity' has no attribute 'VERIFIED_NON_HR'</cod
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 19:00 — 入池, 状态 <strong>Open</strong>(计划外, 未修)。来源: 计划 26-10-02-1632 实施轮阶段 2 桩走查的计划外发现(阶段 2 按范围守恒未修), 用户拍板入池; 入池时已复现(traceback 见 §02)。</li>
+      <li>2026-10-02 — 用户指派认领, 状态 <strong>In Progress</strong>。复验: 2026-10-02 仍复现(重跑 §02 复现命令, traceback 一致); 另发现除 <code>VERIFIED_NON_HR</code> 外 <code>EXEMPT</code>/<code>UNKNOWN</code> 两成员同样已删除, 且 v3 <code>HrJudgement</code> 的 <code>is_hr</code> 已改为 property(旧桩以构造 kwarg 传入, 改枚举后仍会 TypeError) —— 修法需一并处理。漂移面全局 grep 确认仅 <code>scripts/ui_harness.py</code> 一处。§06 留的定夺点结论: v3 下「考核未通过」档 = <code>RELEASED</code> + <code>facts.lane=C</code>, 替身可构造, 不再标注不可构造。</li>
+      <li>2026-10-02 — 修复完成, 状态 <strong>Done</strong>。实际修法 / 与建议修法的差异 / 验证数字见 §07「修复后补充」; 根因段(§05)维持入池结论不变。新坑已记 <code>pitfalls/testing/stubs-sim.md</code>「替身引用生产 API 符号」条目。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-10-02 仍复现(认领轮重跑 §02 复现命令, traceback 与入池取证一致)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>(2026-10-02, 认领轮): 重写 <code>_inject_hr_site</code> 的 <code>_mk</code> 为 v3 四行判定表逐行落身的 <strong>7 场景轮转</strong> —— 行1 考察中(HR+lane=A) / 行2 终态三档(RELEASED+lane=B·C·D) / 行3 放行记录(RELEASED, 无 facts, released_src=SOURCE_NOT_LISTED) / 行4 本地兜底(NO_EVIDENCE) / judged=None 未接入回落; reason 文案从 <code>resolve_identity</code> 各行原文直抄, 站点侧达标结论按 <code>HrEntry.satisfied_verdict</code> 档位即结论口径给(A/C=False, B=True, D=None)。import 改从 <code>auto_qb.hr.model</code> 取 LANE_*/SOURCE_* 常量。</p>
+    <p><strong>与建议修法的差异</strong>: 方向一致(v3 三态改写轮转), 但实际改动更大, 三点 —— ①建议没预见的第二个断点: v3 <code>HrJudgement</code> 的 <code>is_hr</code> 已从构造 kwarg 变成 property, 只改枚举成员仍会 TypeError; ②轮转结构从「lane 独立 × 身份独立」(i%3 × i%5)改为 7 场景耦合轮转 —— 旧结构在 v3 语义下会产出真判定里不存在的组合(如 HR+lane=B), <code>hr_site_lane</code> 展示列会撒谎; ③§06 留的定夺点: v3 下「考核未通过」档 = RELEASED+facts.lane=C, 替身<strong>可构造</strong>(原影响面里"该档只能来自站点在线判定"的盲区结论已过时), 本修复把它变成必渲染桶。</p>
+    <p><strong>验证方式与数字</strong>(2026-10-02 认领轮实测): 重跑复现命令 <code>--hr-site --torrents 20 --port 8098</code> 起盘成功(崩溃点 <code>rebuild_views()</code> 通过, uvicorn 正常监听); <code>/atlas/</code>、<code>/api/groups</code>、<code>/api/state</code> 全 200。20 行种子的桶分布: <code>hr_state</code> = hr×3 / released_non_hr×12 / no_evidence×3 / 空(未接入)×2, 七场景全覆盖; <code>hr_safety_src</code> = site_scope×3 / site_satisfied×3 / site_unsatisfied×3 / site_exempt×3 / site_released×3 / local×5, 六桶齐; <code>hr_safety</code> 出现 failed×3(考核未通过红档, 原盲区首次在桩里渲染)与 warning×2(本地未达标疑似辅种)。生产代码零改动(根因在替身), pytest 面不受影响。</p>
   </section>
 
   <footer>

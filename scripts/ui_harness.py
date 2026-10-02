@@ -109,48 +109,53 @@ def _inject_hr_site(torrents):
     """--hr-site: 按种子轮转注入**真实 HrJudgement**(站点接入形态) —— 冒烟的既知盲区:
 
     FakeTorrent.hr_judgement 恒 None(替身没接判定桥), 故桩冒烟从头到尾只渲染过
-    safety_display 的 judged=None 分支(本地兜底/不适用); 站点命中(在线/策略/未核实)
-    的 hr_safety_src token 与详情抽屉 hrStateLine 新短语在前端从未被真渲染过。
-    这里 monkeypatch 每个种子的 hr_judgement, 轮转覆盖全部分支(含 judged=None 回落):
+    safety_display 的 judged=None 分支(本地兜底/不适用); 站点在线判定的 hr_safety_src
+    token 与详情抽屉 hrStateLine 短语在前端从未被真渲染过。
+    这里 monkeypatch 每个种子的 hr_judgement, 按 v3 四行判定表逐行轮转 7 场景:
+    行1 考察中 / 行2 终态 B·C·D / 行3 放行记录 / 行4 本地兜底 / judged=None 未接入回落。
+    身份与 facts.lane 强耦合(真判定里档位决定身份, resolve_identity 各行的 reason 原文直抄),
+    站点侧达标结论按 HrEntry.satisfied_verdict 的档位即结论口径给(A/C=False, B=True, D=None)。
     只构造真 dataclass, 不接取数链 —— _hr_view_fields 消费的就是这些对象, 与真机同构。
     """
-    from auto_qb.hr.resolve import (
-        HrIdentity,
-        HrJudgement,
-        HrSiteFacts,
+    from auto_qb.hr.model import (
+        LANE_EXEMPT,
         LANE_SATISFIED,
         LANE_SCOPE,
         LANE_UNSATISFIED,
+        SOURCE_EXEMPT,
+        SOURCE_NOT_LISTED,
+        SOURCE_SATISFIED,
     )
+    from auto_qb.hr.resolve import HrIdentity, HrJudgement, HrSiteFacts
+
+    # (identity, lane, reason, released_src, site_satisfied); lane="" ⇒ 命中行缺席, facts=None
+    _SCENES = [
+        (HrIdentity.HR, LANE_SCOPE, "清单命中·考察中(档位 A)", "", False),
+        (HrIdentity.RELEASED, LANE_SATISFIED, "清单命中·已达标(B, 终态放行)", SOURCE_SATISFIED, True),
+        (HrIdentity.RELEASED, LANE_UNSATISFIED, "清单命中·未达标(C, 考核结论已定, 终态放行)", "", False),
+        (HrIdentity.RELEASED, LANE_EXEMPT, "清单命中·已免罪(D, 终态放行)", SOURCE_EXEMPT, None),
+        (HrIdentity.RELEASED, "", "放行记录(覆盖范围内未列出)", SOURCE_NOT_LISTED, None),
+        (HrIdentity.NO_EVIDENCE, "", "无有效站点证据(本地判据兜底)", "", None),
+    ]
 
     def _mk(i):
-        lane = [LANE_SCOPE, LANE_SATISFIED, LANE_UNSATISFIED][i % 3]
-        identity = [
-            HrIdentity.HR,
-            HrIdentity.VERIFIED_NON_HR,
-            HrIdentity.EXEMPT,
-            HrIdentity.UNKNOWN,
-            None,  # 未接入: 回落 judged=None(本地兜底口径)
-        ][i % 5]
-        if identity is None:
-            return None
+        if i % 7 == 6:
+            return None  # 站点未接入: 回落 judged=None(本地兜底口径)
+        identity, lane, reason, released_src, site_satisfied = _SCENES[i % 7]
         facts = HrSiteFacts(
-            lane=lane if identity is HrIdentity.HR else "",
+            lane=lane,
             need_seed_seconds=3600 * (i % 48),
             remain_seconds=3600 * (i % 12),
             ratio=(i % 30) / 10,
             downloaded_bytes=None,
-        )
+        ) if lane else None
         return HrJudgement(
             identity=identity,
-            is_hr=identity is HrIdentity.HR,
-            reason="站点清单命中" if identity is HrIdentity.HR else (
-                "在线核实: 未命中清单，按身份处理" if identity is HrIdentity.VERIFIED_NON_HR else
-                "完成时间超龄，本地豁免" if identity is HrIdentity.EXEMPT else "站点清单暂无此种子"
-            ),
-            site_satisfied=(lane == LANE_SATISFIED) if identity is HrIdentity.HR else None,
+            reason=reason,
+            site_satisfied=site_satisfied,
             site="BTSchool",
             facts=facts,
+            released_src=released_src,
         )
 
     for i, tor in enumerate(torrents):
