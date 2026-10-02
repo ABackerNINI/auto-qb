@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="test-claim-chain-gate-coverage">
+<meta name="issue-stamp" content="26-10-03-0521">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="hr-hotreload-stale-display">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest">
+<meta name="issue-summary" content="test.quick 闸门 match 只盯 src/tests, 纯文档轮不触发 pytest; 双向认领链唯一机检 test_claim_chain_is_bidirectional 只活在 pytest, gen_doc_map --check 只查 doc-topic 主键 —— 657366c3 由此带单向链入库卡死主线">
+<title>ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest · test · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· test</div>
+    <h1>ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest</h1>
+    <p class="lede">test.quick 闸门 match 只盯 src/tests, 纯文档轮不触发 pytest; 双向认领链唯一机检 test_claim_chain_is_bidirectional 只活在 pytest, gen_doc_map --check 只查 doc-topic 主键 —— 657366c3 由此带单向链入库卡死主线</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-03-0521-test-test-claim-chain-gate-coverage</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-03 05:21</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>双向认领链协议(声明 <code>doc-refs</code> / <code>**Refs:**</code> 就必须双向可查)的唯一机检是 pytest 的
+      <code>test_claim_chain_is_bidirectional</code>, 但 ship.commit 的 <code>test.quick</code> 闸门 <code>match = ["src/", "tests/"]</code> ——
+      改动全在 memory-bank/ 的纯文档轮不触发任何 pytest; 提交时机检 <code>gen_doc_map.py --check</code> 只查 doc-topic
+      <strong>主键存在</strong>, 不校验双向链, <code>check_doc_links</code> 只查相对链接存在性。结果: 657366c3(HR 热重载计划,
+      纯文档轮)带着单向 <code>doc-refs</code>(计划 → activeContext 切片, 切片无反向声明)绿灯入库; 拉到它的 clone 在任何命中
+      src/tests 的提交上 <code>test.quick</code> 必红, 主线全部 clone 提交被卡。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <ul>
+      <li><code>.commands/my-commit-flow/.my-commit-flow.toml</code> — test.quick 闸门 <code>match = ["src/", "tests/"]</code>(grep <code>test.quick</code>; 取证 2026-10-03 05:21 时在 40-46 行段)</li>
+      <li><code>.agents/skills/memory-bank/scripts/gen_doc_map.py</code> — <code>check_topics()</code> 只查主键缺 doc-topic 即红(grep <code>check_topics</code>, 取证时 221 行)</li>
+      <li><code>tests/test_docs_forms.py</code> — <code>test_claim_chain_is_bidirectional</code> 双向断言单点(grep <code>claim_chain_is_bidirectional</code>, 取证时 172 行)</li>
+      <li>实证件: <code>memory-bank/plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html</code> 的 doc-refs(指向 activeContext 切片)</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>把双向链检查下沉进 <code>gen_doc_map.py --check</code>(它已全文读所有制品 meta, 提交时机检天然覆盖所有 clone, 0.2s);
+      或给 ship.commit 加一条轻量闸门单跑 test_docs_forms。顺带把「<code>doc-refs</code> 允许指向哪类目标」写进协议单点
+      (activeContext 切片是否合法目标 —— 切片体例无 <code>**Refs:**</code> 约定位, 若合法需补体例约定)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-03 05:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-03 05:21 — 备注解卡事实: 单向链本体已由并行会话修复(切片补 <code>**Refs:**</code> 随 4c0c6f66 前后入库), <code>test_docs_forms.py</code> 复验 10 passed 全绿; 本条只记<strong>闸门覆盖缺口</strong>本身, 修复认领后可独立于事故收尾。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-03-0521-test-test-claim-chain-gate-coverage.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
