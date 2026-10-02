@@ -1,7 +1,7 @@
 # 浏览器冒烟 (Windows 上可做, 长期能力)
 
 > 摘要: `ui_harness.py` + `ui_smoke.cjs` 是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法。
-> 触发: 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, NODE_PATH, npx 缓存, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点
+> 触发: 浏览器冒烟, ui_smoke, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, NODE_PATH, npx 缓存, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, elementHandle.click 超时, 冒烟整体执行, stash 对照, 归因
 
 ### 能力与定位
 
@@ -37,7 +37,21 @@
   别指望 `dev.harness` 会返回; 不要 `(cmd &)`;
   ②起完**立刻看 harness 日志首行**(打印监听地址与种子/组数), 端口被占就换端口;
   ③怀疑服务不对先 `curl <base>/prism/` 必须 200(只 `curl /api/...` 会被旧进程蒙过去)。
-  复发: 1 —— 2026-09-28 多 clone 下 8099 被别会话残留 harness 占用, 换 `--port` 即过(路由没到本文件); 勿杀占用进程。
+  复发: 2 —— 2026-09-28 多 clone 下 8099 被别会话残留 harness 占用, 换 `--port` 即过(路由没到本文件); 勿杀占用进程。
+  2026-10-03 本会话开工 8099 再次被残留 harness 占用 —— netstat 现查 + 换端口零损耗, 判据(查监听 + curl 页面而非 /api)直接命中。
+
+### 「冒烟整体执行 — elementHandle.click: Timeout」≠ 桩没起来 —— 归因先做 HEAD stash 对照
+
+- **触发**: 双皮肤冒烟在同一用例位置报 `冒烟整体执行 — elementHandle.click: Timeout 30000ms exceeded`
+  (2026-10-03 实测: 追剧集行 Ctrl+click 块, position {8,8} 落点被 `sticky-head`/`header.topbar`/`html`
+  交替拦截, Playwright 重试 30s 耗尽; 3 轮双皮肤 + HEAD 对照 4/4 复现)。
+- **判别**: 与上一条「桩没起来」**同名词不同因** —— 上一条卡在首条 waitForFunction(页面根本没渲染,
+  症状像白屏); 本条页面全程活着、断言一路 PASS 到超时点(看最后一条 PASS 在哪即知中断位置)。
+  是否存量: 把自己的脚本改动 `git stash push -- <脚本>` → 跑一轮 → `git stash pop`,
+  HEAD 同位置同报错即与本轮改动无关(实测 stash 前后失败点逐字一致)。
+- **处置**: ①先跑对照再动代码 —— 命中存量 flaky 不顺手修, 记录位置与签名即可;
+  ②超时中断该皮肤后续断言(含末尾 console.error 总检), 汇报写"中断点之前全部通过"而不是"冒烟全绿"。
+  本条暂无守阵(点击拦截面随布局漂移, 静态判不出)。
 
 ### 页面 hidden 态(VS Code 内置页 / 未 bringToFront)
 

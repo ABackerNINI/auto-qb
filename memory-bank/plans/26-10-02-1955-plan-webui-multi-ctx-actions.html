@@ -6,11 +6,11 @@
 <title>计划 · WEBUI 多选右键菜单: 限速 / 移动 / 跳检 / 导出 + 跳检菜单配置开关</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-date" content="2026-10-02">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-topic" content="webui-multi-ctx-actions">
 <meta name="doc-added" content="26-10-02-1955">
-<meta name="doc-updated" content="26-10-02-1955">
-<meta name="doc-refs" content="memory-bank/pitfalls/backend/high-risk-ops.md, memory-bank/pitfalls/web-ui/overlays.md, memory-bank/plans/26-09-30-0109-plan-dangerous-op-consolidation.html">
+<meta name="doc-updated" content="26-10-03-0545">
+<meta name="doc-refs" content="memory-bank/pitfalls/backend/high-risk-ops.md, memory-bank/pitfalls/web-ui/overlays.md, memory-bank/plans/26-09-30-0109-plan-dangerous-op-consolidation.html, memory-bank/tasks/26-10-02-webui-multi-ctx-actions.md">
 <style>
   :root {
     color-scheme: dark;
@@ -180,6 +180,7 @@
     <div class="dhead"><span class="did">D1</span><span class="dtitle">多选导出的形态</span><span class="tag acc">推荐 B</span></div>
     <p><strong>B · 后端 zip 归档</strong>(推荐): 一次下载得单个 zip; 任意选中规模可控; 文件名清洗与防撞在服务端单点; 无浏览器"多文件下载"授权摩擦。<br>
     <strong>A · 前端循环逐个触发下载</strong>: 零后端改动(复用 <code>GET /api/torrents/{hash}/export</code>), 但浏览器首次会弹"允许下载多个文件"、大选中(数百+)不可控、中途失败无汇总。</p>
+    <p class="small">拍板(2026-10-03): <strong>A</strong> —— 实际走前端循环逐个下载(<code>exportMulti</code>, selHashSet 全量展开含组选中), 归档端点未建, 见提交 <code>4c0c6f66</code>。</p>
   </div>
 
   <div class="dcard">
@@ -281,6 +282,7 @@
 
   <div class="wave">
     <div class="whead"><span class="wid">W4</span><span class="wtitle">批量导出 (R1 第四项, 形态随 D1)</span></div>
+    <p class="small">拍板备注(2026-10-03): D1 实际走 <strong>A 前端循环</strong>(<code>exportMulti</code> 复用单 hash 导出端点逐个下载, selHashSet 全量展开), 本波后端归档端点未建, 上表后端行未实施 —— 见提交 <code>4c0c6f66</code>。</p>
     <div class="wbody">
       <h4>改动</h4>
       <table>

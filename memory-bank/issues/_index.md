@@ -21,7 +21,7 @@
 | refactor | 4 |
 | feat | 20 |
 | chore | 3 |
-| question | 5 |
+| question | 4 |
 
 ## Open
 
@@ -45,7 +45,6 @@
 - [feat] [整组迁移防进度丢失(qB 逐个移动同组种子的问题)](26-10-01-2147-feat-group-move-atomicity.html) — qB 一次设定多个种子位置会依次移动, 同组多个种子随机丢进度, 需要整组迁移方案
 - [feat] [HR 在线核实同步修改 HR 标签/分类](26-10-01-2147-feat-hr-verify-sync-hr-tags.html) — 在线核实结论变化时同步增删 HR 相关标签/分类(考核中/未达标等), 当前无此联动(grep hr/ 无标签同步逻辑)
 - [feat] [命中的限速曲线强调显示 + 限速时可配置弹窗提醒](26-10-01-2147-feat-speedlimit-curve-emphasis.html) — 当前生效的限速档位在曲线上强调显示; 被限速时可选配置弹窗提醒
-- [question] [「在线核实」与「全站HR」两个选项的区别说明/取舍](26-10-01-2147-question-hr-online-vs-sitewide-option.html) — 设置中两个 HR 选项语义不清: 补文档说明或合并冗余选项, 待定
 - [question] [HR 在线核实同组间优先核实下载量高的种子(前提待商榷)](26-10-01-2147-question-hr-same-group-download-priority.html) — [?]想法: 同组优先确认下载量高者; 前提「种子在 A 站考核中就不会在 B 站考核」待商榷
 - [question] [同组中无已完成种子时拒绝跳检](26-10-01-2147-question-skipcheck-no-completed-in-group.html) — [?]规则想法: 组内没有任何已完成成员时拒绝跳检(防误跳), 待拍板
 - [feat] [追剧视图完善: 同剧判定调研与分组排序打磨](26-10-01-2138-feat-webui-shows-grouping-research.html) — 追剧视图已加但不完善: 同剧判定需调研头脑风暴, 组内按季/集排序, 多站点辅种不分开显示
@@ -153,5 +152,6 @@
 
 ## Superseded
 
+- [question] [「在线核实」与「全站HR」两个选项的区别说明/取舍](26-10-01-2147-question-hr-online-vs-sitewide-option.html) — 设置中两个 HR 选项语义不清: 补文档说明或合并冗余选项, 待定
 - [bug] [配置热重载后辅种消失; 「变更 N 项」计数与实际不符](26-10-01-2129-bug-webui-hotreload-ext-vanish.html) — 热重载回执报「变更 9 项」实际只加了 1 个 exclude_categories, 且辅种列表疑似因此消失 —— 内核化重构后先复验是否仍复现
 - [question] [doc-map 容量无余量: 任何新「计划+档案」对必破 12200 cap](26-09-28-0219-question-kb-doc-map-cap.html) — HEAD 源重生成 12153/12200 (余 47 字符), 一笔合规计划+档案对固定占 ~106 字符; topic 收口反而增大文件 —— 需要定调: 提 cap / 砍单件登记段 / 精简多件条目

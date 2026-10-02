@@ -22,10 +22,14 @@
 ## 怎么跑
 
 - `scripts/ui_harness.py` —— 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
-  (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N`)。
+  (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N --skip-check-menu on|off`)。
 - `scripts/ui_smoke.cjs` —— Playwright 跑 **prism / atlas 双 UI** 断言。当前规模:
-  **92 项 0 失败**(ok 模式; 单 UI 各 46)/ **84 项 0 失败**(`--expect-cmd error`, 回滚路径 —— error 轮未重跑,
-  数字仍是加 CTX-04~06 之前的)/ **8 项 0 失败**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4)。
+  **10 项**(`--skip-check off` 精简轮, 验跳检菜单 fail-closed 门控; 单 UI 各 5, 0 失败)/
+  **8 项**(`--expect-cmd hang`, 3s 兜底路径; 单 UI 各 4)。on 模式(ok/error)断言已随 W2-W4/W5
+  扩到单 UI 中断前 55 项(上一口径 46 + 多选菜单与 W5 汇总断言), ⚠ 存量 flaky「冒烟整体执行 —
+  elementHandle.click 超时」(追剧集行 Ctrl+click 块, HEAD stash 对照可复现)拦在完整计数之前 ——
+  中断点之前全部 PASS 即与本轮改动无关, 判别法见
+  [pitfalls/testing/smoke.md](../pitfalls/testing/smoke.md)。
 - 典型用法: 起桩服务 → 跑 `ui_smoke.cjs` → 关服务(**完整命令与 `NODE_PATH` 见 [browser-env.md](browser-env.md)**)。
 - 它验的是单测永远够不着的东西: 乐观 UI 的 pending→回滚、视图切换后的 payload 收敛、滚动总高与末行可达、
   主线程长任务、**批量动作是否真的合成一条请求**(靠 `page.on("request")` 数 `/api/torrents/bulk` 与逐目标端点的次数 ——

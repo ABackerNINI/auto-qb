@@ -27,7 +27,6 @@
 ## Open
 
 - [26-10-03-0436] [修复计划 · HR 在线核实热重载后 WebUI 停留「本地·达标」](26-10-03-0436-plan-hr-hotreload-webui-stale-display.html) — `hr-hotreload-stale-display`
-- [26-10-02-1955] [计划 · WEBUI 多选右键菜单: 限速 / 移动 / 跳检 / 导出 + 跳检菜单配置开关](26-10-02-1955-plan-webui-multi-ctx-actions.html) — `webui-multi-ctx-actions`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`
@@ -36,6 +35,7 @@
 
 ## Done
 
+- [26-10-02-1955] [计划 · WEBUI 多选右键菜单: 限速 / 移动 / 跳检 / 导出 + 跳检菜单配置开关](26-10-02-1955-plan-webui-multi-ctx-actions.html) — `webui-multi-ctx-actions`
 - [26-10-02-1936] [修改计划 · WEBUI HR 站点状态区展示层二轮改造 — 折叠 · 全屏 · 筛选排序 · 信息重组](26-10-02-1936-plan-webui-hr-status-display-rework.html) — `webui-hr-status-display`
 - [26-10-02-1632] [计划 · WEBUI 把 ESC 定为「清除全部筛选」兜底键 — 混乱性分析与修改计划](26-10-02-1632-plan-webui-esc-clear-filters.html) — `webui-keyboard-shortcuts`
 - [26-10-02-1621] [修改计划 · 站点引用规则拒绝重复 — auto-qb](26-10-02-1621-plan-rules-ref-duplicate-reject.html) — `rules-ref-duplicate-reject`

@@ -8,7 +8,7 @@
 <meta name="issue-type" content="question">
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Superseded">
 <meta name="issue-title" content="「在线核实」与「全站HR」两个选项的区别说明/取舍">
 <meta name="issue-summary" content="设置中两个 HR 选项语义不清: 补文档说明或合并冗余选项, 待定">
 <title>「在线核实」与「全站HR」两个选项的区别说明/取舍 · question · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2147-question-hr-online-vs-sitewide-option</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:47</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Superseded</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -76,6 +76,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
     <p>TODO.md L90 原文（取证 2026-10-01）：<code>[] "在线核实"与"全站HR"选项有什么区别?</code>。设置中「在线核实」与「全站HR」两个 HR 相关选项语义不清，用户分不清区别；可能补文档说明，也可能两者本就冗余应合并，待定。</p>
+    <p><strong>复验（2026-10-03，基线 c91be940）：已过时</strong> —— 「全站 HR」不再是用户可配选项（清单型/全站型由内置站点档案决定），两个选项不再并存，本条待拍板前提消失；实证见 §04 末条。</p>
   </section>
 
   <section id="s2">
@@ -83,7 +84,7 @@
     <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
     <ul>
       <li><code>全站</code> 字样出现点：<code>hr/model.py</code>、<code>hr/resolve.py</code>、<code>src/auto_qb/webui/static/shared/hr_status.js</code>（取证 2026-10-01）· grep 关键词：<code>全站</code>、<code>在线核实</code></li>
-      <li>配置收敛背景（取证 2026-10-01）：计划 26-09-27-1318（HR 配置键收敛，Done）—— 若收敛后两键已合并，本条直接 Dropped</li>
+      <li>配置收敛背景（取证 2026-10-01）：计划 26-09-27-1318（HR 配置键收敛，Done）—— 若收敛后两键已合并，本条直接 Dropped（2026-10-03 复验：两选项确已不再并存，按 Superseded 归档，见 §04）</li>
       <li>同族 topic（取证 2026-10-01）：backend-partial-hr-verify（HR 在线核实家族）</li>
     </ul>
   </section>
@@ -97,6 +98,13 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-03 07:24 — 状态 <strong>Open → Superseded</strong>（用户定调「已过时」；复验取证 2026-10-03，基线 c91be940）<br>
+        「全站 HR」作为用户选项已不存在 —— <code>listing</code>（清单型/全站型）由内置站点档案填充、<strong>非配置项</strong>（<code>config/schema/hr.py:58-60</code> 注释；grep <code>src/auto_qb/config/schema/</code> 内 <code>listing</code> 零命中）；
+        站点分区的 hr_check 字段已上收至「HR 在线核实」分区（<code>config/schema/trackers.py:3-4</code>，计划 26-09-27-1318 REV2）；
+        用户可配 HR 项只剩该分区的总开关 <code>hr_check.enabled</code>「启用 HR 在线核实」与站点接入卡片 <code>hr_check.sites.&lt;id&gt;.enabled</code>「启用在线核实」（层级不同，非冗余）；
+        形态在设置详情页仅作只读 tag 展示（<code>settings-detail.html:287</code>）。
+        ⇒ 两选项不再并存，本条待拍板前提消失 —— 被计划 <a href="../plans/26-09-27-1318-plan-hr-check-site-presets.html">26-09-27-1318</a>（HR 配置键收敛 + 站点档案内置形态）取代。
+      </li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行（L90）由末阶段统一移除，本报告不回改 TODO.md。</p>
   </section>
