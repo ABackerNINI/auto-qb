@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="issue-clearance-roadmap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-01-1758">
-<meta name="doc-updated" content="26-10-02-1705">
+<meta name="doc-updated" content="26-10-02-1845">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-02-memory-bank-issue-clearance-roadmap.md,memory-bank/plans/26-10-01-1728-plan-doc-drift-repair.html,memory-bank/plans/26-09-29-2036-plan-hr-counter-integration.html">
 <title>Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序</title>
 <style>
@@ -260,16 +260,16 @@
   <div class="cover-meta">
     <span><b>日期</b> 2026-10-02 · v2 改版(初版 26-10-01-1758)</span>
     <span><b>状态</b> Open · 待拍板</span>
-    <span><b>范围</b> 59 条未决 (58 Open + 1 In Progress)</span>
-    <span><b>不入列</b> 43 Done + 1 Superseded</span>
-    <span><b>方法</b> issues/_index.md + 103 份报告 meta 扫描</span>
+    <span><b>范围</b> 53 条未决 (52 Open + 1 In Progress)</span>
+    <span><b>不入列</b> 57 Done + 4 Dropped + 2 Superseded</span>
+    <span><b>方法</b> issues/_index.md + 116 份报告 meta 扫描</span>
     <span><b>topic</b> issue-clearance-roadmap</span>
   </div>
 
   <!-- ================= §0 ================= -->
   <section id="s0">
     <div class="sec-head"><span class="sec-no">§0</span><h2>摸排口径</h2></div>
-    <p class="body">范围 = <span class="muted">issues/_index.md</span> 全部 <b>Open</b> 与 <b>In Progress</b> 条目,共 59 条;43 条 Done、1 条 Superseded 不入列。全部数字为 2026-10-02 02:34 对索引与报告 <span class="muted">issue-*</span> meta 的实测扫描值,无估算。</p>
+    <p class="body">范围 = <span class="muted">issues/_index.md</span> 全部 <b>Open</b> 与 <b>In Progress</b> 条目,共 53 条;57 条 Done、4 条 Dropped、2 条 Superseded 不入列。全部数字为 2026-10-02 18:45 对索引与报告 <span class="muted">issue-*</span> meta 的实测扫描值,无估算。</p>
     <p class="body">类型分布:bug 13 · feat 22 · question 8(7 Open + 1 In Progress)· perf 5 · refactor 4 · docs 4 · chore 3。档位分布:standard 39 · light 19。<b>test 类型 0 条</b>——v1 闸门波清完后,池里已无测试与流程卡点;当前闸门水位 = test.full <b>2143 passed + 3 skipped / 96.49%</b>(基线 26-10-02-0203),后续认领直接在这个基线上验收。</p>
     <p class="body">相对 v1 的增量:v1 所列 31 条已清偿 12 条(v1-W1 闸门波 5/5、v1-W2 3/4、v1-W3 1/5、v1-W6 1/9、v1-W7 2/5),19 条仍未决;v1 之后新入池 46 条记录,其中 40 条仍处未决(39 Open + 1 In Progress)、6 条入池当日即清。19 + 40 = 59。</p>
     <p class="body">排序三原则沿用 v1:<b>①</b> 闸门先绿——已达成,守住即可;<b>②</b> 数据与凭据先于体验——丢数据、丢凭据的风险高于一切交互瑕疵;<b>③</b> 方案先于动手——需拍板的大件不与快修混流,拍板件与被它阻塞的工程件绑在同一波;已有上游计划承载的条目只挂账、不重复排期。</p>
@@ -298,6 +298,7 @@
     </div>
     <p class="body" style="margin-top:16px">波次是建议顺序,不是硬闸——跨域条目可并行(W3 的方案设计与 W1/W2 的快修并行最典型),波内彼此独立可乱序;细规则见 <a href="#s9" style="color:var(--acc)">§8 执行规则</a>。v1 与本版波次编号不延续对照——每条的挂账与状态实时以 <span class="muted">issues/_index.md</span> 为准。</p>
     <p class="body" style="margin-top:16px"><b>状态列图例</b>(2026-10-02 起分批逐条核对填入): <span class="st st-done">✅ 已修复</span> 缺陷已在代码根修, 依据给 commit 或一句代码事实 · <span class="st st-part">🔶 部分修复</span> 修了一部分/修了关联路径, 核心仍在 · <span class="st st-stale">⛔ 已过时</span> 前提不复存在/需求消失/被其它实现取代 · <span class="st st-todo">⏳ 待处理</span> 核对后确认仍未动 · <span class="st st-defer">📌 挂账</span> W9 战略存疑专档, 不排期。池状态回写规则: ✅&#8594;Done; ⛔&#8594;按语义 Dropped(前提消失)/Superseded(被取代); 🔶/⏳/📌 池状态不动。</p>
+    <p class="body" style="margin-top:12px"><b>全表统计小结</b>(五档分布, 静态核对 2026-10-02): 全表 59 行 = <span class="st st-done">✅ 8</span> / <span class="st st-part">🔶 3</span> / <span class="st st-stale">⛔ 4</span> / <span class="st st-todo">⏳ 39</span> / <span class="st st-defer">📌 5</span>。其中 12 条已回写离池(8 ✅&#8594;Done、1 ⛔&#8594;Superseded、3 ⛔&#8594;Dropped), 余 47 条仍在池; 核对期间另有 13 条新记录入池(6 条 Open 未决、7 条入池即清, 均不在本表), 池现状 53 未决 = 52 Open + 1 In Progress, 不入列 63 = 57 Done + 4 Dropped + 2 Superseded —— 分区数字以 <span class="muted">issues/_index.md</span> 为准(2026-10-02 18:45 实测)。</p>
   </section>
 
   <!-- ================= W1 ================= -->
@@ -771,42 +772,42 @@
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">兼容 Transmission 可行性分析<span class="flag">In Progress · 停在拍板</span></span>
             <div class="note">可行性报告 26-10-01-2347 已出:技术可行性中、业务可行性低、全量 38-58 人日(最小只读子集 8-12 人日),建议暂不做——等用户拍板,不是执行卡点。</div></td>
-          <td></td>
+          <td><span class="st st-defer">📌 挂账</span><span class="stwhy">报告 26-10-01-2347 已出(建议暂不做), 停在用户拍板 —— 拍「不做」&#8594;Dropped, 拍「做」&#8594;转计划; 池保持 In Progress</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2212-question-config-split-per-site.html">26-10-01-2212</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">配置切分(每站点一份)是否做(存疑)</span>
             <div class="note">涉及加载/热重载/校验面,待拍板;若做会放大热重载路径的改动面,建议排在 W2 热重载两条清偿后再议。</div></td>
-          <td></td>
+          <td><span class="st st-defer">📌 挂账</span><span class="stwhy">待拍板: config/ 仍单文件加载链(loaders/migrations), 无每站点切分痕迹; 拍板前不动码</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2212-question-search-based-recheck-feasibility.html">26-10-01-2212</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">基于搜索的辅种方式可行性(存疑)</span>
             <div class="note">用站点搜索发现可辅种资源的思路,待可行性结论。</div></td>
-          <td></td>
+          <td><span class="st st-defer">📌 挂账</span><span class="stwhy">可行性结论未出; 全 src 无「站点搜索发现可辅种资源」实现, 结论前不动码</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-30-0052-feat-hr-badge-total-crosscheck.html">26-09-30-0052</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">HR 计数:上限徽章总数轴互证<span class="flag">P3 缓做</span></span>
             <div class="note">&#8594; 依赖 HR 计划 D4 计数口径实证(<a href="26-09-29-2036-plan-hr-counter-integration.html" style="color:var(--acc)">hr-counter-integration</a> 系);D4 落地前不动。v1-W7 保留。</div></td>
-          <td></td>
+          <td><span class="st st-defer">📌 挂账</span><span class="stwhy">未动: 对平仍仅 rows==claim 单轴(service.py:1004), Σ分档==总数==实抓三方互证无码; 依赖 D4 口径实证, 计划 §7 P3 拍板缓做</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-30-0052-feat-hr-login-counter-attest.html">26-09-30-0052</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">HR 计数:looks_like_login 补计数文本佐证<span class="flag">P3 缓做</span></span>
             <div class="note">&#8594; 同依赖 D4;报告 26-09-29-1803 §6 登录态负信号。v1-W7 保留。</div></td>
-          <td></td>
+          <td><span class="st st-stale">⛔ 已过时</span><span class="stwhy">计数文本负信号已有: looks_like_login 含「HR编号」守卫(base.py:75, 5c518b3b 09-24 早于入池), 余量仅子串&#8594;parse_counters 机制升级; 池已改 Dropped</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-30-0052-perf-hr-lastpage-fetch-skip.html">26-09-30-0052</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">HR 计数:末页追翻省略<span class="flag">P3 缓做</span></span>
             <div class="note">&#8594; 已定性为优化非简化(收益偶有、风险面新增),D4 落地前不动。v1-W7 保留。</div></td>
-          <td></td>
+          <td><span class="st st-defer">📌 挂账</span><span class="stwhy">未动: 翻页终点仍「下一页标记消失」(service.py:693), 无 rows==claim 提前停翻; 定性优化非简化, D4 落地前不动</span></td>
         </tr>
       </tbody>
     </table>
@@ -831,8 +832,10 @@
   <section id="cl">
     <div class="sec-head"><span class="sec-no">§A</span><h2>变更记录</h2></div>
     <div class="changelog">
+      <div class="cl-row"><span class="v">v2.5</span><span class="d">26-10-02-1845</span><span class="t">清偿核对批次 5/5(收尾): W9 共 6 条 —— 📌 5 / ⛔ 1, 无 ✅/🔶/⏳。📌 五条: transmission 报告已出停在用户拍板(池保持 In Progress); 配置切分/搜索辅种两条存疑待拍板(config/ 无每站点切分痕迹, 全 src 无搜索辅种实现); HR 计数两条缓做未动 —— 对平仍仅 rows==claim 单轴(service.py:1004), 翻页终点仍「下一页标记消失」(service.py:693), §7 P3 拍板缓做依赖 D4 口径实证。⛔ 一条: 0052-login-counter-attest 诉求「补计数文本负信号」已被既有实现覆盖 —— looks_like_login 现含「HR编号」子串守卫(5c518b3b 09-24, 早于入池), 余量仅子串&#8594;parse_counters 机制升级, 池回写 Dropped。收尾: 全表 59 行一致性复核通过(五档分布 ✅ 8 / 🔶 3 / ⛔ 4 / ⏳ 39 / 📌 5, 逐行恰一状态格); 补回批次 3 误替换丢失的 v2.2 行、修正 v2.3 时间戳笔误(1905&#8594;1804, 以 git 提交时刻 18:04 为准); 封面/§0/footer 池计数按 _index.md 现值刷新(53 未决 = 52 Open + 1 In Progress, 不入列 57 Done + 4 Dropped + 2 Superseded, 档案 116 份)。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2.4</span><span class="d">26-10-02-1825</span><span class="t">清偿核对批次 4/5: W7-W8 共 16 条 —— ✅ 1 / 🔶 1 / ⏳ 14。✅ 一条: 1408-web-runtime-host-protocol 由 9b3c50f8(审计 L1-L3 私有面公开化)落地, _build_search_index/_state_kind 改公开名, webui/runtime.py 现 5 处 host 调用全公开、self._host._ 私有调用清零(验收口径满足; Protocol 未建走公开化替代, 单写者约定已落模块 docstring), 池回写 Done。🔶 一条: 1408-readme-modules-drift README 半边已修(「995 用例」声明随 a61d0f47 退场), 行数快照半边仍漂移(modules/overview.md:5 仍自称 2026-09-05 快照)。⏳ 14 条逐一静态核实未动: W7 三条(EXT 信息展示零提交; EXT 版本门控/高度参数化未做且复验发现 manifest 早有 version 1.0.0 前提部分失真; i18n 无痕迹), rules 容错键语义、mypy 配置、tag/category 弹窗重构、TRACKER_FIELD_LEVELS docstring(:21 仍漂移)、插件 spec 豁免(_DOC_EXEMPT 仍在)、USER.md 口径冲突、hatch-pet 费用、CI 无 Windows runner、版本双源(0.2.0 vs 0.1.0)、任务栏 python 图标(五轮结论仍成立, 入池后仅 49d933b5 死分支清理)、--tray Ctrl+C(无 signal 注册)均无实现痕迹。issues/_index.md 已重建。</span></div>
-      <div class="cl-row"><span class="v">v2.3</span><span class="d">26-10-02-1905</span><span class="t">清偿核对批次 3/5: W6 共 13 条 —— ✅ 2 / 🔶 1 / ⏳ 10。✅ 两条: 2108-esc-clear-filter 已拍板方案 A 并落地(0d286cc5 · ESC 接退栈链终端兜底清面筛, 计划 26-10-02-1632, 池回写 Done); 2108-selection-follow-mouse 由 9c68cce9 方案 B(点击落光标)+ fa79d526(起点统一收尾)合流落地(池回写 Done)。🔶 一条: 2137-settings-help-followup 「?」语调色半边 eb575956 已落地, 富文案遗漏项(remove_tags/delete_tags)未补。⏳ 10 条逐一静态核实未动: 抽屉簇两件(无切种子动作/Alt+1~4 仍 scope:drawer)、批量移动跳检、搜索命中域/片段、抽屉重做、tracker 忽略配置、shows 判定调研(排序/归并初版已具备)、限速曲线强调、乐观 UI 扩面、chip 自定义色均无实现痕迹。issues/_index.md 已重建。</span></div>
+      <div class="cl-row"><span class="v">v2.3</span><span class="d">26-10-02-1804</span><span class="t">清偿核对批次 3/5: W6 共 13 条 —— ✅ 2 / 🔶 1 / ⏳ 10。✅ 两条: 2108-esc-clear-filter 已拍板方案 A 并落地(0d286cc5 · ESC 接退栈链终端兜底清面筛, 计划 26-10-02-1632, 池回写 Done); 2108-selection-follow-mouse 由 9c68cce9 方案 B(点击落光标)+ fa79d526(起点统一收尾)合流落地(池回写 Done)。🔶 一条: 2137-settings-help-followup 「?」语调色半边 eb575956 已落地, 富文案遗漏项(remove_tags/delete_tags)未补。⏳ 10 条逐一静态核实未动: 抽屉簇两件(无切种子动作/Alt+1~4 仍 scope:drawer)、批量移动跳检、搜索命中域/片段、抽屉重做、tracker 忽略配置、shows 判定调研(排序/归并初版已具备)、限速曲线强调、乐观 UI 扩面、chip 自定义色均无实现痕迹。issues/_index.md 已重建。</span></div>
+      <div class="cl-row"><span class="v">v2.2</span><span class="d">26-10-02-1728</span><span class="t">清偿核对批次 2/5: W3-W5 共 13 条 —— ⏳ 12 / ⛔ 1, 无 ✅/🔶。⏳ 12 条逐一静态核实无实现痕迹(W3 三 feat 无方案无码: 全 src 无跨组交叉检测/整组迁移串行化/现场重建; W4 四 perf 未动: api_state 仍缺省 rid=-1 全量、_build_shows_view 仍全量聚合、两生产者门控结构原样、max_tasks_per_tick 仍静态; W5 五条未拍板/无联动); ⛔ 2138-流量历史图入池前提不成立 —— 全局流量历史图 09-15 已落地(/api/traffic/history + 双系列折线图, 数据源为限速曲线 Traffic Monitor, 与被移除的单种统计底座无关), 池已回写 Dropped。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2.1</span><span class="d">26-10-02-1705</span><span class="t">清偿核对批次 1/5: 九个波次表加「状态」列(五档图例见 §1), 本批核对 W1-W2 共 11 条 —— ✅ 5 / ⛔ 2 / 🔶 1 / ⏳ 3。✅ 五条池内 26-10-02 已 Done, 修复 commit 逐一确认(2151&#8594;bc24631b, 2335&#8594;54db09f2, 1408-CSRF&#8594;36dc8ba6, 1408-hardening&#8594;c37f3674, 1702&#8594;23f37df6); ⛔ 两条回写池状态(2129-hotreload-ext-vanish&#8594;Superseded 旧机制被取代, 2129-batch-warning-notify&#8594;Dropped min_level=ERROR 前提消失); 🔶 2002 伪警示条核心仍在、失效键半边已被未知键全量校验覆盖; ⏳ 三条无修复证据维持待处理。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2</span><span class="d">26-10-02-0234</span><span class="t">改版:v1 后清偿 12 条、新入池 46 条,未决 31&#8594;59;test 类型清零后重排九波,起点前移到数据与凭据;transmission 挂账更新为「报告已出停在拍板」;26-09-22-2221 标注需重新授权。</span></div>
       <div class="cl-row"><span class="v">v1</span><span class="d">26-10-01-1758</span><span class="t">初版:31 条未决全量摸排,分七波;只读口径,零代码分析。</span></div>
@@ -840,7 +843,7 @@
   </section>
 
   <footer>
-    数据来源:memory-bank/issues/_index.md + 103 份报告 issue-* meta 扫描 · 2026-10-02 02:34 实测<br>
+    数据来源:memory-bank/issues/_index.md + 116 份报告 issue-* meta 扫描 · 2026-10-02 18:45 实测<br>
     状态:Open 待拍板 · 拍板后按 doc-forms 冻结,改版走「## 变更记录」+ 抬 doc-updated
   </footer>
 

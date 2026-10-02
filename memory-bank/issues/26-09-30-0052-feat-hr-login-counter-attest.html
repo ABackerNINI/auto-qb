@@ -8,7 +8,7 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Dropped">
 <meta name="issue-title" content="HR 计数：looks_like_login 补计数文本佐证（P3 缓做项）">
 <meta name="issue-summary" content="登录态判定 looks_like_login 补页头计数文本负信号佐证（报告 26-09-29-1803 §6 登录态负信号 / HR 计划 §7 P3），依赖 D4 口径实证，缓做">
 <title>HR 计数：looks_like_login 补计数文本佐证（P3 缓做项） · feat · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-30-0052-feat-hr-login-counter-attest</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-30 00:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -159,6 +159,7 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-09-30 00:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 18:41 — 状态 <strong>Dropped</strong>（roadmap 清偿核对批次 5/5 W9 静态核验）：入池前提「looks_like_login 只认登录页结构特征、无计数文本负信号」不成立 —— 该负信号已以「HR编号」子串守卫存在（5c518b3b 2026-09-24，早于入池），含计数文本的 HR 页不会再被判为登录页；余量仅「子串判定 → parse_counters 解析」的机制升级，属增强非缺口，且 HR 计划 §7 P3 已拍板缓做。</li>
     </ul>
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
