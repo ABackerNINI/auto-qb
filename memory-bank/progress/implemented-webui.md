@@ -5,6 +5,21 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- WEB UI **HR 排除辅种补悬停弹窗**(2026-10-02): 2026-09-29 做种时长列非文字化清理撤原生 title
+  「已排除」提示后弹窗侧未接盘 —— 命中 HR 排除表(exclude_categories/exclude_tags)的辅种 hover
+  完全真空(排除态 hr_safety 组装层短路空串, hrPopData 对空档位一律不弹)。后端 record.py 排除
+  匹配收敛单点 `_hr_exclusion_hits`((标签命中, 分类命中)), 新增 `hr_excluded_by()` 来源 token
+  (tag/category/tag+category, 与 hr_excluded 同单点恒一致), `hr_view_fields` 双分支透出
+  `hr_excluded_by`; 前端 hrPopData 排除行分支 —— 「已排除出 HR 管理」+ 依据行「命中 HR 排除表的
+  分类规则/标签规则/标签与分类规则」(`HR_EXCLUDED_BY_TEXT` 映射, 前端不重算匹配纪律不变),
+  无轨道/站点值(排除行本就无, 画要求轨反误导为仍受管束); 三主题 CSS 成对新增
+  `.hp-dot/.hp-verdict.excluded` 中性灰档(--fg-muted, 不占四档安全色); 种子页/辅种组成员行/
+  追剧集行共用弹窗单点一处修三处生效。守阵: testhr_view_fields_excluded 扩展三命中形态 + 空配置
+  键集; record 排除三测补 token 断言; 接线守阵 CSS 成对清单 +2; FakeTorrent 鸭子兼容补
+  hr_excluded_by(裸替身直喂 _build_group_view 两场景全量暴露)。test.full **2292 passed +
+  3 skipped / 99%**(27.5s @ f0c0f0ed, 基线 26-10-02-1956); 档案
+  [tasks/26-10-02-webui-hr-excluded-hover-pop](../tasks/26-10-02-webui-hr-excluded-hover-pop.md)
+
 - WEB UI **ESC 兜底清全部面筛**(2026-10-02, 清偿 question issue
   [26-10-01-2108](../issues/26-10-01-2108-question-webui-esc-clear-filter.html), 计划
   [plans/26-10-02-1632](../plans/26-10-02-1632-plan-webui-esc-clear-filters.html) 拍板方案 A):

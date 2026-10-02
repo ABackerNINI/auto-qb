@@ -401,6 +401,7 @@ def test_record_hr_excluded_blocks_all_entries():
     assert rec.check_hr_condition() is True and rec.hr_excluded() is False, "对照: 未配排除时照常触发"
     rec.tracker_conf.hr.exclude_tags = ["noHR"]
     assert rec.hr_excluded() is True
+    assert rec.hr_excluded_by() == "tag", "命中来源 token 与命中列表一致(弹窗依据行消费)"
     link = _StubLink(HrJudgement(identity=HrIdentity.HR, reason="清单命中(档位 A)"))
     rec.hr_link = link
     asked = len(link.calls)
@@ -419,10 +420,14 @@ def test_record_hr_excluded_category_and_regex():
     assert rec.hr_excluded() is False, "默认大小写敏感(FREE 不匹配 free)"
     rec.category = "free"
     assert rec.hr_excluded() is True
+    assert rec.hr_excluded_by() == "category"
     rec.category = ""
     rec.tracker_conf.hr.exclude_tags = ["regex:^skip.?hr:ignore_case"]
     rec.tags = "HHan,SKIP_HR"
     assert rec.hr_excluded() is True
+    assert rec.hr_excluded_by() == "tag"
+    rec.category = "free"  # 标签与分类同时命中: 来源 token 合并(弹窗依据行据此说明)
+    assert rec.hr_excluded_by() == "tag+category"
 
 
 def test_record_hr_excluded_beats_site_judgement():
@@ -440,6 +445,7 @@ def test_record_hr_excluded_table_empty_is_noop():
     rec.tracker_conf.hr.exclude_tags = ["noHR"]
     rec.tags = "HHan"
     assert rec.hr_excluded() is False and rec.check_hr_condition() is True
+    assert rec.hr_excluded_by() == "", "未命中来源 token 为空串(前端据此不出依据短语)"
 
 
 def test_store_attaches_hr_link():

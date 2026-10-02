@@ -701,6 +701,21 @@ class FakeTorrent:
             return True
         return bool(hr.exclude_categories) and match_tag_patterns(self.category, hr.exclude_categories)
 
+    def hr_excluded_by(self) -> str:
+        """与 TorrentRecord.hr_excluded_by 同语义(命中来源 token, 2026-10-02); 真实判定以真记录为准"""
+        hr = self.tracker_conf.hr
+        if hr is None:
+            return ""
+        from auto_qb.infra.utils import match_tag_patterns
+
+        tag_hit = bool(hr.exclude_tags) and any(match_tag_patterns(t, hr.exclude_tags) for t in self.tags_set)
+        cat_hit = bool(hr.exclude_categories) and match_tag_patterns(self.category, hr.exclude_categories)
+        if not (tag_hit or cat_hit):
+            return ""
+        if tag_hit and cat_hit:
+            return "tag+category"
+        return "tag" if tag_hit else "category"
+
     def check_hr_condition(self) -> bool:
         if not self.tracker_conf.hr:
             return False

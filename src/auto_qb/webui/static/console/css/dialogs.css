@@ -390,6 +390,9 @@
 .hp-verdict.failed { color: var(--error); }
 .hp-verdict.safe { color: var(--green); }
 .hp-verdict.warning { color: var(--warn); }
+/* 排除命中行(已排除出 HR 管理, 2026-10-02): 中性灰档 —— 不属四档安全色, 只交代"无档位" */
+.hp-dot.excluded { background: var(--fg-muted); }
+.hp-verdict.excluded { color: var(--fg-muted); }
 .hp-cyc { font: 500 10px/1.5 var(--font-mono); border: 1px solid transparent; padding: 0 5px; white-space: nowrap; }
 .hp-cyc.ended { color: var(--fg-muted); background: var(--surface-1); border-color: var(--border-soft); }
 /* 2. 进度轨道: 已过段 = 档位色, 未达段 = 轨道底色 */

@@ -36,6 +36,9 @@ const HR_SRC_BUCKETS = {
   site_scope: "在线核实", site_satisfied: "在线核实", site_unsatisfied: "在线核实", site_released: "在线核实", site_exempt: "在线核实",
   local: "本地兜底",
 };
+/* 排除表命中来源 token -> 依据短语(2026-10-02): 后端 record.hr_excluded_by 单点判定,
+ * 前端只映射文字 —— 与上面两张表同一纪律, 不得在 JS 里重算排除匹配(views.py hr_view_fields 同款)。 */
+const HR_EXCLUDED_BY_TEXT = { tag: "标签规则", category: "分类规则", "tag+category": "标签与分类规则" };
 
 /* ---------------- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ----------------
  * 做种时长单元格的原生 title(一大段文字)换成悬停小弹窗。渲染规则以
@@ -180,8 +183,23 @@ window.AQB_HR = {
      * lane ← hr_safety(danger 橙=考察中 / failed 红=考核未通过终态 / safe 绿 / warning 黄=疑似辅种),
      * verdict ← hr_safety_text, 依据 ← hr_reason, 站点侧值 ← hr_site_*(与详情抽屉 hrSiteLine 同源),
      * 本地值 ← seeding_time / hr_req_time(与表格列同口径)。
-     * "none" = 不适用(站点未配 HR / 命中排除表 —— 后端组装层短路成空串), 与无字段行同等不弹。 */
+     * "none" = 不适用(站点未配 HR / 命中排除表 —— 后端组装层短路成空串), 与无字段行同等不弹;
+     * 唯 hr_excluded 行例外(2026-10-02 用户实报): 排除行不进任何档位, 但 hover 不能真空 ——
+     * 结论复用详情抽屉同款短语, 依据 = hr_excluded_by 映射(HR_EXCLUDED_BY_TEXT), 无轨道/站点值。 */
     hrPopData(m) {
+      if (m.hr_excluded) {
+        const by = HR_EXCLUDED_BY_TEXT[m.hr_excluded_by];
+        return {
+          lane: "excluded",
+          verdict: "已排除出 HR 管理",
+          ended: false,
+          gauge: null,
+          badge: "",
+          kv: [],
+          reason: by ? `命中 HR 排除表的${by}` : "命中 HR 排除表",
+          lag: false,
+        };
+      }
       if (!m.hr_safety || m.hr_safety === "none") return null;
       const lane = m.hr_safety;
       const src = m.hr_safety_src;

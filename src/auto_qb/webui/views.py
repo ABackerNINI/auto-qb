@@ -241,8 +241,10 @@ class WebviewMixin:
         - hr_triggered / hr_satisfied: 本机下载条件满足(展示辅助, 区分「本机下载」与「疑似辅种」;
           管理语义在 hr_managed, 不再由本字段表达) / 是否已达成要求
         - hr_excluded: 是否命中 HR 排除表(计划 26-09-28-1805) —— True 时触发/达标恒 False、
-          站点侧字段全空, 前端在做种时长列的 title 里提示(2026-09-29 起撤掉行内「已排除」徽标,
+          站点侧字段全空, 前端在做种时长列的悬停弹窗里提示(2026-09-29 起撤掉行内「已排除」徽标,
           与来源标记同批非文字化; 不得在 JS 里重算匹配, 只消费本布尔)
+        - hr_excluded_by: 排除命中来源 token("tag" / "category" / "tag+category", 未命中 = ""),
+          供弹窗依据行说明「按什么排除」—— 匹配单点在 record.hr_excluded_by, 前端只映射文字
         - hr_req_time: 要求做种时长(秒) = required_seeding_time + extra_seeding_time
         - hr_req_ratio: 要求分享率(0 = 不要求)
         - hr_state / hr_state_text / hr_reason: 站点侧判定(hr / verified_non_hr / unknown /
@@ -273,6 +275,7 @@ class WebviewMixin:
                 "hr_triggered": False,
                 "hr_satisfied": False,
                 "hr_excluded": False,
+                "hr_excluded_by": "",
                 "hr_req_time": 0,
                 "hr_req_ratio": 0.0,
                 "hr_state": "",
@@ -287,7 +290,11 @@ class WebviewMixin:
                 "hr_site_ratio": "",
                 "hr_site_dl": "",
             }
-        excluded = rec.hr_excluded()
+        # 排除态在组装层短路成空串(计划 26-09-30-0559 §5): safety_display 的 None 分支无法区分
+        # 「排除」与「未接入」, 排除种子维持「不适用」空白必须由这里保证。
+        # excluded_by 与 excluded 同源一次算出(来源 token 给弹窗依据行, 前端不重算匹配)
+        excluded_by = rec.hr_excluded_by()
+        excluded = bool(excluded_by)
         triggered = rec.check_hr_condition()
         # v3: satisfied 独立于 triggered —— 命中 B(终态放行)不再受管束但达标结论成立(毕业)
         satisfied = rec.check_hr_satisfied()
@@ -307,6 +314,8 @@ class WebviewMixin:
                 satisfied,
             "hr_excluded":
                 excluded,
+            "hr_excluded_by":
+                excluded_by,
             "hr_req_time":
                 hr.required_seeding_time + hr.extra_seeding_time,
             "hr_req_ratio":

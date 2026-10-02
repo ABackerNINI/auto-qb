@@ -2099,6 +2099,9 @@ def test_frontend_hr_safety_wiring():
             ".hp-arrow",
             ".hp-gauge",
             ".hp-badge",
+            # 排除命中行的中性灰档(2026-10-02): 弹窗 lane=excluded 的点与结论色, 三套成对
+            ".hp-dot.excluded",
+            ".hp-verdict.excluded",
         ):
             assert rule in css, f"{name} 缺 {rule} 规则 —— 三套 UI 必须成对定义"
         # 死样式零残留: 最后一个 .hr-src 消费方(已排除 chip)已撤进 title
@@ -4224,7 +4227,8 @@ def testhr_view_fields_three_state(tmp_path):
 
 def testhr_view_fields_excluded(tmp_path):
     """HR 排除态视图(计划 26-09-28-1805): hr_excluded=True, 触发/达标恒 False,
-    删除安全档位短路成空串(「不适用」空白由组装层保证, 计划 26-09-30-0559 §5)"""
+    删除安全档位短路成空串(「不适用」空白由组装层保证, 计划 26-09-30-0559 §5);
+    hr_excluded_by 透出命中来源 token(2026-10-02: 悬停弹窗依据行「按什么排除」的数据源)"""
     from auto_qb.config import HRRule, TrackerConfig
     from auto_qb.config.models import SiteHrCheckConfig
     from auto_qb.core.qbmanager import QbManager
@@ -4245,18 +4249,31 @@ def testhr_view_fields_excluded(tmp_path):
     rec.hr_link = mock.Mock()  # 排除种子连判定桥都不该被打扰
     fields = QbManager.hr_view_fields(rec)
     assert fields["hr_excluded"] is True
+    assert fields["hr_excluded_by"] == "tag"
     assert fields["hr_triggered"] is False and fields["hr_satisfied"] is False
     assert fields["hr_state"] == "" and fields["hr_safety"] == "" and fields["hr_safety_text"] == ""
     assert fields["hr_safety_src"] == "" and fields["hr_site_lane"] == ""
     rec.hr_link.judge.assert_not_called()
+
+    # 分类命中(2026-10-02 实报的主场景)与双命中: 来源 token 随命中列表走
+    conf.hr.exclude_categories = ["keep"]
+    rec_cat = TorrentRecord.from_torrent(FakeTorrent(hash="HG", state="stalledUP", downloaded=0, category="keep"))
+    rec_cat.tracker_conf = conf
+    fields_cat = QbManager.hr_view_fields(rec_cat)
+    assert fields_cat["hr_excluded"] is True and fields_cat["hr_excluded_by"] == "category"
+    rec.tags = "noHR"
+    rec.category = "keep"
+    fields_both = QbManager.hr_view_fields(rec)
+    assert fields_both["hr_excluded_by"] == "tag+category", "标签与分类同时命中时 token 合并"
 
     # 未命中排除表: hr_excluded=False, 行为照旧
     rec2 = TorrentRecord.from_torrent(FakeTorrent(hash="HE", state="stalledUP", downloaded=0, tags="HHan"))
     rec2.tracker_conf = conf
     assert QbManager.hr_view_fields(rec2)["hr_excluded"] is False
 
-    # 空配置分支也带 hr_excluded 键(前端字段一致性守阵消费全键集)
-    assert QbManager.hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HF")))["hr_excluded"] is False
+    # 空配置分支也带 hr_excluded/hr_excluded_by 键(前端字段一致性守阵消费全键集)
+    empty = QbManager.hr_view_fields(TorrentRecord.from_torrent(FakeTorrent(hash="HF")))
+    assert empty["hr_excluded"] is False and empty["hr_excluded_by"] == ""
 
 
 def _hr_status_env(mgr, tmp_path, *, complete=True, pages=None):

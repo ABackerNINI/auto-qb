@@ -293,27 +293,47 @@ class TorrentRecord:
             name=self.name,
         )
 
+    def _hr_exclusion_hits(self) -> tuple:
+        """排除表命中明细单点((标签命中, 分类命中)): hr_excluded 与 hr_excluded_by 共用同一份匹配,
+        防两处各写一遍后漂移(同 pitfalls「判定两处各写一遍」纪律)。空表快速路径保留: 两个列表
+        都空(默认) = 一次元组判断, 判定入口热路径零成本。"""
+        hr = self.tracker_conf.hr
+        if hr is None:
+            return (False, False)
+        exc_tags = hr.exclude_tags
+        exc_cats = hr.exclude_categories
+        if not exc_tags and not exc_cats:
+            return (False, False)
+        tag_hit = bool(exc_tags) and any(match_tag_patterns(t, exc_tags) for t in self.tags_set)
+        cat_hit = bool(exc_cats) and match_tag_patterns(self.category, exc_cats)
+        return (tag_hit, cat_hit)
+
     def hr_excluded(self) -> bool:
         """HR 排除(计划 26-09-28-1805): 命中 hr.exclude_tags/exclude_categories 的种子不纳入 HR 体系
 
         排除优先级最高 —— 压过站点侧一切管束(mode=all / unknown_policy / 新鲜度闸门):
         用户显式排除 > 保守管束, 与超龄豁免「豁免压过清单」同构。判定时现算:
         在 qB 里加/删排除标签, 下一轮判定即生效或恢复管束, 无需重启、无需记录置脏。
-        空表快速路径: 两个列表都空(默认) = 一次布尔判断, 三个判定入口的热路径零成本。
+        匹配明细单点在 _hr_exclusion_hits(与 hr_excluded_by 共用)。
 
         公开方法(webui/views.py 的 hr_view_fields 也要读排除态做展示); 本文件内四个
         判定入口(hr_managed / check_hr_condition / check_hr_satisfied / hr_judgement)顶部各有一行短路。
         """
-        hr = self.tracker_conf.hr
-        if hr is None:
-            return False
-        exc_tags = hr.exclude_tags
-        exc_cats = hr.exclude_categories
-        if not exc_tags and not exc_cats:
-            return False
-        if exc_tags and any(match_tag_patterns(t, exc_tags) for t in self.tags_set):
-            return True
-        return bool(exc_cats) and match_tag_patterns(self.category, exc_cats)
+        tag_hit, cat_hit = self._hr_exclusion_hits()
+        return tag_hit or cat_hit
+
+    def hr_excluded_by(self) -> str:
+        """命中排除表的**来源** token(仅展示路径消费: webui/views.py 组装弹窗依据行)
+
+        "tag" / "category" / "tag+category"; 未命中 = ""。与 hr_excluded 同一匹配单点
+        (_hr_exclusion_hits), 两者恒一致; 只读快照 + 配置对象, Web 线程安全。
+        """
+        tag_hit, cat_hit = self._hr_exclusion_hits()
+        if not (tag_hit or cat_hit):
+            return ""
+        if tag_hit and cat_hit:
+            return "tag+category"
+        return "tag" if tag_hit else "category"
 
     def hr_judgement(self) -> Optional[HrJudgement]:
         """站点侧三态判定(站点已接入才返回; None = 走本地字段逻辑)
