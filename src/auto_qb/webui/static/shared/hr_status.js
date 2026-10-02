@@ -18,6 +18,48 @@
  *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
  */
+
+/* ---------------- 表① 排序纯函数(计划 26-10-02-1936 §3.4, 阶段3) ----------------
+ * 模块级单例(不走 app.mixin, 被 hrsDetailRows 与守阵的 node 单测直接消费 —— frontend-split
+ * 「非 mixin 单例」书写形态)。排序语义对齐 shared/sort.js 三态, 但比较器收在这里:
+ * - 按原始值排不按人话: bytes/ratio/秒/epoch 数值比较, 名称/tid/done_iso 字符串比较,
+ *   档位按 A<B<C<D 固定秩(不存在档排最后);
+ * - 空值恒排最后(两个方向都不参与反转): null/undefined/空串是通用空; verified_ts/last_seen
+ *   的 0 是哨兵(未核实/未见, hrsVerifiedText 同纪律), 也算空;
+ * - 比较器不写 dir 进空值分支 —— dir 只乘在非空比较结果上; 同值靠 Array.sort 稳定性
+ *   保住后端默认序(档位·下载量), 不另设 tiebreak。 */
+const HRS_LANE_RANK = { A: 0, B: 1, C: 2, D: 3, _UNK: 9 };
+const HRS_SORT_VAL = {
+  lane: (e) => HRS_LANE_RANK[e.lane] === undefined ? HRS_LANE_RANK._UNK : HRS_LANE_RANK[e.lane],
+  name: (e) => e.name || "",
+  tid: (e) => e.tid,
+  uploaded_bytes: (e) => e.uploaded_bytes,
+  downloaded_bytes: (e) => e.downloaded_bytes,
+  ratio: (e) => e.ratio,
+  need_seed_seconds: (e) => e.need_seed_seconds,
+  done_iso: (e) => e.done_iso || "",
+  verified_ts: (e) => e.verified_ts || 0,
+  last_seen: (e) => e.last_seen || 0,
+};
+/* 空值判据(key 维度): verified_ts/last_seen 用 0 当哨兵, 其余 null/undefined/空串 */
+function hrsValEmpty(key, v) {
+  if (v === null || v === undefined || v === "") return true;
+  return (key === "verified_ts" || key === "last_seen") && v === 0;
+}
+function hrsCompareRows(a, b, key, dir) {
+  const acc = HRS_SORT_VAL[key];
+  const va = acc(a);
+  const vb = acc(b);
+  const ea = hrsValEmpty(key, va);
+  const eb = hrsValEmpty(key, vb);
+  if (ea || eb) {
+    if (ea && eb) return 0;
+    return ea ? 1 : -1; /* 空值恒末位: 不随 dir 反转 */
+  }
+  const r = typeof va === "string" ? va.localeCompare(vb) : va - vb;
+  return r * dir;
+}
+
 window.AQB_HR_STATUS = {
   data() {
     return {
@@ -36,9 +78,15 @@ window.AQB_HR_STATUS = {
         refreshing: false,
         refreshNote: "",
         /* 表① 逐站点明细(键 = 站点名): { loading, loaded, error, entries, readError, now }
-         * laneSel(键 = 站点名): 档位筛选 chips 的本地选择("" = 全部), 前端过滤不回后端 */
+         * laneSel(键 = 站点名): 档位筛选 chips 的本地选择("" = 全部), 前端过滤不回后端
+         * oldOn(键 = 站点名): 老旧切换钮状态(计划 26-10-02-1936 §3.3) —— false = 默认只看
+         *   做种中(local_present), true = 连老旧行一起显示; 不持久化(与 laneSel 同层)
+         * sortSel/sortDir(键 = 站点名): 三态排序键与方向("" = 后端默认序), 对齐 shared/sort.js */
         details: {},
         laneSel: {},
+        oldOn: {},
+        sortSel: {},
+        sortDir: {},
       },
     };
   },
@@ -123,12 +171,85 @@ window.AQB_HR_STATUS = {
     hrsSetLaneSel(site, lane) {
       this.hrs.laneSel[site] = lane;
     },
-    /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端、不重排序) */
+    /* ---------------- 老旧切换钮(计划 26-10-02-1936 §3.3, 决策点③a) ----------------
+     * 默认只看做种中(local_present=true), 点击连老旧行一起显示; 与档位 chips 过滤 AND
+     * 叠加, 纯前端本地过滤不回后端不重拉。计数在站点全行集现算(与 chips 同层, 不随
+     * lane 过滤缩放): N = 老旧行数(默认态隐藏数), M = 做种中行数(切回后可见数)。 */
+    hrsOldOnOf(site) {
+      return !!this.hrs.oldOn[site];
+    },
+    hrsToggleOld(site) {
+      this.hrs.oldOn[site] = !this.hrs.oldOn[site];
+    },
+    hrsOldBtnText(site) {
+      const rows = (this.hrs.details[site] && this.hrs.details[site].entries) || [];
+      const present = rows.filter((e) => e.local_present).length;
+      return this.hrsOldOnOf(site) ? `只看做种中 (${present})` : `显示老旧种子 (${rows.length - present})`;
+    },
+    /* ---------------- 三态排序(计划 26-10-02-1936 §3.4, 对齐 shared/sort.js setSort) ----------------
+     * 首点该列 = 降序 → 再点 = 升序 → 第三次 = 恢复后端默认序(档位·下载量); 换列直接
+     * 降序开始。逐站点独立(与 laneSel 同层), 排序在当前过滤后的行集上进行(hrsDetailRows)。 */
+    hrsSortKeyOf(site) {
+      return this.hrs.sortSel[site] || "";
+    },
+    hrsSortDirOf(site) {
+      return this.hrs.sortDir[site] || -1;
+    },
+    hrsSetSort(site, key) {
+      if (this.hrsSortKeyOf(site) !== key) {
+        this.hrs.sortSel[site] = key;
+        this.hrs.sortDir[site] = -1;
+        return;
+      }
+      if (this.hrsSortDirOf(site) === -1) {
+        this.hrs.sortDir[site] = 1;
+        return;
+      }
+      this.hrs.sortSel[site] = "";
+      this.hrs.sortDir[site] = -1;
+    },
+    /* 表① 十列的排序键与表头文案单点(表② 波次表不接排序); 箭头只认 sprite 双图标
+     * (#i-arrow-up/#i-arrow-down, 与种子页同款) */
+    hrsCols() {
+      return [
+        { key: "lane", label: "档位" },
+        { key: "name", label: "名称" },
+        { key: "tid", label: "tid" },
+        { key: "uploaded_bytes", label: "上传量", num: true },
+        { key: "downloaded_bytes", label: "下载量", num: true },
+        { key: "ratio", label: "分享率", num: true },
+        { key: "need_seed_seconds", label: "还需做种", num: true },
+        { key: "done_iso", label: "完成时间" },
+        { key: "verified_ts", label: "核实结论" },
+        { key: "last_seen", label: "在列" },
+      ];
+    },
+    hrsArrowHref(site, key) {
+      return this.hrsSortKeyOf(site) === key && this.hrsSortDirOf(site) === 1 ? "#i-arrow-up" : "#i-arrow-down";
+    },
+    /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端): 档位 chips × 老旧切换 AND
+     * 叠加, 再叠加三态排序(模块级 hrsCompareRows 纯函数, 空值恒末位); 无排序键时保持
+     * 后端默认序(档位·下载量)。 */
     hrsDetailRows(site) {
       const d = this.hrs.details[site];
       if (!d || !d.entries) return [];
+      let rows = d.entries;
       const sel = this.hrsLaneSelOf(site);
-      return sel ? d.entries.filter((e) => e.lane === sel) : d.entries;
+      if (sel) rows = rows.filter((e) => e.lane === sel);
+      if (!this.hrsOldOnOf(site)) rows = rows.filter((e) => e.local_present);
+      const key = this.hrsSortKeyOf(site);
+      if (key) rows = [...rows].sort((a, b) => hrsCompareRows(a, b, key, this.hrsSortDirOf(site)));
+      return rows;
+    },
+    /* 过滤后空态文案(计划 §3.3): 区分「该站点本地没有 HR 种子」(做种中视图全空)与
+     * 「该档位暂无」(chips 过滤后空); 老旧视图空集单独说, 不与做种中口径混。 */
+    hrsEmptyText(site) {
+      const rows = (this.hrs.details[site] && this.hrs.details[site].entries) || [];
+      if (this.hrsLaneSelOf(site)) return "该档位暂无";
+      if (!this.hrsOldOnOf(site)) {
+        return rows.some((e) => e.local_present) ? "该档位暂无" : "该站点本地没有 HR 种子";
+      }
+      return rows.length ? "该档位暂无" : "该站点没有老旧种子";
     },
     /* 档位徽章色义(§5.4): A=warn(考察中) / B=green(达标) / C=error(未达标) / D=blue(免罪);
      * 失踪行由 CSS tr.missing 统一换 --paused 描边弱化, 这里不管 */
@@ -150,26 +271,40 @@ window.AQB_HR_STATUS = {
     hrsDone(iso) {
       return iso ? String(iso).slice(0, 10) : "—";
     },
-    /* 上次核实(放行判定): 0 = 无放行记录 → —(fmtTs 的 0 哨兵本就回空, 这里补 —);
-     * last_seen 0 = 未知(issue 26-10-01-2335 修复前的存量条目), 不缀「最近被见到」—— 绝不显示 epoch */
-    hrsVerifiedText(e) {
-      return e.verified_ts ? this.fmtTs(e.verified_ts) : "—";
+    /* ---------------- 核实结论列(计划 26-10-02-1936 §3.6, 决策点④) ----------------
+     * 主徽章: 已核实(色沿用 hr-vsrc 色义: satisfied=绿 / exempt·not-listed=蓝)或未核实(中性);
+     * 副行 = 已核实时「<来源人话> · <verified_ts>」(如「已达标 · 09-30 14:22」), 未核实 = —。
+     * verified_ts 的 0 哨兵纪律同旧 hrsVerifiedText: 绝不显示 epoch。 */
+    hrsVerdictText(e) {
+      return e.verified_source ? "已核实" : "未核实";
     },
-    /* 来源小徽章: satisfied(B 毕业)=绿 / 其余有记录(absent 免罪, not-listed 未列出)=蓝 /
-     * 无记录=默认中性(未核实)。token 是后端 SOURCE_* 契约值, 只映射不重算。
-     * 类名 hr-vsrc(verified source): hr-src 是列表页已退役的文字 chip 族
+    hrsVerdictSub(e) {
+      if (!e.verified_source) return "—";
+      return `${e.verified_source_text} · ${this.fmtTs(e.verified_ts)}`;
+    },
+    /* 来源小徽章配色: satisfied(B 毕业文案已换已达标)=绿 / 其余有记录(absent 免罪,
+     * not-listed 未列出)=蓝 / 无记录=默认中性(未核实)。token 是后端 SOURCE_* 契约值,
+     * 只映射不重算。类名 hr-vsrc(verified source): hr-src 是列表页已退役的文字 chip 族
      * (hr-tooltip-overlap, 守阵钉了 class="hr-src" 零残留), 新件不得复用该名字 */
     hrsSrcCls(e) {
       if (!e.verified_source) return "";
       return e.verified_source === "satisfied" ? "hr-vsrc-b" : "hr-vsrc-d";
     },
-    /* 状态列: 在列(观察期 N) / 失踪 N 波; 「最近被见到」只在 last_seen 已知时缀 */
-    hrsStatusText(e) {
-      let t = e.active ? "在列" : `失踪 ${e.missing_streak} 波`;
-      if (e.active && e.missing_streak > 0) t += ` · 观察期 ${e.missing_streak}`;
+    /* ---------------- 在列列(计划 26-10-02-1936 §3.6, 决策点④) ----------------
+     * 主徽章: 在列 / 失踪 N 波; 副行 = 「(观察期 N ·)最近被见到 <last_seen>」—— 观察期是
+     * 考察中的属性降级进副层, last_seen 未知(0 哨兵)显示 —, 绝不显示 epoch。 */
+    hrsPresenceText(e) {
+      return e.active ? "在列" : `失踪 ${e.missing_streak} 波`;
+    },
+    hrsPresenceCls(e) {
+      return e.active ? "hr-pres-on" : "hr-pres-miss";
+    },
+    hrsPresenceSub(e) {
+      const parts = [];
+      if (e.active && e.missing_streak > 0) parts.push(`观察期 ${e.missing_streak}`);
       const seen = this.fmtTs(e.last_seen);
-      if (seen) t += ` · 最近被见到 ${seen}`;
-      return t;
+      if (seen) parts.push(`最近被见到 ${seen}`);
+      return parts.length ? parts.join(" · ") : "—";
     },
     /* ---------------- 折叠 ⇄ 全屏覆盖层(计划 26-10-02-1936 阶段2) ----------------
      * 「展开」即打开覆盖式全屏弹窗(用户拍板①改判), 两态之间没有内嵌展开态; hrsOpen 在 state.js

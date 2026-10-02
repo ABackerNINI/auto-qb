@@ -158,10 +158,11 @@
 - test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
-- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2) —— 设置分区表① 模板绑定(档位 chips 本地过滤/明细行/空态/失踪行挂钩/「数据截至」时间戳/「上次核实(放行判定)」独立列名)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
+- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表① 模板绑定(档位 chips 本地过滤/老旧切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
 - test_frontend_hr_full_modal_wiring: HR 站点状态折叠 + 覆盖式全屏弹窗守阵(计划 26-10-02-1936 阶段2) —— aqb:hr-full-modal 扫描锚段内遮罩/面板/头部(标题+摘要+✕)绑定齐全、有「展开/收起」钮且无独立「全屏」钮、面板无预展开属性(v-show 挂 hrsOpen); hrsOpen 默认 false(state.js)不持久化(hr_status.js/config_hub.js/state.js 无该键的 localStorage 写读); hubGo 不再自动拉数只复位 hrsOpen; ESC 关闭进 lifecycle 退栈链且同步 escBusy 名单(dialogs.js), 先于 1632 清筛选兜底; 首次展开才拉(hrsToggle 未 loaded 即调 loadHrStatus)、无 setInterval; .hr-full-mask/.hr-full-modal 三套 UI CSS 成对(prism 落 components.css)
-- test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助三函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表② 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格)
+- test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4 + 26-10-02-1936 阶段3 扩) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助与行集函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表② 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格; local_present 是响应层 mark_local_present 追加的合法豁免)
+- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 老旧过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3) —— 切换钮默认「显示老旧种子 (N)」且 oldOn 默认关(只看做种中); 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -2198,12 +2199,13 @@ def test_frontend_hr_safety_wiring():
 
 
 def test_frontend_hr_detail_table_wiring():
-    """HR 表① 全量详情表前端接线守阵(2026-10-01, 计划 26-10-01-2216 阶段2)
+    """HR 表① 全量详情表前端接线守阵(2026-10-01, 计划 26-10-01-2216 阶段2; 26-10-02-1936 阶段3 扩)
 
     表① 是设置分区「站点状态」块里逐站点的种子明细表(数据 /api/hr/sites/<site>/entries,
     阶段1 交付), 四类"漏一处 = 静默失效 / 拍板被推翻"的故障形态机械钉住:
-    1. 模板绑定: 档位 chips(本地过滤不回后端)/ 明细行 / 空态 / 失踪行挂钩 / 「数据截至」时间戳
-      (拍板⑥)+ 列名「上次核实(放行判定)」(拍板④ 独立口径, 不与 last_seen 合并)—— 缺一处该功能消失;
+    1. 模板绑定: 档位 chips(本地过滤不回后端)/ 老旧切换钮(阶段3)/ 明细行 / 空态 / 失踪行挂钩 /
+      「数据截至」时间戳(拍板⑥)+ 三列重组列名「核实结论」「在列」(阶段3 拍板④, 口径钉在列名)——
+      缺一处该功能消失;
     2. 拍板守卫: remain_seconds 不得进表(拍板③, 2026-09-25 误读教训)/ 不挂 hr-pop 不做行内跳转
       (拍板⑤)/ 单元格无原生 title(hr-tooltip-overlap: 与悬停弹窗叠出遮挡)/ 表① 段无 <details>
       (排障视图在 aqb:hr-diag 独立段, 阶段3 交付)/ 来源徽章类名是 hr-vsrc —— .hr-src 是列表页已退役
@@ -2220,16 +2222,17 @@ def test_frontend_hr_detail_table_wiring():
     assert m, "settings-detail.html 缺 aqb:hr-detail-table 扫描锚 —— 表① 模板被移走或锚被删? 同步本守阵"
     frag = m.group(1)
 
-    # 1. 模板绑定: chips / 明细行 / 空态 / 失踪行 / 时间戳 / 拍板④列名
+    # 1. 模板绑定: chips / 老旧切换钮 / 明细行 / 空态 / 失踪行 / 时间戳 / 拍板④重组列名
     for needle, what in (
         ("hrsLaneChips()", "档位筛选 chips"),
         ("hrsSetLaneSel(", "chips 点击切换"),
+        ("hrsToggleOld(", "老旧切换钮点击(阶段3)"),
+        ("hrsOldBtnText(", "老旧切换钮文案计数(阶段3)"),
         ('v-for="e in hrsDetailRows', "明细行渲染"),
         ('class="drawer-table hr-detail-table"', "表格骨架(同挂 .drawer-table 一类)"),
-        ("该站点暂无 HR 种子", "空站点空态"),
+        ("hrsEmptyText(s.site)", "空态文案单点(阶段3: 区分本地无做种/档位暂无/无老旧)"),
         ("数据截至", "「数据截至」时间戳(拍板⑥)"),
         (':class="{ missing: !e.active }"', "失踪行弱化挂钩"),
-        ("上次核实(放行判定)", "拍板④ 独立口径列名"),
     ):
         assert needle in frag, f"表① 模板缺 {what}(应有 `{needle}`)"
 
@@ -2247,6 +2250,10 @@ def test_frontend_hr_detail_table_wiring():
         ("/api/hr/sites/${encodeURIComponent(site)}/entries", "明细端点拼接"),
         ("hrsLaneSelOf", "档位筛选读取"),
         ("hrsDetailRows", "本地过筛行集(不回后端)"),
+        ("该站点本地没有 HR 种子", "空站点空态文案(阶段3: 做种中视图全空)"),
+        ("该档位暂无", "档位过滤空态文案(阶段3)"),
+        ('label: "核实结论"', "拍板④ 重组列名(口径钉在列名)"),
+        ('label: "在列"', "拍板④ 重组列名(口径钉在列名)"),
     ):
         assert needle in hr_status_js, f"hr_status.js 缺 {what}({needle})"
     assert "setInterval" not in hr_status_js, "hr_status.js 不得有轮询定时器(计划 §5.5: 打开拉一次 + 手动刷新)"
@@ -2266,6 +2273,155 @@ def test_frontend_hr_detail_table_wiring():
     pri_views = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
     assert ".hr-detail-table-bar" in pri_components, "prism/css/components.css 缺表头过滤栏段( chips + 数据截至)"
     assert ".hr-detail-table .hr-lane-a" in pri_views, "prism/css/views.css 缺表格徽章段"
+
+
+# node 单测探针(不落盘): 加载真实 hr_status.js, 对模块级纯函数 hrsCompareRows 跑排序语义电池
+# (计划 26-10-02-1936 §3.4: 空值恒末位两方向不反转 / verified_ts·last_seen 0 哨兵 / 档位固定秩 /
+#  字符串·数值分型 / 同值稳定性)。无 node 静默跳过(与 _scan_js_syntax_with_node 同口径)。
+_NODE_HRS_SORT_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const rows = [
+  { tid: 10, name: "kb", uploaded_bytes: 200, ratio: 2.0, need_seed_seconds: 3600,
+    done_iso: "2026-09-01T10:00:00", verified_ts: 100, last_seen: 200, lane: "B" },
+  { tid: 20, name: "ka", uploaded_bytes: null, ratio: null, need_seed_seconds: null,
+    done_iso: null, verified_ts: 0, last_seen: 0, lane: "A" },
+  { tid: 30, name: "kc", uploaded_bytes: 300, ratio: 30.0, need_seed_seconds: 60,
+    done_iso: "2026-09-02T10:00:00", verified_ts: 300, last_seen: 100, lane: "C" },
+  { tid: 40, name: "kd", uploaded_bytes: 300, ratio: 15.0, need_seed_seconds: 60,
+    done_iso: null, verified_ts: 200, last_seen: 300, lane: "D" },
+];
+const seq = (key, dir) => [...rows].sort((a, b) => hrsCompareRows(a, b, key, dir)).map((r) => r.tid);
+const checks = [
+  ["bytes 降序 null 末位", JSON.stringify(seq("uploaded_bytes", -1)) === "[30,40,10,20]"],
+  ["bytes 升序 null 仍末位", JSON.stringify(seq("uploaded_bytes", 1)) === "[10,30,40,20]"],
+  ["同值稳定性(两方向 30 在 40 前)", seq("uploaded_bytes", -1).indexOf(30) < seq("uploaded_bytes", -1).indexOf(40)
+    && seq("uploaded_bytes", 1).indexOf(30) < seq("uploaded_bytes", 1).indexOf(40)],
+  ["verified_ts 0 哨兵降序末位", JSON.stringify(seq("verified_ts", -1)) === "[30,40,10,20]"],
+  ["verified_ts 0 哨兵升序仍末位", JSON.stringify(seq("verified_ts", 1)) === "[10,40,30,20]"],
+  ["last_seen 两方向空恒末位", JSON.stringify(seq("last_seen", -1)) === "[40,10,30,20]"
+    && JSON.stringify(seq("last_seen", 1)) === "[30,10,40,20]"],
+  ["档位固定秩降序 D>C>B>A", JSON.stringify(seq("lane", -1)) === "[40,30,10,20]"],
+  ["档位固定秩升序 A<B<C<D", JSON.stringify(seq("lane", 1)) === "[20,10,30,40]"],
+  ["名称字符串升序", JSON.stringify(seq("name", 1)) === "[20,10,30,40]"],
+  ["名称字符串降序", JSON.stringify(seq("name", -1)) === "[40,30,10,20]"],
+  ["need_seed_seconds null 两方向末位", JSON.stringify(seq("need_seed_seconds", -1)) === "[10,30,40,20]"
+    && JSON.stringify(seq("need_seed_seconds", 1)) === "[30,40,10,20]"],
+  ["done_iso 空串两方向末位", JSON.stringify(seq("done_iso", 1)) === "[10,30,20,40]"
+    && JSON.stringify(seq("done_iso", -1)) === "[30,10,20,40]"],
+];
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_hr_table_sort_filter_reorg_wiring():
+    """HR 表① 老旧过滤 + 三态排序 + 三列重组守阵(2026-10-02, 计划 26-10-02-1936 阶段3)
+
+    三块新交互"漏一处 = 静默失效 / 拍板被推翻"的故障形态机械钉住:
+    1. 老旧切换钮(§3.3 决策点③a): 默认文案「显示老旧种子 (N)」、oldOn 默认关(只看做种中 =
+      local_present true), 切换后「只看做种中 (M)」; 计数在站点全行集现算;
+    2. 三态排序(§3.4, 对齐 shared/sort.js): 表头十列全 sortable(hrsCols() 单点 + @click
+      hrsSetSort + sprite 双箭头)而表② 波次表不接排序; 状态机 = 首点降 → 再点升 → 第三击恢复
+      后端默认序, 换列直接降序; 比较器纯函数 hrsCompareRows 用 node 真跑语义电池
+      (空值恒末位两方向不反转 / 0 哨兵 / 档位 A<B<C<D 固定秩 / 字符串·数值分型 / 同值稳定),
+      无 node 的机器静默跳过本项(不引入 pytest skip, 基线 0 skipped);
+    3. 三列重组(§3.6 决策点④): 模板新列结构(核实结论徽章 hr-vsrc + 副行 / 在列·失踪徽章
+      hr-pres + 副行)+ CSS 三处成对(th.sortable 箭头激活 accent·hover faint / .hr-sub 副行小字 /
+      .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText /
+      hrsStatusText 随列退役, 零残留。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl = open(os.path.join(shared, "tpl", "settings-detail.html"), encoding="utf-8").read()
+    js = open(os.path.join(shared, "hr_status.js"), encoding="utf-8").read()
+    m = re.search(r"<!-- aqb:hr-detail-table:begin.*?-->(.*?)<!-- aqb:hr-detail-table:end.*?-->", tpl, re.S)
+    assert m, "settings-detail.html 缺 aqb:hr-detail-table 扫描锚 —— 表① 模板被移走或锚被删? 同步本守阵"
+    frag = m.group(1)
+
+    # 1. 老旧切换钮: 默认态文案 + oldOn 默认关(只看做种中)
+    assert "显示老旧种子 (" in js and "只看做种中 (" in js, "切换钮双态文案缺失(计划 §3.3)"
+    mo = re.search(r"hrsOldOnOf\(site\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo and "!!" in mo.group(1), "hrsOldOnOf 必须默认 falsy(默认只看做种中, 计划 §3.3)"
+    assert "hrsToggleOld(s.site)" in frag and "hrsOldBtnText(s.site)" in frag, "工具条缺老旧切换钮绑定"
+    assert "e.local_present" in js, "行集过滤必须消费后端 local_present(决策点③a), 前端不得自算 join"
+
+    # 2. 三态排序: 表头接线 + 列模型单点 + 状态机 + 纯函数
+    assert 'class="sortable"' in frag and "hrsSetSort(s.site, c.key)" in frag, "表头缺 sortable + 点击排序接线"
+    assert "hrsCols()" in frag and "hrsArrowHref(s.site, c.key)" in frag, "表头列模型/箭头接线缺失"
+    assert "#i-arrow-up" in js and "#i-arrow-down" in js, "箭头必须是 sprite 双图标(与种子页同款)"
+    mo = re.search(r"hrsCols\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo, "hr_status.js 缺 hrsCols() 列模型单点"
+    keys = re.findall(r'key: "([a-z_]+)"', mo.group(1))
+    assert len(keys) == 10 and len(set(keys)) == 10, f"表① 必须 10 列可排, 实得 {len(keys)}: {keys}"
+    assert set(keys) == {
+        "lane", "name", "tid", "uploaded_bytes", "downloaded_bytes", "ratio", "need_seed_seconds", "done_iso",
+        "verified_ts", "last_seen"
+    }, "十列排序键漂移, 同步本守阵"
+    mo = re.search(r"hrsSetSort\(site, key\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo, "hr_status.js 缺 hrsSetSort 三态状态机"
+    body = mo.group(1)
+    assert "!== key" in body and "sortDir[site] = -1" in body, "换列必须直接降序开始(sort.js 同款)"
+    assert 'hrsSortDirOf(site) === -1' in body and "sortDir[site] = 1" in body, "第二击必须转升序"
+    assert 'hrsSortKeyOf(site) = ""' in body or 'sortSel[site] = ""' in body, "第三击必须恢复后端默认序"
+    for fn in ("HRS_LANE_RANK", "HRS_SORT_VAL", "hrsValEmpty", "hrsCompareRows"):
+        assert re.search(rf"\b{fn}\b", js), f"hr_status.js 缺排序纯函数 {fn}(模块级单例, 供 node 单测)"
+    # 排序必须作用在当前过滤后的行集上(hrsDetailRows 内, 而不是另一个未过滤的行集)
+    mo = re.search(r"hrsDetailRows\(site\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo and "hrsCompareRows" in mo.group(1) and "local_present" in mo.group(1), \
+        "hrsDetailRows 必须做 chips × 老旧 AND 过滤后再排序(计划 §3.4)"
+    # 表② 波次表不接排序(行数 <=4)
+    md = re.search(r"<!-- aqb:hr-diag:begin.*?-->(.*?)<!-- aqb:hr-diag:end.*?-->", tpl, re.S)
+    assert md and "sortable" not in md.group(1), "表② 波次表不得接排序(计划 §3.4)"
+    # 有 node 时真跑比较器语义电池(无 node 静默跳过, 不引入 skip)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_HRS_SORT_PROBE, os.path.join(shared, "hr_status.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
+        assert proc.returncode == 0, f"hrsCompareRows node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], f"排序语义电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+    # 3. 三列重组: 新列结构 + 旧辅助零残留 + CSS 三处成对
+    for needle, what in (
+        ('class="hr-vsrc"', "核实结论徽章(沿用 hr-vsrc 色义)"),
+        ("hrsVerdictText(e)", "核实结论主层文案"),
+        ("hrsVerdictSub(e)", "核实结论副行(来源人话 · 时刻)"),
+        ('class="hr-pres"', "在列/失踪徽章"),
+        ("hrsPresenceText(e)", "在列主层文案"),
+        ("hrsPresenceSub(e)", "在列副行(观察期 · 最近被见到)"),
+        ('class="hr-sub"', "副行小字"),
+    ):
+        assert needle in frag, f"表① 三列重组缺 {what}(应有 `{needle}`)"
+    for dead in ("hrsVerifiedText", "hrsStatusText"):
+        # 判定只认代码态(剥块/行注释 —— 历史注释里提旧名不算残留)
+        js_code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+        js_code = re.sub(r"//[^\n]*", "", js_code)
+        tpl_code = re.sub(r"<!--.*?-->", "", tpl, flags=re.S)
+        assert dead not in js_code and dead not in tpl_code, f"{dead} 随旧列退役, 不得残留(死代码)"
+    for css, name in (
+        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
+        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
+        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+    ):
+        for rule, what in (
+            (".hr-detail-table th.sortable", "排序表头"),
+            (".hr-detail-table th .arrow", "排序箭头位"),
+            (".hr-detail-table th.sortable .arrow.on", "激活列箭头 accent"),
+            (".hr-detail-table th.sortable:hover .arrow", "非激活列 hover 浅色占位"),
+            (".hr-detail-table .hr-sub", "副行小字(--fg-dim 等宽)"),
+            (".hr-detail-table .hr-pres", "在列/失踪徽章底形"),
+            (".hr-detail-table .hr-pres.hr-pres-on", "在列徽章色义"),
+            (".hr-detail-table .hr-pres.hr-pres-miss", "失踪徽章 --paused 色义"),
+            (".hr-detail-table td.wrap { max-width", "名称列限宽钩子(卡片上下文)"),
+            (".hr-full-modal .hr-detail-table td.wrap { max-width: none", "全屏态名称列放开限宽"),
+        ):
+            assert rule in css, f"{name} 缺 {rule}({what}) —— 三套 UI 必须成对改(计划 §5.6)"
 
 
 def test_frontend_hr_diag_view_wiring():
@@ -2434,8 +2590,9 @@ def test_frontend_hr_contract_keys_match_backend():
     表② 的 kv 拼行与波次取数在 hr_status.js 里, 模板只有 hrsKvRows(s) 一个调用点, 扫不到)。
 
     这里从**前端源码**提取消费键(双向都能红: 前端新增幻键 / 上游改键名都会撞):
-    - 表① 行: 共享模板 aqb:hr-detail-table 段的直接 `e.*` + hr_status.js 三个行辅助函数
-      (hrsVerifiedText/hrsSrcCls/hrsStatusText, 行对象经参数 `e` 传入)的 `e.*`,
+    - 表① 行: 共享模板 aqb:hr-detail-table 段的直接 `e.*` + hr_status.js 的行辅助/行集函数
+      (参数把行对象传进来的: hrsDetailRows 的 `e` / hrsVerdictText/hrsVerdictSub/hrsSrcCls/
+      hrsPresenceText/hrsPresenceCls/hrsPresenceSub 的 `e`, 26-10-02-1936 阶段3 随三列重组换名),
       对照 EntryDetail.to_dict; 全文件扫 `e.*` 会误吞 catch(e) 的 auth/message, 故按函数体提;
     - 表② 站点级: hr_status.js 全文件(拼行单点 hrsKvRows 与摘要层 hrsState*/hrsLaneText
       的参数都叫 s)`s.*` + aqb:hr-diag 模板段, 对照 SiteStatus.to_dict;
@@ -2457,14 +2614,20 @@ def test_frontend_hr_contract_keys_match_backend():
     frag_diag = re.search(r"<!-- aqb:hr-diag:begin.*?-->(.*?)<!-- aqb:hr-diag:end.*?-->", tpl, re.S)
     assert frag_table and frag_diag, "settings-detail.html 缺 aqb 扫描锚(表①/表②) —— 模板被移走? 同步本守阵"
 
-    # --- 表① 行字段: 模板直接消费 + JS 行辅助函数(经参数 e 传整行对象) ---
+    # --- 表① 行字段: 模板直接消费 + JS 行辅助/行集函数(行对象经参数传入) ---
     used_e = set(re.findall(r"\be\.([a-z_]+)\b", frag_table.group(1)))
-    for fn in ("hrsVerifiedText", "hrsSrcCls", "hrsStatusText"):
-        m = re.search(rf"\n    {fn}\(e\) \{{\n(.*?)\n    \}},", js, re.S)
-        assert m, f"hr_status.js 找不到 {fn}(e) 函数体 —— 表① 行消费单点被移走或改名? 同步本守阵"
+    for fn in (
+        "hrsDetailRows", "hrsVerdictText", "hrsVerdictSub", "hrsSrcCls", "hrsPresenceText", "hrsPresenceCls",
+        "hrsPresenceSub"
+    ):
+        # 行集函数参数是 site(体内 lambda 参数 e), 行辅助函数参数是 e —— 统一按「函数头到方法尾」切块
+        m = re.search(rf"\n    {fn}\((?:e|site)\) \{{\n(.*?)\n    \}},", js, re.S)
+        assert m, f"hr_status.js 找不到 {fn} 函数体 —— 表① 行消费单点被移走或改名? 同步本守阵"
         used_e |= set(re.findall(r"\be\.([a-z_]+)\b", m.group(1)))
     assert {"tid", "verified_ts", "last_seen"} <= used_e, f"表① 消费键提取失效(只扫到 {sorted(used_e)}) —— 守阵变恒真, 同步提取器"
-    phantom_e = sorted(used_e - set(EntryDetail(tid=0).to_dict()))
+    # local_present 是响应层 mark_local_present 追加的只读标记(routes/hr.py 单点, 决策点③a),
+    # 不在 EntryDetail.to_dict —— 有意豁免; 其余幻键仍然是真缺陷。
+    phantom_e = sorted(used_e - set(EntryDetail(tid=0).to_dict()) - {"local_present"})
     assert not phantom_e, f"表① 消费了 EntryDetail 不导出的键 {phantom_e}(渲染成空, 打错/上游改名都会这样)"
 
     # --- 表② 站点级(s.*)与波次级(ls.*) ---

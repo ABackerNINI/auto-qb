@@ -295,9 +295,12 @@
                             <button class="hb-btn ghost sm" :disabled="hrs.refreshing"
                                     @click="hrsRefresh(s.site)">立即拉取</button>
                           </p>
-                          <!-- 表① 全量详情表(计划 26-10-01-2216 阶段2, 拍板②b③a④b⑤a⑥a): 逐种子清单,
+                          <!-- 表① 全量详情表(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3): 逐种子清单,
                                按站点按需拉一次(hr_status.js loadHrSiteEntries, 打开分区/手动刷新, 不轮询);
-                               档位 chips 前端本地过滤不回后端; 骨架照 .drawer-table 范式(同挂一类);
+                               档位 chips × 老旧切换钮前端本地过滤不回后端; 表头三态排序对齐种子页
+                               (shared/sort.js 范式: 首点降 → 再点升 → 第三击恢复后端默认序, 空值恒末位);
+                               三列重组(拍板④): 档位徽章 / 核实结论(徽章+来源·时间副行) / 在列(徽章+最近被见到副行);
+                               骨架照 .drawer-table 范式(同挂一类);
                                单元格一律不挂原生 title(hr-tooltip-overlap), 名称过长靠 .wrap 换行;
                                人话(lane_text/need_seed_text/verified_source_text)全由后端算好, 前端不重算 -->
                           <!-- aqb:hr-detail-table:begin (守阵 test_frontend_hr_detail_table_wiring 的扫描锚) -->
@@ -306,6 +309,8 @@
                               <span v-for="c in hrsLaneChips()" :key="c[0]" class="hrs-tag hr-chip"
                                     :class="{ on: hrsLaneSelOf(s.site) === c[0] }"
                                     @click="hrsSetLaneSel(s.site, c[0])">{{ c[1] }}</span>
+                              <span class="hrs-tag hr-chip" :class="{ on: hrsOldOnOf(s.site) }"
+                                    @click="hrsToggleOld(s.site)">{{ hrsOldBtnText(s.site) }}</span>
                               <span v-if="d.now" class="hr-detail-table-fresh">数据截至 {{ fmtTs(d.now) }}</span>
                             </div>
                             <p v-if="d.loading && !d.loaded" class="hb-hp">正在读取站点明细…</p>
@@ -314,10 +319,10 @@
                             <table v-else-if="hrsDetailRows(s.site).length" class="drawer-table hr-detail-table">
                               <thead>
                                 <tr>
-                                  <th>档位</th><th>名称</th><th>tid</th>
-                                  <th class="num">上传量</th><th class="num">下载量</th><th class="num">分享率</th>
-                                  <th class="num">还需做种</th>
-                                  <th>完成时间</th><th>上次核实(放行判定)</th><th>状态</th>
+                                  <th v-for="c in hrsCols()" :key="c.key" class="sortable" :class="{ num: c.num }"
+                                      @click="hrsSetSort(s.site, c.key)"><span>{{ c.label }}</span><span class="arrow"
+                                        :class="{ on: hrsSortKeyOf(s.site) === c.key }"><svg class="ico" viewBox="0 0 16 16"><use
+                                          :href="hrsArrowHref(s.site, c.key)"></use></svg></span></th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -330,13 +335,14 @@
                                   <td class="num">{{ hrsRatio(e.ratio) }}</td>
                                   <td class="num">{{ hrsNeedSeed(e.need_seed_text) }}</td>
                                   <td class="mono-cell">{{ hrsDone(e.done_iso) }}</td>
-                                  <td><span class="mono-cell">{{ hrsVerifiedText(e) }}</span><span class="hr-vsrc"
-                                       :class="hrsSrcCls(e)">{{ e.verified_source_text }}</span></td>
-                                  <td class="mono-cell">{{ hrsStatusText(e) }}</td>
+                                  <td><span class="hr-vsrc" :class="hrsSrcCls(e)">{{ hrsVerdictText(e) }}</span><span
+                                       class="hr-sub">{{ hrsVerdictSub(e) }}</span></td>
+                                  <td><span class="hr-pres" :class="hrsPresenceCls(e)">{{ hrsPresenceText(e) }}</span><span
+                                       class="hr-sub">{{ hrsPresenceSub(e) }}</span></td>
                                 </tr>
                               </tbody>
                             </table>
-                            <div v-else class="empty"><span>{{ hrsLaneSelOf(s.site) ? "该档位暂无 HR 种子" : "该站点暂无 HR 种子" }}</span></div>
+                            <div v-else class="empty"><span>{{ hrsEmptyText(s.site) }}</span></div>
                           </template>
                           <!-- aqb:hr-detail-table:end -->
                           <!-- 表② 排障视图(计划 26-10-01-2216 阶段3, 拍板①a): 排障性文本(取波/守恒/零行三态/
