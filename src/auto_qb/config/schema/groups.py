@@ -180,6 +180,13 @@ GROUPS: Tuple[Group, ...] = (
                         help="本机(127.0.0.1)打开 WebUI 免输入访问密钥; 远程访问仍需密钥",
                         risk="仅对本机连接生效, 对外暴露(host 非本机)仍强制鉴权; 开启弱化本机安全边界",
                     ),
+                    Field(
+                        "skip_check_menu",
+                        "右键菜单显示跳检",
+                        "bool",
+                        default="false",
+                        help="开启后种子右键菜单(单选与多选)显示跳检项, web 端点同步放行; 关闭时菜单不显示且端点拒绝(fail-closed), 规则源的跳检不受影响",
+                    ),
                 )
             ),
             Field(

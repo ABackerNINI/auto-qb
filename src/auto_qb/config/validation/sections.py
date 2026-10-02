@@ -20,7 +20,7 @@ KNOWN_FS_KEYS = {"path_map"}
 # path_map 条目的合法键(YAML 空间): from = qB 报回的宿主路径前缀, to = 容器挂载点
 KNOWN_PATH_MAP_ENTRY_KEYS = {"from", "to"}
 
-KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify"}
+KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu"}
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
@@ -521,6 +521,8 @@ def _validate_web(spec, errors: List[str]) -> None:
         errors.append("config.web.token: 必须是字符串")
     if "skip_local_verify" in spec:
         _try(parse_bool, spec["skip_local_verify"], "config.web.skip_local_verify", errors)
+    if "skip_check_menu" in spec:
+        _try(parse_bool, spec["skip_check_menu"], "config.web.skip_check_menu", errors)
 
 
 def _validate_notify(spec, errors: List[str]) -> None:

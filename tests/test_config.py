@@ -43,6 +43,7 @@
 - test_validate_state_save_interval: state_save_interval 0(关闭)与 >=30s 合法; 低于下限/坏格式报错(防误配置写放大)
 - test_config_schema_version_load_and_migrate_dispatch: schema_version 缺失=v1 加载成功; 非法/未来版本经迁移分派报 ConfigError(报清两个版本号)
 - test_validate_schema_version_shape: validate_config 形状校验(须为整数/须>=1, 防御层)
+- test_load_web_skip_check_menu_tristate: web.skip_check_menu 三态(显式 true / 显式 false / 缺省默认 false, 计划 26-10-02-1955 W1)
 - test_example_minimal_yml_passes_fail_fast: minimal.yml 过 fail-fast 校验 + 钉 README 开箱语义(web/集数标签默认开) —— 示例文件无 schema 守卫会静默漂移(pitfalls/docs/drift.md)
 - test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关(无桌面会话)/ grouping.check_missing_files 关(读宿主磁盘, 不关会误暂停整组 + 打 MISSING 标签) —— compose.yaml 的端口映射与 healthcheck 依赖)
 """
@@ -1344,7 +1345,7 @@ def test_validate_fs_errors():
 
 
 def test_validate_web_errors():
-    """web 段类型与范围错误: 整段非字典 / host 空串 / port 非整数与越界 / token 非字符串"""
+    """web 段类型与范围错误: 整段非字典 / host 空串 / port 非整数与越界 / token 非字符串 / skip_check_menu 非 bool"""
     errors = _errs({"web": "not-dict"})
     assert any("config.web: 必须是字典" in e for e in errors)
     errors = _errs({"web": {"host": "", "port": "abc", "token": 123}})
@@ -1353,6 +1354,20 @@ def test_validate_web_errors():
     assert any("config.web.token: 必须是字符串" in e for e in errors)
     errors = _errs({"web": {"port": 70000}})
     assert any("config.web.port: 超出范围" in e for e in errors)
+    errors = _errs({"web": {"skip_check_menu": "maybe"}})
+    assert any("config.web.skip_check_menu" in e for e in errors)
+
+
+def test_load_web_skip_check_menu_tristate():
+    """web.skip_check_menu 三态(计划 26-10-02-1955 W1): 显式 true / 显式 false / 缺省默认 false"""
+    base = "config:\n  trackers:\n    T1:\n      domains:\n        - a.com\n"
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, base + "  web:\n    skip_check_menu: true\n"))
+        assert cfg.web.skip_check_menu is True
+        cfg = load_config(_write_raw(td, base + "  web:\n    skip_check_menu: false\n"))
+        assert cfg.web.skip_check_menu is False
+        cfg = load_config(_write_raw(td, base))
+        assert cfg.web.skip_check_menu is False  # 缺省走保守默认(菜单不显示 + 端点拒绝)
 
 
 def test_validate_tracker_rules_non_list_skips_refs():

@@ -106,6 +106,7 @@ def load_web_config(spec: dict) -> WebConfig:
         port=_get(spec, "port", d.port, int),
         token=_get(spec, "token", d.token),
         skip_local_verify=_get(spec, "skip_local_verify", d.skip_local_verify, parse_bool),
+        skip_check_menu=_get(spec, "skip_check_menu", d.skip_check_menu, parse_bool),
     )
 
 

@@ -210,12 +210,15 @@ class WebConfig:
     token: 访问密钥(Bearer 鉴权); 留空 = 首次启动随机生成并持久化到 data_dir/web.token
     skip_local_verify: 本机(loopback)连接跳过 token 鉴权, 直接进入 —— 仅对 127.0.0.1/::1 生效,
     host 对外暴露时远端请求仍强制鉴权; 保守默认关闭(开启弱化本机安全边界)
+    skip_check_menu: 右键菜单显示跳检(同时控制单选与多选菜单项显示及 web 端点放行);
+    保守默认关闭(fail-closed: 菜单不显示 + web 端点拒绝), rule 源跳检不受影响
     """
     enabled: bool = False
     host: str = "127.0.0.1"
     port: int = 8080
     token: str = ""
     skip_local_verify: bool = False
+    skip_check_menu: bool = False
 
 
 @dataclass
