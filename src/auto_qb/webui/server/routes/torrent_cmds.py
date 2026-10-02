@@ -155,6 +155,11 @@ def build_router(ctx: WebContext) -> APIRouter:
         两种模式(DLG-02): hashes=种子 hash 列表; keys=分组 key 列表(URL 编码态, 与
         /api/groups/{key}/delete 同一编解码), 可混合。主循环侧展开组成员并与 hashes
         合并去重后一次调用; 回执结构与纯 hash 模式一致(queued/cmd_id + 聚合回执)。
+
+        limits/location 扩展动作(计划 26-10-02-1955 W2): up_limit/dl_limit 非负 int
+        (bytes/s, 0=qB 语义的"无限制", 允许), location 非空 str —— 均按"提供才透传"
+        (队列载荷不带多余键, 纯 pause 调用的历史形态不变)。参数错误(负数 / limits
+        两方向全空 / location 空路径)在路由层 400 拒收: 不入队, 前端即时可见。
         """
         b = body or {}
         payload = {
@@ -173,6 +178,26 @@ def build_router(ctx: WebContext) -> APIRouter:
             payload["tags"] = tags
         if b.get("category") is not None:
             payload["category"] = str(b["category"]).strip()
+        # 批量限速/移动(W2): 提供才透传; 0 = 不限速合法, 负数路由层拒收
+        if b.get("up_limit") is not None:
+            v = int(b["up_limit"])
+            if v < 0:
+                raise HTTPException(status_code=400, detail="up_limit 不能为负数(0 = 不限速)")
+            payload["up_limit"] = v
+        if b.get("dl_limit") is not None:
+            v = int(b["dl_limit"])
+            if v < 0:
+                raise HTTPException(status_code=400, detail="dl_limit 不能为负数(0 = 不限速)")
+            payload["dl_limit"] = v
+        location = str(b.get("location") or "").strip()
+        if location:
+            payload["location"] = location
+        # 按 action 校验: limits 至少一项有值; location 必带非空路径
+        action = payload["action"]
+        if action == "limits" and "up_limit" not in payload and "dl_limit" not in payload:
+            raise HTTPException(status_code=400, detail="批量限速至少提供 up_limit / dl_limit 一项(留空 = 不修改)")
+        if action == "location" and not location:
+            raise HTTPException(status_code=400, detail="批量移动必须提供非空 location")
         return _enqueue("bulk_torrents", payload)
 
     @router.post("/api/torrents/add")

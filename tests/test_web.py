@@ -134,6 +134,8 @@
 - test_drain_web_commands_bulk_torrents: 批量多 hash 一次调用 + 聚合回执(部分缺失/未知动作/空列表 -> error)
 - test_drain_web_commands_bulk_torrents_group_keys: bulk 组键模式(DLG-02): 组键展开级联全组成员删除; 与 hashes 混合去重; 缺失组计组数; 组不存在不调 API
 - test_drain_web_commands_bulk_torrents_tags_category: bulk 标签/分类命令执行 —— add_tags/remove_tags/set_category 单次调用带全部 hash; 缺 tags / 缺 category 键 error 回执; 空串分类(清除)合法; 标签非空校验
+- test_api_t_bulk_limits_location_enqueue: bulk 限速/移动动作入队(计划 26-10-02-1955 W2) —— up/dl/location 提供才透传(0=不限合法), 负数/limits 全空/location 空路径 400 不入队; 历史载荷形态不变; 无密钥 401
+- test_drain_web_commands_bulk_torrents_limits_location: bulk 限速/移动分派 —— 只调有值方向、每方向一次调用传全 hashes; 写后快照同步(up_limit/dl_limit/save_path); 缺值 error 回执不调 API
 - test_cmd_trackers_write_invalidates_lazy_cache: tracker 三兄弟写后失效 _trackers_info 惰性缓存(重读拉新值)
 - test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
 - test_drain_web_commands_empty_queue: 队列为空直接返回(queue.Empty 分支)
@@ -6228,6 +6230,118 @@ def test_api_t_bulk_tags_category_enqueue(web_env):
     ).status_code == 401
 
 
+def test_api_t_bulk_limits_location_enqueue(web_env):
+    """bulk 限速/移动动作入队(计划 26-10-02-1955 W2): up/dl 提供才透传(0=不限合法, 负数 400)、
+    location 非空才透传; limits 两方向全空 / location 空路径 -> 400 不入队;
+    纯 pause 调用的队列载荷不带新键(历史形态不变); 无密钥 401"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    cases = [
+        # 只提供上传方向: 载荷只带 up_limit(0 = qB 语义的不限速, 合法)
+        (
+            {
+                "hashes": ["HA", "HB"],
+                "action": "limits",
+                "up_limit": 1024
+            },
+            {
+                "hashes": ["HA", "HB"],
+                "action": "limits",
+                "delete_files": False,
+                "up_limit": 1024
+            },
+        ),
+        # 两方向都提供: 0 原样透传(不限速)
+        (
+            {
+                "hashes": ["HA"],
+                "action": "limits",
+                "up_limit": 0,
+                "dl_limit": 2048
+            },
+            {
+                "hashes": ["HA"],
+                "action": "limits",
+                "delete_files": False,
+                "up_limit": 0,
+                "dl_limit": 2048
+            },
+        ),
+        # 批量移动: 非空路径透传(首尾空白剥掉)
+        (
+            {
+                "hashes": ["HA"],
+                "action": "location",
+                "location": "  R:/X  "
+            },
+            {
+                "hashes": ["HA"],
+                "action": "location",
+                "delete_files": False,
+                "location": "R:/X"
+            },
+        ),
+    ]
+    for body, want_payload in cases:
+        resp = client.post("/api/torrents/bulk", headers=auth, json=body)
+        assert resp.status_code == 200, f"{body}: {resp.text}"
+        assert resp.json()["queued"] is True
+        cmd, payload = mgr.web.commands.get_nowait()
+        assert cmd == "bulk_torrents"
+        payload.pop("cmd_id")
+        payload.pop("_queued_ts", None)  # P0-0 埋点元数据, 不参与入队参数断言
+        assert payload == want_payload, body
+    # 参数错误 -> 400 且不入队(负数 / limits 全空 / location 空路径)
+    bad = [
+        {
+            "hashes": ["HA"],
+            "action": "limits",
+            "up_limit": -1
+        },
+        {
+            "hashes": ["HA"],
+            "action": "limits",
+            "dl_limit": -1024
+        },
+        {
+            "hashes": ["HA"],
+            "action": "limits"
+        },
+        {
+            "hashes": ["HA"],
+            "action": "location",
+            "location": ""
+        },
+        {
+            "hashes": ["HA"],
+            "action": "location",
+            "location": "   "
+        },
+        {
+            "hashes": ["HA"],
+            "action": "location"
+        },
+    ]
+    for i, body in enumerate(bad):
+        resp = client.post("/api/torrents/bulk", headers=auth, json=body)
+        assert resp.status_code == 400, f"case {i}: {resp.status_code} {resp.text}"
+        assert mgr.web.commands.qsize() == 0, f"case {i}: 参数错误不应入队"
+    # 历史 形态: 不带新键的纯 pause 载荷不变
+    client.post("/api/torrents/bulk", headers=auth, json={"hashes": ["HA"], "action": "pause"})
+    _, payload = mgr.web.commands.get_nowait()
+    payload.pop("cmd_id")
+    payload.pop("_queued_ts", None)
+    assert payload == {"hashes": ["HA"], "action": "pause", "delete_files": False}, payload
+    # 鉴权: 无密钥 401
+    assert client.post(
+        "/api/torrents/bulk", json={
+            "hashes": ["HA"],
+            "action": "limits",
+            "up_limit": 1
+        }
+    ).status_code == 401
+
+
 def test_drain_web_commands_torrent_write_actions():
     """二轮写命令: 参数正确传给 QbApi(真链路), cmd_id 回执 ok, 限速/保存路径写后同步快照"""
     with tempfile.TemporaryDirectory() as td:
@@ -6672,6 +6786,80 @@ def test_drain_web_commands_bulk_torrents_tags_category():
         assert client.calls == before, "缺 category 不应调用 qB API"
         r = mgr.web.results["t6"]
         assert r["status"] == "error" and "分类" in r["error"], r
+
+
+def test_drain_web_commands_bulk_torrents_limits_location():
+    """bulk 限速/移动分派(计划 26-10-02-1955 W2): 只调有值方向、每方向一次调用传全 hashes
+    (不逐枚循环); 0=不限速合法; 缺值(直投队列绕过路由校验)-> error 回执不调 API"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        # limits: 两方向都有 -> 各一次调用, 每次收全 hashes; 回执 ok
+        mgr.web.commands.put(
+            (
+                "bulk_torrents", {
+                    "hashes": ["HA", "HB"],
+                    "action": "limits",
+                    "up_limit": 1024,
+                    "dl_limit": 2048,
+                    "cmd_id": "l1"
+                }
+            )
+        )
+        mgr.web.consume_commands()
+        assert client.calls[-2:] == [("set_upload_limit", 1024), ("set_download_limit", 2048)]
+        assert client.limit_location_hashes_calls[-2:] == [
+            ("set_upload_limit", ["HA", "HB"]),
+            ("set_download_limit", ["HA", "HB"]),
+        ], client.limit_location_hashes_calls
+        assert mgr.web.results["l1"]["status"] == "ok"
+        # 写后快照同步(QbApi 写方法同步 store, 同 tick 读到新值)
+        assert mgr.store.get("HA").up_limit == 1024 and mgr.store.get("HB").dl_limit == 2048
+        # limits: 只提供下载方向(0 = 不限速, 合法)-> 只调下载方向
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA", "HB", "GONE"],
+                "action": "limits",
+                "dl_limit": 0,
+                "cmd_id": "l2"
+            })
+        )
+        mgr.web.consume_commands()
+        assert client.calls[-1] == ("set_download_limit", 0), client.calls[-1]
+        assert client.limit_location_hashes_calls[-1] == ("set_download_limit", ["HA", "HB"]), \
+            "缺失 hash 过滤后一次调用传全部在册 hashes"
+        assert mgr.web.results["l2"]["status"] == "error" and "1/3" in mgr.web.results["l2"]["error"]
+        # location: 一次调用传全 hashes, 快照 save_path 同步
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA", "HB"],
+                "action": "location",
+                "location": "R:/X",
+                "cmd_id": "l3"
+            })
+        )
+        mgr.web.consume_commands()
+        assert client.calls[-1] == ("set_location", "R:/X"), client.calls[-1]
+        assert client.limit_location_hashes_calls[-1] == ("set_location", ["HA", "HB"])
+        assert mgr.web.results["l3"]["status"] == "ok"
+        assert mgr.store.get("HA").save_path == "R:/X"
+        # limits 两方向全空 -> error 回执不调 API(直投队列绕过路由 400 时的 handler 兜底)
+        before = list(client.calls)
+        mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA"], "action": "limits", "cmd_id": "l4"}))
+        mgr.web.consume_commands()
+        assert client.calls == before, "缺限速值不应调用 qB API"
+        assert mgr.web.results["l4"]["status"] == "error" and "限速值" in mgr.web.results["l4"]["error"]
+        # location 空路径 -> error 回执不调 API
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "location",
+                "location": "  ",
+                "cmd_id": "l5"
+            })
+        )
+        mgr.web.consume_commands()
+        assert client.calls == before, "空路径不应调用 qB API"
+        assert mgr.web.results["l5"]["status"] == "error" and "目标路径" in mgr.web.results["l5"]["error"]
 
 
 def test_cmd_trackers_write_invalidates_lazy_cache():
@@ -9491,7 +9679,8 @@ def test_web_commands_rename_fs_folder_branch():
 
 
 def test_web_commands_bulk_argument_errors():
-    """批量动作参数四类错误: 未知动作 / 空目标 / 标签动作无标签 / set_category 无分类"""
+    """批量动作参数错误: 未知动作 / 空目标 / 标签动作无标签 / set_category 无分类 /
+    limits 两方向全空 / location 空路径 -> error 回执且不调 API"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
         cases = [
@@ -9510,6 +9699,14 @@ def test_web_commands_bulk_argument_errors():
                 "hashes": ["HA"],
                 "action": "set_category"
             }, "未提供分类"),
+            ({
+                "hashes": ["HA"],
+                "action": "limits"
+            }, "未提供限速值"),
+            ({
+                "hashes": ["HA"],
+                "action": "location"
+            }, "未提供目标路径"),
         ]
         for i, (payload, want) in enumerate(cases):
             mgr.web.commands.put(("bulk_torrents", dict(payload, cmd_id=f"b{i}")))

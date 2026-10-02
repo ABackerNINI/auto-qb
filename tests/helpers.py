@@ -89,6 +89,9 @@ class FakeClient:
         self.alt_dl_limit_value = 0  # app/preferences alt_dl_limit 读数(bytes/s, 0 = 不限)
         self.speed_limits_mode_value = 0  # transfer/speedLimitsMode 读数(0 = 主速度 / 1 = 备用)
         self.recheck_hashes_calls = []  # torrents_recheck 作用范围(hash 列表; calls 保持旧约定只记 None)
+        # 限速/移动三个 qB 方法的作用范围((方法名, hash 列表); calls 保持旧二元组形状不动,
+        # 单独平行记录供 bulk"单次调用传全 hashes"断言用 —— 同 recheck_hashes_calls 的模式)
+        self.limit_location_hashes_calls = []
         self._sync_rid = 0  # 已发送的响应 ID(模拟 qB m_maindataLastSentID)
         self._sync_snapshot = {}  # 上次响应对应的全量数据(模拟 qB m_maindataSnapshot)
 
@@ -328,12 +331,15 @@ class FakeClient:
 
     def torrents_set_upload_limit(self, torrent_hashes=None, limit=None):
         self.calls.append(("set_upload_limit", limit))
+        self.limit_location_hashes_calls.append(("set_upload_limit", torrent_hashes))
 
     def torrents_set_download_limit(self, torrent_hashes=None, limit=None):
         self.calls.append(("set_download_limit", limit))
+        self.limit_location_hashes_calls.append(("set_download_limit", torrent_hashes))
 
     def torrents_set_location(self, torrent_hashes=None, location=None):
         self.calls.append(("set_location", location))
+        self.limit_location_hashes_calls.append(("set_location", torrent_hashes))
 
     # ---- WEB UI 二轮写命令替身(snake 命名与 QbApi 调用一致; 记 calls 供断言) ----
 

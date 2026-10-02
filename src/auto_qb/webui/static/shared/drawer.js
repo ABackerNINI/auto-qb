@@ -201,6 +201,79 @@ window.AQB_DRAWER = {
       }
       await this._editPost(hash, "location", { location: res.location }, "已移动");
     },
+    /* ---------------- 批量编辑(多选右键, 计划 26-10-02-1955 W2): 批量限速 / 批量移动 ----------------
+     * 与单选编辑同一家族, 但三处不同: 目标集合是整个选中集合(_bulkTargets 口径, 组键 + 成员 hash
+     * 整份交给后端, 展开去重的单一权威在后端); 无当前值可预填(多选各值不同, 预填必然误导);
+     * 提交走 /api/torrents/bulk 合单通道(一次 POST + 一个聚合回执), 不做乐观贴片 —— 限速/移动
+     * 的行值由 QbApi 写方法同步 store 快照 + bulk_torrents 的 RESYNC 补刷新落行(与标签/分类
+     * 的 _metaBulk 同一观感)。 */
+    /* 批量限速…: 双输入各自独立, 留空 = 该方向不提交(D3 拍板), KiB/s ×1024 与单选同口径 */
+    async editLimitsMulti() {
+      this.menu.visible = false;
+      const targets = this._bulkTargets();
+      if (!targets.groupKeys.length && !targets.memberHashes.length) return;
+      const res = await this._openModal({
+        title: "批量限速",
+        body: `为选中的 ${targets.groupKeys.length + targets.memberHashes.length} 个目标设置上传/下载速度上限(KiB/s)。留空 = 该项保持不变, 填 0 = 不限速。`,
+        fields: [
+          { key: "up", label: "上传上限(KiB/s)", value: "", placeholder: "留空不修改, 0 = 不限" },
+          { key: "dl", label: "下载上限(KiB/s)", value: "", placeholder: "留空不修改, 0 = 不限" },
+        ],
+        okText: "应用", cancelText: "取消",
+      });
+      if (!res) return;
+      const body = {};
+      for (const [k, key] of [["up", "up_limit"], ["dl", "dl_limit"]]) {
+        if (res[k] === "") continue;  // 空 = 不修改该项(只提交有值方向)
+        const n = Number(res[k]);
+        if (!Number.isFinite(n) || n < 0) {
+          this.toast("限速需为非负数字(KiB/s)", "warn");
+          return;
+        }
+        body[key] = Math.round(n * 1024);  // KiB/s 转 bytes/s; 0 原样传(qB 语义 = 不限)
+      }
+      if (!Object.keys(body).length) {
+        this.toast("未作修改", "ok", 2000);
+        return;
+      }
+      await this._bulkEditPost(targets, "limits", body, "批量限速");
+    },
+    /* 批量移动…: promptDialog 空 prefill(多选无当前值) -> confirm 确认框展示目标路径与 N */
+    async editMoveMulti() {
+      this.menu.visible = false;
+      const targets = this._bulkTargets();
+      const n = targets.groupKeys.length + targets.memberHashes.length;
+      if (!n) return;
+      const raw = await this.promptDialog("批量移动", "", {
+        body: `将选中的 ${n} 个目标的文件移动到新路径。注意: 移动后相关种子将离开当前辅种组。`,
+        placeholder: "D:\\downloads\\target", okText: "下一步",
+      });
+      if (raw === null) return;
+      const location = String(raw || "").trim();
+      if (!location) {
+        this.toast("路径不能为空", "warn");
+        return;
+      }
+      const ok = await this.confirmDialog("确认移动", `将把 ${n} 个目标的保存路径移动到: ${location}`, { okText: "移动" });
+      if (!ok) return;
+      await this._bulkEditPost(targets, "location", { location }, "批量移动");
+    },
+    /* 批量编辑统一投递: 与 _metaBulk 同链路(api + waitCmd + toast 三态), 目标集合用打开
+     * 对话框时刻锁定的 targets; 不做乐观贴片(见本节头注释)。 */
+    async _bulkEditPost(targets, action, extra, okText) {
+      const { groupKeys, memberHashes } = targets;
+      try {
+        const resp = await this.api("/api/torrents/bulk", {
+          method: "POST",
+          body: JSON.stringify({ action, keys: groupKeys, hashes: memberHashes, ...extra }),
+        });
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) this.toast(`已执行: ${okText}(${groupKeys.length + memberHashes.length} 个目标)`, "ok", 2500);
+        else this.toast(`${okText}失败: ${r.error}`, "error", 8000);
+      } catch (e) {
+        if (!e.auth) this.toast(`${okText}命令发送失败: ` + e.message, "error");
+      }
+    },
     /* 重命名…: 种子显示名(不改磁盘文件名) → POST rename */
     async editRename(h = "") {
       const hash = this._editTargetHash(h);

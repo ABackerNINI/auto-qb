@@ -886,6 +886,79 @@ async function smokeUi(browser, ui) {
     }
 
     /*
+     * W2 批量限速/移动(计划 26-10-02-1955): 多选菜单出现两项 + 限速提交载荷形状。
+     * 判据:
+     *   1. 选中行右键 -> 批量菜单含「限速…」「移动…」两项(重新校验之后; 排序从宽, 只要求同时出现)。
+     *   2. 点「限速…」-> 弹双输入对话框; 上传填 1024 KiB/s、下载留空 -> 载荷 action=limits、
+     *      up_limit=1024*1024、dl_limit 键不出现(D3: 留空方向不提交)、hashes 覆盖整个选中集合。
+     */
+    {
+      const N = 3;
+      await page.evaluate("window.scrollTo(0, 0)");
+      await page.waitForTimeout(200);
+      const picked = await page.evaluate(`(() => {
+        const vm = ${INST};
+        vm.selGroups = [];
+        vm.selMembers = vm.filteredTorrents.slice(0, ${N}).map((r) => r.hash);
+        return vm.selMembers.length;
+      })()`);
+      const selHashes = await readInst(page, "vm.selMembers.slice()");
+      let anchor = null;
+      for (const r of await page.$$(".torrent-row")) {   // 行是窗口化的: 从已渲染行里挑选中锚点
+        const h = await r.evaluate((el) => el.getAttribute("data-hash"));
+        if (selHashes.includes(h)) { anchor = r; break; }
+      }
+      let menuTexts = [];
+      if (anchor) {
+        await anchor.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        menuTexts = await page.$$eval(".ctx-item", (ns) => ns.map((n) => n.textContent.trim()));
+      }
+      add(ui, "W2 批量菜单含限速/移动两项",
+        picked === N && menuTexts.some((t) => t.includes("限速…")) && menuTexts.some((t) => t.includes("移动…")),
+        `选中 ${picked} 行 / 菜单: ${menuTexts.slice(0, 8).join(" / ") || "(未打开)"}`);
+
+      // 2. 提交载荷形状: 拦截 bulk POST -> 弹对话框 -> 上传填 1024 / 下载留空 -> 提交
+      let bulkBody = null;
+      const onReq = (r) => {
+        if (r.url().includes("/api/torrents/bulk")) bulkBody = r.postData();
+      };
+      page.on("request", onReq);
+      let clicked = false;
+      for (const h of await page.$$(".ctx-item")) {
+        const t = ((await h.textContent()) || "").trim();
+        if (t.includes("限速…")) { await armClick(page, h); await h.click(); clicked = true; break; }
+      }
+      if (clicked) {
+        await page.waitForSelector(".modal", { timeout: 5000 }).catch(() => null);
+        const inputs = await page.$$(".modal-fields input");
+        if (inputs.length === 2) {
+          await inputs[0].fill("1024");   // 上传 1024 KiB/s; 下载留空 = 不提交该项(D3)
+          await page.click(".modal-actions .bt.primary");
+          await page.waitForTimeout(500);
+        } else {
+          add(ui, "W2 批量限速载荷形状(留空方向不提交)", false, `对话框输入框 ${inputs.length} 个(期望 2)`);
+        }
+      }
+      page.off("request", onReq);
+      let posted = null;
+      try { posted = bulkBody ? JSON.parse(bulkBody) : null; } catch { posted = null; }
+      const okPayload = !!posted && posted.action === "limits"
+        && posted.up_limit === 1024 * 1024
+        && !("dl_limit" in posted)
+        && Array.isArray(posted.hashes) && posted.hashes.length === N;
+      add(ui, "W2 批量限速载荷形状(留空方向不提交)", clicked && okPayload,
+        `载荷: ${bulkBody ? bulkBody.slice(0, 140) : "(未捕获)"}`);
+      // 收尾: 关掉可能残留的弹层并清选择
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        if (vm.modal && vm.modal.visible) vm.resolveModal(false);
+        vm.clearSelection && vm.clearSelection();
+      })()`);
+      await page.waitForTimeout(300);
+    }
+
+    /*
      * CTX-04 / CTX-05 / CTX-06 —— 右键**次级菜单**的三条(2026-09-24 用户报, 都是"pytest 全绿、
      * node --check 全绿、界面废掉"那一类; 判据一律取**可测的事实**, 不靠截图):
      *   1. 图标 hover 变灰(CTX-04): `.ctx-item:hover .ico` 是**后代**选择器, 而 `.ctx-sub` 是父项的

@@ -558,6 +558,11 @@ window.AQB_COMMANDS = {
      */
     ctxAct(action) {
       this.menu.visible = false;
+      /* 批量限速/移动(计划 26-10-02-1955 W2): 先弹对话框再走 bulk 合单, 载荷(留空方向
+       * 不提交 / 目标路径)由对话框方法组装 —— 与 ctxMeta 同为"先收菜单 + 对话框持有目标
+       * 集合"的形态, 不进 _actCore(那里没有对话框前置, 且限速/移动不在乐观白名单)。 */
+      if (action === "limits") return this.editLimitsMulti();
+      if (action === "location") return this.editMoveMulti();
       return this.bulkAct(action);
     },
     ctxDelete() {

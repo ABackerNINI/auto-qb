@@ -131,6 +131,18 @@ def _add_outcome(result: object) -> tuple[bool, str]:
     return ("Ok." in text), text or "无结果"
 
 
+def _bulk_call_limits(api, hashes, delete_files, extra):
+    """_BULK_ACTIONS["limits"] 的可调用体: 只调有值方向, 每方向一次调用传全 hashes
+
+    不用 lambda 表达: 两个方向"各自可选"用单表达式写不出来, 逐枚循环又被禁止
+    (qbapi 原生收 hash 列表)。签名与 _BULK_ACTIONS 其余条目统一(4 参)。
+    """
+    if extra["up_limit"] is not None:
+        api.torrents_set_upload_limit(torrent_hashes=hashes, limit=int(extra["up_limit"]))
+    if extra["dl_limit"] is not None:
+        api.torrents_set_download_limit(torrent_hashes=hashes, limit=int(extra["dl_limit"]))
+
+
 class WebCommandsMixin:
     def _web_command_handlers(self) -> dict:
         """WEB 控制命令 -> 处理器映射(命令表与处理器实现同处一处, 避免漏挂)
@@ -496,6 +508,9 @@ class WebCommandsMixin:
     # 入口校验非空; set_category 的 category 允许空串(qB 语义 = 清除分类), None 时不会走到。
     # !recheck 不在此表: 它走 _bulk_recheck_via_ops 逐个经 ops 层提交(R1 第二入口 —— 在途
     #   hash 过滤 + 在途登记 + 聚合回执带跳过计数; 直调 API 会给批量路径留下 C1 旁路)。
+    # !limits/location(计划 26-10-02-1955 W2): qbapi 原生收 hash 列表, 一次调用传全 hashes,
+    #   单次调用天然串行(单写线程); limits 只调有值方向(extra 里 None = 该方向不改, D3 拍板),
+    #   快照同步(update_torrent_fields)在 QbApi 写方法内单点完成。
     _BULK_ACTIONS = {
         "pause":
             lambda api, hashes, delete_files, extra: api.torrents_pause(torrent_hashes=hashes),
@@ -512,6 +527,11 @@ class WebCommandsMixin:
         "set_category":
             lambda api, hashes, delete_files, extra: api.
             torrents_set_category(category=extra["category"], torrent_hashes=hashes),
+        "limits":
+            _bulk_call_limits,
+        "location":
+            lambda api, hashes, delete_files, extra: api.
+            torrents_set_location(torrent_hashes=hashes, location=extra["location"]),
     }
 
     # 标签/分类动作(种子级): QbApi 侧已同步 store 快照(update_torrent_fields),
@@ -527,6 +547,9 @@ class WebCommandsMixin:
         keys=None,
         tags=None,
         category=None,
+        up_limit=None,
+        dl_limit=None,
+        location=None,
     ):
         """WEB UI 命令: 批量操作(单命令批量, 平铺视图多选); 回执由本 handler 聚合写
 
@@ -541,6 +564,9 @@ class WebCommandsMixin:
           成员全部不在快照计一个缺失组, 缺失文案与种子缺失分列(纯 hash 模式文案不变, 前端契约保持)
         - 标签/分类动作: add_tags/remove_tags 需非空 tags; set_category 的 category 允许
           空串(清除分类), 未提供(None)才报错 —— 两者由 Web 层按"提供才透传"的同一约定组装
+        - 限速/移动动作(计划 26-10-02-1955 W2): limits 只调有值方向(up/dl 传 None = 不改,
+          0 = qB 语义的不限速, 合法), Web 层已拦负数; location 需非空路径 —— 缺值在
+          handler 同样 error 回执(直投队列绕过路由校验时不得静默无操作)
         """
         req = [h for h in (hashes or []) if h]
         keys = [k for k in (keys or []) if k]
@@ -549,8 +575,8 @@ class WebCommandsMixin:
         if fn is None and action != "recheck":
             if cmd_id:
                 self._set_web_result(
-                    cmd_id, "error",
-                    f"未知批量动作: {action}(可选 pause/resume/recheck/delete/add_tags/remove_tags/set_category)"
+                    cmd_id, "error", f"未知批量动作: {action}"
+                    f"(可选 pause/resume/recheck/delete/add_tags/remove_tags/set_category/limits/location)"
                 )
             return
         if not req and not keys:
@@ -565,7 +591,21 @@ class WebCommandsMixin:
             if cmd_id:
                 self._set_web_result(cmd_id, "error", "未提供分类(空串=清除分类)")
             return
-        extra = {"tags": [t for t in (tags or []) if t], "category": category or ""}
+        extra = {
+            "tags": [t for t in (tags or []) if t],
+            "category": category or "",
+            "up_limit": up_limit,
+            "dl_limit": dl_limit,
+            "location": str(location or "").strip(),
+        }
+        if action == "limits" and extra["up_limit"] is None and extra["dl_limit"] is None:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", "未提供限速值(留空 = 不修改)")
+            return
+        if action == "location" and not extra["location"]:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", "未提供目标路径")
+            return
         known = [h for h in req if self.store.get(h) is not None]
         missing = len(req) - len(known)
         seen = set(known)
