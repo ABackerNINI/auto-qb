@@ -124,6 +124,7 @@ window.CONFIG_EDITOR = {
      *
      * 既要"下拉可选"(避免手写错规则集名), 也要"可直接粘贴修改"(故输入框始终可编辑,
      * 下拉仅作为追加一条引用的快捷入口)。
+     * ceRefOptions 返回**未过滤**全集; 行组件的 refOptions computed 再按当前站点已引用值过滤。
      */
     ceRefOptions() {
       const out = [];
@@ -1155,6 +1156,16 @@ window.CE_FIELD_BASE = {
       const n = (this.list() || []).length;
       return n ? `${n} 项` : "未配置";
     },
+    /* rules_ref 下拉选项: 按当前站点已引用值过滤 —— 已引用的规则不再出现在下拉里, 误选入口消失;
+     * 整组全被引用时该组整个隐藏(免渲染空 optgroup)。归一口径与后端判重一致(str().strip()):
+     * 尾随空白的引用同样算已引用。无参 computed, 模板直接 `refOptions` 引用(不得 refOptions())。 */
+    refOptions() {
+      const used = new Set(this.list().map((it) => String(it === undefined || it === null ? "" : it).trim()));
+      return this.ce
+        .ceRefOptions()
+        .map((g) => ({ group: g.group, items: g.items.filter((o) => !used.has(o.value)) }))
+        .filter((g) => g.items.length);
+    },
   },
   methods: {
     textValue() {
@@ -1224,10 +1235,13 @@ window.CE_FIELD_BASE = {
     setUnitName(unit) {
       this.ce.cfgSetUnit(this.path, this.unitParts.num, unit);
     },
-    /* 规则引用: 从下拉选一条 => 追加一条引用, 并把下拉复位回占位项 */
+    /* 规则引用: 从下拉选一条 => 追加一条引用, 并把下拉复位回占位项。
+     * 追加前查重(双保险): 下拉已按已引用值过滤(refOptions), 但过滤渲染前的连选竞态仍可能
+     * 送来已引用值 —— 重复则 no-op(只复位)。归一与 refOptions/后端判重同口径(str().strip())。 */
     refPick(event) {
       const value = event.target.value;
-      if (value) this.ce.cfgItemAdd(this.path, value);
+      const used = new Set(this.list().map((it) => String(it === undefined || it === null ? "" : it).trim()));
+      if (value && !used.has(value)) this.ce.cfgItemAdd(this.path, value);
       event.target.value = "";
     },
     checkedKey(name) {

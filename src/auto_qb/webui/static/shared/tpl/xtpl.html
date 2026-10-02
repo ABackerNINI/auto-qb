@@ -101,7 +101,8 @@
             </div>
             <select v-if="!readonly" class="hb-select" :value="''" @change="refPick($event)">
               <option value="">从已有规则集/规则中选择…</option>
-              <optgroup v-for="g in ce.ceRefOptions()" :key="g.group" :label="g.group">
+              <!-- refOptions(行级 computed): 已引用的规则不再出现在下拉里, 误选入口消失 -->
+              <optgroup v-for="g in refOptions" :key="g.group" :label="g.group">
                 <option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
               </optgroup>
             </select>
