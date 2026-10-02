@@ -1035,7 +1035,7 @@ def test_p2a_run_materializes_schema_migration_dry_run_then_write():
         mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
         mgr.run(dry_run=False)
         with open(config_path, encoding="utf-8") as f:
-            assert "schema_version: 3" in f.read(), "磁盘应落当前版本章"
+            assert "schema_version: 4" in f.read(), "磁盘应落当前版本章"
         backup = os.path.join(cfg.data_dir, "config.yml.v1.bak")
         assert os.path.exists(backup), "迁移前备份应存在"
         load_config(config_path)  # 迁移后磁盘可原样通过加载

@@ -2,7 +2,7 @@
 # 再生成: commands run test.keys-update
 # 口径: 消失/改名 = 破坏性变更 -> 抬 CURRENT_VERSIONS['config'] + config/migrations.py 注册迁移;
 #       纯新增 = 非破坏, 直接重生成. schema_version 是版本章本身不入面; 动态段归一为通配.
-version: 3
+version: 4
 
 <任意>_rules
 <任意>_rules.*.actions.add_category

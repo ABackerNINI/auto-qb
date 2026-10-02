@@ -15,7 +15,7 @@
 | `interval` | `"60s"` | 默认任务间隔 (maintenance/全局任务), 从上一轮结束起算 |
 | `data_dir` | `"auto-qb-data"` | 运行时数据主目录; state/锁/日志/跳检备份默认均派生其下 (显式配 `state_file`/`log.file` 优先; 留空走默认) |
 | `state_file` | `<data_dir>/state.json` | 状态文件; 未显式配置时由 data_dir 派生 (显式配置优先), 须可写 |
-| `schema_version` | `3` | 配置文件格式版本标记(升级链, 计划 26-09-26-0506): **文件格式标记, 非行为配置** —— 不进 `Config` dataclass; 当前版本单点 `infra/versioning.py` `CURRENT_VERSIONS["config"]=3`, WebUI 保存经 `config/writer.py` 盖章; 加载时缺失=v1, 落后则沿链迁移(内存); 磁盘由 `run()` 开头的启动物化单点改写到当前版本(版本号备份 `<名>.v<m>.bak` 后原子写, 计划 26-09-27-2252), WebUI 保存不做迁移 —— 提交树版本低于当前直接 400 指路刷新, 高于程序支持报 ConfigError; WebUI 保存/`--export-yaml` 自动盖章, 用户手编无需写 |
+| `schema_version` | `4` | 配置文件格式版本标记(升级链, 计划 26-09-26-0506): **文件格式标记, 非行为配置** —— 不进 `Config` dataclass; 当前版本单点 `infra/versioning.py` `CURRENT_VERSIONS["config"]=4`, WebUI 保存经 `config/writer.py` 盖章; 加载时缺失=v1, 落后则沿链迁移(内存); 磁盘由 `run()` 开头的启动物化单点改写到当前版本(版本号备份 `<名>.v<m>.bak` 后原子写, 计划 26-09-27-2252), WebUI 保存不做迁移 —— 提交树版本低于当前直接 400 指路刷新, 高于程序支持报 ConfigError; WebUI 保存/`--export-yaml` 自动盖章, 用户手编无需写。v4 = 站点级「显式空 = 覆盖为空」三态(report 26-10-03-0504 方案 B 阶段 1): 升级时 9 键作用域内的存量 `''` 由迁移移除并逐键打 WARNING |
 | `log` | | `{file, level, max_bytes, format}`; `file` 未配置时默认 `<data_dir>/logs/auto-qb.log` 落盘 (显式配置优先; 留空/空串=未配置=默认落盘, 无法用空串表达仅控制台); RotatingFileHandler 5 备份 |
 | `remove_similar_tags` | false | 全局默认, 站点可覆盖 |
 | `maintenance_tag_mode` | `"interval"` | **维护 tags 节奏** (计划 26-09-27-1438): 站点 tags 维护(`_add_tags`/`_remove_tags`/`_remove_similar_tags`)的执行时机。`interval` = 每个内置任务间隔执行(默认 = 迁移前行为); `on_change` = 种子添加时执行一次, 之后仅当该种子 tags 被**程序之外**改动时重检(登记消费一次; 热重载 L2 后首轮全量收敛), 无变化轮跳过 —— 每轮每种子省一次 qB 读写往返。HR 标签/分类部分**不受影响**, 恒按周期执行(达标状态随时间演化, tags 变化捕捉不到)。取值限 `interval\|on_change` |
@@ -26,7 +26,7 @@
 | `fs` | | 容器部署路径映射: `{path_map: [{from, to}]}`; 留空 = 现状, 改后需重启 |
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |
-| `hr` | | 全局 HR 输出设置 (`add_tag`/`add_category`/`overwrite_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`/`overwrite_category_for_satisfied`) + 排除表 `exclude_tags`/`exclude_categories`: 命中种子不纳入 HR 体系(不打标/不核实/规则按未触发, 压过 mode=all 等一切管束), 判定时现算, 不回撤存量, 与站点段并集(26-09-28-1805); 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--` |
+| `hr` | | 全局 HR 输出设置 (`add_tag`/`add_category`/`overwrite_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`/`overwrite_category_for_satisfied`) + 排除表 `exclude_tags`/`exclude_categories`: 命中种子不纳入 HR 体系(不打标/不核实/规则按未触发, 压过 mode=all 等一切管束), 判定时现算, 不回撤存量, 与站点段并集(26-09-28-1805); 默认分类格式 `!!HR${required_seeding_time}!!` / `--HR${required_seeding_time}--`。站点覆盖链: 站点 `hr` 段对应键优先, 未配置回退本段; v4 起站点段 4 个 str 键(`add_tag`/`add_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`)显式空串 = 「覆盖为空」(如本站不打标), 整键删除 = 跟随全局; **本段(全局)同名键的空串语义仍是「使用默认值」**(加载时剥掉) |
 | `skip_checking_tag` | `"zSkipChecked"` | 跳检成功标签全局名; 带此标签的种子未经哈希校验, `_find_reference` 一律排除 (防"未验证"经参考链传播)。全局统一, **checking 动作 spec 不可配置同名键** (校验报未知键), 动作运行时经 ctx 读取; YAML 留空/空串被 `_strip_none` 视为未配置走默认 (与 log.file 同约定) |
 | `hr_check` | 默认关闭 | **HR 在线核实** (v3 波次模型, 计划 26-09-28-1932 §6.1 + 26-09-30-0240 三参数解耦, 全局 7 键): `{enabled(false), min_interval("90S"; 相邻请求最小间隔, 页面+.torrent 统一, 抖动只向上 +0~25%), max_requests_per_day(240; 站点级日额保险, 全部请求合计, 零点重置), max_pages_per_wave(30; 单波页数上限安全阀, 到顶该档截断), allow_window(""), shared_dir(""), reuse_window("2H"; 数据复用窗 —— 波后窗内直接复用不取数, 生效=min(本值, 拉取间隔)), channel{enabled, port(8788), token, extension_id(""), request_timeout("180S")}, sites{...}}`。判定语义硬编码(四行判定表: 命中考察中→管束 / 终态档 B·C·D 与移出未列出→放行(永续) / 无证据→本地兜底: 达标放行·未达标管束), **无撤退路径配置**。❗`allow_window` 与 `notify.quiet_hours` **语义相反**(那个是「该时段不发」, 本项是「仅该时段取数」)。旧 v2 键 26 个(min_torrent_interval/max_torrents_per_hour/failure_*/unknown_policy/verified_ttl/quota_model 双桶六键/poll_interval 等)已随 **config v2→v3 迁移**删除或常量化; `shared_dir` 与 `channel` 是仅有的两个 L1 字段(需重挂端点/重建服务), 其余全 L0。**取数通道**: 端点仅听 `127.0.0.1`, 无 token ⇒ 401 **且不写任何状态**; 同机多实例 `channel.port` 必须错开(被占 = 启动即报错)。人工对账戳: `--hr-confirm-empty <站点>`(清单为 0 的一次性确认, 非零行自动失效)。设置页「HR 在线核实」分组 |
 | `global_speed_limit_curve` | 无=不启用 | 见下 |
@@ -43,11 +43,11 @@
 | `tags` | | 站点标签 (maintenance 加) |
 | `remove_tags` | | 删除标签格式 (正则) |
 | `upload_speed_limit` / `download_speed_limit` | `"0KiB/s"` | 单种限速, 0=不限; 种子添加时应用; 奇数保护 |
-| `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 + 排除表 `exclude_tags`/`exclude_categories`(与全局并集, 26-09-28-1805) |
+| `hr` | | `{required_seeding_time(必填), required_share_ratio(0), extra_seeding_time("0H"), condition("80%"或"10MiB")}` + 覆盖全局的输出字段 + 排除表 `exclude_tags`/`exclude_categories`(与全局并集, 26-09-28-1805)。**v4 起输出字段 4 个 str 键(`add_tag`/`add_category`/`add_tag_for_satisfied`/`add_category_for_satisfied`)显式空串 = 「覆盖为空」**(如全局配了 `add_tag`, 本站写空串 = 本站不打标; 升级时存量的 `''` 由 v3→v4 迁移移除并打 WARNING, 需要该语义须重新显式配置), 整键删除 = 跟随全局; bool/list 键不在此列(`overwrite_*` 显式 false 本可表达覆盖, `exclude_*` 保持并集) |
 | `hr_check` | | **旧键(已废除, 26-09-27-1930 起)**: 站点级在线核实的唯一入口是 `hr_check.sites.<档案 id>`。本键不再被任何代码接受 —— config v1→v2 迁移曾把它改写到新位置; **v3(config v2→v3)起出现即直接删除**(不再提供旧位置兼容)。站点接入键集见下节 |
 | `rules` | | `["@规则集", "@规则集.规则"]`。**留空 = 该站点不执行任何规则**(无任何隐式回退; `_rules_for_torrent` 直接返回空列表) |
 | `groups` | | 站点分组列表 (可多个, 自由命名无需预定义); 配置层声明不写种子; 供规则 `tracker_group` 条件按分组筛选 (2026-09-15) |
-| `remove_similar_tags` | | 覆盖全局 |
+| `remove_similar_tags` | | 覆盖全局(站点显式 `false` = 本站关闭; 空串视为未配置走全局) |
 
 ## hr_check.sites 站点接入(26-09-27-1318 REV2 上收; v3 收敛为三键)
 

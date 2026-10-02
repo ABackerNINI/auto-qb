@@ -14,14 +14,18 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "触发后添加标签",
         "str",
         default="",
-        help="进入 HR 管理(下载量/比例达条件)但还没达标时给种子打的标签; 支持 ${required_seeding_time} 变量; 留空 = 不打标"
+        tri_state=True,
+        help="进入 HR 管理(下载量/比例达条件)但还没达标时给种子打的标签; 支持 ${required_seeding_time} 变量; 留空 = 不打标。"
+        "站点段里显式留空(空串)= 本站不打标(覆盖全局), 整键删除 = 跟随全局"
     ),
     Field(
         "add_category",
         "触发后设置分类",
         "str",
         default="",
-        help="同上, 但设置的是分类(一个种子只能有一个分类); 留空 = 不设置",
+        tri_state=True,
+        help="同上, 但设置的是分类(一个种子只能有一个分类); 留空 = 不设置。"
+        "站点段里显式留空(空串)= 本站不设置(覆盖全局), 整键删除 = 跟随全局",
     ),
     Field(
         "overwrite_category",
@@ -36,14 +40,18 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "达标后添加标签",
         "str",
         default="",
-        help="HR 达标(做满要求+额外时长, 或分享率达标)后打的标签, 相当于「HR 已完成」标记; 留空 = 不再打标; 已打上的标签程序不会自动摘除",
+        tri_state=True,
+        help="HR 达标(做满要求+额外时长, 或分享率达标)后打的标签, 相当于「HR 已完成」标记; 留空 = 不再打标; 已打上的标签程序不会自动摘除。"
+        "站点段里显式留空(空串)= 本站不再打标(覆盖全局), 整键删除 = 跟随全局",
     ),
     Field(
         "add_category_for_satisfied",
         "达标后设置分类",
         "str",
         default="",
-        help="达标分支设置的分类; 留空 = 不设置",
+        tri_state=True,
+        help="达标分支设置的分类; 留空 = 不设置。"
+        "站点段里显式留空(空串)= 本站不设置(覆盖全局), 整键删除 = 跟随全局",
     ),
     Field(
         "overwrite_category_for_satisfied",

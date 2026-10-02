@@ -16,6 +16,8 @@
 - test_migrate_stamps_version_each_step: 每完成一级由框架盖 schema_version 章(迁移函数不必自己改)
 - test_migrate_idempotent: 对已迁移数据重复 apply 无二次变更(崩溃后重放同一条链即幂等)
 - test_migrate_missing_step_fails_fast: 版本表抬了、迁移表没跟上 -> fail-fast, 不静默跳级
+- test_migrate_with_notes_collects_step_notes: 迁移函数返回 (dict, notes) 时明细沿链汇聚; migrate() 二元组契约不变
+- test_migrate_with_notes_plain_dict_steps: 迁移函数返回裸 dict(无明细)时 notes 为空 —— 兼容全部既有迁移
 - test_migrate_hr_site_v1_v2_full: quota->rate / refresh->wave 两个 dict 支路, 旧键清理 + 保留键原样
 - test_migrate_hr_site_v1_v2_non_dict_quota_refresh: quota / refresh 非 dict -> 不派生 rate / wave
 - test_migrate_hr_site_v1_v2_bad_values_fallback: 非法数值兜底(缺键 / 非 int 计数 / 不可转换时间戳)
@@ -190,6 +192,37 @@ def test_migrate_missing_step_fails_fast(monkeypatch):
     with pytest.raises(SchemaVersionError) as ei:
         migrate("state", {"schema_version": 1})
     assert "v2→v3" in str(ei.value)
+
+
+def test_migrate_with_notes_collects_step_notes(monkeypatch):
+    """migrate_with_notes: 迁移函数返回 (dict, notes) 时明细沿链逐级汇聚(顺序即链序)
+
+    config v3→v4 的「显式置空已移除」逐键 WARNING 走此通道(迁移函数不 log, 明细交调用链)。
+    既有 migrate() 的二元组契约不变 —— state/hr_site 调用方零改动。
+    """
+    def step_1_2(d):
+        return {**d, "v2": True}, ["k1: 已移除"]
+
+    def step_2_3(d):
+        return {**d, "v3": True}, ["k2: 已移除"]
+
+    monkeypatch.setitem(versioning.CURRENT_VERSIONS, "state", 3)
+    monkeypatch.setitem(versioning.MIGRATIONS, "state", {1: step_1_2, 2: step_2_3})
+    data, desc, notes = versioning.migrate_with_notes("state", {"schema_version": 1})
+    assert data["schema_version"] == 3 and desc == "v1→v3", "检测/逐级/盖章口径与 migrate() 一致"
+    assert notes == ["k1: 已移除", "k2: 已移除"]
+
+    # 既有 migrate() 二元组解包照常工作, 明细不外泄
+    data2, desc2 = migrate("state", {"schema_version": 1})
+    assert desc2 == "v1→v3" and data2["schema_version"] == 3
+
+
+def test_migrate_with_notes_plain_dict_steps(monkeypatch):
+    """迁移函数返回裸 dict(无明细)时 notes 为空 —— 兼容全部既有迁移, 无需逐个改造"""
+    monkeypatch.setitem(versioning.CURRENT_VERSIONS, "state", 2)
+    monkeypatch.setitem(versioning.MIGRATIONS, "state", {1: lambda d: {**d, "v2": True}})
+    data, desc, notes = versioning.migrate_with_notes("state", {"schema_version": 1})
+    assert desc == "v1→v2" and notes == [] and data["schema_version"] == 2
 
 
 def test_migrate_hr_site_v1_v2_full():

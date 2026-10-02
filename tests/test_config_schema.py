@@ -18,6 +18,9 @@
 - test_unit_kind_defaults_are_parseable: UNIT_KINDS 字段的 default 可拆为 数值+单位(单位合法)
 - test_deleted_trigger_whitelist_matches_validation: 删除触发白名单与 validation 一致
 - test_schema_payload_is_complete: schema_payload 含全部前端所需分区
+- test_tri_state_marks_site_hr_str_fallback_keys: tri_state(站点级「覆盖为空」)声明面守卫 —— 全库仅
+  站点 hr 回退链 4 个 str 键打标, bool/list 键不标(_strip_none 豁免按此派生, 打错位置 = '' 语义误翻转)
+- test_strip_exempt_keys_derive_from_schema: validation 的站点剥离豁免键集合 == schema tri_state 声明
 """
 import re
 
@@ -266,3 +269,32 @@ def test_schema_payload_is_complete():
     # 页面地址, tracker_domain 供映射制绑定状态行展示)
     presets = payload["constants"]["hr_check_site_presets"]
     assert all({"id", "adapter", "web_domain", "tracker_domain"} <= set(p) for p in presets), presets
+
+
+def test_tri_state_marks_site_hr_str_fallback_keys():
+    """tri_state(站点级「覆盖为空」, report 26-10-03-0504 方案 B 阶段 1)声明面守卫
+
+    全库 schema 只允许站点 hr 回退链的 4 个 str 键打标(_strip_none 豁免按键集合派生, 打错位置 =
+    全局段或其它键的 '' 语义被意外翻转); bool 键不标(config 层 "false" 本可区分), list 键不标
+    (exclude_* 保持并集语义, 空 == 缺失)。
+    """
+    expected = {"add_tag", "add_category", "add_tag_for_satisfied", "add_category_for_satisfied"}
+    marked = {f.key for f in _all_fields() if f.tri_state}
+    assert marked == expected, f"tri_state 打标面漂移: {marked} != {expected}"
+    hr_fields = _field_map(schema.HR_OUTPUT_FIELDS)
+    for key in expected:
+        assert hr_fields[key].kind == "str", f"{key}: tri_state 仅适用于 str 回退链键"
+    unmarked = ("overwrite_category", "overwrite_category_for_satisfied", "exclude_tags", "exclude_categories")
+    assert all(not hr_fields[k].tri_state for k in unmarked), "bool/list 键不得打 tri_state 标"
+
+
+def test_strip_exempt_keys_derive_from_schema():
+    """validation._strip_none 的站点剥离豁免键集合必须恰等于 schema tri_state 声明(单一事实来源)
+
+    豁免集合在 validation/core.py 按 HR_OUTPUT_FIELDS 的 tri_state 标派生 —— 本守卫钉住派生
+    关系本身, 防未来有人绕开 schema 手写第二份清单造成「声明」与「剥离行为」漂移。
+    """
+    from auto_qb.config.validation.core import _TRI_STATE_SITE_KEYS
+
+    assert _TRI_STATE_SITE_KEYS == {f.key for f in schema.HR_OUTPUT_FIELDS if f.tri_state}
+    assert len(_TRI_STATE_SITE_KEYS) == 4

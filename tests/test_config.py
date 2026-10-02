@@ -15,6 +15,8 @@
 - test_config_tracker_tags_expand_dedup: 重复 tag/@tracker_tags 引用去重保序
 - test_validate_minimal_ok: 仅必填项的最小配置通过校验
 - test_validate_empty_sections_use_defaults: 显式留空的段/键视为未配置(走默认值)
+- test_site_hr_explicit_empty_overrides_global: 站点级 tri_state 键显式空串穿过 strip/校验/加载全链 = 覆盖为空(v4)
+- test_non_tri_state_empty_still_stripped: 全局段与站点段非 tri_state 键的显式空串照剥(语义不随 v4 翻转)
 - test_data_dir_derives_runtime_paths: data_dir 主目录派生 state_file/log.file; 显式优先; log.file 留空/空串=默认落盘
 - test_validate_unknown_keys_aggregated: 各段未知键聚合一次性报告(含路径)
 - test_validate_root_unknown_key: 顶层未知键报错
@@ -301,6 +303,65 @@ def test_validate_empty_sections_use_defaults():
         assert cfg.logging.level == logging.INFO
         assert cfg.trackers["T1"].hr.extra_seeding_time == 0
         assert cfg.trackers["T1"].hr.required_share_ratio == 0.0
+
+
+def test_site_hr_explicit_empty_overrides_global():
+    """站点级 tri_state 键显式空串 = 「覆盖为空」(report 26-10-03-0504 方案 B 阶段 1, config v4)
+
+    _strip_none 对站点段 config.trackers.<名>.hr.<tri_state str 键> 的 '' 保留, 穿过
+    strip -> 校验 -> 解析全链后生效值仍为 ''(全局配了 add_tag 时某站可表达「本站不打标」);
+    tri_state 键缺失仍照常回退全局; 消费端(maintenance_mod)对 '' 按不打标/不设置处理。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  schema_version: 4\n"
+            "  hr:\n"
+            "    add_tag: zGlobal\n"
+            "    add_tag_for_satisfied: zDone\n"
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains:\n"
+            "        - a.com\n"
+            "      hr:\n"
+            "        required_seeding_time: 3D\n"
+            "        add_tag: ''\n"  # tri_state: 覆盖为空 = 本站不打标
+            "        add_category_for_satisfied: ''\n"  # tri_state: 同上
+        )
+        cfg = load_config(_write_raw(td, text))
+        t = cfg.trackers["T1"]
+        assert t.hr.add_tag == "", "站点显式空串应保留为覆盖空, 不回退全局"
+        assert t.hr.add_category_for_satisfied == ""
+        assert t.hr.add_tag_for_satisfied == "zDone", "tri_state 键缺失照常回退全局"
+
+
+def test_non_tri_state_empty_still_stripped():
+    """全局段与站点段非 tri_state 键的显式空串仍是「未配置」(照剥, 语义不随 v4 翻转)
+
+    全局 tri_state 键的 '' 语义仍是「使用默认值」(豁免仅对站点段路径生效); bool 键不标
+    (config 层 "false" 本可区分), list 键不标(exclude_* 保持并集语义, 空 == 缺失)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        text = (
+            "config:\n"
+            "  schema_version: 4\n"
+            "  hr:\n"
+            "    add_tag: ''\n"  # 全局 tri_state 键: '' 仍是「使用默认值」, 照剥
+            "    overwrite_category: ''\n"  # 全局 bool: 照剥
+            "  trackers:\n"
+            "    T1:\n"
+            "      domains:\n"
+            "        - a.com\n"
+            "      remove_similar_tags: ''\n"  # 站点 bool: 照剥 -> 回退全局(全局未配 -> false)
+            "      hr:\n"
+            "        required_seeding_time: 3D\n"
+            "        exclude_categories: ''\n"  # 站点 list: 照剥 -> 并集语义不变
+        )
+        cfg = load_config(_write_raw(td, text))
+        assert cfg.hr.add_tag == "", "全局段的 '' = 未配置(使用默认值), 不保留"
+        assert cfg.hr.overwrite_category is False
+        assert cfg.trackers["T1"].remove_similar_tags is False
+        assert cfg.trackers["T1"].hr.exclude_categories == []
 
 
 def test_skip_checking_tag_global_default_and_override():
@@ -1228,9 +1289,12 @@ def test_config_schema_version_load_and_migrate_dispatch(td=None):
         )
         assert cfg.trackers["T1"].domains == ["a.com"]
 
-        # 未来版本: fail-fast 且同时说清文件版本与程序支持版本
+        # 未来版本: fail-fast 且同时说清文件版本与程序支持版本(支持版本随 CURRENT_VERSIONS 演化, 不写死)
+        from auto_qb.infra.versioning import CURRENT_VERSIONS
+
         err = _load_errors(td, "config:\n  schema_version: 9\n  trackers:\n    T1:\n      domains:\n        - a.com\n")
-        assert "schema_version=9" in err and "支持的 3" in err, f"未来版本须报两个版本号: {err}"
+        assert "schema_version=9" in err and f"支持的 {CURRENT_VERSIONS['config']}" in err, \
+            f"未来版本须报两个版本号: {err}"
 
         # 非整数 / < 1: 同样经迁移分派的 SchemaVersionError -> ConfigError
         err = _load_errors(

@@ -83,6 +83,12 @@ class Field:
                   留空则前端回退到该 kind 的第一个单位; 常见值可由默认值后缀直接读出
                   (如 default="3D" -> D), 只有需要偏离默认值后缀时才显式声明
                   (如 extra_seeding_time 的 default 为 0S, 但用户习惯从 H 开始填)。
+    tri_state:   三态键(report 26-10-03-0504 方案 B 阶段 1): True = 该键的显式空串('')是合法值,
+                 不被 _strip_none 当作「未配置」剥掉。仅对**站点段回退链键**有意义 —— 站点 hr 段里
+                 '' = 「覆盖为空」(如本站不打标), 键缺失 = 跟随全局; 全局段同名键的 '' 语义仍是
+                 「使用默认值」, 照剥。剥离豁免的单点在 validation._strip_none(键集合按本声明派生,
+                 tests/test_config_schema.py 守卫声明面与剥离行为一致)。bool 键不标(config 层
+                 "false" 本就可与未配置区分), list 键不标(exclude_* 保持并集语义, 空 == 缺失)。
     """
     key: str
     label: str
@@ -106,6 +112,7 @@ class Field:
     unit_default: str = ""
     open: bool = False  # object 段缺省展开态(True = 平铺不渲染折叠头; 现 schema 仅 hr_check 段在用)
     readonly: bool = False  # 程序托管字段: 见类 docstring —— 前端禁用渲染 + writer 写盘回退防线共用此标
+    tri_state: bool = False  # 三态键(站点级「覆盖为空」): 见类 docstring —— _strip_none 豁免按此标派生
 
 
 @dataclass(frozen=True)

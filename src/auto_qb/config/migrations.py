@@ -14,12 +14,20 @@ import 即注册(auto_qb.config.__init__ 导入本模块), 早于任何 load_con
 - 定位不到档案(缺 hr_page_url / host 陌生) -> 旧键原地保留, 交给校验层报废除错。
 
 schema_version 盖章由 infra.versioning.migrate 框架统一负责, 函数体不碰版本字段。
+
+v3→v4(report 26-10-03-0504 方案 B 阶段 1, 「删除类似标签」全局/站点作用域混淆修复): v4 起站点段
+4 个 str 输出键(hr.add_tag / add_category / add_tag_for_satisfied / add_category_for_satisfied)的
+显式空串语义翻转为「覆盖为空」(_strip_none 不再剥)。v3 及更早里这些 '' 写了也白写(= 未配置),
+为让升级语义不变, 迁移把 9 键作用域内的显式置空值整体移除 —— 站点 4 个 str 键是语义翻转保护,
+其余(全局段同名键 / bool / list 键的 '', 本就被 strip 剥成未配置)属死值顺手清理。每个被移除键的
+路径经 (dict, notes) 返回形态交 migrate_with_notes, 由 loaders.migrate_config_schema 逐键打 WARNING。
 """
-from typing import Dict
+from typing import Dict, List, Tuple
 from urllib.parse import urlparse
 
 from ..infra.versioning import MIGRATIONS
 from . import site_presets
+from .schema.trackers import HR_OUTPUT_FIELDS
 
 #: 随迁的微调项(旧键 -> sites 条目同键名直搬); 页面事实四键一律丢弃
 _MIGRATE_TUNING_KEYS = (
@@ -144,3 +152,68 @@ def _migrate_config_2_3(cfg: dict) -> dict:
 
 
 MIGRATIONS["config"][2] = _migrate_config_2_3
+
+# ---- v3→v4: 9 键作用域内显式置空值移除(report 26-10-03-0504 方案 B 阶段 1) ----
+
+#: 9 键作用域内全局/站点 hr 段共用的输出键(tri_state 4 str + overwrite 2 bool + exclude 2 list);
+#: 键清单单一事实来源 = schema 的 HR_OUTPUT_FIELDS(与 validation 的 KNOWN_HR_KEYS 同面, 有守卫)
+_HR_OUTPUT_KEYS: Tuple[str, ...] = tuple(f.key for f in HR_OUTPUT_FIELDS)
+
+#: 「显式置空已移除」的统一指引(WARNING 文案单点, 用户拍板口径)
+_EMPTY_REMOVED_HINT = "显式置空已移除, 语义为使用默认值; 如需覆盖为空请重新显式配置"
+
+
+def _collect_explicit_empty_paths(cfg: dict) -> List[str]:
+    """收集 9 键作用域内显式置空('')的键路径(纯函数; 迁移移除与 WARNING 明细共用同一清单)
+
+    作用域: config.remove_similar_tags(全局) / config.hr.<8 输出键>(全局) /
+    config.trackers.<名>.remove_similar_tags 与 config.trackers.<名>.hr.<8 输出键>(站点)。
+    只认标量 ''(BaseLoader 对 `key:` 留空的解析形态); None / 空列表等其它形态不在本迁移范围。
+    """
+    paths: List[str] = []
+    if cfg.get("remove_similar_tags") == "":
+        paths.append("config.remove_similar_tags")
+    hr = cfg.get("hr")
+    if isinstance(hr, dict):
+        paths.extend(f"config.hr.{key}" for key in _HR_OUTPUT_KEYS if hr.get(key) == "")
+    trackers = cfg.get("trackers")
+    if isinstance(trackers, dict):
+        for name, tdata in trackers.items():
+            if not isinstance(tdata, dict):
+                continue
+            if tdata.get("remove_similar_tags") == "":
+                paths.append(f"config.trackers.{name}.remove_similar_tags")
+            site_hr = tdata.get("hr")
+            if isinstance(site_hr, dict):
+                paths.extend(f"config.trackers.{name}.hr.{key}" for key in _HR_OUTPUT_KEYS if site_hr.get(key) == "")
+    return paths
+
+
+def _delete_config_path(cfg: dict, path: str) -> None:
+    """按点路径删除 config 块内的一键(path 首段 "config" 即 cfg 本身; 逐段必为 dict, 收集与删除同源)"""
+    parts = path.split(".")
+    node = cfg
+    for p in parts[1:-1]:
+        node = node[p]
+    del node[parts[-1]]
+
+
+def _migrate_config_3_4(cfg: dict):
+    """v3→v4: 移除 9 键作用域内的显式置空值(站点级「覆盖为空」三态的语义翻转保护)
+
+    v4 起 config.trackers.<名>.hr.<4 个 tri_state str 键> 的 '' = 覆盖为空; 存量(v3 及更早)的 ''
+    语义是「未配置」, 若不随迁移移除, 升级即静默翻转为「本站不打标/不加分类」。返回
+    (cfg, notes): 每个被移除键一条 note(路径 + 用户拍板的指引文案), 经 migrate_with_notes
+    交 loaders.migrate_config_schema 逐键打 WARNING —— 迁移函数不 log(纯函数纪律)。
+    无可移除项时返回裸 dict(框架两种返回形态都接受)。
+    """
+    paths = _collect_explicit_empty_paths(cfg)
+    if not paths:
+        return cfg
+    for path in paths:
+        _delete_config_path(cfg, path)
+    notes = [f"{path}: {_EMPTY_REMOVED_HINT}" for path in paths]
+    return cfg, notes
+
+
+MIGRATIONS["config"][3] = _migrate_config_3_4

@@ -9,6 +9,8 @@
 
 校验约定:
 - 显式留空的键(空串/None)视为未配置, 走默认值(_strip_none); 必填键缺失则报错
+- 例外(config v4, report 26-10-03-0504 方案 B 阶段 1): schema 声明 tri_state 的键在站点段
+  config.trackers.<名>.hr.<键> 的空串保留 = 「覆盖为空」; 全局段同名键与其它键的空串照剥
 - 校验聚合全部错误一次性报告(validate_config), 每条带配置路径(如 config.trackers.tracker1)
 - 值格式复用 utils.parse_*(时间/大小/速度/布尔)单一事实来源
 - 规则集 spec 的条件/动作名称经 registry 延迟导入校验(避免模块循环依赖)

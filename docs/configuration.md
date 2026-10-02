@@ -152,6 +152,8 @@ config:
                 required_share_ratio: 2.0          # 要求分享率(0~100)
                 extra_seeding_time: 12H            # 额外做种时间防止意外
                 condition: 80%                     # 触发 HR 的下载比例(0 < 比例 ≤ 100)；也可用绝对量(须 >0)，如 10MiB
+                # 输出四键 add_tag / add_category / add_tag_for_satisfied / add_category_for_satisfied
+                # 也可在此覆盖全局；config v4 起站点段显式空串 = 「覆盖为空」(如本站不打标)，整键删除 = 跟随全局
             # rules:                               # tracker 引用规则(完整示例见[#规则系统])
             #     - "@example_rules"               # 引用整个规则集
             #     - "@example_rules.rule1"         # 引用具体规则

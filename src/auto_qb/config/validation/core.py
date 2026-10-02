@@ -4,6 +4,7 @@ import re
 from typing import List
 
 from ...infra.utils import MatchPattern, parse_bool, parse_time
+from ..schema.trackers import HR_OUTPUT_FIELDS
 
 # config 顶层已知键
 KNOWN_CONFIG_KEYS = {
@@ -38,16 +39,46 @@ KNOWN_CONFIG_KEYS = {
 MAINTENANCE_TAG_MODES = ("interval", "on_change")
 
 
-def _strip_none(value):
+def _is_tri_state_site_leaf(path: tuple, key, value) -> bool:
+    """该键是否为站点段 tri_state 叶(路径 config.trackers.<名>.hr.<键>, 值为非 None 空串)
+
+    path 是当前 dict 在整树中的键路径(不含本 key)。仅站点段豁免: 全局段 config.hr.<键> 的
+    '' 语义仍是「使用默认值」(照剥); 站点段同名非 tri_state 键('' 也照剥)不豁免。
+    """
+    return (
+        value == "" and len(path) == 4 and path[0] == "config" and path[1] == "trackers" and path[3] == "hr" and
+        key in _TRI_STATE_SITE_KEYS
+    )
+
+
+# 站点段支持「覆盖为空」的键集合(单一事实来源 = schema 的 tri_state 声明): 剥离豁免与 schema
+# 声明因此结构性一致(同一份派生, 无第二份清单可漂移); 声明面本身由 tests/test_config_schema.py
+# 的 tri_state 守卫钉住。schema 声明是冻结 dataclass, 进程内派生一次即可。
+_TRI_STATE_SITE_KEYS = frozenset(f.key for f in HR_OUTPUT_FIELDS if f.tri_state)
+
+
+def _strip_none(value, _path=()):
     """递归剔除空值(None/空串): 显式留空的键/列表项视为未配置(走默认值)
 
     yaml.BaseLoader 将 `key:` 留空解析为 ''(而非 None), 与显式 "" 无法区分, 统一视为未配置;
     默认值本为空串的键(如 hr.add_tag)行为不变。
+
+    例外(report 26-10-03-0504 方案 B 阶段 1, config v4): schema 声明 tri_state 的键在**站点段**
+    路径 config.trackers.<名>.hr.<键> 的 '' 保留 —— 语义是「覆盖为空」而非「未配置」(如全局配了
+    hr.add_tag, 某站想本站不打标); 全局段同名键与站点段非 tri_state 键的 '' 照剥。键集合按
+    schema tri_state 声明派生(_TRI_STATE_SITE_KEYS), 声明面由 tests/test_config_schema.py 守卫。
     """
     if isinstance(value, dict):
-        return {k: _strip_none(v) for k, v in value.items() if v is not None and v != ""}
+        out = {}
+        for k, v in value.items():
+            if v is None or v == "":
+                if _is_tri_state_site_leaf(_path, k, v):
+                    out[k] = v  # 站点级显式空 = 覆盖为空(合法稀疏条目), 保留
+                continue
+            out[k] = _strip_none(v, (*_path, k))
+        return out
     if isinstance(value, list):
-        return [_strip_none(v) for v in value if v is not None and v != ""]
+        return [_strip_none(v, _path) for v in value if v is not None and v != ""]
     return value
 
 

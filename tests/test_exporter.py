@@ -205,4 +205,7 @@ def test_export_yaml_template_stamps_schema_version():
         exporter.export_yaml_template(client, cfg, cfg_path, out_path, dry_run=False, only_missing=False)
         with open(out_path, "r", encoding="utf-8") as f:
             data = yaml.load(f, Loader=yaml.BaseLoader)
-        assert data["config"]["schema_version"] == "3", "模板必须带当前版本章(BaseLoader 读回为字符串)"
+        from auto_qb.infra.versioning import CURRENT_VERSIONS
+
+        assert data["config"]["schema_version"] == str(CURRENT_VERSIONS["config"]), \
+            "模板必须带当前版本章(BaseLoader 读回为字符串)"

@@ -47,6 +47,11 @@
 - test_backup_versioned_relative_backup_dir: 备份目录为空串(相对裸文件名) -> 跳过建目录, 直写 CWD
 - test_write_tree_backup_relative_path: 备份路径无父目录 -> 跳过 makedirs 分支, 备份照常产生
 - test_path_helpers_mid_node_shapes: _set_path 中途节点非 dict 重建 / _delete_path 中途非 dict 与裸标量树安全返回
+- test_migrate_config_3_4_removes_explicit_empty: v3→v4 迁移单测 —— 9 键作用域内显式置空移除 + 逐键 notes(非空值/无关站点不误杀)
+- test_migrate_config_3_4_idempotent: v3→v4 迁移幂等 —— 移除后重放无变更无 notes(崩溃重放安全)
+- test_materialize_v3_removes_explicit_empty_with_warning: v3 文件物化 —— 作用域 '' 移除落盘 v4 + 每键 WARNING(caplog)
+- test_materialize_v4_site_empty_untouched: v4 文件站点 '' = 覆盖为空(合法保留), 物化零 IO 不误杀
+- test_write_tree_roundtrip_preserves_site_explicit_empty: ruamel round-trip 保留站点 ''(report 待核实项①实测)
 """
 import copy
 import os
@@ -57,7 +62,8 @@ from auto_qb.config.errors import ConfigError
 from auto_qb.config.loaders import load_config
 from auto_qb.config.writer import materialize_schema_migration, preview_tree, read_tree, write_tree
 
-BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
+# 「天生当前版本的干净文件」锚(当前 = v4): BASE 供各写盘用例当无 hr 的最小合法配置
+BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
 
 
 def _make(tmp_path, text: str) -> str:
@@ -130,7 +136,7 @@ def test_write_tree_preserves_comments_and_plain_scalars(tmp_path):
     """round-trip 写盘: 已有键注释保留, 未修改标量保持原书写风格(数字/布尔不加引号)"""
     path = _make(
         tmp_path, "config:\n"
-        "  schema_version: 3\n"
+        "  schema_version: 4\n"
         "  # 连接设置\n"
         "  qbittorrent:\n"
         "    host: h\n"
@@ -285,7 +291,7 @@ def test_write_tree_rejects_version_higher_than_program(tmp_path):
     with pytest.raises(ConfigError) as ei:
         write_tree(path, tree, old, _bak(tmp_path))
     assert "高于本程序支持" in str(ei.value)
-    assert read_tree(path)["config"]["schema_version"] == "3", "拒绝时磁盘一字不动"
+    assert read_tree(path)["config"]["schema_version"] == "4", "拒绝时磁盘一字不动"
 
 
 def test_write_tree_writes_float_and_negative_scalars_plain(tmp_path):
@@ -369,7 +375,7 @@ def test_preview_tree_does_not_create_backup(tmp_path):
 
 def test_preview_tree_does_not_touch_disk(tmp_path):
     """预览不落盘; 内容含将写入的新值与已有注释"""
-    path = _make(tmp_path, "config:\n  schema_version: 3\n  # 注释\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+    path = _make(tmp_path, "config:\n  schema_version: 4\n  # 注释\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
     before = _text(path)
     old = load_config(path)
     tree = read_tree(path)
@@ -452,7 +458,7 @@ def test_write_tree_stamps_schema_version(tmp_path):
     write_tree(path, tree, old, _bak(tmp_path))
 
     text = _text(path)
-    assert "schema_version: 3" in text, "写回必须带当前版本章"
+    assert "schema_version: 4" in text, "写回必须带当前版本章"
     assert "'1'" not in text, "版本章必须是 int —— 盖成字符串会被 ruamel 写成带引号的 '1'"
 
 
@@ -462,7 +468,7 @@ def test_preview_tree_stamps_schema_version(tmp_path):
     old = load_config(path)
     tree = read_tree(path)
     text = preview_tree(path, tree, old)
-    assert "schema_version: 3" in text
+    assert "schema_version: 4" in text
 
 
 # ------------------------------------------------- 写回版本闸门 + 启动物化(计划 26-09-27-2252)
@@ -512,11 +518,11 @@ def test_write_tree_rejects_stale_version_tree(tmp_path):
 
 
 def test_write_tree_rejects_v2_tree_with_legacy_key(tmp_path):
-    """已盖 v2 章仍带旧键(手改版本号/事故残留): 写盘前校验报废除错, 磁盘一字不动 —— 不设常驻
+    """已盖当前版本章仍带旧键(手改版本号/事故残留): 写盘前校验报废除错, 磁盘一字不动 —— 不设常驻
     兼容层, 迁移链只在版本推进时运行"""
     old = load_config(_make(tmp_path, BASE))
-    corrupt = LEGACY_V1 + "  schema_version: 3\n"
-    path = _make(tmp_path, corrupt)  # 同名路径覆写为「v2 章 + 旧键」的事故残留形态
+    corrupt = LEGACY_V1 + "  schema_version: 4\n"
+    path = _make(tmp_path, corrupt)  # 同名路径覆写为「当前版本章 + 旧键」的事故残留形态
     tree = read_tree(path)
 
     with pytest.raises(ConfigError) as ei:
@@ -541,12 +547,12 @@ def test_materialize_migrates_and_backups(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v1→v3"
+    assert desc == "v1→v4"
     assert backup == str(data_dir / "config.yml.v1.bak")
     with open(backup, encoding="utf-8") as f:
         assert f.read() == LEGACY_V1, "备份 = 迁移前原样(字节级)"
     text = _text(path)
-    assert "schema_version: 3" in text, "磁盘落当前版本章"
+    assert "schema_version: 4" in text, "磁盘落当前版本章"
     assert "hr_page_url" not in text, "旧键随迁移消失"
     cfg = load_config(path)  # 物化后的磁盘必须能原样通过加载
     assert cfg.trackers["BTSchool"].hr_check is not None
@@ -559,7 +565,7 @@ def test_materialize_idempotent_and_noop(tmp_path):
     data_dir = tmp_path / "data"
     path = _make(tmp_path, LEGACY_V1)
     desc, _ = materialize_schema_migration(path, str(data_dir))
-    assert desc == "v1→v3"
+    assert desc == "v1→v4"
     text_after = _text(path)
 
     desc2, backup2 = materialize_schema_migration(path, str(data_dir))
@@ -581,7 +587,7 @@ def test_materialize_unknown_host_old_key_dropped(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir))
 
-    assert desc == "v1→v3"
+    assert desc == "v1→v4"
     text = _text(path)
     assert "hr_check" not in text, "陌生 host 的旧键随 v3 迁移删除"
     cfg = load_config(path)
@@ -595,7 +601,7 @@ def test_materialize_dry_run_probe(tmp_path):
 
     desc, backup = materialize_schema_migration(path, str(data_dir), write=False)
 
-    assert desc == "v1→v3" and backup == ""
+    assert desc == "v1→v4" and backup == ""
     assert _text(path) == LEGACY_V1, "dry-run 不落盘"
     assert not data_dir.exists()
 
@@ -649,7 +655,9 @@ def test_reject_stale_version_non_integer_shape_passes_gate():
 
     _reject_stale_version({"config": {"schema_version": "abc"}})  # 不抛
     _reject_stale_version({"config": {"schema_version": []}})  # 不抛
-    _reject_stale_version({"config": {"schema_version": "3"}})  # 当前版本放行
+    from auto_qb.infra.versioning import CURRENT_VERSIONS
+
+    _reject_stale_version({"config": {"schema_version": str(CURRENT_VERSIONS["config"])}})  # 当前版本放行
 
 
 def test_write_tree_first_save_on_missing_file(tmp_path):
@@ -673,11 +681,11 @@ def test_write_tree_rebuilds_doc_from_non_mapping_file(tmp_path):
     path = _make(tmp_path, "123\n")
     tree = read_tree(path)  # 非映射 -> 空 config 段
     tree["config"]["qbittorrent"] = {"host": "h", "port": "1", "username": "u", "password": "p"}
-    tree["config"]["schema_version"] = "3"
+    tree["config"]["schema_version"] = "4"
     write_tree(path, tree, old, _bak(tmp_path))
     text = _text(path)
     assert "123" not in text, "旧的非映射内容被整体重建"
-    assert "qbittorrent" in text and "schema_version: 3" in text
+    assert "qbittorrent" in text and "schema_version: 4" in text
     loaded = load_config(path)
     assert loaded.qbittorrent.host == "h"
 
@@ -686,7 +694,7 @@ def test_write_tree_roundtrip_list_of_dicts_and_plain_int(tmp_path):
     """列表内映射逐项按 BaseLoader 语义比较(值未变整体跳过); 变更的纯数字字符串按原生标量写出"""
     path = _make(
         tmp_path, "config:\n"
-        "  schema_version: 3\n"
+        "  schema_version: 4\n"
         "  qbittorrent:\n"
         "    host: h\n"
         "    port: 1\n"
@@ -711,7 +719,7 @@ def test_write_tree_roundtrip_list_of_dicts_and_plain_int(tmp_path):
 def test_materialize_bad_version_wraps_config_error(tmp_path):
     """磁盘 schema_version 形状非法 -> SchemaVersionError 包装为 ConfigError(报清文件与原因)"""
     data_dir = tmp_path / "data"
-    path = _make(tmp_path, BASE.replace("schema_version: 3", "schema_version: abc"))
+    path = _make(tmp_path, BASE.replace("schema_version: 4", "schema_version: abc"))
     with pytest.raises(ConfigError, match="schema 版本问题"):
         materialize_schema_migration(path, str(data_dir))
     assert not data_dir.exists(), "探测阶段失败不应产生备份目录"
@@ -902,3 +910,172 @@ def test_path_helpers_mid_node_shapes():
     tree = {"config": {"a": 1}}
     _delete_path(tree, ["config", "a"])
     assert tree == {"config": {}}, "正常单段删除: 键被移除"
+
+
+# ---------- v3→v4: 9 键作用域显式置空移除(report 26-10-03-0504 方案 B 阶段 1) ----------
+
+# v3 存量形态: 站点/全局都有「写了也白写」的 ''(v3 里被 _strip_none 剥成未配置)
+V3_WITH_EMPTIES = (
+    "config:\n"
+    "  schema_version: 3\n"
+    "  remove_similar_tags: ''\n"
+    "  hr:\n"
+    "    add_tag: ''\n"
+    "    add_category: zCat\n"
+    "    exclude_tags: ''\n"
+    "  trackers:\n"
+    "    A:\n"
+    "      domains: [a.com]\n"
+    "      remove_similar_tags: ''\n"
+    "      hr:\n"
+    "        required_seeding_time: 3D\n"
+    "        add_tag: ''\n"
+    "        add_category_for_satisfied: ''\n"
+    "        overwrite_category: ''\n"
+    "        exclude_categories: ''\n"
+    "    B:\n"
+    "      domains: [b.com]\n"
+    "      hr:\n"
+    "        required_seeding_time: 3D\n"
+    "        add_tag: zB\n"
+)
+
+# v4 形态: 站点 '' = 覆盖为空(合法稀疏条目, 迁移不得误杀)
+V4_SITE_EMPTY = (
+    "config:\n"
+    "  schema_version: 4\n"
+    "  hr:\n"
+    "    add_tag: zGlobal\n"
+    "  trackers:\n"
+    "    A:\n"
+    "      domains: [a.com]\n"
+    "      hr:\n"
+    "        required_seeding_time: 3D\n"
+    "        add_tag: ''\n"
+)
+
+
+def test_migrate_config_3_4_removes_explicit_empty():
+    """v3→v4 迁移单测: 9 键作用域内显式置空值移除, 返回 (cfg, notes) 逐键明细(非空值/无关站点不误杀)"""
+    from auto_qb.config.migrations import _migrate_config_3_4
+
+    cfg = {
+        "schema_version": 3,
+        "remove_similar_tags": "",
+        "hr": {
+            "add_tag": "",
+            "add_category": "zCat",
+            "exclude_tags": ""
+        },
+        "trackers":
+            {
+                "A":
+                    {
+                        "domains": ["a.com"],
+                        "remove_similar_tags": "",
+                        "hr":
+                            {
+                                "required_seeding_time": "3D",
+                                "add_tag": "",
+                                "add_category_for_satisfied": "",
+                                "overwrite_category": "",
+                                "exclude_categories": "",
+                            },
+                    },
+                "B": {
+                    "domains": ["b.com"],
+                    "hr": {
+                        "required_seeding_time": "3D",
+                        "add_tag": "zB"
+                    }
+                },
+                "C": "junk",  # 形状烂的站点: 跳过不炸
+            },
+    }
+    out, notes = _migrate_config_3_4(cfg)
+
+    assert out["schema_version"] == 3, "版本章由框架盖章, 迁移函数不碰版本字段"
+    assert "remove_similar_tags" not in out
+    assert out["hr"] == {"add_category": "zCat"}, "全局段只移除 '', 非空值保留"
+    a = out["trackers"]["A"]
+    assert "remove_similar_tags" not in a
+    assert a["hr"] == {"required_seeding_time": "3D"}, "站点段 4 类 '' 全部移除, 必填键保留"
+    assert out["trackers"]["B"]["hr"]["add_tag"] == "zB", "非空值与无 '' 的站点不误杀"
+
+    paths = {note.split(":", 1)[0] for note in notes}
+    assert paths == {
+        "config.remove_similar_tags",
+        "config.hr.add_tag",
+        "config.hr.exclude_tags",
+        "config.trackers.A.remove_similar_tags",
+        "config.trackers.A.hr.add_tag",
+        "config.trackers.A.hr.add_category_for_satisfied",
+        "config.trackers.A.hr.overwrite_category",
+        "config.trackers.A.hr.exclude_categories",
+    }
+    assert all("显式置空已移除" in note and "如需覆盖为空请重新显式配置" in note for note in notes)
+
+
+def test_migrate_config_3_4_idempotent():
+    """v3→v4 迁移幂等: 移除后重放无变更、无 notes(返回裸 dict; 崩溃重放安全)"""
+    from auto_qb.config.migrations import _migrate_config_3_4
+
+    out1, _ = _migrate_config_3_4({"hr": {"add_tag": ""}, "trackers": {"A": {"hr": {"add_tag": ""}}}})
+    result2 = _migrate_config_3_4(out1)
+    assert result2 == out1, "第二次应无任何可移除项, 原样返回(裸 dict 形态)"
+
+
+def test_materialize_v3_removes_explicit_empty_with_warning(tmp_path, caplog):
+    """v3 文件物化: 作用域内 '' 移除并落盘 v4, 每个被移除键一条 WARNING(用户拍板: 日志必须可见)"""
+    import logging
+
+    data_dir = tmp_path / "data"
+    path = _make(tmp_path, V3_WITH_EMPTIES)
+
+    with caplog.at_level(logging.WARNING, logger="auto_qb.config.loaders"):
+        desc, backup = materialize_schema_migration(path, str(data_dir))
+
+    assert desc == "v3→v4"
+    assert backup == str(data_dir / "config.yml.v3.bak")
+    text = _text(path)
+    assert "schema_version: 4" in text
+    assert "add_tag: ''" not in text and "remove_similar_tags: ''" not in text \
+        and "overwrite_category: ''" not in text, "作用域内的 '' 全部移除"
+    assert "add_tag: zB" in text, "非空值不误杀"
+    assert "add_category: zCat" in text, "非空值不误杀"
+    cfg = load_config(path)
+    assert cfg.trackers["A"].hr.add_tag == "" and cfg.hr.add_tag == "", "站点与全局的 '' 都移除 = 双双走默认"
+    warnings = [r.message for r in caplog.records if r.levelno == logging.WARNING]
+    assert any("config.trackers.A.hr.add_tag" in m and "显式置空已移除" in m for m in warnings), warnings
+    assert any("config.hr.add_tag" in m for m in warnings), warnings
+
+
+def test_materialize_v4_site_empty_untouched(tmp_path):
+    """v4 文件的站点 '' = 覆盖为空(合法保留): 物化零 IO 不误杀, 加载后生效值 = ''"""
+    data_dir = tmp_path / "data"
+    path = _make(tmp_path, V4_SITE_EMPTY)
+
+    assert materialize_schema_migration(path, str(data_dir)) == ("", ""), "已是当前版本: 零 IO"
+    assert _text(path) == V4_SITE_EMPTY, "v4 的站点 '' 不得被迁移移除"
+    cfg = load_config(path)
+    assert cfg.trackers["A"].hr.add_tag == "", "覆盖为空生效(不回退全局 zGlobal)"
+    assert cfg.hr.add_tag == "zGlobal"
+
+
+def test_write_tree_roundtrip_preserves_site_explicit_empty(tmp_path):
+    """ruamel round-trip 保留站点 ''(report 26-10-03-0504 待核实项①实测): 写盘 -> 读回仍为 ''
+
+    write_tree -> ruamel dump 把 '' 写成带引号标量(add_tag: ''), BaseLoader 读回 '' ——
+    「覆盖为空」这一稀疏条目在写盘链路无损, WebUI 保存不会把它洗成键缺失。
+    """
+    path = _make(tmp_path, V4_SITE_EMPTY)
+    old = load_config(path)
+    tree = read_tree(path)
+    tree["config"]["trackers"]["A"]["hr"]["add_category"] = ""  # 新增的站点显式空
+    write_tree(path, tree, old, _bak(tmp_path))
+
+    text = _text(path)
+    assert "add_tag: ''" in text, f"已有站点 '' 应原样保留: {text}"
+    assert "add_category: ''" in text, f"新增站点 '' 应写为带引号空串: {text}"
+    loaded = load_config(path)
+    assert loaded.trackers["A"].hr.add_tag == "" and loaded.trackers["A"].hr.add_category == ""

@@ -10,6 +10,8 @@
   由 `migrate()` 沿链串行完成(v1→v2→v3), 任何一级都不感知更早的历史。
 - **迁移函数纪律**: 纯函数(dict→dict, 无 IO); 原子写 / 备份等 IO 语义一律留在调用方;
   `schema_version` 字段由本框架在每级迁移后统一盖章, 迁移函数不必自己改版本字段。
+  需要让人读到的逐键变更(如 v4 迁移的「显式置空已移除」)可返回 (dict, notes) 附带明细,
+  由调用链经 migrate_with_notes 取用并决定日志级别 —— 迁移函数自身不做任何 logging。
 - **版本检测口径**: 字段缺失 = v1(存量文件口径) —— 三类文件的现行结构即 v1, 第一次
   *破坏性*结构变更才诞生 v2 与第一个迁移函数。刻意不为"补字段"这类非破坏性动作造版本:
   那会让所有存量文件平白走一次迁移写盘, 换来的只是演示价值(链式执行的正确性由单测里的
@@ -17,7 +19,7 @@
 
 依赖纪律: infra 只被依赖 —— 本模块只依赖 .errors, 不 import 任何业务模块。
 """
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, List, Tuple
 
 from .errors import SchemaVersionError
 
@@ -27,7 +29,8 @@ VERSION_KEY = "schema_version"
 CURRENT_VERSIONS: Dict[str, int] = {
     "state": 3,  # <data_dir>/state.json 顶层 schema_version
     "hr_site": 2,  # hr/<site>.json 的 schema_version; v2 = HR 波次模型 v3(迁移在 config/migrations.py, 依赖纪律)
-    "config": 3,  # config.schema_version(YAML 的 config: 块内, 不占根键); v3 = HR 14 键口径(迁移函数在 config/migrations.py)
+    # v4 = 站点级「显式空 = 覆盖为空」三态(report 26-10-03-0504 方案 B 阶段 1; 迁移在 config/migrations.py)
+    "config": 4,  # config.schema_version(YAML 的 config: 块内, 不占根键); v3 = HR 14 键口径(迁移函数在 config/migrations.py)
 }
 
 
@@ -93,8 +96,9 @@ def _migrate_state_2_3(data: dict) -> dict:
     return data
 
 
-# MIGRATIONS[kind][from_version] = fn(data: dict) -> dict
+# MIGRATIONS[kind][from_version] = fn(data: dict) -> dict | (dict, notes)
 # 纪律见模块 docstring; 首个破坏性结构变更出现时, 在对应表注册 migrate_<kind>_<n>_<n+1>。
+# 返回形态: 裸 dict(无明细)或 (dict, notes)(附带逐键人读变更明细, 见 migrate_with_notes)。
 MIGRATIONS: Dict[str, Dict[int, Callable[[dict], dict]]] = {
     "state": {
         1: _migrate_state_1_2,
@@ -130,6 +134,44 @@ def detect_version(kind: str, data: dict) -> int:
     return version
 
 
+def _run_migration_step(step: Callable, data: dict) -> Tuple[dict, list]:
+    """执行单级迁移; 兼容两种返回形态: dict(仅数据) | (dict, notes)(附带人读变更明细)
+
+    notes 是该级迁移的逐键/逐项人读变更清单(如「config.trackers.X.hr.add_tag: 显式置空已移除…」),
+    迁移函数本身是纯函数不做 IO/logging, 人读明细经此返回形态上交调用链(见 migrate_with_notes)。
+    """
+    result = step(data)
+    if isinstance(result, tuple):
+        out, notes = result
+        return out, list(notes)
+    return result, []
+
+
+def migrate_with_notes(kind: str, data: dict) -> Tuple[dict, str, List[str]]:
+    """migrate() 的明细版: 额外返回沿链各级迁移附带的 notes(人读变更明细, 每键一条)
+
+    检测/逐级/盖章/fail-fast/幂等口径与 migrate() 完全一致。notes 供调用链决定日志级别与
+    措辞(config v3→v4 的「显式置空已移除」逐键 WARNING 即走此通道); 不需要明细的调用方
+    用 migrate() 即可(签名与返回形态不变, state/hr_site 既有调用零改动)。
+    """
+    version = detect_version(kind, data)
+    current = CURRENT_VERSIONS[kind]
+    notes: List[str] = []
+    if version == current:
+        return data, "", notes
+    table = MIGRATIONS[kind]
+    start = version
+    while version < current:
+        step = table.get(version)
+        if step is None:
+            raise SchemaVersionError(f"{kind} 缺少 v{version}→v{version + 1} 的迁移函数(版本表与迁移表不同步)")
+        data, step_notes = _run_migration_step(step, data)
+        notes.extend(step_notes)
+        version += 1
+        data[VERSION_KEY] = version
+    return data, f"v{start}→v{version}", notes
+
+
 def migrate(kind: str, data: dict) -> Tuple[dict, str]:
     """从检测出的版本沿链逐级迁移到 CURRENT_VERSIONS[kind]
 
@@ -137,18 +179,7 @@ def migrate(kind: str, data: dict) -> Tuple[dict, str]:
     框架盖一次 schema_version 章。返回 (数据, "v1→v3" 形式的描述; 无迁移发生为 "")。
     迁移表缺项(版本号抬了表没跟上)按 SchemaVersionError fail-fast, 不静默跳级。
     迁移中途崩溃的幂等性由调用方保证: 链的输入是磁盘上的真实版本, 重放同一条链即可。
+    需要逐键变更明细的调用方用 migrate_with_notes(迁移函数可返回 (dict, notes) 附带)。
     """
-    version = detect_version(kind, data)
-    current = CURRENT_VERSIONS[kind]
-    if version == current:
-        return data, ""
-    table = MIGRATIONS[kind]
-    start = version
-    while version < current:
-        step = table.get(version)
-        if step is None:
-            raise SchemaVersionError(f"{kind} 缺少 v{version}→v{version + 1} 的迁移函数(版本表与迁移表不同步)")
-        data = step(data)
-        version += 1
-        data[VERSION_KEY] = version
-    return data, f"v{start}→v{version}"
+    data, desc, _ = migrate_with_notes(kind, data)
+    return data, desc

@@ -11,7 +11,7 @@ import yaml
 from ..core import curves
 from ..infra.errors import SchemaVersionError
 from ..infra.utils import MatchPattern, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
-from ..infra.versioning import migrate
+from ..infra.versioning import migrate_with_notes
 from .errors import ConfigError
 from .models import (
     AddEpisodeTagsConfig,
@@ -300,7 +300,9 @@ def load_tracker_hr(spec: dict, global_hr: dict) -> HRRule:
     """
     d = HRRule()
 
-    # 输出设置回退链: 站点 spec -> 全局 hr 段 -> HRRule 字段默认
+    # 输出设置回退链: 站点 spec -> 全局 hr 段 -> HRRule 字段默认。
+    # 按键存在性取值(不是按真假): 站点键存在且值为 ''(tri_state 三态, v4 起 _strip_none 不剥)
+    # 时返回 '' 作为合并生效值 = 「覆盖为空」; 消费端(maintenance_mod)对空串按不打标/不设置处理。
     def out(key: str):
         return spec.get(key, global_hr.get(key, getattr(d, key)))
 
@@ -424,7 +426,9 @@ def migrate_config_schema(data: dict, config_path: str) -> str:
     版本键在 config: 块内(config.schema_version), 缺失 = v1 存量口径 —— 存量配置零迁移成本。
     BaseLoader 标量全为字符串, 先归一成 int 再进版本检测。比程序新的版本 -> ConfigError 报出
     两个版本号(与校验聚合同一干净出口)。返回迁移描述(desc, 无迁移为 "") —— 本函数只做纯内存
-    变换, 落盘与否、记什么日志由调用方决定。
+    变换, 落盘与否、记什么日志由调用方决定。迁移函数附带的逐键变更明细(notes)在这里落成
+    WARNING(v4 迁移的「显式置空已移除」用户拍板要求日志可见; load 与启动物化两条路径都经本
+    函数, 告警单点在此)。
 
     调用点与物化口径(计划 26-09-27-2252): load_config 在校验前迁移加载结果(内存); 磁盘落盘由
     writer.materialize_schema_migration 在 run() 开头单点完成(版本号备份后立即原子写回), 不再
@@ -438,11 +442,14 @@ def migrate_config_schema(data: dict, config_path: str) -> str:
         return ""
     normalize_schema_version(cfg)
     try:
-        cfg, desc = migrate("config", cfg)
+        cfg, desc, notes = migrate_with_notes("config", cfg)
     except SchemaVersionError as e:
         raise ConfigError(f"配置 schema 版本问题({config_path}): {e}") from e
+    logger = logging.getLogger(__name__)
+    for note in notes:  # 迁移函数的人读变更明细(纯函数不 log, 经 migrate_with_notes 上交)
+        logger.warning(f"配置 schema 迁移({config_path}) {desc}: {note}")
     if desc:
-        logging.getLogger(__name__).debug(f"配置 schema 已迁移 {desc}(内存生效)")
+        logger.debug(f"配置 schema 已迁移 {desc}(内存生效)")
     return desc
 
 

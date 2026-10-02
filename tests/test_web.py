@@ -465,7 +465,7 @@ def web_env(tmp_path):
 
     mgr = _make_web_manager(
         tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
+        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
     )
     mgr.web.token = ensure_web_token(mgr)
     app = create_app(mgr)
@@ -3530,7 +3530,7 @@ def test_config_tree_restart_field_fallback(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
-        f.write("config:\n  schema_version: 3\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
+        f.write("config:\n  schema_version: 4\n  data_dir: old-dir\n  qbittorrent:\n    host: h\n")
 
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["data_dir"] = "new-dir"
@@ -3548,7 +3548,7 @@ def test_config_tree_preserves_comments(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     with open(mgr.config_path, "w", encoding="utf-8") as f:
-        f.write("config:\n  schema_version: 3\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
+        f.write("config:\n  schema_version: 4\n  # 保留我\n  main_tick: 2s\n  qbittorrent:\n    host: h\n")
 
     tree = client.get("/api/config", headers=auth).json()["tree"]
     tree["config"]["main_tick"] = "3s"
@@ -3570,7 +3570,7 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
 
     mgr = _make_web_manager(
         tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
+        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
     )
     with caplog.at_level(logging.DEBUG, logger="auto_qb.web"):
         token = ensure_web_token(mgr)
@@ -3581,7 +3581,7 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
         assert token[:8] not in r.getMessage(), f"密钥前缀也不得出现: {r.getMessage()}"
 
 
-_WEB_MGR_CFG = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 3\n"
+_WEB_MGR_CFG = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 4\n"
 
 
 def test_web_token_generated_atomic_and_readable(tmp_path):
