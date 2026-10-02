@@ -63,7 +63,7 @@ LANE_STATUS_TEXTS = {
 SOURCE_TEXTS = {
     SOURCE_EXEMPT: "D 免罪",
     SOURCE_NOT_LISTED: "未列出",
-    SOURCE_SATISFIED: "B 毕业",
+    SOURCE_SATISFIED: "已达标",
 }
 
 

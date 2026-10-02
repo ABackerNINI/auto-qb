@@ -10,13 +10,30 @@
 (manager.hr.request_refresh 单点, 与插件端点同一实现) —— 取数仍由取数线程串行执行。
 """
 import time
-from typing import Dict, List
+from typing import Any, Dict, List, Mapping
 
 from fastapi import APIRouter, HTTPException
 
 from ....hr.report import run_hr_confirm_empty
 from ....hr.status import build_site_statuses, entry_details
 from ..context import WebContext
+
+
+def mark_local_present(rows: List[Dict], by_hash: Mapping[str, Any]) -> None:
+    """给明细行追加只读布尔字段 `local_present`(计划 26-10-02-1936 §3.3, 决策点③a) —— join 口径钉在本路由层
+
+    - `local_present` = **本地库存在该种子**(不区分 state 细类): 暂停/异常的 HR 种子仍是
+      义务对象, 折进「老旧」会造成「已无义务」错觉; 本地不存在 = 老旧(含本地从未下载的清单行);
+    - 键探测按 infohash_v1 -> v2 顺序(任一命中即算), 大小写无关(站点清单与 qB hash 的书写
+      形态可能不同, hex 语义等价);
+    - 纯响应层展示标记: 不落盘、不进 /api/state 轮询载荷, 不影响任何判定/取数调度;
+      `entry_details()` 本体保持纯站点口径(不加本地字段)。
+    """
+    local = {h.casefold() for h in by_hash}
+    for row in rows:
+        row["local_present"] = any(
+            h and h.casefold() in local for h in (row.get("infohash_v1") or "", row.get("infohash_v2") or "")
+        )
 
 
 def build_router(ctx: WebContext) -> APIRouter:
@@ -139,6 +156,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         站点未接入是路径层面的不存在, 回 404 并点名已接入清单。数据读取与 --hr-status 同款
         只读口径(store.read_unlocked), 字段全部来自 hr.status.entry_details 单点(含失踪行,
         排序与人话均由后端算好); 站点文件读坏不抛, read_error 原样带出。
+        local_present 为响应层追加的只读标记(mark_local_present 单点, 计划 26-10-02-1936
+        决策点③a), entry_details 本体保持纯站点口径。
         """
         manager.web.touch()
         conf = getattr(manager.config, "hr_check", None)
@@ -155,9 +174,11 @@ def build_router(ctx: WebContext) -> APIRouter:
         if service is None:
             raise HTTPException(status_code=409, detail="HR 取数线程未启动")
         data, err = service.store(site).read_unlocked()
+        rows = [d.to_dict() for d in entry_details(data)]
+        mark_local_present(rows, manager.store.by_hash)
         return {
             "site": site,
-            "entries": [d.to_dict() for d in entry_details(data)],
+            "entries": rows,
             "read_error": err or "",
             "now": time.time(),
         }

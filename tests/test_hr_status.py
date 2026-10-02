@@ -5,8 +5,13 @@
 - test_entry_details_keeps_missing_rows: 失踪行(active=False)不丢且参与同一排序 —— 全量清单一览是 issue 本意
 - test_entry_details_need_seed_text_reuses_single_point: need_seed 人话确为复用单点(与 CLI 同一函数)而非另写
 - test_entry_details_verified_join: verified join —— 有记录→ts+source 原值+人话 / 无记录→未核实 / v2 键也能命中
-- test_entry_details_source_texts: 放行来源人话映射(D 免罪 / 未列出 / B 毕业); 未知原值回落原文不静默丢
+- test_entry_details_source_texts: 放行来源人话映射(D 免罪 / 未列出 / 已达标); 未知原值回落原文不静默丢
 - test_entry_details_field_surface: 导出字段面 = §3 P0+P1 全集; remain_seconds 等 P2 字段不得出现(决策点③)
+- test_mark_local_present_v1_hit: 本地库存在(v1 命中) -> local_present=True
+- test_mark_local_present_absent: 本地不存在 -> local_present=False(老旧)
+- test_mark_local_present_v2_only_hit: 仅 v2 命中(v1 未命中) -> local_present=True
+- test_mark_local_present_case_insensitive_hit: 大小写差异命中(站点清单与 qB hash 书写形态不同) -> local_present=True
+- test_mark_local_present_empty_hash_skipped: 空 infohash 不探测(空串 casefold 进集合也不误命中)
 
 ### P1 覆盖率提升轮: 展示层与模型长尾
 - test_duration_text_tiers: 人话时长四档(天/时/分/秒) + 负数钳 0
@@ -134,12 +139,12 @@ def test_entry_details_verified_join():
     assert rows[1].verified_source == "absent" and rows[1].verified_source_text == "D 免罪"
     assert rows[2].verified_ts == 0.0 and rows[2].verified_source == "" and rows[2].verified_source_text == "未核实"
     assert rows[3].verified_ts == 1759000001.0
-    assert rows[3].verified_source == "satisfied" and rows[3].verified_source_text == "B 毕业"
+    assert rows[3].verified_source == "satisfied" and rows[3].verified_source_text == "已达标"
 
 
 def test_entry_details_source_texts():
     """放行来源人话映射钉死三键; 未知 source 回落原文(给原始值+人话的兜底, 不静默丢)"""
-    assert SOURCE_TEXTS == {SOURCE_EXEMPT: "D 免罪", SOURCE_NOT_LISTED: "未列出", SOURCE_SATISFIED: "B 毕业"}
+    assert SOURCE_TEXTS == {SOURCE_EXEMPT: "D 免罪", SOURCE_NOT_LISTED: "未列出", SOURCE_SATISFIED: "已达标"}
     data = _site([_entry(9, ih1="eeee1111")])
     data.verified["eeee1111"] = HrVerified(infohash="eeee1111", tid=9, verified_ts=1.0, source="weird")
     row = entry_details(data)[0]
@@ -284,3 +289,57 @@ def test_model_from_json_drops_invalid_verified_records():
     }
     data = HrSiteData.from_json(raw)
     assert set(data.verified) == {"OK"}
+
+
+# ==================== local_present 本地库 join(计划 26-10-02-1936 §3.3, 决策点③a) ====================
+
+
+def _rows_with_hashes(**kwargs):
+    """构造明细行并就地跑 mark_local_present, 返回 (行按 tid 索引, 本地库 hash 集)
+
+    kwargs = 本地库的 hash 表(by_hash 形态, 值随意 —— join 只看键)。
+    """
+    from auto_qb.webui.server.routes.hr import mark_local_present
+
+    entries = [
+        _entry(1, ih1="aaaa1111", ih2="aaaa2222"),
+        _entry(2, ih1="bbbb1111", ih2="bbbb2222"),
+        _entry(3, ih1="cccc1111", ih2="cccc2222"),
+        _entry(4, ih1="", ih2=""),
+    ]
+    rows = [r.to_dict() for r in entry_details(_site(entries))]
+    mark_local_present(rows, kwargs)
+    return {r["tid"]: r for r in rows}
+
+
+def test_mark_local_present_v1_hit():
+    """本地存在(v1 命中) -> True; 完全不在本地库 -> False(老旧, 含本地从未下载的清单行)"""
+    rows = _rows_with_hashes(**{"aaaa1111": object()})
+    assert rows[1]["local_present"] is True, "v1 命中即算本地存在"
+    assert rows[2]["local_present"] is False, "本地不存在 = 老旧(不区分 state 细类, 不存在即 False)"
+
+
+def test_mark_local_present_absent():
+    """本地库为空(空 by_hash) -> 全部行 local_present=False, 端点响应层不抛"""
+    rows = _rows_with_hashes()
+    assert all(r["local_present"] is False for r in rows.values())
+
+
+def test_mark_local_present_v2_only_hit():
+    """仅 v2 命中(v1 未收录) -> True: 终态冻结给 v1/v2 各写一条, 任一键命中即算"""
+    rows = _rows_with_hashes(**{"bbbb2222": object()})
+    assert rows[2]["local_present"] is True, "v1 不在、v2 在 -> 本地存在"
+
+
+def test_mark_local_present_case_insensitive_hit():
+    """大小写差异命中: 站点清单与 qB hash 书写形态可能不同, hex 语义等价 -> True"""
+    rows = _rows_with_hashes(**{"CCCC1111": object()})
+    assert rows[3]["local_present"] is True, "本地库大写、清单小写也必须命中(大小写无关口径)"
+
+
+def test_mark_local_present_empty_hash_skipped():
+    """空 infohash 不探测: 无 hash 行(取数通道刚接通未回填)恒 False, 且空串不误命中本地库的空键"""
+    rows = _rows_with_hashes(**{"": object(), "cccc1111": object()})
+    assert rows[4]["local_present"] is False, "空 hash 行恒不在本地库(空串不得因集合含空键而误命中)"
+    assert rows[3]["local_present"] is True, "空串键不影响有 hash 行的正常探测"
+    assert rows[1]["local_present"] is False and rows[2]["local_present"] is False, "不在本地库的行照常回 False"

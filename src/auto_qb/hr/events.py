@@ -106,7 +106,7 @@ def retention_violation(site: str, ratio: float) -> str:
 def zero_listing(site: str) -> str:
     """结构完好的零行波(§5.3): 不签发放行; 人工对账一次(确认戳)后零行波才可正常签发"""
     return (
-        f"{prefix(EVENT_PARSE)} 站点 {site} | 清单为 0(结构完好): 不签发放行 —— 全部毕业/被清除? 还是改版空表? | "
+        f"{prefix(EVENT_PARSE)} 站点 {site} | 清单为 0(结构完好): 不签发放行 —— 全部已达标移出/被清除? 还是改版空表? | "
         f"若确认账号的 HR 清单确实为空, 跑 --hr-confirm-empty {site}(或用 WebUI 站点卡片按钮)写一次性确认戳; "
         "清单再现非零行时确认戳自动失效"
     )

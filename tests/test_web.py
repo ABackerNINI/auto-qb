@@ -218,6 +218,10 @@
 - test_api_hr_site_entries_guards: HR 未启用 400 / 站点未接入 404(与 confirm-empty 同款话术)
 - test_api_hr_site_entries_409_worker_absent: hr 门面在但取数服务缺席(service=None) -> 409 不假装有数据
 - test_api_state_excludes_hr_entry_details: 体积守卫 —— 种子明细键不得进 /api/state 轮询载荷(计划 §8)
+- test_api_hr_site_entries_local_present: 明细行 local_present 本地库 join(计划 26-10-02-1936 §3.3 决策点③a) ——
+  v1 命中/仅 v2 命中/大小写差异命中 -> True, 本地不存在 -> False(老旧)
+- test_hr_user_visible_texts_no_graduation_wording: 否定守阵 —— 用户可见文案来源(hr status/resolve/events 字符串常量)「毕业」零残留
+  (注释保留域术语, 决策点②); 无事实分支与带事实分支同文「在线·已达标」(testhr_view_fields_three_state 内钉)
 - test_api_keys_get_default_when_missing: 快捷键配置文件不存在 -> GET 回默认表(计划 26-09-28-0354 W6 §4.4)
 - test_api_keys_put_roundtrip: PUT 合法配置落盘(atomic_write)且 GET 原样回读; 空串=显式禁用语义保留
 - test_api_keys_put_invalid_rejected: PUT 结构非法(schema_version/模板/overrides 形状/归一化串) -> 422 且不触碰磁盘
@@ -4190,7 +4194,7 @@ def testhr_view_fields_three_state(tmp_path):
 
     # D 档已免罪(v3.4, 2026-09-26 用户指令): 站点明确终态结论, 来源单列「在线·已免罪」,
     # 不与缺席证据 site_released 混一个 token
-    from auto_qb.hr.model import SOURCE_EXEMPT
+    from auto_qb.hr.model import SOURCE_EXEMPT, SOURCE_SATISFIED
 
     link.judge.return_value = HrJudgement(
         identity=HrIdentity.RELEASED,
@@ -4200,6 +4204,17 @@ def testhr_view_fields_three_state(tmp_path):
     fields = QbManager.hr_view_fields(rec)
     assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_exempt"
     assert fields["hr_safety_text"] == "在线·已免罪"
+
+    # 放行记录无命中行事实 + released_src=satisfied(计划 26-10-02-1936 §3.5): 无事实分支与
+    # 带事实分支同文「在线·已达标」—— 同一结论两种写法(旧「在线·已达标(毕业)」)消灭
+    link.judge.return_value = HrJudgement(
+        identity=HrIdentity.RELEASED,
+        reason="放行记录(已达标移出)",
+        released_src=SOURCE_SATISFIED,
+    )
+    fields = QbManager.hr_view_fields(rec)
+    assert fields["hr_safety"] == "safe" and fields["hr_safety_src"] == "site_satisfied"
+    assert fields["hr_safety_text"] == "在线·已达标"
 
     # 本地兜底路径(judge 返回 None: 站点侧无可查键/未发布视图): triggered/satisfied 就是本地结论,
     # 来源统一 local —— 呈现口径与打标流程同源, 不会出现"标签说达标、徽章说不能删"
@@ -4452,6 +4467,7 @@ def test_api_hr_site_entries_full_fields(web_env, tmp_path):
         "verified_ts",
         "verified_source",
         "verified_source_text",
+        "local_present",
         "done_iso",
         "active",
         "missing_streak",
@@ -4460,10 +4476,47 @@ def test_api_hr_site_entries_full_fields(web_env, tmp_path):
     }
     assert row["tid"] == 101 and row["name"]
     assert row["infohash_v1"] and row["infohash_v2"], "取过 .torrent 的行 v1/v2 都已回填"
+    assert row["local_present"] is False, "夹具本地库为空 -> 全部行是老旧(local_present join 响应层追加)"
     assert row["need_seed_seconds"] is not None and row["need_seed_text"] not in ("", None)
     assert row["lane"] and row["lane_text"], "档位原值 + 人话都要给"
     assert row["active"] is True and "done_iso" in row
     assert row["first_seen"] >= 0.0 and row["last_seen"] >= 0.0, "first_seen/last_seen 原样透传(写入行为属取数管道, 不在此钉)"
+
+
+def test_api_hr_site_entries_local_present(web_env, tmp_path):
+    """local_present 本地库 join(计划 26-10-02-1936 §3.3, 决策点③a): 明细端点每行带只读标记
+
+    真实 join 用例(端点级): v1 精确命中 / 仅 v2 命中 / 大小写差异命中 -> True;
+    本地不存在 -> False(老旧, 含本地从未下载的清单行)。join 键口径单点在
+    routes.hr.mark_local_present(纯函数四态由 test_hr_status 钉)。
+    """
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+
+    def first_row():
+        return client.get("/api/hr/sites/HHan/entries", headers=auth).json()["entries"][0]
+
+    r0 = first_row()
+    assert r0["local_present"] is False, "本地库为空 -> 老旧"
+    h1, h2 = r0["infohash_v1"], r0["infohash_v2"]
+    assert h1 and h2, "夹具行 v1/v2 均已回填(不然测不了双键探测)"
+
+    mgr.store.by_hash.clear()
+    mgr.store.by_hash[h1] = mock.Mock()
+    assert first_row()["local_present"] is True, "v1 命中"
+
+    mgr.store.by_hash.clear()
+    mgr.store.by_hash[h2] = mock.Mock()
+    assert first_row()["local_present"] is True, "仅 v2 命中(v1 未收录的终态冻结形态)"
+
+    mgr.store.by_hash.clear()
+    mgr.store.by_hash[h1.upper()] = mock.Mock()
+    assert first_row()["local_present"] is True, "大小写差异命中(站点清单与 qB hash 书写形态不同)"
+
+    mgr.store.by_hash.clear()
+    mgr.store.by_hash["deadbeef"] = mock.Mock()
+    assert first_row()["local_present"] is False, "本地只有别的种子 -> 老旧"
 
 
 def test_api_hr_site_entries_verified_two_states(web_env, tmp_path):
@@ -4526,8 +4579,27 @@ def test_api_state_excludes_hr_entry_details(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     text = json.dumps(client.get("/api/state", headers=auth).json(), ensure_ascii=False)
-    for key in ("need_seed_text", "verified_source_text", "lane_text", "missing_streak"):
+    for key in ("need_seed_text", "verified_source_text", "lane_text", "missing_streak", "local_present"):
         assert f'"{key}"' not in text, f"/api/state 轮询载荷混入了明细键 {key}"
+
+
+def test_hr_user_visible_texts_no_graduation_wording():
+    """否定守阵(计划 26-10-02-1936 §3.5): 用户可见文案来源「毕业」零残留
+
+    扫 hr/status.py(SOURCE_TEXTS 等)· hr/resolve.py(放行依据文案表 / safety_display 人话)·
+    hr/events.py(告警行)的**字符串常量**(AST 层取, 注释天然不在其列 —— 注释按决策点②
+    保留「毕业」域术语, grep 可溯源)。前端静态文案归阶段 2-3 守阵, 不在此。
+    """
+    import ast
+
+    hr_dir = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "hr"
+    for name in ("status.py", "resolve.py", "events.py"):
+        tree = ast.parse((hr_dir / name).read_text(encoding="utf-8"), filename=name)
+        offenders = [
+            n.value
+            for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and "毕业" in n.value
+        ]
+        assert not offenders, f"{name} 的用户可见字符串残留「毕业」: {offenders!r}"
 
 
 def test_api_hr_refresh_single_site_and_no_runtime(web_env, tmp_path):

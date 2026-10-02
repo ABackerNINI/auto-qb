@@ -231,7 +231,7 @@ def resolve_identity(
                 return HrResolution(HrIdentity.NO_EVIDENCE, f"锚点漂移(本机重下, 放行作废): {drift}")
         src = {
             SOURCE_EXEMPT: "D 档已免罪",
-            SOURCE_SATISFIED: "B 档毕业后移出",
+            SOURCE_SATISFIED: "已达标移出",
         }.get(ver.source, "覆盖范围内未列出")
         return HrResolution(HrIdentity.RELEASED, f"放行记录({src}, 依据 {ver.verified_ts:.0f})", released_src=ver.source)
 
@@ -347,7 +347,7 @@ def safety_display(judged: Optional[HrJudgement], *, triggered: bool, satisfied:
         if judged.released_src == SOURCE_EXEMPT:
             return _safety_display_dataclass(SAFETY_SAFE, SRC_SITE_EXEMPT, "在线·已免罪")
         if judged.released_src == SOURCE_SATISFIED:
-            return _safety_display_dataclass(SAFETY_SAFE, SRC_SITE_SATISFIED, "在线·已达标(毕业)")
+            return _safety_display_dataclass(SAFETY_SAFE, SRC_SITE_SATISFIED, "在线·已达标")
         return _safety_display_dataclass(SAFETY_SAFE, SRC_SITE_RELEASED, "在线·已核实，安全放行")
     # identity == HR: 命中考察中(行 1 管束)
     return _safety_display_dataclass(SAFETY_DANGER, SRC_SITE_SCOPE, "在线·考察中")
