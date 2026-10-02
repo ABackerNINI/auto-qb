@@ -1,9 +1,9 @@
 # 26-10-02-backend-rules-ref-duplicate-reject — 站点引用规则拒绝重复
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-10-02
-**Updated:** 2026-10-02 16:31
-**Summary:** 新 feat: trackers.<站点>.rules 引用判重。分析结论: 重复引用零实际用途(运行时 _resolve_refs 按规则名去重, 引用语法无次数/权重语义), 纯误操作产物 → 配置校验层拒绝 + WEBUI 下拉防呆。计划 plans/26-10-02-1621 待拍板(拍板点 A 报错 vs WARN / B 只拒收不静默去重), 四波次 W1 校验判重 / W2 前端防呆 / W3 文案四处 / W4 测试。
+**Updated:** 2026-10-02 17:40
+**Summary:** trackers.<站点>.rules 引用判重已完结: 拍板 A=直接报错(无 WARN 观察期) / B=只拒收不修正。W1 dfcda6f9(_check_rule_refs 第二轮判重 + 测试) / W2 e854801e(行级 refOptions 过滤已引用项 + refPick 查重, 冒烟 8 断言全过) / W3 b30b5c07(文案四处)。收尾基线 2291 passed + 3 skipped / 99%(baselines/26-10-02-1734), 计划 plans/26-10-02-1621 置 Done。
 **Topics:** rules-ref-duplicate-reject
 **Refs:** memory-bank/plans/26-10-02-1621-plan-rules-ref-duplicate-reject.html
 
@@ -34,12 +34,13 @@
 | # | 子任务 | 状态 |
 |---|---|---|
 | 1 | 用途分析 + 修改计划产出 | Done |
-| 2 | 用户拍板(点 A/B) | Pending |
-| 3 | W1 后端判重 + W4 测试 | Pending |
-| 4 | W2 前端防呆 + 冒烟 | Pending |
-| 5 | W3 文案与文档同步 | Pending |
-| 6 | 收尾(全量基线 + 回写) | Pending |
+| 2 | 用户拍板(点 A/B): A=直接报错 / B=只拒收不修正 | Done |
+| 3 | W1 后端判重 + W4 测试(dfcda6f9) | Done |
+| 4 | W2 前端防呆 + 冒烟(e854801e) | Done |
+| 5 | W3 文案与文档同步(b30b5c07) | Done |
+| 6 | 收尾(全量基线 + 回写) | Done |
 
 ## 进度日志
 
 - 2026-10-02 16:31 — 计划轮完成: 同步 c02e9e14 → 证据链取证(校验/加载/运行时/前端/保存五段) → 用途分析(结论: 无用途) → 计划 plans/26-10-02-1621(doc-topic rules-ref-duplicate-reject, Open) → 立档本档案。生产文件零改动, 待拍板后进 W1-W4。
+- 2026-10-02 17:40 — 收尾轮完结(实施三波次已推 Gitee develop): sync 0d286cc5 → test.full 2291 passed + 3 skipped / 99%(13,259 语句 / 86 未覆盖 / 4,442 分支 / 81 partial, 39.4s, rc=0) → 基线切片 baselines/26-10-02-1734(passed +1 归 0d286cc5 新用例 test_esc_chain_clear_filters_fallback; 语句 +8 / 分支 +6 归 W1 判重分支) → 计划回写 Done + §6 拍板结果 + §8 v2 → activeContext 切片迁出 → 事实回写 config-reference/loading-and-write.md(校验范围)与 progress/implemented-rules.md。计划外发现(仅记录未改): ①判重报错文案含 yml 路径属 W1 既有口径; ②docs/configuration.md:154 YAML 示例注释未提判重; ③计划稿模板路径曾写 src/auto_qb/resources/(实际在仓库根 resources/, W3 已按实际路径落地, 现计划 HTML 已核为正确路径)。

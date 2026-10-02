@@ -28,3 +28,13 @@
   实测 1062 → **1094 passed**(Windows; Linux 侧未同步重测, 已在 testing.md 标注)。
   已知坑: ①解析器"一层一运算符"判定必须在消费二元运算符后给 `used` 赋值, 否则退化成笼统报错;
   ②语义校验(types.py)与运行期求值(eval.py)的报错文案不同源, 测试按文案匹配时容易写错预期。
+- **tracker.rules 引用判重 (2026-10-02, 三波次 `dfcda6f9` / `e854801e` / `b30b5c07`)**: 站点
+  `rules` 引用列表的重复条目在配置校验层拒绝(fail-fast; 运行时 `_resolve_refs` 按规则名去重故
+  重复零用途, 拍板 A=直接报错无 WARN 观察期 / B=只拒收不修正, loaders 不去重 / writer 不改写):
+  W1 `_check_rule_refs` 第二轮判重(归一键 `str(ref).strip()`, 仅合法 @ 形参与判重, 0 基序号
+  对齐 path_map 先例) + test_validate_rule_refs 四例 + test_tracker_rules_ref 去重回归锁;
+  W2 WebUI 防呆(config_editor.js 行级 refOptions 过滤已引用项 + refPick 追加查重 no-op 双保险,
+  浏览器冒烟 8 项断言全过); W3 文案四处(schema help / 05-console-hub / 04-split-explain /
+  docs/configuration.md)。收尾基线 2290 → **2291 passed + 3 skipped / 99%**(+1 来自同日
+  0d286cc5 新用例, 本 feat 扩展既有用例净增 0 条目; 语句 13,251→13,259 / 分支 4,436→4,442 为
+  W1 判重分支)。计划 plans/26-10-02-1621(Done), 档案 tasks/26-10-02-backend-rules-ref-duplicate-reject。

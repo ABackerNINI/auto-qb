@@ -1,13 +1,8 @@
-# 站点引用规则拒绝重复（计划轮）
+# 站点引用规则拒绝重复（已完结）
 
-> 摘要: 新 feat 计划轮。分析结论: trackers.<站点>.rules 重复引用零实际用途 —— 运行时 `_resolve_refs` 按规则名去重(rules_mod.py:377), 引用语法无次数/权重语义, 纯误操作产物。计划 [plans/26-10-02-1621](../plans/26-10-02-1621-plan-rules-ref-duplicate-reject.html) 四波次(W1 校验判重 / W2 前端下拉防呆 / W3 文案四处 / W4 测试)待拍板: 点 A 直接报错 vs 先 WARN; 点 B 只拒收、不做静默去重。档案 tasks/26-10-02-backend-rules-ref-duplicate-reject。
-> 最后活动: 2026-10-02 16:31
+> 摘要: trackers.<站点>.rules 重复引用判重已完结: 配置校验拒绝(W1 dfcda6f9) + WebUI 下拉防呆(W2 e854801e, 冒烟 8 断言全过) + 文案四处(W3 b30b5c07); 拍板 A=直接报错(无 WARN 观察期) / B=只拒收不修正。收尾基线 2291 passed + 3 skipped / 99%(baselines/26-10-02-1734)。
+> 最后活动: 2026-10-02 17:40
 
-## 正在进行
+## 专题完结
 
-- 待用户拍板计划(点 A/B) → 拍板后按 W1-W4 实施。
-
-## 本轮产出
-
-- 计划 [plans/26-10-02-1621-plan-rules-ref-duplicate-reject.html](../plans/26-10-02-1621-plan-rules-ref-duplicate-reject.html)。
-- 档案 [tasks/26-10-02-backend-rules-ref-duplicate-reject.md](../tasks/26-10-02-backend-rules-ref-duplicate-reject.md)(立档阈值 #4)。
+- 全部条目已迁出: 档案 [tasks/26-10-02-backend-rules-ref-duplicate-reject.md](../tasks/26-10-02-backend-rules-ref-duplicate-reject.md)(Done) · 计划 [plans/26-10-02-1621](../plans/26-10-02-1621-plan-rules-ref-duplicate-reject.html)(Done) · 实现事实 progress/implemented-rules.md · 校验口径 config-reference/loading-and-write.md · 基线 testing/baselines/26-10-02-1734-rules-ref-duplicate-reject-done.md。

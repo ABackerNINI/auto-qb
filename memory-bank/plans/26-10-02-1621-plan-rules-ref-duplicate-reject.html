@@ -6,9 +6,9 @@
 <title>修改计划 · 站点引用规则拒绝重复 — auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="rules-ref-duplicate-reject">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-02-1621">
-<meta name="doc-updated" content="26-10-02-1621">
+<meta name="doc-updated" content="26-10-02-1734">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-02-backend-rules-ref-duplicate-reject.md">
 <style>
   *{box-sizing:border-box}
@@ -77,8 +77,8 @@
     <h1>站点引用规则拒绝重复 — rules_ref 判重</h1>
     <p class="lede">站点的规则引用列表（<code>trackers.&lt;站点&gt;.rules</code>）目前只校验格式与存在性，同一引用写两遍会静默通过。本计划先回答「重复引用有没有实际用途」——结论是<strong>没有</strong>：运行时按规则名去重，重复条目完全惰性，只可能是误操作。据此在配置校验层拒绝重复，并在 WebUI 下拉侧防呆，文案与文档同步。</p>
     <p class="meta">
-      状态 <b>Open（待拍板）</b> · 取证基线 <b>c02e9e14</b>（develop，已同步） · 当前全量基线参照 <b>2290 passed + 3 skipped / 99%</b>（baselines/26-10-02-0707）<br>
-      撰写 <b>26-10-02-1621</b> · 本轮为分析 + 计划，未改任何生产文件
+      状态 <b>Done（已实施完结）</b> · 取证基线 <b>c02e9e14</b>（develop，已同步） · 全量基线 <b>2291 passed + 3 skipped / 99%</b>（baselines/26-10-02-1734）<br>
+      撰写 <b>26-10-02-1621</b> · 实施完结于 <b>0d286cc5</b>：W1 <b>dfcda6f9</b> / W2 <b>e854801e</b> / W3 <b>b30b5c07</b>
     </p>
   </div>
 </header>
@@ -204,8 +204,8 @@ for i, ref in enumerate(refs):
     <section id="s6">
       <div class="sec-head"><span class="sec-no">§6</span><h2>风险与拍板点</h2></div>
       <ul>
-        <li><strong>存量兼容</strong>：若现有 config.yml 已含重复引用，升级后启动/保存即报错——这是 fail-fast 的意图而非回归，修复动作明确（删多余行）。<strong>拍板点 A</strong>：直接报错（推荐）vs 先 WARN 一版观察。</li>
-        <li><strong>不做静默去重迁移</strong>：writer / 迁移链不改写用户数据（黄金法则 2 保守默认）。<strong>拍板点 B</strong>：确认只拒收、不修正。</li>
+        <li><strong>存量兼容</strong>：若现有 config.yml 已含重复引用，升级后启动/保存即报错——这是 fail-fast 的意图而非回归，修复动作明确（删多余行）。<strong>拍板点 A</strong>：直接报错（推荐）vs 先 WARN 一版观察。<strong>拍板结果（用户已确认）：直接报错，无 WARN 观察期。</strong></li>
+        <li><strong>不做静默去重迁移</strong>：writer / 迁移链不改写用户数据（黄金法则 2 保守默认）。<strong>拍板点 B</strong>：确认只拒收、不修正。<strong>拍板结果（用户已确认）：只拒收、不修正。</strong></li>
         <li><strong>影响面</strong>：<code>rules</code> 在绑定三元组（domains/rules/groups）相等比较里（rules_mod.py:115-133），用户删掉重复行会触发一轮 L2 结构重建——一次性，无害。</li>
         <li><strong>回滚</strong>：撤销 <code>_check_rule_refs</code> 判重分支与前端过滤即可，无状态、无格式变更。</li>
       </ul>
@@ -225,12 +225,13 @@ for i, ref in enumerate(refs):
       <div class="sec-head"><span class="sec-no">§8</span><h2>变更记录</h2></div>
       <ul>
         <li><strong>v1 · 26-10-02-1621</strong> — 初稿：用途分析（三论据 + 边缘辨析）+ 四波次方案 + 拍板点 A/B。</li>
+        <li><strong>v2 · 26-10-02-1734</strong> — 实施完结：拍板 A=直接报错（无 WARN 观察期）/ B=只拒收不修正。W1 <code>dfcda6f9</code>（<code>_check_rule_refs</code> 第二轮判重：归一键 str(ref).strip()、仅合法 @ 形参与判重、0 基序号对齐 path_map 先例 + test_config 四例 + test_rules_core 运行时去重回归锁）；W2 <code>e854801e</code>（config_editor.js 行级 refOptions 过滤已引用项 + refPick 追加查重 no-op 双保险，xtpl.html 改用行级 refOptions；浏览器冒烟 8 项断言全过）；W3 <code>b30b5c07</code>（schema help / 05-console-hub data-note / 04-split-explain row-note / docs/configuration.md 四处文案）。收尾基线 2291 passed + 3 skipped / 99%（13,259 语句 / 4,442 分支，test.full 39.4s）。</li>
       </ul>
     </section>
 
     <footer class="colophon">
       auto-qb · plans/26-10-02-1621-plan-rules-ref-duplicate-reject.html · doc-topic: rules-ref-duplicate-reject<br>
-      取证基线 c02e9e14 · 本轮仅分析产出本计划，生产文件零改动
+      取证基线 c02e9e14 · 实施完结 W1 dfcda6f9 / W2 e854801e / W3 b30b5c07（收尾基线 26-10-02-1734）
     </footer>
 
   </main>
