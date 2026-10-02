@@ -1,7 +1,7 @@
 # 管道下按错的编码出/解中文 = 乱码但静默(子进程 + 引擎自身)
 
-> 摘要: Windows 上被管道接住的 Python 子进程按**本地码页(cp936)**输出 stdout, 而调用方按 UTF-8 硬解 ⇒ 中文变一串 U+FFFD; 退出码照旧 0, **一个报错都没有** —— 只有人读输出时才发现。**反方向也一样会炸**: 非 Python 子进程(如 node)输出就是 UTF-8, 而 `text=True` 按 locale 去解 ⇒ 直接抛 `UnicodeDecodeError`。
-> 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY
+> 摘要: Windows 上被管道接住的 Python 子进程按**本地码页(cp936)**输出 stdout, 而调用方按 UTF-8 硬解 ⇒ 中文变一串 U+FFFD; 退出码照旧 0, **一个报错都没有** —— 只有人读输出时才发现。**反方向也一样会炸**: 非 Python 子进程(如 node)输出就是 UTF-8, 而 `text=True` 按 locale 去解 ⇒ 直接抛 `UnicodeDecodeError`。再一变体(2026-10-02): AI 工具壳大输出落盘预览在截断点切进多字节字符时整段按 GBK 重解 —— 数据无损, 读落盘日志即真值。
+> 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY, 大输出落盘, persisted output, 预览乱码, outputLimit, 截断点, 30KB
 
 ## 反向: 非 Python 子进程输出是 UTF-8, 别用 `text=True` 让 locale 去猜
 
@@ -72,6 +72,12 @@
 - **守阵**: 解码侧属环境问题, 引擎行为无变化, 不设常规守阵; 修复验证走真机(2026-10-01 实测: 改
   profile 前后, `pwsh -Command "commands run kb.active | Select-Object -First 2"` 由 `鍒涘缓` 变
   `创建`, PS5.1 同)。
+
+## 解码侧变体: 工具壳大输出落盘预览按「截断完整性」选码(2026-10-02 补)
+
+- **触发**: AI 工具壳跑输出超大的命令(本仓实测 `commands run kb.active` ≈ 51KB) —— ZCode Bash 工具内联上限 **30,000 字节**(`outputLimit.maxInlineBytes` 硬编码 3e4), 超限即全量落盘 + 只回前 2000 字符预览; 若内联前缀在分块边界截断时**切进多字节 UTF-8 字符中间**, 预览整段变 `鍒涘缓` 形乱码且稳定复现。与终端无关 —— 纯 ASCII 超大输出预览不乱。
+- **判别**: ①落盘日志逐字节完好(`iconv -f UTF-8 -t UTF-8` 整文件校验通过) ⇒ 数据无损, 坏的只是预览解码; ②同会话对照探针: 正文连续 ASCII(截断点必落单字节)预览完好, 含中文且截断点切进汉字(kb.active 在 30,000 字节附近「的」= e7 9a ae 横跨截断区)预览全乱; ③工具源码定案: 解码函数 kme 对「干净且完整 UTF-8」按 UTF-8 解, 否则整段按 legacy(本机 GBK)重解 —— 截断留下的不完整序列尾巴就是触发器。注意显示口径: 工具报的 KB 数按 1024 进制, 30,343 字节显示 29.7KB 仍会落盘, 判定只认字节。
+- **处置**: ①预览乱不丢数据 —— 直接 Read 落盘的 `*-stdout.log` 即原文; ②要内联可读就把输出压到 30,000 字节以内(≈9,900 汉字); ③天然大输出的命令(kb.active 类)加截断/精简, 或接受落盘读文件; ④引擎/工具侧无可修也不许回退(同上节口径); 后台任务 persistOutput=always 与大小无关必落盘。
 
 ## 同族旧账(互补, 别只修一处)
 
