@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 10 |
 | perf | 5 |
 | docs | 5 |
 | test | 1 |
@@ -25,6 +25,7 @@
 
 ## Open
 
+- [bug] [ui_harness --hr-site 启动即崩: HrIdentity 枚举 v3 漂移](26-10-02-1900-bug-ui-harness-hr-site.html) — scripts/ui_harness.py --hr-site 启动 AttributeError: 引用已不存在的 HrIdentity.VERIFIED_NON_HR(现行 v3 三态 HR/RELEASED/NO_EVIDENCE), 桩工具与 hr/resolve.py 漂移
 - [bug] [主循环首轮 tick 任意异常在 next_*_at 未推进时无退避快速重试(wait_for=0 机理)](26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html) — 主循环异常路径不推进 next_*_at, 首轮 tick 抛任意异常(不止 StopIteration)即形成无退避快速重试循环 —— 有 ERROR 日志不静默, 是否要退避待拍板; StopIteration 已由 f89ceada 显式重抛不在此列
 - [docs] [AUMID 机制文档漂移两处: core-domain.md 称进程须设显式 AppUserModelID(与零调用点事实不符) + tray docstring 残留 AutoQB.UI.lnk](26-10-02-0728-docs-aumid-docs-drift.html) — core-domain.md:27「进程须先设显式 AppUserModelID」与 _set_windows_appid 生产零调用点事实不符; tray/app.py _set_windows_appid docstring 残留「对应开始菜单 AutoQB.UI.lnk」(9891c030 已改注册表键机制)
 - [bug] [tray._set_windows_appid 自引入起生产零调用点: AUMID 从未设置, 任务栏图标修复结论前提存疑](26-10-02-0727-bug-tray-appid-setter-no-call-site.html) — tray/app.py 的 _set_windows_appid 自 9891c030 引入起生产代码零调用点(仅测试驱动), 生产进程从未设置显式 AUMID —— 与 core-domain.md 四轮实测结论「AUMID 是任务栏图标决定性变量」矛盾, 26-10-01-2203 修复前提存疑
