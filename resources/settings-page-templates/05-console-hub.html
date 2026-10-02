@@ -901,7 +901,7 @@
         <div class="row-ct"><input class="u-input mono w-sm"><span class="u-dim">MiB/s</span></div>
         <button class="ask" aria-label="站点上传限速 说明">?</button>
       </div>
-      <div class="row" data-key="trackers.rules_ref" data-note="@规则集 表示跑整个规则集，@规则集.规则名 表示只跑其中一条。" data-def="（空 = 不跑规则）">
+      <div class="row" data-key="trackers.rules_ref" data-note="@规则集 表示跑整个规则集，@规则集.规则名 表示只跑其中一条。重复引用会被配置校验拒绝（同一引用写一次即可）。" data-def="（空 = 不跑规则）">
         <div class="row-lb">要跑哪些规则</div>
         <div class="row-ct"><input class="u-input mono w-lg" value="@default_rules"></div>
         <button class="ask" aria-label="要跑哪些规则 说明">?</button>
