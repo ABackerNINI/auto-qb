@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-batch-warning-notify">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Dropped">
 <meta name="issue-title" content="WEBUI 批量操作引发 WARNING 桌面通知">
 <meta name="issue-summary" content="批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别">
 <title>WEBUI 批量操作引发 WARNING 桌面通知 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2129-bug-webui-batch-warning-notify</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:29</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -155,6 +155,7 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 17:05 — 状态 <strong>Dropped</strong>（roadmap 清偿核对批次 1/5 W1-W2 静态核验）：现象前提已消失 —— 通知桥自 2026-09-27 日志等级整改起 min_level 默认 ERROR（src/auto_qb/config/models.py:236），用户 config.yml 亦显式 <code>min_level: ERROR</code>，WARNING 级日志不再推送桌面通知；批量操作日志仍留在排障层，不构成桌面通知噪音。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>

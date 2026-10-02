@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="issue-clearance-roadmap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-01-1758">
-<meta name="doc-updated" content="26-10-02-0234">
+<meta name="doc-updated" content="26-10-02-1705">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-02-memory-bank-issue-clearance-roadmap.md,memory-bank/plans/26-10-01-1728-plan-doc-drift-repair.html,memory-bank/plans/26-09-29-2036-plan-hr-counter-integration.html">
 <title>Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序</title>
 <style>
@@ -180,6 +180,32 @@
     vertical-align: 2px;
   }
 
+  /* ---------- 状态徽章(清偿核对, 五档) ---------- */
+  .st {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    padding: 1px 8px;
+    border: 1px solid;
+    white-space: nowrap;
+    vertical-align: 1px;
+  }
+  .stwhy {
+    display: block;
+    margin-top: 4px;
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+    max-width: 16em;
+  }
+  .st-done  { color: #7fd6a2; border-color: rgba(127,214,162,.45); background: rgba(127,214,162,.07); }
+  .st-part  { color: #e6b45c; border-color: rgba(230,180,92,.45); background: rgba(230,180,92,.07); }
+  .st-stale { color: #9aa3ad; border-color: rgba(154,163,173,.4); background: rgba(154,163,173,.07); }
+  .st-todo  { color: var(--mut); border-color: var(--line); background: transparent; }
+  .st-defer { color: #aba3e6; border-color: rgba(171,163,230,.45); background: rgba(171,163,230,.07); }
+
   /* ---------- 规则清单 ---------- */
   ol.rules { max-width: 78ch; padding-left: 0; list-style: none; counter-reset: r; }
   ol.rules li {
@@ -271,6 +297,7 @@
       &nbsp;·&nbsp; <b>W8</b> 可在任意间隙穿插 &nbsp;·&nbsp; <b>W9</b> 只挂账不排期
     </div>
     <p class="body" style="margin-top:16px">波次是建议顺序,不是硬闸——跨域条目可并行(W3 的方案设计与 W1/W2 的快修并行最典型),波内彼此独立可乱序;细规则见 <a href="#s9" style="color:var(--acc)">§8 执行规则</a>。v1 与本版波次编号不延续对照——每条的挂账与状态实时以 <span class="muted">issues/_index.md</span> 为准。</p>
+    <p class="body" style="margin-top:16px"><b>状态列图例</b>(2026-10-02 起分批逐条核对填入): <span class="st st-done">✅ 已修复</span> 缺陷已在代码根修, 依据给 commit 或一句代码事实 · <span class="st st-part">🔶 部分修复</span> 修了一部分/修了关联路径, 核心仍在 · <span class="st st-stale">⛔ 已过时</span> 前提不复存在/需求消失/被其它实现取代 · <span class="st st-todo">⏳ 待处理</span> 核对后确认仍未动 · <span class="st st-defer">📌 挂账</span> W9 战略存疑专档, 不排期。池状态回写规则: ✅&#8594;Done; ⛔&#8594;按语义 Dropped(前提消失)/Superseded(被取代); 🔶/⏳/📌 池状态不动。</p>
   </section>
 
   <!-- ================= W1 ================= -->
@@ -278,31 +305,35 @@
     <div class="sec-head"><span class="sec-no">W1</span><h2>后端速赢:凭据、状态与鉴权</h2><span class="side">4 条 · 无前置</span></div>
     <p class="wave-why">为什么最先:v1 闸门波清完后,池里没有测试/流程卡点,起点直接前移到「数据与凭据先于体验」。四条都是后端小件,且都有现成范式可抄——凭据原子写复用已 Done 的 web.token 修复(5965cc07),鉴权加固与 CSRF 同批;修完即消除两类「静默漂移/静默放行」风险。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2151-bug-hr-channel-credential-atomic-write.html">26-10-01-2151</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">hr.token 生成是非原子写,半截文件导致通道密钥静默漂移<span class="flag">与 web.token 同族</span></span>
             <div class="note">O_TRUNC 直写,非空半截密钥被持久化,扩展侧鉴权 401。web.token 同族问题已以 <span class="muted">utils.atomic_write</span> 根修(5965cc07),修法直接复用,速赢。</div></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">bc24631b · resolve_token 改走 atomic_write</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2335-bug-hr-entry-last-seen-dead-prune.html">26-10-01-2335</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">HrEntry.last_seen 全库无写入点,INDEX_RETENTION 过期清理分支永不触发</span>
             <div class="note">last_seen 恒 0.0,service 两处过期清理成死代码——HR 索引只增不减。认领时先定 last_seen 的正确写入时机,再让清理分支复活。</div></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">54db09f2 · last_seen 写入点落地, 清理分支复活</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-bug-web-skip-local-verify-csrf.html">26-09-21-1408</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">skip_local_verify 开启后无 Origin/Host 校验,本机任意网页可跨站驱动写命令<span class="flag">P2</span></span>
             <div class="note">CSRF + DNS rebinding,删除/暂停/限速写动作照常入队;默认关闭但开关一开即洞。v1-W3 原样保留,落点与已 Done 的 web.py 拆分认领时核对。</div></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">36dc8ba6 · Host 白名单 + 写方法 Origin 校验</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-bug-web-auth-hardening-minors.html">26-09-21-1408</a></td>
           <td class="ttype">bug</td><td class="ttier">light</td>
           <td><span class="ttl">WebUI 鉴权面三个低危加固点</span>
             <div class="note">SSE token 查询串 / config-public 限 loopback / uvicorn 显式 proxy_headers=False。三个小件合并一次加固,与上一条同批做。</div></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">c37f3674 · SSE 票据化 + config/public 限 loopback + proxy_headers</span></td>
         </tr>
       </tbody>
     </table>
@@ -313,49 +344,56 @@
     <div class="sec-head"><span class="sec-no">W2</span><h2>WebUI 正确性 bug 簇</h2><span class="side">7 条 · 同域聚簇</span></div>
     <p class="wave-why">为什么第二:七条都是用户每天会撞见的正确性问题,天然聚成三簇——热重载对(辅种消失 / 维护任务不触发)、误报告警对(批量操作 WARNING / 删除连文件误报缺文件)、设置页对(未保存丢改动 / 伪警示条),外加删除类标签作用域一件。热重载两条经历内核化重构,开工先复验是否仍复现,复现再定位。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2129-bug-webui-hotreload-ext-vanish.html">26-10-01-2129</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">配置热重载后辅种消失;「变更 N 项」计数与实际不符<span class="flag">先复验</span></span>
             <div class="note">回执报「变更 9 项」实际只加了 1 个 exclude_categories,辅种列表疑似因此消失。内核化重构改过热重载路径,先复验是否仍复现,复现再定位。</div></td>
+          <td><span class="st st-stale">⛔ 已过时</span><span class="stwhy">旧级别表热重载机制已随内核化重构退役, 回执改按顶层段计数 —— 失真源被取代; 池已改 Superseded</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html">26-10-01-2147</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">添加新站点热重载后不触发种子的内置维护任务</span>
             <div class="note">与上一条同属热重载语义(配置变化 &#8594; 种子侧联动),建议同一认领批次摸清。</div></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无修复证据; 级别表退役后需按统一挂载口复验维护触发衔接</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2129-bug-webui-batch-warning-notify.html">26-10-01-2129</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">WEBUI 批量操作引发 WARNING 桌面通知</span>
             <div class="note">多选动作似乎都会触发 WARNING 级桌面通知,需定位并收敛通知级别。</div></td>
+          <td><span class="st st-stale">⛔ 已过时</span><span class="stwhy">通知桥 min_level=ERROR(models.py:236, 09-27 起), WARNING 不再推桌面通知; 池已改 Dropped</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2129-bug-webui-delete-files-missing-warning.html">26-10-01-2129</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">删除种子(同时删除文件)会引起缺文件 WARNING<span class="flag">同族范式已有</span></span>
             <div class="note">连文件删除的种子被缺文件扫描误报。与已 Done 的 0219(.!qB 过渡态容忍, c353e899)同族——删除路径需与缺文件检测互斥,范式可参考。</div></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无修复证据; 删除路径与缺文件扫描仍无互斥(仅 .!qB 移动容忍)</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2129-bug-webui-delete-tag-scope-confusion.html">26-10-01-2129</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">「删除类标签」全局/站点单设置语义混淆,开启后无法切回全局</span>
             <div class="note">全局设置与站点单设置没有分清;涉及设置模型的作用域语义,认领时先理数据结构再动 UI。</div></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无修复证据; 站点键存在即覆盖(loaders.py:221), 布尔无三态回退</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html">26-09-25-1702</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">设置页有未保存改动时刷新会丢改动(无任何提醒)</span>
             <div class="note">全仓无 beforeunload;cfg.tree 是内存态,重载即被服务端树覆盖。v1-W3 保留。</div></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">23f37df6 · 自绘守卫 + beforeunload 随脏态挂摘</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-22-2002-bug-webui-config-health-warning.html">26-09-22-2002</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">设置页警示条是伪警示:只复述 schema 风险文案,不反映配置健康;升级失效键无任何提示</span>
             <div class="note">恒亮、静态、与配置健康无关;load_config 对 schema 外键静默忽略。认领时先定「配置健康」的数据源再动 UI。v1-W3 保留。</div></td>
+          <td><span class="st st-part">🔶 部分修复</span><span class="stwhy">警示条仍按 schema risk 恒亮(hubCollectRisk); 「失效键无提示」已被未知键全量校验覆盖</span></td>
         </tr>
       </tbody>
     </table>
@@ -366,25 +404,28 @@
     <div class="sec-head"><span class="sec-no">W3</span><h2>数据安全大件(方案先行)</h2><span class="side">3 条 · feat · 设计并行</span></div>
     <p class="wave-why">为什么单列:三条都是「防数据损失」的 feat,动手前都缺方案——检测口径、处置动作、备份/重放形态各是什么均未定义。方案设计不占执行工位,可与 W1/W2 的快修并行启动;拍板前不改码。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-09-22-2221-feat-cross-group-file-conflict.html">26-09-22-2221</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">跨组文件交叉紧急处置:防止新种子覆盖已下载/已完成文件<span class="flag">需重新授权</span></span>
             <div class="note">入池时标「紧急处置」。v1-W2 曾入列,用户明确排除后未动;v2 仍列于此——开工需用户重新授权,认领后先出方案拍板。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-feat-group-move-atomicity.html">26-10-01-2147</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">整组迁移防进度丢失(qB 逐个移动同组种子的问题)</span>
             <div class="note">qB 一次设定多个种子位置会依次移动,同组多个种子随机丢进度。与已 Done 的 0219(.!qB 后缀)同属 qB 移动行为族,上游定性可复用。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-feat-disaster-site-rebuild.html">26-10-01-2203</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">现场重建:硬盘/qB 损坏后重建辅种现场<span class="flag">方向待设计</span></span>
             <div class="note">备份/导出/重放三个方向均未定;大件,先方案后动手,与黄金法则 3(状态持久化)同源,设计时对照。</div></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -395,31 +436,35 @@
     <div class="sec-head"><span class="sec-no">W4</span><h2>性能专项</h2><span class="side">4 条 · 口径先行</span></div>
     <p class="wave-why">为什么第四:四条同属一个工作流——5000 种子规模下的单轮成本与轮询效率;没有测量口径,做完无法证明收益。v1 时本波被 harness 冒烟卡点阻塞,现在 harness 已绿,可以直接进「先测量、再动手」。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2218-perf-webui-api-state-full-scan.html">26-10-01-2218</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">/api/state 全量构建拖垮主循环:增量 rid 用满 + 分页/按需字段<span class="flag">最大杠杆</span></span>
             <div class="note">5000 种子单次约 0.6s 抢占同进程主循环;方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖,方向②由下一条跟踪。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html">26-09-21-1408</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">大库下四视图全量重建是单轮成本大头,追剧视图聚合最重<span class="flag">P2</span></span>
             <div class="note">5000 种子单轮 ~550ms(项目实测);剩余痛点在 shows 全量聚合与前端全量重算。与上一条方向②同源,建议同一批测量后分工。v1-W4 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html">26-09-19-2122</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">节拍门控未减少总重建次数:一半只是从主循环搬到请求路径</span>
             <div class="note">3s 客户端档实测 41→40 次重建,未省 CPU;省下的 50% 只出现在 6s 档。先复测再拍方向:保留/回退/换方向。v1-W4 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2218-perf-mainloop-max-tasks-adaptive.html">26-10-01-2218</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">渐进灌入期主循环掉拍: max_tasks_per_tick 自适应</span>
             <div class="note">--ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s),灌入期每拍还债;候选方案已列于 issue 内,未实施。</div></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -430,43 +475,49 @@
     <div class="sec-head"><span class="sec-no">W5</span><h2>HR 语义与统计拍板簇</h2><span class="side">6 条 · feat 2 + question 4</span></div>
     <p class="wave-why">为什么绑一波:四条 question 都是「要不要/怎么定」的决策件,其中三条直接 gating HR 标签联动的动手范围,一条与统计重设计同族——拍板件与被它阻塞的工程件同波绑定,拍板即开工,避免决策悬空。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-question-hr-online-vs-sitewide-option.html">26-10-01-2147</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">「在线核实」与「全站HR」两个选项的区别说明/取舍</span>
             <div class="note">两选项语义不清:补文档说明或合并冗余选项,待定。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-question-hr-same-group-download-priority.html">26-10-01-2147</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">HR 在线核实同组间优先核实下载量高的种子(前提待商榷)</span>
             <div class="note">前提「种子在 A 站考核中就不会在 B 站考核」待商榷;与 HR 联动 feat 的核实顺序直接相关。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-question-skipcheck-no-completed-in-group.html">26-10-01-2147</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">同组中无已完成种子时拒绝跳检</span>
             <div class="note">防误跳的规则想法,待拍板;若采纳会改跳检守卫逻辑。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-feat-hr-verify-sync-hr-tags.html">26-10-01-2147</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">HR 在线核实同步修改 HR 标签/分类<span class="flag">被上三条 gating</span></span>
             <div class="note">核实结论变化时同步增删 HR 相关标签/分类(考核中/未达标等),当前无此联动。与上面三条问项同属 HR 语义,拍板后动手。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">重新设计单种周期上传/下载量统计<span class="flag">待拍板</span></span>
             <div class="note">upload_size 四条件与 begin_round/upload_delta/upload_snapshots 底座已随计划 26-09-27-1232 暂时移除;待拍板:补下载量口径或改 global_* 全局口径。v1-W5 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2138-question-webui-traffic-history-chart.html">26-10-01-2138</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">WEBUI 流量历史图做不做(待取舍)</span>
             <div class="note">与单种/全局统计重设计同族——与上一条一并拍板,避免口径定了又推翻。</div></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -477,85 +528,98 @@
     <div class="sec-head"><span class="sec-no">W6</span><h2>WEBUI 体验批</h2><span class="side">13 条 · feat 12 + question 1</span></div>
     <p class="wave-why">为什么整批列:26-10-01 晚间集中入池的体验增强,彼此独立、无数据风险,适合作为一个大批次按簇消化——键盘/选中三件与 ESC 问项一小簇,抽屉重做会触碰其中两件的落点建议排簇后,搜索、批量操作、展示增强各自独立。v1 的乐观 UI 割裂修复(9c68cce9)是其中 selection-follow-mouse 的前史。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-feat-webui-selection-follow-mouse.html">26-10-01-2108</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发</span>
             <div class="note">键盘高亮与鼠标点击是两套状态,需合并为单一套随最后操作源移动;方案 B(9c68cce9)已让点击落光标,本条是收尾延展。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-feat-webui-shortcuts-drawer-nav.html">26-10-01-2108</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">浏览种子详情抽屉时支持键盘上下键切换种子</span>
             <div class="note">快捷键引擎与可自定义已落地,补「抽屉打开时上下键切上/下一个种子」动作,小件。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-feat-webui-shortcuts-drawer-open.html">26-10-01-2108</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">Alt+1~4 从列表直接打开选中种子的详情抽屉并转到对应页</span>
             <div class="note">现 Alt+1~4 仅在抽屉已聚焦时切页(scope=drawer),需升级为列表侧直接唤起并定位。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-question-webui-esc-clear-filter.html">26-10-01-2108</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">WEBUI 按 ESC 清除筛选器 —— 定键与否待拍板</span>
             <div class="note">快捷键引擎已有未绑定的 clear-filters 动作,只差是否把 ESC 定给它的决策;可与本簇三件一并拍。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2119-feat-webui-batch-move-skipcheck.html">26-10-01-2119</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">批量移动/批量跳检</span>
             <div class="note">WEBUI 缺批量移动与批量跳检入口;右键单组跳检与危险操作独立操作层已落地可复用。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2119-feat-webui-search-highlight.html">26-10-01-2119</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">搜索命中高亮显示 + 无命中时提示命中域(如「文件名」标识)</span>
             <div class="note">需标出命中来源域与命中片段,无匹配时给「匹配到文件名/标签/站点」类提示。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2119-feat-webui-drawer-redesign.html">26-10-01-2119</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">重做优化种子详情抽屉<span class="flag">簇内排后</span></span>
             <div class="note">详情抽屉整体重设计,已有标签页记忆与长文本截断等局部改进;会触碰 shortcuts-drawer 两件的落点,建议簇内小件先行后再整体重做。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2138-feat-webui-tracker-error-warning-state.html">26-10-01-2138</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">tracker error/warning 状态展示, 且可配置忽略错误或警告</span>
             <div class="note">为种子/组的 tracker 状态增加 error/warning 呈现,并支持配置忽略(不告警不阻断)。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2137-feat-webui-settings-help-followup.html">26-10-01-2137</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色</span>
             <div class="note">「?」说明全面改写(Done)后的遗漏:站点设置「删除标签格式」、自动化「彻底删除标签」等;与 W2 的删除标签作用域 bug 相关,可对照改。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2138-feat-webui-shows-grouping-research.html">26-10-01-2138</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">追剧视图完善: 同剧判定调研与分组排序打磨</span>
             <div class="note">同剧判定需调研头脑风暴,组内按季/集排序,多站点辅种不分开显示;与 W4 的 shows-view 性能条目同域,动手时可对照。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-feat-speedlimit-curve-emphasis.html">26-10-01-2147</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">命中的限速曲线强调显示 + 限速时可配置弹窗提醒</span>
             <div class="note">当前生效的限速档位在曲线上强调显示;被限速时可选配置弹窗提醒。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2137-feat-webui-optimistic-ui-expansion.html">26-10-01-2137</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示</span>
             <div class="note">将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单),新添加种子当拍可见而非下个 tick;乐观链路前史见 v1 已清偿的 4 条 26-09-19 批次。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2120-feat-webui-custom-chip-colors.html">26-10-01-2120</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">WEBUI 自定义站点名/分类/标签字体颜色</span>
             <div class="note">允许用户为 chip 自定义字体颜色(未排期增强)。</div></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -566,25 +630,28 @@
     <div class="sec-head"><span class="sec-no">W7</span><h2>扩展与低优先级</h2><span class="side">3 条 · feat</span></div>
     <p class="wave-why">为什么单列:EXT 域两条是「一句话 TODO」级入池,诉求与现状都需要开工先复验;i18n 显式标了低优先级。排在大批 WebUI 体验之后,避免与 W6 抢同一批前端工位。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-feat-ext-info-display.html">26-10-01-2203</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">浏览器扩展优化信息展示<span class="flag">先复验</span></span>
             <div class="note">EXT 域一句话 TODO:扩展侧信息展示优化(无细节,开工先复验现状与诉求)。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-feat-ext-version-pinning.html">26-10-01-2203</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">扩展版本号 + 主程序仅支持固定版本 + 扩展高度参数化</span>
             <div class="note">扩展加版本号,主程序只认固定版本以简化兼容;扩展行为高度参数化把复杂度交给后端,最大限度免升级。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-feat-i18n-multi-language.html">26-10-01-2203</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">支持多语言<span class="flag">显式低优先级</span></span>
             <div class="note">WEBUI/通知多语言支持,入池时已标未排期;列在这里只为完整盘点,不建议主动开工。</div></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -595,85 +662,98 @@
     <div class="sec-head"><span class="sec-no">W8</span><h2>轻量穿插:refactor / docs / chore / 桌面</h2><span class="side">13 条 · 任意间隙</span></div>
     <p class="wave-why">为什么随时可做:十三条彼此独立、风险低,适合在大件的等待间隙(拍板、跑测试)插队消化;不占波次主线——它们不阻塞任何东西,也不该反过来阻塞 W1-W7。桌面两件(任务栏图标 / Ctrl+C)虽是 bug 但纯观感/便利,归入本波穿插。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 摸排注</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2211-refactor-rules-keys-semantics-review.html">26-10-01-2211</a></td>
           <td class="ttype">refactor</td><td class="ttier">light</td>
           <td><span class="ttl">重新梳理 ignore_next_action_error / stop_following_rules_if 语义</span>
             <div class="note">两个规则容错键的语义/交互需要重新梳理(命名、默认值、组合行为);梳理结论可能牵配置面,先出结论再动。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-refactor-web-runtime-host-protocol.html">26-09-21-1408</a></td>
           <td class="ttype">refactor</td><td class="ttier">light</td>
           <td><span class="ttl">WebUIRuntime 经 self._host 回调 QbManager 私有方法, 无 Protocol 约束</span>
             <div class="note">建议 HostCapabilities Protocol + 单写者假设注释;内核化重构后落点认领时核对。v1-W6 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-refactor-type-annotations-mypy.html">26-09-21-1408</a></td>
           <td class="ttype">refactor</td><td class="ttier">light</td>
           <td><span class="ttl">类型注解完整覆盖仅 43%, 无 mypy/pyright 配置</span>
             <div class="note">749 个 def 的 AST 实测;渐进接入:先 torrents/config 后 mixins/web,挂靠日常改动顺手补,不宜专项大改。v1-W6 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2120-refactor-webui-tag-category-dialog.html">26-10-01-2120</a></td>
           <td class="ttype">refactor</td><td class="ttier">light</td>
           <td><span class="ttl">管理标签/分类窗口重构<span class="flag">先复验</span></span>
             <div class="note">「管理标签/分类」弹窗结构陈旧需要重构(TODO 未给细节,开工先复验现状)。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2212-docs-schema-docstring-tracker-field-levels.html">26-10-01-2212</a></td>
           <td class="ttype">docs</td><td class="ttier">light</td>
           <td><span class="ttl">config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS</span>
             <div class="note">与代码相反的文档漂移,微件;不在 doc-drift-repair 计划(已完结)的 6 处清单内。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-28-1946-docs-config-plugin-spec-docs.html">26-09-28-1946</a></td>
           <td class="ttype">docs</td><td class="ttier">light</td>
           <td><span class="ttl">插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免</span>
             <div class="note">权威单点 = schema 插件表;补逐键文档或维持豁免并写明理由,认领时拍板。v1-W6 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-docs-docs-readme-modules-drift.html">26-09-21-1408</a></td>
           <td class="ttype">docs</td><td class="ttier">light</td>
           <td><span class="ttl">文档漂移: README 称 995 用例(实测已远超), modules.md 行数快照多文件 +34%~+201%</span>
             <div class="note">易腐数字守阵化或从文档退场;随每次基线更新顺手对齐。v1-W6 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-20-1427-docs-skill-user-md-write-conflict.html">26-09-20-1427</a></td>
           <td class="ttype">docs</td><td class="ttier">light</td>
           <td><span class="ttl">两个 skill 对写 USER.md 的口径相反</span>
             <div class="note">aesthetic-preset-library 要求写入,autoclaw 明令禁止回写;定一边口径回写另一份,微件。v1-W6 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-20-1427-chore-skill-hatch-pet-api-cost.html">26-09-20-1427</a></td>
           <td class="ttype">chore</td><td class="ttier">light</td>
           <td><span class="ttl">hatch-pet 调付费 OpenAI 图像 API 且无成本提示</span>
             <div class="note">在 skill 文档补费用风险标注即可,微件。v1-W6 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-chore-ci-no-windows-runner.html">26-09-21-1408</a></td>
           <td class="ttype">chore</td><td class="ttier">light</td>
           <td><span class="ttl">CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵</span>
             <div class="note">托盘/注册表自启/WinRT 通知等 Windows 专属路径只有本机手跑才被执行;加 runner 一发即可。v1-W6 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-chore-version-dual-source.html">26-09-21-1408</a></td>
           <td class="ttype">chore</td><td class="ttier">light</td>
           <td><span class="ttl">版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0</span>
             <div class="note">WebUI 顶栏透出与打包元数据差一个 minor;方向已给:pyproject 单源 + 动态读取。v1-W6 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-bug-taskbar-python-icon.html">26-10-01-2203</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">任务栏按钮图标仍为 python 图标<span class="flag">五轮尝试未解</span></span>
             <div class="note">窗口标题栏/托盘已正确(orbit),仅任务栏按钮仍 python;BMP 帧 ico + AUMID + iconbitmap 组合均无效。纯观感,穿插;认领前先读 issue 内五轮尝试记录避免重走。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-bug-tray-ctrl-c-not-exit.html">26-10-01-2203</a></td>
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">--tray 模式下 Ctrl+C 无法关闭程序</span>
             <div class="note">Windows 控制台信号处理与托盘生命周期冲突;与已 Done 的 tray-join-timeout(9f73b6d8)同属托盘退出路径,认领时对照。</div></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -684,43 +764,49 @@
     <div class="sec-head"><span class="sec-no">W9</span><h2>战略存疑与缓做(挂账)</h2><span class="side">6 条 · 本计划不排期</span></div>
     <p class="wave-why">为什么不排:前三条是战略级「做不做」——transmission 已有可行性报告停在用户拍板,另两条可行性存疑待结论;后三条是 HR 计划显式拍板的 P3 缓做项,依赖 D4 计数口径实证。列出来只为防止「看着没人管」。</p>
     <table class="issue-tbl">
-      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 挂账关系</th></tr></thead>
+      <thead><tr><th>stamp</th><th>类型</th><th>档位</th><th>标题 / 挂账关系</th><th>状态</th></tr></thead>
       <tbody>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2212-question-transmission-compat-feasibility.html">26-10-01-2212</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">兼容 Transmission 可行性分析<span class="flag">In Progress · 停在拍板</span></span>
             <div class="note">可行性报告 26-10-01-2347 已出:技术可行性中、业务可行性低、全量 38-58 人日(最小只读子集 8-12 人日),建议暂不做——等用户拍板,不是执行卡点。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2212-question-config-split-per-site.html">26-10-01-2212</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">配置切分(每站点一份)是否做(存疑)</span>
             <div class="note">涉及加载/热重载/校验面,待拍板;若做会放大热重载路径的改动面,建议排在 W2 热重载两条清偿后再议。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2212-question-search-based-recheck-feasibility.html">26-10-01-2212</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">基于搜索的辅种方式可行性(存疑)</span>
             <div class="note">用站点搜索发现可辅种资源的思路,待可行性结论。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-30-0052-feat-hr-badge-total-crosscheck.html">26-09-30-0052</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">HR 计数:上限徽章总数轴互证<span class="flag">P3 缓做</span></span>
             <div class="note">&#8594; 依赖 HR 计划 D4 计数口径实证(<a href="26-09-29-2036-plan-hr-counter-integration.html" style="color:var(--acc)">hr-counter-integration</a> 系);D4 落地前不动。v1-W7 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-30-0052-feat-hr-login-counter-attest.html">26-09-30-0052</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">HR 计数:looks_like_login 补计数文本佐证<span class="flag">P3 缓做</span></span>
             <div class="note">&#8594; 同依赖 D4;报告 26-09-29-1803 §6 登录态负信号。v1-W7 保留。</div></td>
+          <td></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-30-0052-perf-hr-lastpage-fetch-skip.html">26-09-30-0052</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">HR 计数:末页追翻省略<span class="flag">P3 缓做</span></span>
             <div class="note">&#8594; 已定性为优化非简化(收益偶有、风险面新增),D4 落地前不动。v1-W7 保留。</div></td>
+          <td></td>
         </tr>
       </tbody>
     </table>
@@ -745,6 +831,7 @@
   <section id="cl">
     <div class="sec-head"><span class="sec-no">§A</span><h2>变更记录</h2></div>
     <div class="changelog">
+      <div class="cl-row"><span class="v">v2.1</span><span class="d">26-10-02-1705</span><span class="t">清偿核对批次 1/5: 九个波次表加「状态」列(五档图例见 §1), 本批核对 W1-W2 共 11 条 —— ✅ 5 / ⛔ 2 / 🔶 1 / ⏳ 3。✅ 五条池内 26-10-02 已 Done, 修复 commit 逐一确认(2151&#8594;bc24631b, 2335&#8594;54db09f2, 1408-CSRF&#8594;36dc8ba6, 1408-hardening&#8594;c37f3674, 1702&#8594;23f37df6); ⛔ 两条回写池状态(2129-hotreload-ext-vanish&#8594;Superseded 旧机制被取代, 2129-batch-warning-notify&#8594;Dropped min_level=ERROR 前提消失); 🔶 2002 伪警示条核心仍在、失效键半边已被未知键全量校验覆盖; ⏳ 三条无修复证据维持待处理。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2</span><span class="d">26-10-02-0234</span><span class="t">改版:v1 后清偿 12 条、新入池 46 条,未决 31&#8594;59;test 类型清零后重排九波,起点前移到数据与凭据;transmission 挂账更新为「报告已出停在拍板」;26-09-22-2221 标注需重新授权。</span></div>
       <div class="cl-row"><span class="v">v1</span><span class="d">26-10-01-1758</span><span class="t">初版:31 条未决全量摸排,分七波;只读口径,零代码分析。</span></div>
     </div>

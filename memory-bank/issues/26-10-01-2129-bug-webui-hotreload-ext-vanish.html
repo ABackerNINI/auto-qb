@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="hot-reload">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Superseded">
 <meta name="issue-title" content="配置热重载后辅种消失; 「变更 N 项」计数与实际不符">
 <meta name="issue-summary" content="热重载回执报「变更 9 项」实际只加了 1 个 exclude_categories, 且辅种列表疑似因此消失 —— 内核化重构后先复验是否仍复现">
 <title>配置热重载后辅种消失; 「变更 N 项」计数与实际不符 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2129-bug-webui-hotreload-ext-vanish</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:29</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Superseded</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -156,6 +156,7 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-02 17:05 — 状态 <strong>Superseded</strong>（roadmap 清偿核对批次 1/5 W1-W2 静态核验）：现象出自旧级别表热重载机制时代（回执「级别 ['L0', 'L2'], 变更 9 项」），该机制已随内核化重构（计划 26-09-30-1819, Done）整体退役 —— 新机制 <code>apply_new_config</code>（src/auto_qb/core/qbmanager.py）回执按变更顶层段计数，「变更 N 项」计数失真源头随实现取代消失；「辅种消失」为同轮未经证实的疑似现象，新机制下无对应路径。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。TODO 原行标 <code>[-]</code> 正在做，但入池按默认保持 Open，未置 In Progress。</p>
     <h3>复验</h3>

@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 11 |
+| bug | 9 |
 | perf | 5 |
 | docs | 5 |
 | test | 1 |
@@ -55,10 +55,8 @@
 - [question] [WEBUI 流量历史图做不做(待取舍)](26-10-01-2138-question-webui-traffic-history-chart.html) — [待取舍] 是否为 WEBUI 增加流量历史图, 与单种/全局统计重设计同族
 - [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 - [feat] [设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色](26-10-01-2137-feat-webui-settings-help-followup.html) — 「?」说明全面改写(Done)后的遗漏: 站点设置「删除标签格式」、自动化「彻底删除标签」等; 且「?」按钮边框与发光颜色应随选项色(危险项红等)
-- [bug] [WEBUI 批量操作引发 WARNING 桌面通知](26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
 - [bug] [删除种子(同时删除文件)会引起缺文件 WARNING](26-10-01-2129-bug-webui-delete-files-missing-warning.html) — 连文件一起删除的种子被缺文件扫描误报 WARNING, 删除路径需与缺文件检测互斥
 - [bug] [「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局](26-10-01-2129-bug-webui-delete-tag-scope-confusion.html) — 删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置
-- [bug] [配置热重载后辅种消失; 「变更 N 项」计数与实际不符](26-10-01-2129-bug-webui-hotreload-ext-vanish.html) — 热重载回执报「变更 9 项」实际只加了 1 个 exclude_categories, 且辅种列表疑似因此消失 —— 内核化重构后先复验是否仍复现
 - [feat] [WEBUI 自定义站点名/分类/标签字体颜色](26-10-01-2120-feat-webui-custom-chip-colors.html) — 允许用户为站点名/分类/标签 chip 自定义字体颜色(未排期增强)
 - [refactor] [管理标签/分类窗口重构](26-10-01-2120-refactor-webui-tag-category-dialog.html) — 「管理标签/分类」弹窗结构陈旧需要重构(TODO 未给细节, 开工先复验现状)
 - [feat] [批量移动/批量跳检](26-10-01-2119-feat-webui-batch-move-skipcheck.html) — WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用
@@ -149,7 +147,9 @@
 ## Dropped
 
 - [bug] [hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发](26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail.html) — _do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after>0; 与已修的 last_seen 死分支同族
+- [bug] [WEBUI 批量操作引发 WARNING 桌面通知](26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
 
 ## Superseded
 
+- [bug] [配置热重载后辅种消失; 「变更 N 项」计数与实际不符](26-10-01-2129-bug-webui-hotreload-ext-vanish.html) — 热重载回执报「变更 9 项」实际只加了 1 个 exclude_categories, 且辅种列表疑似因此消失 —— 内核化重构后先复验是否仍复现
 - [question] [doc-map 容量无余量: 任何新「计划+档案」对必破 12200 cap](26-09-28-0219-question-kb-doc-map-cap.html) — HEAD 源重生成 12153/12200 (余 47 字符), 一笔合规计划+档案对固定占 ~106 字符; topic 收口反而增大文件 —— 需要定调: 提 cap / 砍单件登记段 / 精简多件条目
