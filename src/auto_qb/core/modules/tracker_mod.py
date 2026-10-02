@@ -7,8 +7,12 @@
 
 !client 经 ctx.api.client **现取**(不缓存): 重连换客户端时 QbApi.bind 同步更新
   (manager.client setter 的同步链), 模块侧永远拿到当前客户端。
-!apply 无热重载动作: 匹配每轮现读 ctx.config.trackers, 存量记录的重匹配只在全量轮发生
-  (L2 的 reset_runtime 置空 conf 后由 full_round 兑现) —— 段变无需本模块重挂任何东西。
+!apply(plan 26-10-03-0436 Step 1)只做重绑: trackers 段整段变化时把存量记录的
+  tracker_conf 立即重匹配到当前配置 —— L2 重建判据只比较绑定三元组(domains/rules/groups),
+  hr_check / hr 等派生与配置值类字段的变化不触发重建, full_round 又只补 tracker_conf
+  is None 的记录; 存量记录不重绑就永远指向旧配置对象, 判定入口(hr_judgement / 锚点收集)
+  读到 hr_check=None 恒走「站点未接入」本地兜底。段相等即短路; qB 断开跳过(留给下轮
+  full_round / L2 兑现); 重绑是纯内存 O(存量数), tracker_urls 走惰性缓存零 qB API 调用。
 """
 import logging
 from typing import Optional
@@ -18,13 +22,13 @@ from qbittorrentapi import Client
 from ...config import TrackerConfig
 from ...infra import utils
 from ...torrents import TorrentRecord
-from ..module import AppContext, BaseModule
+from ..module import AppContext, ApplyResult, BaseModule
 
 logger = logging.getLogger(__name__)
 
 
 class TrackerModule(BaseModule):
-    """tracker 模块: sections 认领 trackers 段; 匹配/限速每轮现读配置, apply 恒短路"""
+    """tracker 模块: sections 认领 trackers 段; 匹配/限速每轮现读配置, apply 段变即重绑存量记录"""
 
     name = "tracker"
 
@@ -33,6 +37,20 @@ class TrackerModule(BaseModule):
 
     def sections(self) -> tuple[str, ...]:
         return ("trackers", )
+
+    # ---------- 热重载(plan 26-10-03-0436 Step 1: trackers 段变化立即重绑存量记录) ----------
+
+    def apply(self, old, new) -> ApplyResult:
+        if old.trackers == new.trackers:
+            return ApplyResult(self.name)
+        if self._ctx.api.client is None:  # qB 断开: match 无从取 URLs, 留给下轮 full_round / L2 兑现
+            return ApplyResult(self.name)
+        n = 0
+        for rec in self._ctx.store.by_hash.values():
+            if rec.tracker_conf is not None:
+                rec.tracker_conf = self.match(rec)
+                n += 1
+        return ApplyResult(self.name, f"rebound {n}")
 
     # ---------- 相位订阅(plan §4.2 full_round + torrents_added) ----------
 

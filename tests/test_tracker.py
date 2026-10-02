@@ -13,13 +13,18 @@
 - test_apply_speed_limit_skips_when_equal: 当前值==目标值不重复写
 - test_apply_speed_limit_odd_manual_skip: 当前为奇数 KiB 手动限速不覆盖(仅另一方向写)
 - test_apply_speed_limit_dry_run_no_api: dry_run 只记日志不调 API
+- test_apply_rebinds_existing_records_on_trackers_change: trackers 段变即重绑存量记录(hr_check 就位, 回执含 rebound); tracker_conf 为 None 的记录不动(归 full_round)
+- test_apply_skips_rebind_when_client_disconnected: qB 断开(client=None)跳过重绑不抛异常, 照常返回
+- test_apply_equal_trackers_short_circuits: trackers 段按值相等即短路(回执 none, 记录引用不变)
 """
+import copy
 import io
 import logging
 import os
 import tempfile
 
 from auto_qb.config import TrackerConfig
+from auto_qb.config.models import SiteHrCheckConfig  # 包 __init__ 未导出 HR 在线核实配置类
 from helpers import FakeClient, FakeTorrent, make_manager
 
 
@@ -116,6 +121,80 @@ def test_match_tracker_conf_multi_match_warning_log():
         # 等级整改 26-09-27-1126 表 D1: 配置歧义自动降级是排障语义, ERROR -> WARNING
         assert "WARNING" in text and "多个 tracker 配置" in text, f"缺少 WARNING 日志: {text}"
         assert "HHan" in text and "HHanTracker" in text  # 日志列出所有命中配置
+
+
+# ---------- 热重载重绑(plan 26-10-03-0436 Step 1: TrackerModule.apply) ----------
+
+
+def _old_new(mgr, old_trackers, new_trackers):
+    """构造热重载的新旧配置对: 整对象替换模拟生产「重新加载出全新对象」(原地改 ≠ 热重载)"""
+    old = copy.copy(mgr.config)
+    new = copy.copy(mgr.config)
+    old.trackers = old_trackers
+    new.trackers = new_trackers
+    return old, new
+
+
+def test_apply_rebinds_existing_records_on_trackers_change():
+    """trackers 段变化: 存量记录(tracker_conf 非 None)立即重绑到新配置对象, 回执含 rebound
+
+    根因面(plan §2): L2 重建判据只比较绑定三元组(domains/rules/groups), hr_check 从无到有
+    不触发重建; full_round 只补 tracker_conf is None 的记录 —— 不重绑则 hr_judgement() 读旧
+    对象的 hr_check=None 恒走「站点未接入」本地兜底(WebUI 停留「本地·达标」)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        old_conf = TrackerConfig(name="HHan", domains=["tracker.hhanclub.net"])
+        new_conf = TrackerConfig(
+            name="HHan", domains=["tracker.hhanclub.net"], hr_check=SiteHrCheckConfig(tracker="HHan", enabled=True)
+        )
+        old, new = _old_new(mgr, {"HHan": old_conf}, {"HHan": new_conf})
+        tor = FakeTorrent(hash="H1", tracker_conf=old_conf)  # 存量记录持旧配置对象
+        fresh = FakeTorrent(hash="H2")  # tracker_conf None: 重匹配归 full_round, apply 不动
+        mgr.store.by_hash["H1"] = tor
+        mgr.store.by_hash["H2"] = fresh
+        mgr.config = new  # 生产时序: apply_new_config 先换配置对象再广播 apply
+        res = mgr.ctx.trackers.apply(old, new)
+        assert res.module == "tracker" and "rebound" in res.action
+        assert tor.tracker_conf is new_conf, "存量记录必须重绑到新配置的对象"
+        assert tor.tracker_conf.hr_check is not None and tor.tracker_conf.hr_check.enabled, "hr_check 派生视图就位"
+        assert fresh.tracker_conf is None
+
+
+def test_apply_skips_rebind_when_client_disconnected():
+    """qB 断开(client=None): 跳过重绑、不抛异常、照常返回(留给下轮 full_round / L2 兑现)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))  # 不绑 client = qB 断开
+        old_conf = TrackerConfig(name="HHan", domains=["tracker.hhanclub.net"])
+        new_conf = TrackerConfig(
+            name="HHan", domains=["tracker.hhanclub.net"], hr_check=SiteHrCheckConfig(tracker="HHan", enabled=True)
+        )
+        old, new = _old_new(mgr, {"HHan": old_conf}, {"HHan": new_conf})
+        tor = FakeTorrent(hash="H1", tracker_conf=old_conf)
+        mgr.store.by_hash["H1"] = tor
+        mgr.config = new
+        res = mgr.ctx.trackers.apply(old, new)  # 不得抛异常打断热重载广播
+        assert res.module == "tracker" and res.action == "none"
+        assert tor.tracker_conf is old_conf, "断开时不得重绑"
+
+
+def test_apply_equal_trackers_short_circuits():
+    """trackers 段按值相等(分别构造的等值 TrackerConfig): 短路零动作, 记录引用不变"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        old, new = _old_new(
+            mgr,
+            {"HHan": TrackerConfig(name="HHan", domains=["tracker.hhanclub.net"])},
+            {"HHan": TrackerConfig(name="HHan", domains=["tracker.hhanclub.net"])},
+        )
+        tor = FakeTorrent(hash="H1", tracker_conf=old.trackers["HHan"])
+        mgr.store.by_hash["H1"] = tor
+        mgr.config = new
+        res = mgr.ctx.trackers.apply(old, new)
+        assert res.action == "none", "整段按值相等必须短路(无关保存零动作)"
+        assert tor.tracker_conf is old.trackers["HHan"], "短路不得换记录的绑定对象"
 
 
 # ---------- tracker 单种限速 _apply_speed_limit ----------
