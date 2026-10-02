@@ -41,17 +41,20 @@
 ## 轨道二(回退): Playwright 冒烟 `scripts/ui_smoke.cjs`
 
 - **何时用**: agent-browser 命中上面任一回退判据; 或需要那批**数值断言**(双 UI × ok/error/hang 三模式)。
-- **命令**(**必须带 `NODE_PATH`**, 否则 `require()` 找不到包):
+- **命令**(**必须带 `NODE_PATH`**, 否则 `require()` 找不到包; 下例的旧 WorkBuddy 路径**已失效**, 换成现存的 playwright-core 所在目录):
   ```bash
   NODE_PATH="C:/Users/11059/.workbuddy-ai/binaries/node/workspace/node_modules" \
     node scripts/ui_smoke.cjs --base http://127.0.0.1:8099 --torrents 3000
   ```
-- **环境**: 包装在 WorkBuddy 托管目录(**不是项目依赖**, 不在 `package.json` 里)
-  `C:/Users/11059/.workbuddy-ai/binaries/node/workspace/node_modules` —— `playwright@1.63.0` 与 `playwright-core@1.62.0`;
-  浏览器在 `C:/Users/11059/AppData/Local/ms-playwright/`(`chromium-1234` / `chromium-1243` 及对应 headless shell),
-  实测走 `chromium-1234/chrome-win64/chrome.exe`, Chromium **151.0.7922.34**。
+- **环境**: 旧线索「包装在 WorkBuddy 托管目录(**不是项目依赖**, 不在 `package.json` 里)
+  `C:/Users/11059/.workbuddy-ai/binaries/node/workspace/node_modules`」**已失效**(2026-10-02 实测:
+  该目录已无 playwright 包, 自检 require 报 `Cannot find module`)—— 包体当前存放点待补;
+  浏览器在 `C:/Users/11059/AppData/Local/ms-playwright/`, 现存 **`chromium-1243` / `chromium_headless_shell-1243`**
+  (`chromium-1234` 及其 headless shell 已不在)。
 - **版本对齐**: 用 `playwright-core`(脚本里就是 `try require("playwright-core") catch require("playwright")`)——
-  core 1.62 ↔ `chromium-1234`, 顶层 1.63 要 `chromium-1243`; 装了新包却没下对应浏览器会报 `Executable doesn't exist`。
+  **playwright-core@1.63.x ↔ `chromium-1243` 实测可用**(2026-10-02 桩服务走查; 同日 1705 切片的
+  ui_smoke「导航焦点」轮同配 104 项 0 失败); 历史配对: core 1.62 ↔ `chromium-1234`;
+  装了新包却没下对应浏览器会报 `Executable doesn't exist`。
 - **Python 版没装**: `.venv` / `uv.lock` 里都没有。要在 pytest 里直接驱动浏览器才需要
   `uv add --dev playwright` + `uv run playwright install chromium`
   (**会改 `pyproject.toml` / `uv.lock`, 动之前先问**)。
@@ -61,6 +64,6 @@
     node -e "require('playwright-core').chromium.launch().then(b=>{console.log(b.version());return b.close()})"
   ```
   输出判定: 打出 Chromium 版本号 ⇒ 可用; `Cannot find module 'playwright-core'` ⇒ 包没了(托管目录被清或路径变了);
-  `Executable doesn't exist` ⇒ 浏览器没下载。
+  `Executable doesn't exist` ⇒ 浏览器没下载。(2026-10-02 实测已命中 `Cannot find module` 判定 —— WorkBuddy 目录被清, 见上「环境」。)
   ❗给**轨道一**补浏览器必须用 `agent-browser install`, **别用 `npx playwright install` 顶替** ——
   会拉下与它不匹配的版本。

@@ -5,6 +5,20 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- WEB UI **ESC 兜底清全部面筛**(2026-10-02, 清偿 question issue
+  [26-10-01-2108](../issues/26-10-01-2108-question-webui-esc-clear-filter.html), 计划
+  [plans/26-10-02-1632](../plans/26-10-02-1632-plan-webui-esc-clear-filters.html) 拍板方案 A):
+  ESC 不进引擎键表(方案 B 双触发 + fixed 语义崩坏, 已否决), 接 lifecycle.js 退栈链**终端兜底**
+  —— 16 层浮层 pop 与既有 4 兜底全部走完仍无层可退, 且门五件套(`authOk` / `page === "groups"` /
+  无 hrPop 卡 / 非输入态 inInput / `facetsActive`)全过时清全部面筛 + toast 点名「已清除全部筛选
+  (搜索词保留)」; filters.js 新增 computed `facetsActive`(与 clearFilters 字段清单同源,
+  **不含 searchQuery** —— filtersActive 含搜索词不能当门); 键表零改动, `clear-filters` 保持空位
+  供自定义, `clear-esc` label 补「清筛选」, shortcuts.js 三处文案。守阵 test_web_shortcuts.py
+  新增 `test_esc_chain_clear_filters_fallback`(链序 / 门条件五件套 / Escape 唯一默认绑定 /
+  facetsActive 纯度); 桩服务走查 8/8 项 / 34 断言通过(IME 组合态 CDP 真实组词态验证);
+  档案 [tasks/26-10-02-webui-esc-clear-filters](../tasks/26-10-02-webui-esc-clear-filters.md);
+  **已入库 `0d286cc5`**
+
 - WEB UI **Shift 连选起点与键鼠联动统一**(2026-10-02, 计划
   [plans/26-10-02-0608](../plans/26-10-02-0608-plan-webui-shift-anchor.html) 方案 B, 用户指令
   「按推荐实施计划」直接拍板 + 4 决策点按建议案): 修「鼠标点过第 5 行, 按 Shift+↓ 却从**列表第一行**
