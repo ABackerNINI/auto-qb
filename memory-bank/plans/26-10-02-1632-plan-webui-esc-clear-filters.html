@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>计划 · WEBUI 把 ESC 定为「清除全部筛选」兜底键 — 混乱性分析与修改计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-date" content="2026-10-02">
+<meta name="doc-status" content="Open">
+<meta name="doc-topic" content="webui-keyboard-shortcuts">
+<meta name="doc-added" content="26-10-02-1632">
+<meta name="doc-updated" content="26-10-02-1632">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-02-webui-esc-clear-filters.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #14181d;
+    --ink: #e4e8ea;
+    --ink-dim: #99a2a8;
+    --faint: #6b757e;
+    --hair: #262d34;
+    --hair-soft: #1c2228;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #7fc98f;
+    --code-bg: #171d23;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 880px; margin: 0 auto; padding: 52px 44px 80px; }
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.25; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--ink-dim); max-width: 64ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13px; font-family: var(--mono); }
+  .meta-row .item .v a { color: var(--accent-ink); }
+  section { margin-top: 40px; }
+  .sec-head { display: flex; align-items: baseline; gap: 10px; border-bottom: 1px solid var(--hair-soft); padding-bottom: 8px; margin-bottom: 14px; }
+  .sec-head .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .sec-head h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.005em; }
+  h3 { font-family: var(--display); font-size: 14.5px; font-weight: 600; color: var(--accent-ink); margin: 20px 0 8px; }
+  p { margin-bottom: 11px; max-width: 76ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 76ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 14px 16px; overflow-x: auto; margin: 10px 0 14px; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  pre .cm { color: var(--faint); }
+  pre .ad { color: var(--accent-ink); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 13.5px; }
+  th, td { border: 1px solid var(--hair); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); font-weight: 600; background: var(--paper); }
+  td code { font-size: 12px; }
+  .verdict { border: 1px solid var(--hair); background: var(--paper); padding: 16px 18px; margin: 0 0 14px; }
+  .verdict .tag { font-family: var(--display); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 6px; }
+  .verdict p { margin-bottom: 6px; }
+  .verdict p:last-child { margin-bottom: 0; }
+  .note { color: var(--faint); font-size: 13px; }
+  .warn-t { color: var(--warn); }
+  .ok-t { color: var(--ok); }
+  .no-t { color: var(--warn); }
+  footer { margin-top: 52px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划 · Plan · webui-keyboard-shortcuts</div>
+    <h1>WEBUI 把 ESC 定为「清除全部筛选」兜底键 — 混乱性分析与修改计划</h1>
+    <p class="lede">回应 issue <a href="../issues/26-10-01-2108-question-webui-esc-clear-filter.html">26-10-01-2108</a>(question: ESC 清筛选定键与否待拍板)。结论先行: <strong>不会造成混乱 —— 前提是把 ESC 接进 lifecycle.js 既有的 Esc 退栈链终端兜底, 而不是改快捷键引擎的键表</strong>。混乱风险全部来自「实现路径选错」, 不来自「ESC 多一份职责」本身。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-02-1632</div></div>
+      <div class="item"><div class="k">日期</div><div class="v">2026-10-02</div></div>
+      <div class="item"><div class="k">状态</div><div class="v">Open(待拍板)</div></div>
+      <div class="item"><div class="k">代码基线</div><div class="v">develop c02e9e14</div></div>
+      <div class="item"><div class="k">前案</div><div class="v"><a href="26-09-28-0354-plan-webui-keyboard-shortcuts.html">26-09-28-0354</a></div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <div class="sec-head"><span class="no">01</span><h2>结论与拍板建议</h2></div>
+    <div class="verdict">
+      <div class="tag">判定</div>
+      <p><strong class="ok-t">ESC 绑「清除全部筛选」不会造成混乱</strong> —— 条件有三: ① 触发点走 <code>lifecycle.js</code> Esc 退栈链的<strong>终端兜底</strong>(排在全部 16 层浮层 pop 与清选择/收展开兜底之后); ② 新分支带门条件(数据页 / 非输入态 / 无 hrPop 卡 / 面筛有值); ③ 触发时 toast 点名, 不静默。三条在 §05 改动清单里全部落死。</p>
+      <p>反过来, 若按 issue §03 的字面建议「把 ESC 设为 <code>clear-filters</code> 的默认绑定」走<strong>引擎键表</strong>, 会造成真混乱(双触发 / 面板改键语义崩坏 / 守阵倒退), 该路线在 §04 明确否决。</p>
+    </div>
+    <p><strong>拍板建议</strong>: 采纳方案 A(退栈链终端兜底)。按键表侧 <code>clear-filters</code> 保持空位不变 —— 用户仍可在面板给它自定义别的键, 与 ESC 兜底双路径并存、互不冲突。前案 26-09-28-0354 §08 C5「Esc 是唯一固定键」的设计决策原样保留。</p>
+  </section>
+
+  <section id="s2">
+    <div class="sec-head"><span class="no">02</span><h2>现状事实 (代码调研, 2026-10-02 @ develop c02e9e14)</h2></div>
+    <ol>
+      <li><strong>ESC 是唯一固定键</strong>: <code>shortcuts.js</code> 注册表条目 <code>clear-esc</code>(def <code>"Escape"</code>, <code>fixed: true</code>, <code>run: null</code>, 语义「清除选择 / 逐层退栈」), 实现归 <code>lifecycle.js</code> 既有退栈链(FIX-07); 引擎入口 <code>_kbOnKeyDown</code> 第一行 <code>if (e.key === "Escape") return;</code>, 且引擎监听注册序排在退栈链之后(双保险)。文件头注 L11-13 与注册表注释两处写明此设计(前案 §08 C5)。守阵 <code>test_web_shortcuts.py:221</code>(注册序)与 <code>:228</code>(引擎对 Escape 早退)是断言级约束。</li>
+      <li><strong>退栈链形状</strong>(<code>lifecycle.js:48-73</code>): 一条 else-if 链, <strong>一次按键只走一个分支</strong> —— 16 层浮层 pop(确认框 → 添加种子 → 统计 → 限速 → 管理 → 标签编辑 → 文件优先级 → 抽屉 → 历史 → 表头菜单 → 列选择器 → 界面切换 → 搜索浮卡 → 快捷键帮助 → 筛选器下拉 → 右键菜单) + 4 个兜底(清选择 → 收组展开 → 收集展开 → 收剧展开)。链 handler 无 <code>stopPropagation</code>, 也不检查输入态(见事实 10 的既有 quirk)。</li>
+      <li><strong><code>clear-filters</code> 是空位动作</strong>: <code>shortcuts.js:292</code> def <code>""</code>(默认不绑定, 可自定义), scope <code>list</code>, run → <code>vm.clearFilters()</code>。</li>
+      <li><strong><code>clearFilters()</code> 的字段清单</strong>(<code>filters.js:76-86</code>): 清 <code>kindFilter / pathFilter / tagFilter / categoryFilter / siteFilter / hrFilter / hrSrcFilter</code> 七项面筛 + <code>filterMenu</code> + <code>expandedKey</code>; <strong>不清 <code>searchQuery</code></strong>(搜索词归 <code>clearSearch()</code>, 单独一条)。</li>
+      <li><strong><code>filtersActive</code> 含搜索词</strong>(<code>filters.js:113</code>): 七项面筛之外还算 <code>searchQuery.trim()</code> —— 它是顶栏按钮的启用条件, <strong>不能</strong>直接拿来做「clearFilters 会改变状态」的门(只设了搜索词时它为真, 而 clearFilters 空转)。</li>
+      <li><strong>顶栏按钮</strong>(<code>topbar.html:274-277</code>): 「清除筛选」常驻占位, <code>:disabled="!filtersActive"</code> —— 面筛是否激活有现成的可视指示。</li>
+      <li><strong>用户无法把任何动作绑到 ESC</strong>: 录制器捕获段按 Esc 即取消录制(<code>shortcuts.js</code> <code>_kbOnRecordKey</code>), fixed 条目不进冲突检测 —— ESC 在面板体系里完全不可触碰。</li>
+      <li><strong>hrPop 悬停卡</strong>(<code>hr.js:61,173-175</code>): HR 在线核实悬停卡有自己的 document 级 Esc handler(无条件 <code>hrPopHideNow()</code>), 它<strong>不在</strong>退栈链与 <code>escBusy</code> 名单里。</li>
+      <li><strong><code>escBusy</code></strong>(<code>dialogs.js:485</code>): 与退栈链同一名单(含兜底段), 是 config_hub「Esc 返回设置首页」的守门。若新兜底能在设置页触发, 就必须同步进 escBusy —— 方案 A 用 page 门把这个场景整个挡掉, escBusy 零改动。</li>
+      <li><strong>既有 quirk(本计划不修)</strong>: 链 handler 无输入态门 —— 焦点在搜索框里按 ESC, 现在也会清选择/收展开。另: 设置页按 ESC 会隐式触发这些兜底(列表态不可见但仍在)。新分支自带输入态与 page 门, 比同链兄弟分支更严; 既有分支不回改(范围守恒)。</li>
+      <li><strong><code>page</code> 取值</strong>: 数据三视图 <code>page === "groups"</code>(<code>view.js:78-82</code> goView 落点), 设置页 <code>page === "settings"</code>; <code>viewMode</code> ∈ {groups, torrents, shows}。引擎 <code>_kbRows()</code> 同款判据。</li>
+    </ol>
+  </section>
+
+  <section id="s3">
+    <div class="sec-head"><span class="no">03</span><h2>混乱性分析: 五个向量 × 两条路线</h2></div>
+    <p>「混乱」拆成五个可判定的向量, 逐一看两条实现路线下的表现:</p>
+    <table>
+      <tr><th style="width:26%">混乱向量</th><th style="width:37%">路线 B · 引擎键表 (def = "Escape")</th><th>路线 A · 退栈链终端兜底 (推荐)</th></tr>
+      <tr>
+        <td><strong>① 双触发</strong><br><span class="note">一次按键干两件事</span></td>
+        <td class="warn-t">真实存在: 链 handler 不 <code>stopPropagation</code>, 引擎若也接 Escape, 同一次按键「关浮层 + 清筛选」并发, 浮层开着筛选就被清了。</td>
+        <td class="ok-t">不存在: else-if 链一次只走一个分支; 引擎对 Escape 依旧早退, 触发路径单点在链上。</td>
+      </tr>
+      <tr>
+        <td><strong>② 面板 / 录制器语义</strong><br><span class="note">改键体系是否自洽</span></td>
+        <td class="warn-t">崩坏: <code>clear-esc</code>(fixed)与 <code>clear-filters</code> 同显 Esc 两个条目; 录制器按 Esc = 取消, 用户永远录不进也改不掉; fixed 不进冲突检测, 改键出现死区。</td>
+        <td class="ok-t">无感: 键表零改动, <code>clear-filters</code> 仍显示空位可自定义; 面板/帮助浮层只改 <code>clear-esc</code> 的 label 文案。</td>
+      </tr>
+      <tr>
+        <td><strong>③ 与浮层关闭语义冲突</strong><br><span class="note">ESC = 关浮层的反射</span></td>
+        <td>取决于引擎侧的浮层屏蔽 —— <code>_kbOverlayBusy</code> 名单与链/escBusy 名单必须三处同步, 漏一处就是「关浮层顺手清筛选」。</td>
+        <td class="ok-t">结构上免疫: 新分支排在 16 层 pop 之后, 只要任何浮层开着就轮不到它; 筛选器下拉先收、面筛后清, 语义连续。</td>
+      </tr>
+      <tr>
+        <td><strong>④ 反射连按误清</strong><br><span class="note">连按 ESC 退层时顺手清掉辛苦搭的筛选</span></td>
+        <td>同样存在, 且引擎路线没有「一层一层退」的减速带。</td>
+        <td class="ok-t">可控: 链本身就是减速带 —— 连按时先清选择、再收展开, 面筛排最末; 触发即 toast 点名; 面筛是纯前端视图态, 无后端命令、无落盘、顶栏按钮一键可见, 非破坏性。</td>
+      </tr>
+      <tr>
+        <td><strong>⑤ 输入态 / 非数据页误触</strong></td>
+        <td>引擎有 inInput / scope 五值屏蔽, 本向量无差异。</td>
+        <td class="ok-t">门条件挡死: 数据页(<code>page === "groups"</code>) + 非输入态 + <code>authOk</code> 四重门; 设置页 / 登录遮罩期 / 搜索框内按 ESC 都到不了这个分支。</td>
+      </tr>
+    </table>
+    <h3>心智模型: 为什么「清筛选」放兜底最末是自洽的</h3>
+    <p>退栈链的隐喻是 <strong>LIFO</strong>: 最后建立的状态最先退。链已经把「清选择 / 收展开」设为兜底 —— 即项目早已接受「ESC 可以逐层退掉列表视图态」; 面筛与展开同属「数据可见范围的收窄态」(<code>clearFilters()</code> 本身就复位 <code>expandedKey</code>, 两者本就是同族操作), 排在兜底最末 = 视为退栈深度最深的一层, 不引入新的心智负担。而「筛选 → 选择 → 浮层」的使用顺序与退栈顺序互为逆序, 与既有四层兜底的次序感一致。</p>
+    <p>什么情况才算「会造成混乱」而没有被化解: 一次按键干两件事(①)、键表自相矛盾(②)、浮层开着清筛选(③)。三条在路线 A 下结构性不存在; ④⑤属「误触成本」而非「混乱」, 已由减速带 + 门 + toast 压到与既有兜底同级。</p>
+  </section>
+
+  <section id="s4">
+    <div class="sec-head"><span class="no">04</span><h2>方案决策</h2></div>
+    <h3>方案 A · 退栈链终端兜底 <span class="ok-t">(推荐, 本计划主体)</span></h3>
+    <p>在 <code>lifecycle.js</code> 退栈链最末(收剧展开之后)加一个分支, 门条件四件套 + toast。键表、面板、录制器、冲突检测、后端 <code>/api/keys</code> 全部零改动; 尊重前案 §08 C5「Esc 是唯一固定键」; diff 最小。</p>
+    <h3>方案 B · 引擎键表 <span class="no-t">(否决)</span></h3>
+    <p>把 <code>clear-filters</code> 的 def 改为 <code>"Escape"</code> 并让引擎接 Escape。四条否决理由: ① 与退栈链双触发(§03-①); ② fixed 语义与冲突检测崩坏(§03-②); ③ 守阵 <code>test_web_shortcuts.py:228</code>「引擎必须对 Escape 早退」要改 —— 那是前案 §08 C5 的设计决策, 等于倒退; ④ 帮助浮层出现两个 Esc 条目, 面板语义混乱。</p>
+    <h3>方案 C · 给 clear-filters 配其它默认键 <span class="note">(不采, 不答本题)</span></h3>
+    <p>例如默认绑 <code>Ctrl+Shift+X</code>。超出本题(issue 只问 ESC); 空位维持, 用户想要键位可自行在面板录制。</p>
+  </section>
+
+  <section id="s5">
+    <div class="sec-head"><span class="no">05</span><h2>改动清单 (含代码草案)</h2></div>
+    <p>无新增文件、无 manifest 改动、无后端改动、无新配置键。共三处代码 + 一处测试 + 一处 TODO 勾选。</p>
+
+    <h3>5.1 <code>filters.js</code> — 新增 computed <code>facetsActive</code></h3>
+    <p>放在 <code>filtersActive</code> 旁。<strong>不含 <code>searchQuery</code></strong> —— 语义是「clearFilters() 会改变状态」, 与 <code>clearFilters</code> 字段清单同源; 未来加面筛字段时两处同步(注释写明)。</p>
+    <pre><code><span class="cm">/* 面筛(不含搜索词)是否有值: Esc 退栈链「清筛选」兜底的门 —— 与 clearFilters 字段清单
+ * 同源, 新增面筛字段时两处同步; 搜索词不算(归 clearSearch, Esc 兜底不动它) */</span>
+facetsActive() {
+  return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length ||
+    this.categoryFilter.length || this.siteFilter.length || this.hrFilter.length || this.hrSrcFilter.length);
+},</code></pre>
+
+    <h3>5.2 <code>lifecycle.js</code> — 退栈链终端兜底</h3>
+    <p>handler 顶部(Escape 早退之后)算一次输入态判定(与引擎 <code>_kbOnKeyDown</code> 同式, 仅新分支消费, 不改既有分支行为); 兜底最末(收剧展开之后)加分支:</p>
+    <pre><code>document.addEventListener("keydown", (e) =&gt; {
+  if (e.key !== "Escape") return;
+  <span class="ad">const inInput = !!(e.target &amp;&amp; e.target.closest &amp;&amp;
+    e.target.closest("input, textarea, select, [contenteditable]"));  // 仅清筛选兜底消费</span>
+  ...
+  else if (this.expandedShows.length) this.expandedShows = [];  // 兜底: 收起追剧剧展开
+  <span class="ad">// 兜底最深一档: 清全部面筛(26-10-01-2108 拍板) —— 仅数据页 + 非输入态 + 无 hrPop 卡;
+  // 搜索词不清(归 clearSearch); 触发即 toast 点名, 不静默。门条件缺一不可:
+  // page 挡设置页(escBusy 无需同步), inInput 挡搜索框, hrPop 让"收卡"独占该次按键</span>
+  <span class="ad">else if (this.authOk &amp;&amp; this.page === "groups" &amp;&amp; !this.hrPop.open &amp;&amp; !inInput &amp;&amp; this.facetsActive) {
+    this.clearFilters();
+    this.toast("已清除全部筛选(搜索词保留)", "ok", 2500);
+  }</span>
+});</code></pre>
+    <p>同时更新链顶注释(L48 附近): <code>…→ 清选择/收展开兜底</code> 后补 <code>→ 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)</code>。</p>
+
+    <h3>5.3 <code>shortcuts.js</code> — 三处注释/文案, 键表零语义改动</h3>
+    <ul>
+      <li><code>clear-esc</code> 条目 label: 「清除选择 / 逐层退栈」→「清除选择 / 逐层退栈 / 清筛选」—— 面板与帮助浮层从注册表渲染, 自动跟随, 保持展示与行为一致。</li>
+      <li><code>clear-filters</code> 条目行尾注释补: <code>// Esc 触发路径走退栈链兜底(lifecycle), 不走键表; 此处保持空位供自定义其它键</code> —— 防未来读者把空位当漏绑「修」回方案 B。</li>
+      <li>文件头注 L11-13 的 Esc 段补一句: 链终端兜底已含清筛选(26-10-01-2108), 键表侧 clear-filters 仍空位。</li>
+    </ul>
+    <p class="note">⚠ 写注释时避开 <code>*/</code> 字面序列(pitfalls web-ui/js-comment-terminator: 注释里出现星号斜杠会被提前砍断, node --check 全绿但页面首跑白屏)。</p>
+
+    <h3>5.4 <code>tests/test_web_shortcuts.py</code> — 新增守阵(源码扫描式, 与房式同款)</h3>
+    <pre><code>def test_esc_chain_clear_filters_fallback():
+    lc = _read("lifecycle.js")
+    assert lc.index("expandedShows = []") &lt; lc.index("this.clearFilters()"), \
+        "清筛选兜底必须在收剧展开之后(链序即退栈序, LIFO 不可倒)"
+    for frag in ("this.authOk", 'this.page === "groups"', "!this.hrPop.open",
+                 "!inInput", "this.facetsActive"):
+        assert frag in lc, f"清筛选兜底缺门条件: {frag}"
+    assert "已清除全部筛选" in lc, "清筛选兜底必须 toast 点名, 不许静默"
+    sc = _read("shortcuts.js")
+    assert sc.count('def: "Escape"') == 1, "Escape 只许固定键 clear-esc 一个默认绑定"
+    assert "清筛选" in sc, "clear-esc 面板 label 必须反映清筛选兜底"
+    fj = _read("filters.js")
+    block = fj[fj.index("facetsActive()"):]
+    block = block[:block.index("},")]
+    assert "searchQuery" not in block, "facetsActive 不得含 searchQuery(搜索词归 clearSearch)"</code></pre>
+    <p class="note">注: <code>_read</code> / 取文件方式按该测试文件既有 helper 实名对齐, 断言文案可微调, 门条件与链序两条必须保留。文件头 docstring「## 测试计划」清单同步补行(AGENTS 硬要求)。</p>
+
+    <h3>5.5 <code>TODO.md</code></h3>
+    <p><code>[?] WEBUI按ESC清除筛选器</code> 行在实现合并后勾为 <code>[x]</code>(取证时行号已漂移, 按 grep <code>ESC清除筛选器</code> 定位)。</p>
+  </section>
+
+  <section id="s6">
+    <div class="sec-head"><span class="no">06</span><h2>测试与回归</h2></div>
+    <ul>
+      <li><strong>既有断言不动</strong>: <code>test_web_shortcuts.py:221</code>(引擎注册序在链后)、<code>:228</code>(引擎对 Escape 早退)、<code>test_web.py:3657</code>(searchHelpOpen 分支在链上) —— 本计划不触碰这些结构。</li>
+      <li><strong>新增守阵</strong>: §5.4(链序 / 门条件五件套 / Escape 唯一默认绑定 / label / facetsActive 纯度)。</li>
+      <li><strong>回归</strong>: <code>commands run test.full</code>, 收尾新建基线切片记实测数字(体例见 <code>testing/baseline.md</code> 口径段)。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <div class="sec-head"><span class="no">07</span><h2>风险与不做的事</h2></div>
+    <h3>风险与既有化解</h3>
+    <ul>
+      <li><strong>反射连按误清</strong>: 链位减速带 + toast 点名已缓解; 若真机走查后仍嫌误触率高, 后续可在面板加「Esc 兜底范围」开关 —— 不在本轮。</li>
+      <li><strong>IME 组合期</strong>: 组合期 keydown 的 <code>e.key</code> 多为 <code>"Process"</code>, 不命中链; 焦点在输入框时另有 inInput 门。链 handler 现无 isComposing 门是既有形状, 新分支不单独加(与同链兄弟一致), 真机走查覆盖中文输入法场景。</li>
+      <li><strong>预鉴权</strong>: 新分支带 <code>authOk</code>, 比同链兄弟分支更严; 不回改既有分支。</li>
+    </ul>
+    <h3>明确不做(范围守恒, 撞见即入池不修)</h3>
+    <ul>
+      <li>不修「搜索框内按 ESC 也清选择/收展开」的既有 quirk(链 handler 无输入态门的另一面)。</li>
+      <li>不动 <code>escBusy</code>(新分支被 page 门挡在设置页场景外, hub 守门无需同步)。</li>
+      <li>不给 <code>clear-filters</code> 配其它默认键、不动 <code>KB_BLACKLIST</code>、不动录制器与冲突检测。</li>
+      <li>不做「Esc 兜底开关」配置项(避免新增配置键与面板面)。</li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <div class="sec-head"><span class="no">08</span><h2>验收清单 (真机) 与收尾 DoD</h2></div>
+    <h3>真机走查(<code>commands run dev.run -- config.yml --dry-run</code> 起步, 浏览器实测)</h3>
+    <ol>
+      <li>三视图各设面筛(含 H&R 档) → 无浮层无选择连按 ESC: 逐层 清选择 → 收展开 → 清面筛 + toast; 顶栏「清除筛选」由亮转灰。</li>
+      <li>只设搜索词(无面筛) → ESC 无动作、无 toast。</li>
+      <li>开着筛选器下拉按 ESC: 只收下拉, 面筛保留; 再按才清面筛。</li>
+      <li>设置页按 ESC: 背景面筛不动, hub「返回首页」行为照旧(escBusy 未同步是预期)。</li>
+      <li>焦点在搜索框按 ESC: 面筛不动(输入态门)。</li>
+      <li>HR 悬停卡(hover 弹出)开着按 ESC: 只收卡, 面筛不动。</li>
+      <li>设置页快捷键面板: clear-esc 显示新 label; clear-filters 仍显示空位可录制; 录制器按 Esc 仍是取消录制。</li>
+      <li>中文输入法组合态在搜索框按 ESC: 只取消组词, 面筛不动。</li>
+    </ol>
+    <h3>实现轮收尾(按 memory-bank skill 五步 DoD)</h3>
+    <ul>
+      <li>issue <a href="../issues/26-10-01-2108-question-webui-esc-clear-filter.html">26-10-01-2108</a> 状态变更日志补一行: 拍板 = 方案 A, 链接本计划, 记实现 hash。</li>
+      <li>activeContext 切片迁出已完成条目; <code>commands run kb.index</code>; <code>test.full</code> 基线切片记实测。</li>
+      <li>若实现中踩到已记坑, 该条「复发」+1 并在档案写明未命中原因; 有新坑按动作写进 <code>pitfalls/web-ui/</code>。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-02-1632-plan-webui-esc-clear-filters.html · 状态 Open(待拍板) · 代码事实取证 2026-10-02 @ develop c02e9e14, 行号会漂移以 grep 关键词为准
+  </footer>
+
+</div>
+</body>
+</html>
