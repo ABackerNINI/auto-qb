@@ -11,6 +11,7 @@
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
 | [cjk-regex-norm.md](cjk-regex-norm.md) | 把 Python 的 `[\W_]+ → 空格` 归一化直译成 JS `s.replace(/[\W_]+/g,' ')` 会静默废掉中文搜索 —— Python `\W` 是 Unicode 语义(CJK 算词字符), JS `\W` 是 ASCII 语义(整个中文词全是"非词字符"被折成空格)。前端必须写 `[^\p{L}\p{N}]+/gu`(u 标志必带)。 | 写前端搜索/过滤, 前端照抄服务端归一化语义, 中文词搜不到, \W, \p{L}, unicode 归一化 |
+| [clip-path-clips-fixed.md](clip-path-clips-fixed.md) | 祖先带 `clip-path`(console/atlas 皮肤的 `.hb-cut` 切角)时, 其内 `position: fixed` 后代的绘制被裁剪进该祖先的块盒 —— 症状是「全屏层只剩与块重叠的部分可点/可见」, 看着像 z-index 或事件绑定 bug, 实为绘制裁剪。覆盖式全屏层一律写成块盒的**兄弟节点**(或确保祖先链无 clip-path/transform/filter), 不靠 z-index 救。 | fixed 全屏不显示, 覆盖层只显示一部分, 弹窗被裁剪, 全屏遮罩点不到, clip-path, 切角, hb-cut, z-index 调不动, fixed 后代, 设置页覆盖层, 全屏层错位 |
 | [columns-persist.md](columns-persist.md) | 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案(前四轮修复都栽在把意图与派生混在一个字段里); 另有一条**应用之外**的通道: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据"。 | 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths, 浏览器重启, 偏好全回默认, 关闭窗口时清除站点数据, SESSION_ONLY |
 | [contract-api.md](contract-api.md) | 前端不只是后端的镜像 —— 判"字段不一致"前必须沿派生链追到消费点; 跨视图裁剪与真值时序是两条反复出事的线。 | 字段不一致, 前后端契约, 视图回传, rid, 真值, 乐观 UI, 状态色, 占位符, HR 标签, 空值转有值, 上游修复后的展示回归 |
 | [css-comment-terminator.md](css-comment-terminator.md) | CSS 注释以第一个 `*/` 结束 —— 注释文字里再出现 `*/`(如 `s-*/member-row`)会把注释提前砍断, 尾巴落成代码态垃圾, 浏览器按错误恢复把**紧跟的那条规则整条静默丢弃**, 无任何报错。 | 写 CSS 注释, 注释里出现 星号斜杠, 进度条不显示, 样式规则不生效, display 没生效, 控制台皮肤, m-progress |

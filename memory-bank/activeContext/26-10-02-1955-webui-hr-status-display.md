@@ -1,13 +1,9 @@
 # WEBUI HR 在线核实信息展示改造
 
-> 摘要: HR 展示二轮改造计划轮完成 —— 计划 [plans/26-10-02-1936](../plans/26-10-02-1936-plan-webui-hr-status-display-rework.html)(含 5 项可交互样式模板), 6 条问题(折叠/全屏弹窗/老旧过滤/表头排序/"B毕业"改"已达标"/三段信息重组)拆 4 阶段串行, 每代码阶段独立提交。
-> 最后活动: 2026-10-02 19:55
+> 摘要: 任务完结(实施面)。计划 [plans/26-10-02-1936](../plans/26-10-02-1936-plan-webui-hr-status-display-rework.html) 四阶段全部实施并推送: `b50c2873` 后端(local_present 单点 mark_local_present + 「毕业」可见 4 处改「已达标」) / `888a0e29` 折叠+覆盖式全屏(拍板①用户改判「展开即覆盖式全屏, 不另设全屏钮」; atlas clip-path 裁 fixed 后代坑真浏览器目检发现, 见 pitfalls/web-ui/clip-path-clips-fixed.md) / `8cb2da59` 老旧过滤+三态排序+三列重组 / `ca77ff23` 收尾(守阵复核零缺口)。拍板②a③a④a⑤a 均按推荐。基线 [baselines/26-10-03-0440](../testing/baselines/26-10-03-0440-webui-hr-status-display-rework-done.md)(2309 passed + 3 skipped / 99%); 阶段 2/3 各做了三套 UI 真浏览器目检(桩数据)。已完成条目迁出 progress/implemented-webui.md。档案 tasks/26-10-02-webui-hr-status-display(Done)。
+> 最后活动: 2026-10-03 04:52
 
 ## 正在进行
 
-- **等用户拍板**: 5 决策点(计划文档内含推荐) —— ①全屏方式: 推荐覆盖式弹窗 ②"毕业"替换口径: 推荐可见面 4 处全改 + 注释保留 ③做种中/老旧判定: 推荐后端单点 `local_present` 含暂停 ④信息重组: 推荐三列结构化 ⑤折叠取数: 推荐首次展开才拉。
-- 拍板后: 按阶段 1(后端 local_present + 文案) → 2(折叠 + 弹窗) → 3(过滤 + 排序 + 重组) → 4(回归收尾) 逐个派子代理串行实施; 子代理异常失败 3 次停手。
-
-## 已完成
-
-- 2026-10-02 计划轮: 调研 + 计划文档产出 + tasks 档案 [26-10-02-webui-hr-status-display](../tasks/26-10-02-webui-hr-status-display.md) 立档。
+- **真机走查待用户执行**(唯一未验证面): 需真实 qB + 真实 HR 数据, 折叠/全屏/过滤/排序/文案五面各点一遍; 走查发现问题回本切片续。
+- (实施条目已全部完结迁出, 其余无)

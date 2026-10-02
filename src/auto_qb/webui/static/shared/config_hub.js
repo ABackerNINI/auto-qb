@@ -190,7 +190,8 @@ window.CONFIG_HUB = {
       });
       // 运行日志不再单列首页卡(2026-09-26 并入「常规」分区页尾, 随分区模板渲染);
       // HR 站点状态同理(2026-09-25 合并): 它是只读现状不是配置项,
-      // 并进「HR 在线核实」分区页尾, 打开分区时随 hubGo 拉一次 /api/hr/status。
+      // 并进「HR 在线核实」分区页尾; 打开分区只复位折叠态不发请求(阶段2 决策点⑤a,
+      // 见 hubGo), 首次展开(hrsToggle)才拉 /api/hr/status。
       // 键盘快捷键(W6, 计划 26-09-28-0354 §5.2): 同为客户端块(不进配置 schema),
       // 数据走 GET/PUT /api/keys; 读数 = 当前派生条数(overrides)。
       const keysDoc = window.AQB_KEYS ? window.AQB_KEYS.load() : null;

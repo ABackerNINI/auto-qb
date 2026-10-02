@@ -6,9 +6,9 @@
 <title>修改计划 · WEBUI HR 站点状态区展示层二轮改造 — 折叠 · 全屏 · 筛选排序 · 信息重组</title>
 <meta name="doc-topic" content="webui-hr-status-display">
 <meta name="doc-type" content="plan">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-02-1936">
-<meta name="doc-updated" content="26-10-02-1936">
+<meta name="doc-updated" content="26-10-03-0452">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-02-webui-hr-status-display.md">
 <style>
   :root {
@@ -914,6 +914,10 @@
         <tr>
           <td class="t-mono">v1 · 26-10-02-1936</td>
           <td>初稿: 用户 2026-10-02 提出 6 条展示层问题, 逐条现状 → 目标(§1); 现状取证(§2)含折叠先例(运行日志块)、排序范式(shared/sort.js)、本地 join 原料(store.by_hash + views 状态分类单点)、「毕业」文案全量清单(§3.5); 可交互设计模板(§4)覆盖折叠/全屏/老旧切换/排序/信息重组五项; 四阶段拆分(§5)与五项待拍板决策点(§7)。拍板前不动工。</td>
+        </tr>
+        <tr>
+          <td class="t-mono">v2 · 26-10-03-0452</td>
+          <td>实施完成: 拍板差异 —— 决策点①用户改判「展开即覆盖式全屏, 不另设全屏钮」(覆盖式机制保留), ②a③a④a⑤a 按推荐。四阶段全部入库: 阶段 1 后端 <code>b50c2873</code>(local_present 单点 mark_local_present + 「毕业」4 处改「已达标」) / 阶段 2 <code>888a0e29</code>(默认折叠 + 展开即覆盖式全屏, 首次展开才拉数) / 阶段 3 <code>8cb2da59</code>(老旧过滤 + 三态排序 + 三列重组) / 阶段 4 <code>ca77ff23</code>(守阵复核零缺口)。test.full 2309 passed + 3 skipped / 99%(基线 26-10-03-0440); 真机走查待用户执行。档案 tasks/26-10-02-webui-hr-status-display(Done)。</td>
         </tr>
       </tbody>
     </table>

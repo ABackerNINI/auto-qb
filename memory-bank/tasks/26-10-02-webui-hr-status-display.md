@@ -1,9 +1,9 @@
 # 26-10-02-webui-hr-status-display — WEBUI HR 在线核实信息展示改造
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-10-02
-**Updated:** 2026-10-02 19:55
-**Summary:** HR 在线核实展示二轮改造: 上一轮(26-10-01-2216 详情表)后用户反馈 6 条展示问题(站点状态默认折叠 / 表格拥挤需展开全屏倾向覆盖式弹窗 / 老旧未做种种子的默认隐藏 / 表头可点击排序参考种子页 / "B毕业"改"已达标" / 档位·上次核实·状态三段文本结构化重组)。计划文档 26-10-02-1936 已产出(Open, 含 5 项可交互样式模板), 拆 4 阶段串行实施(每代码阶段独立提交), 5 个决策点待拍板。
+**Updated:** 2026-10-03 04:52
+**Summary:** HR 在线核实展示二轮改造: 上一轮(26-10-01-2216 详情表)后用户反馈 6 条展示问题(站点状态默认折叠 / 表格拥挤需展开全屏倾向覆盖式弹窗 / 老旧未做种种子的默认隐藏 / 表头可点击排序参考种子页 / "B毕业"改"已达标" / 档位·上次核实·状态三段文本结构化重组)。计划 26-10-02-1936 拍板(①用户改判「展开即覆盖式全屏, 不另设全屏钮」; ②a③a④a⑤a 按推荐)后四阶段全部实施并逐笔入库(b50c2873 后端 / 888a0e29 折叠+全屏 / 8cb2da59 表格 / ca77ff23 收尾)。test.full 2309 passed + 3 skipped / 99%(基线 26-10-03-0440); 真机走查待用户执行(唯一待办)。
 **Topics:** webui-hr-status-display
 **Refs:** memory-bank/plans/26-10-02-1936-plan-webui-hr-status-display-rework.html
 
@@ -42,12 +42,19 @@
 | # | 子任务 | 状态 |
 |---|---|---|
 | 1 | 调研 + 计划文档(含样式模板)产出 | Done |
-| 2 | 用户拍板(5 决策点) | Open |
-| 3 | 阶段 1 后端: local_present + 文案替换 + 测试 | Open |
-| 4 | 阶段 2 前端骨架: 默认折叠 + 全屏弹窗 | Open |
-| 5 | 阶段 3 前端表格: 过滤 + 排序 + 信息重组 | Open |
-| 6 | 阶段 4 回归收尾 | Open |
+| 2 | 用户拍板(5 决策点) | Done |
+| 3 | 阶段 1 后端: local_present + 文案替换 + 测试 | Done |
+| 4 | 阶段 2 前端骨架: 默认折叠 + 全屏弹窗 | Done |
+| 5 | 阶段 3 前端表格: 过滤 + 排序 + 信息重组 | Done |
+| 6 | 阶段 4 回归收尾 | Done |
+| 7 | 真机走查(用户手动, 需真实 qB + HR 数据) | Open |
 
 ## 进度日志
 
 - 2026-10-02 19:55 — 计划轮完成: sync 2a9932d9 → 定位入口(plans/26-10-01-2216 前案、hr_status.js、views.py、hr/*) → 子代理调研并产出计划 plans/26-10-02-1936(单文件 HTML dark 主题, 5 项 mockup) → 立档本档案。生产文件零改动, 待拍板后按阶段派子代理串行实施。
+- 2026-10-02/03 — 用户拍板: **决策点①改判**「展开即覆盖式全屏, 不另设独立全屏钮」(原推荐 a 的覆盖式机制保留, 只去掉"另设钮"的形态); ②a(「毕业」→「已达标」, 注释保留) / ③a(`local_present` 后端 join 单点) / ④a(三列重组) / ⑤a(首次展开才拉数)均按推荐。四阶段串行实施并逐笔独立提交:
+  - **阶段 1 后端 `b50c2873`**: `routes/hr.py::mark_local_present` 单点(响应层追加只读 `local_present`, join `manager.store.by_hash`, infohash v1→v2 顺序 casefold 探测, 本地存在含暂停; 不落盘不进轮询载荷); 「毕业」用户可见 4 处改「已达标」(status.py:51,66 / resolve.py:234,350 / events.py:109), 注释按拍板保留。
+  - **阶段 2 前端骨架 `888a0e29`**: 站点状态块默认折叠(仅头部摘要行, hubGo 打开分区不再自动拉数) + 「展开」即 fixed 覆盖式全屏(`.hr-full-mask`/`.hr-full-modal` 三套 UI CSS 成对, 让出顶栏/状态栏, 单节点 v-show 不搬 DOM); ESC 挂 lifecycle 退栈链对话框层级(先于 26-10-02-1632「清全部面筛」兜底) + ✕/遮罩两路, dialogs.js escBusy 名单同步; 首次展开才拉数, 折叠态点立即拉取/刷新顺手展开再拉。真浏览器目检发现 atlas `.hb-cut` clip-path 裁剪 fixed 后代坑 → 覆盖层改 .hb-blk 兄弟节点, 坑独立入档 pitfalls/web-ui/clip-path-clips-fixed.md。三套 UI 目检过。
+  - **阶段 3 前端表格 `8cb2da59`**: 老旧过滤(默认只看做种中 `local_present`, 与档位 chips AND, 空态文案区分「本地没有 HR 种子」/「该档位暂无」两口径) + 十列三态排序(对齐 shared/sort.js 范式, 模块级纯函数比较器, 空值恒末位) + 三列重组(档位徽章 / 核实结论徽章+副行 / 在列徽章+「观察期·最近被见到」副行)。三套 UI 目检过。
+  - **阶段 4 收尾 `ca77ff23`**: 守阵复核 5 项零缺口(零代码改动); test.full **2309 passed + 3 skipped / 99%**(34.59s @ 8cb2da59, 基线切片 [testing/baselines/26-10-03-0440](../testing/baselines/26-10-03-0440-webui-hr-status-display-rework-done.md))。
+- 2026-10-03 04:52 — 收尾回写: 本档案置 Done / 计划 26-10-02-1936 置 Done(§9 v2) / activeContext 切片完结化 + 条目迁出 progress/implemented-webui.md / pitfalls 新立 clip-path-clips-fixed / README.md 与 ui-location-persist.md 旧描述最小修正。**真机走查待用户执行**(唯一未验证面, 子任务表保留 Open)。
