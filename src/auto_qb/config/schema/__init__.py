@@ -18,8 +18,9 @@
 2. **键集合必须与 validation.KNOWN_*_KEYS 完全一致** —— 由 tests/test_config_schema.py 守卫,
    新增配置键若忘记登记此处, 守卫测试直接失败(保证"每一项配置都可图形化")。
 3. **插件表必须覆盖 registry 注册的全部插件** —— 同样由守卫测试保证(15 条件 / 12 动作)。
-4. 热重载级别不在此声明: 唯一来源是 config/impact.py(SECTION_LEVELS/TRACKER_FIELD_LEVELS),
-   API 层负责合并, 避免双份维护。
+4. 热重载级别不在此声明: 三张手写级别表(L0/L1/L2)已随 hot-reload-simplify W4 退役,
+   现由 config/impact.py 的 R 级重启闸(RESTART_SECTIONS)+ 各消费模块 apply 自判承载
+   (换对象即生效为默认语义), 避免双份维护。
 
 字段键名与 YAML 空间一致(标量全为字符串), 前端持有的树即磁盘 YAML 的同构表示。
 """

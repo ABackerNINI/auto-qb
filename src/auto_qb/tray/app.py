@@ -131,7 +131,7 @@ def _set_windows_appid() -> None:
 
     Win10/11 任务栏按钮在有显式 AUMID 时才取窗口图标(与 iconbitmap 配合),
     否则恒显示 python.exe 默认图标。AUMID 与 toast 来源(notify.WINDOWS_TOAST_APPID,
-    对应开始菜单 AutoQB.UI.lnk, 图标 = orbit)同一身份。
+    经注册表 HKCU\\Software\\Classes\\AppUserModelId 键注册, 图标 = orbit)同一身份。
     设置调用 hr=0 即成功, 不做读回校验: GetApplicationUserModelId 对非打包进程恒返回
     APPMODEL_ERROR(15703)而非 ERROR_INSUFFICIENT_BUFFER(122), 读回判据无真实命中场景
     (issue 26-10-02-0441)。

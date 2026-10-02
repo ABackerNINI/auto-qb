@@ -8,7 +8,7 @@
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="schema-docstring-tracker-field-levels">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS">
 <meta name="issue-summary" content="TRACKER_FIELD_LEVELS 级别表随内核化重构整体退役后, config/schema/__init__.py 的 docstring 仍提及它, 与代码相反的文档漂移; 不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内">
 <title>config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS · docs · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2212-docs-schema-docstring-tracker-field-levels</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 22:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -98,6 +98,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 22:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-03 — 认领, 状态 <strong>In Progress</strong> (docs issue 清理轮, 待修)</li>
+      <li>2026-10-03 — 修复完成, 状态 <strong>Done</strong> (docs issue 清理轮; config/schema/__init__.py docstring 删对已退役 SECTION_LEVELS/TRACKER_FIELD_LEVELS 的提及, 改写为现状机制——R 级重启闸 + 消费模块 apply 自判, 措辞对齐 config/impact.py; 验证: 各阶段 test.quick 2309 passed / 3 skipped)</li>
     </ul>
     <p class="hint">来源：TODO 未完成项盘点判重时的计划外发现（非 TODO 入池项）—— 出处为 TODO 行「TRACKER_FIELD_LEVELS里还存在hr_check」的判重核实，该 TODO 行本身已过时（级别表整体退役）；本漂移不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内。</p>
   </section>

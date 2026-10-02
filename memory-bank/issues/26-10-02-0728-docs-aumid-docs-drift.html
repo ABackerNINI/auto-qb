@@ -8,7 +8,7 @@
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="tray-aumid">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="AUMID 机制文档漂移两处: core-domain.md 称进程须设显式 AppUserModelID(与零调用点事实不符) + tray docstring 残留 AutoQB.UI.lnk">
 <meta name="issue-summary" content="core-domain.md:27「进程须先设显式 AppUserModelID」与 _set_windows_appid 生产零调用点事实不符; tray/app.py _set_windows_appid docstring 残留「对应开始菜单 AutoQB.UI.lnk」(9891c030 已改注册表键机制)">
 <title>AUMID 机制文档漂移两处: core-domain.md 称进程须设显式 AppUserModelID(与零调用点事实不符) + tray docstring 残留 AutoQB.UI.lnk · docs · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0728-docs-aumid-docs-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 07:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 07:28 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-03 — 认领, 状态 <strong>In Progress</strong> (docs issue 清理轮, 待修)</li>
+      <li>2026-10-03 — 修复完成, 状态 <strong>Done</strong> (docs issue 清理轮; core-domain.md 的 AUMID 表述改为按现状事实——函数存在但生产零调用点, 并标注关联 bug 26-10-02-0727 未决; tray/app.py <code>_set_windows_appid</code> docstring 的 AutoQB.UI.lnk 残留改为注册表键机制描述; 验证: 各阶段 test.quick 2309 passed / 3 skipped)</li>
     </ul>
   </section>
 

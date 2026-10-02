@@ -597,4 +597,4 @@ typography. The data tells a story of dramatic channel shift.
 1. 读取本文件的速查表 + 用户已透露的项目上下文（产品类型 / 行业 / 文案语气线索）
 2. 从 20 个 preset 中**跨流派挑 2-3 个**最相关的（禁止从同一流派挑 2 个）
 3. 通过 `INTERACTIONS.md` 的 `ask` 动作让用户在挑出的 preset 中选一个
-4. 用户选定后，将 preset 名称（如 `01 Pentagram`）写入 `USER.md` 视觉偏好板块
+4. 用户选定后，该 preset 名称（如 `01 Pentagram`）仅作为**当次会话内**的视觉偏好生效；不得自动写回 `USER.md`，也不得宣称已经跨会话保存——除非用户明确要求保存

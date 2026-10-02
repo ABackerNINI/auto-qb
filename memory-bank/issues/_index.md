@@ -16,7 +16,7 @@
 |---|---|
 | bug | 9 |
 | perf | 5 |
-| docs | 5 |
+| docs | 1 |
 | test | 1 |
 | refactor | 4 |
 | feat | 20 |
@@ -26,14 +26,12 @@
 ## Open
 
 - [bug] [主循环首轮 tick 任意异常在 next_*_at 未推进时无退避快速重试(wait_for=0 机理)](26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html) — 主循环异常路径不推进 next_*_at, 首轮 tick 抛任意异常(不止 StopIteration)即形成无退避快速重试循环 —— 有 ERROR 日志不静默, 是否要退避待拍板; StopIteration 已由 f89ceada 显式重抛不在此列
-- [docs] [AUMID 机制文档漂移两处: core-domain.md 称进程须设显式 AppUserModelID(与零调用点事实不符) + tray docstring 残留 AutoQB.UI.lnk](26-10-02-0728-docs-aumid-docs-drift.html) — core-domain.md:27「进程须先设显式 AppUserModelID」与 _set_windows_appid 生产零调用点事实不符; tray/app.py _set_windows_appid docstring 残留「对应开始菜单 AutoQB.UI.lnk」(9891c030 已改注册表键机制)
 - [bug] [tray._set_windows_appid 自引入起生产零调用点: AUMID 从未设置, 任务栏图标修复结论前提存疑](26-10-02-0727-bug-tray-appid-setter-no-call-site.html) — tray/app.py 的 _set_windows_appid 自 9891c030 引入起生产代码零调用点(仅测试驱动), 生产进程从未设置显式 AUMID —— 与 core-domain.md 四轮实测结论「AUMID 是任务栏图标决定性变量」矛盾, 26-10-01-2203 修复前提存疑
 - [test] [O_TRUNC 直写静态守阵并入: 全 src O_TRUNC 清零条件已达成](26-10-02-0527-test-otrunc-static-guard.html) — 1347-token 悬置的 O_TRUNC 直写静态守阵, 生效条件「全 src O_TRUNC 代码清零」已由 bc24631b(hr.token 改 atomic_write)达成, 可并入守阵
 - [bug] [_sign_releases 批量签发对已 verified 的 infohash 不查重, 整条覆写既有放行记录(生产可达性未核实)](26-10-02-0526-bug-hr-sign-releases-verified-overwrite.html) — _sign_releases 对已在 data.verified 的 infohash 不查重, data.verified[h]= 直接整条覆写(源/verified_ts/锚点全换), 与「放行永续有效(终态不可逆)」语义冲突; 生产可达性待核实
 - [refactor] [hr/service.py 多处直调 time.time() 与 now_fn 注入不一致, 假时钟测试不可控](26-10-02-0526-refactor-hr-service-clock-injection-inconsistent.html) — hr/service.py 两处直调 time.time()(fail.last_ts / _advance_observation)绕过 now_fn 注入, 假时钟下行为不可控; 26-10-02 _merge_seen 收编时仅处理同函数一处
 - [perf] [渐进灌入期主循环掉拍: max_tasks_per_tick 自适应](26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — --ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s), 灌入期每拍还债; 给 max_tasks_per_tick 做自适应(候选列于 W5, 未实施)
 - [perf] [/api/state 全量构建拖垮主循环: 增量 rid 用满 + 分页/按需字段(5000 种子实测)](26-10-01-2218-perf-webui-api-state-full-scan.html) — 5000 种子下 /api/state 全量单次约 0.6s 抢占同进程主循环; 方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖, 方向②已由 shows-view issue 跟踪
-- [docs] [config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS](26-10-01-2212-docs-schema-docstring-tracker-field-levels.html) — TRACKER_FIELD_LEVELS 级别表随内核化重构整体退役后, config/schema/__init__.py 的 docstring 仍提及它, 与代码相反的文档漂移; 不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内
 - [question] [配置切分(每站点一份)是否做(存疑)](26-10-01-2212-question-config-split-per-site.html) — (存疑)把站点配置拆为每站点一份文件, 涉及加载/热重载/校验面, 待拍板
 - [question] [基于搜索的辅种方式可行性(存疑)](26-10-01-2212-question-search-based-recheck-feasibility.html) — (可行性存疑)用站点搜索发现可辅种资源的思路, 待可行性结论
 - [refactor] [重新梳理 ignore_next_action_error / stop_following_rules_if 语义](26-10-01-2211-refactor-rules-keys-semantics-review.html) — 两个规则容错键的语义/交互需要重新梳理(命名、默认值、组合行为)
@@ -71,11 +69,9 @@
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵](26-09-21-1408-chore-ci-no-windows-runner.html) — pitfalls 已载平台差异史; 托盘/注册表自启/WinRT 通知等 Windows 专属路径只有手动跑测试才被执行
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
-- [docs] [文档漂移: README 称 995 用例(实测 1098), modules.md 行数快照多文件 +34%~+201%](26-09-21-1408-docs-docs-readme-modules-drift.html) — 知识库守卫不覆盖数字类事实, 漂移静默累积; 易腐数字建议守阵化或从文档退场
 - [perf] [大库下四视图全量重建是单轮成本大头, 追剧视图聚合最重](26-09-21-1408-perf-webui-shows-view-full-rebuild.html) — P2: 5000 种子单轮 ~550ms(项目实测); 轮询分档已缓解, 剩余痛点在 shows 全量聚合与前端全量重算
 - [refactor] [类型注解完整覆盖仅 43%, 无 mypy/pyright 配置](26-09-21-1408-refactor-type-annotations-mypy.html) — 749 个 def: 完整 43%/部分 41%/无 16%(AST 实测); 建议渐进接入, 先 torrents/config 后 mixins/web
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
-- [docs] [两个 skill 对写 USER.md 的口径相反](26-09-20-1427-docs-skill-user-md-write-conflict.html) — aesthetic-preset-library 要求写入 USER.md, autoclaw INTERACTIONS.md 明令禁止回写
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
 ## In Progress
@@ -86,6 +82,7 @@
 
 - [test] [ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest](26-10-03-0521-test-test-claim-chain-gate-coverage.html) — test.quick 闸门 match 只盯 src/tests, 纯文档轮不触发 pytest; 双向认领链唯一机检 test_claim_chain_is_bidirectional 只活在 pytest, gen_doc_map --check 只查 doc-topic 主键 —— 657366c3 由此带单向链入库卡死主线
 - [bug] [ui_harness --hr-site 启动即崩: HrIdentity 枚举 v3 漂移](26-10-02-1900-bug-ui-harness-hr-site.html) — scripts/ui_harness.py --hr-site 启动 AttributeError: 引用已不存在的 HrIdentity.VERIFIED_NON_HR(现行 v3 三态 HR/RELEASED/NO_EVIDENCE), 桩工具与 hr/resolve.py 漂移
+- [docs] [AUMID 机制文档漂移两处: core-domain.md 称进程须设显式 AppUserModelID(与零调用点事实不符) + tray docstring 残留 AutoQB.UI.lnk](26-10-02-0728-docs-aumid-docs-drift.html) — core-domain.md:27「进程须先设显式 AppUserModelID」与 _set_windows_appid 生产零调用点事实不符; tray/app.py _set_windows_appid docstring 残留「对应开始菜单 AutoQB.UI.lnk」(9891c030 已改注册表键机制)
 - [bug] [主循环 except Exception 吞 _tick 的 StopIteration: 一旦触发即静默空转死循环](26-10-02-0442-bug-mainloop-stopiteration-swallowed.html) — qbmanager 主循环对 _tick 的 except Exception 会吞 StopIteration, 触发即 while True 空转死循环(无限快转不干活); 目前仅测试 mock 耗尽场景复现, 生产触发面未证实
 - [bug] [hr/service._finish_wave 末尾无条件 discard 三个告警去重集合, 每波重报与注释设计不符](26-10-02-0441-bug-hr-finish-wave-warn-dedupe-reset.html) — _finish_wave 无条件 discard 登录失效/无通道等三个告警去重集合, 「每站只报一次」的注释设计与实际每波重报不符; P1 覆盖提升时测试按实测行为断言
 - [bug] [tray._set_windows_appid 读回校验在非打包进程恒假: GetApplicationUserModelId 返回 15703 而非 122](26-10-02-0441-bug-tray-appid-readback-dead-branch.html) — _set_windows_appid 设置成功(hr=0)但读回校验对非打包进程恒返回 APPMODEL 15703, app.py:155 的 ==122 分支永不命中; 任务栏 python 图标 issue 的排查不可依赖此读回校验
@@ -93,6 +90,7 @@
 - [test] [qbmanager.py:529/539 web resync/truth_pending 主循环弧 4 单位单测不可达(web 未启用路径)](26-10-02-0441-test-qbmanager-web-arc-unreached.html) — qbmanager 主循环 web 真值弧(529/539, 取证 26-10-02)在 web 未启用的单测环境不可达, 覆盖提升后仅剩的 4 单位长尾; 归后续长尾轮或 web/tray 集成测试
 - [test] [test_budget_unit_wait_and_caps xdist 全量下偶发失败(单跑/整文件均绿)](26-10-02-0306-test-hr-budget-wait-flaky.html) — 覆盖提升 P1 T1.1 新增的 _Budget 等待记账用例在 xdist 全量下偶发 AssertionError, 单跑与整文件(77 passed)均绿; 与 throttle/mainloop sleep 容差族同族
 - [bug] [HrEntry.last_seen 全库无写入点, INDEX_RETENTION 过期清理分支永不触发](26-10-01-2335-bug-hr-entry-last-seen-dead-prune.html) — HrEntry.last_seen 无任何写入点恒 0.0, service 两处 INDEX_RETENTION 过期清理分支成死代码
+- [docs] [config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS](26-10-01-2212-docs-schema-docstring-tracker-field-levels.html) — TRACKER_FIELD_LEVELS 级别表随内核化重构整体退役后, config/schema/__init__.py 的 docstring 仍提及它, 与代码相反的文档漂移; 不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内
 - [bug] [hr.token 生成是非原子写, 半截文件导致通道密钥静默漂移 (与 web.token 同族)](26-10-01-2151-bug-hr-channel-credential-atomic-write.html) — hr.channel resolve_token 用 O_TRUNC 直写 hr.token, 非空半截密钥被持久化, 扩展侧鉴权 401
 - [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui
 - [feat] [快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发](26-10-01-2108-feat-webui-selection-follow-mouse.html) — 键盘高亮选中与鼠标点击选中是两套状态, 需合并为单一套随最后操作源移动
@@ -120,6 +118,7 @@
 - [bug] [WebUI 鉴权面三个低危加固点: SSE token 查询串 / config-public 暴露 / proxy_headers](26-09-21-1408-bug-web-auth-hardening-minors.html) — SSE ticket 化或 fetch 流消费; /api/config/public 限 loopback; uvicorn 显式 proxy_headers=False 防反代 XFF 误判
 - [bug] [skip_local_verify 开启后无 Origin/Host 校验, 本机任意网页可跨站驱动 WebUI 写命令](26-09-21-1408-bug-web-skip-local-verify-csrf.html) — P2: CSRF+DNS rebinding, 删除/暂停/限速写动作照常入队执行; 默认关闭但开关一开即洞
 - [bug] [tracker URL 含 passkey 全文写入日志, 可经 /api/log 读回](26-09-21-1408-bug-web-tracker-url-passkey-log.html) — P2: 私站 announce URL 内嵌 passkey, 轮转日志备份/同机进程是泄露面; 建议单点 sanitize_tracker_url 脱敏
+- [docs] [文档漂移: README 称 995 用例(实测 1098), modules.md 行数快照多文件 +34%~+201%](26-09-21-1408-docs-docs-readme-modules-drift.html) — 知识库守卫不覆盖数字类事实, 漂移静默累积; 易腐数字建议守阵化或从文档退场
 - [refactor] [web.py create_app 单函数 926 行, 鉴权与全部端点挤在一个工厂函数](26-09-21-1408-refactor-web-create-app-monolith.html) — P1: 全项目最大函数坐在唯一对外暴露面里, 本次审计三条安全发现同出一文件; 建议按域拆 Router
 - [refactor] [WebUIRuntime 经 self._host 回调 QbManager 私有方法, 无 Protocol 约束](26-09-21-1408-refactor-web-runtime-host-protocol.html) — web_runtime.py:312/317/479 调 _build_search_index/_state_kind 等; 建议 HostCapabilities Protocol + 单写者假设注释
 - [bug] [热重载 L2 分支重读磁盘 state, 运行期内存态被回滚到上次退出版本](26-09-21-1347-bug-backend-hot-reload-l2-state-rollback.html) — apply_new_config L2 分支 self.state=_load_state() 用磁盘旧版覆盖内存态, Web UI 改规则保存即确定性触发
@@ -135,6 +134,7 @@
 - [bug] [WebUI 列设置(顺序/显示/宽度)经常被重置](26-09-20-1800-bug-webui-column-prefs-reset.html) — 表格列的顺序/显隐/宽度偏好偶发丢失, 刷新后回到默认布局
 - [bug] [状态栏上传/下载速度不更新, 恒显示 0](26-09-20-1646-bug-webui-statusbar-speed-always-zero.html) — 状态栏速度由前端对 groups 求和(totalDl/totalUl), 真机有下载/上传时仍恒为 0
 - [chore] [grill-me skill 是 2 行占位 stub](26-09-20-1427-chore-skill-grill-me-empty-stub.html) — grill-me 仅含 openai.yaml 与 2 行 SKILL.md, 无实际内容却占一个技能位
+- [docs] [两个 skill 对写 USER.md 的口径相反](26-09-20-1427-docs-skill-user-md-write-conflict.html) — aesthetic-preset-library 要求写入 USER.md, autoclaw INTERACTIONS.md 明令禁止回写
 - [test] [主循环节拍断言无容差: 机器负载高时偶发假红](26-09-20-0952-test-mainloop-tick-timing-flaky.html) — test_qbmanager.py:186 断言 elapsed >= 0.05 无容差, 负载下实测 0.046s 即假失败
 - [docs] [conventions.md 的『绝对不要 push』与 AGENTS.md 现行『提交=commit+自动推送』矛盾](26-09-19-2359-docs-memory-bank-push-rule-drift.html) — 知识库 Git 约定仍写禁 push, 与 2026-09-19 用户新规相反, 会让 agent 拒绝推送
 - [bug] [3s 兜底超时后补丁值永久留在行上: 「不再贴、等下轮服务端」在 rid 门控下不成立](26-09-19-2141-bug-webui-pending-timeout-stale-patch.html) — isPending() 超时只 delete pendingOps[hash], 注释称'下轮以服务端为准'; 但 rid 未变时服务端不回传数组、行对象不被替换 ⇒ 乐观补丁(kind=paused)留在行上不走。hang 模式实测: 3.66s 清 pending 后行仍 s-paused, 真值 s-downloading
