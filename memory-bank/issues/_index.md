@@ -21,7 +21,7 @@
 | refactor | 5 |
 | feat | 22 |
 | chore | 3 |
-| question | 7 |
+| question | 6 |
 
 ## Open
 
@@ -52,7 +52,6 @@
 - [question] [同组中无已完成种子时拒绝跳检](26-10-01-2147-question-skipcheck-no-completed-in-group.html) — [?]规则想法: 组内没有任何已完成成员时拒绝跳检(防误跳), 待拍板
 - [feat] [追剧视图完善: 同剧判定调研与分组排序打磨](26-10-01-2138-feat-webui-shows-grouping-research.html) — 追剧视图已加但不完善: 同剧判定需调研头脑风暴, 组内按季/集排序, 多站点辅种不分开显示
 - [feat] [tracker error/warning 状态展示, 且可配置忽略错误或警告](26-10-01-2138-feat-webui-tracker-error-warning-state.html) — 为种子/组的 tracker 状态增加 error/warning 呈现, 并支持配置忽略(不告警不阻断)
-- [question] [WEBUI 流量历史图做不做(待取舍)](26-10-01-2138-question-webui-traffic-history-chart.html) — [待取舍] 是否为 WEBUI 增加流量历史图, 与单种/全局统计重设计同族
 - [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 - [feat] [设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色](26-10-01-2137-feat-webui-settings-help-followup.html) — 「?」说明全面改写(Done)后的遗漏: 站点设置「删除标签格式」、自动化「彻底删除标签」等; 且「?」按钮边框与发光颜色应随选项色(危险项红等)
 - [bug] [删除种子(同时删除文件)会引起缺文件 WARNING](26-10-01-2129-bug-webui-delete-files-missing-warning.html) — 连文件一起删除的种子被缺文件扫描误报 WARNING, 删除路径需与缺文件检测互斥
@@ -147,6 +146,7 @@
 ## Dropped
 
 - [bug] [hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发](26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail.html) — _do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after>0; 与已修的 last_seen 死分支同族
+- [question] [WEBUI 流量历史图做不做(待取舍)](26-10-01-2138-question-webui-traffic-history-chart.html) — [待取舍] 是否为 WEBUI 增加流量历史图, 与单种/全局统计重设计同族
 - [bug] [WEBUI 批量操作引发 WARNING 桌面通知](26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
 
 ## Superseded

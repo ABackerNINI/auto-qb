@@ -411,21 +411,21 @@
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">跨组文件交叉紧急处置:防止新种子覆盖已下载/已完成文件<span class="flag">需重新授权</span></span>
             <div class="note">入池时标「紧急处置」。v1-W2 曾入列,用户明确排除后未动;v2 仍列于此——开工需用户重新授权,认领后先出方案拍板。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无实现痕迹: _check_download_conflicts 仍限同组(grouping_mod.py:374), 全 src 无跨组交叉检测; 开工尚需重新授权</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-feat-group-move-atomicity.html">26-10-01-2147</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">整组迁移防进度丢失(qB 逐个移动同组种子的问题)</span>
             <div class="note">qB 一次设定多个种子位置会依次移动,同组多个种子随机丢进度。与已 Done 的 0219(.!qB 后缀)同属 qB 移动行为族,上游定性可复用。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无实现痕迹: set_location 现有调用点均单 hash 直发(transfer.py:22 / commands.py:403), 无整组串行化或组守卫</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2203-feat-disaster-site-rebuild.html">26-10-01-2203</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">现场重建:硬盘/qB 损坏后重建辅种现场<span class="flag">方向待设计</span></span>
             <div class="note">备份/导出/重放三个方向均未定;大件,先方案后动手,与黄金法则 3(状态持久化)同源,设计时对照。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">方案未出: 全 src 无现场重建/备份导出落地代码, 三方向仍待设计</span></td>
         </tr>
       </tbody>
     </table>
@@ -443,28 +443,28 @@
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">/api/state 全量构建拖垮主循环:增量 rid 用满 + 分页/按需字段<span class="flag">最大杠杆</span></span>
             <div class="note">5000 种子单次约 0.6s 抢占同进程主循环;方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖,方向②由下一条跟踪。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">未动: api_state 仍缺省 rid=-1 全量(state.py:33), 分页/按需字段未做, 「先按真实前端节奏复测」未执行</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html">26-09-21-1408</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">大库下四视图全量重建是单轮成本大头,追剧视图聚合最重<span class="flag">P2</span></span>
             <div class="note">5000 种子单轮 ~550ms(项目实测);剩余痛点在 shows 全量聚合与前端全量重算。与上一条方向②同源,建议同一批测量后分工。v1-W4 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">未动: _build_shows_view 仍按 by_hash 全量三层聚合(views.py:612), 无 dirty 增量路径</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html">26-09-19-2122</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">节拍门控未减少总重建次数:一半只是从主循环搬到请求路径</span>
             <div class="note">3s 客户端档实测 41→40 次重建,未省 CPU;省下的 50% 只出现在 6s 档。先复测再拍方向:保留/回退/换方向。v1-W4 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">未动: 两生产者结构原样 —— 主循环「已取走」门控(runtime.py:351)与请求路径脏即重建(ensure_state, runtime.py:661)并存, 复测拍方向未执行</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2218-perf-mainloop-max-tasks-adaptive.html">26-10-01-2218</a></td>
           <td class="ttype">perf</td><td class="ttier">standard</td>
           <td><span class="ttl">渐进灌入期主循环掉拍: max_tasks_per_tick 自适应</span>
             <div class="note">--ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s),灌入期每拍还债;候选方案已列于 issue 内,未实施。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">未实施: max_tasks_per_tick 仍为静态配置(models.py:311 默认 20, qbmanager.py:688 直传 run_due), 无自适应逻辑</span></td>
         </tr>
       </tbody>
     </table>
@@ -482,42 +482,42 @@
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">「在线核实」与「全站HR」两个选项的区别说明/取舍</span>
             <div class="note">两选项语义不清:补文档说明或合并冗余选项,待定。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">未拍板; v3 收敛后「全站HR」独立选项已不存在(仅 hr_check 组 + 站点形态 全站型/清单型 标签), 拍板前先核对新设置面下混淆是否仍成立</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-question-hr-same-group-download-priority.html">26-10-01-2147</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">HR 在线核实同组间优先核实下载量高的种子(前提待商榷)</span>
             <div class="note">前提「种子在 A 站考核中就不会在 B 站考核」待商榷;与 HR 联动 feat 的核实顺序直接相关。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">未拍板: 核实仍按 enabled_sites 配置序逐站刷新(service.py:444), 无按下载量排序; 前提待商榷原样</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-question-skipcheck-no-completed-in-group.html">26-10-01-2147</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">同组中无已完成种子时拒绝跳检</span>
             <div class="note">防误跳的规则想法,待拍板;若采纳会改跳检守卫逻辑。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">未拍板: 跳检路径无「组内无已完成拒绝跳检」守卫, 拍板前不动手</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-feat-hr-verify-sync-hr-tags.html">26-10-01-2147</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">HR 在线核实同步修改 HR 标签/分类<span class="flag">被上三条 gating</span></span>
             <div class="note">核实结论变化时同步增删 HR 相关标签/分类(考核中/未达标等),当前无此联动。与上面三条问项同属 HR 语义,拍板后动手。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无联动: hr/ 目录无标签/分类写入点, add_tags/remove_tags 仅 grouping(MISSING) 与 maintenance(tracker 规则)使用</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">重新设计单种周期上传/下载量统计<span class="flag">待拍板</span></span>
             <div class="note">upload_size 四条件与 begin_round/upload_delta/upload_snapshots 底座已随计划 26-09-27-1232 暂时移除;待拍板:补下载量口径或改 global_* 全局口径。v1-W5 保留。</div></td>
-          <td></td>
+          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">未拍板: 移除态未变(versioning.py:77 v1→v2 仍清 upload_snapshots, 条件/表达式/底座零恢复), 两候选均未出计划</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2138-question-webui-traffic-history-chart.html">26-10-01-2138</a></td>
           <td class="ttype">question</td><td class="ttier">light</td>
           <td><span class="ttl">WEBUI 流量历史图做不做(待取舍)</span>
             <div class="note">与单种/全局统计重设计同族——与上一条一并拍板,避免口径定了又推翻。</div></td>
-          <td></td>
+          <td><span class="st st-stale">⛔ 已过时</span><span class="stwhy">全局流量历史图 09-15 已落地(/api/traffic/history + 双系列折线图, 数据源为限速曲线 Traffic Monitor, 与被移除的单种统计底座无关), 入池前提「无历史数据可画」不成立; 单种维度归 1248 —— 池已改 Dropped</span></td>
         </tr>
       </tbody>
     </table>
@@ -831,6 +831,7 @@
   <section id="cl">
     <div class="sec-head"><span class="sec-no">§A</span><h2>变更记录</h2></div>
     <div class="changelog">
+      <div class="cl-row"><span class="v">v2.2</span><span class="d">26-10-02-1728</span><span class="t">清偿核对批次 2/5: W3-W5 共 13 条 —— ⏳ 12 / ⛔ 1, 无 ✅/🔶。⏳ 12 条逐一静态核实无实现痕迹(W3 三 feat 无方案无码: 全 src 无跨组交叉检测/整组迁移串行化/现场重建; W4 四 perf 未动: api_state 仍缺省 rid=-1 全量、_build_shows_view 仍全量聚合、两生产者门控结构原样、max_tasks_per_tick 仍静态; W5 五条未拍板/无联动); ⛔ 2138-流量历史图入池前提不成立 —— 全局流量历史图 09-15 已落地(/api/traffic/history + 双系列折线图, 数据源为限速曲线 Traffic Monitor, 与被移除的单种统计底座无关), 池已回写 Dropped。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2.1</span><span class="d">26-10-02-1705</span><span class="t">清偿核对批次 1/5: 九个波次表加「状态」列(五档图例见 §1), 本批核对 W1-W2 共 11 条 —— ✅ 5 / ⛔ 2 / 🔶 1 / ⏳ 3。✅ 五条池内 26-10-02 已 Done, 修复 commit 逐一确认(2151&#8594;bc24631b, 2335&#8594;54db09f2, 1408-CSRF&#8594;36dc8ba6, 1408-hardening&#8594;c37f3674, 1702&#8594;23f37df6); ⛔ 两条回写池状态(2129-hotreload-ext-vanish&#8594;Superseded 旧机制被取代, 2129-batch-warning-notify&#8594;Dropped min_level=ERROR 前提消失); 🔶 2002 伪警示条核心仍在、失效键半边已被未知键全量校验覆盖; ⏳ 三条无修复证据维持待处理。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2</span><span class="d">26-10-02-0234</span><span class="t">改版:v1 后清偿 12 条、新入池 46 条,未决 31&#8594;59;test 类型清零后重排九波,起点前移到数据与凭据;transmission 挂账更新为「报告已出停在拍板」;26-09-22-2221 标注需重新授权。</span></div>
       <div class="cl-row"><span class="v">v1</span><span class="d">26-10-01-1758</span><span class="t">初版:31 条未决全量摸排,分七波;只读口径,零代码分析。</span></div>
