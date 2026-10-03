@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-traffic-chart-resize">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="uPlot 流量图取打开时刻容器宽度, 窗口 resize 后不自适应">
 <meta name="issue-summary" content="三处 qb 流量图(全局弹层/单种抽屉流量页签/分组流量弹层)建图取打开时刻容器宽度, 浏览器 resize 后画布不重算, 重开即恢复">
 <title>uPlot 流量图取打开时刻容器宽度, 窗口 resize 后不自适应 · bug · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-04-0134-bug-webui-traffic-chart-resize</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-04 01:34</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -91,12 +91,16 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>对存活图表挂 <code>ResizeObserver</code>(或 window resize 监听)按容器宽度重设 uPlot 尺寸; 三挂点共用同一建图入口, 一处修三处受益。</p>
+    <p><strong>复验</strong>：2026-10-04（基线 HEAD 4805f5f5）仍复现 —— <code>_qbChartBuild</code> 里 <code>host.clientWidth</code> 建图时一次取定, 全文件无 <code>ResizeObserver</code>/<code>resize</code> 监听, 与建议一致。</p>
+    <p><strong>实际修法</strong>：按建议 —— 建图后对宿主挂 <code>ResizeObserver</code>, 宽度变化即 <code>u.setSize({width, height:300})</code> 重画并同步 <code>_qbChartWs</code>(悬停 flip 折算跟着对); 回调带双守卫(图已被重建/销毁即自摘 + 宿主脱离 DOM 或 0 宽不 <code>setSize</code>, 覆盖 torrent 切页签只停轮询不销毁图的路径); <code>_qbChartDestroy</code> 断开 observer。宿主 <code>.qb-chart-host</code> 为 <code>width:100%</code> 不依赖图内容, 观察不成环。</p>
+    <p><strong>验证</strong>：<code>node --check</code> 语法过; <code>commands run test.quick</code> 2419 passed, 3 skipped(含 <code>test_frontend_qb_traffic_chart_wiring</code> 新增四条 resize 守阵断言)。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-04 01:34 — 入池，状态 <strong>Open</strong>（计划外，未修；来源：plan 26-10-03-0946 实施轮 · 用户拍板入池）</li>
+      <li>2026-10-04 — <strong>Open → Done</strong>（用户指派认领；按建议修法实施并验证通过，改动随本次提交入库）：复验 + 修法 + 验证数字见 03 节。</li>
     </ul>
   </section>
 

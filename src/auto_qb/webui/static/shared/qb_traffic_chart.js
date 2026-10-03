@@ -21,6 +21,9 @@
  * 切走页签由各 close/switch 路径 _qbPollStop 显式 clearInterval —— 只挂打开期间, 不后台常驻。
  * meta.stale=true 的响应照常渲染(读竞态兜底位, §08, 前端不特殊处理)。
  *
+ * 容器 resize 自适应: 建图宽度不是一次取定 —— 建图后对宿主挂 ResizeObserver, 宽度变化即
+ * u.setSize 重画(高度恒 300); 销毁在 _qbChartDestroy 断开, 自摘守卫见 _qbChartBuild 内注。
+ *
  * 令牌纪律: canvas 内色值(series stroke/grid/axis)无法引用 CSS 变量, 一律在建图时读
  * 三主题令牌(getComputedStyle(:root)); DOM 侧(十字线样式/uPlot 结构样式)由 _qbChartInjectCss
  * 注入 token 化样式(var(--fg-dim)), 换肤自动跟随 —— 禁止硬编码色值。
@@ -319,6 +322,10 @@ window.AQB_QB_TRAFFIC = {
     },
     _qbChartDestroy(scope) {
       if (!this._qbCharts) return;
+      if (this._qbChartRos && this._qbChartRos[scope]) {
+        this._qbChartRos[scope].disconnect();
+        this._qbChartRos[scope] = null;
+      }
       const u = this._qbCharts[scope];
       if (u) {
         u.destroy();
@@ -391,7 +398,26 @@ window.AQB_QB_TRAFFIC = {
           }],
         },
       };
-      this._qbCharts[scope] = new uPlot(opts, [data.xs, data.up, data.dl], host);
+      const u = this._qbCharts[scope] = new uPlot(opts, [data.xs, data.up, data.dl], host);
+      // 容器 resize 自适应(便签 26-10-04-0134): 建图宽度一次取定后画布不重算 —— 对宿主挂
+      // ResizeObserver, 宽度变了 setSize 重画(高度恒 300 不参与); 宿主 width:100% 不依赖图
+      // 内容(三主题 views.css .qb-chart-host), 观察不会成环。自摘守卫: 图被重建/销毁
+      // (下次 build 先走 _qbChartDestroy 断开)或宿主 DOM 已随 v-if 拆除(torrent 切页签只停
+      // 轮询不销毁图, 脱离 DOM 后 RO 报 0 宽)即断开, 不留对旧宿主的观察。
+      if (!this._qbChartRos) this._qbChartRos = {};
+      const ro = new ResizeObserver(() => {
+        if (this._qbCharts[scope] !== u || !host.isConnected) {
+          ro.disconnect();
+          return;
+        }
+        const w = host.clientWidth;
+        if (w > 0 && w !== this._qbChartWs[scope]) {
+          this._qbChartWs[scope] = w;
+          u.setSize({ width: w, height: H });
+        }
+      });
+      ro.observe(host);
+      this._qbChartRos[scope] = ro;
       // prism 五主题动态换肤(theme.js 派发 autoqb:themechange): 令牌值变了就重建(canvas 色不认 CSS 变量)
       if (!this._qbThemeBound) {
         this._qbThemeBound = true;
