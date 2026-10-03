@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-copytext-underscore-method">
+<meta name="issue-stamp" content="26-10-03-1412">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-copy-btn">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="复制按钮 _copyText 在 Vue 3.5 模板中解析失败">
+<meta name="issue-summary" content="drawer/popovers 模板用 _ 前缀方法 @click, 真浏览器恒抛错, 两处复制钮失效">
+<title>复制按钮 _copyText 在 Vue 3.5 模板中解析失败 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>复制按钮 _copyText 在 Vue 3.5 模板中解析失败</h1>
+    <p class="lede">drawer/popovers 模板用 _ 前缀方法 @click, 真浏览器恒抛错, 两处复制钮失效</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-03-1412-bug-webui-copytext-underscore-method</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-03 14:12</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">另一 agent 上报（真浏览器验证）</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><strong>来源</strong>：另一 agent 在真浏览器验证 WebUI 抽屉 / 弹窗时上报（2026-10-03）；本轮只做入池记录，
+      <strong>未起真浏览器复现</strong>，报错原文未采集（见第 02 节备注）。</p>
+    <p><strong>现象</strong>：<code>shared/tpl/drawer.html</code> 常规页长值块行（路径 / 哈希 / 备注）与
+      <code>shared/tpl/popovers.html</code> 弹窗详情行的「复制」图标按钮，<code>@click</code> 处理器写成下划线前缀的
+      <code>_copyText(...)</code>；真浏览器点击恒抛错，复制功能不可用。</p>
+    <p><strong>触发条件</strong>：抽屉常规页出现 <code>r.act === "copy"</code> 的行，或任意带 <code>modal.details</code>
+      的弹窗（删除确认框等）行 —— 点一下复制钮即触发。与平台、配置、数据量无关。</p>
+    <p><strong>同源坑位</strong>：<code>memory-bank/pitfalls/web-ui/vue-reactivity.md</code>「模板里不允许下划线前缀标识符」
+      已把本次记为 <strong>复发 1</strong>（2026-10-03；未命中原因：判别当时只写了插值形态，
+      <code>@click="_x()"</code> 这类事件绑定形态对不上没认出来）。<code>drawer.js</code> 侧已注释钉原因。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <p><strong>备注</strong>：本轮证据是<strong>代码与版本事实</strong>（取证 2026-10-03 14:12，本 clone 已同步到
+      <code>23796f3b</code>）；浏览器 console 原文由上报方口头给出「恒抛错」，<strong>本轮未采集</strong> ——
+      认领后第一步请补原文（复现手法见第 05 节末）。</p>
+<pre><code># 1) 模板里的两处调用（grep -rn '"_' src/auto_qb/webui/static --include=*.html）
+src/auto_qb/webui/static/shared/tpl/drawer.html:72
+                          @click="_copyText(String(r.text), r.label)">
+src/auto_qb/webui/static/shared/tpl/popovers.html:126
+                    @click="_copyText(String(d.value), d.label)">
+
+# 2) 全库模板里 "_" 前缀成员调用只有这 2 处
+$ grep -rEn '(@[a-z.]+|:[a-z-]+)="_' src/auto_qb/webui/static --include=*.html | wc -l
+2
+
+# 3) 定义确实存在（不是漏定义）
+src/auto_qb/webui/static/shared/commands.js:594
+    async _copyText(text, label) {
+
+# 4) JS 侧 this. 调用点可达（说明只有模板解析路径出问题）
+src/auto_qb/webui/static/shared/drawer.js:442
+      this._copyText(value, label);
+
+# 5) Vue 是内置的 prod 构建 —— 没有 dev 警告，失败是静默的
+$ head -c 120 src/auto_qb/webui/static/shared/vendor/vue.global.prod.js
+/** * vue v3.5.13 * (c) 2018-present Yuxi (Evan) You and Vue contributors ...
+
+# 6) 模板走 in-DOM 路径（boot 按清单 fetch 注入）
+src/auto_qb/webui/static/shared/boot.js:4
+ * 页面区模板拆在 tpl/*.html, 由这里按清单顺序 fetch 后注入, 全部成功才按序放行逻辑脚本</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>点「复制」图标按钮即触发 —— 抽屉常规页 <code>r.act === "copy"</code> 的行，或任意带 <code>modal.details</code> 的弹窗行。不需要特殊配置或数据量，必现。</td></tr>
+      <tr><td>影响范围</td><td>2 个模板共 2 处（全库模板里 <code>_</code> 前缀成员调用仅此 2 处，见第 02 节计数）。<code>drawer.js:442</code> 经 <code>this._copyText</code> 的纯 JS 调用路径<strong>不受影响</strong>（右键菜单「复制名称 / 哈希 / 磁力」仍可用）。</td></tr>
+      <tr><td>严重度</td><td>中 —— 复制功能整体不可用；且坑位记录指出 Vue 会抛 <code>ReferenceError</code> 并<strong>整块渲染失败</strong>（控制台只有一行），而我们用的是 <code>vue.global.prod</code>（v3.5.13，无 dev 警告）⇒ 静默。若上报属实，则不止按钮失效，可能整段不渲染（抽屉常规页 / 弹窗详情区）。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。
+      以下行号取证于 2026-10-03 14:12，基线 <code>23796f3b</code>。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/static/shared/tpl/drawer.html:72</code> · 表达式 <code>@click="_copyText(String(r.text), r.label)"</code> · grep 关键词 <code>r.act === 'copy'</code> / <code>f-row-act</code></li>
+      <li><code>src/auto_qb/webui/static/shared/tpl/popovers.html:126</code> · 表达式 <code>@click="_copyText(String(d.value), d.label)"</code> · grep 关键词 <code>d-copy</code> / <code>modal.details</code></li>
+      <li><code>src/auto_qb/webui/static/shared/commands.js:594</code> · 定义 <code>async _copyText(text, label)</code> · grep 关键词 <code>_copyText</code></li>
+      <li><code>src/auto_qb/webui/static/shared/drawer.js:442</code> · JS 侧调用 <code>this._copyText(value, label)</code>（对照组：JS 可达）</li>
+      <li><code>src/auto_qb/webui/static/shared/vendor/vue.global.prod.js</code> 文件头 · <code>vue v3.5.13</code> · grep 关键词 <code>vue v3</code></li>
+      <li><code>src/auto_qb/webui/static/shared/boot.js:4</code> · tpl/*.html 由 boot 按清单 fetch 注入（in-DOM 模板路径）· grep 关键词 <code>tpl/</code></li>
+      <li>坑位：<code>memory-bank/pitfalls/web-ui/vue-reactivity.md</code>「模板里不允许下划线前缀标识符」（复发 1）</li>
+    </ul>
+    <p>全量扫描命令（认领后重跑一次，确认范围没变）：</p>
+<pre><code>grep -rEn '(@[a-z.]+|:[a-z-]+)="_' src/auto_qb/webui/static --include=*.html   # 期望: 修前 2 处 / 修后 0 处</code></pre>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查 —— 本轮未起真浏览器复现，不把上报结论当结论写。</div>
+    <p><strong>已排除</strong>：不是漏定义 —— <code>commands.js:594</code> 确有 <code>_copyText</code>，且
+      <code>drawer.js:442</code> 用 <code>this._copyText(...)</code> 调得到，说明该成员在组件实例上是可达的；
+      差异只出现在<strong>模板表达式解析</strong>这一条路径上。</p>
+    <p><strong>上报方假设（未验证）</strong>：Vue 3.5 把 <code>_</code> 前缀当内部保留域，模板里的
+      <code>_copyText</code> 解析不到 ⇒ <code>ReferenceError</code> ⇒ 整块渲染失败。该说法与坑位
+      <code>vue-reactivity.md</code> 的记录一致。</p>
+    <p><strong>待排除</strong>：<code>commands.js</code> 的方法究竟以哪种方式挂进组件（mixin <code>methods</code> /
+      <code>setup()</code> 返回 / <code>data</code> 键）—— Vue 3 对 <code>_</code> / <code>$</code> 前缀的过滤规则
+      在 <code>data</code>、<code>setupState</code> 与 <code>methods</code> 上并不完全一样，需真机抓原始报错才能定性。</p>
+    <p><strong>复现手法</strong>：用 <code>scripts/ui_harness.py</code> 起页面（坑位文件里给过同类手法），
+      打开种子详情抽屉常规页点一次复制钮，DevTools console 取报错原文与栈。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <ol>
+      <li><strong>最小面（推荐）</strong>：保留 <code>commands.js::_copyText</code> 不动，在 methods 上补一个无下划线别名
+        <code>copyText(v, l) { return this._copyText(v, l); }</code>，两处模板改调 <code>copyText(...)</code>。
+        改动 = 2 行模板 + 1 处别名；JS 内部 <code>this._copyText</code> 调用点全部不动，回归面最小。</li>
+      <li><strong>彻底</strong>：把 <code>commands.js::_copyText</code> 重命名为 <code>copyText</code>，同步
+        <code>drawer.js:442</code> 的调用点。改 2 文件 3 处，代价是内部「<code>_</code> = 内部约定」的命名约定要一并调整。</li>
+      <li><strong>防复发（建议与 1 或 2 一起做）</strong>：加一条静态守卫 —— 模板里禁止 <code>_</code> / <code>$</code>
+        前缀标识符，且<strong>必须同时覆盖插值与指令表达式两类形态</strong>（本次复发的根子就是判别只记了插值形态，
+        <code>@click="_x()"</code> 没被认出来）。本轮扫描只有 2 处，可一次清干净后再上守卫。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-03 14:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">待认领：起真浏览器（<code>scripts/ui_harness.py</code>）打开抽屉常规页点一次复制钮，
+      取 console 报错原文与栈，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」，并把原文贴进第 02 节。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-03-1412-bug-webui-copytext-underscore-method.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
