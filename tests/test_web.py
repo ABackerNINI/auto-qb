@@ -222,7 +222,7 @@
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb): 75 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history): 76 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
 - test_drain_web_commands_bulk_skip_check_aggregated: bulk 跳检经 ops 逐 hash 串行(计划 26-10-02-1955 W3) —— 混合结果聚合回执分段计数(成功 / 同日去重 skip / 部分下载禁+执行失败 fail); 成功批 ok 回执且记录同日去重(skip_check_day 跨来源共享)
@@ -244,6 +244,12 @@
 - test_api_state_excludes_hr_entry_details: 体积守卫 —— 种子明细键不得进 /api/state 轮询载荷(计划 §8)
 - test_api_hr_site_entries_local_present: 明细行 local_present 本地库 join(计划 26-10-02-1936 §3.3 决策点③a) ——
   v1 命中/仅 v2 命中/大小写差异命中 -> True, 本地不存在 -> False(未做种)
+- test_api_hr_history_rows_from_real_wave: 拉取历史端点(计划 26-10-04-0312 §3.4)200 —— 行键面 = §3.4 全集,
+  真实波次(S2 记录器)落表; 完成徽章/触发人话/档位 lane_text/写者短标识全由后端算好
+- test_api_hr_history_site_filter: site 过滤只回该站; 未接入 404 点名已接入清单(与 entries 同款话术)
+- test_api_hr_history_guards: HR 未启用 400 / 取数服务缺席 409(与 entries 同款校验)
+- test_api_hr_history_limit_clamped: limit 截最新 N 条; 0 钳到 1(不回全量也不回空页)
+- test_api_hr_history_read_error_reported_not_raised: 站点文件读坏不抛 —— read_errors{site: err} 带出, rows 剔掉坏站
 - test_hr_user_visible_texts_no_graduation_wording: 否定守阵 —— 用户可见文案来源(hr status/resolve/events 字符串常量)「毕业」零残留
   (注释保留域术语, 决策点②); 无事实分支与带事实分支同文「在线·已达标」(testhr_view_fields_three_state 内钉)
 - test_api_keys_get_default_when_missing: 快捷键配置文件不存在 -> GET 回默认表(计划 26-09-28-0354 W6 §4.4)
@@ -5731,6 +5737,110 @@ def test_api_hr_site_entries_409_worker_absent(web_env, tmp_path):
     assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
 
 
+# ---------- 拉取历史(计划 26-10-04-0312 §3.4): GET /api/hr/history ----------
+
+
+def test_api_hr_history_rows_from_real_wave(web_env, tmp_path):
+    """200: 真实波次(S2 记录器落的事件)进历史表 —— 行键面 = §3.4 全集, 人话徽章后端算好"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    r = client.get("/api/hr/history", headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["enabled"] is True and body["read_errors"] == {} and body["now"] > 0
+    assert body["rows"], "夹具跑过一轮真实波, 历史表不能是空的"
+    row = body["rows"][0]
+    assert set(row) == {
+        "ts",
+        "ts_text",
+        "site",
+        "kind",
+        "kind_text",
+        "trigger",
+        "trigger_text",
+        "action",
+        "result_text",
+        "result_tone",
+        "reason",
+        "reason_kind",
+        "pages",
+        "rows",
+        "torrents_ok",
+        "torrents_fail",
+        "verified",
+        "elapsed_s",
+        "elapsed_text",
+        "lanes",
+        "notes",
+        "by",
+    }
+    assert row["site"] == "HHan" and row["kind"] == "wave"
+    assert row["result_text"] == "完成" and row["result_tone"] == "ok", "三档全跑完的波 -> 完成徽章(映射单点在 hr.status)"
+    assert row["trigger"] == "auto" and row["trigger_text"] == "自动"
+    assert row["ts"] > 0 and row["ts_text"] and row["elapsed_text"], "epoch 与人话并给(排序用原值, 展示用文案)"
+    assert row["lanes"] and all(l["lane_text"] for l in row["lanes"]), "各档 lane_text 人话随行给出"
+    assert row["by"] == "tester", "写者实例短标识随事件透传(多实例分辨「谁抓的」)"
+
+
+def test_api_hr_history_site_filter(web_env, tmp_path):
+    """site 过滤: 给了就只回该站; 未接入的站点 404 并点名已接入清单(与 entries 同款话术)"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    r = client.get("/api/hr/history?site=HHan", headers=auth)
+    assert r.status_code == 200
+    rows = r.json()["rows"]
+    assert rows and all(row["site"] == "HHan" for row in rows), "过滤键生效, 行只来自指定站点"
+    r = client.get("/api/hr/history?site=Nope", headers=auth)
+    assert r.status_code == 404 and "Nope" in r.json()["detail"] and "HHan" in r.json()["detail"]
+
+
+def test_api_hr_history_guards(web_env, tmp_path):
+    """HR 未启用 -> 400; 取数服务缺席(service=None) -> 409(与 entries 同款校验口径)"""
+    mgr, client = web_env
+    _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    mgr.config.hr_check.enabled = False
+    assert client.get("/api/hr/history", headers=auth).status_code == 400
+    mgr.config.hr_check.enabled = True
+    mgr.hr.service = None
+    r = client.get("/api/hr/history", headers=auth)
+    assert r.status_code == 409 and "取数线程未启动" in r.json()["detail"]
+
+
+def test_api_hr_history_limit_clamped(web_env, tmp_path):
+    """limit 查询参数: 截最新的 N 条; 0 钳到 1(FastAPI 只管 int 解析, 卫生钳制在这层做)"""
+    mgr, client = web_env
+    svc = _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    from auto_qb.hr.model import HrHistoryEvent
+
+    # 合成事件用未来时刻: 夹具真实波的 ts = 当前时间, 必须保证它排不进「最新 N 条」
+    base = time.time() + 1000.0
+    with svc.store("HHan").hold() as session:
+        for offset in (1000.0, 2000.0, 3000.0):
+            session.data.history.append(HrHistoryEvent(ts=base + offset, kind="wave", action="refreshed"))
+        assert session.commit(time.time()) == "written"
+    rows = client.get("/api/hr/history?limit=2", headers=auth).json()["rows"]
+    assert [r["ts"] for r in rows] == [base + 3000.0, base + 2000.0], "limit 截最新的 N 条"
+    rows = client.get("/api/hr/history?limit=0", headers=auth).json()["rows"]
+    assert len(rows) == 1, "limit<=0 钳到 1(不回全量也不回空页)"
+
+
+def test_api_hr_history_read_error_reported_not_raised(web_env, tmp_path):
+    """站点文件读坏不抛: read_errors{site: err} 原样带出, rows 剔掉坏站(表① 同款只读口径)"""
+    mgr, client = web_env
+    svc = _hr_status_env(mgr, tmp_path)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    svc.store("HHan").path.write_text("{not-json", encoding="utf-8")
+    r = client.get("/api/hr/history", headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rows"] == [], "坏站的数据不进行集(历史表宁缺勿错)"
+    assert "HHan" in body["read_errors"] and body["read_errors"]["HHan"], "坏文件本身就是要人看的信息"
+
+
 def test_api_state_excludes_hr_entry_details(web_env):
     """体积守卫: 种子明细键不得进 /api/state 轮询载荷(计划 §8) —— 明细只随表①按站点按需拉"""
     mgr, client = web_env
@@ -10134,6 +10244,7 @@ def test_cmd_trackers_log_sanitized(caplog):
 # (2026-09-28 ALT-01 增 POST /api/speed/alt 与 /api/speed/alt/toggle 两条, 计划 26-09-28-0037)
 # (2026-10-02 增 POST /api/events/ticket —— SSE 一次性票据换票, issue 26-09-21-1408 B-01)
 # (2026-10-03 增 3 条 GET /api/traffic/qb/* —— qB 口径流量图, plan 26-10-03-0946 §08 P4)
+# (2026-10-04 增 1 条 GET /api/hr/history —— 拉取历史时间轴, plan 26-10-04-0312 §3.4)
 _GOLDEN_ROUTES = {
     ("GET", "/"),
     ("GET", "/api/categories"),
@@ -10208,6 +10319,7 @@ _GOLDEN_ROUTES = {
     ("GET", "/newui/{rest:path}"),
     ("GET", "/api/hr/status"),  # M4: HR 站点级状态快照(只读; 与 --hr-status 同一口径)
     ("GET", "/api/hr/sites/{site}/entries"),  # 种子明细(计划 26-10-01-2216 §7 阶段1; 决策点②b 按站点按需拉)
+    ("GET", "/api/hr/history"),  # 拉取历史时间轴(计划 26-10-04-0312 §3.4; 表③ 数据源, 跨站合并)
     ("GET", "/api/sites/missing"),  # 站点导入: 未配置站点扫描(只读; 与 --export-yaml --only-missing 同口径)
     ("GET", "/api/webui/flags"),  # R2 跳检菜单开关(计划 26-10-02-1955 W1): 前端功能旗标(登录后, 读实时配置)
 }
@@ -10230,7 +10342,7 @@ def _iter_api_routes(routes):
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 75 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 76 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

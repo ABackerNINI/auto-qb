@@ -20,7 +20,7 @@
 """
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .model import (
     CHANNEL_DISABLED,
@@ -33,6 +33,7 @@ from .model import (
     SOURCE_EXEMPT,
     SOURCE_NOT_LISTED,
     SOURCE_SATISFIED,
+    HrHistoryEvent,
     HrSiteData,
 )
 from .ratelimit import day_key, next_allowed_at, next_day_reset, quota_left
@@ -65,6 +66,35 @@ SOURCE_TEXTS = {
     SOURCE_NOT_LISTED: "未列出",
     SOURCE_SATISFIED: "已达标",
 }
+
+#: 拉取历史 · 事件种类人话(计划 26-10-04-0312 §3.4): defer 与 wave 的 waiting 徽章同为
+#: 「拦下」档, 语义区分(自动波被拦 vs 立即拉取被拦)靠 kind_text, 不另设第二套 action 映射
+HISTORY_KIND_TEXTS = {
+    "wave": "取数波",
+    "defer": "立即拉取被拦",
+    "confirm_empty": "人工对账",
+}
+
+#: 拉取历史 · 触发方式人话(表③ 触发列; 与 service 的 trigger 口径一一对应)
+HISTORY_TRIGGER_TEXTS = {
+    "auto": "自动",
+    "manual": "立即",
+    "confirm": "对账",
+}
+
+#: 拉取历史 · 结果徽章映射(单点): action -> (人话, 色档)。色档取值 = 前端 pill 档位
+#: (ok / warn / dim / err / blue); 键 = service.ACTION_* 波终态的字面量 —— 刻意不反向
+#: import 引擎模块(本模块保持纯展示), 字面量由测试钉死对齐。
+#: kind='confirm_empty' 特判优先于查表(其 action='confirm-empty' 本就不在表内)。
+HISTORY_RESULT_BADGES = {
+    "refreshed": ("完成", "ok"),
+    "partial": ("部分·截断", "warn"),
+    "waiting": ("拦下·未到时刻", "dim"),
+    "no-channel": ("通道不可用", "err"),
+    "error": ("失败", "err"),
+    "skipped-locked": ("锁忙", "dim"),
+}
+HISTORY_RESULT_CONFIRM = ("对账", "blue")  #: confirm_empty 事件的特判徽章(计划 §3.4)
 
 
 @dataclass(slots=True)
@@ -429,6 +459,131 @@ def entry_details(data: HrSiteData) -> List[EntryDetail]:
     return out
 
 
+@dataclass(slots=True)
+class HistoryLane:
+    """单档终态快照(拉取历史展开小表的一行; 与 HrHistoryEvent.lanes 同构 + 人话)"""
+
+    lane: str = ""
+    lane_text: str = ""  #: 档位人话(取自 LANE_TEXTS 单点)
+    status: str = ""
+    status_text: str = ""  #: 档位状态人话(取自 LANE_STATUS_TEXTS 单点)
+    pages: int = 0
+    rows: int = 0
+    detail: str = ""
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class HistoryRow:
+    """单条拉取历史(WebUI 表③ 的行; 计划 26-10-04-0312 §3.4)
+
+    数值字段原样透传, 人话(ts_text / elapsed_text / kind_text / trigger_text / result_text /
+    result_tone / 各档 lane_text)全部由后端算好 —— 前端只展示不重算(表① 同款契约)。
+    `result_tone` 是结果徽章色档(ok/warn/dim/err/blue, 直接对应前端 pill 档位);
+    `ts`(epoch)与 `ts_text` 并给 —— 排序用原值、展示用文案。
+    """
+
+    ts: float = 0.0
+    ts_text: str = ""
+    site: str = ""
+    kind: str = ""
+    kind_text: str = ""
+    trigger: str = ""
+    trigger_text: str = ""
+    action: str = ""
+    result_text: str = ""
+    result_tone: str = ""
+    reason: str = ""
+    reason_kind: str = ""
+    pages: int = 0
+    rows: int = 0
+    torrents_ok: int = 0
+    torrents_fail: int = 0
+    verified: int = 0
+    elapsed_s: float = 0.0
+    elapsed_text: str = ""
+    lanes: List[HistoryLane] = field(default_factory=list)
+    notes: List[str] = field(default_factory=list)
+    by: str = ""
+
+    def to_dict(self) -> Dict:
+        return asdict(self)
+
+
+def _history_lanes(raw_lanes: List[Dict]) -> List[HistoryLane]:
+    """事件档位快照 -> 展示行(补 lane_text / status_text 人话; 脏键按缺省兜住不抛)"""
+    out: List[HistoryLane] = []
+    for item in raw_lanes:
+        if not isinstance(item, dict):
+            continue
+        lane = str(item.get("lane") or "")
+        status = str(item.get("status") or "")
+        out.append(
+            HistoryLane(
+                lane=lane,
+                lane_text=LANE_TEXTS.get(lane, lane),
+                status=status,
+                status_text=LANE_STATUS_TEXTS.get(status, status),
+                pages=int(item.get("pages") or 0),
+                rows=int(item.get("rows") or 0),
+                detail=str(item.get("detail") or ""),
+            )
+        )
+    return out
+
+
+def history_rows(datas: Mapping[str, HrSiteData], limit: int, now: float = 0.0) -> List[HistoryRow]:
+    """拉取历史导出(WebUI 表③ 行集; 计划 26-10-04-0312 §3.4) —— 跨站点合并成一条时间轴
+
+    - 合并各站点 history、按 ts 降序、截 limit(limit <= 0 回空表, 上限钳制是调用方的
+      参数卫生); 站点归属记进行 site 列(历史跨站点成时间轴, 站点列是前端过滤键);
+    - 结果徽章映射单点在 HISTORY_RESULT_BADGES(kind='confirm_empty' 特判优先于查表);
+      未知 action 回落原值 + dim(原值与人话并给的既有兜底范式, 不静默丢);
+    - `now` 为本次快照基准入参(与 site_status / build_site_statuses 同范式收口):
+      行内时刻均为绝对值, 当前无「N 前」类相对折算 —— 预留给后续同基准的相对时间字段。
+    """
+    merged: List[Tuple[float, str, HrHistoryEvent]] = []
+    for site, data in datas.items():
+        for ev in data.history:
+            merged.append((ev.ts, site, ev))
+    merged.sort(key=lambda item: item[0], reverse=True)
+    out: List[HistoryRow] = []
+    for ts, site, ev in merged[:max(0, int(limit))]:
+        if ev.kind == "confirm_empty":
+            result_text, tone = HISTORY_RESULT_CONFIRM
+        else:
+            result_text, tone = HISTORY_RESULT_BADGES.get(ev.action, (ev.action, "dim"))
+        out.append(
+            HistoryRow(
+                ts=ts,
+                ts_text=stamp_text(ts),
+                site=site,
+                kind=ev.kind,
+                kind_text=HISTORY_KIND_TEXTS.get(ev.kind, ev.kind),
+                trigger=ev.trigger,
+                trigger_text=HISTORY_TRIGGER_TEXTS.get(ev.trigger, ev.trigger),
+                action=ev.action,
+                result_text=result_text,
+                result_tone=tone,
+                reason=ev.reason,
+                reason_kind=ev.reason_kind,
+                pages=ev.pages,
+                rows=ev.rows,
+                torrents_ok=ev.torrents_ok,
+                torrents_fail=ev.torrents_fail,
+                verified=ev.verified,
+                elapsed_s=ev.elapsed_s,
+                elapsed_text=duration_text(ev.elapsed_s),
+                lanes=_history_lanes(ev.lanes),
+                notes=list(ev.notes),
+                by=ev.by,
+            )
+        )
+    return out
+
+
 def site_conf_interval(conf) -> float:
     """站点拉取间隔(秒, 计划 26-09-30-0240 改名: 原名「对账波周期」); 单独提出来是为了让
     「下次核对清单」这类字段的算法只有一处"""
@@ -470,6 +625,8 @@ def build_site_statuses(service, now: float, sites: Optional[Sequence[str]] = No
 __all__ = [
     "CHANNEL_TEXTS",
     "EntryDetail",
+    "HistoryLane",
+    "HistoryRow",
     "LaneStatus",
     "QuotaStatus",
     "SiteStatus",
@@ -480,6 +637,7 @@ __all__ = [
     "count_attested_empty",
     "duration_text",
     "entry_details",
+    "history_rows",
     "lane_counts",
     "LANE_TEXTS",
     "need_seed_text",

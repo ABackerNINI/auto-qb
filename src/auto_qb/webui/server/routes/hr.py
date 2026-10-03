@@ -1,4 +1,5 @@
-"""HR 在线核实状态路由: `/api/hr/status`(只读) / `/api/hr/refresh`(立即拉取, 计划 26-09-30-0240)。
+"""HR 在线核实状态路由: `/api/hr/status`(只读) / `/api/hr/refresh`(立即拉取, 计划 26-09-30-0240)
+/ `/api/hr/history`(拉取历史, 计划 26-10-04-0312 §3.4)。
 
 回答的问题: **每个站点的 HR 数据现在到哪一步了** —— 通道通不通、数据多新、覆盖证明成不成立、
 索引与回填进度、配额与熔断、以及「为什么现在不放行」。
@@ -14,8 +15,9 @@ from typing import Any, Dict, List, Mapping
 
 from fastapi import APIRouter, HTTPException
 
+from ....hr.model import HISTORY_CAP, HrSiteData
 from ....hr.report import run_hr_confirm_empty
-from ....hr.status import build_site_statuses, entry_details
+from ....hr.status import build_site_statuses, entry_details, history_rows
 from ..context import WebContext
 
 
@@ -183,5 +185,48 @@ def build_router(ctx: WebContext) -> APIRouter:
             "read_error": err or "",
             "now": time.time(),
         }
+
+    @router.get("/api/hr/history")
+    def api_hr_history(limit: int = 300, site: str = ""):
+        """拉取历史时间轴(只读; 计划 26-10-04-0312 §3.4, 表③ 的数据源)
+
+        校验与 /api/hr/sites/{site}/entries 同款: 总开关未启用 400、取数线程未启动 409;
+        site 可选过滤(给了就只回该站; 未接入是路径层面的不存在, 404 点名已接入清单)。
+        数据读取与 --hr-status 同款只读口径(逐站 store.read_unlocked 无锁只读): 写入是
+        原子替换, 无锁读到的必然是完整一份; 读坏不抛, read_errors{site: err} 原样带出
+        (坏文件本身就是要人看的信息, 表① 同款)。行字段全部来自 hr.status.history_rows
+        单点 —— 跨站合并 / ts 降序 / 截 limit 与全部人话徽章都由后端算好, 前端只展示。
+        limit 钳进 [1, HISTORY_CAP]: 查询参数卫生, 空页与不设防的全量都没意义。
+        """
+        manager.web.touch()
+        conf = getattr(manager.config, "hr_check", None)
+        if conf is None or not conf.enabled:
+            raise HTTPException(status_code=400, detail="HR 在线核实未启用")
+        runtime = getattr(manager, "hr", None)
+        service = getattr(runtime, "service", None)
+        if service is None:
+            raise HTTPException(status_code=409, detail="HR 取数线程未启动")
+        site = str(site or "").strip()
+        if site:
+            enabled = {
+                name
+                for name, tc in manager.config.trackers.items() if tc.hr_check is not None and tc.hr_check.enabled
+            }
+            if site not in enabled:
+                raise HTTPException(status_code=404, detail=f"站点 {site} 未接入 hr_check(已接入: {sorted(enabled)})")
+            names: List[str] = [site]
+        else:
+            names = list(service.enabled_sites())
+        datas: Dict[str, HrSiteData] = {}
+        read_errors: Dict[str, str] = {}
+        for name in names:
+            data, err = service.store(name).read_unlocked()
+            if err:
+                read_errors[name] = err
+            else:
+                datas[name] = data
+        now = time.time()
+        rows = [row.to_dict() for row in history_rows(datas, max(1, min(int(limit), HISTORY_CAP)), now)]
+        return {"enabled": True, "rows": rows, "read_errors": read_errors, "now": now}
 
     return router

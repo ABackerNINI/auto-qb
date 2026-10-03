@@ -21,6 +21,15 @@
 - test_model_infohash_of_falls_back_to_downloaded: infohash_of 回落永久层(v1 优先, 缺失回落 v2)
 - test_model_index_by_infohash_skips_inactive_and_empty: 反查表跳过非活跃与空 hash
 - test_model_from_json_drops_invalid_verified_records: 放行记录脏数据(无 hash/无时刻)不入账
+
+### 拉取历史导出(history_rows, 计划 26-10-04-0312 §3.4)
+- test_history_rows_merges_sites_desc_and_site_column: 多站合并成一条时间轴, ts 降序, 行带 site 归属
+- test_history_rows_limit_truncates_newest: limit 截最新的 N 条; limit<=0 回空表(上限钳制是调用方的参数卫生)
+- test_history_rows_badge_mapping: 结果徽章六态查表 + confirm_empty 特判优先 + defer 走 waiting 映射
+  (拦下 dim, kind_text 区分「取数波被拦/立即拉取被拦」) + 未知 action 回落原值不静默丢
+- test_history_rows_plain_texts_and_lanes: 人话字段取值 —— ts_text/elapsed_text 复用单点, kind/trigger
+  人话映射, lanes 附 lane_text/status_text(取 LANE_TEXTS/LANE_STATUS_TEXTS 单点), 计数字段透传
+- test_history_rows_field_surface: 行键面 = §3.4 全集; lane 子键面钉死(前端只消费后端算好字段的契约面)
 """
 from auto_qb.hr import report
 from auto_qb.hr.model import (
@@ -28,18 +37,23 @@ from auto_qb.hr.model import (
     SOURCE_NOT_LISTED,
     SOURCE_SATISFIED,
     HrEntry,
+    HrHistoryEvent,
     HrSiteData,
     HrVerified,
 )
 from auto_qb.hr.resolve import HrSiteView
 from auto_qb.hr.status import (
+    LANE_STATUS_TEXTS,
+    LANE_TEXTS,
     LaneStatus,
     QuotaStatus,
     SOURCE_TEXTS,
     blocking_reason,
     duration_text,
     entry_details,
+    history_rows,
     need_seed_text,
+    stamp_text,
 )
 
 
@@ -343,3 +357,125 @@ def test_mark_local_present_empty_hash_skipped():
     assert rows[4]["local_present"] is False, "空 hash 行恒不在本地库(空串不得因集合含空键而误命中)"
     assert rows[3]["local_present"] is True, "空串键不影响有 hash 行的正常探测"
     assert rows[1]["local_present"] is False and rows[2]["local_present"] is False, "不在本地库的行照常回 False"
+
+
+# ==================== 拉取历史导出(history_rows, 计划 26-10-04-0312 §3.4) ====================
+
+
+def _hist(ts: float, *, kind: str = "wave", trigger: str = "auto", action: str = "refreshed", **kw) -> HrHistoryEvent:
+    """最小历史事件: 只填被测面用到的字段, 其余走 dataclass 缺省"""
+    return HrHistoryEvent(ts=ts, kind=kind, trigger=trigger, action=action, **kw)
+
+
+def _datas(**sites) -> dict:
+    """{站点: 事件表} -> {站点: HrSiteData}(history 字段直挂; 合并/排序的被测面都在这)"""
+    return {site: HrSiteData(history=list(events)) for site, events in sites.items()}
+
+
+def test_history_rows_merges_sites_desc_and_site_column():
+    """多站合并成一条时间轴: 按 ts 降序交错排列, 行带 site 归属(前端站点 chips 的过滤键)"""
+    datas = _datas(
+        alpha=[_hist(100.0), _hist(300.0)],
+        beta=[_hist(200.0, trigger="manual", action="partial")],
+    )
+    rows = history_rows(datas, 10, 999.0)
+    assert [(r.site, r.ts) for r in rows] == [("alpha", 300.0), ("beta", 200.0), ("alpha", 100.0)], \
+        "跨站 ts 降序, 站点归属逐行带出"
+
+
+def test_history_rows_limit_truncates_newest():
+    """limit 截最新的 N 条; limit<=0 回空表(端点层钳到 [1, HISTORY_CAP], 这里守函数本体的底)"""
+    datas = _datas(alpha=[_hist(100.0), _hist(200.0), _hist(300.0)])
+    assert [r.ts for r in history_rows(datas, 2, 999.0)] == [300.0, 200.0]
+    assert history_rows(datas, 0, 999.0) == []
+
+
+def test_history_rows_badge_mapping():
+    """结果徽章映射(单点在 HISTORY_RESULT_BADGES): 六态查表 + confirm_empty 特判优先 +
+    defer 走 action=waiting 映射(拦下 dim, 语义区分靠 kind_text) + 未知 action 回落原值"""
+    cases = [
+        ("refreshed", "完成", "ok"),
+        ("partial", "部分·截断", "warn"),
+        ("waiting", "拦下·未到时刻", "dim"),
+        ("no-channel", "通道不可用", "err"),
+        ("error", "失败", "err"),
+        ("skipped-locked", "锁忙", "dim"),
+    ]
+    for action, text, tone in cases:
+        row = history_rows(_datas(alpha=[_hist(1.0, action=action)]), 10, 9.0)[0]
+        assert (row.result_text, row.result_tone) == (text, tone), f"徽章映射漂移: {action}"
+    row = history_rows(
+        _datas(alpha=[_hist(1.0, kind="confirm_empty", trigger="confirm", action="confirm-empty")]), 10, 9.0
+    )[0]
+    assert (row.result_text, row.result_tone) == ("对账", "blue"), "confirm_empty 特判优先于查表(计划 §3.4)"
+    row = history_rows(_datas(alpha=[_hist(1.0, kind="defer", trigger="manual", action="waiting")]), 10, 9.0)[0]
+    assert (row.result_text, row.result_tone) == ("拦下·未到时刻", "dim"), "defer 复用 waiting 的拦下映射"
+    assert (row.kind, row.kind_text) == ("defer", "立即拉取被拦"), "与自动波被拦的语义区分靠 kind_text"
+    row = history_rows(_datas(alpha=[_hist(1.0, action="disabled")]), 10, 9.0)[0]
+    assert (row.result_text, row.result_tone) == ("disabled", "dim"), "未知 action 回落原值(原值+人话并给, 不静默丢)"
+
+
+def test_history_rows_plain_texts_and_lanes():
+    """人话字段取值: ts_text/elapsed_text 复用既有单点, kind/trigger 人话映射, lanes 附
+    lane_text/status_text(取 LANE_TEXTS/LANE_STATUS_TEXTS 单点), 计数与过程字段原样透传"""
+    ev = _hist(
+        1759000000.0,
+        reason="达到单波页数上限(6), A 档截断",
+        reason_kind="budget",
+        pages=6,
+        rows=214,
+        torrents_ok=3,
+        torrents_fail=1,
+        verified=2,
+        elapsed_s=42.6,
+        lanes=[{
+            "lane": "A",
+            "status": "ok",
+            "pages": 3,
+            "rows": 96,
+            "detail": "截断于第 4 页"
+        }],
+        notes=["n1", "n2"],
+        by="abcd12",
+    )
+    row = history_rows(_datas(alpha=[ev]), 10, 9.0)[0]
+    assert row.ts_text == stamp_text(1759000000.0), "绝对时刻复用 stamp_text 单点"
+    assert row.elapsed_text == duration_text(42.6), "耗时人话复用 duration_text 单点"
+    assert (row.kind, row.kind_text) == ("wave", "取数波")
+    assert (row.trigger, row.trigger_text) == ("auto", "自动")
+    assert (row.reason, row.reason_kind) == ("达到单波页数上限(6), A 档截断", "budget")
+    assert (row.pages, row.rows, row.torrents_ok, row.torrents_fail, row.verified) == (6, 214, 3, 1, 2)
+    lane = row.lanes[0]
+    assert (lane.lane_text, lane.status_text) == (LANE_TEXTS["A"], LANE_STATUS_TEXTS["ok"]), "档位人话取单点"
+    assert (lane.pages, lane.rows, lane.detail) == (3, 96, "截断于第 4 页")
+    assert row.notes == ["n1", "n2"] and row.by == "abcd12"
+
+
+def test_history_rows_field_surface():
+    """行键面 = 计划 §3.4 全集; lane 子键面钉死 —— 前端只消费后端算好字段, 键面漂移即红"""
+    row = history_rows(_datas(alpha=[_hist(1.0, lanes=[{"lane": "B", "status": "ok"}])]), 10, 9.0)[0].to_dict()
+    assert set(row) == {
+        "ts",
+        "ts_text",
+        "site",
+        "kind",
+        "kind_text",
+        "trigger",
+        "trigger_text",
+        "action",
+        "result_text",
+        "result_tone",
+        "reason",
+        "reason_kind",
+        "pages",
+        "rows",
+        "torrents_ok",
+        "torrents_fail",
+        "verified",
+        "elapsed_s",
+        "elapsed_text",
+        "lanes",
+        "notes",
+        "by",
+    }, "字段面要与计划 §3.4 逐字对齐(多导出 = 体积浪费, 少导出 = 前端没得吃)"
+    assert set(row["lanes"][0]) == {"lane", "lane_text", "status", "status_text", "pages", "rows", "detail"}
