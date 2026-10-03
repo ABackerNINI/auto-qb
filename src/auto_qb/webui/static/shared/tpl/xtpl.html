@@ -75,18 +75,25 @@
             <span v-for="(line, i) in readonlySummary" :key="i" class="hb-ro-line">{{ line }}</span>
           </div>
 
-          <label v-else-if="f.kind === 'bool'" class="hb-switch" :class="ce.hubToneOf(item)">
-            <input type="checkbox" :checked="boolValue()" :disabled="readonly" @change="setBool($event.target.checked)">
-            <span class="hb-sw-track"></span>
-            <span class="hb-sw-text">{{ boolValue() ? '启用' : '关闭' }}</span>
-          </label>
+          <!-- bool 行的开关与「跟随全局」按钮必须包在同一个 <template v-else-if> 里:
+               两者若拆成兄弟节点, 中间那个 v-if 会**另起一条 if 链** —— 尾部 <template v-else>
+               (兜底文本框)改挂到新链上, bool 行除开关外还会多渲一个装着 "true"/"false" 的输入框
+               (2026-10-03 实测: basic 分区 4 个 bool 行全中; 引入点是登录 9c6bc499 把按钮插进链中)。
+               故此处成组; 内层 <button v-if> 之后没有 v-else 兄弟, 不会切链。 -->
+          <template v-else-if="f.kind === 'bool'">
+            <label class="hb-switch" :class="ce.hubToneOf(item)">
+              <input type="checkbox" :checked="boolValue()" :disabled="readonly" @change="setBool($event.target.checked)">
+              <span class="hb-sw-track"></span>
+              <span class="hb-sw-text">{{ boolValue() ? '启用' : '关闭' }}</span>
+            </label>
 
-          <!-- 「跟随全局」按钮(方案 B 阶段3): 站点页回退链键且站点键已存在时出现, 点击删站点键 =
-               恢复继承(git --unset 同构, cfgSetBool 恒写 true/false 行为不变); 全局页/非链上键
-               canFollowGlobal 恒 false, 本钮不渲染 -->
-          <button v-if="f.kind === 'bool' && canFollowGlobal()" class="hb-btn ghost sm"
-                  title="移除本站点的覆盖设置, 恢复跟随全局(保存后生效)"
-                  @click="followGlobal()">跟随全局</button>
+            <!-- 「跟随全局」按钮(方案 B 阶段3): 站点页回退链键且站点键已存在时出现, 点击删站点键 =
+                 恢复继承(git --unset 同构, cfgSetBool 恒写 true/false 行为不变); 全局页/非链上键
+                 canFollowGlobal 恒 false, 本钮不渲染 -->
+            <button v-if="canFollowGlobal()" class="hb-btn ghost sm"
+                    title="移除本站点的覆盖设置, 恢复跟随全局(保存后生效)"
+                    @click="followGlobal()">跟随全局</button>
+          </template>
 
           <select v-else-if="f.kind === 'enum'" class="hb-select" :class="ce.hubToneOf(item)"
                   :value="textValue()" :disabled="readonly" @change="set($event.target.value)">
