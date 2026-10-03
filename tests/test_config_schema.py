@@ -21,6 +21,9 @@
 - test_tri_state_marks_site_hr_str_fallback_keys: tri_state(站点级「覆盖为空」)声明面守卫 —— 全库仅
   站点 hr 回退链 4 个 str 键打标, bool/list 键不标(_strip_none 豁免按此派生, 打错位置 = '' 语义误翻转)
 - test_strip_exempt_keys_derive_from_schema: validation 的站点剥离豁免键集合 == schema tri_state 声明
+- test_grouping_cross_group_conflict_check_default_false / _valid_bool / _non_bool_aggregates:
+  新键 grouping.cross_group_conflict_check(计划 26-10-04-0107 S1) —— dataclass 缺省 false /
+  合法 bool 通过校验 / 非 bool 聚合报错
 """
 import re
 
@@ -298,3 +301,30 @@ def test_strip_exempt_keys_derive_from_schema():
 
     assert _TRI_STATE_SITE_KEYS == {f.key for f in schema.HR_OUTPUT_FIELDS if f.tri_state}
     assert len(_TRI_STATE_SITE_KEYS) == 4
+
+
+# ---------- grouping.cross_group_conflict_check(计划 26-10-04-0107 S1): 新键全链路守卫 ----------
+
+
+def test_grouping_cross_group_conflict_check_default_false():
+    """缺省时 dataclass 默认 false(保守默认, 行为与旧版逐字节一致)"""
+    from auto_qb.config.models import GroupingConfig
+
+    assert GroupingConfig().cross_group_conflict_check is False
+
+
+def test_grouping_cross_group_conflict_check_valid_bool():
+    """合法 bool(true/false)通过 fail-fast 校验"""
+    from auto_qb.config.validation import validate_config
+
+    assert validate_config({"config": {"grouping": {"cross_group_conflict_check": "true"}}}) == []
+    assert validate_config({"config": {"grouping": {"cross_group_conflict_check": "false"}}}) == []
+
+
+def test_grouping_cross_group_conflict_check_non_bool_aggregates():
+    """非 bool 进 errors 聚合(走既有 _try(parse_bool, ...) 路径, 不打断其它键的报错)"""
+    from auto_qb.config.validation import validate_config
+
+    errors = validate_config({"config": {"grouping": {"cross_group_conflict_check": "maybe", "enabled": "also-bad"}}})
+    assert any("config.grouping.cross_group_conflict_check" in e for e in errors)
+    assert any("config.grouping.enabled" in e for e in errors)

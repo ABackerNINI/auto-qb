@@ -179,10 +179,12 @@ class GroupingConfig:
 
     enabled: 启用分组检查(缺文件检查统一由分组事件驱动承担, 同组共享一次磁盘扫描)
     missing_tag: 文件丢失时整组添加的标签
+    cross_group_conflict_check: 跨组文件交叉检查(默认关; 开启后检测不同辅种组的文件指向同一磁盘物理文件的交叉)
     """
     enabled: bool = True
     check_missing_files: bool = True  # 启用缺文件检查
     missing_tag: str = 'MISSING'
+    cross_group_conflict_check: bool = False  # 跨组文件交叉检查(默认关)
 
 
 @dataclass

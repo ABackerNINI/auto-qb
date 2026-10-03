@@ -12,7 +12,7 @@ KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
 
 KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password"}
 
-KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag"}
+KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag", "cross_group_conflict_check"}
 
 # fs(文件访问, plan 26-09-27-1407): 容器部署路径映射, 空表 = 现状(保守默认)
 KNOWN_FS_KEYS = {"path_map"}
@@ -344,7 +344,7 @@ def _validate_grouping(spec, errors: List[str]) -> None:
         errors.append("config.grouping: 必须是字典")
         return
     _check_unknown_keys(spec, KNOWN_GROUPING_KEYS, "config.grouping", errors)
-    for key in ("enabled", "check_missing_files"):
+    for key in ("enabled", "check_missing_files", "cross_group_conflict_check"):
         if key in spec:
             _try(parse_bool, spec[key], f"config.grouping.{key}", errors)
 

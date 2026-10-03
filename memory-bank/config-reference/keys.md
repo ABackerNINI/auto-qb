@@ -22,7 +22,7 @@
 | `add_episode_tags` | `{enabled: false, add_tag_single: "zE${episode_first}", add_tag_multi: "zE${episode_first}-${episode_last}"}` | 种子添加时加集数标签; `enabled` 总开关; `add_tag_single`/`add_tag_multi` 模板, 含 `${episode_first}`/`${episode_last}` 占位, 多集仅在集数连续时生成 |
 | `web` | 默认关闭 | `{enabled: bool, host: "127.0.0.1", port: 8080, token: "", skip_local_verify: false, skip_check_menu: false}`; WEB UI(辅种管理): 分组视图/组控制/**图形化配置编辑(每项可增删改 + 只读 YAML 预览)**; token 留空 = 首启随机生成持久化到 data_dir/web.token; host 默认仅本机(对外暴露需自行评估安全); `skip_local_verify=true` 时本机(loopback)访问 /api/* 免密钥鉴权直接进入, 对外暴露仍强制; `skip_check_menu=true` 时种子右键菜单(单选与多选)显示跳检项且 web 端点放行, 默认关闭 = 菜单不显示且端点拒绝(fail-closed), 规则源跳检不受影响(计划 26-10-02-1955 W1) |
 | `notify` | 默认关闭 | `{enabled: bool, min_level: "ERROR", quiet_hours: "", max_per_hour: 20, dedup_window: "10M", channels: [platform]}`; 主动通知(ERROR 及以上日志 -> 平台原生通知, 零依赖; 26-09-27 等级整改后默认只推真正危险, WARNING 仅排障, 想看排障消息手动调低); quiet_hours "HH:MM-HH:MM" 支持跨午夜, 时段内跳过发送(含 ERROR); channels v1 仅 platform(缺省即启用); 节流为内存态不进 state_file |
-| `grouping` | | `{enabled: bool, check_missing_files: bool, missing_tag: "MISSING"}` |
+| `grouping` | | `{enabled: bool, check_missing_files: bool, missing_tag: "MISSING", cross_group_conflict_check: false}`; `cross_group_conflict_check` = 跨组文件交叉检查(默认关, 开启后检测不同辅种组的文件指向同一磁盘物理文件, 警告并暂停涉事下载方) |
 | `fs` | | 容器部署路径映射: `{path_map: [{from, to}]}`; 留空 = 现状, 改后需重启 |
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
 | `delete_tags_if_has_no_torrents` | [] | 仅无种子使用时删除 |

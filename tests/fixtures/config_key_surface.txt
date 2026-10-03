@@ -69,6 +69,7 @@ fs.path_map.*.to
 global_speed_limit_curve
 grouping
 grouping.check_missing_files
+grouping.cross_group_conflict_check
 grouping.enabled
 grouping.missing_tag
 hr

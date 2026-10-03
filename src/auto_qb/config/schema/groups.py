@@ -298,6 +298,14 @@ GROUPS: Tuple[Group, ...] = (
                         grey_if=("enabled", "true"),
                         help="发现缺文件时给组内每个种子添加的标签",
                     ),
+                    Field(
+                        "cross_group_conflict_check",
+                        "跨组文件交叉检查",
+                        "bool",
+                        default="false",
+                        grey_if=("enabled", "true"),
+                        help="开启后检测不同辅种组的文件指向同一磁盘物理文件（部分重叠/大小写/别名目录），警告并暂停涉事下载方；默认关闭",
+                    ),
                 )
             ),
             Field(
