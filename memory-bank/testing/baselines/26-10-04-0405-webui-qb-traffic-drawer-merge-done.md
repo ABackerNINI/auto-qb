@@ -21,3 +21,9 @@
   图 436px = 高度跟随成立) / 种子详情「流量」页签(scope=torrent, body 挂 `is-traffic`, 空态正常); 全程零 pageerror。
 - 未验证面: 真机(真实 qB 数据 / 24h↔30d 换窗 / 低频轮询续拉 / 组右键入口)待用户走查; 原「弹窗滚轮穿透」
   报告(26-10-04-0128)按 12 个遮罩模态统计, 本轮删 2 个 -> 实为 10, 该报告停在拍板未开工, 实施时一并核对。
+
+> 补记 (2026-10-04 04:20, 提交轮): 会话起点 sync 至 71251d61 时远端无更新, 但**提交前远端已推进到 800ccba2**
+> (另一 clone 的「移除 .modal-members 死类」, 同样改了 atlas/console `views.css`); 按 `my-commit-flow.sync`
+> 的失败行配方 (stash -u -> sync -> stash pop) 合流后, 本改动**实际落在 800ccba2 之上**, 提交为 `659eada8`
+> (已推 Gitee develop, ls-remote 核验一致)。合并处无冲突(两处 CSS 改动区段不同), 合并后复跑:
+> **test.full 2423 passed + 3 skipped / 99% / 51.21s** —— 正文那条 39.92s 是同一轮更早的一次采样(两次均实测)。
