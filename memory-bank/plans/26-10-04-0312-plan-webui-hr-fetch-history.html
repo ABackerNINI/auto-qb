@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>修改计划 · WEBUI HR 在线核实 — 拉取历史详情表</title>
+<meta name="doc-topic" content="webui-hr-fetch-history">
+<meta name="doc-type" content="plan">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-04-0312">
+<meta name="doc-updated" content="26-10-04-0312">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-04-webui-hr-fetch-history.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101013;
+    --ink: #e9e9e4;
+    --ink-strong: #f6f6f2;
+    --muted: #9c9c94;
+    --faint: #6f6f68;
+    --hairline: rgba(255, 255, 255, 0.09);
+    --hairline-soft: rgba(255, 255, 255, 0.055);
+    --accent: #5ac2ae;
+    --accent-dim: rgba(90, 194, 174, 0.14);
+    --warn: #d9a441;
+    --error: #e08573;
+    --ok: #8fbf9a;
+    --blue: #7aa7c7;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1140px; margin: 0 auto; padding: 72px 48px 96px; }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  h1 {
+    font-size: 38px;
+    line-height: 1.18;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+    margin: 18px 0 14px;
+  }
+  .lede { font-size: 17px; color: var(--muted); max-width: 52em; }
+  .lede strong { color: var(--ink); font-weight: 510; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 28px;
+    margin-top: 34px; padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+  }
+  .meta-row div { font-family: var(--mono); font-size: 12px; color: var(--faint); }
+  .meta-row b { display: block; color: var(--muted); font-weight: 500; margin-bottom: 3px; letter-spacing: 0.05em; }
+
+  section { margin-top: 76px; }
+  .sec-head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--hairline); padding-bottom: 12px; margin-bottom: 26px; }
+  .sec-no { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  h2 { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink-strong); }
+  h3 { font-size: 17px; font-weight: 600; color: var(--ink-strong); margin: 34px 0 12px; }
+  h3 .ref { font-family: var(--mono); font-size: 12px; color: var(--faint); font-weight: 400; margin-left: 10px; }
+  p { max-width: 74ch; margin-bottom: 12px; }
+  p.wide { max-width: none; }
+  .small { font-size: 13px; color: var(--muted); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  table { width: 100%; border-collapse: collapse; margin: 18px 0 10px; font-size: 13.5px; }
+  th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); font-weight: 500; text-align: left;
+    padding: 8px 12px; border-bottom: 1px solid var(--hairline);
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--hairline-soft); vertical-align: top; }
+  td code { white-space: normal; }
+  .t-mono { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; padding: 1px 7px; border: 1px solid var(--hairline); border-radius: 3px; color: var(--muted); }
+  .tag.accent { color: var(--accent); border-color: rgba(90, 194, 174, 0.4); }
+  .tag.warn { color: var(--warn); border-color: rgba(217, 164, 65, 0.4); }
+  .tag.err { color: var(--error); border-color: rgba(224, 133, 115, 0.4); }
+  .tag.blue { color: var(--blue); border-color: rgba(122, 167, 199, 0.4); }
+  .tag.ok { color: var(--ok); border-color: rgba(143, 191, 154, 0.4); }
+  .note {
+    border-left: 2px solid var(--accent);
+    background: var(--accent-dim);
+    padding: 14px 18px;
+    margin: 20px 0;
+    max-width: none;
+  }
+  .note.warn { border-left-color: var(--warn); background: rgba(217, 164, 65, 0.10); }
+  .note.err { border-left-color: var(--error); background: rgba(224, 133, 115, 0.08); }
+  .note p { margin: 0 0 8px; max-width: none; }
+  .note p:last-child { margin-bottom: 0; }
+  .note .note-t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--accent); display: block; margin-bottom: 6px; }
+  .note.warn .note-t { color: var(--warn); }
+  .note.err .note-t { color: var(--error); }
+
+  ul, ol { max-width: 74ch; padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 7px; }
+  li::marker { color: var(--faint); }
+
+  .file-changes { margin: 14px 0 8px; }
+  .file-changes li { margin-bottom: 12px; }
+  .fc-path { font-family: var(--mono); font-size: 13px; color: var(--ink-strong); }
+  .fc-path .ln { color: var(--faint); }
+
+  .step { border: 1px solid var(--hairline); padding: 20px 24px 14px; margin: 18px 0; }
+  .step-hd { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .step-no { font-family: var(--mono); font-size: 13px; color: var(--accent); white-space: nowrap; }
+  .step-t { font-size: 16px; font-weight: 600; color: var(--ink-strong); }
+  .step .dod { margin-top: 10px; }
+  .dod .dod-t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--ok); display: block; margin-bottom: 6px; }
+
+  footer {
+    margin-top: 90px; padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11.5px; color: var(--faint);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+
+  .mock {
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 14px 16px 10px;
+    margin: 22px 0 8px;
+  }
+  .mock-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding-bottom: 10px; margin-bottom: 10px;
+    border-bottom: 1px solid var(--hairline);
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+  }
+  .mock-bar .mock-title { color: var(--ink-strong); font-weight: 600; }
+  .mock-chip {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    padding: 1px 8px; border: 1px solid var(--hairline); border-radius: 999px; color: var(--muted);
+  }
+  .mock-chip.on { color: var(--accent); border-color: rgba(90, 194, 174, 0.45); }
+  .mock-btn {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    padding: 1px 9px; border: 1px solid rgba(90, 194, 174, 0.4); border-radius: 3px; color: var(--accent);
+  }
+  .mock-fresh { margin-left: auto; color: var(--faint); }
+  .mock-table { font-size: 12.5px; margin: 0 0 6px; }
+  .mock-table th { padding: 6px 9px; font-size: 10px; }
+  .mock-table td { padding: 7px 9px; font-size: 12px; }
+  .mock-table .num, .mock-table th.num { text-align: right; font-family: var(--mono); }
+  .mock-table .mono-cell { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .mock-table .wrap-cell { max-width: 260px; overflow-wrap: anywhere; }
+  .mock-sub td { background: rgba(255, 255, 255, 0.025); color: var(--muted); font-size: 11.5px; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 0 6px; border: 1px solid var(--hairline); border-radius: 999px; }
+  .pill.ok { color: var(--ok); border-color: rgba(143, 191, 154, 0.4); }
+  .pill.warn { color: var(--warn); border-color: rgba(217, 164, 65, 0.4); }
+  .pill.err { color: var(--error); border-color: rgba(224, 133, 115, 0.4); }
+  .pill.dim { color: var(--faint); }
+  .pill.blue { color: var(--blue); border-color: rgba(122, 167, 199, 0.4); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="kicker">修改计划 · Plan</div>
+  <h1>WEBUI HR 在线核实 — 拉取历史详情表</h1>
+  <p class="lede">后端侧新增<strong>「波次 / 拦截 / 对账」三类事件的环形留痕</strong>（随站点文件持久化，当前只有最新快照、没有历史），WebUI「HR 在线核实」全屏弹层新增<strong>表③ 拉取历史</strong>：什么时间、拉取了什么站点、解析结果（页数 / 行数 / 各档明细）、回填与放行、失败原因。列面参照扩展选项页的取数明细表并加细。</p>
+  <div class="meta-row">
+    <div><b>状态</b>Open（待拍板 §04）</div>
+    <div><b>专题</b>webui-hr-fetch-history</div>
+    <div><b>参照件</b>extensions/hr-fetch-proxy 选项页</div>
+    <div><b>锚点快照</b>2026-10-04 03:12</div>
+    <div><b>任务档案</b><a href="../tasks/26-10-04-webui-hr-fetch-history.md">tasks/26-10-04-webui-hr-fetch-history.md</a></div>
+  </div>
+
+  <!-- ============ §01 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§01</span><h2>原始请求与目标</h2></div>
+    <p><strong>原始请求（2026-10-04）</strong>：「WEBUI HR在线核实需要添加拉取历史详情表, 什么时间拉取了什么站点, 解析结果等, 参照插件的表格, 且需更详细. 先写一个分步实施计划」。</p>
+    <h3>目标</h3>
+    <ul>
+      <li>每次真实取数（波次）之后<strong>时间轴可回溯</strong>：时间、站点、触发方式（自动 / 立即拉取 / 人工对账）、结果终态、失败原因。</li>
+      <li><strong>解析结果可见</strong>：本波抓了几页、多少行，各档位（A/B/C）各自的页数 / 行数 / 截断原因，行内展开看档位明细。</li>
+      <li><strong>产出可见</strong>：回填了多少条 .torrent（成功 / 失败）、签发了多少条放行。</li>
+      <li>数据<strong>持久化</strong>（重启不丢）、<strong>多实例共享</strong>（跟随现有站点分文件机制）、容量有界（环形 + 按龄修剪）。</li>
+      <li>前端遵守现有口径：只在用户显式动作时拉数（<strong>不轮询</strong>）、人话由后端算好、三皮肤样式成对。</li>
+    </ul>
+    <h3>非目标</h3>
+    <ul>
+      <li>不改判定、不改取数调度与频控语义 —— 历史记录是纯旁观留痕，写失败也不影响取数（见 §07）。</li>
+      <li>不读扩展侧数据：<code>chrome.storage</code> 的 events 环是扩展私有的，WebUI 读不到；本表全部由<strong>后端自己记录</strong>（也只有后端能带上解析 / 放行语义）。</li>
+      <li>不做分页：环形 + <code>limit</code> 已够用；不进 <code>/api/state</code> 轮询载荷。</li>
+      <li>不新增配置键（容量 / 保留期用常量，见拍板项⑤）。</li>
+    </ul>
+  </section>
+
+  <!-- ============ §02 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§02</span><h2>现状与差距</h2></div>
+
+    <h3>2.1 数据流现状：只有「最新快照」，没有历史</h3>
+    <p>取数链路：<code>HrWorker</code>(60s 自唤醒) → <code>HrRefreshService.refresh_site</code> → 站点锁 → 调度闸（复用窗 / 拉取间隔 / 频控）→ <code>_do_wave</code> → <code>_run_pages</code>（A/B/C 轮流翻页，经通道向浏览器扩展取 <code>myhr.php</code> 各页）→ <code>adapter.parse_page</code> 解析 + 校验 → 行处理 / 回填 / 放行 → <code>session.commit</code> 原子写 <code>&lt;hr 目录&gt;/&lt;site&gt;.json</code>。</p>
+    <p>站点文件（<code>HrSiteData</code>，<span class="t-mono">model.py:459</span>）只存<strong>当前态</strong>：<code>index</code>（清单现状）、<code>wave.lanes</code>（<strong>每档最近一波</strong>的状态，<code>wave_ts</code> 每波重算不跨波继承）、<code>verified</code> / <code>downloaded</code>（累计账本，无时间轴）、<code>rate</code>（频控账本）。历史只散落在：日志文本、<code>.bak</code>（上一版快照，仅一版）、扩展侧 events 环（WebUI 读不到）。<strong>「上周三夜里那波为什么失败」现在无从回答</strong> —— 这是本计划要补的洞。</p>
+
+    <h3>2.2 参照件：扩展选项页的两张表<span class="ref">extensions/hr-fetch-proxy/options.html:141-154</span></h3>
+    <p>「插件」= 浏览器扩展 hr-fetch-proxy。它的选项页有两张表，数据源是 <code>chrome.storage.local</code> 的 <code>events</code> 事件环（容量 50，字段 <code>{t, host, kind, ok, status, ms, bytes, tag, note}</code>，<span class="t-mono">background.js:225</span>）：</p>
+    <table>
+      <thead><tr><th>扩展侧表格</th><th>列</th><th>粒度</th></tr></thead>
+      <tbody>
+        <tr><td>站点现状表</td><td>站点 / 最近活动 / 最近动作·结果 / 用量(本时·本日 访问·下种) / 状态</td><td>站点 × 当前</td></tr>
+        <tr><td>最近取数明细表</td><td>时间 / 站点 / 类型 / 结果 / 耗时 / 大小</td><td>单次 HTTP 请求（页面 / 种子）</td></tr>
+      </tbody>
+    </table>
+    <p>WebUI 侧「站点现状」维度已被 <code>/api/hr/status</code> + 表② 覆盖，不重复；要搬的是<strong>取数明细表</strong>的时间轴维度，并把粒度从「单请求」升到「波次」（解析结果、档位覆盖、回填、放行只在波次粒度上才有意义），即用户说的「参照插件的表格，且需更详细」。</p>
+
+    <h3>2.3 差距清单</h3>
+    <table>
+      <thead><tr><th>#</th><th>差距</th><th>本计划对策</th></tr></thead>
+      <tbody>
+        <tr><td>G1</td><td>后端没有每次取数的历史留痕（只有最新快照 + .bak 一版）</td><td><code>HrSiteData.history</code> 环形事件表（§3.1/3.2）</td></tr>
+        <tr><td>G2</td><td>失败波的原因（通道断 / 登录失效 / Retry-After / 改版截断）只有日志，无结构化留存</td><td>波次终态 + reason 全量入历史（§3.3）</td></tr>
+        <tr><td>G3</td><td>「立即拉取」被账号安全线拦下时按钮只有一次性提示，事后不可考</td><td><code>defer</code> 事件（拍板项④）</td></tr>
+        <tr><td>G4</td><td>WebUI 无历史表挂点</td><td>表③（§3.5）+ 新只读端点（§3.4）</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ §03 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§03</span><h2>方案设计</h2></div>
+
+    <h3>3.1 数据模型<span class="ref">src/auto_qb/hr/model.py</span></h3>
+    <p>新增 <code>HrHistoryEvent</code> dataclass（与既有 <code>HrVerified</code> / <code>HrLaneState</code> 同款 <code>to_json</code>/<code>from_json</code> 序列化范式），<code>HrSiteData</code> 增一字段 <code>history: List[HrHistoryEvent]</code>（缺省空表，<code>from_json</code> 缺键容忍）：</p>
+    <table>
+      <thead><tr><th>字段</th><th>类型</th><th>含义</th></tr></thead>
+      <tbody>
+        <tr><td class="t-mono">ts</td><td>float</td><td>事件时刻（epoch 秒；wave = 波终态时刻）</td></tr>
+        <tr><td class="t-mono">kind</td><td>str</td><td><code>wave</code>（一次取数波）· <code>defer</code>（立即拉取被拦）· <code>confirm_empty</code>（人工对账）</td></tr>
+        <tr><td class="t-mono">trigger</td><td>str</td><td><code>auto</code>（调度自动）· <code>manual</code>（立即拉取）· <code>confirm</code>（对账动作）</td></tr>
+        <tr><td class="t-mono">action</td><td>str</td><td>波终态，直接取既有 <code>ACTION_*</code> 常量（service.py:67-74）：<code>refreshed</code> / <code>partial</code> / <code>waiting</code> / <code>no-channel</code> / <code>error</code> / <code>skipped-locked</code></td></tr>
+        <tr><td class="t-mono">reason</td><td>str</td><td><code>HrRefreshResult.reason</code>（截断到 ~200 字符）</td></tr>
+        <tr><td class="t-mono">reason_kind</td><td>str</td><td><code>REASON_*</code>（budget / parse），告警分级同源</td></tr>
+        <tr><td class="t-mono">pages / rows</td><td>int</td><td>本波页数 / 行数合计（<code>result.pages_fetched</code> / <code>result.entries</code>）</td></tr>
+        <tr><td class="t-mono">torrents_ok / torrents_fail</td><td>int</td><td>回填 .torrent 成功 / 失败数（<code>result.torrents_fetched</code> / <code>torrents_failed</code>）</td></tr>
+        <tr><td class="t-mono">verified</td><td>int</td><td>本波签发放行数（<code>result.verified_count</code>）</td></tr>
+        <tr><td class="t-mono">elapsed_s</td><td>float</td><td>波耗时（<code>result.elapsed_s</code>）</td></tr>
+        <tr><td class="t-mono">lanes</td><td>list[dict]</td><td>各档终态快照 <code>{lane, status, pages, rows, detail}</code>（取自 <code>lane_states</code>，与表② 波次表同构）</td></tr>
+        <tr><td class="t-mono">notes</td><td>list[str]</td><td><code>wave.notes</code> 截断（前 5 条；截断/受限/改版等过程痕迹）</td></tr>
+        <tr><td class="t-mono">by</td><td>str</td><td>写者实例短标识（<code>store.owner</code> 前 6 位）—— 多实例分辨「谁抓的」</td></tr>
+      </tbody>
+    </table>
+    <p>字段几乎全部来自<strong>现成的 <code>HrRefreshResult</code></strong>（service.py:191-211）与 <code>lane_states</code>，记录器只做搬运，不新算业务语义。</p>
+
+    <h3>3.2 存储与写盘纪律</h3>
+    <ul>
+      <li><strong>存哪</strong>：内嵌 <code>HrSiteData.history</code>，随站点文件走 —— 天然获得既有锁、原子写、<code>.bak</code>、多实例共享（详见拍板项①）。</li>
+      <li><strong>容量</strong>：<code>HISTORY_CAP = 200</code> 条 / 站点，<code>HISTORY_MAX_AGE = 14</code> 天；追加时先修剪再截断。常量放 <code>service.py</code> 常量区（§6「程序能定的绝不配置」口径，拍板项⑤）。体积上界 ≈ 200 × 400B ≈ <strong>80KB / 站点</strong>（S1 实测回填，超预期砍 100）。</li>
+      <li><strong>版本链</strong>：<strong>不抬 <code>hr_site</code> 版本</strong>。补字段属非破坏性变更，versioning.py:16-18 明示「刻意不为补字段造版本」；<code>from_json</code> 缺键回空表，存量文件零迁移零写盘。</li>
+      <li><strong>写盘纪律（硬不变量）</strong>：60s poll 被调度闸跳过（reused / waiting）时<strong>不记事件、不写盘</strong> —— 否则每分钟一次全文件重写。写盘只发生在：真实波次（本来就有逐页 commit）、用户触发的 defer、对账动作（本来就写）。S2 用测试钉死这条。</li>
+      <li><strong>多实例</strong>：追加发生在站点锁内的读-改-写会话里，与既有字段同语义，不新增竞态面。已知限制：新旧版本程序混跑时，旧程序写盘会丢掉不认识的 <code>history</code> 字段（丢事件不损业务字段，升级窗口期短暂存在，见 §07）。</li>
+    </ul>
+
+    <h3>3.3 记录写入点<span class="ref">src/auto_qb/hr/service.py · report.py</span></h3>
+    <p>service 新增一个小记录器 <code>_append_history(session, *, kind, trigger, result, lanes, notes)</code>（修剪 + 截断 + append，不做 IO），写盘点三处：</p>
+    <table>
+      <thead><tr><th>事件</th><th>写入点</th><th>持久化</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><span class="tag accent">wave</span></td>
+          <td><code>_do_wave</code> 全部终态：正常路径在 <code>_finish_wave</code> 收尾处；异常路径在 <code>HrChannelQuota</code> / <code>HrChannelUnavailable</code> / <code>HrLoginExpired</code> / Retry-After 各 except 分支 return 前</td>
+          <td>正常路径随既有 commit；异常路径补一次 <code>_persist_step(session)</code></td>
+          <td><code>trigger</code> 按 <code>force</code> 参数区分 auto / manual；<code>HrChannelStopped</code>（停机 / 热重挂让位）<strong>不记</strong> —— 瞬态内部事件，重挂期间会刷屏</td>
+        </tr>
+        <tr>
+          <td><span class="tag warn">defer</span></td>
+          <td><code>_refresh_locked</code> 各闸 return 前（拉取间隔 / min_interval / 日额 / Retry-After / 时间窗 / dry-run），<strong>仅 <code>force=True</code></strong></td>
+          <td>显式 commit（用户点击级频次，可接受）</td>
+          <td>自动 poll 的 waiting <strong>不记</strong>（写盘纪律）；复用窗被 force 跳过，天然不产生 defer</td>
+        </tr>
+        <tr>
+          <td><span class="tag blue">confirm_empty</span></td>
+          <td><code>report.py run_hr_confirm_empty</code>（:169）锁内写戳处</td>
+          <td>随既有 commit</td>
+          <td><code>trigger='confirm'</code>；对账是「零行波能不能放行」的关键前置，入时间轴</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="small">锁忙（<code>HrLockBusy</code>）与「站点未启用 / hr_check 关闭」不入历史：前者是本实例没挤进锁（别的实例会有自己的记录），后者没有发生任何取数。</p>
+
+    <h3>3.4 只读口径与 API<span class="ref">src/auto_qb/hr/status.py · webui/server/routes/hr.py</span></h3>
+    <ul>
+      <li><strong>口径单点</strong>：<code>status.py</code> 新增 <code>history_rows(datas: Mapping[str, HrSiteData], limit, now)</code> —— 合并各站历史、按 <code>ts</code> 降序、截 <code>limit</code>，并算好人话字段（<code>ts_text</code> / <code>elapsed_text</code> / <code>result_text</code> / <code>kind_text</code> / <code>trigger_text</code> / 各档 <code>lane_text</code>）。遵守「行字段人话全由后端算好，前端不重算」的既有约定（表① 同款）。</li>
+      <li><strong>结果徽章映射</strong>（result_text / 色档）：<code>refreshed</code>→完成(ok) · <code>partial</code>→部分·截断(warn) · <code>waiting</code>→拦下·未到时刻(dim) · <code>no-channel</code>→通道不可用(err) · <code>error</code>→失败(err) · <code>skipped-locked</code>→锁忙(dim) · confirm_empty→对账(blue)。</li>
+      <li><strong>端点</strong>：<code>GET /api/hr/history?limit=300&amp;site=&lt;可选&gt;</code>，加在 <code>routes/hr.py</code> 的 <code>build_router</code>（hr builder 已在 ROUTE_BUILDERS 注册，无需动路由表）。校验与 <code>/api/hr/sites/{site}/entries</code>（:151）同款：未启用 400；取数线程未启动 409；读站点文件走 <code>store(site).read_unlocked()</code> 无锁只读先例。响应：<code>{enabled, rows[], read_errors{site: err}, now}</code>；<code>rows[i]</code> 即 §3.1 字段的人话版。读坏文件不抛，<code>read_errors</code> 带出（表① 同款）。</li>
+    </ul>
+
+    <h3>3.5 前端：表③ 拉取历史<span class="ref">static/shared/hr_status.js · tpl/settings-detail.html</span></h3>
+    <ul>
+      <li><strong>挂点</strong>：全屏覆盖层 <code>.hr-full-modal</code> 内、<code>.hrs-list</code>（各站点 article）之后，<strong>全局段</strong>（不进 per-site article —— 历史跨站点成时间轴，参照扩展表也是全局合并 + 站点列）。形态用表② 同款 <code>&lt;details class="hrs-diag"&gt;</code> 折叠范式（拍板项②）。</li>
+      <li><strong>加载时机</strong>：首次展开拉一次 + 「刷新」按钮手动重拉，<strong>不轮询</strong>（hrsToggle 既有范式）；<code>limit=300</code>。</li>
+      <li><strong>过滤</strong>：站点 chips（由行内站点集合现算，<code>hrsLaneChips</code> 范式）+ 「仅看异常」toggle（异常 = action ∈ {error, no-channel, waiting(defer), skipped-locked}）。前端本地过滤，不回后端。</li>
+      <li><strong>代码归属</strong>：并入 <code>hr_status.js</code>（同一 hub 状态对象，方法前缀 <code>hrsHist*</code>）—— 免动三份 index.html 的脚本清单与 mixin 注册；hr_status.js 单文件体量可控（估 +150 行）。</li>
+      <li><strong>样式</strong>：骨架复用 <code>.drawer-table hr-detail-table</code> 双类；展开明细小表与「仅看异常」新增少量类（<code>hr-hist-sub</code> 等）需三皮肤成对：atlas <code>css/dialogs.css</code> / console <code>css/dialogs.css</code> / prism <code>css/views.css</code> + <code>components.css</code>。</li>
+      <li><strong>守阵锚</strong>：<code>&lt;!-- aqb:hr-history:begin / end --&gt;</code> 包裹表③段，配新守阵 <code>test_frontend_hr_history_wiring</code>（test_web.py，扫锚范式同表①/表②）。</li>
+    </ul>
+
+    <div class="mock">
+      <div class="mock-bar">
+        <span class="mock-title">拉取历史 · 最近取数与波次明细</span>
+        <span class="mock-chip on">全部站点</span><span class="mock-chip">hdsky</span><span class="mock-chip">carpt</span>
+        <span class="mock-chip">仅看异常</span>
+        <span class="mock-btn">刷新</span>
+        <span class="mock-fresh">最近 300 条 · 数据截至 03:02</span>
+      </div>
+      <table class="mock-table">
+        <thead><tr><th>时间</th><th>站点</th><th>触发</th><th>结果</th><th class="num">页数</th><th class="num">行数</th><th class="num">回填</th><th class="num">放行</th><th class="num">耗时</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="mono-cell">10-04 03:02:41</td><td class="mono-cell">hdsky</td><td>自动</td>
+            <td><span class="pill ok">完成</span></td><td class="num">6</td><td class="num">214</td><td class="num">3/0</td><td class="num">+1</td><td class="num">42.6s</td>
+            <td class="wrap-cell">覆盖完成(A 全深度, B/C 命中本地全集)</td>
+          </tr>
+          <tr class="mock-sub"><td colspan="10">▸ A 档 · 完成 · 3 页 / 96 行 ｜ B 档 · 完成 · 2 页 / 78 行 ｜ C 档 · 完成 · 1 页 / 40 行</td></tr>
+          <tr>
+            <td class="mono-cell">10-04 02:31:07</td><td class="mono-cell">hdsky</td><td>自动</td>
+            <td><span class="pill warn">部分</span></td><td class="num">4</td><td class="num">118</td><td class="num">1/0</td><td class="num">0</td><td class="num">28.1s</td>
+            <td class="wrap-cell">达到单波页数上限(6), A 档截断</td>
+          </tr>
+          <tr>
+            <td class="mono-cell">10-04 02:05:55</td><td class="mono-cell">carpt</td><td>立即</td>
+            <td><span class="pill dim">拦下</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0.2s</td>
+            <td class="wrap-cell">未到可取时刻(min_interval, 还差 812s)</td>
+          </tr>
+          <tr>
+            <td class="mono-cell">10-04 01:48:33</td><td class="mono-cell">hdsky</td><td>自动</td>
+            <td><span class="pill err">通道不可用</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0.0s</td>
+            <td class="wrap-cell">扩展未连接(静默 184s)</td>
+          </tr>
+          <tr>
+            <td class="mono-cell">10-04 01:12:20</td><td class="mono-cell">carpt</td><td>对账</td>
+            <td><span class="pill blue">对账</span></td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0.0s</td>
+            <td class="wrap-cell">人工确认空清单(零行波恢复签发放行)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small">插件表「大小」列不搬：文本页体积无排障价值，信息量由「页数 / 行数」代替；「类型」列升格为「触发 × 结果 × 展开档位明细」。</p>
+  </section>
+
+  <!-- ============ §04 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§04</span><h2>拍板项</h2></div>
+    <p>五项均已按推荐方向写进上文设计，<strong>不反对即按推荐实施</strong>；反对哪项只回编号 + 选择即可。</p>
+    <table>
+      <thead><tr><th>#</th><th>决策点</th><th>推荐</th><th>备选与不推荐理由</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>①</td><td><strong>存储位置</strong></td>
+          <td><span class="tag accent">A</span> 内嵌 <code>HrSiteData.history</code> 环 —— 零新锁、零新版本注册、随既有原子写 / .bak / 多实例共享</td>
+          <td>B 独立 <code>&lt;site&gt;.history.json</code>：要第二把锁、新版本链注册、双写点，隔离收益撑不起复杂度</td>
+        </tr>
+        <tr>
+          <td>②</td><td><strong>UI 形态</strong></td>
+          <td><span class="tag accent">A</span> 表③ = <code>&lt;details&gt;</code> 折叠段，放全屏弹层站点列表之后（表② 同范式，默认收起、展开才拉数）</td>
+          <td>B 弹层页签化（种子明细 / 拉取历史两个 tab）：要动 26-10-02-1936 刚收口的全屏弹层结构，收益只是少点一次展开</td>
+        </tr>
+        <tr>
+          <td>③</td><td><strong>记录粒度</strong></td>
+          <td><span class="tag accent">A</span> 波次级一行 + 行内展开各档明细（时间轴可读性优先）</td>
+          <td>B 每页一条平铺：单波 3-6 行 → 一天几十行，刷屏且丢「波」这个语义单元</td>
+        </tr>
+        <tr>
+          <td>④</td><td><strong>defer 事件</strong>（立即拉取被账号安全线拦下要不要留痕）</td>
+          <td><span class="tag accent">A</span> 记录 —— 用户点过按钮却没拉成，事后「为什么没拉」可考；用户触发级频次，无写放大</td>
+          <td>B 不记：省一类事件，但 G3 的排障诉求落空</td>
+        </tr>
+        <tr>
+          <td>⑤</td><td><strong>容量与保留</strong></td>
+          <td><span class="tag accent">A</span> 200 条 / 站点 + 14 天修剪，<strong>常量不入配置</strong>（§6 口径；80KB 上界）</td>
+          <td>B 进配置：要 validate_config + schema + 文档全链路，为两个不会有人改的数字不值</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ §05 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§05</span><h2>分步实施</h2></div>
+    <p>六步串行，每步独立可验、可停。S0 为认领动作不计步。<strong>行号全部是 2026-10-04 快照，实施时以符号名为准先复核锚点</strong>（本仓库历史教训：重构后行号必漂）。</p>
+
+    <div class="step">
+      <div class="step-hd"><span class="step-no">S1</span><span class="step-t">数据模型与序列化（backend）</span></div>
+      <ul class="file-changes">
+        <li><span class="fc-path">src/auto_qb/hr/model.py</span>：新增 <code>HrHistoryEvent</code>（字段表见 §3.1，<code>to_json</code>/<code>from_json</code> 照 <code>HrRateLedger</code> 范式）；<code>HrSiteData</code> 增 <code>history</code> 字段 + 两个序列化点；<code>HISTORY_CAP</code> / <code>HISTORY_MAX_AGE</code> 常量（或落 service.py 常量区，实施时定）</li>
+      </ul>
+      <ul>
+        <li>不抬 <code>hr_site</code> schema_version；<code>from_json</code> 缺键回空表，存量文件零迁移。</li>
+      </ul>
+      <div class="dod"><span class="dod-t">DoD</span>
+        <ul>
+          <li>test_hr_store.py：roundtrip（含 history）/ 存量文件缺键兼容 / cap 截断 / 按龄修剪，4 组新用例，同步文件头「## 测试计划」清单。</li>
+          <li>既有 HR 测试零红。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-hd"><span class="step-no">S2</span><span class="step-t">记录写入点（backend）</span></div>
+      <ul class="file-changes">
+        <li><span class="fc-path">src/auto_qb/hr/service.py</span>：新增 <code>_append_history()</code> 记录器；<code>_do_wave</code> 正常终态（<code>_finish_wave</code> 收尾）+ 4 个异常 except 分支（quota / no-channel / login / Retry-After）写入；<code>_refresh_locked</code> 各闸 force-defer 写入；<code>HrChannelStopped</code> 分支明确不写。</li>
+        <li><span class="fc-path">src/auto_qb/hr/report.py</span>：<code>run_hr_confirm_empty</code>（:169）锁内补 confirm 事件。</li>
+      </ul>
+      <ul>
+        <li>记录器只搬运 <code>HrRefreshResult</code> / <code>lane_states</code> / <code>wave.notes</code> 现成数据，异常路径包裹 try 保护：<strong>记录失败不得影响取数主流程</strong>（记日志降级）。</li>
+      </ul>
+      <div class="dod"><span class="dod-t">DoD</span>
+        <ul>
+          <li>test_hr_service.py：正常波 / partial / login / no-channel / quota / Retry-After 六终态各恰一条事件且字段正确；自动 poll 被闸跳过<strong>零写盘</strong>（断言 commit 未发生）；defer 仅 force 路径产生。</li>
+          <li>test_hr_report.py：对账动作产生 confirm 事件。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-hd"><span class="step-no">S3</span><span class="step-t">只读口径与 API（backend）</span></div>
+      <ul class="file-changes">
+        <li><span class="fc-path">src/auto_qb/hr/status.py</span>：<code>history_rows()</code>（合并 / 降序 / limit / 人话字段，含结果徽章映射表）。</li>
+        <li><span class="fc-path">src/auto_qb/webui/server/routes/hr.py</span>：<code>GET /api/hr/history</code>（校验同 <code>/entries</code> :151 范式；<code>read_unlocked</code> 逐站读；<code>read_errors</code> 带出）。</li>
+      </ul>
+      <div class="dod"><span class="dod-t">DoD</span>
+        <ul>
+          <li>test_hr_status.py：多站合并 / 跨站降序 / limit 截断 / 人话字段 / 徽章映射。</li>
+          <li>test_web.py：端点 shape / 未启用 400 / site 过滤 / 读坏文件进 read_errors 不抛。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-hd"><span class="step-no">S4</span><span class="step-t">前端表③（webui）</span></div>
+      <ul class="file-changes">
+        <li><span class="fc-path">static/shared/hr_status.js</span>：<code>hrsHist*</code> 状态与方法（懒加载 / 刷新 / 站点 chips / 仅看异常 / 行展开）。</li>
+        <li><span class="fc-path">static/shared/tpl/settings-detail.html</span>：<code>.hrs-list</code> 后新增表③ <code>&lt;details&gt;</code> 段，<code>aqb:hr-history:begin/end</code> 锚注释包裹。</li>
+        <li><span class="fc-path">static/atlas/css/dialogs.css</span> · <span class="fc-path">static/console/css/dialogs.css</span> · <span class="fc-path">static/prism/css/views.css</span> + <span class="fc-path">components.css</span>：展开明细小表等新类，三皮肤成对。</li>
+      </ul>
+      <div class="dod"><span class="dod-t">DoD</span>
+        <ul>
+          <li>test_web.py：新守阵 <code>test_frontend_hr_history_wiring</code>（锚扫描 + 方法/类存在性）；既有三守阵（full-modal / detail-table / diag）零红。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-hd"><span class="step-no">S5</span><span class="step-t">桩走查与三皮肤目检（test）</span></div>
+      <ul class="file-changes">
+        <li><span class="fc-path">scripts/ui_harness.py</span>：<code>_mk</code> 桩补 <code>/api/hr/history</code> 数据（覆盖五形态：完成 / 部分 / 拦下 / 通道不可用 / 对账 + 一条可展开行）。</li>
+      </ul>
+      <div class="dod"><span class="dod-t">DoD</span>
+        <ul>
+          <li>三皮肤真浏览器截图自查：表③ 收起态 / 展开态 / 过滤态 / 空态与未启用态，3 × 5 张零缺口。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-hd"><span class="step-no">S6</span><span class="step-t">收尾回写</span></div>
+      <ul>
+        <li><code>commands run test.full</code> → 新基线切片（testing/baselines/）。</li>
+        <li><span class="fc-path">docs/hr-online-verify-docs.md</span> 登记本计划与实施件；无新配置键，configuration.md 不动。</li>
+        <li>任务档案进度日志收口、置 <code>Done</code>；activeContext 切片已完成条目迁出。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ §06 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§06</span><h2>测试与验收口径</h2></div>
+    <table>
+      <thead><tr><th>层</th><th>用例组</th><th>钉住的契约</th></tr></thead>
+      <tbody>
+        <tr><td>模型 / 存储</td><td>test_hr_store.py +4</td><td>序列化 roundtrip；缺键兼容（存量文件零迁移）；cap 与按龄修剪</td></tr>
+        <tr><td>服务写入</td><td>test_hr_service.py +6~8, test_hr_report.py +1</td><td>六终态各恰一条；<strong>60s poll 零写盘</strong>；defer 仅 force；对账事件</td></tr>
+        <tr><td>只读口径</td><td>test_hr_status.py +3</td><td>跨站合并降序 / limit / 人话与徽章映射单点</td></tr>
+        <tr><td>API</td><td>test_web.py +3</td><td>shape / 400·409 校验 / read_errors 不抛</td></tr>
+        <tr><td>前端守阵</td><td>test_web.py +1</td><td><code>aqb:hr-history</code> 锚 + hrsHist* 方法 + 三皮肤类成对存在</td></tr>
+        <tr><td>验收</td><td>S5 目检 + S6 基线</td><td>三皮肤 5 态截图；test.full 基线切片记实测数字</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ §07 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§07</span><h2>风险与已知限制</h2></div>
+    <table>
+      <thead><tr><th>风险</th><th>评估与对策</th></tr></thead>
+      <tbody>
+        <tr><td>站点文件变大（含 .bak 翻倍）</td><td>上界 ≈ 80KB/站点（cap 200 × ~400B），S1 实测回填计划；超预期把 cap 砍到 100（改一个常量）。</td></tr>
+        <tr><td>写放大</td><td>硬不变量：调度闸跳过零写盘（S2 测试钉死）；真实波次频次被 refresh_interval / min_interval / 日额天然限流。</td></tr>
+        <tr><td>记录器拖垮取数</td><td>记录器无 IO（纯内存 append + 修剪）；S2 起整体 try 包裹，记录异常降级为日志，绝不外抛进波次路径。</td></tr>
+        <tr><td>多实例混跑新旧版本</td><td>旧程序不认识 <code>history</code> 键，其写盘会丢掉历史段（业务字段无损）。升级窗口期短暂现象，接受；不做双写兼容。</td></tr>
+        <tr><td>三皮肤样式漂移</td><td>守阵锚 + S5 三皮肤目检双保险（既有计划复验过的配方）。</td></tr>
+        <tr><td>隐私</td><td>历史只含站点名 / 档位 / 计数 / 原因文本；不含凭据，不记完整 URL（站点名在配置里本就可见）。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ §08 ============ -->
+  <section>
+    <div class="sec-head"><span class="sec-no">§08</span><h2>锚点附录（2026-10-04 03:12 快照）</h2></div>
+    <table>
+      <thead><tr><th>文件</th><th>锚点</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td class="t-mono">src/auto_qb/hr/model.py</td><td>:459 <code>HrSiteData</code> · :446 <code>HrRateLedger.to_json</code></td><td>S1 字段落点与序列化范式</td></tr>
+        <tr><td class="t-mono">src/auto_qb/hr/service.py</td><td>:67 <code>ACTION_*</code> · :191 <code>HrRefreshResult</code> · :388 <code>refresh_site</code> · :448 <code>_refresh_locked</code> · :500 <code>_do_wave</code> · :595 <code>_run_pages</code> · <code>_finish_wave</code></td><td>S2 全部写入点</td></tr>
+        <tr><td class="t-mono">src/auto_qb/hr/report.py</td><td>:169 <code>run_hr_confirm_empty</code></td><td>S2 confirm 事件</td></tr>
+        <tr><td class="t-mono">src/auto_qb/hr/status.py</td><td><code>build_site_statuses</code> / <code>entry_details</code></td><td>S3 口径单点范式</td></tr>
+        <tr><td class="t-mono">src/auto_qb/webui/server/routes/hr.py</td><td>:40 <code>build_router</code> · :151 <code>/api/hr/sites/{site}/entries</code></td><td>S3 端点与校验范式</td></tr>
+        <tr><td class="t-mono">static/shared/tpl/settings-detail.html</td><td>:266 <code>hr-full-modal</code> · :306 表① 锚 · :354 表② <code>hrs-diag</code></td><td>S4 挂点（表③ 插在 .hrs-list 之后）</td></tr>
+        <tr><td class="t-mono">static/shared/hr_status.js</td><td><code>hrsToggle</code> · <code>hrsCols</code> · <code>hrsLaneChips</code> · <code>hrsKvRows</code></td><td>S4 懒加载 / chips / 排版范式</td></tr>
+        <tr><td class="t-mono">static/{atlas,console,prism}/…</td><td>atlas index.html :149-177 脚本清单 · 三皮肤 dialogs.css / views.css</td><td>S4 CSS 成对面（本计划不动脚本清单）</td></tr>
+        <tr><td class="t-mono">tests/test_web.py</td><td><code>test_frontend_hr_detail_table_wiring</code></td><td>S4 守阵范式</td></tr>
+        <tr><td class="t-mono">scripts/ui_harness.py</td><td><code>_mk</code></td><td>S5 桩数据</td></tr>
+        <tr><td class="t-mono">extensions/hr-fetch-proxy/…</td><td>options.html :141-154（参照表）· background.js :225 <code>pushEvent</code></td><td>列面参照（只读，不改扩展）</td></tr>
+      </tbody>
+    </table>
+    <p class="small">关联知识库：主档案 tasks/26-09-22-backend-partial-hr-verify.md · 文档索引 docs/hr-online-verify-docs.md · 近邻计划 plans/26-10-01-2216（表① 表②）· plans/26-10-02-1936（全屏弹层）。本表③与其是互补关系：表① 表② 回答「现在是什么样」，表③ 回答「一路上是怎么过来的」。</p>
+  </section>
+
+  <footer>
+    <span>plan · webui-hr-fetch-history · 26-10-04-0312</span>
+    <span>锚点行号为快照值, 实施以符号名为准</span>
+  </footer>
+</div>
+</body>
+</html>
