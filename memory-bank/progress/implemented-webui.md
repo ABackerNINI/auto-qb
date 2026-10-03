@@ -9,6 +9,16 @@
 
 - **WEB UI qB 口径流量图三图**(2026-10-04 实施完成, 方案C): 全局弹层 / 单种抽屉「流量」页签 / 分组弹层三挂点 (uPlot vendor 单文件, 三主题登记, 低频轮询); 后端采样管线 (core/modules/traffic_sample_mod.py, 全局恒采 + 单种活跃过滤) + dat 存储层 (core/traffic_store.py, `<data_dir>/qb-traffic/` global.dat + torrents/&lt;infohash&gt;.dat, 小时封口 catch-up 补封 + 半行容错/损坏隔离 + index/reconcile + 删种冻结/重加解冻/按龄淘汰) + 三 GET API (webui/server/traffic_qb.py, 栅格离散 null 断线 + 组读侧聚合, 金清单 75); 配置键 `qb_traffic`(enabled 缺省 false = 零开销)。P6 十条桩验证 10/10 过 (桩验证替代真机); 真机遗留: fastresume 单种 all-time 持久性 / alltime 回退幅度待观察。实施权威 = [计划 26-10-03-0946](../plans/26-10-03-0946-plan-qb-traffic-charts-c.html) + [档案 26-10-03-webui-qb-traffic-charts](../tasks/26-10-03-webui-qb-traffic-charts.md) (P6 验证记录节); test.full 2418 passed / 99%。
 
+- **WEB UI 添加种子三浮层互斥补双向(closeAddPopsExcept 单点)**(2026-10-04): issue 26-10-04-0130
+  认领, 按建议方向二实施。原互斥矩阵单向(openAddPathPop 收 cat/tag, 反向 openAddCatMenu/
+  openAddTagMenu 不收 addPathPop), 路径面板与下拉可同悬且面板盖住相邻字段 label 的点击(Playwright
+  实测 "subtree intercepts pointer events"); 失焦合帧兜不住 —— 新字段 @focus 先 _addPopBlurCancel
+  撤掉定时器。修法 = 抽 `closeAddPopsExcept(kind)` 三浮层互斥单点(收层带 Hi 复位), 三开层各调一次,
+  后续加第四个浮层单点补分支即可; 守阵 `test_frontend_add_combo_blur_close_and_fit` 补第 6 组
+  「互斥双向」静态断言。Playwright 走查 6/6(focus 迁移焦点避开面板几何拦截, 修复前反向缺口终态
+  双开、修复后单浮层); 基线 [testing/baselines/26-10-04-0150](../testing/baselines/26-10-04-0150-webui-add-pop-mutex.md)
+  (2419 passed + 3 skipped / 99%, 合并 4805f5f5 后重测)。
+
 - **WEB UI 添加种子三下拉 label 闪烁「第三轮」(上轮修法未修住)**(2026-10-04): 用户报 a7ebbe14 后
   「点字段 label 稳定复现下拉闪烁」依旧。真浏览器事件埋点定位: 第二轮两个判断是错的 —— label 的
   **mousedown** 默认动作就会 blur 已聚焦的输入框(focusout related=null 实测在),"回焦 ~2ms"只是

@@ -28,6 +28,9 @@
 
 ## 待办 / 观察
 
-- **计划外既有不对称已入池(未修, 范围守恒)**: [26-10-04-0130-bug-webui-add-pop-mutex](../issues/26-10-04-0130-bug-webui-add-pop-mutex.html)
-  —— `openAddCatMenu`/`openAddTagMenu` 不收 `addPathPop`(反向却收), 切换字段时路径面板与下拉
-  双开且面板可盖住相邻字段 label。待用户指派认领。
+- ~~计划外既有不对称已入池(未修, 范围守恒)~~ → **已迁出**: 2026-10-04 02:10 用户指派认领,
+  按方向二修复完毕, 详见切片 [26-10-04-0150-webui-add-pop-mutex](26-10-04-0150-webui-add-pop-mutex.md)
+  与 [issue 档案(状态 Done)](../issues/26-10-04-0130-bug-webui-add-pop-mutex.html)。
+  > 原条目: [26-10-04-0130-bug-webui-add-pop-mutex](../issues/26-10-04-0130-bug-webui-add-pop-mutex.html)
+  > —— `openAddCatMenu`/`openAddTagMenu` 不收 `addPathPop`(反向却收), 切换字段时路径面板与下拉
+  > 双开且面板可盖住相邻字段 label。待用户指派认领。

@@ -188,7 +188,7 @@
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
-- test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限
+- test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
@@ -3665,6 +3665,21 @@ def test_frontend_add_combo_blur_close_and_fit():
     for opt in ("addCatOptions", "addTagOptions", "addPathOptions"):
         assert re.search(rf"{opt}\(\) \{{\n      if \(this\.", at), \
             f"add_torrent.js 缺 {opt} 的 watcher(候选异步到位改变菜单高度, 开着时必须重限)"
+
+    # 6. 三浮层互斥必须双向(26-10-04-0130): 开层收别家走 closeAddPopsExcept 单点 —— 单向写法
+    #    (只 openAddPathPop 收 cat/tag, 反向不收)会让路径面板与下拉同悬, 且面板盖住相邻字段
+    #    label 的点击(走查实测 "subtree intercepts pointer events")
+    mutex = re.search(r"closeAddPopsExcept\(kind\) \{(.*?)\n    \},", at, re.S)
+    assert mutex, "add_torrent.js 找不到 closeAddPopsExcept(三浮层互斥单点, 改名或挪走了? 同步本守阵)"
+    mutex_body = mutex.group(1)
+    for field, kind_key in (("addCatMenu", "cat"), ("addTagMenu", "tag"), ("addPathPop", "path")):
+        assert f'kind !== "{kind_key}"' in mutex_body, \
+            f"closeAddPopsExcept 缺 {field} 分支(互斥单点必须覆盖全部三个浮层)"
+    for fnname, kind in (("openAddCatMenu", "cat"), ("openAddTagMenu", "tag"), ("openAddPathPop", "path")):
+        body = re.search(rf"{fnname}\(\) \{{(.*?)\n    \}},", at, re.S)
+        assert body and f'closeAddPopsExcept("{kind}")' in body.group(1), \
+            (f"{fnname} 必须调 closeAddPopsExcept(\"{kind}\") —— 开本浮层时收掉其余两个, "
+             f"互斥漏一侧 = 双浮层同悬且盖住相邻字段 label 的点击")
 
 
 def test_frontend_add_combo_label_clear_mask_and_refit():

@@ -92,16 +92,33 @@ window.AQB_ADD = {
     toggleAddUrls() {
       this.addShowUrls = !this.addShowUrls;  // 收起不清空已输入链接, 再展开仍可继续编辑
     },
+    /* 三浮层互斥单点(26-10-04-0130): 开任一浮层前收掉其余两个, 互斥必须双向 —— 单向写法
+     * (只 openAddPathPop 收 cat/tag)会让路径面板与下拉同悬, 面板还盖住相邻字段 label 的点击。
+     * kind 是要保留的那个; 收层带 Hi 复位, 与 Esc 退栈/失焦收层的收法一致。 */
+    closeAddPopsExcept(kind) {
+      if (kind !== "cat") {
+        this.addCatMenu = false;
+        this.addCatHi = -1;
+      }
+      if (kind !== "tag") {
+        this.addTagMenu = false;
+        this.addTagHi = -1;
+      }
+      if (kind !== "path") {
+        this.addPathPop = false;
+        this.addPathHi = -1;
+      }
+    },
     openAddCatMenu() {
       this._addPopBlurCancel();  // 焦点回到本输入框(label 转发/重新点入)时撤销挂起的失焦收层, 菜单不闪
-      this.addTagMenu = false;
+      this.closeAddPopsExcept("cat");
       this.addCatHi = -1;
       this.addCatMouseAt = null;  // 开层复位悬停门限坐标(下次打开首个动作不被旧坐标误挡)
       this.addCatMenu = true;
     },
     openAddTagMenu() {
       this._addPopBlurCancel();
-      this.addCatMenu = false;
+      this.closeAddPopsExcept("tag");
       this.addTagHi = -1;
       this.addTagMouseAt = null;  // 同上
       this.addTagMenu = true;
@@ -266,8 +283,7 @@ window.AQB_ADD = {
      * 于是表现为"下拉 2 秒后不见了"。datalist 退役后聚焦 = 展开。 */
     openAddPathPop() {
       this._addPopBlurCancel();
-      this.addCatMenu = false;
-      this.addTagMenu = false;
+      this.closeAddPopsExcept("path");
       this.addPathHi = this.addPathOptions.indexOf(this.addSavePath.trim());
       this.addPathPop = true;
       this._hiScroll("addPathList");

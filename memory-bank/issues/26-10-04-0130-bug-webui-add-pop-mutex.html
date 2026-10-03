@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-add-pop-mutex">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="添加种子三浮层互斥不对称: 路径面板收下拉, 下拉不收路径面板">
 <meta name="issue-summary" content="openAddPathPop 会收分类/标签下拉, 反向 openAddCatMenu/openAddTagMenu 不收 addPathPop, 切换字段时路径面板与下拉可同时悬着(面板还会盖住相邻字段的 label)">
 <title>添加种子三浮层互斥不对称: 路径面板收下拉, 下拉不收路径面板 · bug · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>添加种子三浮层互斥不对称: 路径面板收下拉, 下拉不收路径面板</h1>
     <p class="lede">openAddPathPop 会收分类/标签下拉, 反向 openAddCatMenu/openAddTagMenu 不收 addPathPop, 切换字段时路径面板与下拉可同时悬着(面板还会盖住相邻字段的 label)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-04-0130-bug-webui-add-pop-mutex</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-04 01:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -187,11 +187,25 @@ openAddTagMenu() {          // L102: 只关 addCatMenu, 不关 addPathPop</code>
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-04 01:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-04 02:10 — 认领（按建议方向二），复验锚点仍复现，状态 <strong>In Progress</strong></li>
+      <li>2026-10-04 02:20 — 实施完成（方向二：closeAddPopsExcept 单点 + 守阵第 6 组）+ Playwright 走查 6 场景全 PASS，状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>复验：2026-10-04 02:10 认领时重跑锚点，<b>仍复现</b> —— <code>add_torrent.js</code> 三个开层方法的
+    互斥写法与 01:30 取证逐行一致，缺口原样。</p>
+    <h3>修复后补充（2026-10-04 02:20，按建议方向二）</h3>
+    <p><b>实际修法</b>: 方向二落地 —— 抽 <code>closeAddPopsExcept(kind)</code> 三浮层互斥单点
+    （收层带 Hi 复位，与 Esc 退栈/失焦收层同款），<code>openAddCatMenu</code> /
+    <code>openAddTagMenu</code> / <code>openAddPathPop</code> 三处开层各调一次，各开层方法只保留
+    自己的 Hi 复位与悬停门限坐标复位。后续加第四个浮层在单点补一个分支即可。</p>
+    <p><b>验证方式</b>: ①<code>tests/test_web.py</code> 既有守阵
+    <code>test_frontend_add_combo_blur_close_and_fit</code> 补第 6 组「互斥双向」静态断言
+    （closeAddPopsExcept 单点存在 + 覆盖三浮层分支 + 三开层方法各调一次）；②Playwright 走查
+    <code>scripts/ui_harness.py</code> 桩后端 + DOM 判浮层显隐，6 场景全 PASS —— 路径开→聚焦分类
+    (path 收/cat 开)、分类开→聚焦标签、标签开→聚焦路径（修复前 tag 不收的反向缺口）、点标签
+    label 转发、Tab 迁移焦点，全部终态单浮层。</p>
+    <p><b>测试数字</b>: <code>commands run test.full</code> 2419 passed, 3 skipped (32.46s, 覆盖率
+    99%; 合并远端 4805f5f5 后于新基线重测)。</p>
   </section>
 
   <footer>
