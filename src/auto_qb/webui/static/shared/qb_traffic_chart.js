@@ -18,9 +18,10 @@
  * ref="qbChartHost"(同一时刻只渲染一个流量形态)。
  *
  * 低频轮询(§07 表「轮询/取数」列): 打开期间按采样间隔续拉 —— 间隔从最近响应 meta.interval_s
- * 取(24h 窗即采样间隔; 30d 窗 meta 是 3600s 桶宽而非采样间隔, 夹取到配置校验上界 600s),
- * 取不到回退 30s 常量; document.hidden 跳过(对齐 drawer.js _startDrawerPoll 先例); 关闭/
- * 切走形态由 _stopDrawerPoll / _qbTeardown 显式 clearInterval —— 只挂打开期间, 不后台常驻。
+ * 取(raw 段窗(1m-24h)即采样间隔; hour 段窗(3d/7d/30d) meta 是 3600s 桶宽而非采样间隔,
+ * 夹取到配置校验上界 600s), 取不到回退 30s 常量; document.hidden 跳过(对齐 drawer.js
+ * _startDrawerPoll 先例); 关闭/切走形态由 _stopDrawerPoll / _qbTeardown 显式 clearInterval
+ * —— 只挂打开期间, 不后台常驻。
  * meta.stale=true 的响应照常渲染(读竞态兜底位, §08, 前端不特殊处理)。
  *
  * 静默续拉(2026-10-04 修「每隔几秒闪一次」): 续拉对用户不可见 —— 模板 loading 空态只在
@@ -40,8 +41,8 @@
 /* global uPlot */
 
 /* 轮询间隔边界(ms): 夹取下界 = 配置校验下限 15s(§06), 上界 = 配置校验上限 600s
- * (30d 窗 meta.interval_s=3600 是桶宽, 按它直拉等于一小时不刷新 —— 夹到上界保低频续拉语义);
- * meta 缺失/非法回退 30s 常量(plan §07「采样间隔」基准值)。 */
+ * (hour 段窗(3d/7d/30d) meta.interval_s=3600 是桶宽, 按它直拉等于一小时不刷新 —— 夹到
+ * 上界保低频续拉语义); meta 缺失/非法回退 30s 常量(plan §07「采样间隔」基准值)。 */
 const _QB_POLL_MIN_MS = 15000;
 const _QB_POLL_MAX_MS = 600000;
 const _QB_POLL_FALLBACK_MS = 30000;
@@ -244,7 +245,7 @@ window.AQB_QB_TRAFFIC = {
       this._qbLoad(scope);
       this._qbPollStart(scope);
     },
-    /* 窗口切换(24h/30d): 换窗即重拉重画; 打开中的轮询定时器由 _qbPollResync 按新窗重排 */
+    /* 窗口切换(1m-30d 十档): 换窗即重拉重画; 打开中的轮询定时器由 _qbPollResync 按新窗重排 */
     qbSetWindow(w) {
       const s = this.qbCurScope;
       return s ? this._qbSetWindow(s, w) : undefined;
@@ -352,7 +353,7 @@ window.AQB_QB_TRAFFIC = {
         this._qbPollTimers[scope] = null;
       }
     },
-    /* meta.interval_s 变化(换窗 24h<->30d)时按新间隔重排; 定时器本就停着则不动 */
+    /* meta.interval_s 变化(换窗跨段: raw 段窗 <-> hour 段窗)时按新间隔重排; 定时器本就停着则不动 */
     _qbPollResync(scope) {
       if (!this._qbPollTimers || !this._qbPollTimers[scope]) return;
       if (this._qbPollMs(scope) !== this._qbPollPeriods[scope]) this._qbPollStart(scope);
@@ -502,12 +503,20 @@ window.AQB_QB_TRAFFIC = {
         document.documentElement.addEventListener("autoqb:themechange", this._qbOnThemeChange);
       }
     },
-    /* x 轴刻度文案: 24h 只标时刻(日期由 tooltip 补全), 30d 标日期(窗口按挂点各读各的) */
+    /* x 轴刻度文案(窗口三族): 1m/5m 短窗标到秒(桶可落在同分钟内, HH:MM 会重标);
+     * 3d/7d/30d(hour 段窗)标日期; 其余 raw 段窗只标时刻(日期由 tooltip 补全) */
     _qbTickLabel(ts, scope) {
       const d = new Date(ts * 1000);
       const p = (n) => String(n).padStart(2, "0");
-      if (this[_QB_SCOPES[scope].window] === "30d") return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      const w = this[_QB_SCOPES[scope].window];
+      if (w === "3d" || w === "7d" || w === "30d") return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      if (w === "1m" || w === "5m") return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
       return `${p(d.getHours())}:${p(d.getMinutes())}`;
+    },
+    /* 窗口按钮文案(drawer.html 窗口组; 紧凑两字格, 10 档不挤工具条) */
+    qbWindowLabel(w) {
+      const m = { "1m": "1分", "5m": "5分", "30m": "30分", "3h": "3时", "6h": "6时", "12h": "12时", "24h": "24时", "3d": "3天", "7d": "7天", "30d": "30天" };
+      return m[w] || w;
     },
     /* uPlot 1.6.x 必要基础样式(官方 uPlot.min.css 的结构性子集; 不 vendor css 文件, 按计划
      * 以 token 化样式注入一次): 色值两处(十字虚线)走 --fg-dim 令牌, 换肤自动跟随;

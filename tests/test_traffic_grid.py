@@ -2,6 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_build_grid_24h_and_30d: 24h 窗 30s 栅格 = 2880 桶(floor 对齐); 30d 窗恒 3600s = 720 桶; 未知窗口 ValueError
+- test_build_grid_extended_windows: 1m/5m/30m/3h/6h/12h raw 段窗(桶宽 = 采样间隔, 桶数 = 跨度/间隔) + 3d/7d hour 段窗(恒 3600s = 72/168 桶)
 - test_build_grid_unaligned_t0_extra_bucket: t0 未对齐栅格时窗首桶提前(floor), 桶数 ceil = 2881(「≈2880」口径)
 - test_build_grid_fractional_interval_ceils_bucket_width: 小数采样间隔桶宽向上取整(1.5s -> 2s 桶宽; floor 会隔桶空 = 伪断线)
 - test_raw_rows_jitter_bucket_mean_and_empty_null: 抖动采样行按 floor 归桶, 桶内多行取均值(round 取整); 空桶 = null; null 点行不参与; 窗外行不消费
@@ -58,7 +59,20 @@ def test_build_grid_24h_and_30d():
     assert h.interval == 3600 and h.segment == "hour" and len(h.buckets) == 720
     assert h.first == ((NOW - 2592000) // 3600) * 3600
     with pytest.raises(ValueError):
-        build_grid("7d", NOW)
+        build_grid("90d", NOW)  # 窗口集外(7d 已随 2026-10-04 十档窗口入库, 合法)
+
+
+def test_build_grid_extended_windows():
+    """扩展十档窗口(2026-10-04, 与 qB 速度图对齐 + 3d/7d 外延): raw 段窗桶宽 = 采样间隔,
+    hour 段窗(3d/7d)恒 3600s; 采样间隔只在 raw 段生效"""
+    for name, span in (("1m", 60), ("5m", 300), ("30m", 1800), ("3h", 10800), ("6h", 21600), ("12h", 43200)):
+        g = build_grid(name, NOW, 30.0)
+        assert g.interval == 30 and g.segment == "raw" and g.t0 == NOW - span, name
+        assert len(g.buckets) == span // 30, name  # NOW 与 t0 均为 30 的公倍数, 恰好对齐
+    for name, span in (("3d", 259200), ("7d", 604800)):
+        h = build_grid(name, NOW, 999.0)  # sample_interval 只在 raw 段生效
+        assert h.interval == 3600 and h.segment == "hour" and len(h.buckets) == span // 3600, name
+        assert h.first == ((NOW - span) // 3600) * 3600, name
 
 
 def test_build_grid_unaligned_t0_extra_bucket():

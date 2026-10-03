@@ -7,7 +7,7 @@
   为「桶值 | null」定长数组(§05.1 栅格离散), meta = window/interval_s/source/stale。
 - 未启用(qb_traffic 缺省 None / enabled=false / data_dir 为空防御)或无数据 -> 空态
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
-- window 查询参数仅认 24h|30d, 其余 400(客户端错误不 500)。
+- window 查询参数仅认 WINDOW_NAMES(1m/5m/30m/3h/6h/12h/24h/3d/7d/30d), 其余 400(客户端错误不 500)。
 - 读盘走 TrafficDatStore.read_series_checked(快读即关 + OSError 按空系列对待); 读取失败
   (Windows rewrite 竞态等瞬态, 概率极低)不以空态冒充「无数据」: 回退上一份成功响应并标
   meta.stale=true(§08「最坏返回上一秒快照 + stale」), 无历史快照才回本次现算结果。
@@ -27,14 +27,15 @@ from ...core import traffic_grid as tg
 from ...core.traffic_store import GLOBAL_KEY, TORRENT_KEY_PREFIX, TrafficDatStore
 from .common import group_key_param
 
-#: window 查询参数合法值(§08); 其余一律 400
-WINDOW_NAMES = ("24h", "30d")
+#: window 查询参数合法值(§08; 1m-24h 与 qB 速度图窗口对齐 + 3d/7d 外延, 3d/7d/30d 消费
+#: hour 段); 其余一律 400
+WINDOW_NAMES = ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d")
 
 
 def parse_window(window: str) -> str:
-    """window 查询参数校验: 仅 24h|30d, 其余 400(非法值 4xx, §08 验收判据)"""
+    """window 查询参数校验: 仅 WINDOW_NAMES, 其余 400(非法值 4xx, §08 验收判据)"""
     if window not in WINDOW_NAMES:
-        raise HTTPException(status_code=400, detail="window 须为 24h 或 30d")
+        raise HTTPException(status_code=400, detail="window 须为 " + "|".join(WINDOW_NAMES))
     return window
 
 
@@ -62,7 +63,8 @@ class QbTrafficChartApi:
         return conf is not None and bool(conf.enabled) and bool(self._manager.config.data_dir)
 
     def _grid(self, window: str) -> tg.WindowGrid:
-        """当前时刻的时间栅格; 24h 桶宽 = 采样间隔(未启用/缺省兜底 30s), 30d 恒 3600s"""
+        """当前时刻的时间栅格; raw 段窗口(1m-24h)桶宽 = 采样间隔(未启用/缺省兜底 30s),
+        hour 段窗口(3d/7d/30d)恒 3600s"""
         conf = self._conf()
         sample = conf.sample_interval if conf is not None else tg.DEFAULT_SAMPLE_INTERVAL_S
         return tg.build_grid(window, time.time(), sample)

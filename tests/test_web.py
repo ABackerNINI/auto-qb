@@ -43,7 +43,7 @@
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)
 - test_api_traffic_qb_requires_token: 三 GET 端点沿用全局 token 鉴权单点(无凭证 401)
-- test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 24h|30d
+- test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十档(1m-30d)
 - test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗 raw 段离散(points 均值/空桶 null) + totals 相邻桶差分(重置 null) + 读取竞态降级回上一份快照标 stale
 - test_api_traffic_qb_global_30d_hour_segment: global 30d 窗消费 hour 段(hour_epoch 即桶键), interval_s=3600
 - test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
@@ -4062,14 +4062,17 @@ def test_api_traffic_qb_requires_token(web_env):
 
 
 def test_api_traffic_qb_window_validation(web_env):
-    """window 非法值 4xx(不 500); 缺省回 24h; 大小写敏感(仅 24h|30d, §08)"""
+    """window 非法值 4xx(不 500); 缺省回 24h; 大小写敏感(仅 WINDOW_NAMES 十档, §08)"""
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
+    windows = ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d")
     for p in ("/api/traffic/qb/global", "/api/traffic/qb/torrent/HA", f"/api/traffic/qb/group/{encode_group_key(KEY)}"):
-        assert client.get(p, headers=auth, params={"window": "7d"}).status_code == 400, p
+        assert client.get(p, headers=auth, params={"window": "90d"}).status_code == 400, p
         assert client.get(p, headers=auth, params={"window": "24H"}).status_code == 400, p  # 大写不认
         assert client.get(p, headers=auth, params={"window": ""}).status_code == 400, p
+        for w in windows:  # 十档全部放行(1m/5m/30m/3h/6h/12h/24h 对齐 qB 速度图 + 3d/7d/30d)
+            assert client.get(p, headers=auth, params={"window": w}).status_code == 200, (p, w)
     assert client.get("/api/traffic/qb/global", headers=auth).json()["meta"]["window"] == "24h"  # 缺省 24h
     assert client.get("/api/traffic/qb/global", headers=auth, params={
         "window": "30d"

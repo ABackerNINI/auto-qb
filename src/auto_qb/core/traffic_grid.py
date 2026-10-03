@@ -5,8 +5,9 @@ S4 API 读侧的取数口径, 全部纯函数(输入 traffic_store.ParsedSeries 
 
 栅格离散(§05.1):
 - [t0, t1) 按「栅格 = 采样间隔」离散: bucket = floor(t / interval) * interval; 桶内多行
-  取速率均值; 空桶 = null。24h 窗消费 raw 段(桶宽 = sample_interval, ≈2880 桶), 30d 窗
-  消费 hour 段(hour_epoch 即桶键, 桶宽恒 3600s, 720 点, 桶内不再聚合)。
+  取速率均值; 空桶 = null。raw 段窗口(1m/5m/30m/3h/6h/12h/24h)消费 raw 段(桶宽 =
+  sample_interval, 24h 窗 ≈2880 桶), hour 段窗口(3d/7d/30d)消费 hour 段(hour_epoch 即
+  桶键, 桶宽恒 3600s, 30d 窗 720 点, 桶内不再聚合)。
 - raw 行时间戳不对齐栅格(qB 重连退避/主循环抖动都会让采样时刻漂移, §05.1), 抖动行按
   floor 归桶; 窗首桶允许不满宽(t0 未对齐时首桶只覆盖 [first, t0) 之后的部分 —— 行照收)。
 
@@ -32,8 +33,20 @@ from typing import Optional
 
 from .traffic_store import HOUR_SECONDS, ParsedSeries
 
-#: 窗口名 -> (跨度秒, 消费段): 24h 只消费 raw 段, 30d 只消费 hour 段(§05.1/§08)
-WINDOW_SPECS = {"24h": (86400, "raw"), "30d": (2592000, "hour")}
+#: 窗口名 -> (跨度秒, 消费段): 1m-24h 消费 raw 段(桶宽 = 采样间隔), 3d/7d/30d 消费 hour 段
+#: (桶宽恒 3600s)(§05.1/§08)。1m/5m/30m/3h/6h/12h/24h 与 qB 速度图窗口对齐, 3d/7d 为外延。
+WINDOW_SPECS = {
+    "1m": (60, "raw"),
+    "5m": (300, "raw"),
+    "30m": (1800, "raw"),
+    "3h": (10800, "raw"),
+    "6h": (21600, "raw"),
+    "12h": (43200, "raw"),
+    "24h": (86400, "raw"),
+    "3d": (259200, "hour"),
+    "7d": (604800, "hour"),
+    "30d": (2592000, "hour"),
+}
 
 #: 24h 窗栅格宽的兜底值(qb_traffic 缺省 = 未启用时的空态 meta; 与配置缺省 30S 同值)
 DEFAULT_SAMPLE_INTERVAL_S = 30.0
@@ -47,7 +60,7 @@ class WindowGrid:
     时比「跨度/interval」恰多一桶 —— §05.1 的「≈2880 桶」口径); 桶值 t = 桶起点 epoch 秒。
     """
 
-    name: str  # "24h" | "30d"
+    name: str  # WINDOW_SPECS 键(1m-30d)
     t0: int  # 窗口起点(含), epoch 秒
     t1: int  # 窗口终点(不含), epoch 秒
     interval: int  # 桶宽秒(24h = 采样间隔, 30d = 3600)
@@ -68,7 +81,7 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
     try:
         span, segment = WINDOW_SPECS[window]
     except KeyError:
-        raise ValueError(f"未知窗口: {window!r}(须为 24h|30d)") from None
+        raise ValueError(f"未知窗口: {window!r}(须为 {'|'.join(WINDOW_SPECS)})") from None
     # 桶宽对采样间隔向上取整(floor 在小数间隔如 1.5s 下取 1s 桶宽, 采样行 1.5s 一条 -> 隔桶为空 = 伪断线;
     # ceil 后桶宽 >= 采样间隔, 等间隔采样行每桶至少一条)
     interval = max(1, math.ceil(sample_interval)) if segment == "raw" else HOUR_SECONDS

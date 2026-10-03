@@ -19,7 +19,7 @@
         <div class="drawer-grip" title="拖拽调高" @pointerdown="drawerGripDown($event)"
              @pointermove="drawerGripMove($event)" @pointerup="drawerGripUp($event)"
              @pointercancel="drawerGripUp($event)"></div>
-        <!-- 流量形态头部(全局/分组): 图标 + 标题 + 收起/关闭; 24h/30d 与种子详情流量页签同处
+        <!-- 流量形态头部(全局/分组): 图标 + 标题 + 收起/关闭; 窗口切换与种子详情流量页签同处
              正文工具条(qbTrafficActive 块), 三挂点正文完全一致 -->
         <header v-if="drawer.kind === 'traffic'" class="drawer-head">
           <div class="drawer-title">
@@ -74,8 +74,11 @@
           <template v-if="qbTrafficActive">
             <div class="drawer-toolbar">
               <div class="qb-tabs">
-                <button v-for="w in ['24h', '30d']" :key="w" :class="{ active: qbCurWindow === w }"
-                        @click="qbSetWindow(w)">{{ { '24h': '24 小时', '30d': '30 天' }[w] }}</button>
+                <!-- 窗口序(2026-10-04): 1m/5m/30m/3h/6h/12h/24h 与 qB 速度图对齐 + 3d/7d/30d
+                     外延, 顺序即展示序(短窗在前); 标签紧凑两字格, 10 档不挤工具条 -->
+                <button v-for="w in ['1m', '5m', '30m', '3h', '6h', '12h', '24h', '3d', '7d', '30d']" :key="w"
+                        :class="{ active: qbCurWindow === w }"
+                        @click="qbSetWindow(w)">{{ qbWindowLabel(w) }}</button>
               </div>
               <span class="drawer-toolbar-hint">qB 口径 · 程序运行期间(断线处不连线)</span>
             </div>
