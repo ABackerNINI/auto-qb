@@ -189,7 +189,7 @@
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
-- test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
+- test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
@@ -3595,7 +3595,9 @@ def test_frontend_add_torrent_drag_drop_wiring():
         for ev in re.findall(r'window\.(?:add|remove)EventListener\("([a-z]+)"', m.group(1)):
             bucket.add(ev)
     expect = {"dragenter", "dragover", "dragleave", "drop"}
-    assert added == expect, f"mounted 缺 drag 事件: {expect - added}(少一个就有一条路径不接管)"
+    # 子集语义: mounted 还合法挂了 label 失焦收层守卫的 mousedown capture 记录器(四轮, 2026-10-04),
+    # 不能再断言"恰好等于四件套" —— 只要求四件套一个不少, 多余监听交给 removed == added 对称性兜住。
+    assert expect <= added, f"mounted 缺 drag 事件: {expect - added}(少一个就有一条路径不接管)"
     assert removed == added, f"unmounted 与 mounted 不对称: add={sorted(added)} / remove={sorted(removed)}"
 
     # 2. drop handler 必须拦默认行为 + depth 归零灭遮罩
@@ -3713,6 +3715,13 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
       4. **选中分类后逐字删除, 下拉把窗口撑变形**: 限高只在开层那一刻按**当时**的候选量算过,
          过滤词变化(候选从 1 条涨回全量)时菜单没关过, 开层 watcher 不触发 ⇒ 旧限高不更新。
          修法 = 三个输入值各挂 watcher(开着才重限), meta 对话框的分类下拉同族一并补。
+      5. **四轮 JS 收层守卫(2026-10-04 用户报三修后真机仍闪)**: 三修的 Chromium 探针自校验证明
+         修饰符修法本身有效(摘掉即复现完整闪烁链), 用户症状与"浏览器跑的还是旧模板"一致 ——
+         页签长开不刷新时模板/JS 以加载那一刻为准, 服务端更新到不了。故收层再加 JS 单点守卫
+         _popBlurShouldHold: addPopBlurClose/metaCatBlurClose 的 40ms 定时器触发那刻, 焦点已回
+         本族输入框或本族 label 转发 click 仍在途(mousedown 记录器 capture 记落点) → 跳过收层。
+         模板修饰符在 = 纯 no-op(mousedown 已被 prevent, 定时器不武装); 缺位 = 独立根除闪烁,
+         任何模板/JS 代际混合都安全。
     """
     import re
 
@@ -3817,6 +3826,26 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
         )
         assert ".add-pop-clear" in blob, f"{ui} 缺 .add-pop-clear 样式(清空钮无尺寸/无 hover)"
         assert ".add-input-row.has-clear" in blob, f"{ui} 缺 .has-clear 右内边距(文字会被按钮压住)"
+
+    # 7. 四轮 JS 收层守卫(2026-10-04): 40ms 定时器收层前必须问 _popBlurShouldHold ——
+    #    焦点已回本族输入框 / 本族 label 转发 click 仍在途 → 不收。模板修饰符缺位(旧页签
+    #    残留模板)时由它独立根除「按住期收层 → 松手回焦重开」, 不依赖模板 JS 同代到达。
+    assert "window.addEventListener(\"mousedown\", this._popLabelDownRecorder, { capture: true });" in at, \
+        "add_torrent.js mounted 缺 mousedown capture 记录器(守卫没有落点数据 = 形同虚设)"
+    assert "removeEventListener(\"mousedown\", this._popLabelDownRecorder" in at, \
+        "add_torrent.js unmounted 缺记录器移除(热重载后句柄堆叠, 每次点击记 N 笔)"
+    hold = re.search(r"_popBlurShouldHold\(ids\) \{(.*?)\n    \},", at, re.S)
+    assert hold, "add_torrent.js 找不到 _popBlurShouldHold(收层守卫单点)"
+    assert "document.activeElement" in hold.group(1) and "ids.includes(ae.id)" in hold.group(1), \
+        "_popBlurShouldHold 必须先判「焦点已回本族输入框」(转发 click 已落地 → 不收)"
+    assert "performance.now() - rec.t <= 350" in hold.group(1), \
+        "_popBlurShouldHold 必须带 350ms 新鲜度上界(防旧记录误挡后续无 mousedown 的失焦, 如 Tab)"
+    add_close = re.search(r"addPopBlurClose\(\) \{(.*?)\n    \},", at, re.S)
+    assert add_close and '_popBlurShouldHold(["ad-save-path", "ad-category", "ad-tags"])' in add_close.group(1), \
+        "addPopBlurClose 收层前没问守卫(三字段的家族 id 名单缺一即该字段守卫失效)"
+    meta_close = re.search(r"metaCatBlurClose\(\) \{(.*?)\n    \},", dg, re.S)
+    assert meta_close and '_popBlurShouldHold(["meta-category"])' in meta_close.group(1), \
+        "metaCatBlurClose 收层前没问守卫(meta 分类下拉与三下拉同族, 缺位同闪)"
 
 
 def test_frontend_ctx_submenu_single_entry_and_hover_close():

@@ -16,12 +16,28 @@ window.AQB_ADD = {
     window.addEventListener("dragover", this._addDragOver);
     window.addEventListener("dragleave", this._addDragLeave);
     window.addEventListener("drop", this._addDragDrop);
+    /* 四轮加固(2026-10-04): 失焦收层的 JS 侧单点守卫, 不依赖模板 @mousedown.prevent 是否到达浏览器。
+     * capture 记录最近一次 mousedown 落点是不是「label[for]」(先于一切 stopPropagation) ——
+     * addPopBlurClose / metaCatBlurClose 的 40ms 合帧定时器收层前先问 _popBlurShouldHold:
+     * 本族 label 的转发 click 仍在途(人手按住 80~150ms > 40ms 窗)或焦点已回本族输入框 → 跳过收层,
+     * 根除「按住期收层 → 松手转发回焦重开 = 闪烁」。模板修饰符正常时 mousedown 已被 prevent
+     * (焦点不掉, 定时器根本不武装), 本记录器是纯兜底 —— 兜修饰符缺位的任何形态: 旧模板残留在
+     * 长开页签(修复后不刷新页面就继续用)、未来模板回归、个别浏览器 label-blur 不可防。 */
+    this._popLabelDownRecorder = (e) => {
+      const el = e.target && e.target.closest ? e.target.closest("label[for]") : null;
+      this._popLabelDown = el ? { t: performance.now(), forId: el.getAttribute("for") || "" } : null;
+    };
+    window.addEventListener("mousedown", this._popLabelDownRecorder, { capture: true });
   },
   unmounted() {
     window.removeEventListener("dragenter", this._addDragEnter);
     window.removeEventListener("dragover", this._addDragOver);
     window.removeEventListener("dragleave", this._addDragLeave);
     window.removeEventListener("drop", this._addDragDrop);
+    if (this._popLabelDownRecorder) {
+      window.removeEventListener("mousedown", this._popLabelDownRecorder, { capture: true });
+      this._popLabelDownRecorder = null;
+    }
   },
   methods: {
     /* ---------------- 添加种子对话框(R1B): multipart 提交不走 this.api()(它强制 application/json 会破坏 multipart boundary),
@@ -297,10 +313,25 @@ window.AQB_ADD = {
      * 挂 40ms 定时合帧: 焦点真离开(点空白/别的字段/Tab)下一拍收层; 焦点回来了(开层方法先跑)
      * 则撤销, 菜单全程不闪。定时窗内收层前 window click 兜底照常生效。
      * ⚠ label 一侧的 blur 由模板 @mousedown.prevent 根除(焦点不掉, 本定时器不武装) —— 本窗口
-     * 40ms 只兜点空白/Tab 这类瞬时焦点迁移, 不许再把 label 的长按间隙算进来(2026-10-04 三修)。 */
+     * 40ms 只兜点空白/Tab 这类瞬时焦点迁移, 不许再把 label 的长按间隙算进来(2026-10-04 三修)。
+     * ⚠ 四轮再加固: 收层前问 _popBlurShouldHold —— 焦点已回本族输入框或本族 label 转发 click
+     * 仍在途时跳过收层; 模板修饰符缺位(旧页签残留模板/未来回归)时由它独立根除闪烁, 不再
+     * 依赖模板与 JS 同代到达浏览器。 */
+    /* 失焦收层前的守卫(记录器见 mounted 注释): 在 40ms 合帧定时器**触发那刻**判定 ——
+     * ①焦点已回本族输入框(转发 click 已落地 / 合成零延迟点击) → 不收, 开层方法会接手;
+     * ②本族 label 的 mousedown 落在 350ms 内且焦点不在任何输入框上 = 转发 click 仍在途
+     *   (人手按住中) → 不收, 等松手后 label 默认动作把焦点转回。350ms 上界防旧记录误挡
+     *   后续无 mousedown 的失焦(如 Tab)。ids = 本族输入框 id(add 三字段 / meta 分类)。 */
+    _popBlurShouldHold(ids) {
+      const ae = document.activeElement;
+      if (ae && ae.id && ids.includes(ae.id)) return true;
+      const rec = this._popLabelDown;
+      return !!(rec && performance.now() - rec.t <= 350 && ids.includes(rec.forId));
+    },
     addPopBlurClose() {
       clearTimeout(this._addPopBlurT);
       this._addPopBlurT = setTimeout(() => {
+        if (this._popBlurShouldHold(["ad-save-path", "ad-category", "ad-tags"])) return;
         this.addCatMenu = false;
         this.addTagMenu = false;
         this.addPathPop = false;

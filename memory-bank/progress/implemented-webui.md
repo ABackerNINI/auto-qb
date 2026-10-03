@@ -7,6 +7,18 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 添加种子三下拉 label 闪烁「第四轮」(JS 收层守卫单点加固)**(2026-10-04): 用户报 594e247f
+  三修后真机仍稳定复现。本轮探针自校验(摘掉 `@mousedown.prevent` → delay=150 完整闪烁链复现)证明
+  三修代码在 Chromium 人手时序下干净(三皮肤 × 四场景 24/24 零翻转), 用户症状 = 浏览器跑的还是旧
+  模板 —— SPA 的模板/JS 以页面加载时刻为准, 长开页签不刷新服务端更新到不了。代码侧加固 = 收层不再
+  依赖「模板与 JS 同代到达」: `addPopBlurClose`/`metaCatBlurClose` 的 40ms 定时器收层前问
+  `_popBlurShouldHold`(mounted 挂 mousedown capture 记录器, unmounted 对称移除) —— 焦点已回本族
+  输入框或本族 label 转发 click 仍在途(350ms 新鲜度)→ 跳过收层; 模板修饰符在 = 纯 no-op, 缺位 =
+  独立根除闪烁, 任何代际混合都安全。守卫 vs 旧模板 4/4(点空白/Tab/过期 blur 三条正常收层路径零误伤);
+  守阵 combo 第 7 组 + 拖拽守阵 mounted 断言改子集语义; 用户侧验收 = 服务重启后整页强刷再走查。
+  基线 [testing/baselines/26-10-04-0240](../testing/baselines/26-10-04-0240-webui-addcombo-label-round4.md)
+  (2419 passed + 3 skipped / 31.86s / 99%, stash→sync 合并 2b10581a 后重测)。
+
 - **WEB UI qB 口径流量图三图**(2026-10-04 实施完成, 方案C): 全局弹层 / 单种抽屉「流量」页签 / 分组弹层三挂点 (uPlot vendor 单文件, 三主题登记, 低频轮询); 后端采样管线 (core/modules/traffic_sample_mod.py, 全局恒采 + 单种活跃过滤) + dat 存储层 (core/traffic_store.py, `<data_dir>/qb-traffic/` global.dat + torrents/&lt;infohash&gt;.dat, 小时封口 catch-up 补封 + 半行容错/损坏隔离 + index/reconcile + 删种冻结/重加解冻/按龄淘汰) + 三 GET API (webui/server/traffic_qb.py, 栅格离散 null 断线 + 组读侧聚合, 金清单 75); 配置键 `qb_traffic`(enabled 缺省 false = 零开销)。P6 十条桩验证 10/10 过 (桩验证替代真机); 真机遗留: fastresume 单种 all-time 持久性 / alltime 回退幅度待观察。实施权威 = [计划 26-10-03-0946](../plans/26-10-03-0946-plan-qb-traffic-charts-c.html) + [档案 26-10-03-webui-qb-traffic-charts](../tasks/26-10-03-webui-qb-traffic-charts.md) (P6 验证记录节); test.full 2418 passed / 99%。
 
 - **WEB UI 添加种子三浮层互斥补双向(closeAddPopsExcept 单点)**(2026-10-04): issue 26-10-04-0130

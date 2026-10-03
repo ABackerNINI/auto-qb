@@ -361,10 +361,13 @@ window.AQB_DIALOGS = {
      * 40ms 合帧守卫是必需的 —— 点字段 label(for= 转发激活)时浏览器先 blur 再把焦点转回输入框,
      * 同步收层 = 关了又开(用户看到的"闪烁再现"); 焦点真回来由 openMetaCatMenu 撤销。
      * 改前这个下拉根本没有失焦收层(也没进 lifecycle 的 window click 兜底名单): 点了对话框里
-     * 别的地方(标签胶囊 / 新标签输入框)下拉悬着不收, 只能 Esc 或选一项 —— 与三下拉同族缺陷。 */
+     * 别的地方(标签胶囊 / 新标签输入框)下拉悬着不收, 只能 Esc 或选一项 —— 与三下拉同族缺陷。
+     * 四轮加固(2026-10-04): 收层前问 _popBlurShouldHold(单点在 add_torrent.js, 记录器挂根实例
+     * mounted) —— 模板 @mousedown.prevent 缺位时由 JS 守卫独立根除按住期收层闪烁。 */
     metaCatBlurClose() {
       clearTimeout(this._metaPopBlurT);
       this._metaPopBlurT = setTimeout(() => {
+        if (this._popBlurShouldHold(["meta-category"])) return;
         this.metaCatMenu = false;
         this.metaCatHi = -1;
       }, 40);
