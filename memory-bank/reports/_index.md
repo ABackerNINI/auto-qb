@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-04-0128] [WebUI 弹窗滚轮穿透背景滚动 · 分析报告](26-10-04-0128-report-webui-modal-scroll-chaining.html) — `webui-modal-scroll-chaining`
 - [26-10-03-1505] [HR 波次引擎四现象故障取证 · 一直在拉取 / 核实「未核实」/ 失踪 0 波 · auto-qb](26-10-03-1505-report-hr-fetch-verify-forensics.html) — `backend-partial-hr-verify`
 - [26-10-03-0759] [WEBUI 种子详情抽屉重设计 · 调研报告](26-10-03-0759-report-webui-drawer-redesign.html) — `webui-drawer-redesign`
 - [26-10-03-0757] [WebUI 新增 qB 口径流量图可行性分析 · 全局/单种/分组三图 · auto-qb](26-10-03-0757-report-qb-traffic-charts.html) — `torrent-traffic-stats`

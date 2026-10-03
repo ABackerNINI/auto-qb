@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebUI 弹窗滚轮穿透背景滚动 · 分析报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-modal-scroll-chaining">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-04-0128">
+<meta name="doc-updated" content="26-10-04-0128">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1420;
+    --paper: #151c2c;
+    --paper2: #1a2234;
+    --ink: #dce4f4;
+    --dim: #9aa8c2;
+    --faint: #6b7a96;
+    --line: #2a3550;
+    --acc: #5aa2e8;
+    --ok: #4cc38a;
+    --warn: #e8b45a;
+    --bad: #e87a7a;
+    --code-bg: #0b101c;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; padding: 0 16px 80px;
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 14.5px; line-height: 1.75;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+  header.rpt { padding: 44px 0 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  header.rpt h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: .5px; }
+  header.rpt .sub { color: var(--dim); font-size: 13.5px; }
+  .metagrid { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 16px; font-size: 12.5px; color: var(--dim); }
+  .metagrid b { color: var(--ink); font-weight: 600; }
+  h2 { font-size: 19px; margin: 46px 0 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+  h2 .no { color: var(--acc); margin-right: 8px; font-family: Consolas, monospace; }
+  h3 { font-size: 15.5px; margin: 26px 0 8px; color: var(--ink); }
+  h3::before { content: "▍"; color: var(--acc); margin-right: 4px; }
+  p { margin: 8px 0; }
+  .lead { color: var(--dim); font-size: 13.5px; margin-top: 2px; }
+  ul, ol { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; font-size: 12.8px; }
+  th, td { border: 1px solid var(--line); padding: 7px 9px; vertical-align: top; text-align: left; }
+  th { background: var(--paper2); color: var(--ink); font-weight: 600; white-space: nowrap; }
+  td { color: var(--ink); }
+  td .sm, .sm { font-size: 12px; color: var(--dim); }
+  tr:nth-child(even) td { background: rgba(255,255,255,.015); }
+  code, .mono {
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 12.3px; background: var(--code-bg);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+    color: #a8c8f0; word-break: break-all;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.65;
+    font-family: Consolas, "Cascadia Mono", monospace; color: #b9d2f2;
+  }
+  pre code { border: 0; padding: 0; background: none; }
+  .box { border: 1px solid var(--line); border-left: 3px solid var(--acc); border-radius: 8px; background: var(--paper); padding: 12px 16px; margin: 14px 0; }
+  .box.ok { border-left-color: var(--ok); }
+  .box.warn { border-left-color: var(--warn); }
+  .box.bad { border-left-color: var(--bad); }
+  .box .t { font-weight: 700; margin-bottom: 4px; }
+  .box.ok .t { color: var(--ok); }
+  .box.warn .t { color: var(--warn); }
+  .box.bad .t { color: var(--bad); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .badge { display: inline-block; border-radius: 4px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .b-fix { background: rgba(76,195,138,.14); color: var(--ok); border: 1px solid rgba(76,195,138,.4); }
+  .b-fix2 { background: rgba(90,162,232,.14); color: var(--acc); border: 1px solid rgba(90,162,232,.4); }
+  .b-skip { background: rgba(154,168,194,.1); color: var(--dim); border: 1px solid rgba(154,168,194,.35); }
+  .b-warn { background: rgba(232,180,90,.12); color: var(--warn); border: 1px solid rgba(232,180,90,.4); }
+  .u { color: #a8c8f0; word-break: break-all; }
+  .nc { color: var(--warn); font-weight: 600; }
+  .foot { margin-top: 60px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+  .kbd { font-family: Consolas, monospace; font-size: 11.5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--code-bg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="rpt">
+  <h1>WebUI 弹窗滚轮穿透背景滚动 · 分析报告</h1>
+  <div class="sub">遮罩模态上滚动滚轮连带滚动背景页面（含种子列表）—— 现状盘点 × 主流做法调研 × 逐弹窗判定</div>
+  <div class="metagrid">
+    <span>报告编号: <b>26-10-04-0128</b></span>
+    <span>日期: <b>2026-10-04</b></span>
+    <span>仓库: <b>auto-qb-clone3</b></span>
+    <span>范围: <b>src/auto_qb/webui/static/</b>（三皮肤 atlas / console / prism + shared）</span>
+    <span>性质: <b>证据快照</b>（行号基于当前工作区文件）</span>
+  </div>
+  <div class="metagrid">
+    <span>输入: 阶段 1 代码盘点 + 阶段 2 联网调研（临时件 <span class="mono">tmp-analysis/modal-scroll/phase1-findings.md · phase2-findings.md</span>，已 gitignore；本报告自成一体，全部事实与来源已誊入正文）</span>
+  </div>
+</header>
+
+<!-- ============================================================ 1 -->
+<h2><span class="no">1</span>摘要</h2>
+<div class="box bad">
+  <div class="t">问题</div>
+  全部 <b>12 个带遮罩的模态弹窗</b>上滚动滚轮都会连带滚动背后的页面（种子列表所在），三皮肤（atlas / console / prism）无一例外；全库当前没有任何滚动链阻断手段。
+</div>
+<div class="box warn">
+  <div class="t">机制（一句话）</div>
+  前端是「整页滚动模型」—— 全站唯一的纵向滚动容器是 <b>document</b>（种子列表的行直接铺在文档流里）；弹窗虽是 <code>position: fixed</code>，但仍是 <code>#app</code> 的 DOM 后代，滚轮按 <b>DOM 祖先链</b>向上找最近可滚祖先，而弹窗层自身（<code>.modal-mask</code> / <code>.modal</code>）没有设置 overflow、不是滚动容器 —— 于是有内滚区的弹窗「滚到边界后」连锁到 document，无内滚区的弹窗「第一个滚轮事件」直达 document。
+</div>
+<div class="box ok">
+  <div class="t">推荐方案（一句话）</div>
+  主改动走 CSS：三皮肤共享壳 <code>.modal-mask</code> 加 <code>overflow: hidden; overscroll-behavior: contain;</code>（MDN 官方背书的「遮罩截断滚动链」用法，零布局位移、天然不伤无遮罩浮层），8 类弹窗内滚区顺手补 <code>overscroll-behavior: contain</code>，HR 全屏的专属遮罩 <code>.hr-full-mask</code> 单独补同一组规则；再在 JS 层加一个<b>特征检测门控</b>（<code>CSS.supports('overscroll-behavior','contain')</code> 为 false 才激活）的 wheel / touchmove 拦截，兜底老 Safari / iOS &lt; 16。不选锁 document 派：本方案不存在滚动条位移问题，无需补偿，也无需动 12 个弹窗的开关逻辑。
+</div>
+<div class="box">
+  <div class="t">需要拍板的分叉（详见 §5.4）</div>
+  <ol style="margin:4px 0">
+    <li><b>JS 兜底是否本期一并做</b> —— 推荐做（约 40 行 vanilla，仅老 Safari / iOS &lt; 16 生效，现代浏览器零开销）；也可拆第二期。</li>
+    <li><b>遮罩 overflow 用 <code>hidden</code> 还是 <code>overflow-y: auto</code> 变体</b> —— 推荐 <code>hidden</code> 起步 + 给 6 号通用壳补 max-height 作可选加固；<code>auto</code> 变体可兼防超高弹窗，但会引入 flex 居中溢出顶端不可达的边角问题。</li>
+    <li><b>无遮罩浮层（含「列」窗口）确认不改</b> —— 推荐维持用户假设：不改（裁决与理由见 §6.3）。</li>
+  </ol>
+</div>
+
+<!-- ============================================================ 2 -->
+<h2><span class="no">2</span>问题现象与影响面</h2>
+<p class="lead">弹窗全量清单。技术底座：前端为 Vue 3（<code>shared/vendor/vue.global.prod.js</code> 本地方文件加载，无打包链），单根实例挂 <code>#app</code>；全部弹窗是静态模板片段，由 boot.js 按 tpl-manifest fetch 后以 innerHTML 注入 <code>#app</code>（boot.js:52-73，<code>buckets.app += text</code>；清单 atlas/index.html:129-147）。因此<b>所有弹窗节点都是 #app 的 DOM 子节点</b>，与视图内容同层 —— 没有任何遮罩模态走 Teleport（全站唯一 <code>&lt;teleport to="body"&gt;</code> 是 HR 悬停 tooltip <code>hr-pop</code>，popovers.html:263）。</p>
+
+<h3>2.1 带遮罩的模态框（<code>.modal-mask</code>，共 12 个）</h3>
+<p><code>.modal-mask</code> 定义三皮肤各一份、规则逐字同构：atlas/css/components.css:546-547 · console/css/components.css:461-462 · prism/css/components.css:235-236。均为 <code>position: fixed; inset: 0; z-index: 130; display: flex; align-items: center; justify-content: center; padding: 20px</code>（prism 遮罩底色用令牌 <code>var(--bg-sunken), rgba(0,0,0,.35)</code>，atlas / console 写死 <code>rgba(4,10,22,.72)</code>）。</p>
+<table>
+  <tr><th>#</th><th>名称 / 标题</th><th>打开标志 (Vue data)</th><th>模板 DOM 处</th><th>触发入口</th><th>弹窗内部滚动区</th></tr>
+  <tr><td>1</td><td>添加种子</td><td><code>addOpen</code></td><td>shared/tpl/dialogs-mgr.html:5-7（<code>.modal.add-dialog</code>）</td><td>顶栏按钮 topbar.html:61；快捷键 shortcuts.js:141；拖放入库 add_torrent.js:408,432</td><td><b>有</b>：<code>.add-dialog-body { overflow-y: auto }</code> + <code>.modal.add-dialog { max-height: calc(100vh - 120px) }</code>（atlas/css/dialogs.css:205-207）；三个候选下拉 <code>.add-pop-list { max-height: 210px; overflow-y: auto }</code>（atlas dialogs.css:248）+ JS 动态限高 <code>_fitAddPop</code>（add_torrent.js:304-317）</td></tr>
+  <tr><td>2</td><td>选择保存位置</td><td><code>dirBrowse.open</code></td><td>dialogs-mgr.html:198-200（<code>.modal.dir-browse</code>）</td><td>添加窗口内「选择位置…」按钮 dialogs-mgr.html:85 → openDirBrowse（add_torrent.js:202）</td><td><b>有</b>：<code>.db-list { max-height: 380px; overflow-y: auto }</code>（atlas/css/views.css:276）</td></tr>
+  <tr><td>3</td><td>管理分类</td><td><code>mgrOpen === 'category'</code></td><td>dialogs-mgr.html:240-242（<code>.modal.add-dialog.mgr-dialog</code>）</td><td>筛选弹层「管理…」topbar.html:268 → openMgr（dialogs.js:76）</td><td><b>有</b>：<code>.mgr-list { max-height: 300px; overflow-y: auto }</code>（atlas dialogs.css:347）</td></tr>
+  <tr><td>4</td><td>管理标签</td><td><code>mgrOpen === 'tag'</code></td><td>shared/tpl/popovers.html:2-4</td><td>同上（openMgr）</td><td><b>有</b>：同 <code>.mgr-list</code></td></tr>
+  <tr><td>5</td><td>标签与分类</td><td><code>metaOpen</code></td><td>popovers.html:48-50（<code>.modal.add-dialog.meta-dialog</code>）</td><td>行右键 ctx-menus.html:99；批量浮条 topbar.html:215 → openMetaDialog（dialogs.js:207）</td><td><b>有</b>：<code>.meta-tags { max-height: 220px; overflow-y: auto }</code>（atlas dialogs.css:372）；分类下拉 <code>_fitAddPop("metaCatList")</code>（dialogs.js:905-913）</td></tr>
+  <tr><td>6</td><td>站内确认 / 输入框（通用壳，5 种形态：确认 / 三选一 / 带勾选 / 输入 / 多字段）</td><td><code>modal.visible</code></td><td>popovers.html:112-114（<code>.modal</code> + 动态 danger / wide）</td><td>调用点遍布全站：删除确认 <code>_confirmDelete</code>（delete_flow.js:200，wide+checks+details）；抽屉编辑 drawer.js:53,119,151,191,215,271,314；配置编辑 config_editor.js:223,311,684,699,753,779,815,1309；config_hub.js:882,906,933,941；config_rules.js:147；快捷键 shortcuts.js:814,818,1012</td><td>删除确认的成员明细 <code>.modal-members { max-height: 260px; overflow-y: auto }</code>（atlas views.css:256）；<b><code>.modal</code> 本体无 max-height</b>（atlas components.css:549）</td></tr>
+  <tr><td>7</td><td>历史流量</td><td><code>historyOpen</code></td><td>popovers.html:175-177（<code>.modal.hist-modal</code>）</td><td>状态栏按钮 statusbar.html:17 → openHistory（dialogs.js:591）</td><td>无内滚区（SVG 图固定 920×380，dialogs.js:835-841）</td></tr>
+  <tr><td>8</td><td>键盘快捷键</td><td><code>kbHelpOpen</code></td><td>popovers.html:307-309（<code>.modal.kb-help</code>）</td><td>快捷键 Shift+Slash（shortcuts.js:988）；Esc 关 lifecycle.js:75</td><td><b>有</b>：<code>.kb-help-body { max-height: 60vh; overflow-y: auto }</code>（shared/console_hub.css:1109，三皮肤同载）</td></tr>
+  <tr><td>9</td><td>qB 流量图</td><td><code>qbHistOpen</code></td><td>shared/tpl/qb-traffic.html:8-10（<code>.modal.qb-modal</code>）</td><td>状态栏按钮 statusbar.html:23 → openQbHistory</td><td>无内滚区（SVG 图）</td></tr>
+  <tr><td>10</td><td>qB 分组流量</td><td><code>qbGroupOpen</code></td><td>qb-traffic.html:65-67（<code>.modal.qb-modal</code>）</td><td>分组行右键 ctx-menus.html:192 → openQbGroup</td><td>无内滚区</td></tr>
+  <tr><td>11</td><td>统计面板</td><td><code>statsOpen</code></td><td>shared/tpl/dialogs.html:3-5（<code>.modal.add-dialog.stats-dialog</code>）</td><td>状态栏按钮 statusbar.html:35 → openStats（dialogs.js:18）；快捷键 shortcuts.js:147</td><td><b>有</b>：借用 <code>.add-dialog</code> 壳 → <code>max-height: calc(100vh - 120px)</code> + <code>.add-dialog-body { overflow-y: auto }</code>（dialogs.html:13 用了 <code>add-dialog-body</code>）</td></tr>
+  <tr><td>12</td><td>HR 站点状态全屏</td><td><code>hrsOpen</code></td><td>shared/tpl/settings-detail.html:267（<code>.hr-full-modal</code>，role=dialog）</td><td>hr_status.js:346 → hrsExpand</td><td><b>有</b>：<code>.hr-full-modal-bd { flex: 1; min-height: 0; overflow: auto }</code>（atlas dialogs.css:197）；<b>专属遮罩</b> <code>.hr-full-mask</code>（atlas dialogs.css:187-188，z-index 128，top/bottom 用 <code>--head-h</code>/<code>--statusbar-h</code> 变量，非 inset:0）</td></tr>
+</table>
+<p><b>共享基础设施</b>（打开 / 关闭各自为政，视觉与守卫层共享）：① 统一视觉壳 <code>.modal-mask / .modal / .modal-title / .modal-body / .modal-actions</code> 三皮肤各写一份、类名与结构逐字一致（atlas components.css:546-560 · console components.css:461-480 · prism components.css:235-250），12 个模态复用这套壳 + 各自修饰类；② 统一确认 / 输入原语 <code>window.AQB_FEEDBACK</code>（ui_feedback.js:10）提供 <code>_modalInit / confirmDialog / confirmThreeDialog / confirmWithOption / promptDialog / _openModal / resolveModal</code>（ui_feedback.js:34-135，<code>_openModal</code> 在 ui_feedback.js:87），单例 Promise 模态（ui_feedback.js:88），状态在 state.js:169-174 —— 6 号通用壳即由它驱动；③ 统一遮罩关窗守卫 <code>maskDownSelf / maskCloseIfArmed</code>（dialogs.js:56-63），12 个 modal-mask 模板全部成对挂 <code>@mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(...)"</code>（dialogs.html:4 · dialogs-mgr.html:6,199,241 · popovers.html:3,49,113,176,308 · qb-traffic.html:9,66）；④ 统一 Esc 退栈链 lifecycle.js:56-88，名单与 <code>escBusy()</code>（dialogs.js:525-532）双处同步；⑤ <b>没有公共的 open/close 弹窗管理器</b> —— 每个弹窗是 Vue data 里的独立布尔 / 字符串标志 + <code>v-if</code>，由各 mixin 专用方法置位（openStats dialogs.js:18、openMgr dialogs.js:76、openMetaDialog dialogs.js:207、openAddTorrent add_torrent.js:29、openHistory dialogs.js:591、openSpeedAt dialogs.js:481…）；不是原生 <code>&lt;dialog&gt;</code>（全库 grep <code>&lt;dialog</code> 零命中），不是动态 append；⑥ 样式落点分工：通用壳在皮肤 components.css；弹窗专属样式在皮肤 dialogs.css（atlas / console；<b>prism 没有 dialogs.css</b>，弹窗样式散在 components.css:404-620 与 views.css:474-530）；跨皮肤共享的在 shared/console_hub.css，三份 index.html 均加载（atlas/index.html:13 · console/index.html:16 · prism/index.html:20）。</p>
+
+<h3>2.2 无遮罩浮层（非模态）</h3>
+<p class="lead">参与同一滚轮连锁问题，但无「弹窗后滚背景」的违和感 —— 连锁观感 ≈ 正常页面滚动（页面本可交互）。</p>
+<table>
+  <tr><th>名称</th><th>打开标志</th><th>模板处</th><th>定位 / 滚动</th></tr>
+  <tr><td><b>限速浮层</b>「限速」</td><td><code>speedOpen</code></td><td>dialogs.html:68-69（<code>.speed-pop</code>，role=dialog，<b>无遮罩</b>）</td><td>锚定状态栏上方 fixed，JS 只写 left（dialogs.js:509-513）；<code>.speed-pop .add-dialog-body { overflow: visible }</code>（atlas dialogs.css:489）覆盖了 add-dialog-body 的 auto → <b>无内滚区</b></td></tr>
+  <tr><td><b>列选择器</b>（「列」窗口）</td><td><code>colMenuOpen</code></td><td>topbar.html:73（<code>.col-menu</code>）</td><td>按钮路径 absolute 挂锚点下（atlas components.css:109），右键路径 JS 写 <code>position:fixed + maxHeight + overflowY:auto</code>（columns.js:33-37）；CSS <code>max-height: 70vh; overflow-y: auto</code>（atlas views.css:107 · console views.css:80 · prism components.css:404）</td></tr>
+  <tr><td>筛选器弹层</td><td><code>filterMenu</code></td><td>topbar.html:252（<code>.pop-menu</code>）</td><td><code>max-height: 330px; overflow-y: auto</code>（atlas components.css:113）</td></tr>
+  <tr><td>界面切换下拉</td><td><code>uiMenuOpen</code></td><td>topbar.html:166（<code>.pop-menu</code>）</td><td>同上</td></tr>
+  <tr><td>搜索语法浮卡</td><td><code>searchHelpOpen</code></td><td>topbar.html:46（<code>.search-help-pop</code>）</td><td>锚定浮卡</td></tr>
+  <tr><td>行右键菜单 / 表头右键 / 文件优先级</td><td><code>menu.visible</code> / <code>headMenu.visible</code> / <code>filePrio.visible</code></td><td>ctx-menus.html:2 / 204 / 239（<code>.ctx-menu</code>）</td><td>fixed 锚光标，JS 视口钳位 <code>_menuPos</code>（ui_feedback.js:142-146）</td></tr>
+  <tr><td>配置项说明</td><td><code>hub.help</code></td><td>settings-detail.html:449（<code>.hb-pop</code>）</td><td>设置页锚定</td></tr>
+  <tr><td>HR 悬停卡</td><td><code>hrPop.open</code></td><td>popovers.html:263-264（<code>&lt;teleport to="body"&gt;</code>）</td><td><b>全站唯一 teleport 到 body 的浮层</b></td></tr>
+  <tr><td>拖放遮罩</td><td>（dragenter 期间）</td><td>dialogs.css:282 <code>.add-drop-mask</code></td><td><code>pointer-events: none</code> —— 不接收滚轮</td></tr>
+  <tr><td>toast / 列拖动虚影</td><td>—</td><td>overlays.html:2-3 / 13</td><td>非交互</td></tr>
+</table>
+
+<h3>2.3 详情抽屉（drawer）与弹窗的边界</h3>
+<ul>
+  <li>挂载：drawer.html 注入 <code>.drawer-dock</code>（atlas/index.html:141 manifest；元素在 torrents.html:110），即种子视图 <code>main.content.torrents-dock</code> 内部（groups.html:2-6；布局 atlas dialogs.css:11-13）。</li>
+  <li>形态：<code>.drawer { position: relative; max-height: 42vh; overflow: hidden }</code> + <code>.drawer-body { overflow: auto }</code>（atlas dialogs.css:14,62），窄屏媒体查询才转 fixed（atlas dialogs.css:33）。</li>
+  <li><b>边界结论</b>：抽屉<b>不是浮层</b> —— 它是页面文档流的一部分，无遮罩、页面照常可交互；其内滚区滚到边界后 wheel 连锁到文档滚动属于「页面继续往下滚」的正常语义。弹窗（fixed + 遮罩）则在视觉上隔绝背景，背景跟着滚才是缺陷。两者在 Esc 退栈链里分层管理（lifecycle.js:67-69：filePrio → drawer → 其它弹层）。</li>
+</ul>
+
+<h3>2.4 影响面小结</h3>
+<p><b>12 / 12 遮罩模态全部命中</b>，三皮肤无差异（布局骨架、<code>.group-table</code>、<code>.sticky-head</code>、<code>.modal-mask</code>、<code>.add-dialog-body</code> 规则三套 CSS 逐字同构，仅视觉令牌不同）。无遮罩浮层参与同一连锁但观感不同，不构成「弹窗后滚背景」缺陷（判定见 §6.3）。</p>
+
+<!-- ============================================================ 3 -->
+<h2><span class="no">3</span>机制诊断</h2>
+
+<h3>3.1 主页面滚动结构（三皮肤一致：整页滚动模型）</h3>
+<ul>
+  <li><b>垂直滚动由 document 承担</b>：<code>html, body</code> 只有 margin / preset，无 height / overflow 约束（atlas/style.css:141-142 · console/style.css:136-137 · prism/css/base.css:6-7）；全库 grep 无任何 <code>html/body { overflow }</code>。atlas/css/dialogs.css:10 注释自证：「<b>整页滚动模型</b>下 flex:1 不改变现状」。</li>
+  <li><b>骨架</b>：<code>#app</code> → <code>.sticky-head</code>（service-banner + <code>header.topbar</code>；sticky: <code>position: sticky; top: 0; z-index: 30</code>，console components.css:40 / prism:33，atlas 等价规则）+ <code>.layout</code>（grid，padding 含状态栏让位，atlas components.css:142-143）→ <code>main.content</code>（<code>overflow-x: clip</code> 只裁横向，atlas components.css:151 · console:144 · prism views.css:53）→ 视图内容。</li>
+  <li><b>种子列表滚动容器</b>：<code>.group-table</code> 只有 <code>overflow-x: auto</code>（<b>仅横向</b>），纵向不滚（atlas components.css:209 · console components.css:195 · prism views.css:140）；行直接铺在文档流里，<b>纵向滚动 = document 滚动</b>。分组 / 种子 / 追剧三个视图同构（groups.html:30 <code>@scroll="syncGroupHeadScroll"</code> 只同步横向列头）。种子视图额外挂 <code>.torrents-dock</code> flex column（atlas dialogs.css:11-13）与虚拟滚动 padding 行（torrents.html:22,98 <code>row-pad</code>，按文档滚动位置补偿）。</li>
+</ul>
+
+<h3>3.2 滚动容器链（按 DOM / 滚动规范推演）</h3>
+<pre>document (html)  ←  【唯一的纵向滚动容器 = 种子列表所在】
+└─ body
+   └─ #app
+      ├─ .sticky-head / .layout &gt; .content &gt; .group-table(仅横向滚) / 视图…
+      └─ .modal-mask  (position: fixed; inset: 0; overflow: 未设 → 不是滚动容器)
+         └─ .modal    (overflow: 未设; 仅 .add-dialog 变体有 max-height)
+            └─ .add-dialog-body 等 (overflow-y: auto → 弹窗内自滚区)</pre>
+<p><b>关键事实链：</b></p>
+<ol>
+  <li><b>弹窗是背景滚动容器的 DOM 后代</b>：所有 modal-mask 都由 boot.js 注入 <code>#app</code>（boot.js:67，atlas/index.html:132-146）。虽然 <code>position: fixed</code> 使其脱离布局流，但 <b>wheel 事件的滚动链按 DOM 祖先链向上找「最近可滚祖先」</b>，fixed 定位只改包含块、不改滚动链。</li>
+  <li><b>弹窗层自身不可滚</b>：<code>.modal-mask</code> 与 <code>.modal</code> 均未设 overflow（atlas components.css:546-549），溢出可见 → 不是链上的滚动容器。</li>
+  <li><b>没有中间滚动容器兜底</b>：modal-mask 是 <code>.content</code> / <code>.group-table</code> 的<b>兄弟节点</b>而非后代，链上从弹窗到 document 之间没有任何 <code>overflow: auto</code> 的元素 —— 弹窗内滚区滚尽后，下一站直接是 document。</li>
+  <li><b>document 一滚，种子列表就滚</b>：因为列表纵向滚动就是文档滚动（3.1 节），弹窗遮罩后面整个页面（含吸顶表头之下的全部行）跟着位移。</li>
+</ol>
+
+<h3>3.3 两种连锁时序</h3>
+<table>
+  <tr><th>形态</th><th>涉及弹窗</th><th>时序</th><th>观感</th></tr>
+  <tr><td><b>有内滚区</b></td><td>1 添加种子 / 2 选择位置 / 3·4 管理分类标签 / 5 标签与分类 / 8 快捷键 / 11 统计 / 12 HR 全屏 / 6 删除确认的成员明细</td><td>滚轮先滚内滚区，<b>到达滚动边界（scrollTop == 0 或 max）后继续滚 → 默认 scroll chaining 传给 document → 背景开始滚</b></td><td>「滚着滚着背景突然动了」</td></tr>
+  <tr><td><b>无内滚区</b></td><td>7 历史流量 / 9·10 qB 流量图 / 6 号短内容确认框 / 输入框</td><td>弹窗内没有任何可滚元素，<b>第一个 wheel 事件就直接滚 document → 立即连锁</b></td><td>「弹窗一开背景就不受控」</td></tr>
+  <tr><td>无遮罩浮层（参照）</td><td>限速浮层等</td><td>限速浮层把 <code>add-dialog-body</code> 显式改回 <code>overflow: visible</code>（atlas dialogs.css:489），刻意「无内滚」；无遮罩、页面本可操作</td><td>连锁观感 ≈ 正常页面滚动，<b>不算缺陷</b></td></tr>
+</table>
+<p><b>结论（可预测性）</b>：全部 12 个遮罩模态都会复现 —— 有内滚区的在边界后连锁，无内滚区的立即连锁，区别只是触发时机，<b>没有一个弹窗能阻止背景滚动</b>。<b>根因不是</b> window / document 级 wheel / mousewheel 监听（grep 全部 shared JS 零命中，见 3.4）—— 是<b>纯粹的 CSS 滚动链默认行为 + 缺失阻断</b>。复现前置条件：页面可纵向滚动（种子列表足够长，超出一屏）。</p>
+
+<h3>3.4 现存相关处理与缺失项（全库 grep 取证）</h3>
+<p><b>已存在的滚动相关代码</b>（均与「阻断滚动链」无关）—— window scroll 监听仅 3 处，全是收浮层 / 测视口，不 preventDefault、不驱动列表滚动：</p>
+<ul>
+  <li>hr.js:179 —— 滚动即收 HR 悬停卡（<code>hrPopHideNow</code>）；</li>
+  <li>ui_feedback.js:232 —— 滚动即收 <code>.aq-tip</code> 全局 tooltip；</li>
+  <li>lifecycle.js:30 —— <code>passive: true</code> 的 <code>_onWinScroll</code>（视口高度 / 吸顶测量，注释 lifecycle.js:28「滚动本身不做任何布局读取」）。</li>
+</ul>
+<p><b>明确缺失的阻断手段</b>（全库 grep 零命中，即修复空间）：</p>
+<table>
+  <tr><th>手段</th><th>现状</th></tr>
+  <tr><td><code>overscroll-behavior</code> (contain / none)</td><td><span class="nc">未找到</span> —— 三皮肤 CSS 与 shared CSS 均无（本次报告复核 grep 仍零命中）。这是阻断「内滚区边界 → 文档」连锁的标准一档。</td></tr>
+  <tr><td><code>overscroll-behavior</code> 或 <code>overflow: hidden</code> 挂在 <code>.modal-mask</code> 上</td><td><span class="nc">未找到</span> —— 遮罩层本可以截断滚动链。</td></tr>
+  <tr><td>打开弹窗时锁文档滚动（scroll lock）</td><td><span class="nc">未找到</span>（<code>grep "style.overflow|scrollTop" shared/*.js</code> 仅命中列头横向同步）。</td></tr>
+  <tr><td><code>scrollbar-gutter</code></td><td><span class="nc">未找到</span>。</td></tr>
+  <tr><td><code>wheel preventDefault</code> / passive:false 拦截</td><td><span class="nc">未找到</span>（<code>grep "addEventListener('wheel'|onwheel|mousewheel"</code> 零命中）。</td></tr>
+</table>
+<p><b>间接佐证</b>（团队踩过相邻坑但未涉滚轮链）：dialogs.html:63-67 注释（限速浮层必须做成状态栏兄弟节点，否则被 <code>.statusbar { overflow: hidden }</code> 裁掉）；dialogs-mgr.html:49-52 注释（路径面板曾因挂错定位祖先相对 <code>.modal-mask(fixed)</code> 换算而渲染到视口外）；ui_feedback.js:157 注释（tooltip「单例挂 body 级 —— 脱离列表容器的 overflow」，配合 hr-pop 是全站仅有的摆脱祖先 overflow 先例，当前没有任何弹窗使用它）。</p>
+
+<!-- ============================================================ 4 -->
+<h2><span class="no">4</span>主流做法对比（四流派 + 同类产品先例）</h2>
+<p class="lead">引用分三层标注：<b>[规范语义]</b> = 标准原文 / MDN；<b>[主流实践]</b> = 真实库 / 产品行为；<b>[本项目适配]</b> = 本仓库判断。未核实到的信息一律标「<b>未证实</b>」（汇总见 §8.2）。</p>
+
+<h3>4.1 流派 A：CSS overscroll-behavior（contain / none）</h3>
+<ul>
+  <li><b>[规范语义] 作用对象</b>：CSS Overscroll Behavior L1 明确 "Applies to: <b>scroll container elements</b>"（<span class="u">https://drafts.csswg.org/css-overscroll-1/</span>）；MDN 侧注："this property applies only to scroll containers… setting this property on an iframe has no effect"（<span class="u">https://developer.mozilla.org/en-US/docs/Web/CSS/overscroll-behavior</span>）。<code>Inherited: no</code> —— <b>对非滚动容器设置无效</b>。</li>
+  <li><b>[规范语义] contain</b>："no scroll chaining occurs on neighboring scrolling areas; the underlying elements will not scroll"（MDN）；规范："the element must not perform non-local boundary default actions"。<b>none</b>：在 contain 之上再禁掉本元素自己的边界默认行为（回弹 / 下拉刷新等）。</li>
+  <li><b>[规范语义] 关键条款（直接命中本项目「遮罩无内滚」形态）</b>：规范 "If a scroll container has no potential to scroll… the element is <b>always considered to be at the scroll boundary</b>"；MDN 展开原文："A scroll container that has no scrollable overflow, such as an element with <code>overflow: hidden</code>, is always considered to be at its scroll boundary. So setting a non-default overscroll-behavior such as <code>contain</code> or <code>none</code> on it <b>will prevent scroll chaining to ancestor scroll containers. This can be used to prevent background scrolling while a dialog or overlay is open.</b>"（MDN overscroll-behavior 页，2026 年现行版）—— <b>这是「遮罩 + overflow:hidden + contain」组合的官方明文背书</b>。</li>
+  <li><b>[本项目适配] 对两种形态的适用性</b>：① 有内滚区弹窗：内滚区加 <code>contain</code> 即可止住「到边界后连锁」（MDN 官方示例场景），但滚轮落在标题 / 按钮 / 遮罩空白时链不经过内滚区，<b>单独用①挡不住全部穿透</b>；② 无内滚区弹窗：<code>.modal-mask</code> 加 <code>overflow: hidden</code> 使其成为滚动容器 + <code>contain/none</code>，遮罩覆盖整个视口、滚轮目标必然在遮罩子树内 → <b>理论全覆盖</b>。变体：<code>.modal-mask { overflow-y: auto; overscroll-behavior: contain; }</code>，遮罩自身成为真正的滚动容器，兼带「超高弹窗可在遮罩内滚动」的能力。浏览器差异：Chromium 旧版对 hidden 组合的处理<b>未证实</b>（未检索到权威 bug 单）；caniuse 将所有厂商标为 partial support。</li>
+  <li><b>[主流实践] 兼容线</b>（<span class="u">https://caniuse.com/mdn-css_properties_overscroll-behavior</span>，2026-10 查询）：Chrome 63+（63–143 partial，144+ full）、Edge 18+、Firefox 59+（partial，150+ full）、<b>Safari 16.0+（partial）</b>、<b>iOS Safari 16.0+（partial）</b>、Chrome Android 154 full。结论：<b>Safari / iOS 支持线是 16（2022-09）</b>，更老的 iOS 需 JS 兜底；caniuse 全线标 partial（≈96% 全局覆盖：71.84% full + 24.19% partial）。</li>
+  <li><b>[本项目适配] 对无遮罩浮层是否误伤</b>：两种形态都只写在 <code>.modal-mask</code> / 内滚区上，<code>.col-menu</code> 等无遮罩浮层不含这些类 → <b>不误伤</b>。</li>
+</ul>
+
+<h3>4.2 流派 C：锁 document（Bootstrap / element-plus / Vuetify / antd 路）</h3>
+<ul>
+  <li><b>Bootstrap 5 [主流实践]</b>：开弹窗时 body 加 <code>.modal-open</code>（CSS <code>overflow: hidden</code>），JS 端 <code>Scrollbar.hide()</code>（<span class="u">https://github.com/twbs/bootstrap/blob/main/js/src/util/scrollbar.js</span>，经 jsdelivr 5.3.3 核实）：<code>element.style.overflow = 'hidden'</code>；<b>滚动条消失补偿</b> <code>padding-right += width</code>（宽度实测 <code>Math.abs(window.innerWidth - document.documentElement.clientWidth)</code>）；额外补偿 <code>.fixed-top, .fixed-bottom, .is-fixed, .sticky-top</code> 的 padding-right（sticky-top 还加负 margin-right），且只补实际伸进滚动条区的元素。文档：<span class="u">https://getbootstrap.com/docs/5.3/components/modal/</span>。<b>现代替代</b>：<code>scrollbar-gutter: stable</code>（<span class="u">https://developer.mozilla.org/en-US/docs/Web/CSS/scrollbar-gutter</span>："the gutter will be present if overflow is auto, scroll, or hidden even if the box is not overflowing"，classic scrollbars 下；Baseline 2024，2024-12 起 all evergreen；通常口径 Chrome 94+ / Firefox 97+ / Safari 18.2+，后两个版本号<b>未证实</b>）。</li>
+  <li><b>element-plus [主流实践]</b>：<code>packages/hooks/use-lockscreen/index.ts</code>（<span class="u">https://github.com/element-plus/element-plus/blob/dev/packages/hooks/use-lockscreen/index.ts</span>，经 jsdelivr 核实）：弹窗打开 → body 加类 <code>el-popup-parent--hidden</code>；<b>补偿用 width 而非 padding</b>：<code>document.body.style.width = calc(100% - ${scrollBarWidth}px)</code>；清理延迟 200ms（源码注释：兼容 jsdom 场景），<code>onScopeDispose</code> 兜底；<b>无引用计数</b> —— 每个叠加弹窗各自清理，仅靠 <code>withoutHiddenClass</code> 判断防重复加类，多层弹窗退栈顺序敏感是已知弱点。</li>
+  <li><b>Vuetify [主流实践]</b>（Vue 生态，VueTorrent 的底层）：<code>packages/vuetify/src/components/VOverlay/scrollStrategies.ts</code>（<span class="u">https://github.com/vuetifyjs/vuetify</span>，经 jsdelivr 核实）：<code>scrollStrategy</code> prop <b>default: 'block'</b>（另有 none / close / reposition）；block 策略对目标与内容元素的所有 scroll parents（去重）：① 把当前滚动位置存进 CSS 变量 <code>--v-body-scroll-x/y</code>，② 实测滚动条宽 <code>window.innerWidth - document.documentElement.offsetWidth</code> 设为 <code>--v-scrollbar-offset</code>，③ 加类 <code>v-overlay-scroll-blocked</code>（CSS 端 overflow hidden + padding 补偿）；关闭时 <code>scrollBehavior='auto'</code> 防动画、按变量恢复 <code>scrollLeft/scrollTop</code>、移除类与变量；含「html 仅在其 overflow 为 scroll 时才设 offset」的细节特判。</li>
+  <li><b>ant-design [主流实践]</b>：官方文档 Modal 有 <code>scrollLock</code> prop（"Whether to lock body scroll when modal opens"，<b>default true</b>，6.5.0 引入）—— <span class="u">https://ant.design/components/modal</span>（已核实）。底层 rc-dialog 的 <code>getScrollBarSize</code> + body padding-right 补偿是社区通行记载，本次未逐行核实实现文件 → <b>实现细节未证实</b>。</li>
+  <li><b>副作用清单 [主流实践 + 规范外共识]</b>：① 布局抖动：滚动条消失 → 页宽跳变 → 三家都用补偿（Bootstrap padding-right / element-plus width calc / Vuetify CSS 变量）；② 滚动位置丢失：iOS Safari 上 <code>overflow: hidden</code> 对 body <b>历史上不可靠</b>，<code>position: fixed</code> 补法会复位滚动位置 —— body-scroll-lock-upgrade README 原文："<code>overflow: hidden</code> doesn't work for all browsers"、"<code>position: fixed</code> causes the body scroll to reset"（<span class="u">https://github.com/rick-liruixin/body-scroll-lock-upgrade</span>）；③ 多层弹窗退栈需引用计数（element-plus 无计数是前车之鉴；Vuetify 用 scroll-parent 去重 + class 判重）；④ 本项目 document 即滚动器，body overflow hidden 直接作用于滚动器本体，桌面端有效，但 3 套皮肤都要配补偿，且 Esc 退栈要接计数。</li>
+</ul>
+
+<h3>4.3 流派 D：JS 事件拦截（wheel / touchmove preventDefault）</h3>
+<ul>
+  <li><b>[规范语义 + 版本史] passive 默认化的影响</b>：MDN addEventListener（<span class="u">https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener</span>）："If this option is not specified, it defaults to false — <b>except that it defaults to true for <code>wheel</code>, <code>mousewheel</code>, <code>touchstart</code>, and <code>touchmove</code> events on <code>Window</code>, <code>Document</code>, <code>Document.documentElement</code>, and <code>Document.body</code></b>." → <b>元素级监听（挂在 .modal-mask 上）不受默认化影响</b>，preventDefault 可直接生效；document 级则必须显式 <code>{passive:false}</code>。版本史：Chrome 73 把 root 目标（window / document / body）的 wheel / mousewheel 监听默认 passive（<span class="u">https://developer.chrome.com/blog/scrolling-intervention-2</span>，<span class="u">https://chromestatus.com/feature/6662647093133312</span>）；Chrome 56 对 document 级 touchstart / touchmove 默认 passive（通行记载，官方原文抓取超时 → <b>版本细节未逐字核实</b>）。</li>
+  <li><b>body-scroll-lock / body-scroll-lock-upgrade [主流实践]</b>（<span class="u">https://github.com/rick-liruixin/body-scroll-lock-upgrade</span>，README 核实；原版 willmcpo/body-scroll-lock 已停维护）：策略 = <b>锁 document + touchmove preventDefault 混合</b>：body overflow hidden + <code>reserveScrollBarGap</code> 选项补 padding-right；iOS 上 document 级 touchmove preventDefault；<b>保留目标滚动</b>：<code>allowTouchMove</code> 回调 / <code>body-scroll-lock-ignore</code> 属性向上遍历 DOM 判定，命中则不 preventDefault —— 即「事件拦截只拦目标以外的触摸滚动」；明确反对裸 <code>document.body.ontouchmove = e =&gt; e.preventDefault()</code>：会连弹窗内滚一起锁死，也警告粗暴方案破坏 iOS 惯性 / 橡皮筋。</li>
+  <li><b>react-remove-scroll [主流实践]</b>（<span class="u">https://github.com/theKashey/react-remove-scroll</span>，README 核实）：策略 = <b>纯事件拦截</b>：非 passive wheel / touchmove 监听同步阻断；支持嵌套滚动容器与 shards（锁外仍可交互区域）；多层锁只有最后一个生效；<b>不用 position:fixed</b>，滚动条空间用配套 react-remove-scroll-bar 保持（zeroRight / fullWidth 辅助类）；<code>noRelative</code> 防 body 被加 position: relative；README 自述两个坑：非 passive 监听 "may affect scrolling performance"；inert 模式 "disables events the rest of page completely using <code>pointer-events</code>" 且 "not portals friendly"；iOS：touch 内建处理，<code>-webkit-overflow-scrolling: touch</code> 建议加在滚动目标上。</li>
+</ul>
+
+<h3>4.4 流派 E：<code>&lt;dialog&gt;</code> showModal 与 inert</h3>
+<ul>
+  <li><b>[规范语义] showModal 是否原生锁背景滚动：否</b>。MDN："Elements inside the same document as the dialog, except the dialog and its descendants, <b>become inert</b> (as if the inert attribute is specified)" —— 只提 inert（非交互化），全页无一句滚动相关表述（<span class="u">https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal</span>）。</li>
+  <li><b>[规范语义 + 实践推论] inert 能否阻止滚轮滚动：不能</b>。MDN inert 属性列出的全部被禁行为为：click 事件、focus、find-in-page、文本选择、编辑、无障碍树暴露 —— <b>不包含滚动</b>（<span class="u">https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/inert</span>）。社区同结论，补救即 CSS：<code>body:has(dialog[open]) { overflow: hidden; }</code>（<span class="u">https://www.amitmerchant.com/how-to-disable-scrolling-the-page-behind-a-dialog-element/</span>）。whatwg/html 有关于 modal dialog 应否内置 scroll lock 的 issue（本次未定位到具体编号 → <b>未证实</b>）。</li>
+  <li><b>[主流实践] Vue 生态组合</b>：Teleport / Portal + 背景 inert / aria-hidden + <b>独立的滚动锁</b>三件套。Radix（React 代表）的 <code>@radix-ui/react-dialog</code> package.json 依赖实证：<code>react-remove-scroll: ^2.7.2</code> + <code>aria-hidden: ^1.2.4</code>（npm 核实）—— 即官方组件库也承认「inert 不锁滚动」，需另配滚动锁库。Vue 侧积木：VueUse <code>useScrollLock</code>（可写 ref 控制）。</li>
+  <li><b>[本项目适配]</b> 12 个弹窗换 <code>&lt;dialog&gt;</code> 属大改（3 皮肤同构但结构各异），收益仅 focus 管理与 top layer，滚动锁仍要另做 → 不建议。</li>
+</ul>
+
+<h3>4.5 同类产品先例</h3>
+<ul>
+  <li><b>qBittorrent 官方 WebUI [主流实践]</b>（源码 <span class="u">https://github.com/qbittorrent/qBittorrent/tree/master/src/webui/www/private</span>，经 GitHub API + jsdelivr 逐文件核实）：<b>架构性回避</b> —— 桌面式布局，<code>#desktop { height: 100%; overflow: hidden; }</code>，主滚动区是内部面板（<code>.panel { overflow: auto; }</code>、<code>.dynamicTableDiv</code> / <code>.mochaContentWrapper</code> / <code>.scrollableMenu</code>，且设 <code>scrollbar-width: thin</code>）；style.css / Layout.css / Core.css 中 <b>html/body 无任何 overflow 规则</b> → document 通常不产生滚动，自然没有「穿透背景滚动」问题。弹窗 = MooTools / MochaUI 体系（<code>MochaUI.Modal</code> + <code>baseModalOptions.addClass: "modalDialog"</code>），遮罩是 <code>#modalOverlay</code> 元素仅做 display 显隐；mocha-init.js <b>无任何滚动锁代码</b>。添加种子是独立页面 <code>addtorrent.html</code>（23KB，非弹窗）。结论：官方 WebUI 的「处理」= <b>让 document 不成为滚动器</b>，与本项目的 html/body 滚动器形态根本不同，无法直接照搬。</li>
+  <li><b>VueTorrent [主流实践]</b>（<span class="u">https://github.com/VueTorrent/VueTorrent</span>）：package.json 实证：<code>vue ^3.5.43</code> + <code>vuetify ^4.1.11</code>；<code>src/components/Dialogs/</code> 下 25 个弹窗组件（AddTorrentDialog、Confirm 系列、SpeedLimitDialog 等）统一走 Vuetify <code>v-dialog</code>。滚动锁行为 = Vuetify VOverlay 默认 <code>scrollStrategy: 'block'</code>（4.2 节源码核实）。</li>
+  <li><b>主流设计系统一句带过 [主流实践]</b>：Bootstrap 5 / element-plus / Vuetify / antd（<code>scrollLock</code>）/ MUI（<code>disableScrollLock</code> prop，<span class="u">https://mui.com/material-ui/api/modal/</span> "Disable the scroll lock behavior"）在遮罩弹窗上<b>共同选择都是锁 document + 滚动条宽度补偿</b>；Radix 例外走 react-remove-scroll 纯事件拦截（依赖实证见 4.4 节）。</li>
+</ul>
+
+<h3>4.6 对比矩阵（效果完备性 × 副作用 × 落地成本 × 兼容性）</h3>
+<table>
+  <tr><th>做法</th><th>有内滚区弹窗</th><th>无内滚区弹窗</th><th>无遮罩浮层误伤</th><th>副作用</th><th>落地成本（无打包 Vue + 原生 CSS）</th><th>兼容性</th></tr>
+  <tr><td><b>A.</b> 内滚区 <code>overscroll-behavior: contain</code></td><td>到边界后连锁止住</td><td><span class="nc">无效</span>（链不经内滚区）</td><td>无</td><td>无</td><td>极低（每皮肤 1 行）</td><td>Safari / iOS ≥16</td></tr>
+  <tr><td><b>B.</b> <code>.modal-mask{overflow:hidden; overscroll-behavior:contain}</code></td><td>覆盖（链过遮罩即断）</td><td>覆盖（MDN 官方用法）</td><td>无（只碰 .modal-mask）</td><td>无布局位移；超高弹窗有裁切风险（可用 <code>overflow-y: auto</code> 变体化解，见 §5.4 分叉②）</td><td>低（每皮肤 1 行）</td><td>Safari / iOS ≥16；全线 caniuse "partial"，旧 Chromium 行为<b>未证实</b></td></tr>
+  <tr><td><b>C.</b> 锁 document + 宽度补偿（Bootstrap / element-plus / Vuetify / antd 路）</td><td>覆盖</td><td>覆盖</td><td>间接影响（全局锁，浮层在弹窗开着时也被锁）</td><td>布局抖动需补偿；iOS 老 Safari body hidden 不可靠、position:fixed 丢位置；多层弹窗需计数；Esc 退栈接状态</td><td>中（12 弹窗 × 3 皮肤的开关点收拢 + 补偿）</td><td>好（各家生产验证）</td></tr>
+  <tr><td><b>D.</b> 遮罩级 wheel / touchmove preventDefault（react-remove-scroll 路）</td><td>覆盖，但须 allow-list 放行内滚区（否则内滚被锁死）</td><td>覆盖</td><td>无（只挂 .modal-mask）</td><td>键盘（Space / PgDn / 方向键）滚背景不在覆盖内；非 passive 监听性能损耗（库 README 自述）</td><td>中（vanilla 手写 allow-list / 路径判定约 40-80 行；无打包环境引库需 vendor）</td><td>全（含老 iOS）</td></tr>
+  <tr><td><b>E.</b> 换 <code>&lt;dialog&gt;</code> / Teleport + inert</td><td><span class="nc">不覆盖</span>（inert 不锁滚动，仍需 C / D）</td><td>同左</td><td>—</td><td>大重构；top layer 脱离 #app 结构</td><td>高（12 弹窗 × 3 皮肤）</td><td>好</td></tr>
+</table>
+
+<!-- ============================================================ 5 -->
+<h2><span class="no">5</span>推荐方案与备选</h2>
+
+<h3>5.1 推荐主案（CSS 层为主，B + A 组合，可叠加）</h3>
+<p><b>第一层（主改动）</b>：三皮肤共用的 <code>.modal-mask</code> 加一组规则（atlas/css/components.css:546、console/css/components.css:461、prism/css/components.css:235 三处各 +1 行）：</p>
+<pre>/* 三皮肤 .modal-mask 各追加: */
+.modal-mask { overflow: hidden; overscroll-behavior: contain; }</pre>
+<p>理由：① 规范与 MDN 明文背书（4.1 节引文：无滚动潜力的滚动容器恒在边界上，设 contain 即阻断向祖先连锁，官方场景就是 dialog / overlay），一行 CSS 覆盖「有内滚区」与「无内滚区」两类形态 —— 遮罩覆盖整个视口，滚轮目标必然在遮罩子树内，链上最近滚动容器即遮罩；② <b>零布局位移、无需滚动条补偿、无需动 12 个弹窗的开关逻辑</b>；③ 只碰 <code>.modal-mask</code> 类，<b>天然不伤无遮罩浮层</b>（<code>.col-menu</code> 等不含该类）；④ qB 官方 WebUI 证明问题在「document 滚动器」这一布局形态，本方案不动布局架构、改动面最小。</p>
+<p><b>第二层（顺手加固，A 档）</b>：8 类弹窗内滚区补 <code>overscroll-behavior: contain</code> —— <code>.add-dialog-body</code>（atlas/css/dialogs.css:205）、<code>.add-pop-list</code>（dialogs.css:248）、<code>.db-list</code>（atlas/css/views.css:276）、<code>.mgr-list</code>（atlas dialogs.css:347）、<code>.meta-tags</code>（dialogs.css:372）、<code>.modal-members</code>（atlas/css/views.css:256）、<code>.kb-help-body</code>（shared/console_hub.css:1109）、<code>.hr-full-modal-bd</code>（atlas dialogs.css:197）。即使主层已兜住，这层仍是双保险（防日后某弹窗脱离遮罩壳或遮罩规则被覆盖），且单独修复「内滚区到边界后连锁」这一半语义。</p>
+<p><b>第三层（HR 全屏特例，必须单列）</b>：12 号 HR 站点状态全屏用的是<b>专属遮罩</b> <code>.hr-full-mask</code>（atlas dialogs.css:187-188，z-index 128，top/bottom 用 <code>--head-h</code> / <code>--statusbar-h</code> 变量），且遮罩与 <code>.hr-full-modal</code> 是<b>兄弟元素</b>、不含 <code>.modal-mask</code> 类名 —— 共享壳改动覆盖不到它。需在 atlas/console 的 dialogs.css 与 prism 的 components.css（dialogs.css:186 注释自证「三套 UI 成对改」）给 <code>.hr-full-mask</code> 补同一组 <code>overflow: hidden; overscroll-behavior: contain;</code>，并给 <code>.hr-full-modal-bd</code> 补 contain。</p>
+<p><b>第四层（JS 兜底，收窄版 D，仅老 Safari / iOS &lt; 16 生效）</b>：</p>
+<ul>
+  <li><b>激活门控</b>：<code>CSS.supports('overscroll-behavior', 'contain')</code> 为 false 才启用 —— 现代浏览器（Chrome 63+ / Firefox 59+ / Safari 16+）零开销、零行为差异。</li>
+  <li><b>挂点修正</b>：阶段 2 提议挂在 <code>ui_feedback.js:_openModal</code>（ui_feedback.js:87），但阶段 1 证据显示 <b>_openModal 只驱动 6 号通用壳</b>（其余 11 个弹窗各有独立 Vue 标志与打开方法，且没有公共 open/close 管理器，见 §2.1）。若要 12/12 全覆盖，兜底应改为<b>单点 document 级捕获监听</b>：wheel + touchmove 各挂一个 <code>{passive: false}</code> 捕获监听（门控在监听器内部再查一次，双保险），回调里现查 <code>document.querySelector('.modal-mask, .hr-full-mask')</code> 是否存在 —— 存在且事件路径不在放行名单内才 <code>preventDefault()</code>。选 document 级而非逐遮罩挂监听的原因：① 单点覆盖全部 12 弹窗与未来新增；② 弹窗叠加（1 添加种子 → 2 选择保存位置，dialogs-mgr.html:85 → add_torrent.js:202 真实存在）无需退栈计数 —— 监听常驻、每次事件现查状态，v-if 卸载自然失效；③ 门控保证现代浏览器根本不走这条路（注意 MDN passive 默认化条款：document 级 wheel 监听在实施干预的浏览器里默认 passive，<b>必须显式 <code>{passive:false}</code></b>，而兜底目标老 Safari 无此默认化，同样显式写、防御性兼容两侧）。</li>
+  <li><b>放行名单（allow-list）</b>：事件路径（<code>composedPath()</code> 或 <code>target.closest</code> 向上遍历）命中 8 类内滚区类名（见第二层清单）则不拦截 —— body-scroll-lock 的 <code>allowTouchMove</code> 同款思路。三皮肤内滚区类名阶段 1 结论是同构，名单一份即可。</li>
+  <li><b>成本</b>：约 40 行 vanilla JS，无需引库、无需 vendor。</li>
+</ul>
+
+<h3>5.2 为什么不选锁 document 派（流派 C）</h3>
+<ul>
+  <li><b>无滚动条位移问题可赚</b>：C 的全部复杂度（三家生产库都要写的滚动条宽度补偿）源于「锁掉滚动器后滚动条消失、页宽跳变」。推荐主案 B+A <b>根本不锁 document</b>，滚动条全程不动，补偿代码一行都不需要 —— C 在本项目里只有成本、没有增量收益。</li>
+  <li><b>iOS 老 Safari 位置丢失史</b>：body overflow hidden 历史上不可靠、position:fixed 补法复位滚动位置（body-scroll-lock-upgrade README 原文，4.2 节）—— 恰在兜底目标人群上更不可靠。</li>
+  <li><b>改动面与状态管理成本最高</b>：12 弹窗 × 3 皮肤的打开点收拢（本项目没有公共 open/close 管理器，需新增一层）+ 多层弹窗引用计数（1→2 选择位置叠加真实存在；element-plus 无计数是前车之鉴）+ Esc 退栈链（lifecycle.js:56-88）要接计数恢复。</li>
+  <li><b>全局锁的误伤面</b>：锁 document 是全局的，弹窗开着期间连无遮罩浮层也被锁；B+A 只碰遮罩子树。</li>
+</ul>
+
+<h3>5.3 备选取舍一览</h3>
+<table>
+  <tr><th>备选</th><th>取舍结论</th></tr>
+  <tr><td>C 锁 document + 补偿</td><td><b>不采用</b>。见 5.2：无滚动条位移可赚，却有补偿 + 计数 + iOS 位置丢失三重成本，收益不比 B+A 多。</td></tr>
+  <tr><td>D 全量常开（react-remove-scroll 式，无特征检测）</td><td><b>不采用</b>。非 passive 监听常开的性能损耗（库 README 自述）、allow-list 误锁风险、键盘滚动不覆盖 —— 仅收窄为「特征检测门控的老浏览器兜底」才值得（即 5.1 第四层）。</td></tr>
+  <tr><td>E 换 <code>&lt;dialog&gt;</code> / Teleport + inert</td><td><b>不采用</b>。inert 不锁滚动（MDN 规范语义，4.4 节），换完仍要另做滚动锁；12 弹窗 × 3 皮肤重构不值。</td></tr>
+  <tr><td>仅 A（只给内滚区加 contain）</td><td><b>不够</b>。滚轮落在标题 / 按钮 / 遮罩空白时链不经过内滚区，无内滚区弹窗（7 / 9 / 10 / 6 号短形态）完全挡不住 —— 必须与 B 组合。</td></tr>
+  <tr><td>照搬 qB 官方（内部面板滚动架构）</td><td><b>不在本轮范围</b>。官方是「让 document 不成为滚动器」的架构性回避，等于重排整页布局模型；可作远期方向，与本修复不冲突。</td></tr>
+</table>
+
+<h3>5.4 需要用户拍板的分叉</h3>
+<div class="box warn">
+  <div class="t">分叉① JS 兜底是否本期做</div>
+  <b>推荐：做</b>（约 40 行，document 级捕获 + <code>CSS.supports</code> 门控 + 8 类白名单，见 5.1 第四层）。不做的话，Safari &lt; 16 / iOS &lt; 16（caniuse 支持线，2026 年存量占比低但非零）上 12 个弹窗的穿透维持现状。<b>可拆第二期</b>：CSS 主案先上，兜底单独一轮（白名单需逐弹窗核对后另验）。
+</div>
+<div class="box warn">
+  <div class="t">分叉② 遮罩 overflow 用 hidden 还是 auto 变体</div>
+  <b>推荐：<code>overflow: hidden</code> 起步</b>（最小改动、无 flex 溢出边角）。依据：<code>.modal-mask</code> 是 flex + <code>align-items: center</code>，若改 <code>overflow-y: auto</code>，超高弹窗在 flex 居中下会触发「溢出起始边不可达」的经典问题，需连带改 <code>align-items: safe center</code> 或 <code>flex-start</code> + <code>.modal { margin: auto }</code>，复杂度上升。<b>风险点在 6 号通用壳</b>：<code>.modal</code> 本体无 max-height（atlas components.css:549），长内容确认框（如删除确认 wide+checks+details，delete_flow.js:200）在矮视口可能超出视口高，hidden 会把超出部分裁成不可达（现状靠背景滚动「救」）。<b>可选加固子选项</b>：给 6 号壳补 max-height（与 1 号同款 <code>calc(100vh - 120px)</code>）并让其 body 内滚 —— 是否纳入本期由用户定。
+</div>
+<div class="box ok">
+  <div class="t">分叉③ 无遮罩浮层（含「列」窗口）确认不改</div>
+  <b>推荐：不改</b>，与用户假设一致。完整裁决见 §6.3 —— 此处确认：推荐方案的全部落点（<code>.modal-mask</code> / <code>.hr-full-mask</code> / 8 类内滚区）都不含任何无遮罩浮层类名，零误伤。
+</div>
+
+<!-- ============================================================ 6 -->
+<h2><span class="no">6</span>逐弹窗判定表</h2>
+
+<h3>6.1 12 个遮罩模态逐个判定</h3>
+<table>
+  <tr><th>#</th><th>名称</th><th>内滚区</th><th>判定</th><th>理由</th><th>预期改动点</th></tr>
+  <tr><td>1</td><td>添加种子</td><td>有（add-dialog-body / add-pop-list）</td><td><span class="badge b-fix">要改</span></td><td>遮罩模态 + 内滚区，滚到边界后连锁</td><td>共享壳覆盖；<code>.add-dialog-body</code> / <code>.add-pop-list</code> 顺手加 contain。模板（dialogs-mgr.html）零改动</td></tr>
+  <tr><td>2</td><td>选择保存位置</td><td>有（db-list）</td><td><span class="badge b-fix">要改</span></td><td>同上；且可与 1 号叠加（添加种子内点「选择位置…」）</td><td>共享壳覆盖 + <code>.db-list</code> contain。模板零改动</td></tr>
+  <tr><td>3</td><td>管理分类</td><td>有（mgr-list）</td><td><span class="badge b-fix">要改</span></td><td>同 1 号</td><td>共享壳覆盖 + <code>.mgr-list</code> contain。模板零改动</td></tr>
+  <tr><td>4</td><td>管理标签</td><td>有（mgr-list）</td><td><span class="badge b-fix">要改</span></td><td>同 1 号</td><td>同 3 号（共用 <code>.mgr-list</code>）</td></tr>
+  <tr><td>5</td><td>标签与分类</td><td>有（meta-tags）</td><td><span class="badge b-fix">要改</span></td><td>同 1 号</td><td>共享壳覆盖 + <code>.meta-tags</code> contain。模板零改动</td></tr>
+  <tr><td>6</td><td>站内确认 / 输入框（通用壳 ×5 形态）</td><td>短内容形态无；删除确认明细有（modal-members）；<b>.modal 本体无 max-height</b></td><td><span class="badge b-fix">要改</span></td><td>短内容形态<b>立即连锁</b>；且是全站调用点最多的弹窗（delete_flow / drawer / config_editor / config_hub / config_rules / shortcuts 共 20+ 调用点）</td><td>共享壳覆盖 + <code>.modal-members</code> contain；是 JS 兜底门控的天然受益者（全部形态共享 <code>modal.visible</code>）。超高风险见分叉②</td></tr>
+  <tr><td>7</td><td>历史流量</td><td>无（SVG 固定 920×380）</td><td><span class="badge b-fix">要改</span></td><td>无内滚区 → 第一个滚轮事件<b>立即连锁</b></td><td>仅共享壳一行即覆盖，模板（popovers.html）零改动</td></tr>
+  <tr><td>8</td><td>键盘快捷键</td><td>有（kb-help-body 60vh）</td><td><span class="badge b-fix">要改</span></td><td>内滚区边界后连锁</td><td>共享壳覆盖 + <code>.kb-help-body</code> contain（shared/console_hub.css:1109，三皮肤同载，改一处生效三皮肤）。模板零改动</td></tr>
+  <tr><td>9</td><td>qB 流量图</td><td>无</td><td><span class="badge b-fix">要改</span></td><td>立即连锁</td><td>仅共享壳。模板零改动</td></tr>
+  <tr><td>10</td><td>qB 分组流量</td><td>无</td><td><span class="badge b-fix">要改</span></td><td>立即连锁</td><td>仅共享壳。模板零改动</td></tr>
+  <tr><td>11</td><td>统计面板</td><td>有（借 .add-dialog 壳）</td><td><span class="badge b-fix">要改</span></td><td>同 1 号（dialogs.html:13 复用 add-dialog-body）</td><td>共享壳覆盖 + <code>.add-dialog-body</code> contain（与 1 号同一条规则，无需重复）。模板零改动</td></tr>
+  <tr><td>12</td><td>HR 站点状态全屏</td><td>有（hr-full-modal-bd）</td><td><span class="badge b-fix2">要改（特例）</span></td><td>内滚区边界后连锁 + 遮罩空白处立即连锁；<b>专属遮罩不含 .modal-mask 类名</b>，共享壳改动覆盖不到</td><td><code>.hr-full-mask</code> 单独加同组规则（atlas/console dialogs.css:187 + prism components.css，注释 dialogs.css:186 自证「三套 UI 成对改」）+ <code>.hr-full-modal-bd</code> contain。模板零改动</td></tr>
+</table>
+<p><b>判定汇总：<span class="badge b-fix">12 / 12 要改</span></b>。其中 11 个（1-11 号）由共享壳一处改直接覆盖，12 号因专属遮罩类名需单独补一行（+ 内滚区 contain 一行）；全部 12 个的模板文件（dialogs-mgr.html / popovers.html / dialogs.html / qb-traffic.html / settings-detail.html）<b>零改动</b>，打开 / 关闭逻辑（各 Vue 标志、maskDownSelf 守卫、Esc 退栈链）<b>零改动</b>。</p>
+
+<h3>6.2 共享壳一处改 vs 逐个单改</h3>
+<table>
+  <tr><th>维度</th><th>共享壳一处改（推荐）</th><th>逐个单改</th></tr>
+  <tr><td>改动点数量</td><td>3 皮肤 components.css 各 1 行（遮罩）+ 8 类内滚区 contain（约 10 处 CSS 规则行，分布 atlas/console dialogs.css 与 views.css、shared/console_hub.css、prism 散点）+ <code>.hr-full-mask</code> 2 行 ≈ <b>合计 15-20 行 CSS</b></td><td>12 弹窗各有独立修饰类（add-dialog / dir-browse / mgr-dialog / meta-dialog / hist-modal / qb-modal / kb-help / stats-dialog / hr-full-modal…），<b>没有第二个公共类可挂</b>，需 12 × 3 皮肤 = 36 处写同样的规则</td></tr>
+  <tr><td>覆盖率</td><td>12/12（含未来新增的、沿用 <code>.modal-mask</code> 壳的弹窗，自动继承）</td><td>12/12，但新增弹窗要记得再改一次，漏一个就是一个新穿透点</td></tr>
+  <tr><td>回归风险</td><td>集中在一处规则，验收面小；模板与 JS 逻辑零触碰</td><td>36 处机械重复，任一遗漏或笔误即为残留缺陷</td></tr>
+  <tr><td>结论</td><td><span class="badge b-fix">采用</span></td><td><span class="badge b-skip">不采用</span></td></tr>
+</table>
+
+<h3>6.3 无遮罩浮层判定与用户假设裁决</h3>
+<p>用户原话：<b>「添加种子弹窗需要改，但"列"窗口应该不需要改」。</b></p>
+<div class="box ok">
+  <div class="t">裁决：假设成立 —— 遮罩 / 无遮罩这条分界线可以作为「要改 / 不改」的判据</div>
+  <ul style="margin:6px 0 2px">
+    <li><b>事实核对无误</b>：添加种子弹窗（1 号）确是遮罩模态且有内滚区（<code>.add-dialog-body</code>，滚到边界后连锁，dialogs-mgr.html:5-7 + atlas/css/dialogs.css:205-207）；「列」窗口确是<b>无遮罩</b>的 <code>.col-menu</code> 弹层（topbar.html:73；CSS <code>max-height: 70vh; overflow-y: auto</code>，atlas views.css:107 · console views.css:80 · prism components.css:404；右键路径 JS 动态 fixed + maxHeight + overflowY:auto，columns.js:33-37）。</li>
+    <li><b>判据的机制依据（为什么分界线成立）</b>：违和感的本质是「视觉隔绝」与「背景滚动」的矛盾 —— 遮罩弹窗在视觉上宣告背景不可交互，背景跟着滚才是缺陷；无遮罩浮层不隔绝背景、页面本可交互，其滚动链传到 document 的观感 ≈ 「页面继续往下滚」的正常语义（与抽屉 drawer 同判，§2.3；限速浮层同判，§3.3）。「列」窗口自身滚到边界后确实也会连锁滚背景，但这与用户直接滚动页面滚到底后「停下来」还是「背景（其实就是页面本身）继续」是同一件事，不构成缺陷。</li>
+    <li><b>判据同时是改动面的自然边界（为什么可执行）</b>：推荐方案只触碰 <code>.modal-mask</code>、<code>.hr-full-mask</code> 与遮罩模态的内滚区类 —— <code>.col-menu</code> 等无遮罩浮层不含任何这些类，<b>零改动、零误伤</b>。判据不需要人为维护，CSS 类名天然把两边切开。</li>
+    <li><b>边界线内部的一层细化（不影响判定）</b>：遮罩侧内部还有「有 / 无内滚区」第二层划分 —— 连锁时机不同（边界后连锁 vs 立即连锁），但 12 个都要改且都由共享壳一处覆盖（§6.1）；无遮罩侧的「列选择器 / 筛选器弹层」自身是滚动容器，同样滚到边界后连锁，但维持不改。</li>
+    <li><b>唯一注意点</b>：12 号 HR 全屏是遮罩侧的类名特例（<code>.hr-full-mask</code>），若实施时只改 <code>.modal-mask</code> 会漏掉它 —— 已在判定表单列。</li>
+  </ul>
+</div>
+<table>
+  <tr><th>无遮罩浮层</th><th>判定</th><th>理由</th></tr>
+  <tr><td><b>列选择器（「列」窗口）</b></td><td><span class="badge b-skip">不改</span></td><td>无遮罩，连锁观感 ≈ 正常页面滚动；修复面不含 <code>.col-menu</code>，零误伤</td></tr>
+  <tr><td>限速浮层</td><td><span class="badge b-skip">不改</span></td><td>同上（且刻意设计为无内滚，atlas dialogs.css:489）</td></tr>
+  <tr><td>筛选器弹层 / 界面切换下拉</td><td><span class="badge b-skip">不改</span></td><td>同上（内滚 330px，边界后连锁观感正常）</td></tr>
+  <tr><td>右键菜单 / 表头右键 / 文件优先级 / 搜索语法卡 / 配置项说明 / HR 悬停卡</td><td><span class="badge b-skip">不改</span></td><td>短小浮层，参与连锁但语义正常</td></tr>
+  <tr><td>拖放遮罩 / toast / 列拖动虚影</td><td><span class="badge b-skip">不改</span></td><td>pointer-events: none 或非交互，不接收滚轮</td></tr>
+  <tr><td>详情抽屉（drawer）</td><td><span class="badge b-skip">不改</span></td><td>文档流的一部分，非浮层（§2.3）</td></tr>
+</table>
+<p class="sm">备注：若日后用户反馈「列选择器列表滚到边界处背景跟着动觉得突兀」，可给 <code>.col-menu</code> 内滚单独加 <code>overscroll-behavior: contain</code>，属另一独立小改（一行 × 3 皮肤），不在本报告范围内。</p>
+
+<!-- ============================================================ 7 -->
+<h2><span class="no">7</span>实施要点与风险</h2>
+
+<h3>7.1 改动落点（预计位置）</h3>
+<table>
+  <tr><th>落点</th><th>位置</th><th>改动内容</th><th>预计规模</th></tr>
+  <tr><td>共享遮罩壳</td><td>atlas/css/components.css:546 · console/css/components.css:461 · prism/css/components.css:235</td><td><code>.modal-mask</code> 追加 <code>overflow: hidden; overscroll-behavior: contain;</code></td><td>3 × 1 行</td></tr>
+  <tr><td>弹窗内滚区（A 档）</td><td><code>.add-dialog-body</code>（atlas/css/dialogs.css:205，console 同构 :202，prism components.css:413）· <code>.add-pop-list</code>（atlas dialogs.css:248）· <code>.db-list</code>（atlas/css/views.css:276）· <code>.mgr-list</code>（atlas dialogs.css:347）· <code>.meta-tags</code>（atlas dialogs.css:372）· <code>.modal-members</code>（atlas/css/views.css:256）· <code>.kb-help-body</code>（shared/console_hub.css:1109）</td><td>各追加 <code>overscroll-behavior: contain;</code>（prism 无 dialogs.css，对应规则散在 prism components.css / views.css，需按阶段 1 的同构映射定位）</td><td>约 8-10 行（每类每皮肤 1 行；console_hub.css 一处生效三皮肤）</td></tr>
+  <tr><td>HR 全屏特例</td><td><code>.hr-full-mask</code>（atlas/css/dialogs.css:187 + console 同构 + prism components.css，注释 dialogs.css:186 自证「三套 UI 成对改」）· <code>.hr-full-modal-bd</code>（atlas dialogs.css:197）</td><td>遮罩追加同组规则；bd 追加 contain</td><td>3 × 1 行 + 3 × 1 行</td></tr>
+  <tr><td>JS 兜底（分叉①）</td><td><code>shared/ui_feedback.js</code>（现 <code>_openModal</code> 在 :87，文件底部的 document 级监听区 :218-233 附近；或独立小模块）</td><td>document 级捕获 wheel + touchmove 各一个 <code>{passive:false}</code> 监听，<code>CSS.supports('overscroll-behavior','contain')</code> 门控，命中 <code>.modal-mask</code> / <code>.hr-full-mask</code> 存在且路径不在 8 类内滚区白名单才 preventDefault</td><td>约 40 行 vanilla</td></tr>
+  <tr><td>（可选，分叉②子项）6 号壳加固</td><td>atlas components.css:549（<code>.modal</code>）三皮肤同构处</td><td>补 <code>max-height: calc(100vh - 120px)</code> + body 内滚（与 1 号同款），防长内容确认框矮视口超高被 hidden 遮罩裁切</td><td>3 × 1-2 行</td></tr>
+</table>
+
+<h3>7.2 残留风险</h3>
+<ol>
+  <li><b>caniuse 全线 "partial support"</b>：<code>overflow: hidden + contain</code> 在真实 Chromium / Safari 的边界行为需真机验证 —— 本次未检索到权威反例 bug 单，<b>标注「未证实」而非不存在</b>；用 <code>dev.run --dry-run</code> 真机 + DevTools 触屏模拟双验。</li>
+  <li><b>兜底白名单误锁内滚</b>：JS 兜底的 allow-list 若漏登记某内滚区类，后果是<b>弹窗内滚被误锁（比穿透更糟）</b>。阶段 1 结论是三皮肤内滚区类名同构，名单一份即可，但落地前需按 §6.1 的 8 类逐一核对。</li>
+  <li><b>超高弹窗裁切（分叉②）</b>：<code>overflow: hidden</code> 遮罩会让高于视口的弹窗盒无法触及（现状靠背景滚动补救）；6 号通用壳 <code>.modal</code> 无 max-height 是已知风险面，加固子选项见 §7.1 末行。</li>
+  <li><b>键盘滚动不在覆盖内</b>：Space / PgDn / 方向键在焦点未入弹窗时仍可滚背景 —— 本修复只针对滚轮 / 触摸穿透，与本次目标一致，但需如实声明。</li>
+  <li><b>contain 会同时关掉弹窗打开期间的浏览器下拉刷新 / 横滑导航手势</b>—— 遮罩场景下属预期行为，非缺陷。</li>
+  <li><b>JS 兜底的性能面</b>：document 级非 passive wheel 监听若在现代浏览器常开会损耗滚动性能（react-remove-scroll README 自述同类坑）—— <code>CSS.supports</code> 门控保证现代浏览器根本不注册 / 不生效，实现时建议连监听注册一起门控（supports 通过则不注册）。</li>
+</ol>
+
+<h3>7.3 修复后验收清单</h3>
+<ol>
+  <li><b>三皮肤 × 添加种子弹窗</b>：滚轮滚 <code>.add-dialog-body</code> 到顶 / 底后继续滚，背景种子列表不动；三个候选下拉（add-pop-list）到边界后同样不动背景。</li>
+  <li><b>无内滚区弹窗</b>（历史流量 / qB 流量图 / qB 分组流量）：弹窗上任意位置滚轮，背景立即不动（修复前是立即连锁，反差最明显的验收项）。</li>
+  <li><b>6 号删除确认（长内容）</b>：成员明细内滚 + 整窗滚轮，背景不动；矮视口下整窗可完整触达（分叉②相关，若采纳加固子项则验证 max-height 生效）。</li>
+  <li><b>12 号 HR 全屏</b>：<code>.hr-full-modal-bd</code> 到边界 + 遮罩空白处滚轮，背景不动。</li>
+  <li><b>弹窗叠加</b>：添加种子 → 选择保存位置（1→2），关上层 / 关下层后背景滚动恢复正常。</li>
+  <li><b>无遮罩浮层回归</b>：列选择器、右键菜单、筛选弹层、限速浮层的滚动行为与现状完全一致（不误伤）。</li>
+  <li><b>触摸</b>：DevTools 触屏模拟（有真机 iOS 更佳），弹窗内滚正常、背景不跟滚、惯性不破坏。</li>
+  <li><b>老 Safari 特征</b>：DevTools 禁用 / 模拟无 overscroll-behavior 支持后，JS 兜底生效（背景不滚）且白名单内滚区仍可滚。</li>
+  <li><b>遮罩点击关窗回归</b>：<code>maskDownSelf / maskCloseIfArmed</code>（dialogs.js:56-63）行为不变（拖选文字不误关）。</li>
+  <li><b>Esc 退栈链回归</b>：lifecycle.js:56-88 逐层关闭顺序不变。</li>
+  <li><b>真机过三皮肤</b>：<code>commands run dev.run -- config.yml --dry-run</code> 后逐皮肤过 1-6 项（caniuse partial 需真机验证）。</li>
+</ol>
+
+<!-- ============================================================ 8 -->
+<h2><span class="no">8</span>参考来源</h2>
+
+<h3>8.1 规范与文档</h3>
+<ul class="sm" style="line-height:2">
+  <li>CSS Overscroll Behavior L1（规范原文）：<span class="u">https://drafts.csswg.org/css-overscroll-1/</span></li>
+  <li>MDN overscroll-behavior（含 overflow:hidden + contain 官方用法原文）：<span class="u">https://developer.mozilla.org/en-US/docs/Web/CSS/overscroll-behavior</span></li>
+  <li>caniuse overscroll-behavior（兼容线，2026-10 查询）：<span class="u">https://caniuse.com/mdn-css_properties_overscroll-behavior</span></li>
+  <li>MDN scrollbar-gutter：<span class="u">https://developer.mozilla.org/en-US/docs/Web/CSS/scrollbar-gutter</span></li>
+  <li>MDN addEventListener（passive 默认化条款）：<span class="u">https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener</span></li>
+  <li>MDN HTMLDialogElement.showModal（inert 语义）：<span class="u">https://developer.mozilla.org/en-US/docs/Web/API/HTMLDialogElement/showModal</span></li>
+  <li>MDN inert 全局属性（被禁行为不含滚动）：<span class="u">https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/inert</span></li>
+  <li>Chrome 滚动干预公告（Chrome 73 wheel passive）：<span class="u">https://developer.chrome.com/blog/scrolling-intervention-2</span> · <span class="u">https://chromestatus.com/feature/6662647093133312</span></li>
+  <li>dialog 背景滚动社区文：<span class="u">https://www.amitmerchant.com/how-to-disable-scrolling-the-page-behind-a-dialog-element/</span></li>
+</ul>
+
+<h3>8.2 库 / 产品源码与文档</h3>
+<ul class="sm" style="line-height:2">
+  <li>Bootstrap 5 Scrollbar 工具（padding-right 补偿）：<span class="u">https://github.com/twbs/bootstrap/blob/main/js/src/util/scrollbar.js</span>（经 jsdelivr 5.3.3 核实）· 文档 <span class="u">https://getbootstrap.com/docs/5.3/components/modal/</span></li>
+  <li>element-plus useLockscreen（width calc 补偿、无引用计数）：<span class="u">https://github.com/element-plus/element-plus/blob/dev/packages/hooks/use-lockscreen/index.ts</span>（经 jsdelivr 核实）</li>
+  <li>Vuetify VOverlay scrollStrategies（scrollStrategy block 默认）：<span class="u">https://github.com/vuetifyjs/vuetify</span>（经 jsdelivr 核实）</li>
+  <li>ant-design Modal scrollLock prop：<span class="u">https://ant.design/components/modal</span></li>
+  <li>MUI Modal disableScrollLock：<span class="u">https://mui.com/material-ui/api/modal/</span></li>
+  <li>body-scroll-lock-upgrade（混合策略 + allowTouchMove）：<span class="u">https://github.com/rick-liruixin/body-scroll-lock-upgrade</span></li>
+  <li>react-remove-scroll（纯事件拦截 + shards）：<span class="u">https://github.com/theKashey/react-remove-scroll</span></li>
+  <li>Radix react-dialog 依赖实证（react-remove-scroll ^2.7.2 + aria-hidden ^1.2.4）：npm package.json</li>
+  <li>qBittorrent 官方 WebUI 源码：<span class="u">https://github.com/qbittorrent/qBittorrent/tree/master/src/webui/www/private</span>（经 GitHub API + jsdelivr 逐文件核实）</li>
+  <li>VueTorrent：<span class="u">https://github.com/VueTorrent/VueTorrent</span>（package.json：vue ^3.5.43 + vuetify ^4.1.11）</li>
+</ul>
+
+<h3>8.3 本仓库代码证据（file:line）</h3>
+<p class="sm">关键行号汇总（均基于 2026-10-04 当前工作区，报告撰写时已抽查复核：三皮肤 <code>.modal-mask</code> 定义、<code>overscroll-behavior</code> 全库零命中、<code>_openModal</code> 位置、<code>.hr-full-mask</code> 定义）：</p>
+<table class="sm">
+  <tr><th>事实</th><th>位置（省略前缀 src/auto_qb/webui/static/）</th></tr>
+  <tr><td>模板注入清单（全部进 #app）</td><td>atlas/index.html:129-147；boot.js:52-73</td></tr>
+  <tr><td>.modal-mask 定义 ×3 皮肤</td><td>atlas/css/components.css:546 · console/css/components.css:461 · prism/css/components.css:235</td></tr>
+  <tr><td>.add-dialog max-height + body 内滚</td><td>atlas/css/dialogs.css:205-207（console 同构 :202；prism components.css:413）</td></tr>
+  <tr><td>.modal 本体无 max-height</td><td>atlas/css/components.css:549 · console:466 · prism:237</td></tr>
+  <tr><td>html/body 无 overflow ×3 皮肤</td><td>atlas/style.css:141 · console/style.css:136 · prism/css/base.css:6</td></tr>
+  <tr><td>.group-table 仅横向滚 ×3</td><td>atlas/css/components.css:209 · console:195 · prism/css/views.css:140</td></tr>
+  <tr><td>.content overflow-x: clip ×3</td><td>atlas/css/components.css:151 · console:144 · prism/css/views.css:53</td></tr>
+  <tr><td>整页滚动模型自证注释</td><td>atlas/css/dialogs.css:9-10</td></tr>
+  <tr><td>确认框原语 / _openModal</td><td>ui_feedback.js:34-135（_openModal :87）；state.js:169-174</td></tr>
+  <tr><td>遮罩关窗守卫 / Esc 退栈</td><td>dialogs.js:48-63；lifecycle.js:56-88；dialogs.js:525-532</td></tr>
+  <tr><td>各弹窗内滚区</td><td>dialogs.css:248（add-pop-list）· views.css:256（modal-members）· views.css:276（db-list）· dialogs.css:347（mgr-list）· dialogs.css:372（meta-tags）· console_hub.css:1109（kb-help-body）· dialogs.css:197（hr-full-modal-bd）</td></tr>
+  <tr><td>HR 专属遮罩</td><td>atlas/css/dialogs.css:187-188（.hr-full-mask，z-index 128）· settings-detail.html:267（.hr-full-modal）· hr_status.js:346（hrsExpand）</td></tr>
+  <tr><td>列选择器（「列」窗口）</td><td>topbar.html:73 · atlas/css/views.css:107 · console views.css:80 · prism components.css:404 · columns.js:33-37</td></tr>
+  <tr><td>唯一 teleport（非弹窗）</td><td>popovers.html:263</td></tr>
+</table>
+
+<h3>8.4 未证实 / 未核实事项清单（诚实声明）</h3>
+<ol class="sm">
+  <li>Chromium 旧版对 <code>overflow:hidden</code> + overscroll-behavior 的具体失效 bug 单：未检索到权威来源（检索到的均为旧文 / 二手说法，不引用）。</li>
+  <li>ant-design 底层 rc-dialog 滚动条补偿实现细节（getScrollBarSize + padding-right）：社区通行记载，未逐行核实（官方文档的 scrollLock prop 已核实）。</li>
+  <li>Chrome 56 对 document 级 touch 监听 passive 默认化的官方原文：抓取超时，仅通行记载（Chrome 73 wheel 已核实）。</li>
+  <li>scrollbar-gutter 的 Safari 18.2 / Firefox 97 具体版本号：MDN 表格未抓到，仅 Baseline 2024-12（all evergreen）已核实。</li>
+  <li>whatwg/html 关于 modal dialog 内置 scroll lock 的 issue 编号：未定位。</li>
+</ol>
+
+<div class="foot">
+  auto-qb-clone3 · memory-bank/reports · 26-10-04-0128-report-webui-modal-scroll-chaining.html · 证据快照，行号以 2026-10-04 工作区为准 · 本报告为单文件 HTML，零外部依赖
+</div>
+
+</div>
+</body>
+</html>
