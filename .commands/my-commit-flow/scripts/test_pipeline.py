@@ -16,6 +16,8 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 - ExpandTest                   占位符四类 + 展开失败 + each_limit + 空格引号
 - RunGatesTest                 闸门执行: 全过静默 / 失败留末 20 行 / 超时 / 人工闸门不执行 /
                                展开失败不降级 / 无匹配**静默**跳过(v2 的那条 WARN 已废)
+- SmokeSafetyTest              冒烟安全: 配置里两条 `--help` 闸门必须带 `|--with-safety`;
+                               <each:> 接受该后缀; 探针摘掉「无参即真动作」脚本(超时按不安全)
 - ShortTest                    失败明细里的根路径压缩
 - NoTrackingRefTest            判落后一律 ls-remote 真值 —— 静态扫描禁止 refs/remotes 快照与 status -sb
 - StaticNameTest               AST 找未定义名(冷门分支 NameError, push.py 曾潜伏过一例)
@@ -174,6 +176,77 @@ class RunGatesTest(unittest.TestCase):
         gates = [{"match": [""], "run": ["x"], "auto": True}]
         self.assertEqual(len(_pipeline.gates_for(["src/a.py"], gates)), 1)
         self.assertEqual(_pipeline.gates_for(["src/a.py"], [{"match": ["docs/"], "run": ["x"]}]), [])
+
+
+class SmokeSafetyTest(unittest.TestCase):
+    """闸门冒烟只给脚本加 `--help` —— 而 `--help` 未必被脚本认。
+
+    2026-10-03 实测: `sync.py --help` 把陌生参数当无参, **真的同步了一次**; `push.py --help`
+    同款, 那会真的推。修复两头: ①展开支持 `|--with-safety` 过滤; ②本用例机检**配置里那两条
+    冒烟闸门确实带了过滤** —— 少了它, 下一个写"无参即真动作"的人会再踩一次(且是静默的)。
+    """
+    CONFIG = Path(__file__).resolve().parent.parent / ".my-commit-flow.toml"
+
+    def test_smoke_gates_use_safety_filter(self) -> None:
+        text = self.CONFIG.read_text(encoding="utf-8")
+        # 只看真正会执行的 `run = [...]` 行 —— 注释里会提到 --help(sync.py / push.py 的教训),
+        # 拿注释当判据会误报(写这条守卫时确实踩了一次)。
+        smoke = [
+            line for line in text.splitlines()
+            if line.lstrip().startswith("run") and "<each:" in line and "--help" in line
+        ]
+        self.assertTrue(smoke, "配置里找不到脚本冒烟闸门(删了? 那本条守卫该跟着改)")
+        for line in smoke:
+            self.assertIn(
+                "--with-safety>",
+                line,
+                "冒烟闸门没带 |--with-safety —— `--help` 会被未知参数当无参, 对 sync.py/push.py "
+                "就是真的同步 / 真的推送:\n  " + line.strip(),
+            )
+
+    def test_each_re_accepts_safety_suffix(self) -> None:
+        m = _pipeline.EACH_RE.search("<each:.commands/**/scripts/*.py|--with-safety> --help")
+        self.assertIsNotNone(m)
+        self.assertEqual((m.group(1), m.group(2)), (".commands/**/scripts/*.py", "--with-safety"))
+        # 不带后缀仍是老语义(现有闸门逐字不变)
+        m = _pipeline.EACH_RE.search("<each:src/**/*.py> --help")
+        self.assertEqual((m.group(1), m.group(2)), ("src/**/*.py", None))
+
+    def test_safety_filter_drops_parameterless_action_scripts(self) -> None:
+        """探针判据是**问脚本自己**(`--safety` 吐 `action-without-args`), 不是文件名规则。"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scripts = root / ".commands" / "p" / "scripts"
+            scripts.mkdir(parents=True)
+            (scripts / "doit.py").write_text(
+                "import sys\nprint('action-without-args') if '--safety' in sys.argv else sys.exit(0)\n",
+                encoding="utf-8",
+            )
+            (scripts / "check.py").write_text(
+                "import sys\nprint('read-only-default') if '--safety' in sys.argv else sys.exit(0)\n",
+                encoding="utf-8",
+            )
+            (scripts / "hang.py").write_text(
+                "import time\ntime.sleep(60)\n", encoding="utf-8"
+            )  # 探针会超时 —— 按不安全处理, 不拿 --help 去赌
+            changed = [".commands/p/scripts/doit.py", ".commands/p/scripts/check.py", ".commands/p/scripts/hang.py"]
+            ctx = {"root": root, "changed": changed, "each_limit": 99}
+            cmds, skip = _pipeline.expand_run("python <each:.commands/**/scripts/*.py|--with-safety> --help", ctx)
+            self.assertIsNone(skip)
+            self.assertEqual(len(cmds), 1)  # 只有 check.py 留下
+            self.assertIn("check.py", cmds[0])
+            self.assertNotIn("doit.py", cmds[0])
+
+    def test_safety_filter_all_dropped_is_skip_not_silent_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scripts = root / "s"
+            scripts.mkdir(parents=True)
+            (scripts / "doit.py").write_text("print('action-without-args')\n", encoding="utf-8")
+            ctx = {"root": root, "changed": ["s/doit.py"], "each_limit": 99}
+            cmds, skip = _pipeline.expand_run("python <each:s/*.py|--with-safety> --help", ctx)
+            self.assertEqual(cmds, [])
+            self.assertIn("安全过滤", skip or "")
 
 
 class ShortTest(unittest.TestCase):

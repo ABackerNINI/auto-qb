@@ -85,10 +85,17 @@ def run_push() -> tuple[bool, str]:
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    # ❗argparse 必须在动作之前: 冒烟闸门会跑 `push.py --help` —— 没有 argparse 就会
-    # **真的执行一次推送**。(教训: verify_ref.py 2026-09-22 同款问题, sync.py 2026-09-28 复踩)
+    # ❗参数入口的判据(2026-10-03, 与 sync.py 同源):
+    #   `argv is None` = CLI 直跑 → 吃真实 sys.argv; 显式空表([]) = 测试裸调的动作入口。
+    #   旧 `argv or []` 把 CLI 的 sys.argv 整个丢掉, `push.py --help` 会**真的推一次**。
+    # (教训链: verify_ref.py 2026-09-22 → sync.py 2026-09-28 → 2026-10-03 定性为
+    #  「argv or [] 吃参数」这一类; 冒烟侧过滤见 .my-commit-flow.toml 的 |--with-safety 节。)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args(argv or [])  # 显式空表: main() 裸调(测试)不吃 sys.argv 杂音
+    parser.add_argument("--safety", action="store_true", help="回答「无参跑我是否即真动作」(冒烟安全过滤用)")
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.safety:  # 冒烟安全过滤的探针: 只答常量, 不碰 git / 网络
+        print("push.py: action-without-args")
+        return 0
     ok, line = run_push()
     print(line if ok or line.startswith("[STOP]") else f"推送失败: {line}")
     return 0 if ok else 1

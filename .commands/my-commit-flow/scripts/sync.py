@@ -370,10 +370,18 @@ def run_sync() -> tuple[bool, str]:
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    # ❗argparse 必须在动作之前: 冒烟闸门会跑 `sync.py --help` —— 没有 argparse 就会把
-    # --help 当无参调用, **真的执行一次同步**(push.py 同理, 那会真的推)。
+    # ❗参数入口的判据(2026-10-03 定性, 修 `argv or []`):
+    #   `argv is None`  = **CLI 直跑** —— 必须吃真实 sys.argv, 否则 `--help` / `--safety` /
+    #                    任何陌生参数都被当"无参", 直接下沉到 run_sync() 真跑一次同步
+    #                    (冒烟闸门就在跑 `sync.py --help`; push.py 同款更危险, 会真推)。
+    #   显式空表([])     = 测试里裸调的动作入口 —— 语义不变(不吃 pytest 自己的 sys.argv)。
+    # 两种调用方各有明确入口, 不再靠 `or []` 把二者混成一个。
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args(argv or [])  # 显式空表: main() 裸调(测试)不吃 sys.argv 杂音
+    parser.add_argument("--safety", action="store_true", help="回答「无参跑我是否即真动作」(冒烟安全过滤用)")
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    if args.safety:  # 冒烟安全过滤的探针: 只答常量, 不碰 git
+        print("sync.py: action-without-args")
+        return 0
     ok, line = run_sync()
     if ok:
         print(line)

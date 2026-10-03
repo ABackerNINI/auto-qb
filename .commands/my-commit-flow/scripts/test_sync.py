@@ -17,6 +17,10 @@ pytest 的 tmp_path 下(不碰任何真实 clone); 判据引用 pitfalls/git/ref
 - test_offline_reports_unreachable      远端不可达 → 拿不到远端
 - test_staged_overflow_refuses          staged 暴增 → 拒绝(ref 回退信号)
 - test_main_prints_one_line_contract    main() 输出形态: 成功一行 / 冲突行恰为约定模板
+- test_cli_flag_reaches_main_without_running_sync  裸调 main() 时 sys.argv 的参数必须到达
+                                        (旧 `argv or []` 把 --help/--safety 丢掉 → 真同步一次)
+- test_cli_unknown_flag_exits_without_action        陌生参数 Exit(2), 不下沉到 run_sync()
+- test_main_empty_list_still_is_the_action_entry    显式空表([])仍是无参动作入口
 
 生成物冲突自动化解(计划 26-10-03-1544; 用「假生成器」小脚本当白名单与重建命令, 与库内容解耦):
 - test_behind_dirty_overlap_generated_autoresolves  落后+脏重叠且重叠=生成物 → 自动丢弃+快进+重跑; 成功行含标记; 内容==生成结果
@@ -315,14 +319,53 @@ def test_staged_overflow_refuses(env, monkeypatch):
 
 def test_main_prints_one_line_contract(env, monkeypatch, capsys):
     monkeypatch.chdir(env.a)
-    assert sync_mod.main() == 0
+    # 显式空表: main() 裸调会去读 pytest 自己的 sys.argv(2026-10-03 修 `argv or []` 带来的
+    # 必然结果) —— 本用例测的是输出契约, 与 CLI 参数无关, 所以钉住动作入口。
+    assert sync_mod.main([]) == 0
     assert capsys.readouterr().out.count("\n") == 1  # 成功恰好一行
     _push_remote_commit(env, "base.txt", "remote line\n")
     _commit_file(env.a, "base.txt", "my line\n", "local edit")
-    assert sync_mod.main() == 1
+    assert sync_mod.main([]) == 1
     out = capsys.readouterr().out
     assert re.search(r"^同步失败需解决冲突 本地[0-9a-f]{8} 远端[0-9a-f]{8}", out)  # 约定模板
     assert len(out.strip().splitlines()) == 1  # 失败也是一行(原因 + 步骤都在行内)
+
+
+# ------------------------------------------------------------------ CLI 参数入口(2026-10-03 缺陷回归)
+
+
+def test_cli_flag_reaches_main_without_running_sync(env, monkeypatch, capsys):
+    """`main()` 裸调(= CLI 直跑)时参数必须能到达 —— 旧 `parse_args(argv or [])` 把 sys.argv
+    整个丢掉, 于是 `sync.py --help` **真的同步一次**(冒烟闸门就在跑它)。
+
+    判据: 裸调 + sys.argv 带 `--safety` → 只答探针, HEAD 不动。这条用例是"CLI 参数入口"的
+    唯一守卫 —— 下面那条 main([]) 用例走的是显式空表, 覆盖不到 `argv or []` 这个形态。
+    """
+    monkeypatch.chdir(env.a)
+    before = _git(env.a, "rev-parse", "HEAD")
+    monkeypatch.setattr(sys, "argv", ["sync.py", "--safety"])
+    assert sync_mod.main() == 0
+    out = capsys.readouterr().out
+    assert "action-without-args" in out
+    assert _git(env.a, "rev-parse", "HEAD") == before  # 真的没跑同步
+
+
+def test_cli_unknown_flag_exits_without_action(env, monkeypatch, capsys):
+    """陌生参数必须 Exit(2), **绝不下沉到 run_sync()** —— 否则任何探活都会变成真同步。"""
+    monkeypatch.chdir(env.a)
+    before = _git(env.a, "rev-parse", "HEAD")
+    monkeypatch.setattr(sys, "argv", ["sync.py", "--bogus"])
+    with pytest.raises(SystemExit) as raised:
+        sync_mod.main()
+    assert raised.value.code == 2
+    assert _git(env.a, "rev-parse", "HEAD") == before
+
+
+def test_main_empty_list_still_is_the_action_entry(env, monkeypatch, capsys):
+    """显式空表([])= 无参动作 —— 测试里裸调 main() 的入口语义不能被上面的修法改掉。"""
+    monkeypatch.chdir(env.a)
+    assert sync_mod.main([]) == 0
+    assert capsys.readouterr().out.count("\n") == 1
 
 
 # ------------------------------------------------------------------ 生成物冲突自动化解

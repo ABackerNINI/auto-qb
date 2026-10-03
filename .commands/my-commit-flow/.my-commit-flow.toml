@@ -43,6 +43,8 @@ generated_regen_cmd = "python <skill-dir:memory-bank>/scripts/gen_all.py"
 #   <skill-dir:NAME>  skill 目录(项目级 → 用户级)
 #   <changed:GLOB>    本次改动里匹配的文件 → 拼成一条命令
 #   <each:GLOB>       按匹配文件把这条 run 复制成多条命令(条数上限 each_limit)
+#   <each:GLOB|--with-safety>  同上, 但先问每个脚本的 `--safety` 探针, 把「无参即真动作」
+#                     的脚本摘出去(如 --help 会真的同步 / 推送的 sync.py / push.py)
 # 未知键 / timeout 非法 → STOP: 闸门很贵, 拼错键让它静默失效比报错坏得多。
 # ---------------------------------------------------------------------------
 
@@ -108,12 +110,17 @@ note  = "相对链接存在性: 改名 / 搬家后的坏链不会让任何测试
 [[gates]]
 # 两处都扫: `.agents/skills/`(仍是通用 skill 的家) 与 `.commands/`(包内脚本 ——
 # my-commit-flow 的脚本就从前者迁到了后者)。
+# ❗`|--with-safety`(2026-10-03 修): 冒烟只给脚本加 `--help`, 而 `--help` 未必被脚本认 ——
+#   把陌生参数当无参处理时, 无参数=真动作的脚本会被**真跑一次**: `sync.py --help` 真的同步,
+#   `push.py --help` 真的推送(推送顺序固定, 尤其禁止)。所以 --with-safety 让展开先问每个
+#   脚本自己的 `--safety` 探针, 把「无参即真动作」的摘出去(摘掉会在输出里写明, 不是静默丢)。
+#   ⚠ 这条闸门**不配 auto = true** 也能兜住 —— 展开是统一入口(run.py 与 commit 闸门共用)。
 match = [".agents/skills/", ".commands/"]
-run   = ["python <each:.agents/skills/**/scripts/*.py> --help",
-         "python <each:.commands/**/scripts/*.py> --help"]
+run   = ["python <each:.agents/skills/**/scripts/*.py|--with-safety> --help",
+         "python <each:.commands/**/scripts/*.py|--with-safety> --help"]
 auto  = true
 timeout = 300
-note  = "脚本冒烟: 改了哪个跑哪个(<each:> 把一条 run 复制成多条)"
+note  = "脚本冒烟: 改了哪个跑哪个(<each:> 把一条 run 复制成多条); |--with-safety 摘掉「无参即真动作」脚本(否则 --help 会真的同步/推送)"
 
 [[gates]]
 # 空串 = 每次提交都命中 (hit 用 startswith/子串匹配, 空串匹配一切路径)。

@@ -49,16 +49,35 @@ def git_run(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
-def changed_files() -> tuple[list[str], list[str]]:
+def changed_files(with_safety: bool = False) -> tuple[list[str], list[str]]:
     """返回 (staged, unstaged) 文件清单(按 `git status --porcelain` 的两列判读)。
 
+    `with_safety = True`: 每行末补一个状态字符(`S` = 「无参即真动作」的危险脚本, `.` = 其余),
+    供 `<each:GLOB|--with-safety>` 的展开把危险脚本剔除 —— **闸门冒烟不做「只挑文件名」的静态
+    规则**: 判据留在只有脚本自己知道的地方(见 `_is_parameterless_action` 所在的 gen 脚本)。
+
     ❗必须带 `-uall`: 默认模式下**未跟踪目录只报一条 `?? <dir>/`**, 于是 `<each:GLOB>` 之类
-    按文件的展开**匹配不到新加的文件** —— 新增脚本拿不到 `--help` 冒烟, 且是静默的。
+    按文件的展开**匹配不到新加的文件** —— 新增脚本拿不到冒烟, 且是静默的。
+
+    ❗`--with-safety` 必须走 `-z`(2026-10-03): 危险脚本的状态字符挂在**整段末尾**, 非 -z 形态
+    下 rename 记录的 `old -> new` 里 new 之后才是它 —— 用普通行解析会把状态字符切成名单的一部分。
     """
     staged, unstaged = [], []
     # ❗必须关 quotepath(2026-09-29 实测): 默认 ON 时非 ASCII 文件名被八进制转义加引号
     #   (`?? "\346..."`), 解析出的路径不存在 → exists()=False → 按"已暂存删除"被静默跳过
     #   → 什么都没暂存, commit 报 "nothing added"。off 后路径为原始 UTF-8, 解析才对得上。
+    if with_safety:
+        raw = git("-c", "core.quotepath=off", "status", "--porcelain", "-uall", "-z")
+        for rec in [r for r in raw.split("\0") if len(r) > 3]:
+            xy = rec[:2].ljust(2)
+            path = rec[3:].strip()
+            if " -> " in path:  # rename 被 NUL 切成两段后只剩新路径 —— 取它就是
+                path = path.split(" -> ")[-1].strip()
+            if xy[0] not in (" ", "?"):
+                staged.append(path)
+            if xy[1] != " ":
+                unstaged.append(path)
+        return staged, unstaged
     for line in git("-c", "core.quotepath=off", "status", "--porcelain", "-uall").splitlines():
         if not line.strip():
             continue
@@ -89,7 +108,7 @@ def gates_for(files: list[str], gates: list[dict]) -> list[dict]:
 # ------------------------------------------------------------------ 占位符展开
 
 PLACEHOLDER_RE = re.compile(r"<[^<>]+>")
-EACH_RE = re.compile(r"<each:([^<>]+)>")
+EACH_RE = re.compile(r"<each:([^<>|]+?)(?:\|(--[^<>]+))?>")
 CHANGED_RE = re.compile(r"<changed:([^<>]+)>")
 SKILL_RE = re.compile(r"<skill-dir:([^<>]+)>")
 
@@ -129,6 +148,42 @@ def match_changed(changed: list[str], pattern: str) -> list[str]:
     return sorted(p for p in changed if _glob_match(p, pattern))
 
 
+def _safe_files(files: list[str], root) -> tuple[list[str], list[str]]:
+    """把 `files` 里的路径分成 (安全, 被摘掉) —— 判据**只问脚本自己**(`<路径> --safety`)。
+
+    `--with-safety` 的语义: 闸门冒烟给脚本加的参数只有 `--help` 一种, 而 `--help` 未必被脚本
+    认; 脚本若把陌生参数当无参处理(CLI 无参数 = 执行真动作), 冒烟就会**真去跑一次动作** ——
+    `sync.py --help` 真的同步、`push.py --help` 真的推送, 而后者本仓库明确禁止(推送顺序固定)。
+
+    所以这里不问「文件名像不像危险脚本」(那种规则会在下一次改名时静默失效), 而是拿
+    `--safety` 探针去问脚本本人: 慢 / 挂住 / 非 0 / 没明说 `action-without-args` 一律按不安全
+    (退回不冒烟)。摘掉是**可见的** —— 展开里写明数量, 不是静默丢文件。
+    """
+    safe: list[str] = []
+    skipped: list[str] = []
+    for rel in files:
+        path = Path(rel)
+        full = path if path.is_absolute() else Path(root) / rel
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(full), "--safety"],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+                # ❗探针 stdin 必须钉死: 父进程是 pytest 时 stdin 是被捕获的管道, 子进程继承后
+                #   任何交互式读取都会挂到超时; DEVNULL 让它立刻 EOF, 最坏也只吃满 10s。
+                stdin=subprocess.DEVNULL,
+            )
+            out = f"{proc.stdout or ''}\n{proc.stderr or ''}"
+            (skipped if "action-without-args" in out else safe).append(rel)
+        except (OSError, subprocess.SubprocessError):
+            skipped.append(rel)  # 探针都跑不起来 / 超时 —— 更不能拿 --help 去赌
+    return safe, skipped
+
+
 def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
     """展开一条 `run`, 返回 (命令列表, 跳过原因); 展开不了抛 `ExpandError`。
 
@@ -142,6 +197,12 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
         files = match_changed(ctx["changed"], m.group(1))
         if not files:
             return [], f"无匹配文件: <each:{m.group(1)}>"
+        if m.group(2) == "--with-safety":
+            files, skipped = _safe_files(files, ctx["root"])
+            if skipped:  # 摘掉必须看得见: 不然"没冒烟"与"没改动"分不开
+                print(f"[冒烟] 摘掉 {len(skipped)} 个「无参即真动作」脚本: {'、'.join(skipped)}")
+            if not files:
+                return [], f"<each:{m.group(1)}|--with-safety> 全部被安全过滤摘掉"
         limit = int(ctx.get("each_limit", 99))
         if len(files) > limit:
             raise ExpandError(
@@ -173,7 +234,7 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
         if leftover:
             raise ExpandError(
                 f"无法展开的占位符: {leftover.group(0)}"
-                "(只认 <root> / <skill-dir:NAME> / <changed:GLOB> / <each:GLOB>)"
+                "(只认 <root> / <skill-dir:NAME> / <changed:GLOB> / <each:GLOB> / <each:GLOB|--with-safety>)"
             )
     return resolved, None
 

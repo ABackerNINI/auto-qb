@@ -38,8 +38,19 @@ python <包>/scripts/_pipeline.py --config <路径> # 临时用另一份配置
 | `<skill-dir:NAME>` | skill 目录（`.agents/skills` → `.codebuddy/skills` → 用户级），**找不到即 STOP** |
 | `<changed:GLOB>` | 本次改动里匹配的文件 → 拼成**一条**命令（排除已删除的） |
 | `<each:GLOB>` | 按匹配文件把这条 `run` **复制成多条**命令，每条替换一个文件；条数上限 `each_limit` |
+| `<each:GLOB\|--with-safety>` | 同上，但先拿 `<脚本> --safety` 探针问脚本本人，把「无参即真动作」的**摘掉**（摘掉数量会打印）；探针慢/挂住/非 0/没明说 `action-without-args` → 一律按不安全处理 |
 
 自造占位符（如 `<改过的 py 文件>`）不会被猜 —— 残留的尖括号直接报 STOP。
+
+### `--with-safety` 解决什么
+
+冒烟闸门给脚本加的参数只有 `--help` 一种，而 `--help` **未必被脚本认**；脚本把陌生参数当"无参"
+处理时，无参数 = 执行真动作，冒烟就变成**真跑一次动作**（`sync.py --help` 真的同步、`push.py --help`
+真的推送）。所以这条闸门不用 `--help` 赌运气，而是先问脚本自己。
+
+判据**按探针内容而非文件名规则**（文件名规则会在下次改名时静默失效）；新增"无参即真动作"的脚本
+只需在它自己的 `--safety` 分支如实声明。完整判据与守阵见
+`memory-bank/pitfalls/testing/gate-probe-must-not-run-action.md`。
 
 ## 运行期自动探测（换项目直接能用）
 

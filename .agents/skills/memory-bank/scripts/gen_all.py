@@ -4,6 +4,7 @@
     无参       依次重建全部生成物(等价于 `commands run kb.index` 原先跑的那四条)
     --list     打印全部生成物路径(仓库相对 posix, 一行一个) —— **sync 自动化解白名单的唯一来源**
     --check    全部自证: 磁盘内容 == 生成结果; 漂移即 rc=1 并逐条报路径
+    --safety   回答「无参跑我是否即真动作」—— 冒烟闸门用它决定要不要给本脚本加 `--help`
 
 为什么要有它: `_index.md` 这类生成物的合并冲突解法是「任取一侧 + 重跑」, 而「哪些文件可重跑」
 必须只有**一处声明**。sync 从 `--list` 取白名单, 提交闸门与重建入口也调它 —— 若各处再抄一份清单,
@@ -16,6 +17,7 @@
     python <skill-dir>/scripts/gen_all.py                     重建全部生成物
     python <skill-dir>/scripts/gen_all.py --list              只打印路径, 不写文件
     python <skill-dir>/scripts/gen_all.py --check             只比对, 不一致则退出码 1
+    python <skill-dir>/scripts/gen_all.py --safety            只回答冒烟安全性, 不碰文件
     python <skill-dir>/scripts/gen_all.py --root <dir> --mb-dir <dir>   覆盖探测
 退出码: 0 成功 / 1 校验漂移 / 2 环境缺失(定位不到 create-issue skill 等)
 """
@@ -40,6 +42,14 @@ GENERATORS = (
     ("memory-bank", "gen_docs_index.py"),
     ("create-issue", "gen_issues_index.py"),
 )
+
+# 「无参即真动作」的生成器 —— **同步的生成物自动化解只准碰这一类**。
+# 判据是"无参即真动作"(碰巧当前也是"纯确定性"): 这类脚本的默认动作就是重建全部生成物,
+# 所以「任取一侧 + 重跑 + 自证」在构造上收敛(生成器是纯函数, 只读工作树里的手写文件)。
+# ❗新增一个无参即重建的生成器却忘了登记 → 它的冲突**不会被自动化解**, 表现是与现状一致的
+#   失败行(保守侧, 不猜不丢内容); 多登记一个非无参即动作的 → 冲突时**静默丢手写内容**,
+#   这才是危险方向, 所以登记前先问「无参跑一次, 它是不是把全部生成物都写了一遍」。
+PARAMETERLESS_ACTION_GENERATORS = frozenset({"gen_all.py"})
 
 # `<skill-dir:NAME>` 的候选位置 —— 与命令引擎 / my-commit-flow 同一套口径: 项目级 → 用户级。
 SKILL_DIR_CANDIDATES = (
@@ -121,9 +131,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--list", action="store_true", help="打印全部生成物路径(一行一个), 不写文件")
     parser.add_argument("--check", action="store_true", help="只比对, 不写文件 (不一致则退出码 1)")
+    parser.add_argument("--safety", action="store_true", help="回答「无参跑我是否即真动作」(冒烟过滤用; 不读文件不写文件)")
     parser.add_argument("--root", help="仓库根 (默认向上找 .git)")
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
     args = parser.parse_args(argv)
+
+    # ❗必须在任何动作之前: 冒烟闸门会给脚本加 `--help` 探活, 而"无参即真动作"的脚本若
+    #   把陌生参数当无参处理, 就会**真的重建一遍**(闸门在只读检查阶段写文件)。
+    #   本脚本自己就是这一类, 这里的 --safety / --help 答案只来自常量, 不碰文件系统。
+    if args.safety:
+        kind = "action-without-args" if Path(__file__).name in PARAMETERLESS_ACTION_GENERATORS else "read-only-default"
+        print(f"{Path(__file__).name}: {kind}")
+        return 0
 
     root = Path(args.root).resolve() if args.root else find_root()
     mb = resolve_mb_dir(root, args.mb_dir)
