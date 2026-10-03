@@ -598,11 +598,17 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
     max-height: none !important; height: auto !important; border-radius: 0; }
   .drawer-grip { display: none; }
 }
-/* 过渡: 下滑 + 淡入, 只动 transform/opacity(高度不可过渡; 200ms 与模板 :duration 一致;
- * W3 打磨: 进场缓动尾段收力(位移更"落定"), 退场 ease-in 收束) */
+/* 动画期: 出入过渡钩子(drawer.js)对 dock 做高度插值, 裁掉面板溢出 —— 面板从底缘升起/收回 */
+.drawer-dock.drawer-anim { overflow: hidden; }
+/* 过渡: 下滑 + 淡入 + 槽位高度插值(drawer.js 钩子驱动 dock 高度, 治停靠面板一帧撑开/收回的布局跳变);
+ * 退场时面板转 absolute 压底出流, 由钩子收拢面板自身高度, dock(auto)跟随 —— 面板不顶住槽位;
+ * pointer-events none 免得收场中误点; 面板本体只动 transform/opacity, 高度全交钩子 */
+.drawer-leave-active { position: absolute; left: 0; right: 0; bottom: 0; pointer-events: none; }
 .drawer-enter-active { transition: transform .2s cubic-bezier(.2, .8, .3, 1), opacity .18s ease-out; }
-.drawer-leave-active { transition: transform .16s ease-in, opacity .16s ease-in; pointer-events: none; }
-.drawer-enter-from, .drawer-leave-to { transform: translateY(-16px); opacity: 0; }
+.drawer-leave-active { transition: transform .16s ease-in, opacity .16s ease-in; }
+.drawer-enter-from, .drawer-leave-to { opacity: 0; }
+.drawer-enter-from { transform: translateY(-16px); }
+.drawer-leave-to { transform: translateY(8px); }
 .drawer-head { display: flex; align-items: stretch; gap: 12px; min-height: 44px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--border); }
 .drawer-title { flex: 1 1 auto; min-width: 0; display: flex; gap: 8px; align-items: center; }
 .drawer-title strong { font-size: 14px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

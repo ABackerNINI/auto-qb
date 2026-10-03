@@ -476,6 +476,19 @@ window.AQB_DRAWER = {
     /* 收面板: 无遮罩可关, 只做面板自身收尾(文件优先级小菜单/行选中/页签轮询);
      * drawer.open 跨页不清 —— 切页再回种子页面板状态保持(方案A W1 验收项) */
     closeDrawer() {
+      // 槽位冻结 + 落定顶缘登记: leave 期面板转 absolute 出流, dock 会瞬间塌 0 —— 把用户可见高
+      // 立即写回 dock 内联(同帧无跳变帧), 钩子(drawerLeaveHook)再从该高度收拢到 0; _drawerAnimTop
+      // 供 _kbViewBottom 在收场动画期读落定值(此处 dock 还在全高帧, 是唯一可信测量点)
+      const dock = document.querySelector(".drawer-dock");
+      if (dock && !dock.classList.contains("drawer-anim")
+          && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const h = Math.round(dock.getBoundingClientRect().height);
+        if (h) {
+          this._drawerAnimTop = this._drawerFinalTop(dock);
+          dock.classList.add("drawer-anim");
+          dock.style.height = h + "px";
+        }
+      }
       this.drawer.open = false;
       this.filePrio.visible = false;
       this.drawerSelPath = "";
@@ -777,6 +790,122 @@ window.AQB_DRAWER = {
       try {
         localStorage.setItem("autoqb.ui.drawerOpen", this.drawer.open && !this.drawer.collapsed ? "1" : "0");
       } catch { /* 写入失败: 不影响本轮 */ }
+    },
+    /* ---------------- 出入过渡(Vue <transition> JS 钩子, drawer.html 接线; 用户报"出现/消失很生硬") ----------------
+     * 生硬根源: 停靠面板占据文档流, open 翻转时列表底部一帧被面板撑开/收回 —— 面板本体的
+     * transform/opacity 滑淡(CSS .drawer-enter/leave-*)治不了布局跳变。修法 = 槽位插值:
+     * enter 用 rAF 追赶循环把 .drawer-dock 高度 0 -> 面板实时高(每帧重量, 详情中途到达长高也跟),
+     * leave 反向把面板自身高度收拢到 0(dock auto 跟随); 全程只写 height/margin, 不碰面板 :style
+     * 绑定, Vue 重渲染即便回写绑定值下一帧也被循环覆盖(自愈)。动画期 .drawer-anim 裁掉溢出,
+     * 面板从底缘升起/收回; prefers-reduced-motion 与窄屏全屏态(D3, 面板 fixed 出流)不插值。
+     * 几何登记: 插值期间 dock 顶缘是中间值, 让位量测(_kbRevealRow)不许读 —— enter 起拍把
+     * "自然高时的 dock 顶缘"(即落定顶缘, sticky 钉底)登记进 _drawerAnimTop, _kbViewBottom
+     * 单点优先消费; 收敛/超时/被打断一律清零。seq 代际闸: 快速开关往返时旧循环立即让位新拍。 */
+    _drawerFinalTop(dock) {
+      return Math.round(dock.getBoundingClientRect().top);
+    },
+    _drawerAnimStop() {
+      if (this._drawerAnimRaf) {
+        cancelAnimationFrame(this._drawerAnimRaf);
+        this._drawerAnimRaf = 0;
+      }
+      const dock = document.querySelector(".drawer-dock.drawer-anim");
+      if (dock) {
+        dock.classList.remove("drawer-anim");
+        dock.style.height = "";
+        dock.style.marginTop = "";
+      }
+    },
+    drawerEnterHook(el) {
+      const dock = el.parentElement;  // 面板落点 = .drawer-dock(tpl-manifest 注入), aside 的父节点
+      this._drawerAnimStop();
+      this._drawerAnimSeq = (this._drawerAnimSeq || 0) + 1;
+      if (!dock || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const seq = this._drawerAnimSeq;
+      // 重开打断收场: 被打断的 leave 已把内联高写在面板上, 清掉再量自然高(压成 0 会把自然高量成 0,
+      // 整段动画失效); 槽位残局由 _drawerAnimStop 清理, 面板淡出中的视觉由 CSS enter 接管
+      for (const old of dock.querySelectorAll(".drawer.drawer-leave-active")) old.style.height = "";
+      dock.style.height = "";  // 量自然高(清残留内联)
+      const h0 = dock.getBoundingClientRect().height;
+      this._drawerAnimTop = h0 ? this._drawerFinalTop(dock) : 0;  // 自然高帧的顶缘 = 落定顶缘(sticky 钉底)
+      if (!h0) return;  // 窄屏全屏态(D3, 面板 fixed 不占布局)或空内容: 无槽位可插值, 交回纯 CSS 滑淡
+      const m0 = parseFloat(getComputedStyle(dock).marginTop) || 0;
+      dock.classList.add("drawer-anim");
+      dock.style.height = "0px";
+      dock.style.marginTop = "0px";
+      const t0 = performance.now();
+      const step = () => {
+        if (seq !== this._drawerAnimSeq) return;  // 被新开合打断: 新拍已接管 dock
+        const target = el.getBoundingClientRect().height;  // 每帧追面板实时高(详情中途长高也跟)
+        const cur = parseFloat(dock.style.height) || 0;
+        const next = cur + (target - cur) * 0.45;
+        if (Math.abs(target - next) < 1 || performance.now() - t0 > 400) {
+          dock.style.height = "";  // 收敛: 回交自然高, 内容后续涨落不再经动画
+          dock.style.marginTop = "";
+          dock.classList.remove("drawer-anim");
+          this._drawerAnimTop = 0;
+          this._drawerAnimRaf = 0;
+          return;
+        }
+        dock.style.height = next + "px";
+        dock.style.marginTop = Math.min(m0, next * (m0 / h0)) + "px";  // 呼吸距随槽位同步长出
+        this._drawerAnimRaf = requestAnimationFrame(step);
+      };
+      this._drawerAnimRaf = requestAnimationFrame(step);
+    },
+    drawerAfterEnterHook() {
+      if (!this.drawer.open) return;  // 入场被快速关闭打断: 迟到的钩子不得杀掉 leave 拍的动画循环
+      this._drawerAnimStop();  // 兜底: 追赶循环若仍在途(慢收敛)强制收场回自然高
+      this._drawerAnimTop = 0;
+    },
+    drawerLeaveHook(el) {
+      // closeDrawer 已冻结槽位(drawer-anim + 捕获高)时先取值再清理 —— 面板马上转 absolute 出流,
+      // 之后 dock 的自然高就塌了, 量不回用户看到的最后一帧
+      const frozenDock = document.querySelector(".drawer-dock.drawer-anim");
+      const frozenH = frozenDock ? Math.round(frozenDock.getBoundingClientRect().height) : 0;
+      this._drawerAnimStop();
+      this._drawerAnimSeq = (this._drawerAnimSeq || 0) + 1;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { this._drawerAnimTop = 0; return; }
+      if (getComputedStyle(el).position === "fixed") { this._drawerAnimTop = 0; return; }  // D3 窄屏全屏态: 面板出流, 无布局可插值
+      const dock = el.parentElement;
+      if (!dock) { this._drawerAnimTop = 0; return; }
+      const seq = this._drawerAnimSeq;
+      // 优先用 closeDrawer 捕获的用户可见高; 未捕获(入场中被打断, enter 已登记顶缘)退面板实高
+      const h0 = frozenH || Math.round(el.getBoundingClientRect().height);
+      if (!h0) { this._drawerAnimTop = 0; return; }  // 空内容: 无高度可收
+      if (!frozenH && !this._drawerAnimTop) this._drawerAnimTop = this._drawerFinalTop(dock);
+      const m0 = parseFloat(getComputedStyle(dock).marginTop) || 0;
+      dock.classList.add("drawer-anim");
+      dock.style.height = h0 + "px";  // 从捕获帧起步, 面板同步收拢 —— 两边同一曲线永不脱节
+      const t0 = performance.now();
+      const step = () => {
+        if (seq !== this._drawerAnimSeq) return;  // 重开接管: enter 拍已接管 dock 与面板
+        const t = Math.min(1, (performance.now() - t0) / 160);  // 收场 160ms = CSS 退场(.drawer-leave-active)同拍
+        const k = t * t;  // easeInQuad: 收场加速(与退场滑淡 ease-in 同感)
+        // 收面板自身高度(面板已转 absolute 底缘锚定, 底边钉死向下收), dock 冻结高同步跟缴 —— 列表全程只看到面板沉下去
+        el.style.height = Math.max(0, Math.round(h0 * (1 - k))) + "px";
+        dock.style.height = el.style.height;
+        dock.style.marginTop = Math.round(m0 * (1 - k)) + "px";  // 呼吸距同步收回, 免得尾部刺 8px
+        if (t < 1) {
+          this._drawerAnimRaf = requestAnimationFrame(step);
+          return;
+        }
+        this._drawerAnimRaf = 0;  // 面板节点随后被 Vue 摘除; dock 残留内联由 afterLeave 兜底清
+      };
+      this._drawerAnimRaf = requestAnimationFrame(step);
+      this._drawerAnimDock = dock;  // afterLeave 时面板已出 DOM(parentElement 为 null), 提前留手
+    },
+    drawerAfterLeaveHook() {
+      if (this.drawer.open) return;  // 收场被快速重开打断: 迟到的钩子不得杀掉 enter 拍的动画循环
+      this._drawerAnimStop();  // 面板已出 DOM, 兜底清 dock 内联与在途循环
+      const dock = this._drawerAnimDock;
+      if (dock) {
+        dock.classList.remove("drawer-anim");
+        dock.style.height = "";
+        dock.style.marginTop = "";
+        this._drawerAnimDock = null;
+      }
+      this._drawerAnimTop = 0;
     },
     /* 抽屉头部动作: 复用 actTorrent(它读 menu.hash 并自带回执/toast) */
     drawerAct(action) {

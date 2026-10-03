@@ -88,6 +88,13 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   停靠面板一开把被点行盖住; W4 下界单点只接了键盘跟随) —— openTorrentDrawer 调
   _kbRevealRow(hash) 补让位; nextTick 等面板挂载再量, 下界走 _kbViewBottom 单点
   (不裸用 innerHeight), 行不在 DOM 静默放弃, 不用逐层滚动 API(文件头禁令)
+- test_drawer_transition_dock_anim: 出入过渡动画(2026-10-03 用户报: 抽屉出现/消失生硬) ——
+  停靠面板占文档流, 开/关时列表底部一帧撑开/收回是生硬根源, 面板本体滑淡治不了布局跳变:
+  JS 钩子驱动 .drawer-dock 槽位高度插值(enter 追面板实时高 / leave 收面板自身高 + dock 跟随),
+  模板 @enter/@leave 接线(before-enter 同帧量不到面板); 动画期几何登记 _drawerAnimTop
+  (_kbViewBottom 优先读它, 让位量测不读中间插值); 重开打断收场时清面板内联高再量自然高;
+  after 钩子挡被打断的迟到清场; reduced-motion 与 D3 全屏态双豁免; 三皮肤 CSS 成对
+  (dock 动画期裁剪 + 退场 absolute 底缘锚定)
 """
 
 from __future__ import annotations
@@ -871,3 +878,72 @@ def test_drawer_open_reveal_row() -> None:
     assert "scrollBy" in rb, "让位走 getBoundingClientRect + scrollBy 差值(与 _kbScrollRowIntoView 同口径)"
     assert "scrollIntoView" not in rb, "_kbRevealRow 不得用逐层滚动 API(shortcuts.js 文件头禁令)"
     assert "if (!el) return;" in rb, "行不在 DOM(窗口化折叠)必须静默放弃, 滚动位置宁可不动也不猜"
+
+
+def test_drawer_transition_dock_anim() -> None:
+    """出入过渡动画(2026-10-03 用户报: 抽屉出现/消失很生硬)
+
+    停靠面板占据文档流, open 翻转时列表底部一帧被面板撑开/收回 —— 这是生硬根源; 面板本体的
+    transform/opacity 滑淡(既有 CSS)治不了布局跳变。修法 = JS 钩子驱动 .drawer-dock 槽位高度
+    插值(列表全程不动, 面板仍走滑淡), 并把动画期的几何登记进 _drawerAnimTop 供下界单点消费。
+    """
+    drawer_js = _read("drawer.js")
+    tpl = (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8")
+    # --- 模板接线: 必须用 @enter(before-enter 同帧元素未插入 DOM, 量不到父容器槽位) ---
+    assert '@enter="drawerEnterHook"' in tpl and '@leave="drawerLeaveHook"' in tpl, "<transition> 必须接 enter/leave 钩子"
+    assert "@before-enter" not in tpl, "不得用 before-enter(同帧元素未插入 DOM, parentElement 为 null, 动画整体失效)"
+    assert '@after-enter="drawerAfterEnterHook"' in tpl and '@after-leave="drawerAfterLeaveHook"' in tpl, "after 钩子必须接线(收敛兜底/残局回收)"
+    # --- 钩子机制: 槽位插值驱动的是 .drawer-dock 高度, 不碰面板 :style 绑定 ---
+    enter = re.search(r"drawerEnterHook\(el\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert enter, "drawer.js 找不到 drawerEnterHook"
+    eb = enter.group(1)
+    assert 'el.parentElement' in eb, "enter 钩子必须经面板父节点定位 .drawer-dock(tpl-manifest 注入落点)"
+    assert 'classList.add("drawer-anim")' in eb and 'dock.style.height' in eb, "enter 必须挂动画类并写 dock 槽位高度(治布局一帧跳变)"
+    assert "requestAnimationFrame" in eb, "槽位展开必须走 rAF(同帧直写终值会被合成一帧吞成无过渡)"
+    assert 'getBoundingClientRect().height' in eb, "槽位目标高必须每帧量面板实时高(详情中途到达长高也跟)"
+    assert 'prefers-reduced-motion' in eb, "reduced-motion 必须豁免插值(全局降级口径)"
+    assert 'drawer-leave-active' in eb and 'old.style.height = ""' in eb, (
+        "重开打断收场时必须清被打断面板的内联高再量自然高(压成 0 会把自然高量成 0, 整段动画失效)"
+    )
+    leave = re.search(r"drawerLeaveHook\(el\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert leave, "drawer.js 找不到 drawerLeaveHook"
+    lb = leave.group(1)
+    assert 'drawer-dock.drawer-anim' in lb and "frozenH" in lb, "收场必须先取 closeDrawer 冻结的槽位高再清理(面板出流后自然高已塌)"
+    assert 'position === "fixed"' in lb, "D3 窄屏全屏态必须豁免(面板出流, 无布局可插值)"
+    assert "el.style.height" in lb and "dock.style.height = el.style.height" in lb, (
+        "收场必须同步收面板自身高度与 dock 槽位(面板出流后不收自身高会顶住槽位, 插值失效)"
+    )
+    # --- 几何登记: 动画期下界单点优先读登记值, 让位量测不读中间插值 ---
+    assert "_drawerAnimTop = this._drawerFinalTop(dock)" in drawer_js or "_drawerAnimTop = _drawerFinalTop(dock)" in drawer_js, (
+        "钩子必须把自然高帧的 dock 顶缘登记进 _drawerAnimTop(插值期顶缘是中间值, 不可让让位量测读到)"
+    )
+    # --- 代际闸: 快速开关往返时旧循环立即让位新拍(seq 不符的 rAF 回调自弃) ---
+    assert lb.count("seq !== this._drawerAnimSeq") >= 1 and eb.count("seq !== this._drawerAnimSeq") >= 1, (
+        "enter/leave 循环必须带 seq 代际闸(重开/重关打断时旧循环不得再写 dock)"
+    )
+    # 动画期句柄(_drawerAnimTop/_drawerAnimSeq/_drawerAnimRaf/_drawerAnimDock)与 _drawerTimer 同族:
+    # 实例级非响应式, 惰性初始化, 不进 state.js 的 data(见 state.js drawer 注释口径)
+    eng = _read("shortcuts.js")
+    vb = re.search(r"_kbViewBottom\(\) \{(.*?)\n    \},", eng, re.S)
+    assert vb and "_drawerAnimTop" in vb.group(1), "_kbViewBottom 必须在动画期优先读登记的落定顶缘(dock-panel 坑档: 单点消费)"
+    assert vb.group(1).count("panel") >= 1 and vb.group(1).index("panel") < vb.group(1).index("_drawerAnimTop"), (
+        "_kbViewBottom 必须先取面板 DOM 再作登记值的有效性判定(动画中切走视图时登记值悬空, 不得消费)"
+    )
+    # --- closeDrawer 槽位冻结(leave 期面板转 absolute 出流, dock 会瞬间塌 0) ---
+    close_fn = re.search(r"closeDrawer\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert close_fn and 'classList.add("drawer-anim")' in close_fn.group(1), (
+        "closeDrawer 必须冻结当前用户可见高到 dock(同帧无跳变帧, 收场从捕获帧起步)"
+    )
+    # --- after 钩子挡被打断的迟到清场(快速开关往返) ---
+    ae = re.search(r"drawerAfterEnterHook\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    al = re.search(r"drawerAfterLeaveHook\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert ae and "if (!this.drawer.open) return;" in ae.group(1), "afterEnter 必须挡入场被打断的迟到清场(不杀 leave 拍循环)"
+    assert al and "if (this.drawer.open) return;" in al.group(1), "afterLeave 必须挡收场被打断的迟到清场(不杀 enter 拍循环)"
+    # --- 三皮肤 CSS 成对: 动画期裁剪 + 退场 absolute 底缘锚定(顶锚定会随槽位塌缩把面板顶跑) ---
+    for ui in UIS:
+        cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
+        css = cssp.read_text(encoding="utf-8")
+        assert ".drawer-dock.drawer-anim { overflow: hidden; }" in css, f"{ui}: 缺 dock 动画期裁剪规则(三皮肤成对)"
+        assert re.search(r"\.drawer-leave-active \{ position: absolute; left: 0; right: 0; bottom: 0;",
+                         css), (f"{ui}: 退场必须 absolute 底缘锚定(bottom: 0, 面板沉下去而不是被顶跑)")
+        assert "inset: 0" not in css.split(".drawer-leave-active")[0], f"{ui}: 退场不得用 inset: 0(顶锚定随槽位塌缩把面板顶跑)"

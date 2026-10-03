@@ -7,6 +7,14 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 抽屉出入过渡动画** (2026-10-04): 用户报「抽屉出现与消失时很生硬」 —— 停靠面板占文档流,
+  open 翻转时列表底部一帧被面板撑开/收回, 面板本体滑淡治不了布局跳变; JS 过渡钩子驱动 `.drawer-dock`
+  槽位高度插值(drawer.js 出入过渡块 + drawer.html `<transition>` 接线), 收场同步收面板自身高 +
+  dock 跟随, 动画期几何登记 `_drawerAnimTop` 供 `_kbViewBottom` 单点消费(行让位不读中间插值);
+  seq 代际闸管快速往返, reduced-motion 与 D3 全屏态双豁免。守阵 `test_drawer_transition_dock_anim`;
+  真浏览器探针三皮肤各 9/9; 基线 [testing/baselines/26-10-04-0015](../testing/baselines/26-10-04-0015-webui-drawer-transition-anim-done.md)
+  (**2418 passed + 3 skipped / 99%**); 档案 [tasks/26-10-03-webui-drawer-redesign](../tasks/26-10-03-webui-drawer-redesign.md)
+
 - **WEB UI 添加种子三下拉「第二轮遗留四项」**(2026-10-03): ①点字段 label **稳定**复现下拉闪烁 ——
   输入框已聚焦时点 label 不 blur(@focusout 不参与), 真链条是「label click 冒泡到 window 收层名单 →
   label 默认动作转发 click 给 for= 输入框 → 重开」⇒ 四个 combo 的字段 label 一律 `@click.stop`;
@@ -20,7 +28,7 @@
   [combobox-focusout-close(补第二轮)](../pitfalls/web-ui/combobox-focusout-close.md) +
   [modal-mask-click-self-drag(新)](../pitfalls/web-ui/modal-mask-click-self-drag.md);
   基线 [testing/baselines/26-10-03-2130](../testing/baselines/26-10-03-2130-webui-addcombo-round2.md)
-  (2415 passed + 3 skipped / 99%); 三皮肤真机走查 39/39。**未提交(等用户指令)**。
+  (2415 passed + 3 skipped / 99%); 三皮肤真机走查 39/39。
 
 - **WEB UI 添加种子三下拉「失焦即收 + 限高不出窗」**(2026-10-03): 收层主判据 window click → `@focusout`
   + 40ms 合帧守卫(治点字段 label 转发回焦导致的「下拉闪烁再次出现/未失焦」, 概率性), 开层方法先撤销

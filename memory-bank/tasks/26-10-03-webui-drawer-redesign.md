@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-03
-**Updated:** 2026-10-03
+**Updated:** 2026-10-04
 **Summary:** 方案A四波实施+收尾全部完成: W1 停靠骨架(`f994ce20` 浮层→底部停靠面板, 摘遮罩与blur=PERF-01归零收尾) → W2 键盘跟随流(`9c594e1e` scope存活+Alt+1~4双态+详情防抖跟随) → W3 高度治理(`b81a1ee4` 拖拽调高+收起钮+高度持久化+D1首屏默认收起) → W4 回归验证(`a0b5d73f` ≤900px全屏降级D3+停靠几何修复_kbViewBottom+轮询可见性守卫+基线切片26-10-03-1335) → W5 收尾回写(三issue置Done+本档案收口+计划doc-status→Done+坑档复发1条)。拍板 D1默认收起/D2 Enter仅跟随不关/D3 ≤900px全屏覆盖/D4 C波次废弃, 全按计划推荐项落地。测试: test.quick 2326→2328, test.full **2329 passed + 3 skipped / 99%**; 冒烟走查单24项×三皮肤全过。
 **Topics:** webui-drawer-redesign
 **Refs:** memory-bank/reports/26-10-03-0759-report-webui-drawer-redesign.html,memory-bank/plans/26-10-03-0917-plan-webui-drawer-redesign.html
@@ -54,6 +54,7 @@
 - **kb-cursor 复检后未增强**: 三皮肤均可辨认, 增强与既有拍板 (shared 层单点配方) 打架, 维持现状。
 - **tracker/peers 宽表**: 全宽利用 ~97%, 方案A全宽收益兑现。
 - **测试**: test.quick 2326→2327→2328 (三波各 +1), test.full **2329 passed + 3 skipped / 99%**; 冒烟走查单 24 项 × 三皮肤 (atlas/prism/console) 全过; 基线切片 [testing/baselines/26-10-03-1335-webui-drawer-redesign-w4-done.md](../testing/baselines/26-10-03-1335-webui-drawer-redesign-w4-done.md)。
+- **出入过渡动画 (2026-10-04 续作)**: 槽位高度插值钩子 (drawer.js 出入过渡块) + 动画期几何登记 `_drawerAnimTop` + 守阵 `test_drawer_transition_dock_anim`; 基线 [testing/baselines/26-10-04-0015](../testing/baselines/26-10-04-0015-webui-drawer-transition-anim-done.md) (2416 + 3 skipped / 99%); 明细见进度日志末条。
 - **坑**: 模板里 `_` 前缀裸标识符 ReferenceError 为**已记坑复发** (pitfalls/web-ui/vue-reactivity.md「模板里不允许下划线前缀标识符」, 波及 shared/tpl/drawer.html 与 popovers.html 复制钮, drawer.js L667 注释钉原因) —— 未命中原因: 该条目判别只有模板插值 `{{ _x() }}` 形态, 实际踩的是事件绑定 `@click="_copyText(...)"` 同族形态, 路由到了但形态对不上没认出来。已把复发与本例形态回写进该条目。新增坑档: 停靠面板滚动几何下界、boot.js 嵌套 template 落点 (见 pitfalls/web-ui/)。
 
 ## 进度日志
@@ -61,3 +62,4 @@
 - 2026-10-03 08:27 — 建档。开工 sync 成功 112baefc; 阶段1调研子智能体一次成功 (55 次工具调用, 零异常), 产出 4 个新文件 (报告 + 3 模板, 均过 HTML 标签配平与 node --check 静态校验; 子代理环境无浏览器, 可视化冒烟未做); 相邻 issue selection-follow-mouse (用户未点名) 只在报告 04 节提关联未纳入。拍板 D1 = 用户选「只写报告」→ 阶段2-4 实施面取消, 本档案转 Open 备查。零代码改动, 测试基线沿用 26-10-03-0542 (2309 passed + 3 skipped / 99%), 未跑新基线; 3 个 issue 保持 Open 未认领; 交付物 untracked 等提交指令。
 - 2026-10-03 09:17 — 用户指派「按报告的方案A写一个分步实施计划」: 计划 26-10-03-0917 落盘 (方案A 底部停靠, 五波 W1 骨架/W2 键盘跟随/W3 高度治理/W4 回归/W5 收尾 + 拍板点 D1-D4, Open 待拍板; 报告 C 波1 废弃、C 波3 并入 W1 由 D4 拍板)。认领链回写: 3 个 issue doc-refs 与本档案 Refs 加计划双向声明。零代码改动, 交付物 untracked 等提交指令。
 - 2026-10-03 13:4x — **W1-W5 全部完成, 本档案转 Done**。四波代码提交链 `f994ce20`→`9c594e1e`→`b81a1ee4`→`a0b5d73f` (明细见上方「实施记录」段), D1-D4 全按计划推荐项落地; W4 发现并修复两处计划内缺陷 (停靠几何 `_kbViewBottom` / 隐藏面板轮询收口); 下划线前缀坑复发 1 条已闭环 (复发 +1 + 未命中原因, 见实施记录末条)。W5 收尾回写: 三 issue (drawer-nav / drawer-open / drawer-redesign) 置 Done 并补修复回执; 计划 doc-status → Done; 已完成条目迁出 [progress/implemented-webui.md](../progress/implemented-webui.md); activeContext 切片收口。测试基线 26-10-03-1335 (test.full 2329 + 3 skipped / 99%)。
+- 2026-10-04 00:19 — **续作: 抽屉出入过渡动画** (用户报「抽屉出现与消失时很生硬, 添加过渡动画」)。根因 = 停靠面板占据文档流, open 翻转时列表底部一帧被面板撑开/收回 —— 面板本体的 transform/opacity 滑淡 (W1 既有 CSS) 治不了布局跳变。修法 = JS 过渡钩子驱动 `.drawer-dock` 槽位高度插值 (drawer.js 新增 `drawerEnterHook/drawerLeaveHook` + after 钩子, drawer.html `<transition>` 接线), 开场槽位追面板实时高 (详情中途到达长高也跟), 收场同步收面板自身高度 + dock 跟随 (CSS 退场转 absolute 底缘锚定, closeDrawer 冻结用户可见高为零跳变帧); 动画期几何登记 `_drawerAnimTop` (sticky 落定顶缘) 供 `_kbViewBottom` 单点优先消费, 行让位量测不读中间插值, 入场中切走视图的悬空登记在单点内作废; seq 代际闸管快速开关往返, after 钩子挡迟到清场, reduced-motion 与 D3 窄屏全屏态双豁免。三皮肤 CSS 成对 (dock 动画期裁剪 + 退场锚定)。守阵 `test_drawer_transition_dock_anim`; 真浏览器探针三皮肤各 9/9 (插值进行中/收敛/收场/往返终态干净/零报错)。基线 [testing/baselines/26-10-04-0015](../testing/baselines/26-10-04-0015-webui-drawer-transition-anim-done.md) (test.full **2418 passed + 3 skipped / 99%** @ 926d1f66 + 工作区; 合流前 2416, 远端合流带入 2 条)。随 ship.commit 入库(用户已授权「提交」)。

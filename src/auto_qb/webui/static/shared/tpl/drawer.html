@@ -6,7 +6,9 @@
      W3: 顶缘 .drawer-grip 拖拽调高(夹取 [240px, 70vh]) + 收起/展开钮 + 高度/开合持久化
      (localStorage, 见 drawer.js W3 块); 首屏默认收起(D1, drawer.open 初值 false)。
      FX-29: 换目标走"软切换"(drawer.switching 遮罩沿用旧数据撑住面板几何), 见 drawer.js FX-29 块。 -->
-    <transition name="drawer" :duration="200">
+    <transition name="drawer" :duration="220"
+                @enter="drawerEnterHook" @after-enter="drawerAfterEnterHook"
+                @leave="drawerLeaveHook" @after-leave="drawerAfterLeaveHook">
       <aside v-if="drawer.open" class="drawer" :class="{ collapsed: drawer.collapsed }" :style="drawerPanelStyle()"
              role="region" aria-label="种子详情">
         <!-- W3 顶缘拖拽调高(夹取 [240px, 70vh], 见 drawer.js _drawerClampHeight); 收起态隐藏 -->

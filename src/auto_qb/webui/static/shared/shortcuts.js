@@ -552,6 +552,13 @@ window.AQB_SHORTCUTS = {
       let bot = window.innerHeight;
       if (this.drawer.open) {
         const panel = document.querySelector(".drawer-dock > .drawer");
+        // 出入过渡在途: 面板顶缘的 DOM 实量是高度插值中间值, 读登记的落定顶缘(drawer.js 钩子写入);
+        // 入场动画中切走视图时面板随视图卸载、leave 钩子不点火, 登记值悬空 —— 面板已不在 DOM 即作废
+        if (this._drawerAnimTop) {
+          if (panel) return Math.min(bot, this._drawerAnimTop - 8);
+          this._drawerAnimTop = 0;
+          return bot;
+        }
         if (panel && getComputedStyle(panel).position !== "fixed") {
           bot = Math.min(bot, panel.getBoundingClientRect().top - 8);
         }
