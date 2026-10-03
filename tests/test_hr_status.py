@@ -8,7 +8,7 @@
 - test_entry_details_source_texts: 放行来源人话映射(D 免罪 / 未列出 / 已达标); 未知原值回落原文不静默丢
 - test_entry_details_field_surface: 导出字段面 = §3 P0+P1 全集; remain_seconds 等 P2 字段不得出现(决策点③)
 - test_mark_local_present_v1_hit: 本地库存在(v1 命中) -> local_present=True
-- test_mark_local_present_absent: 本地不存在 -> local_present=False(老旧)
+- test_mark_local_present_absent: 本地不存在 -> local_present=False(未做种)
 - test_mark_local_present_v2_only_hit: 仅 v2 命中(v1 未命中) -> local_present=True
 - test_mark_local_present_case_insensitive_hit: 大小写差异命中(站点清单与 qB hash 书写形态不同) -> local_present=True
 - test_mark_local_present_empty_hash_skipped: 空 infohash 不探测(空串 casefold 进集合也不误命中)
@@ -313,10 +313,10 @@ def _rows_with_hashes(**kwargs):
 
 
 def test_mark_local_present_v1_hit():
-    """本地存在(v1 命中) -> True; 完全不在本地库 -> False(老旧, 含本地从未下载的清单行)"""
+    """本地存在(v1 命中) -> True; 完全不在本地库 -> False(未做种, 含本地从未下载的清单行)"""
     rows = _rows_with_hashes(**{"aaaa1111": object()})
     assert rows[1]["local_present"] is True, "v1 命中即算本地存在"
-    assert rows[2]["local_present"] is False, "本地不存在 = 老旧(不区分 state 细类, 不存在即 False)"
+    assert rows[2]["local_present"] is False, "本地不存在 = 未做种(不区分 state 细类, 不存在即 False)"
 
 
 def test_mark_local_present_absent():

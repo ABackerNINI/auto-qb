@@ -9,6 +9,15 @@
 - **仍适用(层3未完成)**: 存量工作区文件磁盘上仍是 CRLF(一次性转 LF 暂缓), 各 clone 跑完工作区转换前, 下文「edit 工具 oldText CRLF 匹配」「Python 文本模式 `\r\r\n`」「heredoc 终止符」等条目照旧适用。
 - **长期适用**: `.cmd` 生成物必须 CRLF(cmd 对 LF 拆错行)与 Python 写模式陷阱, 与仓库行尾统一无关。
 
+### 统一 LF 后 `kb.index` 在 Windows 把生成物写成 CRLF: 一批无内容差异的 modified
+
+- **触发**: 跑 `commands run kb.index`(或任何用 Python 文本模式写 `.md` 的生成器)后看 `git status`。
+- **判别**: 一批 `_index.md` 被标记 modified, 但 `git diff` **返回 0**(clean filter 把两侧都归一成 LF ⇒ 无内容差异);
+  `git ls-files --eol` 显 `i/lf w/crlf`, 而工作区其余文件是 `w/lf`(2026-10-02 起 `.gitattributes` `eol=lf`)。
+  实测 2026-10-03: `kb.index` 后 9 个 `_index.md` 变 `w/crlf`。**这不是索引内容漂移** —— 别据此判断生成物变了。
+- **处置**: `git checkout -- <那批文件>` 归一回 LF(内容零差异, 安全); 提交侧 clean filter 本就会归一, 不归也
+  **不进 commit**(blob 不变)。根治要生成器按字节写(`write_text(..., newline="")` / `write_bytes`)—— 属未决改造, 未做。
+
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 
 - **触发**: 跑上面这几条命令。

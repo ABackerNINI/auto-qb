@@ -79,8 +79,8 @@ window.AQB_HR_STATUS = {
         refreshNote: "",
         /* 表① 逐站点明细(键 = 站点名): { loading, loaded, error, entries, readError, now }
          * laneSel(键 = 站点名): 档位筛选 chips 的本地选择("" = 全部), 前端过滤不回后端
-         * oldOn(键 = 站点名): 老旧切换钮状态(计划 26-10-02-1936 §3.3) —— false = 默认只看
-         *   做种中(local_present), true = 连老旧行一起显示; 不持久化(与 laneSel 同层)
+         * oldOn(键 = 站点名): 未做种切换钮状态(计划 26-10-02-1936 §3.3) —— false = 默认只看
+         *   做种中(local_present), true = 连未做种行一起显示; 不持久化(与 laneSel 同层)
          * sortSel/sortDir(键 = 站点名): 三态排序键与方向("" = 后端默认序), 对齐 shared/sort.js */
         details: {},
         laneSel: {},
@@ -171,10 +171,10 @@ window.AQB_HR_STATUS = {
     hrsSetLaneSel(site, lane) {
       this.hrs.laneSel[site] = lane;
     },
-    /* ---------------- 老旧切换钮(计划 26-10-02-1936 §3.3, 决策点③a) ----------------
-     * 默认只看做种中(local_present=true), 点击连老旧行一起显示; 与档位 chips 过滤 AND
+    /* ---------------- 未做种切换钮(计划 26-10-02-1936 §3.3, 决策点③a) ----------------
+     * 默认只看做种中(local_present=true), 点击连未做种行一起显示; 与档位 chips 过滤 AND
      * 叠加, 纯前端本地过滤不回后端不重拉。计数在站点全行集现算(与 chips 同层, 不随
-     * lane 过滤缩放): N = 老旧行数(默认态隐藏数), M = 做种中行数(切回后可见数)。 */
+     * lane 过滤缩放): N = 未做种行数(默认态隐藏数), M = 做种中行数(切回后可见数)。 */
     hrsOldOnOf(site) {
       return !!this.hrs.oldOn[site];
     },
@@ -184,7 +184,7 @@ window.AQB_HR_STATUS = {
     hrsOldBtnText(site) {
       const rows = (this.hrs.details[site] && this.hrs.details[site].entries) || [];
       const present = rows.filter((e) => e.local_present).length;
-      return this.hrsOldOnOf(site) ? `只看做种中 (${present})` : `显示老旧种子 (${rows.length - present})`;
+      return this.hrsOldOnOf(site) ? `只看做种中 (${present})` : `显示未做种 (${rows.length - present})`;
     },
     /* ---------------- 三态排序(计划 26-10-02-1936 §3.4, 对齐 shared/sort.js setSort) ----------------
      * 首点该列 = 降序 → 再点 = 升序 → 第三次 = 恢复后端默认序(档位·下载量); 换列直接
@@ -227,7 +227,7 @@ window.AQB_HR_STATUS = {
     hrsArrowHref(site, key) {
       return this.hrsSortKeyOf(site) === key && this.hrsSortDirOf(site) === 1 ? "#i-arrow-up" : "#i-arrow-down";
     },
-    /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端): 档位 chips × 老旧切换 AND
+    /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端): 档位 chips × 未做种切换 AND
      * 叠加, 再叠加三态排序(模块级 hrsCompareRows 纯函数, 空值恒末位); 无排序键时保持
      * 后端默认序(档位·下载量)。 */
     hrsDetailRows(site) {
@@ -242,14 +242,14 @@ window.AQB_HR_STATUS = {
       return rows;
     },
     /* 过滤后空态文案(计划 §3.3): 区分「该站点本地没有 HR 种子」(做种中视图全空)与
-     * 「该档位暂无」(chips 过滤后空); 老旧视图空集单独说, 不与做种中口径混。 */
+     * 「该档位暂无」(chips 过滤后空); 未做种视图空集单独说, 不与做种中口径混。 */
     hrsEmptyText(site) {
       const rows = (this.hrs.details[site] && this.hrs.details[site].entries) || [];
       if (this.hrsLaneSelOf(site)) return "该档位暂无";
       if (!this.hrsOldOnOf(site)) {
         return rows.some((e) => e.local_present) ? "该档位暂无" : "该站点本地没有 HR 种子";
       }
-      return rows.length ? "该档位暂无" : "该站点没有老旧种子";
+      return rows.length ? "该档位暂无" : "该站点没有未做种的种子";
     },
     /* 档位徽章色义(§5.4): A=warn(考察中) / B=green(达标) / C=error(未达标) / D=blue(免罪);
      * 失踪行由 CSS tr.missing 统一换 --paused 描边弱化, 这里不管 */

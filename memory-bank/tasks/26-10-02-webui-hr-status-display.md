@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-02
-**Updated:** 2026-10-03 04:52
+**Updated:** 2026-10-03 21:54
 **Summary:** HR 在线核实展示二轮改造: 上一轮(26-10-01-2216 详情表)后用户反馈 6 条展示问题(站点状态默认折叠 / 表格拥挤需展开全屏倾向覆盖式弹窗 / 老旧未做种种子的默认隐藏 / 表头可点击排序参考种子页 / "B毕业"改"已达标" / 档位·上次核实·状态三段文本结构化重组)。计划 26-10-02-1936 拍板(①用户改判「展开即覆盖式全屏, 不另设全屏钮」; ②a③a④a⑤a 按推荐)后四阶段全部实施并逐笔入库(b50c2873 后端 / 888a0e29 折叠+全屏 / 8cb2da59 表格 / ca77ff23 收尾)。test.full 2309 passed + 3 skipped / 99%(基线 26-10-03-0440); 真机走查待用户执行(唯一待办)。
 **Topics:** webui-hr-status-display
 **Refs:** memory-bank/plans/26-10-02-1936-plan-webui-hr-status-display-rework.html
@@ -48,6 +48,7 @@
 | 5 | 阶段 3 前端表格: 过滤 + 排序 + 信息重组 | Done |
 | 6 | 阶段 4 回归收尾 | Done |
 | 7 | 真机走查(用户手动, 需真实 qB + HR 数据) | Open |
+| 8 | 切换钮文案「显示老旧种子」→「显示未做种」(2026-10-03 后续修订) | Done |
 
 ## 进度日志
 
@@ -58,3 +59,4 @@
   - **阶段 3 前端表格 `8cb2da59`**: 老旧过滤(默认只看做种中 `local_present`, 与档位 chips AND, 空态文案区分「本地没有 HR 种子」/「该档位暂无」两口径) + 十列三态排序(对齐 shared/sort.js 范式, 模块级纯函数比较器, 空值恒末位) + 三列重组(档位徽章 / 核实结论徽章+副行 / 在列徽章+「观察期·最近被见到」副行)。三套 UI 目检过。
   - **阶段 4 收尾 `ca77ff23`**: 守阵复核 5 项零缺口(零代码改动); test.full **2309 passed + 3 skipped / 99%**(34.59s @ 8cb2da59, 基线切片 [testing/baselines/26-10-03-0440](../testing/baselines/26-10-03-0440-webui-hr-status-display-rework-done.md))。
 - 2026-10-03 04:52 — 收尾回写: 本档案置 Done / 计划 26-10-02-1936 置 Done(§9 v2) / activeContext 切片完结化 + 条目迁出 progress/implemented-webui.md / pitfalls 新立 clip-path-clips-fixed / README.md 与 ui-location-persist.md 旧描述最小修正。**真机走查待用户执行**(唯一未验证面, 子任务表保留 Open)。
+- 2026-10-03 21:54 (后续修订 · 文案) — 用户指令「将『显示老旧种子』改为『显示未做种』」: 对齐用户原始诉求第 3 条的自述用词「老旧(未做种)」, 并回应 HR 取证报告 [reports/26-10-03-1505](../reports/26-10-03-1505-report-hr-fetch-verify-forensics.html) §8 缺陷 B1(按钮名「只看做种中」与实际过滤「本地库存在」之间的误导空间 —— 用户选择改「未做种」而非报告另拟的「只在本地」)。改动: 用户可见文案两处 —— 切换钮 `hrsOldBtnText` 默认态「显示老旧种子 (N)」→「显示未做种 (N)」, 空表文案 `hrsEmptyText`「该站点没有老旧种子」→「该站点没有未做种的种子」; 同层注释 / docstring / 守阵标签一并换词(hr_status.js · settings-detail.html · routes/hr.py · test_web.py · test_hr_status.py)。**保留**内部标识符 `oldOn`/`hrsOldOnOf`/`hrsToggleOld`/`hrsOldBtnText` 与「只看做种中 (M)」态(用户仅点名前者; 沿用「毕业→已达标」只改可见文案、保留语义 token 的先例)。测试: HR 子集 83 passed; test.full **2416 passed + 3 skipped / 99%**(25.15s, 基线见 kb.baseline 最新切片)。本轮回写件留在工作树, 等用户提交指令统一入库。
