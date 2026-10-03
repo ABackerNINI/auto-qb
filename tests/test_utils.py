@@ -77,13 +77,17 @@
 - test_win_explorer_hwnds_and_topmost_and_switch: Explorer 枚举/TOPMOST 开关/SwitchToThisWindow + 失败静默
 - test_win_force_foreground_matrix: 三层升级矩阵(还原/显示/焦点/借线程/硬切/异常)
 - test_win_reuse_and_wait_explorer: 复用窗口标题匹配/差集新窗口/超时 None/置前重试封顶
-  (本组 Shell 测试全部用假替身, 不碰真窗口; _win_shell_open 直调经 sidefx._saved 取回原函数避开记账假阳性)
+  (本组 Shell 测试全部用假替身, 不碰真窗口; _win_shell_open 直调经 sidefx._saved 取回原函数避开记账假阳性;
+   平台差异: 涉及 Windows 分支的用例一律 monkeypatch sys.platform, 并用 `_shim_posix_ctypes` 在 POSIX 上
+   补 `ctypes.windll`/`WINFUNCTYPE` 门面 —— 否则 Linux CI 上必红; `_win_reuse_title_candidates` 另把
+   utils 模块内的 os 固定为 ntpath)
 - test_win_string_open_degrades_long_path_to_ancestor: 字符串路线遇超长路径上溯到最近的可达祖先
 - test_exists_dir_file_apply_long_path_prefix: _exists_dir/_exists_file 对判定过长路径前缀 helper
 - test_sanitize_tracker_url: tracker URL 脱敏只留主地址(query/path/fragment 整段丢, 任意凭据参数名都覆盖; udp 端口/userinfo 处理)
 - test_sanitize_tracker_url_unparseable: 空/非字符串/解析不出 host -> 占位串且不抛异常(日志路径不得打断业务)
 - test_display_host: 展示地址(回环 IPv4/IPv6/IPv4-mapped -> localhost, 对外地址与大小写原样, 异常入参不炸)
 """
+import ntpath
 import os
 import pytest
 import sys
@@ -1181,7 +1185,12 @@ def test_atomic_write_failure_cleans_temp_and_reraises(tmp_path):
 
 
 def test_long_path_prefix_relative_path(tmp_path, monkeypatch):
-    """相对路径 -> 先转绝对再加前缀(与已绝对路径不同径)"""
+    """相对路径 -> 先转绝对再加前缀(与已绝对路径不同径)
+
+    相对分支只在 `is_windows()` 为真时可达 ⇒ 必须 monkeypatch 平台 ——
+    否则在 Linux CI 上函数原样返回入参, 前缀断言必红(见 testing/file-conventions.md)。
+    """
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.chdir(tmp_path)
     out = utils.add_long_path_prefix_for_win("sub/dir/file.bin")
     assert out.startswith("\\\\?\\") and "sub/dir" in out.replace("\\", "/")
@@ -1275,12 +1284,37 @@ def _unwrapped_shell_open(monkeypatch):
     raise AssertionError("sidefx 未包装 _win_shell_open: 前置条件变化, 请复核本辅助")
 
 
+def _shim_posix_ctypes(monkeypatch):
+    """POSIX 上补齐 ctypes 的 Windows 专属门面(`windll` / `WINFUNCTYPE`), 让 Windows 分支用例
+    在 Linux CI 上也能跑 —— 用例注入的都是假替身, 不碰真窗口。
+
+    Windows 宿主不装: 走真门面, 行为与改动前逐字一致。缺这两样是 POSIX 的既有事实
+    (`ctypes.windll` / `ctypes.WINFUNCTYPE` 在 Linux 上不存在), 不是被测代码的缺陷 ——
+    生产入口(`_win_user32` / `_win_shell_open` 等)靠 `is_windows()` 早退, 用例则靠本 shim
+    把门面补上。`ctypes.wintypes` 两平台都有, 无需补。
+    """
+    import ctypes
+
+    if not hasattr(ctypes, "windll"):
+        monkeypatch.setattr(ctypes, "windll", SimpleNamespace(), raising=False)
+    if not hasattr(ctypes, "WINFUNCTYPE"):
+        # WINFUNCTYPE(BOOL, HWND, LPARAM) 是回调工厂; 假 user32 下真实调用约定无意义,
+        # 直接返回原函数即可(`_win_explorer_hwnds` 只把它当"把 _on_window 包成 proc"用)
+        monkeypatch.setattr(ctypes, "WINFUNCTYPE", lambda *a: (lambda f: f), raising=False)
+
+
 def test_win_shell_open_pidl_routes(monkeypatch):
-    """_win_shell_open PIDL 路线三分支: 解析失败 / 打开失败 / 成功; 前缀剥离与 COM 配对"""
+    """_win_shell_open PIDL 路线三分支: 解析失败 / 打开失败 / 成功; 前缀剥离与 COM 配对
+
+    Windows 分支用例 ⇒ 固定平台 + 补 ctypes 门面(POSIX 无 `windll`), 假 shell32/ole32
+    全程替身, 不碰真 Shell。
+    """
     import ctypes
 
     import auto_qb.infra.utils as u
 
+    _shim_posix_ctypes(monkeypatch)
+    monkeypatch.setattr(sys, "platform", "win32")
     _unwrapped_shell_open(monkeypatch)
     # 成功: parse 0 + open 0 -> True; pidl 置位 -> ILFree; CoUninitialize 配对
     shell32, ole32, calls = _fake_shell(parse_sets_pidl=True)
@@ -1308,9 +1342,20 @@ def test_win_shell_open_pidl_routes(monkeypatch):
 
 
 def test_win_user32_and_kernel32_bind_signatures(monkeypatch):
-    """user32/kernel32 惰性句柄: 首次取用绑死 x64 签名(测试重置缓存后真绑定一次, 不调任何 API)"""
+    """user32/kernel32 惰性句柄: 首次取用绑死 x64 签名(测试重置缓存后真绑定一次, 不调任何 API)
+
+    Windows 分支用例 ⇒ 固定平台 + 假 `ctypes.windll`(句柄对象为空替身, 属性取不到时
+    `_win_bind` 自行吞掉), 于是本用例在两平台都跑 —— 不靠"恰好抛 AttributeError"。
+    """
+    import ctypes
+
     import auto_qb.infra.utils as u
 
+    _shim_posix_ctypes(monkeypatch)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(
+        ctypes, "windll", SimpleNamespace(user32=SimpleNamespace(), kernel32=SimpleNamespace()), raising=False
+    )
     monkeypatch.setattr(u, "_bound_user32", None)
     monkeypatch.setattr(u, "_bound_kernel32", None)
     user32 = u._win_user32()
@@ -1390,7 +1435,11 @@ class _P1FakeKernel32:
 
 
 def test_win_explorer_hwnds_and_topmost_and_switch(monkeypatch):
-    """Explorer 枚举按类名过滤 / TOPMOST 开关式提升 / SwitchToThisWindow 兜底 + 各失败静默"""
+    """Explorer 枚举按类名过滤 / TOPMOST 开关式提升 / SwitchToThisWindow 兜底 + 各失败静默
+
+    `_win_explorer_hwnds` 内部要 `ctypes.WINFUNCTYPE`(POSIX 无) ⇒ 补门面; user32 仍是假替身。
+    """
+    _shim_posix_ctypes(monkeypatch)
     fake = _P1FakeUser32()
     monkeypatch.setattr(utils, "_win_user32", lambda: fake)
     monkeypatch.setattr(utils, "_win_kernel32", lambda: _P1FakeKernel32())
@@ -1449,7 +1498,13 @@ def test_win_force_foreground_matrix(monkeypatch):
 
 
 def test_win_reuse_and_wait_explorer(monkeypatch):
-    """复用窗口按标题匹配(含本地化后缀); 差集新窗口优先; 超时 None; 置前重试封顶"""
+    """复用窗口按标题匹配(含本地化后缀); 差集新窗口优先; 超时 None; 置前重试封顶
+
+    `_win_reuse_title_candidates` 用 `os.path` 拆**Windows 形态**的 target(调用点只在 Windows)
+    ⇒ 按 pitfalls/testing/patching.md ④ 固定语义: 只把 utils 模块内的 `os` 换成 `ntpath`
+    (纯字符串模块, 两平台同语义), 不动全局 os.path。否则 POSIX 上反斜杠不是分隔符, 盘根断言必红。
+    """
+    monkeypatch.setattr(utils, "os", SimpleNamespace(path=ntpath))
     monkeypatch.setattr(utils, "_win_user32", lambda: _P1FakeUser32())
     monkeypatch.setattr(utils, "_win_kernel32", lambda: _P1FakeKernel32())
     # 标题候选: 目标名 + 父目录名

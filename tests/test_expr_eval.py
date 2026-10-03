@@ -340,7 +340,7 @@ def test_legacy_condition_equivalence(monkeypatch):
 # ---------- T0.2 扩展: 取值器/函数表错误路径与运行期边界 ----------
 
 
-def test_more_getters_and_funcs(monkeypatch):
+def test_more_getters_and_funcs(tmp_path, monkeypatch):
     """取值器与函数表补遗: idle 正值 / 全局计数谓词 / tracker.names / file_count / len /
     abs·round·min·max·days·hours / disk_total·disk_used / exists 真值 / 同 ctx 二次取值命中缓存"""
     calls = []
@@ -375,8 +375,10 @@ def test_more_getters_and_funcs(monkeypatch):
     # 两次 freespace 只新增 1 次真实查询; Local 层会把路径补成长路径前缀)
     assert _val('disk_total("C:/") == 500GiB', ctx) is True
     assert _val('disk_used("C:/") == 100GiB', ctx) is True
-    # exists 真值/假值(经 Local 实现, 只读 stat)
-    assert _val('exists("C:/")', ctx) is True
+    # exists 真值/假值(经 Local 实现, 只读 stat): 真值用 tmp_path 这个**跨平台真实存在**的目录
+    # —— 写死 "C:/" 只在 Windows 成立(Linux CI 上它不存在, 断言必红); 假值用必然不存在的盘符路径
+    real_dir = str(tmp_path).replace("\\", "/")
+    assert _val(f'exists("{real_dir}")', ctx) is True
     assert _val('exists("Z:/__auto_qb_no_such_path__")', ctx) is False
     n0 = len(calls)
     assert _val('freespace("C:/")', ctx) == 400 * _GIB

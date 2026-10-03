@@ -2,12 +2,12 @@
 
 **Status:** Done
 **Added:** 2026-10-01
-**Updated:** 2026-10-02
+**Updated:** 2026-10-04 05:53
 **Summary:** 覆盖率提升计划 P0–P2 三阶段全部完成: 综合 90.83% → 99.06% (17,541/17,708 单位), tray/app.py 行覆盖 36% → 98.43%, hr 包 99.71%; 防回沉阈值 --cov-fail-under 抬至 98 (§5 实测−1 规则); 变异红验 25/25 精确还原; 计划转 Done, 基线切片 P0/P1/P2 各一份 (Linux 侧待补)。
 
 **Topics:** test-coverage-uplift
 
-**Refs:** memory-bank/plans/26-10-01-2157-plan-test-coverage-uplift.html
+**Refs:** memory-bank/plans/26-10-01-2157-plan-test-coverage-uplift.html, memory-bank/tasks/26-10-04-test-ci-platform.md
 
 ## 原始请求
 
@@ -42,3 +42,4 @@
 - **2026-10-02 03:37** P2-a 长尾清偿 (8b7831cd): T2.2+T2.3 core/modules + torrents + rules/actions, 96.49% → 97.53% (+186 单位), 红验 7/7 (含抓到一处假绿后收紧夹具)。
 - **2026-10-02 04:18** P2-b tray 攻坚 (1c237504): T2.1 tests/test_tray.py 新建 (45 函数/59 例, headless 逻辑缝) + widget 主体 4 处逐块 pragma 豁免, tray 行覆盖 36% → 98.43%, 红验 5/5。
 - **2026-10-02 04:26** P2-c 收尾 (本笔): test.full 复跑实测综合 **99.06%** (17,541/17,708 单位, 语句 13,201/13,284 · 分支 4,340/4,424; 2,278 passed + 3 skipped / 30.09+30.26s 两采样) → 阈值按计划 §5「实测 −1」单点规则抬 **94 → 98** (P2 DoD 字面预估档 95 按 96% 终点倒推, 实测已越过, 以 §5 为准), 抬后复跑全绿 → 切片 26-10-02-0426-p2-coverage-uplift → 计划 HTML 三处转 Done → 完成条目迁出 progress/implemented-testing.md → 本档案转 Done。
+- **2026-10-04 05:53** 后遗症清偿(另立档案 `26-10-04-test-ci-platform`): 本档案 Summary 末句自记的「Linux 侧待补」正是缺口 —— 本计划新增的 Windows 分支用例(P1 的 `test_utils` Shell/PIDL/user32 组 + P2-b 的 `test_tray` `_set_windows_appid` 组, 外加 `test_ui::test_autostart_error_paths` 与 `test_expr_eval` 的 `exists` 真值)只在 Windows 侧验收, 推上 develop 后 **Linux CI 从 `41aa9f00` 起连红 10 条**。修法: 生产代码零改动, 4 个测试文件改成两平台同跑(POSIX 补 `ctypes.windll`/`WINFUNCTYPE` 门面 + `winreg` 替身 + 显式 `ntpath` + `exists` 真值改 `tmp_path`)。两侧实测: Linux 容器 **2440 passed + 6 skipped / 98.69%**(修前 10 failed / 98.04%), Windows **2442 passed + 4 skipped / 98.74%**。教训已入 `pitfalls/testing/patching.md`「复发 +1」。**本档案的完成口径从此改为「两侧都测」**(见 baseline.md 常驻警告)。

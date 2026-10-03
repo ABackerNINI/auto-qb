@@ -871,9 +871,13 @@ def _patch_windll(monkeypatch, setter):
 
     不给 kernel32: 删读回校验后函数不应再触碰它 —— 读回若回归, windll.kernel32 属性
     AttributeError 会被函数吞掉并留「设置失败」debug, 被用例的精确断言判红。
+
+    `raising=False`: POSIX 的 ctypes 没有 windll 属性, 不给这个开关会在 Linux CI 上
+    直接 AttributeError 判红; `_set_windows_appid` 本身不判平台(全靠 try/except 兜底),
+    补上假门面即可两平台同跑。
     """
     fake = types.SimpleNamespace(shell32=types.SimpleNamespace(SetCurrentProcessExplicitAppUserModelID=setter), )
-    monkeypatch.setattr(ctypes, "windll", fake)
+    monkeypatch.setattr(ctypes, "windll", fake, raising=False)
 
 
 def test_set_windows_appid_success_no_readback(monkeypatch):

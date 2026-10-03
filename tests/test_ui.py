@@ -26,6 +26,7 @@ from types import SimpleNamespace
 import sys
 import threading
 import time
+import types
 
 import pytest
 
@@ -377,29 +378,59 @@ def test_run_join_timeout_warns(tmp_path, monkeypatch):
     ui._manager_thread.join(timeout=5)  # 收尾: 放掉被挂起的假主循环, 不留悬挂线程
 
 
-def test_autostart_error_paths(monkeypatch):
-    """自启注册/注销失败语义: OSError 转 AutoQbError; 未注册注销幂等"""
-    import winreg
+def _winreg_or_stub(monkeypatch):
+    """取 winreg: Windows 上真模块; POSIX 上注入替身模块(被测代码的 `import winreg` 命中 sys.modules)。
 
+    替身只提供被测分支引用到的常量 —— CreateKeyEx / OpenKey 由各用例自己覆盖。
+    见 pitfalls/testing/patching.md ③(平台专属模块导入用 `setitem(sys.modules, …)` 处置)。
+    """
+    try:
+        import winreg
+        return winreg
+    except ImportError:
+        stub = types.ModuleType("winreg")
+        stub.HKEY_CURRENT_USER = 0
+        stub.KEY_SET_VALUE = 1
+        stub.REG_SZ = 1
+        # 占位实现: 真 winreg 的这些入口本就存在, 用例要 `setattr` 覆盖它们 —— 缺了会撞
+        # monkeypatch 的"属性必须已存在"检查(AttributeError), 而本 stub 只用来补平台缺口
+        stub.CreateKeyEx = lambda *a, **kw: None
+        stub.OpenKey = lambda *a, **kw: None
+        stub.DeleteValue = lambda *a, **kw: None
+        monkeypatch.setitem(sys.modules, "winreg", stub)
+        return stub
+
+
+def test_autostart_error_paths(monkeypatch):
+    """自启注册/注销失败语义: OSError 转 AutoQbError; 未注册注销幂等
+
+    三段各用独立 `monkeypatch.context()` —— 旧写法靠 `monkeypatch.undo()` 清场, 会把平台 patch
+    与 winreg 替身一并撤掉, 后续段落就没法在 POSIX 上跑(见 testing/file-conventions.md
+    「平台相关测试必须以 monkeypatch 固定平台」)。
+    """
     from auto_qb.infra.autostart import AutoQbError, disable, enable
 
     def reg_boom(*a, **kw):
         raise OSError(5, "拒绝访问")
 
-    monkeypatch.setattr(winreg, "CreateKeyEx", reg_boom)
-    with pytest.raises(AutoQbError, match="注册失败"):
-        enable("config.yml")
-    monkeypatch.undo()
-    # 未注册: OpenKey 抛 FileNotFoundError -> 幂等返回
-    monkeypatch.setattr(winreg, "OpenKey", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError(2, "未注册")))
-    disable()  # 不抛
-    monkeypatch.undo()
-    # 注销失败(darwin 分支: plist unlink 失败) -> AutoQbError(Win32 分支的 DeleteValue 失败被
-    # 内层「未注册幂等」吞掉, 外层转换只保护非 Win32 的文件系统操作)
-    monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(
-        autostart, "MACOS_PLIST",
-        SimpleNamespace(unlink=lambda *a, **kw: (_ for _ in ()).throw(PermissionError(5, "拒绝")))
-    )
-    with pytest.raises(AutoQbError, match="注销失败"):
-        disable()
+    # 1) Win32: CreateKeyEx 抛 OSError -> AutoQbError
+    with monkeypatch.context() as m:
+        m.setattr(sys, "platform", "win32")
+        m.setattr(_winreg_or_stub(m), "CreateKeyEx", reg_boom)
+        with pytest.raises(AutoQbError, match="注册失败"):
+            enable("config.yml")
+    # 2) Win32: 未注册(OpenKey 抛 FileNotFoundError) -> 注销幂等返回
+    with monkeypatch.context() as m:
+        m.setattr(sys, "platform", "win32")
+        m.setattr(_winreg_or_stub(m), "OpenKey", lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError(2, "未注册")))
+        disable()  # 不抛
+    # 3) darwin: plist unlink 失败 -> AutoQbError(Win32 分支的 DeleteValue 失败被内层
+    # 「未注册幂等」吞掉, 外层转换只保护非 Win32 的文件系统操作)
+    with monkeypatch.context() as m:
+        m.setattr(sys, "platform", "darwin")
+        m.setattr(
+            autostart, "MACOS_PLIST",
+            SimpleNamespace(unlink=lambda *a, **kw: (_ for _ in ()).throw(PermissionError(5, "拒绝")))
+        )
+        with pytest.raises(AutoQbError, match="注销失败"):
+            disable()

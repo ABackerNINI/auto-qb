@@ -2,6 +2,7 @@
 name      = "test"
 when      = "验证代码：全量 / 快速 / 单文件"
 confirmed = true
+scripts_dir = "scripts"
 
 # ❗命令**必须自带 TMPDIR**：工具 shell 的 TMPDIR 默认是 `H:\Temp`，那个盘上符号链接读取被拒，
 #   pytest 会在收尾的 `cleanup_dead_symlinks` 上抛 `PermissionError [WinError 5] … pytest-current`
@@ -44,3 +45,10 @@ note    = "<args> 填文件路径或 -k 表达式；单文件用 -n 0（并行�
 run     = ["uv run python scripts/update_config_key_surface.py"]
 when    = "键面守卫(test_config_key_surface)报基线过期后重写 tests/fixtures/config_key_surface.txt"
 note    = "消失键且版本未抬时脚本拒绝重生成(先抬 CURRENT_VERSIONS + 注册迁移再跑); 生成器单点在测试模块, 不要复制展开逻辑"
+
+[tasks."test.linux"]
+script  = "linux_ci.py"
+timeout = 900
+when    = "本机复现 Linux CI(平台差异排查): 起容器跑全量, 与 Windows 侧对照 —— 改了平台相关代码/测试后必跑"
+note    = "用脚本而不是一行 run: 命令里全是 && / ; / | 与多层引号, 引擎在 Windows 上走 cmd.exe, 引号地狱必踩。配方与两个必踩点(别删容器内 /work/.git, 否则 test_commands_engine 多 5 条假红; 先删宿主 .venv 再 uv sync)单点在 memory-bank/pitfalls/testing/patching.md「Docker 等价复现」节。默认镜像 python3.12(= CI 矩阵), 传参可换镜像(如 python3.13-bookworm-slim)。输出全文透传(排障要看 FAILED 明细与覆盖率行)"
+doc     = "../../memory-bank/pitfalls/testing/patching.md"

@@ -3,6 +3,8 @@
 > 摘要: 「Windows 全绿 / Linux 全红」的四类根因与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**(2026-09-25 已修: 环境揭出引擎码页回退真缺陷, GetACP + 测试钉缝双修)。
 > 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红
 
+**Refs:** memory-bank/tasks/26-10-04-test-ci-platform.md
+
 ### 「Windows 全绿 / Linux 全红」: 本机跑通不等于 CI 跑通 (Linux CI 一次红 4 项, 真根因三个)
 
 - **触发**: 本机全绿但 CI 红。
@@ -19,6 +21,21 @@
   patch `qbmanager.Client` **无效**(`connect()` 走的是 `qbclient.new_client`)⇒
   **patch 真正被调用的名字**, 与网络解耦。
 - **处置**: 见下条判别法。
+- **复发** +1 —— 2026-10-02 (覆盖率提升轮 P0/P1/P2, 计划 `26-10-01-2157`; 2026-10-04 修复):
+  该轮新增的 **Windows 分支用例**只在 Windows 侧验收, 推上 `develop` 后 **Linux CI 连红 10 条**
+  (`test_utils` 的 Shell/PIDL/user32 组 5 条 + `test_tray` 的 `_set_windows_appid` 组 3 条 +
+  `test_ui::test_autostart_error_paths` + `test_expr_eval::test_more_getters_and_funcs`)。
+  四类形态: ① `ctypes.windll` / `ctypes.WINFUNCTYPE` 在 POSIX **不存在**(直取属性即 AttributeError);
+  ② `winreg` 是 Windows 专属模块(`import winreg` → ModuleNotFoundError); ③ `os.path` 在 POSIX 是
+  `posixpath`, 反斜杠不当分隔符(`_win_reuse_title_candidates("R:\\")` 的盘根断言必红);
+  ④ 真值断言写死 Windows 盘符(`exists("C:/")`)。
+  **为什么没命中**: 本轮只动 `tests/` + 在 Windows 侧跑 `test.full`, 提覆盖率时只问"这行覆盖上没有",
+  没问"这条在 Linux 上会怎样" —— 判别法没被路由到**写测试**这个动作上。
+  **处置**: ① `ctypes.windll`/`WINFUNCTYPE` 用 `_shim_posix_ctypes`(POSIX 补门面, Windows 不装走真门面);
+  ② `winreg` 用 `setitem(sys.modules, "winreg", 替身)`(替身要给 `setattr` 覆盖的入口留占位, 否则撞
+  "属性必须已存在"); ③ Windows 路径语义用显式 `ntpath`; ④ 真值改用 `tmp_path` 这类跨平台真实存在的路径。
+  **判据**: 改完必须在 **Linux 容器**里跑全量(见下节), 与 Windows 侧**两侧都绿**才算完 ——
+  本轮 Linux = 2440 passed + 6 skipped / 覆盖率 98.69%(修前 10 failed / 98.04%)。
 
 ### ❗本工具 shell 注入 `PYTHONUTF8=1` —— "本地码页回退"假红(**2026-09-25 已修: 一半是环境, 一半真缺陷**)
 
@@ -97,6 +114,16 @@
 - **判别**: WSL 里 `wsl -- bash -c '...'` 复制一份仓库(排除 `.venv` / `.git`)、`uv sync`、
   `uv run pytest tests -q` 即可(加 `-p 3.12` / `-p 3.13` 还能对上 CI 矩阵版本)。
   ❗**WSL 可能被安全策略拦在黑名单里**(2026-09-22 实测: `wsl.exe` 命中 Program Blacklist 被拒, **不可绕过**)。
+- **Docker 等价复现 (2026-10-04 实测可用, 替代 WSL)**: 已收录为 task —— **`commands run test.linux`**
+  (脚本 `.commands/test/scripts/linux_ci.py`; 传参可换镜像, 如 `python3.13-bookworm-slim`)。
+  命令本体不再抄在这里(手抄即第 N 处副本, 判据见 commands skill「收录协议」)。
+  ❗**三个必踩点**(脚本已内建, 手写时必踩): ① **不要删容器内 `/work/.git`** —— `test_commands_engine`
+  的 `find_root()` 靠向上找 `.git`, 删了会多出 5 条假红; ② `cp -a` 会连宿主的 Windows `.venv` 一起拷进来,
+  必须先 `rm -rf` 再由 `uv sync` 重建(否则 Linux 上拿到 Windows 二进制); ③ 宿主**同时**在跑 pytest 时
+  仓库根的 `.coverage` 会被反复写/删, `cp -a` 可能撞 `cannot stat`。
+  **为什么是脚本而不是一行 `run`**: 命令里全是 `&&` / `;` / `|` 与多层引号, 而引擎在 Windows 上走
+  `cmd.exe`(`shell=True`)—— 引号地狱必踩。
+  容器内 `ctypes.wintypes` **可导入**, 只有 `ctypes.windll` / `ctypes.WINFUNCTYPE` / `winreg` 缺失。
 - **处置**: 退而求其次的**等价论证** —— 用
   `monkeypatch.setattr(模块, "os", types.SimpleNamespace(path=posixpath))` 再跑判据 ——
   这**精确等价**于"该代码跑在 Linux", 于是**在 Windows 上就能复现 Linux 的失败**。
