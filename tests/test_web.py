@@ -187,6 +187,7 @@
 - test_api_add_torrent_endpoint: /api/torrents/add multipart(bytes 内存直传/选项透传/空来源 400)
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
+- test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
@@ -3387,6 +3388,61 @@ def test_frontend_add_torrent_drag_drop_wiring():
             f"{ui}/index.html 缺拖拽落点遮罩(.add-drop-mask + v-if=\"addDragOver\")—— "
             f"该皮肤用户拖文件进页面没有落点反馈(双 UI 必须成对改)"
         )
+
+
+def test_frontend_add_combo_blur_close_and_fit():
+    """添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障, 静态防回潮)
+
+    两个用户可见故障形态, 根因都在事件接线/几何量测这类 pytest 运行时看不见的地方:
+      1. **点窗口其它位置下拉不收 / 闪烁重现**: 收层判据原来只有 window click(lifecycle.js),
+         点字段 label(for= 转发激活)时浏览器先 blur 再把焦点转回输入框, click 关层 + 转发
+         click 重开 = 关了又开(leave 过渡被打断 = 闪烁)。修法 = 收层主判据改 @focusout,
+         但**不能同步收** —— 必须 40ms 合帧守卫(焦点回来由开层方法撤销), 否则闪烁回潮。
+      2. **选项过长把窗口撑变形**: .pop-menu 基础 max-height 只保证菜单自身可滚, 菜单锚在
+         输入行下方, 绝对定位溢出会伸出窗口外并把 .add-dialog-body 的 scrollHeight 撑大。
+         修法 = 开层时把可滚内层限到「输入行 → 滚动容器可见底沿」的净空内(滚动条留在窗口里)。
+    """
+    import re
+
+    at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
+    mgr = open(os.path.join(STATIC_ROOT, "shared", "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
+
+    # 1. 三个输入框全部挂 @focusout 收层(漏一个 = 那个下拉点空白不收)
+    for input_id in ("ad-save-path", "ad-category", "ad-tags"):
+        m = re.search(rf'<input id="{input_id}"(.*?)>', mgr, re.S)
+        assert m, f"dialogs-mgr.html 找不到 #{input_id}(添加窗口三下拉的输入框, 改名或挪走了? 同步本守阵)"
+        assert '@focusout="addPopBlurClose"' in m.group(1), \
+            f"#{input_id} 缺 @focusout=\"addPopBlurClose\"(失焦即收是收层主判据, 漏挂 = 该下拉点窗口其它位置不收)"
+
+    # 2. 失焦收层必须带合帧守卫: 同步收层会被 label 的焦点转回打断(闪烁回潮)
+    body = re.search(r"addPopBlurClose\(\) \{(.*?)\n    \},", at, re.S)
+    assert body, "add_torrent.js 找不到 addPopBlurClose(失焦收层单点, 改名或挪走了? 同步本守阵)"
+    assert "setTimeout" in body.group(1) and "clearTimeout" in body.group(1), \
+        "addPopBlurClose 必须用定时器合帧(同步收层 + label 转发回焦 = 关了又开闪烁); 定时窗内焦点回来由开层方法撤销"
+    for field in ("addCatMenu", "addTagMenu", "addPathPop"):
+        assert f"this.{field} = false" in body.group(1), f"addPopBlurClose 漏收 {field}"
+
+    # 3. 三个开层方法先撤销挂起的收层(焦点回到输入框 = 菜单保持, 不闪)
+    for fnname in ("openAddCatMenu", "openAddTagMenu", "openAddPathPop"):
+        body = re.search(rf"{fnname}\(\) \{{(.*?)\n    \}},", at, re.S)
+        assert body and "_addPopBlurCancel()" in body.group(1), \
+            f"{fnname} 必须先 _addPopBlurCancel()(焦点转回输入框时撤销挂起的失焦收层, 否则菜单闪烁)"
+
+    # 4. 限高: 开层 watcher 单点(开层入口有四处, 直挂方法会漏) + 量「行→滚动容器可见底沿」净空
+    for token in ("addCatMenu(v) {", "addTagMenu(v) {", "addPathPop(v) {"):
+        assert token in at, f"add_torrent.js 缺 watcher {token}(开层限高必须走 watcher 单点, 四处开层入口直挂会漏)"
+    fit = re.search(r"_fitAddPop\(refName\) \{(.*?)\n    \},", at, re.S)
+    assert fit, "add_torrent.js 找不到 _fitAddPop(下拉限高单点, 改名或挪走了? 同步本守阵)"
+    fit_body = fit.group(1)
+    assert 'closest(".add-input-row")' in fit_body and 'closest(".add-dialog-body")' in fit_body, \
+        "_fitAddPop 必须以输入行为锚、以 .add-dialog-body 可见底沿为界量净空(以视口为界会在窗口化/滚动时量错)"
+    assert 'list.style.maxHeight = ""' in fit_body, \
+        "_fitAddPop 限高前必须先复位旧值(上一次的限高会污染本次测量)"
+
+    # 5. 候选异步到位会改变菜单高度, 开着时也要重限
+    for opt in ("addCatOptions", "addTagOptions", "addPathOptions"):
+        assert re.search(rf"{opt}\(\) \{{\n      if \(this\.", at), \
+            f"add_torrent.js 缺 {opt} 的 watcher(候选异步到位改变菜单高度, 开着时必须重限)"
 
 
 def test_frontend_ctx_submenu_single_entry_and_hover_close():

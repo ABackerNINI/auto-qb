@@ -7,6 +7,14 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 添加种子三下拉「失焦即收 + 限高不出窗」**(2026-10-03): 收层主判据 window click → `@focusout`
+  + 40ms 合帧守卫(治点字段 label 转发回焦导致的「下拉闪烁再次出现/未失焦」, 概率性), 开层方法先撤销
+  挂起收层; 开层 watcher `_fitAddPop` 量「输入行→滚动容器可见底沿」净空限高 + 候选异步重限(治菜单
+  伸出窗口外把 `.add-dialog-body` 撑变形, 滚动条进窗)。守阵 `test_frontend_add_combo_blur_close_and_fit`;
+  坑档 [pitfalls/web-ui/combobox-focusout-close.md](../pitfalls/web-ui/combobox-focusout-close.md);
+  基线 [testing/baselines/26-10-03-1550](../testing/baselines/26-10-03-1550-webui-addcombo-blur-fit-done.md)
+  (2391 passed + 3 skipped / 99%); 三皮肤真机走查 12/12 × 3。**未提交(等用户指令)**。
+
 - **WEB UI 种子详情抽屉重设计: 浮层 → 底部停靠属性面板 (方案A)**(2026-10-03, 计划
   [plans/26-10-03-0917](../plans/26-10-03-0917-plan-webui-drawer-redesign.html) 五波, 提交链 `f994ce20`/`9c594e1e`/`b81a1ee4`/`a0b5d73f`,
   清偿 issue [26-10-01-2119-feat-webui-drawer-redesign](../issues/26-10-01-2119-feat-webui-drawer-redesign.html) +

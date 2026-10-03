@@ -93,12 +93,14 @@ window.AQB_ADD = {
       this.addShowUrls = !this.addShowUrls;  // 收起不清空已输入链接, 再展开仍可继续编辑
     },
     openAddCatMenu() {
+      this._addPopBlurCancel();  // 焦点回到本输入框(label 转发/重新点入)时撤销挂起的失焦收层, 菜单不闪
       this.addTagMenu = false;
       this.addCatHi = -1;
       this.addCatMouseAt = null;  // 开层复位悬停门限坐标(下次打开首个动作不被旧坐标误挡)
       this.addCatMenu = true;
     },
     openAddTagMenu() {
+      this._addPopBlurCancel();
       this.addCatMenu = false;
       this.addTagHi = -1;
       this.addTagMouseAt = null;  // 同上
@@ -247,11 +249,56 @@ window.AQB_ADD = {
      * —— 聚焦反而把面板关掉(为让位于原生 datalist 的建议浮层), 而那个浮层会自行超时消失,
      * 于是表现为"下拉 2 秒后不见了"。datalist 退役后聚焦 = 展开。 */
     openAddPathPop() {
+      this._addPopBlurCancel();
       this.addCatMenu = false;
       this.addTagMenu = false;
       this.addPathHi = this.addPathOptions.indexOf(this.addSavePath.trim());
       this.addPathPop = true;
       this._hiScroll("addPathList");
+    },
+    /* ---------------- 失焦收层(2026-10-03 报障: 点窗口其它位置下拉不收/闪烁重现) ----------------
+     * 收层主判据改成「输入框失焦」(模板 @focusout), window click(lifecycle.js)降级为兜底:
+     * 点空白/点别的字段/Tab 走 focusout 必然触发; 点字段 label(for= 转发激活)不触发重开闪烁。
+     * ⚠ 不能在 focusout 里同步收 —— 点 label 时浏览器先 blur 再由 label 默认动作把焦点转回输入框
+     * (实测 focusout → ~2ms 后 focusin), 同步收层 = 关了又开, leave 过渡被打断 = 用户看到的
+     * 「下拉闪烁再次出现」。挂 40ms 定时合帧: 焦点真离开(点空白/别的字段/Tab)下一拍收层;
+     * 焦点回来了(开层方法先跑)则撤销, 菜单全程不闪。定时窗内收层前 window click 兜底照常生效。 */
+    addPopBlurClose() {
+      clearTimeout(this._addPopBlurT);
+      this._addPopBlurT = setTimeout(() => {
+        this.addCatMenu = false;
+        this.addTagMenu = false;
+        this.addPathPop = false;
+        this.addCatHi = -1;
+        this.addTagHi = -1;
+        this.addPathHi = -1;
+      }, 40);
+    },
+    _addPopBlurCancel() {
+      clearTimeout(this._addPopBlurT);
+    },
+    /* ---------------- 下拉限高(2026-10-03 报障: 选项过长把添加窗口撑变形) ----------------
+     * .pop-menu 基础 max-height:330px 只保证菜单自身可滚, 但菜单锚在输入行下方, 输入行贴近
+     * 窗口底沿时整条菜单伸出窗口外(滚动条也跟着出窗), 且绝对定位溢出会把 .add-dialog-body
+     * 的 scrollHeight 撑大(窗口内容变形/多出滚动量)。开层后在同一帧量「输入行到滚动容器可见
+     * 底沿」的净空, 把可滚内层(.add-pop-list 或菜单自身)限到净空内 —— 滚动条永远留在窗口里。
+     * 只在开层/候选到位时量一次: 菜单开着时用户再滚动窗口, 行随内容滚走, 净空只增不减会露头,
+     * 不做滚动跟随(收层重开即重新量, 复杂度不值)。 */
+    _fitAddPop(refName) {
+      this.$nextTick(() => {
+        if (!this.addOpen) return;
+        const inner = this.$refs[refName];
+        if (!inner) return;
+        const menu = inner.closest(".add-pop") || inner;
+        const row = menu.closest(".add-input-row");
+        const body = menu.closest(".add-dialog-body");
+        if (!row || !body) return;
+        const list = menu.querySelector(".add-pop-list") || menu;  // 可滚内层(路径面板=列表, 分类/标签=菜单自身)
+        list.style.maxHeight = "";  // 先复位再量, 上一次的限高不许污染本次测量
+        const chrome = menu.offsetHeight - list.offsetHeight;  // 面板头等固定件
+        const avail = Math.floor(body.getBoundingClientRect().bottom - row.getBoundingClientRect().bottom - 10 - chrome);
+        if (avail > 0 && list.offsetHeight > avail) list.style.maxHeight = `${Math.max(120, avail)}px`;
+      });
     },
     pickAddPath(p) {
       this.addSavePath = p;  // 单选回填(覆盖自由输入框内容)
@@ -439,6 +486,29 @@ window.AQB_ADD = {
       if (this.addSubmitting) return false;
       if (this.addFiles.length) return true;
       return this.addUrls.split(/\r?\n/).some((l) => l.trim());
+    },
+  },
+  watch: {
+    /* 下拉限高单点: 三个浮层的开层入口有四处(开层方法 / 输入 @input 直开 / 键盘 _comboKeydown /
+     * 目录浏览返回), 开层计时走 watcher 才不漏; 候选异步到位(loadAddOptions)会改变菜单高度,
+     * 开着时也要重限。 */
+    addCatMenu(v) {
+      if (v) this._fitAddPop("addCatList");
+    },
+    addTagMenu(v) {
+      if (v) this._fitAddPop("addTagList");
+    },
+    addPathPop(v) {
+      if (v) this._fitAddPop("addPathList");
+    },
+    addCatOptions() {
+      if (this.addCatMenu) this._fitAddPop("addCatList");
+    },
+    addTagOptions() {
+      if (this.addTagMenu) this._fitAddPop("addTagList");
+    },
+    addPathOptions() {
+      if (this.addPathPop) this._fitAddPop("addPathList");
     },
   },
 };
