@@ -189,7 +189,7 @@
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限
-- test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03) —— 四个 combo 的字段 label 一律 @click.stop(点 label 走「window 收层 → 转发 click 重开」= 稳定闪烁, @focusout 挡不住)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
+- test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
@@ -3671,10 +3671,12 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
     """添加种子三下拉「第二轮遗留四项」接线守阵(2026-10-03 报障, 静态防回潮)
 
     上一轮(失焦即收 + 开层限高)之后剩下的四条, 根因同样全在"pytest 看不见的事件/几何接线"里:
-      1. **点字段 label 稳定复现下拉闪烁**: label 的默认动作把 click **转发**给 for= 的输入框,
-         而它自己那次 click 先冒泡到 window(lifecycle 收层名单) —— 顺序恒为「window 收层 →
-         转发 click 重开」, leave 过渡被打断; 此时输入框**已聚焦**(点 label 不 blur), 上一轮
-         补的 @focusout 挡不住这一路。修法 = 四个 combo 的字段 label 一律 @click.stop。
+      1. **点字段 label 稳定复现下拉闪烁(两轮才修对)**: label 的 click 默认动作把 click **转发**
+         给 for= 的输入框, 而它自己那次 click 先冒泡到 window(lifecycle 收层名单) ⇒ 必须
+         @click.stop。但只挡 click 赢不了主竞态: label 的 **mousedown** 默认动作先把已聚焦的
+         输入框 blur 掉, addPopBlurClose 的 40ms 合帧定时器在**按住期间**(人手 80~150ms 必然
+         > 40ms)先触发收层, 松手后 label 转发回焦再重开 = 闪烁。修法 = 四个 combo 的字段 label
+         一律 @mousedown.prevent + @click.stop(缺一即回归)。
       2. **三个 combobox 没有清空按钮**: 补 .add-pop-clear, 必须 @mousedown.prevent(不拦默认
          动作按钮会抢焦点 → 输入框失焦走 addPopBlurClose 把下拉收掉, 清完想接着挑就多点一次)。
       3. **拖选输入框文字、终点落在遮罩上抬手 = 关窗**: click 的 target 是 mousedown/mouseup 的
@@ -3694,7 +3696,8 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
     mgr = open(os.path.join(shared, "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
     pv = open(os.path.join(shared, "tpl", "popovers.html"), encoding="utf-8").read()
 
-    # 1. 四个 combo 的字段 label 全部 @click.stop(漏一个 = 那个下拉点 label 稳定闪烁)
+    # 1. 四个 combo 的字段 label 全部 @mousedown.prevent + @click.stop(漏一个 = 那个下拉点 label 稳定闪烁;
+    #    prevent 挡 mousedown 默认动作的 blur(40ms 合帧窗赢不了人手按住时长), stop 挡 window click 收层)
     for holder, input_id in (
         ("mgr", "ad-save-path"), ("mgr", "ad-category"), ("mgr", "ad-tags"), ("pv", "meta-category")
     ):
@@ -3704,6 +3707,10 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
         assert "@click.stop" in m.group(0), \
             (f"label[for={input_id}] 缺 @click.stop —— 点它会走「window click 收层 → label 转发 "
              f"click 重开」= 下拉闪烁再现(输入框已聚焦, @focusout 挡不住这一路)")
+        assert "@mousedown.prevent" in m.group(0), \
+            (f"label[for={input_id}] 缺 @mousedown.prevent —— label 的 mousedown 默认动作把已聚焦的"
+             f"输入框 blur 掉, addPopBlurClose 的 40ms 合帧定时器在按住期间(人手 80~150ms > 40ms)"
+             f"先收层, 松手 label 转发回焦再重开 = 闪烁(2026-10-04 三修, 真机按住时序实测)")
 
     # 2. 三个 combobox 内嵌清空(x): 行挂 has-clear + 按钮 @mousedown.prevent + 走 clearAddField
     for input_id, kind, field in (

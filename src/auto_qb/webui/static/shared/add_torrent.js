@@ -275,10 +275,13 @@ window.AQB_ADD = {
     /* ---------------- 失焦收层(2026-10-03 报障: 点窗口其它位置下拉不收/闪烁重现) ----------------
      * 收层主判据改成「输入框失焦」(模板 @focusout), window click(lifecycle.js)降级为兜底:
      * 点空白/点别的字段/Tab 走 focusout 必然触发; 点字段 label(for= 转发激活)不触发重开闪烁。
-     * ⚠ 不能在 focusout 里同步收 —— 点 label 时浏览器先 blur 再由 label 默认动作把焦点转回输入框
-     * (实测 focusout → ~2ms 后 focusin), 同步收层 = 关了又开, leave 过渡被打断 = 用户看到的
-     * 「下拉闪烁再次出现」。挂 40ms 定时合帧: 焦点真离开(点空白/别的字段/Tab)下一拍收层;
-     * 焦点回来了(开层方法先跑)则撤销, 菜单全程不闪。定时窗内收层前 window click 兜底照常生效。 */
+     * ⚠ 不能在 focusout 里同步收 —— 点 label 时 mousedown 默认动作先 blur, label 的 click 默认
+     * 动作才把焦点转回输入框, 这两步之间隔着**整段按住时长**(人手 80~150ms); 零延迟合成点击
+     * 实测 ~2ms 是假象, 按 2ms 设计的合帧窗必输。同步收层 = 关了又开, leave 过渡被打断 = 闪烁。
+     * 挂 40ms 定时合帧: 焦点真离开(点空白/别的字段/Tab)下一拍收层; 焦点回来了(开层方法先跑)
+     * 则撤销, 菜单全程不闪。定时窗内收层前 window click 兜底照常生效。
+     * ⚠ label 一侧的 blur 由模板 @mousedown.prevent 根除(焦点不掉, 本定时器不武装) —— 本窗口
+     * 40ms 只兜点空白/Tab 这类瞬时焦点迁移, 不许再把 label 的长按间隙算进来(2026-10-04 三修)。 */
     addPopBlurClose() {
       clearTimeout(this._addPopBlurT);
       this._addPopBlurT = setTimeout(() => {

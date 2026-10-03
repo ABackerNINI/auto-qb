@@ -41,11 +41,14 @@
 
           <div class="add-dialog-grid">
             <div class="add-dialog-field add-dialog-pathfield">
-              <!-- label 必须 @click.stop: label 的默认动作会把 click **转发**给 for= 的输入框,
-                   而它自己的 click 先冒泡到 window(lifecycle 收层名单), 顺序是「window 收层 →
-                   转发 click 重开」= 关了又开, leave 过渡被打断即用户看到的"下拉闪烁再现"
-                   (点 label 时输入框已聚焦, 不走 blur, 所以 @focusout 挡不住这一路)。 -->
-              <label class="add-dialog-label" for="ad-save-path" @click.stop>保存路径(留空 = qB 默认)</label>
+            <!-- label 必须 @mousedown.prevent + @click.stop(点在 label 上 = 稳定复现的"下拉闪烁再现")。
+                 @click.stop 只挡 window click 收层(上轮以为这就够); 真正赢不了的竞态在 blur:
+                 label 的 mousedown 默认动作把已聚焦的输入框 blur 掉, addPopBlurClose 挂的 40ms
+                 合帧定时器在**按住期间**(人手 80~150ms, 必 > 40ms)先触发收层, 松手后 label 的
+                 click 默认动作才把焦点转回输入框重开 = 关了又开。@mousedown.prevent 让 mousedown
+                 不产生 blur(焦点不掉, 定时器不武装), 根除整条链; 两个修饰符缺一即闪烁回归。
+                 (Playwright 默认点击 down/up 仅隔 ~2ms, 撞不上 40ms 窗 —— 走查必须 delay>=120) -->
+            <label class="add-dialog-label" for="ad-save-path" @mousedown.prevent @click.stop>保存路径(留空 = qB 默认)</label>
               <div class="add-dialog-pathrow">
                 <!-- FX-18: 浮层必须锚在**输入行**上(.add-input-row 有 position:relative)。
                      旧写法把面板挂在 .add-dialog-pathrow 下, 而它没有定位祖先 -> 面板按
@@ -86,9 +89,9 @@
               </div>
             </div>
             <div class="add-dialog-field add-dialog-combo">
-              <!-- @click.stop 同上(点在 label 上 = 稳定复现的"下拉闪烁再现"): 挡住 window 收层,
-                   只让 label 转发给输入框的那一次 click 生效 -->
-              <label class="add-dialog-label" for="ad-category" @click.stop>分类(可空)</label>
+              <!-- @mousedown.prevent + @click.stop 同保存路径 label(按住期间 40ms 合帧定时器先收层,
+                   松手 refocus 再重开 = 闪烁; mousedown.prevent 根除 blur) -->
+              <label class="add-dialog-label" for="ad-category" @mousedown.prevent @click.stop>分类(可空)</label>
               <!-- FX-18: 面板锚定"输入行"而非整个 field 盒(后者是 grid 项会被拉伸, 面板离输入框很远) -->
               <div class="add-input-row has-clear">
                 <input id="ad-category" v-model="addCategory" class="add-dialog-input" type="text"
@@ -112,8 +115,8 @@
               </div>
             </div>
             <div class="add-dialog-field add-dialog-combo">
-              <!-- @click.stop 同上(点在 label 上 = 稳定复现的"下拉闪烁再现") -->
-              <label class="add-dialog-label" for="ad-tags" @click.stop>标签(逗号分隔, 可空)</label>
+              <!-- @mousedown.prevent + @click.stop 同保存路径 label -->
+              <label class="add-dialog-label" for="ad-tags" @mousedown.prevent @click.stop>标签(逗号分隔, 可空)</label>
               <div class="add-input-row has-clear">
                 <input id="ad-tags" v-model="addTags" class="add-dialog-input" type="text"
                        placeholder="如 HR, Keep(可从下拉挑选)" autocomplete="off" spellcheck="false"

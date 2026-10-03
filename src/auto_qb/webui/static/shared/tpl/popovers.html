@@ -58,9 +58,11 @@
         <div class="add-dialog-body">
           <p class="meta-targets">作用于 <b>{{ metaCount }}</b> 个种子(打开时锁定)</p>
           <div class="add-dialog-field add-dialog-combo">
-            <!-- label 必须 @click.stop(与添加种子三下拉同因): 它已进入 lifecycle 的 window click
-                 收层名单, 不挡就是「window 收层 → label 转发 click 重开」= 下拉闪烁再现 -->
-            <label class="add-dialog-label" for="meta-category" @click.stop>分类(留空 = 无分类)</label>
+            <!-- label 必须 @mousedown.prevent + @click.stop(与添加种子三下拉同因同修):
+                 @click.stop 挡 window click 收层; @mousedown.prevent 挡 mousedown 默认动作的 blur ——
+                 不挡则 metaCatBlurClose 的 40ms 合帧定时器在按住期间(人手 80~150ms)先收层,
+                 松手 label 转发 refocus 再重开 = 闪烁。缺一即回归, 走查须 delay>=120ms。 -->
+            <label class="add-dialog-label" for="meta-category" @mousedown.prevent @click.stop>分类(留空 = 无分类)</label>
             <div class="add-input-row">
               <input id="meta-category" v-model="metaCatInput" class="add-dialog-input" type="text"
                      placeholder="下拉选择或自由输入, 留空 = 清除分类" autocomplete="off" spellcheck="false"

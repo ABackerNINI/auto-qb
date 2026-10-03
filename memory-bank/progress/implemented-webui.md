@@ -7,6 +7,19 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 添加种子三下拉 label 闪烁「第三轮」(上轮修法未修住)**(2026-10-04): 用户报 a7ebbe14 后
+  「点字段 label 稳定复现下拉闪烁」依旧。真浏览器事件埋点定位: 第二轮两个判断是错的 —— label 的
+  **mousedown** 默认动作就会 blur 已聚焦的输入框(focusout related=null 实测在),"回焦 ~2ms"只是
+  零延迟合成点击的假象, 真人按下到抬起隔 **80~150ms** ⇒ addPopBlurClose 的 40ms 合帧定时器在
+  **按住期间**先收层, 松手 label click 默认动作回焦重开 = 每次必闪; 第二轮走查 39/39 全绿是因为
+  Playwright 默认点击 down/up 只隔 ~2ms, 撞不上 40ms 窗。修法 = 四个字段 label(添加窗口三字段 +
+  meta 分类)一律 `@mousedown.prevent`(mousedown 不产生 blur ⇒ 收层定时器不武装, 竞态从根上消失;
+  @click.stop 保留挡 window 收层, 缺一即回归; 关闭态点 label 仍正常聚焦+开菜单, 实测)。守阵第 1 组
+  扩为双断言; 坑档 [combobox-focusout-close(复发+1, 第三轮)](../pitfalls/web-ui/combobox-focusout-close.md)
+  —— 教训: 合成零延迟点击验证不了按住时序竞态, 走查必须 `delay>=120ms`。基线
+  [testing/baselines/26-10-04-0054](../testing/baselines/26-10-04-0054-webui-addcombo-label-round3.md)
+  (2418 passed + 3 skipped / 99%, 合并 30143bda 后重测); 三皮肤 24/24(delay=150ms 人手时序)。
+
 - **WEB UI 抽屉出入过渡动画** (2026-10-04): 用户报「抽屉出现与消失时很生硬」 —— 停靠面板占文档流,
   open 翻转时列表底部一帧被面板撑开/收回, 面板本体滑淡治不了布局跳变; JS 过渡钩子驱动 `.drawer-dock`
   槽位高度插值(drawer.js 出入过渡块 + drawer.html `<transition>` 接线), 收场同步收面板自身高 +
