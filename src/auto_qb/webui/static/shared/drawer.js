@@ -458,7 +458,10 @@ window.AQB_DRAWER = {
       this._stopDrawerPoll();
       this._stopDrawerFollow();  // 显式打开优先于在途跟随(双击换目标 vs 防抖中的跟随, 不得互相打架)
       this._drawerSwitchEnd();   // FX-29: 面板整体重建 -> 无"旧内容可保留", 待到集合与遮罩一并作废
-      const initialTab = this.drawerLastTab || "general";
+      // 流量页签(S5b, plan 26-10-03-0946 §07 表②)受 qb_traffic_enabled 门控: 上次停在流量页签
+      // 而功能后来关闭时落回常规页(页签按钮 v-if=qbTrafficOn 不渲染, 初值也不能落在隐形页签上)
+      const last = this.drawerLastTab;
+      const initialTab = last === "traffic" && !this.qbTrafficOn ? "general" : (last || "general");
       this.drawer = {
         open: true, collapsed: false, hash, tab: initialTab, loading: true, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
@@ -485,6 +488,10 @@ window.AQB_DRAWER = {
         clearInterval(this._drawerTimer);
         this._drawerTimer = null;
       }
+      // 流量页签(S5b)的低频轮询同收: 本方法是抽屉页签轮询的收口单点(closeDrawer/drawerTab/
+      // _switchDrawerTarget/openTorrentDrawer 全走这里), 页签切走/换目标/关面板即停 —— 若新页签
+      // 仍是流量, _loadDrawerTab 会重新起(_qbPollStart 自带先停后起)
+      this._qbPollStop("torrent");
     },
     _startDrawerPoll() {
       this._stopDrawerPoll();
@@ -591,6 +598,14 @@ window.AQB_DRAWER = {
         this._fetchDrawerPeers(false, seq);
         this._startDrawerPoll();
       } else if (tab === "content") this._fetchDrawerFiles(false, seq);
+      // 流量页签(S5b, plan 26-10-03-0946 §07 表②): 数据源 /api/traffic/qb/torrent/{hash};
+      // 打开时拉取一次 + 打开期间按采样间隔低频续拉(qb_traffic_chart.js _qbPollStart,
+      // meta.interval_s 取间隔), 关抽屉/切页签/换目标由 _stopDrawerPoll 统一收 ——
+      // hash 上下文竞态(换目标后旧响应)在 _qbLoad 的 stale 判定里丢弃
+      else if (tab === "traffic" && this.qbTrafficOn) {
+        this._qbLoad("torrent");
+        this._qbPollStart("torrent");
+      }
     },
     /* ---------------- W2 详情跟随光标(计划 §2.3 四条纪律, 全部收口在此单点) ----------------
      * 触发入口: shortcuts.js::_kbApplyCursor 尾部(鼠标路径将来接同一入口, §1.3 相邻预留)。

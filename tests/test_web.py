@@ -34,7 +34,7 @@
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
-- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a, plan 26-10-03-0946 §07) —— enabled=false 入口不渲染不请求(入口按钮 v-if="qbHistEntryOn" 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步
+- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -2491,13 +2491,14 @@ console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: check
 
 
 def test_frontend_qb_traffic_chart_wiring():
-    """qB 口径流量图前端接线守阵(P5a, plan 26-10-03-0946 §07)
+    """qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07)
 
-    四类"漏一处 = 静默失效 / P5 验收被破坏"的故障形态机械钉住:
-    1. enabled=false 入口不渲染不请求(P5 验收前置): 入口按钮 v-if="qbHistEntryOn" 挂今日
-      流量面板内, 门单点在 flags.qb_traffic_enabled(/api/webui/flags 下发, fail-closed
-      默认 false, state.js 显式建字段 + lifecycle.loadWebFlags 写入); 无旗标无入口,
-      openQbHistory 无触发路径 = 零请求;
+    五类"漏一处 = 静默失效 / P5 验收被破坏"的故障形态机械钉住:
+    1. enabled=false 三挂点入口不渲染不请求(P5 验收): 全局入口按钮 v-if="qbHistEntryOn" 挂今日
+      流量面板内; 抽屉「流量」页签按钮与组右键「qB 口径流量图」菜单项 v-if="qbTrafficOn";
+      门单点在 flags.qb_traffic_enabled(/api/webui/flags 下发, fail-closed 默认 false,
+      state.js 显式建字段 + lifecycle.loadWebFlags 写入), _qbLoad 里再兜一道 —— 无旗标无入口,
+      无入口无触发路径 = 三挂点零请求;
     2. uPlot 双系列断线语义(§5.2): 两 series 显式 spanGaps=false(纯断线, 无最大跨越);
       桶序 -> uPlot 数据的栅格重建 _qbPointsToData 用 node 真跑(null 槽 y=null + x 等距
       不漂移 / 前导 null 锚推算 / 全 null 与 interval 非法回落), 无 node 静默跳过;
@@ -2505,8 +2506,13 @@ def test_frontend_qb_traffic_chart_wiring():
       tpl-manifest 同步登记(逐份断言, 三清单一致性另由 test_frontend_template_split_wiring
       钉住), app.mixin 注入 + 弹层/Esc 退栈/escBusy 名单同步 + _logout 清理;
     4. 挂点形态: 今日流量面板(TM 历史入口旁并列按钮), 图层/取值 CSS 三套 UI 成对
-      (.qb-* 结构类 + .sb-qb 入口类; tooltip 与图例复用 .hist-* 同源色义)。
-    """
+      (.qb-* 结构类 + .sb-qb 入口类; tooltip 与图例复用 .hist-* 同源色义);
+    5. S5b 两挂点与低频轮询(§07 表): 单种挂点 = 抽屉「流量」页签(drawer.js _loadDrawerTab
+      进, 关抽屉/切页签/换目标由 _stopDrawerPoll 统一收) + 分组挂点 = 组右键菜单项开分组弹层
+      (key 直用 menu.key 的 encode_group_key 通道, 不自行编码); 轮询三挂点统一: 间隔从
+      meta.interval_s 夹取([15s,600s] 配置校验界, 30d 窗桶宽 3600s 被夹到上界保续拉语义)
+      + document.hidden 跳过(对齐 _startDrawerPoll 先例)+ _qbPollStop 显式 clearInterval
+      (只挂打开期间, 不后台常驻)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
@@ -2514,14 +2520,21 @@ def test_frontend_qb_traffic_chart_wiring():
     auth_js = open(os.path.join(shared, "auth.js"), encoding="utf-8").read()
     dialogs_js = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
     app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
     statusbar = open(os.path.join(shared, "tpl", "statusbar.html"), encoding="utf-8").read()
+    drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
+    qb_traffic_tpl = open(os.path.join(shared, "tpl", "qb-traffic.html"), encoding="utf-8").read()
+    ctx_menus = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
 
-    # 1. enabled 门(fail-closed 单点)
+    # 1. enabled 门(fail-closed 单点; 三挂点共用 qbTrafficOn, 全局入口另挂今日流量面板本体)
     assert 'flags: { skip_check_menu: false, qb_traffic_enabled: false }' in state_js, \
         "state.js flags 默认缺 qb_traffic_enabled: false(fail-closed 初值必须显式建)"
     assert "qb_traffic_enabled: !!(f && f.qb_traffic_enabled)" in lifecycle_js, \
         "loadWebFlags 必须写回 qb_traffic_enabled(缺了旗标恒 false = 功能永不可见)"
     assert "qb_traffic_enabled: false" in lifecycle_js, "loadWebFlags 失败分支必须保持 fail-closed"
+    mo = re.search(r"qbTrafficOn\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo and "this.flags.qb_traffic_enabled" in mo.group(1), \
+        "qb_traffic_chart.js 缺 qbTrafficOn 功能总门单点(抽屉流量页签/组右键菜单项的 v-if 门)"
     mo = re.search(r"qbHistEntryOn\(\) \{\n(.*?)\n    \},", js, re.S)
     assert mo, "qb_traffic_chart.js 缺 qbHistEntryOn 入口门单点"
     body = mo.group(1)
@@ -2566,9 +2579,14 @@ def test_frontend_qb_traffic_chart_wiring():
             "qb-traffic.html 不在盘上"
     assert "app.mixin(window.AQB_QB_TRAFFIC)" in app_js, "app.js 未注入 AQB_QB_TRAFFIC(整块功能静默消失)"
     assert "this.qbHistOpen ||" in dialogs_js, "escBusy 名单缺 qbHistOpen(与 Esc 退栈链两处同步纪律)"
+    assert "this.qbGroupOpen ||" in dialogs_js, "escBusy 名单缺 qbGroupOpen(S5b 分组弹层, 与 Esc 退栈链两处同步纪律)"
     assert "this.qbHistOpen) this.closeQbHistory()" in lifecycle_js, "Esc 退栈链缺 qB 弹层分支"
+    assert "this.qbGroupOpen) this.closeQbGroup()" in lifecycle_js, "Esc 退栈链缺 qB 分组弹层分支(S5b)"
     assert "this.qbHistOpen = false" in auth_js and "this.qbHistData = null" in auth_js, \
         "_logout 必须清 qB 弹层状态(受保护内容同 historyOpen 先例)"
+    assert "this.qbGroupOpen = false" in auth_js and "this._qbPollStop(\"group\")" in auth_js \
+        and "this._qbPollStop(\"torrent\")" in auth_js, \
+        "_logout 必须清 S5b 两挂点状态并停轮询定时器(不留对 /api/traffic/qb/* 的后台请求)"
 
     # 4. CSS 三套 UI 成对(.qb-* 结构类 + .sb-qb 入口; tooltip/图例复用 .hist-* 不在此列)
     for css, name in (
@@ -2584,6 +2602,56 @@ def test_frontend_qb_traffic_chart_wiring():
             (".sb-qb {", "今日流量面板入口按钮"),
         ):
             assert rule in css, f"{name} 缺 {rule}({what}) —— 三套 UI 必须成对改"
+
+    # 5. S5b 两挂点 + 低频轮询(plan §07 表②③ + 「轮询/取数」列)
+    # 作用域表 = 三挂点单一描述源: 三作用域齐全, 各持 state 字段名/容器 ref/端点 url
+    for scope, host in (("global", "qbChartHost"), ("torrent", "qbTorrentChartHost"), ("group", "qbGroupChartHost")):
+        assert f'host: "{host}"' in js, f"_QB_SCOPES 缺 {scope} 作用域容器 ref({host})"
+    assert 'url: (h, w) => "/api/traffic/qb/torrent/" + h + "?window=" + w' in js, \
+        "单种作用域端点串漂移(/api/traffic/qb/torrent/{hash})"
+    assert 'url: (k, w) => "/api/traffic/qb/group/" + k + "?window=" + w' in js, \
+        "分组作用域端点串漂移(/api/traffic/qb/group/{key}; key 原样内插 = encode_group_key 通道, 不自行编码)"
+    # 单种挂点(§07 表②): 抽屉「流量」页签 v-if 门 + 页签体容器 + drawer.js 接线三处
+    assert 'v-if="qbTrafficOn"' in drawer_tpl and 'drawerTab(\'traffic\')' in drawer_tpl, \
+        "drawer.html 缺「流量」页签按钮(v-if=qbTrafficOn 门 + drawerTab 入口)"
+    assert 'ref="qbTorrentChartHost"' in drawer_tpl, "drawer.html 缺 qbTorrentChartHost 建图落点"
+    assert 'tab === "traffic" && this.qbTrafficOn' in drawer_js and 'this._qbPollStart("torrent")' in drawer_js, \
+        "drawer.js _loadDrawerTab 缺流量页签分支(加载 + 起轮询)"
+    assert 'this._qbPollStop("torrent")' in drawer_js, \
+        "drawer.js _stopDrawerPoll 缺流量轮询收口(关抽屉/切页签/换目标全走这里 = 关闭即停)"
+    assert 'last === "traffic" && !this.qbTrafficOn' in drawer_js, \
+        "drawer.js 打开抽屉缺流量页签初值归一(功能关闭时上次停留页签须落回常规页)"
+    # 分组挂点(§07 表③): 组右键菜单项(v-if 门) + 分组弹层(qb-traffic.html 同片第二弹层)
+    assert 'v-if="qbTrafficOn"' in ctx_menus and 'openQbGroup(menu.key)' in ctx_menus, \
+        "ctx-menus.html 缺组右键「qB 口径流量图」菜单项(v-if 门 + menu.key 直用的 encode_group_key 通道)"
+    assert ctx_menus.count("openQbGroup(menu.key)") == 1, "组右键菜单项只能挂在单组菜单(多选/剧集菜单不得出现)"
+    assert 'v-if="qbGroupOpen"' in qb_traffic_tpl and 'ref="qbGroupChartHost"' in qb_traffic_tpl \
+        and 'closeQbGroup' in qb_traffic_tpl and 'qbGroupSetWindow' in qb_traffic_tpl, \
+        "qb-traffic.html 缺分组流量弹层(遮罩/建图落点/关闭/窗口切换)"
+    assert 'await this._qbLoad("group")' in js and 'this._qbPollStart("group")' in js, \
+        "openQbGroup 缺打开拉取 + 起轮询(§07 表③「打开弹层拉取」)"
+    assert 'if (!this.qbTrafficOn || !key) return;' in js, "openQbGroup 缺 fail-closed 兜底门(入口 v-if 之外的加载路径)"
+    # 低频轮询(§07): 间隔取 meta.interval_s 夹取([15s,600s] 配置校验界) + 30s 兜底 +
+    # document.hidden 跳过(对齐 drawer.js _startDrawerPoll 先例) + 关闭路径显式 clearInterval
+    assert "_QB_POLL_FALLBACK_MS = 30000" in js and "_QB_POLL_MIN_MS = 15000" in js and "_QB_POLL_MAX_MS = 600000" in js, \
+        "轮询间隔常量漂移(30s 兜底 / [15s,600s] 夹取界 = §06 配置校验边界)"
+    assert "Math.min(_QB_POLL_MAX_MS, Math.max(_QB_POLL_MIN_MS, s * 1000))" in js, \
+        "轮询间隔必须经 [15s,600s] 夹取(30d 窗 meta.interval_s=3600 是桶宽, 直拉 = 一小时不刷新)"
+    assert "if (!def.active(this) || document.hidden || this[def.loading]) return;" in js, \
+        "轮询 tick 缺 document.hidden / 不活跃 / 在途未落袋跳过(先例 _startDrawerPoll)"
+    assert js.count("clearInterval(") == 1, \
+        "组件内 clearInterval 只允许在 _qbPollStop 单点(轮询停止收口)"
+    for close_call, scope in (("closeQbHistory", "global"), ("closeQbGroup", "group")):
+        blk = re.search(rf"{close_call}\(\) \{{\n(.*?)\n    \}},", js, re.S)
+        assert blk and f'this._qbPollStop("{scope}")' in blk.group(1), \
+            f"{close_call} 缺 _qbPollStop(弹层关闭轮询即停, P5 验收)"
+    # state.js 根选项显式建字段(Vue 响应式前置, frontend-split 纪律)
+    for field in (
+        "qbTorrentWindow", "qbTorrentData", "qbTorrentLoading", "qbTorrentError", "qbTorrentHoverIdx",
+        "qbTorrentHoverLeft", "qbGroupOpen", "qbGroupKey", "qbGroupName", "qbGroupWindow", "qbGroupData",
+        "qbGroupLoading", "qbGroupError", "qbGroupHoverIdx", "qbGroupHoverLeft"
+    ):
+        assert re.search(rf"^\s+{field}: ", state_js, re.M), f"state.js 缺 {field} 初值(根选项显式建字段)"
 
 
 def test_frontend_hr_diag_view_wiring():

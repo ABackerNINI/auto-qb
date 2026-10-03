@@ -74,6 +74,16 @@ window.AQB_AUTH = {
       this.qbHistOpen = false;  // qB 口径流量图弹层(P5a): 受保护内容一并清(组件实例随 _qbChartDestroy 收尾)
       this.qbHistHoverIdx = -1;
       this.qbHistData = null;
+      // qB 口径流量图 S5b 两挂点(分组弹层/抽屉流量页签): 受保护内容与轮询定时器一并清
+      // (轮询只挂打开期间, 登出必须拆干净 —— 不留对 /api/traffic/qb/* 的后台请求)
+      this._qbPollStop("global");
+      this._qbPollStop("torrent");
+      this._qbPollStop("group");
+      this.qbGroupOpen = false;
+      this.qbGroupHoverIdx = -1;
+      this.qbGroupData = null;
+      this.qbTorrentHoverIdx = -1;
+      this.qbTorrentData = null;
       this.statsOpen = false;
       this.statsServer = null;
       this.statsError = "";

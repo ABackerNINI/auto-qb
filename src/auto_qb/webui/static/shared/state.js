@@ -215,6 +215,25 @@ window.AQB_STATE = {
       qbHistError: "",
       qbHistHoverIdx: -1,     // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
       qbHistHoverLeft: 0,     // 悬停十字线 px(tooltip 水平定位)
+      // qB 口径流量图 · 单种挂点(S5b, plan §07 表②): 种子详情抽屉「流量」页签; 开合由
+      // drawer.open + drawer.tab === "traffic" 表达, 不设独立 open 字段(页签本体在 drawer.html)
+      qbTorrentWindow: "24h", // 24h | 30d
+      qbTorrentData: null,    // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
+      qbTorrentLoading: false,
+      qbTorrentError: "",
+      qbTorrentHoverIdx: -1,  // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
+      qbTorrentHoverLeft: 0,  // 悬停十字线 px(tooltip 水平定位)
+      // qB 口径流量图 · 分组挂点(S5b, §07 表③): 分组弹层(现状无分组弹层, 本挂点新建,
+      // 入口 = 组右键菜单「qB 口径流量图」); key = 分组视图 g.key(encode_group_key 通道)
+      qbGroupOpen: false,
+      qbGroupKey: "",         // 打开时刻锁定的组 key(慢响应不污染下一次打开)
+      qbGroupName: "",        // 弹层标题用(经 _findGroup 取, 找不到留空)
+      qbGroupWindow: "24h",   // 24h | 30d
+      qbGroupData: null,      // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
+      qbGroupLoading: false,
+      qbGroupError: "",
+      qbGroupHoverIdx: -1,    // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
+      qbGroupHoverLeft: 0,    // 悬停十字线 px(tooltip 水平定位)
       // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面。
       // FX-01: 初值必须为 true —— 首帧状态**未知**, 不能当作"未授权"渲染密钥表单。
       // 离开该状态只有三条明确路径(见 mounted/bootstrap): 本机免鉴权 / 密钥验证通过 / 无密钥或验证被拒。

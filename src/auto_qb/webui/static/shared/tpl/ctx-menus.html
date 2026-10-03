@@ -185,6 +185,13 @@
             <div class="ctx-item" @click="openTargetPath('group', menu.key)">
               <svg class="ico ico-sm ico-folder" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>打开目标文件夹
             </div>
+            <!-- qB 口径流量图 · 分组挂点(S5b, plan 26-10-03-0946 §07 表③): 打开分组流量弹层;
+                 v-if=qbTrafficOn fail-closed 门(flags.qb_traffic_enabled, 对齐跳检菜单项先例) ——
+                 enabled=false 菜单项不渲染 = 无入口即无请求(P5 验收); key 直用 menu.key
+                 (encode_group_key 通道, 同 openTargetPath/组级命令) -->
+            <div class="ctx-item" v-if="qbTrafficOn" @click="openQbGroup(menu.key)">
+              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>qB 口径流量图
+            </div>
             <div class="ctx-sep"></div>
             <div class="ctx-item danger" @click="delGroup()">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>删除该{{ l10nGroup }}…

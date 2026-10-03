@@ -28,6 +28,9 @@
             <button :class="{ active: drawer.tab === 'trackers' }" @click="drawerTab('trackers')">Tracker</button>
             <button :class="{ active: drawer.tab === 'peers' }" @click="drawerTab('peers')">用户</button>
             <button :class="{ active: drawer.tab === 'content' }" @click="drawerTab('content')">内容</button>
+            <!-- qB 口径流量图 · 单种挂点(S5b, plan 26-10-03-0946 §07 表②): enabled=false 时
+                 页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收) -->
+            <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>
           </nav>
           <button class="drawer-fold" :title="drawer.collapsed ? '展开' : '收起'" @click="toggleDrawerCollapse()">
             <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
@@ -181,6 +184,61 @@
               </tbody>
             </table>
             <div v-else class="empty"><span>无文件列表</span></div>
+          </template>
+          <!-- qB 口径流量图 · 单种挂点(S5b, plan 26-10-03-0946 §07 表②): /api/traffic/qb/torrent/{hash}
+               时序速率, 复用 qb_traffic_chart.js 三挂点组件(torrent 作用域); null 桶 = 断线不连线
+               (§5.2), 非活跃期无采样即断线; 拉取/轮询在 _qbLoad/_qbPollStart(drawer.js
+               _loadDrawerTab 进, 关抽屉/切页签/收起即停)。逻辑与全局弹层同源(qb_traffic_chart.js),
+               两套 UI 同一份(单一语义模板) -->
+          <template v-else-if="drawer.tab === 'traffic'">
+            <div class="drawer-toolbar">
+              <div class="qb-tabs">
+                <button v-for="w in ['24h', '30d']" :key="w" :class="{ active: qbTorrentWindow === w }"
+                        @click="qbTorrentSetWindow(w)">{{ { '24h': '24 小时', '30d': '30 天' }[w] }}</button>
+              </div>
+              <span class="drawer-toolbar-hint">qB 口径 · 程序运行期间(断线处不连线)</span>
+            </div>
+            <div v-if="qbTorrentLoading" class="empty">
+              <svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
+              <span>正在加载流量数据…</span>
+            </div>
+            <div v-else-if="qbTorrentError" class="empty">
+              <svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+              <span>{{ qbTorrentError }}</span>
+            </div>
+            <div v-else-if="!qbTorrentPoints.length" class="empty">
+              <svg class="ico" viewBox="0 0 16 16"><use href="#i-inbox"></use></svg>
+              <span>暂无该种子的 qB 口径流量数据(仅活跃传输期间有采样)</span>
+            </div>
+            <template v-else>
+              <p v-if="qbTorrentData.meta && qbTorrentData.meta.stale" class="qb-stale">数据读取瞬时失败, 展示上一次成功快照</p>
+              <!-- uPlot 建图落点: 容器 ref 由 _qbChartBuild 量宽, tooltip 为其兄弟绝对定位;
+                   悬停 idx/px 由 uPlot setCursor 钩子写回(qbTorrentHoverIdx/qbTorrentHoverLeft) -->
+              <div class="qb-chart">
+                <div ref="qbTorrentChartHost" class="qb-chart-host"></div>
+                <div v-if="qbTorrentHover" class="hist-tip" :class="{ flip: qbTorrentHover.flip }"
+                     :style="{ left: qbTorrentHover.left + 'px', top: '0' }">
+                  <b>{{ qbTorrentHover.tip }}</b>
+                  <template v-if="!qbTorrentHover.gap">
+                    <span class="h-up">上行 {{ fmtSpeed(qbTorrentHover.up) }}</span>
+                    <span class="h-down">下行 {{ fmtSpeed(qbTorrentHover.dl) }}</span>
+                    <span>合计 {{ fmtSpeed(qbTorrentHover.up + qbTorrentHover.dl) }}</span>
+                  </template>
+                  <span v-else>断线 · 无数据</span>
+                </div>
+              </div>
+              <div class="hist-legend">
+                <span><i class="sw up"></i>上行</span>
+                <span><i class="sw down"></i>下行</span>
+                <span class="hist-hint">悬停查看详情</span>
+              </div>
+              <div v-if="qbTorrentSummary" class="hist-summary">
+                <span>窗口 <b>{{ qbTorrentSummary.buckets }} 桶</b></span>
+                <span>上传累计 <b class="h-up">{{ fmtSize(qbTorrentSummary.up) }}</b></span>
+                <span>下载累计 <b class="h-down">{{ fmtSize(qbTorrentSummary.down) }}</b></span>
+                <span class="hist-hint">累计为窗口内增量(断线期不计)</span>
+              </div>
+            </template>
           </template>
         </div>
       </aside>
