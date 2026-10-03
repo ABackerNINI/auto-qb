@@ -151,9 +151,11 @@ window.AQB_FEEDBACK = {
    全局悬浮提示(.aq-tip): 原生 title 的自绘替代 —— 视觉复刻设置页发光按钮配方
  * --------------------------------------------------------------------------
  * 触发面 = 一切带 title 的元素(模板里 130+ 处 title / :title 绑定零改动全量受益)。
- * 机制: document 级委托 mouseover / focusin, 命中 [title] 即**摘除原属性**(浏览器
- * 原生气泡无法换肤且固定延迟 ~1s)+ 350ms 后弹自绘浮层; 离开 / 失焦即还原 title ——
- * 还原前用 hasAttribute 探测: 悬浮期间 Vue patch 若已写入新值则保留新值, :title 绑定不受影响。
+ * 机制: document 级委托 mouseover / focusin, 命中 [title] 即**摘除原属性(整条祖先链,
+ * 嵌套带 title 的组借外层 title 还魂会叠出双 tooltip)**+ 350ms 后弹自绘浮层; 离开 /
+ * 失焦即还原 title —— 还原前用 hasAttribute 探测: 悬浮期间若值已被重写则保留新值,
+ * :title 绑定不受影响。悬浮期间另有周期补摘(状态栏 :title 随轮询逐轮变值, Vue patch
+ * 会把 title 重写回去而 mouseover 不会再触发), 补摘捕获到的即最新值。
  * 浮层单例挂 body 级 —— 脱离列表容器的 overflow / clip-path(同 hr-pop 与 .speed-pop 的教训);
  * 样式单点在 shared/console_hub.css 的 .aq-tip 段(三套皮肤同载, 颜色走皮肤令牌)。
  * 本块是纯 DOM 行为层, 不进 Vue mixin(不占 methods 命名空间, 也无重名风险)。
@@ -161,11 +163,14 @@ window.AQB_FEEDBACK = {
 (function () {
   "use strict";
   const SHOW_DELAY_MS = 350; // 与原生 tooltip 的迟滞感对齐, 掠过不闪
+  const REARM_MS = 250;      // 悬浮期间补摘周期(短于原生气泡起跳延迟, Vue 重写的 title 撑不到 1s)
   const GAP = 6;             // 浮层与锚点的间距
   const EDGE = 8;            // 视口边缘留白(同 _menuOverflowsRight 口径)
   let tip = null;            // 单例浮层(懒建: 登录页等无 title 场景零 DOM 成本)
-  let cur = null;            // 当前悬浮的 [title] 元素
+  let cur = null;            // 当前悬浮的 [title] 元素(链最内层)
+  let chain = [];            // 本次悬浮被摘掉 title 的整条祖先链(含 cur): 还原单点
   let timer = 0;
+  let rearm = 0;             // 悬浮期间周期补摘定时器(见 enter)
 
   function tipEl() {
     if (!tip) {
@@ -177,15 +182,23 @@ window.AQB_FEEDBACK = {
     return tip;
   }
 
+  function strip(el) {
+    el.__aqTitle = el.getAttribute("title");
+    el.removeAttribute("title"); // 原属性在手上, 原生气泡就无从弹出
+  }
+
   function restore(el) {
-    if (!el.__aqTitle) return;
+    if (el.__aqTitle === null || el.__aqTitle === undefined) return;
     if (!el.hasAttribute("title")) el.setAttribute("title", el.__aqTitle);
     el.__aqTitle = null;
   }
 
   function hide() {
     if (timer) { clearTimeout(timer); timer = 0; }
-    if (cur) { restore(cur); cur = null; }
+    if (rearm) { clearInterval(rearm); rearm = 0; }
+    for (const el of chain) restore(el);
+    chain = [];
+    cur = null;
     if (tip) tip.classList.remove("on");
   }
 
@@ -210,9 +223,19 @@ window.AQB_FEEDBACK = {
     hide();
     if (!target) return;
     cur = target;
-    target.__aqTitle = target.getAttribute("title");
-    target.removeAttribute("title"); // 原属性在手上, 原生气泡就无从弹出
+    // 整条祖先链都要摘(不止最内层): 状态栏是嵌套带 title 的组(.sb-today > .sb-hist /
+    // .sb-stats > .sb-item / .sb-speed > .sb-spd), 只摘最内层时原生气泡会借外层祖先的
+    // title 还魂 —— 自绘浮层 + 原生气泡同时出现(双 tooltip)。
+    for (let el = target; el; el = el.parentElement) {
+      if (el.hasAttribute("title")) { strip(el); chain.push(el); }
+    }
     timer = setTimeout(() => show(cur), SHOW_DELAY_MS);
+    // 状态栏速度/今日流量等 :title 绑定随轮询逐轮变值, Vue patch 会在悬浮期间把 title
+    // 重写回去(mouseover 不会再触发, 没人摘) —— 周期补摘, 补摘时捕获到的即最新值,
+    // 还原自然还原新值; 周期短于原生气泡起跳延迟, 重写的 title 撑不到弹出。
+    rearm = setInterval(() => {
+      for (const el of chain) if (el.hasAttribute("title")) strip(el);
+    }, REARM_MS);
   }
 
   document.addEventListener("mouseover", (ev) => {

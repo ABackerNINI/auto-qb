@@ -46,7 +46,7 @@
 
 全局 tooltip 收敛为自绘单例, **新元素一律继续写原生 `title` 属性**(模板侧零成本接入), 不许再自造浮层:
 
-- **触发面**: 一切带 `title` 的元素(含 Vue `:title` 绑定); 调度单点在 `shared/ui_feedback.js` 尾部的纯 DOM 委托层(不进 mixin)—— hover/键盘聚焦时摘除原属性压掉原生气泡, 350ms 后弹 `.aq-tip`, 离开/失焦还原。点击 / 滚动 / 窗口失焦立即收起。
+- **触发面**: 一切带 `title` 的元素(含 Vue `:title` 绑定); 调度单点在 `shared/ui_feedback.js` 尾部的纯 DOM 委托层(不进 mixin)—— hover/键盘聚焦时**整条祖先链**摘除原属性压掉原生气泡(只摘最内层时, 嵌套带 title 的组会借外层祖先 title 还魂叠出双 tooltip, 见 pitfalls/web-ui/aq-tip-nested-title-double.md), 350ms 后弹 `.aq-tip`, 离开/失焦还原; 悬浮期间另有 250ms 周期补摘(状态栏等 `:title` 随轮询逐轮变值, Vue patch 会把 title 重写回去而 mouseover 不再触发)。点击 / 滚动 / 窗口失焦立即收起。
 - **样式单点**: `shared/console_hub.css` 的 `.aq-tip` 段(三皮肤同载)。视觉复刻设置页发光按钮配方: 描边 `--accent-line` + 负 spread 微光 `0 0 16px -8px`(同 `.hb-card` 静息 `--glow-soft`), 底 `--bg-elev` 字 `--fg`, 圆角随 `--radius-sm`(控制台自动方角)。⚠ 发光要在 `.aq-tip` 本层用 `--accent` 现算 —— `.hb-*` 的 `--glow-soft` 只声明在 hub 控件上, body 级单例继承不到(console_hub.css 文件头硬知识③)。
 - **例外**: 需要富内容(仪表/表格/交互)的悬浮走既有专用浮层(hr-pop / hb-pop / search-help-pop), 不挤 `title` 通道。
 
