@@ -10,3 +10,4 @@
 - **处置**: 按守阵 prescribed **整目录删除**残壳 (`rm -rf` 报红路径) —— 环境清理, 非代码改动, 不入提交; 删后重跑该守阵确认绿。同日第二次目击 (第一次 core/mixins, issue 26-10-01-1946, 残壳「删过两次被目击再生」后复现取证确认是历史产物不会再生), 守阵两次都当场抓住 —— 守阵有效; 其它 clone 留有同款残壳会同样标红, 同法处置。
 - **守阵**: tests/test_no_ghost_pkg_dirs.py (src 下含 __pycache__ 而无 .py 的目录即红)。
 - **复发**: +1 —— 2026-10-02(backend-issues-clearance 阶段 1) test.full 首跑再撞 `src/auto_qb/core/mixins` 残壳, 按处方整目录删除即绿。为什么没命中: 残壳由多 clone 检出不同步产生, 流程上无法预防, 属守阵预期捕获路径(三度当场抓住), 非路由/执行失误。
+- **复发** +1 —— 2026-10-03(sync 生成物自动化解计划收尾): test.full 首跑撞 `core/mixins` / `mixins` / `web` / `web/routes` **四个**残壳(本 clone 是 09-22 web→webui 与 core/mixins 迁移的旧检出), 按处方整目录删除即绿。为什么没命中: 本轮任务是改 `.commands/` 管道脚本、与 src/ 无关, 残壳纯属本 clone 历史残留(未跟踪、gitignored、不随同步更新), 无从预防 —— 守阵再次当场抓住, 属其预期工作方式。

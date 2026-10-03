@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="sync-generated-index-autoresolve">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-03-1544">
+<meta name="doc-updated" content="26-10-03-1616">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-03-commands-sync-generated-autoresolve.md">
+<title>实施计划 · 同步时自动化解生成物索引冲突 · auto-qb</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0e1012;
+    --paper:#131619;
+    --paper-2:#171b1f;
+    --ink:#e3e5e2;
+    --ink-dim:#9ba1a3;
+    --ink-faint:#6c7274;
+    --hair:rgba(255,255,255,.10);
+    --hair-soft:rgba(255,255,255,.055);
+    --accent:#c4a35a;
+    --accent-ink:#e2c684;
+    --ok:#7fa86a;
+    --bad:#d0726a;
+    --mono:"JetBrains Mono","Cascadia Mono","SFMono-Regular",Consolas,"Liberation Mono",monospace;
+    --sans:"PingFang SC","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+    --measure:68ch;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:16px;line-height:1.65;letter-spacing:.005em;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 40px}
+
+  .cover{border-bottom:1px solid var(--hair);padding:76px 0 46px}
+  .kicker{
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 24px;
+  }
+  h1{font-size:44px;line-height:1.14;letter-spacing:-.022em;font-weight:600;margin:0 0 20px;max-width:20ch}
+  .lede{font-size:18px;line-height:1.6;color:var(--ink-dim);max-width:52ch;margin:0 0 40px}
+
+  dl.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:1px;background:var(--hair-soft);border:1px solid var(--hair-soft);margin:0}
+  dl.meta>div{background:var(--paper);padding:14px 16px}
+  dl.meta dt{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 7px}
+  dl.meta dd{margin:0;font-family:var(--mono);font-size:13px;color:var(--ink)}
+
+  .shell{display:grid;grid-template-columns:190px minmax(0,1fr);gap:64px;align-items:start}
+  nav.toc{position:sticky;top:0;padding:52px 0 0;font-size:13px;line-height:1.5}
+  nav.toc ol{list-style:none;margin:0;padding:0}
+  nav.toc li{margin:0 0 11px}
+  nav.toc a{color:var(--ink-faint);text-decoration:none;display:block;border:0}
+  nav.toc a:hover{color:var(--ink-dim)}
+  nav.toc .n{font-family:var(--mono);font-size:11px;color:var(--accent);margin-right:9px}
+
+  main{padding:52px 0 104px;min-width:0}
+  section{margin-bottom:72px;scroll-margin-top:28px}
+  .secnum{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--accent);margin:0 0 10px}
+  h2{font-size:27px;line-height:1.24;letter-spacing:-.016em;font-weight:600;margin:0 0 22px;max-width:26ch}
+  h3{font-size:18px;line-height:1.3;letter-spacing:-.006em;font-weight:600;margin:36px 0 12px}
+  h4{font-size:14px;font-weight:600;margin:26px 0 8px;color:var(--ink)}
+  p{max-width:var(--measure);margin:0 0 16px}
+  a{color:var(--accent-ink);text-decoration:none;border-bottom:1px solid var(--hair)}
+  a:hover{border-bottom-color:var(--hair)}
+  strong{font-weight:600;color:var(--ink)}
+  code{
+    font-family:var(--mono);font-size:.86em;background:var(--paper-2);
+    border:1px solid var(--hair-soft);border-radius:3px;padding:1px 5px;color:var(--ink);
+  }
+  ul.plain,ol.plain{padding-left:0;list-style:none;max-width:var(--measure);margin:0 0 18px}
+  ul.plain>li{position:relative;padding-left:20px;margin-bottom:9px}
+  ul.plain>li::before{content:"";position:absolute;left:2px;top:.72em;width:6px;height:1px;background:var(--accent)}
+
+  ol.inv{list-style:none;counter-reset:inv;padding:0;margin:22px 0 8px;max-width:var(--measure)}
+  ol.inv>li{counter-increment:inv;position:relative;padding:0 0 20px 46px;border-bottom:1px solid var(--hair-soft);margin-bottom:20px}
+  ol.inv>li:last-child{border-bottom:0;padding-bottom:0;margin-bottom:0}
+  ol.inv>li::before{
+    content:counter(inv,decimal-leading-zero);position:absolute;left:0;top:1px;
+    font-family:var(--mono);font-size:12px;color:var(--accent);
+  }
+  ol.inv b{display:block;font-weight:600;margin-bottom:4px}
+
+  table{width:100%;border-collapse:collapse;margin:20px 0 26px;font-size:14px}
+  th{
+    text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--ink-faint);font-weight:500;padding:0 16px 9px 0;border-bottom:1px solid var(--hair);white-space:nowrap;
+  }
+  td{padding:12px 16px 12px 0;border-bottom:1px solid var(--hair-soft);vertical-align:top;line-height:1.55}
+  th:last-child,td:last-child{padding-right:0}
+  td code{white-space:nowrap}
+
+  .note{border-left:1px solid var(--hair);padding:4px 0 4px 20px;margin:22px 0;max-width:var(--measure);color:var(--ink-dim)}
+  .note b{color:var(--ink);font-weight:600}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-right:10px}
+  .tag.ok{color:var(--ok)}
+  .tag.bad{color:var(--bad)}
+
+  figure{margin:26px 0 30px}
+  figure svg{display:block;width:100%;max-width:760px;height:auto}
+  figcaption{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:14px;letter-spacing:.04em}
+
+  .changelog{font-size:14px}
+  .changelog td:first-child{font-family:var(--mono);color:var(--ink-dim);white-space:nowrap;width:1%}
+  .colophon{border-top:1px solid var(--hair);padding:26px 0 60px;font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.05em;display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+
+  @media (max-width:900px){
+    .wrap{padding:0 22px}
+    .shell{grid-template-columns:minmax(0,1fr);gap:0}
+    nav.toc{position:static;padding:34px 0 0;border-bottom:1px solid var(--hair);padding-bottom:26px}
+    nav.toc ol{columns:2;column-gap:28px}
+    h1{font-size:32px}
+    main{padding-top:38px}
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="wrap">
+    <p class="kicker">实施计划 · plan</p>
+    <h1>同步时自动化解生成物索引冲突</h1>
+    <p class="lede">把「<code>_index.md</code> 撞车」从人肉解冲突变成重跑脚本 —— 白名单 + 重跑 + 自证三步机制，落在 <code>run_sync()</code> 这一个单点上，sync / commit / push 三条入口同时受益。</p>
+    <dl class="meta">
+      <div><dt>状态</dt><dd>Done</dd></div>
+      <div><dt>专题</dt><dd>sync-generated-index-autoresolve</dd></div>
+      <div><dt>建档 / 更新</dt><dd>26-10-03-1544</dd></div>
+      <div><dt>本期范围</dt><dd>S1 + S2</dd></div>
+      <div><dt>主改文件</dt><dd>sync.py</dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="wrap shell">
+
+  <nav class="toc" aria-label="目录">
+    <ol>
+      <li><a href="#s01"><span class="n">01</span>问题与根因</a></li>
+      <li><a href="#s02"><span class="n">02</span>目标与不变量</a></li>
+      <li><a href="#s03"><span class="n">03</span>生成物全集与单点</a></li>
+      <li><a href="#s04"><span class="n">04</span>机制设计</a></li>
+      <li><a href="#s05"><span class="n">05</span>输出契约与配置</a></li>
+      <li><a href="#s06"><span class="n">06</span>改动清单</a></li>
+      <li><a href="#s07"><span class="n">07</span>测试计划</a></li>
+      <li><a href="#s08"><span class="n">08</span>取舍记录</a></li>
+      <li><a href="#s09"><span class="n">09</span>边界：本期不做</a></li>
+      <li><a href="#s10"><span class="n">10</span>实施顺序</a></li>
+      <li><a href="#s11"><span class="n">11</span>变更记录</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="s01">
+      <p class="secnum">01</p>
+      <h2>问题：每次同步都要人肉解冲突</h2>
+
+      <p>多 clone 并行下，两个会话都会在收尾阶段重跑索引生成器，于是同一批 <code>_index.md</code> 在两边各自产生新版本。后同步的那一方必然撞车，而 <code>my-commit-flow.sync</code> 现在的行为是<strong>见冲突就停</strong>，于是执行者被叫去手工合流。</p>
+
+      <p>失败点只有两处，都在 <code>.commands/my-commit-flow/scripts/sync.py</code>，而且都不区分冲突落在<strong>手写源文件</strong>还是<strong>生成物</strong>：</p>
+
+      <table>
+        <thead><tr><th>位置</th><th>触发条件</th><th>现在的结果</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>sync.py:93-98</code></td>
+            <td>落后（<code>ahead == 0</code>）+ 本地脏改动与远端新提交重叠，<code>git merge --ff-only</code> 被拒</td>
+            <td>失败行「本地改动与远端新提交重叠」—— 这就是日常说的「快进失败」</td>
+          </tr>
+          <tr>
+            <td><code>sync.py:104-108</code></td>
+            <td>已分叉 + <code>git rebase</code> 过程中出现任何冲突</td>
+            <td><code>rebase --abort</code> 全量回滚 → 失败行「需解决冲突」</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>证据</h3>
+      <ul class="plain">
+        <li><a href="../pitfalls/git/sync-pull.md">pitfalls/git/sync-pull.md</a> 的「提交点撞远端前移」条目<strong>复发已 7 次</strong>（1 + 计划 26-10-01-2216 阶段1/阶段2 两度 + 2026-10-01/02 四次）。</li>
+        <li>其中 2026-10-01 一条明确记录：<em>「<code>ship.commit</code> 首跑失败（重叠文件为生成物 <code>plans/_index.md</code>）」</em>；另一条记录 <code>tasks/_index.md</code> 自动合并无冲突。</li>
+        <li>同一份陷阱文件里已经写明「旧做法『<code>git checkout --</code> 掉生成物索引再 sync』<strong>只对可重跑的生成物安全</strong>」—— 也就是正确处置早就知道，只是没接线到脚本里。</li>
+      </ul>
+
+      <h3>杠杆：一个单点，三条入口</h3>
+      <p><code>run_sync()</code> 是 sync / commit / push 三条入口共用的唯一函数：<code>sync.py</code> 的 <code>my-commit-flow.sync</code> 任务、<code>commit.py:136</code> 的「内部同步」、<code>push.py:44</code> 的推送前同步，全部调它。改一处，三处受益，不存在「改了 sync 但 commit 还是老行为」的分叉。</p>
+    </section>
+
+    <section id="s02">
+      <p class="secnum">02</p>
+      <h2>目标与不变量</h2>
+
+      <h3>目标</h3>
+      <ol class="inv">
+        <li><b>生成物冲突零人工</b>冲突或重叠若全部落在可重跑的生成物上，同步自行化解并给出成功行。</li>
+        <li><b>手写冲突零变化</b>只要有一个手写文件参与冲突，行为与今天逐字一致 —— 该失败就失败，绝不猜。</li>
+        <li><b>不新增第二处集合定义</b>「哪些文件是生成物」只能有一处声明，闸门、重建入口、sync 白名单都从它取。</li>
+      </ol>
+
+      <h3>不变量（改动不得破坏）</h3>
+      <ul class="plain">
+        <li><strong>失败后仓库状态与跑之前一致</strong> —— 沿用现有纪律「写状态的命令必须比只读的更干净地失败」。任何异常路径都要 <code>rebase --abort</code> / 不做半截丢弃。</li>
+        <li><strong>输出契约仍是一行</strong> —— 成功一行、失败一行（原因 + 下一步）。失败行模板逐字不变，调用方不用改。</li>
+        <li><strong>保守默认</strong> —— 白名单取不到、重建命令缺失、自证失败、循环超限，一律退回今天的失败行，绝不「部分解决后硬上」。</li>
+        <li><strong>判据纪律不变</strong> —— 判落后仍只认 <code>ls-remote</code> 现查的远端真值，不读 <code>refs/remotes/*</code> 快照（见 <a href="../pitfalls/git/refs.md">pitfalls/git/refs.md</a>）。</li>
+      </ul>
+    </section>
+
+    <section id="s03">
+      <p class="secnum">03</p>
+      <h2>生成物全集与单点定义</h2>
+
+      <p>库内共 20 个 <code>_index.md</code>，全部由四个生成器产出：</p>
+
+      <table>
+        <thead><tr><th>生成器</th><th>产出</th><th>数量</th></tr></thead>
+        <tbody>
+          <tr><td><code>gen_kb_index.py</code></td><td>自发现：含 <code>_about.md</code> 的目录（<code>checklists</code> / <code>config-reference</code> / <code>conventions</code> / <code>modules</code> / <code>pitfalls</code> 及 7 个子类 / <code>progress</code> / <code>rule-system</code> / <code>systemPatterns</code> / <code>testing</code>）</td><td>17</td></tr>
+          <tr><td><code>gen_tasks_index.py</code></td><td><code>memory-bank/tasks/_index.md</code></td><td>1</td></tr>
+          <tr><td><code>gen_docs_index.py</code></td><td><code>memory-bank/plans/_index.md</code> · <code>memory-bank/reports/_index.md</code></td><td>2</td></tr>
+          <tr><td><code>gen_issues_index.py</code></td><td><code>memory-bank/issues/_index.md</code></td><td>1</td></tr>
+        </tbody>
+      </table>
+
+      <h3>为什么重跑必然收敛：四个生成器都是纯函数</h3>
+      <p>输出只由工作树里的<strong>手写文件</strong>决定 —— 主题 <code>.md</code> 的三行头元数据（<code># 标题</code> / <code>&gt; 摘要:</code> / <code>&gt; 触发:</code>）、档案的 <code>**Status:**</code> 等字段、HTML 制品的 <code>doc-*</code> meta。不读 git、不读时间戳、不读环境。因此「任取一侧 + 重跑生成器」必然得到唯一正确内容，<strong>不需要任何文本合并</strong>。</p>
+
+      <h3>单点定义：新增 <code>gen_all.py</code></h3>
+      <p>新增 <code>.agents/skills/memory-bank/scripts/gen_all.py</code>，作为生成物集合的<strong>唯一声明处</strong>：</p>
+      <table>
+        <thead><tr><th>调用</th><th>行为</th><th>谁用</th></tr></thead>
+        <tbody>
+          <tr><td><code>gen_all.py</code></td><td>依次跑四个生成器（等价于现在 <code>kb.index</code> 做的事）</td><td>重建入口 / sync 的重跑</td></tr>
+          <tr><td><code>gen_all.py --list</code></td><td>打印它负责的全部路径，一行一个</td><td><strong>sync 的白名单来源</strong></td></tr>
+          <tr><td><code>gen_all.py --check</code></td><td>全部校验，漂移即 rc=1 并逐条报路径</td><td>自证闸门 / <code>kb.check</code></td></tr>
+        </tbody>
+      </table>
+      <p>随后把 <code>.commands/kb/config.toml</code> 的 <code>kb.index</code> / <code>kb.check</code> 改为调它（各从 4 条命令收成 1 条），集合从此只有一处。这是本方案唯一的「顺手重构」，理由是：若 sync 自己再抄一份清单，就是第 N+1 处副本，而「哪份才生效」不写在清单旁边 —— 这正是 <code>scripts/check_command_drift.py</code> 那条闸门要防的东西。</p>
+    </section>
+
+    <section id="s04">
+      <p class="secnum">04</p>
+      <h2>机制设计</h2>
+
+      <h3>三步不变量：白名单 → 重跑 → 自证</h3>
+      <ol class="inv">
+        <li><b>白名单</b>只有「能被生成器重跑出来」的路径才允许自动解决。来源是生成器自己声明的 <code>--list</code>，不是手抄常量 —— 新增索引目录自动进入白名单，不需要改 sync。</li>
+        <li><b>重跑</b>冲突解决只做机械动作（任取一侧），内容一律由生成器重写。不做文本合并，不做行级并集。</li>
+        <li><b>自证</b>重跑后必须让生成器自己的 <code>--check</code> 通过。通过 = 文件内容确实等于生成结果 ⇒ <strong>证明没有手写内容被丢弃</strong>；过不了就回滚 + 失败。<span class="tag">这是敢默认打开的全部理由</span></li>
+      </ol>
+
+      <figure>
+        <svg viewBox="0 0 680 568" role="img" xmlns="http://www.w3.org/2000/svg">
+          <title>sync 生成物冲突自动化解流程</title>
+          <desc>远端有新提交时，若重叠或冲突的文件全部落在生成物白名单内，则任取一侧并重跑生成器，通过生成器自检后继续合流；否则回滚并保持现状的失败行为。</desc>
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#6c7274" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <rect x="150" y="40" width="280" height="56" rx="8" style="fill:#171b1f;stroke:rgba(255,255,255,.14);stroke-width:.5"/>
+          <text x="290" y="58" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px;font-weight:600" fill="#e3e5e2">远端有新提交</text>
+          <text x="290" y="76" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:12px" fill="#9ba1a3">快进被拒 或 rebase 冲突</text>
+
+          <rect x="150" y="156" width="280" height="56" rx="8" style="fill:#171b1f;stroke:#c4a35a;stroke-width:.5"/>
+          <text x="290" y="174" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px;font-weight:600" fill="#e2c684">冲突是否全在生成物白名单</text>
+          <text x="290" y="192" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:11px" fill="#c4a35a">gen_all.py --list</text>
+
+          <rect x="150" y="272" width="280" height="56" rx="8" style="fill:#171b1f;stroke:rgba(255,255,255,.14);stroke-width:.5"/>
+          <text x="290" y="290" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px;font-weight:600" fill="#e3e5e2">任取一侧 → 重跑生成器</text>
+          <text x="290" y="308" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:12px" fill="#9ba1a3">--check 通过 = 确证是生成物</text>
+
+          <rect x="150" y="388" width="280" height="56" rx="8" style="fill:#171b1f;stroke:rgba(255,255,255,.14);stroke-width:.5"/>
+          <text x="290" y="406" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px;font-weight:600" fill="#e3e5e2">add → continue / 重试快进</text>
+          <text x="290" y="424" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:12px" fill="#9ba1a3">rebase 收尾后再重跑一次</text>
+
+          <rect x="150" y="504" width="280" height="44" rx="8" style="fill:#171b1f;stroke:#7fa86a;stroke-width:.5"/>
+          <text x="290" y="526" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px;font-weight:600" fill="#a8c795">同步成功 &lt;hash&gt;</text>
+
+          <rect x="470" y="156" width="170" height="56" rx="8" style="fill:#171b1f;stroke:#d0726a;stroke-width:.5"/>
+          <text x="555" y="174" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;font-weight:600" fill="#d0726a">rebase --abort</text>
+          <text x="555" y="192" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:12px" fill="#9ba1a3">失败行与现状一致</text>
+
+          <line x1="290" y1="96" x2="290" y2="150" stroke="#6c7274" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="290" y1="212" x2="290" y2="266" stroke="#6c7274" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="290" y1="328" x2="290" y2="382" stroke="#6c7274" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="290" y1="444" x2="290" y2="498" stroke="#6c7274" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="430" y1="184" x2="464" y2="184" stroke="#6c7274" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="300" y="240" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:11px" fill="#6c7274">是</text>
+          <text x="447" y="172" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:11px" fill="#6c7274">否</text>
+        </svg>
+        <figcaption>自动化解只走「是」这一支；「否」支的行为与今天逐字一致。</figcaption>
+      </figure>
+
+      <h3>S1 · 落后 + 本地脏与远端改动重叠（快进被拒）</h3>
+      <ol class="plain">
+        <li>算重叠集：<code>git diff --name-only HEAD &lt;远端 tip&gt;</code> ∩ 本地脏文件（staged + unstaged，用现成的 <code>changed_files()</code>）。</li>
+        <li>重叠集 ⊆ 白名单 → 逐路径 <code>git checkout HEAD -- &lt;path&gt;</code>（丢弃本地那一份生成物，索引与工作树一起回 HEAD），重试 <code>merge --ff-only</code>，然后重跑生成器。</li>
+        <li>重叠集含任何非白名单路径 → 现状失败行，一字不改。</li>
+      </ol>
+      <p class="note"><b>只处理「被修改」的路径。</b>本地若把某个生成物<em>删掉</em>或<em>改名</em>了，属于异常状态，直接走失败支，不猜意图。</p>
+
+      <h3>S2 · 分叉 + rebase 冲突</h3>
+      <p>把单次 <code>git rebase</code> 换成<strong>有界循环</strong>：</p>
+      <ol class="plain">
+        <li>rebase 停下后取冲突集：<code>git diff --name-only --diff-filter=U</code>。</li>
+        <li>非空且 ⊆ 白名单 → 逐路径 <code>git checkout --ours -- &lt;path&gt;</code>（rebase 里 <code>--ours</code> 是上游侧；取哪侧无所谓，内容马上被重写）→ 重跑生成器 → <code>--check</code> → <code>git add</code> → <code>git rebase --continue</code>（带 <code>GIT_EDITOR=true</code>，防挂编辑器）。</li>
+        <li>出现任何非白名单冲突 → <code>rebase --abort</code> → 现状失败行。</li>
+        <li>循环上限 = 本地独有提交数 + 1，超限即 abort（防死循环）。</li>
+      </ol>
+      <p><strong>收尾再自证一次。</strong>多提交重放时，中间那次重跑是基于「部分重放」的树。所以 rebase 完成后要再跑一次生成器 + <code>--check</code>；若仍有漂移，<code>git commit --amend --no-edit</code> 把最终结果折进 tip —— rebase 之后的 tip 是<strong>未推送的本地提交</strong>，amend 是安全的本地操作。</p>
+    </section>
+
+    <section id="s05">
+      <p class="secnum">05</p>
+      <h2>输出契约与配置</h2>
+
+      <h3>输出</h3>
+      <table>
+        <thead><tr><th>场景</th><th>输出</th></tr></thead>
+        <tbody>
+          <tr><td>自动化解成功</td><td><code>同步成功 &lt;hash&gt; 自动重跑生成物 N 处</code>（仍是一行）</td></tr>
+          <tr><td>常规成功</td><td><code>已同步 &lt;hash&gt;</code> / <code>同步成功 &lt;hash&gt;</code>（不变）</td></tr>
+          <tr><td>失败</td><td>模板逐字不变：<code>同步失败需解决冲突 本地&lt;x&gt; 远端&lt;y&gt; …</code></td></tr>
+        </tbody>
+      </table>
+      <p>因为失败行模板不变，<code>commit.py</code> / <code>push.py</code> 的调用处不需要任何改动。</p>
+
+      <h3>新配置键</h3>
+      <p>写在 <code>.commands/my-commit-flow/.my-commit-flow.toml</code>。三个键<strong>必须同时加进 <code>_ship_config.py</code> 的 <code>KEY_DEFAULTS</code></strong>，否则 <code>config_problems()</code> 会按「顶层未知键」直接 STOP —— 这是 <code>load_config()</code> 的白名单过滤机制，属于既有 fail-fast 约束。</p>
+      <table>
+        <thead><tr><th>键</th><th>默认</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td><code>auto_resolve_generated</code></td><td><code>true</code></td><td>总开关。<code>false</code> = 完全回到今天的行为（一个冲突都不碰）</td></tr>
+          <tr><td><code>generated_list_cmd</code></td><td><code>python &lt;skill-dir:memory-bank&gt;/scripts/gen_all.py --list</code></td><td>白名单来源</td></tr>
+          <tr><td><code>generated_regen_cmd</code></td><td><code>python &lt;skill-dir:memory-bank&gt;/scripts/gen_all.py</code></td><td>重跑命令（自证 = 同一命令加 <code>--check</code>）</td></tr>
+        </tbody>
+      </table>
+      <p>两条命令走现成的 <code>&lt;skill-dir:NAME&gt;</code> 占位符机制（<code>_pipeline.expand_run</code>），与闸门用的是同一套解析，不新造一套。</p>
+
+      <h3>保守默认：下列任一情况即退回现状失败行</h3>
+      <ul class="plain">
+        <li>白名单取不到（命令缺失 / 非 0 退出 / 输出为空）</li>
+        <li>重跑命令执行失败</li>
+        <li>重跑后 <code>--check</code> 仍报漂移（= 白名单里有东西其实不是生成物）</li>
+        <li>rebase 循环超限，或 <code>--continue</code> 报「nothing to commit」等异常状态</li>
+        <li>路径解析异常（删除 / 改名 / 非 ASCII 转义）</li>
+      </ul>
+    </section>
+
+    <section id="s06">
+      <p class="secnum">06</p>
+      <h2>改动清单</h2>
+
+      <table>
+        <thead><tr><th>文件</th><th>改动</th></tr></thead>
+        <tbody>
+          <tr><td><code>.commands/my-commit-flow/scripts/sync.py</code></td><td>白名单解析（缓存）、S1 重叠自动化解、S2 rebase 有界循环、收尾自证 + amend、成功行标记、docstring 行为段</td></tr>
+          <tr><td><code>.commands/my-commit-flow/scripts/_ship_config.py</code></td><td><code>KEY_DEFAULTS</code> 加 3 个键 + 类型校验</td></tr>
+          <tr><td><code>.commands/my-commit-flow/.my-commit-flow.toml</code></td><td>加 3 个键，注释写明「列错 = 静默丢内容」</td></tr>
+          <tr><td><code>.agents/skills/memory-bank/scripts/gen_all.py</code></td><td>新增：无参重建 / <code>--list</code> / <code>--check</code>（生成物集合单点）</td></tr>
+          <tr><td><code>.commands/kb/config.toml</code></td><td><code>kb.index</code> / <code>kb.check</code> 改为调 <code>gen_all.py</code></td></tr>
+          <tr><td><code>.commands/my-commit-flow/scripts/test_sync.py</code></td><td>+6 个真仓库场景；docstring「## 测试计划」同步（AGENTS.md 硬要求）</td></tr>
+          <tr><td><code>tests/test_memory_bank.py</code></td><td><code>gen_all.py</code> 的 <code>--list</code> / <code>--check</code> 单测</td></tr>
+          <tr><td><code>.commands/my-commit-flow/references/pipeline.md</code>、包 <code>config.toml</code> 的 note</td><td>同步口径回写</td></tr>
+          <tr><td><a href="../pitfalls/git/sync-pull.md">pitfalls/git/sync-pull.md</a></td><td>处置段更新：「重叠即停」改为「生成物自动重跑」，并记一次复发的成因说明</td></tr>
+          <tr><td><a href="../conventions/collaboration.md">conventions/collaboration.md</a></td><td>同步口径补一句：生成物冲突由 sync 自动化解，手写冲突仍人工</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s07">
+      <p class="secnum">07</p>
+      <h2>测试计划</h2>
+
+      <p>沿用 <code>test_sync.py</code> 现有夹具：<strong>真实临时仓库</strong>（本地 bare 远端 + 两个工作仓），全部跑真 git，不用 mock —— 同步是写状态的操作，mock 测不出真实的拒绝与回滚行为。</p>
+
+      <table>
+        <thead><tr><th>#</th><th>场景</th><th>断言</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>落后 + 脏重叠且重叠 = 生成物</td><td>自动丢弃 + 快进 + 重跑；成功行含「自动重跑生成物」标记；文件内容 == 生成结果</td></tr>
+          <tr><td>2</td><td>落后 + 重叠含非生成物</td><td><strong>仍失败</strong>；HEAD 与脏文件原样（现状回归）</td></tr>
+          <tr><td>3</td><td>分叉冲突仅在生成物</td><td>自动解决；零 merge commit（线性）；<code>--check</code> 绿</td></tr>
+          <tr><td>4</td><td>分叉冲突含手写文件</td><td>回滚；失败行逐字不变（现状回归）</td></tr>
+          <tr><td>5</td><td>白名单取不到 / 重跑 rc≠0 / <code>--check</code> 红</td><td>失败；仓库状态与跑之前一致（三种子情形各一条）</td></tr>
+          <tr><td>6</td><td>幂等</td><td>化解成功后重跑 sync → <code>已同步</code></td></tr>
+        </tbody>
+      </table>
+
+      <p class="note"><b>夹具不依赖真实 memory-bank。</b>用一个「假生成器」小脚本（写固定内容）+ 一个临时清单文件充当白名单与重建命令，配置指向它们即可 —— 这样测试与库内容解耦，也不受索引真实漂移影响。</p>
+    </section>
+
+    <section id="s08">
+      <p class="secnum">08</p>
+      <h2>取舍记录</h2>
+
+      <p>以下四条都认真考虑过并否掉，记下来是为了避免以后重新踩一遍：</p>
+
+      <table>
+        <thead><tr><th>方案</th><th>为什么不用</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>git rebase -X theirs</code> / <code>-X ours</code></td>
+            <td>策略作用于<strong>所有</strong>文件，会静默把手写冲突也取一侧。这是最坏的一类失败 —— 不报错、内容错、还能提交。</td>
+          </tr>
+          <tr>
+            <td><code>.gitattributes</code> 的 <code>merge=union</code></td>
+            <td>行级并集会让 <code>_index.md</code> 留下重复行与半行，闸门照样红 —— 只是把「冲突」换成了「坏内容」，问题没解决，还更难查。</td>
+          </tr>
+          <tr>
+            <td>自定义 merge driver</td>
+            <td>要在<strong>每个 clone</strong> 的 <code>.git/config</code> 里注册（不可提交），漏配的 clone 行为不同 —— 与「多 clone 并行」的现状直接相冲；且 driver 拿不到完整工作树，无法重跑生成器。</td>
+          </tr>
+          <tr>
+            <td>冲突时任取一侧直接 <code>add</code></td>
+            <td>省掉第三步自证 = 完全相信白名单。白名单一旦写错就<strong>静默丢内容</strong>，且要到很久以后才发现。第 3 步的成本只是一次 <code>--check</code>，换掉这个风险很值。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s09">
+      <p class="secnum">09</p>
+      <h2>边界：本期不做</h2>
+      <ul class="plain">
+        <li><strong>S3（分叉 + 树脏）不动。</strong>现在直接拒。丢弃<em>工作区未提交</em>的改动，风险比丢弃已提交内容高一档，且「未跟踪新文件」还要 <code>stash -u</code> 才收得走。留作第二期，机制可复用。</li>
+        <li><strong>手写文件的冲突永远人工。</strong>不做语义合并、不做行级启发式。</li>
+        <li><strong>不碰未跟踪文件、不碰白名单外的任何路径。</strong></li>
+        <li><strong>不改判落后 / 判齐平的判据</strong>（仍只认 <code>ls-remote</code> 真值）。</li>
+        <li><strong>不为「消掉一次失败」加手工预检</strong> —— 沿用现有处置纪律：复踩代价 ≈ 一次重跑，不值得加前置检查。</li>
+      </ul>
+    </section>
+
+    <section id="s10">
+      <p class="secnum">10</p>
+      <h2>实施顺序</h2>
+      <ol class="plain">
+        <li><code>gen_all.py</code> + 单测；<code>kb.index</code> / <code>kb.check</code> 改调它，跑 <code>kb.check</code> 确认绿（先把单点立起来，sync 才有东西可调）。</li>
+        <li>配置三键 + <code>KEY_DEFAULTS</code>；<code>_pipeline.py --show-config</code> 确认键生效。</li>
+        <li>S1 重叠自动化解 + 场景 1/2 测试。</li>
+        <li>S2 rebase 有界循环 + 场景 3/4/5/6 测试。</li>
+        <li>文档回写（<code>pipeline.md</code> / 陷阱 / 协作约定），跑 <code>kb.index</code> 与 <code>test.full</code>，新建基线切片。</li>
+      </ol>
+      <p>每步结束都应保持仓库可提交：第 1、2 步只加能力不改行为（<code>auto_resolve_generated</code> 在第 3 步才接进 <code>run_sync</code>），不存在「中间态把同步搞坏」的窗口。</p>
+    </section>
+
+    <section id="s11">
+      <p class="secnum">11</p>
+      <h2>变更记录</h2>
+      <table class="changelog">
+        <thead><tr><th>时间</th><th>变更</th></tr></thead>
+        <tbody>
+          <tr><td>26-10-03-1544</td><td>初稿：定位两条失败分支（<code>sync.py:93-98</code> / <code>104-108</code>）、确认四个生成器均为纯函数、定三步机制（白名单 / 重跑 / 自证）、定范围 S1 + S2，S3 明确延后。</td></tr>
+          <tr><td>26-10-03-1616</td><td>本期 S1 + S2 实施完成：新增 <code>gen_all.py</code> 集合单点（<code>kb.index</code> / <code>kb.check</code> 各收成一条）、配置三键 + 类型校验、<code>run_sync()</code> 两条分支接入自动化解（含 S1 预检与快照回滚、S2 有界循环与收尾 amend）。<code>test_sync</code> 12→20 用例；文档回写见任务档案。</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="colophon">
+      <span>auto-qb · memory-bank/plans · doc-topic: sync-generated-index-autoresolve</span>
+      <span>状态 Done · 已实施</span>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

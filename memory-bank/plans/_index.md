@@ -35,6 +35,7 @@
 
 ## Done
 
+- [26-10-03-1544] [实施计划 · 同步时自动化解生成物索引冲突 · auto-qb](26-10-03-1544-plan-sync-generated-index-autoresolve.html) — `sync-generated-index-autoresolve`
 - [26-10-03-0917] [计划 · WEBUI 种子详情抽屉重设计 方案A (底部停靠属性面板) · 分步实施计划](26-10-03-0917-plan-webui-drawer-redesign.html) — `webui-drawer-redesign`
 - [26-10-03-0436] [修复计划 · HR 在线核实热重载后 WebUI 停留「本地·达标」](26-10-03-0436-plan-hr-hotreload-webui-stale-display.html) — `hr-hotreload-stale-display`
 - [26-10-02-1955] [计划 · WEBUI 多选右键菜单: 限速 / 移动 / 跳检 / 导出 + 跳检菜单配置开关](26-10-02-1955-plan-webui-multi-ctx-actions.html) — `webui-multi-ctx-actions`

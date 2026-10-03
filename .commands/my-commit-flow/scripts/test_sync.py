@@ -17,6 +17,16 @@ pytest 的 tmp_path 下(不碰任何真实 clone); 判据引用 pitfalls/git/ref
 - test_offline_reports_unreachable      远端不可达 → 拿不到远端
 - test_staged_overflow_refuses          staged 暴增 → 拒绝(ref 回退信号)
 - test_main_prints_one_line_contract    main() 输出形态: 成功一行 / 冲突行恰为约定模板
+
+生成物冲突自动化解(计划 26-10-03-1544; 用「假生成器」小脚本当白名单与重建命令, 与库内容解耦):
+- test_behind_dirty_overlap_generated_autoresolves  落后+脏重叠且重叠=生成物 → 自动丢弃+快进+重跑; 成功行含标记; 内容==生成结果
+- test_behind_dirty_overlap_handwritten_refuses     落后+重叠含非生成物 → 仍失败; HEAD 与脏文件原样(现状回归)
+- test_diverged_conflict_generated_autoresolves     分叉冲突仅在生成物 → 自动解决; 零 merge commit(线性); 内容==生成结果
+- test_diverged_conflict_handwritten_rolls_back     分叉冲突含手写文件 → 回滚; 失败行逐字不变(现状回归)
+- test_autoresolve_whitelist_unavailable_refuses    白名单取不到 → 失败; 仓库状态与跑之前一致
+- test_autoresolve_regen_failure_rolls_back         重跑 rc≠0 → 失败; 仓库状态与跑之前一致
+- test_autoresolve_check_red_refuses                自证红 → 失败; 仓库状态与跑之前一致
+- test_autoresolve_is_idempotent                    化解成功后重跑 sync → 已同步
 """
 
 from __future__ import annotations
@@ -77,6 +87,99 @@ def _push_remote_commit(env: dict, name: str, content: str, msg: str = "remote")
     _commit_file(b, name, content, msg)
     _git(b, "push", "origin", "develop")
     return b
+
+
+# ------------------------------------------------------------------ 生成物自动化解夹具
+# 用一个「假生成器」小脚本当白名单(--list)与重建/自证命令: 写固定内容, 与真实 memory-bank 解耦,
+# 也不受库内索引真实漂移影响。配置指向它即可(见 _install_fake_generator)。
+NL = chr(10)
+
+
+def _gen_content(path: str) -> str:
+    return "generated:" + path + NL
+
+
+# 注意: 模板里**不出现任何反斜杠**(用 chr(10) 代换行), 免得跨工具/跨平台的转义差异污染夹具。
+FAKE_GEN = '''import sys
+from pathlib import Path
+
+PATHS = {paths!r}
+LIST_OK = {list_ok!r}
+REGEN_OK = {regen_ok!r}
+CHECK_OK = {check_ok!r}
+
+
+def content(p):
+    return "generated:" + p + chr(10)
+
+
+def main():
+    args = sys.argv[1:]
+    if "--list" in args:
+        if not LIST_OK:
+            return 3
+        for p in PATHS:
+            print(p)
+        return 0
+    if "--check" in args:
+        if not CHECK_OK:
+            return 1
+        for p in PATHS:
+            f = Path(p)
+            if not f.exists() or f.read_text(encoding="utf-8") != content(p):
+                return 1
+        return 0
+    if not REGEN_OK:
+        return 1
+    for p in PATHS:
+        f = Path(p)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(content(p), encoding="utf-8")
+    return 0
+
+
+raise SystemExit(main())
+'''
+
+CONFIG_TEMPLATE = '''confirmed = true
+branch = ""
+main_candidates = ["origin"]
+auto_resolve_generated = true
+generated_list_cmd = 'python "{gen}" --list'
+generated_regen_cmd = 'python "{gen}"'
+'''
+
+
+def _install_fake_generator(
+    env: dict,
+    monkeypatch,
+    paths=("gen/a.md", ),
+    list_ok: bool = True,
+    regen_ok: bool = True,
+    check_ok: bool = True
+) -> Path:
+    """把外置配置指向一个「假生成器」—— 覆盖 COMMAND_FLOW_PACK_DIR, 用临时包目录当配置源。"""
+    gen = env.tmp / "fake_gen.py"
+    gen.write_text(
+        FAKE_GEN.format(paths=list(paths), list_ok=list_ok, regen_ok=regen_ok, check_ok=check_ok), encoding="utf-8"
+    )
+    pack = env.tmp / "pack"
+    pack.mkdir(exist_ok=True)
+    (pack / ".my-commit-flow.toml").write_text(CONFIG_TEMPLATE.format(gen=gen.as_posix()), encoding="utf-8")
+    monkeypatch.setenv("COMMAND_FLOW_PACK_DIR", str(pack))
+    return gen
+
+
+def _seed_generated_conflict(env: dict, monkeypatch, **fake_kwargs) -> None:
+    """建一个生成物索引冲突场景: HEAD 有一份旧生成物, 本地重跑过(脏), 远端也改了同一文件。"""
+    (env.a / "gen").mkdir(exist_ok=True)
+    (env.a / "gen" / "a.md").write_text("stale" + NL, encoding="utf-8")
+    _git(env.a, "add", "-A")
+    _git(env.a, "commit", "-m", "add gen index")
+    _git(env.a, "push", "origin", "develop")
+    _install_fake_generator(env, monkeypatch, **fake_kwargs)
+    (env.a / "gen" / "a.md").write_text(_gen_content("gen/a.md"), encoding="utf-8")  # 本地重跑过 → 脏
+    _push_remote_commit(env, "gen/a.md", "remote" + NL)  # 远端也改了同一生成物
 
 
 def test_in_sync_reports_same_hash(env, monkeypatch):
@@ -220,3 +323,106 @@ def test_main_prints_one_line_contract(env, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert re.search(r"^同步失败需解决冲突 本地[0-9a-f]{8} 远端[0-9a-f]{8}", out)  # 约定模板
     assert len(out.strip().splitlines()) == 1  # 失败也是一行(原因 + 步骤都在行内)
+
+
+# ------------------------------------------------------------------ 生成物冲突自动化解
+
+
+def test_behind_dirty_overlap_generated_autoresolves(env, monkeypatch):
+    """落后 + 脏重叠且重叠 = 生成物 → 自动丢弃本地那份 + 快进 + 重跑; 内容 == 生成结果。"""
+    monkeypatch.chdir(env.a)
+    _seed_generated_conflict(env, monkeypatch)
+    ok, line = sync_mod.run_sync()
+    assert ok and "自动重跑生成物" in line
+    assert (env.a / "gen" / "a.md").read_text(encoding="utf-8") == _gen_content("gen/a.md")
+    remote_tip = _git(env.a, "ls-remote", "origin", "develop").split()[0]
+    assert _git(env.a, "rev-parse", "HEAD") == remote_tip
+
+
+def test_behind_dirty_overlap_handwritten_refuses(env, monkeypatch):
+    """落后 + 重叠含非生成物 → 仍失败; HEAD 与脏文件原样(现状回归)。"""
+    monkeypatch.chdir(env.a)
+    _install_fake_generator(env, monkeypatch)
+    (env.a / "base.txt").write_text("my edit" + NL, encoding="utf-8")
+    _push_remote_commit(env, "base.txt", "remote edit" + NL)
+    before = _git(env.a, "rev-parse", "HEAD")
+    ok, line = sync_mod.run_sync()
+    assert not ok and "重叠" in line
+    assert sync_mod.is_dirty_block(line)
+    assert _git(env.a, "rev-parse", "HEAD") == before
+    assert (env.a / "base.txt").read_text(encoding="utf-8") == "my edit" + NL
+
+
+def test_diverged_conflict_generated_autoresolves(env, monkeypatch):
+    """分叉冲突仅在生成物 → 自动解决; 零 merge commit(线性); 内容 == 生成结果。"""
+    monkeypatch.chdir(env.a)
+    _seed_generated_conflict(env, monkeypatch)
+    _commit_file(env.a, "gen/a.md", _gen_content("gen/a.md"), "local regen")
+    ok, line = sync_mod.run_sync()
+    assert ok and "自动重跑生成物" in line
+    assert _git(env.a, "rev-list", "--merges", "--count", "HEAD") == "0"
+    assert (env.a / "gen" / "a.md").read_text(encoding="utf-8") == _gen_content("gen/a.md")
+    remote_tip = _git(env.a, "ls-remote", "origin", "develop").split()[0]
+    assert _git(env.a, "rev-list", "--count", f"{remote_tip}..HEAD") == "1"
+
+
+def test_diverged_conflict_handwritten_rolls_back(env, monkeypatch):
+    """分叉冲突含手写文件 → 回滚; 失败行逐字不变(现状回归)。"""
+    monkeypatch.chdir(env.a)
+    _install_fake_generator(env, monkeypatch)
+    _commit_file(env.a, "base.txt", "my line" + NL, "local edit")
+    before = _git(env.a, "rev-parse", "HEAD")
+    _push_remote_commit(env, "base.txt", "remote line" + NL)
+    ok, line = sync_mod.run_sync()
+    assert not ok
+    assert re.search(r"需解决冲突 本地[0-9a-f]{8} 远端[0-9a-f]{8}", line)
+    assert "已自动回滚" in line
+    assert _git(env.a, "rev-parse", "HEAD") == before
+    assert not (env.a / ".git" / "rebase-merge").exists()
+    assert not (env.a / ".git" / "rebase-apply").exists()
+
+
+def test_autoresolve_whitelist_unavailable_refuses(env, monkeypatch):
+    """白名单取不到(--list 非 0) → 失败; 仓库状态与跑之前一致。"""
+    monkeypatch.chdir(env.a)
+    _seed_generated_conflict(env, monkeypatch, list_ok=False)
+    before = _git(env.a, "rev-parse", "HEAD")
+    before_bytes = (env.a / "gen" / "a.md").read_bytes()
+    ok, line = sync_mod.run_sync()
+    assert not ok and "重叠" in line
+    assert _git(env.a, "rev-parse", "HEAD") == before
+    assert (env.a / "gen" / "a.md").read_bytes() == before_bytes
+
+
+def test_autoresolve_regen_failure_rolls_back(env, monkeypatch):
+    """重跑 rc≠0 → 失败; 仓库状态与跑之前一致。"""
+    monkeypatch.chdir(env.a)
+    _seed_generated_conflict(env, monkeypatch, regen_ok=False)
+    before = _git(env.a, "rev-parse", "HEAD")
+    before_bytes = (env.a / "gen" / "a.md").read_bytes()
+    ok, line = sync_mod.run_sync()
+    assert not ok and "重叠" in line
+    assert _git(env.a, "rev-parse", "HEAD") == before
+    assert (env.a / "gen" / "a.md").read_bytes() == before_bytes
+
+
+def test_autoresolve_check_red_refuses(env, monkeypatch):
+    """自证红(--check 非 0) → 失败; 仓库状态与跑之前一致(预检即在改动前拦下)。"""
+    monkeypatch.chdir(env.a)
+    _seed_generated_conflict(env, monkeypatch, check_ok=False)
+    before = _git(env.a, "rev-parse", "HEAD")
+    before_bytes = (env.a / "gen" / "a.md").read_bytes()
+    ok, line = sync_mod.run_sync()
+    assert not ok and "重叠" in line
+    assert _git(env.a, "rev-parse", "HEAD") == before
+    assert (env.a / "gen" / "a.md").read_bytes() == before_bytes
+
+
+def test_autoresolve_is_idempotent(env, monkeypatch):
+    """化解成功后重跑 sync → 已同步(幂等)。"""
+    monkeypatch.chdir(env.a)
+    _seed_generated_conflict(env, monkeypatch)
+    ok1, line1 = sync_mod.run_sync()
+    assert ok1 and "自动重跑生成物" in line1
+    ok2, line2 = sync_mod.run_sync()
+    assert ok2 and line2.startswith("已同步 ")

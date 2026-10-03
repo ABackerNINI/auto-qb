@@ -4,14 +4,11 @@ when      = "知识库：索引重建 / 会话切片 / 只校验不写"
 confirmed = true
 
 [tasks."kb.index"]
-run     = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py",
-           "python <skill-dir:memory-bank>/scripts/gen_kb_index.py",
-           "python <skill-dir:memory-bank>/scripts/gen_docs_index.py",
-           "python <skill-dir:create-issue>/scripts/gen_issues_index.py"]
+run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py"]
 timeout = 120
 pin     = true
 when    = "收尾回写知识库后重建索引（不要手改 _index.md）"
-note    = "集合必须与 my-commit-flow 的 `memory-bank/` 闸门**同集**: 闸门能判红的生成物, 这里就得有重建入口 —— 2026-09-24 实测漏项导致报错文案指到跑完仍红的命令; 2026-09-29 _doc-map.md 物化退役(改查询 kb.docmap)后为三条; 2026-10-01 收编 create-issue 的 gen_issues_index.py(issue 状态改完一处跑齐, 不用再单独补跑)后为四条"
+note    = "2026-10-03 起**收成一条**: 四个生成器的集合单点在 memory-bank skill 的 scripts/gen_all.py(它同时是 sync 自动化解白名单的 --list 来源) —— 集合从此只有一处, 不再在包配置里再列一遍; 2026-09-24 的教训(漏项导致报错文案指到跑完仍红的命令)由 gen_all 的 GENERATORS 单点防住"
 
 [tasks."kb.docmap"]
 run     = ["python <skill-dir:memory-bank>/scripts/gen_doc_map.py <args>"]
@@ -32,13 +29,10 @@ when    = "看测试基线 / 最新数字 / 历史基线排障（默认列最近
 note    = "只打印不写文件；<args> 可传 --all 或 -n N 看全量/改条数、--check 只校验（--check 已同时挂进 kb.check）"
 
 [tasks."kb.check"]
-run     = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
-           "python <skill-dir:memory-bank>/scripts/gen_kb_index.py --check",
-           "python <skill-dir:memory-bank>/scripts/gen_docs_index.py --check",
+run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check",
-           "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
-           "python <skill-dir:create-issue>/scripts/gen_issues_index.py --check"]
+           "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。集合 = kb.index 四条的 --check + gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验"

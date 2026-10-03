@@ -185,6 +185,8 @@ GEN_CMD_BY_SCRIPT = {
     "gen_tasks_index.py": "commands run kb.index",
     "gen_kb_index.py": "commands run kb.index",
     "gen_docs_index.py": "commands run kb.index",
+    # 生成物集合的单点: kb.index 调它, 由它覆盖上面三条 + create-issue 的 gen_issues_index。
+    "gen_all.py": "commands run kb.index",
     # 只校验/查询不写文件的脚本 —— 它的"重跑"是校验或查询命令, 不是重建命令
     # (gen_doc_map.py 同类: 2026-09-29 起 _doc-map.md 物化退役, 改查询 `commands run kb.docmap`)
     "gen_active_recent.py": "commands run kb.active --check",

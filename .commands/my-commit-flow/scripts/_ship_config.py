@@ -61,6 +61,18 @@ KEY_DEFAULTS: dict = {
     # 摆到执行者眼前 —— 库里的约束不接到决策点上就等于没写。留空 = 不打印。
     "pitfalls_index": "",
     "each_limit": 99,  # <each:GLOB> 的展开条数上限; 超了说明提交范围该拆, 不该静默跑下去
+    # 生成物冲突自动化解(计划 26-10-03-1544): 白名单来自生成器的 --list, 重跑与自证同一入口。
+    # 默认开 —— 只在「冲突 / 重叠**全部**落在可重跑的生成物上」时才动作, 手写冲突行为逐字不变。
+    "auto_resolve_generated": True,
+    "generated_list_cmd": "python <skill-dir:memory-bank>/scripts/gen_all.py --list",
+    "generated_regen_cmd": "python <skill-dir:memory-bank>/scripts/gen_all.py",
+}
+
+# 生成物自动化解三键的期望类型 —— 写错会让自动化解静默失效(或按错类型动作), 与 timeout 同级 STOP。
+GENERATED_KEY_TYPES = {
+    "auto_resolve_generated": bool,
+    "generated_list_cmd": str,
+    "generated_regen_cmd": str,
 }
 
 # 一个 [[gates]] 条目允许出现的键。出现在配置里的其它键一律 STOP ——
@@ -444,4 +456,14 @@ def config_problems(cfg: dict, path: Path | None = None) -> list[tuple[str, str]
         timeout = gate.get("timeout", 600)
         if isinstance(timeout, bool) or not isinstance(timeout, int) or timeout <= 0:
             problems.append(("STOP", f"gate「{note}」的 timeout 非法: {timeout!r}(正整数秒)"))
+
+    # 生成物自动化解三键的类型: 写错(如 auto_resolve_generated = 1)会让化解路径行为异常, 停手。
+    for key, want in GENERATED_KEY_TYPES.items():
+        value = cfg.get(key)
+        if want is bool:
+            bad = not isinstance(value, bool)
+        else:
+            bad = not isinstance(value, str)
+        if bad:
+            problems.append(("STOP", f"{key} 类型非法: {value!r}(应为 {want.__name__})"))
     return problems

@@ -41,8 +41,11 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 `scripts/check_doc_links.py`)
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
-- test_kb_scripts_import_cleanly: skill 的 6 个脚本都能 import
-- test_gen_cmd_hints_name_real_tasks: 生成物的"怎么重建"提示必须指向真能重建它的命令(`gen_cmd` 按脚本查表 + `kb.index` 覆盖面 ⊇ 闸门判红的生成物集合; 2026-09-24 `_doc-map.md` 报错文案指错命令的机检)
+- test_kb_scripts_import_cleanly: skill 的脚本都能 import
+- test_gen_all_declares_exactly_all_indexes: gen_all.py 的产出集合 == 库内全部 `_index.md`(生成物全集单点)
+- test_gen_all_check_is_green: gen_all.py `--check` 在当前库上绿 (磁盘 == 生成结果)
+- test_gen_all_list_matches_outputs: `--list` 声明的路径集合 == collect() 实际产出 (白名单不得多/少)
+- test_gen_cmd_hints_name_real_tasks: 生成物的"怎么重建"提示必须指向真能重建它的命令(`gen_cmd` 按脚本查表 + `kb.index` 覆盖面 ⊇ 闸门判红的生成物集合, 经 gen_all.py 单点收编后按声明核对; 2026-09-24 `_doc-map.md` 报错文案指错命令的机检)
 """
 
 from __future__ import annotations
@@ -530,15 +533,57 @@ def test_doc_links_are_not_broken() -> None:
 
 
 def test_kb_scripts_import_cleanly() -> None:
-    """skill 的 6 个脚本都能被 import —— 模块级错误在这里当场红, 不必等闸门跑 `--help`。"""
+    """skill 的脚本都能被 import —— 模块级错误在这里当场红, 不必等闸门跑 `--help`。"""
     if str(SKILL_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(SKILL_SCRIPTS))
     for name in (
-        "_common", "gen_tasks_index", "gen_kb_index", "check_kb_structure", "gen_active_recent", "gen_baseline_recent"
+        "_common", "gen_tasks_index", "gen_kb_index", "gen_docs_index", "gen_all", "check_kb_structure",
+        "gen_active_recent", "gen_baseline_recent"
     ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
         __import__(name)
+
+
+def _gen_all():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import gen_all
+
+    return gen_all
+
+
+def test_gen_all_declares_exactly_all_indexes() -> None:
+    """生成物集合单点: gen_all 的产出 == 库内**全部** `_index.md` —— 一个不多, 一个不少。
+
+    这是 sync 自动化解白名单的安全底线: 白名单里多一个其实不是生成物的路径, sync 就会
+    在冲突时静默丢弃手写内容(第 3 步自证也救不回来); 少一个则冲突化解不了。
+    """
+    gen_all = _gen_all()
+    outputs = gen_all.collect(ROOT, MB)
+    on_disk = set(MB.rglob("_index.md"))
+    assert set(outputs) == on_disk, (
+        f"gen_all 产出与库内 _index.md 不一致: 多 {sorted(set(outputs) - on_disk)} / "
+        f"少 {sorted(on_disk - set(outputs))}"
+    )
+
+
+def test_gen_all_check_is_green() -> None:
+    """`--check` 在当前库上必须绿 —— 磁盘内容 == 生成结果(等价于 kb.check 的生成物部分)。"""
+    gen_all = _gen_all()
+    outputs = gen_all.collect(ROOT, MB)
+    drifted = [p for p, want in outputs.items() if (p.read_text(encoding="utf-8") if p.exists() else "") != want]
+    assert not drifted, "请运行 `commands run kb.index` 重建:\n" + "\n".join(
+        f"  {p.relative_to(ROOT)}" for p in sorted(drifted)
+    )
+
+
+def test_gen_all_list_matches_outputs(capsys) -> None:
+    """`--list` 声明的集合必须与 collect() 实际写出的集合**恒等** —— 白名单不得多/少。"""
+    gen_all = _gen_all()
+    assert gen_all.main(["--list"]) == 0
+    listed = {ROOT / line for line in capsys.readouterr().out.splitlines() if line.strip()}
+    assert listed == set(gen_all.collect(ROOT, MB))
 
 
 def test_gen_cmd_hints_name_real_tasks() -> None:
@@ -579,14 +624,19 @@ def test_gen_cmd_hints_name_real_tasks() -> None:
         assert m, f"{cfg.relative_to(ROOT)} 里找不到任务 `{task_id}` —— 表里的提示是死指针"
         return m.group(1)
 
+    gen_scripts = {s for _skill, s in _gen_all().GENERATORS}
+
     for script, hint in sorted(table.items()):
         parts = hint.split()
         assert parts[:2] == ["commands", "run"] and len(parts) >= 3, f"{script} 的提示不是 `commands run <task>`: {hint!r}"
         task_id = parts[2]
         body = task_body(task_id)  # 2. 任务真实存在
         if task_id == "kb.index":  # 3. 核心: 真的会重建它
-            assert script in body, (
-                f"{script} 的提示说跑 `{task_id}`, 但它的 run 列表里没有 {script} —— "
+            # 2026-10-03 起 kb.index 收成一条 `gen_all.py`: 提示说跑 kb.index 的脚本, 要么直接出现在
+            # run 列表里, 要么由 gen_all 的 GENERATORS 声明覆盖(集合单点收编, 不再是手抄副本)。
+            covered = script in body or ("gen_all.py" in body and script in gen_scripts)
+            assert covered, (
+                f"{script} 的提示说跑 `{task_id}`, 但它的 run 列表与 gen_all.GENERATORS 都没覆盖 {script} —— "
                 f"用户照做一遍仍然是红的(2026-09-24 实测的缺陷形态)"
             )
         elif task_id == "kb.check":

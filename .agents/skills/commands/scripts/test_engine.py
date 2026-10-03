@@ -180,15 +180,18 @@ def test_run_success_keeps_evidence(monkeypatch, capsys):
 
 def test_run_selfcheck_compressed(monkeypatch, capsys):
     tree = C.load_tree()
-    tree.tasks["kb.index"].risky = True  # 借多命令 task 冒充 risky(进程内改动, 不落盘)
+    task = tree.tasks["kb.check"]  # 借**多命令** task 冒充 risky(进程内改动, 不落盘)
+    task.risky = True
     monkeypatch.setattr(C, "load_tree", lambda: tree)  # cmd_run 内部还会 load 一次 —— 必须让它拿到同一份
     monkeypatch.setattr(engine, "_shell", _shell_returning(True, ""))
-    rc = engine.cmd_run(argparse.Namespace(task="kb.index", extra=[]))
+    rc = engine.cmd_run(argparse.Namespace(task="kb.check", extra=[]))
     captured = capsys.readouterr().out
     assert rc == 0
-    assert "[自证] kb.index 将要执行:" in captured
-    assert "…(共 4 条, 全量: show kb.index)" in captured
-    assert captured.count("gen_tasks_index") == 1  # 只打首条, 其余三条不再全量展开
+    assert "[自证] kb.check 将要执行:" in captured
+    n = len(C.task_commands(task, tree.root, []))
+    assert n > 1  # 这条用例专测「多命令压缩」—— 单命令 task 根本不出压缩行(2026-10-03 kb.index 收成一条后换 kb.check)
+    assert f"…(共 {n} 条, 全量: show kb.check)" in captured
+    assert captured.count("gen_all.py") == 1  # 只打首条, 其余不再全量展开
 
 
 def test_run_timeout_names_command(monkeypatch, capsys):

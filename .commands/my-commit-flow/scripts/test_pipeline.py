@@ -19,7 +19,7 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 - ShortTest                    失败明细里的根路径压缩
 - NoTrackingRefTest            判落后一律 ls-remote 真值 —— 静态扫描禁止 refs/remotes 快照与 status -sb
 - StaticNameTest               AST 找未定义名(冷门分支 NameError, push.py 曾潜伏过一例)
-- ConfigProblemsTest           未知键 / timeout 非法 → STOP
+- ConfigProblemsTest           未知键 / timeout 非法 / 生成物自动化解键类型 → STOP
 """
 
 from __future__ import annotations
@@ -329,6 +329,21 @@ class ConfigProblemsTest(unittest.TestCase):
     def test_bad_timeout_is_stop(self) -> None:
         problems = self._problems(self.BASE + '[[gates]]\nmatch = ["src/"]\nrun = ["x"]\ntimeout = 0\n')
         self.assertTrue(any(lvl == "STOP" and "timeout" in msg for lvl, msg in problems))
+
+    def test_bad_auto_resolve_type_is_stop(self) -> None:
+        # 1 不是 bool —— 按错类型动作会让化解路径静默失效, 必须 STOP
+        problems = self._problems(self.BASE + "auto_resolve_generated = 1\n")
+        self.assertTrue(any(lvl == "STOP" and "auto_resolve_generated" in msg for lvl, msg in problems))
+
+    def test_bad_generated_cmd_type_is_stop(self) -> None:
+        problems = self._problems(self.BASE + "generated_list_cmd = 5\n")
+        self.assertTrue(any(lvl == "STOP" and "generated_list_cmd" in msg for lvl, msg in problems))
+
+    def test_valid_generated_keys_have_no_stop(self) -> None:
+        problems = self._problems(
+            self.BASE + "auto_resolve_generated = true\ngenerated_list_cmd = \"x\"\ngenerated_regen_cmd = \"y\"\n"
+        )
+        self.assertFalse([p for p in problems if p[0] == "STOP"])
 
     def test_valid_config_has_no_stop(self) -> None:
         problems = self._problems(self.BASE + '[[gates]]\nmatch = ["src/"]\nrun = ["x"]\nauto = true\ntimeout = 60\n')

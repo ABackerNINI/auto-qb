@@ -19,7 +19,7 @@ enabled = true
 script = "sync.py"
 pin    = true
 when   = "会话开工：第一个执行动作（改文件 / 跑校验 / 任何 git 写操作）之前；以及收到「提交」后的第一步（收尾回写之前）。自动 fetch + 快进/rebase(分叉保线性)"
-note   = "成功一行: 已同步/同步成功 <hash>; 失败一行含原因与步骤(冲突已自动回滚); 结果贴进回复"
+note   = "成功一行: 已同步/同步成功 <hash>(生成物冲突自动化解时附「自动重跑生成物 N 处」); 失败一行含原因与步骤(冲突已自动回滚); 结果贴进回复"
 doc    = "references/pipeline.md"
 
 [tasks."my-commit-flow.verify-ref"]
