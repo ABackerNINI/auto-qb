@@ -23,6 +23,7 @@
 - test_resolve_fsroot_placeholder: <FSROOT> 占位符解析, 且不写死任何真实路径
 - test_corpus_source_loads_and_rejects_aborted: 语料加载; status=aborted 的语料必须拒绝回放
 - test_corpus_tracker_section_picks_specific_tag: 站点标签取"对该 host 最专有"的, 不被通用标签抢走
+- test_corpus_mode_pump_touches_alltime_accumulators: 回归钉(P6 续做轮) —— alltime 三属性两档都初始化, 语料档 pump 触达累加行不炸且 server_state 仍透传
 """
 from __future__ import annotations
 
@@ -544,6 +545,84 @@ def _make_sim(tmp_path, cmd_latency_ms: float, md_lag_ms: float, status: str = "
     args.root = str(tmp_path / "root")
     args.run_dir = simqb.make_run_dir(args.root, "t")
     return simqb.SimQb(args)
+
+
+def _write_pump_corpus(tmp_path: Path) -> Path:
+    """最小语料, 但种子带齐 pump 变异路径要读的字段(真机录制语料必含 uploaded 等)"""
+    d = tmp_path / "corpus-pump"
+    d.mkdir(parents=True, exist_ok=True)
+    h = "c" * 40
+    t0 = {
+        "t_seq": 0,
+        "role": "t0",
+        "full_update": True,
+        "rid": 1,
+        "torrents":
+            {
+                h:
+                    {
+                        "name": "N",
+                        "save_path": "<FSROOT>/d0/x",
+                        "state": "stalledUP",
+                        "tags": "T",
+                        "category": "",
+                        "size": 10,
+                        "uploaded": 5000,
+                        "seeding_time": 99,
+                        "ratio": 5.0,
+                        "time_active": 99,
+                        "last_activity": 1790000000,
+                    }
+            },
+        "server_state": {
+            "up_info_speed": 1
+        },
+        "tags": ["T"],
+        "categories": {},
+    }
+    last = dict(t0, t_seq=1, role="closure", full_update=True)
+    with gzip.open(d / "sync-stream.jsonl.gz", "wt", encoding="utf-8") as f:
+        f.write(json.dumps(t0, ensure_ascii=False) + "\n")
+        f.write(json.dumps(last, ensure_ascii=False) + "\n")
+    for fn, obj in [
+        ("files.json.gz", {
+            h: [{
+                "name": "x/f.mkv",
+                "size": 10
+            }]
+        }),
+        ("trackers.json.gz", {
+            h: []
+        }),
+        ("disk.json.gz", {
+            h: {}
+        }),
+        ("groups.json.gz", {
+            "groups": []
+        }),
+    ]:
+        with gzip.open(d / fn, "wt", encoding="utf-8") as f:
+            json.dump(obj, f)
+    (d / "meta.json").write_text(json.dumps({"status": "ok", "frames": 2}), encoding="utf-8")
+    return d
+
+
+def test_corpus_mode_pump_touches_alltime_accumulators(tmp_path):
+    """回归钉(P6 续做轮): alltime 三属性必须两档都初始化 —— 语料档 server_state 透传
+    _corpus_ss 用不到它们, 但 pump 的累加路径两档共用; 只在 _build_torrents(合成档)里
+    初始化时, 语料档 run_load_engine 首拍即 AttributeError 死线程(S6 半成品曾引入,
+    真语料字段齐全时 pump 可达累加行)。**变异验证**: 还原为仅合成档初始化即红。"""
+    d = _write_pump_corpus(tmp_path)
+    args = simqb.build_parser().parse_args(["--source=corpus:%s" % d, "--root", str(tmp_path / "root")])
+    args.root = str(tmp_path / "root")
+    args.run_dir = simqb.make_run_dir(args.root, "pump")
+    sim = simqb.SimQb(args)
+    sim.pump()
+    sim.pump()
+    assert sim._alltime_extra_ul > 0, "语料档 pump 必须能触达 alltime 累加行且不炸"
+    # 语料档 server_state 仍透传首帧, 不受累加器影响
+    ss = sim.server_state()
+    assert ss["up_info_speed"] == 1, "语料档 server_state 必须保持透传"
 
 
 def test_two_layer_state_info_newer_than_maindata(tmp_path):

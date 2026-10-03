@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="keys-update-crlf">
+<meta name="issue-stamp" content="26-10-04-0134">
+<meta name="issue-type" content="chore">
+<meta name="doc-topic" content="keys-update-crlf">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突">
+<meta name="issue-summary" content="test.keys-update 重生成 tests/fixtures/config_key_surface.txt 时 Windows 写出 CRLF(仓库 eol=lf), 每次重生成 diff 全文件换行噪音, 须手工归一才能过守卫">
+<title>test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突 · chore · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· chore</div>
+    <h1>test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突</h1>
+    <p class="lede">test.keys-update 重生成 tests/fixtures/config_key_surface.txt 时 Windows 写出 CRLF(仓库 eol=lf), 每次重生成 diff 全文件换行噪音, 须手工归一才能过守卫</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-04-0134-chore-keys-update-crlf</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-04 01:34</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><code>commands run test.keys-update</code> 重生成 <code>tests/fixtures/config_key_surface.txt</code> 时, Windows 上落盘 CRLF; 而仓库该 fixture 按 <code>.gitattributes</code>(<code>* text=auto eol=lf</code>)应为 LF —— 每次重生成后 <code>git diff</code> 混入整文件换行噪音, 须手工归一(去 CR)才能过键面守卫(test_config_key_surface)。实施轮 S1(提交 1c78218b)实际遇到并手工归一。</p>
+    <p class="hint">来源：plan 26-10-03-0946 实施轮 · 用户拍板入池；取证基线 HEAD 926d1f66。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <ul>
+      <li><code>scripts/update_config_key_surface.py:43</code>（取证 2026-10-04 01:34, 基线 HEAD 926d1f66）· <code>guard.BASELINE_PATH.write_text(guard.render_baseline(...), encoding="utf-8")</code> 未带 <code>newline</code> 参数, Windows 文本模式默认把 <code>\n</code> 写成 <code>\r\n</code> · grep 关键词 <code>BASELINE_PATH.write_text</code></li>
+      <li><code>.gitattributes:3</code>（取证同）· <code>* text=auto eol=lf</code></li>
+      <li><code>.commands/test/config.toml:44</code>（取证同）· <code>test.keys-update</code> 命令定义 · grep 关键词 <code>update_config_key_surface</code></li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>写基线改显式 LF 落盘(<code>write_text(..., newline="\n")</code> 或等价二进制写); 改后重跑 <code>commands run test.keys-update</code> 验证 <code>git diff</code> 无整文件换行噪音。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-04 01:34 — 入池，状态 <strong>Open</strong>（计划外，未修；来源：plan 26-10-03-0946 实施轮 · 用户拍板入池）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-04-0134-chore-keys-update-crlf.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

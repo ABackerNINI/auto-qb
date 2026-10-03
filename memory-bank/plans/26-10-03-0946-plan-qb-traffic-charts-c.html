@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="torrent-traffic-stats">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-03-0946">
-<meta name="doc-updated" content="26-10-03-1110">
+<meta name="doc-updated" content="26-10-04-0115">
 <title>实施计划 · qB 口径流量图方案C · dat 落盘（全局/单种）+ 分组读侧推算 · auto-qb</title>
 <style>
   :root {
@@ -105,7 +105,7 @@
       <div class="item"><div class="k">专题</div><div class="v">torrent-traffic-stats</div></div>
       <div class="item"><div class="k">取证基线</div><div class="v">0a66c7c0 · 2026-10-03</div></div>
       <div class="item"><div class="k">上游制品</div><div class="v"><a href="../reports/26-10-03-0757-report-qb-traffic-charts.html">report 26-10-03-0757</a> · issue <a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248 (Open)</a></div></div>
-      <div class="item"><div class="k">状态</div><div class="v">Open（26-10-03 三轮拍板已并入：组系列不落盘、读侧推算）</div></div>
+      <div class="item"><div class="k">状态</div><div class="v">Done（2026-10-04 实施完成: P1-P6 全段落地 + 桩验证 10/10, 待真机长期观察）</div></div>
       <div class="item"><div class="k">预估工作量</div><div class="v">≈ 6–8 人日 · 6 段独立可提交</div></div>
     </div>
     <nav class="toc">
@@ -492,10 +492,11 @@ GET /api/traffic/qb/group/{key}?window=24h|30d   # routes/groups.py（key 收当
     <p class="hint">26-10-03-0946 初版：方案C 拍板落地（数据落点 <code>&lt;data_dir&gt;/qb-traffic/</code>、null 断线、分组 key 详细对比 §04 待拍板默认甲）。</p>
     <p class="hint">26-10-03-1041 二轮拍板改版（用户三条）：①<b>单种历史入盘</b>——推翻 §02.2「单种不落盘」，三类系列全落 dat、内存环取消、单种图 24h/30d；②组 key <b>不得含 save_path</b>（移动即断史）、③<b>不得因增删文件换键</b>（「对流量展示来说是毁灭性的」）——内容指纹键否决，§04 重写为<b>代理身份键 + 成员表决吸收</b>，原「换 key 旧历史」三选项作废；工作量 6–8.5 → 7–10 人日。</p>
     <p class="hint">26-10-03-1110 三轮拍板改版（用户拍板：组流量可由组内种子流量推算，成员通常 ≤50，不落盘；全局含全部种子推算难，依旧落盘）：落盘范围收窄为全局 + 单种——groups/ 目录、组文件、index 组注册表取消，单种入盘决策沿用并升格为组推算的数据基座；<b>二轮引入的组身份代理键 + 成员表决吸收整体作废</b>（组不落盘则无键可断，二轮点名的「移动/增删换键断史」在读侧口径下自然消解），§04 重写为读侧推算设计（成员集现取 + 桶级聚合 + 借 global.dat 区分真空闲 0 与停机 null）；组采样移出采样器（§03），组聚合移入 P4；工作量 7–10 → 6–8 人日。</p>
+    <p class="hint">26-10-04-0115 实施完成（S1–S6 六段 + 收尾）：P1 采样器核心 1c78218b（配置键全链 + 采样器）→ P2 dat 存储层 687fe827 → P3 冻结/淘汰 da23e842（体量实测 39.1MB ≤ 41MB 上界）→ P4 三 GET + 组读侧聚合 61c0ddc4（金清单 72→75）→ P5a 235507af / P5b 181d90c3（uPlot vendor + 三挂点 + 轮询，三主题截图自查 30/30 过）→ S6 收尾（2026-10-04，桩验证替代真机——用户拍板）：P6 十条 <b>10/10 过</b>（逐条方法/实测数字/结论单点 = 任务档案「P6 验证记录」节），test.full <b>2418 passed + 3 skipped / 99% / 25.85s</b>。实施中三处裁决口径：①<b>catch-up 补封</b>——seal_sweep 归并所有「有 raw 行且尚无 hour 行」的历史桶，重启跨度/断连跳桶不把 raw 行留在 30d 视图之外（§02.4 的桩验证双路径实证：预置既往桶补封 + 整点边界自然触发）；②<b>损坏阈值 = 坏行 ≥2 且占比 &gt;5%</b>——绝对下限兜「上一次崩溃尾半行经追加补 \n 后成小文件中段坏行」场景，kill 丢行恒 ≤1（§02.4）；③<b>分组弹层新建</b>——仓库无既有分组弹层可复用，P5b 新建并复用分组视图成员集（同源同刻，§04.1-①，弹层瞬时 sum 与组桶聚合 22/22 桶恒等核对）。计划内缺陷 1 件已修：sim_qb.py 语料档 pump AttributeError（半成品引入，alltime 三属性仅合成档初始化；回归钉变异验证红→绿）。真机遗留项：fastresume 单种 all-time 持久性、alltime 回退幅度——待用户真机长期观察（主 issue 保持 Open）。</p>
   </section>
 
   <footer>
-    <p>auto-qb · 实施计划 26-10-03-0946 · 专题 torrent-traffic-stats · 取证基线 0a66c7c0 (2026-10-03) · 上游 report 26-10-03-0757 · 状态 Open（26-10-03 三轮拍板已并入：组不落盘读侧推算 + 全局保留落盘）</p>
+    <p>auto-qb · 实施计划 26-10-03-0946 · 专题 torrent-traffic-stats · 取证基线 0a66c7c0 (2026-10-03) · 上游 report 26-10-03-0757 · 状态 Done（2026-10-04 实施完成: P1-P6 全段落地 + P6 桩验证 10/10, 待真机长期观察）</p>
   </footer>
 
 </div>

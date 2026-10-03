@@ -471,6 +471,11 @@ class SimQb:
         self.manual_limits: dict[str, int] = {}  # S8: 手设单种限速(奇数 KiB/s), 收尾核对是否被改写
         self._ordered: list[dict] = []  # 全部种子(按生成序); --ramp 时按拍逐步暴露
         self._visible = 0
+        # alltime 计数器先给零值: 语料档透传 _corpus_ss 用不到它们, 但 pump 的累加路径
+        # 两档共用, 不先初始化的话语料档首拍就 AttributeError(真值由 _build_torrents 覆写)
+        self._alltime_base_dl = 0
+        self._alltime_base_ul = 0
+        self._alltime_extra_ul = 0
         self.events: list[dict] = []
         self._ev_lock = threading.Lock()
 
@@ -773,6 +778,14 @@ class SimQb:
         k = a.ramp if a.ramp > 0 else len(self._ordered)
         self._expose(min(k, len(self._ordered)))
 
+        # alltime 计数器基值(P6 桩验证对齐真 qB server_state 键名 alltime_dl/alltime_ul):
+        # 初值 = 建库时的历史量, 此后只增不减(种子删除不回退, 对齐真 qB alltime 语义);
+        # 仿真库纯做种不下载 -> dl 恒定。进程重启(新 run)计数器从基值重新起步 —— auto-qb
+        # 看到的就是"qB 重启 alltime 回退", 供采样器回落判重置路径做桩验证。
+        self._alltime_base_dl = sum(t["downloaded"] for t in self._ordered)
+        self._alltime_base_ul = sum(t["uploaded"] for t in self._ordered)
+        self._alltime_extra_ul = 0
+
     def _expose(self, target: int) -> int:
         """把生成序里的前 target 个种子暴露给 auto-qb(P2 渐进灌入用)
 
@@ -938,10 +951,11 @@ class SimQb:
                 t = self.torrents.get(h)
                 if t is None:
                     continue
+                up_gain = self.rng.randrange(1, 4 * 1024**2)
                 patch = {
                     "upspeed": self.rng.randrange(0, 8 * 1024**2),
                     "dlspeed": 0,
-                    "uploaded": t["uploaded"] + self.rng.randrange(1, 4 * 1024**2),
+                    "uploaded": t["uploaded"] + up_gain,
                     "seeding_time": t["seeding_time"] + 1,
                     "ratio": round(t["ratio"] + 0.001, 3),
                     "state": self.rng.choice(STATES_ACTIVE),
@@ -949,6 +963,7 @@ class SimQb:
                     "time_active": t["time_active"] + 1,
                 }
                 t.update(patch)
+                self._alltime_extra_ul += up_gain  # alltime 只增不减(与种子删除解耦)
                 self.dirty.setdefault(h, {}).update({k: patch[k] for k in MUTATE_FIELDS})
             # P2 渐进灌入: 每拍追加 ramp 个种子(首轮成本被打散, 看是否有单 tick 尖峰)
             if a.ramp > 0 and self._visible < len(self._ordered):
@@ -1098,8 +1113,11 @@ class SimQb:
             return dict(getattr(self, "_corpus_ss", {}) or {})
         up = sum(t["upspeed"] for t in self.torrents.values())
         return {
-            "all_time_dl": 0,
-            "all_time_ul": 0,
+            # 键名对齐真 qB server_state(alltime_dl/alltime_ul): auto-qb 采样器(plan
+            # 26-10-03-0946 §03.2)按真键名读, 旧名 all_time_* 会让全局系列恒 null。
+            # dl 恒定(纯做种), ul 随 pump 单调增长; 进程重启回退到基值 -> 回落判重置可验。
+            "alltime_dl": self._alltime_base_dl,
+            "alltime_ul": self._alltime_base_ul + self._alltime_extra_ul,
             "dl_info_data": 0,
             "dl_info_speed": 0,
             "dl_rate_limit": 0,

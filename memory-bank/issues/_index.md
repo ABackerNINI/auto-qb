@@ -14,17 +14,19 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 10 |
+| bug | 11 |
 | perf | 5 |
 | docs | 1 |
 | test | 1 |
 | refactor | 4 |
 | feat | 17 |
-| chore | 3 |
+| chore | 4 |
 | question | 4 |
 
 ## Open
 
+- [bug] [uPlot 流量图取打开时刻容器宽度, 窗口 resize 后不自适应](26-10-04-0134-bug-webui-traffic-chart-resize.html) — 三处 qb 流量图(全局弹层/单种抽屉流量页签/分组流量弹层)建图取打开时刻容器宽度, 浏览器 resize 后画布不重算, 重开即恢复
+- [chore] [test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突](26-10-04-0134-chore-keys-update-crlf.html) — test.keys-update 重生成 tests/fixtures/config_key_surface.txt 时 Windows 写出 CRLF(仓库 eol=lf), 每次重生成 diff 全文件换行噪音, 须手工归一才能过守卫
 - [bug] [添加种子三浮层互斥不对称: 路径面板收下拉, 下拉不收路径面板](26-10-04-0130-bug-webui-add-pop-mutex.html) — openAddPathPop 会收分类/标签下拉, 反向 openAddCatMenu/openAddTagMenu 不收 addPathPop, 切换字段时路径面板与下拉可同时悬着(面板还会盖住相邻字段的 label)
 - [bug] [full-checking 轮询首跳误判已完成种子校验成功](26-10-03-1140-bug-ops-recheck-false-success.html) — ops poll 成功分支未要求 seen_checking, 已完成种子 recheck 提交后约 1s 被首跳误判「校验成功」; 规则源同路径会假晋升参考种子
 - [bug] [主循环首轮 tick 任意异常在 next_*_at 未推进时无退避快速重试(wait_for=0 机理)](26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html) — 主循环异常路径不推进 next_*_at, 首轮 tick 抛任意异常(不止 StopIteration)即形成无退避快速重试循环 —— 有 ERROR 日志不静默, 是否要退避待拍板; StopIteration 已由 f89ceada 显式重抛不在此列
