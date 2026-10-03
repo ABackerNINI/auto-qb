@@ -1,7 +1,7 @@
 # Git 同步上游 (fetch / pull / 镜像线)
 
-> 摘要: `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒; 双 UI 镜像线何时该重放。
-> 触发: git fetch, git pull, 同步上游, 落后, 行尾, 快进合并被拒, keep 分支, 镜像线
+> 摘要: `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒(树脏场景只走 stash, 「先提交」是死锁); 双 UI 镜像线何时该重放。
+> 触发: git fetch, git pull, 同步上游, 落后, 行尾, 快进合并被拒, 树脏, 重叠, stash, 死锁, keep 分支, 镜像线
 
 ### `git status -sb` 的 ahead/behind 是上次 fetch 时的快照, 不会自己刷新
 
@@ -16,7 +16,10 @@
 - **触发**: `my-commit-flow.sync` 失败行报「本地改动与远端新提交重叠」。
 - **判别**: **卡点** —— `git diff --stat` 为空但 `git status` 仍显示 ` M` 且工作区文件比 blob 大 ⇒
   **是行尾不是内容**(行尾幽灵 `M`)。
-- **处置**: 先提交或 stash 承载本地改动(脚本不代做清理), 再重跑 sync。
+- **处置**: **只走 stash**(脚本不代做清理), 再重跑 sync —— 配方: `git stash push -u` → `commands run my-commit-flow.sync` → `git stash pop` → 测试 → `commands run ship.commit`。
+  ❗**「先提交」是死锁, 不是处置**: 提交入口 `ship.commit` 内部第一步就是这条 sync, 树脏没解除必再撞同一处
+  —— sync 要你先提交 / ship.commit 要你先 sync, 两端互斥谁都进不去(2026-10-03 实测)。
+  2026-10-03 起 sync / ship.commit 的失败行**自带这条解锁配方**(单点 `UNLOCK_STEPS`, `.commands/my-commit-flow/scripts/sync.py`), 照行内配方走即可。
   行尾幽灵 `M`: `git add <file>` + `git reset -q -- <file>` 刷新索引视图即可 ff, 实测有效。
   - **2026-10-02**: 仓库根已加 `.gitattributes`(`* text=auto eol=lf`)对 blob 侧设防 —— 存量工作区一次性转 LF(层3, 暂缓)完成后此类幽灵 M 应根除, 完成前本条仍适用。
   ❗旧版「`git diff --output=备份.patch` 移出 → 快进 → 施回」补丁配方**已删除**(rebase/stash 解禁后由
@@ -47,4 +50,5 @@
 - **复发** +1 —— 2026-10-02 (auto-qb-clone2, U1-b 未保存改动守卫提交点): 收到「提交」时 sync 报「本地 300f8aa5 / 远端 4a883385 重叠」, 按 `cp -a .git <仓库外备份>` → **`git stash push -u`** → sync(4a883385) → `git stash pop` 化解, 无冲突; `kb.index` 在新基线上重跑后再 `test.full` 2289 passed / 99%。**为什么没命中**: 同上一行 —— 会话中途的远端推进属 sync 固有窗口, 防不住, 处置无需改。
   ❗本轮补一条**未写进处置的细节**: stash 必须带 **`-u`** —— 收尾产物里通常有未跟踪新文件(新档案 / 新基线切片 / 新 pitfall), 默认 stash 不收未跟踪, pop 后新文件会留在旧基线上、且 sync 的快进可能因它们被拒; `-u` 一并收走, pop 时无冲突(远端不会新增同名文件)。旧做法「`git checkout --` 掉生成物索引再 sync」只对**可重跑的生成物**安全, 对未跟踪新产物不适用。
 - **复发** +1 —— 2026-10-02 (auto-qb-clone1, 行尾统一 LF 层1/2/4 提交点): 会话开局 sync 过(0d286cc5), 收尾时远端已被并行 clone 推进至 a6b5b5b0(纯文档回写, 未触 src/tests), `ship.commit` 首跑失败行拦下; 按 `cp -a .git <仓库外备份>` → `stash push -u` → sync → pop 预案化解, tasks/_index.md 自动合并无冲突, 重跑提交成功。**为什么没命中**: 同上 —— 会话中途的远端推进属 sync 固有窗口防不住, 处置无需改。
+- **复发** +1 —— 2026-10-03 (另一会话, `_copyText` 别名修复提交点): 远端 20545039(别的会话改 `tpl/drawer.html`)与本轮改动的**同一文件**重叠, sync 判「落后 + 树脏重叠」拒绝快进, 而 `ship.commit` 要求先 sync —— **双向死锁**; 按 `git stash push -u` → sync 快进 → `git stash pop`(两处改动上下文不重叠, 自动合并零冲突) → 测试 → 提交化解。**为什么没命中**: 前几轮复发都写「先提交或 stash」两条并列, 「先提交」这条实为死路(2026-10-03 实测)；当日已改**失败行自带 stash 解锁配方** + 死锁护栏提示(本条处置已同步改成只走 stash), 复发成本从「自己想明白」降到「照行内配方走」。
 - **复发** +1 —— 2026-10-02 (auto-qb-clone1, 控制台编码坑档补写提交点): 会话内 18:24 sync 过(cfbfa712), 「提交」时远端已推进至 d354745b(纯文档 roadmap), sync 首跑报「本地改动与远端新提交重叠」; 按 `cp -a .git <仓库外备份>` → `stash push -u` → sync → pop 预案化解, 无冲突。**为什么没命中**: 同上 —— 会话中途远端推进属固有窗口, 防不住, 处置无需改。

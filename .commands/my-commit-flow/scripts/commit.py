@@ -133,12 +133,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # 1 内部同步: 落后自动快进 / 分叉自动 rebase; 失败即停(回写件必须落在合并后的新基线上)
-    from sync import run_sync  # noqa: E402  (延后 import: 测试替身要能覆盖)
+    from sync import is_dirty_block, run_sync  # noqa: E402  (延后 import: 测试替身要能覆盖)
 
     ok, sync_line = run_sync()
     if not ok:
-        print("提交失败: 未与主线同步 —— 先跑 commands run my-commit-flow.sync 后重跑")
+        print("提交失败: 未与主线同步 —— 处置后重跑 commands run ship.commit")
         print(f"  同步失败: {sync_line}")
+        if is_dirty_block(sync_line):
+            # 死锁护栏(2026-10-03): 「先跑 sync 后重跑」在树脏场景是死循环 —— 上面那条 sync
+            # 就是本命令内部这一步, 单独重跑必撞同一处; 配方在 sync 失败行里, 这里不重复。
+            print("  注意: 上面这条同步是本命令内部那一步 —— 单独重跑 sync、或「先提交」都解不开"
+                  "(提交入口第一步还是它); 按失败行的「解锁」走")
         return 1
 
     # 2 闸门(在暂存前: fmt 类闸门会改文件)。改动清单以同步后的磁盘为准重算。

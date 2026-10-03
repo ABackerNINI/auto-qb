@@ -8,6 +8,8 @@
 - test_staged_delete_skips_add            已暂存的删除: 逐路径 add 不再撞 pathspec 落空(issue 26-09-28-0128)
 - test_unstaged_delete_uses_rm_cached     未暂存的删除: 工作区无而索引有 → rm --cached 登记删除(issue 26-09-28-0128)
 - test_sync_failure_blocks_commit         未与主线同步 → 提交失败 + sync 失败详情, 不产生提交
+- test_dirty_sync_failure_warns_deadlock  树脏类同步失败 → 附死锁护栏行(别再「先跑 sync / 先提交」)
+- test_clean_sync_failure_no_deadlock_note 非脏类同步失败(离线) → 不附护栏行, 免误导
 - test_gate_failure_blocks_commit         闸门红 → 提交失败 + 闸门名 + 失败输出, 不产生提交
 - test_push_failure_is_partial            推送未完成 → 退出码仍 0 + 补推提示; 消息文件照常消费
 - test_no_push_stops_before_push          --no-push 不碰 push, 一行注明未推送
@@ -163,17 +165,46 @@ def test_unstaged_delete_uses_rm_cached(repo, monkeypatch, capsys):
     assert _git(repo, "show", "--stat", "--name-status", "HEAD").count("D") >= 1  # 删除经 rm --cached 进了提交
 
 
+def _dirty_sync_line() -> str:
+    """树脏类同步失败行(与 sync.py 真机输出同形态) —— 含解锁配方, 会被 is_dirty_block 认出。"""
+    return (f"{sync_mod.DIRTY_BLOCK_MARK} 本地12345678 远端87654321 —— 本地改动与远端新提交重叠; "
+            f"解锁: {sync_mod.UNLOCK_STEPS}")
+
+
 def test_sync_failure_blocks_commit(repo, monkeypatch, capsys):
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, "本地改动与远端新提交重叠 —— 先提交或移出后重跑"))
+    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, _dirty_sync_line()))
     msg = _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     rc = commit_mod.main([])
     out = capsys.readouterr().out
     assert rc == 1
-    assert "提交失败: 未与主线同步" in out and "commands run my-commit-flow.sync" in out
+    assert "提交失败: 未与主线同步" in out
     assert "重叠" in out  # sync 的一行原因透传
     assert msg.exists()  # 未提交, 消息照常保留
     assert _git(repo, "status", "--porcelain").count("x.txt") == 1  # 未产生任何提交/暂存
+
+
+def test_dirty_sync_failure_warns_deadlock(repo, monkeypatch, capsys):
+    """树脏类失败必须点破死锁(2026-10-03): 单独重跑 sync / 「先提交」都进不去, 只能 stash 解锁。"""
+    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, _dirty_sync_line()))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "解锁" in out and "git stash push -u" in out and "git stash pop" in out  # 配方完整透传
+    assert "本命令内部那一步" in out  # 死锁护栏行: 这条 sync 就是 submit 内部那一步
+    assert "先跑 commands run my-commit-flow.sync 后重跑" not in out  # 旧提示会让人原地转圈
+
+
+def test_clean_sync_failure_no_deadlock_note(repo, monkeypatch, capsys):
+    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, "拿不到远端 origin/develop (离线?) —— 联网后重跑"))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "本命令内部那一步" not in out  # 离线不是脏类, 别拿 stash 配方误导
 
 
 def test_gate_failure_blocks_commit(repo, monkeypatch, capsys):

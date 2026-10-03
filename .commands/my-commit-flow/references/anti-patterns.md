@@ -15,7 +15,8 @@
 
 ## 合流
 
-- ❌ 脏工作区直接历史整合（rebase / 非快进 merge）—— sync 会给失败行；先提交或 stash 再重跑，脚本不代做清理。
+- ❌ 脏工作区直接历史整合（rebase / 非快进 merge）—— sync 会给失败行；**只走 stash**（`git stash push -u` → sync → `git stash pop` → 测试 → `ship.commit`），脚本不代做清理。
+- ❌ 拿「先提交」解树脏 —— **双向死锁**：sync 要你先提交，而 `ship.commit` 内部第一步就是这条 sync（树脏未解必再撞同一处）。
 - ❌ 落后 / 分叉时绕过 sync 硬合 —— `commands run my-commit-flow.sync` 自动快进 / rebase(保线性)，失败行写明步骤。
 - ❌ stash / 施回后不对账 —— 按 `git diff --stat` 逐项核对，确认没缺漏再继续。
 - ❌ 用几分钟前的 `git status -sb` 判断"与主线一致" —— 那是上次 fetch 的快照。

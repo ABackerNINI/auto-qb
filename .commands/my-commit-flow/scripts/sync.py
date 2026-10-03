@@ -5,7 +5,11 @@
   纯落后          → git merge --ff-only <远端tip>; 树脏交 git 裁决 —— 无重叠自然成功, 重叠被拒 → 同步成功 <hash>
   分叉(树净)      → git rebase <远端tip>: 只改写按定义未推送的本地独有提交, 历史保持线性;
                     中途冲突 → --abort 全量自动回滚 → 同步成功 <新hash>
-  分叉(树脏)      → 失败(先提交或 stash; 脚本不代做清理)
+  树脏挡路(上两类的脏分支) → 失败, 失败行**自带解锁配方** UNLOCK_STEPS(脚本仍不代做清理)
+
+注: 树脏类失败行为什么必须自带配方(2026-10-03 定): 只说「先提交或移出后重跑」会撞**双向死锁** ——
+  sync 要你先提交, 而 ship.commit 内部第一步就是这条 sync(树脏未解, 必再撞同一处), 两端互斥谁都进不去。
+  解锁唯一走法: stash 移出 → 同步 → pop 弹回(两处改动上下文不重叠时自动合并, 实测零冲突)。
 
 判据纪律: 判落后只用 ls-remote 现查的远端真值对比本地 HEAD —— refs/remotes/* 的写入在本环境
 会被静默丢弃, `status -sb` 的 ahead/behind 是快照, 都不可信(单点: memory-bank/pitfalls/git/refs.md)。
@@ -42,6 +46,21 @@ def remote_sha_with_retry(name: str, branch: str, attempts: int = 2) -> str:
         if attempt == 0:
             time.sleep(1)
     return ""
+
+
+# 树脏挡路的**解锁配方** —— 两类脏分支失败行都必须带上它(不带 = 双向死锁, 见模块 docstring)。
+# `-u` 必带: 收尾产物常是未跟踪新文件(新档案 / 新切片 / 新 pitfall), 默认 stash 不收未跟踪,
+# 快进仍会被它们挡住; pop 时远端不会新增同名文件, 实测无冲突。高风险同步前照例 `cp -a .git <仓库外备份>`。
+UNLOCK_STEPS = ("git stash push -u → commands run my-commit-flow.sync → git stash pop → "
+                "测试 → commands run ship.commit")
+
+# 树脏类失败行的固定前缀 —— commit.py 靠它识别「本轮会死锁」, 好补一句护栏提示(不重复配方)。
+DIRTY_BLOCK_MARK = "树脏挡路"
+
+
+def is_dirty_block(line: str) -> bool:
+    """失败行是不是「本地改动挡住同步」这一类 —— 是就必须按 UNLOCK_STEPS 解锁, 不能走「先提交」。"""
+    return line.startswith(DIRTY_BLOCK_MARK)
 
 
 def _git_reason(proc) -> str:
@@ -94,13 +113,14 @@ def run_sync() -> tuple[bool, str]:
         proc = git_run("merge", "--ff-only", rsha)
         if proc.returncode != 0:
             reason = ("本地改动与远端新提交重叠" if "would be overwritten" in (proc.stderr or "") else _git_reason(proc))
-            return False, f"{reason} 本地{head[:8]} 远端{rsha[:8]} —— 先提交或移出本地改动后重跑"
+            return False, (f"{DIRTY_BLOCK_MARK} 本地{head[:8]} 远端{rsha[:8]} —— {reason}; "
+                           f"「先提交」解不开(ship.commit 内部第一步就是这条同步, 必再撞同一处) —— 解锁: {UNLOCK_STEPS}")
         return True, f"同步成功 {git('rev-parse', 'HEAD')[:8]}"
 
     # 分叉 → rebase 保持线性(D1); 树脏不做 —— rebase 会拒绝, 与其让 git 报生码不如自己说人话
     if staged or unstaged:
-        return False, (f"已分叉且工作区脏 —— rebase 需干净工作区, 先提交或 stash 后重跑 "
-                       f"(本地{head[:8]} 远端{rsha[:8]})")
+        return False, (f"{DIRTY_BLOCK_MARK} 本地{head[:8]} 远端{rsha[:8]} —— 已分叉且工作区脏, rebase 需干净工作区; "
+                       f"「先提交」解不开(提交入口第一步还是这条同步) —— 解锁: {UNLOCK_STEPS}")
     proc = git_run("rebase", rsha)
     if proc.returncode != 0:
         git("rebase", "--abort", check=False)  # 全量自动回滚: 失败后仓库与跑之前一致

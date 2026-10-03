@@ -8,11 +8,12 @@ pytest 的 tmp_path 下(不碰任何真实 clone); 判据引用 pitfalls/git/ref
 - test_ahead_only_is_noop               本地领先(未推送) → 已同步, 推送即快进
 - test_behind_clean_fast_forwards       纯落后+树净 → 同步成功, HEAD == 远端 tip
 - test_behind_dirty_without_overlap_ok  落后+树脏无重叠 → 同步成功, 本地改动原样保留
-- test_behind_dirty_overlap_refuses     落后+脏重叠 → 失败(重叠), HEAD 与脏文件原样
+- test_behind_dirty_overlap_refuses     落后+脏重叠 → 失败(重叠), HEAD 与脏文件原样; 失败行自带解锁配方
 - test_diverged_rebases_linear          分叉(不同文件) → rebase 保线性: 零 merge commit, 提交内容不变
 - test_diverged_conflict_rolls_back     分叉同文件冲突 → 「同步失败需解决冲突 本地<x> 远端<y>」,
                                         rebase 已回滚(无残留状态, HEAD 不变)
-- test_diverged_dirty_refuses           分叉+树脏 → 失败(先提交或 stash)
+- test_diverged_dirty_refuses           分叉+树脏 → 失败(自带解锁配方, 不再给「先提交」这条死锁指引)
+- test_dirty_block_flag_recognized      脏类失败行被 is_dirty_block 认出; 冲突/离线类不被认成脏类
 - test_offline_reports_unreachable      远端不可达 → 拿不到远端
 - test_staged_overflow_refuses          staged 暴增 → 拒绝(ref 回退信号)
 - test_main_prints_one_line_contract    main() 输出形态: 成功一行 / 冲突行恰为约定模板
@@ -122,7 +123,11 @@ def test_behind_dirty_overlap_refuses(env, monkeypatch):
     before = _git(env.a, "rev-parse", "HEAD")
     ok, line = sync_mod.run_sync()
     assert not ok
-    assert "重叠" in line and "先提交或移出" in line
+    assert "重叠" in line
+    # 死锁护栏(2026-10-03): 失败行必须自带解锁配方, 且**不能**再给「先提交」这条死锁指引
+    assert sync_mod.is_dirty_block(line)
+    assert "git stash push -u" in line and "git stash pop" in line
+    assert "先提交或移出" not in line
     assert _git(env.a, "rev-parse", "HEAD") == before  # 仓库状态不变
     assert (env.a / "base.txt").read_text(encoding="utf-8") == "my edit\n"
 
@@ -162,7 +167,27 @@ def test_diverged_dirty_refuses(env, monkeypatch):
     _push_remote_commit(env, "b.txt", "b\n")
     ok, line = sync_mod.run_sync()
     assert not ok
-    assert "已分叉且工作区脏" in line and "stash" in line
+    assert "已分叉且工作区脏" in line
+    assert sync_mod.is_dirty_block(line) and "git stash push -u" in line and "git stash pop" in line
+    assert "先提交或 stash 后重跑" not in line  # 旧指引会把执行者推进死锁
+
+
+def test_dirty_block_flag_recognized(env, monkeypatch):
+    """is_dirty_block 的分流: 只有「本地改动挡路」这一类算脏类 —— commit.py 靠它决定补不补死锁护栏。"""
+    monkeypatch.chdir(env.a)
+    (env.a / "base.txt").write_text("my edit\n", encoding="utf-8")
+    _push_remote_commit(env, "base.txt", "remote edit\n")
+    _, dirty = sync_mod.run_sync()
+    assert sync_mod.is_dirty_block(dirty)
+    # 冲突(已提交后分叉)与离线都不是脏类 —— 各自的处置不含 stash 配方
+    _git(env.a, "checkout", "--", "base.txt")
+    _commit_file(env.a, "base.txt", "my line\n", "local edit")
+    _push_remote_commit(env, "base.txt", "remote line\n")
+    _, conflict = sync_mod.run_sync()
+    assert not sync_mod.is_dirty_block(conflict)
+    _git(env.a, "remote", "set-url", "origin", str(env.tmp / "nonexistent.git"))
+    _, offline = sync_mod.run_sync()
+    assert not sync_mod.is_dirty_block(offline)
 
 
 def test_offline_reports_unreachable(env, monkeypatch):

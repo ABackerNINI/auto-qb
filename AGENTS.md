@@ -76,7 +76,7 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 > **工作区模式: 多 clone 并行** (2026-09-20 起): 每个 AI 实例用**一份独立克隆**, 跨 clone 同步一律走 Gitee `develop`。细则见 [conventions/collaboration.md](memory-bank/conventions/collaboration.md)「协作约定」。
 > **完整判据与事故档案单点在 [pitfalls/git/_index.md](memory-bank/pitfalls/git/_index.md)**; 本节只留最容易致命的几条:
 
-- ✅ **rebase / merge / stash 禁令已解除** (2026-09-25): 历史上删除拦截层会在这几类操作写入 `.git` 时批量删对象 (3 次事故), 该问题已修复, 恢复可用 —— 高风险历史整合前仍建议先 `cp -a .git <备份>`。落后 / 分叉一律 `commands run my-commit-flow.sync` (自动快进 / rebase 保线性; 树脏会给失败行, 先提交或 stash 再重跑)。
+- ✅ **rebase / merge / stash 禁令已解除** (2026-09-25): 历史上删除拦截层会在这几类操作写入 `.git` 时批量删对象 (3 次事故), 该问题已修复, 恢复可用 —— 高风险历史整合前仍建议先 `cp -a .git <备份>`。落后 / 分叉一律 `commands run my-commit-flow.sync` (自动快进 / rebase 保线性; 树脏会给失败行(行内自带 stash 解锁配方))。
 - **ref 三处核对与推送核验已内联进 ship 脚本**: `HEAD` == `refs/heads/<branch>` == loose/packed、推完 `ls-remote` 现查远端真值, 全部由 `ship.commit` / `ship.push` / `my-commit-flow.sync` 自动做 —— **不要手工核验**; 不一致 / 「无法核实」会出现在失败行里, 排障用 `commands run my-commit-flow.verify-ref`。(本 shell 里 `refs/remotes/*` 写入被静默丢弃、`git push --dry-run` 永远"成功", 都不可信 —— 详单点 [pitfalls/git/refs.md](memory-bank/pitfalls/git/refs.md)。)
 - 机检与停手点一律走 **task id**: `commands run ship.commit` / `ship.push` / `my-commit-flow.sync` / `my-commit-flow.verify-ref`(排障)(`list my-commit-flow/ship` 看全流程, `show <task>` 看展开的命令与深读指针)。**包内 README 与 `references/` 只在排障 / 迁移时读** —— 日常整读它, 等于把"读整份文档找命令"的成本又搬回来。
 

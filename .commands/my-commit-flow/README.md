@@ -17,7 +17,8 @@
 ## 停手点 (脚本只报, 不替你判断)
 
 0. **缺外置配置** —— `python <包>/scripts/_pipeline.py --init` 生成初稿 → 人工确认(红线必须手填) → 置 `confirmed = true`。
-1. **树脏 + 落后/分叉** —— 失败行写明; 先提交或 stash 再重跑(脚本不代做清理)。
+1. **树脏 + 落后/分叉** —— 失败行写明并**自带解锁配方**: `git stash push -u` → `my-commit-flow.sync` → `git stash pop` → 测试 → `ship.commit`(脚本不代做清理)。
+   ❗别走「先提交」—— `ship.commit` 内部第一步就是这条同步, 树脏未解必再撞同一处, 双向死锁。
 2. **改动混有 warn_lines(用户在途文件)** —— 成功行后附一行 ⚠, 确认是有意的。
 3. **staged 数量暴增** —— 分支 ref 可能被回退; 不要 add -A "解决", 走 `my-commit-flow.verify-ref`。
 4. **闸门红** —— 失败输出附闸门名 + 末 20 行; 处理后重跑。
