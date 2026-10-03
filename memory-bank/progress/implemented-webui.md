@@ -99,7 +99,12 @@
   test.full **2309 passed + 3 skipped / 99%**(34.59s, 基线
   [26-10-03-0440](../testing/baselines/26-10-03-0440-webui-hr-status-display-rework-done.md));
   档案 [tasks/26-10-02-webui-hr-status-display](../tasks/26-10-02-webui-hr-status-display.md);
-  真机走查(真实 qB + HR 数据)待用户执行
+  真机走查(真实 qB + HR 数据)待用户执行。
+  **文案两轮修订**(2026-10-03): ①「显示老旧种子」→「显示未做种」(回应取证报告 B1);
+  ②用户二次驳回「未做种/只看做种中」——「未做种」实为**本地已删除**(非"没在做种"),
+  「做种中」反向态**含暂停/异常**, 定为「显示已删除种子 (N) / 只看本地仍在列 (M)」(空态
+  文案与注释/守阵标签同步换词, 内部标识符 `oldOn` 族保留; 守阵加旧措辞零残留断言);
+  test.full 2416 passed + 3 skipped / 99%(基线 [26-10-03-2335](../testing/baselines/26-10-03-2335-webui-hr-deleted-label.md))。
 
 - WEB UI **HR 排除辅种补悬停弹窗**(2026-10-02): 已外迁 → [implemented-webui-history.md](implemented-webui-history.md)(cap 轮转, 事实不变)
 

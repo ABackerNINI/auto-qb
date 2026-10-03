@@ -46,6 +46,11 @@ function hrsValEmpty(key, v) {
   if (v === null || v === undefined || v === "") return true;
   return (key === "verified_ts" || key === "last_seen") && v === 0;
 }
+/* 终态档判据(B3 中间态用): B 已达标 / C 未达标 / D 已免罪 —— 非 A 考察中即终态;
+ * 与后端 lane_is_terminal 同口径(仅挡 A), 但前端只用于**展示措辞**不参与判定 */
+function hrsTerminalLane(lane) {
+  return lane === "B" || lane === "C" || lane === "D";
+}
 function hrsCompareRows(a, b, key, dir) {
   const acc = HRS_SORT_VAL[key];
   const va = acc(a);
@@ -79,8 +84,8 @@ window.AQB_HR_STATUS = {
         refreshNote: "",
         /* 表① 逐站点明细(键 = 站点名): { loading, loaded, error, entries, readError, now }
          * laneSel(键 = 站点名): 档位筛选 chips 的本地选择("" = 全部), 前端过滤不回后端
-         * oldOn(键 = 站点名): 未做种切换钮状态(计划 26-10-02-1936 §3.3) —— false = 默认只看
-         *   做种中(local_present), true = 连未做种行一起显示; 不持久化(与 laneSel 同层)
+        * oldOn(键 = 站点名): 已删除种子切换钮状态(计划 26-10-02-1936 §3.3) —— false = 默认只看
+        *   本地仍在列(local_present), true = 连已删除行一起显示; 不持久化(与 laneSel 同层)
          * sortSel/sortDir(键 = 站点名): 三态排序键与方向("" = 后端默认序), 对齐 shared/sort.js */
         details: {},
         laneSel: {},
@@ -171,10 +176,14 @@ window.AQB_HR_STATUS = {
     hrsSetLaneSel(site, lane) {
       this.hrs.laneSel[site] = lane;
     },
-    /* ---------------- 未做种切换钮(计划 26-10-02-1936 §3.3, 决策点③a) ----------------
-     * 默认只看做种中(local_present=true), 点击连未做种行一起显示; 与档位 chips 过滤 AND
-     * 叠加, 纯前端本地过滤不回后端不重拉。计数在站点全行集现算(与 chips 同层, 不随
-     * lane 过滤缩放): N = 未做种行数(默认态隐藏数), M = 做种中行数(切回后可见数)。 */
+    /* ---------------- 已删除种子切换钮(计划 26-10-02-1936 §3.3, 决策点③a) ----------------
+     * 两个可见文案只描述「本地在不在」, 不描述做种状态(2026-10-03 用户二次驳回上轮文案:
+     * 默认过滤实为「本地已删除/从未下载」而非「没在做种」, 反向态又含暂停/异常而非都在
+     * 做种, 故按钮不再使用「做种」措辞):
+     *   默认态 = 只看本地仍在列的(local_present=true), 按钮说「显示已删除种子 (N)」;
+     *   切换后 = 连已删除行一起显示, 按钮说「只看本地仍在列 (M)」。
+     * 与档位 chips 过滤 AND 叠加, 纯前端本地过滤不回后端不重拉。计数在站点全行集现算
+     * (与 chips 同层, 不随 lane 过滤缩放): N = 本地已删除行数(默认态隐藏数), M = 本地仍在列行数。 */
     hrsOldOnOf(site) {
       return !!this.hrs.oldOn[site];
     },
@@ -184,7 +193,7 @@ window.AQB_HR_STATUS = {
     hrsOldBtnText(site) {
       const rows = (this.hrs.details[site] && this.hrs.details[site].entries) || [];
       const present = rows.filter((e) => e.local_present).length;
-      return this.hrsOldOnOf(site) ? `只看做种中 (${present})` : `显示未做种 (${rows.length - present})`;
+      return this.hrsOldOnOf(site) ? `只看本地仍在列 (${present})` : `显示已删除种子 (${rows.length - present})`;
     },
     /* ---------------- 三态排序(计划 26-10-02-1936 §3.4, 对齐 shared/sort.js setSort) ----------------
      * 首点该列 = 降序 → 再点 = 升序 → 第三次 = 恢复后端默认序(档位·下载量); 换列直接
@@ -227,8 +236,8 @@ window.AQB_HR_STATUS = {
     hrsArrowHref(site, key) {
       return this.hrsSortKeyOf(site) === key && this.hrsSortDirOf(site) === 1 ? "#i-arrow-up" : "#i-arrow-down";
     },
-    /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端): 档位 chips × 未做种切换 AND
-     * 叠加, 再叠加三态排序(模块级 hrsCompareRows 纯函数, 空值恒末位); 无排序键时保持
+    /* 行集 = 后端排好序的 entries 前端本地过筛(不回后端): 档位 chips × 已删除种子切换
+     * AND 叠加, 再叠加三态排序(模块级 hrsCompareRows 纯函数, 空值恒末位); 无排序键时保持
      * 后端默认序(档位·下载量)。 */
     hrsDetailRows(site) {
       const d = this.hrs.details[site];
@@ -241,15 +250,15 @@ window.AQB_HR_STATUS = {
       if (key) rows = [...rows].sort((a, b) => hrsCompareRows(a, b, key, this.hrsSortDirOf(site)));
       return rows;
     },
-    /* 过滤后空态文案(计划 §3.3): 区分「该站点本地没有 HR 种子」(做种中视图全空)与
-     * 「该档位暂无」(chips 过滤后空); 未做种视图空集单独说, 不与做种中口径混。 */
+    /* 过滤后空态文案(计划 §3.3): 区分「该站点本地没有 HR 种子」(本地仍在列视图全空)与
+     * 「该档位暂无」(chips 过滤后空); 已删除视图空集单独说, 不与本地仍在列口径混。 */
     hrsEmptyText(site) {
       const rows = (this.hrs.details[site] && this.hrs.details[site].entries) || [];
       if (this.hrsLaneSelOf(site)) return "该档位暂无";
       if (!this.hrsOldOnOf(site)) {
         return rows.some((e) => e.local_present) ? "该档位暂无" : "该站点本地没有 HR 种子";
       }
-      return rows.length ? "该档位暂无" : "该站点没有未做种的种子";
+      return rows.length ? "该档位暂无" : "该站点没有已删除的种子";
     },
     /* 档位徽章色义(§5.4): A=warn(考察中) / B=green(达标) / C=error(未达标) / D=blue(免罪);
      * 失踪行由 CSS tr.missing 统一换 --paused 描边弱化, 这里不管 */
@@ -271,33 +280,51 @@ window.AQB_HR_STATUS = {
     hrsDone(iso) {
       return iso ? String(iso).slice(0, 10) : "—";
     },
-    /* ---------------- 核实结论列(计划 26-10-02-1936 §3.6, 决策点④) ----------------
-     * 主徽章: 已核实(色沿用 hr-vsrc 色义: satisfied=绿 / exempt·not-listed=蓝)或未核实(中性);
-     * 副行 = 已核实时「<来源人话> · <verified_ts>」(如「已达标 · 09-30 14:22」), 未核实 = —。
+    /* ---------------- 核实结论列(计划 26-10-02-1936 §3.6, 决策点④; 2026-10-03 修 B3) ----------------
+     * 主徽章三态 —— 数据源只有后端给的 verified_source / lane / active, 前端不重算判定:
+     *   ① 有放行记录            : 「已核实」(色沿用 hr-vsrc 色义: satisfied=绿 / exempt·not-listed=蓝);
+     *   ② 无记录 + 行在列 + 档位为终态(B/C/D): 「在列·<档位人话>」中间态(蓝) —— 站侧已给结论
+     *      (如 B 已达标)但行仍挂清单未消失 ⇒ _freeze_terminal 未触发 ⇒ 后端刻意不写 verified
+     *      (防伪: 命中不是放行, 见 test_hr_service.py 守阵), 此时显「未核实」会掩盖「已达标」;
+     *   ③ 其余(无记录 + A 考察中, 或已退役但无记录): 「未核实」(中性)。
+     * ⚠ 切勿改成「命中即写 verified」—— 那会破坏放行防伪语义(后端判定侧唯一写点是冻结/未列出)。
+     * 副行 = 已核实时「<来源人话> · <verified_ts>」, 其余 = 中间态说明 / —。
      * verified_ts 的 0 哨兵纪律同旧 hrsVerifiedText: 绝不显示 epoch。 */
     hrsVerdictText(e) {
-      return e.verified_source ? "已核实" : "未核实";
+      if (e.verified_source) return "已核实";
+      if (e.active && hrsTerminalLane(e.lane) && e.lane_text) return `在列·${e.lane_text}`;
+      return "未核实";
     },
     hrsVerdictSub(e) {
-      if (!e.verified_source) return "—";
-      return `${e.verified_source_text} · ${this.fmtTs(e.verified_ts)}`;
+      if (e.verified_source) return `${e.verified_source_text} · ${this.fmtTs(e.verified_ts)}`;
+      if (e.active && hrsTerminalLane(e.lane)) return "站侧已定论, 行未移出(放行记录待移出后签发)";
+      return "—";
     },
     /* 来源小徽章配色: satisfied(B 毕业文案已换已达标)=绿 / 其余有记录(absent 免罪,
-     * not-listed 未列出)=蓝 / 无记录=默认中性(未核实)。token 是后端 SOURCE_* 契约值,
-     * 只映射不重算。类名 hr-vsrc(verified source): hr-src 是列表页已退役的文字 chip 族
-     * (hr-tooltip-overlap, 守阵钉了 class="hr-src" 零残留), 新件不得复用该名字 */
+     * not-listed 未列出)=蓝 / 中间态(终态档在列未核实)=蓝 / 无记录=默认中性(未核实)。
+     * token 是后端 SOURCE_* 契约值, 只映射不重算。类名 hr-vsrc(verified source): hr-src 是
+     * 列表页已退役的文字 chip 族(hr-tooltip-overlap, 守阵钉了 class="hr-src" 零残留), 新件
+     * 不得复用该名字 */
     hrsSrcCls(e) {
-      if (!e.verified_source) return "";
-      return e.verified_source === "satisfied" ? "hr-vsrc-b" : "hr-vsrc-d";
+      if (e.verified_source) return e.verified_source === "satisfied" ? "hr-vsrc-b" : "hr-vsrc-d";
+      if (e.active && hrsTerminalLane(e.lane)) return "hr-vsrc-d";
+      return "";
     },
     /* ---------------- 在列列(计划 26-10-02-1936 §3.6, 决策点④) ----------------
-     * 主徽章: 在列 / 失踪 N 波; 副行 = 「(观察期 N ·)最近被见到 <last_seen>」—— 观察期是
-     * 考察中的属性降级进副层, last_seen 未知(0 哨兵)显示 —, 绝不显示 epoch。 */
+     * 主徽章两态按 active 分流(2026-10-03 修 B4: 退役行不再借「失踪 N 波」)—— 
+     *   active=true : 「在列」(绿);
+     *   active=false: 退役行 —— 有放行记录显「已移出」(蓝, 与「已核实」同义), 无记录显
+     *                 「已退役」(中性)。退役行**不显示** missing_streak: 它是 A 档观察期计数器,
+     *                 service.py 退役时已清零(结构性恒 0), 显示「失踪 0 波」纯属语义错位。
+     * 副行 = 「(观察期 N ·)最近被见到 <last_seen>」—— 观察期只属活跃行, last_seen 未知
+     * (0 哨兵)显示 —, 绝不显示 epoch。 */
     hrsPresenceText(e) {
-      return e.active ? "在列" : `失踪 ${e.missing_streak} 波`;
+      if (e.active) return "在列";
+      return e.verified_source ? "已移出" : "已退役";
     },
     hrsPresenceCls(e) {
-      return e.active ? "hr-pres-on" : "hr-pres-miss";
+      if (e.active) return "hr-pres-on";
+      return e.verified_source ? "hr-pres-out" : "hr-pres-off";
     },
     hrsPresenceSub(e) {
       const parts = [];
@@ -380,7 +407,7 @@ window.AQB_HR_STATUS = {
         { k: "放行签发", v: s.releases_enabled ? "开" : "冻结", cls: s.releases_enabled ? "" : "warn" },
         { k: "取波", v: s.fresh_text || "—" },
         { k: "复用窗至", v: exp ? `${exp}${s.stale ? "(已过)" : ""}` : "—" },
-        { k: "下次拉取", v: this.fmtTs(s.next_wave_at) || "—" },
+        { k: "下次核对清单", v: this.fmtTs(s.next_wave_at) || "—" },
         { k: "配额", v: (s.quota && s.quota.text) || "—" },
         { k: "零行三态", v: zero, cls: unconfirmed ? "warn" : "", act: unconfirmed },
         { k: "守恒", v: `索引 ${s.index_total} 条(活跃 ${s.index_active}) · 待回填 ${s.pending_infohash} 条(${this.hrsPct(s.backfill_ratio)}) · ${s.retention_text || "—"}` },

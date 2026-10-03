@@ -140,12 +140,12 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hr-detail-table .hr-vsrc.hr-vsrc-d { border-color: var(--blue-line); color: var(--blue); }
 /* 三列重组 + 三态排序(计划 26-10-02-1936 §3.4/§3.6, 阶段3): 核实结论徽章沿用 hr-vsrc 底形
  * (margin-left 摘除 —— 独立成列不再是文字后缀); 副行小字 --fg-dim 等宽; 在列/失踪徽章
- * hr-pres(on=绿 / miss=--paused 与 tr.missing 弱化同源); 表头排序箭头用 sprite 双图标
+ * hr-pres(on=绿 / out=蓝 已移出 / off=中性 已退役); 表头排序箭头用 sprite 双图标
  * (与种子页同款): 激活列 accent 全显, 非激活列 hover 浅色占位, 第三态(默认序)无激活列。 */
 .hr-detail-table .hr-sub { display: block; margin-top: 2px; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; color: var(--fg-dim); white-space: nowrap; }
 .hr-detail-table .hr-pres { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-dim); font-size: 10.5px; white-space: nowrap; }
 .hr-detail-table .hr-pres.hr-pres-on { border-color: var(--green-line); color: var(--green); }
-.hr-detail-table .hr-pres.hr-pres-miss { border-color: var(--paused); color: var(--paused); }
+.hr-detail-table .hr-pres.hr-pres-out { border-color: var(--blue-line); color: var(--blue); }
 .hr-detail-table th.sortable { cursor: pointer; user-select: none; }
 .hr-detail-table th.sortable:hover { color: var(--fg); }
 .hr-detail-table th .arrow { display: inline-block; margin-left: 3px; color: var(--accent); opacity: 0; }

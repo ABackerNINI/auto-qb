@@ -31,3 +31,11 @@
 与两项入池候选**等用户指派**。
 
 - 2026-10-03 21:54 — 用户指派 §8 显示文案 B1 并完成修复: 切换钮「显示老旧种子」→「显示未做种」(+ 空表文案换词), 明细见 [tasks/26-10-02-webui-hr-status-display](../tasks/26-10-02-webui-hr-status-display.md) 进度日志 21:54 条。§8 其余条目(设计确认 1 / 显示文案 B2-B4 / 次要 3)与两项入池候选仍**等用户指派**。
+- 2026-10-03 23:35 — B1 文案**二次修订**: 用户驳回「未做种/只看做种中」(实为本地已删除 / 反向态含暂停), 改「显示已删除种子 / 只看本地仍在列」; 见 tasks/26-10-02 进度日志 23:35 条。
+- 2026-10-03 23:47 — 用户指派「一并看看」→ 完成 §8 **B2 / B3 / B4 与候选 C1** 四项修复(`test.full` 2417 passed + 3 skipped / 99%):
+  - **B4 退役行徽章**: 退役行不再借「失踪 N 波」(service.py 退役即把 missing_streak 清零, 显示恒 0 是语义错位) —— 有放行记录显「已移出」(蓝, hr-pres-out), 无记录显「已退役」(中性, hr-pres-off); 「失踪 N 波」只属活跃行观察期(副行「观察期 N」不变)。改 hr_status.js + 三套 UI CSS 成对。
+  - **B2 「下次拉取」措辞**: 三处用户可见文案 + kv 行标签改「下次核对清单」, 点明是对账节奏非取种进度(status.py 两处 + hr_status.js kv 行)。
+  - **B3 核实结论中间态**: 后端刻意「命中不写 verified」(防伪, test_hr_service.py 守阵), 但无记录 + 行在列 + 终态档(B/C/D)显「未核实」掩没了「已达标」⇒ 新增中间态「在列·<档位人话>」(蓝) + 副行说明。**前端只消费现状字段(verified_source/lane/lane_text/active), 后端零改动**, 严守「切勿改成命中即写 verified」。新增模块级 `hrsTerminalLane` 判据。
+  - **C1 wave_ts 跨波冻结(真 bug)**: service.py:522 `wave_ts=prev.wave_ts if prev.ok else 0.0` + 每波 `if st.wave_ts <= 0` 置一次 ⇒ 连续 ok 档的 wave_ts 永停进程内首成功波, 缺席证明新鲜度闸(`anchor.added_on > st.wave_ts`)用陈旧基准。修法 = 不跨波继承(置 0, 本波重算首页时刻)。方向安全(只让合法放行发生, 不新增误放行 —— 缺席仍须本波位置覆盖)。新增回归 `test_wave_ts_refreshes_every_wave_not_frozen`(变异验证: 还原旧码即红)。
+  - **未做**: A1 设计确认项(零对象稳态拉长间隔, 产品取舍)与 C3(30 天静默淘汰预告)仍等指派/未动。
+  - 回写: 本切片 + tasks/26-10-02 进度日志; `kb.index` 重跑; 基线切片 `testing/baselines/26-10-03-2348-hr-display-defects-b234-c1.md`。

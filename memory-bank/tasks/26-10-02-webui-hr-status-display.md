@@ -49,6 +49,8 @@
 | 6 | 阶段 4 回归收尾 | Done |
 | 7 | 真机走查(用户手动, 需真实 qB + HR 数据) | Open |
 | 8 | 切换钮文案「显示老旧种子」→「显示未做种」(2026-10-03 后续修订) | Done |
+| 9 | 文案再修订: 「未做种/只看做种中」→「已删除种子/本地仍在列」(2026-10-03 二次驳回) | Done |
+| 10 | §8 B2/B3/B4 + C1 四项修复(2026-10-03 后续指派) | Done |
 
 ## 进度日志
 
@@ -59,4 +61,12 @@
   - **阶段 3 前端表格 `8cb2da59`**: 老旧过滤(默认只看做种中 `local_present`, 与档位 chips AND, 空态文案区分「本地没有 HR 种子」/「该档位暂无」两口径) + 十列三态排序(对齐 shared/sort.js 范式, 模块级纯函数比较器, 空值恒末位) + 三列重组(档位徽章 / 核实结论徽章+副行 / 在列徽章+「观察期·最近被见到」副行)。三套 UI 目检过。
   - **阶段 4 收尾 `ca77ff23`**: 守阵复核 5 项零缺口(零代码改动); test.full **2309 passed + 3 skipped / 99%**(34.59s @ 8cb2da59, 基线切片 [testing/baselines/26-10-03-0440](../testing/baselines/26-10-03-0440-webui-hr-status-display-rework-done.md))。
 - 2026-10-03 04:52 — 收尾回写: 本档案置 Done / 计划 26-10-02-1936 置 Done(§9 v2) / activeContext 切片完结化 + 条目迁出 progress/implemented-webui.md / pitfalls 新立 clip-path-clips-fixed / README.md 与 ui-location-persist.md 旧描述最小修正。**真机走查待用户执行**(唯一未验证面, 子任务表保留 Open)。
-- 2026-10-03 21:54 (后续修订 · 文案) — 用户指令「将『显示老旧种子』改为『显示未做种』」: 对齐用户原始诉求第 3 条的自述用词「老旧(未做种)」, 并回应 HR 取证报告 [reports/26-10-03-1505](../reports/26-10-03-1505-report-hr-fetch-verify-forensics.html) §8 缺陷 B1(按钮名「只看做种中」与实际过滤「本地库存在」之间的误导空间 —— 用户选择改「未做种」而非报告另拟的「只在本地」)。改动: 用户可见文案两处 —— 切换钮 `hrsOldBtnText` 默认态「显示老旧种子 (N)」→「显示未做种 (N)」, 空表文案 `hrsEmptyText`「该站点没有老旧种子」→「该站点没有未做种的种子」; 同层注释 / docstring / 守阵标签一并换词(hr_status.js · settings-detail.html · routes/hr.py · test_web.py · test_hr_status.py)。**保留**内部标识符 `oldOn`/`hrsOldOnOf`/`hrsToggleOld`/`hrsOldBtnText` 与「只看做种中 (M)」态(用户仅点名前者; 沿用「毕业→已达标」只改可见文案、保留语义 token 的先例)。测试: HR 子集 83 passed; test.full **2416 passed + 3 skipped / 99%**(25.15s, 基线见 kb.baseline 最新切片)。本轮回写件留在工作树, 等用户提交指令统一入库。
+- 2026-10-03 23:35 (后续修订 · 文案二次驳回) — 用户驳回上轮「显示未做种 / 只看做种中」: 指「未做种」实为**本地已删除**(不是"没在做种"), 且「只看做种中」的反向态**含暂停等状态**(并非都在做种)。改动(用户可见文案三处): `hrsOldBtnText` 默认态「显示未做种 (N)」→「显示已删除种子 (N)」, 反向态「只看做种中 (M)」→「只看本地仍在列 (M)」; `hrsEmptyText` 已删除视图空态「该站点没有未做种的种子」→「该站点没有已删除的种子」。同层注释(hr_status.js 状态声明 + 切换钮段 + 行集/空态段)与模板注释(settings-detail.html)、守阵标签(test_web.py 两处 docstring + 扫描标签 + 断言文案)一并换词, 并加**旧措辞零残留断言**(`未做种`/`只看做种中` 不得出现在 hr_status.js, 含注释)。语义判据: routes/hr.py:22-36 `local_present` = 本地 qB 库存在该种子(**含暂停**, 与做种状态无关), 键探测 infohash v1→v2 casefold。**保留**内部标识符 `oldOn`/`hrsOldOnOf`/`hrsToggleOld`/`hrsOldBtnText`(沿用「毕业→已达标」只改可见文案保留语义 token 的先例)。测试: tests/test_web.py -k hr 33 passed; test.full **2416 passed + 3 skipped / 99%**(45.75s, 基线切片 [testing/baselines/26-10-03-2335](../testing/baselines/26-10-03-2335-webui-hr-deleted-label.md))。本轮回写件留在工作树, 等用户提交指令统一入库。
+
+- 2026-10-03 23:47 (后续修订 · 二轮修复) — 用户指令「一并看看」→ 指派并落地 §8 **B2/B3/B4 + 候选 C1** 四项:
+  - **B4 退役行徽章语义**. 判据: service.py:1162 退役时把 missing_streak 清零 ⇒ 退役行结构性恒显「失踪 0 波」。改 hr_status.js `hrsPresenceText`/`hrsPresenceCls`: 退役行有放行记录显「已移出」(蓝 hr-pres-out, 与「已核实」同义) / 无记录显「已退役」(中性 hr-pres-off); 「失踪 N 波」只承担活跃行观察期(副行「观察期 N · 最近被见到」不变)。三套 UI CSS 成对改(hr-pres-miss 退役, 新增 hr-pres-out)。
+  - **B2 「下次拉取」措辞**. status.py `fresh_text`(下次核对清单) + blocking_reason 兜底 + hr_status.js kv 行标签三处换词, 点明是对账节奏(下次核对站点清单的时刻)非取种进度。
+  - **B3 核实结论中间态**. 后端刻意「命中不写 verified」(防伪, 守阵 test_hr_service.py:744/748), 无记录 + 行在列 + 终态档(B/C/D)显「未核实」掩没「已达标」⇒ 前端新增中间态「在列·<档位人话>」(蓝) + 副行「站侧已定论, 行未移出」。**后端零改动**, 只消费现状字段(verified_source/lane/lane_text/active); 新增模块级 `hrsTerminalLane` 判据(仅展示). 严守「切勿改成命中即写 verified」。
+  - **C1 wave_ts 跨波冻结(真 bug)**. service.py:522 `wave_ts = prev.wave_ts if prev.ok else 0.0` + 每波 `if st.wave_ts <= 0` 置一次 ⇒ 连续 ok 档 wave_ts 永停进程内首成功波, 违背 model.py:319「本档最近一波完成取的时刻」, 缺席证明新鲜度闸(service.py:1406-1407 `anchor.added_on > st.wave_ts`)用陈旧基准 ⇒ 近几天新加种子拿不到「未列出」批量放行。修法 = 置 0 不跨波继承(本波重算首页时刻); 方向安全(只让合法放行发生, 不新增误放行 —— 缺席仍须本波位置覆盖, 判据在 cutoff_done 非 wave_ts)。新增回归 test_wave_ts_refreshes_every_wave_not_frozen(变异验证: 还原旧码即红)。
+  - **未做**: A1 设计确认项(零对象稳态拉长间隔, 产品取舍) / C3(30 天静默淘汰预告) 未动, 仍等指派。
+  - 测试: `test.full` **2417 passed + 3 skipped / 99%**(37.22s); 基线切片 [testing/baselines/26-10-03-2348-hr-display-defects-b234-c1](../testing/baselines/26-10-03-2348-hr-display-defects-b234-c1.md)。回写件留工作树, 等「提交」指令。

@@ -16,7 +16,7 @@
 ### P1 覆盖率提升轮: 展示层与模型长尾
 - test_duration_text_tiers: 人话时长四档(天/时/分/秒) + 负数钳 0
 - test_lane_and_quota_status_to_dict_roundtrip_keys: LaneStatus/QuotaStatus 的 to_dict = asdict
-- test_blocking_reason_stale_with_next_wave_text: 过复用窗的兜底文案(带/不写下次拉取时刻)
+- test_blocking_reason_stale_with_next_wave_text: 过复用窗的兜底文案(带/不写下次核对清单时刻)
 - test_model_lane_predicates_and_done_epoch_edges: lane_is_satisfied/exempt + done_epoch 空值与坏值不猜
 - test_model_infohash_of_falls_back_to_downloaded: infohash_of 回落永久层(v1 优先, 缺失回落 v2)
 - test_model_index_by_infohash_skips_inactive_and_empty: 反查表跳过非活跃与空 hash
@@ -219,11 +219,11 @@ def test_lane_and_quota_status_to_dict_roundtrip_keys():
 
 
 def test_blocking_reason_stale_with_next_wave_text():
-    """数据过复用窗时的兜底文案: 有下次拉取时刻带时刻, 没有则省略"""
+    """数据过复用窗时的兜底文案: 有下次核对清单时刻带时刻, 没有则省略(2026-10-03 修 B2 换词)"""
     view = HrSiteView(site="s", lane_a={"H": HrEntry(tid=1, name="x")})
     data = HrSiteData()
     data.wave.releases_enabled = True
-    assert "下次拉取" in blocking_reason(view, data, stale=True, next_wave_at=1234.5)
+    assert "下次核对清单" in blocking_reason(view, data, stale=True, next_wave_at=1234.5)
     assert "立即拉取" in blocking_reason(view, data, stale=True, next_wave_at=0.0)
     assert blocking_reason(view, data, stale=False) == ""
 

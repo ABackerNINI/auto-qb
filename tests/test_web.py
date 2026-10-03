@@ -170,11 +170,11 @@
 - test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
-- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表① 模板绑定(档位 chips 本地过滤/未做种切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
+- test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表① 模板绑定(档位 chips 本地过滤/已删除种子切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
 - test_frontend_hr_full_modal_wiring: HR 站点状态折叠 + 覆盖式全屏弹窗守阵(计划 26-10-02-1936 阶段2) —— aqb:hr-full-modal 扫描锚段内遮罩/面板/头部(标题+摘要+✕)绑定齐全、有「展开/收起」钮且无独立「全屏」钮、面板无预展开属性(v-show 挂 hrsOpen); hrsOpen 默认 false(state.js)不持久化(hr_status.js/config_hub.js/state.js 无该键的 localStorage 写读); hubGo 不再自动拉数只复位 hrsOpen; ESC 关闭进 lifecycle 退栈链且同步 escBusy 名单(dialogs.js), 先于 1632 清筛选兜底; 首次展开才拉(hrsToggle 未 loaded 即调 loadHrStatus)、无 setInterval; .hr-full-mask/.hr-full-modal 三套 UI CSS 成对(prism 落 components.css)
 - test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4 + 26-10-02-1936 阶段3 扩) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助与行集函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表② 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格; local_present 是响应层 mark_local_present 追加的合法豁免)
-- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 未做种过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3) —— 切换钮默认「显示未做种 (N)」且 oldOn 默认关(只看做种中); 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留
+- test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -2240,7 +2240,7 @@ def test_frontend_hr_detail_table_wiring():
 
     表① 是设置分区「站点状态」块里逐站点的种子明细表(数据 /api/hr/sites/<site>/entries,
     阶段1 交付), 四类"漏一处 = 静默失效 / 拍板被推翻"的故障形态机械钉住:
-    1. 模板绑定: 档位 chips(本地过滤不回后端)/ 未做种切换钮(阶段3)/ 明细行 / 空态 / 失踪行挂钩 /
+    1. 模板绑定: 档位 chips(本地过滤不回后端)/ 已删除种子切换钮(阶段3)/ 明细行 / 空态 / 失踪行挂钩 /
       「数据截至」时间戳(拍板⑥)+ 三列重组列名「核实结论」「在列」(阶段3 拍板④, 口径钉在列名)——
       缺一处该功能消失;
     2. 拍板守卫: remain_seconds 不得进表(拍板③, 2026-09-25 误读教训)/ 不挂 hr-pop 不做行内跳转
@@ -2259,15 +2259,15 @@ def test_frontend_hr_detail_table_wiring():
     assert m, "settings-detail.html 缺 aqb:hr-detail-table 扫描锚 —— 表① 模板被移走或锚被删? 同步本守阵"
     frag = m.group(1)
 
-    # 1. 模板绑定: chips / 未做种切换钮 / 明细行 / 空态 / 失踪行 / 时间戳 / 拍板④重组列名
+    # 1. 模板绑定: chips / 已删除种子切换钮 / 明细行 / 空态 / 失踪行 / 时间戳 / 拍板④重组列名
     for needle, what in (
         ("hrsLaneChips()", "档位筛选 chips"),
         ("hrsSetLaneSel(", "chips 点击切换"),
-        ("hrsToggleOld(", "未做种切换钮点击(阶段3)"),
-        ("hrsOldBtnText(", "未做种切换钮文案计数(阶段3)"),
+        ("hrsToggleOld(", "已删除种子切换钮点击(阶段3)"),
+        ("hrsOldBtnText(", "已删除种子切换钮文案计数(阶段3)"),
         ('v-for="e in hrsDetailRows', "明细行渲染"),
         ('class="drawer-table hr-detail-table"', "表格骨架(同挂 .drawer-table 一类)"),
-        ("hrsEmptyText(s.site)", "空态文案单点(阶段3: 区分本地无做种/档位暂无/未做种视图空)"),
+        ("hrsEmptyText(s.site)", "空态文案单点(阶段3: 区分本地无 HR/档位暂无/已删除视图空)"),
         ("数据截至", "「数据截至」时间戳(拍板⑥)"),
         (':class="{ missing: !e.active }"', "失踪行弱化挂钩"),
     ):
@@ -2357,8 +2357,8 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
     """HR 表① 未做种过滤 + 三态排序 + 三列重组守阵(2026-10-02, 计划 26-10-02-1936 阶段3)
 
     三块新交互"漏一处 = 静默失效 / 拍板被推翻"的故障形态机械钉住:
-    1. 未做种切换钮(§3.3 决策点③a): 默认文案「显示未做种 (N)」、oldOn 默认关(只看做种中 =
-      local_present true), 切换后「只看做种中 (M)」; 计数在站点全行集现算;
+    1. 已删除种子切换钮(§3.3 决策点③a): 默认文案「显示已删除种子 (N)」、oldOn 默认关(只看本地仍在列 =
+      local_present true), 切换后「只看本地仍在列 (M)」; 计数在站点全行集现算;
     2. 三态排序(§3.4, 对齐 shared/sort.js): 表头十列全 sortable(hrsCols() 单点 + @click
       hrsSetSort + sprite 双箭头)而表② 波次表不接排序; 状态机 = 首点降 → 再点升 → 第三击恢复
       后端默认序, 换列直接降序; 比较器纯函数 hrsCompareRows 用 node 真跑语义电池
@@ -2376,11 +2376,14 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
     assert m, "settings-detail.html 缺 aqb:hr-detail-table 扫描锚 —— 表① 模板被移走或锚被删? 同步本守阵"
     frag = m.group(1)
 
-    # 1. 未做种切换钮: 默认态文案 + oldOn 默认关(只看做种中)
-    assert "显示未做种 (" in js and "只看做种中 (" in js, "切换钮双态文案缺失(计划 §3.3)"
+    # 1. 已删除种子切换钮: 默认态文案 + oldOn 默认关(只看本地仍在列)
+    #    文案 2026-10-03 用户二次驳回: 默认过滤实为「本地已删除」而非「没在做种」, 反向态含暂停/异常
+    assert "显示已删除种子 (" in js and "只看本地仍在列 (" in js, "切换钮双态文案缺失(计划 §3.3, 26-10-03 文案)"
+    # 旧措辞只在测试说明里提; 前端源码零残留(含注释 —— 注释解释的是「为何不再用做种措辞」)
+    assert "未做种" not in js and "只看做种中" not in js, "旧误导文案残留(26-10-03 二次驳回)"
     mo = re.search(r"hrsOldOnOf\(site\) \{\n(.*?)\n    \},", js, re.S)
-    assert mo and "!!" in mo.group(1), "hrsOldOnOf 必须默认 falsy(默认只看做种中, 计划 §3.3)"
-    assert "hrsToggleOld(s.site)" in frag and "hrsOldBtnText(s.site)" in frag, "工具条缺未做种切换钮绑定"
+    assert mo and "!!" in mo.group(1), "hrsOldOnOf 必须默认 falsy(默认只看本地仍在列, 计划 §3.3)"
+    assert "hrsToggleOld(s.site)" in frag and "hrsOldBtnText(s.site)" in frag, "工具条缺已删除种子切换钮绑定"
     assert "e.local_present" in js, "行集过滤必须消费后端 local_present(决策点③a), 前端不得自算 join"
 
     # 2. 三态排序: 表头接线 + 列模型单点 + 状态机 + 纯函数
@@ -2429,12 +2432,23 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
         ('class="hr-vsrc"', "核实结论徽章(沿用 hr-vsrc 色义)"),
         ("hrsVerdictText(e)", "核实结论主层文案"),
         ("hrsVerdictSub(e)", "核实结论副行(来源人话 · 时刻)"),
-        ('class="hr-pres"', "在列/失踪徽章"),
+        ('class="hr-pres"', "在列/退役徽章"),
         ("hrsPresenceText(e)", "在列主层文案"),
         ("hrsPresenceSub(e)", "在列副行(观察期 · 最近被见到)"),
         ('class="hr-sub"', "副行小字"),
     ):
         assert needle in frag, f"表① 三列重组缺 {what}(应有 `{needle}`)"
+    # 4. 文案语义修正(2026-10-03 §8 B3/B4): 退役行不再借「失踪 N 波」, 终态在列行不再一律「未核实」
+    #    (注: 「失踪行」是 CSS tr.missing 的既有叫法, 与徽章文案不是一回事 —— 只钉模板 literal)
+    assert "失踪 ${" not in js, "退役行「失踪 N 波」文案残留(§8 B4: missing_streak 退役即清零, 显示恒 0 是语义错位)"
+    assert "已移出" in js and "已退役" in js, "退役行主徽章三态缺失(§8 B4: 已移出 / 已退役)"
+    assert "hrsTerminalLane" in js, "B3 终态档判据 helper 缺失(核实结论中间态)"
+    assert "在列·" in js, "B3 中间态文案「在列·<档位人话>」缺失"
+    mo = re.search(r"hrsVerdictText\(e\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo and "hrsTerminalLane" in mo.group(1), "hrsVerdictText 未消费终态档判据(B3 中间态)"
+    mo = re.search(r"hrsPresenceText\(e\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo and "verified_source" in mo.group(1), "hrsPresenceText 退役行未按放行记录分流(B4)"
+    assert "missing_streak" not in mo.group(1), "退役行主徽章不得再用 missing_streak(B4)"
     for dead in ("hrsVerifiedText", "hrsStatusText"):
         # 判定只认代码态(剥块/行注释 —— 历史注释里提旧名不算残留)
         js_code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
@@ -2452,9 +2466,9 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
             (".hr-detail-table th.sortable .arrow.on", "激活列箭头 accent"),
             (".hr-detail-table th.sortable:hover .arrow", "非激活列 hover 浅色占位"),
             (".hr-detail-table .hr-sub", "副行小字(--fg-dim 等宽)"),
-            (".hr-detail-table .hr-pres", "在列/失踪徽章底形"),
+            (".hr-detail-table .hr-pres", "在列/退役徽章底形"),
             (".hr-detail-table .hr-pres.hr-pres-on", "在列徽章色义"),
-            (".hr-detail-table .hr-pres.hr-pres-miss", "失踪徽章 --paused 色义"),
+            (".hr-detail-table .hr-pres.hr-pres-out", "已移出徽章 --blue 色义"),
             (".hr-detail-table td.wrap { max-width", "名称列限宽钩子(卡片上下文)"),
             (".hr-full-modal .hr-detail-table td.wrap { max-width: none", "全屏态名称列放开限宽"),
         ):

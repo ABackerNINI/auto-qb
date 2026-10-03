@@ -51,6 +51,7 @@
 - test_all_failed_wave_keeps_short_retry_rhythm: 6.全档失败波 healthy_ts 不前进 → 下一轮重试节奏不变
 - test_partial_wave_advances_healthy_ts_failed_lane_waits: 7.部分失败波 healthy_ts 前进 → 失败档位等下一波
 - test_refresh_all_force_not_blocked_by_gates: 8.走查 refresh_all(force=True)不被两道闸挡(--hr-once 语义)
+- test_wave_ts_refreshes_every_wave_not_frozen: C1 回归 —— lane.wave_ts 每波刷新(不冻结首成功波; 缺席证明新鲜度闸基准正确)
 
 ### P1 覆盖率提升轮(T1.1 错误路径系统补齐)
 - test_refresh_site_guard_paths: 站点未接入 / 全局开关关 / result.ok 属性
@@ -1405,6 +1406,27 @@ def test_partial_wave_advances_healthy_ts_failed_lane_waits(tmp_path):
     clock.advance(2 * 3600.0)  # 复用窗(1H)过, 拉取间隔(12H)未到 → 失败的 B/C 等下一波
     second = run_wave(service)
     assert second.action == ACTION_WAITING and "拉取间隔" in second.reason
+
+
+def test_wave_ts_refreshes_every_wave_not_frozen(tmp_path):
+    """C1 回归(2026-10-03): lane.wave_ts 每波刷新, 不冻结在进程内首成功波。
+
+    原实现 `wave_ts = prev.wave_ts if prev.ok else 0.0` + 每波只在 `st.wave_ts <= 0` 时置一次
+    ⇒ 连续 ok 档的 wave_ts 永停首次成功波, 违背 model.py:319「本档最近一波完成取的时刻」,
+    并让 _absence_proven_all 新鲜度闸(anchor.added_on > st.wave_ts)拿陈旧基准 —— 近几天新加
+    本地种子拿不到「未列出」批量放行(方向保守不误放行, 但违背字段语义)。"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, gconf=global_conf(reuse_window=3600.0), clock=clock)
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    first_ts = data.wave.lanes["A"].wave_ts
+    assert first_ts == clock.now, "首波 wave_ts = 本波取数时刻"
+    clock.advance(13 * 3600.0)  # 过拉取间隔, 开新波(内容不变, A 档照常 ok)
+    run_wave(service)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].wave_ts == clock.now > first_ts, \
+        "第二波 wave_ts 必须刷新为本次取数时刻(修复前冻结在首波)"
 
 
 def test_refresh_all_force_not_blocked_by_gates(tmp_path):

@@ -13,7 +13,7 @@
 时间相关字段的语义(易混, 明写):
 - `fetched_at`: 上次**尝试**取波的刻(失败也会前进 —— 它回答"上次动过是什么时候");
 - `wave.healthy_ts`: 上次**健康波**时刻(至少一档有有效数据) —— 它才是新鲜度与**拉取节奏**的基准
-  (计划 26-09-30-0240: 拉取间隔闸门与「下次拉取」展示都从它算, 失败波不推进 ⇒ 失败档下一轮重试);
+  (计划 26-09-30-0240: 拉取间隔闸门与「下次核对清单」展示都从它算, 失败波不推进 ⇒ 失败档下一轮重试);
 - `expires_at`: 复用窗截止(别的实例刚抓过就不再抓; 时长 = min(复用窗, 拉取间隔));
 - `next_wave_at`: 下次**可能**取的时刻(现算: healthy_ts + refresh_interval) —— 站点文件里不存它,
   因为它随周期配置变化, 存下来就会重复一份可能过期的副本。
@@ -295,13 +295,15 @@ def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: flo
         f"最近请求 {ago_text(quota.last_fetch_ts, now)} · 最小间隔 {quota.min_interval:g}s"
     )
     # 拉取节奏基准 = 上次健康波(计划 26-09-30-0240): 与 service 的拉取间隔闸门同一算法(单一出处);
-    # 失败波不推进 healthy_ts ⇒ 「下次拉取」不因失败波顺延, 与「下一轮重试」的处置一致
+    # 失败波不推进 healthy_ts ⇒ 「下次核对」不因失败波顺延, 与「下一轮重试」的处置一致。
+    # 文案口径(2026-10-03 修 B2): 这是**对账节奏**(下一次核对站点清单的时刻), 不是取种进度 ——
+    # 「下次拉取」易被读成「还有多少没拉完」, 故改「下次核对清单」(与「立即拉取」按钮区分)。
     next_at = data.wave.healthy_ts + site_conf_interval(conf) if data.wave.healthy_ts else 0.0
     fresh = f"上次取波 {ago_text(data.fetched_at, now)} · 最近健康波 {ago_text(data.wave.healthy_ts, now)}"
     if data.expires_at:
         fresh += f" · 复用窗至 {stamp_text(data.expires_at)}" + ("(已过)" if stale else "")
     if next_at:
-        fresh += f" · 下次拉取 {stamp_text(next_at)}"
+        fresh += f" · 下次核对清单 {stamp_text(next_at)}"
     return SiteStatus(
         site=site,
         enabled=conf.enabled,
@@ -429,7 +431,7 @@ def entry_details(data: HrSiteData) -> List[EntryDetail]:
 
 def site_conf_interval(conf) -> float:
     """站点拉取间隔(秒, 计划 26-09-30-0240 改名: 原名「对账波周期」); 单独提出来是为了让
-    「下次拉取」这类字段的算法只有一处"""
+    「下次核对清单」这类字段的算法只有一处"""
     return float(getattr(conf, "refresh_interval", 0.0) or 0.0)
 
 
@@ -445,7 +447,7 @@ def blocking_reason(view: HrSiteView, data: HrSiteData, stale: bool, site: str =
     if not data.wave.releases_enabled:
         return "本波未全部档位有效(截断/失效): 命中照常, 批量「未列出」待下波续判"
     if stale:
-        nxt = f" 下次拉取 {stamp_text(next_wave_at)}" if next_wave_at else ""
+        nxt = f" 下次核对清单 {stamp_text(next_wave_at)}" if next_wave_at else ""
         return f"数据已过复用窗,{nxt}(可点『立即拉取』提前)"
     return ""
 

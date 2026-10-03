@@ -471,7 +471,7 @@ class HrRefreshService:
             return
 
         # 拉取间隔闸门(计划 26-09-30-0240): 节奏硬闸, 与复用窗(新鲜度)解耦 ——
-        # 下次拉取 = 上次健康波 + refresh_interval。失败波不推进 healthy_ts ⇒ 失败的档位
+        # 下次核对清单 = 上次健康波 + refresh_interval。失败波不推进 healthy_ts ⇒ 失败的档位
         # 仍按「下一轮(60s)重试」, 与现状一致。force(立即拉取)跳过本闸;
         # min_interval / 日额 / Retry-After / 时间窗在下方照常生效(账号安全线不被越过)。
         healthy = data.wave.healthy_ts
@@ -519,7 +519,13 @@ class HrRefreshService:
                 status=LANE_IDLE,
                 fail_streak=prev.fail_streak,
                 count_mismatch_streak=prev.count_mismatch_streak,
-                wave_ts=prev.wave_ts if prev.ok else 0.0,
+                # wave_ts **不跨波继承**(2026-10-03 修 C1): 原 `prev.wave_ts if prev.ok else 0.0`
+                # 让连续 ok 档的 wave_ts 永停在进程内首次成功波(每波只在本档取到首页时置一次,
+                # 见下方 `if st.wave_ts <= 0`), 违背 model.py:319「本档最近一波完成取的时刻」,
+                # 并让 _absence_proven_all 的新鲜度闸(anchor.added_on > st.wave_ts)用陈旧基准 ⇒
+                # 近几天新加本地种子拿不到「未列出」批量放行(方向保守不误放行, 但违背字段语义)。
+                # 置 0 = 本波重算; 真正的时刻由本波首次取到该档首页时写入。
+                wave_ts=0.0,
             )
         pages_left = max(1, int(self.global_conf.max_pages_per_wave))
 
