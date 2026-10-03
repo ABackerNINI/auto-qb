@@ -106,6 +106,14 @@
 /* 历史入口(2026-09-17): 文字已移除, 只剩图标 -> 图标自己有色(与今日流量图标同族 --today-ico) */
 .sb-hist .ico { color: var(--today-ico, var(--lime)); }
 .sb-hist:hover .ico { color: var(--accent-hi); }
+/* qB 口径流量图入口(P5a, plan 26-10-03-0946 §07): 与 .sb-hist 同族同排, 图标色区分 */
+.sb-qb { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; padding: 1px 8px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface-1);
+  color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-qb:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
+.sb-qb .ico { color: var(--today-ico, var(--lime)); }
+.sb-qb:hover .ico { color: var(--accent-hi); }
 /* 左侧统计摘要: 指标项紧凑排列(标签暗 + 数值亮), 空间不足时整体裁切而不换行 */
 .sb-stats { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
 /* "今日" 与 "连接/剩余" 的标签同格式(2026-09-20): 两条同族, 别再各写一套 */
@@ -508,6 +516,23 @@
 .hist-summary b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
 .hist-summary .h-up { color: var(--today-up); }
 .hist-summary .h-down { color: var(--today-down); }
+
+/* qB 口径流量图弹层(P5a, plan 26-10-03-0946 §07): 图表容器/窗口切换/空态 ——
+ * tooltip(.hist-tip)与图例/摘要(.hist-legend/.hist-summary)复用既有类, 色义同源;
+ * 曲线本体色值由 qb_traffic_chart.js 读令牌注入, 这里只有结构性规则 */
+.qb-modal { width: var(--modal-w-add); max-width: 100%; }
+.qb-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--border); }
+.qb-tabs button { padding: 3px 12px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--fg-muted); font-size: 12px; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.qb-tabs button:hover { color: var(--fg); }
+.qb-tabs button.active { background: var(--accent-soft); color: var(--accent-hi);
+  box-shadow: inset 0 0 0 1px var(--accent-line); }
+.qb-note, .qb-stale { padding: 44px 0; text-align: center; color: var(--fg-dim); font-size: 13px; }
+.qb-stale { padding: 0 0 10px; font-size: 12px; }
+.qb-chart { position: relative; }
+.qb-chart-host { width: 100%; }
 
 /* ---------------- 响应式 ---------------- */
 @media (max-width: 1320px) {

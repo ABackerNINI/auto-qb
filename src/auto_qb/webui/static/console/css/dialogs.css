@@ -407,6 +407,14 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .sb-hist:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
 .sb-hist .ico { color: var(--today-ico, var(--lime)); }
 .sb-hist:hover .ico { color: var(--accent-hi); }
+/* qB 口径流量图入口(P5a, plan 26-10-03-0946 §07): 与 .sb-hist 同族同排, 图标色区分 */
+.sb-qb { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; padding: 1px 8px;
+  border: 1px solid var(--border-soft); background: var(--surface-1);
+  color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-qb:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
+.sb-qb .ico { color: var(--today-ico, var(--lime)); }
+.sb-qb:hover .ico { color: var(--accent-hi); }
 .speed-pop { position: fixed; z-index: 131; width: 380px; padding: 14px 16px 12px;
   bottom: calc(var(--statusbar-h, 34px) + 8px);
   display: flex; flex-direction: column; gap: 10px;

@@ -128,7 +128,8 @@ window.AQB_STATE = {
       // R2 跳检菜单开关(计划 26-10-02-1955 W1, 默认 false = fail-closed): 字段必须显式建
       // (v-if 对 undefined 恰好也隐藏, 但 undefined 是非响应式盲区, 呼应 vue-reactivity 静默坑);
       // 登录后 loadWebFlags 从 /api/webui/flags 取真值, 设置页保存配置后同步刷新(免重登)。
-      flags: { skip_check_menu: false },
+      // qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): qB 口径流量图入口旗标, 同一 fail-closed 口径
+      flags: { skip_check_menu: false, qb_traffic_enabled: false },
       // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— 一级只有一个「更多操作」子面板,
       // 队列/TMM/超级做种/强制开始/分享率限制/复制族 都在它里面(见 conventions/webui.md)
       subMenu: "",        // "" | "advanced"
@@ -205,6 +206,15 @@ window.AQB_STATE = {
       historyLoading: false,
       historyError: "",
       histHoverIdx: -1,       // 悬停柱桶索引(-1 = 无)
+      // qB 口径流量图弹层(P5a, plan 26-10-03-0946 §07; 数据源 /api/traffic/qb/global, 时序速率,
+      // 响应三域同形 { points, totals, meta }; 组件在 qb_traffic_chart.js)
+      qbHistOpen: false,
+      qbHistWindow: "24h",    // 24h | 30d
+      qbHistData: null,       // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
+      qbHistLoading: false,
+      qbHistError: "",
+      qbHistHoverIdx: -1,     // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
+      qbHistHoverLeft: 0,     // 悬停十字线 px(tooltip 水平定位)
       // 登录"验证中"加载态(本地密钥 bootstrap 期间 true): 修复刷新时闪现输入密钥界面。
       // FX-01: 初值必须为 true —— 首帧状态**未知**, 不能当作"未授权"渲染密钥表单。
       // 离开该状态只有三条明确路径(见 mounted/bootstrap): 本机免鉴权 / 密钥验证通过 / 无密钥或验证被拒。

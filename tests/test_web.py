@@ -34,6 +34,7 @@
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
+- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a, plan 26-10-03-0946 §07) —— enabled=false 入口不渲染不请求(入口按钮 v-if="qbHistEntryOn" 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -115,7 +116,7 @@
 - test_web_commands_bulk_recheck_via_ops: 批量 recheck 经 ops 聚合回执
 - test_web_commands_add_torrents_receipt: 添加种子受理/拒绝回执
 - test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
-- test_api_webui_flags_endpoint: R2 功能旗标端点(计划 26-10-02-1955 W1) —— 开/关读实时配置 + 未鉴权 401
+- test_api_webui_flags_endpoint: R2 功能旗标端点(计划 26-10-02-1955 W1) —— 开/关读实时配置 + 未鉴权 401; qb_traffic_enabled 旗标(P5a)段缺省/关 = False, 开 = True
 - test_api_t_skip_check_gated_by_config: R2 skip-check 端点 gate —— 配置关 403(detail 注明 web.skip_check_menu)/ 开 200 入队, 403 不投递命令
 - test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
 - test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘
@@ -544,12 +545,24 @@ def test_api_webui_flags_endpoint(web_env):
     FakeConfig 测试侧默认 skip_check_menu=True(helpers, 供既有 skip-check 用例直通);
     关闭用例实例级置 False(深拷贝, 不跨测试泄漏) —— 端点必须现取 manager.config 引用,
     不按值持有旧 Config(hot-reload-held-config 坑)。
+    qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): 段缺省 None / enabled=false 均 False,
+    _enable_qb_traffic 置段 enabled=True 后即时翻真(读实时配置口径)。
     """
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
-    assert client.get("/api/webui/flags", headers=auth).json() == {"skip_check_menu": True}
+    assert client.get("/api/webui/flags", headers=auth).json() == {
+        "skip_check_menu": True,
+        "qb_traffic_enabled": False,  # FakeConfig 默认 qb_traffic=None(未启用)
+    }
     mgr.config.web.skip_check_menu = False
-    assert client.get("/api/webui/flags", headers=auth).json() == {"skip_check_menu": False}
+    assert client.get("/api/webui/flags", headers=auth).json() == {
+        "skip_check_menu": False,
+        "qb_traffic_enabled": False,
+    }
+    _enable_qb_traffic(mgr, enabled=True)
+    assert client.get("/api/webui/flags", headers=auth).json()["qb_traffic_enabled"] is True
+    _enable_qb_traffic(mgr, enabled=False)
+    assert client.get("/api/webui/flags", headers=auth).json()["qb_traffic_enabled"] is False
     assert client.get("/api/webui/flags").status_code == 401
 
 
@@ -2445,6 +2458,132 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
             (".hr-full-modal .hr-detail-table td.wrap { max-width: none", "全屏态名称列放开限宽"),
         ):
             assert rule in css, f"{name} 缺 {rule}({what}) —— 三套 UI 必须成对改(计划 §5.6)"
+
+
+# node 单测探针(P5a): 加载真实 qb_traffic_chart.js, 对模块级纯函数 _qbPointsToData 跑
+# 栅格重建 + null 断线语义电池(plan 26-10-03-0946 §5.1/§5.2: 桶键等距 / null 槽 y=null
+# / 全 null 回落 / interval 非法防御)。无 node 静默跳过(与 _scan_js_syntax_with_node 同口径)。
+_NODE_QB_TRAFFIC_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const P = (t, up, dl) => ({ t, up, dl });
+const checks = [];
+let pts = [P(1000, 1, 2), P(1030, 3, 4), P(1060, 5, 6)];
+let d = _qbPointsToData(pts, 30);
+checks.push(["连续段 xs 等距", !!d && JSON.stringify(d.xs) === "[1000,1030,1060]"]);
+checks.push(["连续段值透传", !!d && d.up.join() === "1,3,5" && d.dl.join() === "2,4,6"]);
+pts = [P(1000, 1, 2), null, P(1060, 5, 6)];
+d = _qbPointsToData(pts, 30);
+checks.push(["null 桶 x 按栅格重建(缺口位置不漂移)", !!d && JSON.stringify(d.xs) === "[1000,1030,1060]"]);
+checks.push(["null 桶 y=null(spanGaps=false 断线)", !!d && d.up[1] === null && d.dl[1] === null]);
+checks.push(["锚取首点", !!d && d.anchor.k === 0 && d.anchor.t0 === 1000]);
+pts = [null, P(1030, 3, 4), null, P(1090, 7, 8)];
+d = _qbPointsToData(pts, 30);
+checks.push(["前导 null 整列重建", !!d && JSON.stringify(d.xs) === "[1000,1030,1060,1090]"]);
+checks.push(["前导/中断 null y=null", !!d && d.up[0] === null && d.up[2] === null && d.up[3] === 7]);
+checks.push(["锚取首个非 null", !!d && d.anchor.k === 1 && d.anchor.t0 === 1030]);
+checks.push(["全 null 回落(后端已归一 [])", _qbPointsToData([null, null], 30) === null]);
+checks.push(["interval 非法回落", _qbPointsToData([P(1, 1, 1)], 0) === null]);
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_qb_traffic_chart_wiring():
+    """qB 口径流量图前端接线守阵(P5a, plan 26-10-03-0946 §07)
+
+    四类"漏一处 = 静默失效 / P5 验收被破坏"的故障形态机械钉住:
+    1. enabled=false 入口不渲染不请求(P5 验收前置): 入口按钮 v-if="qbHistEntryOn" 挂今日
+      流量面板内, 门单点在 flags.qb_traffic_enabled(/api/webui/flags 下发, fail-closed
+      默认 false, state.js 显式建字段 + lifecycle.loadWebFlags 写入); 无旗标无入口,
+      openQbHistory 无触发路径 = 零请求;
+    2. uPlot 双系列断线语义(§5.2): 两 series 显式 spanGaps=false(纯断线, 无最大跨越);
+      桶序 -> uPlot 数据的栅格重建 _qbPointsToData 用 node 真跑(null 槽 y=null + x 等距
+      不漂移 / 前导 null 锚推算 / 全 null 与 interval 非法回落), 无 node 静默跳过;
+    3. 三主题登记链(§07): tpl 分片 + uPlot vendor + 组件 mixin 在三份 index.html 的
+      tpl-manifest 同步登记(逐份断言, 三清单一致性另由 test_frontend_template_split_wiring
+      钉住), app.mixin 注入 + 弹层/Esc 退栈/escBusy 名单同步 + _logout 清理;
+    4. 挂点形态: 今日流量面板(TM 历史入口旁并列按钮), 图层/取值 CSS 三套 UI 成对
+      (.qb-* 结构类 + .sb-qb 入口类; tooltip 与图例复用 .hist-* 同源色义)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+    lifecycle_js = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
+    auth_js = open(os.path.join(shared, "auth.js"), encoding="utf-8").read()
+    dialogs_js = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
+    app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    statusbar = open(os.path.join(shared, "tpl", "statusbar.html"), encoding="utf-8").read()
+
+    # 1. enabled 门(fail-closed 单点)
+    assert 'flags: { skip_check_menu: false, qb_traffic_enabled: false }' in state_js, \
+        "state.js flags 默认缺 qb_traffic_enabled: false(fail-closed 初值必须显式建)"
+    assert "qb_traffic_enabled: !!(f && f.qb_traffic_enabled)" in lifecycle_js, \
+        "loadWebFlags 必须写回 qb_traffic_enabled(缺了旗标恒 false = 功能永不可见)"
+    assert "qb_traffic_enabled: false" in lifecycle_js, "loadWebFlags 失败分支必须保持 fail-closed"
+    mo = re.search(r"qbHistEntryOn\(\) \{\n(.*?)\n    \},", js, re.S)
+    assert mo, "qb_traffic_chart.js 缺 qbHistEntryOn 入口门单点"
+    body = mo.group(1)
+    assert "this.flags.qb_traffic_enabled" in body and "this.todayTraffic" in body, \
+        "入口门必须同时消费 flags.qb_traffic_enabled 与今日流量面板(挂点本体)"
+    # 入口按钮: v-if 门 + 面板内并列(TM 历史入口同组)
+    assert 'v-if="qbHistEntryOn"' in statusbar and 'class="sb-qb"' in statusbar, \
+        "statusbar 缺 qB 入口按钮(v-if 门是 P5 验收的静态锚)"
+    today_blk = re.search(r'<template v-if="todayTraffic">(.*?)</template>', statusbar, re.S)
+    assert today_blk and 'class="sb-qb"' in today_blk.group(1), \
+        "qB 入口必须挂在今日流量面板组内(挂点 = 今日流量面板, plan §07 表)"
+
+    # 2. uPlot 断线语义 + 悬停取值对齐
+    assert js.count("spanGaps: false") == 2, "上行/下行两 series 都必须显式 spanGaps=false(§5.2)"
+    assert "setCursor" in js and "qbHistHoverIdx" in js, "缺 uPlot setCursor -> 悬停取值通道"
+    assert "_qbPointsToData" in js and "function _qbPointsToData" in js, \
+        "缺栅格重建纯函数(模块级单例, 供 node 单测)"
+    # 有 node 时真跑 null 断线语义电池(无 node 静默跳过, 不引入 skip)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_QB_TRAFFIC_PROBE,
+             os.path.join(shared, "qb_traffic_chart.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace"
+        )
+        assert proc.returncode == 0, f"_qbPointsToData node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], f"null 断线语义电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+    # 3. 三主题登记链 + 接线
+    for ui in _UI_ALL:
+        mf = _ui_manifest(ui)
+        assert "/shared/tpl/qb-traffic.html" in [p["src"] for p in mf["parts"]], f"{ui} 清单缺 qb-traffic.html 分片"
+        assert "/shared/vendor/uPlot.iife.min.js" in mf["scripts"], f"{ui} 清单缺 uPlot vendor"
+        assert "/shared/qb_traffic_chart.js" in mf["scripts"], f"{ui} 清单缺组件 mixin"
+        assert os.path.isfile(os.path.join(STATIC_ROOT, "shared", "vendor", "uPlot.iife.min.js")), \
+            "uPlot.iife.min.js 不在盘上(404 = 整页停在错误占位)"
+        assert os.path.isfile(os.path.join(STATIC_ROOT, "shared", "tpl", "qb-traffic.html")), \
+            "qb-traffic.html 不在盘上"
+    assert "app.mixin(window.AQB_QB_TRAFFIC)" in app_js, "app.js 未注入 AQB_QB_TRAFFIC(整块功能静默消失)"
+    assert "this.qbHistOpen ||" in dialogs_js, "escBusy 名单缺 qbHistOpen(与 Esc 退栈链两处同步纪律)"
+    assert "this.qbHistOpen) this.closeQbHistory()" in lifecycle_js, "Esc 退栈链缺 qB 弹层分支"
+    assert "this.qbHistOpen = false" in auth_js and "this.qbHistData = null" in auth_js, \
+        "_logout 必须清 qB 弹层状态(受保护内容同 historyOpen 先例)"
+
+    # 4. CSS 三套 UI 成对(.qb-* 结构类 + .sb-qb 入口; tooltip/图例复用 .hist-* 不在此列)
+    for css, name in (
+        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
+        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
+        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+    ):
+        for rule, what in (
+            (".qb-modal {", "弹层宽度"),
+            (".qb-tabs button.active", "窗口切换激活态"),
+            (".qb-note", "加载/空态"),
+            (".qb-chart {", "图表容器(悬停 tooltip 定位锚)"),
+            (".sb-qb {", "今日流量面板入口按钮"),
+        ):
+            assert rule in css, f"{name} 缺 {rule}({what}) —— 三套 UI 必须成对改"
 
 
 def test_frontend_hr_diag_view_wiring():

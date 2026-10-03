@@ -62,6 +62,7 @@ window.AQB_LIFECYCLE = {
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;  // 历史弹层(pop): 弹层先于右键菜单关闭
+      else if (this.qbHistOpen) this.closeQbHistory();  // qB 口径流量图弹层(P5a): 与历史弹层同层; escBusy 已同步(dialogs.js)
       else if (this.headMenu.visible) this.headMenu.visible = false;  // 表头右键菜单(TBL-05)
       else if (this.colMenuOpen) this.colMenuOpen = false;  // 列选择器弹层(pop)
       else if (this.uiMenuOpen) this.uiMenuOpen = false;  // 顶栏界面切换下拉(pop)
@@ -234,13 +235,18 @@ window.AQB_LIFECYCLE = {
     /* R2 跳检菜单开关(计划 26-10-02-1955 W1): 登录后取一次 /api/webui/flags 写入 flags
      * (调用点: lifecycle 本机免鉴权路径 + auth.js bootstrap 成功路径; 设置页 cfgSave
      * 成功后再调刷新, 免重登)。请求失败保持 false = fail-closed(菜单不显示, 后端端点
-     * 403 兜底)。整对象替换赋值(非原地改键), 保证 Vue 响应式触发。 */
+     * 403 兜底)。整对象替换赋值(非原地改键), 保证 Vue 响应式触发。
+     * qb_traffic_enabled(P5a, plan 26-10-03-0946 §07): qB 口径流量图入口旗标, 同一
+     * fail-closed 口径 —— false 时入口不渲染、不请求(P5 验收)。 */
     async loadWebFlags() {
       try {
         const f = await this.api("/api/webui/flags");
-        this.flags = { skip_check_menu: !!(f && f.skip_check_menu) };
+        this.flags = {
+          skip_check_menu: !!(f && f.skip_check_menu),
+          qb_traffic_enabled: !!(f && f.qb_traffic_enabled),
+        };
       } catch (e) {
-        this.flags = { skip_check_menu: false };
+        this.flags = { skip_check_menu: false, qb_traffic_enabled: false };
       }
     },
   },

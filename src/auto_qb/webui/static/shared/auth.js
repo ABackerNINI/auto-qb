@@ -71,6 +71,9 @@ window.AQB_AUTH = {
       this.clearSelection();
       this.historyOpen = false;
       this.histHoverIdx = -1;
+      this.qbHistOpen = false;  // qB 口径流量图弹层(P5a): 受保护内容一并清(组件实例随 _qbChartDestroy 收尾)
+      this.qbHistHoverIdx = -1;
+      this.qbHistData = null;
       this.statsOpen = false;
       this.statsServer = null;
       this.statsError = "";

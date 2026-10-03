@@ -488,6 +488,7 @@ app.mixin(window.AQB_SHOWS);
 app.mixin(window.AQB_DELETE);
 app.mixin(window.AQB_DRAWER);
 app.mixin(window.AQB_DIALOGS);
+app.mixin(window.AQB_QB_TRAFFIC);  // qB 口径流量图(P5a, plan 26-10-03-0946 §07): uPlot 双系列组件 + 弹层方法域
 app.mixin(window.AQB_HR_STATUS);
 app.mixin(window.CONFIG_EDITOR);
 app.mixin(window.CONFIG_RULES);

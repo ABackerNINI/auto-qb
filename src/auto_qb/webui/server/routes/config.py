@@ -32,14 +32,22 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/webui/flags")
     def api_webui_flags():
-        """前端功能旗标(登录后消费): webui 行为开关键, 当前只含跳检菜单开关
+        """前端功能旗标(登录后消费): webui 行为开关键 + 功能入口旗标
 
         R2(计划 26-10-02-1955 W1): 与 /api/config/public 语义不同 —— 那是登录前 loopback
         免鉴权专用, 本端点走 factory 全局鉴权(登录后才可读), 不扩 public 端点。
         读**实时配置**: manager.config 是引用, 热重载替换对象后这里现取现真
         (不按值持有旧 Config, 见 pitfalls/backend/hot-reload-held-config.md)。
+
+        qb_traffic_enabled(plan 26-10-03-0946 §07 P5): qB 口径流量图入口旗标 ——
+        enabled=false(含 qb_traffic 段缺省 None)时前端入口不渲染不请求(P5 验收);
+        段缺省 None 与 enabled=false 同判(对齐 traffic_qb._feature_on 的未启用口径,
+        data_dir 防御不在此判: 数据缺失由三端点空态兜底, 入口可见无碍)。
         """
-        return {"skip_check_menu": bool(manager.config.web.skip_check_menu)}
+        return {
+            "skip_check_menu": bool(manager.config.web.skip_check_menu),
+            "qb_traffic_enabled": bool(manager.config.qb_traffic and manager.config.qb_traffic.enabled),
+        }
 
     @router.post("/api/expr/eval")
     def api_expr_eval(body: dict = None):

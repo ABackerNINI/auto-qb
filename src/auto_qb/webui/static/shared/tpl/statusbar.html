@@ -17,6 +17,12 @@
           <button class="sb-hist" title="历史流量(按天/月/年)" @click.stop="openHistory()">
             <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
           </button>
+          <!-- qB 口径流量图入口(plan 26-10-03-0946 §07 P5a, 与 TM 历史入口并列):
+               enabled=false 时 qbHistEntryOn 为假 -> 入口不渲染、openQbHistory 无触发路径
+               = 不发请求(P5 验收); 弹层模板在 tpl/qb-traffic.html -->
+          <button v-if="qbHistEntryOn" class="sb-qb" title="qB 口径流量图(24h/30d 时序)" @click.stop="openQbHistory()">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
+          </button>
         </span>
       </template>
       <span class="sb-stats" title="qBittorrent 服务器实时状态(与主轮询同周期同步)">

@@ -1,0 +1,55 @@
+    <!-- qB 口径流量图弹层(plan 26-10-03-0946 §07 P5a; 今日流量面板入口, TM「历史流量」弹层旁并列):
+         /api/traffic/qb/global 时序速率, uPlot 双系列(上行/下行, vendor 同模式登记);
+         null 桶 = 断线不连线(spanGaps:false, §5.2), tooltip 悬停取值对齐既有弹层水平。
+         入口在 statusbar(.sb-qb), enabled=false 时入口不渲染不请求(门: qbHistEntryOn ->
+         flags.qb_traffic_enabled, /api/webui/flags 下发, fail-closed); 图例文案按 §5.2
+         与 TM 图划界: 「qB 口径 · 程序运行期间」。逻辑在 shared/qb_traffic_chart.js
+         (AQB_QB_TRAFFIC), 两套 UI 同一份(单一语义模板) -->
+    <div v-if="qbHistOpen" class="modal-mask" @click.self="closeQbHistory">
+      <div class="modal qb-modal" role="dialog" aria-modal="true">
+        <div class="modal-title">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
+          <span>qB 口径流量图</span>
+          <span class="ce-spacer"></span>
+          <div class="qb-tabs">
+            <button v-for="w in ['24h', '30d']" :key="w" :class="{ active: qbHistWindow === w }"
+                    @click="qbHistSetWindow(w)">{{ { '24h': '24 小时', '30d': '30 天' }[w] }}</button>
+          </div>
+          <button class="bt icon" title="关闭" @click="closeQbHistory">
+            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div v-if="qbHistLoading" class="qb-note">加载中…</div>
+        <p v-else-if="qbHistError" class="error">{{ qbHistError }}</p>
+        <p v-else-if="!qbHistPoints.length" class="qb-note">暂无 qB 口径流量数据(程序运行期间无采样)</p>
+        <template v-else>
+          <p v-if="qbHistData.meta && qbHistData.meta.stale" class="qb-stale">数据读取瞬时失败, 展示上一次成功快照</p>
+          <!-- uPlot 建图落点: 容器 ref 由 _qbChartBuild 量宽, tooltip 为其兄弟绝对定位;
+               悬停 idx/px 由 uPlot setCursor 钩子写回(qbHistHoverIdx/qbHistHoverLeft) -->
+          <div class="qb-chart">
+            <div ref="qbChartHost" class="qb-chart-host"></div>
+            <div v-if="qbHover" class="hist-tip" :class="{ flip: qbHover.flip }"
+                 :style="{ left: qbHover.left + 'px', top: '0' }">
+              <b>{{ qbHover.tip }}</b>
+              <template v-if="!qbHover.gap">
+                <span class="h-up">上行 {{ fmtSpeed(qbHover.up) }}</span>
+                <span class="h-down">下行 {{ fmtSpeed(qbHover.dl) }}</span>
+                <span>合计 {{ fmtSpeed(qbHover.up + qbHover.dl) }}</span>
+              </template>
+              <span v-else>断线 · 无数据</span>
+            </div>
+          </div>
+          <div class="hist-legend">
+            <span><i class="sw up"></i>上行</span>
+            <span><i class="sw down"></i>下行</span>
+            <span class="hist-hint">qB 口径 · 程序运行期间(断线处不连线) · 悬停查看详情</span>
+          </div>
+          <div v-if="qbHistSummary" class="hist-summary">
+            <span>窗口 <b>{{ qbHistSummary.buckets }} 桶</b></span>
+            <span>上传累计 <b class="h-up">{{ fmtSize(qbHistSummary.up) }}</b></span>
+            <span>下载累计 <b class="h-down">{{ fmtSize(qbHistSummary.down) }}</b></span>
+            <span class="hist-hint">累计为窗口内增量(断线期不计)</span>
+          </div>
+        </template>
+      </div>
+    </div>
