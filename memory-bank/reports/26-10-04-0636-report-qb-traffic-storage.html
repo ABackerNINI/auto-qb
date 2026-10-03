@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="torrent-traffic-stats">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-04-0636">
+<meta name="doc-updated" content="26-10-04-0636">
+<title>qB 流量历史存储压缩与「速度 0 vs 断线」语义调研报告 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2027;
+    --accent: #5cc0cf;
+    --accent-ink: #86d7e0;
+    --ok: #7fc08a;
+    --ok-bg: #16241a;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --bad: #e0796f;
+    --bad-bg: #2a1a18;
+    --code-bg: #171d24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1040px; margin: 0 auto; padding: 52px 44px 80px; }
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 76ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13px; font-family: var(--mono); }
+  nav.toc { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { color: var(--accent-ink); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  h4 { font-family: var(--display); font-size: 13.5px; font-weight: 600; margin: 14px 0 6px; color: var(--ink-dim); }
+  p { margin-bottom: 11px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--hair); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.04em; color: var(--ink-dim); background: var(--paper-2); }
+  td { color: var(--ink); }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 8px; border-radius: 10px; margin-right: 4px; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+  .tag.bad { background: var(--bad-bg); color: var(--bad); }
+  .tag.info { background: #1a2530; color: var(--accent-ink); }
+  .callout { border-left: 3px solid var(--accent); background: var(--paper-2); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout .t { font-family: var(--display); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 6px; }
+  .callout.warn .t { color: var(--warn); }
+  .callout.ok .t { color: var(--ok); }
+  .callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
+  .anchor { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+  .small { font-size: 12.5px; color: var(--ink-faint); }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">Research Report · torrent-traffic-stats</div>
+  <h1>qB 流量历史存储压缩与「速度 0 vs 断线」语义调研报告</h1>
+  <p class="lede">两个问题的联合调研：①qb 流量速度 0 被记录为「断线无数据」；②压缩流量记录文件、提高保存密度（速度 0 是常态可据此压缩，时间高度重复可考虑「开始时间 + 间隔」推算，注意配置可能更改）。先定存储方案、对比优劣（本轮不采用二进制，仅调研备选），再在其上落问题一的修法。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">形态</div><div class="v">report（调研快照，出厂冻结）</div></div>
+    <div class="item"><div class="k">日期</div><div class="v">2026-10-04</div></div>
+    <div class="item"><div class="k">调研方式</div><div class="v">三路并行子智能体网络调研 + 本仓代码取证</div></div>
+    <div class="item"><div class="k">状态</div><div class="v">Done（实施另行计划拍板）</div></div>
+  </div>
+  <nav class="toc">
+    <a href="#s1">01 摘要</a><a href="#s2">02 现状</a><a href="#s3">03 问题一取证</a><a href="#s4">04 成熟方案调研</a><a href="#s5">05 存储方案对比</a><a href="#s6">06 推荐设计 v2</a><a href="#s7">07 问题一修法</a><a href="#s8">08 风险与验收</a><a href="#s9">09 来源</a>
+  </nav>
+</header>
+
+<!-- ================================================================ -->
+<section id="s1">
+  <h2><span class="no">01</span>摘要（结论先行）</h2>
+  <div class="callout ok">
+    <div class="t">结论一 · 问题一根因</div>
+    <p>「速度 0 → 断线无数据」不是写错值，而是<b>语义倒挂</b>：单种系列采样有活跃过滤（<code>dlspeed&gt;0 or upspeed&gt;0</code> 才产点，<span class="anchor">traffic_sample_mod.py:243</span>），空闲期不写任何行；读侧把「无行桶」一律当断线（<span class="anchor">traffic_grid.py:158</span>），前端悬停 null 桶显示「断线 · 无数据」（<span class="anchor">drawer.html:115</span>）。于是最大量的常态观测（速度 0）被落进了本该表示「采集异常」的缺口编码。工业界与 qB 生态全部先例相反：<b>测得 0 就画 0 平线，缺口只留给「无观测」</b>（qB 桌面端、VueTorrent、Flood、Deluge 均定频推 0 样本；Prometheus staleness / RRD heartbeat 都把「没数据」当一等状态与 0 严格区分）。</p>
+  </div>
+  <div class="callout ok">
+    <div class="t">结论二 · 存储方案</div>
+    <p>推荐 <b>v2 零值行程行（z 行）方案</b>：连续零速采样段压缩为一行 <code>z,&lt;start&gt;,&lt;end&gt;,&lt;dl_total&gt;,&lt;up_total&gt;</code>（行程行自身携带时间边界，<b>不依赖间隔推算</b>，天然免疫采样间隔配置变更）；数据行保持显式时间戳不变。文本格式内预期压缩 <b>5–10x</b>（205KB 上界 → 约 25–40KB），且空闲段行数与空闲时长解耦 ——「提高保存间隔」的诉求被更优地满足：<b>不需要牺牲图表分辨率</b>。这是工业界同构先例最密集的一条路（Gorilla XOR 对恒值只写 1 bit、VictoriaMetrics constant 段编码、InfluxDB 时间戳 RLE、Prometheus head chunk 120 样本封口纪律）。</p>
+  </div>
+  <div class="callout warn">
+    <div class="t">结论三 · 明确不做（本轮）</div>
+    <p>「段头 start + 隐含间隔、段内省略时间戳」先例成立（Netdata 页元数据 / InfluxDB RLE / Gorilla 块头）但在文本格式下收益仅约 −20%，且与「抖动是事实、坏行跳过、间隔可改」三条现状纪律相抵，<b>列为 v3 备选不实施</b>；整文件 gzip/zstd 透明压缩与追加写冲突，仅适合轮转归档层，不采用；JSONL 比 CSV 行式大 1.5–3x，全面劣势；二进制格式（SQLite / Gorilla 式分块 / Parquet / RRD-Whisper）完成调研留档 §04.5，供以后演进，本轮不动。</p>
+  </div>
+  <p>问题一的修法在 v2 之上自然落定（§07）：单种空闲段出现 z 行 → 图上画 0 平线；tooltip 三态文案（0 值 / 无采样 / 采集中断）；空闲段不再断累计增量链。组图已借 global.dat 区分真空闲与停机（<span class="anchor">traffic_grid.py:204</span>），语义保持。<b>本报告为调研快照，未动任何代码；实施需另行计划并拍板</b>（请求边界）。</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s2">
+  <h2><span class="no">02</span>现状盘点：流量历史如何保存（代码事实）</h2>
+  <h3>2.1 全链路</h3>
+  <table>
+    <tr><th style="width:12%">环节</th><th>事实</th><th style="width:30%">锚点</th></tr>
+    <tr><td>采样</td><td>internal 任务按 <code>sample_interval</code>（默认 30s，可配 1.5s–600s）读内存快照，零新增 qB 请求。<b>全局系列恒采</b>（qB 在线即有值，速率 0 也写行）；<b>单种系列活跃过滤</b>：<code>dlspeed&gt;0 or upspeed&gt;0</code> 才采，空闲期不产点（「全库空闲时零采样行」是 P1 验收项）。</td><td class="anchor">traffic_sample_mod.py:227–251</td></tr>
+    <tr><td>null 点</td><td>qB 断连退避期（<code>store.client is None</code>）全局出 null 点（全字段 None），单种不产点；关键字段缺失/空值同走 null 点，「绝不用 0 充数」。</td><td class="anchor">traffic_sample_mod.py:190–198, 297–313</td></tr>
+    <tr><td>落盘</td><td>纯文本行式 dat（<code>&lt;data_dir&gt;/qb-traffic/</code>：global.dat + torrents/&lt;infohash&gt;.dat + index.json）。每轮每系列恰一行 raw，<code>open("a")</code> 追加 + flush（崩溃丢 ≤1 行）；惰性建文件（首次活跃采样才建）。</td><td class="anchor">traffic_store.py:315–338</td></tr>
+    <tr><td>格式 v1</td><td>头行 <code># auto-qb qb-traffic v1</code>（逐列冻结，不得扩列改版）+ key 行 + raw 行 + hour 行；null 行四数据列全空。</td><td class="anchor">traffic_store.py:16–25, 113</td></tr>
+    <tr><td>小时封口</td><td>每小时首个采样触发 catch-up 扫描：raw 行归并出 hour 行（avg/max + 桶末累计快照），按窗裁剪（raw 段留 <code>raw_window</code> 默认 24h，hour 段留 <code>rollup_window</code> 默认 30d 可无上限），tmp + <code>os.replace</code> 原子重写。<b>桶内全 null 不产 hour 行</b>。</td><td class="anchor">traffic_store.py:340–413, 454–470</td></tr>
+    <tr><td>读侧</td><td>栅格离散：[t0,t1) 按桶宽 = ceil(采样间隔)（raw 段窗 1m–24h）或 3600s（hour 段窗 3d/7d/30d）切桶；桶内多行取均值；<b>空桶 = null = 断线语义</b>；累计增量 = 相邻桶快照差分（回落判重置、断链 null）。</td><td class="anchor">traffic_grid.py:79–92, 117–163, 175–193</td></tr>
+    <tr><td>组聚合</td><td>组不落盘，读侧现算 Σ 成员；<b>null 判定借全局系列当真值源</b>——桶在全局有行（哪怕全 0）→ 组图出 0 线；全局无行/null → 组图断线。文档明言「单种图做不到（单种空闲与停机同为无行）」。</td><td class="anchor">traffic_grid.py:27, 204–221</td></tr>
+    <tr><td>前端</td><td>uPlot 双系列；null 桶 <code>spanGaps:false</code> 断线不连线；悬停 null 桶 tooltip 显示「断线 · 无数据」；单种全 null 时整图回落空态文案「暂无该种子的 qB 口径流量数据（仅活跃传输期间有采样）」。</td><td class="anchor">qb_traffic_chart.js:451, 100–118；drawer.html:97–115, 198</td></tr>
+  </table>
+
+  <h3>2.2 体量模型（压缩空间的量化）</h3>
+  <ul>
+    <li>行字节数：空闲行 <code>raw,1770000000,0,0,4500000000,900000000\n</code> ≈ <b>40B</b>；活跃行 ≈ <b>52B</b>（时间戳 11B + 逗号占每行 ~23%）。</li>
+    <li>global.dat 上界 = raw 24h@30s = 2,880 行（≈150KB）+ hour 30d = 720 行（≈55KB）≈ <b>205KB/文件</b>（方案C §02.3 设计上界）。</li>
+    <li>闲时占比：qB 长期在线但无传输是常态 —— 全局系列空闲期 <b>每 30s 一行全 0 行</b>，典型场景 90%+ 的行是冗余零行（每行的速率对全 0、累计对与前一行完全相同、唯一变化的时间戳也只是等差递增）。</li>
+    <li>单种系列反向问题：空闲期一行没有 → 图上该时段全是缺口（§03），存储省了但语义丢了。</li>
+  </ul>
+  <div class="callout">
+    <div class="t">关键观察</div>
+    <p>两个问题在存储层是同一件事的两面：v1 格式里「有观测」只能表达成「有一行」，于是<b>单种图为了省磁盘选择不观测空闲，全局图为了语义完整为空闲付出 90% 冗余行</b>。缺一个「廉价表达连续零速观测」的行型，两个问题互为代价。z 行（§06）就是补上这个缺失的行型。</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s3">
+  <h2><span class="no">03</span>问题一取证：「速度 0 → 断线无数据」的成因链</h2>
+  <h3>3.1 主因（系统性）：单种系列的活跃过滤</h3>
+  <p>种子从有速度降到 0（下载完成转做种、暂停、做种无上传）后，采样器跳过它（<span class="anchor">traffic_sample_mod.py:243</span>）→ 空闲期零行 → 读侧空桶 = null（<span class="anchor">traffic_grid.py:158–163</span>）→ uPlot <code>spanGaps:false</code> 断线 + 悬停「断线 · 无数据」（<span class="anchor">drawer.html:115</span>）。用户在单种「流量」页签悬停任何空闲段都稳定复现。这是方案C的刻意拍板（「单种空闲与停机同为无行，停机洞由全局系列表达」），但把「空闲」这个<b>最大量的常态</b>放进了「断线」这个<b>异常编码</b>里 —— 用户误读是必然结果（§04.3 生态先例全是反面）。</p>
+  <h3>3.2 次因一：tooltip 文案二义</h3>
+  <p>「断线 · 无数据」把三种完全不同的状态说成一句话：①qB 断连（有显式 null 行，真实断线）；②程序停机/未启用（无行）；③（经 3.1 放大后的）速度 0 空闲。三态在业界是三种颜色/三种措辞（§04.2）。</p>
+  <h3>3.3 次因二：配置间隔变更让旧数据「变稀」</h3>
+  <p>读侧桶宽 = <b>当前</b> <code>sample_interval</code>（<span class="anchor">traffic_qb.py:65–70</span>）。若间隔从 300s 改成 30s，旧 raw 行仍按 300s 节奏分布 → 旧段 90% 桶无行 → 整段渲染成断线（伪断线）。跟进轮修过一处同类问题（小数间隔下 floor 桶宽伪断线，改 ceil，<span class="anchor">traffic_grid.py:85–87</span>），但「当前桶宽 × 历史行距」的错配没有解 —— 这正是用户「注意配置可能更改」担心的场景，z 行自带时间边界所以免疫（§06.4）。</p>
+  <h3>3.4 次因三：全局系列的抖动缺口（罕见但存在）</h3>
+  <p>全局系列逐点落盘，桶宽 = ceil(间隔)：均匀漂移（每拍晚 &lt; 1 间隔）不漏桶；但主循环单拍迟滞超过一个间隔（高负载轮）会漏出一个孤桶 → 空闲段中间插一个「断线」缺口。<b>z 行方案下空闲段没有逐点行可漏（行程在内存连续延伸），此问题免费消失</b>；活跃段的偶发缺口可选用 UI 阈值吸收（§07 拍板点，默认不做）。</p>
+  <div class="callout warn">
+    <div class="t">边界澄清</div>
+    <p>以下不是问题：①全局图空闲段画 0 平线 —— 全局恒采，0 行本来就写盘；②组图空闲 0 线/停机断线 —— 已借 global.dat 区分（<span class="anchor">traffic_grid.py:204–221</span>），设计正确；③断连退避期的真缺口 —— null 行如实表达，应当保留。问题收敛在<b>单种（及 hour 段单种 30d）的空闲语义</b>。</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s4">
+  <h2><span class="no">04</span>成熟方案调研（三路子智能体汇总）</h2>
+  <p class="small">以下事实来自三路并行网络调研（时序系统存储编码 / 文本编码与二进制备选 / qB 生态与 UX 惯例），全部带来源 URL（§09）；查不到的数字如实标注。</p>
+
+  <h3>4.1 成熟时序系统的存储编码</h3>
+  <table>
+    <tr><th>系统</th><th>时间戳</th><th>零值/空闲段</th><th>「0 vs 无数据」语义</th><th>每样本字节数</th></tr>
+    <tr><td>RRDtool</td><td><b>隐含</b>（start + step 槽位推算，盘上不存 ts）</td><td>无压缩（NaN 也占满固定槽位）</td><td>heartbeat 超时 → UNKNOWN(NaN)，与测得 0 严格分开；聚合层 xff 控缺失容忍</td><td>无官方数字（文件创建即全尺寸）</td></tr>
+    <tr><td>Graphite Whisper</td><td><b>显式</b>（4B uint32/点）</td><td>无压缩（未写槽位也占空间）</td><td>未写槽位读出 null；档位 (secondsPerPoint, points) 写进文件头</td><td><b>12B/点</b>（官方 struct <code>!Ld</code>）</td></tr>
+    <tr><td>Prometheus TSDB / Gorilla</td><td>delta-of-delta，恒定间隔时 dod=0 → <b>1 bit/时间戳</b></td><td>XOR 对值未变只写 <b>1 bit</b> → 空闲期 ≈2 bit/样本</td><td><b>stale marker + 5min lookback</b>：序列停更后查询返回 no data 而非 0；崩溃丢标记则最后值再活 5 分钟（官方承认的假活窗口）</td><td>论文 1.37B/点（12x）；官方 1–2B/样本</td></tr>
+    <tr><td>VictoriaMetrics</td><td>显式存但深度压缩</td><td><b>constant / equidistant 段编码</b>（整段同值/等差只存边界）</td><td>以序列连续性为准，无逐点 null</td><td>官方 <b>0.4B/点</b>（node_exporter 数据）</td></tr>
+    <tr><td>InfluxDB TSM</td><td>自适应：RLE（间隔均匀时）→ simple8b delta → 裸存</td><td>时间戳 RLE + 值 Gorilla XOR</td><td>tombstone 文件，查询时遮蔽</td><td>无官方数字</td></tr>
+    <tr><td>Netdata dbengine</td><td><b>页内隐含</b>（页头 start + update-every + 点数）</td><td>LZ4 页压缩</td><td>采集失败显式补插 <b>gap 点</b>；<b>update-every 变更 → 刷页开新页</b>（间隔元数据属于页，不属于全局）</td><td>tier0 磁盘平均 1B/点</td></tr>
+    <tr><td>Zabbix</td><td>DB 行</td><td>—</td><td>history（原始、短留）+ trends（小时 min/max/avg/<b>count</b>、长留）两级</td><td>无官方数字</td></tr>
+  </table>
+  <p><b>横向规律</b>：①能把数据切成「等间隔段/页」的系统就隐含时间戳（RRD、Netdata），整流式乱序写入的就显式存 + 压到近零（Prometheus、VM、Influx）；②<b>间隔变更的教科书答案是 Netdata 的「间隔是段属性」</b>——变更即封旧段开新段，旧段保持旧语义；③「无观测」在所有成熟系统里都是可存储/可推导的一等状态，<b>绝不默认当 0</b>。</p>
+
+  <h3>4.2 「测得 0 vs 没数据」的渲染惯例</h3>
+  <ul>
+    <li><b>Prometheus</b>：无样本 ≠ 0 —— 序列标 stale 后查询不返回值，图上从最后采样时刻起消失；官方明文「no value is returned for that time series」。</li>
+    <li><b>Grafana</b>：null 处理三选项 Never（缺口，默认）/ Always（连线）/ <b>Threshold（缺口超过阈值才断开）</b>；空值渲染「-」不渲染 0；旧面板选项名就叫 null as zero / as gap。</li>
+    <li><b>状态页工具</b>（UptimeRobot / Gatus / Statuspage）：事实上的三态图形语言 —— <b>颜色只编码「观测结果好坏」，「无观测」永远用灰/空缺表达</b>，不与故障色混用。</li>
+    <li><b>uPlot</b>（本项目在用）：系列级 <code>spanGaps</code> 默认 false（null 即断线），可设秒数实现「短缺口连线」—— 与 Grafana Threshold 同构。</li>
+  </ul>
+
+  <h3>4.3 qBittorrent 生态先例</h3>
+  <table>
+    <tr><th>项目</th><th>每种子历史曲线</th><th>全局历史</th><th>存储</th><th>空闲渲染</th></tr>
+    <tr><td>qB 桌面端 SpeedPlotView</td><td>无</td><td>内存环形缓冲 5 档（1 分钟–24h）</td><td><b>纯内存，无持久化，重启清零</b></td><td><b>每 tick 无条件推样本（含 0）→ 永远 0 平线</b>，不存在「无样本」概念</td></tr>
+    <tr><td>qB 官方 WebUI</td><td>无</td><td>无（仅底栏实时速率）</td><td>—</td><td>—</td></tr>
+    <tr><td>VueTorrent</td><td>无（只有当前速率数字）</td><td>ApexCharts，前端滑动窗 15 点</td><td>sessionStorage（关标签即丢）</td><td>0 速率照推（<code>data ?? 0</code>），0 平线</td></tr>
+    <tr><td><b>Flood</b>（qB/rT/Tr）</td><td>无</td><td><b>生态内最完整先例</b>：服务端每 2s 轮询连续写，7 层 HistoryEra（5s×5min → 7d×无限）</td><td><b>NeDB 文件落盘，重启不丢</b></td><td>客户端连不上 → 轮询退避 → <b>断连时段无行缺口</b>；正常空闲 = 0 平线</td></tr>
+    <tr><td><b>ruTorrent trafic 插件</b></td><td><b>有（唯一同构先例）</b>：每种子 CSV（日 24 / 月 31 / 年 12 桶）</td><td>同构</td><td>CSV 固定桶</td><td>采集侧 <code>if delta!=0</code> 零增量不写记录（与本项目活跃过滤同构），但<b>渲染层固定桶，没写数据的桶天然保持 0</b> —— 图上永不出现缺口</td></tr>
+    <tr><td>Prometheus exporter + Grafana</td><td>有速率指标（带 label）</td><td>有</td><td>Prometheus TSDB</td><td>空闲种子导出 0 → 0 平线；qB 停机 → 抓取失败 → staleness 缺口。<b>生态天然区分 0 与断</b></td></tr>
+  </table>
+  <p><b>生态结论</b>：每种子历史曲线在 qB 替代 UI 里是空白（无可抄的现成语义）；但所有做全局历史的先例（qB 桌面 / VueTorrent / Flood / Deluge）全部「定时器无条件推 0 样本」，唯一同构的 ruTorrent 用固定桶把空闲渲染成 0。<b>没有任何先例把空闲渲染成缺口</b>。</p>
+
+  <h3>4.4 文本行内压缩技术（对零值冗余的收益排序）</h3>
+  <ol>
+    <li><b>零值行程行（RLE 特例）</b>：连续 N 个全 0 采样合并为一行。估算（按本系统行字节数显式推算）：空闲段平均 1 小时 → <b>约 7.4x</b>；平均 10 分钟 → 约 5.7x。<b>单项收益最大</b>，且与追加/归并语义零冲突。「行程进行中如何落盘」的工业先例 = Prometheus head chunk（开放块，写满 120 样本或 2h 才封口）+ logrotate delaycompress（只封上一周期）—— 对应到本系统：开放行程在内存延伸，每小时封口扫描强制落盘，崩溃丢失上界 = 1 个行程（纯零信息，无信息价值）。</li>
+    <li><b>段头 start + 显式步长快照、段内省略时间戳</b>：先例 = Gorilla 块头（96% 时间戳压成 1 bit）、InfluxDB「delta 全同即 RLE」、Netdata 页头。文本下估算每行省 11B（−20%）。坑：坏行跳过后段内计数不可信（需补序号字段）；跨段重建时间轴；间隔变更必须「变更即新段」写进写侧不变式。</li>
+    <li><b>数值列定点化 / totals 降频</b>：速率缩 KiB/s、totals 只进 hour 行 —— 再省 15–20%，但破坏「逗号计数判坏行」的简单性，需以行型前缀表达，列为激进项。</li>
+    <li><b>小时封口块 gzip/zstd</b>：数字型文本典型 3:1 起；gzip 多成员拼接（RFC 1952）Python 原生可读、可在每小时封口时 append。代价：文件不再是可 grep 的纯文本 —— 与「dat 是行式文本」的现有纪律相抵，<b>不推荐本轮做</b>。</li>
+    <li><b>JSON/JSONL</b>：比 CSV 行式大 1.5–3x（本数据形态估算 ~2.6x），全面劣势，排除。</li>
+  </ol>
+
+  <h3>4.5 二进制格式备选（供以后，本轮不实施）</h3>
+  <table>
+    <tr><th>格式</th><th>编码要点</th><th>追加友好</th><th>损坏容忍</th><th>Python 生态成本</th><th>对本数据形态</th></tr>
+    <tr><td>SQLite</td><td>单文件 + SQL 聚合/降采样免费</td><td>好（INSERT 即追加）</td><td>好（WAL；注意 -wal/-shm 三文件纪律）</td><td><b>stdlib 零依赖</b></td><td>普通行表 ≈1x（对 90% 零值无折扣）；<b>表结构存行程行则保住收益</b>。同域先例：<b>vnStat 2.0 自研平面格式 → SQLite</b></td></tr>
+    <tr><td>Gorilla 式自研分块</td><td>delta-of-delta + XOR + 块尾校验和</td><td>中（内存追加、按块封口）</td><td>中（坏块整块弃，可复用 5% 阈值隔离思路）</td><td>自写位打包 ~300 行，stdlib 可达</td><td><b>密度上限 10–60x</b>（空闲 ≈0.6B/行），实现/调试成本最高</td></tr>
+    <tr><td>Parquet</td><td>列式 RLE/dictionary</td><td><b>差</b>（小批追加是公认反模式，只能小时微批封口）</td><td>好（页级校验）</td><td>pyarrow 重依赖</td><td>适合做导出/归档目标格式，不适合主存储</td></tr>
+    <tr><td>protobuf varint 帧</td><td>varint + 长度前缀帧</td><td>好</td><td><b>弱</b>（长度前缀位翻转会整流失步，需周期重同步点/帧 CRC —— 补救后结构趋近 Gorilla 块）</td><td>可 stdlib 手写 ~40 行</td><td>估算 3–13x，居中</td></tr>
+    <tr><td>RRDtool / Whisper</td><td>预分配固定槽位环形覆盖</td><td>O(1) 覆盖（非追加）</td><td>槽级</td><td>Whisper 纯 struct 可自写</td><td><b>对空闲零收益</b>（稀疏不省空间）；且与「hour 段无上限」根本冲突</td></tr>
+  </table>
+  <p><b>演进路径建议（记录供以后）</b>：迁移成本最低 = SQLite（stdlib、vnStat 先例、表存行程行）；密度最高 = Gorilla 式每小时块（与现有「小时封口」结构天然同构）；过渡机制 = 头行版本号双读单写、逐文件随轮转自然换代 —— 这套机制与 v2 的 z 行扩展共用同一张版本门闩。</p>
+</section>
+
+<!-- ================================================================ -->
+<section id="s5">
+  <h2><span class="no">05</span>存储方案对比（本轮决策）</h2>
+  <table>
+    <tr><th style="width:17%">候选</th><th>机制</th><th class="ok">压缩收益</th><th>崩溃安全</th><th>坏行容错</th><th>间隔变更健壮</th><th>改动面</th><th style="width:9%">结论</th></tr>
+    <tr>
+      <td><b>A. 现状维持</b></td>
+      <td>v1 逐点行；单种活跃过滤</td>
+      <td><span class="tag bad">1x</span></td>
+      <td>丢 ≤1 行</td>
+      <td>逗号计数 + 5% 阈值</td>
+      <td><span class="tag bad">旧段变稀伪断线</span></td>
+      <td>零</td>
+      <td><span class="tag bad">否</span>两个问题都不解</td>
+    </tr>
+    <tr>
+      <td><b>B. 零值行程行 v2</b><br><span class="small">（推荐）</span></td>
+      <td>新增 <code>z,&lt;start&gt;,&lt;end&gt;,&lt;totals&gt;</code> 行型；开放行程内存延伸，三触发封口；数据行保持显式 ts</td>
+      <td><span class="tag ok">5–10x</span><br><span class="small">205KB → 25–40KB（估算）</span></td>
+      <td><span class="tag ok">丢 ≤1 行程</span><br><span class="small">纯零信息，无价值</span></td>
+      <td>行程行 end−start 整除/单调校验，失败按坏行</td>
+      <td><span class="tag ok">行程自带边界，免疫</span></td>
+      <td>采样器 run 状态 + 存储层 z 行 + 读侧展开；测试面 ~72 用例（§08）</td>
+      <td><span class="tag ok">采用</span></td>
+    </tr>
+    <tr>
+      <td><b>C. 段头隐含时间戳</b><br><span class="small">（用户提案的工业版）</span></td>
+      <td>段头 start + 步长快照，段内省 ts；变更即新段</td>
+      <td><span class="tag warn">+20%</span>（在 B 之上）</td>
+      <td>同 B</td>
+      <td><span class="tag warn">跳过坏行即计数漂移，需序号字段</span></td>
+      <td>需「变更即新段」不变式兜底</td>
+      <td>读侧重写时间轴重建</td>
+      <td><span class="tag warn">v3 备选</span><br><span class="small">收益/风险比不划算</span></td>
+    </tr>
+    <tr>
+      <td><b>D. 整文件透明压缩</b></td>
+      <td>封口小时段 gzip 成员/zstd 帧 append</td>
+      <td><span class="tag warn">叠加 3–8x</span></td>
+      <td>块隔离好</td>
+      <td>压缩层损坏 = 整块丢</td>
+      <td>无关</td>
+      <td>读写两侧加压缩层</td>
+      <td><span class="tag bad">不采用</span><br><span class="small">文件失去可 grep 性，与行式文本纪律相抵</span></td>
+    </tr>
+    <tr>
+      <td><b>E. JSONL 重写</b></td>
+      <td>每行 JSON 对象</td>
+      <td><span class="tag bad">反向 2.6x</span></td>
+      <td>同 A</td>
+      <td>同 A</td>
+      <td>同 A</td>
+      <td>全量重写</td>
+      <td><span class="tag bad">排除</span></td>
+    </tr>
+    <tr>
+      <td><b>F. 二进制</b>（SQLite / Gorilla / Parquet）</td>
+      <td>见 §04.5</td>
+      <td><span class="tag ok">1–60x 不等</span></td>
+      <td>见 §04.5</td>
+      <td>块/页级</td>
+      <td>好</td>
+      <td>存储层整体换血</td>
+      <td><span class="tag info">留档以后</span></td>
+    </tr>
+  </table>
+  <div class="callout">
+    <div class="t">对用户提案「保存开始时间 + 间隔、之后推算」的正面回答</div>
+    <p>方向正确且有工业先例（Gorilla 块头 / InfluxDB RLE / Netdata 页头），但存在一个次序判断：<b>文本格式下主要冗余是零值行而不是时间戳列</b>——时间戳列只占每行 ~23%，而零值行占行数的 90%+。z 行（B）把行程的时间边界显式写进行内，同样实现了「一次写时间、后续推算」，却不依赖间隔恒定：采样抖动、坏行跳过、间隔改配置都伤不到它。等 v2 落地后若还需再压，段头隐含时间戳（C）是现成的下一级，且两者的版本门闩机制相同。</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s6">
+  <h2><span class="no">06</span>推荐设计：dat 格式 v2（零值行程行）</h2>
+  <h3>6.1 格式定义</h3>
+  <pre><code># auto-qb qb-traffic v2                      &lt;- 头行版本号 = 双读门闩
+key,&lt;系列标识&gt;
+raw,&lt;epoch_s&gt;,&lt;dl_rate&gt;,&lt;up_rate&gt;,&lt;dl_total&gt;,&lt;up_total&gt;    &lt;- 不变：非零速率采样行（语义收窄为「非零观测」）
+z,&lt;start_s&gt;,&lt;end_s&gt;,&lt;dl_total&gt;,&lt;up_total&gt;                  &lt;- 新增：零值行程行
+                                              [start,end] 区间按采样节奏观测，速率恒 (0,0)；
+                                              all-time 累计快照行程内恒定（无传输则不增长）
+raw,&lt;epoch_s&gt;,,,,                            &lt;- 不变：null 行（断连/缺字段），v1 v2 同形
+hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&gt;,&lt;dl_total&gt;,&lt;up_total&gt;   &lt;- 列不变；聚合口径扩展（6.4）</code></pre>
+  <ul>
+    <li>逐列冻结纪律对 v1 行型继续成立；v2 = v1 解析器 + z 行型，<b>读侧按头行版本分发</b>（双读单写）。</li>
+    <li>z 行自带 start/end 时间边界 —— <b>不依赖采样间隔推算</b>，间隔配置变更后新旧数据各自如实（§05 候选 B 的核心优势）。</li>
+  </ul>
+
+  <h3>6.2 采样器：开放行程（open run）纪律</h3>
+  <ul>
+    <li>每系列内存至多一个开放行程 <code>{start, last_seen, dl_total, up_total}</code>；速率 (0,0) 的采样只推进内存行程（<b>不落盘</b>），非零采样先封口写出 z 行再写 raw 行。</li>
+    <li><b>封口三触发</b>（崩溃丢失上界 = 1 个行程，且行程内容是纯零信息）：①非零样本到达；②小时封口扫描强制封口（与现有 catch-up 语义同款，顺带保证 hour 聚合能看到行程）；③行程长度上限 120 样本（Prometheus head chunk 120 样本封口先例；@30s = 1h）。</li>
+    <li>程序崩溃/重启：内存行程随进程消失 —— 丢一段「零性」，与丢一行零行等价，无信息损失。</li>
+  </ul>
+  <div class="callout warn">
+    <div class="t">拍板点 · 单种系列的行程开启条件（防文件数失控）</div>
+    <p>若单种系列无条件恒采，则每个种子（含从未传输的）都会在首个小时封口时建文件 —— 击穿方案C「文件数 = 1 + 有过流量的种子数」的三闸收敛。建议规则：<b>零样本仅在「该系列已有数据文件或已开行程」时才延长/开启行程</b> —— 语义即「动过的种子停下 = 0 线；从没动过的种子 = 无数据（空态）」。既保住惰性建文件，又恰好符合用户直觉（用户抱怨的是「动过然后停下」被画成断线，不是「从没动过」没有图）。</p>
+  </div>
+
+  <h3>6.3 读侧：行程展开语义</h3>
+  <ul>
+    <li>栅格离散：z 行使其覆盖区间 [start,end] 内的所有桶获得速率 (0,0) 观测（桶与区间相交即覆盖）——空闲段在图上是<b>连续 0 平线</b>，中间没有可漏的逐点行（§03.4 抖动缺口免费消失）。</li>
+    <li>累计增量：z 行携带的 totals 快照作为行程末快照进入差分链 —— <b>空闲段不再断链</b>，其后首个活跃桶有基线，「窗口累计」不再漏计。</li>
+    <li>hour 聚合：行程对桶贡献 0 速率样本（样本数按 (end−start)/interval 估算，仅用于均值权重）；单种空闲小时由此产出 hour 行（avg=0）—— <b>30d 单种图从「整幅空白」变为带 0 线</b>（P5 已做孤点渲染，此前是 hour 行缺失）。</li>
+    <li>坏行校验：z 行 <code>end ≥ start</code> 且差值与本文件见过的节奏相容（宽松校验防手编损坏放大影响面），失败按坏行跳过计数（走既有 5% 阈值隔离）。</li>
+  </ul>
+
+  <h3>6.4 体量与配置影响</h3>
+  <ul>
+    <li>global.dat 空闲 24h：今天 2,880 行 ×40B ≈ 115KB → v2 约 24 条行程 ≈ 1.2KB（<b>−99%</b>）；活跃段行数不变。单文件 205KB 上界估算降到 25–40KB（<b>5–10x</b>，活跃占比越高越接近低值 —— 必须实测复核）。</li>
+    <li>单种 .dat：空闲期从 0 行变为每小时 1 条 z 行（≈48B/小时）—— 这是用户<b>想要</b>的增量（0 线可见性），且 rollup 窗口裁剪纪律不变。</li>
+    <li><b>零新配置键</b>（黄金法则 2/4 免事务）：<code>sample_interval / raw_window / rollup_window</code> 口径全部不变；「提高保存间隔」的诉求由「空闲不再逐行」满足，分辨率零损失。若未来还要压活跃段，调大 sample_interval 即可，两个杠杆解耦。</li>
+    <li>迁移：双读单写，头行版本分发；本 clone 生产 config.yml 未启用 qb_traffic，预计零存量数据；他 clone 若已启用，v1 文件保持原样直到自然滑出保留窗（旧空闲段显示为缺口，属历史数据如实呈现）。</li>
+  </ul>
+</section>
+
+<!-- ================================================================ -->
+<section id="s7">
+  <h2><span class="no">07</span>问题一修法（在 v2 之上）</h2>
+  <table>
+    <tr><th style="width:22%">症状</th><th>修法</th><th style="width:26%">落点</th></tr>
+    <tr><td>单种空闲段画成断线缺口 + 悬停「断线 · 无数据」</td><td>空闲段出现 z 行 → 桶有观测 → 图上 0 平线（连续、无假缺口）；与 qB 桌面/VueTorrent/Flood/ruTorrent 全体先例对齐</td><td class="anchor">traffic_sample_mod.py 采样纪律 + traffic_grid.py 展开语义</td></tr>
+    <tr><td>tooltip 三种状态一句话</td><td>三态文案：零桶 →「0 B/s · 空闲/做种中」；空桶 →「无采样 · 程序未运行或未启用」；含 null 行的桶 →「采集中断 · qB 断连」。图例 hint 同步（「断线处不连线」→「缺口 = 无采样」）</td><td class="anchor">drawer.html:110–115, 83, 121</td></tr>
+    <tr><td>单种全窗空闲 → 整图空态「暂无数据」</td><td>有 z 行即有观测 → 不再触发全 null 空态；空态文案保留给「从未传输」（与 §06.2 拍板点一致）</td><td class="anchor">traffic_qb.py:99–101；drawer.html:198</td></tr>
+    <tr><td>空闲断链导致窗口累计漏计后继活跃段</td><td>z 行快照续链（§06.3）</td><td class="anchor">traffic_grid.py:175–193</td></tr>
+    <tr><td>30d 单种图整幅空白（空闲小时无 hour 行）</td><td>空闲小时由行程聚合出 hour 行（avg=0）</td><td class="anchor">traffic_store.py:454–470 聚合口径</td></tr>
+    <tr><td>全局图活跃段偶发抖动缺口（§03.4）</td><td>空闲段已免疫；活跃段可选 uPlot <code>spanGaps=&lt;2×interval&gt;</code> 阈值吸收（Grafana Threshold 先例）—— <b>默认不做</b>（保守默认，活跃段缺口罕见且是真信息）</td><td class="anchor">qb_traffic_chart.js:451（拍板点）</td></tr>
+    <tr><td>响应形状是否区分「停机缺口/断连缺口」</td><td>最小版不动 API 形状（points 定长数组 + null），前端以「本桶是否对应 null 行」区分需读侧附加信息 —— 列为可选增强（points 元素 null → {gap: "down"|"off"}），<b>建议第一版只改文案不改形状</b></td><td class="anchor">traffic_qb.py §08 响应契约（拍板点）</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================ -->
+<section id="s8">
+  <h2><span class="no">08</span>风险、取舍与验收要点</h2>
+  <h3>8.1 风险与缓解</h3>
+  <ul>
+    <li><b>一行坏 = 一段空闲异常</b>：z 行影响面比 raw 行大（一行错 = N 个点错）。缓解：end−start 整除/单调校验 + 既有 5%/≥2 坏行隔离阈值 + 行程上限 120 样本天然封顶影响面。</li>
+    <li><b>单种恒采的内存与遍历开销</b>：每轮遍历 by_hash 本就发生（活跃过滤只是 skip）；内存行程 = 每种子一条小 dict（几百种子量级，主循环线程无锁）——可忽略。</li>
+    <li><b>双读复杂度</b>：v1/v2 两个解析器并存一个版本周期。缓解：v2 = v1 + z 行型（增量解析，非平行实现）；本 clone 预计零存量。</li>
+    <li><b>压缩比是估算</b>：5–10x 基于行字节数显式推算，实际取决于活跃占比 —— 实施时以真实采样数据实测复核（验收数字必须实测，见基线口径）。</li>
+  </ul>
+  <h3>8.2 测试面（改动波及）</h3>
+  <p>现有钉住 v1 行为的测试：<code>test_traffic_store.py</code>（42 用例）/ <code>test_traffic_sample.py</code>（18）/ <code>test_traffic_grid.py</code>（12）+ test_web / test_module_host 引用。需同步口径的既有用例族：「空闲零采样行」「每轮每系列恰一行 raw」；需新增的用例族：z 行格式化/解析/坏行校验、开放行程三触发封口、单种首零不建文件（§06.2 拍板点）、覆盖展开（含桶跨行程边界）、间隔变更混排数据、30d 行程聚合、v1 文件双读回归。</p>
+  <h3>8.3 验收判据（建议）</h3>
+  <ol>
+    <li>单种「流量」页签：活跃→停止后，空闲段渲染为 0 平线，悬停显示 0 值文案；删种冻结/重加/计数器回落既有语义不回归。</li>
+    <li>qB 断连段仍为缺口（null 行语义不变）；程序停机段仍为缺口；两者文案与 0 值可区分。</li>
+    <li>同等采样数据下 dat 文件体积实测下降（目标 ≥5x，以真实工况记录实测数字入基线切片）。</li>
+    <li>改 sample_interval（如 300s→30s）后，旧段空闲仍为 0 线（z 行覆盖语义）、旧活跃段呈稀疏点（如实），无成段伪断线。</li>
+    <li>崩溃丢失上界复验：kill 进程后重启，最多丢 1 个未封口行程。</li>
+  </ol>
+</section>
+
+<!-- ================================================================ -->
+<section id="s9">
+  <h2><span class="no">09</span>调研来源（子智能体检索，关键摘录）</h2>
+  <h3>时序系统存储编码</h3>
+  <ul class="small">
+    <li>RRDtool rrdcreate（step/heartbeat/UNKNOWN/xff）— https://oss.oetiker.ch/rrdtool/doc/rrdcreate.en.html</li>
+    <li>Graphite Whisper（档位/12B/点/null 槽）— https://graphite.readthedocs.io/en/latest/whisper.html</li>
+    <li>Gorilla 论文（VLDB'15，1.37B/点、dod/XOR 码字）— https://www.vldb.org/pvldb/vol8/p1816-pelkonen.pdf；解读 https://blog.acolyer.org/2016/05/03/gorilla-a-fastscalable-in-memory-time-series-database/</li>
+    <li>Prometheus Storage / Querying basics（2h 块、1–2B/样本、stale marker + 5min lookback）— https://prometheus.io/docs/prometheus/latest/storage/ ; /querying/basics/</li>
+    <li>VictoriaMetrics 编码（0.4B/点、constant/equidistant/delta2）— https://faun.pub/victoriametrics-achieving-better-compression-for-time-series-data-than-gorilla-317bc1f95932</li>
+    <li>InfluxDB TSM（RLE→simple8b→裸存）— https://github.com/influxdata/influxdb/blob/master/tsdb/engine/tsm1/README.md</li>
+    <li>Netdata dbengine（tier 降采样、gap 点补插、update-every 变更刷页）— https://learn.netdata.cloud/docs/developer-and-contributor-corner/database-engine</li>
+    <li>Zabbix history/trends（小时 min/max/avg/count）— https://www.zabbix.com/documentation/current/en/manual/config/items/history_and_trends</li>
+  </ul>
+  <h3>文本编码与二进制备选</h3>
+  <ul class="small">
+    <li>zstd seekable 格式规范 — https://github.com/facebook/zstd/blob/dev/contrib/seekable_format/zstd_seekable_compression_format.md</li>
+    <li>Python gzip 多成员解压 — https://docs.python.org/3/library/gzip.html</li>
+    <li>MRTG log 文本格式（同域文本先例）— https://oss.oetiker.ch/mrtg/doc/mrtg-logfile.en.html</li>
+    <li>vnStat 2.0 迁移 SQLite（同域自研格式 → SQLite 先例）— https://github.com/vergoh/vnstat/issues/120</li>
+    <li>Parquet 小文件追加反模式 — https://hudi.apache.org</li>
+  </ul>
+  <h3>qB 生态与 UX 惯例</h3>
+  <ul class="small">
+    <li>qB SpeedPlotView 源码（Averager 定频推 0、纯内存）— https://github.com/qbittorrent/qBittorrent/blob/master/src/gui/properties/speedplotview.cpp</li>
+    <li>VueTorrent SpeedGraph / navbar store（15 点滑动窗、0 照推）— https://github.com/VueTorrent/VueTorrent/blob/master/src/components/Navbar/SideWidgets/SpeedGraph.vue</li>
+    <li>Flood HistoryService / HistoryEra（NeDB 分层落盘、断连退避出缺口）— https://github.com/Flood-UI/flood/blob/master/server/services/historyService.js</li>
+    <li>ruTorrent trafic 插件（每种子 CSV、零增量不写、固定桶渲染 0）— https://github.com/Novik/ruTorrent/blob/master/plugins/trafic/update.php</li>
+    <li>Grafana Time series（Connect nulls: Never/Always/Threshold）— https://grafana.com/docs/grafana/latest/panels-visualizations/visualizations/time-series/</li>
+    <li>uPlot spanGaps 默认 false — https://github.com/leeoniya/uPlot/blob/master/src/opts.js</li>
+    <li>Prometheus staleness 渲染语义 — https://prometheus.io/docs/prometheus/latest/querying/basics/</li>
+  </ul>
+  <p class="small">未核实项如实声明：CMU DRLE 论文每样本字节数（PDF 抓取失败）；RRDtool/InfluxDB/Zabbix 无官方每样本字节数；Statuspage 组件状态完整枚举未逐字核实；本文所有压缩比中标注「估算」者为基于行字节数的显式推算，实施时须实测。</p>
+</section>
+
+<footer>
+  <p>auto-qb · memory-bank/reports/26-10-04-0636-report-qb-traffic-storage.html · 快照制品（出厂冻结）· 本报告未改动任何代码；实施需另行计划（plans/）并经用户拍板。</p>
+</footer>
+
+</div>
+</body>
+</html>
