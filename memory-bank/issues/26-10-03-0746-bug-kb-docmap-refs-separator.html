@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="kb-docmap-refs-separator">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="gen_doc_map refs 解析只认英文逗号: 视觉分隔符多目标整串被当单一路径, 认领链守卫报「目标不存在」">
 <meta name="issue-summary" content="refs 多目标用视觉分隔符(如「 · 」)时整串被 _split_refs 当成单一路径 → 认领链守卫报「目标不存在」; 解析只认英文逗号(gen_doc_map.py _split_refs), 格式约定只写在文件头 docstring 未进报错 —— P4 收尾回写实测撞见">
 <title>gen_doc_map refs 解析只认英文逗号: 视觉分隔符多目标整串被当单一路径, 认领链守卫报「目标不存在」 · bug · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题 · bug</div>
     <h1>gen_doc_map refs 解析只认英文逗号: 视觉分隔符多目标整串被当单一路径, 认领链守卫报「目标不存在」</h1>
     <p class="lede">refs 多目标用视觉分隔符(如「 · 」)时整串被 _split_refs 当成单一路径 → 认领链守卫报「目标不存在」; 解析只认英文逗号(gen_doc_map.py _split_refs), 格式约定只写在文件头 docstring 未进报错 —— P4 收尾回写实测撞见</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-03-0746-bug-kb-docmap-refs-separator</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-03 07:46</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -174,6 +174,8 @@ def _split_refs(raw: str) -&gt; list[str]:
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-03 07:46 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-03 08:41 — 认领, 状态 <strong>In Progress</strong>(用户指派)。复验 (08:41, 本 clone dd180a11): 三锚点全部仍在 —— <code>_split_refs</code>(gen_doc_map.py:82) 只 <code>split(",")</code> / 文件头 docstring「认领链」段(:12) / <code>check_claim_chain</code>(:254) 与报错文本(:314 附近); 实测复现: <code>_split_refs("A.html · B.html")</code> 返回单元素 <code>['A.html · B.html']</code>, 报错原文「引用的目标不存在 → …」无任何分隔符提示。另核对协议单点 doc-forms.md「认领链」(:70) 已写明「逗号分隔」—— 缺的只是报错不自解释。</li>
+      <li>2026-10-03 08:41 — 状态 <strong>Done</strong>。实际修法: 采用建议 <strong>①</strong>(报错自带格式说明), 解析行为不动(仍只认英文逗号, 约定不放宽): <code>check_claim_chain</code> 报「目标不存在」时, ref 命中视觉分隔符(<code>· 、 ; ； | ｜</code>, 新增 <code>VISUAL_SEP_RE</code>)即追加提示「(ref 内含视觉分隔符 —— 多目标须英文逗号分隔, 整串被当成了单一路径)」; <code>--check</code> 头行报错补「refs 多目标一律英文逗号分隔」。建议 ② 未采用 —— 放宽解析会把约定变宽且需同步 docstring / 守阵, 而协议单点本已写明逗号, 提示到位即可自解释。验证: 新增守阵 <code>test_claim_chain_missing_target_hints_separator</code>(test_docs_forms.py, 分隔符 case 报错含提示 + 普通断链 case 不误报) + <code>gen_doc_map --check</code> 绿(主键 352 份 / 认领链全闭环) + <code>test.full</code> 2326 passed / 3 skipped / 0 failed(30.37s, 较上轮基线 +1 即新守阵)。</li>
     </ul>
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>

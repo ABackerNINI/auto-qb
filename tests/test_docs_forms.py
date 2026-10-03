@@ -19,6 +19,7 @@
 - test_doc_map_live_rotation: 全完结专题在默认视图只留名 (轮转), `--all` 仍全量
 - test_issue_topics_present: 每条 issue 都有 `doc-topic` (否则会从专题视图里静默漏掉)
 - test_claim_chain_is_bidirectional: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明
+- test_claim_chain_missing_target_hints_separator: ref 含视觉分隔符报「目标不存在」时, 报错自带英文逗号分隔提示 (issue 26-10-03-0746)
 """
 
 from __future__ import annotations
@@ -164,3 +165,17 @@ def test_claim_chain_is_bidirectional() -> None:
     gen = _load_generator("gen_doc_map")
     problems = gen.check_claim_chain(gen.collect(MB), ROOT, MB)
     assert not problems, "认领链不闭环:\n  " + "\n  ".join(problems)
+
+
+def test_claim_chain_missing_target_hints_separator() -> None:
+    """ref 含视觉分隔符时报错必须自带「英文逗号分隔」提示 —— 解析只认逗号, 但报错要自解释 (issue 26-10-03-0746)。"""
+    gen = _load_generator("gen_doc_map")
+    base = {"form": "issue", "topic": "t", "status": "Open", "stamp": "26-10-03-0746", "title": "t"}
+    sep_item = {**base, "link": "issues/x.html", "refs": ["memory-bank/plans/a.html · memory-bank/plans/b.html"]}
+    problems = gen.check_claim_chain([sep_item], ROOT, MB)
+    assert len(problems) == 1, f"视觉分隔符 case 应恰好报一条: {problems}"
+    assert "视觉分隔符" in problems[0] and "英文逗号" in problems[0], problems[0]
+    plain_item = {**base, "link": "issues/x.html", "refs": ["memory-bank/plans/no-such-file.html"]}
+    problems = gen.check_claim_chain([plain_item], ROOT, MB)
+    assert len(problems) == 1, f"普通断链 case 应恰好报一条: {problems}"
+    assert "视觉分隔符" not in problems[0], problems[0]

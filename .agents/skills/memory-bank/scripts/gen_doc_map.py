@@ -48,6 +48,8 @@ TASK_UPDATED_RE = re.compile(r"\*\*Updated:\*\*\s*(\d{4}-\d{2}-\d{2})")
 STAMP_RE = re.compile(r"^(\d\d-\d\d-\d\d)-(\d{4})-")
 HTML_REFS_RE = re.compile(r'<meta name="doc-refs" content="([^"]*)">')
 TASK_REFS_RE = re.compile(r"^\*\*Refs:\*\*\s*(.+)$", re.MULTILINE)
+# refs 多目标的唯一合法分隔符是英文逗号; 这些视觉分隔符常见误用, 命中即进报错提示 (issue 26-10-03-0746)
+VISUAL_SEP_RE = re.compile(r"[·、;；|｜]")
 NAME_WRAP = 4000  # 名录折行宽度, 只影响换行 —— 零信息损失 (150→400→4000 三轮收口, 见 git 历史)
 
 
@@ -272,7 +274,10 @@ def check_claim_chain(items: list[dict], root: Path, mb: Path) -> list[str]:
         for ref in refs:
             target = root / ref
             if not target.exists():
-                problems.append(f"{self_rel}: 引用的目标不存在 → {ref}")
+                hint = ""
+                if VISUAL_SEP_RE.search(ref):
+                    hint = " (ref 内含视觉分隔符 —— 多目标须英文逗号分隔, 整串被当成了单一路径)"
+                problems.append(f"{self_rel}: 引用的目标不存在 → {ref}{hint}")
             elif self_rel not in _refs_of(target):
                 problems.append(f"{self_rel} → {ref}: 目标未反向声明本件 (认领链单向)")
     if not checked:
@@ -313,8 +318,8 @@ def main() -> int:
         problems = check_claim_chain(items, root, mb)
         if problems:
             sys.stderr.write(
-                "认领链不闭环 (声明 doc-refs / **Refs:** 的件, 目标必须存在且反向声明; 协议见 "
-                "memory-bank/conventions/doc-forms.md「认领链」):\n"
+                "认领链不闭环 (声明 doc-refs / **Refs:** 的件, 目标必须存在且反向声明; refs 多目标一律"
+                "英文逗号分隔; 协议见 memory-bank/conventions/doc-forms.md「认领链」):\n"
             )
             for p in problems:
                 sys.stderr.write(f"  {p}\n")
