@@ -453,10 +453,10 @@ class GroupingModule(BaseModule):
             warned.add((key, kind))
             self._ctx.api.torrents_stop(torrent_hashes=[t.hash for t in torrents])
 
-    # ---------- 跨组文件交叉检测(post 相位: S2 纯检测不处置, 处置见 plan 26-10-04-0107 S3) ----------
+    # ---------- 跨组文件交叉检测(post 相位: 消除 + 去重门 + 暂停涉事下载方, plan 26-10-04-0107) ----------
 
     def _check_cross_group_file_conflicts(self, dry_run: bool):
-        """跨组文件交叉检测(纯检测): 组边界不等于磁盘上不交叉, 交叉在场且下载中即警告
+        """跨组文件交叉检测: 组边界不等于磁盘上不交叉, 交叉在场且下载中即警告并暂停涉事下载方
 
         场景(plan 26-10-04-0107 §01): (1)同 save_path 文件列表部分重叠; (2)文件名仅大小写不同
         (Windows 不区分大小写); (3)不同 save_path 经 junction/symlink/盘符别名指向同一物理目录。
@@ -472,17 +472,19 @@ class GroupingModule(BaseModule):
              固有属性, 归同组检查管)。
           3. MISSING 豁免(D3): 事件任一参与者带 missing_tag -> 豁免该事件(带标签侧是已知缺文件、
              等用户重下补救的状态, 对侧重新下载这些文件是合法补救)。
-          4. 激活 + 警告: 非豁免事件中存在下载中参与者(谓词与 _check_download_conflicts 同款)
-             才激活, 按组对聚合警告一次(组对规范序 tuple(sorted((ka, kb), key=str)), 路径展示
-             截前 3 处 + 「等 N 处」)。
+          4. 激活: 非豁免事件中存在下载中参与者(谓词与 _check_download_conflicts 同款)才激活,
+             按组对聚合(组对规范序 tuple(sorted((ka, kb), key=str)), 路径展示截前 3 处 +
+             「等 N 处」)。
+          5. 消除 + 处置(结构对齐 _check_download_conflicts 的消除段与处置段): active 组对集
+             算完后先清过期去重记录(store.cross_group_conflict_warned, 组对不再激活即 discard,
+             下次重现可再次触发); 处置循环顺序严格对齐同组检查 —— 警告 -> dry_run 止步(不暂停、
+             不记去重) -> 登记去重 -> 暂停涉事下载方(D2: 只停两侧组中满足下载中谓词的成员,
+             绝不传整组; 暂停幂等, 组对持续不重复警告/暂停)。
 
         成本: 只消费 store.groups / store.group_sizes / store.by_hash 三份内存数据, 零新增
         qB 请求、检测零触盘(只有目录级 realpath_lexical); 开关关闭首行即返回零开销;
         增量轮(rounds_applied > 0)且 dirty_groups 为空时事件集合与上轮一致, 直接返回
         (dirty 只读不复位, 消费单点仍是 _check_download_conflicts; 全量基线未建立时必跑)。
-
-        **S3 将补**: 去重门(store.cross_group_conflict_warned 按组对)、暂停涉事下载方(D2)、
-        消除循环; 本步警告不经去重门, 每轮重发, 仅日志可见。
         """
         cfg = self._ctx.config.grouping
         if not cfg.cross_group_conflict_check:
@@ -526,7 +528,7 @@ class GroupingModule(BaseModule):
                     dl.append(h)
             group_dl[key] = dl
             group_missing[key] = has_missing
-        # 4. 事件 -> 豁免 -> 激活: 按组对聚合(keys 已按 str 排序, (ka, kb) 即规范序, S3 去重键同形)
+        # 4. 事件 -> 豁免 -> 激活: 按组对聚合(keys 已按 str 排序, (ka, kb) 即规范序, 去重键同形)
         pair_paths: Dict[tuple, list] = {}  # 组对(规范序) -> 共享物理路径列表
         for phys, hits in loc.items():
             keys = sorted({k for k, _h in hits}, key=str)
@@ -539,8 +541,22 @@ class GroupingModule(BaseModule):
                     if not group_dl.get(ka) and not group_dl.get(kb):
                         continue  # 无下载中参与者: 静态共存不激活
                     pair_paths.setdefault((ka, kb), []).append(phys)
-        for (ka, kb), paths in pair_paths.items():
-            dl_hashes = group_dl[ka] + group_dl[kb]
+        # active 组对集: (ka, kb, 共享路径, 涉事下载方) —— dl_hashes 只含两侧组中满足下载中谓词的
+        # 成员 hash(group_dl, 谓词与 _check_download_conflicts 同款; 通常恰 1 个, 双侧都在下载则都停),
+        # 绝不传整组(D2)
+        active = [(ka, kb, paths, group_dl[ka] + group_dl[kb]) for (ka, kb), paths in pair_paths.items()]
+        # 5. 交叉消除: 不在 active 组对集的过期去重记录清除(下次重现时再次警告+暂停),
+        #    对齐 _check_download_conflicts 的消除段; 下载方被暂停后组对失活, 下轮即在此清除。
+        #    成员判定对 pair_paths 的键(即 active 组对集): active 是四元组列表, 不能直接 in
+        warned = store.cross_group_conflict_warned
+        for pair in list(warned):
+            if pair not in pair_paths:
+                warned.discard(pair)
+        # 6. 处置: 警告 + 暂停涉事下载方(顺序严格对齐 _check_download_conflicts 处置段:
+        #    警告 -> dry-run 止步(不暂停、不记去重) -> 登记去重 -> 暂停)
+        for ka, kb, paths, dl_hashes in active:  # paths 供消息, dl_hashes = 涉事下载方
+            if (ka, kb) in warned:
+                continue  # 冲突持续不重复警告/暂停(暂停幂等)
             dl_set = set(dl_hashes)
             dl_desc = ", ".join(f"{h[:8]}[{by_hash[h].tracker_name}]" for h in dl_hashes)
             done_desc = ", ".join(
@@ -554,6 +570,10 @@ class GroupingModule(BaseModule):
                 f"跨组文件交叉(2组) | 共享物理文件 {len(paths)} 处: {paths_desc}, "
                 f"下载方: {dl_desc}, 完成侧: {done_desc or '无'}"
             )
+            if dry_run:
+                continue  # dry-run 只报告: 不暂停、不记去重
+            warned.add((ka, kb))
+            self._ctx.api.torrents_stop(torrent_hashes=dl_hashes)
 
     # ---------- 校验动作(checking)辅助: 组上下文 ----------
 

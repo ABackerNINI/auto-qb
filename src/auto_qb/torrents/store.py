@@ -89,6 +89,10 @@ class TorrentStore:
         self.member_to_key: Dict[str, Any] = {}
         self.state_snapshot: Dict[str, Any] = {}
         self.download_conflict_warned: Set[Tuple[Any, str]] = set()
+        # 跨组文件交叉检测的去重集合(plan 26-10-04-0107 S3): (组key_a, 组key_b) 规范序组对 ——
+        # 软信号不落盘(纯内存, 重启即失忆, 方向是「更早恢复检测」, 保守); 热重载不清,
+        # 理由见 reset_runtime 注释。
+        self.cross_group_conflict_warned: Set[Tuple[Any, Any]] = set()
         # 缺文件扫描的过渡态容忍计数(仅内存, 重启归零): 组key -> 连续「原名缺失但 .!qB 孪生
         # 存在」命中次数(issue 26-09-21-0219 / plan 26-09-22-2038)。软信号不落盘 —— 丢失方向
         # 是"更早恢复判定"(保守, 沿用 verified_references 仅内存先例); 跨轮存活, 不随每轮
@@ -429,6 +433,9 @@ class TorrentStore:
         self.state_snapshot.clear()
         self.verified_references.clear()
         self.transitional_missing_skips.clear()  # 组 key 随分组索引重建, 过渡态计数一并清零
+        # download_conflict_warned / cross_group_conflict_warned 有意不清(决策钉死, 防"顺手补 clear"):
+        # 两个去重集合的组 key 均为纯函数派生(grouping_mod.group_key_of 单一事实源), 热重载重建
+        # 分组索引后同数据派生同 key, 旧条目语义仍成立; 过期条目由每轮扫描的消除循环兜底丢弃。
         self.invalidate_tags()
         self.invalidate_categories()
         self.view_changed = True  # 分组索引已清空, 视图必须重建

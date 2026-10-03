@@ -66,7 +66,7 @@
 - test_grouping_leave_group_member_index_missing_from_group_list: 索引有组表无的成员移出仍清理映射 (P2-a)
 - test_grouping_missing_files_check_disabled_guard: 缺文件检查入口禁用守卫 (P2-a)
 - test_grouping_conflict_scan_skips_ghost_members: 冲突扫描幽灵成员跳过; _group_has_downloading 幽灵不活跃 (P2-a)
-- test_cross_group_partial_overlap_warns_pure_detect: 场景①部分重叠 -> 警告含重叠文件物理路径, S2 纯检测零动作 (26-10-04-0107 S2)
+- test_cross_group_partial_overlap_warns: 场景①部分重叠 -> 警告含重叠文件物理路径; S3 起处置生效 (26-10-04-0107 S2/S3)
 - test_cross_group_case_only_posix_no_false_positive: 场景②POSIX normcase 恒等 -> 大小写不同不误报 (26-10-04-0107 S2)
 - test_cross_group_case_only_windows_detected: 场景②Windows normcase 折叠 -> 大小写交叉检出 (26-10-04-0107 S2)
 - test_cross_group_junction_alias_detected: 场景③junction 别名目录 realpath_lexical 归同 -> 检出 (26-10-04-0107 S2)
@@ -74,6 +74,13 @@
 - test_cross_group_zero_change_short_circuit: rounds_applied>0 且 dirty 空 -> 提前返回; dirty 非空恢复全量 (26-10-04-0107 S2)
 - test_cross_group_switch_off_silent: 开关缺省 false -> 交叉在场仍零输出零动作, 打开后检出 (26-10-04-0107 S2)
 - test_cross_group_same_group_overlap_not_triggered: 同组文件重叠是分组固有属性 -> 不触发跨组警告 (26-10-04-0107 S2)
+- test_cross_group_dispose_stops_downloader: S3 触发处置: 交叉在场 -> 仅暂停涉事下载方(hash 精确, 不含完成侧), 组对入去重 (26-10-04-0107 S3)
+- test_cross_group_dispose_dedup_no_repeat: S3 去重门: 冲突持续不重复警告/暂停(暂停幂等) (26-10-04-0107 S3)
+- test_cross_group_dispose_clear_and_retrigger: S3 消除+重现: 下载方转暂停 -> 去重清除且 stop 不增; 恢复下载 -> 再次触发 (26-10-04-0107 S3)
+- test_cross_group_dispose_seeder_side_untouched: S3/D2: stop 名单只含下载方, 无完成/做种成员混入 (26-10-04-0107 S3)
+- test_cross_group_dispose_dry_run_only_warns: S3 dry-run: 警告在, 不暂停, 不记去重 (26-10-04-0107 S3)
+- test_cross_group_reset_runtime_keeps_warned: S3 reset_runtime 有意不清跨组去重集合(决策钉死, 防后人顺手加 clear) (26-10-04-0107 S3)
+- test_cross_group_single_side_dirty_still_detected: S3/风险2: 单侧脏(dirty 仅含组 A)仍全量检出并暂停 (26-10-04-0107 S3)
 """
 import logging
 import os
@@ -1554,9 +1561,9 @@ _OVERLAP_A = {"ep01.mkv": 100, "ep02.mkv": 200}
 _OVERLAP_B = {"ep02.mkv": 200, "ep03.mkv": 300}
 
 
-def test_cross_group_partial_overlap_warns_pure_detect():
+def test_cross_group_partial_overlap_warns():
     """场景①部分重叠: 两组同 save_path 文件列表 [ep01,ep02]/[ep02,ep03], B 下载中
-    -> 警告含 ep02 物理路径; S2 纯检测: 零暂停零外部动作"""
+    -> 警告含 ep02 物理路径; S3 起处置生效: 涉事下载方被暂停(hash 精确断言见 S3 用例)"""
     with tempfile.TemporaryDirectory() as td:
         mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
         _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
@@ -1564,7 +1571,7 @@ def test_cross_group_partial_overlap_warns_pure_detect():
             grp._check_cross_group_file_conflicts(dry_run=False)
         assert any("跨组文件交叉" in m for m in cap.messages), f"部分重叠应警告: {cap.messages}"
         assert any("ep02.mkv" in m for m in cap.messages), f"消息应含重叠文件 ep02 的物理路径: {cap.messages}"
-        assert client.calls == [], f"S2 纯检测不处置(不暂停): {client.calls}"
+        assert client.calls.count(("stop", None)) == 1, f"S3 处置应暂停涉事下载方: {client.calls}"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="normcase 在 Windows 折叠大小写, 该不误报断言仅在 POSIX 成立")
@@ -1587,7 +1594,7 @@ def test_cross_group_case_only_windows_detected():
         with _grab_cross_warnings() as cap:
             grp._check_cross_group_file_conflicts(dry_run=False)
         assert any("跨组文件交叉" in m for m in cap.messages), f"Windows 大小写折叠应检出交叉: {cap.messages}"
-        assert client.calls == [], f"S2 纯检测不处置: {client.calls}"
+        assert client.calls.count(("stop", None)) == 1, f"S3 处置应暂停涉事下载方: {client.calls}"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="junction 仅 Windows(目录 symlink 需开发者模式, 不测)")
@@ -1604,7 +1611,7 @@ def test_cross_group_junction_alias_detected():
             with _grab_cross_warnings() as cap:
                 grp._check_cross_group_file_conflicts(dry_run=False)
             assert any("跨组文件交叉" in m for m in cap.messages), f"junction 别名归同后应检出: {cap.messages}"
-            assert client.calls == [], f"S2 纯检测不处置: {client.calls}"
+            assert client.calls.count(("stop", None)) == 1, f"S3 处置应暂停涉事下载方: {client.calls}"
         finally:
             os.rmdir(link)  # 先摘 junction 再交还 TemporaryDirectory 清理(防 rmtree 循环进入真身)
 
@@ -1667,3 +1674,128 @@ def test_cross_group_same_group_overlap_not_triggered():
             grp._check_cross_group_file_conflicts(dry_run=False)
         assert not any("跨组文件交叉" in m for m in cap.messages), f"同组重叠不应触发跨组警告: {cap.messages}"
         assert client.calls == [], "跨组检测不处置同组冲突"
+
+
+# ---------------- 跨组文件交叉检测 S3 (计划 26-10-04-0107 §05, 处置: 暂停 + 去重 + 消除, 2026-10-04) ----------------
+# 暂停断言一律 mock api.torrents_stop: 真实 stop 经 _sync_paused_state 同 tick 改写 store 快照,
+# 把「下载中」谓词打掉、污染去重断言(对齐 :472 同组四段式先例的注释口径)
+
+
+def test_cross_group_dispose_stops_downloader():
+    """S3 触发处置: 两组交叉 + B 下载中 -> 暂停仅涉事下载方(hash 精确, 不含完成侧); 组对入去重集合"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        key_a, key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        pair = tuple(sorted((key_a, key_b), key=str))  # 组对规范序(与去重集合元素同形)
+        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
+        # 污染去重断言(真实场景下轮 refresh 才校准)
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1, f"交叉在场应暂停涉事下载方: {stop_mock.call_count}"
+            assert stop_mock.call_args.kwargs["torrent_hashes"] == ["HB"], "只停下载方 HB, 不含完成侧"
+            assert pair in mgr.store.cross_group_conflict_warned, f"组对应登记去重: {mgr.store.cross_group_conflict_warned}"
+
+
+def test_cross_group_dispose_dedup_no_repeat():
+    """S3 去重门: 冲突持续不重复警告/暂停(暂停幂等), 再跑一轮 stop 仍只 1 次"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
+        # 污染去重断言(真实场景下轮 refresh 才校准)
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1
+            grp._check_cross_group_file_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1, f"冲突持续不应重复暂停: {stop_mock.call_count}"
+
+
+def test_cross_group_dispose_clear_and_retrigger():
+    """S3 消除+重现(四段式, 对齐同组检查先例): 下载方转暂停 -> 组对失活去重清除且 stop 不增; 恢复下载 -> 再次触发"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        key_a, key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        pair = tuple(sorted((key_a, key_b), key=str))
+        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
+        # 污染去重断言(真实场景下轮 refresh 才校准)
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1
+            # 冲突消除(B 转暂停): 组对失活(无下载中参与者) -> 去重清除, stop 不增
+            mgr.store.by_hash["HB"].state = "pausedDL"
+            grp._check_cross_group_file_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1, f"消除轮不应新增暂停: {stop_mock.call_count}"
+            assert mgr.store.cross_group_conflict_warned == set(), "组对失活应清除去重记录"
+            # 冲突重现(B 恢复下载中) -> 再次警告+暂停
+            mgr.store.by_hash["HB"].state = "downloading"
+            grp._check_cross_group_file_conflicts(dry_run=False)
+            assert stop_mock.call_count == 2, f"冲突重现应再次暂停: {stop_mock.call_count}"
+            assert pair in mgr.store.cross_group_conflict_warned
+
+
+def test_cross_group_dispose_seeder_side_untouched():
+    """S3/D2 红线: stop 名单只含下载中成员, 完成侧/做种成员绝不混入(组 A 含两个做种成员仍只停 HB)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        key_a, key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        # 组 A 补第二个做种成员: 证明 stop 名单不随组员扩散(只按下载中谓词取)
+        mgr.store.by_hash["HA2"] = FakeTorrent(hash="HA2", name="TA2", state="stalledUP", save_path=td, amount_left=0)
+        mgr.store.groups[key_a].append("HA2")
+        mgr.store.member_to_key["HA2"] = key_a
+        mgr.store.group_sizes[key_a]["HA2"] = dict(_OVERLAP_A)
+        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
+        # 污染去重断言(真实场景下轮 refresh 才校准)
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+            assert stop_mock.call_count == 1, f"应只调一次 stop: {stop_mock.call_count}"
+            hashes = stop_mock.call_args.kwargs["torrent_hashes"]
+            assert set(hashes) == {"HB"}, f"stop 名单应只含下载方: {hashes}"
+            assert "HA" not in hashes and "HA2" not in hashes, f"完成/做种侧不得混入: {hashes}"
+
+
+def test_cross_group_dispose_dry_run_only_warns():
+    """S3 dry-run(风险4): 警告照发, 但不暂停、不记去重 —— 下次真实执行仍会触发处置"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
+        # 污染去重断言(真实场景下轮 refresh 才校准)
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            with _grab_cross_warnings() as cap:
+                grp._check_cross_group_file_conflicts(dry_run=True)
+            assert any("跨组文件交叉" in m for m in cap.messages), f"dry-run 警告应照发: {cap.messages}"
+            assert stop_mock.call_count == 0, f"dry-run 不得暂停: {stop_mock.call_count}"
+            assert mgr.store.cross_group_conflict_warned == set(), "dry-run 不得记去重"
+
+
+def test_cross_group_reset_runtime_keeps_warned():
+    """S3 reset_runtime 续用(决策钉死): 热重载不清跨组去重集合 —— 组 key 纯函数派生, 旧条目语义仍成立"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
+        # 污染去重断言(真实场景下轮 refresh 才校准)
+        with mock.patch.object(mgr.api, "torrents_stop"):
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert len(mgr.store.cross_group_conflict_warned) == 1, "前置: 处置已登记去重"
+        mgr.store.reset_runtime()
+        assert len(mgr.store.cross_group_conflict_warned
+                  ) == 1, (f"reset_runtime 有意不清该集合(见 reset_runtime 注释): {mgr.store.cross_group_conflict_warned}")
+
+
+def test_cross_group_single_side_dirty_still_detected():
+    """S3/风险2: 单侧脏(dirty 仅含组 A, 交叉对象组 B 静止干净)仍全量检出并暂停 —— 跨组检测不做按组增量"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        key_a, _key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        mgr.store.rounds_applied = 1  # 增量基线已建立: 若误按 dirty 增量, 组 B 侧交叉将漏检
+        mgr.store.dirty_groups.add(key_a)
+        # mock 掉 api.torrents_stop: QbApi 的 stop 会经 _sync_paused_state 同 tick 改写 store 快照,
+        # 污染去重断言(真实场景下轮 refresh 才校准)
+        with mock.patch.object(mgr.api, "torrents_stop") as stop_mock:
+            with _grab_cross_warnings() as cap:
+                grp._check_cross_group_file_conflicts(dry_run=False)
+            assert any("跨组文件交叉" in m for m in cap.messages), f"单侧脏仍应检出交叉: {cap.messages}"
+            assert stop_mock.call_count == 1, f"检出即处置: {stop_mock.call_count}"
+            assert stop_mock.call_args.kwargs["torrent_hashes"] == ["HB"], "只停下载方 HB"
+            assert key_a in mgr.store.dirty_groups, "dirty_groups 只读不复位(消费单点仍是同组检查)"
