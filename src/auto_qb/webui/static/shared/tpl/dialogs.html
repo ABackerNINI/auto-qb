@@ -1,3 +1,4 @@
+         <!-- 统计面板(FE-2C): /api/stats server_state 直取(缺失显示 —); server 为 null 时空态。
          复用 .modal/.add-dialog 视觉语言(.stats-dialog 仅调宽与行样式); 打开时取一次, 卡内可手动刷新 -->
     <div v-if="statsOpen" class="modal-mask"
          @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeStats)">
