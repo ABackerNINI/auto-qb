@@ -9,16 +9,15 @@
 
 | task | 做什么 | 输出 |
 |---|---|---|
-| `my-commit-flow.sync` | 开工 / 提交前同步: fetch + 快进 / 分叉自动 rebase(保线性) | `已同步 / 同步成功 <hash>`; 失败一行含原因与步骤 |
-| `ship.commit` | 提交全流程: 内部同步 → 闸门 → 逐路径暂存 → 提交 → 核 ref → 内联推送 | `提交成功 <hash>`; 推送未完成不改退出码(补 ship.push) |
+| `my-commit-flow.sync` | 开工同步: fetch + 快进 / 分叉自动 rebase(保线性)。提交路径已不需要它(2026-10-04 起 ship.commit 提交先行) | `已同步 / 同步成功 <hash>`; 失败一行含原因与步骤 |
+| `ship.commit` | 提交全流程: 闸门 → 逐路径暂存 → 提交 → 核 ref → 内部同步(树净 rebase 恒可自动) → 内联推送 | `提交成功 <hash>`; 推送未完成(含同步冲突/断网)不改退出码(补 ship.push) |
 | `ship.push` | 补推 / 重验: 同步核对 → 推主线 → 核远端 → 镜像(全程静默) | `推送成功 <hash>` |
 | `my-commit-flow.verify-ref` | 排障: ref 三处核对 | `ref 一致 <hash>`; 不一致给处置步骤 |
 
 ## 停手点 (脚本只报, 不替你判断)
 
 0. **缺外置配置** —— `python <包>/scripts/_pipeline.py --init` 生成初稿 → 人工确认(红线必须手填) → 置 `confirmed = true`。
-1. **树脏 + 落后/分叉** —— 失败行写明并**自带解锁配方**: `git stash push -u` → `my-commit-flow.sync` → `git stash pop` → 测试 → `ship.commit`(脚本不代做清理)。
-   ❗别走「先提交」—— `ship.commit` 内部第一步就是这条同步, 树脏未解必再撞同一处, 双向死锁。
+1. **树脏 + 落后/分叉(仅独立 sync 会撞)** —— 失败行写明并**自带两条出路**: ① `git stash push -u` → `my-commit-flow.sync` → `git stash pop` → 测试 → `ship.commit`(脚本不代做清理); ② 工作已完成待入库 → 直接 `ship.commit`(2026-10-04 起提交先行, 树净 rebase 恒可自动)。
 2. **改动混有 warn_lines(用户在途文件)** —— 成功行后附一行 ⚠, 确认是有意的。
 3. **staged 数量暴增** —— 分支 ref 可能被回退; 不要 add -A "解决", 走 `my-commit-flow.verify-ref`。
 4. **闸门红** —— 失败输出附闸门名 + 末 20 行; 处理后重跑。

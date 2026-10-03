@@ -1,6 +1,6 @@
 # Git 同步上游 (fetch / pull / 镜像线)
 
-> 摘要: `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒(树脏场景只走 stash, 「先提交」是死锁); 双 UI 镜像线何时该重放。
+> 摘要: `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒(树脏场景两条出路: stash 配方或提交先行 —— 2026-10-04 起 ship.commit 提交先行, 旧「先提交是死锁」作废); 双 UI 镜像线何时该重放。
 > 触发: git fetch, git pull, 同步上游, 落后, 行尾, 快进合并被拒, 树脏, 重叠, stash, 死锁, keep 分支, 镜像线
 
 ### `git status -sb` 的 ahead/behind 是上次 fetch 时的快照, 不会自己刷新
@@ -22,9 +22,9 @@
   重跑失败 / 自证红），才回落到下面的手工配方。
 - **处置（手写文件参与时）**: **只走 stash**(脚本不代做清理), 再重跑 sync —— 配方: `git stash push -u` → `commands run my-commit-flow.sync` → `git stash pop` → 测试 → `commands run ship.commit`。
   ❗**`pop` 撞生成物冲突(both modified)时**(2026-10-04 实测): 该冲突**autoresolve 管不到**(三步化解接线在 sync 内部的快进/rebase 分支, 手工 stash pop 在其外) —— 处置: `git checkout HEAD -- <冲突生成物>` → 重跑 `commands run kb.index`(未跟踪新产物 pop 时已回工作树, 重建即全) → `git stash drop`(pop 冲突时 stash entry 保留, 解完手动 drop); **不要手工解冲突**。
-  ❗**「先提交」是死锁, 不是处置**: 提交入口 `ship.commit` 内部第一步就是这条 sync, 树脏没解除必再撞同一处
-  —— sync 要你先提交 / ship.commit 要你先 sync, 两端互斥谁都进不去(2026-10-03 实测)。
-  2026-10-03 起 sync / ship.commit 的失败行**自带这条解锁配方**(单点 `UNLOCK_STEPS`, `.commands/my-commit-flow/scripts/sync.py`), 照行内配方走即可。
+  ❗**「先提交」曾是死锁, 2026-10-04 起已解**: ship.commit 翻转为**提交先行**(先提交后同步, 树净 rebase 恒可自动)
+  —— 工作已完成待入库就直接 `commands run ship.commit`, 与远端的冲突改在 rebase 时暴露; 想先同步再继续手头
+  工作才走上面的 stash 配方。sync 失败行自带两条出路(单点 `UNLOCK_STEPS`, `.commands/my-commit-flow/scripts/sync.py`), 照行内指引走即可。
   行尾幽灵 `M`: `git add <file>` + `git reset -q -- <file>` 刷新索引视图即可 ff, 实测有效。
   - **2026-10-02**: 仓库根已加 `.gitattributes`(`* text=auto eol=lf`)对 blob 侧设防 —— 存量工作区一次性转 LF(层3, 暂缓)完成后此类幽灵 M 应根除, 完成前本条仍适用。
   ❗旧版「`git diff --output=备份.patch` 移出 → 快进 → 施回」补丁配方**已删除**(rebase/stash 解禁后由
@@ -65,3 +65,10 @@
   **生成物冲突零人工**, 手写冲突行为逐字不变。⇒ 再遇「重叠」失败行, 先判断重叠是否全在生成物上。
 - **复发** +1 —— 2026-10-03 (本 clone, 生成物自动化解计划的提交点): 开工 sync 过 `7ef83e63`, 实施期间远端连推 4 笔(webui 三下拉失焦收窗 / 流量图 P5a / P5b / 死锁复发登记)至 `181d90c3`; 提交时 sync 首跑报**新版**「树脏挡路 …」失败行, 照行内配方 `cp -a .git <仓库外备份>` → `stash push -u` → sync(`同步成功 181d90c3`) → `pop` **零冲突**(重叠仅手写件 `pitfalls/git/sync-pull.md`, 两边改动落在不同段)。**为什么没命中**: 同前 —— 会话中途远端推进属固有窗口防不住; 但本轮是**新机制第一次在真机验证保守默认**: 重叠含手写件 ⇒ 自动化解正确地**没有**动作(未猜意图), 直接给失败行 + 配方。
 - **复发** +1 —— 2026-10-04 (本 clone, 跨组文件交叉计划轮提交点): 开工 sync 过 `926d1f66`, 首跑报「fetch 未落稳」(暂态), 重跑撞**新版**「树脏挡路」失败行(远端推进至 `908fbf28`); 照行内配方 `stash push -u` → sync → `pop` —— 本轮 **pop 撞了生成物冲突**(`plans/_index.md` both modified): 按 `checkout HEAD --` 该件 → 重跑 `kb.index` → `stash drop` 化解, 零残留落在新基线。**为什么没命中**: 三步自动化解接线在 `run_sync()` 单点, 只覆盖 sync 内部的快进/rebase 分支, 手工 stash pop 环节在其外 —— 配方行已补 pop 冲突处置, 后续照走即可。
+- **机制修复 (2026-10-04, ship.commit 提交先行)**: 本条 12 次复发的共同温床是「同步发生在树脏时」—— 旧 `ship.commit`
+  内部第一步就是 sync(治 2026-09-26「baseline 总是撞」), 分叉 / 重叠 + 树脏必撞 stash 舞蹈。现已翻转编排:
+  **闸门 → 暂存 → 提交 → 同步(rebase, 树净恒可自动) → 推送** —— 同步失败只剩冲突 / 断网两类且自动回滚,
+  按「推送未完成」停下要人; 回写件与远端 `_index` 的撞车由生成物自动化解兜底(重跑发生在含两边切片的树上,
+  结果天然是并集), 手写件冲突改在 rebase 里合流。代价两处已接住: ①闸门首跑在合并前 —— rebase 真合入远端
+  就按同一份清单**复跑一轮**(fmt 改动 amend 折进未推送 tip); ②独立 sync 的树脏场景仍走两条出路(stash 配方 / 提交先行)。
+  流程单点: `.commands/my-commit-flow/references/pipeline.md`。

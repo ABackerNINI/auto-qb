@@ -5,7 +5,8 @@
   纯落后          → git merge --ff-only <远端tip>; 树脏交 git 裁决 —— 无重叠自然成功, 重叠被拒 → 同步成功 <hash>
   分叉(树净)      → git rebase <远端tip>: 只改写按定义未推送的本地独有提交, 历史保持线性;
                     中途冲突 → --abort 全量自动回滚 → 同步成功 <新hash>
-  树脏挡路(上两类的脏分支) → 失败, 失败行**自带解锁配方** UNLOCK_STEPS(脚本仍不代做清理)
+  树脏挡路(上两类的脏分支) → 失败, 失败行自带**两条出路**: stash 解锁配方 UNLOCK_STEPS(脚本仍不代做
+                    清理)或提交先行(ship.commit 已改先提交后同步, 2026-10-04)
 
 生成物冲突自动化解(计划 26-10-03-1544, 默认开; 键 auto_resolve_generated / generated_*_cmd):
   快进被拒 / rebase 冲突时, 若重叠 / 冲突**全部**落在生成物白名单(`generated_list_cmd` 的 --list)上,
@@ -14,9 +15,10 @@
   为什么敢默认开: 生成器是纯函数(内容只由工作树里的手写文件决定), 重跑后自证通过 = 文件确实等于
   生成结果 ⇒ 证明没有手写内容被丢弃。白名单是唯一权威来源(生成器自己的 --list), 不在这里再抄一份。
 
-注: 树脏类失败行为什么必须自带配方(2026-10-03 定): 只说「先提交或移出后重跑」会撞**双向死锁** ——
-  sync 要你先提交, 而 ship.commit 内部第一步就是这条 sync(树脏未解, 必再撞同一处), 两端互斥谁都进不去。
-  解锁唯一走法: stash 移出 → 同步 → pop 弹回(两处改动上下文不重叠时自动合并, 实测零冲突)。
+注: 树脏类失败行为什么必须自带出路(2026-10-03 定, 2026-10-04 更新): 只说「先提交或移出后重跑」会让执行者
+  原地打转 —— 单独重跑 sync 树还是脏的, 必再撞同一处。出路两条: ① stash 移出 → 同步 → pop 弹回(两处改动
+  上下文不重叠时自动合并, 实测零冲突); ② 提交先行 —— ship.commit 已改为先提交后同步(2026-10-04), 树净
+  rebase 恒可自动, 与远端的冲突改在 rebase 时暴露。「先提交是死锁」的旧论断随 ship.commit 顺序翻转作废。
 
 判据纪律: 判落后只用 ls-remote 现查的远端真值对比本地 HEAD —— refs/remotes/* 的写入在本环境
 会被静默丢弃, `status -sb` 的 ahead/behind 是快照, 都不可信(单点: memory-bank/pitfalls/git/refs.md)。
@@ -65,12 +67,13 @@ UNLOCK_STEPS = (
     "测试 → commands run ship.commit"
 )
 
-# 树脏类失败行的固定前缀 —— commit.py 靠它识别「本轮会死锁」, 好补一句护栏提示(不重复配方)。
+# 树脏类失败行的固定前缀 —— 供调用方 / 测试辨认「本地改动挡住同步」这一类(ship.commit 翻转后提交路径
+# 树净不再撞它, 只剩独立 sync 的树脏场景; 2026-10-04)。
 DIRTY_BLOCK_MARK = "树脏挡路"
 
 
 def is_dirty_block(line: str) -> bool:
-    """失败行是不是「本地改动挡住同步」这一类 —— 是就必须按 UNLOCK_STEPS 解锁, 不能走「先提交」。"""
+    """失败行是不是「本地改动挡住同步」这一类 —— 独立 sync 场景按 UNLOCK_STEPS 解锁, 或改走提交先行。"""
     return line.startswith(DIRTY_BLOCK_MARK)
 
 
@@ -342,15 +345,17 @@ def run_sync() -> tuple[bool, str]:
                 return True, f"同步成功 {git('rev-parse', 'HEAD')[:8]} {GENERATED_MARK} {count} 处"
         reason = ("本地改动与远端新提交重叠" if "would be overwritten" in (proc.stderr or "") else _git_reason(proc))
         return False, (
-            f"{DIRTY_BLOCK_MARK} 本地{head[:8]} 远端{rsha[:8]} —— {reason}; "
-            f"「先提交」解不开(ship.commit 内部第一步就是这条同步, 必再撞同一处) —— 解锁: {UNLOCK_STEPS}"
+            f"{DIRTY_BLOCK_MARK} 本地{head[:8]} 远端{rsha[:8]} —— {reason}; 出路二选一: "
+            f"不提交先同步 {UNLOCK_STEPS}; 或工作已完成待入库 → commands run ship.commit"
+            f"(提交先行, 与远端的冲突改在 rebase 时暴露)"
         )
 
     # 分叉 → rebase 保持线性(D1); 树脏不做 —— rebase 会拒绝, 与其让 git 报生码不如自己说人话
     if staged or unstaged:
         return False, (
             f"{DIRTY_BLOCK_MARK} 本地{head[:8]} 远端{rsha[:8]} —— 已分叉且工作区脏, rebase 需干净工作区; "
-            f"「先提交」解不开(提交入口第一步还是这条同步) —— 解锁: {UNLOCK_STEPS}"
+            f"出路二选一: 不提交先同步 {UNLOCK_STEPS}; 或工作已完成待入库 → commands run ship.commit"
+            f"(提交先行, 树净 rebase 恒可自动)"
         )
     conflict_line = (f"需解决冲突 本地{head[:8]} 远端{rsha[:8]} —— rebase 已自动回滚, "
                      "手动合流(解冲突)后重跑")

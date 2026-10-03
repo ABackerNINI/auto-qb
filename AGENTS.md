@@ -91,11 +91,11 @@ commands run env.sync     # 首次 / 依赖变更后同步依赖
 
 ## 提交 / PR
 
-> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①`commands run my-commit-flow.sync`(远端有更新自动快进 / rebase 合流) → ②收尾回写文档(落在合并后的新基线上 —— 回写件是全体 clone 最热写点, 陈旧基线上写合并必撞) → ③消息写进 `.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后 `commands run ship.commit`: 内部同步 + 闸门 + 暂存 + 提交 + 核 ref + 推 Gitee 全自动; 成功一行「提交成功 <hash>」, 推送未完成不改退出码(补 `ship.push`)。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
+> **步骤与机检一律走 task id**(不是文档): 收到"提交" → ①收尾回写文档(DoD) → ②消息写进 `.git/COMMIT_MSG_AI.txt`(提交后脚本自动删除)后 `commands run ship.commit`: 闸门 + 暂存 + 提交 + 内部同步(2026-10-04 起**提交先行** —— 树净 rebase 恒可自动, stash 舞蹈自提交路径退役) + 核 ref + 推 Gitee 全自动; 同步冲突 / 断网才需 agent 介入(失败行自带下一步), 成功一行「提交成功 <hash>」, 推送未完成不改退出码(补 `ship.push`)。独立 `my-commit-flow.sync` 只剩会话开工用途。**本节只留口径**; 原理与完整判据在包内 `references/pipeline.md`(排障才读)。
 
 - **协作主线**: 日常在 `develop`, 以 **Gitee 的 `develop`** 为准; **交付与否只看 Gitee**。GitHub 只作镜像、**允许滞后** —— 别用 GitHub 状态判断进度。
 - **用户说"提交" = commit + push**, 一次走完; **触发词只认"提交 / 入库 / 推上去"这类显式指令**, "继续 / 接着做 / ok / 你看着办"一律不算。**本条是提交口径的单点定义**, 优先于 `memory-bank/` 里的历史表述。
 - **推送顺序固定**: 先推 Gitee (必须成功) → 核远端 ref == 本地 → 再**尝试一次** GitHub 镜像 —— **全程静默**(26-09-28 定调: 允许滞后, 成败都不提; 不重试 / 不换代理 / 不改走 SSH / 不回滚 Gitee 已完成的推送)。
 - **提交信息 = gitmoji + 中文**: 首行 `<gitmoji> <中文一句话概述>`, 空一行后写动机 / 取舍 / 影响面 / 实测数字; 小改只写首行。**数字必须是提交那一刻实测的**。选哪个 emoji 走 [gitmoji skill](.agents/skills/gitmoji/SKILL.md)。
-- **先合并远端, 再收尾** (2026-09-26 定稿, 治「baseline 总是撞」): 收尾回写 (基线切片 / activeContext 切片 / 各 _index) 必须落在**合并远端之后**的新基线上 —— 落后即先 `commands run my-commit-flow.sync`(自动合流)再收尾; 回写文件**随主提交一并暂存**, 不推完再补一笔 (已推送的提交不能 amend + 强推)。
+- **回写合流交脚本** (2026-10-04 起, 取代 2026-09-26「先合并远端再收尾」): 收尾回写直接写在本地基线上, 与远端的合流由 `ship.commit` 提交后 rebase 完成 —— 各 `_index` 撞车由生成物自动化解兜底(取一侧 + 重跑生成器 + 自证), 手写件冲突才停下要人; 回写文件仍**随主提交一并暂存**, 不推完再补一笔 (已推送的提交不能 amend + 强推)。
 - **红线与闸门清单外置在 `.commands/my-commit-flow/.my-commit-flow.toml`** (包脚本强制读取, 缺了就停手引导生成)。

@@ -1,4 +1,5 @@
-"""commit.py v3 守阵 —— 编排合一 + 一行输出契约。真实临时仓库测 git 路径, 外部依赖(sync/闸门/push)替身。
+"""commit.py 守阵 —— 编排合一 + 一行输出契约。真实临时仓库测 git 路径, 外部依赖按需替身:
+闸门 / push 一律替身; 同步在编排语义用例里替身, 在真仓场景用例里真跑(见 2026-10-04 提交先行节)。
 
 ## 测试计划
 - test_stage_plan_*                       暂存计划: 全量 / 子集(omitted 可见) / 拒批量 / 红线 / 空改动
@@ -7,12 +8,16 @@
 - test_full_commit_push_one_line          全流程成功 → 恰好一行「提交成功 <hash>」; 消息文件消费即删
 - test_staged_delete_skips_add            已暂存的删除: 逐路径 add 不再撞 pathspec 落空(issue 26-09-28-0128)
 - test_unstaged_delete_uses_rm_cached     未暂存的删除: 工作区无而索引有 → rm --cached 登记删除(issue 26-09-28-0128)
-- test_sync_failure_blocks_commit         未与主线同步 → 提交失败 + sync 失败详情, 不产生提交
-- test_dirty_sync_failure_warns_deadlock  树脏类同步失败 → 附死锁护栏行(别再「先跑 sync / 先提交」)
-- test_clean_sync_failure_no_deadlock_note 非脏类同步失败(离线) → 不附护栏行, 免误导
+- test_sync_offline_after_commit_partial  提交先行: 同步失败(离线)在提交落稳之后 → 推送未完成, 退出码 0
+- test_sync_conflict_line_passthrough     冲突类失败行原样透传(约定模板无缝拼接), 不再附死锁护栏
+- test_remote_moved_rebases_before_push   真仓: 远端前移 → 提交后 rebase 保线性, 成功行报改写后的新 hash
+- test_remote_conflict_reports_partial    真仓: 同文件冲突 → rebase 自动回滚 → 提交成功(未推送) + 冲突模板
+- test_post_rebase_gates_rerun_on_diverge 真仓: rebase 合入远端 → 闸门复跑一轮(共两轮, 同一清单)
+- test_post_rebase_gate_red_blocks_push   真仓: 复跑红 → 推送未完成 + 修复指引, 不推送
+- test_post_rebase_gate_dirty_amends      真仓: 复跑的 fmt 类闸门又改文件 → amend 折进未推送 tip
 - test_gate_failure_blocks_commit         闸门红 → 提交失败 + 闸门名 + 失败输出, 不产生提交
 - test_push_failure_is_partial            推送未完成 → 退出码仍 0 + 补推提示; 消息文件照常消费
-- test_no_push_stops_before_push          --no-push 不碰 push, 一行注明未推送
+- test_no_push_skips_sync_and_push        --no-push 不同步不推送(离线可用), 一行注明未推送
 - test_warn_lines_note_on_success         warn_lines 命中 → 成功路径附一行 ⚠(唯一例外, D5)
 - test_message_kept_on_commit_fail        git commit 失败 → 消息文件保留
 - test_message_kept_on_verify_fail        ref 核对失败 → 消息文件保留
@@ -54,7 +59,7 @@ def _commit_file(repo: Path, name: str, content: str, msg: str) -> None:
 
 @pytest.fixture()
 def repo(tmp_path, monkeypatch):
-    """带 bare 远端的工作仓(已推送 base 提交); cwd 钉在仓内, find_root 钉到仓根。"""
+    """带 bare 远端的工作仓(已推送 base 提交); cwd 钉在仓内, find_root / verify_ref 钉到仓根。"""
     monkeypatch.setenv("COMMAND_FLOW_PACK_DIR", str(PKG))
     origin = tmp_path / "origin.git"
     _git(tmp_path, "init", "--bare", "-b", "develop", origin.name)
@@ -67,7 +72,27 @@ def repo(tmp_path, monkeypatch):
     _git(a, "push", "-u", "origin", "develop")
     monkeypatch.chdir(a)
     monkeypatch.setattr(commit_mod, "find_root", lambda: a)
+    # 真 check_refs 用例需要: verify_ref 的 REPO / BRANCH 是 import 时定死的模块级值
+    monkeypatch.setattr(verify_ref_mod, "REPO", a)
+    monkeypatch.setattr(verify_ref_mod, "BRANCH", "develop")
     return a
+
+
+def _push_remote_commit(repo: Path, tmp: Path, name: str, content: str, msg: str = "remote") -> None:
+    """第二个工作仓 b: 模拟"别的 clone 推了新提交"(与 test_sync 同款)。"""
+    b = tmp / "b"
+    if not b.exists():
+        _git(tmp, "clone", "-b", "develop", "origin.git", "b")
+        _git(b, "config", "user.email", "t@t")
+        _git(b, "config", "user.name", "t")
+    (b / name).write_text(content, encoding="utf-8")
+    _git(b, "add", "-A")
+    _git(b, "commit", "-m", msg)
+    _git(b, "push", "origin", "develop")
+
+
+def _must_not_push() -> None:
+    raise AssertionError("不该走到推送")
 
 
 def _patch_ok_flow(monkeypatch):
@@ -120,8 +145,7 @@ def test_message_default_path(tmp_path):
 # ------------------------------------------------------------------ 真实仓库路径
 
 
-def test_message_missing_fails_early(repo, monkeypatch, capsys):
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (True, "已同步 abcdef01"))
+def test_message_missing_fails_early(repo, capsys):
     (repo / "x.txt").write_text("x\n", encoding="utf-8")  # 有改动才走得到消息检查
     rc = commit_mod.main([])
     out = capsys.readouterr().out
@@ -166,50 +190,156 @@ def test_unstaged_delete_uses_rm_cached(repo, monkeypatch, capsys):
     assert _git(repo, "show", "--stat", "--name-status", "HEAD").count("D") >= 1  # 删除经 rm --cached 进了提交
 
 
-def _dirty_sync_line() -> str:
-    """树脏类同步失败行(与 sync.py 真机输出同形态) —— 含解锁配方, 会被 is_dirty_block 认出。"""
-    return (f"{sync_mod.DIRTY_BLOCK_MARK} 本地12345678 远端87654321 —— 本地改动与远端新提交重叠; "
-            f"解锁: {sync_mod.UNLOCK_STEPS}")
+# ------------------------------------------------------------------ 同步失败 = 推送未完成(2026-10-04 提交先行)
 
 
-def test_sync_failure_blocks_commit(repo, monkeypatch, capsys):
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, _dirty_sync_line()))
+def test_sync_offline_after_commit_partial(repo, monkeypatch, capsys):
+    """提交先行(2026-10-04): 同步失败发生在提交落稳之后 —— 按「推送未完成」处理, 不回滚提交。"""
+    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, "拿不到远端 origin/develop (离线?) —— 联网后重跑"))
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(push_mod, "run_push", _must_not_push)
     msg = _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     rc = commit_mod.main([])
     out = capsys.readouterr().out
-    assert rc == 1
-    assert "提交失败: 未与主线同步" in out
-    assert "重叠" in out  # sync 的一行原因透传
-    assert msg.exists()  # 未提交, 消息照常保留
-    assert _git(repo, "status", "--porcelain").count("x.txt") == 1  # 未产生任何提交/暂存
+    assert rc == 0  # 提交这个主目标已达成 —— 别重新提交
+    assert "提交成功" in out and "未推送" in out
+    assert "推送未完成: 同步失败: 拿不到远端" in out and "commands run ship.push" in out
+    assert not msg.exists()  # ref 核对已过, 消息照常消费
+    assert "git stash push -u" not in out  # 离线不是脏类, 别拿 stash 配方误导
+    assert "x.txt" in _git(repo, "show", "--name-only", "--format=", "HEAD")  # 提交在, 等补推
 
 
-def test_dirty_sync_failure_warns_deadlock(repo, monkeypatch, capsys):
-    """树脏类失败必须点破死锁(2026-10-03): 单独重跑 sync / 「先提交」都进不去, 只能 stash 解锁。"""
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, _dirty_sync_line()))
+def test_sync_conflict_line_passthrough(repo, monkeypatch, capsys):
+    """冲突类失败行原样透传, 与 sync.py main() 同一条拼接缝(「同步失败需解决冲突 …」无分隔冒号)。"""
+    conflict_line = "需解决冲突 本地12345678 远端87654321 —— rebase 已自动回滚, 手动合流(解冲突)后重跑"
+    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, conflict_line))
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(push_mod, "run_push", _must_not_push)
     _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
     rc = commit_mod.main([])
     out = capsys.readouterr().out
-    assert rc == 1
-    assert "解锁" in out and "git stash push -u" in out and "git stash pop" in out  # 配方完整透传
-    assert "本命令内部那一步" in out  # 死锁护栏行: 这条 sync 就是 submit 内部那一步
-    assert "先跑 commands run my-commit-flow.sync 后重跑" not in out  # 旧提示会让人原地转圈
+    assert rc == 0
+    assert "提交成功" in out and "未推送" in out
+    assert "推送未完成: 同步失败需解决冲突 本地12345678 远端87654321" in out  # 模板无缝拼接(v3 约定)
+    assert "本命令内部那一步" not in out  # 旧死锁护栏已随提交先行退役
 
 
-def test_clean_sync_failure_no_deadlock_note(repo, monkeypatch, capsys):
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (False, "拿不到远端 origin/develop (离线?) —— 联网后重跑"))
+# ------------------------------------------------------------------ 真仓同步场景(rebase / 冲突 / 闸门复跑)
+
+
+def test_remote_moved_rebases_before_push(repo, tmp_path, monkeypatch, capsys):
+    """提交先行主路径: 远端前移 → 提交后 rebase 保线性, 成功行报改写后的新 hash。"""
+    pushed = []
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(push_mod, "run_push", lambda: pushed.append(1) or (True, "推送成功 abcdef01"))
     _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")  # 会话中途远端推进
+    rc = commit_mod.main([])  # run_sync 不替身 —— 真跑(fetch + 提交后 rebase)
+    out = capsys.readouterr().out
+    assert rc == 0
+    m = re.fullmatch(r"提交成功 ([0-9a-f]{8})\n", out)
+    assert m, f"成功必须恰好一行, 实际: {out!r}"
+    assert _git(repo, "rev-parse", "HEAD").startswith(m.group(1))  # 成功行报的是 rebase 后的真值
+    remote_tip = _git(repo, "ls-remote", "origin", "develop").split()[0]
+    assert _git(repo, "rev-list", "--count", f"{remote_tip}..HEAD") == "1"  # 本地提交重放在远端 tip 上
+    assert _git(repo, "rev-list", "--merges", "--count", "HEAD") == "0"  # 历史保持线性
+    assert (repo / "b.txt").exists() and (repo / "x.txt").exists()  # 两边内容都在
+    assert pushed == [1]
+
+
+def test_remote_conflict_reports_partial(repo, tmp_path, monkeypatch, capsys):
+    """同文件冲突 → rebase 自动回滚 → 提交成功(未推送) + 约定冲突模板; 退出码 0, 不重新提交。"""
+    monkeypatch.setattr(commit_mod, "run_gates", lambda hits, ctx: ([], [], 0))
+    monkeypatch.setattr(push_mod, "run_push", _must_not_push)
+    msg = _write_msg(repo)
+    (repo / "base.txt").write_text("my line\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "base.txt", "remote line\n")  # 同文件不同行 → rebase 必撞
     rc = commit_mod.main([])
     out = capsys.readouterr().out
-    assert rc == 1
-    assert "本命令内部那一步" not in out  # 离线不是脏类, 别拿 stash 配方误导
+    assert rc == 0
+    assert "提交成功" in out and "未推送" in out
+    assert re.search(r"推送未完成: 同步失败需解决冲突 本地[0-9a-f]{8} 远端[0-9a-f]{8}", out)
+    assert "commands run ship.push" in out
+    assert not msg.exists()  # ref 核对已过 → 消息已消费
+    assert not (repo / ".git" / "rebase-merge").exists()  # 回滚无残留
+    assert not (repo / ".git" / "rebase-apply").exists()
+    assert _git(repo, "log", "--format=%s", "-1") == "✨ test"  # HEAD 仍是本地提交(rebase 已回滚)
+
+
+def test_post_rebase_gates_rerun_on_diverge(repo, tmp_path, monkeypatch, capsys):
+    """rebase 真合入远端(HEAD 改写) → 闸门复跑一轮: 共两轮(提交前 + 合流后), 按同一份本地改动清单。"""
+    calls = []
+
+    def _gates(hits, ctx):
+        calls.append(list(ctx["changed"]))
+        return [], [], 0
+
+    monkeypatch.setattr(commit_mod, "run_gates", _gates)
+    monkeypatch.setattr(push_mod, "run_push", lambda: (True, "推送成功 abcdef01"))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0 and out.startswith("提交成功 ")
+    assert len(calls) == 2  # 提交前一轮 + 合流后复跑一轮
+    assert calls[0] == calls[1] == ["x.txt"]
+
+
+def test_post_rebase_gate_red_blocks_push(repo, tmp_path, monkeypatch, capsys):
+    """复跑红 → 推送未完成 + 修复指引(修复重跑将作为新提交入库), 不推送, 退出码 0。"""
+    runs = {"n": 0}
+
+    def _gates(hits, ctx):
+        runs["n"] += 1
+        if runs["n"] == 1:
+            return [], [], 0
+        return [("测试闸门", "pytest -q", 1, 0.4, "boom\nE   assert False")], [], 1
+
+    monkeypatch.setattr(commit_mod, "run_gates", _gates)
+    monkeypatch.setattr(push_mod, "run_push", _must_not_push)
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "提交成功" in out and "未推送" in out
+    assert "推送未完成: 闸门「测试闸门」未过(合并远端后复跑" in out
+    assert "重跑 commands run ship.commit" in out and "boom" in out
+    assert runs["n"] == 2
+
+
+def test_post_rebase_gate_dirty_amends(repo, tmp_path, monkeypatch, capsys):
+    """复跑的 fmt 类闸门又改了文件 → 逐路径 add + amend 折进未推送 tip(不产生第二个提交)。"""
+    runs = {"n": 0}
+
+    def _gates(hits, ctx):
+        runs["n"] += 1
+        if runs["n"] == 2:  # 第二轮 = 合流后的复跑: 模拟 fmt 改文件
+            (repo / "x.txt").write_text("x\nformatted\n", encoding="utf-8")
+        return [], [], 0
+
+    monkeypatch.setattr(commit_mod, "run_gates", _gates)
+    monkeypatch.setattr(push_mod, "run_push", lambda: (True, "推送成功 abcdef01"))
+    _write_msg(repo)
+    (repo / "x.txt").write_text("x\n", encoding="utf-8")
+    _push_remote_commit(repo, tmp_path, "b.txt", "b\n")
+    rc = commit_mod.main([])
+    out = capsys.readouterr().out
+    assert rc == 0 and out.startswith("提交成功 ")
+    remote_tip = _git(repo, "ls-remote", "origin", "develop").split()[0]
+    assert _git(repo, "rev-list", "--count", f"{remote_tip}..HEAD") == "1"  # 仍只有一个本地提交
+    assert "formatted" in _git(repo, "show", "HEAD:x.txt")  # 闸门改动折进了 tip
+
+
+# ------------------------------------------------------------------ 失败与例外路径
 
 
 def test_gate_failure_blocks_commit(repo, monkeypatch, capsys):
-    monkeypatch.setattr(sync_mod, "run_sync", lambda: (True, "已同步 abcdef01"))
     monkeypatch.setattr(
         commit_mod, "run_gates", lambda hits, ctx: ([("测试闸门", "pytest -q", 1, 0.4, "boom\nE   assert False")], [], 1)
     )
@@ -236,12 +366,13 @@ def test_push_failure_is_partial(repo, monkeypatch, capsys):
     assert not msg.exists()  # 提交已落稳(ref 通过), 消息照常消费
 
 
-def test_no_push_stops_before_push(repo, monkeypatch, capsys):
+def test_no_push_skips_sync_and_push(repo, monkeypatch, capsys):
     _patch_ok_flow(monkeypatch)
 
     def _must_not_run():
-        raise AssertionError("--no-push 不该续跑推送")
+        raise AssertionError("--no-push 不该碰同步 / 推送")
 
+    monkeypatch.setattr(sync_mod, "run_sync", _must_not_run)
     monkeypatch.setattr(push_mod, "run_push", _must_not_run)
     msg = _write_msg(repo)
     (repo / "x.txt").write_text("x\n", encoding="utf-8")
@@ -290,6 +421,5 @@ def test_message_kept_on_verify_fail(repo, monkeypatch, capsys):
 
 
 def test_check_refs_pass_on_fresh_repo(repo, monkeypatch):
-    monkeypatch.setattr(verify_ref_mod, "REPO", repo)
     ok, detail = verify_ref_mod.check_refs()
     assert ok and detail == []
