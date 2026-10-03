@@ -17,6 +17,8 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_rebuild_needed_matrix_each_criterion_alone_triggers_rebuild: 判据矩阵(审计 M2): 六判据段/三元组逐成员/trackers 增删各自单独变更必触发重建
 - test_rebuild_needed_matrix_tracker_runtime_fields_do_not_rebuild: 判据矩阵负例(审计 M2): tracker 运行时现读字段变化不重建(过度重启族防线)
 - test_rebuild_within_window_still_delivers_queue_rebuilt: 抑制窗内二次重建 queue_rebuilt 不被吞(issue 26-10-01-0750)
+- test_full_round_restores_torrent_tasks_after_rebuild: full_round 重匹配兑现后补建存量种子的种子级任务(issue 26-10-01-2147)
+- test_startup_round_tasks_not_duplicated: 首轮全量轮 full_round 补建与 added 管线幂等互斥, 任务面恰一份(issue 26-10-01-2147)
 - test_rebuild_preserves_runtime_memory_state: 重建不重读磁盘, exec_history 原对象保留
 - test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时回归阈值(基线化, 审计 L9)
 - test_p2a_dispatch_event_guards_skip_without_side_effects: 事件分派四守卫(快照/配置/首轮/同值)静默跳过 (P2-a)
@@ -90,7 +92,8 @@ def test_kernel_does_not_import_business_packages():
 
 
 def test_phase_subscription_map():
-    """事件两相位(events_removed/events_added)恰 rules 一家; torrents_added 四家按装配序
+    """事件两相位(events_removed/events_added)恰 rules 一家; torrents_added 四家按装配序;
+    full_round 两家按装配序(tracker 重匹配先行, rules 任务补建消费其结果, issue 26-10-01-2147)
 
     §4.2 相位表的认领面: torrents_added = tracker → maintenance → grouping → rules
     (装配序 = 相位内消费序, plan §3.3)。组上下文等行为归各自模块测试。
@@ -102,6 +105,7 @@ def test_phase_subscription_map():
         assert [h.__self__.name for h in handlers.get("events_added", [])] == ["rules"]
         assert [h.__self__.name
                 for h in handlers.get("torrents_added", [])] == ["tracker", "maintenance", "grouping", "rules"]
+        assert [h.__self__.name for h in handlers.get("full_round", [])] == ["tracker", "rules"]
 
 
 # ============================================================
@@ -150,6 +154,9 @@ def test_torrents_added_pipeline_order():
     = 相位内消费序), 相位内次序为 §4.2 认领清单的装配序实现 —— 数据互不依赖
     (各步只读 tracker_conf/store/config), 次序约束在此锁定, 变更必须是有意行为。
     集数标签与维护同属 maintenance, 在其单订阅内紧随维护执行(见 maintenance_mod._on_torrent_added)。
+    首轮全量轮 _refresh_torrents 还会在 added 管线之前经 full_round 相位补建种子级任务
+    (issue 26-10-01-2147, 同走 _create_torrent_tasks 被 mock 记一次), 故 order 首元素
+    为该补建; 其后才是 torrents_added 相位内的四家序。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
@@ -190,7 +197,8 @@ def test_torrents_added_pipeline_order():
         finally:
             for p in patches:
                 p.stop()
-        assert order == ["limit", "maintain", "episodes", "group", "tasks"], order
+        # 首个 "tasks" = full_round 补建(issue 26-10-01-2147); 其后 = added 管线四家序
+        assert order == ["tasks", "limit", "maintain", "episodes", "group", "tasks"], order
 
 
 # ============================================================
@@ -466,6 +474,109 @@ def test_rebuild_within_window_still_delivers_queue_rebuilt():
 
         assert len(rebuilt) == 2, "抑制窗内二次重建的 queue_rebuilt 不得被吞(issue 26-10-01-0750)"
         assert mgr.task_queue.has_named("delete_tags"), "全局任务必须重注册进最后一次重建出的队列"
+
+
+# ============================================================
+# L2 重建后种子级任务补建(issue 26-10-01-2147)
+# ============================================================
+def test_full_round_restores_torrent_tasks_after_rebuild():
+    """full_round 重匹配兑现后补建存量种子的种子级任务(issue 26-10-01-2147)
+
+    rebuild_runtime 换新 TaskQueue 后只有全局任务自注册重入队, 种子级任务(内置
+    maintenance + interval 规则任务)随旧队列丢弃; 唯一触发源 torrents_added 相位对
+    存量记录不触发(_apply 只对 prev 没有的 hash 判 added)。修复后 rules 订阅
+    full_round, 在 tracker 重匹配(装配序在前)之后补建:
+    - maintenance 任务立即到期(下一 tick 兑现一次维护: external_tag_changes 已由
+      reset_runtime 全量登记, 唯一消费方是该任务跑的 handle_maintenance);
+    - interval 规则任务重入队(立即到期, 与 added 管线同语义);
+    - 幂等: 重复 emit full_round 不重复建(队列查重, 黄金法则 1);
+    - conf 仍 None(未匹配站点)的记录不补建, 留待下一全量轮。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        # tracker 带规则集引用: 规则任务(_rules_for_torrent 经 @引用绑定)才有创建面
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules"])
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
+        client.torrents["H1"] = tor
+        seed_store(mgr, [tor])
+        rules = mgr.host.get("rules")
+
+        # L2 重建(interval 变化): 队列换新 / conf 置空, 种子级任务丢失(缺陷场景)
+        old = mgr.config
+        new = _new_cfg_like(old)
+        new.interval = 999.0
+        mgr.connect = mock.MagicMock(return_value=True)
+        assert rules.apply(old, new).action == "rebuilt"
+        assert mgr.store.get("H1").tracker_conf is None, "reset_runtime 契约: conf 置空待重匹配"
+        q = mgr.task_queue
+        assert not any(t.hash == "H1" for t in q._fast), "重建后种子级任务应随旧队列丢弃"
+
+        # 全量轮: tracker 重匹配 -> rules 补建(装配序 tracker 先于 rules)
+        # rebuild_runtime 尾段 reconnect 已把 client 断开; mock connect 不真绑, 先模拟重连完成
+        mgr.client = client
+        mgr.events.emit("full_round")
+        assert mgr.store.get("H1").tracker_conf is not None, "重匹配先行, conf 已就位"
+        assert q.has_task("internal", "maintenance", "H1"), "内置维护任务必须补建"
+        assert q.has_task("rule", "example_rules.add_site_tag", "H1"), "interval 规则任务必须补建"
+        m = next(t for t in q._fast if t.kind == "internal" and t.hash == "H1")
+        assert m.next_run <= time.time(), "补建的维护任务应立即到期(下一 tick 首轮兑现一次维护)"
+
+        # 幂等: 重复 full_round 不重复建(桩配置 3 条 interval 规则, 按单规则计数)
+        mgr.events.emit("full_round")
+        n_m = sum(1 for t in q._fast if t.kind == "internal" and t.hash == "H1")
+        n_r = sum(1 for t in q._fast if t.kind == "rule" and t.name == "example_rules.add_site_tag" and t.hash == "H1")
+        assert (n_m, n_r) == (1, 1), f"重复补建必须被队列查重挡住: maintenance={n_m}, rule={n_r}"
+
+
+def test_full_round_skips_unmatched_records():
+    """conf 仍 None(未匹配站点)的记录不补建: 无规则可绑定, 留待下一全量轮"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules"])
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
+        client.trackers_map["H2"] = [{"url": "https://unknown.example.net/announce.php"}]
+        client.torrents["H2"] = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
+        seed_store(mgr, [client.torrents["H1"], client.torrents["H2"]])
+        rules = mgr.host.get("rules")
+
+        old = mgr.config
+        new = _new_cfg_like(old)
+        new.interval = 999.0
+        mgr.connect = mock.MagicMock(return_value=True)
+        assert rules.apply(old, new).action == "rebuilt"
+        mgr.client = client  # 模拟 rebuild_runtime 尾段 reconnect 的重连完成(mock connect 不真绑)
+        mgr.events.emit("full_round")
+
+        assert mgr.store.get("H2").tracker_conf is None, "未匹配站点不重匹配"
+        assert not any(t.hash == "H2" for t in mgr.task_queue._fast), "未匹配记录不得补建任务"
+        assert mgr.task_queue.has_task("internal", "maintenance", "H1"), "已匹配记录照常补建"
+
+
+def test_startup_round_tasks_not_duplicated():
+    """首轮全量轮(全部种子判 added): full_round 补建与 added 管线幂等互斥, 任务面恰一份
+
+    full_round 相位先于 torrents_added 相位(plan §4.2): 首轮补建先建, added 管线的
+    建任务一步被队列查重挡住 —— 两个入口对同一 hash 只落一份任务。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"), tracker_rules=["@example_rules"])
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1", state="stalledUP", tags="")
+        client.torrents["H2"] = FakeTorrent(hash="H2", name="T2", state="stalledUP", tags="")
+        mgr._refresh_torrents()  # 首轮全量: full_round 补建 -> added 管线(同 tick)
+        q = mgr.task_queue
+        for h in ("H1", "H2"):
+            assert q.has_task("internal", "maintenance", h), f"{h} 维护任务必须就位"
+            assert q.has_task("rule", "example_rules.add_site_tag", h), f"{h} 规则任务必须就位"
+        n_m = sum(1 for t in q._fast if t.kind == "internal" and t.hash in ("H1", "H2"))
+        n_r = sum(
+            1
+            for t in q._fast if t.kind == "rule" and t.name == "example_rules.add_site_tag" and t.hash in ("H1", "H2")
+        )
+        assert (n_m, n_r) == (2, 2), f"任务面必须恰一份(不随入口数翻倍): maintenance={n_m}, rule={n_r}"
 
 
 def test_rebuild_preserves_runtime_memory_state():

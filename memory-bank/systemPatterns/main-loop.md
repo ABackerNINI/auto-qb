@@ -93,7 +93,7 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 
 | 相位 | 内容 | 认领 |
 |------|------|------|
-| `full_round`(:754, 仅全量轮) | tracker 重匹配(L2 reset_runtime 置空 conf 在此兑现) | TrackerModule(tracker_mod.py:40) |
+| `full_round`(:754, 仅全量轮) | tracker 重匹配(L2 reset_runtime 置空 conf 在此兑现)+ 存量种子级任务补建(L2 重建换队列后种子级任务随旧队列丢弃且 torrents_added 对存量不触发, 重匹配兑现后按队列查重幂等补建、立即到期首轮兑现一次维护, issue 26-10-01-2147) | TrackerModule(tracker_mod.py:40) → RulesModule(rules_mod.py:69, 装配序在后消费重匹配结果) |
 | `transitions`(:767, 每轮无条件) | 状态转移观测: 上传转暂停 / errored → 缺文件扫描(用上一轮快照); **必须先于一切自有动作** —— 自有停种经快照同步会当场改写 `by_hash`, 放后面会把自家停种误判为外部转移 | GroupingModule(grouping_mod.py:67) |
 | `events_removed`(:778) | on_torrent_deleted / on_torrent_state_enum_changed / on_torrent_field_changed 同步即时分派(deleted 用删除前快照副本, state 用上一轮快照对比); 事件规则**不建周期任务**, 建 rule-event 一次性 Task 作 ctx.task 同步执行, 遇 checking pending 由轮询子任务断点续跑(rules_mod.py:332-355) | RulesModule(rules_mod.py:64) |
 | `events_added`(:808) | on_torrent_added —— 新增种子**已匹配 tracker conf 之后**触发 | RulesModule(rules_mod.py:65) |

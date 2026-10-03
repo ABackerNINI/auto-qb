@@ -5,6 +5,19 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **热重载 L2 重建后种子级任务补建: RulesModule 订阅 full_round (2026-10-04, issue
+  [26-10-01-2147](../issues/26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) 认领修复)**:
+  `rebuild_runtime` 换新 TaskQueue 后只有全局任务自注册重入队, 种子级任务(内置 maintenance + interval
+  规则任务)随旧队列丢弃且唯一触发源 torrents_added 相位对存量记录不触发(`_apply` 只对 prev 没有的
+  hash 判 added)⇒ 所有 L2 级热重载后存量种子维护面停摆直到重启。修法三件: ①`TaskQueue.has_task(kind,
+  name, hash)` 查重助手(`has_named` 委托归一); ②RulesModule 订阅 `full_round`(装配序在 TrackerModule
+  重匹配之后), conf 已就位且任务面缺失的存量记录补建, conf 仍 None(未匹配站点)留待下轮; ③
+  `_create_torrent_tasks` 入口幂等(maintenance 任务在队即整面跳过, 首轮全量轮「补建先于 added 管线」
+  双入口互斥) + `immediate=True`(补建任务立即到期, 下一 tick 兑现一次维护消费 `external_tag_changes`
+  —— on_change「首轮全量收敛」契约成立)。红验先行 3 用例(test_modules_p5.py)。坑档
+  [pitfalls/backend/hot-reload-stale-bindings-derived-views.md](../pitfalls/backend/hot-reload-stale-bindings-derived-views.md);
+  档案 [tasks/26-10-04-backend-hotreload-torrent-task-restore](../tasks/26-10-04-backend-hotreload-torrent-task-restore.md)
+
 - **HR 热重载存量绑定陈旧修复: `TrackerModule.apply` 重绑存量记录 (2026-10-03, 计划
   [plans/26-10-03-0436](../plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html) P1, `2a5d07a2`)**:
   热重载只换 `manager.config` 对象, 存量 `rec.tracker_conf` 仍指旧 `TrackerConfig`(其 `hr_check` 派生视图为

@@ -77,7 +77,7 @@ def test_full_round_phase_rematches_empty_confs():
         rec = mgr.store.get("H1")
         assert rec.tracker_conf is None
         n = mgr.events.emit("full_round")
-        assert n == 1, "恰好 tracker 模块订阅 full_round"
+        assert n == 2, "tracker(重匹配) + rules(种子级任务补建, issue 26-10-01-2147)订阅 full_round"
         assert rec.tracker_conf is not None, "全量轮相位应兑现重匹配"
         assert rec.tracker_conf.name == "HHan"
 

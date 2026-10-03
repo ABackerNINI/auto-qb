@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 8 |
 | perf | 5 |
 | docs | 1 |
 | test | 1 |
@@ -42,7 +42,6 @@
 - [feat] [浏览器扩展优化信息展示](26-10-01-2203-feat-ext-info-display.html) — EXT 域一句话 TODO: 扩展侧信息展示优化(无细节, 开工先复验现状与诉求)
 - [feat] [扩展版本号 + 主程序仅支持固定版本 + 扩展高度参数化](26-10-01-2203-feat-ext-version-pinning.html) — 扩展加版本号, 主程序只认固定版本以简化兼容; 扩展行为高度参数化把复杂度交给后端, 最大限度免升级
 - [feat] [支持多语言(低优先级)](26-10-01-2203-feat-i18n-multi-language.html) — (低优先级)WEBUI/通知多语言支持, 未排期
-- [bug] [添加新站点热重载后不触发种子的内置维护任务](26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) — WEBUI 添加新站点并热重载后, 受影响种子的内置维护任务没有被触发
 - [feat] [整组迁移防进度丢失(qB 逐个移动同组种子的问题)](26-10-01-2147-feat-group-move-atomicity.html) — qB 一次设定多个种子位置会依次移动, 同组多个种子随机丢进度, 需要整组迁移方案
 - [feat] [HR 在线核实同步修改 HR 标签/分类](26-10-01-2147-feat-hr-verify-sync-hr-tags.html) — 在线核实结论变化时同步增删 HR 相关标签/分类(考核中/未达标等), 当前无此联动(grep hr/ 无标签同步逻辑)
 - [feat] [命中的限速曲线强调显示 + 限速时可配置弹窗提醒](26-10-01-2147-feat-speedlimit-curve-emphasis.html) — 当前生效的限速档位在曲线上强调显示; 被限速时可选配置弹窗提醒
@@ -93,6 +92,7 @@
 - [bug] [HrEntry.last_seen 全库无写入点, INDEX_RETENTION 过期清理分支永不触发](26-10-01-2335-bug-hr-entry-last-seen-dead-prune.html) — HrEntry.last_seen 无任何写入点恒 0.0, service 两处 INDEX_RETENTION 过期清理分支成死代码
 - [docs] [config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS](26-10-01-2212-docs-schema-docstring-tracker-field-levels.html) — TRACKER_FIELD_LEVELS 级别表随内核化重构整体退役后, config/schema/__init__.py 的 docstring 仍提及它, 与代码相反的文档漂移; 不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内
 - [bug] [hr.token 生成是非原子写, 半截文件导致通道密钥静默漂移 (与 web.token 同族)](26-10-01-2151-bug-hr-channel-credential-atomic-write.html) — hr.channel resolve_token 用 O_TRUNC 直写 hr.token, 非空半截密钥被持久化, 扩展侧鉴权 401
+- [bug] [添加新站点热重载后不触发种子的内置维护任务](26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) — WEBUI 添加新站点并热重载后, 受影响种子的内置维护任务没有被触发
 - [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui
 - [bug] [「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局](26-10-01-2129-bug-webui-delete-tag-scope-confusion.html) — 删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置
 - [feat] [重做优化种子详情抽屉](26-10-01-2119-feat-webui-drawer-redesign.html) — 详情抽屉整体重设计(未排期); 已有标签页记忆与长文本截断等局部改进, 需要一次整体重做

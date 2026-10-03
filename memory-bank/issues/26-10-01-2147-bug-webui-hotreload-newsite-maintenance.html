@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="hot-reload">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="添加新站点热重载后不触发种子的内置维护任务">
 <meta name="issue-summary" content="WEBUI 添加新站点并热重载后, 受影响种子的内置维护任务没有被触发">
 <title>添加新站点热重载后不触发种子的内置维护任务 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2147-bug-webui-hotreload-newsite-maintenance</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:47</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -168,14 +168,22 @@
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-04 02:35 — 修复完成，状态 <strong>Done</strong>（实测 2422 passed + 3 skipped / 覆盖率 99%，<code>commands run test.quick</code> 与 <code>test.full</code> 均绿）。修法与验证见「修复后补充」。</li>
+      <li>2026-10-04 02:06 — 用户指派认领修复，状态 <strong>In Progress</strong>。修法采纳 §06 候选 1（rules 订阅 full_round 补建 + 队列查重幂等 + 补建任务首轮立即兑现）。</li>
       <li>2026-10-01 21:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-04 00:55 — 复验（用户指派，起桩验证 + 关键锚点抽查未漂移）：新机制（统一挂载口）下仍复现，影响面更宽（所有 L2 级热重载后存量种子的种子级任务均丢，不止新站点），根因已定位（§05），不转 Dropped。用户拍板「暂不修，只回写复验结论」，状态保持 <strong>Open</strong> 等后续修复安排。零代码改动。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行（L77）由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>
     <p>复验：2026-10-04 仍复现（新机制下）—— 已兑现入池时的复验 TODO：起桩重放「WEBUI 添加新站点 → 热重载」并核对锚点链，结论为仍复现且影响面更宽（见 §01 / §03 / §05），不 Dropped；状态保持 Open。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h3>修复后补充（2026-10-04）</h3>
+    <p><strong>实际修法 = §06 候选 1</strong>（rules 订阅 full_round 补建），落地三件：</p>
+    <ul>
+      <li><code>TaskQueue.has_task(kind, name, hash)</code> 新查重助手（<code>src/auto_qb/core/taskqueue.py</code>）—— 种子级任务幂等判据单点；<code>has_named</code>（全局任务）改为它的 <code>hash=""</code> 特例转发，语义不变。</li>
+      <li><code>RulesModule</code> 订阅 <code>full_round</code>（<code>src/auto_qb/core/modules/rules_mod.py</code> <code>_on_full_round</code>）—— 装配序在 TrackerModule 之后：重匹配兑现后为 conf 已就位、任务面缺失的存量记录补建；conf 仍 None（未匹配站点）的留待下一全量轮；补建数 &gt;0 时回执日志（<code>全量轮补建种子级任务 N 个</code>）。</li>
+      <li><code>_create_torrent_tasks</code> 幂等化 + <code>immediate</code> 参数 —— 入口以「队列已有该种子的内置 maintenance 任务」为整面判据（与规则任务同源同批创建），重复调用零副作用（黄金法则 1）；补建路径 <code>immediate=True</code> 使维护任务立即到期（下一 tick 兑现一次维护：reset_runtime 全量登记的 <code>external_tag_changes</code> 唯一消费方就是它，on_change 模式「首轮全量收敛」契约由此成立），added 管线维持原 <code>now+interval</code> 时序。首轮全量轮「full_round 补建先于 added 管线」的双入口重复全靠入口幂等互斥。</li>
+    </ul>
+    <p><strong>验证方式</strong>：红验先行 —— 3 条回归测试（<code>tests/test_modules_p5.py</code>）修复前坐实红（补建不存在 / 未匹配记录无防御 / 双入口重复），修复后同用例转绿：<code>test_full_round_restores_torrent_tasks_after_rebuild</code>（L2 重建 → full_round 补建 → maintenance+interval 规则任务回队且立即到期 → 重复 emit 幂等）、<code>test_full_round_skips_unmatched_records</code>（conf 仍 None 不补建）、<code>test_startup_round_tasks_not_duplicated</code>（首轮全量轮补建与 added 管线任务面恰一份）。既有测试随行为变化同步两处（<code>test_modules_p3.py</code> full_round 订阅者数 1→2、<code>test_qbmanager.py</code> 返回值 None→False）+ 管线序测试断言更新（order 首元素为 full_round 补建）。<strong>测试数字（提交前实测）</strong>：<code>commands run test.quick</code> = 2422 passed + 3 skipped（22.80s）；<code>commands run test.full</code> = 2422 passed + 3 skipped（29.07s），覆盖率 99%（14345 语句 / 132 未覆盖 / 4820 分支 / 105 partial）。与建议修法的差异：候选 1 的「None→匹配上 记录首轮立即兑现一次维护」未走同步 <code>handle_maintenance(force_tags)</code> 直调，改为补建任务立即到期（<code>next_run=now</code>）经任务管线下一 tick 兑现 —— 不阻塞 full_round 相位、复用任务管线 dry_run 口径、消费 <code>external_tag_changes</code> 的语义与 force_tags 等价。</p>
   </section>
 
   <footer>

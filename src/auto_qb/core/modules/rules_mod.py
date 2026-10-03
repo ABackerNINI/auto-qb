@@ -8,7 +8,10 @@ RuleEngineMixin(状态持久化已于 P0 迁 core/state.py)整体迁入, 相位/
 - L2 结构重建(hot-reload W3 合并点): 重建任务队列与规则收进 apply, 整段相等即短路;
   级别分派层与三张手写表退役(W4), 重建判据单点在 _rebuild_needed;
 - 段认领兜底(P6): rebuild_runtime 相位 —— 内核对「无认领面的变更段」广播, 本模块执行
-  全量重建(与 L2 同一单点), 见 qbmanager.apply_new_config 与 impact.KERNEL_SECTIONS。
+  全量重建(与 L2 同一单点), 见 qbmanager.apply_new_config 与 impact.KERNEL_SECTIONS;
+- 全量轮任务补建(issue 26-10-01-2147): full_round 相位(装配序在 tracker 重匹配之后)
+  —— L2 重建换新队列后种子级任务随旧队列丢弃且 torrents_added 对存量记录不触发,
+  重匹配兑现后在此按队列查重幂等补建(立即到期, 首轮兑现一次维护)。
 
 !Rule/RuleContext 的宿主面仍是 **QbManager**(构造期传入, 不换对象): 规则动作消费
   manager.store/state/task_queue/api/ctx.ops/group_* —— 换宿主面是 rules 动作层的
@@ -61,6 +64,7 @@ class RulesModule(BaseModule):
     # ---------- 相位订阅(plan §4.2: events_removed / events_added / torrents_added) ----------
 
     def subscribe(self, phases) -> None:
+        phases.on("full_round", self._on_full_round)
         phases.on("events_removed", self._on_events_removed)
         phases.on("events_added", self._on_events_added)
         phases.on("torrents_added", self._on_torrents_added)
@@ -73,6 +77,29 @@ class RulesModule(BaseModule):
         —— 与 queue_rebuilt 相位同款的非刷新类相位(P3 先例)。
         """
         self.rebuild_runtime()
+
+    def _on_full_round(self, event) -> None:
+        """全量轮种子级任务补建(issue 26-10-01-2147): L2 重建后恢复存量种子的任务面
+
+        rebuild_runtime 换新 TaskQueue 后只有全局任务被各模块自注册重入队, 种子级任务
+        (内置 maintenance + interval 规则任务)随旧队列丢弃; 唯一触发源 torrents_added
+        相位对存量记录不触发(store._apply 只对 prev 没有的 hash 判 added, 重建轮记录
+        全部保留)。补建建在 tracker 重匹配之后(装配序 tracker 先于 rules, emit 契约:
+        前序订阅者异常即中断本相位), conf 已就位的记录才补 —— 仍 None(未匹配站点)的
+        留待下一全量轮; 创建入口 _create_torrent_tasks 队列查重幂等, 与 added 管线
+        (首轮全量轮同 tick 先补建后 added)互斥不重复。补建任务立即到期: 下一 tick
+        兑现一次维护(reset_runtime 登记的 external_tag_changes 唯一消费方就是它,
+        on_change 模式的「首轮全量收敛」契约由此成立)。
+        """
+        queue = self._ctx.task_queue
+        if queue is None:
+            return
+        n = 0
+        for rec in self._ctx.store.by_hash.values():
+            if rec.tracker_conf is not None and self._create_torrent_tasks(rec.hash, immediate=True):
+                n += 1
+        if n:
+            logger.info(f"全量轮补建种子级任务 {n} 个(L2 重建后任务面恢复, issue 26-10-01-2147)")
 
     def _on_events_removed(self, event) -> None:
         """删除种子事件分派(带删除前快照); state/field 变化分派由同一相位承担
@@ -394,21 +421,29 @@ class RulesModule(BaseModule):
 
     # ---------- 种子级任务创建(原 qbmanager._create_torrent_tasks, torrents_added 相位认领) ----------
 
-    def _create_torrent_tasks(self, hash: str):
+    def _create_torrent_tasks(self, hash: str, immediate: bool = False) -> bool:
         """
-        为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务
+        为新增种子创建任务: 内置 maintenance + 所有符合条件的规则任务(幂等, 返回是否创建)
 
         缺文件检查统一由分组事件驱动承担(_refresh_torrents 检测到删除/状态变化/
         保存路径变化立即触发组内扫描), 不再创建逐种子 missing_files 任务。
         每个任务有内置 interval(规则任务用规则自身 interval), 规则任务加入队列即立即到期(下一 tick 执行)。
-        内置种子任务加入队列后下一个interval到期。
+        内置种子任务加入队列后下一个interval到期; immediate=True(L2 重建后的 full_round
+        补建, issue 26-10-01-2147)时改为立即到期 —— 下一 tick 兑现一次维护。
+        幂等判据(黄金法则 1): 队列已有该种子的内置 maintenance 任务即整面跳过
+        (它与规则任务同源同批创建, 有它 = 任务面已就位; full_round 补建与 added 管线
+        首轮同 tick 双入口互斥全靠这里)。
         """
+        queue = self._ctx.task_queue
+        if queue.has_task("internal", "maintenance", hash):
+            return False
         torrent = self._ctx.store.get(hash)
         if not torrent:
-            return
+            return False
 
         # 创建内置种子任务(handler 经 ctx.maintenance 模块句柄取, 不 import 兄弟模块)
-        self._ctx.task_queue.add_task(
+        now = time.time()
+        queue.add_task(
             Task(
                 "internal",
                 "maintenance",
@@ -417,7 +452,7 @@ class RulesModule(BaseModule):
                 interval=self._ctx.config.interval,
                 handler=self._ctx.maintenance.handle_maintenance_task_interface,
             ),
-            time.time() + self._ctx.config.interval,
+            now if immediate else now + self._ctx.config.interval,
         )
 
         # 创建种子规则任务(仅 interval 规则建周期任务; on_* 事件规则不建, 由事件分派即时处理)
@@ -426,4 +461,5 @@ class RulesModule(BaseModule):
             task = self._create_rule_task(rule, hash)
             if task is not None:
                 tasks.append(task)
-        self._ctx.task_queue.add_tasks(tasks)
+        queue.add_tasks(tasks)
+        return True

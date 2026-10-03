@@ -499,11 +499,11 @@ def test_tick_full_flow():
 
 
 def test_create_torrent_tasks_tor_missing():
-    """_create_torrent_tasks: 种子不在快照 -> 直接返回, 不建任务"""
+    """_create_torrent_tasks: 种子不在快照 -> 直接返回 False, 不建任务"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.client = FakeClient()
-        assert mgr.host.get("rules")._create_torrent_tasks("NOPE") is None
+        assert mgr.host.get("rules")._create_torrent_tasks("NOPE") is False
         assert mgr.task_queue._fast == []
 
 

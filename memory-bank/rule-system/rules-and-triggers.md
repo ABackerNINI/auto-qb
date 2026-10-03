@@ -14,7 +14,7 @@
 - 配置中 `config` 段下**所有以 `_rules` 结尾的键**是规则集: `{规则集名: {规则名: spec}}` → Rule 全名 `{规则集名}.{规则名}` (如 `example_rules.rule1`)。
 - 规则加载在 `run()` 中 (`_load_rules`), **不在构造时** (`--export-yaml` 模式不需要)。
 - tracker 通过 `rules: ["@规则集", "@规则集.规则名"]` 引用规则 (`_resolve_refs` 按名称去重)。
-- **规则是种子级任务**: 新种子被检测到时, 为其匹配 tracker 引用的每条规则各建一个 Task (kind=rule, interval=规则自身的 interval, 默认 0 → 归一化为每 tick)。未匹配 tracker 配置的种子不创建任何任务。
+- **规则是种子级任务**: 新种子被检测到时(torrents_added 相位), 为其匹配 tracker 引用的每条规则各建一个 Task (kind=rule, interval=规则自身的 interval, 默认 0 → 归一化为每 tick)。未匹配 tracker 配置的种子不创建任何任务。创建入口 `_create_torrent_tasks` 队列查重幂等(`TaskQueue.has_task`, 黄金法则 1) —— L2 重建后的 full_round 补建(issue 26-10-01-2147)与 added 管线共用该入口, 同一 (kind, name, hash) 恰一份。
 - 规则执行 = 该 Task 到期 → `_handle_rule` → 构造 `RuleContext(manager, client, config, hash, dry_run, task=task)` → `rule.process(ctx)`。
 
 ## 触发时机 (trigger)
