@@ -151,11 +151,15 @@ window.AQB_FEEDBACK = {
    全局悬浮提示(.aq-tip): 原生 title 的自绘替代 —— 视觉复刻设置页发光按钮配方
  * --------------------------------------------------------------------------
  * 触发面 = 一切带 title 的元素(模板里 130+ 处 title / :title 绑定零改动全量受益)。
- * 机制: document 级委托 mouseover / focusin, 命中 [title] 即**摘除原属性(整条祖先链,
- * 嵌套带 title 的组借外层 title 还魂会叠出双 tooltip)**+ 350ms 后弹自绘浮层; 离开 /
- * 失焦即还原 title —— 还原前用 hasAttribute 探测: 悬浮期间若值已被重写则保留新值,
- * :title 绑定不受影响。悬浮期间另有周期补摘(状态栏 :title 随轮询逐轮变值, Vue patch
- * 会把 title 重写回去而 mouseover 不会再触发), 补摘捕获到的即最新值。
+ * 机制(原生 tooltip 断供式): title 属性在 DOM 层被**单向拦截** —— MutationObserver
+ * 盯全文档, 任何时刻出现 title(模板渲染 / Vue :title 写回 / 新插入节点)即刻迁进
+ * data-aq-tip 并删掉原属性, DOM 里从此不存在 title, 原生气泡无从弹出。
+ * 前两轮的「hover 时摘 + 离开还原 + 悬浮期补摘」仍有缝: Vue 轮询把指针下的节点整个
+ * 换掉时指针不动、mouseover 不触发, 新节点带着 title 直接还魂(用户报两 tooltip 交替),
+ * 且原生气泡周期补摘存在定时器竞态。代价: title 不再还原 —— 原生悬浮语义由 .aq-tip
+ * 承接; :title 绑定值变化时 Vue 仍会 setAttribute("title"), 被观察器再次截走, 数据流闭环。
+ * 浮层触发 = document 级委托 mouseover / focusin 命中 [data-aq-tip], 350ms 后弹 .aq-tip;
+ * 离开 / 失焦 / 点击 / 滚动 / 窗口失焦立即收起; 文案 show() 时现读最新值(轮询变值即显新值)。
  * 浮层单例挂 body 级 —— 脱离列表容器的 overflow / clip-path(同 hr-pop 与 .speed-pop 的教训);
  * 样式单点在 shared/console_hub.css 的 .aq-tip 段(三套皮肤同载, 颜色走皮肤令牌)。
  * 本块是纯 DOM 行为层, 不进 Vue mixin(不占 methods 命名空间, 也无重名风险)。
@@ -163,14 +167,11 @@ window.AQB_FEEDBACK = {
 (function () {
   "use strict";
   const SHOW_DELAY_MS = 350; // 与原生 tooltip 的迟滞感对齐, 掠过不闪
-  const REARM_MS = 250;      // 悬浮期间补摘周期(短于原生气泡起跳延迟, Vue 重写的 title 撑不到 1s)
   const GAP = 6;             // 浮层与锚点的间距
   const EDGE = 8;            // 视口边缘留白(同 _menuOverflowsRight 口径)
   let tip = null;            // 单例浮层(懒建: 登录页等无 title 场景零 DOM 成本)
-  let cur = null;            // 当前悬浮的 [title] 元素(链最内层)
-  let chain = [];            // 本次悬浮被摘掉 title 的整条祖先链(含 cur): 还原单点
+  let cur = null;            // 当前悬浮的 [data-aq-tip] 元素(嵌套组取最内层)
   let timer = 0;
-  let rearm = 0;             // 悬浮期间周期补摘定时器(见 enter)
 
   function tipEl() {
     if (!tip) {
@@ -182,28 +183,31 @@ window.AQB_FEEDBACK = {
     return tip;
   }
 
-  function strip(el) {
-    el.__aqTitle = el.getAttribute("title");
-    el.removeAttribute("title"); // 原属性在手上, 原生气泡就无从弹出
+  /* title -> data-aq-tip 单向迁移: 原属性即刻摘除, 原生气泡断供。
+   * 自身 removeAttribute 也进观察器批次, 此时 getAttribute 为 null —— 幂等直返,
+   * 不得误清刚写入的 data-aq-tip; 空串 title 视为清除提示, 连旧标记一并摘掉。 */
+  function capture(el) {
+    const v = el.getAttribute("title");
+    if (v === null) return;
+    el.removeAttribute("title");
+    if (v) el.setAttribute("data-aq-tip", v);
+    else el.removeAttribute("data-aq-tip");
   }
 
-  function restore(el) {
-    if (el.__aqTitle === null || el.__aqTitle === undefined) return;
-    if (!el.hasAttribute("title")) el.setAttribute("title", el.__aqTitle);
-    el.__aqTitle = null;
+  /* 清场 sweep: 节点自身 + 子树里现存的 title 一次性迁走(启动清场 / 观察器新插入节点) */
+  function sweep(root) {
+    if (root.nodeType === 1 && root.hasAttribute("title")) capture(root);
+    if (root.querySelectorAll) for (const el of root.querySelectorAll("[title]")) capture(el);
   }
 
   function hide() {
     if (timer) { clearTimeout(timer); timer = 0; }
-    if (rearm) { clearInterval(rearm); rearm = 0; }
-    for (const el of chain) restore(el);
-    chain = [];
     cur = null;
     if (tip) tip.classList.remove("on");
   }
 
   function show(anchor) {
-    const text = anchor.__aqTitle;
+    const text = anchor.getAttribute("data-aq-tip"); // show 时现读: 轮询变值即显最新文案
     if (!text || !text.trim()) { hide(); return; }
     const t = tipEl();
     t.textContent = text;      // title 一律按纯文本渲染, 不吃 HTML 注入
@@ -223,37 +227,33 @@ window.AQB_FEEDBACK = {
     hide();
     if (!target) return;
     cur = target;
-    // 整条祖先链都要摘(不止最内层): 状态栏是嵌套带 title 的组(.sb-today > .sb-hist /
-    // .sb-stats > .sb-item / .sb-speed > .sb-spd), 只摘最内层时原生气泡会借外层祖先的
-    // title 还魂 —— 自绘浮层 + 原生气泡同时出现(双 tooltip)。
-    for (let el = target; el; el = el.parentElement) {
-      if (el.hasAttribute("title")) { strip(el); chain.push(el); }
-    }
     timer = setTimeout(() => show(cur), SHOW_DELAY_MS);
-    // 状态栏速度/今日流量等 :title 绑定随轮询逐轮变值, Vue patch 会在悬浮期间把 title
-    // 重写回去(mouseover 不会再触发, 没人摘) —— 周期补摘, 补摘时捕获到的即最新值,
-    // 还原自然还原新值; 周期短于原生气泡起跳延迟, 重写的 title 撑不到弹出。
-    rearm = setInterval(() => {
-      for (const el of chain) if (el.hasAttribute("title")) strip(el);
-    }, REARM_MS);
   }
 
   document.addEventListener("mouseover", (ev) => {
-    enter(ev.target instanceof Element ? ev.target.closest("[title]") : null);
+    enter(ev.target instanceof Element ? ev.target.closest("[data-aq-tip]") : null);
   }, true);
   document.addEventListener("mouseout", (ev) => {
     // 只在真正离开当前锚点时收起; 锚点内部移动由 mouseover 判重兜住
     if (cur && (!(ev.relatedTarget instanceof Element) || !cur.contains(ev.relatedTarget))) hide();
   }, true);
-  // 键盘可达性: Tab 聚焦到带 title 的控件同样出提示, 移走即收
+  // 键盘可达性: Tab 聚焦到带提示的控件同样出提示, 移走即收
   document.addEventListener("focusin", (ev) => {
-    enter(ev.target instanceof Element ? ev.target.closest("[title]") : null);
+    enter(ev.target instanceof Element ? ev.target.closest("[data-aq-tip]") : null);
   }, true);
   document.addEventListener("focusout", hide, true);
   // 点击(往往接着开菜单 / 弹窗)与滚动(锚点位移)时立即收起, 浮层不悬在旧位置
   document.addEventListener("mousedown", hide, true);
   window.addEventListener("scroll", hide, true);
   window.addEventListener("blur", hide);
+
+  sweep(document);
+  new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.type === "attributes") capture(m.target);
+      else for (const n of m.addedNodes) sweep(n);
+    }
+  }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["title"] });
 })();
 
 /* ==========================================================================
