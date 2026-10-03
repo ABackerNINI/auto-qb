@@ -42,6 +42,10 @@ window.AQB_LIFECYCLE = {
       this.addCatMenu = false;  // 添加种子对话框内浮层: 点空白处统一收起(触发元素自身已 @click.stop 拦截)
       this.addTagMenu = false;
       this.addPathPop = false;
+      /* meta 对话框(标签与分类)的分类下拉: 同族浮层, 原本漏在名单外 —— 点对话框别处只靠
+       * @focusout(2026-10-03 补)收, 这里补兜底。⚠ 有它才必须给 meta 的字段 label 挂
+       * @click.stop —— 否则点 label 走"window click 收层 → label 转发 click 重开" = 闪烁。 */
+      this.metaCatMenu = false;
       // FX-08: 限速浮层无遮罩 -> 点空白视为"放弃本次修改"直接收起(与 Esc 同语义)
       if (this.speedOpen) this.closeSpeedDialog();
     });

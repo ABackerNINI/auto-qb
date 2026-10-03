@@ -1,5 +1,6 @@
     <!-- 标签管理对话框(FE-2C2): 列表 + 新建行(逗号分隔可批量) + 行级删除; 底部静态提示自动规则标签 -->
-    <div v-if="mgrOpen === 'tag'" class="modal-mask" @click.self="closeMgr">
+    <div v-if="mgrOpen === 'tag'" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMgr)">
       <div class="modal add-dialog mgr-dialog" role="dialog" aria-modal="true" aria-label="管理标签">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
@@ -44,7 +45,8 @@
          (add_tags/remove_tags/set_category), 每次点击独立命令独立回执, 无"应用/取消"(照 qB 官方交互)。
          目标集合打开时锁定; 分类/标签候选打开时拉取; 复用 .modal/.add-dialog 视觉体系(.meta-dialog)。
          逻辑在 shared/dialogs.js(AQB_DIALOGS), 两套 UI 成对 -->
-    <div v-if="metaOpen" class="modal-mask" @click.self="closeMeta">
+    <div v-if="metaOpen" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMeta)">
       <div class="modal add-dialog meta-dialog" role="dialog" aria-modal="true" aria-label="标签与分类">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
@@ -56,12 +58,15 @@
         <div class="add-dialog-body">
           <p class="meta-targets">作用于 <b>{{ metaCount }}</b> 个种子(打开时锁定)</p>
           <div class="add-dialog-field add-dialog-combo">
-            <label class="add-dialog-label" for="meta-category">分类(留空 = 无分类)</label>
+            <!-- label 必须 @click.stop(与添加种子三下拉同因): 它已进入 lifecycle 的 window click
+                 收层名单, 不挡就是「window 收层 → label 转发 click 重开」= 下拉闪烁再现 -->
+            <label class="add-dialog-label" for="meta-category" @click.stop>分类(留空 = 无分类)</label>
             <div class="add-input-row">
               <input id="meta-category" v-model="metaCatInput" class="add-dialog-input" type="text"
                      placeholder="下拉选择或自由输入, 留空 = 清除分类" autocomplete="off" spellcheck="false"
                      @focus="openMetaCatMenu" @click.stop="openMetaCatMenu"
-                     @input="metaCatHi = -1; metaCatMenu = true" @keydown="onMetaCatKeydown($event)">
+                     @input="metaCatHi = -1; metaCatMenu = true" @focusout="metaCatBlurClose"
+                     @keydown="onMetaCatKeydown($event)">
               <transition name="pop">
                 <div v-if="metaCatMenu" class="pop-menu add-pop" @click.stop ref="metaCatList">
                   <div class="pop-item add-pop-item" @mousedown.prevent="metaSetCategory('')">
@@ -104,7 +109,8 @@
         </div>
       </div>
     </div>
-    <div v-if="modal.visible" class="modal-mask" @click.self="resolveModal(false)">
+    <div v-if="modal.visible" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(resolveModal, false)">
       <div class="modal" :class="{ danger: modal.danger, wide: modal.wide }" role="dialog" aria-modal="true">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16">
@@ -166,7 +172,8 @@
     </div>
 
     <!-- 历史流量弹层(今日流量面板入口): dat 按日行 -> 天/月/年聚合折线图(SVG, 容器级悬停取值) -->
-    <div v-if="historyOpen" class="modal-mask" @click.self="historyOpen = false">
+    <div v-if="historyOpen" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeHistory)">
       <div class="modal hist-modal" role="dialog" aria-modal="true">
         <div class="modal-title">
           <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
@@ -297,7 +304,8 @@
 
     <!-- 键盘快捷键帮助浮层(W6, 计划 26-09-28-0354 §5.2: H 组 Shift+Slash 打开, 只读速查;
          Esc 关闭归 lifecycle 退栈链, 名单三处同步: 退栈链 / escBusy / _kbOverlayBusy) -->
-    <div v-if="kbHelpOpen" class="modal-mask" @click.self="kbHelpOpen = false">
+    <div v-if="kbHelpOpen" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeKbHelp)">
       <div class="modal kb-help" role="dialog" aria-modal="true" aria-label="键盘快捷键">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>

@@ -1,5 +1,9 @@
          底部 D4 接管预览(静态说明 + 已有组前缀计数) -->
-    <div v-if="addOpen" class="modal-mask add-dialog-mask" @click.self="closeAddTorrent()">
+    <!-- 遮罩关窗不用 @click.self: click 的 target 是 mousedown/mouseup 的**公共祖先**, 在输入框里
+         拖选文字、终点落在遮罩上抬手时公共祖先就是遮罩 -> 被判成"点空白关窗"(2026-10-03 报障:
+         选个标签文字抬手, 整个添加窗口没了)。改成"mousedown 记臂位 + mouseup.self 才关"。 -->
+    <div v-if="addOpen" class="modal-mask add-dialog-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeAddTorrent)">
       <div class="modal add-dialog" role="dialog" aria-modal="true" aria-label="添加种子">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
@@ -37,16 +41,27 @@
 
           <div class="add-dialog-grid">
             <div class="add-dialog-field add-dialog-pathfield">
-              <label class="add-dialog-label" for="ad-save-path">保存路径(留空 = qB 默认)</label>
+              <!-- label 必须 @click.stop: label 的默认动作会把 click **转发**给 for= 的输入框,
+                   而它自己的 click 先冒泡到 window(lifecycle 收层名单), 顺序是「window 收层 →
+                   转发 click 重开」= 关了又开, leave 过渡被打断即用户看到的"下拉闪烁再现"
+                   (点 label 时输入框已聚焦, 不走 blur, 所以 @focusout 挡不住这一路)。 -->
+              <label class="add-dialog-label" for="ad-save-path" @click.stop>保存路径(留空 = qB 默认)</label>
               <div class="add-dialog-pathrow">
                 <!-- FX-18: 浮层必须锚在**输入行**上(.add-input-row 有 position:relative)。
                      旧写法把面板挂在 .add-dialog-pathrow 下, 而它没有定位祖先 -> 面板按
                      .modal-mask(fixed; inset:0) 换算, 被渲染到视口下沿之外("点了没反应")。 -->
-                <div class="add-input-row">
+                <div class="add-input-row has-clear">
                   <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
                          placeholder="如 D:\Torrents" autocomplete="off" spellcheck="false"
                          @focus="openAddPathPop" @click.stop="openAddPathPop" @input="addPathHi = -1"
                          @focusout="addPopBlurClose" @keydown="onAddPathKeydown($event)">
+                  <!-- 清空(x): 两个修饰符缺一不可 —— @mousedown.prevent 拦掉默认动作让焦点留在输入框
+                       (否则按钮抢焦点 -> 输入框失焦走 addPopBlurClose 把候选面板收掉); @click.stop
+                       挡住 lifecycle 的 window click 兜底(不挡 = 点 x 顺手把下拉一起收了)。 -->
+                  <button v-if="addSavePath" type="button" class="add-pop-clear" title="清空保存路径"
+                          @mousedown.prevent @click.stop="clearAddField('path')">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+                  </button>
                   <!-- FX-17: 原生 <datalist> + list= 退役 —— 它的建议浮层样式不受主题控制, 还会
                        自行超时消失(即"下拉 2 秒后消失"), 并与自绘面板抢同一次交互。 -->
                   <transition name="pop">
@@ -71,13 +86,19 @@
               </div>
             </div>
             <div class="add-dialog-field add-dialog-combo">
-              <label class="add-dialog-label" for="ad-category">分类(可空)</label>
+              <!-- @click.stop 同上(点在 label 上 = 稳定复现的"下拉闪烁再现"): 挡住 window 收层,
+                   只让 label 转发给输入框的那一次 click 生效 -->
+              <label class="add-dialog-label" for="ad-category" @click.stop>分类(可空)</label>
               <!-- FX-18: 面板锚定"输入行"而非整个 field 盒(后者是 grid 项会被拉伸, 面板离输入框很远) -->
-              <div class="add-input-row">
+              <div class="add-input-row has-clear">
                 <input id="ad-category" v-model="addCategory" class="add-dialog-input" type="text"
                        placeholder="下拉选择或自由输入" autocomplete="off" spellcheck="false"
                        @focus="openAddCatMenu" @click.stop="openAddCatMenu"
                        @input="addCatHi = -1; addCatMenu = true" @focusout="addPopBlurClose" @keydown="onAddCatKeydown($event)">
+                <button v-if="addCategory" type="button" class="add-pop-clear" title="清空分类"
+                        @mousedown.prevent @click.stop="clearAddField('cat')">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+                </button>
                 <transition name="pop">
                   <div v-if="addCatMenu" class="pop-menu add-pop" @click.stop ref="addCatList">
                     <div v-for="(c, i) in addCatFiltered()" :key="c" class="pop-item add-pop-item"
@@ -91,12 +112,17 @@
               </div>
             </div>
             <div class="add-dialog-field add-dialog-combo">
-              <label class="add-dialog-label" for="ad-tags">标签(逗号分隔, 可空)</label>
-              <div class="add-input-row">
+              <!-- @click.stop 同上(点在 label 上 = 稳定复现的"下拉闪烁再现") -->
+              <label class="add-dialog-label" for="ad-tags" @click.stop>标签(逗号分隔, 可空)</label>
+              <div class="add-input-row has-clear">
                 <input id="ad-tags" v-model="addTags" class="add-dialog-input" type="text"
                        placeholder="如 HR, Keep(可从下拉挑选)" autocomplete="off" spellcheck="false"
                        @focus="openAddTagMenu" @click.stop="openAddTagMenu"
                        @input="addTagHi = -1; addTagMenu = true" @focusout="addPopBlurClose" @keydown="onAddTagKeydown($event)">
+                <button v-if="addTags" type="button" class="add-pop-clear" title="清空标签"
+                        @mousedown.prevent @click.stop="clearAddField('tag')">
+                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+                </button>
                 <transition name="pop">
                   <div v-if="addTagMenu" class="pop-menu add-pop" @click.stop ref="addTagList">
                     <div v-for="(t, i) in addTagFiltered()" :key="t" class="pop-item add-pop-item"
@@ -169,7 +195,8 @@
     <!-- R10-11 路径选择器(决策 D2-A): 服务端目录浏览 —— 浏览器拿不到本地绝对路径(目录上传控件
          只给相对路径), 所以"像选 .torrent 那样选目录"只能由服务端给路径。它也是本轮唯一新增的
          文件系统读能力: 安全边界(允许根白名单 / .. 穿越 / 符号链接逃逸 / 只列目录)全在后端。 -->
-    <div v-if="dirBrowse.open" class="modal-mask dir-browse-mask" @click.self="closeDirBrowse">
+    <div v-if="dirBrowse.open" class="modal-mask dir-browse-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeDirBrowse)">
       <div class="modal dir-browse" role="dialog" aria-modal="true" aria-label="选择保存位置">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
@@ -210,7 +237,8 @@
     </div>
     <!-- 分类管理对话框(FE-2C2): 列表(名字+保存路径) + 新建行 + 行级改路径/删除; CRUD 走 /api/categories 系端点,
          成功后重拉列表; 关闭后主列表随下一轮 rid 轮询自然更新。复用 .modal/.add-dialog 视觉体系(.mgr-dialog 调宽与行样式) -->
-    <div v-if="mgrOpen === 'category'" class="modal-mask" @click.self="closeMgr">
+    <div v-if="mgrOpen === 'category'" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMgr)">
       <div class="modal add-dialog mgr-dialog" role="dialog" aria-modal="true" aria-label="管理分类">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>

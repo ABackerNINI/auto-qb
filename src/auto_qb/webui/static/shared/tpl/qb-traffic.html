@@ -5,7 +5,8 @@
          flags.qb_traffic_enabled, /api/webui/flags 下发, fail-closed); 图例文案按 §5.2
          与 TM 图划界: 「qB 口径 · 程序运行期间」。逻辑在 shared/qb_traffic_chart.js
          (AQB_QB_TRAFFIC), 两套 UI 同一份(单一语义模板) -->
-    <div v-if="qbHistOpen" class="modal-mask" @click.self="closeQbHistory">
+    <div v-if="qbHistOpen" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeQbHistory)">
       <div class="modal qb-modal" role="dialog" aria-modal="true">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
@@ -61,7 +62,8 @@
          与分组弹层瞬时值同源 —— 组图挂的是聚合后端点, 前端不做二次聚合。
          交互与全局弹层同构(24h/30d 切换 / 打开拉取 + 低频轮询 / uPlot 双系列), 逻辑在
          shared/qb_traffic_chart.js(group 作用域), 两套 UI 同一份(单一语义模板) -->
-    <div v-if="qbGroupOpen" class="modal-mask" @click.self="closeQbGroup">
+    <div v-if="qbGroupOpen" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeQbGroup)">
       <div class="modal qb-modal" role="dialog" aria-modal="true">
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>

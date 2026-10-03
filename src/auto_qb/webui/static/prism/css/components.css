@@ -440,6 +440,13 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 面板宽度与输入框逐像素对齐、顶边贴住输入框下缘。 */
 .add-input-row { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .add-input-row > .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+/* 输入框内嵌清空(x, 2026-10-03 报障) —— 同星图口径: absolute 钉右内侧 + 输入框常驻右内边距
+ * (做成 flex 项会在按钮出现/消失时挤窄输入框, 下拉宽度也跟着变) */
+.add-input-row.has-clear > .add-dialog-input { padding-right: 30px; }
+.add-pop-clear { position: absolute; right: 6px; width: 20px; height: 20px; display: grid; place-items: center;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted); cursor: pointer; padding: 0; }
+.add-pop-clear:hover { background: var(--surface-2); color: var(--fg); }
+.add-pop-clear .ico { width: 12px; height: 12px; }
 /* R10-11 修订: 输入行必须能**撑满**剩余的同行空间 —— 原先只有 min-width:0 没有增长因子,
  * 它在 flex 行里退到"内容宽"(input 的 auto 宽 ≈ 180px), 结果是保存路径独占整行后右侧
  * 仍留一大片空白(用户: "路径输入框太小")。 */

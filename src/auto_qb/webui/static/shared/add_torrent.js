@@ -125,6 +125,22 @@ window.AQB_ADD = {
       this.addCatMenu = false;
       this.addCatHi = -1;
     },
+    /* 输入框内嵌清空(x, 2026-10-03 报障: 保存路径/分类/标签三个 combobox 没有清除入口,
+     * 改一次值只能手动全选再删)。模板侧按钮必须 @mousedown.prevent —— 不拦默认动作按钮会抢走
+     * 焦点, 输入框走 addPopBlurClose 把下拉收掉, 清完想接着挑候选就得多点一次; 拦掉后焦点
+     * 留在输入框, 下拉保持展开(清空 = 空过滤词 = 全量候选, 由下面的 watcher 重限高)。 */
+    clearAddField(kind) {
+      if (kind === "path") {
+        this.addSavePath = "";
+        this.addPathHi = -1;
+      } else if (kind === "cat") {
+        this.addCategory = "";
+        this.addCatHi = -1;
+      } else if (kind === "tag") {
+        this.addTags = "";
+        this.addTagHi = -1;
+      }
+    },
     pickAddTag(tag) {
       const parts = this.addTags.split(",").map((t) => t.trim()).filter(Boolean);
       if (!parts.includes(tag)) parts.push(tag);
@@ -282,11 +298,12 @@ window.AQB_ADD = {
      * 窗口底沿时整条菜单伸出窗口外(滚动条也跟着出窗), 且绝对定位溢出会把 .add-dialog-body
      * 的 scrollHeight 撑大(窗口内容变形/多出滚动量)。开层后在同一帧量「输入行到滚动容器可见
      * 底沿」的净空, 把可滚内层(.add-pop-list 或菜单自身)限到净空内 —— 滚动条永远留在窗口里。
-     * 只在开层/候选到位时量一次: 菜单开着时用户再滚动窗口, 行随内容滚走, 净空只增不减会露头,
-     * 不做滚动跟随(收层重开即重新量, 复杂度不值)。 */
+     * 只在开层/候选到位/过滤词变化时量一次: 菜单开着时用户再滚动窗口, 行随内容滚走, 净空只增
+     * 不减会露头, 不做滚动跟随(收层重开即重新量, 复杂度不值)。meta 对话框的分类下拉同族,
+     * 复用本方法(它的输入行与 .add-dialog-body 结构一致, watcher 挂在 dialogs.js)。 */
     _fitAddPop(refName) {
       this.$nextTick(() => {
-        if (!this.addOpen) return;
+        if (!this.addOpen && !this.metaOpen) return;  // meta 对话框(标签与分类)复用同一套限高
         const inner = this.$refs[refName];
         if (!inner) return;
         const menu = inner.closest(".add-pop") || inner;
@@ -508,6 +525,19 @@ window.AQB_ADD = {
       if (this.addTagMenu) this._fitAddPop("addTagList");
     },
     addPathOptions() {
+      if (this.addPathPop) this._fitAddPop("addPathList");
+    },
+    /* 过滤词变化也要重限(2026-10-03 报障: 选中一个分类后逐字删除 -> 候选从 1 条涨回全量,
+     * 下拉把窗口撑变形)。开层那一刻按**当时**的候选量算的限高不会自己更新 —— 菜单没关过,
+     * addCatMenu watcher 不触发, @input 直开(菜单已是 true)也不触发。三个输入值各挂一个
+     * watcher, 只在对应浮层开着时重量净空。 */
+    addCategory() {
+      if (this.addCatMenu) this._fitAddPop("addCatList");
+    },
+    addTags() {
+      if (this.addTagMenu) this._fitAddPop("addTagList");
+    },
+    addSavePath() {
       if (this.addPathPop) this._fitAddPop("addPathList");
     },
   },

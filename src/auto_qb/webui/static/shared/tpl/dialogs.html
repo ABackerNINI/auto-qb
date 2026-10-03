@@ -1,5 +1,6 @@
          复用 .modal/.add-dialog 视觉语言(.stats-dialog 仅调宽与行样式); 打开时取一次, 卡内可手动刷新 -->
-    <div v-if="statsOpen" class="modal-mask" @click.self="closeStats">
+    <div v-if="statsOpen" class="modal-mask"
+         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeStats)">
       <div class="modal add-dialog stats-dialog" role="dialog" aria-modal="true" aria-label="qBittorrent 统计">
         <div class="modal-title">
           <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>

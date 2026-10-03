@@ -7,6 +7,21 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 添加种子三下拉「第二轮遗留四项」**(2026-10-03): ①点字段 label **稳定**复现下拉闪烁 ——
+  输入框已聚焦时点 label 不 blur(@focusout 不参与), 真链条是「label click 冒泡到 window 收层名单 →
+  label 默认动作转发 click 给 for= 输入框 → 重开」⇒ 四个 combo 的字段 label 一律 `@click.stop`;
+  ②三个 combobox 内嵌清空 x(`@mousedown.prevent` 保焦点 + `@click.stop` 挡 window 收层, 双修饰符
+  缺一即"清完下拉没了"), 三皮肤 CSS 成对; ③拖选文字终点落在遮罩上抬手把窗口关了 —— click 的 target
+  是 mousedown/mouseup 的**公共祖先**(= 遮罩), `@click.self` 误判 ⇒ 全仓 11 处遮罩统一改
+  「mousedown 记臂位 + mouseup.self 才关」(dialogs.js 单点, 零残留); ④选中分类后逐字删除撑变形 ——
+  开层限高按当时候选量算, 删字涨回全量时旧限高不更新 ⇒ 三个输入值各挂 watcher 重限(meta 侧同族);
+  另排查出第 4 个 combo(meta 分类下拉)既无 @focusout 也不在 window click 名单 = 点别处悬着不收,
+  一并补齐。守阵 `test_frontend_add_combo_label_clear_mask_and_refit`; 坑档
+  [combobox-focusout-close(补第二轮)](../pitfalls/web-ui/combobox-focusout-close.md) +
+  [modal-mask-click-self-drag(新)](../pitfalls/web-ui/modal-mask-click-self-drag.md);
+  基线 [testing/baselines/26-10-03-2130](../testing/baselines/26-10-03-2130-webui-addcombo-round2.md)
+  (2415 passed + 3 skipped / 99%); 三皮肤真机走查 39/39。**未提交(等用户指令)**。
+
 - **WEB UI 添加种子三下拉「失焦即收 + 限高不出窗」**(2026-10-03): 收层主判据 window click → `@focusout`
   + 40ms 合帧守卫(治点字段 label 转发回焦导致的「下拉闪烁再次出现/未失焦」, 概率性), 开层方法先撤销
   挂起收层; 开层 watcher `_fitAddPop` 量「输入行→滚动容器可见底沿」净空限高 + 候选异步重限(治菜单

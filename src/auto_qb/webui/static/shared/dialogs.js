@@ -45,6 +45,30 @@ window.AQB_DIALOGS = {
       if (v === null || v === undefined || v === "") return "—";
       return { connected: "已连接", firewalled: "已连接(防火墙限制)", disconnected: "未连接" }[v] || String(v);
     },
+    /* ---------------- 遮罩关窗: 判据必须是"按下的那一点也在遮罩上"(2026-10-03 报障) ----------------
+     * 旧写法 @click.self 判的是 click 事件的 target, 而 click 由 mousedown 与 mouseup 的
+     * **公共祖先**派发(DOM 规范): 在输入框里按下左键拖选文字、鼠标终点落到遮罩上抬手 ——
+     * 公共祖先就是遮罩本身, 于是"拖选文字"被判成"点空白关窗"(用户原话: 选个标签文字,
+     * 抬手窗口没了)。修法 = mousedown 先记一笔「这一下是不是从遮罩起手」(_maskArmed),
+     * mouseup.self 只在自遮罩起手时才关窗。任何落在对话框内部的 mousedown 都会把臂位清掉,
+     * 不会累积到下一次点击; 遮罩上按下再抬起(真·点空白)行为不变。
+     * 用法(模板成对挂): @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeX)" */
+    maskDownSelf(e) {
+      this._maskArmed = e.target === e.currentTarget;
+    },
+    maskCloseIfArmed(closeFn, ...args) {
+      if (!this._maskArmed) return;  // 这一笔起手在对话框内(拖选文字/拖动), 不是"点空白"
+      this._maskArmed = false;
+      closeFn(...args);
+    },
+    /* 只有布尔开关、没有关闭方法的两处浮层(历史弹层 / 快捷键帮助): 给遮罩一个具名关闭方法,
+     * 免得在模板里写内联箭头(编译产物难读, 且赋值表达式在模板里不受守卫测试保护)。 */
+    closeHistory() {
+      this.historyOpen = false;
+    },
+    closeKbHelp() {
+      this.kbHelpOpen = false;
+    },
     /* ---------------- 分类/标签管理对话框(FE-2C2): qB 分类/标签的增删改 ----------------
      * 列表数据源 GET /api/categories|tags; 写操作走 POST /api/categories(/edit|/remove) 与 /api/tags(/remove)。
      * CRUD 成功后重拉列表刷新对话框; 对话框关闭后主列表随下一轮 rid 轮询自然更新(不强刷)。
@@ -333,7 +357,23 @@ window.AQB_DIALOGS = {
         this.metaCatInput = name;
       }
     },
+    /* 失焦收层(与添加种子三下拉同一套口径, 见 pitfalls/web-ui/combobox-focusout-close):
+     * 40ms 合帧守卫是必需的 —— 点字段 label(for= 转发激活)时浏览器先 blur 再把焦点转回输入框,
+     * 同步收层 = 关了又开(用户看到的"闪烁再现"); 焦点真回来由 openMetaCatMenu 撤销。
+     * 改前这个下拉根本没有失焦收层(也没进 lifecycle 的 window click 兜底名单): 点了对话框里
+     * 别的地方(标签胶囊 / 新标签输入框)下拉悬着不收, 只能 Esc 或选一项 —— 与三下拉同族缺陷。 */
+    metaCatBlurClose() {
+      clearTimeout(this._metaPopBlurT);
+      this._metaPopBlurT = setTimeout(() => {
+        this.metaCatMenu = false;
+        this.metaCatHi = -1;
+      }, 40);
+    },
+    _metaPopBlurCancel() {
+      clearTimeout(this._metaPopBlurT);
+    },
     openMetaCatMenu() {
+      this._metaPopBlurCancel();  // 焦点回到本输入框时撤销挂起的失焦收层, 菜单不闪
       this.metaCatMouseAt = null;  // 开层复位悬停门限坐标(同 addCatMouseAt)
       this.metaCatHi = this.metaCategories.indexOf(this.metaCatInput.trim());
       this.metaCatMenu = true;
@@ -845,7 +885,7 @@ window.AQB_DIALOGS = {
     },
     /* 悬停态(容器级 mousemove 连续追踪, 修复旧逐桶 enter/leave 在桶间空隙的闪烁):
      * crosshair x / 两系列高亮点 / tooltip 定位 */
-    histHover() {
+      histHover() {
       if (this.histHoverIdx < 0 || this.histHoverIdx >= this.historyBuckets.length) return null;
       const g = this.histGeom;
       const i = this.histHoverIdx;
@@ -856,6 +896,20 @@ window.AQB_DIALOGS = {
         down: this.histSeries.down[i],
         leftPct: (this.histSeries.up[i].x / g.w) * 100,
       };
+    },
+  },
+  watch: {
+    /* 分类下拉限高: 与添加种子三下拉同口径(add_torrent.js::_fitAddPop 的注释), 只是锚点是
+     * meta 对话框自己的输入行 —— 开层(watcher metaCatMenu)/候选到位/过滤词变化三处都要重限,
+     * 少一处就会出现"删字后候选涨回全量把对话框撑变形"。 */
+    metaCatMenu(v) {
+      if (v) this._fitAddPop("metaCatList");
+    },
+    metaCatInput() {
+      if (this.metaCatMenu) this._fitAddPop("metaCatList");
+    },
+    metaCategories() {
+      if (this.metaCatMenu) this._fitAddPop("metaCatList");
     },
   },
 };

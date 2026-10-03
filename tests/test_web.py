@@ -189,6 +189,7 @@
 - test_add_torrent_receipt_and_optional_flags: 添加回执两形态(API>=2.14.0 的 JSON 元数据 / 旧文本 "Ok.")判受理 + 两个 optional 选项(停止位 is_stopped / 自动管理 use_auto_torrent_management)恒显式下发(省略会吃 qB 会话/全局默认) + 成功走 INFO(改前 WARNING 会直推桌面弹窗)
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限
+- test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03) —— 四个 combo 的字段 label 一律 @click.stop(点 label 走「window 收层 → 转发 click 重开」= 稳定闪烁, @focusout 挡不住)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_api_export_endpoint: /api/torrents/{hash}/export 字节流与 disposition(404/503); 非 ASCII 种子名走 filename*(回归: 头 latin-1 编码崩)
 - test_content_disposition_encoding: content_disposition 头值纯 ASCII + filename* 百分号编码 + 清洗/回退
@@ -3650,6 +3651,124 @@ def test_frontend_add_combo_blur_close_and_fit():
     for opt in ("addCatOptions", "addTagOptions", "addPathOptions"):
         assert re.search(rf"{opt}\(\) \{{\n      if \(this\.", at), \
             f"add_torrent.js 缺 {opt} 的 watcher(候选异步到位改变菜单高度, 开着时必须重限)"
+
+
+def test_frontend_add_combo_label_clear_mask_and_refit():
+    """添加种子三下拉「第二轮遗留四项」接线守阵(2026-10-03 报障, 静态防回潮)
+
+    上一轮(失焦即收 + 开层限高)之后剩下的四条, 根因同样全在"pytest 看不见的事件/几何接线"里:
+      1. **点字段 label 稳定复现下拉闪烁**: label 的默认动作把 click **转发**给 for= 的输入框,
+         而它自己那次 click 先冒泡到 window(lifecycle 收层名单) —— 顺序恒为「window 收层 →
+         转发 click 重开」, leave 过渡被打断; 此时输入框**已聚焦**(点 label 不 blur), 上一轮
+         补的 @focusout 挡不住这一路。修法 = 四个 combo 的字段 label 一律 @click.stop。
+      2. **三个 combobox 没有清空按钮**: 补 .add-pop-clear, 必须 @mousedown.prevent(不拦默认
+         动作按钮会抢焦点 → 输入框失焦走 addPopBlurClose 把下拉收掉, 清完想接着挑就多点一次)。
+      3. **拖选输入框文字、终点落在遮罩上抬手 = 关窗**: click 的 target 是 mousedown/mouseup 的
+         **公共祖先**, 这情形公共祖先就是遮罩 ⇒ @click.self 误判成"点空白关窗"。修法 = 遮罩
+         改成 mousedown 记臂位 + mouseup.self 才关(全仓 11 处遮罩统一, 含无输入框的弹层 ——
+         拖选普通文字同样会误关)。
+      4. **选中分类后逐字删除, 下拉把窗口撑变形**: 限高只在开层那一刻按**当时**的候选量算过,
+         过滤词变化(候选从 1 条涨回全量)时菜单没关过, 开层 watcher 不触发 ⇒ 旧限高不更新。
+         修法 = 三个输入值各挂 watcher(开着才重限), meta 对话框的分类下拉同族一并补。
+    """
+    import re
+
+    shared = os.path.join(STATIC_ROOT, "shared")
+    at = open(os.path.join(shared, "add_torrent.js"), encoding="utf-8").read()
+    dg = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
+    lf = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
+    mgr = open(os.path.join(shared, "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
+    pv = open(os.path.join(shared, "tpl", "popovers.html"), encoding="utf-8").read()
+
+    # 1. 四个 combo 的字段 label 全部 @click.stop(漏一个 = 那个下拉点 label 稳定闪烁)
+    for holder, input_id in (
+        ("mgr", "ad-save-path"), ("mgr", "ad-category"), ("mgr", "ad-tags"), ("pv", "meta-category")
+    ):
+        src = mgr if holder == "mgr" else pv
+        m = re.search(rf'<label[^>]*for="{input_id}"[^>]*>', src, re.S)
+        assert m, f"找不到 for=\"{input_id}\" 的字段 label(改结构了? 同步本守阵)"
+        assert "@click.stop" in m.group(0), \
+            (f"label[for={input_id}] 缺 @click.stop —— 点它会走「window click 收层 → label 转发 "
+             f"click 重开」= 下拉闪烁再现(输入框已聚焦, @focusout 挡不住这一路)")
+
+    # 2. 三个 combobox 内嵌清空(x): 行挂 has-clear + 按钮 @mousedown.prevent + 走 clearAddField
+    for input_id, kind, field in (
+        ("ad-save-path", "path", "addSavePath"), ("ad-category", "cat", "addCategory"), ("ad-tags", "tag", "addTags")
+    ):
+        i = mgr.index(f'id="{input_id}"')
+        seg = mgr[mgr.rindex('class="add-input-row', 0, i):i + 900]
+        assert "has-clear" in seg, f"#{input_id} 的输入行缺 has-clear(清空钮靠它让出右内边距)"
+        assert 'class="add-pop-clear"' in seg, f"#{input_id} 行内缺 .add-pop-clear 清空按钮"
+        assert '@mousedown.prevent' in seg, \
+            f"#{input_id} 的清空钮缺 @mousedown.prevent(不拦默认动作会抢焦点 → 下拉被失焦收掉)"
+        assert f"clearAddField('{kind}')" in seg, f"#{input_id} 的清空钮没接 clearAddField('{kind}')"
+        assert f'v-if="{field}"' in seg, f"#{input_id} 的清空钮没按 {field} 非空才显形"
+        btn = re.search(r'<button[^>]*add-pop-clear[\s\S]{0,200}?>', seg)
+        assert btn and "@click.stop" in btn.group(0), \
+            (f"#{input_id} 的清空钮缺 @click.stop —— 它的 click 会冒泡到 lifecycle 的 window "
+             f"收层名单, 点一下 x 顺手把下拉一起收了(真机走查实测: 清空后菜单消失)")
+    clear_body = re.search(r"clearAddField\(kind\) \{(.*?)\n    \},", at, re.S)
+    assert clear_body, "add_torrent.js 找不到 clearAddField(三个 combobox 的清空单点)"
+    for field in ("addSavePath", "addCategory", "addTags"):
+        assert f"this.{field} = \"\";" in clear_body.group(1), f"clearAddField 不清空 {field}"
+
+    # 3. 遮罩关窗: mousedown 记臂位 + mouseup.self 才关; 全仓不许再有 @click.self
+    masks = 0
+    for name in ("dialogs-mgr.html", "dialogs.html", "popovers.html", "qb-traffic.html"):
+        txt = open(os.path.join(shared, "tpl", name), encoding="utf-8").read()
+        for m in re.finditer(r'<div v-if="[^"]*" class="modal-mask[\s\S]{0,240}?>', txt):
+            masks += 1
+            tag = m.group(0)
+            assert '@mousedown="maskDownSelf"' in tag and '@mouseup.self="maskCloseIfArmed(' in tag, \
+                (f"{name} 的遮罩没接「mousedown 记臂位 + mouseup.self 才关」: {tag[:80]} —— "
+                 f"@click.self 会被『拖选文字终点落在遮罩上抬手』误判成点空白关窗")
+        live = re.sub(r"<!--[\s\S]*?-->", "", txt)  # 注释里讲原理不算(只查真接线)
+        assert "@click.self" not in live, \
+            f"{name} 仍残留 @click.self 遮罩关窗(拖选文字抬手会误关窗)"
+    assert masks >= 11, f"只数到 {masks} 处 modal-mask(漏挂? 或守阵正则失配, 复核)"
+    arm = re.search(r"maskDownSelf\(e\) \{(.*?)\n    \},", dg, re.S)
+    assert arm and "e.target === e.currentTarget" in arm.group(1), \
+        "dialogs.js::maskDownSelf 必须判 target === currentTarget(只有按在遮罩上才算起手)"
+    close_arm = re.search(r"maskCloseIfArmed\(closeFn, \.\.\.args\) \{(.*?)\n    \},", dg, re.S)
+    assert close_arm and "if (!this._maskArmed) return;" in close_arm.group(1), \
+        "dialogs.js::maskCloseIfArmed 必须先判 _maskArmed(起手在对话框内的那一笔不许关窗)"
+
+    # 4. 过滤词变化重限高: 三个输入值 watcher + meta 侧三处(候选到位/开层/过滤词)
+    for val, pop in (("addCategory", "addCatMenu"), ("addTags", "addTagMenu"), ("addSavePath", "addPathPop")):
+        assert re.search(rf"\n    {val}\(\) \{{\n      if \(this\.{pop}\) this\._fitAddPop", at), \
+            (f"add_torrent.js 缺 {val} 的 watcher —— 打开时按当时的候选量限过高, 删字让候选涨回全量时"
+             f"菜单没关过(开层 watcher 不触发), 下拉会把窗口撑变形")
+    for key, guard in (
+        ("metaCatMenu(v)", "if (v)"), ("metaCatInput()", "if (this.metaCatMenu)"),
+        ("metaCategories()", "if (this.metaCatMenu)")
+    ):
+        assert re.search(rf"\n    {re.escape(key)} \{{\n      {re.escape(guard)} this\._fitAddPop", dg), \
+            f"dialogs.js 缺 {key} 的限高 watcher(meta 分类下拉与三下拉同族, 撑变形同样会犯)"
+    assert 'if (!this.addOpen && !this.metaOpen) return;' in at, \
+        "_fitAddPop 必须同时放行 meta 对话框(两处共用同一套限高, 只认 addOpen 会让 meta 侧恒不生效)"
+
+    # 5. meta 分类下拉补失焦收层 + 进 window click 兜底名单(原本两处都漏 = 点对话框别处下拉不收)
+    m = re.search(r'<input id="meta-category"(.*?)>', pv, re.S)
+    assert m and '@focusout="metaCatBlurClose"' in m.group(1), \
+        "#meta-category 缺 @focusout 收层(点对话框里别的地方下拉悬着不收)"
+    blur = re.search(r"metaCatBlurClose\(\) \{(.*?)\n    \},", dg, re.S)
+    assert blur and "setTimeout" in blur.group(1) and "clearTimeout" in blur.group(1), \
+        "metaCatBlurClose 必须定时合帧(同步收层会被 label 转发回焦打断 = 闪烁)"
+    open_meta = re.search(r"openMetaCatMenu\(\) \{(.*?)\n    \},", dg, re.S)
+    assert open_meta and "_metaPopBlurCancel()" in open_meta.group(1), \
+        "openMetaCatMenu 必须撤销挂起的失焦收层(焦点转回输入框时菜单不闪)"
+    assert "this.metaCatMenu = false;" in lf, \
+        "lifecycle.js 的 window click 兜底名单缺 metaCatMenu(与三下拉同层, 漏了靠 focusout 单点兜)"
+
+    # 6. 清空钮样式三皮肤成对(漏一档 = 该皮肤按钮无样式: 透明方块 + 文字被压在底下)
+    for ui in _UI_ALL:
+        css_dir = os.path.join(STATIC_ROOT, ui, "css")
+        blob = "".join(
+            open(os.path.join(css_dir, f), encoding="utf-8").read()
+            for f in sorted(os.listdir(css_dir)) if f.endswith(".css")
+        )
+        assert ".add-pop-clear" in blob, f"{ui} 缺 .add-pop-clear 样式(清空钮无尺寸/无 hover)"
+        assert ".add-input-row.has-clear" in blob, f"{ui} 缺 .has-clear 右内边距(文字会被按钮压住)"
 
 
 def test_frontend_ctx_submenu_single_entry_and_hover_close():

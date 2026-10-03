@@ -225,6 +225,14 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 /* FX-18: 浮层锚点从"整个 field 盒"下沉到"输入行"(.add-dialog-field 是 grid 项会被拉伸) */
 .add-input-row { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .add-input-row > .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+/* 输入框内嵌清空(x, 2026-10-03 报障: 保存路径/分类/标签无清除入口)。用 absolute 钉在输入行
+ * 右内侧 + 输入框**常驻**右内边距让位, 而不是做成 flex 项 —— 后者在按钮出现/消失时会把输入框
+ * 挤窄(打第一个字时抖一下), 也让下拉(.add-pop 左右贴行)宽度跟着按钮有无变。 */
+.add-input-row.has-clear > .add-dialog-input { padding-right: 30px; }
+.add-pop-clear { position: absolute; right: 6px; width: 20px; height: 20px; display: grid; place-items: center;
+  border: 0; border-radius: 999px; background: transparent; color: var(--fg-muted); cursor: pointer; padding: 0; }
+.add-pop-clear:hover { background: var(--surface-2); color: var(--fg); }
+.add-pop-clear .ico { width: 12px; height: 12px; }
 /* R10-11 修订: 输入行必须能**撑满**同行剩余空间(原先只有 min-width:0 没有增长因子,
  * flex 行里退到 input 的内容宽 ≈ 180px -> 独占整行后右侧仍是一大片空白)。 */
 .add-dialog-pathrow > .add-input-row { flex: 1 1 auto; }
