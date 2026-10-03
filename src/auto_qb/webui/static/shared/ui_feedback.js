@@ -269,10 +269,10 @@ window.AQB_FEEDBACK = {
 (function () {
   "use strict";
   if (window.CSS && CSS.supports && CSS.supports("overscroll-behavior", "contain")) return;
-  // 放行名单: 8 类内滚区 + modal(通用壳自身, P1 加固后 overflow-y: auto 是滚动容器)
+  // 放行名单: 7 类内滚区 + modal(通用壳自身, P1 加固后 overflow-y: auto 是滚动容器)
   const ALLOW = [
     "add-dialog-body", "add-pop-list", "db-list", "mgr-list", "meta-tags",
-    "modal-members", "kb-help-body", "hr-full-modal-bd", "modal",
+    "kb-help-body", "hr-full-modal-bd", "modal",
   ];
   const MASK_SEL = ".modal-mask, .hr-full-mask";
 

@@ -6,8 +6,10 @@
 > 8 类内滚区补 contain, 6 号壳 .modal max-height 内滚加固) + JS 兜底 (ui_feedback.js
 > CSS.supports 门控 + document 级捕获 wheel/touchmove + 白名单, 仅老 Safari/iOS<16 生效)。
 > 无遮罩浮层 (列窗口等) 按拍板零改动。develop 三提交 fdb97468/b989df10/e5a59841,
-> 基线 26-10-04-0353 (test.full 2423 passed, TOTAL 99%)。
-> 最后活动: 2026-10-04 03:53
+> 基线 26-10-04-0353 (test.full 2423 passed, TOTAL 99%)。遗留观察清偿 (04:03): .modal-members
+> 死类 (含 .modal-member-row/.mm-* 子选择器, 零构造点) 三处移除 (atlas/console views.css +
+> ui_feedback.js 白名单 8→7 类), 基线 26-10-04-0403 数字持平。
+> 最后活动: 2026-10-04 04:03
 
 ## 状态
 

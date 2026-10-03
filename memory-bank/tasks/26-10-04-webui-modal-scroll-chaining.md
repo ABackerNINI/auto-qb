@@ -58,3 +58,11 @@
   压回 700 (属性零删减)。P3 顺带发现 .modal-members 类无模板/JS 构造点 (疑似遗留死类, 白名单含之
   无害), 按范围守恒未处理。基线 26-10-04-0353: test.full 2423 passed + 3 skipped, 28.82s, TOTAL 99%。
   真机 §7.3 走查未做 (子任务 #8 Open)。收尾回写件随主提交入库。
+
+- **2026-10-04 04:03** 遗留观察清偿轮: 用户指令「确认后移除死类」。全库核查确认 `.modal-members`
+  连同子选择器 `.modal-member-row` / `.mm-site` / `.mm-name` / `.mm-path` 均零构造点 (HTML 模板/JS
+  classList 均无; `.member-row` 无前缀版是活类勿混; 废弃锚点 = delete_flow.js:202 注释「DLG-01
+  成员明细已移除」), prism 皮肤本就无此类。三处移除: atlas/css/views.css 成员明细整块 10 行 +
+  console/css/views.css 整块 11 行 + ui_feedback.js 白名单摘 "modal-members" (8 内滚区 → 7 类)。
+  基线 [26-10-04-0403](../testing/baselines/26-10-04-0403-webui-modal-members-dead-class-removal.md):
+  test.full 2423 passed + 3 skipped, 29.88s, TOTAL 99% (与 0353 持平)。改动留工作树等用户提交指令。
