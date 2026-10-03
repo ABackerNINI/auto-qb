@@ -144,8 +144,18 @@
           </div>
 
           <template v-else>
-            <input class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
-                   :type="f.kind === 'password' ? 'password' : 'text'" :value="textValue()"
+            <!-- 密码字段: Chrome 要求密码控件处于 <form> 内且表单带 (可隐藏的) 用户名字段, 否则控制台报
+                 两条可访问性警告。form 用 display:contents 不生成盒子, 控件仍作 .hb-ct 的 flex 子项参与
+                 布局; 提交无实际语义, preventDefault 兜底。非密码字段仍渲染裸 input -->
+            <form v-if="f.kind === 'password'" style="display:contents" @submit.prevent>
+              <input type="text" name="username" autocomplete="username" value="auto-qb" tabindex="-1"
+                     aria-hidden="true" style="display:none">
+              <input class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
+                     type="password" :value="textValue()" :placeholder="sitePlaceholder()" :disabled="readonly"
+                     @input="set($event.target.value)">
+            </form>
+            <input v-else class="hb-input" :class="[ce.hubToneOf(item), ce.hubWidthOf(item), { 'hb-mono': ce.hubMonoOf(item) }]"
+                   type="text" :value="textValue()"
                    :placeholder="sitePlaceholder()" :min="f.min" :max="f.max" :disabled="readonly"
                    @input="set($event.target.value)">
             <span v-if="f.unit" class="hb-dim">{{ f.unit }}</span>

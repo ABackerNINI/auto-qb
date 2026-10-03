@@ -120,6 +120,9 @@
           <span>auto-qb</span>
         </div>
         <p class="muted">请输入 WEB 访问密钥(见启动日志或 data_dir/web.token)</p>
+        <!-- 隐藏用户名槽位: Chrome 要求密码表单带 (可隐藏的) 用户名字段, 否则控制台报可访问性警告;
+             访问密钥没有用户名, 用固定占位与密码关联 -->
+        <input type="text" name="username" autocomplete="username" value="auto-qb" tabindex="-1" aria-hidden="true" style="display:none">
         <input v-model="tokenInput" type="password" placeholder="访问密钥" autocomplete="current-password" required>
         <button type="submit" class="bt primary" :disabled="!tokenInput.trim() || authPending">{{ authPending ? '验证中…' : '进入' }}</button>
         <button v-if="authErrorKind === 'unavailable'" type="button" class="bt ghost"
