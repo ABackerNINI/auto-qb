@@ -66,10 +66,19 @@
 - test_grouping_leave_group_member_index_missing_from_group_list: 索引有组表无的成员移出仍清理映射 (P2-a)
 - test_grouping_missing_files_check_disabled_guard: 缺文件检查入口禁用守卫 (P2-a)
 - test_grouping_conflict_scan_skips_ghost_members: 冲突扫描幽灵成员跳过; _group_has_downloading 幽灵不活跃 (P2-a)
+- test_cross_group_partial_overlap_warns_pure_detect: 场景①部分重叠 -> 警告含重叠文件物理路径, S2 纯检测零动作 (26-10-04-0107 S2)
+- test_cross_group_case_only_posix_no_false_positive: 场景②POSIX normcase 恒等 -> 大小写不同不误报 (26-10-04-0107 S2)
+- test_cross_group_case_only_windows_detected: 场景②Windows normcase 折叠 -> 大小写交叉检出 (26-10-04-0107 S2)
+- test_cross_group_junction_alias_detected: 场景③junction 别名目录 realpath_lexical 归同 -> 检出 (26-10-04-0107 S2)
+- test_cross_group_missing_tag_exempt: D3 任一侧成员带 MISSING 标签豁免, 去标签后照常检出 (26-10-04-0107 S2)
+- test_cross_group_zero_change_short_circuit: rounds_applied>0 且 dirty 空 -> 提前返回; dirty 非空恢复全量 (26-10-04-0107 S2)
+- test_cross_group_switch_off_silent: 开关缺省 false -> 交叉在场仍零输出零动作, 打开后检出 (26-10-04-0107 S2)
+- test_cross_group_same_group_overlap_not_triggered: 同组文件重叠是分组固有属性 -> 不触发跨组警告 (26-10-04-0107 S2)
 """
 import logging
 import os
 import tempfile
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest import mock
 
@@ -1496,3 +1505,165 @@ def test_grouping_conflict_scan_skips_ghost_members():
         grp._check_download_conflicts(False)
         assert client.calls == []
         assert grp._group_has_downloading(["GHOST", "H1"]) is False, "stalledUP 非活跃下载"
+
+
+# ---------------- 跨组文件交叉检测 S2 (计划 26-10-04-0107 §05, 纯检测不处置, 2026-10-04) ----------------
+
+
+class _CrossWarnCapture(logging.Handler):
+    """直挂 grouping 模块 logger 的 WARNING 采集器
+
+    QbManager 构造链 setup_logging 清空 root handlers, caplog.text 恒空
+    (pitfalls/testing/log-capture); 对齐本文件过渡态用例的 _Capture 直挂先例。
+    """
+    def __init__(self):
+        super().__init__(level=logging.WARNING)
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+@contextmanager
+def _grab_cross_warnings():
+    cap = _CrossWarnCapture()
+    log = logging.getLogger("auto_qb.core.modules.grouping_mod")
+    log.addHandler(cap)
+    try:
+        yield cap
+    finally:
+        log.removeHandler(cap)
+
+
+def _seed_cross_pair(store, sp_a, files_a, sp_b, files_b, state_a="stalledUP", state_b="downloading", tags_a=""):
+    """跨组检测夹具: 两组各 1 成员(save_path/文件清单可异同), 默认 A 完成侧 + B 下载中, 返回组对 key
+
+    直注 store.groups / group_sizes / member_to_key / by_hash(姿势对齐 _seed_group);
+    文件字典必须是 {"ep01.mkv": 100} 形状的真实清单 —— 跨组检测的展开源就是它, 空字典 = 无文件 = 检不出。
+    """
+    key_a = (sp_a, tuple(sorted(files_a)))
+    key_b = (sp_b, tuple(sorted(files_b)))
+    _seed_group(store, key_a, ["HA"], file_map=files_a, in_by_hash=[])
+    _seed_group(store, key_b, ["HB"], file_map=files_b, in_by_hash=[])
+    store.by_hash["HA"] = FakeTorrent(hash="HA", name="TA", state=state_a, save_path=sp_a, amount_left=100, tags=tags_a)
+    store.by_hash["HB"] = FakeTorrent(hash="HB", name="TB", state=state_b, save_path=sp_b, amount_left=100)
+    return key_a, key_b
+
+
+_OVERLAP_A = {"ep01.mkv": 100, "ep02.mkv": 200}
+_OVERLAP_B = {"ep02.mkv": 200, "ep03.mkv": 300}
+
+
+def test_cross_group_partial_overlap_warns_pure_detect():
+    """场景①部分重叠: 两组同 save_path 文件列表 [ep01,ep02]/[ep02,ep03], B 下载中
+    -> 警告含 ep02 物理路径; S2 纯检测: 零暂停零外部动作"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert any("跨组文件交叉" in m for m in cap.messages), f"部分重叠应警告: {cap.messages}"
+        assert any("ep02.mkv" in m for m in cap.messages), f"消息应含重叠文件 ep02 的物理路径: {cap.messages}"
+        assert client.calls == [], f"S2 纯检测不处置(不暂停): {client.calls}"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="normcase 在 Windows 折叠大小写, 该不误报断言仅在 POSIX 成立")
+def test_cross_group_case_only_posix_no_false_positive():
+    """场景②POSIX 不误报: 两组文件名仅大小写不同(normcase 恒等 = 两个物理文件) -> 无警告"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        _seed_cross_pair(mgr.store, td, {"ep01.mkv": 100}, td, {"EP01.mkv": 100})
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert not any("跨组文件交叉" in m for m in cap.messages), f"POSIX 大小写敏感不应误报: {cap.messages}"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="大小写折叠仅在 Windows 生效")
+def test_cross_group_case_only_windows_detected():
+    """场景②Windows 真检出: 同样大小写数据, normcase 折叠为同一物理文件 -> 警告(与 POSIX 用例分开断言, 不按平台分支期望)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        _seed_cross_pair(mgr.store, td, {"ep01.mkv": 100}, td, {"EP01.mkv": 100})
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert any("跨组文件交叉" in m for m in cap.messages), f"Windows 大小写折叠应检出交叉: {cap.messages}"
+        assert client.calls == [], f"S2 纯检测不处置: {client.calls}"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="junction 仅 Windows(目录 symlink 需开发者模式, 不测)")
+def test_cross_group_junction_alias_detected():
+    """场景③junction 别名: 两组 save_path 分别指向真身与 junction, realpath_lexical 归同 -> 警告"""
+    import _winapi  # CPython 标准库内部 API(测试套同款), 无需管理员权限; 平台用例体内导入, POSIX 收集不触
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        link = os.path.join(td, "link")
+        _winapi.CreateJunction(td, link)  # 造 junction: link -> td 真身
+        try:
+            _seed_cross_pair(mgr.store, td, {"movie.mkv": 100}, link, {"movie.mkv": 100})
+            with _grab_cross_warnings() as cap:
+                grp._check_cross_group_file_conflicts(dry_run=False)
+            assert any("跨组文件交叉" in m for m in cap.messages), f"junction 别名归同后应检出: {cap.messages}"
+            assert client.calls == [], f"S2 纯检测不处置: {client.calls}"
+        finally:
+            os.rmdir(link)  # 先摘 junction 再交还 TemporaryDirectory 清理(防 rmtree 循环进入真身)
+
+
+def test_cross_group_missing_tag_exempt():
+    """D3 MISSING 豁免: 任一侧成员带 missing_tag -> 豁免该事件无警告; 去标签后照常检出(对照)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B, tags_a="MISSING")
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert not any("跨组文件交叉" in m for m in cap.messages), f"MISSING 侧重下补救合法, 应豁免: {cap.messages}"
+        mgr.store.by_hash["HA"].tags = ""
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert any("跨组文件交叉" in m for m in cap.messages), "豁免解除后应照常检出"
+
+
+def test_cross_group_zero_change_short_circuit():
+    """零变化短路: rounds_applied>0 且 dirty_groups 空 -> 提前返回无警告; dirty 非空恢复全量(对照)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        key_a, _key_b = _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        mgr.store.rounds_applied = 1  # 增量基线已建立
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert not any("跨组文件交叉" in m for m in cap.messages), "增量轮零变化应提前返回"
+        mgr.store.dirty_groups.add(key_a)  # 变化登记 -> 恢复全量扫描
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert any("跨组文件交叉" in m for m in cap.messages), "dirty 非空应恢复全量并检出"
+        assert key_a in mgr.store.dirty_groups, "dirty_groups 只读不复位(消费单点仍是同组检查)"
+
+
+def test_cross_group_switch_off_silent():
+    """开关缺省 false(保守默认): 交叉数据在场仍零输出零动作; 打开后照常检出(对照, 证明确实是开关拦的)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))  # cross_group_conflict_check 缺省 false
+        _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B)
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert not any("跨组文件交叉" in m for m in cap.messages), "开关关闭应零输出"
+        assert client.calls == [], "开关关闭应零动作"
+        mgr.config.grouping.cross_group_conflict_check = True
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert any("跨组文件交叉" in m for m in cap.messages), "开关打开后同数据应检出"
+
+
+def test_cross_group_same_group_overlap_not_triggered():
+    """同组文件重叠是分组固有属性: 单组两成员共享文件列表(甚至同时下载) -> 不触发跨组警告(归同组检查管)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        files = {"ep01.mkv": 100, "ep02.mkv": 200}
+        key = (td, ("ep01.mkv", "ep02.mkv"))
+        _seed_group(mgr.store, key, ["HA", "HB"], file_map=files, in_by_hash=[])
+        mgr.store.by_hash["HA"] = FakeTorrent(hash="HA", name="TA", state="downloading", save_path=td, amount_left=100)
+        mgr.store.by_hash["HB"] = FakeTorrent(hash="HB", name="TB", state="stalledDL", save_path=td, amount_left=100)
+        with _grab_cross_warnings() as cap:
+            grp._check_cross_group_file_conflicts(dry_run=False)
+        assert not any("跨组文件交叉" in m for m in cap.messages), f"同组重叠不应触发跨组警告: {cap.messages}"
+        assert client.calls == [], "跨组检测不处置同组冲突"

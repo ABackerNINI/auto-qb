@@ -6,7 +6,7 @@ GroupingMixin(387 行)整体迁入, 经四个刷新相位被内核广播(plan §
 - torrents_added: 逐新增种子的归组一步(P5 收口前相位里只有本模块认领, 其余各家 P5 随
                   逐种子管线一起迁入);
 - removed_scan:   删除后组内缺文件扫描;
-- post:           保存路径重归组 + 下载冲突检查(每轮收尾)。
+- post:           保存路径重归组 + 跨组文件交叉检测 + 下载冲突检查(每轮收尾)。
 `grouping.enabled` 的启用开关由模块**自判**(plan §3.1: 启用开关属模块), 内核只广播相位。
 
 缺文件扫描的轮内去重集合(_missing_scanned_keys)收进模块实例: 原内核 _refresh_torrents
@@ -23,7 +23,7 @@ group_key_of 纯函数随迁(scripts/qb_capture.py 语料抓取器 import 同一
 import logging
 import os
 from collections.abc import Mapping
-from typing import Dict
+from typing import Any, Dict
 
 from ...infra import file_access, utils
 from ...torrents import TorrentRecord
@@ -47,6 +47,17 @@ def group_key_of(save_path: str, file_map: Mapping[str, int]):
     纯函数, 无状态, 不读 self; 行为与抽取前完全一致。
     """
     return (utils.path_normalize(save_path), tuple(sorted(file_map.keys())))
+
+
+def _cross_physical_key(dir_resolved: str, rel_path: str) -> str:
+    """跨组交叉检测专用的物理路径键: 目录解析结果 + 相对路径做 normcase+normpath 词法归一
+
+    与 group_key_of 的 path_normalize 分层: 归组键保持词法形态(大小写/别名不折叠, 分组键
+    单一事实源, 严禁改 path_normalize), 物理键在此叠加大小写折叠(仅 normcase 生效的平台
+    (Windows)折叠, POSIX 恒等即不误报)与调用方预先完成的目录级别名解析(realpath_lexical)。
+    纯函数, 只做字符串运算不触盘。
+    """
+    return os.path.normcase(os.path.normpath(os.path.join(dir_resolved, rel_path)))
 
 
 class GroupingModule(BaseModule):
@@ -98,6 +109,9 @@ class GroupingModule(BaseModule):
             return
         dry_run = event.payload.get("dry_run", False)
         self._handle_save_path_changes(dry_run)
+        # 跨组检测挂在同组检查之前且对 dirty_groups 只读(单一消费点仍是 _check_download_conflicts,
+        # 两套检查共用同一份变化登记, plan 26-10-04-0107 §04 插入位置 note)
+        self._check_cross_group_file_conflicts(dry_run)
         self._check_download_conflicts(dry_run)
 
     # ---------- 删除事件 ----------
@@ -438,6 +452,108 @@ class GroupingModule(BaseModule):
                 continue
             warned.add((key, kind))
             self._ctx.api.torrents_stop(torrent_hashes=[t.hash for t in torrents])
+
+    # ---------- 跨组文件交叉检测(post 相位: S2 纯检测不处置, 处置见 plan 26-10-04-0107 S3) ----------
+
+    def _check_cross_group_file_conflicts(self, dry_run: bool):
+        """跨组文件交叉检测(纯检测): 组边界不等于磁盘上不交叉, 交叉在场且下载中即警告
+
+        场景(plan 26-10-04-0107 §01): (1)同 save_path 文件列表部分重叠; (2)文件名仅大小写不同
+        (Windows 不区分大小写); (3)不同 save_path 经 junction/symlink/盘符别名指向同一物理目录。
+        新种子下载会静默覆盖另一组已下载/已完成数据, 不可逆 —— 同组下载冲突检查覆盖不到
+        (其 docstring 明确只做组内比较)。
+
+        四步判定(展开 -> 事件 -> 豁免 -> 激活警告):
+          1. 物理路径全量展开: store.groups x store.group_sizes 的相对路径拼 save_path, 经
+             _cross_physical_key 归一成物理路径键, 建反向索引 path -> [(组key, hash)];
+             目录部分经 file_access.realpath_lexical 解析别名(每个不同 save_path 只解析一次,
+             syscall 次数 O(组数); Mapped 部署自动退化为词法归一, 保守不误报), 解析异常回退词法。
+          2. 交叉事件: 同一物理路径被 >=2 个不同组 key 引用(同组多成员共享路径是分组定义的
+             固有属性, 归同组检查管)。
+          3. MISSING 豁免(D3): 事件任一参与者带 missing_tag -> 豁免该事件(带标签侧是已知缺文件、
+             等用户重下补救的状态, 对侧重新下载这些文件是合法补救)。
+          4. 激活 + 警告: 非豁免事件中存在下载中参与者(谓词与 _check_download_conflicts 同款)
+             才激活, 按组对聚合警告一次(组对规范序 tuple(sorted((ka, kb), key=str)), 路径展示
+             截前 3 处 + 「等 N 处」)。
+
+        成本: 只消费 store.groups / store.group_sizes / store.by_hash 三份内存数据, 零新增
+        qB 请求、检测零触盘(只有目录级 realpath_lexical); 开关关闭首行即返回零开销;
+        增量轮(rounds_applied > 0)且 dirty_groups 为空时事件集合与上轮一致, 直接返回
+        (dirty 只读不复位, 消费单点仍是 _check_download_conflicts; 全量基线未建立时必跑)。
+
+        **S3 将补**: 去重门(store.cross_group_conflict_warned 按组对)、暂停涉事下载方(D2)、
+        消除循环; 本步警告不经去重门, 每轮重发, 仅日志可见。
+        """
+        cfg = self._ctx.config.grouping
+        if not cfg.cross_group_conflict_check:
+            return
+        store = self._ctx.store
+        if store.rounds_applied > 0 and not store.dirty_groups:
+            return  # 增量轮零变化: 事件集合与上轮一致(全量基线未建立时必跑)
+        fa = file_access.get_file_access()
+        by_hash = store.by_hash
+        missing_tag = cfg.missing_tag
+        # 1. 物理路径全量展开: 目录解析缓存(每 save_path 一次 syscall) + 物理键反向索引
+        dir_resolved: Dict[str, str] = {}  # 归一 save_path(组 key 首元) -> 别名解析结果
+        loc: Dict[str, list] = {}  # 物理路径键 -> [(组key, hash)]
+        for key, members in store.groups.items():
+            save_path = key[0]
+            resolved = dir_resolved.get(save_path)
+            if resolved is None:
+                try:
+                    resolved = fa.realpath_lexical(save_path)
+                except (OSError, ValueError):
+                    # 畸形路径不打断主循环: 词法回退方向是「少检出」, 保守
+                    resolved = os.path.normcase(os.path.normpath(save_path))
+                dir_resolved[save_path] = resolved
+            for h in members:
+                for rel in store.group_sizes.get(key, {}).get(h, {}):
+                    loc.setdefault(_cross_physical_key(resolved, rel), []).append((key, h))
+        # 2-3. 参与者按组全量预分类(下载中 / MISSING), 供逐事件的豁免与激活判定
+        group_dl: Dict[Any, list] = {}  # 组 key -> 下载中成员 hash(谓词与 _check_download_conflicts 同款)
+        group_missing: Dict[Any, bool] = {}  # 组 key -> 任一成员带 missing_tag
+        for key, members in store.groups.items():
+            dl = []
+            has_missing = False
+            for h in members:
+                t = by_hash.get(h)
+                if t is None:
+                    continue  # 幽灵成员(组表有快照无): 不参与豁免与激活判定
+                if missing_tag in t.tags_set:
+                    has_missing = True
+                e = t.state_enum
+                if e.is_downloading and not e.is_stopped and not e.is_checking and t.amount_left > 0:
+                    dl.append(h)
+            group_dl[key] = dl
+            group_missing[key] = has_missing
+        # 4. 事件 -> 豁免 -> 激活: 按组对聚合(keys 已按 str 排序, (ka, kb) 即规范序, S3 去重键同形)
+        pair_paths: Dict[tuple, list] = {}  # 组对(规范序) -> 共享物理路径列表
+        for phys, hits in loc.items():
+            keys = sorted({k for k, _h in hits}, key=str)
+            if len(keys) < 2:
+                continue  # 同组多成员共享路径是分组固有属性, 归同组检查管
+            for i, ka in enumerate(keys):
+                for kb in keys[i + 1:]:
+                    if group_missing.get(ka) or group_missing.get(kb):
+                        continue  # D3: 任一侧带 missing_tag -> 豁免该事件
+                    if not group_dl.get(ka) and not group_dl.get(kb):
+                        continue  # 无下载中参与者: 静态共存不激活
+                    pair_paths.setdefault((ka, kb), []).append(phys)
+        for (ka, kb), paths in pair_paths.items():
+            dl_hashes = group_dl[ka] + group_dl[kb]
+            dl_set = set(dl_hashes)
+            dl_desc = ", ".join(f"{h[:8]}[{by_hash[h].tracker_name}]" for h in dl_hashes)
+            done_desc = ", ".join(
+                f"{h[:8]}[{by_hash[h].tracker_name}]"
+                for h in store.groups.get(ka, []) + store.groups.get(kb, []) if h not in dl_set and h in by_hash
+            )
+            shown = paths[:3]
+            more = len(paths) - len(shown)
+            paths_desc = ", ".join(f"'{p}'" for p in shown) + (f" 等 {more} 处" if more > 0 else "")
+            logger.warning(
+                f"跨组文件交叉(2组) | 共享物理文件 {len(paths)} 处: {paths_desc}, "
+                f"下载方: {dl_desc}, 完成侧: {done_desc or '无'}"
+            )
 
     # ---------- 校验动作(checking)辅助: 组上下文 ----------
 
