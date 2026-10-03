@@ -56,6 +56,7 @@ from .modules import (
     RulesModule,
     SpeedCurveModule,
     TrackerModule,
+    TrafficSampleModule,
 )
 from .state import StateService
 from ..webui.commands import WebCommandsMixin
@@ -232,6 +233,10 @@ class QbManager(
         # 装配清单 P5 收官(plan §3.3): rules 最后 —— 事件分派/建任务改相位认领, L2 结构
         # 重建收进 rules.apply(W3), 级别分派层与三张手写表退役(W4)
         self.host.register(RulesModule(self))
+        # 装配清单追加(plan 26-10-03-0946 方案C P1): qB 口径流量采样器 —— internal 采样任务
+        # 自注册(start/queue_rebuilt), enabled=false(缺省)零任务零文件(黄金法则 2); 与其余
+        # 模块零耦合(只读 store 快照), 挂清单末尾
+        self.host.register(TrafficSampleModule(self.ctx))
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。

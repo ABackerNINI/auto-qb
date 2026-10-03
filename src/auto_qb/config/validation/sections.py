@@ -24,6 +24,9 @@ KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
+# qb_traffic(qB 口径流量采样, plan 26-10-03-0946 §06)
+KNOWN_QB_TRAFFIC_KEYS = {"enabled", "sample_interval", "raw_window", "rollup_window"}
+
 # hr_check(HR 在线核实, v3 15 键口径, 计划 26-09-28-1932 §6.1 + 26-09-30-0240); 站点级与全局共用区分两套键集
 KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token", "extension_id", "request_timeout"}
 
@@ -571,3 +574,36 @@ def _validate_notify(spec, errors: List[str]) -> None:
                 name = next(iter(item))
                 if name not in NOTIFY_CHANNELS:
                     errors.append(f"config.notify.channels[{i}]: 未知渠道 '{name}', 可用: {sorted(NOTIFY_CHANNELS)}")
+
+
+def _validate_qb_traffic(spec, errors: List[str]) -> None:
+    """校验 config.qb_traffic 段(qB 口径流量采样, plan 26-10-03-0946 §06); 未配置(None)合法 = 不启用
+
+    边界依据(§06 表): sample_interval 15s-600s(下限防请求放大, 上限防 24h 视图颗粒过粗);
+    raw_window 1h-72h(上限防单文件超体量设计点); rollup_window 7d-90d(报告 §08-③ 档位)。
+    """
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.qb_traffic: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_QB_TRAFFIC_KEYS, "config.qb_traffic", errors)
+    if "enabled" in spec:
+        _try(parse_bool, spec["enabled"], "config.qb_traffic.enabled", errors)
+    if "sample_interval" in spec:
+        _try_time(
+            spec["sample_interval"], "config.qb_traffic.sample_interval", errors, positive=True, min_s=15, max_s=600
+        )
+    if "raw_window" in spec:
+        _try_time(
+            spec["raw_window"], "config.qb_traffic.raw_window", errors, positive=True, min_s=3600, max_s=72 * 3600
+        )
+    if "rollup_window" in spec:
+        _try_time(
+            spec["rollup_window"],
+            "config.qb_traffic.rollup_window",
+            errors,
+            positive=True,
+            min_s=7 * 86400,
+            max_s=90 * 86400
+        )

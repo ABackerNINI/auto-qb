@@ -410,6 +410,46 @@ GROUPS: Tuple[Group, ...] = (
         icon="i-gauge",
     ),
     Group(
+        "traffic",
+        "流量图",
+        "qB 口径的上下行流量历史曲线(方案C 采样管线)",
+        fields=(
+            Field(
+                "qb_traffic",
+                "qB 流量采样",
+                "object",
+                default=None,
+                optional=True,  # 整段缺省 = 未启用(None), 与 enabled 双重闸门(保守默认)
+                help="按采样间隔周期记录 qB 口径的上下行流量(读内存快照, 零新增 qB 请求), 供 WEB UI 流量图消费; 整段缺省或 enabled: false = 不采样零开销",
+                fields=(
+                    Field("enabled", "启用", "bool", default="false", help="功能总开关; false(缺省) = 不建采样任务不建目录零文件(保守默认)"),
+                    Field(
+                        "sample_interval",
+                        "采样间隔",
+                        "time",
+                        default="30S",
+                        help="流量采样周期(15 秒 ~ 10 分钟): 也是 24h 视图的曲线颗粒; 越小曲线越细, 但存储体量线性增长(默认 30 秒下 24 小时约 2880 行)"
+                    ),
+                    Field(
+                        "raw_window",
+                        "高分辨率保留窗",
+                        "time",
+                        default="24H",
+                        help="原始采样行(逐点速率 + 累计)的保留时长(1 小时 ~ 3 天); 24h 视图从它取数, 超窗的行随小时封口被裁剪"
+                    ),
+                    Field(
+                        "rollup_window",
+                        "小时均值保留窗",
+                        "time",
+                        default="30D",
+                        help="小时封口行(均值/峰值)的保留时长(7 ~ 90 天); 30d 视图从它取数, 也是已删种子文件的淘汰龄"
+                    ),
+                ),
+            ),
+        ),
+        icon="i-monitor",
+    ),
+    Group(
         "trackers",
         "站点",
         "站点匹配、标签、限速与 HR",

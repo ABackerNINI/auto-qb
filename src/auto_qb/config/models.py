@@ -282,6 +282,23 @@ class GlobalSpeedLimitCurve:
     enabled: bool = True  # False = 整体停用(任务短路: 不读 dat 不写 qB, 不按曲线调档)
 
 
+@dataclass
+class QbTraffic:
+    """qB 口径流量采样(plan 26-10-03-0946 方案C §06)
+
+    采样器按 sample_interval 周期读内存快照(零新增 qB 请求)产出全局/单种两系列采样点,
+    供 qB 口径流量图消费(方案C: 采样点逐系列落 dat 文件, 由存储阶段接手)。
+    enabled: 功能总开关; False(缺省) = 不建任务不建目录零文件(保守默认, 黄金法则 2)
+    sample_interval: 采样间隔(秒), 校验边界 15s-600s; 也是 24h 视图的栅格宽
+    raw_window: raw 段(高分辨率采样行)保留窗(秒), 校验边界 1h-72h
+    rollup_window: hour 段(小时均值)保留窗与冻结文件淘汰龄(秒), 校验边界 7d-90d
+    """
+    enabled: bool = False
+    sample_interval: float = 30.0  # 秒; YAML 原始缺省 "30S"
+    raw_window: float = 86400.0  # 秒; YAML 原始缺省 "24H"
+    rollup_window: float = 2592000.0  # 秒; YAML 原始缺省 "30D"
+
+
 @dataclass(frozen=True)
 class PathMapEntry:
     """fs.path_map 单条映射(容器部署): 逻辑空间前缀 -> 容器挂载点
@@ -363,3 +380,6 @@ class Config:
 
     # 全局限速曲线(Traffic Monitor): 读取 dat 流量, 按多条 period 曲线聚合, 自动设置 qB 全局速度限制
     global_speed_limit_curve: Optional[GlobalSpeedLimitCurve] = None  # None = 未启用
+
+    # qB 口径流量采样(plan 26-10-03-0946 方案C): 全局/单种两系列周期采样, 供流量图消费
+    qb_traffic: Optional[QbTraffic] = None  # None = 未启用(缺省; 键组整体缺省即功能未启用)

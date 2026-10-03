@@ -16,6 +16,7 @@ from .maintenance_mod import MaintenanceModule
 from .grouping_mod import GroupingModule
 from .ops_mod import OpsModule
 from .rules_mod import RulesModule
+from .traffic_sample_mod import TrafficSampleModule
 
 __all__ = [
     "LoggingModule",
@@ -26,4 +27,5 @@ __all__ = [
     "GroupingModule",
     "OpsModule",
     "RulesModule",
+    "TrafficSampleModule",
 ]

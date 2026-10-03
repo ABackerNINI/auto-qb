@@ -34,6 +34,7 @@ from .models import (
     PeriodCurve,
     WebConfig,
     QbittorrentConfig,
+    QbTraffic,
     TrackerConfig,
 )
 from .validation import validate_config
@@ -46,6 +47,7 @@ from .loaders import (
     load_notify_config,
     load_web_config,
     load_qbittorrent_config,
+    load_qb_traffic,
     load_tracker_config,
     load_tracker_hr,
 )
@@ -65,6 +67,7 @@ __all__ = [
     "PeriodCurve",
     "WebConfig",
     "QbittorrentConfig",
+    "QbTraffic",
     "TrackerConfig",
     "validate_config",
     "load_config",
@@ -75,6 +78,7 @@ __all__ = [
     "load_notify_config",
     "load_web_config",
     "load_qbittorrent_config",
+    "load_qb_traffic",
     "load_tracker_config",
     "load_tracker_hr",
     "DEFAULT_CONFIG_FILE",

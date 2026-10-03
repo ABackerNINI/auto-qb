@@ -914,6 +914,7 @@ class FakeConfig:
     delete_tags_if_has_no_torrents = []  # 全局: 彻底删除无种子的标签格式(支持正则)
     grouping = GroupingConfig(enabled=False, missing_tag="MISSING")  # 种子分组管理(默认关闭)
     global_speed_limit_curve = None  # 全局限速曲线(未启用; 与 Config 默认一致, 测试按需赋值)
+    qb_traffic = None  # qB 口径流量采样(未启用; 与 Config 默认一致, 测试按需赋 QbTraffic(...))
     notify = NotifyConfig()  # 主动通知(默认 disabled)
     web = WebConfig(skip_check_menu=True)  # WEB UI(默认 disabled); skip_check_menu 测试侧默认开 ——
     # R2 gate 用例(计划 26-10-02-1955 W1)按需实例级置 False(fail-closed 403), 深拷贝不跨测试泄漏,

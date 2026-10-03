@@ -55,9 +55,11 @@ def test_ctx_services_are_same_objects():
         # P4 起 maintenance/ops 模块句柄也挂 ctx(分组打标经 ctx.maintenance, 危险操作经 ctx.ops)
         assert mgr.ctx.maintenance is mgr.host.get("maintenance")
         assert mgr.ctx.ops is mgr.host.get("ops")
-        # 宿主与总线挂在内核侧, 指向同一 ctx; 装配清单随 P1-P5 逐段推进(rules 收官)
+        # 宿主与总线挂在内核侧, 指向同一 ctx; 装配清单随 P1-P5 逐段推进(rules 收官),
+        # 追加段(plan 26-10-03-0946 P1): qb_traffic 流量采样器挂清单末尾
         assert [m.name for m in mgr.host.modules()] == [
-            "logging", "notify", "webui", "hr", "tracker", "speed_curve", "maintenance", "grouping", "ops", "rules"
+            "logging", "notify", "webui", "hr", "tracker", "speed_curve", "maintenance", "grouping", "ops", "rules",
+            "qb_traffic"
         ]
         assert mgr.ctx.notify is mgr.host.get("notify"), "托盘经 ctx.notify 调公开方法(单一真相)"
         assert mgr.ctx.trackers is mgr.host.get("tracker"), "tracker 匹配经 ctx.trackers 服务(决策点 D3)"

@@ -30,6 +30,7 @@ from .models import (
     WebConfig,
     PeriodCurve,
     QbittorrentConfig,
+    QbTraffic,
     TrackerConfig,
 )
 from . import site_presets
@@ -390,6 +391,28 @@ def load_global_speed_limit_curve(spec) -> Optional[GlobalSpeedLimitCurve]:
     )
 
 
+def load_qb_traffic(spec) -> Optional[QbTraffic]:
+    """解析 config.qb_traffic 段(spec 为 None/缺省 -> None, 不启用)
+
+    先验证再解析: 结构/键/数值合法性由 validation._validate_qb_traffic 在 fail-fast 校验
+    阶段聚合完成, 此处仅做转换, 可假定配置正确(不含任何检查)。缺省键走 QbTraffic 默认值。
+    配置样式:
+        enabled: false             # 功能总开关(缺省 false; false = 不建任务不建目录零文件)
+        sample_interval: 30S       # 采样间隔(15s-600s)
+        raw_window: 24H            # raw 段保留窗(1h-72h)
+        rollup_window: 30D         # hour 段保留窗(7d-90d)
+    """
+    if spec is None:
+        return None
+    d = QbTraffic()
+    return QbTraffic(
+        enabled=parse_bool(str(spec["enabled"])) if "enabled" in spec else d.enabled,
+        sample_interval=parse_time(str(spec["sample_interval"])) if "sample_interval" in spec else d.sample_interval,
+        raw_window=parse_time(str(spec["raw_window"])) if "raw_window" in spec else d.raw_window,
+        rollup_window=parse_time(str(spec["rollup_window"])) if "rollup_window" in spec else d.rollup_window,
+    )
+
+
 def _parse_curve_points(raw_list, direction_key: str) -> List[CurvePoint]:
     """解析 upload_curve/download_curve 列表 -> CurvePoint 列表(仅转换, 合法性由校验阶段保证)
 
@@ -533,6 +556,7 @@ def load_config(config_path: str) -> Config:
         qbittorrent=load_qbittorrent_config(_get(cfg, "qbittorrent", {})),
         trackers=trackers,
         global_speed_limit_curve=load_global_speed_limit_curve(cfg.get("global_speed_limit_curve")),
+        qb_traffic=load_qb_traffic(cfg.get("qb_traffic")),
     )
 
 

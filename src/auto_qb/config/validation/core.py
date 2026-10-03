@@ -31,6 +31,7 @@ KNOWN_CONFIG_KEYS = {
     "hr_check",
     "trackers",
     "global_speed_limit_curve",
+    "qb_traffic",
     "maintenance_tag_mode",
 }
 
@@ -199,6 +200,7 @@ def validate_config(data) -> List[str]:
         _validate_hr_site_bindings,
         _validate_log,
         _validate_notify,
+        _validate_qb_traffic,
         _validate_qbittorrent,
         _validate_tag_lists,
         _validate_trackers,
@@ -274,6 +276,7 @@ def validate_config(data) -> List[str]:
     _validate_notify(cfg.get("notify"), errors)
     _validate_web(cfg.get("web"), errors)
     _validate_hr_check(cfg.get("hr_check"), errors)
+    _validate_qb_traffic(cfg.get("qb_traffic"), errors)
     _validate_tag_lists(cfg, errors)
     _validate_trackers(cfg.get("trackers"), rules_config, errors)
     # 站点绑定类校验(计划 26-09-27-1318 §3.3): 绑不上/绑多个/缺 hr 段 —— 要等 trackers 与
