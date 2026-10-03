@@ -8,7 +8,7 @@
 > + 显式 ntpath + `tmp_path`)。两侧实测: **Linux 容器 2440 passed + 6 skipped / 98.69%**(修前 10 failed /
 > 98.04%), **Windows `test.full` 2442 passed + 4 skipped / 99%**。基线切片 26-10-04-0553。
 
-> 最后活动: 2026-10-04 05:53
+> 最后活动: 2026-10-04 06:30
 
 ## 进行中
 
@@ -32,6 +32,11 @@
   **2442 passed + 4 skipped / 99%**; `test_memory_bank.py` 31 passed。
 - 回写: `pitfalls/testing/patching.md` 加「复发 +1」(含"为什么没命中" + 四类处置) 与
   「Docker 等价复现」配方(WSL 被黑名单拦的替代; 含"别删 `/work/.git`"等两个必踩点)。
+- 后续轮(2026-10-04 06:30): 用户要求 ci.yml 加 windows-latest job —— 新增 `test-windows`
+  job(3.12/3.13 矩阵)复用 ubuntu job 全部步骤, coverage artifact 改名 `coverage-ubuntu-<py>`
+  防撞名; 本地(Windows)基线 2442 passed + 4 skipped / 99%(基线 26-10-04-0630)。知识库既有
+  issue [26-09-21-1408](../issues/26-09-21-1408-chore-ci-no-windows-runner.html)
+  (chore-ci-no-windows-runner, Open)主体即本改动 —— 置 Done 需用户显式确认认领。
 
 ## 未验证面
 
