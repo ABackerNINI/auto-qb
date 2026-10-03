@@ -5,7 +5,7 @@
 - test_qb_traffic_config_parses_sample: 完整样例解析(enabled/三个时间键换算成秒)
 - test_qb_traffic_config_partial_falls_back_to_defaults: 部分键缺省回退 QbTraffic 默认值
 - test_qb_traffic_config_rejects_bad_section: 段非 dict / 未知键 / enabled 非布尔
-- test_qb_traffic_config_bounds_matrix: 四时间/布尔键边界矩阵(15S~10M / 1H~72H / 7D~90D 恰好压线收, 压线外拒)
+- test_qb_traffic_config_bounds_matrix: 四时间/布尔键边界矩阵(1.5S~10M / 1H~90D / 7D~无上限 恰好压线收, 压线外拒)
 - test_sample_task_registered_when_enabled: enabled=true -> start 创建 qb_traffic_sample 全局任务(interval=采样间隔)
 - test_sample_task_not_registered_when_disabled: enabled=false 与键组缺省(None)两种情形均不建任务
 - test_sample_task_reregisters_on_queue_rebuilt: L2 队列重建 -> 按新配置重入队(换 interval/启用/停用三向)
@@ -184,37 +184,37 @@ def test_qb_traffic_config_rejects_bad_section():
 
 def test_qb_traffic_config_bounds_matrix():
     """边界矩阵: 恰好压线合法(含等价秒数), 压线外拒绝; 三时间键各自独立校验"""
-    # 合法: 上下边界恰好压线(15S~10M / 1H~72H / 7D~90D)
+    # 合法: 上下边界恰好压线(1.5S~10M / 1H~90D / 7D~无上限)
     ok = validate_config(
         _cfg_dict({
             "enabled": "true",
-            "sample_interval": "15S",
+            "sample_interval": "1.5S",
             "raw_window": "1H",
             "rollup_window": "7D",
         })
     )
     assert ok == [], ok
     ok = validate_config(
-        _cfg_dict({
-            "enabled": "false",
-            "sample_interval": "10M",
-            "raw_window": "72H",
-            "rollup_window": "90D",
-        })
+        _cfg_dict(
+            {
+                "enabled": "false",
+                "sample_interval": "10M",
+                "raw_window": "90D",
+                "rollup_window": "36500D",  # 保留窗无上限: 100 年也合法(等效永久保留)
+            }
+        )
     )
     assert ok == [], ok
     # 越界: 各键压线外一秒即拒
-    bad = validate_config(_cfg_dict({"sample_interval": "14S"}))
+    bad = validate_config(_cfg_dict({"sample_interval": "1.4S"}))
     assert any("sample_interval" in e for e in bad), bad
     bad = validate_config(_cfg_dict({"sample_interval": "601S"}))
     assert any("sample_interval" in e for e in bad), bad
     bad = validate_config(_cfg_dict({"raw_window": "30M"}))
     assert any("raw_window" in e for e in bad), bad
-    bad = validate_config(_cfg_dict({"raw_window": "73H"}))
+    bad = validate_config(_cfg_dict({"raw_window": "91D"}))
     assert any("raw_window" in e for e in bad), bad
     bad = validate_config(_cfg_dict({"rollup_window": "6D"}))
-    assert any("rollup_window" in e for e in bad), bad
-    bad = validate_config(_cfg_dict({"rollup_window": "91D"}))
     assert any("rollup_window" in e for e in bad), bad
 
 

@@ -398,9 +398,9 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
     阶段聚合完成, 此处仅做转换, 可假定配置正确(不含任何检查)。缺省键走 QbTraffic 默认值。
     配置样式:
         enabled: false             # 功能总开关(缺省 false; false = 不建任务不建目录零文件)
-        sample_interval: 30S       # 采样间隔(15s-600s)
-        raw_window: 24H            # raw 段保留窗(1h-72h)
-        rollup_window: 30D         # hour 段保留窗(7d-90d)
+        sample_interval: 30S       # 采样间隔(1.5s-600s)
+        raw_window: 24H            # raw 段保留窗(1h-90d)
+        rollup_window: 30D         # hour 段保留窗(7d 起, 无上限)
     """
     if spec is None:
         return None

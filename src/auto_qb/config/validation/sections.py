@@ -577,10 +577,12 @@ def _validate_notify(spec, errors: List[str]) -> None:
 
 
 def _validate_qb_traffic(spec, errors: List[str]) -> None:
-    """校验 config.qb_traffic 段(qB 口径流量采样, plan 26-10-03-0946 §06); 未配置(None)合法 = 不启用
+    """校验 config.qb_traffic 段(qB 口径流量采样, plan 26-10-03-0946 方案C §06); 未配置(None)合法 = 不启用
 
-    边界依据(§06 表): sample_interval 15s-600s(下限防请求放大, 上限防 24h 视图颗粒过粗);
-    raw_window 1h-72h(上限防单文件超体量设计点); rollup_window 7d-90d(报告 §08-③ 档位)。
+    边界依据(§06 表, 26-10-04 按用户拍板放宽): sample_interval 1.5s-600s(原 15s 下限防请求放大 ——
+    采样只读内存快照零 qB 请求, 放宽后仅剩写放大代价; 上限防 24h 视图颗粒过粗);
+    raw_window 1h-90d(原 72h 上限防单文件超体量, 用户接受体量换 3 个月高分辨率);
+    rollup_window 7d 起、无上限(原 90d 上限取消 —— 设得足够久即等效永久保留)。
     """
     if spec is None:
         return
@@ -592,18 +594,12 @@ def _validate_qb_traffic(spec, errors: List[str]) -> None:
         _try(parse_bool, spec["enabled"], "config.qb_traffic.enabled", errors)
     if "sample_interval" in spec:
         _try_time(
-            spec["sample_interval"], "config.qb_traffic.sample_interval", errors, positive=True, min_s=15, max_s=600
+            spec["sample_interval"], "config.qb_traffic.sample_interval", errors, positive=True, min_s=1.5, max_s=600
         )
     if "raw_window" in spec:
         _try_time(
-            spec["raw_window"], "config.qb_traffic.raw_window", errors, positive=True, min_s=3600, max_s=72 * 3600
+            spec["raw_window"], "config.qb_traffic.raw_window", errors, positive=True, min_s=3600, max_s=90 * 86400
         )
     if "rollup_window" in spec:
-        _try_time(
-            spec["rollup_window"],
-            "config.qb_traffic.rollup_window",
-            errors,
-            positive=True,
-            min_s=7 * 86400,
-            max_s=90 * 86400
-        )
+        # 无 max_s: 保留窗不设上限, 设得足够久(如 3650D)即等效永久保留
+        _try_time(spec["rollup_window"], "config.qb_traffic.rollup_window", errors, positive=True, min_s=7 * 86400)

@@ -289,9 +289,9 @@ class QbTraffic:
     采样器按 sample_interval 周期读内存快照(零新增 qB 请求)产出全局/单种两系列采样点,
     供 qB 口径流量图消费(方案C: 采样点逐系列落 dat 文件, 由存储阶段接手)。
     enabled: 功能总开关; False(缺省) = 不建任务不建目录零文件(保守默认, 黄金法则 2)
-    sample_interval: 采样间隔(秒), 校验边界 15s-600s; 也是 24h 视图的栅格宽
-    raw_window: raw 段(高分辨率采样行)保留窗(秒), 校验边界 1h-72h
-    rollup_window: hour 段(小时均值)保留窗与冻结文件淘汰龄(秒), 校验边界 7d-90d
+    sample_interval: 采样间隔(秒), 校验边界 1.5s-600s(26-10-04 自 15s 放宽); 也是 24h 视图的栅格宽
+    raw_window: raw 段(高分辨率采样行)保留窗(秒), 校验边界 1h-90d(26-10-04 自 72h 放宽)
+    rollup_window: hour 段(小时均值)保留窗与冻结文件淘汰龄(秒), 校验边界 7d 起无上限(26-10-04 取消 90d 上限, 足够久即等效永久)
     """
     enabled: bool = False
     sample_interval: float = 30.0  # 秒; YAML 原始缺省 "30S"

@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_build_grid_24h_and_30d: 24h 窗 30s 栅格 = 2880 桶(floor 对齐); 30d 窗恒 3600s = 720 桶; 未知窗口 ValueError
 - test_build_grid_unaligned_t0_extra_bucket: t0 未对齐栅格时窗首桶提前(floor), 桶数 ceil = 2881(「≈2880」口径)
+- test_build_grid_fractional_interval_ceils_bucket_width: 小数采样间隔桶宽向上取整(1.5s -> 2s 桶宽; floor 会隔桶空 = 伪断线)
 - test_raw_rows_jitter_bucket_mean_and_empty_null: 抖动采样行按 floor 归桶, 桶内多行取均值(round 取整); 空桶 = null; null 点行不参与; 窗外行不消费
 - test_hour_rows_align_by_hour_epoch: 30d 窗 hour 行按 hour_epoch 对位(桶内不再聚合); 窗外/超过 t1 的行不消费
 - test_series_totals_diff_max0_reset_baseline: 相邻桶快照差分; cur < last 判重置该桶增量 null(dl/up 逐向独立); 窗首基线缺失 null; 空桶断链后下一有观测桶同样 null
@@ -67,6 +68,14 @@ def test_build_grid_unaligned_t0_extra_bucket():
     assert len(g.buckets) == 2881
     assert g.first == ((now - 86400) // 30) * 30
     assert g.last < now <= g.last + 30  # 全部桶覆盖 [t0, t1)
+
+
+def test_build_grid_fractional_interval_ceils_bucket_width():
+    """小数采样间隔桶宽向上取整: 1.5s -> 2s 桶宽(floor 取 1s 会让 1.5s 一条的采样行隔桶为空 = 伪断线)"""
+    g = build_grid("24h", NOW, 1.5)
+    assert g.interval == 2
+    assert len(g.buckets) == 43200  # NOW 与 t0 均为偶数, 恰好对齐
+    assert g.last < NOW <= g.last + 2  # 覆盖 [t0, t1) 不变
 
 
 # ---------------- 单系列离散(§05.1) ----------------

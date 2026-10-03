@@ -25,6 +25,7 @@ totals 段(§05.1, 单系列):
   null; 桶早于组内全部成员文件的最早行(组尚无任何观测)-> null; 其余桶即使全员空闲也出
   0 —— 组图空闲段 0 线、停机段断线, 二者靠全局系列区分。
 """
+import math
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -68,7 +69,9 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
         span, segment = WINDOW_SPECS[window]
     except KeyError:
         raise ValueError(f"未知窗口: {window!r}(须为 24h|30d)") from None
-    interval = max(1, int(sample_interval)) if segment == "raw" else HOUR_SECONDS
+    # 桶宽对采样间隔向上取整(floor 在小数间隔如 1.5s 下取 1s 桶宽, 采样行 1.5s 一条 -> 隔桶为空 = 伪断线;
+    # ceil 后桶宽 >= 采样间隔, 等间隔采样行每桶至少一条)
+    interval = max(1, math.ceil(sample_interval)) if segment == "raw" else HOUR_SECONDS
     t1 = int(now)
     t0 = t1 - span
     first = t0 - (t0 % interval)  # floor 对齐(epoch 恒正)

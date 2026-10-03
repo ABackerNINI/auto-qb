@@ -120,6 +120,11 @@ def _try_number(value, where: str, errors: List[str], *, integer: bool = False, 
         errors.append(f"{where}: 须 <= {max:g}")
 
 
+def _fmt_s(v: float) -> str:
+    """秒数显示: 整数秒出普通数字(7776000 而非 :g 的 7.776e+06), 小数秒保留 :g(1.5)"""
+    return f"{int(v)}" if float(v).is_integer() else f"{v:g}"
+
+
 def _try_time(
     value, where: str, errors: List[str], positive: bool = False, min_s: float = None, max_s: float = None
 ) -> None:
@@ -133,9 +138,9 @@ def _try_time(
     if positive and seconds <= 0:
         errors.append(f"{where}: 必须为正时间: {value}")
     if min_s is not None and seconds < min_s:
-        errors.append(f"{where}: 须 >= {min_s:g}s")
+        errors.append(f"{where}: 须 >= {_fmt_s(min_s)}s")
     if max_s is not None and seconds > max_s:
-        errors.append(f"{where}: 须 <= {max_s:g}s")
+        errors.append(f"{where}: 须 <= {_fmt_s(max_s)}s")
 
 
 # state_save_interval 下限: 状态的真实变更频率是小时~天级, 更激进的间隔只会白白放大磁盘
