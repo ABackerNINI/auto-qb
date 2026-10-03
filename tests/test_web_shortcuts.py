@@ -565,7 +565,7 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert "{{ drawerTitle() }}" in tpl and "drawer.detail ? drawer.detail.name : drawer.hash" not in tpl, (
         "头部标题必须走 drawerTitle()(成员名优先, 不再是 hash)"
     )
-    assert ':class="{ switching: drawer.switching }"' in tpl and 'class="drawer-busy"' in tpl, (
+    assert ':class="{ switching: drawer.switching,' in tpl and 'class="drawer-busy"' in tpl, (
         "body 必须挂 switching 遮罩类与加载胶囊(FX-29)"
     )
     assert "drawer.tab === 'general' && drawer.loading && !drawer.detail" in tpl, (
@@ -673,7 +673,7 @@ def test_drawer_height_collapse_w3() -> None:
     # Vue 3.5 运行时编译模板解析不了 `_` 前缀裸标识符(ReferenceError, W3 目检实证) ——
     # grip 三个内联处理器必须非下划线命名(精确匹配已隐含); 既有 _copyText 模板调用是历史缺陷, 单独报告不在此钉
     assert '@click="toggleDrawerCollapse()"' in tpl and 'class="drawer-fold"' in tpl, "头部必须有收起/展开钮(W1 只有关闭钮)"
-    assert ':class="{ collapsed: drawer.collapsed }"' in tpl and ':style="drawerPanelStyle()"' in tpl, (
+    assert ':class="{ collapsed: drawer.collapsed,' in tpl and ':style="drawerPanelStyle()"' in tpl, (
         "aside 必须双绑定 collapsed 类与内联高度"
     )
     # --- Alt+1~4 收起态先展开(页签不可见, 切了等于没切) ---

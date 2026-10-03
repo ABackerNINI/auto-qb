@@ -42,3 +42,28 @@
 - **守阵**: `tests/test_web_shortcuts.py::test_drawer_open_reveal_row` —— openTorrentDrawer 必须调
   _kbRevealRow, 让位必须 nextTick + _kbViewBottom 单点, 禁 scrollIntoView 与 innerHeight, 行不在
   DOM 必须静默放弃。
+
+### 落点从视图内上提到 app 级: 内边距要补回, 失效的父容器 flex 规则要删
+
+- **触发**: 2026-10-04 把 qB 口径流量图三挂点并入底部抽屉, `.drawer-dock` 自 `tpl/torrents.html`
+  上提到 app 级分片 `tpl/dock.html`(面板要任意页可开, 见 activeContext 26-10-04-0405)。
+- **判别**: 落点原先在 `.layout` / `.ce-page` 内部, 面板宽度靠**父容器的水平内边距**收边(两页都是 12px);
+  上提到 `#app` 直下后父容器没了 ⇒ 面板变全宽贴边。sticky 吸底本身不受影响(仍以文档滚动容器为准),
+  但 `.torrents-dock > .drawer-dock { flex: 0 0 auto }` 这类"面板是父容器 flex 子项"的规则**静默失效**
+  (不再有匹配节点), 留着就是骗后来人。
+- **处置**: `.drawer-dock` 自己补 `padding: 0 12px`(三皮肤成对改, 值与原父容器内边距对齐);
+  删掉随落点一起失效的父容器子项规则; 落点分片只放一个 `.drawer-dock`(boot.js `findSlot` 只认**第一个**
+  匹配 —— 摆两个等于第二个永远空着)。面板可见性改由 `drawer.js::drawerVisible` 按形态把守
+  (种子详情限种子页, 流量图全局), 替代原先"DOM 随视图 v-if 出入"的隐式门。
+
+### flex 纵列里"撑满可用高"必须配确定高度, 否则图塌到 min-height
+
+- **触发**: 2026-10-04 让流量图高度跟随抽屉高度(`.drawer-body.is-traffic { display:flex; flex-direction:column }`
+  + `.qb-chart { flex:1 }` + `.qb-chart-host { height:100% }`)。
+- **判别**: flex 的 `flex:1` 只在容器高度**确定**时才有解。抽屉默认是内容自适应(只有 CSS `max-height: 42vh`),
+  高度由内容撑出来 —— 此时"图撑满余量"是循环定义, 实测图会塌到 `min-height`。
+- **处置**: 流量形态由 `drawer.js::drawerPanelStyle()` 给**确定高度**(`drawerHeightPx` 有值就用它,
+  没有则回落 42vh = 与 CSS 默认上限同值), 高度因此也与种子详情**共用同一 drawerHeightPx**;
+  建图侧 `_qbChartBuild` 量 `host.clientHeight` 当图高, ResizeObserver 宽高**双观察**才能跟着拖拽实时长。
+- **守阵**: `tests/test_web.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
+  撑满段成对 + RO 宽高双观察) + `test_web_shortcuts.py::test_drawer_height_collapse_w3`(面板高度单点)。

@@ -1,0 +1,6 @@
+
+    <!-- 详情抽屉全局落点(2026-10-04 自 tpl/torrents.html 上提至 app 级):
+         原先落点在种子视图内 -> 抽屉只存在于种子页; qB 口径流量图(全局/分组)并入抽屉后
+         需要任意页都能开, 故把落点提到 #app 直下(排在页面布局之后, sticky 吸底仍成立,
+         boot.js 的 drawer 条目按此选择器注入)。面板本体见 shared/tpl/drawer.html -->
+    <div class="drawer-dock"></div>

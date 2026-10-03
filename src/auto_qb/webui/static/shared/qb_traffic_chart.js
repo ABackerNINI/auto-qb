@@ -1,4 +1,4 @@
-/* auto-qb WEB UI · qB 口径流量图(uPlot 双系列组件 + 弹层方法域, 三挂点)
+/* auto-qb WEB UI · qB 口径流量图(uPlot 双系列组件, 三挂点)
  *
  * plan 26-10-03-0946 方案C §07 P5a/P5b。一个「双系列(上行/下行)时间曲线」封装, 三图(全局/单种/
  * 分组)共用: uPlot options 样板(axes/series/scales/cursor)收在 _qbChartBuild 单点, 调用方只给
@@ -9,20 +9,24 @@
  * !本文件在 HTML 里必须排在 app.js **之前**; data 字段在 state.js(根选项, 不进 app.mixin,
  *   见 frontend-split 纪律), uPlot vendor 由三主题 tpl-manifest scripts 登记(boot.js 依序放行)。
  *
- * 三挂点(S5b 起以 _QB_SCOPES 作用域表为单一描述源, 字段名/容器 ref/端点/活跃与竞态判定
- * 各一份): ① global 全局弹层(/api/traffic/qb/global, 今日流量面板入口) ② torrent 种子详情
- * 抽屉「流量」页签(/api/traffic/qb/torrent/{hash}, drawer.js _loadDrawerTab 进) ③ group 分组
- * 弹层(/api/traffic/qb/group/{key}, 组右键菜单入口; key = 分组视图 g.key, 即 encode_group_key
- * 通道与 /api/groups/{key} 同款, 前端不自行编码)。
+ * 三挂点(2026-10-04 起全部并入底部详情抽屉, 以 _QB_SCOPES 作用域表为单一描述源): ① global 全局
+ * (/api/traffic/qb/global, 状态栏「qB 口径流量图」入口) ② group 分组(/api/traffic/qb/group/{key},
+ * 组右键菜单入口; key = 分组视图 g.key, 即 encode_group_key 通道, 前端不自行编码) ③ torrent 单种
+ * (/api/traffic/qb/torrent/{hash}, 种子详情抽屉「流量」页签)。全局/分组走 drawer.kind === "traffic"
+ * (scope 记挂点), 单种走 drawer.kind === "seed" + drawer.tab === "traffic"; 三者共用同一抽屉壳、
+ * 同一拖拽高度(drawerHeightPx)与同一段正文块(drawer.html qbTrafficActive), 故建图落点统一
+ * ref="qbChartHost"(同一时刻只渲染一个流量形态)。
  *
  * 低频轮询(§07 表「轮询/取数」列): 打开期间按采样间隔续拉 —— 间隔从最近响应 meta.interval_s
  * 取(24h 窗即采样间隔; 30d 窗 meta 是 3600s 桶宽而非采样间隔, 夹取到配置校验上界 600s),
  * 取不到回退 30s 常量; document.hidden 跳过(对齐 drawer.js _startDrawerPoll 先例); 关闭/
- * 切走页签由各 close/switch 路径 _qbPollStop 显式 clearInterval —— 只挂打开期间, 不后台常驻。
+ * 切走形态由 _stopDrawerPoll / _qbTeardown 显式 clearInterval —— 只挂打开期间, 不后台常驻。
  * meta.stale=true 的响应照常渲染(读竞态兜底位, §08, 前端不特殊处理)。
  *
- * 容器 resize 自适应: 建图宽度不是一次取定 —— 建图后对宿主挂 ResizeObserver, 宽度变化即
- * u.setSize 重画(高度恒 300); 销毁在 _qbChartDestroy 断开, 自摘守卫见 _qbChartBuild 内注。
+ * 容器尺寸自适应(便签 26-10-04-0134 + 2026-10-04 高度跟随): 建图尺寸不是一次取定 —— 建图后对
+ * 宿主挂 ResizeObserver, 宽/高任一变化即 u.setSize 重画(高度取自宿主 clientHeight, 随抽屉拖拽
+ * 调高实时跟随; 未拖拽时 drawerPanelStyle 给流量形态一个确定高度, 见 drawer.js); 销毁在
+ * _qbChartDestroy 断开, 自摘守卫见 _qbChartBuild 内注。
  *
  * 令牌纪律: canvas 内色值(series stroke/grid/axis)无法引用 CSS 变量, 一律在建图时读
  * 三主题令牌(getComputedStyle(:root)); DOM 侧(十字线样式/uPlot 结构样式)由 _qbChartInjectCss
@@ -41,7 +45,8 @@ const _QB_POLL_FALLBACK_MS = 30000;
 /* 三挂点作用域表(模块级单一描述源): 字段名一律指到 state.js 根选项的字段(不进 app.mixin,
  * frontend-split 纪律); url(ctx, window) 组端点串, ctx = 单种 hash / 分组 key(经 this 取);
  * active = 该图此刻是否应显示/可拉(建图守卫 + 轮询 tick 跳过判据同源); stale = 在途响应
- * 回落时是否已过期(不落袋, 对齐 drawer.js _drawerStale 代际纪律)。 */
+ * 回落时是否已过期(不落袋, 对齐 drawer.js _drawerStale 代际纪律)。
+ * host 三挂点统一为 qbChartHost: 三形态互斥(同一时刻只渲染一个), 正文块共用(drawer.html)。 */
 const _QB_SCOPES = {
   global: {
     host: "qbChartHost",
@@ -49,31 +54,35 @@ const _QB_SCOPES = {
     hoverIdx: "qbHistHoverIdx", hoverLeft: "qbHistHoverLeft",
     url: (_ctx, w) => "/api/traffic/qb/global?window=" + w,
     ctx: null,
-    active: (t) => !!t.qbHistOpen,
-    stale: (t) => !t.qbHistOpen,
+    active: (t) => t.drawer.open && !t.drawer.collapsed
+      && t.drawer.kind === "traffic" && t.drawer.scope === "global",
+    stale: (t) => !(t.drawer.open && t.drawer.kind === "traffic" && t.drawer.scope === "global"),
   },
   torrent: {
-    host: "qbTorrentChartHost",
+    host: "qbChartHost",
     window: "qbTorrentWindow", data: "qbTorrentData", loading: "qbTorrentLoading", error: "qbTorrentError",
     hoverIdx: "qbTorrentHoverIdx", hoverLeft: "qbTorrentHoverLeft",
     url: (h, w) => "/api/traffic/qb/torrent/" + h + "?window=" + w,
     ctx: (t) => t.drawer.hash,
-    // 抽屉打开 + 流量页签 + 展开态 + 种子页种子视图(面板 DOM 随种子视图 v-if 出入,
+    // 抽屉打开 + 种子形态 + 流量页签 + 展开态 + 种子页种子视图(面板 DOM 随 drawerVisible 出入,
     // 不可见即跳过 —— 对齐 _startDrawerPoll 的页面守卫先例; 收起态图不可见, 省请求同停)
-    active: (t) => !!(t.drawer.open && t.drawer.tab === "traffic" && !t.drawer.collapsed
-      && t.page === "groups" && t.viewMode === "torrents"),
-    stale: (t, h) => !t.qbTrafficOn || !t.drawer.open || t.drawer.tab !== "traffic" || t.drawer.hash !== h,
+    active: (t) => !!(t.drawer.open && t.drawer.kind === "seed" && t.drawer.tab === "traffic"
+      && !t.drawer.collapsed && t.page === "groups" && t.viewMode === "torrents"),
+    stale: (t, h) => !(t.qbTrafficOn && t.drawer.open && t.drawer.kind === "seed"
+      && t.drawer.tab === "traffic" && t.drawer.hash === h),
   },
   group: {
-    host: "qbGroupChartHost",
+    host: "qbChartHost",
     window: "qbGroupWindow", data: "qbGroupData", loading: "qbGroupLoading", error: "qbGroupError",
     hoverIdx: "qbGroupHoverIdx", hoverLeft: "qbGroupHoverLeft",
     // key = 分组视图 g.key(服务端 encode_group_key 产物, base64url 天然 URL 安全),
     // 与 delete_flow/commands 的 /api/groups/${k} 同款原样内插 —— 前端不自行编码(§07 表③)
     url: (k, w) => "/api/traffic/qb/group/" + k + "?window=" + w,
     ctx: (t) => t.qbGroupKey,
-    active: (t) => !!t.qbGroupOpen,
-    stale: (t, k) => !t.qbTrafficOn || !t.qbGroupOpen || t.qbGroupKey !== k,
+    active: (t) => t.drawer.open && !t.drawer.collapsed
+      && t.drawer.kind === "traffic" && t.drawer.scope === "group",
+    stale: (t, k) => !(t.qbTrafficOn && t.drawer.open && t.drawer.kind === "traffic"
+      && t.drawer.scope === "group" && t.qbGroupKey === k),
   },
 };
 
@@ -119,87 +128,122 @@ window.AQB_QB_TRAFFIC = {
   computed: {
     /* 功能总门(P5 验收, fail-closed 单点): flags.qb_traffic_enabled(/api/webui/flags 下发,
      * fail-closed 默认 false)。抽屉「流量」页签按钮 / 组右键「qB 口径流量图」菜单项 /
-     * 分组弹层入口全部 v-if 在它上; 各 _qbLoad 里再兜一道(关闭后无任何请求路径)。 */
+     * 状态栏入口全部 v-if 在它上; 各 _qbLoad 里再兜一道(关闭后无任何请求路径)。 */
     qbTrafficOn() {
       return !!(this.flags && this.flags.qb_traffic_enabled);
     },
-    /* 全局弹层入口门(P5a): qbTrafficOn 且今日流量面板在(statusbar 挂点本体, plan §07 表①)。 */
+    /* 全局入口门(P5a): qbTrafficOn 且今日流量面板在(statusbar 挂点本体, plan §07 表①)。 */
     qbHistEntryOn() {
       return !!(this.flags && this.flags.qb_traffic_enabled && this.todayTraffic);
     },
-    /* points 捷径(模板空态判据; 未启用/无数据后端回 points: []) */
-    qbHistPoints() {
-      return (this.qbHistData && this.qbHistData.points) || [];
+    /* 当前流量形态的作用域("" = 非流量形态) —— 三挂点正文块(drawer.html qbTrafficActive)与
+     * 抽屉流量形态高度判据(drawer.js drawerPanelStyle)的单一派生点。 */
+    qbCurScope() {
+      if (!this.drawer.open) return "";
+      if (this.drawer.kind === "traffic") return this.drawer.scope || "";
+      if (this.drawer.kind === "seed" && this.drawer.tab === "traffic" && this.qbTrafficOn) return "torrent";
+      return "";
     },
-    qbTorrentPoints() {
-      return (this.qbTorrentData && this.qbTorrentData.points) || [];
+    qbTrafficActive() {
+      return !!this.qbCurScope;
     },
-    qbGroupPoints() {
-      return (this.qbGroupData && this.qbGroupData.points) || [];
+    /* 流量形态头部标题(kind === "traffic" 时用; 单种走种子详情头部, 不消费本值) */
+    qbTrafficTitle() {
+      const s = this.qbCurScope;
+      if (s === "global") return "qB 口径流量图";
+      if (s === "group") return "分组流量图 · " + (this.qbGroupName || "未命名分组");
+      if (s === "torrent") return "种子流量图 · " + this.drawerTitle();
+      return "";
+    },
+    /* 当前作用域取值族(三挂点共用同一段正文块, 模板零分支) */
+    qbCurData() {
+      const s = this.qbCurScope;
+      return s ? this[_QB_SCOPES[s].data] : null;
+    },
+    qbCurPoints() {
+      const d = this.qbCurData;
+      return (d && d.points) || [];
+    },
+    qbCurLoading() {
+      const s = this.qbCurScope;
+      return s ? !!this[_QB_SCOPES[s].loading] : false;
+    },
+    qbCurError() {
+      const s = this.qbCurScope;
+      return s ? this[_QB_SCOPES[s].error] : "";
+    },
+    qbCurWindow() {
+      const s = this.qbCurScope;
+      return s ? this[_QB_SCOPES[s].window] : "24h";
     },
     /* 悬停取值(对齐 dialogs.js histHover 十字先例): 时刻 + 上/下行速率(fmtSpeed 同源);
-     * 断线桶(null)不出速率, 出「断线」文案 —— §5.2 语义直读。left/flip 由十字线 px 折算。
-     * 三挂点同一实现(_qbHoverOf), 这里是全局弹层的一份。 */
-    qbHover() {
-      return this._qbHoverOf("global");
-    },
-    qbTorrentHover() {
-      return this._qbHoverOf("torrent");
-    },
-    qbGroupHover() {
-      return this._qbHoverOf("group");
+     * 断线桶(null)不出速率, 出「断线」文案 —— §5.2 语义直读。left/flip 由十字线 px 折算。 */
+    qbCurHover() {
+      const s = this.qbCurScope;
+      return s ? this._qbHoverOf(s) : null;
     },
     /* 窗口内累计(totals 非空桶求和; 断线/重置桶本就 null 不计 —— §5.1 差分语义) */
-    qbHistSummary() {
-      return this._qbSummaryOf("global");
+    qbCurSummary() {
+      const s = this.qbCurScope;
+      return s ? this._qbSummaryOf(s) : null;
     },
-    qbTorrentSummary() {
-      return this._qbSummaryOf("torrent");
+    /* 空态/汇总口径文案(按作用域微调; 其余文案三挂点一致) */
+    qbCurEmptyText() {
+      const s = this.qbCurScope;
+      if (s === "torrent") return "暂无该种子的 qB 口径流量数据(仅活跃传输期间有采样)";
+      if (s === "group") return "暂无该分组的 qB 口径流量数据(成员活跃传输期间才有采样)";
+      return "暂无 qB 口径流量数据(程序运行期间无采样)";
     },
-    qbGroupSummary() {
-      return this._qbSummaryOf("group");
+    qbCurSummaryHint() {
+      const s = this.qbCurScope;
+      const base = "累计为窗口内增量(断线期不计)";
+      return s === "group" ? base + " · 组口径 = 当前成员集聚合" : base;
     },
   },
   methods: {
-    /* ---------------- 弹层开关(打开拉取一次 + 起低频轮询; 关闭 clearInterval) ---------------- */
+    /* ---------------- 流量形态开关(三挂点并入抽屉; 打开 = 把抽屉切到流量形态) ----------------
+     * 全局/分组: openDrawerTraffic(scope, key) 整体重置抽屉状态并拉数 + 起低频轮询;
+     * 单种: 走 drawer.js openTorrentDrawer + drawerTab('traffic')(页签本体, 不在本模块)。
+     * 关闭统一走 drawer.js closeDrawer()(Esc/关闭钮/切页三路同口), 收轮询与图见 _qbTeardown。 */
     async openQbHistory() {
-      this.qbHistOpen = true;
-      this._qbPollStart("global");
-      await this._qbLoad("global");
+      return this.openDrawerTraffic("global", "");
     },
-    closeQbHistory() {
-      this.qbHistOpen = false;
-      this.qbHistHoverIdx = -1;
-      this._qbPollStop("global");
-      this._qbChartDestroy("global");
-    },
-    /* 分组弹层(S5b, §07 表③): 入口 = 组右键菜单「qB 口径流量图」(ctx-menus.html, v-if=qbTrafficOn)。
+    /* 分组入口(S5b, §07 表③): 入口 = 组右键菜单「qB 口径流量图」(ctx-menus.html, v-if=qbTrafficOn)。
      * key 直用分组视图 g.key(encode_group_key 通道); 组名经 _findGroup 取(decoratedGroups 同 key)。 */
     async openQbGroup(key) {
       if (!this.qbTrafficOn || !key) return;  // fail-closed 双保险(菜单项 v-if 之外的加载路径兜底)
-      const g = this._findGroup(key);
-      this.menu.visible = false;  // 右键菜单入口先收菜单(与 openMetaDialog 同口径)
-      this.qbGroupKey = key;
-      this.qbGroupName = (g && g.name) || "";
-      this.qbGroupOpen = true;
-      this._qbPollStart("group");
-      await this._qbLoad("group");
+      return this.openDrawerTraffic("group", key);
     },
-    closeQbGroup() {
-      this.qbGroupOpen = false;
-      this.qbGroupHoverIdx = -1;
-      this._qbPollStop("group");
-      this._qbChartDestroy("group");
+    /* 打开流量形态抽屉(全局/分组共用; 单种走 openTorrentDrawer + 流量页签):
+     * 与 drawer.js openTorrentDrawer 同口径 —— 先收上一次的轮询/跟随/图, 再整体重置抽屉状态为
+     * 流量形态(kind/scope), 持久化开合态, 最后拉数 + 起低频轮询。 */
+    async openDrawerTraffic(scope, key) {
+      if (!this.qbTrafficOn || !_QB_SCOPES[scope]) return;  // fail-closed 兜底
+      if (scope === "group") {
+        if (!key) return;
+        const g = this._findGroup(key);
+        this.menu.visible = false;  // 右键菜单入口先收菜单(与 openMetaDialog 同口径)
+        this.qbGroupKey = key;
+        this.qbGroupName = (g && g.name) || "";
+      }
+      this._stopDrawerPoll();   // 种子详情页签轮询(trackers/peers/torrent 流量)一并收
+      this._stopDrawerFollow();
+      this._drawerSwitchEnd();  // 形态整体重建 -> 无"旧内容可保留"
+      this._qbTeardown();       // 三挂点轮询与图全收(形态切换不残留旧图)
+      this.drawer = {
+        open: true, collapsed: false, hash: "", tab: "general", loading: false, error: "",
+        detail: null, trackers: [], files: [], peers: { peers: [] },
+        trackersLoading: false, filesLoading: false, peersLoading: false, switching: false,
+        kind: "traffic", scope,
+      };
+      this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读)
+      this._qbLoad(scope);
+      this._qbPollStart(scope);
     },
     /* 窗口切换(24h/30d): 换窗即重拉重画; 打开中的轮询定时器由 _qbPollResync 按新窗重排 */
-    qbHistSetWindow(w) {
-      return this._qbSetWindow("global", w);
-    },
-    qbTorrentSetWindow(w) {
-      return this._qbSetWindow("torrent", w);
-    },
-    qbGroupSetWindow(w) {
-      return this._qbSetWindow("group", w);
+    qbSetWindow(w) {
+      const s = this.qbCurScope;
+      return s ? this._qbSetWindow(s, w) : undefined;
     },
     /* 兼容别名(P5a 公开名; 现归一到 _qbLoad 单点) */
     loadQbHistory() {
@@ -210,6 +254,13 @@ window.AQB_QB_TRAFFIC = {
       if (this[def.window] === w) return;
       this[def.window] = w;
       return this._qbLoad(scope);
+    },
+    /* 三挂点统一收尾(关抽屉 / 形态切换 / 登出): 停三挂点轮询 + 销毁三挂点图, 单点防漏 */
+    _qbTeardown() {
+      for (const s of Object.keys(_QB_SCOPES)) {
+        this._qbPollStop(s);
+        this._qbChartDestroy(s);
+      }
     },
     /* ---------------- 取数单点(三挂点同形: 开门 -> 拉取 -> 竞态判 -> 落袋/回落) ---------------- */
     async _qbLoad(scope) {
@@ -341,13 +392,16 @@ window.AQB_QB_TRAFFIC = {
       if (!data) return;
       if (!this._qbCharts) this._qbCharts = {};
       if (!this._qbChartWs) this._qbChartWs = {};
+      if (!this._qbChartHs) this._qbChartHs = {};
       if (!this._qbAnchors) this._qbAnchors = {};
       this._qbChartDestroy(scope);
       this._qbChartInjectCss();
       this._qbAnchors[scope] = data.anchor;  // 悬停取值用(非响应式实例字段, 同 _drawerTimer 先例)
       const tk = this._qbChartTokens();
-      const H = 300;
       const W = this._qbChartWs[scope] = host.clientWidth || 860;
+      // 高度跟随宿主(流量形态里 .qb-chart-host 撑满抽屉可用高): 量到就用, 量不到(布局未定)回落 300;
+      // 抽屉拖拽调高 -> 宿主高度变 -> ResizeObserver 重画, 见下
+      const H = this._qbChartHs[scope] = host.clientHeight || 300;
       const fmtAxisSpeed = (v) => this.fmtSpeed(v).replace(" B/s", "");
       const axis = {
         stroke: tk.axis,
@@ -399,11 +453,11 @@ window.AQB_QB_TRAFFIC = {
         },
       };
       const u = this._qbCharts[scope] = new uPlot(opts, [data.xs, data.up, data.dl], host);
-      // 容器 resize 自适应(便签 26-10-04-0134): 建图宽度一次取定后画布不重算 —— 对宿主挂
-      // ResizeObserver, 宽度变了 setSize 重画(高度恒 300 不参与); 宿主 width:100% 不依赖图
-      // 内容(三主题 views.css .qb-chart-host), 观察不会成环。自摘守卫: 图被重建/销毁
-      // (下次 build 先走 _qbChartDestroy 断开)或宿主 DOM 已随 v-if 拆除(torrent 切页签只停
-      // 轮询不销毁图, 脱离 DOM 后 RO 报 0 宽)即断开, 不留对旧宿主的观察。
+      // 容器尺寸自适应(便签 26-10-04-0134 + 高度跟随): 建图尺寸一次取定后画布不重算 —— 对宿主挂
+      // ResizeObserver, 宽/高任一变化即 setSize 重画(抽屉拖拽调高 -> 宿主高变 -> 图跟着长);
+      // 宿主 width:100%/height:100% 不依赖图内容(三主题 views.css .qb-chart-host), 观察不会成环。
+      // 自摘守卫: 图被重建/销毁(下次 build 先走 _qbChartDestroy 断开)或宿主 DOM 已随 v-if 拆除
+      // (流量形态切走只停轮询不销毁图, 脱离 DOM 后 RO 报 0 尺寸)即断开, 不留对旧宿主的观察。
       if (!this._qbChartRos) this._qbChartRos = {};
       const ro = new ResizeObserver(() => {
         if (this._qbCharts[scope] !== u || !host.isConnected) {
@@ -411,9 +465,11 @@ window.AQB_QB_TRAFFIC = {
           return;
         }
         const w = host.clientWidth;
-        if (w > 0 && w !== this._qbChartWs[scope]) {
+        const h = host.clientHeight;
+        if (w > 0 && h > 0 && (w !== this._qbChartWs[scope] || h !== this._qbChartHs[scope])) {
           this._qbChartWs[scope] = w;
-          u.setSize({ width: w, height: H });
+          this._qbChartHs[scope] = h;
+          u.setSize({ width: w, height: h });
         }
       });
       ro.observe(host);

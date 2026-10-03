@@ -261,10 +261,10 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .hist-summary .h-up { color: var(--today-up); }
 .hist-summary .h-down { color: var(--today-down); }
 
-/* qB 口径流量图弹层(P5a, plan 26-10-03-0946 §07): 图表容器/窗口切换/空态 ——
- * tooltip(.hist-tip)与图例/摘要(.hist-legend/.hist-summary)复用既有类, 色义同源;
- * 曲线本体色值由 qb_traffic_chart.js 读令牌注入, 这里只有结构性规则 */
-.qb-modal { width: var(--modal-w-add); max-width: 100%; }
+/* qB 口径流量图(P5a, plan 26-10-03-0946 §07; 2026-10-04 三挂点并入底部详情抽屉):
+ * 图表容器/窗口切换/空态 —— tooltip(.hist-tip)与图例/摘要(.hist-legend/.hist-summary)复用既有类,
+ * 色义同源; 曲线本体色值由 qb_traffic_chart.js 读令牌注入, 这里只有结构性规则。
+ * 流量形态正文的 flex/撑满规则在 dialogs.css 的 .drawer-body.is-traffic 段(抽屉壳侧) */
 .qb-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
   background: var(--bg-sunken); border: 1px solid var(--border); }
 .qb-tabs button { padding: 3px 12px; border: 0; border-radius: 999px; background: transparent;

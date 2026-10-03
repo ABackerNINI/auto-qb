@@ -8,6 +8,16 @@
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
 window.AQB_DRAWER = {
+  computed: {
+    /* 抽屉可见性(2026-10-04 双形态): 流量形态全局可用(状态栏入口在任何页都能开); 种子详情形态仍
+     * 只在种子页种子视图渲染 —— 等价于原「.drawer-dock 随种子视图 v-if 出入」: 切页时面板 DOM
+     * 退场但 drawer.open 保持, 回页状态不丢(方案A W1 验收项)。 */
+    drawerVisible() {
+      if (!this.drawer.open) return false;
+      if (this.drawer.kind === "traffic") return true;
+      return this.page === "groups" && this.viewMode === "torrents";
+    },
+  },
   methods: {
     /* 自动种子管理开关(种子页右键 R2 补遗): 复用 torrentCmd 回执链 */
     autoTmmToggle() {
@@ -445,8 +455,8 @@ window.AQB_DRAWER = {
      * 数据: /api/torrents/{hash} 全字段详情; /trackers /files /peers 按需拉取。
      * trackers/peers 在对应 tab 激活期间 5s 轮询(页面隐藏时暂停), 关闭面板即停 —— 不进主循环 tick;
      * General 分组行在 drawerGeneralSections 预格式化(qB 哨兵 -1/-2/8640000 在此统一翻译)。
-     * 形态: 右缘浮层改为种子视图 .drawer-dock 里的停靠面板 —— 无遮罩, open 只负责挂状态与拉数据;
-     * 面板 DOM 随种子视图 v-if 出入, 故 open 必须页面守卫(见下), close 只收面板。
+     * 形态: 右缘浮层改为底部停靠面板(2026-10-04 起落点为 app 级 .drawer-dock, 可见性由 drawerVisible
+     * 按形态把守) —— 无遮罩, open 只负责挂状态与拉数据; close 只收面板。
      * W2 键盘跟随: 光标移动经 shortcuts.js::_kbApplyCursor 尾部进 _kbFollowDrawer 单点(防抖 200ms
      * + 请求代际 seq + hash 短路, §2.3), 停稳后经 _switchDrawerTarget 换目标; 显式打开/关闭在此
      * 两处作废在途跟随定时器, 显式操作优先于跟随。 */
@@ -462,11 +472,13 @@ window.AQB_DRAWER = {
       // 而功能后来关闭时落回常规页(页签按钮 v-if=qbTrafficOn 不渲染, 初值也不能落在隐形页签上)
       const last = this.drawerLastTab;
       const initialTab = last === "traffic" && !this.qbTrafficOn ? "general" : (last || "general");
+      this._qbTeardown();  // 若上一形态是流量图(全局/分组), 换到种子详情时收轮询与图
       this.drawer = {
         open: true, collapsed: false, hash, tab: initialTab, loading: true, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
         switching: false,  // FX-29: 打开路径不存在"保留旧数据", 遮罩恒不亮(显式建字段见 vue-reactivity)
+        kind: "seed", scope: "",
       };
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读, 首屏恒默认收起)
       this._kbRevealRow(hash);   // 显式打开也让位: 停靠面板一开就压住列表底部, 被点行(双击/右键/Enter)要露出来(2026-10-03 报障)
@@ -495,6 +507,7 @@ window.AQB_DRAWER = {
       this._stopDrawerPoll();
       this._stopDrawerFollow();
       this._drawerSwitchEnd();  // FX-29: 收面板即撤切换态(未完成的等待不得挂到下次打开)
+      this._qbTeardown();       // 流量形态(全局/分组/单种)轮询与图一并收(2026-10-04 三挂点并入抽屉)
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读)
     },
     _stopDrawerPoll() {
@@ -740,10 +753,14 @@ window.AQB_DRAWER = {
     },
     /* 面板内联样式: 展开且有高度记忆/拖拽值时, height 与 max-height 同锁一个 px
      * (CSS 默认 max-height:42vh 只管未拖拽过的内容自适应态; 拖到 42vh 以上必须放开);
+     * 流量形态必须给确定高度 —— 图高 = 宿主高(撑满抽屉可用高), 无确定高度时 flex 无解,
+     * 故未拖拽过时回落 42vh(与 CSS 默认上限同值); 与种子详情共用同一 drawerHeightPx(高度复用);
      * 收起/关闭态交给 CSS(收起 = body 隐藏, 高度回落头部行高) */
     drawerPanelStyle() {
-      if (!this.drawer.open || this.drawer.collapsed || !this.drawerHeightPx) return {};
-      const h = this._drawerClampHeight(this.drawerHeightPx, window.innerHeight);
+      if (!this.drawer.open || this.drawer.collapsed) return {};
+      const px = this.drawerHeightPx || (this.qbTrafficActive ? Math.round(window.innerHeight * 0.42) : 0);
+      if (!px) return {};
+      const h = this._drawerClampHeight(px, window.innerHeight);
       return { height: h + "px", maxHeight: h + "px" };
     },
     /* 顶缘拖拽(pointer capture 挂在 grip 元素上, move/up 都派发给它, 出窗不丢事件)。
@@ -778,7 +795,12 @@ window.AQB_DRAWER = {
     toggleDrawerCollapse() {
       this.drawer.collapsed = !this.drawer.collapsed;
       this.persistDrawerOpen();
-      if (!this.drawer.collapsed) this._kbFollowDrawer();
+      if (!this.drawer.collapsed) {
+        this._kbFollowDrawer();
+        // 流量形态: 收起期 body 不可见(图不重建), 展开后宿主重新有尺寸 -> 补一发建图
+        const s = this.qbCurScope;
+        if (s) this.$nextTick(() => this._qbChartBuild(s));
+      }
     },
     persistDrawerHeight() {
       try {

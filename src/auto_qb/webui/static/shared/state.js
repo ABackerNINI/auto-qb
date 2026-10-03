@@ -98,14 +98,17 @@ window.AQB_STATE = {
       unrecognizedOpen: false,  // 未识别折叠区展开态(追剧视图)
       groupColumns: GROUP_COLUMNS,
       detailColumns: DETAIL_COLUMNS,
-      // 种子详情抽屉(R1B): 各 tab 数据与加载态; _drawerTimer 轮询句柄挂实例(非响应式)
+      // 底部详情抽屉(R1B): 各 tab 数据与加载态; _drawerTimer 轮询句柄挂实例(非响应式)
       // collapsed(W3 方案A): 收起态 = 只留头部(~44px), 展开恢复; 字段必须显式建(vue-reactivity 坑)
+      // kind(2026-10-04 双形态): "seed" = 种子详情(五页签) / "traffic" = qB 口径流量图(全局/分组,
+      //   scope 记挂点); 两形态共用同一抽屉壳与同一拖拽高度(drawerHeightPx) —— 原模态弹层已并入。
       drawer: {
         open: false, collapsed: false, hash: "", tab: "general", loading: false, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
         // FX-29 切换目标期的遮罩态: 保留旧内容撑住面板几何, 遮罩盖住旧值防误读, 新数据到手才撤
         switching: false,
+        kind: "seed", scope: "",  // scope ∈ "" | "global" | "group"(kind === "traffic" 时有效)
       },
       drawerLastTab: initialDrawerTab(),  // 记住上次停留的 tab(跨种子打开 + 刷新保持); 见 initialDrawerTab()
       // 面板高度记忆(W3 方案A): 用户拖拽调高后的 px; null = 未拖拽过, 走 CSS 默认上限 42vh。
@@ -206,9 +209,10 @@ window.AQB_STATE = {
       historyLoading: false,
       historyError: "",
       histHoverIdx: -1,       // 悬停柱桶索引(-1 = 无)
-      // qB 口径流量图弹层(P5a, plan 26-10-03-0946 §07; 数据源 /api/traffic/qb/global, 时序速率,
-      // 响应三域同形 { points, totals, meta }; 组件在 qb_traffic_chart.js)
-      qbHistOpen: false,
+      // qB 口径流量图 · 全局挂点(P5a, plan 26-10-03-0946 §07; 数据源 /api/traffic/qb/global,
+      // 时序速率, 响应三域同形 { points, totals, meta }; 组件在 qb_traffic_chart.js)。
+      // 2026-10-04: 三挂点并入底部详情抽屉(开合 = drawer.open + drawer.kind === "traffic"
+      // + drawer.scope), 不再各持独立 open 字段。
       qbHistWindow: "24h",    // 24h | 30d
       qbHistData: null,       // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
       qbHistLoading: false,
@@ -216,16 +220,15 @@ window.AQB_STATE = {
       qbHistHoverIdx: -1,     // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
       qbHistHoverLeft: 0,     // 悬停十字线 px(tooltip 水平定位)
       // qB 口径流量图 · 单种挂点(S5b, plan §07 表②): 种子详情抽屉「流量」页签; 开合由
-      // drawer.open + drawer.tab === "traffic" 表达, 不设独立 open 字段(页签本体在 drawer.html)
+      // drawer.kind === "seed" + drawer.tab === "traffic" 表达, 不设独立 open 字段(正文块在 drawer.html)
       qbTorrentWindow: "24h", // 24h | 30d
       qbTorrentData: null,    // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
       qbTorrentLoading: false,
       qbTorrentError: "",
       qbTorrentHoverIdx: -1,  // 悬停桶索引(-1 = 无; uPlot setCursor 钩子写回)
       qbTorrentHoverLeft: 0,  // 悬停十字线 px(tooltip 水平定位)
-      // qB 口径流量图 · 分组挂点(S5b, §07 表③): 分组弹层(现状无分组弹层, 本挂点新建,
-      // 入口 = 组右键菜单「qB 口径流量图」); key = 分组视图 g.key(encode_group_key 通道)
-      qbGroupOpen: false,
+      // qB 口径流量图 · 分组挂点(S5b, §07 表③): 分组形态(与全局同挂抽屉, scope="group"),
+      // 入口 = 组右键菜单「qB 口径流量图」; key = 分组视图 g.key(encode_group_key 通道)
       qbGroupKey: "",         // 打开时刻锁定的组 key(慢响应不污染下一次打开)
       qbGroupName: "",        // 弹层标题用(经 _findGroup 取, 找不到留空)
       qbGroupWindow: "24h",   // 24h | 30d

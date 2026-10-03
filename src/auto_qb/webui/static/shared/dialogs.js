@@ -528,7 +528,7 @@ window.AQB_DIALOGS = {
     escBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
         this.metaOpen || this.hrsOpen || this.filePrio.visible || this.drawer.open || this.historyOpen ||
-        this.qbHistOpen || this.qbGroupOpen || this.headMenu.visible ||
+        this.headMenu.visible ||
         this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.kbHelpOpen || this.filterMenu ||
         this.menu.visible || this.selGroups.length || this.selMembers.length || this.expandedKey ||
         this.expandedShowEp || this.expandedShows.length);

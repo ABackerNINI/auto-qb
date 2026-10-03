@@ -19,7 +19,8 @@
           </button>
           <!-- qB 口径流量图入口(plan 26-10-03-0946 §07 P5a, 与 TM 历史入口并列):
                enabled=false 时 qbHistEntryOn 为假 -> 入口不渲染、openQbHistory 无触发路径
-               = 不发请求(P5 验收); 弹层模板在 tpl/qb-traffic.html -->
+               = 不发请求(P5 验收); 2026-10-04 起并入底部详情抽屉(openQbHistory ->
+               openDrawerTraffic, 面板本体在 tpl/drawer.html 的流量形态) -->
           <button v-if="qbHistEntryOn" class="sb-qb" title="qB 口径流量图(24h/30d 时序)" @click.stop="openQbHistory()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
           </button>

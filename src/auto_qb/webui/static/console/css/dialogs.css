@@ -2,11 +2,13 @@
  * R1B 右缘抽屉重设计为停靠面板: 全宽贴列表容器、无遮罩、无 backdrop-filter —— 本皮肤唯一一处
  * 毛玻璃在此摘除, PERF-01 全站归零收尾(与 atlas/prism 成对改)。布局/落点/层级口径见
  * atlas/css/dialogs.css 头段注释, 三皮肤同构。 */
-.drawer-dock { position: sticky; bottom: var(--statusbar-h, 34px); z-index: 40; margin-top: 8px; }
+/* 落点 2026-10-04 自种子视图上提为 app 级(shared/tpl/dock.html): qB 口径流量图(全局/分组)并入
+ * 抽屉后需任意页可开; 左右内边距复刻原落点所在的 .layout/.ce-page 内边距(12px), 宽度不变 */
+.drawer-dock { position: sticky; bottom: var(--statusbar-h, 34px); z-index: 40; margin-top: 8px;
+  padding: 0 12px; }
 /* 种子视图停靠模式(groups.html 按 viewMode 挂类): 父容器 flex column —— W3 高度治理的几何钩子 */
 .torrents-dock { display: flex; flex-direction: column; }
 .torrents-dock > .group-table { flex: 1 1 auto; min-height: 0; }
-.torrents-dock > .drawer-dock { flex: 0 0 auto; }
 .drawer { position: relative; display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
   background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
   box-shadow: var(--shadow-3); }
@@ -57,6 +59,12 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
   cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
 .drawer-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
 .drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px 20px; position: relative; }
+/* 流量形态正文(2026-10-04 三挂点并入抽屉): 图高撑满抽屉可用高 —— 正文转 flex 纵列,
+   图容器 flex:1 吸收余量, 宿主 height:100% 给 uPlot 量高(qb_traffic_chart.js 建图量 clientHeight
+   + ResizeObserver 宽高双观察); 抽屉顶缘拖拽调高 -> 宿主高变 -> 图实时跟着长 */
+.drawer-body.is-traffic { display: flex; flex-direction: column; }
+.drawer-body.is-traffic .qb-chart { flex: 1 1 auto; min-height: 100px; }
+.drawer-body.is-traffic .qb-chart-host { height: 100%; }
 /* FX-29 软切换遮罩: 换目标时旧数据不清空(撑住面板几何, 免"内容消失 -> 面板抽成一条 -> 撑回"的
    连锁跳动), 只把内容降到不可读并屏蔽交互 —— 防串显效果同清空, 面板高度全程不动。
    遮罩由 drawer.js _drawerBusyArm 延迟 160ms 才点亮: 局域网详情常在 100ms 内到达, 那时用户看到

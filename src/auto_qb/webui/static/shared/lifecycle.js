@@ -64,10 +64,8 @@ window.AQB_LIFECYCLE = {
       else if (this.metaOpen) this.closeMeta();  // 标签/分类编辑对话框: 与管理对话框同层
       else if (this.hrsOpen) this.hrsCollapse();  // HR 站点状态全屏覆盖层(计划 26-10-02-1936 阶段2): 对话框层级, 先于清筛选兜底; escBusy 已同步(dialogs.js)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
-      else if (this.drawer.open) this.closeDrawer();  // 详情抽屉: 确认框优先, 其后于其它浮层
+      else if (this.drawer.open) this.closeDrawer();  // 详情抽屉(种子详情 / qB 口径流量图): 确认框优先, 其后于其它浮层
       else if (this.historyOpen) this.historyOpen = false;  // 历史弹层(pop): 弹层先于右键菜单关闭
-      else if (this.qbHistOpen) this.closeQbHistory();  // qB 口径流量图弹层(P5a): 与历史弹层同层; escBusy 已同步(dialogs.js)
-      else if (this.qbGroupOpen) this.closeQbGroup();  // qB 口径分组流量弹层(S5b): 与全局弹层同层; escBusy 已同步(dialogs.js)
       else if (this.headMenu.visible) this.headMenu.visible = false;  // 表头右键菜单(TBL-05)
       else if (this.colMenuOpen) this.colMenuOpen = false;  // 列选择器弹层(pop)
       else if (this.uiMenuOpen) this.uiMenuOpen = false;  // 顶栏界面切换下拉(pop)

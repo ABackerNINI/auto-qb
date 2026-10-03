@@ -71,19 +71,17 @@ window.AQB_AUTH = {
       this.clearSelection();
       this.historyOpen = false;
       this.histHoverIdx = -1;
-      this.qbHistOpen = false;  // qB 口径流量图弹层(P5a): 受保护内容一并清(组件实例随 _qbChartDestroy 收尾)
+      // qB 口径流量图三挂点(2026-10-04 并入底部详情抽屉): 受保护内容与轮询定时器一并清
+      // (轮询只挂打开期间, 登出必须拆干净 —— 不留对 /api/traffic/qb/* 的后台请求);
+      // 抽屉若停在流量形态也一并收起 —— _qbTeardown 单点停三挂点轮询 + 销毁三挂点图
       this.qbHistHoverIdx = -1;
       this.qbHistData = null;
-      // qB 口径流量图 S5b 两挂点(分组弹层/抽屉流量页签): 受保护内容与轮询定时器一并清
-      // (轮询只挂打开期间, 登出必须拆干净 —— 不留对 /api/traffic/qb/* 的后台请求)
-      this._qbPollStop("global");
-      this._qbPollStop("torrent");
-      this._qbPollStop("group");
-      this.qbGroupOpen = false;
       this.qbGroupHoverIdx = -1;
       this.qbGroupData = null;
       this.qbTorrentHoverIdx = -1;
       this.qbTorrentData = null;
+      this.drawer.open = false;
+      this._qbTeardown();
       this.statsOpen = false;
       this.statsServer = null;
       this.statsError = "";
