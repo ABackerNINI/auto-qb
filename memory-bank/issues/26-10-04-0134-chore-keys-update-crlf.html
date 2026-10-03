@@ -8,7 +8,7 @@
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="keys-update-crlf">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突">
 <meta name="issue-summary" content="test.keys-update 重生成 tests/fixtures/config_key_surface.txt 时 Windows 写出 CRLF(仓库 eol=lf), 每次重生成 diff 全文件换行噪音, 须手工归一才能过守卫">
 <title>test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突 · chore · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-04-0134-chore-keys-update-crlf</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-04 01:34</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -92,11 +92,15 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>写基线改显式 LF 落盘(<code>write_text(..., newline="\n")</code> 或等价二进制写); 改后重跑 <code>commands run test.keys-update</code> 验证 <code>git diff</code> 无整文件换行噪音。</p>
+    <p><strong>复验</strong>：2026-10-04（基线 HEAD 20b13a66）仍复现 —— <code>scripts/update_config_key_surface.py:43</code> 的 <code>write_text</code> 确无 <code>newline</code> 参数, Windows 文本模式默认落 CRLF, 与建议一致。</p>
+    <p><strong>实际修法</strong>：与建议同, <code>write_text(..., encoding="utf-8", newline="\n")</code> 显式 LF 落盘。</p>
+    <p><strong>验证</strong>：重跑 <code>commands run test.keys-update</code>（154 键无变化）后 <code>git diff</code> 仅剩脚本一行改动, 无 fixture 换行噪音; <code>grep -c $'\r'</code> 归零（fixture 纯 LF）; <code>commands run test.quick</code> 2419 passed, 3 skipped。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-04 — <strong>Open → Done</strong>（用户指派认领；按建议修法实施并验证通过，改动随本次提交入库）：复验 + 修法 + 验证数字见 03 节。</li>
       <li>2026-10-04 01:34 — 入池，状态 <strong>Open</strong>（计划外，未修；来源：plan 26-10-03-0946 实施轮 · 用户拍板入池）</li>
     </ul>
   </section>

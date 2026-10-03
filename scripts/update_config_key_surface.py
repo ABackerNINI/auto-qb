@@ -40,7 +40,7 @@ def main() -> int:
         print("  消失的键:", " ".join(removed))
         print("  处置: 抬 CURRENT_VERSIONS['config'] + config/migrations.py 注册迁移 + 迁移回归测试后重跑本命令")
         return 1
-    guard.BASELINE_PATH.write_text(guard.render_baseline(version, current), encoding="utf-8")
+    guard.BASELINE_PATH.write_text(guard.render_baseline(version, current), encoding="utf-8", newline="\n")
     print(f"[ok] 基线已重写: v{old_version} -> v{version}, {len(old_keys)} -> {len(current)} 键")
     if added:
         print("  新增:", " ".join(added))
