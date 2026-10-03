@@ -110,6 +110,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
     <p>来自 TODO.md 未完成项盘点（L77）。WEBUI 添加新站点并触发配置热重载后，受影响种子的内置维护任务没有被触发 —— 新站点上线后，其种子的维护动作（标签/分类等维护面）没有跟着跑。与 issue <code>26-10-01-2129-bug-webui-hotreload-ext-vanish</code> 同属热重载后置链路问题（共用 doc-topic <code>hot-reload</code>）。⚠ 现象出自旧级别表热重载机制时代（级别表已随内核化重构退役，统一挂载口落地于 <code>src/auto_qb/config/impact.py</code>），开工第一步先在新机制下复验是否仍复现。</p>
+    <p><strong>复验改判（2026-10-04）</strong>：新机制（内核化重构后统一挂载口）下仍复现，且影响面比入池原文更宽 —— 所有 L2 级热重载后，存量种子的种子级任务（内置维护 + interval 规则任务）均丢失，不止「添加新站点」场景；详见 §03 / §05。</p>
   </section>
 
   <section id="s2">
@@ -127,9 +128,9 @@
     <h2><span class="no">03</span>影响面</h2>
     <table>
       <tr><th>维度</th><th>结论</th></tr>
-      <tr><td>触发条件</td><td>WEBUI 添加新站点 → 配置热重载（旧机制时代现象，新机制下是否复现待复验）</td></tr>
-      <tr><td>影响范围</td><td>受影响站点的种子不跑内置维护任务（标签/分类等维护面停留在旧状态）；与字段变化触发机制（计划 26-09-27-1438-plan-field-changed-trigger，Done，<code>on_torrent_field_changed</code>）的衔接需核对</td></tr>
-      <tr><td>严重度</td><td>中（维护不触发会留下陈旧标签/状态；但机制已换代，可能已不复现）</td></tr>
+      <tr><td>触发条件</td><td>WEBUI 添加站点（或任何触发 tracker 绑定变化的配置保存）→ 配置热重载（统一挂载口 apply 路径）：绑定变化（含站点增删，<code>o is None</code> 判 True）命中 L2 结构重建 <code>rebuild_runtime()</code>（取证 2026-10-04，新机制下复验确认）</td></tr>
+      <tr><td>影响范围</td><td>所有 L2 级热重载后的存量种子，不止新站点：① 新匹配上的存量种子永远等不到 <code>torrents_added</code> 相位，种子级任务（内置维护 + interval 规则任务）不被创建；② 其余存量种子的既有种子级任务随 <code>TaskQueue()</code> 换新被丢弃，L2 重建后只重注册全局 delete_tags* 任务，无人重建。两类均需重启进程才恢复（取证 2026-10-04）。不触 L2 重建的热重载不受影响</td></tr>
+      <tr><td>严重度</td><td>中偏高（2026-10-04 复验改判）—— 受影响存量的维护面（标签/分类等）整体停摆直到重启进程；与字段变化触发链（<code>on_torrent_field_changed</code>）无衔接（热重载不改变任何种子字段，field_changed 为空，不触发）</td></tr>
     </table>
   </section>
 
@@ -139,30 +140,40 @@
     <ul>
       <li>统一挂载口 apply 路径：<code>src/auto_qb/config/impact.py</code>（取证 2026-10-01）· grep 关键词：<code>配置热重载完成</code>、apply / impact</li>
       <li>内置维护任务注册：<code>core/modules/</code>（取证 2026-10-01）· grep 关键词：维护任务 / maintenance_mod</li>
-      <li>同族 issue（取证 2026-10-01）：<code>26-10-01-2129-bug-webui-hotreload-ext-vanish</code> · 与本条共用 doc-topic <code>hot-reload</code></li>
+      <li>同族 issue（取证 2026-10-01）：<code>26-10-01-2129-bug-webui-hotreload-ext-vanish</code> · 已 Superseded，与本条无交接 · 共用 doc-topic <code>hot-reload</code></li>
+      <li>热重载链（取证 2026-10-04）：WEBUI 保存 → <code>src/auto_qb/webui/server/routes/config.py:129-156</code>（PUT /api/config → <code>_enqueue("reload_config", ...)</code>）→ <code>src/auto_qb/webui/commands.py:187,753</code> → <code>src/auto_qb/core/qbmanager.py:608-666</code>（<code>apply_new_config</code> → <code>host.apply_all</code>，:649 回执日志）→ <code>src/auto_qb/config/impact.py:55-69</code>（顶层段 diff + R 闸）· grep 关键词：<code>reload_config</code>、<code>apply_new_config</code></li>
+      <li>L2 结构重建（取证 2026-10-04）：<code>src/auto_qb/core/modules/rules_mod.py:121-152</code> <code>rebuild_runtime()</code> —— 换新 <code>TaskQueue()</code> + <code>store.reset_runtime()</code> + <code>queue_rebuilt</code> 相位；L2 重建后只重注册全局 delete_tags* 任务（<code>maintenance_mod.py:83-126</code>）· grep 关键词：<code>rebuild_runtime</code>、<code>queue_rebuilt</code></li>
+      <li>种子级任务唯一创建点与唯一触发源（取证 2026-10-04）：<code>rules_mod.py:397-429</code> <code>_create_torrent_tasks</code>（maintenance Task :411-421）· 唯一触发源 <code>torrents_added</code> 相位（<code>rules_mod.py:95-97</code>）· grep 关键词：<code>_create_torrent_tasks</code>、<code>torrents_added</code></li>
+      <li>full_round 重匹配契约「存量记录不走 added 分支」（取证 2026-10-04）：<code>qbmanager.py:767-770</code>；<code>store.py:207-210</code>（<code>_apply</code> 只对 prev 没有的 hash 判 added）；<code>reset_runtime</code> 保留记录只置 conf=None（<code>store.py:423-439</code>）· grep 关键词：<code>reset_runtime</code>、<code>external_tag_changes</code>、<code>handle_maintenance</code></li>
     </ul>
   </section>
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查 —— 现象出自旧级别表机制时代，新机制（统一挂载口 apply 路径）下「添加新站点 → 热重载 → 种子内置维护任务触发」链路是否断开未复验；可能直接 Dropped。</div>
+    <div class="callout"><strong>已定位（复验取证 2026-10-04，新机制下仍复现）</strong>：种子级任务（内置维护 + interval 规则任务）唯一创建点 <code>_create_torrent_tasks</code>（<code>rules_mod.py:397-429</code>），唯一触发源 <code>torrents_added</code> 相位；而 L2 结构重建 <code>rebuild_runtime()</code> 换新 <code>TaskQueue()</code> 后只重注册全局 delete_tags* 任务，种子级任务无人重建。热重载引入 tracker 绑定变化（添加新站点含 <code>o is None</code> 判 True）→ L2 重建 + <code>store.reset_runtime()</code>（记录保留、conf 置 None）→ 下轮 <code>full_round</code> 重匹配，但契约是「存量记录不走 added 分支」（<code>_apply</code> 只对 prev 没有的 hash 判 added）⇒ 绑定补上了、任务面没人管：新匹配存量种子等不到 <code>torrents_added</code>，其余存量种子的既有种子级任务被换队列丢弃。旁证：计划 26-09-27-1438 §07「首轮全量收敛」假设在代码上不成立 —— <code>reset_runtime</code> 登记的 <code>external_tag_changes</code>（<code>store.py:435-437</code>）唯一消费方是 <code>handle_maintenance</code>（<code>maintenance_mod.py:147-150</code>），任务不存在则无人消费。旧级别表机制同构（<code>ed514e30~1</code> 的 L2 分支同样只建全局任务），非重构回归；<code>on_torrent_field_changed</code> 字段变化链与热重载无衔接（热重载不改变任何种子字段，不触发）。</div>
   </section>
 
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-    <p>待定 —— 先复验再定位：① 在内核化重构后的新热重载机制下重放「WEBUI 添加新站点 → 热重载」场景，确认受影响种子的内置维护任务是否仍不触发（不复现则本条转 Dropped）；② 若复现，核对热重载 apply 后对受影响种子的维护任务派发路径，以及与 <code>on_torrent_field_changed</code> 字段变化触发（计划 26-09-27-1438，Done）的衔接。不在本报告里实施。</p>
+    <p>候选方案（复验取证 2026-10-04 蒸馏，供后续认领者评估，<strong>不在本报告里实施</strong>）：</p>
+    <ol>
+      <li><strong>rules 模块订阅 <code>full_round</code> 补建</strong>（当时评估推荐）：重匹配兑现后为缺任务的存量记录补建种子级维护任务 + interval 规则任务；taskqueue 加 (kind, hash) 查重助手；「None→匹配上」记录首轮立即兑现一次维护。</li>
+      <li><strong>tracker 重绑对齐 added 管线</strong>：重绑时收集绑定变化 hash，full_round 后对齐广播 <code>torrents_added</code>，复用既有 added 管线 —— 需评估限速重 apply / 归组副作用是否幂等。</li>
+      <li>（不可行）<code>queue_rebuilt</code> 相位全量补建 —— conf 未就位会崩（<code>_rules_for_torrent</code> 对 conf=None 无防御）。</li>
+    </ol>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-04 00:55 — 复验（用户指派，起桩验证 + 关键锚点抽查未漂移）：新机制（统一挂载口）下仍复现，影响面更宽（所有 L2 级热重载后存量种子的种子级任务均丢，不止新站点），根因已定位（§05），不转 Dropped。用户拍板「暂不修，只回写复验结论」，状态保持 <strong>Open</strong> 等后续修复安排。零代码改动。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行（L77）由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」—— 本条先在内核化重构后的新热重载机制下复验，可能直接 Dropped。</p>
+    <p>复验：2026-10-04 仍复现（新机制下）—— 已兑现入池时的复验 TODO：起桩重放「WEBUI 添加新站点 → 热重载」并核对锚点链，结论为仍复现且影响面更宽（见 §01 / §03 / §05），不 Dropped；状态保持 Open。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
