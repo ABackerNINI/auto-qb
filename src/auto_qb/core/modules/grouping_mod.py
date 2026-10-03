@@ -548,10 +548,15 @@ class GroupingModule(BaseModule):
         # 5. 交叉消除: 不在 active 组对集的过期去重记录清除(下次重现时再次警告+暂停),
         #    对齐 _check_download_conflicts 的消除段; 下载方被暂停后组对失活, 下轮即在此清除。
         #    成员判定对 pair_paths 的键(即 active 组对集): active 是四元组列表, 不能直接 in
+        #    消除不受 dry_run 门控(属计划内语义: 消除的是已过期的软信号记录)。
+        #    集合删减时显式置 view_changed —— 组视图的 cross_group_conflict 标记由它派生,
+        #    正常情况其输入(组成员/状态)变化会自然置脏, 此行兜底推导链断裂
+        #    (防御性显式置脏先例: views.refresh_error_reasons)。
         warned = store.cross_group_conflict_warned
         for pair in list(warned):
             if pair not in pair_paths:
                 warned.discard(pair)
+                store.view_changed = True
         # 6. 处置: 警告 + 暂停涉事下载方(顺序严格对齐 _check_download_conflicts 处置段:
         #    警告 -> dry-run 止步(不暂停、不记去重) -> 登记去重 -> 暂停)
         for ka, kb, paths, dl_hashes in active:  # paths 供消息, dl_hashes = 涉事下载方
@@ -571,8 +576,12 @@ class GroupingModule(BaseModule):
                 f"下载方: {dl_desc}, 完成侧: {done_desc or '无'}"
             )
             if dry_run:
-                continue  # dry-run 只报告: 不暂停、不记去重
+                continue  # dry-run 只报告: 不暂停、不记去重(故 dry_run 下本段不会置脏)
             warned.add((ka, kb))
+            # 集合新增同样显式置 view_changed(与消除段同一兜底: 组视图 cross_group_conflict
+            # 标记由去重集合派生, 见上); 置在 stop 之前, api.torrents_stop 经 _sync_paused_state
+            # 改写快照本就带视图脏, 此行保证不依赖该副作用
+            store.view_changed = True
             self._ctx.api.torrents_stop(torrent_hashes=dl_hashes)
 
     # ---------- 校验动作(checking)辅助: 组上下文 ----------

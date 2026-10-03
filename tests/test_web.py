@@ -76,6 +76,7 @@
 - test_flush_views_hr_facade_missing_null_defense: hr 门面缺失(None)时判空防御 —— 重建记基线与 flush 比对都跳过, 不炸不置脏
 - test_build_group_view_member_num_seeds_fields: 组视图成员透出 num_seeds/num_leechs/num_complete/num_incomplete
 - test_build_group_view_group_aggregates: 组视图组级聚合(辅种扩列 2026-09-28) —— 进度/可用性 max、eta 最小有效值(哨兵不参与)、剩余量 min、最近活动 max(-1 不参与)、已下载求和、做种时长平均、分享率=总上传÷单份大小; 全组无效值回 0/None
+- test_build_group_view_cross_group_conflict_flag: 组视图跨组文件交叉标记(26-10-04-0107 S4/D4) —— 去重集合展平为组 key 集合后端查好, warned 注入组对两侧 true、组外组 false; warned 空全 false; 未归组单种子视图(singles)为成员级投影不携带组级标记
 - test_member_view_extended_fields: 成员视图透出辅种扩列字段(eta/time_active/last_activity 分钟量化 + downloaded/amount_left/completion_on/seen_complete/availability/限速/tracker/infohash_v2)
 - test_error_reason_from_tracker_msg: 错误种子的具体原因取 tracker 报错 msg(虚拟条目跳过)+ 视图透出 error_reason(取不到回退"错误"/非错误态为空)
 - test_error_reason_missing_files_without_api: missingFiles 的原因由状态本身给出("文件丢失"), 不发 tracker 请求
@@ -4826,6 +4827,51 @@ def test_build_group_view(tmp_path):
     assert [m["category"] for m in g["members"]] == ["anime", "anime"]
     # seeding_time 展示值按分钟取整(与 store 重建判定同一步长, 防视图内容与脏标记脱钩)
     assert [m["seeding_time"] for m in g["members"]] == [3600, 3600]
+
+
+def test_build_group_view_cross_group_conflict_flag(tmp_path):
+    """组视图透出跨组文件交叉标记(plan 26-10-04-0107 S4/D4) —— 后端查去重集合, 前端只渲染
+
+    warned 注入组对 -> 组对两侧组字段 true、组外组 false; warned 空 -> 全 false;
+    未归组种子不进组视图, singles 单种子视图是成员级投影, 不携带组级标记(无污染;
+    前端 filters.js 对搜索视图的虚拟单种子组恒补 cross_group_conflict: false, 单种子无组 key)。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.config.grouping.enabled = True
+    mgr.client = FakeClient()
+    t1 = FakeTorrent(hash="HA", name="ShowA", state="stalledUP", progress=1.0, size=512**2, save_path=r"R:/a")
+    t2 = FakeTorrent(hash="HB", name="ShowB", state="downloading", progress=0.5, size=512**2, save_path=r"R:/b")
+    t3 = FakeTorrent(hash="HC", name="ShowC", state="stalledUP", progress=1.0, size=512**2, save_path=r"R:/c")
+    t4 = FakeTorrent(hash="HD", name="Lone", state="stalledUP", progress=1.0, size=512**2, save_path=r"R:/d")
+    seed_store(mgr, [t1, t2, t3, t4])
+    key_a = (r"R:/a", ("a.mkv", ))
+    key_b = (r"R:/b", ("b.mkv", ))
+    key_c = (r"R:/c", ("c.mkv", ))
+    mgr.store.groups[key_a] = ["HA"]
+    mgr.store.groups[key_b] = ["HB"]
+    mgr.store.groups[key_c] = ["HC"]
+    for h, k in (("HA", key_a), ("HB", key_b), ("HC", key_c)):
+        mgr.store.member_to_key[h] = k
+
+    # warned 空(开关关/无交叉常态) -> 全 false
+    view = {g["name"]: g for g in mgr._build_group_view()}
+    assert set(view) == {"ShowA", "ShowB", "ShowC"}
+    assert not any(g["cross_group_conflict"] for g in view.values()), "warned 空时不得有组被标记"
+
+    # warned 注入组对 (A, B) -> 两侧组 true, 组外 C false
+    # (直写 store 去重集合的白盒姿势, 对齐本文件 seed_store + 手填 groups 的既有夹具)
+    mgr.store.cross_group_conflict_warned.add((key_a, key_b))
+    view = {g["name"]: g for g in mgr._build_group_view()}
+    assert view["ShowA"]["cross_group_conflict"] is True
+    assert view["ShowB"]["cross_group_conflict"] is True
+    assert view["ShowC"]["cross_group_conflict"] is False
+
+    # 未归组种子(Lone)不在组视图里; singles 是成员级投影, 不携带组级标记(无字段污染)
+    singles = mgr._build_singles_view()
+    assert [m["name"] for m in singles] == ["Lone"]
+    assert all("cross_group_conflict" not in m for m in singles)
 
 
 def test_build_group_view_member_num_seeds_fields(tmp_path):

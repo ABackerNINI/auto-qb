@@ -210,6 +210,8 @@ window.AQB_FILTERS = {
           commonTags: { list: this.mTags(r), diff: false },
           commonCategory: { value: r.category || "", diff: false },
           sizeMismatch: false,
+          // 跨组文件交叉标记恒 false: 单种子无组 key, 不存在跨组交叉(26-10-04-0107 D4)
+          cross_group_conflict: false,
           members: [{ ...r, hit: true }],
         });
       }

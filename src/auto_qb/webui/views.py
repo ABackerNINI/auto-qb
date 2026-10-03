@@ -406,6 +406,9 @@ class WebviewMixin:
         from ..infra import utils as _utils
 
         view = []
+        # 跨组文件交叉标记的组 key 全集: 去重集合(plan 26-10-04-0107, 软信号纯内存)展平一次,
+        # 组装循环里只做 O(1) 成员判定; 空集合时零开销(开关关/无交叉的常态)
+        cross_keys = {k for pair in self.store.cross_group_conflict_warned for k in pair}
         for key, members in self.store.groups.items():
             recs = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             if not recs:
@@ -478,6 +481,11 @@ class WebviewMixin:
                     # 全组未知(qB 负值)回 None —— 前端显示空白而非 -1.00
                     "availability":
                         avail_max if avail_max >= 0 else None,
+                    # 跨组文件交叉标记(bool): 本组与某他组有文件指向同一磁盘物理文件(26-10-04-0107 D4),
+                    # 前端组名旁渲染警告标记 —— 布尔在后端查好, 前端只渲染不计算(派生值后端算约定);
+                    # 去重集合的增删由 grouping_mod 显式置 view_changed, 本视图重建后标记自然出现/消失
+                    "cross_group_conflict":
+                        key in cross_keys,
                     "members":
                         members_view,
                 }

@@ -40,6 +40,10 @@
                 <div v-if="col.key === 'name'" class="g-name" :title="g.name">
                   <svg class="ico ico-sm caret" viewBox="0 0 16 16"><use href="#i-caret"></use></svg>
                   <span class="g-name-text">{{ g.name }}</span>
+                  <span v-if="g.cross_group_conflict" class="risk-mark"
+                        title="与其他辅种组的文件指向同一磁盘物理文件 —— 涉事下载方已被暂停">
+                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
+                  </span>
                 </div>
                 <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !g.dlspeed }">{{ fmtSpeedOrDash(g.dlspeed) }}</div>
                 <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !g.upspeed }">{{ fmtSpeedOrDash(g.upspeed) }}</div>
