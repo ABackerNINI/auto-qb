@@ -490,6 +490,10 @@ window.AQB_DRAWER = {
       // 在主循环之外额外占用 qB。5s 仍远快于人工观察节奏。
       this._drawerTimer = setInterval(() => {
         if (!this.drawer.open || document.hidden) return;
+        // W4 停靠化收口(计划 26-10-03-0917 前波移交观察项): 面板 DOM 随种子视图 v-if 出入,
+        // 切走页面/视图后 drawer.open 仍为 true(回页状态保持语义), 旧浮层形态的轮询会继续对
+        // 隐藏面板打 trackers/peers —— 不可见即跳过(定时器不拆, 回页下一拍自动恢复)。
+        if (this.page !== "groups" || this.viewMode !== "torrents") return;
         if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
         else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
       }, 5000);

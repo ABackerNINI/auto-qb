@@ -497,7 +497,7 @@ window.AQB_SHORTCUTS = {
     _kbViewportRow(rows, delta) {
       const headH = this._headH || 0;
       const vTop = window.scrollY + headH + 4;
-      const vBot = window.scrollY + window.innerHeight - 4;
+      const vBot = window.scrollY + this._kbViewBottom() - 4;  // 面板开着时下界让位面板顶缘(W4)
       const kind = rows[0].kind === "torrent" || rows[0].kind === "group" ? rows[0].kind : null;
       const pre = kind && this._rowPre && this._rowPre[kind];
       if (pre && pre.length === rows.length + 1) {
@@ -542,6 +542,22 @@ window.AQB_SHORTCUTS = {
       const per = Math.max(1, Math.floor((this._winViewH || window.innerHeight) / est));
       this._kbMove(dir * per);
     },
+    /* 列表行可见下界(W4 几何走查产出, 计划 26-10-03-0917): 停靠面板开着时它 sticky 吸在视口底
+     * (收起态只剩头部条也一样), 底部一段列表行被面板盖住 —— 行可见下界不再是 window.innerHeight,
+     * 而是面板顶缘(getBoundingClientRect().top 实测, 滚到文档底面板落回文档流时该值自然上移)
+     * 减去 dock 的 8px 呼吸距。关闭(面板不在 DOM)或窄屏全屏态(D3, position:fixed —— 列表整幅被
+     * 覆盖, 没有"部分可见"可言, 也避免 top 内插出退化区间)回落整窗高; fixed 判定走计算样式,
+     * 断点单点在各皮肤 CSS 的 @media(max-width:900px), JS 不复制断点数。 */
+    _kbViewBottom() {
+      let bot = window.innerHeight;
+      if (this.drawer.open) {
+        const panel = document.querySelector(".drawer-dock > .drawer");
+        if (panel && getComputedStyle(panel).position !== "fixed") {
+          bot = Math.min(bot, panel.getBoundingClientRect().top - 8);
+        }
+      }
+      return bot;
+    },
     /* 滚动进视口: 目标已可见则不动(避免每次按键都跳)。渲染行用 getBoundingClientRect 差值;
      * 窗口化未渲染行用 _rowWindow 前缀和换算 y(计划 W2; 禁 scrollIntoView, 见文件头)。 */
     _kbScrollRowIntoView(rows, idx) {
@@ -553,10 +569,11 @@ window.AQB_SHORTCUTS = {
           : `[data-hash="${CSS.escape(r.id)}"]`;
         const el = document.querySelector(sel);
         const headH = this._headH || 0;
+        const vBot = this._kbViewBottom();  // 面板开着时下界让位面板顶缘(W4 几何走查)
         if (el) {
           const rect = el.getBoundingClientRect();
           if (rect.top < headH + 4) window.scrollBy(0, rect.top - headH - 8);
-          else if (rect.bottom > window.innerHeight - 4) window.scrollBy(0, rect.bottom - window.innerHeight + 8);
+          else if (rect.bottom > vBot - 4) window.scrollBy(0, rect.bottom - vBot + 8);
           return;
         }
         // 窗口化把该行折叠了: 用前缀和算它的文档 y。前缀和与当前列表不同源(长度不符)则放弃
@@ -567,7 +584,7 @@ window.AQB_SHORTCUTS = {
         const y = pre[idx] + (this._winTop[kind] || 0);
         const h = pre[idx + 1] - pre[idx];
         if (y < window.scrollY + headH + 4) window.scrollTo(0, y - headH - 8);
-        else if (y + h > window.scrollY + window.innerHeight - 4) window.scrollTo(0, y + h - window.innerHeight + 8);
+        else if (y + h > window.scrollY + vBot - 4) window.scrollTo(0, y + h - vBot + 8);
       });
     },
     /* ---------------- W2: 展开 / 收起 / 打开 ---------------- */

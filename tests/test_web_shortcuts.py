@@ -72,6 +72,12 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   兜底在收剧展开之后(链序即退栈序, LIFO 不可倒) / 门条件五件套(authOk / page=groups /
   !hrPop.open / !inInput / facetsActive) / toast 点名不静默; Escape 仅 clear-esc 一个默认绑定
   且面板 label 点名清筛选; facetsActive 不含 searchQuery(搜索词归 clearSearch)
+- test_drawer_narrow_fullscreen_w4: 方案A W4(计划 26-10-03-0917 D3 + 前波移交观察项) ——
+  D3 窄屏降级三皮肤成对(≤900px 面板 fixed 全屏覆盖主区 / !important 压内联高度记忆 /
+  statusbar 让位 / grip 隐藏 / 停靠基线 relative 不删 / 关闭钮保留); W4 几何走查产出
+  _kbViewBottom 行可见下界单点(实测面板顶缘, fixed 全屏态回落, _kbViewportRow 与
+  _kbScrollRowIntoView 两处消费且不再裸用 window.innerHeight 当下界); 轮询停靠化收口
+  (5s tick 挡非种子视图, 面板不可见即不拉)
 """
 
 from __future__ import annotations
@@ -727,3 +733,51 @@ def test_esc_chain_clear_filters_fallback() -> None:
     block = fj[fj.index("facetsActive()"):]
     block = block[:block.index("},")]
     assert "searchQuery" not in block, "facetsActive 不得含 searchQuery(搜索词归 clearSearch)"
+
+
+def test_drawer_narrow_fullscreen_w4() -> None:
+    """方案A W4(计划 26-10-03-0917 W4/D3 + 前波移交观察项): D3 窄屏降级三皮肤成对;
+    行可见下界 _kbViewBottom(停靠面板盖住列表视口底部, 走查实证后收口); 轮询停靠化语义收口"""
+    # --- D3: ≤900px 面板转全屏覆盖主区(三皮肤成对; 关闭钮在模板, 断言不被降级样式移除) ---
+    tpl = (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8")
+    assert 'class="drawer-close"' in tpl, "关闭钮必须在(drawer.html, D3 全屏态唯一的关面板入口)"
+    for ui in ("atlas", "console", "prism"):
+        cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
+        css = cssp.read_text(encoding="utf-8")
+        # prism 等文件在 D3 之前已有同断点的窄屏块(topbar 折行族), 必须认含 .drawer 的那块
+        blocks = [m.group(1) for m in re.finditer(r"@media \(max-width: 900px\) \{(.*?)\n\}", css, re.S)]
+        blk = next((b for b in blocks if ".drawer" in b), None)
+        assert blk is not None, f"{ui}: 缺 D3 窄屏降级 @media(max-width:900px) 块"
+        assert re.search(r"\.drawer \{ position: fixed;", blk), f"{ui}: 窄屏下面板必须 fixed 全屏覆盖主区(D3)"
+        assert "max-height: none !important" in blk and "height: auto !important" in blk, (
+            f"{ui}: 全屏态必须 !important 压过 drawerPanelStyle 内联高度(高度记忆/拖拽值失效)"
+        )
+        assert "bottom: var(--statusbar-h" in blk, f"{ui}: 全屏态要给底部状态栏让位(不整体盖屏)"
+        assert ".drawer-grip { display: none; }" in blk, f"{ui}: 全屏态拖拽调高无意义, grip 必须隐藏"
+        # 停靠基线规则仍在前(窄屏块只是覆盖): .drawer relative 是 W3 grip 定位参照, 不得被改掉
+        assert re.search(r"\.drawer \{ position: relative;", css), f"{ui}: 停靠基线 .drawer relative 不得删(窄屏块只做覆盖)"
+    # --- W4 几何走查产出: 行可见下界让位停靠面板(收起态头部条也算遮蔽) ---
+    eng = _read("shortcuts.js")
+    vb = re.search(r"_kbViewBottom\(\) \{(.*?)\n    \},", eng, re.S)
+    assert vb, "shortcuts.js 缺 _kbViewBottom(行可见下界单点)"
+    vbb = vb.group(1)
+    assert "this.drawer.open" in vbb, "_kbViewBottom 必须守 drawer.open(关面板回落整窗高)"
+    assert 'document.querySelector(".drawer-dock > .drawer")' in vbb, "下界必须实测面板顶缘(滚到文档底自然落回文档流)"
+    assert 'getComputedStyle(panel).position !== "fixed"' in vbb, (
+        "窄屏全屏态(position:fixed, 断点单点在 CSS)必须回落整窗高, JS 不复制 900px 断点数"
+    )
+    # 两处消费: 无光标回落(_kbViewportRow)与滚动进视口(_kbScrollRowIntoView)都不得再裸用 window.innerHeight 当下界
+    vp = re.search(r"_kbViewportRow\(rows, delta\) \{(.*?)\n    \},", eng, re.S)
+    assert vp and "this._kbViewBottom()" in vp.group(1), "_kbViewportRow 下界必须走 _kbViewBottom(面板盖住列表底部, W4 走查实证)"
+    si = re.search(r"_kbScrollRowIntoView\(rows, idx\) \{(.*?)\n    \},", eng, re.S)
+    assert si, "shortcuts.js 缺 _kbScrollRowIntoView"
+    sib = si.group(1)
+    assert "this._kbViewBottom()" in sib, "_kbScrollRowIntoView 下界必须走 _kbViewBottom(渲染行与窗口化两路)"
+    assert sib.count("window.innerHeight") == 0, "_kbScrollRowIntoView 不得再裸用 window.innerHeight 当下界"
+    # --- 前波移交观察项收口: 面板不可见(切走页面/视图)即停轮询拉取(定时器不拆, 回页自恢复) ---
+    drawer_js = _read("drawer.js")
+    poll = re.search(r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, 5000\);", drawer_js, re.S)
+    assert poll, "drawer.js 找不到 trackers/peers 5s 轮询 tick"
+    pb = poll.group(1)
+    assert pb.index("!this.drawer.open") < pb.index('this.page !== "groups"'), "轮询 tick 守卫序: 面板开 -> 页面可见"
+    assert 'this.viewMode !== "torrents"' in pb, "轮询 tick 必须挡非种子视图(面板 DOM 随视图 v-if, 不可见即不拉)"

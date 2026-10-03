@@ -563,6 +563,16 @@
   transition: background var(--dur) var(--ease), width var(--dur) var(--ease); }
 .drawer-grip:hover::after, .drawer-grip:active::after { background: var(--accent-hi, var(--accent)); width: 64px; }
 body.drawer-resizing { cursor: ns-resize; user-select: none; }
+/* D3 窄屏降级(W4, 计划 26-10-03-0917): 列表容器过窄(视口 ≤900px, 与本文件既有窄屏断点同族;
+ * 容器宽 = 视口 - .layout 左右内边距, 差 24px 内)时停靠意义消失 —— 面板转全屏覆盖主区
+ * (移动端抽屉惯例, 关闭钮保留)。fixed 吸满视口、让出底部状态栏; 高度记忆/拖拽调高失效
+ * (!important 压过 drawerPanelStyle 的内联样式, grip 隐藏)。祖先链无 transform/clip-path,
+ * fixed 不被裁剪 —— 见 pitfalls/web-ui/clip-path-clips-fixed。 */
+@media (max-width: 900px) {
+  .drawer { position: fixed; left: 0; right: 0; top: 0; bottom: var(--statusbar-h, 34px);
+    max-height: none !important; height: auto !important; border-radius: 0; }
+  .drawer-grip { display: none; }
+}
 /* 过渡: 下滑 + 淡入, 只动 transform/opacity(高度不可过渡; 200ms 与模板 :duration 一致;
  * W3 打磨: 进场缓动尾段收力(位移更"落定"), 退场 ease-in 收束) */
 .drawer-enter-active { transition: transform .2s cubic-bezier(.2, .8, .3, 1), opacity .18s ease-out; }
