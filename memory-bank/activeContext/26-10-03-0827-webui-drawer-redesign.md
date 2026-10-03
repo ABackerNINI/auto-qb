@@ -1,0 +1,4 @@
+# WEBUI 详情抽屉重设计 — 调研报告轮 (停在报告交付)
+
+> 摘要: 用户指派解决 3 个池内 issue (drawer-nav 上下键切种子 / drawer-open Alt+1~4 列表侧开抽屉 / drawer-redesign 抽屉整体重做) + 追加硬约束「抽屉模糊列表致键盘切换看不清当前行」; 要求调研成熟方案出 3 模板+报告。主会话只委派: 阶段1调研子智能体一次成功, 产出 [reports/26-10-03-0759](../reports/26-10-03-0759-report-webui-drawer-redesign.html) + [reports/26-10-03-drawer-redesign-templates/](../reports/26-10-03-drawer-redesign-templates/) 三模板 (A 底部停靠 qBt 式 / B 主从分栏 / C 非模态浮层, 报告推荐 C 先行+A 终态另立计划)。关键取证: blur 病灶 = 三皮肤各一处 `.drawer-mask` 的 `backdrop-filter: blur(2px)` (PERF-01 后全站仅存), 抽屉模板单点 `shared/tpl/drawer.html`, 光标模型 `_kbMove/_kbApplyCursor/_kbScrollRowIntoView` 可复用。**拍板 D1 用户改判「只写报告」→ 实施/收尾取消**, 波次备查在报告与档案 [tasks/26-10-03-webui-drawer-redesign](../tasks/26-10-03-webui-drawer-redesign.md); 3 issue 保持 Open 未认领; 交付物 untracked 等提交指令。
+> 最后活动: 2026-10-03 08:27
