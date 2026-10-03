@@ -441,11 +441,16 @@ window.AQB_DRAWER = {
       const label = field === "name" ? "种子名" : field === "hash" ? "信息哈希" : "magnet 链接";
       this._copyText(value, label);
     },
-    /* ---------------- 种子详情抽屉(R1B: WEB UI 替代 qB 界面的详情面板) ----------------
+    /* ---------------- 种子详情面板(R1B → 方案A 底部停靠, 计划 26-10-03-0917 W1) ----------------
      * 数据: /api/torrents/{hash} 全字段详情; /trackers /files /peers 按需拉取。
-     * trackers/peers 在对应 tab 激活期间 3s 轮询(页面隐藏时暂停), 关闭抽屉即停 —— 不进主循环 tick;
-     * General 分组行在 drawerGeneralSections 预格式化(qB 哨兵 -1/-2/8640000 在此统一翻译)。 */
+     * trackers/peers 在对应 tab 激活期间 5s 轮询(页面隐藏时暂停), 关闭面板即停 —— 不进主循环 tick;
+     * General 分组行在 drawerGeneralSections 预格式化(qB 哨兵 -1/-2/8640000 在此统一翻译)。
+     * 形态: 右缘浮层改为种子视图 .drawer-dock 里的停靠面板 —— 无遮罩, open 只负责挂状态与拉数据;
+     * 面板 DOM 随种子视图 v-if 出入, 故 open 必须页面守卫(见下), close 只收面板。 */
     async openTorrentDrawer(hash) {
+      // 防御分支(W1): 面板落点只存在于种子页(torrents 视图), 非种子页没有 .drawer-dock ——
+      // 入口(双击/右键/Enter)本就只在种子页, 这里兜底防跨页调用把面板状态挂在不可见容器上
+      if (this.page !== "groups" || this.viewMode !== "torrents") return;
       this.menu.visible = false;
       this._stopDrawerPoll();
       const initialTab = this.drawerLastTab || "general";
@@ -457,6 +462,8 @@ window.AQB_DRAWER = {
       await this._fetchDrawerDetail();  // 详情恒拉(头部标题/常规页都依赖); 非常规 tab 再补拉对应数据
       if (initialTab !== "general") this._loadDrawerTab(initialTab);
     },
+    /* 收面板: 无遮罩可关, 只做面板自身收尾(文件优先级小菜单/行选中/页签轮询);
+     * drawer.open 跨页不清 —— 切页再回种子页面板状态保持(方案A W1 验收项) */
     closeDrawer() {
       this.drawer.open = false;
       this.filePrio.visible = false;

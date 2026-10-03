@@ -50,6 +50,7 @@
   }
 
   var buckets = { app: "", body: "" };
+  var slots = [];  /* 自定义选择器落点(方案A 停靠面板): { sel, text } —— app 桶插入后按选择器定位注入 */
   var partIdx = 0;
 
   function nextPart() {
@@ -58,21 +59,43 @@
       return;
     }
     var part = mf.parts[partIdx++];
-    var into = part.into === "body" ? "body" : "app";
+    var into = part.into === "body" || part.into === "app" ? part.into : "";  // 其余值 = 自定义选择器
     fetch(part.src, { credentials: "same-origin" }).then(function (res) {
       if (!res.ok) throw new Error(part.src + " HTTP " + res.status);
       return res.text();
     }).then(function (text) {
-      buckets[into] += text;
+      if (into) buckets[into] += text;
+      else slots.push({ sel: part.into, text: text });
       nextPart();
     }).catch(function (err) {
       fail("分片加载失败: " + (err && err.message || err));
     });
   }
 
+  function findSlot(sel, root) {
+    /* 递归下钻 template.content 找落点容器(见 injectParts 内注释) */
+    var hit = root.querySelector(sel);
+    if (hit) return hit;
+    var tmpls = root.querySelectorAll("template");
+    for (var i = 0; i < tmpls.length; i++) {
+      hit = findSlot(sel, tmpls[i].content);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
   function injectParts() {
     app.insertAdjacentHTML("beforeend", buckets.app);
     if (buckets.body) document.body.insertAdjacentHTML("beforeend", buckets.body);
+    /* 自定义落点: 目标容器可在 <template v-if> 片段内部(如种子视图的 .drawer-dock, 面板随视图
+     * 出入) —— querySelector 够不到 template.content, 且模板存在浏览器解析出的**嵌套**
+     * (querySelectorAll 不会下钻 content 片段), 须逐层递归; 找不到即 fail-fast,
+     * 与分片加载失败同一处置(不留半挂状态)。必须在 Vue 挂载前完成(本函数先于脚本链执行)。 */
+    for (var si = 0; si < slots.length; si++) {
+      var target = findSlot(slots[si].sel, app);
+      if (!target) { fail("分片落点不存在: " + slots[si].sel); return; }
+      target.insertAdjacentHTML("beforeend", slots[si].text);
+    }
     var scriptIdx = 0;
     (function nextScript() {
       if (scriptIdx >= mf.scripts.length) return;

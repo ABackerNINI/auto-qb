@@ -384,10 +384,13 @@ window.AQB_SHORTCUTS = {
       return map;
     },
     /* 当前作用域(五值之三; modal 在派发处单独分流, 抽屉优先级低于设置页 —— 两者互斥打开):
-     * 设置页 / 抽屉 / 列表(W5 全量生效) */
+     * 设置页 / 抽屉 / 列表(W5 全量生效)。
+     * 方案A W1: 停靠面板只存在于种子页(torrents 视图的 .drawer-dock), 而 drawer.open 跨页不清
+     * (切页再回面板状态保持) —— drawer 分支必须带页面条件, 否则面板开着切到别的视图会被
+     * 误判成 drawer 作用域(_kbOverlayBusy 名单 W2 才动, 本波只加此条件保一致性)。 */
     _kbScope() {
       if (this.page === "settings") return "settings";
-      if (this.drawer.open) return "drawer";
+      if (this.page === "groups" && this.viewMode === "torrents" && this.drawer.open) return "drawer";
       return "list";
     },
     /* 模态层名单: 与 dialogs.js escBusy 的**浮层名单**同形, 但不含选择/展开兜底段
@@ -428,7 +431,10 @@ window.AQB_SHORTCUTS = {
         return;                                        // 模态层打开: 只响应模态键位, 其余一律失效
       } else if (!inInput && this._kbOverlayBusy()) {
         // 浮层打开: 只放行焦点局部(抽屉 Alt+1-4 / 设置页 Ctrl+S)自身的键位 —— 抽屉页切换
-        // 不与全局键冲突(W5 验收口径); 列表键位在浮层下仍然失效(同 W1-W4)
+        // 不与全局键冲突(W5 验收口径); 列表键位在浮层下仍然失效(同 W1-W4)。
+        // 方案A W1: 详情面板已停靠进种子视图(不再是全屏浮层), 但本名单仍含 drawer.open
+        // (面板开着 = 种子页上列表键暂死, 与重设计前逐键一致, W1 键盘零回归);
+        // 摘 drawer.open 让列表键复活是 W2 的事(计划 26-10-03-0917 §3.2)。
         if (item.scope !== scope || (scope !== "drawer" && scope !== "settings")) return;
       } else if (item.scope !== "global" && item.scope !== scope) {
         return;                                        // 非焦点页不串扰

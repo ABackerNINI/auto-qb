@@ -1,5 +1,7 @@
       <div v-if="page==='groups'" class="layout">
-        <main class="content">
+        <!-- torrents-dock(方案A W1): 种子视图父容器 flex column(列表区 flex:1/min-height:0, 面板 auto)
+             —— 仅种子视图挂 .drawer-dock, 其余视图布局不动; W3 高度治理在此几何钩子上接拖拽调高 -->
+        <main class="content" :class="{ 'torrents-dock': viewMode === 'torrents' }">
 
         <template v-if="viewMode === 'groups'">
         <!-- 列头吸顶(脱离 .group-table 的双轴滚动容器, 直接挂到 .content 下做纵向 sticky):

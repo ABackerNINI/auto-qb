@@ -1024,7 +1024,8 @@ _UI_ALL = ("atlas", "prism", "console")
 def _ui_manifest(ui):
     """解析 ui/index.html shell 里 <script type="application/json" id="tpl-manifest"> 清单
 
-    清单是 boot.js 与守阵共用的单一来源(plans/26-09-26-2233 §5): parts = 模板分片(into: app|body),
+    清单是 boot.js 与守阵共用的单一来源(plans/26-09-26-2233 §5): parts = 模板分片(into: app|body,
+    其余值为 #app 内自定义选择器落点, 方案A 停靠面板 26-10-03-0917 W1 起支持),
     scripts = 逻辑脚本加载顺序。缺清单/坏 JSON 直接断言红 —— shell 半残比假绿好。
     """
     shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
@@ -1900,7 +1901,16 @@ def test_frontend_template_split_wiring():
             if n > cap:
                 problems.append(f"{ui}/{part['src']} {n} 行, 超 {cap} 行单分片体量上限")
             if part.get("into") not in ("app", "body"):
-                problems.append(f"{ui}/{part['src']} into 非法: {part.get('into')!r}(boot 只认 app|body)")
+                # 其余值 = #app 内自定义选择器落点(boot.js 会先查常规 DOM 再下钻 <template> 片段;
+                # 方案A 停靠面板 26-10-03-0917 W1 起 drawer 分片落 .drawer-dock)。约定: 必须以
+                # "." 开头且落点容器真实存在于某分片, 防手滑写成任意字符串
+                into = part.get("into")
+                if not (isinstance(into, str) and into.startswith(".") and into):
+                    problems.append(f"{ui}/{part['src']} into 非法: {into!r}(boot 只认 app|body 或 '.' 开头的选择器)")
+                    continue
+                # 自定义落点容器必须真实存在于某分片(boot.js 运行时 fail-fast, 这里提前到静态)
+                if into[1:] not in _ui_aggregate(ui):
+                    problems.append(f"{ui}/{part['src']} into 落点 {into} 在任何分片中都不存在(boot 会 fail-fast 停在错误占位)")
         tpl_dir = os.path.join(udir, "tpl")
         if os.path.isdir(tpl_dir):
             problems.append(f"{ui}: 残留 {ui}/tpl/ 目录(收敛后唯一源是 shared/tpl, 双副本必须删除)")

@@ -1,29 +1,33 @@
-/* ==================== 种子详情抽屉(R1B) ====================
- * 层级: 抽屉 80 < 右键菜单 100 < toast 120 < 确认框 130 < hr-pop 140。
- * 遮罩 blur(2px) 是控制台皮肤唯一一处 backdrop-filter(与 atlas/prism 计数对齐, PERF-01 守阵);
- * 全屏遮罩/吸顶吸底条一律禁毛玻璃。 */
-.drawer-mask { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end;
-  background: rgba(4, 10, 22, .5); backdrop-filter: blur(2px); animation: fade-in .14s var(--ease); }
-.drawer { width: min(860px, 94vw); height: 100%; display: flex; flex-direction: column;
-  background: var(--bg-card); border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
-  animation: drawer-in .18s var(--ease); }
-@keyframes drawer-in { from { transform: translateX(24px); opacity: 0; } }
-.drawer-enter-active, .drawer-leave-active { transition: opacity .15s var(--ease); }
-.drawer-enter-from, .drawer-leave-to { opacity: 0; }
-.drawer-mask.drawer-leave-active { pointer-events: none; }
-.drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px 12px;
+/* ==================== 种子详情面板(方案A 底部停靠, 计划 26-10-03-0917 W1) ====================
+ * R1B 右缘抽屉重设计为停靠面板: 全宽贴列表容器、无遮罩、无 backdrop-filter —— 本皮肤唯一一处
+ * 毛玻璃在此摘除, PERF-01 全站归零收尾(与 atlas/prism 成对改)。布局/落点/层级口径见
+ * atlas/css/dialogs.css 头段注释, 三皮肤同构。 */
+.drawer-dock { position: sticky; bottom: var(--statusbar-h, 34px); z-index: 40; margin-top: 8px; }
+/* 种子视图停靠模式(groups.html 按 viewMode 挂类): 父容器 flex column —— W3 高度治理的几何钩子 */
+.torrents-dock { display: flex; flex-direction: column; }
+.torrents-dock > .group-table { flex: 1 1 auto; min-height: 0; }
+.torrents-dock > .drawer-dock { flex: 0 0 auto; }
+.drawer { display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
+  background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-3); }
+/* 过渡: 下滑 + 淡入, 只动 transform/opacity(高度不可过渡; 200ms 与模板 :duration 一致) */
+.drawer-enter-active { transition: transform .2s var(--ease), opacity .2s var(--ease); }
+.drawer-leave-active { transition: transform .16s var(--ease), opacity .16s var(--ease); pointer-events: none; }
+.drawer-enter-from, .drawer-leave-to { transform: translateY(-14px); opacity: 0; }
+.drawer-head { display: flex; align-items: stretch; gap: 12px; min-height: 44px; padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--border-soft); }
-.drawer-title { flex: 1; min-width: 0; display: flex; gap: 8px; align-items: flex-start; }
-.drawer-title strong { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
-.drawer-close { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
+.drawer-title { flex: 1 1 auto; min-width: 0; display: flex; gap: 8px; align-items: center; }
+.drawer-title strong { font-size: 14px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer-close { align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
   border: 0; background: transparent; color: var(--fg-dim); cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
 .drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
-.drawer-tabs { display: flex; gap: 2px; padding: 8px 16px 0; border-bottom: 1px solid var(--border-soft); }
-.drawer-tabs button { padding: 7px 14px; border: 0; background: transparent; color: var(--fg-muted);
+/* 页签并入头部行(stretch 撑满头高): 活动页签下划线正好压在头部底边线上 */
+.drawer-tabs { display: flex; gap: 2px; }
+.drawer-tabs button { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);
   cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
 .drawer-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
-.drawer-body { flex: 1; overflow: auto; padding: 16px 18px 24px; }
+.drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px 20px; }
 .drawer-hr { border: 1px solid var(--border-soft); border-left: 2px solid var(--hr-pending); padding: 8px 12px;
   margin: 0 0 16px; font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
 .drawer-hr.done { border-left-color: var(--hr-done); }
