@@ -22,8 +22,9 @@
  *   - keydown 监听在 lifecycle.js mounted 里注册, 排在既有 Esc 退栈链**之后**; data 字段
  *     kbCursor / kbHelpOpen / 面板与录制器状态(kbDraft 等)在 state.js(根选项展开, 不许进
  *     app.mixin —— pitfalls web-ui/frontend-split)。
- *   - W5 局部作用域: scope 五值全量生效 —— drawer(抽屉 Alt+1-4) / settings(设置页 Ctrl+S,
- *     inputSafe 输入框内也放行) / modal(模态层白名单: 模态内只响应模态键位, 本期无条目, 引擎已留位)。
+ *   - W5 局部作用域: scope 五值全量生效 —— settings(设置页 Ctrl+S, inputSafe 输入框内也放行) /
+ *     modal(模态层白名单: 模态内只响应模态键位, 本期无条目, 引擎已留位); drawer 档自方案A W2
+ *     (计划 26-10-03-0917)起无条目 —— 停靠面板是列表附属, Alt+1-4 改 list 作用域双态(_kbDrawerTab)。
  *   - W6 自定义: 设置页「快捷键」分区(录制器 VS Code 按下即录模式 / 冲突三选一 / 黑名单拒绑 /
  *     单条与全部重置 / 保存 PUT 落盘) + ? 帮助浮层(只读速查)。Esc 是唯一 fixed 键, 面板不可改。
  *   - 光标滚动跟随**禁用 scrollIntoView**(逐层滚动可滚祖先会连带滚整页, pitfalls
@@ -115,7 +116,8 @@ const KB_DEF_RE = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$/;
  *   def  = 默认键位归一化串; "" = 默认不绑定(空位, 可被自定义); fixed = 不可改键(Esc)。
  *   repeat = 长按连发: e.repeat 自动重复事件默认被引擎丢弃, 标记后放行(只给光标/选择扩展
  *   上下键族 —— 每按一次就发一条后端命令的键位(队列移动)不开, 免得长按刷爆命令)。
- *   scope = global(任何非输入态) | list(三数据视图) | drawer(抽屉内) | settings(设置页)
+ *   scope = global(任何非输入态) | list(三数据视图) | drawer(抽屉内; 方案A W2 起注册表无条目,
+ *           机制留位 —— 停靠面板是列表附属不是作用域, 见 _kbScope) | settings(设置页)
  *           | modal(模态层内, 本期无条目, 引擎已留位)。
  *   danger = 危险档(§08 清单): 键盘路径必经确认框, 面板行内标 WARN; 危险档默认键一律二键组合。
  *   run(vm) = 动作出口, 只映射既有方法不另写实现; W5 全波接线完成(E/F/G/H/I 组激活)。
@@ -177,7 +179,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "page-down", group: "光标与导航", label: "下翻一屏",
     def: "PageDown", scope: "list",
     run: (vm) => vm._kbMovePage(1) },
-  { id: "row-open", group: "光标与导航", label: "打开当前行(组行=展开明细, 种子行=详情抽屉)",
+  { id: "row-open", group: "光标与导航", label: "打开当前行(组行=展开明细, 种子行=详情面板)",
     def: "Enter", scope: "list",
     run: (vm) => vm._kbOpenRow() },
   // ---- C · 选择 ----
@@ -209,7 +211,7 @@ const AQB_SHORTCUT_DEFS = [
   { id: "act-recheck", group: "一级动作", label: "重新校验",
     def: "Shift+KeyY", scope: "list", danger: true,
     run: (vm) => vm._kbAct("recheck") },
-  { id: "act-detail", group: "一级动作", label: "详细信息(抽屉)",
+  { id: "act-detail", group: "一级动作", label: "详细信息(详情面板)",
     def: "KeyI", scope: "list",
     run: (vm) => vm._kbOpenDrawer() },
   { id: "act-meta", group: "一级动作", label: "标签 / 分类",
@@ -262,19 +264,19 @@ const AQB_SHORTCUT_DEFS = [
   { id: "force-start", group: "队列与开关", label: "强制开始切换",
     def: "Shift+KeyF", scope: "list",
     run: (vm) => vm._kbTorrentToggle("force-start", "force_start", "强制开始") },  // 可逆故不入危险档(§08)
-  // ---- G · 局部作用域(焦点在抽屉/设置页时才响应, W5) ----
-  { id: "drawer-tab-general", group: "局部作用域", label: "抽屉 · 常规页",
-    def: "Alt+Digit1", scope: "drawer",
-    run: (vm) => vm.drawerTab("general") },
-  { id: "drawer-tab-trackers", group: "局部作用域", label: "抽屉 · Tracker 页",
-    def: "Alt+Digit2", scope: "drawer",
-    run: (vm) => vm.drawerTab("trackers") },
-  { id: "drawer-tab-peers", group: "局部作用域", label: "抽屉 · 用户页",
-    def: "Alt+Digit3", scope: "drawer",
-    run: (vm) => vm.drawerTab("peers") },
-  { id: "drawer-tab-content", group: "局部作用域", label: "抽屉 · 内容页",
-    def: "Alt+Digit4", scope: "drawer",
-    run: (vm) => vm.drawerTab("content") },
+  // ---- G · 局部作用域(设置页局部键位, W5; 方案A W2 起详情面板四条独立成组, 双态见 _kbDrawerTab) ----
+  { id: "drawer-tab-general", group: "详情面板", label: "详情面板 · 打开/切到常规页",
+    def: "Alt+Digit1", scope: "list",
+    run: (vm) => vm._kbDrawerTab("general") },
+  { id: "drawer-tab-trackers", group: "详情面板", label: "详情面板 · 打开/切到 Tracker 页",
+    def: "Alt+Digit2", scope: "list",
+    run: (vm) => vm._kbDrawerTab("trackers") },
+  { id: "drawer-tab-peers", group: "详情面板", label: "详情面板 · 打开/切到用户页",
+    def: "Alt+Digit3", scope: "list",
+    run: (vm) => vm._kbDrawerTab("peers") },
+  { id: "drawer-tab-content", group: "详情面板", label: "详情面板 · 打开/切到内容页",
+    def: "Alt+Digit4", scope: "list",
+    run: (vm) => vm._kbDrawerTab("content") },
   { id: "settings-save", group: "局部作用域", label: "设置页 · 保存配置",
     def: "Ctrl+KeyS", scope: "settings", inputSafe: true,
     run: (vm) => vm.cfgSave() },  // inputSafe: 输入框内也放行; 浏览器保存网页可拦, §3.3
@@ -383,21 +385,22 @@ window.AQB_SHORTCUTS = {
       this._kbTableCache = map;
       return map;
     },
-    /* 当前作用域(五值之三; modal 在派发处单独分流, 抽屉优先级低于设置页 —— 两者互斥打开):
-     * 设置页 / 抽屉 / 列表(W5 全量生效)。
-     * 方案A W1: 停靠面板只存在于种子页(torrents 视图的 .drawer-dock), 而 drawer.open 跨页不清
-     * (切页再回面板状态保持) —— drawer 分支必须带页面条件, 否则面板开着切到别的视图会被
-     * 误判成 drawer 作用域(_kbOverlayBusy 名单 W2 才动, 本波只加此条件保一致性)。 */
+    /* 当前作用域(五值之三取二; modal 在派发处单独分流):
+     * 方案A W2(计划 26-10-03-0917 §3.2): 停靠面板**不再是键盘作用域** —— 它是种子列表的附属
+     * 面板而非浮层, 面板开着时列表键位保持存活(§2.2 矩阵), scope 落 "list"(Delete 直连同样依赖
+     * 此判定)。W1 曾临时让 drawer.open 判成 "drawer" 保逐键零回归, 随 _kbOverlayBusy 摘名单
+     * 一并取消; "drawer" 值与下方浮层放行分支的 scope==="drawer" 判定机制保留(条目清空, 引擎留位)。 */
     _kbScope() {
       if (this.page === "settings") return "settings";
-      if (this.page === "groups" && this.viewMode === "torrents" && this.drawer.open) return "drawer";
       return "list";
     },
     /* 模态层名单: 与 dialogs.js escBusy 的**浮层名单**同形, 但不含选择/展开兜底段
-     * (有选中时快捷键必须照常可用 —— 目标解析走选中集合; escBusy 是 Esc 退栈专用, 不能混用)。 */
+     * (有选中时快捷键必须照常可用 —— 目标解析走选中集合; escBusy 是 Esc 退栈专用, 不能混用)。
+     * 方案A W2: 名单摘除 drawer.open —— 停靠面板不是浮层, Delete 等注册表外绑定与列表键在面板
+     * 开着时保持可用; escBusy(退栈链)仍含 drawer.open(Esc 关面板), 两名单自此职责分叉。 */
     _kbOverlayBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
-        this.metaOpen || this.filePrio.visible || this.drawer.open || this.historyOpen || this.headMenu.visible ||
+        this.metaOpen || this.filePrio.visible || this.historyOpen || this.headMenu.visible ||
         this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible ||
         this.kbHelpOpen);
     },
@@ -430,11 +433,9 @@ window.AQB_SHORTCUTS = {
       } else if (this.modal.visible) {
         return;                                        // 模态层打开: 只响应模态键位, 其余一律失效
       } else if (!inInput && this._kbOverlayBusy()) {
-        // 浮层打开: 只放行焦点局部(抽屉 Alt+1-4 / 设置页 Ctrl+S)自身的键位 —— 抽屉页切换
-        // 不与全局键冲突(W5 验收口径); 列表键位在浮层下仍然失效(同 W1-W4)。
-        // 方案A W1: 详情面板已停靠进种子视图(不再是全屏浮层), 但本名单仍含 drawer.open
-        // (面板开着 = 种子页上列表键暂死, 与重设计前逐键一致, W1 键盘零回归);
-        // 摘 drawer.open 让列表键复活是 W2 的事(计划 26-10-03-0917 §3.2)。
+        // 浮层打开: 只放行焦点局部(设置页 Ctrl+S)自身的键位 —— 列表键位在浮层下仍然失效(同 W1-W4)。
+        // 方案A W2: drawer.open 已摘出浮层名单 —— 停靠面板是列表附属不是浮层, 面板开着列表键位
+        // 全部存活(§2.2 矩阵); scope==="drawer" 判定随名单摘除不再可达, 机制保留(条目清空)。
         if (item.scope !== scope || (scope !== "drawer" && scope !== "settings")) return;
       } else if (item.scope !== "global" && item.scope !== scope) {
         return;                                        // 非焦点页不串扰
@@ -469,6 +470,7 @@ window.AQB_SHORTCUTS = {
     _kbApplyCursor(rows, idx) {
       this.kbCursor = rows[idx];
       this._kbScrollRowIntoView(rows, idx);
+      this._kbFollowDrawer();  // 方案A W2 跟随单点(§2.3; page+kind 守卫在方法内, 相邻视图零开销返回)
     },
     _kbMove(delta) {
       const rows = this._kbRows();
@@ -622,7 +624,32 @@ window.AQB_SHORTCUTS = {
         else this._kbExpandRow();
         return;
       }
-      this.openTorrentDrawer(c.id);  // 种子行: 详情抽屉
+      // 种子行: 详情面板。D2 拍板(计划 26-10-03-0917 §05): 面板已开时 Enter 仅跟随不关面板 ——
+      // openTorrentDrawer 即换目标打开(不走 close), 关面板只走 Esc 与关闭钮
+      this.openTorrentDrawer(c.id);
+    },
+    /* Alt+1~4 双态(方案A W2, §2.2): 面板关 = 开面板并定位该页签; 面板开 = 切页签(现行为)。
+     * 目标解析: 光标行(kind=torrent)优先, 其次单选种子(_kbSingleHash, 选中恰一个 hash);
+     * 非种子页(停靠落点 .drawer-dock 只在种子视图)或解析不出目标时 toast 提示后忽略 —— 不猜目标。
+     * drawer 作用域条目已清空(§3.2), 四条改 list 作用域由此单点分流双态。 */
+    _kbDrawerTab(tab) {
+      if (this.page !== "groups" || this.viewMode !== "torrents") {
+        this.toast("详情面板只在种子页可用", "info", 2500);
+        return;
+      }
+      if (this.drawer.open) {
+        this.drawerTab(tab);  // 开态: 切页签(现行为)
+        return;
+      }
+      const c = this.kbCursor;
+      const hash = c && c.kind === "torrent" ? c.id : this._kbSingleHash();
+      if (!hash) {
+        this._kbHint();
+        return;
+      }
+      this.drawerLastTab = tab;      // openTorrentDrawer 以 drawerLastTab 为初始页签
+      this.persistDrawerTab();       // 与 drawerTab 切页同口径(下一个种子默认停在相同页签)
+      this.openTorrentDrawer(hash);
     },
     /* ---------------- W2/W3: 选择与目标解析 ---------------- */
     _kbHint() {

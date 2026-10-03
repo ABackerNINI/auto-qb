@@ -441,18 +441,22 @@ window.AQB_DRAWER = {
       const label = field === "name" ? "种子名" : field === "hash" ? "信息哈希" : "magnet 链接";
       this._copyText(value, label);
     },
-    /* ---------------- 种子详情面板(R1B → 方案A 底部停靠, 计划 26-10-03-0917 W1) ----------------
+    /* ---------------- 种子详情面板(R1B → 方案A 底部停靠, 计划 26-10-03-0917 W1/W2) ----------------
      * 数据: /api/torrents/{hash} 全字段详情; /trackers /files /peers 按需拉取。
      * trackers/peers 在对应 tab 激活期间 5s 轮询(页面隐藏时暂停), 关闭面板即停 —— 不进主循环 tick;
      * General 分组行在 drawerGeneralSections 预格式化(qB 哨兵 -1/-2/8640000 在此统一翻译)。
      * 形态: 右缘浮层改为种子视图 .drawer-dock 里的停靠面板 —— 无遮罩, open 只负责挂状态与拉数据;
-     * 面板 DOM 随种子视图 v-if 出入, 故 open 必须页面守卫(见下), close 只收面板。 */
+     * 面板 DOM 随种子视图 v-if 出入, 故 open 必须页面守卫(见下), close 只收面板。
+     * W2 键盘跟随: 光标移动经 shortcuts.js::_kbApplyCursor 尾部进 _kbFollowDrawer 单点(防抖 200ms
+     * + 请求代际 seq + hash 短路, §2.3), 停稳后经 _switchDrawerTarget 换目标; 显式打开/关闭在此
+     * 两处作废在途跟随定时器, 显式操作优先于跟随。 */
     async openTorrentDrawer(hash) {
       // 防御分支(W1): 面板落点只存在于种子页(torrents 视图), 非种子页没有 .drawer-dock ——
       // 入口(双击/右键/Enter)本就只在种子页, 这里兜底防跨页调用把面板状态挂在不可见容器上
       if (this.page !== "groups" || this.viewMode !== "torrents") return;
       this.menu.visible = false;
       this._stopDrawerPoll();
+      this._stopDrawerFollow();  // 显式打开优先于在途跟随(双击换目标 vs 防抖中的跟随, 不得互相打架)
       const initialTab = this.drawerLastTab || "general";
       this.drawer = {
         open: true, hash, tab: initialTab, loading: true, error: "",
@@ -469,6 +473,7 @@ window.AQB_DRAWER = {
       this.filePrio.visible = false;
       this.drawerSelPath = "";
       this._stopDrawerPoll();
+      this._stopDrawerFollow();
     },
     _stopDrawerPoll() {
       if (this._drawerTimer) {
@@ -487,50 +492,66 @@ window.AQB_DRAWER = {
         else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
       }, 5000);
     },
-    async _fetchDrawerDetail() {
+    /* W2 请求代际纪律: 四个 fetcher 均带可选 seq(0 = 无代际约束, 走 hash 戳守卫) ——
+     * 换 hash(跟随/显式打开)或换代际(切页签)后, 在途旧响应一律丢弃, 防止慢响应把新目标的
+     * 详情/列表覆盖成旧的。hash 戳另兜一路: 5s 轮询(seq=0)发出后恰逢跟随换目标, 响应也不落袋。 */
+    _drawerStale(hash, seq) {
+      return this.drawer.hash !== hash || (!!seq && seq !== this._drawerLoadSeq);
+    },
+    async _fetchDrawerDetail(seq = 0) {
+      const hash = this.drawer.hash;
       this.drawer.loading = true;
       this.drawer.error = "";
       try {
-        const r = await this.api(`/api/torrents/${this.drawer.hash}`);
+        const r = await this.api(`/api/torrents/${hash}`);
+        if (this._drawerStale(hash, seq)) return;  // 旧响应丢弃(W2 代际纪律)
         this.drawer.detail = (r && r.torrent) || null;
         if (!this.drawer.detail) this.drawer.error = "种子不存在或已被删除";
       } catch (e) {
+        if (this._drawerStale(hash, seq)) return;
         if (!e.auth) this.drawer.error = e.message || "详情获取失败";
       } finally {
-        this.drawer.loading = false;
+        // 过期请求不动 loading 态(新在途请求持有它), 免得闪一帧"加载完"假象
+        if (!this._drawerStale(hash, seq)) this.drawer.loading = false;
       }
     },
-    async _fetchDrawerTrackers(silent = false) {
+    async _fetchDrawerTrackers(silent = false, seq = 0) {
+      const hash = this.drawer.hash;
       if (!silent) this.drawer.trackersLoading = true;
       try {
-        const r = await this.api(`/api/torrents/${this.drawer.hash}/trackers`);
+        const r = await this.api(`/api/torrents/${hash}/trackers`);
+        if (this._drawerStale(hash, seq)) return;
         this.drawer.trackers = Array.isArray(r) ? r : [];
       } catch (e) {
         if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
       } finally {
-        this.drawer.trackersLoading = false;
+        if (!this._drawerStale(hash, seq)) this.drawer.trackersLoading = false;
       }
     },
-    async _fetchDrawerFiles(silent = false) {
+    async _fetchDrawerFiles(silent = false, seq = 0) {
+      const hash = this.drawer.hash;
       if (!silent) this.drawer.filesLoading = true;
       try {
-        const r = await this.api(`/api/torrents/${this.drawer.hash}/files`);
+        const r = await this.api(`/api/torrents/${hash}/files`);
+        if (this._drawerStale(hash, seq)) return;
         this.drawer.files = Array.isArray(r) ? r : [];
       } catch (e) {
         if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
       } finally {
-        this.drawer.filesLoading = false;
+        if (!this._drawerStale(hash, seq)) this.drawer.filesLoading = false;
       }
     },
-    async _fetchDrawerPeers(silent = false) {
+    async _fetchDrawerPeers(silent = false, seq = 0) {
+      const hash = this.drawer.hash;
       if (!silent) this.drawer.peersLoading = true;
       try {
-        const r = await this.api(`/api/torrents/${this.drawer.hash}/peers`);
+        const r = await this.api(`/api/torrents/${hash}/peers`);
+        if (this._drawerStale(hash, seq)) return;
         this.drawer.peers = r || { peers: [] };
       } catch (e) {
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
       } finally {
-        this.drawer.peersLoading = false;
+        if (!this._drawerStale(hash, seq)) this.drawer.peersLoading = false;
       }
     },
     /* tab 切换: general 重新拉详情(反映最新状态); trackers/peers 拉一次并启动轮询; content 拉一次。
@@ -544,16 +565,67 @@ window.AQB_DRAWER = {
       this._stopDrawerPoll();
       this._loadDrawerTab(tab);
     },
-    /* 按 tab 拉取对应数据(开抽屉初值 / 切 tab 共用, 单一加载逻辑): 避免两处各写一遍分支 */
+    /* 按 tab 拉取对应数据(开抽屉初值 / 切 tab / W2 跟随换目标共用, 单一加载逻辑):
+     * 每次进入 bump 请求代际 seq —— 之后所有带 seq 的在途响应过期, 换目标/换页签竞态在此收口。 */
     _loadDrawerTab(tab) {
-      if (tab === "general") this._fetchDrawerDetail();
+      const seq = (this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1);
+      if (tab === "general") this._fetchDrawerDetail(seq);
       else if (tab === "trackers") {
-        this._fetchDrawerTrackers();
+        this._fetchDrawerTrackers(false, seq);
         this._startDrawerPoll();
       } else if (tab === "peers") {
-        this._fetchDrawerPeers();
+        this._fetchDrawerPeers(false, seq);
         this._startDrawerPoll();
-      } else if (tab === "content") this._fetchDrawerFiles();
+      } else if (tab === "content") this._fetchDrawerFiles(false, seq);
+    },
+    /* ---------------- W2 详情跟随光标(计划 §2.3 四条纪律, 全部收口在此单点) ----------------
+     * 触发入口: shortcuts.js::_kbApplyCursor 尾部(鼠标路径将来接同一入口, §1.3 相邻预留)。
+     *   1) 触发单点+守卫 —— 面板开 + 种子页 + 光标是种子行(kind=torrent); 追剧/辅种组行视图共用
+     *      _kbApplyCursor, 守卫不满足即零开销返回, 不波及;
+     *   2) 防抖 200ms —— 连发上下键不逐行拉详情, 停稳才发;
+     *   3) 在途请求代际 seq —— _loadDrawerTab 每次 bump, 换 hash 后旧响应一律丢弃(见上);
+     *   4) hash 未变短路 —— 光标落回同一行不重拉; 页签内 5s 轮询(_startDrawerPoll)照旧, 互不打架。 */
+    _kbFollowDrawer() {
+      if (!this.drawer.open) return;
+      if (this.page !== "groups" || this.viewMode !== "torrents") return;  // 种子页守卫(面板停靠落点)
+      const c = this.kbCursor;
+      if (!c || c.kind !== "torrent") return;  // kind 守卫(组行/剧/集单元不跟随)
+      if (this.drawer.hash === c.id) return;   // 纪律4: hash 未变短路(含防抖在途的重复触发)
+      if (this._followDrawerTimer) clearTimeout(this._followDrawerTimer);
+      this._followDrawerTimer = setTimeout(() => {
+        this._followDrawerTimer = null;
+        // 停稳复核: 面板已关 / 切页走了 / 目标已换(显式打开优先) / 光标又落回原行 -> 放弃本次跟随
+        if (!this.drawer.open || this.page !== "groups" || this.viewMode !== "torrents") return;
+        const cur = this.kbCursor;
+        if (!cur || cur.kind !== "torrent" || cur.id === this.drawer.hash) return;
+        this._switchDrawerTarget(cur.id);
+      }, 200);
+    },
+    _stopDrawerFollow() {
+      if (this._followDrawerTimer) {
+        clearTimeout(this._followDrawerTimer);
+        this._followDrawerTimer = null;
+      }
+    },
+    /* 跟随换目标: 保留当前页签(与 openTorrentDrawer 取 drawerLastTab 初始定位不同), 旧页签数据
+     * 即刻清空防串显, 再按当前页签重拉(_loadDrawerTab 内 bump 代际 seq + 重启 5s 轮询) */
+    _switchDrawerTarget(hash) {
+      this._stopDrawerPoll();
+      this._stopDrawerFollow();
+      this.drawer.hash = hash;
+      this.drawer.loading = true;
+      this.drawer.error = "";
+      this.drawer.detail = null;
+      this.drawer.trackers = [];
+      this.drawer.files = [];
+      this.drawer.peers = { peers: [] };
+      this.filePrio.visible = false;  // 内容页签小菜单与行选中跨种子失效(与 drawerTab/closeDrawer 同口径)
+      this.drawerSelPath = "";
+      this._loadDrawerTab(this.drawer.tab);
+      // 详情恒拉(头部标题/常规页都依赖, 与 openTorrentDrawer 同口径): _loadDrawerTab 只在 general
+      // 页签拉详情, 其余页签在此补一发 —— seq 归 _loadDrawerTab 先 bump(页签数据走代际守卫),
+      // 详情这次不带 seq 只走 hash 戳守卫(同 hash 内晚到也是同资源, 无覆盖错目标风险)。
+      if (this.drawer.tab !== "general") this._fetchDrawerDetail();
     },
     /* 持久化抽屉 tab 偏好(与 persistUiPage 同纪律): 只落"停在哪页"这个意图, 不落派生值;
      * 写入失败(隐私模式/配额满)只影响刷新后落点, 不该打断切页 —— 故吞掉异常。 */

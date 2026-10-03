@@ -38,9 +38,16 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   起点且排除 Shift(法则 2); 四处消费者走 _selAnchor 单点解析、无裸 list[0]; _selAnchor 兜底链
   齐全(显式 -> 光标 -> 展开组 -> 首行); _selSetAnchor 不碰选中集合; _kbExtend 先落手势原点
   (_selSeedAnchorFromCursor) 再移动光标, 且已有有效起点不动
-- test_local_scope_wiring: G 组抽屉四条 scope=drawer + run 走 drawerTab; settings-save
-  inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope 五值三档(settings/drawer/list)齐全;
-  浮层打开只放行焦点局部(drawer/settings)键位; 非 inputSafe 条目不得标 inputSafe
+- test_local_scope_wiring: settings-save inputSafe + Ctrl+KeyS + cfgSave; 引擎 _kbScope
+  settings/list 档齐全(方案A W2 起停靠面板不再是作用域, drawer 值机制留位);
+  浮层打开只放行焦点局部(settings)键位; 非 inputSafe 条目不得标 inputSafe
+- test_drawer_dock_keyboard_w2: 方案A W2(计划 26-10-03-0917 §2.2/§2.3/§3.2/§3.4) ——
+  _kbOverlayBusy 摘 drawer.open 而 escBusy 保留(两名单职责分叉: 面板≠浮层 vs Esc 关面板);
+  drawer-tab 四条 group=详情面板 / scope=list / run=_kbDrawerTab 双态(非种子页 toast 忽略 /
+  开态切页 / 关态开面板定位该页签, 目标解析 kbCursor(torrent) 优先 + 单选种子兜底);
+  跟随单点 _kbFollowDrawer 挂 _kbApplyCursor 尾部, page+kind 守卫 + 200ms 防抖 + hash 短路 +
+  停稳复核; _loadDrawerTab bump 请求代际 seq 且四 fetcher 带 _drawerStale 旧响应丢弃;
+  _switchDrawerTarget 清旧页签数据防串显; open/close 作废在途跟随定时器
 - test_modal_whitelist_branch: 引擎含模态白名单分流(modal 条目仅模态内响应, 模态内非模态键位一律失效)
 - test_recorder_and_panel_wiring: 录制器按下即录(捕获段监听+stopPropagation) / 纯修饰键拒收 /
   Esc 取消 / 黑名单当场拒绑 / 冲突三选一(交换/覆盖对方置空/取消) / 单条与全部重置 /
@@ -414,29 +421,97 @@ def test_shift_anchor_unified() -> None:
 
 
 def test_local_scope_wiring() -> None:
-    """W5 局部作用域: G 组接线 + 引擎 scope 三档齐全 + 浮层放行焦点局部"""
+    """W5 局部作用域: settings-save 接线 + 引擎 scope 档齐全 + 浮层放行焦点局部(方案A W2 后口径)"""
     items = {it["id"]: it for it in _registry()}
-    for tid, tab in [
-        ("drawer-tab-general", "general"), ("drawer-tab-trackers", "trackers"), ("drawer-tab-peers", "peers"),
-        ("drawer-tab-content", "content")
-    ]:
-        it = items[tid]
-        assert it["scope"] == "drawer", f"{tid} 必须是 drawer 作用域"
-        assert it["def"].startswith("Alt+Digit"), f"{tid} 默认键应为 Alt+1-4"
-        assert f'vm.drawerTab("{tab}")' in _read("shortcuts.js"), f"{tid} run 未走 drawerTab"
     save = items["settings-save"]
     assert save["scope"] == "settings" and save["inputSafe"], "settings-save 必须 settings 作用域 + inputSafe"
     assert save["def"] == "Ctrl+KeyS", "settings-save 默认键必须是 Ctrl+KeyS"
     eng = _read("shortcuts.js")
-    # scope 三档(设置页/抽屉/列表; modal 在派发处分流)
-    for needle in ('this.page === "settings"', "this.drawer.open", 'return "list";'):
-        assert needle in eng, f"_kbScope 缺档: {needle}"
-    # 浮层打开只放行焦点局部(drawer/settings)自身的键位, 其余一律失效
-    assert 'scope !== "drawer" && scope !== "settings"' in eng, ("浮层放行分支必须只认 drawer/settings 局部键位(列表键位在浮层下仍失效)")
+    # scope 档(设置页/列表; modal 在派发处分流)。方案A W2: 停靠面板不再是作用域 ——
+    # drawer.open 不进 _kbScope(否则面板开着 list 条目全被 item.scope !== scope 拦死),
+    # "drawer" 值由 KB_SCOPES 与浮层放行分支机制留位
+    scope_body = re.search(r"_kbScope\(\) \{(.*?)\n    \},", eng, re.S)
+    assert scope_body, "shortcuts.js 找不到 _kbScope"
+    assert 'this.page === "settings"' in scope_body.group(1) and 'return "list";' in scope_body.group(
+        1
+    ), "_kbScope 缺 settings/list 档"
+    assert "drawer.open" not in scope_body.group(1), "_kbScope 不得再判 drawer.open(停靠面板=list 作用域, W2 §3.2)"
+    # 浮层打开只放行焦点局部自身的键位, 其余一律失效(drawer 放行判定机制留位, 现不可达)
+    assert 'scope !== "drawer" && scope !== "settings"' in eng, ("浮层放行分支必须只认局部键位(列表键位在浮层下仍失效)")
     # inputSafe 只允许 settings 作用域(输入框内放行的键位不该作用于列表页)
     for it in _registry():
         if it["inputSafe"]:
             assert it["scope"] == "settings", f"{it['id']} inputSafe 条目必须 settings 作用域"
+
+
+def test_drawer_dock_keyboard_w2() -> None:
+    """方案A W2(计划 26-10-03-0917 §2.2 矩阵 / §2.3 跟随纪律 / §3.2 scope 派发 / §3.4 数据面)"""
+    eng = _read("shortcuts.js")
+    drawer_js = _read("drawer.js")
+    # --- §3.2 名单分叉: _kbOverlayBusy 摘 drawer.open(面板≠浮层), escBusy 保留(Esc 关面板) ---
+    busy = re.search(r"_kbOverlayBusy\(\) \{(.*?)\n    \},", eng, re.S)
+    assert busy, "shortcuts.js 找不到 _kbOverlayBusy"
+    assert "this.drawer.open" not in busy.group(1), "_kbOverlayBusy 必须摘除 drawer.open(停靠面板不是浮层, Delete 等列表键面板开着要保持可用)"
+    assert "this.filePrio.visible || this.historyOpen" in busy.group(1), "_kbOverlayBusy 名单书写序漂移, 同步本守阵解析"
+    dialogs_js = _read("dialogs.js")
+    esc_busy = re.search(r"escBusy\(\) \{(.*?)\n    \},", dialogs_js, re.S)
+    assert esc_busy and "this.drawer.open" in esc_busy.group(1), "escBusy 必须保留 drawer.open(面板开 Esc=关面板, 退栈链零改动)"
+    # --- §3.2 drawer-tab 四条: 详情面板组 / list 作用域 / run=_kbDrawerTab 双态 ---
+    items = {it["id"]: it for it in _registry()}
+    for tid in ("drawer-tab-general", "drawer-tab-trackers", "drawer-tab-peers", "drawer-tab-content"):
+        it = items[tid]
+        assert it["group"] == "详情面板", f"{tid} 应独立成「详情面板」组(帮助面板语义变化可见)"
+        assert it["scope"] == "list", f"{tid} 必须 list 作用域(W2 双态; drawer 作用域条目清空)"
+        assert it["def"].startswith("Alt+Digit"), f"{tid} 默认键应为 Alt+1-4"
+    assert 'run: (vm) => vm._kbDrawerTab("general")' in eng, "drawer-tab-general run 未走 _kbDrawerTab 双态入口"
+    # 双态实现: 非种子页 toast 忽略 -> 开态切页 -> 关态开面板定位该页签
+    dtab = re.search(r"_kbDrawerTab\(tab\) \{(.*?)\n    \},", eng, re.S)
+    assert dtab, "shortcuts.js 找不到 _kbDrawerTab(Alt+1-4 双态入口)"
+    tb = dtab.group(1)
+    assert tb.index('this.page !== "groups" || this.viewMode !== "torrents"'
+                   ) < tb.index("this.drawerTab(tab)"), "非种子页守卫必须先于双态分流(停靠落点只在种子视图)"
+    assert "this.toast(" in tb, "非种子页必须 toast 提示后忽略, 不许静默"
+    assert tb.index("if (this.drawer.open)") < tb.index("openTorrentDrawer(hash)"), "双态序: 开态切页 / 关态开面板"
+    assert "this.drawerLastTab = tab;" in tb and "this.persistDrawerTab()" in tb, "关态开面板必须经 drawerLastTab 定位该页签(openTorrentDrawer 的初始页签口径)"
+    # 目标解析: kbCursor(kind=torrent) 优先, 单选种子兜底, 无目标 _kbHint
+    assert 'c.kind === "torrent" ? c.id : this._kbSingleHash()' in tb, "目标解析须 kbCursor(torrent) 优先 + _kbSingleHash 兜底"
+    assert "this._kbHint()" in tb, "无目标必须 _kbHint 提示后忽略"
+    # --- §2.3 跟随单点: 挂 _kbApplyCursor 尾部, page+kind 守卫 + 防抖 + hash 短路 + 停稳复核 ---
+    apply_cur = re.search(r"_kbApplyCursor\(rows, idx\) \{(.*?)\n    \},", eng, re.S)
+    assert apply_cur and "_kbFollowDrawer()" in apply_cur.group(1), "跟随单点必须挂 _kbApplyCursor 尾部(§2.3 触发单点)"
+    follow = re.search(r"_kbFollowDrawer\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert follow, "drawer.js 找不到 _kbFollowDrawer(跟随单点应在数据面)"
+    fb = follow.group(1)
+    assert fb.index("this.drawer.open") < fb.index('c.kind !== "torrent"'), "跟随守卫序: 面板开 -> 种子页 -> kind=torrent"
+    assert 'this.page !== "groups" || this.viewMode !== "torrents"' in fb, "挂点必须带种子页守卫(追剧/组行视图共用 _kbApplyCursor 不波及)"
+    assert "}, 200)" in fb, "跟随必须 200ms 防抖(连发上下键不逐行拉详情)"
+    assert "this.drawer.hash === c.id" in fb, "hash 未变必须短路(光标落回同一行不重拉)"
+    assert "cur.id === this.drawer.hash" in fb and "cur.kind !== \"torrent\"" in fb, "停稳复核必须再验目标(面板关/切页/目标已换/落回原行放弃)"
+    # --- §3.4 数据面: _loadDrawerTab 代际 seq + fetcher 旧响应丢弃 + 换目标清数据 ---
+    load = re.search(r"_loadDrawerTab\(tab\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert load and "this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1" in load.group(
+        1
+    ), "_loadDrawerTab 必须 bump 请求代际 seq(换目标/换页签后旧响应丢弃)"
+    for fn in ("_fetchDrawerDetail", "_fetchDrawerTrackers", "_fetchDrawerFiles", "_fetchDrawerPeers"):
+        sig = re.search(rf"async {fn}\((.*?)\) \{{", drawer_js)
+        assert sig and "seq = 0" in sig.group(1), f"{fn} 必须带可选 seq(代际守卫)"
+    assert drawer_js.count("this._drawerStale(hash, seq)") >= 8, "四个 fetcher 的成功/异常/finally 三路都必须过 _drawerStale 旧响应丢弃"
+    stale = re.search(r"_drawerStale\(hash, seq\) \{\n      return (.*?);\n    \},", drawer_js, re.S)
+    assert stale and "this.drawer.hash !== hash" in stale.group(1) and "seq !== this._drawerLoadSeq" in stale.group(
+        1
+    ), "_drawerStale 必须 hash 戳 + 代际双守卫(hash 戳兜 5s 轮询竞态)"
+    switch = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert switch, "drawer.js 找不到 _switchDrawerTarget(跟随换目标落点)"
+    sb = switch.group(1)
+    assert "this.drawer.trackers = [];" in sb and "this.drawer.files = [];" in sb and "this.drawer.peers = { peers: [] };" in sb, "换目标必须清旧页签数据(防止串显上个种子的 trackers/files/peers)"
+    assert "this._loadDrawerTab(this.drawer.tab)" in sb, "换目标后必须按当前页签重拉(跟随保留页签, 不回 drawerLastTab)"
+    assert 'if (this.drawer.tab !== "general") this._fetchDrawerDetail();' in sb, (
+        "换目标必须恒拉详情(头部标题依赖; _loadDrawerTab 只在 general 页签拉, 走查发现的串显 hash 缺口)"
+    )
+    # open/close 作废在途跟随(显式操作优先于防抖中的跟随)
+    assert drawer_js.count("this._stopDrawerFollow();") >= 2, "openTorrentDrawer 与 closeDrawer 都必须作废在途跟随定时器"
+    # Delete 直连的 list 作用域守卫仍成立(停靠面板下 scope=list, Delete 可用 —— §2.2 矩阵)
+    assert 'this._kbScope() === "list"' in eng, "Delete 直连必须保留 list 作用域守卫(面板开着 scope 仍为 list)"
 
 
 def test_modal_whitelist_branch() -> None:
