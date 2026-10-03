@@ -1,10 +1,10 @@
 # 26-10-04-webui-hr-fetch-history — WEBUI HR 在线核实拉取历史详情表
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-10-04
-**Updated:** 2026-10-04 04:05
+**Updated:** 2026-10-04 06:32
 **Topics:** webui-hr-fetch-history
-**Summary:** HR在线核实新增「拉取历史详情表」：后端三类事件（波次/拦截/对账）环形留痕进站点文件 history 字段 + GET /api/hr/history + 全屏弹层表③(参照扩展选项页取数明细表并加细)。已拍板(⑤=2000条+6个月, 其余推荐A), S1-S6 实施中, 分支 webui-hr-fetch-history。
+**Summary:** HR在线核实新增「拉取历史详情表」：后端三类事件（波次/拦截/对账）环形留痕进站点文件 history 字段 + GET /api/hr/history + 全屏弹层表③(参照扩展选项页取数明细表并加细)。已拍板(⑤=2000条/站点+6个月, 其余推荐A), S1-S6 全部落地(提交链 49da6d06→ec697a08, 分支 webui-hr-fetch-history 待并回 develop), test.full 2442 passed + 3 skipped / 99%。
 **Refs:** memory-bank/plans/26-10-04-0312-plan-webui-hr-fetch-history.html
 
 ## 原始请求
@@ -42,14 +42,15 @@
 | 步骤 | 内容 | 状态 |
 |---|---|---|
 | 拍板 | 计划 §04 五项 | Closed（①②③④=推荐A; ⑤=2000条/站点+6个月, 用户指定） |
-| S1 | 数据模型与序列化 | Open |
-| S2 | 记录写入点 | Open |
-| S3 | 只读口径与 API | Open |
-| S4 | 前端表③ | Open |
-| S5 | 桩走查与三皮肤目检 | Open |
-| S6 | 收尾回写 | Open |
+| S1 | 数据模型与序列化 | Done |
+| S2 | 记录写入点 | Done |
+| S3 | 只读口径与 API | Done |
+| S4 | 前端表③ | Done |
+| S5 | 桩走查与三皮肤目检 | Done |
+| S6 | 收尾回写 | Done |
 
 ## 进度日志
 
 - **2026-10-04 03:20** 立档。计划编制轮完成: sync 成功(13e2646f) → 勘察（子智能体全库调研 + service/store/model/versioning/routes/settings-detail/hr_status 精读, 锚点快照 03:12）→ 计划落文 [plans/26-10-04-0312](../plans/26-10-04-0312-plan-webui-hr-fetch-history.html)（8 节: 现状差距/方案设计/五拍板/S1-S6/测试口径/风险/锚点附录, 含表③静态 mock）。本会话零代码改动, 实施待用户拍板后指派。
 - **2026-10-04 04:05** 拍板落定 + 开工。用户指示: ⑤ 容量/保留 = **2000 条/站点 + 6 个月**（覆盖计划 200 条/14 天, 常量化不变）, 其余四项按推荐 A。执行模式: 主会话拆解排程 + 串行子智能体实施（防长任务 token 膨胀与进度全丢）, 本地分支 `webui-hr-fetch-history`, 每步完成即本地 commit（不走 my-commit-flow）, 全部完成后本地并回 develop 等提交指令。
+- **2026-10-04 06:32** S6 收尾回写, 全计划 Done。S1-S5 落地链（每步一 commit）: `49da6d06`(S0 拍板落定) → `0227f25c`(S1 HrHistoryEvent + HrSiteData.history 环形留痕) → `4c88e8e2`(S2 波次/拦截/对账三类写入点, poll 跳过零写盘) → `2923ffa4`(S3 history_rows 只读口径 + GET /api/hr/history) → `85a22f8a`(S4 全屏弹层表③: 懒加载/站点chips/仅看异常/行展开档位明细) → `ec697a08`(S5 ui_harness 桩五形态 + 表③断言与三皮肤目检)。各步实测 test.quick 依次 2427/2431/2441/2442/2442 passed + 3 skipped; S5 三皮肤冒烟 207/207 + 15 张截图目检零缺口（追剧集行 Ctrl+click 存量 flaky 按既有处置口径绕行未修, 坑档 [smoke.md](../pitfalls/testing/smoke.md) 该条复发 +1）。S6: test.full **2442 passed + 3 skipped / 30.93s / TOTAL 99%**（14571 语句 / 138 未覆盖 / 4850 分支 / 107 partial, 基线切片 [26-10-04-0632](../testing/baselines/26-10-04-0632-webui-hr-fetch-history.md), 相对上基线 0308 净增 19 用例）; docs/hr-online-verify-docs.md 登记计划与实施件; 计划 meta doc-status → Done; 切片完成条目迁出 → [implemented-webui.md](../progress/implemented-webui.md)。待用户指令并回 develop。

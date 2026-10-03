@@ -1,5 +1,13 @@
-# WEBUI HR 拉取历史详情表 · 计划编制轮
+# 26-10-04-0320-webui-hr-fetch-history — WEBUI HR 拉取历史详情表
 
-> 摘要: 用户要求为 WEBUI HR在线核实添加「拉取历史详情表」（什么时间拉取了什么站点/解析结果等, 参照扩展选项页表格且更详细）, 本轮只出分步实施计划。勘察两关键结论: ①后端站点文件只存最新快照无历史流水, 需新增持久化结构; ②「插件」= hr-fetch-proxy 扩展, 其表格数据在 chrome.storage WebUI 读不到, 必须后端自记。计划 [plans/26-10-04-0312-plan-webui-hr-fetch-history.html](../plans/26-10-04-0312-plan-webui-hr-fetch-history.html) 落文: HrSiteData.history 环形事件（wave/defer/confirm_empty 三类, cap 200 + 14 天, 不抬版本链）+ GET /api/hr/history + 全屏弹层表③(details 折叠段, 波次一行展开档位明细); 五项拍板(§04)待用户确认, S1-S6 未开工。档案 [tasks/26-10-04-webui-hr-fetch-history](../tasks/26-10-04-webui-hr-fetch-history.md)(Open)。零代码改动, 未提交。
+> 摘要: 拉取历史详情表 S1-S6 **全部完成**（本地分支 webui-hr-fetch-history, 提交链 49da6d06→ec697a08）: 后端站点文件 history 环形留痕（波次/拦截/对账三类, ⑤=2000条/站点+6个月）+ GET /api/hr/history + 全屏弹层表③ + 冒烟桩五形态; test.full 2442 passed + 3 skipped / 30.93s / 99%（基线 [26-10-04-0632](../testing/baselines/26-10-04-0632-webui-hr-fetch-history.md)）。实施事实已迁出 → [implemented-webui.md](../progress/implemented-webui.md); 档案 [tasks/26-10-04-webui-hr-fetch-history](../tasks/26-10-04-webui-hr-fetch-history.md)(Done)、计划 meta(Done)、[docs/hr-online-verify-docs.md](../../docs/hr-online-verify-docs.md) 均已收口。剩用户侧动作: 并回 develop + 提交指令 + 真机走查。
+> 最后活动: 2026-10-04 06:32
 
-> 最后活动: 2026-10-04 03:20
+## 正在进行
+
+- （无 —— S1-S6 全部完成, 剩并回 develop 与真机走查两个用户侧动作）
+
+## 已完成(本轮 S6)
+
+- 基线切片 + docs/hr-online-verify-docs.md 登记 + 档案/计划收口 + 完成条目迁出 implemented-webui.md。
+- 坑档 [pitfalls/testing/smoke.md](../pitfalls/testing/smoke.md): 追剧集行 Ctrl+click 存量 flaky 复发 +1（S5 三皮肤 3/3 复现, 按既有处置口径绕行未修）。

@@ -7,6 +7,18 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI HR 拉取历史详情表**(2026-10-04, 计划
+  [plans/26-10-04-0312](../plans/26-10-04-0312-plan-webui-hr-fetch-history.html) S1-S6 全落地, 提交链
+  `49da6d06`(拍板落定: ⑤=2000条/站点+6个月, 余推荐A)→`0227f25c`(S1 `HrHistoryEvent` +
+  `HrSiteData.history` 环形留痕, 不抬 hr_site 版本链)→`4c88e8e2`(S2 波次/拦截(含 force-defer)/对账三类
+  事件写入点, poll 跳过零写盘)→`2923ffa4`(S3 `history_rows()` 只读口径 + `GET /api/hr/history`)→
+  `85a22f8a`(S4 全屏弹层表③: 懒加载/站点chips/仅看异常/行展开档位明细)→`ec697a08`(S5 ui_harness 桩
+  五形态 + 表③断言与三皮肤目检), 分支 webui-hr-fetch-history 待并回): 「什么时间拉取了什么站点/解析
+  结果」可考 —— 参照扩展选项页取数明细表且更细; 已知限制: 新旧版本混跑窗口期旧程序写盘丢 history 键
+  (业务字段无损, 不做双写兼容)。test.full 2442 passed + 3 skipped / 30.93s / 99%(基线
+  [26-10-04-0632](../testing/baselines/26-10-04-0632-webui-hr-fetch-history.md)); 三皮肤冒烟 207/207 +
+  15 张截图目检; 档案 [tasks/26-10-04-webui-hr-fetch-history](../tasks/26-10-04-webui-hr-fetch-history.md)(Done)。
+
 - **WEB UI 添加种子三下拉 label 闪烁「第四轮」(JS 收层守卫单点加固)**(2026-10-04): 用户报 594e247f
   三修后真机仍稳定复现。本轮探针自校验(摘掉 `@mousedown.prevent` → delay=150 完整闪烁链复现)证明
   三修代码在 Chromium 人手时序下干净(三皮肤 × 四场景 24/24 零翻转), 用户症状 = 浏览器跑的还是旧
