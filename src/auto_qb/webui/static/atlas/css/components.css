@@ -544,8 +544,7 @@
  * 棱镜侧 .modal-mask 从来就没加过 backdrop-filter(见 prism/css/components.css), 所以无此症状。
  * 摘掉模糊后遮罩加深一档(.62 → .72)以维持"底层内容退到后面"的观感。 */
 .modal-mask { position: fixed; inset: 0; z-index: 130; display: flex; align-items: center; justify-content: center;
-  padding: 20px; background: rgba(4, 10, 22, .72); animation: fade-in .14s var(--ease);
-  overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防弹窗滚轮穿透背景 */
+  padding: 20px; background: rgba(4, 10, 22, .72); animation: fade-in .14s var(--ease); overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防滚轮穿透背景 */
 @keyframes fade-in { from { opacity: 0; } }
 .modal { width: var(--modal-w-base); max-width: 100%; padding: 20px 22px; border-radius: var(--radius-lg);
   background: linear-gradient(180deg, rgba(255, 255, 255, .035), transparent 42%), var(--bg-card);
