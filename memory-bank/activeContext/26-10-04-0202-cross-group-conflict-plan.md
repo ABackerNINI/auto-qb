@@ -1,0 +1,4 @@
+# 跨组文件交叉检测计划立项 (计划已出, 待实施)
+
+> 摘要: 分析 issue [26-09-22-2221](../issues/26-09-22-2221-feat-cross-group-file-conflict.html) 出分步修改计划 [plans/26-10-04-0107](../plans/26-10-04-0107-plan-cross-group-file-conflict.html), 四阶段串行子智能体(勘察 → 拍板 → 撰写 → 验收)完成, 主会话只委派。勘察两大发现: ①issue 旧锚点因 kernel-module-refactor 全部漂移(grouping_mod.py / infra/utils.py / 相位广播 qbmanager.py:842); ②检测可基于 store.groups/group_sizes 内存数据零新增 qB 请求。四项拍板(用户): 独立开关 `grouping.cross_group_conflict_check` 默认关 + 三场景全检(含 realpath_lexical 别名解析) / 仅暂停涉事下载方 / 任一侧 MISSING 即豁免 / 暂停 + Web 组视图提示。撰写子智能体复用了当天 01:07 的中断草稿(复验全部锚点后修订定稿, 修正约 7 处漂移行号), 另两细化: 去重收窄组对粒度防刷屏 + 全量展开加 dirty 空短路门。计划 S0-S5 待实施, issue 仍 Open 未认领, 实施待用户指派。档案 [tasks/26-10-04-backend-cross-group-conflict](../tasks/26-10-04-backend-cross-group-conflict.md) (Open)。提交时点 sync 撞树脏(stash→sync→pop 解锁) + pop 撞生成物冲突(checkout HEAD + kb.index 重跑, 处置已补 sync-pull.md)。
+> 最后活动: 2026-10-04 02:02

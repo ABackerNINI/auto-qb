@@ -21,6 +21,7 @@
   → `--check` 自证，成功行带「自动重跑生成物 N 处」，**无需人工**。只要有一个手写文件参与（或白名单取不到 /
   重跑失败 / 自证红），才回落到下面的手工配方。
 - **处置（手写文件参与时）**: **只走 stash**(脚本不代做清理), 再重跑 sync —— 配方: `git stash push -u` → `commands run my-commit-flow.sync` → `git stash pop` → 测试 → `commands run ship.commit`。
+  ❗**`pop` 撞生成物冲突(both modified)时**(2026-10-04 实测): 该冲突**autoresolve 管不到**(三步化解接线在 sync 内部的快进/rebase 分支, 手工 stash pop 在其外) —— 处置: `git checkout HEAD -- <冲突生成物>` → 重跑 `commands run kb.index`(未跟踪新产物 pop 时已回工作树, 重建即全) → `git stash drop`(pop 冲突时 stash entry 保留, 解完手动 drop); **不要手工解冲突**。
   ❗**「先提交」是死锁, 不是处置**: 提交入口 `ship.commit` 内部第一步就是这条 sync, 树脏没解除必再撞同一处
   —— sync 要你先提交 / ship.commit 要你先 sync, 两端互斥谁都进不去(2026-10-03 实测)。
   2026-10-03 起 sync / ship.commit 的失败行**自带这条解锁配方**(单点 `UNLOCK_STEPS`, `.commands/my-commit-flow/scripts/sync.py`), 照行内配方走即可。
@@ -63,3 +64,4 @@
   现已把三步(白名单 → 重跑 → 自证)落在 `run_sync()` 单点, sync / commit / push 三条入口同时受益:
   **生成物冲突零人工**, 手写冲突行为逐字不变。⇒ 再遇「重叠」失败行, 先判断重叠是否全在生成物上。
 - **复发** +1 —— 2026-10-03 (本 clone, 生成物自动化解计划的提交点): 开工 sync 过 `7ef83e63`, 实施期间远端连推 4 笔(webui 三下拉失焦收窗 / 流量图 P5a / P5b / 死锁复发登记)至 `181d90c3`; 提交时 sync 首跑报**新版**「树脏挡路 …」失败行, 照行内配方 `cp -a .git <仓库外备份>` → `stash push -u` → sync(`同步成功 181d90c3`) → `pop` **零冲突**(重叠仅手写件 `pitfalls/git/sync-pull.md`, 两边改动落在不同段)。**为什么没命中**: 同前 —— 会话中途远端推进属固有窗口防不住; 但本轮是**新机制第一次在真机验证保守默认**: 重叠含手写件 ⇒ 自动化解正确地**没有**动作(未猜意图), 直接给失败行 + 配方。
+- **复发** +1 —— 2026-10-04 (本 clone, 跨组文件交叉计划轮提交点): 开工 sync 过 `926d1f66`, 首跑报「fetch 未落稳」(暂态), 重跑撞**新版**「树脏挡路」失败行(远端推进至 `908fbf28`); 照行内配方 `stash push -u` → sync → `pop` —— 本轮 **pop 撞了生成物冲突**(`plans/_index.md` both modified): 按 `checkout HEAD --` 该件 → 重跑 `kb.index` → `stash drop` 化解, 零残留落在新基线。**为什么没命中**: 三步自动化解接线在 `run_sync()` 单点, 只覆盖 sync 内部的快进/rebase 分支, 手工 stash pop 环节在其外 —— 配方行已补 pop 冲突处置, 后续照走即可。

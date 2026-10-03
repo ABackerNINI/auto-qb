@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="cross-group-file-conflict">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-04-0107">
+<meta name="doc-updated" content="26-10-04-0202">
+<meta name="doc-refs" content="memory-bank/issues/26-09-22-2221-feat-cross-group-file-conflict.html, memory-bank/tasks/26-10-04-backend-cross-group-conflict.md">
+<title>实施计划 · 跨组文件交叉检测与紧急处置 · auto-qb</title>
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#101315;
+    --paper:#15191c;
+    --paper-2:#191e22;
+    --ink:#e4e7e5;
+    --ink-dim:#9aa3a3;
+    --ink-faint:#6b7473;
+    --hair:rgba(255,255,255,.10);
+    --hair-soft:rgba(255,255,255,.055);
+    --accent:#6fb0a4;
+    --accent-ink:#8fc7bb;
+    --ok:#82a873;
+    --bad:#cf7a6d;
+    --mono:"JetBrains Mono","Cascadia Mono","SFMono-Regular",Consolas,"Liberation Mono",monospace;
+    --sans:"PingFang SC","Source Han Sans SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+    --measure:68ch;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:16px;line-height:1.65;letter-spacing:.005em;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:0 40px}
+
+  .cover{border-bottom:1px solid var(--hair);padding:76px 0 46px}
+  .kicker{
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 24px;
+  }
+  h1{font-size:42px;line-height:1.16;letter-spacing:-.022em;font-weight:600;margin:0 0 20px;max-width:22ch}
+  .lede{font-size:18px;line-height:1.6;color:var(--ink-dim);max-width:54ch;margin:0 0 40px}
+
+  dl.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--hair-soft);border:1px solid var(--hair-soft);margin:0}
+  dl.meta>div{background:var(--paper);padding:14px 16px}
+  dl.meta dt{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 7px}
+  dl.meta dd{margin:0;font-family:var(--mono);font-size:13px;color:var(--ink)}
+
+  .shell{display:grid;grid-template-columns:200px minmax(0,1fr);gap:60px;align-items:start}
+  nav.toc{position:sticky;top:0;padding:52px 0 0;font-size:13px;line-height:1.5}
+  nav.toc ol{list-style:none;margin:0;padding:0}
+  nav.toc li{margin:0 0 11px}
+  nav.toc a{color:var(--ink-faint);text-decoration:none;display:block;border:0}
+  nav.toc a:hover{color:var(--ink-dim)}
+  nav.toc .n{font-family:var(--mono);font-size:11px;color:var(--accent);margin-right:9px}
+
+  main{padding:52px 0 104px;min-width:0}
+  section{margin-bottom:72px;scroll-margin-top:28px}
+  .secnum{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--accent);margin:0 0 10px}
+  h2{font-size:27px;line-height:1.24;letter-spacing:-.016em;font-weight:600;margin:0 0 22px;max-width:28ch}
+  h3{font-size:18px;line-height:1.3;letter-spacing:-.006em;font-weight:600;margin:38px 0 12px}
+  h4{font-size:14px;font-weight:600;margin:26px 0 8px;color:var(--ink)}
+  p{max-width:var(--measure);margin:0 0 16px}
+  a{color:var(--accent-ink);text-decoration:none;border-bottom:1px solid var(--hair)}
+  a:hover{border-bottom-color:var(--hair)}
+  strong{font-weight:600;color:var(--ink)}
+  code{
+    font-family:var(--mono);font-size:.86em;background:var(--paper-2);
+    border:1px solid var(--hair-soft);border-radius:3px;padding:1px 5px;color:var(--ink);
+  }
+  pre{
+    font-family:var(--mono);font-size:13px;line-height:1.6;background:var(--paper-2);
+    border:1px solid var(--hair-soft);border-radius:3px;padding:14px 18px;overflow-x:auto;
+    max-width:860px;margin:18px 0 22px;color:var(--ink);
+  }
+  pre code{background:none;border:0;padding:0}
+  ul.plain,ol.plain{padding-left:0;list-style:none;max-width:var(--measure);margin:0 0 18px}
+  ul.plain>li{position:relative;padding-left:20px;margin-bottom:9px}
+  ul.plain>li::before{content:"";position:absolute;left:2px;top:.72em;width:6px;height:1px;background:var(--accent)}
+  ol.plain{padding-left:0;list-style:none;counter-reset:st}
+  ol.plain>li{counter-increment:st;position:relative;padding-left:30px;margin-bottom:10px}
+  ol.plain>li::before{content:counter(st,decimal);position:absolute;left:0;top:.1em;font-family:var(--mono);font-size:12px;color:var(--accent)}
+
+  ol.inv{list-style:none;counter-reset:inv;padding:0;margin:22px 0 8px;max-width:var(--measure)}
+  ol.inv>li{counter-increment:inv;position:relative;padding:0 0 20px 46px;border-bottom:1px solid var(--hair-soft);margin-bottom:20px}
+  ol.inv>li:last-child{border-bottom:0;padding-bottom:0;margin-bottom:0}
+  ol.inv>li::before{
+    content:counter(inv,decimal-leading-zero);position:absolute;left:0;top:1px;
+    font-family:var(--mono);font-size:12px;color:var(--accent);
+  }
+  ol.inv b{display:block;font-weight:600;margin-bottom:4px}
+
+  table{width:100%;border-collapse:collapse;margin:20px 0 26px;font-size:14px}
+  th{
+    text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--ink-faint);font-weight:500;padding:0 16px 9px 0;border-bottom:1px solid var(--hair);white-space:nowrap;
+  }
+  td{padding:12px 16px 12px 0;border-bottom:1px solid var(--hair-soft);vertical-align:top;line-height:1.55}
+  th:last-child,td:last-child{padding-right:0}
+  td code{white-space:normal}
+
+  .note{border-left:1px solid var(--hair);padding:4px 0 4px 20px;margin:22px 0;max-width:var(--measure);color:var(--ink-dim)}
+  .note b{color:var(--ink);font-weight:600}
+  .tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-right:10px}
+  .tag.ok{color:var(--ok)}
+  .tag.bad{color:var(--bad)}
+
+  figure{margin:26px 0 30px}
+  figure svg{display:block;width:100%;max-width:760px;height:auto}
+  figcaption{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:14px;letter-spacing:.04em}
+
+  .colophon{border-top:1px solid var(--hair);padding:26px 0 60px;font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.05em;display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+
+  @media (max-width:900px){
+    .wrap{padding:0 22px}
+    .shell{grid-template-columns:minmax(0,1fr);gap:0}
+    nav.toc{position:static;padding:34px 0 0;border-bottom:1px solid var(--hair);padding-bottom:26px}
+    nav.toc ol{columns:2;column-gap:28px}
+    h1{font-size:30px}
+    main{padding-top:38px}
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="wrap">
+    <p class="kicker">实施计划 · plan · feat / standard</p>
+    <h1>跨组文件交叉检测与紧急处置</h1>
+    <p class="lede">组边界不等于文件不交叉 —— 三类场景会让不同组的种子在磁盘上指向同一物理文件，新种子下载静默覆盖已下载/已完成数据，不可逆。本计划在分组模块内加一道跨组交叉防线：全量物理路径展开、MISSING 豁免、仅暂停涉事下载方、WebUI 组视图提示，与现有同组冲突检查同级。</p>
+    <dl class="meta">
+      <div><dt>状态</dt><dd>Open · 待认领</dd></div>
+      <div><dt>专题</dt><dd>cross-group-file-conflict</dd></div>
+      <div><dt>建档</dt><dd>26-10-04-0107</dd></div>
+      <div><dt>来源 issue</dt><dd>26-09-22-2221</dd></div>
+      <div><dt>主改文件</dt><dd>grouping_mod.py</dd></div>
+      <div><dt>锚点取证</dt><dd>2026-10-04 · 认领时复验</dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="wrap shell">
+
+  <nav class="toc" aria-label="目录">
+    <ol>
+      <li><a href="#s01"><span class="n">01</span>问题与场景</a></li>
+      <li><a href="#s02"><span class="n">02</span>拍板记录</a></li>
+      <li><a href="#s03"><span class="n">03</span>目标与不变量</a></li>
+      <li><a href="#s04"><span class="n">04</span>机制设计</a></li>
+      <li><a href="#s05"><span class="n">05</span>分步实施 S1-S5</a></li>
+      <li><a href="#s06"><span class="n">06</span>测试纪律与平台用例</a></li>
+      <li><a href="#s07"><span class="n">07</span>风险与回退</a></li>
+      <li><a href="#s08"><span class="n">08</span>边界：本期不做</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="s01">
+      <p class="secnum">01</p>
+      <h2>问题与场景</h2>
+
+      <p>本程序按「(规范化 save_path, 排序后的文件相对路径元组)」归组（<code>group_key_of</code>，<code>src/auto_qb/core/modules/grouping_mod.py:41-49</code>）—— 文件列表文本上不同即不同组，但<strong>组边界不等于磁盘上不交叉</strong>。issue <a href="../issues/26-09-22-2221-feat-cross-group-file-conflict.html">26-09-22-2221</a> 列了三类真实场景：</p>
+
+      <table>
+        <thead><tr><th>#</th><th>场景</th><th>为什么现有防线够不到</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>①</td>
+            <td>同 save_path 下文件列表<strong>部分重叠</strong>（A=[ep01,ep02]、B=[ep02,ep03]）</td>
+            <td>列表不同即归入不同组；ep02 是同一物理文件，组内三条防线（大小一致性 / multi-dl·mixed / 缺文件扫描）都只做组内比较</td>
+          </tr>
+          <tr>
+            <td>②</td>
+            <td>文件名<strong>仅大小写不同</strong>（Windows 不区分大小写）</td>
+            <td><code>path_normalize</code>（<code>src/auto_qb/infra/utils.py:477-488</code>）只统一分隔符与压缩斜杠，<strong>不做大小写折叠</strong> —— 文本上不同组，磁盘上同一文件</td>
+          </tr>
+          <tr>
+            <td>③</td>
+            <td>不同 save_path 经 <strong>junction / symlink / 盘符别名</strong>指向同一物理目录</td>
+            <td><code>path_normalize</code> 不解析任何别名，两个词法不同的 save_path 归成两组，落盘却是同一目录</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>后果：新种子下载写盘时静默覆盖另一组已下载/已完成的同名文件 —— 数据损坏<strong>静默且不可逆</strong>，被覆盖组随后做种数据错误、校验失败、误触发 MISSING 处置。现有唯一的下载冲突检查 <code>_check_download_conflicts</code>（grouping_mod.py:373）docstring 明确只覆盖<strong>同组</strong>，全代码检索无跨组交叉检测（issue 02 节取证）。</p>
+
+      <p class="note"><b>issue 内旧锚点已漂移。</b>issue 报告里引用的 <code>src/auto_qb/mixins/grouping.py</code> / <code>src/auto_qb/utils.py:411</code> 等路径是 2026-09-22 的旧位置，kernel 模块化重构后已全部迁移。本计划全部锚点按 2026-10-04 勘察重标（<code>core/modules/grouping_mod.py</code> / <code>infra/utils.py</code>），<strong>认领时须逐点复验</strong>（见 S0）。</p>
+    </section>
+
+    <section id="s02">
+      <p class="secnum">02</p>
+      <h2>拍板记录（2026-10-04）</h2>
+
+      <p>以下 4 项由用户拍板，本计划<strong>严格落在这些决策内</strong>，实施时不得另立方案；细节分歧回到本表裁决。</p>
+
+      <table>
+        <thead><tr><th>#</th><th>决策</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>D1</td>
+            <td><b>配置开关</b></td>
+            <td>新增 <code>grouping.cross_group_conflict_check</code>（bool，默认 <code>false</code>，保守默认）。开启后三场景全检；别名解析走 file_access 层 <code>realpath_lexical</code>（Local 部署解析 junction/symlink；Mapped/Docker 部署自动退化为词法归一 normcase+normpath，保守不误报）</td>
+          </tr>
+          <tr>
+            <td>D2</td>
+            <td><b>处置粒度</b></td>
+            <td>仅暂停<strong>涉事下载方</strong>（下载中的那个种子，<code>torrents_stop</code> 只传涉事下载成员的 hash，绝不传整组）；已完成/做种侧不动</td>
+          </tr>
+          <tr>
+            <td>D3</td>
+            <td><b>MISSING 口径</b></td>
+            <td>交叉对中<strong>任一侧</strong>成员带 missing_tag 即豁免该对（对齐现有同组 mixed 检查的「重下补救合法」语义，grouping_mod.py:417 先例）</td>
+          </tr>
+          <tr>
+            <td>D4</td>
+            <td><b>附加手段</b></td>
+            <td>暂停之外，webui 组视图加跨组交叉提示（后端 views 字段 + 前端展示）</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s03">
+      <p class="secnum">03</p>
+      <h2>目标与不变量</h2>
+
+      <h3>目标</h3>
+      <ol class="inv">
+        <li><b>三场景全检出</b>开关开启后，部分重叠 / 大小写不同 / 别名同目录三类交叉在「下载中」状态下当轮检出并警告。</li>
+        <li><b>处置克制且可恢复</b>只暂停涉事下载成员；冲突消除后去重记录清除，用户手动恢复下载会再次触发（与同组检查同语义）。</li>
+        <li><b>零新增 qB 请求</b>检测只消费 <code>store.groups</code> / <code>store.group_sizes</code> / <code>store.by_hash</code> 三份内存数据，不新增任何 /api/v2 调用。</li>
+        <li><b>默认静默</b>开关默认 false，行为与今天逐字节一致；关闭时零额外开销。</li>
+      </ol>
+
+      <h3>不变量（改动不得破坏）</h3>
+      <ul class="plain">
+        <li><strong>path_normalize 是分组键单一事实源</strong> —— 大小写折叠 / 别名解析只准加在跨组检测自己的归一层，严禁改 <code>path_normalize</code> 本身（scripts/qb_capture.py 与 match_path_patterns、fs 校验共用它）。</li>
+        <li><strong>单一写线程</strong> —— 跨组检测挂在 <code>post</code> 相位（主循环线程），去重集合只在主循环线程变更。</li>
+        <li><strong>fail-fast 配置契约</strong> —— 新键进 <code>validate_config</code> 全链路 + schema + 键面基线，守卫测试绿才算落地。</li>
+        <li><strong>软信号不落盘</strong> —— 去重集合纯内存（对齐 <code>download_conflict_warned</code> 口径，store.py:91；「软信号不落盘」注释先例 :92-95），重启即失忆，方向是「更早恢复检测」，保守。</li>
+        <li><strong>检测不触盘</strong> —— 只用词法归一与 <code>realpath_lexical</code>（目录级），不调用 exists/getsize，不引入 UNDETERMINED 三态分支。</li>
+      </ul>
+    </section>
+
+    <section id="s04">
+      <p class="secnum">04</p>
+      <h2>机制设计</h2>
+
+      <h3>四步判定：展开 → 事件 → 豁免 → 处置</h3>
+      <ol class="inv">
+        <li><b>物理路径全量展开</b>对每个组，把组内成员的文件列表（<code>store.group_sizes[key][hash]</code> 的规范相对路径）拼上 save_path，归一成<strong>物理路径键</strong>，建反向索引 <code>物理路径 -&gt; [(组key, hash)]</code>。数据全部来自内存，零 qB 请求。</li>
+        <li><b>交叉事件判定</b>同一物理路径被 <code>&ge;2</code> 个<strong>不同组 key</strong> 引用即交叉事件（同组多成员共享路径是分组定义的固有属性，归同组检查管，不在本判定内）。</li>
+        <li><b>MISSING 豁免（D3）</b>事件任一侧参与者带 <code>missing_tag</code> 即豁免该事件 —— 带标签侧是「已知缺文件、等用户重下补救」的状态，对侧重新下载这些文件是合法补救。</li>
+        <li><b>警告 + 处置</b>非豁免事件中存在「下载中」参与者（判定谓词与现有 :415 同款）才激活：逐对聚合警告一次；非 dry-run 时暂停涉事下载方（D2）并登记去重。</li>
+      </ol>
+
+      <figure>
+        <svg viewBox="0 0 720 620" role="img" xmlns="http://www.w3.org/2000/svg">
+          <title>跨组文件交叉检测流程</title>
+          <desc>post 相位进入，经开关与零变化短路门后做物理路径全量展开，按组 key 不同判交叉，MISSING 豁免后对含下载中参与者的事件聚合警告；非 dry-run 时经去重门暂停涉事下载方并登记；消除循环负责冲突消除后清去重。</desc>
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#6b7473" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <rect x="185" y="24" width="250" height="48" rx="3" style="fill:#191e22;stroke:rgba(255,255,255,.14);stroke-width:.5"/>
+          <text x="310" y="48" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px;font-weight:600" fill="#e4e7e5">post 相位（每轮收尾）</text>
+          <text x="310" y="63" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">grouping_mod._on_post</text>
+
+          <rect x="185" y="104" width="250" height="56" rx="3" style="fill:#191e22;stroke:rgba(255,255,255,.14);stroke-width:.5"/>
+          <text x="310" y="124" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px" fill="#e4e7e5">门 1：cross_group_conflict_check</text>
+          <text x="310" y="142" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">false = 返回（现状）· 增量轮无 dirty 也返回</text>
+
+          <rect x="185" y="192" width="250" height="56" rx="3" style="fill:#191e22;stroke:#6fb0a4;stroke-width:.5"/>
+          <text x="310" y="212" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px" fill="#8fc7bb">物理路径全量展开（纯内存）</text>
+          <text x="310" y="230" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">store.groups × group_sizes → path → [(key,hash)]</text>
+
+          <rect x="185" y="280" width="250" height="56" rx="3" style="fill:#191e22;stroke:rgba(255,255,255,.14);stroke-width:.5"/>
+          <text x="310" y="300" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px" fill="#e4e7e5">交叉事件：同一物理路径 ≥2 个组</text>
+          <text x="310" y="318" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">部分重叠 / 大小写折叠 / 别名同目录</text>
+
+          <rect x="185" y="368" width="250" height="56" rx="3" style="fill:#191e22;stroke:rgba(255,255,255,.14);stroke-width:.5"/>
+          <text x="310" y="388" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px" fill="#e4e7e5">门 2：MISSING 豁免（D3）</text>
+          <text x="310" y="406" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">任一侧带 missing_tag → 豁免该事件</text>
+
+          <rect x="185" y="456" width="250" height="56" rx="3" style="fill:#191e22;stroke:#cf7a6d;stroke-width:.5"/>
+          <text x="310" y="476" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px" fill="#cf7a6d">激活：存在下载中参与者</text>
+          <text x="310" y="494" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">谓词同 :415 · 聚合警告（每对一次）</text>
+
+          <rect x="185" y="544" width="250" height="56" rx="3" style="fill:#191e22;stroke:#cf7a6d;stroke-width:.5"/>
+          <text x="310" y="564" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px" fill="#cf7a6d">去重门 → 暂停涉事下载方（D2）</text>
+          <text x="310" y="582" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">dry_run 止于警告 · torrents_stop 只传下载成员</text>
+
+          <rect x="520" y="456" width="176" height="56" rx="3" style="fill:#191e22;stroke:#82a873;stroke-width:.5"/>
+          <text x="608" y="476" text-anchor="middle" dominant-baseline="central" style="font-family:'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px" fill="#a8c795">消除循环</text>
+          <text x="608" y="494" text-anchor="middle" dominant-baseline="central" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">not in active → discard</text>
+
+          <line x1="310" y1="72" x2="310" y2="98" stroke="#6b7473" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="310" y1="160" x2="310" y2="186" stroke="#6b7473" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="310" y1="248" x2="310" y2="274" stroke="#6b7473" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="310" y1="336" x2="310" y2="362" stroke="#6b7473" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="310" y1="424" x2="310" y2="450" stroke="#6b7473" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="310" y1="512" x2="310" y2="538" stroke="#6b7473" stroke-width="1.5" marker-end="url(#ar)"/>
+          <line x1="435" y1="484" x2="514" y2="484" stroke="#6b7473" stroke-width="1.5" marker-end="url(#ar)"/>
+          <text x="465" y="474" text-anchor="middle" style="font-family:'JetBrains Mono',Consolas,monospace;font-size:10px" fill="#6b7473">每轮扫描时</text>
+        </svg>
+        <figcaption>去重门命中即整段跳过（不再警告也不再暂停）；消除循环与处置循环在同一方法内，风格对齐现有同组检查 :423-440。</figcaption>
+      </figure>
+
+      <h3>物理路径归一层（本检测私有的唯一新归一逻辑）</h3>
+      <ul class="plain">
+        <li><strong>目录部分解析别名</strong>：以组 key 首元（即 <code>path_normalize</code> 后的 save_path，归组键单一事实源）为输入，经 <code>file_access.get_file_access().realpath_lexical(...)</code> 解析 —— Local 实现 = <code>normcase(realpath(_strip_win_prefix(path)))</code>（file_access.py:210-211，junction/symlink 在此解析）；Mapped 实现 = 纯词法 <code>normcase(normpath(_norm_logical(path)))</code>（:339-340，D3 决策的「保守不误报」退化）。两个实现都<strong>不走映射表、不产生 UNDETERMINED / FileAccessError</strong>。每轮对每个<strong>不同 save_path 只解析一次</strong>（运行内 dict 缓存），syscall 次数 O(组数) 而非 O(文件数)。</li>
+        <li><strong>文件名部分只做词法折叠</strong>：物理键 = <code>os.path.normcase(os.path.normpath(os.path.join(目录解析结果, 相对路径)))</code> —— 大小写场景②由 normcase 折叠（Windows 生效，POSIX 恒等即不误报），不再对每个文件做 realpath。</li>
+        <li><strong>兜底</strong>：解析包 <code>try/except (OSError, ValueError)</code>，异常回退纯词法 <code>normcase+normpath</code> —— 畸形路径不得打断主循环，且词法回退方向是「少检出」，保守。</li>
+        <li><strong>不碰 path_normalize</strong>：上述全部逻辑收进检测自己的模块级纯函数（建议名 <code>_cross_physical_key</code>，落 grouping_mod.py），<code>utils.path_normalize</code> 一行不动。</li>
+      </ul>
+
+      <h3>数据复用与成本</h3>
+      <table>
+        <thead><tr><th>数据</th><th>来源</th><th>角色</th></tr></thead>
+        <tbody>
+          <tr><td><code>store.groups</code></td><td>store.py:87（内存驻留）</td><td>组 key → 成员 hash；组 key 首元即归一 save_path</td></tr>
+          <tr><td><code>store.group_sizes</code></td><td>store.py:88（首归组拉一次 files，惰性缓存）</td><td>组 key → hash → {规范相对路径: 大小}；展开的文件清单来源</td></tr>
+          <tr><td><code>store.by_hash</code></td><td>每轮快照</td><td>状态判定（<code>state_enum</code> + <code>amount_left</code>，谓词同 :415）与 <code>tags_set</code>（D3 豁免）</td></tr>
+          <tr><td><code>store.dirty_groups</code></td><td>store.py:82</td><td><strong>只读</strong>短路门（见下），消费单点仍是 <code>_check_download_conflicts</code>:392-396</td></tr>
+        </tbody>
+      </table>
+      <p><strong>扫描时机：独立于 dirty 增量走全量，但保留零变化短路。</strong>交叉常只有单侧脏（组 A 下载中、组 B 静止），按组增量会漏；故检测开启时每次扫描都全量展开（O(总文件数) 纯内存）。但 <code>dirty_groups</code> 恰好是状态/成员/归组/自有动作变化的完整登记 —— 增量轮次（<code>rounds_applied &gt; 0</code>）且 <code>dirty</code> 为空时，交叉事件集合与上轮逐字节相同，直接返回。静止种子库（做种为主）零成本；有下载活动的轮次才付 O(文件数) 的字符串字典构建成本。</p>
+      <p class="note"><b>插入位置敏感：必须在同组检查之前、且不消费 dirty。</b><code>_check_download_conflicts</code>:392-396 是 <code>dirty_groups</code> 的唯一消费点（读取 :392、取出即复位 :396）。跨组检测挂在 <code>_on_post</code>（:96-101）中 <code>_handle_save_path_changes</code> 之后、<code>_check_download_conflicts</code> 之前，对 dirty <strong>只读不复位</strong>，两套检查共用同一份变化登记，互不干扰。</p>
+
+      <h3>去重与消除（对齐现有模式）</h3>
+      <ul class="plain">
+        <li><strong>去重集合</strong>：<code>store.cross_group_conflict_warned: Set[Tuple[Any, Any]]</code>，元素为排序后的组对 <code>(key_a, key_b)</code>（按 <code>str(key)</code> 排序取规范序）。store.py:91 旁新增，注释沿用「软信号不落盘」口径。</li>
+        <li><strong>去重粒度取组对而非「组对+物理路径」</strong>：警告按组对聚合（路径列表展示前 3 处 + 「等 N 处」），整列表重叠时避免一次成百上千行警告；组对激活期覆盖其全部共享路径，处置语义等价。用户骨架提示过「key 含派生物理路径也可续用」，按防刷屏理由收窄为组对（调整理由见 S3 改法要点与汇报）。</li>
+        <li><strong>消除</strong>：每次扫描重建 active 组对集（非豁免且含下载中参与者），<code>list(warned)</code> 遍历，不在 active 的 <code>discard</code> —— 对齐 :424-426。下载方被暂停后状态转移，下轮组对失活、去重清除；用户手动恢复下载会再次触发（与同组 multi-dl/mixed 完全同语义，test_grouping.py:445-486 先例）。</li>
+        <li><strong>dry_run 语义</strong>：警告照发；<code>if dry_run: continue</code> 放在 <code>warned.add</code> <strong>之前</strong>、暂停之前 —— dry-run 不暂停、不记去重（严格对齐 :437-440 顺序）。</li>
+      </ul>
+    </section>
+
+    <section id="s05">
+      <p class="secnum">05</p>
+      <h2>分步实施 S1-S5</h2>
+
+      <p class="note"><b>S0 · 认领动作（开工前，不计步）。</b>①跑 <code>commands run my-commit-flow.sync</code> 同步；②<b>逐点复验本计划全部锚点行号</b>（取证 2026-10-04）—— 每个锚点给了符号名 + grep 关键词 + 行号，行号只是加速项；③在 issue 26-09-22-2221 状态变更日志补一行「复验：&lt;时间&gt; 仍复现」。</p>
+
+      <h3>S1 · 配置键全链路</h3>
+      <p><strong>目标</strong>：<code>grouping.cross_group_conflict_check</code>（bool，默认 false）从 YAML 到 dataclass 到 schema 到文档全链贯通，键面守卫绿。</p>
+      <table>
+        <thead><tr><th>文件</th><th>改动</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/auto_qb/config/models.py:175-184</code></td><td><code>GroupingConfig</code> 加字段 <code>cross_group_conflict_check: bool = False</code>（置于 <code>missing_tag</code> 之后），类 docstring 补一行语义说明（默认关，开启后检测跨组文件交叉）</td></tr>
+          <tr><td><code>src/auto_qb/config/validation/sections.py:15</code></td><td><code>KNOWN_GROUPING_KEYS</code> 加 <code>"cross_group_conflict_check"</code>（逐键枚举，防未知键静默丢弃）</td></tr>
+          <tr><td><code>src/auto_qb/config/validation/sections.py:347</code></td><td><code>_validate_grouping</code> 的 <code>for key in ("enabled", "check_missing_files")</code> 元组加 <code>"cross_group_conflict_check"</code>（走既有 <code>_try(parse_bool, ...)</code> 聚合报错）</td></tr>
+          <tr><td><code>src/auto_qb/config/schema/groups.py:278</code></td><td><code>Field("grouping", ...)</code> 的 <code>fields</code> 加 <code>Field("cross_group_conflict_check", "跨组文件交叉检查", "bool", default="false", grey_if=("enabled", "true"), help="开启后检测不同辅种组的文件指向同一磁盘物理文件（部分重叠/大小写/别名目录），警告并暂停涉事下载方；默认关闭")</code> —— 逐字对齐 <code>check_missing_files</code> 字段的写法（:285-292）</td></tr>
+          <tr><td><code>tests/fixtures/config_key_surface.txt</code></td><td>跑 <code>commands run test.keys-update</code> 重生成（纯新增键 = 非破坏变更，<strong>刻意不抬 config 版本</strong>，口径见 test_config_key_surface.py 模块 docstring）</td></tr>
+          <tr><td><code>memory-bank/config-reference/keys.md:25</code></td><td>grouping 行的键集说明加 <code>cross_group_conflict_check: false</code>（<code>test_keys_md_covers_key_surface</code> 会查文档回写）</td></tr>
+        </tbody>
+      </table>
+      <p><strong>验收标准</strong>：<code>commands run test.quick</code> 中 test_config_key_surface / test_config_schema 全绿；YAML 里写 <code>cross_group_conflict_check: true</code> 能进 dataclass，写 <code>"yes"</code> 之类非 bool 聚合报错。</p>
+      <p><strong>自带测试</strong>（tests/test_config_schema.py，:86 已有 <code>("grouping", KNOWN_GROUPING_KEYS)</code> 断言锚）：新增 ①缺省时 dataclass 默认 false；②合法 bool 通过；③非 bool 进 errors 聚合（对齐该文件既有 grouping 校验用例风格）。</p>
+
+      <h3>S2 · 检测核心（纯检测不处置）</h3>
+      <p><strong>目标</strong>：三场景的交叉事件能检出并 <code>logger.warning</code>，本步结束仅日志可见、可独立验证；不碰 store、不暂停。</p>
+      <table>
+        <thead><tr><th>文件</th><th>改动</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/auto_qb/core/modules/grouping_mod.py</code></td><td>①模块级纯函数 <code>_cross_physical_key(dir_resolved: str, rel_path: str) -&gt; str</code>（normcase+normpath+join）；②方法 <code>_check_cross_group_file_conflicts(self, dry_run: bool)</code>；③<code>_on_post</code>（:96-101）接线一行</td></tr>
+        </tbody>
+      </table>
+      <p><strong>改法要点</strong>：</p>
+      <ol class="plain">
+        <li><b>方法骨架</b>（建议签名 <code>def _check_cross_group_file_conflicts(self, dry_run: bool) -&gt; None:</code>，docstring 写明四步判定与 S3 将补的去重/处置）：
+<pre><code>def _check_cross_group_file_conflicts(self, dry_run: bool):
+    cfg = self._ctx.config.grouping
+    if not cfg.cross_group_conflict_check:
+        return
+    store = self._ctx.store
+    if store.rounds_applied &gt; 0 and not store.dirty_groups:
+        return  # 增量轮零变化: 事件集合与上轮一致(全量基线未建立时必跑)
+    # ... 全量展开 → 事件 → 豁免 → active → 警告(S3 在此补去重门/暂停/消除)</code></pre></li>
+        <li><b>全量展开</b>：<code>loc: Dict[str, List[Tuple[key, str]]] = {}</code>；遍历 <code>store.groups</code>，目录解析结果缓存 <code>dir_resolved: Dict[str, str]</code>（键 = 组 key 首元，值 = <code>fa.realpath_lexical(key[0])</code>，<code>fa = file_access.get_file_access()</code>，用法先例 grouping_mod.py:314；try/except (OSError, ValueError) 回退 <code>normcase+normpath</code>）；内层遍历 <code>store.group_sizes.get(key, {}).get(h, {})</code> 的相对路径，<code>phys = _cross_physical_key(dir_resolved, rel)</code>，append <code>(key, h)</code>。</li>
+        <li><b>事件与豁免</b>：按 <code>phys</code> 聚合后，取 distinct 组 key <code>&ge;2</code> 的事件；参与者 = 两侧组的全部成员（同组文件列表相同的分组定义推论）；任一参与者在 <code>store.by_hash</code> 中 <code>missing_tag in t.tags_set</code> → 豁免（<code>missing_tag = cfg.missing_tag</code>，对齐 :417 先例）。</li>
+        <li><b>状态判定</b>：下载中谓词逐字对齐 :415 —— <code>e.is_downloading and not e.is_stopped and not e.is_checking and t.amount_left &gt; 0</code>。</li>
+        <li><b>聚合警告</b>：按组对聚合（组对规范序 <code>tuple(sorted((ka, kb), key=str))</code>），一条 warning：<code>跨组文件交叉(N组) | 共享物理文件 M 处: 'path1' 等, 下载方: hash8[site] ..., 完成侧: ...</code> —— 风格对齐现有「辅种组(N个) | ...」前缀（:434/:436），路径展示截前 3 处。</li>
+        <li><b>接线</b>：<code>_on_post</code> 在 <code>self._handle_save_path_changes(dry_run)</code> 与 <code>self._check_download_conflicts(dry_run)</code> 之间插 <code>self._check_cross_group_file_conflicts(dry_run)</code>（理由见 §04 末 note）。</li>
+      </ol>
+      <p><strong>验收标准</strong>：FakeConfig 把开关打开 + 直注两组交叉数据 → caplog 捕获警告；开关关/缺省 → 零输出零开销；同组重叠（非跨组）不触发。</p>
+      <p><strong>自带测试</strong>（tests/test_grouping.py，直调 <code>mgr.host.get("grouping")._check_cross_group_file_conflicts(dry_run=False)</code>，rounds_applied=0 → 全量扫描；数据注入姿势对齐 :445-456 的 <code>mgr.store.groups/group_sizes/by_hash</code> 直注）：</p>
+      <table>
+        <thead><tr><th>#</th><th>用例</th><th>断言</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>场景①部分重叠：两组同 save_path、文件列表 [ep01,ep02] / [ep02,ep03]，B 下载中</td><td>caplog 有「跨组文件交叉」；消息含 ep02 物理路径</td></tr>
+          <tr><td>2</td><td>场景②大小写：两组文件名仅大小写不同（POSIX 下 normcase 恒等 = 两文件，断言不误报；Windows 行为另测，见 §06）</td><td>Linux/CI 上无警告（不误报）</td></tr>
+          <tr><td>3</td><td>场景③别名：Windows junction 用例（skipif 非 Windows，构造见 §06）</td><td>两 save_path 经 realpath_lexical 归同 → 有警告</td></tr>
+          <tr><td>4</td><td>MISSING 豁免：任一侧成员 tags 含 missing_tag</td><td>无警告</td></tr>
+          <tr><td>5</td><td>零变化短路：rounds_applied&gt;0 且 dirty 空</td><td>直调后无警告（提前返回）</td></tr>
+          <tr><td>6</td><td>开关关闭：FakeConfig 缺省</td><td>交叉数据在场仍无警告</td></tr>
+        </tbody>
+      </table>
+
+      <h3>S3 · 处置动作（暂停 + 去重 + 消除）</h3>
+      <p><strong>目标</strong>：警告升级为处置 —— 暂停涉事下载方、内存去重防重复、冲突消除清记录、reset_runtime 语义落地。</p>
+      <table>
+        <thead><tr><th>文件</th><th>改动</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/auto_qb/torrents/store.py:91</code> 旁</td><td>新增 <code>self.cross_group_conflict_warned: Set[Tuple[Any, Any]] = set()</code>，注释写明「软信号不落盘」+「热重载不清，理由见 reset_runtime」</td></tr>
+          <tr><td><code>src/auto_qb/torrents/store.py:423-441</code></td><td><code>reset_runtime</code> <strong>不加清除</strong>（决策见下），补一行注释说明该集合与 <code>download_conflict_warned</code> 同口径续用</td></tr>
+          <tr><td><code>src/auto_qb/core/modules/grouping_mod.py</code></td><td>S2 方法补三段：消除循环（对齐 :424-426）、去重门 + 暂停 + 登记（对齐 :428-440 的顺序）、S2 的警告循环改为经去重门</td></tr>
+        </tbody>
+      </table>
+      <p><strong>改法要点</strong>：</p>
+      <ol class="plain">
+        <li><b>reset_runtime 决策（显式落地）</b>：<b>不清</b> <code>cross_group_conflict_warned</code>。理由：去重 key 的两个组 key 是纯函数派生（grouping_mod.py:41-49 单一事实源），热重载重建分组索引后同数据派生同 key，旧条目语义仍成立；过期条目由每轮扫描的消除循环兜底丢弃；且现有 <code>download_conflict_warned</code> 同样不在 reset_runtime 清单（:426-433），先例一致。此决策必须写进 reset_runtime 注释，不许留成隐式行为。</li>
+        <li><b>消除</b>：active 组对集（含 S2 的豁免/下载中判定）算完后，<code>for pair in list(warned): if pair not in active: warned.discard(pair)</code>。</li>
+        <li><b>处置循环</b>（顺序严格对齐 :428-440）：
+<pre><code>for ka, kb, paths, dl_hashes in active:      # paths 供消息, dl_hashes = 涉事下载方
+    if (ka, kb) in warned:
+        continue                              # 冲突持续不重复警告/暂停(暂停幂等)
+    logger.warning(...)                        # 聚合消息(含路径与下载方)
+    if dry_run:
+        continue                              # dry-run 只报告: 不暂停、不记去重
+    warned.add((ka, kb))
+    self._ctx.api.torrents_stop(torrent_hashes=dl_hashes)</code></pre>
+        <code>dl_hashes</code> = 两侧组中满足下载中谓词的成员 hash（通常恰 1 个；双侧都在下载则都停）—— <strong>绝不传整组</strong>（D2）。已有 <code>warned.add</code> 在暂停<strong>之前</strong>、<code>dry_run: continue</code> 在 add <strong>之前</strong>。</li>
+        <li><b>真实链路注意</b>：<code>api.torrents_stop</code> 会经 <code>_sync_paused_state</code> 同 tick 改写 store 快照 —— 与现有同组暂停同一机制，无新增风险；测试侧必须 mock（见自带测试）。</li>
+      </ol>
+      <p><strong>验收标准</strong>：交叉在场 → 涉事下载方被暂停（mock 断言 hashes 精确）；持续不重复；下载方转暂停后消除清记录；重现再触发；dry-run 只警告。</p>
+      <p><strong>自带测试</strong>（tests/test_grouping.py，全部 <code>mock.patch.object(mgr.api, "torrents_stop")</code>——标准写法 test_grouping.py:461-466，注释口径「QbApi 的 stop 会同步 store 改写快照污染去重断言」）：在前 6 例基础上加：</p>
+      <table>
+        <thead><tr><th>#</th><th>用例</th><th>断言</th></tr></thead>
+        <tbody>
+          <tr><td>7</td><td>触发处置：两组交叉 + B 下载中</td><td>stop 调 1 次、<code>call_args.kwargs["torrent_hashes"] == [B_hash]</code>（不含完成侧）；<code>(ka, kb) in mgr.store.cross_group_conflict_warned</code>（断言风格对齐 :466）</td></tr>
+          <tr><td>8</td><td>持续不重复</td><td>再跑 stop 仍 1 次</td></tr>
+          <tr><td>9</td><td>消除清除 + 重现</td><td>B 转 pausedDL → 再跑 → warned 空且 stop 不增；B 恢复下载中 → 再跑 → stop 第 2 次（对齐 :445-486 的四段式）</td></tr>
+          <tr><td>10</td><td>做种侧不动</td><td>stop hashes 集合 == {下载方}，无完成/做种成员</td></tr>
+          <tr><td>11</td><td>dry_run</td><td>警告在（caplog）、stop 0 次、warned 仍空</td></tr>
+          <tr><td>12</td><td>reset_runtime 续用</td><td>触发后调 <code>mgr.store.reset_runtime()</code> → warned 不清（决策钉死，防后人顺手加 clear）</td></tr>
+          <tr><td>13</td><td>单侧脏仍检出</td><td>rounds_applied&gt;0、dirty 仅含组 A、交叉对象组 B 干净 → 仍警告+暂停（全量展开正确性）</td></tr>
+        </tbody>
+      </table>
+
+      <h3>S4 · Web 组视图提示（D4）</h3>
+      <p><strong>目标</strong>：分组视图行内可见跨组交叉标记，复用现有 risk-mark 视觉语言。</p>
+      <table>
+        <thead><tr><th>文件</th><th>改动</th></tr></thead>
+        <tbody>
+          <tr><td><code>src/auto_qb/webui/views.py:404</code> <code>_build_group_view</code></td><td>组装前先算 <code>cross_keys = {k for pair in self.store.cross_group_conflict_warned for k in pair}</code>；组字典加 <code>"cross_group_conflict": key in cross_keys</code>，注释对齐「派生值后端算」段（:446-452 风格）</td></tr>
+          <tr><td><code>src/auto_qb/core/modules/grouping_mod.py</code></td><td>处置循环中 warned 集合发生增或删时 <code>store.view_changed = True</code>（store.py:104 既有标记；防御性显式置脏 —— 正常情况下其输入均为 view 字段/组成员变化会自然置脏，此行兜底推导链断裂，先例 views.py:207-208 refresh_error_reasons）</td></tr>
+          <tr><td><code>src/auto_qb/webui/static/shared/tpl/groups.html</code>（name 单元格，约 :47-53）</td><td>sizeMismatch risk-mark 同款加：<code>&lt;span v-if="g.cross_group_conflict" class="risk-mark" title="与其他辅种组的文件指向同一磁盘物理文件 —— 涉事下载方已被暂停"&gt;&lt;svg class="ico ico-sm" viewBox="0 0 16 16"&gt;&lt;use href="#i-warn"&gt;&lt;/use&gt;&lt;/svg&gt;&lt;/span&gt;</code>（复用 #i-warn sprite 与 .risk-mark 样式，无新 CSS）</td></tr>
+          <tr><td><code>src/auto_qb/webui/static/shared/filters.js</code>（未归组虚拟组构造，约 :203-214）</td><td>字面量补默认 <code>cross_group_conflict: false</code>（单种子无组 key 恒 false，对齐同处 <code>sizeMismatch: false</code>:212）</td></tr>
+          <tr><td><code>src/auto_qb/webui/static/shared/decorate.js</code></td><td><strong>无改动</strong> —— decoratedGroups（:115-126）的 <code>...g</code> 透传即携带后端算好的布尔；不要在前端重复计算（「派生值后端算」约定）</td></tr>
+        </tbody>
+      </table>
+      <p><strong>验收标准</strong>：真机（或 test_web 假夹具）开启开关制造交叉 → 分组视图该组名称旁出现警告标记；冲突消除 → 标记随视图重建消失（<code>consume_view_changed</code> 读后复位链路，webui/runtime.py:350 —— :635 是重建发布点，不是消费点）。</p>
+      <p><strong>自带测试</strong>（tests/test_web.py，对齐 :73-78 既有 test_build_group_view 系列）：<code>test_build_group_view_cross_group_conflict_flag</code> —— warned 注入一对 → 该组视图字段为 true、他组为 false；warned 空 → 全 false；单种子/未归组视图无此字段污染。</p>
+
+      <h3>S5 · 集成验证与文档回写</h3>
+      <p><strong>目标</strong>：全量基线、issue 留痕、知识库回写，达收尾 DoD。</p>
+      <table>
+        <thead><tr><th>文件/动作</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>commands run test.full</code></td><td>全量基线（TMPDIR 已内置，别手工加前缀）；新建基线切片 <code>memory-bank/testing/baselines/26-10-04-&lt;HHMM&gt;</code>，记实测数字（口径见 testing/baseline.md；当前最近基线用 <code>commands run kb.baseline</code> 查）</td></tr>
+          <tr><td>issue 26-09-22-2221</td><td>状态变更日志补两行：认领时的「复验」行（S0）+ 修完行（实际修法 / 验证方式 / 测试数字；与本计划建议修法不同则保留建议原文并说明改道原因）</td></tr>
+          <tr><td><code>commands run kb.index</code></td><td>重建索引（本计划 HTML 登记进 plans/_index.md；若踩坑新增 pitfalls 条目一并收录）</td></tr>
+          <tr><td><code>memory-bank/</code> 回写</td><td>activeContext 切片（已完成条目迁出）；代码事实变更回写（若 docstring / 模块说明与实现产生出入）；可选真机走查：<code>commands run dev.run -- config.yml --dry-run</code> 验警告路径（dry-run 不暂停）</td></tr>
+        </tbody>
+      </table>
+      <p><strong>验收标准</strong>：test.full 全绿且数字入册；issue 状态变更日志完整；新键在 keys.md 有出处。</p>
+      <p><strong>自带测试</strong>：无新用例 —— 本步是基线与留痕；若 test.full 暴露回归，回到对应步修复后重跑。</p>
+    </section>
+
+    <section id="s06">
+      <p class="secnum">06</p>
+      <h2>测试纪律与平台用例</h2>
+
+      <ul class="plain">
+        <li><strong>docstring「## 测试计划」清单同步</strong>：tests/test_grouping.py 头部逐测试列条目（:1-60 样例），S2/S3 新增的 13 个用例必须同步登记；test_web.py:73-78 同理（AGENTS.md 硬要求，机械守卫会查）。</li>
+        <li><strong>Windows 大小写用例在 Linux CI 上 normcase 恒等</strong>：拆成两条分开断言 —— POSIX 侧断言「大小写不同的两个文件名<strong>不</strong>构成交叉」（不误报，全平台可跑）；Windows 侧真检出行为用 <code>@pytest.mark.skipif(os.name != "nt", reason="大小写折叠仅在 Windows 生效")</code> 标记。不要在期望值里手工模拟 normcase 行为。</li>
+        <li><strong>junction 用例</strong>：同样 skipif 非 Windows；临时目录内用 <code>_winapi.CreateJunction(target, link)</code>（CPython 标准库内部 API，无需管理员权限，CPython 测试套同款）造 junction，把两组的 save_path 分别指向真身与链接。symlink 目录变体在 Windows 上需要开发者模式，junction 覆盖同一解析路径即可，不测 symlink。</li>
+        <li><strong>暂停断言一律 mock <code>torrents_stop</code></strong>：真实 stop 经 <code>_sync_paused_state</code> 同 tick 改写 <code>by_hash</code> 快照，会把「下载中」谓词打掉、污染去重断言（test_grouping.py:461-466 注释原文）。</li>
+        <li><strong>测试数据注入姿势</strong>：白盒直注 <code>mgr.store.groups / group_sizes / by_hash / member_to_key</code>（对齐 :451-456）；需要 group_sizes 含真实文件清单 —— S2 场景①要给两组各自 hash 填 <code>{"ep01.mkv": 100, ...}</code> 形状的字典（跨组检测的展开源就是它，空字典 = 无文件 = 检不出）。</li>
+      </ul>
+    </section>
+
+    <section id="s07">
+      <p class="secnum">07</p>
+      <h2>风险与回退</h2>
+
+      <h3>七条已知坑与对策（每条都有测试或 grep 钉住）</h3>
+      <table>
+        <thead><tr><th>#</th><th>坑</th><th>对策与钉子</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><b>误改 <code>path_normalize</code></b> —— 它是分组键单一事实源（grouping_mod.py:49、scripts/qb_capture.py import、match_path_patterns utils.py:491、fs 校验共用），加大小写折叠/realpath 会全局改变归组语义</td>
+            <td>归一逻辑全部收进检测私有的 <code>_cross_physical_key</code> 与目录解析缓存；实施后 <code>git diff src/auto_qb/infra/utils.py</code> 必须为空；既有 test_grouping 全量绿 = 分组语义未漂移的回归证明</td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><b>按 dirty 增量做跨组检测会漏</b> —— 交叉常只有单侧脏</td>
+            <td>全量展开（D 决策）；仅保留「<code>rounds_applied&gt;0 且 dirty 空</code>」零变化短路（事件集合逐字节相同，正确性无损）；<b>只读不复位 dirty</b>，消费单点仍是 :396（取出即复位） —— 挂载点选在 <code>_check_download_conflicts</code> 之前（S2 改法要点 6）；测试 13 钉单侧脏场景</td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><b>reset_runtime 清不清去重集合没有显式决策</b> —— 热重载后行为不可预期</td>
+            <td>已显式决策：<b>不清</b>（组 key 与警告语义在重建后仍成立，消除循环兜底过期条目，对齐 download_conflict_warned 先例 :426-433）；决策写进 reset_runtime 注释；测试 12 钉死，防后人顺手加 clear</td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><b>dry_run 顺序错误</b> —— 若 <code>warned.add</code> 在 dry-run 分支前执行，dry-run 会「记了去重但不处置」，下次真实执行被去重吞掉</td>
+            <td>顺序逐字对齐 :437-440：警告 → <code>if dry_run: continue</code> → <code>warned.add</code> → 暂停；测试 11 钉「警告在、stop 0 次、warned 空」</td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><b>Windows 大小写用例在 Linux CI 上失效</b> —— normcase 在 POSIX 恒等，硬断言会假红或假绿</td>
+            <td>拆 POSIX 不误报断言（全平台）+ Windows 真检出断言（skipif os.name），见 §06；junction 用例同样平台标记</td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td><b>触盘 / 引入 UNDETERMINED 三态分支</b> —— Mapped 部署下 exists 类调用会撞映射 miss，词法检测被三态语义复杂化</td>
+            <td>检测零触盘：只用 <code>realpath_lexical</code>（两实现 file_access.py:210-211 / :339-340 都不走映射表、不产生 UNDETERMINED / FileAccessError）与纯字符串运算；目录级解析带 try/except 兜底词法；Mapped 部署别名交叉漏报是已知且被接受的保守退化（D1），写进 §08 边界</td>
+          </tr>
+          <tr>
+            <td>7</td>
+            <td><b><code>_sync_paused_state</code> 同 tick 改写 store 状态</b> —— 真实 stop 会让测试快照失真、去重断言污染</td>
+            <td>测试一律 <code>mock.patch.object(mgr.api, "torrents_stop")</code>（:461-466 标准写法）；生产链路与现有同组暂停共用同一校准机制（下轮 refresh 对齐），无新增风险</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>性能风险</h3>
+      <p>全量展开成本 = O(总文件数) 字符串运算 + O(组数) 次 realpath 系统调用（目录级 + 运行内缓存）。仅在「开关开启 且（首轮 或 dirty 非空）」的轮次支付；静止种子库零成本。若超大库（数十万文件级）实测单轮展开超预算，降级路径是给短路门加粗粒度指纹（组数/成员数/文件数三元组缓存）——<strong>本期不做</strong>，先实测（S5 基线数字）再议。</p>
+
+      <h3>回退方案</h3>
+      <ol class="plain">
+        <li><b>运行期一键回退</b>：<code>cross_group_conflict_check</code> 默认 false，配置关掉（或删掉该键）= 整条检测链旁路，行为与今天一致；去重集合是纯内存字段不进 state_file，回退零状态残留。</li>
+        <li><b>代码级回退</b>：S2/S3 全部改动收在 grouping_mod.py 新增方法 + <code>_on_post</code> 一行接线 + store.py 一个字段；S4 是 views 一个字段 + 前端一处 span。按步分批提交，单步 revert 即可，互不牵连。</li>
+        <li><b>配置面回退</b>：删键需同步移除 models / sections（KNOWN_GROUPING_KEYS + 校验元组）/ schema Field 三处，重跑 <code>commands run test.keys-update</code> 并回写 keys.md —— 非破坏删键，无需抬版本。</li>
+      </ol>
+    </section>
+
+    <section id="s08">
+      <p class="secnum">08</p>
+      <h2>边界：本期不做</h2>
+      <ul class="plain">
+        <li><strong>不暂停整组、不加独立标签</strong> —— 处置粒度已拍板为仅涉事下载方（D2）；若未来要标签，复用 MISSING 语义讨论，不另造。</li>
+        <li><strong>Mapped/Docker 部署不解析别名交叉</strong> —— D1 明确词法退化保守不误报；漏报方向已知且被接受，文档（keys.md help 文案）写明。</li>
+        <li><strong>文件级符号链接不做逐文件 realpath</strong> —— 别名解析只做目录级（O(组数) syscall）；下载目录内部单文件级 junction/symlink 属奇异场景，记为已知限制。</li>
+        <li><strong>不做大小比较/内容比对</strong> —— 同物理路径即交叉，不比对 size 区分「内容完全相同的重复辅种」；该场景伴随的重复下载问题另行立项。</li>
+        <li><strong>不做成员弹层/种子详情页的交叉展示</strong> —— 本期只做分组视图行内标记（D4 字面范围）。</li>
+        <li><strong>不碰同组检查与缺文件扫描</strong> —— 三条既有防线的语义与增量机制原样保留，跨组检测是并列新增，不重构。</li>
+      </ul>
+    </section>
+
+    <div class="colophon">
+      <span>auto-qb · memory-bank/plans · doc-topic: cross-group-file-conflict</span>
+      <span>状态 Open · 待认领 · 锚点取证 2026-10-04</span>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>
