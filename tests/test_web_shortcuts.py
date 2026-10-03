@@ -50,6 +50,10 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   _switchDrawerTarget 换目标走 FX-29 软切换(不清空旧数据, switching 遮罩防串显 + 按 tab 的
   待到集合全到手才落定); open/close 作废在途跟随定时器; 头部标题走 drawerTitle(memberByHash
   名优先, 不等详情); 详情加载空态只归常规页签; 三皮肤 CSS 成对(switching 遮罩 + 加载胶囊)
+- test_drawer_follow_mouse_click: 鼠标路径接 §1.3 预留的同一跟随挂点 —— 种子行**普通单击**走
+  _kbFollowDrawer(面板开则换目标, 200ms 防抖与 page/kind 守卫全在挂点内); Ctrl/Shift 是选择
+  手势不跟随(圈选 N 行不该让面板逐行翻); 单击**不得开面板**(开面板仍归双击 / Enter / 右键
+  「详情」—— 点一下就弹出 42vh 面板压掉列表, 与「列表当前行必须看得清」冲突)
 - test_drawer_height_collapse_w3: 方案A W3(计划 26-10-03-0917 §2.1/§3.5/D1) —— 顶缘 grip 拖拽调高
   (pointer capture + preventDefault + 夹取 [240px, 70vh] 收口 _drawerClampHeight 纯逻辑单点,
   松手才落盘); 持久化 autoqb.ui.drawerHeight / autoqb.ui.drawerOpen 与 drawerTab 同族(try/catch);
@@ -566,6 +570,28 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert drawer_js.count("this._stopDrawerFollow();") >= 2, "openTorrentDrawer 与 closeDrawer 都必须作废在途跟随定时器"
     # Delete 直连的 list 作用域守卫仍成立(停靠面板下 scope=list, Delete 可用 —— §2.2 矩阵)
     assert 'this._kbScope() === "list"' in eng, "Delete 直连必须保留 list 作用域守卫(面板开着 scope 仍为 list)"
+
+
+def test_drawer_follow_mouse_click() -> None:
+    """鼠标路径接跟随挂点(计划 26-10-03-0917 §1.3 相邻预留): 种子行普通单击与键盘共用
+    _kbFollowDrawer 同一挂点 —— 面板开着点哪行换哪行; 面板关着不打开; 修饰键点击不跟随"""
+    sel = _read("selection.js")
+    m = re.search(r"onTorrentClick\(m, event\) \{(.*?)\n    \},", sel, re.S)
+    assert m, "selection.js 找不到 onTorrentClick(单击入口被改名/搬走? 同步本守阵)"
+    body = m.group(1)
+    assert "this._kbFollowDrawer();" in body, ("种子行单击未接跟随挂点 —— 面板开着点另一行不换目标(键盘 ↑↓ 跟随、鼠标不跟随 = 两条输入没接同一行状态)")
+    at = body.index("this._kbFollowDrawer()")
+    assert at > body.index("event.ctrlKey") and at > body.index("this.shiftTorrentSel(m)"), (
+        "跟随必须写在两个修饰键分支之后(Ctrl/Shift 是选择手势, 圈选 N 行不该让面板逐行翻)"
+    )
+    assert "openTorrentDrawer" not in body, (
+        "单击不得开面板 —— 点一下就弹出 42vh 面板压掉列表, 与「列表当前行必须看得清」硬约束冲突; 开面板仍归双击 / Enter / 右键「详情」"
+    )
+    # 挂点自带守卫: 面板关着/收起态单击零副作用(不拉数据, 也不偷偷把面板打开)
+    follow = re.search(r"_kbFollowDrawer\(\) \{(.*?)\n    \},", _read("drawer.js"), re.S)
+    assert follow and "if (!this.drawer.open) return;" in follow.group(1), ("_kbFollowDrawer 首守卫必须挡面板关闭态(单击只在面板已开时换目标)")
+    tpl = (SHARED / "tpl" / "torrents.html").read_text(encoding="utf-8")
+    assert '@dblclick="openTorrentDrawer(m.hash)"' in tpl, "双击开面板入口掉了(单击只跟随, 开面板仍归双击)"
 
 
 def test_drawer_height_collapse_w3() -> None:

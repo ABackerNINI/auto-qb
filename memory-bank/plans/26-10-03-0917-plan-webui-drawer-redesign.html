@@ -155,7 +155,11 @@
     <li><strong>含</strong>: 抽屉模板与三皮肤 drawer 族重排、打开/关闭语义、scope 派发与键位调整、详情跟随光标、面板高度治理、回归验证与收尾回写。</li>
     <li><strong>不含</strong>: 报告波 1 的 C 式 <code>drawer-cursor-up/down</code> 动作 (方案A下无此需求, 见 1.2); 报告波 3 的遮罩降档 (被 W1 结构性取代, D4); 报告波 4 的常规页信息密度<strong>重做</strong> (降级为 W3 复检项, FX-22 分组卡片与长文本截断改进原样保留)。</li>
     <li><strong>不回退</strong>: 页签记忆 (<code>drawerLastTab</code> + localStorage)、FX-22 常规页分组卡片化、<code>.f-row .v</code> line-clamp 截断族、trackers/peers 激活期轮询 —— 全部是重设计的保留输入。</li>
-    <li><strong>相邻预留</strong>: 池内 <span class="path">26-10-01-2108-feat-webui-selection-follow-mouse</span> (选中跟随鼠标) 与本计划的「光标行状态」是同一行状态的两套输入; W2 的跟随挂点做成单点入口, 鼠标路径将来接同一挂点即可零成本合流 —— 本计划不接鼠标路径 (范围守恒)。</li>
+    <li><strong>相邻预留</strong>: 池内 <span class="path">26-10-01-2108-feat-webui-selection-follow-mouse</span> (选中跟随鼠标) 与本计划的「光标行状态」是同一行状态的两套输入; W2 的跟随挂点做成单点入口, 鼠标路径将来接同一挂点即可零成本合流 —— 本计划不接鼠标路径 (范围守恒)。
+      <em>2026-10-03 已接</em>: 用户报「鼠标单击种子无法切换详情抽屉」, 鼠标路径按预留接进同一挂点
+      (<code>selection.js::onTorrentClick</code> 普通单击分支末尾调 <code>_kbFollowDrawer()</code>, 防抖/守卫/软切换全复用);
+      面板关着不打开、Ctrl/Shift 选择手势不跟随两条边界见守阵
+      <span class="path">tests/test_web_shortcuts.py::test_drawer_follow_mouse_click</span>。</li>
   </ul>
 </section>
 

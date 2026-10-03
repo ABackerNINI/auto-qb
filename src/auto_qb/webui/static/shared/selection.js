@@ -144,7 +144,13 @@ window.AQB_SELECTION = {
       if (!head) return;
       head.style.transform = `translateX(${-ev.target.scrollLeft}px)`;
     },
-    /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围); 普通点击不选中 */
+    /* 单种子行点击: 修饰键语义与明细行一致(Ctrl 切换 / Shift 平铺范围); 普通点击不选中。
+     * 另接详情面板跟随(计划 26-10-03-0917 §1.3 相邻预留的鼠标路径): 普通单击与键盘共用
+     * _kbFollowDrawer 同一个挂点, 面板开着点哪行面板就换到哪行 —— 此前只有键盘 ↑↓ 会跟随,
+     * 鼠标点了半天面板纹丝不动(割裂感与报告 26-09-30-1806 同源: 两条输入没接同一行状态)。
+     * 两条边界: ① 面板关着**不打开**(开面板仍归双击 / Enter / 右键「详情」, 点一下就弹出
+     * 42vh 面板压掉列表, 与「用户硬约束: 列表当前行必须看得清」冲突) —— 挂点自己首行即守卫;
+     * ② Ctrl / Shift 点击是**选择手势**不是「看这一行」, 不跟随(批量圈选 N 行不该让面板逐行翻)。 */
     onTorrentClick(m, event) {
       this.kbCursor = { kind: "torrent", id: m.hash };  // 点击落光标(≠ 选中, 方案 B 键鼠衔接)
       // 点击落起点(平铺种子行); Shift 不重置起点(法则 2)
@@ -154,7 +160,11 @@ window.AQB_SELECTION = {
         this.toggleMemberSel(m);
         return;
       }
-      if (event.shiftKey) this.shiftTorrentSel(m);
+      if (event.shiftKey) {
+        this.shiftTorrentSel(m);
+        return;
+      }
+      this._kbFollowDrawer();  // 普通单击: 面板开则跟随换目标(防抖 200ms / 守卫全在挂点内)
     },
     shiftTorrentSel(m) {
       this.selGroups = [];  // FX-11: 同 toggleMemberSel
