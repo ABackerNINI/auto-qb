@@ -81,6 +81,13 @@
             <span class="hb-sw-text">{{ boolValue() ? '启用' : '关闭' }}</span>
           </label>
 
+          <!-- 「跟随全局」按钮(方案 B 阶段3): 站点页回退链键且站点键已存在时出现, 点击删站点键 =
+               恢复继承(git --unset 同构, cfgSetBool 恒写 true/false 行为不变); 全局页/非链上键
+               canFollowGlobal 恒 false, 本钮不渲染 -->
+          <button v-if="f.kind === 'bool' && canFollowGlobal()" class="hb-btn ghost sm"
+                  title="移除本站点的覆盖设置, 恢复跟随全局(保存后生效)"
+                  @click="followGlobal()">跟随全局</button>
+
           <select v-else-if="f.kind === 'enum'" class="hb-select" :class="ce.hubToneOf(item)"
                   :value="textValue()" :disabled="readonly" @change="set($event.target.value)">
             <option v-if="!f.required" value="">(未配置)</option>
@@ -135,19 +142,31 @@
                    :placeholder="sitePlaceholder()" :min="f.min" :max="f.max" :disabled="readonly"
                    @input="set($event.target.value)">
             <span v-if="f.unit" class="hb-dim">{{ f.unit }}</span>
+            <!-- 「跟随全局」按钮(方案 B 阶段3, tri_state str 键): 清空输入框保存 = 覆盖为空(写 ''),
+                 本钮才是删键跟随全局 —— 两个动作语义不同, 互不替代 -->
+            <button v-if="canFollowGlobal()" class="hb-btn ghost sm"
+                    title="移除本站点的覆盖设置, 恢复跟随全局(保存后生效)"
+                    @click="followGlobal()">跟随全局</button>
           </template>
 
           <button v-if="f.kind === 'expr'" class="hb-btn ghost sm" @click="ce.cfgExprTry(path)">试算</button>
 
           <!-- 布尔型从属项: 父字段的内联额外开关(比单独占一张子卡更符合从属语义);
-               来源徽标同常规行(siteBadge(inl.path)), 站点页 hr 段的 overwrite 族在此显示 -->
-          <label v-for="inl in item.inline" :key="inl.field.key" class="hb-switch"
-                 :title="inl.field.risk || inl.field.help || ''">
-            <input type="checkbox" :checked="inlineValue(inl)" @change="setInline(inl, $event.target.checked)">
-            <span class="hb-sw-track"></span>
-            <span class="hb-sw-text">{{ inl.field.label }}</span>
-            <span v-if="siteBadge(inl.path)" class="hb-badge" :class="{ on: siteBadge(inl.path) === '站点' }">{{ siteBadge(inl.path) }}</span>
-          </label>
+               来源徽标同常规行(siteBadge(inl.path)), 站点页 hr 段的 overwrite 族在此显示。
+               tooltip 把 risk 与 help 并接(原 risk || help 会让 help 永不可见 —— 阶段3 给
+               overwrite 族的 help 写了三态措辞, 得让它露出来); 规则页插件 spec 的 inline
+               无 help, 并接后文本不变。「跟随全局」小钮放 label 外(放进 label 会连点开关) -->
+          <template v-for="inl in item.inline" :key="inl.field.key">
+            <label class="hb-switch" :title="[inl.field.risk, inl.field.help].filter(Boolean).join(' ')">
+              <input type="checkbox" :checked="inlineValue(inl)" @change="setInline(inl, $event.target.checked)">
+              <span class="hb-sw-track"></span>
+              <span class="hb-sw-text">{{ inl.field.label }}</span>
+              <span v-if="siteBadge(inl.path)" class="hb-badge" :class="{ on: siteBadge(inl.path) === '站点' }">{{ siteBadge(inl.path) }}</span>
+            </label>
+            <button v-if="canFollowGlobal(inl.path)" class="hb-btn ghost sm"
+                    title="移除本站点的覆盖设置, 恢复跟随全局(保存后生效)"
+                    @click="followGlobal(inl.path, inl.field.label)">跟随全局</button>
+          </template>
         </div>
 
         <button class="hb-ask" :class="[ce.hubToneOf(item), { on: ce.hub.helpKey === ce.hubKey(path) }]"

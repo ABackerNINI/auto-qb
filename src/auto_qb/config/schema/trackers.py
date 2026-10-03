@@ -16,7 +16,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         default="",
         tri_state=True,
         help="进入 HR 管理(下载量/比例达条件)但还没达标时给种子打的标签; 支持 ${required_seeding_time} 变量; 留空 = 不打标。"
-        "站点段里显式留空(空串)= 本站不打标(覆盖全局), 整键删除 = 跟随全局"
+        "站点页里清空并保存 = 本站不打标(覆盖全局); 点「跟随全局」= 移除站点覆盖, 回退全局配置"
     ),
     Field(
         "add_category",
@@ -25,7 +25,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         default="",
         tri_state=True,
         help="同上, 但设置的是分类(一个种子只能有一个分类); 留空 = 不设置。"
-        "站点段里显式留空(空串)= 本站不设置(覆盖全局), 整键删除 = 跟随全局",
+        "站点页里清空并保存 = 本站不设置(覆盖全局); 点「跟随全局」= 移除站点覆盖, 回退全局配置",
     ),
     Field(
         "overwrite_category",
@@ -33,6 +33,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "bool",
         default="false",
         group_of="add_category",
+        help="站点页里: 开关 = 站点显式开/关(仍覆盖全局), 点「跟随全局」= 移除站点覆盖, 回退全局配置",
         risk="开启后会覆盖人工设置的分类; 关闭时仅覆盖本程序上次自动设置的分类",
     ),
     Field(
@@ -42,7 +43,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         default="",
         tri_state=True,
         help="HR 达标(做满要求+额外时长, 或分享率达标)后打的标签, 相当于「HR 已完成」标记; 留空 = 不再打标; 已打上的标签程序不会自动摘除。"
-        "站点段里显式留空(空串)= 本站不再打标(覆盖全局), 整键删除 = 跟随全局",
+        "站点页里清空并保存 = 本站不再打标(覆盖全局); 点「跟随全局」= 移除站点覆盖, 回退全局配置",
     ),
     Field(
         "add_category_for_satisfied",
@@ -51,7 +52,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         default="",
         tri_state=True,
         help="达标分支设置的分类; 留空 = 不设置。"
-        "站点段里显式留空(空串)= 本站不设置(覆盖全局), 整键删除 = 跟随全局",
+        "站点页里清空并保存 = 本站不设置(覆盖全局); 点「跟随全局」= 移除站点覆盖, 回退全局配置",
     ),
     Field(
         "overwrite_category_for_satisfied",
@@ -59,6 +60,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "bool",
         default="false",
         group_of="add_category_for_satisfied",
+        help="站点页里: 开关 = 站点显式开/关(仍覆盖全局), 点「跟随全局」= 移除站点覆盖, 回退全局配置",
         risk="开启后会覆盖人工设置的分类",
     ),
     Field(
@@ -68,7 +70,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         default=[],
         risk="命中任一格式的种子会整个退出 HR 体系: 不打 HR 标签/分类、不参与在线核实判定、规则一律按未触发 —— 若种子实际仍在考核期将漏管",
         help="命中任一格式的种子不纳入 HR 管理; 支持 regex:/ 前缀与 :ignore_case 后缀(可组合), 例: noHR / 'regex:^skip.?hr:ignore_case'。"
-        "与「HR 全局默认」里的同名配置取并集(两边都生效); 判定时现算 —— 在 qB 里加/删标签, 下一轮即生效或恢复管束。留空 = 不排除",
+        "与「HR 全局默认」里的同名配置取并集(两边都生效), 站点页里清空 = 只用全局的排除表; 判定时现算 —— 在 qB 里加/删标签, 下一轮即生效或恢复管束。留空 = 不排除",
     ),
     Field(
         "exclude_categories",
@@ -76,7 +78,7 @@ HR_OUTPUT_FIELDS: Tuple[Field, ...] = (
         "pattern_list",
         default=[],
         risk="命中任一格式的分类会把该种子整个排除出 HR 体系(同「排除标签」的漏管风险)",
-        help="种子分类命中任一格式即排除出 HR 管理; 支持 regex:/ 前缀与 :ignore_case 后缀。与「HR 全局默认」里的同名配置取并集; 留空 = 不排除",
+        help="种子分类命中任一格式即排除出 HR 管理; 支持 regex:/ 前缀与 :ignore_case 后缀。与「HR 全局默认」里的同名配置取并集(两边都生效), 站点页里清空 = 只用全局的排除表; 留空 = 不排除",
     ),
 )
 
@@ -169,6 +171,7 @@ TRACKER_FIELDS: Tuple[Field, ...] = (
         "删除类似标签",
         "bool",
         default="false",
-        help="未配置时回退全局「删除类似标签」的值; 自动清理仅大小写不同的重复标签",
+        help="未配置时回退全局「删除类似标签」的值; 自动清理仅大小写不同的重复标签。"
+        "站点页里: 开关 = 站点显式开/关(仍覆盖全局), 点「跟随全局」= 移除站点覆盖, 回退全局配置",
     ),
 )

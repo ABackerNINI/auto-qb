@@ -378,7 +378,8 @@ window.CONFIG_EDITOR = {
       }
       if (node && typeof node === "object") delete node[path[path.length - 1]];
     },
-    /* 恢复字段为默认(移除该键, 让后端走默认值) */
+    /* 恢复字段为默认(移除该键, 让后端走回退链/默认值)
+     * 消费者: CE_FIELD_BASE.followGlobal(方案 B 阶段3「跟随全局」按钮) —— 阶段2 前是死代码, 至此接线 */
     cfgResetField(path) {
       this.cfgDelPath(path);
     },
@@ -1286,6 +1287,33 @@ window.CE_FIELD_BASE = {
       if (!gp) return ph;
       if (this.ce.cfgInputValue(this.f, this.path) !== "") return ph;
       return this.ce.cfgText(gp, "") || ph;
+    },
+    /* 「跟随全局」按钮可见性(方案 B 阶段3): 仅站点页回退链键且站点键**已存在**时显示 ——
+     * 键不存在时本就跟随全局, 无事可做; 全局页 / 非链上键 / 规则页插件 spec
+     * (cfgSiteFallbackPath 返回 null)一律 false。tri_state 键的 '' 也算存在(cfgExists 按树节点判)。 */
+    canFollowGlobal(path) {
+      const p = path || this.path;
+      return !!(this.ce.cfgSiteFallbackPath(p) && this.ce.cfgExists(p));
+    },
+    /* 点「跟随全局」= 删站点覆盖键(report 26-10-03-0504 方案 B: 与 git --unset / VS Code Reset
+     * 同构; cfgResetField/cfgDelPath 由此接线)。删键可逆性弱(保存后 str 值得重输 / bool 得重拨),
+     * 按仓库破坏性动作惯例弹 confirmDialog(danger); 确认后删键 + toast 提醒「保存后生效」——
+     * 删的只是内存树, 徽标与回填由响应式树实时翻成「全局」(阶段2 已保证), 无需额外交线。
+     * WARN: 本方法跑在 hub-field 组件实例上, confirmDialog/toast/modal 都在**根实例** ——
+     *   必须经 this.ce 调(直接 this.confirmDialog 会在 _openModal 读 this.modal 时炸,
+     *   嵌套组件没有根的 data; config_hub.js 顶层模板里 this.confirmDialog 能用是因为那里 this=根)。 */
+    async followGlobal(path, label) {
+      const p = path || this.path;
+      if (!this.canFollowGlobal(p)) return;
+      const name = label || this.f.label;
+      const ok = await this.ce.confirmDialog(
+        `「${name}」恢复跟随全局`,
+        "将删除本站点对这项的覆盖设置, 生效值回退为全局配置; 保存后写入磁盘。",
+        { okText: "跟随全局", danger: true }
+      );
+      if (!ok) return;
+      this.ce.cfgResetField(p);
+      this.ce.toast(`已移除「${name}」的站点覆盖, 保存后跟随全局配置`, "ok", 3500);
     },
     set(value) {
       this.ce.cfgSetPath(this.path, value);
