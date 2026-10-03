@@ -8,7 +8,7 @@
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="ci-no-windows-runner">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵">
 <meta name="issue-summary" content="pitfalls 已载平台差异史; 托盘/注册表自启/WinRT 通知等 Windows 专属路径只有手动跑测试才被执行">
 <title>CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵 · chore · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-21-1408-chore-ci-no-windows-runner</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-21 14:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -95,6 +95,16 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-09-21 14:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-04 06:33 — 用户显式认领；修完置 <strong>Done</strong>（实际修法 / 验证方式见「05 修复后补充」）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>修复后补充（2026-10-04）</h2>
+    <ul>
+      <li>实际修法: <code>.github/workflows/ci.yml</code> 新增 <code>test-windows</code> job（<code>windows-latest</code>，python 3.12/3.13 矩阵，fail-fast false），步骤复用 ubuntu job（checkout / 固定 SHA 的 setup-uv / setup-python / 依赖同步 / 全量 pytest）；不上传 coverage（Windows 侧先只做通过性验证），原 artifact 改名 <code>coverage-ubuntu-&lt;py&gt;</code> 防撞名。提交 <code>a4d7d456</code>。</li>
+      <li>与建议的差异: 未加 skipif —— 26-10-04 的 Linux 连红修复（任务档案 <code>26-10-04-test-ci-platform</code>）已让全部用例两平台同跑，Windows 侧本机全量 2442 passed + 4 skipped / 99%，无需跳过；coverage 上传暂不搬到 Windows job。</li>
+      <li>验证方式: 本机（Windows）<code>commands run test.full</code> = 2442 passed + 4 skipped / 99% / 32.57s（基线切片 26-10-04-0630）；Python 3.13 on Windows runner 与 uv/pytest 平台行为以首次 GitHub Actions 运行为准。</li>
     </ul>
   </section>
 

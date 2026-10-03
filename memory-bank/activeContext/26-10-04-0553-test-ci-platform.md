@@ -36,7 +36,7 @@
   job(3.12/3.13 矩阵)复用 ubuntu job 全部步骤, coverage artifact 改名 `coverage-ubuntu-<py>`
   防撞名; 本地(Windows)基线 2442 passed + 4 skipped / 99%(基线 26-10-04-0630)。知识库既有
   issue [26-09-21-1408](../issues/26-09-21-1408-chore-ci-no-windows-runner.html)
-  (chore-ci-no-windows-runner, Open)主体即本改动 —— 置 Done 需用户显式确认认领。
+  (chore-ci-no-windows-runner)经用户显式认领后置 Done(§05 修复后补充), 索引已重建。
 
 ## 未验证面
 

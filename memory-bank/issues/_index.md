@@ -20,7 +20,7 @@
 | test | 1 |
 | refactor | 4 |
 | feat | 16 |
-| chore | 3 |
+| chore | 2 |
 | question | 4 |
 
 ## Open
@@ -61,7 +61,6 @@
 - [docs] [插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免](26-09-28-1946-docs-config-plugin-spec-docs.html) — conditions/actions 插件名之下的 spec 键在 keys.md 与 rule-system/conditions-and-actions.md 均无逐键覆盖, test_config_key_surface 出处检查对该层豁免(权威单点=schema 插件表)
 - [feat] [重新设计单种周期上传/下载量统计 (upload_size 四条件 + begin_round 底座已移除)](26-09-27-1248-feat-stats-redesign-torrent-traffic.html) — upload_size/today/week/month 四条件与 begin_round/upload_delta/upload_snapshots 统计底座已随计划 26-09-27-1232 暂时移除; 待重新设计: 补下载量口径或改 global_* 全局口径
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
-- [chore] [CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵](26-09-21-1408-chore-ci-no-windows-runner.html) — pitfalls 已载平台差异史; 托盘/注册表自启/WinRT 通知等 Windows 专属路径只有手动跑测试才被执行
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
 - [perf] [大库下四视图全量重建是单轮成本大头, 追剧视图聚合最重](26-09-21-1408-perf-webui-shows-view-full-rebuild.html) — P2: 5000 种子单轮 ~550ms(项目实测); 轮询分档已缓解, 剩余痛点在 shows 全量聚合与前端全量重算
 - [refactor] [类型注解完整覆盖仅 43%, 无 mypy/pyright 配置](26-09-21-1408-refactor-type-annotations-mypy.html) — 749 个 def: 完整 43%/部分 41%/无 16%(AST 实测); 建议渐进接入, 先 torrents/config 后 mixins/web
@@ -123,6 +122,7 @@
 - [bug] [WebUI 鉴权面三个低危加固点: SSE token 查询串 / config-public 暴露 / proxy_headers](26-09-21-1408-bug-web-auth-hardening-minors.html) — SSE ticket 化或 fetch 流消费; /api/config/public 限 loopback; uvicorn 显式 proxy_headers=False 防反代 XFF 误判
 - [bug] [skip_local_verify 开启后无 Origin/Host 校验, 本机任意网页可跨站驱动 WebUI 写命令](26-09-21-1408-bug-web-skip-local-verify-csrf.html) — P2: CSRF+DNS rebinding, 删除/暂停/限速写动作照常入队执行; 默认关闭但开关一开即洞
 - [bug] [tracker URL 含 passkey 全文写入日志, 可经 /api/log 读回](26-09-21-1408-bug-web-tracker-url-passkey-log.html) — P2: 私站 announce URL 内嵌 passkey, 轮转日志备份/同机进程是泄露面; 建议单点 sanitize_tracker_url 脱敏
+- [chore] [CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵](26-09-21-1408-chore-ci-no-windows-runner.html) — pitfalls 已载平台差异史; 托盘/注册表自启/WinRT 通知等 Windows 专属路径只有手动跑测试才被执行
 - [docs] [文档漂移: README 称 995 用例(实测 1098), modules.md 行数快照多文件 +34%~+201%](26-09-21-1408-docs-docs-readme-modules-drift.html) — 知识库守卫不覆盖数字类事实, 漂移静默累积; 易腐数字建议守阵化或从文档退场
 - [refactor] [web.py create_app 单函数 926 行, 鉴权与全部端点挤在一个工厂函数](26-09-21-1408-refactor-web-create-app-monolith.html) — P1: 全项目最大函数坐在唯一对外暴露面里, 本次审计三条安全发现同出一文件; 建议按域拆 Router
 - [refactor] [WebUIRuntime 经 self._host 回调 QbManager 私有方法, 无 Protocol 约束](26-09-21-1408-refactor-web-runtime-host-protocol.html) — web_runtime.py:312/317/479 调 _build_search_index/_state_kind 等; 建议 HostCapabilities Protocol + 单写者假设注释
