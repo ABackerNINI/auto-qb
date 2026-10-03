@@ -23,6 +23,10 @@
  * 切走形态由 _stopDrawerPoll / _qbTeardown 显式 clearInterval —— 只挂打开期间, 不后台常驻。
  * meta.stale=true 的响应照常渲染(读竞态兜底位, §08, 前端不特殊处理)。
  *
+ * 静默续拉(2026-10-04 修「每隔几秒闪一次」): 续拉对用户不可见 —— 模板 loading 空态只在
+ * 无数据时接管正文(drawer.html), 数据落袋走 _qbChartBuild 的 setData 原地快路(同一宿主上
+ * 图还活着就不销毁重建; 完整重建仅首图/宿主被拆后/换肤三次)。
+ *
  * 容器尺寸自适应(便签 26-10-04-0134 + 2026-10-04 高度跟随): 建图尺寸不是一次取定 —— 建图后对
  * 宿主挂 ResizeObserver, 宽/高任一变化即 u.setSize 重画(高度取自宿主 clientHeight, 随抽屉拖拽
  * 调高实时跟随; 未拖拽时 drawerPanelStyle 给流量形态一个确定高度, 见 drawer.js); 销毁在
@@ -394,6 +398,15 @@ window.AQB_QB_TRAFFIC = {
       if (!this._qbChartWs) this._qbChartWs = {};
       if (!this._qbChartHs) this._qbChartHs = {};
       if (!this._qbAnchors) this._qbAnchors = {};
+      // 静默续拉快路(修「每隔几秒闪一次」): 同一宿主上图还活着就 setData 原地换数据, 不走
+      // 销毁重建 —— destroy + new uPlot 会清屏一帧, 每次轮询落袋都闪一次(同 drawer-switch-flicker
+      // 「快中间态本身就是闪」型)。宿主被 v-if 拆过/换过(root 已脱离本宿主)或首次建图才走完整重建。
+      const prev = this._qbCharts[scope];
+      if (prev && prev.root && prev.root.isConnected && prev.root.parentElement === host) {
+        this._qbAnchors[scope] = data.anchor;  // 悬停取值锚随新数据换新
+        prev.setData([data.xs, data.up, data.dl]);
+        return;
+      }
       this._qbChartDestroy(scope);
       this._qbChartInjectCss();
       this._qbAnchors[scope] = data.anchor;  // 悬停取值用(非响应式实例字段, 同 _drawerTimer 先例)
@@ -479,7 +492,11 @@ window.AQB_QB_TRAFFIC = {
         this._qbThemeBound = true;
         this._qbOnThemeChange = () => {
           for (const s of Object.keys(_QB_SCOPES)) {
-            if (_QB_SCOPES[s].active(this)) this._qbChartBuild(s);
+            if (_QB_SCOPES[s].active(this)) {
+              // 先销毁再建: canvas 色是建图时烘焙的令牌值, setData 快路不换色, 换肤必须整图重建
+              this._qbChartDestroy(s);
+              this._qbChartBuild(s);
+            }
           }
         };
         document.documentElement.addEventListener("autoqb:themechange", this._qbOnThemeChange);

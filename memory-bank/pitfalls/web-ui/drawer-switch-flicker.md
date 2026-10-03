@@ -43,3 +43,14 @@
 - **判别**: 详情是**唯一来源**不等于**唯一取处** —— 主表 `memberByHash` 每 1.5~3s 已同步, 名字当场可得。
 - **处置**: `drawerTitle()` 优先取 `memberByHash.get(hash).name`, 详情只作兜底。
   凡"目标刚切换、真值还没到"的头部/摘要类显示, 先在已有的本地快照里找, 别默认退回原始 id。
+
+- **复发: 1** —— 2026-10-04 qB 流量图三挂点并入抽屉(26-10-04-0405)后, 用户报「流量图每隔几秒闪一次」。
+  低频轮询续拉把本坑两条都踩了一遍: `_qbLoad` 一开始就亮 `qbCurLoading` -> 模板 `v-if` 把整块图换成
+  加载空态再换回(「遮罩/加载态立即点亮 = 制造新闪烁」); 数据落袋后 `_qbChartBuild` 走 destroy +
+  `new uPlot` 整图重建, canvas 清屏一帧(「快中间态本身就是闪」)。
+  **为什么没命中**: 流量图组件(qb_traffic_chart.js)是计划 26-10-03-0946 新写的, 取数/轮询范式对齐的是
+  drawer.js 的**竞态纪律**(stale 判定/hidden 跳过), 没有回头过 drawer-switch-flicker 的**渲染闪烁**清单;
+  计划评审盯的是断线语义与轮询口径, 「续拉可见性」不在验收项里。
+  **修法**: 静默续拉 —— 模板 loading 空态只在无数据时接管(`qbCurLoading && !qbCurPoints.length`),
+  同宿主上图还活着走 `u.setData` 原地换数据(不销毁重建); 换肤因 canvas 色烘焙仍整图重建(先销毁)。
+  守阵 test_web.py `test_frontend_qb_traffic_chart_wiring` 三锚钉住。
