@@ -28,3 +28,7 @@
 - W3(2026-10-01 08:00): 删兼容层本体 + 守阵转反复活 + ui_harness 迁移 + 注释清零 + 回写
   (modules.md 兼容层节改退役终态 / core-domain.md 838 行注记 / qbmanager docstring / 计划 HTML
   Done / 分诊清单留档 / 档案收官)+ 四场景走查 21/21 PASS, 基线切片 26-10-01-0800。
+
+## 前序波次切片已蒸馏(2026-10-03 切片计数清理)
+
+- **前序波次切片已蒸馏**: `26-10-01-0443-web-state-alias-disposal`(拍板); `26-10-01-0545-web-state-alias-disposal`(W1 路由与 src 侧); `26-10-01-0700-web-state-alias-disposal`(W2 测试面迁移) —— 内容全在其档案 [tasks/26-10-01-backend-web-state-alias-disposal](../tasks/26-10-01-backend-web-state-alias-disposal.md), 按 [cap-counting 坑档](../pitfalls/kb/cap-counting.md)「切片计数触顶的合法出口」删除(清理前切片数 104 > SLICE_COUNT_LIMIT 70)。

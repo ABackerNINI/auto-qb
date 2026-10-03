@@ -23,3 +23,11 @@
 - **AGENTS.md 削薄 (唯一剩余项, 独立清理会话)**: 7,975 → 回到 ≤ 8,000 (不套 50%)。手法 = 路由手术 —— 细节下沉 `memory-bank/README.md` / `conventions/` / `pitfalls/`, 原位留指针; **必须仍在 AGENTS.md**: 7 条黄金法则、红线、git 硬约束三处纪律、提交口径 (常驻可见性语义, 不许下沉)。验收 = `doc.caps` 绿 + 人工对照清单。
 - 平时: 提交时若出现 `[债务]` 行 → **在回复里提醒用户另开会话清理**, 不在本会话动手; 清理由用户在**新会话**里跑 `commands run doc.caps` 拿现算清单, 收口 `commands run doc.caps -- --strict`。
 - 附带发现已随手收口: `_common.TASK_LOG_CAP`(无消费者) 删除; `ALL_ROLES` 改为 `DEFAULT_ROLES` 别名。
+
+## 追加(2026-10-03): 切片计数债务清理 —— 104 → 68
+
+- 用户另开会话清理「切片数 104 > 70」债务。按 [cap-counting 坑档](../pitfalls/kb/cap-counting.md)「切片计数触顶的合法出口」执行: **未抬 `SLICE_COUNT_LIMIT`、未删活跃片**。
+- 删除 36 片 = 同专题重复片 9(kernel-module-refactor ×5 → 留 26-10-01-0359 / web-state-alias-disposal ×3 → 留 26-10-01-0800 / webui-delete-tag-scope-confusion ×1 → 留 26-10-03-0915; 三片保留件各加「前序波次切片已蒸馏」留痕段)+ 已完结波次片 27(全部有对应 `tasks/` 档案且内容已被档案覆盖)。
+- 排除项: 8 片有入链(删则 `doc.links` 红 —— docs/hr-online-verify-docs.md · plans/26-09-26-0529 · baselines/26-09-28-0401 · progress/implemented-webui-history.md · tasks 档案 ×2 · issues/26-09-29-2142)+ 3 片仍有开放待办(docker-deploy W5 真机验收 / settings-back-nav 待拍板 / timekit 用户令暂不实施)+ 真机走查待用户的 3 片。
+- 删前逐个 grep 入链; 删后 `kb.check`(主键纪律 357 文档 / 211 专题)与 `doc.links` 均绿。
+- **结构性提示**: 104 片全在 9 天内产出 ⇒ 实测 ~11 片/日(多 clone 并行), 而上限按 5 片/日校准 ⇒ 会反复触顶; 长期处置走治理议题, 本会话未自行调数。

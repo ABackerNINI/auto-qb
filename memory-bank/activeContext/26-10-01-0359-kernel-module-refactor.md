@@ -28,3 +28,7 @@
 
 - 别名层处置计划(memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.html)**待拍板**
   —— 决策点 D1(属性对永久保留?)/ D2(测试分批粒度)/ D3(执行时机); W0 分诊清单可先行。
+
+## 前序波次切片已蒸馏(2026-10-03 切片计数清理)
+
+- **前序波次切片已蒸馏**: `26-09-30-1912-kernel-module-refactor`(P0 内核地基); `26-09-30-2005-kernel-module-refactor`(P1 基建模块化); `26-09-30-2048-kernel-module-refactor`(P2 门面转正 + P3 小模块先行); `26-09-30-2250-kernel-module-refactor`(P4 中坚模块); `26-10-01-0245-kernel-module-refactor`(P5 最大一刀) —— 内容全在其档案 [tasks/26-09-30-backend-kernel-module-refactor](../tasks/26-09-30-backend-kernel-module-refactor.md), 按 [cap-counting 坑档](../pitfalls/kb/cap-counting.md)「切片计数触顶的合法出口」删除(清理前切片数 104 > SLICE_COUNT_LIMIT 70)。

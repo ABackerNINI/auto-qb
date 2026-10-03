@@ -1,7 +1,0 @@
-# 知识库文档漂移分段修复 (S1-S5)
-
-> 摘要: plans/26-10-01-1728 五段回写的滚动实施 —— **S1-S5 全部完成并过验收**(S5: P3 计数清扫 projectbrief/roadmap/rules-and-deps, 豁免面核实, 顺手删 mixins/__pycache__ 未跟踪残留, 机检三连绿, 收尾基线 test.full 1909 passed + 3 skipped / 91% 切片 26-10-01-1930; 代码注释残留 3 处待用户拍板未动)。S1-S4 各自单独提交(6f474098 / 0b422396 / 58a88928 / 7f046ca0), S5 单独提交; 已完成条目迁出 progress/implemented-tooling.md。
-> 最后活动: 2026-10-01
-
-- **2026-10-01 S4 完成**: 4 份按计划修毕, 计划偏差以代码实测为准(configuration 条件表头实为「12 种」非计划所记 16, 与 L410 的 16 一并统一为 13); 机检 doc.links + kb.check 绿, kb.index 已随档案头更新重建; test.full 基线按计划留给 S5。
-- **2026-10-01 S5 完成(全段收尾)**: ①P3 计数清扫(逐条实测, 只修无披露头注的): projectbrief.md 15→13 条件、progress/roadmap.md 16→13 条件、modules/rules-and-deps.md base.py 274→314 / expr/ ~700·6 文件→1245·7 文件 / actions/ 934→673、full_checking 178→152(S3 沿用旧文未复测处); 豁免未动: productContext(内容基线头注)、modules/overview+core-domain(行数 2026-09-05 快照头注)、core-runtime(行内标注口径)、mixins(历史快照)、code-style(无残留计数)。②顺手项: src/auto_qb/mixins/(仅 __pycache__, 零跟踪)删除。③机检三连绿: kb.index 16 索引 / kb.check 256 文档·159 专题(既有债务: 切片 81>70、cap 债务 1, 未新增)/ doc.links 绿。④收尾基线 test.full **1909 passed + 3 skipped / 91%**(13278 语句 / 1051 未覆盖 / 4408 分支 / 435 partial, 31.2s), 切片 testing/baselines/26-10-01-1930-doc-drift-repair-s5.md(基线 @ 7f046ca0), 与 26-10-01-1835 基线通过数持平。⑤代码注释残留 3 处(实存; 第 4 处 core/mixins/__init__.py 已随审计 L2 删除)按计划 §6 待用户拍板, 未动任何 .py。计划 doc-status Open→Done(26-10-01-1930), 完成条目已迁 progress/implemented-tooling.md。
