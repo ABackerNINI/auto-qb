@@ -40,6 +40,14 @@
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
 - test_api_enqueue_wakes_main_loop: 投递用户命令唤醒主循环; 反向守卫——自投递命令须登记进 SELF_POSTED_COMMANDS(防自激)
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
+- test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)
+- test_api_traffic_qb_requires_token: 三 GET 端点沿用全局 token 鉴权单点(无凭证 401)
+- test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 24h|30d
+- test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗 raw 段离散(points 均值/空桶 null) + totals 相邻桶差分(重置 null) + 读取竞态降级回上一份快照标 stale
+- test_api_traffic_qb_global_30d_hour_segment: global 30d 窗消费 hour 段(hour_epoch 即桶键), interval_s=3600
+- test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
+- test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员均值/全员空闲 0 线/停机借 global 判 null/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
+- test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
 - test_config_tree_roundtrip: 配置树读取/保存写回文件并投递热重载命令
 - test_config_tree_invalid_rejected: 非法配置树 -> 400 且不写回
@@ -210,7 +218,7 @@
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
 - test_cmd_trackers_log_sanitized: tracker 编辑/移除日志只写脱敏主地址 —— 任意命名的凭据全文都不进日志(不按参数名黑名单), 主地址仍在
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags): 72 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb): 75 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_drain_web_commands_recheck_rejected_while_checking: R1 单发拒绝(plan 26-09-30-0109) —— 规则校验在途时 WEB recheck 回执 error「校验进行中」, qB 不重启校验
 - test_drain_web_commands_bulk_recheck_skips_inflight: R1 bulk 第二入口 —— 在途 hash 逐个经 ops 过滤, 聚合回执带「N 个校验进行中已跳过」, 其余正常提交
 - test_drain_web_commands_bulk_skip_check_aggregated: bulk 跳检经 ops 逐 hash 串行(计划 26-10-02-1955 W3) —— 混合结果聚合回执分段计数(成功 / 同日去重 skip / 部分下载禁+执行失败 fail); 成功批 ok 回执且记录同日去重(skip_check_day 跨来源共享)
@@ -333,6 +341,7 @@ def _make_web_manager(tmp_path, config_text):
         delete_tags=[],
         delete_tags_if_has_no_torrents=[],
         global_speed_limit_curve=None,
+        qb_traffic=None,  # qB 口径流量(plan 26-10-03-0946 §06): None = 未启用; 用例按需置 QbTraffic(enabled=True)
         notify=SimpleNamespace(enabled=False),
         qbittorrent=SimpleNamespace(host="127.0.0.1", port=1, username="u", password="p"),
         logging=SimpleNamespace(level="WARNING", file="", max_bytes=1048576, format="%(message)s"),
@@ -3517,6 +3526,228 @@ def test_api_traffic_history_endpoint(web_env):
     }
     data = client.get("/api/traffic/history", headers=auth).json()
     assert data["state"] == "ok" and data["history"][0]["date"] == "2026-09-14"
+
+
+# ---- qB 口径流量图三 GET 端点(plan 26-10-03-0946 §08 P4; 装配单点 server/traffic_qb.py, 纯函数口径 core/traffic_grid.py) ----
+
+
+def _enable_qb_traffic(mgr, **kw):
+    """用例侧启用 qb_traffic(真实 QbTraffic 段, 缺省键取设计缺省; kw 可覆盖任意键)"""
+    from auto_qb.config import QbTraffic
+
+    mgr.config.qb_traffic = QbTraffic(**{"enabled": True, **kw})
+    return mgr.config.qb_traffic
+
+
+def _qb_dat(mgr):
+    """指向替身 data_dir(tmp_path)的存储层: 用例经真实写路径造 dat 数据"""
+    from auto_qb.core.traffic_store import TrafficDatStore
+
+    return TrafficDatStore(mgr.config.data_dir)
+
+
+def test_api_traffic_qb_disabled_empty_state(web_env):
+    """未启用空态(qb_traffic None / enabled=false): 三端点 200 空数组 + meta, 与 /api/traffic/history 未启用分支同构"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    paths = ("/api/traffic/qb/global", f"/api/traffic/qb/torrent/HA", f"/api/traffic/qb/group/{encode_group_key(KEY)}")
+    for p in paths:  # qb_traffic = None(缺省): 200 空态(不 500 不 404)
+        r = client.get(p, headers=auth)
+        assert r.status_code == 200, p
+        body = r.json()
+        assert body["points"] == [] and body["totals"] == []
+        assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False and body["meta"]["window"] == "24h"
+    # 与未启用空数组先例同构: /api/traffic/history 同样 200 + 空数组
+    assert client.get("/api/traffic/history", headers=auth).status_code == 200
+    _enable_qb_traffic(mgr, enabled=False)  # 段存在但 enabled=false: 同空态
+    for p in paths:
+        body = client.get(p, headers=auth).json()
+        assert body["points"] == [] and body["meta"]["stale"] is False
+
+
+def test_api_traffic_qb_requires_token(web_env):
+    """三 GET 端点沿用全局 token 鉴权单点: 无凭证 401"""
+    mgr, client = web_env
+    _enable_qb_traffic(mgr)
+    for p in ("/api/traffic/qb/global", "/api/traffic/qb/torrent/HA", f"/api/traffic/qb/group/{encode_group_key(KEY)}"):
+        assert client.get(p).status_code == 401, p
+
+
+def test_api_traffic_qb_window_validation(web_env):
+    """window 非法值 4xx(不 500); 缺省回 24h; 大小写敏感(仅 24h|30d, §08)"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    for p in ("/api/traffic/qb/global", "/api/traffic/qb/torrent/HA", f"/api/traffic/qb/group/{encode_group_key(KEY)}"):
+        assert client.get(p, headers=auth, params={"window": "7d"}).status_code == 400, p
+        assert client.get(p, headers=auth, params={"window": "24H"}).status_code == 400, p  # 大写不认
+        assert client.get(p, headers=auth, params={"window": ""}).status_code == 400, p
+    assert client.get("/api/traffic/qb/global", headers=auth).json()["meta"]["window"] == "24h"  # 缺省 24h
+    assert client.get("/api/traffic/qb/global", headers=auth, params={
+        "window": "30d"
+    }).json()["meta"]["window"] == "30d"
+
+
+def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch):
+    """global 24h 窗: raw 段栅格离散(points 速率均值/空桶 null) + totals 相邻桶差分(重置 null)
+    + 读取竞态降级: 回上一份成功快照标 stale=true, 不以空态冒充无数据(§08)"""
+    from auto_qb.core.traffic_store import ParsedSeries, TrafficDatStore
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    conf = _enable_qb_traffic(mgr)
+    store = _qb_dat(mgr)
+    now = int(time.time())
+    base = ((now - 7200) // 30) * 30  # 窗内 2h 处的 30s 对齐桶
+    # 桶 base+30: 两行抖动(均值 150/60, 快照取最新行); 桶 base+90/120: 相邻桶正常差分;
+    # 桶 base+150: dl 快照回落(重置, 逐向独立); 桶 base+180: null 点行(断连空桶)
+    store.append_point("global", base + 31, 100, 50, 1000, 500)
+    store.append_point("global", base + 45, 200, 70, 2000, 800)
+    store.append_point("global", base + 95, 5, 5, 2400, 900)
+    store.append_point("global", base + 125, 300, 90, 3400, 1300)
+    store.append_point("global", base + 155, 10, 10, 2900, 1400)
+    store.append_point("global", base + 185, None, None, None, None)
+
+    def bucket_of(ts):
+        return (ts // int(conf.sample_interval)) * int(conf.sample_interval)
+
+    def point_at(body, ts):
+        t = bucket_of(ts)
+        return next((p for p in body["points"] if p and p["t"] == t), None)
+
+    def total_at(body, ts):
+        t = bucket_of(ts)
+        return next((p for p in body["totals"] if p and p["t"] == t), None)
+
+    r = client.get("/api/traffic/qb/global", headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["meta"] == {"window": "24h", "interval_s": 30, "source": "qb", "stale": False}
+    assert 2880 <= len(body["points"]) <= 2881  # 满窗栅格(窗首对齐时恰 2880)
+    assert point_at(body, base + 31) == {"t": bucket_of(base + 31), "dl": 150, "up": 60}  # 桶内均值
+    assert point_at(body, base + 125) == {"t": bucket_of(base + 125), "dl": 300, "up": 90}
+    assert point_at(body, base + 185) is None  # null 点桶 = null(断线)
+    # totals: 桶 base+30 窗内首个有观测桶 -> 基线缺失 null; base+120 相邻桶差分;
+    # base+150 dl 快照回落重置 null(逐向独立, up 正常); base+180 空桶 null
+    assert total_at(body, base + 31) == {"t": bucket_of(base + 31), "dl": None, "up": None}
+    assert total_at(body, base + 125) == {"t": bucket_of(base + 125), "dl": 1000, "up": 400}
+    assert total_at(body, base + 155) == {"t": bucket_of(base + 155), "dl": None, "up": 100}
+    assert total_at(body, base + 185) is None
+
+    # 读取竞态降级(§08「最坏返回上一秒快照 + stale」):
+    # a) 24h 已有成功响应入 last-good -> 降级回上一份快照(点值不变) + stale=true;
+    # b) 30d 从未成功请求过 -> 无历史快照, 降级回现算空态 + stale=true(不冒充"确定无数据")
+    def _read_broken():
+        return lambda self, key: (ParsedSeries(key=key, raw=(), hours=(), bad_lines=0, data_lines=0), False)
+
+    monkeypatch.setattr(TrafficDatStore, "read_series_checked", _read_broken())
+    stale = client.get("/api/traffic/qb/global", headers=auth).json()
+    assert stale["meta"]["stale"] is True
+    assert stale["points"] == body["points"] and stale["totals"] == body["totals"]
+    fresh = client.get("/api/traffic/qb/global", headers=auth, params={"window": "30d"}).json()
+    assert fresh["points"] == [] and fresh["totals"] == [] and fresh["meta"]["stale"] is True
+    monkeypatch.undo()
+    assert client.get("/api/traffic/qb/global", headers=auth).json()["meta"]["stale"] is False  # 恢复后照常
+
+
+def test_api_traffic_qb_global_30d_hour_segment(web_env):
+    """global 30d 窗: hour 段消费(hour_epoch 即桶键, 桶内不再聚合), meta.interval_s=3600"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_dat(mgr)
+    now = int(time.time())
+    h = ((now - 172800) // 3600) * 3600  # 窗内 2 天前的小时桶
+    store.append_point("global", h + 60, 100, 40, 1000, 400)
+    store.append_point("global", h + 120, 300, 80, 2000, 800)
+    assert store.seal_hour("global", h, now=h + 3600, raw_window=72 * 3600, rollup_window=90 * 86400)
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "30d"}).json()
+    assert body["meta"]["interval_s"] == 3600 and body["meta"]["window"] == "30d"
+    assert 720 <= len(body["points"]) <= 721  # 30d 窗 ≈720 桶
+    p = next(p for p in body["points"] if p and p["t"] == h)
+    assert p == {"t": h, "dl": 200, "up": 60}  # hour 行 avg(桶内不再聚合)
+    total = next(p for p in body["totals"] if p and p["t"] == h)
+    assert total == {"t": h, "dl": None, "up": None}  # 窗内首个有观测小时桶: 基线缺失
+
+
+def test_api_traffic_qb_torrent_endpoint(web_env):
+    """单种端点: 正常取数 / 非法哈希 400 / 未知哈希空态; 数据挂 infohash —— 不在当前快照的冻结种子历史仍可查"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_dat(mgr)
+    now = int(time.time())
+    base = ((now - 3600) // 30) * 30
+    store.append_point("torrent:HA", base + 10, 500, 100, 5000, 1000)
+    body = client.get("/api/traffic/qb/torrent/HA", headers=auth).json()
+    assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False
+    p = next(p for p in body["points"] if p and p["t"] == base)
+    assert p == {"t": base, "dl": 500, "up": 100}
+    # 非法哈希(路径不安全字符, 存储层 fail-fast) -> 400; 未知哈希(合法字符, 无文件) -> 空态
+    assert client.get("/api/traffic/qb/torrent/HA.X", headers=auth).status_code == 400
+    assert client.get("/api/traffic/qb/torrent/ZZ", headers=auth).json()["points"] == []
+    # 删种冻结(hash 已不在 by_hash 快照)后历史仍可查: 数据以 dat 文件为准, 不以快照存在性裁决
+    assert "HA" not in mgr.store.by_hash
+    body2 = client.get("/api/traffic/qb/torrent/HA", headers=auth).json()
+    assert any(p2 and p2["t"] == base for p2 in body2["points"])
+
+
+def test_api_traffic_qb_group_endpoint(web_env):
+    """分组端点读侧现算(§04.1): Σ 成员均值 / 全员空闲出 0 线 / 停机借 global 判 null(成员有行也断线) /
+    成员重置贡献 0 不拖垮全组 / 成员历史回溯可见(新成员入组前的行一并计入) / 解析不到成员空态 / 畸形 key 400"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_dat(mgr)
+    now = int(time.time())
+    base = ((now - 3600) // 30) * 30
+    b0, b1, b2, b3, b4, b5 = (base + i * 30 for i in range(6))
+    # 全局(真值源): b0..b4 都有观测; b5 无行 = 停机桶
+    for i in range(5):
+        store.append_point("global", base + i * 30 + 1, 1, 1, i * 100, 0)
+    # HA: b0 速率 100(快照 1000) / b1 速率 0(快照 2000) / b2 重置(快照 500 < 2000)速率 10 /
+    #     b3 速率 10(快照 600) / b5 有行但全局停机(应整桶断线)
+    store.append_point("torrent:HA", b0 + 2, 100, 10, 1000, 0)
+    store.append_point("torrent:HA", b1 + 2, 0, 0, 2000, 0)
+    store.append_point("torrent:HA", b2 + 2, 10, 5, 500, 0)
+    store.append_point("torrent:HA", b3 + 2, 10, 5, 600, 0)
+    store.append_point("torrent:HA", b5 + 2, 99, 9, 999, 0)
+    # HB: b0 就有数据(200, 快照 100) —— b0 的行在其"入组前", 回溯同样可见; b1/b2 连续产点
+    store.append_point("torrent:HB", b0 + 3, 200, 20, 100, 0)
+    store.append_point("torrent:HB", b1 + 3, 0, 0, 300, 0)
+    store.append_point("torrent:HB", b2 + 3, 30, 3, 400, 0)
+    enc = encode_group_key(KEY)
+    body = client.get(f"/api/traffic/qb/group/{enc}", headers=auth).json()
+
+    def pt(seg, t):
+        return next((p for p in body[seg] if p and p["t"] == t), None)
+
+    assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False
+    assert pt("points", b0) == {"t": b0, "dl": 300, "up": 30}  # Σ 成员均值(HA 100 + HB 200, 回溯可见)
+    assert pt("points", b1) == {"t": b1, "dl": 0, "up": 0}  # HA 速率 0 行 + HB 无行按 0 计
+    assert pt("points", b2) == {"t": b2, "dl": 40, "up": 8}  # HA 10 + HB 30
+    assert pt("points", b3) == {"t": b3, "dl": 10, "up": 5}  # HB 无行按 0 计
+    assert pt("points", b4) == {"t": b4, "dl": 0, "up": 0}  # 全员空闲但全局有观测 -> 0 线(非 null)
+    assert pt("points", b5) is None  # 停机桶借 global 判 null(即使 HA 有行也断线)
+    assert pt("totals", b0) == {"t": b0, "dl": 0, "up": 0}  # 双成员窗内基线缺失 -> 0(不出洞)
+    assert pt("totals", b1) == {"t": b1, "dl": 1200, "up": 0}  # HA +1000, HB +200
+    assert pt("totals", b2) == {"t": b2, "dl": 100, "up": 0}  # HA 重置贡献 0(不是 -1500), HB +100
+    assert pt("totals", b3) == {"t": b3, "dl": 100, "up": 0}  # HA +100, HB 无行基线缺失 0
+    assert pt("totals", b4) == {"t": b4, "dl": 0, "up": 0}  # 全员无行 -> 0
+    assert pt("totals", b5) is None  # null 桶整桶 None
+    # 指纹解析不到成员 -> 空态; 畸形 key -> 400(同 /api/groups/{key} 通道)
+    other = encode_group_key(("R:/other", ("c.mkv", )))
+    assert client.get(f"/api/traffic/qb/group/{other}", headers=auth).json()["points"] == []
+    assert client.get("/api/traffic/qb/group/!!!not-base64!!!", headers=auth).status_code == 400
+
+
+def test_api_traffic_qb_group_never_transferred_empty_state(web_env):
+    """组从未有成员产过流量(成员文件全缺) -> 空态(§08 分组端点); 不渲染全 0 线"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    body = client.get(f"/api/traffic/qb/group/{encode_group_key(KEY)}", headers=auth).json()
+    assert body["points"] == [] and body["totals"] == [] and body["meta"]["stale"] is False
 
 
 def test_config_schema_endpoint(web_env):
@@ -9355,6 +9586,7 @@ def test_cmd_trackers_log_sanitized(caplog):
 # 57 个 /api 端点 + 3 个 UI 重定向(/, /newui, /newui/{rest:path})。拆分全程必须逐条保持。
 # (2026-09-28 ALT-01 增 POST /api/speed/alt 与 /api/speed/alt/toggle 两条, 计划 26-09-28-0037)
 # (2026-10-02 增 POST /api/events/ticket —— SSE 一次性票据换票, issue 26-09-21-1408 B-01)
+# (2026-10-03 增 3 条 GET /api/traffic/qb/* —— qB 口径流量图, plan 26-10-03-0946 §08 P4)
 _GOLDEN_ROUTES = {
     ("GET", "/"),
     ("GET", "/api/categories"),
@@ -9422,6 +9654,9 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/torrents/{hash}/trackers/edit"),
     ("POST", "/api/torrents/{hash}/trackers/remove"),
     ("GET", "/api/traffic/history"),
+    ("GET", "/api/traffic/qb/global"),  # qB 口径流量图三端点(plan 26-10-03-0946 §08 P4; 同域对照 history)
+    ("GET", "/api/traffic/qb/group/{key}"),  # 同上: 组读侧现算(§04.1), key 同 /api/groups/{key} 通道
+    ("GET", "/api/traffic/qb/torrent/{hash}"),  # 同上: 单种(数据挂 infohash, 删种冻结后历史仍可查)
     ("GET", "/newui"),
     ("GET", "/newui/{rest:path}"),
     ("GET", "/api/hr/status"),  # M4: HR 站点级状态快照(只读; 与 --hr-status 同一口径)
@@ -9448,7 +9683,7 @@ def _iter_api_routes(routes):
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 72 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 75 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、

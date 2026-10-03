@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, Response
 
 from ....infra.utils import auto_managed_tag_rules, is_auto_managed_tag
 from ..common import content_disposition
+from ..traffic_qb import QbTrafficChartApi as _QbTrafficChartApi
 
 from fastapi import APIRouter
 from ..context import WebContext
@@ -20,6 +21,7 @@ def build_router(ctx: WebContext) -> APIRouter:
     _enqueue = ctx.enqueue
     _require_torrent = ctx.require_torrent
     _require_client = ctx.require_client
+    _qb_traffic = _QbTrafficChartApi(manager)
     router = APIRouter()
 
     @router.get("/api/torrents/{hash}")
@@ -70,6 +72,17 @@ def build_router(ctx: WebContext) -> APIRouter:
                 f"peers:{hash}", lambda: dict(client.sync_torrent_peers(torrent_hash=hash) or {}), ttl=1.0
             )
         )
+
+    @router.get("/api/traffic/qb/torrent/{hash}")
+    def api_traffic_qb_torrent(hash: str, window: str = "24h"):
+        """单种子 qB 口径流量时序(plan 26-10-03-0946 §08, P4): torrents/<hash>.dat 读侧栅格离散
+
+        数据挂 infohash 身份(§02.2), 删种冻结后历史仍可查(与详情端点的 _require_torrent
+        404 口径刻意不同 —— 哈希不合法 400 / 无数据空态, 不以快照存在性裁决历史数据);
+        响应形状与全局/分组端点一致(装配单点在 server/traffic_qb.py)。
+        """
+        manager.web.touch()
+        return JSONResponse(content=_qb_traffic.payload_torrent(hash, window))
 
     # ---- 管理端点(R2B: 分类/标签/限速覆盖/添加种子/导出/日志) ----
 

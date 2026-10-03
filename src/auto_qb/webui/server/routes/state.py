@@ -1,4 +1,4 @@
-"""状态聚合读路由: /api/status · /api/state · /api/groups · /api/search · /api/stats · /api/traffic/history.
+"""状态聚合读路由: /api/status · /api/state · /api/groups · /api/search · /api/stats · /api/traffic/history · /api/traffic/qb/global.
 
 端点体逐字平移(plan 26-09-22-1857 W2); 仅 @app.* → @router.* 与共享件别名(原闭包名不变)。
 鉴权由 factory 的全局 dependencies 单点覆盖, 本模块不另挂依赖。
@@ -7,6 +7,7 @@
 from fastapi.responses import JSONResponse
 
 from ..common import app_version as _app_version
+from ..traffic_qb import QbTrafficChartApi as _QbTrafficChartApi
 
 from fastapi import APIRouter
 from ..context import WebContext
@@ -14,6 +15,7 @@ from ..context import WebContext
 
 def build_router(ctx: WebContext) -> APIRouter:
     manager = ctx.manager
+    _qb_traffic = _QbTrafficChartApi(manager)
     router = APIRouter()
 
     @router.get("/api/status")
@@ -115,5 +117,16 @@ def build_router(ctx: WebContext) -> APIRouter:
         manager.web.touch()
         view = manager.web.traffic_view
         return {"state": view.get("state"), "history": view.get("history") or []}
+
+    @router.get("/api/traffic/qb/global")
+    def api_traffic_qb_global(window: str = "24h"):
+        """qB 口径全局流量时序(plan 26-10-03-0946 §08, P4): global.dat 读侧栅格离散
+
+        与 /api/traffic/history(TM 口径按日聚合)同域对照; 窗口 24h|30d(缺省 24h),
+        响应形状与单种/分组端点一致(装配单点在 server/traffic_qb.py)。JSONResponse 直出
+        (24h 窗 ≈2880 点, 跳过 jsonable_encoder 遍历 —— 同 /api/state 的口径)。
+        """
+        manager.web.touch()
+        return JSONResponse(content=_qb_traffic.payload_global(window))
 
     return router

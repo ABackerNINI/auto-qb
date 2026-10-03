@@ -39,7 +39,7 @@ enabled=false(含 qb_traffic None)全程零文件零目录(保守默认, 黄金�
 - rewrite 遇 PermissionError(Windows 读侧竞态: os.replace 目标被打开)退避重试 x3、
   每次 50ms; 仍失败则放弃本轮(原文件完好, 数据无损, 下一小时封口自然补上)。
 
-读路径(§02.4 右, 面向 Web 线程只读; 本阶段供测试与 S4 API 使用):
+读路径(§02.4 右, 面向 Web 线程只读; S4 API 经 traffic_grid 纯函数消费):
 - 不匹配格式/字段非法的行跳过并计数(纪律对齐 curves.parse_history_dat 坏行先例;
   TM 是外部只读文件, 我们自有写路径 —— 半行容错是自己的义务); 仅尾部半行是正常崩溃残留:
   无换行结尾的末段若是完整合法行则照常收数据(只是缺行尾换行, 追加侧会先补 \\n), 解析失败
@@ -49,7 +49,10 @@ enabled=false(含 qb_traffic None)全程零文件零目录(保守默认, 黄金�
   也不让坏文件常驻报错); 绝对下限兜住「上一次崩溃的尾半行经追加补 \\n 后成为小文件中段
   坏行」的场景 —— 单行残留跳过即可, 随下一次封口重写自洁, 不据以整文件隔离(kill 丢行
   恒 <=1); 下一次追加按新建重建(头行 + key 行);
-- 文件 <=205KB(raw 24h@30s + hour 30d 设计上界)一次性快读即关。
+- 文件 <=205KB(raw 24h@30s + hour 30d 设计上界)一次性快读即关;
+- read_series_checked(S4): read_series 的可判别变体, 附读取健康位 —— OSError 瞬态
+  (Windows rewrite 竞态)时 read_ok=False, API 层据此回退上一份响应并标 stale(§08),
+  不以空态冒充无数据。
 
 index.json 与启动对账(§02.5):
 - 条目 {frozen_at, created_at, updated_at}; frozen_at = None 常态, 非 None = 种子已删
@@ -470,16 +473,41 @@ class TrafficDatStore:
 
     def read_series(self, key: str) -> ParsedSeries:
         """读单系列(一次性快读即关; S4 API 的取数入口)。文件缺失 = 空系列"""
-        path = self.series_path(key)
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            return ParsedSeries(key=key, raw=(), hours=(), bad_lines=0, data_lines=0)
-        parsed = self._read_path(path)
+        parsed, _read_ok = self.read_series_checked(key)
         if parsed.key is None:
             return ParsedSeries(key=key, raw=(), hours=(), bad_lines=parsed.bad_lines, data_lines=parsed.data_lines)
         return parsed
 
-    def _read_path(self, path: str) -> ParsedSeries:
-        """读 + 坏行计数 + 损坏阈值处置(>5% 且坏行 >= 2 移 .corrupt 后按空文件对待, §02.4)
+    def read_series_checked(self, key: str) -> tuple:
+        """读单系列 + 读取健康位(S4 API 的判别取数入口; read_series 的可判别变体)
+
+        返回 (ParsedSeries, read_ok): read_ok=False 仅当文件打开/读取抛 OSError
+        (Windows rewrite 竞态等瞬态 —— §02.4 读侧竞态口径: 按空系列对待, 原文件无损);
+        其余语义与 read_series 一致(文件缺失 = 空系列 + 健康; 损坏阈值处置后 = 空系列;
+        头行 key 缺失不掩蔽数据行 —— API 以请求路径定位系列, 数据行照常消费)。
+        健康位供 API 层区分「真没数据」与「这轮没读到」: 后者回退上一份响应并标
+        meta.stale(§08), 不以空态冒充无数据。
+        """
+        path = self.series_path(key)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return ParsedSeries(key=key, raw=(), hours=(), bad_lines=0, data_lines=0), True
+        text, ok = self._read_text(path)
+        if text is None:
+            return ParsedSeries(key=key, raw=(), hours=(), bad_lines=0, data_lines=0), False
+        return self._parse_and_guard(path, text), True
+
+    @staticmethod
+    def _read_text(path: str) -> tuple:
+        """整文件快读即关(<=205KB 设计上界); OSError -> (None, False) 按空系列对待(§02.4)"""
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                return f.read(), True
+        except OSError as e:
+            logger.warning(f"流量存储 | {os.path.basename(path)} 读取失败(按空系列对待): {e}")
+            return None, False
+
+    def _parse_and_guard(self, path: str, text: str) -> ParsedSeries:
+        """坏行计数 + 损坏阈值处置(>5% 且坏行 >= 2 移 .corrupt 后按空文件对待, §02.4)
 
         - 尾部半行(正常崩溃残留, torn_tail)从占比分子分母双侧扣除;
         - 坏行 >= 2 的绝对下限: 上一次崩溃的尾半行经「追加先补 \\n」后会成为中段坏行,
@@ -487,12 +515,6 @@ class TrafficDatStore:
           与 P2 验收冲突; 单行残留跳过即可, 随下一次封口重写自洁(坏行不算内容一致);
           真实损坏(盘损/格式错乱)坏行远不止 1 行, 阈值判据不受影响。
         """
-        try:
-            with open(path, "r", encoding="utf-8", errors="replace") as f:
-                text = f.read()
-        except OSError as e:
-            logger.warning(f"流量存储 | {os.path.basename(path)} 读取失败(按空系列对待): {e}")
-            return ParsedSeries(key=None, raw=(), hours=(), bad_lines=0, data_lines=0)
         parsed = parse_dat_text(text)
         eff_bad = parsed.bad_lines - (1 if parsed.torn_tail else 0)
         eff_data = parsed.data_lines - (1 if parsed.torn_tail else 0)
@@ -504,6 +526,13 @@ class TrafficDatStore:
             if self._quarantine(path):
                 return ParsedSeries(key=None, raw=(), hours=(), bad_lines=0, data_lines=0)
         return parsed
+
+    def _read_path(self, path: str) -> ParsedSeries:
+        """读 + 坏行计数 + 损坏阈值处置(写侧封口的读回入口; = _read_text + _parse_and_guard)"""
+        text, _ok = self._read_text(path)
+        if text is None:
+            return ParsedSeries(key=None, raw=(), hours=(), bad_lines=0, data_lines=0)
+        return self._parse_and_guard(path, text)
 
     def _quarantine(self, path: str) -> bool:
         """坏文件原文移 <name>.corrupt(已存在则覆盖 —— 只留最近一份现场); 失败不阻断读"""
