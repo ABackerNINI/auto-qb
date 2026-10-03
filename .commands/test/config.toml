@@ -31,7 +31,7 @@ silent_success = true
 run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest .commands .agents/skills/commands -q --no-cov -n 4']
 timeout = 300
 when    = "改了 .commands/ 下的包脚本或 commands 引擎 —— 它们的测试不在 testpaths(tests/) 里, 全量测试收不到"
-note    = "**弃用 -n 0**(2026-10-03): 串行在本机**挂住** —— my-commit-flow 的真实临时仓库用例跑到第 15 个后不再推进, 从而**卡死 ship.commit 的闸门**(闸门是这个 task 的调用方, 表现是提交无输出即中止)。取 HEAD 版 test_sync.py 对照同样挂 ⇒ 不是某次改动引入, 是「串行 + 这些真实 git 场景用例」的组合问题; -n 4 全绿(96 passed / ~105s, 与串行同量级)。收集面含 .agents/skills/commands(引擎测试贴着引擎放, 2026-09-27 起)。2026-09-28 起也要 TMPDIR 前缀: 上述场景测试用 tmp_path 夹具会建 pytest 临时目录(原『不建临时目录』的说法随 v3 场景测试过时)。silent_success: 成功只出结论行"
+note    = "**-n 0 曾挂住, 已于 2026-10-03 修根因**(根因与修法见 memory-bank/pitfalls/testing/parallel-run.md): 原先串行在本机**挂住** —— my-commit-flow 的真实临时仓库用例跑到第 15 个后不再推进, 从而**卡死 ship.commit 的闸门**(闸门是这个 task 的调用方, 表现是提交无输出即中止)。根因**不是仓库逻辑**, 是 Windows 上 `subprocess.run(capture_output=True)` 高负载 + 大量 spawn 时无限挂死(CreateProcess 不返回 / 孙进程占管道写端); 已在 `_pipeline.run_capture` 加看门狗(硬截止 + `taskkill /F /T` 杀整棵树), 修复后 `-n 0` 跑三个包脚本用例 79 passed / 275s 不再挂。**本 task 仍保持 -n 4**(闸门要快且能收口, 96 passed / ~105s)。收集面含 .agents/skills/commands(引擎测试贴着引擎放, 2026-09-27 起)。2026-09-28 起也要 TMPDIR 前缀: 上述场景测试用 tmp_path 夹具会建 pytest 临时目录(原『不建临时目录』的说法随 v3 场景测试过时)。silent_success: 成功只出结论行"
 silent_success = true
 
 [tasks."test.one"]

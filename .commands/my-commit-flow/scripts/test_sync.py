@@ -36,7 +36,6 @@ pytest 的 tmp_path 下(不碰任何真实 clone); 判据引用 pitfalls/git/ref
 from __future__ import annotations
 
 import re
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -46,6 +45,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import sync as sync_mod  # noqa: E402
+from _pipeline import run_capture  # noqa: E402
 from _ship_config import find_root  # noqa: E402
 
 PKG = Path(__file__).resolve().parent.parent
@@ -53,7 +53,10 @@ HASH_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
 def _git(cwd: Path, *args: str) -> str:
-    proc = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8")
+    # 走 run_capture 而非裸 subprocess.run: Windows 上高负载 + 大量 spawn 时
+    # `CreateProcess` / `communicate()` 会**无限挂住**(根因见 _pipeline.run_capture 注释),
+    # 裸调会把整条 test_sync / 提交闸门冻死 —— 见 pitfalls/testing/parallel-run.md。
+    proc = run_capture(["git", *args], cwd=cwd)
     assert proc.returncode == 0, f"git {' '.join(args)} 失败: {proc.stderr}"
     return proc.stdout.strip()
 

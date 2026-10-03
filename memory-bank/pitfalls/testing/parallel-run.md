@@ -1,21 +1,41 @@
 # 并行跑测试 (pytest-xdist)
 
-> 摘要: **已设为默认**(`pytest.ini` 的 `addopts = -n 4`) —— 全量 21s → **7.6s**(带覆盖率); sidefx 台账已用 `workeroutput` 回传汇总, 「越界 0 条」不再消失。⚠ `-n 0` 只对**单文件/单模块**靠谱, 对**包脚本那批真实临时仓库用例**会**挂住**(2026-10-03, 见下节); 覆盖率分支 partial 与串行差 1。
-> 触发: 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0
+> 摘要: **已设为默认**(`pytest.ini` 的 `addopts = -n 4`) —— 全量 21s → **7.6s**(带覆盖率); sidefx 台账已用 `workeroutput` 回传汇总, 「越界 0 条」不再消失。⚠ `-n 0` 曾对**包脚本那批真实临时仓库用例**挂住 —— 根因是 **Windows `subprocess` 无限挂死**(非仓库逻辑), 2026-10-03 用 `_pipeline.run_capture` 看门狗修复(见下节); 覆盖率分支 partial 与串行差 1。
+> 触发: 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0, subprocess 挂死, CreateProcess
 
-### ⚠ `-n 0` 对 my-commit-flow 的真实仓库用例会**挂住**(2026-10-03, 已改闸门)
+### ⚠ `-n 0` 曾对 my-commit-flow 的真实仓库用例**挂住**(2026-10-03, 根因已定位并修复)
 
 - **触发**: 跑 `test.pkg` / `test_sync.py`(`.commands/my-commit-flow/scripts/`), 尤其**提交时** ——
   症状是 `ship.commit` **无任何输出即中止**, 看着像闸门静默失败。
 - **判别**: `.commands/test/config.toml` 的 `test.pkg` 原写 `-n 0`; 串行跑到 `test_sync.py` 第 **15** 个
   用例后**不再推进**(不报错、不超时退出, 直接挂死; 闸门的 `timeout=300` 把整条提交拖垮)。
-  **是否存量**: 取 `git show HEAD:.../test_sync.py` 原版单跑**同样挂** ⇒ 与当次改动无关, 是
-  「串行 + 那批真实 git 临时仓库用例」的组合问题。
-- **处置**: ①`test.pkg` 改 `-n 4`(已落 config.toml, 实测 96 passed / ~108s, 与串行同量级且闸门能收口);
-  ②排障单文件仍可用 `-n 0`, 但**一旦命中挂住就换 `-n 4`**; ③`test.one` 的 `<args> -q -n 0` 同理 ——
-  它给的是单文件场景, 挂住同样换 `-n 4`。
+  **是否存量**: 取 `git show HEAD:.../test_sync.py` 原版单跑**同样挂** ⇒ 与当次改动无关。
+- **根因(2026-10-03 定位)**: **不是**仓库逻辑, 是 Windows 上 `subprocess.run(capture_output=True)`
+  在**高负载 + 大量 spawn** 时会**无限挂住** —— 本机 4 个 clone 同时跑 git / 测试时, 从约第 800 次
+  spawn 起概率性触发, 两种入口都实测到过(`faulthandler.dump_traceback(all_threads=True)` 抓栈):
+  1. **`_winapi.CreateProcess`(即 `Popen.__init__`)不返回** —— 主线程停在
+     `subprocess.py:1554 _execute_child`, 连子进程都没起来。
+  2. **`communicate()` join 读线程等不到 EOF** —— 主线程停在 `subprocess.py:1663 _communicate → join`,
+     两个 `subprocess._readerthread` 阻塞: git 的**孙进程**(`git push` → `sh.exe` →
+     `git-receive-pack.exe` → `git.exe`)继承了管道写端且不退出。此时**连 `subprocess.run(timeout=…)`
+     也救不了** —— timeout 只杀直接子进程, `communicate()` 仍阻塞在 join。
+- **处置(已落地, 在 `.commands/my-commit-flow/scripts/_pipeline.py`)**: 新增 `run_capture()`
+  统一入口 —— 真正的 `Popen + communicate` 放在**看门狗线程**里, 主线程只等到 deadline;
+  到点用 `taskkill /F /T` 杀**整棵进程树** + 关掉本端管道(不 join), 返回 `rc=-1`。
+  把"提交无声冻死"变成**快速可判定的失败**。`git` / `git_rc` / `git_run` / 闸门 `run_gates` /
+  `_safe_files` 探针**全部**改走它; `test_sync.py` / `test_commit.py` 的 `_git` 也改走它。
+  - ⚠ **超时/非 0 的中间态要显式判**: `run_capture` 把超时收成 `rc=-1`(**不抛**), 而原实现
+    靠 `except subprocess.SubprocessError` / `TimeoutExpired` 接超时 —— 例如 `_safe_files` 探针
+    必须显式看 `rc != 0` 才摘脚本, 漏判会**静默放行**真动作脚本
+    (改的时候被 `test_safety_filter_drops_parameterless_action_scripts` 抓出)。
+  - ⚠ **超时必须真的收尸**: 裸 `Popen` 在 `TimeoutExpired` 分支得自己 `taskkill` + `wait()`,
+    否则子进程活着占 cwd, 调用方 `tearDown` 立刻 `rmtree` 临时目录 → `WinError 32`
+    (改的时候被 `test_timeout_is_failure` / 冒烟用例抓出)。
+- **现状**: 修复后 `-n 0` 跑三个包脚本用例 **79 passed / 274.76s**, 不再挂住。
+  - 排障单文件**可以**用 `-n 0`; `test.pkg` 仍保持 `-n 4`(闸门能收口, 96 passed / ~105s)。
 - **为什么值得单独记**: 它**卡在提交路径上**且**完全静默** —— 不是"跑得慢", 是"提交没有输出就结束了",
-  最容易被误读成代码/闸门配置坏了。根因未定位到具体用例(留给 issue), 但"换 -n 4 即过"是可靠解法。
+  最容易被误读成代码/闸门配置坏了。教训: **Windows 上把子进程 `timeout` 当成万无一失是错的** ——
+  还得能**杀整棵树 + 不等读线程**。
 
 ### 现状: 默认并行 `-n 4`
 

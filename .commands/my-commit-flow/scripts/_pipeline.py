@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -28,12 +30,94 @@ for _stream in (sys.stdout, sys.stderr):
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ship_config import CONFIG_NAME, ConfigMissing, config_problems, find_root, find_skill_dir, init_config, load_config  # noqa: E402
 
+# ------------------------------------------------------------------ 子进程防挂死
+# ❗Windows 上 `subprocess.run(capture_output=True)` 会**无限挂住**, 两种入口都实测到过
+#   (2026-10-03 定位, 见 memory-bank/pitfalls/testing/parallel-run.md):
+#   ① `_winapi.CreateProcess`(即 `Popen.__init__`)在大量 spawn / 高负载下不再返回
+#      —— 本机 4 个 clone 同时跑测试时, 约第 800 次 spawn 起概率性永久阻塞;
+#   ② `communicate()` 里 join 读线程: git 的**孙进程**继承了管道写端且不退出时, 读端永远
+#      等不到 EOF —— 此时连 `subprocess.run(timeout=…)` 也救不了(timeout 只杀直接子进程,
+#      `communicate()` 仍阻塞在 join)。
+#   处置: 全程跑在**看门狗线程**里, 硬截止到点就 `taskkill /F /T` 整棵进程树 + 关掉我们这端
+#   的管道(不 join), 然后返回一个可判定的失败 —— 让调用方**快速失败**而不是冻住整条 ship。
+#   代价: 极少数卡死会泄漏一个幽灵线程(无法从外部杀), 相对于"提交无声中止"可接受。
+GIT_TIMEOUT = float(os.environ.get("COMMAND_FLOW_GIT_TIMEOUT", "120"))
+
+
+def _kill_tree(pid: int) -> None:
+    """Windows: 连孙子一起杀掉(`git push` 会派生 sh.exe → git-receive-pack → git)。"""
+    try:
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def run_capture(args, cwd=None, timeout: float = GIT_TIMEOUT, shell: bool = False) -> subprocess.CompletedProcess:
+    """跑一条命令并抓输出, **保证不永久挂住**(见上面的根因注释)。
+
+    返回 CompletedProcess; 超时/卡死时 rc 记 `-1`(与真实 git 码不冲突), 输出带一句原因。
+    实现: 真正的 Popen + communicate 放在看门狗线程里, 主线程只等到 deadline;
+    到点后杀掉**整棵进程树**并关掉我们的管道读端, 让读线程随之结束(不 join)。
+
+    `shell=True` 供闸门(`run_gates`)这类**命令串**用 —— 与 git 的 argv 直调不同, 但同样
+    走本看门狗(裸 subprocess.run 在 Windows 上同款挂死)。
+    """
+    box: dict = {}
+    argv = args if shell else list(args)
+
+    def _worker() -> None:
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                argv,
+                shell=shell,
+                cwd=str(cwd) if cwd else None,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                errors="replace"
+            )
+            box["pid"] = proc.pid
+            out, err = proc.communicate(timeout=timeout)
+            box["rc"], box["out"], box["err"] = proc.returncode, out, err
+        except subprocess.TimeoutExpired:
+            box["rc"] = -1
+            box["err"] = f"超时 {timeout:.0f}s (进程树已杀)"
+            if proc is not None:
+                box["pid"] = proc.pid
+                # ❗必须**真的收尸**: 只记下 pid 不杀, 子进程会继续活着占着 cwd 与管道
+                # (调用方 tearDown 立刻 rmtree 临时目录 → WinError 32; 实测 2026-10-03)。
+                # `subprocess.run` 在这里内部会 kill(), 裸 Popen 得自己做 —— 连孙子一起杀
+                # 再 wait() 掉进程, Windows 上 cwd 锁才真正释放。
+                _kill_tree(proc.pid)
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+        except (OSError, subprocess.SubprocessError) as exc:
+            box["rc"], box["err"] = -1, f"起不来: {exc!r}"
+
+    worker = threading.Thread(target=_worker, daemon=True)
+    worker.start()
+    worker.join(timeout + 15)  # 给 communicate 自己一点余量(它内部已有 timeout)
+    if worker.is_alive():
+        # communicate / CreateProcess 卡在共享管道或系统调用上 —— 杀树 + 关管道, 不等它。
+        pid = box.get("pid")
+        if pid:
+            _kill_tree(int(pid))
+        label = argv if shell else list(args)
+        return subprocess.CompletedProcess(label, -1, "", f"卡死 (>{timeout:.0f}s, 进程树已杀)")
+    label = argv if shell else list(args)
+    return subprocess.CompletedProcess(label, box.get("rc", -1), box.get("out", "") or "", box.get("err", "") or "")
+
 
 def git(*args: str, check: bool = True) -> str:
     # **不能整段 strip()**: `git status --porcelain` 的首列空格表示"无暂存改动",
     # 整段 strip 会把首行的这个空格吃掉 → ' M a/b' 变成 'M  a/b', 首列被误判成已暂存,
     # 且 line[3:] 丢掉路径首字符, 红线匹配会**静默放行**。
-    proc = subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    proc = run_capture(["git", *args])
     if check and proc.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} 失败: {proc.stderr.strip()}")
     return proc.stdout.rstrip("\n")
@@ -41,12 +125,12 @@ def git(*args: str, check: bool = True) -> str:
 
 def git_rc(*args: str) -> int:
     """只关心**退出码**的 git 调用(如 `merge-tree --write-tree`: 0 = 可干净合流, 非 0 = 有冲突)。"""
-    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace").returncode
+    return run_capture(["git", *args]).returncode
 
 
 def git_run(*args: str) -> subprocess.CompletedProcess:
     """要 rc + stderr 的 git 调用(merge --ff-only / rebase / push 的失败原因都在 stderr)。"""
-    return subprocess.run(["git", *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return run_capture(["git", *args])
 
 
 def changed_files(with_safety: bool = False) -> tuple[list[str], list[str]]:
@@ -164,23 +248,18 @@ def _safe_files(files: list[str], root) -> tuple[list[str], list[str]]:
     for rel in files:
         path = Path(rel)
         full = path if path.is_absolute() else Path(root) / rel
-        try:
-            proc = subprocess.run(
-                [sys.executable, str(full), "--safety"],
-                cwd=str(root),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=10,
-                # ❗探针 stdin 必须钉死: 父进程是 pytest 时 stdin 是被捕获的管道, 子进程继承后
-                #   任何交互式读取都会挂到超时; DEVNULL 让它立刻 EOF, 最坏也只吃满 10s。
-                stdin=subprocess.DEVNULL,
-            )
-            out = f"{proc.stdout or ''}\n{proc.stderr or ''}"
-            (skipped if "action-without-args" in out else safe).append(rel)
-        except (OSError, subprocess.SubprocessError):
-            skipped.append(rel)  # 探针都跑不起来 / 超时 —— 更不能拿 --help 去赌
+        # 走 run_capture: 同样的 `CreateProcess` 挂死风险(见其上方根因注释)。
+        # rc != 0(超时 / 起不来 / 脚本报错)一律按**不安全**摘掉 —— 原实现靠
+        # `subprocess.run(timeout=…)` 抛 TimeoutExpired 走到 except 分支, 而 run_capture
+        # 把超时收成 rc=-1(不抛), 所以判据必须显式带上 rc(2026-10-03, 改错会静默放行)。
+        proc = run_capture([sys.executable, str(full), "--safety"], cwd=root, timeout=10)
+        out = f"{proc.stdout or ''}\n{proc.stderr or ''}"
+        # 摘掉(不安全)判据: ①脚本自认「无参即真动作」, 或 ②探针没跑通(rc != 0 —— 超时 /
+        # 起不来 / 脚本报错)。只有「跑通且没自认危险」才留下冒烟。
+        if proc.returncode != 0 or "action-without-args" in out:
+            skipped.append(rel)
+        else:
+            safe.append(rel)
     return safe, skipped
 
 
@@ -271,20 +350,12 @@ def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, fl
                 continue
             for real in cmds:
                 t0 = time.monotonic()
-                try:
-                    proc = subprocess.run(
-                        real,
-                        shell=True,
-                        cwd=str(ctx["root"]),
-                        timeout=timeout,
-                        capture_output=True,
-                        text=True,
-                        encoding="utf-8",
-                        errors="replace"
-                    )
-                    rc, out = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
-                except subprocess.TimeoutExpired:
-                    rc, out = -1, f"超时 {timeout}s"
+                # 走 run_capture(shell 模式): 闸门命令串同样会撞 Windows 的 CreateProcess / 管道挂死,
+                # 且闸门带超时语义 —— 看门狗到点杀**整棵进程树**, 比裸 subprocess.run(timeout=…)
+                # 只杀直接子进程更彻底(根因见模块顶「子进程防挂死」段)。
+                proc = run_capture(real, cwd=str(ctx["root"]), timeout=timeout, shell=True)
+                rc = proc.returncode
+                out = (proc.stdout or "") + (proc.stderr or "")
                 secs = time.monotonic() - t0
                 ran += 1
                 if rc != 0:

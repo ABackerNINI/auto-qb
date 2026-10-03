@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import ast
 import builtins
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -192,8 +191,8 @@ class SmokeSafetyTest(unittest.TestCase):
         # 只看真正会执行的 `run = [...]` 行 —— 注释里会提到 --help(sync.py / push.py 的教训),
         # 拿注释当判据会误报(写这条守卫时确实踩了一次)。
         smoke = [
-            line for line in text.splitlines()
-            if line.lstrip().startswith("run") and "<each:" in line and "--help" in line
+            line
+            for line in text.splitlines() if line.lstrip().startswith("run") and "<each:" in line and "--help" in line
         ]
         self.assertTrue(smoke, "配置里找不到脚本冒烟闸门(删了? 那本条守卫该跟着改)")
         for line in smoke:

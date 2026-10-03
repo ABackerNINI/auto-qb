@@ -22,7 +22,6 @@
 from __future__ import annotations
 
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -34,13 +33,15 @@ import commit as commit_mod  # noqa: E402
 import push as push_mod  # noqa: E402
 import sync as sync_mod  # noqa: E402
 import verify_ref as verify_ref_mod  # noqa: E402
+from _pipeline import run_capture  # noqa: E402
 
 PKG = Path(__file__).resolve().parent.parent
 RED = ["config.yml", "auto-qb-data/"]
 
 
 def _git(cwd: Path, *args: str) -> str:
-    proc = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, encoding="utf-8")
+    # 走 run_capture: 同批真实临时仓库用例共用防挂死入口(根因见 _pipeline.run_capture 注释)。
+    proc = run_capture(["git", *args], cwd=cwd)
     assert proc.returncode == 0, f"git {' '.join(args)} 失败: {proc.stderr}"
     return proc.stdout.strip()
 
