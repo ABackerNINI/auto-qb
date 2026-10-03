@@ -1,4 +1,4 @@
-"""test_traffic_sample 测试计划: qB 口径流量采样器(plan 26-10-03-0946 方案C P1 采样器核心 + §06 配置键)
+"""test_traffic_sample 测试计划: qB 口径流量采样器(plan 26-10-03-0946 方案C P1 采样器核心 + §06 配置键 + S2 落盘接线)
 
 ## 测试计划(每个测试函数一条)
 - test_qb_traffic_config_absent_means_disabled: 键组缺省 -> config.qb_traffic 为 None(未启用)
@@ -16,7 +16,8 @@
 - test_missing_fields_produce_null_point_not_zero: server_state 关键字段缺失/空值 -> null 点(不写 0)且基线不推进
 - test_torrent_active_filter_zero_rows_when_idle: 空闲种子零采样行; 活跃种子照常采样
 - test_disabled_at_runtime_handler_noop: 任务已注册后运行期关闭 -> handler 短路不采样(任务保留)
-- test_sampling_creates_no_files_or_dirs: enabled=true 采样全程零新建文件/目录(P1 纯内存)
+- test_enabled_false_creates_zero_files_or_dirs: enabled=false/键组缺省 -> start+采样全程零文件零目录(S2 保守默认验收)
+- test_enabled_true_persists_under_data_dir: enabled=true -> 采样点落 <data_dir>/qb-traffic/, 格式 v1 逐列 + 会话快照不落盘
 - test_module_contract: name/sections 声明正确且被装配清单认领
 """
 import io
@@ -60,6 +61,7 @@ def _active_torrent(hash="HASH123", **kw) -> FakeTorrent:
 
 def _mgr_with_traffic(tmp_path, qb_traffic) -> object:
     mgr = make_manager(str(tmp_path / "state.json"))
+    mgr.config.data_dir = str(tmp_path)  # S2: dat 落盘根目录(真实配置恒非空, loaders 默认 auto-qb-data)
     mgr.client = FakeClient()
     if qb_traffic is not None:
         mgr.config.qb_traffic = qb_traffic
@@ -391,16 +393,42 @@ def test_disabled_at_runtime_handler_noop(tmp_path):
     assert mod.latest == {} and mod._baselines == {}  # 零采样零内存变更
 
 
-def test_sampling_creates_no_files_or_dirs(tmp_path):
-    """enabled=true 采样全程零新建文件/目录(P1 纯内存, 黄金法则 2)"""
+def test_enabled_false_creates_zero_files_or_dirs(tmp_path):
+    """enabled=false 与键组缺省两种情形: start + 采样全程零新建文件/目录(S2 落盘接线后的
+    保守默认验收, 黄金法则 2; S1 的「enabled=true 纯内存」边界已被 P2 接线取代,
+    落盘形态断言在 test_traffic_store.py)"""
+    for qb in (QbTraffic(enabled=False), None):
+        mgr = _mgr_with_traffic(tmp_path, qb)
+        mgr.store.server_state = _ss()
+        seed_store(mgr, [_active_torrent()])
+        mod = mgr.host.get("qb_traffic")
+        mod.start(mgr.ctx, dry_run=False)  # 对账同样零动作(存储目录不存在 -> 不创建)
+        _run_sample(mgr)
+        _run_sample(mgr)
+        assert sorted(str(p) for p in tmp_path.rglob("*")) == [], qb
+
+
+def test_enabled_true_persists_under_data_dir(tmp_path):
+    """enabled=true: 采样点落盘到 <data_dir>/qb-traffic/(global.dat + 单种惰建文件);
+    会话快照列不落盘(§02.3: 只落速率对 + all-time 累计对)"""
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _ss()
     seed_store(mgr, [_active_torrent()])
-    before = sorted(str(p) for p in tmp_path.rglob("*"))
+    mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)
     _run_sample(mgr)
-    after = sorted(str(p) for p in tmp_path.rglob("*"))
-    assert before == after
+    root = tmp_path / "qb-traffic"
+    assert (root / "global.dat").is_file()
+    assert (root / "torrents" / "HASH123.dat").is_file()
+    text = (root / "global.dat").read_text(encoding="utf-8")
+    lines = text.splitlines()
+    assert lines[0] == "# auto-qb qb-traffic v1" and lines[1] == "key,global"
+    assert all(line.startswith("raw,") for line in lines[2:])
+    # 六列恰为 raw/时间/速率对/all-time 累计对; 会话快照(1_000_000/2_000_000)不落任何列(§02.3)
+    first_raw = lines[2].split(",")
+    assert len(first_raw) == 6
+    assert first_raw[0] == "raw" and first_raw[2] == "1024" and first_raw[3] == "2048"
+    assert first_raw[4] == "10000000" and first_raw[5] == "20000000"
 
 
 def test_module_contract(tmp_path):
