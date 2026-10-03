@@ -44,6 +44,18 @@
 }
 /* 内边距交给 .hb-wrap 统一给(与样张 .wrap 同一组值), 否则会和 .ce-page 自带的内边距叠成两份 */
 .hub-page { padding: 0; }
+/* WARN: `.ce-page` 自带的入场动画 `page-in`(components.css)起点带 `transform: translateY(4px)`,
+ *   而本页三个 `position: fixed` 后代(.hb-actbar 保存条 / .hb-pop 说明浮窗 / .hb-pop-arrow 箭头)
+ *   都是 `<main class="ce-page hub-page">` 的**直接子节点**。动画播放期间 `<main>` 带 transform
+ *   ⇒ 按规范成为这几个 fixed 后代的**包含块**, 它们的 `bottom: var(--statusbar-h)` 由「相对视口」
+ *   变成「相对 <main> 盒」—— <main> 不够高时保存条会落在页面中段, 动画一结束(transform 归 none)
+ *   又跳回视口底部, 表现为**切换进设置页时底部动作条先出现在中间再下移的闪烁**(2026-10-04 实测:
+ *   高视口下动画期间 gap-from-bottom 162px, 落定后 34px)。`.hb-view.on` 的 `hb-in` 不背锅
+ *   —— 它不是这三个元素任何一个的祖先, 其 transform 无害。
+ *   处置: 本页关闭 `page-in`, 入场交给 `.hb-view.on`(内层内容的 opacity + translateY(5px) 仍在,
+ *   观感不变), 从根上不让 `<main>` 成为 fixed 后代的包含块。`page-in` 全局定义不动 —— `.layout`
+ *   (种子等视图)没有这类 fixed 子节点, 其位移入场可保留。 */
+.hub-page { animation: none; }
 
 /* 切角: 只用在「有边界的实体」(块 / 规则卡 / 曲线卡 / 分区图标 / 浮窗), 不用在控件与行上 */
 .hb-cut {
