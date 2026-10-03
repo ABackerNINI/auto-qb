@@ -7,8 +7,8 @@
 <meta name="doc-topic" content="torrent-traffic-stats">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-03-0946">
-<meta name="doc-updated" content="26-10-03-0946">
-<title>实施计划 · qB 口径流量图方案C · 采样管线 + dat 文件落盘 · auto-qb</title>
+<meta name="doc-updated" content="26-10-03-1110">
+<title>实施计划 · qB 口径流量图方案C · dat 落盘（全局/单种）+ 分组读侧推算 · auto-qb</title>
 <style>
   :root {
     color-scheme: dark;
@@ -98,23 +98,23 @@
 
   <header class="cover">
     <div class="kicker">实施计划 · plan · auto-qb</div>
-    <h1>qB 口径流量图 · 方案C 分步实施计划<br>采样管线 + dat 文件落盘（全局实时 / 单种子 / 辅种分组）</h1>
-    <p class="lede">基于可行性报告 <a href="../reports/26-10-03-0757-report-qb-traffic-charts.html">26-10-03-0757</a> 的<b>方案C</b>拍板（推翻报告推荐 A）展开的分步实施计划：采样数据落 <code>&lt;data_dir&gt;/qb-traffic/</code> 子目录的逐系列 dat 文件。含本轮拍板回执、方案C 合规化裁决、存储与采样器设计、<b>分组 key 详细对比</b>（§04，用户点名）、时间栅格与 null 断线语义、配置键面、六阶段派发。纯展示功能，不向规则引擎暴露任何变量；非目标与口径划界沿报告 §2.4 不变。</p>
+    <h1>qB 口径流量图 · 方案C 分步实施计划<br>dat 文件落盘（全局 / 单种）+ 分组读侧推算</h1>
+    <p class="lede">基于可行性报告 <a href="../reports/26-10-03-0757-report-qb-traffic-charts.html">26-10-03-0757</a> 的<b>方案C</b>拍板（推翻报告推荐 A）展开的分步实施计划：全局与单种系列落 <code>&lt;data_dir&gt;/qb-traffic/</code> 子目录的逐系列 dat 文件，<b>分组系列不落盘</b>——组流量由组内成员单种 dat 读侧推算（三轮拍板）。含拍板回执（二轮拍板：单种历史入盘；三轮拍板：组不落盘、读侧推算）、方案C 合规化裁决、存储与采样器设计、<b>分组读侧推算设计</b>（§04，二轮的代理键 + 表决吸收机制随之作废）、时间栅格与 null 断线语义、配置键面、六阶段派发。纯展示功能，不向规则引擎暴露任何变量；非目标与口径划界沿报告 §2.4 不变。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-03-0946</div></div>
       <div class="item"><div class="k">专题</div><div class="v">torrent-traffic-stats</div></div>
       <div class="item"><div class="k">取证基线</div><div class="v">0a66c7c0 · 2026-10-03</div></div>
       <div class="item"><div class="k">上游制品</div><div class="v"><a href="../reports/26-10-03-0757-report-qb-traffic-charts.html">report 26-10-03-0757</a> · issue <a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248 (Open)</a></div></div>
-      <div class="item"><div class="k">状态</div><div class="v">Open（§04 待拍板，其余已定）</div></div>
-      <div class="item"><div class="k">预估工作量</div><div class="v">≈ 6–8.5 人日 · 6 段独立可提交</div></div>
+      <div class="item"><div class="k">状态</div><div class="v">Open（26-10-03 三轮拍板已并入：组系列不落盘、读侧推算）</div></div>
+      <div class="item"><div class="k">预估工作量</div><div class="v">≈ 6–8 人日 · 6 段独立可提交</div></div>
     </div>
     <nav class="toc">
-      <a href="#s0">拍板回执</a><a href="#s1">方案C 裁决</a><a href="#s2">存储设计</a><a href="#s3">采样器设计</a><a href="#s4">分组 key 对比</a><a href="#s5">null 断线语义</a><a href="#s6">配置键</a><a href="#s7">前端</a><a href="#s8">API</a><a href="#s9">六阶段派发</a><a href="#s10">风险与真机</a><a href="#s11">验收与回写</a>
+      <a href="#s0">拍板回执</a><a href="#s1">方案C 裁决</a><a href="#s2">存储设计</a><a href="#s3">采样器设计</a><a href="#s4">分组读侧推算</a><a href="#s5">null 断线语义</a><a href="#s6">配置键</a><a href="#s7">前端</a><a href="#s8">API</a><a href="#s9">六阶段派发</a><a href="#s10">风险与真机</a><a href="#s11">验收与回写</a>
     </nav>
   </header>
 
   <section id="s0">
-    <h2><span class="no">00</span>拍板回执（2026-10-03 本轮 + 上轮沿用）</h2>
+    <h2><span class="no">00</span>拍板回执（2026-10-03 三轮 + 上轮沿用）</h2>
     <table>
       <thead><tr><th>决策点</th><th>拍板</th><th>来源</th><th>对设计的影响</th></tr></thead>
       <tbody>
@@ -123,7 +123,9 @@
         <tr><td><b>停机空洞表达</b></td><td><b>null 断线</b>，不补 0、不回填</td><td>本轮用户拍板（报告拍板点④落定）</td><td>栅格离散与渲染语义见 §05</td></tr>
         <tr><td><b>前端选型</b></td><td><b>uPlot</b>（vendor 单文件 IIFE）</td><td>上轮拍板沿用（报告 §08 拍板记录）</td><td>组件与挂点见 §07；排除自绘 SVG 方向</td></tr>
         <tr><td><b>采样间隔 / 保留窗口</b></td><td>做成<b>可配置项</b>，不写死</td><td>上轮拍板沿用（报告 §08 拍板记录）</td><td>键面设计见 §06（黄金法则 4 全链同步）</td></tr>
-        <tr><td><b>分组换 key 旧历史</b></td><td><b>待拍板</b>——本计划给详细对比，默认按「不保留」实施</td><td>本轮用户要求详细对比</td><td>三选项对比与影响面分析见 §04.3；改向不阻塞 P1–P3</td></tr>
+        <tr><td><b>单种历史落盘</b></td><td><b>入盘</b>——单种系列与全局/分组同样落 dat（推翻初版 §02.2「单种不落盘」子决策）</td><td>二轮用户拍板（26-10-03）</td><td>§02.2 重写；内存环取消（§03.3）；单种图 24h/30d 可用（§07/§08）；文件数三闸收敛（§10.1）</td></tr>
+        <tr><td><b>分组系列落盘</b></td><td><b>不落盘</b>——组流量由组内成员单种 dat 读侧推算（成员通常 ≤50，聚合成本可接受）；<b>全局依旧落盘</b>（含全部种子，推算难度大）</td><td>三轮用户拍板（26-10-03）</td><td>§02.2 再收窄：落盘范围 = 全局 + 单种，groups/ 目录与组文件取消；<b>二轮引入的组身份代理键 + 表决吸收整体作废</b>，§04 重写为读侧推算设计；工作量 7–10 → 6–8 人日</td></tr>
+        <tr><td>组 key 稳定化 <span class="tag off">已作废</span></td><td>组 key <b>不得含 save_path</b>（移动即断史）、<b>不得因增删文件换键</b>（「对流量展示来说是毁灭性的」）→ 内容指纹键否决，改<b>代理身份键 + 成员表决吸收</b></td><td>二轮用户拍板（26-10-03）</td><td>§04 全节改版：指纹降级为当轮定位符，dat 挂代理键；「换 key 旧历史」三选项（甲乙丙）随之作废。<b>三轮拍板后整行失效</b>——组不落盘则无键可断，两约束在读侧口径下自动满足（§04.2）</td></tr>
       </tbody>
     </table>
     <div class="callout ok">
@@ -146,7 +148,7 @@
     <table>
       <thead><tr><th>报告点名的负担（§06/§07）</th><th>本计划的机制</th></tr></thead>
       <tbody>
-        <tr><td>文件数随分组线性增长</td><td>单种系列<b>不落盘</b>（§02.2，种子数 ≫ 组数是文件数爆炸的主源头，先掐掉）；文件总数 = 1 (global) + 组数 + index.json，组数量级见报告 §4.4 估算基准（100 组）</td></tr>
+        <tr><td>文件数随种子数线性增长</td><td>三轮拍板后文件总数 = 1 (global) + <b>有过流量的种子数</b>（组不落盘，组数项消失）；爆炸源头（种子数）由三闸收敛：<b>惰性建文件</b>（首次活跃采样才建，从未传输的种子零文件）+ <b>空闲零行</b>（活跃过滤不变，§03.2）+ <b>删种冻结淘汰</b>（§02.5）；单文件 ≤205KB 封顶（§02.3）</td></tr>
         <tr><td>追加写崩溃产生半行需容错</td><td>读侧坏行/半行跳过（对齐 TM 解析先例 <code>curves.py:48-73</code> 的坏行纪律）；重写走 temp + <code>os.replace</code> 原子替换；损坏超阈值移 <code>.corrupt</code> 重建，不静默吞（§02.4）</td></tr>
         <tr><td>清理/轮转逻辑自担</td><td>小时封口时原地按窗裁剪（无独立清理任务）+ 冻结文件按龄淘汰（§02.5）；全部有单测钉住（P2/P3 验收）</td></tr>
       </tbody>
@@ -154,11 +156,11 @@
     <h3>1.3 C 相对 A 的实质收益（写进档案备查）</h3>
     <ul>
       <li><b>state.json 零改动</b>：无 v4 迁移、无版本链风险；差分基线不落盘、重启重置（§03.4），首窗 null 与停机空洞语义天然一致。</li>
-      <li><b>24h 高分辨率段跨重启存活</b>：C 的 raw 段落盘即持久（报告方案对比表中 C「重启存活：全存活」的兑现），A 的 24h 内存环重启即丢；读侧统一从 dat 文件取数，内存环退化为差分基线 + 单种环（§03.3）。</li>
+      <li><b>24h 高分辨率段跨重启存活（两类落盘系列）</b>：C 的 raw 段落盘即持久（报告方案对比表中 C「重启存活：全存活」的兑现），A 的 24h 内存环重启即丢；读侧统一从 dat 文件取数，内存结构退化为差分基线（三轮拍板后连组身份映射也没有，§03.3）——二轮拍板后单种同样采样即落盘，「重启清零」的 UI 告示整体取消。</li>
       <li><b>写放大更小、崩溃丢失更小</b>：平时每采样间隔追加一行 ≈50B；A 每次 flush 全量重写 3–4MB。崩溃丢窗口：C ≤ 1 个采样行，A ≤ state_save_interval（120s）。</li>
     </ul>
-    <h3>1.4 对报告 §9.1 的一处设计修正</h3>
-    <p>报告 §9.1 说分组系列「复用 <code>_build_group_view</code> 的组级 sum 结果，不重算」——<b>不成立</b>：<code>_build_group_view</code> 是 web 层<b>懒建</b>（<code>webui/runtime.py:635</code> 在脏标记时才重建，不在主循环每 tick 执行），且采样器在 core 层，引用它构成 core→webui 反向依赖。修正：<b>采样器自算组级 sum</b>（遍历 <code>store.groups[key]</code> 成员，对 <code>by_hash</code> 的 <code>dlspeed/upspeed/uploaded/downloaded</code> 求和），口径逐字段对齐 <code>views.py:424-429, 459-460</code>（网络流量可加和的口径注释同源）。图上曲线与分组弹层瞬时值可能有 ≤1 个采样间隔的相位差，属两套独立读取，语义一致。</p>
+    <h3>1.4 对报告 §9.1 的设计修正（三轮拍板后收敛为读侧口径）</h3>
+    <p>报告 §9.1 说分组系列「复用 <code>_build_group_view</code> 的组级 sum 结果，不重算」——<b>不成立</b>：<code>_build_group_view</code> 是 web 层<b>懒建</b>（<code>webui/runtime.py:635</code> 在脏标记时才重建），且采样器在 core 层，引用它构成 core→webui 反向依赖。初版修正为「采样器自算组级 sum」；三轮拍板后组系列不采样不落盘，该修正对象消失——<b>组级聚合整体移到读侧</b>（API 层按查询时刻成员聚合单种 dat，§04），聚合口径仍对齐 <code>views.py:424-429, 459-460</code>，组曲线与分组弹层瞬时值天然同源。</p>
   </section>
 
   <section id="s2">
@@ -171,21 +173,28 @@
   skip-check-backup/           # 既有（ops_mod.py:495-496）
   hr/                          # 既有（hr/store.py:83）
   qb-traffic/                  # ← 本计划新增
-    index.json                 # 短哈希 → 组元数据映射 + 格式版本（§02.3）
+    index.json                 # 单种注册表：种子哈希 → 冻结/时间元数据 + 格式版本（§02.5）
     global.dat                 # 全局系列（单文件，永不冻结）
-    groups/
-      3f9a1c2e4b57.dat         # 每组一文件（文件名 = sha1(key)[:12]，§04.2）</pre>
+    torrents/
+      &lt;infohash&gt;.dat          # 每活跃种子一文件（infohash 40 hex 即稳定身份键，§02.2）
+                               # 组不落盘（三轮拍板）：组曲线由成员单种 dat 读侧推算，§04</pre>
     <ul>
       <li><b>子目录名 <code>qb-traffic</code></b>：kebab-case 对齐既有兄弟目录（<code>skip-check-backup</code>/<code>hr</code>）；<code>qb-</code> 前缀与 TM 口径的流量数据在目录层划界（报告 §2.2）。硬编码常量（对齐既有子目录先例，全部非配置键），建目录走 <code>os.makedirs(..., exist_ok=True)</code>。<b>子目录名不做配置键</b>——用户拍板只要求「合适的子目录」，少一个旋钮；真有需求后续加键是纯加法。</li>
       <li>创建时机：<code>enabled</code> 且首次采样时惰性创建（<code>enabled=false</code> 的安装不产生任何文件/目录，P3 验收项）。</li>
     </ul>
 
-    <h3>2.2 落盘范围：单种系列不落盘（子决策，可后期推翻）</h3>
-    <p>只有<b>全局</b>与<b>分组</b>两类系列落 dat 文件；<b>单种系列只留内存环</b>（24h @ 采样间隔，每活跃种子一 deque，删种即清——对齐 <code>store.py:291-307</code> field_snapshots 删种即清先例）。理由：种子数 ≫ 组数（文件数爆炸的主源头），且报告 §9.4 本就判「单种 24h 环纯内存即满足观察需求」、单种 30 天长段口径还挂着 all-time 持久性待真机验证（§10.2）。单种图的窗口即 24h，重启即清零——UI 文案如实声明。若日后要单种落盘，加 <code>torrents</code> 子目录 + 配置键是纯加法，本期不做。</p>
+    <h3>2.2 落盘范围：全局 + 单种两类落盘（三轮拍板收窄；单种入盘沿用二轮拍板）</h3>
+    <p><b>全局</b>与<b>单种</b>两类系列落 dat 文件，<b>分组系列不落盘</b>（三轮拍板）：组流量 = 组内成员单种流量的可加和，成员通常 ≤50，读侧聚合成本可接受，不值得为它维护一套文件与身份机制；<b>全局含全部种子</b>，读侧推算（遍历全库求和）难度大且 <code>server_state</code> 本就直供，依旧落盘。二轮拍板的「单种历史入盘」沿用——它恰好是组推算的<b>数据基座</b>：组曲线 = Σ 成员单种曲线，成员文件缺失（从未传输）按 0 计（§04）。单种落盘的关键优势：<b>infohash 本身就是永久稳定身份</b>——移动目录、增删文件、删后重加都不变，直接以 <code>&lt;infohash&gt;.dat</code> 命名，无需任何身份层。</p>
+    <ul>
+      <li><b>生命周期</b>：首次活跃采样时惰性建文件（从未产生流量的种子零文件零开销）→ 删种 → 文件冻结（停止追加）→ 同 hash 重加 → 解冻续写（历史保留，计数器回落由 §03.4 判重置兜底）→ 冻结超 <code>rollup_window</code> 淘汰（§02.5）。</li>
+      <li><b>体量</b>：空闲种子零采样行（活跃过滤 §03.2 不变），文件只含活跃时段；单文件上限同 §02.3（205KB，对应连续活跃满窗的上界）。文件数 = 有过流量的种子数 ≪ 库内种子总数；典型辅种库并发活跃几十~几百 → 增量 10–100MB 上界量级，实际远小。</li>
+      <li><b>写读路径</b>：全局与单种共用同一套 writer/reader/封口/裁剪/容错（§02.3–02.5）；组聚合复用单种 reader（§04），无第三套代码路径。</li>
+    </ul>
 
     <h3>2.3 文件格式 v1</h3>
     <pre># auto-qb qb-traffic v1                          ← 头行：格式标识 + 版本
-key,&lt;base64url(group_key)&gt;                      ← key 原文（base64url 编码）；global.dat 固定 key,global
+key,&lt;系列标识&gt;                                  ← 稳定身份：global.dat 固定 key,global；torrents/ = torrent:&lt;infohash&gt;。
+                                                    组无文件（三轮拍板，§04）——指纹只是查询定位符，不入存储层
 raw,&lt;epoch_s&gt;,&lt;dl_rate&gt;,&lt;up_rate&gt;,&lt;dl_total&gt;,&lt;up_total&gt;        # 采样行，≈每采样间隔一行
 hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&gt;,&lt;dl_total&gt;,&lt;up_total&gt;   # 小时封口行</pre>
     <table>
@@ -195,10 +204,10 @@ hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&
         <tr><td><code>raw.dl_total / up_total</code></td><td>累计快照，bytes</td><td>Prometheus 口径：存快照、消费侧差分；速率与累计双轨互证（报告 §4.4）</td></tr>
         <tr><td><code>hour.*_avg / *_max</code></td><td>桶内速率均值/峰值</td><td>封口时由本小时 raw 行归并；30 天视图直接消费 hour 行（720 点）</td></tr>
         <tr><td><code>hour.*_total</code></td><td>本小时末累计快照</td><td>相邻 hour 行差分 = 小时累计增量；<code>max(0,·)</code> + 回落判重置（§03.4）</td></tr>
-        <tr><td>头行 <code>key,</code></td><td>组 key 原文</td><td>孤儿文件自愈的数据源（§02.3 index 对账）；base64url 即 <code>encode_group_key</code> 的编码（<code>infra/utils.py:1063-1069</code>）</td></tr>
+        <tr><td>头行 <code>key,</code></td><td>系列稳定身份（<code>torrent:&lt;infohash&gt;</code> / global）</td><td>孤儿文件自愈的数据源（§02.5 对账）；指纹不进存储层——组不落盘后指纹只剩查询定位符一个角色（§04）</td></tr>
       </tbody>
     </table>
-    <p class="hint">行格式刻意与 TM 的 <code>history_traffic.dat</code>（<code>YYYY/M/D ul/dl</code>，<code>curves.py:48-73</code>）同构不同义：同为行式文本、坏行跳过的容错纪律对齐，但 TM 是外部只读文件、我们是自有写路径——「半行容错是我们自己的义务」（报告 §06 的告诫，§02.4 兑现）。单文件稳定上限：raw 24h@30s = 2,880 行 ≈150KB + hour 30d = 720 行 ≈55KB ≈ <b>205KB/文件</b>；100 组 + global ≈ 21MB 总量，分摊在 101 个独立小文件里。</p>
+    <p class="hint">行格式刻意与 TM 的 <code>history_traffic.dat</code>（<code>YYYY/M/D ul/dl</code>，<code>curves.py:48-73</code>）同构不同义：同为行式文本、坏行跳过的容错纪律对齐，但 TM 是外部只读文件、我们是自有写路径——「半行容错是我们自己的义务」（报告 §06 的告诫，§02.4 兑现）。单文件稳定上限：raw 24h@30s = 2,880 行 ≈150KB + hour 30d = 720 行 ≈55KB ≈ <b>205KB/文件</b>；200 活跃种子 + global ≈ 41MB 总量上界（全部满窗连续活跃的保守假设；空闲种子零行，实际远小），分摊在 201 个独立小文件里；组曲线读侧聚合现算，不占文件。</p>
 
     <h3>2.4 写路径与读路径</h3>
     <div class="split">
@@ -223,19 +232,18 @@ hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&
     <h3>2.5 index.json 与清理/淘汰</h3>
     <pre>index.json：
   { "format": 1,
-    "groups": {
-      "3f9a1c2e4b57": { "key_b64": "…",            # base64url(group_key)，与 dat 头行同源
-                        "frozen_at": null,          # 非 null = 组已解散/换键，文件冻结不再追加
-                        "created_at": 1727…, "updated_at": 1727… } } }</pre>
+    "torrents": {
+      "8f14e45f…":   { "frozen_at": null,          # 非 null = 种子已删，冻结不再追加（重加即解冻）
+                       "created_at": 1727…, "updated_at": 1727… } } }</pre>
     <ul>
-      <li><b>启动对账（reconcile）</b>：扫描 <code>qb-traffic/</code> 目录与 index 求差——孤儿 dat（index 无条目）从头行 <code>key,</code> 重建条目；失配（头行 key ≠ index 条目）以头行为准自愈；index 条目无文件则删条目。<b>对账只读目录与头行，永不动 raw/hour 数据</b>。</li>
-      <li><b>冻结与淘汰</b>：组解散 / 换 key（§04.3 默认「不保留」）→ 旧文件置 <code>frozen_at</code>、停止追加；采样任务每小时顺带（复用封口时机，无独立任务）检查 frozen 文件，<code>now - updated_at &gt; rollup_window</code> 即删除文件 + index 条目。冻结期的旧数据仍可查询（30 天内），自然过期——这正是「不保留」选项的实现形态：不删历史，只是不再续写、按窗消亡。</li>
-      <li><b>index.json 写入</b>：<code>utils.atomic_write</code>（tmp + replace），仅条目变化时写（封口/冻结/淘汰时点），非每采样。</li>
+      <li><b>启动对账（reconcile）</b>：扫描 <code>qb-traffic/</code> 目录与 index 求差——孤儿 dat（index 无条目）从头行 <code>key,</code> 重建条目；失配以头行为准自愈；index 条目无文件则删条目。<b>对账只读目录与头行，永不动 raw/hour 数据</b>。</li>
+      <li><b>冻结与淘汰</b>：种子删除 → 文件冻结（停止追加）；同 hash 重加 → 解冻续写。采样任务每小时顺带（复用封口时机，无独立任务）检查 frozen 文件，<code>now - updated_at &gt; rollup_window</code> 即删除文件 + index 条目。组无文件，无冻结/淘汰概念——组曲线随成员集现算（§04）。</li>
+      <li><b>index.json 写入</b>：<code>utils.atomic_write</code>（tmp + replace），仅条目变化时写（封口 / 冻结 / 解冻 / 淘汰时点），非每采样。</li>
     </ul>
   </section>
 
   <section id="s3">
-    <h2><span class="no">03</span>采样器设计：挂点、三系列来源、差分与基线</h2>
+    <h2><span class="no">03</span>采样器设计：挂点、两系列来源、差分与基线</h2>
 
     <h3>3.1 模块与任务挂点</h3>
     <ul>
@@ -245,27 +253,28 @@ hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&
       <li>handler 在<b>主循环线程</b>执行——dat 追加/rewrite、index 写入、内存结构变更全部单线程，无锁（单写线程不变式由 P1 测试钉住）。</li>
     </ul>
 
-    <h3>3.2 三系列采样来源（全部读内存快照，零新增 qB 请求）</h3>
+    <h3>3.2 两系列采样来源（全部读内存快照，零新增 qB 请求）</h3>
     <table>
       <thead><tr><th>系列</th><th>来源（1.5s 增量同步已在内存）</th><th>采样判据</th></tr></thead>
       <tbody>
         <tr><td>① 全局</td><td><code>store.server_state</code>：<code>dl_info_speed/up_info_speed</code>（瞬时）+ <code>dl_info_data/up_info_data</code>（会话累计）+ <code>alltime_dl/alltime_ul</code>（终身累计）</td><td>恒采（qB 在线即有值；断连退避期出 null 点，§03.5）</td></tr>
         <tr><td>② 单种</td><td><code>record.dlspeed/upspeed</code>（瞬时）+ <code>downloaded/uploaded</code>（all-time）+ <code>downloaded_session/uploaded_session</code>（<code>record.py:38-60</code>）</td><td><b>活跃过滤</b>：<code>dlspeed&gt;0 or upspeed&gt;0</code> 才采；非活跃期不产点（展示层断线）——全库空闲时零采样行（P1 验收）</td></tr>
-        <tr><td>③ 分组</td><td><b>自算</b>：遍历 <code>store.groups</code>（<code>key → [hash…]</code>，<code>store.py:87-89</code>），对成员 <code>by_hash</code> 记录 sum <code>dlspeed/upspeed/uploaded/downloaded</code>——口径对齐 <code>views.py:424-429, 459-460</code>（§01.4 修正：不复用懒建的 <code>_build_group_view</code>）</td><td>组任一成员活跃才采；组键取 <code>grouping_mod.py:41-49</code> 内容指纹，与分组视图同键同源</td></tr>
       </tbody>
     </table>
+    <p class="hint"><b>组不采样（三轮拍板）</b>：分组系列不落盘，采样器与组概念完全解耦——组曲线在 API 层由成员单种 dat 读侧聚合现算（§04），口径对齐 <code>views.py:424-429, 459-460</code>（§01.4）。</p>
 
     <h3>3.3 内存结构（比报告 §9.3 再砍一层）</h3>
     <pre>采样器进程内：
-  baselines: 系列键 → { dl_total, up_total }          # 差分基线，仅进程内推进，不落盘（§03.4）
-  torrent_rings: hash → deque(maxlen=2880)            # 单种 24h 环（点 = raw 行同构），删种即清
-  （全局/分组的 24h 序列不再要内存环——每次采样即追加落盘，读侧从 dat raw 段取，§01.3）</pre>
+  baselines: 系列键（global + torrent:&lt;infohash&gt;）→ { dl_total, up_total }
+                                                             # 差分基线，仅进程内推进，不落盘（§03.4）
+  （两类系列的 24h 序列都不再要内存环——每次采样即追加落盘，读侧统一从 dat raw 段取，§01.3/§02.2；
+    组身份映射 fp_to_surrogate / last_hash_surrogate 随三轮拍板拆除——组不采样不落盘，§04）</pre>
 
     <h3>3.4 差分与基线重置规则（沿报告 §9.2，落盘部分按 C 改）</h3>
     <ul>
       <li>速率字段直采不差分；累计差分在<b>消费侧</b>（API 栅格离散时）进行：<code>delta = max(0, cur - last)</code>；<code>cur &lt; last</code>（qB 重启会话归零 / alltime 回退 / 删种重加）⇒ 判计数器重置：该桶记 null，基线更新为 cur。</li>
       <li><b>基线不落盘</b>：程序重启 → 基线为空 → 重启后首个采样只立基线不出增量（首窗 null）。这是方案 C 免掉 state v4 的关键取舍，代价 = 每次重启损失 1 个采样窗的累计增量（速率曲线不受影响——瞬时值对重启免疫），与「停机 = 断线」的拍板语义一致。</li>
-      <li><b>显式重置</b>：组键换手（移动目录/增删文件 ⇒ 新 key）→ 新文件新系列从零起，旧文件冻结（§02.5）；种子删除 → 该 hash 内存环清除；同 hash 重加 → all-time 归零由回落判重置兜底。</li>
+      <li><b>种子身份天然稳定（三轮拍板后无身份层）</b>：单种系列挂 infohash——移动目录/增删文件不触碰它，<b>无需任何吸收机制</b>；种子删除 → 文件冻结，同 hash 重加 → 解冻续写，all-time 归零由回落判重置兜底。组无身份问题——组曲线按查询时刻成员聚合（§04），指纹变化只换查询键，不换数据。</li>
     </ul>
 
     <h3>3.5 断连与空值防御</h3>
@@ -276,60 +285,32 @@ hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>分组 key 详细对比（拍板点⑤ · 用户点名）</h2>
-    <p>三层决策逐层对比：<b>key 本体</b>（曲线用什么键）→ <b>key→文件名映射</b>（dat 文件怎么命名）→ <b>换 key 后旧历史策略</b>（报告拍板点⑤的原始问题）。前两层无争议给结论，第三层列三选项供拍板。</p>
+    <h2><span class="no">04</span>分组读侧推算设计（三轮拍板 · 组不落盘，成员单种 dat 聚合）</h2>
+    <p>三轮拍板：组流量可以由组内种子流量<b>推算</b>（成员通常 ≤50，聚合成本可接受），不值得为它落盘；全局含全部种子、推算难度大，依旧落盘。这使二轮拍板的「组 key 稳定化」<b>失去对象</b>——组系列不落盘，就没有可断的键：指纹（<code>(path_normalize(save_path), 排序文件名元组)</code>，<code>grouping_mod.py:41-49</code>）只是<b>查询时刻的定位符</b>，移动目录/增删文件换键后，新键照样聚合同一批成员的单种历史，曲线天然连续。二轮引入的代理身份键 + 成员表决吸收（<code>fp_to_surrogate</code>/<code>last_hash_surrogate</code>/index members 快照/启动表决）<b>整体作废</b>；数据基座 = 二轮拍板的单种入盘：组曲线 = Σ 成员单种曲线。</p>
 
-    <h3>4.1 key 本体：沿用内容指纹，不新造</h3>
-    <table>
-      <thead><tr><th>候选</th><th>换 key 触发面</th><th>与既有分组的关系</th><th>判定</th></tr></thead>
-      <tbody>
-        <tr><td><b>内容指纹</b> <code>(path_normalize(save_path), 排序文件元组)</code>（<code>grouping_mod.py:41-49</code>）</td><td>移动目录 / 增删文件</td><td>与分组弹层、<code>_build_group_view</code>、<code>/api/groups/{key}</code> <b>同键同源</b></td><td><span class="tag a">沿用</span> 流量图是分组视图的时间维度，键必须一致——图和列表各用一套「组」概念是口径事故</td></tr>
-        <tr><td>仅 save_path</td><td>仅移动目录（更少）</td><td>与分组视图键冲突：同目录两套文件集合会被并成一条曲线，而列表按指纹分两组</td><td><span class="tag c">排除</span> 图 ↔ 列表对不上</td></tr>
-        <tr><td>qB category/tag</td><td>用户改标签即断</td><td>语义完全不同（用户标注 vs 内容指纹）</td><td><span class="tag c">排除</span></td></tr>
-      </tbody>
-    </table>
+    <h3>4.1 聚合算法（API 层现算，§08 分组端点）</h3>
+    <ol>
+      <li><b>成员集</b>：查询时刻 <code>store.groups[当前指纹键]</code>（<code>key → [hash…]</code>，<code>store.py:87-89</code>）——与分组视图/弹层同源同刻，不新造组概念（范围守恒）。</li>
+      <li><b>速率</b>：各成员单种序列按 §05.1 栅格离散到桶 → 桶内 Σ 成员均值；桶内无行成员按 0 计。</li>
+      <li><b>累计增量</b>：逐成员先差分（<code>max(0,·)</code> + 回落判重置，§03.4 同款）再求和——先逐成员差分再相加，避免单成员计数器重置把全组差分打成大负数；成员某桶增量缺失（无行/重置/窗首基线缺失）按 0 计，组口径宁可少计一桶不出洞。</li>
+      <li><b>桶 null 判定（借全局系列当真值源）</b>：桶在全局系列为 null（程序停机/qB 断连——global 恒采 + 断连写空值行，§03.5）→ null；桶早于组内全部成员文件的最早行（组尚无任何观测）→ null；<b>其余桶即使全员空闲也出 0</b>——组图空闲段是 0 线、停机段是断线，二者靠 global.dat 区分，这是单种图做不到的（单种空闲与停机同为无行）。</li>
+    </ol>
 
-    <h3>4.2 key → 文件名映射：短哈希 + index.json</h3>
-    <table>
-      <thead><tr><th>候选</th><th>文件名形态</th><th>问题</th><th>判定</th></tr></thead>
-      <tbody>
-        <tr><td>base64url(key) 全量做文件名</td><td>可达数百字符（save_path + 文件元组 JSON 后编码）</td><td>Windows MAX_PATH 260 风险（data_dir 深层 + groups/ 一层）；不可读；同 key 多处编码不一致的隐患</td><td><span class="tag c">排除</span></td></tr>
-        <tr><td><b>sha1(base64url(key))[:12] + index.json</b></td><td>恒 12 hex 字符</td><td>哈希不可逆 → 须 index 映射（头行 <code>key,</code> 兜底自愈）；理论碰撞（100 组下 2^48 量级，可忽略；创建时查重，碰撞则加长到 16 hex 并 WARN）</td><td><span class="tag a">采用</span></td></tr>
-      </tbody>
-    </table>
+    <h3>4.2 语义边界（刻意声明）</h3>
+    <ul>
+      <li><b>组历史 = 查询时刻成员集的全程聚合</b>：新成员的历史一并计入（回溯可见），成员移除后其历史从组曲线消失。不维护成员随时间的快照——那正是被拆除的身份层；该口径与分组弹层瞬时值完全同源（弹层本来就是当前成员 sum），列表与图永不打架。</li>
+      <li><b>指纹变化（移动/增删文件）</b>：<code>store.groups</code> 的键变、成员不变 → 图跟着新键走、数据同一批，曲线连续——二轮拍板点名的两个「毁灭性」场景（含 save_path 断史 / 增删文件换键）在此口径下无伤，两约束自动满足。</li>
+      <li><b>合并/拆分</b>：成员集怎么变，曲线就怎么聚合——读侧聚合与列表视图共用同一成员集，初版担忧的「图合并、列表拆分」分歧不复存在。</li>
+    </ul>
 
-    <h3>4.3 换 key 后旧历史展示策略（待拍板 · 默认「不保留」）</h3>
-    <p>组 key 是内容指纹，「换 key = 内容集合变了」。移动目录、增删文件都会换 key——尤其前者（整库挪盘符/改目录名）会让用户直观感觉「我的组断了」。三选项：</p>
-    <table>
-      <thead><tr><th>选项</th><th>做法</th><th>语义正确性</th><th>实现成本</th><th>对 dat/index 格式影响</th></tr></thead>
-      <tbody>
-        <tr>
-          <td><b>甲 · 不保留</b>（报告推荐，本计划默认）</td>
-          <td>换 key 即新系列；旧文件冻结、30 天内仍可查旧 key 曲线，按窗自然消亡（§02.5）；分组弹层只挂当前 key</td>
-          <td><span class="tag a">最严谨</span>：旧曲线对新内容集合无语义，不硬拼；「目录挪了 = 新观察对象」自洽</td>
-          <td><span class="tag a">0 额外</span>：冻结+淘汰本就是清理机制的一部分</td>
-          <td>无（<code>frozen_at</code> 字段已预留）</td>
-        </tr>
-        <tr>
-          <td><b>乙 · 按 save_path 归并展示</b></td>
-          <td>分组图把同 save_path 的多代 key 按时间段拼成一条连续曲线（代间衔接点 null 断开）</td>
-          <td><span class="tag b">稀释</span>：增删文件导致的换 key 也被拼进「同一目录的历史」，但内容集合其实变了；hover 需标代次，否则用户误读</td>
-          <td><span class="tag b">+0.5–1 天</span>：查询聚合层按 <code>save_path</code> 归并多文件 + 时间段拼接</td>
-          <td>index 条目加 <code>save_path + periods</code> 元数据（v1 即预留字段位，甲乙通用）</td>
-        </tr>
-        <tr>
-          <td><b>丙 · 组别名</b></td>
-          <td>用户给组命名，别名做展示键，底层仍指纹键；换 key 时别名自动继承（同 save_path）或手动重绑</td>
-          <td><span class="tag a">体验最好</span>，但「自动继承」的判定规则本身就是乙的归并问题</td>
-          <td><span class="tag c">+1.5–2.5 天</span>：命名 UI + 持久化 + 绑定/继承规则；报告 §08 已判「超出本期」</td>
-          <td>index/独立别名存储 + 配置面</td>
-        </tr>
-      </tbody>
-    </table>
-    <div class="callout warn">
-      <p><b>拍板状态与影响面：</b>三项中<b>甲</b>是默认（与报告推荐一致），P1–P6 全程按甲实施；实施到 <b>P4（分组查询端点）前</b>用户可改判乙/丙——改判只动「分组查询聚合层 + index 元数据」（乙 +0.5–1 天，丙另计），<b>不回改采样器与 dat 格式</b>（P1/P2 成果全部保留）。若不另行拍板，视为维持甲。</p>
+    <h3>4.3 请求成本</h3>
+    <ul>
+      <li>每请求 ≤50 成员文件 × ≤205KB（24h 窗只消费 raw 段、30d 窗只消费 hour 段）；空闲成员零行、从未传输成员无文件，典型远小于上界。</li>
+      <li>弹层打开期间按采样间隔低频续拉（§07），非后台常驻；<b>不做聚合缓存</b>——真机压力实证后再议（P4 钉 50 成员聚合正确性与耗时单测）。</li>
+    </ul>
+    <div class="callout ok">
+      <p><b>拍板落实状态：</b>三轮拍板两条（组不落盘读侧推算 / 全局保留落盘）由本节落实；二轮拍板的两条组 key 约束（不得含 save_path / 不得因增删文件换键）在读侧口径下<b>自动满足</b>——数据挂 infohash 与 global，键只当查询定位符，无键可断；代理键 + 表决吸收机制及相关单测面全部移出计划。</p>
     </div>
-    <p class="hint">补充说明：甲之下「挪目录断档」并非数据丢失——旧 key 文件冻结后 30 天内在分组弹层仍可查（旧 key 经 index 反查）；断的是<b>新 key 的曲线从零起</b>。若用户后续反馈强烈，乙是低成本升级路径（字段已预留）。</p>
   </section>
 
   <section id="s5">
@@ -347,6 +328,7 @@ hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&
         <tr><td>程序停机</td><td>停机期无采样者 → 连续空桶</td><td>曲线断开；文案「程序未运行期间无数据」</td></tr>
         <tr><td>qB 断连</td><td>采样任务照常出队但写空值行（§03.5）</td><td>断线（与停机洞视觉一致，不需要区分色）</td></tr>
         <tr><td>计数器重置 / 单种非活跃</td><td>判重置桶 null（§03.4）；单种非活跃期不产点</td><td>断线 / 单种图仅在活跃期有线段</td></tr>
+        <tr><td>组全员空闲 vs 组停机</td><td>读侧聚合借全局系列判（§04.1-④：global 行在 → 真空闲出 0；global null → 停机出洞）</td><td>组图空闲段 0 线 / 停机段断线</td></tr>
       </tbody>
     </table>
     <ul>
@@ -393,7 +375,7 @@ hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&
       <thead><tr><th>图</th><th>挂点（沿报告 §9.6）</th><th>窗口</th><th>轮询/取数</th></tr></thead>
       <tbody>
         <tr><td>① 全局</td><td>今日流量面板：既有 TM「历史流量」弹层旁并列 qB 弹层（或弹层内 tab：TM 按日聚合 / qB 时序）</td><td>24h / 30d 切换</td><td>打开时拉取 + 打开期间按采样间隔低频续拉（对齐 <code>drawer.js:471-482</code> 低频 <code>setInterval</code> + <code>document.hidden</code> 跳过先例）</td></tr>
-        <tr><td>② 单种</td><td>种子详情抽屉新增「流量」页签</td><td>仅 24h（内存环，重启清零——文案声明）</td><td>同上；抽屉关闭即停</td></tr>
+        <tr><td>② 单种</td><td>种子详情抽屉新增「流量」页签</td><td>24h / 30d 切换（dat 落盘跨重启连续；非活跃时段为断线，§5.2）</td><td>同上；抽屉关闭即停</td></tr>
         <tr><td>③ 分组</td><td>分组弹层</td><td>24h / 30d 切换</td><td>key 通道复用 <code>encode_group_key</code>（<code>/api/groups/{key}</code> 同款）</td></tr>
       </tbody>
     </table>
@@ -402,8 +384,9 @@ hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&
   <section id="s8">
     <h2><span class="no">08</span>API 端点（三域 router，金清单 +3）</h2>
     <pre>GET /api/traffic/qb/global?window=24h|30d        # routes/state.py（与 /api/traffic/history 同域对照）
-GET /api/traffic/qb/torrent/{hash}?window=24h    # routes/torrent_detail.py（仅 24h：单种不落盘，30d 拒 4xx）
-GET /api/traffic/qb/group/{key}?window=24h|30d   # routes/groups.py（key 沿用 base64url 通道）
+GET /api/traffic/qb/torrent/{hash}?window=24h|30d  # routes/torrent_detail.py（单种已落盘，30d 同样可查）
+GET /api/traffic/qb/group/{key}?window=24h|30d   # routes/groups.py（key 收当前指纹 base64url，同 /api/groups/{key}
+                                                  # 通道；服务端按当前成员聚合成员单种 dat 现算——组无文件，§04）
 
 响应形状（三域一致，报告 §9.5 + totals 细化）：
   { "points": [ { "t": 1727…, "dl": 123456, "up": 7890 } | null, ... ],
@@ -411,44 +394,44 @@ GET /api/traffic/qb/group/{key}?window=24h|30d   # routes/groups.py（key 沿用
     "meta":  { "window": "24h", "interval_s": 30, "source": "qb", "stale": false } }</pre>
     <ul>
       <li>全部挂<b>既有三域 router</b>，不新增域 ⇒ <code>ROUTE_BUILDERS</code>（11 域，<code>routes/__init__.py:8-20</code>）不动；金清单 <code>test_web_route_manifest_frozen</code>（<code>tests/test_web.py:9392</code>，现钉 72 条）<b>同步追加 3 条 GET</b>。</li>
-      <li>鉴权沿用 <code>make_require_token</code>；未启用/无数据返回空态（<code>points: []</code> + <code>meta.stale</code>），与 <code>/api/traffic/history</code> 未启用空数组分支同构（<code>routes/state.py:108-117</code>）；<code>window</code> 非法值 4xx；数据源 = dat 文件读（§02.4 读路径）+ 内存环（单种）。</li>
+      <li>鉴权沿用 <code>make_require_token</code>；未启用/无数据返回空态（<code>points: []</code> + <code>meta.stale</code>），与 <code>/api/traffic/history</code> 未启用空数组分支同构（<code>routes/state.py:108-117</code>）；<code>window</code> 非法值 4xx；数据源统一 = dat 文件读（§02.4 读路径），分组端点另经 §04.1 聚合（≤50 成员文件现算，成本 §04.3）；分组端点指纹解析不到成员（组从未有成员产过流量）返回空态。</li>
       <li>读文件在 Web 线程：文件 ≤205KB 快读 + rewrite 竞态退避（§02.4），最坏返回上一秒快照 + <code>stale: true</code>，不阻塞事件循环超时。</li>
     </ul>
   </section>
 
   <section id="s9">
     <h2><span class="no">09</span>六阶段派发（每段一个独立可提交单元）</h2>
-    <p class="hint">对齐报告 §12 节奏：P2 从「state v4 落盘」换向为「dat 落盘」，P3 换为清理与体量，真机收尾拆出配置验收并入 P6。段间依赖单向向下，任何一段停下都不留半成品入口。</p>
+    <p class="hint">对齐报告 §12 节奏：P2 从「state v4 落盘」换向为「dat 落盘」，P3 换为清理与体量，真机收尾拆出配置验收并入 P6；三轮拍板后组采样/代理键吸收层拆除，组读侧聚合并入 P4。段间依赖单向向下，任何一段停下都不留半成品入口。</p>
     <table>
       <thead><tr><th>阶段</th><th>内容</th><th>产出</th><th>验收判据（单测/机检钉住）</th><th class="num">工作量</th></tr></thead>
       <tbody>
         <tr>
           <td><b>P1</b><br>采样器核心</td>
-          <td>模块骨架 + internal 任务自注册 + 三系列采样（§03.1–3.2）+ 差分基线/重置（§03.4）+ 单种内存环；<b>纯内存不落盘不接 UI</b></td>
+          <td>模块骨架 + internal 任务自注册 + 两系列采样（§03.1–3.2，全局恒采/单种活跃过滤）+ 差分基线/重置（§03.4）；<b>纯内存不落盘不接 UI</b></td>
           <td><code>traffic_sample_mod.py</code> + 单测</td>
-          <td>采样在主循环线程（单写线程不变式有测试钉住）；模拟 qB 重启（计数器回落）不产负增量、记重置；组键换手 → 旧系列冻结、新系列起零；断连出 null；全库空闲零采样行；<code>enabled=false</code> 不注册任务</td>
-          <td class="num">2–2.5 天</td>
+          <td>采样在主循环线程（单写线程不变式有测试钉住）；模拟 qB 重启（计数器回落）不产负增量、记重置；断连出 null；单种活跃过滤（空闲零采样行）；<code>enabled=false</code> 不注册任务</td>
+          <td class="num">1.5–2 天</td>
         </tr>
         <tr>
           <td><b>P2</b><br>dat 落盘</td>
-          <td>writer/reader（§02.3–02.4）+ 小时封口 rollup + rewrite 裁剪 + <code>index.json</code> + 启动 reconcile（§02.5）+ 文件名哈希（§04.2）</td>
+          <td>writer/reader（§02.3–02.4，global + <code>torrents/</code>）+ 小时封口 rollup + rewrite 裁剪 + <code>index.json</code>（单种注册表）+ 启动 reconcile（§02.5）</td>
           <td>存储层模块 + 单测</td>
-          <td>半行/坏行容错（构造截断文件）；kill 模拟丢 ≤1 采样行；重启接续首窗 null 基线重置；窗口裁剪边界（正好 N 行）；孤儿 dat 自愈 / 失配 index 对账 / 碰撞加长；rewrite 竞态退避</td>
+          <td>半行/坏行容错（构造截断文件）；kill 模拟丢 ≤1 采样行；重启接续首窗 null 基线重置；窗口裁剪边界（正好 N 行）；孤儿 dat 自愈 / 失配 index 对账；rewrite 竞态退避</td>
           <td class="num">1.5–2 天</td>
         </tr>
         <tr>
           <td><b>P3</b><br>清理与体量</td>
-          <td>冻结文件按龄淘汰（§02.5）+ 配置键全链（§06）</td>
+          <td>冻结文件按龄淘汰（§02.5，删种冻结/重加解冻）+ 配置键全链（§06）</td>
           <td>清理逻辑 + <code>validate_config</code>/schema/键面 fixture + 单测</td>
-          <td>冻结超 <code>rollup_window</code> 即删文件+条目；100 组构造数据体量 ≤ 上限（≈21MB 总量回归）；4 键边界校验（15s–600s / 1h–72h / 7d–90d）；<code>test_config_key_surface</code> 绿；<code>enabled=false</code> 全程零文件零目录</td>
-          <td class="num">0.5–1 天</td>
+          <td>冻结超 <code>rollup_window</code> 即删文件+条目；200 活跃种子构造数据体量回归 ≤ 上界（≈41MB）；4 键边界校验（15s–600s / 1h–72h / 7d–90d）；<code>test_config_key_surface</code> 绿；<code>enabled=false</code> 全程零文件零目录</td>
+          <td class="num">0.5 天</td>
         </tr>
         <tr>
           <td><b>P4</b><br>API 端点</td>
-          <td>三 GET（§08）+ 栅格离散与 null 语义（§05.1）+ 金清单登记</td>
+          <td>三 GET（§08）+ 栅格离散与 null 语义（§05.1）+ <b>组读侧聚合（§04：成员 dat → 桶级求和）</b>+ 金清单登记</td>
           <td>3 端点 + <code>test_web_route_manifest_frozen</code> 75 条</td>
-          <td>金清单绿；栅格离散单测（抖动采样归桶/空桶 null/累计差分 max(0,·) 与重置 null）；非法 window 4xx；空态 + stale；token 鉴权沿用</td>
-          <td class="num">0.5–1 天</td>
+          <td>金清单绿；栅格离散单测（抖动采样归桶/空桶 null/累计差分 max(0,·) 与重置 null）；组聚合单测（成员进出回溯可见性 / 全员空闲出 0 线 / 停机借 global 判 null / 成员重置贡献 0 / 50 成员耗时上界）；非法 window 4xx；空态 + stale；token 鉴权沿用</td>
+          <td class="num">1 天</td>
         </tr>
         <tr>
           <td><b>P5</b><br>前端三图</td>
@@ -459,14 +442,14 @@ GET /api/traffic/qb/group/{key}?window=24h|30d   # routes/groups.py（key 沿用
         </tr>
         <tr>
           <td><b>P6</b><br>真机收尾</td>
-          <td>报告 §11.2 五条逐项核验 + C 特有三条：长停机重启接续 / 组解散文件冻结淘汰 / 手工构造半行文件容错</td>
+          <td>报告 §11.2 五条逐项核验 + C 特有四条：长停机重启接续 / 真机移动目录 + 增删文件实测（单种曲线天然不断——infohash 身份；组曲线随当前成员集聚合）/ 删种冻结·重加解冻·淘汰 / 手工构造半行文件容错；组推算与分组弹层瞬时值对照</td>
           <td>验证记录（testing/ 基线切片或报告追记）+ 结论回写</td>
           <td>每条有实测数字与结论；与设计偏差回写本计划变更记录并说明</td>
           <td class="num">0.5 天</td>
         </tr>
       </tbody>
     </table>
-    <p><b>工作量合计 ≈6–8.5 人日。</b>报告 §06 方案C 行的「3–5 人日」只覆盖采样+落盘+前端主体；本表多出的部分是逐段显式化的金清单登记、清理/对账、配置键全链与真机收尾——比 A 的 4–6 人日贵在文件生命周期管理，省在免 state v4 迁移。<b>分组 key 改判乙（§04.3）</b>发生在 P4 前则 +0.5–1 天。</p>
+    <p><b>工作量合计 ≈6–8 人日。</b>报告 §06 方案C 行的「3–5 人日」只覆盖采样+落盘+前端主体；本表多出的部分是逐段显式化的金清单登记、清理/对账、配置键全链与真机收尾——比 A 的 4–6 人日贵在文件生命周期管理，省在免 state v4 迁移；二轮拍板增量 = 单种落盘（P2/P3）≈ +1 人日，三轮拍板 = 拆除组采样与代理键吸收层（P1/P2）、组读侧聚合移入 P4，净 −1 人日上下。</p>
   </section>
 
   <section id="s10">
@@ -475,20 +458,21 @@ GET /api/traffic/qb/group/{key}?window=24h|30d   # routes/groups.py（key 沿用
     <table>
       <thead><tr><th>风险</th><th>等级</th><th>缓解</th></tr></thead>
       <tbody>
-        <tr><td>组 key 高频抖动（文件列表反复增删）导致 dat 文件频繁冻结/新建</td><td><span class="tag b">中</span></td><td>换 key 只影响冻结/新建（O(1)），hour 封口按文件独立；抖动期曲线是断线如实呈现；P1 单测覆盖「换 key → 旧冻新零」</td></tr>
-        <tr><td>文件总数随组数线性增长（1 + 组数 + index）</td><td><span class="tag b">中</span></td><td>单种不落盘先掐最大头（§02.2）；文件 ≤205KB 上限；index 观察；PT 辅种组数量级远小于种子数</td></tr>
+        <tr><td>指纹高频抖动（文件列表反复增删）</td><td><span class="tag c">低</span></td><td>组不落盘后指纹只是查询定位符，抖动零存储后果——无映射、无文件 churn、无 index 写放大；分组视图本体不受影响（范围守恒）</td></tr>
+        <tr><td>文件总数 = 1 + 有过流量的种子数（组不落盘），随库规模线性增长</td><td><span class="tag c">低</span></td><td>三闸收敛（§02.2）：惰性建文件（从未传输零文件）/ 空闲零行 / 删种冻结淘汰；单文件 ≤205KB；活跃并发量级（几十~几百）远小于库总量</td></tr>
+        <tr><td>组读侧聚合请求成本（≤50 成员文件 × ≤205KB/请求）</td><td><span class="tag c">低</span></td><td>仅弹层按需 + 低频续拉（§07）；24h 窗只读 raw 段、30d 窗只读 hour 段；空闲成员零行、从未传输成员无文件，典型远小于上界；不做缓存，压力实证后再议（§04.3）；P4 钉 50 成员正确性与耗时单测</td></tr>
         <tr><td>追加写崩溃半行 / rewrite 竞态（Windows <code>os.replace</code> 对已打开文件失败）</td><td><span class="tag b">中</span></td><td>读侧坏行跳过 + 5% 损坏阈值移 .corrupt；rewrite 退避重试 ×3；读侧快读即关；P2 全部有单测</td></tr>
         <tr><td>index 与目录失配（手工删文件 / 半写的 index）</td><td><span class="tag c">低</span></td><td>启动 reconcile 自愈，头行 <code>key,</code> 是重建数据源（§02.5）；index 走 atomic_write</td></tr>
-        <tr><td>单种 all-time 持久性证据不完整（报告 §11-①）</td><td><span class="tag c">低（较报告降级）</span></td><td>C 下单种不落盘、无 30 天长段差分，暴露面缩到「24h 环内跨 qB 重启的累计接续」——回落判重置兜底，最坏断线</td></tr>
+        <tr><td>单种 all-time 计数器回退（qB 重启/重加）污染单种 totals 差分</td><td><span class="tag c">低</span></td><td>回落判重置兜底（§03.4），速率曲线不受影响；删后重加解冻续写语义有单测（P2）；跨 qB 重启持久性仍在真机清单（§10.2-①）</td></tr>
         <tr><td>alltime/会话计数器回退污染全局长段增量</td><td><span class="tag b">中</span></td><td>消费侧 <code>max(0,·)</code> 差分 + 回落判重置 null（§03.4/§05.1）；速率曲线不受影响（瞬时直采）</td></tr>
-        <tr><td>每小时 rewrite 的写放大（100 组 = 100 次/小时）</td><td><span class="tag c">低</span></td><td>单文件 ≈205KB、错峰在各自封口时刻，I/O 量级可忽略；对比方案 A 每次 flush 全量重写 3–4MB state.json 反而是净改善</td></tr>
+        <tr><td>每小时 rewrite 的写放大（200 活跃种子 = 200 次/小时；组文件已随三轮拍板消失）</td><td><span class="tag c">低</span></td><td>单文件 ≈205KB、错峰在各自封口时刻，I/O 量级可忽略；对比方案 A 每次 flush 全量重写 3–4MB state.json 反而是净改善</td></tr>
         <tr><td>与 TM 图同屏口径混淆（null 断线 vs 缺失日=0）</td><td><span class="tag c">低</span></td><td>图例/文案「qB 口径 · 程序运行期间」划界（§05.2）；报告 §2.2 划界表沿用</td></tr>
         <tr><td>state.json 零改动</td><td><span class="tag a">无</span></td><td>无 v4 迁移、无版本链回归面（versioning 保持 state 3，<code>infra/versioning.py:29-34</code>）</td></tr>
       </tbody>
     </table>
     <h3>10.2 待真机验证清单（沿报告 §11.2，标注 C 下适用性）</h3>
     <ol>
-      <li><b>单种 all-time 跨 qB 重启持久性</b>——C 下影响降级（§10.1），仍验证：决定环内累计接续口径。</li>
+      <li><b>单种 all-time 跨 qB 重启持久性</b>——单种落盘后影响面回到 totals 长段差分的接续口径（§10.1），仍验证。</li>
       <li><b>alltime_dl/alltime_ul 非优雅退出回退幅度</b>——仍关键：全局 <code>totals</code> 长段差分的重置频率上限。</li>
       <li><b>会话计数器归零语义全覆盖</b>——仍关键：重启后首个采样 <code>cur &lt; last</code> 判定是否一次兜住全部计数器字段。</li>
       <li><b>server_state 增量轮键缺失模式</b>——仍关键：采样读空值走 null 分支（§03.5）的正确性。</li>
@@ -506,10 +490,12 @@ GET /api/traffic/qb/group/{key}?window=24h|30d   # routes/groups.py（key 沿用
     </ul>
     <h3>变更记录</h3>
     <p class="hint">26-10-03-0946 初版：方案C 拍板落地（数据落点 <code>&lt;data_dir&gt;/qb-traffic/</code>、null 断线、分组 key 详细对比 §04 待拍板默认甲）。</p>
+    <p class="hint">26-10-03-1041 二轮拍板改版（用户三条）：①<b>单种历史入盘</b>——推翻 §02.2「单种不落盘」，三类系列全落 dat、内存环取消、单种图 24h/30d；②组 key <b>不得含 save_path</b>（移动即断史）、③<b>不得因增删文件换键</b>（「对流量展示来说是毁灭性的」）——内容指纹键否决，§04 重写为<b>代理身份键 + 成员表决吸收</b>，原「换 key 旧历史」三选项作废；工作量 6–8.5 → 7–10 人日。</p>
+    <p class="hint">26-10-03-1110 三轮拍板改版（用户拍板：组流量可由组内种子流量推算，成员通常 ≤50，不落盘；全局含全部种子推算难，依旧落盘）：落盘范围收窄为全局 + 单种——groups/ 目录、组文件、index 组注册表取消，单种入盘决策沿用并升格为组推算的数据基座；<b>二轮引入的组身份代理键 + 成员表决吸收整体作废</b>（组不落盘则无键可断，二轮点名的「移动/增删换键断史」在读侧口径下自然消解），§04 重写为读侧推算设计（成员集现取 + 桶级聚合 + 借 global.dat 区分真空闲 0 与停机 null）；组采样移出采样器（§03），组聚合移入 P4；工作量 7–10 → 6–8 人日。</p>
   </section>
 
   <footer>
-    <p>auto-qb · 实施计划 26-10-03-0946 · 专题 torrent-traffic-stats · 取证基线 0a66c7c0 (2026-10-03) · 上游 report 26-10-03-0757 · 状态 Open（§04 分组 key 待拍板，默认甲「不保留」）</p>
+    <p>auto-qb · 实施计划 26-10-03-0946 · 专题 torrent-traffic-stats · 取证基线 0a66c7c0 (2026-10-03) · 上游 report 26-10-03-0757 · 状态 Open（26-10-03 三轮拍板已并入：组不落盘读侧推算 + 全局保留落盘）</p>
   </footer>
 
 </div>
