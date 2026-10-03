@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 8 |
 | perf | 5 |
 | docs | 1 |
 | test | 1 |
@@ -52,7 +52,6 @@
 - [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 - [feat] [设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色](26-10-01-2137-feat-webui-settings-help-followup.html) — 「?」说明全面改写(Done)后的遗漏: 站点设置「删除标签格式」、自动化「彻底删除标签」等; 且「?」按钮边框与发光颜色应随选项色(危险项红等)
 - [bug] [删除种子(同时删除文件)会引起缺文件 WARNING](26-10-01-2129-bug-webui-delete-files-missing-warning.html) — 连文件一起删除的种子被缺文件扫描误报 WARNING, 删除路径需与缺文件检测互斥
-- [bug] [「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局](26-10-01-2129-bug-webui-delete-tag-scope-confusion.html) — 删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置
 - [feat] [WEBUI 自定义站点名/分类/标签字体颜色](26-10-01-2120-feat-webui-custom-chip-colors.html) — 允许用户为站点名/分类/标签 chip 自定义字体颜色(未排期增强)
 - [refactor] [管理标签/分类窗口重构](26-10-01-2120-refactor-webui-tag-category-dialog.html) — 「管理标签/分类」弹窗结构陈旧需要重构(TODO 未给细节, 开工先复验现状)
 - [feat] [批量移动/批量跳检](26-10-01-2119-feat-webui-batch-move-skipcheck.html) — WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用
@@ -93,6 +92,7 @@
 - [docs] [config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS](26-10-01-2212-docs-schema-docstring-tracker-field-levels.html) — TRACKER_FIELD_LEVELS 级别表随内核化重构整体退役后, config/schema/__init__.py 的 docstring 仍提及它, 与代码相反的文档漂移; 不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内
 - [bug] [hr.token 生成是非原子写, 半截文件导致通道密钥静默漂移 (与 web.token 同族)](26-10-01-2151-bug-hr-channel-credential-atomic-write.html) — hr.channel resolve_token 用 O_TRUNC 直写 hr.token, 非空半截密钥被持久化, 扩展侧鉴权 401
 - [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui
+- [bug] [「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局](26-10-01-2129-bug-webui-delete-tag-scope-confusion.html) — 删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置
 - [feat] [快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发](26-10-01-2108-feat-webui-selection-follow-mouse.html) — 键盘高亮选中与鼠标点击选中是两套状态, 需合并为单一套随最后操作源移动
 - [question] [WEBUI 按 ESC 清除筛选器 —— 定键与否待拍板](26-10-01-2108-question-webui-esc-clear-filter.html) — [?]想法: 按 ESC 清除筛选器; 快捷键引擎已有未绑定的 clear-filters 动作, 只差是否把 ESC 定给它的决策
 - [chore] [kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py](26-10-01-2012-chore-kb-index-missing-issues-gen.html) — kb.index 的 16 个索引不含 create-issue 的 gen_issues_index.py, 改 issue 状态后跑 kb.index 不迁移 issues/_index.md 状态分区, 须单独补跑; 收编与否待定调

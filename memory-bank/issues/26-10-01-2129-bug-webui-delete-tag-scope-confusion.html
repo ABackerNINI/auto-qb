@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-delete-tag-scope-confusion">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局">
 <meta name="issue-summary" content="删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置">
 <meta name="doc-refs" content="memory-bank/reports/26-10-03-0504-report-webui-site-scope-confusion.html,memory-bank/tasks/26-10-03-webui-delete-tag-scope-confusion.md">
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2129-bug-webui-delete-tag-scope-confusion</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:29</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -155,12 +155,39 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-03 — 用户指派根因分析（用户指派 = 合法认领），出报告
+        <a href="../reports/26-10-03-0504-report-webui-site-scope-confusion.html">26-10-03-0504</a>：
+        缺陷定性三层（config 层 <code>_strip_none</code> 使 str/list「显式空=未定义」坍缩 / WebUI bool 开关恒写值
+        从不删键单向锁死 / 回填显示用 schema 默认非合并生效的全局值），受影响面 9 个全局/站点双层键；
+        用户拍板方案 B 完整形态（config 层三态 + WebUI 修齐）+ 配置版本升级，直接实施（分析轮状态仍 Open 未单独置
+        In Progress，认领链见报告与本档案 doc-refs）。</li>
+      <li>2026-10-03 — 已修复并验证，状态 <strong>Done</strong>。修复落点三提交：<code>18bde39c</code>
+        （config 层三态基座：<code>Field.tri_state</code> 4 站点 str 键 + <code>_strip_none</code> 站点段豁免 +
+        配置 v3→v4 迁移清存量 <code>''</code> 逐键 WARNING）/<code>42d3d90a</code>（显示层：回退链 7 键生效值回填 +
+        「站点/全局」来源徽标）/<code>9c6bc499</code>（交互层：「跟随全局」删键按钮 + str「清空保存=覆盖为空」与
+        「跟随全局=删键」两动作区分 + 9 键 help 三态文案）。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。原文「删除类似标签」疑笔误已如上注明，未改动原文。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-03 报告轮取证<strong>仍复现</strong>（三层根因逐层锚点核实）；实施轮后<strong>已消失</strong> ——
+      站点页「跟随全局」删键后徽标实时翻「全局」+ 回填全局生效值，站点显式 <code>''</code> 保留并显示
+      「覆盖为空」语义，冒烟 118/118 断言覆盖上述路径。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（方案 B 完整形态，较 §06 建议的「补恢复入口」更完整：先给 config 层补三态表达，再修齐 WebUI）</b>：
+      ① config 层 <code>Field.tri_state</code>（4 个站点 str 键：<code>hr.add_tag</code> /
+      <code>hr.add_category</code> / <code>hr.add_tag_for_satisfied</code> / <code>hr.add_category_for_satisfied</code>），
+      <code>_strip_none</code> 对站点段豁免保 <code>''</code>（显式空 ≠ 未定义），validate 放行；存量显式置空
+      <code>键: ''</code> 由配置 v3→v4 迁移清除并逐键 WARNING（语义翻转灰度）。② WebUI 显示层：站点页按
+      「站点→全局→默认」回退链回填生效值 + 来源徽标，治「全局 ON 站点显示 OFF」失真。③ WebUI 交互层：
+      「跟随全局」按钮（接线既有死代码 <code>cfgResetField</code>/<code>cfgDelPath</code>，confirm danger +
+      toast）＝ 删键恢复继承（业界动词：git <code>--unset</code> / VS Code Reset / dconf reset 同款）；
+      str 键「清空保存」＝ 覆盖为空（写 <code>''</code>，键保留）与「跟随全局」＝ 删键两动作显式区分；
+      9 键 help 改三态文案。</p>
+    <p><b>验证</b>：全量 <b>2325 passed + 3 skipped / 99%</b>（基线
+      <a href="../testing/baselines/26-10-03-0913-webui-delete-tag-scope-confusion-done.md">26-10-03-0913</a>）；
+      浏览器冒烟 <b>118/118</b>（atlas/prism/console 三皮肤，bool 三态走全 / str 覆盖为空 vs 删键 /
+      徽标回退链 / help 文案断言）。任务档案与过程记录见
+      <a href="../tasks/26-10-03-webui-delete-tag-scope-confusion.md">tasks/26-10-03-webui-delete-tag-scope-confusion</a>。</p>
   </section>
 
   <footer>
