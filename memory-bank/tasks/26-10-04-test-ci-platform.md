@@ -74,3 +74,5 @@
   - 同步: 基线切片改引 task id; 坑档的 Docker 段改以 task id 为单点、只留三个必踩点(命令本体不再抄)。
   - **踩到的机检两条**(记进 `.workbuddy-ai` 日志): ①新建档案后**必须先 `kb.index`** 否则 `test_memory_bank` 4 条 + `test_docs_forms` 1 条红; ②**认领链必须双向** —— 档案 `**Refs:**` 指向的每个件都要反向 `**Refs:**` 回来(坑档 / 基线切片各加一行, 上游档案 Refs 追加), 否则 `test_docs_forms::test_claim_chain_is_bidirectional` 红。
   - 另: `doc` 字段的相对路径是**相对包目录**解析的(不是仓库根)—— 写 `../../../` 会 STOP。
+  - 另: **新脚本必须自认 `--safety` → `action-without-args`**(判据单点 `_pipeline._safe_files`)。首版漏了,
+    闸门虽仍把它摘掉(探针 10s 超时 → 按不安全), 但**每次提交白等 10s 且白起一次 `docker run`** —— 补上后探针即时返回。

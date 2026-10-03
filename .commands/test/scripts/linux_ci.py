@@ -30,6 +30,15 @@ INNER = (
 
 
 def main(argv: list[str]) -> int:
+    # 冒烟安全过滤探针(判据单点: .commands/my-commit-flow/scripts/_pipeline.py::_safe_files):
+    # 无参跑本脚本 = 真起容器跑全量 ⇒ 必须自认 action-without-args, 让闸门的 `<each:...|--with-safety>`
+    # 直接摘掉 —— 否则探针只能等 10s 超时(还会白起一次 docker run), 每次提交都付这笔钱。
+    if "--safety" in argv:
+        print("action-without-args")
+        return 0
+    if argv and argv[0].startswith("-"):
+        print(f"[STOP] 未知参数: {argv[0]}(本 task 只接一个可选镜像名)")
+        return 2
     image = argv[0] if argv else IMAGE
     if shutil.which("docker") is None:
         print("[STOP] 没装 docker: 本 task 用容器复现 Linux CI, 没 docker 跑不了")
