@@ -8,7 +8,7 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-drawer-redesign">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="doc-refs" content="memory-bank/reports/26-10-03-0759-report-webui-drawer-redesign.html,memory-bank/plans/26-10-03-0917-plan-webui-drawer-redesign.html">
 <meta name="issue-title" content="重做优化种子详情抽屉">
 <meta name="issue-summary" content="详情抽屉整体重设计(未排期); 已有标签页记忆与长文本截断等局部改进, 需要一次整体重做">
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2119-feat-webui-drawer-redesign</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:19</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -155,12 +155,30 @@
     <ul>
       <li>2026-10-01 21:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-03 — 调研报告登记: 抽屉重设计调研与 3 选型模板已出（<a href="../reports/26-10-03-0759-report-webui-drawer-redesign.html">reports/26-10-03-0759</a>），本 issue 保持 Open，实施未排期</li>
+      <li>2026-10-03 — 已修复并验证，状态 <strong>Done</strong>。由方案A实施计划
+        <a href="../plans/26-10-03-0917-plan-webui-drawer-redesign.html">26-10-03-0917</a> 四波落地：
+        W1 停靠骨架（<code>f994ce20</code>：浮层 → 底部停靠面板 <code>.drawer-dock</code> sticky 吸底，
+        遮罩与 <code>backdrop-filter</code> 结构性消除 —— PERF-01 全站归零收尾；boot.js "into" 支持选择器落点；
+        三皮肤 drawer 族 CSS 重写 + 下滑淡入动画）/ W2 键盘跟随流（<code>9c594e1e</code>）/
+        W3 高度治理（<code>b81a1ee4</code>：拖拽调高夹取 [240px, 70vh] + 收起/展开钮 + 高度持久化
+        <code>autoqb.ui.drawerHeight</code>；首屏默认收起 = 拍板 D1；tracker/peers 宽表全宽利用 ~97%）/
+        W4 回归（<code>a0b5d73f</code>：≤900px 转全屏覆盖 = 拍板 D3；停靠面板遮蔽列表底部光标行的几何缺陷修复 ——
+        <code>_kbViewBottom</code> 单点下界；隐藏面板轮询可见性守卫）。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-03 实施轮 W1-W4 <strong>已消失</strong> —— 抽屉（现停靠面板）显示时列表整幅可见、无任何模糊遮罩，
+      键盘切换时光标行三皮肤均可清晰辨认（用户追加的硬约束由方案A结构性满足）；三皮肤目检 + 冒烟走查单 24 项全过。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（较 §06 建议的「保留局部改进做整体重设计」更进一步：按调研报告方案A 底部停靠属性面板一步到位，
+      选型与波次见 <a href="../plans/26-10-03-0917-plan-webui-drawer-redesign.html">计划 26-10-03-0917</a>）</b>：
+      浮层 → 列表下方全宽停靠面板（<code>.drawer-dock</code>，随种子视图 <code>v-if</code> 隐藏，跨页浮层残留问题顺带消灭）；
+      页签记忆（<code>drawerLastTab</code>）/ FX-22 分组卡片 / line-clamp 截断族 / trackers-peers 激活期轮询全部保留不回退；
+      键盘语义升级（scope 存活 + Alt+1~4 双态 + 详情跟随）见同批 issue drawer-nav / drawer-open 回执。</p>
+    <p><b>验证</b>：三皮肤真浏览器目检各波验收 + 冒烟走查单 24 项 × 三皮肤全过；
+      全量 <b>2329 passed + 3 skipped / 99%</b>（基线
+      <a href="../testing/baselines/26-10-03-1335-webui-drawer-redesign-w4-done.md">26-10-03-1335</a>）。
+      任务档案见 <a href="../tasks/26-10-03-webui-drawer-redesign.md">tasks/26-10-03-webui-drawer-redesign</a>。</p>
   </section>
 
   <footer>

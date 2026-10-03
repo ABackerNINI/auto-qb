@@ -8,7 +8,7 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-keyboard-shortcuts">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="doc-refs" content="memory-bank/reports/26-10-03-0759-report-webui-drawer-redesign.html,memory-bank/plans/26-10-03-0917-plan-webui-drawer-redesign.html">
 <meta name="issue-title" content="浏览种子详情抽屉时支持键盘上下键切换种子">
 <meta name="issue-summary" content="键盘快捷键引擎与可自定义已落地, 补「抽屉打开时上下键切到上/下一个种子」这一动作">
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2108-feat-webui-shortcuts-drawer-nav</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -157,12 +157,26 @@
     <ul>
       <li>2026-10-01 21:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-03 — 调研报告登记: 抽屉重设计调研与 3 选型模板已出（<a href="../reports/26-10-03-0759-report-webui-drawer-redesign.html">reports/26-10-03-0759</a>），本 issue 保持 Open，实施未排期</li>
+      <li>2026-10-03 — 已修复并验证，状态 <strong>Done</strong>。由方案A实施计划
+        <a href="../plans/26-10-03-0917-plan-webui-drawer-redesign.html">26-10-03-0917</a> W2 落地（提交 <code>9c594e1e</code>）。
+        实现较 §06 建议改道：不新增「抽屉内切上/下一个种子」动作 —— 抽屉重做为底部停靠面板后 scope 存活
+        （<code>_kbOverlayBusy</code> 浮层名单摘除 <code>drawer.open</code>），上下键永远属于列表（<code>_kbMove</code> 不动），
+        详情面板防抖跟随光标（200ms + 在途请求 seq 代际 + hash 未变短路），语义上覆盖本 issue 全部场景（改道依据见计划 §1.2 / 拍板 D4）。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest），TODO 对应行由末阶段统一移除。备注：TODO 标 <code>[-]</code> 正在做 —— 父项 L199 的引擎部分已完成（计划 26-09-28-0354 Done），剩余范围即 L200，末阶段两行一并移除；本 issue 保持 Open，认领只能由用户指派。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-03 实施轮 W4 走查<strong>已消失</strong> —— 详情面板开着按上下键（含 repeat 连发）切种子，
+      光标仍在列表、详情跟随停稳行；连发 1s Network 面板断言在途详情请求恒 ≤ 1 且最终落在停稳行。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（改道说明：§06 建议的「新增 drawer-scope 光标动作」在方案A下废弃，见计划 §1.2 / 拍板 D4）</b>：
+      ① 抽屉停靠化后不再算浮层，<code>shortcuts.js</code> <code>_kbOverlayBusy</code> 摘除 <code>drawer.open</code>，
+      面板开着列表键位与 Delete 等注册表外绑定保持可用；② 详情跟随单点 <code>_kbFollowDrawer</code>（drawer.js）
+      挂 <code>_kbApplyCursor</code> 尾部：防抖 200ms + seq 代际 + hash 短路；③ <code>_loadDrawerTab</code> 加请求代际 seq；
+      ④ Enter 面板已开仅跟随不关（拍板 D2）。</p>
+    <p><b>验证</b>：计划 §2.2 键盘行为矩阵逐格真浏览器走查 + 冒烟走查单 24 项 × 三皮肤（atlas/prism/console）全过；
+      全量 <b>2329 passed + 3 skipped / 99%</b>（基线
+      <a href="../testing/baselines/26-10-03-1335-webui-drawer-redesign-w4-done.md">26-10-03-1335</a>）。
+      任务档案见 <a href="../tasks/26-10-03-webui-drawer-redesign.md">tasks/26-10-03-webui-drawer-redesign</a>。</p>
   </section>
 
   <footer>

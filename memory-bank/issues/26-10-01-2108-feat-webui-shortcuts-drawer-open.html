@@ -8,7 +8,7 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-keyboard-shortcuts">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="doc-refs" content="memory-bank/reports/26-10-03-0759-report-webui-drawer-redesign.html,memory-bank/plans/26-10-03-0917-plan-webui-drawer-redesign.html">
 <meta name="issue-title" content="Alt+1~4 从列表直接打开选中种子的详情抽屉并转到对应页">
 <meta name="issue-summary" content="现 Alt+1~4 仅在抽屉已聚焦时切页(scope=drawer), 需升级为列表侧直接唤起抽屉定位对应页">
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2108-feat-webui-shortcuts-drawer-open</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -155,12 +155,25 @@
     <ul>
       <li>2026-10-01 21:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-03 — 调研报告登记: 抽屉重设计调研与 3 选型模板已出（<a href="../reports/26-10-03-0759-report-webui-drawer-redesign.html">reports/26-10-03-0759</a>），本 issue 保持 Open，实施未排期</li>
+      <li>2026-10-03 — 已修复并验证，状态 <strong>Done</strong>。由方案A实施计划
+        <a href="../plans/26-10-03-0917-plan-webui-drawer-redesign.html">26-10-03-0917</a> W2 落地（提交 <code>9c594e1e</code>）：
+        <code>drawer-tab-general/trackers/peers/content</code> 四条注册表条目 scope 由 <code>"drawer"</code> 改 <code>"list"</code> 双态 ——
+        面板关 = 开面板并定位对应页签（目标解析取 <code>kbCursor</code> / 单选种子，非种子页或无目标 toast 提示后忽略），
+        面板开 = 切页（现行为）；与 §06 建议方向一致。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-03 实施轮 W4 走查<strong>已消失</strong> —— 列表侧（面板关）按 Alt+1~4 直接打开当前光标/选中种子的
+      详情面板并落到对应页签；面板开着按 Alt+1~4 维持切页。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>：<code>shortcuts.js</code> <code>drawer-tab-*</code> 四条注册表条目 scope <code>"drawer"</code> → <code>"list"</code>，
+      run 改双态（关 = 开面板 + 定位页签；开 = 切页）；目标解析取 <code>kbCursor</code>（kind=torrent）/ 单选种子，
+      非种子页或无目标 toast 提示后忽略；drawer scope 机制保留（条目清空）。落地细节与 §06 建议方向一致，
+      仅作用域实现从「提升 scope + 直接开抽屉」细化为注册表条目级双态。</p>
+    <p><b>验证</b>：计划 §2.2 键盘行为矩阵逐格真浏览器走查 + 冒烟走查单 24 项 × 三皮肤（atlas/prism/console）全过；
+      全量 <b>2329 passed + 3 skipped / 99%</b>（基线
+      <a href="../testing/baselines/26-10-03-1335-webui-drawer-redesign-w4-done.md">26-10-03-1335</a>）。
+      任务档案见 <a href="../tasks/26-10-03-webui-drawer-redesign.md">tasks/26-10-03-webui-drawer-redesign</a>。</p>
   </section>
 
   <footer>

@@ -1,7 +1,7 @@
 # 渲染 / 静态资源 / 两套 UI
 
-> 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖)与"两套 UI 必须成对改"的纪律。
-> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS
+> 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律。
+> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板
 
 ### 挂件类名错配 ⇒ 整页静默废掉
 
@@ -102,3 +102,14 @@
   子卡渲染成**空壳且不报错**。
 - **处置**: 递归时传 `allowGrouping=false`。
   ⚠ 排查"渲染出来但是空的"最快的是**浏览器控制台 + 模板里临时打一行 `{{ item.items.length }}`**。
+
+### boot.js 的 manifest `"into"` 落点在嵌套 template content 内时, querySelector 够不到
+
+- **触发**: 给 tpl-manifest 条目换注入落点(2026-10-03 抽屉重设计: drawer 从 `"into": "app"` 改指种子视图模板内部的
+  `.drawer-dock`) —— 落点容器写在某个 `<template>` 的 content 里, 外层模板本身又是 boot.js 先注入的。
+- **判别**: 顶层 `root.querySelector(sel)` 查不到报"落点找不到"是显性的; 更隐蔽的是
+  `querySelectorAll("template")` **不会下钻** `template.content` 片段, 而模板存在浏览器解析出的**嵌套**
+  (template 套 template), 只展开一层照样漏 —— 症状是"落点偶发找不到", 取决于哪个嵌套分支被走到。
+- **处置**: 落点查找必须**逐层递归下钻 `template.content`**(`boot.js` 已实现: querySelector 不中就对
+  `root.querySelectorAll("template")` 逐个递归进 content 再找; 找不到 fail-fast 显式占位)。
+  给 manifest 换落点后必须真浏览器起盘目检一次, 静态检查发现不了这类落点丢失。

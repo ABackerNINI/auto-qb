@@ -7,6 +7,24 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 种子详情抽屉重设计: 浮层 → 底部停靠属性面板 (方案A)**(2026-10-03, 计划
+  [plans/26-10-03-0917](../plans/26-10-03-0917-plan-webui-drawer-redesign.html) 五波, 提交链 `f994ce20`/`9c594e1e`/`b81a1ee4`/`a0b5d73f`,
+  清偿 issue [26-10-01-2119-feat-webui-drawer-redesign](../issues/26-10-01-2119-feat-webui-drawer-redesign.html) +
+  [26-10-01-2108-feat-webui-shortcuts-drawer-nav](../issues/26-10-01-2108-feat-webui-shortcuts-drawer-nav.html) +
+  [26-10-01-2108-feat-webui-shortcuts-drawer-open](../issues/26-10-01-2108-feat-webui-shortcuts-drawer-open.html)):
+  用户硬约束「抽屉打开时模糊列表、键盘切换看不清当前行」结构性消除 —— W1 浮层改列表下方全宽停靠面板
+  (`.drawer-dock` sticky 吸底, boot.js "into" 支持选择器落点, 三皮肤 drawer 族 CSS 重写 + 下滑淡入),
+  遮罩与 `backdrop-filter` 摘除 = **PERF-01 全站归零收尾**; W2 键盘跟随流: scope 存活(`_kbOverlayBusy` 摘 drawer.open,
+  面板开着列表键位不灭)+ drawer-tab-* 四条 list scope 双态(Alt+1~4 关态开面板定位页签/开态切页)+
+  详情防抖跟随单点 `_kbFollowDrawer`(200ms + seq 代际 + hash 短路, 挂 `_kbApplyCursor` 尾部)+
+  D2 Enter 已开仅跟随不关; W3 高度治理: 拖拽调高夹取 [240px, 70vh] + 收起/展开钮 + 高度持久化 `autoqb.ui.drawerHeight`,
+  D1 首屏默认收起(`drawerOpen` 只写不回读), tracker/peers 宽表全宽利用 ~97%; W4: D3 ≤900px 转全屏覆盖(纯 CSS)+
+  计划内修复两处(停靠面板 sticky 吸底遮蔽以 `window.innerHeight` 为下界的滚动几何 → `_kbViewBottom` 单点下界让位面板顶缘;
+  隐藏面板 5s 轮询收口 → 种子视图可见性守卫)+ kb-cursor 复检后未增强(三皮肤可辨, 与既有拍板打架)。
+  坑: 模板 `_` 前缀裸标识符为已记坑复发(波及 drawer.html/popovers.html 复制钮, drawer.js 注释钉原因)。
+  全量 **2329 passed + 3 skipped / 99%**(基线 [testing/baselines/26-10-03-1335](../testing/baselines/26-10-03-1335-webui-drawer-redesign-w4-done.md));
+  冒烟走查单 24 项 × 三皮肤全过; 档案 [tasks/26-10-03-webui-drawer-redesign](../tasks/26-10-03-webui-drawer-redesign.md)
+
 - **WEB UI 站点级「显式空 = 覆盖为空」三态 + 「跟随全局」删键: 删除类标签全局/站点作用域混淆修复**(2026-10-03, issue 26-10-01-2129 方案 B 完整形态, 三阶段提交 `18bde39c`/`42d3d90a`/`9c6bc499`): 根因三层(config 层 `_strip_none` 使 str/list「显式空=未定义」坍缩 / bool 开关恒写值从不删键单向锁死 / 回填用 schema 默认非全局生效值), 用户拍板 B 完整形态 + 配置版本升级。config 层: `Field.tri_state` 属性 + 4 站点 str 键标三态(hr.add_tag / add_category / add_tag_for_satisfied / add_category_for_satisfied)+ `_strip_none` 站点段豁免保 '' + validate 放行 + **配置 v3→v4 迁移**(经 infra.versioning 新增 migrate_with_notes 汇聚)清存量 '' 并逐键 WARNING, ruamel round-trip 保 '' 实测无损; keys.md / docs/configuration.md 同步。显示层: config_editor.js `SITE_FALLBACK_GLOBAL` 7 键回退链表 + cfgSiteFallbackPath/cfgFallbackValue 生效值回填 + siteBadge「站点/全局」来源徽标(站点 '' 原样显示)+ cfgIsDefault 链上键抑制「默认」矛盾徽标; 三皮肤零成对改。交互层: 「跟随全局」按钮接线死代码 cfgResetField/cfgDelPath(confirm danger + toast), str「清空保存=覆盖为空」与「跟随全局=删键」两动作区分, 9 键 help 三态文案(schema/trackers.py), 内联开关 tooltip risk+help 并接修复。守阵: config 层 v3→v4 迁移用例; 冒烟 118/118(atlas/prism/console, bool 三态走全 / str 覆盖为空 vs 删键 / 徽标回退链)。全量 **2325 passed + 3 skipped / 99%**(基线 [testing/baselines/26-10-03-0913](../testing/baselines/26-10-03-0913-webui-delete-tag-scope-confusion-done.md)); 档案 [tasks/26-10-03-webui-delete-tag-scope-confusion](../tasks/26-10-03-webui-delete-tag-scope-confusion.md); 报告 [reports/26-10-03-0504](../reports/26-10-03-0504-report-webui-site-scope-confusion.html); **随实施提交已入库**
 
 - **WEB UI HR 判定新鲜度置脏 (2026-10-03, 计划

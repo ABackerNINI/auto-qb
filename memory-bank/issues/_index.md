@@ -19,7 +19,7 @@
 | docs | 1 |
 | test | 1 |
 | refactor | 4 |
-| feat | 20 |
+| feat | 17 |
 | chore | 3 |
 | question | 4 |
 
@@ -56,10 +56,7 @@
 - [feat] [WEBUI 自定义站点名/分类/标签字体颜色](26-10-01-2120-feat-webui-custom-chip-colors.html) — 允许用户为站点名/分类/标签 chip 自定义字体颜色(未排期增强)
 - [refactor] [管理标签/分类窗口重构](26-10-01-2120-refactor-webui-tag-category-dialog.html) — 「管理标签/分类」弹窗结构陈旧需要重构(TODO 未给细节, 开工先复验现状)
 - [feat] [批量移动/批量跳检](26-10-01-2119-feat-webui-batch-move-skipcheck.html) — WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用
-- [feat] [重做优化种子详情抽屉](26-10-01-2119-feat-webui-drawer-redesign.html) — 详情抽屉整体重设计(未排期); 已有标签页记忆与长文本截断等局部改进, 需要一次整体重做
 - [feat] [搜索命中高亮显示 + 无命中时提示命中域(如「文件名」标识)](26-10-01-2119-feat-webui-search-highlight.html) — 搜索结果需标出命中来源域与命中片段, 无匹配时给出「匹配到文件名/标签/站点」类提示
-- [feat] [浏览种子详情抽屉时支持键盘上下键切换种子](26-10-01-2108-feat-webui-shortcuts-drawer-nav.html) — 键盘快捷键引擎与可自定义已落地, 补「抽屉打开时上下键切到上/下一个种子」这一动作
-- [feat] [Alt+1~4 从列表直接打开选中种子的详情抽屉并转到对应页](26-10-01-2108-feat-webui-shortcuts-drawer-open.html) — 现 Alt+1~4 仅在抽屉已聚焦时切页(scope=drawer), 需升级为列表侧直接唤起抽屉定位对应页
 - [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
 - [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做
 - [docs] [插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免](26-09-28-1946-docs-config-plugin-spec-docs.html) — conditions/actions 插件名之下的 spec 键在 keys.md 与 rule-system/conditions-and-actions.md 均无逐键覆盖, test_config_key_surface 出处检查对该层豁免(权威单点=schema 插件表)
@@ -94,7 +91,10 @@
 - [bug] [hr.token 生成是非原子写, 半截文件导致通道密钥静默漂移 (与 web.token 同族)](26-10-01-2151-bug-hr-channel-credential-atomic-write.html) — hr.channel resolve_token 用 O_TRUNC 直写 hr.token, 非空半截密钥被持久化, 扩展侧鉴权 401
 - [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui
 - [bug] [「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局](26-10-01-2129-bug-webui-delete-tag-scope-confusion.html) — 删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置
+- [feat] [重做优化种子详情抽屉](26-10-01-2119-feat-webui-drawer-redesign.html) — 详情抽屉整体重设计(未排期); 已有标签页记忆与长文本截断等局部改进, 需要一次整体重做
 - [feat] [快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发](26-10-01-2108-feat-webui-selection-follow-mouse.html) — 键盘高亮选中与鼠标点击选中是两套状态, 需合并为单一套随最后操作源移动
+- [feat] [浏览种子详情抽屉时支持键盘上下键切换种子](26-10-01-2108-feat-webui-shortcuts-drawer-nav.html) — 键盘快捷键引擎与可自定义已落地, 补「抽屉打开时上下键切到上/下一个种子」这一动作
+- [feat] [Alt+1~4 从列表直接打开选中种子的详情抽屉并转到对应页](26-10-01-2108-feat-webui-shortcuts-drawer-open.html) — 现 Alt+1~4 仅在抽屉已聚焦时切页(scope=drawer), 需升级为列表侧直接唤起抽屉定位对应页
 - [question] [WEBUI 按 ESC 清除筛选器 —— 定键与否待拍板](26-10-01-2108-question-webui-esc-clear-filter.html) — [?]想法: 按 ESC 清除筛选器; 快捷键引擎已有未绑定的 clear-filters 动作, 只差是否把 ESC 定给它的决策
 - [chore] [kb.index 生成器不含 issues 索引, 改 issue 状态后须单独跑 gen_issues_index.py](26-10-01-2012-chore-kb-index-missing-issues-gen.html) — kb.index 的 16 个索引不含 create-issue 的 gen_issues_index.py, 改 issue 状态后跑 kb.index 不迁移 issues/_index.md 状态分区, 须单独补跑; 收编与否待定调
 - [docs] [tests/test_ui.py:41 注释仍按旧「FakeConfig 类属性共享实例」口径, 深拷贝根修后过时](26-10-01-2012-docs-test-ui-stale-fakeconfig-comment.html) — FakeConfig 根修(54c83ac3 改 deepcopy 实例属性)后, test_ui.py:41 注释理由已失效; 保守无害, 随下次触碰 test_ui 顺手校正

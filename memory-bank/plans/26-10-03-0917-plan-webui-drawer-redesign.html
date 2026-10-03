@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-drawer-redesign">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-03-0917">
-<meta name="doc-updated" content="26-10-03-0917">
+<meta name="doc-updated" content="26-10-03-1342">
 <meta name="doc-refs" content="memory-bank/issues/26-10-01-2108-feat-webui-shortcuts-drawer-nav.html,memory-bank/issues/26-10-01-2108-feat-webui-shortcuts-drawer-open.html,memory-bank/issues/26-10-01-2119-feat-webui-drawer-redesign.html,memory-bank/tasks/26-10-03-webui-drawer-redesign.md">
 <title>计划 · WEBUI 种子详情抽屉重设计 方案A (底部停靠属性面板) · 分步实施计划</title>
 <style>
@@ -111,7 +111,7 @@
     <div class="item"><div class="k">编号</div><div class="v">26-10-03-0917-plan-webui-drawer-redesign</div></div>
     <div class="item"><div class="k">取证</div><div class="v">2026-10-03 @ develop 0a66c7c0</div></div>
     <div class="item"><div class="k">上游</div><div class="v">reports/26-10-03-0759 (方案A §03 / 波次 §05)</div></div>
-    <div class="item"><div class="k">状态</div><div class="v">Open · 待拍板 D1-D4</div></div>
+    <div class="item"><div class="k">状态</div><div class="v">Done · 四波已实施完结 (D1-D4 按推荐项落地)</div></div>
   </div>
 </header>
 
@@ -295,6 +295,10 @@
       <li>三 issue 置终态 + 档案 <span class="path">tasks/26-10-03-webui-drawer-redesign.md</span> 滚动收口, 已完成条目迁出 <span class="path">progress/implemented-webui.md</span>。</li>
       <li>本计划 doc-status → Done; activeContext 切片收尾; 基线切片入册 (W4 产出)。</li>
       <li>若踩到已记的坑: <code>复发</code> +1 并在档案写未命中原因; 新坑按动作入 <span class="path">pitfalls/web-ui/</span>。</li>
+      <li><strong>✅ 实施完结 (2026-10-03)</strong>: W1 <code>f994ce20</code> → W2 <code>9c594e1e</code> → W3 <code>b81a1ee4</code> → W4 <code>a0b5d73f</code>, W5 收尾回写同日完成;
+        D1-D4 全按推荐项落地; W4 计划内修复两处 (停靠几何 <code>_kbViewBottom</code> 下界 / 隐藏面板轮询收口);
+        test.full <strong>2329 passed + 3 skipped / 99%</strong> (基线 <span class="path">testing/baselines/26-10-03-1335-webui-drawer-redesign-w4-done.md</span>),
+        冒烟走查单 24 项 × 三皮肤全过; 三 issue 置 Done; 档案 <span class="path">tasks/26-10-03-webui-drawer-redesign.md</span> 收口 Done。</li>
     </ul>
   </div>
 </section>
@@ -374,7 +378,7 @@
 </section>
 
 <footer class="colophon">
-  26-10-03-0917-plan-webui-drawer-redesign · doc-topic: webui-drawer-redesign · 状态 Open (待拍板 D1-D4) · 取证 2026-10-03 @ develop 0a66c7c0 · 上游 reports/26-10-03-0759
+  26-10-03-0917-plan-webui-drawer-redesign · doc-topic: webui-drawer-redesign · 状态 Done (2026-10-03 四波实施完结, D1-D4 按推荐项落地) · 取证 2026-10-03 @ develop 0a66c7c0 · 上游 reports/26-10-03-0759
 </footer>
 
 </div>
