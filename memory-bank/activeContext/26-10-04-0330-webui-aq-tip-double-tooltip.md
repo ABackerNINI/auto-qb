@@ -6,7 +6,10 @@
 > ~1s 起跳另有竞态。定稿 = 用户拍板「只留自绘 tooltip, 移除原生」: MutationObserver 盯全
 > 文档, title 属性任何时刻出现即刻迁进 data-aq-tip 并删掉原属性, DOM 里不存在 title,
 > 原生气泡从根上断供; title 不再还原。
-> 最后活动: 2026-10-04 04:15
+> 追加 (2026-10-04 05:25): 用户报「状态栏上传速度 tooltip 位置错误, 出现时挡住元素本身」——
+> 同模块 show() 定位两处缺陷已修(①锚点在 350ms 窗口内被 Vue 换掉时 rect 全 0 → 浮层落视口左上角;
+> ②竖向末尾无条件夹回视口 → 底缘锚点被浮层压住)。详见下方「追加」节。
+> 最后活动: 2026-10-04 05:25
 
 ## 已完成 (2026-10-04)
 
@@ -31,3 +34,24 @@
 任务完结, 改动留在工作树等用户显式「提交」指令(本轮未获提交授权)。
 真机走查项: 三皮肤状态栏 hover 历史入口/速度组 >2s 只见一个自绘气泡, DevTools 现查 DOM
 无 title 属性(原生 tooltip 应全局绝迹)。
+
+## 追加 (2026-10-04 05:25) — 状态栏上传速度 tooltip 定位两处缺陷
+
+> 用户报「WEBUI状态栏的上传速度tooltip位置错误, 出现时会挡住元素本身」。常规窗口尺寸
+> (1280/1440/1024/900/800/640 × 三皮肤) 用 Playwright 实测**复现不出**——浮层正常在按钮
+> 上方 6px、仅横向被右缘夹取; 深挖后定位到 `show()` 两处真缺陷(都已修):
+
+- **①锚点脱离 → 浮层落视口左上角**: `enter()` 起 350ms 延时, 若期间 Vue 轮询把锚点节点整个
+  换掉, `show()` 拿到已脱离文档的节点 —— `getBoundingClientRect()` 全 0 ⇒ 浮层落到 `(8,6)`。
+  实测复现: 换节点后 box `[8,6,291,41]`(应 `[989,731,1272,766]`)。修法: 按 `mouseover` 记下的
+  指针坐标 `document.elementFromPoint()` 重解析当前 `[data-aq-tip]`, 解析不到就收起。
+- **②竖向末尾无条件夹回视口 → 压在锚点身上**: 底缘锚点(状态栏)一旦走「上方放不下转下方」
+  分支, 末尾 `y = vh - h - EDGE` 会把浮层拉回状态栏上。A/B 实测 vh=70: 旧 `styleTop=27`
+  (tip 27–62 / 锚点 41.8–65.2, **overlap=true**); 新 `styleTop=1`(overlap=false)。修法: 竖向改
+  「上方优先 → 转下方 → 两侧都放不下才允许溢出视口」, **任何分支都不越过锚点**。
+- **验证**: 常规尺寸位置与修复前**逐像素一致**(无回归); vh=76→50 全部 overlap=false;
+  detach 用例回到 `[989,731,1272,766]`; `commands run test.full` **2423 passed + 3 skipped / 99%**。
+- **回写**: `conventions/webui.md` 的 .aq-tip 段补「定位」条; 新坑档
+  [pitfalls/web-ui/aq-tip-position-clamp.md](../pitfalls/web-ui/aq-tip-position-clamp.md);
+  基线切片 [baselines/26-10-04-0527](../testing/baselines/26-10-04-0527-webui-aq-tip-position.md)。
+- 改动单文件 `shared/ui_feedback.js`(27+/8-); 已随「提交」指令入库。

@@ -47,6 +47,7 @@
 全局 tooltip 收敛为自绘单例, **新元素一律继续写原生 `title` 属性**(模板侧零成本接入), 不许再自造浮层:
 
 - **触发面**: 一切带 `title` 的元素(含 Vue `:title` 绑定); 调度单点在 `shared/ui_feedback.js` 尾部的纯 DOM 委托层(不进 mixin)。机制(2026-10-04 二轮定稿, **原生 tooltip 断供式**): MutationObserver 盯全文档, title 属性在任何时刻出现(模板渲染 / Vue `:title` 写回 / 新插入节点)即刻迁进 `data-aq-tip` 并删掉原属性 —— DOM 里不存在 title, 原生气泡无从弹出; 浮层触发 = document 级委托 mouseover / focusin 命中 `[data-aq-tip]`, 350ms 后弹 `.aq-tip`, 文案 show() 时现读最新值。前两轮的「hover 时摘 + 离开还原 + 悬浮期补摘」被废弃 —— Vue 轮询把指针下节点整个换掉时指针不动、mouseover 不触发, 新节点带 title 还魂叠出双 tooltip(见 pitfalls/web-ui/aq-tip-nested-title-double.md)。代价: title 不再还原(原生悬浮语义由 `.aq-tip` 承接)。点击 / 滚动 / 窗口失焦立即收起。
+- **定位**(2026-10-04 修): 上方优先 → 上方放不下转下方 → 两侧都放不下才允许溢出视口; **任何分支都不越过锚点**。旧版末尾无条件把浮层夹回视口内, 状态栏这类底缘锚点一旦走「转下方」分支就会被拉回状态栏上, 正好盖住它自己描述的元素。锚点在 350ms 延时窗口内被 Vue 整个换掉时已脱离文档(rect 全 0), 按记录的指针坐标 `elementFromPoint` 重解析当前锚点, 解析不到就收起(否则浮层落到视口左上角)。
 - **样式单点**: `shared/console_hub.css` 的 `.aq-tip` 段(三皮肤同载)。视觉复刻设置页发光按钮配方: 描边 `--accent-line` + 负 spread 微光 `0 0 16px -8px`(同 `.hb-card` 静息 `--glow-soft`), 底 `--bg-elev` 字 `--fg`, 圆角随 `--radius-sm`(控制台自动方角)。⚠ 发光要在 `.aq-tip` 本层用 `--accent` 现算 —— `.hb-*` 的 `--glow-soft` 只声明在 hub 控件上, body 级单例继承不到(console_hub.css 文件头硬知识③)。
 - **例外**: 需要富内容(仪表/表格/交互)的悬浮走既有专用浮层(hr-pop / hb-pop / search-help-pop), 不挤 `title` 通道。
 

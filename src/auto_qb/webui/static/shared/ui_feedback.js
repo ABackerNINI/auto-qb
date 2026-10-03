@@ -160,6 +160,10 @@ window.AQB_FEEDBACK = {
  * 承接; :title 绑定值变化时 Vue 仍会 setAttribute("title"), 被观察器再次截走, 数据流闭环。
  * 浮层触发 = document 级委托 mouseover / focusin 命中 [data-aq-tip], 350ms 后弹 .aq-tip;
  * 离开 / 失焦 / 点击 / 滚动 / 窗口失焦立即收起; 文案 show() 时现读最新值(轮询变值即显新值)。
+ * 定位(2026-10-04 修): 上方优先 / 上方放不下转下方 / 两侧都放不下才允许溢出视口 —— **任何
+ * 分支都不越过锚点**(旧版末尾无条件夹回视口内, 状态栏这类底缘锚点会被浮层压在身下)。
+ * 另: 锚点在 350ms 窗口内被 Vue 整个换掉时已脱离文档(rect 全 0), 按记录的指针坐标
+ * elementFromPoint 重解析当前锚点, 解析不到就收起 —— 否则浮层会落到视口左上角。
  * 浮层单例挂 body 级 —— 脱离列表容器的 overflow / clip-path(同 hr-pop 与 .speed-pop 的教训);
  * 样式单点在 shared/console_hub.css 的 .aq-tip 段(三套皮肤同载, 颜色走皮肤令牌)。
  * 本块是纯 DOM 行为层, 不进 Vue mixin(不占 methods 命名空间, 也无重名风险)。
@@ -171,6 +175,7 @@ window.AQB_FEEDBACK = {
   const EDGE = 8;            // 视口边缘留白(同 _menuOverflowsRight 口径)
   let tip = null;            // 单例浮层(懒建: 登录页等无 title 场景零 DOM 成本)
   let cur = null;            // 当前悬浮的 [data-aq-tip] 元素(嵌套组取最内层)
+  let curX = NaN, curY = NaN; // 最近一次鼠标命中的视口坐标(锚点被换掉时按它重解析, 见 show)
   let timer = 0;
 
   function tipEl() {
@@ -207,6 +212,16 @@ window.AQB_FEEDBACK = {
   }
 
   function show(anchor) {
+    // 锚点在 350ms 延时窗口内被整个换掉时(Vue 轮询重渲染, 见 pitfalls/web-ui/aq-tip-nested-title-double),
+    // 它已脱离文档 —— getBoundingClientRect() 返回全 0, 浮层会落到视口左上角(表现为"位置错误")。
+    // 按指针位置重新解析当前真正的锚点; 解析不到就收起(宁可不弹, 也不弹到错误位置)。
+    if (anchor && !anchor.isConnected) {
+      const hit = Number.isFinite(curX) && document.elementFromPoint(curX, curY);
+      const el = hit && hit.closest ? hit.closest("[data-aq-tip]") : null;
+      if (!el) { hide(); return; }
+      anchor = el;
+      cur = el;
+    }
     const text = anchor.getAttribute("data-aq-tip"); // show 时现读: 轮询变值即显最新文案
     if (!text || !text.trim()) { hide(); return; }
     const t = tipEl();
@@ -214,32 +229,40 @@ window.AQB_FEEDBACK = {
     t.classList.add("on");     // 先 display 再量测(display: none 量不到尺寸)
     const r = anchor.getBoundingClientRect();
     const w = t.offsetWidth, h = t.offsetHeight;
-    let x = Math.min(Math.max(EDGE, r.left + r.width / 2 - w / 2), window.innerWidth - w - EDGE);
-    let y = r.top - h - GAP;   // 默认上方居中
-    if (y < EDGE) y = r.bottom + GAP; // 上方放不下转下方
-    if (y + h > window.innerHeight - EDGE) y = Math.max(EDGE, window.innerHeight - h - EDGE);
+    const vw = window.innerWidth, vh = window.innerHeight;
+    // 水平: 锚点居中, 夹取到视口内(留 EDGE); 浮层宽过视口时贴左(右段裁掉, 好过整块出屏)
+    const x = Math.max(EDGE, Math.min(r.left + r.width / 2 - w / 2, Math.max(EDGE, vw - w - EDGE)));
+    // 垂直: 首选上方(与锚点留 GAP) -> 上方放不下转下方 -> 两侧都放不下才允许溢出视口。
+    // !末尾**不再无条件夹回视口内**: 状态栏锚点在视口底缘, 一旦走"转下方"分支, 旧版夹取会把
+    //   浮层拉回状态栏上, 正好盖住它自己描述的元素(用户报的"挡住元素本身")。
+    const above = r.top - h - GAP, below = r.bottom + GAP;
+    let y;
+    if (above >= EDGE) y = above;                                    // 上方放得下
+    else if (below + h <= vh - EDGE) y = below;                      // 上方放不下, 下方放得下
+    else y = r.top - EDGE >= vh - EDGE - r.bottom ? above : below;   // 两侧都放不下: 贴空间大的一侧
     t.style.left = Math.round(x) + "px";
     t.style.top = Math.round(y) + "px";
   }
 
-  function enter(target) {
+  function enter(target, x, y) {
     if (target === cur) return; // 锚点内部子元素间移动: 不重置延迟
     hide();
     if (!target) return;
     cur = target;
+    curX = x; curY = y;        // 记住指针位置: 锚点被换掉时按它重解析(见 show)
     timer = setTimeout(() => show(cur), SHOW_DELAY_MS);
   }
 
   document.addEventListener("mouseover", (ev) => {
-    enter(ev.target instanceof Element ? ev.target.closest("[data-aq-tip]") : null);
+    enter(ev.target instanceof Element ? ev.target.closest("[data-aq-tip]") : null, ev.clientX, ev.clientY);
   }, true);
   document.addEventListener("mouseout", (ev) => {
     // 只在真正离开当前锚点时收起; 锚点内部移动由 mouseover 判重兜住
     if (cur && (!(ev.relatedTarget instanceof Element) || !cur.contains(ev.relatedTarget))) hide();
   }, true);
-  // 键盘可达性: Tab 聚焦到带提示的控件同样出提示, 移走即收
+  // 键盘可达性: Tab 聚焦到带提示的控件同样出提示, 移走即收(键盘路径无指针坐标, 传 NaN 不参与重解析)
   document.addEventListener("focusin", (ev) => {
-    enter(ev.target instanceof Element ? ev.target.closest("[data-aq-tip]") : null);
+    enter(ev.target instanceof Element ? ev.target.closest("[data-aq-tip]") : null, NaN, NaN);
   }, true);
   document.addEventListener("focusout", hide, true);
   // 点击(往往接着开菜单 / 弹窗)与滚动(锚点位移)时立即收起, 浮层不悬在旧位置
