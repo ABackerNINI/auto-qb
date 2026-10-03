@@ -16,7 +16,7 @@ v3 模型变化(相对 v2):
 """
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ..infra.versioning import CURRENT_VERSIONS
 
@@ -64,6 +64,10 @@ LANE_FAILED = "failed"  # 本波结构性失效(表头缺失/字段缺失, 第 1
 CHANNEL_OK = "ok"
 CHANNEL_SILENT = "silent"
 CHANNEL_DISABLED = "disabled"
+
+# 拉取历史容量(计划 26-10-04-0312 §3.2; 容量拍板 2026-10-04: 2000 条 + 6 个月, 覆盖计划原稿的 200 条/14 天)
+HISTORY_CAP = 2000  #: 每站点保留的最近事件条数(修剪助手按追加序截新)
+HISTORY_MAX_AGE_S = 183 * 86400  #: 事件最长保留期(秒, 183 天 = 6 个月); 过龄剔除, 恰好等于期限的保留
 
 
 def _as_float(value: Any, default: float = 0.0) -> float:
@@ -456,6 +460,91 @@ class HrRateLedger:
 
 
 @dataclass(slots=True)
+class HrHistoryEvent:
+    """一次取数波 / 立即拉取被拦 / 人工对账的历史事件(计划 26-10-04-0312 §3.1)
+
+    **纯追加的观测记录**: 不参与任何判定, 只供 WEBUI 拉取历史表回看; 记录器(S2)只搬运
+    现成的 HrRefreshResult / lane_states / wave.notes, 不新算业务语义。容量与按龄修剪由
+    `prune_history` 统一处理; 序列化与 HrRateLedger 同范式 —— from_json 缺键给默认值、
+    多余键忽略, 存量站点文件不含 history 键时 HrSiteData 回空表(非破坏性补字段, 不抬
+    hr_site schema_version)。
+    """
+
+    ts: float  # 事件时刻(epoch 秒; wave = 波终态时刻)
+    kind: str = ""  # wave(一次取数波) / defer(立即拉取被拦) / confirm_empty(人工对账)
+    trigger: str = ""  # auto(调度自动) / manual(立即拉取) / confirm(对账动作)
+    #: 波终态, 直接取既有 ACTION_* 常量值(service 常量区):
+    #: refreshed / partial / waiting / no-channel / error / skipped-locked
+    action: str = ""
+    reason: str = ""  # HrRefreshResult.reason(截断到 ~200 字符)
+    reason_kind: str = ""  # REASON_*(budget / parse), 告警分级同源
+    pages: int = 0  # 本波页数合计(result.pages_fetched)
+    rows: int = 0  # 本波有效行数合计(result.entries)
+    torrents_ok: int = 0  # 回填 .torrent 成功数(result.torrents_fetched)
+    torrents_fail: int = 0  # 回填 .torrent 失败数(result.torrents_failed)
+    verified: int = 0  # 本波签发放行数(result.verified_count)
+    elapsed_s: float = 0.0  # 波耗时(result.elapsed_s)
+    #: 各档终态快照 {lane, status, pages, rows, detail}(取自 lane_states, 与波次表同构)
+    lanes: List[Dict[str, Any]] = field(default_factory=list)
+    notes: List[str] = field(default_factory=list)  # wave.notes 截断(前 5 条; 过程痕迹)
+    by: str = ""  # 写者实例短标识(store.owner 前 6 位) —— 多实例分辨「谁抓的」
+
+    def to_json(self) -> Dict[str, Any]:
+        return {
+            "ts": self.ts,
+            "kind": self.kind,
+            "trigger": self.trigger,
+            "action": self.action,
+            "reason": self.reason,
+            "reason_kind": self.reason_kind,
+            "pages": self.pages,
+            "rows": self.rows,
+            "torrents_ok": self.torrents_ok,
+            "torrents_fail": self.torrents_fail,
+            "verified": self.verified,
+            "elapsed_s": self.elapsed_s,
+            "lanes": [dict(lane) for lane in self.lanes],
+            "notes": list(self.notes),
+            "by": self.by,
+        }
+
+    @classmethod
+    def from_json(cls, raw: Dict[str, Any]) -> "HrHistoryEvent":
+        return cls(
+            ts=_as_float(raw.get("ts")),
+            kind=str(raw.get("kind") or ""),
+            trigger=str(raw.get("trigger") or ""),
+            action=str(raw.get("action") or ""),
+            reason=str(raw.get("reason") or ""),
+            reason_kind=str(raw.get("reason_kind") or ""),
+            pages=_as_int(raw.get("pages")),
+            rows=_as_int(raw.get("rows")),
+            torrents_ok=_as_int(raw.get("torrents_ok")),
+            torrents_fail=_as_int(raw.get("torrents_fail")),
+            verified=_as_int(raw.get("verified")),
+            elapsed_s=_as_float(raw.get("elapsed_s")),
+            lanes=[dict(item) for item in (raw.get("lanes") or []) if isinstance(item, dict)],
+            notes=[str(n or "") for n in (raw.get("notes") or [])],
+            by=str(raw.get("by") or ""),
+        )
+
+
+def prune_history(events: List[HrHistoryEvent], now: float) -> List[HrHistoryEvent]:
+    """修剪拉取历史(纯函数, 不改传入表, 返回新表; 元素对象不复制): 先按龄剔旧, 再按容量截新。
+
+    - 按龄: ts 距 now 超过 HISTORY_MAX_AGE_S 的事件剔除; 恰好等于期限的保留, 未来时刻
+      (ts > now)一并保留 —— 时钟回拨 / 多实例毫秒级偏差不丢事件。
+    - 按容量: 超过 HISTORY_CAP 时保留追加序**末尾**(最新)的 HISTORY_CAP 条, 顺序不变。
+
+    输入假定按追加序排列(旧在前新在后) —— 由写入点(S2 记录器)保证。
+    """
+    kept = [e for e in events if now - e.ts <= HISTORY_MAX_AGE_S]
+    if len(kept) > HISTORY_CAP:
+        kept = kept[-HISTORY_CAP:]
+    return kept
+
+
+@dataclass(slots=True)
 class HrSiteData:
     """一个站点的全部账号级状态(站点文件的内容)"""
 
@@ -476,6 +565,9 @@ class HrSiteData:
     empty_confirmed_at: float = 0.0
     #: 站点明确要求的等待时刻(Retry-After, §5.2): 之前零请求; 不是退避机制 —— 是站点指令
     retry_after_until: float = 0.0
+    #: 拉取历史(计划 26-10-04-0312 §3.1): 追加式事件表, 纯观测不入判定, 随站点文件共享;
+    #: 追加前先经 prune_history 修剪(容量 + 按龄), 存量文件不含该键时回空表(零迁移)
+    history: List[HrHistoryEvent] = field(default_factory=list)
 
     # ---------- 读写 ----------
 
@@ -516,6 +608,7 @@ class HrSiteData:
             "rate": self.rate.to_json(),
             "empty_confirmed_at": self.empty_confirmed_at,
             "retry_after_until": self.retry_after_until,
+            "history": [e.to_json() for e in self.history],
         }
 
     @classmethod
@@ -532,6 +625,7 @@ class HrSiteData:
             rate=HrRateLedger.from_json(raw.get("rate") or {}),
             empty_confirmed_at=_as_float(raw.get("empty_confirmed_at")),
             retry_after_until=_as_float(raw.get("retry_after_until")),
+            history=[HrHistoryEvent.from_json(item) for item in (raw.get("history") or [])],
         )
         for item in raw.get("index") or []:
             entry = HrEntry.from_json(item)

@@ -19,6 +19,10 @@
 - test_schema_mismatch_is_not_quarantined: schema 不符是版本迁移, 不挪走也不从备份猜
 - test_schema_version_old_migrates_and_materializes_on_commit: 旧版本沿链迁移(旧迁新拒), 随下次 commit 物化新版本
 - test_schema_migration_logs_once: 迁移 INFO 只报一次(读路径含无锁只读, 防通知轰炸)
+- test_history_roundtrip_all_fields: history 事件数组全字段往返(经站点文件落盘, 含 lanes/notes 复合结构), 逐字段相等
+- test_history_missing_key_legacy_compat: 旧 JSON 不含 history 键 -> from_json 得空表且其余字段无损(存量文件零迁移)
+- test_history_cap_keeps_latest: 超 HISTORY_CAP(2000)条时修剪助手保留最新 HISTORY_CAP 条(原表不动)
+- test_history_age_prune_boundary: 按龄修剪: 超过 183 天剔、恰好 183 天边界保留、未来时刻保留
 """
 import json
 import logging
@@ -27,14 +31,18 @@ import pytest
 
 from auto_qb.infra import versioning
 from auto_qb.hr.model import (
+    HISTORY_CAP,
+    HISTORY_MAX_AGE_S,
     HrDownloaded,
     HrDlFail,
     HrEntry,
+    HrHistoryEvent,
     HrLaneState,
     HrRateLedger,
     HrSiteData,
     HrVerified,
     HrWaveMeta,
+    prune_history,
 )
 import auto_qb.hr.store as hr_store
 from auto_qb.hr.store import HrLockBusy, HrSiteStore, hr_dir
@@ -327,6 +335,169 @@ def test_schema_migration_logs_once(tmp_path, monkeypatch, caplog):
             assert err is None
     infos = [r for r in caplog.records if r.levelno == logging.INFO and "已迁移" in r.getMessage()]
     assert len(infos) == 1, f"迁移 INFO 只报一次: {[i.getMessage() for i in infos]}"
+
+
+# ==================== 拉取历史(HrHistoryEvent, 计划 26-10-04-0312 S1) ====================
+
+
+def _history_events() -> list:
+    """两条历史事件: 第一条全字段拉满(reason 200 字符 + lanes 3 档 + notes 5 条), 第二条只填核心字段验默认值"""
+    full = HrHistoryEvent(
+        ts=1000.5,
+        kind="wave",
+        trigger="auto",
+        action="refreshed",
+        reason="r" * 200,
+        reason_kind="",
+        pages=6,
+        rows=214,
+        torrents_ok=3,
+        torrents_fail=1,
+        verified=2,
+        elapsed_s=42.6,
+        lanes=[
+            {
+                "lane": "A",
+                "status": "ok",
+                "pages": 3,
+                "rows": 96,
+                "detail": ""
+            },
+            {
+                "lane": "B",
+                "status": "ok",
+                "pages": 2,
+                "rows": 78,
+                "detail": "命中本地全集"
+            },
+            {
+                "lane": "C",
+                "status": "failed",
+                "pages": 1,
+                "rows": 0,
+                "detail": "表头缺失"
+            },
+        ],
+        notes=["n1", "n2", "n3", "n4", "n5"],
+        by="abcdef",
+    )
+    minimal = HrHistoryEvent(
+        ts=2000.0,
+        kind="defer",
+        trigger="manual",
+        action="waiting",
+        reason="未到可取时刻(min_interval, 还差 812s)",
+        reason_kind="budget",
+        by="xyz789"
+    )
+    return [full, minimal]
+
+
+def test_history_roundtrip_all_fields(tmp_path):
+    """history 事件数组全字段往返(经站点文件落盘), 逐字段相等"""
+    sample = _history_events()
+    store = HrSiteStore("btschool", str(tmp_path))
+    with store.hold() as session:
+        session.data.history = sample
+        assert session.commit(now=3000.0) == "written"
+
+    data, err = HrSiteStore("btschool", str(tmp_path)).read_unlocked()
+    assert err is None
+    assert len(data.history) == 2
+    full = data.history[0]
+    assert full.ts == 1000.5
+    assert full.kind == "wave" and full.trigger == "auto" and full.action == "refreshed"
+    assert full.reason == "r" * 200 and full.reason_kind == ""
+    assert full.pages == 6 and full.rows == 214
+    assert full.torrents_ok == 3 and full.torrents_fail == 1
+    assert full.verified == 2 and full.elapsed_s == 42.6
+    assert full.lanes == [
+        {
+            "lane": "A",
+            "status": "ok",
+            "pages": 3,
+            "rows": 96,
+            "detail": ""
+        },
+        {
+            "lane": "B",
+            "status": "ok",
+            "pages": 2,
+            "rows": 78,
+            "detail": "命中本地全集"
+        },
+        {
+            "lane": "C",
+            "status": "failed",
+            "pages": 1,
+            "rows": 0,
+            "detail": "表头缺失"
+        },
+    ]
+    assert full.notes == ["n1", "n2", "n3", "n4", "n5"]
+    assert full.by == "abcdef"
+    # 第二条只填核心字段: 缺省字段按默认值往返(读侧对元素缺字段容忍)
+    mini = data.history[1]
+    assert mini.ts == 2000.0 and mini.action == "waiting" and mini.reason_kind == "budget"
+    assert mini.pages == 0 and mini.rows == 0 and mini.lanes == [] and mini.notes == [] and mini.elapsed_s == 0.0
+    # dataclass 级纯往返(不经站点文件): to_json -> from_json 逐字段相等
+    assert HrHistoryEvent.from_json(sample[0].to_json()) == sample[0]
+    assert HrHistoryEvent.from_json(sample[1].to_json()) == sample[1]
+
+
+def test_history_missing_key_legacy_compat(tmp_path):
+    """旧 JSON 不含 history 键 -> from_json 得空表且其余字段无损(存量文件零迁移)"""
+    payload = {
+        "schema_version": versioning.CURRENT_VERSIONS["hr_site"],
+        "revision": 7,
+        "fetched_at": 111.0,
+        "writer": {
+            "instance_id": "legacy",
+            "heartbeat": 222.0
+        },
+        "index": [{
+            "tid": 5,
+            "name": "t5"
+        }],
+        "rate": {
+            "day_window": "2026-10-04",
+            "day_count": 9
+        },
+    }
+    (tmp_path / "s.json").write_text(json.dumps(payload), encoding="utf-8")
+    data, err = HrSiteStore("s", str(tmp_path)).read_unlocked()
+    assert err is None
+    assert data.history == []
+    # 其余字段无损
+    assert data.revision == 7 and data.fetched_at == 111.0
+    assert data.writer_instance == "legacy" and data.writer_heartbeat == 222.0
+    assert data.index[5].name == "t5" and data.rate.day_count == 9
+
+
+def test_history_cap_keeps_latest():
+    """超 HISTORY_CAP(2000)条时修剪助手保留最新 HISTORY_CAP 条(顺序不变, 原表不动)"""
+    events = [HrHistoryEvent(ts=float(i)) for i in range(HISTORY_CAP + 500)]
+    now = float(HISTORY_CAP + 500)  # now 贴着事件时刻: 只验容量截断, 不触发按龄剔除
+    pruned = prune_history(events, now=now)
+    assert len(pruned) == HISTORY_CAP
+    assert pruned[0].ts == 500.0, "最旧的 500 条被截掉"
+    assert pruned[-1].ts == float(HISTORY_CAP + 499), "最新一条保留在末尾"
+    assert [e.ts for e in pruned] == [e.ts for e in events[-HISTORY_CAP:]]
+    assert len(events) == HISTORY_CAP + 500, "修剪返回新表, 不改传入表"
+    # 恰好等于 cap: 原样全保留
+    exact = [HrHistoryEvent(ts=float(i)) for i in range(HISTORY_CAP)]
+    assert [e.ts for e in prune_history(exact, now=now)] == [e.ts for e in exact]
+
+
+def test_history_age_prune_boundary():
+    """按龄修剪: 超过 HISTORY_MAX_AGE_S(183 天)剔除; 恰好等于期限(边界)保留; 未来时刻保留"""
+    now = 10_000_000.0
+    too_old = HrHistoryEvent(ts=now - HISTORY_MAX_AGE_S - 1.0)
+    at_edge = HrHistoryEvent(ts=now - HISTORY_MAX_AGE_S)
+    fresh = HrHistoryEvent(ts=now - 60.0)
+    future = HrHistoryEvent(ts=now + 120.0)
+    pruned = prune_history([too_old, at_edge, fresh, future], now=now)
+    assert [e.ts for e in pruned] == [at_edge.ts, fresh.ts, future.ts], "只剔严格超龄的, 边界值与未来时刻保留"
 
 
 # ==================== P1 覆盖率提升轮: 存储层错误路径长尾 ====================
