@@ -254,7 +254,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-detail-row .d-copy:hover { opacity: 1; }
 /* 成员明细(删除整组/批量删除): 逐行 站点 + 种子名 + 保存路径, 超高滚动 */
 .modal-members { margin: -4px 0 14px; max-height: 260px; overflow-y: auto; padding: 4px 12px;
-  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-sunken); }
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--bg-sunken);
+  overscroll-behavior: contain; }
 .modal-member-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12.5px; min-width: 0; }
 .modal-member-row + .modal-member-row { border-top: 1px solid var(--border-soft); }
 .modal-member-row .mm-site { flex: 0 0 auto; min-width: 58px; color: var(--fg-muted); font-weight: 600; font-size: 11.5px; }
@@ -275,7 +276,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
   word-break: break-all; }
 .db-list { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
   padding: 4px; border-radius: var(--radius-sm); background: var(--surface-1);
-  border: 1px solid var(--border-soft); }
+  border: 1px solid var(--border-soft); overscroll-behavior: contain; }
 .db-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; border: 0;
   border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted);
   font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;

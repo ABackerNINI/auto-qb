@@ -194,7 +194,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-detail-row .d-copy:hover { opacity: 1; }
 /* 成员明细 */
 .modal-members { margin: -4px 0 14px; max-height: 260px; overflow-y: auto; padding: 4px 12px;
-  border: 1px solid var(--border-soft); background: var(--bg-sunken); }
+  border: 1px solid var(--border-soft); background: var(--bg-sunken);
+  overscroll-behavior: contain; }
 .modal-member-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12.5px; min-width: 0; }
 .modal-member-row + .modal-member-row { border-top: 1px solid var(--border-soft); }
 .modal-member-row .mm-site { flex: 0 0 auto; min-width: 58px; color: var(--fg-muted); font-weight: 600;
@@ -210,7 +211,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
   border: 1px solid var(--border-soft); color: var(--fg-soft);
   font-family: var(--font-mono); font-size: 12px; line-height: 1.55; word-break: break-all; }
 .db-list { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
-  padding: 4px; background: var(--surface-1); border: 1px solid var(--border-soft); }
+  padding: 4px; background: var(--surface-1); border: 1px solid var(--border-soft);
+  overscroll-behavior: contain; }
 .db-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; border: 0;
   background: transparent; color: var(--fg-muted); font: inherit; font-size: 12.5px; text-align: left;
   cursor: pointer; transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }

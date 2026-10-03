@@ -1106,7 +1106,7 @@
   font-size: 12px;
 }
 .kb-help { width: min(560px, 92vw); }
-.kb-help-body { max-height: 60vh; overflow-y: auto; padding: 4px 18px 10px; }
+.kb-help-body { max-height: 60vh; overflow-y: auto; padding: 4px 18px 10px; overscroll-behavior: contain; }
 .kb-help-grp-t {
   font: 600 11px/1 var(--hb-font-display);
   letter-spacing: 0.08em;

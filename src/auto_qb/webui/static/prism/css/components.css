@@ -233,10 +233,12 @@
 
 /* ---------------- 站内确认框 ---------------- */
 .modal-mask { position: fixed; inset: 0; z-index: 130; display: flex; align-items: center; justify-content: center;
-  padding: 20px; background: var(--bg-sunken), rgba(0, 0, 0, .35); animation: fade-in .14s var(--ease); }
+  padding: 20px; background: var(--bg-sunken), rgba(0, 0, 0, .35); animation: fade-in .14s var(--ease);
+  overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防弹窗滚轮穿透背景 */
 .modal { width: var(--modal-w-base); max-width: 100%; padding: 20px 22px; border-radius: var(--radius-lg);
   background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
-  animation: modal-in .2s var(--ease-spring); }
+  animation: modal-in .2s var(--ease-spring);
+  max-height: calc(100vh - 120px); overflow-y: auto; overscroll-behavior: contain; } /* 矮视口兜底: 壳内滚, 按钮可达 */
 .modal.wide { width: var(--modal-wide-w); }
 .modal-title { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 600; }
 .modal-title .ico { color: var(--warn); }
@@ -254,7 +256,8 @@
  * 不带 backdrop-filter); z-index 取 128/129 —— 压在内容与右键菜单(100)之上、确认框(130)
  * 之下, 覆盖层开着时弹确认框仍能盖上来。三套 UI 成对改(atlas/console dialogs.css, 本文件)。 */
 .hr-full-mask { position: fixed; left: 0; right: 0; top: var(--head-h, 0px); bottom: var(--statusbar-h, 34px);
-  z-index: 128; background: var(--bg-sunken), rgba(0, 0, 0, .35); animation: fade-in .14s var(--ease); }
+  z-index: 128; background: var(--bg-sunken), rgba(0, 0, 0, .35); animation: fade-in .14s var(--ease);
+  overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防弹窗滚轮穿透背景 */
 .hr-full-modal { position: fixed; left: 0; right: 0; top: var(--head-h, 0px); bottom: var(--statusbar-h, 34px);
   z-index: 129; display: flex; flex-direction: column; background: var(--bg-card);
   border-top: 1px solid var(--border-strong); box-shadow: var(--shadow-3); animation: modal-in .2s var(--ease-spring); }
@@ -263,7 +266,7 @@
 .hr-full-modal-t { font-size: 15px; font-weight: 600; }
 .hr-full-modal-sub { color: var(--fg-dim); font-size: 12px; }
 .hr-full-modal-hd .hb-btn { margin-left: auto; }
-.hr-full-modal-bd { flex: 1; min-height: 0; overflow: auto; }
+.hr-full-modal-bd { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 /* 待删目标信息区(值可复制)
  * R10-13: 长文本口径统一为"**单行省略 + title 全文 + 复制按钮**" —— 旧写法 overflow-wrap:
  * anywhere 会把超长 tracker URL / hash 换成很多行, 把弹窗顶高、且右边缘参差不齐。
@@ -306,7 +309,7 @@
   font-family: var(--font-mono); font-size: 12px; line-height: 1.55; word-break: break-all; }
 .db-list { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
   padding: 4px; border-radius: var(--radius-sm); background: var(--surface-1);
-  border: 1px solid var(--border-soft); }
+  border: 1px solid var(--border-soft); overscroll-behavior: contain; }
 .db-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; border: 0;
   border-radius: var(--radius-sm); background: transparent; color: var(--fg-muted);
   font: inherit; font-size: 12.5px; text-align: left; cursor: pointer;
@@ -410,7 +413,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 /* FX-19: 窗口从 640px 放宽到 760px —— 三个字段一行(路径 1.6fr + 分类 + 标签)时输入框不再局促 */
 .modal.add-dialog { width: var(--modal-w-add); max-height: calc(100vh - 120px); display: flex; flex-direction: column; padding-bottom: 16px; }
 .add-dialog-x { margin-left: auto; }
-.add-dialog-body { overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+.add-dialog-body { overflow-y: auto; margin: 0 -4px; padding: 0 4px; overscroll-behavior: contain; }
 .add-dialog-field { margin-top: 18px; }
 .add-dialog-field:first-child { margin-top: 6px; }
 .add-dialog-label { display: block; margin-bottom: 6px; color: var(--fg-dim); font-size: 11.5px; font-weight: 600;
@@ -455,7 +458,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .add-dialog-pathrow .add-dialog-input { flex: 1 1 auto; min-width: 0; }
 .add-dialog-pathbtn { flex: 0 0 auto; white-space: nowrap; }
 .add-pop { top: calc(100% + 4px); width: 100%; z-index: 60; }
-.add-pop-list { max-height: 210px; overflow-y: auto; }
+.add-pop-list { max-height: 210px; overflow-y: auto; overscroll-behavior: contain; }
 .add-pop-item { cursor: pointer; }
 /* 键盘活动项行(data-hi 行)摘掉 hover 高亮: 高亮只走 .on 一条路 —— 治「上下键选中项闪烁」
  * (pitfalls/web-ui/hover-keynav-fight); 悬停接管在 comboHoverIdx(@mousemove + 3px 位移门限)。
@@ -571,7 +574,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
  * 列表行(名字 + 保存路径 + 行级操作) / 新建行 / 底部提示; 全部只引用既有 tokens。
  */
 .modal.mgr-dialog { width: var(--modal-w-form); }
-.mgr-list { display: flex; flex-direction: column; margin: 4px 0 14px; max-height: 300px; overflow-y: auto; }
+.mgr-list { display: flex; flex-direction: column; margin: 4px 0 14px; max-height: 300px; overflow-y: auto;
+  overscroll-behavior: contain; }
 .mgr-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; }
 .mgr-row + .mgr-row { border-top: 1px solid var(--border-soft); }
 .mgr-name { flex: 0 1 auto; min-width: 80px; max-width: 40%; font-weight: 600; font-size: 13px; color: var(--fg);
@@ -594,7 +598,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal.meta-dialog { width: var(--modal-w-form); }
 .meta-targets { margin: 0 0 12px; color: var(--fg-dim); font-size: 12.5px; }
 .meta-targets b { color: var(--fg); }
-.meta-tags { display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto; margin: 2px 0 12px; }
+.meta-tags { display: flex; flex-wrap: wrap; gap: 8px; max-height: 220px; overflow-y: auto; margin: 2px 0 12px;
+  overscroll-behavior: contain; }
 
 /* 筛选弹层底部管理入口(FE-2C2): sticky 吸底(长列表滚动时管理入口不滚走), 顶部细线与列表区分隔 */
 .pop-mgr-btn { position: sticky; bottom: -8px; display: flex; align-items: center; gap: 6px;
