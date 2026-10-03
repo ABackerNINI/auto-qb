@@ -14,6 +14,11 @@
  * !排障视图(表②, 计划 26-10-01-2216 阶段3): 站点级 kv 行(hrsKvRows)+ 各档波次明细
  *   (hrsWaveCutoff/hrsWaveCount)全部取自 /api/hr/status 现有载荷, **零新请求**; 收进
  *   <details> 默认收起, 展开态不持久化(临时排障动作)。
+ * !拉取历史(表③, 计划 26-10-04-0312): 只读端点 /api/hr/history 按需拉一次(limit=300,
+ *   表③ <details> 首次展开 @toggle 触发 hrsHistEnsureLoaded), 「刷新」手动重拉, 不轮询;
+ *   站点 chips 与「仅看异常」纯前端本地过滤不回后端; 行人话(22 键)全由后端算好, 前端只挑
+ *   徽章色档与排版。状态挂 hrsHist —— 与 hrs 同一份 mixin data 的伴生键(hrs 根对象键集被
+ *   test_frontend_hr_status_fields_match_backend 闭集钉住, 不往里加新键), 方法前缀 hrsHist*。
  * !入口只有一个(2026-09-25 合并): Console Hub「HR 在线核实」分区页尾 —— 曾经的经典设置页
  *   章节与独立首页卡片都已随旧版设置页移除, 别再加回第二套入口。
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾 mixin window.AQB_HR_STATUS)。
@@ -65,6 +70,18 @@ function hrsCompareRows(a, b, key, dir) {
   return r * dir;
 }
 
+/* ---------------- 表③ 拉取历史常量与判据(计划 26-10-04-0312 §3.5, 模块级单例) ----------------
+ * token 都是后端字面量, 只比对不重算: BAD_ACTIONS = 波终态里算「异常」的四个 action
+ * (kind='defer' 的拦下行不论 action 一律算异常, 计划 §3.5 拍板); TONES = result_tone 徽章
+ * 色档白名单(后端 HISTORY_RESULT_BADGES 色档族), 未知档回落 dim(与后端未知 action 回落
+ * dim 同款兜底); LIMIT = 单页拉取条数(拍板值, 与端点缺省一致)。 */
+const HRS_HIST_LIMIT = 300;
+const HRS_HIST_BAD_ACTIONS = ["error", "no-channel", "waiting", "skipped-locked"];
+const HRS_HIST_TONES = ["ok", "warn", "dim", "err", "blue"];
+function hrsHistIsBad(r) {
+  return HRS_HIST_BAD_ACTIONS.indexOf(r.action) >= 0 || r.kind === "defer";
+}
+
 window.AQB_HR_STATUS = {
   data() {
     return {
@@ -92,6 +109,20 @@ window.AQB_HR_STATUS = {
         oldOn: {},
         sortSel: {},
         sortDir: {},
+      },
+      /* 表③ 拉取历史(计划 26-10-04-0312 §3.5): 与 hrs 同一份 mixin data 的伴生状态 —— 不并进
+       * hrs 根对象的原因: 模板对 hrs.* 的键引用被 test_frontend_hr_status_fields_match_backend
+       * 闭集钉死, 加新键即红; hrsHist.* 前缀不落进那个扫描。首次展开才 fetch, 不轮询不持久化。 */
+      hrsHist: {
+        loading: false,
+        loaded: false,
+        error: "",
+        rows: [],
+        readErrors: {},
+        now: 0,
+        site: "", /* 站点 chips 本地选择("" = 全部站点), 前端过滤不回后端 */
+        badOnly: false, /* 「仅看异常」toggle(判据 hrsHistIsBad) */
+        expanded: {}, /* 行展开集(键 = ts|site), 展开态不持久化 */
       },
     };
   },
@@ -486,6 +517,120 @@ window.AQB_HR_STATUS = {
     },
     hrsPollText() {
       return this.hrs.pollInterval ? `每 ${this.hrs.pollInterval}s 检查一次站点` : "";
+    },
+    /* ---------------- 表③ 拉取历史(计划 26-10-04-0312 §3.5) ----------------
+     * 端点 /api/hr/history 只读; 行字段与人话(22 键)全部后端算好(hr.status.history_rows 单点),
+     * 这里只存取 / 本地过滤 / 排版。取数时机同表① 范式: 首次展开才拉(模板 @toggle ->
+     * hrsHistOnToggle -> hrsHistEnsureLoaded), 「刷新」手动重拉(hrsHistReload), 不轮询无定时器;
+     * force 重拉期间 loaded 维持 true, 旧行留在表里不闪回加载态(表① loadHrSiteEntries 同款)。
+     * fetch 错误处理随 loadHrStatus 范式: auth 失败交给全局登出, 其余落 hrsHist.error。 */
+    async hrsHistLoad(force = false) {
+      const h = this.hrsHist;
+      if (h.loading) return;
+      if (h.loaded && !force) return;
+      h.loading = true;
+      h.error = "";
+      try {
+        const r = await this.api(`/api/hr/history?limit=${HRS_HIST_LIMIT}`);
+        h.loaded = true;
+        h.rows = r.rows || [];
+        h.readErrors = r.read_errors || {};
+        h.now = r.now || 0;
+        h.expanded = {};
+      } catch (e) {
+        if (!e.auth) h.error = e.message || "拉取历史读取失败";
+      } finally {
+        h.loading = false;
+      }
+    },
+    /* details 的开与合都会发 toggle: 只有展开且未 loaded 才发请求(首次展开才拉一次) */
+    hrsHistOnToggle(ev) {
+      if (ev && ev.target && ev.target.open) this.hrsHistEnsureLoaded();
+    },
+    hrsHistEnsureLoaded() {
+      if (!this.hrsHist.loaded) this.hrsHistLoad();
+    },
+    hrsHistReload() {
+      this.hrsHistLoad(true);
+    },
+    /* 站点 chips(hrsLaneChips 的 [值, 文案] 对范式): 全部站点 + 行内站点集合现算(首现序),
+     * 纯前端本地过滤不回后端 —— 端点的 site 参数是给单站深链用的, 本表不拼 */
+    hrsHistSiteChips() {
+      const seen = [];
+      for (const r of this.hrsHist.rows) {
+        if (r.site && !seen.includes(r.site)) seen.push(r.site);
+      }
+      return [["", "全部站点"]].concat(seen.map((st) => [st, st]));
+    },
+    hrsHistSiteSel() {
+      return this.hrsHist.site;
+    },
+    hrsHistSetSite(site) {
+      this.hrsHist.site = site;
+    },
+    hrsHistBadOn() {
+      return !!this.hrsHist.badOnly;
+    },
+    hrsHistToggleBad() {
+      this.hrsHist.badOnly = !this.hrsHist.badOnly;
+    },
+    /* 行集 = 后端排好序的 rows(ts 降序)前端本地过筛: 站点 chips × 仅看异常 AND 叠加 */
+    hrsHistRows() {
+      const h = this.hrsHist;
+      let rows = h.rows;
+      if (h.site) rows = rows.filter((r) => r.site === h.site);
+      if (h.badOnly) rows = rows.filter(hrsHistIsBad);
+      return rows;
+    },
+    /* 行展开(键 = ts|site): 点行展开各档明细子行, 再点收起; 展开态不持久化 */
+    hrsHistKey(r) {
+      return `${r.ts}|${r.site}`;
+    },
+    hrsHistIsOpen(r) {
+      return !!this.hrsHist.expanded[this.hrsHistKey(r)];
+    },
+    hrsHistToggleRow(r) {
+      const k = this.hrsHistKey(r);
+      this.hrsHist.expanded[k] = !this.hrsHist.expanded[k];
+    },
+    /* 结果徽章色档: result_tone(ok/warn/dim/err/blue)后端单点给好, 直接映射 hr-hres-<tone>,
+     * 未知档回落 dim —— 前端不重算语义 */
+    hrsHistResCls(r) {
+      const tone = HRS_HIST_TONES.includes(r.result_tone) ? r.result_tone : "dim";
+      return `hr-hres-${tone}`;
+    },
+    /* 数值列: 取数语义只属 wave 行(defer/confirm_empty 没有, 显 —); pages/rows 的 0 = 没取到
+     * 也显 —, 回填/放行的 0 计数照显(计划 mock 口径: 完成 3/0 与放行 0) */
+    hrsHistWaveNum(r, key) {
+      if (r.kind !== "wave") return "—";
+      const v = r[key] || 0;
+      return v > 0 ? v : "—";
+    },
+    hrsHistBackfill(r) {
+      if (r.kind !== "wave") return "—";
+      return `${r.torrents_ok || 0}/${r.torrents_fail || 0}`;
+    },
+    hrsHistVerified(r) {
+      if (r.kind !== "wave") return "—";
+      return r.verified > 0 ? `+${r.verified}` : "0";
+    },
+    /* 「数据截至」时间戳取响应 now(mock 口径「最近 N 条 · 数据截至 …」; fmtTs 对 0 回空串,
+     * 无 now 时只给条数) */
+    hrsHistFreshText() {
+      const h = this.hrsHist;
+      const asof = h.now ? ` · 数据截至 ${this.fmtTs(h.now)}` : "";
+      return `最近 ${h.rows.length} 条${asof}`;
+    },
+    /* 展开明细子行(计划 §3.5 mock 表): 各档一段 <lane> <lane_text> · <status_text> · P 页 / R 行
+     * (+档位 detail), 行级 notes 追加尾部 —— 全部人话后端算好, 这里只拼排版 */
+    hrsHistSubText(r) {
+      const parts = (r.lanes || []).map((ln) => {
+        const seg = [`${ln.lane} ${ln.lane_text}`.trim(), ln.status_text || "", `${ln.pages || 0} 页 / ${ln.rows || 0} 行`];
+        if (ln.detail) seg.push(ln.detail);
+        return seg.filter(Boolean).join(" · ");
+      });
+      if (r.notes && r.notes.length) parts.push(r.notes.join("；"));
+      return parts.join("；") || "无档位明细";
     },
   },
 };

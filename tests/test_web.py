@@ -176,6 +176,7 @@
 - test_frontend_hr_full_modal_wiring: HR 站点状态折叠 + 覆盖式全屏弹窗守阵(计划 26-10-02-1936 阶段2) —— aqb:hr-full-modal 扫描锚段内遮罩/面板/头部(标题+摘要+✕)绑定齐全、有「展开/收起」钮且无独立「全屏」钮、面板无预展开属性(v-show 挂 hrsOpen); hrsOpen 默认 false(state.js)不持久化(hr_status.js/config_hub.js/state.js 无该键的 localStorage 写读); hubGo 不再自动拉数只复位 hrsOpen; ESC 关闭进 lifecycle 退栈链且同步 escBusy 名单(dialogs.js), 先于 1632 清筛选兜底; 首次展开才拉(hrsToggle 未 loaded 即调 loadHrStatus)、无 setInterval; .hr-full-mask/.hr-full-modal 三套 UI CSS 成对(prism 落 components.css)
 - test_frontend_hr_contract_keys_match_backend: HR 两张表消费键契约守阵(计划 26-10-01-2216 阶段4 + 26-10-02-1936 阶段3 扩) —— 从前端源码提取消费键(表① e.*: 模板 aqb:hr-detail-table 段 + hr_status.js 行辅助与行集函数; 表② s.*/ls.*: hr_status.js 全文件 + aqb:hr-diag 模板段), 断言 ⊆ EntryDetail/SiteStatus/LaneStatus 的 to_dict 键集(后端侧闭集钉法 test_entry_details_field_surface 挡不住「上游改键+同步改 expected」的前端静默落空), 每组带核心键在场断言防提取器失效变恒真; 幻键集必须为空(表② 徽章人话 ls.lane_text 曾是幻键致渲染为空, 已修: LaneStatus 补 lane_text 字段由 _lane_statuses 填充, 白名单收空守阵恢复严格; local_present 是响应层 mark_local_present 追加的合法豁免)
 - test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留
+- test_frontend_hr_history_wiring: HR 表③ 拉取历史前端接线守阵(计划 26-10-04-0312 §3.5/§05 S4) —— aqb:hr-history 扫描锚 begin/end 成对且段内 <details> 默认收起 + summary 文案 + 站点 chips(hrsHistSiteChips 行内集合现算)+「仅看异常」toggle + 刷新钮 + 「数据截至」时间戳 + 十列表头(时间/站点/触发/结果/页数/行数/回填/放行/耗时/说明)+ 明细行 v-for 与展开明细子行(hr-hist-sub)+ 空态/未启用态文案 + read_errors 点名行; 取数纪律: 首次展开才 fetch(limit=300, @toggle -> hrsHistEnsureLoaded)+ 「刷新」手动重拉(hrsHistReload)+ 无 setInterval + 站点过滤纯前端本地筛不拼 site 查询串; 展开态不持久化(hr_status.js 代码态零 localStorage); .hr-hist-table/.hr-hist-row/.hr-hist-sub/.hr-hres 及五档色义(ok/warn/dim/err/blue)三套 UI CSS 成对
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
@@ -1927,9 +1928,10 @@ def test_frontend_template_split_wiring():
             # 单分片体量上限默认 400; settings-detail.html 是 HR 表①(计划 26-10-01-2216 阶段2,
             # 拍板②b 按站点明细表)的落点, 391 -> 435 行属功能增长不是拆分回潮, 单独点名给例外额度
             # (其余分片仍钉 400); 26-10-02-1936 阶段2 折叠头 + 覆盖式全屏覆盖层再涨 454 -> 473,
-            # 额度提到 500 —— 该分片下次再长应把 speed/keys 等视图拆成独立分片 —— 切割须过
+            # 额度提到 500; 26-10-04-0312 S4 表③ 拉取历史(全局 <details> 段)再涨 482 -> 539,
+            # 额度提到 560 —— 该分片下次再长应把 speed/keys 等视图拆成独立分片 —— 切割须过
             # 等价性验证(pitfalls/web-ui/frontend-split.md), 不得顺手抽文件
-            cap = 500 if os.path.basename(part["src"]) == "settings-detail.html" else 400
+            cap = 560 if os.path.basename(part["src"]) == "settings-detail.html" else 400
             if n > cap:
                 problems.append(f"{ui}/{part['src']} {n} 行, 超 {cap} 行单分片体量上限")
             if part.get("into") not in ("app", "body"):
@@ -2943,6 +2945,103 @@ def test_frontend_hr_contract_keys_match_backend():
     # 补该字段由 _lane_statuses 填充(LANE_TEXTS 单点), 白名单已收 —— 任何幻键在这里都是真缺陷。
     phantom_ls = sorted(used_ls - set(LaneStatus().to_dict()))
     assert not phantom_ls, f"表② 波次级消费了 LaneStatus 不导出的键 {phantom_ls}(渲染成空, 打错/上游改名都会这样)"
+
+
+def test_frontend_hr_history_wiring():
+    """HR 表③ 拉取历史前端接线守阵(2026-10-04, 计划 26-10-04-0312 §3.5/§05 S4)
+
+    表③ 是全屏覆盖层里 .hrs-list 之后的全局 <details>(拉取历史跨站点成时间轴, 不进 per-site
+    article; 数据 /api/hr/history, S1-S3 交付; 状态挂 hr_status.js 伴生键 hrsHist, 方法前缀
+    hrsHist*), 五类"漏一处 = 静默失效 / 拍板被推翻"的故障形态机械钉住:
+    1. 模板绑定: aqb:hr-history 扫描锚 begin/end 成对且段内 <details> 默认收起(表② 同款折叠
+      范式)/ summary 文案 / 站点 chips(hrsHistSiteChips, 行内站点集合现算)/ 「仅看异常」toggle /
+      刷新钮 / 「数据截至」时间戳 / 十列表头(计划 §3.5 mock 列面: 时间/站点/触发/结果/页数/行数/
+      回填/放行/耗时/说明)/ 明细行 v-for + 行点击展开明细子行(hr-hist-sub)/ 空态与未启用态文案 /
+      read_errors 点名行(坏站点文件不静默);
+    2. 取数纪律(计划 §3.5): 首次展开才 fetch(limit=300, 模板 @toggle -> hrsHistOnToggle ->
+      hrsHistEnsureLoaded), 「刷新」手动重拉(hrsHistReload), 无 setInterval(不轮询);
+      站点过滤纯前端本地筛不回后端(端点拼串不得出现 site 查询参数);
+    3. 展开态不持久化: 排障动作不写存储, hr_status.js 代码态零 localStorage(表② 同款);
+    4. CSS 三处成对(计划 §5.6): .hr-hist-table / .hr-hist-row / .hr-hist-sub / .hr-hres 及
+      result_tone 五档色义(ok/warn/dim/err/blue)在 atlas / console / prism 聚合各 ≥1
+      (骨架 .drawer-table + .hr-detail-table 与 chips 行复用件的成对由既有守阵钉住)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl = open(os.path.join(shared, "tpl", "settings-detail.html"), encoding="utf-8").read()
+    begins = re.findall(r"<!-- aqb:hr-history:begin", tpl)
+    ends = re.findall(r"<!-- aqb:hr-history:end", tpl)
+    assert len(begins) == 1 and len(ends) == 1, \
+        f"aqb:hr-history 扫描锚必须 begin/end 恰好成对各一(实得 begin={len(begins)} / end={len(ends)}) —— 表③ 段被移走或锚被删? 同步本守阵"
+    m = re.search(r"<!-- aqb:hr-history:begin.*?-->(.*?)<!-- aqb:hr-history:end.*?-->", tpl, re.S)
+    frag = m.group(1)
+
+    # 1. 折叠范式 + 模板绑定
+    dm = re.search(r"<details\b[^>]*>", frag)
+    assert dm, "表③ 缺 <details>(表② 同款折叠范式)"
+    assert not re.search(r"<details\b[^>]*\bopen\b", dm.group(0)), "表③ <details> 不得带默认 open(默认收起是拍板交互)"
+    for needle, what in (
+        ("拉取历史 · 最近取数与波次明细", "summary 文案"),
+        ("hrsHistOnToggle($event)", "首次展开触发(@toggle)"),
+        ("hrsHistSiteChips()", "站点 chips(行内站点集合现算)"),
+        ("hrsHistSetSite(", "chips 点击切换"),
+        ("仅看异常", "「仅看异常」toggle 文案"),
+        ("hrsHistToggleBad()", "「仅看异常」点击切换"),
+        ("hrsHistReload()", "「刷新」手动重拉"),
+        ("hrsHistFreshText()", "「数据截至」时间戳(拼行单点在 hrsHistFreshText)"),
+        ('class="drawer-table hr-detail-table hr-hist-table"', "表格骨架(同挂 .drawer-table + .hr-detail-table)"),
+        ('v-for="r in hrsHistRows()"', "明细行渲染(前端本地过筛行集)"),
+        ('class="hr-hist-row"', "可点击主行(展开触发)"),
+        ('class="hr-hist-sub"', "展开明细子行"),
+        ("hrsHistSubText(r)", "子行文案单点(各档 lanes 明细)"),
+        ('class="hr-hres"', "结果徽章(result_tone 色档)"),
+        ("hrsHistResCls(r)", "结果徽章色档映射"),
+        ("正在读取拉取历史", "加载态文案"),
+        ("最近还没有拉取记录", "空态文案"),
+        ("HR 在线核实未启用", "未启用态文案"),
+        ("文件读取失败", "read_errors 点名行(坏站点文件不静默)"),
+    ):
+        assert needle in frag, f"表③ 模板缺 {what}(应有 `{needle}`)"
+    # 十列列面(计划 §3.5 mock): 时间/站点/触发/结果/页数/行数/回填/放行/耗时/说明(数值列挂 .num)
+    for col in ("时间", "站点", "触发", "结果", "页数", "行数", "回填", "放行", "耗时", "说明"):
+        assert f"<th>{col}</th>" in frag or f'<th class="num">{col}</th>' in frag, \
+            f"表③ 表头缺「{col}」列(计划 §3.5 mock 列面)"
+
+    # 2. 取数纪律: 首次展开才拉 + 手动刷新 + 不轮询 + 本地过滤不回后端
+    js = open(os.path.join(shared, "hr_status.js"), encoding="utf-8").read()
+    for needle, what in (
+        ("/api/hr/history?limit=", "历史端点拼接"),
+        ("HRS_HIST_LIMIT = 300", "单页拉取条数(计划拍板值)"),
+        ("hrsHistOnToggle(ev)", "toggle 入口(开与合都触发, 只有展开才拉)"),
+        ("hrsHistEnsureLoaded", "首次展开才拉单点"),
+        ("hrsHistReload", "手动重拉单点"),
+        ("hrsHistSiteChips", "站点 chips 现算单点"),
+        ("hrsHistRows", "本地过筛行集单点"),
+        ("hrsHistIsBad", "仅看异常判据单点"),
+        ('r.kind === "defer"', "拦下行一律算异常(计划 §3.5 拍板)"),
+        ("hrsHistSubText", "展开子行文案单点"),
+        ("hrsHistResCls", "徽章色档映射单点"),
+        ("数据截至", "「数据截至」拼行单点(hrsHistFreshText)"),
+    ):
+        assert needle in js, f"hr_status.js 缺 {what}({needle})"
+    assert "setInterval" not in js, "hr_status.js 不得有轮询定时器(表③ 不轮询, 计划 §3.5)"
+    assert "/api/hr/history?site" not in js and "&site=" not in js, \
+        "站点过滤必须纯前端本地筛, 不得回后端拼 site 查询串(计划 §3.5)"
+
+    # 3. 展开态不持久化(剥块/行注释再查 —— 说明文字不算使用, 判定只认代码态)
+    js_code = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    js_code = re.sub(r"//[^\n]*", "", js_code)
+    assert "localStorage" not in js_code, "展开态不持久化: hr_status.js 代码态不得出现 localStorage"
+
+    # 4. CSS 三处成对: 表③ 新类 + result_tone 五档色义
+    for css, name in (
+        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
+        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
+        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+    ):
+        for cls in (".hr-hist-table", ".hr-hist-row", ".hr-hist-sub", ".hr-hres"):
+            assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5.6)"
+        for tone in ("ok", "warn", "dim", "err", "blue"):
+            assert f".hr-hres.hr-hres-{tone}" in css, f"{name} 缺 .hr-hres-{tone} 色义(result_tone 五档)"
 
 
 def test_frontend_member_window_functions_live_in_methods():
@@ -6012,7 +6111,8 @@ def test_frontend_hr_status_fields_match_backend():
     # 锚点必须指向合并块自身: v-if 只在「HR 在线核实」分区模板块这一处出现, 重复出现说明块被复制
     # (2026-09-27 起块内含「站点接入」+「站点状态」两个块, 扫描窗放大到 8000 字符; 26-10-01 阶段2
     # 表① 又带入嵌套 <template v-for> 明细表 —— 单找第一个 </template> 会切在明细表收口、丢掉块尾
-    # 字段覆盖, 故改按模板嵌套深度找**锚点自己的配对收口**, 窗口只作半残兜底再放大到 16000)
+    # 字段覆盖, 故改按模板嵌套深度找**锚点自己的配对收口**, 窗口只作半残兜底: 阶段3 放大到 16000,
+    # 26-10-04-0312 S4 表③ 拉取历史全局段再涨(实测块 18.2k 字符)放大到 32000)
     anchor = "hub.view === 'hr_check'"
     for ui in _UI_ALL:
         html = _ui_aggregate(ui)
@@ -6023,7 +6123,7 @@ def test_frontend_hr_status_fields_match_backend():
         assert open_i >= 0, f"{ui}: 锚点 {anchor} 不在 <template> 开标签内 —— 模板结构被改坏? 同步本守阵"
         depth = 0
         cut = -1
-        for m in re.finditer(r"<template\b|</template>", html[open_i:open_i + 16000]):
+        for m in re.finditer(r"<template\b|</template>", html[open_i:open_i + 32000]):
             depth += 1 if m.group(0).startswith("<template") else -1
             if depth == 0:
                 cut = open_i + m.start()

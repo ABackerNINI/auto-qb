@@ -389,6 +389,63 @@
                           <!-- aqb:hr-diag:end -->
                         </article>
                       </div>
+                      <!-- 表③ 拉取历史(计划 26-10-04-0312 §3.5): 全局段(历史跨站点成时间轴, 不进 per-site
+                           article), 表② 同款 <details> 折叠范式默认收起; 首次展开才拉一次 /api/hr/history
+                           (limit=300, @toggle 触发 hrsHistEnsureLoaded), 「刷新」手动重拉, 不轮询不加定时器;
+                           站点 chips 由行内站点集合现算 + 「仅看异常」toggle, 纯前端本地过滤不回后端;
+                           行点击展开各档明细子行(hrsHistSubText); 人话(ts_text/trigger_text/result_text/
+                           result_tone/lane_text/status_text/elapsed_text)全由后端算好, 前端只挑徽章色档
+                           与排版; 展开态不持久化(表② 同款临时排障动作) -->
+                      <!-- aqb:hr-history:begin (守阵 test_frontend_hr_history_wiring 的扫描锚) -->
+                      <details class="hrs-diag" @toggle="hrsHistOnToggle($event)">
+                        <summary>拉取历史 · 最近取数与波次明细</summary>
+                        <p v-if="!hrs.enabled" class="hb-hp">HR 在线核实未启用(启用后这里会显示最近取数与波次明细)</p>
+                        <template v-else>
+                          <div v-if="hrsHist.loaded && !hrsHist.error" class="hr-detail-table-bar">
+                            <span v-for="c in hrsHistSiteChips()" :key="'hrh-chip-' + c[0]" class="hrs-tag hr-chip"
+                                  :class="{ on: hrsHistSiteSel() === c[0] }"
+                                  @click="hrsHistSetSite(c[0])">{{ c[1] }}</span>
+                            <span class="hrs-tag hr-chip" :class="{ on: hrsHistBadOn() }"
+                                  @click="hrsHistToggleBad()">仅看异常</span>
+                            <button class="hb-btn ghost sm" :disabled="hrsHist.loading" @click="hrsHistReload()">刷新</button>
+                            <span class="hr-detail-table-fresh">{{ hrsHistFreshText() }}</span>
+                          </div>
+                          <p v-if="hrsHist.loading && !hrsHist.loaded" class="hb-hp">正在读取拉取历史…</p>
+                          <p v-else-if="hrsHist.error" class="hb-hp error">{{ hrsHist.error }}
+                            <button class="hb-btn ghost sm" :disabled="hrsHist.loading" @click="hrsHistReload()">重试</button></p>
+                          <template v-else>
+                            <p v-for="(histErr, histSite) in hrsHist.readErrors" :key="'hrh-err-' + histSite" class="hrs-line error">站点 {{ histSite }} 文件读取失败: {{ histErr }}</p>
+                            <table v-if="hrsHistRows().length" class="drawer-table hr-detail-table hr-hist-table">
+                              <thead><tr>
+                                <th>时间</th><th>站点</th><th>触发</th><th>结果</th>
+                                <th class="num">页数</th><th class="num">行数</th><th class="num">回填</th><th class="num">放行</th>
+                                <th class="num">耗时</th><th>说明</th>
+                              </tr></thead>
+                              <tbody>
+                                <template v-for="r in hrsHistRows()" :key="'hrh-' + hrsHistKey(r)">
+                                  <tr class="hr-hist-row" @click="hrsHistToggleRow(r)">
+                                    <td class="mono-cell">{{ r.ts_text }}</td>
+                                    <td class="mono-cell">{{ r.site }}</td>
+                                    <td>{{ r.trigger_text }}</td>
+                                    <td><span class="hr-hres" :class="hrsHistResCls(r)">{{ r.result_text }}</span></td>
+                                    <td class="num">{{ hrsHistWaveNum(r, 'pages') }}</td>
+                                    <td class="num">{{ hrsHistWaveNum(r, 'rows') }}</td>
+                                    <td class="num">{{ hrsHistBackfill(r) }}</td>
+                                    <td class="num">{{ hrsHistVerified(r) }}</td>
+                                    <td class="num">{{ r.elapsed_text || '—' }}</td>
+                                    <td class="wrap">{{ r.reason || '—' }}</td>
+                                  </tr>
+                                  <tr v-if="hrsHistIsOpen(r)" class="hr-hist-sub">
+                                    <td colspan="10">{{ hrsHistSubText(r) }}</td>
+                                  </tr>
+                                </template>
+                              </tbody>
+                            </table>
+                            <p v-else class="hb-hp">最近还没有拉取记录(取数波完成/被拦/人工对账后这里会出现时间轴)</p>
+                          </template>
+                        </template>
+                      </details>
+                      <!-- aqb:hr-history:end -->
                       </div>
                       </div>
                     </section>

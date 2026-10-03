@@ -702,6 +702,22 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
  * 阶段2 拍板(展开即全屏)后只存在于 .hr-full-modal 内, 限宽自然被放开规则盖住, 成对保留作双态钩子 */
 .hr-detail-table td.wrap { max-width: 150px; }
 .hr-full-modal .hr-detail-table td.wrap { max-width: none; }
+/* ---------------- HR 表③ 拉取历史(计划 26-10-04-0312 §3.5, prism 侧) ----------------
+ * 骨架复用 .drawer-table + .hr-detail-table(徽章底形/mono/num 列对齐全继承; chips 行与
+ * 「数据截至」复用 components.css 的既有 .hr-detail-table-bar 段); 新增件只有: 结果徽章
+ * 色档(后端 result_tone 直接映射 .hr-hres-<tone>, ok/warn/dim/err/blue 五档)+ 行点击展开
+ * 明细子行 .hr-hist-sub(mono 小字弱化色)。色值全取五主题既有令牌, 不写死 hex;
+ * 三套 UI 成对改(atlas/console dialogs.css, prism components.css + views.css)。 */
+.hr-hist-table { margin-top: 6px; }
+.hr-hist-table .hr-hist-row { cursor: pointer; }
+.hr-hist-table .hr-hist-row:hover td { background: var(--bg-hover); }
+.hr-hist-table .hr-hist-sub td { font-family: var(--font-mono); font-size: 11px; color: var(--fg-dim); white-space: normal; overflow-wrap: anywhere; }
+.hr-hres { display: inline-block; padding: 0 6px; border: 1px solid var(--border-soft); border-radius: 999px; color: var(--fg-dim); font-size: 10.5px; white-space: nowrap; }
+.hr-hres.hr-hres-ok { border-color: var(--green-line); color: var(--green); }
+.hr-hres.hr-hres-warn { border-color: var(--warn-line); color: var(--warn); }
+.hr-hres.hr-hres-dim { border-color: var(--border-soft); color: var(--fg-dim); }
+.hr-hres.hr-hres-err { border-color: var(--error-line); color: var(--error); }
+.hr-hres.hr-hres-blue { border-color: var(--blue-line); color: var(--blue); }
 .drawer-raw { margin-top: 6px; }
 .drawer-raw summary { cursor: pointer; color: var(--fg-muted); font-size: 12.5px; margin-bottom: 8px; }
 
