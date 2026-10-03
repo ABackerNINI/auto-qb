@@ -33,6 +33,9 @@
     --skip-check-menu on|off(默认 on): web.skip_check_menu 桩值两态 ——
                    on 走「跳检…」菜单项/确认链断言(计划 26-10-02-1955 W3/W5),
                    off 验 fail-closed 门控(菜单两处都不渲染; 配套 ui_smoke.cjs --skip-check off)
+    --hr-scene on|empty|off(默认 on): HR 在线核实桩场景(计划 26-10-04-0312 S5) ——
+                   on 灌五形态拉取历史(表③, HHan/HDSky 跨站时间轴), empty 验空态,
+                   off 验未启用态; 配套 ui_smoke.cjs --hr-scene(仅 on 跑表③断言组)
 
 注意
 ----
@@ -55,7 +58,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from auto_qb.config import WebConfig  # noqa: E402
 from auto_qb.webui import create_app  # noqa: E402
-from tests.helpers import FakeClient, FakeTorrent, make_manager, seed_store  # noqa: E402
+from tests.helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store  # noqa: E402
 
 _STATES = ["stalledUP", "uploading", "downloading", "pausedUP", "pausedDL", "stalledDL", "checkingUP", "errored"]
 _SIZES = [2 * 1024**3, 8 * 1024**3, 25 * 1024**3, 60 * 1024**3]
@@ -163,6 +166,194 @@ def _inject_hr_site(torrents):
 
     for i, tor in enumerate(torrents):
         tor.hr_judgement = lambda i=i: _mk(i)  # 实例级覆盖: 真记录该方法无参
+
+
+def _inject_hr_history(mgr, data_dir: str, scene: str):
+    """--hr-scene: HR「站点状态」块与拉取历史表③(计划 26-10-04-0312)的桩场景
+
+    三态(冒烟的既知盲区与 --hr-site 同源: 桩 manager 没有 HR 取数线程, /api/hr/* 全族
+    端点此前在冒烟里只能走到「未启用」空态, 启用态 / 表③ 时间轴从未被真浏览器渲染过):
+      on    启用 + 五形态历史(默认): 完成(ok) / 部分·截断(warn) / 拦下·未到时刻(dim,
+            defer) / 通道不可用(err) / 对账(blue) 各一条, 跨两站(HHan + HDSky)合并成
+            时间轴; 完成行带 A/B/C 三档 lanes 快照 = 「行展开明细子行」的数据面。
+            五形态的 action/kind/trigger 字面量逐一对齐 service 记录器的真实写点
+            (refreshed/partial/waiting/no-channel/confirm-empty), 不凭空造形态。
+      empty 启用 + 零历史: 空态文案(「最近还没有拉取记录」)。
+      off   未启用: 保持 FakeConfig 默认(hr_check.enabled=False), /api/hr/status 回
+            enabled=false, 前端站点状态块与表③ 段都显示未启用文案。
+
+    保真口径: 只灌 HrHistoryEvent **输入**, 22 键人话行(徽章色档/耗时文案/档位人话)
+    全部经生产 hr.status.history_rows 现算 —— 桩不复制展示层的映射逻辑(替身漂移 =
+    自以为在测, 见 pitfalls/testing/stubs-sim.md)。HDSky 除进 service 的 site_confs
+    外, 还要在 config.trackers 补一个**绑定壳**(见下方站点绑定段): 表③ 是跨站合并
+    时间轴, 站点 chips 需要第二个站才能目检; 种子行的站点匹配不受影响 —— 行 site 取
+    rec.tracker_conf(合成种子的 tracker_conf 恒指 HHan 对象), HDSky 壳无任何种子引用。
+    """
+    from types import SimpleNamespace
+
+    from auto_qb.config.models import HrCheckConfig, SiteHrCheckConfig
+    from auto_qb.hr.fetcher import NullFetcher
+    from auto_qb.hr.model import HrHistoryEvent
+    from auto_qb.hr.runtime import HrRuntimeStatus
+    from auto_qb.hr.service import HrRefreshService
+
+    if scene == "off":
+        return  # 未启用态: 配置保持默认关, 端点回 enabled=false(前端显示未启用文案)
+
+    mgr.config.hr_check = HrCheckConfig(enabled=True)
+    svc = HrRefreshService(
+        data_dir=data_dir,
+        global_conf=mgr.config.hr_check,
+        site_confs={
+            "HHan": SiteHrCheckConfig(enabled=True, tracker="HHan"),
+            "HDSky": SiteHrCheckConfig(enabled=True, tracker="HDSky"),
+        },
+        fetcher=NullFetcher("桩服务不执行取数"),
+        owner="harness",
+        allow_fetch=False,
+    )
+    if scene == "on":
+        now = time.time()
+        events = {
+            "HHan":
+                [
+                    # 完成(ok) + lanes 多档可展开行: A/B/C 三档快照(status=ok 本波有效),
+                    # 字段抄 _append_history 的 snapshot 口径(lane/status/pages/rows/detail)
+                    HrHistoryEvent(
+                        ts=now - 300,
+                        kind="wave",
+                        trigger="auto",
+                        action="refreshed",
+                        reason="覆盖完成(A 全深度, B/C 命中本地全集)",
+                        pages=6,
+                        rows=214,
+                        torrents_ok=3,
+                        torrents_fail=0,
+                        verified=1,
+                        elapsed_s=42.6,
+                        lanes=[
+                            {
+                                "lane": "A",
+                                "status": "ok",
+                                "pages": 3,
+                                "rows": 96,
+                                "detail": "全深度翻完"
+                            },
+                            {
+                                "lane": "B",
+                                "status": "ok",
+                                "pages": 2,
+                                "rows": 78,
+                                "detail": "命中本地全集"
+                            },
+                            {
+                                "lane": "C",
+                                "status": "ok",
+                                "pages": 1,
+                                "rows": 40,
+                                "detail": "命中本地全集"
+                            },
+                        ],
+                        notes=["B/C 档第 1 页即命中本地全集, 提前收档"],
+                        by="harness",
+                    ),
+                    # 部分·截断(warn): 预算/页数上限截断, 截断点之前的数据仍有效
+                    HrHistoryEvent(
+                        ts=now - 1900,
+                        kind="wave",
+                        trigger="auto",
+                        action="partial",
+                        reason="达到单波页数上限(30), A 档截断",
+                        pages=4,
+                        rows=118,
+                        torrents_ok=1,
+                        torrents_fail=0,
+                        verified=0,
+                        elapsed_s=28.1,
+                        lanes=[{
+                            "lane": "A",
+                            "status": "ok",
+                            "pages": 4,
+                            "rows": 118,
+                            "detail": "达到单波页数上限截断(截断点之前有效)"
+                        }],
+                        by="harness",
+                    ),
+                    # 通道不可用(err): HrChannelUnavailable 波终态(还没碰到任何档位, lanes 空)
+                    HrHistoryEvent(
+                        ts=now - 4900,
+                        kind="wave",
+                        trigger="auto",
+                        action="no-channel",
+                        reason="扩展未连接(静默 184s)",
+                        elapsed_s=0.4,
+                        by="harness",
+                    ),
+                ],
+            "HDSky":
+                [
+                    # 拦下·未到时刻(dim): defer(立即拉取被频控闸拦下; 记录器口径
+                    # kind=defer + trigger=manual + action=waiting, 计数字段全 0)
+                    HrHistoryEvent(
+                        ts=now - 3400,
+                        kind="defer",
+                        trigger="manual",
+                        action="waiting",
+                        reason="未到可取时刻(min_interval, 还差 812s)",
+                        by="harness",
+                    ),
+                    # 对账(blue): confirm_empty 事件(action=confirm-empty 本就不在徽章表内,
+                    # kind 特判优先 —— run_hr_confirm_empty 的原话 reason 直抄)
+                    HrHistoryEvent(
+                        ts=now - 6600,
+                        kind="confirm_empty",
+                        trigger="confirm",
+                        action="confirm-empty",
+                        reason="人工对账: 确认账号 HR 清单为空(--hr-confirm-empty), 零行波恢复签发放行, 非零行自动失效",
+                        by="harness",
+                    ),
+                ],
+        }
+        for site, evs in events.items():
+            with svc.store(site).hold() as session:
+                session.data.history.extend(evs)
+                session.commit(now)
+
+    # 端点侧的站点接入绑定: /api/hr/sites/{site}/entries 与 /api/hr/history?site= 按
+    # config.trackers.<站>.hr_check.enabled 判站点接入(生产口径), 不绑则站点明细端点
+    # 全 404 —— 前端打开站点状态块会给每个站点拉一次表①(loadHrStatus 首拉), 404 以
+    # console.error 落进冒烟末尾的「无 console.error」总检(实测 2 错误/皮肤, 恒红)。
+    # 壳只当绑定用: domains/tags 给无害占位值, 不与任何合成种子的 tracker 域相撞。
+    for name in svc.enabled_sites():
+        tracker = mgr.config.trackers.get(name)
+        if tracker is None:
+            tracker = FakeTracker(name, hr=None, rules=[])
+            tracker.tags = [name]
+            tracker.domains = [f"tracker.{name.lower()}.invalid"]
+            mgr.config.trackers[name] = tracker
+        tracker.hr_check = SiteHrCheckConfig(enabled=True, tracker=name)
+
+    # 站点状态块(/api/hr/status)与表③(/api/hr/history)同源的消费面: 真读 service 的
+    # 磁盘文件, 桩只补「线程在跑」的运行时快照与一个永远 409 的立即拉取(桩没有取数线程)。
+    # revision 也一并给(webui 视图重建基线读它, 真 HrRuntime 上是 publisher.revision 属性)
+    mgr.hr = SimpleNamespace(
+        service=svc,
+        revision=0,
+        status=lambda: HrRuntimeStatus(
+            enabled=True,
+            sites=svc.enabled_sites(),
+            sites_dir=svc.dir,
+            writer="harness",
+            fetch_enabled=False,
+            worker_running=False,
+            poll_interval=300.0,
+            note="桩服务: 只读展示, 不执行取数",
+        ),
+        request_refresh=lambda sites=None: {
+            "requested": [],
+            "note": "桩服务不执行取数"
+        },
+    )
 
 
 def _target_hashes(mgr, cmd: str, body: dict):
@@ -319,6 +510,14 @@ def main() -> int:
         action="store_true",
         help="注入站点接入形态的真实 HrJudgement(轮转全分支) —— 冒烟盲区复现用, 见 _inject_hr_site",
     )
+    ap.add_argument(
+        "--hr-scene",
+        choices=["on", "empty", "off"],
+        default="on",
+        help="HR 在线核实桩场景(默认 on, 见 _inject_hr_history): on = 启用 + 五形态拉取历史"
+        "(表③); empty = 启用 + 零历史(空态); off = 未启用(前端显示未启用态)。"
+        "配套 ui_smoke.cjs --hr-scene —— 仅 on 跑表③断言组",
+    )
     ap.add_argument("--cmd-result", choices=["ok", "error", "hang"], default="ok", help="命令泵回执(默认 ok)")
     ap.add_argument(
         "--skip-check-menu",
@@ -378,6 +577,9 @@ def main() -> int:
     if args.hr_site:
         _inject_hr_site(torrents)
         print(f"[harness] HR 站点判定已注入: {args.torrents} 个种子轮转全分支")
+    _inject_hr_history(mgr, tmp, args.hr_scene)
+    if args.hr_scene != "off":
+        print(f"[harness] HR 场景={args.hr_scene}: 站点状态 + 拉取历史表③已注入(HHan/HDSky)")
     seed_store(mgr, torrents)
     for tor in torrents:  # 抽屉/详情端点按 hash 取, 与 store 保持一致
         mgr.client.torrents[tor.hash] = tor
@@ -395,7 +597,7 @@ def main() -> int:
     app = create_app(mgr)
     print(
         f"[harness] http://{args.host}:{args.port}/atlas/  /prism/  种子={args.torrents} 组={len(mgr.store.groups)} "
-        f"命令回执={args.cmd_result} 跳检菜单={args.skip_check_menu}",
+        f"命令回执={args.cmd_result} 跳检菜单={args.skip_check_menu} HR场景={args.hr_scene}",
         flush=True
     )
 

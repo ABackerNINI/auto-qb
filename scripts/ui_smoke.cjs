@@ -18,6 +18,8 @@
  *   --expect-cmd ok|error|hang  与桩服务 --cmd-result 对应(默认 ok)
  *   --skip-check on|off  与桩服务 --skip-check-menu 对应(默认 on): off 走精简轮,
  *                只验 fail-closed 门控(单选/多选菜单都不渲染「跳检…」, 其余项照常)
+ *   --hr-scene on|empty|off  与桩服务 --hr-scene 对应(默认 on): 仅 on 跑 HR 表③
+ *                拉取历史断言组(计划 26-10-04-0312 S5); empty/off 场景行数断言不成立, 跳过
  *
  * 依赖: playwright-core(与已装的 chromium 版本对齐; 见文件末尾"版本对齐"注释)。
  */
@@ -46,6 +48,9 @@ const EXPECT_CMD = argv("expect-cmd", "ok");
 /* 跳检菜单旗标两态(W5 汇总, 计划 26-10-02-1955): 与桩服务 --skip-check-menu 必须一致 ——
  * on(默认)跑全套(多选四项齐/单选跳检项/确认链); off 走精简轮只验 fail-closed 门控。 */
 const SKIP_CHECK = argv("skip-check", "on");
+/* HR 在线核实桩场景(计划 26-10-04-0312 S5): 与桩服务 --hr-scene 必须一致 ——
+ * on(默认)跑表③拉取历史断言组; empty/off 场景下表③行集为空/未启用, 断言组跳过。 */
+const HR_SCENE = argv("hr-scene", "on");
 
 const results = [];
 const add = (ui, name, ok, detail) => {
@@ -1690,6 +1695,74 @@ async function smokeUi(browser, ui) {
       await page.waitForTimeout(800);
     } catch (e) {
       add(ui, "设置页刷新保持位置(顶层页 + 分区 + 配置已加载)", false, e.message);
+    }
+  }
+
+  /*
+   * HR 拉取历史表③(计划 26-10-04-0312 S5): 桩 --hr-scene on(默认)起盘, 走真实手势
+   * 设置页 → HR 分区 → 站点状态全屏弹层 → 表③ 首次展开(懒加载 fetch)→ 渲染。
+   * 最小断言集 ×4, 只钉「真浏览器里这条链路活着」: 行 shape / 五形态徽章映射 / 过滤
+   * 语义 / 展开态的穷举归 test_web.py 守阵(pytest 层), 这里不重复。empty/off 场景
+   * (桩 --hr-scene empty/off)行集为空/未启用, 行数断言不成立 —— 配对参数下整组跳过。
+   */
+  if (HR_SCENE === "on") {
+    try {
+      await page.click("nav.tabs-right button");   // 顶栏右侧「设置」
+      await page.waitForSelector(".hb-grid .hb-card", { timeout: 20000 }).catch(() => null);
+      await page.evaluate(`${INST}.hubGo("hr_check")`);
+      await page.evaluate(`${INST}.hrsToggle()`);  // 站点状态全屏弹层(块头部唯一展开钮)
+      await page.waitForSelector(".hr-full-modal", { timeout: 10000 });
+      await page.waitForFunction(`(() => { const vm = ${INST}; return vm.hrs.loaded; })()`, null, { timeout: 10000 });
+      // 表③ = 弹层里 summary 带「拉取历史」的 details(表② 同类但文案不同); 真实点开,
+      // @toggle -> hrsHistEnsureLoaded -> 首次 fetch /api/hr/history(limit=300)
+      const hist = await page.evaluateHandle(`(() => {
+        return [...document.querySelectorAll(".hr-full-modal details.hrs-diag")]
+          .find((d) => ((d.querySelector("summary") || {}).textContent || "").includes("拉取历史")) || null;
+      })()`);
+      const histEl = hist.asElement();
+      if (!histEl) throw new Error("表③ details(拉取历史)在全屏弹层里找不到");
+      await histEl.click();
+      await page.waitForSelector(".hr-full-modal .hr-hist-table .hr-hist-row", { timeout: 10000 });
+      const nRows = await page.$$eval(".hr-full-modal .hr-hist-row", (ns) => ns.length);
+      add(ui, "HR表③: 首次展开懒加载, 五形态行齐", nRows === 5, `${nRows} 行`);
+      const tones = await page.evaluate(`(() => {
+        const out = {};
+        for (const el of document.querySelectorAll(".hr-full-modal .hr-hist-row .hr-hres")) {
+          const t = [...el.classList].find((c) => c.startsWith("hr-hres-")) || "?";
+          out[t] = (out[t] || 0) + 1;
+        }
+        return out;
+      })()`);
+      const okTones = ["ok", "warn", "dim", "err", "blue"].every((t) => tones["hr-hres-" + t] === 1);
+      add(ui, "HR表③: 五档徽章各一且 result_tone 类落上", okTones, JSON.stringify(tones));
+      await page.evaluate(`(() => {
+        const hist = [...document.querySelectorAll(".hr-full-modal details.hrs-diag")]
+          .find((d) => ((d.querySelector("summary") || {}).textContent || "").includes("拉取历史"));
+        [...hist.querySelectorAll(".hr-chip")].find((c) => c.textContent.includes("仅看异常")).click();
+      })()`);
+      await page.waitForTimeout(250);
+      const nBad = await page.$$eval(".hr-full-modal .hr-hist-row", (ns) => ns.length);
+      add(ui, "HR表③: 仅看异常本地过滤生效(defer+通道不可用)", nBad === 2, `${nBad} 行`);
+      await page.evaluate(`${INST}.hrsHist.badOnly = false`);   // 复原全量行集
+      await page.waitForTimeout(200);
+      const first = (await page.$$(".hr-full-modal .hr-hist-row"))[0];
+      await first.click();                                       // 行点击 -> hrsHistToggleRow
+      await page.waitForSelector(".hr-full-modal .hr-hist-sub", { timeout: 5000 });
+      const sub = await page.$eval(".hr-full-modal .hr-hist-sub", (el) => (el.textContent || "").trim());
+      add(ui, "HR表③: 行展开明细子行可见(完成行三档)",
+        sub.includes("A 考察中") && sub.includes("3 页 / 96 行"), sub.slice(0, 70));
+      // 收尾: 关弹层回种子页, 别把后续断言带到设置页(与上一块同一套清理)
+      await page.evaluate(`${INST}.hrsCollapse()`);
+      await page.evaluate(`${INST}.hubBack()`);
+      await page.evaluate(`localStorage.removeItem("autoqb.ui.page"); localStorage.removeItem("autoqb.ui.hub");`);
+      await page.click("nav.tabs button");
+      await page.waitForTimeout(800);
+    } catch (e) {
+      add(ui, "HR表③: 桩走查断言组", false, e.message);
+      await page.evaluate(`(() => { try { ${INST}.hrsCollapse(); ${INST}.hubBack();
+        localStorage.removeItem("autoqb.ui.page"); localStorage.removeItem("autoqb.ui.hub"); } catch (err) {} })()`).catch(() => {});
+      await page.click("nav.tabs button").catch(() => {});
+      await page.waitForTimeout(500);
     }
   }
 
