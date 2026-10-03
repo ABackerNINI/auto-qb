@@ -7,8 +7,8 @@
 > S5 集成回写 (本切片)。新增用例 19 条: test_config_schema 3 + test_grouping 15 (S2 检测 8 +
 > S3 处置 7) + test_web 1; 其中 1 条 POSIX 专用 (大小写不误报断言) 在 Windows 按设计 skip。
 
-- 时间: 2026-10-04 04:12 (GMT+8); 分支 feat/cross-group-file-conflict (rebase 到 develop 2ab1f6a3 之上, 线性)
-- 五笔实现提交: S0 认领 e5a43f75 / S1 配置键 90a250cf / S2 检测核心 e07f48c2 / S3 处置 9234dbfd / S4 Web 提示 efab3b7e
+- 时间: 2026-10-04 04:12 (GMT+8); 分支 feat/cross-group-file-conflict (实测时点 rebase 在 develop 2ab1f6a3 之上, 后随分支二次 rebase 到 2d2bb5e1 并 ff 合入本地 develop; 本切片数字对应代码态 = 4267ed70, 线性)
+- 五笔实现提交: S0 认领 675e5071 / S1 配置键 34f89338 / S2 检测核心 a69e043c / S3 处置 cc6b2131 / S4 Web 提示 4267ed70
 - 命令: `commands run test.full`
 - 实测: **2441 passed + 4 skipped, 36.16s, 覆盖率 TOTAL 99%**(14361 语句 / 135 未覆盖 / 4864 分支 / 106 partial)
 - 相对上基线(26-10-04-0353: 2423 passed + 3 skipped)净增 19 用例: 2445 总数 - 2426 = 19; passed +18,

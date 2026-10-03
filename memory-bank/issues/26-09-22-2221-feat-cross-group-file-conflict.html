@@ -185,7 +185,7 @@
     <h3>复验</h3>
     <p>复验：2026-10-04 02:43 仍复现 —— 计划 26-10-04-0107 全部锚点按符号名+grep 逐点核对：37 项行号精确一致，4 项微漂（±1-3 行），符号与语义全部成立（已兑现入池复验 TODO，留痕见上方状态日志）。</p>
     <h3>修复后补充（2026-10-04）</h3>
-    <p><strong>实际修法 = 计划 §05 S1-S4 四步</strong>（全部按计划落地，五笔提交 e5a43f75 / 90a250cf / e07f48c2 / 9234dbfd / efab3b7e）：</p>
+    <p><strong>实际修法 = 计划 §05 S1-S4 四步</strong>（全部按计划落地，五笔提交 675e5071 / 34f89338 / a69e043c / cc6b2131 / 4267ed70）：</p>
     <ul>
       <li><strong>S1 配置键</strong>（<code>src/auto_qb/config/</code>）—— 独立开关 <code>grouping.cross_group_conflict_check</code> 默认 false 全链贯通：models.py <code>GroupingConfig</code> 加字段 / sections.py KNOWN_GROUPING_KEYS 与 bool 校验元组 / schema Field（对齐 <code>check_missing_files</code> 写法）/ 键面基线重生成（154→155 键，version 4 不抬 = 非破坏新增）/ keys.md 回写。</li>
       <li><strong>S2 检测核心</strong>（<code>src/auto_qb/core/modules/grouping_mod.py</code>）—— 模块级 <code>_cross_physical_key</code>（normcase+normpath 词法归一，与 <code>path_normalize</code> 分层，不动分组键单一事实源）+ <code>_check_cross_group_file_conflicts</code> 四步判定：物理路径全量展开（目录级 <code>realpath_lexical</code> 别名解析，每 save_path 一次 syscall，异常词法回退）→ 交叉事件（同物理路径 ≥2 组）→ MISSING 豁免（任一侧带 missing_tag 即豁免）→ 激活警告（按组对聚合，路径展示前 3 处 + 等 N 处）；纯内存零触盘、零新增 qB 请求，增量轮 dirty 空短路，接线插在 <code>_on_post</code> 内 <code>_handle_save_path_changes</code> 与 <code>_check_download_conflicts</code> 之间。</li>
