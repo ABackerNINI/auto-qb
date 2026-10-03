@@ -18,6 +18,7 @@
 ## Done
 
 - [26-10-03-0759] [WEBUI 种子详情抽屉重设计 · 调研报告](26-10-03-0759-report-webui-drawer-redesign.html) — `webui-drawer-redesign`
+- [26-10-03-0757] [WebUI 新增 qB 口径流量图可行性分析 · 全局/单种/分组三图 · auto-qb](26-10-03-0757-report-qb-traffic-charts.html) — `torrent-traffic-stats`
 - [26-10-03-0504] [「删除类似标签」全局/站点作用域混淆: 三层根因取证与方案选型 · auto-qb](26-10-03-0504-report-webui-site-scope-confusion.html) — `webui-delete-tag-scope-confusion`
 - [26-10-02-0508] [设置页未保存改动防护: 成熟方案调研与「刷新弹框 + 刷新后清零」对比 · auto-qb](26-10-02-0508-report-webui-unsaved-changes-guard.html) — `webui-settings-unsaved-changes`
 - [26-10-01-2347] [兼容 Transmission 可行性分析 · qB 耦合面盘点 · auto-qb](26-10-01-2347-report-transmission-compat-feasibility.html) — `transmission-compat-feasibility`

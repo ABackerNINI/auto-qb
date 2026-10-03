@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="torrent-traffic-stats">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-03-0757">
+<meta name="doc-updated" content="26-10-03-0757">
+<title>WebUI 新增 qB 口径流量图可行性分析 · 全局/单种/分组三图 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2027;
+    --accent: #5cc0cf;
+    --accent-ink: #86d7e0;
+    --ok: #7fc08a;
+    --ok-bg: #16241a;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --bad: #e0796f;
+    --bad-bg: #2a1a18;
+    --code-bg: #171d24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1000px; margin: 0 auto; padding: 52px 44px 80px; }
+
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 29px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 70ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+
+  nav.toc { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { color: var(--accent-ink); }
+
+  section { margin-top: 34px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.006em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: var(--ink); }
+  h4 { font-family: var(--display); font-size: 13.5px; font-weight: 600; margin: 14px 0 6px; color: var(--ink-dim); }
+  p { margin-bottom: 11px; max-width: 80ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 80ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  a { color: var(--accent-ink); }
+
+  .verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 18px 0 6px; }
+  .vcard { background: var(--paper); border: 1px solid var(--hair); border-radius: 4px; padding: 14px 16px; }
+  .vcard .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; }
+  .vcard .v { font-family: var(--display); font-size: 19px; font-weight: 600; }
+  .vcard .n { font-size: 12.5px; color: var(--ink-dim); margin-top: 5px; line-height: 1.5; }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--paper); padding: 12px 16px; margin: 14px 0; border-radius: 0 4px 4px 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout p { margin-bottom: 6px; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); border-bottom: 1px solid var(--hair); white-space: nowrap; }
+  td.num { font-family: var(--mono); white-space: nowrap; }
+  tbody tr:hover { background: var(--paper); }
+
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.04em; }
+  .tag.a { background: var(--ok-bg); color: var(--ok); border: 1px solid #2c4531; }
+  .tag.b { background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .tag.c { background: var(--bad-bg); color: var(--bad); border: 1px solid #4d2b28; }
+  .tag.off { background: var(--paper-2); color: var(--ink-faint); border: 1px solid var(--hair); }
+
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px; padding: 12px 14px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: var(--ink-dim); margin: 10px 0 14px; }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+  .pane { background: var(--paper); border: 1px solid var(--hair); border-radius: 4px; padding: 12px 16px; }
+  .pane h4 { margin-top: 2px; }
+
+  .hint { color: var(--ink-faint); font-size: 13px; max-width: 80ch; }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">可行性分析 · report · auto-qb</div>
+    <h1>WebUI 新增 qB 口径流量图可行性分析<br>全局实时 / 单种子 / 辅种分组 三图</h1>
+    <p class="lede">为 WebUI 新增三种<b>仅展示</b>的 qB 口径流量图要不要做、卡在哪、怎么做 —— 基于 2026-10-03 HEAD（<code>c91be940</code>）的代码盘点与外部方案调研。精度要求低、采样率低；非目标：不恢复「以种子流量统计作为规则条件」功能。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-03-0757</div></div>
+      <div class="item"><div class="k">专题</div><div class="v">torrent-traffic-stats</div></div>
+      <div class="item"><div class="k">取证基线</div><div class="v">c91be940 · 2026-10-03</div></div>
+      <div class="item"><div class="k">关联 issue</div><div class="v"><a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248 (主, Open)</a> · <a href="../issues/26-10-01-2138-question-webui-traffic-history-chart.html">26-10-01-2138 (相关, Dropped)</a></div></div>
+      <div class="item"><div class="k">状态</div><div class="v">Done（快照终态）</div></div>
+    </div>
+    <nav class="toc">
+      <a href="#s1">结论</a><a href="#s2">需求口径</a><a href="#s3">现状盘点</a><a href="#s4">外部调研</a><a href="#s5">数据可得性</a><a href="#s6">方案对比</a><a href="#s7">推荐</a><a href="#s8">待拍板</a><a href="#s9">设计草案</a><a href="#s10">三约束应对</a><a href="#s11">风险与验证</a><a href="#s12">分阶段实施</a><a href="#s13">附录</a>
+    </nav>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论速览</h2>
+    <p>先给答案，后面是证据。</p>
+    <div class="verdict">
+      <div class="vcard"><div class="k">技术可行性</div><div class="v">高</div><div class="n">三图全部实时值已在内存（1.5s 增量同步链路），新增的只是「时间维度」——采样与存储，零新增 qB 请求</div></div>
+      <div class="vcard"><div class="k">改造成本</div><div class="v">4–6 人日</div><div class="n">方案 A：采样/rollup/落盘 2–3 天 + 前端组件 1–2 天 + state v4 迁移与测试 1 天</div></div>
+      <div class="vcard"><div class="k">推荐方案</div><div class="v">A</div><div class="n">后端统一采样管线 + 内存环 24h + 小时 rollup 30 天；B 丢历史、C 文件数随分组线性膨胀</div></div>
+      <div class="vcard"><div class="k">待拍板</div><div class="v">5 项</div><div class="n">总方案 / 图表实现 / 采样间隔与保留窗口 / 停机空洞表达 / 分组换 key 后旧历史（§08）</div></div>
+    </div>
+    <div class="callout ok">
+      <p><strong>一句话结论：</strong>这不是一次「数据获取」工程，而是一次「时序记录」工程——主循环每 1.5s 的增量同步早已把三张图需要的每一个实时数字搬进了内存，本报告核对的全部工作都在「把它们按时间存下来、按曲线吐出去」。真正的三个决策点是：<b>时序落点</b>（state v4 vs 独立文件，推荐 state v4）、<b>停机空洞表达</b>（null 断线，不补 0）、<b>分组换 key 后旧历史</b>（推荐不保留）。</p>
+    </div>
+    <div class="callout warn">
+      <p><strong>口径先行：</strong>本报告的「qB 流量」与既有「Traffic Monitor 全局流量」是两套数据源、两种口径（§02 划界）。相关 issue <a href="../issues/26-10-01-2138-question-webui-traffic-history-chart.html">26-10-01-2138</a> 正是因混淆两者被静态核验结案（Dropped）——该 issue 提出的问题实为真需求，本报告即为它的正式可行性回答。</p>
+    </div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>需求口径与划界</h2>
+
+    <h3>2.1 三图定义（仅展示，不入规则）</h3>
+    <table>
+      <thead><tr><th>#</th><th>图</th><th>口径</th><th>数据来源</th><th>挂点</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>①</td><td><b>qB 全局实时流量图</b></td>
+          <td>qB 进程整体的上/下行速率与累计（会话 + 终身），近 24h 高分辨率 + 30 天小时均值</td>
+          <td>qB <code>server_state</code>（<code>dl_info_speed/up_info_speed</code> 瞬时；<code>dl_info_data/up_info_data</code> 会话累计；<code>alltime_dl/alltime_ul</code> 终身累计），每轮 sync 已在内存</td>
+          <td>今日流量面板弹层（与既有历史流量弹层同族）</td>
+        </tr>
+        <tr>
+          <td>②</td><td><b>单种子流量图</b></td>
+          <td>单个 torrent 的速率曲线与累计增量，仅对该种子处于活跃期采样</td>
+          <td><code>TorrentRecord</code> 已有 <code>dlspeed/upspeed</code>（瞬时）+ <code>downloaded/uploaded</code>（all-time）+ <code>downloaded_session/uploaded_session</code>（会话）</td>
+          <td>种子详情抽屉新增「流量」页签</td>
+        </tr>
+        <tr>
+          <td>③</td><td><b>辅种分组流量图</b></td>
+          <td>组级聚合速率/累计曲线；分组键 = 内容指纹，跨重启稳定</td>
+          <td>组级流量聚合已存在（<code>_build_group_view</code> 每 tick 已 sum <code>dlspeed/upspeed/uploaded/downloaded</code>），以组 key 为键做时间序列</td>
+          <td>分组弹层</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">三图精度要求低、采样率低（30–60s 档），不做实时仪表盘；仅展示，不喂给规则引擎。</p>
+
+    <h3>2.2 划界：Traffic Monitor 全局流量 ≠ qB 流量</h3>
+    <div class="split">
+      <div class="pane">
+        <h4>既有：Traffic Monitor 全局流量（不动）</h4>
+        <ul>
+          <li>数据源 = 外部程序 Traffic Monitor 拥有的 <code>history_traffic.dat</code>，本程序<b>只读</b>（<code>src/auto_qb/config/models.py:270-274</code>，<code>src/auto_qb/core/curves.py:3-8</code>）</li>
+          <li>口径 = TM 自采的机器级每日累计（每行「某日已累计上传/下载量」），按天/月/年聚合</li>
+          <li>链路：speed_curve 每轮整文件读入（<code>speed_curve_mod.py:142-157</code>）→ 快照经 <code>ctx.web.set_traffic_view()</code> 整体替换（<code>runtime.py:233-240</code>）→ 端点 <code>GET /api/traffic/history</code>（<code>routes/state.py:108-117</code>）→ 前端自绘 SVG 柱状图（<code>shared/dialogs.js:549-858</code>）</li>
+          <li>聚合语义：窗口内缺失日视为 0、不补点（<code>curves.py:76-92</code>）——这是「聚合」口径</li>
+        </ul>
+      </div>
+      <div class="pane">
+        <h4>本报告新增：qB 口径三图</h4>
+        <ul>
+          <li>数据源 = qB WebUI API（本程序已有的同步链路），不依赖外部程序</li>
+          <li>口径 = qB 进程视角：瞬时速率（秒级语义）+ 会话累计 + 终身累计；单位与采样时刻以 qB 为准</li>
+          <li>时间语义 = 连续时序曲线（速率），不是「按日聚合柱」；停机期是空洞不是 0（§10-①）</li>
+          <li>与 TM 图<b>并存不替代</b>：TM 图继续服务「限速曲线的数据源展示」，qB 图服务「qB 到底在跑多快」</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>2.3 相关 issue 的来龙去脉</h3>
+    <p><a href="../issues/26-10-01-2138-question-webui-traffic-history-chart.html">26-10-01-2138（question · webui-traffic-history-chart，Dropped）</a>问的是「WEBUI 流量历史图做不做」。静态核验时，既有「历史流量图」（<code>/api/traffic/history</code>，TM 数据源）被误当成「qB 流量图已存在」，该 issue 遂被判定为已覆盖而 Dropped。实际上 TM 图是外部数据源的<b>每日累计柱状图</b>，与该 issue 想要的 <b>qB 口径实时/时序流量图</b>不是一回事（§2.2）。本报告在口径上把两者划清，并作为该问题真需求面的正式可行性结论。</p>
+
+    <h3>2.4 非目标与边界</h3>
+    <ul>
+      <li><b>不恢复「以种子流量统计作为规则条件」功能</b>：<code>upload_size</code> 四条件 + <code>begin_round</code> 统计底座已随计划 26-09-27-1232 移除，其重设计归主 issue <a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248（Open）</a>。本报告三图是纯展示层，<b>不向规则表达式暴露任何新变量</b>。</li>
+      <li><b>与统计重设计互不阻塞</b>：主 issue 若落地自己的统计口径，三图的采样管线可复用其产出；三图先行不预判其结论。两者共享的唯一假设是「TorrentRecord 的流量字段可信」——这已是现状事实。</li>
+      <li><b>不做数据导出 / 长期归档 / 跨设备汇总</b>：30 天窗口是产品决策上限（拍板点③）。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>现状盘点（代码事实，2026-10-03 取证）</h2>
+
+    <h3>3.1 既有流量链路（只读 TM，与 qB 无关）</h3>
+    <ul>
+      <li><code>history_traffic.dat</code> 是外部程序 Traffic Monitor 拥有的文件，本程序只读（<code>config/models.py:270-274</code>，<code>core/curves.py:3-8</code>）。</li>
+      <li>speed_curve 每轮<b>整文件读入</b>（<code>core/modules/speed_curve_mod.py:142-157</code>）；聚合缺失日视为 0 无补点（<code>core/curves.py:76-92</code>）。</li>
+      <li>快照经 <code>ctx.web.set_traffic_view()</code> 整体替换——主循环线程整体换引用、Web 线程只读，无锁即自洽（<code>webui/runtime.py:233-240</code>）。</li>
+      <li>端点 <code>GET /api/traffic/history</code>（<code>webui/server/routes/state.py:108-117</code>）；<code>traffic_source</code> 仅支持 <code>traffic_monitor: {dat_path}</code>（<code>config/validation/curves.py:30-39</code>）。</li>
+      <li>前端完全自绘 SVG、无图表库（<code>webui/static/shared/dialogs.js:549-858</code>，模板 <code>popovers.html:201-205</code>）。</li>
+    </ul>
+
+    <h3>3.2 qB API 面：三图的实时值已经在内存里</h3>
+    <ul>
+      <li>客户端 <code>qbittorrentapi.Client</code> 单点构造（<code>core/qbclient.py:60-71</code>）；QbApi facade 透传 <code>torrents_info/sync_maindata</code>（<code>core/qbapi.py:306-314</code>）；未封装 <code>transfer/info</code>——但全局速度与累计不必走它：<code>server_state</code> 与 <code>/transfer/info</code> 是同一对象（§4.1），<code>rules/expr/env.py:356-363</code> 已从 <code>server_state</code> 取 <code>dl_info_speed/up_info_speed</code> 等全局量。</li>
+      <li>种子级 <code>TorrentRecord</code> 已有 <code>downloaded/uploaded/dlspeed/upspeed</code> + <code>downloaded_session/uploaded_session</code>（<code>torrents/record.py:38-60</code>，<code>torrents/view.py:14-27</code>）。</li>
+      <li><code>server_state</code> 每轮合并原子替换（增量轮部分键与旧值合并，FIX-04a），<code>/api/stats</code> 直透（<code>torrents/store.py:56-59, 138-145</code>；<code>routes/state.py:98-106</code>）。</li>
+      <li><b>主循环每 1.5s 增量 <code>/sync/maindata</code> ⇒ 三种图的实时值已在内存，零新增 qB 请求</b>。</li>
+    </ul>
+
+    <h3>3.3 辅种分组：组级聚合已存在，组键跨重启稳定</h3>
+    <ul>
+      <li>分组非配置定义，运行时按内容指纹推导：组 key = (规范化 save_path, 排序文件相对路径元组)（<code>core/modules/grouping_mod.py:41-49</code>），跨重启稳定；移动目录/增删文件换 key。</li>
+      <li>索引 <code>store.groups: key → [hash…]</code> / <code>member_to_key</code> / <code>group_sizes</code>（<code>torrents/store.py:87-89</code>）。</li>
+      <li>组级流量聚合已存在：<code>_build_group_view</code> 每 tick 重建，已 sum <code>dlspeed/upspeed/uploaded/downloaded</code>（<code>webui/views.py:404-485</code>）。</li>
+      <li>组 ↔ 前端映射 <code>encode_group_key</code> base64url（<code>infra/utils.py:1063-1075</code>），分组路由 <code>/api/groups/{key}/…</code>（<code>routes/groups.py:17-30</code>）。</li>
+    </ul>
+
+    <h3>3.4 state 持久化：版本链与清理先例</h3>
+    <ul>
+      <li>StateService 原子写 + <code>.bak</code>（<code>core/state.py:27-36, 150-165</code>）；优雅退出 save + 周期 <code>maybe_flush</code>（<code>state_save_interval</code> 默认 120s，下限 30s，0=关；<code>qbmanager.py:534-589</code>）。</li>
+      <li>版本链 <code>CURRENT_VERSIONS = state 3 / hr_site 2 / config 4</code>（<code>infra/versioning.py:29-34</code>）——最近 v3→v4 是 config 链，<b>state 尚无 v4</b>；纳入版本链判据：程序读回且结构演化（<code>versioning.py:5-9</code>）。</li>
+      <li>⚠ <code>state["speed_limit_curve"][date]</code> 时序键无清理、无界增长（<code>speed_curve_mod.py:272-278</code>，未证实是否已被注意到）——新时序键<b>不得</b>在新区复刻这个问题。</li>
+      <li>按 hash 清理先例：<code>field_snapshots</code> 删种即清（<code>store.py:291-307</code>）；按日清理先例：<code>skip_check_day</code>（<code>ops_mod.py:365-367</code>）。</li>
+    </ul>
+
+    <h3>3.5 WebUI 架构：无构建链，弹窗+API 有现成惯例</h3>
+    <ul>
+      <li>FastAPI 工厂 <code>create_app</code>，ROUTE_BUILDERS 11 域 router + 金清单守阵 <code>test_web_route_manifest_frozen</code> 钉死（<code>webui/server/factory.py:20-35</code>，<code>routes/__init__.py:8-21</code>）；静态 mount "/" 兜底（<code>server/static_ui.py:46</code>）。</li>
+      <li>无前端构建链：三套主题目录 atlas/prism/console，Vue3 全局构建本地 vendor（<code>static/shared/vendor/vue.global.prod.js</code>）；模板按页分片 <code>shared/tpl/*.html</code> 运行时 fetch 拼装；逻辑按域拆 <code>shared/*.js</code> mixin（20+ 文件）。</li>
+      <li>新增「弹窗 + API」惯例：后端 <code>routes/&lt;域&gt;.py</code>（先例 <code>routes/torrent_detail.py:26-57</code>），前端 tpl 片 + <code>&lt;域&gt;.js</code> mixin + <code>index.html</code> 登记。</li>
+      <li>轮询：SSE <code>/api/events</code> + 定时轮询 1.5~3s 分档（<code>shared/polling.js</code>）；低频独立轮询先例：抽屉 trackers/peers 5s <code>setInterval</code>（<code>shared/drawer.js:471-482</code>）。</li>
+    </ul>
+
+    <h3>3.6 主循环：双时间线与低频钩子挂点</h3>
+    <ul>
+      <li>双时间线：同步线 <code>sync_interval</code> 默认 1.5s + 任务线 <code>main_tick</code> 默认 2s（<code>qbmanager.py:462-522</code>；<code>config/schema/groups.py:40-46</code>）。</li>
+      <li>低频采样钩子最自然挂点 = <b>internal 全局任务</b>，仿 speed_limit_curve 经 <code>subscribe("queue_rebuilt")</code> 自注册，TaskQueue REQUEUE 按 interval 周期重入队（<code>taskqueue.py:27, 59-75, 156</code>）。</li>
+      <li>单一写线程：state 写点仅主循环线程（<code>state.py:8-9</code>），store <code>by_hash</code> 每轮原子替换、Web 只读（<code>store.py:254</code>）——采样放主循环线程即满足黄金法则 5，无需新锁。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>外部调研</h2>
+    <p class="hint">标记约定：【官方】= 官方文档/源码证实；【社区】= 社区/第三方经验。</p>
+
+    <h3>4.1 qB API 字段语义</h3>
+    <ul>
+      <li><b>种子级累计的两种口径</b>【官方】：<code>/torrents/info</code> 的 <code>uploaded/downloaded</code> = all-time 口径（无 session 后缀）；<code>uploaded_session/downloaded_session</code> = 本会话。（<a href="https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)">WebUI-API (qBittorrent 5.0) wiki</a>）</li>
+      <li><b>单种 all-time 疑似跨 qB 重启持久</b>：libtorrent <code>add_torrent_params::total_uploaded/total_downloaded</code> 随 <code>write_resume_data</code> 序列化【官方】（<a href="https://libtorrent.org/reference-Add_Torrent.html">libtorrent reference-Add_Torrent</a>）+ 社区实测 fastresume bencode 含 <code>total_uploaded</code> ⇒ 单种累计跨 qB 重启持久（源码级证据强，无一句话官方文档，<b>列待真机验证</b>，§11-①）；删种重加归零。</li>
+      <li><b>全局量</b>【官方·源码】：<code>/transfer/info</code> 的 <code>dl_info_speed/up_info_speed</code> = 瞬时速率，<code>dl_info_data/up_info_data</code> = 会话累计（重启归零）；<code>server_state</code> 与 <code>/transfer/info</code> 是同一对象，另含 <code>alltime_dl/alltime_ul</code> 终身累计（qB 源码 <code>sessionstatus.h</code> + 前端 <code>statistics.js</code>）。alltime 持久化在 <code>qBittorrent-data.ini</code> 周期落盘，非优雅退出可能回退【社区】⇒ <b>全局长段累计曲线不能依赖 alltime 差分做唯一口径，须自采样基线 + max(0,·)</b>。</li>
+      <li><b>qB WebUI 无任何历史/统计端点、无单种速度历史 API，必须自采</b>【官方·源码】（<code>src/webui/www/private/scripts</code> 无图表脚本；对照 qB 桌面端有速度图而 WebUI 没有）。</li>
+      <li><b>rid 增量语义</b>【官方】：rid 变化 full_update；断线重置 rid=0 拉全量——与本项目 store 的 <code>reset_sync</code> 行为一致（<code>store.py:168-176</code>）。</li>
+    </ul>
+
+    <h3>4.2 成熟项目怎么做</h3>
+    <table>
+      <thead><tr><th>项目</th><th>做法</th><th>对本项目的启示</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>qB 桌面端速度图</td>
+          <td><code>speedplotview.{h,cpp}</code>【官方·源码】：每秒采样，Averager 多分辨率 <code>circular_buffer</code> 内存环（5min@1s / 30min@6s / 6h@36s / 12h@72s / 24h@144s 五档），纯内存不落盘</td>
+          <td><b>多分辨率滚动环模式最值得抄</b>；桌面端也证明「内存环即可满足观察需求」</td>
+        </tr>
+        <tr>
+          <td>VueTorrent</td>
+          <td>apexcharts@^5.16 + 浏览器内存滑动窗口，刷新即丢、无持久化【官方·源码+社区】</td>
+          <td>即方案 B 的原型；验证了「纯前端窗口」在无 30 天口径需求时够用</td>
+        </tr>
+        <tr>
+          <td>Transmission 第三方统计（nipil/transmission-torrent-statistics）</td>
+          <td>轮询每种子累计值 → SQLite（主表 hash+name + 每种子采样表）→ 变化才存样本 → db-age-cleanup 清理 → 极简 JSON 端点 + Flot 自绘；原始计数器原样存储不修正，删重加非单调由消费方处理【社区】</td>
+          <td>「存累计快照 + 消费侧差分」「变化才存」「按龄清理」三个手法可直接搬</td>
+        </tr>
+        <tr>
+          <td>exporter + Prometheus + Grafana（martabal/qbittorrent-exporter 等）</td>
+          <td>标准指标管线解决全部历史/聚合需求【社区】</td>
+          <td>对内嵌单文件工具过重（2-3 个常驻服务），不采纳；但「累计计数器 + rate() 自动处理计数器重置」的口径值得照抄</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>4.3 图表库对比（bundlephobia 实测体积）</h3>
+    <table>
+      <thead><tr><th>库</th><th>体积 (raw/gzip)</th><th>关键能力</th><th>短板</th></tr></thead>
+      <tbody>
+        <tr><td class="num">uPlot (MIT)</td><td class="num">50.8KB / 21.9KB</td><td>IIFE 单文件 vendor（无构建链兼容）；流式性能最强（3600 点 60fps ≈10% CPU）；支持 null 缺口</td><td>无内建 LTTB（数据侧自降采样，参考实现 ~90 行）；options 样板多</td></tr>
+        <tr><td class="num">Chart.js</td><td class="num">199KB / 67.8KB</td><td>生态大</td><td>无构建吃不到 tree-shaking；streaming 插件 v4 支持存疑</td></tr>
+        <tr><td class="num">ECharts</td><td class="num">1.11MB / 361.8KB</td><td>内建 LTTB、功能全</td><td>vendor 偏大，对单文件工具不可接受</td></tr>
+        <tr><td class="num">ApexCharts</td><td class="num">571KB / 153KB</td><td>VueTorrent 在用</td><td>体积一般</td></tr>
+        <tr><td class="num">lightweight-charts</td><td class="num">158KB / 50KB</td><td>金融 K 线向</td><td>形态不匹配</td></tr>
+        <tr><td class="num">继续自绘 SVG</td><td class="num">0</td><td>完全可控；<code>dialogs.js:549-858</code> 已有可仿写先例（柱状图弹层含 hover 取值）</td><td>时间轴缩放/联动等交互要自造，开发成本随交互需求上升</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">单图数百~数千点的量级下 uPlot/自绘都绰绰有余，差异主要在体积与缺口语义（§4.5）。</p>
+
+    <h3>4.4 采样与存储的业界口径</h3>
+    <ul>
+      <li><b>Prometheus 标准口径</b>【官方】（<a href="https://prometheus.io/docs/prometheus/latest/querying/functions/">querying/functions</a>）：存累计快照、展示前差分，计数器回落按重置处理。本项目落地：存储累计快照 + max(0,·) 差分 + last 只在进程内推进；组键换手（删重加/换指纹）必须重置该组基线。</li>
+      <li><b>两条都存</b>：速率优先（<code>dlspeed/upspeed</code> 瞬时值）做高频段 + 累计差分做长段。</li>
+      <li><b>存储取舍</b>：内存环 + 周期 flush 进 state.json 零新增机制（崩溃丢 ≤2min）——推荐；追加式 dat 每组一文件管理成本涨（方案 C）；SQLite 干净但第二套存储心智。</li>
+      <li><b>数据量估算</b>：30s 采样 30 天 = 86,400 点/系列 ≈2.2MB/组，不可全量存原始；分层后：近 24h 内存环 @30s = 2,880 点（可丢）+ 30 天小时 rollup（avg+max）720 点 ≈32KB/组/30天；<b>100 组 ≈3-4MB JSON 单文件原子写可行</b>。</li>
+    </ul>
+
+    <h3>4.5 停机空洞表达</h3>
+    <p>惯例：停机/断档写 <code>null</code> 不写 0——0 会把「没运行」画成「没流量」，是反模式【社区/业界共识】。默认断线；spanGaps/connectNulls 可设最大跨越（Chart.js/uPlot/ECharts 均支持）。注意与 TM 图「缺失日=0」划清：那是<b>聚合</b>语义（窗口内缺失日不贡献流量），不适用于<b>时序</b>曲线。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>数据可得性：三图各自的来源与口径结论</h2>
+    <table>
+      <thead><tr><th>图</th><th>实时值来源（已在内存）</th><th>长段累计口径</th><th>结论</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>①全局</td>
+          <td><code>server_state</code>：<code>dl_info_speed/up_info_speed</code>（瞬时）+ <code>dl_info_data/up_info_data</code>（会话累计）+ <code>alltime_dl/alltime_ul</code>（终身）</td>
+          <td>会话计数器 qB 重启归零；<code>alltime</code> 持久化在 qBittorrent-data.ini，非优雅退出可能回退【社区】⇒ <b>不能作为唯一差分基线</b></td>
+          <td><span class="tag a">可得</span> 自采样基线 + max(0,·) 差分；瞬时速率直采，不依赖任何计数器语义</td>
+        </tr>
+        <tr>
+          <td>②单种</td>
+          <td><code>TorrentRecord.downloaded/uploaded</code>（all-time）+ <code>dlspeed/upspeed</code>（瞬时）+ <code>*_session</code></td>
+          <td>all-time 疑似随 fastresume 跨 qB 重启持久（§11-① 待真机验证）；删种重加归零</td>
+          <td><span class="tag a">可得</span> 高频段直采瞬时值；长段用 all-time 差分 + 回落判重置；删重加靠 cur &lt; last 判定</td>
+        </tr>
+        <tr>
+          <td>③分组</td>
+          <td><code>_build_group_view</code> 每 tick 已 sum 组内 <code>dlspeed/upspeed/uploaded/downloaded</code>（<code>views.py:404-485</code>）</td>
+          <td>组 key = 内容指纹跨重启稳定；组解散/移动目录/增删文件换 key（旧基线必须重置）</td>
+          <td><span class="tag a">可得</span> 组维度天然规避 hash 失效与删重加；唯一新决策是换 key 后旧历史的展示策略（拍板点⑤）</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="callout ok">
+      <p><b>总结论：数据底座零成本。</b>三图需要的每一个数字都已随 1.5s 增量同步进入内存（<code>/sync/maindata</code> 响应的 <code>server_state</code> + <code>torrents</code> 补丁），采样器只是「每 30–60s 读一次自己内存里的快照」——零新增 qB 请求、零跨层新依赖。需要新建的只有「时间维度」：采样管线 + 环形缓冲 + rollup + 落盘。</p>
+    </div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>方案对比</h2>
+
+    <h3>6.1 三个候选方案</h3>
+    <table>
+      <thead><tr><th>维度</th><th>方案 A（推荐）：后端统一采样管线</th><th>方案 B：纯前端滑动窗口</th><th>方案 C：采样管线 + 每组 dat 文件</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>数据链路</b></td>
+          <td>internal 全局任务（30–60s）在主循环线程采样三图 → 差分/基线管理 → 内存环 + rollup</td>
+          <td>前端从既有轮询响应自取实时值，浏览器内存滑窗（VueTorrent 模式）</td>
+          <td>采样管线同 A；落点为每组按日追加 dat 文件（对齐 TM 先例）</td>
+        </tr>
+        <tr>
+          <td><b>存储</b></td>
+          <td>内存环 24h@30s（可丢）+ state.json 小时 rollup 30 天（<b>state v3→v4</b>）；100 组 ≈3-4MB 单文件原子写</td>
+          <td>无落盘，刷新即丢</td>
+          <td><code>&lt;data_dir&gt;</code> 下每组一文件，追加写</td>
+        </tr>
+        <tr>
+          <td><b>前端</b></td>
+          <td>vendor uPlot 单文件（或自绘）三图共用双系列组件</td>
+          <td>同左（或更简）</td>
+          <td>同左，另需 dat 解析端</td>
+        </tr>
+        <tr>
+          <td><b>30 天历史</b></td>
+          <td><span class="tag a">有</span></td>
+          <td><span class="tag c">无</span> 与需求「历史」直接冲突</td>
+          <td><span class="tag a">有</span></td>
+        </tr>
+        <tr>
+          <td><b>重启存活</b></td>
+          <td><span class="tag a">rollup 存活</span>；24h 环可丢（口径已声明）</td>
+          <td><span class="tag c">全丢</span></td>
+          <td><span class="tag a">全存活</span></td>
+        </tr>
+        <tr>
+          <td><b>state/版本链影响</b></td>
+          <td>state v4 迁移（纯加法，低风险）</td>
+          <td>零 state 变更</td>
+          <td>省掉 state v4</td>
+        </tr>
+        <tr>
+          <td><b>工作量</b></td>
+          <td class="num">4–6 人日</td>
+          <td class="num">~1 人日</td>
+          <td class="num">3–5 人日</td>
+        </tr>
+        <tr>
+          <td><b>主要风险</b></td>
+          <td>分组重算与 rollup 边界；uPlot options 样板多；state v4 迁移测试</td>
+          <td>无 30 天口径、重启即丢——<b>与需求历史冲突</b>，只配当降级原型</td>
+          <td>文件数随分组线性增长；追加写崩溃产生半行需容错（TM 格式的「半行容错」是历史包袱不是资产）；清理/轮转逻辑自担</td>
+        </tr>
+      </tbody>
+    </table>
+    <p><b>B 的定位</b>：不满足「30 天历史」这一需求核心，仅当用户拍板「接受重启即丢」时才成立；它的 1 天成本可以作为 A 的前期原型（先画后采）复用。C 的「对齐 TM 先例」只对了一半——TM 的 dat 是<b>外部程序拥有</b>的文件（本程序只读），自产 dat 会把写路径、半行容错、文件生命周期全部变成自己的维护面，反而偏离先例。</p>
+
+    <h3>6.2 前端选型小节（两个子选项）</h3>
+    <div class="split">
+      <div class="pane">
+        <h4>子选项 1：vendor uPlot 单文件</h4>
+        <ul>
+          <li>21.9KB gzip，IIFE 单文件进 <code>static/shared/vendor/</code>，与 Vue3 vendor 同模式，无构建链兼容</li>
+          <li>3600 点 60fps ≈10% CPU；原生 null 缺口（停机空洞表达免费拿）</li>
+          <li>无内建 LTTB ⇒ 数据侧自降采样（参考实现 ~90 行）；options 样板多（一次性封装成双系列组件后三图复用）</li>
+          <li>适合：要时间窗缩放 / 十字线联动 / 后续加系列</li>
+        </ul>
+      </div>
+      <div class="pane">
+        <h4>子选项 2：继续自绘 SVG</h4>
+        <ul>
+          <li>0 体积、完全可控；<code>dialogs.js:549-858</code> 既有历史流量弹层就是可仿写先例（含 hover 取值、天/月/年切换）</li>
+          <li>三图都是双系列（上/下）数百~数千点，自绘绰绰有余</li>
+          <li>null 断线渲染需自己处理（跳段路径），hover 取值/缩放自造</li>
+          <li>适合：只要「静态浏览 + hover 取值」——与既有弹层交互水平对齐</li>
+        </ul>
+      </div>
+    </div>
+    <p class="hint">判据：两者在数据量上都无压力，差异在<b>体积</b>与<b>交互开发成本</b>。若产品预期只是「看一眼趋势」（与既有弹层同级），自绘与现库一致且零依赖；若预期要缩放/细看某小时，uPlot 一次封装长期受益。→ 拍板点②。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>推荐方案：A</h2>
+    <div class="callout ok">
+      <p><b>推荐：方案 A（后端统一采样管线 + 内存环 + 小时 rollup + state v4）。</b>理由：</p>
+      <p>1. <b>唯一同时满足「30 天历史」与「单一写线程」约束的方案</b>——采样挂 internal 全局任务在主循环线程执行，state.json 是既有落盘单点（原子写 + .bak + 版本链），黄金法则 3/5 全部沿用既有机制，零新增并发模型。</p>
+      <p>2. <b>数据量在单文件原子写的舒适区</b>：100 组 30 天 rollup ≈3-4MB，对照 state.json 现有载荷量级可控；内存环把高频段挡在落盘之外，崩溃丢窗口 ≤ state_save_interval（默认 120s）。</p>
+      <p>3. <b>B 不满足需求</b>（历史丢失），<b>C 买错了先例</b>（TM 的 dat 是外部只读文件，自产追加式 dat 引入线性文件数 + 半行容错 + 独立清理三个维护面，违背「状态持久化统一进 state_file」的黄金法则 3）。</p>
+      <p>4. <b>成本可控且可分期</b>：4-6 人日可拆成 5 个独立可提交单元（§12），每段都有独立验收判据，随时可停在任意阶段不烂尾。</p>
+    </div>
+    <p>同时明确：方案 A 的实施<b>以 §08 拍板为前提</b>——5 个决策点中任何一个换向（尤其 ②④⑤）都不改变「可行性成立」的结论，只改变设计草案的对应段落。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>需要用户拍板的决策点</h2>
+    <table>
+      <thead><tr><th>#</th><th>决策点</th><th>选项</th><th>推荐与理由</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>①</td><td><b>总方案 A / B / C</b></td>
+          <td>A 后端采样+state v4；B 纯前端不落盘；C 采样+每组 dat</td>
+          <td><span class="tag a">A</span> 唯一同时满足历史口径与黄金法则 3/5；B 丢历史；C 文件膨胀 + 半行容错负担（§06.1）</td>
+        </tr>
+        <tr>
+          <td>②</td><td><b>图表实现：uPlot vs 继续自绘 SVG</b></td>
+          <td>vendor uPlot（21.9KB gzip，null 缺口原生，要封装一次）；自绘（0 体积，先例可仿，缩放自造）</td>
+          <td><span class="tag b">看预期</span> 只做「看趋势 + hover 取值」（与既有弹层同级）⇒ 自绘；要时间窗缩放/细看 ⇒ uPlot。两者不影响后端设计</td>
+        </tr>
+        <tr>
+          <td>③</td><td><b>采样间隔与保留窗口</b></td>
+          <td>采样 30s / 60s；环 24h；rollup 30 天（可谈 7/90 天）</td>
+          <td><span class="tag a">30s + 24h 环 + 30 天 rollup</span>（调研基准）：100 组 ≈3-4MB；60s 采样体积减半但 24h 曲线颗粒变粗；窗口每 +30 天 ≈ +3-4MB</td>
+        </tr>
+        <tr>
+          <td>④</td><td><b>停机空洞表达</b></td>
+          <td>null 断线（可设最大跨越）；缺桶补 0（与 TM 聚合口径一致）</td>
+          <td><span class="tag a">null 断线</span>：0 会把「没运行」画成「没流量」（业界反模式）；TM 图「缺失日=0」是聚合语义不适用于时序图（§4.5）</td>
+        </tr>
+        <tr>
+          <td>⑤</td><td><b>分组换 key 后旧历史是否保留展示</b></td>
+          <td>不保留（换 key 即新系列）；按 save_path 归并展示旧 key 曲线；用户可命名组别名</td>
+          <td><span class="tag a">不保留</span>：组 key 是内容指纹，「换 key = 内容集合变了」，旧曲线对新内容无语义；且免掉「hash→名称持久缓存」。若用户更在意「这个目录的历史」，归并展示是中间态（需存 key→时间段元数据，+0.5-1 天），组别名超出本期</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">①③④⑤ 任一换向都只改 §09 对应段落；② 完全不影响后端。拍板前不开工（黄金法则 7：派发以显式确认为准）。</p>
+
+    <h3>拍板记录 (2026-10-03, 用户拍板)</h3>
+    <ul>
+      <li><b>实施安排</b>：本轮拍板「先不实施」——报告交付后暂缓实施，P1-P5 分阶段方案（§12）保留待另行启动。</li>
+      <li><b>前端选型（原拍板点②）</b>：已拍定 <b>uPlot</b>（vendor 单文件 IIFE，§6.2 子选项 1），排除继续自绘 SVG 方向。</li>
+      <li><b>采样间隔与保留窗口（原拍板点③）</b>：拍板要求做成<b>可配置项</b>（config 键，默认值后续定），不允许写死在代码里；按黄金法则 4，新增配置键须同步进 <code>validate_config</code> 与 <code>config/schema.py</code>。</li>
+      <li><b>停机空洞表达（原拍板点④，null 断线 vs 补 0）与分组换 key 旧历史策略（原拍板点⑤）</b>：明确「之后决定」，实施启动前需补拍板。</li>
+    </ul>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>设计草案（按方案 A 展开）</h2>
+
+    <h3>9.1 采样器挂点与采样内容</h3>
+    <ul>
+      <li><b>挂点</b>：internal 全局任务，仿 speed_limit_curve 经 <code>subscribe("queue_rebuilt")</code> 自注册，REQUEUE 按 interval 周期重入队（<code>taskqueue.py:27, 59-75, 156</code>）。interval = 拍板点③（建议 30s）。<b>在主循环线程执行</b>——state 写点天然单线程（<code>state.py:8-9</code>），无锁。</li>
+      <li><b>全局系列</b>：读 <code>store.server_state</code> —— <code>dl_info_speed/up_info_speed</code> 瞬时值入环；<code>alltime_dl/alltime_ul</code> + <code>dl_info_data/up_info_data</code> 存累计快照（Prometheus 口径：存快照、展示前差分）。</li>
+      <li><b>单种系列</b>：只对活跃种子（<code>dlspeed&gt;0 or upspeed&gt;0</code> 或状态 active）采样，避免全库 86,400 点 × N 的爆炸；非活跃期不产生采样点（展示层为断线）。</li>
+      <li><b>分组系列</b>：复用 <code>_build_group_view</code> 的组级 sum 结果（<code>views.py:404-485</code>），以组 key（<code>grouping_mod.py:41-49</code>）为序列键，不重算。</li>
+    </ul>
+
+    <h3>9.2 差分与基线重置规则</h3>
+    <ul>
+      <li>速率 = last 只在进程内推进：<code>rate = max(0, cur - last)</code>；<code>cur &lt; last</code>（qB 重启会话归零 / alltime 回退 / 删重加）⇒ <b>判定为计数器重置</b>：基线重置为 cur，该窗口记 null（不产伪速率）。</li>
+      <li>基线重置显式触发（与隐式回落判定双保险）：组键换手（删重加/移动目录/增删文件 ⇒ key 变化）⇒ 新 key 从零起；种子删除 ⇒ 该 hash 系列清除（对齐 <code>field_snapshots</code> 删种即清先例，<code>store.py:291-307</code>）。</li>
+      <li>高频段（24h 环）直接存 <code>dlspeed/upspeed</code> 瞬时值，不经差分——瞬时值对重启归零免疫，两条腿互为校验。</li>
+    </ul>
+
+    <h3>9.3 内存环 + rollup 结构</h3>
+    <pre>内存（每系列）：
+  ring_24h   @30s   上限 2,880 点/系列   纯内存，崩溃可丢（口径声明）
+  采样点 = { t, dl_rate, up_rate, dl_total, up_total }   # 速率直存 + 累计快照并存
+
+落盘（state["qb_traffic"]，state v4 新增顶层键）：
+  rollups:  key → [ { hour, dl_avg, dl_max, up_avg, up_max }, ... ]   # 720 点/30天 ≈32KB/组
+  baselines: key → { dl_total, up_total, updated_at }                 # 差分基线（进程内推进，落盘仅供重启后接续）
+  meta:     { sampled_at, interval_s, window_days }                   # 自描述，服务迁移与排障
+
+体量：100 组 ≈ 3-4MB JSON；随 maybe_flush 周期落盘（默认 120s ⇒ 崩溃丢 ≤2min rollup 增量）</pre>
+    <ul>
+      <li>rollup 在内存环滚动过期时归并产生（每小时封口一条 avg+max），环本身不落盘——写放大最小。</li>
+    </ul>
+
+    <h3>9.4 state v4 迁移草案</h3>
+    <ul>
+      <li><code>CURRENT_VERSIONS["state"]</code> 3→4（<code>infra/versioning.py:29-34</code>），迁移函数落 config/migrations.py 同级机制；<b>纯加法迁移</b>：旧 state 无 <code>qb_traffic</code> 键则补默认结构，无存量数据转换，风险低。</li>
+      <li><b>清理策略与键位纪律（吸取既有教训）</b>：<code>speed_limit_curve[date]</code> 无界增长（<code>speed_curve_mod.py:272-278</code>）是前车之鉴——<code>qb_traffic.rollups</code> 按 30 天滚动窗口清理（按日清理先例 <code>ops_mod.py:365-367</code>）；单种系列<b>不落盘</b>（24h 环纯内存即满足观察需求）或按 hash 清理（先例 <code>store.py:291-307</code>），杜绝新键复刻无界增长。</li>
+      <li>纳入版本链判据自查（<code>versioning.py:5-9</code>）：state v4 是「程序读回且结构演化」——成立。</li>
+    </ul>
+
+    <h3>9.5 API 端点草案（落既有域，金清单同步一次）</h3>
+    <pre>GET /api/traffic/qb/global?window=24h|30d        # 落 routes/state.py（与 /api/traffic/history 同域，天然对照）
+GET /api/traffic/qb/torrent/{hash}?window=...    # 落 routes/torrent_detail.py（先例 :26-57）
+GET /api/traffic/qb/group/{key}?window=...       # 落 routes/groups.py（key 沿用 encode_group_key base64url，对齐 /api/groups/{key}/…）
+
+响应形状（三域一致）：
+  { "points": [ { t, dl, up } | null, ... ],      # null = 断线/缺桶（拍板点④）
+    "meta":  { window, interval_s, source: "qb", stale: bool } }</pre>
+    <ul>
+      <li>端点全部挂在<b>既有三域 router</b> 内，不新增域 ⇒ <code>ROUTE_BUILDERS</code>（11 域，<code>routes/__init__.py:8-21</code>）不动；金清单守阵 <code>test_web_route_manifest_frozen</code> 的钉死清单<b>同步追加 3 个 GET</b>（一次性登记）。</li>
+      <li>未启用/无数据时返回空态（<code>points: []</code> + <code>meta.stale</code>），与 traffic_source 未启用时 <code>history</code> 空数组的既有分支同构（<code>routes/state.py:108-117</code> docstring 语义）。</li>
+    </ul>
+
+    <h3>9.6 前端挂点</h3>
+    <table>
+      <thead><tr><th>图</th><th>挂点</th><th>交互先例</th></tr></thead>
+      <tbody>
+        <tr><td>①全局</td><td>今日流量面板 → 既有「历史流量」弹层旁并列 qB 口径弹层（或弹层内加 tab：TM 按日聚合 / qB 时序曲线）</td><td><code>dialogs.js:549-858</code> openHistory 弹层（hover 取值、窗切换）</td></tr>
+        <tr><td>②单种</td><td>种子详情抽屉新增「流量」页签</td><td>抽屉低频独立轮询 5s <code>setInterval</code>（<code>drawer.js:471-482</code>）；流量页签按采样间隔轮询（30-60s）或惰性拉取</td></tr>
+        <tr><td>③分组</td><td>分组弹层</td><td>分组路由 <code>/api/groups/{key}/…</code> 的 key 通道直接复用</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>三图共用一个<b>双系列（上/下）曲线组件</b>：uPlot 封装 或 自绘 SVG 组件（拍板点②），一次写完三处复用；tpl 片 + <code>&lt;域&gt;.js</code> mixin + index.html 登记走既有「弹窗+API」惯例；三套主题（atlas/prism/console）令牌取色，不硬编码色值。</li>
+      <li>停机空洞渲染：null 断线为默认；「最大跨越」参数可后置（先做纯断线，产品上够用）。</li>
+    </ul>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>三个现实约束的应对</h2>
+    <table>
+      <thead><tr><th>约束</th><th>现状事实</th><th>应对</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>① 程序不常驻</b></td>
+          <td>现有 TM 历史缺日直接缺桶（缺失=0，压缩式时间轴），无补点/回填代码；本程序停机期间无采样者</td>
+          <td>qB 口径停机期空洞<b>不可避免</b>，只能选展示口径（拍板点④）：null 断线、不补点不回填；30 天 rollup 的语义是「程序运行期间的小时均值」而非全天候，UI 文案如实声明。与 TM 图「缺失日=0」的聚合口径划清，两图同屏时用图例区分</td>
+        </tr>
+        <tr>
+          <td><b>② qB 重启</b></td>
+          <td>APIConnectionError 退避重连（<code>qbmanager.py:549-559</code>）；rid 失效强制全量（<code>store.py:168-176</code>）；但无「会话计数器重置」感知——server_state 会话累计归零会产生伪负增量</td>
+          <td>max(0,·) 差分保护 + <code>cur &lt; last</code> 判重置记 null（§9.2）；重连退避期间采样任务照常出点（数值 stale 或 null）；alltime 不作唯一口径（§4.1 回退风险），瞬时速率直采双轨互证</td>
+        </tr>
+        <tr>
+          <td><b>③ 种子删重加</b></td>
+          <td>删除即清 field_snapshots 先例（<code>store.py:291-307</code>）；无跨重启 hash→名称持久缓存；组键是内容指纹 ⇒ 组维度天然规避 hash 失效</td>
+          <td>单种：删种即清系列；同 hash 重加 all-time 归零由 <code>cur &lt; last</code> 判重置兜底。分组：指纹键控天然稳定，唯一暴露面是换 key（拍板点⑤，推荐不保留）</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s11">
+    <h2><span class="no">11</span>风险与待真机验证清单</h2>
+    <h3>11.1 风险表</h3>
+    <table>
+      <thead><tr><th>风险</th><th>等级</th><th>缓解</th></tr></thead>
+      <tbody>
+        <tr><td>分组重算与 rollup 边界（组 key 高频抖动，如文件列表反复增删导致 rollup 碎片化）</td><td><span class="tag b">中</span></td><td>rollup 封口在小时边界，抖动期内仅内存环换键；P1 单测覆盖「换 key → 旧系列冻结、新系列起零」</td></tr>
+        <tr><td>state.json 体量随分组数增长（100 组 ≈3-4MB）</td><td><span class="tag b">中</span></td><td>拍板点③锁窗口；体量入 <code>meta</code> 自描述便于观测；超预期降采样间隔至 60s</td></tr>
+        <tr><td>单种 all-time 持久性证据不完整（§11-①）⇒ 30 天单种长段差分可能失真</td><td><span class="tag b">中</span></td><td>回落判重置兜底（最坏退化为重启后曲线分段）；P1 先真机验证再接长段</td></tr>
+        <tr><td>uPlot options 样板多 / 三主题视觉回归</td><td><span class="tag c">低</span></td><td>封装单组件三处复用；色值全部走令牌</td></tr>
+        <tr><td>state v4 迁移回归</td><td><span class="tag c">低</span></td><td>纯加法迁移；P2 独立提交 + 迁移单测（旧 v3 state 启动无感）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>11.2 待真机验证清单（调研遗留，派发前逐条核）</h3>
+    <ol>
+      <li><b>单种 all-time 跨 qB 重启持久性</b>：libtorrent <code>total_uploaded/total_downloaded</code> 随 fastresume 序列化（源码级证据强、无一句话官方文档）——真机验证：做种中重启 qB，重启前后 <code>/torrents/info</code> 的 <code>uploaded/downloaded</code> 读数一致不归零。</li>
+      <li><b>alltime_dl/alltime_ul 非优雅退出回退幅度</b>【社区】：qBittorrent-data.ini 周期落盘——真机验证：kill -9 qB 后重启，读数回退量级；决定自采样基线接续策略。</li>
+      <li><b>会话计数器归零语义全覆盖</b>：<code>dl_info_data/up_info_data</code> 与 <code>*_session</code> 重启归零——真机验证：重启后第一轮采样的 <code>cur &lt; last</code> 判重置是否把所有计数器字段一次兜住。</li>
+      <li><b>server_state 增量轮键缺失模式</b>：FIX-04a 合并语义已有（<code>store.py:138-145</code>），真机观察增量轮统计窗口字段是否始终在场（真机曾见「仅累计流量正确、其余字段空值」）——确认采样不取到空值。</li>
+      <li><b>图表运行时行为</b>：uPlot null 缺口渲染 + 数据侧自降采样（~90 行参考）在 720–2,880 点真实数据下的表现；若候选含 Chart.js 需先验证 streaming 插件 v4 支持存疑项（选 uPlot/自绘则该条自然消解）。</li>
+    </ol>
+  </section>
+
+  <section id="s12">
+    <h2><span class="no">12</span>分阶段实施建议（每阶段一个独立可提交单元）</h2>
+    <p class="hint">供拍板后逐段派发；每段独立可提交、可停、可回滚，段间依赖单向向下。</p>
+    <table>
+      <thead><tr><th>阶段</th><th>内容</th><th>产出</th><th>验收判据</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>P1</b><br>采样管线</td>
+          <td>internal 全局任务 + 内存环 + 差分/基线重置（§9.1–9.2）；不落盘不接 UI</td>
+          <td>采样器模块 + 单测</td>
+          <td>采样在主循环线程（单写线程不变式有测试钉住）；模拟 qB 重启（计数器回落）不产负速率、记 null；组键换手 → 旧系列冻结新系列起零；断连期间出 null 点；全库空闲时零采样点（活跃过滤生效）</td>
+        </tr>
+        <tr>
+          <td><b>P2</b><br>state v4 落盘</td>
+          <td>rollup 归并 + <code>state["qb_traffic"]</code> + 版本链 3→4 + 窗口清理（§9.3–9.4）</td>
+          <td>迁移函数 + 清理任务 + 单测</td>
+          <td>旧 v3 state.json 启动无感迁移（补默认键）；rollup 30 天窗口外自动清理；kill 模拟（非优雅退出）丢失窗口 ≤ state_save_interval；state 体量回归（100 组构造数据 ≤ 预期上限）</td>
+        </tr>
+        <tr>
+          <td><b>P3</b><br>API 端点</td>
+          <td>三域 router 各 +GET（§9.5）+ 金清单同步</td>
+          <td>3 个只读端点 + <code>test_web_route_manifest_frozen</code> 登记</td>
+          <td>金清单测试绿；window 参数非法值 4xx；未启用/无数据返回空态（<code>points: []</code> + stale 标记）；token 鉴权沿用（<code>make_require_token</code>）</td>
+        </tr>
+        <tr>
+          <td><b>P4</b><br>前端三图</td>
+          <td>双系列组件（uPlot 或自绘，拍板点②）+ 三挂点（§9.6）+ 低频轮询</td>
+          <td>vendor 文件（如选 uPlot）+ tpl 片 + mixin + index.html 登记</td>
+          <td>三套主题（atlas/prism/console）视觉回归通过；null 断线渲染正确（人工核对一段含停机的数据）；hover 取值与既有弹层水平一致；关闭功能开关时三挂点不请求</td>
+        </tr>
+        <tr>
+          <td><b>P5</b><br>真机收尾</td>
+          <td>§11.2 清单逐条真机核验 + 结论回写 memory-bank（如 all-time 持久性成立/不成立 → §9.2 长段口径落定）</td>
+          <td>验证记录（testing/ 基线切片或报告追记）</td>
+          <td>5 条清单每条有实测数字与结论；与设计草案的偏差回写并说明</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>工作量复核：P1 2–3 天 + P2 1 天 + P3 0.5–1 天 + P4 1–2 天 ≈ <b>4.5–7 人日</b>（与调研 4–6 人日口径一致，上限含拍板点②选 uPlot 的封装成本）。P1+P2 完成即有数据资产（无 UI）；P3 完成即可 curl 验证；P4 才动前端——任何阶段停下都不留半成品入口。</p>
+  </section>
+
+  <section id="s13">
+    <h2><span class="no">13</span>附：取证基线与参考链接汇总</h2>
+    <ul>
+      <li><b>取证基线</b>：2026-10-03 · commit <code>c91be940</code>；正文 file:line 锚点为该日取证，报告冻结后不随后续代码演化更新（report 工位 = 证据快照，出厂即冻结）。</li>
+      <li><b>输入来源</b>：阶段 1 代码盘点（输入A）+ 阶段 2 外部调研（输入B）视为已核实素材引用；本报告对输入A 的全部关键锚点做了仓库内抽查复核（models/curves/state routes/qbapi/env/record/grouping/views/versioning/store/factory/routes init/groups routes/utils/qbmanager/taskqueue/speed_curve/runtime/drawer/dialogs/schema），抽查全部命中。</li>
+      <li><b>关联制品</b>：主 issue <a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248</a>（Open，统计重设计）；相关 issue <a href="../issues/26-10-01-2138-question-webui-traffic-history-chart.html">26-10-01-2138</a>（Dropped，口径混淆，§2.3）。专题主键 <code>torrent-traffic-stats</code>（与两 issue 同专题）。</li>
+    </ul>
+    <h3>参考链接</h3>
+    <ul>
+      <li>【官方】qB WebUI API (qBittorrent 5.0) wiki — <a href="https://github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)">github.com/qbittorrent/qBittorrent/wiki/WebUI-API-(qBittorrent-5.0)</a></li>
+      <li>【官方】libtorrent reference-Add_Torrent（total_uploaded/total_downloaded 随 resume data 序列化）— <a href="https://libtorrent.org/reference-Add_Torrent.html">libtorrent.org/reference-Add_Torrent.html</a></li>
+      <li>【官方·源码】qBittorrent <code>sessionstatus.h</code> / <code>statistics.js</code>（server_state 与 /transfer/info 同源、alltime 字段）；<code>speedplotview.{h,cpp}</code>（多分辨率内存环）；<code>src/webui/www/private/scripts</code>（无图表脚本）— github.com/qbittorrent/qBittorrent</li>
+      <li>【官方】Prometheus querying functions（累计计数器存快照 + rate() 重置处理口径）— <a href="https://prometheus.io/docs/prometheus/latest/querying/functions/">prometheus.io/docs/prometheus/latest/querying/functions</a></li>
+      <li>【社区】VueTorrent（apexcharts + 内存滑窗，无持久化）— github.com/VueTorrent/VueTorrent</li>
+      <li>【社区】nipil/transmission-torrent-statistics（累计快照→SQLite→变化才存→按龄清理→Flot 自绘）— github.com/nipil/transmission-torrent-statistics</li>
+      <li>【社区】martabal/qbittorrent-exporter（exporter+Prometheus+Grafana 路线，本报告不采纳）— github.com/martabal/qbittorrent-exporter</li>
+      <li>【实测】bundlephobia 体积数据（uplot / chart.js / echarts / apexcharts / lightweight-charts）— bundlephobia.com</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>auto-qb · 可行性报告 26-10-03-0757 · 专题 torrent-traffic-stats · 取证基线 c91be940 (2026-10-03) · 状态 Done（快照终态，不随后续代码演化更新）</p>
+  </footer>
+
+</div>
+</body>
+</html>
