@@ -104,6 +104,8 @@ window.AQB_STATE = {
         open: false, collapsed: false, hash: "", tab: "general", loading: false, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
+        // FX-29 切换目标期的遮罩态: 保留旧内容撑住面板几何, 遮罩盖住旧值防误读, 新数据到手才撤
+        switching: false,
       },
       drawerLastTab: initialDrawerTab(),  // 记住上次停留的 tab(跨种子打开 + 刷新保持); 见 initialDrawerTab()
       // 面板高度记忆(W3 方案A): 用户拖拽调高后的 px; null = 未拖拽过, 走 CSS 默认上限 42vh。

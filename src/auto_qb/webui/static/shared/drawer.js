@@ -457,11 +457,13 @@ window.AQB_DRAWER = {
       this.menu.visible = false;
       this._stopDrawerPoll();
       this._stopDrawerFollow();  // 显式打开优先于在途跟随(双击换目标 vs 防抖中的跟随, 不得互相打架)
+      this._drawerSwitchEnd();   // FX-29: 面板整体重建 -> 无"旧内容可保留", 待到集合与遮罩一并作废
       const initialTab = this.drawerLastTab || "general";
       this.drawer = {
         open: true, collapsed: false, hash, tab: initialTab, loading: true, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
+        switching: false,  // FX-29: 打开路径不存在"保留旧数据", 遮罩恒不亮(显式建字段见 vue-reactivity)
       };
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读, 首屏恒默认收起)
       await this._fetchDrawerDetail();  // 详情恒拉(头部标题/常规页都依赖); 非常规 tab 再补拉对应数据
@@ -475,6 +477,7 @@ window.AQB_DRAWER = {
       this.drawerSelPath = "";
       this._stopDrawerPoll();
       this._stopDrawerFollow();
+      this._drawerSwitchEnd();  // FX-29: 收面板即撤切换态(未完成的等待不得挂到下次打开)
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读)
     },
     _stopDrawerPoll() {
@@ -519,6 +522,7 @@ window.AQB_DRAWER = {
       } finally {
         // 过期请求不动 loading 态(新在途请求持有它), 免得闪一帧"加载完"假象
         if (!this._drawerStale(hash, seq)) this.drawer.loading = false;
+        this._drawerDone("detail", hash, seq);  // FX-29: 落定登记(该数据源已到手)
       }
     },
     async _fetchDrawerTrackers(silent = false, seq = 0) {
@@ -532,6 +536,7 @@ window.AQB_DRAWER = {
         if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
       } finally {
         if (!this._drawerStale(hash, seq)) this.drawer.trackersLoading = false;
+        this._drawerDone("trackers", hash, seq);
       }
     },
     async _fetchDrawerFiles(silent = false, seq = 0) {
@@ -545,6 +550,7 @@ window.AQB_DRAWER = {
         if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
       } finally {
         if (!this._drawerStale(hash, seq)) this.drawer.filesLoading = false;
+        this._drawerDone("files", hash, seq);
       }
     },
     async _fetchDrawerPeers(silent = false, seq = 0) {
@@ -558,6 +564,7 @@ window.AQB_DRAWER = {
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
       } finally {
         if (!this._drawerStale(hash, seq)) this.drawer.peersLoading = false;
+        this._drawerDone("peers", hash, seq);
       }
     },
     /* tab 切换: general 重新拉详情(反映最新状态); trackers/peers 拉一次并启动轮询; content 拉一次。
@@ -568,7 +575,8 @@ window.AQB_DRAWER = {
       this.drawerLastTab = tab;
       this.persistDrawerTab();
       this.filePrio.visible = false;  // 换页签时收起文件优先级小菜单(内容页签专属)
-      this._stopDrawerPoll();
+      this._drawerSwitchEnd();  // FX-29: 切页签使在途的那一组响应全部过期(stale 不落袋), 若不撤等待
+      this._stopDrawerPoll();   //     遮罩会挂死 —— 显式操作视作结束上一次切换
       this._loadDrawerTab(tab);
     },
     /* 按 tab 拉取对应数据(开抽屉初值 / 切 tab / W2 跟随换目标共用, 单一加载逻辑):
@@ -614,18 +622,22 @@ window.AQB_DRAWER = {
         this._followDrawerTimer = null;
       }
     },
-    /* 跟随换目标: 保留当前页签(与 openTorrentDrawer 取 drawerLastTab 初始定位不同), 旧页签数据
-     * 即刻清空防串显, 再按当前页签重拉(_loadDrawerTab 内 bump 代际 seq + 重启 5s 轮询) */
+    /* ---------------- FX-29 换目标: 软切换(治「上下键切换种子时抽屉闪烁」, 26-10-03) ----------------
+     * 旧实现把 detail / trackers / files / peers 一把清空再重拉, 面板每一次光标移动都走一遍
+     * 「整幅内容消失 -> 落到加载空态 -> 数据回来重建」, 连按上下键时就是持续闪烁; 且未拖过高的
+     * 面板只有 CSS 42vh 上限(高度随内容), 空态把面板抽成一条再撑开, 列表与停靠面板连锁跳动。
+     * 软切换 = 保留旧数据撑住几何, 用 **遮罩** 而不是清空来防串显: 内容此刻属于上个种子, 罩住
+     * 即不可读(并屏蔽交互), 新数据全部到手才掀开 —— 「看着上个种子的值」不会成立, 但面板几何
+     * 全程不动, 用户眼里只有内容换了一帧。落定按「数据源集合」而不是「任一请求」: 早到的单个请求
+     * 不许提前掀罩(那时另一个源还是上个种子的值), 故按 tab 登记待到集合, 全部到手才算落定。 */
     _switchDrawerTarget(hash) {
       this._stopDrawerPoll();
       this._stopDrawerFollow();
       this.drawer.hash = hash;
       this.drawer.loading = true;
       this.drawer.error = "";
-      this.drawer.detail = null;
-      this.drawer.trackers = [];
-      this.drawer.files = [];
-      this.drawer.peers = { peers: [] };
+      this._drawerWait = new Set(this._drawerWaitSources(this.drawer.tab));
+      this._drawerBusyArm();   // 延迟点亮遮罩(快响应时用户看不到任何中间态)
       this.filePrio.visible = false;  // 内容页签小菜单与行选中跨种子失效(与 drawerTab/closeDrawer 同口径)
       this.drawerSelPath = "";
       this._loadDrawerTab(this.drawer.tab);
@@ -633,6 +645,49 @@ window.AQB_DRAWER = {
       // 页签拉详情, 其余页签在此补一发 —— seq 归 _loadDrawerTab 先 bump(页签数据走代际守卫),
       // 详情这次不带 seq 只走 hash 戳守卫(同 hash 内晚到也是同资源, 无覆盖错目标风险)。
       if (this.drawer.tab !== "general") this._fetchDrawerDetail();
+    },
+    /* 本次切换要等的数据源(tab -> 「详情 + 该 tab 列表」); 常规页签只有详情一项 */
+    _drawerWaitSources(tab) {
+      if (tab === "general") return ["detail"];
+      if (tab === "content") return ["detail", "files"];
+      return ["detail", tab];
+    },
+    /* 单个数据源到手(成功或失败都算到手 —— 失败要让 error 态显出来, 不能把遮罩挂死)。
+     * 过期响应不登记: 它的数据没落袋, 状态仍属于在途的新目标。 */
+    _drawerDone(src, hash, seq) {
+      const w = this._drawerWait;
+      if (!w || this._drawerStale(hash, seq)) return;
+      w.delete(src);
+      if (w.size) return;      // 还有兄弟源在飞 —— 不提前掀罩(防半新半旧)
+      this._drawerSwitchEnd();
+    },
+    /* 遮罩延迟点亮: 局域网详情常在 100ms 内就到 —— 那一刻用户看到的是「内容直接换成新的」,
+     * 中间没有任何一帧变淡; 只有真的慢下来(>160ms)才滑入加载胶囊并把旧值淡到不可读。 */
+    _drawerBusyArm() {
+      this._drawerBusyDisarm();
+      this._busyArmTimer = setTimeout(() => {
+        this._busyArmTimer = null;
+        if (this.drawer.open && !this.drawer.collapsed) this.drawer.switching = true;
+      }, 160);
+    },
+    _drawerBusyDisarm() {
+      if (this._busyArmTimer) {
+        clearTimeout(this._busyArmTimer);
+        this._busyArmTimer = null;
+      }
+    },
+    /* 切换期收尾: 撤待到集合 / 撤延迟 / 撤遮罩(closeDrawer 与中途打断同样走这里) */
+    _drawerSwitchEnd() {
+      this._drawerWait = null;
+      this._drawerBusyDisarm();
+      this.drawer.switching = false;
+    },
+    /* 头部标题: 优先主表成员名(memberByHash 每 1.5~3s 一轮已在本地, 切换瞬间即得) ——
+     * 旧实现等详情到位, 中间一帧把标题显示成 40 字符 hash 再跳回种子名, 是肉眼最刺眼的一跳。 */
+    drawerTitle() {
+      const m = this.memberByHash.get(this.drawer.hash);
+      if (m && m.name) return m.name;
+      return this.drawer.detail ? this.drawer.detail.name : this.drawer.hash;
     },
     /* 持久化抽屉 tab 偏好(与 persistUiPage 同纪律): 只落"停在哪页"这个意图, 不落派生值;
      * 写入失败(隐私模式/配额满)只影响刷新后落点, 不该打断切页 —— 故吞掉异常。 */

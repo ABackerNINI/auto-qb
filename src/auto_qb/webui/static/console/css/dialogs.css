@@ -50,7 +50,16 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .drawer-tabs button { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);
   cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
 .drawer-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
-.drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px 20px; }
+.drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px 20px; position: relative; }
+/* FX-29 软切换遮罩: 换目标时旧数据不清空(撑住面板几何, 免"内容消失 -> 面板抽成一条 -> 撑回"的
+   连锁跳动), 只把内容降到不可读并屏蔽交互 —— 防串显效果同清空, 面板高度全程不动。
+   遮罩由 drawer.js _drawerBusyArm 延迟 160ms 才点亮: 局域网详情常在 100ms 内到达, 那时用户看到
+   的是"内容直接换成新的", 中间一帧都不淡; 只有真的慢下来才滑出加载胶囊。 */
+.drawer-body > * { transition: opacity .12s linear; }
+.drawer-body.switching > *:not(.drawer-busy) { opacity: .12; pointer-events: none; }
+.drawer-busy { position: absolute; top: 8px; right: 14px; z-index: 3; padding: 2px 9px; pointer-events: none;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--bg-hover);
+  color: var(--fg-muted); font-size: 11.5px; line-height: 1.6; }
 .drawer-hr { border: 1px solid var(--border-soft); border-left: 2px solid var(--hr-pending); padding: 8px 12px;
   margin: 0 0 16px; font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
 .drawer-hr.done { border-left-color: var(--hr-done); }

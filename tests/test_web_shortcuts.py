@@ -47,7 +47,9 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   开态切页 / 关态开面板定位该页签, 目标解析 kbCursor(torrent) 优先 + 单选种子兜底);
   跟随单点 _kbFollowDrawer 挂 _kbApplyCursor 尾部, page+kind 守卫 + 200ms 防抖 + hash 短路 +
   停稳复核; _loadDrawerTab bump 请求代际 seq 且四 fetcher 带 _drawerStale 旧响应丢弃;
-  _switchDrawerTarget 清旧页签数据防串显; open/close 作废在途跟随定时器
+  _switchDrawerTarget 换目标走 FX-29 软切换(不清空旧数据, switching 遮罩防串显 + 按 tab 的
+  待到集合全到手才落定); open/close 作废在途跟随定时器; 头部标题走 drawerTitle(memberByHash
+  名优先, 不等详情); 详情加载空态只归常规页签; 三皮肤 CSS 成对(switching 遮罩 + 加载胶囊)
 - test_drawer_height_collapse_w3: 方案A W3(计划 26-10-03-0917 §2.1/§3.5/D1) —— 顶缘 grip 拖拽调高
   (pointer capture + preventDefault + 夹取 [240px, 70vh] 收口 _drawerClampHeight 纯逻辑单点,
   松手才落盘); 持久化 autoqb.ui.drawerHeight / autoqb.ui.drawerOpen 与 drawerTab 同族(try/catch);
@@ -517,11 +519,49 @@ def test_drawer_dock_keyboard_w2() -> None:
     switch = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", drawer_js, re.S)
     assert switch, "drawer.js 找不到 _switchDrawerTarget(跟随换目标落点)"
     sb = switch.group(1)
-    assert "this.drawer.trackers = [];" in sb and "this.drawer.files = [];" in sb and "this.drawer.peers = { peers: [] };" in sb, "换目标必须清旧页签数据(防止串显上个种子的 trackers/files/peers)"
+    # --- FX-29 软切换: 不清空旧数据(保留几何) + 遮罩防串显 + 早到请求不提前掀罩 ---
+    for line in (
+        "this.drawer.detail = null;", "this.drawer.trackers = [];", "this.drawer.files = [];",
+        "this.drawer.peers = { peers: [] };"
+    ):
+        assert line not in sb, (
+            f"换目标不得再{line[:-1].strip()} —— FX-29: 清空 = body 落加载空态 + 未拖过高的面板"
+            "抽成一条再撑回, 连按上下键就是持续闪烁 + 列表/停靠面板连锁跳动"
+        )
+    assert "this._drawerWait = new Set(this._drawerWaitSources(this.drawer.tab));" in sb, (
+        "换目标须按 tab 登记本次要等的数据源集合(详情恒等 + 该 tab 列表)"
+    )
+    assert "this._drawerBusyArm();" in sb, "换目标须延迟点亮遮罩(快响应时零中间态, 只有慢下来才淡出旧值)"
     assert "this._loadDrawerTab(this.drawer.tab)" in sb, "换目标后必须按当前页签重拉(跟随保留页签, 不回 drawerLastTab)"
     assert 'if (this.drawer.tab !== "general") this._fetchDrawerDetail();' in sb, (
         "换目标必须恒拉详情(头部标题依赖; _loadDrawerTab 只在 general 页签拉, 走查发现的串显 hash 缺口)"
     )
+    # 落定只认「本 tab 的全套数据源」, 且过期响应不登记(否则另一个源还是上个种子的值就掀了罩)
+    done = re.search(r"_drawerDone\(src, hash, seq\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert done, "drawer.js 找不到 _drawerDone(FX-29 单个数据源到手登记)"
+    db = done.group(1)
+    assert db.index("this._drawerStale(hash, seq)") < db.index("w.delete(src)"), "过期响应不得登记到手(stale 先判)"
+    assert "if (w.size) return;" in db, "兄弟源仍在飞时必须继续罩着(防半新半旧的中间帧)"
+    assert 'switching: false' in _read("state.js"), "drawer 初值须显式建 switching 字段(vue-reactivity 静默坑)"
+    assert re.search(r"drawerTitle\(\) \{\n.*?this\.memberByHash\.get\(this\.drawer\.hash\)", drawer_js,
+                     re.S), ("drawerTitle 必须优先取 memberByHash 的名字(FX-29: 原实现等详情, 中间一帧标题是 40 字符 hash)")
+    # --- 模板: 标题走 drawerTitle / 遮罩挂 body / 详情空态只归常规页签 ---
+    tpl = (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8")
+    assert "{{ drawerTitle() }}" in tpl and "drawer.detail ? drawer.detail.name : drawer.hash" not in tpl, (
+        "头部标题必须走 drawerTitle()(成员名优先, 不再是 hash)"
+    )
+    assert ':class="{ switching: drawer.switching }"' in tpl and 'class="drawer-busy"' in tpl, (
+        "body 必须挂 switching 遮罩类与加载胶囊(FX-29)"
+    )
+    assert "drawer.tab === 'general' && drawer.loading && !drawer.detail" in tpl, (
+        "详情加载空态只归常规页签(压到 Tracker/用户/内容会把整幅表格换成一行空态)"
+    )
+    # --- 三皮肤 CSS 成对: switching 遮罩 + 加载胶囊 ---
+    for ui in ("atlas", "console", "prism"):
+        cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
+        css = cssp.read_text(encoding="utf-8")
+        assert ".drawer-body.switching > *:not(.drawer-busy)" in css, f"{ui}: 缺 FX-29 软切换遮罩规则(三皮肤成对)"
+        assert ".drawer-busy {" in css, f"{ui}: 缺加载胶囊样式"
     # open/close 作废在途跟随(显式操作优先于防抖中的跟随)
     assert drawer_js.count("this._stopDrawerFollow();") >= 2, "openTorrentDrawer 与 closeDrawer 都必须作废在途跟随定时器"
     # Delete 直连的 list 作用域守卫仍成立(停靠面板下 scope=list, Delete 可用 —— §2.2 矩阵)
