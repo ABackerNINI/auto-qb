@@ -5,6 +5,18 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **HR 热重载存量绑定陈旧修复: `TrackerModule.apply` 重绑存量记录 (2026-10-03, 计划
+  [plans/26-10-03-0436](../plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html) P1, `2a5d07a2`)**:
+  热重载只换 `manager.config` 对象, 存量 `rec.tracker_conf` 仍指旧 `TrackerConfig`(其 `hr_check` 派生视图为
+  None; 重绑两条旧路 —— L2 判据只比绑定三元组 / full_round 只补 None —— 都不覆盖配置值类变更) ⇒ HR 判定 /
+  `HrRuntime._anchors()` 锚点收集 / `hr` 规则段三个消费面全瘫, WebUI 恒显「本地·达标」。
+  修法 = 认领模块 `apply(old,new)`: `old.trackers != new.trackers`(整段按值比较)即遍历
+  `store.by_hash` 中 `tracker_conf is not None` 的记录执行 `rec.tracker_conf = self.match(rec)`
+  (回执 `tracker:rebound N`), 相等短路零动作, `ctx.api.client is None` 防御跳过不抛 ——
+  一处修复覆盖三个消费面, 不动 L2 结构判据。守阵 test_tracker.py 三用例(存量重绑+回执 / client=None /
+  相等短路, 红验过)。坑档 [pitfalls/backend/hot-reload-stale-bindings-derived-views.md](../pitfalls/backend/hot-reload-stale-bindings-derived-views.md);
+  档案 [tasks/26-10-03-backend-hr-hotreload-stale-display](../tasks/26-10-03-backend-hr-hotreload-stale-display.md)
+
 - **缺文件扫描过渡态容忍: .!qB 孪生存在不判缺失 (2026-10-01, 清偿 issue
   [26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck](../issues/26-09-21-0219-bug-qb-move-dot-qb-suffix-recheck.html),
   按计划 [26-09-22-2038](../plans/26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) 修法 1 主体)**:

@@ -14,7 +14,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 10 |
 | perf | 5 |
 | docs | 1 |
 | test | 1 |
@@ -25,6 +25,7 @@
 
 ## Open
 
+- [bug] [gen_doc_map refs 解析只认英文逗号: 视觉分隔符多目标整串被当单一路径, 认领链守卫报「目标不存在」](26-10-03-0746-bug-kb-docmap-refs-separator.html) — refs 多目标用视觉分隔符(如「 · 」)时整串被 _split_refs 当成单一路径 → 认领链守卫报「目标不存在」; 解析只认英文逗号(gen_doc_map.py _split_refs), 格式约定只写在文件头 docstring 未进报错 —— P4 收尾回写实测撞见
 - [bug] [主循环首轮 tick 任意异常在 next_*_at 未推进时无退避快速重试(wait_for=0 机理)](26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html) — 主循环异常路径不推进 next_*_at, 首轮 tick 抛任意异常(不止 StopIteration)即形成无退避快速重试循环 —— 有 ERROR 日志不静默, 是否要退避待拍板; StopIteration 已由 f89ceada 显式重抛不在此列
 - [bug] [tray._set_windows_appid 自引入起生产零调用点: AUMID 从未设置, 任务栏图标修复结论前提存疑](26-10-02-0727-bug-tray-appid-setter-no-call-site.html) — tray/app.py 的 _set_windows_appid 自 9891c030 引入起生产代码零调用点(仅测试驱动), 生产进程从未设置显式 AUMID —— 与 core-domain.md 四轮实测结论「AUMID 是任务栏图标决定性变量」矛盾, 26-10-01-2203 修复前提存疑
 - [test] [O_TRUNC 直写静态守阵并入: 全 src O_TRUNC 清零条件已达成](26-10-02-0527-test-otrunc-static-guard.html) — 1347-token 悬置的 O_TRUNC 直写静态守阵, 生效条件「全 src O_TRUNC 代码清零」已由 bc24631b(hr.token 改 atomic_write)达成, 可并入守阵

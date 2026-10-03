@@ -5,6 +5,17 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **WEB UI HR 判定新鲜度置脏 (2026-10-03, 计划
+  [plans/26-10-03-0436](../plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html) P2, `e4df1fc0`)**:
+  HR 判定结果非 store 快照字段 —— 取数线程发布新视图(`HrViewPublisher.revision` 自增)无任何置脏消费方,
+  WebUI 快照挂在旧值(热重载接入 HR 后恒显「本地·达标」的辅因; 独立缺陷: 运行期判定一变 UI 都要等别的原因
+  碰巧置脏)。修法仿「错误原因」先例: `WebUIRuntime` 重建完成时记基线 `_hr_rev_at_build`(挂
+  `_publish_locked` 末尾, 判空防御), `flush_views` 比对当前 `hr.revision` 与基线不等即 `mark_dirty()` ——
+  基线随重建前移, 无循环置脏。守阵 test_web.py 两用例(直推 publisher 抬 revision → flush 置位
+  group_view_dirty / 重建后基线前移不再置脏, 红验过)。坑档
+  [pitfalls/backend/hot-reload-stale-bindings-derived-views.md](../pitfalls/backend/hot-reload-stale-bindings-derived-views.md);
+  档案 [tasks/26-10-03-backend-hr-hotreload-stale-display](../tasks/26-10-03-backend-hr-hotreload-stale-display.md)
+
 - WEB UI **多选右键菜单四项(限速/移动/跳检/导出 .torrent)+ 跳检菜单开关 `web.skip_check_menu`**
   (2026-10-02/03, 计划 [plans/26-10-02-1955](../plans/26-10-02-1955-plan-webui-multi-ctx-actions.html),
   五波六提交; 拍板 D1=A 前端循环(推翻推荐的后端 zip, 归档端点未建) / D2=是 fail-closed / D3=留空不改):

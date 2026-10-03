@@ -1,17 +1,11 @@
-# HR 热重载后 WebUI 停留「本地·达标」根因分析
+# HR 热重载后 WebUI 停留「本地·达标」修复与收尾
 
-> 摘要: 用户实报「热重载开启站点 HR 在线核实后 WebUI 仍显示本地·达标, 重启才显示在线·已达标」。计划轮完成: 两层根因取证(存量 `rec.tracker_conf` 不随热重载重绑——L2 判据只比绑定三元组 + full_round 只补 None; HR 判定变化无置脏机关, 视图快照挂旧值), 分步修复计划 [plans/26-10-03-0436](../plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html)。
-> 最后活动: 2026-10-03 04:50
+> 摘要: 计划 [plans/26-10-03-0436](../plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html) 两层根因(存量 `tracker_conf` 不随热重载重绑 / HR 判定非快照字段无置脏)已四阶段实施完毕(P1 `2a5d07a2` 重绑存量绑定 / P2 `e4df1fc0` hr.revision 置脏 / P3 桩走查 PASS / P4 收尾回写), 全程记录在 [tasks/26-10-03-backend-hr-hotreload-stale-display](../tasks/26-10-03-backend-hr-hotreload-stale-display.md)。
+> 最后活动: 2026-10-03 07:28
 
 ## 正在进行
 
-- **待实施**: 计划四步——① TrackerModule 新增 apply(trackers 段变即重绑存量记录, 顺带修好 hr 规则段热重载与 `_anchors` 锚点收集) ② WebUI 补 `hr.revision` 新鲜度置脏 ③ test_tracker / test_web 单测 ④ 真机验收(不重启验证场景复原)+ 收尾 DoD(pitfalls/backend 入坑: 热重载换对象 ≠ 存量绑定对象自动更新)。
-- 实施前先读计划文档 04 节「已排除项」避免误修(热重载时序 / HrRuntime.apply / worker 冷启动发布均已验证正常)。
+- **真机复核**(待用户, 需真实 qB 与扩展在线): 不重启验证热重载开启站点 HR 后 WebUI 判定列下一拍变「在线·XX」+ 无关段热重载无 rebound + 重启路径照常; P3 已以桩走查 PASS 代行(桩保真度局限: 判定桥手工接线、t2 取数为直推 publisher 模拟)。
+- **待提交**: P4 收尾回写改动全在工作区(坑档 / 常青文档回写 / 基线切片 / 计划标 Done / tasks 档案 / 本切片), 等用户提交指令。
 
-## 已完成
-
-- 2026-10-03 计划轮: 判定链路取证(record/rules_mod/tracker_mod/resolve/views/webui runtime + hr runtime/worker/service)+ 计划文档产出, 未动代码。
-- 2026-10-03 解卡与入池轮: 闸门缺口排查(ship.commit 的 test.quick 闸门 match 只盯 src/tests, 纯文档轮绕过 pytest, 双向认领链提交时机检零覆盖)→ 并行会话补切片 **Refs:** 后同步复验 `test_docs_forms.py` 10 passed 全绿 → 缺口入池 [issues/26-10-03-0521](../issues/26-10-03-0521-test-test-claim-chain-gate-coverage.html)(Open, 待认领修闸门)。
-- 2026-10-03 修复轮: 0521 认领修毕 —— 双向链机检下沉 `gen_doc_map.py --check`(提交闸门 memory-bank/ 全轮次覆盖, 声明方扩到四形态全量), pytest 同函数复验, doc-forms「认领链」补合法目标口径; 负向探针 3/3 + test_docs_forms 10 passed + test.quick 2308 passed(唯一红为 26-10-01-1946 幽灵目录在本 clone 的无关残留), issue 置 Done。
-
-**Refs:** memory-bank/plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html
+**Refs:** memory-bank/plans/26-10-03-0436-plan-hr-hotreload-webui-stale-display.html · memory-bank/tasks/26-10-03-backend-hr-hotreload-stale-display.md
