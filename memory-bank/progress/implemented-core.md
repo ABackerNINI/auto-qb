@@ -5,6 +5,22 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **跨组文件交叉检测与紧急处置 (2026-10-04, 计划
+  [plans/26-10-04-0107](../plans/26-10-04-0107-plan-cross-group-file-conflict.html) S0-S5 全段, issue
+  [26-09-22-2221](../issues/26-09-22-2221-feat-cross-group-file-conflict.html) Done)**:
+  组边界不等于文件不交叉(部分重叠文件列表 / 大小写不同 / junction·symlink 别名同目录), 新种子下载会
+  静默覆盖另一组已下载数据且不可逆 —— 既有三条防线都以「同组」为边界够不到跨组。落地四件: ①独立开关
+  `grouping.cross_group_conflict_check` 默认关(全链贯通, 键面基线 154→155); ②grouping_mod
+  `_check_cross_group_file_conflicts` 四步判定 —— store.groups×group_sizes 物理路径全量展开(目录级
+  `realpath_lexical` 别名解析 + 检测私有 `_cross_physical_key` normcase 归一, **不动 path_normalize**)
+  → 交叉事件 → MISSING 豁免(任一侧带标签 = 重下补救合法) → 按组对聚合激活警告; 纯内存零触盘、零新增
+  qB 请求, 增量轮 dirty 空短路; ③处置 = `store.cross_group_conflict_warned` 组对去重 + 仅暂停涉事
+  下载方 `torrents_stop(dl_hashes)`(绝不传整组) + 消除循环(discard 过期组对, 下次重现再触发);
+  ④Web 组视图组名旁 cross_group_conflict `#i-warn` 标记(warned 集合派生 + view_changed 显式置脏兜底)。
+  新增用例 19 条(config_schema 3 / grouping 15[平台 skipif 拆分] / web 1); test.full 2441 passed +
+  4 skipped / 99% / 36.16s(基线 [26-10-04-0412](../testing/baselines/26-10-04-0412-cross-group-conflict-detection.md));
+  真机走查留待用户。档案 [tasks/26-10-04-backend-cross-group-conflict](../tasks/26-10-04-backend-cross-group-conflict.md)
+
 - **热重载 L2 重建后种子级任务补建: RulesModule 订阅 full_round (2026-10-04, issue
   [26-10-01-2147](../issues/26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) 认领修复)**:
   `rebuild_runtime` 换新 TaskQueue 后只有全局任务自注册重入队, 种子级任务(内置 maintenance + interval

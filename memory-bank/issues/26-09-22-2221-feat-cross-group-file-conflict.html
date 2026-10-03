@@ -8,7 +8,7 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="cross-group-file-conflict">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="跨组文件交叉紧急处置: 防止新种子覆盖已下载/已完成文件">
 <meta name="issue-summary" content="不同组之间出现文件交叉(如同名/同路径文件已被其他组下载完成)时需要紧急处置, 防止新种子下载覆盖已有数据">
 <meta name="doc-refs" content="memory-bank/plans/26-10-04-0107-plan-cross-group-file-conflict.html, memory-bank/tasks/26-10-04-backend-cross-group-conflict.md">
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-22-2221-feat-cross-group-file-conflict</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-22 22:21</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">grouping</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">用户</div></div>
     </div>
@@ -180,11 +180,24 @@
     <ul>
       <li>2026-09-22 22:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-04 02:43 — 复验: 实施轮开工逐点复验锚点（计划 26-10-04-0107 全部锚点按符号名+grep 核对），仍复现；仅个别行号微漂（±1-3 行），详见计划实施汇报</li>
+      <li>2026-10-04 04:12 — 修复完成，状态 <strong>Done</strong>（计划 26-10-04-0107 S0-S5 全段落地；<code>test.full</code> 实测 2441 passed + 4 skipped / 覆盖率 99% / 36.16s，基线切片 <code>baselines/26-10-04-0412-cross-group-conflict-detection.md</code>）。修法与验证见「修复后补充」。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>复验：2026-10-04 02:43 仍复现 —— 计划 26-10-04-0107 全部锚点按符号名+grep 逐点核对：37 项行号精确一致，4 项微漂（±1-3 行），符号与语义全部成立（已兑现入池复验 TODO，留痕见上方状态日志）。</p>
+    <h3>修复后补充（2026-10-04）</h3>
+    <p><strong>实际修法 = 计划 §05 S1-S4 四步</strong>（全部按计划落地，五笔提交 e5a43f75 / 90a250cf / e07f48c2 / 9234dbfd / efab3b7e）：</p>
+    <ul>
+      <li><strong>S1 配置键</strong>（<code>src/auto_qb/config/</code>）—— 独立开关 <code>grouping.cross_group_conflict_check</code> 默认 false 全链贯通：models.py <code>GroupingConfig</code> 加字段 / sections.py KNOWN_GROUPING_KEYS 与 bool 校验元组 / schema Field（对齐 <code>check_missing_files</code> 写法）/ 键面基线重生成（154→155 键，version 4 不抬 = 非破坏新增）/ keys.md 回写。</li>
+      <li><strong>S2 检测核心</strong>（<code>src/auto_qb/core/modules/grouping_mod.py</code>）—— 模块级 <code>_cross_physical_key</code>（normcase+normpath 词法归一，与 <code>path_normalize</code> 分层，不动分组键单一事实源）+ <code>_check_cross_group_file_conflicts</code> 四步判定：物理路径全量展开（目录级 <code>realpath_lexical</code> 别名解析，每 save_path 一次 syscall，异常词法回退）→ 交叉事件（同物理路径 ≥2 组）→ MISSING 豁免（任一侧带 missing_tag 即豁免）→ 激活警告（按组对聚合，路径展示前 3 处 + 等 N 处）；纯内存零触盘、零新增 qB 请求，增量轮 dirty 空短路，接线插在 <code>_on_post</code> 内 <code>_handle_save_path_changes</code> 与 <code>_check_download_conflicts</code> 之间。</li>
+      <li><strong>S3 处置动作</strong>（grouping_mod.py + <code>src/auto_qb/torrents/store.py</code>）—— <code>store.cross_group_conflict_warned</code> 组对去重集合（软信号不落盘、reset_runtime 有意不清，对齐 download_conflict_warned 先例）+ 处置循环严格对齐同组检查顺序（警告 → dry_run 止步 → 登记去重 → 仅暂停涉事下载方 <code>torrents_stop(dl_hashes)</code>，绝不传整组）+ 消除循环（不在 active 组对集的过期记录 discard，下次重现可再次触发）。</li>
+      <li><strong>S4 Web 组视图提示</strong>（<code>src/auto_qb/webui/</code>）—— views.py <code>_build_group_view</code> 组字典加 <code>cross_group_conflict</code> 布尔（由去重集合派生，派生值后端算约定）；groups.html name 单元格组名旁加 sizeMismatch risk-mark 同款 <code>#i-warn</code> 标记（无新 CSS）；warned 集合增删两处显式置脏 <code>store.view_changed</code> 兜底推导链断裂。</li>
+    </ul>
+    <p><strong>验证方式</strong>：新增用例 19 条（test_config_schema 3：缺省 false / 合法 bool 通过 / 非 bool 聚合报错；test_grouping 15：S2 检测 8（部分重叠 / POSIX 大小写不误报 / Windows 大小写检出 / junction 别名 / MISSING 豁免 / 零变化短路 / 开关关静默 / 同组重叠不触发）+ S3 处置 7（暂停下载方 / 去重不重复 / 消除后再触发 / 做种侧不混入 / dry-run 只警告 / reset_runtime 不清 / 单侧脏仍检出）；test_web 1：组视图 cross_group_conflict 标记）—— 平台敏感用例按计划 §06 用 skipif 拆分（POSIX 不误报断言 / Windows 大小写与 junction 用例），暂停断言一律 mock <code>torrents_stop</code>（真实 stop 经 <code>_sync_paused_state</code> 同 tick 改写快照会污染去重断言）。<strong>测试数字（test.full 实测）</strong>：2441 passed + 4 skipped / 覆盖率 TOTAL 99%（14361 语句 / 135 未覆盖 / 4864 分支 / 106 partial）/ 36.16s，全绿零回归。</p>
+    <p><strong>与计划建议修法的差异</strong>（两条，其余锚点全数落实，4 处 ±1-3 行微漂锚点按符号定位无碍）：</p>
+    <ul>
+      <li>计划 S3 伪代码消除段 <code>pair not in active</code> 对四元组列表恒假（tuple 对 list 成员判定按元素比较，永不命中），实现改判 <code>pair not in pair_paths</code>（其键即 active 组对集）并注释钉坑 —— 字面照抄会使冲突消除静默失效；</li>
+      <li>计划验收示例非 bool 用例值 <code>"yes"</code> 实测被 <code>parse_bool</code> 接受为 True，非 bool 用例改用真非法值 <code>"maybe"</code>（对齐 test_traffic_sample.py 先例）。</li>
+    </ul>
   </section>
 
   <footer>

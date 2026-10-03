@@ -94,12 +94,12 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 | 相位 | 内容 | 认领 |
 |------|------|------|
 | `full_round`(:754, 仅全量轮) | tracker 重匹配(L2 reset_runtime 置空 conf 在此兑现)+ 存量种子级任务补建(L2 重建换队列后种子级任务随旧队列丢弃且 torrents_added 对存量不触发, 重匹配兑现后按队列查重幂等补建、立即到期首轮兑现一次维护, issue 26-10-01-2147) | TrackerModule(tracker_mod.py:40) → RulesModule(rules_mod.py:69, 装配序在后消费重匹配结果) |
-| `transitions`(:767, 每轮无条件) | 状态转移观测: 上传转暂停 / errored → 缺文件扫描(用上一轮快照); **必须先于一切自有动作** —— 自有停种经快照同步会当场改写 `by_hash`, 放后面会把自家停种误判为外部转移 | GroupingModule(grouping_mod.py:67) |
+| `transitions`(:767, 每轮无条件) | 状态转移观测: 上传转暂停 / errored → 缺文件扫描(用上一轮快照); **必须先于一切自有动作** —— 自有停种经快照同步会当场改写 `by_hash`, 放后面会把自家停种误判为外部转移 | GroupingModule(grouping_mod.py:89) |
 | `events_removed`(:778) | on_torrent_deleted / on_torrent_state_enum_changed / on_torrent_field_changed 同步即时分派(deleted 用删除前快照副本, state 用上一轮快照对比); 事件规则**不建周期任务**, 建 rule-event 一次性 Task 作 ctx.task 同步执行, 遇 checking pending 由轮询子任务断点续跑(rules_mod.py:332-355) | RulesModule(rules_mod.py:64) |
 | `events_added`(:808) | on_torrent_added —— 新增种子**已匹配 tracker conf 之后**触发 | RulesModule(rules_mod.py:65) |
-| `torrents_added`(:815, 逐种子) | 逐新增种子管线: 维护打标 / tracker 限速 / 建任务 / 归组 / 集数标签, 各模块按装配序认领 | maintenance / tracker / rules / grouping(maintenance_mod.py:81 · tracker_mod.py:41 · rules_mod.py:66 · grouping_mod.py:68) |
-| `removed_scan`(:822, 仅 removed 非空) | 组内缺文件扫描(剩余种子可能文件丢失, 不等下一轮) | GroupingModule(grouping_mod.py:69) |
-| `post`(:826, 每轮) | 保存路径变化重归组 + 下载冲突检查 | GroupingModule(grouping_mod.py:70) |
+| `torrents_added`(:815, 逐种子) | 逐新增种子管线: 维护打标 / tracker 限速 / 建任务 / 归组 / 集数标签, 各模块按装配序认领 | maintenance / tracker / rules / grouping(maintenance_mod.py:81 · tracker_mod.py:41 · rules_mod.py:66 · grouping_mod.py:97) |
+| `removed_scan`(:822, 仅 removed 非空) | 组内缺文件扫描(剩余种子可能文件丢失, 不等下一轮) | GroupingModule(grouping_mod.py:102) |
+| `post`(:826, 每轮) | 保存路径变化重归组 + 跨组文件交叉检测(独立开关 `grouping.cross_group_conflict_check` 默认关; 纯内存零触盘, plan 26-10-04-0107) + 下载冲突检查 | GroupingModule(grouping_mod.py:107) |
 
 两个非 `_refresh_torrents` 的相位: `queue_rebuilt` —— L2 重建队列后请求各模块按当前配置重注册全局任务(已注册的幂等跳过 `TaskQueue.has_named`; 内核 `_create_global_tasks` 只剩兼容转发, `qbmanager.py:692-701`, 认领 maintenance_mod.py:80 / speed_curve_mod.py:104); `rebuild_runtime` —— L2 结构重建 + 未认领段兜底重建, 收进 RulesModule(rules_mod.py:67)。
 

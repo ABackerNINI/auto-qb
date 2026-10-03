@@ -19,7 +19,7 @@
 | docs | 1 |
 | test | 1 |
 | refactor | 4 |
-| feat | 17 |
+| feat | 16 |
 | chore | 3 |
 | question | 4 |
 
@@ -60,7 +60,6 @@
 - [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做
 - [docs] [插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免](26-09-28-1946-docs-config-plugin-spec-docs.html) — conditions/actions 插件名之下的 spec 键在 keys.md 与 rule-system/conditions-and-actions.md 均无逐键覆盖, test_config_key_surface 出处检查对该层豁免(权威单点=schema 插件表)
 - [feat] [重新设计单种周期上传/下载量统计 (upload_size 四条件 + begin_round 底座已移除)](26-09-27-1248-feat-stats-redesign-torrent-traffic.html) — upload_size/today/week/month 四条件与 begin_round/upload_delta/upload_snapshots 统计底座已随计划 26-09-27-1232 暂时移除; 待重新设计: 补下载量口径或改 global_* 全局口径
-- [feat] [跨组文件交叉紧急处置: 防止新种子覆盖已下载/已完成文件](26-09-22-2221-feat-cross-group-file-conflict.html) — 不同组之间出现文件交叉(如同名/同路径文件已被其他组下载完成)时需要紧急处置, 防止新种子下载覆盖已有数据
 - [bug] [设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示](26-09-22-2002-bug-webui-config-health-warning.html) — 首页警示条由『已配置且 schema 带 risk 文案』驱动, 恒亮、静态、与配置健康无关; 且 load_config 对 schema 外键静默忽略, 版本升级后配置项失效无任何提示
 - [chore] [CI 仅 ubuntu-latest, 主力平台 Windows 不在矩阵](26-09-21-1408-chore-ci-no-windows-runner.html) — pitfalls 已载平台差异史; 托盘/注册表自启/WinRT 通知等 Windows 专属路径只有手动跑测试才被执行
 - [chore] [版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0](26-09-21-1408-chore-version-dual-source.html) — WebUI 顶栏透出与打包元数据已差一个 minor; 建议 pyproject 单源 + 动态读取
@@ -118,6 +117,7 @@
 - [test] [既有: 26-09-26-2345 旧计划缺 doc meta, test_docs_forms 两条守阵红](26-09-27-1153-test-plan-shipflow-v2-missing-meta.html) — plans/26-09-26-2345-plan-commands-shipflow-v2.html 缺 doc-status/doc-topic/doc-added/doc-updated, test_docs_forms::test_artifacts_meta_complete 与 test_status_vocabulary 恒红(HEAD 上复验同红)
 - [bug] [设置页有未保存改动时刷新会丢改动(无任何提醒)](26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html) — 设置页(唯一 Console Hub)编辑配置后按 F5 / 关标签 / 后退会静默丢弃未保存改动 —— 全仓无 beforeunload 提醒, cfg.tree 是内存态, 重载即被服务端树覆盖
 - [test] [FakeConfig 类级共享 grouping 实例被 test_web 实例改写, test_refresh_removed_grouping_disabled 顺序敏感](26-09-22-2311-test-fakeconfig-shared-state-order-pollution.html) — FakeConfig.grouping 为类级共享实例, test_web 两处在实例上改 enabled=True 后残留全局, test_qbmanager 该用例在 test_web 先跑的自定义顺序下必红（全量字母序不触发, 与方案 C 目录迁移无关）
+- [feat] [跨组文件交叉紧急处置: 防止新种子覆盖已下载/已完成文件](26-09-22-2221-feat-cross-group-file-conflict.html) — 不同组之间出现文件交叉(如同名/同路径文件已被其他组下载完成)时需要紧急处置, 防止新种子下载覆盖已有数据
 - [test] [throttle 守阵 elapsed 容差无 sleep 精度余量, 文件级/全量跑偶发假红](26-09-22-2052-test-throttle-test-sleep-tolerance.html) — test_run_loop_throttles_without_stop_event 的 mock 场景断言 elapsed >= 0.05, Windows sleep(50ms) 实测可 46ms(定时器精度), 文件级跑时前序测试改变定时器状态即红; 单跑恒绿
 - [bug] [config 校验缺少取值范围约束, 可配出合法格式但危险的值](26-09-22-1937-bug-config-value-range-validation.html) — validate_config 只拦格式与未知键, 数值/时间类配置取值范围大多无上下限约束, 可能引发运行时问题, 需逐项分析收紧
 - [bug] [WebUI 鉴权面三个低危加固点: SSE token 查询串 / config-public 暴露 / proxy_headers](26-09-21-1408-bug-web-auth-hardening-minors.html) — SSE ticket 化或 fetch 流消费; /api/config/public 限 loopback; uvicorn 显式 proxy_headers=False 防反代 XFF 误判

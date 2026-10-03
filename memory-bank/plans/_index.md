@@ -27,7 +27,6 @@
 ## Open
 
 - [26-10-04-0312] [修改计划 · WEBUI HR 在线核实 — 拉取历史详情表](26-10-04-0312-plan-webui-hr-fetch-history.html) — `webui-hr-fetch-history`
-- [26-10-04-0107] [实施计划 · 跨组文件交叉检测与紧急处置 · auto-qb](26-10-04-0107-plan-cross-group-file-conflict.html) — `cross-group-file-conflict`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`
@@ -36,6 +35,7 @@
 
 ## Done
 
+- [26-10-04-0107] [实施计划 · 跨组文件交叉检测与紧急处置 · auto-qb](26-10-04-0107-plan-cross-group-file-conflict.html) — `cross-group-file-conflict`
 - [26-10-03-1544] [实施计划 · 同步时自动化解生成物索引冲突 · auto-qb](26-10-03-1544-plan-sync-generated-index-autoresolve.html) — `sync-generated-index-autoresolve`
 - [26-10-03-0946] [实施计划 · qB 口径流量图方案C · dat 落盘（全局/单种）+ 分组读侧推算 · auto-qb](26-10-03-0946-plan-qb-traffic-charts-c.html) — `torrent-traffic-stats`
 - [26-10-03-0917] [计划 · WEBUI 种子详情抽屉重设计 方案A (底部停靠属性面板) · 分步实施计划](26-10-03-0917-plan-webui-drawer-redesign.html) — `webui-drawer-redesign`
