@@ -587,6 +587,21 @@ window.AQB_SHORTCUTS = {
         else if (y + h > window.scrollY + vBot - 4) window.scrollTo(0, y + h - vBot + 8);
       });
     },
+    /* 显式打开路径的行让位(2026-10-03 报障: 双击列表最后几行, 停靠面板一开把被点行盖住) ——
+     * W4 下界单点只接了键盘跟随, drawer.js openTorrentDrawer(双击/右键/Enter/Alt+数字 共用
+     * 的显式打开)挂上状态后调本方法一次补让位。面板 DOM 随 open 状态 v-if 挂载, 同帧还量不到
+     * 面板 —— nextTick 后再测; 目标行下缘低于可视下界才 scrollBy, 本来可见就不动(不抢用户的
+     * 滚轮位置); 行不在 DOM(窗口化折叠)静默放弃, 滚动位置宁可不动也不猜(P1-2 退避口径)。 */
+    _kbRevealRow(hash) {
+      this.$nextTick(() => {
+        if (!this.drawer.open) return;
+        const el = document.querySelector(`[data-hash="${CSS.escape(hash)}"]`);
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const vBot = this._kbViewBottom();  // 面板开着时下界 = 面板顶缘(W4 单点); 关闭/窄屏全屏态回落整窗高
+        if (rect.bottom > vBot - 4) window.scrollBy(0, rect.bottom - vBot + 8);
+      });
+    },
     /* ---------------- W2: 展开 / 收起 / 打开 ---------------- */
     _kbParseEpId(id) {
       const parts = String(id).split("|");

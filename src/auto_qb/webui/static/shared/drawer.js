@@ -469,6 +469,7 @@ window.AQB_DRAWER = {
         switching: false,  // FX-29: 打开路径不存在"保留旧数据", 遮罩恒不亮(显式建字段见 vue-reactivity)
       };
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读, 首屏恒默认收起)
+      this._kbRevealRow(hash);   // 显式打开也让位: 停靠面板一开就压住列表底部, 被点行(双击/右键/Enter)要露出来(2026-10-03 报障)
       await this._fetchDrawerDetail();  // 详情恒拉(头部标题/常规页都依赖); 非常规 tab 再补拉对应数据
       if (initialTab !== "general") this._loadDrawerTab(initialTab);
     },

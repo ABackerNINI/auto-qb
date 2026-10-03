@@ -84,6 +84,10 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   _kbViewBottom 行可见下界单点(实测面板顶缘, fixed 全屏态回落, _kbViewportRow 与
   _kbScrollRowIntoView 两处消费且不再裸用 window.innerHeight 当下界); 轮询停靠化收口
   (5s tick 挡非种子视图, 面板不可见即不拉)
+- test_drawer_open_reveal_row: 显式打开路径行让位(2026-10-03 报障: 双击列表末尾几行,
+  停靠面板一开把被点行盖住; W4 下界单点只接了键盘跟随) —— openTorrentDrawer 调
+  _kbRevealRow(hash) 补让位; nextTick 等面板挂载再量, 下界走 _kbViewBottom 单点
+  (不裸用 innerHeight), 行不在 DOM 静默放弃, 不用逐层滚动 API(文件头禁令)
 """
 
 from __future__ import annotations
@@ -847,3 +851,23 @@ def test_drawer_narrow_fullscreen_w4() -> None:
     pb = poll.group(1)
     assert pb.index("!this.drawer.open") < pb.index('this.page !== "groups"'), "轮询 tick 守卫序: 面板开 -> 页面可见"
     assert 'this.viewMode !== "torrents"' in pb, "轮询 tick 必须挡非种子视图(面板 DOM 随视图 v-if, 不可见即不拉)"
+
+
+def test_drawer_open_reveal_row() -> None:
+    """显式打开路径行让位(2026-10-03 报障: 双击列表末尾几行, 停靠面板一开把被点行盖住) ——
+    W4 下界单点只接了键盘跟随, 显式打开 openTorrentDrawer 必须补一次被点行让位"""
+    drawer_js = _read("drawer.js")
+    open_fn = re.search(r"async openTorrentDrawer\(hash\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert open_fn, "drawer.js 找不到 openTorrentDrawer"
+    assert "this._kbRevealRow(hash)" in open_fn.group(1), ("显式打开必须调 _kbRevealRow 让位(停靠面板一开就压住列表底部, 双击末尾几行被挡)")
+    eng = _read("shortcuts.js")
+    rv = re.search(r"_kbRevealRow\(hash\) \{(.*?)\n    \},", eng, re.S)
+    assert rv, "shortcuts.js 缺 _kbRevealRow(显式打开路径的行让位单点)"
+    rb = rv.group(1)
+    assert "$nextTick" in rb, "面板 DOM 随 open v-if 挂载, 必须等 nextTick 再量几何(同帧量不到面板)"
+    assert "this._kbViewBottom()" in rb, "让位下界必须走 _kbViewBottom 单点(dock-panel 坑档: 不许现写 innerHeight)"
+    assert rb.count("window.innerHeight") == 0, "_kbRevealRow 不得裸用 window.innerHeight 当下界"
+    assert "data-hash" in rb and "CSS.escape" in rb, "目标行按 data-hash 定位且转义(与滚动跟随同源)"
+    assert "scrollBy" in rb, "让位走 getBoundingClientRect + scrollBy 差值(与 _kbScrollRowIntoView 同口径)"
+    assert "scrollIntoView" not in rb, "_kbRevealRow 不得用逐层滚动 API(shortcuts.js 文件头禁令)"
+    assert "if (!el) return;" in rb, "行不在 DOM(窗口化折叠)必须静默放弃, 滚动位置宁可不动也不猜"
