@@ -1,7 +1,7 @@
 # 已实现 · WEB UI 历史轮次(外迁流水)
 
-> 摘要: implemented-webui.md 超 cap 后外迁的早期长条目(2026-09-15 三条 + 2026-09-17 第 9/10/11 轮修复 + 2026-09-18/19 四条) —— 冷库流水; implemented-webui.md 再超 cap 时最老条目续迁至此, 新条目仍回 implemented-webui.md。
-> 触发: 第九轮, 第十轮, 第十一轮, FX-01, R10-16, 历史流水, 外迁
+> 摘要: implemented-webui.md 超 cap 后外迁的早期长条目(2026-09-15 三条 + 2026-09-17 第 9/10/11 轮修复 + 2026-09-18/19 四条 + 2026-09-24/25 五条 + 2026-09-26 四条 + **2026-10-03 续迁 2026-09-26~10-02 十六条**) —— 冷库流水; implemented-webui.md 再超 cap 时最老条目续迁至此, 新条目仍回 implemented-webui.md。
+> 触发: 第九轮, 第十轮, 第十一轮, FX-01, R10-16, 历史流水, 外迁, 键盘快捷键, 前端文件拆分, 搜索语法, 设置页分组合并
 
 - WEB UI 第十一轮修复 (2026-09-17): 7 项 (`想法.md` 待办)。①图标语义色补齐: 导航「追剧」(新挂 `ico-tv`)与「添加种子」(新挂 `ico-add`)、状态栏「空间剩余」(`.ico-disk` 原继承 `--fg-dim` 观感无色 -> indigo)与两处「限制速度」仪表盘(-> `--limit-hit`, "不限速"只弱化数值); ②状态栏历史入口**去文字只留图标**(图标改取 today-up 族色, 否则只剩灰点); ③**明细表接入点击排序** —— 明细与三视图正交, 故新增独立 `detailSortKey/detailSortDir` + `setSort(key,'detail')` scope 分支(表头右键排序项同源), 明细列模型补 `sortable` 标记到 14 列(Hash 除外), 行序由 `sortedMembers(list)` 派生(空键=后端原序, 标签为数组故先 join 再比); ④**保存路径列迁移**: 辅种表新增(组级取首位成员值 = 路径筛选器同口径), 明细表删除(组内成员路径本就一致); ⑤**横向滚动条(三项根因, 两轮才定位)**: `.group-head` 脱离滚动容器 => 表头比 `.content` 宽时把整页撑宽(实测表头写 3000px, `documentElement.scrollWidth` 1872→3012) -> `.content { overflow-x: clip }`(clip 不建滚动容器, sticky 与表头 transform 跟随不受影响); `.detail` 自带 `overflow-x: auto` => 与外层各滚各的 -> 去掉内层滚动; **"列没溢出却常驻横滚条"的真因是单元格自动最小尺寸**(表格层 `white-space: nowrap` + 单元格 `min-width: auto` = 文本全长, 13 列累加把行 `min-content` 顶到容器之上) -> 行内单元格统一 `min-width: 0`, 行/表头保持 `fit-content`(**底色跟内容**); 中途曾用"行定宽 100%"治假滚动条, 但那会让**溢出段没有行底色/边框**(用户实测反馈"滚动后右边无背景条"), 已回退。 ⑥**标签/分类芯片改状态色**(原"分类恒蓝/标签恒灰"无语义且蓝色与"下载中"撞色), 跟随所在行状态语义色, HR 标签用 `:not()` 排除保住橙/青语义。基线 999 passed(**不变**, 前端改动由静态守阵 + 双 UI 浏览器冒烟覆盖), 档案 [tasks/TASK013](../tasks/26-09-17-webui-fix-round11.md)
 - WEB UI 第十轮修复 (2026-09-17): 16 项 (R10-01~R10-16) 按成因归 7 类实施, 计划 [memory-bank/plans/26-09-17-0901-webui-fix-plan-round10.html](../plans/26-09-17-0901-webui-fix-plan-round10.html)。三条硬 bug: ①**状态栏限速读了不存在的字段名**(前端读 `server_state.dl_limit/up_limit`, qB 真键是 `dl_rate_limit/up_rate_limit`; 该字段还兼作速度染色分母 ⇒ 色阶从未生效) -> `speedLimitBytes` 取数单点, 状态栏与染色分母同源; ②**星图点一次限速开两个窗口**(`.speed-pop` 与 SPD-04 旧模态共用 `speedOpen`, 第九轮漏删星图) -> 删旧模态 + 静态断言; ③**本机免鉴权仍被弹回密钥页**(前端把"有身份"绑死"密钥串非空") -> `authMode`/`authOk` 单点判据 + 不带空 Bearer。结构性: **列对齐进列模型**(`align` + `colAlignCss` 按可见列生成 `:nth-child` 规则注入 `<head>`, `data-table` 标记表头与值, 一处改两套生效; `:where()` 压特异性以保留既有"0 值居中")与**列偏好不再重置**(跨版本迁移 `LEGACY_COLS_KEYS` + 不再用升版本应对列集变更 + 写盘容错; origin 隔离作为限制入 pitfalls)。服务端新增能力: `/api/fs/dirs`(只列目录, 允许根白名单 + realpath 边界 + 符号链接逃逸防护) 与 `/api/fs/mkdir`(单层名字 + 幂等 + 同名文件 409), `open-path` 对单文件种子改为**定位选中**; 前端新增服务端目录浏览器对话框替代自绘下拉。其余: 状态栏底色专用令牌 `--statusbar-bg` + 去文字标签 + 历史入口并入今日流量组、选中态令牌族 `--sel-*`(五主题靖蓝族, 与做种绿分家)、文本列(站数/保存路径/hash/tracker)加入行状态色、弹窗尺寸令牌族(窄/标准/表单/宽/超宽; 添加窗口两 UI 统一 860px)、值行"单行省略 + title + 复制按钮"、菜单「高级能力」→「更多操作」、抽屉目录/文件分色、删除详情行由 `_deleteDetails` 由目标集合统一派生(四入口同构); 基线 996 → **999 passed**(+open_path 平台用例 + `/api/fs/dirs` + `/api/fs/mkdir`); 双 UI 浏览器冒烟逐项实测通过(假 qB + 临时 data_dir, 完事清理)
@@ -30,9 +30,11 @@
 - WEB UI 设置页**控件两处打磨**(2026-09-25, 已入库 `c4fcc0c`; 成因 / 逐项实测数字见切片 `26-09-25-1743-webui-settings-control-polish`): 均收口在 `shared/console_hub.css` —— ①规则引用下拉被 `.hb-ct .hb-select{flex:0 1 250px}` 的**后代**选择器串进 column 方向 `.hb-list`(flex-basis 变高度, 实测 460×250 竖条)⇒ 加 `.hb-list > .hb-select{flex:none}`; ②启用开关整族收 0.86(44×24/18/20 → 38×21/15/17), 静息底由 `--tone-line`(与选中态 accent 同色相, 只能靠滑块位置分辨)改中性 `--border-strong`。
 - WEB UI **设置页合一: 移除经典设置页 + HR 站点状态并入「HR 在线核实」** (2026-09-25, 已入库 `7fcdc9c`; 明细见 activeContext 切片 `26-09-25-0845-webui-settings-unify`): ①经典页整块删除(`hub.mode`/`hubSetMode`/localStorage 切换一并移除, `page==='settings'` 只渲染 hub)。②「HR 站点状态」不再单列卡片: 只读状态块并入「HR 在线核实」分区页尾, 两套 UI 成对改。③顺带清掉只被旧页引用的死代码(JS 16 成员含级联 + 两主题 ce-* 旧页选择器与媒体查询残留; 既有死代码按范围守恒不动)。④机检: HR 字段锚点四入口 → 两入口(`hub.view === 'hr_check'` 唯一性)。**验证**: 全量 1597 passed + 1 skipped(与新基线一致; 曾恒红的 2 条 GBK 假红已随远端 a760da0 修复) + 双主题真浏览器冒烟(真实 create_app + 假 manager): 卡片/分区/搜索直达/运行日志/HR 状态块(含熔断·过期异常态)渲染正常, `main.ce-page` 恰 1 个、无「经典」按钮。
 
-- WEB UI **做种时长悬停弹窗(T3 进度仪表)**(2026-09-26): 原生 `title` 一大段文字换悬停弹窗, T3 定稿零冗余落码(档案 `26-09-26-webui-hr-popup`)。`shared/hr.js` 单点: `hrPopData` 数据组装(只消费后端 hr_safety*/hr_site_* 字段零重算; 无时长要求→盾徽记; 考察中→还需 X; 本地兜底→已超出/还需 X; 终态未达标→考核期已过无站点轨; 数值条仅站点侧值; 终态「已结束」章) + hrPop* 调度(enter 120ms / leave 160ms / 移入弹窗不隐藏 / ESC·滚动·缩放即关) + fixed 定位(上翻下翻/视口夹取); `hrDurTitle` 删除。6 处绑定换 mouseenter/mouseleave; 弹窗单例 `<teleport to="body">`(prism 五主题令牌自动继承免改); 两套 CSS 成对(z-index 140); 守阵第②③段就地改写。全量 **1665 passed + 1 skipped**(TOTAL 92%); 冒烟 8 档位内容矩阵 + 交互 + 五主题跟随 0 报错; 档案 [tasks/26-09-26-webui-hr-popup](../tasks/26-09-26-webui-hr-popup.md); **随本提交入库**
+- WEB UI **做种时长悬停弹窗(T3 进度仪表)**(2026-09-26): 原生 `title` 一大段文字换悬停弹窗, T3 定稿零冗余落码(档案 `26-09-26-webui-hr-popup`)。`shared/hr.js` 单点: `hrPopData` 数据组装(只消费后端 hr_safety*/hr_site_* 字段零重算; 无时长要求→盾徽记; 考察中→还需 X; 本地兜底→已超出/还需 X; 终态未达标→考核期已过无站点轨; 数值条仅站点侧值; 终态「已结束」章) + hrPop* 调度(enter 120ms / leave 160ms / 移入弹窗不隐藏 / ESC·滚动·缩放即关) + fixed 定位(上翻下翻/视口夹取); `hrDurTitle` 删除。6 处绑定换 mouseenter/mouseleave; 弹窗单例 `<teleport to="body">`(prism 五主题令牌自动继承免改); 两套 CSS 成对(z-index 140); 守阵第②③段就地改写。全量 **1665 passed + 1 skipped**(TOTAL 92%); 冒烟 8 档位内容矩阵 + 交互 + 五主题跟随 0 报错; 档案 [tasks/26-09-26-webui-hr-popup](../tasks/26-09-26-webui-hr-popup.md); **随本提交入库**
 
-- WEB UI **一键导入缺失站点**(2026-09-26): 对齐 CLI `--export-yaml --only-missing` —— 设置页「站点」pill 行「⤓ 导入缺失站点」→ `GET /api/sites/missing`(新路由模块 `routes/sites.py`, 只读)复用 `core/exporter.py` 同一套构件(域名双向包含匹配 + 默认条目: 自动标签 / `0KiB/s` 占位限速 / hr 示例值)扫描 qB 全部种子找未配置站点 → 确认框列出站点名(域名) → **填入编辑器待审**(不自动保存, 保守默认: 示例值不未经审阅生效) → 既有「保存」走校验/备份/热重载。`exporter.py` 提取 `gen_tracker_name`(既有占用/批内同名 → `_N` 后缀, taken 就地登记)供 CLI 与 webui 共用; 前端合并跳过同名键防待生效热重载竞态; 断连 503 / 扫描失败 502; atlas / prism 按钮成对。+7 测试, 全量 **1623 passed + 1 skipped**(TOTAL 92%), 金清单 61→62; 档案 [tasks/26-09-26-webui-sites-import](../tasks/26-09-26-webui-sites-import.md); **已入库 `e3fb35d`**(合流远端 9 笔后经合并提交 `8bacfae` 推送, 合并树重测 1636 collected / TOTAL 92%; 真机走查待真实 qB)
+
+- WEB UI **一键导入缺失站点**(2026-09-26): 对齐 CLI `--export-yaml --only-missing` —— 设置页「站点」pill 行「⤓ 导入缺失站点」→ `GET /api/sites/missing`(新路由模块 `routes/sites.py`, 只读)复用 `core/exporter.py` 同一套构件(域名双向包含匹配 + 默认条目: 自动标签 / `0KiB/s` 占位限速 / hr 示例值)扫描 qB 全部种子找未配置站点 → 确认框列出站点名(域名) → **填入编辑器待审**(不自动保存, 保守默认: 示例值不未经审阅生效) → 既有「保存」走校验/备份/热重载。`exporter.py` 提取 `gen_tracker_name`(既有占用/批内同名 → `_N` 后缀, taken 就地登记)供 CLI 与 webui 共用; 前端合并跳过同名键防待生效热重载竞态; 断连 503 / 扫描失败 502; atlas / prism 按钮成对。+7 测试, 全量 **1623 passed + 1 skipped**(TOTAL 92%), 金清单 61→62; 档案 [tasks/26-09-26-webui-sites-import](../tasks/26-09-26-webui-sites-import.md); **已入库 `e3fb35d`**(合流远端 9 笔后经合并提交 `8bacfae` 推送, 合并树重测 1636 collected / TOTAL 92%; 真机走查待真实 qB)
+
 
 - WEB UI **做种时长悬停弹窗(T3 进度仪表)**(2026-09-26): 原生 `title` 一大段文字换悬停弹窗, T3 定稿零冗余落码(档案 `26-09-26-webui-hr-popup`)。`shared/hr.js` 单点: `hrPopData` 数据组装(只消费后端 hr_safety*/hr_site_* 字段零重算; 无时长要求→盾徽记; 考察中→还需 X; 本地兜底→已超出/还需 X; 终态未达标→考核期已过无站点轨; 数值条仅站点侧值; 终态「已结束」章) + hrPop* 调度(enter 120ms / leave 160ms / 移入弹窗不隐藏 / ESC·滚动·缩放即关) + fixed 定位(上翻下翻/视口夹取); `hrDurTitle` 删除。6 处绑定换 mouseenter/mouseleave; 弹窗单例 `<teleport to="body">`(prism 五主题令牌自动继承免改); 两套 CSS 成对(z-index 140); 守阵第②③段就地改写。全量 **1665 passed + 1 skipped**(TOTAL 92%); 冒烟 8 档位内容矩阵 + 交互 + 五主题跟随 0 报错; 档案 [tasks/26-09-26-webui-hr-popup](../tasks/26-09-26-webui-hr-popup.md); **随本提交入库**
 
@@ -45,3 +47,106 @@
 - WEB UI **搜索负词种子级定案: 任一候选行含负词 ⇒ 整种子排除**(2026-09-26/27): 两轮实机报障收口 —— ①「cat and -11」: E11 单文件的种子名行含 "11" 被行级作废, 却被不含 "11" 的**保存路径行**("D:/TV/The.Cat.and.the.Dragon.S01", "cat and" 齐)整颗捞回; ②「-mteam」站点行负词拦不住名字行正词命中。拍板(27): 负词优先级高于正词, 按**单个种子**统一计算 —— 任一候选行(名字/站点/分类/路径/标签/文件行, 季包文件统一计算)含负词 ⇒ 整颗排除; 多种子集合(辅种组/追剧)**每个种子单独计算**, 组/剧不连带。`search_torrents` 收敛为单轮逐种子判定(building 窗口内文件行负词未生效, 就位后收敛)。守阵 `test_search_torrents_negative_torrent_veto`(名字/路径/站点行否决 + 文件轮同受约束) + negative_term/facet_rows 改种子级断言(季包统一计算/标签行否决); 全量 **1685 passed + 1 skipped / 0 failed**(TOTAL 92%, views.py 98%, 基线 26-09-27-0045); 坑回写 [pitfalls/web-ui/search-views.md](../pitfalls/web-ui/search-views.md); **未提交**
 
 - WEB UI **搜索匹配收敛服务端单点: 三页(辅种/种子/追剧)统一消费 searchHits**(2026-09-26 晚): 治"同一语义修三遍" —— 统一前查询语法有三份实现(服务端 `_parse_query`+行级匹配 / 种子页 filters.js 客户端行过滤 / 追剧页剧名整句 includes), 恶女10·季包"cat 12"两轮报障各修一处即再漏别处。单点 = `views.py::search_torrents` 行级匹配, 候选行从「名字/文件」扩到「+站点/分类/保存路径/每标签」(只读 store 即时, 与名字行同轮; 文件行仍走索引 building 渐进) —— 顺带治了"搜站点名/标签在分组·追剧页搜不到"的跨页不一致; 剧名不单设候选行(展示名 = `tvshows.parse_release` 从成员种子名解析的标题, 名字行天然覆盖)。前端删第二/第三实现: filters.js 四函数(`_searchNorm`/`_parseSearchQuery`/`_torrentTextMatch`/`_torrentSearchPass`)与 `filteredTorrents` 改走 `hits.has(hash)`(输入新词到响应返回间沿用上一查询命中集, 与组视图同节奏)、shows.js 剧名 includes 删除(剧行高亮 = 全部集保留代理)、app.js `searchHitsQ` 陈旧守卫随之删除。守阵 `test_frontend_search_syntax_wiring` 改写为**反漂移**(前端复活任何"函数名+括号"匹配实现即红; node 对账脚本随客户端解析器一起删除), 新增 `test_search_torrents_facet_rows`(站点/分类/标签/路径行 + by 定位 + 行级负词不整种子误杀)。全量 **1684 passed + 1 skipped / 0 failed**(TOTAL 91%, 实测 16.4s); 坑回写 [pitfalls/web-ui/search-views.md](../pitfalls/web-ui/search-views.md)(三处实现收敛单点条目); **未提交**
+
+---
+
+## 2026-10-03 cap 轮转外迁 (自 implemented-webui.md, 原文逐字未改)
+
+- WEB UI **搜索查询语法强化: 词 AND + `-排除` + `"短语"`(行级语义)**(2026-09-26): 修复「恶女 10」搜不到单文件发布物(旧口径整句归一后连续子串, 两词不连续必不中)+ 新增排除能力。后端 `views.py` 新增 `_parse_query` 纯函数(websearch 宽容词法: 空格分词隐式 AND / 词首 `-` 排除 / `"…"` 短语连续子串 / 孤立 `-`·未闭合引号·纯标点宽容降级, 词法判定在原始查询上进行与归一互不干扰), `search_torrents` 改**行级匹配** —— 候选行 = 归一种子名或单个归一文件名, 行通过 ⇔ 含全部正词且无负词, 种子命中 ⇔ 任一行通过(负词按行作废, 合集包非 DV 行不误杀; 跨行 AND 不命中是与种子级的分界, 26-09-26 拍板); 仅负词查询返回空 + `negative_only` 标记(与 Google 一致, 无正判据无从起搜)。响应加 `negative_only` 键(向后兼容)。前端: 两主题 placeholder 提示语法 + 5 处空态「只有排除词」提示(app.js `searchNegativeOnly` 状态单点)。**真机回访双修(同日)**: ①种子页 `filteredTorrents` 客户端过滤同步升级同语法 —— filters.js `_parseSearchQuery`/`_searchNorm`/`_torrentTextMatch` 单点(字段行级语义: 名称/站点/分类/路径/每标签各为一候选行; 仅负词返回空), hr.js 旧整句版删除, 守阵 test_frontend_search_syntax_wiring 以 vm 沙箱与 views.py **行为级对账**(当场抓到 `_` 折叠漂移; `\W` 会折叠掉 CJK 一并钉死); ②清除钮 `@mousedown.prevent` 两主题成对(focus 宽度过渡把按钮移出光标, 焦点态 click 落空)。+7 测试累计, 全量 **1680 passed + 1 skipped**(TOTAL 91%, 基线 26-09-26-2121); 调研与设计定稿见报告 [reports/26-09-26-1918-report-webui-search-query-syntax.html](../reports/26-09-26-1918-report-webui-search-query-syntax.html); 档案 [tasks/26-09-26-webui-search-query-syntax](../tasks/26-09-26-webui-search-query-syntax.md)
+
+- WEB UI **设置页分组合并: 日志/界面(WebUI)/通知/运行日志 并入「常规」**(2026-09-26): 设置首页 10 张卡 → 6 张(常规/自动化/HR 在线核实/限速/站点/规则)。单点改动在 schema `groups.py`(log/web/notify 三段整段搬进 basic 组, 三个独立分组删除), 两套 UI 首页卡/搜索/富说明经 schema 派生自动跟随; config_hub.js 删 `__logs` 特制卡与分支(运行日志块移入常规分区页尾, 打开分区拉一次不轮询; 存量浏览器偏好 `__logs` 由 hubRestore 映射进 basic; web.host 暴露警示 LED 挪到常规卡; HUB_HELP 交叉引用「界面 →/通知 →」改「常规 →」); atlas/prism 模板成对改(`__logs` v-else-if 分支删除, v-if 链保持合法); web 段 label「WEB UI」→「WebUI」; `validate_config` 键集合不动(test_config_schema 守卫对齐)。守阵 test_web::test_config_schema_endpoint 同步新分组表 + 钉 log/web/notify 并入 basic 尾部。全量 **1665 passed + 1 skipped**(TOTAL 92%, 合并工作树重测, 含并行入库的 versioning/button 测试); 档案 [tasks/26-09-26-webui-settings-group-merge](../tasks/26-09-26-webui-settings-group-merge.md); **未提交**
+
+- WEB UI **种子级标签/分类即时编辑**(2026-09-26): 补上"对种子加/删标签、设置分类"的用户能力 —— `/api/torrents/bulk` 动作表扩 `add_tags`/`remove_tags`/`set_category`(载荷加 `tags`/`category` 键, **提供才透传**, 空串分类=qB"清除分类"语义; `_BULK_ACTIONS` lambda 统一 4 参带 `extra`, 既有 4 动作忽略它; `bulk_torrents` 本就在 RESYNC/延迟回执两名单, 新动作零白名单改动自动继承补刷新与聚合回执), QbApi 侧三个方法早已就绪且同步 store 快照。前端「标签/分类」**即时编辑对话框**(shared/dialogs.js): 目标集合打开时锁定(批量 = `_bulkTargets()` 整个选中集合 / 单种子 = menu.hash), 全部标签以 `.opt-pill` 切换胶囊展示(亮 = 选中种子**共同拥有**, 点击即投递一条 bulk 命令), 分类 combobox 现有分类选择 + 自由输入(新分类/新标签**先建后设**, create 失败不阻断, 主循环 FIFO 保证顺序); 共同标签取交集但**不过滤站点同名标签**(那条是组级展示口径, 编辑场景要能移除它们)。三处入口双 UI 成对: 批量浮条按钮 / 批量右键菜单(CTX-03 链路 ctxMeta) / 单种子右键菜单(一级, 与限速/移动/重命名同级); `.opt-pill` 组件 atlas 首次引入(照 prism 同源搬入)。+3 测试, 全量 **1638 passed + 1 skipped**(TOTAL 92%); 双 UI 浏览器冒烟通过(harness 桩); 档案 [tasks/26-09-26-webui-torrent-meta-edit](../tasks/26-09-26-webui-torrent-meta-edit.md); **未提交**
+
+- WEB UI **前端大文件拆分 + 单一语义模板收敛 + 内核续拆**(2026-09-27, plans/26-09-26-2233 五波全落地): ①模板: 两套 index.html(2555/2613 行)→ shell(166/177 行)+`shared/tpl/*.html` 14 分片**单一语义源** + `shared/boot.js` 按清单 fetch 注入(失败显式占位+停止); 双模板副本消灭, 模板级 UI 差异唯一入口 = `v-if="ui === 'atlas'|'prism'"` 条件块 + `ui-diff:` 注释(守阵收集为活差异清单, 现存 1 条: 棱镜主题切换器) ②样式: atlas style.css 1720 → 令牌+基线留根 200 + `css/{components,views,dialogs}.css`(全 ≤700, 连续字节切片级联序不变) ③内核: app.js 1281→411(常量单点+接线), `state.js`(data/computed/watch)/`lifecycle.js`(生命周期)经 `...window.X` 展开进**根组件选项**(不许 app.mixin —— 波及 hub-field 实例), `auth.js`/`polling.js`/`view.js` 走全局 mixin 方法域 ④守阵: 13 处直读改聚合读法 + 新增分片接线/差异口注册表/双 shell 清单一致性/整包成员查找 + JS 接线形态④。等价证明 = 切割聚合字节自验 + 真 API stub 冒烟改造前后渲染 DOM 双 UI 逐字节一致; 全量 **1688 passed + 1 skipped**(TOTAL 91%, 基线 [testing/baselines/26-09-27-1305-webui-kernel-split](../testing/baselines/26-09-27-1305-webui-kernel-split.md)); 计划 [plans/26-09-26-2233](../plans/26-09-26-2233-plan-webui-frontend-file-split.html); 档案 [tasks/26-09-26-webui-frontend-file-split](../tasks/26-09-26-webui-frontend-file-split.md); **已入库 `6fd1331`(三层拆分)/`aeca1fb`(收敛), 内核拆分随本批提交入库**
+
+- WEB UI **自绘悬浮提示 .aq-tip**(2026-09-28): 原生 title 全局替换为自绘单例 —— `ui_feedback.js` 纯 DOM 委托(摘 title/350ms 延迟弹/收起还原, hasAttribute 探测保 Vue :title 绑定) + `console_hub.css` 发光按钮配方(三皮肤令牌自适应)。机制与配方**事实单点 = conventions/webui.md「WEB UI 悬浮提示 .aq-tip」节**。test.full 1820/3(基线 26-09-28-0744); **已入库 `c64b836f`**(切片 26-09-28-0730 蒸馏至此删除)
+
+- WEB UI **设置页分类回归修复: 「常规/日志」成块 + 运行日志默认折叠**(2026-09-28): 治 26-09-26 分组合并(1905d6d)的回归 —— log/web/notify 三段因 `open=True` 被 cfgFlatten 平铺成无标题同级字段, 全部落进「常规/常规」。修复: 三段去 `open=True` 恢复成块展示(hubBlocks 自动渲染带标题且**永远展开**的块, 分类显性与 2026-09-15 平铺诉求同时满足), label 恢复合并前分组名 日志/WebUI/通知 + 补回旧分组一行 help; 运行日志块默认折叠、首次展开才拉 /api/log(`hubLogsToggle`/`hubLogsLoad`, 折叠态动等级/行数/刷新自动展开再拉), hubGo 去预取; hubHits/hubFieldCount 改递归进块(块内字段不再是展开顶层项); `open` 字段保留为通用能力(现仅 hr_check optional 段在用)。守阵 `test_config_schema_endpoint` 钉尾三段 kind=object 且不声明 open(防 open 平铺回归)。**三套 UI(atlas/prism/console)零成对改**: 设置页同吃 shared/tpl + config_hub.js, console 纯 CSS 换肤, manifest 一致性守阵钉住。全量 **1815 passed + 3 skipped**(TOTAL 91.39%, 基线 [testing/baselines/26-09-28-0212-webui-settings-categorize-logs](../testing/baselines/26-09-28-0212-webui-settings-categorize-logs.md)); 档案 [tasks/26-09-28-webui-settings-categorize-logs](../tasks/26-09-28-webui-settings-categorize-logs.md); **随本提交入库**
+
+- WEB UI **搜索框语法帮助入口: 框内幽灵「?」+ 锚定浮卡(方案A)**(2026-09-28): 3 版交互式提案(计划 26-09-28-0201)用户拍板 A + 占位符简化为「搜索种子或文件名...」。实施: `topbar.html` 「?」恒显于清空钮左侧 + 浮卡(词 AND/`-词`/`"短语"`/`-"短语"` 四行 + 容错提示, 示例行点击回填即搜 `doSearch` + 焦点还输入框); 挂件样式入三 UI 共用层 `shared/console_hub.css`(mono 用 `var(--font-mono, 内联栈)` longhand —— 星图无该令牌, shorthand 遇未定义令牌整条失效), 皮肤差异只留 atlas pill 钮圆与 input 右内边距 52px; `searchHelpOpen` 状态 + `toggleSearchHelp`/`searchHelpFill`(view.js), 收起 = 点空白/Esc(lifecycle 既有链)+ goView/openSettings 导航收起; 守阵 `test_frontend_search_help_wiring`。实机 dev.harness+Playwright 三套 UI 全交互通过(示例 `"web dl"` 真实后端命中 35/60); 全量 **1815 passed + 3 skipped**(TOTAL 91%, 基线 26-09-28-0250); 档案 [tasks/26-09-26-webui-search-query-syntax](../tasks/26-09-26-webui-search-query-syntax.md); **未提交**
+
+- WEB UI **做种时长列/弹窗的「要求」显示修复**(2026-09-29): 用户实报未核/在线行不显示要求时间、只剩孤立的「未核」芯片。定位为两处**渲染门**(纯前端, 判定与字段未动): ①三份模板 `.req` 只在 `hr_triggered` 为真时渲染 ⇒ 未触发行连配置事实(要求时长)一起被藏; ②`hr.js` 弹窗把 `unverified` 与真放行/免罪同类收起成「无时长要求」徽记(而它 `hr_req_time=115200s` 确有要求)。修复: 要求门只认「已做种非空 + `hr_req_time`」; 收起条件只留 `site_released`/`site_exempt`(义务已了), 未核实改画本地轨。**现象属「上游修好后才被点亮」** —— 前几轮修好 HR 视图发布后 `hr_safety` 从空变有值, 此前不可达的芯片/弹窗分支第一次上线(教训入 [pitfalls/web-ui/contract-api.md](../pitfalls/web-ui/contract-api.md))。守阵 `test_frontend_hr_safety_wiring` 增两条断言(回退即红)。全量 **1747 passed + 4 skipped**(TOTAL 91%, 基线 [testing/baselines/26-09-29-1920-webui-hr-duration-req](../testing/baselines/26-09-29-1920-webui-hr-duration-req.md)); 档案 [tasks/26-09-29-webui-hr-duration-req](../tasks/26-09-29-webui-hr-duration-req.md); **未提交**
+
+- WEB UI **标签列全量展开, 移除「+1/+2」折叠**(2026-09-30): 用户要求标签不再折叠。4 处模板(种子明细 / 组级+组内成员 / 追剧集行)去 `tagSlice(...,3)`/`slice(0,3)` 截断与 `+N` 徽标, 改 `v-for` 全量渲染; 三皮肤 `.g-tags, .m-tags` 加 `flex-wrap: wrap`(行高逐行实测的虚拟滚动承接变高行), 清 `.tag-more` 死样式; `decorate.js` 删 `tagSlice()`。单个超长标签仍 ellipsis(完整值在悬浮)。纯前端改动, 无 Python 源改动; 档案 [tasks/26-09-30-webui-tags-unfold](../tasks/26-09-30-webui-tags-unfold.md); **随本提交入库**
+
+- WEB UI **键盘快捷键全量落地(可自定义)**(2026-09-30, plans/26-09-28-0354 W1-W7 两波): ①引擎 `shared/shortcuts.js` 注册表单一事实源 55 条(e.code+固定修饰序归一化 / IME isComposing+229 双保险 / 输入元素+模态层屏蔽 / repeat+纯修饰键+defaultPrevented 前置 / 浏览器保留键黑名单 Ctrl+W/T/N/Q 族; 适配器 `window.AQB_KEYS` 单一存储出口) ②光标模型 kbCursor 按身份不按下标(滚动进视口走 getBoundingClientRect 差值+`_rowPre` 前缀和, **禁 scrollIntoView**; 26-09-30 方案 B 键鼠衔接追加: selection.js 五个点击入口按所在行回写 kbCursor —— 落光标≠选中, 无光标回落改**视口就近行** `_kbViewportRow`, 明细成员行补 kb-cursor 视觉, 守阵 test_click_lands_cursor_and_viewport_fallback) ③`commands._actCore` 统一动作出口(act/actTorrent/bulkAct/actEpisode 四入口收敛) ④默认键位 A-I 组(§08 v4 危险档一律二键组合: 删除 Shift+D/重新校验 Shift+Y/强制汇报 Shift+A + 确认框默认「确定」Enter 确认; Delete 键额外删除入口直连 `_deleteFlow` 注册表外; E 组 Shift 族/F 组队列开关/G 组局部作用域 Alt+1-4+设置页 Ctrl+S inputSafe/H 组帮助浮层 Shift+Slash) ⑤作用域五值(global/list/drawer/settings/modal)全量生效, 模态白名单分流 ⑥后端持久化: `routes/keys.py` GET/PUT `/api/keys`(存储 `auto-qb-data/webui-keys.json` 与 web.token 同寻址, 读时兜底链 主文件→.bak→默认表, PUT 结构校验 422, 金清单 +2; 存储定案=后端独立文件, 决策点⑥) ⑦自定义面板: 设置页「快捷键」分区(按下即录录制器捕获段监听/纯修饰键拒收/黑名单拒绑/冲突三选一 交换-覆盖对方置空-取消/单条全部重置/空串=显式禁用/保存失败本地回滚/离开未保存先确认)+ 帮助浮层只读速查。守阵 test_web_shortcuts.py 16 条 + test_web.py keys 后端 5 条; 探针 28 项全过。全量 **1813 passed + 3 skipped**(TOTAL 91%, 基线 [26-09-30-0555 W1-W4](../testing/baselines/26-09-30-0555-webui-keyboard-w1w4.md) / [26-09-30-0702 W5-W7](../testing/baselines/26-09-30-0702-webui-keyboard-w5w7.md)); 档案 [tasks/26-09-28-webui-keyboard-shortcuts](../tasks/26-09-28-webui-keyboard-shortcuts.md); W1-W4 **已入库 `38ffec5`**, W5-W7 **未提交**
+
+- WEB UI **HR 在线核实详情两张表**(2026-10-01/02, 清偿 issue
+  [26-10-01-2137-feat-webui-hr-detail-table](../issues/26-10-01-2137-feat-webui-hr-detail-table.html),
+  计划 [plans/26-10-01-2216](../plans/26-10-01-2216-plan-webui-hr-detail-table.html) 拍板六项全按推荐):
+  ①后端导出单点 `hr/status.py` `EntryDetail`/`entry_details()`(P0+P1 全集, 人话字段后端算好,
+  档位·下载量排序含失踪行)+ 只读端点 `GET /api/hr/sites/{site}/entries`(未启用 400 / 未接入 404 /
+  线程未启动 409; f5ce07bd); ②站点卡片**表① 全量详情表**(打开分区/手动刷新各拉一次不轮询,
+  档位筛选 chips 本地过滤, 「数据截至」时间戳, 「上次核实(放行判定)」独立口径, 单元格不挂原生 title;
+  d3d4d987); ③**表② 排障视图**(站点级 kv 行 `hrsKvRows` 拼行单点 + 各档波次明细, 原生 `<details>`
+  默认收起, 数据全来自 /api/hr/status 零新请求, 展开态不持久化; b2b1e96d); `.hr-detail-table` 等
+  三套 UI CSS 成对。阶段4 契约守阵 `test_frontend_hr_contract_keys_match_backend`(前端消费键 ⊆
+  后端 to_dict 键集)钉两表字段面; 基线数字见 `commands run kb.baseline`;
+  档案 [tasks/26-10-01-webui-hr-detail-table](../tasks/26-10-01-webui-hr-detail-table.md); **随本提交入库**
+
+- WEB UI **设置页只读字段(程序托管/R 级)**(2026-10-01, 清偿 issue
+  [26-09-28-2135-feat-webui-readonly-fields](../issues/26-09-28-2135-feat-webui-readonly-fields.html)):
+  schema_version/data_dir/state_file/fs 段此前渲染为可编辑但保存必然被盖章/回退, 反馈还谎报「需重启才生效」。
+  修法五条: ①`Field` 加 `readonly` 标志 + 四点位打标(fs 段与叶子 path_map 双标, 前端叶子只认自身标)
+  + `readonly_config_paths()`; ②CE_FIELD_BASE 三 computed(readonly/readonlyComplex/readonlySummary),
+  hub-field 只读摘要分支(fs.path_map 渲染「from: … · to: …」映射对, 替换 `[object Object]` text 控件)
+  + 全控件 `:disabled` + 「程序维护」徽标 + settings-detail 块级 section 开关收口; ③cfgSave 反馈口径改
+  「程序托管字段, 仅能在配置文件中修改, 本次未写入」; ④writer `_fallback_readonly_fields` 键面防线
+  (schema_version 豁免 —— 盖章承担其只读, 回退会吞「高于本程序支持」精确错); ⑤守阵 +5(writer 3 /
+  schema 1 / web 静态 1)。真浏览器定向验证徽标/禁用/摘要全符合设计。test.full **1929 passed + 3 skipped / 91%**
+  (基线 [testing/baselines/26-10-01-2250](../testing/baselines/26-10-01-2250-webui-readonly-fields.md));
+  档案 [tasks/26-10-01-webui-readonly-fields](../tasks/26-10-01-webui-readonly-fields.md); **随本提交入库**
+
+- WEB UI **web.token 生成改走 atomic_write**(2026-10-01, 清偿 issue
+  [26-09-21-1347-bug-web-token-non-atomic-write](../issues/26-09-21-1347-bug-web-token-non-atomic-write.html)):
+  ensure_web_token 原用 O_TRUNC 直写, 生成瞬间非优雅终止会留下非空半截 token 被持久化 ⇒ 已存浏览器密钥 401。
+  修法 = 改走 utils.atomic_write 单点(mkstemp 默认 0600, 落盘字节逐字节等价), 读取侧零改动;
+  守阵暂不并入 O_TRUNC 静态扫描(hr/channel.py:104 同族直写未清, 待一并收)。守阵 +3(test_web:
+  生成可读回 / 已有 token 不漂移 / 写一半中断自愈)。**已入库 `5965cc07`**(W2 清偿 1/3)
+
+- WEB UI **HR 排除辅种补悬停弹窗**(2026-10-02): 2026-09-29 做种时长列非文字化清理撤原生 title
+  「已排除」提示后弹窗侧未接盘 —— 命中 HR 排除表(exclude_categories/exclude_tags)的辅种 hover
+  完全真空(排除态 hr_safety 组装层短路空串, hrPopData 对空档位一律不弹)。后端 record.py 排除
+  匹配收敛单点 `_hr_exclusion_hits`((标签命中, 分类命中)), 新增 `hr_excluded_by()` 来源 token
+  (tag/category/tag+category, 与 hr_excluded 同单点恒一致), `hr_view_fields` 双分支透出
+  `hr_excluded_by`; 前端 hrPopData 排除行分支 —— 「已排除出 HR 管理」+ 依据行「命中 HR 排除表的
+  分类规则/标签规则/标签与分类规则」(`HR_EXCLUDED_BY_TEXT` 映射, 前端不重算匹配纪律不变),
+  无轨道/站点值(排除行本就无, 画要求轨反误导为仍受管束); 三主题 CSS 成对新增
+  `.hp-dot/.hp-verdict.excluded` 中性灰档(--fg-muted, 不占四档安全色); 种子页/辅种组成员行/
+  追剧集行共用弹窗单点一处修三处生效。守阵: testhr_view_fields_excluded 扩展三命中形态 + 空配置
+  键集; record 排除三测补 token 断言; 接线守阵 CSS 成对清单 +2; FakeTorrent 鸭子兼容补
+  hr_excluded_by(裸替身直喂 _build_group_view 两场景全量暴露)。test.full **2292 passed +
+  3 skipped / 99%**(27.5s @ f0c0f0ed, 基线 26-10-02-1956); 档案
+  [tasks/26-10-02-webui-hr-excluded-hover-pop](../tasks/26-10-02-webui-hr-excluded-hover-pop.md)
+
+- WEB UI **ESC 兜底清全部面筛**(2026-10-02, 清偿 question issue
+  [26-10-01-2108](../issues/26-10-01-2108-question-webui-esc-clear-filter.html), 计划
+  [plans/26-10-02-1632](../plans/26-10-02-1632-plan-webui-esc-clear-filters.html) 拍板方案 A):
+  ESC 不进引擎键表(方案 B 双触发 + fixed 语义崩坏, 已否决), 接 lifecycle.js 退栈链**终端兜底**
+  —— 16 层浮层 pop 与既有 4 兜底全部走完仍无层可退, 且门五件套(`authOk` / `page === "groups"` /
+  无 hrPop 卡 / 非输入态 inInput / `facetsActive`)全过时清全部面筛 + toast 点名「已清除全部筛选
+  (搜索词保留)」; filters.js 新增 computed `facetsActive`(与 clearFilters 字段清单同源,
+  **不含 searchQuery** —— filtersActive 含搜索词不能当门); 键表零改动, `clear-filters` 保持空位
+  供自定义, `clear-esc` label 补「清筛选」, shortcuts.js 三处文案。守阵 test_web_shortcuts.py
+  新增 `test_esc_chain_clear_filters_fallback`(链序 / 门条件五件套 / Escape 唯一默认绑定 /
+  facetsActive 纯度); 桩服务走查 8/8 项 / 34 断言通过(IME 组合态 CDP 真实组词态验证);
+  档案 [tasks/26-10-02-webui-esc-clear-filters](../tasks/26-10-02-webui-esc-clear-filters.md);
+  **已入库 `0d286cc5`**
+
+- WEB UI **Shift 连选起点与键鼠联动统一**(2026-10-02, 计划
+  [plans/26-10-02-0608](../plans/26-10-02-0608-plan-webui-shift-anchor.html) 方案 B, 用户指令
+  「按推荐实施计划」直接拍板 + 4 决策点按建议案): 修「鼠标点过第 5 行, 按 Shift+↓ 却从**列表第一行**
+  起选」—— 根因是方案 B 只统一了**光标**(`kbCursor`), 区间**起点**(`selAnchor*`)仍是另一套状态机
+  (仅 Ctrl/⌘ 点击与展开写入), 为空时四处消费者一律兜底 `list[0]`。修法四条: ①起点解析/写入单点
+  `_selAnchor(kind, list)` / `_selSetAnchor(kind, id)`(`selection.js`), 兜底链 **显式锚点 → 当前光标
+  → [group: 展开的组] → 列表首行**, `shiftGroupSel`/`shiftMemberSel`/`shiftTorrentSel`/`_extendUnit`
+  四处改调用, 消掉「四处各写一遍 `list[0]`」的口径漂移源; ②五个点击入口普通/Ctrl 路径补落起点,
+  **`!event.shiftKey` 守卫排除 Shift**(法则 2: 起点在扩展期间不动, 否则 Shift+点击只选目标单行);
+  ③`shortcuts.js` 新增 `_selSeedAnchorFromCursor`, `_kbExtend` 在 `_kbMove` **之前**以当前光标落
+  「手势原点」(已有有效起点则不动); ④追剧页起点缺失改走 `_selAnchor("unit", units)` 形成区间, 不再
+  退化为单单元切换。**行为口径未变**: 普通点击仍不选中(只写 `selAnchor*`) / 滚动仍只在键盘路径 /
+  禁 `scrollIntoView` / FX-11 互斥清理不变 / 无 Python src·配置键·后端改动。守阵
+  `test_web_shortcuts.py` 18 → 19(`test_shift_anchor_unified`); test.full **2290 passed + 3 skipped /
+  99%**(基线 [testing/baselines/26-10-02-0635](../testing/baselines/26-10-02-0635-webui-shift-anchor.md));
+  档案 [tasks/26-09-28-webui-keyboard-shortcuts](../tasks/26-09-28-webui-keyboard-shortcuts.md); **已入库 `fa79d526`**
