@@ -255,3 +255,55 @@ window.AQB_FEEDBACK = {
   window.addEventListener("scroll", hide, true);
   window.addEventListener("blur", hide);
 })();
+
+/* ==========================================================================
+   弹窗滚轮穿透兜底(仅老 Safari / iOS < 16 生效)
+ * --------------------------------------------------------------------------
+ * P1 CSS 主案(c485d492)已给 .modal-mask / .hr-full-mask 加 overscroll-behavior:
+ * contain 截断滚动链, 但该属性 Safari / iOS 16 才支持 —— 本块用 CSS.supports
+ * 门控: 支持则完全不注册监听(现代浏览器零开销), 不支持才挂 document 级捕获
+ * wheel / touchmove, 遮罩开着时拦掉落点不在内滚区的滚动, 兜底穿透。
+ * document 级 wheel 监听在部分浏览器默认 passive, 必须显式 {passive: false};
+ * 每次事件现查遮罩状态, 弹窗叠加无需开/关计数, v-if 卸载自然失效。
+ * ========================================================================== */
+(function () {
+  "use strict";
+  if (window.CSS && CSS.supports && CSS.supports("overscroll-behavior", "contain")) return;
+  // 放行名单: 8 类内滚区 + modal(通用壳自身, P1 加固后 overflow-y: auto 是滚动容器)
+  const ALLOW = [
+    "add-dialog-body", "add-pop-list", "db-list", "mgr-list", "meta-tags",
+    "modal-members", "kb-help-body", "hr-full-modal-bd", "modal",
+  ];
+  const MASK_SEL = ".modal-mask, .hr-full-mask";
+
+  // 老浏览器没有 composedPath 时回退 target 向上遍历
+  function pathAllowed(e) {
+    if (e.composedPath) {
+      const path = e.composedPath();
+      for (const el of path) {
+        if (el && el.classList) {
+          for (const name of ALLOW) if (el.classList.contains(name)) return true;
+        }
+      }
+      return false;
+    }
+    let t = e.target;
+    while (t && t.classList) {
+      for (const name of ALLOW) if (t.classList.contains(name)) return true;
+      t = t.parentElement;
+    }
+    return false;
+  }
+
+  function shouldBlock(e) {
+    if (!document.querySelector(MASK_SEL)) return false;       // 遮罩没开: 不拦
+    if (e.type === "wheel" && e.ctrlKey) return false;         // Ctrl+滚轮缩放手势放行
+    return !pathAllowed(e);
+  }
+
+  const onScrollEvt = (e) => {
+    if (shouldBlock(e)) e.preventDefault();
+  };
+  document.addEventListener("wheel", onScrollEvt, { capture: true, passive: false });
+  document.addEventListener("touchmove", onScrollEvt, { capture: true, passive: false });
+})();
