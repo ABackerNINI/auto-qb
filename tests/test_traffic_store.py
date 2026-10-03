@@ -1,4 +1,4 @@
-"""test_traffic_store 测试计划: qB 口径流量 dat 存储层(plan 26-10-03-0946 方案C P2, §02)
+"""test_traffic_store 测试计划: qB 口径流量 dat 存储层(plan 26-10-03-0946 方案C P2 落盘 + P3 生命周期, §02)
 
 ## 测试计划(每个测试函数一条)
 - test_series_path_layout_and_invalid_keys: 目录布局 <data_dir>/qb-traffic/{global.dat, torrents/<h>.dat}; 非法系列键 fail-fast
@@ -28,6 +28,21 @@
 - test_empty_data_dir_persists_nothing: data_dir 为空(防御, 真实配置恒非空) -> 零文件零目录(CWD 无泄漏)
 - test_all_persist_writes_on_caller_thread: 全部落盘写在调用 run_due 的线程(主循环线程)内完成, 模块不建线程(黄金法则 5)
 - test_seal_sweep_covers_global_and_torrents_and_counts: 封口扫描 catch-up 补封当前桶之前全部未封桶(含更早漏封桶), 覆盖 global + torrents/, 按文件数计数; 非 dat/.corrupt 不碰
+- test_lifecycle_freeze_absent_from_torrent_set: 删种冻结(S3): 不在当前种子集合 -> frozen_at=整数秒 + 变化时点落盘; 重复判定幂等; dat 数据不动
+- test_lifecycle_freeze_requires_existing_file: 条目无文件不冻结(留给启动 reconcile)
+- test_lifecycle_unfreeze_when_back_in_set: 重加解冻(S3): 重新出现 -> frozen_at=None, 历史保留; 幂等
+- test_lifecycle_no_change_no_index_write: 无变化零落盘(不写 index)
+- test_evict_expired_frozen_removes_file_and_entry: 冻结超 rollup_window -> 删文件+条目; 未超龄(边界含)/未冻结不删; index 同步落盘
+- test_evict_missing_file_drops_entry_and_removal_failure_retries: 文件已不在删死条目; 删除失败(读侧竞态)保条目下轮重试
+- test_evict_never_touches_global: global 不在 index 结构性豁免: 永不冻结永不淘汰
+- test_evict_skips_malformed_updated_at: 条目 updated_at 畸形不据以删除(淘汰判定不崩溃)
+- test_handler_lifecycle_persist_failure_not_fatal: 冻结/解冻判定落盘失败(OSError)不阻断采样
+- test_handler_freezes_deleted_torrent_stops_appends: 删种 -> 采样轮判定冻结 + 后续轮零追加
+- test_handler_unfreezes_readded_torrent_keeps_history: 重加 -> 采样轮解冻续写, 历史保留
+- test_handler_disconnect_round_skips_lifecycle: 断连轮跳过冻结/解冻判定(快照 stale), 恢复连接后才冻结
+- test_handler_dry_run_skips_lifecycle: dry_run 不做生命周期判定(不构造存储层)
+- test_handler_evicts_expired_frozen_at_seal_timing: 淘汰复用封口时机: 翻小时轮删除超龄冻结文件; 同小时轮不淘汰
+- test_volume_regression_200_torrents_full_window: 体量回归(P3 验收): 200 活跃种子 + global 满窗数据 <= 201x205KB(≈41MB, §02.3 推导式); 满窗稳态封口零重写
 
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
@@ -391,7 +406,8 @@ def test_index_written_only_at_change_points(tmp_path):
     index_path = tmp_path / TRAFFIC_DIR_NAME / "index.json"
     assert index_path.is_file()
     first = json.loads(index_path.read_text(encoding="utf-8"))
-    assert first["format"] == 1 and first["torrents"]["ABC123"]["frozen_at"] is None  # 本阶段恒 None(S3)
+    assert first["format"
+                ] == 1 and first["torrents"]["ABC123"]["frozen_at"] is None  # 建条目恒 None(冻结由 S3 lifecycle_sweep 判定)
     assert first["torrents"]["ABC123"]["created_at"] == 100
     # 追加不写盘(非每采样): updated_at 内存推进, 文件内容不变
     for i in range(3):
@@ -414,7 +430,7 @@ def test_reconcile_orphan_dat_self_heals(tmp_path):
     counts = store.reconcile()
     assert counts == {"dropped_entries": 0, "recovered_entries": 1}
     e = store.entry("ABC123")
-    assert e["frozen_at"] is None  # 本阶段(P2)一律 null
+    assert e["frozen_at"] is None  # 对账重建恒 null(冻结由 S3 lifecycle_sweep 判定)
     assert e["created_at"] == pytest.approx(os.path.getmtime(path))
     assert e["updated_at"] == pytest.approx(os.path.getmtime(path))
     assert store.reconcile() == {"dropped_entries": 0, "recovered_entries": 0}  # 幂等
@@ -469,6 +485,156 @@ def test_reconcile_never_touches_raw_hour_data(tmp_path):
     store2 = TrafficDatStore(str(empty))
     assert store2.reconcile() == {"dropped_entries": 0, "recovered_entries": 0}
     assert not (empty / TRAFFIC_DIR_NAME).exists()
+
+
+# ---------- S3 生命周期: 冻结/解冻/按龄淘汰(§02.2/§02.5) ----------
+
+
+def test_lifecycle_freeze_absent_from_torrent_set(tmp_path):
+    """删种冻结: 条目未冻结 + 文件存在 + 不在当前种子集合 -> frozen_at=整数秒且变化时点落盘;
+    重复判定幂等(已冻结不重复计数); 冻结只动注册表不动 dat 数据"""
+    store = _store(tmp_path)
+    store.append_point("torrent:ABC123", 100, 1, 1, 1, 1)  # 建文件 + 建条目
+    path = store.series_path("torrent:ABC123")
+    before = _read_text(path)
+    assert store.lifecycle_sweep({"OTHER"}, now=200.6) == {"frozen": 1, "unfrozen": 0}
+    assert store.entry("ABC123")["frozen_at"] == 200  # 整数秒(§02.5 示例口径)
+    on_disk = json.loads((tmp_path / TRAFFIC_DIR_NAME / "index.json").read_text(encoding="utf-8"))
+    assert on_disk["torrents"]["ABC123"]["frozen_at"] == 200  # 条目变化时点落盘
+    assert _read_text(path) == before  # 数据不动
+    assert store.lifecycle_sweep({"OTHER"}, now=300) == {"frozen": 0, "unfrozen": 0}  # 幂等
+
+
+def test_lifecycle_freeze_requires_existing_file(tmp_path):
+    """文件不存在的失配条目不冻结(死条目留给启动 reconcile 删除)"""
+    store = _store(tmp_path)
+    store._touch_entry("GHOST", 100)  # 直接造条目(无文件)
+    assert store.lifecycle_sweep(set(), now=200) == {"frozen": 0, "unfrozen": 0}
+    assert store.entry("GHOST")["frozen_at"] is None
+
+
+def test_lifecycle_unfreeze_when_back_in_set(tmp_path):
+    """重加解冻: 已冻结条目重新出现在种子集合 -> frozen_at=None, 历史保留(数据不动);
+    重复判定幂等(未冻结不重复计数)"""
+    store = _store(tmp_path)
+    store.append_point("torrent:ABC123", 100, 1, 1, 1, 1)
+    store.lifecycle_sweep(set(), now=200)
+    before = _read_text(store.series_path("torrent:ABC123"))
+    assert store.lifecycle_sweep({"ABC123"}, now=300) == {"frozen": 0, "unfrozen": 1}
+    assert store.entry("ABC123")["frozen_at"] is None
+    assert _read_text(store.series_path("torrent:ABC123")) == before  # 历史保留
+    assert store.lifecycle_sweep({"ABC123"}, now=400) == {"frozen": 0, "unfrozen": 0}  # 幂等
+
+
+def test_lifecycle_no_change_no_index_write(tmp_path, monkeypatch):
+    """无变化零落盘: 无冻结/解冻发生时不写 index(仅条目变化时点写, §02.5)"""
+    from auto_qb.core import traffic_store as traffic_store_mod
+
+    store = _store(tmp_path)
+    store.append_point("torrent:ABC123", 100, 1, 1, 1, 1)  # 建条目(此前的写不受计数影响)
+    writes = []
+    real_atomic = traffic_store_mod.atomic_write
+
+    def counting_write(path, write_fn, **kw):
+        writes.append(path)
+        return real_atomic(path, write_fn, **kw)
+
+    monkeypatch.setattr(traffic_store_mod, "atomic_write", counting_write)
+    store.lifecycle_sweep({"ABC123"}, now=200)  # 在集合内且未冻结: 无变化
+    store.lifecycle_sweep({"ABC123"}, now=300)
+    assert writes == []
+    store.lifecycle_sweep(set(), now=400)  # 变化时点(冻结): 恰一次写
+    assert len(writes) == 1
+
+
+def test_evict_expired_frozen_removes_file_and_entry(tmp_path):
+    """按龄淘汰: frozen 且 now - updated_at > rollup_window -> 删 dat 文件 + index 条目;
+    未超龄(边界含 now-updated == rollup_window)/未冻结不删; index 同步落盘"""
+    store = _store(tmp_path)
+    for h in ("OLD", "FRESH", "ALIVE"):
+        store.append_point(f"torrent:{h}", 100, 1, 1, 1, 1)
+    store.lifecycle_sweep(set(), now=200)  # 三个全部冻结
+    window = 7200
+    for h in ("OLD", "ALIVE"):
+        store._index[h]["updated_at"] = 1000
+    store._index["FRESH"]["updated_at"] = 1000 + window  # 年龄 1s(检查时刻之前刚活动)
+    store._index["ALIVE"]["frozen_at"] = None  # 未冻结对照组
+    assert store.evict_expired_frozen(now=1000 + window, rollup_window=window) == 0  # 边界: 严格大于才删
+    assert store.evict_expired_frozen(now=1000 + window + 1, rollup_window=window) == 1
+    assert store.entry("OLD") is None  # 超龄冻结: 文件 + 条目均删
+    assert not os.path.exists(store.series_path("torrent:OLD"))
+    assert store.entry("FRESH") is not None  # 未超龄不删
+    assert os.path.exists(store.series_path("torrent:FRESH"))
+    assert store.entry("ALIVE") is not None  # 未冻结不淘汰(哪怕超龄)
+    on_disk = json.loads((tmp_path / TRAFFIC_DIR_NAME / "index.json").read_text(encoding="utf-8"))
+    assert "OLD" not in on_disk["torrents"] and "FRESH" in on_disk["torrents"]
+
+
+def test_evict_missing_file_drops_entry_and_removal_failure_retries(tmp_path, monkeypatch):
+    """淘汰删除: 文件已不在(FileNotFoundError)删死条目; 删除失败(Windows 读侧竞态
+    PermissionError)保留条目下轮重试 —— 条目与文件状态恒一致, 不产孤儿"""
+    store = _store(tmp_path)
+    store.append_point("torrent:GONE", 100, 1, 1, 1, 1)
+    store.append_point("torrent:LOCKED", 100, 1, 1, 1, 1)
+    store.lifecycle_sweep(set(), now=200)
+    for h in ("GONE", "LOCKED"):
+        store._index[h]["updated_at"] = 0  # 远超任何窗口
+    os.remove(store.series_path("torrent:GONE"))  # 文件先消失
+    real_remove = os.remove
+
+    def failing_remove(path, *a, **kw):
+        if str(path).endswith("LOCKED.dat"):
+            raise PermissionError(13, "locked by reader")
+        return real_remove(path, *a, **kw)
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.remove", failing_remove)
+    assert store.evict_expired_frozen(now=10**9, rollup_window=7200) == 1  # GONE 删条目, LOCKED 失败保留
+    assert store.entry("GONE") is None
+    assert store.entry("LOCKED") is not None
+    assert os.path.exists(store.series_path("torrent:LOCKED"))
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.remove", real_remove)  # 下轮竞态解除
+    assert store.evict_expired_frozen(now=10**9, rollup_window=7200) == 1  # 重试成功
+    assert store.entry("LOCKED") is None
+    assert not os.path.exists(store.series_path("torrent:LOCKED"))
+
+
+def test_evict_never_touches_global(tmp_path):
+    """global 永不冻结永不淘汰(§02.5): 不在 index, 结构性豁免 —— 全库清空 + 极小淘汰窗都不碰"""
+    store = _store(tmp_path)
+    store.append_point("global", 100, 1, 1, 1, 1)
+    path = store.series_path("global")
+    assert store.lifecycle_sweep(set(), now=200) == {"frozen": 0, "unfrozen": 0}  # 无条目可冻
+    assert store.evict_expired_frozen(now=10**9, rollup_window=1) == 0
+    assert os.path.exists(path)
+    assert _read_text(path).splitlines() == [HEADER_LINE, "key,global", "raw,100,1,1,1,1"]
+    assert store._index == {}
+
+
+def test_evict_skips_malformed_updated_at(tmp_path):
+    """条目 updated_at 畸形(手工编辑 index)不据以删除, 留给人工处置(淘汰判定不崩溃)"""
+    store = _store(tmp_path)
+    store.append_point("torrent:WEIRD", 100, 1, 1, 1, 1)
+    store.lifecycle_sweep(set(), now=200)
+    store._index["WEIRD"]["updated_at"] = None
+    assert store.evict_expired_frozen(now=10**9, rollup_window=1) == 0
+    assert store.entry("WEIRD") is not None
+    assert os.path.exists(store.series_path("torrent:WEIRD"))
+
+
+def test_handler_lifecycle_persist_failure_not_fatal(tmp_path, monkeypatch):
+    """冻结/解冻判定落盘失败(OSError)不阻断采样: 本轮照常出点"""
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_active_torrent()])
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+
+    def failing_sweep(self, present, now):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(TrafficDatStore, "lifecycle_sweep", failing_sweep)
+    assert _run_sample(mgr) is True  # 不上抛
+    assert GLOBAL_SERIES_KEY in mod.latest and "torrent:HASH123" in mod.latest  # 采样照常
 
 
 # ---------- 惰性建文件 / 重启接续 ----------
@@ -612,3 +778,161 @@ def test_seal_sweep_covers_global_and_torrents_and_counts(tmp_path):
     assert [h.hour_epoch for h in store.read_series("torrent:A").hours] == [H0]
     assert [h.hour_epoch for h in store.read_series("torrent:B").hours] == [H0 - 2 * HOUR]
     assert os.path.exists(store.series_path("torrent:C") + CORRUPT_SUFFIX)  # 原位未动
+
+
+# ---------- S3 handler 接线: 冻结/解冻/淘汰随采样轮(§02.2/§02.5) ----------
+
+
+def test_handler_freezes_deleted_torrent_stops_appends(tmp_path, monkeypatch):
+    """删种 -> 采样轮判定冻结: frozen_at 置值且后续轮零追加(停止追加, §02.2)"""
+    t = {"now": H1 + 100.0}
+    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_active_torrent()])
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    assert _run_sample(mgr) is True
+    tpath = tmp_path / TRAFFIC_DIR_NAME / "torrents" / "HASH123.dat"
+    lines_at_freeze = len(_read_text(tpath).splitlines())
+    # 删种: 内存快照移除 -> 下一轮(同小时, 不触发封口)冻结
+    mgr.store.by_hash.pop("HASH123")
+    t["now"] = H1 + 160.0
+    assert _run_sample(mgr) is True
+    assert mod._store.entry("HASH123")["frozen_at"] == int(H1 + 160.0)
+    # 继续推进多轮: 冻结文件零追加
+    t["now"] = H1 + 220.0
+    _run_sample(mgr)
+    assert len(_read_text(tpath).splitlines()) == lines_at_freeze
+
+
+def test_handler_unfreezes_readded_torrent_keeps_history(tmp_path, monkeypatch):
+    """重加 -> 采样轮解冻续写: frozen_at 清零, 历史行保留, 新行照常追加
+    (重加后 all-time 计数器回落由既有判重置兜底, 见 test_counter_rollback_records_reset_no_negative)"""
+    t = {"now": H1 + 100.0}
+    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_active_torrent()])
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    _run_sample(mgr)
+    mgr.store.by_hash.pop("HASH123")
+    t["now"] = H1 + 160.0
+    _run_sample(mgr)
+    assert mod._store.entry("HASH123")["frozen_at"] is not None
+    tpath = tmp_path / TRAFFIC_DIR_NAME / "torrents" / "HASH123.dat"
+    frozen_text = _read_text(tpath)
+    # 同 hash 重加(活跃, 计数器推进) -> 同轮先解冻再采样追加
+    seed_store(mgr, [_active_torrent(downloaded=6_000_000, uploaded=4_000_000)])
+    t["now"] = H1 + 220.0
+    assert _run_sample(mgr) is True
+    assert mod._store.entry("HASH123")["frozen_at"] is None
+    unfrozen_text = _read_text(tpath)
+    assert unfrozen_text.startswith(frozen_text)  # 历史保留(同小时纯追加, 前缀不变)
+    assert len(unfrozen_text.splitlines()) == len(frozen_text.splitlines()) + 1  # 解冻后续写
+
+
+def test_handler_disconnect_round_skips_lifecycle(tmp_path, monkeypatch):
+    """断连轮跳过冻结/解冻判定(by_hash 是断连前快照, 误判会冻结在线种子/漏判重加);
+    恢复连接后才按当前种子集合判定"""
+    t = {"now": H1 + 100.0}
+    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_active_torrent()])
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    _run_sample(mgr)
+    mgr.store.by_hash.pop("HASH123")  # 删种恰好落在断连期(快照不可知)
+    mgr.client = None
+    t["now"] = H1 + 160.0
+    _run_sample(mgr)
+    assert mod._store.entry("HASH123")["frozen_at"] is None  # 断连轮不判
+    mgr.client = FakeClient()
+    t["now"] = H1 + 220.0
+    _run_sample(mgr)
+    assert mod._store.entry("HASH123")["frozen_at"] == int(H1 + 220.0)  # 恢复连接后才冻结
+
+
+def test_handler_dry_run_skips_lifecycle(tmp_path, monkeypatch):
+    """dry_run 不做生命周期判定(观测写盘属真实副作用, 零落盘纪律): 存储层连构造都不发生"""
+    t = {"now": H1 + 100.0}
+    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
+    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_active_torrent()])
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=True)
+    TrafficDatStore(str(tmp_path)).append_point("torrent:HASH123", H1 - 60, 1, 1, 1, 1)  # 预置历史条目+文件
+    mgr.store.by_hash.pop("HASH123")
+    assert _run_sample(mgr, dry_run=True) is True
+    assert mod._store is None  # 未构造存储层(dry_run 不触盘)
+    on_disk = json.loads((tmp_path / TRAFFIC_DIR_NAME / "index.json").read_text(encoding="utf-8"))
+    assert on_disk["torrents"]["HASH123"]["frozen_at"] is None  # 磁盘条目未被冻结
+
+
+def test_handler_evicts_expired_frozen_at_seal_timing(tmp_path, monkeypatch):
+    """淘汰复用封口时机(§02.5, 无独立任务): 超龄冻结文件在翻小时的首个采样轮删除;
+    同小时内的采样轮不淘汰"""
+    t = {"now": H1 + 100.0}
+    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
+    conf = QbTraffic(enabled=True, sample_interval=30, raw_window=3600, rollup_window=7200)
+    mgr = _mgr(tmp_path, conf)
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_active_torrent()])
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    _run_sample(mgr)  # 建文件 + 建条目(本轮触发首次封口扫描)
+    mgr.store.by_hash.pop("HASH123")
+    t["now"] = H1 + 160.0
+    _run_sample(mgr)  # 冻结(同小时)
+    mod._store._index["HASH123"]["updated_at"] = int(H1 + 160.0) - 7201  # 最后活动已超 rollup_window
+    tpath = tmp_path / TRAFFIC_DIR_NAME / "torrents" / "HASH123.dat"
+    t["now"] = H1 + 220.0
+    _run_sample(mgr)  # 同小时: 未到封口时机 -> 不淘汰
+    assert os.path.exists(tpath)
+    t["now"] = H1 + HOUR + 100.0
+    _run_sample(mgr)  # 翻小时: 封口轮顺带淘汰
+    assert not os.path.exists(tpath)
+    assert mod._store.entry("HASH123") is None
+
+
+# ---------- S3 体量回归(P3 验收, §02.3) ----------
+
+
+def test_volume_regression_200_torrents_full_window(tmp_path):
+    """体量回归: 200 活跃种子 + global 满窗连续活跃数据 -> 总盘占用 <= 201 x 205KB(≈41MB 上界)
+
+    推导式(§02.3, 列宽取保守上界: 速率 <= 9,999,999 B/s≈9.5MB/s、累计 <= 9,999,999,999 B≈9.3GB、
+    epoch 10 位): 单文件 = 头行 24B + key 行 46B(infohash 40 hex) + raw 2880 行(24h@30s)
+    x 51B + hour 720 行(30d) x 66B = 194,470B <= 205KB; 201 文件 => 209,920 x 201
+    = 42,193,920B ≈ 41MB(全部满窗连续活跃的保守假设; 空闲种子零行, 实际远小)。
+    满窗数据按格式 v1 直接造文件(走存储层 API 需 201x2880 次 open 追加, 回归测试不可承受);
+    随后一次封口扫描验证满窗稳态零重写(体量不增长)。
+    """
+    now = 1_800_000_000  # 整点 epoch(10 位, 2027-01-15), raw/hour 桶对齐
+    raw_lines = [format_raw_row(now - 24 * HOUR + i * 30, 999999, 999999, 9999999999, 9999999999) for i in range(2880)]
+    hour0 = now - 719 * HOUR  # 720 个整点桶铺满 30d 窗, 顶桶 = now(覆盖 raw 全部桶)
+    hour_lines = [
+        format_hour_row(HourRow(hour0 + j * HOUR, 999999, 999999, 999999, 999999, 9999999999, 9999999999))
+        for j in range(720)
+    ]
+    root = tmp_path / TRAFFIC_DIR_NAME
+    tdir = root / "torrents"
+    tdir.mkdir(parents=True)
+    for i in range(200):
+        h = f"{i:040x}"  # 40 位 hex, 对齐真实 infohash 宽度
+        _write_dat(tdir / f"{h}.dat", [HEADER_LINE, f"key,torrent:{h}"] + raw_lines + hour_lines)
+    _write_dat(root / "global.dat", [HEADER_LINE, "key,global"] + raw_lines + hour_lines)
+    dat_files = sorted(tdir.glob("*.dat")) + [root / "global.dat"]
+    assert len(dat_files) == 201
+    per_file_bound = 205 * 1024  # §02.3 单文件上界(205KB)
+    sizes = [p.stat().st_size for p in dat_files]
+    assert max(sizes) <= per_file_bound
+    total = sum(sizes)
+    assert total <= 201 * per_file_bound  # ≈41MB 总量上界
+    # 满窗稳态: 封口扫描零重写(已封桶不重算 + 裁剪无窗外行), 体量不增长
+    store = _store(tmp_path)
+    assert store.seal_sweep((now // HOUR) * HOUR, now=now, raw_window=24 * HOUR, rollup_window=30 * 24 * HOUR) == 0
+    assert sum(p.stat().st_size for p in dat_files) == total

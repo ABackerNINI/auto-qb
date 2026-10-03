@@ -27,9 +27,18 @@ P1 范围边界已被 S2 接续(plan §02 dat 落盘): 采样点除进内存镜�
   表达(§05.2); 不沿用旧值画假曲线, null 点不推进基线;
 - server_state / 记录关键字段缺失或空值 => 该轮该系列按 null 点处理并 DEBUG 记录, 不写 0。
 
+生命周期判定(§02.2/§02.5, S3, 全部跟随采样轮在 handler 内, 不开新任务新线程):
+- 删种冻结: 连接轮对照 store.by_hash(当前种子集合内存快照)与 index 条目 —— 条目未冻结 +
+  文件存在 + infohash 不在集合 => frozen_at = now, 该文件不再追加(不在集合本就无采样点);
+- 重加解冻: 已冻结条目重新出现在集合 => frozen_at = null 解冻续写, 历史保留; 重加后
+  all-time 计数器回落由既有判重置兜底(§03.4), 不新增机制;
+- 按龄淘汰: 每小时封口时点顺带(复用封口触发, 无独立任务)检查 frozen 文件,
+  now - updated_at > rollup_window => 删 dat 文件 + index 条目; global 永不冻结永不淘汰;
+- 断连轮跳过冻结/解冻判定: by_hash 是断连前快照, 以它判定会误冻结在线种子/漏判重加。
+
 线程模型(黄金法则 5): handler 由 TaskQueue 在主循环线程执行, baselines/latest 全部只在
-该线程读写, 无锁; 模块自身不创建任何线程。dat 追加/封口重写/index 写入等全部落盘写操作
-都在 handler 调用链内(主循环线程), 存储层无锁(单写线程不变式由测试钉住)。
+该线程读写, 无锁; 模块自身不创建任何线程。dat 追加/封口重写/index 写入/冻结淘汰等全部
+落盘写操作都在 handler 调用链内(主循环线程), 存储层无锁(单写线程不变式由测试钉住)。
 
 配置: config.qb_traffic(QbTraffic, 缺省 None = 未启用)。enabled 为 false(含段缺省)时
 start 不建任务、不建目录、零文件零开销(保守默认, 黄金法则 2); 热重载改 enabled=true 后经
@@ -172,7 +181,7 @@ class TrafficSampleModule(BaseModule):
     # ---------- 全局任务执行体 ----------
 
     def handle_traffic_sample(self, task: Task, dry_run: bool) -> bool:
-        """一轮采样: 全局恒采 + 单种活跃过滤, 产出点经产出缝落盘(S2)+内存镜像(P1)"""
+        """一轮采样: 生命周期判定(S3) + 全局恒采 + 单种活跃过滤, 产出点经产出缝落盘(S2)+内存镜像(P1)"""
         conf = self._ctx.config.qb_traffic
         if conf is None or not conf.enabled:
             # 未启用/运行期被热重载关闭: 本轮不采样不动内存不落盘(任务保留, L2 重建时按新配置重注册)
@@ -187,10 +196,31 @@ class TrafficSampleModule(BaseModule):
             self._maybe_hourly_seal(now)  # 断连轮照常封口: 断连期历史行同样要按小时归并
             logger.debug("流量采样 | qB 断连, 本轮全局出 null 点")
             return REQUEUE
+        self._sample_lifecycle(store, now)  # 冻结/解冻判定先行: 重加种子本轮解冻后才可能被追加(S3)
         self._sample_global(store.server_state, now)
         self._sample_torrents(store, now)
         self._maybe_hourly_seal(now)
         return REQUEUE
+
+    # ---------- 生命周期判定(S3, §02.2/§02.5) ----------
+
+    def _sample_lifecycle(self, store, now: float) -> None:
+        """冻结/解冻判定(采样轮时点): 对照 by_hash 当前种子集合与 index 条目(§02.2)
+
+        仅连接轮调用(调用方保证): 断连轮 by_hash 是断连前快照, 误判会冻结在线种子/
+        漏判重加。判定在采样之前 —— 同轮重加的种子先解冻再采样, 条目语义不倒挂。
+        dry_run / 运行期关闭 / data_dir 为空(防御)均短路; OSError 不上抛(注册表写失败
+        无一致性后果, 冻结/解冻在内存已生效, 下一个条目变化时点随封口/淘汰重试落盘)。
+        """
+        if not self._persistence_on or not self._ctx.config.data_dir:
+            return
+        try:
+            counts = self._get_store(self._ctx).lifecycle_sweep(set(store.by_hash.keys()), now)
+        except OSError as e:
+            logger.warning(f"流量采样 | 冻结/解冻判定落盘失败(内存已生效, 下个变化时点重试): {e}")
+            return
+        if counts["frozen"] or counts["unfrozen"]:
+            logger.info(f"流量采样 | 种子生命周期: 冻结 {counts['frozen']} 个(已删种), 解冻 {counts['unfrozen']} 个(重加)")
 
     # ---------- 两系列采样 ----------
 
@@ -323,6 +353,8 @@ class TrafficSampleModule(BaseModule):
         upsert, 幂等(黄金法则 1)。断连轮同样触发(断连期历史行照常归并)。触发时机在
         handler(主循环线程), 与写入共用单线程。封口失败(OSError)不阻断采样, 原文件
         完好, 数据无损。
+        S3 顺带(§02.5, 复用同一触发无独立任务): 冻结文件按龄淘汰先行于封口扫描 ——
+        本轮要淘汰的文件不必再重写封口; global 不在 index 结构性豁免。
         """
         conf = self._ctx.config.qb_traffic
         if conf is None or not conf.enabled or not self._persistence_on:
@@ -334,6 +366,9 @@ class TrafficSampleModule(BaseModule):
         if not self._ctx.config.data_dir:
             return
         try:
+            evicted = self._get_store(self._ctx).evict_expired_frozen(now=now, rollup_window=conf.rollup_window)
+            if evicted:
+                logger.info(f"流量采样 | 冻结淘汰: 删除 {evicted} 个超龄冻结文件(超 rollup_window)")
             rewritten = self._get_store(
                 self._ctx
             ).seal_sweep(bucket, now=now, raw_window=conf.raw_window, rollup_window=conf.rollup_window)

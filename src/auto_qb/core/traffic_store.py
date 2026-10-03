@@ -1,4 +1,4 @@
-"""traffic_store: qB 口径流量 dat 存储层(plan 26-10-03-0946 方案C P2, §02)
+"""traffic_store: qB 口径流量 dat 存储层(plan 26-10-03-0946 方案C P2 落盘 + P3 生命周期, §02)
 
 数据落点(§01.1 归类为观测/日志数据, 不入 state_file —— append-only、丢失无一致性后果、
 体量日志型): `<data_dir>/qb-traffic/` 子目录(kebab-case 硬编码常量, 不做配置键; 子目录名
@@ -52,11 +52,20 @@ enabled=false(含 qb_traffic None)全程零文件零目录(保守默认, 黄金�
 - 文件 <=205KB(raw 24h@30s + hour 30d 设计上界)一次性快读即关。
 
 index.json 与启动对账(§02.5):
-- 条目 {frozen_at, created_at, updated_at}; frozen_at 本阶段(P2)建条目一律 None ——
-  删种冻结/重加解冻/按龄淘汰是 S3, 本层只留字段位;
-- 写入走 utils.atomic_write, 仅条目变化时点写(建文件/封口/对账), 非每采样;
-  updated_at 随追加在内存推进, 到上述时点才落盘(崩溃后滞后 <=1 小时, 对 S3 的按龄
-  淘汰判据 7d 粒度无影响);
+- 条目 {frozen_at, created_at, updated_at}; frozen_at = None 常态, 非 None = 种子已删
+  冻结不再追加(整数秒);
+- 写入走 utils.atomic_write, 仅条目变化时点写(建文件/封口/冻结/解冻/淘汰/对账),
+  非每采样; updated_at 随追加在内存推进(= 最后数据活动时刻), 到上述时点才落盘
+  (崩溃后滞后 <=1 小时, 对按龄淘汰判据 7d 粒度无影响); 内存值恒为真值 ——
+  淘汰判定读内存, 不受落盘滞后影响;
+- 生命周期(§02.2, S3): 删种 -> 冻结(lifecycle_sweep: 条目未冻结 + 文件存在 + infohash
+  不在当前种子集合 => frozen_at = now); 同 hash 重加 -> 解冻(frozen_at = None, 历史保留
+  续写, 计数器回落由采样器判重置兜底); 判定时机跟随采样轮(调用方 = 采样 handler,
+  主循环线程) —— 断连轮快照 stale, 由调用方跳过判定;
+- 按龄淘汰(§02.5, S3): evict_expired_frozen 在每小时封口时点顺带(复用封口触发, 无独立
+  任务), frozen 条目且 now - updated_at > rollup_window => 删 dat 文件 + index 条目;
+  文件删除失败(Windows 读侧竞态)保留条目下轮重试; global 不在 index, 结构性豁免
+  (永不冻结永不淘汰);
 - reconcile: 扫目录与 index 求差 —— 孤儿 dat(index 无条目)从头行 key, 重建条目;
   index 条目无文件则删条目; index 本身坏/半写按空表自愈(以磁盘为准)。对账只读目录与
   头行, 永不改写 raw/hour 数据。文件身份 = 文件名(infohash, §02.2「infohash 本身就是
@@ -609,6 +618,75 @@ class TrafficDatStore:
         except OSError:
             return None
         return parse_dat_text(text).key
+
+    # ---------- 生命周期: 冻结/解冻/按龄淘汰(§02.2/§02.5, S3) ----------
+
+    def lifecycle_sweep(self, present_infohashes, now: float) -> dict:
+        """冻结/解冻判定(§02.2 生命周期): 对照当前种子集合与 index 条目, 变化即落盘
+
+        - 删种冻结: 条目未冻结 + 文件存在 + infohash 不在 present_infohashes =>
+          frozen_at = now(整数秒), 停止追加(追加侧本就不产点 —— 不在集合内无采样;
+          此处是注册表语义收口); 文件不存在的失配条目留给启动 reconcile, 不据以冻结;
+        - 重加解冻: 已冻结条目的 infohash 重新出现在集合 => frozen_at = None, 历史保留
+          续写(重加后 all-time 计数器回落由采样器判重置兜底, 本层不感知);
+        - 两次判定都只动条目不动 dat 数据; 重复调用幂等(已冻结/未冻结各自稳定, 黄金
+          法则 1), 无变化时零落盘(仅条目变化时点写 index, §02.5)。
+
+        调用方 = 采样 handler(主循环线程, 黄金法则 5), 判定时机跟随采样轮; 断连轮的
+        by_hash 是断连前快照(stale), 由调用方跳过本轮判定。present_infohashes 为空集
+        是合法输入(qB 全库清空 => 全部未冻结条目冻结)。
+        返回计数 {"frozen": n, "unfrozen": m}(日志/测试用)。
+        """
+        present = present_infohashes if isinstance(present_infohashes, (set, frozenset)) else set(present_infohashes)
+        counts = {"frozen": 0, "unfrozen": 0}
+        for h, e in self._index.items():
+            if h in present:
+                if e.get("frozen_at") is not None:
+                    e["frozen_at"] = None
+                    self._index_dirty = True
+                    counts["unfrozen"] += 1
+            elif e.get("frozen_at") is None and os.path.exists(os.path.join(self._torrents_dir, h + DAT_SUFFIX)):
+                e["frozen_at"] = int(now)
+                self._index_dirty = True
+                counts["frozen"] += 1
+        self._flush_index()  # 仅脏时写
+        return counts
+
+    def evict_expired_frozen(self, now: float, rollup_window: float) -> int:
+        """冻结文件按龄淘汰(§02.5): frozen 且 now - updated_at > rollup_window =>
+        删 dat 文件 + index 条目; 返回淘汰数(日志/测试用)
+
+        调用时机 = 每小时封口时点顺带(复用封口触发, 无独立任务; 调用方义务)。global
+        不在 index, 结构性豁免(永不冻结永不淘汰, §02.5)。updated_at = 最后数据活动
+        时刻(内存真值): 冻结后不再追加即停摆, 超龄即该文件最新数据已滑出 hour 保留窗。
+        文件已不存在(FileNotFoundError)也删条目(死条目自洁); 其余删除失败(Windows
+        读侧竞态占文件)保留条目下轮重试 —— 条目与文件状态恒一致, 不产孤儿。条目
+        updated_at 畸形(手工编辑 index)不据以删除, 留给人工处置。
+        """
+        evicted = 0
+        for h in list(self._index):
+            e = self._index[h]
+            if e.get("frozen_at") is None:
+                continue  # 未冻结不淘汰(追加与对账各自维护活跃/失配条目)
+            updated = e.get("updated_at")
+            if not isinstance(updated, (int, float)) or isinstance(updated, bool):
+                continue
+            if now - updated <= rollup_window:
+                continue  # 未超龄不删
+            path = os.path.join(self._torrents_dir, h + DAT_SUFFIX)
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass  # 文件早已不在: 死条目照常清
+            except OSError as exc:
+                logger.warning(f"流量存储 | {h + DAT_SUFFIX} 淘汰删除失败(下轮封口重试): {exc}")
+                continue
+            del self._index[h]
+            self._index_dirty = True
+            evicted += 1
+        if evicted:
+            self._flush_index()
+        return evicted
 
     # ---------- 内部 ----------
 
