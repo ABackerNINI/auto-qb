@@ -433,6 +433,18 @@ function initialDrawerTab() {
   }
 }
 
+/* 种子详情面板高度初值(方案A W3 持久化, 与 initialDrawerTab 同口径): 用户拖拽调高后记录 px。
+ * null = 从未拖拽过, 面板走 CSS 默认(内容自适应, 上限 42vh)。读侧只挡明显脏值(非数字/出界);
+ * 视口夹取 [240px, 70vh] 在应用时做(窗口尺寸跨刷新可能变), 见 drawer.js::_drawerClampHeight。 */
+function initialDrawerHeight() {
+  try {
+    const n = parseInt(localStorage.getItem("autoqb.ui.drawerHeight"), 10);
+    return Number.isFinite(n) && n >= 240 && n <= 4000 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 /* 状态优先级**单点表**(数值越小越"该被看到"): "一组/一集种子的聚合状态取哪个"。
  *
  * 必须与后端 `auto_qb/mixins/web_view.py::_SHOW_STATE_RANK` **逐项一致** —— 追剧页的集状态

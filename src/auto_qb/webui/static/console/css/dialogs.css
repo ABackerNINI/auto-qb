@@ -7,21 +7,34 @@
 .torrents-dock { display: flex; flex-direction: column; }
 .torrents-dock > .group-table { flex: 1 1 auto; min-height: 0; }
 .torrents-dock > .drawer-dock { flex: 0 0 auto; }
-.drawer { display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
+.drawer { position: relative; display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
   background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
   box-shadow: var(--shadow-3); }
-/* 过渡: 下滑 + 淡入, 只动 transform/opacity(高度不可过渡; 200ms 与模板 :duration 一致) */
-.drawer-enter-active { transition: transform .2s var(--ease), opacity .2s var(--ease); }
-.drawer-leave-active { transition: transform .16s var(--ease), opacity .16s var(--ease); pointer-events: none; }
-.drawer-enter-from, .drawer-leave-to { transform: translateY(-14px); opacity: 0; }
+/* W3 高度治理: 内联 height/max-height(拖拽值, drawer.js drawerPanelStyle)覆盖这里的默认上限;
+ * 收起态只留头部(body 隐藏, 高度回落内容), 展开钮在头部(chevron 翻转) */
+.drawer.collapsed .drawer-body { display: none; }
+.drawer-grip { position: absolute; top: 0; left: 0; right: 0; height: 8px; z-index: 2;
+  cursor: ns-resize; touch-action: none; }
+.drawer-grip::after { content: ""; position: absolute; left: 50%; top: 2px; transform: translateX(-50%);
+  width: 42px; height: 3px; border-radius: 2px; background: var(--border-strong);
+  transition: background var(--dur) var(--ease), width var(--dur) var(--ease); }
+.drawer-grip:hover::after, .drawer-grip:active::after { background: var(--accent); width: 64px; }
+body.drawer-resizing { cursor: ns-resize; user-select: none; }
+/* 过渡: 下滑 + 淡入, 只动 transform/opacity(高度不可过渡; 200ms 与模板 :duration 一致;
+ * W3 打磨: 进场缓动尾段收力(位移更"落定"), 退场 ease-in 收束) */
+.drawer-enter-active { transition: transform .2s cubic-bezier(.2, .8, .3, 1), opacity .18s ease-out; }
+.drawer-leave-active { transition: transform .16s ease-in, opacity .16s ease-in; pointer-events: none; }
+.drawer-enter-from, .drawer-leave-to { transform: translateY(-16px); opacity: 0; }
 .drawer-head { display: flex; align-items: stretch; gap: 12px; min-height: 44px; padding: 0 10px 0 16px;
   border-bottom: 1px solid var(--border-soft); }
 .drawer-title { flex: 1 1 auto; min-width: 0; display: flex; gap: 8px; align-items: center; }
 .drawer-title strong { font-size: 14px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drawer-close { align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
+.drawer-close, .drawer-fold { align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
   border: 0; background: transparent; color: var(--fg-dim); cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
+.drawer-close:hover, .drawer-fold:hover { background: var(--bg-hover); color: var(--fg); }
+.drawer-fold .ico { transition: transform var(--dur) var(--ease); }
+.drawer-fold .ico.flip { transform: rotate(180deg); }
 /* 页签并入头部行(stretch 撑满头高): 活动页签下划线正好压在头部底边线上 */
 .drawer-tabs { display: flex; gap: 2px; }
 .drawer-tabs button { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);

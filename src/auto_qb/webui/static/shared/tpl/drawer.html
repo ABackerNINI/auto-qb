@@ -2,9 +2,16 @@
      注入落点 = 种子视图的 .drawer-dock(tpl-manifest drawer 条目指定, boot.js 按选择器注入)。
      停靠面板无遮罩无模糊 —— 列表整幅可见(用户硬约束), PERF-01 全站零 backdrop-filter 在此收尾;
      Esc 关闭(退栈链, dialogs.js escBusy); trackers/peers 在对应 tab 激活期间 5s 轮询,
-     关闭即停(见 drawer.js _startDrawerPoll); 四个页签 body 与 FX-22/截断族原样保留。 -->
+     关闭即停(见 drawer.js _startDrawerPoll); 四个页签 body 与 FX-22/截断族原样保留。
+     W3: 顶缘 .drawer-grip 拖拽调高(夹取 [240px, 70vh]) + 收起/展开钮 + 高度/开合持久化
+     (localStorage, 见 drawer.js W3 块); 首屏默认收起(D1, drawer.open 初值 false)。 -->
     <transition name="drawer" :duration="200">
-      <aside v-if="drawer.open" class="drawer" role="region" aria-label="种子详情">
+      <aside v-if="drawer.open" class="drawer" :class="{ collapsed: drawer.collapsed }" :style="drawerPanelStyle()"
+             role="region" aria-label="种子详情">
+        <!-- W3 顶缘拖拽调高(夹取 [240px, 70vh], 见 drawer.js _drawerClampHeight); 收起态隐藏 -->
+        <div class="drawer-grip" title="拖拽调高" @pointerdown="drawerGripDown($event)"
+             @pointermove="drawerGripMove($event)" @pointerup="drawerGripUp($event)"
+             @pointercancel="drawerGripUp($event)"></div>
         <header class="drawer-head">
           <div class="drawer-title">
             <span class="g-status" :class="'k-' + ((memberByHash.get(drawer.hash) || {}).kind || 'other')"
@@ -19,6 +26,9 @@
             <button :class="{ active: drawer.tab === 'peers' }" @click="drawerTab('peers')">用户</button>
             <button :class="{ active: drawer.tab === 'content' }" @click="drawerTab('content')">内容</button>
           </nav>
+          <button class="drawer-fold" :title="drawer.collapsed ? '展开' : '收起'" @click="toggleDrawerCollapse()">
+            <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+          </button>
           <button class="drawer-close" title="关闭(Esc)" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>

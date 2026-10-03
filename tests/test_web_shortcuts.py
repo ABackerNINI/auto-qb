@@ -48,6 +48,14 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   跟随单点 _kbFollowDrawer 挂 _kbApplyCursor 尾部, page+kind 守卫 + 200ms 防抖 + hash 短路 +
   停稳复核; _loadDrawerTab bump 请求代际 seq 且四 fetcher 带 _drawerStale 旧响应丢弃;
   _switchDrawerTarget 清旧页签数据防串显; open/close 作废在途跟随定时器
+- test_drawer_height_collapse_w3: 方案A W3(计划 26-10-03-0917 §2.1/§3.5/D1) —— 顶缘 grip 拖拽调高
+  (pointer capture + preventDefault + 夹取 [240px, 70vh] 收口 _drawerClampHeight 纯逻辑单点,
+  松手才落盘); 持久化 autoqb.ui.drawerHeight / autoqb.ui.drawerOpen 与 drawerTab 同族(try/catch);
+  D1 首屏默认收起 = drawer.open 初值 false + drawerOpen 键全 bundle 只写不回读(逐文件断言) +
+  drawerHeightPx 高度记忆仍生效; 收起/展开钮 toggleDrawerCollapse(展开补跟 _kbFollowDrawer,
+  收起期跟随暂停双守卫); 模板 grip 四 pointer 事件 / fold 钮 / aside collapsed 类+内联高度双绑定;
+  Alt+1~4 收起态先展开再切页签; 三皮肤 CSS 成对(collapsed 隐 body / grip touch-action / 拖拽期
+  禁选中 / fold 钮 / .drawer relative)
 - test_modal_whitelist_branch: 引擎含模态白名单分流(modal 条目仅模态内响应, 模态内非模态键位一律失效)
 - test_recorder_and_panel_wiring: 录制器按下即录(捕获段监听+stopPropagation) / 纯修饰键拒收 /
   Esc 取消 / 黑名单当场拒绑 / 冲突三选一(交换/覆盖对方置空/取消) / 单条与全部重置 /
@@ -512,6 +520,94 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert drawer_js.count("this._stopDrawerFollow();") >= 2, "openTorrentDrawer 与 closeDrawer 都必须作废在途跟随定时器"
     # Delete 直连的 list 作用域守卫仍成立(停靠面板下 scope=list, Delete 可用 —— §2.2 矩阵)
     assert 'this._kbScope() === "list"' in eng, "Delete 直连必须保留 list 作用域守卫(面板开着 scope 仍为 list)"
+
+
+def test_drawer_height_collapse_w3() -> None:
+    """方案A W3(计划 26-10-03-0917 §2.1 布局参数 / §3.5 持久化 / D1 首屏默认收起)"""
+    drawer_js = _read("drawer.js")
+    state_js = _read("state.js")
+    app_js = _read("app.js")
+    tpl = (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8")
+    # --- §2.1 拖拽调高: 顶缘 grip pointer 事件 + 夹取 [240px, 70vh](纯逻辑单点) ---
+    clamp = re.search(r"_drawerClampHeight\(px, viewportH\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert clamp, "drawer.js 找不到 _drawerClampHeight(夹取必须收口在纯逻辑单点)"
+    cb = clamp.group(1)
+    assert "0.7" in cb and "240" in cb, "夹取区间必须是 [240px, 70vh](§2.1 布局参数)"
+    assert "Math.min(Math.max(px" in cb, "夹取必须 min/max 双向(下界 240 / 上界 70vh)"
+    grip = re.search(r"drawerGripDown\(e\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert grip, "drawer.js 找不到 drawerGripDown(顶缘拖拽入口)"
+    gb = grip.group(1)
+    assert "this.drawer.collapsed" in gb, "拖拽入口必须守卫收起态(收起无 body 可调)"
+    assert "setPointerCapture" in gb and "preventDefault" in gb, "拖拽必须 pointer capture + preventDefault(出窗不丢事件/不起手选中)"
+    move = re.search(r"drawerGripMove\(e\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert move and "_drawerClampHeight(" in move.group(1), "move 实时改高必须过夹取函数"
+    up = re.search(r"drawerGripUp\(e\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert up and "persistDrawerHeight()" in up.group(1), "松手才落盘(拖拽过程不写 localStorage)"
+    # 面板内联样式: 高度只在展开且有记忆时生效, height 与 max-height 同锁(CSS 默认 42vh 上限要能被拖拽突破)
+    style = re.search(r"drawerPanelStyle\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert style, "drawer.js 找不到 drawerPanelStyle(面板高度应用单点)"
+    stb = style.group(1)
+    assert stb.index("this.drawer.open") < stb.index("this.drawerHeightPx") and "collapsed" in stb, (
+        "内联高度必须守卫 开+未收起(dashboardPanelStyle 高度不该挂在关闭/收起态)"
+    )
+    assert '"maxHeight"' in stb or "maxHeight" in stb, "内联样式必须同时锁 max-height(拖过 42vh 后 CSS 默认上限要被覆盖)"
+    # --- §3.5 持久化: 两键与 drawerTab 同族 try/catch; D1 = drawerOpen 只写不回读 ---
+    for fn, key in (("persistDrawerHeight", "autoqb.ui.drawerHeight"), ("persistDrawerOpen", "autoqb.ui.drawerOpen")):
+        body = re.search(rf"{fn}\(\) \{{(.*?)\n    \}},", drawer_js, re.S)
+        assert body, f"drawer.js 找不到 {fn}"
+        assert f'localStorage.setItem("{key}"' in body.group(1), f"{fn} 必须写 {key}(§3.5 键族)"
+        assert "catch" in body.group(1), f"{fn} 必须吞写入异常(与 persistDrawerTab 同纪律)"
+    all_shared = {n: _read(n) for n in ("app.js", "state.js", "drawer.js", "shortcuts.js", "dialogs.js", "selection.js")}
+    for n, s in all_shared.items():
+        assert 'getItem("autoqb.ui.drawerOpen")' not in s, (
+            f"{n} 回读了 autoqb.ui.drawerOpen —— D1 硬约束: 首屏恒默认收起, 该键只作记录(写不回读)"
+        )
+    assert 'localStorage.getItem("autoqb.ui.drawerHeight")' in app_js, "高度记忆必须回读(initialDrawerHeight)"
+    assert "n >= 240" in app_js, "initialDrawerHeight 读侧必须挡出界脏值(视口夹取在应用时做)"
+    # --- D1: 首屏默认收起 —— drawer.open 初值 false; collapsed 字段显式建(vue-reactivity 坑) ---
+    assert "open: false, collapsed: false," in state_js, "state.js drawer 初值必须 open=false(D1 首屏默认收起) + collapsed 显式建"
+    assert "drawerHeightPx: initialDrawerHeight()" in state_js, "state.js 必须挂高度记忆初值"
+    # --- 收起/展开: toggle 双态 + 展开补跟 + 开/关/收全记开合态 ---
+    tog = re.search(r"toggleDrawerCollapse\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert tog, "drawer.js 找不到 toggleDrawerCollapse(收起/展开钮数据面)"
+    tgb = tog.group(1)
+    assert "this.drawer.collapsed = !this.drawer.collapsed" in tgb and "persistDrawerOpen()" in tgb, "收起切换必须翻 collapsed 并记开合态"
+    assert "_kbFollowDrawer()" in tgb, "展开必须向当前光标补跟(收起期跟随暂停, 见 _kbFollowDrawer)"
+    open_fn = re.search(r"async openTorrentDrawer\(hash\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert open_fn and "collapsed: false" in open_fn.group(1), "显式打开必须复位 collapsed(收起态双击换目标要看到 body)"
+    close_fn = re.search(r"closeDrawer\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert close_fn and "persistDrawerOpen()" in close_fn.group(1), "关闭必须记开合态"
+    # 跟随暂停: 收起态不拉详情(初守卫 + 停稳复核都要带 collapsed)
+    follow = re.search(r"_kbFollowDrawer\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert follow and follow.group(1).count("this.drawer.collapsed") >= 2, "跟随守卫与停稳复核都必须挡收起态(body 不可见)"
+    # --- 模板接线: grip pointer 四事件 / fold 钮 / aside 双绑定 ---
+    assert '@pointerdown="drawerGripDown($event)"' in tpl and '@pointermove="drawerGripMove($event)"' in tpl, (
+        "grip 必须接 pointerdown/move(拖拽调高入口)"
+    )
+    assert '@pointerup="drawerGripUp($event)"' in tpl and '@pointercancel="drawerGripUp($event)"' in tpl, (
+        "grip 必须接 pointerup + pointercancel(取消路径也要落盘收尾)"
+    )
+    # Vue 3.5 运行时编译模板解析不了 `_` 前缀裸标识符(ReferenceError, W3 目检实证) ——
+    # grip 三个内联处理器必须非下划线命名(精确匹配已隐含); 既有 _copyText 模板调用是历史缺陷, 单独报告不在此钉
+    assert '@click="toggleDrawerCollapse()"' in tpl and 'class="drawer-fold"' in tpl, "头部必须有收起/展开钮(W1 只有关闭钮)"
+    assert ':class="{ collapsed: drawer.collapsed }"' in tpl and ':style="drawerPanelStyle()"' in tpl, (
+        "aside 必须双绑定 collapsed 类与内联高度"
+    )
+    # --- Alt+1~4 收起态先展开(页签不可见, 切了等于没切) ---
+    eng = _read("shortcuts.js")
+    dtab = re.search(r"_kbDrawerTab\(tab\) \{(.*?)\n    \},", eng, re.S)
+    assert dtab and dtab.group(1).index("this.drawer.collapsed") < dtab.group(1).index("this.drawerTab(tab)"), (
+        "Alt+1~4 在收起态必须先展开再切页签"
+    )
+    # --- 三皮肤 CSS 成对: 收起态 / grip / 拖拽期禁选中 / fold 钮 / 面板 relative(absolute grip 定位参照) ---
+    for ui in ("atlas", "console", "prism"):
+        cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
+        css = cssp.read_text(encoding="utf-8")
+        assert ".drawer.collapsed .drawer-body { display: none; }" in css, f"{ui}: 收起态必须隐藏 body(§2.1 收起只留头部)"
+        assert ".drawer-grip" in css and "touch-action: none" in css, f"{ui}: grip 样式缺失(触摸端拖拽会滚动页面)"
+        assert "body.drawer-resizing" in css and "user-select: none" in css, f"{ui}: 拖拽期禁选中文本缺失"
+        assert ".drawer-fold" in css, f"{ui}: fold 钮样式缺失"
+        assert re.search(r"\.drawer \{ position: relative;", css), f"{ui}: .drawer 必须 relative(grip absolute 定位参照)"
 
 
 def test_modal_whitelist_branch() -> None:

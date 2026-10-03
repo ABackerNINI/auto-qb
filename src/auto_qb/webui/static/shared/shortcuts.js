@@ -629,6 +629,7 @@ window.AQB_SHORTCUTS = {
       this.openTorrentDrawer(c.id);
     },
     /* Alt+1~4 双态(方案A W2, §2.2): 面板关 = 开面板并定位该页签; 面板开 = 切页签(现行为)。
+     * W3 收起态(半开)视同开态先展开再切页签 —— 页签在收起态不可见, 切了等于没切。
      * 目标解析: 光标行(kind=torrent)优先, 其次单选种子(_kbSingleHash, 选中恰一个 hash);
      * 非种子页(停靠落点 .drawer-dock 只在种子视图)或解析不出目标时 toast 提示后忽略 —— 不猜目标。
      * drawer 作用域条目已清空(§3.2), 四条改 list 作用域由此单点分流双态。 */
@@ -638,6 +639,7 @@ window.AQB_SHORTCUTS = {
         return;
       }
       if (this.drawer.open) {
+        if (this.drawer.collapsed) this.toggleDrawerCollapse();  // W3: 收起态先展开(Alt+N 本就要看该页签)
         this.drawerTab(tab);  // 开态: 切页签(现行为)
         return;
       }

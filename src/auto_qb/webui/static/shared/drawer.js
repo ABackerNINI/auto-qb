@@ -459,10 +459,11 @@ window.AQB_DRAWER = {
       this._stopDrawerFollow();  // 显式打开优先于在途跟随(双击换目标 vs 防抖中的跟随, 不得互相打架)
       const initialTab = this.drawerLastTab || "general";
       this.drawer = {
-        open: true, hash, tab: initialTab, loading: true, error: "",
+        open: true, collapsed: false, hash, tab: initialTab, loading: true, error: "",
         detail: null, trackers: [], files: [], peers: { peers: [] },
         trackersLoading: false, filesLoading: false, peersLoading: false,
       };
+      this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读, 首屏恒默认收起)
       await this._fetchDrawerDetail();  // 详情恒拉(头部标题/常规页都依赖); 非常规 tab 再补拉对应数据
       if (initialTab !== "general") this._loadDrawerTab(initialTab);
     },
@@ -474,6 +475,7 @@ window.AQB_DRAWER = {
       this.drawerSelPath = "";
       this._stopDrawerPoll();
       this._stopDrawerFollow();
+      this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读)
     },
     _stopDrawerPoll() {
       if (this._drawerTimer) {
@@ -587,6 +589,7 @@ window.AQB_DRAWER = {
      *   4) hash 未变短路 —— 光标落回同一行不重拉; 页签内 5s 轮询(_startDrawerPoll)照旧, 互不打架。 */
     _kbFollowDrawer() {
       if (!this.drawer.open) return;
+      if (this.drawer.collapsed) return;  // W3 收起态跟随暂停(body 不可见, 拉了也看不见); 展开时补跟
       if (this.page !== "groups" || this.viewMode !== "torrents") return;  // 种子页守卫(面板停靠落点)
       const c = this.kbCursor;
       if (!c || c.kind !== "torrent") return;  // kind 守卫(组行/剧/集单元不跟随)
@@ -594,8 +597,8 @@ window.AQB_DRAWER = {
       if (this._followDrawerTimer) clearTimeout(this._followDrawerTimer);
       this._followDrawerTimer = setTimeout(() => {
         this._followDrawerTimer = null;
-        // 停稳复核: 面板已关 / 切页走了 / 目标已换(显式打开优先) / 光标又落回原行 -> 放弃本次跟随
-        if (!this.drawer.open || this.page !== "groups" || this.viewMode !== "torrents") return;
+        // 停稳复核: 面板已关/已收起 / 切页走了 / 目标已换(显式打开优先) / 光标又落回原行 -> 放弃本次跟随
+        if (!this.drawer.open || this.drawer.collapsed || this.page !== "groups" || this.viewMode !== "torrents") return;
         const cur = this.kbCursor;
         if (!cur || cur.kind !== "torrent" || cur.id === this.drawer.hash) return;
         this._switchDrawerTarget(cur.id);
@@ -633,6 +636,72 @@ window.AQB_DRAWER = {
       try {
         localStorage.setItem("autoqb.ui.drawerTab", this.drawerLastTab);
       } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
+    },
+    /* ---------------- W3 高度治理(计划 26-10-03-0917 §2.1/§3.5/D1) ----------------
+     * 拖拽调高: 面板顶缘 .drawer-grip 的 pointer 事件(pointer capture, move 实时改高),
+     * 夹取 [240px, 70vh]; 收起/展开钮: 收起态只留头部(~44px); 持久化: 高度与开合态进
+     * localStorage(autoqb.ui.drawerHeight / autoqb.ui.drawerOpen, 与 drawerTab 同族口径)。
+     * D1 拍板 = 首屏默认收起 + 高度记忆仍生效: drawer.open 初值恒 false(state.js),
+     * drawerOpen 键只作记录(写入不回读) —— 与「开合态记忆」字面有出入, 首屏满高优先(硬约束)。 */
+    /* 夹取函数(纯逻辑, 守阵可锚): px 夹进 [240, 0.7*viewportH]。极小视口下 70vh<240 时
+     * 取 70vh 为上界、下界随之取 min(240, 上界) —— 区间保持合法, 面板不越过 70vh 红线。 */
+    _drawerClampHeight(px, viewportH) {
+      const max = Math.round((viewportH || 0) * 0.7);
+      const min = Math.min(240, max);
+      return Math.round(Math.min(Math.max(px, min), Math.max(max, min)));  // 取整, 落盘值不带亚像素尾数
+    },
+    /* 面板内联样式: 展开且有高度记忆/拖拽值时, height 与 max-height 同锁一个 px
+     * (CSS 默认 max-height:42vh 只管未拖拽过的内容自适应态; 拖到 42vh 以上必须放开);
+     * 收起/关闭态交给 CSS(收起 = body 隐藏, 高度回落头部行高) */
+    drawerPanelStyle() {
+      if (!this.drawer.open || this.drawer.collapsed || !this.drawerHeightPx) return {};
+      const h = this._drawerClampHeight(this.drawerHeightPx, window.innerHeight);
+      return { height: h + "px", maxHeight: h + "px" };
+    },
+    /* 顶缘拖拽(pointer capture 挂在 grip 元素上, move/up 都派发给它, 出窗不丢事件)。
+     * !命名约束: 模板内联处理器不得用 `_` 前缀 —— Vue 3.5 运行时编译的模板解析不了
+     * 下划线开头的裸标识符(ReferenceError), 本文件其余 `_` 方法只经 this.xx 调用故无恙。 */
+    drawerGripDown(e) {
+      if (!this.drawer.open || this.drawer.collapsed) return;  // 收起态无 body 可调
+      if (e.button !== undefined && e.button !== 0) return;    // 只认主键
+      e.preventDefault();  // 防拖拽起手选中文本/触发滚动
+      const panel = e.currentTarget.parentElement;  // grip 是 .drawer 的首子节点
+      this._drawerDrag = { startY: e.clientY, startH: panel.getBoundingClientRect().height, pid: e.pointerId };
+      e.currentTarget.setPointerCapture(e.pointerId);
+      document.body.classList.add("drawer-resizing");
+    },
+    drawerGripMove(e) {
+      const d = this._drawerDrag;
+      if (!d || e.pointerId !== d.pid) return;
+      if (!this.drawer.open || this.drawer.collapsed) { this.drawerDragStop(); return; }  // 拖拽中面板被关(键盘路径)
+      this.drawerHeightPx = this._drawerClampHeight(d.startH + (d.startY - e.clientY), window.innerHeight);
+    },
+    drawerGripUp(e) {
+      const d = this._drawerDrag;
+      if (!d || e.pointerId !== d.pid) return;
+      this.drawerDragStop();
+      this.persistDrawerHeight();  // 松手才落盘(拖拽过程不写 localStorage)
+    },
+    drawerDragStop() {
+      this._drawerDrag = null;
+      document.body.classList.remove("drawer-resizing");
+    },
+    /* 收起/展开: 收起 = 只留头部(body 隐藏); 展开即向当前光标补跟(收起期跟随暂停, 见 _kbFollowDrawer) */
+    toggleDrawerCollapse() {
+      this.drawer.collapsed = !this.drawer.collapsed;
+      this.persistDrawerOpen();
+      if (!this.drawer.collapsed) this._kbFollowDrawer();
+    },
+    persistDrawerHeight() {
+      try {
+        localStorage.setItem("autoqb.ui.drawerHeight", String(this.drawerHeightPx));
+      } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
+    },
+    /* 开合态记录(D1): 展开=1, 收起/关闭=0。只写不回读 —— 首屏恒默认收起(硬约束), 键按计划创建 */
+    persistDrawerOpen() {
+      try {
+        localStorage.setItem("autoqb.ui.drawerOpen", this.drawer.open && !this.drawer.collapsed ? "1" : "0");
+      } catch { /* 写入失败: 不影响本轮 */ }
     },
     /* 抽屉头部动作: 复用 actTorrent(它读 menu.hash 并自带回执/toast) */
     drawerAct(action) {
