@@ -38,9 +38,9 @@
 
 ## Open
 
+- [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
 - [26-10-03-webui-qb-traffic-charts] WebUI qB 口径流量图 (可行性 + 方案C 实施计划) - 为 WebUI 新增 3 种仅展示的 qB 口径流量图 (全局实时/单种子/辅种分组) 调研成熟方案并出可行性报告 26-10-03-0757 (13 节 da…
 - [26-09-30-memory-bank-timekit] memory-bank 取时间标准化 (UTC+8 单点 + 守卫 + 移植) - KB 日期全凭 agent 手写: 约定要求「时间戳用命令取当前值」但那条命令不存在, 守卫只查形状不查值 (gen_active_recent 静默回退),…
-- [26-09-22-backend-partial-hr-verify] 部分种子 HR 的在线核实 - 部分种子 HR 站点在线核实。**M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已落地**
 - [26-09-23-commands-unified-surface] 项目命令统一调用面 (纯引擎 + 包式配置层) - 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell…
 
 ## Done

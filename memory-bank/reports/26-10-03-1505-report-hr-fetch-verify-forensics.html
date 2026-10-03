@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="backend-partial-hr-verify">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-03-1505">
+<meta name="doc-updated" content="26-10-03-1505">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-22-backend-partial-hr-verify.md">
+<title>HR 波次引擎四现象故障取证 · 一直在拉取 / 核实「未核实」/ 失踪 0 波 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2027;
+    --accent: #5cc0cf;
+    --accent-ink: #86d7e0;
+    --ok: #7fc08a;
+    --ok-bg: #16241a;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --bad: #e0796f;
+    --bad-bg: #2a1a18;
+    --code-bg: #171d24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1040px; margin: 0 auto; padding: 52px 44px 80px; }
+
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.3; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 76ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 3px; }
+  .meta-row .item .v { font-size: 13px; font-family: var(--mono); }
+
+  nav.toc { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { color: var(--accent-ink); }
+
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.006em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 22px 0 8px; color: var(--ink); }
+  h4 { font-family: var(--display); font-size: 13.5px; font-weight: 600; margin: 14px 0 6px; color: var(--ink-dim); }
+  p { margin-bottom: 11px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  a { color: var(--accent-ink); }
+  b, strong { color: var(--ink); }
+
+  .verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 18px 0 6px; }
+  .vcard { background: var(--paper); border: 1px solid var(--hair); border-radius: 4px; padding: 14px 16px; }
+  .vcard .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; }
+  .vcard .v { font-family: var(--display); font-size: 19px; font-weight: 600; }
+  .vcard .n { font-size: 12.5px; color: var(--ink-dim); margin-top: 5px; line-height: 1.5; }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--paper); padding: 12px 16px; margin: 14px 0; border-radius: 0 4px 4px 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout p { margin-bottom: 6px; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); border-bottom: 1px solid var(--hair); white-space: nowrap; }
+  td.num, .mono { font-family: var(--mono); white-space: nowrap; }
+  tbody tr:hover { background: var(--paper); }
+
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.04em; white-space: nowrap; }
+  .tag.a { background: var(--ok-bg); color: var(--ok); border: 1px solid #2c4531; }
+  .tag.b { background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .tag.c { background: var(--bad-bg); color: var(--bad); border: 1px solid #4d2b28; }
+  .tag.off { background: var(--paper-2); color: var(--ink-faint); border: 1px solid var(--hair); }
+
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px; padding: 12px 14px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: var(--ink-dim); margin: 10px 0 14px; }
+  pre .ln { color: var(--ink-faint); user-select: none; }
+  pre em { color: var(--accent-ink); font-style: normal; }
+  pre strong { color: var(--ink); font-weight: 600; }
+
+  .quote { border-left: 3px solid var(--hair); background: var(--paper-2); padding: 10px 14px; margin: 10px 0; border-radius: 0 4px 4px 0; color: var(--ink); }
+  .quote .qno { font-family: var(--display); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); display: block; margin-bottom: 3px; }
+
+  .hint { color: var(--ink-faint); font-size: 13px; max-width: 84ch; }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">故障取证 · report · auto-qb</div>
+    <h1>HR 波次引擎四现象故障取证<br>「一直在拉取」· 核实「未核实」· 「失踪 0 波」</h1>
+    <p class="lede">生产侧四个互相「矛盾」的观感 (S1–S4) 的证据链重建。核心结论先行: 取数引擎是<b>账号级对账机器</b>, 本地种子状态只决定「翻多深」、从不决定「抓不抓」; 展示层把四个独立事实压进同一面板, 被读成了互相矛盾的状态。所有 <code>file:line</code> 引用基于取证基线 <code>develop@23796f3b</code>, 原样保留。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-03-1505</div></div>
+      <div class="item"><div class="k">专题</div><div class="v">backend-partial-hr-verify</div></div>
+      <div class="item"><div class="k">取证基线</div><div class="v">develop@23796f3b · 2026-10-03</div></div>
+      <div class="item"><div class="k">生成时间</div><div class="v">2026-10-03 15:05 +08:00</div></div>
+      <div class="item"><div class="k">状态</div><div class="v">Done (快照终态)</div></div>
+    </div>
+    <nav class="toc">
+      <a href="#s01">结论速览</a><a href="#s02">问题背景</a><a href="#s03">机制背景</a><a href="#s04">S1</a><a href="#s05">S2</a><a href="#s06">S3</a><a href="#s07">S4</a><a href="#s08">统一解释</a><a href="#s09">时间线</a><a href="#s10">缺陷与建议</a><a href="#s11">未决问题</a><a href="#s12">证据附录</a>
+    </nav>
+  </header>
+
+  <section id="s01">
+    <h2><span class="no">01</span>结论速览</h2>
+    <p>先给答案, 证据在 §04–§07。判定口径: <b>设计内</b> = 代码按设计意图运行, 需要动的是产品取舍或文案; <b>显示语义缺陷</b> = 数据与判定正确, 界面文案造成误读。</p>
+    <table>
+      <thead><tr><th style="width:44px">#</th><th style="width:30%">现象 (用户原话)</th><th>根因一句话</th><th style="width:130px">判定</th><th style="width:90px">置信度</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="num">S1</td>
+          <td>「该站点本地没有 HR 种子」<b>依然在拉取</b></td>
+          <td>「没有」是明细表<b>空态文案</b> (默认过滤后本地 qB 库与站点清单行<b>零交集</b>); 「依然在拉取」是账号级对账的<b>设计内行为</b> —— 四道拉取闸门 (service.py:448-496) 没有一道读本地种子状态</td>
+          <td><span class="tag b">设计内</span> <span class="tag b">文案误导空间</span></td>
+          <td><span class="tag a">高</span></td>
+        </tr>
+        <tr>
+          <td class="num">S2</td>
+          <td>所有本地种子「B已达标」<b>依然在拉取</b></td>
+          <td>本地种子全达标只把<b>对账对象集</b>清空 (影响翻页深度), 不构成取数闸门; 5H 对账节奏照走 —— 拉的是站点清单页, 不是种子</td>
+          <td><span class="tag b">设计内</span></td>
+          <td><span class="tag a">高</span></td>
+        </tr>
+        <tr>
+          <td class="num">S3</td>
+          <td>「B已达标」种子核实结论显示<b>「未核实」</b></td>
+          <td>B 档命中<b>刻意不写</b>放行记录 (命中即撤销放行的防伪语义, service.py:861-867); <code>verified</code> 要等行从清单<b>消失且位置被证明</b>时由终态冻结写入 —— 行 remain=0 长期挂清单 ⇒ 永不触发; 主列表「在线·已达标」与明细表「未核实」走两条互不通约通路</td>
+          <td><span class="tag b">设计内</span> <span class="tag b">文案粒度缺陷</span></td>
+          <td><span class="tag a">高</span></td>
+        </tr>
+        <tr>
+          <td class="num">S4</td>
+          <td>「失踪 0 波 最近被见到 09-28 07:14」实际<b>已过去很多波</b></td>
+          <td><code>missing_streak</code> 是 A 档<b>观察期计数器</b>, 不是失踪波数 —— 退役行结构性恒 0; 「09-28 07:14」是 v2 引擎<b>末次页面合并笔迹</b>, 该行自那以后从未被任何波重见 (v3 断层期若重见, last_seen=0.0 的新行会整体替换 ⇒ 显示「—」, 非零即从未重见)</td>
+          <td><span class="tag b">显示语义缺陷</span></td>
+          <td><span class="tag a">高</span> <span class="tag b">盲窗成因为中置信子项</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="verdict">
+      <div class="vcard"><div class="k">引擎级故障</div><div class="v">0 个</div><div class="n">四现象无一需要改引擎判定逻辑; 数据侧 (判定/落盘) 全部按设计运行</div></div>
+      <div class="vcard"><div class="k">设计内行为</div><div class="v">3 项</div><div class="n">S1/S2/S3 的数据侧; 是否要改属产品取舍 (§10-A)</div></div>
+      <div class="vcard"><div class="k">显示文案缺陷</div><div class="v">4 条</div><div class="n">S1 空态文案 / S2「下次拉取」语义 / S3 缺中间态 / S4「失踪 N 波」徽章 (§10-B)</div></div>
+      <div class="vcard"><div class="k">次要缺陷候选</div><div class="v">1 + 2</div><div class="n">wave_ts 跨波冻结 (保守方向, 未入池) + S4 本体 + 30 天静默淘汰附随风险 (§10-C)</div></div>
+    </div>
+    <div class="callout ok">
+      <p><strong>一句话结论：</strong>「依然在拉取」拉的是<b>站点清单页</b>, 不是种子; 「未核实」不是没核实, 是核实结论的<b>登记时点还没到</b> (要等行移出清单); 「失踪 0 波」的 0 不是波数, 是观察期计数器的缺省值。三个症状 (S1–S3) 同根: 引擎按<b>账号级对账</b>设计运转, 本地种子状态只影响「翻多深」, 永不影响「抓不抓」; S4 是独立的三列改版文案问题, 叠加了一层引擎盲窗的固有歧义。</p>
+    </div>
+  </section>
+
+  <section id="s02">
+    <h2><span class="no">02</span>问题背景与四现象</h2>
+    <h3>2.1 现场</h3>
+    <p>生产 config 中 BTSchool / CarPT 两站 <code>hr_check</code> enabled, <code>refresh_interval=5H</code> (配置默认 12H, <code>config/models.py:143</code>, 展示名「拉取间隔」); 其余取数相关默认: <code>min_interval</code> 90S, <code>max_requests_per_day</code> 240, <code>max_pages_per_wave</code> 30, <code>reuse_window</code> 2H (生效 = min(复用窗, 拉取间隔) = 2H, <code>service.py:1062</code>)。症状呈现时点 2026-10-03 (当日末波 14:20), 此时三列改版 (<code>8cb2da59</code>, 10-02 18:33 上线) 已让「失踪 N 波 · 最近被见到」成为可见文案。</p>
+    <h3>2.2 四现象 (用户原话)</h3>
+    <div class="quote"><span class="qno">S1</span>「该站点本地没有 HR 种子」依然在拉取</div>
+    <div class="quote"><span class="qno">S2</span>所有本地种子「B已达标」依然在拉取</div>
+    <div class="quote"><span class="qno">S3</span>「B已达标」种子核实结论显示「未核实」</div>
+    <div class="quote"><span class="qno">S4</span>「失踪 0 波 最近被见到 09-28 07:14」实际已过去很多波</div>
+    <p class="hint">四条分别指向: 取数调度 (S1/S2)、放行记录登记 (S3)、退役条目展示 (S4)。S1 与 S2/S3 在同一界面同框出现 —— 这是「统一解释」(§08) 的切入点。</p>
+  </section>
+
+  <section id="s03">
+    <h2><span class="no">03</span>机制背景 —— HR 波次引擎 5 分钟版</h2>
+
+    <h3>3.1 账号级对账, 数据落 <code>&lt;site&gt;.json</code> 而非 state.json</h3>
+    <p>HR 状态是<b>账号级</b>的 (model.py:6), 不进 <code>state.json</code>, 落 <code>&lt;data_dir&gt;/hr/&lt;site&gt;.json</code> (store.py:6, 51-62), 一站点一文件一把锁 —— 多实例共享同一份账号事实。三层模型:</p>
+    <ul>
+      <li><b>index</b> —— 站点清单条目 (tid / lane / active / missing_streak / first_seen / last_seen / infohash_v1/v2 …), model.py:84-168。这是「对账底账」: 站点清单长什么样, 引擎就记什么。</li>
+      <li><b>verified</b> —— 放行记录 (infohash → 来源/时刻), <b>永续有效</b> (model.py:250-256, 471)。它不是「核实过没有」的标记, 而是「不受管束」的结论。</li>
+      <li><b>wave</b> —— 最近一波的元数据 (healthy_ts / 各档状态 / releases_enabled …), model.py:378-431。</li>
+    </ul>
+
+    <h3>3.2 A-B-C(-D) 档位与「波」的生命周期</h3>
+    <p>站点 HR 清单页按考察状态分档: <b>A = 考察中</b> (LANE_SCOPE) / <b>B = 已达标</b> (LANE_SATISFIED) / <b>C = 未达标</b> (LANE_UNSATISFIED) / <b>D = 免罪</b> (absent)。主循环 (<code>worker.py</code>) POLL_INTERVAL=60s 自唤醒 (260-285), 逐启用站点 <code>refresh_site</code> (287-309)。一波的生命周期:</p>
+    <p class="mono" style="white-space:normal"><code>_refresh_locked</code> 闸门 (service.py:448-496) → <code>_do_wave</code> (500-587) → <code>_run_pages</code> A/B/C 轮流翻页 (589-727) → <code>_process_rows</code> 行处理 (825-855) → <code>_run_downloads</code> 身份登记下载 (873-953) → <code>_finish_wave</code> (968-1097)。</p>
+
+    <h3>3.3 拉取闸门四道 —— 没有一道读本地种子状态</h3>
+    <p><code>_refresh_locked</code> (service.py:448-496) 依次过四道闸: <b>复用窗</b> (464-471, 窗内数据直接采用) / <b>拉取间隔</b> (477-483, <code>healthy_ts + refresh_interval</code>) / <b>allow_fetch</b> (485-488, dry-run 只读) / <b>频控 next_allowed_at</b> (490-494)。关键在于:</p>
+    <pre><span class="ln">477</span>  healthy = data.wave.healthy_ts
+<span class="ln">478</span>  if not force and healthy &gt; 0:
+<span class="ln">479</span>      due_wave = healthy + site_conf.refresh_interval
+<span class="ln">480</span>      if now &lt; due_wave:
+<span class="ln">481</span>          result.action = ACTION_WAITING
+<span class="ln">482</span>          result.reason = f"未到拉取时刻(拉取间隔, 还差 {due_wave - now:.0f}s)"
+<span class="ln">483</span>          return
+<span class="ln">484</span>
+<span class="ln">485</span>  if not self.allow_fetch:
+<span class="ln">486</span>      result.action = ACTION_WAITING
+<span class="ln">487</span>      result.reason = "dry-run / 只读模式: 不发起取数"
+<span class="ln">488</span>      return
+<span class="ln">489</span>
+<span class="ln">490</span>  due, why = next_allowed_at(data, limits, now)
+<span class="ln">491</span>  if due &gt; now:
+<span class="ln">492</span>      result.action = ACTION_WAITING
+<span class="ln">493</span>      result.reason = f"未到可取时刻({why}, 还差 {due - now:.0f}s)"
+<span class="ln">494</span>      return
+<span class="ln">495</span>
+<span class="ln">496</span>  self._do_wave(site, site_conf, adapter, session, result, limits, anchors)</pre>
+    <p>四道闸全部只看<b>时间与账号频控</b>。<b>对账对象集 (anchors) 在闸门之后才现算</b> (service.py:509); <b>对象集为空也不跳波</b> —— <code>_do_wave</code> 无条件进 <code>_run_pages</code> (service.py:509-539); 三停翻条件 (761-797) 只影响单档<b>翻页深度</b>, 停翻仅把该档从本波翻页序列移除。换言之: 「本地有没有种子、达没达标」最多让这一波翻得浅一点, <b>永远不会让这一波不发生</b>。</p>
+
+    <h3>3.4 .torrent 下载只服务身份登记</h3>
+    <p>引擎下载 .torrent 的唯一目的是给清单行登记 infohash 身份: A 档行<b>无条件</b>下、B/C/D 终态行<b>名称粗配疑似本地才下</b> (826-830, 854-855), 同 tid 永不重下 (883-885)。生产实测: 两站清单行全部 B 档且 infohash 已回填 ⇒ <code>pending_downloads</code> 恒空, 当日 <code>day_count</code> 8/6 次请求<b>全部是页面请求, 无一条种子下载</b>。这对理解 S1/S2 的「拉取」二字的实体很关键 —— 拉的是页面, 不是种子。</p>
+
+    <h3>3.5 v3 设计前提 (判定 S1/S2 的锚)</h3>
+    <pre><span class="ln">6</span><strong>**单波型**(§4.1): 每波都从第 1 页开始、以覆盖全部对象为目标 —— 清单是动的, 任何「从断点</strong>
+<span class="ln">7</span><strong>继续」「凭上波已见过而跳过」都在赌上波的覆盖假设仍然成立。</strong>每波**自证覆盖**: 覆盖结论只来自
+<span class="ln">8</span>本波抓到的页面。波的大小由覆盖对象集(未对账 ∪ 考察中, 超额 ≥3× 排除)最老的完成时间决定,
+<span class="ln">9</span>随对账与转终态单调变浅 —— 「这波 20 页、下波 1 页」由此涌现, 不靠波型配置。</pre>
+    <p class="hint">—— service.py:6-9 模块 docstring。S2 的判定直接落在这句上: 「凭上波已见过而跳过是在赌覆盖假设仍成立」。</p>
+  </section>
+
+  <section id="s04">
+    <h2><span class="no">04</span>S1 ·「该站点本地没有 HR 种子」依然在拉取</h2>
+    <div class="callout"><p><strong>结论：</strong>「没有」= 明细表<b>空态文案</b> (本地 qB 库与站点清单行零交集); 「依然在拉取」= <b>设计内行为</b>。两半都对, 拼在一起才显得矛盾。</p></div>
+
+    <h3>4.1 「该站点本地没有 HR 种子」这句话从哪来</h3>
+    <p>它是明细表<b>过滤后的空态文案</b>, 不是站点清单为空的断言。行集在前端本地过筛 (hr_status.js:233-243):</p>
+    <pre><span class="ln">233</span>hrsDetailRows(site) {
+<span class="ln">234</span>  const d = this.hrs.details[site];
+<span class="ln">235</span>  if (!d || !d.entries) return [];
+<span class="ln">236</span>  let rows = d.entries;
+<span class="ln">237</span>  const sel = this.hrsLaneSelOf(site);
+<span class="ln">238</span>  if (sel) rows = rows.filter((e) =&gt; e.lane === sel);
+<span class="ln">239</span>  <em>if (!this.hrsOldOnOf(site)) rows = rows.filter((e) =&gt; e.local_present);</em>
+<span class="ln">240</span>  const key = this.hrsSortKeyOf(site);
+<span class="ln">241</span>  if (key) rows = [...rows].sort((a, b) =&gt; hrsCompareRows(a, b, key, this.hrsSortDirOf(site)));
+<span class="ln">242</span>  return rows;
+<span class="ln">243</span>},</pre>
+    <p><code>oldOn</code> 默认 false (hr_status.js:87) —— 默认就是「只看做种中」过滤。空态判定 (hr_status.js:246-253): 无档位 chip 过滤 + 做种中视图 + <b>全行 <code>local_present</code> 为假</b> ⇒ 显示「该站点本地没有 HR 种子」; 由 settings-detail.html:345 渲染。而 <code>local_present</code> 的语义在路由层钉死 (routes/hr.py:22-36): <b>「本地 qB 库存在该种子」(含暂停, 与做种状态无关)</b>, 按 infohash_v1 → v2 对 <code>manager.store.by_hash</code> 探测 (任一命中即算, 大小写无关); 身份未回填的行 (34-36) 恒 false; 站点索引为空的站点也命中该文案。26-10-02 档案决策③a 明文: 「本地库存在含暂停, 暂停仍是义务对象」。</p>
+
+    <h3>4.2 运行数据排歧</h3>
+    <ul>
+      <li>两站 index <b>非空</b>: BTSchool 194 行 / CarPT 17 行 ⇒ 排除「索引为空」分支;</li>
+      <li>活跃行 infohash 回填率 100% ⇒ 排除「pending 未回填导致 local_present 恒 false」分支;</li>
+      <li><code>local_present</code> 含暂停 ⇒ 「种子停止做种所以被过滤」分支被<b>证伪</b>;</li>
+      <li>剩下的唯一解释: <b>(a) 本地 qB 库与站点清单行零交集</b>。「毕业后已从本地删除」是吻合的解释, 磁盘不可考 (未决问题 §11-2)。</li>
+    </ul>
+
+    <h3>4.3 「依然在拉取」的实测</h3>
+    <p>BTSchool 当日 04:10 / 09:15 / 14:20 三次 <code>refreshed</code> 正常, <b>精确 5H 间隔</b>, 其间 <code>waiting</code> (还差 10789s) —— 与「依然在拉取」的观感吻合: 取数节奏从未停。</p>
+
+    <h3>4.4 判定与修复方向</h3>
+    <p><b>判定: 设计内行为</b> (高置信)。账号级对账的含义就是: 清单是动的, 随时可能出现新的 A 档考察行, 把本地种子重新拉回管束 —— service.py:6-9 设计说明明文。但「只看做种中」按钮名 vs 实际过滤条件「本地库存在」之间有<b>误导空间</b>。</p>
+    <p><b>修复方向:</b> 文案消歧 —— 空态附一句「站点清单仍有 N 行, 点显示老旧种子查看」, 或把按钮名改「只在本地」; 可选增强 (零对象稳态 N 波后自动拉长间隔) 属产品取舍非缺陷 (§10)。</p>
+  </section>
+
+  <section id="s05">
+    <h2><span class="no">05</span>S2 · 所有本地种子「B已达标」依然在拉取</h2>
+    <div class="callout"><p><strong>结论：</strong>与 S1 同一条闸门链 —— 本地种子全达标<b>不构成取数闸门</b>, 设计内 (高置信)。</p></div>
+
+    <h3>5.1 达标种子在引擎侧的待遇: 移出对象集, 仅此而已</h3>
+    <p>对象集现算 (<code>_build_objects</code>, service.py:1230-1249) 时, 达标 B 档种子被移出对账对象集: 终态 lane 直接 continue (1239-1240)、已有放行记录 continue (1241-1242)、超额线 continue (1243-1244, 本地做种时长 ≥ 3× 要求时长, <code>SEED_EXEMPT_RATIO = 3.0</code> service.py:103):</p>
+    <pre><span class="ln">1239</span>            if entry is not None and lane_is_terminal(entry.lane):
+<span class="ln">1240</span>                <em>continue</em>  # 终态冻结出对象集(终态不可逆, 不再为它翻页下载)
+<span class="ln">1241</span>            if ver is not None:
+<span class="ln">1242</span>                <em>continue</em>  # 放行记录在案(未列出/免罪): 被动命中由行处理撤销
+<span class="ln">1243</span>            if required_seeding_time &gt; 0 and anchor.seeding_time &gt;= SEED_EXEMPT_RATIO * required_seeding_time:
+<span class="ln">1244</span>                <em>continue</em>  # 超额线(§3.3): 免除在线对账义务; 被动命中考察中仍转管束(网站绝对权威)</pre>
+    <p>但对象集只决定<b>翻页深度</b> (§3.3): 对象集空了, 波照开、页照翻 (至少每档第 1 页)。「拉取」动作本身与本地种子状态无关。</p>
+
+    <h3>5.2 「拉取」在界面上可见的载体</h3>
+    <ul>
+      <li>kv 行「取波」: 「上次取波 / 最近健康波 / 复用窗至 / 下次拉取」 (status.py:297-304 → hr_status.js:381-383) —— <code>next_wave_at = healthy_ts + refresh_interval</code>, 倒计时永在;</li>
+      <li>按钮「立即拉取」 (settings-detail.html:250, 296 → <code>/api/hr/refresh</code> → <code>request_refresh</code> worker.py:223-240, 跳过复用窗与拉取间隔, 频控照常);</li>
+      <li>日志 <code>refreshed</code> / <code>waiting</code> (worker.py:353, 363)。</li>
+    </ul>
+
+    <h3>5.3 判定与修复方向</h3>
+    <p><b>判定: 设计内</b> (高置信)。v3 设计前提「凭上波已见过而跳过是在赌覆盖假设仍成立」(service.py:6-9, §3.5) —— 清单是动的, 每 5H 重新对一遍账是设计意图, 不是没拉完。</p>
+    <p><b>修复方向:</b> 展示层把「下次拉取」语义讲清 —— 它是<b>对账节奏</b> (下一次核对站点清单的时刻), 不是「还有多少没拉完」。</p>
+  </section>
+
+  <section id="s06">
+    <h2><span class="no">06</span>S3 ·「B已达标」种子的核实结论显示「未核实」</h2>
+    <div class="callout"><p><strong>结论：</strong>设计内行为 + 展示<b>文案粒度缺陷</b> (高置信; 代码 / 测试 / 运行数据三方一致)。B 档命中<b>刻意不写</b>放行记录; <code>verified</code> 要等行从清单<b>消失且位置被证明</b>时由终态冻结写入。明细表与主列表走两条互不通约的通路, 矛盾是结构性的。</p></div>
+
+    <h3>6.1 命中即定论, 但命中不是放行</h3>
+    <p><code>_record_hit</code> (service.py:861-867) —— infohash 精配命中的处理是「写入波上下文 + 撤销既有放行」, <b>不写 <code>data.verified</code></b>:</p>
+    <pre><span class="ln">861</span>    def _record_hit(self, data: HrSiteData, wave: _WaveContext, h: str, row: HrEntry) -&gt; None:
+<span class="ln">862</span>        """infohash 精配命中: 定论按档位(§3 矩阵); <strong>命中即撤销既有放行</strong>(它已回清单/重考)。"""
+<span class="ln">863</span>        wave.hits[h] = row.lane
+<span class="ln">864</span>        wave.pending_downloads.discard(row.tid)
+<span class="ln">865</span>        <em>if h in data.verified:</em>
+<span class="ln">866</span>            <em>del data.verified[h]</em>
+<span class="ln">867</span>            wave.retracted += 1</pre>
+    <p>这不是疏漏, 是防伪语义: 种子还挂在站点清单上 (哪怕 B 页 remain=0), 放行就不成立 —— 命中即撤销放行, 保证「回清单 ⇒ 立刻重新受管束」。测试守阵钉了这一点 (tests/test_hr_service.py:744):</p>
+    <pre><span class="ln">744</span>    assert h21 not in data.verified, <strong>"命中不是放行: 放行记录由冻结/未列出签发来落"</strong></pre>
+    <p>model.py:56 注释同义: <code>SOURCE_SATISFIED = "satisfied"  # B 档毕业后移出清单(B 命中时的达标结论要留住)</code>。</p>
+
+    <h3>6.2 放行记录的唯一写点: 终态冻结, 前提是「消失」</h3>
+    <p><code>SOURCE_SATISFIED</code> 的唯一写点是 <code>_freeze_terminal</code> (service.py:1114-1142): 前提 = tid <b>不在本波 <code>wave.seen</code></b> (1119-1121, 即行已从清单消失) + 该档本波有效 + <b>位置被证明</b> (全深度或完成时间早于截断线, 1126-1127); satisfied 分支在 1131-1133:</p>
+    <pre><span class="ln">1119</span>        for tid, entry in data.index.items():
+<span class="ln">1120</span>            <em>if tid in wave.seen or not entry.active or not lane_is_terminal(entry.lane):</em>
+<span class="ln">1121</span>                <em>continue</em>
+<span class="ln">1122</span>            st = lane_states.get(entry.lane)
+<span class="ln">1123</span>            if st is None or not st.ok:
+<span class="ln">1124</span>                continue
+<span class="ln">1125</span>            done = entry.done_epoch
+<span class="ln">1126</span>            if not st.full_depth and (done is None or done &lt; st.cutoff_done):
+<span class="ln">1127</span>                continue  # 位置未被覆盖: 不能证明它离开了, 维持原状(命中照常, 保守无害)
+<span class="ln">1128</span>            entry.active = False
+<span class="ln">1129</span>            for h in (entry.infohash_v1, entry.infohash_v2):
+<span class="ln">1130</span>                if h and h not in data.verified:
+<span class="ln">1131</span>                    source = <strong>SOURCE_SATISFIED</strong> if entry.lane == LANE_SATISFIED else (
+<span class="ln">1132</span>                        SOURCE_EXEMPT if entry.lane == LANE_EXEMPT else SOURCE_NOT_LISTED
+<span class="ln">1133</span>                    )</pre>
+    <p>而生产现状是: BTSchool 的 B 行 remain=0 <b>长期挂清单</b> (本波停翻原因即「连续 48 行剩余考察时间为 0」的到期段强信号, service.py:763-779) —— 行每波都被重见 (<code>tid in wave.seen</code>), <b>永不满足消失前提</b> ⇒ <code>_freeze_terminal</code> 永不为它们触发 ⇒ <code>verified</code> 永远无记录。</p>
+
+    <h3>6.3 双通路: 同一批种子在两个界面两种说法</h3>
+    <table>
+      <thead><tr><th style="width:120px">界面</th><th>取数通路</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>明细表</b>「核实结论」</td>
+          <td>只认 <code>data.verified</code>: status.py:419 无记录显示「未核实」; hr_status.js:278-280 <code>hrsVerdictText(e)</code> = <code>e.verified_source ? "已核实" : "未核实"</code></td>
+          <td><b>「未核实」</b> (verified 无记录)</td>
+        </tr>
+        <tr>
+          <td><b>主列表</b>(种子行状态)</td>
+          <td>走运行时视图 index 活跃行: resolve.py:369-381 <code>build_site_view</code> 把活跃 B 档行装进 <code>lane_terminal</code>; resolve.py:217-220 命中 B ⇒ <code>RELEASED</code>; resolve.py:342 显示<b>「在线·已达标」</b></td>
+          <td><b>「在线·已达标」</b> (index 活跃行)</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>两条通路都没有错, 但它们<b>互不通约</b>: 一个说「放行记录还没签」, 一个说「清单说它已达标」。用户同时看到两处, 矛盾感由此而来。</p>
+
+    <h3>6.4 排除「计数对平冻结」与运行数据终证</h3>
+    <p>计数对平冻结 (service.py:1000-1031, <code>releases_enabled=False</code>) 只闸<b>批量「未列出」签发</b> (1034-1035); <code>_freeze_terminal</code> 在 1037 <b>无条件调用</b>, 不受影响。实测两站 <code>count_claim=None</code>、<code>releases_enabled=True</code>, 冻结从未发生 —— 该嫌疑排除。运行数据终证:</p>
+    <ul>
+      <li>BTSchool: 活跃 B 行 <b>0/50</b> 有 verified —— 「未核实」与代码推断逐行对上;</li>
+      <li>非活跃 144 行中 <b>64 条</b>有 verified (64/64 回填者全命中), satisfied 来源区间 09-28 07:14 → 09-30 04:31;</li>
+      <li>CarPT: 活跃 B 行 <b>0/17</b> 有 verified, 同构。</li>
+    </ul>
+
+    <h3>6.5 判定与修复方向</h3>
+    <p><b>判定: 设计内 + 文案粒度缺陷</b> (高置信)。「未核实」三个字掩盖了真实状态「在列·B 档·结论已定」。</p>
+    <p><b>修复方向:</b> 明细表补中间态 —— <code>verified_source</code> 为空但行有档位结论时, 显示如「<b>在列·已达标(移出清单后转已核实)</b>」; <code>lane_text</code> 已在场 (status.py:409), 无需新字段。<b>切勿改成命中即写 verified</b> —— 那会破坏「命中即撤销放行」的防伪语义 (§6.1) 与测试守阵 (tests/test_hr_service.py:744)。</p>
+  </section>
+
+  <section id="s07">
+    <h2><span class="no">07</span>S4 ·「失踪 0 波 最近被见到 09-28 07:14」已过去很多波</h2>
+    <div class="callout"><p><strong>结论：</strong><b>显示语义缺陷</b> (叠加一层引擎盲窗的固有歧义; 数据与判定侧均设计内, 高置信)。用户看到的那一行是 BTSchool 的 B 档<b>退役条目</b> (142 条同批之一): <code>missing_streak</code> 结构性恒 0; 「09-28 07:14:04」是 v2 引擎<b>末次页面合并笔迹</b>, 不是迁移伪影。</p></div>
+
+    <h3>7.1 那一行是怎么渲染出来的</h3>
+    <p>渲染矩阵 (hr_status.js:296-308 + settings-detail.html:340-341):</p>
+    <pre><span class="ln">296</span>    hrsPresenceText(e) {
+<span class="ln">297</span>      <em>return e.active ? "在列" : `失踪 ${e.missing_streak} 波`;</em>
+<span class="ln">298</span>    },
+<span class="ln">299</span>    hrsPresenceCls(e) {
+<span class="ln">300</span>      return e.active ? "hr-pres-on" : "hr-pres-miss";
+<span class="ln">301</span>    },
+<span class="ln">302</span>    hrsPresenceSub(e) {
+<span class="ln">303</span>      const parts = [];
+<span class="ln">304</span>      if (e.active &amp;&amp; e.missing_streak &gt; 0) parts.push(`观察期 ${e.missing_streak}`);
+<span class="ln">305</span>      const seen = this.fmtTs(e.last_seen);
+<span class="ln">306</span>      <em>if (seen) parts.push(`最近被见到 ${seen}`);</em>
+<span class="ln">307</span>      return parts.length ? parts.join(" · ") : "—";
+<span class="ln">308</span>    },</pre>
+    <p>退役行 (<code>active=false</code>) 主徽章恒为「失踪 {missing_streak} 波」; 副行 <code>last_seen</code> 经 <code>fmtTs</code> 显示 (0 哨兵回空, format.js:55)。徽章的「失踪」+ 副行的真实时刻, 组合出「失踪 0 波 · 最近被见到 09-28 07:14」这个自相矛盾的读法。</p>
+
+    <h3>7.2 missing_streak 是 A 档观察期计数器, 不是失踪波数</h3>
+    <p><code>missing_streak</code> 的<b>唯一递增点</b>是 <code>_advance_observation</code> (service.py:1144-1174), 且仅对 <code>lane == A (LANE_SCOPE) + active + 未重见 + 位置被覆盖</code> (<code>_position_covered</code>, 1376-1390) 的条目 +1:</p>
+    <pre><span class="ln">1153</span>        for tid, entry in data.index.items():
+<span class="ln">1154</span>            <em>if entry.lane != LANE_SCOPE or not entry.active or tid in wave.seen:</em>
+<span class="ln">1155</span>                <em>continue</em>
+<span class="ln">1156</span>            h = entry.infohash_v1 or entry.infohash_v2
+<span class="ln">1157</span>            if not _position_covered(entry, lane_states):
+<span class="ln">1158</span>                continue  # 位置未被覆盖: streak 冻结(维持管束)
+<span class="ln">1159</span>            entry.missing_streak += 1
+<span class="ln">1160</span>            if entry.missing_streak &gt;= MISSING_GRACE_WAVES:
+<span class="ln">1161</span>                <em>entry.active = False</em>
+<span class="ln">1162</span>                <em>entry.missing_streak = 0</em>   # 观察期出口: 退役并清零</pre>
+    <p>全貌: 达 <code>MISSING_GRACE_WAVES=2</code> (service.py:107) 出口退役并<b>清零</b> (1161-1162); 重见清零 (<code>_process_rows</code> 839); <code>_freeze_terminal</code> (1114-1142) 从不触碰它; <code>_record_hit</code> 换 tid 接管 (869-871) 原样保留 —— 后者是退役行 N≥1 的唯一可达路径, <b>生产 0 例</b>。所以: B 档行经终态冻结退役的, <code>missing_streak</code> <b>结构性恒 0</b>。这个字段的本意是「A 档考察中种子的失踪观察期计数」, 从来不是「失踪波数」。</p>
+
+    <h3>7.3 「09-28 07:14」是什么: last_seen 笔迹考据</h3>
+    <table>
+      <thead><tr><th style="width:150px">时点</th><th>last_seen 写入点状态</th></tr></thead>
+      <tbody>
+        <tr><td class="num">09-24 21:47 · 5c518b3b</td><td>v2 引擎入库, <code>_merge_index</code> <b>首写 last_seen</b> (fresh.last_seen=now)</td></tr>
+        <tr><td class="num">09-27 23:02 · 09d41096</td><td>最终 v2: <b>逐页合并</b>, 每页当场刷新 last_seen + commit —— v2 期的正常形态</td></tr>
+        <tr><td class="num">09-29 03:15 · be83d611</td><td>v3 重建提交, <b>last_seen 写入点丢失</b> (commit message 后来由 54db09f2 自证: 「HrEntry.last_seen 全库无写入点恒 0.0」)</td></tr>
+        <tr><td class="num">09-29 17:54 生产 v3 首跑</td><td>schema v1→v2 迁移 (<code>_migrate_hr_site_1_2</code>, versioning.py:37-71) 对 index 条目<b>原样不 touch</b> ⇒ v2 笔迹穿越迁移存活</td></tr>
+        <tr><td class="num">10-02 04:16 · 54db09f2</td><td><b>恢复写入点</b> (唯一写点 = <code>_merge_seen</code>, service.py:1108-1112, 赋值在 1111: <code>row.last_seen = now</code>); 生产 10-02 18:33 波起生效</td></tr>
+      </tbody>
+    </table>
+
+    <h3>7.4 关键推理: last_seen 非零 ⇒ 该行从未被 v3 重见</h3>
+    <p>v3 断层期 (09-29 → 10-02, pre-fix) 若该行被任何波重见, <code>data.index[tid] = row</code> 会用 last_seen=0.0 的<b>新行对象整体替换</b>旧条目 ⇒ 今天应显示「—」。<b>last_seen 非零 ⇒ 该行自 v2 末次解析 (09-28 07:14:04) 后从未被任何波重见</b>。因此 09-28 07:14 是<b>真实末次目击</b> —— 此前 P1 预判的「v3 断层伪影」假说被部分证伪: 断层真实存在, 但表现形态是<b>保留旧值</b>, 而非冻结在升级前一刻 (本例恰好在升级前 37h, 纯属该批行的清单寿命使然)。</p>
+
+    <h3>7.5 运行数据: 142 条同批笔迹, 与用户所见逐字对上</h3>
+    <ul>
+      <li>BTSchool 非活跃 144 行的 last_seen 只有两个值: <b>09-25 15:49:50 ×2</b> (tid 7461 / 3960) 与 <b>09-28 07:14:04 ×142</b> (epoch <code>1790550844.03</code>, <b>单秒批量笔迹</b>);</li>
+      <li>这 142 行全部 <code>lane=B</code>, first_seen 集中在 09-28 07:01-07:06 (同一批清单解析);</li>
+      <li>全部 <code>active=false</code>, <code>missing_streak=0</code> ⇒ 渲染出「失踪 0 波」+「最近被见到 09-28 07:14」, <b>与用户所见逐字对上</b> (fmtTs 按浏览器本地 UTC+8 分钟截断, format.js:40-58);</li>
+      <li>活跃 50 行 last_seen 全部 = 10-03 (54db09f2 已在生产生效) —— 写入点恢复的旁证;</li>
+      <li>62 行有 infohash ⇒ v3 首波批量退役时签 satisfied <b>124 条 = 62 行 × (v1+v2) 双 hash</b> (_freeze_terminal 1129-1141); 80 行无 hash 无记录, 同波退役。</li>
+    </ul>
+
+    <h3>7.6 盲窗: 波在跑, 页面零解析</h3>
+    <p>57 条 .torrent 下载落在 <b>09-28 16:01 → 09-29 00:24</b> (5 批, 约 2 分钟/条, fails=0 全部成功), tid 全部属于这 142 行 —— 但 last_seen <b>纹丝不动</b>。成因: v2 回填路径 (<code>_backfill_on_reuse</code> / <code>_backfill_on_page_failure</code>, 09d41096 service.py L386-446) 从已持久化索引里挑无 hash 条目下载,<b>不跑 <code>_merge_index</code></b> ⇒ 波次在跑、配额在花, 但<b>零页面解析</b>。这就是「很多波过去了却毫无痕迹」的机制载体 (盲窗成因三说并存不可考, 见 §11-1)。</p>
+
+    <h3>7.7 生产日志链 (v2 期日志已被轮转清空)</h3>
+    <ul>
+      <li>09-29 03:25:13-25 —— <b>六连 RecursionError 崩溃循环</b> (be83d611 提交后 10 分钟, 部署现场); v2 期日志在这次轮转中被清空;</li>
+      <li>09-29 17:54:02 —— 生产 v3 首跑 (schema v1→v2 迁移); 18:06 波次异常 <code>LANE_SATISFIED not defined</code>;</li>
+      <li><b>09-29 18:45:35 —— HR 线程启动, 首健康波 18:50:08</b> —— 142 行正是在该波被 <code>_freeze_terminal</code> 批量退役 (62 行签 satisfied×2)。</li>
+    </ul>
+
+    <h3>7.8 量化「很多波」</h3>
+    <p>09-28 07:14:04 → 10-03 14:20:39 = <b>127.1h ≈ 25.4 个 5H 波槽</b>; 实际波次: v3 健康波实测 9 次 + v2 期至少 5 个回填批次 ⇒ <b>实际 ≥14 波</b>从该行身边走过而它毫无变化。用户对「很多波」的直觉是对的。</p>
+
+    <h3>7.9 附随风险: 30 天后静默淘汰</h3>
+    <p><code>_prune_index</code> (service.py:1417-1427): <code>active=false</code> 且 last_seen&gt;0 超 <code>INDEX_RETENTION=30d</code> (service.py:140) 即 <code>del index[tid]</code> ⇒ <b>142 行将于 10-28 07:14 之后的首波被静默删除</b>。影响面: verified 独立永续 (model.py:250-256), resolve 侧判定零影响 (resolve.py:371-391 只遍历活跃行且放行记录独立); 但 <code>entry_details</code> (status.py:395) 里这些行将整个消失 —— 其中 <b>80 行无 hash 无放行记录, 历史将无痕迹</b>。</p>
+
+    <h3>7.10 判定与修复方向</h3>
+    <p><b>判定: 显示语义缺陷</b> (数据与判定侧均设计内, 高置信; 中置信子项: 盲窗成因三说并存不可考)。「失踪 N 波」被用在它从未设计承担的语义上。</p>
+    <p><b>修复方向:</b> 退役行主徽章改说人话 —— 有 <code>verified_ts</code> 显「已移出 / 已放行」+ 核实时刻, 无记录显「已退役」; 「失踪 N 波」只承担<b>活跃行观察期</b>语义 (hr_status.js:304 已是这么用副行的); 可选: <code>_record_hit</code> 换 tid 接管时顺带清 <code>missing_streak</code>。</p>
+  </section>
+
+  <section id="s08">
+    <h2><span class="no">08</span>统一解释 —— 四个独立事实被压进同一界面</h2>
+
+    <h3>8.1 同一根: 对账机器不看本地</h3>
+    <p>S1–S3 三个现象同根: 取数引擎是<b>账号级对账机器</b> —— 本地种子状态只影响「翻多深」(对象集 / 三停翻), <b>永不影响「抓不抓」</b>。这是 service.py:6-9 设计前提的直接推论, 不是缺陷。</p>
+
+    <h3>8.2 四个独立事实, 一块界面</h3>
+    <p>展示层把四个各自正确的独立事实压缩进同一面板, 用户把它们读成了互相矛盾的状态:</p>
+    <table>
+      <thead><tr><th>#</th><th style="width:22%">独立事实</th><th>权威载体</th><th>界面呈现</th><th style="width:18%">被读成</th></tr></thead>
+      <tbody>
+        <tr><td class="num">①</td><td><b>账号在取数</b></td><td><code>wave.healthy_ts</code> + 复用窗 / 频控 (status.py:297-304)</td><td>kv 行「取波 / 复用窗至 / 下次拉取」倒计时 + 日志 refreshed/waiting</td><td>「它还在拉」</td></tr>
+        <tr><td class="num">②</td><td><b>站点清单有行</b></td><td><code>&lt;site&gt;.json</code> index (BTSchool 194 / CarPT 17)</td><td>明细表行集 (B 档 remain=0 长挂)</td><td>「清单里还有种子」</td></tr>
+        <tr><td class="num">③</td><td><b>本地库有/没有种子</b></td><td>qB torrents 按 infohash (含暂停)</td><td><code>local_present</code> 过滤 + 空态文案 (hr_status.js:246-253)</td><td>「本地没有 HR 种子」</td></tr>
+        <tr><td class="num">④</td><td><b>放行已签发与否</b></td><td><code>data.verified</code> (永续)</td><td>明细表「核实结论」列 (status.py:419)</td><td>「还没核实」</td></tr>
+      </tbody>
+    </table>
+
+    <h3>8.3 两两配对, 四个症状全部涌现</h3>
+    <ul>
+      <li><b>S2 ↔ S3 是同一批行的两列</b>: 站点把种子长期挂 B 页 remain=0 (BTSchool 50 行 / CarPT 17 行) ⇒ 主列表显「在线·已达标」(resolve 通路, resolve.py:342) + 明细表档位「B已达标」; 但行不消失 ⇒ <code>_freeze_terminal</code> 不触发 ⇒ verified 无记录 ⇒ 同一行的「核实结论」列显「未核实」(status 通路)。</li>
+      <li><b>S1 与 S2/S3 同框</b>: 明细表默认「只看做种中」(实为本地库存在过滤) 把本地零交集的站点滤成空表 ⇒ 显「该站点本地没有 HR 种子」; 而 kv 行「下次拉取」仍在倒计时 —— 「没有种子却在拉」同框成立。</li>
+      <li><b>时序量化</b>: 5H 间隔 + 2H 复用窗下每天每站约 4-5 波, 每波 A/B/C 各 1 页 (3 请求), day_count 与日志逐次对平 —— 「依然在拉取」拉的是<b>清单页</b>, 不是种子 (§3.4)。</li>
+      <li><b>S4 独立</b>: 三列改版 (8cb2da59) 让「失踪 N 波」成为可见文案, 但把 A 档观察期计数器套在了退役行的展示上 (§7.2), 叠加 v3 断层盲窗 (§7.6) 造成「很多波过去而界面纹丝不动」。</li>
+    </ul>
+  </section>
+
+  <section id="s09">
+    <h2><span class="no">09</span>时间线重建 (09-24 → 10-28)</h2>
+    <p class="hint">均为 +08:00。粗体 = 与四现象直接相关的节点。</p>
+    <table>
+      <thead><tr><th style="width:170px">时刻</th><th>事件</th><th style="width:34%">证据 / 备注</th></tr></thead>
+      <tbody>
+        <tr><td class="num">09-24 21:47</td><td><code>5c518b3b</code> v2 引擎入库, <code>_merge_index</code> 首写 last_seen</td><td>last_seen 笔迹纪元起点</td></tr>
+        <tr><td class="num">09-25 03:39-03:44</td><td>生产 v2 首波, BTSchool.json 建档 (rev=1, 52 行)</td><td>站点数据文件诞生</td></tr>
+        <tr><td class="num">09-25 04:01</td><td><code>c4b04b45</code> v2 逐页 / 逐 .torrent 增量落盘</td><td></td></tr>
+        <tr><td class="num">09-27 23:02</td><td><code>09d41096</code> 最终 v2 (生产实跑到 v3 切换)</td><td>逐页合并刷新 last_seen; 回填路径 L386-446</td></tr>
+        <tr><td class="num">09-28 07:01-07:06</td><td>142 条 B 档行首次解析进索引</td><td>first_seen 集中区段</td></tr>
+        <tr><td class="num"><b>09-28 07:14:04</b></td><td><b>v2 末次页面合并, 142 行 last_seen 定格; 同刻签 4 条 not-listed</b></td><td>epoch 1790550844.03 单秒批量笔迹 —— 即用户看到的「最近被见到」</td></tr>
+        <tr><td class="num">09-28 16:01 → 09-29 00:24</td><td><b>盲窗</b>: 页面零解析, 5 批 57 次回填下载全成功</td><td>回填路径不跑合并 ⇒ 波在跑、last_seen 不动 (§7.6)</td></tr>
+        <tr><td class="num">09-29 03:15</td><td><code>be83d611</code> v3 重建提交 (last_seen 写入点丢失)</td><td></td></tr>
+        <tr><td class="num">09-29 03:25</td><td>生产部署崩溃循环 (RecursionError ×6)</td><td>提交后 10 分钟; <b>v2 期日志被轮转清空</b></td></tr>
+        <tr><td class="num">09-29 17:54</td><td>生产 v3 首跑, schema v1→v2 迁移</td><td><code>_migrate_hr_site_1_2</code> (versioning.py:37-71) 对 index 原样不 touch, v2 笔迹穿越存活</td></tr>
+        <tr><td class="num"><b>09-29 18:45-18:50</b></td><td><b>v3 首健康波 (18:50:08): 142 行 _freeze_terminal 批量退役, 62 行签 satisfied×2</b></td><td>HR 线程 18:45:35 启动; S3 数据侧形态在此定型</td></tr>
+        <tr><td class="num">09-30 04:31</td><td>第二波签 3 条 not-listed</td><td>satisfied 区间下界 09-30 04:31</td></tr>
+        <tr><td class="num">10-02 04:16</td><td><code>54db09f2</code> 修复 last_seen 写入点</td><td>生产 10-02 18:33 波起生效</td></tr>
+        <tr><td class="num">10-02 18:33 起</td><td><code>8cb2da59</code> 三列改版上线</td><td><b>「失踪 N 波 · 最近被见到」成为可见文案</b> —— S4 症状从潜伏转为可见</td></tr>
+        <tr><td class="num">10-03 14:20</td><td>末波; <b>S4 症状呈现</b></td><td>离 last_seen 定格已 127.1h ≈ 25.4 个波槽, 实际 ≥14 波 (§7.8)</td></tr>
+        <tr><td class="num"><b>10-28 07:14 (预测)</b></td><td><b>142 行越过 30 天 INDEX_RETENTION, 首波静默淘汰</b></td><td><code>_prune_index</code> (service.py:1417-1427); 80 无 hash 行历史将无痕迹 (§7.9)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>缺陷与建议清单</h2>
+    <p class="hint">分级: <b>A 设计确认项</b> (要不要改设计, 产品取舍) / <b>B 显示文案缺陷</b> (数据对, 文案误读) / <b>C 次要缺陷候选</b> (均未入池)。入池与否由所有者拍板。</p>
+
+    <h3>A · 设计确认项 (产品取舍, 非缺陷)</h3>
+    <table>
+      <thead><tr><th style="width:70px">编号</th><th style="width:34%">事项</th><th>修复方向</th></tr></thead>
+      <tbody>
+        <tr><td class="num">A1</td><td><b>取数闸门无本地状态参与</b> (S1/S2 共同根): 对象集为空不跳波, 5H 节奏照走</td><td>当前设计有依据 —— 清单动态性, service.py:6-9 明文。可选增强: 零对象稳态 N 波后自动拉长间隔; 属产品取舍, 改前需拍板</td></tr>
+      </tbody>
+    </table>
+
+    <h3>B · 显示文案缺陷 (每条给修复方向)</h3>
+    <table>
+      <thead><tr><th style="width:70px">编号</th><th style="width:34%">缺陷</th><th>修复方向</th></tr></thead>
+      <tbody>
+        <tr><td class="num">B1</td><td><b>S1 空态文案误导</b>: 「只看做种中」按钮名 vs 实际过滤「本地库存在」; 空态「该站点本地没有 HR 种子」不提清单仍有行 (hr_status.js:246-253)</td><td>空态附「站点清单仍有 N 行, 点显示老旧种子查看」, 或按钮名改「只在本地」</td></tr>
+        <tr><td class="num">B2</td><td><b>「下次拉取」语义未讲清</b> (S2): kv 行倒计时被读成「还有多少没拉完」 (status.py:297-304)</td><td>展示层注明这是对账节奏 (下一次核对站点清单的时刻), 不是拉取进度</td></tr>
+        <tr><td class="num">B3</td><td><b>核实结论缺中间态</b> (S3): verified 无记录一律「未核实」 (status.py:419), 掩盖「在列·B 档·结论已定」</td><td>verified_source 空但有档位结论时显「在列·已达标(移出清单后转已核实)」; lane_text 已在场 (status.py:409) 无需新字段。<b>切勿改成命中即写 verified</b> (破坏防伪语义与 tests/test_hr_service.py:744 守阵)</td></tr>
+        <tr><td class="num">B4</td><td><b>退役行徽章「失踪 N 波」语义错位</b> (S4): 观察期计数器套在退役行展示上 (hr_status.js:296-298)</td><td>退役行主徽章改说人话: 有 verified_ts 显「已移出/已放行」+ 核实时刻, 无记录显「已退役」; 「失踪 N 波」只承担活跃行观察期语义; 可选: _record_hit 接管时顺带清 missing_streak</td></tr>
+      </tbody>
+    </table>
+
+    <h3>C · 次要缺陷候选 (均未入池, 报告仅列候选)</h3>
+    <table>
+      <thead><tr><th style="width:70px">编号</th><th style="width:34%">候选</th><th>说明与方向</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="num">C1</td>
+          <td><b>wave_ts 跨波冻结</b> (次要, 保守方向)</td>
+          <td>service.py:517-523 新波继承 <code>wave_ts = prev.wave_ts if prev.ok else 0.0</code>, service.py:649-651 仅在 <code>st.wave_ts &lt;= 0</code> 时刷新 ⇒ 连续 ok 档的 wave_ts 永停在<b>进程内首次成功波</b> (实测两站 91.5h 前)。消费点 <code>_absence_proven_all</code> 新鲜度闸 (service.py:1406-1407, <code>anchor.added_on &gt; st.wave_ts</code> 拒绝缺席证明) 用陈旧基准 ⇒ 近 4 天新加本地种子拿不到「未列出」批量放行 —— <b>不产生误放行</b>, 方向保守; 但违背 model.py:319 字段注释「本档最近一波完成取的时刻」。修法: 每波成功后无条件刷新 wave_ts</td>
+        </tr>
+        <tr><td class="num">C2</td><td><b>退役行「失踪 0 波」语义</b></td><td>= S4 本体 (见 B4)</td></tr>
+        <tr><td class="num">C3</td><td><b>30 天静默淘汰的展示消失</b> (S4 附属风险)</td><td>10-28 07:14 后 142 行从 entry_details 整个消失 (status.py:395), 其中 80 无 hash 行历史无痕迹; verified 与判定不受影响 (§7.9)。可在淘汰前于界面/日志给一句预告, 或保留 tombstone 展示</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="s11">
+    <h2><span class="no">11</span>未决问题</h2>
+    <ol>
+      <li><b>09-28 07:14 后页面为何再未解析成功</b> —— 扩展超时 / 登录页 / 站点侧批量移出, 三说并存。v2 期日志被 09-29 崩溃循环轮转清空, <b>永久不可考</b>; 不影响根因判定 (盲窗只解释 S4 的观感强度, 不改变 S4 判定)。</li>
+      <li><b>本地 BTSchool 种子与清单零交集成因</b> (毕业后已删 / 其他) —— 磁盘不可考; 不影响 S1 判定 (无论成因, 引擎行为均设计内)。</li>
+      <li><b>拉取无本地状态闸门是否要改</b> —— 属产品取舍 (当前设计有依据: 清单动态性, service.py:6-9); 若要改, 走 A1 的拍板流程, 不要顺手改。</li>
+    </ol>
+  </section>
+
+  <section id="s12">
+    <h2><span class="no">12</span>证据与数据附录</h2>
+
+    <h3>12.1 运行数据统计 (生产 &lt;site&gt;.json, 只读)</h3>
+    <table>
+      <thead><tr><th style="width:120px">站点</th><th>指标</th><th>实测值</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="5" class="num">BTSchool</td><td>index 总行数</td><td class="num">194 (活跃 50 / 非活跃 144)</td></tr>
+        <tr><td>非活跃行 last_seen 分布</td><td>09-25 15:49:50 ×2 (tid 7461/3960); <b>09-28 07:14:04 ×142</b> (epoch 1790550844.03, 单秒批量; 全 lane=B, first_seen 09-28 07:01-07:06)</td></tr>
+        <tr><td>verified 覆盖</td><td>活跃 B 行 <b>0/50</b>; 非活跃 144 行中 64 条有 (64/64 回填者全命中), satisfied 区间 09-28 07:14 → 09-30 04:31</td></tr>
+        <tr><td>取数节奏 (当日)</td><td class="num">04:10 / 09:15 / 14:20 三次 refreshed, 精确 5H; 其间 waiting (还差 10789s)</td></tr>
+        <tr><td>活跃行 last_seen</td><td>全部 = 10-03 (54db09f2 写入点已在生产生效)</td></tr>
+        <tr><td rowspan="3" class="num">CarPT</td><td>index 总行数</td><td class="num">17 (全 B 档)</td></tr>
+        <tr><td>verified 覆盖</td><td><b>0/17</b> —— 与 BTSchool 同构</td></tr>
+        <tr><td>配额/频控</td><td>day_count 8/6 (两站合计口径), 全部页面请求, 无一条种子下载</td></tr>
+        <tr><td class="num">盲窗</td><td>.torrent 下载</td><td>09-28 16:01 → 09-29 00:24, 5 批共 <b>57 次</b>, 约 2 分钟/条, fails=0 全成功; tid 全属 142 行; last_seen 纹丝不动 (§7.6)</td></tr>
+        <tr><td class="num">双 hash</td><td>satisfied 签发数</td><td class="num">124 条 = 62 行 × (v1+v2) (_freeze_terminal 1129-1141); 80 行无 hash 无记录同波退役</td></tr>
+      </tbody>
+    </table>
+
+    <h3>12.2 生产日志关键行</h3>
+    <table>
+      <thead><tr><th style="width:190px">时刻 (+08:00)</th><th>日志事实</th></tr></thead>
+      <tbody>
+        <tr><td class="num">09-29 03:25:13-25</td><td><b>六连 RecursionError 崩溃循环</b> (be83d611 提交后 10 分钟, 部署现场); v2 期日志被轮转清空</td></tr>
+        <tr><td class="num">09-29 17:54:02</td><td>生产 v3 首跑 (schema v1→v2 迁移)</td></tr>
+        <tr><td class="num">09-29 18:06</td><td>波次异常 <code>LANE_SATISFIED not defined</code></td></tr>
+        <tr><td class="num">09-29 18:45:35</td><td><b>HR 线程启动; 首健康波 18:50:08</b> —— 142 行在该波 _freeze_terminal 批量退役</td></tr>
+        <tr><td class="num">09-30 04:31</td><td>第二波签 3 条 not-listed</td></tr>
+        <tr><td class="num">10-02 18:33 起</td><td>54db09f2 写入点修复生效; 8cb2da59 三列改版上线</td></tr>
+        <tr><td class="num">10-03 14:20:39</td><td>当日末波 refreshed 正常 —— S4 症状呈现时点</td></tr>
+      </tbody>
+    </table>
+
+    <h3>12.3 提交清单 (last_seen / 展示链)</h3>
+    <table>
+      <thead><tr><th style="width:130px">提交</th><th style="width:130px">时刻</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td class="num">5c518b3b</td><td class="num">09-24 21:47</td><td>v2 引擎入库; <code>_merge_index</code> 首写 last_seen (fresh.last_seen=now)</td></tr>
+        <tr><td class="num">c4b04b45</td><td class="num">09-25 04:01</td><td>v2 逐页 / 逐 .torrent 增量落盘</td></tr>
+        <tr><td class="num">09d41096</td><td class="num">09-27 23:02</td><td>最终 v2: 逐页合并 (每页当场刷新 last_seen + commit); 回填路径 <code>_backfill_on_reuse</code> / <code>_backfill_on_page_failure</code> (service.py L386-446)</td></tr>
+        <tr><td class="num">be83d611</td><td class="num">09-29 03:15</td><td>v3 重建提交 —— <b>last_seen 写入点丢失</b></td></tr>
+        <tr><td class="num">54db09f2</td><td class="num">10-02 04:16</td><td><b>恢复写入点</b> (唯一写点 <code>_merge_seen</code>, service.py:1108-1112); commit message 自证「HrEntry.last_seen 全库无写入点恒 0.0」</td></tr>
+        <tr><td class="num">8cb2da59</td><td class="num">10-02 上线</td><td>三列改版: 「失踪 N 波 · 最近被见到」成为可见文案</td></tr>
+      </tbody>
+    </table>
+
+    <h3>12.4 数据源与边界声明</h3>
+    <ul>
+      <li><b>代码</b>: 本 clone <code>D:\Projects\auto-qb-clone2</code> develop @ <code>23796f3b</code> —— 全部 <code>file:line</code> 引用基于该基线;</li>
+      <li><b>生产运行数据</b>: 主 clone <code>D:\Projects\auto-qb\auto-qb-data\</code> (hr/BTSchool.json / hr/CarPT.json / logs), <b>只读</b>读取; 本 clone auto-qb-data 仅调试件;</li>
+      <li><b>配置</b>: 本 clone <code>config.yml</code> 非生产体; 生产配置口径以 §2.1 所载为准 (BTSchool / CarPT 两站 hr_check enabled, refresh_interval=5H);</li>
+      <li><b>本报告职责</b>: 忠实呈现前序只读取证的材料与结论; 引用行号在动笔前已对源码逐段复核 (service / model / status / routes / worker / resolve / versioning / hr_status.js / format.js / settings-detail.html)。</li>
+    </ul>
+  </section>
+
+  <footer>
+    <p>报告工位快照 (出厂即冻结) · 修复取舍走 issue 工位 · memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html</p>
+    <p>取证基线 develop@23796f3b (D:\Projects\auto-qb-clone2) · 生产运行数据取自主 clone auto-qb-data (只读) · 生成 2026-10-03 15:05 +08:00</p>
+  </footer>
+
+</div>
+</body>
+</html>
