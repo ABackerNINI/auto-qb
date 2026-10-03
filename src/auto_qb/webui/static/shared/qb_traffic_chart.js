@@ -289,6 +289,12 @@ window.AQB_QB_TRAFFIC = {
         if (!stale) this[def.loading] = false;
       }
       if (stale) return;
+      // FX-29 软切换落定登记(修「流量页签单击换行遮罩挂死」): 换目标软切换的待到集合含
+      // "traffic"(_drawerWaitSources), 流量数据到手(成功/失败都算, 见 _drawerDone)必须登记,
+      // 否则集合永不清空 -> drawer.switching 遮罩「正在加载…」挂死盖住图(双击走
+      // openTorrentDrawer 整体重置不经待到集合, 故只有单击跟随这条软切换路径踩中)。
+      // seq 传 0 只走 hash 戳守卫: 落袋前 def.stale 已确认 drawer.hash === ctx, 同源一致。
+      if (scope === "torrent") this._drawerDone("traffic", ctx, 0);
       // 等 v-if 分支进 DOM 再建图(uPlot 要量容器宽); 轮询间隔随新 meta 重排(换窗/间隔变更)
       this.$nextTick(() => this._qbChartBuild(scope));
       this._qbPollResync(scope);

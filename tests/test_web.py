@@ -34,7 +34,7 @@
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
-- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在无数据时接管正文 + 同宿主 setData 原地快路 + 换肤先销毁再重建, 2026-10-04 修轮询期闪烁)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步 + 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)
+- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在无数据时接管正文 + 同宿主 setData 原地快路 + 换肤先销毁再重建, 2026-10-04 修轮询期闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步 + 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -2535,7 +2535,9 @@ def test_frontend_qb_traffic_chart_wiring():
       夹取([15s,600s] 配置校验界, 30d 窗桶宽 3600s 被夹到上界保续拉语义) + document.hidden 跳过
       (对齐 _startDrawerPoll 先例)+ _qbPollStop 显式 clearInterval(只挂打开期间, 不后台常驻)。
       静默续拉(2026-10-04 修「每隔几秒闪一次」): loading 空态只在无数据时接管正文, 落袋走
-      setData 原地快路(不 destroy+new 清屏), 换肤先销毁再整图重建。
+      setData 原地快路(不 destroy+new 清屏), 换肤先销毁再整图重建。FX-29 软切换落定登记
+      (2026-10-04 修「流量页签单击换行『正在加载…』挂死」): _qbLoad 落袋登记
+      _drawerDone("traffic"), 与 _drawerWaitSources 通用分支成对, 缺一边遮罩等永不到手的源。
       drawer-dock 落点已自种子视图上提为 app 级分片(dock.html), 抽屉任意页可开。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
@@ -2698,6 +2700,15 @@ def test_frontend_qb_traffic_chart_wiring():
     theme_blk = re.search(r"_qbOnThemeChange = \(\) => \{\n(.*?)\n        \};", js, re.S)
     assert theme_blk and theme_blk.group(1).find("this._qbChartDestroy(s)") < theme_blk.group(1).find("this._qbChartBuild(s)"), \
         "换肤处理器必须先 _qbChartDestroy 再 _qbChartBuild(canvas 色建图时烘焙, setData 快路不换色)"
+    # FX-29 软切换落定登记(2026-10-04 修「流量页签单击换行『正在加载…』挂死」): 换目标软切换的
+    # 待到集合含 "traffic"(_drawerWaitSources 通用分支), 但 _drawerDone 只有 detail/trackers/
+    # files/peers 四个 fetcher 在调 —— _qbLoad 落袋不登记则集合永不清空, drawer.switching 遮罩
+    # 挂死盖住图(双击走 openTorrentDrawer 整体重置不经待到集合, 只有单击跟随软切换踩中)
+    assert 'if (scope === "torrent") this._drawerDone("traffic", ctx, 0);' in js, \
+        "qb_traffic_chart.js _qbLoad 落袋必须登记 FX-29 落定(_drawerDone('traffic')), 否则软切换遮罩等一个永不到手的源挂死"
+    wait_blk = re.search(r"_drawerWaitSources\(tab\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert wait_blk and 'return ["detail", tab]' in wait_blk.group(1), \
+        "drawer.js _drawerWaitSources 通用分支必须覆盖 traffic 页签(与 _qbLoad 的落定登记成对, 拆开即挂死)"
     # state.js 根选项显式建字段(Vue 响应式前置, frontend-split 纪律)
     for field in (
         "qbTorrentWindow", "qbTorrentData", "qbTorrentLoading", "qbTorrentError", "qbTorrentHoverIdx",

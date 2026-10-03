@@ -44,7 +44,7 @@
 - **处置**: `drawerTitle()` 优先取 `memberByHash.get(hash).name`, 详情只作兜底。
   凡"目标刚切换、真值还没到"的头部/摘要类显示, 先在已有的本地快照里找, 别默认退回原始 id。
 
-- **复发: 1** —— 2026-10-04 qB 流量图三挂点并入抽屉(26-10-04-0405)后, 用户报「流量图每隔几秒闪一次」。
+- **复发: 2** —— 2026-10-04 qB 流量图三挂点并入抽屉(26-10-04-0405)后, 用户报「流量图每隔几秒闪一次」。
   低频轮询续拉把本坑两条都踩了一遍: `_qbLoad` 一开始就亮 `qbCurLoading` -> 模板 `v-if` 把整块图换成
   加载空态再换回(「遮罩/加载态立即点亮 = 制造新闪烁」); 数据落袋后 `_qbChartBuild` 走 destroy +
   `new uPlot` 整图重建, canvas 清屏一帧(「快中间态本身就是闪」)。
@@ -54,3 +54,17 @@
   **修法**: 静默续拉 —— 模板 loading 空态只在无数据时接管(`qbCurLoading && !qbCurPoints.length`),
   同宿主上图还活着走 `u.setData` 原地换数据(不销毁重建); 换肤因 canvas 色烘焙仍整图重建(先销毁)。
   守阵 test_web.py `test_frontend_qb_traffic_chart_wiring` 三锚钉住。
+
+- **复发 2(第二次, 2026-10-04 流量页签单击换行遮罩挂死)** —— 用户报「流量页签下单击换行一直显示
+  加载中, 关抽屉重开才正常; 双击正常」。FX-29 协议只在 drawer.js 侧接了一半: `_drawerWaitSources`
+  通用分支把流量页签归入待到集合(["detail", "traffic"]), 但落定登记 `_drawerDone` 隐含在四个
+  fetcher 的 finally 里 —— 流量取数单点 `_qbLoad` 在 qb_traffic_chart.js(跨模块), 落袋从不登记
+  "traffic" => 集合永不清空, `drawer.switching` 遮罩挂死(「按 tab 登记待到集合…全部到手才落定」
+  的另一半: **每个入集数据源都必须有人登记**, 否则集合在等一个永不到手的源)。
+  **为什么没命中**: 同前次 —— 流量页签的取数写在独立模块, 对齐的是竞态纪律; 「落定登记」是
+  drawer.js 内部的隐式约定(靠"在 fetcher finally 里调"这一形态成立), 跨模块加页签时只有 drawer.js
+  一侧看得见这半边协议; 上一条复发记录也只列了渲染闪烁两条, 没把「登记协议跨模块不成立」写进清单。
+  **修法**: `_qbLoad` 落袋(成功/失败都算)且 scope==="torrent" 时 `_drawerDone("traffic", ctx, 0)`
+  (seq=0 只走 hash 戳, 与 def.stale 同源); 守阵补两锚(登记语句 / _drawerWaitSources 与登记成对)。
+  **教训**: 跨模块接入既有"成对协议"(arm/register)时, 成对的两半必须各有显式锚点守着 —— 靠调用
+  形态隐含成立的那一半, 在模块边界外不可见。
