@@ -51,10 +51,12 @@ from .model import (
     HrDownloaded,
     HrDlFail,
     HrEntry,
+    HrHistoryEvent,
     HrLaneState,
     HrSiteData,
     HrVerified,
     lane_is_terminal,
+    prune_history,
 )
 from .parse import cross_page_violation, order_violations, page_javascript_marks
 from .ratelimit import HrLimits, next_allowed_at, try_consume
@@ -155,6 +157,10 @@ LANE_FAIL_ALERT_STREAK = 3
 
 #: 全档失效时的数据复用短窗(盖过下一轮 —— 与 v2 同款理由)
 ALL_FAILED_REUSE_WINDOW = 120.0
+
+#: 拉取历史(计划 26-10-04-0312 §3.3): 记录器搬运现成文案时的截断口径
+HISTORY_REASON_MAX = 200  # reason 截断长度(字符)
+HISTORY_NOTES_MAX = 5  # wave.notes 保留条数(取前几条过程痕迹)
 
 
 def _fuzzy_signal(name: str) -> str:
@@ -485,23 +491,48 @@ class HrRefreshService:
         if not self.allow_fetch:
             result.action = ACTION_WAITING
             result.reason = "dry-run / 只读模式: 不发起取数"
+            if force:  # defer 只记用户点击级(§3.3); 自动 poll 的 waiting 不记不写盘(60s 节拍零写盘)
+                self._append_history(
+                    site, data, kind="defer", trigger="manual", action=ACTION_WAITING, reason=result.reason
+                )
+                self._persist_step(session)
             return
 
         due, why = next_allowed_at(data, limits, now)
         if due > now:
             result.action = ACTION_WAITING
             result.reason = f"未到可取时刻({why}, 还差 {due - now:.0f}s)"
+            if force:  # min_interval / 日额 / Retry-After / 时间窗都在本闸汇成一条 defer(账号安全线拦下的立即拉取)
+                self._append_history(
+                    site, data, kind="defer", trigger="manual", action=ACTION_WAITING, reason=result.reason
+                )
+                self._persist_step(session)
             return
 
-        self._do_wave(site, site_conf, adapter, session, result, limits, anchors)
+        self._do_wave(site, site_conf, adapter, session, result, limits, anchors, force=force)
 
     # ---------- 波次引擎(§4) ----------
 
     def _do_wave(
-        self, site: str, site_conf: SiteHrCheckConfig, adapter, session, result, limits: HrLimits,
-        anchors: Mapping[str, HrAnchor]
+        self,
+        site: str,
+        site_conf: SiteHrCheckConfig,
+        adapter,
+        session,
+        result,
+        limits: HrLimits,
+        anchors: Mapping[str, HrAnchor],
+        force: bool = False
     ) -> None:
         data = session.data
+        # 拉取历史的 trigger 口径(计划 26-10-04-0312 §3.3): 立即拉取=manual, 调度自动=auto
+        trigger = "manual" if force else "auto"
+        wave_started = self._now()
+
+        def _stamp_elapsed() -> None:
+            # 记录点现算波耗时(result.elapsed_s 会被 refresh_site 收尾用含锁全波值再盖一次)
+            result.elapsed_s = max(0.0, self._now() - wave_started)
+
         budget = _Budget(
             data, limits, self._now, self._sleeper, sleep_max=self.sleep_max, round_wait_max=self.round_wait_max
         )
@@ -545,6 +576,7 @@ class HrRefreshService:
             )
         except HrChannelStopped as e:
             # 关停 / 热重挂时被叫停: 不告警、不计失败, 本轮让位(下轮自会重来)。
+            # 拉取历史也不记(§3.3): 瞬态内部事件, 重挂期间会刷屏。
             result.action = ACTION_WAITING
             result.reason = f"本波取数被叫停(正在停止或重挂端点): {e}"
             return
@@ -553,11 +585,21 @@ class HrRefreshService:
             result.action = ACTION_WAITING
             result.reason = f"扩展侧硬上限挡下(后端频控可能失效), 本波让位: {e}"
             self._warn_ext_quota(site, e)
+            _stamp_elapsed()
+            self._append_history(
+                site, data, kind="wave", trigger=trigger, result=result, lanes=lane_states, notes=wave.notes
+            )
+            self._persist_step(session)
             return
         except HrChannelUnavailable as e:
             result.action = ACTION_NO_CHANNEL
             result.reason = str(e)
             self._warn_no_channel(site, e)
+            _stamp_elapsed()
+            self._append_history(
+                site, data, kind="wave", trigger=trigger, result=result, lanes=lane_states, notes=wave.notes
+            )
+            self._persist_step(session)
             return
         except HrLoginExpired as e:
             # 登录失效: 只有人去浏览器登录才会好 —— 不算取数失败。痕迹: 1.一条 WARNING 2.
@@ -570,7 +612,8 @@ class HrRefreshService:
             # 扩展回传「登录页」时请求确实发出去了: 间隔基准必须前进, 否则登录态恢复前
             # 每轮 poll(60s)都立即重发, 白烧日额还持续刷站点(这条路径不经过页面级 mark)。
             budget.mark()
-            self._finish_wave(site, site_conf, data, session, result, wave, lane_states, unmatched)
+            _stamp_elapsed()
+            self._finish_wave(site, site_conf, data, session, result, wave, lane_states, unmatched, trigger=trigger)
             return
         except HrFetchError as e:
             # 页面取数失败 = 该档证据在此截断(失效点之前有效), 其它档已按档位独立跑完各自的份;
@@ -581,16 +624,21 @@ class HrRefreshService:
                 # 指令必须落盘: hold() 每波从盘重读, 不 commit 的话下一波读到的 retry_after_until
                 # 是 0, 等于无视站点指令继续打站点; mark() 让间隔基准同样前进(失败的请求也是真实请求)。
                 budget.mark()
-                self._persist_step(session)
                 result.action = ACTION_WAITING
                 result.reason = f"站点要求等待(Retry-After {retry_after:.0f}s): {e}"
+                _stamp_elapsed()
+                self._append_history(
+                    site, data, kind="wave", trigger=trigger, result=result, lanes=lane_states, notes=wave.notes
+                )
+                self._persist_step(session)
                 return
             wave.had_error = True
             wave.notes.append(f"页面取数失败: {e}")
             _mark_fetch_failed_lane(lane_states, wave)
             logger.warning(events.fetch_failed(site, 1, 1, str(e)))
 
-        self._finish_wave(site, site_conf, data, session, result, wave, lane_states, unmatched)
+        _stamp_elapsed()
+        self._finish_wave(site, site_conf, data, session, result, wave, lane_states, unmatched, trigger=trigger)
 
     def _run_pages(
         self,
@@ -969,6 +1017,63 @@ class HrRefreshService:
         if session is not None and self.persist:
             session.commit(self._now())
 
+    # ---------- 拉取历史(计划 26-10-04-0312 §3.3: 记录器只搬运现成数据, 无 IO) ----------
+
+    def _append_history(
+        self,
+        site: str,
+        data: HrSiteData,
+        *,
+        kind: str,
+        trigger: str,
+        action: str = "",
+        reason: str = "",
+        reason_kind: str = "",
+        result: Optional[HrRefreshResult] = None,
+        lanes: Optional[Mapping[str, HrLaneState]] = None,
+        notes: Optional[List[str]] = None,
+    ) -> None:
+        """记一条拉取历史事件进站点数据的 history 表(纯内存: 构造 + prune_history 修剪 + 追加)。
+
+        字段口径: result 非空 = wave 终态事件(全部字段搬运自 HrRefreshResult / lane_states /
+        wave.notes, 不新算业务语义); result 为空 = defer / confirm_empty(用显式 action/reason,
+        计数字段留 0)。持久化由调用方负责(随既有 commit 或补一次 _persist_step), 本方法无 IO。
+        整体 try 保护: 历史是纯观测, 记录失败降级为日志, 绝不外抛进取数主流程。
+        """
+        try:
+            now = self._now()
+            states = lanes or {}
+            snapshot = [
+                {
+                    "lane": states[lane].lane,
+                    "status": states[lane].status,
+                    "pages": states[lane].pages,
+                    "rows": states[lane].rows,
+                    "detail": states[lane].detail,
+                } for lane in FETCH_LANES if lane in states
+            ]
+            event = HrHistoryEvent(
+                ts=now,
+                kind=kind,
+                trigger=trigger,
+                action=result.action if result is not None else action,
+                reason=(result.reason if result is not None else reason)[:HISTORY_REASON_MAX],
+                reason_kind=result.reason_kind if result is not None else reason_kind,
+                pages=result.pages_fetched if result is not None else 0,
+                rows=result.entries if result is not None else 0,
+                torrents_ok=result.torrents_fetched if result is not None else 0,
+                torrents_fail=result.torrents_failed if result is not None else 0,
+                verified=result.verified_count if result is not None else 0,
+                elapsed_s=result.elapsed_s if result is not None else 0.0,
+                lanes=snapshot,
+                notes=[str(n) for n in (notes or [])][:HISTORY_NOTES_MAX],
+                by=(self.store(site).owner or "")[:6],
+            )
+            data.history = prune_history(data.history, now)
+            data.history.append(event)
+        except Exception:
+            logger.warning(f"HR 站点 {site} | 记录拉取历史失败(降级忽略, 不影响取数): ", exc_info=True)
+
     # ---------- 波后收尾: 合并 / 观察期 / 防伪 / 放行 ----------
 
     def _finish_wave(
@@ -981,6 +1086,7 @@ class HrRefreshService:
         wave: _WaveContext,
         lane_states,
         unmatched,
+        trigger: str = "auto",
     ) -> None:
         now = self._now()
         self._merge_seen(data, wave, now)
@@ -1094,6 +1200,10 @@ class HrRefreshService:
         )
         result.reason = "; ".join(notes)
         result.snapshot = data
+        # 拉取历史(计划 26-10-04-0312 §3.3): 波终态事件, 随下方既有 commit 落盘
+        self._append_history(
+            site, data, kind="wave", trigger=trigger, result=result, lanes=lane_states, notes=wave.notes
+        )
         if self.persist:
             status = session.commit(now)
             result.persisted = status == "written"

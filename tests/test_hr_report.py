@@ -30,6 +30,8 @@
 - test_scope_of_url_variants: URL 档位提取(hrtype=/status=/都没有)
 - test_confirm_empty_disabled_reports_hint: 确认戳在总开关关闭时明确提示非 0
 - test_confirm_empty_readonly_and_lock_busy: 只读退化与锁占用各自的提示 + 非 0
+- test_confirm_empty_records_history_event: 对账动作入拉取历史(计划 26-10-04-0312 §3.3)——
+  恰一条 confirm_empty 事件(trigger=confirm / action=confirm-empty)随既有 commit 落盘
 - test_status_row_cells_marks_observation: 观察期行的档位文案后缀
 - test_ellipsis_respects_cjk_double_width: CJK 双宽截断(保最后 1 格给 …)
 - test_stamp_text_ts_zero_is_dash: 无时刻显示 "-"
@@ -471,6 +473,23 @@ def test_run_hr_confirm_empty_stamps_site(tmp_path):
     buf2 = io.StringIO()
     assert run_hr_confirm_empty(cfg, [SITE], out=buf2) == 0
     assert "已写入人工对账戳" in buf2.getvalue()
+
+
+def test_confirm_empty_records_history_event(tmp_path):
+    """对账动作入拉取历史(计划 26-10-04-0312 §3.3): 恰一条 confirm_empty 事件随既有 commit 落盘"""
+    store = HrSiteStore(SITE, str(tmp_path / "hr"))
+    cfg = _config(tmp_path, data_dir=tmp_path)
+    buf = io.StringIO()
+
+    assert run_hr_confirm_empty(cfg, [SITE], out=buf) == 0
+
+    data, err = store.read_unlocked()
+    assert err is None and data.empty_confirmed_at > 0, "对账戳照常落盘"
+    (ev, ) = data.history
+    assert (ev.kind, ev.trigger, ev.action) == ("confirm_empty", "confirm", "confirm-empty")
+    assert "人工对账" in ev.reason
+    assert ev.ts > 0 and len(ev.by) == 6, "by = 写者实例短标识(store.owner 前 6 位)"
+    assert ev.rows == 0 and ev.lanes == [], "对账事件不携带波次计数字段"
 
 
 def test_run_hr_status_zero_row_counter_attested_tail(tmp_path, monkeypatch):

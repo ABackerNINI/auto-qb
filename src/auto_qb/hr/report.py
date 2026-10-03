@@ -195,6 +195,16 @@ def run_hr_confirm_empty(config: Config, sites: List[str], out=None) -> int:
                 data.empty_confirmed_at = time.time()
                 note = "; 人工对账: 确认账号 HR 清单为空(--hr-confirm-empty), 零行波恢复签发放行, 非零行自动失效"
                 data.wave.notes = ((data.wave.notes or "") + note).strip("; ")
+                # 拉取历史(计划 26-10-04-0312 §3.3): 对账是「零行波能不能放行」的关键前置, 入时间轴,
+                # 随下方既有 commit 落盘(锁忙不入历史 —— 别的实例会有自己的记录)
+                service._append_history(
+                    site,
+                    data,
+                    kind="confirm_empty",
+                    trigger="confirm",
+                    action="confirm-empty",
+                    reason=note.strip("; ")
+                )
                 status = session.commit(time.time())
                 if status == "written":
                     print(f"[{site}] 已写入人工对账戳({stamp_text(data.empty_confirmed_at)})。", file=out)

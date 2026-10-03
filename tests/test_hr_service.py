@@ -81,6 +81,14 @@
 - test_build_views_skips_disabled_and_channel_states: 视图构建跳过未启用站点; 通道状态 ok/silent/disabled 与无锁读
 - test_lane_fail_streak_alerts_error: 连续 3 波同档失效 -> ERROR 升级(只提示人, 不改行为)
 - test_worker_and_freeze_guards: 终态冻结的档位无效守卫 / 观察期位置未覆盖冻结 / 出口无 hash 不落记录
+
+### S2 拉取历史记录点(计划 26-10-04-0312 §3.3)
+- test_history_wave_events_six_terminal_states: 六终态(refreshed/partial/login/no-channel/quota/Retry-After)
+  各恰一条 wave 事件且随站点文件落盘, 关键字段(action/trigger/计数字段/lanes 快照/notes/by)搬运正确
+- test_history_auto_poll_gate_skip_writes_nothing: 自动 poll 被调度闸(复用窗/拉取间隔)跳过 -> 零事件
+  + 零写盘(站点文件一字节不变) —— 硬不变量
+- test_history_defer_only_on_force: defer 事件仅 force 路径产生(立即拉取撞 min_interval -> 一条 defer
+  显式落盘); 非 force 被闸拦无事件不写盘
 """
 import logging
 import time
@@ -91,9 +99,10 @@ import pytest
 
 import auto_qb.hr.service as hr_service
 from auto_qb.hr import events
-from auto_qb.hr.fetcher import HrFetchError
+from auto_qb.hr.fetcher import HrFetchError, NullFetcher
 from auto_qb.hr.model import (
     FETCH_LANES,
+    LANE_IDLE,
     LANE_SATISFIED,
     LANE_SCOPE,
     LANE_UNSATISFIED,
@@ -111,11 +120,14 @@ from auto_qb.hr.store import HrSiteStore
 from auto_qb.hr.service import (
     ACTION_ERROR,
     ACTION_LOCKED,
+    ACTION_NO_CHANNEL,
     ACTION_PARTIAL,
+    ACTION_REFRESHED,
     ACTION_WAITING,
     FUZZY_NAME_K,
     HrRefreshService,
     REASON_BUDGET,
+    REASON_NONE,
     _WaveContext,
     _lanes_summary_from,
     _mark_fetch_failed_lane,
@@ -2141,3 +2153,122 @@ def test_freeze_and_observation_guards(tmp_path):
     }
     exits = HrRefreshService._advance_observation(data, covered, wave)
     assert exits == 1 and data.index[31].active is False and data.verified == {}
+
+
+# ---------------- 拉取历史记录点(计划 26-10-04-0312 §3.3, S2) ----------------
+
+
+def _history_from_disk(service, site: str = SITE):
+    """从磁盘读站点文件取拉取历史(能读到他 == 事件已随站点文件落盘)"""
+    data, err = service.store(site).read_unlocked()
+    assert err is None
+    return data.history
+
+
+def test_history_wave_events_six_terminal_states(tmp_path):
+    """六终态各恰一条 wave 事件(refreshed/partial/login/no-channel/quota/Retry-After),
+    字段搬运自 result/lane_states/wave.notes 且随站点文件落盘; trigger 按 force 区分(§3.3)"""
+    # 1. 正常波 refreshed(force 立即拉取 -> trigger=manual; .torrent 回填成功计入 torrents_ok)
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]), blobs={11: torrent_blob("other.bin")})
+    service = make_service(tmp_path / "s1-refreshed", fetcher, clock=Clock())
+    result = service.refresh_site(SITE, {}, force=True)
+    assert result.action == ACTION_REFRESHED
+    (ev, ) = _history_from_disk(service)
+    assert (ev.kind, ev.trigger, ev.action) == ("wave", "manual", "refreshed")
+    assert ev.reason_kind == REASON_NONE
+    assert ev.pages == 3 and ev.rows == 1 and ev.torrents_ok == 1 and ev.torrents_fail == 0
+    assert ev.by == "test" and ev.ts > 0 and ev.elapsed_s >= 0
+    assert [l["lane"] for l in ev.lanes] == ["A", "B", "C"] and all(l["status"] == "ok" for l in ev.lanes)
+
+    # 2. partial(B 档页面取数失败, 失效档快照与 reason 都搬运进事件)
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]), fail_text_at={"B": "boom"})
+    service = make_service(tmp_path / "s2-partial", fetcher, clock=Clock())
+    assert service.refresh_site(SITE, {}).action == ACTION_PARTIAL
+    (ev, ) = _history_from_disk(service)
+    assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "partial")
+    assert "页面取数失败" in ev.reason
+    failed_b = [l for l in ev.lanes if l["lane"] == "B"][0]
+    assert failed_b["status"] == "failed" and failed_b["pages"] == 0 and "页面取数失败" in failed_b["detail"]
+
+    # 3. login(A 档命中登录页 -> 走 _finish_wave 收尾, 终态 error)
+    fetcher = FakeFetcher(pages=standard_pages(), login_at={"A"})
+    service = make_service(tmp_path / "s3-login", fetcher, clock=Clock())
+    assert service.refresh_site(SITE, {}).action == ACTION_ERROR
+    (ev, ) = _history_from_disk(service)
+    assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "error")
+    assert "登录页" in ev.reason
+
+    # 4. no-channel(端点级故障 -> 波级让位, 档位快照全为未跑)
+    service = make_service(tmp_path / "s4-nochannel", NullFetcher("通道未启用"), clock=Clock())
+    assert service.refresh_site(SITE, {}).action == ACTION_NO_CHANNEL
+    (ev, ) = _history_from_disk(service)
+    assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "no-channel")
+    assert ev.pages == 0 and ev.rows == 0
+    assert all(l["status"] == LANE_IDLE for l in ev.lanes)
+
+    # 5. quota(扩展侧硬上限 -> 波级让位)
+    service = make_service(tmp_path / "s5-quota", FakeFetcher(pages=standard_pages(), quota=True), clock=Clock())
+    assert service.refresh_site(SITE, {}).action == ACTION_WAITING
+    (ev, ) = _history_from_disk(service)
+    assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "waiting")
+    assert "扩展侧硬上限" in ev.reason
+    assert all(l["status"] == LANE_IDLE for l in ev.lanes)
+
+    # 6. Retry-After(站点指令 -> 波级落 retry_after_until 让位)
+    fetcher = FakeFetcher(pages=standard_pages(), retry_after_at={"A": 600.0})
+    service = make_service(tmp_path / "s6-retry", fetcher, clock=Clock())
+    assert service.refresh_site(SITE, {}).action == ACTION_WAITING
+    (ev, ) = _history_from_disk(service)
+    assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "waiting")
+    assert "Retry-After" in ev.reason and ev.reason_kind == REASON_NONE
+    assert all(l["status"] == LANE_IDLE for l in ev.lanes)
+
+
+def test_history_auto_poll_gate_skip_writes_nothing(tmp_path):
+    """硬不变量(§3.3): 自动 poll 被调度闸(复用窗/拉取间隔)跳过 -> 零事件 + 零写盘(站点文件一字节不变)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, gconf=global_conf(reuse_window=3600.0), clock=clock)
+    run_wave(service)
+    site_file = service.store(SITE).path
+    before = site_file.read_bytes()
+    (first, ) = _history_from_disk(service)
+    assert first.kind == "wave"
+    # 复用窗内(1H): 自动 poll 直接 REUSED —— 同样零事件零写盘
+    clock.advance(600.0)
+    reused = service.refresh_site(SITE, {})
+    assert reused.action == "reused"
+    assert site_file.read_bytes() == before, "复用窗内的 poll 不得写盘"
+    assert _history_from_disk(service) == [first], "复用窗内的 poll 不入历史"
+    # 复用窗外 + 拉取间隔内: 自动 poll 被拉取间隔闸跳过 —— 零事件零写盘(硬不变量)
+    clock.advance(2 * 3600.0)
+    waiting = service.refresh_site(SITE, {})
+    assert waiting.action == ACTION_WAITING and "未到拉取时刻" in waiting.reason
+    assert site_file.read_bytes() == before, "被调度闸跳过的 poll 不得写盘"
+    assert _history_from_disk(service) == [first], "自动 poll 的 waiting 不入历史"
+
+
+def test_history_defer_only_on_force(tmp_path):
+    """defer 事件仅 force 路径产生(§3.3): 非 force 被闸拦无事件不写盘; force 撞 min_interval
+    (账号安全线) -> 恰一条 defer 并随显式 commit 落盘"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, gconf=global_conf(min_interval=90.0, reuse_window=1.0), clock=clock)
+    run_wave(service)  # 首波健康波(1 条 wave 事件); last_fetch_ts = now
+    site_file = service.store(SITE).path
+    before = site_file.read_bytes()
+    # 非 force(自动 poll): 被拉取间隔闸拦 -> 无事件 + 零写盘
+    clock.advance(60.0)
+    auto = service.refresh_site(SITE, {})
+    assert auto.action == ACTION_WAITING and "未到拉取时刻" in auto.reason
+    assert site_file.read_bytes() == before and len(_history_from_disk(service)) == 1
+    # force(立即拉取): 越过复用窗/拉取间隔两道闸, 撞上 min_interval 账号安全线 -> 一条 defer 显式落盘
+    forced = service.refresh_site(SITE, {}, force=True)
+    assert forced.action == ACTION_WAITING
+    assert "间隔" in forced.reason and "拉取间隔" not in forced.reason, f"应是 min_interval 拦下: {forced.reason}"
+    wave_ev, defer_ev = _history_from_disk(service)  # 从磁盘读: defer 已随显式 commit 落盘
+    assert wave_ev.kind == "wave" and wave_ev.trigger == "auto"
+    assert (defer_ev.kind, defer_ev.trigger, defer_ev.action) == ("defer", "manual", "waiting")
+    assert "间隔" in defer_ev.reason
+    assert defer_ev.lanes == [] and defer_ev.rows == 0 and defer_ev.pages == 0
+    assert defer_ev.by == "test" and defer_ev.ts == clock.now
