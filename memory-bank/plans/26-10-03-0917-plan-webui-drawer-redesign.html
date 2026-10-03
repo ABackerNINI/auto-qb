@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-drawer-redesign">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-03-0917">
+<meta name="doc-updated" content="26-10-03-0917">
+<meta name="doc-refs" content="memory-bank/issues/26-10-01-2108-feat-webui-shortcuts-drawer-nav.html,memory-bank/issues/26-10-01-2108-feat-webui-shortcuts-drawer-open.html,memory-bank/issues/26-10-01-2119-feat-webui-drawer-redesign.html,memory-bank/tasks/26-10-03-webui-drawer-redesign.md">
+<title>计划 · WEBUI 种子详情抽屉重设计 方案A (底部停靠属性面板) · 分步实施计划</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --ok: #4cc38a;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.7; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 90px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 34px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; margin-bottom: 14px; }
+  .lede { font-size: 15.5px; color: var(--dim); max-width: 68ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 15px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { grid-column: 2; margin-top: 46px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -.01em; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 16px; font-weight: 600; margin: 26px 0 10px; color: var(--ink); }
+  h3 .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); margin-right: 8px; }
+  p { margin: 0 0 12px; color: var(--dim); max-width: 78ch; }
+  p strong, li strong { color: var(--ink); }
+  ul, ol { margin: 0 0 12px 22px; color: var(--dim); max-width: 78ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 3px; padding: 1px 6px; color: var(--accent-ink); }
+  .path { font-family: var(--mono); font-size: 12.5px; color: var(--accent-ink); word-break: break-all; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13.5px; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--hair); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--hair-soft); color: var(--dim); vertical-align: top; }
+  td:first-child { color: var(--ink); }
+  tr:hover td { background: rgba(92,192,207,.04); }
+  .note { border-left: 2px solid var(--accent); background: rgba(92,192,207,.06); padding: 12px 16px; margin: 14px 0 18px; font-size: 14px; color: var(--dim); border-radius: 0 4px 4px 0; }
+  .note b { color: var(--accent-ink); }
+  .warnbox { border-left: 2px solid var(--warn); background: rgba(226,168,110,.07); padding: 12px 16px; margin: 14px 0 18px; font-size: 14px; color: var(--dim); border-radius: 0 4px 4px 0; }
+  .warnbox b { color: var(--warn); }
+  .ascii { font-family: var(--mono); font-size: 12px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--hair); border-radius: 6px; padding: 16px 18px; overflow-x: auto; color: var(--dim); white-space: pre; margin: 12px 0 18px; }
+  .ascii .hi { color: var(--accent-ink); }
+  .badge { display: inline-block; padding: 1px 10px; border-radius: 3px; font-family: var(--mono); font-size: 11.5px; background: #16232a; color: var(--accent-ink); border: 1px solid #2b4048; }
+  .badge.s { background: #14251c; color: var(--ok); border-color: #26402f; }
+  .badge.m { background: #241f14; color: var(--warn); border-color: #443826; }
+  .kbd { font-family: var(--mono); font-size: 12px; background: #1b232d; border: 1px solid #33414d; border-bottom-width: 2px; border-radius: 4px; padding: 1px 7px; color: var(--ink); white-space: nowrap; }
+  /* 波次卡 */
+  .wave { border: 1px solid var(--hair); padding: 18px 22px 14px; margin: 18px 0; }
+  .wave-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .wave-head .wno { font-family: var(--display); font-size: 13px; letter-spacing: .06em; color: var(--accent-ink); }
+  .wave-head h3 { margin: 0; }
+  .wave-head .badge { margin-left: auto; }
+  /* 拍板点 */
+  .decide { border: 1px solid var(--hair); border-left: 2px solid var(--warn); padding: 14px 18px 10px; margin: 14px 0; }
+  .decide .dq { font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+  .decide .dq .dn { font-family: var(--mono); font-size: 12px; color: var(--warn); margin-right: 8px; }
+  .decide ol { margin-bottom: 8px; }
+  .decide .rec { color: var(--ok); }
+  footer.colophon { grid-column: 2; margin-top: 60px; padding-top: 18px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<nav class="toc">
+  <div class="toc-label">目录</div>
+  <a href="#s1"><span class="no">01</span>定位与输入</a>
+  <a href="#s2"><span class="no">02</span>目标形态与交互规格</a>
+  <a href="#s3"><span class="no">03</span>关键集成点 (代码事实)</a>
+  <a href="#s4"><span class="no">04</span>分步实施 · 五波</a>
+  <a href="#s5"><span class="no">05</span>拍板点 D1-D4</a>
+  <a href="#s6"><span class="no">06</span>风险与回归矩阵</a>
+  <a href="#s7"><span class="no">07</span>证据与关联</a>
+  <div class="toc-foot">取证 2026-10-03<br>@ develop 0a66c7c0<br>行号会漂移, 以符号为准</div>
+</nav>
+
+<header class="cover">
+  <div class="kicker">实施计划 · 方案A · 底部停靠属性面板</div>
+  <h1>WEBUI 种子详情抽屉重设计 · 方案A 分步实施计划</h1>
+  <p class="lede">落实调研报告 <a href="../reports/26-10-03-0759-report-webui-drawer-redesign.html">26-10-03-0759</a> 的方案A: 详情抽屉从「右缘浮层 + 全屏模糊遮罩」重做为「列表下方全宽停靠面板」——遮罩与 <code>backdrop-filter</code> 结构性消除, 上下键保持在列表、详情面板防抖跟随光标, <span class="kbd">Alt</span>+<span class="kbd">1~4</span> 跨态开面板并定位页签。覆盖三个池内 issue 与用户追加的「列表当前行必须看得清」硬约束。交互基准可用选型模板 <span class="path">reports/26-10-03-drawer-redesign-templates/plan-a-bottom-dock.html</span> (双击可开, 键盘可实际操作)。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">编号</div><div class="v">26-10-03-0917-plan-webui-drawer-redesign</div></div>
+    <div class="item"><div class="k">取证</div><div class="v">2026-10-03 @ develop 0a66c7c0</div></div>
+    <div class="item"><div class="k">上游</div><div class="v">reports/26-10-03-0759 (方案A §03 / 波次 §05)</div></div>
+    <div class="item"><div class="k">状态</div><div class="v">Open · 待拍板 D1-D4</div></div>
+  </div>
+</header>
+
+<section id="s1">
+  <h2><span class="no">01</span>定位与输入</h2>
+
+  <h3><span class="tag">1.1</span>拍板链与本计划的位置</h3>
+  <p>报告 §04 的推荐次序是「C 先行落地, A 列为终态另立计划推进」; 报告 §05 波次表的波 5 即「方案A 单独立计划」。用户拍板<strong>直接按方案A出实施计划</strong> —— 本计划就是那个「另立计划」, 方案A一步到位, C 路线的波次不再单独排期 (取舍见拍板点 D4)。</p>
+
+  <h3><span class="tag">1.2</span>三个 issue + 一条硬约束在方案A下的解法映射</h3>
+  <table>
+    <tr><th>条目</th><th>报告 C 路线的解法</th><th>方案A的解法 (本计划)</th><th>落点</th></tr>
+    <tr>
+      <td>…shortcuts-drawer-nav<br>抽屉开着上下键切种子</td>
+      <td>新增 drawer-scope 光标动作 drawerNav()</td>
+      <td><strong>语义升级</strong>: 上下键永远属于列表 (scope 存活), 面板开着列表键位不灭, 详情跟随光标 —— 无需新光标动作, <code>_kbMove</code> 不动</td>
+      <td>W2</td>
+    </tr>
+    <tr>
+      <td>…shortcuts-drawer-open<br>Alt+1~4 列表侧直接开抽屉</td>
+      <td>注册表拆双条目 / 调派发规则</td>
+      <td>drawer-tab-* 四条改 list scope 双态: 面板关 = 开面板并定位页签, 面板开 = 切页 (现行为)</td>
+      <td>W2</td>
+    </tr>
+    <tr>
+      <td>…drawer-redesign<br>抽屉整体重做</td>
+      <td>只做轻量部分 (波 3/4)</td>
+      <td>方案A本体: 浮层 → 底部停靠面板, 结构重排 + 三皮肤 drawer 族重写</td>
+      <td>W1 / W3</td>
+    </tr>
+    <tr>
+      <td>用户硬约束<br>列表当前行必须看得清</td>
+      <td>摘 blur + 遮罩降档 + 高亮增强</td>
+      <td><strong>结构性消除</strong>: 无遮罩即无模糊, 列表整幅永久可见; 摘 <code>backdrop-filter</code> 顺带完成 PERF-01 全站归零收尾</td>
+      <td>W1</td>
+    </tr>
+  </table>
+
+  <h3><span class="tag">1.3</span>范围边界</h3>
+  <ul>
+    <li><strong>含</strong>: 抽屉模板与三皮肤 drawer 族重排、打开/关闭语义、scope 派发与键位调整、详情跟随光标、面板高度治理、回归验证与收尾回写。</li>
+    <li><strong>不含</strong>: 报告波 1 的 C 式 <code>drawer-cursor-up/down</code> 动作 (方案A下无此需求, 见 1.2); 报告波 3 的遮罩降档 (被 W1 结构性取代, D4); 报告波 4 的常规页信息密度<strong>重做</strong> (降级为 W3 复检项, FX-22 分组卡片与长文本截断改进原样保留)。</li>
+    <li><strong>不回退</strong>: 页签记忆 (<code>drawerLastTab</code> + localStorage)、FX-22 常规页分组卡片化、<code>.f-row .v</code> line-clamp 截断族、trackers/peers 激活期轮询 —— 全部是重设计的保留输入。</li>
+    <li><strong>相邻预留</strong>: 池内 <span class="path">26-10-01-2108-feat-webui-selection-follow-mouse</span> (选中跟随鼠标) 与本计划的「光标行状态」是同一行状态的两套输入; W2 的跟随挂点做成单点入口, 鼠标路径将来接同一挂点即可零成本合流 —— 本计划不接鼠标路径 (范围守恒)。</li>
+  </ul>
+</section>
+
+<section id="s2">
+  <h2><span class="no">02</span>目标形态与交互规格</h2>
+
+  <h3><span class="tag">2.1</span>布局 (报告 §03 方案A原图)</h3>
+  <div class="ascii">
+┌──────────────────────────────────────────────────────┐
+│ 顶栏 / 筛选 / 搜索                                    │
+├──────────────────────────────────────────────────────┤
+│ 种子列表 (flex: 1, 光标行高亮 + 滚动跟随)             │
+│   row 3                                              │
+│ <span class="hi">▶ row 4  &lt;-- .kb-cursor, 详情面板跟随此行 --&gt;</span>       │
+│   row 5                                              │
+├────────────────── 拖拽调高 · 可收起 ──────────────────┤
+│ 详情面板 (默认约 42vh, 全宽, 无任何遮罩)              │
+│ [常规] [Tracker] [用户] [内容]                [×]    │
+│  名称 / 哈希 / 大小 / 状态 / 进度 / HR …             │
+│  tracker 表 / peers 表获得全宽 (本站宽表受益)         │
+└──────────────────────────────────────────────────────┘</div>
+  <p><strong>布局参数</strong>: 面板默认高约 42vh; 拖拽调高夹取区间 [240px, 70vh]; 收起态只留面板头部 (~44px 行高); 全宽贴列表容器; 高度与开合态持久化 (键族见 §3.5)。动画从右缘 <code>translateX</code> 滑入改为下滑 + 淡入 (transition 组件 200ms 保留, 高度不可过渡 —— 只动 transform/opacity)。</p>
+
+  <h3><span class="tag">2.2</span>键盘行为矩阵</h3>
+  <table>
+    <tr><th>键</th><th>面板关 (纯列表)</th><th>面板开 (跟随态)</th></tr>
+    <tr><td><span class="kbd">↑</span>/<span class="kbd">↓</span> (repeat 连发)</td><td>列表光标 (现状 <code>_kbMove</code>)</td><td><strong>不变 —— 光标仍在列表</strong>, 详情防抖跟随</td></tr>
+    <tr><td><span class="kbd">PgUp</span>/<span class="kbd">PgDn</span>/<span class="kbd">Home</span>/<span class="kbd">End</span></td><td>光标页移/跳端 (现状)</td><td>同上, 跟随</td></tr>
+    <tr><td><span class="kbd">Enter</span></td><td>开面板 (现 row-open → <code>openTorrentDrawer</code>)</td><td>按拍板 D2 (推荐: 仅跟随不关)</td></tr>
+    <tr><td><span class="kbd">Alt</span>+<span class="kbd">1~4</span></td><td><strong>开面板并定位页签</strong> (新, 解决 drawer-open)</td><td>切页签 (现行为)</td></tr>
+    <tr><td><span class="kbd">Esc</span></td><td>退栈链既有兜底 (清筛选等)</td><td>关面板 → 再按走退栈链后续</td></tr>
+    <tr><td>双击 / 右键「详情」</td><td>开面板 (现状入口不动)</td><td>换目标打开</td></tr>
+    <tr><td><span class="kbd">Delete</span> 等列表键</td><td>现状</td><td><strong>保持可用</strong> (停靠面板不再算浮层)</td></tr>
+  </table>
+
+  <h3><span class="tag">2.3</span>跟随模型 (Web 端连动纪律)</h3>
+  <ul>
+    <li><strong>触发单点</strong>: 光标落地处 (<code>_kbApplyCursor</code>) 尾部挂一个入口, 面板开且当前页为种子页时 → 请求详情跟随; 鼠标路径未来接同一入口 (§1.3 相邻预留)。</li>
+    <li><strong>防抖 200ms</strong>: 连发上下键时不逐行拉详情; 停稳才发。</li>
+    <li><strong>在途请求代际 (seq)</strong>: 换 hash 后旧响应一律丢弃, 防止慢响应把新种子的详情覆盖成旧的 —— 报告 §02 共识第 3 条「连动节流」的本站实现。</li>
+    <li><strong>hash 未变短路</strong>: 光标落回同一行不重拉; 页签内 5s 轮询 (<code>_startDrawerPoll</code>) 照旧, 两者不互相打架。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2><span class="no">03</span>关键集成点 (代码事实, 已复核 @ 0a66c7c0)</h2>
+  <p>报告 §01 的取证仍然成立; 本节是<strong>报告没展开、实施时最容易踩</strong>的五个集成点, 锚点已在本基线复核。</p>
+
+  <h3><span class="tag">3.1</span>DOM 落点: tpl-manifest 注入目标要改</h3>
+  <p>抽屉模板经各皮肤 <code>index.html</code> 的 <code>tpl-manifest</code> 注入, 现挂 <code>"into": "app"</code> (<span class="path">atlas/index.html</span> L138, console / prism 同构), 即 <code>#app</code> 尾部兄弟节点 —— 这正是它能全屏浮在所有页面之上的原因。<strong>停靠化必须换落点</strong>:</p>
+  <ul>
+    <li><strong>推荐</strong>: <span class="path">shared/tpl/torrents.html</span> 的 <code>viewMode === 'torrents'</code> 模板内、<code>.group-table</code> 之后新增停靠容器 <code>.drawer-dock</code>, 三皮肤 manifest 的 drawer 条目 <code>"into"</code> 改指该容器。种子视图父容器改 flex column (列表区 <code>flex:1; min-height:0</code>, 面板 auto)。</li>
+    <li>依据: 抽屉入口全站唯二 —— <span class="path">torrents.html</span> L27 双击、<span class="path">ctx-menus.html</span> L85 右键「详情」, 都在种子视图; 面板随视图 <code>v-if</code> 隐藏, <strong>天然解决「开着抽屉切到站点/设置页, 浮层残留 + scope 误判」</strong> (现浮层形态下抽屉跨页常驻)。</li>
+    <li>备选 (不推荐): 模板留 <code>#app</code> 尾部, 靠 flex <code>order</code> 塞进视觉位置 —— DOM 语义与可达性都差, 弃。</li>
+  </ul>
+
+  <h3><span class="tag">3.2</span>scope 派发与浮层名单 (shortcuts.js, 三处联动)</h3>
+  <ul>
+    <li><code>_kbScope()</code> L388-392: <code>if (this.drawer.open) return "drawer"</code> —— 停靠面板只存在于种子页, 该分支必须加页面条件 (<code>page === "torrents" && drawer.open</code>), <strong>否则面板开着切页后会误判 scope 把列表键位全灭</strong>。</li>
+    <li><code>_kbOverlayBusy()</code> L395-399: 名单摘除 <code>drawer.open</code> —— 停靠面板不是浮层, Delete 等注册表外绑定与列表键在面板开着时保持可用 (W2)。<strong>W1 阶段先不动这两处</strong>: 面板开着键位行为与现状一致 (drawer scope, 列表键死), W1 键盘零回归, W2 再放开。</li>
+    <li><code>drawer-tab-general/trackers/peers/content</code> L266-279: scope <code>"drawer"</code> → <code>"list"</code>, run 改双态 (§2.2); 目标解析取 <code>kbCursor</code> (kind=torrent) / 单选种子, 非种子页或无目标时 toast 提示后忽略。drawer scope 机制保留 (条目清空)。</li>
+  </ul>
+
+  <h3><span class="tag">3.3</span>Esc 退栈链: 零改动, 走查确认</h3>
+  <p><span class="path">shared/dialogs.js</span> <code>escBusy()</code> L485-487 已含 <code>drawer.open</code>, 快捷键引擎 <code>_kbOnKeyDown</code> 首行即把 Escape 整键让给退栈链 —— 「面板开 Esc = 关面板」已经成立。只需走查确认两层序: 关面板 → 再 Esc 落到「清除全部筛选」兜底 (计划 26-10-02-1632 已实施)。遮罩点击关闭随遮罩一起消失, 无迁移项。</p>
+
+  <h3><span class="tag">3.4</span>数据面: 打开语义与跟随挂点 (drawer.js)</h3>
+  <ul>
+    <li><code>openTorrentDrawer(hash)</code> L448 / <code>closeDrawer()</code> L460: 打开语义调整 (无遮罩、目标 hash、初始页签取 <code>drawerLastTab</code> L451 不变); trackers/peers 激活期轮询 <code>_startDrawerPoll</code> L472 <strong>不变</strong>。</li>
+    <li><code>_loadDrawerTab(tab)</code> L541: 加请求代际 seq; 新增跟随单点方法 (防抖 + seq + hash 短路, §2.3), 由 <code>_kbApplyCursor</code> L463 尾部调用。</li>
+  </ul>
+
+  <h3><span class="tag">3.5</span>持久化与配置边界</h3>
+  <p>面板高度 / 开合态进 localStorage (<code>autoqb.ui.drawerHeight</code> / <code>autoqb.ui.drawerOpen</code>, 与 <code>autoqb.ui.drawerTab</code> 同族, <code>persistDrawerTab</code> L553 为先例, 初始值口径在 <span class="path">shared/state.js</span> L107)。<strong>不新增 config.yml 键</strong> —— 不触 <code>validate_config</code> / <code>config/schema.py</code> (黄金法则 4 无涉), 不进配置文档。</p>
+
+  <h3><span class="tag">3.6</span>三皮肤 CSS 与过渡动画</h3>
+  <ul>
+    <li><code>.drawer-mask</code> / <code>.drawer</code> 族重写, 每皮肤头段: <span class="path">atlas/css/dialogs.css</span> L3-4 · <span class="path">console/css/dialogs.css</span> L6-7 · <span class="path">prism/css/views.css</span> L546-547 (行号来自报告取证 @ 112baefc, 以符号为准)。摘 <code>backdrop-filter: blur(2px)</code> 与全屏遮罩 —— <strong>PERF-01 全站零 backdrop-filter 在此收尾</strong>。</li>
+    <li><code>.kb-cursor</code> 虚线描边是 shared 层单点 (<span class="path">shared/console_hub.css</span> L1045-1049), A 下即跟随指示, 对比度增强列为 W3 可选复检项。</li>
+    <li>Vue transition 名 <code>drawer</code> (drawer.html L2, 200ms): 各皮肤的 <code>drawer-enter-*</code> 动画族从右缘滑入改为下滑 + 淡入, 只动 transform/opacity。</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <h2><span class="no">04</span>分步实施 · 五波 (每波单独提交)</h2>
+  <p>排序原则: W1 结构先行且<strong>键盘零回归</strong> (行为与现状逐键一致), W2 才动键位面; 每波过验收再进下一波, 单波可独立回退。</p>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wno">W1</span><h3>停靠骨架: 浮层 → 底部面板, 遮罩与 blur 结构性消除</h3><span class="badge m">M</span></div>
+    <ul>
+      <li>torrents.html: <code>viewMode</code> 模板内增 <code>.drawer-dock</code> 容器, 种子视图父容器改 flex column (§3.1)。</li>
+      <li>drawer.html: 根结构 <code>.drawer-mask &gt; .drawer</code> → 停靠面板 (头部 = 状态点 + 名称 + 页签 + 收起/关闭钮; 四页签 body 原样保留 —— FX-22 卡片、截断族、行内操作不回退)。</li>
+      <li>三皮肤 index.html: drawer 条目 <code>"into"</code> 改指 <code>.drawer-dock</code>; 三皮肤 drawer 族 CSS 重写 (§3.6), 摘遮罩与 blur。</li>
+      <li>drawer.js: open/close 语义调整; 非种子页调用的防御分支。</li>
+      <li>shortcuts.js 仅两条最小改动保一致性: <code>_kbScope</code> 加 page 条件、浮层分支注释更新 (<strong>名单与键位面不动</strong>, 留 W2)。</li>
+    </ul>
+    <p><strong>验收</strong>: ui_harness 桩起盘, 三皮肤真浏览器目检各一轮 —— 双击 / Enter / 右键开面板; 列表整幅可见、无模糊; Esc 关面板; 切页再回面板状态保持; <strong>逐键核对键盘行为与 W1 前一致</strong>。</p>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wno">W2</span><h3>键盘跟随流: scope 存活 + Alt+1~4 双态 + 详情跟随</h3><span class="badge m">M</span></div>
+    <ul>
+      <li>shortcuts.js: <code>_kbOverlayBusy</code> 摘 <code>drawer.open</code>; drawer-tab-* 四条改 list scope 双态 + 目标解析 + 无目标 toast (§3.2)。</li>
+      <li>drawer.js: 跟随单点 (防抖 200ms + seq 代际 + hash 短路) 挂 <code>_kbApplyCursor</code> 尾部; <code>_loadDrawerTab</code> 加 seq (§3.4)。</li>
+      <li>row-open 开态行为按 D2 落地。</li>
+      <li>快捷键帮助面板同步: 条目 label / 分组 / 数量 (drawer 组 4 条语义变化要可见)。</li>
+      <li>守阵测试同步: 测试计划清单补 scope 派发与目标解析断言。</li>
+    </ul>
+    <p><strong>验收</strong>: §2.2 矩阵逐格真浏览器走查; 连发 ↓ 1s, Network 面板断言在途详情请求恒 ≤ 1 且最终落在停稳行; drawer-nav / drawer-open 两 issue 的验收条件逐条核销。</p>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wno">W3</span><h3>面板体验: 高度治理与全宽收益落点</h3><span class="badge s">S-M</span></div>
+    <ul>
+      <li>拖拽调高 (pointer 事件 + 夹取 [240px, 70vh]) + 收起/展开钮 + 高度与开合持久化 (D1 落地, §3.5)。</li>
+      <li>tracker / peers 宽表全宽利用复核; <code>.f-row .v</code> line-clamp 族在全宽下的截断阈值复检; FX-22 分组卡片保留验证; 常规页信息密度复检 (报告波 4 的降级承接)。</li>
+      <li><code>.kb-cursor</code> 对比度增强复检 (可选, shared 单点一处); 下滑淡入动画打磨。</li>
+    </ul>
+    <p><strong>验收</strong>: 目检三皮肤; 高度/开合跨刷新持久; 收起态列表恢复满高。</p>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wno">W4</span><h3>回归与验证: 几何 · 相邻视图 · 真机</h3><span class="badge m">M</span></div>
+    <ul>
+      <li>行窗口化几何走查: 面板压缩列表视口后, <code>_kbViewportRow</code> 就近回落与 <code>_kbScrollRowIntoView</code> (getBoundingClientRect + scrollBy, <code>_rowPre</code> 前缀和) 以滚动容器为参照 —— 预期零改动, 走查确认而非假设。</li>
+      <li>相邻视图回归: 追剧视图 / 辅种组行 / 剧集行的光标模型与 Enter 语义不受跟随挂点影响 (挂点 page + kind 守卫); 表头吸顶 (<code>syncTorrentHeadScroll</code>) / 列拖拽 / 搜索高亮回归。</li>
+      <li>窄屏降级按 D3 落地。</li>
+      <li>守阵 + 新增单测 (scope 派发、目标解析、防抖 seq 等可锚纯逻辑); <code>commands run test.full</code> 出基线切片。</li>
+      <li>真机冒烟: <code>commands run dev.run -- config.yml --dry-run</code> 先行, 用户真机复核键位流。</li>
+    </ul>
+    <p><strong>验收</strong>: 基线全绿数字入切片; 冒烟走查单 (开面板 → 上下连发跟随 → Alt+2 → Esc → 清筛选兜底) 三皮肤全过。</p>
+  </div>
+
+  <div class="wave">
+    <div class="wave-head"><span class="wno">W5</span><h3>收尾回写 (DoD)</h3><span class="badge s">S</span></div>
+    <ul>
+      <li>三 issue 置终态 + 档案 <span class="path">tasks/26-10-03-webui-drawer-redesign.md</span> 滚动收口, 已完成条目迁出 <span class="path">progress/implemented-webui.md</span>。</li>
+      <li>本计划 doc-status → Done; activeContext 切片收尾; 基线切片入册 (W4 产出)。</li>
+      <li>若踩到已记的坑: <code>复发</code> +1 并在档案写未命中原因; 新坑按动作入 <span class="path">pitfalls/web-ui/</span>。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="no">05</span>拍板点 D1-D4 (实施前逐项定)</h2>
+
+  <div class="decide">
+    <div class="dq"><span class="dn">D1</span>面板初始态: 页面加载时面板默认开还是关?</div>
+    <ol>
+      <li class="rec"><strong>默认收起, 高度记忆仍生效</strong> (推荐) —— 首屏列表满高, 需要时一键/一键键位唤起; 与「面板是列表的附属」心智一致。</li>
+      <li><strong>恢复上次开合态</strong> —— 重开浏览器回到上次现场, 但「上次开着」对隔天回来的人未必是想要的。</li>
+      <li><strong>默认展开 42vh</strong> —— 面板常驻, 最接近 Deluge 心智, 但牺牲首屏列表。</li>
+    </ol>
+  </div>
+
+  <div class="decide">
+    <div class="dq"><span class="dn">D2</span>Enter 在面板已开时的语义 (报告原文写「Enter 开/关面板」)?</div>
+    <ol>
+      <li class="rec"><strong>已开则仅跟随不关</strong> (推荐) —— 关面板只走 Esc 与关闭钮; 理由: Enter 是列表高频键, toggle 语义下连发/误触会意外关面板, 且「跟随」已让 Enter 的开面板职责在开态失去意义。</li>
+      <li><strong>开/关 toggle</strong> —— 忠于报告原文; 需把 row-open 排除出 repeat 放行, 防长按连发翻转。</li>
+    </ol>
+  </div>
+
+  <div class="decide">
+    <div class="dq"><span class="dn">D3</span>窄屏降级: 列表容器过窄时面板怎么办?</div>
+    <ol>
+      <li class="rec"><strong>≤900px 转全屏覆盖主区</strong> (推荐, 保留关闭钮) —— 停靠意义随宽度消失, 全屏覆盖是移动端抽屉惯例, 面板 body 零改动。</li>
+      <li><strong>维持停靠最小高</strong> —— 简单, 但窄屏下列表只剩两三行, 违背本约束的初衷。</li>
+      <li><strong>本次不做降级</strong> —— 窄屏是低频场景, 记 issue 挂起。</li>
+    </ol>
+  </div>
+
+  <div class="decide">
+    <div class="dq"><span class="dn">D4</span>报告 C 路线波次的取舍确认</div>
+    <ol>
+      <li class="rec"><strong>C 波 1 (抽屉内光标动作) 废弃、C 波 3 (遮罩降档) 取消</strong> (推荐) —— 前者被方案A的 scope 存活语义取代 (§1.2), 后者被 W1 结构性取代, blur 摘除由本计划承接、PERF-01 收尾不延迟太多。</li>
+      <li><strong>C 波 3 仍先行单独落地</strong> —— 仅当本计划排期明显延后、且用户中途想要缓解时才值得 (双倍维护三皮肤遮罩)。</li>
+    </ol>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="no">06</span>风险与回归矩阵</h2>
+  <table>
+    <tr><th>风险</th><th>场景</th><th>缓解 (落点)</th></tr>
+    <tr><td>三皮肤视觉回归面大</td><td>drawer 族整段重写, 三处成对维护</td><td>每波单独提交可回退; 三皮肤目检清单元 (W1/W3), 与既有成对维护纪律一致</td></tr>
+    <tr><td>列表可视行数被压</td><td>面板 42vh + 小屏更明显 (报告已点名)</td><td>收起钮 + 拖拽夹取 + 高度记忆 (W3); D1 默认收起</td></tr>
+    <tr><td>在途请求竞态</td><td>连发换行, 慢响应把旧 hash 详情覆盖到新行</td><td>seq 代际 + 防抖 (W2), Network 断言验收</td></tr>
+    <tr><td>scope 误判跨页</td><td>面板开着切到站点/设置页, 列表键位全灭</td><td>dock 随视图 v-if 隐藏 (§3.1) + <code>_kbScope</code> page 条件 (§3.2)</td></tr>
+    <tr><td>跟随挂点波及相邻视图</td><td>追剧/组视图光标模型共用 <code>_kbApplyCursor</code></td><td>挂点 page + kind 守卫 (W2), W4 专项回归</td></tr>
+    <tr><td>transition 高度不可过渡</td><td><code>&lt;transition&gt;</code> 对 height:auto 无动画</td><td>只动 transform/opacity 下滑淡入 (§2.1)</td></tr>
+    <tr><td>既有右缘抽屉习惯重学</td><td>老用户肌肉记忆</td><td>Alt+1~4 / Esc / 双击语义全部延续, 只有形态变; 帮助面板文案同步 (W2)</td></tr>
+  </table>
+</section>
+
+<section id="s7">
+  <h2><span class="no">07</span>证据与关联</h2>
+  <h3>代码锚点 (复核 2026-10-03 @ develop 0a66c7c0; 未标注者为报告取证 @ 112baefc, 行号仅加速定位)</h3>
+  <ul>
+    <li><span class="path">shared/tpl/drawer.html</span> L2 (transition) · L3-4 (mask 根) · L13 (关闭钮) · L17-22 (页签) · L45-64 (FX-22, 报告)</li>
+    <li><span class="path">shared/tpl/torrents.html</span> L1 (viewMode 模板根) · L25 (kb-cursor class) · L27 (双击入口)</li>
+    <li><span class="path">shared/drawer.js</span> L448 (openTorrentDrawer) · L451 (drawerLastTab) · L460 (closeDrawer) · L472 (_startDrawerPoll) · L531 (drawerTab) · L541 (_loadDrawerTab) · L553 (persistDrawerTab)</li>
+    <li><span class="path">shared/shortcuts.js</span> L180 (row-open) · L266-279 (drawer-tab-* ×4) · L388 (_kbScope) · L395 (_kbOverlayBusy) · L402 (_kbOnKeyDown, 首行让 Esc) · L442 (_kbRows) · L463 (_kbApplyCursor) · L467 (_kbMove) · L479 (_kbViewportRow)</li>
+    <li><span class="path">shared/dialogs.js</span> L485-487 (escBusy 含 drawer.open)</li>
+    <li><span class="path">atlas/index.html</span> L126-140 (tpl-manifest, drawer 条目 L138; console / prism 同构)</li>
+    <li>遮罩三处: atlas/css/dialogs.css L3-4 · console/css/dialogs.css L6-7 · prism/css/views.css L546-547 (报告); <span class="path">shared/console_hub.css</span> L1045-1049 (.kb-cursor, 报告)</li>
+  </ul>
+  <h3>关联件</h3>
+  <ul>
+    <li>上游调研: <a href="../reports/26-10-03-0759-report-webui-drawer-redesign.html">reports/26-10-03-0759-report-webui-drawer-redesign.html</a> (现状取证 / 成熟方案调研 / 三方案对比与波次表)</li>
+    <li>交互基准模板: <span class="path">reports/26-10-03-drawer-redesign-templates/plan-a-bottom-dock.html</span> (静态假数据, 键盘可实际操作)</li>
+    <li>认领 issue: <a href="../issues/26-10-01-2108-feat-webui-shortcuts-drawer-nav.html">…shortcuts-drawer-nav</a> · <a href="../issues/26-10-01-2108-feat-webui-shortcuts-drawer-open.html">…shortcuts-drawer-open</a> · <a href="../issues/26-10-01-2119-feat-webui-drawer-redesign.html">…drawer-redesign</a></li>
+    <li>任务档案: <span class="path">tasks/26-10-03-webui-drawer-redesign.md</span> (波次备查单点)</li>
+    <li>外部参考: 引上游报告 §06 (qBittorrent 停靠属性面板 / Deluge 底部详情页签 / Gmail-Linear 键盘跟随模型), 本计划不另立。</li>
+  </ul>
+</section>
+
+<footer class="colophon">
+  26-10-03-0917-plan-webui-drawer-redesign · doc-topic: webui-drawer-redesign · 状态 Open (待拍板 D1-D4) · 取证 2026-10-03 @ develop 0a66c7c0 · 上游 reports/26-10-03-0759
+</footer>
+
+</div>
+</body>
+</html>

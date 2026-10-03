@@ -3,9 +3,9 @@
 **Status:** Open
 **Added:** 2026-10-03
 **Updated:** 2026-10-03
-**Summary:** 主会话只委派: 阶段1调研子智能体出报告+3个选型模板(方案A底部停靠/B主从分栏/C非模态浮层, 推荐C先行); 拍板时用户改判「只写报告」, 实施波次未排期; 3个池内issue保持Open; 交付物未提交等指令。
+**Summary:** 主会话只委派: 阶段1调研子智能体出报告+3个选型模板(方案A底部停靠/B主从分栏/C非模态浮层, 推荐C先行); 拍板时用户改判「只写报告」, 实施波次未排期; 3个池内issue保持Open; 交付物未提交等指令。后续轮: 用户拍板直接按方案A出实施计划, 计划 26-10-03-0917 已落盘(五波W1-W5+拍板点D1-D4, Open待拍板), C路线波次废弃/并入以计划D4为准。
 **Topics:** webui-drawer-redesign
-**Refs:** memory-bank/reports/26-10-03-0759-report-webui-drawer-redesign.html
+**Refs:** memory-bank/reports/26-10-03-0759-report-webui-drawer-redesign.html,memory-bank/plans/26-10-03-0917-plan-webui-drawer-redesign.html
 
 ## 原始请求
 
@@ -20,7 +20,7 @@
 
 ## 实现计划
 
-仅备查, 未排期, 来自报告 §建议实施波次:
+方案A已单独立计划: **plans/26-10-03-0917-plan-webui-drawer-redesign.html**(五波 W1-W5 + 拍板点 D1-D4, 状态与波次权威在计划侧)。下方 C 路线波次仅存档备查:
 
 1. 波1 (S): 抽屉内上下键切种子 —— shortcuts.js 注册 2 动作 + drawer.js `drawerNav(delta)` + 防抖 → 关 issue drawer-nav
 2. 波2 (S): Alt+1~4 列表侧开抽屉定位页签 —— scope 调整/拆双条目 + 无选中兜底 → 关 issue drawer-open
@@ -36,7 +36,9 @@
 | 阶段2 拍板选型 | Dropped | 用户改判「只写报告」, 不选型 |
 | 阶段3 实施 (波1-3 按选型) | Dropped | 未排期, 待用户再授权 |
 | 阶段4 收尾 (测试/issue关闭/回写) | Open | 随未来实施轮执行 |
+| 方案A 实施计划编制 (后续轮) | Done | plans/26-10-03-0917-plan-webui-drawer-redesign.html (Open 待拍板 D1-D4) |
 
 ## 进度日志
 
 - 2026-10-03 08:27 — 建档。开工 sync 成功 112baefc; 阶段1调研子智能体一次成功 (55 次工具调用, 零异常), 产出 4 个新文件 (报告 + 3 模板, 均过 HTML 标签配平与 node --check 静态校验; 子代理环境无浏览器, 可视化冒烟未做); 相邻 issue selection-follow-mouse (用户未点名) 只在报告 04 节提关联未纳入。拍板 D1 = 用户选「只写报告」→ 阶段2-4 实施面取消, 本档案转 Open 备查。零代码改动, 测试基线沿用 26-10-03-0542 (2309 passed + 3 skipped / 99%), 未跑新基线; 3 个 issue 保持 Open 未认领; 交付物 untracked 等提交指令。
+- 2026-10-03 09:17 — 用户指派「按报告的方案A写一个分步实施计划」: 计划 26-10-03-0917 落盘 (方案A 底部停靠, 五波 W1 骨架/W2 键盘跟随/W3 高度治理/W4 回归/W5 收尾 + 拍板点 D1-D4, Open 待拍板; 报告 C 波1 废弃、C 波3 并入 W1 由 D4 拍板)。认领链回写: 3 个 issue doc-refs 与本档案 Refs 加计划双向声明。零代码改动, 交付物 untracked 等提交指令。

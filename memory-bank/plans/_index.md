@@ -26,6 +26,7 @@
 
 ## Open
 
+- [26-10-03-0917] [计划 · WEBUI 种子详情抽屉重设计 方案A (底部停靠属性面板) · 分步实施计划](26-10-03-0917-plan-webui-drawer-redesign.html) — `webui-drawer-redesign`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`
