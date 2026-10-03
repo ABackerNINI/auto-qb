@@ -2,9 +2,9 @@
 
 **Status:** Open
 **Added:** 2026-10-04
-**Updated:** 2026-10-04 03:20
+**Updated:** 2026-10-04 04:05
 **Topics:** webui-hr-fetch-history
-**Summary:** HR在线核实新增「拉取历史详情表」：后端三类事件（波次/拦截/对账）环形留痕进站点文件 history 字段 + GET /api/hr/history + 全屏弹层表③(参照扩展选项页取数明细表并加细)。计划已落文待拍板, S1-S6 未开工。
+**Summary:** HR在线核实新增「拉取历史详情表」：后端三类事件（波次/拦截/对账）环形留痕进站点文件 history 字段 + GET /api/hr/history + 全屏弹层表③(参照扩展选项页取数明细表并加细)。已拍板(⑤=2000条+6个月, 其余推荐A), S1-S6 实施中, 分支 webui-hr-fetch-history。
 **Refs:** memory-bank/plans/26-10-04-0312-plan-webui-hr-fetch-history.html
 
 ## 原始请求
@@ -41,7 +41,7 @@
 
 | 步骤 | 内容 | 状态 |
 |---|---|---|
-| 拍板 | 计划 §04 五项 | Open |
+| 拍板 | 计划 §04 五项 | Closed（①②③④=推荐A; ⑤=2000条/站点+6个月, 用户指定） |
 | S1 | 数据模型与序列化 | Open |
 | S2 | 记录写入点 | Open |
 | S3 | 只读口径与 API | Open |
@@ -52,3 +52,4 @@
 ## 进度日志
 
 - **2026-10-04 03:20** 立档。计划编制轮完成: sync 成功(13e2646f) → 勘察（子智能体全库调研 + service/store/model/versioning/routes/settings-detail/hr_status 精读, 锚点快照 03:12）→ 计划落文 [plans/26-10-04-0312](../plans/26-10-04-0312-plan-webui-hr-fetch-history.html)（8 节: 现状差距/方案设计/五拍板/S1-S6/测试口径/风险/锚点附录, 含表③静态 mock）。本会话零代码改动, 实施待用户拍板后指派。
+- **2026-10-04 04:05** 拍板落定 + 开工。用户指示: ⑤ 容量/保留 = **2000 条/站点 + 6 个月**（覆盖计划 200 条/14 天, 常量化不变）, 其余四项按推荐 A。执行模式: 主会话拆解排程 + 串行子智能体实施（防长任务 token 膨胀与进度全丢）, 本地分支 `webui-hr-fetch-history`, 每步完成即本地 commit（不走 my-commit-flow）, 全部完成后本地并回 develop 等提交指令。
