@@ -613,6 +613,12 @@ window.AQB_COMMANDS = {
       if (ok) this.toast(`已复制${label}`, "ok", 2000);
       else this.toast("复制失败: 浏览器未授权剪贴板访问", "error");
     },
+    /* 模板入口别名(issue 26-10-03-1412): Vue 模板解析不到 `_` 前缀成员(保留内部域, 点复制钮
+     * 恒抛 ReferenceError 且整块渲染失败), 模板可触达的处理器必须无下划线 —— drawer.html /
+     * popovers.html 的复制钮走这里; JS 内部调用(drawer.js 复制菜单项)仍走 this._copyText */
+    copyText(text, label) {
+      return this._copyText(text, label);
+    },
     /* 右键菜单复制项: field = name | hash | magnet(数据取 memberByHash 的 SEED_ITEM 完整字段) */
     /* 导出 .torrent(种子页右键 R2 补遗): fetch 字节 → blob 下载(Bearer 走 header, 不能用 a href 直链;
      * 不能用 this.api —— 它固定 resp.json(), 而这里是二进制流; 下载核心抽在 _exportDownload,

@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-copy-btn">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="复制按钮 _copyText 在 Vue 3.5 模板中解析失败">
 <meta name="issue-summary" content="drawer/popovers 模板用 _ 前缀方法 @click, 真浏览器恒抛错, 两处复制钮失效">
 <title>复制按钮 _copyText 在 Vue 3.5 模板中解析失败 · bug · 计划外问题</title>
@@ -94,14 +94,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题 · bug（已修）</div>
     <h1>复制按钮 _copyText 在 Vue 3.5 模板中解析失败</h1>
     <p class="lede">drawer/popovers 模板用 _ 前缀方法 @click, 真浏览器恒抛错, 两处复制钮失效</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-03-1412-bug-webui-copytext-underscore-method</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-03 14:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">另一 agent 上报（真浏览器验证）</div></div>
     </div>
@@ -125,8 +125,9 @@
     <h2><span class="no">02</span>证据</h2>
     <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
     <p><strong>备注</strong>：本轮证据是<strong>代码与版本事实</strong>（取证 2026-10-03 14:12，本 clone 已同步到
-      <code>23796f3b</code>）；浏览器 console 原文由上报方口头给出「恒抛错」，<strong>本轮未采集</strong> ——
-      认领后第一步请补原文（复现手法见第 05 节末）。</p>
+      <code>23796f3b</code>）；认领轮补采到浏览器 console 原文（用户真浏览器复验提供，2026-10-03）——
+      与坑位 <code>vue-reactivity.md</code> 判别一致：</p>
+<pre><code>ReferenceError: _copyText is not defined</code></pre>
 <pre><code># 1) 模板里的两处调用（grep -rn '"_' src/auto_qb/webui/static --include=*.html）
 src/auto_qb/webui/static/shared/tpl/drawer.html:72
                           @click="_copyText(String(r.text), r.label)">
@@ -218,12 +219,28 @@ src/auto_qb/webui/static/shared/boot.js:4
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-03 14:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-03 — 认领并修复，状态 <strong>Done</strong>（修复后补充见下）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">待认领：起真浏览器（<code>scripts/ui_harness.py</code>）打开抽屉常规页点一次复制钮，
-      取 console 报错原文与栈，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」，并把原文贴进第 02 节。</p>
+    <p>2026-10-03 认领轮：用户在真浏览器复验提供 console 报错原文
+      <code>ReferenceError: _copyText is not defined</code>（已贴第 02 节）—— 与坑位判别一致，
+      <strong>仍复现</strong>，本单按根因修复。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：按建议修法 ①实施 —— <code>commands.js</code> 在 <code>_copyText</code>
+      旁新增无下划线别名 <code>copyText(text, label)</code>（内部 <code>return this._copyText(...)</code>），
+      两处模板 <code>@click</code> 改调 <code>copyText(...)</code>；<code>drawer.js:442</code> 的
+      <code>this._copyText</code> 纯 JS 调用点不动，回归面最小。</p>
+    <p><strong>防复发（建议 ③一并落地）</strong>：新增静态守阵
+      <code>tests/test_web.py::test_frontend_template_no_reserved_prefix_identifiers</code> ——
+      扫全部 <code>shared/tpl/*.html</code> + 三 UI shell 内联段的插值与指令表达式（两类形态都覆盖，
+      即复发 1 的根子），禁止 <code>_</code>/<code>$</code> 前缀裸标识符；<code>$event</code>
+      白名单放行，<code>obj._x</code> 成员访问不拦。已红验证：修复前两处 <code>@click="_copyText(...)"</code>
+      原文喂同一扫描逻辑均命中。</p>
+    <p><strong>验证方式与数字</strong>：守阵 + 同族 4 项
+      （<code>test_frontend_template_no_reserved_prefix_identifiers</code> /
+      <code>computed_not_invoked_as_function</code> / <code>static_bundle_health</code>(含 node --check) /
+      <code>template_split_wiring</code>）全绿；全量测试数字见收尾基线切片
+      <code>memory-bank/testing/baselines/</code>。真浏览器点复制钮的最终确认待用户下一轮 UI 冒烟。</p>
   </section>
 
   <footer>

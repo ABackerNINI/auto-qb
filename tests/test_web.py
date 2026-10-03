@@ -24,6 +24,7 @@
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤200 行/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
 - test_frontend_member_window_functions_live_in_methods: 成员行窗口三个带参函数(memberWin/memberPadTop/memberPadBottom)必须落在 methods 块, 不能进 computed —— Vue 3 computed 是无参 getter, 带参会导致整表白屏(issue 26-09-21-0247)
 - test_frontend_computed_not_invoked_as_function: computed 成员不得以 `this.X()` 调用(拿到的是 getter 的值, 再 () 会 TypeError) —— 经典设置页改"数值+单位"字段的数字会整页白屏
+- test_frontend_template_no_reserved_prefix_identifiers: 模板表达式(插值+指令)禁止 `_`/`$` 前缀裸标识符 —— Vue 内部保留域解析不到, 抛 ReferenceError 且整块渲染失败(issue 26-10-03-1412 复制钮 `_copyText`); `$event` 白名单, 成员访问不拦
 - test_frontend_dist_segments_aggregates_per_view: distSegments 必须按 viewMode 取数(torrents / shows / groups), 不能只数 this.groups —— 种子页次导航 chips 会全空(issue 26-09-21-0247)
 - test_frontend_cols_store_single_setitem_site: COLS_STORE_KEY 的 setItem 全仓恰好一处(persistPage 内) —— 散写回潮即红
 - test_frontend_persist_page_takes_intent_only: persistPage 只收意图态(colHidden/colOrder/colW), 生效宽度 colWidths 不得进持久化路径(双轨模型铁律, plan 26-09-21-1551)
@@ -2742,6 +2743,51 @@ def test_frontend_computed_not_invoked_as_function():
                     "(拿到的是 getter 的值, 再 () 会 TypeError ⇒ 触发该路径的界面整段白屏)"
                 )
     assert not problems, "computed 被当函数调用: " + "; ".join(problems)
+
+
+def test_frontend_template_no_reserved_prefix_identifiers():
+    """模板表达式里禁止 `_`/`$` 前缀裸标识符 —— Vue 把两类前缀当内部保留域, 模板解析不到
+
+    现象与定性(issue 26-10-03-1412, 坑位 web-ui/vue-reactivity.md「模板里不允许下划线前缀标识符」):
+    drawer.html / popovers.html 的复制钮处理器写成 `@click="_copyText(...)"`, 真浏览器点击恒抛
+    `ReferenceError: _copyText is not defined`(用户复验原文, 2026-10-03)且**整块渲染失败** ——
+    Vue 把 `_`/`$` 前缀成员排除在组件代理之外, data/methods 里的 `_` 方法对模板不可见;
+    vue.global.prod 无 dev 警告, 失败是静默的。
+
+    覆盖两类形态(上次复发 1 的根子就是判别只记了插值形态, `@click="_x()"` 没被认出来):
+    插值 `{{ ... }}` 与指令表达式(v-on / v-bind / v-if 等的属性值)。
+    `$event` 是 Vue 内建事件形参, 白名单放行; `obj._x` 成员访问(点号后)不属于裸标识符, 不拦。
+    """
+    problems = []
+    sources = []  # (rel, text): 盘上全部分片 + 各 UI shell 的 #app 内联段(与运行时编译输入同源)
+    tpl_dir = os.path.join(STATIC_ROOT, "shared", "tpl")
+    for name in sorted(os.listdir(tpl_dir)):
+        if name.endswith(".html"):
+            rel = "shared/tpl/" + name
+            sources.append((rel, open(os.path.join(tpl_dir, name), encoding="utf-8").read()))
+    for ui in _UI_ALL:
+        sources.append((f"{ui}/index.html(#app 内联)", _ui_shell_inline(ui)))
+
+    # 逐文件剥 HTML 注释(注释里的"别这么写"示例不算违规, 否则守阵会逼人删文档)
+    stripped = [(rel, re.sub(r"<!--.*?-->", "", text, flags=re.S)) for rel, text in sources]
+    for rel, text in stripped:
+        spans = [(m.group(1), m.start()) for m in re.finditer(r"\{\{(.*?)\}\}", text, re.S)]
+        spans += [
+            (m.group(1), m.start())
+            for m in re.finditer(r"""(?:^|\s)(?:v-[\w:.\-]+|@[\w.\-]+|:[\w.\-]+)\s*=\s*(["'])(.*?)\1""", text, re.S)
+        ]
+        for expr, pos in spans:
+            for m in re.finditer(r"(?<![\w$.])([_$][A-Za-z_$][\w$]*)", expr):
+                tok = m.group(1)
+                if tok == "$event":  # Vue 内建事件形参, 模板里合法
+                    continue
+                ln = text[:pos].count("\n") + 1
+                problems.append(
+                    f"{rel}:{ln} 模板表达式含保留前缀标识符 `{tok}` —— Vue 解析不到(_/$ 前缀不对模板暴露, "
+                    f"成员定义在 methods/data 里也会抛 ReferenceError 且整块渲染失败); "
+                    f"模板处理器一律去前缀, 内部 `_` 方法经无前缀别名中转(issue 26-10-03-1412)"
+                )
+    assert not problems, "模板保留前缀标识符: " + "; ".join(problems)
 
 
 def test_frontend_dist_segments_aggregates_per_view():
