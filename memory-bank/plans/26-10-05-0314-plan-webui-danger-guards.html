@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-danger-guards">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-05-0314">
+<meta name="doc-updated" content="26-10-05-0314">
+<meta name="doc-refs" content="memory-bank/issues/26-10-05-0254-feat-webui-recheck-confirm.html, memory-bank/issues/26-10-05-0254-feat-webui-skip-check-preconditions.html">
+<title>WEBUI 危险动作防护: 重新校验确认框 + 跳检前置条件 · 实施计划</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc7a2;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td .gap { color: var(--warn); font-weight: 600; }
+  td .ok { color: var(--ok); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>结论与拍板点</a>
+    <a href="#s2"><span class="no">02</span>复验结论与问题面</a>
+    <a href="#s3"><span class="no">03</span>前置条件核对矩阵</a>
+    <a href="#s4"><span class="no">04</span>方案与取舍</a>
+    <a href="#s5"><span class="no">05</span>分步实施</a>
+    <a href="#s6"><span class="no">06</span>测试计划(盯死)</a>
+    <a href="#s7"><span class="no">07</span>风险与回滚</a>
+    <a href="#s8"><span class="no">08</span>变更记录</a>
+    <div class="toc-foot">
+      认领件 <a href="../issues/26-10-05-0254-feat-webui-recheck-confirm.html">recheck-confirm</a> ·
+      <a href="../issues/26-10-05-0254-feat-webui-skip-check-preconditions.html">skip-check-preconditions</a><br>
+      取证基线 5e697ea0 · 2026-10-05 03:14
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">实施计划 · Open(待拍板)</div>
+    <h1>WEBUI 危险动作防护: 重新校验确认框 + 跳检前置条件</h1>
+    <p class="lede">跳检是删种重加级危险操作。本计划把「该不该跳检」的判定下沉 ops 层单点(方向 A), WEB 与规则两来源共用一套闸门; 重新校验补齐鼠标路径确认框与键盘路径对齐。前置条件逐条核对矩阵 + 每闸门一测一红验的守阵在 §03/§06。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-05-0314-plan-webui-danger-guards</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">认领 issue</div><div class="v">26-10-05-0254 × 2(姊妹件)</div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core/ops · torrents/store · webui(前后端)</div></div>
+      <div class="item"><div class="k">预期改动</div><div class="v">ops 闸门扩展 + 前端确认框; webui/commands.py 预计零改动</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论与拍板点</h2>
+    <p><strong>一句话</strong>: 跳检缺的不是确认框(两入口已有 danger 框), 是「该不该允许」的判定 —— WEB 入口直连 <code>ops.skip_check</code>, 只过 ops 层两道闸门(部分下载禁止 + 同日去重), 规则侧决策链 0/1 的语义(仅暂停中未完成、组内无活跃下载)与文件前置检查都没跟上; 重新校验反之, 确认框只在键盘路径有, 鼠标三入口裸奔。两边合起来是同一件事: <strong>危险动作的防护要落在单点, 而不是长在某条调用链上</strong>。</p>
+    <h3>方案结论(推荐, 待拍板)</h3>
+    <ul>
+      <li><strong>跳检前置 → 方向 A</strong>: 闸门全部下沉 <code>ops._skip_gates</code> 单点, rule / web 两来源共用。规则侧行为零变化(决策链 0/1 本就在更早处拒绝, ops 层再加一道是纵深防御); WEB 单发/批量自动获得全部闸门, <code>webui/commands.py</code> 预计零改动(拒绝文案经 <code>ActionResult</code> 自动进回执)。</li>
+      <li><strong>新前置条件 5 条</strong>(详见 §03 矩阵): 已完成禁止、活跃中禁止、组内有活跃下载成员禁止、同 hash recheck 在途禁止、前置文件检查(check_filelist)并入执行链。其中文件检查是本次复验新核实的缺口 —— <code>check_filelist</code> 全仓唯一调用点在规则侧(checking.py:121), WEB 跳检从不查文件, 缺失文件会被 is_skip_checking 标成「完整」。</li>
+      <li><strong>重新校验 → 前端共用确认框</strong>: 抽 <code>_recheckConfirm(what)</code>, 批量浮条/批量右键(经 <code>bulkAct</code>)、单选右键与抽屉(经 <code>torrentCmd</code>)、键盘(改调共用 helper)四处同一文案; 后端零改动。</li>
+      <li><strong>测试盯死</strong>: 每个新闸门一条单测 + 一条红验探针(摘闸门必红); WEB 单发/批量回执文案断言; 前端确认框静态守卫(防未来重构静默摘除); 全量基线切片。</li>
+    </ul>
+    <h3>拍板点(全部给了推荐, 拍板后 S1 开工)</h3>
+    <table>
+      <tr><th>#</th><th>问题</th><th>推荐</th><th>备选与代价</th></tr>
+      <tr><td>D1</td><td>已完成种子(progress&gt;=1): 禁止还是「允许但二次确认」?</td><td><strong>禁止</strong>(ops 单点, 与规则侧 chain 0 完全一致; 跳检对已完成零收益且清空统计)</td><td>允许但二次确认 = WEB 特判, 前端/后端两处口径, 漂移面回到本计划要消掉的地方</td></tr>
+      <tr><td>D2</td><td>活跃中(下载/做种, 非暂停)是否一并禁止?</td><td><strong>禁止</strong>(chain 0 同一谓词, 自然覆盖)</td><td>不拦 = 做种被中断、统计清空, 与规则侧口径相反</td></tr>
+      <tr><td>D3</td><td>组级闸门(组内有活跃下载成员)本期一并下沉?</td><td><strong>一并</strong>(安全问题: 组共享物理文件, 下载方正在写, 跳检把全部块标有效 = 脏数据; 不只是语义问题)</td><td>拆另立件 = 已知数据安全缺口带着上线</td></tr>
+      <tr><td>D4</td><td>组内其它成员 full-checking 在途(chain 1.5)WEB 侧拦不拦?</td><td><strong>不拦</strong>(规则侧让位是为省重复 I/O; 跳检删种重加不读不写共享文件, 无 I/O 冲突; 用户显式意图优先。<strong>同 hash</strong> 在途仍拒 —— 删种会杀死在途校验轮询)</td><td>保守拒绝 = 误伤合法人工操作, 且要在 ops 里解释「为什么组员校验我不能跳检」</td></tr>
+      <tr><td>D5</td><td>HR 在管(未放行)种子跳检怎么处理?</td><td><strong>本期只做前端确认框文案警示</strong>(跳检清零 qB 每种统计, HR 锚点 seeding_time 倒退、3× 超额线推迟 —— 已核实); 硬闸另立 issue, 需与 HR 放行/观察期语义对齐, 影响面超出本计划</td><td>本期直接加硬闸 = 触及 HR 状态机语义, 测试面不成比例</td></tr>
+      <tr><td>D6</td><td>前端形态: 点后报错还是菜单灰置?</td><td><strong>点后报错</strong>(单一真相在 ops 闸门; 灰置要前端复制谓词, 必然漂移, 且组级/在途条件前端算不了)</td><td>灰置 = 谓词两处维护 + 组级判定前端不可得</td></tr>
+      <tr><td>D7</td><td>重检确认范围: 单选也要确认?</td><td><strong>三鼠标入口全接</strong>(单选也确认, 与键盘路径同文案; 误触代价与数据量无关, 防护不该看数据量)</td><td>仅多选 = 单选右键(最高频误触面)继续裸奔</td></tr>
+    </table>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>复验结论与问题面</h2>
+    <p>两个 issue 已于 2026-10-05 03:14 复验(取证基线 5e697ea0), 均仍复现; 复验行已写进各自报告 §07。这里只放结论性事实, 证据原文见 issue 报告。</p>
+    <h3>WEB 跳检链路(前端入口 → 后端 → ops)</h3>
+<pre><code>前端(2 入口, 均 danger 确认框 + flags.skip_check_menu 门控):
+  单选右键/抽屉  ctx-menus.html:109  skipCheckTorrent()   drawer.js:58   → POST /api/torrents/{h}/skip-check
+  多选右键       ctx-menus.html:29   ctxAct('skip_check') → commands.js:569 → skipCheckMulti()  drawer.js:276
+  批量浮条       无跳检按钮
+路由/后端(2 入口):
+  单发  torrent_cmds.py:47(403 门控) → _cmd_skip_check_torrent  commands.py:349 → ops.skip_check(source="web")
+  批量  commands.py:586(fail-closed 门控) → :635 分派 → _bulk_skip_check_via_ops :702 → 逐 hash ops.skip_check
+执行模型: 命令经队列在主循环线程串行执行(单一写线程, 黄金法则 5), 跳检阻塞 ~6s 期间其它命令排队
+  —— 进程内无并发竞态, 同 hash 两次跳检天然串行, 无需新闸门(写进 §03 矩阵备查)。</code></pre>
+    <h3>问题面三层</h3>
+    <ul>
+      <li><strong>判定缺口(本件主目标)</strong>: ops 层 <code>_skip_gates</code>(ops_mod.py:452)只有部分下载禁止 + 同日去重两道; 规则侧决策链 0(仅暂停中未完成, checking.py:88)/1(组内无活跃下载, :92)/1.5/1.6 与 chain 4 文件前置检查(checking.py:121, 全仓唯一调用点)全部留在 rules 层, WEB 直连入口一个都享受不到。已完成/做种中种子被删种重加、统计清空、HR 计时倒退; 文件缺失的种子被标成「完整」。</li>
+      <li><strong>防护不对称(姊妹件)</strong>: 重新校验键盘路径有确认(shortcuts.js:806 <code>_kbAct</code>, :814 confirmDialog, 注释自述「鼠标路径不变」), 鼠标三入口(批量右键 ctxAct→bulkAct→_actCore、单选右键/抽屉 torrentCmd、批量浮条 bulkAct)点下即执行。</li>
+      <li><strong>架构事实(决定方案走向)</strong>: ops_mod.py 头注自述「recheck/跳检的 qB 交互序列、提交点检查与保护策略<strong>单点归本模块</strong>」; AppContext 无 grouping 句柄但组级判定只需 <code>store.group_members</code> + <code>store.by_hash</code>(store 是 ctx 服务, ops 本就可达); 同 hash 在途登记 <code>ctx.task_queue.active_check_hashes()</code> ops 已在消费(recheck 在途互斥, ops_mod.py:156)—— <strong>方向 A 需要的原语全部在 ops 可达范围内, 不需要新增跨模块依赖</strong>。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>前置条件核对矩阵</h2>
+    <p>「还有哪些前置条件」的完整答案。逐条核对过代码(取证 2026-10-05 03:14), 不是候选清单 —— 处置列即实施内容。判据: 拒绝对 WEB 用户是否自解释、规则侧行为是否受扰。</p>
+    <table>
+      <tr><th>前置条件</th><th>规则侧现状</th><th>WEB 侧现状</th><th>本计划处置</th></tr>
+      <tr><td>种子已从客户端移除</td><td>—</td><td class="ok">已有: tor is None + R2 实时复核(ops_mod.py:386-394, 动手前重拉 live, 零副作用)</td><td>不动</td></tr>
+      <tr><td>部分下载(0&lt;progress&lt;1)</td><td>禁止</td><td class="ok">已有(<code>_skip_gates</code>, 零块会被标有效上传垃圾数据)</td><td>不动(与新谓词并存: 新谓词放行暂停中未完成, 本条拦其中 0&lt;p&lt;1 的安全子集)</td></tr>
+      <tr><td>同日已跳检(跨来源)</td><td>去重</td><td class="ok">已有(skip_check_day 跨来源共享)</td><td>不动</td></tr>
+      <tr><td>已完成(progress&gt;=1, 无论状态)</td><td>跳过(chain 0, checking.py:88)</td><td><span class="gap">无闸门</span> —— 用户点名项</td><td><strong>新闸门 G3</strong>(ops, 快照判)</td></tr>
+      <tr><td>活跃中(下载/做种, 非暂停)</td><td>跳过(chain 0 同条)</td><td><span class="gap">无闸门</span>(做种被中断)</td><td><strong>新闸门 G4</strong>(与 G3 同一谓词 <code>is_stopped and progress&lt;1</code>, 分状态给自解释文案)</td></tr>
+      <tr><td>组内有活跃下载成员</td><td>整组不校验(chain 1, checking.py:92)</td><td><span class="gap">无闸门</span>(共享物理文件被下载方写入, 跳检标全部块有效 = 脏数据, 属数据安全不只是语义)</td><td><strong>新闸门 G6</strong>(ops 经 store 判定, 判定原语上移 store 单点)</td></tr>
+      <tr><td>同 hash recheck 在途</td><td>chain 0/1.5 间接覆盖(校验中状态非 stopped)</td><td><span class="gap">无闸门</span>(跳检删种会杀死在途校验轮询, 校验作废)</td><td><strong>新闸门 G5</strong>(<code>ctx.task_queue.active_check_hashes()</code>, ops 现成原语)</td></tr>
+      <tr><td>组内其它成员 full-checking 在途</td><td>让位等待(chain 1.5, 为省重复 I/O)</td><td><span class="gap">无闸门</span></td><td>不拦(D4 推荐项: 跳检不读不写共享文件, 无 I/O 冲突; 同 hash 仍拦)</td></tr>
+      <tr><td>组内成员校验失败推断(chain 1.6)</td><td>失败推断 skip</td><td><span class="gap">无闸门</span></td><td>不拦(纯规则语义: WEB 用户显式想跳检, 拒绝理由不自解释; 拒绝权在 G3-G6 与确认框)</td></tr>
+      <tr><td>前置文件缺失 / 尺寸不符</td><td>chain 4 check_filelist(两模式都查)</td><td><span class="gap">无</span> —— 复验核实: <strong>未随四阶段迁移</strong>, WEB 跳检从不查文件</td><td><strong>并入执行链</strong>: R2 live 复核后、导出前调 <code>check_filelist</code>(同模块静态方法)</td></tr>
+      <tr><td>无参考种子</td><td>告警(高风险)</td><td class="ok">由前端 danger 确认框文案承担(设计如此, ops_mod.py:370-372 自述)</td><td>不动; S4 文案增补时一并强化</td></tr>
+      <tr><td>HR 在管(未放行)种子</td><td>未核</td><td><span class="gap">无闸门</span> —— 复验核实: HR 锚点 seeding_time 取自 qB 每种统计(torrents/record.py:287-296), 跳检重加必然清零, 超额线(service.py:1358, 3×)与做种计时倒退</td><td>本期确认框文案警示(D5 推荐); 硬闸另立 issue</td></tr>
+      <tr><td>同 hash skip_check 并发</td><td>—</td><td class="ok">架构保证: 命令队列主循环串行(单一写线程), 阻塞执行体</td><td>无需闸门(矩阵备查, 防未来误加锁)</td></tr>
+      <tr><td>web.skip_check_menu 未启用</td><td>不受影响(rule 源不读此键)</td><td class="ok">已有三道: 菜单隐藏(v-if)+ 单发 403(torrent_cmds.py:56)+ 批量拒单(commands.py:586), 全 fail-closed</td><td>不动</td></tr>
+    </table>
+    <div class="callout warn">谓词口径单点: G3/G4 的「仅暂停中未完成」必须与 checking.py:88 是<strong>同一个谓词</strong>(<code>state_enum.is_stopped and progress &lt; 1.0</code>), 实现处注释互指; stalledDL 等边缘态是否算 stopped 由 <code>state_enum</code> 现有语义决定 —— 与规则侧天然一致(同一谓词), 不引入 WEB 特有口径。实施时加一条用例把边缘态钉死(§06 T2b)。</div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>方案与取舍</h2>
+    <h3>跳检前置: 方向 A(下沉 ops 单点) vs 方向 B(WEB 入口自判)</h3>
+    <ul>
+      <li><strong>方向 A(推荐)</strong>: 新闸门全部进 <code>ops._skip_gates</code>(G3-G6)+ 执行链并 filelist 检查。规则侧零行为变化(决策链 0/1 先于 ops 调用, 同谓词等价 no-op, 纵深防御); WEB 单发/批量同过一道闸; 拒绝文案写一次, 两来源共用。代价: <code>_group_has_downloading</code> 判定需上移 store(见下), 触及 grouping 模块一处委托改写。</li>
+      <li><strong>方向 B(否)</strong>: WEB 入口(commands.py)前置一次等价只读判定。否决理由: ①ops_mod.py 头注明文「提交点检查与保护策略单点归本模块」, plan 26-09-30-0109 危险操作收口的既定架构; ②单发/批量两入口要写两遍; ③filelist 检查原语在 ops 模块, WEB 层调用要么跨模块拿要么复制; ④两处谓词必然漂移 —— 正是 issue §05 合理怀疑的根因模式重演。</li>
+      <li><strong>组级判定的落点</strong>: grouping_mod.<code>_group_has_downloading(members)</code> 的数据源全是 store(<code>by_hash</code> + <code>state_enum</code>)。上移为 <code>TorrentStore.group_has_downloading(hash)</code>(签名收 hash, 内部取 members), grouping_mod 改委托(单一真相), ops.<code>_skip_gates</code> 经 <code>self._ctx.store</code> 消费 —— 模块间不 import 的契约不破(消费的是 store 服务)。</li>
+      <li><strong>filelist 检查的插入点</strong>: R2 live 复核(确认种子还在)之后、导出之前 —— live 都不在的种子不值得查文件。规则侧会双查(chain 4 一次 + ops 一次): 跳检天级低频, 一次文件列表 API + 若干 stat 可忽略, 换「执行体内不信任调用方」的单一安全真相, 值。失败语义 fail(带 <code>check_filelist</code> 错误描述), 不是 skip。</li>
+      <li><strong>G5 的插入点</strong>: <code>_skip_gates</code> 内(纯内存读, 零 API 成本), 在 G3/G4 之后。文案点明后果:「跳检会删除种子, 在途校验将作废」。</li>
+    </ul>
+    <h3>重新校验确认框(前端, 共用 helper)</h3>
+    <ul>
+      <li><strong>落点</strong>: <code>commands.js</code> 新增 <code>async _recheckConfirm(what)</code>(内部 <code>confirmDialog</code>, 文案沿 shortcuts.js:814 逐字:「将对{what}重新校验: 全量重读磁盘并校验完整性, 大库上耗时长且不可中断。」)。</li>
+      <li><strong>接入点 3 处</strong>(覆盖全部 4 个鼠标入口): ①<code>bulkAct</code> 加 recheck 分支 —— 批量浮条(topbar.html:211)与批量右键(ctxAct:574 落 bulkAct)同时覆盖, <code>ctxAct</code> 零改动; ②<code>drawer.js torrentCmd</code> 加 recheck 分支 —— 单选右键(ctx-menus.html:103)与抽屉内右键同时覆盖, 只拦 <code>action === "recheck"</code>, 其它命令通道行为不变; ③<code>shortcuts.js _kbAct</code> 改调共用 helper(文案零变化, 键盘行为不变)。</li>
+      <li><strong>候选 B(_actCore 加确认)否</strong>: 键盘路径会双重确认; 且 torrentCmd 不走 _actCore, 覆盖不全 —— 正是 issue §06 候选 B 自己点出的两个代价。</li>
+      <li><strong>后端零改动</strong>: ops.recheck 的 R1 在途互斥/提交点实时复核/冷却策略原样(issue 复验已核对 :329/:656 两入口)。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>分步实施</h2>
+    <p>后端先行(安全闸门先落地), 前端跟进, 收尾红验 + 基线。每步独立提交, 单步可 revert。</p>
+    <table>
+      <tr><th>步</th><th>内容</th><th>文件</th><th>验收</th></tr>
+      <tr>
+        <td><strong>S0</strong></td>
+        <td>认领 + 复验 + 本计划(已完成)</td>
+        <td>两个 issue HTML + 本计划</td>
+        <td>复验行 + doc-refs 双向链 + kb.index 重建</td>
+      </tr>
+      <tr>
+        <td><strong>S1</strong></td>
+        <td>ops 闸门扩展: G3/G4(仅暂停中未完成, 谓词对照 checking.py:88 注释互指) + G5(同 hash 在途) + G6(组级, 经 store 新方法) + filelist 检查并进 skip_check 执行链(R2 后导出前); store 新增 <code>group_has_downloading(hash)</code>, grouping_mod 改委托</td>
+        <td><code>core/modules/ops_mod.py</code> · <code>torrents/(store)</code> · <code>core/modules/grouping_mod.py</code></td>
+        <td>§06 T1-T9 绿(含红验); test_ops / test_checking / test_grouping 全量绿</td>
+      </tr>
+      <tr>
+        <td><strong>S2</strong></td>
+        <td>WEB 回执透传核对(预计零改动): 单发 error 文案、批量 skip/fail 分桶文案经既有 ActionResult 通道自动生效; 若文案需按 WEB 语境微调只动 ops 文案常量</td>
+        <td><code>webui/commands.py</code>(预期不触)</td>
+        <td>§06 T10-T12 绿; 手动核对单发/批量拒绝回执文案自解释</td>
+      </tr>
+      <tr>
+        <td><strong>S3</strong></td>
+        <td>前端重检确认框: <code>_recheckConfirm(what)</code> + bulkAct/torrentCmd 接入 + _kbAct 改调共用 helper</td>
+        <td><code>webui/static/shared/commands.js</code> · <code>drawer.js</code> · <code>shortcuts.js</code></td>
+        <td>§06 T13 静态守卫绿; 手动三入口(批量浮条/右键/抽屉)确认框弹出、取消零副作用</td>
+      </tr>
+      <tr>
+        <td><strong>S4</strong></td>
+        <td>跳检确认框文案增补(依赖 D5/D6 拍板): skipCheckTorrent / skipCheckMulti 的 body 补「已完成或正在做种/下载的种子会被后端拒绝」+ (D5)HR 在管警示句</td>
+        <td><code>webui/static/shared/drawer.js</code></td>
+        <td>文案与后端闸门口径一致(禁止项逐字对应); 既有前端用例不回归</td>
+      </tr>
+      <tr>
+        <td><strong>S5</strong></td>
+        <td>收尾: 红验复核 + test.full 基线切片 + issue 置 Done(修复后补充: 实际修法/验证/数字) + 计划置 Done + memory-bank 回写</td>
+        <td>memory-bank/ 全线</td>
+        <td>基线切片含新增用例数与耗时; 两个 issue 状态 Done</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>测试计划(盯死)</h2>
+    <p>原则: <strong>每个新闸门一条单测 + 一条红验探针</strong>(注释掉闸门分支 → 对应用例必红, 防守阵空转); 既有行为全量回归(跳检闸门动的是 rule/web 共用路径, 规则侧回归是最大风险); 前端确认框用静态守卫钉住接入点(先例: test_removed_redundant_tooltips)。</p>
+    <h3>ops 层(tests/test_ops.py)</h3>
+    <table>
+      <tr><th>#</th><th>用例</th><th>断言要点</th><th>红验探针</th></tr>
+      <tr><td>T1</td><td>test_skip_gates_rejects_completed</td><td>progress=1.0(做种态)→ is_failed, 文案含「已完成」; 零副作用(state 无去重记录、无备份)</td><td>摘 G3/G4 谓词已完成半边</td></tr>
+      <tr><td>T2</td><td>test_skip_gates_rejects_active</td><td>下载中(progress&lt;1, 非 stopped)→ is_failed, 文案含「活跃/暂停」; 零副作用</td><td>摘 G3/G4 谓词 stopped 半边</td></tr>
+      <tr><td>T2b</td><td>test_skip_gates_predicate_edge_states</td><td>stalledDL 等边缘态判定与 <code>state_enum</code> 现有语义逐态钉死(与规则侧同谓词同结果)</td><td>—(口径锁)</td></tr>
+      <tr><td>T3</td><td>test_skip_gates_allows_paused_incomplete</td><td>stoppedDL progress=0 → 闸门全过(辅种主场景, 防过严回归)</td><td>—(放行面锁)</td></tr>
+      <tr><td>T4</td><td>test_skip_gates_rejects_group_downloading</td><td>同组成员 downloading → is_failed, 文案含「组内/下载」</td><td>摘 G6</td></tr>
+      <tr><td>T5</td><td>test_skip_gates_allows_group_all_paused</td><td>组内全暂停/未归组 → 通过</td><td>—(放行面锁)</td></tr>
+      <tr><td>T6</td><td>test_skip_check_rejects_inflight_recheck</td><td>active_check_hashes 含目标 → is_failed, 文案含「校验中」; 零副作用(不删种、无备份)</td><td>摘 G5</td></tr>
+      <tr><td>T7</td><td>test_skip_check_filelist_precondition_blocks</td><td>文件缺失 → is_failed 带 check_filelist 描述; 断言未执行导出/删除(零副作用, R2 与文件检查都在不可逆步骤前)</td><td>摘 filelist 调用</td></tr>
+      <tr><td>T8</td><td>既有行为锁(回归)</td><td>部分下载禁止/同日去重/R2 复核/打标/备份恢复/去重即时落盘等既有用例全数保持绿</td><td>—</td></tr>
+      <tr><td>T9</td><td>test_store_group_has_downloading</td><td>store 新方法直接单测 + grouping_mod 委托等价断言; test_grouping 既有用例锁行为不回归</td><td>—</td></tr>
+    </table>
+    <h3>web 层(tests/test_web.py)</h3>
+    <table>
+      <tr><th>#</th><th>用例</th><th>断言要点</th></tr>
+      <tr><td>T10</td><td>test_web_skip_check_completed_rejected_receipt</td><td>单发已完成种子 → 回执 error, ops 拒绝文案透传(_cmd_skip_check_torrent 回执映射)</td></tr>
+      <tr><td>T11</td><td>test_web_bulk_skip_check_mixed_outcome</td><td>批量混合目标(1 已完成 + 1 暂停未完成)→ 聚合回执: 成功/失败计数正确、失败文案自解释</td></tr>
+      <tr><td>T12</td><td>门控不回归</td><td>skip_check_menu 关 → 单发 403 / 批量拒单语义不变(既有用例保持)</td></tr>
+    </table>
+    <h3>前端静态守卫(tests/test_web.py)</h3>
+    <table>
+      <tr><th>#</th><th>用例</th><th>断言要点</th></tr>
+      <tr><td>T13</td><td>test_recheck_confirm_wired_all_mouse_entries</td><td>静态断言 JS 源码: bulkAct 含 recheck 确认分支、drawer.js torrentCmd 含 recheck 确认分支、shortcuts.js _kbAct 调共用 helper —— 三锚点任一被重构摘除即红</td></tr>
+    </table>
+    <h3>全量与真机</h3>
+    <ul>
+      <li><strong>T14</strong>: <code>commands run test.full</code> → 基线切片(testing/baselines/, 记总数/新增数/覆盖率/耗时)。</li>
+      <li><strong>T15(可选, 用户拍板)</strong>: 真机走查 —— dev.run 后真库单种验证: 三入口确认框、已完成种子拒绝文案、批量混合回执。(先例: webui 流量色轮真浏览器三皮肤断言。)</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>风险与回滚</h2>
+    <table>
+      <tr><th>风险</th><th>评估与对策</th></tr>
+      <tr><td>谓词过严误伤(stalledDL 等被拒)</td><td>与规则侧同谓词 —— 规则侧同样拒, 口径仍全局一致; 用户显式想跳检活跃种子可先暂停(动作可预期)。T2b 把边缘态逐个钉死, 防实现走样。</td></tr>
+      <tr><td>规则侧回归</td><td>决策链 0/1 恒先于 ops 调用且同谓词, ops 新闸门对规则源等价 no-op; test_checking(69 条)+ test_ops(27 条)全量回归兜底; D4/D6 不拦的项写明理由, 防未来「补对称」时误加。</td></tr>
+      <tr><td>组级判定漂移</td><td>判定上移 store 单点, grouping_mod 委托 + T9 等价断言; grouping 既有测试锁行为。</td></tr>
+      <tr><td>快照龄(组级/状态判定基于 ≤2s 龄快照)</td><td>与 grouping 现状同源同龄, 无新增陈旧面; R2 实时复核继续兜底存在性。极端竞态(判定后瞬间恢复做种)由确认框+天级低频兜住, 不加额外 API 轮次。</td></tr>
+      <tr><td>filelist 双查成本</td><td>跳检天级低频 + 一次文件列表 API + 若干 stat; 换执行体单一安全真相, 值(§04 已论证)。</td></tr>
+      <tr><td>前端确认框打扰</td><td>仅 recheck 一类动作 + 取消零副作用 + 文案与键盘路径一致(心智统一); 跳检确认框只加一句文案, 交互形态不变。</td></tr>
+      <tr><td>回滚</td><td>S1-S4 独立提交单步 revert; 全部新闸门集中在 <code>_skip_gates</code> 单点, 摘除即回旧行为; filelist 检查独立一处, 同理。</td></tr>
+    </table>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>变更记录</h2>
+    <ul>
+      <li>2026-10-05 03:14 — 建档(Open, 待拍板)。认领 26-10-05-0254 两个姊妹件; 完成复验与 §03 前置条件核对矩阵(两项「待核」已核实: filelist 未迁移、HR 计时受扰); 拍板点 D1-D7 全部附推荐。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-05-0314-plan-webui-danger-guards.html · 状态 Open(待拍板) — 拍板后按 §05 分步实施, 状态随实施推进在本节留痕
+  </footer>
+
+</div>
+</body>
+</html>

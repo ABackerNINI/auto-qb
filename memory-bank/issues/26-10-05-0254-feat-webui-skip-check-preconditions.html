@@ -8,7 +8,8 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-skip-check-preconditions">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0314-plan-webui-danger-guards.html">
 <meta name="issue-title" content="WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析">
 <meta name="issue-summary" content="WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析">
 <title>WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析 · feat · 计划外问题</title>
@@ -101,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-0254-feat-webui-skip-check-preconditions</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 02:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -211,9 +212,10 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-05 02:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-05 03:14 — 用户指派认领，状态 <strong>In Progress</strong>；复验仍复现，§06 两项待核已核实(见上)；认领方: <a href="../plans/26-10-05-0314-plan-webui-danger-guards.html">plan · WEBUI 危险动作防护(重检确认框 + 跳检前置条件)</a></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-05 03:14 仍复现。锚点重跑: <code>_cmd_skip_check_torrent</code>(commands.py:349)与 <code>_bulk_skip_check_via_ops</code>(:702)原样; <code>skip_check</code>(ops_mod.py:355)与 <code>_skip_gates</code>(:452, 自入池时 :349 漂移, 闸门内容未变)仅两条闸门; 规则侧决策链 0/1(checking.py:84-95)原样。§06 表两项「待核」本次核实: ①<strong>前置文件检查未随四阶段迁移</strong> —— <code>check_filelist</code> 全仓唯一调用点在规则侧(checking.py:121), WEB 单发/批量均不查, 文件缺失的种子被 WEB 跳检后将以 is_skip_checking 重加为「完整」; ②<strong>HR 计时确受影响</strong> —— HR 锚点 seeding_time 取自 qB 每种统计快照(torrents/record.py:287-296 <code>hr_anchor()</code>), 跳检删种重加必然清零该统计, HR 超额线判定(hr/service.py:1358, 3× 线)与做种计时倒退。补充事实: 同 hash 在途 recheck 未被跳检闸门核查(<code>active_check_hashes</code> 仅 ops.recheck 消费); 进程内并发由单一写线程天然串行, 无需新闸门。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
