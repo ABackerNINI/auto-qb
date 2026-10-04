@@ -8,7 +8,8 @@
                              变体全部拦截, 测试钉死)
 
 用法 (从仓库根):
-    python .agents/skills/memory-bank/scripts/nav_server.py                    起服务 (127.0.0.1:8765;
+    python .agents/skills/memory-bank/scripts/nav_server.py                    起服务 (绑 127.0.0.1:8765,
+                                                                               浏览器开 localhost:8765;
                                                                                启动后自动开浏览器, --no-open 关)
     python .agents/skills/memory-bank/scripts/nav_server.py --port 9000        换端口 (被占用时
                                                                                报错行内提示 --port)
@@ -38,6 +39,9 @@ from _common import find_root, resolve_mb_dir  # noqa: E402
 import nav_data  # noqa: E402
 
 SHELL_NAME = "nav_page.html"
+BIND_HOST = "127.0.0.1"  # 监听只绑回环 (sidefx 放行), 不对外暴露
+OPEN_HOST = "localhost"  # 浏览器打开的地址一律用 localhost: 127.0.0.1 这个 origin 有历史遗留
+                         # (旧缓存 / 残留服务), 换成 localhost 拿一个干净 origin
 DEFAULT_STATIC_DIR = "tmp-analysis/nav"  # 相对仓库根; 目录已 gitignored, 静态导出件不入库
 STATIC_LINK_PREFIX = "../../memory-bank/"  # 静态件指向 memory-bank 原文的相对链接前缀 (壳按 file: 协议取用)
 DATA_TOKEN = "__DATA__"  # 壳内数据注入位 (S2 的壳以同款 token 预留)
@@ -216,13 +220,13 @@ def gen_static(mb: Path, shell_path: Path, out_dir: Path) -> int:
 
 def serve(mb: Path, shell_path: Path, port: int, open_browser: bool = True) -> int:
     try:
-        server = NavServer(("127.0.0.1", port), _build_handler(mb, shell_path))
+        server = NavServer((BIND_HOST, port), _build_handler(mb, shell_path))
     except OSError as exc:
         sys.stderr.write(
-            "[nav] bind 127.0.0.1:%d failed (%s): port likely in use, retry with --port <other>\n" % (port, exc)
+            "[nav] bind %s:%d failed (%s): port likely in use, retry with --port <other>\n" % (BIND_HOST, port, exc)
         )
         return 1
-    url = "http://127.0.0.1:%d" % port
+    url = "http://%s:%d" % (OPEN_HOST, port)
     print("[nav] serving %s  (memory-bank: %s)" % (url, mb))
     if open_browser:
         webbrowser.open(url)

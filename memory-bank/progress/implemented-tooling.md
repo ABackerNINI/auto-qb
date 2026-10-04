@@ -11,7 +11,9 @@
   (issue 补 issue-type / issue-tier / issue-summary, 全形态补 doc-updated 缺省回落 stamp; 派生 topics[](live
   口径同 is_live)与各形态 x 状态 counts), **不改 collect() 本体**(闸门/守阵消费单点, 键集合由守阵钉死);
   stamp 取数据自带 doc-updated 最大值, 不生成依赖当前时钟的内容。服务层 `nav_server.py` 纯 stdlib
-  http.server 绑 127.0.0.1:8765(allow_reuse_address 必须关 —— Windows 上 REUSEADDR 会让同端口双绑静默成功):
+  http.server 绑 127.0.0.1:8765(allow_reuse_address 必须关 —— Windows 上 REUSEADDR 会让同端口双绑静默成功),
+  但**浏览器打开的地址用 localhost:8765**(`OPEN_HOST`, 2026-10-04 起; 127.0.0.1 那个 origin 有历史遗留, 换
+  localhost 拿干净 origin —— 监听仍只绑回环 IPv4, localhost 解析回落即达):
   `/` 页面壳 + `/api/data` 每请求现算(前端 30s 轮询准实时) + `/memory-bank/<path>` 静态映射(resolve 后必须
   严格落在 memory-bank/ 内, 越界一律 403, ../ %2e%2e ..%2f 反斜杠变体全拒)。壳 `nav_page.html` 入库
   scripts/(http 模式 fetch + 轮询; 静态模式 `--gen-static` 注入单文件, 默认 tmp-analysis/nav/ 已 gitignored);
