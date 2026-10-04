@@ -32,6 +32,7 @@
 - test_periodic_flush_is_wired_in_run_loop: 接线守阵——周期落盘必须挂在主循环(not dry_run 门内), run() 加载状态后重置到期点
 - test_tick_refresh_error_continues: 主循环内 _refresh_torrents 抛异常被捕获, 下一 tick 继续
 - test_run_stopiteration_from_tick_not_swallowed: 守阵(26-10-02-0442)——_tick 的 StopIteration 在 except Exception 之前单独接住并重抛, 不得吞掉后继续下一拍
+- test_run_exception_backs_off_next_tick: 守阵(26-10-02-0728)——主循环 except Exception 路径必须把 next_*_at 推到 max(原值, now+main_tick) 退避, 不得 wait_for=0 快速重试
 - test_execute_due_respects_max: 每 tick 最多执行 max_tasks_per_tick 个, 超额留队列
 - test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
 - test_refresh_added_no_tracker_match_skips: 新增种子未匹配 tracker 配置 -> 警告并跳过
@@ -463,6 +464,10 @@ def test_run_main_loop():
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
         mgr.connect = mock.Mock(return_value=True)
+        # !节拍调小(26-10-02-0728): 异常路径现在会推进 next_*_at 退避, 第一次异常后主循环
+        # 真等一个 main_tick 才进下一拍 —— 默认 1.0s 会让本用例多挂 1s。
+        mgr.config.main_tick = 0.05
+        mgr.config.sync_interval = 0.05
         mgr._tick = mock.Mock(side_effect=[RuntimeError("boom"), KeyboardInterrupt()])
         with mock.patch("auto_qb.core.qbmanager.time.sleep"):
             mgr.run(dry_run=False)
@@ -581,6 +586,10 @@ def test_tick_refresh_error_continues():
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
         mgr.connect = mock.Mock(return_value=True)
+        # !节拍调小(26-10-02-0728): 异常路径现在会推进 next_*_at 退避, 第一次异常后主循环
+        # 真等一个 main_tick 才进下一拍 —— 默认 1.0s 会让本用例多挂 1s。
+        mgr.config.main_tick = 0.05
+        mgr.config.sync_interval = 0.05
         # 第一次抛普通异常(被内层 except Exception 捕获), 第二次抛 KeyboardInterrupt(退出循环)
         mgr._refresh_torrents = mock.Mock(side_effect=[RuntimeError("refresh boom"), KeyboardInterrupt()])
         with mock.patch("auto_qb.core.qbmanager.time.sleep"):
@@ -607,6 +616,41 @@ def test_run_stopiteration_from_tick_not_swallowed():
             with pytest.raises(StopIteration):
                 mgr.run(dry_run=False)
         assert mgr._tick.call_count == 1, "StopIteration 必须当场穿透 run(), 不得进入下一拍"
+
+
+def test_run_exception_backs_off_next_tick():
+    """守阵(26-10-02-0728): 主循环异常路径必须推进 next_*_at 退避, 不得 wait_for=0 快速重试
+
+    except Exception 只记日志不推进 next_sync_at/next_tick_at —— 首轮两者是 0.0, 非首轮是
+    已到期的过去值, wait_for 恒算出 0, while True 立即进下一拍重跑同一条线再炸一次, 形成
+    无退避的快速重试循环(ERROR 刷屏 + CPU 空转)。StopIteration 已重抛(26-10-02-0442)、
+    APIConnectionError 走 _reconnect_due 退避, 均不在此列; 修法: 异常分支把两条时间线推到
+    max(原值, now + main_tick), 失败的线最早下个节拍重试(退避起步与 _reconnect_due 一致)。
+    三条线都替换成炸点: 异常发生在哪条线(双到期走 _tick / 单到期走 _sync_line/_task_line)
+    取决于浮点时间边界, 全替换保证判据与分支选择解耦。
+    红验(修复前): 异常拍之间间隔 ≈ 0(wait_for=0), gaps 断言当时判红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.connect = mock.Mock(return_value=True)
+        mgr.config.main_tick = 0.2
+        mgr.config.sync_interval = 0.2
+        stop_event = threading.Event()
+        tick_at: list = []
+
+        def boom(dry_run, flush=True, force=False):
+            tick_at.append(time.monotonic())
+            if len(tick_at) >= 3:
+                stop_event.set()
+            raise RuntimeError("tick boom")
+
+        mgr._tick = boom
+        mgr._sync_line = boom
+        mgr._task_line = boom
+        mgr.run(dry_run=True, stop_event=stop_event)
+        assert len(tick_at) == 3, f"应恰好 3 拍后停: {len(tick_at)}"
+        gaps = [b - a for a, b in zip(tick_at, tick_at[1:])]
+        assert all(g >= 0.15 for g in gaps), f"异常拍之间必须退避 >= main_tick(0.2s): {gaps}"
 
 
 def test_connect_throttle_repeated_failures():

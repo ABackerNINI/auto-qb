@@ -574,6 +574,15 @@ class QbManager(
                         raise
                     except Exception as e:
                         logger.error(f"主循环异常: {e}", exc_info=True)
+                        # 退避(issue 26-10-02-0728): 异常路径不推进 next_*_at —— 首轮两者是 0.0,
+                        # 非首轮保持"已到期"的过去值, wait_for 恒算出 0, while True 立即进下一拍
+                        # 重跑同一条线再炸一次, 形成无退避的快速重试循环(ERROR 刷屏 + CPU 空转;
+                        # StopIteration 已重抛、APIConnectionError 走 _reconnect_due, 均不在此列)。
+                        # 两条时间线一起推到 max(原值, now + main_tick): 失败的线最早下个节拍重试
+                        # (退避起步与 _reconnect_due 口径一致); max 不把尚未到期的时间线往回拨。
+                        _backoff = time.time() + main_tick
+                        next_sync_at = max(next_sync_at, _backoff)
+                        next_tick_at = max(next_tick_at, _backoff)
                     # 兜底: 上面任何一条线抛异常时也要把推迟的回执落掉 —— 漏写会让前端 waitCmd
                     # 干等 40s, 界面一直半透明。!**只在正常路径没跑到时才补**: 否则等真值的那些
                     # 回执会在同一轮里被 flush 两次, 日志出现两行一模一样的"另 N 条等真值落地"。
