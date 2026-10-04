@@ -1,8 +1,8 @@
 # 26-09-28-webui-settings-back-nav — WEBUI 设置二级页返回优化: 吸顶返回条(方案一) + Esc 返回(方案三)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-28
-**Updated:** 2026-09-28
+**Updated:** 2026-10-04
 **Summary:** 设置二级页原唯一回首页入口是随页滚走的 12.5px 小面包屑, 且顶栏「设置」钮(openSettings)不重置 hub.view(分区持久化) —— 分区深处无任何路径回设置首页。三案比选后拍板方案一+三: ①面包屑升级吸顶返回条(--head-h 实测偏移 + 玻璃底抄 .hb-actbar, z-index 6) ②Esc 职责链尾追加返回首页(hubOnKey, dialogs.js::escBusy 同名单守门不抢 lifecycle 关闭链)。方案一为最简版待用户调整定稿; 键盘快捷键引擎(26-09-28-0354)落地时 Esc 分支须对账移植。
 **Topics:** webui-settings-back-nav
 **Refs:** memory-bank/tasks/26-09-28-webui-keyboard-shortcuts.md
@@ -36,3 +36,6 @@
 ## 进度日志
 
 - 2026-09-28 22:01 方案一最简版 + 方案三落地: test.quick / test.full 均 1831 passed / 3 skipped(基线 26-09-28-2201); 静态文件磁盘直读, 刷新即见效。回写件随主提交入库。
+
+
+- 2026-10-04 18:41 — 状态 In Progress → Done：方案一 + 方案三已落地: 吸顶返回条 + Esc 返回首页; Esc 职责链后续由 26-10-02-webui-esc-clear-filters(Done)对账移植。

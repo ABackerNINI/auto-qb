@@ -1,8 +1,8 @@
 # 26-09-23-commands-unified-surface — 项目命令统一调用面 (纯引擎 + 包式配置层)
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-09-23
-**Updated:** 2026-09-24
+**Updated:** 2026-10-04
 **Summary:** 同一条命令在仓库里有 8 处副本 / 5 种写法, 唯一生效的那条恰好"看起来最不正常" (POSIX `TMPDIR=x cmd` 前缀在本工具 shell 实测 rc=1), 而"该抄哪一份"没有任何提示 ⇒ 直到某次拿到假红才暴露。方案: skill 缩成**纯引擎**(只认识「包」与「命令」, 连"提交"都不知道), 命令单点定义在 `<仓库根>/.commands/<包>/config.toml`, 包是**黑盒**(私有配置引擎不读), 路由**不落盘**改为逐级查询 + `pin` 常显, 并配一条反漂移闸门让文档里的手抄形态直接判红。**W1–W5 已全部实施并提交**; 2026-09-24 优化轮补齐三处遗留 (SKILL.md 两种记法 + 恒定大小硬上限 / `pin` 数量守卫 / 格式化闸门去双写)。**W6 会话噪音治理**(2026-09-24, 用户走查一次真实提交流程后提出"噪音多、token 高"): 引擎输出摘要改为**异常感知**(只取末几行会让 WARN 的内容消失, 实测逼出一次预检重跑)、task id 认包路径限定写法、闸门 PASS 行从 ≈1.5 KB 命令全文收成一行、开工自检给出**可执行的同步配方**(含重叠判定)、包/引擎的 47 条脚本测试首次挂上闸门。**W7 wrapper 入口**(2026-09-24, 用户要求「真正实现 `commands run <task.id>`」): 实测三个 shell 都不搜 cwd ⇒ 生成器落 **cwd + PATH 目录**两处(生成物 gitignore, 只认自己的标记行), 并把「低噪音包」的八条判据写进收录协议。
 **Topics:** commands-unified-surface
 
@@ -271,6 +271,8 @@ v1.4 把闸门与红线写进包的 `config.toml`(= 领域配置进 command-flow
   `--uninstall` 后重装幂等; `doc.caps` SKILL.md **2515/2600** · AGENTS.md 7616/8000; 漂移 0 处; sidefx 越界 0(台账 2051 条)
   (新增放行面收窄到"临时目录里的 `commands` / `commands.cmd`", 理由是那条端到端用例必须真跑脚本)。
 
+
+- 2026-10-04 18:41 — 状态 Open → Done：W1–W7 全部实施: 包式配置单点 + 纯引擎 + wrapper 两处落盘 + 低噪音判据; 后续命令工作由 26-10-03-commands-argv-flag-swallowed / commands-sync-generated-autoresolve / 26-10-04-commands-commit-first-sync(均 Done)接走。
 ## 遗留 / 下一步
 
 - **A11 未判**: 需要一次真实会话里 agent 自发收录才算数。

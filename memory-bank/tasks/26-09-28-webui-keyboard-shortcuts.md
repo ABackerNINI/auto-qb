@@ -1,8 +1,8 @@
 # 26-09-28-webui-keyboard-shortcuts — WEBUI 键盘快捷键(可自定义): 成熟方案调研 + 存储定案
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-28
-**Updated:** 2026-10-02
+**Updated:** 2026-10-04
 **Summary:** 前案 26-09-26-0822 (localStorage 预选) 经成熟方案调研与存储对比后被 26-09-28-0354 取代(0822 置 Superseded): 定案后端独立文件 auto-qb-data/webui-keys.json + GET/PUT /api/keys(金清单+2); 引擎不引库自写 ~200 行(tinykeys 为参照), 沿 0822 注册表/e.code/作用域/三段屏蔽设计; 自定义面板进设置页「快捷键」分区 + ? 浮层。§08 六决策点已全部拍板(2026-09-30, ① 五轮收敛至 v4 终版): ①危险档一律二键组合(修饰键+字母, 非裸键非三键)+确认框兜底(默认确定/Enter 确认)—— 删除=Shift+D(另有 Delete 键作为额外删除操作无需绑定, 直连 _deleteFlow, 即删除双快捷键入口), 重新校验=Shift+Y, 强制汇报=Shift+A; 裸键 D/C/F 释放空位; ②光标只走组行; ③Shift 族保留; ④不加顶栏按钮; ⑤取消一次做完, W1-W4 第一波先行、W5-W7 第二波; ⑥后端文件。注册表 58 条(52 默认+6 空位)。存储 schema 预埋 {template, overrides}, 绑定模板机制确认缓议仅预埋(§4.7)。2026-09-30 追加: 用户报键鼠割裂(鼠标顶部按键跳底), 调研报告 26-09-30-1806 落地(根因=点击不回写 kbCursor + 无光标↑落末行的极值回落; 推荐方案 B); 同日用户拍板按方案 B 实施, 已落地(五入口回写 kbCursor / 回落改视口就近 _kbViewportRow / 明细成员行补光标视觉 / 守阵 17 条), 随本提交入库。
 **Topics:** webui-keyboard-shortcuts
 **Refs:** memory-bank/plans/26-09-28-0354-plan-webui-keyboard-shortcuts.html, memory-bank/plans/26-09-26-0822-plan-webui-keyboard-shortcuts.html, memory-bank/tasks/26-09-28-webui-settings-back-nav.md, memory-bank/reports/26-09-30-1806-report-webui-keymouse-cohesion.html
@@ -72,3 +72,6 @@
   - 冒烟: dev.harness + ui_smoke.cjs(3000 种子)80 PASS + 2 FAIL, 失败项 = 既有的吸顶遮挡间歇失败(**stash 前后对照同行号同项数**确认先在, 与本笔无关, 范围守恒未修); 提交前并入 `eae2aede`(改 console_hub.css / xtpl.html)后重测仍同 80 PASS + 同 2 项同行号; 无 pageerror / console.error。
   - 未做: 真机实弹走查(计划 §07.1 的 M1-M8 行为验收)留给用户。
 
+
+
+- 2026-10-04 18:41 — 状态 In Progress → Done：计划 26-09-28-0354 全部落地: 后端 auto-qb-data/webui-keys.json + GET/PUT /api/keys, 自写引擎, 注册表 58 条; 后续键鼠割裂修复由 26-10-02-webui-nav-focus / webui-esc-clear-filters(均 Done)接走。

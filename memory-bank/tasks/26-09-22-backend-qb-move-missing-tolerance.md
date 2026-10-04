@@ -1,8 +1,8 @@
 # 26-09-22-backend-qb-move-missing-tolerance.md — qB 移动 .!qB 后缀误判缺文件修复
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-22
-**Updated:** 2026-09-22
+**Updated:** 2026-10-04
 **Summary:** issue 26-09-21-0219(用户现场: qB 移动已完成种子偶发 .!qB 后缀 → 缺文件扫描误判 → 整组误停+MISSING)已认领; 修复计划已出(过渡态容忍 + 连续 3 次上限, 不加配置键), 待用户过目后实施
 **Topics:** backend-qb-move-dot-qb
 
@@ -37,3 +37,6 @@
 
 - 2026-09-22 20:38 — 快进同步 origin/develop(d8d8bdd → 676f761, 本地 0 独有提交, 无冲突); 锚点符号全部复验仍在; 计划文档产出; issue 26-09-21-0219 置 In Progress(用户 20:20 指派认领)。
 - 2026-09-22 20:58 — 用户指示「先提交」: 本档案随计划一并入库; 实施待用户过目计划后开始。
+
+
+- 2026-10-04 18:41 — 状态 In Progress → Done：修复已落码: 过渡态容忍 + 连续 3 次上限(grouping_mod.py / ops_mod.py), 未加配置键; 所认领 issue 26-09-21-0219 已置 Done。

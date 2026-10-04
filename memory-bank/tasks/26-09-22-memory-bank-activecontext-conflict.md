@@ -1,8 +1,8 @@
 # 26-09-22-memory-bank-activecontext-conflict — activeContext 多 clone 冲突治理
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-22
-**Updated:** 2026-09-23
+**Updated:** 2026-10-04
 **Summary:** activeContext.md 全体收尾必写 + 「最后更新」滚动栈同段重写 → develop 汇合高频冲突; 已按 **A′ 时间戳切片 + D** 实施 W1–W3(取消 global.md / _index.md / 取最近 N 条与缓存文件), W4(merge-tree 预检) 可选未做。
 **Topics:** memory-bank-activecontext-conflict
 
@@ -126,3 +126,6 @@ v1.1 与初稿的三处差异(2026-09-23 与用户确议, 理由见计划 §04):
   - 计划 §05 W4 与 §07 AC-1…AC-7 已逐条标为实测通过; 未新增测试文件(建新文件需单独确认)。
 
 - **2026-09-22 23:20–23:50 (问答 → 计划产出)**: 先按问答轮完成根因分析(读 activeContext.md / collaboration.md / SKILL.md / pitfalls/git/history-integration.md + git grep 检索); 用户指令「产出计划然后提交」后转入执行: 开工 ff-only 同步 9 提交至 `d4dea8b`(含 W5 src 布局重构), 工作区干净; 立档查重(本 clone + 跨工作区 ls)无同名 slug; 闸门①等价动作 —— 干净代码态跑全量 `uv run pytest tests -q` = **1189 passed + 1 skipped**(32.9s, 覆盖率 91%, TMPDIR 已设 R:/Temp/auto-qb/tests), 与重构前基线一致; 计划 HTML 落盘 memory-bank/plans/26-09-22-2350-activecontext-conflict-plan.html(25.6 KB, dark 主题)。仅文档, 未改代码。
+
+
+- 2026-10-04 18:41 — 状态 In Progress → Done：A′ + D 已实施: 收尾改写切片而非重写同段, 连续时间戳切片(26-09-25 起 14 个)入库; 无 global.md / _index.md; W4 为可选项且后续无冲突记录。

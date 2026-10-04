@@ -1,8 +1,8 @@
 # 26-09-23-test-suite-perf — 全量测试耗时归因与三处实测优化
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-23
-**Updated:** 2026-09-23
+**Updated:** 2026-10-04
 **Summary:** 全量测试耗时 **75s → 默认并行 7.6s**。根因是**环境**: 本机每次文件操作曾收固定开销(写 20ms / 删 43ms, 与数据量无关、三盘一致), 一次全量建 577 个临时目录; 用户两次调整系统层排除项后四类操作全部 <1ms ⇒ 串行 19.4s。代码侧另修三处框架开销: sidefx 收尾 4.7~9.0s → 1.04s、JS 语法守阵 7.4s → 0.38s(语义 8/8 对齐 `node --check`)、三处临时目录泄漏。**已上并行**: 加 `pytest-xdist` + `pytest.ini` 的 `addopts = -n 4`(默认), 并补 `workeroutput` 台账回传(并行下「越界 0」不再消失)。代码侧改动已提交推送 `1bde85d`; 并行部分已入库 `f469492`。C 方案实测被推翻, 未实施。
 **Topics:** test-suite-perf
 
@@ -264,3 +264,6 @@ PowerShell 的 `Get-MpComputerStatus` / `Get-MpPreference` 也无输出 ⇒ **�
 - **提交**: `f469492` ⚡️「测试改为默认并行(-n 4): 全量 21s → 7.6s, 并让闸门自带 TMPDIR」——
   13 个路径。Gitee `develop` = `f469492` ✅; **GitHub 镜像滞后一个提交**(`1bde85d`),
   按纪律只报一次、不重试。无幽灵 diff。
+
+
+- 2026-10-04 18:41 — 状态 In Progress → Done：代码侧三处优化与并行化全部入库(1bde85d / f469492), pytest.ini 默认 -n 4, 实测 75s → 7.6s。

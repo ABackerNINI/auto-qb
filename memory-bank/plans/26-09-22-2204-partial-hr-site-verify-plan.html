@@ -6,9 +6,9 @@
 <title>部分种子 HR 的在线核实 — 可行性分析与实施计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="backend-partial-hr-verify">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-09-22-2204">
-<meta name="doc-updated" content="26-09-27-1833">
+<meta name="doc-updated" content="26-10-04-1841">
 <meta name="doc-refs" content="memory-bank/tasks/26-09-22-backend-partial-hr-verify.md,memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html,memory-bank/tasks/26-09-25-webui-hr-safety-display.md,memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html,memory-bank/reports/26-09-28-0030-report-hr-verify-v2-impl-audit.html">
 <style>
   :root {
@@ -182,7 +182,7 @@
     <p class="dek">对「部分种子 HR」站点: 由<strong>浏览器扩展</strong>(打包形态无关, 跑在<strong>日常浏览器</strong>里, 不需要专用浏览器)以真实登录态取 HR 统计页与 .torrent, 后端算 infohash、与本地做种库对账, 建按 (站点, tid) 的 HR 索引。判定是三态 —— <strong>受管束 / 已核实不受管束 (安全放行) / 未核实</strong>, 且<strong>站点数据是权威</strong>: 触发与达标都看站点侧, 本地 qB 字段降为兜底与展示 (转移种子 / 多客户端下本地字段会骗人)。多实例<strong>共享站点数据</strong>: 站点分文件 + <strong>每站点一把锁</strong>, <strong>持锁期间完成读/抓/写全程</strong>, 有效期内直接复用; 取数节奏与主循环 tick 解耦, 只在数据变化时更新。首批站点 <strong>BTSchool</strong>。(cookie 全程不离开浏览器)</p>
     <div class="meta-row">
       <div><b>日期</b>2026-09-22 22:04 · v3.0 修订 2026-09-25 17:10 (达标判定来源优先级) · v3.4 重新梳理 2026-09-26 (状态模型: 三个终态都已结束 + 同日 D 档已免罪来源单列落地)</div>
-      <div><b>状态</b>M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已交付 (2026-09-24/25) · v2.6 通道时序与饿死残留修复 + v2.7 增量落盘 + v2.8 明细表改版与逐文件 ts + v2.9 超龄豁免与翻页早停 + v3.0 达标判定来源优先级 (2026-09-25, 均已落地) + v3.4 状态模型重新梳理 + D 档已免罪来源单列 (2026-09-26, 已落地) · <strong>v3.5 在线核实 v2 方案 (§14)</strong> + <strong>v3.6 M5.1–M5.5 全部落地 (2026-09-27, 见 §15; 实施拆解与拍板见 plans/26-09-27-1815)</strong> · 余真机走查与 M0 前置实测三项</div>
+      <div><b>状态</b>M1 核心管道 + M2 取数通道 + M3 判定联动 + M4 多站点与打磨均已交付 (2026-09-24/25) · v2.6 通道时序与饿死残留修复 + v2.7 增量落盘 + v2.8 明细表改版与逐文件 ts + v2.9 超龄豁免与翻页早停 + v3.0 达标判定来源优先级 (2026-09-25, 均已落地) + v3.4 状态模型重新梳理 + D 档已免罪来源单列 (2026-09-26, 已落地) · <strong>v3.5 在线核实 v2 方案 (§14)</strong> + <strong>v3.6 M5.1–M5.5 全部落地 (2026-09-27, 见 §15; 实施拆解与拍板见 plans/26-09-27-1815)</strong> · 余真机走查与 M0 前置实测三项 · 2026-10-04 复核置 Done(真机走查已由报告 26-10-03-1505 用生产数据取证闭合)</div>
       <div><b>影响面</b>取数通道 (扩展) · 判定语义 (三态·站点侧权威) · 取数线程与共享站点数据 · TorrentRecord</div>
       <div><b>任务档案</b>tasks/26-09-22-backend-partial-hr-verify.md</div>
     </div>

@@ -1,8 +1,8 @@
 # 26-09-26-webui-frontend-file-split — WEB UI 前端大文件拆分
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-26
-**Updated:** 2026-09-27
+**Updated:** 2026-10-04
 **Summary:** 用户报「webui 代码文件很大难维护」。实测定案单体 = 两套 index.html(2555/2613 行,根模板各约 2360 行语义同构副本)+ atlas/style.css 1720 + app.js 1271;后端与共享 JS 粒度健康不在范围。产出拆分计划(plans/26-09-26-2233),5 波次,机制定案「分片 HTML + boot.js fetch 注入」。2026-09-27 用户放行按计划实施、往「消灭双模板副本」走: W0 守阵迁移盘点 + W1 根模板分片已落地(两套 shell 166/177 行 + 14×2 分片全部 ≤400 行 + shared/boot.js,聚合字节等价 + 无头 Edge 冒烟通过,守阵全绿)。待: W2 样式/app.js 续拆、W3 双模板差异评估、W4 收口。
 **Topics:** webui-frontend-file-split
 
@@ -31,7 +31,7 @@ W0 守阵迁移方案+harness 基线(0.5 轮) → W1 根模板分片(2 轮,由�
 | 3 | W1 根模板分片(两套 UI + boot.js + 守阵升级) | ✅ |
 | 4 | W2 atlas/style.css 分层 + app.js 续拆 | ✅ CSS 分层(style.css 留根 + css/{components,views,dialogs}.css, 字节等价); app.js 1281→411 行(state/lifecycle 根选项 + auth/polling/view 方法域, 渲染 DOM 等价证明, 见进度日志 26-09-27 13:10) |
 | 5 | W3 双模板差异评估报告(可选) | ✅ reports/26-09-27-1143-report-webui-template-diff.html; **用户已拍板收敛, 单一语义模板已落地**(shared/tpl + 差异口, 见 12:40 条) |
-| 6 | W4 收口(基线/回写/真机冒烟/提交) | ◐ 基线切片已入库(testing/baselines/26-09-27-1305, TOTAL 91%)+ 回写完成; 真机 qB 侧五主题冒烟留待用户环境; 提交待用户指令 |
+| 6 | W4 收口(基线/回写/真机冒烟/提交) | ✅ | 基线切片已入库(testing/baselines/26-09-27-1305, TOTAL 91%)+ 回写完成; 2026-10-04 复核: 真机 qB 侧五主题冒烟与提交指令均属用户侧动作, 拆分本体(W0–W3)已全部落地
 
 ## 进度日志
 
@@ -66,3 +66,6 @@ W0 守阵迁移方案+harness 基线(0.5 轮) → W1 根模板分片(2 轮,由�
   - **issue 26-09-27-1153 无需动作**: 核实发现对方 clone 已置 Done(meta+badge 两处一致), 状态日志记了修法(`6fd1331` +4 meta)与验证(test_docs_forms 34 passed), 索引一致(kb.check 过)。
   - **W4 回写三件完成**: ①`progress/implemented-webui.md` 迁入本轮总条目(置顶); 触发 cap 守卫(10,947>10,000)后按既有轮转惯例把四条 09-25 旧条目外迁 history(18.9k/24k), 守卫复绿 ②新坑 `pitfalls/web-ui/frontend-split.md`(template-render 已 7,009 超 6k cap, 按协议另立主题文件): 四节 —— 聚合读法单点/差异口纪律/根选项 vs app.mixin 分界/拆分等价性验证方法 ③`modules/core-domain.md` 的 `web_ui/static/` 模块表行重写(4,094→1,377 字符): 拆分前架构描述 → 三层现状(模板单一源+差异口/样式分层/内核片段+根选项展开)+契约不变式+守阵口径指针。
   - 实测: test.quick **1688 passed + 1 skipped + 0 failed**; test_memory_bank 24 passed; kb.check 6/6。**未提交**(等用户说提交)。
+
+
+- 2026-10-04 18:41 — 状态 In Progress → Done：W0–W4 已落地: 两套根 shell 拆到 166/177 行 + 14×2 分片, style.css 分层(css/{components,views,dialogs}), app.js 1281→~500 行(shared/app.js), 双模板差异已收敛为 shared/tpl 单一语义模板 + 差异口; W4 余项为真机五主题冒烟与提交指令(用户侧动作)。

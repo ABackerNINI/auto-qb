@@ -9,28 +9,13 @@
 
 ## In Progress
 
-- [26-09-29-2036] [HR 计数对平集成 — 修改计划 (v3.1)](26-09-29-2036-plan-hr-counter-integration.html) — `backend-partial-hr-verify`
-- [26-09-29-1905] [HR 来源标记 · 非文字化设计模板](26-09-29-1905-plan-webui-hr-src-underline.html) — `webui-hr-src-underline`
-- [26-09-28-1805] [计划 · HR 排除功能: 按标签/分类把种子排除出 HR 体系](26-09-28-1805-plan-hr-exclude-tag-category.html) — `hr-exclude-tag-category`
-- [26-09-27-1407] [计划 · 文件访问层包装 + 下载目录只读挂载 + 路径映射(docker 兼容)](26-09-27-1407-plan-docker-fs-wrapper-pathmap.html) — `docker-deploy`
-- [26-09-27-1232] [计划 · 暂时移除不成熟的限速统计设计 (upload_size 四条件 + begin_round)](26-09-27-1232-plan-remove-upload-stats.html) — `remove-upload-stats`
-- [26-09-26-0031] [HR 取数代理 · 选项页风格选型(三选一)](26-09-26-0031-plan-hr-ext-options-style.html) — `backend-partial-hr-verify`
-- [26-09-25-2241] [auto-qb · Docker 部署方案](26-09-25-2241-plan-docker-deploy.html) — `docker-deploy`
-- [26-09-25-2043] [HR 悬停弹窗模板 · T1 档案卡 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html) — `webui-hr-popup-t1`
-- [26-09-25-2043] [HR 悬停弹窗模板 · T2 结论卡 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t2-verdict-card.html) — `webui-hr-popup-t2`
-- [26-09-25-2043] [HR 悬停弹窗模板 · T3 进度仪表 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html) — `webui-hr-popup-t3`
-- [26-09-23-2008] [commands — 项目命令统一调用面 · 工程方案](26-09-23-2008-commands-plan.html) — `commands-unified-command-surface`
-- [26-09-22-2350] [activeContext 多 clone 冲突治理 — 工程方案](26-09-22-2350-activecontext-conflict-plan.html) — `memory-bank-activecontext-conflict`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
-- [26-09-22-1801] [tracker URL 源头脱敏 · 可行性分析与实施计划](26-09-22-1801-tracker-url-source-sanitize-plan.html) — `tracker-url-source-sanitize`
 
 ## Open
 
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`
-- [26-09-30-0240] [修改计划 · HR 在线核实三参数解耦 — 拉取间隔 / 复用窗 / 立即拉取](26-09-30-0240-plan-hr-reuse-window-decouple.html) — `backend-partial-hr-verify`
-- [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
 
 ## Done
 
@@ -53,11 +38,15 @@
 - [26-10-01-0350] [计划 · 别名层处置 — _WEB_STATE_ALIAS 与旧名委托层的退役路线](26-10-01-0350-plan-web-state-alias-disposal.html) — `web-state-alias-disposal`
 - [26-09-30-1819] [计划 · QbManager 内核化重构 — 微内核 + 插件式模块](26-09-30-1819-plan-kernel-module-refactor.html) — `kernel-module-refactor`
 - [26-09-30-0559] [修改计划 · HR 触发语义重构 — 移除「本地不触发」,全量纳入管理](26-09-30-0559-plan-hr-trigger-semantics.html) — `backend-hr-verify`
+- [26-09-30-0240] [修改计划 · HR 在线核实三参数解耦 — 拉取间隔 / 复用窗 / 立即拉取](26-09-30-0240-plan-hr-reuse-window-decouple.html) — `backend-partial-hr-verify`
 - [26-09-30-0109] [危险操作独立操作层 · 工程计划 · auto-qb](26-09-30-0109-plan-dangerous-op-consolidation.html) — `dangerous-op-consolidation`
+- [26-09-29-2036] [HR 计数对平集成 — 修改计划 (v3.1)](26-09-29-2036-plan-hr-counter-integration.html) — `backend-partial-hr-verify`
+- [26-09-29-1905] [HR 来源标记 · 非文字化设计模板](26-09-29-1905-plan-webui-hr-src-underline.html) — `webui-hr-src-underline`
 - [26-09-29-0323] [站点搜索 × 列表交互 · 三方案(计划)](26-09-29-0323-plan-webui-sites-search-3-proposals.html) — `webui-sites-page-search`
 - [26-09-29-0003] [计划 · WEBUI 设置页「?」说明全面核对与改写](26-09-29-0003-plan-webui-settings-help-rewrite.html) — `webui-settings-help`
 - [26-09-28-1932] [HR 在线核实 · 模型推翻重建计划 · auto-qb](26-09-28-1932-plan-hr-verify-rebuild.html) — `backend-partial-hr-verify`
 - [26-09-28-1834] [计划 · 配置版本升级守卫: 键面基线冻结快照](26-09-28-1834-plan-config-version-guard.html) — `config-version-guard`
+- [26-09-28-1805] [计划 · HR 排除功能: 按标签/分类把种子排除出 HR 体系](26-09-28-1805-plan-hr-exclude-tag-category.html) — `hr-exclude-tag-category`
 - [26-09-28-0354] [计划 · WEB UI 键盘快捷键: 成熟方案调研与存储定案 (可自定义)](26-09-28-0354-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
 - [26-09-28-0201] [auto-qb WEB UI · 搜索框帮助按钮 · 3 版模板(供挑选)](26-09-28-0201-plan-search-help-button-3-proposals.html) — `webui-search-query-syntax`
 - [26-09-28-0157] [沉默即成功 — my-commit-flow 输出契约 v3 (26-09-28-0157)](26-09-28-0157-plan-commands-shipflow-v3.html) — `commands-shipflow-v3`
@@ -67,20 +56,29 @@
 - [26-09-27-1852] [计划 · 站点页搜索: 全字段匹配与多命中展示](26-09-27-1852-plan-sites-page-search.html) — `webui-sites-page-search`
 - [26-09-27-1815] [HR 在线核实 · 审计修复 + v2 方案实施 · 修改计划 · auto-qb](26-09-27-1815-plan-hr-verify-audit-fixes.html) — `backend-partial-hr-verify`
 - [26-09-27-1438] [计划 · 字段变化触发时机 on_torrent_field_changed 与维护任务 tags 迁移](26-09-27-1438-plan-field-changed-trigger.html) — `field-changed-trigger`
+- [26-09-27-1407] [计划 · 文件访问层包装 + 下载目录只读挂载 + 路径映射(docker 兼容)](26-09-27-1407-plan-docker-fs-wrapper-pathmap.html) — `docker-deploy`
 - [26-09-27-1318] [计划 · HR 在线核实配置收敛: 内置站点档案 + 配置全部上收「HR 在线核实」分区](26-09-27-1318-plan-hr-check-site-presets.html) — `hr-check-site-presets`
+- [26-09-27-1232] [计划 · 暂时移除不成熟的限速统计设计 (upload_size 四条件 + begin_round)](26-09-27-1232-plan-remove-upload-stats.html) — `remove-upload-stats`
 - [26-09-27-1126] [计划 · 日志等级整改 — 危险情况归 ERROR，通知默认只推 ERROR](26-09-27-1126-plan-log-level-notify-error.html) — `log-level-notify-error`
 - [26-09-26-2345] [commands × my-commit-flow v2 — 输出契约与零参数化设计](26-09-26-2345-plan-commands-shipflow-v2.html) — `commands-shipflow-v2`
 - [26-09-26-2233] [计划 · WEB UI 前端大文件拆分](26-09-26-2233-plan-webui-frontend-file-split.html) — `webui-frontend-file-split`
 - [26-09-26-0538] [auto-qb WEB UI · 按钮体系重构 · 3 组方案模板(供挑选)](26-09-26-0538-plan-webui-button-3-proposals.html) — `webui-button-system`
 - [26-09-26-0529] [测试基线切片化 · 单文件改每条一档](26-09-26-0529-plan-baseline-slice-per-file.html) — `baseline-slice-per-file`
 - [26-09-26-0506] [落盘文件 schema 版本号与逐级升级链 · 工程计划](26-09-26-0506-plan-schema-version-chain.html) — `backend-schema-version-chain`
+- [26-09-26-0031] [HR 取数代理 · 选项页风格选型(三选一)](26-09-26-0031-plan-hr-ext-options-style.html) — `backend-partial-hr-verify`
+- [26-09-25-2241] [auto-qb · Docker 部署方案](26-09-25-2241-plan-docker-deploy.html) — `docker-deploy`
+- [26-09-25-2043] [HR 悬停弹窗模板 · T3 进度仪表 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t3-progress-ledger.html) — `webui-hr-popup-t3`
 - [26-09-25-1823] [计划 · HR 在线核实的 WEB UI 呈现（删除安全档位 × 来源档位）](26-09-25-1823-plan-webui-hr-safety-display.html) — `webui-hr-safety-display`
+- [26-09-23-2008] [commands — 项目命令统一调用面 · 工程方案](26-09-23-2008-commands-plan.html) — `commands-unified-command-surface`
 - [26-09-23-1959] [文档形态统一 — 计划与报告入库 · 工程方案](26-09-23-1959-memory-bank-doc-forms-plan.html) — `memory-bank-doc-forms`
+- [26-09-22-2350] [activeContext 多 clone 冲突治理 — 工程方案](26-09-22-2350-activecontext-conflict-plan.html) — `memory-bank-activecontext-conflict`
+- [26-09-22-2204] [部分种子 HR 的在线核实 — 可行性分析与实施计划](26-09-22-2204-partial-hr-site-verify-plan.html) — `backend-partial-hr-verify`
 - [26-09-22-2112] [src/auto_qb 目录结构优化 · 分层归拢计划（方案 C 定稿）](26-09-22-2112-src-layout-restructure-plan.html) — `src-layout-restructure`
 - [26-09-22-2038] [qB 移动已完成种子误判缺文件 · .!qB 过渡态容忍修复计划](26-09-22-2038-qb-move-dot-qb-suffix-fix-plan.html) — `backend-qb-move-dot-qb`
 - [26-09-22-1912] [运行期状态周期落盘 · 修复「非优雅终止丢失整个运行期状态」](26-09-22-1912-backend-state-periodic-flush-plan.html) — `backend-state-persistence`
 - [26-09-22-1857] [修复计划 · 热重载 L2 分支重读磁盘 state, 运行期内存态被回滚](26-09-22-1857-hot-reload-l2-state-rollback-fix-plan.html) — `hot-reload-l2-state-rollback-fix`
 - [26-09-22-1857] [web.py create_app 拆分计划 · 926 行工厂函数 → web/ 包 + 按域 Router](26-09-22-1857-web-create-app-split-plan.html) — `web-create-app`
+- [26-09-22-1801] [tracker URL 源头脱敏 · 可行性分析与实施计划](26-09-22-1801-tracker-url-source-sanitize-plan.html) — `tracker-url-source-sanitize`
 - [26-09-22-1248] [知识库目录化重构 · memory-bank 全库分类 + 二级指针方案](26-09-22-1248-memory-bank-dir-refactor-plan.html) — `memory-bank-dir-refactor`
 - [26-09-22-0812] [闸门自动运行 · my-commit-flow 修改方案](26-09-22-0812-commit-gate-auto-run-plan.html) — `commit-gate-auto-run`
 - [26-09-21-1551] [列设置重置 · 双轨模型重设计计划](26-09-21-1551-column-prefs-intent-redesign-plan.html) — `webui-column-prefs`
@@ -123,5 +121,7 @@
 
 - [26-09-30-1751] [计划 · 热重载机制简化: 统一挂载口 vs 保存即重启](26-09-30-1751-plan-hot-reload-simplify.html) — `hot-reload-simplify`
 - [26-09-26-0822] [计划 · WEB UI 键盘快捷键（可自定义）· 可行性分析与实施计划](26-09-26-0822-plan-webui-keyboard-shortcuts.html) — `webui-keyboard-shortcuts`
+- [26-09-25-2043] [HR 悬停弹窗模板 · T1 档案卡 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t1-spec-card.html) — `webui-hr-popup-t1`
+- [26-09-25-2043] [HR 悬停弹窗模板 · T2 结论卡 · auto-qb](26-09-25-2043-plan-webui-hr-popup-t2-verdict-card.html) — `webui-hr-popup-t2`
 - [26-09-15-0910] [auto-qb · WEB UI 第七轮优化计划](26-09-15-0910-webui-optimization-plan-v2.html) — `webui-optimization`
 - [26-09-15-0658] [auto-qb · WEB UI 优化计划](26-09-15-0658-webui-optimization-plan.html) — `webui-optimization`

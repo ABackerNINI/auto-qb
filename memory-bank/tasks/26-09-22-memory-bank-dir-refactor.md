@@ -1,8 +1,8 @@
 # 26-09-22-memory-bank-dir-refactor — 知识库目录化重构 (分类 + 二级指针)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-22
-**Updated:** 2026-10-01
+**Updated:** 2026-10-04
 **Summary:** 全库 8 份超标文档 → 分类目录 + 索引指针 + 五步配方 (含 cap 分级与存根); 脚本统一落 memory-bank skill; **W0–W8 全部完成** —— 8 份超标文档拆成 9 目录 / 40+ 主题文件 + tasks 消肿 + 链接机检, 12 条结构性守卫; 余 instructions 漂移重写待做; 26-10-01 后继可行性分析落报告(生成物实时化 / 四工位专题目录化), 裁定维持「落盘 + 平铺」并留两项增强待拍板
 **Topics:** memory-bank-dir-refactor
 **Refs:** memory-bank/reports/26-10-01-2125-report-kb-artifacts-realtime-and-layout.html
@@ -333,3 +333,6 @@
   集合是事故易发区, 先比对 docmap 已覆盖面)。
 
 > 较早的进度日志(3,816 字符)**已外迁** → [attachments/memory-bank-dir-refactor-log.md](attachments/memory-bank-dir-refactor-log.md)
+
+
+- 2026-10-04 18:41 — 状态 In Progress → Done：W0–W8 全部完成: 8 份超标文档拆进 9 个分类目录, 40+ 主题文件 + 索引指针落库, 生成脚本统一下沉; 2026-10-01 后继可行性分析(报告 26-10-01-2125)裁定维持「落盘 + 平铺」, 三条建议属新议题。

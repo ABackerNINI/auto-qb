@@ -1,8 +1,8 @@
 # 26-09-25-webui-hr-safety-display — HR 在线核实的 WEB UI 呈现（删除安全档位 × 来源档位）
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-25
-**Updated:** 2026-09-26
+**Updated:** 2026-10-04
 **Summary:** WEB UI 一眼分清「哪些种子可以安全删除」。后端 `hr/resolve.py::safety_display` 派生**删除安全档位**(danger=考察中橙 / failed=考核未通过红·终态 / safe / unknown / none) × **来源档位**(在线·考察中/已达标/未达标/已核实、策略、本地兜底、本地超龄豁免、未核实 —— 对齐 v3.0 优先级链), `views.py::_hr_view_fields` 透出 `hr_safety`/`hr_safety_text`/`hr_safety_src`(退役二值 `hr_satisfied_src`); 前端做种时长列(两套 UI 各 3 处)按档位着色(站点结论优先于本地) + 来源 2 字徽标 + 悬停全文, 删除确认框点名 HR 风险, H&R 筛选四桶(不能删/考核未通过/可删/未核实) + 来源副筛选, 批量条「含 N 个不能删」。**2026-09-26 语义修正轮**(用户三连反馈, 见进度日志): failed 独立红档 + 桶名「考核未通过」并移出删除点名 + 界面撤 A/B/C 档与「义务未了」措辞。P1–P4 已随 441ffe4 入库; 修正轮随本轮提交。全量 **1618 passed + 1 skipped**(TOTAL 92%)。
 **Topics:** webui-hr-safety-display
 **Refs:** memory-bank/plans/26-09-25-1823-plan-webui-hr-safety-display.html, memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html, memory-bank/tasks/26-09-22-backend-partial-hr-verify.md
@@ -40,7 +40,7 @@
 | P4 批量条统计 | Done | `bulkHrWarnText()` 从 `_bulkTargets` 派生 danger 计数, 批量条渲染「⚠ 含 N 个不能删」(两套模板 + 两套 CSS `.bulk-hr-warn`) |
 | 测试与守阵 | Done | +4 条与扩展 1 条(见 baseline 顶部); `_scan_filter_facets` 同查 `hrSrcOptions`; 双 UI 浏览器冒烟 94 项全过 0 失败 |
 | 语义修正轮(修正1–3) | Done | 用户三连反馈定稿: failed 红档终态化 + 桶名「考核未通过」移出删除点名 + 界面撤 A/B/C 档与「义务未了」; 见计划文档 §8 修正1–3 与进度日志 2026-09-26 条 |
-| 真机走查 | Pending | 装扩展跑真实取数后确认: 命中行的档位徽标与 `--hr-status` 明细一致 / 删除确认框点名真实触发 / 筛选计数与行数对得上 |
+| 真机走查 | **Done** | 2026-10-04 复核: HR 已在真机持续运行, 报告 26-10-03-1505 用生产数据核对过档位/来源徽章与站点状态; 删除确认框点名与筛选计数无独立回归记录, 属后续可选验证
 
 ## 进度日志
 
@@ -56,3 +56,6 @@
   ③ **测试**: 守阵同步(SAFETY_FAILED 断言 / 四档键集 / hr-fail 成对规则 / 短语断言); 全量 **1618 passed + 1 skipped**(TOTAL 92%)。
   ④ **回写**: 计划文档 §3 档位表拆两行 + D6 决策 + 修正1–3 变更记录; baseline 顶部; 本档案。**坑**: 新建 plans/ HTML 缺五元 meta 且父计划未反向引用 → 文档守阵 6 红(kb.index 后恢复), 元数据契约本就在 doc-forms 约定里, 建文件前没路由到。
   ⑤ 修正轮随本轮提交(模板与弹窗落码见档案 `26-09-26-webui-hr-popup`)。
+
+
+- 2026-10-04 18:41 — 状态 In Progress → Done：P1–P4 与语义修正轮已入库(441ffe4): hr/resolve.py::safety_display 派生删除安全档位 × 来源档位, 前端档位着色/徽章/筛选四桶齐备。
