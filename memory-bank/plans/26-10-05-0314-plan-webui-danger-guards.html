@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="webui-danger-guards">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-05-0314">
-<meta name="doc-updated" content="26-10-05-0402">
+<meta name="doc-updated" content="26-10-05-0433">
 <meta name="doc-refs" content="memory-bank/issues/26-10-05-0254-feat-webui-recheck-confirm.html, memory-bank/issues/26-10-05-0254-feat-webui-skip-check-preconditions.html, memory-bank/issues/26-10-05-0402-bug-skip-check-self-fail-gate.html, memory-bank/tasks/26-10-05-webui-danger-guards.md">
 <title>WEBUI 危险动作防护: 重新校验确认框 + 跳检前置条件 · 实施计划</title>
 <style>
@@ -97,52 +97,64 @@
   <header class="cover">
     <div class="kicker">实施计划 · Open(待拍板)</div>
     <h1>WEBUI 危险动作防护: 重新校验确认框 + 跳检前置条件</h1>
-    <p class="lede">跳检是删种重加级危险操作。本计划把「该不该跳检」的判定下沉 ops 层单点(方向 A), WEB 与规则两来源共用一套闸门; 重新校验补齐鼠标路径确认框与键盘路径对齐。前置条件逐条核对矩阵 + 每闸门一测一红验的守阵在 §03/§06。</p>
+    <p class="lede">跳检是删种重加级危险操作。本计划把「该不该跳检」的判定下沉 ops 层单点(方向 A), WEB 与规则两来源共用一套闸门; 在此之上前端交互改为<strong>三分流预检</strong>: 点跳检 → 确认框先开但确认钮禁用 → 预检请求(ops 同谓词 dry-run) → 后端按「禁止 / 需显式强制 / 可跳检」三态返回 → 前端按态渲染详细原因与逃生通道。重新校验补齐鼠标路径确认框与键盘路径对齐。前置条件逐条核对矩阵(含三分流归类) + 每闸门一测一红验的守阵在 §03/§06。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-0314-plan-webui-danger-guards</div></div>
       <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
       <div class="item"><div class="k">认领 issue</div><div class="v">26-10-05-0254 × 2(姊妹件)</div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core/ops · torrents/store · webui(前后端)</div></div>
-      <div class="item"><div class="k">预期改动</div><div class="v">ops 闸门扩展 + 前端确认框; webui/commands.py 预计零改动</div></div>
+      <div class="item"><div class="k">预期改动</div><div class="v">ops 闸门+预检+force · 前端预检对话框; webui 路由/commands 小改(端点+透传)</div></div>
     </div>
   </header>
 
   <section id="s1">
     <h2><span class="no">01</span>结论与拍板点</h2>
-    <p><strong>一句话</strong>: 跳检缺的不是确认框(两入口已有 danger 框), 是「该不该允许」的判定 —— WEB 入口直连 <code>ops.skip_check</code>, 只过 ops 层两道闸门(部分下载禁止 + 同日去重), 规则侧决策链 0/1 的语义(仅暂停中未完成、组内无活跃下载)与文件前置检查都没跟上; 重新校验反之, 确认框只在键盘路径有, 鼠标三入口裸奔。两边合起来是同一件事: <strong>危险动作的防护要落在单点, 而不是长在某条调用链上</strong>。</p>
+    <p><strong>一句话</strong>: 跳检缺的不是确认框(两入口已有 danger 框), 是「该不该允许」的判定与<strong>判定结果的呈现</strong> —— WEB 入口直连 <code>ops.skip_check</code>, 只过 ops 层两道闸门(部分下载禁止 + 同日去重), 规则侧决策链 0/1 的语义(仅暂停中未完成、组内无活跃下载)与文件前置检查都没跟上; 而且点下才知道被拒, 用户在确认时看不到自己正在赌什么。重新校验反之, 确认框只在键盘路径有, 鼠标三入口裸奔。两边合起来是同一件事: <strong>危险动作的防护要落在单点, 判定结果要在用户确认之前摊开</strong>。</p>
     <h3>方案结论(推荐, 待拍板)</h3>
     <ul>
-      <li><strong>跳检前置 → 方向 A</strong>: 闸门全部下沉 <code>ops._skip_gates</code> 单点, rule / web 两来源共用。规则侧行为为零变化(决策链 0/1/1.5/1.6 本就在更早处拒绝或等待, ops 层再加一道同谓词是纵深防御); WEB 单发/批量自动获得全部闸门, <code>webui/commands.py</code> 预计零改动(拒绝文案经 <code>ActionResult</code> 自动进回执)。</li>
-      <li><strong>新前置条件 7 条</strong>(详见 §03 矩阵): 已完成禁止、活跃中禁止、组内有活跃下载成员禁止、同 hash recheck 在途禁止、组内校验在途禁止(chain 1.5 镜像)、组内校验失败推断禁止(chain 1.6 镜像)、前置文件检查(check_filelist)并入执行链。其中文件检查是本次复验新核实的缺口 —— <code>check_filelist</code> 全仓唯一调用点在规则侧(checking.py:121), WEB 跳检从不查文件, 缺失文件会被 is_skip_checking 标成「完整」; 组内两道是 2026-10-05 复析补入(D4 拍板翻转, 见拍板点): 1.5 实为等判决时序而非省 I/O, 1.6 是确定性坏数据证据。</li>
-      <li><strong>重新校验 → 前端共用确认框</strong>: 抽 <code>_recheckConfirm(what)</code>, 批量浮条/批量右键(经 <code>bulkAct</code>)、单选右键与抽屉(经 <code>torrentCmd</code>)、键盘(改调共用 helper)四处同一文案; 后端零改动。</li>
-      <li><strong>测试盯死</strong>: 每个新闸门一条单测 + 一条红验探针(摘闸门必红); WEB 单发/批量回执文案断言; 前端确认框静态守卫(防未来重构静默摘除); 全量基线切片。</li>
+      <li><strong>跳检前置 → 方向 A + 三分流预检</strong>: 闸门全部下沉 <code>ops._skip_gates</code> 单点(规则侧行为零变化, 决策链 0/1/1.5/1.6 本就在更早处拒绝或等待, ops 层再加一道同谓词是纵深防御); 前端交互改为「点跳检 → 确认框先开但确认钮禁用 → 预检请求(ops 同谓词 dry-run, 非前端复制谓词) → 三态返回 → 按态渲染」。三态: <strong>case 1 禁止</strong>(跳检无意义或确定性坏数据, 无逃生)、<strong>case 2 需显式强制</strong>(不能完全确定, 给逃生通道)、<strong>case 3 可跳检</strong>。执行路径闸门原样全跑 —— 预检只前移判定呈现, <strong>不减任何防护</strong>; case 1 硬闸在服务端, 前端绕不过。</li>
+      <li><strong>force 语义</strong>: 执行请求带 <code>force=true</code> 时, 仅 case 2 闸门(G5 同 hash 在途 / G7 组内校验在途, D8)降为警告放行; case 1 闸门对 force 一律硬拒。force 缺省 False, 规则侧不传 —— 规则侧零变化不变式保持。</li>
+      <li><strong>新前置条件 7 条</strong>(详见 §03 矩阵, 含逐条三分流归类): 已完成禁止、活跃中禁止、组内有活跃下载成员禁止、同 hash recheck 在途禁止(可强制)、组内校验在途禁止(chain 1.5 镜像, 可强制)、组内校验失败推断禁止(chain 1.6 镜像)、前置文件检查(check_filelist)并入执行链。其中文件检查是 03:14 复验核实的缺口 —— <code>check_filelist</code> 全仓唯一调用点在规则侧(checking.py:121), WEB 跳检从不查文件, 缺失文件会被 is_skip_checking 标成「完整」; 组内两道是 2026-10-05 复析补入(D4 拍板翻转, 见拍板点)。</li>
+      <li><strong>重新校验 → 前端共用确认框</strong>: 抽 <code>_recheckConfirm(what)</code>, 批量浮条/批量右键(经 <code>bulkAct</code>)、单选右键与抽屉(经 <code>torrentCmd</code>)、键盘(改调共用 helper)四处同一文案; 后端零改动。(本条不受三分流调整影响 —— recheck 无预检需求, 在途互斥后端已有。)</li>
+      <li><strong>测试盯死</strong>: 每个新闸门一条单测 + 一条红验探针(摘闸门必红); 预检三态/force 语义/只读性各一条单测; WEB 单发/批量回执文案断言; 前端对话框静态守卫; 全量基线切片。</li>
     </ul>
-    <h3>拍板点(全部给了推荐, 拍板后 S1 开工)</h3>
+    <h3>拍板点</h3>
     <table>
-      <tr><th>#</th><th>问题</th><th>推荐</th><th>备选与代价</th></tr>
-      <tr><td>D1</td><td>已完成种子(progress&gt;=1): 禁止还是「允许但二次确认」?</td><td><strong>禁止</strong>(ops 单点, 与规则侧 chain 0 完全一致; 跳检对已完成零收益且清空统计)</td><td>允许但二次确认 = WEB 特判, 前端/后端两处口径, 漂移面回到本计划要消掉的地方</td></tr>
-      <tr><td>D2</td><td>活跃中(下载/做种, 非暂停)是否一并禁止?</td><td><strong>禁止</strong>(chain 0 同一谓词, 自然覆盖)</td><td>不拦 = 做种被中断、统计清空, 与规则侧口径相反</td></tr>
-      <tr><td>D3</td><td>组级闸门(组内有活跃下载成员)本期一并下沉?</td><td><strong>一并</strong>(安全问题: 组共享物理文件, 下载方正在写, 跳检把全部块标有效 = 脏数据; 不只是语义问题)</td><td>拆另立件 = 已知数据安全缺口带着上线</td></tr>
-      <tr><td>D4</td><td>组内其它成员 full-checking 在途(chain 1.5)与组内成员校验失败推断(chain 1.6)WEB 侧拦不拦?<br><strong>(2026-10-05 复析拍板: 均拦, 新闸门 G7/G8)</strong></td><td><strong>均拦</strong>。1.5 的规则侧语义不是省 I/O 而是等判决 —— 等待清空后重走决策链: 通过者晋升 verified_references / 失败者由 1.6 拦截(full_checking.py:60-62,100-101), WEB 在窗口内跳检 = 抢在判决前断言数据有效, 失败分支即永久洗白; 1.6 是当日校验失败+文件映射一致的确定性坏数据证据, 与 D3 同属数据安全范畴(「不只是语义问题」同款理由)。两道拒绝均瞬态自解(校验结束/次日重置), 文案一句话自解释(§04); 同 hash 在途仍由 G5 拒(删种会杀死在途校验轮询)</td><td>不拦(原推荐, 已否): 「无 I/O 冲突」打错靶心 —— 危害在数据准确性不在 I/O; 「拒绝权在 G3-G6+确认框」对该场景零覆盖(候选暂停未完成过 G3/G4、无人下载过 G6、filelist 只查存在与尺寸不查内容); 洗白永久化(chain 0 不复查已完成, zSkipChecked 自证未验证却无机制回头); 用户不观察组员状态且确认框文案不透出 —— 误操作面大</td></tr>
-      <tr><td>D5</td><td>HR 在管(未放行)种子跳检怎么处理?</td><td><strong>本期只做前端确认框文案警示</strong>(跳检清零 qB 每种统计, HR 锚点 seeding_time 倒退、3× 超额线推迟 —— 已核实); 硬闸另立 issue, 需与 HR 放行/观察期语义对齐, 影响面超出本计划</td><td>本期直接加硬闸 = 触及 HR 状态机语义, 测试面不成比例</td></tr>
-      <tr><td>D6</td><td>前端形态: 点后报错还是菜单灰置?</td><td><strong>点后报错</strong>(单一真相在 ops 闸门; 灰置要前端复制谓词, 必然漂移, 且组级/在途条件前端算不了)</td><td>灰置 = 谓词两处维护 + 组级判定前端不可得</td></tr>
-      <tr><td>D7</td><td>重检确认范围: 单选也要确认?</td><td><strong>三鼠标入口全接</strong>(单选也确认, 与键盘路径同文案; 误触代价与数据量无关, 防护不该看数据量)</td><td>仅多选 = 单选右键(最高频误触面)继续裸奔</td></tr>
+      <tr><th>#</th><th>问题</th><th>结论/推荐</th><th>备选与代价</th></tr>
+      <tr><td>D1</td><td>已完成种子(progress&gt;=1): 禁止还是「允许但二次确认」?</td><td><strong>已定: 禁止</strong> —— 用户定向三分流时点名(「已完成的种子, 跳检无任何意义」), 归 case 1, 与规则侧 chain 0 完全一致</td><td>—</td></tr>
+      <tr><td>D2</td><td>活跃中(下载/做种, 非暂停)是否一并禁止?</td><td><strong>已定: 禁止</strong>(归 case 1: 活跃且 p&lt;1 = 下载中, 未验证块被标有效 = 上传垃圾, 与部分下载闸门同款危害; 文案给出路「先暂停再跳检」—— 暂停后 p=0 可过, 不需要 force)</td><td>—</td></tr>
+      <tr><td>D3</td><td>组级闸门(组内有活跃下载成员)本期一并下沉?</td><td><strong>推荐: 一并</strong>(安全问题: 组共享物理文件, 下载方正在写, 跳检把全部块标有效 = 脏数据; 归 case 1, 文案给出路「先暂停下载方」)</td><td>拆另立件 = 已知数据安全缺口带着上线</td></tr>
+      <tr><td>D4</td><td>组内其它成员 full-checking 在途(chain 1.5)与组内成员校验失败推断(chain 1.6)WEB 侧拦不拦?<br><strong>(2026-10-05 复析拍板: 均拦; 04:33 三分流修订: G8 仍 case 1, G7 改 case 2)</strong></td><td><strong>均拦, 但分级</strong>: G8(失败推断)归 case 1 —— 当日校验失败+文件映射一致是确定性坏数据证据, 强制跳检 = 明知数据坏仍标有效, 逃生无意义, 文案给出路「先对该组做 full-checking」; G7(校验在途)归 case 2 —— 判决窗口抢跑是<strong>真不确定</strong>: 判决通过即证明文件完好, 判决失败则洗白坏数据, 赌注两面都真实存在, 正是「不能完全确定的情况」定义本身。原「均拦」的动机(防洗白 / 防抢跑)不推翻, 只是 G7 的拒绝从终局改为可显式豁越</td><td>G7 也 case 1 = 堵死「明知这轮校验无意义」用户的合理出路(如误发起的 recheck); G8 给 force = 给「明知数据坏仍上传」开通道, 无正当用途</td></tr>
+      <tr><td>D5</td><td>HR 在管(未放行)种子跳检怎么处理?</td><td><strong>本期只做对话框警示文案</strong>(警示行并入新预检对话框固定文案区; 跳检清零 qB 每种统计, HR 锚点 seeding_time 倒退、3× 超额线推迟 —— 已核实); 硬闸另立 issue, 需与 HR 放行/观察期语义对齐, 影响面超出本计划</td><td>本期直接加硬闸 = 触及 HR 状态机语义, 测试面不成比例</td></tr>
+      <tr><td>D6</td><td>前端形态: 点后报错还是菜单灰置?<br><strong>(2026-10-05 04:33 用户定向后被第三形态取代)</strong></td><td><strong>已定: 点后预检三分流</strong> —— 既不是点后报错(确认前看不到后果)也不是灰置(谓词两处维护)。预检是 ops 同谓词 dry-run, 谓词单点保住; 灰置否决理由(组级/在途条件前端算不了)对预检不成立 —— 算不了正是发给后端算的理由</td><td>—</td></tr>
+      <tr><td>D7</td><td>重检确认范围: 单选也要确认?</td><td><strong>推荐: 三鼠标入口全接</strong>(单选也确认, 与键盘路径同文案; 误触代价与数据量无关, 防护不该看数据量)</td><td>仅多选 = 单选右键(最高频误触面)继续裸奔</td></tr>
+      <tr><td>D8</td><td><strong>case 2 集合构成</strong>: 除 G5/G7 外是否还有闸门给逃生通道?</td><td><strong>推荐: 仅 G5(同 hash 校验在途)+ G7(组内校验在途)</strong>。逐条排除理由见 §03 分流列 —— 其余每条的拒绝都是「确定性危害」或「零收益纯伤害」, force 无正当用途</td><td>扩大 case 2 集合 = 给确定性坏数据开上传通道; 全部 case 1 = 堵死误发起校验/判决窗口的真实出路</td></tr>
+      <tr><td>D9</td><td><strong>filelist 检查是否进预检</strong>?(还是只进执行链, 预检只查内存闸门)</td><td><strong>推荐: 进预检</strong> —— 「确认前看到详细原因」是本方案的核心价值, 文件缺失恰是最常见死因之一, 漏检它预检就名不副实。代价: 每 hash 一次 files API + N 次 stat, 主循环线程阻塞约百 ms 级/hash; 跳检天级低频 + 预检批量一次, 可接受(§07 有量化)</td><td>不进预检 = 文件缺失到执行时才报错回执, 用户确认时不知道; 优点是预检纯内存、瞬时返回</td></tr>
+      <tr><td>D10</td><td><strong>预检请求失败(网络/超时)前端怎么办</strong>?</td><td><strong>推荐: 降级为普通确认框</strong>(= 今天的行为: 确认后执行, 后端闸门照拦禁止项), 对话框明示「预检失败: …, 后端闸门仍会在执行时拦截」; <strong>force 钮永远只在预检成功后出现</strong>(强制必须先看到赌注)</td><td>保持禁用 + 重试 = 预检从增强变硬依赖, UX 检查失败把用户挡在门外, 而后端防护本来就不依赖预检</td></tr>
     </table>
   </section>
 
   <section id="s2">
     <h2><span class="no">02</span>复验结论与问题面</h2>
     <p>两个 issue 已于 2026-10-05 03:14 复验(取证基线 5e697ea0), 均仍复现; 复验行已写进各自报告 §07。这里只放结论性事实, 证据原文见 issue 报告。</p>
-    <h3>WEB 跳检链路(前端入口 → 后端 → ops)</h3>
-<pre><code>前端(2 入口, 均 danger 确认框 + flags.skip_check_menu 门控):
+    <h3>WEB 跳检链路(前端入口 → 后端 → ops; 04:33 起含预检腿)</h3>
+<pre><code>前端(2 入口, 现 danger 确认框 + flags.skip_check_menu 门控; S4 改预检对话框):
   单选右键/抽屉  ctx-menus.html:109  skipCheckTorrent()   drawer.js:58   → POST /api/torrents/{h}/skip-check
   多选右键       ctx-menus.html:29   ctxAct('skip_check') → commands.js:569 → skipCheckMulti()  drawer.js:276
   批量浮条       无跳检按钮
-路由/后端(2 入口):
-  单发  torrent_cmds.py:47(403 门控) → _cmd_skip_check_torrent  commands.py:349 → ops.skip_check(source="web")
-  批量  commands.py:586(fail-closed 门控) → :635 分派 → _bulk_skip_check_via_ops :702 → 逐 hash ops.skip_check
+预检腿(S4 新增, 两入口共用):
+  确认框先开(确认钮禁用) → POST /api/torrents/skip-check/precheck {hashes:[…]}
+    → enqueue 主循环线程执行 ops.skip_check_precheck(同谓词 dry-run, 只读)
+    → 回执 {per-hash: cls(ok|force|blocked) + reasons[闸门 id/文案]}
+    → 前端按三态渲染: 全 ok → 启用确认; 有 force → 露「强制」钮; 有 blocked → 明细区列原因
+路由/后端(2 入口 + 1 预检端点):
+  单发  torrent_cmds.py:47(403 门控) → _cmd_skip_check_torrent  commands.py:349 → ops.skip_check(source="web", force=body.force)
+  批量  commands.py:586(fail-closed 门控) → :635 分派 → _bulk_skip_check_via_ops :702 → 逐 hash ops.skip_check(force 透传)
+  预检  torrent_cmds.py 新端点(S2) → enqueue "skip_check_precheck" → ops 只读判定, 不触任何写路径
 执行模型: 命令经队列在主循环线程串行执行(单一写线程, 黄金法则 5), 跳检阻塞 ~6s 期间其它命令排队
-  —— 进程内无并发竞态, 同 hash 两次跳检天然串行, 无需新闸门(写进 §03 矩阵备查)。</code></pre>
+  —— 进程内无并发竞态, 同 hash 两次跳检天然串行, 无需新闸门(写进 §03 矩阵备查)。
+  预检同走队列: 与写命令天然串行化, 拿到的是无撕裂快照(store/state/active_check_hashes 全在主线程),
+  且复用既有 cmd_id + waitCmd 通道, 不开第二套请求-响应机制。</code></pre>
     <h3>问题面三层</h3>
     <ul>
       <li><strong>判定缺口(本件主目标)</strong>: ops 层 <code>_skip_gates</code>(ops_mod.py:452)只有部分下载禁止 + 同日去重两道; 规则侧决策链 0(仅暂停中未完成, checking.py:88)/1(组内无活跃下载, :92)/1.5/1.6 与 chain 4 文件前置检查(checking.py:121, 全仓唯一调用点)全部留在 rules 层, WEB 直连入口一个都享受不到。已完成/做种中种子被删种重加、统计清空、HR 计时倒退; 文件缺失的种子被标成「完整」。</li>
@@ -152,27 +164,28 @@
   </section>
 
   <section id="s3">
-    <h2><span class="no">03</span>前置条件核对矩阵</h2>
-    <p>「还有哪些前置条件」的完整答案。逐条核对过代码(取证 2026-10-05 03:14), 不是候选清单 —— 处置列即实施内容。判据: 拒绝对 WEB 用户是否自解释、规则侧行为是否受扰。</p>
+    <h2><span class="no">03</span>前置条件核对矩阵(含三分流归类)</h2>
+    <p>「还有哪些前置条件」的完整答案 + 用户定向的三分流逐条归类。逐条核对过代码(取证 2026-10-05 03:14, 三分流归类 04:33), 不是候选清单 —— 处置列即实施内容。归类判据: <strong>case 1 = 拒绝是终局</strong>(跳检无意义, 或后果确定性坏 —— force 无正当用途); <strong>case 2 = 拒绝但给 force 逃生</strong>(后果真不确定, 用户知情后可自行裁决); <strong>case 3 = 放行</strong>。所有拒绝文案(两类均要求)按「原因 + 后果 + 出路(若有)」三段式写。</p>
     <table>
-      <tr><th>前置条件</th><th>规则侧现状</th><th>WEB 侧现状</th><th>本计划处置</th></tr>
-      <tr><td>种子已从客户端移除</td><td>—</td><td class="ok">已有: tor is None + R2 实时复核(ops_mod.py:386-394, 动手前重拉 live, 零副作用)</td><td>不动</td></tr>
-      <tr><td>部分下载(0&lt;progress&lt;1)</td><td>禁止</td><td class="ok">已有(<code>_skip_gates</code>, 零块会被标有效上传垃圾数据)</td><td>不动(与新谓词并存: 新谓词放行暂停中未完成, 本条拦其中 0&lt;p&lt;1 的安全子集)</td></tr>
-      <tr><td>同日已跳检(跨来源)</td><td>去重</td><td class="ok">已有(skip_check_day 跨来源共享)</td><td>不动</td></tr>
-      <tr><td>已完成(progress&gt;=1, 无论状态)</td><td>跳过(chain 0, checking.py:88)</td><td><span class="gap">无闸门</span> —— 用户点名项</td><td><strong>新闸门 G3</strong>(ops, 快照判)</td></tr>
-      <tr><td>活跃中(下载/做种, 非暂停)</td><td>跳过(chain 0 同条)</td><td><span class="gap">无闸门</span>(做种被中断)</td><td><strong>新闸门 G4</strong>(与 G3 同一谓词 <code>is_stopped and progress&lt;1</code>, 分状态给自解释文案)</td></tr>
-      <tr><td>组内有活跃下载成员</td><td>整组不校验(chain 1, checking.py:92)</td><td><span class="gap">无闸门</span>(共享物理文件被下载方写入, 跳检标全部块有效 = 脏数据, 属数据安全不只是语义)</td><td><strong>新闸门 G6</strong>(ops 经 store 判定, 判定原语上移 store 单点)</td></tr>
-      <tr><td>同 hash recheck 在途</td><td>chain 0/1.5 间接覆盖(校验中状态非 stopped)</td><td><span class="gap">无闸门</span>(跳检删种会杀死在途校验轮询, 校验作废)</td><td><strong>新闸门 G5</strong>(<code>ctx.task_queue.active_check_hashes()</code>, ops 现成原语)</td></tr>
-      <tr><td>组内其它成员 full-checking 在途</td><td>让位等待(chain 1.5: 等待清空后重走决策链, 通过晋升参考 / 失败由 1.6 拦截)</td><td><span class="gap">无闸门</span>(判决悬置窗口内抢跑, 失败分支=永久洗白)</td><td><strong>新闸门 G7</strong>(D4 拍板): 谓词逐字镜像 <code>others_checking</code>(full_checking.py:69-72, active_check_hashes ∪ is_checking, 后半覆盖用户手动 recheck —— G5 的队列视野看不见它); 瞬态拒绝, 校验结束自解</td></tr>
-      <tr><td>组内成员校验失败推断(chain 1.6)</td><td>失败推断 skip(四要件: 其它成员/当日计数/假失败自愈/文件映射一致)</td><td><span class="gap">无闸门</span>(确定性坏数据被标有效, 且 chain 0 永不回头)</td><td><strong>新闸门 G8</strong>(D4 拍板): 镜像四要件; 假失败自愈做只读变体 —— 记录指向已完成/已删成员时不参与推断且不 pop(闸门无副作用, 清理仍归规则侧与次日重置)</td></tr>
-      <tr><td>候选自身当日校验失败(recheck_fails[hash]&gt;0)</td><td><span class="gap">无闸门</span>(1.6 仅查其它成员; 失败冷却只限 recheck, ops_mod.py:167)</td><td><span class="gap">无闸门</span> —— 复析新发现: 两条路径都能把自身校验失败的种子洗白, 详见 <a href="../issues/26-10-05-0402-bug-skip-check-self-fail-gate.html">26-10-05-0402</a></td><td>不并入本计划(G8 须与 chain 1.6 逐字同谓词即 others-only, 纳入自身即构成规则侧行为变更, 违反方向 A 零变化不变式); 另立件单独拍板</td></tr>
-      <tr><td>前置文件缺失 / 尺寸不符</td><td>chain 4 check_filelist(两模式都查)</td><td><span class="gap">无</span> —— 复验核实: <strong>未随四阶段迁移</strong>, WEB 跳检从不查文件</td><td><strong>并入执行链</strong>: R2 live 复核后、导出前调 <code>check_filelist</code>(同模块静态方法)</td></tr>
-      <tr><td>无参考种子</td><td>告警(高风险)</td><td class="ok">由前端 danger 确认框文案承担(设计如此, ops_mod.py:370-372 自述)</td><td>不动; S4 文案增补时一并强化</td></tr>
-      <tr><td>HR 在管(未放行)种子</td><td>未核</td><td><span class="gap">无闸门</span> —— 复验核实: HR 锚点 seeding_time 取自 qB 每种统计(torrents/record.py:287-296), 跳检重加必然清零, 超额线(service.py:1358, 3×)与做种计时倒退</td><td>本期确认框文案警示(D5 推荐); 硬闸另立 issue</td></tr>
-      <tr><td>同 hash skip_check 并发</td><td>—</td><td class="ok">架构保证: 命令队列主循环串行(单一写线程), 阻塞执行体</td><td>无需闸门(矩阵备查, 防未来误加锁)</td></tr>
-      <tr><td>web.skip_check_menu 未启用</td><td>不受影响(rule 源不读此键)</td><td class="ok">已有三道: 菜单隐藏(v-if)+ 单发 403(torrent_cmds.py:56)+ 批量拒单(commands.py:586), 全 fail-closed</td><td>不动</td></tr>
+      <tr><th>前置条件</th><th>规则侧现状</th><th>WEB 侧现状</th><th>本计划处置</th><th>三分流归类</th></tr>
+      <tr><td>种子已从客户端移除</td><td>—</td><td class="ok">已有: tor is None + R2 实时复核(ops_mod.py:386-394, 动手前重拉 live, 零副作用)</td><td>不动</td><td>case 1(预检报「已不在客户端」; 执行时 R2 兜底不变)</td></tr>
+      <tr><td>部分下载(0&lt;progress&lt;1)</td><td>禁止</td><td class="ok">已有(<code>_skip_gates</code>, 零块会被标有效上传垃圾数据)</td><td>不动(与新谓词并存: 新谓词放行暂停中未完成, 本条拦其中 0&lt;p&lt;1 的安全子集)</td><td><strong>case 1</strong>: 未验证块被标有效 = 上传垃圾, 确定性坏数据; 出路 = 无(等下载完成或改用 full-checking, 文案已含)</td></tr>
+      <tr><td>同日已跳检(跨来源)</td><td>去重</td><td class="ok">已有(skip_check_day 跨来源共享)</td><td>不动</td><td><strong>case 1</strong>: 再跳零收益(跳检本身不做任何校验)且再清零一次统计 = 纯伤害; 出路 = 无需(明天自动可再跳)</td></tr>
+      <tr><td>已完成(progress&gt;=1, 无论状态)</td><td>跳过(chain 0, checking.py:88)</td><td><span class="gap">无闸门</span> —— 用户点名项</td><td><strong>新闸门 G3</strong>(ops, 快照判)</td><td><strong>case 1</strong>(用户点名): 数据已通过哈希校验, 跳检无任何意义, 只剩统计清零纯损失; 出路 = 无需</td></tr>
+      <tr><td>活跃中(下载/做种, 非暂停)</td><td>跳过(chain 0 同条)</td><td><span class="gap">无闸门</span>(做种被中断)</td><td><strong>新闸门 G4</strong>(与 G3 同一谓词 <code>is_stopped and progress&lt;1</code>, 分状态给自解释文案)</td><td><strong>case 1</strong>: 活跃且 p&lt;1 = 下载中, 同部分下载的垃圾上传危害(做种态 p=1 已被 G3 覆盖); <strong>出路 = 先暂停再跳检</strong>(暂停后 p=0 可过全部闸门) —— 有零成本自助出路, 不需要 force</td></tr>
+      <tr><td>组内有活跃下载成员</td><td>整组不校验(chain 1, checking.py:92)</td><td><span class="gap">无闸门</span>(共享物理文件被下载方写入, 跳检标全部块有效 = 脏数据, 属数据安全不只是语义)</td><td><strong>新闸门 G6</strong>(ops 经 store 判定, 判定原语上移 store 单点)</td><td><strong>case 1</strong>: force 跳检时下载方仍在写共享文件, 脏数据是确定性结局(不是赌概率); <strong>出路 = 先暂停下载方</strong>(组内暂停后 G6 过, 流程合法)</td></tr>
+      <tr><td>同 hash recheck 在途</td><td>chain 0/1.5 间接覆盖(校验中状态非 stopped)</td><td><span class="gap">无闸门</span>(跳检删种会杀死在途校验轮询, 校验作废)</td><td><strong>新闸门 G5</strong>(<code>ctx.task_queue.active_check_hashes()</code>, ops 现成原语)</td><td><strong>case 2(推荐, D8)</strong>: 强制 = 杀死在途校验(已花 I/O 作废)且不经其判决断言数据有效 —— 若数据坏则洗白; 但用户可能<strong>明知</strong>这轮校验无意义(如误发起的 recheck)想直接跳, 真不确定, 留逃生; 文案点明「将删除种子并在途校验作废」</td></tr>
+      <tr><td>组内其它成员 full-checking 在途</td><td>让位等待(chain 1.5: 等待清空后重走决策链, 通过晋升参考 / 失败由 1.6 拦截)</td><td><span class="gap">无闸门</span>(判决悬置窗口内抢跑, 失败分支=永久洗白)</td><td><strong>新闸门 G7</strong>(D4 拍板拦, 三分流归 case 2): 谓词逐字镜像 <code>others_checking</code>(full_checking.py:69-72, active_check_hashes ∪ is_checking, 后半覆盖用户手动 recheck —— G5 的队列视野看不见它)</td><td><strong>case 2(推荐, D8)</strong>: 判决窗口抢跑是<strong>真不确定</strong> —— 判决通过即证明共享文件完好(反而给了跳检依据), 判决失败则洗白坏数据, 两面都真实; 用户看完组员校验状态后自行裁决。文案: 「同组种子正在全量校验, 强制跳检将不经其判决断言数据有效; 若判决为失败, 坏数据将被永久洗白; 建议等待校验结束」</td></tr>
+      <tr><td>组内成员校验失败推断(chain 1.6)</td><td>失败推断 skip(四要件: 其它成员/当日计数/假失败自愈/文件映射一致)</td><td><span class="gap">无闸门</span>(确定性坏数据被标有效, 且 chain 0 永不回头)</td><td><strong>新闸门 G8</strong>(D4 拍板): 镜像四要件; 假失败自愈做只读变体 —— 记录指向已完成/已删成员时不参与推断且不 pop(闸门无副作用, 清理仍归规则侧与次日重置)</td><td><strong>case 1</strong>: 当日校验失败 + 文件映射一致 = 数据已被证伪, 强制跳检 = 明知坏仍标有效并上传, 无正当用途(与 G7 的「赌未定」有本质区别: 这是「赌已输」); <strong>出路 = 对该组做 full-checking</strong> 修数据</td></tr>
+      <tr><td>候选自身当日校验失败(recheck_fails[hash]&gt;0)</td><td><span class="gap">无闸门</span>(1.6 仅查其它成员; 失败冷却只限 recheck, ops_mod.py:167)</td><td><span class="gap">无闸门</span> —— 复析新发现: 两条路径都能把自身校验失败的种子洗白, 详见 <a href="../issues/26-10-05-0402-bug-skip-check-self-fail-gate.html">26-10-05-0402</a></td><td>不并入本计划(G8 须与 chain 1.6 逐字同谓词即 others-only, 纳入自身即构成规则侧行为变更, 违反方向 A 零变化不变式); 另立件单独拍板</td><td>归该件拍板(若立闸, 按 G8 同款理由应归 case 1)</td></tr>
+      <tr><td>前置文件缺失 / 尺寸不符</td><td>chain 4 check_filelist(两模式都查, 失败 → skip 整条链)</td><td><span class="gap">无</span> —— 复验核实: <strong>未随四阶段迁移</strong>, WEB 跳检从不查文件</td><td><strong>并入执行链</strong>: R2 live 复核后、导出前调 <code>check_filelist</code>(同模块静态方法); 是否同时进预检见 D9(推荐进)</td><td><strong>case 1</strong>: 存在性与尺寸是跳检的全部证据(跳检 = 只验这两个不验内容), 证据不成立即确定性坏数据 —— 缺失 → 块标有效传垃圾; 尺寸不符 → 数据已变; 路径不可判定(映射 miss)→ 保守停住, 出路 = 修 fs.path_map 配置(错误文案自带), 不给 force(给了 = 证据缺失仍上传)</td></tr>
+      <tr><td>无参考种子</td><td>告警(高风险)</td><td class="ok">由前端 danger 确认框文案承担(设计如此, ops_mod.py:370-372 自述)</td><td>不动(不入闸门); 警示文案迁入新预检对话框固定文案区</td><td>case 3 带警示: 放行但文案区显示高风险行(本就是「用户知情后自行裁决」的软形态, 不升级为 force —— 升级会改变规则侧对等语义, 超出本计划)</td></tr>
+      <tr><td>HR 在管(未放行)种子</td><td>未核</td><td><span class="gap">无闸门</span> —— 复验核实: HR 锚点 seeding_time 取自 qB 每种统计(torrents/record.py:287-296), 跳检重加必然清零, 超额线(service.py:1358, 3×)与做种计时倒退</td><td>本期对话框警示文案(D5); 硬闸另立 issue</td><td>case 3 带警示(同无参考: 损失是真但非数据坏, D5 已定文案警示, 硬闸另立件再定分流)</td></tr>
+      <tr><td>同 hash skip_check 并发</td><td>—</td><td class="ok">架构保证: 命令队列主循环串行(单一写线程), 阻塞执行体</td><td>无需闸门(矩阵备查, 防未来误加锁)</td><td>—(架构保证, 非条件)</td></tr>
+      <tr><td>web.skip_check_menu 未启用</td><td>不受影响(rule 源不读此键)</td><td class="ok">已有三道: 菜单隐藏(v-if)+ 单发 403(torrent_cmds.py:56)+ 批量拒单(commands.py:586), 全 fail-closed</td><td>不动</td><td>—(访问控制, 不属三分流; 预检端点同样挂 403 门控)</td></tr>
     </table>
     <div class="callout warn">谓词口径单点: G3/G4 的「仅暂停中未完成」必须与 checking.py:88 是<strong>同一个谓词</strong>(<code>state_enum.is_stopped and progress &lt; 1.0</code>), 实现处注释互指; stalledDL 等边缘态是否算 stopped 由 <code>state_enum</code> 现有语义决定 —— 与规则侧天然一致(同一谓词), 不引入 WEB 特有口径。实施时加一条用例把边缘态钉死(§06 T2b)。</div>
+    <div class="callout">三分流落点一句话: <strong>case 1 拒绝文案要能自解释(原因+后果+出路), case 2 拒绝文案要能让人下决心(赌注两面写清楚), case 3 不代表没有代价 —— 固定警示区永远显示统计清零/未哈希校验/(无参考)/(HR 在管)。</strong>执行路径一律不看分流标签全量重跑闸门(case 2 的 force 只影响本条是否放行), 预检与执行之间没有信任传递。</div>
   </section>
 
   <section id="s4">
@@ -184,7 +197,16 @@
       <li><strong>组级判定的落点</strong>: grouping_mod.<code>_group_has_downloading(members)</code> 的数据源全是 store(<code>by_hash</code> + <code>state_enum</code>)。上移为 <code>TorrentStore.group_has_downloading(hash)</code>(签名收 hash, 内部取 members), grouping_mod 改委托(单一真相), ops.<code>_skip_gates</code> 经 <code>self._ctx.store</code> 消费 —— 模块间不 import 的契约不破(消费的是 store 服务)。</li>
       <li><strong>filelist 检查的插入点</strong>: R2 live 复核(确认种子还在)之后、导出之前 —— live 都不在的种子不值得查文件。规则侧会双查(chain 4 一次 + ops 一次): 跳检天级低频, 一次文件列表 API + 若干 stat 可忽略, 换「执行体内不信任调用方」的单一安全真相, 值。失败语义 fail(带 <code>check_filelist</code> 错误描述), 不是 skip。</li>
       <li><strong>G5 的插入点</strong>: <code>_skip_gates</code> 内(纯内存读, 零 API 成本), 在 G3/G4 之后。文案点明后果:「跳检会删除种子, 在途校验将作废」。</li>
-      <li><strong>G7/G8 的实现要点(2026-10-05 复析补)</strong>: 谓词逐字镜像规则侧 —— G7 镜像 <code>others_checking</code>(full_checking.py:69-72), G8 镜像 <code>_skip_on_group_check_failed</code> 四要件(:123-153, others-only); 镜像偏差即规则侧行为变更, 「候选自身失败」缺口不并入(另立 26-10-05-0402)。原语全部已在 ops 可达: <code>recheck_fail_count</code> 经 checking_meta 导入(ops_mod.py:41, 依赖方向契约允许; :167 已在消费), <code>group_sizes</code>/<code>member_to_key</code> 经 <code>self._ctx.store</code>(与 G6 同路), <code>active_check_hashes</code> 已在消费(:156)。G8 自愈做只读变体(不 pop 记录); recheck_fails 含宽限耗尽/异常噪声(full_checking.py:47-49), WEB 闸门继承规则侧既有假阳性面(同日窗口+自愈条件兜底, 瞬态可重试), 不发明更锐利谓词。文案: G7「同组种子正在全量校验, 请等其结束后再跳检(校验通过即证明共享文件完好)」; G8「同组种子 X 今日校验失败且文件映射一致, 共享数据已证实有问题, 禁止跳检」。</li>
+      <li><strong>G7/G8 的实现要点(2026-10-05 复析补)</strong>: 谓词逐字镜像规则侧 —— G7 镜像 <code>others_checking</code>(full_checking.py:69-72), G8 镜像 <code>_skip_on_group_check_failed</code> 四要件(:123-153, others-only); 镜像偏差即规则侧行为变更, 「候选自身失败」缺口不并入(另立 26-10-05-0402)。原语全部已在 ops 可达: <code>recheck_fail_count</code> 经 checking_meta 导入(ops_mod.py:41, 依赖方向契约允许; :167 已在消费), <code>group_sizes</code>/<code>member_to_key</code> 经 <code>self._ctx.store</code>(与 G6 同路), <code>active_check_hashes</code> 已在消费(:156)。G8 自愈做只读变体(不 pop 记录); recheck_fails 含宽限耗尽/异常噪声(full_checking.py:47-49), WEB 闸门继承规则侧既有假阳性面(同日窗口+自愈条件兜底, 瞬态可重试), 不发明更锐利谓词。文案: G7(case 2, 赌注两面写清)「同组种子正在全量校验: 等其结束后再跳检, 校验通过即证明共享文件完好; 强制跳检将不经其判决断言数据有效, 若判决为失败坏数据将被永久洗白」; G8(case 1)「同组种子 X 今日校验失败且文件映射一致, 共享数据已证实有问题, 禁止跳检; 请先对该组做 full-checking」。</li>
+    </ul>
+    <h3>跳检三分流预检: 端点 / force 语义 / 对话框(2026-10-05 04:33 用户定向后新增)</h3>
+    <ul>
+      <li><strong>架构原则: 预检 = ops 同谓词 dry-run, 不是前端复制谓词</strong>。新增 <code>ops.skip_check_precheck(hashes) -&gt; list[verdict]</code>, 内部逐 hash 走<strong>只读变体</strong> <code>_skip_gates_detail(hash, tor) -&gt; list[GateVerdict]</code>;<code>_skip_gates</code>(执行路径)改为从 detail 派生「取首个未过闸门」—— 谓词只写一遍, 两路径同源。GateVerdict = {gate: "G3"…/"G8"/"filelist"/"partial"/"dedup", cls: "blocked"|"force"|"ok", text: 文案}; cls 就是 §03 归类, <strong>分流标签与谓词同点定义</strong>。⚠ <code>_skip_gates</code> 现有副作用(清理非当日 skip_check_day 记录, ops_mod.py:469-470)<strong>不得进入 detail 路径</strong> —— 预检必须零写入(state 不动、无 API 写、无 pop), 否则「只是看看」会改状态。</li>
+      <li><strong>端点</strong>: POST <code>/api/torrents/skip-check/precheck</code> body {hashes: [...]}(单发 = 单元素数组), 挂同一 403 门控; 经 <code>_enqueue</code> 走主循环线程(与写命令串行化, 快照无撕裂; 复用 cmd_id + waitCmd 既有通道, 前端不新开请求机制)。批量上限沿用 bulk 语义; 每 hash: 内存闸门(瞬时)+ filelist(D9 推荐: 一次 files API + N 次 stat)。回执结构: {results: [{hash, name, cls, reasons: [GateVerdict...]}], summary: {ok, force, blocked}}。</li>
+      <li><strong>force 语义(服务端裁决, 前端绕不过)</strong>: 执行请求 body 增 <code>force: true</code>; 单发 torrent_cmds.py 解析后进 payload, 批量 commands.py 透传给 <code>_bulk_skip_check_via_ops(force=...)</code> 逐 hash 下发; <code>ops.skip_check(..., force=False)</code> 新参数缺省 False —— <strong>规则侧不传, 零变化不变式保持</strong>。执行时闸门照常全跑: force=True 仅把 cls=="force" 的未过闸门降级为 warning 日志后放行, cls=="blocked" 照旧硬拒(即使请求带了 force)。强制动作记 INFO 日志(哪个 hash 豁越了哪个闸门), 留审计痕迹。</li>
+      <li><strong>预检-执行无信任传递</strong>: 预检结果只决定对话框渲染(哪些钮可用、显示什么原因), 不进任何白名单 —— 用户点确认/强制后, 执行路径重跑全部闸门; 预检到确认的窗口内状态变了(如组员开始下载), 执行时照样被拒, 回执文案自解释。force 同理只是「许可」不是「指令」: 预检说可强制、执行时校验恰好结束, force 无害(闸门已自然通过)。</li>
+      <li><strong>对话框状态机(S4, 两入口共用一个 builder)</strong>: 抽 <code>_skipCheckDialog(hashes)</code> 取代 skipCheckTorrent / skipCheckMulti 里各自为政的两个 <code>_openModal</code> 调用。共享 modal 是数据驱动的(<code>_modalInit</code> + popovers.html 模板, Vue 3), 扩展三字段即得, 既有全部对话框零变化: <code>okDisabled</code>(确认钮禁用, :disabled 绑定, 进框时 true)、<code>busy</code>(「正在检查前置条件…」行)、<code>verdict</code>(三分流渲染区)。确认钮进框即禁用 → 预检回执 → 按态切换: 全 ok → 启用确认(文案「跳检 N 个」); 有 force → 复用既有第三钮 <code>extraText</code> 当<strong>强制钮</strong>(模板里第三钮本就是 danger-solid 破坏性分支, 语义严丝合缝): ok+force 混合 = 确认钮文案「跳检 N 个可跳检的」(只送 ok 子集)+ 强制钮「强制跳检全部 N+M」(送全量+force=true); force-only = 确认钮保持禁用, 只有强制钮; 有 blocked = blocked 一律不可执行, 明细区列出。预检失败 → D10 降级: 启用普通确认、不出现强制钮、body 明示降级原因。</li>
+      <li><strong>多种子展示</strong>: 复用删除确认框的 <code>details</code> 行式明细范式(既有 modal-details 区, 行式键值 + 单行省略 + title 全文)。三段: 计数行(可跳检 N / 需强制 M / 禁止 K)+ 按原因分组行(「禁止 · 已完成 ×3: 名A, 名B, 名C…」单行省略, 同原因聚合避免 N 行重复文案)+ 单发时退化为全量原因行。分组内名称展示上限 5 个 + 「等 X 个」(title 悬停看全量可后续增强, 不阻塞本期)。固定警示区(统计清零/数据未经哈希校验/无参考高风险/HR 在管)始终显示, 与分流结果并列不互斥。</li>
     </ul>
     <h3>重新校验确认框(前端, 共用 helper)</h3>
     <ul>
@@ -208,27 +230,27 @@
       </tr>
       <tr>
         <td><strong>S1</strong></td>
-        <td>ops 闸门扩展: G3/G4(仅暂停中未完成, 谓词对照 checking.py:88 注释互指) + G5(同 hash 在途) + G6(组级, 经 store 新方法) + G7(组内校验在途, 镜像 others_checking) + G8(组内校验失败推断, 镜像 1.6 四要件+只读自愈) + filelist 检查并进 skip_check 执行链(R2 后导出前); store 新增 <code>group_has_downloading(hash)</code>, grouping_mod 改委托</td>
+        <td>ops 闸门扩展 + 三分流落地: G3/G4(仅暂停中未完成, 谓词对照 checking.py:88 注释互指) + G5(同 hash 在途, cls=force) + G6(组级, 经 store 新方法) + G7(组内校验在途, 镜像 others_checking, cls=force) + G8(组内校验失败推断, 镜像 1.6 四要件+只读自愈, cls=blocked) + filelist 检查并进执行链(R2 后导出前); 闸门改 <code>_skip_gates_detail</code> 单点(带 cls/文案, 零副作用)+ <code>_skip_gates</code> 派生; 新增 <code>skip_check_precheck(hashes)</code> dry-run; <code>skip_check(force=False)</code> 参数(force 只豁越 cls=force); store 新增 <code>group_has_downloading(hash)</code>, grouping_mod 改委托</td>
         <td><code>core/modules/ops_mod.py</code> · <code>torrents/(store)</code> · <code>core/modules/grouping_mod.py</code></td>
-        <td>§06 T1-T9 绿(含红验); test_ops / test_checking / test_grouping 全量绿</td>
+        <td>§06 T1-T9/T16-T20 绿(含红验); test_ops / test_checking / test_grouping 全量绿</td>
       </tr>
       <tr>
         <td><strong>S2</strong></td>
-        <td>WEB 回执透传核对(预计零改动): 单发 error 文案、批量 skip/fail 分桶文案经既有 ActionResult 通道自动生效; 若文案需按 WEB 语境微调只动 ops 文案常量</td>
-        <td><code>webui/commands.py</code>(预期不触)</td>
-        <td>§06 T10-T12 绿; 手动核对单发/批量拒绝回执文案自解释</td>
+        <td>路由与命令层: 新增预检端点 POST /api/torrents/skip-check/precheck(403 门控 + enqueue "skip_check_precheck")+ force 透传(单发 body.force → payload; 批量 body.force → _bulk_skip_check_via_ops); 执行回执文案核对(拒绝文案经既有 ActionResult 通道自动生效)</td>
+        <td><code>webui/server/routes/torrent_cmds.py</code> · <code>webui/commands.py</code></td>
+        <td>§06 T10-T12/T21-T22 绿; 手动核对单发/批量拒绝回执文案自解释</td>
       </tr>
       <tr>
         <td><strong>S3</strong></td>
-        <td>前端重检确认框: <code>_recheckConfirm(what)</code> + bulkAct/torrentCmd 接入 + _kbAct 改调共用 helper</td>
+        <td>前端重检确认框: <code>_recheckConfirm(what)</code> + bulkAct/torrentCmd 接入 + _kbAct 改调共用 helper(不受三分流调整影响, 原案执行)</td>
         <td><code>webui/static/shared/commands.js</code> · <code>drawer.js</code> · <code>shortcuts.js</code></td>
         <td>§06 T13 静态守卫绿; 手动三入口(批量浮条/右键/抽屉)确认框弹出、取消零副作用</td>
       </tr>
       <tr>
         <td><strong>S4</strong></td>
-        <td>跳检确认框文案增补(依赖 D5/D6 拍板): skipCheckTorrent / skipCheckMulti 的 body 补「已完成或正在做种/下载的种子会被后端拒绝」+ (D4)组员校验在途/当日校验失败警示句 + (D5)HR 在管警示句</td>
-        <td><code>webui/static/shared/drawer.js</code></td>
-        <td>文案与后端闸门口径一致(禁止项逐字对应); 既有前端用例不回归</td>
+        <td>跳检预检对话框: 共享 modal 扩展 okDisabled/busy/verdict 三字段(模板 :disabled + 三分流渲染区 + 强制钮复用 extraText 第三钮); 抽 <code>_skipCheckDialog(hashes)</code> 取代 skipCheckTorrent/skipCheckMulti 两个 _openModal(确认后按分流送 ok 子集或全量+force); 多种子按原因分组展示(计数行 + 分组行 + 上限 5); 固定警示区(统计清零/未哈希校验/无参考/HR D5); 预检失败降级路径(D10)</td>
+        <td><code>webui/static/shared/ui_feedback.js</code> · <code>tpl/popovers.html</code> · <code>drawer.js</code></td>
+        <td>§06 T23-T24 绿; 手动走查三态 + 混合批次 + 预检失败降级(断后端)三场景</td>
       </tr>
       <tr>
         <td><strong>S5</strong></td>
@@ -257,6 +279,9 @@
       <tr><td>T9</td><td>test_store_group_has_downloading</td><td>store 新方法直接单测 + grouping_mod 委托等价断言; test_grouping 既有用例锁行为不回归</td><td>—</td></tr>
       <tr><td>T16</td><td>test_skip_gates_rejects_group_checking_inflight</td><td>组内其它成员在途两半各一例: 队列登记(active_check_hashes)与 store is_checking(后者覆盖用户手动 recheck)→ is_failed, 文案含「校验中/等待」; 在途清空后放行; 零副作用</td><td>摘 G7</td></tr>
       <tr><td>T17</td><td>test_skip_gates_rejects_group_check_failed</td><td>组内其它成员当日 recheck_fails&gt;0 且同映射 → is_failed, 文案含「校验失败」; 负样本: 文件映射不一致放行 / 记录指向已完成成员放行(自愈不参与) / 非当日放行; 断言 G8 路径不 pop 记录(只读自愈); 零副作用</td><td>摘 G8</td></tr>
+      <tr><td>T18</td><td>test_skip_gates_detail_classification</td><td><code>_skip_gates_detail</code> 三态归类断言: G5/G7 场景 → cls=force; G3/G4/G6/G8/filelist/部分下载/同日去重场景 → cls=blocked; 全过 → 空列表; 执行路径 <code>_skip_gates</code> 与 detail 首个未过闸门一致(同源断言, 防两套谓词漂移)</td><td>摘 detail 与 _skip_gates 的派生关系</td></tr>
+      <tr><td>T19</td><td>test_skip_check_force_semantics</td><td>force=True: G5/G7 场景放行成功(闸门降级为 warning 日志); G3/G6/G8/filelist 场景仍 is_failed(带原文案); force 缺省 False 全拒; 断言 force 豁越留 INFO 审计日志; 规则源调用点不传 force(签名缺省即证明)</td><td>摘 force 分支(所有闸门对 force 硬拒 → G5 放行场景必红)</td></tr>
+      <tr><td>T20</td><td>test_skip_check_precheck_readonly</td><td><code>skip_check_precheck</code> 前后 ops.state 深比对不变(skip_check_day 不写入不 prune)、无任何 qB 写 API(mock 断言仅 torrents_info/torrents_files 只读面)、种子零变动</td><td>把 _skip_gates 的 prune 逻辑误并入 detail 路径必红</td></tr>
     </table>
     <h3>web 层(tests/test_web.py)</h3>
     <table>
@@ -264,11 +289,15 @@
       <tr><td>T10</td><td>test_web_skip_check_completed_rejected_receipt</td><td>单发已完成种子 → 回执 error, ops 拒绝文案透传(_cmd_skip_check_torrent 回执映射)</td></tr>
       <tr><td>T11</td><td>test_web_bulk_skip_check_mixed_outcome</td><td>批量混合目标(1 已完成 + 1 暂停未完成)→ 聚合回执: 成功/失败计数正确、失败文案自解释</td></tr>
       <tr><td>T12</td><td>门控不回归</td><td>skip_check_menu 关 → 单发 403 / 批量拒单语义不变(既有用例保持)</td></tr>
+      <tr><td>T21</td><td>test_web_precheck_endpoint</td><td>POST /api/torrents/skip-check/precheck: 回执结构 {results:[{hash,name,cls,reasons}], summary:{ok,force,blocked}}; 403 门控同单发; 未知 hash → cls=blocked 文案「已不在客户端」; 空 hashes → 400/空回执</td></tr>
+      <tr><td>T22</td><td>test_web_force_passthrough</td><td>单发 body.force=true → ops.skip_check 收到 force=True(mock 断言 kwarg); 批量 body.force=true → _bulk_skip_check_via_ops 逐 hash 透传; 缺省不传 → force=False; force=true 时 case 1 闸门拒绝文案照常进回执</td></tr>
     </table>
     <h3>前端静态守卫(tests/test_web.py)</h3>
     <table>
       <tr><th>#</th><th>用例</th><th>断言要点</th></tr>
       <tr><td>T13</td><td>test_recheck_confirm_wired_all_mouse_entries</td><td>静态断言 JS 源码: bulkAct 含 recheck 确认分支、drawer.js torrentCmd 含 recheck 确认分支、shortcuts.js _kbAct 调共用 helper —— 三锚点任一被重构摘除即红</td></tr>
+      <tr><td>T23</td><td>test_skip_check_dialog_precheck_wired</td><td>静态断言: _modalInit 声明 okDisabled/busy/verdict 字段、popovers.html 确认钮含 :disabled="modal.okDisabled" 绑定、drawer.js 两入口(skipCheckTorrent/skipCheckMulti)均走 _skipCheckDialog 并发预检请求、强制钮复用 extraText 通道 —— 任一被重构摘除即红</td></tr>
+      <tr><td>T24</td><td>test_skip_check_dialog_verdict_render</td><td>静态断言渲染逻辑: blocked 子集永不产生可执行钮、force 混合态确认钮只送 ok 子集而强制钮送全量+force、预检失败降级分支启用普通确认且不渲染强制钮、分组展示含上限截断</td></tr>
     </table>
     <h3>全量与真机</h3>
     <ul>
@@ -287,8 +316,12 @@
       <tr><td>快照龄(组级/状态判定基于 ≤2s 龄快照)</td><td>与 grouping 现状同源同龄, 无新增陈旧面; R2 实时复核继续兜底存在性。极端竞态(判定后瞬间恢复做种)由确认框+天级低频兜住, 不加额外 API 轮次。</td></tr>
       <tr><td>G7/G8 误拦面(校验战役窗口长; recheck_fails 含 giveup/异常噪声)</td><td>拒绝均瞬态自解: 校验结束 / 次日重置 / 自愈条件不参与; 文案自带出路(等校验结束后重试, 通过即安全 —— 等到的判决反而给跳检提供依据); 噪声沿用规则侧 2026-09-25 起的既有接受面(自愈+同日窗口), 不发明更锐利谓词。</td></tr>
       <tr><td>filelist 双查成本</td><td>跳检天级低频 + 一次文件列表 API + 若干 stat; 换执行体单一安全真相, 值(§04 已论证)。</td></tr>
-      <tr><td>前端确认框打扰</td><td>仅 recheck 一类动作 + 取消零副作用 + 文案与键盘路径一致(心智统一); 跳检确认框只加一句文案, 交互形态不变。</td></tr>
-      <tr><td>回滚</td><td>S1-S4 独立提交单步 revert; 全部新闸门集中在 <code>_skip_gates</code> 单点, 摘除即回旧行为; filelist 检查独立一处, 同理。</td></tr>
+      <tr><td>预检-执行窗口漂移(确认前后状态变了)</td><td>预检与执行之间<strong>无信任传递</strong>(§04): 执行路径重跑全部闸门, 漂移场景(组员开始下载/校验恰好启动)由既有闸门在执行时拒绝, 回执文案自解释; force 只是许可不是指令 —— 预检判可强制、执行时条件已自然消失, force 无害。真机走查(T15)覆盖一例漂移。</td></tr>
+      <tr><td>预检阻塞主循环(D9 filelist 进预检)</td><td>预检经 enqueue 在主循环线程执行, 每 hash 一次 files API + N 次 stat, 约百 ms 级/hash; 50 种批量约数秒 —— 期间其它命令排队(与单次跳检执行 ~6s 同量级, 天级低频)。预检对话框期间确认钮本就禁用, 用户无感。若真机实测超预期: 回退选项 = 预检仅内存闸门(D9 备选), filelist 退回执行时核验, 单步可切(S1 的 detail 结构不变, 只减 filelist 一步)。</td></tr>
+      <tr><td>force 通道被直调(绕过前端对话框)</td><td>force 语义在服务端裁决(§04): 只豁越 G5/G7 两个瞬态闸门, G3/G4/G6/G8/filelist/部分下载/去重对 force 一律硬拒 —— 直调 API 拿到的最大自由 = 用户在对话框里本来就能拿到的强制自由, 无放大面; force 豁越留 INFO 审计日志(T19)。</td></tr>
+      <tr><td>预检请求失败把用户挡在门外</td><td>D10 降级路径: 启用普通确认(= 今天的行为, 后端闸门照拦), 不出现强制钮 —— 预检是增强不是硬依赖; force 必须先见赌注才出现, 降级路径永不提供 force。</td></tr>
+      <tr><td>前端确认框打扰</td><td>仅 recheck 一类动作 + 取消零副作用 + 文案与键盘路径一致(心智统一); 跳检确认框升级为预检对话框后多一次预检请求(本地环回, 百 ms 级), 换确认前看到全部后果与出路。</td></tr>
+      <tr><td>回滚</td><td>S1-S4 独立提交单步 revert; 全部新闸门集中在 <code>_skip_gates</code> 单点, 摘除即回旧行为; filelist 检查独立一处, 同理; 预检端点/force 参数/对话框扩展三者各自独立, 摘预检腿即回到「点后报错」形态而不触碰闸门本身。</td></tr>
     </table>
   </section>
 
@@ -297,11 +330,12 @@
     <ul>
       <li>2026-10-05 03:14 — 建档(Open, 待拍板)。认领 26-10-05-0254 两个姊妹件; 完成复验与 §03 前置条件核对矩阵(两项「待核」已核实: filelist 未迁移、HR 计时受扰); 拍板点 D1-D7 全部附推荐。</li>
       <li>2026-10-05 04:02 — 复析修订(D4 拍板翻转)。组内其它成员 full-checking 在途(1.5)与组内成员校验失败推断(1.6)由「不拦」改「拦」, 新增闸门 G7/G8(谓词逐字镜像规则侧, G8 假失败自愈只读变体)。动机: 原「不拦」论据反驳的是 I/O 冲突, 危害实在数据准确性 —— 1.5 实为等判决时序(full_checking.py:60-62)而非省 I/O, 1.6 是确定性坏数据证据与 D3 同范畴; G3-G6+确认框对该场景零覆盖(filelist 只查存在与尺寸); 洗白经 chain 0 永久化(zSkipChecked 自证未验证却无机制回头); 用户不观察组员状态且确认框不透出, 误操作面大。前置条件 5 条→7 条; §04 增 G7/G8 实现要点; §06 增 T16/T17(含负样本与只读自愈断言); §07 增误拦面风险行。复析另发现「候选自身当日校验失败无闸门」缺口(规则侧 without_reference 段与 WEB 路径共有; 不并入本计划以防破坏规则侧零变化), 已入池 <a href="../issues/26-10-05-0402-bug-skip-check-self-fail-gate.html">26-10-05-0402</a>。</li>
+      <li>2026-10-05 04:33 — 交互三分流修订(用户定向: 可行性复核后并入)。WEB 跳检流改为「点跳检 → 确认框先开但确认钮禁用 → 预检请求 → 后端同谓词 dry-run 判定 → 前端按三态处理」: case 1 禁止(已完成/活跃/部分下载/组内下载/G8 组内校验失败/filelist 失败/同日去重 —— 确定性危害或零收益, 无逃生)、case 2 需显式强制(G5 同 hash 在途/G7 组内校验在途 —— 真不确定, 给逃生通道)、case 3 可跳检; case 1/2 文案按「原因+后果+出路」三段式。可行性结论: <strong>可行且强化原架构</strong> —— 预检做成 ops 层 dry-run(谓词单点不破, D6 灰置否决理由不适用), 执行路径闸门原样全跑(预检-执行无信任传递, 防护面不减), force 服务端裁决只豁越 case 2 且缺省 False(规则侧零变化不变式保持), 前端复用数据驱动 modal(删除框 details 行式范式 + extra 第三钮当强制钮, Vue 3 扩展向后兼容)。核实要点: _skip_gates 的 prune 副作用不得进预检路径(T20 钉死); filelist 进预检的成本量化见 §07(50 种约数秒, 有回退选项)。拍板点: D1/D2/D6 已随定向消解(标注已定), D4 细分(G8=case 1 / G7=case 2, 原「均拦」保留), 新增 D8(case 2 集合)/D9(filelist 入预检)/D10(预检失败降级)。§02 链路图增预检腿; §03 矩阵增三分流归类列; §04 增端点/force/对话框状态机/多种子展示设计; §05 S1-S4 改写; §06 增 T18-T24; §07 增 4 行风险。预期改动修正: webui 路由/commands 由「预计零改动」改「小改(预检端点 + force 透传)」。</li>
     </ul>
   </section>
 
   <footer>
-    26-10-05-0314-plan-webui-danger-guards.html · 状态 Open(待拍板) — 拍板后按 §05 分步实施, 状态随实施推进在本节留痕
+    26-10-05-0314-plan-webui-danger-guards.html · 状态 Open(待拍板 D3/D7/D8-D10) — 拍板后按 §05 分步实施, 状态随实施推进在本节留痕
   </footer>
 
 </div>
