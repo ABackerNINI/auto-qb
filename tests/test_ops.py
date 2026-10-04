@@ -11,10 +11,13 @@
 - test_ops_rule_recheck_success_once_after_evidence: rule 源全序列 on_success 恰 1 次且只发生在见证据之后(带序号回调) (S2a)
 - test_ops_recheck_wait_result_zero_api_calls: 等待期(证据立起前后)多跳 torrents_info 计数 == 0, 周期观测纯快照读(等价性红线) (S2a)
 - test_ops_recheck_poll_reads_live_record_fresh_progress: 闭包不缓存字段值: 中途改 store 活记录 progress, 下一跳读到新值(回落跌破基线判败, 标「progress 回落」) (S2a)
+- test_ops_recheck_giveup_arbitration_extends_grace: 超宽限 + 仲裁直查见真校验态(快照滞后) -> 延长一次宽限不判败, 快照跟上后正常 SUCCESS, 全程直查恰 1 次 (S2b)
+- test_ops_recheck_giveup_arbitration_not_checking_fails: 超宽限 + 仲裁直查见非校验态 -> 判败序列不变(冷却 +1 / origin 重入队), 日志报真实等待时长 (S2b)
+- test_ops_recheck_giveup_arbitration_api_error_fails: 超宽限 + 仲裁直查异常 -> fail-closed 同判败不走外层异常路径; D5 延期后第二次宽限耗尽不再直查直接判败 (S2b)
 - test_ops_skip_check_day_shared_across_sources: 跳检同日去重跨来源共享(web 先跳, 规则同日再跳被拒)
 - test_ops_web_skip_check_no_highrisk_warning: web 源不产生「无参考跳检(高风险)」告警(规则侧语义不泄漏进 WEB)
 - test_ops_web_recheck_poll_torrent_deleted_no_origin: 轮询期间种子删除且无 origin -> 消亡无重入队 (P2-a)
-- test_ops_web_recheck_start_giveup_timeout: 宽限耗尽未见 checking(web 源) -> 判败不计冷却 (P2-a)
+- test_ops_web_recheck_start_giveup_timeout: 宽限耗尽仲裁直查见非校验态(web 源, S2b 补 live 应答) -> 判败不计冷却 (P2-a)
 - test_ops_recheck_poll_exception_releases_and_requeues: 轮询异常 -> 释放在途; rule 源 origin 重入队 (P2-a)
 - test_ops_recheck_duplicate_task_guard: 登记点兜底 add_task 失败 -> skip 不发送 (P2-a)
 - test_ops_skip_check_live_recheck_api_error: 跳检前实时复核 API 异常 -> fail 零副作用 (P2-a)
@@ -334,6 +337,141 @@ def test_ops_recheck_poll_reads_live_record_fresh_progress():
 
 
 # ============================================================
+# C. 启动超时仲裁直查(plan 26-10-04-1824 S2b, D5): 判「启动超时」前对 qB 一次性单 hash 直查
+# ============================================================
+def test_ops_recheck_giveup_arbitration_extends_grace():
+    """测试: 超宽限 + 仲裁直查见真校验态(快照滞后看不见) -> 延长一次宽限继续纯快照观测, 不判败;
+    快照跟上后走正常 SUCCESS 序列; 全程 torrents_info 恰 1 次(仲裁后观测零 API, 等价性红线)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = seed_paused(mgr, client)  # store 快照: pausedDL(同步线暂停/滞后的旁观视角)
+    client.torrents["HA"] = FakeTorrent(hash="HA", state="checkingDL")  # qB 真值: 已在校验(与快照分离)
+    fired = []
+    origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin, on_success=lambda: fired.append(1))
+    assert r.is_pending, f"rule 源应 pending: {r}"
+    now = time.time()
+    real_time = time.time
+    try:
+        time.time = lambda: now + 601.0  # 整体平移时钟模拟 600s 宽限耗尽
+        with capture_ops_logs() as logs:
+            run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查见 checkingDL -> 延长一次宽限
+    finally:
+        time.time = real_time
+    assert any("延长一次宽限" in m and "601s" in m for m in logs), f"应有延长日志且报真实已等时长: {logs}"
+    assert not any("校验启动超时" in m for m in logs), f"延期不得判败: {logs}"
+    assert "HA" in mgr.task_queue.active_check_hashes(), "延期后轮询须存活"
+    assert not any(task is origin for task in mgr.task_queue._fast), "延期不判败, origin 不得重入队"
+    assert client.info_calls == 1, f"仲裁直查恰一次: {client.info_calls}"
+    # 快照跟上(此后观测零 API): 证据闩 -> 完成, 正常 SUCCESS 序列
+    t.state = "checkingDL"
+    run_queue(mgr, now + 603.0)  # 快照翻 checkingDL: 生效证据 -> REQUEUE
+    assert "HA" in mgr.task_queue.active_check_hashes(), "证据跳仍在校验中, 登记须持有"
+    t.state = "pausedUP"
+    t.progress = 1.0
+    run_queue(mgr, now + 605.0)  # 证据之后回 completed: 真判定成功
+    assert fired == [1], f"延期后应走正常 SUCCESS 序列: {fired}"
+    assert any(task is origin for task in mgr.task_queue._fast), "成功后 origin 应重入队"
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "成功后轮询消亡释放在途"
+    assert client.info_calls == 1, f"仲裁后快照观测仍零 API: {client.info_calls}"
+
+
+def test_ops_recheck_giveup_arbitration_not_checking_fails():
+    """测试: 超宽限 + 仲裁直查见非校验态(快照与 qB 真值一致, 确未开检) -> 判败序列不变
+    (rule 源冷却计数 +1 / origin 默认重置重入队), 日志报真实等待时长(非固定宽限常量)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client)  # store 快照与 live 应答同为 pausedDL(非真校验态)
+    origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
+    assert r.is_pending, f"rule 源应 pending: {r}"
+    now = time.time()
+    real_time = time.time
+    try:
+        time.time = lambda: now + 601.0
+        with capture_ops_logs() as logs:
+            run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查见 pausedDL -> 判败
+    finally:
+        time.time = real_time
+    assert any("校验启动超时" in m and "601s" in m for m in logs), f"应判启动超时且报真实时长: {logs}"
+    assert mgr.state["recheck_fails"]["HA"]["count"] == 1, "直查未见校验态: 判败序列不变(冷却 +1)"
+    assert any(task is origin for task in mgr.task_queue._fast), "判败后 origin 应默认重置重入队"
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "判败后轮询消亡释放在途"
+    assert client.info_calls == 1, f"仲裁直查恰一次: {client.info_calls}"
+
+
+def test_ops_recheck_giveup_arbitration_api_error_fails():
+    """测试: 超宽限 + 仲裁直查 API 异常 -> 与「未见」同判 fail-closed 判败(异常分支内吃掉,
+    不走「校验轮询异常」外层路径); D5 仲裁恰 1 次: 直查延期后第二次宽限耗尽不再直查直接判败"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    # ---- 第 1 段: 直查异常 -> 判败序列原样(冷却 +1 / origin 重入队 / 真实时长日志) ----
+    t = seed_paused(mgr, client)
+    origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
+    assert r.is_pending, f"rule 源应 pending: {r}"
+    direct = []
+
+    def boom(torrent_hashes=None, **kw):
+        direct.append(torrent_hashes)
+        raise RuntimeError("api down")
+
+    client.torrents_info = boom
+    now = time.time()
+    real_time = time.time
+    try:
+        time.time = lambda: now + 601.0
+        with capture_ops_logs() as logs:
+            run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查抛异常 -> 分支内吃掉, 按未见判败
+    finally:
+        time.time = real_time
+    assert len(direct) == 1, f"仲裁直查应恰一次: {direct}"
+    assert not any("校验轮询异常" in m for m in logs), f"异常须分支内吃掉, 不走外层路径: {logs}"
+    assert any("仲裁直查失败" in m for m in logs), f"直查异常应有独立告警: {logs}"
+    assert any("校验启动超时" in m and "601s" in m for m in logs), f"应判启动超时且报真实时长: {logs}"
+    assert mgr.state["recheck_fails"]["HA"]["count"] == 1, "直查异常与未见同判: 冷却 +1"
+    assert any(task is origin for task in mgr.task_queue._fast), "判败后 origin 应默认重置重入队"
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "判败后轮询消亡释放在途"
+    # ---- 第 2 段(D5): 直查见真校验态延期一次, 第二次宽限耗尽不再直查直接判败 ----
+    t2 = seed_paused(mgr, client, hash="HB")
+    origin2 = Task("rule", "rule-test-hb", hash="HB", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r2 = mgr.ctx.ops.recheck("HB", source="rule", origin=origin2)
+    assert r2.is_pending, f"rule 源应 pending: {r2}"
+    live_calls = []
+
+    def flaky_info(torrent_hashes=None, **kw):
+        client.info_calls += 1
+        live_calls.append(torrent_hashes)
+        if len(live_calls) > 1:  # D5 违约(第二次直查)在此炸出, 判定却仍 fail-closed -> 靠计数断言抓
+            raise RuntimeError("D5 violation: second direct query")
+        return [FakeTorrent(hash="HB", state="checkingDL")]  # qB 真值在校验(快照看不见)
+
+    client.torrents_info = flaky_info
+    info_calls_before = client.info_calls
+    now2 = time.time()
+    try:
+        time.time = lambda: now2 + 601.0
+        with capture_ops_logs() as logs2:
+            run_queue(mgr, now2 + 601.0)  # 第一次宽限耗尽: 仲裁直查见 checkingDL -> 延长一次
+            time.time = lambda: now2 + 1202.0
+            run_queue(mgr, now2 + 1202.0)  # 第二次宽限耗尽: 不再直查, 直接判败(D5)
+    finally:
+        time.time = real_time
+    assert len(live_calls) == 1, f"D5: 直查不得超一次: {live_calls}"
+    assert client.info_calls - info_calls_before == 1, f"D5: 直查计数恰 +1: {client.info_calls}"
+    assert sum("延长一次宽限" in m for m in logs2) == 1, f"延期只发生一次: {logs2}"
+    assert any("校验启动超时" in m and "601s" in m for m in logs2), f"第二次宽限耗尽应直接判败: {logs2}"
+    assert not any("校验轮询异常" in m for m in logs2), f"不得走外层异常路径: {logs2}"
+    assert mgr.state["recheck_fails"]["HB"]["count"] == 1, "第二次宽限耗尽应判败计冷却"
+    assert any(task is origin2 for task in mgr.task_queue._fast), "判败后 origin2 应默认重置重入队"
+    assert "HB" not in mgr.task_queue.active_check_hashes(), "判败后轮询消亡释放在途"
+    assert t2.state == "pausedDL", "判败不得改动种子状态"
+
+
+# ============================================================
 # B. ops_skip_check: 跨来源共享去重 + 告警按来源
 # ============================================================
 def test_ops_skip_check_day_shared_across_sources():
@@ -379,11 +517,12 @@ def test_ops_web_recheck_poll_torrent_deleted_no_origin():
 
 
 def test_ops_web_recheck_start_giveup_timeout():
-    """测试: 宽限耗尽仍未见 checking(web 源) -> 判败防活锁, 不计冷却(origin=None 直接消亡)"""
+    """测试: 宽限耗尽仍未见 checking(web 源) -> 仲裁直查见非校验态(live 应答 = 暂停种子)判败
+    防活锁, 不计冷却(origin=None 直接消亡); 判败原语义保持(S2b)"""
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
-    t = seed_paused(mgr, client)
+    t = seed_paused(mgr, client)  # client.torrents["HA"] = t: 仲裁直查的 live 应答(pausedDL 非校验态)
     r = mgr.ctx.ops.recheck("HA", source="web")
     assert r.is_ok
     t0 = time.time()
@@ -398,6 +537,7 @@ def test_ops_web_recheck_start_giveup_timeout():
     assert "HA" not in mgr.task_queue.active_check_hashes(), "宽限耗尽判败后轮询应消亡"
     assert "HA" not in mgr.state.get("recheck_fails", {}), "web 源不计冷却"
     assert t.state == "pausedDL", "判败不得改动种子状态"
+    assert client.info_calls == 1, f"仲裁直查应恰一次(fail-closed 落判败): {client.info_calls}"
 
 
 def test_ops_recheck_poll_exception_releases_and_requeues():

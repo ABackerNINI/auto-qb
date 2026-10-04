@@ -131,6 +131,8 @@ class OpsModule(BaseModule):
         轮询单跳判定统一走 checking_meta.poll_verdict 证据门控(plan 26-10-04-1824): 成功结论
         必须有生效证据(真全量校验态, 排除启动期简历校验伪证据)背书 —— 未见证据时对 completed
         旧快照不下成功结论(WAITING 继续等), 未见证据而 progress 回落(数据缺损签名)提前判败。
+        宽限耗尽的启动超时分支在判超时前做一次性仲裁直查(D5): 快照同步线暂停/滞后时对 qB
+        单 hash 直查核实, 见真校验态延长一次宽限(仍纯快照观测), 未见或直查异常判败(fail-closed)。
 
         返回 ActionResult: rule 源 pending(规则断点, 规则任务本轮不重入队, 恢复由轮询负责) /
         web 源 ok(已提交, 结果经快照可见) / skip(R1 拒绝或冷却) / fail(发送失败)。
@@ -171,7 +173,10 @@ class OpsModule(BaseModule):
                issue 26-10-03-1140);
             3. 未见证据而 progress 回落(< baseline_progress) -> FAILED(数据缺损签名, 标签
                「progress 回落」, 先于超时判定);
-            4. 宽限耗尽仍无证据 -> START_TIMEOUT 判败(活锁保险丝; 仲裁直查在后续阶段接入);
+            4. 宽限耗尽仍无证据 -> START_TIMEOUT: 判超时前先做一次性仲裁直查(plan 26-10-04-1824
+               D5, 事件驱动, 本轮询生命周期至多 1 次)—— 快照同步线可能暂停/滞后而 qB 真在校验,
+               对 qB 单 hash 直查核实: 见真校验态 -> 重置宽限窗口延长一次, 回到纯快照观测;
+               未见或直查异常 -> 判败(活锁保险丝, fail-closed);
             5. 其余歧义 -> WAITING 继续等(recheck 异步应用 + 快照按 sync_interval 节拍滞后,
                首样本竞态修复语义并入)。
 
@@ -180,7 +185,7 @@ class OpsModule(BaseModule):
             也不得改为每次 torrents_info 直查(把 2s 轮询变成 API 轰炸) —— 周期观测是纯
             快照读, 零 API; 终局处置里的写动作(auto_start)不受此限。
             """
-            nonlocal submitted, submitted_at, seen_checking
+            nonlocal submitted, submitted_at, seen_checking, arbitrated
             try:
                 if not submitted:
                     return FINISHED  # recheck 发送失败: 登记的轮询直接消亡(释放在途登记)
@@ -241,19 +246,41 @@ class OpsModule(BaseModule):
                     if origin is not None:
                         tq.add_task(origin)  # 默认重置: 重走完整决策链(重新校验)
                 else:  # PollVerdict.START_TIMEOUT
-                    # 宽限耗尽仍未见校验启动: 判败防轮询活锁(qB 重启丢请求等极端情形);
-                    # 判败后 origin 重走决策链会重新提交, 请求恢复生效后自然续上
-                    # (本阶段保持现状判败序列; 仲裁直查在后续阶段接入, 计划 26-10-04-1824)
+                    # 宽限耗尽仍未见校验启动: 判超时前先仲裁直查(D5, 事件驱动一次性)—— 快照
+                    # 同步线可能暂停/滞后(暂停旁观 pause_event / 同步线故障), qB 可能真在校验
+                    # 而快照看不见; 本生命周期内至多仲裁 1 次, 第二次宽限耗尽直接判败
+                    elapsed_now = time.time() - submitted_at  # 真实等待时长(日志用; 须在宽限重置前取)
+                    if not arbitrated:
+                        arbitrated = True
+                        try:
+                            live = self._ctx.api.torrents_info(torrent_hashes=hash)
+                        except Exception as e:
+                            # 直查异常与「未见」同判(fail-closed): 异常在分支内吃掉, 不走外层
+                            # 「校验轮询异常」路径, 判败序列原样(计划 26-10-04-1824)
+                            logger.warning(f"{prefix} {rec.log_repr} | 启动超时仲裁直查失败({e}), 按未见校验判败")
+                            live = []
+                        if live and is_piece_checking(live[0].state):
+                            # qB 实际在校验(快照看不见): 延长一次宽限, 重置窗口后继续纯快照观测
+                            # (证据照常经闩/verdict 判定, 观测零 API 不变)
+                            submitted_at = time.time()
+                            logger.info(
+                                f"{prefix} {rec.log_repr} | "
+                                f"启动超时仲裁: qB 实际在校验而快照未见, 已等 {elapsed_now:.0f}s, 延长一次宽限继续观测"
+                            )
+                            return REQUEUE
+                        # 直查未见真校验态(空=种子已不在 / 非 checking / 异常): 落判败序列
+                    # 判败防轮询活锁(qB 重启丢请求等极端情形); 判败后 origin 重走决策链会重新
+                    # 提交, 请求恢复生效后自然续上; 日志报真实等待时长(计划 §10 R4, 判「启动超时」语义不变)
                     if source == "rule":
                         fail_count = bump_recheck_fail(self._ctx.state, hash)
                         logger.warning(
                             f"{prefix} {rec.log_repr} | "
-                            f"校验启动超时({CHECK_START_GIVEUP:.0f}s 未见 checking, 第{fail_count}次, progress={rec.progress})"
+                            f"校验启动超时({elapsed_now:.0f}s 未见 checking, 第{fail_count}次, progress={rec.progress})"
                         )
                     else:
                         logger.warning(
                             f"{prefix} {rec.log_repr} | "
-                            f"校验启动超时({CHECK_START_GIVEUP:.0f}s 未见 checking, progress={rec.progress})"
+                            f"校验启动超时({elapsed_now:.0f}s 未见 checking, progress={rec.progress})"
                         )
                     if origin is not None:
                         tq.add_task(origin)  # 默认重置: 重走完整决策链(重新校验)
@@ -267,6 +294,7 @@ class OpsModule(BaseModule):
         submitted = False  # recheck 是否发送成功(先登记后发送; 失败时轮询子任务据此消亡)
         submitted_at = time.time()  # 校验启动宽限窗口起点(recheck 发送成功时刻)
         seen_checking = False  # 本轮询周期内是否观察到过生效证据(成功结论的必要背书)
+        arbitrated = False  # 本轮询生命周期内是否已仲裁过(启动超时判败前的一次性直查, D5 至多 1 次)
         # 提交点进度基线(P1 之前取 store 快照值, 语义偏保守安全): 未见证据时 progress 回落
         # 即数据缺损签名(校验发现坏块), 据此提前判败 —— 闭包内存态, 不入 taskqueue/state_file
         baseline_progress = tor.progress if tor is not None else 0.0
