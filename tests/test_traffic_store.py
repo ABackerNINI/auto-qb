@@ -89,9 +89,18 @@ v3 写侧存储族(plan 26-10-04-1957 S2a, TrafficV3Store):
 - test_v3_store_evict_expired_series: S2b 系列按龄淘汰新口径(§04.5) —— 超龄删整目录(天文件+agg.dat, 龄期
   由文件名日期算); 边界(恰 window)不动; 无天文件保守跳过; 全局结构性豁免; 删除失败保留下轮重试
 
+v3 读侧解析缓存族(plan 26-10-04-1957 S3a §05.2, V3DayCache):
+- test_v3_day_cache_hit_and_invalidate: mtime+size 键控解析缓存 —— 未变命中(同一解析对象零重解析) /
+  追加变 size 失效 / 裁剪重写变小失效(两向都变); 缺失文件缓存 None 哨兵(文件出现后 stat 键变化自然失效)
+- test_v3_day_cache_window_reads_only_involved_files: 按天加载(24h 窗只开 2 个日期文件, open 计数断言) ——
+  read_window 按 v3_window_dates 只读涉及日期天文件, 目录内其余天文件零 open; 日期升序; 窗口重查零新 open
+- test_v3_day_cache_budget_lru: 字节预算 LRU —— 驻留条目文本总量 <= budget, 超出最久未用先逐出
+  (恒保留最新读入的一条); 命中刷新新近度
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
+import builtins
 import json
 import os
 import threading
@@ -100,6 +109,7 @@ from datetime import datetime
 
 import pytest
 
+import auto_qb.core.traffic_store as traffic_store_module
 from auto_qb.config import QbTraffic
 from auto_qb.core.modules.traffic_sample_mod import GLOBAL_SERIES_KEY, TASK_NAME, TrafficSampleModule
 from auto_qb.core.taskqueue import Task
@@ -123,6 +133,7 @@ from auto_qb.core.traffic_store import (
     TrafficDatStore,
     TrafficV3Store,
     V3Block,
+    V3DayCache,
     V3HourSample,
     V3NullRun,
     V3Sample,
@@ -1898,3 +1909,110 @@ def test_v3_store_evict_expired_series(tmp_path, monkeypatch):
     assert os.path.exists(v3_series_dir(str(tmp_path), "torrent:OLD"))  # 目录保留下轮重试
     monkeypatch.undo()
     assert st.evict_expired_series(now, window) == ["torrent:OLD"]  # 下轮重试成功
+
+
+# ---------- v3 S3a 读侧: 按天解析缓存(plan 26-10-04-1957 §05.2, V3DayCache) ----------
+
+
+def _write_v3_day(data_dir, key, date, text):
+    """测试助手: 直接落一个天文件(不经写侧批量纪律)"""
+    path = v3_day_file_path(data_dir, key, date)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    return path
+
+
+def test_v3_day_cache_hit_and_invalidate(tmp_path, monkeypatch):
+    """解析缓存命中与失效两向(验收): 未变命中(不重读不重解析, 同一解析对象) /
+    追加变 size 失效 / 裁剪重写变小失效(mtime+size 键控, 两向都变); 缺失文件缓存 None
+    (文件此后出现则 stat 键变化自然失效)"""
+    data_dir = str(tmp_path)
+    d = "2026-10-04"
+    text = format_v3_day_text("global", (V3Block(1000, 30, (V3Sample(1, 1, 10, 20), )), ))
+    _write_v3_day(data_dir, "global", d, text)
+    calls = []
+    real_parse = traffic_store_module.parse_v3_day_text
+
+    def counting_parse(t):
+        calls.append(1)
+        return real_parse(t)
+
+    monkeypatch.setattr(traffic_store_module, "parse_v3_day_text", counting_parse)
+    cache = V3DayCache(data_dir)
+    p1 = cache.read_day("global", d)
+    assert p1 is not None and p1.key == "global" and calls == [1]
+    assert cache.read_day("global", d) is p1  # 未变命中: 同一解析对象, 零重解析
+    assert calls == [1]
+    # 追加(size 变大) -> 失效重解析
+    bigger = format_v3_day_text("global", (V3Block(1000, 30, (V3Sample(1, 1, 10, 20), V3Sample(2, 2, 20, 40))), ))
+    _write_v3_day(data_dir, "global", d, bigger)
+    p2 = cache.read_day("global", d)
+    assert calls == [1, 1] and len(p2.blocks[0].records) == 2
+    # 裁剪重写(size 严格变小) -> 失效重解析
+    _write_v3_day(data_dir, "global", d, text)
+    p3 = cache.read_day("global", d)
+    assert calls == [1, 1, 1] and len(p3.blocks[0].records) == 1
+    assert cache.read_day("global", d) is p3  # 未变再命中
+    assert calls == [1, 1, 1]
+    # 缺失文件: None 且缓存(不再触发解析); 文件出现后 stat 键变化自然失效
+    assert cache.read_day("global", "2026-10-03") is None
+    assert cache.read_day("global", "2026-10-03") is None
+    assert calls == [1, 1, 1]
+    _write_v3_day(data_dir, "global", "2026-10-03", text)
+    assert cache.read_day("global", "2026-10-03") is not None and calls == [1, 1, 1, 1]
+
+
+def test_v3_day_cache_window_reads_only_involved_files(tmp_path, monkeypatch):
+    """按天加载(验收: 24h 窗只开 2 个日期文件): read_window 按 v3_window_dates 只读涉及
+    日期的天文件, 目录内其余天文件零 open; 返回按日期升序"""
+    data_dir = str(tmp_path)
+    block = V3Block(1000, 30, (V3Sample(1, 1, 10, 20), ))
+    for date in ("2026-10-03", "2026-10-04", "2026-10-05"):
+        _write_v3_day(data_dir, "global", date, format_v3_day_text("global", (block, )))
+    opened = []
+    real_open = builtins.open
+
+    def counting_open(file, *a, **k):
+        opened.append(os.fspath(file))
+        return real_open(file, *a, **k)
+
+    monkeypatch.setattr(builtins, "open", counting_open)
+    cache = V3DayCache(data_dir)
+    t0 = datetime(2026, 10, 4, 12, 0, 0).timestamp()
+    t1 = datetime(2026, 10, 5, 12, 0, 0).timestamp()  # 24h 窗: 涉及 10-04 与 10-05 两个日期
+    result = cache.read_window("global", t0, t1)
+    dat_opens = [p for p in opened if p.endswith(".dat")]
+    assert len(dat_opens) == 2  # 只开 2 个涉及文件(10-03 未动)
+    assert [d for d, _ in result] == ["2026-10-04", "2026-10-05"]
+    assert all(parsed is not None and parsed.key == "global" for _, parsed in result)
+    # 窗口再查(缓存命中): 零新 open
+    opened.clear()
+    cache.read_window("global", t0, t1)
+    assert [p for p in opened if p.endswith(".dat")] == []
+
+
+def test_v3_day_cache_budget_lru(tmp_path, monkeypatch):
+    """字节预算 LRU: 驻留条目文本总量 <= budget, 超出最久未用先逐出(至少保留最新一条);
+    命中把条目移到队尾(刷新新近度)"""
+    data_dir = str(tmp_path)
+    block = V3Block(1000, 30, (V3Sample(1, 1, 10, 20), ))
+    for date in ("2026-10-01", "2026-10-02", "2026-10-03"):
+        _write_v3_day(data_dir, "global", date, format_v3_day_text("global", (block, )))
+    calls = []
+    real_parse = traffic_store_module.parse_v3_day_text
+
+    def counting_parse(t):
+        calls.append(1)
+        return real_parse(t)
+
+    monkeypatch.setattr(traffic_store_module, "parse_v3_day_text", counting_parse)
+    cache = V3DayCache(data_dir, budget=1)  # 预算 1B: 每条都超, 恒只保最新读入的一条
+    cache.read_day("global", "2026-10-01")
+    cache.read_day("global", "2026-10-02")  # 10-01 被挤出
+    cache.read_day("global", "2026-10-03")  # 10-02 被挤出
+    assert calls == [1, 1, 1]
+    cache.read_day("global", "2026-10-01")  # 10-01 已被逐出: 重解析(10-03 被挤出)
+    assert calls == [1, 1, 1, 1]
+    cache.read_day("global", "2026-10-01")  # 最新读入的条目保留: 命中
+    assert calls == [1, 1, 1, 1]

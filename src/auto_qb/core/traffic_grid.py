@@ -29,13 +29,30 @@ totals 段(§05.1, 单系列):
 - 桶 null 判定借全局系列当真值源(§04.1-④): 桶在全局系列为 null(程序停机/qB 断连) ->
   null; 桶早于组内全部成员文件的最早行(组尚无任何观测)-> null; 其余桶即使全员空闲也出
   0 —— 组图空闲段 0 线、停机段断线, 二者靠全局系列区分。
+
+v3 读侧核心(plan 26-10-04-1957 S3a, §05.1/§05.2 —— 文件尾 v3 区):
+- 分层纯化: 天文件(V3ParsedDay, 经 traffic_store.V3DayCache 按天加载 + 解析缓存) ->
+  块序列 ->(S1 游标 dt 链 v3_block_slots)-> 记录时间轴 ->(逐记录有效 dt 桶宽 + D1 跨桶
+  覆盖 + 块间真空)-> 有序桶点列。S3b 的 agg 段(hour/day/month)合流在「桶点」层面并流,
+  天文件读取不经本模块任何单一入口硬编码。
+- 桶点模型(D1 实施期定稿, 逐记录覆盖桶): 每个观测槽生成一个覆盖桶, 桶宽 = 桶宽(有效dt),
+  桶 = [t, ceil(ts)), t = ceil(ts) - w —— 单记录的桶天然覆盖其有效 dt 全程, 标称栅格视角
+  下「单记录跨多桶、中间桶同值非 null」由宽桶等价承载; z 游程按均摊槽展开为多桶(rate 同值
+  (0,0)、totals 同快照)是覆盖语义的字面形态。v2 组读侧聚合(借 global 判 null)与视图映射
+  (WINDOW_SPECS/agg 段)属 S3b, 本阶段不动。
 """
 import math
 import time
 from dataclasses import dataclass
 from typing import Optional
 
-from .traffic_store import HOUR_SECONDS, ParsedSeries
+from .traffic_store import (
+    HOUR_SECONDS,
+    ParsedSeries,
+    V3Block,
+    v3_block_slots,
+    v3_bucket_width_s,
+)
 
 #: 窗口名 -> (跨度秒, 消费段): 1m-24h 消费 raw 段(桶宽 = 采样间隔), 3d/7d/30d 消费 hour 段
 #: (桶宽恒 3600s)(§05.1/§08)。1m/5m/30m/3h/6h/12h/24h 与 qB 速度图窗口对齐, 3d/7d 为外延。
@@ -287,3 +304,159 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
             prevs[j] = (o.dl_total, o.up_total)
         out.append({"t": b, "dl": dl, "up": up})
     return out
+
+
+# ======================================================================
+# v3 读侧核心(plan 26-10-04-1957 S3a, §05.1/§05.2)
+#
+# 分层纯化(为 S3b 留接缝): 天文件解析产物(V3ParsedDay.blocks) -> 本层 v3_series_slots
+# (记录时间轴, S3b agg 段合流的并流点) -> v3_series_points(桶点) -> v3_totals_points
+# (累计增量)。天文件读取在 traffic_store.V3DayCache(按天加载 + mtime/size 解析缓存);
+# 本模块不触文件不触时钟, 视图映射(WINDOW_SPECS/agg 段/组端点)属 S3b。
+#
+# 归桶模型(D1 实施期定稿: 逐记录覆盖桶):
+# - 每个观测槽(r/z)生成一个覆盖桶: 桶宽 w = v3_bucket_width_s(有效dt)(S1 槽层的 dt_s =
+#   显式 dt 或游程均摊 span/run_len), 桶 = [t, ceil(ts)), t = ceil(ts) - w。
+#   替代 v2 全局 ceil(sample_interval) 一刀切(traffic_grid.py:91) —— 混排 interval 分块
+#   各归各桶, 抖动/漂移不再制造空桶(A2 伪断线根因的读侧残留一并消除)。
+# - 桶起点锚定实测时刻(ceil(ts) - w), 无累积漂移 —— 「按桶宽向前铺格」的替代方案会被
+#   每行 ceil(dt)-dt ∈ [0,1) 的单调累积拖偏(稳态小漂移退化逐行显式 dt 时块尾可达数十秒),
+#   已否决; 锚定式桶起点与实测时刻的偏差恒 < 1 个桶宽。
+# - D1 跨桶覆盖: 记录的覆盖区间 [ts-w, ts] 整段由该记录的桶承载 —— 桶宽 = ceil(有效dt)
+#   使单记录天然覆盖其有效 dt 全程; 标称栅格视角下「单记录跨多桶、中间桶同值非 null」的
+#   语义由宽桶等价实现(观测非 null、rate 同值、totals 同快照都由这一个桶给出), 折线在
+#   暂停段不伪断; z 游程按 S1 均摊槽展开为多桶(每桶 rate (0,0) + 同一游程快照)是覆盖
+#   语义的字面形态。混桶 raw 优先口径沿用 v2(同 key 合并规则)。
+# - 同桶合并(混桶): 同 key 两观测槽 —— raw 优先于 z; raw+raw 速率取均值、快照取最新行
+#   (同刻取后到者); z+z 取先到者(v2 多行程同桶口径)。
+# - 真空 vs 断连两语义分离(§05.1): 块间 gap 中未被下一块首记录覆盖桶吸收的差值段为真空,
+#   出一个 null 点(t = 上一块游标终值取整)断线; gap <= 首槽桶宽(00:00 硬切的 <=1 间隔
+#   天然 gap)被首记录覆盖桶吸收不出 null。程序停机 = 无块 = 天然真空(无任何点);
+#   断连(程序活着)= n 槽 -> 连续 null 槽折叠为一个 null 点(首槽位置取整)。两者都是
+#   null 点, 但来源不同: 真空无任何观测, n 槽是显式 null 观测。
+# - 窗口 [t0, t1): 槽 ts >= t1 不消费; 覆盖桶触及窗口左界(ceil(ts) >= t0)才保留 ——
+#   桶首允许略早于 t0(上界一个桶宽, 行照收, 对齐 v2 窗首口径); null 点按 t 过滤。
+# ======================================================================
+
+#: 真空判定浮点容差(秒): 块间 gap 与首记录覆盖桶的比较 ε
+_V3_VACUUM_EPS_S = 1e-6
+
+
+@dataclass(frozen=True)
+class V3PointEntry:
+    """v3 读侧单桶点(S3a 桶点层输出, S3b 视图映射的输入形态)
+
+    t = 桶起点 epoch 秒(覆盖桶 [t, t+w), w = 该记录桶宽 —— 响应层如需宽度可由
+    v3_bucket_width_s 对有效 dt 复原); rate/totals 全 None = null 点(n 游程/块间真空
+    标记, 断线语义 —— v3 r/z 行无 null 形态, null 只来自这两种标记)。
+    """
+
+    t: int  # 桶起点 epoch 秒
+    dl_rate: Optional[int] = None  # 桶内下载速率均值(bytes/s, round 取整)
+    up_rate: Optional[int] = None
+    dl_total: Optional[int] = None  # 桶末 all-time 下载累计快照(bytes)
+    up_total: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class V3TotalsEntry:
+    """v3 单桶点累计增量(v3_totals_points 输出): dl/up = 相邻桶快照差分, None = null"""
+
+    t: int
+    dl: Optional[int]
+    up: Optional[int]
+
+
+def v3_series_slots(blocks: tuple) -> tuple:
+    """块序列 -> 扁平槽序(记录时间轴层; S3b agg 段合流的接缝): 块按 start_epoch 升序
+    (稳定排序, 同刻保文件序), 逐块 v3_block_slots 展开(复用 S1 游标 dt 链, 不另写推算)。"""
+    out = []
+    for blk in sorted(blocks, key=lambda b: b.start_epoch):
+        out.extend(v3_block_slots(blk))
+    return tuple(out)
+
+
+def v3_series_points(blocks: tuple, t0: float, t1: float) -> tuple:
+    """v3 读侧核心(§05.1/§05.2): 块序列 -> 窗口 [t0, t1) 内按 t 升序的桶点列
+
+    blocks = V3Block 序列(单系列的若干天文件解析产物合并传入; 天文件按日期升序读出,
+    块不跨天故按 start_epoch 排序即恢复时间序)。归桶/覆盖/真空/合并规则见本区头注释。
+    无块(停机/无数据)返回空元组(天然真空, 调用方按空态处理)。
+    """
+    cells = {}  # 桶键 -> [is_raw, dl_sum, up_sum, n, last_ts, dl_total, up_total]
+    marks: list = []  # null 点 (t, ...) —— n 游程折叠 + 块间真空
+    prev_chain_end: Optional[float] = None
+    last_was_null = False
+    for block in sorted(blocks, key=lambda blk: blk.start_epoch):
+        slots = v3_block_slots(block)
+        if not slots:
+            continue
+        if prev_chain_end is not None:
+            first_w = v3_bucket_width_s(slots[0].dt_s)
+            # 真空: 下一块首记录覆盖桶起点晚于上一块游标终值 -> 差值段出 null 点
+            if math.ceil(slots[0].ts) - first_w > prev_chain_end + _V3_VACUUM_EPS_S:
+                marks.append(int(prev_chain_end))
+        for s in slots:
+            if s.obs is None:
+                # n 槽: 连续 null 槽折叠为一个 null 点(首槽位置取整; 断连语义)
+                t = int(math.floor(s.ts))
+                if t0 <= t < t1 and not last_was_null:
+                    marks.append(t)
+                last_was_null = True
+                continue
+            last_was_null = False
+            if s.ts >= t1:
+                continue  # 窗尾之后的槽不消费(v2 ts >= t1 口径)
+            w = v3_bucket_width_s(s.dt_s)
+            key = math.ceil(s.ts) - w
+            if key + w < t0:  # 覆盖桶不触及窗口左界(桶 [key, key+w) 与 [t0, t1) 无交集)
+                continue
+            o = s.obs
+            e = cells.get(key)
+            if e is None:
+                cells[key] = [not s.is_zero, o[0], o[1], 1, s.ts, o[2], o[3]]
+            elif not s.is_zero:
+                if e[0]:  # raw+raw: 速率均值 + 最新行快照(同刻取后到者, v2 口径)
+                    e[1] += o[0]
+                    e[2] += o[1]
+                    e[3] += 1
+                    if s.ts >= e[4]:
+                        e[4] = s.ts
+                        e[5] = o[2]
+                        e[6] = o[3]
+                else:  # raw 到 z 桶: 混桶 raw 优先(v2 口径沿用)
+                    e[0] = True
+                    e[1], e[2], e[3], e[4], e[5], e[6] = o[0], o[1], 1, s.ts, o[2], o[3]
+            # z 到 raw 桶: raw 优先, z 让位; z 到 z 桶: 先到者保留(v2 多行程同桶口径)
+        prev_chain_end = slots[-1].ts  # 游标终值 = 末槽实测时刻(真空判定基准)
+    entries = []
+    for key in sorted(cells):
+        e = cells[key]
+        n = e[3]
+        entries.append((key, 1, V3PointEntry(key, int(round(e[1] / n)), int(round(e[2] / n)), e[5], e[6])))
+    for t in marks:
+        if t0 <= t < t1:
+            entries.append((t, 0, V3PointEntry(t)))
+    # null 点排同刻观测点之前(null 在先 = 该时刻断线、其后才是观测覆盖; 稳定保插入序)
+    entries.sort(key=lambda x: (x[0], x[1]))
+    return tuple(e for _, _, e in entries)
+
+
+def v3_totals_points(points: tuple) -> tuple:
+    """v3 累计增量段(§05.1): 相邻桶点快照差分 —— v2 规则平移(series_totals_points):
+    max(0,·) 等价形 + cur < last 判计数器重置 -> null + 基线缺失(窗首/null 点断链)->
+    null; dl/up 两向独立判定。游程快照(z 槽桶 totals 恒定)进差分链 —— 空闲段每桶
+    delta = 0 链不断, 其后首个活跃桶恢复有基线; 宽桶(跨桶覆盖)的 delta 覆盖其整段
+    有效 dt(暂停期真实增量落在恢复记录的一桶里)。"""
+    out = []
+    prev = None  # 相邻前桶点快照(dl_total, up_total)
+    for p in points:
+        if p.dl_rate is None:  # null 点: 断线且断链
+            out.append(V3TotalsEntry(t=p.t, dl=None, up=None))
+            prev = None
+            continue
+        dl = _bucket_delta(p.dl_total, prev[0]) if prev is not None else None
+        up = _bucket_delta(p.up_total, prev[1]) if prev is not None else None
+        out.append(V3TotalsEntry(t=p.t, dl=dl, up=up))
+        prev = (p.dl_total, p.up_total)
+    return tuple(out)

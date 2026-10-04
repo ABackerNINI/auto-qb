@@ -103,7 +103,9 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple, Optional
@@ -1667,7 +1669,9 @@ class TrafficV3Store:
     def read_agg(self, key: str) -> V3ParsedAgg:
         """读系列 agg.dat(§04.3 恢复入口): 缺失/空文件 = 空解析结果(key=None, 全空元组);
         OSError 上抛(调用方按恢复失败口径处理)。解析坏行/同 epoch 取最后一行等纪律
-        全在 parse_v3_agg_text(撕裂尾行跳过, 水位从文件尾推)。"""
+        全在 parse_v3_agg_text(撕裂尾行跳过, 水位从文件尾推)。
+        读侧快读口径(D3, §05.2): agg.dat 单次快读上界按 ~1MB 口径放宽(全年 hour 行
+        ≈8760 x ~90B + day/month 行) —— 口径记录非强制截断, S3b 视图读取沿用本入口。"""
         path = v3_agg_file_path(self._data_dir, key)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return V3ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
@@ -1785,6 +1789,77 @@ class TrafficV3Store:
                 continue
             evicted.append(TORRENT_KEY_PREFIX + name)
         return evicted
+
+
+#: 解析缓存默认字节预算(按天文件文本字节数计, LRU; S3a 实施期定约, §05.2): 解析产物
+#: (V3Block/V3Sample 对象图)对文本约有 6-8 倍内存膨胀, 4MB 文本预算把最坏驻留(2s 档
+#: 天文件 ≈2MB 文本/天)压在约 2 个文件 ≈25-30MB 对象内存; 30s 档(≈115KB/天)可驻 ~34 个
+#: 天文件。缓存粒度 = 整天解析结果(V3ParsedDay): 命中率最高的入口是 Web 图窗按
+#: meta.interval_s 的重复轮询(查询窗口日期集不变即全命中); 不驻留 90d x 2s 档全量 raw
+#: (§05.2 口径 —— 驻留受本预算上界约束, 105 万行/系列的驻留方案已否决)。
+V3_DAY_CACHE_BUDGET_BYTES = 4_000_000
+
+
+class V3DayCache:
+    """按天文件解析缓存(S3a §05.2, 读侧; Web 线程调用): mtime_ns+size 键控
+
+    - 失效键 = os.stat 的 (st_mtime_ns, st_size): 天文件只在追加期变化(追加必变 size),
+      裁剪/重写(tmp+replace)size 严格变小 —— 两向都使 stat 键变化而失效; 未变即命中,
+      直接复用解析产物(不重读不重解析)。
+    - 内存上界: 驻留条目的文件文本字节总量 <= budget(默认 V3_DAY_CACHE_BUDGET_BYTES),
+      超出按 LRU 逐出(命中移队尾, 最久未用先逐出; 至少保留最新一条 —— 单文件超预算时
+      不自我清空)。缺失/空文件也缓存(stat 键 = None 哨兵): 文件此后出现则 stat 变化
+      自然失效。
+    - 线程模型: 读侧被 Web 线程并发调用 —— 缓存表用锁保护; 解析(慢段)在锁外进行,
+      并发对同一文件重复解析无害(后写胜, 黄金法则 5 的单写线程约束不涉及只读缓存)。
+
+    S3b 接缝: 视图端点经 read_window(窗口 -> 日期集合 -> 只读涉及文件, 24h 窗至多
+    2 个日期文件)取 V3ParsedDay, 块序列交给 traffic_grid.v3_series_points 归桶;
+    agg.dat 消费(hour/day/month 段)不在本类, 留 S3b。
+    """
+    def __init__(self, data_dir: str, budget: int = V3_DAY_CACHE_BUDGET_BYTES) -> None:
+        self._data_dir = data_dir
+        self._budget = max(1, int(budget))
+        self._lock = threading.Lock()
+        # (系列键, 日期串) -> (stat 键 | None, 文本字节数, V3ParsedDay | None)
+        self._entries: OrderedDict = OrderedDict()
+
+    def read_day(self, key: str, date_str: str) -> Optional[V3ParsedDay]:
+        """读单天文件(带缓存): 缺失/空文件 = None; 非法键/日期 fail-fast(路径纯计算)。"""
+        path = v3_day_file_path(self._data_dir, key, date_str)
+        try:
+            st = os.stat(path)
+            stat_key = (st.st_mtime_ns, st.st_size)
+            size = st.st_size
+        except OSError:
+            stat_key = None  # 缺失哨兵: 文件此后出现则 stat 键变化, 缓存自然失效
+            size = 0
+        with self._lock:
+            ent = self._entries.get((key, date_str))
+            if ent is not None and ent[0] == stat_key:
+                self._entries.move_to_end((key, date_str))
+                return ent[2]
+        parsed = self._read_parse(path)  # 锁外解析(慢段; 并发重复解析无害)
+        with self._lock:
+            self._entries[(key, date_str)] = (stat_key, size, parsed)
+            self._entries.move_to_end((key, date_str))
+            while len(self._entries) > 1 and sum(e[1] for e in self._entries.values()) > self._budget:
+                self._entries.popitem(last=False)
+        return parsed
+
+    def read_window(self, key: str, start_epoch: float, end_epoch: float) -> tuple:
+        """查询窗口 -> 日期集合 -> 只读涉及的天文件(§05.2 按天加载): 按日期升序返回
+        (date_str, V3ParsedDay | None) 元组。块不跨天(00:00 硬切), 单天文件可独立解析;
+        24h 窗至多 2 个日期文件(窗口只开涉及文件, 不扫全目录)。"""
+        return tuple((d, self.read_day(key, d)) for d in sorted(v3_window_dates(start_epoch, end_epoch)))
+
+    @staticmethod
+    def _read_parse(path: str) -> Optional[V3ParsedDay]:
+        """缺省解析纪律(对齐 TrafficV3Store.read_day): 缺失/空文件 None, 其余整读解析。"""
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return None
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return parse_v3_day_text(f.read())
 
 
 def v3_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
