@@ -6,6 +6,11 @@
     GET /memory-bank/<path>  静态映射四工位原文, 供「打开原文」; resolve 后必须仍落在 memory-bank/
                              内, 越界一律 403 (URL 先解码再判, ../ 与 %2e%2e / ..%2f / 反斜杠等
                              变体全部拦截, 测试钉死)
+    POST /api/pull           仅快进同步本仓库 (前端顶栏「拉取」按钮): ls-remote 取远端真值 → fetch →
+                             merge --ff-only; 不能快进 (分叉 / 本地改动重叠 / 离线) 一律失败并回一行
+                             原因, 绝不 rebase / 绝不生成 merge commit。必须带 X-Nav-Action 头 ——
+                             CSRF 护栏: 跨站 fetch 带自定义头会先发 OPTIONS 预检, 本服务不答 (501)
+                             → 浏览器拦下; 同源页面不受影响。
 
 用法 (从仓库根):
     python .agents/skills/memory-bank/scripts/nav_server.py                    起服务 (绑 127.0.0.1:8765,
@@ -27,7 +32,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
+import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -41,10 +48,21 @@ import nav_data  # noqa: E402
 SHELL_NAME = "nav_page.html"
 BIND_HOST = "127.0.0.1"  # 监听只绑回环 (sidefx 放行), 不对外暴露
 OPEN_HOST = "localhost"  # 浏览器打开的地址一律用 localhost: 127.0.0.1 这个 origin 有历史遗留
-                         # (旧缓存 / 残留服务), 换成 localhost 拿一个干净 origin
+# (旧缓存 / 残留服务), 换成 localhost 拿一个干净 origin
 DEFAULT_STATIC_DIR = "tmp-analysis/nav"  # 相对仓库根; 目录已 gitignored, 静态导出件不入库
 STATIC_LINK_PREFIX = "../../memory-bank/"  # 静态件指向 memory-bank 原文的相对链接前缀 (壳按 file: 协议取用)
 DATA_TOKEN = "__DATA__"  # 壳内数据注入位 (S2 的壳以同款 token 预留)
+
+# ---- 仅快进拉取 (前端顶栏「拉取」按钮 → POST /api/pull) ----
+PULL_PATH = "/api/pull"
+PULL_HEADER = "X-Nav-Action"  # CSRF 护栏: 跨站 fetch 带自定义头会先发 OPTIONS 预检, 本服务不答
+PULL_HEADER_VALUE = "pull"
+# 主线远端候选与顺序: 与 .commands/my-commit-flow 的 main_candidates 同序 (Gitee 优先, 历史 clone 的
+# origin 可能是 GitHub 镜像)。判据纪律同 sync.py —— 只认 ls-remote 现查的远端真值, 不读 refs/remotes
+# (本环境该 ref 的写入会被静默丢弃, 见 pitfalls/git/refs.md)。
+MAIN_REMOTE_CANDIDATES = ("gitee", "origin", "github")
+GIT_TIMEOUT = 60  # 单条 git 命令超时(秒): 离线 / 凭据弹窗时不至于挂死服务线程
+_PULL_LOCK = threading.Lock()  # 串行化并发拉取 (ThreadingHTTPServer 每请求一线程)
 
 # 壳缺失时的占位模板 (仅 --gen-static 自验管线用): dark 主题, 注入数据并回显计数, 不冒充正式壳。
 _PLACEHOLDER_SHELL = """<!DOCTYPE html>
@@ -106,11 +124,111 @@ class NavServer(ThreadingHTTPServer):
     daemon_threads = True
 
 
+# --------------------------------------------------------------------------- 仅快进拉取
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
+    """在 root 下跑一条 git。超时 / 起不来统一以 rc!=0 表达 (不抛) —— 调用方一律按 rc 判,
+    失败原因取 stderr 末行。`errors="replace"` 兜住 Windows 下非 UTF-8 输出。"""
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return subprocess.CompletedProcess(args, 1, "", "git 起不来 / 超时: %s" % exc)
+
+
+def _out(proc: subprocess.CompletedProcess) -> str:
+    """git 成功输出的 strip 版 (调用方只在 rc==0 时消费)。"""
+    return (proc.stdout or "").strip()
+
+
+def _last_line(text: str) -> str:
+    """失败原因: stderr 末条非空行 (git 的 hint 行也在, 取末行通常是最具体的那句)。"""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    return lines[-1] if lines else "git 非 0"
+
+
+def classify_pull(head: str, rsha: str, behind: int, ahead: int) -> str:
+    """仅快进同步的分类 (纯逻辑, 无 git 副作用) —— 返回 up-to-date / ahead-only / fast-forward / diverged。
+
+    behind / ahead = `git rev-list --left-right --count <rsha>...HEAD` 的左右计数
+    (远端落后本地数 / 本地领先远端数)。仅快进口径: 只有 ahead==0 且 behind>0 才允许 merge --ff-only;
+    两端都有(diverged)一律失败 —— 不 rebase / 不生成 merge commit, 交人处理。
+    """
+    if head == rsha:
+        return "up-to-date"
+    if behind == 0:
+        return "ahead-only"
+    if ahead == 0:
+        return "fast-forward"
+    return "diverged"
+
+
+def pick_remote(root: Path) -> str:
+    """主线远端名: 按 MAIN_REMOTE_CANDIDATES 顺序取第一个存在的 (都没有则退第一个, 无远端则空串)。"""
+    names = [line.strip() for line in _out(_git(root, "remote")).splitlines() if line.strip()]
+    for cand in MAIN_REMOTE_CANDIDATES:
+        if cand in names:
+            return cand
+    return names[0] if names else ""
+
+
+def pull_ff_only(root: Path) -> tuple[bool, str]:
+    """仅快进把当前 clone 同步到主线远端; 返回 (ok, 一行结果)。
+
+    步骤与 sync.py 同源: fetch(把对象拉进对象库) → ls-remote 取远端真值 → rev-list 算领先/落后 →
+    可快进才 merge --ff-only。任何不能快进的情形都返回 ok=False + 一行原因, 不改动工作区 / 历史。
+    """
+    if _out(_git(root, "rev-parse", "--is-inside-work-tree")) != "true":
+        return False, "不在 git 工作树里 —— 本目录不是仓库"
+    remote = pick_remote(root)
+    if not remote:
+        return False, "找不到远端 —— git remote -v 核对"
+    branch = _out(_git(root, "rev-parse", "--abbrev-ref", "HEAD"))
+    if not branch or branch == "HEAD":
+        return False, "当前处于游离 HEAD —— 无法确定要同步的分支"
+    _git(root, "fetch", remote, branch)  # 只为把远端 tip 的对象拉进对象库; 成败不判(离线时 ls-remote 也为空)
+    rsha = ""
+    for line in _out(_git(root, "ls-remote", remote, branch)).splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[1] == "refs/heads/" + branch:
+            rsha = parts[0]
+            break
+    if not rsha:
+        return False, "拿不到远端 %s/%s (离线?) —— 联网后重试" % (remote, branch)
+    head = _out(_git(root, "rev-parse", "HEAD"))
+    if not head:
+        return False, "本地没有任何提交 (空仓库)"
+    raw = _out(_git(root, "rev-list", "--left-right", "--count", "%s...HEAD" % rsha))
+    try:
+        behind, ahead = (int(x) for x in raw.split())
+    except ValueError:
+        return False, "算不出领先 / 落后 (fetch 未落稳?) —— 重试"
+    kind = classify_pull(head, rsha, behind, ahead)
+    if kind == "up-to-date":
+        return True, "已是最新 %s" % head[:8]
+    if kind == "ahead-only":
+        return True, "本地领先远端 %d 个提交, 无需拉取" % ahead
+    if kind == "diverged":
+        return False, ("本地已分叉 (领先 %d / 落后 %d) —— 仅快进不自动 rebase / merge; "
+                       "需人工合流后重试" % (ahead, behind))
+    proc = _git(root, "merge", "--ff-only", rsha)
+    if proc.returncode != 0:
+        return False, ("快进被拒 —— %s; 本地改动可能与远端新提交重叠, 先提交或移出后重试" % _last_line(proc.stderr))
+    return True, "已快进到 %s" % _out(_git(root, "rev-parse", "HEAD"))[:8]
+
+
 class NavHandler(BaseHTTPRequestHandler):
-    """路由处理器; mb / shell_path 由 _build_handler 在子类上注入。"""
+    """路由处理器; mb / shell_path / root 由 _build_handler 在子类上注入。"""
 
     mb: Path
     shell_path: Path
+    root: Path
 
     def log_message(self, fmt: str, *args) -> None:  # noqa: A002
         sys.stderr.write("[nav] %s - %s\n" % (self.address_string(), fmt % args))
@@ -134,6 +252,36 @@ class NavHandler(BaseHTTPRequestHandler):
         else:
             self._send_text(404, "not found: %s" % path)
 
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlsplit(self.path).path
+        if path == PULL_PATH:
+            self._handle_pull()
+        else:
+            self._send_text(404, "not found: %s" % path)
+
+    def _handle_pull(self) -> None:
+        """仅快进同步本仓库。CSRF 护栏 (两道): 必须带 X-Nav-Action 头 (跨站 fetch 带自定义头会先发
+        OPTIONS 预检, 本服务不实现 do_OPTIONS → 501 → 浏览器拦下); Origin 若存在则必须同源回环。
+        动作失败 (分叉 / 重叠 / 离线) 仍回 200 + {ok:false, message} —— 那是业务结果不是 HTTP 错误。"""
+        if self.headers.get(PULL_HEADER) != PULL_HEADER_VALUE:
+            self._send_text(403, "forbidden: missing %s header" % PULL_HEADER)
+            return
+        origin = self.headers.get("Origin")
+        if origin:
+            try:
+                host = urlsplit(origin).hostname
+            except ValueError:
+                host = None
+            if host not in ("localhost", "127.0.0.1"):
+                self._send_text(403, "forbidden: cross-origin")
+                return
+        length = int(self.headers.get("Content-Length") or 0)
+        if length:  # 消费请求体, 免得连接上残留字节
+            self.rfile.read(length)
+        with _PULL_LOCK:
+            ok, message = pull_ff_only(self.root)
+        self._send_json(200, {"ok": ok, "message": message})
+
     def _send_bytes(self, code: int, body: bytes, ctype: str) -> None:
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -144,6 +292,9 @@ class NavHandler(BaseHTTPRequestHandler):
 
     def _send_text(self, code: int, text: str) -> None:
         self._send_bytes(code, text.encode("utf-8"), "text/plain; charset=utf-8")
+
+    def _send_json(self, code: int, obj: dict) -> None:
+        self._send_bytes(code, json.dumps(obj, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
 
     def _send_shell(self) -> None:
         try:
@@ -190,8 +341,8 @@ class NavHandler(BaseHTTPRequestHandler):
         self._send_bytes(200, cand.read_bytes(), ctype)
 
 
-def _build_handler(mb: Path, shell_path: Path) -> type[NavHandler]:
-    return type("BoundNavHandler", (NavHandler, ), {"mb": mb, "shell_path": shell_path})
+def _build_handler(mb: Path, shell_path: Path, root: Path) -> type[NavHandler]:
+    return type("BoundNavHandler", (NavHandler, ), {"mb": mb, "shell_path": shell_path, "root": root})
 
 
 def _read_shell(shell_path: Path) -> tuple[str, bool]:
@@ -218,9 +369,9 @@ def gen_static(mb: Path, shell_path: Path, out_dir: Path) -> int:
     return 0
 
 
-def serve(mb: Path, shell_path: Path, port: int, open_browser: bool = True) -> int:
+def serve(mb: Path, shell_path: Path, root: Path, port: int, open_browser: bool = True) -> int:
     try:
-        server = NavServer((BIND_HOST, port), _build_handler(mb, shell_path))
+        server = NavServer((BIND_HOST, port), _build_handler(mb, shell_path, root))
     except OSError as exc:
         sys.stderr.write(
             "[nav] bind %s:%d failed (%s): port likely in use, retry with --port <other>\n" % (BIND_HOST, port, exc)
@@ -268,7 +419,7 @@ def main() -> int:
     if args.gen_static is not None:
         out_dir = Path(args.gen_static)
         return gen_static(mb, shell_path, out_dir if out_dir.is_absolute() else root / out_dir)
-    return serve(mb, shell_path, args.port, open_browser=not args.no_open)
+    return serve(mb, shell_path, root, args.port, open_browser=not args.no_open)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,17 @@
   全壳仅一处表头 + 主表行与专区都调 `ledgerCells` + 专区克隆主表 thead), 另 2 条既有守阵改指共用单点。踩坑与机检
   判据见 [pitfalls/web-ui/layout-css.md](../pitfalls/web-ui/layout-css.md)「两个独立表格逐栏对齐」节; 数据层/服务层仍零改动。
 
+- **kb.nav 顶栏「拉取」按钮 · 仅快进同步本仓库 (2026-10-05)**: 导航页顶栏新增拉取动作 —— 点一下让服务端
+  `POST /api/pull` 同步当前 clone 到主线远端, **仅快进**: ls-remote 取远端真值(不读 refs/remotes, 该 ref 在
+  本环境写入被静默丢弃, 见 [pitfalls/git/refs.md](../pitfalls/git/refs.md)) → fetch → `merge --ff-only`;
+  **分叉 / 本地改动重叠 / 离线一律失败**并回一行原因(不 rebase / 不生成 merge commit), 前端弹提示浮层; 成功即
+  重拉 `/api/data` 刷新页面。远端按 gitee → origin → github 挑(同 my-commit-flow 的 main_candidates)。安全: 只绑
+  127.0.0.1 + 必须带自定义头 `X-Nav-Action`(跨站 fetch 带自定义头会先发 OPTIONS 预检, 本服务不答即被浏览器拦下)
+  + Origin 回环校验 + `_PULL_LOCK` 串行化; 静态导出 / file:// 无服务端, 按钮隐藏。守阵 `tests/test_kb_nav.py`
+  +11(壳按钮骨架 / 分类纯逻辑 / 非仓库·游离 HEAD·离线·分叉·本地领先·快进六场景 / 端点 403 护栏 + 404 +
+  结果回传), **数据层 nav_data.py 零改动**, 服务层新增 POST 路由与 git 编排。基线 2553 passed + 4 skipped /
+  99%(切片 [26-10-05-0324](../testing/baselines/26-10-05-0324-kb-nav-pull.md))。
+
 - **activeContext 多 clone 冲突治理 = 时间戳切片方案 (2026-09-23, W1–W3)**: 「重写头部滚动栈」改成
   「新增/更新自己的时间戳切片」; 取消 global.md/_index.md/_recent.md 缓存(文件名自带时间与主题,
   `kb.active` 现算); 归档阈值 14 天默认落地(`--stale-days` 可调)。W4(merge-tree 预检 + rerere)可选未做;

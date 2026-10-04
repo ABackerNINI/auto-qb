@@ -76,6 +76,23 @@
   .readout { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap; }
   .readout b { color: var(--cyan); font-weight: 600; }
 
+  /* ============ 顶栏: 拉取 (仅快进同步本仓库) ============ */
+  /* [hidden] 兜底必写: .pullbtn 的 display 会盖掉 UA 的 [hidden]{display:none} (静态/file 模式要隐藏) */
+  .pullbtn[hidden] { display: none; }
+  .pullbtn {
+    display: inline-flex; align-items: center; gap: 6px; flex: none;
+    background: var(--paper-2); color: var(--dim); border: 1px solid var(--hair-2);
+    border-radius: 6px; padding: 6px 14px; font: 12.5px var(--sans); cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .pullbtn:hover { color: var(--ink); border-color: var(--cyan); }
+  .pullbtn:disabled { opacity: .55; cursor: default; }
+  .pullbtn svg { width: 13px; height: 13px; display: block; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .pullbtn.busy svg { animation: pullspin .9s linear infinite; }
+  .pullbtn.ok { color: var(--green); border-color: rgba(127,199,154,.45); }
+  .pullbtn.err { color: var(--amber); border-color: rgba(226,165,90,.45); }
+  @keyframes pullspin { to { transform: rotate(360deg); } }
+
   /* ============ 视图容器 ============ */
   .views { flex: 1; min-height: 0; position: relative; }
   .view { display: none; height: 100%; }
@@ -455,6 +472,11 @@
     <button data-view="cards">卡片墙</button>
   </div>
   <div class="readout" id="readout">载入中…</div>
+  <!-- 拉取: 仅快进同步本仓库 (POST /api/pull); 静态导出 / file:// 下无服务端, 由 boot() 隐藏 -->
+  <button class="pullbtn" id="pullBtn" title="仅快进同步本仓库 (拉取主线远端最新, 不自动 rebase / merge)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    <span id="pullLabel">拉取</span>
+  </button>
 </header>
 
 <div class="views">
@@ -588,6 +610,7 @@ const VIEW_KEY = "mb-nav-view";
 const PINS_KEY = "mb-nav-pins";
 const FILTERS_KEY = "mb-nav-filters";   // 筛选器 / 选择类状态 (纯前端偏好, 刷新后不丢)
 const SORT_KEYS = ["stamp", "form", "status", "topic"];
+const PULL_HEADER = "X-Nav-Action";   // 拉取的 CSRF 自定义头: 跨站 fetch 带它会先发 OPTIONS 预检, 服务不答即被浏览器拦下
 /* 图钉图标 (内联 SVG, 无外链图标库): 空心 = 未 pin; 实心由 .pinbtn.on 的 CSS fill 控制 */
 const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
 
@@ -1120,6 +1143,7 @@ function wire() {
     const b = e.target.closest("button");
     if (b) setView(b.dataset.view);
   });
+  $("pullBtn").addEventListener("click", doPull);
   $("gq").addEventListener("input", e => { S.q = e.target.value.trim(); saveFilters(); renderCurrent(); });
   $("gq").addEventListener("keydown", e => {
     if (e.key === "Escape") { e.target.value = ""; S.q = ""; saveFilters(); renderCurrent(); }
@@ -1251,8 +1275,42 @@ async function refresh(silent) {
   }
 }
 
+/* 拉取 (仅快进): POST /api/pull 让服务端同步本仓库; 成功即刷新数据, 失败弹提示。
+   服务端只做 merge --ff-only —— 分叉 / 本地改动重叠 / 离线都会回 ok:false + 一行原因, 不 rebase。 */
+async function doPull() {
+  const btn = $("pullBtn");
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.classList.remove("ok", "err");
+  btn.classList.add("busy");
+  $("pullLabel").textContent = "同步中";
+  try {
+    const res = await fetch("/api/pull", { method: "POST", headers: { [PULL_HEADER]: "pull" } });
+    const d = await res.json().catch(() => null);
+    if (d && d.ok) {
+      btn.classList.add("ok");
+      $("pullLabel").textContent = "已更新";
+      await refresh(true);
+      setTimeout(() => { btn.classList.remove("ok"); $("pullLabel").textContent = "拉取"; }, 1600);
+    } else {
+      btn.classList.add("err");
+      $("pullLabel").textContent = "拉取";
+      showError("同步失败", esc((d && d.message) || ("HTTP " + res.status)),
+        "仅快进: 分叉 / 本地改动重叠 / 离线时不会自动 rebase, 需人工处理后再点。");
+    }
+  } catch (err) {
+    btn.classList.add("err");
+    $("pullLabel").textContent = "拉取";
+    showError("同步失败", esc(String(err)), "无法访问 <code>/api/pull</code> —— 服务是否仍在运行?");
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("busy");
+  }
+}
+
 function boot() {
   wire();
+  if (STATIC_MODE || location.protocol === "file:") $("pullBtn").hidden = true;   /* 静态 / file 模式无服务端可拉 */
   S.pins = loadPins();   /* 全壳唯一装载点 (derive 绝不触碰): 守阵 test_pin_state_not_reseeded_by_derive */
   S.view = loadView();
   restoreFilters();      /* 全壳唯一装载点 (derive 绝不触碰): 刷新后筛选器不丢 */

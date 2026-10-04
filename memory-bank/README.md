@@ -24,7 +24,7 @@
 | **真机走查清单** | [checklists/_index.md](checklists/_index.md) —— 做走查时逐条勾 |
 | 跨会话任务档案 (立档 / 查档) | [tasks/_index.md](tasks/_index.md) |
 | 计划外问题池 (8 类 × 两档) | [issues/_index.md](issues/_index.md) |
-| **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · 专题视图 `kb.docmap`(不落盘) · **人的导航页 `kb.nav`(本地服务现算)** |
+| **计划 / 报告 / 一件事的全部材料** | [plans/_index.md](plans/_index.md) · [reports/_index.md](reports/_index.md) · 专题视图 `kb.docmap`(不落盘) · **人的导航页 `kb.nav`(本地服务现算, 顶栏含仅快进拉取)** |
 | **跑项目命令** | `.commands/` 包(每包一 `config.toml`), 经 `commands` 引擎按 task id 调; 文档不许抄命令(`commands run doc.drift` 判红) |
 
 ## 生成物 (冲突时**重跑脚本**, 不要手改)
