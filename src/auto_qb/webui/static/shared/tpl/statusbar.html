@@ -9,12 +9,12 @@
         <!-- R10-05: 历史入口并入"今日流量"组(结构上成为子元素) —— 原先两者是兄弟节点,
              中间那道竖线来自 .sb-today 自身的右边框, 读起来像两个不相干的块。
             2026-09-20: 数值里的字面量 ↓/↑ 换成真箭头图标(i-arrow-down/up, 继承数值色), 组图标改双色。 -->
-        <span class="sb-item sb-today" :title="todayTrafficTitle">
+        <span class="sb-item sb-today">
           <svg class="ico ico-sm ico-today" viewBox="0 0 16 16"><use href="#i-traffic"></use></svg>
           <span class="lbl">今日</span>
           <span class="val v-down"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-down"></use></svg>{{ fmtSize(todayTraffic.down) }}</span>
           <span class="val v-up"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-arrow-up"></use></svg>{{ fmtSize(todayTraffic.up) }}</span>
-          <button class="sb-hist" title="历史流量(按天/月/年)" @click.stop="openHistory()">
+          <button class="sb-hist" @click.stop="openHistory()">
             <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
           </button>
           <!-- qB 口径流量图入口(plan 26-10-03-0946 §07 P5a, 与 TM 历史入口并列):
@@ -26,14 +26,14 @@
           </button>
         </span>
       </template>
-      <span class="sb-stats" title="qBittorrent 服务器实时状态(与主轮询同周期同步)">
+      <span class="sb-stats">
         <span v-for="it in sbStats" :key="it.key" class="sb-item" :title="it.title">
           <svg class="ico ico-sm" :class="it.cls" viewBox="0 0 16 16"><use :href="it.icon"></use></svg>
           <span class="lbl">{{ it.label }}</span><span class="val">{{ it.value }}</span>
         </span>
         <span v-if="!sbStats.length" class="sb-empty">统计未同步(等待 qB 连接)</span>
       </span>
-      <button class="sb-btn" title="打开完整 qBittorrent 统计面板" @click="openStats()">
+      <button class="sb-btn" @click="openStats()">
         <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>完整统计
       </button>
       <span class="sb-spacer"></span>
@@ -43,7 +43,7 @@
            "限制速度"是按钮, 点击只打开该方向预聚焦的浮层(独立的"限速"按钮退役)。
            R10-03: 三个文字标签去棹(同排已有图标 + 数值, 文字纯冗余), 完整语义由 title 补全。
            R10-04: 取值口径 = speedLimitBytes 单点(状态栏与速度染色分母同源)。 -->
-      <span class="sb-speed" title="全部组下载/上传速度合计与 qB 当前限速; 点击任一方向可修改该方向限速">
+      <span class="sb-speed">
         <!-- ALT-01: 备用速度切换(计划 26-09-28-0037 TPL-A) —— qB 惯例"乌龟"隐喻:
              熄灭 = 主速度生效, 亮绿 = 备用速度生效; 状态读主轮询的 statsServer.use_alt_speed_limits
              (零新增请求), 单击经命令队列切 qB toggle 端点; 备用限速数值在限速浮层改。 -->
@@ -51,7 +51,6 @@
           <svg class="ico ico-sm" :class="{ spin: altToggling }" viewBox="0 0 16 16"><use href="#i-turtle"></use></svg>
         </button>
         <button class="sb-spd" :class="{ off: sbLimits.down === '不限' }"
-                :title="'下载 ' + fmtSpeed(totalDl) + ' / 限速 ' + sbLimits.down + ' · 点击修改(就近弹出)'"
                 @click.stop="openSpeedAt($event, 'down')">
           <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>
           <span class="val">{{ fmtSpeed(totalDl) }}</span>
@@ -60,7 +59,6 @@
         </button>
         <span class="sb-sep"></span>
         <button class="sb-spd" :class="{ off: sbLimits.up === '不限' }"
-                :title="'上传 ' + fmtSpeed(totalUl) + ' / 限速 ' + sbLimits.up + ' · 点击修改(就近弹出)'"
                 @click.stop="openSpeedAt($event, 'up')">
           <svg class="ico ico-sm ico-up" viewBox="0 0 16 16"><use href="#i-upload"></use></svg>
           <span class="val">{{ fmtSpeed(totalUl) }}</span>

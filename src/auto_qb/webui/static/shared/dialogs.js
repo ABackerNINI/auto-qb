@@ -644,7 +644,7 @@ window.AQB_DIALOGS = {
           cls: "ico-peers",
           label: "连接",
           value: this.statVal(s.total_peer_connections),
-          title: "当前 peer 连接总数 · 连接状态: " + this.connText(s.connection_status),
+          title: "连接状态: " + this.connText(s.connection_status),
         },
         {
           key: "disk",
