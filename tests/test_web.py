@@ -31,6 +31,7 @@
 - test_frontend_col_manual_flag_not_revived: 反向守阵 —— manual 标志位(colManual)不得复活(v5 下 w 非空即固化页)
 - test_frontend_cols_legacy_keys_have_migration: LEGACY_COLS_KEYS 键链必须伴随 migrateLegacyToV5 迁移(v3->v4 清零事故的机检)
 - test_frontend_cols_empty_hint_names_browser_clear_cause: 空存储提示必须点名浏览器站点级"关闭窗口时清除 Cookie 和站点数据"这条通道 + 给自查路径 + sessionStorage 会话级去重(2026-09-24 取证: cookie 例外 127.0.0.1,* setting=4)
+- test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
@@ -3302,6 +3303,40 @@ def test_frontend_cols_empty_hint_names_browser_clear_cause():
     assert "edge://settings/content/all" in body, "提示必须给出可自查的浏览器设置路径(否则用户无从下手)"
     assert "sessionStorage" in body, "缺少 sessionStorage 兜底 ⇒ 清站点数据的环境下每次开浏览器都弹"
     assert "localStorage.setItem(COLS_ORIGIN_HINT_KEY" in body, "普通场景的跨会话去重标记(只弹一次)被删了"
+
+
+def test_removed_redundant_tooltips_stay_removed():
+    """复述型 tooltip 不得复活守阵(报告 26-10-04-0815: A-G 组模板 66 处 + H1 columns.js)
+
+    判定口径: tooltip 只是逐字复述可见内容 / 图标本身自明的都属冗余, 已整体移除;
+    全站悬浮提示统一由 shared/ui_feedback.js 拦截层渲染。本守阵读模板/JS 源码钉住
+    代表性文案, 哪个文件把已删文案写回去即红。判定为保留的 tooltip(操作说明/后果预告、
+    drawer.js 等的 _openModal 弹窗标题字段、config_hub.js 设置节标题、独立图表部件)不在列。
+    """
+    checks = (
+        # A 组 · 底部状态栏: 数值逐字复述 + 「点击修改」增量提示 + 数据状态实现细节
+        ("shared/tpl/statusbar.html", ("点击修改", "数据状态")),
+        # B 组 · 顶栏页签: 与可见文字同义(图标+「分组」/「种子」)
+        ("shared/tpl/topbar.html", ("按分组展示", "全部种子一行一条")),
+        # D 组 · 抽屉关闭钮: ✕ 自明, Esc 快捷键在帮助浮层有正式清单
+        ("shared/tpl/drawer.html", ("关闭(Esc)", "关闭（Esc）")),
+        # E 组 · 对话框族关闭钮: 关闭钮的 ✕ 自明
+        ("shared/tpl/dialogs.html", ('title="关闭"',)),
+        ("shared/tpl/dialogs-mgr.html", ('title="关闭"',)),
+        ("shared/tpl/popovers.html", ('title="关闭"',)),
+        # F 组 · 曲线标题栏 caret: 箭头方向已表意
+        ("shared/tpl/settings-detail.html", ("点击收起",)),
+        ("shared/tpl/xtpl.html", ("点击收起",)),
+        # H1 · columns.js 列偏好提示横幅: 横幅整体可点 + 手型光标 + 15s 自毁
+        ("shared/columns.js", ("点击关闭",)),
+    )
+    for rel, needles in checks:
+        text = open(os.path.join(STATIC_ROOT, *rel.split("/")), encoding="utf-8").read()
+        for needle in needles:
+            assert needle not in text, (
+                f"{rel} 出现已移除的复述型 tooltip 文案「{needle}」(报告 26-10-04-0815 判定为移除) —— "
+                "悬浮提示一律走 shared/ui_feedback.js 拦截层, 不要把原生 title 写回去"
+            )
 
 
 def test_frontend_page_location_persisted():

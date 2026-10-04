@@ -325,7 +325,7 @@ window.AQB_COLUMNS = {
     },
 
     /* 空存储提示(W4 origin 隔离 + W5 浏览器"关闭时清除站点数据"): 本 origin 没有列偏好记录时弹一次
-     * (点击关闭 / 15s 自灭)。运行时注入 DOM, 两套模板零改动。
+     * (整条横幅可点关闭 / 15s 自灭)。运行时注入 DOM, 两套模板零改动。
      *
      * !为什么只陈述"本地址没有偏好记录"、不做精确判定(2026-09-24 取证): 站点级"关闭窗口时清除
      * Cookie 和站点数据"(Chromium cookie 例外 setting=4 = SESSION_ONLY)会在关浏览器时把该 host 的
@@ -352,7 +352,6 @@ window.AQB_COLUMNS = {
         + "「关闭窗口时清除 Cookie 和站点数据」→ 每次关掉浏览器偏好都会回默认"
         + "(Edge 可在 edge://settings/content/all 里查该地址)。可固定用同一地址, "
         + "或改用 http://localhost:<端口> 打开。";
-      el.title = "点击关闭";
       el.style.cssText = "position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;"
         + "background:#1c252d;color:#e4eaef;border:1px solid #26313a;border-left:3px solid #5cc0cf;"
         + "padding:10px 16px;font:13px/1.5 'Segoe UI','Microsoft YaHei',sans-serif;"
