@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="skip-check-self-fail-gate">
+<meta name="issue-stamp" content="26-10-05-0402">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="skip-check-self-fail-gate">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0314-plan-webui-danger-guards.html, memory-bank/tasks/26-10-05-webui-danger-guards.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验">
+<meta name="issue-summary" content="候选种子自身当日校验失败(recheck_fails[hash]&gt;0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查">
+<title>跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验</h1>
+    <p class="lede">候选种子自身当日校验失败(recheck_fails[hash]&gt;0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-05-0402-bug-skip-check-self-fail-gate</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 04:02</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">backend</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>发现场景: 2026-10-05 复析计划 26-10-05-0314(WEBUI 危险动作防护)的拍板点 D4 时, 下沉核对决策链 1.5/1.6 的实现语义, 发现失败推断(chain 1.6)按设计只查<strong>其它成员</strong>, 而失败冷却(recheck_fails)的唯一消费点在 recheck 提交前 —— 两条跳检路径(规则侧决策链 0-4 / WEB 直连 ops.skip_check)对「<strong>候选种子自身</strong>当日校验失败后再跳检」都没有任何闸门。</p>
+    <p>后果形态: 自身校验失败 = 该种子对自身 piece hash 的校验未通过(数据与种子不匹配的确证, 见 §05 语义注记) → 用户/规则此时跳检 → is_skip_checking 把全部块标有效 → progress=1 被判「已完成」→ chain 0 永不再复查, zSkipChecked 打标后仅隔离出参考链, 本体无人回头。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">代码原文引用; 取证 2026-10-05 04:02(基线 a13af0cb, 同批提交仅 kb.nav 工具件, 引用文件未漂移; 初读在 5e697ea0 树上完成)。</p>
+<pre><code># 1. 决策链 1.6 others-only: 推断循环显式跳过自身(full_checking.py:141-142)
+for h in members:
+    if h == hash or recheck_fail_count(manager.ctx.state, h) &lt;= 0:
+        continue
+
+# 2. 决策链 docstring 同口径(checking.py:37): 「组内其它成员校验失败且文件映射一致 -&gt;
+#    结果必然相同, skip(失败推断...)」 —— 自身失败不在推断语义内
+
+# 3. 失败冷却唯一消费点在 recheck 提交前, 且仅 rule 源(ops_mod.py:167);
+#    skip_check / _skip_gates 全程不读 recheck_fails
+if source == "rule" and recheck_fail_count(self._ctx.state, hash) &gt;= RECHECK_FAIL_LIMIT:
+
+# 4. _skip_gates(ops_mod.py:452)现仅两道: 部分下载禁止 + 同日去重 —— 无自身失败闸
+
+# 5. 洗白永久性依据: chain 0(checking.py:88)已完成种子一律跳过校验
+if not (ctx.torrent.state_enum.is_stopped and ctx.torrent.progress &lt; 1.0):
+    return ActionResult.skip("种子非暂停中未完成状态, 无需校验")</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>种子自身当日 recheck 失败且仍暂停未完成(失败后回落态恰好满足 chain 0); <strong>规则侧</strong>需 without_reference 段 mode=skip-checking 且组内无可过 basic_check 的参考(自身失败的组通常正好没有 —— 同映射姊妹若曾通过, 自身不会失败); <strong>WEB 侧</strong>仅需 skip_check_menu 启用时用户点跳检(单发或批量), 无任何配置前提</td></tr>
+      <tr><td>影响范围</td><td>全部跳检路径(rule / web 单发 / web 批量); 坏数据被标全块有效后做种外传 —— PT 站 H&R / 口碑 / 封号风险; zSkipChecked 只隔离参考链不保护本体, chain 0 保证自动化永不复查, 仅用户手动 recheck 可翻案</td></tr>
+      <tr><td>严重度</td><td><strong>高</strong> —— 数据完整性工具的核心保证(未验证不发种)被既有路径绕过, 且后果对外不可逆、对用户静默</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>src/auto_qb/rules/actions/full_checking.py:141</code>(取证 2026-10-05 04:02)· <code>_skip_on_group_check_failed</code> 的 <code>if h == hash</code> · grep <code>h == hash</code></li>
+      <li><code>src/auto_qb/core/modules/ops_mod.py:167</code>(取证 2026-10-05 04:02)· recheck 提交前失败冷却 · grep <code>recheck_fail_count</code>(全仓消费点仅此 + full_checking.py:142 读他人)</li>
+      <li><code>src/auto_qb/core/modules/ops_mod.py:452</code>(取证 2026-10-05 04:02)· <code>_skip_gates</code> · grep <code>_skip_gates</code></li>
+      <li><code>src/auto_qb/rules/actions/checking.py:88</code>(取证 2026-10-05 04:02)· 决策链 0 谓词 · grep <code>state_enum.is_stopped and ctx.torrent.progress</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">已核结论(代码核实, 非猜测): 失败推断(1.6)的设计语义是「同组<strong>他人</strong>失败可外推到自身」, 「<strong>自身</strong>失败」的防护没有任何一处承接 —— 决策链 0-4 无对应闸门, 失败冷却的唯一消费点在 recheck 路径(且仅 rule 源)。属设计时未覆盖的防护缺口, 非回归。
+    <br><br>语义注记: recheck_fails 计数含噪声 —— 「曾见 checking 后落回未完成」(真数据证据)与「宽限耗尽未开检 / 异常」(非数据证据)都计数(full_checking.py:47-49); 假失败自愈仅清「指向已完成/已删成员」的记录。修本件时须沿用或收窄该接受面, 不要假设计数=确定坏数据。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <ul>
+      <li><strong>候选 A(与 26-10-05-0314 计划 G8 合流)</strong>: ops.<code>_skip_gates</code> 增闸 —— <code>recheck_fail_count(self._ctx.state, hash) &gt; 0</code> → fail「该种子今日校验失败, 数据完整性未证实, 禁止跳检」。注意: ①这会改变规则侧行为(without_reference skip-checking 段新增拒绝), 是<strong>行为修复</strong>而非纵深防御, 与 chain 1.6 others-only 的语义边界需拍板; ②噪声语义沿用 §05 注记的接受面。</li>
+      <li><strong>候选 B(仅 WEB 拦)</strong>: 规则侧保持 others-only, WEB 入口特判 —— 否决倾向: 两处口径漂移(26-10-05-0314 §04 否决方向 B 的同款理由), 且拒绝文案在 ops 单点写一次更自解释。</li>
+      <li><strong>衔接</strong>: 26-10-05-0314 计划已新增 G8(组内 1.6 镜像闸); 本件若认领建议与该计划同批实施或紧随, 复用同一谓词原语与文案骨架。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-05 04:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-05-0402-bug-skip-check-self-fail-gate.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

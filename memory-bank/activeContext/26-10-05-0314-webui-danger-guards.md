@@ -1,16 +1,15 @@
 # WEBUI 危险动作防护(重检确认框 + 跳检前置条件)
 
-> 摘要: 认领 26-10-05-0254 两个姊妹件 issue(重检鼠标路径缺确认框 / 跳检缺前置条件判定), 复验均仍复现, 产出分步实施计划 [26-10-05-0314](../plans/26-10-05-0314-plan-webui-danger-guards.html)(Open 待拍板)。计划核心: 跳检前置走方向 A —— 新闸门(已完成/活跃中/组内活跃下载/同 hash 在途/filelist 前置)全部下沉 `ops._skip_gates` 单点, rule/web 共用, `webui/commands.py` 预计零改动; 重检抽 `_recheckConfirm` 前端三鼠标入口接入。复验两项新核实: ①`check_filelist` 全仓仅规则侧调用(checking.py:121), WEB 跳检从不查文件(未随四阶段迁移); ②HR 锚点 seeding_time 取自 qB 每种统计(record.py:287-296), 跳检重加清零 → HR 超额线(3×, service.py:1358)倒退。拍板点 D1-D7 全部附推荐(D1 已完成禁止/D3 组级一并下沉/D4 组员在途不拦/D5 HR 本期只文案警示/D6 点后报错)。**Refs:** memory-bank/plans/26-10-05-0314-plan-webui-danger-guards.html
+> 摘要: 认领 26-10-05-0254 两姊妹件, 实施计划 [26-10-05-0314](../plans/26-10-05-0314-plan-webui-danger-guards.html)(Open, 待拍板 D1-D3/D5-D7)。2026-10-05 复析翻转 D4: 组员 full-checking 在途(1.5)与校验失败推断(1.6)由不拦改拦 —— 1.5 实为等判决时序而非省 I/O, 1.6 是确定性坏数据证据, 洗白经 chain 0 永久化且 G3-G6+确认框零覆盖; 新增 G7/G8(谓词逐字镜像规则侧, G8 假失败自愈只读变体), 前置条件 5 条→7 条, 守阵增 T16/T17。复析另发现「候选自身当日校验失败无闸门」缺口(规则侧 without_reference 段与 WEB 路径共有; 不并入本计划以防破坏规则侧零变化), 入池 [26-10-05-0402](../issues/26-10-05-0402-bug-skip-check-self-fail-gate.html)。已完成条目(复验/计划落盘/复析修订/入池/建档/基线 0413)沉淀进任务档案, 本切片只留易变层。
 >
-> 最后活动: 2026-10-05 03:14
-
-## 已完成
-- 复验两 issue(取证基线 5e697ea0), 复验行写入各自 §07, 含行号漂移修订(`_skip_gates` :349→:452)与两项待核结论。
-- 实施计划落盘(方案/矩阵/S1-S5 分步/T1-T15 测试守阵/风险回滚), 状态 Open。
-- 双向认领链(issue doc-refs ↔ plan doc-refs)+ kb.index 重建 + kb.check 闭环验证通过。
+> 最后活动: 2026-10-05 04:13
 
 ## 正在进行
-- 等用户对 D1-D7 拍板(计划 §01 表); 拍板后 S1 开工(ops 闸门扩展 + store 组级判定上移)。
+
+- 等用户对 D1-D3/D5-D7 拍板(计划 §01 表, 全部附推荐); D4 已拍板(均拦, G7/G8)。
 
 ## 下一步
-- S1 → S5 按 [计划 §05](../plans/26-10-05-0314-plan-webui-danger-guards.html) 分步实施, 每步独立提交; S5 收尾跑 test.full 建基线切片。
+
+- 拍板后 S1 开工(ops 闸门扩展 G3-G8 + filelist 并入执行链 + store 组级判定上移) → S5 按 [计划 §05](../plans/26-10-05-0314-plan-webui-danger-guards.html) 分步实施, 每步独立提交; S5 收尾跑 test.full 建基线切片并把 issue/计划置 Done。
+
+**Refs:** memory-bank/tasks/26-10-05-webui-danger-guards.md, memory-bank/plans/26-10-05-0314-plan-webui-danger-guards.html
