@@ -26,6 +26,10 @@
   ③⚠ 生成物由 CRLF 改写成 LF 后, 若索引 stat 缓存还记着旧(CRLF)尺寸, `git status` 会报一批**幽灵 M** ——
   `git diff` / `git diff-files` 内容比对均为 0, `git update-index --refresh` 也刷不掉; 跑一次
   `git add -- <那批文件>` 刷新 stat 即净(内容与索引恒等 ⇒ 不产生任何暂存条目)。
+- **复发 +1 (2026-10-05)**: 处置①修的是生成器, **其它 clone 盘上的旧 CRLF 生成物不会被自动清理** —— 本 clone
+  首次跑 test.quick 即被守阵 `test_generated_indexes_are_lf_only` 抓到 11 个 `_index.md` 残留(`eol=lf` 归一化下
+  git status 不可见); `kb.index` 重建即绿。没翻到本条的原因: 本轮任务是纯文档编辑, 未走 git 前置路由;
+  守阵报错自带处置配方, 拦截闭环成立。
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 

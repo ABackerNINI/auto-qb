@@ -68,6 +68,8 @@ python .agents/skills/create-issue/scripts/new_issue.py <slug> \
   (如 `webui-optimistic-ui` 下挂 3 条), 这样 `commands run kb.docmap` 的专题视图才把它们串成一条线。
   不传 = 一题一专题。**该 meta 不可省** —— 缺了该 issue 会从专题视图里静默漏掉
   (守卫 `tests/test_docs_forms.py::test_issue_topics_present` 判红)。
+- 模板同时带空的 `doc-refs` meta(认领链声明位): 与既有计划/档案相关时创建即可填;
+  被 tasks 档案认领时**必须填**, 见「修一条 issue 时」第 3 步。
 - 产出 `<issues dir>/<时间>-<类型>-<slug>.html`, 例 `26-09-19-2359-docs-memory-bank-push-rule-drift.html`。
 - 脚本随后**自动重建 `_index.md`** 并打印路径; 文件已存在则报错退出, 不覆盖。
 - `--dir` 不传时按 `memory-bank/issues` → `issues` → `docs/issues` 探测已存在的那个; 都不存在则要求显式指定。
@@ -119,9 +121,12 @@ commands run kb.check   # 只比对不写(供守卫/提交闸门用)
    没认领就改代码 = 越界, 没认领就置 `In Progress` 同样是越界。用户没指派时, 正确动作是把
    issue 留在 `Open`, 在回复里说明"要不要认领 / 什么时候修", 等一句明确的话。
 2. 开工置 `In Progress`, 先**复验**(防过期原则第 5 条), 再重建索引。
-3. 修完置 `Done`, 在报告里补"实际修法 / 验证方式 / 测试数字"; 与"建议修法"不同则保留建议原文并说明改道原因。
-4. 按 `memory-bank` skill 的收尾 DoD 跑测试、回写 `memory-bank/` 主题文档; 需要时同步更新报告正文。
-5. 重建索引, 让 `_index.md` 反映新状态。
+3. **填认领链反向声明**: 认领方(任务档案/计划)会在它的 `Refs` 里列本 issue —— 本件同步把 head 的
+   `doc-refs` meta 填上认领方路径(仓库根相对路径, 多目标英文逗号)。缺了就是单向链, 提交闸门
+   `gen_doc_map --check` 判红; 协议单点见 [doc-forms「认领链」](../../../memory-bank/conventions/doc-forms.md)。
+4. 修完置 `Done`, 在报告里补"实际修法 / 验证方式 / 测试数字"; 与"建议修法"不同则保留建议原文并说明改道原因。
+5. 按 `memory-bank` skill 的收尾 DoD 跑测试、回写 `memory-bank/` 主题文档; 需要时同步更新报告正文。
+6. 重建索引, 让 `_index.md` 反映新状态。
 
 ## 可移植性(换项目怎么用)
 
@@ -132,7 +137,7 @@ commands run kb.check   # 只比对不写(供守卫/提交闸门用)
 | issues 目录 | 探测 `memory-bank/issues` → `issues` → `docs/issues` | `--dir <相对仓库根的路径>` |
 | 仓库根 | 向上探测 `.git`(目录或 worktree 的 `.git` 文件) | `--root <路径>` |
 | 项目名 | 模板里不出现项目名 | `--project <名>` 注入封面 kicker |
-| meta 名 | `issue-slug / -stamp / -type / -tier / -status / -title / -summary` + `doc-topic`(无项目前缀) | 不用改 |
+| meta 名 | `issue-slug / -stamp / -type / -tier / -status / -title / -summary` + `doc-topic`(无项目前缀) / `doc-refs`(空值默认, 认领时填) | 不用改 |
 | 语言 | 中文模板 | 替换 `assets/*.html` |
 | 类型枚举 | `scripts/_common.py` 的 `TYPES` | 改这一处即可 |
 
@@ -147,4 +152,5 @@ commands run kb.check   # 只比对不写(供守卫/提交闸门用)
 - ❌ 文件名 / 时间戳凭记忆编 —— 必然与真实时间不符, 且与别的文件撞序。
 - ❌ 手改 `_index.md` —— 生成物, 重跑脚本即可。
 - ❌ 只改 meta 不改封面徽标(或反之) —— 两处漂移, 人读的和脚本读的不一致。
+- ❌ 认领 issue 后不填 `doc-refs` —— 认领方的 `Refs` 列了本件就是单向链, 提交闸门判红(见「修一条 issue 时」第 3 步)。
 - ❌ 把大改造塞进 issues —— 那该是 `tasks/` 档案或 `memory-bank/plans/` 计划。

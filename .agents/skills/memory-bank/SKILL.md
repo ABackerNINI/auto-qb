@@ -39,9 +39,9 @@ user-invocable: true
 1. **activeContext 切片**: 写/更新 `memory-bank/activeContext/YY-MM-DD-HHMM-<slug>.md`(含 `# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`)。**同一专题跨会话沿用同一个 slug** —— 新会话更新「最后活动」与「正在进行」, 不新建文件(只在换专题时新建); 已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**; 超 14 天没动 → 蒸馏后删除。它是易变层, 不是流水账。四条约定见 [references/kb-structure.md](references/kb-structure.md)。
 2. **tasks/**: 命中阈值 → 按下方「任务档案规范」定名(**先查重再建**)建/更新 `memory-bank/tasks/YY-MM-DD-*.md`(追加进度日志 + 更新子任务状态表 + 维护 `Summary` 与 `Updated`), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。
 3. **事实回写**: 代码事实变更 → 回写对应 `memory-bank/` 主题文档与根 `README.md`; 测试基线数字**只写** `testing/baselines/` 下的新切片(一条基线一个文件, 最新一条 = 单点事实源, 其它文档一律引用不手抄 —— 命名与体例见 `testing/baseline.md` 口径段)。
-4. **闸门**: 跑 `commands run test.full`, 新建基线切片记录实测数字(`testing/baselines/` 下)并写进本次结论。
+4. **闸门**: 跑 `commands run test.full`, 新建基线切片记录实测数字(`testing/baselines/` 下)并写进本次结论; 建档任务的切片补一行 `**Refs:** <档案路径>` 反向声明(认领链, 见「任务档案规范」)。
 5. **收录命令**: 遇到**反复要跑/难拼/有"看起来正常但不生效"写法**的命令 → 自己 `add` 进 `.commands/` 的对应包, 别在文档里抄(手抄会被 `commands run doc.drift` 判红)。判据见 [commands skill](../commands/SKILL.md)「收录协议」。
-6. **新坑**: 非显然的失败/陷阱 → **按动作选类, 写进 `pitfalls/<类>/<主题>.md`**: 补三行头(`# 标题`/`> 摘要:`/`> 触发:`), 条目写 `触发`/`判别`/`处置` **三必填**(`守阵`/`复发` 选填); 没有合适的类**先扩枚举**; 写完 `commands run kb.index`。
+6. **新坑**: 非显然的失败/陷阱 → **按动作选类, 写进 `pitfalls/<类>/<主题>.md`**: 补三行头(`# 标题`/`> 摘要:`/`> 触发:`; 建档任务再补一行 `**Refs:** <档案路径>` 反向声明), 条目写 `触发`/`判别`/`处置` **三必填**(`守阵`/`复发` 选填); 没有合适的类**先扩枚举**; 写完 `commands run kb.index`。
    - **复发闭环**: 踩到**已记的坑** → 该条 `复发` **+1**, 并在档案里写一句**为什么没命中**(路由没到/文件没读/读了没照做)。反复重踩于是变成**可排序的数字**, 也是「下沉为守阵」的优先级依据。
    - **拆文档也算入库动作**: 写进 `memory-bank` 前先看目标文件的 cap(`_common.CAP_POLICY`, 人读镜像见下方 cap 表); 超了精简/外迁到 50%(触顶处置口径见 cap 表注)。
 7. **cap 债务转告**: 提交输出出现 `[债务]` 行 → **在回复里提醒用户「文档数字已超标, 需另开新会话清理」**, 并**不在本会话动手改**(agent 开不了新会话, 在同一场里改 = 把返工留在原处)。债务清单不用转抄 —— 用户开清理会话时跑 `commands run doc.caps` 现算即可。`AGENTS.md` 不适用这条: 它是硬规定, 超限当场拦下就地削薄。
@@ -55,6 +55,7 @@ user-invocable: true
 - 必备章节: `# <文件名> — 名称`、状态行(`Status`/`Added`/`Updated`/`Summary`)、`## 原始请求`、`## 思考过程与决策`、`## 实现计划`、`## 子任务状态表`、`## 进度日志`。
 - **`**Status:**` 只能取这 4 个英文词**: `In Progress`/`Open`/`Done`/`Dropped` —— 守卫用正则匹配、`gen_tasks_index.py` 按它决定索引分区; 写成中文「完成」或加前缀(`✅ 完成`)会被判**非法状态行**, 两条守卫同时红。旧词映射见 [doc-forms 约定](../../../memory-bank/conventions/doc-forms.md)(`Pending`→Open · `Completed`→Done · `Abandoned`→Dropped)。
 - `**Summary:**` 是 `_index.md` 摘要的数据源 —— 索引里按 `gen_tasks_index.SUMMARY_MAX` **截断成一行**, 全文留在档案, 摘要写长不会撑爆索引。
+- 引用他件 (issue/计划/报告/基线切片/坑档) 写 `**Refs:**` 行: 值 = **仓库根相对路径**, **多目标一律英文逗号、全写一行** (`·`/`、`/`;` 会被整串当成单一路径判红)。认领链**双向**: 每个被引目标都必须反向声明本档案 (HTML `doc-refs` meta / md `**Refs:** <档案路径>` 行), 单向链提交闸门判红 —— 协议单点见 [doc-forms「认领链」](../../../memory-bank/conventions/doc-forms.md)。
 - 迁移期档案保留 `**Legacy-ID:** TASKnnn`, 供历史文档与历史对话中的旧编号回溯。
 - 一个专题一个档案(不逐会话建文件): 新会话追加**结论与决策**; 历史流水账原文归档在该档案的 `## 历史会话纪要 (原文归档)` 段。
 - 守卫 `tests/test_memory_bank.py` 校验索引↔文件双向一致、忽略日期前缀的 slug 唯一、命名规范、状态分区、必备章节、索引 == 生成结果 —— 登记了没文件/有文件没登记都会让 pytest 失败。
