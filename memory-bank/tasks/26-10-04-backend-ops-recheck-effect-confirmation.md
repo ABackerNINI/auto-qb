@@ -5,7 +5,8 @@
 **Updated:** 2026-10-04
 **Summary:** 认领 issue 26-10-03-1140 (recheck 首跳误判已完成种子「校验成功」), 按计划 26-10-04-1824 整体重设计为证据门控判定: checking_meta 纯函数 poll_verdict (SUCCESS 仅 seen_checking 可达) + ops_mod poll 闭包重构 + 宽限仲裁直查(D5 ≤1 次) + R1 提交点实时复核(live 基线) + 模式固化(坑档/判定纪律)。新增用例 15 条 + 既有适配 27 处; test.full 2530 passed + 4 skipped / 99%。D1-D5 全按推荐拍板。四笔实施提交 fd3b9a5d / 6b408006 / 8c5c3548 / d51c0d93 (+ 收尾 a75f9a6f), 分支 ops-recheck-effect-confirmation。
 
-**Refs:** memory-bank/issues/26-10-03-1140-bug-ops-recheck-false-success.html · memory-bank/plans/26-10-04-1824-plan-ops-recheck-effect-confirmation.html · memory-bank/testing/baselines/26-10-04-2256-ops-recheck-effect-confirmation.md
+**Topics:** ops-recheck-false-success
+**Refs:** memory-bank/issues/26-10-03-1140-bug-ops-recheck-false-success.html, memory-bank/plans/26-10-04-1824-plan-ops-recheck-effect-confirmation.html
 
 ## 原始请求
 
