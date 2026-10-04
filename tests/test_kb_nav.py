@@ -16,6 +16,9 @@
    绝不读写 —— 否则 30s 轮询会把用户改的筛选洗掉 (与 pin 同源)。还原须对 schema 校验 (见
    pitfalls/web-ui/ui-location-persist.md), 且已知状态先并入 statusSeeded 台账, 否则刷新后首轮
    derive() 会把用户取消过的已知状态又加回来 (与 3' 同一根因)。
+3''''. **顶栏可分辨**: 顶栏底色必须与侧栏 / 工具栏 / 内容区拉开可测的明度差 (2026-10-05 用户报
+   「kb.nav 标题栏颜色与其余部分难区分」)。顶栏与侧栏曾共用同一枚 --paper ⇒ 逐通道差 0;
+   修法是专用令牌 + 抬明度 (低透明度下色相差异会被压没, 只剩亮度差作数), 与 3''' 同一类判据。
 3'''. **状态色可读**: 状态徽章底色 + 文字色必须一眼可分 (2026-10-05 用户报「open/done 状态底色相近」)。
    两个坑: ①`.chip{color:var(--dim)}` 与 `.chip.st-*` 同特异性且写在更靠后, 会把状态文字色整个盖掉
    (改前实测五个状态 chip 文字全是 --dim 灰); ②cyan / green 两个令牌亮度几乎相同, 同透明度时底色
@@ -39,6 +42,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_shell_no_external_resources: 壳无 http(s) 外链 src/href 资源引用 (属性锚定, 注释/文案不受影响)
 - test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 标题 专题 链 (表头与共用行模板 ledgerCells 同步)
 - test_status_badge_colors_distinguishable: 状态徽章文字色写在 .chip.st-* 上 (不被同特异性的 .chip --dim 盖掉) + Open/Done 底色 alpha 必须不同 (同亮度令牌只能靠明度拉开) + 控制台 .rs 与台账同口径 + 出局态无底
+- test_topbar_surface_distinguishable: 顶栏底色走专用令牌 (不得借回 --paper / --paper-2) + 与 --paper / --bg 最大通道差 >= 24 (判据 20 之上留余量) + 下缘必须是 cyan 缝
 - test_status_filter_not_reseeded_every_poll: derive() 对状态候选只自动入选一次 (statusSeeded 闸门在前), 30s 轮询不得盖回用户取消的选择
 - test_shell_has_filter_persistence: 筛选器持久化骨架 (FILTERS_KEY + 存/读/还原三函数 + boot 装载一次 + 输入框/下拉回填初值)
 - test_filter_state_not_reseeded_on_poll: derive() 不得读写筛选器持久化 (与 pin 同源: 轮询不得洗掉用户筛选)
@@ -285,6 +289,55 @@ def test_status_badge_colors_distinguishable() -> None:
     for st in ("Open", "InProgress", "Done"):
         assert alpha(rule(f".rs.st-{st}")) == alpha(rule(f".chip.st-{st}")
                                                    ), (f"控制台 .rs.st-{st} 与台账 .chip.st-{st} 底色透明度不一致 —— 两视图状态口径必须同一套")
+
+
+def test_topbar_surface_distinguishable() -> None:
+    """顶栏底色必须与「其余部分」拉开**可测**的明度差 —— 2026-10-05 用户报
+    「kb.nav 标题栏颜色与其余部分难区分」。
+
+    改前实测 (headless 截元素图取众数填充色): 顶栏 #12161b 与台账左侧栏 / 工具栏逐通道差
+    **0** (三处共用同一枚 --paper), 与表格区 --bg #0e1114 只差 **7** —— 按本仓判据
+    (同视图内两两 RGB 最大通道差 <20 即"分不出", pitfalls/web-ui/layout-css.md)
+    两条都不合格, 所以整块 chrome 连成一片、中间只剩一条 hairline。
+
+    三条红线:
+    1. **顶栏不许再借 --paper / --paper-2** —— 侧栏 / 工具栏 / 控制台面板共用它们, 借了必然同色;
+       必须走专用令牌 (同 prism --statusbar-bg 的先例: 共用令牌一改会把别处带偏)。
+    2. 该令牌与 --paper / --bg 的最大通道差 >= 24 —— 判据下限是 20, 但贴着下限的值实机上仍偏弱,
+       故留 4 余量。
+    3. 下缘边界必须带 accent 色相 (cyan) —— 中性白 hairline 叠在亮一档的栏上读不出"这里是边界"。
+    """
+    text = SHELL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", text, flags=re.S)  # 去注释, 免得注释里的示例选择器被当成规则
+
+    def rule(sel: str) -> str:
+        m = re.search(re.escape(sel) + r"[^{}]*\{([^}]*)\}", css)
+        assert m, f"{sel} 规则不见了? 顶栏改版要同步本守阵"
+        return m.group(1)
+
+    def token(name: str) -> tuple[int, int, int]:
+        m = re.search(re.escape(name) + r"\s*:\s*#([0-9a-fA-F]{6})", css)
+        assert m, f"令牌 {name} 不见了 (或不再是 6 位 hex, 本守阵只认 hex)"
+        h = m.group(1)
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+
+    body = rule(".topbar")
+    bg = re.search(r"background:\s*var\((--[a-z0-9-]+)\)", body)
+    assert bg, f".topbar 的 background 不是显式令牌 (解析不了就守不住): {body!r}"
+    top_tok = bg.group(1)
+    assert top_tok not in ("--paper",
+                           "--paper-2"), (f".topbar 又借回 {top_tok} 了 —— 它同时管侧栏 / 工具栏 / 面板, 借了就与它们同色, "
+                                          "正是「标题栏难区分」的成因")
+
+    c_top = token(top_tok)
+    for other in ("--paper", "--bg"):
+        c = token(other)
+        d = max(abs(c_top[i] - c[i]) for i in range(3))
+        assert d >= 24, (f"顶栏底色 {top_tok}{c_top} 与 {other}{c} 的最大通道差只有 {d} (<24) —— "
+                         "按判据 (<20 即分不出) 这条随时会退回「看不出来」")
+
+    assert re.search(r"border-bottom:\s*1px solid rgba\(\s*86\s*,\s*200\s*,\s*215",
+                     body), ("顶栏下缘必须是 cyan 缝 —— 中性 hairline 叠在亮一档的栏上读不出边界: " + body)
 
 
 def test_status_filter_not_reseeded_every_poll() -> None:

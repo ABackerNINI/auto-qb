@@ -18,6 +18,9 @@
     --paper: #12161b;
     --paper-2: #171d24;
     --paper-3: #1c242e;
+    /* --chrome = 顶栏专用底色 (2026-10-05 加): 在 --paper-3 之上再亮一档, 与 --paper 拉开**可测**的
+       明度差。**不要**把它并回 --paper / --paper-3 —— 顶栏与侧栏同色正是"标题栏难区分"的成因。 */
+    --chrome: #232e3b;
     --ink: #dde3e8;
     --dim: #98a3ad;
     --faint: #6b7681;
@@ -49,14 +52,27 @@
   ::-webkit-scrollbar-thumb { background: #2a333d; border-radius: 4px; }
   ::selection { background: #24424a; color: #fff; }
 
-  /* ============ 顶栏 (三视图共有) ============ */
+  /* ============ 顶栏 (三视图共有) ============
+     底色用**专用令牌** --chrome, 不借 --paper —— 台账左侧栏 / 工具栏 / 控制台面板都用 --paper,
+     顶栏与它们同色时整块 chrome 连成一片, 中间只剩一条 hairline, 用户 2026-10-05 报
+     「标题栏颜色与其余部分难区分」。改前实测: 顶栏 #12161b 与侧栏/工具栏逐通道差 **0**,
+     与表格区 #0e1114 只差 **7** —— 按本仓判据 (同视图内两两 RGB 最大通道差 <20 即"分不出")
+     两条都不合格。
+     修法 = 抬**明度**(低透明度下色相差异会被压没, 只剩亮度差作数), 下缘再补一道 cyan 缝当边界。
+     不直接改 --paper 是因为它同时管侧栏与所有面板, 一改会把整页带偏 ——
+     同 prism --statusbar-bg 的先例 (views.css「不用 --glass 是因为它同时管顶栏, 改它会把顶栏一起带偏」)。
+     ⚠ 顶栏内的控件 (.gsearch / .seg / .pullbtn) 底色仍是 --paper-2, 在亮一档的栏上读作**内凹槽**,
+       不再靠"比栏亮"表示可点 —— 段选钮的选中态因此单独抬了底色, 见 .seg button.on。 */
   .topbar {
     display: flex; align-items: center; gap: 18px; padding: 0 18px; height: 52px;
-    border-bottom: 1px solid var(--hair-2); background: var(--paper); flex: none; position: relative; z-index: 20;
+    border-bottom: 1px solid rgba(86,200,215,.3); background: var(--chrome);
+    flex: none; position: relative; z-index: 20;
   }
   .brand { font-family: var(--disp); font-size: 15px; letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); white-space: nowrap; }
   .brand .sep { color: var(--faint); }
-  .brand small { color: var(--faint); letter-spacing: .12em; margin-left: 10px; font-size: 10px; }
+  /* 副标题在 --chrome 上比在旧 --paper 上暗了一档 (实测对比度 3.92:1 -> 2.97:1, 跌破 3:1),
+     随底色一起抬到 --dim (5.36:1); 层级靠 10px 字号与位置维持, 不靠颜色 */
+  .brand small { color: var(--dim); letter-spacing: .12em; margin-left: 10px; font-size: 10px; }
   .gsearch { position: relative; flex: 0 1 400px; }
   .gsearch input {
     width: 100%; background: var(--paper-2); border: 1px solid var(--hair); color: var(--ink);
@@ -72,7 +88,10 @@
   }
   .seg button:last-child { border-right: none; }
   .seg button:hover { color: var(--ink); }
-  .seg button.on { background: var(--cyan-soft); color: var(--cyan); }
+  /* 选中态单独抬一档 (不借 --cyan-soft 的 .12): 未选中钮在 --chrome 上读作内凹槽,
+     选中钮必须比栏**亮**才立得住 —— .12 叠在 --chrome 上实测仅比栏亮 19 (低于 20 判据),
+     .22 提到 34, 且与未选中态 (#171d24) 拉开 57 */
+  .seg button.on { background: rgba(86,200,215,.22); color: var(--cyan); }
   .readout { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap; }
   .readout b { color: var(--cyan); font-weight: 600; }
 
