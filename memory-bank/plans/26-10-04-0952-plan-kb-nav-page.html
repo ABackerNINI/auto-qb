@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="kb-nav-page">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-04-0952">
-<meta name="doc-updated" content="26-10-04-0952">
+<meta name="doc-updated" content="26-10-04-1043">
 <meta name="doc-refs" content="">
 <title>实施计划 · memory-bank 四工位导航页 · 三视图可切换 · auto-qb</title>
 <style>
@@ -84,7 +84,7 @@
   <div class="meta-row">
     <div class="item"><div class="k">计划</div><div class="v">26-10-04-0952</div></div>
     <div class="item"><div class="k">专题</div><div class="v">kb-nav-page</div></div>
-    <div class="item"><div class="k">状态</div><div class="v">Open</div></div>
+    <div class="item"><div class="k">状态</div><div class="v">Done</div></div>
     <div class="item"><div class="k">分支</div><div class="v">develop</div></div>
     <div class="item"><div class="k">原型</div><div class="v">tmp-analysis/nav-design/ 三套</div></div>
   </div>
@@ -220,7 +220,7 @@
     <li><code>plans/_index.md</code> 重跑 <code>kb.index</code>；本计划状态改 Done（实施完成时）；</li>
     <li>若实施中踩到新坑（如 http.server 线程/编码类），按动作写进 <code>pitfalls/&lt;类&gt;/</code> 并重跑 kb.index。</li>
   </ul>
-  <p class="stub">—— 本计划落文时三套原型已存在并验证；实施从 S1 起步，等用户认领指令。</p>
+  <p>—— 实施完成回执 (2026-10-04): S1 <code>nav_data.py</code> + <code>nav_server.py</code>(92e366b7) / S2 三视图页面壳(7bee8847) / S3 <code>kb.nav</code> 挂点 + README 路由行 + <code>tests/test_kb_nav.py</code> 9 条守阵(防穿越四变体全拒) 全部落地; 实测 test.full <strong>2471 passed + 4 skipped / 覆盖率 99% / 30.7s</strong>(基线切片 26-10-04-1039), <code>kb.check</code> 绿, 本计划状态改 Done。</p>
 </section>
 
 <footer>

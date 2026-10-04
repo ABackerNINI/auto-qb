@@ -36,3 +36,9 @@ run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py --check",
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
 note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验"
+
+[tasks."kb.nav"]
+run     = ["python <skill-dir:memory-bank>/scripts/nav_server.py <args>"]
+timeout = 3600
+when    = "人的知识库导航页: 本地服务现算三视图(台账/控制台/卡片墙)浏览; --gen-static 走静态导出"
+note    = "前台长跑 Ctrl-C 停; 默认绑 127.0.0.1:8765, 端口被占时报错行内提示 --port; --gen-static [DIR] 不起服务落盘单文件(默认 tmp-analysis/nav/, 已 gitignored); 服务模式零落盘, 数据每请求现算"

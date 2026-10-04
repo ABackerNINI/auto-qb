@@ -5,6 +5,22 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **memory-bank 四工位导航页 · 三视图可切换 (2026-10-04, 计划 26-10-04-0952 全段落地)**: issues / plans /
+  reports / tasks 的状态与关联做成本地导航页, 主视图三套并存(台账 / 控制台 / 卡片墙)顶栏一键切换(选择记忆
+  localStorage, file:// 降级)。数据层 `nav_data.collect_nav()` 复用 `gen_doc_map.collect()` 做**薄 enrich**
+  (issue 补 issue-type / issue-tier / issue-summary, 全形态补 doc-updated 缺省回落 stamp; 派生 topics[](live
+  口径同 is_live)与各形态 x 状态 counts), **不改 collect() 本体**(闸门/守阵消费单点, 键集合由守阵钉死);
+  stamp 取数据自带 doc-updated 最大值, 不生成依赖当前时钟的内容。服务层 `nav_server.py` 纯 stdlib
+  http.server 绑 127.0.0.1:8765(allow_reuse_address 必须关 —— Windows 上 REUSEADDR 会让同端口双绑静默成功):
+  `/` 页面壳 + `/api/data` 每请求现算(前端 30s 轮询准实时) + `/memory-bank/<path>` 静态映射(resolve 后必须
+  严格落在 memory-bank/ 内, 越界一律 403, ../ %2e%2e ..%2f 反斜杠变体全拒)。壳 `nav_page.html` 入库
+  scripts/(http 模式 fetch + 轮询; 静态模式 `--gen-static` 注入单文件, 默认 tmp-analysis/nav/ 已 gitignored);
+  `color-scheme: dark` 零外链资源。挂点 `commands run kb.nav`(前台长跑 Ctrl-C 停)。守阵
+  `tests/test_kb_nav.py` 9 条: 数据形状 / issue enrich / stamp 防时钟 / collect() 键集合不回归 / 壳三视图
+  容器+dark+零外链 / 服务层三路由与防穿越, 全桩目录零网络外呼零子进程。基线 2471 passed + 4 skipped /
+  覆盖率 99%(切片 26-10-04-1039)。计划
+  [26-10-04-0952](../plans/26-10-04-0952-plan-kb-nav-page.html)。
+
 - **activeContext 多 clone 冲突治理 = 时间戳切片方案 (2026-09-23, W1–W3)**: 「重写头部滚动栈」改成
   「新增/更新自己的时间戳切片」; 取消 global.md/_index.md/_recent.md 缓存(文件名自带时间与主题,
   `kb.active` 现算); 归档阈值 14 天默认落地(`--stale-days` 可调)。W4(merge-tree 预检 + rerere)可选未做;
