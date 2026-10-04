@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="qb-traffic-line-breaks">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-04-1639">
+<meta name="doc-updated" content="26-10-04-1639">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-04-webui-qb-traffic-line-breaks.md">
+<title>WEBUI qB 流量图折线断裂取证报告 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2027;
+    --accent: #5cc0cf;
+    --accent-ink: #86d7e0;
+    --ok: #7fc08a;
+    --ok-bg: #16241a;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --bad: #e0796f;
+    --bad-bg: #2a1a18;
+    --code-bg: #171d24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1040px; margin: 0 auto; padding: 52px 44px 80px; }
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 76ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13px; font-family: var(--mono); }
+  nav.toc { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { color: var(--accent-ink); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  h4 { font-family: var(--display); font-size: 13.5px; font-weight: 600; margin: 14px 0 6px; color: var(--ink-dim); }
+  p { margin-bottom: 11px; max-width: 84ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 84ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 12px 0 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--hair); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.04em; color: var(--ink-dim); background: var(--paper-2); }
+  td { color: var(--ink); }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 8px; border-radius: 10px; margin-right: 4px; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+  .tag.bad { background: var(--bad-bg); color: var(--bad); }
+  .tag.info { background: #1a2530; color: var(--accent-ink); }
+  .callout { border-left: 3px solid var(--accent); background: var(--paper-2); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0; max-width: 84ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout .t { font-family: var(--display); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 6px; }
+  .callout.warn .t { color: var(--warn); }
+  .callout.ok .t { color: var(--ok); }
+  .callout.bad .t { color: var(--bad); }
+  .callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
+  .anchor { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+  .small { font-size: 12.5px; color: var(--ink-faint); }
+  figure { margin: 16px 0; }
+  figcaption { font-size: 12.5px; color: var(--ink-faint); margin-top: 8px; max-width: 84ch; }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">Forensics Report · qb-traffic-line-breaks</div>
+  <h1>WEBUI qB 流量图折线断裂取证报告 —— 采样节奏被主循环节拍量化, 读侧栅格桶宽错位</h1>
+  <p class="lede">用户报障三症状: ①折线不连贯, 约「10 秒两条折线」且与前后段不连接; ②图更新频率固定, 不随设置的采样频率(3s)对齐; ③采样改 1.5s 后折线只剩端点。本轮以真机落盘数据 + 截图像素测量 + 代码链路三路取证, 根因唯一且已量化复现; 修复建议三点待拍板, 本轮未动任何代码。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">形态</div><div class="v">report(取证快照, 出厂冻结)</div></div>
+    <div class="item"><div class="k">日期</div><div class="v">2026-10-04</div></div>
+    <div class="item"><div class="k">证据快照</div><div class="v">16:23:15 截图 + 16:23:24 数据尾</div></div>
+    <div class="item"><div class="k">状态</div><div class="v">Done(修复另行拍板实施)</div></div>
+  </div>
+  <nav class="toc">
+    <a href="#s1">01 结论</a><a href="#s2">02 症状与现场</a><a href="#s3">03 证据链</a><a href="#s4">04 根因</a><a href="#s5">05 症状对照</a><a href="#s6">06 排除项</a><a href="#s7">07 修复建议</a><a href="#s8">08 证据清单</a>
+  </nav>
+</header>
+
+<!-- ================================================================ -->
+<section id="s1">
+  <h2><span class="no">01</span>结论(先行)</h2>
+  <div class="callout bad">
+    <div class="t">根因 · 一句话</div>
+    <p>采样任务的真实节奏不是配置的 <code>sample_interval</code>, 而是<b>被主循环节拍(main_tick=2s)向上量化的值</b>: 3s 配置实际 4s 一轮(<code>next_run = now + 3</code> 只能在 2s tick 边界到期)。读侧栅格却按 <code>ceil(sample_interval)</code> 切桶(3s/1.5s 档 → 3s/2s 桶宽)—— <b>4s 的行距落进更窄的桶, 桶系统性走空</b>, 前端 <code>spanGaps:false</code>(null 桶断线不连线, §5.2 拍板语义)如实把空桶画成断口, 折线碎段; 1.5s 档桶宽(2s)恰为行距(4s)的一半, 每个数据点两侧桶全空 → 全部判孤点, 只剩点标。</p>
+  </div>
+  <div class="callout warn">
+    <div class="t">伴随缺陷 · 两条</div>
+    <p><b>热重载错位</b>: 采样任务 interval 注册时定死(<code>_register_task</code> 只在启动/队列重建跑), 运行期改 sample_interval 只立刻影响读侧(L0 换对象), 写侧节奏不动 —— 用户改 1.5s 后「写 4s / 读 2s 桶」错位拉满, 全孤点状态稳定复现。<b>前端轮询下界残留</b>: 刷新间隔夹取下界 15s 是<b>放宽前的旧配置校验下限</b>(26-10-04 边界已放宽到 1.5s, 前端没跟), 3s 采样下图固定 15s 才刷新 —— 即「更新频率固定不对齐」。</p>
+  </div>
+  <div class="callout ok">
+    <div class="t">量化吻合</div>
+    <p>三个症状全部被同一机制定量解释: 4s 行距 × 3s 桶 → 6~12s 折线段 + 3s 缺口(「约 10 秒两条折线不连接」); × 2s 桶 → 全孤点(「只剩端点」); 轮询夹取 15s(「固定 ~10 秒更新」)。落盘行距实测 {4s: 39, 5s: 1}/40 行, 截图点距像素实测恒 48px ≈ 4.1s, 与演算一致。v2 零值行程(z 行)纪律无罪(§06 排除)。</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s2">
+  <h2><span class="no">02</span>症状与现场</h2>
+  <h3>2.1 报障原文</h3>
+  <blockquote style="border-left:3px solid var(--hair); padding:8px 16px; margin:12px 0; color:var(--ink-dim); max-width:84ch;">
+    <p style="margin-bottom:0">「WEBUI qb流量图折线不连贯, 10秒两条折线, 但与前后10秒的折线未连接起来, 且更新频率固定10秒未与设置的采样频率对齐, 我目前设置是3秒, 改为1.5秒后折线只剩下端点了」</p>
+  </blockquote>
+  <h3>2.2 现场</h3>
+  <table>
+    <tr><th style="width:22%">项</th><th>值</th></tr>
+    <tr><td>挂点 / 窗口</td><td>单种抽屉「流量」页签(torrent 挂点), 5 分钟窗; 图例: 下行(靛)有速率散点, 上行(青)恒 0 贴底</td></tr>
+    <tr><td>截图</td><td>2026-10-04 16:23:15, 悬停桶 16:20 显示 下行 1.72 MiB/s / 上行 0 B/s</td></tr>
+    <tr><td>数据快照</td><td>用户提供的运行时 <code>qb-traffic/</code> 目录(global.dat + 5 个单种 dat + index.json), 尾行时刻 16:23:24, 与截图同分钟</td></tr>
+    <tr><td>配置</td><td><code>sample_interval</code> 3s(报障时点曾改 1.5s 后回 3s); <code>main_tick</code> 缺省 2s</td></tr>
+    <tr><td>图上形态</td><td>全部为孤立点标, 无任何连线段; 底部 y=0 一排等距青点(上行恒 0), 上方靛点散布 0.2~11 MiB/s</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================ -->
+<section id="s3">
+  <h2><span class="no">03</span>证据链</h2>
+
+  <h3>3.1 落盘行距实测: 所有系列都是 4 秒一条 raw 行</h3>
+  <p>对快照目录全部 6 个 dat 做行距统计(最近 40 行 raw 的相邻时间戳差):</p>
+  <table>
+    <tr><th>系列</th><th>raw 行数</th><th>末行时刻</th><th>最近 40 行间隔分布</th><th>最后 5 分钟</th></tr>
+    <tr><td><code>global.dat</code></td><td>6575</td><td>16:23:24</td><td><b>{4s: 39, 5s: 1}</b></td><td>71 行, {4s: 68, 5s: 2}</td></tr>
+    <tr><td><code>torrents/21687aec…</code>(截图中种)</td><td>272</td><td>16:23:24</td><td><b>{4s: 39, 5s: 1}</b></td><td>71 行, {4s: 68, 5s: 2}</td></tr>
+    <tr><td><code>torrents/9d6fce85…</code></td><td>1190</td><td>15:46:04</td><td>{4s: 38, 5s: 2}</td><td>—</td></tr>
+    <tr><td><code>torrents/9c43f794…</code></td><td>77</td><td>09:58:37</td><td>{4s: 37, 5s: 2, 52s: 1}</td><td>—</td></tr>
+    <tr><td><code>torrents/e95e5eb9…</code></td><td>146</td><td>15:44:27</td><td>{4s: 36, 5s: 2, 16s: 1, 28s: 1}</td><td>—</td></tr>
+    <tr><td><code>torrents/b88271a8…</code></td><td>2734</td><td>09:48:25</td><td>{4s: 39, 495s: 1}</td><td>—</td></tr>
+  </table>
+  <p>结论: 活跃期行距恒 4s(偶发 5s 是 tick 处理耗时抖动), <b>不是配置的 3s</b>。截图中种(21687aec)在整段 5 分钟窗内 z 行数为 0 —— 逐样本非零、每轮必落行, 排除零值行程压缩参与。</p>
+
+  <h3>3.2 节奏量化的代码链路</h3>
+  <pre><code>Task(interval=conf.sample_interval=3)          # traffic_sample_mod.py:228 注册
+  → 每轮收尾 next_run = now + task.interval     # taskqueue.py:226 (_requeue)
+  → 到期判据: 堆顶 next_run &lt;= now 才弹出       # taskqueue.py:206 (_pop_due)
+  → now 只在主循环 tick 推进: sleep(main_tick)  # qbmanager run(); main_tick 缺省 2.0s (config/models.py:331)
+⇒ 有效节奏 = ceil(max(interval, main_tick) / main_tick) × main_tick
+   interval=3, tick=2 → ceil(3/2)×2 = 4s   (与落盘实测 4s 完全一致)
+   interval=1.5 → interval &lt; tick → 每 tick 到期 = 2s(重启后)
+   interval=30 → ceil(30/2)×2 = 30s (缺省路径不受影响)</code></pre>
+
+  <h3>3.3 截图像素实测: 点距恒 48px ≈ 4.1s, 全孤点无连线</h3>
+  <p>对截图(3839×665)按色相过滤做点簇检测: 下行(靛)点簇 30 个, 相邻点距<b>中位 48px(16 次, 众数绝对主导)</b>; 尾部存在连续 14 点全部严格 48px 等距(x 3073→3722)。比例尺: 横轴 16:18:48→16:23:24 共 276s 对应 3247px ⇒ 11.76px/s ⇒ <b>48px = 4.08s/点</b>。全部点均为孤立点标(无连线段); 检出的大间距(96/144/192px)为 4s 的整数倍, 系悬停浮层遮盖与低值点越出检测带, 非数据缺失。上图与 3.1 的落盘行距互相印证: 图上每个点 = 一条 4s 落盘行。</p>
+
+  <h3>3.4 桶覆盖演算: 4s 行距 × 窄桶 → 系统性空桶</h3>
+  <p>读侧桶宽 = <code>max(1, ceil(sample_interval))</code>(<span class="anchor">traffic_grid.py:91</span>; build_grid 经 <span class="anchor">traffic_qb.py:65–70</span> 消费), 行按 <code>ts - ts % interval</code> 归桶(<span class="anchor">traffic_grid.py:134</span>), 空桶出 null, 前端 <code>spanGaps:false</code> 断线不连线(<span class="anchor">qb_traffic_chart.js:452</span>), 两侧皆 null 的非空桶画点标(<code>_qbIsolatedIdxs</code>, <span class="anchor">qb_traffic_chart.js:123–130</span>)。行距 4s、相位 r(行首对 3 取模)分三种走向:</p>
+  <table>
+    <tr><th style="width:34%">档位</th><th>占用桶序列(以相位 r=0 为例)</th><th style="width:34%">图面形态</th></tr>
+    <tr><td>3s 桶(3s 设置)</td><td>行 0,4,8,12,16,20,24 → 桶 <b>0,1,2,[3 空],4,5,6,[7 空],8…</b></td><td>3~6s 连线段 + 每空 1 桶断一次 ⇒ 6~12s 一段、段间 3s 缺口(=「10 秒两条折线, 前后不连接」)</td></tr>
+    <tr><td>2s 桶(1.5s 设置)</td><td>行 0,4,8,12 → 桶 <b>0,[1 空],2,[3 空],4…</b></td><td>每个非空桶两侧全 null ⇒ 全部判孤点, 只画点标(=「只剩端点」; 截图即此态)</td></tr>
+    <tr><td>4s 桶(修复后应有)</td><td>行 0,4,8 → 桶 0,1,2 连续</td><td>行距 == 桶宽 ⇒ 每桶恰一行, 折线连续</td></tr>
+  </table>
+  <figure>
+    <svg viewBox="0 0 920 150" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="行距与桶宽错位示意">
+      <text x="0" y="14" fill="#9aa4ad" font-size="12" font-family="monospace">3s 设置: 4s 行距 → 3s 桶</text>
+      <g font-family="monospace" font-size="11">
+        <rect x="20"  y="26" width="60" height="22" fill="#16241a" stroke="#7fc08a"/><text x="34" y="41" fill="#7fc08a">row@0</text>
+        <rect x="80"  y="26" width="60" height="22" fill="#16241a" stroke="#7fc08a"/><text x="94" y="41" fill="#7fc08a">row@4</text>
+        <rect x="140" y="26" width="60" height="22" fill="#2a1a18" stroke="#e0796f"/><text x="156" y="41" fill="#e0796f">empty</text>
+        <rect x="200" y="26" width="60" height="22" fill="#16241a" stroke="#7fc08a"/><text x="214" y="41" fill="#7fc08a">row@12</text>
+        <rect x="260" y="26" width="60" height="22" fill="#16241a" stroke="#7fc08a"/><text x="274" y="41" fill="#7fc08a">row@16</text>
+        <rect x="320" y="26" width="60" height="22" fill="#2a1a18" stroke="#e0796f"/><text x="336" y="41" fill="#e0796f">empty</text>
+        <rect x="380" y="26" width="60" height="22" fill="#16241a" stroke="#7fc08a"/><text x="394" y="41" fill="#7fc08a">row@24</text>
+        <rect x="440" y="26" width="60" height="22" fill="#16241a" stroke="#7fc08a"/><text x="454" y="41" fill="#7fc08a">row@28</text>
+        <rect x="500" y="26" width="60" height="22" fill="#2a1a18" stroke="#e0796f"/><text x="516" y="41" fill="#e0796f">empty</text>
+        <text x="580" y="41" fill="#dde3e8">⇒ 段|段|段, 每遇空桶断线一次</text>
+      </g>
+      <text x="0" y="86" fill="#9aa4ad" font-size="12" font-family="monospace">1.5s 设置: 4s 行距 → 2s 桶</text>
+      <g font-family="monospace" font-size="11">
+        <rect x="20"  y="98" width="40" height="22" fill="#16241a" stroke="#7fc08a"/><text x="28" y="113" fill="#7fc08a">@0</text>
+        <rect x="60"  y="98" width="40" height="22" fill="#2a1a18" stroke="#e0796f"/><text x="66" y="113" fill="#e0796f">空</text>
+        <rect x="100" y="98" width="40" height="22" fill="#16241a" stroke="#7fc08a"/><text x="108" y="113" fill="#7fc08a">@4</text>
+        <rect x="140" y="98" width="40" height="22" fill="#2a1a18" stroke="#e0796f"/><text x="146" y="113" fill="#e0796f">空</text>
+        <rect x="180" y="98" width="40" height="22" fill="#16241a" stroke="#7fc08a"/><text x="188" y="113" fill="#7fc08a">@8</text>
+        <rect x="220" y="98" width="40" height="22" fill="#2a1a18" stroke="#e0796f"/><text x="226" y="113" fill="#e0796f">空</text>
+        <rect x="260" y="98" width="40" height="22" fill="#16241a" stroke="#7fc08a"/><text x="268" y="113" fill="#7fc08a">@12</text>
+        <rect x="300" y="98" width="40" height="22" fill="#2a1a18" stroke="#e0796f"/><text x="306" y="113" fill="#e0796f">空</text>
+        <text x="580" y="113" fill="#dde3e8">⇒ 每点两侧皆空 = 全孤点(只剩端点)</text>
+      </g>
+    </svg>
+    <figcaption>图 1 · 行距(4s, 主循环节拍量化产物)与读侧桶宽错位示意。桶时间轴按比例示意, 非严格等比。</figcaption>
+  </figure>
+</section>
+
+<!-- ================================================================ -->
+<section id="s4">
+  <h2><span class="no">04</span>根因(按因果序四条)</h2>
+  <table>
+    <tr><th style="width:8%">#</th><th style="width:26%">根因</th><th>机制</th><th style="width:26%">锚点</th></tr>
+    <tr>
+      <td>A</td>
+      <td><b>写侧: 采样节奏被节拍量化</b>(主因)</td>
+      <td>TaskQueue 周期任务的到期判据只在主循环 tick 边界评估, <code>next_run = now + interval</code> 的真实兑现节奏 = <code>ceil(max(interval, tick)/tick)×tick</code>。3s 配置兑现为 4s —— 消费侧任何「按配置 interval 推算数据粒度」的假设都不成立。</td>
+      <td class="anchor">taskqueue.py:206, 226<br>config/models.py:331<br>traffic_sample_mod.py:228</td>
+    </tr>
+    <tr>
+      <td>B</td>
+      <td><b>读侧: 栅格桶宽口径缺量化</b>(直接成因)</td>
+      <td><code>build_grid</code> 桶宽 = <code>ceil(sample_interval)</code>(小数间隔向上取整修过「floor 伪断线」, 但没修 tick 量化这一层)。桶宽 &lt; 实际行距 ⇒ 空桶系统性出现, <code>spanGaps:false</code> 如实断线。空桶语义本是「无采样=断线」, 此处被错位制造出伪断线。</td>
+      <td class="anchor">traffic_grid.py:89–91<br>qb_traffic_chart.js:452–459</td>
+    </tr>
+    <tr>
+      <td>C</td>
+      <td><b>热重载: task.interval 注册时定死</b></td>
+      <td><code>_register_task</code> 只在启动/queue_rebuilt 跑; 运行期改 sample_interval 后 handler 每轮现读配置的只有 enabled/dry_run 等开关, interval 不回写任务。读侧 L0 换对象即时生效 ⇒ 改 1.5s 后「写 4s / 读 2s 桶」错位最大, 全孤点持续。(重启进程反而自愈: 1.5s → 节奏 2s = 桶宽 2s。)</td>
+      <td class="anchor">traffic_sample_mod.py:215–232</td>
+    </tr>
+    <tr>
+      <td>D</td>
+      <td><b>前端: 轮询下界 15s 旧边界残留</b></td>
+      <td>刷新间隔 = clamp(meta.interval_s, <b>15s</b>, 600s); 15s 是放宽前的配置校验下限(26-10-04 已放宽到 1.5s), 前端常量与注释没跟 ⇒ 3s/1.5s 采样下刷新恒 15s, 与采样频率解耦(用户感知「固定 ~10 秒」)。</td>
+      <td class="anchor">qb_traffic_chart.js:43–48, 334–340</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ================================================================ -->
+<section id="s5">
+  <h2><span class="no">05</span>症状 ↔ 根因对照</h2>
+  <table>
+    <tr><th style="width:36%">用户症状</th><th style="width:14%">实测真值</th><th>解释</th></tr>
+    <tr><td>「10 秒两条折线, 与前后 10 秒的折线未连接」</td><td>段宽 6~12s + 3s 缺口</td><td>A+B: 4s 行距 × 3s 桶 → 每 3~4 行空一桶, spanGaps:false 断开; 「两条」= 上行/下行两系列同桶同断</td></tr>
+    <tr><td>「更新频率固定 10 秒, 不对齐 3s 采样」</td><td>15s(代码夹取下界)</td><td>D: 前端轮询下界 = 旧配置校验下限 15s, 与 sample_interval 解耦</td></tr>
+    <tr><td>「改 1.5s 后折线只剩端点」</td><td>点距恒 48px ≈ 4.1s, 全孤点</td><td>A+B+C: 桶宽变 2s &lt; 行距 4s → 全孤点; C 使写侧仍 4s、错位不随重启前配置收敛</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================ -->
+<section id="s6">
+  <h2><span class="no">06</span>排除项(查过, 无罪)</h2>
+  <ul>
+    <li><b>v2 零值行程(z 行)纪律</b>: 截图中种 5 分钟窗内 z 行数 0(逐样本非零); 有 z 行的三个系列, 行程衔接处的桶覆盖演算为相邻(z1 末桶与 z2 首桶之间无空桶, 4s 行程间隙落在 z1 末桶宽度内)—— 空闲段 0 平线语义工作正常。</li>
+    <li><b>断连/停机洞</b>: global.dat 活跃期连续无 null 行; b88271a8 的 495s 大间隔属种子真实空闲(09:48 后无传输), 与本症状无关。</li>
+    <li><b>前端渲染链</b>: setData 原地快路 / 锚点重建(<code>_qbPointsToData</code> 等距 xs)核对无错 —— 图如实画出了后端给的 null 分布, 缺口在数据侧不在画图侧。</li>
+    <li><b>次级观察(随修复自然消失, 不单独立项)</b>: 现状下相邻 z 行程的封口间隙(一个采样节奏)在「节奏 &gt; 桶宽」档位会露出一桶宽的缝; 修复后节奏 == 桶宽, 封口边界恒邻接。</li>
+  </ul>
+</section>
+
+<!-- ================================================================ -->
+<section id="s7">
+  <h2><span class="no">07</span>修复建议(三点, 待拍板; 本轮未动代码)</h2>
+  <table>
+    <tr><th style="width:8%">#</th><th style="width:30%">修法</th><th>要点</th></tr>
+    <tr>
+      <td>1</td>
+      <td>读侧桶宽改按<b>量化节奏</b></td>
+      <td><code>traffic_grid</code> 新增纯函数 <code>ceil(max(sample_interval, main_tick)/main_tick)×main_tick</code>, <code>traffic_qb._grid</code> 消费(manager.config.main_tick 现取)。系统性伪断线消失; 真漏采轮次仍按断线语义断开。<code>meta.interval_s</code> 随之变准 ⇒ 前端 xs 重建与轮询自动跟齐; z 封口边界邻接性由「节奏==桶宽」保证。</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>采样 handler 回写 task.interval</td>
+      <td><code>handle_traffic_sample</code> 每轮 <code>task.interval = conf.sample_interval</code>(收尾 requeue 即按新值) —— 热重载改采样间隔即时生效, 不用重启(修「固定不跟配置」的写侧半边)。</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>前端轮询下界 15s → 1.5s</td>
+      <td><code>_QB_POLL_MIN_MS</code> 对齐新配置校验下限, 注释同步; <code>test_web.py</code>:2703 守卫断言同步。刷新频率 = meta.interval_s = 有效采样节奏。</td>
+    </tr>
+  </table>
+  <div class="callout warn">
+    <div class="t">影响面备注</div>
+    <p>修复后 3s 档 24h 窗 = 21600 桶(4s 桶宽), 且全窗重拉频率从 15s 提到 4s —— 本机 WebUI 可承受; 若日后嫌重, 「尾增量拉取」另立专题, 不在本三点内。另: <code>ZRUN_CAP_SAMPLES=120</code> 在 4s 节奏下 480s 即封口(小于 <code>ZRUN_FLUSH_S</code>=600s), 行程实际约 8 分钟一封, 无用户可见影响, 仅备忘。</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s8">
+  <h2><span class="no">08</span>证据清单</h2>
+  <table>
+    <tr><th style="width:34%">证据</th><th>位置 / 内容</th></tr>
+    <tr><td>运行时数据快照</td><td><code>C:\Users\11059\Desktop\Projects\data\qb-traffic\</code>(global.dat 6575 行 + torrents/ 5 文件 + index.json; 尾行 2026-10-04 16:23:24; 仓外用户工作目录, 未入库)</td></tr>
+    <tr><td>WEBUI 截图</td><td>同目录 <code>屏幕截图 2026-10-04 162315.png</code>(3839×665, 单种抽屉流量页签 5 分钟窗)</td></tr>
+    <tr><td>行距统计 / 像素测量</td><td>本轮现算脚本(纯标准库 + PIL), 结论已录 §03; 检测污染源(悬停浮层文字同色系)已识别并剔除</td></tr>
+    <tr><td>代码锚点</td><td>§04 表四行所列 file:line, 以 develop <code>3d1e1665</code> 工作树为准</td></tr>
+  </table>
+  <p class="small">取证方式: 真机数据实测 + 截图像素测量 + 代码链路核对, 三路互证; 未运行真机(数据由用户提供)。本报告为快照, 修复实施与验收数字的权威在任务档案 26-10-04-webui-qb-traffic-line-breaks。</p>
+</section>
+
+<footer>auto-qb · memory-bank/reports · 26-10-04-1639 · doc-topic: qb-traffic-line-breaks</footer>
+</div>
+</body>
+</html>

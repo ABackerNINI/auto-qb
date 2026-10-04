@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-04-1639] [WEBUI qB 流量图折线断裂取证报告 · auto-qb](26-10-04-1639-report-webui-qb-traffic-line-breaks.html) — `qb-traffic-line-breaks`
 - [26-10-04-0815] [WEBUI tooltip 全量清点与去留判定 · auto-qb](26-10-04-0815-report-webui-tooltip-declutter.html) — `webui-tooltip-declutter`
 - [26-10-04-0636] [qB 流量历史存储压缩与「速度 0 vs 断线」语义调研报告 · auto-qb](26-10-04-0636-report-qb-traffic-storage.html) — `torrent-traffic-stats`
 - [26-10-04-0128] [WebUI 弹窗滚轮穿透背景滚动 · 分析报告](26-10-04-0128-report-webui-modal-scroll-chaining.html) — `webui-modal-scroll-chaining`
