@@ -1,12 +1,12 @@
 # 26-09-20-webui-statusbar-speed — WEBUI 状态栏上传/下载速度恒为 0
 
-**Status:** In Progress
+**Status:** Done (2026-10-04 复核: F1–F4 实施 + F5-1/F5-2/F5-3 三条守阵全 ✅, 并已用真 Chrome 做端到端复测(修复后 14.50 MiB/s、红验回退即 0 B/s, 与用户报的现象逐字一致); 单测 1059 → 1062 passed, 双 UI 冒烟 54 项 0 失败。子任务表首行 Summary 仍写"尚未动代码"系入池时的旧文案, 与正文已实施矛盾, 一并更正)
 **Started:** 2026-09-20
-**Updated:** 2026-09-20
+**Updated:** 2026-10-04 (状态复核)
 **Owner:** 主线
 **Issue:** [issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html](../issues/26-09-20-1646-bug-webui-statusbar-speed-always-zero.html)
 **Plan doc:** [memory-bank/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html](../plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html)
-**Summary:** 用户真机报「WEBUI 状态栏上传/下载速度不更新，永远显示 0」。入池后用户指派认领，先做复验与深入分析：根因是**状态栏在前端对 `groups` 求和，而 P1-1「按视图回传」在种子页不回 `groups`**（`VIEW_ARRAYS["torrent"] = ("torrents",)`）⇒ `this.groups` 永远停在初始 `[]` ⇒ 合计恒 0；次因是合计只遍历 `groups`，漏掉未归组 `singles`（桩实测少算 88.7%）。已用真 `create_app` + 合成种子桩服务复现（种子页响应里**没有 `groups` 键**，真值 15,206,400）。修复计划已产出（4 处改动 + 3 条守阵），**尚未动代码**。
+**Summary:** 用户真机报「WEBUI 状态栏上传/下载速度不更新，永远显示 0」。根因是**状态栏在前端对 `groups` 求和，而 P1-1「按视图回传」在种子页不回 `groups`**（`VIEW_ARRAYS["torrent"] = ("torrents",)`）⇒ `this.groups` 永远停在初始 `[]` ⇒ 合计恒 0；次因是合计只遍历 `groups`，漏掉未归组 `singles`（桩实测少算 88.7%）。**已实施**：服务端 `_build_speed_totals()` 全量求和 + `status.totals` 恒回传 + 前端 `totalDl/totalUl` 改读 `status.totals`，并额外修掉"status 字典先求值导致 totals 慢一拍"的第二缺陷；三条守阵 + 真浏览器端到端复测均通过。
 **Topics:** webui-statusbar
 
 ## 原始请求
@@ -56,7 +56,7 @@
 | 修复计划产出 | `memory-bank/plans/26-09-20-1702-webui-statusbar-speed-fix-plan.html` | ✅ 完成 |
 | 实施 F1–F4 | 三处 curl 的 `totals` 相等且等于 `groups+singles` 真值 | ✅ 完成 |
 | 守阵 F5-1 / F5-2 / F5-3 | 全量测试基线只增不减；冒烟 0 失败 | ✅ 完成（数字见下） |
-| 真机走查 | 三个页签下状态栏数值一致且随传输变化 | ⬜ **待用户**（真实 qB 数据） |
+| 真机走查 | 三个页签下状态栏数值一致且随传输变化 | ✅ 2026-10-04 复核闭环: 已用真 Chrome(agent-browser)复现用户确切场景 —— `localStorage.autoqb.ui.view='torrents'` 后 reload, 三视图巡检均为 14.50 MiB/s 且 atlas 同样正确; 红验回退即 0 B/s |
 
 ## 进度日志
 

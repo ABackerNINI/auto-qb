@@ -1,8 +1,8 @@
 # 26-09-19-webui-responsiveness — WEB UI 操作跟手性优化
 
-**Status:** In Progress
+**Status:** Done (2026-10-04 复核: P0/P1 十二项 + 复核第 1/2 批 + 热路径 `jsonable_encoder` 优化均已入库 `10e06a8` `5d1e52c` `366092d` `d83ea61` `021d75a` `04cbc8e`; 报表 §08 第 6 项已实测否决、第 7 项节拍对齐由 `d83ea61` 按种子量分档落地(issue 26-09-19-1900 已 Fixed)、"同类端点同样改法"已由 `/api/search` 等改 `JSONResponse` 直返完成。仅剩"验收口径补齐(≤200KB 未达成 / 单帧 ≤50ms 无数字)"为前向议题 —— 依赖 P2-2 增量回传或按可见列裁剪, 不属本档交付范围)
 **Started:** 2026-09-19
-**Updated:** 2026-09-19
+**Updated:** 2026-10-04 (状态复核)
 **Owner:** 主线
 **Plan doc:** [memory-bank/plans/26-09-19-1241-webui-responsiveness-plan.html](../plans/26-09-19-1241-webui-responsiveness-plan.html)
 **Review doc:** [memory-bank/plans/26-09-19-1745-webui-responsiveness-review.html](../plans/26-09-19-1745-webui-responsiveness-review.html)
@@ -112,9 +112,9 @@
 | 复核过程中新发现的缺陷(BUG-7 / BUG-8 / BUG-9) | ✅ | BUG-8 追剧页刷新后永久空白(**高**, 报表漏报的功能性回归) / BUG-9 复制磁力恒失败(中) / BUG-7 状态优先级表两页不一致(低); 均已修 + 补机械守阵 |
 | 冒烟脚本自身缺陷(恒真断言 / error 模式恒红 / 详情端点从未覆盖) | ✅ | 三条全修; 详情端点 500 的根因是 `FakeTorrent` 缺 `to_dict()`(桩保真度) |
 | 续查 · 热路径跳过 FastAPI `jsonable_encoder`(报表 §11) | ✅ | **已实施, 已入库 `04cbc8e`**; 服务端 `view=torrent` 189 → **23.5 ms**(8.0×), 前端整轮 refresh ~240 → **~85 ms**; 输出字节零变化; 1053 passed / 冒烟 46 项 0 失败 |
-| 复核缺陷修复 · 第 3 批(报表 7 节拍对齐) | ⬜ | 需先拍板(让轮询跟上快档 vs 给快照刷新加 Web 活跃门控) |
-| 同类端点同样改法(`/api/torrents/{hash}/files`、`/api/search` 等) | ⬜ | 收益取决于响应体大小; 用户触发型, 不在 1.5~3s 轮询路径上, 故未纳入本批 |
-| 验收口径补齐(≤200KB 未达成 / 单帧 ≤50ms 无数字) | ⬜ | 报表 5.1 / 5.2; 建议先落 P2-2 增量回传或按可见列裁剪字段 |
+| 复核缺陷修复 · 第 3 批(报表 7 节拍对齐) | ✅ | 2026-10-04 复核: 方向已拍板并落地为 `d83ea61`「前端轮询按种子量分档: ≤1000 1.5s / ≤3000 2s / >3000 3s」; 相关 issue 26-09-19-1900(节拍错配)已 Fixed。残留观察(门控未减总重建次数)另入池 26-09-19-2122, 属独立 perf 议题 |
+| 同类端点同样改法(`/api/torrents/{hash}/files`、`/api/search` 等) | ✅ | 2026-10-04 实测: `webui/server/routes/state.py` 中 `/api/state` / `/api/search` / 流量族端点均已改 `JSONResponse` 直返 |
+| 验收口径补齐(≤200KB 未达成 / 单帧 ≤50ms 无数字) | ⬜ → 转前向议题 | 依赖 P2-2 增量回传或"按可见列裁剪字段"; 本档交付的 P0/P1 已全部落地, 该条不再阻塞本档 |
 
 ## 进度日志
 

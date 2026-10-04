@@ -1,8 +1,8 @@
 # 26-09-17-memory-bank-trigger-fix — Memory Bank 触发机制修复 (skill 缺失 + 立档纪律失败)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-17
-**Updated:** 2026-09-17
+**Updated:** 2026-10-04 (2026-10-04 复核: 六项子任务全 Complete 且已入库 `b4ce7bd`; 落点 `.agents/skills/memory-bank/SKILL.md` 与 `tests/test_memory_bank.py` 现均在库)
 **专题:** 知识库治理 / 代理协作机制
 **Legacy-ID:** TASK010
 **Summary:** skill 载体 + always-on 阈值 + TASK001~TASK009 回填 + activeContext 瘦身 + 守卫测试完成; 已入库 `b4ce7bd`
@@ -38,7 +38,11 @@
 - [x] `activeContext.md` 瘦身 (会话纪要迁入各专题档案的"历史会话纪要 (原文归档)")
 - [x] 新增守卫测试 `tests/test_memory_bank.py`
 - [x] 跑全量 pytest 并回写 `testing.md` 基线
-- [ ] 提交 (等用户指示)
+- [x] 提交 (2026-09-17 用户明确指示后已入库 `b4ce7bd`)
+
+> **2026-10-04 复核**: 六项子任务(10.1~10.6)全部 `Complete`, 10.7 提交亦已在进度日志中记为"用户明确指示后提交",
+> 仅实现计划里的复选框漏勾 ⇒ 状态由 `In Progress` 改 `Done`。落点复验: `.agents/skills/memory-bank/SKILL.md`
+> 与 `tests/test_memory_bank.py` 现均在库(后者是本档引入的索引↔档案一致性守卫, 至今仍是收尾机检的一环)。
 
 ## 子任务状态表
 

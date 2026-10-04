@@ -1,6 +1,6 @@
 # 26-09-18-webui-error-reason — WEB UI 错误种子显示具体原因 (状态列 `error_reason`)
 
-**Status:** In Progress (代码/测试/文档已完, **已入库 `9723a76`**; 剩用户真机走查反馈)
+**Status:** Done (代码/测试/文档已完, **已入库 `9723a76`**; 2026-10-04 复核: 13 项子任务全 ✅, 后端 `views._error_reason` / `refresh_error_reasons` 与前端 `stateText` 落点现均在库)
 **Started:** 2026-09-18
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** (无 —— 单点特性, 未产出计划文档)

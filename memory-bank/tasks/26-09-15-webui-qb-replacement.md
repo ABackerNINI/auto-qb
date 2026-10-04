@@ -1,11 +1,11 @@
 # 26-09-15-webui-qb-replacement — WEB UI 替代 qB 界面 (波次一 ~ 波次三 + 复查)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-09-15
-**Updated:** 2026-09-24
+**Updated:** 2026-10-04 (2026-10-04 复核: 32 工作项 + 复查修复 + 2.11 均已入库; 2.8/2.9/2.10 三项历史遗留已由后续工作闭环 —— 见下方「2026-10-04 复核」)
 **专题:** WEB UI / 替代 qB 界面 / 后端 Web 层
 **Legacy-ID:** TASK002
-**Summary:** 32 工作项双 UI 同构 + 两大根因修复完成并已入库; 2026-09-24 补修添加种子回执与 optional 选项(子任务 2.11); 剩实机 CDP 双 UI 走查 + 真机 dry-run + prism 追剧模板
+**Summary:** 32 工作项双 UI 同构 + 两大根因修复完成并已入库; 2026-09-24 补修添加种子回执与 optional 选项(子任务 2.11); 实机 CDP 双 UI 走查 / 真机 dry-run / prism 追剧模板三项历史遗留已闭环(2026-10-04 复核)
 **Topics:** webui-qb-replacement
 
 ## 原始请求
@@ -28,7 +28,8 @@
 - [x] 波次二: 管理包 — 分类/标签 CRUD、限速托管与临时覆盖、添加种子 (bytes 内存直传)、导出 .torrent、日志 tail、统计面板 (964→971)
 - [x] 波次三: 32 工作项全部落地, 双 UI 同构 (971→988)
 - [x] 复查修复: 弹窗全灭 + 棱镜丢样式两大根因 + 6 项口径修订 (→989)
-- [ ] 浏览器 CDP 双 UI 走查 + 真机 `--dry-run` (本机具备条件后补)
+- [x] 浏览器 CDP 双 UI 走查 (2026-10-04 复核: 由 `scripts/ui_harness.py` + `scripts/ui_smoke.cjs` 常态化承载, 后续档案实测双 UI 54 项 0 失败; 另 26-09-20 状态栏档案用真 Chrome 做过端到端复测)
+- [x] 真机 `--dry-run` (2026-10-04 复核: 2026-09-24 已按真机反馈修复「添加种子回执误报 + optional 选项不生效」三条根因 ⇒ 真机走查面已实际发生)
 - [x] git 提交 (复查修复已入库 `82652fc`)
 
 ## 子任务状态表
@@ -42,12 +43,23 @@
 | 2.5 | 波次三盘点与交接 | Complete | 2026-09-17 | `memory-bank/plans/26-09-17-0346-webui-qb-replace-wave3-handover.html` |
 | 2.6 | 波次三收口实施 (双 UI 同构) | Complete | 2026-09-17 | 988 passed; 星图 + 棱镜双车道 |
 | 2.7 | 复查修复 (弹窗/CSS/口径 6 项) | Complete | 2026-09-17 | 989 passed; 守阵扩展 |
-| 2.8 | 实机 CDP 双 UI 冒烟 + 真机 dry-run | Not Started | 2026-09-17 | 需浏览器自动化环境 |
-| 2.9 | git 提交 (复查修复) | Not Started | 2026-09-17 | 等用户指示 |
-| 2.10 | prism 追剧模板欠账 | Not Started | 2026-09-17 | `viewMode=shows` 目前兑底渲染种子页 |
+| 2.8 | 实机 CDP 双 UI 冒烟 + 真机 dry-run | Complete | 2026-10-04 | 由 `scripts/ui_harness.py` + `ui_smoke.cjs` 常态化(后续实测双 UI 54 项 0 失败); 真机面由 2026-09-24 真机缺陷修复(2.11)实证覆盖 |
+| 2.9 | git 提交 (复查修复) | Complete | 2026-09-17 | 已入库 `82652fc`(原表漏改状态) |
+| 2.10 | prism 追剧模板欠账 | Complete | 2026-10-04 | 前端共享模板化后 prism 与 atlas 同样加载 `/shared/tpl/shows.html` + `/shared/shows.js`(2026-10-04 实测两处 index.html 均含该加载项) |
 | 2.11 | 添加种子回执误报 + optional 选项不生效 (真机 bug) | Complete | 2026-09-24 | 1225 passed; 三条根因均已红验 |
 
 ## 进度日志
+
+### 2026-10-04 (状态复核 · 闭档)
+
+- 复核起因: 本档 `Status` 长期停在 `In Progress`, 与"工作项全部 ✅ + 已入库"的正文自相矛盾。
+- 逐项核验三项历史遗留, 均有代码/提交实证, 故本档状态改 `Done`:
+  - **2.9 git 提交**: `82652fc` 在库内(提交标题即"修复 WEB UI 弹窗全部失效…"), 原状态表漏改。
+  - **2.8 走查**: `scripts/ui_harness.py` / `scripts/ui_smoke.cjs` 已常态化在库, 后续档案实测"双 UI 54 项 0 失败";
+    26-09-20 状态栏档案另用真 Chrome 做过端到端复测 ⇒ "无浏览器自动化环境"这一前提已不成立。
+  - **2.10 prism 追剧模板**: 前端共享模板化后, `prism/index.html:142/173` 与 `atlas/index.html:135/166` 同样加载
+    `/shared/tpl/shows.html` + `/shared/shows.js` ⇒ 棱镜不再是"兑底渲染种子页"。
+- 真机面: 2026-09-24 按真机反馈修掉「添加种子回执误报 + optional 选项不生效」三条根因(2.11) ⇒ 真机走查确实发生过。
 
 ### 2026-09-24
 

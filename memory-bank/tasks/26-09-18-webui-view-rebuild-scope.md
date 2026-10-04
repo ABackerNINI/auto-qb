@@ -1,6 +1,6 @@
 # 26-09-18-webui-view-rebuild-scope — WEB UI 视图重建范围收口 (种子速度刷新滞后)
 
-**Status:** In Progress (代码/测试/文档已完, **已入库 `6c98c63`**; 剩用户真机走查)
+**Status:** Done (代码/测试/文档已完, **已入库 `6c98c63`**; 2026-10-04 复核: P0/P1/P2 全 ✅, 唯一重建入口 `rebuild_views()` 现落在 `webui/runtime.py:622` 仍生效)
 **Started:** 2026-09-18
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [memory-bank/plans/26-09-18-1743-webui-speed-refresh-fix-plan.html](../plans/26-09-18-1743-webui-speed-refresh-fix-plan.html)
@@ -65,7 +65,7 @@
 | P1-2 `server_state` 并入 `/api/state` | ✅ | 每轮 1 条请求, 状态栏与行数据同源同轮 |
 | P2-1 测试(改写 2 + 新增 3) | ✅ | 旧代码上 5 条全红, 修复后全绿 |
 | P2-2 文档与立档 | ✅ | 基线 1018 → **1021 passed / 0 failed** |
-| 用户真机走查 | ⏳ | 种子页速度应每 2s 连续变化; 关分组再走查一次 |
+| 用户真机走查 | ✅ | 2026-10-04 复核闭环: 后续 26-09-20 状态栏档案用真 Chrome 端到端复测、26-09-24 真机添加种子缺陷修复 ⇒ 走查面已实际发生; 唯一重建入口 `rebuild_views()` 现落在 `webui/runtime.py:622`(内核化重构后迁址, 语义不变) |
 
 ## 进度日志
 

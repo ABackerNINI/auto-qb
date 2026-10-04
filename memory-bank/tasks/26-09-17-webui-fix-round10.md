@@ -1,6 +1,6 @@
 # 26-09-17-webui-fix-round10 — WEB UI 第十轮修复 (16 项 · R10-01~R10-16)
 
-**Status:** In Progress
+**Status:** Done (2026-10-04 复核: 16 项 R10-01~R10-16 全 ✅, 含真机走查 r1 两处反馈, 已入库 `cb57bef`)
 **Started:** 2026-09-17
 **Owner:** 主线 (单会话连续实施)
 **Plan doc:** [memory-bank/plans/26-09-17-0901-webui-fix-plan-round10.html](../plans/26-09-17-0901-webui-fix-plan-round10.html) (16 项分类拆解 / 根因定位 / 分阶段实施)
