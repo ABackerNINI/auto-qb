@@ -64,6 +64,8 @@ RESYNC_COMMANDS = frozenset(
 # handler 内部(依 qB 返回串写)写入 —— 它们不是"执行完即 ok", 所以 drain 侧**不**补写回执。
 # recheck_torrent / skip_check_torrent 属 P1/P2' 提交点拒绝族(plan 26-09-30-0109): handler
 # 经 ops 层提交并把结果**映射成回执**(拒绝回执带自解释文案), 同走本族。
+# skip_check_precheck(plan 26-10-05-0314 S2): 只读 dry-run, 回执由 handler 自写 —— 判定数据
+# (results/summary)经 truth 字段随回执带出(既有 cmd 通道的通用数据位), drain 不得用裸 ok 覆盖。
 DEFERRED_RECEIPT_COMMANDS = frozenset(
     {
         "reannounce_group",
@@ -72,6 +74,7 @@ DEFERRED_RECEIPT_COMMANDS = frozenset(
         "add_torrents",
         "recheck_torrent",
         "skip_check_torrent",
+        "skip_check_precheck",
     }
 )
 
@@ -161,6 +164,7 @@ class WebCommandsMixin:
             "delete_torrent": self._cmd_delete_torrent,
             "recheck_torrent": self._cmd_recheck_torrent,
             "skip_check_torrent": self._cmd_skip_check_torrent,
+            "skip_check_precheck": self._cmd_skip_check_precheck,
             "super_seeding": self._cmd_super_seeding,
             "force_start": self._cmd_force_start,
             "set_torrent_limits": self._cmd_set_torrent_limits,
@@ -346,13 +350,15 @@ class WebCommandsMixin:
                 self._set_web_result(cmd_id, "error", r.message)
             logger.info(f"WEB UI | 重新校验拒绝 {hash[:8]}: {r.message}")
 
-    def _cmd_skip_check_torrent(self, hash: str, cmd_id: str = ""):
+    def _cmd_skip_check_torrent(self, hash: str, cmd_id: str = "", force: bool = False):
         """WEB UI 命令: 右键跳检 —— 经 ops 层执行四阶段(与规则跳检同闸门/同去重/天然串行)
 
         阻塞 ~6s(删除->轮询->重加), 期间其它命令排队 —— 与规则跳检执行时现状一致;
         拒绝(今日已跳检过/种子已被移除/部分下载)回执 error 带自解释文案。
+        force(plan 26-10-05-0314 S2): 透传 ops.skip_check —— 仅豁越 cls=force 的未过闸门
+        (G5/G7 瞬态), cls=blocked 一律硬拒(即使带了 force); 缺省 False 行为零变化。
         """
-        r = self.ctx.ops.skip_check(hash, source="web")  # plan kernel-module-refactor P4: 改走 ctx.ops
+        r = self.ctx.ops.skip_check(hash, source="web", force=force)  # plan kernel-module-refactor P4: 改走 ctx.ops
         if r.is_ok:
             if cmd_id:
                 self._set_web_result(cmd_id, "ok")
@@ -361,6 +367,26 @@ class WebCommandsMixin:
             if cmd_id:
                 self._set_web_result(cmd_id, "error", r.message)
             logger.info(f"WEB UI | 右键跳检未执行 {hash[:8]}: {r.message}")
+
+    def _cmd_skip_check_precheck(self, hashes=None, cmd_id: str = ""):
+        """WEB UI 命令: 跳检预检(只读 dry-run, 计划 26-10-05-0314 S2) —— 转发 ops.skip_check_precheck
+        并聚合回执, 判定数据经 truth 字段随 cmd 通道带出(前端 waitCmd 的既有数据位)
+
+        ops 侧零副作用(T20): 不写 state、不 prune、无 qB 写 API —— 本 handler 只聚合计数,
+        不触碰任何闸门/去重状态。回执形状: truth={results: [{hash, name, cls, reasons}],
+        summary: {ok, force, blocked}}(summary 按单 hash 总 cls 计数, 与 ops 单条 cls 同名);
+        未知 hash 透传 ops 的 gone/blocked verdict, 不改写不截断。
+        """
+        req = [str(h) for h in (hashes or []) if h]
+        results = self.ctx.ops.skip_check_precheck(req)
+        summary = {"ok": 0, "force": 0, "blocked": 0}
+        for item in results:
+            summary[item["cls"]] = summary.get(item["cls"], 0) + 1
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok", truth={"results": results, "summary": summary})
+        logger.info(
+            f"WEB UI | 跳检预检({len(req)}个): 可跳检 {summary['ok']} / 可强制 {summary['force']} / 禁止 {summary['blocked']}"
+        )
 
     def _cmd_super_seeding(self, hash: str, enable: bool = False):
         if self.store.get(hash) is not None:
@@ -551,6 +577,7 @@ class WebCommandsMixin:
         up_limit=None,
         dl_limit=None,
         location=None,
+        force: bool = False,
     ):
         """WEB UI 命令: 批量操作(单命令批量, 平铺视图多选); 回执由本 handler 聚合写
 
@@ -633,8 +660,9 @@ class WebCommandsMixin:
             self._bulk_recheck_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys))
             return
         if action == "skip_check":
-            # 批量跳检(计划 26-10-02-1955 W3): 逐 hash 串行经 ops 层四阶段, 不直调 API
-            self._bulk_skip_check_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys))
+            # 批量跳检(计划 26-10-02-1955 W3): 逐 hash 串行经 ops 层四阶段, 不直调 API;
+            # force(计划 26-10-05-0314 S2)逐 hash 透传 —— 仅豁越 cls=force 闸门, blocked 照旧硬拒
+            self._bulk_skip_check_via_ops(known, cmd_id, missing, len(req), missing_groups, len(keys), force=force)
             return
         if known:
             fn(self.api, known, delete_files, extra)
@@ -707,12 +735,15 @@ class WebCommandsMixin:
         n_req: int = 0,
         missing_groups: int = 0,
         n_keys: int = 0,
+        force: bool = False,
     ) -> None:
         """批量跳检经 ops 层逐 hash 串行提交(计划 26-10-02-1955 W3): 聚合回执按结果分桶
 
         与单发同一提交点(ops 层 skip_check, source="web"): R2 实时复核 / 同日去重
         (skip_check_day 跨来源共享)/ 备份 / 打标守卫全部在 ops 层原样生效, 批量只是聚合层 ——
         **逐 hash 串行**调用是单写线程假设的硬要求(pitfalls/backend/concurrency.md), 禁止并发扇出。
+        force(plan 26-10-05-0314 S2): 逐 hash 透传 ops.skip_check —— 仅豁越 cls=force 的
+        未过闸门, cls=blocked 一律硬拒; 缺省 False 行为零变化。
         跳过按原因分桶计数(同日去重 / 种子已移除, 文案自解释), 失败聚合计数附前 3 条文案;
         回执口径与 bulk 其余动作一致: 任何缺失/跳过/失败都进 error 文案(部分成功也报错,
         拒绝计数必须可见), 全部成功才 ok。
@@ -722,7 +753,7 @@ class WebCommandsMixin:
         fail_n = 0
         fail_msgs: List[str] = []
         for h in hashes:
-            r = self.ctx.ops.skip_check(h, source="web")
+            r = self.ctx.ops.skip_check(h, source="web", force=force)
             if r.is_skipped:
                 skip_buckets[r.message] = skip_buckets.get(r.message, 0) + 1
             elif r.is_failed:
