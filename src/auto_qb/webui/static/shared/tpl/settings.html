@@ -110,7 +110,7 @@
                            :aria-expanded="hubTrackerStageOpen ? 'true' : 'false'"
                            @focus="hub.trackerSearchFocus = true"
                            @keydown="hubTrackerKeydown($event)">
-                    <button v-if="cfg.trackerQuery.trim()" class="hb-tr-x" title="清空"
+                    <button v-if="cfg.trackerQuery.trim()" class="hb-tr-x"
                             @mousedown.prevent @click="hubTrackerClear()">×</button>
 
                     <!-- 命中面板: 头(标签 + 命中数搬出输入框 + 键位) / 命中行(高亮只走 act:
@@ -242,9 +242,9 @@
                             <span class="st-n">{{ i + 1 }}</span>
                             <span class="st-t">{{ hubPluginText(entry) }}</span>
                             <span class="st-r">
-                              <button class="hb-btn ghost sm" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, -1)">↑</button>
-                              <button class="hb-btn ghost sm" title="下移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, 1)">↓</button>
-                              <button class="hb-btn danger sm" title="删除该条件" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'conditions', i)">✕</button>
+                              <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, -1)">↑</button>
+                              <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, 1)">↓</button>
+                              <button class="hb-btn danger sm" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'conditions', i)">✕</button>
                             </span>
                           </div>
                           <hub-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'conditions', i)"
@@ -266,9 +266,9 @@
                             <span class="st-n">{{ i + 1 }}</span>
                             <span class="st-t">{{ hubPluginText(entry) }}</span>
                             <span class="st-r">
-                              <button class="hb-btn ghost sm" title="上移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">↑</button>
-                              <button class="hb-btn ghost sm" title="下移" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, 1)">↓</button>
-                              <button class="hb-btn danger sm" title="删除该动作" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">✕</button>
+                              <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">↑</button>
+                              <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, 1)">↓</button>
+                              <button class="hb-btn danger sm" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">✕</button>
                             </span>
                           </div>
                           <hub-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'actions', i)"

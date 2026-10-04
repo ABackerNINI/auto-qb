@@ -23,7 +23,6 @@
                     <!-- 折叠交互(2026-09-28): 整条标题栏可点(不再单设「展开/收起」按钮), 箭头图标指示状态;
                          周期输入框与删除按钮 @click.stop, 避免误触发折叠 -->
                     <div class="hb-curve-hd" role="button" tabindex="0"
-                         :title="cfgCurveOpen(i) ? '点击收起' : '点击展开'"
                          @click="cfgCurveToggle(i)" @keyup.enter="cfgCurveToggle(i)">
                       <svg class="ico ico-sm hb-curve-caret" :class="{ open: cfgCurveOpen(i) }" viewBox="0 0 16 16"
                            aria-hidden="true"><use href="#i-chevron"></use></svg>
@@ -104,7 +103,7 @@
                             <span class="t-arrow" aria-hidden="true">→</span>
                             <input class="hb-input hb-mono" :value="cfgCurveSpeed(i, dir, j)" placeholder="6MiB/s"
                                    @input="cfgCurvePointSet(i, dir, j, undefined, $event.target.value)">
-                            <button class="hb-btn ghost sm" title="删除该档位" @click="cfgCurvePointRemove(i, dir, j)">✕</button>
+                            <button class="hb-btn ghost sm" @click="cfgCurvePointRemove(i, dir, j)">✕</button>
                           </div>
                         </div>
                         <button class="hb-btn sm hb-tier-add" @click="cfgCurvePointAdd(i, dir)">＋ 添加档位</button>
@@ -160,8 +159,8 @@
                         <span class="kb-row-acts">
                           <template v-if="!it.fixed">
                             <button class="hb-btn ghost sm" @click="kbRecord(it.id)">{{ kbRecId === it.id ? '取消' : '录制' }}</button>
-                            <button v-if="kbSerialOf(it)" class="hb-btn ghost sm" title="禁用该动作(空键位)" @click="kbDisableRow(it)">禁用</button>
-                            <button v-if="kbIsOverridden(it)" class="hb-btn ghost sm" title="恢复默认键位" @click="kbResetRow(it)">重置</button>
+                            <button v-if="kbSerialOf(it)" class="hb-btn ghost sm" @click="kbDisableRow(it)">禁用</button>
+                            <button v-if="kbIsOverridden(it)" class="hb-btn ghost sm" @click="kbResetRow(it)">重置</button>
                           </template>
                         </span>
                         <span v-if="kbRecId === it.id" class="kb-rec-tip">按下组合键…(Esc 取消, 纯修饰键不收)</span>
@@ -192,7 +191,7 @@
                       <!-- readonly(程序托管)段(如 fs): 启用/关闭开关无意义, 换成徽标(issue 26-09-28-2135) -->
                       <template v-if="b.section">
                         <span v-if="b.item.field && b.item.field.readonly" class="hb-badge">程序维护</span>
-                        <label v-else class="hb-switch" title="控制该配置段是否写入配置文件">
+                        <label v-else class="hb-switch">
                           <input type="checkbox" :checked="cfgExists(b.item.path)"
                                  @change="cfgToggleSection(b.item.path, b.item.field, $event.target.checked)">
                           <span class="hb-sw-track"></span>

@@ -15,7 +15,7 @@
           <span class="bh-r">
             <!-- readonly(程序托管)段: 启用/关闭开关无意义(段的存在性由 config.yml 管理), 换成徽标 -->
             <span v-if="readonly" class="hb-badge">程序维护</span>
-            <label v-else class="hb-switch" title="控制该配置段是否写入配置文件">
+            <label v-else class="hb-switch">
               <input type="checkbox" :checked="sectionExists()" @change="toggleSection($event.target.checked)">
               <span class="hb-sw-track"></span>
               <span class="hb-sw-text">{{ sectionExists() ? '启用' : '关闭' }}</span>
@@ -35,7 +35,7 @@
            折叠态仍给「已配置 n/m 项」摘要, 让用户不展开也看得出这段有没有配过 -->
       <div v-else-if="item.type === 'group'" class="hb-blk hb-sub" :data-hb-key="ce.hubKey(path)">
         <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
-             :title="groupOpen ? '点击收起' : '点击展开'" @click="toggleGroup()" @keyup.enter="toggleGroup()">
+             @click="toggleGroup()" @keyup.enter="toggleGroup()">
           <span class="bh-t">{{ item.label }}</span>
           <span class="bh-n">{{ groupSummary }}</span>
           <span class="bh-r">
@@ -105,7 +105,7 @@
             <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
               <input class="hb-input" :class="{ 'hb-mono': ce.hubMonoOf(item) }" :value="it"
                      :placeholder="f.placeholder || ''" :disabled="readonly" @input="listSet(i, $event.target.value)">
-              <button v-if="!readonly" class="hb-btn ghost sm" title="删除该项" @click="listRemove(i)">✕</button>
+              <button v-if="!readonly" class="hb-btn ghost sm" @click="listRemove(i)">✕</button>
             </div>
             <button v-if="!readonly" class="hb-btn ghost sm" style="align-self:flex-start" @click="listAdd()">＋ 添加</button>
           </div>
@@ -114,7 +114,7 @@
             <div v-for="(it, i) in list()" :key="i" class="hb-list-row">
               <input class="hb-input hb-mono" :value="it" :disabled="readonly" :placeholder="f.placeholder || '@规则集 或 @规则集.规则名'"
                      @input="listSet(i, $event.target.value)">
-              <button v-if="!readonly" class="hb-btn ghost sm" title="删除该引用" @click="listRemove(i)">✕</button>
+              <button v-if="!readonly" class="hb-btn ghost sm" @click="listRemove(i)">✕</button>
             </div>
             <select v-if="!readonly" class="hb-select" :value="''" @change="refPick($event)">
               <option value="">从已有规则集/规则中选择…</option>
