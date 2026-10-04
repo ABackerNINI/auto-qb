@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:,">
+<title>MB 导航 · memory-bank 四工位 (台账 / 控制台 / 卡片墙)</title>
+<!--
+  memory-bank 四工位导航页壳 (计划 26-10-04-0952 S2)。三视图合并: A 台账 / B 控制台 / C 卡片墙,
+  移植自 tmp-analysis/nav-design/ 三套已验证原型, 交互设计未改。
+  数据接入: http 模式 fetch /api/data (30s 轮询); 静态模式由 nav_server.py --gen-static 把
+  下方唯一的数据注入位替换为 JSON (检测注入完成即不走 fetch)。链接前缀按协议自适应。
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #171d24;
+    --paper-3: #1c242e;
+    --ink: #dde3e8;
+    --dim: #98a3ad;
+    --faint: #6b7681;
+    --hair: rgba(255,255,255,.07);
+    --hair-2: rgba(255,255,255,.14);
+    --cyan: #56c8d7;
+    --cyan-soft: rgba(86,200,215,.12);
+    --amber: #e2a55a;
+    --amber-soft: rgba(226,165,90,.12);
+    --green: #7fc79a;
+    --green-soft: rgba(127,199,154,.12);
+    --green-dim: #7ba98c;
+    --mut: #76828d;
+    --rose: #c7a3c9;
+    --rose-soft: rgba(199,163,201,.09);
+    --sand: #cdb992;
+    --sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --disp: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Cascadia Code", "Consolas", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 13.5px; line-height: 1.55;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: #2a333d; border-radius: 4px; }
+  ::selection { background: #24424a; color: #fff; }
+
+  /* ============ 顶栏 (三视图共有) ============ */
+  .topbar {
+    display: flex; align-items: center; gap: 18px; padding: 0 18px; height: 52px;
+    border-bottom: 1px solid var(--hair-2); background: var(--paper); flex: none; position: relative; z-index: 20;
+  }
+  .brand { font-family: var(--disp); font-size: 15px; letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); white-space: nowrap; }
+  .brand .sep { color: var(--faint); }
+  .brand small { color: var(--faint); letter-spacing: .12em; margin-left: 10px; font-size: 10px; }
+  .gsearch { position: relative; flex: 0 1 400px; }
+  .gsearch input {
+    width: 100%; background: var(--paper-2); border: 1px solid var(--hair); color: var(--ink);
+    border-radius: 5px; padding: 7px 10px 7px 30px; font: 12.5px var(--sans); outline: none;
+  }
+  .gsearch input:focus { border-color: var(--cyan); }
+  .gsearch input::placeholder { color: var(--faint); }
+  .gsearch svg { position: absolute; left: 9px; top: 8px; width: 13px; height: 13px; stroke: var(--faint); }
+  .seg { display: flex; border: 1px solid var(--hair-2); border-radius: 6px; overflow: hidden; flex: none; }
+  .seg button {
+    background: var(--paper-2); color: var(--dim); border: none; padding: 6px 16px;
+    font: 12.5px var(--sans); cursor: pointer; border-right: 1px solid var(--hair);
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button:hover { color: var(--ink); }
+  .seg button.on { background: var(--cyan-soft); color: var(--cyan); }
+  .readout { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .readout b { color: var(--cyan); font-weight: 600; }
+
+  /* ============ 视图容器 ============ */
+  .views { flex: 1; min-height: 0; position: relative; }
+  .view { display: none; height: 100%; }
+  #v-ledger.on { display: grid; grid-template-columns: 224px 1fr; }
+  #v-console.on { display: flex; flex-direction: column; }
+  #v-cards.on { display: block; overflow-y: auto; }
+
+  /* ============ 共用: 状态色 / 形态色 / 徽章 ============ */
+  .st-Open { color: var(--cyan); }
+  .st-InProgress { color: var(--amber); }
+  .st-Done { color: var(--green-dim); }
+  .st-Dropped, .st-Superseded { color: var(--mut); }
+  .st-none { color: var(--faint); }
+  .fc-issue { color: var(--rose); }
+  .fc-plan { color: var(--cyan); }
+  .fc-report { color: var(--green-dim); }
+  .fc-task { color: var(--amber); }
+  .c-open { background: var(--cyan); } .c-ip { background: var(--amber); } .c-done { background: #3d5947; }
+  .c-drop { background: #39434d; } .c-sup { background: #2c3844; } .c-none { background: #2a333d; }
+  .chip {
+    display: inline-block; font-size: 10.5px; font-family: var(--disp); letter-spacing: .05em;
+    padding: 1px 7px; border-radius: 8px; border: 1px solid var(--hair-2); color: var(--dim); white-space: nowrap;
+  }
+  .chip.st-Open { border-color: rgba(86,200,215,.4); background: var(--cyan-soft); }
+  .chip.st-InProgress { border-color: rgba(226,165,90,.4); background: var(--amber-soft); }
+  .chip.st-Done { border-color: rgba(127,199,154,.35); background: var(--green-soft); }
+  .chip.st-Dropped, .chip.st-Superseded { border-color: var(--hair-2); background: transparent; }
+  .fbadge {
+    display: inline-block; font-family: var(--disp); font-size: 10px; letter-spacing: .1em;
+    padding: 1px 0; width: 100%; text-align: center; border-radius: 2px;
+    background: var(--paper-2); border: 1px solid var(--hair-2); color: var(--dim);
+  }
+  .fbadge.fc-issue { color: var(--rose); border-color: #453b47; background: var(--rose-soft); }
+  .fbadge.fc-plan { color: var(--cyan); border-color: #33455c; background: var(--cyan-soft); }
+  .fbadge.fc-report { color: var(--green-dim); border-color: #3a4a38; background: var(--green-soft); }
+  .fbadge.fc-task { color: var(--amber); border-color: #4b3f2c; background: var(--amber-soft); }
+
+  /* ============ 视图 A: 台账 ============ */
+  #v-ledger aside {
+    border-right: 1px solid var(--hair-2); background: var(--paper);
+    padding: 16px 0 12px; overflow-y: auto; display: flex; flex-direction: column;
+  }
+  .fgroup { padding: 13px 18px 4px; }
+  .fgroup .fl {
+    font-family: var(--disp); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 7px;
+  }
+  .frow { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; user-select: none; color: var(--dim); }
+  .frow:hover { color: var(--ink); }
+  .frow .box {
+    width: 11px; height: 11px; border: 1px solid var(--hair-2); border-radius: 2px;
+    flex: none; position: relative; transition: background .12s, border-color .12s;
+  }
+  .frow.on { color: var(--ink); }
+  .frow.on .box { background: var(--cyan); border-color: var(--cyan); }
+  .frow.on .box::after {
+    content: ""; position: absolute; inset: 2px; background: var(--bg);
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  }
+  .frow .nm { flex: 1; font-size: 12.5px; }
+  .frow .ct { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .frow.sw .box { border-radius: 6px; }
+  .src-note { margin-top: auto; padding-top: 18px; }
+  .src-note .note { color: var(--faint); font-size: 11px; line-height: 1.7; }
+  .src-note .mono { font-family: var(--mono); font-size: 10.5px; }
+  #v-ledger main { display: flex; flex-direction: column; overflow: hidden; }
+  .toolbar {
+    display: flex; align-items: center; gap: 14px; padding: 11px 20px;
+    border-bottom: 1px solid var(--hair-2); background: var(--paper); flex: none;
+  }
+  .sort { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: 11.5px; }
+  .sort select {
+    background: var(--paper-2); color: var(--ink); border: 1px solid var(--hair);
+    border-radius: 4px; padding: 4px 6px; font: 12px var(--sans); outline: none;
+  }
+  .count { font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; }
+  .count b { color: var(--cyan); font-weight: 600; }
+  .toolbar .hint { margin-left: auto; color: var(--faint); font-size: 11px; }
+  .ledgerwrap { overflow: auto; flex: 1; }
+  #v-ledger table { width: 100%; border-collapse: collapse; }
+  #v-ledger thead th {
+    position: sticky; top: 0; z-index: 2; background: var(--bg);
+    font-family: var(--disp); font-weight: 600; font-size: 10px; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--faint); text-align: left;
+    padding: 9px 10px; border-bottom: 1px solid var(--hair-2); white-space: nowrap;
+  }
+  #v-ledger thead th.num { text-align: right; }
+  #v-ledger tbody td { padding: 7px 10px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+  #v-ledger tbody tr { cursor: pointer; }
+  #v-ledger tbody tr:hover { background: var(--paper-2); }
+  #v-ledger tbody tr.sel { background: var(--cyan-soft); box-shadow: inset 2px 0 0 var(--cyan); }
+  td.idx { font-family: var(--mono); font-size: 10.5px; color: var(--faint); text-align: right; width: 34px; padding-top: 9px; }
+  td.stamp { font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap; width: 96px; }
+  td.formc { width: 46px; }
+  td.statc { width: 84px; }
+  td.topic { width: 200px; }
+  td.refs { width: 54px; text-align: right; font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; }
+  td.topic code { font-family: var(--mono); font-size: 10.5px; color: var(--dim); background: var(--paper-2); border: 1px solid var(--hair); border-radius: 3px; padding: 1px 5px; }
+  .title-cell b { font-weight: 500; font-size: 13px; }
+  .title-cell .sm { color: var(--faint); font-size: 11.5px; margin-top: 1px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .chain { color: var(--faint); }
+  .chain.has { color: var(--cyan); }
+
+  /* ============ 视图 A: 详情抽屉 ============ */
+  .drawer {
+    position: fixed; top: 0; right: -430px; width: 420px; height: 100%; z-index: 30;
+    background: var(--paper); border-left: 1px solid var(--hair-2);
+    transition: right .22s cubic-bezier(.16,1,.3,1); display: flex; flex-direction: column;
+    box-shadow: -18px 0 40px rgba(0,0,0,.35);
+  }
+  .drawer.open { right: 0; }
+  .drawer .dhead { padding: 18px 20px 14px; border-bottom: 1px solid var(--hair-2); }
+  .drawer .dhead .form-line { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; flex-wrap: wrap; }
+  .drawer h2 { font-family: var(--disp); font-size: 16.5px; font-weight: 600; line-height: 1.4; margin: 0; }
+  .drawer .dbody { overflow-y: auto; flex: 1; padding: 14px 20px 24px; }
+  .dsec { margin-bottom: 20px; }
+  .dsec .dlabel {
+    font-family: var(--disp); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--faint); margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--hair);
+  }
+  .kv { display: grid; grid-template-columns: 74px 1fr; gap: 4px 10px; font-size: 12.5px; }
+  .kv .k { color: var(--faint); }
+  .kv .v { color: var(--ink); }
+  .kv .v.mono { font-family: var(--mono); font-size: 11.5px; }
+  .rel { display: block; padding: 6px 9px; border: 1px solid var(--hair); border-radius: 5px; margin-bottom: 5px; text-decoration: none; color: var(--ink); background: var(--paper-2); }
+  .rel:hover { border-color: var(--cyan); background: var(--cyan-soft); }
+  .rel .r1 { display: flex; gap: 7px; align-items: center; }
+  .rel .rt { font-size: 12px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rel .r2 { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 2px; }
+  .rel.rev { border-left: 2px solid var(--amber); }
+  .rel.fwd { border-left: 2px solid var(--cyan); }
+  .rel.same { border-left: 2px solid var(--mut); }
+  .none { color: var(--faint); font-size: 12px; font-style: italic; }
+  .openbtn {
+    display: block; text-align: center; padding: 8px; border: 1px solid var(--cyan);
+    color: var(--cyan); border-radius: 5px; text-decoration: none; font-size: 12.5px; margin-top: 4px;
+  }
+  .openbtn:hover { background: var(--cyan-soft); }
+  .dclose {
+    position: absolute; top: 14px; right: 14px; width: 24px; height: 24px; border: 1px solid var(--hair-2);
+    border-radius: 4px; background: none; color: var(--dim); cursor: pointer; font-size: 12px; line-height: 1;
+    font-family: var(--mono);
+  }
+  .dclose:hover { color: var(--ink); border-color: var(--cyan); }
+
+  /* ============ 视图 B: 控制台 ============ */
+  #v-console {
+    background-image:
+      linear-gradient(rgba(86,200,215,.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(86,200,215,.02) 1px, transparent 1px);
+    background-size: 34px 34px, 34px 34px;
+  }
+  .strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 14px 22px 6px; flex: none; }
+  .tile { border: 1px solid var(--hair); background: var(--paper); padding: 12px 14px 11px; position: relative; }
+  .tile .tl { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); display: flex; justify-content: space-between; }
+  .tile .tv { font-family: var(--mono); font-size: 26px; font-weight: 600; color: var(--ink); margin: 4px 0 8px; }
+  .tile .tv small { font-size: 11px; color: var(--faint); font-weight: 400; margin-left: 6px; }
+  .segbar { display: flex; height: 5px; gap: 2px; }
+  .segbar i { display: block; }
+  .seglegend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
+  .seglegend s { text-decoration: none; display: inline-block; width: 7px; height: 7px; margin-right: 4px; vertical-align: -1px; }
+  .deck { flex: 1; display: grid; grid-template-columns: 330px 1fr; gap: 14px; padding: 12px 22px 18px; min-height: 0; }
+  .chan { border: 1px solid var(--hair); background: var(--paper); display: flex; flex-direction: column; min-height: 0; }
+  .chan .chd { padding: 12px 14px 10px; border-bottom: 1px solid var(--hair); flex: none; }
+  .chd .ct { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); margin-bottom: 9px; display: flex; justify-content: space-between; }
+  .chd input {
+    width: 100%; background: var(--bg); border: 1px solid var(--hair); color: var(--ink);
+    font: 12px var(--mono); padding: 7px 9px; outline: none;
+  }
+  .chd input:focus { border-color: var(--cyan); }
+  .chlist { overflow-y: auto; flex: 1; }
+  .ch { padding: 8px 14px 7px; border-bottom: 1px solid var(--hair); cursor: pointer; border-left: 2px solid transparent; }
+  .ch:hover { background: var(--paper-2); }
+  .ch.on { background: var(--cyan-soft); border-left-color: var(--cyan); }
+  .ch .c1 { display: flex; align-items: center; gap: 7px; }
+  .ch .ck { font-family: var(--mono); font-size: 11.5px; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ch .cdot { width: 5px; height: 5px; border-radius: 50%; flex: none; }
+  .ch .cdot.live { background: var(--cyan); box-shadow: 0 0 5px rgba(86,200,215,.7); }
+  .ch .cdot.done { background: #39434d; }
+  .ch .c2 { display: flex; gap: 9px; margin-top: 3px; font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
+  .ch .c2 b { font-weight: 400; }
+  .scope { border: 1px solid var(--hair); background: var(--paper); min-height: 0; display: flex; flex-direction: column; }
+  .scope .shd { padding: 13px 18px 11px; border-bottom: 1px solid var(--hair); flex: none; display: flex; align-items: baseline; gap: 14px; }
+  .shd .sk { font-family: var(--mono); font-size: 16px; color: var(--cyan); letter-spacing: .02em; word-break: break-all; }
+  .shd .sn { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+  .shd .sl { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+  .scope .sbody { overflow-y: auto; flex: 1; padding: 10px 18px 18px; }
+  .empty { color: var(--faint); font-family: var(--mono); font-size: 11px; padding: 30px 0; text-align: center; letter-spacing: .1em; }
+  .row { border: 1px solid var(--hair); background: var(--paper-2); margin-bottom: 8px; }
+  .row-head { display: flex; align-items: center; gap: 12px; padding: 9px 12px; cursor: pointer; }
+  .row-head:hover { background: rgba(86,200,215,.05); }
+  .row-head .arrow { font-family: var(--mono); color: var(--faint); font-size: 10px; width: 10px; flex: none; transition: transform .15s; display: inline-block; }
+  .row.open .arrow { transform: rotate(90deg); color: var(--cyan); }
+  .row.open { border-color: var(--hair-2); }
+  .rf { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; padding: 2px 7px; border: 1px solid var(--hair-2); flex: none; }
+  .rs { font-family: var(--mono); font-size: 9.5px; padding: 2px 7px; flex: none; letter-spacing: .06em; border-radius: 2px; }
+  .rs.st-Open { background: var(--cyan-soft); }
+  .rs.st-InProgress { background: var(--amber-soft); }
+  .rs.st-Done { background: var(--green-soft); }
+  .rs.st-Dropped, .rs.st-Superseded { background: rgba(118,130,141,.12); }
+  .row-head .rstamp { font-family: var(--mono); font-size: 10px; color: var(--faint); flex: none; }
+  .row-head .rtitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+  .row-head .rchain { font-family: var(--mono); font-size: 9.5px; color: var(--faint); flex: none; }
+  .row-head .rchain.has { color: var(--amber); }
+  .row-body { display: none; padding: 4px 12px 12px 34px; }
+  .row.open .row-body { display: block; }
+  .rmeta { font-family: var(--mono); font-size: 10.5px; color: var(--dim); display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; }
+  .rsummary { color: var(--dim); font-size: 12px; margin: 2px 0 10px; max-width: 90ch; }
+  .sublabel { font-family: var(--mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--faint); margin: 10px 0 6px; }
+  .refline { display: flex; align-items: center; gap: 9px; padding: 5px 9px; border: 1px solid var(--hair); border-left: 2px solid var(--cyan); background: var(--bg); margin-bottom: 4px; text-decoration: none; color: var(--ink); }
+  .refline.rev { border-left-color: var(--amber); }
+  .refline:hover { border-color: var(--hair-2); background: var(--paper-2); }
+  .refline .rft { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+  .refline .rfs { font-family: var(--mono); font-size: 9.5px; color: var(--faint); flex: none; }
+  .refnone { color: var(--faint); font-family: var(--mono); font-size: 10px; }
+  .openlink {
+    display: inline-block; margin-top: 9px; font-family: var(--mono); font-size: 10.5px; color: var(--cyan);
+    text-decoration: none; border: 1px solid var(--hair-2); padding: 4px 10px;
+  }
+  .openlink:hover { border-color: var(--cyan); background: var(--cyan-soft); }
+
+  /* ============ 视图 C: 卡片墙 ============ */
+  .cwrap { max-width: 1340px; margin: 0 auto; padding: 26px 32px 60px; }
+  .cnote { color: var(--dim); font-size: 13px; max-width: 78ch; margin-bottom: 4px; }
+  .cnote .mono { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 16px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill {
+    border: 1px solid var(--hair); background: var(--paper); color: var(--dim);
+    border-radius: 999px; padding: 4px 13px; font-size: 12px; cursor: pointer; user-select: none;
+    transition: color .15s, border-color .15s, background .15s;
+  }
+  .pill:hover { color: var(--ink); border-color: var(--faint); }
+  .pill.on { color: var(--green); border-color: rgba(127,199,154,.45); background: var(--green-soft); }
+  .pill.on.f-issue { color: var(--rose); border-color: rgba(199,163,201,.45); background: var(--rose-soft); }
+  .pill.on.f-plan { color: var(--cyan); border-color: rgba(86,200,215,.45); background: var(--cyan-soft); }
+  .pill.on.f-report { color: var(--sand); border-color: rgba(205,185,146,.45); background: rgba(205,185,146,.12); }
+  .pill.on.f-task { color: var(--amber); border-color: rgba(226,165,90,.45); background: var(--amber-soft); }
+  .stat { margin-left: auto; color: var(--faint); font-size: 12px; }
+  .stat b { color: var(--ink); font-weight: 600; }
+  .wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 22px; }
+  .tcard {
+    background: var(--paper); border: 1px solid var(--hair); border-radius: 12px;
+    padding: 18px 18px 12px; box-shadow: 0 3px 16px rgba(0,0,0,.18);
+    transition: transform .16s ease, border-color .16s;
+    display: flex; flex-direction: column;
+  }
+  .tcard:hover { transform: translateY(-2px); border-color: rgba(255,255,255,.16); }
+  .tc-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+  .tc-key { font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--ink); word-break: break-all; line-height: 1.45; flex: 1; }
+  .tc-live {
+    flex: none; font-family: var(--disp); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase;
+    padding: 2px 9px; border-radius: 999px; margin-top: 2px;
+  }
+  .tc-live.on { color: var(--green); background: var(--green-soft); }
+  .tc-live.off { color: var(--mut); background: rgba(118,130,141,.1); }
+  .tc-forms { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; }
+  .fchip { font-size: 11px; padding: 1px 9px; border-radius: 999px; }
+  .fchip.fc-issue { color: var(--rose); background: var(--rose-soft); }
+  .fchip.fc-plan { color: var(--cyan); background: var(--cyan-soft); }
+  .fchip.fc-report { color: var(--sand); background: rgba(205,185,146,.12); }
+  .fchip.fc-task { color: var(--amber); background: var(--amber-soft); }
+  .items { margin-top: 6px; display: flex; flex-direction: column; }
+  .it {
+    display: flex; align-items: baseline; gap: 9px; padding: 6px 8px; margin: 0 -8px;
+    border-radius: 8px; text-decoration: none; color: var(--ink);
+  }
+  .it:hover { background: var(--paper-3); }
+  .it .if { flex: none; width: 30px; font-size: 10.5px; text-align: center; }
+  .it .it-t { flex: 1; min-width: 0; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it .it-s { flex: none; font-size: 10.5px; color: var(--faint); }
+  .it.st-Open .it-s, .it.st-none .it-s { color: var(--green); }
+  .it.st-InProgress .it-s { color: var(--sand); }
+  .more {
+    border: none; background: none; color: var(--faint); font: 12px var(--sans);
+    padding: 7px 8px; margin: 2px -8px 0; text-align: left; cursor: pointer; border-radius: 8px;
+  }
+  .more:hover { color: var(--green); background: var(--paper-3); }
+  .empty-wall { grid-column: 1 / -1; text-align: center; color: var(--faint); padding: 70px 0; font-size: 13px; }
+
+  /* ============ 错误 / 提示浮层 ============ */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50; background: rgba(10,13,16,.82);
+    display: flex; align-items: center; justify-content: center; padding: 30px;
+  }
+  .overlay[hidden] { display: none; }
+  .obox { max-width: 560px; background: var(--paper); border: 1px solid var(--hair-2); border-left: 3px solid var(--amber); border-radius: 8px; padding: 20px 24px; }
+  .obox .ot { font-family: var(--disp); font-size: 15px; font-weight: 600; margin-bottom: 8px; color: var(--amber); }
+  .obox .om { color: var(--ink); font-size: 13px; margin-bottom: 8px; }
+  .obox .oh { color: var(--dim); font-size: 12px; }
+  .obox .oh code, .obox .om code { font-family: var(--mono); font-size: 11px; background: var(--paper-2); border: 1px solid var(--hair); border-radius: 3px; padding: 1px 5px; color: var(--cyan); }
+
+  @media (max-width: 1100px) {
+    #v-ledger.on { grid-template-columns: 190px 1fr; }
+    td.topic { width: 130px; }
+    .deck { grid-template-columns: 1fr; }
+    .chan { max-height: 300px; }
+    .strip { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">MB<span class="sep">//</span>NAV <small>memory-bank 四工位导航</small></div>
+  <div class="gsearch">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="gq" type="text" placeholder="搜索标题 / 专题 / 摘要…  (Esc 清空)">
+  </div>
+  <div class="seg" id="seg">
+    <button data-view="ledger" class="on">台账</button>
+    <button data-view="console">控制台</button>
+    <button data-view="cards">卡片墙</button>
+  </div>
+  <div class="readout" id="readout">载入中…</div>
+</header>
+
+<div class="views">
+
+  <!-- 视图 A: 台账 (过滤轨 + 排序表格 + 详情抽屉) -->
+  <section class="view on" id="v-ledger">
+    <aside>
+      <div class="fgroup" id="fgForm"><div class="fl">形态</div></div>
+      <div class="fgroup" id="fgStatus"><div class="fl">状态</div></div>
+      <div class="fgroup" id="fgType"><div class="fl">Issue 类型</div></div>
+      <div class="fgroup" id="fgLive"><div class="fl">关联</div></div>
+      <div class="fgroup src-note">
+        <div class="fl">数据源</div>
+        <div class="note">
+          扫描器 <span class="mono">gen_doc_map.collect()</span><br>
+          状态单点 = 各件 <span class="mono">doc-*</span> / <span class="mono">issue-*</span> meta<br>
+          关联 = <span class="mono">doc-topic</span> + <span class="mono">doc-refs</span> 认领链
+        </div>
+      </div>
+    </aside>
+    <main>
+      <div class="toolbar">
+        <div class="sort">排序
+          <select id="sort">
+            <option value="stamp">时间 新-旧</option>
+            <option value="form">形态 issue-task</option>
+            <option value="status">状态 活跃-完结</option>
+            <option value="topic">专题 A-Z</option>
+          </select>
+        </div>
+        <div class="count" id="aCount"></div>
+        <div class="hint">点击行看关联 · 链 = doc-refs 声明数</div>
+      </div>
+      <div class="ledgerwrap">
+        <table>
+          <thead><tr>
+            <th class="num">#</th><th style="width:96px">时间戳</th><th style="width:46px">形态</th>
+            <th>标题</th><th style="width:200px">专题</th><th style="width:84px">状态</th><th style="width:54px; text-align:right">链</th>
+          </tr></thead>
+          <tbody id="aRows"></tbody>
+        </table>
+      </div>
+    </main>
+  </section>
+
+  <!-- 视图 B: 控制台 (四工位统计带 + 专题频道 + readout 行内展开) -->
+  <section class="view" id="v-console">
+    <div class="strip" id="strip"></div>
+    <div class="deck">
+      <div class="chan">
+        <div class="chd">
+          <div class="ct"><span>TOPIC CHANNELS</span><span id="chCount"></span></div>
+          <input id="cq" type="text" placeholder="过滤专题键… (Esc 清空)">
+        </div>
+        <div class="chlist" id="chlist"></div>
+      </div>
+      <div class="scope">
+        <div class="shd" id="shd"></div>
+        <div class="sbody" id="sbody"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 视图 C: 卡片墙 (专题卡片 + 药丸过滤 + 还有 n 件展开) -->
+  <section class="view" id="v-cards">
+    <div class="cwrap">
+      <div class="cnote">
+        四工位材料按 <span class="mono">doc-topic</span> 归组 · 状态读自各件 meta 单点 · 认领链来自 <span class="mono">doc-refs</span>。
+        点击条目直达原文;「还有 n 件」展开同专题其余材料。
+      </div>
+      <div class="controls">
+        <div class="pills" id="cFormPills"></div>
+        <div class="pills" id="cStatusPills"></div>
+        <div class="pill on" id="cLiveOnly">仅活跃专题</div>
+        <div class="stat" id="cStat"></div>
+      </div>
+      <div class="wall" id="wall"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- 详情抽屉 (视图 A) -->
+<div class="drawer" id="drawer">
+  <button class="dclose" id="dclose" title="关闭">x</button>
+  <div class="dhead">
+    <div class="form-line" id="dFormLine"></div>
+    <h2 id="dTitle"></h2>
+  </div>
+  <div class="dbody" id="dBody"></div>
+</div>
+
+<!-- 错误 / 提示浮层 -->
+<div class="overlay" id="overlay" hidden>
+  <div class="obox">
+    <div class="ot" id="oTitle">数据不可用</div>
+    <div class="om" id="oMsg"></div>
+    <div class="oh" id="oHint"></div>
+  </div>
+</div>
+
+<!-- 数据注入位: --gen-static 把下方唯一的占位字面量替换为 JSON (application/json 块不执行,
+     http 模式壳里是占位符原样, 静态件里是可 JSON.parse 的数据) -->
+<script id="nav-data" type="application/json">__DATA__</script>
+
+<script>
+"use strict";
+
+/* ---- 数据注入: nav-data 块被 --gen-static 替换为 JSON; 拼接写法避免文件里出现第二个占位字面量 ---- */
+const TOKEN = "__" + "DATA" + "__";
+const INLINE = (document.getElementById("nav-data").textContent || "").trim();
+const STATIC_MODE = INLINE !== "" && INLINE !== TOKEN;
+const MB = location.protocol === "file:" ? "../../memory-bank/" : "/memory-bank/";
+const POLL_MS = 30000;
+
+const FORM_CN = { issue: "问题", plan: "计划", report: "报告", task: "档案" };
+const FORM_ORD = ["issue", "plan", "report", "task"];
+const KNOWN_ST = ["Open", "In Progress", "Done", "Dropped", "Superseded"];
+const NO_ST = "(无状态)";
+const NO_KEY = "(无主键)";
+const ST_TXT = { "Open": "待办", "In Progress": "进行", "Done": "完结", "Dropped": "弃置", "Superseded": "被代" };
+const TYPES = ["bug", "perf", "docs", "test", "refactor", "feat", "chore", "question"];
+const ACTIVE_ST = new Set(["Open", "In Progress"]);
+const VIEW_KEY = "mb-nav-view";
+
+let DATA = null;
+let byLink = new Map();      // link -> item
+let groups = new Map();      // topicKey -> items[]
+let topicInfo = new Map();   // topicKey -> {topic, live, forms}
+let statusList = KNOWN_ST.slice();
+
+/* 全局状态 (跨视图共享, 30s 轮询重渲染时保持) */
+const S = {
+  view: "ledger",
+  q: "",
+  /* A 台账 */
+  aForms: new Set(FORM_ORD), aStatuses: new Set(KNOWN_ST), aTypes: new Set(TYPES),
+  aLive: false, aChain: false, sort: "stamp", sel: null,
+  /* B 控制台 */
+  selTopic: null, cq: "", openRows: new Set(),
+  /* C 卡片墙 */
+  cForms: new Set(FORM_ORD), cStatuses: new Set(KNOWN_ST), cLive: true, expanded: new Set(),
+};
+
+/* ---- 工具 ---- */
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML.replace(/"/g, "&quot;");
+}
+const stOf = i => i.status || NO_ST;
+const stCls = s => ({ "Open": "st-Open", "In Progress": "st-InProgress", "Done": "st-Done", "Dropped": "st-Dropped", "Superseded": "st-Superseded" })[s] || "st-none";
+const stBar = s => ({ "Open": "c-open", "In Progress": "c-ip", "Done": "c-done", "Dropped": "c-drop", "Superseded": "c-sup" })[s] || "c-none";
+const refKey = r => String(r).replace(/^memory-bank\//, "");
+const $ = id => document.getElementById(id);
+
+/* ---- 数据派生 (每次 DATA 更新后重算; 过滤/展开状态保留在 S 里) ---- */
+function derive() {
+  byLink = new Map(DATA.items.map(i => [i.link, i]));
+  groups = new Map();
+  for (const i of DATA.items) {
+    const k = i.topic || NO_KEY;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(i);
+  }
+  topicInfo = new Map(DATA.topics.map(t => [t.topic, t]));
+  const seen = new Set(DATA.items.map(i => stOf(i)));
+  for (const s of seen) {
+    if (!statusList.includes(s)) statusList.push(s);
+    S.aStatuses.add(s);
+    S.cStatuses.add(s);
+  }
+}
+function liveOf(key) { const t = topicInfo.get(key); return t ? !!t.live : false; }
+
+/* ---- 顶栏 / 视图切换 ---- */
+function loadView() {
+  try { const v = localStorage.getItem(VIEW_KEY); return ["ledger", "console", "cards"].includes(v) ? v : "ledger"; }
+  catch (e) { return "ledger"; }
+}
+function saveView(v) { try { localStorage.setItem(VIEW_KEY, v); } catch (e) { /* file:// 下静默降级 */ } }
+function setView(v) {
+  S.view = v;
+  saveView(v);
+  for (const b of document.querySelectorAll("#seg button")) b.classList.toggle("on", b.dataset.view === v);
+  for (const id of ["v-ledger", "v-console", "v-cards"]) $(id).classList.toggle("on", id === "v-" + v);
+  renderCurrent();
+}
+function renderCurrent() {
+  if (!DATA) return;
+  if (S.view === "ledger") renderLedger();
+  else if (S.view === "console") renderConsole();
+  else renderCards();
+}
+function updateTopbar() {
+  const live = DATA.topics.filter(t => t.live).length;
+  $("readout").innerHTML =
+    esc(DATA.stamp || "--") + " · <b>" + DATA.items.length + "</b> 件 · <b>" +
+    groups.size + "</b> 专题 · <b>" + live + "</b> 活跃";
+}
+
+/* ---- 错误浮层 ---- */
+function showError(title, msg, hint) {
+  $("oTitle").textContent = title;
+  $("oMsg").innerHTML = msg;
+  $("oHint").innerHTML = hint || "";
+  $("overlay").hidden = false;
+}
+function hideError() { $("overlay").hidden = true; }
+
+/* ============================================================
+   视图 A: 台账
+   ============================================================ */
+function toggleSet(set, v) {
+  if (set.has(v)) { if (set.size === 1) return false; set.delete(v); } else set.add(v);
+  return true;
+}
+function buildFilterRows(groupId, entries, sw, isActive, onToggle) {
+  const box = $(groupId);
+  for (const [val, label, ct] of entries) {
+    const row = document.createElement("div");
+    row.className = "frow" + (isActive(val) ? " on" : "") + (sw ? " sw" : "");
+    row.innerHTML = '<span class="box"></span><span class="nm">' + label + '</span><span class="ct">' + ct + "</span>";
+    row.onclick = () => { onToggle(val); row.classList.toggle("on"); };
+    box.appendChild(row);
+  }
+}
+
+const FORM_ORD_N = { issue: 0, plan: 1, report: 2, task: 3 };
+const ST_ORD_N = { "In Progress": 0, "Open": 1, "Done": 2, "Dropped": 3, "Superseded": 4 };
+
+function aFiltered() {
+  let list = DATA.items.filter(i =>
+    S.aForms.has(i.form) && S.aStatuses.has(stOf(i)) &&
+    (!(i["issue-type"]) || S.aTypes.has(i["issue-type"])) &&
+    (!S.aLive || liveOf(i.topic || NO_KEY)) &&
+    (!S.aChain || (i.refs && i.refs.length > 0))
+  );
+  if (S.q) {
+    const q = S.q.toLowerCase();
+    list = list.filter(i => (i.title + " " + (i.topic || "") + " " + (i["issue-summary"] || "")).toLowerCase().includes(q));
+  }
+  const cmp = {
+    stamp: (a, b) => b.stamp.localeCompare(a.stamp) || FORM_ORD_N[a.form] - FORM_ORD_N[b.form],
+    form: (a, b) => FORM_ORD_N[a.form] - FORM_ORD_N[b.form] || b.stamp.localeCompare(a.stamp),
+    status: (a, b) => (ST_ORD_N[stOf(a)] != null ? ST_ORD_N[stOf(a)] : 9) - (ST_ORD_N[stOf(b)] != null ? ST_ORD_N[stOf(b)] : 9) || b.stamp.localeCompare(a.stamp),
+    topic: (a, b) => (a.topic || NO_KEY).localeCompare(b.topic || NO_KEY) || b.stamp.localeCompare(a.stamp),
+  }[S.sort];
+  return list.sort(cmp);
+}
+
+function renderLedger() {
+  if (!DATA) return;
+  const cnt = f => DATA.items.filter(f).length;
+  const fgForm = $("fgForm"), fgStatus = $("fgStatus"), fgType = $("fgType"), fgLive = $("fgLive");
+  fgForm.innerHTML = '<div class="fl">形态</div>';
+  fgStatus.innerHTML = '<div class="fl">状态</div>';
+  fgType.innerHTML = '<div class="fl">Issue 类型</div>';
+  fgLive.innerHTML = '<div class="fl">关联</div>';
+  buildFilterRows("fgForm", FORM_ORD.map(k => [k, FORM_CN[k], cnt(i => i.form === k)]), false,
+    v => S.aForms.has(v), v => { toggleSet(S.aForms, v); renderLedger(); });
+  buildFilterRows("fgStatus", statusList.map(s => [s, s, cnt(i => stOf(i) === s)]), false,
+    v => S.aStatuses.has(v), v => { toggleSet(S.aStatuses, v); renderLedger(); });
+  buildFilterRows("fgType", TYPES.map(t => [t, t, cnt(i => i["issue-type"] === t)]), false,
+    v => S.aTypes.has(v), v => { toggleSet(S.aTypes, v); renderLedger(); });
+  buildFilterRows("fgLive", [
+    ["live", "仅活跃专题", cnt(i => liveOf(i.topic || NO_KEY))],
+    ["chain", "有认领链", cnt(i => i.refs && i.refs.length)],
+  ], true,
+    v => (v === "live" ? S.aLive : S.aChain),
+    v => { if (v === "live") S.aLive = !S.aLive; else S.aChain = !S.aChain; renderLedger(); });
+
+  const list = aFiltered();
+  $("aCount").innerHTML = "<b>" + list.length + "</b> / " + DATA.items.length + " 件";
+  $("aRows").innerHTML = list.map((i, n) => `
+    <tr data-link="${esc(i.link)}"${S.sel === i.link ? ' class="sel"' : ""}>
+      <td class="idx">${n + 1}</td>
+      <td class="stamp">${esc(i.stamp)}</td>
+      <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
+      <td class="title-cell"><b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
+      <td class="topic"><code>${esc(i.topic || NO_KEY)}</code></td>
+      <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
+      <td class="refs"><span class="chain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "# " + i.refs.length : "·"}</span></td>
+    </tr>`).join("");
+
+  if (S.sel) { if (byLink.has(S.sel)) renderDrawer(S.sel); else closeDrawer(); }
+}
+
+function renderDrawer(link) {
+  const i = byLink.get(link);
+  if (!i) return;
+  const sameTopic = DATA.items.filter(x => (x.topic || NO_KEY) === (i.topic || NO_KEY) && x.link !== link);
+  const fwd = (i.refs || []).map(r => byLink.get(refKey(r))).filter(Boolean);
+  const fwdDead = (i.refs || []).filter(r => !byLink.has(refKey(r)));
+  const rev = DATA.items.filter(x => x.link !== link && (x.refs || []).some(r => refKey(r) === link));
+  const one = (x, cls) => `
+    <a class="rel ${cls}" href="${MB}${esc(x.link)}" target="_blank">
+      <span class="r1"><span class="fbadge fc-${x.form}" style="width:auto;padding:1px 6px;">${FORM_CN[x.form]}</span><span class="rt">${esc(x.title)}</span></span>
+      <span class="r2">${esc(x.stamp)} · ${esc(stOf(x))}</span></a>`;
+
+  $("dFormLine").innerHTML =
+    '<span class="fbadge fc-' + i.form + '" style="width:auto;padding:1px 8px;">' + FORM_CN[i.form] + "</span>" +
+    '<span class="chip ' + stCls(stOf(i)) + '">' + esc(stOf(i)) + "</span>" +
+    (i["issue-type"] ? '<span class="chip">' + esc(i["issue-type"]) + "</span>" : "") +
+    (i["issue-tier"] ? '<span class="chip">' + esc(i["issue-tier"]) + "</span>" : "");
+  $("dTitle").textContent = i.title;
+  $("dBody").innerHTML = `
+    <div class="dsec"><div class="dlabel">元数据</div>
+      <div class="kv">
+        <span class="k">专题</span><span class="v mono">${esc(i.topic || NO_KEY)}</span>
+        <span class="k">时间戳</span><span class="v mono">${esc(i.stamp)}</span>
+        ${i["doc-updated"] ? '<span class="k">更新</span><span class="v mono">' + esc(i["doc-updated"]) + "</span>" : ""}
+        ${i["issue-summary"] ? '<span class="k">摘要</span><span class="v" style="line-height:1.6">' + esc(i["issue-summary"]) + "</span>" : ""}
+      </div>
+    </div>
+    <div class="dsec"><div class="dlabel">认领链 · 声明的引用 (${fwd.length}${fwdDead.length ? " + " + fwdDead.length + " 失效" : ""})</div>
+      ${(fwd.length || fwdDead.length)
+        ? fwd.map(x => one(x, "fwd")).join("") +
+          fwdDead.map(r => '<div class="rel fwd" style="color:var(--faint)"><span class="rt mono" style="font-size:11px">' + esc(r) + " (未入库)</span></div>").join("")
+        : '<div class="none">无 doc-refs 声明</div>'}
+    </div>
+    <div class="dsec"><div class="dlabel">反向引用 · 谁声明了本件 (${rev.length})</div>
+      ${rev.length ? rev.map(x => one(x, "rev")).join("") : '<div class="none">无反向引用</div>'}
+    </div>
+    <div class="dsec"><div class="dlabel">同专题件 (${sameTopic.length}) · ${esc(i.topic || NO_KEY)}</div>
+      ${sameTopic.length
+        ? sameTopic.slice(0, 14).map(x => one(x, "same")).join("") +
+          (sameTopic.length > 14 ? '<div class="none">… 其余 ' + (sameTopic.length - 14) + " 件</div>" : "")
+        : '<div class="none">单件专题</div>'}
+    </div>
+    <a class="openbtn" href="${MB}${esc(i.link)}" target="_blank">打开原文 -&gt;</a>`;
+  $("drawer").classList.add("open");
+}
+function closeDrawer() { $("drawer").classList.remove("open"); }
+
+/* ============================================================
+   视图 B: 控制台
+   ============================================================ */
+function renderConsole() {
+  if (!DATA) return;
+  /* 四工位统计带 */
+  const strip = $("strip");
+  strip.innerHTML = FORM_ORD.map(form => {
+    const byS = DATA.counts[form] || {};
+    const total = Object.values(byS).reduce((a, b) => a + b, 0);
+    const segs = statusList.filter(s => byS[s]).map(s =>
+      '<i class="' + stBar(s) + '" style="flex:' + byS[s] + '" title="' + esc(s) + ": " + byS[s] + '"></i>').join("");
+    const legend = statusList.filter(s => byS[s]).map(s =>
+      '<span><s class="' + stBar(s) + '"></s>' + esc(s) + " " + byS[s] + "</span>").join("");
+    return `
+    <div class="tile">
+      <div class="tl"><span>${form.toUpperCase()}</span><span>${FORM_CN[form]}</span></div>
+      <div class="tv">${total}<small>件</small></div>
+      <div class="segbar">${segs}</div>
+      <div class="seglegend">${legend}</div>
+    </div>`;
+  }).join("");
+
+  renderChannels();
+  renderScope();
+}
+
+function renderChannels() {
+  const qLocal = S.cq.trim().toLowerCase();
+  const qGlobal = S.q.toLowerCase();
+  const keys = [...groups.keys()]
+    .filter(k => (!qLocal || k.toLowerCase().includes(qLocal)) && (!qGlobal || k.toLowerCase().includes(qGlobal)))
+    .sort((a, b) => {
+      const la = liveOf(a), lb = liveOf(b);
+      const na = groups.get(a).length, nb = groups.get(b).length;
+      return (nb - na) || (String(lb).localeCompare(String(la))) || a.localeCompare(b);
+    });
+  $("chCount").textContent = keys.length + " CH";
+  $("chlist").innerHTML = keys.map(k => {
+    const g = groups.get(k), live = liveOf(k);
+    const fc = Object.fromEntries(FORM_ORD.map(f => [f, g.filter(i => i.form === f).length]));
+    return `<div class="ch ${S.selTopic === k ? "on" : ""}" data-k="${esc(k)}">
+      <div class="c1"><span class="cdot ${live ? "live" : "done"}" title="${live ? "活跃专题" : "已完结"}"></span><span class="ck">${esc(k)}</span></div>
+      <div class="c2">${FORM_ORD.filter(f => fc[f]).map(f => "<b>" + FORM_CN[f] + " " + fc[f] + "</b>").join("")}</div>
+    </div>`;
+  }).join("");
+}
+
+function refLines(item) {
+  const fwd = (item.refs || []).map(r => byLink.get(refKey(r))).filter(Boolean);
+  const dead = (item.refs || []).filter(r => !byLink.has(refKey(r)));
+  const rev = DATA.items.filter(x => x.link !== item.link && (x.refs || []).some(r => refKey(r) === item.link));
+  const one = (x, cls) => `<a class="refline ${cls}" href="${MB}${esc(x.link)}" target="_blank">
+      <span class="rf fc-${x.form}">${FORM_CN[x.form]}</span><span class="rft">${esc(x.title)}</span>
+      <span class="rfs">${esc(x.stamp)} · ${esc(stOf(x))}</span></a>`;
+  const deadLine = r => '<div class="refline" style="border-left-color:#39434d;color:var(--faint)"><span class="rft mono">' + esc(r) + " (未入库)</span></div>";
+  return `
+    <div class="sublabel">认领链 · 声明引用 ${fwd.length + dead.length}</div>
+    ${(fwd.map(x => one(x, "fwd")).join("") + dead.map(deadLine).join("")) || (!fwd.length && !dead.length ? '<div class="refnone">无 doc-refs 声明</div>' : "")}
+    <div class="sublabel">反向引用 ${rev.length}</div>
+    ${rev.map(x => one(x, "rev")).join("") || '<div class="refnone">无反向声明</div>'}`;
+}
+
+function renderScope() {
+  const shd = $("shd"), sbody = $("sbody");
+  if (!S.selTopic || !groups.has(S.selTopic)) {
+    shd.innerHTML = S.selTopic
+      ? '<span class="sk" style="color:var(--faint)">TOPIC GONE</span>'
+      : '<span class="sk" style="color:var(--faint)">SELECT A CHANNEL</span>';
+    sbody.innerHTML = '<div class="empty">// 从左侧选择一个专题频道载入 readout //</div>';
+    if (S.selTopic) S.selTopic = null;
+    return;
+  }
+  const g = groups.get(S.selTopic).slice().sort((a, b) =>
+    FORM_ORD_N[a.form] - FORM_ORD_N[b.form] || b.stamp.localeCompare(a.stamp));
+  const live = liveOf(S.selTopic);
+  shd.innerHTML = '<span class="sk">' + esc(S.selTopic) + "</span>" +
+    '<span class="sn">' + g.length + " 件</span>" +
+    '<span class="sl" style="color:' + (live ? "var(--green)" : "var(--mut)") + '">' + (live ? "ACTIVE" : "CLOSED") + "</span>";
+  sbody.innerHTML = g.map(i => `
+    <div class="row${S.openRows.has(i.link) ? " open" : ""}" data-link="${esc(i.link)}">
+      <div class="row-head">
+        <span class="arrow">&gt;</span>
+        <span class="rf fc-${i.form}">${FORM_CN[i.form]}</span>
+        <span class="rs ${stCls(stOf(i))}">${esc(stOf(i)).toUpperCase()}</span>
+        <span class="rstamp">${esc(i.stamp)}</span>
+        <span class="rtitle">${esc(i.title)}</span>
+        <span class="rchain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "#" + i.refs.length : ""}</span>
+      </div>
+      <div class="row-body">
+        <div class="rmeta"><span>TOPIC ${esc(i.topic || NO_KEY)}</span><span>${i["doc-updated"] ? "UPD " + esc(i["doc-updated"]) : ""}</span>${i["issue-type"] ? "<span>TYPE " + esc(i["issue-type"]) + "</span>" : ""}${i["issue-tier"] ? "<span>" + esc(i["issue-tier"]) + "</span>" : ""}</div>
+        ${i["issue-summary"] ? '<div class="rsummary">' + esc(i["issue-summary"]) + "</div>" : ""}
+        ${refLines(i)}
+        <a class="openlink" href="${MB}${esc(i.link)}" target="_blank">OPEN -&gt; ${esc(i.link)}</a>
+      </div>
+    </div>`).join("");
+}
+
+/* ============================================================
+   视图 C: 卡片墙
+   ============================================================ */
+function cVisibleItems(key) {
+  let list = groups.get(key).filter(i => S.cForms.has(i.form) && S.cStatuses.has(stOf(i)));
+  if (S.q) {
+    const q = S.q.toLowerCase();
+    list = list.filter(i => (i.title + " " + (i.topic || "") + " " + (i["issue-summary"] || "")).toLowerCase().includes(q));
+  }
+  return list.slice().sort((a, b) => {
+    const aa = ACTIVE_ST.has(stOf(a)) ? 0 : 1, bb = ACTIVE_ST.has(stOf(b)) ? 0 : 1;
+    return aa - bb || b.stamp.localeCompare(a.stamp);
+  });
+}
+
+function renderCards() {
+  if (!DATA) return;
+  $("cFormPills").innerHTML = FORM_ORD.map(f =>
+    '<span class="pill f-' + f + (S.cForms.has(f) ? " on" : "") + '" data-v="' + f + '">' + FORM_CN[f] + "</span>").join("");
+  $("cStatusPills").innerHTML = statusList.map(s =>
+    '<span class="pill' + (S.cStatuses.has(s) ? " on" : "") + '" data-v="' + esc(s) + '">' + esc(s) + "</span>").join("");
+  $("cLiveOnly").classList.toggle("on", S.cLive);
+
+  const keys = [...groups.keys()].filter(k => {
+    if (S.cLive && !liveOf(k)) return false;
+    const allOn = S.cForms.size === FORM_ORD.length && S.cStatuses.size === statusList.length;
+    if (!S.q && allOn) return true;
+    return cVisibleItems(k).length > 0 || (S.q && k.toLowerCase().includes(S.q.toLowerCase()));
+  }).sort((a, b) => {
+    const la = liveOf(a) ? 0 : 1, lb = liveOf(b) ? 0 : 1;
+    return la - lb || groups.get(b).length - groups.get(a).length || a.localeCompare(b);
+  });
+  const total = keys.reduce((n, k) => n + groups.get(k).length, 0);
+  $("cStat").innerHTML = "<b>" + keys.length + "</b> 专题 · <b>" + total + "</b> 件";
+
+  $("wall").innerHTML = keys.map(k => {
+    const items = cVisibleItems(k);
+    const all = groups.get(k);
+    const live = liveOf(k);
+    const fc = Object.fromEntries(FORM_ORD.map(f => [f, all.filter(i => i.form === f).length]));
+    const show = S.expanded.has(k) ? items : items.slice(0, 5);
+    const hidden = items.length - show.length;
+    return `<div class="tcard">
+      <div class="tc-top">
+        <div class="tc-key">${esc(k)}</div>
+        <span class="tc-live ${live ? "on" : "off"}">${live ? "活跃" : "完结"}</span>
+      </div>
+      <div class="tc-forms">${FORM_ORD.filter(f => fc[f]).map(f =>
+        '<span class="fchip fc-' + f + '">' + FORM_CN[f] + " " + fc[f] + "</span>").join("")}</div>
+      <div class="items">
+        ${show.map(i => `
+          <a class="it fc-${i.form} ${stCls(stOf(i))}"
+             href="${MB}${esc(i.link)}" target="_blank" title="${esc(i.title)} · ${esc(stOf(i))} · ${esc(i.stamp)}">
+            <span class="if">${FORM_CN[i.form]}</span>
+            <span class="it-t">${esc(i.title)}</span>
+            <span class="it-s">${esc(ST_TXT[stOf(i)] || stOf(i))}</span>
+          </a>`).join("")}
+        ${hidden > 0 ? '<button class="more" data-k="' + esc(k) + '">还有 ' + hidden + " 件, 点击展开</button>" : ""}
+      </div>
+    </div>`;
+  }).join("") || '<div class="empty-wall">没有匹配的专题 —— 试试放宽过滤条件或清空搜索</div>';
+}
+
+/* ============================================================
+   事件绑定 (一次性)
+   ============================================================ */
+function wire() {
+  $("seg").addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (b) setView(b.dataset.view);
+  });
+  $("gq").addEventListener("input", e => { S.q = e.target.value.trim(); renderCurrent(); });
+  $("gq").addEventListener("keydown", e => {
+    if (e.key === "Escape") { e.target.value = ""; S.q = ""; renderCurrent(); }
+  });
+
+  /* A */
+  $("aRows").addEventListener("click", e => {
+    const tr = e.target.closest("tr");
+    if (!tr) return;
+    S.sel = tr.dataset.link;
+    $("aRows").querySelectorAll("tr.sel").forEach(r => r.classList.remove("sel"));
+    tr.classList.add("sel");
+    renderDrawer(S.sel);
+  });
+  $("sort").addEventListener("change", e => { S.sort = e.target.value; renderLedger(); });
+  $("dclose").onclick = () => { S.sel = null; closeDrawer(); };
+
+  /* B */
+  $("chlist").addEventListener("click", e => {
+    const ch = e.target.closest(".ch");
+    if (!ch) return;
+    S.selTopic = ch.dataset.k;
+    $("chlist").querySelectorAll(".ch").forEach(x => x.classList.toggle("on", x.dataset.k === S.selTopic));
+    renderScope();
+  });
+  $("cq").addEventListener("input", e => { S.cq = e.target.value; renderChannels(); });
+  $("cq").addEventListener("keydown", e => {
+    if (e.key === "Escape") { e.target.value = ""; S.cq = ""; renderChannels(); }
+  });
+  $("sbody").addEventListener("click", e => {
+    const head = e.target.closest(".row-head");
+    if (!head) return;
+    const row = head.parentElement;
+    const link = row.dataset.link;
+    if (S.openRows.has(link)) S.openRows.delete(link); else S.openRows.add(link);
+    row.classList.toggle("open");
+  });
+
+  /* C */
+  $("cFormPills").addEventListener("click", e => {
+    const p = e.target.closest(".pill");
+    if (!p) return;
+    const f = p.dataset.v;
+    if (S.cForms.has(f)) { if (S.cForms.size === 1) return; S.cForms.delete(f); } else S.cForms.add(f);
+    renderCards();
+  });
+  $("cStatusPills").addEventListener("click", e => {
+    const p = e.target.closest(".pill");
+    if (!p) return;
+    const s = p.dataset.v;
+    if (S.cStatuses.has(s)) { if (S.cStatuses.size === 1) return; S.cStatuses.delete(s); } else S.cStatuses.add(s);
+    renderCards();
+  });
+  $("cLiveOnly").addEventListener("click", () => { S.cLive = !S.cLive; renderCards(); });
+  $("wall").addEventListener("click", e => {
+    const m = e.target.closest(".more");
+    if (!m) return;
+    S.expanded.add(m.dataset.k);
+    renderCards();
+  });
+}
+
+/* ============================================================
+   数据接入: http 模式 fetch + 30s 轮询 / 静态模式注入
+   ============================================================ */
+function applyData(d) {
+  DATA = d;
+  derive();
+  updateTopbar();
+  hideError();
+  renderCurrent();
+}
+
+async function refresh(silent) {
+  try {
+    const res = await fetch("/api/data", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const d = await res.json();
+    if (!d || !Array.isArray(d.items)) throw new Error("unexpected payload");
+    applyData(d);
+    return true;
+  } catch (err) {
+    if (!silent) {
+      showError("数据加载失败",
+        esc(String(err)) + " —— 无法从 <code>/api/data</code> 取得导航数据。",
+        '可改用静态件: <code>python .agents/skills/memory-bank/scripts/nav_server.py --gen-static</code>, ' +
+        "再用浏览器以 file:// 打开生成的单文件。");
+    }
+    return false;
+  }
+}
+
+function boot() {
+  wire();
+  S.view = loadView();
+  for (const b of document.querySelectorAll("#seg button")) b.classList.toggle("on", b.dataset.view === S.view);
+  for (const id of ["v-ledger", "v-console", "v-cards"]) $(id).classList.toggle("on", id === "v-" + S.view);
+
+  if (STATIC_MODE) {
+    try {
+      applyData(JSON.parse(INLINE));
+    } catch (err) {
+      showError("静态件数据损坏", "注入数据解析失败: " + esc(String(err)), "请重新生成: nav_server.py --gen-static");
+    }
+    return;
+  }
+  if (location.protocol === "file:") {
+    showError("壳内无数据",
+      "当前以 file:// 打开的是未注入数据的页面壳。",
+      '请先执行 <code>python .agents/skills/memory-bank/scripts/nav_server.py --gen-static</code> 生成静态件再打开, 或起本地服务后经 http 访问。');
+    return;
+  }
+  refresh(false).then(ok => {
+    if (ok) setInterval(() => { refresh(true); }, POLL_MS);
+  });
+}
+
+boot();
+</script>
+</body>
+</html>
