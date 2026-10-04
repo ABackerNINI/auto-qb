@@ -3,6 +3,8 @@
 > 摘要: caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。
 > 触发: caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager
 
+**Refs:** memory-bank/tasks/26-10-05-test-log-capture-helper.md
+
 ### caplog 挂在 root 上、依赖全局日志状态 ⇒ 断言偶发落空或恒空
 
 - **触发**: 用 `caplog`(或任何依赖 root 传播的采集)断言 `auto_qb.*` 的日志级别 / 内容。
@@ -13,8 +15,10 @@
   泄漏的 root level 才过)。③ xdist(-n4)动态调度下同 worker 邻居每次不同, 以上状态被邻居改变就
   **偶发落空**(CI 实测 2026-09-27: 噪音日志测试抓 0 条, py3.12/3.13 都见, 本地难复现)。
 - **处置**: 挂**模块 logger** 自建 handler + **显式 setLevel** + `finally` 恢复原 level 与 handlers
-  —— 对 root 级别 / handlers / 传播链全部免疫。守阵: `test_web.py::_grab_web_logger`
-  (web 生命周期 5 个测试已切换)。不要因此放弃日志断言 —— 日志级别即通知语义。
+  —— 对 root 级别 / handlers / 传播链全部免疫。统一实现已落 `tests/helpers.py::capture_logs`
+  (issue 26-10-04-2311 认领轮 2026-10-05: `.records/.messages/.text` 三视图 + 关 propagate 不污染输出),
+  **新用例一律用它, 别再手写局部捕获器**; 守阵 `test_logging.py::test_capture_logs_survives_qbmanager_setup_logging`
+  (对照断言钉死 caplog 恒空的坑存在性, 前提失效即红提示重评范式)。不要因此放弃日志断言 —— 日志级别即通知语义。
 - **复发**: 2(原记于 stubs-sim「make_manager 清 root handlers」条, 2026-09-27 外迁至此。
   为什么没命中(首次): 旧判别只写"用例体内建 manager"这层, 没料到 root level 与 xdist 两个更底层的伤害面。
   2026-10-01 W2 issue 清偿轮再踩: **两个独立认领子智能体先后撞同一坑** —— QbManager 构造链执行

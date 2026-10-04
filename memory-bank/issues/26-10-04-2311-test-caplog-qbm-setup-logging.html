@@ -8,9 +8,10 @@
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="caplog-qbm-setup-logging">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="QbManager 测试组合下 pytest caplog 恒空: setup_logging 清根 handlers 连 caplog handler 一起摘">
 <meta name="issue-summary" content="QbManager 测试组合下 pytest caplog 恒空: 模块装配 LoggingModule 调 setup_logging 清根 handlers, caplog 挂在根上的 handler 被一并摘除; test_ops.py 已有 capture_ops_logs 自挂模块 logger 的绕过范式">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-05-test-log-capture-helper.md">
 <title>QbManager 测试组合下 pytest caplog 恒空: setup_logging 清根 handlers 连 caplog handler 一起摘 · test · 计划外问题（便签）</title>
 <style>
   :root {
@@ -68,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-04-2311-test-caplog-qbm-setup-logging</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-04 23:11</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-04 23:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-05 00:51 — 认领（用户指派），状态 <strong>In Progress</strong>。复验（00:51）：三锚点仍命中（<code>infra/logging.py:98</code> <code>handlers.clear</code> / <code>logging_mod.py:47</code> 调用 / <code>tests/test_ops.py:79</code> 范式），机制成立；另发现全库已有 8 处测试文件各自手写同款绕过（test_ops / test_grouping×2 / test_rule_base / test_speed_curve×2 / test_tracker / test_ui / test_web×2），坑档 <code>pitfalls/testing/log-capture.md</code> 已记（复发 2）。<strong>拍板方向一</strong>（统一范式上移 <code>tests/helpers.py</code>）：方向二需动生产日志语义 —— <code>setup_logging</code> 清根承担热重载重挂防重复 handler 与独占 root（拦第三方噪音）职责，且其上方 <code>basicConfig</code> 挂的 handler 不清会双份输出，影响面与收益不成比例。</li>
+      <li>2026-10-05 00:58 — 修复完成，状态 <strong>Done</strong>。实际修法（= 建议方向一落地）: ①<code>tests/helpers.py</code> 新增统一捕获 <code>capture_logs(logger_name="auto_qb", level=DEBUG)</code> —— 挂模块 logger + 显式 setLevel + 关 propagate（不污染测试输出）+ finally 恢复, 捕获对象带 <code>.records / .messages</code>（持续累积列表, with 块外仍可断言）<code>/ .text</code>; docstring 写明「QbManager 构造链清 root ⇒ caplog 恒空, QbManager 系测试别用 caplog」（issue 建议的"tests 头部约定"落点在此单点）。②<code>tests/test_ops.py</code> 本地 <code>_OpsLogCapture</code> + 实现删除, 改 3 行薄适配保消息列表形状, 既有 4 处用例零改动。③守阵 2 条进 <code>tests/test_logging.py</code>: <code>test_capture_logs_survives_qbmanager_setup_logging</code>（make_manager 构造后捕获仍有效 + 对照断言 caplog.text 恒空钉死坑存在性, 前提失效即红提示重评范式）与 <code>test_capture_logs_restores_logger_state</code>（退出恢复 level/propagate/handlers）。其余 7 处既有局部捕获范式（test_grouping / test_rule_base / test_speed_curve / test_tracker / test_ui / test_web）仍在原地工作, 统一出口已立, 是否消重属后续 refactor（范围守恒）。验证: 红验（sed 禁用 addHandler → 2 守阵红 → 还原绿, 断言非恒真）; 靶向 test_logging + test_ops 38 passed; test.full <strong>2532 passed + 4 skipped / 99% / 26.98s</strong>（相对上基线 2530+4: +2 = 新守阵）, 基线切片 <a href="../testing/baselines/26-10-05-0058-log-capture-helper.md">26-10-05-0058-log-capture-helper</a>。</li>
     </ul>
   </section>
 

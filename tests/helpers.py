@@ -4,11 +4,13 @@
 """
 import copy
 import json
+import logging
 import os
 import tempfile
 import threading
 import time
 from collections.abc import Mapping
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -943,6 +945,54 @@ def _hr_rule(**kw) -> HRRule:
     )
     base.update(kw)
     return HRRule(**base)
+
+
+# ---------- 日志捕获(QbManager 系测试统一范式; 别用 caplog) ----------
+class _LogCapture(logging.Handler):
+    """挂模块 logger 的极简捕获器: records/messages 持续累积(同一列表对象), text 按需派生"""
+    def __init__(self):
+        super().__init__()
+        self.records = []
+        self.messages = []  # getMessage() 字符串, 与 records 同序
+
+    def emit(self, record):
+        self.records.append(record)
+        self.messages.append(record.getMessage())
+
+    @property
+    def text(self):
+        return "\n".join(self.messages)
+
+
+@contextmanager
+def capture_logs(logger_name="auto_qb", level=logging.DEBUG):
+    """临时挂捕获 handler 到指定 logger 并临时关闭其 propagate(不污染测试输出)
+
+    为什么不用 caplog: QbManager 构造链(LoggingModule -> setup_logging)会
+    `logging.getLogger().handlers.clear()` 清空 root handlers, pytest caplog 挂在
+    root 上的捕获 handler 一并被清 —— 用例体内构造 QbManager 的测试 caplog.text
+    恒空("有日志"断言稳定红, "无日志"断言可能静默假绿)。本 helper 直挂 auto_qb
+    子树的 logger, 对 root handlers / level / 传播链全部免疫。限界: 只收 auto_qb.*
+    树下的日志(第三方库 logger 收不到)。
+
+    用法: `with capture_logs("auto_qb.core.modules.ops_mod") as cap:` 后断言
+    cap.messages / cap.text / cap.records。挂 auto_qb 顶层(默认)收全树; 子 logger
+    的有效等级由祖先决定 —— 构造过 QbManager 的场景 auto_qb 已被 setup_logging
+    设为 DEBUG, 直接可用; 未构造的场景子日志可能被祖先等级(默认 WARNING)拦截,
+    此时挂具体模块 logger 更直接(helper 会替它显式 setLevel)。
+    """
+    h = _LogCapture()
+    lg = logging.getLogger(logger_name)
+    old_level, old_propagate = lg.level, lg.propagate
+    lg.setLevel(level)
+    lg.propagate = False
+    lg.addHandler(h)
+    try:
+        yield h
+    finally:
+        lg.removeHandler(h)
+        lg.setLevel(old_level)
+        lg.propagate = old_propagate
 
 
 def make_manager(state_file, tracker_rules=None, tracker_kw=None):

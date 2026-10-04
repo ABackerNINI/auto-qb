@@ -10,6 +10,8 @@
 - test_filter_log_lines_keeps_multiline_record: 多行记录(整段 traceback)的续行跟随其记录的取舍
 - test_filter_log_lines_unfilterable_returns_note: 格式无等级字段 / 已存行与格式不符 -> 回全部行 + note, 不静默给空
 - test_filter_log_lines_custom_field_specs: 字段宽度/数字/字面量 %% 等格式变体不影响等级定位
+- test_capture_logs_survives_qbmanager_setup_logging: QbManager 构造链清 root 后 helpers.capture_logs 仍有效(issue 26-10-04-2311 守阵); 对照断言 caplog.text 恒空钉死坑存在性
+- test_capture_logs_restores_logger_state: capture_logs 退出恢复目标 logger 的 level/propagate/handlers
 
 注意: setup_logging 操作 root logger(清空并重建 handlers), 每个测试尾部必须恢复
 root level(WARNING)并清空 handlers, 避免污染同批其它测试的日志行为。
@@ -21,6 +23,7 @@ from logging.handlers import RotatingFileHandler
 
 from auto_qb.config.models import LoggingConfig
 from auto_qb.infra.logging import NOTE_FORMAT_MISMATCH, NOTE_NO_LEVEL_FIELD, filter_log_lines, setup_logging
+from helpers import capture_logs, make_manager
 
 _WARNING = logging.WARNING  # 30
 
@@ -209,3 +212,32 @@ def test_filter_log_lines_custom_field_specs():
         miss = _lines(fmt, [("auto_qb.core.mixins", logging.INFO, "启动完成")])[0]
         assert filter_log_lines(fmt, [miss, hit], "WARNING") == ([hit], ""), fmt
         assert filter_log_lines(fmt, [miss, hit], "INFO") == ([miss], ""), fmt
+
+
+# ============================================================
+# B. helpers.capture_logs 统一日志捕获(issue 26-10-04-2311)
+# ============================================================
+def test_capture_logs_survives_qbmanager_setup_logging(tmp_path, caplog):
+    """测试: QbManager 构造链 setup_logging 清 root handlers 后, helpers.capture_logs 仍收到
+    auto_qb.* 日志; 对照组断言 caplog.text 恒空, 钉死「QbManager 系测试别用 caplog」的坑存在性"""
+    make_manager(str(tmp_path / "state.json"))  # 构造链 setup_logging: root handlers 被 clear
+    probe = logging.getLogger("auto_qb.core.modules.ops_mod")
+    probe.warning("capture-probe-2311")  # 模拟被测代码 emit(caplog 的 root handler 已被清)
+    assert "capture-probe-2311" not in caplog.text, "caplog 又能收到了: log-capture 范式前提失效, 需重评"
+    with capture_logs("auto_qb.core.modules.ops_mod") as cap:
+        probe.warning("capture-probe-2311")
+    assert cap.messages == ["capture-probe-2311"], f"QbManager 构造后捕获仍应有效: {cap.messages}"
+    assert "capture-probe-2311" in cap.text
+    _restore_root()  # 本文件纪律: setup_logging 留下的 root handler 不跨测试泄漏
+
+
+def test_capture_logs_restores_logger_state():
+    """测试: capture_logs 退出后恢复目标 logger 的 level/propagate/handlers, 不跨测试泄漏"""
+    lg = logging.getLogger("auto_qb.core.modules.ops_mod")
+    old_level, old_prop, old_handlers = lg.level, lg.propagate, list(lg.handlers)
+    with capture_logs("auto_qb.core.modules.ops_mod") as cap:
+        assert lg.propagate is False and lg.level == logging.DEBUG, "捕获期应关传播并显式设级"
+        lg.warning("restore-probe")
+        assert cap.messages == ["restore-probe"]
+    assert lg.level == old_level and lg.propagate is old_prop
+    assert lg.handlers == old_handlers

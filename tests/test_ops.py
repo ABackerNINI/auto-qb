@@ -41,7 +41,7 @@ from auto_qb.core.qbmanager import QbManager
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT
 from auto_qb.rules.actions.full_checking import bump_recheck_fail
-from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
+from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, seed_store
 
 # 跳检会真实落盘 .torrent 备份(issue 26-09-21-1347): state_file 必须落临时目录, 与 test_checking 同口径
 _TMP_STATE_DIR = tempfile.TemporaryDirectory(prefix="autoqb-ops-state-")
@@ -61,35 +61,12 @@ def run_queue(mgr, now):
     return mgr.task_queue.run_due(False, now=now)
 
 
-class _OpsLogCapture(logging.Handler):
-    """抓 ops_mod 模块日志的极简 handler(消息列表)
-
-    不用 caplog: QbManager 构造期经 logging 模块 setup_logging 会 clear 根 handlers,
-    pytest caplog 挂在根上的 handler 一并被清(text 恒空) —— 直接挂模块 logger 才可靠。
-    """
-    def __init__(self):
-        super().__init__()
-        self.messages = []
-
-    def emit(self, record):
-        self.messages.append(record.getMessage())
-
-
 @contextmanager
 def capture_ops_logs(level=logging.DEBUG):
-    """临时挂 _OpsLogCapture 到 ops_mod 模块 logger 并临时关闭 propagate(不污染测试输出)"""
-    h = _OpsLogCapture()
-    lg = logging.getLogger("auto_qb.core.modules.ops_mod")
-    old_level, old_propagate = lg.level, lg.propagate
-    lg.setLevel(level)
-    lg.propagate = False
-    lg.addHandler(h)
-    try:
-        yield h.messages
-    finally:
-        lg.removeHandler(h)
-        lg.setLevel(old_level)
-        lg.propagate = old_propagate
+    """ops_mod 模块日志消息捕获 —— 统一实现已上移 helpers.capture_logs(issue 26-10-04-2311),
+    本地只保消息列表形状, 既有用例零改动。不用 caplog 的原因见 capture_logs docstring。"""
+    with capture_logs("auto_qb.core.modules.ops_mod", level) as cap:
+        yield cap.messages
 
 
 def seed_paused(mgr, client, hash="HA"):

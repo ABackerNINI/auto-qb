@@ -17,7 +17,7 @@
 | bug | 7 |
 | perf | 5 |
 | docs | 1 |
-| test | 2 |
+| test | 1 |
 | refactor | 4 |
 | feat | 15 |
 | chore | 2 |
@@ -25,7 +25,6 @@
 
 ## Open
 
-- [test] [QbManager 测试组合下 pytest caplog 恒空: setup_logging 清根 handlers 连 caplog handler 一起摘](26-10-04-2311-test-caplog-qbm-setup-logging.html) — QbManager 测试组合下 pytest caplog 恒空: 模块装配 LoggingModule 调 setup_logging 清根 handlers, caplog 挂在根上的 handler 被一并摘除; test_ops.py 已有 capture_ops_logs 自挂模块 logger 的绕过范式
 - [bug] [主循环首轮 tick 任意异常在 next_*_at 未推进时无退避快速重试(wait_for=0 机理)](26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html) — 主循环异常路径不推进 next_*_at, 首轮 tick 抛任意异常(不止 StopIteration)即形成无退避快速重试循环 —— 有 ERROR 日志不静默, 是否要退避待拍板; StopIteration 已由 f89ceada 显式重抛不在此列
 - [bug] [tray._set_windows_appid 自引入起生产零调用点: AUMID 从未设置, 任务栏图标修复结论前提存疑](26-10-02-0727-bug-tray-appid-setter-no-call-site.html) — tray/app.py 的 _set_windows_appid 自 9891c030 引入起生产代码零调用点(仅测试驱动), 生产进程从未设置显式 AUMID —— 与 core-domain.md 四轮实测结论「AUMID 是任务栏图标决定性变量」矛盾, 26-10-01-2203 修复前提存疑
 - [test] [O_TRUNC 直写静态守阵并入: 全 src O_TRUNC 清零条件已达成](26-10-02-0527-test-otrunc-static-guard.html) — 1347-token 悬置的 O_TRUNC 直写静态守阵, 生效条件「全 src O_TRUNC 代码清零」已由 bc24631b(hr.token 改 atomic_write)达成, 可并入守阵
@@ -72,6 +71,7 @@
 
 ## Done
 
+- [test] [QbManager 测试组合下 pytest caplog 恒空: setup_logging 清根 handlers 连 caplog handler 一起摘](26-10-04-2311-test-caplog-qbm-setup-logging.html) — QbManager 测试组合下 pytest caplog 恒空: 模块装配 LoggingModule 调 setup_logging 清根 handlers, caplog 挂在根上的 handler 被一并摘除; test_ops.py 已有 capture_ops_logs 自挂模块 logger 的绕过范式
 - [bug] [uPlot 流量图取打开时刻容器宽度, 窗口 resize 后不自适应](26-10-04-0134-bug-webui-traffic-chart-resize.html) — 三处 qb 流量图(全局弹层/单种抽屉流量页签/分组流量弹层)建图取打开时刻容器宽度, 浏览器 resize 后画布不重算, 重开即恢复
 - [chore] [test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突](26-10-04-0134-chore-keys-update-crlf.html) — test.keys-update 重生成 tests/fixtures/config_key_surface.txt 时 Windows 写出 CRLF(仓库 eol=lf), 每次重生成 diff 全文件换行噪音, 须手工归一才能过守卫
 - [bug] [添加种子三浮层互斥不对称: 路径面板收下拉, 下拉不收路径面板](26-10-04-0130-bug-webui-add-pop-mutex.html) — openAddPathPop 会收分类/标签下拉, 反向 openAddCatMenu/openAddTagMenu 不收 addPathPop, 切换字段时路径面板与下拉可同时悬着(面板还会盖住相邻字段的 label)
