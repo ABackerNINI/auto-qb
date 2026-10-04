@@ -1,9 +1,9 @@
 # 26-10-04-backend-qb-traffic-storage-v3 — qB 流量存储 v3 实施
 
-**Status:** In Progress
+**Status:** Done
 **Topics:** qb-traffic-storage-v3
 **Added:** 2026-10-04
-**Updated:** 2026-10-04
+**Updated:** 2026-10-05
 **Summary:** 实施计划 26-10-04-1957 开工: feature/qb-traffic-v3 分支五期拆七步串行子智能体实施(S1 纯函数→S4 配置键→S2a/S2b 写侧→S3a/S3b 读侧→S5 收尾), 每步 test.full + 普通 git commit, 完成后合回 develop 等提交指令; D4 拍板 6mo/1y/all 三档。
 
 **Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md
@@ -36,8 +36,8 @@
 | ④ | S2b 聚合与恢复 | 累计器/水位封口/文件尾恢复/catch-up 硬序/hour 裁剪/淘汰新口径/seal_sweep 退役 | Done (62998945) |
 | ⑤ | S3a 读侧核心 | 有效 dt 桶宽/跨桶覆盖(D1)/块间 gap 真空/按天加载/解析缓存 | Done (fca0cb96) |
 | ⑥ | S3b 视图+端点+前端 | WINDOW_SPECS(D4: 6mo/1y/all)/组端点去 global/A4 下界常量/档位文案 | Done (eb66e3c4) |
-| ⑦ | S5 收尾与基线 | index.json/v1v2 死代码退役/docstring v3 契约/实测数字/基线切片/回写 | Open |
-| ⑧ | 合回 develop | 分支合并回本地 develop, 等用户提交指令 | Open |
+| ⑦ | S5 收尾与基线 | index.json/v1v2 死代码退役/docstring v3 契约/实测数字/基线切片/回写 | Done (7f155e3b) |
+| ⑧ | 合回 develop | 分支合并回本地 develop, 等用户提交指令 | Done (fast-forward) |
 
 ## 进度日志
 
@@ -52,3 +52,5 @@
 - 流程注记: T4 首次派发遇配额中断(现场遗留 557 行未提交实现), 重派后经逐条核对规格+补测试+修真缺陷后入库——中断遗留代码不可盲信, 必须核对。
 - **2026-10-05 S3a 完成 (fca0cb96)**: grid v3 读侧区(v3_series_points/v3_totals_points/v3_series_slots 并流接缝); V3DayCache(mtime_ns+size 键控, 4MB 文本预算 LRU, 整天粒度); 真空/断连分离(≤1 间隔天然 gap 被块首桶吸收不误报); D1 实施期定约: 覆盖语义实现为「逐记录覆盖桶」(桶宽=ceil(有效dt) 天然覆盖有效 dt 全程; z 均摊槽展开多桶为字面形态), 否决向前铺格方案(ceil 累积偏移破坏时间真值)。grid 17→20, store +3 缓存例。2563 passed / 4 skipped; 覆盖率回落 98%(grid 96%, v2 残留路径经端点面间接覆盖)——S5 退役 v2 后复核回 99%。
 - **2026-10-05 S3b 完成 (eb66e3c4)**: WINDOW_SPECS 13 档(3d/7d/30d→hour 行, 6mo/1y→day 行滚动窗, all→month 行, 90d 不存在 400); V3DayCache.read_agg(64 条目 LRU); 三端点翻 v3; 组端点去 global(null=桶内无成员观测); earliest_row_ts 三层全算; 前端 A4 下界 1500+13 档文案+月轴; D1 栅格形态=覆盖区间重叠秒加权。实施期定约: _qbPointsToData 非 null 点真值覆写(all 视图月行非等距防 5 天漂移, 对等距视图恒等); all 视图 meta.interval_s=标称月长 30d。grid 25/web 家族重写+5/node 探针+4。2574 passed / 4 skipped, 覆盖率 98%。
+- **2026-10-05 S5 完成 (7f155e3b)**: 退役清理净 -1942 行(TrafficDatStore 整类/v2 解析面/6 存根/grid v2 残留; 删 53 条死代码用例); 保留 v1/v2 头行识别-忽略(R2)与 8 列兜底 cov_s=3600(防御); traffic_store docstring 升 v3 契约单点。实测: test.full 2526 passed/4 skipped/99%(98% 疑虑闭合); 写 IO 144+24 次/天(300x↓@2s, 20x↓@30s); 24h 窗 2 文件/组 Mx1/1y 冷读 1 open; r 行 49B→36B, 空闲天 16.4x 压缩。基线切片 testing/baselines/26-10-05-0447-qb-traffic-v3-s5-done.md。
+- **2026-10-05 收尾**: 七步全清, feature/qb-traffic-v3 fast-forward 合回本地 develop(未推送, 等用户提交指令)。§9.1 端到端 --dry-run 真机验收与旧目录 qb-traffic/ 删留待用户; D2 tol 真机复核窗在 S5 后仍开放。
