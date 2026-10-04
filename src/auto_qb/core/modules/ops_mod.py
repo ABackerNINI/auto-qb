@@ -40,7 +40,10 @@ from ...rules.checking_meta import (
     CHECK_RESULT_INTERVAL,
     CHECK_START_GIVEUP,
     RECHECK_FAIL_LIMIT,
+    PollVerdict,
     bump_recheck_fail,
+    is_piece_checking,
+    poll_verdict,
     recheck_fail_count,
 )
 from ...torrents import TorrentRecord
@@ -125,6 +128,10 @@ class OpsModule(BaseModule):
           宽限耗尽/异常 默认重置重走决策链); WEB 源 None —— 轮询结束即消亡, 无重入队副作用。
         - torrent: 可选活记录; None 时经 store 取(store 原地更新的活记录, 显式传参与缺省等价)。
 
+        轮询单跳判定统一走 checking_meta.poll_verdict 证据门控(plan 26-10-04-1824): 成功结论
+        必须有生效证据(真全量校验态, 排除启动期简历校验伪证据)背书 —— 未见证据时对 completed
+        旧快照不下成功结论(WAITING 继续等), 未见证据而 progress 回落(数据缺损签名)提前判败。
+
         返回 ActionResult: rule 源 pending(规则断点, 规则任务本轮不重入队, 恢复由轮询负责) /
         web 源 ok(已提交, 结果经快照可见) / skip(R1 拒绝或冷却) / fail(发送失败)。
         """
@@ -153,11 +160,25 @@ class OpsModule(BaseModule):
         tq = self._ctx.task_queue
 
         def poll(task: Task, dry_run: bool) -> bool:
-            """校验结果轮询: 读 store 活记录(原地更新, 不发 API 重查真值), 每 CHECK_RESULT_INTERVAL 一次
+            """校验结果轮询: 证据门控状态机 —— 读 store 活记录(原地更新, 不发 API 重查真值), 每
+            CHECK_RESULT_INTERVAL 一跳
+
+            单跳判定序(plan 26-10-04-1824, 判定序单点在 checking_meta.poll_verdict, 本闭包只分派):
+            1. 生效证据闩: 快照处于真全量校验态(checkingDL/checkingUP; is_piece_checking 排除
+               qB 启动期 checkingResumeData 简历校验伪证据) -> 置 seen_checking, 继续等;
+            2. seen_checking 已立 -> 结果判定: progress>=1.0 即 SUCCESS, 否则 FAILED(成功结论
+               必须有生效证据背书 —— 已完成种子的陈旧快照 progress=1.0 不再误判成功,
+               issue 26-10-03-1140);
+            3. 未见证据而 progress 回落(< baseline_progress) -> FAILED(数据缺损签名, 标签
+               「progress 回落」, 先于超时判定);
+            4. 宽限耗尽仍无证据 -> START_TIMEOUT 判败(活锁保险丝; 仲裁直查在后续阶段接入);
+            5. 其余歧义 -> WAITING 继续等(recheck 异步应用 + 快照按 sync_interval 节拍滞后,
+               首样本竞态修复语义并入)。
 
             等价性红线(plan §3.4): 这里必须继续读 store 活记录 —— 记录对象被同步线程原地
             更新, 逐轮读到最新 state/progress; 不得改为闭包创建时缓存字段值(快照失真),
-            也不得改为每次 torrents_info 直查(把 2s 轮询变成 API 轰炸)。
+            也不得改为每次 torrents_info 直查(把 2s 轮询变成 API 轰炸) —— 周期观测是纯
+            快照读, 零 API; 终局处置里的写动作(auto_start)不受此限。
             """
             nonlocal submitted, submitted_at, seen_checking
             try:
@@ -171,10 +192,23 @@ class OpsModule(BaseModule):
                     if origin is not None:
                         tq.add_task(origin)
                     return FINISHED
-                if rec.state_enum.is_checking:
-                    seen_checking = True
+                if is_piece_checking(rec.state):
+                    seen_checking = True  # 生效证据闩: 本轮 recheck 确已生效(别名收窄, 简历校验不算)
                     return REQUEUE  # 仍在校验中, 下一轮轮询
-                if rec.progress >= 1.0:
+                verdict = poll_verdict(
+                    seen_checking=seen_checking,
+                    progress=rec.progress,
+                    baseline_progress=baseline_progress,
+                    elapsed=time.time() - submitted_at,
+                    giveup=CHECK_START_GIVEUP,  # 显式透传(与默认同值): 宽限上限保持 ops_mod 命名空间可打桩
+                )
+                if verdict is PollVerdict.WAITING:
+                    # 歧义继续等: recheck 尚未被 qB 应用(异步应用 + 快照滞后)或排队未开检 ——
+                    # 不计失败(首样本竞态修复); 含「无证据的 progress>=1.0 旧快照」, 不对陈旧
+                    # 快照下成功结论(事故 26-10-03-1140 的结构性排除点)
+                    return REQUEUE
+                if verdict is PollVerdict.SUCCESS:
+                    # 生效证据之后的完成: 真校验成功(到这必 seen_checking=True, 结构性排除假成功)
                     logger.info(f"{prefix} {rec.log_repr} | 校验成功")
                     if on_success is not None:
                         on_success()
@@ -184,18 +218,32 @@ class OpsModule(BaseModule):
                         logger.info(f"{prefix} {rec.log_repr} | 校验成功自动开始")
                     if origin is not None:
                         tq.add_task(origin, keep_progress=True)  # 显式保存进度: 断点续跑后续动作
-                elif seen_checking:
-                    # 曾见 checking 后落回未完成: 真实校验未通过(冷却仅规则源, D1)
+                elif verdict is PollVerdict.FAILED:
+                    # 生效后未完成(seen_checking=True)或未见证据而 progress 回落(数据缺损签名):
+                    # 均为真实校验未通过(冷却仅规则源, D1); 两到达路径只是标签差异, 处置相同
                     if source == "rule":
                         fail_count = bump_recheck_fail(self._ctx.state, hash)
-                        logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(第{fail_count}次, progress={rec.progress})")
+                        if seen_checking:
+                            logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(第{fail_count}次, progress={rec.progress})")
+                        else:
+                            logger.warning(
+                                f"{prefix} {rec.log_repr} | "
+                                f"校验未通过(progress 回落 {rec.progress} < 基线 {baseline_progress}, 第{fail_count}次)"
+                            )
                     else:
-                        logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(progress={rec.progress})")
+                        if seen_checking:
+                            logger.warning(f"{prefix} {rec.log_repr} | 校验未通过(progress={rec.progress})")
+                        else:
+                            logger.warning(
+                                f"{prefix} {rec.log_repr} | "
+                                f"校验未通过(progress 回落 {rec.progress} < 基线 {baseline_progress})"
+                            )
                     if origin is not None:
                         tq.add_task(origin)  # 默认重置: 重走完整决策链(重新校验)
-                elif time.time() - submitted_at >= CHECK_START_GIVEUP:
+                else:  # PollVerdict.START_TIMEOUT
                     # 宽限耗尽仍未见校验启动: 判败防轮询活锁(qB 重启丢请求等极端情形);
                     # 判败后 origin 重走决策链会重新提交, 请求恢复生效后自然续上
+                    # (本阶段保持现状判败序列; 仲裁直查在后续阶段接入, 计划 26-10-04-1824)
                     if source == "rule":
                         fail_count = bump_recheck_fail(self._ctx.state, hash)
                         logger.warning(
@@ -209,10 +257,6 @@ class OpsModule(BaseModule):
                         )
                     if origin is not None:
                         tq.add_task(origin)  # 默认重置: 重走完整决策链(重新校验)
-                else:
-                    # 未见 checking 且宽限未耗尽: recheck 尚未被 qB 应用(异步应用 + 快照滞后)
-                    # 或排队未开检 —— 继续轮询, 不计失败(首样本竞态修复)
-                    return REQUEUE
                 return FINISHED  # 轮询子任务消亡(释放在途登记)
             except Exception as e:
                 logger.error(f"{prefix} {hash[:8]} | 校验轮询异常: {e}")
@@ -222,7 +266,10 @@ class OpsModule(BaseModule):
 
         submitted = False  # recheck 是否发送成功(先登记后发送; 失败时轮询子任务据此消亡)
         submitted_at = time.time()  # 校验启动宽限窗口起点(recheck 发送成功时刻)
-        seen_checking = False  # 本轮询周期内是否观察到过 checking 态(失败判定前提)
+        seen_checking = False  # 本轮询周期内是否观察到过生效证据(成功结论的必要背书)
+        # 提交点进度基线(P1 之前取 store 快照值, 语义偏保守安全): 未见证据时 progress 回落
+        # 即数据缺损签名(校验发现坏块), 据此提前判败 —— 闭包内存态, 不入 taskqueue/state_file
+        baseline_progress = tor.progress if tor is not None else 0.0
 
         task = Task(
             "check",

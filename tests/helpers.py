@@ -79,6 +79,7 @@ class FakeClient:
         self.files_map = {}  # hash -> 文件列表(分组测试用: 按种子区分文件列表)
         self.trackers_map = {}  # hash -> trackers 列表(强制覆盖; 强制汇报确认测试用)
         self.files_calls = 0  # torrents_files 调用计数(验证分组检查不再全量拉文件列表)
+        self.info_calls = 0  # torrents_info 调用计数(验证 recheck 轮询期零 API 直查, 纯快照读)
         self.sync_calls = 0  # sync_maindata 调用计数(验证增量同步路径)
         self.server_state = None  # 非空时随 sync 响应回传(模拟 qB 每轮都带 server_state)
         self.peers_map = {}  # hash -> peers 响应(sync_torrent_peers 替身; 未命中回空整包)
@@ -108,6 +109,7 @@ class FakeClient:
         return self.files
 
     def torrents_info(self, torrent_hashes=None, **kw):
+        self.info_calls += 1
         return self.torrents.info(torrent_hashes=torrent_hashes, **kw)
 
     def sync_maindata(self, rid=0, **kw):

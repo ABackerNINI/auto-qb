@@ -6,6 +6,11 @@
 - test_ops_web_recheck_rejected_when_snapshot_checking: 快照 checking 态 -> 拒绝(不依赖登记, 覆盖 qB 自家 WebUI 发起的校验)
 - test_ops_web_recheck_no_cooldown_no_promotion: web 源反复失败不计冷却(D1 手动排障不受限), 成功不晋升 verified_references
 - test_ops_rule_recheck_cooldown_and_requeue_regression: rule 源失败计冷却 + origin 默认重置重入队 + 达上限当日拒绝(回归不变)
+- test_ops_recheck_completed_torrent_first_hop_no_false_success: 已完成种子首跳读旧快照 -> 无证据不判成功(WAITING), 在途登记持有, 见证据后才真判定成功 (S2a)
+- test_ops_recheck_stale_snapshot_timeline_no_false_success: 生产时间线重放: 快照冻结两拍无结论 -> 证据 -> 完成才唯一一次「校验成功」 (S2a)
+- test_ops_rule_recheck_success_once_after_evidence: rule 源全序列 on_success 恰 1 次且只发生在见证据之后(带序号回调) (S2a)
+- test_ops_recheck_wait_result_zero_api_calls: 等待期(证据立起前后)多跳 torrents_info 计数 == 0, 周期观测纯快照读(等价性红线) (S2a)
+- test_ops_recheck_poll_reads_live_record_fresh_progress: 闭包不缓存字段值: 中途改 store 活记录 progress, 下一跳读到新值(回落跌破基线判败, 标「progress 回落」) (S2a)
 - test_ops_skip_check_day_shared_across_sources: 跳检同日去重跨来源共享(web 先跳, 规则同日再跳被拒)
 - test_ops_web_skip_check_no_highrisk_warning: web 源不产生「无参考跳检(高风险)」告警(规则侧语义不泄漏进 WEB)
 - test_ops_web_recheck_poll_torrent_deleted_no_origin: 轮询期间种子删除且无 origin -> 消亡无重入队 (P2-a)
@@ -17,10 +22,12 @@
 - test_ops_infer_content_layout_empty_content: content_path 为空不推断布局 (P2-a)
 - test_ops_clear_backup_noop_missing_path_and_oserror: _clear_backup 无元数据/path 空/删除失败三态 (P2-a)
 """
+import logging
 import os
 import tempfile
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import date
 
 from auto_qb.core.qbmanager import QbManager
@@ -45,6 +52,37 @@ def make_mgr(cfg):
 
 def run_queue(mgr, now):
     return mgr.task_queue.run_due(False, now=now)
+
+
+class _OpsLogCapture(logging.Handler):
+    """抓 ops_mod 模块日志的极简 handler(消息列表)
+
+    不用 caplog: QbManager 构造期经 logging 模块 setup_logging 会 clear 根 handlers,
+    pytest caplog 挂在根上的 handler 一并被清(text 恒空) —— 直接挂模块 logger 才可靠。
+    """
+    def __init__(self):
+        super().__init__()
+        self.messages = []
+
+    def emit(self, record):
+        self.messages.append(record.getMessage())
+
+
+@contextmanager
+def capture_ops_logs(level=logging.DEBUG):
+    """临时挂 _OpsLogCapture 到 ops_mod 模块 logger 并临时关闭 propagate(不污染测试输出)"""
+    h = _OpsLogCapture()
+    lg = logging.getLogger("auto_qb.core.modules.ops_mod")
+    old_level, old_propagate = lg.level, lg.propagate
+    lg.setLevel(level)
+    lg.propagate = False
+    lg.addHandler(h)
+    try:
+        yield h.messages
+    finally:
+        lg.removeHandler(h)
+        lg.setLevel(old_level)
+        lg.propagate = old_propagate
 
 
 def seed_paused(mgr, client, hash="HA"):
@@ -157,6 +195,142 @@ def test_ops_rule_recheck_cooldown_and_requeue_regression():
     r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
     assert r.is_skipped and "今日不再重试" in r.message, f"达上限应拒绝: {r}"
     assert len(client.calls) == n_calls, f"拒绝时不得再提交 recheck: {client.calls}"
+
+
+# ============================================================
+# 证据门控轮询(plan 26-10-04-1824 S2a): B 组事故重放(无证据不下成功结论) + E 组红线(等价性)
+# ============================================================
+def test_ops_recheck_completed_torrent_first_hop_no_false_success():
+    """测试: 已完成种子 recheck 首跳读到旧 completed 快照 -> 不判成功(WAITING), 见证据后才真判定
+    (事故 26-10-03-1140 重放: qB 异步应用前首跳 progress=1.0 旧快照不得误判「校验成功」)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", state="pausedUP", progress=1.0)  # 已完成种子(非 checking 态)
+    seed_store(mgr, [t])
+    client.torrents["HA"] = t
+    fired = []
+    origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
+    origin.resume_index = 4  # 断点标记: 成功重入队须 keep_progress(断点保留; 默认重置会清空)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin, on_success=lambda: fired.append(1))
+    assert r.is_pending, f"rule 源应 pending: {r}"
+    now = time.time()
+    run_queue(mgr, now + 1)  # 首跳(入队即到期): 快照仍 completed 且无证据 -> WAITING
+    assert fired == [], "无证据首跳不得触发 on_success(假成功事故点)"
+    assert "HA" in mgr.task_queue.active_check_hashes(), "WAITING 轮询任务仍活, 在途登记须持有"
+    r2 = mgr.ctx.ops.recheck("HA", source="rule", origin=origin, on_success=lambda: fired.append(1))
+    assert r2.is_skipped and "校验进行中" in r2.message, f"轮询在途, 重复提交应被拒: {r2}"
+    assert client.calls == [("recheck", None)], f"除提交 recheck 外零 qB 交互: {client.calls}"
+    assert client.info_calls == 0, f"轮询期不得直查 torrents_info: {client.info_calls} 次"
+    t.state = "checkingDL"
+    run_queue(mgr, now + 3)  # 快照翻 checkingDL: 生效证据 -> REQUEUE
+    assert "HA" in mgr.task_queue.active_check_hashes(), "证据跳仍在校验中, 登记须持有"
+    t.state = "pausedUP"
+    run_queue(mgr, now + 5)  # 证据之后回 completed: 真判定成功
+    assert fired == [1], f"on_success 应恰触发一次(仅真判定): {fired}"
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "成功后轮询消亡释放在途"
+    assert any(task is origin for task in mgr.task_queue._fast), "成功后 origin 应重入队"
+    assert origin.resume_index == 4, "成功路径 origin 应 keep_progress(断点保留续跑)"
+
+
+def test_ops_recheck_stale_snapshot_timeline_no_false_success():
+    """测试: 生产时间线等价重放 —— 提交后快照冻结两拍(一直 completed, 模拟 qB 未应用)两跳无结论;
+    翻 checking(REQUEUE) -> 回 completed 真判定, 全程「校验成功」日志恰一次(仅真判定)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", state="pausedUP", progress=1.0)
+    seed_store(mgr, [t])
+    client.torrents["HA"] = t
+    now = time.time()
+    with capture_ops_logs() as logs:
+        r = mgr.ctx.ops.recheck("HA", source="web")
+        assert r.is_ok
+        run_queue(mgr, now + 1)  # 冻结拍1: 旧快照仍 completed, 无证据
+        run_queue(mgr, now + 3)  # 冻结拍2: 仍 completed, 无证据
+        assert not any("校验成功" in m for m in logs), f"快照冻结期不得下成功结论: {logs}"
+        assert "HA" in mgr.task_queue.active_check_hashes(), "WAITING 轮询须保持活"
+        t.state = "checkingDL"
+        run_queue(mgr, now + 5)  # 生效证据 -> REQUEUE
+        assert not any("校验成功" in m for m in logs), f"证据跳仍在校验中, 不得下成功结论: {logs}"
+        t.state = "pausedUP"
+        run_queue(mgr, now + 7)  # 证据之后回 completed: 真判定
+    assert sum("校验成功" in m for m in logs) == 1, f"成功日志应恰一次(仅真判定): {logs}"
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "真判定后轮询消亡释放在途"
+
+
+def test_ops_rule_recheck_success_once_after_evidence():
+    """测试: rule 源全序列 提交 -> 首跳无证据 -> 见证据 -> 完成; on_success 恰 1 次且只发生在
+    见证据之后(带序号回调: 测试侧逐跳编号, 回调记录触发时点, 与证据跳先后可对照)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", state="pausedUP", progress=1.0)
+    seed_store(mgr, [t])
+    client.torrents["HA"] = t
+    fired = []  # (hop 序号, 回调触发时的快照 state)
+    hop = [0]
+    origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin, on_success=lambda: fired.append((hop[0], t.state)))
+    assert r.is_pending
+    now = time.time()
+    hop[0] = 1
+    run_queue(mgr, now + 1)  # 首跳: 无证据(completed 旧快照)
+    assert fired == [], "无证据首跳不得触发 on_success"
+    hop[0] = 2
+    t.state = "checkingDL"
+    run_queue(mgr, now + 3)  # 生效证据跳(仍在校验中)
+    assert fired == [], "证据跳未完成, 不得触发 on_success"
+    hop[0] = 3
+    t.state = "pausedUP"
+    run_queue(mgr, now + 5)  # 证据之后的完成跳: 真判定
+    assert fired == [(3, "pausedUP")], f"on_success 应恰在见证据后的完成跳触发一次: {fired}"
+
+
+def test_ops_recheck_wait_result_zero_api_calls():
+    """测试(等价性红线): 轮询等待期(证据立起前后多跳推进)零 torrents_info 直查 —— 周期观测纯快照读"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", state="pausedUP", progress=1.0)
+    seed_store(mgr, [t])
+    client.torrents["HA"] = t
+    r = mgr.ctx.ops.recheck("HA", source="web")
+    assert r.is_ok
+    now = time.time()
+    run_queue(mgr, now + 1)  # 冻结拍: completed 无证据 -> WAITING
+    t.state = "checkingDL"
+    run_queue(mgr, now + 3)  # 证据立起 -> REQUEUE
+    t.state = "checkingDL"
+    run_queue(mgr, now + 5)  # 等待期多跳推进(仍 checkingDL)
+    t.state = "checkingUP"
+    run_queue(mgr, now + 7)  # 换一形态的真校验态继续等
+    assert client.info_calls == 0, f"轮询期不得直查 torrents_info: {client.info_calls} 次"
+    assert client.calls == [("recheck", None)], f"除提交 recheck 外零 qB 交互: {client.calls}"
+    assert "HA" in mgr.task_queue.active_check_hashes(), "纯等待不消亡"
+
+
+def test_ops_recheck_poll_reads_live_record_fresh_progress():
+    """测试(逐轮读活记录): 闭包不缓存字段值 —— 中途改 store 活记录 progress, 下一跳读到新值;
+    未见证据而跌破基线即按数据缺损签名判败, log 标「progress 回落」(处置序列与常规判败相同)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", state="pausedDL", progress=0.5)  # 基线 0.5(提交点快照值)
+    seed_store(mgr, [t])
+    client.torrents["HA"] = t
+    origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
+    assert r.is_pending
+    now = time.time()
+    run_queue(mgr, now + 1)  # 首跳: progress 未变(0.5 == 基线) -> WAITING
+    t.progress = 0.3  # 中途改 store 活记录(对象身份直写): 模拟校验发现坏块后的回落
+    with capture_ops_logs() as logs:
+        run_queue(mgr, now + 3)  # 下一跳: 逐轮读到新值 0.3 < 基线 0.5 -> FAILED(progress 回落)
+    assert any("progress 回落" in m for m in logs), f"回落路径应有准确标签: {logs}"
+    assert mgr.state["recheck_fails"]["HA"]["count"] == 1, "rule 源回落判败应计冷却"
+    assert any(task is origin for task in mgr.task_queue._fast), "判败后 origin 应默认重置重入队"
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "判败后轮询消亡释放在途"
 
 
 # ============================================================
