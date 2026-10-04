@@ -757,6 +757,16 @@ class TrafficDatStore:
         e = self._index.get(infohash)
         return dict(e) if e is not None else None
 
+    def has_entry(self, infohash: str) -> bool:
+        """单种数据文件存在判定(plan 26-10-04-0721 §03.3): index 条目存在即有数据文件
+
+        判据 = dict 查(零样本轮询每轮 <= 种子数次, 无 IO)。语义: 建文件与建条目同步
+        (_touch_entry 惰性建文件时同步建条目, §02.5; 启动 reconcile 保证条目 <-> 文件
+        一致) —— index 有条目即有数据文件。单种零样本开行程的门: 动过的种子停下 = 0 线
+        (有条目 -> 开/推进行程); 从未传输的种子 = 无数据(无条目 -> 整体跳过, 空态)。
+        """
+        return infohash in self._index
+
     def _touch_entry(self, infohash: str, ts: float) -> None:
         """追加时点推进条目: 无条目则建(惰性建文件同步建条目, frozen_at 本阶段恒 None,
         §02.5)并立即落盘(建文件时点); 有条目仅内存推进 updated_at(封口时点统一落盘,
