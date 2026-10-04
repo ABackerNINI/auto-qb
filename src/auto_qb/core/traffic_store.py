@@ -1572,6 +1572,81 @@ def v3_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
     )
 
 
+class TrafficV3Store:
+    """v3 写侧存储(S2a, plan 26-10-04-1957 §03.3): 按天文件块化追加 + 批量落盘
+
+    写侧翻转后的落盘单点: 采样模块 BlockBuffer 每系列每 flush 单次 open("a") 写 N 行 +
+    flush + fsync; 尾字节查补(崩溃残留半行补 \\n)每 flush 仅一次; 块头(B 行)由调用方在
+    块首次 flush 时随批传入(块状态单点在采样模块 —— 跨 flush 的同块只传一次头)。
+    只写 qb-traffic-v3/, 不触旧 qb-traffic/ 与 index.json(R2 换代); 目录惰性创建。
+    S2b 接缝: 聚合封口(hour/day/month 行)将 append 到 v3_agg_file_path(同款追加纪律)。
+    OSError 上抛(调用方按落盘失败口径处理 —— 观测数据丢失无一致性后果, §01.1)。
+    """
+    def __init__(self, data_dir: str) -> None:
+        self._data_dir = data_dir
+
+    @property
+    def data_dir(self) -> str:
+        return self._data_dir
+
+    def series_day_path(self, key: str, date_str: str) -> str:
+        """系列键 + 本地日期串 -> 天文件路径(路径计算复用 S1 纯函数, 非法键/日期 fail-fast)"""
+        return v3_day_file_path(self._data_dir, key, date_str)
+
+    def series_has_data(self, key: str) -> bool:
+        """「系列目录存在且含 >=1 个 .dat」(§3.2: v2 index 条目门改目录判定, 惰性零目录零 IO)
+
+        门语义(v2 §3.3 平移): 有数据(或已开游程)的系列零样本才开/延长游程, 从未传输种子
+        零文件零游程。agg.dat 亦以 .dat 结尾, 计入(有聚合必有历史, 语义一致)。
+        """
+        series_dir = v3_series_dir(self._data_dir, key)
+        if not os.path.isdir(series_dir):
+            return False
+        try:
+            for name in os.listdir(series_dir):
+                if name.endswith(DAT_SUFFIX):
+                    return True
+        except OSError:
+            return False
+        return False
+
+    def append_records(self, key: str, date_str: str, header: Optional[tuple], records: tuple) -> None:
+        """块化追加一批记录(§03.3 批量写): 单次 open("a") + flush + fsync
+
+        header = (start_epoch, interval_s) 时先写 B 行(该块首次 flush; 跨 flush 的同块
+        由调用方只传一次); records 为 V3Sample / V3ZeroRun / V3NullRun 序列(按槽序)。
+        文件不存在先建头行(v3) + key 行; 崩溃残留尾部半行先补一个换行(不与残行合并,
+        每 flush 查补一次 —— v2 逐行查补退役)。records 与 header 全空 = 零操作。
+        """
+        if header is None and not records:
+            return
+        path = self.series_day_path(key, date_str)  # 非法键/日期在此 fail-fast
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        prefix = ""
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            prefix = f"{HEADER_LINE_V3}\nkey,{key}\n"
+        else:
+            with open(path, "rb") as f:
+                f.seek(-1, os.SEEK_END)
+                if f.read(1) != b"\n":
+                    prefix = "\n"
+        lines = []
+        if header is not None:
+            lines.append(format_v3_b_row(int(header[0]), int(header[1])))
+        for rec in records:
+            if isinstance(rec, V3Sample):
+                lines.append(format_v3_r_row(rec))
+            elif isinstance(rec, V3ZeroRun):
+                lines.append(format_v3_z_row(rec))
+            else:
+                lines.append(format_v3_n_row(rec))
+        with open(path, "a", encoding="utf-8", newline="\n") as f:
+            f.write(prefix)
+            f.write("\n".join(lines) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+
+
 def v3_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
     """逐级派生聚合行(§04.1, 严格逐级 —— day 只从 hour 行聚, month 只从 day 行聚,
     day 不从 raw 直聚: raw_window 裁剪边缘的 cov_s 链只在逐级传递才完整):

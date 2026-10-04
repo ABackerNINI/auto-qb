@@ -22,11 +22,12 @@
 - test_reconcile_key_mismatch_warns_filename_wins: 头行 key 与文件名失配 -> 告警并按文件名登记(不改写文件)
 - test_reconcile_never_touches_raw_hour_data: 对账前后 dat 数据字节级不变; 存储目录不存在零动作不建目录
 - test_lazy_file_creation_zero_files_without_samples: 从未采样的种子零文件; global 首点(含 null 点)才建文件
-- test_restart_continuity_appends_without_truncation: 重启(新 store/新模块实例)后 dat 接续追加不断史 + 首窗 null(基线不落盘, S1 语义)
-- test_handler_triggers_hourly_seal_once_per_hour: 每小时首个采样触发封口扫描(上一小时桶); 同小时内不重复触发
+- test_restart_continuity_appends_without_truncation(v3 S2a 重写): 重启(新模块实例)后同天文件开新块接续不断史 + 首窗 null(基线不落盘)
+- test_handler_writes_v3_only_no_v2_side_effects(v3 S2a 重写): handler 零触旧目录 qb-traffic/ 与 index.json,
+  seal_sweep/lifecycle_sweep/evict_expired_frozen 触发点断开(S5 删); 断连轮 n 游程; stop() 封 n 游程落 v3
 - test_handler_dry_run_persists_nothing: dry_run 全程零文件(start 对账跳过 + handler 不落盘不封口)
 - test_empty_data_dir_persists_nothing: data_dir 为空(防御, 真实配置恒非空) -> 零文件零目录(CWD 无泄漏)
-- test_all_persist_writes_on_caller_thread: 全部落盘写在调用 run_due 的线程(主循环线程)内完成, 模块不建线程(黄金法则 5)
+- test_all_persist_writes_on_caller_thread(v3 S2a 重写): 全部 v3 批量落盘(TrafficV3Store.append_records)写在主循环线程, 模块不建线程
 - test_seal_sweep_covers_global_and_torrents_and_counts: 封口扫描 catch-up 补封当前桶之前全部未封桶(含更早漏封桶), 覆盖 global + torrents/, 按文件数计数; 非 dat/.corrupt 不碰
 - test_lifecycle_freeze_absent_from_torrent_set: 删种冻结(S3): 不在当前种子集合 -> frozen_at=整数秒 + 变化时点落盘; 重复判定幂等; dat 数据不动
 - test_lifecycle_freeze_requires_existing_file: 条目无文件不冻结(留给启动 reconcile)
@@ -36,12 +37,11 @@
 - test_evict_missing_file_drops_entry_and_removal_failure_retries: 文件已不在删死条目; 删除失败(读侧竞态)保条目下轮重试
 - test_evict_never_touches_global: global 不在 index 结构性豁免: 永不冻结永不淘汰
 - test_evict_skips_malformed_updated_at: 条目 updated_at 畸形不据以删除(淘汰判定不崩溃)
-- test_handler_lifecycle_persist_failure_not_fatal: 冻结/解冻判定落盘失败(OSError)不阻断采样
-- test_handler_freezes_deleted_torrent_stops_appends: 删种 -> 采样轮判定冻结 + 后续轮零追加
-- test_handler_unfreezes_readded_torrent_keeps_history: 重加 -> 采样轮解冻续写, 历史保留
-- test_handler_disconnect_round_skips_lifecycle: 断连轮跳过冻结/解冻判定(快照 stale), 恢复连接后才冻结
-- test_handler_dry_run_skips_lifecycle: dry_run 不做生命周期判定(不构造存储层)
-- test_handler_evicts_expired_frozen_at_seal_timing: 淘汰复用封口时机: 翻小时轮删除超龄冻结文件; 同小时轮不淘汰
+- test_handler_deleted_torrent_no_new_records(v3 S2a 重写): v3 冻结语义 = 删种即零新记录, 缓冲随 flush 收尾, 无 index 动作
+- test_handler_readded_torrent_keeps_history(v3 S2a 重写): 重加 -> 原块续写, 断采间隔如实写成显式 dt
+- test_handler_dry_run_skips_lifecycle_and_store_construction(v3 S2a 重写): dry_run 不构造 v2/v3 任一存储层,
+  预置 index 条目不被冻结; (原 lifecycle 落盘失败/断连跳过判定/封口时机淘汰三用例已随 v2 触发面退役折入
+  test_handler_writes_v3_only_no_v2_side_effects 的 boom 断言)
 - test_volume_regression_200_torrents_full_window: 体量回归(P3 验收): 200 活跃种子 + global 满窗数据 <= 201x205KB(≈41MB, §02.3 推导式); 满窗稳态封口零重写
 - test_zrow_roundtrip_and_v2_mixed_rows: format_z_row 产出可被 v2 解析还原为相同 ZRow; v2 头行 + 混合行(raw/null/z/hour)解析正确, zruns 携带在 ParsedSeries(v1 文件恒空)
 - test_v1_header_z_line_counted_bad: v1 头行文件 + z 行 -> 按坏行计数(zruns 恒空, v1 语义逐字节不变)
@@ -74,12 +74,18 @@ v3 纯函数区(plan 26-10-04-1957 S1, 全部不接线 —— 写侧仍 v2, 既�
 - test_v3_rollup_strict_level_by_level: 逐级派生(§04.1) —— day 从 hour 行 / month 从 day 行: avg 按 cov 加权 / max 取下级最大 / totals 级末快照 / cov=Σ下级.cov / kind 限 day/month 与空下级/零覆盖 fail-fast
 - test_v3_format_fail_fast_and_torn_tail: 写侧序列化纪律 —— dt_ms 非法(0/负/超上界/bool)与 interval_s 非法 fail-fast; 解析侧撕裂尾半行豁免口径(完整末行无换行不算 torn, 残缺末行记 torn_tail 且坏行计数)
 
+v3 写侧存储族(plan 26-10-04-1957 S2a, TrafficV3Store):
+- test_v3_store_append_records_day_file_shape: 新文件头行(v3)+key 行, B 行随批写, r/z/n 落盘 roundtrip; 全空调用零操作
+- test_v3_store_header_once_and_torn_tail_repair: 跨 flush 同块 header 只写一次; 崩溃残留完整行补换行照常收(kill 不放大)
+- test_v3_store_series_has_data_gate: v3 数据门(目录存在且含 >=1 个 .dat): 缺失/空目录 False, 天文件/agg.dat True, 非法键 fail-fast
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
 import json
 import os
 import threading
+import time
 from datetime import datetime
 
 import pytest
@@ -105,6 +111,7 @@ from auto_qb.core.traffic_store import (
     ZRow,
     AggRow,
     TrafficDatStore,
+    TrafficV3Store,
     V3Block,
     V3HourSample,
     V3NullRun,
@@ -690,22 +697,6 @@ def test_evict_skips_malformed_updated_at(tmp_path):
     assert os.path.exists(store.series_path("torrent:WEIRD"))
 
 
-def test_handler_lifecycle_persist_failure_not_fatal(tmp_path, monkeypatch):
-    """冻结/解冻判定落盘失败(OSError)不阻断采样: 本轮照常出点"""
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
-    mod = mgr.host.get("qb_traffic")
-    mod.start(mgr.ctx, dry_run=False)
-
-    def failing_sweep(self, present, now):
-        raise OSError("disk full")
-
-    monkeypatch.setattr(TrafficDatStore, "lifecycle_sweep", failing_sweep)
-    assert _run_sample(mgr) is True  # 不上抛
-    assert GLOBAL_SERIES_KEY in mod.latest and "torrent:HASH123" in mod.latest  # 采样照常
-
-
 # ---------- 惰性建文件 / 重启接续 ----------
 
 
@@ -720,20 +711,22 @@ def test_lazy_file_creation_zero_files_without_samples(tmp_path):
     assert (tmp_path / TRAFFIC_DIR_NAME / "global.dat").is_file()
 
 
-def test_restart_continuity_appends_without_truncation(tmp_path):
-    """重启接续: 新 store/新模块实例(baselines 空)在同一数据目录上接续追加不断史;
-    重启后首窗 null(基线不落盘, S1 语义)"""
-    # 第一段运行: 两轮采样(global.dat 2 行 + 单种 2 行)
+def test_restart_continuity_appends_without_truncation(tmp_path, monkeypatch):
+    """重启接续(v3): 新模块实例(baselines/缓冲空)在同一天文件上开新块接续追加不断史;
+    重启后首窗 null(基线不落盘, S1 语义); 新块块首 = 重启后首个记录"""
+    fixed = H1 + 100.0
+    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: fixed)
+    # 第一段运行: 一轮采样(r 记录随 flush 落盘)
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _ss()
     seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     _run_sample(mgr)
-    _run_sample(mgr)
-    gpath = tmp_path / TRAFFIC_DIR_NAME / "global.dat"
-    tpath = tmp_path / TRAFFIC_DIR_NAME / "torrents" / "HASH123.dat"
-    assert len(_read_text(gpath).splitlines()) == 4  # 头 + key + 2 行
+    mod._flush_all_series()
+    gpath = v3_day_file_path(str(tmp_path), "global", v3_epoch_date_str(fixed))
+    tpath = v3_day_file_path(str(tmp_path), "torrent:HASH123", v3_epoch_date_str(fixed))
+    assert len(_read_text(gpath).splitlines()) == 4  # 头 + key + B + 1 行
     # 重启: 全新 manager(同 data_dir), 计数器推进
     mgr2 = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr2.store.server_state = _ss(alltime_dl=10_001_000, alltime_ul=20_002_000)
@@ -742,45 +735,46 @@ def test_restart_continuity_appends_without_truncation(tmp_path):
     mod2.start(mgr2.ctx, dry_run=False)
     _run_sample(mgr2)
     assert mod2.latest[GLOBAL_SERIES_KEY].dl_inc is None  # 基线不落盘 -> 首窗 null(S1 语义)
-    assert len(_read_text(gpath).splitlines()) == 5  # dat 接续追加, 不断史
-    assert len(_read_text(tpath).splitlines()) == 5
+    mod2._flush_all_series()
+    parsed = parse_v3_day_text(_read_text(gpath))
+    assert len(parsed.blocks) == 2  # dat 接续开新块, 不断史
+    assert parsed.blocks[0].start_epoch == int(fixed) and parsed.blocks[1].start_epoch == int(fixed)
+    assert len(parse_v3_day_text(_read_text(tpath)).blocks) == 2
 
 
 # ---------- handler 接线 ----------
 
 
-def test_handler_triggers_hourly_seal_once_per_hour(tmp_path, monkeypatch):
-    """每小时首个采样触发封口扫描(上一小时桶); 同小时内不重复触发; 断连轮照常封口"""
-    fixed = H1 + 100
-    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: fixed)
+def test_handler_writes_v3_only_no_v2_side_effects(tmp_path, monkeypatch):
+    """写侧翻 v3(§6.2 换代矩阵): handler 全程零触旧目录 qb-traffic/ 与 index.json ——
+    seal_sweep / lifecycle_sweep / evict_expired_frozen 的 v2 触发点全部断开(S5 删代码);
+    断连轮全局 n 游程照常推进; stop() 后 n 游程封口落 v3 天文件"""
+    t = {"now": H1 + 100.0}
+    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    # 预置上一小时桶的历史行(直接经存储层)
-    TrafficDatStore(str(tmp_path)).append_point("global", H0 + 30, 500, 250, 100, 50)
+    mgr.store.server_state = _ss()
+    seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
-    mgr.store.server_state = _ss()
-    assert _run_sample(mgr) is True
-    parsed = TrafficDatStore(str(tmp_path)).read_series("global")
-    assert [h.hour_epoch for h in parsed.hours] == [H0]  # 上一小时桶已封口
-    assert [r.ts for r in parsed.raw] == [H0 + 30, fixed]  # 本轮新行照常追加
-    # 同小时第二轮: 不重复扫描
-    swept = {"n": 0}
-    real_sweep = mod._store.seal_sweep
 
-    def counting_sweep(*a, **kw):
-        swept["n"] += 1
-        return real_sweep(*a, **kw)
+    def boom(*a, **kw):
+        raise AssertionError("v2 触发面在 S2a 后不应被 handler 调用")
 
-    monkeypatch.setattr(mod._store, "seal_sweep", counting_sweep)
+    monkeypatch.setattr(TrafficDatStore, "seal_sweep", boom)
+    monkeypatch.setattr(TrafficDatStore, "lifecycle_sweep", boom)
+    monkeypatch.setattr(TrafficDatStore, "evict_expired_frozen", boom)
     assert _run_sample(mgr) is True
-    assert swept["n"] == 0
-    # 断连轮: 照常出 null 点且小时翻转时照常封口
-    mgr.client = None
-    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: H1 + 2 * HOUR)
+    mgr.client = None  # 断连轮: 照常记 n 槽(生命周期判定已退役, 无 stale 快照误判面)
+    t["now"] = H1 + 130.0
     assert _run_sample(mgr) is True
-    assert swept["n"] == 1
-    assert mod.latest[GLOBAL_SERIES_KEY].dl_rate is None  # 断连 null 点
-    assert [h.hour_epoch for h in TrafficDatStore(str(tmp_path)).read_series("global").hours] == [H0, H1]
+    assert mod._open_runs[GLOBAL_SERIES_KEY].kind == "n"
+    assert not (tmp_path / TRAFFIC_DIR_NAME).exists()  # 旧目录零文件零目录
+    assert mod._store is None  # v2 存储层从未构造
+    mod.stop()  # 优雅收尾: 封 n 游程 + 落 v3
+    assert not (tmp_path / TRAFFIC_DIR_NAME).exists()
+    text = _read_text(v3_day_file_path(str(tmp_path), "global", v3_epoch_date_str(H1 + 100)))
+    recs = parse_v3_day_text(text).blocks[0].records
+    assert [type(r) for r in recs] == [V3Sample, V3NullRun]  # r + 断连 n 槽
 
 
 def test_handler_dry_run_persists_nothing(tmp_path):
@@ -811,23 +805,25 @@ def test_empty_data_dir_persists_nothing(tmp_path, monkeypatch):
 
 
 def test_all_persist_writes_on_caller_thread(tmp_path, monkeypatch):
-    """单写线程不变式: 全部 append_point 落盘发生在调用 run_due 的线程(= 主循环线程), 模块不建线程"""
+    """单写线程不变式: 全部 v3 批量落盘(TrafficV3Store.append_records)发生在调用 run_due
+    的线程(= 主循环线程)内, 模块不建线程(黄金法则 5)"""
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _ss()
     seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
+    mod._last_flush = time.time() - 601  # 预置过期: 本轮 handler 内 flush 驱动即触发
     seen = []
-    orig = TrafficDatStore.append_point
+    real = TrafficV3Store.append_records
 
-    def spy(self, key, ts, *cols):
+    def spy(self, key, date_str, header, records):
         seen.append((key, threading.get_ident()))
-        return orig(self, key, ts, *cols)
+        return real(self, key, date_str, header, records)
 
-    monkeypatch.setattr(TrafficDatStore, "append_point", spy)
+    monkeypatch.setattr(TrafficV3Store, "append_records", spy)
     threads_before = threading.active_count()
     assert mgr.task_queue.run_due(max_tasks=10) == 1
-    assert seen and {k for k, _ in seen} == {"global", "torrent:HASH123"}
+    assert {k for k, _ in seen} == {"global", "torrent:HASH123"}
     assert all(ident == threading.get_ident() for _, ident in seen)
     assert threading.active_count() == threads_before
 
@@ -852,8 +848,9 @@ def test_seal_sweep_covers_global_and_torrents_and_counts(tmp_path):
 # ---------- S3 handler 接线: 冻结/解冻/淘汰随采样轮(§02.2/§02.5) ----------
 
 
-def test_handler_freezes_deleted_torrent_stops_appends(tmp_path, monkeypatch):
-    """删种 -> 采样轮判定冻结: frozen_at 置值且后续轮零追加(停止追加, §02.2)"""
+def test_handler_deleted_torrent_no_new_records(tmp_path, monkeypatch):
+    """v3 冻结语义(§04.5 平移): 删种即不再产新块/新记录(不在 by_hash 本就无采样) ——
+    已有缓冲随 flush 落盘收尾, 后续轮零新增记录, 无 index 注册表动作"""
     t = {"now": H1 + 100.0}
     monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
@@ -861,23 +858,22 @@ def test_handler_freezes_deleted_torrent_stops_appends(tmp_path, monkeypatch):
     seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
-    assert _run_sample(mgr) is True
-    tpath = tmp_path / TRAFFIC_DIR_NAME / "torrents" / "HASH123.dat"
-    lines_at_freeze = len(_read_text(tpath).splitlines())
-    # 删种: 内存快照移除 -> 下一轮(同小时, 不触发封口)冻结
-    mgr.store.by_hash.pop("HASH123")
+    _run_sample(mgr)  # r 进缓冲
+    mgr.store.by_hash.pop("HASH123")  # 删种
     t["now"] = H1 + 160.0
-    assert _run_sample(mgr) is True
-    assert mod._store.entry("HASH123")["frozen_at"] == int(H1 + 160.0)
-    # 继续推进多轮: 冻结文件零追加
-    t["now"] = H1 + 220.0
-    _run_sample(mgr)
-    assert len(_read_text(tpath).splitlines()) == lines_at_freeze
+    _run_sample(mgr)  # 删种轮: 该系列无采样
+    t["now"] = H1 + 700.0
+    _run_sample(mgr)  # flush 驱动触发: 缓冲收尾落盘
+    parsed = parse_v3_day_text(
+        _read_text(v3_day_file_path(str(tmp_path), "torrent:HASH123", v3_epoch_date_str(H1 + 100)))
+    )
+    assert [type(r) for r in parsed.blocks[0].records] == [V3Sample]  # 恰删种前 1 条, 后续零新增
+    assert mod._buffers["torrent:HASH123"].records == []
 
 
-def test_handler_unfreezes_readded_torrent_keeps_history(tmp_path, monkeypatch):
-    """重加 -> 采样轮解冻续写: frozen_at 清零, 历史行保留, 新行照常追加
-    (重加后 all-time 计数器回落由既有判重置兜底, 见 test_counter_rollback_records_reset_no_negative)"""
+def test_handler_readded_torrent_keeps_history(tmp_path, monkeypatch):
+    """重加续写(v3): 同 hash 重加(活跃, 计数器推进) -> 新记录接在原块续写(同文件, 历史
+    保留); 断采间隔由累积漂移判据如实写成显式 dt; 重加后计数器回落由既有判重置兜底"""
     t = {"now": H1 + 100.0}
     monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
@@ -886,46 +882,24 @@ def test_handler_unfreezes_readded_torrent_keeps_history(tmp_path, monkeypatch):
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     _run_sample(mgr)
+    tpath = v3_day_file_path(str(tmp_path), "torrent:HASH123", v3_epoch_date_str(H1 + 100))
     mgr.store.by_hash.pop("HASH123")
     t["now"] = H1 + 160.0
-    _run_sample(mgr)
-    assert mod._store.entry("HASH123")["frozen_at"] is not None
-    tpath = tmp_path / TRAFFIC_DIR_NAME / "torrents" / "HASH123.dat"
-    frozen_text = _read_text(tpath)
-    # 同 hash 重加(活跃, 计数器推进) -> 同轮先解冻再采样追加
+    _run_sample(mgr)  # 删种期: 无记录
+    # 同 hash 重加(活跃, 计数器推进) -> 续写
     seed_store(mgr, [_active_torrent(downloaded=6_000_000, uploaded=4_000_000)])
     t["now"] = H1 + 220.0
     assert _run_sample(mgr) is True
-    assert mod._store.entry("HASH123")["frozen_at"] is None
-    unfrozen_text = _read_text(tpath)
-    assert unfrozen_text.startswith(frozen_text)  # 历史保留(同小时纯追加, 前缀不变)
-    assert len(unfrozen_text.splitlines()) == len(frozen_text.splitlines()) + 1  # 解冻后续写
+    mod._flush_all_series()
+    recs = parse_v3_day_text(_read_text(tpath)).blocks[0].records
+    assert len(recs) == 2 and all(isinstance(r, V3Sample) for r in recs)  # 历史保留 + 续写
+    assert recs[1].dt_ms == 120_000  # 断采 120s 如实入行(从链上锚点 H1+100 起算)
+    assert recs[1].dl_total == 6_000_000  # 重加后的 totals 快照
 
 
-def test_handler_disconnect_round_skips_lifecycle(tmp_path, monkeypatch):
-    """断连轮跳过冻结/解冻判定(by_hash 是断连前快照, 误判会冻结在线种子/漏判重加);
-    恢复连接后才按当前种子集合判定"""
-    t = {"now": H1 + 100.0}
-    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
-    mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
-    mod = mgr.host.get("qb_traffic")
-    mod.start(mgr.ctx, dry_run=False)
-    _run_sample(mgr)
-    mgr.store.by_hash.pop("HASH123")  # 删种恰好落在断连期(快照不可知)
-    mgr.client = None
-    t["now"] = H1 + 160.0
-    _run_sample(mgr)
-    assert mod._store.entry("HASH123")["frozen_at"] is None  # 断连轮不判
-    mgr.client = FakeClient()
-    t["now"] = H1 + 220.0
-    _run_sample(mgr)
-    assert mod._store.entry("HASH123")["frozen_at"] == int(H1 + 220.0)  # 恢复连接后才冻结
-
-
-def test_handler_dry_run_skips_lifecycle(tmp_path, monkeypatch):
-    """dry_run 不做生命周期判定(观测写盘属真实副作用, 零落盘纪律): 存储层连构造都不发生"""
+def test_handler_dry_run_skips_lifecycle_and_store_construction(tmp_path, monkeypatch):
+    """dry_run 不做生命周期判定且不构造任何存储层(v2/v3 都不触盘, 观测写盘属真实副作用);
+    预置的 v2 index 条目不被冻结(零注册表动作)"""
     t = {"now": H1 + 100.0}
     monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
@@ -933,38 +907,13 @@ def test_handler_dry_run_skips_lifecycle(tmp_path, monkeypatch):
     seed_store(mgr, [_active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=True)
-    TrafficDatStore(str(tmp_path)).append_point("torrent:HASH123", H1 - 60, 1, 1, 1, 1)  # 预置历史条目+文件
+    TrafficDatStore(str(tmp_path)).append_point("torrent:HASH123", H1 - 60, 1, 1, 1, 1)  # 预置 v2 历史
     mgr.store.by_hash.pop("HASH123")
     assert _run_sample(mgr, dry_run=True) is True
-    assert mod._store is None  # 未构造存储层(dry_run 不触盘)
+    assert mod._store is None and mod._v3store is None  # 两代存储层都未构造
     on_disk = json.loads((tmp_path / TRAFFIC_DIR_NAME / "index.json").read_text(encoding="utf-8"))
     assert on_disk["torrents"]["HASH123"]["frozen_at"] is None  # 磁盘条目未被冻结
-
-
-def test_handler_evicts_expired_frozen_at_seal_timing(tmp_path, monkeypatch):
-    """淘汰复用封口时机(§02.5, 无独立任务): 超龄冻结文件在翻小时的首个采样轮删除;
-    同小时内的采样轮不淘汰"""
-    t = {"now": H1 + 100.0}
-    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
-    conf = QbTraffic(enabled=True, sample_interval=30, raw_window=3600, rollup_window=7200)
-    mgr = _mgr(tmp_path, conf)
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
-    mod = mgr.host.get("qb_traffic")
-    mod.start(mgr.ctx, dry_run=False)
-    _run_sample(mgr)  # 建文件 + 建条目(本轮触发首次封口扫描)
-    mgr.store.by_hash.pop("HASH123")
-    t["now"] = H1 + 160.0
-    _run_sample(mgr)  # 冻结(同小时)
-    mod._store._index["HASH123"]["updated_at"] = int(H1 + 160.0) - 7201  # 最后活动已超 rollup_window
-    tpath = tmp_path / TRAFFIC_DIR_NAME / "torrents" / "HASH123.dat"
-    t["now"] = H1 + 220.0
-    _run_sample(mgr)  # 同小时: 未到封口时机 -> 不淘汰
-    assert os.path.exists(tpath)
-    t["now"] = H1 + HOUR + 100.0
-    _run_sample(mgr)  # 翻小时: 封口轮顺带淘汰
-    assert not os.path.exists(tpath)
-    assert mod._store.entry("HASH123") is None
+    assert not (tmp_path / TRAFFIC_V3_DIR_NAME).exists()  # v3 侧零文件
 
 
 # ---------- S3 体量回归(P3 验收, §02.3) ----------
@@ -1705,3 +1654,60 @@ def test_v3_format_fail_fast_and_torn_tail():
     # 残缺末行: 记 torn_tail(豁免损坏占比)且计坏行; 前面好行照常收
     torn = parse_v3_day_text(_v3_day_text(head + ["r,1,1"])[:-1])  # 去掉末行换行 -> 残缺尾段
     assert torn.torn_tail is True and torn.bad_lines == 1 and len(torn.blocks[0].records) == 1
+
+
+# ---------- v3 写侧存储(S2a, TrafficV3Store) ----------
+
+
+def test_v3_store_append_records_day_file_shape(tmp_path):
+    """TrafficV3Store.append_records: 新文件建头行(v3) + key 行, header 随批写 B 行,
+    r/z/n 记录逐行落盘且 parse_v3_day_text roundtrip 还原; records+header 全空零操作不建文件"""
+    st = TrafficV3Store(str(tmp_path))
+    date = v3_epoch_date_str(H1)
+    st.append_records("global", date, (H1, 30), (V3Sample(1, 2, 3, 4), V3ZeroRun(2, 5, 6), V3NullRun(3)))
+    text = _read_text(st.series_day_path("global", date))
+    lines = text.splitlines()
+    assert lines[0] == HEADER_LINE_V3 and lines[1] == "key,global" and lines[2] == f"B,{H1},30"
+    assert lines[3:] == ["r,1,2,3,4", "z,2,5,6", "n,3"]
+    parsed = parse_v3_day_text(text)
+    assert parsed.key == "global" and len(parsed.blocks) == 1 and len(parsed.blocks[0].records) == 3
+    # 全空调用: 零操作(不建文件不建目录, 惰性创建纪律)
+    st.append_records("torrent:X", date, None, ())
+    assert not (tmp_path / TRAFFIC_V3_DIR_NAME / "torrents").exists()
+
+
+def test_v3_store_header_once_and_torn_tail_repair(tmp_path):
+    """跨 flush 同块 header 只传一次(不重复 B 行); 崩溃残留半行(完整合法行缺换行)先补
+    换行照常收数据 —— kill 丢失不放大(每 flush 查补一次)"""
+    st = TrafficV3Store(str(tmp_path))
+    date = v3_epoch_date_str(H1)
+    path = st.series_day_path("global", date)
+    st.append_records("global", date, (H1, 30), (V3Sample(1, 1, 1, 1), ))
+    st.append_records("global", date, None, (V3Sample(2, 2, 2, 2), ))  # 同块续写: header=None
+    parsed = parse_v3_day_text(_read_text(path))
+    assert len(parsed.blocks) == 1 and len(parsed.blocks[0].records) == 2  # 单 B 行单块
+    with open(path, "a", encoding="utf-8", newline="") as f:
+        f.write("r,9,9,9,9")  # 崩溃残留: 完整行但无换行
+    st.append_records("global", date, None, (V3Sample(3, 3, 3, 3), ))
+    parsed = parse_v3_day_text(_read_text(path))
+    # 残行补 \n 后成为完整合法行照常收(2 + 残行 + 1 = 4), 零坏行零 torn
+    assert len(parsed.blocks) == 1 and len(parsed.blocks[0].records) == 4
+    assert parsed.bad_lines == 0 and not parsed.torn_tail
+
+
+def test_v3_store_series_has_data_gate(tmp_path):
+    """series_has_data(v3 数据门, §3.2): 目录缺失/空目录 -> False; 有天文件或 agg.dat
+    (同为 .dat 后缀) -> True; 非法系列键 fail-fast"""
+    st = TrafficV3Store(str(tmp_path))
+    assert st.series_has_data("torrent:ABC") is False  # 目录缺失
+    os.makedirs(v3_series_dir(str(tmp_path), "torrent:ABC"))
+    assert st.series_has_data("torrent:ABC") is False  # 目录空
+    _write_dat(
+        v3_day_file_path(str(tmp_path), "torrent:ABC", v3_epoch_date_str(H1)), [HEADER_LINE_V3, "key,torrent:ABC"]
+    )
+    assert st.series_has_data("torrent:ABC") is True  # 有天文件
+    os.makedirs(v3_series_dir(str(tmp_path), "torrent:DEF"))
+    (tmp_path / TRAFFIC_V3_DIR_NAME / "torrents" / "DEF" / "agg.dat").write_text("", encoding="utf-8")
+    assert st.series_has_data("torrent:DEF") is True  # 仅 agg.dat 亦计入(.dat 后缀)
+    with pytest.raises(ValueError):
+        st.series_has_data("torrent:bad/key")  # 路径分隔符不进文件名
