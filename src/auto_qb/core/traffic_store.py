@@ -12,17 +12,26 @@
 目录惰性创建: enabled 且首次采样(首个产出点)时 os.makedirs(exist_ok=True);
 enabled=false(含 qb_traffic None)全程零文件零目录(保守默认, 黄金法则 2)。
 
-文件格式 v1(§02.3, 逐列冻结, 不得扩列改版):
-    # auto-qb qb-traffic v1                      <- 头行: 格式标识 + 版本
-    key,<系列标识>                                <- global.dat 固定 key,global; torrents/ = torrent:<infohash>
-    raw,<epoch_s>,<dl_rate>,<up_rate>,<dl_total>,<up_total>                      # 采样行
-    hour,<hour_epoch>,<dl_avg>,<dl_max>,<up_avg>,<up_max>,<dl_total>,<up_total>  # 小时封口行
+文件格式(§02, 逐列冻结, 不得扩列改版; v2 = v1 + z 行型, 双读门闩 —— plan 26-10-04-0721 §02):
+    # auto-qb qb-traffic v1 | v2                 <- 头行: 格式标识 + 版本(双读门闩)
+    key,<系列标识>                                <- 不变; global.dat 固定 key,global; torrents/ = torrent:<infohash>
+    raw,<epoch_s>,<dl_rate>,<up_rate>,<dl_total>,<up_total>                      # 不变; v2 语义收窄为「非零速率采样行」
+    raw,<epoch_s>,,,,,                           <- 不变; null 行(断连/缺字段), v1 v2 同形
+    hour,<hour_epoch>,<dl_avg>,<dl_max>,<up_avg>,<up_max>,<dl_total>,<up_total>  # 列不变
+    z,<start_s>,<end_s>,<dl_total>,<up_total>    <- v2 新增: 零值行程行(Z_FIELDS = 5)
 
+- 头行双读门闩(§02.2): 头行恰为 v2(HEADER_LINE_V2)才接受 z 行; 头行仍为 v1(HEADER_LINE,
+  常量保留用于识别)时 z 行按坏行计数 —— v1 语义逐字节不变; 其它头行整文件记坏(现行口径)。
+  头行升级到 v2 属写路径(P1b): 新文件默认 v2, 存量 v1 首次 z 追加/内容重写时升级(R3)。
 - raw 四数据列 = 瞬时速率对(bytes/s) + all-time 累计快照对(bytes, Prometheus 口径:
   存快照、消费侧差分; 取 all-time 对 —— 跨 qB 重启连续性最好, §10.1 两行风险均按
   消费侧回落判重置兜底); 会话快照对本层不落盘(§02.3, S1 采样点的 session 字段在此截除)。
 - null 点(断连/关键字段缺失)写 `raw,<epoch_s>,,,,`(四数据列全空), 读侧还原 None。
-- 累计快照列恒非负整数; 时间列(epoch_s/hour_epoch)恒整数秒。
+- z 行(v2 §02.1): [start, end] 闭区间按采样节奏观测、速率恒 (0,0); totals 快照行程内
+  恒定(无传输则 all-time 计数不增长)。恒非负整数, 时间列整数秒, 口径对齐 raw/hour。
+  校验宽松(§02.2): 列数 = 5, 四数值列非空非负, end >= start 且 end - start <=
+  ZRUN_MAX_SPAN_S —— 违者一律按坏行跳过计数, 走既有损坏阈值隔离。
+- 累计快照列恒非负整数; 时间列(epoch_s/hour_epoch/start_s/end_s)恒整数秒。
 
 写路径(§02.4 左, 仅主循环线程 —— 黄金法则 5, 调用方义务; 本层无锁):
 - 平时每次采样 open("a") 追加一行 raw + flush(进程崩溃丢 <=1 行), 不做常驻句柄;
@@ -109,8 +118,11 @@ DAT_SUFFIX = ".dat"
 #: 损坏文件隔离后缀(§02.4: 原文移 <name>.corrupt)
 CORRUPT_SUFFIX = ".corrupt"
 
-#: 头行(格式标识 + 版本, §02.3 逐列冻结)
+#: 头行 v1(格式标识 + 版本, §02.3 逐列冻结; 双读门闩保留用于识别 —— v1 文件 z 行按坏行计数)
 HEADER_LINE = "# auto-qb qb-traffic v1"
+
+#: 头行 v2(新增 z 行型; 双读门闩 —— 头行恰为 v2 才接受 z 行, plan 26-10-04-0721 §02.2)
+HEADER_LINE_V2 = "# auto-qb qb-traffic v2"
 
 #: index.json 格式版本
 INDEX_FORMAT = 1
@@ -126,6 +138,12 @@ RAW_FIELDS = 6
 
 #: hour 行字段数(hour + 时间 + 6 数据列)
 HOUR_FIELDS = 8
+
+#: z 行字段数(z + start/end 两个时间列 + 2 个 totals 列, v2 §02.1)
+Z_FIELDS = 5
+
+#: z 行最大时间跨度(秒, 宽松上界: 合法行程 <= ~1h + 间隔抖动, 超界即损坏, §02.2)
+ZRUN_MAX_SPAN_S = 86400
 
 #: 坏行占比损坏阈值(§02.4: > 5% 判文件损坏)
 CORRUPT_RATIO = 0.05
@@ -173,6 +191,16 @@ class HourRow:
 
 
 @dataclass(frozen=True)
+class ZRow:
+    """dat 零值行程行(v2 §02.1): [start, end] 闭区间按采样节奏观测, 速率恒 (0,0)"""
+
+    start: int  # 行程起点 epoch 秒(含)
+    end: int  # 行程终点 epoch 秒(含; >= start 且跨度 <= ZRUN_MAX_SPAN_S)
+    dl_total: int  # all-time 累计快照对(行程开启时首个零样本, 行程内恒定不刷新)
+    up_total: int
+
+
+@dataclass(frozen=True)
 class ParsedSeries:
     """单文件解析结果(read_series 返回; S4 API 的取数入口)"""
 
@@ -182,6 +210,7 @@ class ParsedSeries:
     bad_lines: int  # 跳过的坏行数(含尾部半行)
     data_lines: int  # 受检行总数(头行后全部行, 含空行/注释/坏行; 损坏占比分母)
     torn_tail: bool = False  # 末尾存在未写完的半行(正常崩溃残留; 豁免损坏占比)
+    zruns: tuple = ()  # Tuple[ZRow, ...](文件序; v1 文件恒空 —— 默认空元组, 构造点向后兼容)
 
 
 def _fmt_int(v: int) -> str:
@@ -204,6 +233,11 @@ def format_hour_row(row: HourRow) -> str:
     )
 
 
+def format_z_row(start: int, end: int, dl_total: int, up_total: int) -> str:
+    """零值行程行文本(v2 §02.1 逐列: z + 两个时间列 + totals 快照对)"""
+    return f"z,{_fmt_int(start)},{_fmt_int(end)},{_fmt_int(dl_total)},{_fmt_int(up_total)}"
+
+
 def _parse_int_field(text: str) -> Optional[int]:
     """数据列解析: 空 = None(null 列); 非负整数合法; 其余(负数/非数值)抛 ValueError -> 坏行"""
     if text == "":
@@ -217,20 +251,26 @@ def _parse_int_field(text: str) -> Optional[int]:
 def parse_dat_text(text: str) -> ParsedSeries:
     """dat 文本 -> ParsedSeries(纯函数, 无文件访问)
 
-    头行必须恰为 HEADER_LINE(缺失/不符 = 整文件不匹配格式, 全部行记坏); 其后每行都计入
-    data_lines(损坏占比分母), key 行取首个(重复 key 行记坏), raw/hour 行按列解析, 空行/
-    注释行跳过不计坏, 其余不匹配格式的一律跳过计数。无换行结尾的末段是崩溃残留位: 解析
-    成功则照常收数据(缺的只是行尾换行, 追加侧会先补), 失败则记 torn_tail(豁免损坏占比)。
-    hour 行同桶重复取最后一行(重封 upsert 的读侧口径, 对齐 curves 重复日期先例)。
+    头行必须恰为 HEADER_LINE 或 HEADER_LINE_V2(缺失/不符 = 整文件不匹配格式, 全部行记坏);
+    双读门闩(§02.2): 头行恰为 v2 才接受 z 行, 头行仍为 v1 时 z 行按坏行计数(v1 语义
+    逐字节不变)。其后每行都计入 data_lines(损坏占比分母), key 行取首个(重复 key 行记坏),
+    raw/hour/z 行按列解析, 空行/注释行跳过不计坏, 其余不匹配格式的一律跳过计数。无换行
+    结尾的末段是崩溃残留位: 解析成功则照常收数据(缺的只是行尾换行, 追加侧会先补), 失败
+    则记 torn_tail(豁免损坏占比)。hour 行同桶重复取最后一行(重封 upsert 的读侧口径,
+    对齐 curves 重复日期先例)。z 行校验宽松(§02.2): 列数 = 5, 四数值列经 _parse_int_field
+    (空/负/非数值 -> 坏行), end >= start 且 end - start <= ZRUN_MAX_SPAN_S —— 违者一律坏行。
     """
     lines = text.splitlines()
     torn = bool(text) and not text.endswith("\n")
-    if not lines or lines[0].strip() != HEADER_LINE:
+    header = lines[0].strip() if lines else None
+    if header not in (HEADER_LINE, HEADER_LINE_V2):
         # 头行缺失/不符: 文件级不匹配格式 —— 每一行都算坏行(损坏判定必然命中阈值)
         return ParsedSeries(key=None, raw=(), hours=(), bad_lines=len(lines), data_lines=len(lines), torn_tail=torn)
+    accept_z = header == HEADER_LINE_V2
     key: Optional[str] = None
     raw_rows: list = []
     hours_by_epoch: dict = {}
+    zruns: list = []
     bad = 0
     data = 0
     torn_tail = False
@@ -268,13 +308,32 @@ def parse_dat_text(text: str) -> ParsedSeries:
                 )
                 hours_by_epoch[row.hour_epoch] = row  # 同桶重复取最后一行
                 continue
+            if accept_z and parts[0] == "z" and len(parts) == Z_FIELDS:
+                start = _parse_int_field(parts[1])
+                end = _parse_int_field(parts[2])
+                dl_total = _parse_int_field(parts[3])
+                up_total = _parse_int_field(parts[4])
+                if None in (start, end, dl_total, up_total):
+                    raise ValueError("z 行存在空列")  # ZRow 恒非负整数, 无 null 形态
+                if end < start or end - start > ZRUN_MAX_SPAN_S:
+                    raise ValueError("z 行时间区间非法")
+                zruns.append(ZRow(start=start, end=end, dl_total=dl_total, up_total=up_total))
+                continue
         except (ValueError, IndexError):
             pass
-        bad += 1  # 键名/列数不匹配或字段非法
+        bad += 1  # 键名/列数不匹配或字段非法(v1 头行下的 z 行在此落网 —— 按坏行计数)
         if torn and i == last_idx - 1:
             torn_tail = True  # 尾部半行 = 正常崩溃残留(阈值豁免, 见 _read_path)
     hours = tuple(hours_by_epoch[e] for e in sorted(hours_by_epoch))
-    return ParsedSeries(key=key, raw=tuple(raw_rows), hours=hours, bad_lines=bad, data_lines=data, torn_tail=torn_tail)
+    return ParsedSeries(
+        key=key,
+        raw=tuple(raw_rows),
+        hours=hours,
+        bad_lines=bad,
+        data_lines=data,
+        torn_tail=torn_tail,
+        zruns=tuple(zruns)
+    )
 
 
 class TrafficDatStore:

@@ -43,6 +43,11 @@
 - test_handler_dry_run_skips_lifecycle: dry_run 不做生命周期判定(不构造存储层)
 - test_handler_evicts_expired_frozen_at_seal_timing: 淘汰复用封口时机: 翻小时轮删除超龄冻结文件; 同小时轮不淘汰
 - test_volume_regression_200_torrents_full_window: 体量回归(P3 验收): 200 活跃种子 + global 满窗数据 <= 201x205KB(≈41MB, §02.3 推导式); 满窗稳态封口零重写
+- test_zrow_roundtrip_and_v2_mixed_rows: format_z_row 产出可被 v2 解析还原为相同 ZRow; v2 头行 + 混合行(raw/null/z/hour)解析正确, zruns 携带在 ParsedSeries(v1 文件恒空)
+- test_v1_header_z_line_counted_bad: v1 头行文件 + z 行 -> 按坏行计数(zruns 恒空, v1 语义逐字节不变)
+- test_z_bad_line_family_counts_bad: z 坏行族逐项计坏行(列数≠5/负数/非数值/空列/end<start), 合法 z 行不受牵连
+- test_z_span_boundary_exact_day: span = ZRUN_MAX_SPAN_S(86400) 恰好合法, 86401 坏行
+- test_z_corrupt_threshold_quarantine: 坏 z 行计入损坏占比分子分母, 达阈值整文件隔离移 .corrupt; 未达阈值照常跳过计数
 
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
@@ -59,14 +64,18 @@ from auto_qb.core.taskqueue import Task
 from auto_qb.core.traffic_store import (
     CORRUPT_SUFFIX,
     HEADER_LINE,
+    HEADER_LINE_V2,
     HOUR_SECONDS,
     HourRow,
     REWRITE_RETRIES,
     RawRow,
     TRAFFIC_DIR_NAME,
+    ZRUN_MAX_SPAN_S,
+    ZRow,
     TrafficDatStore,
     format_hour_row,
     format_raw_row,
+    format_z_row,
     parse_dat_text,
 )
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
@@ -936,3 +945,99 @@ def test_volume_regression_200_torrents_full_window(tmp_path):
     store = _store(tmp_path)
     assert store.seal_sweep((now // HOUR) * HOUR, now=now, raw_window=24 * HOUR, rollup_window=30 * 24 * HOUR) == 0
     assert sum(p.stat().st_size for p in dat_files) == total
+
+
+# ---------- v2 z 行(plan 26-10-04-0721 P1a: 只做读路径与格式定义) ----------
+
+
+def test_zrow_roundtrip_and_v2_mixed_rows():
+    """v2 头行 + 混合行(raw/null/z/hour)解析正确, zruns 携带在 ParsedSeries;
+    format_z_row 产出可被 v2 解析还原为相同 ZRow; v1 文件 zruns 恒空(默认字段零改动)"""
+    text = "\n".join(
+        [
+            HEADER_LINE_V2,
+            "key,global",
+            "raw,100,1,2,3,4",
+            "raw,130,,,,",  # null 行: v1 v2 同形
+            format_z_row(200, 260, 3, 4),
+            f"hour,{H0},1,1,1,1,10,10",
+        ]
+    )
+    p = parse_dat_text(text)
+    assert p.key == "global"
+    assert [r.ts for r in p.raw] == [100, 130] and p.raw[1].is_null
+    assert p.hours == (HourRow(hour_epoch=H0, dl_avg=1, dl_max=1, up_avg=1, up_max=1, dl_total=10, up_total=10), )
+    assert p.zruns == (ZRow(start=200, end=260, dl_total=3, up_total=4), )
+    assert p.bad_lines == 0 and p.data_lines == 5
+    # roundtrip: format 逐列还原(含 10 位大数)
+    assert format_z_row(200, 260, 3, 4) == "z,200,260,3,4"
+    p2 = parse_dat_text("\n".join([HEADER_LINE_V2, "key,global", format_z_row(0, 3600, 9_999_999_999, 8_888_888_888)]))
+    assert p2.zruns == (ZRow(start=0, end=3600, dl_total=9_999_999_999, up_total=8_888_888_888), )
+    # v1 既有解析结果 zruns 恒空(默认空元组, 全部既有构造点零改动)
+    p1 = parse_dat_text("\n".join([HEADER_LINE, "key,global", "raw,100,1,2,3,4"]))
+    assert p1.zruns == ()
+
+
+def test_v1_header_z_line_counted_bad():
+    """v1 头行 + z 行 -> 按坏行计数(zruns 恒空): v1 语义逐字节不变(双读门闩, §02.2)"""
+    text = "\n".join([
+        HEADER_LINE,
+        "key,global",
+        "raw,100,1,2,3,4",
+        "z,200,260,3,4",  # v1 头行不认 z 行
+        "garbage",
+    ])
+    p = parse_dat_text(text)
+    assert p.key == "global"
+    assert [r.ts for r in p.raw] == [100] and p.hours == () and p.zruns == ()
+    assert p.bad_lines == 2 and p.data_lines == 4  # 分母含 key 行(结构行), 不含头行
+
+
+def test_z_bad_line_family_counts_bad():
+    """z 坏行族逐项计坏行: 列数!=5 / 负数 / 非数值 / 空列 / end<start; 合法 z 行不受牵连"""
+    good = "z,100,160,3,4"
+    bad_lines = [
+        "z,100,160,3",  # 列数不足
+        "z,100,160,3,4,9",  # 列数超出
+        "z,-100,160,3,4",  # 负时间列
+        "z,100,160,-3,4",  # 负 totals 列
+        "z,100,160,x,4",  # 非数值
+        "z,100,,3,4",  # 空列(ZRow 恒非负整数, 无 null 形态)
+        "z,200,100,3,4",  # end < start
+    ]
+    text = "\n".join([HEADER_LINE_V2, "key,global"] + bad_lines + [good])
+    p = parse_dat_text(text)
+    assert p.zruns == (ZRow(start=100, end=160, dl_total=3, up_total=4), )
+    assert p.bad_lines == len(bad_lines) and p.data_lines == len(bad_lines) + 2  # 分母含 key 行
+
+
+def test_z_span_boundary_exact_day():
+    """span 边界: end - start = ZRUN_MAX_SPAN_S(86400) 恰好合法, 86401 坏行"""
+    text = "\n".join([HEADER_LINE_V2, "key,global", "z,0,86400,1,1", "z,0,86401,1,1"])
+    p = parse_dat_text(text)
+    assert p.zruns == (ZRow(start=0, end=ZRUN_MAX_SPAN_S, dl_total=1, up_total=1), )
+    assert p.bad_lines == 1
+
+
+def test_z_corrupt_threshold_quarantine(tmp_path):
+    """坏 z 行计入损坏占比(分子分母双侧, 与既有 raw 坏行同口径): 达阈值(>5% 且 >=2 行)
+    整文件隔离移 .corrupt 后按空文件对待; 未达阈值时坏 z 行跳过计数, 合法行照常读出"""
+    store = _store(tmp_path)
+    path = store.series_path("global")
+    lines = [HEADER_LINE_V2, "key,global"] + [f"raw,{100 + i},1,1,1,1" for i in range(19)]
+    lines += ["z,0,-1,3,4", "z,x,1,1,1"]  # 2 坏 z 行 / 22 受检行 = 9.1% > 5%
+    _write_dat(path, lines)
+    original = _read_text(path)
+    parsed = store.read_series("global")
+    assert parsed.key == "global" and parsed.raw == () and parsed.zruns == ()  # 按空文件对待(同缺文件口径)
+    assert os.path.exists(path + CORRUPT_SUFFIX)
+    assert _read_text(path + CORRUPT_SUFFIX) == original  # 原文保全
+    # 未达阈值: 坏 z 行(1 行, 不足绝对下限 2)跳过计数, 合法行照常
+    store2 = _store(tmp_path / "sub")
+    lines2 = [HEADER_LINE_V2, "key,global"] + [f"raw,{100 + i},1,1,1,1" for i in range(38)]
+    lines2.append("z,0,-1,3,4")  # 1/40 且坏行 < 2 -> 不隔离
+    _write_dat(store2.series_path("global"), lines2)
+    p2 = store2.read_series("global")
+    assert len(p2.raw) == 38 and p2.bad_lines == 1 and p2.zruns == ()
+    assert os.path.exists(store2.series_path("global"))
+    assert not os.path.exists(store2.series_path("global") + CORRUPT_SUFFIX)
