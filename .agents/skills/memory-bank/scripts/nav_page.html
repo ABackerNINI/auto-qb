@@ -431,7 +431,7 @@
         <table>
           <thead><tr>
             <th class="num">#</th><th style="width:96px">时间戳</th><th style="width:46px">形态</th>
-            <th>标题</th><th style="width:200px">专题</th><th style="width:84px">状态</th><th style="width:54px; text-align:right">链</th>
+            <th style="width:84px">状态</th><th>标题</th><th style="width:200px">专题</th><th style="width:54px; text-align:right">链</th>
           </tr></thead>
           <tbody id="aRows"></tbody>
         </table>
@@ -524,6 +524,7 @@ let byLink = new Map();      // link -> item
 let groups = new Map();      // topicKey -> items[]
 let topicInfo = new Map();   // topicKey -> {topic, live, forms}
 let statusList = KNOWN_ST.slice();
+let statusSeeded = new Set();   // 已自动入选过的状态值台账 —— 见 derive(): 只自动入选一次
 
 /* 全局状态 (跨视图共享, 30s 轮询重渲染时保持) */
 const S = {
@@ -563,6 +564,12 @@ function derive() {
   const seen = new Set(DATA.items.map(i => stOf(i)));
   for (const s of seen) {
     if (!statusList.includes(s)) statusList.push(s);
+    /* 状态值不定长 —— 数据里新冒出来的状态要自动入选, 否则带它的条目会静默消失。
+       但只自动入选**一次**(statusSeeded 记账): 每轮 30s 轮询都 add 一遍会把用户刚取消的
+       状态筛选又加回来, 表现就是「状态筛选器隔一会儿自己重置」(2026-10-04 用户报)。
+       形态 / issue 类型的候选是定长常量数组, 没有这条派生逻辑, 所以不受影响。 */
+    if (statusSeeded.has(s)) continue;
+    statusSeeded.add(s);
     S.aStatuses.add(s);
     S.cStatuses.add(s);
   }
@@ -673,9 +680,9 @@ function renderLedger() {
       <td class="idx">${n + 1}</td>
       <td class="stamp">${esc(i.stamp)}</td>
       <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
+      <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
       <td class="title-cell"><b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
       <td class="topic"><code>${esc(i.topic || NO_KEY)}</code></td>
-      <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
       <td class="refs"><span class="chain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "# " + i.refs.length : "·"}</span></td>
     </tr>`).join("");
 

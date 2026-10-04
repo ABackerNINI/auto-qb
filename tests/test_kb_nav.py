@@ -9,6 +9,8 @@
    的文件吐给浏览器。
 3. **页面壳自足**: 三视图容器与切换控件在位 (壳被误改丢了视图等于丢了用户拍板的三选三)、
    dark 口径 (conventions/webui.md)、零外链资源 (本地工具不得依赖网络)。
+3'. **台账可读性**: 状态列钉在形态右侧、标题左侧 (2026-10-04 用户定调); 状态筛选不得被 30s
+   轮询重播种 (同日用户报「状态筛选器每隔一会儿自动重置」, 根因见 pitfalls/web-ui/poll-reseed-filter.md)。
 
 另守一条**单点不回归**: nav_data 只许在 collect() 条目上做加法 enrich, 不许改
 gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 (计划 §01 拍板: 消费方零变动)。
@@ -25,6 +27,8 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_shell_has_three_views_and_switcher: 壳含三视图容器 (v-ledger / v-console / v-cards) 与 data-view 切换控件
 - test_shell_is_dark: 壳含 color-scheme: dark
 - test_shell_no_external_resources: 壳无 http(s) 外链 src/href 资源引用 (属性锚定, 注释/文案不受影响)
+- test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 标题 专题 链 (表头与行模板同步)
+- test_status_filter_not_reseeded_every_poll: derive() 对状态候选只自动入选一次 (statusSeeded 闸门在前), 30s 轮询不得盖回用户取消的选择
 - test_static_map_serves_file_and_api: GET / 与 /api/data 200 (壳文本 / JSON 契约), 正常 memory-bank 文件 200 且 .md 给 text/plain
 - test_static_map_blocks_traversal: ../ / %2e%2e / ..%2f / %5c 反斜杠变体一律 403/404 且不泄漏目标内容; 未知文件 404
 - test_log_filters_polling: 精简 log —— /api/data 轮询与壳加载成功不上屏; 错误与静态映射请求留痕
@@ -183,6 +187,43 @@ def test_shell_no_external_resources() -> None:
     text = SHELL.read_text(encoding="utf-8")
     external = re.findall(r"""(?:\ssrc|\shref)\s*=\s*["']https?://[^"']*""", text)
     assert not external, f"壳里出现外链资源引用 (本地工具禁止网络依赖): {external[:5]}"
+
+
+def test_ledger_status_column_between_form_and_title() -> None:
+    """台账列序 (用户 2026-10-04 定调): 状态挨着形态、在标题左侧 —— 塞到专题右边要横向拖
+    才能看见, 等于没有。表头与行模板必须同步改: 只改一头会让整行数据错位一列。"""
+    text = SHELL.read_text(encoding="utf-8")
+
+    head = re.search(r"<thead><tr>(.*?)</tr></thead>", text, re.S)
+    assert head, "台账表头不见了? 表格结构搬家要同步本守阵"
+    cols = [c.strip() for c in re.findall(r"<th[^>]*>([^<]*)</th>", head.group(1))]
+    assert cols[:3] == ["#", "时间戳", "形态"], f"前三列变了: {cols}"
+    assert cols.index("状态") == cols.index("形态") + 1, f"状态列必须在形态右侧: {cols}"
+    assert cols.index("状态") < cols.index("标题"), f"状态列必须在标题左侧: {cols}"
+
+    body = re.search(r'<tbody id="aRows">', text)
+    assert body, "台账行容器不见了"
+    row = re.search(r"list\.map\(\(i, n\) => `(.*?)`\)\.join", text, re.S)
+    assert row, "行模板不见了? 渲染方式变了要同步本守阵"
+    cells = re.findall(r'<td class="([a-z-]+)"', row.group(1))
+    assert cells == ["idx", "stamp", "formc", "statc", "title-cell", "topic", "refs"], f"行模板列序漂移: {cells}"
+
+
+def test_status_filter_not_reseeded_every_poll() -> None:
+    """状态候选值不定长, derive() 每轮数据都得扫一遍补新值 —— 但**只许自动入选一次**:
+    每 30s 轮询都把数据里存在的状态 add 回 S.aStatuses / S.cStatuses, 用户刚取消的状态
+    就被盖回来, 表现是「状态筛选器隔一会儿自己重置」(2026-10-04 用户报; 形态 / issue 类型
+    是定长常量数组、不进这条派生逻辑, 所以只有状态中招)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    block = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert block, "derive() 不见了? 数据派生逻辑搬家要同步本守阵"
+    body = block.group(1)
+
+    guard = "if (statusSeeded.has(s)) continue;"
+    assert guard in body, "缺少 statusSeeded 闸门: 状态会被每轮轮询无条件 add 回选中集合"
+    assert "S.aStatuses.add(s)" in body and "S.cStatuses.add(s)" in body, "自动入选逻辑不见了"
+    assert body.index(guard) < body.index("S.aStatuses.add(s)"), "闸门必须排在自动入选之前"
+    assert body.count("statusSeeded.add(s)") == 1, "入选记账只能落一处, 多处会让闸门失效"
 
 
 # --------------------------------------------------------------------------- 服务层 (127.0.0.1 随机端口)
