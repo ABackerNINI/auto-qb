@@ -7,8 +7,9 @@
 <meta name="issue-stamp" content="26-10-03-1140">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="ops-recheck-false-success">
+<meta name="doc-refs" content="memory-bank/plans/26-10-04-1824-plan-ops-recheck-effect-confirmation.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="full-checking 轮询首跳误判已完成种子校验成功">
 <meta name="issue-summary" content="ops poll 成功分支未要求 seen_checking, 已完成种子 recheck 提交后约 1s 被首跳误判「校验成功」; 规则源同路径会假晋升参考种子">
 <title>full-checking 轮询首跳误判已完成种子校验成功 · bug · 计划外问题</title>
@@ -101,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-03-1140-bug-ops-recheck-false-success</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-03 11:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">ops (core/modules/ops_mod)</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -168,9 +169,11 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-03 11:40 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-04 — 用户指派认领，状态 <strong>In Progress</strong>；修改计划另立 <code>memory-bank/plans/</code> 档案（整体重设计，不打补丁）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-04（基线 ea2f2a51）<strong>仍复现</strong>。三处锚点全部重跑成立: ①<code>ops_mod.py</code> recheck poll 成功分支 <code>if rec.progress &gt;= 1.0:</code>(取证时 :177)仍无 <code>seen_checking</code> 前置, <code>seen_checking</code> 仍只把守失败分支; ②<code>taskqueue.py:147</code> <code>task.next_run = now</code> 入队即到期; ③<code>checking_meta.py</code> <code>CHECK_RESULT_INTERVAL=2.0</code> / <code>CHECK_START_GIVEUP=600.0</code> 未变。生产日志时间线(4 条「校验成功」挤在同一毫秒)与首跳误判链路自洽。</p>
+    <p>复验中额外确认两个同族缺陷(已并入计划范围): <strong>(b) 假失败方向</strong> —— 小种子校验在约 2s 采样间隔内完成时永远见不到 checking, 走到 <code>CHECK_START_GIVEUP</code> 误判「校验启动超时」(rule 源还会计冷却); <strong>(c) checkingResumeData 别名</strong> —— <code>TorrentState.is_checking</code> 覆盖 <code>checkingResumeData</code>(qB 启动期简历校验, 非全量重校验), qB 重启后原 recheck 请求必已丢失, 若把它当生效证据会打开新的假成功路径。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

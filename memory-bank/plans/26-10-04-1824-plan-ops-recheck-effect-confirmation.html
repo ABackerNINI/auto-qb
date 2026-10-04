@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="ops-recheck-false-success">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-04-1824">
+<meta name="doc-updated" content="26-10-04-2020">
+<meta name="doc-refs" content="memory-bank/issues/26-10-03-1140-bug-ops-recheck-false-success.html">
+<title>recheck 轮询生效确认整体重设计 · 修改计划</title>
+<style>
+  :root {
+    --bg: #11151a;
+    --paper: #151b22;
+    --ink: #dde5ec;
+    --dim: #9daebc;
+    --faint: #6b7a88;
+    --hair: #27313b;
+    --hair-soft: #1d262f;
+    --accent: #e2b25c;
+    --accent-dim: #a8834a;
+    --ok: #7fc8a9;
+    --bad: #e07a7a;
+    --code-bg: #0e1318;
+    --mark: #1a2129;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #3d3423; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2b3641; border-radius: 5px; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.62; }
+  .sheet { max-width: 1200px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 208px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 64ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: #241f15; color: var(--accent); border: 1px solid #4a3d26; }
+  section { grid-column: 2; margin-top: 48px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-dim); margin-right: 10px; }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 80ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 80ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; border: 1px solid var(--hair-soft); }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td .mono, .mono { font-family: var(--mono); font-size: 12.5px; }
+  .ok { color: var(--ok); }
+  .bad { color: var(--bad); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 80ch; }
+  .callout.red { border-left-color: var(--bad); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 80ch; }
+  figure { margin: 18px 0 20px; }
+  figcaption { font-family: var(--display); font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); margin-top: 10px; }
+  .flow { font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--dim); white-space: pre; overflow-x: auto; padding: 14px 16px; background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px; }
+  .flow b { color: var(--ink); font-weight: 400; }
+  .flow i { color: var(--accent); font-style: normal; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>结论与拍板点</a>
+    <a href="#s2"><span class="no">02</span>验证结论与问题面</a>
+    <a href="#s3"><span class="no">03</span>根因: 判定混叠</a>
+    <a href="#s4"><span class="no">04</span>既有生效确认基建</a>
+    <a href="#s5"><span class="no">05</span>设计原则</a>
+    <a href="#s6"><span class="no">06</span>方案</a>
+    <a href="#s7"><span class="no">07</span>场景适用性审计</a>
+    <a href="#s8"><span class="no">08</span>行为变更明细</a>
+    <a href="#s9"><span class="no">09</span>测试计划</a>
+    <a href="#s10"><span class="no">10</span>风险与回滚</a>
+    <a href="#s11"><span class="no">11</span>实施切分与验收</a>
+    <a href="#s12"><span class="no">12</span>变更记录</a>
+    <div class="toc-foot">
+      认领 issue 26-10-03-1140<br>
+      状态 Open · 待拍板
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb-clone · 修改计划 · ops 域生效确认</div>
+    <h1>recheck 轮询生效确认整体重设计: 证据门控判定</h1>
+    <p class="lede">把「操作是否生效」与「操作结果如何」两个被混叠的问题拆开: 成功判定必须先有正证据(观测到真正的全量校验态), 判定逻辑提为纯函数使「无证据成功」在结构上不可表达。同族的假失败与 qB 重启别名一并闭合, recheck 提交点升级为实时复核, 模式沉淀为规范 —— 覆盖全部 auto-qb 与 qB 状态脱节场景。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-04-1824-plan-ops-recheck-effect-confirmation</div></div>
+      <div class="item"><div class="k">认领 issue</div><div class="v"><a href="../issues/26-10-03-1140-bug-ops-recheck-false-success.html">26-10-03-1140-bug-ops-recheck-false-success</a></div></div>
+      <div class="item"><div class="k">验证基线</div><div class="v">ea2f2a51</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core/modules/ops_mod · rules/checking_meta</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论与拍板点</h2>
+    <p>本计划认领 issue 26-10-03-1140(recheck 轮询首跳误判已完成种子校验成功), 但<strong>不做点状补丁</strong>: 复验确认该 bug 只是「从陈旧观测直接下确定性结论」这一类缺陷的一个切面 —— 复验同时确认了同路径的假失败缺陷与 qB 重启场景的伪证据别名(§02)。方案把 recheck 轮询的判定重构为<strong>证据门控状态机</strong>, 并与代码库里已有的四处生效确认基建(WEBUI 真值落地 / reannounce 确认 / 跳检 R2 复核 / 直查不回落红线)归一到同一模式(§04), 模式沉淀进知识库(§06 P2)。</p>
+    <p>核心结构变化一句话: 现在的成功分支是 <code>if rec.progress &gt;= 1.0: 成功</code>; 改后成功是<strong>不可达</strong>的, 除非本周期内观测到过真正的全量校验态(<code>checkingDL</code> / <code>checkingUP</code>)。判定本身提为纯函数, 「无证据成功」在函数签名层面无法表达(§05 原则 3)。</p>
+    <h3>拍板点</h3>
+    <table>
+      <tr><th>#</th><th>决策</th><th>推荐</th><th>备选与理由</th></tr>
+      <tr><td class="mono">D1</td><td>小种子「校验已完成但观测不到」的残余风险(§10 R1): 等满 600s 宽限判「校验启动超时」, 经 origin 重提重走决策链(冷却上限 3 次/日兜底)</td><td class="ok">接受</td><td>宽限后盲判成功 —— 拒绝: 假成功正是本 issue 要消灭的东西; 严格 <code>seen_checking</code> 的这个代价是安全方向上最便宜的</td></tr>
+      <tr><td class="mono">D2</td><td>verdict 纯函数与证据谓词的落点</td><td class="ok">rules/checking_meta</td><td>ops_mod 私有 —— checking_meta 是 ops 与 rules 之间的中性叶(依赖方向现成), 测试可直接导入; 决策链 1.5/1.6 将来也可同源取用</td></tr>
+      <tr><td class="mono">D3</td><td>R1 提交点实时复核纳入本轮(P1), 复核异常时 fail-closed(拒绝提交, R2 同款)</td><td class="ok">是</td><td>不做 —— 则重复提交窗口仍开: 源码确证重复提交无数据风险(正在 hash 时 lt 层 no-op; 排队时重扫文件并挪到队尾), 但无效 I/O 与排队推迟真实存在, 且 R1 live 同时承担「取实时基线」职责(见 §6.2); fail-open 则把「拿不到真值」伪装成「可以动手」</td></tr>
+      <tr><td class="mono">D4</td><td>拒绝「状态位变化」(如 uploading→stopped)作为生效证据</td><td class="ok">拒绝</td><td>用户在校验等待期内手动暂停种子会产生同款 delta —— 换一条路 reintroduce 假成功, 与结构化排除目标相悖</td></tr>
+      <tr><td class="mono">D5</td><td>宽限耗尽仲裁直查(qB 是否真在校验)每次超时事件至多 1 次</td><td class="ok">1 次</td><td>不设上限 —— 同步线真断了时退化为周期直查(API 轰炸形状, 违反等价性红线的精神)</td></tr>
+    </table>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证结论与问题面</h2>
+    <h3>2.1 复验(基线 ea2f2a51, 2026-10-04)</h3>
+    <p>issue 三处锚点全部重跑成立: <code>ops_mod.py</code> recheck poll 成功分支(取证时 :177)仍无 <code>seen_checking</code> 前置; <code>taskqueue.py:147</code> <code>task.next_run = now</code> 入队即到期; <code>checking_meta.py</code> 的 <code>CHECK_RESULT_INTERVAL=2.0</code> / <code>CHECK_START_GIVEUP=600.0</code> 未变。生产日志时间线与首跳误判链路自洽。</p>
+    <p>复验额外确认两个同族缺陷, 已并入本计划范围:</p>
+    <table>
+      <tr><th>#</th><th>缺陷</th><th>方向</th><th>机制</th></tr>
+      <tr><td class="mono">a</td><td>已完成种子首跳假成功(issue 本体)</td><td class="bad">假成功</td><td>提交时 progress=1.0 且不在 checking → 首跳(入队即到期)读到 qB 异步应用前的旧快照 → 命中 <code>progress &gt;= 1.0</code> 成功分支 → rule 源假晋升参考种子 + auto_start + keep_progress 续跑; WEB 源日志误导 + R1 在途登记提前释放(约 2s 内可重复提交)</td></tr>
+      <tr><td class="mono">b</td><td>小种子校验「启动超时」假失败</td><td class="bad">假失败</td><td>校验在约 2s 采样间隔内全程完成 → 永远观测不到 checking → 走满 600s 宽限 → 判「校验启动超时」, rule 源还计一次失败冷却(污染决策链 1.6 推断, 靠其假失败自愈兜底)</td></tr>
+      <tr><td class="mono">c</td><td>checkingResumeData 伪证据</td><td class="bad">假成功</td><td><code>TorrentState.is_checking</code> 覆盖 <code>checkingResumeData</code>(qB 启动期简历校验, 不是全量重校验)。qB 重启后原 recheck 请求必已丢失, 轮询若把启动期的 ResumeData 态当「校验启动证据」, 会为一次从未发生的校验开假成功 —— 这是给成功分支补 <code>seen_checking</code> 门控时<strong>必须同时</strong>收窄的别名, 否则修了 a 又开 c</td></tr>
+    </table>
+    <h3>2.2 生产事故时间线重放(2026-10-03 11:16, 4 个 40GB 级原盘)</h3>
+    <table>
+      <tr><th>时刻</th><th>发生什么</th><th>store 快照里的样子</th><th>poll 判定</th></tr>
+      <tr><td class="mono">38.229–.232</td><td>WEB 批量 recheck 提交 4 个种子, 各登记在途 + 发 <code>torrents/recheck</code></td><td>completed(progress=1.0, 非 checking)</td><td>—</td></tr>
+      <tr><td class="mono">~38.3</td><td>命令线触发 P0-5 补刷新; qB 尚未把 recheck 应用到任何一个种子</td><td>仍是 completed</td><td>—</td></tr>
+      <tr><td class="mono">39.331–.332</td><td>主循环 tick 执行 4 个轮询任务(入队即到期后的第一跳)</td><td>仍是 completed(校验前的状态)</td><td class="bad">4 条「校验成功」同毫秒打出, FINISHED 消亡, R1 释放</td></tr>
+      <tr><td class="mono">40+</td><td>qB 才真正开始校验(单盘需数分钟)</td><td>checkingDL/UP, progress 回落爬升</td><td>已无人监听</td></tr>
+    </table>
+    <p>「校验成功」能打出来, 恰恰证明首跳读到的是<strong>校验前的完成态</strong>而非校验后的结果 —— 40GB 原盘不可能 1.1s 校验完, 4 条挤在同一毫秒说明 4 个轮询任务读到的是同一份校验前的旧快照。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>根因: 判定混叠</h2>
+    <h3>3.1 数据流与节拍</h3>
+    <figure>
+      <div class="flow"><b>qBittorrent</b>  recheck 异步应用(队列延迟未知, 无任何 API 可查「已受理」)
+   │  /sync/maindata 增量同步 —— 同步线节拍 sync_interval=1.5s, 只报「变化的种子」
+   ▼
+<b>store 活记录</b>(原地更新, 滞后 ≤ 1.5s + qB 自身应用延迟)
+   │  逐轮 store.get(hash) 读活记录 —— CHECK_RESULT_INTERVAL=2.0s
+   ▼
+<b>poll 闭包</b>(ops_mod.recheck) —— 现状: 成功分支直接对快照观测下结论</div>
+      <figcaption>FIG.1 — recheck 轮询的观测链: 两级滞后(快照节拍 + qB 应用延迟)都在「提交」与「生效」之间</figcaption>
+    </figure>
+    <h3>3.2 两问混叠</h3>
+    <p>轮询每跳其实在回答两个正交的问题: <strong>Q1 操作是否已生效</strong>(recheck 是否被 qB 应用并真的跑过), <strong>Q2 操作结果如何</strong>(校验通过与否)。现代码只有失败分支用 <code>seen_checking</code> 回答了 Q1, 成功分支直接拿 Q2 的观测(<code>progress &gt;= 1.0</code>)下结论。而 Q2 的观测值在「生效前」与「生效后」是<strong>别名</strong>的: 已完成种子的生效前状态(1.0, 非 checking)与校验通过后的状态(1.0, 非 checking)完全相同 —— 仅凭一份快照, 这两个世界不可分辨。</p>
+    <h3>3.3 别名清单(方案必须逐一处置)</h3>
+    <table>
+      <tr><th>别名</th><th>不可分辨的两件事</th><th>处置</th></tr>
+      <tr><td class="mono">A1</td><td>已完成种子「recheck 未生效」vs「recheck 已跑完且通过」—— 可观测状态同为 (progress=1.0, 非 checking)</td><td>成功必须以观测到校验态为前置(原则 2); 歧义落回有界等待(原则 5)</td></tr>
+      <tr><td class="mono">A2</td><td>小种子「recheck 未生效」vs「recheck 已在采样间隔内跑完」—— 任何 ≤2s 间隔的采样都抓不到</td><td>承认观测硬边界: 保守判超时 + 有界重试(D1); 辅以 progress 回落证据缩短真失败的判定(§06)</td></tr>
+      <tr><td class="mono">A3</td><td>「全量校验进行中」vs「qB 启动期简历校验(checkingResumeData)」—— 同落 is_checking</td><td>证据谓词收窄为 {checkingDL, checkingUP}, 明确排除 ResumeData(原则 2)</td></tr>
+      <tr><td class="mono">A4</td><td>「recheck 生效导致状态位变化」vs「用户手动暂停导致状态位变化」</td><td>拒绝状态位 delta 作为证据(D4)</td></tr>
+    </table>
+    <h3>3.4 可观测性硬边界(2026-10-04 子代理源码调研确证, qB master/5.2.4 + libtorrent 2.0.11)</h3>
+    <p>对 qB 官方 WebUI 行为与 forceRecheck 全链路做了源码级调研, 结论收窄并加固了本节判断:</p>
+    <ul>
+      <li><strong>官方 WebUI 不解决、只回避</strong>: 点击 Force Recheck 后仅有(可选)事前确认框 → POST → <code>syncData(100)</code> 立即刷一次增量, 之后完全交给 1.5s 周期 sync 反映状态 —— 无乐观更新、无 pending 指示、无任何事后回执。官方姿势即「不宣称结果、只反映状态」; 我们方案多出来的判定纪律, 恰是自动化工具必须下结论(晋升/auto_start)而官方 UI 不必承担的部分。</li>
+      <li><strong>POST 200 只代表异步投递</strong>: WebAPI recheckAction 是同步 for 循环逐个调 <code>TorrentImpl::forceRecheck()</code>, 每个向 libtorrent 投递异步消息后立即返回; qB 不暂停种子, <code>m_state</code> 要等下一次 alert 驱动的 <code>updateState()</code>(qB 内部刷新节拍默认 1.5s)才翻。</li>
+      <li><strong>「排队等待校验」状态已消亡</strong>: libtorrent 2.x 删除了 <code>queued_for_checking</code>; 排队与正在 hash 在 lt 侧同为 <code>checking_files</code>, qB 一律映射成 <code>checkingUP/checkingDL</code> —— 排队中的种子<strong>同样产出生效证据</strong>。校验队列默认串行(lt <code>active_checking=1</code>, qB 可经 <code>max_active_checking_torrents</code> 偏好并行化), 批量 recheck 时后续种子逐个执行, 但因为等待期就显示 Checking*, 它们立即转入 WAIT_RESULT 长等待而不会误判超时。</li>
+      <li><strong>无任何持久回看信号(源码级否定)</strong>: <code>completion_on</code> 成功不刷新(lt 只在首次完成时写 <code>m_completed_time</code>)、失败也不清零; <code>seen_complete</code> 是 swarm 侧信号与本地校验无关; qB 内部 <code>m_unchecked</code> 与 lt 的 <code>torrent_checked_alert</code> 均未暴露到 WebAPI。「校验做过」只能靠状态转移的<strong>过程</strong>观测, 不能靠任何字段<strong>回看</strong>。</li>
+      <li><strong>每次被应用的 recheck 必经 <code>checkingResumeData</code> → <code>checking*</code> 过程态</strong>: forceRecheck 把 lt 状态置为 checking_resume_data(文件预扫描), 随后进 checking_files。但 ResumeData 与 qB 启动期简历校验同名同态(别名 A3), 仍不作判定证据; 谓词维持 {checkingDL, checkingUP}。</li>
+      <li><strong>sync 是电平采样不是事件缓冲</strong>: 服务端只记「变化的种子 ID」, 序列化发生在轮询时刻 —— 两次轮询之间走完全程的校验(小种子)中间态彻底丢失, 只见终态。这是别名 A2 的 qB 侧结构性根源, 轮询间隔必须远小于最小校验时长。</li>
+      <li><strong>重复提交无风险但有代价</strong>: 正在 hash 时 lt 层 no-op; 排队等待时重跑文件预扫描并挪到队尾 —— 无报错、无数据风险, 代价是无效 I/O 与排队推迟(影响 P1 动机表述, 见 §6.2)。</li>
+      <li><strong>API 面其它候选逐一否定(收尾排查)</strong>: <code>/log/main</code> 无任何校验开始/完成日志(forceRecheck 与 torrent_checked_alert 全链路 0 条 LogMsg, master/5.2.1/4.6.7 三版本逐行核验, 仅 FileErrorAlert 写文件 IO 错误) —— 日志不能当事件缓冲证据; <code>pieceStates</code> 唯一确定性变化是应用瞬间位图清零(可作「已应用」瞬态旁证), 但校验完成后位图回填、窗口同样受电平采样限制, 收益边际不纳入; WebAPI 2.9.3→2.15.1(qB 4.6.7→5.2.4)变更清单无任何校验相关新增。社区实践(qbit_manage fire-and-forget / cross-seed 先停后有界轮询 state)亦无更强信号; qB 官方 issue #12451/#20646 证实「校验过程不可见不可控」是公认痛点。</li>
+    </ul>
+    <p>综合: 观测不可分辨的 corner(A1/A2)是 qB 可观测性的结构上限, 官方实现同样绕不开 —— 方案目标维持不变: <strong>让歧义永远落到安全的一侧</strong>: 无证据不宣称成功, 有界等待 + 有界重试兜底(§05 原则 5)。2026-09-25 的「首样本竞态修复」(现 else 分支)已经为 progress&lt;1.0 的样本确立了这个方向, 本次是把 progress=1.0 的路收进同一纪律。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>既有生效确认基建: 模式已经存在, 只缺一个执行点</h2>
+    <p>复验过程中盘点全库, 发现「异步操作 → 生效确认」在代码库里已有四处成熟实现。recheck 轮询是唯一一个<strong>宣称成败结论却没有证据门控</strong>的判定点:</p>
+    <table>
+      <tr><th>机制</th><th>位置</th><th>体现的模式要素</th></tr>
+      <tr><td>WEB 命令真值落地</td><td class="mono">webui/runtime.py defer_receipt / flush_truths / _truth_landed / _affected_truth</td><td>决定性时刻<strong>直查 qB 不回落快照</strong>(「拿快照当命令后的真值 = 读到命令前的旧值」真机实测 1362ms 滞后); 「取不到就 None, 不伪装」; 效果落地才推真值, 超时宁可让前端回滚</td></tr>
+      <tr><td>强制汇报确认</td><td class="mono">webui check_pending + _confirm_reannounce_result</td><td>提交时抓 <strong>baseline</strong>, 轮询确认效果与基线的差, deadline 判败聚合回执 —— 异步效果确认的完整范本</td></tr>
+      <tr><td>跳检 R2 实时复核</td><td class="mono">ops_mod.skip_check + _poll_until</td><td>破坏性动作动手前<strong>重拉实时状态</strong>, 拒绝发生在零副作用点; 删除/重加均轮询确认生效(qB 删除/重加同为异步)</td></tr>
+      <tr><td>recheck 轮询(本计划对象)</td><td class="mono">ops_mod.recheck poll</td><td class="bad">仅失败分支有 seen_checking 门控; 成功分支、提交点检查(R1 读快照)均无证据要求</td></tr>
+    </table>
+    <p>共性提炼(即 §05 的设计原则来源): <strong>①</strong> 基线在提交点取得; <strong>②</strong> 生效需要正证据, 不认「没坏就是好了」; <strong>③</strong> 决定性时刻直查真值、不回落快照; <strong>④</strong> 歧义有界等待, 等不出就诚实地说「未确认」; <strong>⑤</strong> 拒绝尽量前移到零副作用点。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>设计原则(结构性排除, 非点状补丁)</h2>
+    <ol>
+      <li><strong>两问解耦, 判定不可达原则。</strong>「生效确认」(Q1)是「结果判定」(Q2)的前置状态: 判定只有 WAITING / SUCCESS / FAILED / START_TIMEOUT 四个出口, 其中 SUCCESS 与 FAILED 必须经由「已观测到生效证据」这一状态转移才能到达。没有 Q1 的答案, Q2 的任何观测都只配维持 WAITING。</li>
+      <li><strong>证据谓词单点。</strong>生效证据 = 观测到 <code>state ∈ {checkingDL, checkingUP}</code>(真全量校验态), 单点实现为 <code>is_piece_checking(state)</code>, 明确排除 <code>checkingResumeData</code>(别名 A3)。成功证据本周期内只认它; 辅助失败证据 = <code>progress &lt; baseline_progress</code>(数据缺损签名: 暂停/做种中的种子 progress 只会因校验发现坏块而回落, 别名 A4 的状态位 delta 不作为任何方向的证据)。观测到的真校验态不区分发起者 —— 语义是「该种子数据已被全量校验」, 与谁提交无关。</li>
+      <li><strong>poka-yoke: 判定提为纯函数。</strong>每跳的判定从闭包里抽成全显式入参的纯函数(落点 D2): <code>poll_verdict(seen_checking, progress, baseline_progress, elapsed, giveup) → {WAITING, SUCCESS, FAILED, START_TIMEOUT}</code>。「无证据成功」在签名层面不可表达 —— seen_checking=False 时函数没有任何一条路径返回 SUCCESS, 由全叉积穷举测试钉死(§09 A 组), 而不是靠 reviewer 记住规则。</li>
+      <li><strong>snapshot 与 live 的分工边界。</strong>周期观测(逐轮读 store 活记录)与决定性直查(实时 API)各管一段: 周期观测零 API 成本、覆盖可能长达数小时的校验期(等价性红线原样保留); 直查只出现在三个决定性时刻 —— 提交点取基线 + R1 复核(P1, 每次 1 次)、宽限耗尽仲裁(P0, 每事件 ≤1 次, D5)—— 都是<strong>事件驱动的一次性调用</strong>, 不是周期轮询, 不构成 API 轰炸形状。</li>
+      <li><strong>失败安全方向(风险不对称决定保守侧)。</strong>假成功与假失败的代价不对称: 假成功污染参考种子库(后续跳检引用未经校验的「参考」)+ auto_start 未校验种子, 是语义错误; 假失败只多跑一次小校验 + 计一次当日冷却(次日自愈)。歧义永远不映射成功 —— 宁可要一个标签诚实的「启动超时」, 不要一个标签体面的假「校验成功」。</li>
+    </ol>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>方案</h2>
+    <h3>6.1 P0 — recheck 轮询重构为证据门控状态机</h3>
+    <p><strong>checking_meta.py 新增</strong>(中性叶, 不引新依赖; 落点见 D2):</p>
+<pre><code>PieceCheckingStates = frozenset({"checkingDL", "checkingUP"})
+
+def is_piece_checking(state: str) -> bool:
+    """是否处于真正的全量校验态(排除 qB 启动期 checkingResumeData 伪证据)"""
+    return state in PieceCheckingStates
+
+class PollVerdict(Enum):  # 轮询单跳判定: 唯一出口集, WAITING 之外都是终局
+    WAITING / SUCCESS / FAILED / START_TIMEOUT
+
+def poll_verdict(*, seen_checking, progress, baseline_progress, elapsed,
+                 giveup: float = CHECK_START_GIVEUP) -> PollVerdict:
+    if seen_checking:                      # 生效已确认 -> 结果判定
+        return SUCCESS if progress >= 1.0 else FAILED
+    if progress < baseline_progress:       # 数据缺损签名: 校验必已运行且未通过
+        return FAILED
+    if elapsed >= giveup:                  # 宽限耗尽仍无生效证据(仲裁直查在闭包侧)
+        return START_TIMEOUT
+    return WAITING                         # 歧义(含别名 A1/A2) -> 继续等</code></pre>
+    <p><strong>ops_mod.recheck 改造</strong>(闭包瘦身, 单一写线程模型不变):</p>
+    <ul>
+      <li>提交点捕获 <code>baseline_progress</code>(来源随 P1 升级为实时真值; P1 之前取 store 快照值, 语义偏保守安全)。</li>
+      <li>poll 每跳: 删除守卫与删除路径<strong>原样不动</strong>; <code>is_piece_checking(rec.state)</code> 为真 → <code>seen_checking = True</code> → REQUEUE(此后的等待仍是纯快照观测, 零 API); 否则调 <code>poll_verdict</code> 按判定分派: WAITING → REQUEUE; SUCCESS → 原 on_success / 冷却清除 / auto_start / origin keep_progress 序列; FAILED → 原失败序列; START_TIMEOUT → 走下述仲裁。</li>
+      <li><strong>宽限耗尽仲裁</strong>(唯一新增直查点): 判 START_TIMEOUT 前对 qB 做一次单 hash <code>torrents_info</code> —— 见真校验态 → 延长一次宽限继续快照观测(覆盖暂停旁观 / 同步线故障期间 qB 真在校验的场景), 未见或调用异常 → 判超时(原判败序列不变)。每超时事件至多仲裁 1 次(D5), 日志报真实等待时长。</li>
+      <li>R1 快照检查、冷却、登记/释放、pending/ok/skip/fail 返回面、WEB 回执映射<strong>全部不变</strong>。R1 登记的释放时点从「首跳误判」后移到「真判定」, 重复提交窗口随之闭合。</li>
+    </ul>
+    <figure>
+      <div class="flow">提交: R1 快照检查 → 冷却(rule) → <i>R1 实时复核+取基线(P1)</i> → 登记 → 发送 recheck
+  │
+  ▼  每 CHECK_RESULT_INTERVAL 逐跳(读 store 活记录, 零 API)
+┌─────────────────────────────────────────────────────────┐
+│ rec None ──► 删除路径(不变)                                │
+│ is_piece_checking? ──► seen_checking=True ──► REQUEUE ──┐ │
+│ (checkingResumeData 不算, A3)                           │ │
+│ 否则 poll_verdict(...):                                 │ │
+│   WAITING(歧义 A1/A2) ──────────────► REQUEUE ──────────┤ │
+│   SUCCESS(需 seen_checking) ──► on_success/auto_start   │ │
+│   FAILED ──► 冷却+origin 重置                            │ │
+│   START_TIMEOUT ──► <i>仲裁直查 ≤1 次</i> ─┬─ 见校验态: 延长宽限 │ │
+│                                        └─ 未见/异常: 判败  │ │
+└─────────────────────────────────────────────────────────┘◄┘</div>
+      <figcaption>FIG.2 — 改造后的轮询状态机: SUCCESS/FAILED 不可达除非 seen_checking 或数据缺损签名; 直查只在仲裁点</figcaption>
+    </figure>
+    <h3>6.2 P1 — R1 提交点实时复核(跳检 R2 同款, 决策点 D3)</h3>
+    <p>现状 R1 读快照判断「是否在校验中」, 快照 ≤1.5s 龄: qB 自家 WebUI 刚发起的校验在这个窗口内不可见, 此时提交 recheck 会造成重复提交 —— 源码确证其后果是 no-op(正在 hash)或文件重扫 + 挪队尾(排队中), 无数据风险但属无效 I/O 且推迟自身排队。升级为: 快照检查(快速拒绝路径, 不变) → 冷却(不变) → <strong>单 hash 实时复核</strong>: 种子已不在 → skip(R2 同款文案); <code>is_piece_checking</code> → skip(校验进行中); 否则以<strong>实时值</strong>作 baseline_progress。复核调用异常 → fail-closed 拒绝提交(「提交前实时复核失败(未执行任何变更)」, 与 R2 文案同族)。recheck 与跳检同为动种子文件域的操作, 保护策略拉齐; 成本为每次提交 1 次 API(人工点击与规则决策链都是低频事件)。</p>
+    <h3>6.3 P2 — 模式固化</h3>
+    <ul>
+      <li>新坑档 <code>pitfalls/backend/effect-confirmation.md</code>(三行头元数据): 坑 = 「从陈旧观测直接下确定性结论」; 判据 = 异步操作宣称成败结论必须有证据门控 + 决定性时刻直查不回落快照; 引用本 issue 与四处范本位置。</li>
+      <li>issue 26-10-03-1140 修后补充(实际修法 / 验证方式 / 测试数字), 状态 Fixed(Done); <code>commands run kb.index</code> 重建索引。</li>
+      <li>ops_mod 模块头注释补一行「新异步操作接入 = 新 source, 判定必须走证据门控」—— 该文件已声明「新来源不开旁路」, 本次把判定纪律一并写进同一个单点。</li>
+    </ul>
+    <h3>6.4 明确不做(范围守恒)</h3>
+    <ul>
+      <li>WEBUI 真值落地 / reannounce 确认 / 跳检四阶段: 已是范本, 不动。</li>
+      <li>决策链 1.5 组等待与 1.6 失败推断: 语义不动; 其依赖的「登记提前释放」缝隙随 P0 闭合。</li>
+      <li>auto_start 不加二次生效确认: start 是幂等操作且不宣称结论, 其前置(校验真成功)已由 P0 闭合。</li>
+      <li>WAIT_RESULT 阶段(seen_checking 已立后)不加超时: 大种子合法校验远超 600s, 现有语义保留; 「seen_checking 已立但校验被 qB 重启吞掉不续跑」是既有边界, 记入坑档已知边界, 不在本次范围。</li>
+      <li>taskqueue / store / 状态持久化: 零改动。本次<strong>不新增任何 state_file 键</strong>(baseline / seen_checking / 仲裁标记都是任务闭包内存态, 随轮询生命周期消亡)。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>场景适用性审计: 模式能否覆盖所有异步操作面</h2>
+    <p>对全库「提交异步操作给 qB」的点逐一审计(用户要求覆盖 issue 描述之外的同族场景):</p>
+    <table>
+      <tr><th>#</th><th>异步操作点</th><th>宣称结论?</th><th>现有生效确认</th><th>缺口</th><th>本次处置</th></tr>
+      <tr><td class="mono">1</td><td>recheck 轮询(rule/web)</td><td class="bad">成败结论</td><td>无成功门控</td><td class="bad">缺陷 a/b/c 全集</td><td class="ok">P0 重构</td></tr>
+      <tr><td class="mono">2</td><td>recheck 提交点 R1</td><td>拒绝/放行</td><td>快照(≤1.5s 龄)</td><td>提交竞态窗口</td><td class="ok">P1 实时复核</td></tr>
+      <tr><td class="mono">3</td><td>跳检 skip_check</td><td>成败结论</td><td>R2 实时复核 + _poll_until 确认</td><td>—</td><td>不动(范本)</td></tr>
+      <tr><td class="mono">4</td><td>WEB pause/resume 前端真值</td><td>结论(推给前端)</td><td>truth landed 直查 + 超时不推</td><td>—</td><td>不动(范本)</td></tr>
+      <tr><td class="mono">5</td><td>强制汇报 reannounce</td><td>成败结论</td><td>baseline + 确认轮询 + deadline 判败</td><td>—</td><td>不动(范本)</td></tr>
+      <tr><td class="mono">6</td><td>添加种子 add_torrents</td><td>受理结论(非生效)</td><td>_add_outcome 双响应形态 + pending 语义</td><td>—</td><td>不动</td></tr>
+      <tr><td class="mono">7</td><td>auto_start(校验成功后)</td><td>无结论宣称(幂等)</td><td>—</td><td>—</td><td>不动(前置由 P0 闭合)</td></tr>
+      <tr><td class="mono">8</td><td>start/stop/tag/limits/rename 等 WEB 动作</td><td>无结论宣称</td><td>P0-5 命令后补刷新</td><td>—</td><td>不动</td></tr>
+      <tr><td class="mono">9</td><td>组内等待 1.5 / 失败推断 1.6</td><td>派生判定</td><td>读登记 + 快照; 1.6 有假失败自愈</td><td>登记早释缝隙(随 1 号闭合)</td><td>语义不动</td></tr>
+      <tr><td class="mono">10</td><td>qB 重启 / 断连</td><td>—</td><td>rid 失效全量重建 + giveup 熔断</td><td class="bad">ResumeData 伪证据(3 号别名 c)</td><td class="ok">P0 谓词排除</td></tr>
+    </table>
+    <p><strong>结论: 模式覆盖全部场景。</strong>「证据门控判定 + 决定性时刻直查 + 歧义保守处置」不是为 recheck 发明的新框架, 而是把库里 4 处既有实践(§04)显式化后反哺唯一缺位的执行点; 审计表中其余判定点要么已是该模式的实例, 要么根本不宣称结论(「不宣称」本身就是该模式的最安全形态)。将来新异步操作(HR 联动 / 外部 API / 定时任务)按 ops 模块既定口径以「新 source」接入时, 执行体落在本模块、判定纪律随 P2 写进模块头注释, 天然继承。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>行为变更明细(逐场景 before / after)</h2>
+    <table>
+      <tr><th>场景</th><th>现在</th><th>改后</th></tr>
+      <tr><td>S1 40GB 已完成种子, WEB 批量 recheck(生产事故)</td><td class="bad">首跳 1.1s 假「校验成功」</td><td class="ok">首跳 WAITING; ≤约 5s(qB 内部刷新 1.5s + 同步节拍 + 轮询节拍)内快照见 checkingUP 转入结果等待; 数小时后校验真完成才打「校验成功」; R1 登记全程持有(不可重复提交)</td></tr>
+      <tr><td>S2 同场景 rule 源(含 on_success)</td><td class="bad">假晋升 verified_references + keep_progress 续跑 auto_start</td><td class="ok">真成功才晋升/续跑; 假成功路径在结构上不可达</td></tr>
+      <tr><td>S3 小种子已完成(校验 &lt; 2s), 已暂停</td><td class="bad">首跳假成功(同 S1)</td><td>WAITING 至宽限耗尽 → 仲裁直查(未见) → 「校验启动超时」→ rule 源 origin 重提重走决策链(冷却 ≤3 次/日兜底, 次日重置); 残余风险 R1(D1)</td></tr>
+      <tr><td>S4 小种子部分下载, 校验失败(坏块)且未见 checking</td><td class="bad">等满 600s 误标「校验启动超时」</td><td class="ok">progress &lt; baseline 即判「校验未通过」—— 标签准确, 处置序列与现在相同</td></tr>
+      <tr><td>S5 qB 重启丢请求</td><td>giveup 判超时(不变)</td><td>同左; 启动期 ResumeData 不再可能充当伪证据(别名 c 闭合)</td></tr>
+      <tr><td>S6 qB 自家 WebUI 发起的校验进行中提交 recheck</td><td class="bad">快照未反映时重复提交(重复 I/O / 报错)</td><td class="ok">R1 实时复核拒绝, 零副作用, 文案自解释</td></tr>
+      <tr><td>S7 校验等待期内用户在 qB 里自己 recheck 同一种子</td><td>seen_checking 后按其结果判定</td><td>行为不变; 语义澄清: 证据语义是「数据被全量校验过」, 不区分发起者</td></tr>
+      <tr><td>S8 宽限期内暂停旁观(pause_event)/同步线故障, qB 真在校验</td><td class="bad">600s 后误判「启动超时」</td><td class="ok">仲裁直查见真校验态 → 延长一次宽限, 快照恢复后续判</td></tr>
+      <tr><td>S9 校验期间种子被删除</td><td>删除路径: 清冷却 + origin 重入队</td><td>不变</td></tr>
+      <tr><td>S10 等待期用户手动暂停种子(别名 A4 反例)</td><td class="bad">若采用状态 delta 证据会误判成功</td><td class="ok">delta 不作为证据(D4), 维持 WAITING 至真校验态出现或宽限耗尽</td></tr>
+      <tr><td>S11 批量 recheck 排队(qB 校验队列默认串行, 40GB×N 逐个执行)</td><td class="bad">排在后面的种子迟迟「无动静」, 若 giveup 语义按旧快照判会误判「启动超时」</td><td class="ok">源码确证排队中的种子 lt 侧同为 checking_files, qB 映射 checkingUP —— 等待期即产出生效证据, 提交后立即转入 WAIT_RESULT 长等待(无超时), 轮到它时真校验、真判定</td></tr>
+    </table>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>测试计划(盯死)</h2>
+    <p>所有新用例同步所在文件头部「## 测试计划」清单(仓库硬约束)。测试基建沿用 <code>tests/test_ops.py</code> 的 <code>FakeClient / FakeTorrent / seed_store / run_queue</code> 模式, 不连真 qB。</p>
+    <h3>A. verdict 纯函数全叉积(test_ops 或独立 checking_meta 测试组, 落点随 D2)</h3>
+    <ul>
+      <li>逐行表测: (piece_checking × seen_checking × progress × baseline × elapsed) 全组合的期望 verdict —— 关键行: <code class="bad">(seen=F, p=1.0, baseline=1.0, 未超宽限) → WAITING</code>(本 issue 的事故行, 现在返回 SUCCESS); <code class="ok">(seen=F, p=1.0, 超宽限) → START_TIMEOUT</code>; (seen=T, p≥1) → SUCCESS; (seen=T, p&lt;1) → FAILED; (seen=F, p&lt;baseline) → FAILED。</li>
+      <li>性质断言(穷举保证): SUCCESS <strong>当且仅当</strong> seen_checking=True; 无任何入参组合能绕过。</li>
+      <li><code>is_piece_checking</code>: 三个 checking 态中 ResumeData 必须为假, checkingDL/checkingUP 为真; 非 checking 状态全假。</li>
+    </ul>
+    <h3>B. 事故重放与集成(run_queue 推进真实时钟)</h3>
+    <ul>
+      <li><code>test_ops_recheck_completed_torrent_first_hop_no_false_success</code>: 已完成种子提交 → 第一跳(入队即到期)断言: 无「校验成功」日志、不晋升、登记仍持有、任务未消亡; 第二跳见 checkingDL → REQUEUE; 第三跳回到 completed → SUCCESS 序列正确。</li>
+      <li>生产时间线等价重放: 提交后快照冻结两拍(模拟 qB 未应用)再翻 checking, 结果判定不提前。</li>
+      <li>rule 源全序列: 假晋升不可能(提交→首跳→校验完成, on_success 调用次数断言为 1 且仅发生在证据之后)。</li>
+    </ul>
+    <h3>C. 宽限仲裁直查</h3>
+    <ul>
+      <li>超宽限 + live 见 checkingDL → 判定延期(REQUEUE), 不判败; 之后快照跟上一判 SUCCESS。</li>
+      <li>超宽限 + live 未见校验态 → START_TIMEOUT 判败序列不变(冷却/origin 重入队回归断言)。</li>
+      <li>超宽限 + live 调用异常 → 同上判败(异常不炸轮询); <strong>仲裁直查次数断言 = 1</strong>(D5, 延期后的第二次宽限耗尽不再直查)。</li>
+    </ul>
+    <h3>D. R1 实时复核(P1)</h3>
+    <ul>
+      <li>快照非 checking + live checkingDL → 拒绝且未发 recheck; live 空 → 拒绝(R2 文案族); live 异常 → fail-closed 且未发 recheck。</li>
+      <li>baseline 取自 live 真值: 快照 progress 与 client.torrents 不一致时, 后续 progress 回落证据按 live 基线判定。</li>
+    </ul>
+    <h3>E. 红线守护</h3>
+    <ul>
+      <li>等价性红线断言: seen_checking 立起之后的整个 WAIT_RESULT 阶段(FakeClient.calls 计数)<strong>零</strong> torrents_info 调用 —— 周期观测必须仍是纯快照读。</li>
+      <li>逐轮读 store 活记录语义不变(闭包不缓存字段值的现有断言保留)。</li>
+    </ul>
+    <h3>F. 回归面</h3>
+    <ul>
+      <li>现有 <code>test_ops_web_recheck_registers_and_releases</code> / <code>..._rejected_when_*</code> / <code>..._no_cooldown_no_promotion</code> / <code>test_ops_rule_recheck_cooldown_and_requeue_regression</code> / <code>..._poll_torrent_deleted_no_origin</code>: 语义不变, 应原样通过(其中 giveup 用例补 live 应答)。</li>
+      <li><code>test_checking.py</code> 冷却 / 去重 / 组串行化用例回归; <code>test_modules_p4.py</code> ops 委托面回归。</li>
+      <li>收尾跑 <code>commands run test.full</code>, 实测数字回填 issue 修后补充与基线切片。</li>
+    </ul>
+  </section>
+
+  <section id="s10">
+    <h2><span class="no">10</span>风险与回滚</h2>
+    <table>
+      <tr><th>#</th><th>风险</th><th>评估与处置</th></tr>
+      <tr><td class="mono">R1</td><td>小种子「校验完成但不可观测」corner(S3): 从假成功变为「启动超时」标签 + 有界重试</td><td>接受(D1)。无假宣称; rule 源最多 3 次重复小校验/日(冷却兜底), WEB 源只有一条诚实的超时警告; 次日自愈。触发面 = 校验全程 &lt; 约 2s(≈SSD 上 1GB 级以下)且种子已暂停 —— 大种子必然观测到 checking</td></tr>
+      <tr><td class="mono">R2</td><td>progress &lt; baseline 失败证据的误判面(校验等待期内文件被移走/磁盘故障)</td><td>罕见; 误判方向是「计一次失败冷却」, 次日重置, 且该种子状态本身确实已坏 —— 标签不冤</td></tr>
+      <tr><td class="mono">R3</td><td>API 调用面变化</td><td>每次 recheck 提交 +1(P1, 低频事件); 每次超时事件 ≤1(P0 仲裁); 校验等待期(可能数小时)仍为零 API —— 红线不破</td></tr>
+      <tr><td class="mono">R4</td><td>行为兼容</td><td>ActionResult 返回面 / WEB 回执映射 / state_file 结构(零新键)均不变; 日志文案变化 2 处(超时日志报真实时长、S4 场景标签由「启动超时」纠正为「校验未通过」)</td></tr>
+      <tr><td class="mono">R5</td><td>黄金法则核对</td><td>幂等(判定是纯函数, 副作用序列不变); 保守默认(歧义落保守侧); fail-fast(不新增配置键, 无 validate_config 变更); 单一写线程(闭包仍是主循环线程任务, 非本地变量归闭包, 无新共享态)</td></tr>
+    </table>
+    <p><strong>回滚</strong>: 改动集中在 <code>checking_meta.py</code>(纯新增)+ <code>ops_mod.py</code>(poll 与提交点)+ 测试, 单提交可整体 revert; 无数据迁移、无 state 结构变更, 回滚无残留。</p>
+  </section>
+
+  <section id="s11">
+    <h2><span class="no">11</span>实施切分与验收</h2>
+    <table>
+      <tr><th>步</th><th>内容</th><th>出口条件</th></tr>
+      <tr><td class="mono">P0</td><td>checking_meta: is_piece_checking + PollVerdict + poll_verdict → ops_mod: baseline 捕获 + poll 闭包瘦身 + 宽限仲裁 → 测试 A/B/C/E + 回归 F</td><td>全叉积测试与事故重放全绿; test.full 无回归; 红线守护断言通过</td></tr>
+      <tr><td class="mono">P1</td><td>R1 实时复核 + live 基线 → 测试 D + 回归</td><td>D 组全绿; 提交面 ActionResult 语义不变</td></tr>
+      <tr><td class="mono">P2</td><td>坑档 effect-confirmation.md + 模块头注释纪律 + issue 修后补充(Fixed) + kb.index</td><td>认领链双闭合; 索引重建</td></tr>
+    </table>
+    <h3>验收(生产口径)</h3>
+    <ol>
+      <li>对 4 个 40GB 级已完成种子批量 recheck: 日志不再出现提交后 1–2s 内的「校验成功」; 「校验成功」出现时 qB 界面上该校验确已完成; 期间重复提交被 R1 拒绝。</li>
+      <li>rule 源同场景: verified_references 只在真校验完成后增长。</li>
+      <li>全量测试通过并把实测数字写进基线切片。</li>
+    </ol>
+  </section>
+
+  <section id="s12">
+    <h2><span class="no">12</span>变更记录</h2>
+    <ul>
+      <li>2026-10-04 18:24 — 初稿(状态 Open, 待拍板)。认领 issue 26-10-03-1140; 复验确认缺陷 a 并新确认同族缺陷 b/c; 方案 = 证据门控轮询重构(P0)+ R1 实时复核(P1)+ 模式固化(P2)。</li>
+      <li>2026-10-04 20:20 — 并入 qB 源码调研结论(用户要求子代理调研官方 WebUI 解法与 WebAPI 彻底解法; 三个子代理并行, qB master/5.2.4/4.6.7 + libtorrent 2.0.11 源码经镜像逐行核验): §3.4 重写为源码确证的可观测性硬边界 —— 官方 WebUI 不宣称只反映(POST 后仅 syncData(100))/无持久回看信号(completion_on·seen_complete 双向否定)/排队与实检同态 checkingUP/sync 电平采样/重复提交 no-op 或重扫/log·main 无校验日志/pieceStates 仅瞬态旁证/WebAPI 2.9.3→2.15.1 无相关新增/社区无更强实践(官方 issue #12451·#20646 佐证)。D3 与 §6.2 动机按「重复提交无风险但有代价」修正; S1 时界精确化(≤约 5s); 新增 S11 批量排队场景(排队即证据, 无误判超时)。方案结构不变, 拍板点 D1–D5 不变。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-04-1824-plan-ops-recheck-effect-confirmation.html · 认领 26-10-03-1140-bug-ops-recheck-false-success · 拍板后进入实施, 状态随实施推进在「变更记录」留痕
+  </footer>
+
+</div>
+</body>
+</html>

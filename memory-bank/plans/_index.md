@@ -13,6 +13,7 @@
 
 ## Open
 
+- [26-10-04-1824] [recheck 轮询生效确认整体重设计 · 修改计划](26-10-04-1824-plan-ops-recheck-effect-confirmation.html) — `ops-recheck-false-success`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
 - [26-09-30-0931] [memory-bank 取时间标准化 · 工程计划 · auto-qb](26-09-30-0931-plan-memory-bank-timekit.html) — `memory-bank-timekit`
