@@ -62,12 +62,25 @@
 - test_idle_24h_line_count_z_vs_zero_rows: 行数影响: 全空闲 24h@30s, v1 零行方案 2880 行 vs z 行方案 144 行(600s 封口节奏), 体积比 >10x
 - test_read_series_z_grid_expansion_end_to_end: 端到端打通(P3, plan 26-10-04-0721 §04.1) —— append_point + append_z_run 落盘 -> read_series -> grid 覆盖展开: 空闲段 0 平线 + totals 空闲 delta=0 链不断
 
+v3 纯函数区(plan 26-10-04-1957 S1, 全部不接线 —— 写侧仍 v2, 既有行为零改动):
+- test_v3_day_roundtrip_with_drift_rows: S1 验收 roundtrip —— 序列化 -> 解析 -> 游标 dt 链推算与原始采样实测序列逐一相等(含显式 dt_ms 漂移行 / z+n 相邻游程 / 标称缺省行), 多块/obs 形态逐项核对
+- test_v3_amortized_run_chain_self_consistent: 均摊定位 —— 非块首游程槽均摊 [锚点, 锚点+dt] 且末槽恰在游程实测终点; 其后首 r 的 dt 以游程终点为基准(链式自洽); 块首游程端点含(首槽 = B.start); 缺省游程按标称栅格
+- test_v3_parse_bad_line_family_cursor_not_advanced: v3 坏行族逐项计坏(v1/v2 头行整文件不匹配 / r 列数 {5,6} 之外 / dt_ms 非法族(0/负/超上界/非数值) / 负速率 / run_len<1 / interval<1 / 块头前数据行), 好行不受牵连且游标不推进(坏行前后好行推算时刻与干净文件一致)
+- test_v3_no_equal_interval_drift_immunity: 纯等间隔路径不存在 —— 构造 d̄>0 全显式 dt 序列, dt 链逐点等于实测, 等间隔推算漂移远超 tol(证无累积误差)
+- test_v3_bucket_width_effective_dt: 桶宽纯函数 max(1, ceil(有效dt)) —— 显式 dt / 缺省 / 游程均摊 span/run_len 各形态
+- test_v3_paths_dates_and_window: 按天目录与路径解析(§06.2) —— 系列 key <-> 目录双向 / 日期 <-> 文件名(非法形状与非真实日期拒收) / agg.dat 路径 / 窗口 -> 涉及日期集合(跨月/跨年) / day_epoch/month_epoch 本地 00:00 / 非法键与倒置窗口 fail-fast
+- test_v3_agg_roundtrip_and_legacy_8col: agg.dat roundtrip —— hour/day/month 9 列混存解析按 kind 分列升序 / 同 epoch 重复取最后一行 / 8 列旧行兜底 cov_s=3600 / format_agg_row 逐列往返 / 非法 kind fail-fast
+- test_v3_hour_agg_dt_weighted_degenerate_to_v2: dt 加权 hour 聚合(§04.1) —— avg=round(Σ(rate x dt)/cov) / cov 上界 3600 / totals 级末快照 / dt_i 恒等 interval_s 时严格退化为现行 _aggregate_bucket 公式(对照断言钉住) / 空样本与零覆盖 fail-fast
+- test_v3_rollup_strict_level_by_level: 逐级派生(§04.1) —— day 从 hour 行 / month 从 day 行: avg 按 cov 加权 / max 取下级最大 / totals 级末快照 / cov=Σ下级.cov / kind 限 day/month 与空下级/零覆盖 fail-fast
+- test_v3_format_fail_fast_and_torn_tail: 写侧序列化纪律 —— dt_ms 非法(0/负/超上界/bool)与 interval_s 非法 fail-fast; 解析侧撕裂尾半行豁免口径(完整末行无换行不算 torn, 残缺末行记 torn_tail 且坏行计数)
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
 import json
 import os
 import threading
+from datetime import datetime
 
 import pytest
 
@@ -77,20 +90,53 @@ from auto_qb.core.taskqueue import Task
 from auto_qb.core.traffic_grid import BucketObs, build_grid, rate_points, series_bucket_obs, series_totals_points
 from auto_qb.core.traffic_store import (
     CORRUPT_SUFFIX,
+    DRIFT_TOL_MS,
+    DT_MS_MAX,
     HEADER_LINE,
     HEADER_LINE_V2,
+    HEADER_LINE_V3,
     HOUR_SECONDS,
     HourRow,
     REWRITE_RETRIES,
     RawRow,
     TRAFFIC_DIR_NAME,
+    TRAFFIC_V3_DIR_NAME,
     ZRUN_MAX_SPAN_S,
     ZRow,
+    AggRow,
     TrafficDatStore,
+    V3Block,
+    V3HourSample,
+    V3NullRun,
+    V3Sample,
+    V3ZeroRun,
+    format_agg_row,
     format_hour_row,
     format_raw_row,
+    format_v3_b_row,
+    format_v3_day_text,
+    format_v3_n_row,
+    format_v3_r_row,
+    format_v3_z_row,
     format_z_row,
     parse_dat_text,
+    parse_v3_agg_text,
+    parse_v3_day_text,
+    v3_agg_file_path,
+    v3_block_slots,
+    v3_bucket_width_s,
+    v3_date_str_epoch,
+    v3_day_epoch,
+    v3_day_file_date,
+    v3_day_file_path,
+    v3_epoch_date_str,
+    v3_hour_agg,
+    v3_month_epoch,
+    v3_rel_dir_to_key,
+    v3_rollup_agg,
+    v3_root_dir,
+    v3_series_dir,
+    v3_window_dates,
 )
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
@@ -1315,3 +1361,347 @@ def test_read_series_z_grid_expansion_end_to_end(tmp_path):
     assert totals[g.buckets.index(base)] == {"t": base, "dl": None, "up": None}  # 窗首基线缺失
     for k in range(1, 11):  # 空闲段 delta=0, 链不断
         assert totals[g.buckets.index(base + 30 * k)] == {"t": base + 30 * k, "dl": 0, "up": 0}, k
+
+
+# ---------- v3 纯函数区(plan 26-10-04-1957 S1): 全部不接线, 写侧仍 v2 ----------
+
+
+def _v3_day_text(lines) -> str:
+    """手工构造 v3 天文件文本(行列表逐行写, \\n 行尾)"""
+    return "\n".join(lines) + "\n"
+
+
+def test_v3_day_roundtrip_with_drift_rows():
+    """S1 验收 roundtrip: 序列化 -> 解析 -> 游标 dt 链推算与原始采样实测序列逐一相等
+    (含显式 dt_ms 漂移行 / z+n 相邻游程 / 标称缺省行); 多块与 obs 形态逐项核对"""
+    interval = 30
+    # 原始实测序列(稳态漂移 d=0.4s > tol=250ms -> 漂移行写显式 dt_ms; 游程内均匀间距
+    # 与引导间隔一致 —— 均摊定位在该前提下逐点精确)
+    recs = [
+        V3Sample(10, 20, 1000, 2000),  # r0 块首 @1000.0(无 dt)
+        V3Sample(11, 21, 1100, 2100, dt_ms=30400),  # r1 @1030.4
+        V3Sample(12, 22, 1200, 2200, dt_ms=30400),  # r2 @1060.8
+        # z 游程 3 槽 @1091.6/1122.4/1153.2: dt = 末槽 - 链上锚点(r2) = 92.4s
+        V3ZeroRun(3, 1200, 2200, dt_ms=92400),
+        # 相邻 n 游程 2 槽 @1184.0/1214.8: dt 含引导间隔 = 1214.8 - 1153.2 = 61.6s
+        V3NullRun(2, dt_ms=61600),
+        V3Sample(13, 23, 1300, 2300, dt_ms=30800),  # r3 @1245.6
+        V3Sample(14, 24, 1400, 2400, dt_ms=30800),  # r4 @1276.4
+        V3Sample(15, 25, 1500, 2500),  # r5 标称缺省行 @1306.4
+        V3Sample(16, 26, 1600, 2600, dt_ms=30400),  # r6 @1336.8
+    ]
+    expected_ts = [1000.0, 1030.4, 1060.8, 1091.6, 1122.4, 1153.2, 1184.0, 1214.8, 1245.6, 1276.4, 1306.4, 1336.8]
+    block = V3Block(start_epoch=1000, interval_s=interval, records=tuple(recs))
+    text = format_v3_day_text("global", (block, ))
+    lines = text.splitlines()
+    assert lines[0] == HEADER_LINE_V3 and lines[1] == "key,global"
+    assert lines[2] == "B,1000,30" and lines[3] == "r,10,20,1000,2000" and lines[6] == "z,3,1200,2200,92400"
+    parsed = parse_v3_day_text(text)
+    assert parsed.key == "global" and parsed.bad_lines == 0 and parsed.data_lines == 11 and not parsed.torn_tail
+    assert len(parsed.blocks) == 1 and parsed.blocks[0] == block  # 解析还原 == 原始行型
+    slots = v3_block_slots(parsed.blocks[0])
+    assert len(slots) == 12  # 7 r 槽 + 3 z 槽 + 2 n 槽
+    assert [s.ts for s in slots] == pytest.approx(expected_ts, abs=1e-6)
+    # obs 形态: r 槽带观测 / z 槽速率恒 0 且 totals 快照恒定 / n 槽 null
+    assert slots[0].obs == (10, 20, 1000, 2000) and not slots[0].is_zero
+    assert all(s.obs == (0, 0, 1200, 2200) and s.is_zero for s in slots[3:6])
+    assert all(s.obs is None and not s.is_zero for s in slots[6:8])
+    # 有效 dt: r1 = 显式 30.4s / 游程槽 = 均摊 30.8s / r5 缺省 = 30.0s
+    assert slots[1].dt_s == pytest.approx(30.4, abs=1e-9)
+    assert slots[3].dt_s == pytest.approx(30.8, abs=1e-9)
+    assert slots[10].dt_s == 30.0
+    # 多块: 第二块独立游标(各自 B.start 起算)
+    b2 = V3Block(
+        start_epoch=5000,
+        interval_s=60,
+        records=(V3Sample(1, 1, 1, 1), V3Sample(1, 1, 1, 1, dt_ms=61000)),
+    )
+    parsed2 = parse_v3_day_text(format_v3_day_text("torrent:ABC", (block, b2)))
+    assert parsed2.key == "torrent:ABC" and len(parsed2.blocks) == 2
+    assert [s.ts for s in v3_block_slots(parsed2.blocks[1])] == pytest.approx([5000.0, 5061.0], abs=1e-6)
+
+
+def test_v3_amortized_run_chain_self_consistent():
+    """均摊定位(§02.3): 非块首游程槽均摊 [锚点, 锚点+dt] 且末槽恰在游程实测终点;
+    其后首 r 的 dt 以游程终点为基准(链式自洽); 块首游程端点含(首槽 = B.start);
+    缺省游程按标称栅格"""
+    # 非块首显式 z 游程: 锚点 1000, advance 90s -> 槽 1030/1060/1090(末槽 = 锚点+dt)
+    b = V3Block(
+        start_epoch=1000,
+        interval_s=30,
+        records=(V3Sample(1, 1, 1, 1), V3ZeroRun(3, 5, 6, dt_ms=90000), V3Sample(2, 2, 2, 2, dt_ms=30000)),
+    )
+    slots = v3_block_slots(b)
+    assert [s.ts for s in slots] == pytest.approx([1000.0, 1030.0, 1060.0, 1090.0, 1120.0], abs=1e-9)
+    assert slots[1].ts == pytest.approx(1000.0 + 90.0 / 3, abs=1e-9)  # 首槽在锚点 + dt/len(非锚点)
+    assert slots[3].ts == pytest.approx(1000.0 + 90.0, abs=1e-9)  # 末槽恰在游程实测终点
+    # 其后首 r 的 dt 以游程终点(1090, 实测)为基准: dt_ms=30000 -> 1120, 链式自洽
+    assert slots[4].ts == pytest.approx(1090.0 + 30.0, abs=1e-9)
+    # 缺省 z 游程(非块首, 前置 r 行): 标称栅格(槽 = 锚点 + k x interval, k=1..len), 其后 r 标称接续
+    b2 = V3Block(
+        start_epoch=1000,
+        interval_s=30,
+        records=(V3Sample(1, 1, 1, 1), V3ZeroRun(2, 5, 6), V3Sample(1, 1, 1, 1)),
+    )
+    assert [s.ts for s in v3_block_slots(b2)] == pytest.approx([1000.0, 1030.0, 1060.0, 1090.0], abs=1e-9)
+    # 块首游程: 首槽 = B.start(端点含), 槽距 = dt/(len-1), 游标终点 = 末槽
+    b3 = V3Block(
+        start_epoch=5000,
+        interval_s=30,
+        records=(V3ZeroRun(3, 5, 6, dt_ms=60000), V3Sample(1, 1, 1, 1, dt_ms=30000)),
+    )
+    slots3 = v3_block_slots(b3)
+    assert [s.ts for s in slots3] == pytest.approx([5000.0, 5030.0, 5060.0, 5090.0], abs=1e-9)
+    # 相邻游程(z -> n, R2 纪律): n 的 dt 含引导间隔(链上锚点 = 前游程终点), 槽均摊精确
+    b4 = V3Block(
+        start_epoch=1000,
+        interval_s=30,
+        records=(V3Sample(1, 1, 1, 1), V3ZeroRun(2, 5, 6, dt_ms=60000), V3NullRun(2, dt_ms=61000)),
+    )
+    assert [s.ts for s in v3_block_slots(b4)] == pytest.approx([1000.0, 1030.0, 1060.0, 1090.5, 1121.0], abs=1e-9)
+
+
+def test_v3_parse_bad_line_family_cursor_not_advanced():
+    """v3 坏行族逐项计坏(§02.3): v1/v2 头行整文件不匹配 / r 列数 {5,6} 之外 /
+    dt_ms 非法族(0/负/超上界/非数值) / 负速率 / run_len<1 / interval<1 / 块头前数据行;
+    好行不受牵连且游标不推进(坏行前后好行推算时刻与干净文件一致)"""
+    good_head = [HEADER_LINE_V3, "key,global", "B,1000,30"]
+    bad_lines = [
+        "r,1,1,1",  # r 4 列(列数 {5,6} 之外)
+        "r,1,1,1,1,1,1",  # r 7 列
+        "r,1,1,1,1,0",  # dt_ms = 0(须正整数)
+        "r,1,1,1,1,-5",  # dt_ms 负
+        f"r,1,1,1,1,{DT_MS_MAX + 1}",  # dt_ms 超上界
+        "r,1,1,1,1,abc",  # dt_ms 非数值
+        "r,-1,1,1,1",  # 负速率
+        "z,0,1,1",  # run_len < 1
+        "z,2,1",  # z 3 列
+        "z,2,1,1,0",  # z dt_ms = 0
+        "n,0",  # n run_len < 1
+        "n,2,1,1",  # n 4 列
+        f"n,2,{DT_MS_MAX + 1}",  # n dt_ms 超上界
+        "garbage",  # 未知行型
+        "key,other",  # 重复 key 行
+        "B,1000,0",  # interval_s < 1 -> 整行坏(不开新块)
+    ]
+    good_tail = ["r,2,2,2,2", "B,2000,60", "r,3,3,3,3,45000"]
+    text = _v3_day_text(good_head + ["r,1,1,1,1"] + bad_lines + good_tail)
+    parsed = parse_v3_day_text(text)
+    assert parsed.key == "global" and parsed.bad_lines == len(bad_lines) and parsed.data_lines == 22
+    # 坏行不落 records 且游标不推进: 块 1 = B(1000,30) + r@1000 + r@1030(坏 B 未开新块)
+    assert len(parsed.blocks) == 2
+    assert [len(b.records) for b in parsed.blocks] == [2, 1]
+    assert [s.ts for s in v3_block_slots(parsed.blocks[0])] == pytest.approx([1000.0, 1030.0], abs=1e-9)
+    assert [s.ts for s in v3_block_slots(parsed.blocks[1])] == pytest.approx([2000.0], abs=1e-9)
+    # 干净文件对照: 同一批好行的推算时刻完全一致(坏行不影响游标链)
+    clean = parse_v3_day_text(_v3_day_text(good_head + ["r,1,1,1,1"] + good_tail))
+    assert [s.ts for b in clean.blocks
+            for s in v3_block_slots(b)] == [s.ts for b in parsed.blocks for s in v3_block_slots(b)]
+    # dt_ms 恰好上界合法
+    ok = parse_v3_day_text(_v3_day_text(good_head + [f"r,1,1,1,1,{DT_MS_MAX}"]))
+    assert ok.bad_lines == 0 and ok.blocks[0].records[0].dt_ms == DT_MS_MAX
+    # 旧版头行(含 v1/v2)整文件不匹配格式 —— R2 换代, v3 读侧不设双读
+    for head in (HEADER_LINE, HEADER_LINE_V2, "key,global"):
+        old = parse_v3_day_text(_v3_day_text([head, "key,global", "B,1000,30", "r,1,1,1,1"]))
+        assert old.key is None and old.blocks == () and old.bad_lines == 4 and old.data_lines == 4
+
+
+def test_v3_no_equal_interval_drift_immunity():
+    """纯等间隔路径不存在(§02.3): 构造 d̄>0 全显式 dt 序列 —— dt 链逐点等于实测,
+    等间隔推算(start + i x interval)漂移远超 tol(证无累积误差)"""
+    interval, n = 30, 20
+    actual = [2000.0 + i * 30.4 for i in range(n)]
+    recs = tuple(V3Sample(i, i, i, i, dt_ms=None if i == 0 else 30400) for i in range(n))
+    parsed = parse_v3_day_text(format_v3_day_text("global", (V3Block(2000, interval, recs), )))
+    slots = v3_block_slots(parsed.blocks[0])
+    assert [s.ts for s in slots] == pytest.approx(actual, abs=1e-6)  # dt 链逐点相等
+    equal_interval = [2000.0 + i * interval for i in range(n)]
+    max_drift = max(abs(a - e) for a, e in zip(actual, equal_interval))
+    assert max_drift > 1.0  # 等间隔推算在块尾漂移 > 1s(远超 tol=250ms) —— 该路径不存在于实现
+    assert DRIFT_TOL_MS == 250  # D2: 模块常量非配置键
+
+
+def test_v3_bucket_width_effective_dt():
+    """桶宽纯函数(§02.3): 逐记录 max(1, ceil(有效dt)); 有效dt = 显式 dt / 缺省 interval /
+    游程均摊 span/run_len"""
+    assert v3_bucket_width_s(0.25) == 1  # 亚秒 -> 下限 1
+    assert v3_bucket_width_s(30.0) == 30
+    assert v3_bucket_width_s(30.5) == 31  # 显式 dt 30500ms -> ceil
+    assert v3_bucket_width_s(86.4) == 87
+    b = V3Block(
+        start_epoch=1000,
+        interval_s=30,
+        records=(
+            V3Sample(1, 1, 1, 1), V3Sample(2, 2, 2, 2, dt_ms=30500), V3ZeroRun(3, 5, 6, dt_ms=90000), V3NullRun(2)
+        ),
+    )
+    slots = v3_block_slots(b)
+    # r0 缺省 30 / r1 显式 31 / z 均摊 90/3=30 x3 / n 缺省 30 x2(块首 r 槽宽 = 标称 interval)
+    assert [v3_bucket_width_s(s.dt_s) for s in slots] == [30, 31, 30, 30, 30, 30, 30]
+
+
+def test_v3_paths_dates_and_window(tmp_path):
+    """按天目录与路径解析(§06.2): 系列 key <-> 目录双向 / 日期 <-> 文件名 / agg.dat
+    路径 / 窗口 -> 涉及日期集合(跨月/跨年) / day_epoch/month_epoch 本地 00:00 /
+    非法键与倒置窗口 fail-fast"""
+    data_dir = str(tmp_path)
+    root = os.path.join(data_dir, TRAFFIC_V3_DIR_NAME)
+    assert v3_root_dir(data_dir) == root
+    assert v3_series_dir(data_dir, "global") == os.path.join(root, "global")
+    assert v3_series_dir(data_dir, "torrent:ABC123") == os.path.join(root, "torrents", "ABC123")
+    assert v3_day_file_path(data_dir, "global", "2026-10-04") == os.path.join(root, "global", "2026-10-04.dat")
+    assert v3_agg_file_path(data_dir, "torrent:ABC123") == os.path.join(root, "torrents", "ABC123", "agg.dat")
+    # 反向: 相对目录 -> 系列键(两种分隔符都认); 非系列目录 None
+    assert v3_rel_dir_to_key("global") == "global"
+    assert v3_rel_dir_to_key("torrents/ABC123") == "torrent:ABC123"
+    assert v3_rel_dir_to_key("torrents\\ABC123") == "torrent:ABC123"
+    assert v3_rel_dir_to_key("torrents") is None and v3_rel_dir_to_key("other") is None
+    assert v3_rel_dir_to_key("torrents/../evil") is None
+    # 文件名 <-> 日期: 形状与非真实日期都拒收
+    assert v3_day_file_date("2026-10-04.dat") == "2026-10-04"
+    assert v3_day_file_date("agg.dat") is None
+    assert v3_day_file_date("2026-10-4.dat") is None and v3_day_file_date("2026-13-01.dat") is None
+    assert v3_day_file_date("x.corrupt") is None
+    # 本地 00:00 口径(day_epoch/month_epoch)
+    day0 = int(datetime(2026, 10, 4).timestamp())
+    assert v3_date_str_epoch("2026-10-04") == day0
+    assert v3_epoch_date_str(day0) == "2026-10-04"
+    assert v3_day_epoch(day0 + 3600) == day0
+    assert v3_month_epoch(day0) == int(datetime(2026, 10, 1).timestamp())
+    # 窗口 -> 日期集合: 跨日/跨年含两端所在日; 单日窗口
+    assert v3_window_dates(day0 - 3600, day0 + 3600) == frozenset({"2026-10-03", "2026-10-04"})
+    ny = int(datetime(2027, 1, 1).timestamp())
+    assert v3_window_dates(ny - 3600, ny + 3600) == frozenset({"2026-12-31", "2027-01-01"})
+    assert v3_window_dates(day0, day0) == frozenset({"2026-10-04"})
+    # 跨月窗口(月末日 23:00 -> 次月 1 日 01:00)
+    month_end = int(datetime(2026, 9, 30).timestamp())
+    assert v3_window_dates(month_end - 3600,
+                           month_end + 25 * 3600) == frozenset({"2026-09-29", "2026-09-30", "2026-10-01"})
+    # fail-fast: 非法键 / 非法日期串 / 倒置窗口
+    with pytest.raises(ValueError):
+        v3_series_dir(data_dir, "torrent:../evil")
+    with pytest.raises(ValueError):
+        v3_series_dir(data_dir, "weird")
+    with pytest.raises(ValueError):
+        v3_day_file_path(data_dir, "global", "2026-13-01")
+    with pytest.raises(ValueError):
+        v3_date_str_epoch("2026-10-4")
+    with pytest.raises(ValueError):
+        v3_window_dates(day0, day0 - 1)
+
+
+def test_v3_agg_roundtrip_and_legacy_8col():
+    """agg.dat roundtrip(§02.2): hour/day/month 9 列混存解析按 kind 分列升序 / 同 epoch
+    重复取最后一行 / 8 列旧行兜底 cov_s=3600 / format_agg_row 逐列往返 / 非法 kind fail-fast"""
+    text = _v3_day_text(
+        [
+            HEADER_LINE_V3,
+            "key,torrent:ABC",
+            "hour,1000,10,20,5,8,100,200,3600",
+            "hour,1000,11,21,6,9,110,210,3500",  # 同 epoch 重复 -> 取最后一行(:273 口径)
+            "hour,4600,12,22,7,10,120,220,1800",
+            "day,5000,10,20,5,8,130,230,5400",
+            "month,100,1,2,3,4,140,240,86400",
+            "hour,5000,9,19,4,7,90,190",  # 8 字段旧行 -> cov_s 兜底 3600(防御性)
+            "garbage,line",  # 坏行计数
+        ]
+    )
+    parsed = parse_v3_agg_text(text)
+    assert parsed.key == "torrent:ABC" and parsed.bad_lines == 1 and parsed.data_lines == 8
+    assert parsed.hours == (
+        AggRow("hour", 1000, 11, 21, 6, 9, 110, 210, 3500),  # 同 epoch 取最后一行
+        AggRow("hour", 4600, 12, 22, 7, 10, 120, 220, 1800),
+        AggRow("hour", 5000, 9, 19, 4, 7, 90, 190, 3600),  # 8 字段旧行兜底
+    )
+    assert parsed.days == (AggRow("day", 5000, 10, 20, 5, 8, 130, 230, 5400), )
+    assert parsed.months == (AggRow("month", 100, 1, 2, 3, 4, 140, 240, 86400), )
+    # 逐列往返: format -> parse 还原同值
+    row = parsed.days[0]
+    assert format_agg_row(row) == "day,5000,10,20,5,8,130,230,5400"
+    reparsed = parse_v3_agg_text(_v3_day_text([HEADER_LINE_V3, format_agg_row(row)]))
+    assert reparsed.days == (row, ) and reparsed.bad_lines == 0
+    # 非法 kind fail-fast; 9 字段(kind + 8)整行恰合, 10 字段计坏
+    with pytest.raises(ValueError):
+        format_agg_row(AggRow("week", 1, 1, 1, 1, 1, 1, 1, 1))
+    bad = parse_v3_agg_text(_v3_day_text([HEADER_LINE_V3, "hour,1,1,1,1,1,1,1,1,1"]))
+    assert bad.bad_lines == 1 and bad.hours == ()
+
+
+def test_v3_hour_agg_dt_weighted_degenerate_to_v2():
+    """dt 加权 hour 聚合(§04.1): avg = round(Σ(rate x dt)/cov) / cov 上界 3600 /
+    totals 级末快照 / dt_i 恒等 interval_s 时严格退化为现行 _aggregate_bucket 公式
+    (traffic_store.py:653-657, 对照断言钉住) / 空样本与零覆盖 fail-fast"""
+    h0 = 36_000
+    # 退化形态: dt_i 恒 = 30s, 120 样本恰满 1h -> 与 v2 _aggregate_bucket 纯活跃桶逐列一致
+    rates = [100 + i for i in range(120)]
+    up_rates = [50 + i for i in range(120)]
+    samples = tuple(
+        V3HourSample(dl_rate=dl, up_rate=up, dl_total=1000 + i, up_total=2000 + i, dt_s=30.0)
+        for i, (dl, up) in enumerate(zip(rates, up_rates))
+    )
+    agg = v3_hour_agg(h0, samples)
+    raw_rows = tuple(
+        RawRow(ts=h0 + i * 30, dl_rate=dl, up_rate=up, dl_total=1000 + i, up_total=2000 + i)
+        for i, (dl, up) in enumerate(zip(rates, up_rates))
+    )
+    v2_row = TrafficDatStore._aggregate_bucket(raw_rows, (), h0, 30)
+    assert (agg.dl_avg, agg.up_avg) == (v2_row.dl_avg, v2_row.up_avg)  # 对照断言: 退化公式逐列一致
+    assert agg.dl_avg == int(round(sum(rates) / 120))  # = round(Σ(rate x dt) / (n x dt))
+    assert agg.cov_s == 3600 and agg.dl_max == rates[-1] and agg.up_max == up_rates[-1]
+    assert (agg.dl_total, agg.up_total) == (1000 + 119, 2000 + 119)  # totals = 级末快照
+    # dt 加权(非均匀): 2 样本各 1800s
+    half = v3_hour_agg(h0, (V3HourSample(100, 50, 1, 2, 1800.0), V3HourSample(300, 150, 3, 4, 1800.0)))
+    assert (half.dl_avg, half.up_avg) == (200, 100) and half.cov_s == 3600
+    # cov 上界: Σdt > 3600 裁到 3600
+    clamped = v3_hour_agg(h0, (V3HourSample(100, 50, 1, 2, 2000.0), V3HourSample(300, 150, 3, 4, 2000.0)))
+    assert clamped.cov_s == 3600 and clamped.dl_avg == int(round((100 * 2000 + 300 * 2000) / 3600))
+    # fail-fast: 空样本 / 零覆盖
+    with pytest.raises(ValueError):
+        v3_hour_agg(h0, ())
+    with pytest.raises(ValueError):
+        v3_hour_agg(h0, (V3HourSample(1, 1, 1, 1, 0.0), ))
+
+
+def test_v3_rollup_strict_level_by_level():
+    """逐级派生(§04.1): day 从 hour 行 / month 从 day 行 —— avg 按 cov 加权 /
+    max 取下级最大 / totals 级末快照(epoch 最大下级行) / cov = Σ下级.cov;
+    kind 限 day/month(严格逐级, day 不从 raw 直聚)与空下级/零覆盖 fail-fast"""
+    h1 = AggRow("hour", 100, 100, 150, 50, 80, 1000, 2000, 3600)
+    h2 = AggRow("hour", 4600, 200, 250, 100, 160, 1100, 2100, 1800)
+    day = v3_rollup_agg("day", 0, (h1, h2))
+    # avg = (100x3600 + 200x1800)/5400 = 133.33 -> 133; up = (50x3600 + 100x1800)/5400 = 66.67 -> 67
+    assert day == AggRow("day", 0, 133, 250, 67, 160, 1100, 2100, 5400)
+    d2 = AggRow("day", 86_400, 0, 0, 0, 0, 1200, 2200, 7200)
+    month = v3_rollup_agg("month", 100, (day, d2))
+    # avg = (133x5400 + 0x7200)/12600 = 57; up = (67x5400)/12600 = 28.7 -> 29; totals = 级末(d2)
+    assert month == AggRow("month", 100, 57, 250, 29, 160, 1200, 2200, 12_600)
+    # fail-fast: hour 不可逐级派生 / 空下级 / 零覆盖
+    with pytest.raises(ValueError):
+        v3_rollup_agg("hour", 1, (day, ))
+    with pytest.raises(ValueError):
+        v3_rollup_agg("day", 1, ())
+    with pytest.raises(ValueError):
+        v3_rollup_agg("day", 1, (AggRow("hour", 1, 1, 1, 1, 1, 1, 1, 0), ))
+
+
+def test_v3_format_fail_fast_and_torn_tail():
+    """写侧序列化纪律: dt_ms 非法(0/负/超上界/bool)与 interval_s 非法 fail-fast;
+    解析侧撕裂尾半行豁免口径(完整末行无换行不算 torn, 残缺末行记 torn_tail 且坏行计数)"""
+    assert format_v3_r_row(V3Sample(1, 2, 3, 4, dt_ms=DT_MS_MAX)) == f"r,1,2,3,4,{DT_MS_MAX}"  # 上界合法
+    assert format_v3_n_row(V3NullRun(2)) == "n,2" and format_v3_n_row(V3NullRun(2, dt_ms=5000)) == "n,2,5000"
+    assert format_v3_z_row(V3ZeroRun(2, 3, 4)) == "z,2,3,4"
+    for bad_dt in (0, -1, DT_MS_MAX + 1, True, 1.5, "3"):
+        with pytest.raises(ValueError):
+            format_v3_r_row(V3Sample(1, 1, 1, 1, dt_ms=bad_dt))
+        with pytest.raises(ValueError):
+            format_v3_z_row(V3ZeroRun(2, 1, 1, dt_ms=bad_dt))
+    for bad_iv in (0, -30, 30.5, True):
+        with pytest.raises(ValueError):
+            format_v3_b_row(1000, bad_iv)
+    head = [HEADER_LINE_V3, "key,global", "B,1000,30", "r,1,1,1,1"]
+    # 完整末行无换行: 正常收数据, 不算 torn_tail(缺的只是行尾换行, 追加侧先补)
+    ok = parse_v3_day_text("\n".join(head))
+    assert ok.bad_lines == 0 and not ok.torn_tail and len(ok.blocks[0].records) == 1
+    # 残缺末行: 记 torn_tail(豁免损坏占比)且计坏行; 前面好行照常收
+    torn = parse_v3_day_text(_v3_day_text(head + ["r,1,1"])[:-1])  # 去掉末行换行 -> 残缺尾段
+    assert torn.torn_tail is True and torn.bad_lines == 1 and len(torn.blocks[0].records) == 1
