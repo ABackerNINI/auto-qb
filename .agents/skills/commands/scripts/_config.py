@@ -33,7 +33,9 @@ PACK_ENV = "COMMAND_FLOW_PACK_DIR"  # 调包脚本时注入: 本包目录(让脚
 # 那比直接报错坏得多。付的价钱: 新增键必须先加进这里。
 PACK_KEYS = {"name", "when", "enabled", "version", "origin", "scripts_dir", "confirmed"}
 SUBPACK_KEYS = {"enabled"}
-TASK_KEYS = {"run", "script", "args", "when", "note", "doc", "timeout", "requires", "risky", "pin", "silent_success"}
+TASK_KEYS = {
+    "run", "script", "args", "when", "note", "doc", "timeout", "requires", "risky", "pin", "silent_success", "stream"
+}
 
 DEFAULT_TIMEOUT = 600
 MAX_DEPTH = 8  # 层级上限: 套得太深会让人下钻到迷路
@@ -77,6 +79,9 @@ class Task:
     # W2-4(计划 26-09-28-0157 §10): 成功路径只出结论行、不打「略过 N 行」提示 —— 给"成功即静默"
     # 的任务(test.full / test.quick)声明; 信息类命令(kb.active 等)**不加**, 它们的有损摘要靠提示兜底。
     silent_success: bool = False
+    # 前台长跑任务(kb.nav 这类常驻服务): stdio 直连终端 —— 输出实时可见、Ctrl-C 直达子进程;
+    # 与默认捕获式路径(capture_output=True, 跑完才见输出)互斥, 且 timeout 不生效。
+    stream: bool = False
     scripts_dir: Path | None = None  # 脚本所在目录(继承而来)
 
     @property
@@ -320,6 +325,7 @@ def _load_task(tid: str, raw: object, pack: Pack, cfg_path: Path) -> Task:
         risky=bool(raw.get("risky", False)),
         pin=bool(raw.get("pin", False)),
         silent_success=bool(raw.get("silent_success", False)),
+        stream=bool(raw.get("stream", False)),
         scripts_dir=pack.scripts_dir,
     )
 

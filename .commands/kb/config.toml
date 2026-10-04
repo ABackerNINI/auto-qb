@@ -40,5 +40,6 @@ note    = "--check 只校验不写；要在回写代码**之后**跑，否则改
 [tasks."kb.nav"]
 run     = ["python <skill-dir:memory-bank>/scripts/nav_server.py <args>"]
 timeout = 3600
+stream  = true
 when    = "人的知识库导航页: 本地服务现算三视图(台账/控制台/卡片墙)浏览; --gen-static 走静态导出"
-note    = "前台长跑 Ctrl-C 停; 默认绑 127.0.0.1:8765, 端口被占时报错行内提示 --port; --gen-static [DIR] 不起服务落盘单文件(默认 tmp-analysis/nav/, 已 gitignored); 服务模式零落盘, 数据每请求现算"
+note    = "stream 前台长跑: 输出直连终端(timeout 不生效), Ctrl-C 干净停; 启动即开浏览器(--no-open 关); 精简 log: 只留启动行 + 错误/静态映射请求, /api/data 轮询不上屏; 默认绑 127.0.0.1:8765, 端口被占时报错行内提示 --port; --gen-static [DIR] 不起服务落盘单文件(默认 tmp-analysis/nav/, 已 gitignored); 服务模式零落盘, 数据每请求现算"

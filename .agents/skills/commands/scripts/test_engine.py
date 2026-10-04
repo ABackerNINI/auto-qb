@@ -13,6 +13,9 @@ test.pkg 收集面 = .commands + .agents/skills/commands, 改引擎必被收到(
 - test_conclusions_fallback_when_no_conclusion   无结论形态 → 退回末 N 行, 不变盲
 - test_conclusion_patterns_are_anchored          结论判据钉锚(行中 passed 不算)
 - test_silent_success_flag_parsed_from_config    test.full/quick/pkg 从配置解析 silent_success, 信息类不声明
+- test_stream_flag_parsed_from_config            kb.nav 声明 stream, 其余任务不声明
+- test_stream_mode_runs_attached                 stream 任务 stdio 直连(不捕获/不吃 timeout), 成功出 [ok]
+- test_stream_mode_ctrlc_is_clean_stop           stream 任务 Ctrl-C → rc 0 + [stop] 行, 不裸 traceback
 - test_silent_success_success_is_quiet           静默任务成功只出结论行; 「略过」提示不给
 - test_silent_success_falls_back_at_cmd_run      静默任务输出形态变了 → cmd_run 层面退回末 N 行, 仍无提示
 - test_run_success_passthrough_full              默认成功: 全文透传, 中段内容原样可见, 无「略过」提示
@@ -79,6 +82,48 @@ def test_silent_success_flag_parsed_from_config():
     assert tree.tasks["test.quick"].silent_success is True
     assert tree.tasks["test.pkg"].silent_success is True
     assert tree.tasks["kb.index"].silent_success is False  # 信息类: 成功全文透传, 靠声明而非引擎摘要省 token
+
+
+def test_stream_flag_parsed_from_config():
+    """kb.nav 声明 stream(前台长跑) —— 引擎从真实包配置解析出该旗标; 其余任务不声明。"""
+    mod = engine
+    tree = mod.C.load_tree()
+    assert tree.tasks["kb.nav"].stream is True
+    assert tree.tasks["kb.index"].stream is False
+    assert tree.tasks["test.full"].stream is False
+
+
+def test_stream_mode_runs_attached(monkeypatch, capsys):
+    """stream 任务直连执行: 不捕获输出(实时可见)、不吃 timeout(常驻服务没有"跑完")。"""
+    recorded = {}
+
+    class _Proc:
+        returncode = 0
+
+    def _fake_run(cmd, **kwargs):
+        recorded["cmd"] = cmd
+        recorded.update(kwargs)
+        return _Proc()
+
+    monkeypatch.setattr(engine.subprocess, "run", _fake_run)
+    rc = engine.cmd_run(argparse.Namespace(task="kb.nav", extra=[]))
+    captured = capsys.readouterr().out
+    assert rc == 0
+    assert "capture_output" not in recorded or recorded["capture_output"] is False
+    assert "timeout" not in recorded  # timeout 不适用 —— 常驻服务不能被引擎按秒杀掉
+    assert "[ok] kb.nav" in captured
+
+
+def test_stream_mode_ctrlc_is_clean_stop(monkeypatch, capsys):
+    """stream 任务 Ctrl-C: 引擎层捕获 KeyboardInterrupt → rc 0 + [stop] 行, 不给调用方裸 traceback。"""
+    def _fake_run(cmd, **kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(engine.subprocess, "run", _fake_run)
+    rc = engine.cmd_run(argparse.Namespace(task="kb.nav", extra=[]))
+    captured = capsys.readouterr().out
+    assert rc == 0
+    assert "[stop] kb.nav" in captured
 
 
 def test_silent_success_success_is_quiet(monkeypatch, capsys):

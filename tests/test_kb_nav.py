@@ -27,6 +27,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_shell_no_external_resources: 壳无 http(s) 外链 src/href 资源引用 (属性锚定, 注释/文案不受影响)
 - test_static_map_serves_file_and_api: GET / 与 /api/data 200 (壳文本 / JSON 契约), 正常 memory-bank 文件 200 且 .md 给 text/plain
 - test_static_map_blocks_traversal: ../ / %2e%2e / ..%2f / %5c 反斜杠变体一律 403/404 且不泄漏目标内容; 未知文件 404
+- test_log_filters_polling: 精简 log —— /api/data 轮询与壳加载成功不上屏; 错误与静态映射请求留痕
 """
 
 from __future__ import annotations
@@ -242,3 +243,17 @@ def test_static_map_blocks_traversal(nav_port: int) -> None:
 
     code, _body = _get(nav_port, "/memory-bank/no-such-file.html")
     assert code == 404, "库内不存在的文件应 404 (不是 403 —— 区分越界与缺失)"
+
+
+def test_log_filters_polling(nav_port: int, capsys) -> None:
+    """精简 log (26-10-04 用户定调: log 数量不需要多): /api/data 是 30s 轮询、/ 是壳加载 ——
+    成功时不上屏; 错误与其余请求 (如静态映射) 留痕, 常驻期间 stderr 可读。"""
+    _get(nav_port, "/")
+    _get(nav_port, "/api/data")
+    _get(nav_port, "/memory-bank/tasks/26-10-01-0000-t1.md")
+    _get(nav_port, "/nope")
+    err = capsys.readouterr().err
+    assert "GET /api/data" not in err, "/api/data 轮询成功必须被过滤, 否则常驻 log 被刷屏"
+    assert "GET / HTTP/1.1" not in err, "壳加载成功不必留痕"
+    assert "404" in err and "GET /nope" in err, "错误请求要留痕"
+    assert "GET /memory-bank/tasks/26-10-01-0000-t1.md" in err, "静态映射请求要留痕"

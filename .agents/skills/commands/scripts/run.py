@@ -78,6 +78,30 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     for cmd in cmds:
         started = time.time()
+        if task.stream:
+            # 前台长跑(常驻服务): stdio 直连终端, 输出实时可见, Ctrl-C 直达子进程组 ——
+            # 捕获式 _shell 的"跑完才见输出"对它是反模式; timeout 同理不适用(服务没有"跑完")。
+            # env 仍注入 _CHILD_ENV: 一旦输出被管道接住(AI 工具捕获), 子进程照旧说 UTF-8。
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    shell=True,
+                    cwd=str(C.find_root()),
+                    env={
+                        **os.environ,
+                        **_CHILD_ENV,
+                        **C.pack_env(task)
+                    },
+                )
+            except KeyboardInterrupt:
+                print(f"\n[stop] {task.id} (Ctrl-C)")
+                return 0
+            spent = time.time() - started
+            if proc.returncode != 0:
+                print(f"[FAIL] {task.id} (exit {proc.returncode}, {spent:.1f}s) —— 输出见上, 未捕获")
+                return FAILED
+            print(f"[ok] {task.id} ({spent:.1f}s)")
+            continue
         try:
             ok, out = _shell(cmd, task.timeout, env=C.pack_env(task))
         except subprocess.TimeoutExpired:

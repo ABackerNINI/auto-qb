@@ -8,7 +8,8 @@
                              变体全部拦截, 测试钉死)
 
 用法 (从仓库根):
-    python .agents/skills/memory-bank/scripts/nav_server.py                    起服务 (127.0.0.1:8765)
+    python .agents/skills/memory-bank/scripts/nav_server.py                    起服务 (127.0.0.1:8765;
+                                                                               启动后自动开浏览器, --no-open 关)
     python .agents/skills/memory-bank/scripts/nav_server.py --port 9000        换端口 (被占用时
                                                                                报错行内提示 --port)
     python .agents/skills/memory-bank/scripts/nav_server.py --gen-static [DIR] 不起服务: 壳+注入
@@ -26,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -85,10 +87,14 @@ _CONTENT_TYPES = {
 
 
 def _utf8_stdout() -> None:
-    """Windows 控制台可能是 GBK, 打中文/符号会崩 —— CLI 入口统一 UTF-8 兜底 (同 gen_doc_map)。"""
+    """Windows 控制台可能是 GBK, 打中文/符号会崩 —— CLI 入口统一 UTF-8 兜底 (同 gen_doc_map)。
+
+    line_buffering: stdout 被管道接住(AI 工具捕获)时默认是块缓冲, 启动行会滞留到进程退出才可见 ——
+    常驻服务必须逐行可见, 强制行缓冲 (真终端 isatty 本来就是行缓冲, 不受影响)。
+    """
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
-            stream.reconfigure(encoding="utf-8", errors="replace")
+            stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
 
 class NavServer(ThreadingHTTPServer):
@@ -104,6 +110,14 @@ class NavHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args) -> None:  # noqa: A002
         sys.stderr.write("[nav] %s - %s\n" % (self.address_string(), fmt % args))
+
+    def log_request(self, code: object = "-", size: object = "-") -> None:  # noqa: N802
+        # 精简 log: /api/data 是页面 30s 轮询、/ 是壳加载 —— 成功时不上屏; 只留错误与其余请求。
+        path = self.requestline.split(" ")[1] if self.requestline else ""
+        status = code if isinstance(code, int) else 200
+        if status < 400 and (path == "/api/data" or path in ("/", "/index.html")):
+            return
+        sys.stderr.write("[nav] %s %s\n" % (status, self.requestline))
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlsplit(self.path).path
@@ -200,7 +214,7 @@ def gen_static(mb: Path, shell_path: Path, out_dir: Path) -> int:
     return 0
 
 
-def serve(mb: Path, shell_path: Path, port: int) -> int:
+def serve(mb: Path, shell_path: Path, port: int, open_browser: bool = True) -> int:
     try:
         server = NavServer(("127.0.0.1", port), _build_handler(mb, shell_path))
     except OSError as exc:
@@ -208,7 +222,10 @@ def serve(mb: Path, shell_path: Path, port: int) -> int:
             "[nav] bind 127.0.0.1:%d failed (%s): port likely in use, retry with --port <other>\n" % (port, exc)
         )
         return 1
-    print("[nav] serving http://127.0.0.1:%d  (memory-bank: %s)" % (port, mb))
+    url = "http://127.0.0.1:%d" % port
+    print("[nav] serving %s  (memory-bank: %s)" % (url, mb))
+    if open_browser:
+        webbrowser.open(url)
     print("[nav] Ctrl-C to stop")
     try:
         server.serve_forever()
@@ -216,6 +233,7 @@ def serve(mb: Path, shell_path: Path, port: int) -> int:
         pass
     finally:
         server.server_close()
+    print("[nav] stopped")
     return 0
 
 
@@ -223,6 +241,7 @@ def main() -> int:
     _utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8765, help="服务端口 (默认 8765; 被占用换此参数)")
+    parser.add_argument("--no-open", action="store_true", help="不起浏览器 (默认启动后自动打开页面)")
     parser.add_argument(
         "--gen-static",
         nargs="?",
@@ -245,7 +264,7 @@ def main() -> int:
     if args.gen_static is not None:
         out_dir = Path(args.gen_static)
         return gen_static(mb, shell_path, out_dir if out_dir.is_absolute() else root / out_dir)
-    return serve(mb, shell_path, args.port)
+    return serve(mb, shell_path, args.port, open_browser=not args.no_open)
 
 
 if __name__ == "__main__":
