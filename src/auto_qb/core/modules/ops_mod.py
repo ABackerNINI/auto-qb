@@ -11,7 +11,9 @@ recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本
   WEB 源是手动排障, 不受限 —— 限制它就是「按钮为什么不生效」。
 - 防「真实冲突」的作用所有来源: 在途互斥(_active_checks 登记 / 快照 checking 态, R1)、
   recheck 提交点实时复核(R1, plan 26-10-04-1824)、跳检实时复核(R2)、跳检同日去重
-  (skip_check_day)。判据: 被拒时用户能否从界面自行看出原因 —— checking 态种子列表可见
+  (skip_check_day)、跳检前置闸门组(G3/G4/G5/G6/filelist, 三分流判定单点
+  _skip_gates_detail + 执行路径 _skip_gates 派生 + 预检 skip_check_precheck, plan 26-10-05-0314)。
+  判据: 被拒时用户能否从界面自行看出原因 —— checking 态种子列表可见
   (拒绝可自解释), 保留; 不可见窗口的拒绝一律不对 WEB 设。
 
 执行模型不变: 两个调用方都在主循环线程(WEB 命令线 drain + 规则任务线), 单一写线程约束
@@ -33,6 +35,7 @@ plan 别名层处置 W1 起 manager 侧同样传 manager.ctx.state)。state / sa
 import logging
 import os
 import time
+from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
@@ -58,6 +61,27 @@ logger = logging.getLogger(__name__)
 _RECHECK_BUSY_MSG = "校验进行中, 请等待当前校验完成"
 _SKIP_GONE_MSG = "种子已被移除(可能被用户删除), 放弃跳检"
 _RECHECK_GONE_MSG = "种子已被移除(可能被用户删除), 放弃校验"  # R1 实时复核 live 空时用(与 _SKIP_GONE_MSG 同族)
+
+# 跳检闸门三分流标签(plan 26-10-05-0314 §03/§04, cls 与谓词同点定义):
+#   blocked = 确定性危害/零收益, 一律硬拒(force 也不放行, case 1);
+#   force   = 真不确定(判决窗口抢跑), 可被 skip_check(force=True) 显式豁越(case 2);
+#   ok      = 通过(不进未过列表 —— _skip_gates_detail 只返回未过闸门)。
+GATE_BLOCKED = "blocked"
+GATE_FORCE = "force"
+GATE_OK = "ok"
+
+
+@dataclass(frozen=True)
+class GateVerdict:
+    """单道跳检闸门的判定结果(不可变值对象): gate 闸门 id / cls 三分流标签 / text 拒绝文案
+
+    gate 取值: "G3"(已完成) / "G4"(活跃中) / "G5"(同 hash 校验在途) / "G6"(组内活跃下载) /
+    "partial"(部分下载) / "dedup"(同日去重) / "filelist"(前置文件检查) / "gone"(预检时种子已不在
+    客户端, 仅 skip_check_precheck 产出)。拒绝文案按「原因+后果+出路」三段式(plan §03)。
+    """
+    gate: str
+    cls: str
+    text: str
 
 
 def _poll_until(predicate, attempts: int, interval: float) -> bool:
@@ -359,29 +383,30 @@ class OpsModule(BaseModule):
         torrent: Optional[TorrentRecord] = None,
         auto_start: bool = False,
         has_reference: bool = True,
+        force: bool = False,
     ) -> ActionResult:
         """辅种跳检(高风险): 导出 → 删除(保留文件) → 确认消失 → 重加(跳过校验) → 确认出现 → 恢复快照
 
-        自 rules/actions/skip_checking.py._execute_skip_checking 迁入(行为等价), R2 实时复核
-        落在闸门通过后、导出之前 —— 两来源同时受保护(C2: 按陈旧快照执行会把用户刚删的种子
-        复活; 复核在备份与删除之前, 拒绝零副作用)。
+        自 rules/actions/skip_checking.py._execute_skip_checking 迁入(行为等价)。执行序(plan
+        26-10-05-0314 §03/§04): R2 实时复核 → 前置闸门(filelist 排最后) → 导出 —— filelist 并入
+        闸门后, 其插入点要求「R2 live 复核确认种子还在之后、导出等不可逆步骤之前」(live 都不在的
+        种子不值得再跑任何闸门, 含 filelist 的 files API), 故 R2 前移到闸门之前; 拒绝仍然零副作用
+        (R2 与全部闸门都在备份与删除这两个不可逆步骤之前)。
 
         来源差异:
         - has_reference 的「无参考跳检(高风险)」告警是规则侧语义, 仅 rule 源产生(WEB 前端
           危险确认框已承担风险告知, 不把规则告警泄漏进 WEB)。
-        - 安全闸门全来源生效: 部分下载禁止跳检 / 跨规则同日去重(skip_check_day 跨来源共享,
-          拒绝文案「今日已跳检过」自解释)。
+        - 安全闸门全来源生效(三分流归类见 GateVerdict): 部分下载禁止跳检 / 跨规则同日去重
+          (skip_check_day 跨来源共享, 拒绝文案「今日已跳检过」自解释) / 已完成与活跃中禁止(G3/G4) /
+          组内活跃下载禁止(G6) / 同 hash 校验在途可强制(G5) / 前置文件检查(filelist)。
+        - force: 仅豁越 cls=force 的未过闸门(降级 warning + INFO 审计后放行), cls=blocked 一律硬拒;
+          缺省 False —— 规则侧调用点不传(签名缺省即零变化不变式的证明)。
         - torrent: 可选活记录; None 时经 store 取(规则侧 ctx.torrent 与缺省取值等价)。
         """
         prefix = f"ops[{source}]"
         tor = torrent if torrent is not None else self._ctx.store.get(hash)
         if tor is None:
             return ActionResult.skip(_SKIP_GONE_MSG)
-
-        # ---- 阶段 1: 前置闸门 (任一不过 → fail/skip 返回, 无副作用) ----
-        gate = self._skip_gates(hash, tor)
-        if gate is not None:
-            return gate
 
         # ---- R2 实时复核: 闸门读的是快照(≤2s 龄), 动手前重拉一次实时状态 ----
         # 种子已不在 -> 干净放弃: 发生在备份与删除之前, 零副作用、无孤儿备份(修 C2)。
@@ -392,6 +417,11 @@ class OpsModule(BaseModule):
         if not live:
             logger.info(f"{prefix} {tor.log_repr} | 跳检放弃: {_SKIP_GONE_MSG}")
             return ActionResult.skip(_SKIP_GONE_MSG)
+
+        # ---- 阶段 1: 前置闸门 (任一不过 → fail/skip 返回, 无副作用; filelist 排最后) ----
+        gate = self._skip_gates(hash, tor, force=force)
+        if gate is not None:
+            return gate
 
         # ---- 阶段 2: 准备 (导出/校验属性/布局推断, 均须在删除前完成) ----
         try:
@@ -449,26 +479,181 @@ class OpsModule(BaseModule):
             return ActionResult.ok("skip-checking 跳检完成并自动开始")
         return ActionResult.ok("skip-checking 跳检完成")
 
-    def _skip_gates(self, hash: str, tor: TorrentRecord) -> Optional[ActionResult]:
-        """跳检前置闸门: 部分下载禁止 + 跨规则同日去重(跨来源共享)。返回 None = 全部通过。
+    def skip_check_precheck(self, hashes: list) -> list:
+        """跳检预检(只读 dry-run, plan 26-10-05-0314 D6/D9): 逐 hash 给出三分流判定, 供 WEB 确认框
+        在用户确认之前摊开「该不该跳检、赌什么」; 执行路径闸门原样全跑 —— 预检与执行之间无信任传递。
 
-        - 部分下载(0<progress<1)禁止: 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法
-          发现未下载的零块, is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据)。
-          仅 progress==0(全新辅种, 数据完整)可跳检; full-checking 对部分下载安全, 不设限。
-        - 跨规则同日去重(全来源): 多条规则都配 checking 时, 同一种子当日只跳检一次(跳检必然
-          清空本地统计, 重复跳检只会再丢一次而毫无收益); 顺带清理非当日记录(防 state 无界增长)。
+        只读承诺(T20): 不写 state(skip_check_day 不写入不 prune)、不 pop、无任何 qB 写 API、
+        种子零变动 —— 内部仅走 _skip_gates_detail(零副作用判定)与 check_filelist(torrents_files
+        只读); _skip_gates 的 prune 副作用不得经 detail 泄入本路径。经命令队列在主循环线程执行
+        (与写命令串行化, 快照无撕裂)。
+
+        返回 list[dict] 单 hash 一条, 字段命名对齐 S2 的 HTTP 回执形状
+        {results: [{hash, name, cls, reasons}], summary: {ok, force, blocked}}(summary 由调用方聚合):
+        - cls: 单 hash 总三分流, blocked > force > ok(任一未过闸门 blocked 即 blocked;
+          否则存在 force 类未过即 force; 全过 ok);
+        - reasons: [{gate, cls, text}, ...] 即 _skip_gates_detail 的全部未过闸门; tor 已不在
+          客户端(store 无记录)时单条 gone/blocked, 文案「已不在客户端」(S2 端点测试 T21 依赖)。
         """
-        progress = tor.progress
-        if 0.0 < progress < 1.0:
-            return ActionResult.fail(f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
+        results = []
+        for h in hashes:
+            tor = self._ctx.store.get(h)
+            if tor is None:
+                results.append(
+                    {
+                        "hash": h,
+                        "name": "",
+                        "cls": GATE_BLOCKED,
+                        "reasons": [{
+                            "gate": "gone",
+                            "cls": GATE_BLOCKED,
+                            "text": "已不在客户端(可能已被删除), 无法跳检"
+                        }],
+                    }
+                )
+                continue
+            verdicts = self._skip_gates_detail(h, tor)
+            if any(v.cls == GATE_BLOCKED for v in verdicts):
+                cls = GATE_BLOCKED
+            elif verdicts:  # 只剩 force 类未过
+                cls = GATE_FORCE
+            else:
+                cls = GATE_OK
+            results.append(
+                {
+                    "hash": h,
+                    "name": tor.name,
+                    "cls": cls,
+                    "reasons": [{
+                        "gate": v.gate,
+                        "cls": v.cls,
+                        "text": v.text
+                    } for v in verdicts],
+                }
+            )
+        return results
 
+    def _skip_gates(self, hash: str, tor: TorrentRecord, force: bool = False) -> Optional[ActionResult]:
+        """跳检前置闸门(执行路径): 从 _skip_gates_detail 派生 —— 取首个未过闸门转 ActionResult,
+        谓词只写一遍、执行与预检两路径同源(防两套谓词漂移, T18 同源断言钉死)。
+
+        - 返回形态与既有语义一致: dedup 沿用 skip, 其余闸门 fail; None = 全部通过。
+        - force=True 仅把 cls=force 的未过闸门降级为 warning 日志后放行(另记 INFO 审计:
+          哪个 hash 豁越了哪个闸门); cls=blocked 一律硬拒。
+        - 全部通过(含 force 豁越后)时顺带清理非当日 skip_check_day 记录(防 state 无界增长)
+          —— 这是本路径**专属副作用**, detail(预检)零写入(T20)。
+        """
+        for v in self._skip_gates_detail(hash, tor):
+            if force and v.cls == GATE_FORCE:
+                logger.warning(f"{tor.log_repr} | force 豁越跳检闸门 {v.gate}: {v.text}")
+                logger.info(f"force 审计: hash={hash} 豁越闸门 {v.gate}(跳检继续)")
+                continue
+            if v.gate == "dedup":
+                return ActionResult.skip(v.text)
+            return ActionResult.fail(v.text)
         today = date.today().isoformat()
-        skip_day = self.state.setdefault("skip_check_day", {})
-        if skip_day.get(hash) == today:
-            return ActionResult.skip("今日已跳检过该种子(跨规则去重)")
-        for h in [h for h, d in skip_day.items() if d != today]:
-            del skip_day[h]
+        skip_day = self.state.get("skip_check_day")
+        if skip_day:
+            for h in [h for h, d in skip_day.items() if d != today]:
+                del skip_day[h]
         return None
+
+    def _skip_gates_detail(self, hash: str, tor: TorrentRecord) -> list:
+        """跳检前置闸门判定单点(只读): 按固定顺序逐闸门判定, 返回**全部未过**闸门(全过 = 空列表)
+
+        三分流 cls 与谓词同点定义(见 GateVerdict)。执行路径 _skip_gates 取首个未过闸门, 预检
+        skip_check_precheck 消费完整列表 —— 两路径同源。
+
+        零副作用铁律(T20): 本判定不写 state、不 prune、不 pop、无任何 qB 写 API —— 预检
+        「只是看看」不得改状态; skip_check_day 的清理留在执行路径(_skip_gates 尾部)。
+
+        顺序与短路: G3 → G4 → G5 → G6 → partial → dedup → filelist(排最后, plan 插入点由
+        skip_check 的执行序保证: R2 实时复核之后、导出之前)。前面已有 **blocked** 未过时短路
+        跳过 filelist(省一次 files API + N 次 stat —— 结论已注定 blocked); 仅 force 类未过时
+        **不**短路: force=True 豁越后 filelist 仍须真跑(case 1 硬闸不得被短路绕过)。
+
+        各闸门口径:
+        - G3 已完成(progress>=1, 无论状态) / G4 活跃中(非 stopped 且 p<1): 放行谓词逐字同
+          rules/actions/checking.py:88 决策链 0(两处注释互指); stalledDL 等边缘态口径由
+          state_enum 现有语义决定, 与规则侧天然一致(同一谓词), 不发明 WEB 特有口径(plan §03)。
+        - G5 同 hash 校验在途(ctx.task_queue.active_check_hashes(), recheck 在途互斥同款原语):
+          跳检删种会杀死在途校验轮询 —— 唯一 case 2(下一棒 G7 组内校验在途同归 force,
+          插在 G6 之后、partial 之前即可, 无需重构)。
+        - G6 组内有活跃下载成员(经 store.group_has_downloading, S1a 上移的组级判定单点):
+          组内共享物理文件, 下载方正在写, 跳检把全部块标有效 = 脏数据。
+        - partial(0<p<1): 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法发现未下载的零块,
+          is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据)。仅 progress==0(全新辅种,
+          数据完整)可跳检; full-checking 对部分下载安全, 不设限。
+        - dedup: 跨规则同日去重(全来源) —— 多条规则都配 checking 时, 同一种子当日只跳检一次
+          (跳检必然清空本地统计, 重复跳检只会再丢一次而毫无收益)。
+        - filelist: 前置文件检查, 调 check_filelist(checking.py:121 决策链 4 同一原语, 规则侧
+          双查为计划明文接受); 失败语义 blocked(fail), 不是 skip; 映射 miss(路径不可判定)保守
+          停住, 文案自带「修 fs.path_map 配置」出路。
+        """
+        verdicts: list = []
+        progress = tor.progress
+        state_enum = tor.state_enum
+
+        # G3/G4 共用放行谓词 —— 逐字同 rules/actions/checking.py:88 决策链 0(两处注释互指):
+        # 仅「暂停中未完成」放行; 做种态 p=1 落 G3, 下载中等非 stopped 态 p<1 落 G4。
+        paused_incomplete = state_enum.is_stopped and progress < 1.0
+
+        if not paused_incomplete:
+            if progress >= 1.0:
+                # G3 已完成: 数据已通过哈希校验, 跳检零收益纯损失(case 1, 用户点名项)
+                verdicts.append(
+                    GateVerdict(
+                        "G3", GATE_BLOCKED, f"种子已完成(progress={progress}): 数据已通过哈希校验, 跳检无任何意义, "
+                        f"只会清零本地做种统计; 无需跳检"
+                    )
+                )
+            else:
+                # G4 活跃中: 活跃且 p<1 = 下载中, 同部分下载的垃圾上传危害(case 1);
+                # 出路 = 先暂停再跳检(暂停后 p=0 可过全部闸门, 不需要 force)
+                verdicts.append(
+                    GateVerdict(
+                        "G4", GATE_BLOCKED, f"种子活跃中(state={tor.state}): 未暂停且未完成, 未验证块会被标有效并上传垃圾数据; "
+                        f"请先暂停再跳检"
+                    )
+                )
+
+        # G5 同 hash 校验在途(唯一 case 2): 判决窗口抢跑是真不确定 —— 强制 = 杀死在途校验
+        # (已花 I/O 作废)且不经其判决断言数据有效; 用户明知本轮校验无意义(如误发起)时留逃生
+        if hash in self._ctx.task_queue.active_check_hashes():
+            verdicts.append(
+                GateVerdict("G5", GATE_FORCE, "该种子校验中(在途): 跳检会删除种子并使在途校验作废, 且不经其判决断言数据有效"
+                            "(若数据坏将被洗白); 确知本轮校验无意义时方可强制")
+            )
+
+        # G6 组内有活跃下载成员: 共享物理文件被下载方写入, force 也救不回确定性脏数据(case 1);
+        # 出路 = 先暂停下载方(组内暂停后 G6 过, 流程合法)
+        if self._ctx.store.group_has_downloading(hash):
+            verdicts.append(
+                GateVerdict("G6", GATE_BLOCKED, "组内有种子正在下载: 组内成员共享同一物理文件, 下载方正在写入, "
+                            "跳检会把全部块标有效(脏数据); 请先暂停组内下载方再跳检")
+            )
+
+        # partial 部分下载(既有闸门并入 detail, 文案零变化)
+        if 0.0 < progress < 1.0:
+            verdicts.append(
+                GateVerdict("partial", GATE_BLOCKED, f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
+            )
+
+        # dedup 跨规则同日去重(既有闸门并入 detail, 文案零变化; 只读 —— 不 setdefault 不 prune)
+        skip_day = self.state.get("skip_check_day") or {}
+        if skip_day.get(hash) == date.today().isoformat():
+            verdicts.append(GateVerdict("dedup", GATE_BLOCKED, "今日已跳检过该种子(跨规则去重)"))
+
+        # filelist 前置文件检查(排最后): 前面已有 blocked 未过 -> 短路(结论已注定, 省 files API);
+        # 仅 force 类未过不短路(force 豁越后本闸门仍须真跑)
+        if not any(v.cls == GATE_BLOCKED for v in verdicts):
+            err = self.check_filelist(self._ctx.api, tor)
+            if err is not None:
+                text = f"跳检前置文件检查未通过: {err}"
+                if err.startswith("路径不可判定"):  # 与 check_filelist 的映射 miss 文案前缀同源(同模块单点)
+                    text += "; 请修正 fs.path_map 配置后重试"
+                verdicts.append(GateVerdict("filelist", GATE_BLOCKED, text))
+        return verdicts
 
     def _skip_delete(self, hash: str, tor: TorrentRecord, prefix: str) -> Optional[ActionResult]:
         """跳检步骤: 删除种子(保留文件)并轮询确认已从客户端消失(qB 删除为异步)。

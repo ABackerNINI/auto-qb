@@ -20,7 +20,7 @@
 - test_ops_recheck_baseline_from_live_truth: 基线取 live 真值: 快照 0.5 / live 0.9 -> 快照跟齐后不均匀期回落 0.8 按 0.9 判 FAILED「progress 回落」(旧快照基线 0.5 下 0.8 会判 WAITING) (P1)
 - test_ops_skip_check_day_shared_across_sources: 跳检同日去重跨来源共享(web 先跳, 规则同日再跳被拒)
 - test_ops_web_skip_check_no_highrisk_warning: web 源不产生「无参考跳检(高风险)」告警(规则侧语义不泄漏进 WEB)
-- test_ops_web_recheck_poll_torrent_deleted_no_origin: 轮询期间种子删除且无 origin -> 消亡无重入队 (P2-a)
+- test_ops_web_recheck_poll_torrent_deleted_no_origin: 轮询期间种子删除且无 origin -> 消亡无重入队副作用 (P2-a)
 - test_ops_web_recheck_start_giveup_timeout: 宽限耗尽仲裁直查见非校验态(web 源, S2b 补 live 应答) -> 判败不计冷却 (P2-a)
 - test_ops_recheck_poll_exception_releases_and_requeues: 轮询异常 -> 释放在途; rule 源 origin 重入队 (P2-a)
 - test_ops_recheck_duplicate_task_guard: 登记点兜底 add_task 失败 -> skip 不发送 (P2-a)
@@ -28,7 +28,22 @@
 - test_ops_skip_gates_prune_stale_skip_day: 跳检同日去重表跨日残留清理 (P2-a)
 - test_ops_infer_content_layout_empty_content: content_path 为空不推断布局 (P2-a)
 - test_ops_clear_backup_noop_missing_path_and_oserror: _clear_backup 无元数据/path 空/删除失败三态 (P2-a)
+
+跳检闸门扩展(plan 26-10-05-0314 S1b-1: 三分流 detail 单点 + force + 预检):
+- test_skip_gates_rejects_completed: T1 已完成(做种态 p=1)拒, 文案含「已完成」, 零副作用
+- test_skip_gates_rejects_active: T2 活跃中拒, 文案含「活跃」与「暂停」出路, 零副作用
+- test_skip_gates_predicate_edge_states: T2b 边缘态逐态钉死 = state_enum.is_stopped 现有语义(同 checking.py:88 谓词)
+- test_skip_gates_allows_paused_incomplete: T3 暂停未完成放行(辅种主场景, 防过严回归)
+- test_skip_gates_rejects_group_downloading: T4 组内有活跃下载成员拒, 文案含「组内/下载」
+- test_skip_gates_allows_group_all_paused: T5 组内全暂停/未归组放行(放行面锁)
+- test_skip_check_rejects_inflight_recheck: T6 同 hash 校验在途拒, 文案含「校验中」, 零副作用
+- test_skip_check_filelist_precondition_blocks: T7 文件缺失/路径不可判定拒(带 check_filelist 描述与 fs.path_map 出路), 未导出未删除
+- test_skip_gates_detail_classification: T18 detail 三态归类 + 执行路径与 detail 首个未过闸门同源断言
+- test_skip_check_force_semantics: T19 force 仅豁越 cls=force(G5)并留 WARNING+INFO 审计; blocked 一律硬拒; 签名缺省 False
+- test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
 """
+import copy
+import inspect
 import logging
 import os
 import tempfile
@@ -36,7 +51,9 @@ import time
 import uuid
 from contextlib import contextmanager
 from datetime import date
+from types import SimpleNamespace
 
+from auto_qb.core.modules.ops_mod import OpsModule
 from auto_qb.core.qbmanager import QbManager
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT
@@ -718,3 +735,368 @@ def test_ops_clear_backup_noop_missing_path_and_oserror():
     finally:
         os.remove = real_remove
     assert "HB" not in mgr.state["skip_check_backup"]
+
+
+# ============================================================
+# E. 跳检闸门扩展(plan 26-10-05-0314 S1b-1): 三分流 detail 单点 + force 语义 + 只读预检
+#    谓词单点在 ops._skip_gates_detail; 规则侧决策链 0/1 恒先于 ops 调用, 新闸门对规则源等价 no-op
+# ============================================================
+def wire_group(mgr, key, *hashes):
+    """把若干 hash 直写进 store 分组索引(group_has_downloading 的判定数据源)"""
+    for h in hashes:
+        mgr.store.member_to_key[h] = key
+    mgr.store.groups[key] = list(hashes)
+
+
+def seed_inflight(mgr, hash_):
+    """登记一个在途校验(active_check_hashes 的判定数据源, 即 G5 的视野)"""
+    task = Task("check", "check-checking-result", hash=hash_, store=mgr.store, handler=lambda t, d: REQUEUE)
+    assert mgr.task_queue.add_task(task)
+
+
+def test_skip_gates_rejects_completed():
+    """测试(T1): 已完成种子(做种态 p=1)跳检被拒, 文案含「已完成」; 零副作用(无去重记录/无备份/无写 API)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="pausedUP", progress=1.0)  # 做种态 p=1 -> 落 G3
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "已完成" in r.message, f"已完成应被拒: {r}"
+    assert client.calls == [], f"拒绝零副作用(不得导出/删除/重加): {client.calls}"
+    assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "拒绝不得写同日去重"
+    assert not mgr.state.get("skip_check_backup"), "拒绝不得留备份元数据"
+
+
+def test_skip_gates_rejects_active():
+    """测试(T2): 活跃中(下载中, 非 stopped 且 p<1)跳检被拒, 文案含「活跃」与「暂停」出路; 零副作用"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stalledDL", progress=0.5)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "活跃" in r.message and "暂停" in r.message, f"活跃中应被拒且给出路: {r}"
+    assert client.calls == [], f"拒绝零副作用: {client.calls}"
+    assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "拒绝不得写同日去重"
+
+
+def test_skip_gates_predicate_edge_states():
+    """测试(T2b, 口径锁): 边缘态逐态钉死 —— G3/G4 判定就是 state_enum.is_stopped and progress < 1.0
+    (逐字同 checking.py:88), 不发明 WEB 特有口径: p=1 无论状态落 G3; p<1 非 stopped 落 G4;
+    p<1 stopped 放行"""
+    from qbittorrentapi import TorrentState
+
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    ops = mgr.ctx.ops
+    stopped_states = ["pausedDL", "stoppedDL", "pausedUP", "stoppedUP"]
+    non_stopped_states = [
+        "downloading",
+        "metaDL",
+        "forcedDL",
+        "forcedMetaDL",
+        "stalledDL",
+        "queuedDL",
+        "checkingDL",
+        "checkingResumeData",
+        "uploading",
+        "forcedUP",
+        "stalledUP",
+        "queuedUP",
+        "allocating",
+        "moving",
+        "error",
+        "missingFiles",
+        "unknown",
+    ]
+    # 钉死测试自己的状态清单与枚举语义一致(清单漂移即红, 防用例口径失真)
+    for s in stopped_states:
+        assert TorrentState(s).is_stopped, f"{s} 应 is_stopped"
+    for s in non_stopped_states:
+        assert not TorrentState(s).is_stopped, f"{s} 应非 is_stopped"
+
+    def g6_may_cofire(state):  # store.group_has_downloading 对未归组种子判自身(S1a 语义, 下载中谓词)
+        ts = TorrentState(state)
+        return ts.is_downloading and not ts.is_stopped and not ts.is_checking
+
+    for state in non_stopped_states:
+        t = FakeTorrent(hash="HA", state=state, progress=0.0)
+        seed_store(mgr, [t])
+        vs = ops._skip_gates_detail("HA", t)
+        expected = ["G4"] + (["G6"] if g6_may_cofire(state) else [])
+        assert [v.gate for v in vs] == expected, f"{state} p=0 应落 G4(非 stopped): {vs}"
+        assert all(v.cls == "blocked" for v in vs), f"G4/G6 是 case 1 硬闸: {vs}"
+    for state in stopped_states:
+        t = FakeTorrent(hash="HA", state=state, progress=0.0)
+        seed_store(mgr, [t])
+        assert ops._skip_gates_detail("HA", t) == [], f"{state} p=0 应放行(stopped 且 p<1): 同规则侧口径"
+    for state in non_stopped_states + stopped_states:
+        t = FakeTorrent(hash="HA", state=state, progress=1.0)
+        seed_store(mgr, [t])
+        vs = ops._skip_gates_detail("HA", t)
+        expected = ["G3"] + (["G6"] if g6_may_cofire(state) else [])
+        assert [v.gate for v in vs] == expected, f"{state} p=1 应落 G3(已完成无论状态, 做种态同): {vs}"
+
+
+def test_skip_gates_allows_paused_incomplete():
+    """测试(T3, 放行面锁): 暂停未完成(stoppedDL p=0)闸门全过且整条跳检成功 —— 辅种主场景防过严回归"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    assert mgr.ctx.ops._skip_gates_detail("HASH123", t) == [], "暂停未完成应过全部闸门(辅种主场景)"
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"暂停未完成应放行完成跳检: {r}"
+
+
+def test_skip_gates_rejects_group_downloading():
+    """测试(T4): 组内有活跃下载成员跳检被拒(共享物理文件被写, 跳检标全部块有效 = 脏数据), 文案含「组内/下载」"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    ha = FakeTorrent(hash="HASH123", state="pausedDL", progress=0.0)
+    hb = FakeTorrent(hash="HB", state="downloading", progress=0.3)
+    seed_store(mgr, [ha, hb])
+    client.torrents["HASH123"] = ha
+    client.torrents["HB"] = hb
+    wire_group(mgr, "K", "HASH123", "HB")
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "组内" in r.message and "下载" in r.message, f"组内有下载应被拒: {r}"
+    assert client.calls == [], f"拒绝零副作用: {client.calls}"
+
+
+def test_skip_gates_allows_group_all_paused():
+    """测试(T5, 放行面锁): 组内全暂停/已完成放行; 未归组(单种子)放行"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    ha = FakeTorrent(hash="HA", state="pausedDL", progress=0.0)
+    hb = FakeTorrent(hash="HB", state="stoppedUP", progress=1.0)  # 组内做种态不是「下载中」
+    hc = FakeTorrent(hash="HC", state="pausedDL", progress=0.0)  # 未归组
+    seed_store(mgr, [ha, hb, hc])
+    wire_group(mgr, "K", "HA", "HB")
+    ops = mgr.ctx.ops
+    assert ops._skip_gates_detail("HA", ha) == [], "组内全暂停/已完成应放行"
+    assert ops._skip_gates_detail("HC", hc) == [], "未归组应放行"
+    assert ops._skip_gates("HC", hc) is None, "执行路径全过应返回 None"
+
+
+def test_skip_check_rejects_inflight_recheck():
+    """测试(T6): 同 hash 校验在途(队列登记)跳检被拒 —— 跳检删种会杀死在途校验; 文案含「校验中」;
+    零副作用(不删种/无备份/无去重记录)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    seed_inflight(mgr, "HASH123")
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "校验中" in r.message, f"在途校验应拒绝: {r}"
+    assert not any(c[0] in ("export", "delete", "add") for c in client.calls), f"拒绝零副作用: {client.calls}"
+    assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "拒绝不得写同日去重"
+    assert not mgr.state.get("skip_check_backup"), "拒绝不得留备份元数据"
+
+
+def test_skip_check_filelist_precondition_blocks():
+    """测试(T7): 前置文件检查并入执行链(R2 之后、导出之前) —— 文件缺失 is_failed 带 check_filelist
+    描述且未导出未删除; 路径不可判定(映射 miss)保守 blocked 且文案自带「修 fs.path_map 配置」出路"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    client.files = [SimpleNamespace(name="missing.bin", size=123)]  # 磁盘上不存在 -> check_filelist 报缺失
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "前置文件检查未通过" in r.message and "文件缺失: missing.bin" in r.message, \
+        f"文件缺失应带 check_filelist 描述拒绝: {r}"
+    assert not any(c[0] in ("export", "delete", "add") for c in client.calls), \
+        f"文件缺失零副作用(未导出未删除, R2 与文件检查都在不可逆步骤前): {client.calls}"
+    assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "拒绝不得写同日去重"
+
+    # 映射 miss(存在性不可判定): 保守 blocked, 出路文案指向 fs.path_map 配置
+    from auto_qb.infra import file_access as fa_mod
+
+    class _UndeterminedFA:
+        def exists(self, path):
+            return fa_mod.UNDETERMINED
+
+    real_get = fa_mod.get_file_access
+    fa_mod.get_file_access = lambda: _UndeterminedFA()  # ops_mod.file_access 是同一模块对象, 单点替换即生效
+    try:
+        r2 = mgr.ctx.ops.skip_check("HASH123", source="web")
+    finally:
+        fa_mod.get_file_access = real_get
+    assert r2.is_failed and "路径不可判定" in r2.message and "修正 fs.path_map 配置" in r2.message, \
+        f"映射 miss 应保守 blocked 且给出路: {r2}"
+
+
+def test_skip_gates_detail_classification():
+    """测试(T18): _skip_gates_detail 三态归类 —— G5->force; G3/G4/G6/filelist/partial/dedup->blocked;
+    全过->空; 执行路径 _skip_gates 与 detail 首个未过闸门一致(同源断言, 防两套谓词漂移;
+    dedup 沿用 skip 形态、其余 fail 形态)。G7/G8 由下一棒插在 G6 之后, 本棒先钉现有闸门"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    ops = mgr.ctx.ops
+    today = date.today().isoformat()
+
+    def fresh(state, progress, hash_):
+        t = FakeTorrent(hash=hash_, state=state, progress=progress)
+        seed_store(mgr, [t])
+        return t
+
+    def gates(hash_, t):
+        return [(v.gate, v.cls) for v in ops._skip_gates_detail(hash_, t)]
+
+    # G3 已完成(做种态) -> blocked
+    t = fresh("pausedUP", 1.0, "G3HA")
+    assert gates("G3HA", t) == [("G3", "blocked")]
+    # G4 活跃中 -> blocked(p=0 不触发 partial; 未归组下载态并发命中 G6, 自身即下载方, S1a 语义)
+    t = fresh("downloading", 0.0, "G4HB")
+    assert gates("G4HB", t) == [("G4", "blocked"), ("G6", "blocked")]
+    # G5 同 hash 校验在途 -> force(唯一 case 2; 下一棒 G7 同归 force)
+    t = fresh("pausedDL", 0.0, "G5HC")
+    seed_inflight(mgr, "G5HC")
+    assert gates("G5HC", t) == [("G5", "force")]
+    r = ops._skip_gates("G5HC", t)
+    assert r.is_failed and "校验中" in r.message, f"force 类闸门缺省仍硬拒: {r}"
+    # G6 组内活跃下载 -> blocked
+    t = fresh("pausedDL", 0.0, "G6HD")
+    hb = FakeTorrent(hash="G6HE", state="downloading", progress=0.3)
+    seed_store(mgr, [t, hb])
+    wire_group(mgr, "K6", "G6HD", "G6HE")
+    assert gates("G6HD", t) == [("G6", "blocked")]
+    # partial 部分下载 -> blocked(既有闸门并入 detail, 语义文案零变化)
+    t = fresh("pausedDL", 0.5, "PRTF")
+    assert gates("PRTF", t) == [("partial", "blocked")]
+    # dedup 同日去重 -> blocked(既有闸门并入 detail; 执行路径沿用 skip 形态)
+    t = fresh("pausedDL", 0.0, "DDPHG")
+    mgr.state.setdefault("skip_check_day", {})["DDPHG"] = today
+    assert gates("DDPHG", t) == [("dedup", "blocked")]
+    r = ops._skip_gates("DDPHG", t)
+    assert r.is_skipped and r.message == ops._skip_gates_detail("DDPHG", t)[0].text, \
+        f"执行路径 dedup 应沿用 skip 形态且文案同源: {r}"
+    # filelist 前置文件检查 -> blocked(排最后)
+    t = fresh("pausedDL", 0.0, "FLHH")
+    client.files = [SimpleNamespace(name="x.bin", size=1)]
+    assert gates("FLHH", t) == [("filelist", "blocked")]
+    client.files = []
+    # 全过 -> 空列表; 执行路径 None
+    t = fresh("pausedDL", 0.0, "OKHI")
+    assert gates("OKHI", t) == []
+    assert ops._skip_gates("OKHI", t) is None
+    # 同源断言(混合场景): 活跃部分下载 -> detail 按固定顺序(G4 -> G6 -> partial), 执行路径取首个
+    t = fresh("downloading", 0.5, "MXHJ")
+    vs = ops._skip_gates_detail("MXHJ", t)
+    assert [(v.gate, v.cls) for v in vs] == [("G4", "blocked"), ("G6", "blocked"), ("partial", "blocked")], \
+        f"固定顺序: {vs}"
+    r = ops._skip_gates("MXHJ", t)
+    assert r.is_failed and r.message == vs[0].text, f"执行路径应取首个未过闸门(同源): {r} vs {vs[0]}"
+
+
+def test_skip_check_force_semantics():
+    """测试(T19): force 语义 —— force=True 仅豁越 cls=force 的未过闸门(G5: WARNING 降级 + INFO 审计
+    后放行成功); cls=blocked(G3/G6/filelist)即使 force=True 仍硬拒带原文案; 缺省 force=False 全拒
+    (T6 已覆盖); 规则侧调用点不传 force 由签名缺省证明(零变化不变式)"""
+    # G5 场景 force=True: 豁越放行成功, 留 WARNING(闸门降级) + INFO(审计: hash + 闸门)
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    seed_inflight(mgr, "HASH123")
+    with capture_logs("auto_qb.core.modules.ops_mod", logging.DEBUG) as cap:
+        r = mgr.ctx.ops.skip_check("HASH123", source="web", force=True)
+    assert r.is_ok, f"force=True 应豁越 G5 放行: {r}"
+    warns = [x.getMessage() for x in cap.records if x.levelname == "WARNING"]
+    audits = [x.getMessage() for x in cap.records if x.levelname == "INFO"]
+    assert any("force 豁越跳检闸门 G5" in m for m in warns), f"豁越闸门应留 WARNING: {warns}"
+    assert any("force 审计" in m and "G5" in m and "HASH123" in m for m in audits), \
+        f"豁越应留 INFO 审计(hash+闸门): {audits}"
+    assert mgr.state["skip_check_day"]["HASH123"] == date.today().isoformat(), "豁越后跳检应真实完成"
+
+    # G3 已完成 + force=True: case 1 硬拒带原文案
+    mgr2 = make_mgr(FakeConfig())
+    client2 = FakeClient()
+    mgr2.client = client2
+    t2 = FakeTorrent(hash="HASH123", state="pausedUP", progress=1.0)
+    seed_store(mgr2, [t2])
+    client2.torrents["HASH123"] = t2
+    r2 = mgr2.ctx.ops.skip_check("HASH123", source="web", force=True)
+    assert r2.is_failed and "已完成" in r2.message, f"blocked 闸门对 force 硬拒: {r2}"
+
+    # G6 组内下载 + force=True: 仍硬拒
+    mgr3 = make_mgr(FakeConfig())
+    client3 = FakeClient()
+    mgr3.client = client3
+    ha = FakeTorrent(hash="HASH123", state="pausedDL", progress=0.0)
+    hb = FakeTorrent(hash="HB", state="downloading", progress=0.3)
+    seed_store(mgr3, [ha, hb])
+    client3.torrents["HASH123"] = ha
+    client3.torrents["HB"] = hb
+    wire_group(mgr3, "K", "HASH123", "HB")
+    r3 = mgr3.ctx.ops.skip_check("HASH123", source="web", force=True)
+    assert r3.is_failed and "组内" in r3.message, f"G6 对 force 硬拒: {r3}"
+
+    # filelist + force=True: 仍硬拒(证据缺失不给 force)
+    mgr4 = make_mgr(FakeConfig())
+    client4 = FakeClient()
+    mgr4.client = client4
+    seed_paused(mgr4, client4, hash="HASH123")
+    client4.files = [SimpleNamespace(name="missing.bin", size=1)]
+    r4 = mgr4.ctx.ops.skip_check("HASH123", source="web", force=True)
+    assert r4.is_failed and "前置文件检查未通过" in r4.message, f"filelist 对 force 硬拒: {r4}"
+
+    # 缺省 force=False: G5 场景硬拒(与上面 force=True 成对照)
+    mgr5 = make_mgr(FakeConfig())
+    client5 = FakeClient()
+    mgr5.client = client5
+    seed_paused(mgr5, client5, hash="HASH123")
+    seed_inflight(mgr5, "HASH123")
+    r5 = mgr5.ctx.ops.skip_check("HASH123", source="web")
+    assert r5.is_failed and "校验中" in r5.message, f"缺省 force=False 应硬拒: {r5}"
+
+    # 规则侧零变化证明: 签名缺省 False, 规则调用点(skip_checking.py)不传即零变化
+    assert inspect.signature(OpsModule.skip_check).parameters["force"].default is False
+
+
+def test_skip_check_precheck_readonly():
+    """测试(T20): 预检只读 —— 调用前后 ops.state 深比对不变(skip_check_day 不写入不 prune)、
+    零写 API(mock 断言仅只读面)、种子零变动; 回执字段命名对齐 S2 形状; gone 判定文案「已不在客户端」"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = seed_paused(mgr, client, hash="HASH123")  # ok 样本
+    t2 = FakeTorrent(hash="HDONE", state="pausedUP", progress=1.0)  # blocked 样本(G3)
+    seed_store(mgr, [t, t2])
+    client.torrents["HDONE"] = t2
+    mgr.state.setdefault("skip_check_day", {})["STALE"] = "2000-01-01"  # prune 若误入 detail 此处必红
+    before = copy.deepcopy(mgr.state)
+    info_before, files_before = client.info_calls, client.files_calls
+
+    results = mgr.ctx.ops.skip_check_precheck(["HASH123", "HDONE", "HMISSING"])
+
+    # 回执形状(S2 将包成 {results, summary}; 单 hash: hash/name/cls/reasons)
+    assert [x["hash"] for x in results] == ["HASH123", "HDONE", "HMISSING"]
+    assert results[0]["cls"] == "ok" and results[0]["reasons"] == [] and results[0]["name"] == "Test"
+    assert results[1]["cls"] == "blocked", f"已完成样本应 blocked: {results[1]}"
+    assert results[1]["reasons"][0]["gate"] == "G3" and "已完成" in results[1]["reasons"][0]["text"]
+    assert results[2]["cls"] == "blocked" and results[2]["reasons"][0]["gate"] == "gone"
+    assert "已不在客户端" in results[2]["reasons"][0]["text"], f"gone 文案 T21 依赖: {results[2]}"
+
+    # 只读面: 零写 API; 预检不拉 live(info_calls 不增); files_calls 恰 +1(HDONE 被 G3 短路 filelist)
+    assert client.calls == [], f"预检不得调任何写 API: {client.calls}"
+    assert client.info_calls == info_before, f"预检不得直查 torrents_info: {client.info_calls}"
+    assert client.files_calls - files_before == 1, \
+        f"filelist 仅对无 blocked 闸门的样本运行(短路省成本): {client.files_calls}"
+
+    # state 深比对不变: 去重表不写入、不 prune(执行路径专属副作用不得泄入预检)
+    assert mgr.state == before, f"预检后 state 必须逐字节不变: {mgr.state}"
+    assert mgr.state["skip_check_day"]["STALE"] == "2000-01-01", "跨日残留不得被预检清理(零副作用铁律)"
+
+    # 种子零变动
+    assert t.state == "pausedDL" and t.progress == 0.0 and t2.state == "pausedUP" and t2.progress == 1.0
+    assert client.torrents["HASH123"] is t and client.torrents["HDONE"] is t2
