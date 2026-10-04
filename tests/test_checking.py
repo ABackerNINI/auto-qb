@@ -411,6 +411,7 @@ def test_checking_paused_incomplete_not_skip():
     pd = FakeTorrent(hash="PD1", name="PD1", state="pausedDL")  # 暂停未完成
     inject_group(mgr, "HASH123", "PD1")
     seed_store(mgr, [t, pd])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled, "暂停未完成不应跳过"
     run_queue(mgr)  # 首轮: 发送 recheck
@@ -425,6 +426,7 @@ def test_checking_no_group_uses_without_reference():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled
     run_queue(mgr)  # 首轮: 发送 recheck
@@ -533,6 +535,7 @@ def test_checking_no_reference_full_checking():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled, "应提交校验"
@@ -571,6 +574,7 @@ def test_checking_recheck_fail_cooldown():
     # progress 恒 0.5(<1): 每轮轮询都判失败(概括损坏文件); stoppedDL 满足闸门 0
     t = make_target(state="stoppedDL", progress=0.5)
     seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 三次提交的 live 放行都靠它(非 checking 态)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -784,6 +788,7 @@ def test_checking_piecehashes_diff():
     mgr.client = client
     client.piece_hashes_map = {"HASH123": ["a", "b"], "R1": ["a", "c"]}  # 不一致
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -801,6 +806,7 @@ def test_checking_piecehashes_api_error():
     mgr.client = client
     client.piece_hashes_error = True
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -840,6 +846,7 @@ def test_checking_custom_rc1():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -878,6 +885,7 @@ def test_checking_verified_references_not_persisted():
         client = CheckingFakeClient()
         mgr.client = client
         t = make_target()
+        client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
         t0 = time.time()
         process_rule(mgr, client, t, dry_run=False)  # 提交即发送 recheck
         seed_store(mgr, [make_target(state="checkingDL")])  # 校验中
@@ -1060,6 +1068,7 @@ def test_skip_check_tagged_member_excluded_as_reference():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP", tags="zSkipChecked")  # 已完成但带跳检标签
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -1078,6 +1087,7 @@ def test_skip_check_tagged_verified_reference_excluded():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP", tags="zSkipChecked")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -1107,6 +1117,7 @@ def test_checking_full_checking_pending():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     process_rule(mgr, client, t, dry_run=False)
     assert ("recheck", None) in client.calls, f"提交时即应发送 recheck: {client.calls}"
@@ -1123,6 +1134,7 @@ def test_checking_full_checking_dup_ignore():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     process_rule(mgr, client, t, dry_run=False)
     process_rule(mgr, client, t, dry_run=False)  # 重复 -> 忽略
     n_recheck = sum(1 for c in client.calls if c[0] == "recheck")
@@ -1136,6 +1148,7 @@ def test_checking_full_checking_auto_start_false():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     process_rule(mgr, client, t, dry_run=False)  # 提交即发送
     seed_store(mgr, [make_target(state="checkingDL")])  # 校验中
@@ -1155,6 +1168,7 @@ def test_checking_full_checking_send_error():
     mgr.client = client
     client.recheck_error = RuntimeError("simulated recheck failure")
     t = make_target()
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 复核须放行才能测到发送失败
     t0 = time.time()
     with patch("auto_qb.rules.base.logger.error") as mw:
         handled, _stop = process_rule(mgr, client, t, dry_run=False)
@@ -1177,6 +1191,7 @@ def test_checking_full_checking_pending_resume():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1213,6 +1228,7 @@ def test_checking_full_checking_resume_continues_actions():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1245,6 +1261,7 @@ def test_checking_full_checking_resume_skips_conditions():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1275,6 +1292,7 @@ def test_checking_full_checking_resume_skips_dedup():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1307,6 +1325,7 @@ def test_checking_full_checking_fail_retry():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 两次提交(初提交 + 重走决策链)的 live 放行都靠它
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1346,7 +1365,9 @@ def test_checking_full_checking_first_sample_race_not_failed():
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
     mgr.client = client
-    seed_store(mgr, [make_target()])
+    t = make_target()
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1380,7 +1401,9 @@ def test_checking_full_checking_giveup_condemns():
     mgr = make_mgr(cfg, with_tq=True)
     client = CheckingFakeClient()
     mgr.client = client
-    seed_store(mgr, [make_target()])
+    t = make_target()
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1410,6 +1433,7 @@ def test_checking_group_full_checking_serialized():
         a = make_target(hash="HA")
         b = make_target(hash="HB")
         seed_store(mgr, [a, b])
+        client.torrents["HA"] = a  # P1 提交点实时复核读客户端: A 的 full-checking 提交也须 live 放行(非 checking 态)
         client.torrents["HB"] = b  # R2 实时复核读客户端(非快照): 跳检前种子必须在客户端
         inject_group(mgr, "HA", "HB")
         rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
@@ -1513,6 +1537,7 @@ def test_checking_group_no_infer_when_sizes_differ():
     mgr.store.group_sizes.setdefault(key, {})["HA"] = {"movie.mkv": 100}
     mgr.store.group_sizes[key]["HB"] = {"movie.mkv": 200}  # 大小不一致
     mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 1}
+    client.torrents["HB"] = b  # P1 提交点实时复核读客户端: B 提交前种子必须在客户端(非 checking 态)
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     tb = mgr.host.get("rules")._create_rule_task(rule, "HB")
     mgr.task_queue.add_task(tb, time.time())
@@ -1637,6 +1662,7 @@ def _group_wait_env(td):
     b = make_target(hash="HB")
     seed_store(mgr, [a, b])
     inject_group(mgr, "HA", "HB")
+    client.torrents["HA"] = a  # P1 提交点实时复核读客户端: A 的 full-checking 提交须 live 放行(非 checking 态)
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     t0 = time.time()
     ta = mgr.host.get("rules")._create_rule_task(rule, "HA")

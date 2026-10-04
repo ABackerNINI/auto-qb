@@ -10,8 +10,9 @@ recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本
 - 防「自动化频率失控」的保护只作用 source="rule": 3 次/日校验失败冷却(recheck_fails)。
   WEB 源是手动排障, 不受限 —— 限制它就是「按钮为什么不生效」。
 - 防「真实冲突」的作用所有来源: 在途互斥(_active_checks 登记 / 快照 checking 态, R1)、
-  跳检实时复核(R2)、跳检同日去重(skip_check_day)。判据: 被拒时用户能否从界面自行看出
-  原因 —— checking 态种子列表可见(拒绝可自解释), 保留; 不可见窗口的拒绝一律不对 WEB 设。
+  recheck 提交点实时复核(R1, plan 26-10-04-1824)、跳检实时复核(R2)、跳检同日去重
+  (skip_check_day)。判据: 被拒时用户能否从界面自行看出原因 —— checking 态种子列表可见
+  (拒绝可自解释), 保留; 不可见窗口的拒绝一律不对 WEB 设。
 
 执行模型不变: 两个调用方都在主循环线程(WEB 命令线 drain + 规则任务线), 单一写线程约束
 原样成立。阻塞执行体 + 单一写线程是当前安全模型的一半 —— recheck/skip_check 必须留在
@@ -55,6 +56,7 @@ logger = logging.getLogger(__name__)
 # R1/R2 拒绝文案(自解释: checking 态在种子列表可见, 用户能对上原因)
 _RECHECK_BUSY_MSG = "校验进行中, 请等待当前校验完成"
 _SKIP_GONE_MSG = "种子已被移除(可能被用户删除), 放弃跳检"
+_RECHECK_GONE_MSG = "种子已被移除(可能被用户删除), 放弃校验"  # R1 实时复核 live 空时用(与 _SKIP_GONE_MSG 同族)
 
 
 def _poll_until(predicate, attempts: int, interval: float) -> bool:
@@ -116,7 +118,8 @@ class OpsModule(BaseModule):
         on_success=None,
         origin=None,
     ) -> ActionResult:
-        """full-checking 操作: R1 提交点检查 -> 登记轮询子任务 -> 发送 recheck -> 轮询结果
+        """full-checking 操作: R1 提交点检查(快照 -> 冷却 -> 实时复核) -> 登记轮询子任务 ->
+        发送 recheck -> 轮询结果
 
         自 rules/actions/full_checking.py._execute_full_checking 迁入(行为等价), 规则侧差异
         全部收进参数:
@@ -134,8 +137,15 @@ class OpsModule(BaseModule):
         宽限耗尽的启动超时分支在判超时前做一次性仲裁直查(D5): 快照同步线暂停/滞后时对 qB
         单 hash 直查核实, 见真校验态延长一次宽限(仍纯快照观测), 未见或直查异常判败(fail-closed)。
 
+        提交点实时复核(plan 26-10-04-1824 P1): 快照 <=1.5s 龄, qB 自家 WebUI 刚发起的校验在
+        该窗口内不可见, 此时提交会重复排队(no-op 或重扫文件挪队尾) —— 快照检查与冷却通过后、
+        登记之前对 qB 单 hash 直查核实(跳检 R2 同款范式): live 空 = 种子已不在(放弃) /
+        live checking = 拒绝 / 复核异常 fail-closed 拒绝; 进度基线一并改取 live 真值。成本为
+        每次提交 +1 次 torrents_info(人工点击与规则决策链都是低频事件, 计划 §10 R3 已接受)。
+
         返回 ActionResult: rule 源 pending(规则断点, 规则任务本轮不重入队, 恢复由轮询负责) /
-        web 源 ok(已提交, 结果经快照可见) / skip(R1 拒绝或冷却) / fail(发送失败)。
+        web 源 ok(已提交, 结果经快照可见) / skip(R1 拒绝(快照/实时复核/种子已不在)或冷却) /
+        fail(发送失败或实时复核异常)。
         """
         prefix = f"ops[{source}]"
 
@@ -160,6 +170,25 @@ class OpsModule(BaseModule):
 
         tor = torrent if torrent is not None else snap
         tq = self._ctx.task_queue
+
+        # ---- R1 实时复核(全来源, plan 26-10-04-1824 P1): 动手前对 qB 单 hash 直查核实(跳检 R2
+        # 同款范式)。次序约束(计划 §6.1): 在冷却之后(冷却拒绝不付 API 成本)、登记之前(拒绝时
+        # 不留任何登记); live 空 = 种子已不在(qB 侧已删, 快照尚在) -> 放弃。
+        try:
+            live = self._ctx.api.torrents_info(torrent_hashes=hash)
+        except Exception as e:
+            # 复核异常 fail-closed: 看不见就不提交(未执行任何变更), 与跳检 R2 同口径
+            return ActionResult.fail(f"提交前实时复核失败(未执行任何变更): {e}")
+        if not live:
+            logger.info(f"{prefix} {self._ops_repr(tor)} | recheck 放弃: {_RECHECK_GONE_MSG}")
+            return ActionResult.skip(_RECHECK_GONE_MSG)
+        if is_piece_checking(live[0].state):
+            # live 真值在校验(快照窗口内不可见, 典型: qB 自家 WebUI 刚发起) -> 拒绝重复提交
+            logger.info(f"{prefix} {self._ops_repr(tor)} | recheck 拒绝: {_RECHECK_BUSY_MSG}(实时复核)")
+            return ActionResult.skip(f"{_RECHECK_BUSY_MSG}(实时复核)")
+        # 进度基线取 live 真值(P1, 取代 store 快照值): 快照 progress 与 qB 不一致时, 轮询期的
+        # 回落证据(数据缺损签名)按 qB 真实进度判定 —— 闭包内存态, 不入 taskqueue/state_file
+        baseline_progress = live[0].progress
 
         def poll(task: Task, dry_run: bool) -> bool:
             """校验结果轮询: 证据门控状态机 —— 读 store 活记录(原地更新, 不发 API 重查真值), 每
@@ -295,9 +324,7 @@ class OpsModule(BaseModule):
         submitted_at = time.time()  # 校验启动宽限窗口起点(recheck 发送成功时刻)
         seen_checking = False  # 本轮询周期内是否观察到过生效证据(成功结论的必要背书)
         arbitrated = False  # 本轮询生命周期内是否已仲裁过(启动超时判败前的一次性直查, D5 至多 1 次)
-        # 提交点进度基线(P1 之前取 store 快照值, 语义偏保守安全): 未见证据时 progress 回落
-        # 即数据缺损签名(校验发现坏块), 据此提前判败 —— 闭包内存态, 不入 taskqueue/state_file
-        baseline_progress = tor.progress if tor is not None else 0.0
+        # (baseline_progress 已在上方实时复核处取 live 真值, P1 起基线不再取 store 快照)
 
         task = Task(
             "check",

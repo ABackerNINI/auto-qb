@@ -295,6 +295,7 @@ def test_event_checking_resume_success():
         tor = _pause_target()
         mgr.client = FakeClient()
         seed_store(mgr, [tor])  # 快照注入(dispatch 前种子已在 store)
+        mgr.client.torrents["H1"] = tor  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
         t0 = __import__("time").time()
         # 直接分派(不整轮 refresh, 便于确定推进队列) —— 模拟 refresh 的 added 分派
         rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1")
@@ -332,6 +333,7 @@ def test_event_checking_resume_fail():
         tor = _pause_target(progress=0.5)
         mgr.client = FakeClient()
         seed_store(mgr, [tor])
+        mgr.client.torrents["H1"] = tor  # P1 提交点实时复核读客户端: 两次提交(初提交 + 重走决策链)的 live 放行都靠它
         t0 = __import__("time").time()
         rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1")
         tor.tracker_conf = mgr.config.trackers["HHan"]
@@ -358,6 +360,7 @@ def test_event_checking_deleted():
         tor = _pause_target()
         mgr.client = FakeClient()
         seed_store(mgr, [tor])
+        mgr.client.torrents["H1"] = tor  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
         t0 = __import__("time").time()
         rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "event_rules.r1")
         tor.tracker_conf = mgr.config.trackers["HHan"]

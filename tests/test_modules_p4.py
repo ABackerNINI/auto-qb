@@ -178,6 +178,7 @@ def test_ops_service_direct_call_and_inflight_mutex():
         mgr.client = FakeClient()
         t = FakeTorrent(hash="HA", state="pausedDL", progress=0.0)
         seed_store(mgr, [t])
+        mgr.client.torrents["HA"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
         # 直调: web 源提交 -> 在途登记(决策链 1.5 可见)
         r = mgr.ctx.ops.recheck("HA", source="web")
         assert r.is_ok, f"ctx.ops 直调应登记在途: {r}"
