@@ -5,6 +5,25 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **🆕 recheck 轮询生效确认整体重设计: 证据门控判定 (2026-10-04, 计划
+  [plans/26-10-04-1824](../plans/26-10-04-1824-plan-ops-recheck-effect-confirmation.html) 全段, issue
+  [26-10-03-1140](../issues/26-10-03-1140-bug-ops-recheck-false-success.html) Done)**:
+  recheck 轮询原成功分支 `if rec.progress >= 1.0` 直接对陈旧快照下结论 —— 已完成种子提交后首跳
+  (入队即到期)读到 qB 异步应用前旧快照误判「校验成功」(生产事故 2026-10-03: 4 条 40GB 同毫秒假成功)。
+  重设计四件: ①`rules/checking_meta.py` 判定纯函数 `poll_verdict` + 证据谓词 `is_piece_checking`
+  ({checkingDL, checkingUP}, 排除 qB 启动期 checkingResumeData 伪证据) —— SUCCESS 仅 seen_checking
+  可达, 「无证据成功」签名层面不可表达, 160 组合穷举钉死; ②ops_mod poll 闭包重构为证据门控状态机
+  (证据闩收窄 / 未见证据 progress 回落提前判「校验未通过」/ START_TIMEOUT 判败前一次性仲裁直查
+  D5 ≤1 次, 超时日志报真实时长); ③R1 提交点实时复核 (快照→冷却→live 单 hash 直查→登记→发送,
+  跳检 R2 同款: live 空 skip / live checking 拒绝 / 异常 fail-closed), baseline_progress 改取 live
+  真值; ④模式固化: 坑档 [pitfalls/backend/effect-confirmation.md](../pitfalls/backend/effect-confirmation.md)
+  + ops_mod 模块头判定纪律 (新异步操作接入 = 新 source, 判定必须走证据门控)。等价性红线不破:
+  周期观测纯快照读零 API, 直查只在决定性时刻。新增用例 15 条 (A3/B3/C3/D4/E2) + 既有适配 27 处;
+  test.full 2530 passed + 4 skipped / 99% (基线
+  [26-10-04-2256](../testing/baselines/26-10-04-2256-ops-recheck-effect-confirmation.md))。
+  五棒串行子智能体实施 (S1-S4, 编排者核验提交), 档案
+  [tasks/26-10-04-backend-ops-recheck-effect-confirmation](../tasks/26-10-04-backend-ops-recheck-effect-confirmation.md)。
+
 - **跨组文件交叉检测与紧急处置 (2026-10-04, 计划
   [plans/26-10-04-0107](../plans/26-10-04-0107-plan-cross-group-file-conflict.html) S0-S5 全段, issue
   [26-09-22-2221](../issues/26-09-22-2221-feat-cross-group-file-conflict.html) Done)**:
