@@ -33,7 +33,7 @@
 | ① | S1 存储层纯函数 | v3 行型序列化/解析/游标 dt 链/按天路径/聚合 9 列纯函数, 不接线, 既有 107 例零改动 | Done (9744655b) |
 | ② | S4 配置键 + schema | flush_interval 全链 + sample_interval ≥main_tick 硬校验 | Done (30eebcf0) |
 | ③ | S2a 写侧翻转核心 | BlockBuffer/游程/flush 驱动/跨天切块/stop()/回拨钳制/翻 v3 目录/热重载联动 | Done (7b89d0da) |
-| ④ | S2b 聚合与恢复 | 累计器/水位封口/文件尾恢复/catch-up 硬序/hour 裁剪/淘汰新口径/seal_sweep 退役 | Open |
+| ④ | S2b 聚合与恢复 | 累计器/水位封口/文件尾恢复/catch-up 硬序/hour 裁剪/淘汰新口径/seal_sweep 退役 | Done (62998945) |
 | ⑤ | S3a 读侧核心 | 有效 dt 桶宽/跨桶覆盖(D1)/块间 gap 真空/按天加载/解析缓存 | Open |
 | ⑥ | S3b 视图+端点+前端 | WINDOW_SPECS(D4: 6mo/1y/all)/组端点去 global/A4 下界常量/档位文案 | Open |
 | ⑦ | S5 收尾与基线 | index.json/v1v2 死代码退役/docstring v3 契约/实测数字/基线切片/回写 | Open |
@@ -48,3 +48,5 @@
 - **2026-10-04 21:xx S4 完成 (30eebcf0)**: flush_interval 全链 10 文件(validate/schema/groups/models/loaders/键面 fixture 155→156/keys.md/configuration.md); sample_interval 下限改 ≥main_tick 硬校验, 倍数失配不进 errors(D5 告警留 S2a)。新增 3 例 + 守卫 parametrize 补 qb_traffic 段(此前漏登记的互检缺口, 计划内补齐)。test.full 2529 passed / 4 skipped / 99%。
 - **2026-10-04 22:xx S2a 完成 (7b89d0da)**: TrafficV3Store 落盘单点(open("a")+fsync, 尾字节查补每 flush 一次); traffic_sample_mod 全文件重写(v2 触发面缩 no-op 存根留 S5); BlockBuffer/四触发+跨天封口/累积漂移 250ms/回拨钳制/handler 内 flush/00:00 硬切/stop() 幂等/失配 ceil+告警一次/has_entry 改目录判定; 断开旧目录与 index.json。sample 30→44 例, store 写侧族重写。2540 passed / 99%。S2b 接缝: _seal_run(累计器)/_maybe_flush_all(水位+淘汰)/append_records 同款纪律(agg append)/stop()(聚合封口)。
 - S2a 实施期细化(已钉测试): 块首游程 dt 基准 = B.start(非块首 = 写侧游标), OpenRun.start 保留首样本实测时刻作时长基准; 块首亚秒余量成初始累积漂移由显式 dt 吸收; 午夜硬切天然 ≤1 间隔块间 gap(真空判定属 S3)。
+- **2026-10-05 0x:xx S2b 完成 (62998945)**: SeriesAgg 前向记账(与 dt 链同源)/flush 时点水位封口合并 append/catch-up 硬序(补算全落盘才裁剪, 窗口=rollup_window)/hour 裁剪 tmp+replace 仅存点/淘汰删系列目录(文件名日期算龄+每小时节流)/dry_run 全短路。修复中断会话遗留实现的真缺陷: _agg_ingest_hour/day 产出行从未进待写批(hour/day 行落不了盘)。新增 17 例。2557 passed / 4 skipped, 覆盖率报 98.50%(S5 收尾核对是否跌破 99% 基线)。偏差: n 游程引导区间记上一观测速率(前向记账必然); _agg_ingest_day 月级联支防御面保留。
+- 流程注记: T4 首次派发遇配额中断(现场遗留 557 行未提交实现), 重派后经逐条核对规格+补测试+修真缺陷后入库——中断遗留代码不可盲信, 必须核对。
