@@ -80,7 +80,7 @@
                         :class="{ active: qbCurWindow === w }"
                         @click="qbSetWindow(w)">{{ qbWindowLabel(w) }}</button>
               </div>
-              <span class="drawer-toolbar-hint">qB 口径 · 程序运行期间(断线处不连线)</span>
+              <span class="drawer-toolbar-hint">qB 口径 · 程序运行期间(缺口 = 无采样, 停机/断连)</span>
             </div>
             <!-- 静默续拉(修「每隔几秒闪一次」): 已有数据时 loading 不接管正文 —— 整块 v-if 换成
                  加载空态 = 每个轮询周期图 DOM 被拆装一次(闪的根源, 同 drawer-switch-flicker 的
@@ -111,14 +111,17 @@
                     <span class="h-up">上行 {{ fmtSpeed(qbCurHover.up) }}</span>
                     <span class="h-down">下行 {{ fmtSpeed(qbCurHover.dl) }}</span>
                     <span>合计 {{ fmtSpeed(qbCurHover.up + qbCurHover.dl) }}</span>
+                    <!-- 0 桶状态行(plan 26-10-04-0721 §05): z 派生空闲段是 (0,0) 真实观测点,
+                         与 null 缺口可辨 —— 速率行照旧, 仅补一行状态语 -->
+                    <span v-if="qbCurHover.up + qbCurHover.dl === 0">0 B/s · 空闲/做种中</span>
                   </template>
-                  <span v-else>断线 · 无数据</span>
+                  <span v-else>无采样 · 程序未运行或 qB 断连</span>
                 </div>
               </div>
               <div class="hist-legend">
                 <span><i class="sw up"></i>上行</span>
                 <span><i class="sw down"></i>下行</span>
-                <span class="hist-hint">qB 口径 · 程序运行期间(断线处不连线) · 悬停查看详情</span>
+                <span class="hist-hint">qB 口径 · 程序运行期间(缺口 = 无采样, 停机/断连) · 悬停查看详情</span>
               </div>
               <div v-if="qbCurSummary" class="hist-summary">
                 <span>窗口 <b>{{ qbCurSummary.buckets }} 桶</b></span>

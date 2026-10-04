@@ -182,7 +182,8 @@ window.AQB_QB_TRAFFIC = {
       return s ? this[_QB_SCOPES[s].window] : "24h";
     },
     /* 悬停取值(对齐 dialogs.js histHover 十字先例): 时刻 + 上/下行速率(fmtSpeed 同源);
-     * 断线桶(null)不出速率, 出「断线」文案 —— §5.2 语义直读。left/flip 由十字线 px 折算。 */
+     * 断线桶(null)不出速率, 出「无采样」文案(plan 26-10-04-0721 §05); 0 桶状态行在
+     * drawer.html 模板侧(up+dl==0)。left/flip 由十字线 px 折算。 */
     qbCurHover() {
       const s = this.qbCurScope;
       return s ? this._qbHoverOf(s) : null;
@@ -195,7 +196,7 @@ window.AQB_QB_TRAFFIC = {
     /* 空态/汇总口径文案(按作用域微调; 其余文案三挂点一致) */
     qbCurEmptyText() {
       const s = this.qbCurScope;
-      if (s === "torrent") return "暂无该种子的 qB 口径流量数据(仅活跃传输期间有采样)";
+      if (s === "torrent") return "暂无该种子的 qB 口径流量数据(从未有传输记录)";
       if (s === "group") return "暂无该分组的 qB 口径流量数据(成员活跃传输期间才有采样)";
       return "暂无 qB 口径流量数据(程序运行期间无采样)";
     },

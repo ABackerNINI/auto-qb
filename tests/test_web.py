@@ -35,7 +35,7 @@
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
-- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在无数据时接管正文 + 同宿主 setData 原地快路 + 换肤先销毁再重建, 2026-10-04 修轮询期闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步 + 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)
+- test_frontend_qb_traffic_chart_wiring: qB 口径流量图前端接线守阵(P5a+P5b, plan 26-10-03-0946 §07) —— enabled=false 三挂点入口不渲染不请求(全局入口按钮 v-if="qbHistEntryOn" / 抽屉流量页签与组右键菜单项 v-if="qbTrafficOn", 门在 flags.qb_traffic_enabled, /api/webui/flags 下发 fail-closed)+ uPlot 双系列 spanGaps=false 断线不连线 + 桶序->_qbPointsToData 栅格重建与 null 语义 node 真跑(全 null 回落/前导 null 锚推算/interval 非法防御)+ 三挂点作用域表与低频轮询口径(interval_s 夹取 + document.hidden 跳过 + 关闭/切走 clearInterval)+ 静默续拉(loading 空态只在无数据时接管正文 + 同宿主 setData 原地快路 + 换肤先销毁再重建, 2026-10-04 修轮询期闪烁)+ FX-29 软切换落定登记(_qbLoad 落袋 _drawerDone("traffic") 与 _drawerWaitSources 成对, 2026-10-04 修流量页签单击换行遮罩挂死)+ 三主题登记链(tpl/vendor/mixin/manifest)+ escBusy 与 Esc 退栈链同步 + 建图后宿主 ResizeObserver 自适应与销毁断开(便签 26-10-04-0134)+ 缺口三态文案与空态钉住(P4, plan 26-10-04-0721 §05: 0 桶状态行/缺口合并文案/图例 hint 两处/单种空态收窄为从未传输 + node 三段混排回归)
 - test_api_group_commands_enqueue: pause/resume/reannounce/delete 命令入队(key 编解码回原值)
 - test_api_group_malformed_key_returns_400: 畸形分组 key(base64 非法/非 JSON/结构不符)回 400 而非 500
 - test_api_delete_with_files_flag: delete 命令透传 delete_files 标志
@@ -2511,6 +2511,17 @@ checks.push(["前导/中断 null y=null", !!d && d.up[0] === null && d.up[2] ===
 checks.push(["锚取首个非 null", !!d && d.anchor.k === 1 && d.anchor.t0 === 1030]);
 checks.push(["全 null 回落(后端已归一 [])", _qbPointsToData([null, null], 30) === null]);
 checks.push(["interval 非法回落", _qbPointsToData([P(1, 1, 1)], 0) === null]);
+// P4 回归(plan 26-10-04-0721 §07): 停机/断连 = null 缺口(spanGaps:false 如实断线);
+// 空闲 = (0,0) 真实观测点(0 平线, 不是缺口) —— 三段混排(活跃/缺口/空闲/活跃)一次钉住
+pts = [P(1000, 5, 6), null, null, P(1090, 0, 0), P(1120, 0, 0), null, P(1180, 2, 3)];
+d = _qbPointsToData(pts, 30);
+checks.push(["三段混排 xs 等距(缺口位置不漂移)",
+  !!d && JSON.stringify(d.xs) === "[1000,1030,1060,1090,1120,1150,1180]"]);
+checks.push(["停机/断连 null 桶 y=null(如实断线)",
+  !!d && d.up[1] === null && d.up[2] === null && d.up[5] === null && d.dl[5] === null]);
+checks.push(["空闲段 (0,0) 是观测点不成缺口",
+  !!d && d.up[3] === 0 && d.up[4] === 0 && d.dl[3] === 0 && d.dl[4] === 0]);
+checks.push(["三段混排活跃值透传", !!d && d.up[0] === 5 && d.up[6] === 2 && d.dl[6] === 3]);
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -2547,8 +2558,12 @@ def test_frontend_qb_traffic_chart_wiring():
       静默续拉(2026-10-04 修「每隔几秒闪一次」): loading 空态只在无数据时接管正文, 落袋走
       setData 原地快路(不 destroy+new 清屏), 换肤先销毁再整图重建。FX-29 软切换落定登记
       (2026-10-04 修「流量页签单击换行『正在加载…』挂死」): _qbLoad 落袋登记
-      _drawerDone("traffic"), 与 _drawerWaitSources 通用分支成对, 缺一边遮罩等永不到手的源。
-      drawer-dock 落点已自种子视图上提为 app 级分片(dock.html), 抽屉任意页可开。"""
+      _drawerDone("traffic"), 与 _drawerWaitSources 成对, 缺一边遮罩等永不到手的源。
+      drawer-dock 落点已自种子视图上提为 app 级分片(dock.html), 抽屉任意页可开。
+    6. 缺口三态文案与空态(plan 26-10-04-0721 §05, P4): 悬停 0 桶状态行(空闲段 z 派生 (0,0)
+      真实观测点, 与 null 缺口可辨)/ 悬停缺口合并文案「无采样 · 程序未运行或 qB 断连」/
+      图例 hint 两处同步「缺口 = 无采样(停机/断连)」/ 单种空态收窄为「从未有传输记录」;
+      三皮肤共用 shared 分片与 mixin(tpl-manifest 登记链见上面第 3 点), 文案单点钉住即可。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
@@ -2728,6 +2743,22 @@ def test_frontend_qb_traffic_chart_wiring():
         assert re.search(rf"^\s+{field}: ", state_js, re.M), f"state.js 缺 {field} 初值(根选项显式建字段)"
     assert 'kind: "seed", scope: ""' in state_js, \
         "state.js drawer 缺 kind/scope 初值(抽屉双形态, vue-reactivity 前置)"
+
+    # 6. 缺口三态文案与空态(plan 26-10-04-0721 §05, P4): 三皮肤共用 shared/tpl/drawer.html 与
+    # shared/qb_traffic_chart.js(登记链已在上面第 3 点逐皮肤钉住), 文案单点改动三皮肤同时
+    # 生效 —— 这里钉文案本体 + 触发判据 + 旧文案退场, 不逐皮肤重复
+    assert 'v-if="qbCurHover.up + qbCurHover.dl === 0">0 B/s · 空闲/做种中</span>' in drawer_tpl, \
+        "悬停 0 桶缺状态行(空闲段 z 派生 (0,0) 真实观测点, 必须与 null 缺口可辨; 速率行照旧)"
+    assert "无采样 · 程序未运行或 qB 断连" in drawer_tpl, \
+        "悬停缺口文案未更新(plan §05 首版合并文案: 两态区分依赖可选 API 形状增强, 拍板不做)"
+    assert "断线 · 无数据" not in drawer_tpl, "旧缺口文案「断线 · 无数据」必须退场"
+    assert drawer_tpl.count("缺口 = 无采样, 停机/断连") == 2, \
+        "图例 hint 两处(工具条 + 图例)必须同步为「缺口 = 无采样(停机/断连)」"
+    assert "断线处不连线" not in drawer_tpl, "旧图例 hint「断线处不连线」必须退场"
+    assert '暂无该种子的 qB 口径流量数据(从未有传输记录)' in js, \
+        "单种空态文案未收窄为「从未有传输记录」(plan §03.3 拍板: 空闲不再产生空态)"
+    assert "仅活跃传输期间有采样" not in js, \
+        "旧单种空态文案必须退场(空闲段现在是 0 平线, 空态语义只剩从未传输)"
 
 
 def test_frontend_hr_diag_view_wiring():
