@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="backend-partial-hr-verify">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-03-1505">
-<meta name="doc-updated" content="26-10-03-1505">
+<meta name="doc-updated" content="26-10-05-0530">
 <meta name="doc-refs" content="memory-bank/tasks/26-09-22-backend-partial-hr-verify.md">
 <title>HR 波次引擎四现象故障取证 · 一直在拉取 / 核实「未核实」/ 失踪 0 波 · auto-qb</title>
 <style>
@@ -107,7 +107,7 @@
   <header class="cover">
     <div class="kicker">故障取证 · report · auto-qb</div>
     <h1>HR 波次引擎四现象故障取证<br>「一直在拉取」· 核实「未核实」· 「失踪 0 波」</h1>
-    <p class="lede">生产侧四个互相「矛盾」的观感 (S1–S4) 的证据链重建。核心结论先行: 取数引擎是<b>账号级对账机器</b>, 本地种子状态只决定「翻多深」、从不决定「抓不抓」; 展示层把四个独立事实压进同一面板, 被读成了互相矛盾的状态。所有 <code>file:line</code> 引用基于取证基线 <code>develop@23796f3b</code>, 原样保留。</p>
+    <p class="lede">生产侧四个互相「矛盾」的观感 (S1–S4) 的证据链重建。核心结论先行: 取数引擎是<b>账号级对账机器</b>, 本地种子状态只决定「翻多深」、从不决定「抓不抓」; 展示层把四个独立事实压进同一面板, 被读成了互相矛盾的状态。所有 <code>file:line</code> 引用基于取证基线 <code>develop@23796f3b</code>, 原样保留。26-10-05 增补 <a href="#s13">§13 后记</a>: 「稳态降频」动议的可行性分析 (A1 / §11-3 的拍板材料) —— 取证正文未动, 后记行号按当前基线 <code>beb6223d</code> 重标。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-03-1505</div></div>
       <div class="item"><div class="k">专题</div><div class="v">backend-partial-hr-verify</div></div>
@@ -116,7 +116,7 @@
       <div class="item"><div class="k">状态</div><div class="v">Done (快照终态)</div></div>
     </div>
     <nav class="toc">
-      <a href="#s01">结论速览</a><a href="#s02">问题背景</a><a href="#s03">机制背景</a><a href="#s04">S1</a><a href="#s05">S2</a><a href="#s06">S3</a><a href="#s07">S4</a><a href="#s08">统一解释</a><a href="#s09">时间线</a><a href="#s10">缺陷与建议</a><a href="#s11">未决问题</a><a href="#s12">证据附录</a>
+      <a href="#s01">结论速览</a><a href="#s02">问题背景</a><a href="#s03">机制背景</a><a href="#s04">S1</a><a href="#s05">S2</a><a href="#s06">S3</a><a href="#s07">S4</a><a href="#s08">统一解释</a><a href="#s09">时间线</a><a href="#s10">缺陷与建议</a><a href="#s11">未决问题</a><a href="#s12">证据附录</a><a href="#s13">后记 26-10-05 · 稳态降频可行性</a>
     </nav>
   </header>
 
@@ -498,7 +498,7 @@
     <table>
       <thead><tr><th style="width:70px">编号</th><th style="width:34%">事项</th><th>修复方向</th></tr></thead>
       <tbody>
-        <tr><td class="num">A1</td><td><b>取数闸门无本地状态参与</b> (S1/S2 共同根): 对象集为空不跳波, 5H 节奏照走</td><td>当前设计有依据 —— 清单动态性, service.py:6-9 明文。可选增强: 零对象稳态 N 波后自动拉长间隔; 属产品取舍, 改前需拍板</td></tr>
+        <tr><td class="num">A1</td><td><b>取数闸门无本地状态参与</b> (S1/S2 共同根): 对象集为空不跳波, 5H 节奏照走</td><td>当前设计有依据 —— 清单动态性, service.py:6-9 明文。可选增强: 零对象稳态 N 波后自动拉长间隔; 属产品取舍, 改前需拍板。<b>26-10-05: <a href="#s13">§13 后记</a>已给拍板材料 —— 判定可行, 且 N 波防抖可省 (破稳态即时回退机制)</b></td></tr>
       </tbody>
     </table>
 
@@ -533,7 +533,7 @@
     <ol>
       <li><b>09-28 07:14 后页面为何再未解析成功</b> —— 扩展超时 / 登录页 / 站点侧批量移出, 三说并存。v2 期日志被 09-29 崩溃循环轮转清空, <b>永久不可考</b>; 不影响根因判定 (盲窗只解释 S4 的观感强度, 不改变 S4 判定)。</li>
       <li><b>本地 BTSchool 种子与清单零交集成因</b> (毕业后已删 / 其他) —— 磁盘不可考; 不影响 S1 判定 (无论成因, 引擎行为均设计内)。</li>
-      <li><b>拉取无本地状态闸门是否要改</b> —— 属产品取舍 (当前设计有依据: 清单动态性, service.py:6-9); 若要改, 走 A1 的拍板流程, 不要顺手改。</li>
+      <li><b>拉取无本地状态闸门是否要改</b> —— 属产品取舍 (当前设计有依据: 清单动态性, service.py:6-9); 若要改, 走 A1 的拍板流程, 不要顺手改。<b>26-10-05: 已进 <a href="#s13">§13 后记</a>做可行性分析, 判定可行, 等拍板。</b></li>
     </ol>
   </section>
 
@@ -593,9 +593,71 @@
     </ul>
   </section>
 
+  <section id="s13">
+    <h2><span class="no">13</span>后记 (26-10-05) · 稳态降频可行性分析 —— A1 / §11-3 的拍板材料</h2>
+    <div class="callout ok">
+      <p><strong>判定：可行</strong> (高置信)。动议的两个场景 (S1 本地零交集 / S2 本地全达标) 在引擎里统一落到同一个可便宜现算的判据 —— <b>对账对象集为空</b>; 且新下载种子会在 ≤60s 内自动把对象集翻回非空。推荐形态不是「拉长 timer」, 而是拉取间隔闸<b>按对象集动态取值</b>: 稳态期用降频间隔, 对象集一翻非空, 间隔闸自动回退到常态间隔 (此刻已远超期 ⇒ 立即放行) —— 新义务对象的发现延迟不升反降 (5H → ≤60s)。本节是可行性分析, 未实施; 实施走 plan 工位。</p>
+    </div>
+
+    <h3>13.1 动议与两前提的代码侧对应</h3>
+    <p>动议 (26-10-05, 所有者): 「本地无相关种子的拉取频率可以降低 —— ① PT 站点的 HR 通常有宽限期, 比如 10 日内做种 3 天即达标; ② 之前 B 已达标 / C 未通过的种子重返 A 考察中是极低概率事件, 唯一触发的可能是重新下载; 所以降低拉取频率影响可控, 比如降低到 1 天一次。」两个前提在引擎侧都有明确对应:</p>
+    <ul>
+      <li><b>前提① (宽限期) → 决定「发现延迟可容忍多久」</b>: 宽限期是站点侧概念, 引擎不建模 (义务发现靠站点清单档位)。量化: 典型宽限 7-14 天 ≫ 降频间隔 24H —— 最坏发现延迟只占宽限期 ~10%, 补救窗口 (重新下载 / 补做种) 依然充裕。</li>
+      <li><b>前提② (重返 A 极低概率) → 有两道与频率无关的既有防线兜底</b>: ①重见命中即撤销放行 (<code>_record_hit</code>, service.py:915-921 —— 「回清单 ⇒ 立刻重新受管束」的防伪语义, §6.1); ②本机重下漂移回炉 (<code>anchor.drift_reason</code>, service.py:1349-1352 —— 放行作废、种子回对象集重新定论)。降频只是推迟重见, 不改变两道防线的正确性。补充: 除重新下载外, 站点侧 HR 政策重算 / 改版理论上也能把 B 行翻回 A —— 同样被「重见即管束」覆盖, 差别只是晚一天知道。</li>
+    </ul>
+
+    <h3>13.2 代码事实链 (基线 <code>beb6223d</code>)</h3>
+    <p class="hint">原正文 §01-§12 行号基于取证基线 23796f3b, 原样保留; 本节按当前基线 beb6223d 重标 (service.py 行号漂移 +6 左右, 判定逻辑无变化)。</p>
+    <ol>
+      <li><b>拉取闸门四道</b> (service.py:454-512) 全部只看时间与频控: 复用窗 (470) / 拉取间隔 (483-489, <code>healthy + refresh_interval</code>) / allow_fetch (491) / 频控 (501)。降频 = 只动第二道闸的间隔取值, 其余三道原样。</li>
+      <li><b>本地锚点 (anchors) 每 poll (60s) 从本地库现取</b> (worker.py:293 → runtime.py:358-382): 按 tracker 配置归属分组, 只收 <code>hr_check.enabled</code> 站的种子; 锚点带 added_on / seeding_time / progress / name, 不可变快照。</li>
+      <li><b>对象集从 anchors 出发现算</b> (<code>_build_objects</code>, service.py:1327-1365), 排除链: index 活跃终态行 (B/C) → 排除 (1354-1355); 已有放行 → 排除 (1356-1357); 超额 ≥3× → 排除 (1358-1359); 剩余进对象集, 其中不在 index 的记「未对账」(1361-1364)。</li>
+      <li><b>两个动议场景统一落「对象集为空」</b>: S1 (本地零交集) ⇒ anchors 空 ⇒ 对象集空; S2 (本地全 B) ⇒ anchors 全部撞 index 活跃终态行 ⇒ 对象集空。判据纯内存现算 (anchors 参数 + 已落盘 index/verified), 每轮 poll 本来就算 (现算点在波前 service.py:540), 提前到闸门处零额外 IO。</li>
+      <li><b>新下载自动破稳态</b>: 新种子入库 → 下一 poll (≤60s) 进 anchors → 不在 index / 无放行 ⇒ 记「未对账」进对象集 ⇒ 判据自动翻非空。无需任何额外触发机制。</li>
+      <li><b>稳态期单波开销不变</b>: 对象集空不跳波 (§3.3), 每波仍 A/B/C 各至少 1 页 (3 请求) —— 降频省的是波次, 不是单波页数; 若要再省页数需改覆盖语义 (v3 设计前提「每波自证覆盖」), <b>不建议捆绑</b>。</li>
+    </ol>
+
+    <h3>13.3 推荐设计: 间隔闸动态取值, 破稳态即时回退</h3>
+    <ul>
+      <li><b>核心改动一点</b>: 拉取间隔闸 (service.py:483-489) 的间隔取值改为 <code>idle_refresh_interval if 对象集为空 else refresh_interval</code>。降频到 24H 后, 一旦对象集翻非空, <code>due = healthy + refresh_interval</code> 已在过去 (healthy ≥24H 前, refresh_interval = 5H) ⇒ 闸门立即放行 ⇒ 下一 poll (≤60s) 自动拉取。<b>破稳态发现延迟 ≤60s + 波时长, 比现状 5H 节奏还快</b> —— 不需要第二套「破稳态触发器」, 间隔闸回退本身就是触发。</li>
+      <li><b>降频方向不需要防抖</b> (A1 原案「稳态 N 波后拉长」可简化): 对象集为空是本波自证覆盖的结论; 立即降频后若出现义务对象, ≤60s 即被发现并拉回常态 —— 抖动方向上没有风险敞口。超额线排除的判据 (seeding_time) 单调增, index 终态不可逆, 判据本身不回抖。</li>
+      <li><b>配置键</b>: <code>hr_check.sites.&lt;id&gt;.idle_refresh_interval</code> (站点级, 每站稳态独立判定), 默认 <b>24H (26-10-05 拍板: 默认启用)</b>; 校验: ≥ refresh_interval (降频不能比常态还快) + 合理下限, 进 <code>validate_config</code> + <code>config/schema.py</code> (黄金法则 4)。</li>
+      <li><b>实现纪律 (必须)</b>: 锚点快照失败 ≠ 稳态 —— <code>_collect_anchors</code> 异常时返回空 (worker.py:323-325), 与「本地零交集」不可区分; 实现要把「获取失败」显式传出来, 闸门见到失败不降频 (保守方向)。</li>
+      <li><b>展示配套</b>: 稳态期「下次拉取」倒计时显示 24H —— B2 (对账节奏语义) 若同批修, 观感完整; 不修不影响机制。</li>
+      <li><b>测试守阵方向</b>: 稳态期用降频间隔 / 对象集翻非空即时放行 / 锚点快照失败不降频 / force (立即拉取) 与频控 (min_interval / 日额 / Retry-After) 行为不变。</li>
+    </ul>
+
+    <h3>13.4 风险与边界量化</h3>
+    <table>
+      <thead><tr><th style="width:60px">编号</th><th style="width:30%">风险</th><th>量化与边界</th></tr></thead>
+      <tbody>
+        <tr><td class="num">R1</td><td><b>新下载种子的发现延迟</b></td><td>推荐形态下 ≤60s + 波时长 (§13.3), 不是直觉的 24H —— 风险基本消除。</td></tr>
+        <tr><td class="num">R2</td><td><b>「本地种子被删但仍挂清单」的发现延迟</b></td><td>从 ≤5H 变 ≤24H; 宽限期 10 天口径下仍有 ~9 天补救窗口 (重新下载 / 补做种)。可接受。</td></tr>
+        <tr><td class="num">R3</td><td><b>站点侧翻转 (B/C → A) 的发现延迟 ≤24H</b></td><td>重见即管束的防线不变 (§13.1 前提②); 种子在做种则无实际损失 —— 极低概率叠加低损失。</td></tr>
+        <tr><td class="num">R4</td><td><b>观察期节奏变慢</b></td><td>A 档失踪观察期 MISSING_GRACE_WAVES=2 波 (service.py:109) 从 ~10h 变 ~48h —— 只影响「行消失 ⇒ 放行/退役」的登记时点 (本地无种子的行), 不影响保护语义。</td></tr>
+        <tr><td class="num">R5</td><td><b>误判稳态</b> (唯一实质风险)</td><td>载体 = 锚点快照失败被当成零交集 (§13.3 实现纪律拦) 与 index/verified 数据损坏 (现状同样存在, 非降频引入)。</td></tr>
+      </tbody>
+    </table>
+    <p><b>不变项 (无需动)</b>: 复用窗公式 <code>min(reuse_window, refresh_interval)</code> (service.py:1174) 不跟随降频间隔 —— 稳态期复用窗仍 2H, 新鲜度与节奏解耦, 语义正确; 30 天 INDEX_RETENTION 淘汰与降频无相互作用 (还挂清单的行每天至少重见一次, last_seen 持续刷新; 已消失行按 wall clock 淘汰); 手动「立即拉取」/ 频控 / 日额 / Retry-After 全部照旧。</p>
+
+    <h3>13.5 收益量化 (生产两站口径)</h3>
+    <ul>
+      <li><b>请求量</b>: 现状实测两站合计 14 请求/天 (§12.1, BTSchool 8 + CarPT 6, 全页面请求) → 稳态期 1 波/天 × 3 页 = 6/天, <b>-57%</b>; 按 5H 理论节奏口径 (4.8 波 × 3 页 × 2 站 ≈ 28.8/天) 则 <b>-79%</b>。</li>
+      <li><b>附带</b>: 频控余量变大; 站点侧可见请求频率同比例下降 (账号风控暴露减小); <b>非稳态期节奏完全不变 (5H), 保护不弱化</b> —— 这是「动态取值」相对「全局调大 refresh_interval」的本质优势。</li>
+    </ul>
+
+    <h3>13.6 拍板点 (26-10-05 所有者拍板)</h3>
+    <ol>
+      <li><b>idle_refresh_interval 取值</b>: <b>已拍板 24H</b> (1 天一次) —— 与宽限期量级匹配。</li>
+      <li><b>默认值</b>: <b>已拍板默认 24H (默认启用降频)</b> —— 保守默认原则让位于所有者显式定值; 破稳态即时回退 (§13.3) 使默认启用风险可控。</li>
+      <li><b>是否同批修 B2</b> (「下次拉取」文案): 未拍板, 实施时再定 (独立缺陷, 不阻塞)。</li>
+    </ol>
+    <p class="hint">本节只做可行性分析与设计推荐, 未动任何代码; 实施时走 plan 工位 + 立档。原 §01-§12 取证正文与判定一律未动。</p>
+  </section>
+
   <footer>
-    <p>报告工位快照 (出厂即冻结) · 修复取舍走 issue 工位 · memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html</p>
-    <p>取证基线 develop@23796f3b (D:\Projects\auto-qb-clone2) · 生产运行数据取自主 clone auto-qb-data (只读) · 生成 2026-10-03 15:05 +08:00</p>
+    <p>报告工位快照 (§01-§12 出厂即冻结; 26-10-05 增补 §13 后记 —— 稳态降频可行性分析, 用户动议触发, 取证正文未动) · 修复取舍走 issue 工位 · memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html</p>
+    <p>取证基线 develop@23796f3b (D:\Projects\auto-qb-clone2) · §13 后记代码引用基线 beb6223d · 生产运行数据取自主 clone auto-qb-data (只读) · 生成 2026-10-03 15:05 +08:00 · 增补 2026-10-05 05:12 · 拍板回写 05:30 +08:00</p>
   </footer>
 
 </div>
