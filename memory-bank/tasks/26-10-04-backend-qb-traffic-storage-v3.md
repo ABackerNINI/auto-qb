@@ -34,7 +34,7 @@
 | ② | S4 配置键 + schema | flush_interval 全链 + sample_interval ≥main_tick 硬校验 | Done (30eebcf0) |
 | ③ | S2a 写侧翻转核心 | BlockBuffer/游程/flush 驱动/跨天切块/stop()/回拨钳制/翻 v3 目录/热重载联动 | Done (7b89d0da) |
 | ④ | S2b 聚合与恢复 | 累计器/水位封口/文件尾恢复/catch-up 硬序/hour 裁剪/淘汰新口径/seal_sweep 退役 | Done (62998945) |
-| ⑤ | S3a 读侧核心 | 有效 dt 桶宽/跨桶覆盖(D1)/块间 gap 真空/按天加载/解析缓存 | Open |
+| ⑤ | S3a 读侧核心 | 有效 dt 桶宽/跨桶覆盖(D1)/块间 gap 真空/按天加载/解析缓存 | Done (fca0cb96) |
 | ⑥ | S3b 视图+端点+前端 | WINDOW_SPECS(D4: 6mo/1y/all)/组端点去 global/A4 下界常量/档位文案 | Open |
 | ⑦ | S5 收尾与基线 | index.json/v1v2 死代码退役/docstring v3 契约/实测数字/基线切片/回写 | Open |
 | ⑧ | 合回 develop | 分支合并回本地 develop, 等用户提交指令 | Open |
@@ -50,3 +50,4 @@
 - S2a 实施期细化(已钉测试): 块首游程 dt 基准 = B.start(非块首 = 写侧游标), OpenRun.start 保留首样本实测时刻作时长基准; 块首亚秒余量成初始累积漂移由显式 dt 吸收; 午夜硬切天然 ≤1 间隔块间 gap(真空判定属 S3)。
 - **2026-10-05 0x:xx S2b 完成 (62998945)**: SeriesAgg 前向记账(与 dt 链同源)/flush 时点水位封口合并 append/catch-up 硬序(补算全落盘才裁剪, 窗口=rollup_window)/hour 裁剪 tmp+replace 仅存点/淘汰删系列目录(文件名日期算龄+每小时节流)/dry_run 全短路。修复中断会话遗留实现的真缺陷: _agg_ingest_hour/day 产出行从未进待写批(hour/day 行落不了盘)。新增 17 例。2557 passed / 4 skipped, 覆盖率报 98.50%(S5 收尾核对是否跌破 99% 基线)。偏差: n 游程引导区间记上一观测速率(前向记账必然); _agg_ingest_day 月级联支防御面保留。
 - 流程注记: T4 首次派发遇配额中断(现场遗留 557 行未提交实现), 重派后经逐条核对规格+补测试+修真缺陷后入库——中断遗留代码不可盲信, 必须核对。
+- **2026-10-05 S3a 完成 (fca0cb96)**: grid v3 读侧区(v3_series_points/v3_totals_points/v3_series_slots 并流接缝); V3DayCache(mtime_ns+size 键控, 4MB 文本预算 LRU, 整天粒度); 真空/断连分离(≤1 间隔天然 gap 被块首桶吸收不误报); D1 实施期定约: 覆盖语义实现为「逐记录覆盖桶」(桶宽=ceil(有效dt) 天然覆盖有效 dt 全程; z 均摊槽展开多桶为字面形态), 否决向前铺格方案(ceil 累积偏移破坏时间真值)。grid 17→20, store +3 缓存例。2563 passed / 4 skipped; 覆盖率回落 98%(grid 96%, v2 残留路径经端点面间接覆盖)——S5 退役 v2 后复核回 99%。
