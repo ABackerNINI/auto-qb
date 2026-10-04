@@ -398,7 +398,8 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
     阶段聚合完成, 此处仅做转换, 可假定配置正确(不含任何检查)。缺省键走 QbTraffic 默认值。
     配置样式:
         enabled: false             # 功能总开关(缺省 false; false = 不建任务不建目录零文件)
-        sample_interval: 30S       # 采样间隔(1.5s-600s)
+        sample_interval: 30S       # 采样间隔(>= main_tick, 上限 600s)
+        flush_interval: 10M        # 缓冲批量落盘周期(60S~1H, 整数秒)
         raw_window: 24H            # raw 段保留窗(1h-90d)
         rollup_window: 30D         # hour 段保留窗(7d 起, 无上限)
     """
@@ -408,6 +409,7 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
     return QbTraffic(
         enabled=parse_bool(str(spec["enabled"])) if "enabled" in spec else d.enabled,
         sample_interval=parse_time(str(spec["sample_interval"])) if "sample_interval" in spec else d.sample_interval,
+        flush_interval=parse_time(str(spec["flush_interval"])) if "flush_interval" in spec else d.flush_interval,
         raw_window=parse_time(str(spec["raw_window"])) if "raw_window" in spec else d.raw_window,
         rollup_window=parse_time(str(spec["rollup_window"])) if "rollup_window" in spec else d.rollup_window,
     )

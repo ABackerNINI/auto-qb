@@ -117,6 +117,7 @@ notify.min_level
 notify.quiet_hours
 qb_traffic
 qb_traffic.enabled
+qb_traffic.flush_interval
 qb_traffic.raw_window
 qb_traffic.rollup_window
 qb_traffic.sample_interval

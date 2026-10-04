@@ -184,6 +184,22 @@ def _check_regex_patterns(patterns: list, where: str, errors: List[str]) -> None
                 errors.append(f"{where}[{i}]: 非法正则: {e}")
 
 
+def _current_main_tick(cfg: dict):
+    """从同一份 config 现取 main_tick 秒值(qb_traffic.sample_interval 下限硬校验用, 计划 26-10-04-1957 §06.1)
+
+    缺省走 models.Config.main_tick 的默认值(延迟导入防环); main_tick 自身写坏时返回 None,
+    交叉校验跳过 —— 主 tick 的格式/范围错误已由 validate_config 记进 errors, 不缺这一条。
+    """
+    if "main_tick" not in cfg:
+        from ..models import Config
+
+        return Config().main_tick
+    try:
+        return parse_time(cfg["main_tick"])
+    except ValueError:
+        return None
+
+
 def validate_config(data) -> List[str]:
     """全量校验配置(结构/未知键/必填项/值格式), 返回错误列表(空 = 通过)
 
@@ -281,7 +297,7 @@ def validate_config(data) -> List[str]:
     _validate_notify(cfg.get("notify"), errors)
     _validate_web(cfg.get("web"), errors)
     _validate_hr_check(cfg.get("hr_check"), errors)
-    _validate_qb_traffic(cfg.get("qb_traffic"), errors)
+    _validate_qb_traffic(cfg.get("qb_traffic"), errors, _current_main_tick(cfg))
     _validate_tag_lists(cfg, errors)
     _validate_trackers(cfg.get("trackers"), rules_config, errors)
     # 站点绑定类校验(计划 26-09-27-1318 §3.3): 绑不上/绑多个/缺 hr 段 —— 要等 trackers 与

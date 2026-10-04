@@ -5,7 +5,7 @@ from typing import List
 
 from ...infra.utils import parse_bool, parse_fsize, parse_hm, parse_hr_condition, parse_speed, parse_time
 from .. import site_presets
-from .core import _check_regex_patterns, _check_str_list, _check_unknown_keys, _try, _try_number, _try_time
+from .core import _check_regex_patterns, _check_str_list, _check_unknown_keys, _fmt_s, _try, _try_number, _try_time
 from .rules import _check_rule_refs
 
 KNOWN_LOG_KEYS = {"level", "file", "max_bytes", "format"}
@@ -24,8 +24,13 @@ KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
-# qb_traffic(qB 口径流量采样, plan 26-10-03-0946 §06)
-KNOWN_QB_TRAFFIC_KEYS = {"enabled", "sample_interval", "raw_window", "rollup_window"}
+# qb_traffic(qB 口径流量采样, plan 26-10-03-0946 §06; flush_interval 为 v3 新键, 计划 26-10-04-1957 §06.1)
+KNOWN_QB_TRAFFIC_KEYS = {"enabled", "sample_interval", "flush_interval", "raw_window", "rollup_window"}
+
+# qb_traffic.flush_interval 边界(v3 计划 26-10-04-1957 §06.1): 缓冲批量落盘周期 —— 下限防写放大
+# (fsync 风暴), 上限防崩溃丢失窗口过大; 须为整数秒(游标/块头时间戳按整秒粒度推算)
+FLUSH_INTERVAL_MIN_S = 60.0
+FLUSH_INTERVAL_MAX_S = 3600.0
 
 # hr_check(HR 在线核实, v3 15 键口径, 计划 26-09-28-1932 §6.1 + 26-09-30-0240); 站点级与全局共用区分两套键集
 KNOWN_HR_CHANNEL_KEYS = {"enabled", "port", "token", "extension_id", "request_timeout"}
@@ -576,13 +581,15 @@ def _validate_notify(spec, errors: List[str]) -> None:
                     errors.append(f"config.notify.channels[{i}]: 未知渠道 '{name}', 可用: {sorted(NOTIFY_CHANNELS)}")
 
 
-def _validate_qb_traffic(spec, errors: List[str]) -> None:
+def _validate_qb_traffic(spec, errors: List[str], main_tick: float = None) -> None:
     """校验 config.qb_traffic 段(qB 口径流量采样, plan 26-10-03-0946 方案C §06); 未配置(None)合法 = 不启用
 
-    边界依据(§06 表, 26-10-04 按用户拍板放宽): sample_interval 1.5s-600s(原 15s 下限防请求放大 ——
-    采样只读内存快照零 qB 请求, 放宽后仅剩写放大代价; 上限防 24h 视图颗粒过粗);
+    边界依据(§06 表; v3 计划 26-10-04-1957 §06.1 修订): sample_interval 下限 = main_tick(硬校验,
+    main_tick 从同一份 config 现取 —— 采样任务由主循环节拍驱动, 比 tick 还细的间隔调度上不可实现;
+    上限 600 防视图颗粒过粗); flush_interval 60-3600s 整数秒(v3 新键: 缓冲批量落盘周期, 缺省 600);
     raw_window 1h-90d(原 72h 上限防单文件超体量, 用户接受体量换 3 个月高分辨率);
     rollup_window 7d 起、无上限(原 90d 上限取消 —— 设得足够久即等效永久保留)。
+    「main_tick 整数倍」不在本层校验(裁决 D5): 失配只是精度损耗不致错误行为, 告警落采样模块检测点。
     """
     if spec is None:
         return
@@ -593,9 +600,26 @@ def _validate_qb_traffic(spec, errors: List[str]) -> None:
     if "enabled" in spec:
         _try(parse_bool, spec["enabled"], "config.qb_traffic.enabled", errors)
     if "sample_interval" in spec:
-        _try_time(
-            spec["sample_interval"], "config.qb_traffic.sample_interval", errors, positive=True, min_s=1.5, max_s=600
-        )
+        seconds = _try(parse_time, spec["sample_interval"], "config.qb_traffic.sample_interval", errors)
+        if seconds is not None:
+            if seconds <= 0:
+                errors.append(f"config.qb_traffic.sample_interval: 必须为正时间: {spec['sample_interval']}")
+            elif seconds > 600:
+                errors.append("config.qb_traffic.sample_interval: 须 <= 600s")
+            elif main_tick is not None and seconds < main_tick:
+                errors.append(
+                    f"config.qb_traffic.sample_interval: 须 >= main_tick({_fmt_s(main_tick)}s)"
+                    f"(采样节奏不细于主循环节拍): {spec['sample_interval']}"
+                )
+    if "flush_interval" in spec:
+        seconds = _try(parse_time, spec["flush_interval"], "config.qb_traffic.flush_interval", errors)
+        if seconds is not None:
+            if seconds < FLUSH_INTERVAL_MIN_S:
+                errors.append(f"config.qb_traffic.flush_interval: 须 >= {_fmt_s(FLUSH_INTERVAL_MIN_S)}s")
+            elif seconds > FLUSH_INTERVAL_MAX_S:
+                errors.append(f"config.qb_traffic.flush_interval: 须 <= {_fmt_s(FLUSH_INTERVAL_MAX_S)}s")
+            elif seconds != int(seconds):
+                errors.append(f"config.qb_traffic.flush_interval: 须为整数秒: {spec['flush_interval']}")
     if "raw_window" in spec:
         _try_time(
             spec["raw_window"], "config.qb_traffic.raw_window", errors, positive=True, min_s=3600, max_s=90 * 86400

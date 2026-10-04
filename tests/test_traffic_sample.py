@@ -5,7 +5,12 @@
 - test_qb_traffic_config_parses_sample: 完整样例解析(enabled/三个时间键换算成秒)
 - test_qb_traffic_config_partial_falls_back_to_defaults: 部分键缺省回退 QbTraffic 默认值
 - test_qb_traffic_config_rejects_bad_section: 段非 dict / 未知键 / enabled 非布尔
-- test_qb_traffic_config_bounds_matrix: 四时间/布尔键边界矩阵(1.5S~10M / 1H~90D / 7D~无上限 恰好压线收, 压线外拒)
+- test_qb_traffic_config_bounds_matrix: 各时间/布尔键边界矩阵(1.5S 需 main_tick 配合 / 60S~1H / 1H~90D / 7D~无上限 恰好压线收, 压线外拒)
+- test_qb_traffic_sample_interval_below_main_tick_rejected: v3 下限硬校验(26-10-04-1957 §06.1) ——
+  sample_interval < main_tick 加载期拒(1.5s 档在 main_tick=2s 下被拒), 恰等于压线收
+- test_qb_traffic_sample_interval_multiple_mismatch_not_an_error: 裁决 D5 —— 非 main_tick 整数倍校验层不报错
+- test_qb_traffic_flush_interval_bounds: v3 新键 flush_interval —— dataclass 缺省 600 /
+  60~3600s 整数秒压线收 / 越界与非整数秒与坏格式聚合报错
 - test_sample_task_registered_when_enabled: enabled=true -> start 创建 qb_traffic_sample 全局任务(interval=采样间隔)
 - test_sample_task_not_registered_when_disabled: enabled=false 与键组缺省(None)两种情形均不建任务
 - test_sample_task_reregisters_on_queue_rebuilt: L2 队列重建 -> 按新配置重入队(换 interval/启用/停用三向)
@@ -120,20 +125,21 @@ class _ModuleLogCapture:
 
 
 # ---------- 配置键全链(§06) ----------
-def _cfg_dict(qb_traffic_spec) -> dict:
-    return {
-        "config":
-            {
-                "qbittorrent": {
-                    "host": "127.0.0.1",
-                    "port": 8080,
-                    "username": "u",
-                    "password": "p"
-                },
-                "trackers": {},
-                "qb_traffic": qb_traffic_spec,
-            }
+def _cfg_dict(qb_traffic_spec, main_tick=None) -> dict:
+    """配置 dict 样例; main_tick 可选(v3 下限语义: sample_interval >= main_tick 硬校验要现取它)"""
+    top = {
+        "qbittorrent": {
+            "host": "127.0.0.1",
+            "port": 8080,
+            "username": "u",
+            "password": "p"
+        },
+        "trackers": {},
+        "qb_traffic": qb_traffic_spec,
     }
+    if main_tick is not None:
+        top["main_tick"] = main_tick
+    return {"config": top}
 
 
 def _load(tmp_path, qb_traffic_spec):
@@ -167,27 +173,30 @@ def test_qb_traffic_config_absent_means_disabled(tmp_path):
 
 
 def test_qb_traffic_config_parses_sample(tmp_path):
-    """完整样例解析: enabled 布尔化 + 三个时间键换算成秒"""
+    """完整样例解析: enabled 布尔化 + 各时间键换算成秒(含 v3 新键 flush_interval)"""
     cfg = _load(
         tmp_path, {
             "enabled": "true",
             "sample_interval": "1M",
+            "flush_interval": "10M",
             "raw_window": "48H",
             "rollup_window": "60D",
         }
     ).qb_traffic
     assert cfg.enabled is True
     assert cfg.sample_interval == 60.0
+    assert cfg.flush_interval == 600.0
     assert cfg.raw_window == 48 * 3600.0
     assert cfg.rollup_window == 60 * 86400.0
 
 
 def test_qb_traffic_config_partial_falls_back_to_defaults(tmp_path):
-    """部分键缺省回退默认值(30S/24H/30D, enabled 缺省 false)"""
+    """部分键缺省回退默认值(30S/10M/24H/30D, enabled 缺省 false)"""
     cfg = _load(tmp_path, {"enabled": "true"}).qb_traffic
     assert cfg.enabled is True
     d = QbTraffic()
     assert cfg.sample_interval == d.sample_interval == 30.0
+    assert cfg.flush_interval == d.flush_interval == 600.0
     assert cfg.raw_window == d.raw_window == 86400.0
     assert cfg.rollup_window == d.rollup_window == 30 * 86400.0
 
@@ -202,15 +211,19 @@ def test_qb_traffic_config_rejects_bad_section():
 
 
 def test_qb_traffic_config_bounds_matrix():
-    """边界矩阵: 恰好压线合法(含等价秒数), 压线外拒绝; 三时间键各自独立校验"""
-    # 合法: 上下边界恰好压线(1.5S~10M / 1H~90D / 7D~无上限)
+    """边界矩阵: 恰好压线合法(含等价秒数), 压线外拒绝; 各时间键独立校验"""
+    # 合法: 上下边界恰好压线(1.5S 需 main_tick <= 1.5s 才过下限硬校验 / 1H~90D / 7D~无上限)
     ok = validate_config(
-        _cfg_dict({
-            "enabled": "true",
-            "sample_interval": "1.5S",
-            "raw_window": "1H",
-            "rollup_window": "7D",
-        })
+        _cfg_dict(
+            {
+                "enabled": "true",
+                "sample_interval": "1.5S",
+                "flush_interval": "10M",
+                "raw_window": "1H",
+                "rollup_window": "7D",
+            },
+            main_tick="1S",  # 1.5S >= main_tick: 下限语义自证(默认 main_tick=2 时 1.5S 已非法, 见下方专项用例)
+        )
     )
     assert ok == [], ok
     ok = validate_config(
@@ -218,6 +231,7 @@ def test_qb_traffic_config_bounds_matrix():
             {
                 "enabled": "false",
                 "sample_interval": "10M",
+                "flush_interval": "1H",  # 3600s 恰好压上边界
                 "raw_window": "90D",
                 "rollup_window": "36500D",  # 保留窗无上限: 100 年也合法(等效永久保留)
             }
@@ -225,8 +239,6 @@ def test_qb_traffic_config_bounds_matrix():
     )
     assert ok == [], ok
     # 越界: 各键压线外一秒即拒
-    bad = validate_config(_cfg_dict({"sample_interval": "1.4S"}))
-    assert any("sample_interval" in e for e in bad), bad
     bad = validate_config(_cfg_dict({"sample_interval": "601S"}))
     assert any("sample_interval" in e for e in bad), bad
     bad = validate_config(_cfg_dict({"raw_window": "30M"}))
@@ -235,6 +247,37 @@ def test_qb_traffic_config_bounds_matrix():
     assert any("raw_window" in e for e in bad), bad
     bad = validate_config(_cfg_dict({"rollup_window": "6D"}))
     assert any("rollup_window" in e for e in bad), bad
+
+
+def test_qb_traffic_sample_interval_below_main_tick_rejected():
+    """v3 下限语义(plan 26-10-04-1957 §06.1): sample_interval < main_tick 加载期硬拒
+
+    回归锚: 1.5s 档在校验放宽时曾合法, main_tick=2s 下必须被拒(采样任务由主循环节拍驱动)。
+    """
+    errors = validate_config(_cfg_dict({"sample_interval": "1.5S"}, main_tick="2S"))
+    assert any("sample_interval" in e and "main_tick" in e for e in errors), errors
+    # 压线即合法: 恰等于 main_tick 收
+    assert validate_config(_cfg_dict({"sample_interval": "2S"}, main_tick="2S")) == []
+
+
+def test_qb_traffic_sample_interval_multiple_mismatch_not_an_error():
+    """裁决 D5: 非 main_tick 整数倍只是精度损耗, 校验层不报错(告警落采样模块检测点, S4 不落)"""
+    assert validate_config(_cfg_dict({"sample_interval": "3S"}, main_tick="2S")) == []
+
+
+def test_qb_traffic_flush_interval_bounds():
+    """flush_interval(v3 新键): 60~3600s 整数秒压线收; 越界 / 非整数秒 / 坏格式聚合报错"""
+    assert QbTraffic().flush_interval == 600.0  # dataclass 缺省 600
+    for good in ("60S", "600S", "1H", "10M"):  # 压线 + 等价写法
+        assert validate_config(_cfg_dict({"flush_interval": good})) == [], good
+    bad = validate_config(_cfg_dict({"flush_interval": "30S"}))
+    assert any("flush_interval" in e and ">= 60" in e for e in bad), bad
+    bad = validate_config(_cfg_dict({"flush_interval": "7200S"}))
+    assert any("flush_interval" in e and "<= 3600" in e for e in bad), bad
+    bad = validate_config(_cfg_dict({"flush_interval": "90.5S"}))
+    assert any("flush_interval" in e and "整数秒" in e for e in bad), bad
+    bad = validate_config(_cfg_dict({"flush_interval": "abc"}))
+    assert any("config.qb_traffic.flush_interval" in e for e in bad), bad
 
 
 # ---------- 任务注册(P1 验收: enabled=false 不注册任务) ----------
