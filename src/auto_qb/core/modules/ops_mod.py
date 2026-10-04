@@ -11,7 +11,7 @@ recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本
   WEB 源是手动排障, 不受限 —— 限制它就是「按钮为什么不生效」。
 - 防「真实冲突」的作用所有来源: 在途互斥(_active_checks 登记 / 快照 checking 态, R1)、
   recheck 提交点实时复核(R1, plan 26-10-04-1824)、跳检实时复核(R2)、跳检同日去重
-  (skip_check_day)、跳检前置闸门组(G3/G4/G5/G6/filelist, 三分流判定单点
+  (skip_check_day)、跳检前置闸门组(G3-G8/filelist, 三分流判定单点
   _skip_gates_detail + 执行路径 _skip_gates 派生 + 预检 skip_check_precheck, plan 26-10-05-0314)。
   判据: 被拒时用户能否从界面自行看出原因 —— checking 态种子列表可见
   (拒绝可自解释), 保留; 不可见窗口的拒绝一律不对 WEB 设。
@@ -76,6 +76,7 @@ class GateVerdict:
     """单道跳检闸门的判定结果(不可变值对象): gate 闸门 id / cls 三分流标签 / text 拒绝文案
 
     gate 取值: "G3"(已完成) / "G4"(活跃中) / "G5"(同 hash 校验在途) / "G6"(组内活跃下载) /
+    "G7"(组内其它成员校验在途) / "G8"(组内成员校验失败推断) /
     "partial"(部分下载) / "dedup"(同日去重) / "filelist"(前置文件检查) / "gone"(预检时种子已不在
     客户端, 仅 skip_check_precheck 产出)。拒绝文案按「原因+后果+出路」三段式(plan §03)。
     """
@@ -398,7 +399,8 @@ class OpsModule(BaseModule):
           危险确认框已承担风险告知, 不把规则告警泄漏进 WEB)。
         - 安全闸门全来源生效(三分流归类见 GateVerdict): 部分下载禁止跳检 / 跨规则同日去重
           (skip_check_day 跨来源共享, 拒绝文案「今日已跳检过」自解释) / 已完成与活跃中禁止(G3/G4) /
-          组内活跃下载禁止(G6) / 同 hash 校验在途可强制(G5) / 前置文件检查(filelist)。
+          组内活跃下载禁止(G6) / 同 hash 校验在途可强制(G5) / 组内其它成员校验在途可强制(G7) /
+          组内成员校验失败推断禁止(G8) / 前置文件检查(filelist)。
         - force: 仅豁越 cls=force 的未过闸门(降级 warning + INFO 审计后放行), cls=blocked 一律硬拒;
           缺省 False —— 规则侧调用点不传(签名缺省即零变化不变式的证明)。
         - torrent: 可选活记录; None 时经 store 取(规则侧 ctx.torrent 与缺省取值等价)。
@@ -567,7 +569,7 @@ class OpsModule(BaseModule):
         零副作用铁律(T20): 本判定不写 state、不 prune、不 pop、无任何 qB 写 API —— 预检
         「只是看看」不得改状态; skip_check_day 的清理留在执行路径(_skip_gates 尾部)。
 
-        顺序与短路: G3 → G4 → G5 → G6 → partial → dedup → filelist(排最后, plan 插入点由
+        顺序与短路: G3 → G4 → G5 → G6 → G7 → G8 → partial → dedup → filelist(排最后, plan 插入点由
         skip_check 的执行序保证: R2 实时复核之后、导出之前)。前面已有 **blocked** 未过时短路
         跳过 filelist(省一次 files API + N 次 stat —— 结论已注定 blocked); 仅 force 类未过时
         **不**短路: force=True 豁越后 filelist 仍须真跑(case 1 硬闸不得被短路绕过)。
@@ -577,10 +579,21 @@ class OpsModule(BaseModule):
           rules/actions/checking.py:88 决策链 0(两处注释互指); stalledDL 等边缘态口径由
           state_enum 现有语义决定, 与规则侧天然一致(同一谓词), 不发明 WEB 特有口径(plan §03)。
         - G5 同 hash 校验在途(ctx.task_queue.active_check_hashes(), recheck 在途互斥同款原语):
-          跳检删种会杀死在途校验轮询 —— 唯一 case 2(下一棒 G7 组内校验在途同归 force,
-          插在 G6 之后、partial 之前即可, 无需重构)。
+          跳检删种会杀死在途校验轮询 —— case 2(组内其它成员校验在途同归 case 2, 见 G7)。
         - G6 组内有活跃下载成员(经 store.group_has_downloading, S1a 上移的组级判定单点):
           组内共享物理文件, 下载方正在写, 跳检把全部块标有效 = 脏数据。
+        - G7 组内其它成员 full-checking 在途(case 2): 谓词逐字镜像
+          rules/actions/full_checking.py _wait_for_group_checking.others_checking(决策链 1.5,
+          others-only 排除自身), 两半视野: 队列登记 active_check_hashes(规则发起) ∪ store 快照
+          is_checking(后半覆盖用户手动 recheck —— G5 的队列视野看不见它)。判决窗口抢跑是真不确定:
+          判决通过即证明共享文件完好, 判决失败则洗白坏数据 —— 同 G5 给 force 逃生(D4/D8 拍板)。
+        - G8 组内成员校验失败推断(case 1): 四要件逐字镜像
+          rules/actions/full_checking.py _skip_on_group_check_failed(决策链 1.6, others-only):
+          其它成员 / 当日计数(recheck_fails, 含宽限耗尽/异常噪声 —— 继承规则侧既有假阳性面,
+          同日窗口+自愈条件兜底, 不发明更锐利谓词) / 假失败自愈**只读变体**: 记录指向已完成/
+          已删成员时不参与推断且不 pop(规则侧此处 pop, full_checking.py:146) —— 清理仍归规则侧
+          与次日重置, 本判定零副作用铁律(T20) / 文件映射一致(group_sizes)。出路 = 对该组做
+          full-checking 修数据。
         - partial(0<p<1): 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法发现未下载的零块,
           is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据)。仅 progress==0(全新辅种,
           数据完整)可跳检; full-checking 对部分下载安全, 不设限。
@@ -617,7 +630,7 @@ class OpsModule(BaseModule):
                     )
                 )
 
-        # G5 同 hash 校验在途(唯一 case 2): 判决窗口抢跑是真不确定 —— 强制 = 杀死在途校验
+        # G5 同 hash 校验在途(case 2): 判决窗口抢跑是真不确定 —— 强制 = 杀死在途校验
         # (已花 I/O 作废)且不经其判决断言数据有效; 用户明知本轮校验无意义(如误发起)时留逃生
         if hash in self._ctx.task_queue.active_check_hashes():
             verdicts.append(
@@ -632,6 +645,53 @@ class OpsModule(BaseModule):
                 GateVerdict("G6", GATE_BLOCKED, "组内有种子正在下载: 组内成员共享同一物理文件, 下载方正在写入, "
                             "跳检会把全部块标有效(脏数据); 请先暂停组内下载方再跳检")
             )
+
+        # ---- G7/G8 组内镜像闸门(S1b-2): members 数据源与规则侧同一真相(checking.py:93
+        # grouping._group_members 即委托 store.group_members), 谓词逐字镜像, 镜像注释互指在 ops 侧
+        members = self._ctx.store.group_members(hash)
+
+        # G7 组内其它成员 full-checking 在途(case 2): 谓词逐字镜像 rules/actions/full_checking.py
+        # _wait_for_group_checking.others_checking(决策链 1.5, others-only 排除自身), 两半视野:
+        # 队列登记 active_check_hashes(规则发起) ∪ store 快照 is_checking(后半覆盖用户手动 recheck
+        # —— G5 的队列视野看不见它)。跳检删种会杀死组员在途校验, 且不经其判决断言共享数据有效;
+        # 赌注两面: 判决通过即证明文件完好 / 判决失败则坏数据被永久洗白 —— 同 G5 给 force 逃生
+        others = [h for h in members if h != hash]
+        inflight = self._ctx.task_queue.active_check_hashes()
+        by_hash = self._ctx.store.by_hash
+        if others and any(h in inflight or (h in by_hash and by_hash[h].state_enum.is_checking) for h in others):
+            verdicts.append(
+                GateVerdict(
+                    "G7", GATE_FORCE, "同组种子正在全量校验中: 等其结束后再跳检, 校验通过即证明共享文件完好; "
+                    "强制跳检将不经其判决断言数据有效, 若判决为失败坏数据将被永久洗白"
+                )
+            )
+
+        # G8 组内成员校验失败推断(case 1): 四要件逐字镜像 rules/actions/full_checking.py
+        # _skip_on_group_check_failed(决策链 1.6, others-only): 其它成员 / 当日计数(recheck_fails,
+        # 含宽限耗尽/异常噪声 —— 继承规则侧既有假阳性面, 同日窗口+自愈条件兜底, 不发明更锐利谓词) /
+        # 假失败自愈只读变体 / 文件映射一致。当日校验失败+同映射 = 数据已被证伪, 强制跳检 = 明知坏
+        # 仍标有效并上传, force 无正当用途(「赌已输」与 G7 的「赌未定」有本质区别)
+        key = self._ctx.store.member_to_key.get(hash)
+        if key is not None:
+            sizes = self._ctx.store.group_sizes.get(key, {})
+            mine = sizes.get(hash)
+            if mine:
+                for h in members:
+                    if h == hash or recheck_fail_count(self._ctx.state, h) <= 0:
+                        continue
+                    rec = self._ctx.store.get(h)
+                    if rec is None or rec.progress >= 1.0:
+                        # 只读自愈(T20): 假失败记录不参与推断且**不 pop**(规则侧此处 pop 记录,
+                        # full_checking.py:146) —— 清理仍归规则侧与次日重置, 本判定零副作用
+                        continue
+                    if sizes.get(h) == mine:
+                        verdicts.append(
+                            GateVerdict(
+                                "G8", GATE_BLOCKED, f"同组种子 {h[:8]} 今日校验失败且文件映射一致, "
+                                "共享数据已证实有问题, 禁止跳检; 请先对该组做 full-checking"
+                            )
+                        )
+                        break  # 同规则侧返回语义: 首个同映射失败成员即成判
 
         # partial 部分下载(既有闸门并入 detail, 文案零变化)
         if 0.0 < progress < 1.0:
