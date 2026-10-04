@@ -297,7 +297,10 @@ class HrWorker:
         results: List[HrRefreshResult] = []
         for site in self.service.enabled_sites():
             force = force_sites is not None and site in force_sites
-            result = self.service.refresh_site(site, anchors_by_site.get(site), force=force)
+            # 锚点三态交接(计划 26-10-05-0555 §2.5): 采集失败(None)原样直通 = 稳态不生效;
+            # 采集成功而该站键缺失 → {} = 确认该站零锚点(可降频, S1 场景主路径)。
+            anchors = anchors_by_site.get(site, {}) if anchors_by_site is not None else None
+            result = self.service.refresh_site(site, anchors, force=force)
             results.append(result)
             self._note(site, result)
         if results:
@@ -310,19 +313,21 @@ class HrWorker:
 
     # ---------- 内部 ----------
 
-    def _collect_anchors(self) -> Mapping[str, Mapping[str, Any]]:
+    def _collect_anchors(self) -> Optional[Mapping[str, Mapping[str, Any]]]:
         """本地种子锚点(infohash -> HrAnchor): 由主循环以**不可变数据**交接
 
-        取数线程不读 store(线程边界) —— M3 接入 TorrentRecord 后由主循环提供;
-        现在没有提供者就返回空(锚点只用于「提前作废本实例放行」, 缺了不影响刷新)。
+        取数线程不读 store(线程边界) —— M3 接入 TorrentRecord 后由主循环提供。
+        返回 None = 锚点**未知**(未接提供者 / 主循环侧取数失败), 与「确认零锚点」(空映射)
+        严格区分(计划 26-10-05-0555 §2.5): None 本轮不构成稳态(不把「不知道」当「零种子」
+        而错误降频), wave 行为与空锚点一致(锚点只用于「提前作废本实例放行」, 缺了不影响刷新)。
         """
         if self._anchors_fn is None:
-            return {}
+            return None
         try:
             return self._anchors_fn() or {}
         except Exception as e:  # 主循环侧取数失败不该影响刷新
             logger.warning(f"HR 取数线程获取本地锚点失败(本轮忽略): {e}")
-            return {}
+            return None
 
     def _build_views(self, results: List[HrRefreshResult]) -> HrViewSet:
         """本轮视图: 优先用**内存快照**(未落盘时也能反映本轮结果), 其余站点读已落盘数据"""

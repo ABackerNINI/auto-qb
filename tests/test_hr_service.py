@@ -200,7 +200,9 @@ def make_service(tmp_path, fetcher, *, site=None, gconf=None, clock=None) -> HrR
 
 
 def run_wave(service, anchors=None):
-    return service.refresh_site(SITE, anchors or {})
+    # 三态直通(计划 26-10-05-0555 §2.5): None = 锚点未知(不构成稳态, 与本计划实施前的闸门节奏一致);
+    # 显式 {} = 确认零锚点(可降频)。旧实现这里是 `anchors or {}`, 复刻的是 refresh_site 已删除的吞并。
+    return service.refresh_site(SITE, anchors)
 
 
 def mk_blob(name: str):
@@ -631,7 +633,8 @@ def test_zero_rows_confirmed_release(tmp_path):
     assert "h1" in data.verified  # 零行 + 确认戳 → 放行
     # 再现非零行 → 戳失效
     fetcher.pages = standard_pages(rows_b=five_expired_rows(20))
-    clock.advance(13 * 3600)
+    # 稳态降频(26-10-05-0555): h1 已放行出对象集 → 对象集空 = 稳态, 下一波按 idle 间隔(默认 24H)到点
+    clock.advance(24 * 3600.0 + 60.0)
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     assert data.empty_confirmed_at == 0.0
@@ -778,7 +781,8 @@ def test_terminal_vanish_writes_release(tmp_path):
     assert h21 not in data.verified, "命中不是放行: 放行记录由冻结/未列出签发来落"
     # 第二波: B 档空表(全深度) → 条目消失被证明 → 退役 + 放行记录(毕业来源)
     fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
-    clock.advance(13 * 3600)
+    # 稳态降频(26-10-05-0555): 终态条目出对象集 → 对象集空 = 稳态, 下一波按 idle 间隔(默认 24H)到点
+    clock.advance(24 * 3600.0 + 60.0)
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].active is False
@@ -807,7 +811,8 @@ def test_terminal_vanish_c_lane_release_source(tmp_path):
     assert data.index[21].lane == LANE_UNSATISFIED and data.index[21].infohash_v1 == h21
     assert h21 not in data.verified
     fetcher.pages = {url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")}
-    clock.advance(13 * 3600)
+    # 稳态降频(26-10-05-0555): 终态条目出对象集 → 对象集空 = 稳态, 下一波按 idle 间隔(默认 24H)到点
+    clock.advance(24 * 3600.0 + 60.0)
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].active is False
@@ -862,7 +867,7 @@ def test_merge_seen_refreshes_last_seen(tmp_path):
     fetcher = FakeFetcher(pages=pages)
     service = make_service(tmp_path, fetcher, clock=clock)
     t0 = clock()
-    run_wave(service, {})
+    run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].last_seen == t0, "本波已见行: last_seen = 合并进索引的时刻"
     assert data.index[21].first_seen == t0, "新条目 first_seen 兜底同源(假时钟, 不再真挂钟)"
@@ -878,7 +883,7 @@ def test_merge_seen_refreshes_last_seen(tmp_path):
     }
     clock.advance(13 * 3600)
     t1 = clock()
-    run_wave(service, {})
+    run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].active is False
     assert data.index[21].last_seen == t0, "退役条目不再进合并口: last_seen 冻结在最后见到时刻(淘汰计时起点)"
@@ -1601,12 +1606,12 @@ def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
     fetcher = FakeFetcher(pages={url_of(l): LOGIN_PAGE for l in "ABC"})
     service = make_service(tmp_path, fetcher, clock=clock)
     with service_log() as messages:
-        first = run_wave(service, {})
+        first = run_wave(service)
         assert first.action == ACTION_ERROR and "登录页" in first.reason
         data, _ = service.store(SITE).read_unlocked()
         assert data.rate.last_fetch_ts == clock.now, "登录页路径同样前进间隔基准"
         clock.advance(120.0)
-        second = run_wave(service, {})
+        second = run_wave(service)
         assert second.action == ACTION_ERROR
     login_errors = [m for m in messages if "页面是登录页 ⇒" in m]
     assert len(login_errors) == 1, "登录恢复前每站只报一次(状态变化报一次), 不再每波重报"
@@ -1618,11 +1623,11 @@ def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
     assert sum("登录态仍未恢复(已告警过" in m for m in repeat_messages) == 1
     # 恢复重置: 中间正常波拿到内容页 -> 清去重标记; 再次登录失效重新报一次
     fetcher.pages.update(standard_pages())
-    assert run_wave(service, {}).action == "refreshed"  # 登录波不设复用窗, 恢复波直接可跑
+    assert run_wave(service).action == "refreshed"  # 登录波不设复用窗, 恢复波直接可跑
     fetcher.pages.update({url_of(l): LOGIN_PAGE for l in "ABC"})
     clock.advance(12 * 3600.0 + 60.0)  # 跳出复用窗(2h)与拉取间隔(12h, 恢复波推进了 healthy_ts)
     with service_log() as relogin:
-        third = run_wave(service, {})
+        third = run_wave(service)
         assert third.action == ACTION_ERROR
     assert len([m for m in relogin if "页面是登录页 ⇒" in m]) == 1, "恢复后再失效 -> 重新告警(状态变化报一次)"
 
@@ -1923,14 +1928,14 @@ def test_readonly_degradation_noted_in_result(tmp_path):
     clock = Clock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
-    run_wave(service, {})
+    run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
     rev_before = data.revision
     assert rev_before > 0
     # 注入「本实例上次写到过更高的 revision」: 下一波锁自检判不生效 -> 只读退化
     service.store(SITE)._last_write_rev = 10_000
     clock.advance(13 * 3600)
-    result = run_wave(service, {})
+    result = run_wave(service)
     assert "锁自检失败" in result.reason and result.persisted is False
     data2, _ = service.store(SITE).read_unlocked()
     assert data2.revision == rev_before, "只读退化不得写盘"
@@ -2151,7 +2156,7 @@ def test_lane_fail_streak_alerts_error(tmp_path):
     with service_log() as messages:
         for _ in range(3):
             clock.advance(13 * 3600)
-            run_wave(service, {})
+            run_wave(service)
     errors = [m for m in messages if "已连续 3 波失效" in m]
     assert len(errors) == 1, messages
     data, _ = service.store(SITE).read_unlocked()
@@ -2278,14 +2283,15 @@ def test_history_auto_poll_gate_skip_writes_nothing(tmp_path):
     (first, ) = _history_from_disk(service)
     assert first.kind == "wave"
     # 复用窗内(1H): 自动 poll 直接 REUSED —— 同样零事件零写盘
+    # (锚点传 None = 未知: 稳态旗标翻转写(§2.4)是零写盘纪律的唯一例外, 由 S4 用例单独钉)
     clock.advance(600.0)
-    reused = service.refresh_site(SITE, {})
+    reused = service.refresh_site(SITE)
     assert reused.action == "reused"
     assert site_file.read_bytes() == before, "复用窗内的 poll 不得写盘"
     assert _history_from_disk(service) == [first], "复用窗内的 poll 不入历史"
     # 复用窗外 + 拉取间隔内: 自动 poll 被拉取间隔闸跳过 —— 零事件零写盘(硬不变量)
     clock.advance(2 * 3600.0)
-    waiting = service.refresh_site(SITE, {})
+    waiting = service.refresh_site(SITE)
     assert waiting.action == ACTION_WAITING and "未到拉取时刻" in waiting.reason
     assert site_file.read_bytes() == before, "被调度闸跳过的 poll 不得写盘"
     assert _history_from_disk(service) == [first], "自动 poll 的 waiting 不入历史"
@@ -2300,9 +2306,9 @@ def test_history_defer_only_on_force(tmp_path):
     run_wave(service)  # 首波健康波(1 条 wave 事件); last_fetch_ts = now
     site_file = service.store(SITE).path
     before = site_file.read_bytes()
-    # 非 force(自动 poll): 被拉取间隔闸拦 -> 无事件 + 零写盘
+    # 非 force(自动 poll): 被拉取间隔闸拦 -> 无事件 + 零写盘(锚点 None = 未知, 不触发稳态翻转写)
     clock.advance(60.0)
-    auto = service.refresh_site(SITE, {})
+    auto = service.refresh_site(SITE)
     assert auto.action == ACTION_WAITING and "未到拉取时刻" in auto.reason
     assert site_file.read_bytes() == before and len(_history_from_disk(service)) == 1
     # force(立即拉取): 越过复用窗/拉取间隔两道闸, 撞上 min_interval 账号安全线 -> 一条 defer 显式落盘

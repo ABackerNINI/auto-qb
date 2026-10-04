@@ -398,6 +398,9 @@ class HrRefreshService:
 
         anchors: 本地种子锚点(infohash -> HrAnchor, 含 name)。由主循环在唤醒取数线程时
         **以不可变数据**交接, 取数线程不用读 store(线程边界不变)。
+        三态契约(计划 26-10-05-0555 §2.5): None = 锚点采集失败/未知 —— 稳态降频不生效
+        (不把「不知道」当「零种子」), wave 行为与空锚点一致; {} = 采集成功且该站零锚点
+        (确认零交集, 可降频); 非空映射 = 正常对账。
         force: 「立即拉取」(计划 26-09-30-0240) —— 跳过复用窗与拉取间隔两道调度闸;
         min_interval / 日额 / Retry-After / 时间窗(账号安全线与站点指令)照常生效。
         """
@@ -429,7 +432,8 @@ class HrRefreshService:
                     result.reason = (result.reason + "; " if result.reason else "") + \
                         "站点文件 schema 比程序新, 已跳过取数与写盘(请先升级程序)"
                     return result
-                self._refresh_locked(site, site_conf, adapter, session, result, anchors or {}, force=force)
+                # anchors 的 None(采集失败/未知)原样直通, 不吞成 {} —— 三态契约见 refresh_site docstring(§2.5)
+                self._refresh_locked(site, site_conf, adapter, session, result, anchors, force=force)
         except HrLockBusy as e:
             result.action = ACTION_LOCKED
             result.reason = str(e)
@@ -446,8 +450,13 @@ class HrRefreshService:
         anchors_by_site: Optional[Mapping[str, Mapping[str, HrAnchor]]] = None,
         force: bool = False,
     ) -> List[HrRefreshResult]:
-        anchors_by_site = anchors_by_site or {}
-        return [self.refresh_site(site, anchors_by_site.get(site), force=force) for site in self.enabled_sites()]
+        # 三态与 worker.run_once 同款(计划 26-10-05-0555 §2.5): 顶层 None = 采集失败/未知 →
+        # 各站 None(稳态不生效); 映射缺某站键 = 确认该站零锚点 → {}。
+        return [
+            self.refresh_site(
+                site, anchors_by_site.get(site, {}) if anchors_by_site is not None else None, force=force
+            ) for site in self.enabled_sites()
+        ]
 
     # ---------- 锁内主流程 ----------
 
@@ -458,12 +467,30 @@ class HrRefreshService:
         adapter,
         session,
         result,
-        anchors: Mapping[str, HrAnchor],
+        anchors: Optional[Mapping[str, HrAnchor]],
         force: bool = False,
     ) -> None:
         data = session.data
         limits = self.limits_for(site)
         now = self._now()
+
+        # ---- 波前: 对象集现算(§2.2 提级, 计划 26-10-05-0555) ----
+        # 每 poll 每站一次纯内存现算(零额外 IO, 报告 §13.2 裁定可接受); 锚点漂移回炉随之从
+        # 「波时」提前到「poll 时」(≤60s) —— 本机重下的种子其放行记录作废更及时, 且它把对象集
+        # 翻非空 ⇒ 间隔闸回退(报告 §13.2「新下载自动破稳态」依赖的正是这一步, 回炉语义不变)。
+        # 复用窗 / 拉取间隔 / allow_fetch / 频控各提前 return 分支返回前判据已在手。
+        anchors_known = anchors is not None
+        wave_anchors = anchors or {}
+        objects, observing, unmatched = self._build_objects(data, wave_anchors, site_conf.required_seeding_time)
+        # 稳态判定(§2.1): 对账对象集为空 ∧ 锚点采集成功 —— 采集失败(None)不算稳态(§2.5),
+        # 否则主循环侧故障会被当成「零交集」而错误降频(报告 R5 唯一实质风险)。
+        steady = anchors_known and not objects
+        interval = site_conf.idle_refresh_interval if steady else site_conf.refresh_interval
+        # 稳态旗标只在**翻转时**写盘(§2.4): 稳态期反复 poll 旗标不变 ⇒ 零写盘(守「自动 poll
+        # 零写盘」纪律, 翻转至多每天几次); 旗标只供展示链读, 闸门永远用上面的本实例现算值(§06 R6)。
+        if data.wave.idle_mode != steady:
+            data.wave.idle_mode = steady
+            self._persist_step(session)
 
         # 复用窗(新鲜度闸): 窗内数据直接采用(可能是别的实例刚抓的)。force(立即拉取)跳过本闸 ——
         # 两道调度闸(复用窗 + 拉取间隔)都可被人工意志越过, 账号安全线(min_interval 等)不在此列
@@ -476,16 +503,21 @@ class HrRefreshService:
             result.snapshot = data
             return
 
-        # 拉取间隔闸门(计划 26-09-30-0240): 节奏硬闸, 与复用窗(新鲜度)解耦 ——
-        # 下次核对清单 = 上次健康波 + refresh_interval。失败波不推进 healthy_ts ⇒ 失败的档位
-        # 仍按「下一轮(60s)重试」, 与现状一致。force(立即拉取)跳过本闸;
-        # min_interval / 日额 / Retry-After / 时间窗在下方照常生效(账号安全线不被越过)。
+        # 拉取间隔闸门(计划 26-09-30-0240 + 26-10-05-0555 §2.3): 节奏硬闸, 与复用窗(新鲜度)解耦 ——
+        # 下次核对清单 = 上次健康波 + 拉取间隔(动态取值: 稳态期 = idle_refresh_interval; 对象集
+        # 一翻非空自动回退 refresh_interval, 而 healthy + refresh_interval 早已过去 ⇒ 下一 poll
+        # 立即开波)。失败波不推进 healthy_ts ⇒ 失败的档位仍按「下一轮(60s)重试」, 与现状一致。
+        # force(立即拉取)跳过本闸; min_interval / 日额 / Retry-After / 时间窗在下方照常生效
+        #(账号安全线不被越过)。
         healthy = data.wave.healthy_ts
         if not force and healthy > 0:
-            due_wave = healthy + site_conf.refresh_interval
+            due_wave = healthy + interval
             if now < due_wave:
                 result.action = ACTION_WAITING
-                result.reason = f"未到拉取时刻(拉取间隔, 还差 {due_wave - now:.0f}s)"
+                result.reason = (
+                    f"未到拉取时刻(拉取间隔·稳态降频, 还差 {due_wave - now:.0f}s)"
+                    if steady else f"未到拉取时刻(拉取间隔, 还差 {due_wave - now:.0f}s)"
+                )
                 return
 
         if not self.allow_fetch:
@@ -509,7 +541,9 @@ class HrRefreshService:
                 self._persist_step(session)
             return
 
-        self._do_wave(site, site_conf, adapter, session, result, limits, anchors, force=force)
+        self._do_wave(
+            site, site_conf, adapter, session, result, limits, wave_anchors, objects, observing, unmatched, force=force
+        )
 
     # ---------- 波次引擎(§4) ----------
 
@@ -522,6 +556,9 @@ class HrRefreshService:
         result,
         limits: HrLimits,
         anchors: Mapping[str, HrAnchor],
+        objects: Dict[str, HrAnchor],
+        observing: Dict[str, HrEntry],
+        unmatched: Dict[str, HrAnchor],
         force: bool = False
     ) -> None:
         data = session.data
@@ -536,8 +573,9 @@ class HrRefreshService:
         budget = _Budget(
             data, limits, self._now, self._sleeper, sleep_max=self.sleep_max, round_wait_max=self.round_wait_max
         )
-        # ---- 波前: 对象集现算(§4.2; 锚点漂移回炉也在这里发生) ----
-        objects, observing, unmatched = self._build_objects(data, anchors, site_conf.required_seeding_time)
+        # ---- 对象集 (objects, observing, unmatched) 已由 _refresh_locked 波前现算并传入
+        #(§2.2 提级, 计划 26-10-05-0555): 这里不再现算 —— 杜绝双跑现算与双回炉;
+        # trusted_done / _run_pages / _finish_wave 的消费口径不变。
         wave = _WaveContext(anchors)
         wave.dl_by_hash = _dl_by_hash(data)
         wave.trusted_done = self._trusted_done_map(objects, observing)

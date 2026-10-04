@@ -385,6 +385,11 @@ class HrWaveMeta:
 
     wave_ts: float = 0.0  #: 最近一波完成的时刻
     healthy_ts: float = 0.0  #: 最近「健康波」时刻(至少一档有有效数据) —— 新鲜度闸门基准
+    #: 稳态降频旗标(计划 26-10-05-0555 §2.4): True = 写者实例最近一次现算时对账对象集为空,
+    #: 拉取间隔闸按 idle_refresh_interval 降频。**只作展示链的桥**(闸门永远用本实例现算值,
+    #: 多实例边界见计划 §06 R6); 仅翻转时写盘, 带默认值补字段不 bump hr_site 版本
+    #(infra/versioning.py「非破坏性补字段不造版本」口径)。
+    idle_mode: bool = False
     lanes: Dict[str, HrLaneState] = field(default_factory=dict)  # 档位 -> 状态
     #: 本波是否允许批量签发「未列出」放行(三档全有有效数据 + 防伪通过, §5.3)
     releases_enabled: bool = False
@@ -399,6 +404,7 @@ class HrWaveMeta:
         return {
             "wave_ts": self.wave_ts,
             "healthy_ts": self.healthy_ts,
+            "idle_mode": self.idle_mode,
             "lanes": {
                 k: v.to_json()
                 for k, v in self.lanes.items()
@@ -419,6 +425,7 @@ class HrWaveMeta:
         return cls(
             wave_ts=_as_float(raw.get("wave_ts")),
             healthy_ts=_as_float(raw.get("healthy_ts")),
+            idle_mode=bool(raw.get("idle_mode")),
             lanes={
                 str(k): HrLaneState.from_json(v)
                 for k, v in (raw.get("lanes") or {}).items()
