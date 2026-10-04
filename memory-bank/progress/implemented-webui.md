@@ -7,6 +7,24 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 危险动作防护: 重新校验确认框 + 跳检前置条件三分流预检**(2026-10-05, 计划
+  [plans/26-10-05-0314](../plans/26-10-05-0314-plan-webui-danger-guards.html) S0-S5 全落地, 提交链
+  `bcc2bce2`(S1a store 组级判定上移单点, grouping_mod 委托保签名)→`09683720`(S1b-1 ops
+  `_skip_gates_detail` 三分流判定单点只读变体 + G3-G6 新闸门 + force 语义 + precheck dry-run +
+  filelist 并入执行链, R2 live 复核前移到闸门之前)→`7d9595a7`(S1b-2 G7/G8 组内镜像闸门: 校验在途
+  =force 可豁越 / 校验失败推断=blocked 硬拒)→`0ff19787`(S2 预检端点
+  `POST /api/torrents/skip-check/precheck` + 单发/批量 force 透传)→`51e30393`(S3
+  `_recheckConfirm` 共用确认框接入全部鼠标入口, 与键盘路径同文案)→`bd532d26`(S4 跳检预检对话框
+  三分流状态机: 进框禁用→预检→按态渲染, force 钮必须先见赌注), 分支 webui-danger-guards 待并回):
+  跳检「该不该允许」判定下沉 ops 单点与规则侧同谓词(规则侧零变化, test_checking 69 条全程绿),
+  WEB 确认框升级「进框禁用→预检→按态渲染」三分流(case 1 禁止无逃生 / case 2 可显式强制 /
+  case 3 放行), force 服务端裁决只豁越 G5/G7; 重新校验鼠标三通道补齐确认框。新守阵 22 条(每闸门
+  一测 + 红验探针先红后恢复; T13/T24 首版经红验暴露突变盲区升级, 坑档
+  [pitfalls/testing/static-guard-mutation](../pitfalls/testing/static-guard-mutation.md));
+  test.full 2576 passed + 4 skipped / 99%(基线
+  [26-10-05-0737](../testing/baselines/26-10-05-0737-webui-danger-guards.md)); 档案
+  [tasks/26-10-05-webui-danger-guards](../tasks/26-10-05-webui-danger-guards.md)(Done)。
+
 - **WEB UI 复述型 tooltip 全量移除 67 处 + 不复活守卫**(2026-10-04, 判定报告
   [reports/26-10-04-0815](../reports/26-10-04-0815-report-webui-tooltip-declutter.html) 全量实施, 提交链
   `72a7d274`(报告)→`80220a82`(A 组状态栏 7 处 + A5 sbStats 精简)→`5c0412ff`(B 组顶栏 12)→`ae919a39`

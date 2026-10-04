@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-danger-guards">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-05-0314">
-<meta name="doc-updated" content="26-10-05-0433">
+<meta name="doc-updated" content="26-10-05-0744">
 <meta name="doc-refs" content="memory-bank/issues/26-10-05-0254-feat-webui-recheck-confirm.html, memory-bank/issues/26-10-05-0254-feat-webui-skip-check-preconditions.html, memory-bank/issues/26-10-05-0402-bug-skip-check-self-fail-gate.html, memory-bank/tasks/26-10-05-webui-danger-guards.md">
 <title>WEBUI 危险动作防护: 重新校验确认框 + 跳检前置条件 · 实施计划</title>
 <style>
@@ -95,12 +95,12 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">实施计划 · Open(待拍板)</div>
+    <div class="kicker">实施计划 · Done(实施完成)</div>
     <h1>WEBUI 危险动作防护: 重新校验确认框 + 跳检前置条件</h1>
     <p class="lede">跳检是删种重加级危险操作。本计划把「该不该跳检」的判定下沉 ops 层单点(方向 A), WEB 与规则两来源共用一套闸门; 在此之上前端交互改为<strong>三分流预检</strong>: 点跳检 → 确认框先开但确认钮禁用 → 预检请求(ops 同谓词 dry-run) → 后端按「禁止 / 需显式强制 / 可跳检」三态返回 → 前端按态渲染详细原因与逃生通道。重新校验补齐鼠标路径确认框与键盘路径对齐。前置条件逐条核对矩阵(含三分流归类) + 每闸门一测一红验的守阵在 §03/§06。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-0314-plan-webui-danger-guards</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">认领 issue</div><div class="v">26-10-05-0254 × 2(姊妹件)</div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core/ops · torrents/store · webui(前后端)</div></div>
       <div class="item"><div class="k">预期改动</div><div class="v">ops 闸门+预检+force · 前端预检对话框; webui 路由/commands 小改(端点+透传)</div></div>
@@ -331,11 +331,12 @@
       <li>2026-10-05 03:14 — 建档(Open, 待拍板)。认领 26-10-05-0254 两个姊妹件; 完成复验与 §03 前置条件核对矩阵(两项「待核」已核实: filelist 未迁移、HR 计时受扰); 拍板点 D1-D7 全部附推荐。</li>
       <li>2026-10-05 04:02 — 复析修订(D4 拍板翻转)。组内其它成员 full-checking 在途(1.5)与组内成员校验失败推断(1.6)由「不拦」改「拦」, 新增闸门 G7/G8(谓词逐字镜像规则侧, G8 假失败自愈只读变体)。动机: 原「不拦」论据反驳的是 I/O 冲突, 危害实在数据准确性 —— 1.5 实为等判决时序(full_checking.py:60-62)而非省 I/O, 1.6 是确定性坏数据证据与 D3 同范畴; G3-G6+确认框对该场景零覆盖(filelist 只查存在与尺寸); 洗白经 chain 0 永久化(zSkipChecked 自证未验证却无机制回头); 用户不观察组员状态且确认框不透出, 误操作面大。前置条件 5 条→7 条; §04 增 G7/G8 实现要点; §06 增 T16/T17(含负样本与只读自愈断言); §07 增误拦面风险行。复析另发现「候选自身当日校验失败无闸门」缺口(规则侧 without_reference 段与 WEB 路径共有; 不并入本计划以防破坏规则侧零变化), 已入池 <a href="../issues/26-10-05-0402-bug-skip-check-self-fail-gate.html">26-10-05-0402</a>。</li>
       <li>2026-10-05 04:33 — 交互三分流修订(用户定向: 可行性复核后并入)。WEB 跳检流改为「点跳检 → 确认框先开但确认钮禁用 → 预检请求 → 后端同谓词 dry-run 判定 → 前端按三态处理」: case 1 禁止(已完成/活跃/部分下载/组内下载/G8 组内校验失败/filelist 失败/同日去重 —— 确定性危害或零收益, 无逃生)、case 2 需显式强制(G5 同 hash 在途/G7 组内校验在途 —— 真不确定, 给逃生通道)、case 3 可跳检; case 1/2 文案按「原因+后果+出路」三段式。可行性结论: <strong>可行且强化原架构</strong> —— 预检做成 ops 层 dry-run(谓词单点不破, D6 灰置否决理由不适用), 执行路径闸门原样全跑(预检-执行无信任传递, 防护面不减), force 服务端裁决只豁越 case 2 且缺省 False(规则侧零变化不变式保持), 前端复用数据驱动 modal(删除框 details 行式范式 + extra 第三钮当强制钮, Vue 3 扩展向后兼容)。核实要点: _skip_gates 的 prune 副作用不得进预检路径(T20 钉死); filelist 进预检的成本量化见 §07(50 种约数秒, 有回退选项)。拍板点: D1/D2/D6 已随定向消解(标注已定), D4 细分(G8=case 1 / G7=case 2, 原「均拦」保留), 新增 D8(case 2 集合)/D9(filelist 入预检)/D10(预检失败降级)。§02 链路图增预检腿; §03 矩阵增三分流归类列; §04 增端点/force/对话框状态机/多种子展示设计; §05 S1-S4 改写; §06 增 T18-T24; §07 增 4 行风险。预期改动修正: webui 路由/commands 由「预计零改动」改「小改(预检端点 + force 透传)」。</li>
+      <li>2026-10-05 07:44 — <strong>实施完成(Done)</strong>, 分支 webui-danger-guards。拍板: D3/D7/D8/D9/D10 全按推荐落地(D3 组级一并下沉 / D7 三鼠标入口全接 / D8 case 2 仅 G5+G7 / D9 filelist 进预检 / D10 预检失败降级普通确认), T15 桩测留待用户真机走查。六笔提交: bcc2bce2(S1a store 组级判定上移单点, grouping_mod 改委托) → 09683720(S1b-1 _skip_gates_detail 单点只读变体 + G3-G6 + force 语义 + precheck dry-run + filelist 并入执行链) → 7d9595a7(S1b-2 G7/G8 组内镜像闸门, 校验在途=force / 校验失败推断=blocked) → 0ff19787(S2 webui 预检端点 + force 透传) → 51e30393(S3 前端 _recheckConfirm 共用 helper 接入全部鼠标入口) → bd532d26(S4 跳检预检对话框三分流状态机)。实测: <code>commands run test.full</code> 2576 passed + 4 skipped / 覆盖率 99% / 27.48s+28.13s 两次采样(基线切片 <a href="../testing/baselines/26-10-05-0737-webui-danger-guards.md">26-10-05-0737</a>); 新增守阵 22 条(T1-T7/T9/T10/T11/T13/T16-T24), 实施期红验探针逐条先红后恢复, S5 收尾抽查(摘 G8→T17 红 / 摘 :disabled 绑定→T23 红)复证守阵活着。<strong>与计划的差异清单</strong>: ①R2 live 复核前移到闸门之前 —— 原代码 _skip_gates 在 R2 前, 为满足 filelist 插入点「R2 复核后、导出前」而前移(拒绝路径多 1 次只读 torrents_info, 全部闸门仍在备份/删除两个不可逆步骤之前); ②grouping_mod 委托保留 <code>(self, members)</code> 签名仅方法体逐成员委托 store 新方法(连签名一起改需连动 checking.py:94 调用点并改写 4 处既有用例, 违反单棒约束; 生产输入逐位等价); ③G7 文案加「中」字(「正在全量校验中」满足三段式断言, 语义不变); ④「批量浮条 topbar.html:211」入口已于 2026-10-05 退役(§02/§04 勘误, bulkAct 仍是批量通道单点, S3 接入点不受影响); ⑤预检回执走既有回执 truth 位携带(不扩 runtime.py 回执根键, precheck 不进 RESYNC_COMMANDS 无真值事件副作用); ⑥T13/T24 首版守阵(字符串包含/链式正则)经红验暴露对短路禁用/语句删改突变不敏感, 升级为整行活性/逐分支清单锚定(坑档 <a href="../pitfalls/testing/static-guard-mutation.md">pitfalls/testing/static-guard-mutation.md</a>)。</li>
     </ul>
   </section>
 
   <footer>
-    26-10-05-0314-plan-webui-danger-guards.html · 状态 Open(待拍板 D3/D7/D8-D10) — 拍板后按 §05 分步实施, 状态随实施推进在本节留痕
+    26-10-05-0314-plan-webui-danger-guards.html · 状态 Done(实施完成, 2026-10-05) — 六笔提交落地于分支 webui-danger-guards, 拍板结果与差异清单见 §08; 真机走查(T15)留待用户
   </footer>
 
 </div>

@@ -8,3 +8,4 @@
 - **触发**: 改完某个测试文件想快速验证, 跑 `commands run test.one -- tests/<file>.py` 或裸 `uv run pytest tests/<file>.py -q` (2026-10-04, 导航页守阵 test_kb_nav.py 首跑实测: `9 passed` 与 `FAIL ... Total coverage: 18.41%` 同屏)。
 - **判别**: 输出里**同时**有 `N passed`(全绿) 与末尾覆盖率 FAIL —— 根因是 pytest.ini / pyproject 的 `--cov-fail-under=98` 作用于**本次收集面**的覆盖率: 只收集一个文件时全仓 14k+ 语句只有少数被执行, 总覆盖率必然远低门槛; 这与用例成败无关。真失败看 `FAILED` / `errors` 行, 没有它们就是全过。
 - **处置**: 单文件验证以 `N passed` 为准, 忽略覆盖率 FAIL 行; 要一个干净的绿灯结论就跑 `commands run test.quick`(全量收集 + `--no-cov`, ~7s)或收尾时跑 `test.full`。不要为消掉这行去给单文件运行加 `--no-cov` 之外的动作(如调低门槛) —— 门槛是全量基线的守卫, 只属于全量跑。
+- **复发**: 1 —— 2026-10-05 (webui-danger-guards S5 红验抽查, 计划 26-10-05-0314 收尾): 红验探针两次单文件跑(`test.one -- tests/test_ops.py -k …` / `tests/test_web.py -k …`)同屏出现 `1 failed`(真红, 探针意图)与 `FAIL Required test coverage of 98% not reached. Total coverage: 21.37%`(假红)—— 本次**命中但已知**: 判据「`N passed`/`FAILED` 行与 FAIL 行分开看」直接套用, 假红未造成误判; 没有提前规避是因为红验就要单跑单条用例, 单文件收集面下该 FAIL 必然出现, 属预期噪声非新坑。

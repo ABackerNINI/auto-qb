@@ -8,8 +8,8 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-skip-check-preconditions">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
-<meta name="doc-refs" content="memory-bank/plans/26-10-05-0314-plan-webui-danger-guards.html, memory-bank/tasks/26-10-05-webui-danger-guards.md">
+<meta name="issue-status" content="Done">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0314-plan-webui-danger-guards.html, memory-bank/tasks/26-10-05-webui-danger-guards.md, memory-bank/testing/baselines/26-10-05-0737-webui-danger-guards.md">
 <meta name="issue-title" content="WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析">
 <meta name="issue-summary" content="WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析">
 <title>WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-0254-feat-webui-skip-check-preconditions</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 02:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -213,11 +213,15 @@
     <ul>
       <li>2026-10-05 02:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-05 03:14 — 用户指派认领，状态 <strong>In Progress</strong>；复验仍复现，§06 两项待核已核实(见上)；认领方: <a href="../plans/26-10-05-0314-plan-webui-danger-guards.html">plan · WEBUI 危险动作防护(重检确认框 + 跳检前置条件)</a></li>
+      <li>2026-10-05 07:44 — 修完置 <strong>Done</strong>（计划 26-10-05-0314 S1/S2/S4，提交 bcc2bce2/09683720/7d9595a7/0ff19787/bd532d26，分支 webui-danger-guards）；实测与验证见下「修复后补充」</li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-10-05 03:14 仍复现。锚点重跑: <code>_cmd_skip_check_torrent</code>(commands.py:349)与 <code>_bulk_skip_check_via_ops</code>(:702)原样; <code>skip_check</code>(ops_mod.py:355)与 <code>_skip_gates</code>(:452, 自入池时 :349 漂移, 闸门内容未变)仅两条闸门; 规则侧决策链 0/1(checking.py:84-95)原样。§06 表两项「待核」本次核实: ①<strong>前置文件检查未随四阶段迁移</strong> —— <code>check_filelist</code> 全仓唯一调用点在规则侧(checking.py:121), WEB 单发/批量均不查, 文件缺失的种子被 WEB 跳检后将以 is_skip_checking 重加为「完整」; ②<strong>HR 计时确受影响</strong> —— HR 锚点 seeding_time 取自 qB 每种统计快照(torrents/record.py:287-296 <code>hr_anchor()</code>), 跳检删种重加必然清零该统计, HR 超额线判定(hr/service.py:1358, 3× 线)与做种计时倒退。补充事实: 同 hash 在途 recheck 未被跳检闸门核查(<code>active_check_hashes</code> 仅 ops.recheck 消费); 进程内并发由单一写线程天然串行, 无需新闸门。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h3>修复后补充（2026-10-05 07:44 · 计划 26-10-05-0314 S1/S2/S4, 方向 A + 三分流预检）</h3>
+    <p><strong>实际修法</strong>(提交 bcc2bce2 / 09683720 / 7d9595a7 / 0ff19787 / bd532d26): 前置条件判定下沉 ops 单点 —— 新增 <code>GateVerdict(gate/cls/text)</code> 与只读判定 <code>_skip_gates_detail</code>(带三分流标签, 零副作用), 执行路径 <code>_skip_gates</code> 改从 detail 派生(谓词只写一遍); 新闸门: <strong>G3</strong> 已完成 / <strong>G4</strong> 活跃中(谓词逐字同 checking.py:88, 注释互指) / <strong>G5</strong> 同 hash recheck 在途(cls=force) / <strong>G6</strong> 组内活跃下载(判定上移 <code>TorrentStore.group_has_downloading</code>, grouping_mod 改委托保签名) / <strong>G7</strong> 组内其它成员校验在途(镜像 others_checking, cls=force) / <strong>G8</strong> 组内校验失败推断(镜像 chain 1.6 四要件 + 假失败自愈只读变体不 pop, cls=blocked); <code>check_filelist</code> 并入执行链且进预检(D9, blocked 未过时短路省 files API); <code>skip_check(force=False)</code> 只豁越 cls=force(case 1 硬拒不变), 豁越留 INFO 审计, 规则侧不传零变化。web 层: 新端点 <code>POST /api/torrents/skip-check/precheck</code>(403 门控 + 主循环队列串行化) + 单发/批量 force 透传。前端: 两入口确认框升级为三分流预检对话框 <code>_skipCheckDialog</code>(进框确认钮禁用 → 预检 → 按态渲染; 强制钮复用 extraText 第三钮; 预检失败按 D10 降级为普通确认且永不渲染强制钮)。</p>
+    <p><strong>与建议修法差异</strong>: 采纳方向 A(下沉 ops 单点), 方向 B(轻量 WEB 前置)按预期否决(两处谓词漂移); 交互形态为第三形态「点后预检三分流」(用户 04:33 定向), 既非点后报错也非灰置(D6); §06 候选表落地: 已完成→G3 / 活跃中→G4 / 组内活跃下载→G6 / 组内在途→G7 / 组内失败推断→G8 / filelist→执行链+预检 / 无参考与 HR→预检对话框固定警示区(D5, HR 硬闸另立件) / 同 hash 并发在途→G5(复验新核实条目); 「候选自身当日校验失败」<strong>不并入</strong>(G8 须与 chain 1.6 逐字同谓词即 others-only, 纳入自身即规则侧行为变更, 另立 <a href="26-10-05-0402-bug-skip-check-self-fail-gate.html">26-10-05-0402</a> 单独拍板)。</p>
+    <p><strong>验证</strong>: ops 新守阵 T1-T7/T16-T20(每闸门一测 + 红验探针先红后恢复: 摘 G3/G4/G5/G6/filelist/派生关系/force 分支/prune 误入 detail/G7/G8 各一), web 新守阵 T10-T11/T21-T22(回执/门控/预检端点/force 透传)与 T23-T24(前端静态守卫, 首版经红验暴露突变盲区已升级整行活性/逐分支锚定); S5 收尾红验抽查复证守阵活着(摘 G8 → T17 红; 摘 popovers.html <code>:disabled</code> 绑定 → T23 红), 恢复后复绿。规则侧零变化全程锁死(test_checking 69 条每棒绿)。真机走查留待用户(T15: 三态对话框 + 混合批次 + 预检失败降级)。</p>
+    <p><strong>实测数字</strong>: <code>commands run test.full</code> (Windows, 2026-10-05 07:37) <strong>2576 passed + 4 skipped, 27.48s / 28.13s(两次采样), 覆盖率 TOTAL 99%</strong>(14970 语句 / 152 未覆盖 / 5038 分支 / 114 partial), 相对上基线 passed +22 = 本计划新增守阵总数; 明细见 <a href="../testing/baselines/26-10-05-0737-webui-danger-guards.md">基线切片 26-10-05-0737</a>。认领链: <a href="../plans/26-10-05-0314-plan-webui-danger-guards.html">plan · 26-10-05-0314</a> + <a href="../tasks/26-10-05-webui-danger-guards.md">tasks · 26-10-05-webui-danger-guards</a>。</p>
   </section>
 
   <footer>

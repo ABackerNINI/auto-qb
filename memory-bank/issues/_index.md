@@ -61,13 +61,13 @@
 
 ## In Progress
 
-- [feat] [WEBUI 重新校验需确认框: 鼠标路径无兜底(仅键盘路径有)](26-10-05-0254-feat-webui-recheck-confirm.html) — 右键菜单/批量条的重新校验点下即执行, 无任何确认; 键盘路径 shortcuts.js:814 已有 confirmDialog —— 两路径防护不对称, 鼠标路径需补确认框
-- [feat] [WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析](26-10-05-0254-feat-webui-skip-check-preconditions.html) — WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析
 - [question] [兼容 Transmission 可行性分析](26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
 ## Done
 
+- [feat] [WEBUI 重新校验需确认框: 鼠标路径无兜底(仅键盘路径有)](26-10-05-0254-feat-webui-recheck-confirm.html) — 右键菜单/批量条的重新校验点下即执行, 无任何确认; 键盘路径 shortcuts.js:814 已有 confirmDialog —— 两路径防护不对称, 鼠标路径需补确认框
+- [feat] [WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析](26-10-05-0254-feat-webui-skip-check-preconditions.html) — WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析
 - [test] [QbManager 测试组合下 pytest caplog 恒空: setup_logging 清根 handlers 连 caplog handler 一起摘](26-10-04-2311-test-caplog-qbm-setup-logging.html) — QbManager 测试组合下 pytest caplog 恒空: 模块装配 LoggingModule 调 setup_logging 清根 handlers, caplog 挂在根上的 handler 被一并摘除; test_ops.py 已有 capture_ops_logs 自挂模块 logger 的绕过范式
 - [bug] [uPlot 流量图取打开时刻容器宽度, 窗口 resize 后不自适应](26-10-04-0134-bug-webui-traffic-chart-resize.html) — 三处 qb 流量图(全局弹层/单种抽屉流量页签/分组流量弹层)建图取打开时刻容器宽度, 浏览器 resize 后画布不重算, 重开即恢复
 - [chore] [test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突](26-10-04-0134-chore-keys-update-crlf.html) — test.keys-update 重生成 tests/fixtures/config_key_surface.txt 时 Windows 写出 CRLF(仓库 eol=lf), 每次重生成 diff 全文件换行噪音, 须手工归一才能过守卫

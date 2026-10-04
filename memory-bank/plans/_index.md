@@ -14,7 +14,6 @@
 ## Open
 
 - [26-10-05-0555] [HR 稳态降频 (idle_refresh_interval) 分步实施计划 · auto-qb](26-10-05-0555-plan-hr-steady-throttle.html) — `hr-steady-throttle`
-- [26-10-05-0314] [WEBUI 危险动作防护: 重新校验确认框 + 跳检前置条件 · 实施计划](26-10-05-0314-plan-webui-danger-guards.html) — `webui-danger-guards`
 - [26-10-04-1957] [实施计划 · qB 流量历史 dat v3 · 块化稀疏 delta + 批量落盘 + 按天文件 + 聚合分层 · auto-qb](26-10-04-1957-plan-qb-traffic-storage-v3.html) — `qb-traffic-storage-v3`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 - [26-09-30-2112] [cap 守卫改债务制 · 工程计划 · auto-qb](26-09-30-2112-plan-memory-bank-cap-debt.html) — `memory-bank-cap-debt`
@@ -22,6 +21,7 @@
 
 ## Done
 
+- [26-10-05-0314] [WEBUI 危险动作防护: 重新校验确认框 + 跳检前置条件 · 实施计划](26-10-05-0314-plan-webui-danger-guards.html) — `webui-danger-guards`
 - [26-10-04-1830] [方案 · kb.nav 右键置顶 (pin) · 置顶专区 + 双向显示 · auto-qb](26-10-04-1830-plan-kb-nav-pin.html) — `kb-nav-pin`
 - [26-10-04-1824] [recheck 轮询生效确认整体重设计 · 修改计划](26-10-04-1824-plan-ops-recheck-effect-confirmation.html) — `ops-recheck-false-success`
 - [26-10-04-0952] [实施计划 · memory-bank 四工位导航页 · 三视图可切换 · auto-qb](26-10-04-0952-plan-kb-nav-page.html) — `kb-nav-page`
