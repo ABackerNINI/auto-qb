@@ -50,6 +50,7 @@
 - test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
 - test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员均值/全员空闲 0 线/停机借 global 判 null/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
 - test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
+- test_api_traffic_qb_group_member_only_zruns_not_empty: 组空态判据含 zruns(plan 26-10-04-0721 §04.4) —— 成员只剩 z 行(raw 滑出 24h 窗/hour 未封)不算「从未产过流量」, 出 0 线而非空态
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
 - test_config_tree_roundtrip: 配置树读取/保存写回文件并投递热重载命令
 - test_config_tree_invalid_rejected: 非法配置树 -> 400 且不写回
@@ -4390,6 +4391,23 @@ def test_api_traffic_qb_group_never_transferred_empty_state(web_env):
     _enable_qb_traffic(mgr)
     body = client.get(f"/api/traffic/qb/group/{encode_group_key(KEY)}", headers=auth).json()
     assert body["points"] == [] and body["totals"] == [] and body["meta"]["stale"] is False
+
+
+def test_api_traffic_qb_group_member_only_zruns_not_empty(web_env):
+    """组空态判据补 not p.zruns(plan 26-10-04-0721 §04.4): 成员可能只剩 z 行(raw 行已滑出
+    24h 窗、hour 行未封的窗口内) —— z 行是真实观测, 不算「从未产过流量」, 组出 0 线而非空态"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_dat(mgr)
+    now = int(time.time())
+    start = ((now - 600) // 30) * 30
+    store.append_z_run("global", start, start + 540, 100, 50)  # 全局同窗有观测(真值源)
+    store.append_z_run("torrent:HA", start, start + 540, 100, 50)  # 成员只剩 z 行
+    body = client.get(f"/api/traffic/qb/group/{encode_group_key(KEY)}", headers=auth).json()
+    assert body["points"] != []  # 非空态: 只剩 z 行的成员文件仍产出 points
+    p = next(p for p in body["points"] if p and p["t"] == start)
+    assert p == {"t": start, "dl": 0, "up": 0}  # z 覆盖桶 -> 空闲 0 线
 
 
 def test_config_schema_endpoint(web_env):

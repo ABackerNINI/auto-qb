@@ -149,8 +149,10 @@ class QbTrafficChartApi:
         member_series = [self.store.read_series_checked(TORRENT_KEY_PREFIX + h) for h in members]
         degraded = not global_ok or any(not ok for _, ok in member_series)
         member_parsed = [p for p, _ in member_series]
-        if all(not p.raw and not p.hours for p in member_parsed):
-            # 组从未有成员产过流量(成员文件全缺/零行)-> 空态(§08); 降级时如实标 stale
+        if all(not p.raw and not p.hours and not p.zruns for p in member_parsed):
+            # 组从未有成员产过流量(成员文件全缺/零行)-> 空态(§08); 降级时如实标 stale。
+            # 判据含 zruns(plan 26-10-04-0721 §04.4): 成员可能只剩 z 行(raw 行已滑出 24h
+            # 窗、hour 行未封的窗口内) —— z 行是真实观测, 不算「从未产过流量」
             return {"points": [], "totals": [], "meta": self._meta(grid, stale=degraded)}
         earliest = min(ts for ts in (tg.earliest_row_ts(p) for p in member_parsed) if ts is not None)
         member_obs = [tg.series_bucket_obs(p, grid) for p in member_parsed]

@@ -60,6 +60,7 @@
 - test_cross_hour_run_splits_weight: 跨小时边界行程按交集拆权重进相邻两桶(各桶独立出 hour 行)
 - test_seal_sweep_due_includes_z_only_bucket: 待封桶集合含仅 z 覆盖(无 raw 行)的桶(seal_sweep catch-up 产 hour 行); 当前桶不提前封
 - test_idle_24h_line_count_z_vs_zero_rows: 行数影响: 全空闲 24h@30s, v1 零行方案 2880 行 vs z 行方案 144 行(600s 封口节奏), 体积比 >10x
+- test_read_series_z_grid_expansion_end_to_end: 端到端打通(P3, plan 26-10-04-0721 §04.1) —— append_point + append_z_run 落盘 -> read_series -> grid 覆盖展开: 空闲段 0 平线 + totals 空闲 delta=0 链不断
 
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
@@ -73,6 +74,7 @@ import pytest
 from auto_qb.config import QbTraffic
 from auto_qb.core.modules.traffic_sample_mod import GLOBAL_SERIES_KEY, TASK_NAME, TrafficSampleModule
 from auto_qb.core.taskqueue import Task
+from auto_qb.core.traffic_grid import BucketObs, build_grid, rate_points, series_bucket_obs, series_totals_points
 from auto_qb.core.traffic_store import (
     CORRUPT_SUFFIX,
     HEADER_LINE,
@@ -1291,3 +1293,25 @@ def test_idle_24h_line_count_z_vs_zero_rows(tmp_path):
     # z 方案经解析还原零坏行(144 条行程行全部合法)
     assert store.read_series("global").bad_lines == 0 and len(store.read_series("global").zruns) == 144
     assert max(z.end for z in store.read_series("global").zruns) <= now  # 跨度合法(ZRUN_MAX_SPAN_S 内)
+
+
+def test_read_series_z_grid_expansion_end_to_end(tmp_path):
+    """端到端打通(P3, plan 26-10-04-0721 §04.1): append_point 活跃段 + append_z_run 空闲段
+    真实落盘 -> read_series -> grid 覆盖展开 —— 空闲段 0 平线 + totals 空闲 delta=0 链不断"""
+    store = _store(tmp_path)
+    base = 1_800_000_000 - 1200  # 对齐 30s 栅格的桶起点(1_800_000_000 恰为 30 的公倍数)
+    store.append_point("global", base + 5, 100, 50, 1000, 500)  # 活跃桶 base
+    store.append_z_run("global", base + 30, base + 300, 1000, 500)  # 空闲 270s -> 桶 base+30..base+300
+    parsed = store.read_series("global")
+    assert parsed.bad_lines == 0 and len(parsed.zruns) == 1  # 落盘 -> 解析 roundtrip 无损
+    g = build_grid("30m", base + 600, 30.0)  # 30m 窗, t1 = base+600, 桶宽 30s
+    obs = series_bucket_obs(parsed, g)
+    assert obs[base] == BucketObs(100, 50, 1000, 500)  # 活跃桶(raw)
+    for k in range(1, 11):  # z 覆盖桶 (0,0) + 行程快照
+        assert obs[base + 30 * k] == BucketObs(0, 0, 1000, 500), k
+    pts = rate_points(obs, g)
+    assert pts[g.buckets.index(base + 150)] == {"t": base + 150, "dl": 0, "up": 0}  # 空闲 0 平线
+    totals = series_totals_points(obs, g)
+    assert totals[g.buckets.index(base)] == {"t": base, "dl": None, "up": None}  # 窗首基线缺失
+    for k in range(1, 11):  # 空闲段 delta=0, 链不断
+        assert totals[g.buckets.index(base + 30 * k)] == {"t": base + 30 * k, "dl": 0, "up": 0}, k

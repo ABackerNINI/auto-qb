@@ -13,6 +13,11 @@
 - test_group_rate_sums_members_missing_zero: 组速率 = 桶内 Σ 成员均值, 无行成员按 0 计; null 桶整桶 None
 - test_group_totals_per_member_diff_then_sum: 逐成员先差分再求和 —— 单成员重置贡献 0 不拖垮全组; 成员基线缺失(窗首/无行)贡献 0; null 桶断链
 - test_group_50_members_correct_and_time_bound: 50 成员 x 满窗 2880 桶聚合正确性(抽样桶 Σ 校验) + 耗时上界(<< 采样间隔 30s, 实测断言 < 3s)
+- test_zrun_coverage_expansion_and_mixed_bucket_raw_priority: z 行程覆盖展开(相交桶 (0,0)+行程快照; 桶跨行程边界/窗首尾截断/单点行程闭区间语义); 混桶 raw 优先钉住
+- test_series_totals_chain_through_zrun: totals 续链 —— 空闲段 z 桶 delta=0 链不断, 后继活跃桶恢复有基线; 计数器重置桶 null(两向独立判定沿用)
+- test_interval_change_mixed_series_sparse_active_and_zline: 间隔变更混排(300s -> 30s) —— 旧活跃段稀疏点如实(空桶 null), z 段 0 线连续不伪断, z 桶按快照重续 totals 链
+- test_earliest_row_ts_includes_zrun_start: earliest_row_ts 把 z 行 start 计入最早观测(只剩 z 行的文件也有最早观测)
+- test_group_zrun_idle_zero_line_and_outage_null: 组图回归(组三函数零改动消费 z 派生观测) —— 全员空闲 0 线 / 停机桶借 global 判 null / 成员只剩 z 行 earliest 含 z start
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— now 由用例给定固定 epoch, 输入直接构造 ParsedSeries。
 """
@@ -31,14 +36,21 @@ from auto_qb.core.traffic_grid import (
     series_bucket_obs,
     series_totals_points,
 )
-from auto_qb.core.traffic_store import HourRow, ParsedSeries, RawRow
+from auto_qb.core.traffic_store import HourRow, ParsedSeries, RawRow, ZRow
 
 #: 固定"现在"(2027-01-15, 纯测试时刻; 恰为 30 与 3600 的公倍数, 对齐断言干净)
 NOW = 1_800_000_000
 
 
-def _series(raw=(), hours=()) -> ParsedSeries:
-    return ParsedSeries(key="test", raw=tuple(raw), hours=tuple(hours), bad_lines=0, data_lines=len(raw) + len(hours))
+def _series(raw=(), hours=(), zruns=()) -> ParsedSeries:
+    return ParsedSeries(
+        key="test",
+        raw=tuple(raw),
+        hours=tuple(hours),
+        zruns=tuple(zruns),
+        bad_lines=0,
+        data_lines=len(raw) + len(hours),
+    )
 
 
 def _row(ts, dl, up, dt=None, ut=None) -> RawRow:
@@ -262,3 +274,114 @@ def test_group_50_members_correct_and_time_bound():
     assert totals[idx] == {"t": b, "dl": 10 * n, "up": 0}  # 逐成员每桶 +10; 上行恒 0
     assert totals[g.buckets.index(g.first)] == {"t": g.first, "dl": 0, "up": 0}  # 窗首基线缺失 -> 0
     assert elapsed < 3.0, f"50 成员聚合耗时 {elapsed:.3f}s 超上界"
+
+
+# ---------------- z 行程覆盖展开(plan 26-10-04-0721 §04.1, P3) ----------------
+
+
+def test_zrun_coverage_expansion_and_mixed_bucket_raw_priority():
+    """z 行程覆盖展开: 闭区间 [start, end] 相交的每桶获得 (0,0) 观测 + 行程快照 ——
+    桶跨行程边界 / 窗首尾截断 / 单点行程 [ts,ts] 闭区间语义天然覆盖; 混桶 raw 优先(确定性规则钉住)"""
+    g = build_grid("24h", NOW, 30.0)
+    base = g.first + 3600  # 窗内 1 小时处的一个对齐桶起点
+    zruns = (
+        ZRow(start=base + 30, end=base + 150, dl_total=7777, up_total=3333),  # 跨 5 个桶
+        ZRow(start=base + 210, end=base + 210, dl_total=7777, up_total=3333),  # 单点行程
+        ZRow(start=g.first - 45, end=g.first + 20, dl_total=1, up_total=2),  # 窗首截断: 只剩 g.first 桶
+        ZRow(start=g.last, end=g.last + 600, dl_total=3, up_total=4),  # 窗尾截断: 只剩 g.last 桶
+    )
+    raws = [_row(base + 35, 100, 50, 5000, 2500)]  # 桶 base+30 与首个行程混桶 -> raw 优先
+    obs = series_bucket_obs(_series(raws, zruns=zruns), g)
+    assert obs[base + 30] == BucketObs(100, 50, 5000, 2500)  # 混桶: 取 raw 聚合结果, z 覆盖让位
+    for k in range(2, 6):  # base+60 .. base+150: 纯 z 覆盖桶 (0,0) + 行程快照
+        assert obs[base + 30 * k] == BucketObs(0, 0, 7777, 3333), k
+    assert base + 180 not in obs  # 行程之外的空桶仍 null(断线语义不变)
+    assert obs[base + 210] == BucketObs(0, 0, 7777, 3333)  # 单点行程覆盖所在桶(P2 留档形态)
+    assert obs[g.first] == BucketObs(0, 0, 1, 2)  # 行程起点在窗外: 窗首桶仍覆盖
+    assert g.first - 30 not in obs  # 窗外桶不消费
+    assert obs[g.last] == BucketObs(0, 0, 3, 4)  # 行程终点在窗外: 窗尾桶仍覆盖
+    pts = rate_points(obs, g)
+    assert pts[g.buckets.index(base + 60)] == {"t": base + 60, "dl": 0, "up": 0}  # 空闲 0 平线点
+
+
+def test_series_totals_chain_through_zrun():
+    """totals 续链(§04.1): 空闲段 z 桶携带行程快照进入相邻差分 —— 每桶 delta=0 链不断,
+    其后首个活跃桶恢复有基线; 计数器重置(qB 空闲期重启)仍在下一活跃桶现形为 null(两向独立判定沿用)"""
+    g = build_grid("24h", NOW, 30.0)
+    base = g.first + 3600
+    zruns = (ZRow(start=base + 30, end=base + 600, dl_total=1000, up_total=500), )
+    raws = [
+        _row(base + 5, 100, 50, 1000, 500),  # 活跃桶 base: 窗首基线缺失 -> null
+        _row(base + 635, 100, 50, 1200, 560),  # 空闲 600s 后的活跃桶: 基线由 z 桶续上
+    ]
+    totals = series_totals_points(series_bucket_obs(_series(raws, zruns=zruns), g), g)
+    i = g.buckets.index(base)
+    assert totals[i] == {"t": base, "dl": None, "up": None}  # 窗首基线缺失(现行口径不变)
+    for k in range(1, 21):  # 空闲段 20 个 z 桶: delta 全 0, 链不断
+        assert totals[i + k] == {"t": base + 30 * k, "dl": 0, "up": 0}, k
+    assert totals[i + 21] == {"t": base + 630, "dl": 200, "up": 60}  # 后继活跃桶恢复有基线
+    # 计数器重置: dl 回落(1200 -> 800)与 up 回落分别独立判定
+    raws_reset = [_row(base + 5, 100, 50, 1000, 500), _row(base + 635, 100, 50, 800, 400)]
+    totals2 = series_totals_points(series_bucket_obs(_series(raws_reset, zruns=zruns), g), g)
+    assert totals2[i + 21] == {"t": base + 630, "dl": None, "up": None}  # 重置桶 null, 绝不产负增量
+    raws_half = [_row(base + 5, 100, 50, 1000, 500), _row(base + 635, 100, 50, 1200, 400)]
+    totals3 = series_totals_points(series_bucket_obs(_series(raws_half, zruns=zruns), g), g)
+    assert totals3[i + 21] == {"t": base + 630, "dl": 200, "up": None}  # 两向独立: dl 正常 / up 重置 null
+
+
+def test_interval_change_mixed_series_sparse_active_and_zline():
+    """间隔变更混排(300s -> 30s, §07 P3): 旧活跃段稀疏点在 30s 栅格上如实(桶间空桶 null
+    不补线); z 段 0 线连续不伪断(免疫采样间隔配置变更); z 桶按行程快照重续 totals 链"""
+    g = build_grid("24h", NOW, 30.0)
+    base = g.first + 3600
+    raws = [
+        _row(base + 5, 100, 10, 1000, 100),
+        _row(base + 305, 100, 10, 2000, 200),  # 旧 300s 间隔的稀疏活跃点
+        _row(base + 605, 100, 10, 3000, 300),
+    ]
+    zruns = (ZRow(start=base + 610, end=base + 1500, dl_total=3000, up_total=300), )
+    obs = series_bucket_obs(_series(raws, zruns=zruns), g)
+    pts = rate_points(obs, g)
+    i = g.buckets.index(base)
+    assert pts[i] == {"t": base, "dl": 100, "up": 10}
+    assert pts[i + 1] is None and pts[i + 9] is None  # 旧活跃段稀疏点之间: 空桶如实 null
+    assert pts[i + 10] == {"t": base + 300, "dl": 100, "up": 10}
+    assert pts[i + 20] == {"t": base + 600, "dl": 100, "up": 10}  # 混桶(末活跃行 + 行程起点): raw 优先
+    assert all(p is not None for p in pts[i + 21:i + 51])  # z 段 0 线连续, 无伪断
+    assert pts[i + 50] == {"t": base + 1500, "dl": 0, "up": 0}
+    totals = series_totals_points(obs, g)
+    assert totals[i + 20] == {"t": base + 600, "dl": None, "up": None}  # 稀疏段空桶断链(如实)
+    assert totals[i + 21] == {"t": base + 630, "dl": 0, "up": 0}  # z 桶 delta=0, 链由行程快照重续
+    assert totals[i + 50] == {"t": base + 1500, "dl": 0, "up": 0}
+
+
+def test_earliest_row_ts_includes_zrun_start():
+    """earliest_row_ts 把 z 行 start 计入最早观测(§04.3, z 行是一次真实观测):
+    只剩 z 行的文件(raw 滑出 24h 窗)也有最早观测, 组图不再据此误判全 null"""
+    zruns = (ZRow(start=NOW - 8000, end=NOW - 7000, dl_total=1, up_total=1), )
+    assert earliest_row_ts(_series(zruns=zruns)) == NOW - 8000
+    raws = [_row(NOW - 100, 1, 1, 1, 1)]
+    assert earliest_row_ts(_series(raws, zruns=zruns)) == NOW - 8000  # raw 更晚: 取 z start
+
+
+# ---------------- 组图回归(P3: 组三函数零改动消费 z 派生观测) ----------------
+
+
+def test_group_zrun_idle_zero_line_and_outage_null():
+    """组图回归: 全员空闲(z 覆盖)出 0 线 / 停机桶借 global 判 null(即使成员有 z 派生观测) /
+    成员只剩 z 行时 earliest 含 z start 不再误判「组尚无任何观测」—— 组三函数零改动"""
+    g = build_grid("24h", NOW, 30.0)
+    b0, b1, b2 = g.buckets[100], g.buckets[101], g.buckets[102]
+    zruns = (ZRow(start=b0, end=b2 + 29, dl_total=500, up_total=100), )
+    member = _series(zruns=zruns)  # 成员只剩 z 行: b0..b2 全部 z 派生观测
+    member_obs = series_bucket_obs(member, g)
+    g_obs = {b0: BucketObs(0, 0, 500, 100), b2: BucketObs(0, 0, 500, 100)}  # global: b1 无行 = 停机
+    mask = group_null_mask(g_obs, g, earliest_row_ts(member))
+    assert mask[100] is False and mask[101] is True and mask[102] is False  # 停机桶借 global 判 null
+    pts = group_rate_points([member_obs], g, mask)
+    assert pts[100] == {"t": b0, "dl": 0, "up": 0}  # 全员空闲 0 线(非 null)
+    assert pts[101] is None  # 停机桶整桶 None
+    assert pts[102] == {"t": b2, "dl": 0, "up": 0}
+    totals = group_totals_points([member_obs], g, mask)
+    assert totals[100] == {"t": b0, "dl": 0, "up": 0}  # 窗首基线缺失贡献 0(不出洞)
+    assert totals[102] == {"t": b2, "dl": 0, "up": 0}  # 空闲段 delta=0

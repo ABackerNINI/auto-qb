@@ -8,6 +8,9 @@ S4 API 读侧的取数口径, 全部纯函数(输入 traffic_store.ParsedSeries 
   取速率均值; 空桶 = null。raw 段窗口(1m/5m/30m/3h/6h/12h/24h)消费 raw 段(桶宽 =
   sample_interval, 24h 窗 ≈2880 桶), hour 段窗口(3d/7d/30d)消费 hour 段(hour_epoch 即
   桶键, 桶宽恒 3600s, 30d 窗 720 点, 桶内不再聚合)。
+- z 零值行程行(plan 26-10-04-0721 §04.1)覆盖展开: 行程闭区间 [start, end] 相交的每个桶
+  (start < b+w 且 end >= b)获得速率 (0,0) 观测, totals = 行程快照 —— 空闲段 0 平线;
+  混桶 raw 优先(桶内同时有 raw 行与 z 覆盖时取 raw 聚合结果, z 让位)。
 - raw 行时间戳不对齐栅格(qB 重连退避/主循环抖动都会让采样时刻漂移, §05.1), 抖动行按
   floor 归桶; 窗首桶允许不满宽(t0 未对齐时首桶只覆盖 [first, t0) 之后的部分 —— 行照收)。
 
@@ -15,7 +18,8 @@ totals 段(§05.1, 单系列):
 - 相邻桶累计快照差分: delta = cur - last(cur >= last 时天然非负, 即 max(0,·));
   cur < last 判计数器重置 -> 该桶增量 null(§03.4 同款, dl/up 两向独立判定, 对齐采样器
   _delta 逐向口径); 前桶无快照(窗首/空桶断链)= 基线缺失 -> null。桶内快照取最新非 null
-  行的累计对(raw)或 hour 行累计对(hour, 本小时末快照口径与封口一致)。
+  行的累计对(raw)或 hour 行累计对(hour, 本小时末快照口径与封口一致); z 派生桶携带行程
+  快照参与差分 —— 空闲段每桶 delta = 0 链不断, 其后首个活跃桶恢复有基线(plan §04.1)。
 
 组读侧聚合(§04.1, API 层现算不做聚合缓存):
 - 速率 = 各成员序列栅格离散到桶 -> 桶内 Σ 成员均值; 桶内无行成员按 0 计;
@@ -108,14 +112,20 @@ class BucketObs:
 
 
 def series_bucket_obs(parsed: ParsedSeries, grid: WindowGrid) -> dict:
-    """单系列 -> 桶键 -> BucketObs(按窗口消费段分派: raw 归桶聚合 / hour 直接对位)"""
+    """单系列 -> 桶键 -> BucketObs(按窗口消费段分派: raw 归桶聚合(含 z 行程覆盖展开) / hour 直接对位)"""
     if grid.segment == "raw":
-        return _obs_from_raw(parsed.raw, grid)
+        return _obs_from_raw(parsed.raw, parsed.zruns, grid)
     return _obs_from_hours(parsed.hours, grid)
 
 
-def _obs_from_raw(rows: tuple, grid: WindowGrid) -> dict:
-    """raw 行归桶(§05.1): 桶内多行速率取均值; 快照取桶内最新非 null 行的累计对"""
+def _obs_from_raw(rows: tuple, zruns: tuple, grid: WindowGrid) -> dict:
+    """raw 行归桶(§05.1): 桶内多行速率取均值; 快照取桶内最新非 null 行的累计对
+
+    z 行程覆盖展开(plan 26-10-04-0721 §04.1): 行程闭区间 [start, end] 相交的桶(桶
+    [b, b+w), 条件 start < b+w 且 end >= b)获得速率 (0,0) 观测, totals = 行程快照 ——
+    单点行程 [ts, ts] 闭区间语义天然覆盖所在桶。混桶 raw 优先: 已有 raw 聚合结果的桶
+    z 覆盖让位(确定性规则, 一个桶的粒度图上不可见); 多行程覆盖同桶取文件序首个。
+    """
     first, last, interval, t1 = grid.first, grid.last, grid.interval, grid.t1
     acc = {}  # 桶键 -> [dl_sum, up_sum, n, last_ts, dl_total, up_total]
     for r in rows:
@@ -139,6 +149,13 @@ def _obs_from_raw(rows: tuple, grid: WindowGrid) -> dict:
     for b, a in acc.items():
         n = a[2]
         out[b] = BucketObs(int(round(a[0] / n)), int(round(a[1] / n)), a[4], a[5])
+    for z in zruns:
+        b = z.start - (z.start % interval)
+        top = z.end - (z.end % interval)
+        while b <= top:
+            if first <= b <= last and b not in out:  # 窗外桶不消费; 混桶 raw 优先
+                out[b] = BucketObs(0, 0, z.dl_total, z.up_total)
+            b += interval
     return out
 
 
@@ -194,10 +211,12 @@ def series_totals_points(obs: dict, grid: WindowGrid) -> list:
 
 
 def earliest_row_ts(parsed: ParsedSeries) -> Optional[int]:
-    """单种文件最早观测行时刻(raw 采样行 + hour 封口行全算 —— null 行也是一次观测);
+    """单种文件最早观测行时刻(raw 采样行 + hour 封口行 + z 行程行全算 —— null 行也是
+    一次观测, z 行的 start 是一次真实观测(plan 26-10-04-0721 §04.3));
     无任何行(无文件/零行)= None(组尚无任何观测, §04.1-④)"""
     cands = [r.ts for r in parsed.raw]
     cands.extend(h.hour_epoch for h in parsed.hours)
+    cands.extend(z.start for z in parsed.zruns)
     return min(cands) if cands else None
 
 
