@@ -480,6 +480,12 @@ window.AQB_DRAWER = {
         switching: false,  // FX-29: 打开路径不存在"保留旧数据", 遮罩恒不亮(显式建字段见 vue-reactivity)
         kind: "seed", scope: "",
       };
+      // 开场落定信号(FX-29 待到集合同机制): 登记详情 + 初值页签的数据源, 全到手 = 面板几何落定,
+      // 届时补一发让位(挂单 _drawerOpenReveal 在 _drawerDone 兑现) —— 开场那次量的是 loading 态
+      // 几何(面板随后长到 42vh), 文档底打开时 scrollBy 还会被钳制成 0(下滚余量是停靠槽位长高才
+      // 创造的; 2026-10-04 回归取证)。流量页签高度恒定(drawerPanelStyle 定高), 不进集合。
+      this._drawerWait = new Set(initialTab === "traffic" ? ["detail"] : this._drawerWaitSources(initialTab));
+      this._drawerOpenReveal = hash;
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读, 首屏恒默认收起)
       this._kbRevealRow(hash);   // 显式打开也让位: 停靠面板一开就压住列表底部, 被点行(双击/右键/Enter)要露出来(2026-10-03 报障)
       await this._fetchDrawerDetail();  // 详情恒拉(头部标题/常规页都依赖); 非常规 tab 再补拉对应数据
@@ -702,6 +708,12 @@ window.AQB_DRAWER = {
       w.delete(src);
       if (w.size) return;      // 还有兄弟源在飞 —— 不提前掀罩(防半新半旧)
       this._drawerSwitchEnd();
+      if (this._drawerOpenReveal) {  // 开场路径的落定补让位(挂单见 openTorrentDrawer; 切换路径无挂单)
+        const h = this._drawerOpenReveal;
+        this._drawerOpenReveal = "";
+        // 双守卫防迟到兑现: 挂单后被打断(关闭/换目标)时 drawer.open/hash 已易主, 那是别的种子几何
+        if (this.drawer.open && this.drawer.hash === h) this._kbRevealRow(h);
+      }
     },
     /* 遮罩延迟点亮: 局域网详情常在 100ms 内就到 —— 那一刻用户看到的是「内容直接换成新的」,
      * 中间没有任何一帧变淡; 只有真的慢下来(>160ms)才滑入加载胶囊并把旧值淡到不可读。 */
@@ -871,6 +883,11 @@ window.AQB_DRAWER = {
         }
         dock.style.height = next + "px";
         dock.style.marginTop = Math.min(m0, next * (m0 / h0)) + "px";  // 呼吸距随槽位同步长出
+        // 落定顶缘逐帧重登记: 详情中途长高后, enter 起拍登记的 loading 态顶缘不再是落定值,
+        // 让位量测(_kbRevealRow/键盘跟随)会按旧几何漏让(2026-10-04 回归取证)。dock sticky
+        // 吸底期底缘恒定(margin-top 不参与吸底定位), 落定顶缘 = dock 底缘 - 面板自然高
+        // (面板自身布局高不受 dock 槽位 overflow 裁剪, 即当前内容的落定高)。
+        this._drawerAnimTop = Math.round(dock.getBoundingClientRect().bottom - target);
         this._drawerAnimRaf = requestAnimationFrame(step);
       };
       this._drawerAnimRaf = requestAnimationFrame(step);
@@ -879,6 +896,10 @@ window.AQB_DRAWER = {
       if (!this.drawer.open) return;  // 入场被快速关闭打断: 迟到的钩子不得杀掉 leave 拍的动画循环
       this._drawerAnimStop();  // 兜底: 追赶循环若仍在途(慢收敛)强制收场回自然高
       this._drawerAnimTop = 0;
+      // 槽位落定后补一发让位: 文档底打开时开场让位被钳制成 0(下滚余量是停靠槽位长高才创造的,
+      // 2026-10-04 取证), 此刻槽位已回自然高、余量足额, 且收场兜底强制回自然高后几何是实量值。
+      // 流量形态无种子行可让, 不发。
+      if (this.drawer.kind === "seed") this._kbRevealRow(this.drawer.hash);
     },
     drawerLeaveHook(el) {
       // closeDrawer 已冻结槽位(drawer-anim + 捕获高)时先取值再清理 —— 面板马上转 absolute 出流,

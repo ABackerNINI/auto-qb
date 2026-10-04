@@ -42,6 +42,30 @@
 - **守阵**: `tests/test_web_shortcuts.py::test_drawer_open_reveal_row` —— openTorrentDrawer 必须调
   _kbRevealRow, 让位必须 nextTick + _kbViewBottom 单点, 禁 scrollIntoView 与 innerHeight, 行不在
   DOM 必须静默放弃。
+- **复发: 1** —— 2026-10-04 用户再报同一症状(「已修但回归」)。为什么没命中: 修复的让位调用确实
+  在, 但**量测时机与滚动时机都错**(见下一条: 量的是 loading 态几何 + 文档底 scrollBy 被钳制),
+  守阵只断言「调用了让位」, 探不到这类「调用存在但几何/时机错」的缺陷 —— 静态守阵全绿而真机必红。
+
+### 让位量测必须读「落定几何」, 文档底打开时下滚余量是槽位长高才创造的
+
+- **触发**: 2026-10-04 用户报「双击查看最后几个种子被抽屉挡住(已修但回归)」。
+  26-10-03 的让位在 openTorrentDrawer 挂状态后 nextTick 量一次就收工, 但那一刻: ①面板还在
+  loading 空态(≈百来px), 详情几十 ms 后到手、面板长到 42vh 顶格 —— 量到的顶缘(实量与动画期
+  登记的 _drawerAnimTop 起拍值同病)是 loading 态快照; ②用户在文档底, `scrollBy(+Δ)` 被浏览器
+  钳制成 0 —— 下滚余量是停靠槽位(.drawer-dock 流内元素)长高才创造的, 而槽位长高发生在让位之后。
+  真浏览器逐帧取证: scrollY 全程一字不动。键盘跟随不踩这两个坑(面板早已长好、余量已存在),
+  症状即「键盘正常、双击被盖」。
+- **判别**: 静态守阵全绿 + 真机必红 —— 必须走 ui_harness + 真浏览器探针(双击末行 → 等落定 →
+  量行底缘 vs 面板顶缘)。修复前取证值: animTop=616(loading 登记) vs 落定顶缘 488; scrollBy
+  y1==y0(被 max 钳死)。
+- **处置**: 三发让位, 各治一层, 全走 `_kbRevealRow` 单点(只在被点行被盖时 scrollBy, 不抢滚轮):
+  ①追赶循环**逐帧重登记**落定顶缘(`dock 底缘 - 面板自然高`; sticky 吸底期底缘恒定, 面板自身
+  布局高不受槽位裁剪)——修量测; ②开场按 FX-29 待到集合登记数据源(detail + 初值页签; 流量页签
+  定高不进集合), 全到手在 `_drawerDone` 兑现挂单 `_drawerOpenReveal`(open/hash 双守卫防迟到
+  误发)——修「页签数据中途长高」; ③`drawerAfterEnterHook` 槽位落定后补发——修「文档底钳制」
+  (槽位长高后余量足额; 流量形态无种子行不发)。
+- **守阵**: `test_drawer_open_reveal_row`(三发挂点 + 挂单守卫) +
+  `test_drawer_transition_dock_anim`(逐帧重登记)。
 
 ### 落点从视图内上提到 app 级: 内边距要补回, 失效的父容器 flex 规则要删
 

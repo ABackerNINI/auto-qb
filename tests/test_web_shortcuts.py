@@ -85,16 +85,20 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   _kbScrollRowIntoView 两处消费且不再裸用 window.innerHeight 当下界); 轮询停靠化收口
   (5s tick 挡非种子视图, 面板不可见即不拉)
 - test_drawer_open_reveal_row: 显式打开路径行让位(2026-10-03 报障: 双击列表末尾几行,
-  停靠面板一开把被点行盖住; W4 下界单点只接了键盘跟随) —— openTorrentDrawer 调
-  _kbRevealRow(hash) 补让位; nextTick 等面板挂载再量, 下界走 _kbViewBottom 单点
-  (不裸用 innerHeight), 行不在 DOM 静默放弃, 不用逐层滚动 API(文件头禁令)
+  停靠面板一开把被点行盖住; W4 下界单点只接了键盘跟随; 2026-10-04 回归: 开场量的
+  是 loading 态几何且文档底 scrollBy 被钳制) —— openTorrentDrawer 调 _kbRevealRow(hash)
+  补让位 + 开场按 FX-29 待到集合登记数据源、全到手在 _drawerDone 兑现挂单补发
+  (_drawerOpenReveal 带 open/hash 双守卫); 槽位落定 drawerAfterEnterHook 再补一发
+  (流量形态不发); nextTick 等面板挂载再量, 下界走 _kbViewBottom 单点(不裸用
+  innerHeight), 行不在 DOM 静默放弃, 不用逐层滚动 API(文件头禁令)
 - test_drawer_transition_dock_anim: 出入过渡动画(2026-10-03 用户报: 抽屉出现/消失生硬) ——
   停靠面板占文档流, 开/关时列表底部一帧撑开/收回是生硬根源, 面板本体滑淡治不了布局跳变:
   JS 钩子驱动 .drawer-dock 槽位高度插值(enter 追面板实时高 / leave 收面板自身高 + dock 跟随),
   模板 @enter/@leave 接线(before-enter 同帧量不到面板); 动画期几何登记 _drawerAnimTop
-  (_kbViewBottom 优先读它, 让位量测不读中间插值); 重开打断收场时清面板内联高再量自然高;
-  after 钩子挡被打断的迟到清场; reduced-motion 与 D3 全屏态双豁免; 三皮肤 CSS 成对
-  (dock 动画期裁剪 + 退场 absolute 底缘锚定)
+  (_kbViewBottom 优先读它, 让位量测不读中间插值; 2026-10-04 回归: 详情中途长高后起拍
+  登记值失效, 追赶循环逐帧重登记落定顶缘 = dock 底缘 - 面板自然高); 重开打断收场时
+  清面板内联高再量自然高; after 钩子挡被打断的迟到清场; reduced-motion 与 D3 全屏态
+  双豁免; 三皮肤 CSS 成对(dock 动画期裁剪 + 退场 absolute 底缘锚定)
 """
 
 from __future__ import annotations
@@ -862,11 +866,30 @@ def test_drawer_narrow_fullscreen_w4() -> None:
 
 def test_drawer_open_reveal_row() -> None:
     """显式打开路径行让位(2026-10-03 报障: 双击列表末尾几行, 停靠面板一开把被点行盖住) ——
-    W4 下界单点只接了键盘跟随, 显式打开 openTorrentDrawer 必须补一次被点行让位"""
+    W4 下界单点只接了键盘跟随, 显式打开 openTorrentDrawer 必须补一次被点行让位;
+    2026-10-04 回归: 开场那发量的是 loading 态几何(面板随后长到 42vh), 且文档底打开时
+    scrollBy 被钳制成 0(下滚余量是停靠槽位长高才创造的) —— 数据落定与槽位落定各补一发"""
     drawer_js = _read("drawer.js")
     open_fn = re.search(r"async openTorrentDrawer\(hash\) \{(.*?)\n    \},", drawer_js, re.S)
     assert open_fn, "drawer.js 找不到 openTorrentDrawer"
-    assert "this._kbRevealRow(hash)" in open_fn.group(1), ("显式打开必须调 _kbRevealRow 让位(停靠面板一开就压住列表底部, 双击末尾几行被挡)")
+    body = open_fn.group(1)
+    assert "this._kbRevealRow(hash)" in body, ("显式打开必须调 _kbRevealRow 让位(停靠面板一开就压住列表底部, 双击末尾几行被挡)")
+    assert 'this._drawerWait = new Set(initialTab === "traffic" ? ["detail"] : this._drawerWaitSources(initialTab))' in body, (
+        "开场必须按 FX-29 待到集合登记数据源(详情+初值页签), 全到手才是面板几何落定(页签数据中途长高也覆盖); "
+        "流量页签定高不进集合"
+    )
+    assert "this._drawerOpenReveal = hash" in body, "开场必须挂落定补让位挂单(数据源全到手后兑现)"
+    done_fn = re.search(r"_drawerDone\(src, hash, seq\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert done_fn and "_drawerOpenReveal" in done_fn.group(1), (
+        "待到集合清空(_drawerDone)必须兑现开场挂单补发让位 —— 那是数据落定时刻, 页签数据晚到也覆盖"
+    )
+    assert "this.drawer.hash === h" in done_fn.group(1), ("挂单兑现必须带 hash 守卫(挂单后被打断/换目标, 迟到兑现不得按旧种子几何抢滚动)")
+    after_enter = re.search(r"drawerAfterEnterHook\(\) \{(.*?)\n    \},", drawer_js, re.S)
+    assert after_enter and "this._kbRevealRow(this.drawer.hash)" in after_enter.group(1), (
+        "槽位落定(afterEnter)必须补一发让位: 文档底打开时开场 scrollBy 被钳制成 0, "
+        "下滚余量是停靠槽位长高才创造的, 落定后才有足额余量(2026-10-04 取证)"
+    )
+    assert 'this.drawer.kind === "seed"' in after_enter.group(1), "流量形态无种子行可让, afterEnter 补发必须按形态门控"
     eng = _read("shortcuts.js")
     rv = re.search(r"_kbRevealRow\(hash\) \{(.*?)\n    \},", eng, re.S)
     assert rv, "shortcuts.js 缺 _kbRevealRow(显式打开路径的行让位单点)"
@@ -916,6 +939,10 @@ def test_drawer_transition_dock_anim() -> None:
     # --- 几何登记: 动画期下界单点优先读登记值, 让位量测不读中间插值 ---
     assert "_drawerAnimTop = this._drawerFinalTop(dock)" in drawer_js or "_drawerAnimTop = _drawerFinalTop(dock)" in drawer_js, (
         "钩子必须把自然高帧的 dock 顶缘登记进 _drawerAnimTop(插值期顶缘是中间值, 不可让让位量测读到)"
+    )
+    assert "_drawerAnimTop = Math.round(dock.getBoundingClientRect().bottom - target)" in eb, (
+        "追赶循环必须逐帧重登记落定顶缘(dock 底缘 - 面板自然高; sticky 吸底期底缘恒定): "
+        "详情中途长高后起拍登记的 loading 态顶缘不再是落定几何, 让位量测会按旧几何漏让(2026-10-04 回归)"
     )
     # --- 代际闸: 快速开关往返时旧循环立即让位新拍(seq 不符的 rAF 回调自弃) ---
     assert lb.count("seq !== this._drawerAnimSeq") >= 1 and eb.count("seq !== this._drawerAnimSeq") >= 1, (
