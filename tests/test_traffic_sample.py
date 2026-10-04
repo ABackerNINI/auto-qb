@@ -62,7 +62,7 @@
   信用区间跨小时界自然拆分; avg = dt 加权 / max 逐记录取大 / totals 级末快照 / cov_s = Σ桶内覆盖;
   未完结小时留累计器; hour 行并入 day 累计器(严格逐级)
 - test_agg_hour_degenerate_equal_interval_matches_v2: dt_i ≡ interval_s 时 hour 行与现行 v2
-  _aggregate_bucket 纯活跃桶公式逐列一致(对照钉住), 且等于 v3_hour_agg 标称输入
+  等间隔均值公式 round(Σrate/n)(v2 纯活跃桶口径, 内联对照)逐列一致, 且等于 v3_hour_agg 标称输入
 - test_agg_z_n_runs_and_block_gap_vacuum: z 游程槽速率恒 0 + totals 行程快照; n 游程 null 期
   不贡献且清空信用; 新块首清信用 —— 块间 gap = 真空不虚记覆盖
 - test_agg_day_month_rollup_and_month_boundary: 逐级派生(hour→day→month)数值 = v3_rollup_agg;
@@ -113,8 +113,6 @@ from auto_qb.core.traffic_store import (
     AggRow,
     HEADER_LINE_V3,
     HOUR_SECONDS,
-    RawRow,
-    TrafficDatStore,
     TrafficV3Store,
     V3HourSample,
     V3NullRun,
@@ -1315,8 +1313,8 @@ def test_agg_hour_row_dt_weighted_across_hour_boundary(tmp_path):
 
 
 def test_agg_hour_degenerate_equal_interval_matches_v2(tmp_path):
-    """dt_i ≡ interval_s 退化(§4.1 验收): 等间隔无漂移序列产出的 hour 行与现行 v2
-    _aggregate_bucket 纯活跃桶公式逐列一致(对照钉住), 且等于 v3_hour_agg 标称输入"""
+    """dt_i ≡ interval_s 退化(§4.1 验收): 等间隔无漂移序列产出的 hour 行与等间隔均值
+    公式 round(Σrate/n)(v2 纯活跃桶口径)逐列一致(对照钉住), 且等于 v3_hour_agg 标称输入"""
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mod = mgr.host.get("qb_traffic")
     key = GLOBAL_SERIES_KEY
@@ -1325,13 +1323,11 @@ def test_agg_hour_degenerate_equal_interval_matches_v2(tmp_path):
     _feed_30s(mod, key, h0, obs)
     mod._agg_flush_series(key, now=h0 + HOUR_SECONDS)
     row = parse_v3_agg_text(_agg_text(tmp_path, key)).hours[0]
-    raw_rows = tuple(
-        RawRow(ts=h0 + i * 30, dl_rate=d, up_rate=u, dl_total=t, up_total=s) for i, (d, u, t, s) in enumerate(obs)
-    )
-    v2_row = TrafficDatStore._aggregate_bucket(raw_rows, (), h0, 30)
-    assert (row.dl_avg, row.up_avg) == (v2_row.dl_avg, v2_row.up_avg)  # v2 公式对照
-    assert (row.dl_max, row.up_max) == (v2_row.dl_max, v2_row.up_max)
-    assert (row.dl_total, row.up_total) == (v2_row.dl_total, v2_row.up_total) == (1300, 2300)
+    # 等间隔均值公式对照(v2 纯活跃桶口径 round(Σrate/n), 内联计算 —— v2 解析已随 S5 退役)
+    assert row.dl_avg == int(round(sum(d for d, _, _, _ in obs) / len(obs)))
+    assert row.up_avg == int(round(sum(u for _, u, _, _ in obs) / len(obs)))
+    assert (row.dl_max, row.up_max) == (max(d for d, _, _, _ in obs), max(u for _, u, _, _ in obs))
+    assert (row.dl_total, row.up_total) == (1300, 2300)  # totals = 级末快照
     manual = v3_hour_agg(h0, tuple(V3HourSample(d, u, t, s, 30.0) for d, u, t, s in obs))
     assert row.dl_avg == manual.dl_avg and row.cov_s == manual.cov_s == 120
 
@@ -1683,3 +1679,83 @@ def test_agg_defensive_paths_cascades_and_write_failure(tmp_path, monkeypatch):
     agg.pending[_AGG_H0 + 8 * HOUR_SECONDS] = [V3HourSample(100, 50, 1, 2, 3600.0)]
     assert mod._agg_flush_series(key, now=_AGG_H0 + 9 * HOUR_SECONDS) is False
     assert _AGG_H0 + 8 * HOUR_SECONDS not in agg.pending  # 封口内存照常推进, 写跳过
+
+
+# ---------- S5 实测: 写 IO open/flush 计数(plan 26-10-04-1957 §09.1) ----------
+
+
+def _dat_text(tmp_path, key: str, date: str):
+    """读系列天文件文本"""
+    return open(v3_day_file_path(str(tmp_path), key, date), encoding="utf-8").read()
+
+
+def _drive_full_day(tmp_path, monkeypatch, sample_interval: int, day0: int):
+    """全局系列模拟一整天采样流经采样模块 + store(假时钟), 返回 (模块, open 计数 dict)。
+
+    flush_interval=600 -> 恰 144 个 flush 时点/天(86400/600), 24 个整点小时封口; 末次
+    采样恰在午夜: 跨天硬切把当天最后一段落盘(第 144 次天文件 append), 次日首样本随
+    flush 落次日文件(1 次)。计数只算追加写 open(mode 含 a 且非二进制), 尾字节查补的
+    "rb" 读不计。"""
+    t = {"now": day0}
+    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=sample_interval, flush_interval=600))
+    mgr.store.server_state = _ss(dl_info_speed=1024, up_info_speed=512)
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    task = Task("internal", TASK_NAME, interval=sample_interval, handler=mod.handle_traffic_sample)
+    counts = {"day0": 0, "day1": 0, "agg": 0}
+    day0_suffix = v3_epoch_date_str(day0) + ".dat"
+    real_open = open
+
+    def counting_open(file, mode="r", *a, **kw):
+        m = mode or ""
+        if "a" in m and "b" not in m:
+            path = os.fspath(file)
+            if path.endswith("agg.dat"):
+                counts["agg"] += 1
+            elif path.endswith(day0_suffix):
+                counts["day0"] += 1
+            elif path.endswith(".dat"):
+                counts["day1"] += 1
+        return real_open(file, mode, *a, **kw)
+
+    monkeypatch.setattr("builtins.open", counting_open)
+    for i in range(86400 // sample_interval + 1):  # 含午夜样本(t = day0+86400, 属次日)
+        t["now"] = day0 + i * sample_interval
+        assert mod.handle_traffic_sample(task, dry_run=False) is True
+    return mod, counts
+
+
+def test_v3_write_io_full_day_2s_interval(tmp_path, monkeypatch):
+    """写 IO 实测(2s 档, §09.1): 全局系列一整天 43200 样本, 天文件 append open 恰 144 次/天
+    (v2 逐行追加为 43200 次 -> 300x 下降), agg append 恰 24 次(每小时封口 1 次);
+    计数器断言防回归。"""
+    from datetime import datetime
+
+    day0 = int(datetime(2026, 5, 10).timestamp())
+    _mod, c = _drive_full_day(tmp_path, monkeypatch, 2, day0)
+    assert c["day0"] == 144  # 86400s / 600s flush = 144(含午夜硬切的收尾落盘)
+    assert c["day1"] == 1  # 次日首样本: 1 次
+    assert c["agg"] == 24  # 24 个整点小时封口
+    assert 43200 // 144 == 300  # 对照 v2 逐行追加 43200 次/天: 300x 下降
+    # 数据面抽查: day0 天文件单块 43200 条 r 记录(interval_s=2); agg 24 hour 行 + 1 day 行
+    parsed = parse_v3_day_text(_dat_text(tmp_path, GLOBAL_SERIES_KEY, v3_epoch_date_str(day0)))
+    assert len(parsed.blocks) == 1 and parsed.blocks[0].interval_s == 2
+    assert len(parsed.blocks[0].records) == 43200
+    agg_rows = parse_v3_agg_text(_agg_text(tmp_path, GLOBAL_SERIES_KEY))
+    assert len(agg_rows.hours) == 24 and len(agg_rows.days) == 1 and agg_rows.months == ()
+
+
+def test_v3_write_io_full_day_30s_interval(tmp_path, monkeypatch):
+    """写 IO 实测(30s 档, §09.1 对照): flush 次数由 flush_interval 驱动, 同样 144 次/天
+    (2880 样本 -> 144 append, 20x 下降于 v2 逐行 2880 次); 采样密度不影响写 IO 面量级
+    —— v3 的写 IO 与采样率解耦(批量缓冲), 只与 flush_interval 相关。"""
+    from datetime import datetime
+
+    day0 = int(datetime(2026, 5, 10).timestamp())
+    _mod, c = _drive_full_day(tmp_path, monkeypatch, 30, day0)
+    assert c["day0"] == 144 and c["day1"] == 1 and c["agg"] == 24
+    assert 2880 // 144 == 20  # 对照 v2 逐行追加 2880 次/天: 20x 下降(§09.1 口径)
+    parsed = parse_v3_day_text(_dat_text(tmp_path, GLOBAL_SERIES_KEY, v3_epoch_date_str(day0)))
+    assert len(parsed.blocks) == 1 and parsed.blocks[0].interval_s == 30
+    assert len(parsed.blocks[0].records) == 2880

@@ -7,13 +7,11 @@
 - test_build_grid_fractional_interval_ceils_bucket_width: 小数采样间隔桶宽向上取整(1.5s -> 2s 桶宽; floor 会隔桶空 = 伪断线)
 - test_build_grid_day_windows_d4: 6mo/1y(D4 新档) day 段窗 —— 滚动窗涉及本地日期逐日铺格(桶键 = 本地日界 00:00, 6mo = 182d + 首尾日 / 1y 比 6mo 多 183 桶), interval 86400; 90d 不存在; all 拒绝 build_grid(数据面定栅格)
 - test_build_month_grid_all_view: all 视图数据面铺格 —— 首末月行间逐月铺桶(缺失月也在 = null 桶), 乱序/重复 epoch 取最小最大; 空集合 = 空 buckets 兜底栅格
-- test_hour_rows_align_by_hour_epoch: (v2 残留面)30d 窗 hour 行按 hour_epoch 对位(桶内不再聚合); 窗外/超过 t1 的行不消费
-- test_rate_points_and_earliest_row_ts: points 形状 {"t","dl","up"} | null; (v2)earliest_row_ts 取 raw+hour 全部行最早时刻, 零行 = None
+- test_rate_points_null_shape: points 形状 {"t","dl","up"} | null(空桶断线)
 - test_group_null_mask_rules: (v3 重写, D6)组桶 null = 无任何成员观测(任一成员 r/z 观测即程序存活真值); 无行成员按 0 计; 借 global 判 null 退役
 - test_group_rate_sums_members_missing_zero: 组速率 = 桶内 Σ 成员均值, 无行成员按 0 计; null 桶整桶 None
 - test_group_totals_per_member_diff_then_sum: 逐成员先差分再求和 —— 单成员重置贡献 0 不拖垮全组; 成员基线缺失(窗首/无行)贡献 0; null 桶断链
-- test_group_50_members_correct_and_time_bound: 50 成员 x 满窗 2880 桶聚合正确性(抽样桶 Σ 校验) + 耗时上界(<< 采样间隔 30s, 实测断言 < 3s)
-- test_earliest_row_ts_includes_zrun_start: (v2 残留面)earliest_row_ts 把 z 行 start 计入最早观测
+- test_group_50_members_correct_and_time_bound: (v3 口径)50 成员 x 满窗 2880 桶聚合正确性(抽样桶 Σ 校验, 每成员一块 -> v3_grid_obs) + 耗时上界(<< 采样间隔 30s, 实测断言 < 3s)
 - test_group_zrun_idle_zero_line_and_outage_null: (v3 重写)组图回归 v3 观测面 —— 全员空闲(z 覆盖)0 线 / 全员无观测(停机)断线 / 成员只剩 z 块也有观测; 组三函数消费 v3_grid_obs 产物
 - test_v3_points_known_sequence_end_to_end: 已知序列逐桶核对 —— 天文件文本 -> 解析 -> 桶点: 显式 dt / 缺省 / z 均摊 / n 后链式自洽; 断连/停机 null; totals 差分
 - test_v3_d1_cross_bucket_coverage: 跨桶覆盖(D1) —— z 游程展开多桶同值非 null; r 暂停宽桶整段承载不伪断
@@ -39,12 +37,10 @@ from auto_qb.core.traffic_grid import (
     WINDOW_SPECS,
     build_grid,
     build_month_grid,
-    earliest_row_ts,
     group_null_mask,
     group_rate_points,
     group_totals_points,
     rate_points,
-    series_bucket_obs,
     series_totals_points,
     v3_agg_obs,
     v3_earliest_row_ts,
@@ -55,15 +51,11 @@ from auto_qb.core.traffic_grid import (
 )
 from auto_qb.core.traffic_store import (
     AggRow,
-    HourRow,
-    ParsedSeries,
-    RawRow,
     V3Block,
     V3NullRun,
     V3ParsedAgg,
     V3Sample,
     V3ZeroRun,
-    ZRow,
     format_v3_day_text,
     parse_v3_day_text,
     v3_date_str_epoch,
@@ -74,22 +66,6 @@ from auto_qb.core.traffic_store import (
 
 #: 固定"现在"(2027-01-15, 纯测试时刻; 恰为 30 与 3600 的公倍数, 对齐断言干净)
 NOW = 1_800_000_000
-
-
-def _series(raw=(), hours=(), zruns=()) -> ParsedSeries:
-    return ParsedSeries(
-        key="test",
-        raw=tuple(raw),
-        hours=tuple(hours),
-        zruns=tuple(zruns),
-        bad_lines=0,
-        data_lines=len(raw) + len(hours),
-    )
-
-
-def _row(ts, dl, up, dt=None, ut=None) -> RawRow:
-    return RawRow(ts=ts, dl_rate=dl, up_rate=up, dl_total=dt, up_total=ut)
-
 
 # ---------------- 栅格构建(§05.1) ----------------
 
@@ -177,35 +153,13 @@ def test_build_month_grid_all_view():
 # (v2 raw 归桶/差分/z 覆盖展开用例已随 S3a 读侧翻转重写为 v3 口径, 见文件尾 v3 区)
 
 
-def test_hour_rows_align_by_hour_epoch():
-    """30d 窗 hour 行按 hour_epoch 对位(桶内不再聚合); 窗外/未进窗的行不消费"""
-    g = build_grid("30d", NOW)
-    h0 = g.first + 3600 * 10
-    hours = [
-        HourRow(hour_epoch=h0, dl_avg=111, dl_max=222, up_avg=33, up_max=44, dl_total=1000, up_total=500),
-        HourRow(hour_epoch=h0 + 3600, dl_avg=7, dl_max=7, up_avg=8, up_max=8, dl_total=1500, up_total=900),
-        HourRow(hour_epoch=g.first - 3600, dl_avg=1, dl_max=1, up_avg=1, up_max=1, dl_total=1, up_total=1),  # 窗前
-    ]
-    obs = series_bucket_obs(_series(hours=hours), g)
-    assert obs[h0] == BucketObs(111, 33, 1000, 500)
-    assert obs[h0 + 3600] == BucketObs(7, 8, 1500, 900)
-    assert h0 - 3600 not in obs
-    pts = rate_points(obs, g)
-    assert pts[g.buckets.index(h0)] == {"t": h0, "dl": 111, "up": 33}
-
-
-def test_rate_points_and_earliest_row_ts():
-    """points 形状 {"t","dl","up"} | null; earliest_row_ts 收 raw+hour 全部行(含 null 行), 零行 = None"""
+def test_rate_points_null_shape():
+    """points 形状(§08): 桶有观测 -> {"t","dl","up"}; 空桶 = null(断线语义, §05.2)"""
     g = build_grid("24h", NOW, 30.0)
     base = g.first + 60
     obs = {base: BucketObs(1, 2, 3, 4)}
     assert rate_points(obs, g)[g.buckets.index(base)] == {"t": base, "dl": 1, "up": 2}
     assert rate_points(obs, g)[g.buckets.index(base) + 1] is None
-    assert earliest_row_ts(_series()) is None
-    assert earliest_row_ts(_series(raw=[_row(NOW - 100, 1, 1, 1, 1)])) == NOW - 100
-    null_row = RawRow(ts=NOW - 200, dl_rate=None, up_rate=None, dl_total=None, up_total=None)
-    assert earliest_row_ts(_series(raw=[null_row, _row(NOW - 100, 1, 1, 1, 1)])) == NOW - 200  # null 行也算观测
-    assert earliest_row_ts(_series(hours=[HourRow(NOW - 5000, 1, 1, 1, 1, 1, 1)])) == NOW - 5000
 
 
 # ---------------- 组读侧聚合(§04.1) ----------------
@@ -278,45 +232,31 @@ def test_group_50_members_correct_and_time_bound():
     """50 成员 x 满窗 2880 桶: 抽样桶 Σ 成员均值/逐成员差分校验 + 耗时上界
 
     上界依据: 组图弹层按采样间隔(30s)低频续拉(§07), 单次聚合须远小于一个间隔;
-    实测量级为数十 ms(纯聚合, 不含文件读), 断言 3s 为含 CI 慢机的宽裕上界。
+    断言 3s 为含 CI 慢机的宽裕上界。v3 口径: 每成员一个 2880 记录块(标称 30s),
+    组三函数消费 v3_series_points -> v3_grid_obs 产物。
     """
     g = build_grid("24h", NOW, 30.0)
     n = 50
-    members = []
+    blocks = []
     for m in range(n):
-        rows = [
-            _row(g.first + i * 30 + 5, 100 + m, 200 + m, i * 10 + m, 0)  # 每桶恰一行(抖动 +5s)
-            for i in range(2880) if g.first + i * 30 + 5 < g.t1
-        ]
-        members.append(_series(rows))
+        recs = tuple(V3Sample(100 + m, 200 + m, i * 10 + m, 0) for i in range(2880))  # 每桶恰一记录, totals 每桶 +10
+        blocks.append(V3Block(g.first + 30, 30, recs))  # 槽位 = g.first+30+30i -> 桶键 = g.buckets[i]
 
     t_start = time.perf_counter()
-    member_obs = [series_bucket_obs(p, g) for p in members]
+    member_obs = [v3_grid_obs(v3_series_points((blk, ), g.t0, g.t1 + 1), g) for blk in blocks]
     mask = group_null_mask(member_obs, g)
     points = group_rate_points(member_obs, g, mask)
     totals = group_totals_points(member_obs, g, mask)
     elapsed = time.perf_counter() - t_start
 
     assert len(points) == len(g.buckets)
-    assert all(p is not None for p in points)  # 每桶每成员都有行: 无 null
+    assert all(p is not None for p in points)  # 每桶每成员都有观测: 无 null
     idx = 100
     b = g.buckets[idx]
     assert points[idx] == {"t": b, "dl": 100 * n + n * (n - 1) // 2, "up": 200 * n + n * (n - 1) // 2}
     assert totals[idx] == {"t": b, "dl": 10 * n, "up": 0}  # 逐成员每桶 +10; 上行恒 0
     assert totals[g.buckets.index(g.first)] == {"t": g.first, "dl": 0, "up": 0}  # 窗首基线缺失 -> 0
     assert elapsed < 3.0, f"50 成员聚合耗时 {elapsed:.3f}s 超上界"
-
-
-# ---------------- z 行与 earliest(仍接线面; v2 覆盖展开/续链用例已平移 v3 区) ----------------
-
-
-def test_earliest_row_ts_includes_zrun_start():
-    """earliest_row_ts 把 z 行 start 计入最早观测(§04.3, z 行是一次真实观测):
-    只剩 z 行的文件(raw 滑出 24h 窗)也有最早观测, 组图不再据此误判全 null"""
-    zruns = (ZRow(start=NOW - 8000, end=NOW - 7000, dl_total=1, up_total=1), )
-    assert earliest_row_ts(_series(zruns=zruns)) == NOW - 8000
-    raws = [_row(NOW - 100, 1, 1, 1, 1)]
-    assert earliest_row_ts(_series(raws, zruns=zruns)) == NOW - 8000  # raw 更晚: 取 z start
 
 
 # ---------------- 组图回归(v3 观测面, S3b D6 重写) ----------------

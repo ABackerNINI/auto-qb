@@ -1,56 +1,33 @@
-"""traffic_grid: qB 口径流量图读侧栅格离散与组聚合纯函数(plan 26-10-03-0946 方案C P4, §05.1/§04.1)
+"""traffic_grid: qB 口径流量图读侧栅格离散与组聚合纯函数(plan 26-10-03-0946 方案C P4, §05.1/§04.1; v3 读侧 plan 26-10-04-1957 S3a/S3b)
 
-S4 API 读侧的取数口径, 全部纯函数(输入 traffic_store.ParsedSeries / 桶表, 输出响应段),
-不触文件不触时钟 —— Web 线程直接调用, 单测可独立构造输入:
+S4 API 读侧的取数口径, 全部纯函数(输入 v3 天文件块序列 / agg 行 / 栅格桶表, 输出响应段),
+不触文件不触时钟 —— Web 线程直接调用, 单测可独立构造输入。v2 逐行格式的读侧(系列解析 /
+raw 归桶 / z 行程覆盖展开 / 最早观测行)已随 S5 退役删除, 本模块即现行唯一读侧:
 
-栅格离散(§05.1):
-- [t0, t1) 按「栅格 = 采样间隔」离散: bucket = floor(t / interval) * interval; 桶内多行
-  取速率均值; 空桶 = null。raw 段窗口(1m/5m/30m/3h/6h/12h/24h)消费 raw 段(桶宽 =
-  sample_interval, 24h 窗 ≈2880 桶), hour 段窗口(3d/7d/30d)消费 hour 段(hour_epoch 即
-  桶键, 桶宽恒 3600s, 30d 窗 720 点, 桶内不再聚合)。
-- z 零值行程行(plan 26-10-04-0721 §04.1)覆盖展开: 行程闭区间 [start, end] 相交的每个桶
-  (start < b+w 且 end >= b)获得速率 (0,0) 观测, totals = 行程快照 —— 空闲段 0 平线;
-  混桶 raw 优先(桶内同时有 raw 行与 z 覆盖时取 raw 聚合结果, z 让位)。
-- raw 行时间戳不对齐栅格(qB 重连退避/主循环抖动都会让采样时刻漂移, §05.1), 抖动行按
-  floor 归桶; 窗首桶允许不满宽(t0 未对齐时首桶只覆盖 [first, t0) 之后的部分 —— 行照收)。
+窗口与栅格(§05.1/§05.3, WINDOW_SPECS 13 档):
+- raw 段窗(1m-24h): 桶宽 = 采样间隔(向上取整防伪断线), 桶 = floor 对齐; 数据经
+  traffic_store.V3DayCache 按天加载 -> 块序列 -> v3_series_points 桶点 -> v3_grid_obs
+  按重叠秒加权展开到栅格(D1 跨桶覆盖: 宽桶中间栅格桶同值非 null)。
+- hour 段窗(3d/7d/30d): 桶宽恒 3600s, 消费 agg hour 行; day 段窗(6mo/1y): 滚动窗涉及
+  本地日期逐日铺格(桶键 = 本地日界 00:00), 消费 agg day 行; month 段窗(all): 数据面定栅格
+  (build_month_grid, 首末月行之间逐月铺格), 消费 agg month 行。agg 行 epoch 即栅格桶键
+  (v3_agg_obs 直映, 桶内不再聚合)。
 
-totals 段(§05.1, 单系列):
-- 相邻桶累计快照差分: delta = cur - last(cur >= last 时天然非负, 即 max(0,·));
-  cur < last 判计数器重置 -> 该桶增量 null(§03.4 同款, dl/up 两向独立判定, 对齐采样器
-  _delta 逐向口径); 前桶无快照(窗首/空桶断链)= 基线缺失 -> null。桶内快照取最新非 null
-  行的累计对(raw)或 hour 行累计对(hour, 本小时末快照口径与封口一致); z 派生桶携带行程
-  快照参与差分 —— 空闲段每桶 delta = 0 链不断, 其后首个活跃桶恢复有基线(plan §04.1)。
+桶点模型(D1 实施期定稿, §05.1): 每个观测槽生成一个覆盖桶, 桶宽 = max(1, ceil(有效dt)),
+桶 = [ceil(ts)-w, ceil(ts)) —— 单记录的桶天然覆盖其有效 dt 全程; z 游程按均摊槽展开为
+多桶(rate 同值 (0,0)、totals 同快照)是覆盖语义的字面形态。块间真空与 n 游程断连都出
+null 点, 来源不同(真空无观测 / 断连显式 null)。
 
-组读侧聚合(§04.1 -> §05.1 v3 平移, API 层现算不做聚合缓存):
-- 速率 = 各成员序列栅格离散到桶 -> 桶内 Σ 成员均值; 桶内无行成员按 0 计;
-- 累计增量 = 逐成员先差分(max(0,·) + 回落判重置贡献 0 + 基线缺失贡献 0)再求和 ——
-  先逐成员差分再相加, 避免单成员计数器重置把全组差分打成大负数; 组口径宁可少计一桶
-  不出洞(§04.1-③);
-- 桶 null 判定(v3, §05.1): 桶内无任何成员观测 -> null(全员无观测 = 停机/断连/组尚无
-  任何观测); 其余桶即使全员空闲也出 0 —— 组图空闲段 0 线、停机段断线, 二者由成员自身
-  观测面区分(r/z 观测即程序存活真值, 「借 global 判 null」随 v3 退役)。
+totals 段(§05.1, 单系列与组共用差分层):
+- 相邻桶累计快照差分: delta = cur - last; cur < last 判计数器重置 -> 该桶增量 null
+  (dl/up 两向独立判定, 对齐采样器 _delta 逐向口径); 前桶无快照(窗首/空桶断链)= 基线
+  缺失 -> null。z 槽桶快照恒定参与差分 —— 空闲段每桶 delta = 0 链不断。
 
-v3 读侧核心(plan 26-10-04-1957 S3a/S3b, §05.1-§05.3 —— 文件尾 v3 区):
-- 分层纯化: 天文件(V3ParsedDay, 经 traffic_store.V3DayCache 按天加载 + 解析缓存) ->
-  块序列 ->(S1 游标 dt 链 v3_block_slots)-> 记录时间轴 ->(逐记录有效 dt 桶宽 + D1 跨桶
-  覆盖 + 块间真空)-> 有序桶点列 ->(S3b 栅格展开 v3_grid_obs)-> 响应栅格桶观测。
-  agg 段(hour/day/month)在「桶点」层面并流: agg 行 epoch 即栅格桶键(v3_agg_obs 直映),
-  与 raw 段共用 rate_points/series_totals_points 差分层。
-- 桶点模型(D1 实施期定稿, 逐记录覆盖桶): 每个观测槽生成一个覆盖桶, 桶宽 = 桶宽(有效dt),
-  桶 = [t, ceil(ts)), t = ceil(ts) - w —— 单记录的桶天然覆盖其有效 dt 全程, 标称栅格视角
-  下「单记录跨多桶、中间桶同值非 null」由宽桶等价承载; z 游程按均摊槽展开为多桶(rate 同值
-  (0,0)、totals 同快照)是覆盖语义的字面形态。
-- 视图映射(S3b, §05.3): 响应数组 = 窗口栅格上的「桶值 | null」定长数组(§08 形状不变)。
-  raw 段窗(1m-24h)栅格 = 栅格离散(桶宽 = 采样间隔), 桶点覆盖区间 [t, t+w) 与栅格桶按
-  重叠秒数加权展开(v3_grid_obs —— D1 跨桶覆盖的栅格形态: 宽桶中间栅格桶同值非 null);
-  hour 段窗(3d/7d/30d)消费 agg hour 行、day 段窗(6mo/1y)消费 day 行、month 段窗(all)
-  消费 month 行 —— 行 epoch 即栅格桶键(v3_agg_obs 直映, 桶内不再聚合)。6mo/1y = 滚动窗
-  (now-182d/365d..now, 自然月边界只用于 month 行聚合粒度); all = 数据面定栅格
-  (build_month_grid, 首末 month 行之间逐月铺格, 缺失月 = null)。
-- 组读侧聚合 v3(§05.1/§05.4, 「借 global 判 null」退役): 组桶 null 判定改由成员自身观测面
-  裁决 —— v3 采样器全局同拍, 单成员的 r/z 观测即「程序存活且 qB 在线」真值: 桶内任一成员
-  有观测即非 null(无行成员按 0 计), 全员无观测 = 停机/断连/组尚无任何观测 -> null。每请求
-  省一次全局文件读取(组图 30d 由 M×31 -> M×1 次文件读取)。
+组读侧聚合(§04.1 -> §05.4, API 层现算不做聚合缓存):
+- 速率 = 各成员栅格桶观测 Σ 成员均值, 无行成员按 0 计;
+- 累计增量 = 逐成员先差分(重置/基线缺失贡献 0)再求和 —— 宁可少计一桶不出洞;
+- 桶 null 判定(v3): 桶内无任何成员观测 -> null —— 单成员的 r/z 观测即「程序存活且 qB
+  在线」真值, 不借全局系列(组图 3d+ 窗 M 个成员各只读 1 个 agg 文件)。
 """
 import math
 import time
@@ -59,7 +36,6 @@ from typing import Optional
 
 from .traffic_store import (
     HOUR_SECONDS,
-    ParsedSeries,
     V3Block,
     V3ParsedAgg,
     v3_block_slots,
@@ -195,70 +171,10 @@ def grid_for_now(window: str, sample_interval: float = DEFAULT_SAMPLE_INTERVAL_S
 class BucketObs:
     """单桶观测(§05.1 归桶结果): 速率均值 + 桶末累计快照"""
 
-    dl_rate: int  # 桶内下载速率均值(bytes/s, round 取整, 口径对齐封口 _aggregate_bucket)
+    dl_rate: int  # 桶内下载速率均值(bytes/s, round 取整)
     up_rate: int
     dl_total: Optional[int]  # 桶末 all-time 下载累计快照(bytes; raw 取最新行, hour 取封口行)
     up_total: Optional[int]
-
-
-def series_bucket_obs(parsed: ParsedSeries, grid: WindowGrid) -> dict:
-    """单系列 -> 桶键 -> BucketObs(按窗口消费段分派: raw 归桶聚合(含 z 行程覆盖展开) / hour 直接对位)"""
-    if grid.segment == "raw":
-        return _obs_from_raw(parsed.raw, parsed.zruns, grid)
-    return _obs_from_hours(parsed.hours, grid)
-
-
-def _obs_from_raw(rows: tuple, zruns: tuple, grid: WindowGrid) -> dict:
-    """raw 行归桶(§05.1): 桶内多行速率取均值; 快照取桶内最新非 null 行的累计对
-
-    z 行程覆盖展开(plan 26-10-04-0721 §04.1): 行程闭区间 [start, end] 相交的桶(桶
-    [b, b+w), 条件 start < b+w 且 end >= b)获得速率 (0,0) 观测, totals = 行程快照 ——
-    单点行程 [ts, ts] 闭区间语义天然覆盖所在桶。混桶 raw 优先: 已有 raw 聚合结果的桶
-    z 覆盖让位(确定性规则, 一个桶的粒度图上不可见); 多行程覆盖同桶取文件序首个。
-    """
-    first, last, interval, t1 = grid.first, grid.last, grid.interval, grid.t1
-    acc = {}  # 桶键 -> [dl_sum, up_sum, n, last_ts, dl_total, up_total]
-    for r in rows:
-        if r.dl_rate is None or r.ts >= t1:  # null 点不参与归桶(空值行只表达断连, §03.5)
-            continue
-        b = r.ts - (r.ts % interval)
-        if b < first or b > last:
-            continue  # 窗外行不消费(24h 窗只看 raw 窗内的桶)
-        a = acc.get(b)
-        if a is None:
-            acc[b] = [r.dl_rate, r.up_rate, 1, r.ts, r.dl_total, r.up_total]
-            continue
-        a[0] += r.dl_rate
-        a[1] += r.up_rate
-        a[2] += 1
-        if r.ts >= a[3]:  # 桶末快照 = 最新行(同刻行取后到者, 快照单调不减口径一致)
-            a[3] = r.ts
-            a[4] = r.dl_total
-            a[5] = r.up_total
-    out = {}
-    for b, a in acc.items():
-        n = a[2]
-        out[b] = BucketObs(int(round(a[0] / n)), int(round(a[1] / n)), a[4], a[5])
-    for z in zruns:
-        b = z.start - (z.start % interval)
-        top = z.end - (z.end % interval)
-        while b <= top:
-            if first <= b <= last and b not in out:  # 窗外桶不消费; 混桶 raw 优先
-                out[b] = BucketObs(0, 0, z.dl_total, z.up_total)
-            b += interval
-    return out
-
-
-def _obs_from_hours(rows: tuple, grid: WindowGrid) -> dict:
-    """hour 行对位(§05.1): hour_epoch 即桶键, 桶内不再聚合(封口已按小时归并)"""
-    first, last, t1 = grid.first, grid.last, grid.t1
-    out = {}
-    for h in rows:
-        b = h.hour_epoch
-        if b < first or b > last or b >= t1:
-            continue
-        out[b] = BucketObs(h.dl_avg, h.up_avg, h.dl_total, h.up_total)
-    return out
 
 
 def rate_points(obs: dict, grid: WindowGrid) -> list:
@@ -298,16 +214,6 @@ def series_totals_points(obs: dict, grid: WindowGrid) -> list:
         out.append({"t": b, "dl": dl, "up": up})
         prev = (o.dl_total, o.up_total)
     return out
-
-
-def earliest_row_ts(parsed: ParsedSeries) -> Optional[int]:
-    """单种文件最早观测行时刻(raw 采样行 + hour 封口行 + z 行程行全算 —— null 行也是
-    一次观测, z 行的 start 是一次真实观测(plan 26-10-04-0721 §04.3));
-    无任何行(无文件/零行)= None(组尚无任何观测, §04.1-④)"""
-    cands = [r.ts for r in parsed.raw]
-    cands.extend(h.hour_epoch for h in parsed.hours)
-    cands.extend(z.start for z in parsed.zruns)
-    return min(cands) if cands else None
 
 
 def group_null_mask(member_obs: list, grid: WindowGrid) -> list:
@@ -383,7 +289,7 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 # 归桶模型(D1 实施期定稿: 逐记录覆盖桶):
 # - 每个观测槽(r/z)生成一个覆盖桶: 桶宽 w = v3_bucket_width_s(有效dt)(S1 槽层的 dt_s =
 #   显式 dt 或游程均摊 span/run_len), 桶 = [t, ceil(ts)), t = ceil(ts) - w。
-#   替代 v2 全局 ceil(sample_interval) 一刀切(traffic_grid.py:91) —— 混排 interval 分块
+#   替代 v2 全局 ceil(sample_interval) 一刀切 —— 混排 interval 分块
 #   各归各桶, 抖动/漂移不再制造空桶(A2 伪断线根因的读侧残留一并消除)。
 # - 桶起点锚定实测时刻(ceil(ts) - w), 无累积漂移 —— 「按桶宽向前铺格」的替代方案会被
 #   每行 ceil(dt)-dt ∈ [0,1) 的单调累积拖偏(稳态小漂移退化逐行显式 dt 时块尾可达数十秒),
@@ -599,7 +505,7 @@ def v3_agg_obs(rows: tuple, grid: WindowGrid) -> dict:
 def v3_earliest_row_ts(blocks: tuple, agg: Optional[V3ParsedAgg]) -> Optional[int]:
     """v3 单系列最早观测时刻(S3b, §05.4): 块首槽实测时刻(B.start 即首槽, 含 z 游程开块
     —— 块首游程首槽 = B.start) + agg 行 epoch(hour/day/month 三层全算 —— 观测面全层的
-    最早证据, day/month 行计入即本函数与 v2 earliest_row_ts 的差); 双空(无块无 agg 行)
+    最早证据, day/month 行计入 —— 观测面全层的覆盖(v3 新增)); 双空(无块无 agg 行)
     = None(组端点空态判据「组从未产过流量」的 v3 观测面口径)。"""
     cands = [b.start_epoch for b in blocks]
     if agg is not None:

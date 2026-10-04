@@ -9,8 +9,7 @@ S2a 写侧翻转(§03): 采样点不再逐行落盘, 进内存 BlockBuffer(每�
 (默认 600s, handler 内计时)批量追加落盘到 <data_dir>/qb-traffic-v3/<系列>/<YYYY-MM-DD>.dat
 (v3 块化稀疏 delta 格式; 序列化/解析纯函数单点在 core/traffic_store.py v3 纯函数区, 文件
 写入单点在同文件 TrafficV3Store)。聚合分层(S2b)见下「聚合分层与恢复」节。
-v2 写路径随翻转停用: 本模块不再触旧目录 qb-traffic/ 与 index.json(停写; 退役方法保留
-待 S5 清理, 标注 pragma no cover)。
+v2 写路径已随 S5 退役删除: 本模块不触旧目录 qb-traffic/(R2 留存不读)。
 
 差分与重置规则(沿用 §03.4): 速率字段直采不差分; 累计差分对 all-time 对进行,
 delta = max(0, cur - last); cur < last 判计数器重置(该点增量记 null + INFO, 基线更新为 cur),
@@ -88,8 +87,8 @@ qbmanager 的 finally 与 state.save 顺序不改。
 - 裁剪与淘汰(§4.5): hour 行按 rollup_window 裁剪, piggyback hour 封口时点, 判据用内存
   最老行(零常规文件读), 存在到龄行才重写 + 无到龄零写(same_content 语义), tmp+fsync+
   os.replace 仅存于此(v3 常规写路径无原子重写); day/month 行不按龄裁剪(D7 永久)。
-  种子淘汰 = 删超龄系列目录(天文件 + agg.dat), 龄期由天文件名日期直接算(index.json
-  updated_at 退役), frozen 照删, 全局系列豁免; 触发点 = flush 时点(节流至多每
+  种子淘汰 = 删超龄系列目录(天文件 + agg.dat), 龄期由天文件名日期直接算(v2 注册表
+  机制退役), frozen 照删, 全局系列豁免; 触发点 = flush 时点(节流至多每
   EVICT_CHECK_INTERVAL_S 一次, 扫目录 IO 不随 600s flush 放大), 淘汰后同步清理该系列
   全部内存缓存(数据门/累计器/基线/镜像, 防陈旧门缓存复活已删系列)。
 - dry_run: 累计器与水位封口内存照常推进; agg append 与裁剪/淘汰写操作静默跳过;
@@ -100,9 +99,8 @@ C1 生效与热重载联动(§3.5): handler 每轮现读 sample_interval 与 mai
 检测 sample_interval 变化 -> 直接改 task.interval + 关闭全部现块(旧块落盘, 新块带新
 interval —— 新旧数据分块各有 interval); main_tick 每轮现读无需联动。
 
-生命周期判定(S3 的 v2 index 面)随换代退役: v3 冻结语义 = 删种即不再产新块(不在
-by_hash 本就无采样), 文件留存到按龄删除(淘汰属 S2b); 旧 lifecycle_sweep/reconcile/
-seal_sweep 触发已断开(方法保留待 S5)。
+生命周期判定(S3 的 v2 注册表面)已随 S5 删除: v3 冻结语义 = 删种即不再产新块(不在
+by_hash 本就无采样), 文件留存到按龄删除(淘汰属 S2b)。
 
 线程模型(黄金法则 5): handler 由 TaskQueue 在主循环线程执行, buffers/baselines/latest/
 游程全部只在该线程读写, 无锁; 模块自身不创建任何线程; 全部落盘写在 handler 调用链内。
@@ -126,7 +124,6 @@ from ..traffic_store import (
     V3NullRun,
     V3Sample,
     V3ZeroRun,
-    TrafficDatStore,
     TrafficV3Store,
     v3_block_slots,
     v3_day_epoch,
@@ -282,10 +279,6 @@ class TrafficSampleModule(BaseModule):
         self._baselines: dict = {}
         # 采样落点镜像: 系列键 -> 最近一个采样点(null 点含)。内存有界(与系列数同阶)。
         self.latest: dict = {}
-        # v2 存储层(惰性构造): S2a 起写侧不再触旧目录, 仅退役方法引用(待 S5 清理)
-        self._store: Optional[TrafficDatStore] = None
-        # 已触发过封口扫描的小时桶起点(退役字段, 随 _maybe_hourly_seal 待 S5 清理)
-        self._sealed_hour: Optional[int] = None
         # 开放游程(v3 §3.2): 系列键 -> OpenRun, 每系列至多一个; 主循环线程独占
         self._open_runs: dict = {}
         # dry_run 语境旗标(start/handler 每轮设置): dry_run 缓冲游程照常推进, 落盘静默跳过
@@ -327,25 +320,6 @@ class TrafficSampleModule(BaseModule):
             # 聚合恢复 + catch-up(§4.3, 先于任何采样/flush; 含恢复末尾的 hour 裁剪 ——
             # 硬序: catch-up 先于裁剪)。dry_run 跳过(catch-up 有写, 恢复无内存意义)。
             self._recover_aggregates()
-        # v2 启动对账(reconcile/index)随换代退役: v3 写侧不触 index.json(R2), S5 删方法
-
-    def _reconcile_on_start(self, ctx: AppContext, dry_run: bool) -> None:  # pragma: no cover
-        """[v2 退役面, S2a 断开调用, S5 删] 启动对账: 扫 v2 目录与 index 求差自愈。"""
-        if dry_run:
-            return
-        conf = ctx.config.qb_traffic
-        if conf is None or not conf.enabled or not ctx.config.data_dir:
-            return
-        try:
-            counts = self._get_store(ctx).reconcile()
-        except OSError as e:
-            logger.warning(f"流量采样 | 启动对账失败(不影响采样, 文件侧按现状运行): {e}")
-            return
-        if counts["dropped_entries"] or counts["recovered_entries"]:
-            logger.info(
-                f"流量采样 | 启动对账: 重建孤儿条目 {counts['recovered_entries']} 个, "
-                f"删除失配条目 {counts['dropped_entries']} 个"
-            )
 
     def subscribe(self, phases) -> None:
         phases.on("queue_rebuilt", self._on_queue_rebuilt)
@@ -463,8 +437,7 @@ class TrafficSampleModule(BaseModule):
     def _sample_torrents(self, store, ts: float) -> None:
         """单种系列(活跃过滤): dlspeed>0 or upspeed>0 才产 r; 零速/缺字段进 z/n 游程(§3.2)
 
-        零样本: 已开游程直接推进(无需重读 totals); 无游程经数据门(目录判定 + 进程内缓存,
-        v2 has_entry 门退役)才读字段开游程(totals 缺失不开新游程), 无数据(从未传输)整体
+        零样本: 已开游程直接推进(无需重读 totals); 无游程经数据门(目录判定 + 进程内缓存)才读字段开游程(totals 缺失不开新游程), 无数据(从未传输)整体
         跳过。null 仅活跃且缺字段时记 n 游程槽(先封开放游程, R2)。只读遍历 by_hash:
         handler 在主循环线程执行, 单线程不变式下迭代期无并发写(黄金法则 5)。
         """
@@ -512,12 +485,6 @@ class TrafficSampleModule(BaseModule):
         else:
             self._no_data.add(key)
         return has
-
-    def _torrent_has_entry(self, infohash: str) -> bool:  # pragma: no cover
-        """[v2 退役面, S2a 断开调用, S5 删] v2 index 条目门(被 _torrent_has_data 取代)。"""
-        if not self._ctx.config.data_dir:
-            return False
-        return self._get_store(self._ctx).has_entry(infohash)
 
     @staticmethod
     def _read_fields(fields, getter) -> Optional[tuple]:
@@ -643,12 +610,6 @@ class TrafficSampleModule(BaseModule):
         if self._v3store is None:
             self._v3store = TrafficV3Store(self._ctx.config.data_dir)
         return self._v3store
-
-    def _get_store(self, ctx: AppContext) -> TrafficDatStore:  # pragma: no cover
-        """[v2 退役面, S2a 断开调用, S5 删] v2 存储层惰性构造(退役方法引用)。"""
-        if self._store is None:
-            self._store = TrafficDatStore(ctx.config.data_dir)
-        return self._store
 
     def _append_record(self, key: str, rec, start_ts: float, end_ts: float) -> None:
         """单条 v3 记录进缓冲(§3.1/§2.3 写侧核心): 块开启 / 00:00 跨天切块 / 累积漂移触发
@@ -1075,32 +1036,6 @@ class TrafficSampleModule(BaseModule):
             return
         self._seal_all_runs()
         self._flush_all_series()
-
-    def _persist_point(self, key: str, point: TrafficSamplePoint) -> None:  # pragma: no cover
-        """[v2 退役面, S2a 断开调用, S5 删] v2 逐行追加落盘(被 BlockBuffer 批量 flush 取代)。"""
-        conf = self._ctx.config.qb_traffic
-        if conf is None or not conf.enabled or not self._persistence_on:
-            return
-        if not self._ctx.config.data_dir:
-            return
-        try:
-            self._get_store(self._ctx
-                           ).append_point(key, point.ts, point.dl_rate, point.up_rate, point.dl_total, point.up_total)
-            self._persist_warned = False
-        except OSError as e:
-            if self._persist_warned:
-                logger.debug(f"流量采样 | {key} 采样行落盘失败(持续): {e}")
-                return
-            logger.warning(f"流量采样 | {key} 采样行落盘失败(本轮数据丢失, 后续失败不再重复告警): {e}")
-            self._persist_warned = True
-
-    def _maybe_hourly_seal(self, now: float) -> None:  # pragma: no cover
-        """[v2 退役面, S2a 断开触发, S5 删] v2 小时封口(每小时首采样触发 seal_sweep)随 v3
-        写侧翻转退役: v3 空载压缩走 z/n 游程、聚合分层(hour/day/month + catch-up)属 S2b。"""
-
-    def _sample_lifecycle(self, store, now: float) -> None:  # pragma: no cover
-        """[v2 退役面, S2a 断开调用, S5 删] v2 冻结/解冻判定(index 面)。v3 冻结语义 =
-        删种即不再产新块(不在 by_hash 本就无采样), 文件留存到按龄删除(淘汰属 S2b)。"""
 
     @staticmethod
     def _delta(key: str, direction: str, cur, last) -> Optional[int]:
