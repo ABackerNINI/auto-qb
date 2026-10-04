@@ -7,6 +7,17 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 复述型 tooltip 全量移除 67 处 + 不复活守卫**(2026-10-04, 判定报告
+  [reports/26-10-04-0815](../reports/26-10-04-0815-report-webui-tooltip-declutter.html) 全量实施, 提交链
+  `72a7d274`(报告)→`80220a82`(A 组状态栏 7 处 + A5 sbStats 精简)→`5c0412ff`(B 组顶栏 12)→`ae919a39`
+  (追剧/详情抽屉 12)→`728f92ab`(对话框族 19)→`a33db037`(设置页/配置编辑器 16)→`e8203a3c`
+  (H1 columns.js + 守卫), 分支 webui-tooltip-declutter 待并回): 133 处全量清点按 R1 复述 / R2 自明+无害 /
+  R3 截断兜底 / R4 信息增量 / R5 不可发现交互+后果预告 五类判据判定, 移除 67 / 保留 66; 悬浮提示唯一
+  通道仍是 shared/ui_feedback.js `.aq-tip` 拦截层, 移除 = 纯删 title 属性, 三皮肤零成对改; dialogs.js
+  A5(statusbar 统计项)按报告「精简」只去复述半句。守阵: test_removed_redundant_tooltips_stay_removed
+  (tests/test_web.py)断言代表性已删文案不写回。全量基线 [testing/baselines/26-10-04-0900](../testing/baselines/26-10-04-0900-webui-tooltip-declutter.md);
+  档案 [tasks/26-10-04-webui-tooltip-declutter](../tasks/26-10-04-webui-tooltip-declutter.md)(Done)。
+
 - **WEB UI HR 拉取历史详情表**(2026-10-04, 计划
   [plans/26-10-04-0312](../plans/26-10-04-0312-plan-webui-hr-fetch-history.html) S1-S6 全落地, 提交链
   `49da6d06`(拍板落定: ⑤=2000条/站点+6个月, 余推荐A)→`0227f25c`(S1 `HrHistoryEvent` +

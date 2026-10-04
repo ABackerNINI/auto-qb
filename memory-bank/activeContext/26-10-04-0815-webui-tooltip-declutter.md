@@ -1,14 +1,13 @@
-# WEBUI tooltip 去留判定报告: 133 处全量清点, 移除 67 / 保留 66
+# WEBUI 复述型 tooltip 全量移除完成: 67 处 + 不复活守卫 (报告 26-10-04-0815)
 
-> 摘要: 用户主诉「复述型 tooltip 纯冗余且可能遮挡元素; 图标/文字自明且误点无害的也应移除」。全量枚举三皮肤共享模板的 title / :title + JS 动态赋值共 **133 处**(ui_feedback.js .aq-tip 拦截层是唯一 tooltip 通道, 移除 = 纯删属性), 按 R1 复述 / R2 自明+无害 / R3 截断兜底 / R4 信息增量 / R5 不可发现交互+后果预告 五类判据逐条判定: **移除 67(50.4%) / 保留 66**。用户点名的状态栏上/下行速度限速 tooltip(A9/A10)在移除列; 「挡住元素」的定位缺陷已于 2026-10-04 修复, 本报告处理残留的复述噪音。报告 [26-10-04-0815](../reports/26-10-04-0815-report-webui-tooltip-declutter.html) 已落文, **待用户拍板后一次性实施**(纯属性删除, 12 模板 + columns.js, 无测试触碰)。
-> 最后活动: 2026-10-04 08:15
+> 摘要: 判定报告 [reports/26-10-04-0815](../reports/26-10-04-0815-report-webui-tooltip-declutter.html) 已全量实施 —— A-G 组 66 处散在 10 个共享模板 + H1 columns.js, dialogs.js A5 按报告「精简」而非全删; 守卫 test_removed_redundant_tooltips_stay_removed(tests/test_web.py)钉死已删文案。完成条目已迁出 [progress/implemented-webui.md](../progress/implemented-webui.md), 档案 [tasks/26-10-04-webui-tooltip-declutter](../tasks/26-10-04-webui-tooltip-declutter.md)(Done), 基线 [testing/baselines/26-10-04-0900](../testing/baselines/26-10-04-0900-webui-tooltip-declutter.md)。
+> 最后活动: 2026-10-04 09:00
 
 ## 正在进行
 
-- 报告轮(只写文档, 未动代码): 判定表 + 汇总 + 范围边界 + 实施建议四段齐备, 待拍板两处边界(B12 图例 chip / D4 关闭 Esc 提示)或全量按表实施。
+- 无 —— 实施与收尾 DoD(基线 / 索引 / progress 迁出 / 立档)均完成, 提交交主会话。
 
 ## 后续注意
 
-- 实施时 A5(statusbar 统计项)是「精简」不是全删: dialogs.js sbStats 两处 title 文案去掉「当前 peer 连接总数 · 」复述半句。
-- 实施后建议(可选)补一条「复述型 tooltip 不得复活」冒烟守卫(断言 statusbar 不含「点击修改」等已移除文案)。
-- 验证走三皮肤目检: 移除项不再弹, 保留项(截断兜底/时间列/警示标记/乌龟/跟随全局)悬浮仍正常。
+- 分支 webui-tooltip-declutter(9 提交: 报告 1 + 实施 6 + 计划/编排 2)待并回 develop, 提交/合并由主会话决定。
+- 判定为保留的 66 处 tooltip(截断兜底 / 时间列 / 警示标记 / 乌龟 / 跟随全局 / 信息增量)未经守卫钉住, 并回前建议三皮肤目检悬浮仍正常。
