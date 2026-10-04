@@ -33,6 +33,8 @@
 - test_frontend_cols_empty_hint_names_browser_clear_cause: 空存储提示必须点名浏览器站点级"关闭窗口时清除 Cookie 和站点数据"这条通道 + 给自查路径 + sessionStorage 会话级去重(2026-09-24 取证: cookie 例外 127.0.0.1,* setting=4)
 - test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
 - test_recheck_confirm_wired_all_mouse_entries: 重新校验确认框三入口接线守阵(T13, 计划 26-10-05-0314 S3) —— commands.js _recheckConfirm 单点(helper 存在 + 文案与 okText 调用形态沿键盘路径原样)+ bulkAct 批量通道 / drawer.js torrentCmd 单选通道各含 recheck 确认分支 + shortcuts.js _kbAct 改调共用 helper 不再内联 confirmDialog 文案 + 共用文案字符串全仓只此一份, 任一接入点被重构摘除即红
+- test_skip_check_dialog_precheck_wired: 跳检预检对话框接线守阵(T23, 计划 26-10-05-0314 S4) —— ui_feedback.js _modalInit 声明 okDisabled/busy/verdict 三字段 + popovers.html 确认钮 :disabled="modal.okDisabled" 绑定 / busy 行 / verdict 行式渲染区(强制钮复用 extraText 第三钮 danger-solid) + drawer.js 两入口(skipCheckTorrent/skipCheckMulti)均交棒 _skipCheckDialog 且不再自带 _openModal + _skipCheckDialog 进框即禁用(busy + 固定警示区)并发预检(_skipPrecheck), 任一被重构摘除即红
+- test_skip_check_dialog_verdict_render: 跳检预检三分流渲染逻辑守阵(T24, 计划 26-10-05-0314 S4) —— _skipPrecheck 状态机分支(预检失败降级=启用普通确认且无强制钮 / 含 blocked=确认强制双钮全收 / ok+force 混合=确认钮文案「跳检 N 个可跳检的」+ 强制钮「强制跳检全部」/ force-only=确认保持禁用 / 全 ok=只启用确认)+ ok 子集派生(cls==="ok" 过滤)+ 确认路径送 ok 子集而强制路径送全量+force(_skipExec 单发 body 仅 force 时带 force 键, 批量确认只走 hashes 通道)+ 降级文案「后端闸门仍会在执行时拦截」+ _skipVerdictRows 计数行与分组上限截断(slice(0,5)+等 X 个), 任一分支被改写即红
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
@@ -3460,6 +3462,159 @@ def test_recheck_confirm_wired_all_mouse_entries():
         re.M,
     ), "_kbAct 未调共用 helper —— 键盘路径自成一份文案必漂移(计划 26-10-05-0314 S3)"
     assert 'confirmDialog("重新校验"' not in m.group(1), ("_kbAct 又内联了重新校验确认框文案 —— 应改调 commands.js _recheckConfirm")
+
+
+def test_skip_check_dialog_precheck_wired():
+    """跳检预检对话框接线守阵(T23, 计划 26-10-05-0314 S4)
+
+    S4 把跳检确认框升级为三分流预检对话框: 共享 modal 扩展 okDisabled/busy/verdict 三字段,
+    抽 _skipCheckDialog 取代 skipCheckTorrent/skipCheckMulti 两个各自为政的 _openModal。
+    本守阵读 JS/模板源码钉住接线, 整行/整块活性锚定(T13 经验: 字符串包含拦不住突变),
+    任一环被重构摘除即红:
+    1. ui_feedback.js _modalInit 声明 okDisabled: false / busy: false / verdict: null
+       (缺省零变化是「既有全部对话框不受影响」的根基);
+    2. popovers.html 确认钮(modalOk)挂 :disabled="modal.okDisabled" 绑定 + busy 行 +
+       verdict 行式渲染区(复用 modal-details 范式) + 强制钮仍走 extraText 第三钮
+       (danger-solid 破坏性分支);
+    3. drawer.js 两入口均交棒 _skipCheckDialog 且方法体内不再自带 _openModal;
+    4. _skipCheckDialog 进框即 okDisabled:true + busy:true + verdict(固定警示区)并触发预检
+       (_skipPrecheck 调 precheck 端点 + waitCmd 等回执)。
+    """
+    ui = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
+    tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
+    drawer = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+
+    # ① _modalInit 三字段(缺省值即零变化契约: 改默认/删字段/改名都红)
+    m = re.search(r"_modalInit\(\)\s*\{\s*return\s*\{(.*?)\n      \};", ui, re.S)
+    assert m, "ui_feedback.js 找不到 _modalInit(改名或挪走了? 同步本守阵)"
+    init = m.group(1)
+    assert re.search(r"^        okDisabled: false, // ", init, re.M), \
+        "_modalInit 缺 okDisabled: false 声明(确认钮禁用通道) —— 预检对话框状态机失锚"
+    assert re.search(r"^        busy: false,\s+// ", init, re.M), \
+        "_modalInit 缺 busy: false 声明(预检在途行) —— 预检对话框状态机失锚"
+    assert re.search(r"^        verdict: null,\s+// ", init, re.M), \
+        "_modalInit 缺 verdict: null 声明(三分流渲染区) —— 预检对话框状态机失锚"
+
+    # ② 模板: 确认钮 :disabled 绑定(整钮块锚定 —— 绑定挪出 modalOk 钮或改静态值即红)
+    m = re.search(r'<button ref="modalOk"[\s\S]*?</button>', tpl)
+    assert m, "popovers.html 找不到 modalOk 确认钮(模板重构? 同步本守阵)"
+    assert ':disabled="modal.okDisabled"' in m.group(0), \
+        "modalOk 确认钮缺 :disabled=\"modal.okDisabled\" 绑定 —— 进框禁用/按态解锁失效(计划 26-10-05-0314 S4)"
+    # busy 行(整行锚定)与 verdict 渲染区(行式明细, 复用 modal-details 范式)
+    assert '<p v-if="modal.busy" class="modal-body">正在检查前置条件…</p>' in tpl, \
+        "popovers.html 缺预检 busy 行 —— 预检在途无反馈(计划 26-10-05-0314 S4)"
+    assert '<div v-if="modal.verdict && modal.verdict.length" class="modal-details">' in tpl, \
+        "popovers.html 缺 verdict 三分流渲染区(modal-details 行式范式)"
+    assert 'v-for="(d, i) in modal.verdict"' in tpl, "verdict 区缺行式 v-for 渲染"
+    # 强制钮仍复用 extraText 第三钮通道(danger-solid 破坏性分支; 换自铸强制钮即红)
+    assert re.search(r'<button v-if="modal\.extraText" class="bt danger-solid" @click="resolveModal\(\'extra\'\)">', tpl), \
+        "第三钮(extraText 通道)被改写 —— S4 强制钮必须复用既有 danger-solid 破坏性分支"
+
+    # ③ 两入口均交棒 _skipCheckDialog, 且方法体内不再自带 _openModal(确认框被取代)
+    for name in ("skipCheckTorrent", "skipCheckMulti"):
+        m = re.search(rf"async {name}\(\)\s*\{{(.*?)\n    \}},", drawer, re.S)
+        assert m, f"drawer.js 找不到 {name}(改名或挪走了? 同步本守阵)"
+        assert "this._skipCheckDialog(" in m.group(1), \
+            f"{name} 未走 _skipCheckDialog —— 预检对话框两入口共用的状态机被绕开(计划 26-10-05-0314 S4)"
+        assert "_openModal" not in m.group(1), \
+            f"{name} 仍自带 _openModal 确认框 —— 旧 danger 确认框应被预检对话框取代"
+
+    # ④ _skipCheckDialog: 进框即禁用 + busy + 固定警示区 + 触发预检(调 _skipPrecheck)
+    m = re.search(r"async _skipCheckDialog\(hashes, exec\)\s*\{(.*?)\n    \},", drawer, re.S)
+    assert m, "drawer.js 找不到 _skipCheckDialog(S4 状态机被改名/挪走? 同步本守阵)"
+    dlg = re.sub(r"//[^\n]*", "", m.group(1))  # 剥行注释后锚定代码结构(注释改写不红, 代码突变必红)
+    assert "okDisabled: true" in dlg, "_skipCheckDialog 进框未禁用确认钮(预检回执前不得有可执行钮)"
+    assert "busy: true" in dlg, "_skipCheckDialog 进框未置 busy(预检在途无反馈)"
+    assert "verdict: warnRows" in dlg, "_skipCheckDialog 进框未挂固定警示区(case 3 不代表没有代价)"
+    assert "this._skipPrecheck(seq" in dlg, "_skipCheckDialog 未触发预检投递"
+
+
+def test_skip_check_dialog_verdict_render():
+    """跳检预检三分流渲染逻辑守阵(T24, 计划 26-10-05-0314 S4)
+
+    静态钉住 _skipPrecheck/_skipCheckDialog/_skipExec/_skipVerdictRows 的状态机语义,
+    防渲染逻辑被改写出「blocked 仍可执行 / 降级态冒出强制钮 / 混合态送错子集」这类
+    pytest 静态守阵之外只有真浏览器才看得见的回归:
+    1. 六态分支(逐分支提取语句清单与期望比对, 剥注释滤空行): 预检失败降级=启用普通确认且无
+       强制钮 / 含 blocked=确认强制双钮全收 / ok+force 混合=确认「跳检 N 个可跳检的」+强制
+       「强制跳检全部」/ force-only=确认保持禁用只有强制钮 / 全 ok=只启用确认;
+    2. ok 子集派生与提交口径: okHashes 只收 cls==="ok"; 确认路径送 ok 子集(降级送全量),
+       强制路径送全量 + force=true(单发 body 仅 force 时带 force 键, 批量确认只走 hashes);
+    3. 降级文案明示「后端闸门仍会在执行时拦截」(D10);
+    4. 分组展示: 计数行(可跳检/需强制/禁止)+ 组内名称上限截断(slice(0,5)+等 X 个)。
+    """
+    drawer = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+
+    # ① 状态机六态分支: 逐分支提取语句清单(剥注释滤空行后)与期望逐一比对 ——
+    #    摘除/新增/改写任一语句(如降级分支删掉解锁行、blocked 分支漏收强制钮)即红
+    m = re.search(r"async _skipPrecheck\(seq, hashes, warnRows\)\s*\{(.*?)\n    \},", drawer, re.S)
+    assert m, "drawer.js 找不到 _skipPrecheck(S4 状态机被改名/挪走? 同步本守阵)"
+    pre = re.sub(r"//[^\n]*", "", m.group(1))
+
+    def _branch(head, nxt):
+        bm = re.search(re.escape(head) + r"(.*?)" + re.escape(nxt), pre, re.S)
+        assert bm, f"状态机分支锚点丢失: {head!r} -> {nxt!r}(分支结构被改写? 同步本守阵)"
+        return [ln.strip() for ln in bm.group(1).splitlines() if ln.strip()]
+
+    assert _branch("if (degraded) {", "} else if (counts.blocked) {") == [
+        "this.modal.okDisabled = false;",
+        'this.modal.extraText = "";',
+    ], "降级分支(D10)被改写 —— 必须启用普通确认(okDisabled=false)且无强制钮(extraText 空)"
+    assert _branch("} else if (counts.blocked) {", "} else if (counts.ok && counts.force) {") == [
+        "this.modal.okDisabled = true;",
+        'this.modal.extraText = "";',
+    ], "含 blocked 分支被改写 —— blocked 硬闸: 确认/强制双钮全收, 不得产生任何可执行钮"
+    assert _branch("} else if (counts.ok && counts.force) {", "} else if (counts.force) {") == [
+        "this.modal.okDisabled = false;",
+        "this.modal.okText = `跳检 ${counts.ok} 个可跳检的`;",
+        "this.modal.extraText = `强制跳检全部 ${counts.ok + counts.force}`;",
+    ], "ok+force 混合分支被改写 —— 确认钮只送 ok 子集文案, 强制钮送全量"
+    assert _branch("} else if (counts.force) {", "} else {") == [
+        "this.modal.okDisabled = true;",
+        "this.modal.extraText = `强制跳检全部 ${counts.ok + counts.force}`;",
+    ], "force-only 分支被改写 —— 确认保持禁用, 只有强制钮"
+    fm = re.search(re.escape("} else if (counts.force) {") + r"(.*?)" + re.escape("} else {"), pre, re.S)
+    assert fm, "force-only 分支锚点丢失(分支结构被改写? 同步本守阵)"
+    tail_m = re.search(r"(.*?)\n      \}", pre[fm.end():], re.S)
+    assert tail_m, "全 ok 分支锚点丢失(分支结构被改写? 同步本守阵)"
+    assert [ln.strip() for ln in tail_m.group(1).splitlines() if ln.strip()] == [
+        "this.modal.okDisabled = false;",
+        "this.modal.okText = `跳检 ${counts.ok} 个`;",
+        'this.modal.extraText = "";',
+    ], "全 ok 分支被改写 —— 只启用确认(送全量不带 force), 无强制钮"
+    # ok 子集派生: 只收 cls==="ok"(blocked/force 不进确认子集)
+    assert 'okHashes = results.filter((x) => x.cls === "ok").map((x) => x.hash);' in pre, \
+        "okHashes 未按 cls===\"ok\" 派生 —— 确认子集口径失守"
+    # D10 降级文案(两处: 非 ok 回执 + 请求异常, 缺一即红)
+    assert pre.count("后端闸门仍会在执行时拦截") == 2, \
+        "降级文案「后端闸门仍会在执行时拦截」应恰好覆盖 非 ok 回执 与 请求异常 两分支"
+
+    # ② 确认/强制两路径的提交口径(_skipCheckDialog 分派 + _skipExec 端点载荷)
+    m = re.search(r"async _skipCheckDialog\(hashes, exec\)\s*\{(.*?)\n    \},", drawer, re.S)
+    assert m, "drawer.js 找不到 _skipCheckDialog"
+    dlg = re.sub(r"//[^\n]*", "", m.group(1))
+    assert "return this._skipExec(exec, hashes, true);" in dlg, \
+        "强制路径未送全量(hashes) —— 强制钮必须送全量 + force"
+    assert "return this._skipExec(exec, v.degraded ? hashes : v.okHashes, false);" in dlg, \
+        "确认路径未按 态送 ok 子集(降级送全量) —— 混合态把 force/blocked 目标混进普通确认即违背三分流"
+    m = re.search(r"async _skipExec\(exec, hashes, force\)\s*\{(.*?)\n    \},", drawer, re.S)
+    assert m, "drawer.js 找不到 _skipExec"
+    exe = re.sub(r"//[^\n]*", "", m.group(1))
+    assert "body: force ? JSON.stringify({ force: true }) : undefined" in exe, \
+        "单发跳检 body 应仅在 force 时携带 force 键(缺省载荷与历史一致)"
+    assert "keys: force ? exec.groupKeys : []" in exe and "hashes: force ? exec.memberHashes : hashes" in exe, \
+        "批量跳检载荷口径失守: 确认=只送 ok 子集(hashes), 强制=keys+hashes 整份"
+    assert "...(force ? { force: true } : {})" in exe, \
+        "批量强制路径缺 force: true 透传(S2: 提供才入载荷)"
+
+    # ③ 分组展示: 计数行 + 上限截断(5 + 等 X 个)
+    m = re.search(r"_skipVerdictRows\(results\)\s*\{(.*?)\n    \},", drawer, re.S)
+    assert m, "drawer.js 找不到 _skipVerdictRows"
+    rows = re.sub(r"//[^\n]*", "", m.group(1))
+    assert "`可跳检 ${ok.length} / 需强制 ${force.length} / 禁止 ${blocked.length}`" in rows, \
+        "分组展示缺计数行(可跳检/需强制/禁止)"
+    assert "g.names.slice(0, 5)" in rows, "分组行缺名称上限截断(5 个)"
+    assert "等 ${g.names.length} 个" in rows, "分组行缺「等 X 个」尾注"
 
 
 def test_frontend_page_location_persisted():

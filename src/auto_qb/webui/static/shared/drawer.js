@@ -7,6 +7,14 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DRAWER);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+/* 跳检预检 gate id -> 分组行短标签(S4, 计划 26-10-05-0314): 取值与 ops_mod.GateVerdict 的
+ * gate 对齐(G3-G8 / partial / dedup / filelist + gone); 漂移只影响分组行可读性, 不影响分流判定。 */
+const SKIP_GATE_LABELS = {
+  G3: "已完成", G4: "活跃中", G5: "校验在途", G6: "组内正在下载",
+  G7: "组内校验在途", G8: "组内校验失败", partial: "部分下载", dedup: "今日已跳检",
+  filelist: "文件缺失", gone: "已不在客户端",
+};
+
 window.AQB_DRAWER = {
   computed: {
     /* 抽屉可见性(2026-10-04 双形态): 流量形态全局可用(状态栏入口在任何页都能开); 种子详情形态仍
@@ -57,32 +65,213 @@ window.AQB_DRAWER = {
       this.menu.hash = this.drawer.hash;
       this.torrentCmd(action, body, okText);
     },
-    /* ---------------- 右键跳检(P2', plan 26-09-30-0109 §3.6) ----------------
-     * 高风险操作: 删除并以跳过校验方式重加, 本地统计(上传/下载量、做种时间)被清空,
-     * 数据未经哈希校验 —— 危险确认框显式确认后才投递(风险告知在前端承担, 与规则侧
-     * 「无参考跳检」告警同一条红线的前端半边)。执行走 ops 层四阶段, 阻塞主循环 ~6s,
-     * 期间其它命令排队 —— 与规则跳检执行时现状一致, 故 waitCmd 放宽到 60s。 */
+    /* ---------------- 右键跳检(P2', plan 26-09-30-0109 §3.6; S4 预检对话框 26-10-05-0314) ----------------
+     * 高风险操作: 删除并以跳过校验方式重加, 本地统计(上传/下载量、做种时间)被清零,
+     * 数据未经哈希校验。S4 起确认框升级为预检对话框(_skipCheckDialog, 单发/批量两入口共用):
+     * 进框即禁用确认, 预检(ops 同谓词 dry-run)回执后按三分流渲染原因与逃生通道;
+     * 固定警示区(统计清零/未哈希校验/无参考高风险/HR 在管)始终显示。执行走 ops 层四阶段,
+     * 阻塞主循环 ~6s, 期间其它命令排队 —— waitCmd 放宽到 60s(与批量同口径)。 */
     async skipCheckTorrent() {
       this.menu.visible = false;
       const hash = this.menu.hash;
       if (!hash) return;
-      const m = this.memberByHash.get(hash) || {};
-      const ok = await this._openModal({
-        title: "跳检(跳过校验重加)",
-        body: `将删除种子"${m.name || hash.slice(0, 12)}"并以跳过校验方式重加: 本地统计(上传/下载量、做种时间)会被清空, 数据未经哈希校验。确认继续?`,
-        okText: "跳检",
+      await this._skipCheckDialog([hash], { mode: "single", hash, groupKeys: [], memberHashes: [hash] });
+    },
+    /* 跳检预检对话框状态机(S4, 计划 26-10-05-0314 §04; 单发/批量两入口共用):
+     * 进框(确认禁用 + busy + 固定警示区) -> 发预检(POST /api/torrents/skip-check/precheck,
+     * 后端 ops 同谓词 dry-run) -> 回执后按三分流切换:
+     *   全 ok        -> 启用确认「跳检 N 个」(送全量, 不带 force);
+     *   ok+force 混合 -> 确认「跳检 N 个可跳检的」(只送 ok 子集, 不带 force) + 强制钮
+     *                    (复用 extraText 第三钮, 模板本就是 danger-solid 破坏性分支)
+     *                    「强制跳检全部 N」(送全量 + force=true);
+     *   force-only    -> 确认保持禁用, 只有强制钮;
+     *   含 blocked    -> 无可执行钮(blocked 硬闸, force 只豁瞬态闸门救不回), 按原因分组列出;
+     *   预检失败      -> D10 降级: 启用普通确认(= 旧 danger 确认框行为: 确认后执行, 后端闸门
+     *                    执行时照拦), 永不出强制钮 —— force 必须先见赌注才出现(plan §07)。
+     * 执行路径闸门原样全跑, 预检与执行之间没有信任传递(plan §03 callout)。
+     * exec: {mode:"single", hash} | {mode:"bulk", groupKeys, memberHashes} —— 提交端点与 toast
+     * 形态两入口各异, 由 _skipExec 按 mode 分派; 本方法只管对话框与预检状态机。 */
+    async _skipCheckDialog(hashes, exec) {
+      const n = hashes.length;
+      // 代际: 单例 modal 下再开新框会把旧 Promise 结算为取消 —— 旧框在途的预检回执
+      // 不得污染新框, 落袋前一律按 seq 复核
+      const seq = (this._skipCheckSeq = (this._skipCheckSeq || 0) + 1);
+      // 固定警示区(plan §03 callout: case 3 不代表没有代价): 统计清零 / 未哈希校验 /
+      // 无参考高风险 / HR 在管(D5) —— 进框即显示, 与分流结果并列不互斥
+      // (旧 danger 确认框文案区里的警示迁入于此)
+      const warnRows = [
+        { icon: "#i-warn", label: "统计清零", value: "本地统计(上传/下载量、做种时间)将被清空", wide: true },
+        { icon: "#i-warn", label: "未哈希校验", value: "数据未经哈希校验", wide: true },
+        { icon: "#i-warn", label: "无参考", value: "无参考对照的跳检属高风险操作", wide: true },
+        { icon: "#i-warn", label: "HR 在管", value: "未放行的 HR 种子: 做种时长锚点会倒退、超额线(3×)推迟", wide: true },
+      ];
+      const p = this._openModal({
+        title: n > 1 ? "批量跳检(跳过校验重加)" : "跳检(跳过校验重加)",
+        body: n > 1 ? `将删除选中的 ${n} 个种子并以跳过校验方式重加。` : "将删除该种子并以跳过校验方式重加。",
+        okText: `跳检 ${n} 个`,
         cancelText: "取消",
         danger: true,
         icon: "#i-bolt",
+        wide: true,          // 原因/名称行宽松可读(与删除确认框同形态)
+        okDisabled: true,    // 进框即禁用: 预检回执前无任何可执行钮(强制必须先看到赌注)
+        busy: true,
+        verdict: warnRows,
       });
-      if (!ok) return;
+      this._skipPrecheck(seq, hashes, warnRows);  // 不 await: 对话框已开, 回执异步落框
+      const choice = await p;
+      if (!choice) return;  // 取消/Esc/遮罩: 零副作用(此时未发任何执行请求)
+      // 走到这说明点的是确认/强制钮 —— _skipVerdict 只在 seq 复核通过后写入, 故取值必属
+      // 当前这框(新框会先把旧 Promise 结算成取消); 兜底按降级(全量不带 force)处理
+      const v = this._skipVerdict || { degraded: true, okHashes: hashes };
+      if (choice === "extra") return this._skipExec(exec, hashes, true);  // 强制: 全量 + force=true
+      // 确认: 降级 = 全量不带 force(= 旧确认框行为); 正常 = ok 子集(全 ok 时即全量)
+      return this._skipExec(exec, v.degraded ? hashes : v.okHashes, false);
+    },
+    /* 预检投递与落框(不 await 调用): 回执后把三分流结果接在固定警示区之后, 并按态切换
+     * 确认/强制钮。非 ok 回执与请求异常一律走 D10 降级; 403(web.skip_check_menu 关)同形 ——
+     * 文案自解释, 执行端点同样有 403 兜底(fail-closed, 前端降级不构成绕过)。 */
+    async _skipPrecheck(seq, hashes, warnRows) {
+      let rows = [], okHashes = [], counts = null, degraded = false;
       try {
-        const resp = await this.api(`/api/torrents/${hash}/skip-check`, { method: "POST" });
+        const resp = await this.api("/api/torrents/skip-check/precheck", {
+          method: "POST",
+          body: JSON.stringify({ hashes }),
+        });
         const r = await this.waitCmd(resp.cmd_id, 60000);
-        if (r.ok) this.toast(`已跳检: ${m.name || hash.slice(0, 12)}`, "ok", 3000);
-        else this.toast(`跳检未执行: ${r.error}`, "error", 8000);
+        if (r.ok && r.truth && Array.isArray(r.truth.results)) {
+          const results = r.truth.results;
+          counts = {
+            ok: results.filter((x) => x.cls === "ok").length,
+            force: results.filter((x) => x.cls === "force").length,
+            blocked: results.filter((x) => x.cls === "blocked").length,
+          };
+          okHashes = results.filter((x) => x.cls === "ok").map((x) => x.hash);
+          rows = this._skipVerdictRows(results);
+        } else {
+          degraded = true;
+          rows = [{ icon: "#i-warn", label: "预检失败", value: `${r.ok ? "回执缺少预检数据" : r.error}, 后端闸门仍会在执行时拦截`, wide: true }];
+        }
       } catch (e) {
-        if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
+        if (e.auth) return;  // 401 已由 _logout 收口(modal 一并清空), 无需也不得再动
+        degraded = true;
+        rows = [{ icon: "#i-warn", label: "预检失败", value: `${e.message}, 后端闸门仍会在执行时拦截`, wide: true }];
+      }
+      // 迟到回执 / 框已关 / 已被新框取代: 不落袋(防旧结果驱动新框的按钮)
+      if (seq !== this._skipCheckSeq || !this.modal.visible) return;
+      this.modal.busy = false;
+      this.modal.verdict = [...warnRows, ...rows];
+      this._skipVerdict = { degraded, okHashes };
+      if (degraded) {
+        // D10 降级: 启用普通确认(确认后执行, 后端闸门照拦); 强制钮永不出现
+        this.modal.okDisabled = false;
+        this.modal.extraText = "";
+      } else if (counts.blocked) {
+        // 含 blocked: 一律不可执行 —— 确认/强制双钮全收, 用户须先解决原因
+        this.modal.okDisabled = true;
+        this.modal.extraText = "";
+      } else if (counts.ok && counts.force) {
+        // ok+force 混合: 确认只送 ok 子集(不带 force); 强制钮送全量 + force=true
+        this.modal.okDisabled = false;
+        this.modal.okText = `跳检 ${counts.ok} 个可跳检的`;
+        this.modal.extraText = `强制跳检全部 ${counts.ok + counts.force}`;
+      } else if (counts.force) {
+        // force-only: 确认保持禁用, 只有强制钮
+        this.modal.okDisabled = true;
+        this.modal.extraText = `强制跳检全部 ${counts.ok + counts.force}`;
+      } else {
+        // 全 ok: 启用确认(送全量, 不带 force), 无强制钮
+        this.modal.okDisabled = false;
+        this.modal.okText = `跳检 ${counts.ok} 个`;
+        this.modal.extraText = "";
+      }
+    },
+    /* 预检回执 -> verdict 行式明细(不含固定警示区): 批量 = 计数行 + 按原因分组行
+     * (同 (cls, gate) 聚合, 「禁止 · 已完成 ×3: 名A, 名B, …」单行省略, 组内名称上限
+     * 5 个 + 「等 X 个」); 单发 = 全量原因行(原因+后果+出路三段式原文, 无未过闸门时
+     * 给一条「前置条件全部满足」正行)。gate 短标签表见文件头 SKIP_GATE_LABELS。 */
+    _skipVerdictRows(results) {
+      const rows = [];
+      const ok = results.filter((x) => x.cls === "ok");
+      const force = results.filter((x) => x.cls === "force");
+      const blocked = results.filter((x) => x.cls === "blocked");
+      if (results.length > 1) {
+        rows.push({
+          icon: "#i-select-all",
+          label: "预检",
+          value: `可跳检 ${ok.length} / 需强制 ${force.length} / 禁止 ${blocked.length}`,
+        });
+        const groups = new Map();
+        for (const r of results) {
+          for (const x of r.reasons || []) {
+            const key = `${x.cls}|${x.gate}`;
+            if (!groups.has(key)) groups.set(key, { cls: x.cls, gate: x.gate, names: [] });
+            groups.get(key).names.push(r.name || r.hash.slice(0, 12));
+          }
+        }
+        for (const g of groups.values()) {
+          const shown = g.names.slice(0, 5);  // 组内名称展示上限 5 个
+          rows.push({
+            icon: g.cls === "blocked" ? "#i-x-circle" : "#i-hourglass",
+            label: `${g.cls === "blocked" ? "禁止" : "需强制"} · ${SKIP_GATE_LABELS[g.gate] || g.gate} ×${g.names.length}`,
+            value: shown.join(", ") + (g.names.length > shown.length ? ` 等 ${g.names.length} 个` : ""),
+            wide: true,
+          });
+        }
+      } else {
+        const reasons = (results[0] && results[0].reasons) || [];
+        if (!reasons.length) {
+          rows.push({ icon: "#i-check-circle", label: "预检", value: "前置条件全部满足, 可跳检" });
+        } else {
+          for (const x of reasons) {
+            rows.push({
+              icon: x.cls === "blocked" ? "#i-x-circle" : "#i-hourglass",
+              label: x.cls === "blocked" ? "禁止" : "需强制",
+              value: x.text,
+              wide: true,
+            });
+          }
+        }
+      }
+      return rows;
+    },
+    /* 跳检执行分派(确认/强制钮共落点): 单发 POST /api/torrents/{hash}/skip-check(body 仅在
+     * force 时携带 force 键, 缺省载荷与历史一致); 批量 POST /api/torrents/bulk
+     * (action=skip_check, ok 子集只走 hashes 通道, 强制按 keys+hashes 整份 + force=true)。
+     * 执行路径后端重跑全部闸门 —— blocked 照旧硬拒, force 只豁瞬态; 拒绝文案经
+     * error 回执 toast 展示。单枚跳检阻塞主循环 ~6s 级, waitCmd 放宽到 60s + SSE cmd
+     * 事件赛跑兜底(waitCmd 实现), 回执未到前批量常驻 toast 停留「进行中」。 */
+    async _skipExec(exec, hashes, force) {
+      try {
+        if (exec.mode === "single") {
+          const hash = exec.hash;
+          const m = this.memberByHash.get(hash) || {};
+          const resp = await this.api(`/api/torrents/${hash}/skip-check`, {
+            method: "POST",
+            body: force ? JSON.stringify({ force: true }) : undefined,
+          });
+          const r = await this.waitCmd(resp.cmd_id, 60000);
+          if (r.ok) this.toast(`已跳检: ${m.name || hash.slice(0, 12)}`, "ok", 3000);
+          else this.toast(`跳检未执行: ${r.error}`, "error", 8000);
+          return;
+        }
+        const n = force ? exec.groupKeys.length + exec.memberHashes.length : hashes.length;
+        const resp = await this.api("/api/torrents/bulk", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "skip_check",
+            keys: force ? exec.groupKeys : [],
+            hashes: force ? exec.memberHashes : hashes,
+            ...(force ? { force: true } : {}),
+          }),
+        });
+        const tid = this.toast(`批量跳检进行中…(${n} 个目标, 每个约需数秒)`, "busy", 0, { sticky: true });
+        const r = await this.waitCmd(resp.cmd_id, 60000);
+        if (r.ok) this._finishToast(tid, "ok", `已执行: 批量跳检(${n} 个目标)`, 3000);
+        else this._finishToast(tid, "error", `批量跳检未完成: ${r.error}`, 8000);
+      } catch (e) {
+        if (!e.auth) {
+          this.toast((exec.mode === "single" ? "命令发送失败: " : "批量跳检命令发送失败: ") + e.message, "error");
+        }
       }
     },
     /* ---------------- 种子编辑对话框(D 轮): 限速/分享率限制/移动/重命名 ----------------
@@ -275,37 +464,23 @@ window.AQB_DRAWER = {
       if (!ok) return;
       await this._bulkEditPost(targets, "location", { location }, "批量移动");
     },
-    /* 批量跳检…(计划 26-10-02-1955 W3): 高风险(删除并以跳过校验方式重加, 本地统计清空),
-     * danger 确认框文案沿单选 skipCheckTorrent 骨架、按 N 换算; 确认后才投递 bulk 合单通道
-     * (action=skip_check)。单枚跳检阻塞主循环 ~6s 级, 聚合回执随 N 线性变慢 —— waitCmd 放宽到
-     * 60s + SSE cmd 事件赛跑兜底(waitCmd 实现), 回执未到前常驻 toast 停留「进行中」。
+    /* 批量跳检…(计划 26-10-02-1955 W3; S4 起确认框升级为预检对话框 26-10-05-0314):
+     * 目标集合 _bulkTargets, 组键就地展开成成员 hash 后交 _skipCheckDialog(预检展示与
+     * ok 子集的单一口径); 强制路径仍按 keys+hashes 双通道整份提交(与历史载荷同形 + force 键)。
      * 菜单显隐由 flags.skip_check_menu 门控(W1), 后端 bulk 分派处同样 fail-closed。 */
     async skipCheckMulti() {
       this.menu.visible = false;
       const targets = this._bulkTargets();
       const n = targets.groupKeys.length + targets.memberHashes.length;
       if (!n) return;
-      const ok = await this._openModal({
-        title: "批量跳检(跳过校验重加)",
-        body: `将删除选中的 ${n} 个种子并以跳过校验方式重加: 每个种子的本地统计(上传/下载量、做种时间)会被清空, 数据未经哈希校验。确认继续?`,
-        okText: "跳检",
-        cancelText: "取消",
-        danger: true,
-        icon: "#i-bolt",
-      });
-      if (!ok) return;
-      try {
-        const resp = await this.api("/api/torrents/bulk", {
-          method: "POST",
-          body: JSON.stringify({ action: "skip_check", keys: targets.groupKeys, hashes: targets.memberHashes }),
-        });
-        const tid = this.toast(`批量跳检进行中…(${n} 个目标, 每个约需数秒)`, "busy", 0, { sticky: true });
-        const r = await this.waitCmd(resp.cmd_id, 60000);
-        if (r.ok) this._finishToast(tid, "ok", `已执行: 批量跳检(${n} 个目标)`, 3000);
-        else this._finishToast(tid, "error", `批量跳检未完成: ${r.error}`, 8000);
-      } catch (e) {
-        if (!e.auth) this.toast("批量跳检命令发送失败: " + e.message, "error");
+      const hashes = [...targets.memberHashes];
+      for (const k of targets.groupKeys) {
+        const g = this._findGroup(k);
+        for (const m of (g && g.members) || []) {
+          if (!hashes.includes(m.hash)) hashes.push(m.hash);
+        }
       }
+      await this._skipCheckDialog(hashes, { mode: "bulk", groupKeys: targets.groupKeys, memberHashes: targets.memberHashes });
     },
     /* 批量编辑统一投递: 与 _metaBulk 同链路(api + waitCmd + toast 三态), 目标集合用打开
      * 对话框时刻锁定的 targets; 不做乐观贴片(见本节头注释)。 */

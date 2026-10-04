@@ -42,6 +42,11 @@ window.AQB_FEEDBACK = {
         fields: null,   // 多字段输入 [{key,label,value,placeholder}](编辑类对话框: 限速/分享率/移动/重命名)
         wide: false,    // 加宽形态(删除确认框: 摘要与选项宽松可读; DLG-01 成员明细区已移除)
         icon: "",       // 标题图标覆盖(如删除用 i-trash-x); 缺省按 danger 取 warn/info
+        okDisabled: false, // 确认钮禁用(popovers.html :disabled 绑定; 跳检预检对话框 S4: 进框 true,
+                           // 预检回执后按三分流解锁 —— 既有对话框缺省 false 零变化)
+        busy: false,       // 「正在检查前置条件…」行(跳检预检对话框 S4: 预检在途, 回执后撤下)
+        verdict: null,     // 三分流渲染区(跳检预检对话框 S4: 行式明细 [{icon,label,value,wide}],
+                           // 复用 modal-details 范式; null = 不渲染)
       };
     },
     confirmDialog(title, body, opts = {}) {

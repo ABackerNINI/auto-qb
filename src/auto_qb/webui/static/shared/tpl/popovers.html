@@ -121,6 +121,20 @@
           <span>{{ modal.title }}</span>
         </div>
         <p class="modal-body">{{ modal.body }}</p>
+        <!-- 跳检预检对话框(S4, 计划 26-10-05-0314 §04)两段扩展, 既有对话框缺省零变化:
+             busy 行: 预检在途(modal.busy 进框 true), 回执到货即撤下;
+             verdict 区: modal.verdict = 行式明细 [{icon,label,value,wide}], 固定警示区
+             (统计清零/未哈希校验/无参考/HR 在管)恒在行首与分流结果并列不互斥, 随后是
+             三分流结果(计数/按原因分组/单发全量原因/预检失败降级) —— 复用删除确认框
+             modal-details 行式范式(单行省略 + title 全文), 空 = 不渲染。 -->
+        <p v-if="modal.busy" class="modal-body">正在检查前置条件…</p>
+        <div v-if="modal.verdict && modal.verdict.length" class="modal-details">
+          <div v-for="(d, i) in modal.verdict" :key="i" class="modal-detail-row" :class="{ wide: d.wide }">
+            <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
+            <span class="d-label">{{ d.label }}</span>
+            <span class="d-value" :title="String(d.value)">{{ d.value }}</span>
+          </div>
+        </div>
         <!-- 待操作目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标)
              R10-16: 四个删除入口的详情行由 _deleteFlow 统一派生, 结构完全一致(目标/成员/站点/路径/总大小)。
              R10-13: 长值一律"单行省略 + title 全文 + 复制按钮"(wide 行例外: 值独占一行冡 3 行),
@@ -165,8 +179,11 @@
           <!-- 第三个钮(三选一框, 见 confirmThreeDialog): 破坏性分支("放弃改动并刷新"这类),
                缺省不渲染(extraText 为空) —— 既有两钮对话框零变化 -->
           <button v-if="modal.extraText" class="bt danger-solid" @click="resolveModal('extra')">{{ modal.extraText }}</button>
-          <!-- ref="modalOk": 确认类默认焦点落此(计划 26-09-28-0354 §08) —— Enter 即确认 -->
-          <button ref="modalOk" class="bt" :class="modal.danger ? 'danger-solid' : 'primary'" @click="resolveModal(true)">
+          <!-- ref="modalOk": 确认类默认焦点落此(计划 26-09-28-0354 §08) —— Enter 即确认;
+               :disabled(S4 跳检预检): 进框即禁用, 预检回执按三分流解锁 —— 既有对话框
+               okDisabled 缺省 false, 绑定恒不生效零变化 -->
+          <button ref="modalOk" class="bt" :class="modal.danger ? 'danger-solid' : 'primary'"
+                  :disabled="modal.okDisabled" @click="resolveModal(true)">
             {{ modal.okText }}
           </button>
         </div>
