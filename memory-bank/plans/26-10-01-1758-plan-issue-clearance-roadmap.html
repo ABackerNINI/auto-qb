@@ -7,7 +7,7 @@
 <meta name="doc-topic" content="issue-clearance-roadmap">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-01-1758">
-<meta name="doc-updated" content="26-10-03-0655">
+<meta name="doc-updated" content="26-10-04-2020">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-02-memory-bank-issue-clearance-roadmap.md,memory-bank/plans/26-10-01-1728-plan-doc-drift-repair.html,memory-bank/plans/26-09-29-2036-plan-hr-counter-integration.html">
 <title>Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序</title>
 <style>
@@ -260,8 +260,8 @@
   <div class="cover-meta">
     <span><b>日期</b> 2026-10-02 · v2 改版(初版 26-10-01-1758)</span>
     <span><b>状态</b> Open · 待拍板</span>
-    <span><b>范围</b> 49 条未决 (48 Open + 1 In Progress)</span>
-    <span><b>不入列</b> 63 Done + 4 Dropped + 2 Superseded</span>
+    <span><b>范围</b> 41 条未决 (40 Open + 1 In Progress)</span>
+    <span><b>不入列</b> 76 Done + 4 Dropped + 3 Superseded</span>
     <span><b>方法</b> issues/_index.md + 116 份报告 meta 扫描</span>
     <span><b>topic</b> issue-clearance-roadmap</span>
   </div>
@@ -269,7 +269,7 @@
   <!-- ================= §0 ================= -->
   <section id="s0">
     <div class="sec-head"><span class="sec-no">§0</span><h2>摸排口径</h2></div>
-    <p class="body">范围 = <span class="muted">issues/_index.md</span> 全部 <b>Open</b> 与 <b>In Progress</b> 条目,共 49 条;63 条 Done、4 条 Dropped、2 条 Superseded 不入列。全部数字为 2026-10-03 对索引与报告 <span class="muted">issue-*</span> meta 的实测扫描值,无估算。</p>
+    <p class="body">范围 = <span class="muted">issues/_index.md</span> 全部 <b>Open</b> 与 <b>In Progress</b> 条目,共 41 条;76 条 Done、4 条 Dropped、3 条 Superseded 不入列。全部数字为 2026-10-04 对索引与报告 <span class="muted">issue-*</span> meta 的实测扫描值,无估算。</p>
     <p class="body">类型分布:bug 13 · feat 22 · question 8(7 Open + 1 In Progress)· perf 5 · refactor 4 · docs 4 · chore 3。档位分布:standard 39 · light 19。<b>test 类型 0 条</b>——v1 闸门波清完后,池里已无测试与流程卡点;当前闸门水位 = test.full <b>2143 passed + 3 skipped / 96.49%</b>(基线 26-10-02-0203),后续认领直接在这个基线上验收。</p>
     <p class="body">相对 v1 的增量:v1 所列 31 条已清偿 12 条(v1-W1 闸门波 5/5、v1-W2 3/4、v1-W3 1/5、v1-W6 1/9、v1-W7 2/5),19 条仍未决;v1 之后新入池 46 条记录,其中 40 条仍处未决(39 Open + 1 In Progress)、6 条入池当日即清。19 + 40 = 59。</p>
     <p class="body">排序三原则沿用 v1:<b>①</b> 闸门先绿——已达成,守住即可;<b>②</b> 数据与凭据先于体验——丢数据、丢凭据的风险高于一切交互瑕疵;<b>③</b> 方案先于动手——需拍板的大件不与快修混流,拍板件与被它阻塞的工程件绑在同一波;已有上游计划承载的条目只挂账、不重复排期。</p>
@@ -298,7 +298,7 @@
     </div>
     <p class="body" style="margin-top:16px">波次是建议顺序,不是硬闸——跨域条目可并行(W3 的方案设计与 W1/W2 的快修并行最典型),波内彼此独立可乱序;细规则见 <a href="#s9" style="color:var(--acc)">§8 执行规则</a>。v1 与本版波次编号不延续对照——每条的挂账与状态实时以 <span class="muted">issues/_index.md</span> 为准。</p>
     <p class="body" style="margin-top:16px"><b>状态列图例</b>(2026-10-02 起分批逐条核对填入): <span class="st st-done">✅ 已修复</span> 缺陷已在代码根修, 依据给 commit 或一句代码事实 · <span class="st st-part">🔶 部分修复</span> 修了一部分/修了关联路径, 核心仍在 · <span class="st st-stale">⛔ 已过时</span> 前提不复存在/需求消失/被其它实现取代 · <span class="st st-todo">⏳ 待处理</span> 核对后确认仍未动 · <span class="st st-defer">📌 挂账</span> W9 战略存疑专档, 不排期。池状态回写规则: ✅&#8594;Done; ⛔&#8594;按语义 Dropped(前提消失)/Superseded(被取代); 🔶/⏳/📌 池状态不动。</p>
-    <p class="body" style="margin-top:12px"><b>全表统计小结</b>(五档分布, 静态核对 2026-10-03): 全表 59 行 = <span class="st st-done">✅ 11</span> / <span class="st st-part">🔶 2</span> / <span class="st st-stale">⛔ 4</span> / <span class="st st-todo">⏳ 37</span> / <span class="st st-defer">📌 5</span>。其中 15 条已回写离池(11 ✅&#8594;Done、1 ⛔&#8594;Superseded、3 ⛔&#8594;Dropped), 余 44 条仍在池; 核对期间另有 15 条新记录入池(6 条 Open 未决、9 条入池即清, 均不在本表), 池现状 49 未决 = 48 Open + 1 In Progress, 不入列 69 = 63 Done + 4 Dropped + 2 Superseded —— 分区数字以 <span class="muted">issues/_index.md</span> 为准(2026-10-03 实测)。</p>
+    <p class="body" style="margin-top:12px"><b>全表统计小结</b>(五档分布, 静态核对 2026-10-03): 全表 59 行 = <span class="st st-done">✅ 18</span> / <span class="st st-part">🔶 2</span> / <span class="st st-stale">⛔ 4</span> / <span class="st st-todo">⏳ 30</span> / <span class="st st-defer">📌 5</span>。其中 22 条已回写离池(18 ✅&#8594;Done、1 ⛔&#8594;Superseded、3 ⛔&#8594;Dropped), 余 37 条仍在池; 核对期间另有 15 条新记录入池(6 条 Open 未决、9 条入池即清, 均不在本表), 池现状 41 未决 = 40 Open + 1 In Progress, 不入列 83 = 76 Done + 4 Dropped + 3 Superseded —— 分区数字以 <span class="muted">issues/_index.md</span> 为准(2026-10-04 实测)。</p>
   </section>
 
   <!-- ================= W1 ================= -->
@@ -359,7 +359,7 @@
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">添加新站点热重载后不触发种子的内置维护任务</span>
             <div class="note">与上一条同属热重载语义(配置变化 &#8594; 种子侧联动),建议同一认领批次摸清。</div></td>
-          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无修复证据; 级别表退役后需按统一挂载口复验维护触发衔接</span></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">13e2646f · rules 订阅 full_round 补建种子级任务(档案 26-10-04-backend-hotreload-torrent-task-restore), 池已改 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2129-bug-webui-batch-warning-notify.html">26-10-01-2129</a></td>
@@ -380,7 +380,7 @@
           <td class="ttype">bug</td><td class="ttier">standard</td>
           <td><span class="ttl">「删除类标签」全局/站点单设置语义混淆,开启后无法切回全局</span>
             <div class="note">全局设置与站点单设置没有分清;涉及设置模型的作用域语义,认领时先理数据结构再动 UI。</div></td>
-          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无修复证据; 站点键存在即覆盖(loaders.py:221), 布尔无三态回退</span></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">18bde39c + 42d3d90a + 9c6bc499 · 站点级三态基座 + 配置 v3&#8594;v4 + 来源徽标, 布尔可回退全局, 池已改 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-09-25-1702-bug-webui-settings-unsaved-changes-lost.html">26-09-25-1702</a></td>
@@ -412,7 +412,7 @@
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">跨组文件交叉紧急处置:防止新种子覆盖已下载/已完成文件<span class="flag">需重新授权</span></span>
             <div class="note">入池时标「紧急处置」。v1-W2 曾入列,用户明确排除后未动;v2 仍列于此——开工需用户重新授权,认领后先出方案拍板。</div></td>
-          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">无实现痕迹: _check_download_conflicts 仍限同组(grouping_mod.py:374), 全 src 无跨组交叉检测; 开工尚需重新授权</span></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">34f89338 + a69e043c + cc6b2131 + 4267ed70 · 跨组交叉检测与处置全链落地(配置键默认关), 用户已重新授权并收口, 池已改 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2147-feat-group-move-atomicity.html">26-10-01-2147</a></td>
@@ -543,14 +543,14 @@
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">浏览种子详情抽屉时支持键盘上下键切换种子</span>
             <div class="note">快捷键引擎与可自定义已落地,补「抽屉打开时上下键切上/下一个种子」动作,小件。</div></td>
-          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">动作注册表 58 动作无「抽屉内切上/下一个种子」; 抽屉打开时浮层门只放行 drawer/settings 局部键, 上下键(list 作用域)被拦</span></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">7d38e2ea · 抽屉重设计 W2 键盘跟随流: scope 存活 + 详情跟随光标, 池已改 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-feat-webui-shortcuts-drawer-open.html">26-10-01-2108</a></td>
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">Alt+1~4 从列表直接打开选中种子的详情抽屉并转到对应页</span>
             <div class="note">现 Alt+1~4 仅在抽屉已聚焦时切页(scope=drawer),需升级为列表侧直接唤起并定位。</div></td>
-          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">drawer-tab-* 四动作仍 scope:"drawer"(shortcuts.js), 列表侧(抽屉未开)按压无唤起逻辑, 与入池时现状一致</span></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">7d38e2ea · drawer-tab-* 四动作 scope 改 list 双态, 列表侧可唤起并定位, 池已改 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2108-question-webui-esc-clear-filter.html">26-10-01-2108</a></td>
@@ -564,7 +564,7 @@
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">批量移动/批量跳检</span>
             <div class="note">WEBUI 缺批量移动与批量跳检入口;右键单组跳检与危险操作独立操作层已落地可复用。</div></td>
-          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">全 src 无批量移动/批量跳检入口(仅右键单组跳检既有), 与入池时现状一致</span></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">a4bfabbf + f5f62726 · 批量移动/批量跳检入口落地(计划 26-10-02-1955 W2/W3, 档案 26-10-02-webui-multi-ctx-actions), 池已改 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2119-feat-webui-search-highlight.html">26-10-01-2119</a></td>
@@ -578,7 +578,7 @@
           <td class="ttype">feat</td><td class="ttier">standard</td>
           <td><span class="ttl">重做优化种子详情抽屉<span class="flag">簇内排后</span></span>
             <div class="note">详情抽屉整体重设计,已有标签页记忆与长文本截断等局部改进;会触碰 shortcuts-drawer 两件的落点,建议簇内小件先行后再整体重做。</div></td>
-          <td><span class="st st-todo">⏳ 待处理</span><span class="stwhy">抽屉仅页签记忆/长文本截断等局部改进, 整体重设计无方案无码, drawer.js 近期提交均与本条无关</span></td>
+          <td><span class="st st-done">✅ 已修复</span><span class="stwhy">dadc97a6 + 7d38e2ea + 14a4d0e2 + 54d8b6fc · 抽屉重设计方案 A(底部停靠面板)四波全落地, 三 issue 同批置 Done</span></td>
         </tr>
         <tr>
           <td class="stamp"><a href="../issues/26-10-01-2138-feat-webui-tracker-error-warning-state.html">26-10-01-2138</a></td>
@@ -832,6 +832,7 @@
   <section id="cl">
     <div class="sec-head"><span class="sec-no">§A</span><h2>变更记录</h2></div>
     <div class="changelog">
+      <div class="cl-row"><span class="v">v2.7</span><span class="d">26-10-04-2020</span><span class="t">复核轮(承接 v2.6, 零代码): 对 2026-10-03 之后的实际进展补核对 —— 表内 7 条 ⏳&#8594;✅ 池回写 Done: W2 两条(2147-热重载维护任务 13e2646f / 2129-删除标签作用域 18bde39c+42d3d90a+9c6bc499)、W3 一条(26-09-22-2221 跨组交叉检测 34f89338+a69e043c+cc6b2131+4267ed70, 用户已重新授权并收口)、W6 四条(2119-抽屉重设计 dadc97a6+7d38e2ea+14a4d0e2+54d8b6fc / 2108-抽屉快捷键两件 7d38e2ea / 2119-批量移动跳检 a4bfabbf+f5f62726)。其中「批量移动/跳检」入池后漏建认领链(专题主键 webui-batch-ops 与实施档案 webui-multi-ctx-actions 不同名, docmap 交叉不到), 本轮换建双向链。全表五档分布 ✅ 18 / 🔶 2 / ⛔ 4 / ⏳ 30 / 📌 5; 封面/§1/footer 池计数按 _index.md 现值刷新。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2.6</span><span class="d">26-10-03-0655</span><span class="t">清偿跟进: docs issue 清理轮(9f5c72c7)收口 4 条文档漂移 —— W6 表内 3 条置 ✅ 池回写 Done: 26-10-01-2212 docstring 按现行段计数口径重写 / 26-09-21-1408 行数快照半边补修(5 份 modules 快照重扫 + README 用例数带口径日期, 🔶&#8594;✅) / 26-09-20-1427 USER.md 口径统一采「默认不写回」侧; 表外 1 条 26-10-02-0728(AUMID 文档漂移)同提交置 Done —— 入池晚于全表核对, 不在本表, 不补行。26-09-28-1946(插件 spec 逐键文档)按用户拍板保持 Open/⏳。全表五档分布 ✅ 11 / 🔶 2 / ⛔ 4 / ⏳ 37 / 📌 5; 封面/§1/footer 池计数按 _index.md 现值刷新(49 未决 = 48 Open + 1 In Progress, 不入列 69 = 63 Done + 4 Dropped + 2 Superseded, 档案 118 份)。</span></div>
       <div class="cl-row"><span class="v">v2.5</span><span class="d">26-10-02-1845</span><span class="t">清偿核对批次 5/5(收尾): W9 共 6 条 —— 📌 5 / ⛔ 1, 无 ✅/🔶/⏳。📌 五条: transmission 报告已出停在用户拍板(池保持 In Progress); 配置切分/搜索辅种两条存疑待拍板(config/ 无每站点切分痕迹, 全 src 无搜索辅种实现); HR 计数两条缓做未动 —— 对平仍仅 rows==claim 单轴(service.py:1004), 翻页终点仍「下一页标记消失」(service.py:693), §7 P3 拍板缓做依赖 D4 口径实证。⛔ 一条: 0052-login-counter-attest 诉求「补计数文本负信号」已被既有实现覆盖 —— looks_like_login 现含「HR编号」子串守卫(5c518b3b 09-24, 早于入池), 余量仅子串&#8594;parse_counters 机制升级, 池回写 Dropped。收尾: 全表 59 行一致性复核通过(五档分布 ✅ 8 / 🔶 3 / ⛔ 4 / ⏳ 39 / 📌 5, 逐行恰一状态格); 补回批次 3 误替换丢失的 v2.2 行、修正 v2.3 时间戳笔误(1905&#8594;1804, 以 git 提交时刻 18:04 为准); 封面/§0/footer 池计数按 _index.md 现值刷新(53 未决 = 52 Open + 1 In Progress, 不入列 57 Done + 4 Dropped + 2 Superseded, 档案 116 份)。issues/_index.md 已重建。</span></div>
       <div class="cl-row"><span class="v">v2.4</span><span class="d">26-10-02-1825</span><span class="t">清偿核对批次 4/5: W7-W8 共 16 条 —— ✅ 1 / 🔶 1 / ⏳ 14。✅ 一条: 1408-web-runtime-host-protocol 由 9b3c50f8(审计 L1-L3 私有面公开化)落地, _build_search_index/_state_kind 改公开名, webui/runtime.py 现 5 处 host 调用全公开、self._host._ 私有调用清零(验收口径满足; Protocol 未建走公开化替代, 单写者约定已落模块 docstring), 池回写 Done。🔶 一条: 1408-readme-modules-drift README 半边已修(「995 用例」声明随 a61d0f47 退场), 行数快照半边仍漂移(modules/overview.md:5 仍自称 2026-09-05 快照)。⏳ 14 条逐一静态核实未动: W7 三条(EXT 信息展示零提交; EXT 版本门控/高度参数化未做且复验发现 manifest 早有 version 1.0.0 前提部分失真; i18n 无痕迹), rules 容错键语义、mypy 配置、tag/category 弹窗重构、TRACKER_FIELD_LEVELS docstring(:21 仍漂移)、插件 spec 豁免(_DOC_EXEMPT 仍在)、USER.md 口径冲突、hatch-pet 费用、CI 无 Windows runner、版本双源(0.2.0 vs 0.1.0)、任务栏 python 图标(五轮结论仍成立, 入池后仅 49d933b5 死分支清理)、--tray Ctrl+C(无 signal 注册)均无实现痕迹。issues/_index.md 已重建。</span></div>
@@ -844,7 +845,7 @@
   </section>
 
   <footer>
-    数据来源:memory-bank/issues/_index.md + 118 份报告 issue-* meta 扫描 · 2026-10-03 实测<br>
+    数据来源:memory-bank/issues/_index.md + 129 份报告 issue-* meta 扫描 · 2026-10-04 实测<br>
     状态:Open 待拍板 · 拍板后按 doc-forms 冻结,改版走「## 变更记录」+ 抬 doc-updated
   </footer>
 

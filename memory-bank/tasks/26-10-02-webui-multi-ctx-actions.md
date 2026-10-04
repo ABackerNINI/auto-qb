@@ -5,7 +5,7 @@
 **Updated:** 2026-10-03
 **Summary:** 计划 26-10-02-1955 五波六提交全部完成并推送: W1 配置键 web.skip_check_menu 全链路 + flags 端点/skip-check 403 fail-closed gate/前端菜单门控(b71e1291, dff534b6); W2 批量限速/移动(a4bfabbf); W3 批量跳检 ops 聚合(f5f62726); W4 多选导出——D1 拍板 A 前端循环逐个下载, 归档端点未建, 零后端改动(4c0c6f66); W5 冒烟走查汇总——harness 跳检开关两态参数化 + smoke 补四项齐/单选跳检项/确认后提交/限速与导出回执 toast/off 态精简轮, 双皮肤实跑(9f1e2a32)。拍板: D1=A(推翻计划推荐的后端 zip) / D2=是 fail-closed / D3=留空不改。基线 26-10-03-0542: 2309 passed + 3 skipped / 99%。
 **Topics:** webui-multi-ctx-actions
-**Refs:** memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html
+**Refs:** memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html,memory-bank/issues/26-10-01-2119-feat-webui-batch-move-skipcheck.html
 
 ## 原始请求
 

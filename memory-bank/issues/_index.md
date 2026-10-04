@@ -19,7 +19,7 @@
 | docs | 1 |
 | test | 1 |
 | refactor | 4 |
-| feat | 16 |
+| feat | 15 |
 | chore | 2 |
 | question | 4 |
 
@@ -54,7 +54,6 @@
 - [bug] [删除种子(同时删除文件)会引起缺文件 WARNING](26-10-01-2129-bug-webui-delete-files-missing-warning.html) — 连文件一起删除的种子被缺文件扫描误报 WARNING, 删除路径需与缺文件检测互斥
 - [feat] [WEBUI 自定义站点名/分类/标签字体颜色](26-10-01-2120-feat-webui-custom-chip-colors.html) — 允许用户为站点名/分类/标签 chip 自定义字体颜色(未排期增强)
 - [refactor] [管理标签/分类窗口重构](26-10-01-2120-refactor-webui-tag-category-dialog.html) — 「管理标签/分类」弹窗结构陈旧需要重构(TODO 未给细节, 开工先复验现状)
-- [feat] [批量移动/批量跳检](26-10-01-2119-feat-webui-batch-move-skipcheck.html) — WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用
 - [feat] [搜索命中高亮显示 + 无命中时提示命中域(如「文件名」标识)](26-10-01-2119-feat-webui-search-highlight.html) — 搜索结果需标出命中来源域与命中片段, 无匹配时给出「匹配到文件名/标签/站点」类提示
 - [feat] [HR 计数：上限徽章总数轴互证（P3 缓做项）](26-09-30-0052-feat-hr-badge-total-crosscheck.html) — HR 上限徽章的 Σ分档 == 总数 == 实抓 三者两两互证（HR 计划 §4 备选项 / §7 P3），依赖 D4 计数口径实证，缓做
 - [perf] [HR 计数：末页追翻省略（P3 缓做项）](26-09-30-0052-perf-hr-lastpage-fetch-skip.html) — HR 计数启用站点翻页达末页终点后仍多做一次追翻请求；报告 26-09-29-1803 §5.1 定性为优化非简化（收益偶有、风险面新增），HR 计划 §7 P3 拍板缓做
@@ -93,6 +92,7 @@
 - [bug] [添加新站点热重载后不触发种子的内置维护任务](26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) — WEBUI 添加新站点并热重载后, 受影响种子的内置维护任务没有被触发
 - [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui
 - [bug] [「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局](26-10-01-2129-bug-webui-delete-tag-scope-confusion.html) — 删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置
+- [feat] [批量移动/批量跳检](26-10-01-2119-feat-webui-batch-move-skipcheck.html) — WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用
 - [feat] [重做优化种子详情抽屉](26-10-01-2119-feat-webui-drawer-redesign.html) — 详情抽屉整体重设计(未排期); 已有标签页记忆与长文本截断等局部改进, 需要一次整体重做
 - [feat] [快捷键上下移动的选中态改为跟随鼠标点击移动, 单击双击都触发](26-10-01-2108-feat-webui-selection-follow-mouse.html) — 键盘高亮选中与鼠标点击选中是两套状态, 需合并为单一套随最后操作源移动
 - [feat] [浏览种子详情抽屉时支持键盘上下键切换种子](26-10-01-2108-feat-webui-shortcuts-drawer-nav.html) — 键盘快捷键引擎与可自定义已落地, 补「抽屉打开时上下键切到上/下一个种子」这一动作

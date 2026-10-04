@@ -8,7 +8,8 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-batch-ops">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-02-webui-multi-ctx-actions.md">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="批量移动/批量跳检">
 <meta name="issue-summary" content="WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用">
 <title>批量移动/批量跳检 · feat · 计划外问题</title>
@@ -101,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2119-feat-webui-batch-move-skipcheck</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:19</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -153,13 +154,14 @@
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-04 20:20 — 清偿核对回写，状态 <strong>Done</strong>：批量移动与批量跳检入口已于 26-10-02/03 由计划 <a href="../plans/26-10-02-1955-plan-webui-multi-ctx-actions.html">26-10-02-1955</a> 的 W2/W3 落地（<code>a4bfabbf</code> 批量限速/移动、<code>f5f62726</code> 批量跳检走 ops 逐 hash 串行聚合 + danger 确认框），档案 <a href="../tasks/26-10-02-webui-multi-ctx-actions.md">26-10-02-webui-multi-ctx-actions</a> 已 Done（基线 26-10-03-0542: 2309 passed + 3 skipped / 99%）。本条入池后未建认领链，代码面实测已具备入口（含 <code>web.skip_check_menu</code> 默认关开关与 skip-check 端点 403 fail-closed gate），故回写 Done。</li>
       <li>2026-10-01 21:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-04 已不复现 —— 多选右键菜单「限速…/移动…/跳检…/导出 .torrent」四项齐备（计划 26-10-02-1955 W2/W3），本轮为清偿核对回写，未重新起桩。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法 = 与 §06 建议方向一致</strong>（复用既有 bulk 通道，零新增表）：<code>bulk</code> 动作扩 <code>limits</code>/<code>location</code>（qbapi 原生收 hash 列表单次调用，a4bfabbf）与 <code>skip_check</code>（走 ops 逐 hash 串行聚合回执，f5f62726）；跳检项另加 <code>web.skip_check_menu</code> 配置开关（默认关，b71e1291 + dff534b6）。验证：ui_harness 双皮肤冒烟 + ui_smoke 汇总断言（多选菜单四项齐 / 单选菜单含跳检项 / 确认后提交 <code>bulk action=skip_check</code> / 限速与导出回执 toast / off 态精简轮 10/10 全绿），基线 26-10-03-0542: 2309 passed + 3 skipped / 99%。</p>
   </section>
 
   <footer>
