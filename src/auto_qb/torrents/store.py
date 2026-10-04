@@ -385,6 +385,24 @@ class TorrentStore:
         """种子所属组 key; 未归组 -> None"""
         return self.member_to_key.get(hash)
 
+    def group_has_downloading(self, hash: str) -> bool:
+        """组内是否存在活跃下载种子: 存在 -> 整组未完成, 不进行任何校验(包括跳检)
+
+        判定语义单点(plan 26-10-05-0314 S1a, 自 GroupingModule._group_has_downloading
+        原样上移: 规则侧决策链 1 与后续 WEB 跳检组级闸门共用同一真相, 防两处谓词漂移)。
+        口径: is_downloading 且非停止且非校验 —— 不看 amount_left(与下载冲突检查的
+        下载中谓词是两口径, 勿擅自合并); 幽灵成员(组表有快照无)跳过;
+        hash 未归组 -> 仅判自身, hash 不在库 -> False。
+        """
+        by_hash = self.by_hash
+        for h in self.group_members(hash):
+            if h not in by_hash:
+                continue
+            state_enum = by_hash[h].state_enum
+            if state_enum.is_downloading and not state_enum.is_stopped and not state_enum.is_checking:
+                return True
+        return False
+
     # ---------- 全局标签/分类缓存 ----------
 
     def all_tags(self) -> set:

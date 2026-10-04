@@ -595,15 +595,15 @@ class GroupingModule(BaseModule):
         return self._ctx.store.by_hash
 
     def _group_has_downloading(self, members: list[str]) -> bool:
-        """组内是否存在活跃下载种子: 存在 -> 整组未完成, 不进行任何校验(包括跳检) """
-        by_hash = self._ctx.store.by_hash
-        for h in members:
-            if h not in by_hash:
-                continue
-            state_enum = by_hash[h].state_enum
-            if state_enum.is_downloading and not state_enum.is_stopped and not state_enum.is_checking:
-                return True
-        return False
+        """组内是否存在活跃下载种子: 存在 -> 整组未完成, 不进行任何校验(包括跳检)
+
+        判定谓词上移 TorrentStore.group_has_downloading 单点(plan 26-10-05-0314 S1a:
+        WEB 跳检组级闸门与规则侧决策链 1 共用同一真相, 防两处谓词漂移), 本方法仅逐成员
+        委托 —— 生产调用(checking 决策链 1)传入的 members 即 store.group_members 的
+        全量列表, 逐成员委托对全量输入与上移前实现逐位一致(等价断言见 test_grouping T9)。
+        """
+        store = self._ctx.store
+        return any(store.group_has_downloading(h) for h in members)
 
     def _group_reference_candidates(self, members: list[str]) -> list:
         """组内已完成且未在校验的成员列表, 作为参考种子候选(想法2: filelist 参考定义)

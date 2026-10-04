@@ -29,6 +29,7 @@
 - test_leave_group_empty_deletes: 组空删除返回 None
 - test_leave_group_not_in_group: 不在组内返回 None
 - test_group_has_downloading: 组内存在下载中成员判定
+- test_group_has_downloading_delegates_to_store: _group_has_downloading 委托 store 单点等价断言(plan 26-10-05-0314 T9: 同输入同输出 + 路由钉死)
 - test_group_reference_candidates: 返回做种成员作为参考候选
 - test_grouping_save_path_change_no_cache: 无缓存文件映射 -> 维持原行为不重归组
 - test_assign_new_torrent_missing: 哈希不在 by_hash -> AttributeError 上抛(调用方保证存在)
@@ -743,6 +744,63 @@ def test_group_has_downloading():
     ])
     assert mgr.host.get("grouping")._group_has_downloading(["H1", "H2"]) is True
     assert mgr.host.get("grouping")._group_has_downloading(["H2"]) is False
+
+
+def test_group_has_downloading_delegates_to_store():
+    """_group_has_downloading 委托等价断言(plan 26-10-05-0314 T9): 谓词上移 store 单点后对同输入同输出
+
+    生产输入形态(members == store.group_members(hash) 全量列表)与未归组/幽灵/空列表输入下,
+    委托后输出 == 上移前逐字语义(内联参照实现) == store 直查; 末段以实例级替身钉死委托路由。
+    """
+    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    seed_store(
+        mgr,
+        [
+            FakeTorrent(hash="H1", state="stalledDL"),  # 下载中
+            FakeTorrent(hash="H2", state="stalledUP"),
+            FakeTorrent(hash="H3", state="checkingDL"),  # 强制校验: is_downloading 且 is_checking -> 不算
+            FakeTorrent(hash="H4", state="pausedDL"),
+            FakeTorrent(hash="H5", state="stalledUP"),  # 未归组
+            FakeTorrent(hash="H6", state="stalledDL"),  # 未归组且下载中
+        ]
+    )
+    grp = mgr.host.get("grouping")
+    store = mgr.store
+    key_a, key_b = ("R:\\A", ("a.mkv", )), ("R:\\B", ("b.mkv", ))
+    store.groups = {key_a: ["H1", "H2"], key_b: ["H3", "H4"]}
+    store.member_to_key = {"H1": key_a, "H2": key_a, "H3": key_b, "H4": key_b}
+
+    def reference(members):
+        """上移前逐字语义(参照实现, 防上移走样的对照)"""
+        by_hash = store.by_hash
+        for h in members:
+            if h not in by_hash:
+                continue
+            e = by_hash[h].state_enum
+            if e.is_downloading and not e.is_stopped and not e.is_checking:
+                return True
+        return False
+
+    # 同输入同输出: 委托后 == 参照实现 == store 直查(全量列表/未归组/不在库/幽灵/空列表)
+    cases = [
+        store.group_members("H1"),  # [H1, H2] 组内有下载中成员 -> True
+        store.group_members("H3"),  # [H3, H4] checkingDL+pausedDL -> False
+        store.group_members("H5"),  # [H5] 未归组做种 -> False
+        store.group_members("H6"),  # [H6] 未归组下载中 -> True
+        store.group_members("NOPE"),  # [NOPE] 不在库 -> False
+        ["GHOST", "H5"],  # 幽灵成员 + 未归组做种 -> False
+        [],  # 空列表 -> False
+    ]
+    for members in cases:
+        expected = reference(members)
+        assert grp._group_has_downloading(members) is expected, f"委托等价失败: {members}"
+        if members and members[0] in store.by_hash:
+            assert store.group_has_downloading(members[0]) is expected, f"store 直查不一致: {members}"
+    assert grp._group_has_downloading(store.group_members("H1")) is True, "组内有下载中成员"
+    assert grp._group_has_downloading(store.group_members("H3")) is False, "checkingDL 不算活跃下载"
+    # 委托路由钉死: store 方法被替身接管 -> grouping 侧跟着变(证明本地不再持有谓词)
+    store.group_has_downloading = lambda h: True
+    assert grp._group_has_downloading(store.group_members("H3")) is True
 
 
 def test_group_reference_candidates():

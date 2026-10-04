@@ -19,6 +19,7 @@
 - test_store_files_lazy: 记录级 files 惰性拉取+缓存
 - test_store_state_snapshot: update_state_snapshot 由 by_hash 派生 state_enum
 - test_store_group_members: group_members/group_key(未归组 -> [自身]/None)
+- test_store_group_has_downloading: group_has_downloading 组级活跃下载判定(上移单点: 有下载者/全暂停/不在库/幽灵成员/checkingDL 边缘态)
 - test_store_all_tags: all_tags 惰性缓存 + invalidate_tags 失效
 - test_store_all_categories: all_categories 惰性缓存 + invalidate_categories 失效
 - test_store_tag_usage: 从快照聚合标签使用情况
@@ -572,6 +573,30 @@ def test_store_group_members():
     assert store.group_key("H1") == key
     assert store.group_members("H3") == ["H3"]  # 未归组 -> 单种子
     assert store.group_key("H3") is None
+
+
+def test_store_group_has_downloading():
+    """group_has_downloading: 组级活跃下载判定(谓词上移自 GroupingModule._group_has_downloading 单点, plan 26-10-05-0314 T9)
+
+    组内有下载中成员 -> True(内部经 group_members 取全组, 任一成员入口同判); 全暂停/不在库 -> False;
+    幽灵成员(组表有快照无)跳过; checkingDL(强制校验)边缘态不算活跃下载(口径锁)。
+    """
+    store = TorrentStore()
+    key = ("R:\\Downloads", ("a.mkv", ))
+    store.by_hash["H1"] = FakeTorrent(hash="H1", state="stalledDL")
+    store.by_hash["H2"] = FakeTorrent(hash="H2", state="pausedUP")
+    store.groups[key] = ["H1", "H2"]
+    store.member_to_key["H1"] = key
+    store.member_to_key["H2"] = key
+    assert store.group_has_downloading("H1") is True  # 组内有下载中成员
+    assert store.group_has_downloading("H2") is True  # 同组任一成员入口同判
+    assert store.group_has_downloading("H3") is False  # 不在库(未归组 -> [自身], 自身不在 by_hash)
+    store.groups[key].append("GHOST")
+    assert store.group_has_downloading("H1") is True  # 幽灵成员跳过不崩溃
+    store.by_hash["H1"].state = "pausedDL"
+    assert store.group_has_downloading("H1") is False  # 全暂停(组内无活跃下载)
+    store.by_hash["H1"].state = "checkingDL"
+    assert store.group_has_downloading("H1") is False  # 强制校验不算活跃下载(边缘态口径)
 
 
 def test_store_all_tags():
