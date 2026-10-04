@@ -571,6 +571,8 @@ const TYPES = ["bug", "perf", "docs", "test", "refactor", "feat", "chore", "ques
 const ACTIVE_ST = new Set(["Open", "In Progress"]);
 const VIEW_KEY = "mb-nav-view";
 const PINS_KEY = "mb-nav-pins";
+const FILTERS_KEY = "mb-nav-filters";   // 筛选器 / 选择类状态 (纯前端偏好, 刷新后不丢)
+const SORT_KEYS = ["stamp", "form", "status", "topic"];
 /* 图钉图标 (内联 SVG, 无外链图标库): 空心 = 未 pin; 实心由 .pinbtn.on 的 CSS fill 控制 */
 const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
 
@@ -632,6 +634,56 @@ function pinZoneItems() {
     seen.add(x.link);
     return true;
   });
+}
+
+/* ---- 筛选器持久化 (2026-10-05 用户报「刷新即重置」): 与 VIEW_KEY / PINS_KEY 同款纯前端偏好,
+   只存筛选 / 选择类**用户意图**, 不存 DATA 派生物; 读写一律 try/catch 兜底 (file:// 下静默降级为会话内存态)。
+   装载点全壳唯一 (boot 里 restoreFilters 一次) —— derive() 绝不碰, 否则 30s 轮询会把用户改的筛选洗掉
+   (与 pin 同源, 见 pitfalls/web-ui/poll-reseed-filter.md)。 */
+function pickStrings(v, allow) {
+  if (!Array.isArray(v)) return null;
+  return v.filter(x => typeof x === "string" && (!allow || allow.includes(x)));
+}
+function saveFilters() {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({
+      q: S.q,
+      aForms: [...S.aForms], aStatuses: [...S.aStatuses], aTypes: [...S.aTypes],
+      aLive: S.aLive, aChain: S.aChain, sort: S.sort,
+      selTopic: S.selTopic, cq: S.cq, openRows: [...S.openRows],
+      cForms: [...S.cForms], cStatuses: [...S.cStatuses], cLive: S.cLive, expanded: [...S.expanded],
+      statusSeeded: [...statusSeeded],
+    }));
+  } catch (e) { /* file:// 下静默降级为会话内存态 */ }
+}
+function loadFilters() {
+  try {
+    const o = JSON.parse(localStorage.getItem(FILTERS_KEY) || "null");
+    return o && typeof o === "object" ? o : null;
+  } catch (e) { return null; }
+}
+/* 还原必须对 schema 校验 (坑 pitfalls/web-ui/ui-location-persist.md): 集合项只收白名单内的值,
+   空的选中集回落默认 (UI 不变式: 至少留一项, 否则列表整片空); 状态值是数据派生的动态值, 不做白名单。
+   statusSeeded 先并入 KNOWN_ST —— 否则首轮 derive() 会把用户取消过的已知状态又 add 回来。 */
+function restoreFilters() {
+  statusSeeded = new Set(KNOWN_ST);
+  const o = loadFilters();
+  if (!o) return;
+  if (typeof o.q === "string") S.q = o.q;
+  const af = pickStrings(o.aForms, FORM_ORD); if (af && af.length) S.aForms = new Set(af);
+  const at = pickStrings(o.aTypes, TYPES); if (at && at.length) S.aTypes = new Set(at);
+  const as = pickStrings(o.aStatuses); if (as && as.length) S.aStatuses = new Set(as);
+  const cf = pickStrings(o.cForms, FORM_ORD); if (cf && cf.length) S.cForms = new Set(cf);
+  const cs = pickStrings(o.cStatuses); if (cs && cs.length) S.cStatuses = new Set(cs);
+  if (typeof o.aLive === "boolean") S.aLive = o.aLive;
+  if (typeof o.aChain === "boolean") S.aChain = o.aChain;
+  if (typeof o.cLive === "boolean") S.cLive = o.cLive;
+  if (SORT_KEYS.includes(o.sort)) S.sort = o.sort;
+  if (typeof o.selTopic === "string" || o.selTopic === null) S.selTopic = o.selTopic;
+  if (typeof o.cq === "string") S.cq = o.cq;
+  const or = pickStrings(o.openRows); if (or) S.openRows = new Set(or);
+  const ex = pickStrings(o.expanded); if (ex) S.expanded = new Set(ex);
+  const ss = pickStrings(o.statusSeeded); if (ss) for (const s of ss) statusSeeded.add(s);
 }
 
 /* ---- 数据派生 (每次 DATA 更新后重算; 过滤/展开状态保留在 S 里) ---- */
@@ -745,17 +797,17 @@ function renderLedger() {
   fgType.innerHTML = '<div class="fl">Issue 类型</div>';
   fgLive.innerHTML = '<div class="fl">关联</div>';
   buildFilterRows("fgForm", FORM_ORD.map(k => [k, FORM_CN[k], cnt(i => i.form === k)]), false,
-    v => S.aForms.has(v), v => { toggleSet(S.aForms, v); renderLedger(); });
+    v => S.aForms.has(v), v => { toggleSet(S.aForms, v); saveFilters(); renderLedger(); });
   buildFilterRows("fgStatus", statusList.map(s => [s, s, cnt(i => stOf(i) === s)]), false,
-    v => S.aStatuses.has(v), v => { toggleSet(S.aStatuses, v); renderLedger(); });
+    v => S.aStatuses.has(v), v => { toggleSet(S.aStatuses, v); saveFilters(); renderLedger(); });
   buildFilterRows("fgType", TYPES.map(t => [t, t, cnt(i => i["issue-type"] === t)]), false,
-    v => S.aTypes.has(v), v => { toggleSet(S.aTypes, v); renderLedger(); });
+    v => S.aTypes.has(v), v => { toggleSet(S.aTypes, v); saveFilters(); renderLedger(); });
   buildFilterRows("fgLive", [
     ["live", "仅活跃专题", cnt(i => liveOf(i.topic || NO_KEY))],
     ["chain", "有认领链", cnt(i => i.refs && i.refs.length)],
   ], true,
     v => (v === "live" ? S.aLive : S.aChain),
-    v => { if (v === "live") S.aLive = !S.aLive; else S.aChain = !S.aChain; renderLedger(); });
+    v => { if (v === "live") S.aLive = !S.aLive; else S.aChain = !S.aChain; saveFilters(); renderLedger(); });
 
   renderPinZone();
 
@@ -943,7 +995,7 @@ function renderScope() {
       ? '<span class="sk" style="color:var(--faint)">TOPIC GONE</span>'
       : '<span class="sk" style="color:var(--faint)">SELECT A CHANNEL</span>';
     sbody.innerHTML = '<div class="empty">// 从左侧选择一个专题频道载入 readout //</div>';
-    if (S.selTopic) S.selTopic = null;
+    if (S.selTopic) { S.selTopic = null; saveFilters(); }   /* 选中的专题已消失: 落盘清掉, 免得下次还原到空 */
     return;
   }
   const g = groups.get(S.selTopic).slice().sort((a, b) =>
@@ -1042,9 +1094,9 @@ function wire() {
     const b = e.target.closest("button");
     if (b) setView(b.dataset.view);
   });
-  $("gq").addEventListener("input", e => { S.q = e.target.value.trim(); renderCurrent(); });
+  $("gq").addEventListener("input", e => { S.q = e.target.value.trim(); saveFilters(); renderCurrent(); });
   $("gq").addEventListener("keydown", e => {
-    if (e.key === "Escape") { e.target.value = ""; S.q = ""; renderCurrent(); }
+    if (e.key === "Escape") { e.target.value = ""; S.q = ""; saveFilters(); renderCurrent(); }
   });
 
   /* A */
@@ -1090,7 +1142,7 @@ function wire() {
   document.addEventListener("click", e => { if (!e.target.closest("#ctxMenu")) closeCtx(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeCtx(); });
   window.addEventListener("scroll", closeCtx, true);
-  $("sort").addEventListener("change", e => { S.sort = e.target.value; renderLedger(); });
+  $("sort").addEventListener("change", e => { S.sort = e.target.value; saveFilters(); renderLedger(); });
   $("dclose").onclick = () => { S.sel = null; closeDrawer(); };
 
   /* B */
@@ -1098,12 +1150,13 @@ function wire() {
     const ch = e.target.closest(".ch");
     if (!ch) return;
     S.selTopic = ch.dataset.k;
+    saveFilters();
     $("chlist").querySelectorAll(".ch").forEach(x => x.classList.toggle("on", x.dataset.k === S.selTopic));
     renderScope();
   });
-  $("cq").addEventListener("input", e => { S.cq = e.target.value; renderChannels(); });
+  $("cq").addEventListener("input", e => { S.cq = e.target.value; saveFilters(); renderChannels(); });
   $("cq").addEventListener("keydown", e => {
-    if (e.key === "Escape") { e.target.value = ""; S.cq = ""; renderChannels(); }
+    if (e.key === "Escape") { e.target.value = ""; S.cq = ""; saveFilters(); renderChannels(); }
   });
   $("sbody").addEventListener("click", e => {
     const head = e.target.closest(".row-head");
@@ -1111,6 +1164,7 @@ function wire() {
     const row = head.parentElement;
     const link = row.dataset.link;
     if (S.openRows.has(link)) S.openRows.delete(link); else S.openRows.add(link);
+    saveFilters();
     row.classList.toggle("open");
   });
 
@@ -1120,6 +1174,7 @@ function wire() {
     if (!p) return;
     const f = p.dataset.v;
     if (S.cForms.has(f)) { if (S.cForms.size === 1) return; S.cForms.delete(f); } else S.cForms.add(f);
+    saveFilters();
     renderCards();
   });
   $("cStatusPills").addEventListener("click", e => {
@@ -1127,13 +1182,15 @@ function wire() {
     if (!p) return;
     const s = p.dataset.v;
     if (S.cStatuses.has(s)) { if (S.cStatuses.size === 1) return; S.cStatuses.delete(s); } else S.cStatuses.add(s);
+    saveFilters();
     renderCards();
   });
-  $("cLiveOnly").addEventListener("click", () => { S.cLive = !S.cLive; renderCards(); });
+  $("cLiveOnly").addEventListener("click", () => { S.cLive = !S.cLive; saveFilters(); renderCards(); });
   $("wall").addEventListener("click", e => {
     const m = e.target.closest(".more");
     if (!m) return;
     S.expanded.add(m.dataset.k);
+    saveFilters();
     renderCards();
   });
 }
@@ -1172,6 +1229,11 @@ function boot() {
   wire();
   S.pins = loadPins();   /* 全壳唯一装载点 (derive 绝不触碰): 守阵 test_pin_state_not_reseeded_by_derive */
   S.view = loadView();
+  restoreFilters();      /* 全壳唯一装载点 (derive 绝不触碰): 刷新后筛选器不丢 */
+  /* 受控控件回填初值: 状态还原了但输入框 / 下拉还显示默认值, 用户会当成"没生效" */
+  $("gq").value = S.q;
+  $("cq").value = S.cq;
+  $("sort").value = S.sort;
   for (const b of document.querySelectorAll("#seg button")) b.classList.toggle("on", b.dataset.view === S.view);
   for (const id of ["v-ledger", "v-console", "v-cards"]) $(id).classList.toggle("on", id === "v-" + S.view);
 

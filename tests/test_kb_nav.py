@@ -11,6 +11,11 @@
    dark 口径 (conventions/webui.md)、零外链资源 (本地工具不得依赖网络)。
 3'. **台账可读性**: 状态列钉在形态右侧、标题左侧 (2026-10-04 用户定调); 状态筛选不得被 30s
    轮询重播种 (同日用户报「状态筛选器每隔一会儿自动重置」, 根因见 pitfalls/web-ui/poll-reseed-filter.md)。
+3''. **筛选器持久化**: 筛选 / 选择类状态 (台账四组 + 排序 + 双搜索 + 卡片三组 + 展开态) 落
+   localStorage, 刷新后不丢 (2026-10-05 用户报「每次刷新重置」); 装载点全壳唯一且在 boot, derive()
+   绝不读写 —— 否则 30s 轮询会把用户改的筛选洗掉 (与 pin 同源)。还原须对 schema 校验 (见
+   pitfalls/web-ui/ui-location-persist.md), 且已知状态先并入 statusSeeded 台账, 否则刷新后首轮
+   derive() 会把用户取消过的已知状态又加回来 (与 3' 同一根因)。
 
 另守一条**单点不回归**: nav_data 只许在 collect() 条目上做加法 enrich, 不许改
 gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 (计划 §01 拍板: 消费方零变动)。
@@ -29,6 +34,10 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_shell_no_external_resources: 壳无 http(s) 外链 src/href 资源引用 (属性锚定, 注释/文案不受影响)
 - test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 标题 专题 链 (表头与行模板同步)
 - test_status_filter_not_reseeded_every_poll: derive() 对状态候选只自动入选一次 (statusSeeded 闸门在前), 30s 轮询不得盖回用户取消的选择
+- test_shell_has_filter_persistence: 筛选器持久化骨架 (FILTERS_KEY + 存/读/还原三函数 + boot 装载一次 + 输入框/下拉回填初值)
+- test_filter_state_not_reseeded_on_poll: derive() 不得读写筛选器持久化 (与 pin 同源: 轮询不得洗掉用户筛选)
+- test_restore_filters_seeds_known_statuses: 还原筛选器时已知状态 (KNOWN_ST) 先并入 statusSeeded 台账 (否则刷新后首轮 derive 把取消的已知状态加回)
+- test_filter_mutations_persist: 各筛选入口 (台账四组 / 排序 / 双搜索 / 卡片三组) 均落盘, 少一处即该筛选刷新后仍旧重置
 - test_shell_has_pin_zone_and_ctxmenu: 置顶骨架在位 (#pinZone / #ctxMenu / PINS_KEY / contextmenu 监听)
 - test_pin_state_not_reseeded_by_derive: derive() 不碰 pins; S.pins = loadPins() 全壳唯一 (轮询不得洗掉 pin)
 - test_pinned_rendered_in_both_zones: 同一份 pin 状态被专区渲染 (pinZoneItems) 与行模板 (isPinned) 双处消费
@@ -228,6 +237,57 @@ def test_status_filter_not_reseeded_every_poll() -> None:
     assert "S.aStatuses.add(s)" in body and "S.cStatuses.add(s)" in body, "自动入选逻辑不见了"
     assert body.index(guard) < body.index("S.aStatuses.add(s)"), "闸门必须排在自动入选之前"
     assert body.count("statusSeeded.add(s)") == 1, "入选记账只能落一处, 多处会让闸门失效"
+
+
+# --------------------------------------------------------------------------- 筛选器持久化
+
+
+def test_shell_has_filter_persistence() -> None:
+    """筛选器必须落 localStorage (2026-10-05 用户报「每次刷新重置」): 存储键 + 存/读/还原三函数
+    齐备, boot() 调 restoreFilters() 装载一次, 且把受控控件 (搜索框 / 排序下拉) 回填初值 ——
+    状态还原了但控件还显示默认值, 用户会当成"没生效"。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert 'const FILTERS_KEY = "mb-nav-filters"' in text, "缺筛选器存储键常量"
+    for fn in ("function saveFilters()", "function loadFilters()", "function restoreFilters()"):
+        assert fn in text, f"缺筛选器持久化函数: {fn}"
+    boot = re.search(r"function boot\(\) \{(.*?)\n\}", text, re.S)
+    assert boot, "boot() 不见了? 装载逻辑搬家要同步本守阵"
+    body = boot.group(1)
+    assert "restoreFilters();" in body, "boot() 必须装载一次筛选器状态 (否则刷新回默认)"
+    assert '$("gq").value = S.q' in body and '$("sort").value = S.sort' in body, "boot() 必须回填受控控件初值"
+
+
+def test_filter_state_not_reseeded_on_poll() -> None:
+    """与 pin 同源 (坑 pitfalls/web-ui/poll-reseed-filter.md): derive() 每 30s 跑一次, 绝不能读回
+    localStorage / 重播筛选器默认 / 回写持久化 —— 否则轮询会把用户刚改的筛选洗掉。"""
+    text = SHELL.read_text(encoding="utf-8")
+    block = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert block, "derive() 不见了? 数据派生逻辑搬家要同步本守阵"
+    body = block.group(1)
+    for forbidden in ("loadFilters", "restoreFilters", "saveFilters"):
+        assert forbidden not in body, f"derive() 里出现 {forbidden}: 30s 轮询会与用户筛选打架"
+
+
+def test_restore_filters_seeds_known_statuses() -> None:
+    """还原筛选器时, 已知状态 (KNOWN_ST) 必须先计入 statusSeeded 台账 —— 否则首轮 derive()
+    会把用户取消过的已知状态又 add 回来, 「刷新即重置」的根因就藏在这里 (与 3' 同源)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    block = re.search(r"function restoreFilters\(\) \{(.*?)\n\}", text, re.S)
+    assert block, "restoreFilters() 不见了? 持久化还原逻辑搬家要同步本守阵"
+    body = block.group(1)
+    assert "statusSeeded" in body and "KNOWN_ST" in body, "还原时必须把 KNOWN_ST 并入 statusSeeded 台账"
+
+
+def test_filter_mutations_persist() -> None:
+    """每个改筛选的入口都要落盘: 少一处 = 该筛选器刷新后仍旧重置 (用户报的就是这个)。
+    台账四组筛选 (形态/状态/类型/关联) 是核心, 排序 / 双搜索 / 卡片三组一并守。"""
+    text = SHELL.read_text(encoding="utf-8")
+    for set_name in ("aForms", "aStatuses", "aTypes"):
+        assert re.search(r"toggleSet\(S\." + set_name + r", v\); saveFilters\(\);", text), \
+            f"台账 {set_name} 筛选落盘缺失"
+    assert "S.aChain = !S.aChain; saveFilters();" in text, "台账「关联」筛选落盘缺失"
+    assert text.count("saveFilters();") >= 12, \
+        f"筛选落盘点偏少 (期望 >=12): {text.count('saveFilters();')}"
 
 
 # --------------------------------------------------------------------------- 置顶 (pin)
