@@ -49,6 +49,7 @@ ctx.notify 用四公开口替身 (enabled_state/is_enabled/set_enabled) —— �
 - test_toggle_autostart_error_shows_warning: enable 抛 AutoQbError -> 弹窗不外抛
 - test_run_tray_wraps_generic_init_failure: 初始化任意异常 -> 包成 AutoQbError ("托盘 UI 初始化失败")
 - test_run_tray_reraises_autoqb_error: AutoQbError 原样重抛 (不二次包装)
+- test_trayui_init_sets_appid_before_first_window: TrayUi.__init__ 里 AUMID 设置先于 _build_window (时序钉死, issue 26-10-02-0727)
 - test_set_windows_appid_success_no_readback: (Win32 替身) hr=0 -> 留「已设置」debug, 无读回动作 (读回判据已删, issue 26-10-02-0441)
 - test_set_windows_appid_set_failure_warns: hr != 0 -> warning 后直接返回
 - test_set_windows_appid_setter_raises_is_swallowed: 设置 API 抛错 -> 吞掉 (进程静默继续)
@@ -834,6 +835,20 @@ def test_run_tray_reraises_autoqb_error(monkeypatch, tmp_path):
             run_tray(mgr, dry_run=True)  # AutoQbError 原样重抛, 不二次包装
     finally:
         _cleanup_tray_handlers()
+
+
+def test_trayui_init_sets_appid_before_first_window(monkeypatch, tmp_path):
+    """issue 26-10-02-0727: AUMID 设置调用须先于首个窗口创建 —— 时序钉死防调用点再丢失"""
+    order = []
+    mgr = make_manager(str(tmp_path / "state.json"))
+    monkeypatch.setattr(tray_app, "_set_windows_appid", lambda: order.append("appid"))
+    monkeypatch.setattr(TrayUi, "_build_window", lambda self: order.append("window"))
+    monkeypatch.setattr(TrayUi, "_build_tray", lambda self: order.append("tray"))
+    try:
+        TrayUi(mgr, dry_run=True)
+    finally:
+        _cleanup_tray_handlers()
+    assert order == ["appid", "window", "tray"], ("AUMID 必须在 _build_window(首个窗口)之前设置, 否则 Windows 任务栏按钮回退 python 默认图标")
 
 
 # ---------- _set_windows_appid: Win32 边界替身 (设置调用 hr=0 即成功; 读回校验已删 ——

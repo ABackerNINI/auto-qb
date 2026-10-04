@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="taskbar-python-icon">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="任务栏按钮图标仍为 python 图标(五轮尝试未解)">
 <meta name="issue-summary" content="窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位">
 <title>任务栏按钮图标仍为 python 图标(五轮尝试未解) · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2203-bug-taskbar-python-icon</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 22:03</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -143,7 +143,7 @@
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：BMP 帧 ico、AUMID(注册表/lnk)、纯 iconbitmap 及其组合，均无效）—— 常规方案不覆盖作者环境，任务栏按钮图标实际取自哪个进程标识 / 启动链路待重新取证。</div>
+    <div class="callout">已定位（2026-10-05, 由关联单 26-10-02-0727 考古闭环）: Windows 任务栏按钮图标在有显式<b>进程级</b> AUMID 时才取窗口图标 —— 而生产从未设置过: _set_windows_appid(SetCurrentProcessExplicitAppUserModelID) 自 9891c030 引入起生产零调用点。五轮尝试中的「AUMID」均为注册表/lnk 注册(notify 的 toast 来源身份 AutoQB.UI), 那只登记身份信息, <b>不改变当前进程的 AUMID</b> —— 决定性变量从未被真正施加。这与 core-domain.md 四轮对照诊断(无 AUMID 时无论 iconbitmap/iconphoto/WM_SETICON 任务栏恒 python.exe)完全自洽: 五轮不是方案无效, 是方案从未生效。原已排除项(BMP 帧 ico / 纯 iconbitmap / 注册表 AUMID 组合)仍然成立, 但结论须改写为「缺少进程级 AUMID 时这些手段确实救不了任务栏」。</div>
   </section>
 
   <section id="s6">
@@ -156,12 +156,16 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 22:03 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-05 — 认领: 根因定位为进程级 AUMID 从未设置(26-10-02-0727), 修复随该单落地, 状态 <strong>In Progress</strong>（待真机任务栏目视确认后转 Done, 见「修复后补充」）</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行（L150）由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-05 重跑锚点 —— ①原锚点 memory-bank/modules.md「图标结论」节已随模块文档拆分迁至 memory-bank/modules/core-domain.md:27(文档漂移, 锚点更新); ②五轮已排除项不再重查; ③新增决定性事实: _set_windows_appid 生产零调用点(26-10-02-0727), 即本单根因。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（随关联单 26-10-02-0727 实施, 原建议「从任务栏按钮图标实际解析链重新取证」的取证结论即上文根因）:
+      TrayUi.__init__ 在首个窗口创建前调用 _set_windows_appid() —— 进程级 AUMID 与既有 BMP 帧 iconbitmap 组合恰好是 core-domain.md 四轮诊断给出的正确终态组合, 此前只差「真正执行」这一环。</p>
+    <p><b>验证方式</b>: 代码链路已闭环(test.full 全绿 2541 passed / 4 skipped, 含新增时序测试 test_trayui_init_sets_appid_before_first_window); 
+      <b>任务栏按钮是否恢复 orbit 属真机视觉行为, 待作者下次 --tray 运行目视确认</b> —— 确认后本单转 Done; 若仍 python, 则在 AUMID 已生效的新前提下按 explorer 身份解析链重新取证(排除项清单不需重查)。</p>
   </section>
 
   <footer>

@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="tray-aumid">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tray._set_windows_appid 自引入起生产零调用点: AUMID 从未设置, 任务栏图标修复结论前提存疑">
 <meta name="issue-summary" content="tray/app.py 的 _set_windows_appid 自 9891c030 引入起生产代码零调用点(仅测试驱动), 生产进程从未设置显式 AUMID —— 与 core-domain.md 四轮实测结论「AUMID 是任务栏图标决定性变量」矛盾, 26-10-01-2203 修复前提存疑">
 <title>tray._set_windows_appid 自引入起生产零调用点: AUMID 从未设置, 任务栏图标修复结论前提存疑 · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0727-bug-tray-appid-setter-no-call-site</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 07:27</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">tray</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -145,7 +145,7 @@
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（9891c030 引入时是否有调用点、后被哪次改动移除未查; 已排除: 测试替身遮蔽 —— 事实来自生产代码 grep, 与测试无关）</div>
+    <div class="callout">已定位（2026-10-05 考古）: 函数在引入提交 9891c030 当时就<b>生而零调用</b> —— git show 9891c030:src/auto_qb/ui.py 中仅有定义(:135)无任何 caller, 提交信息里「AUMID(首窗口前设置)」作为任务栏图标最终方案的一环被写进了文档与测试, 但装配调用从未落进生产代码; 此后 b459a26d(ui.py 归拢为 tray/ 包)等迁移均原样搬运, 未补调用点。已排除: 测试替身遮蔽(事实来自生产代码 grep)与「后被某次改动移除」(引入时即无)。</div>
   </section>
 
   <section id="s6">
@@ -158,11 +158,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 07:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-05 — 认领并实施（建议修法①补调用点），状态 <strong>Done</strong>（根因考古 / 实际修法 / 测试数字见「复验」「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-05 仍复现 —— grep _set_windows_appid 全仓, 生产侧仅 src/auto_qb/tray/app.py:129 定义一处, 调用点仍只有 tests/test_tray.py; 认领后按建议修法①实施, 状态转 Done。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（建议修法三选一中实施①, ③「先实测再定」不再必要 —— 2203 的五轮失败与四轮对照诊断在新事实下自洽: 五轮中的 AUMID 走注册表/lnk, 是 toast 来源身份注册, 不改变当前进程的 AUMID; 进程级 SetCurrentProcessExplicitAppUserModelID 从未在生产执行, 任务栏恒 python 恰是四轮诊断「无 AUMID 恒 python 图标」的预言）:
+      TrayUi.__init__ 在 _build_window(首个窗口)之前调用 _set_windows_appid(); 不导出进 tray/__init__.py(调用点在包内, 无外部 caller 需求)。</p>
+    <p><b>测试同步</b>(tests/test_tray.py): 新增 test_trayui_init_sets_appid_before_first_window —— 替身 _set_windows_appid/_build_window/_build_tray 记录时序, 钉死「AUMID 先于首窗口」防调用点再丢失; 文件头测试计划清单同步。</p>
+    <p><b>验证方式与数字</b>: commands run test.full 全绿 —— 2541 passed / 4 skipped / 29.43s, 覆盖率 99%(14871 语句 / 152 miss / 113 partial 分支)。边界: AUMID 生效后任务栏按钮是否恢复 orbit 属真机视觉行为(替身覆盖不到), 由关联单 26-10-01-2203 跟踪确认。</p>
   </section>
 
   <footer>

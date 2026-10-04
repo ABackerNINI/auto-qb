@@ -168,6 +168,10 @@ class TrayUi:
         self._paused = False  # 托盘勾选态缓存(权威来源为 pause_event, 轮询时同步)
         self._started = time.time()
         self._manager_thread = None
+        # AUMID 必须在首个窗口创建前设置(core-domain.md 四轮实测: 无显式 AUMID 时 Windows
+        # 任务栏按钮恒为 python.exe 默认图标, iconbitmap 救不了); 此前该函数自 9891c030 引入起
+        # 生产零调用点(issue 26-10-02-0727), 26-10-01-2203 排查中的 AUMID 组合从未真正生效。
+        _set_windows_appid()
         self._build_window()
         self._build_tray()
 
