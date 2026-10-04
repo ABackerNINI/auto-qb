@@ -72,7 +72,7 @@
 - test_tail_zero_partial_reset: 页尾部分到期行 -> 跨页累计重新起算
 - test_process_rows_unit_identity_paths: 行处理单元: 永久层继承 / 换 tid 重列接管 / 命中撤销放行 / 同 hash 旧条目退役
 - test_run_downloads_unit_paths: 下载单元: 待回填缺行 / 已有身份跳过 / 永久层回填命中与不命中 / 预算止步
-- test_download_invalid_blob_counted_as_fail: .torrent 内容非法 -> 计种子失败不外抛
+- test_download_invalid_blob_counted_as_fail: .torrent 内容非法 -> 计种子失败不外抛, fail.last_ts 记注入时钟(26-10-02-0526 时钟收编守阵)
 - test_readonly_degradation_noted_in_result: 锁自检失败(只读退化) -> 波照跑但不写盘, reason 注明
 - test_persist_false_reports_readonly_mode: 只读走查(persist=False)不写盘且 reason 注明「只读模式」
 - test_lane_summary_and_prune_and_position_units: 波次纯函数单元: 档位摘要 / 陈旧淘汰(模块级单点, 含恒 0 存量不淘汰) / 位置覆盖 / 缺席证明 / 下载反查
@@ -1914,6 +1914,7 @@ def test_download_invalid_blob_counted_as_fail(tmp_path):
     assert result.torrents_failed == 3 and result.torrents_fetched == 0
     data, _ = service.store(SITE).read_unlocked()
     assert data.fails[11].count == 3
+    assert data.fails[11].last_ts == clock.now, "fail.last_ts 必须来自注入时钟, 不直调 time.time()"
     assert data.index[11].infohash_v1 == "", "身份未回填"
 
 
@@ -2177,7 +2178,7 @@ def test_freeze_and_observation_guards(tmp_path):
         "B": HrLaneState(lane="B", status="ok", full_depth=True),
         "C": HrLaneState(lane="C", status="ok", full_depth=True),
     }
-    assert HrRefreshService._advance_observation(data, not_covered, wave) == 0
+    assert HrRefreshService._advance_observation(data, not_covered, wave, 1.0) == 0
     assert obs.missing_streak == 0 and obs.active
     # 观察期出口但身份缺位(hash 为空) -> 计数出口, 不落放行记录
     obs.missing_streak = 1
@@ -2186,8 +2187,15 @@ def test_freeze_and_observation_guards(tmp_path):
         "B": HrLaneState(lane="B", status="ok", full_depth=True),
         "C": HrLaneState(lane="C", status="ok", full_depth=True),
     }
-    exits = HrRefreshService._advance_observation(data, covered, wave)
+    exits = HrRefreshService._advance_observation(data, covered, wave, 1.0)
     assert exits == 1 and data.index[31].active is False and data.verified == {}
+    # 出口带身份 -> 落放行记录, verified_ts 取注入 now(issue 26-10-02-0526 时钟收编: 不直调 time.time())
+    obs2 = HrEntry(tid=32, name="a-row2", lane=LANE_SCOPE, done_iso="2026-09-01T10:00:00")
+    obs2.infohash_v1 = "HL-OBS"
+    obs2.missing_streak = 1
+    data.index[32] = obs2
+    exits = HrRefreshService._advance_observation(data, covered, wave, 1234.5)
+    assert exits == 1 and data.verified["HL-OBS"].verified_ts == 1234.5
 
 
 # ---------------- 拉取历史记录点(计划 26-10-04-0312 §3.3, S2) ----------------

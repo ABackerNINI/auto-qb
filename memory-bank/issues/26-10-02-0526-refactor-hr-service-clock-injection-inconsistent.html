@@ -8,9 +8,10 @@
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="hr-service-clock-injection-inconsistent">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="hr/service.py 多处直调 time.time() 与 now_fn 注入不一致, 假时钟测试不可控">
 <meta name="issue-summary" content="hr/service.py 两处直调 time.time()(fail.last_ts / _advance_observation)绕过 now_fn 注入, 假时钟下行为不可控; 26-10-02 _merge_seen 收编时仅处理同函数一处">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-05-0232-hr-clock-injection.md, memory-bank/activeContext/26-10-05-0232-hr-clock-injection.md">
 <title>hr/service.py 多处直调 time.time() 与 now_fn 注入不一致, 假时钟测试不可控 · refactor · 计划外问题（便签）</title>
 <style>
   :root {
@@ -68,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0526-refactor-hr-service-clock-injection-inconsistent</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 05:26</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 05:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-05 02:24 — 用户指派认领，状态 <strong>Open → In Progress</strong>。复验（基线 4f9f1f09）仍复现：grep 全文件直调点两处，行号漂移 :956→:1013（<code>_note_dl_fail</code> 内 <code>fail.last_ts</code>）、:1152→:1268（<code>_advance_observation</code> 内 <code>now =</code>）；:344 <code>now_fn=time.time</code> 为注入默认值不收编</li>
+      <li>2026-10-05 02:32 — 修复完成，状态 <strong>In Progress → Done</strong>。实际修法（与 §03 建议一致）: 按 <code>_merge_seen</code> 同款收编 —— <code>_note_dl_fail</code> / <code>_advance_observation</code> 两个 staticmethod 增 <code>now: float</code> 参数，调用方传 <code>self._now()</code>（下载失败记账点各取当下；观察期复用 <code>_finish_wave</code> 已算的 now，放行 <code>verified_ts</code> 与波次收尾时刻对齐），生产行为不变。守阵: <code>test_download_invalid_blob_counted_as_fail</code> 钉 <code>fail.last_ts ==</code> 注入时钟 + <code>test_freeze_and_observation_guards</code> 钉出口 <code>verified_ts ==</code> 注入 now。红验: 探针临时改回墙钟，两条新断言全红（1791138444.x ≠ 1700000000.0 / 1234.5），恢复后 test_hr_service.py 84 passed。实测: <code>test.full</code> 2540 passed + 4 skipped / 99% / 36.39s+27.69s（基线切片 <a href="../testing/baselines/26-10-05-0232-hr-clock-injection.md">26-10-05-0232</a>）</li>
     </ul>
   </section>
 

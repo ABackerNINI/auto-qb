@@ -974,7 +974,7 @@ class HrRefreshService:
                     # 站点明确指令等待: 与页面同口径上抛波级落 retry_after_until 让位 ——
                     # 计成「种子失败」会把站点限速伪装成种子坏了, 且指令不会落盘。
                     raise
-                self._note_dl_fail(data, tid)
+                self._note_dl_fail(data, tid, self._now())
                 result.torrents_failed += 1
                 self._persist_step(session)
                 logger.warning(f"HR 站点 {site} | tid={tid} 取 .torrent 失败({data.fails[tid].count} 次): {e}")
@@ -982,7 +982,7 @@ class HrRefreshService:
             try:
                 v1, v2, info = compute_infohashes(blob)
             except ValueError as e:
-                self._note_dl_fail(data, tid)
+                self._note_dl_fail(data, tid, self._now())
                 result.torrents_failed += 1
                 self._persist_step(session)
                 logger.warning(f"HR 站点 {site} | tid={tid} 返回内容不是合法 .torrent: {e}")
@@ -1007,10 +1007,10 @@ class HrRefreshService:
             self._persist_step(session)
 
     @staticmethod
-    def _note_dl_fail(data: HrSiteData, tid: int) -> None:
+    def _note_dl_fail(data: HrSiteData, tid: int, now: float) -> None:
         fail = data.fails.setdefault(tid, HrDlFail(tid=tid))
         fail.count += 1
-        fail.last_ts = time.time()
+        fail.last_ts = now
 
     def _persist_step(self, session) -> None:
         """增量落盘的统一口(只在正式口径下写; 走查 persist=False 不落盘)。"""
@@ -1091,7 +1091,7 @@ class HrRefreshService:
         now = self._now()
         self._merge_seen(data, wave, now)
         # ---- 观察期推进(§3.4): 没看到不终结「考察中」; 出口要自身位置被覆盖 ----
-        exits = self._advance_observation(data, lane_states, wave)
+        exits = self._advance_observation(data, lane_states, wave, now)
         # ---- 证据防伪(§5.3): 流转守恒 + 零行戳。骤降保护已按 26-09-29 裁决移除: A 只流向
         #      B/C/D, 守恒直接盯 A 档正证据, 总量变化不构成漏 HR 面; 而基线是高水位不回落,
         #      站点合法清账后会把批量签发永久冻死(误触面)。 ----
@@ -1258,14 +1258,13 @@ class HrRefreshService:
         return frozen
 
     @staticmethod
-    def _advance_observation(data: HrSiteData, lane_states, wave: _WaveContext) -> int:
+    def _advance_observation(data: HrSiteData, lane_states, wave: _WaveContext, now: float) -> int:
         """失踪观察期状态机(§3.4): 上波命中考察中、本波未重见的种子:
         - 本波重见(已在行处理清零 streak) → 按档位定论;
         - 未重见且自身位置被本波覆盖(每档都证明) → streak + 1;
           连续 MISSING_GRACE_WAVES 波 ⇒ 判「移出」放行(条目退役 + 放行记录);
         - 位置未被覆盖 → streak 冻结(维持管束)。与批量防伪解耦(22:38 定稿)。"""
         exits = 0
-        now = time.time()
         for tid, entry in data.index.items():
             if entry.lane != LANE_SCOPE or not entry.active or tid in wave.seen:
                 continue
