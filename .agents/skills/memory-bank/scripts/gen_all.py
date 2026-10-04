@@ -167,9 +167,12 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 0
 
+    # ❗newline="\n" 必须显式给: write_text 的 newline 默认 None ⇒ 按 os.linesep 翻换行, Windows 上把
+    #   `\n` 写成 CRLF —— 生成物落进仓库就是一批"纯行尾噪音"的 modified(坑档 pitfalls/git/editing-traps.md)。
+    #   本脚本的立身前提是"生成器是纯函数、不读环境", 落盘这一下读 os.linesep 就把前提破坏了。
     for path, want in outputs.items():
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(want, encoding="utf-8")
+        path.write_text(want, encoding="utf-8", newline="\n")
     print(f"已生成 {len(outputs)} 个生成物")
     return 0
 

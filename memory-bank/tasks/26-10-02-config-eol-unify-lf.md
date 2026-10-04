@@ -2,9 +2,11 @@
 
 **Status:** In Progress
 **Added:** 2026-10-02
-**Updated:** 2026-10-02
+**Updated:** 2026-10-04
 **Topics:** config-eol-unify-lf
-**Summary:** CRLF 反复引发事故(编辑工具匹配失败 / `\r\r\n` 双重转换 / 行尾幽灵 M 挡同步 / cap 计数虚高), 根因 = 系统级 core.autocrlf=true 且仓库无 .gitattributes。层1(.gitattributes `* text=auto eol=lf` + .editorconfig)与层2(renormalize 归一 LICENSE、memory-bank/pitfalls.md 两个 CRLF blob, --ignore-cr-at-eol 全空=纯行尾)已落地; 全局 core.autocrlf 改 input(用户级压过系统级 true)。层3(存量工作区约 2189 文件一次性转 LF + 各 clone 刷新)用户指示暂缓。
+**Summary:** CRLF 反复引发事故(编辑工具匹配失败 / `\r\r\n` 双重转换 / 行尾幽灵 M 挡同步 / cap 计数虚高), 根因 = 系统级 core.autocrlf=true 且仓库无 .gitattributes。层1(.gitattributes `* text=auto eol=lf` + .editorconfig)与层2(renormalize 归一 LICENSE、memory-bank/pitfalls.md 两个 CRLF blob, --ignore-cr-at-eol 全空=纯行尾)已落地; 全局 core.autocrlf 改 input(用户级压过系统级 true)。层3(存量工作区约 2189 文件一次性转 LF + 各 clone 刷新)用户指示暂缓。2026-10-04 兑现坑档记的"未决改造": 5 处生成器写盘一律显式 `newline="\n"`(kb.index 不再产出 CRLF 生成物), 守阵 `test_generated_indexes_are_lf_only`。
+
+**Refs:** memory-bank/testing/baselines/26-10-04-1759-kb-index-lf.md
 
 ## 原始请求
 
@@ -36,8 +38,10 @@
 | 全局 core.autocrlf=input | Done |
 | 层3 本 clone 工作区转 LF | Open(用户指示暂缓) |
 | 层3 其它 clone 刷新 | Open(跨仓库红线, 各 clone 会话自行执行) |
+| 生成器按字节写 LF(kb.index 行尾噪音根治) | Done |
 
 ## 进度日志
 
 - 2026-10-02: 分析轮(只读)产出四层方案; 执行轮落地层 1/2/4 + 全局配置, 层3 暂缓。
 - 2026-10-02: `ship.commit` 首跑撞 sync 固有窗口(远端被并行 clone 推进至 a6b5b5b0, 纯文档), 按 `cp -a .git` 备份 → `stash push -u` → sync → pop 预案化解(无冲突), 重跑提交成功 b857cfdc; 已在 sync-pull.md 登记复发 +1。
+- 2026-10-04: 另一会话报"kb.index 顺带产出纯 CRLF 行尾噪音的 `_index.md`", 兑现坑档 `pitfalls/git/editing-traps.md` 里标为"未决改造"的根治项 —— 5 处生成器写盘点(gen_all / gen_kb_index / gen_tasks_index / gen_docs_index / create-issue 的 gen_issues_index)从 `write_text(..., encoding="utf-8")` 改为显式 `newline="\n"`(默认 `newline=None` 会按 `os.linesep` 在 Windows 落 CRLF)。新增守阵 `test_generated_indexes_are_lf_only`(先红后绿); 20 个生成物重建后逐字节无 CR, 且 `git diff` 对它们零内容差异。层3(存量手写文件)仍暂缓。

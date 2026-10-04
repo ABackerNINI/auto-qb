@@ -127,7 +127,9 @@ def main() -> int:
         return 0
 
     for index, rendered in targets.items():
-        index.write_text(rendered, encoding="utf-8")
+        # newline="\n": 生成物一律 LF —— write_text 默认按 os.linesep 翻换行, Windows 上会写成 CRLF
+        # (纯行尾噪音, 见 pitfalls/git/editing-traps.md)。守阵 test_generated_indexes_are_lf_only。
+        index.write_text(rendered, encoding="utf-8", newline="\n")
     print(f"已生成 {len(targets)} 个索引" + (f" (--dir {args.dir})" if args.dir else ""))
     return 0
 

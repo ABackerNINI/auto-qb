@@ -45,6 +45,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_gen_all_declares_exactly_all_indexes: gen_all.py 的产出集合 == 库内全部 `_index.md`(生成物全集单点)
 - test_gen_all_check_is_green: gen_all.py `--check` 在当前库上绿 (磁盘 == 生成结果)
 - test_gen_all_list_matches_outputs: `--list` 声明的路径集合 == collect() 实际产出 (白名单不得多/少)
+- test_generated_indexes_are_lf_only: 生成物字节里无 CR —— 生成器 `write_text` 显式 `newline="\n"`, 防 Windows 上按 os.linesep 落成 CRLF 的"纯行尾噪音"
 - test_gen_cmd_hints_name_real_tasks: 生成物的"怎么重建"提示必须指向真能重建它的命令(`gen_cmd` 按脚本查表 + `kb.index` 覆盖面 ⊇ 闸门判红的生成物集合, 经 gen_all.py 单点收编后按声明核对; 2026-09-24 `_doc-map.md` 报错文案指错命令的机检)
 """
 
@@ -584,6 +585,24 @@ def test_gen_all_list_matches_outputs(capsys) -> None:
     assert gen_all.main(["--list"]) == 0
     listed = {ROOT / line for line in capsys.readouterr().out.splitlines() if line.strip()}
     assert listed == set(gen_all.collect(ROOT, MB))
+
+
+def test_generated_indexes_are_lf_only() -> None:
+    """生成物一律 LF 行尾 (2026-10-04) —— `Path.write_text` 的 `newline` 默认 `None` ⇒ 按 `os.linesep`
+    翻换行, Windows 上把 `\n` 写成 CRLF, 于是 `kb.index` 顺带产出一批"纯行尾噪音"的 modified
+    (坑档 pitfalls/git/editing-traps.md; 根因属该条记的"未决改造")。
+
+    这里逐**字节**断言无 CR —— 用 `read_text` 会把 CRLF 折成 LF, 正好是这条缺陷能逃过既有
+    `test_gen_all_check_is_green` / `kb.check` 的原因(它们对行尾不敏感)。文件集合取
+    `gen_all.collect()` 的键(生成物单点), 不另抄一份清单。
+    """
+    gen_all = _gen_all()
+    offenders = sorted(
+        p.relative_to(ROOT).as_posix() for p in gen_all.collect(ROOT, MB) if p.exists() and b"\r" in p.read_bytes()
+    )
+    assert not offenders, (
+        "这些生成物含 CR 字节(应为纯 LF), 请运行 `commands run kb.index` 重建:\n" + "\n".join(f"  {rel}" for rel in offenders)
+    )
 
 
 def test_gen_cmd_hints_name_real_tasks() -> None:

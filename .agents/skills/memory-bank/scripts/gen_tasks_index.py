@@ -133,7 +133,9 @@ def main() -> int:
             return 1
         return 0
 
-    index.write_text(rendered, encoding="utf-8")
+    # newline="\n": 生成物一律 LF —— write_text 默认按 os.linesep 翻换行, Windows 上会写成 CRLF
+    # (纯行尾噪音, 见 pitfalls/git/editing-traps.md)。守阵 test_generated_indexes_are_lf_only。
+    index.write_text(rendered, encoding="utf-8", newline="\n")
     print(f"已生成 {index.relative_to(root)}")
     return 0
 

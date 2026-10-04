@@ -1,7 +1,7 @@
 # 编辑与工具陷阱 (git / 文本)
 
 > 摘要: 工具 shell 里改文件的多类静默事故 —— 编辑器挂死、行尾被归一、文本模式写回双重换行(`\r\r\n`)、编码写坏、多行替换错位、同文件多次 Edit、edit 工具 CRLF 匹配、PowerShell 引号剥除 (旧"stash 毁库"条已随拦截层修复解除)。2026-10-02 起仓库 .gitattributes 统一 LF, 行尾类条目适用范围收窄(见首节)。
-> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 双重换行, write_text, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠
+> 触发: git stash, GIT_EDITOR, 改文件, 行尾, CRLF, LF, 双重换行, write_text, 编码, 乱码, 多行替换, Edit, junction, oldText, python -c, 引号, 控制字符, 转义被吃, Windows 路径, 反斜杠, 幽灵 M, stat 缓存
 
 ### 2026-10-02 起仓库统一 LF: 行尾类条目适用范围收窄
 
@@ -15,8 +15,17 @@
 - **判别**: 一批 `_index.md` 被标记 modified, 但 `git diff` **返回 0**(clean filter 把两侧都归一成 LF ⇒ 无内容差异);
   `git ls-files --eol` 显 `i/lf w/crlf`, 而工作区其余文件是 `w/lf`(2026-10-02 起 `.gitattributes` `eol=lf`)。
   实测 2026-10-03: `kb.index` 后 9 个 `_index.md` 变 `w/crlf`。**这不是索引内容漂移** —— 别据此判断生成物变了。
-- **处置**: `git checkout -- <那批文件>` 归一回 LF(内容零差异, 安全); 提交侧 clean filter 本就会归一, 不归也
-  **不进 commit**(blob 不变)。根治要生成器按字节写(`write_text(..., newline="")` / `write_bytes`)—— 属未决改造, 未做。
+  2026-10-04 根治后 `kb.index` 不再复现(处置①); 本条保留给存量**手写**文件与其它未登记的文本模式写盘点。
+- **处置**: ①**根治已落地 (2026-10-04)**: 5 处生成器写盘点(`gen_all.py` / `gen_kb_index.py` / `gen_tasks_index.py` /
+  `gen_docs_index.py` / create-issue 的 `gen_issues_index.py`)一律显式 `write_text(..., newline="\n")` —— 原先吃
+  `newline=None` 的默认值, 落盘时按 `os.linesep` 翻换行, Windows 上就是 CRLF。守阵
+  `tests/test_memory_bank.py::test_generated_indexes_are_lf_only`(逐字节断言生成物无 CR; `--check` 用 `read_text`
+  会把 CRLF 折成 LF, 对行尾不敏感, 所以这条缺陷此前能一路绿灯)。
+  ②存量工作区(层3 未做)里**手写**文件仍可能是 CRLF, 归一只需 `git checkout -- <那批文件>`(内容零差异, 安全);
+  提交侧 clean filter 本就会归一, 不归也**不进 commit**(blob 不变)。
+  ③⚠ 生成物由 CRLF 改写成 LF 后, 若索引 stat 缓存还记着旧(CRLF)尺寸, `git status` 会报一批**幽灵 M** ——
+  `git diff` / `git diff-files` 内容比对均为 0, `git update-index --refresh` 也刷不掉; 跑一次
+  `git add -- <那批文件>` 刷新 stat 即净(内容与索引恒等 ⇒ 不产生任何暂存条目)。
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 
