@@ -116,10 +116,18 @@
     display: inline-block; font-size: 10.5px; font-family: var(--disp); letter-spacing: .05em;
     padding: 1px 7px; border-radius: 8px; border: 1px solid var(--hair-2); color: var(--dim); white-space: nowrap;
   }
-  .chip.st-Open { border-color: rgba(86,200,215,.4); background: var(--cyan-soft); }
-  .chip.st-InProgress { border-color: rgba(226,165,90,.4); background: var(--amber-soft); }
-  .chip.st-Done { border-color: rgba(127,199,154,.35); background: var(--green-soft); }
-  .chip.st-Dropped, .chip.st-Superseded { border-color: var(--hair-2); background: transparent; }
+  /* 状态徽章: 底色 + 文字色都写在状态选择器上。
+     ⚠ 文字色必须落在这里 —— 与 .chip 同特异性 (0,1,0), 而 .chip{color:var(--dim)} 在文档里更靠后,
+       只靠上面 .st-* 那条会被它盖掉 (2026-10-05 实测: 五个状态 chip 文字全掉成 --dim 灰, 状态色白给)。
+     底色分三层, 台账 chip 与控制台 rs 同一套: Open / In Progress 实底(待关注) > Done 弱绿底(已收口)
+       > Dropped / Superseded 无底(出局)。
+     ⚠ Open(cyan) 与 Done(绿) 的令牌同亮度, 同样 12% 透明度时实测底色 #16272b / #1b2624 肉眼不可分 ——
+       光换色相没用, 必须同时拉开**明度**与**底/边/字三条通道**; 反之 Done 压得太暗又会与无底的
+       Dropped / Superseded 撞车, 所以 Done 取中间档 (.14), 靠"有底 vs 无底"与出局态分开。 */
+  .chip.st-Open { color: var(--cyan); border-color: rgba(86,200,215,.55); background: rgba(86,200,215,.24); }
+  .chip.st-InProgress { color: var(--amber); border-color: rgba(226,165,90,.5); background: rgba(226,165,90,.16); }
+  .chip.st-Done { color: var(--green-dim); border-color: rgba(127,199,154,.3); background: rgba(127,199,154,.14); }
+  .chip.st-Dropped, .chip.st-Superseded { color: var(--mut); border-color: var(--hair-2); background: transparent; }
   .fbadge {
     display: inline-block; font-family: var(--disp); font-size: 10px; letter-spacing: .1em;
     padding: 1px 0; width: 100%; text-align: center; border-radius: 2px;
@@ -350,10 +358,11 @@
   .row.open { border-color: var(--hair-2); }
   .rf { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; padding: 2px 7px; border: 1px solid var(--hair-2); flex: none; }
   .rs { font-family: var(--mono); font-size: 9.5px; padding: 2px 7px; flex: none; letter-spacing: .06em; border-radius: 2px; }
-  .rs.st-Open { background: var(--cyan-soft); }
-  .rs.st-InProgress { background: var(--amber-soft); }
-  .rs.st-Done { background: var(--green-soft); }
-  .rs.st-Dropped, .rs.st-Superseded { background: rgba(118,130,141,.12); }
+  /* 控制台状态条: 与台账 chip 同一套三层底色 (文字色由 .st-* 给, 这里只定底)。 */
+  .rs.st-Open { background: rgba(86,200,215,.24); }
+  .rs.st-InProgress { background: rgba(226,165,90,.16); }
+  .rs.st-Done { background: rgba(127,199,154,.14); }
+  .rs.st-Dropped, .rs.st-Superseded { background: transparent; }
   .row-head .rstamp { font-family: var(--mono); font-size: 10px; color: var(--faint); flex: none; }
   .row-head .rtitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
   .row-head .rchain { font-family: var(--mono); font-size: 9.5px; color: var(--faint); flex: none; }

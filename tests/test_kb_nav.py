@@ -16,6 +16,10 @@
    绝不读写 —— 否则 30s 轮询会把用户改的筛选洗掉 (与 pin 同源)。还原须对 schema 校验 (见
    pitfalls/web-ui/ui-location-persist.md), 且已知状态先并入 statusSeeded 台账, 否则刷新后首轮
    derive() 会把用户取消过的已知状态又加回来 (与 3' 同一根因)。
+3'''. **状态色可读**: 状态徽章底色 + 文字色必须一眼可分 (2026-10-05 用户报「open/done 状态底色相近」)。
+   两个坑: ①`.chip{color:var(--dim)}` 与 `.chip.st-*` 同特异性且写在更靠后, 会把状态文字色整个盖掉
+   (改前实测五个状态 chip 文字全是 --dim 灰); ②cyan / green 两个令牌亮度几乎相同, 同透明度时底色
+   实测 #16272b vs #1b2624 肉眼不可分 —— 光换色相没用, 必须靠**明度 (alpha)** 拉开。
 
 另守一条**单点不回归**: nav_data 只许在 collect() 条目上做加法 enrich, 不许改
 gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 (计划 §01 拍板: 消费方零变动)。
@@ -34,6 +38,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_shell_is_dark: 壳含 color-scheme: dark
 - test_shell_no_external_resources: 壳无 http(s) 外链 src/href 资源引用 (属性锚定, 注释/文案不受影响)
 - test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 标题 专题 链 (表头与共用行模板 ledgerCells 同步)
+- test_status_badge_colors_distinguishable: 状态徽章文字色写在 .chip.st-* 上 (不被同特异性的 .chip --dim 盖掉) + Open/Done 底色 alpha 必须不同 (同亮度令牌只能靠明度拉开) + 控制台 .rs 与台账同口径 + 出局态无底
 - test_status_filter_not_reseeded_every_poll: derive() 对状态候选只自动入选一次 (statusSeeded 闸门在前), 30s 轮询不得盖回用户取消的选择
 - test_shell_has_filter_persistence: 筛选器持久化骨架 (FILTERS_KEY + 存/读/还原三函数 + boot 装载一次 + 输入框/下拉回填初值)
 - test_filter_state_not_reseeded_on_poll: derive() 不得读写筛选器持久化 (与 pin 同源: 轮询不得洗掉用户筛选)
@@ -235,6 +240,51 @@ def test_ledger_status_column_between_form_and_title() -> None:
     assert row, "行模板 (ledgerCells) 不见了? 渲染方式变了要同步本守阵"
     cells = re.findall(r'<td class="([a-z-]+)"', row.group(1))
     assert cells == ["idx", "stamp", "formc", "statc", "title-cell", "topic", "refs"], f"行模板列序漂移: {cells}"
+
+
+def test_status_badge_colors_distinguishable() -> None:
+    """状态徽章 (台账 .chip.st-* / 控制台 .rs.st-*) 的底色与文字色必须一眼可分 ——
+    2026-10-05 用户报「open/done 状态底色相近, 需要优化」。两条红线:
+
+    1. **文字色必须落在 `.chip.st-*` 上**: 它与 `.chip { color: var(--dim) }` 同特异性 (0,1,0),
+       而后者在壳里写得更靠后 —— 只靠 `.st-*` 那条会被盖掉 (改前实测五个状态 chip 文字全成
+       --dim 灰, 状态色白给, 与 pitfalls/web-ui/layout-css.md「例外色别靠书写顺序赢」同源)。
+    2. **Open 与 Done 的底色不能同透明度**: cyan / green 两个令牌亮度几乎相同, 同样 12% 时实测
+       底色 #16272b vs #1b2624, 肉眼不可分 —— 只换色相没用, 必须靠明度 (alpha) 拉开;
+       方向固定: Open (待关注) 比 Done (已收口) 实, Done 比出局态 (无底) 实。
+    """
+    text = SHELL.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", text, flags=re.S)  # 去掉注释, 免得注释里的示例选择器被当成规则
+
+    def rule(sel: str) -> str:
+        m = re.search(re.escape(sel) + r"[^{}]*\{([^}]*)\}", css)
+        assert m, f"{sel} 规则不见了? 状态色搬家要同步本守阵"
+        return m.group(1)
+
+    def alpha(body: str) -> float | None:
+        m = re.search(r"background:\s*rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)", body)
+        return float(m.group(1)) if m else None
+
+    for st in ("Open", "InProgress", "Done"):
+        body = rule(f".chip.st-{st}")
+        assert "color:" in body, (f".chip.st-{st} 没写 color —— 会被同特异性的 .chip{{color:var(--dim)}} 盖掉, 状态色白给")
+        assert alpha(body) is not None, f".chip.st-{st} 的底色不是显式 rgba: {body!r}"
+
+    a_open, a_done = alpha(rule(".chip.st-Open")), alpha(rule(".chip.st-Done"))
+    assert a_open != a_done, (
+        f"Open / Done 底色用了同一个透明度 ({a_open}) —— cyan 与 green 令牌亮度几乎相同, "
+        "暗底上只换色相分不出来, 必须靠明度 (alpha) 拉开"
+    )
+    assert a_open > a_done, f"Open (待关注) 应比 Done (已收口) 更实: {a_open} vs {a_done}"
+
+    # 出局态一律无底, 靠文字色区分; 也保证 Done 的"有底"有对照物
+    for sel in (".chip.st-Dropped", ".rs.st-Dropped"):
+        assert "background: transparent" in rule(sel), f"{sel} 应为无底 (出局态)"
+
+    # 控制台状态条与台账 chip 同一套口径: 只定底, 透明度逐档对齐 (文字色由 .st-* 给)
+    for st in ("Open", "InProgress", "Done"):
+        assert alpha(rule(f".rs.st-{st}")) == alpha(rule(f".chip.st-{st}")
+                                                   ), (f"控制台 .rs.st-{st} 与台账 .chip.st-{st} 底色透明度不一致 —— 两视图状态口径必须同一套")
 
 
 def test_status_filter_not_reseeded_every_poll() -> None:
