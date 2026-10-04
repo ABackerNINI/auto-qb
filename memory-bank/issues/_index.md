@@ -67,7 +67,6 @@
 
 ## In Progress
 
-- [bug] [full-checking 轮询首跳误判已完成种子校验成功](26-10-03-1140-bug-ops-recheck-false-success.html) — ops poll 成功分支未要求 seen_checking, 已完成种子 recheck 提交后约 1s 被首跳误判「校验成功」; 规则源同路径会假晋升参考种子
 - [question] [兼容 Transmission 可行性分析](26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 
 ## Done
@@ -76,6 +75,7 @@
 - [chore] [test.keys-update 在 Windows 重生成基线写 CRLF, 与仓库 LF 规约冲突](26-10-04-0134-chore-keys-update-crlf.html) — test.keys-update 重生成 tests/fixtures/config_key_surface.txt 时 Windows 写出 CRLF(仓库 eol=lf), 每次重生成 diff 全文件换行噪音, 须手工归一才能过守卫
 - [bug] [添加种子三浮层互斥不对称: 路径面板收下拉, 下拉不收路径面板](26-10-04-0130-bug-webui-add-pop-mutex.html) — openAddPathPop 会收分类/标签下拉, 反向 openAddCatMenu/openAddTagMenu 不收 addPathPop, 切换字段时路径面板与下拉可同时悬着(面板还会盖住相邻字段的 label)
 - [bug] [复制按钮 _copyText 在 Vue 3.5 模板中解析失败](26-10-03-1412-bug-webui-copytext-underscore-method.html) — drawer/popovers 模板用 _ 前缀方法 @click, 真浏览器恒抛错, 两处复制钮失效
+- [bug] [full-checking 轮询首跳误判已完成种子校验成功](26-10-03-1140-bug-ops-recheck-false-success.html) — ops poll 成功分支未要求 seen_checking, 已完成种子 recheck 提交后约 1s 被首跳误判「校验成功」; 规则源同路径会假晋升参考种子
 - [bug] [gen_doc_map refs 解析只认英文逗号: 视觉分隔符多目标整串被当单一路径, 认领链守卫报「目标不存在」](26-10-03-0746-bug-kb-docmap-refs-separator.html) — refs 多目标用视觉分隔符(如「 · 」)时整串被 _split_refs 当成单一路径 → 认领链守卫报「目标不存在」; 解析只认英文逗号(gen_doc_map.py _split_refs), 格式约定只写在文件头 docstring 未进报错 —— P4 收尾回写实测撞见
 - [test] [ship.commit 闸门对双向认领链零覆盖: 纯文档轮绕过 pytest](26-10-03-0521-test-test-claim-chain-gate-coverage.html) — test.quick 闸门 match 只盯 src/tests, 纯文档轮不触发 pytest; 双向认领链唯一机检 test_claim_chain_is_bidirectional 只活在 pytest, gen_doc_map --check 只查 doc-topic 主键 —— 657366c3 由此带单向链入库卡死主线
 - [bug] [ui_harness --hr-site 启动即崩: HrIdentity 枚举 v3 漂移](26-10-02-1900-bug-ui-harness-hr-site.html) — scripts/ui_harness.py --hr-site 启动 AttributeError: 引用已不存在的 HrIdentity.VERIFIED_NON_HR(现行 v3 三态 HR/RELEASED/NO_EVIDENCE), 桩工具与 hr/resolve.py 漂移

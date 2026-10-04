@@ -17,7 +17,8 @@ recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本
 执行模型不变: 两个调用方都在主循环线程(WEB 命令线 drain + 规则任务线), 单一写线程约束
 原样成立。阻塞执行体 + 单一写线程是当前安全模型的一半 —— recheck/skip_check 必须留在
 主循环线程调用; 新来源(HR 联动 / 外部 API / 定时任务)接入 = 新增一个 source, 不复制操作
-语义、不开旁路。
+语义、不开旁路。新异步操作接入 = 新 source, 判定必须走证据门控(参照 recheck 的
+poll_verdict 范式, 见 memory-bank/pitfalls/backend/effect-confirmation.md)。
 
 依赖方向(单向, 防环): 本模块 -> rules 包**中性叶**(rules/checking_meta: 轮询常量与冷却
 helper)与 rules.base(ActionResult) —— 这是 ops 与 rules 之间唯一允许的 import 方向
