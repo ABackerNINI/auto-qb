@@ -16,6 +16,7 @@
 - test_exempt_seed_not_in_objects_passive_hit_managed: 超额种子(≥3×)不进对象集; 被动命中考察中仍转管束
 - test_local_satisfied_hit_scope_still_managed: 本地已达标 × 命中考察中 → 管束(网站绝对权威)
 - test_release_signed_on_full_coverage: 覆盖完整 + 防伪通过 → 未列出放行签发
+- test_verified_record_not_overwritten_on_rewave: 已放行未漂移跨波记录原样保留 —— 批量签发不覆写既有放行(issue 26-10-02-0526 端到端守阵, 终态不可逆)
 - test_freshness_gate_blocks_release: added_on 晚于本波取数 → 行 4(不签发放行)
 - test_zero_rows_no_release: 结构完好零行 → 不签发放行
 - test_zero_rows_confirmed_release: --hr-confirm-empty 后零行可签发; 非零行清除确认戳
@@ -77,7 +78,7 @@
 - test_lane_summary_and_prune_and_position_units: 波次纯函数单元: 档位摘要 / 陈旧淘汰(模块级单点, 含恒 0 存量不淘汰) / 位置覆盖 / 缺席证明 / 下载反查
 - test_merge_seen_refreshes_last_seen: 合并口刷新 last_seen(本波已见行=合并时刻, 未重见条目冻结在最后见到时刻) —— issue 26-10-01-2335 写入点, 详情表导出契约随点亮
 - test_index_retention_prune_revives: INDEX_RETENTION 复活链 —— 退役条目距 last_seen 超期被清理 / 活跃条目与观察期条目不误清 / 放行记录不随索引清理丢失 / 淘汰落盘
-- test_build_objects_unit_guards: 对象集现算单元: 空 hash / 非活跃条目 / 锚点漂移回炉
+- test_build_objects_unit_guards: 对象集现算单元: 空 hash / 非活跃条目 / 锚点漂移回炉 / 已放行未漂移不回对象集(issue 26-10-02-0526)
 - test_build_views_skips_disabled_and_channel_states: 视图构建跳过未启用站点; 通道状态 ok/silent/disabled 与无锁读
 - test_lane_fail_streak_alerts_error: 连续 3 波同档失效 -> ERROR 升级(只提示人, 不改行为)
 - test_worker_and_freeze_guards: 终态冻结的档位无效守卫 / 观察期位置未覆盖冻结 / 出口无 hash 不落记录
@@ -548,6 +549,26 @@ def test_release_signed_on_full_coverage(tmp_path):
     assert "h1" in data.verified
     assert data.verified["h1"].source == SOURCE_NOT_LISTED
     assert result.releases_signed >= 1
+
+
+def test_verified_record_not_overwritten_on_rewave(tmp_path):
+    """已放行未漂移跨波记录原样保留 —— 「批量签发整条覆写既有放行」不可达的端到端守阵
+    (issue 26-10-02-0526): _build_objects 对已 verified 未漂移的对象不出对象集,
+    _sign_releases 无从覆写(放行永续有效, 终态不可逆); 漂移(本机重下)才回炉重签。"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
+    run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    first = data.verified["h1"]
+    assert first.source == SOURCE_NOT_LISTED
+    # 次波同一锚点(未漂移): 记录逐字段原样, 零二次签发
+    clock.advance(13 * 3600)
+    result = run_wave(service, anchors)
+    data, _ = service.store(SITE).read_unlocked()
+    assert result.releases_signed == 0
+    assert data.verified["h1"] == first, "放行记录被整条覆写(终态不可逆被破坏)"
 
 
 def test_freshness_gate_blocks_release(tmp_path):
@@ -2014,7 +2035,7 @@ def test_mark_fetch_failed_and_seen_rows_units(tmp_path):
 
 
 def test_build_objects_unit_guards(tmp_path):
-    """对象集现算单元: 空 hash 键跳过 / 非活跃条目不绑定 / 锚点漂移把放行记录作废回炉"""
+    """对象集现算单元: 空 hash 键跳过 / 非活跃条目不绑定 / 锚点漂移把放行记录作废回炉 / 已放行未漂移不回对象集"""
     service = make_service(tmp_path, FakeFetcher(pages={}))
     # 空 hash 键: 直接跳过
     objects, observing, unmatched = service._build_objects(HrSiteData(), {"": HrAnchor(name="x")}, 100.0)
@@ -2043,6 +2064,20 @@ def test_build_objects_unit_guards(tmp_path):
     objects, observing, unmatched = service._build_objects(data, {"HG": rebought}, 100.0)
     assert "HG" not in data.verified, "漂移即作废放行"
     assert "HG" in unmatched, "回炉重新对账"
+    # 已 verified 且未漂移: 不出对象集 —— 「批量签发整条覆写既有放行」不可达的前提(issue 26-10-02-0526 守阵)
+    data.verified["HG"] = HrVerified(
+        infohash="HG",
+        tid=7,
+        verified_ts=1.0,
+        source=SOURCE_NOT_LISTED,
+        anchor_added_on=1,
+        anchor_downloaded=10,
+        anchor_completion_on=100,
+        anchor_progress=1.0,
+    )
+    objects, observing, unmatched = service._build_objects(data, {"HG": anchor}, 100.0)
+    assert data.verified["HG"].verified_ts == 1.0, "未漂移不作废放行"
+    assert "HG" not in objects and "HG" not in observing and "HG" not in unmatched, "已放行未漂移不回对象集"
 
 
 def _gconf_channel_off():
