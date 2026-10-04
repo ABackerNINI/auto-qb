@@ -61,6 +61,9 @@
 - test_recheck_fail_flushed_immediately: recheck 失败冷却计数即时落盘(防死循环闸门不因崩溃失效)
 - test_checking_group_wait_own_deleted_revives_origin: 组内等待中自身已删除 -> revive origin + 轮询消亡 (P2-a)
 - test_checking_group_wait_poll_error_revives_origin: 组内等待轮询异常 -> revive origin + 消亡 (P2-a)
+- test_is_piece_checking_excludes_resume_data: 全量校验态判定 —— 排除 qB 启动期简历校验 checkingResumeData(伪证据别名)
+- test_poll_verdict_line_by_line: 轮询单跳判定逐行表测(事故行: 无证据 progress=1.0 不得 SUCCESS)
+- test_poll_verdict_success_iff_seen_checking: 判定穷举性质(160 组合): SUCCESS 必有 seen_checking 背书
 """
 import json
 import os
@@ -75,6 +78,7 @@ from auto_qb.config import Config
 from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
 from auto_qb.rules.actions.full_checking import bump_recheck_fail, recheck_fail_count
+from auto_qb.rules.checking_meta import PieceCheckingStates, PollVerdict, is_piece_checking, poll_verdict
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
@@ -1677,3 +1681,59 @@ def test_checking_group_wait_poll_error_revives_origin():
         assert not any(t.kind == "check-wait" for t in mgr.task_queue._fast), "等待任务应消亡"
         assert tb in mgr.task_queue._fast, "origin 应被 revive 重入队"
         assert client.calls.count(("recheck", None)) == 1, "异常路径不得重复提交 recheck"
+
+
+# ============================================================
+# H. checking_meta 判定纯函数(plan 26-10-04-1824 S1): 不连真 qB, 纯函数直接导入测试
+# ============================================================
+def test_is_piece_checking_excludes_resume_data():
+    """测试: 全量校验态判定 —— checkingDL/checkingUP 为真; qB 启动期简历校验 checkingResumeData 与常见态全假"""
+    assert PieceCheckingStates == frozenset({"checkingDL", "checkingUP"}), "真全量校验态集合只有 checkingDL/checkingUP"
+    assert is_piece_checking("checkingDL") is True
+    assert is_piece_checking("checkingUP") is True
+    assert is_piece_checking("checkingResumeData") is False, "简历校验是启动期伪证据别名, 必须排除"
+    for st in (
+        "downloading", "uploading", "stalledDL", "stalledUP", "pausedDL", "pausedUP", "stoppedUP", "error",
+        "missingFiles", "queuedDL"
+    ):
+        assert is_piece_checking(st) is False, f"非校验态 {st} 不应判真"
+
+
+def test_poll_verdict_line_by_line():
+    """测试: 判定顺序语义逐行表测(期望值全显式); 含事故行(issue 26-10-03-1140)
+
+    事故行: 线上现状的成功分支 `if rec.progress >= 1.0: 成功` 对陈旧快照直接下结论 ——
+    seen=F, progress=1.0(=baseline) 被误判「校验成功」; 新语义钉为 WAITING/START_TIMEOUT。
+    """
+    # 事故行: 未见生效证据 + 陈旧快照 progress=1.0(=baseline): 未超宽限 -> WAITING, 超宽限 -> START_TIMEOUT
+    assert poll_verdict(seen_checking=False, progress=1.0, baseline_progress=1.0, elapsed=0.0) is PollVerdict.WAITING
+    assert poll_verdict(seen_checking=False, progress=1.0, baseline_progress=1.0, elapsed=599.0) is PollVerdict.WAITING
+    assert poll_verdict(
+        seen_checking=False, progress=1.0, baseline_progress=1.0, elapsed=600.0
+    ) is PollVerdict.START_TIMEOUT
+    # 生效已确认 -> 结果判定(不再看 baseline): 完成 SUCCESS / 未完成 FAILED
+    assert poll_verdict(seen_checking=True, progress=1.0, baseline_progress=1.0, elapsed=0.0) is PollVerdict.SUCCESS
+    assert poll_verdict(seen_checking=True, progress=0.97, baseline_progress=0.5, elapsed=0.0) is PollVerdict.FAILED
+    # 未见生效证据但 progress 回落(数据缺损签名): 超宽限与否都 FAILED(先于超时判定)
+    assert poll_verdict(seen_checking=False, progress=0.9, baseline_progress=1.0, elapsed=0.0) is PollVerdict.FAILED
+    assert poll_verdict(seen_checking=False, progress=0.9, baseline_progress=1.0, elapsed=1e6) is PollVerdict.FAILED
+    # progress==baseline 未超宽限: 歧义 -> 继续等
+    assert poll_verdict(seen_checking=False, progress=0.5, baseline_progress=0.5, elapsed=599.0) is PollVerdict.WAITING
+
+
+def test_poll_verdict_success_iff_seen_checking():
+    """测试: 穷举性质(全叉积 160 组合, 非抽样) —— SUCCESS 必有生效证据背书, 无证据成功不可表达
+
+    seen=True 时判定只由 progress 决定(progress>=1.0 则 SUCCESS, 与 baseline/elapsed 无关);
+    seen=False 时 SUCCESS 永不可达。
+    """
+    for seen in (False, True):
+        for progress in (0.0, 0.5, 0.999, 1.0, 1.5):
+            for baseline in (0.0, 0.5, 1.0, 1.2):
+                for elapsed in (0.0, 599.0, 600.0, 1e6):
+                    v = poll_verdict(seen_checking=seen, progress=progress, baseline_progress=baseline, elapsed=elapsed)
+                    ctx = f"seen={seen} progress={progress} baseline={baseline} elapsed={elapsed} -> {v}"
+                    if seen:
+                        assert (v is PollVerdict.SUCCESS) == (progress >= 1.0), f"生效后判定只由 progress 决定: {ctx}"
+                    else:
+                        assert v is not PollVerdict.SUCCESS, f"无生效证据不得 SUCCESS: {ctx}"
