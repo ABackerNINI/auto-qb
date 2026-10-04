@@ -12,16 +12,16 @@
  * failed=考核未通过(终态红档)**不在**此集合: 考核期已过、结果已成立, 删除无新增惩罚,
  * 点名「不能删」不符合实际(2026-09-25 用户修正)。warning=疑似辅种(黄档, 2026-09-30 计划
  * hr-trigger-semantics)**不在**此集合: 黄档警示「注意」不禁止删除, 与语义一致。
- * token 由后端 hr.resolve.safety_display 单点派生, 前端只集合比对; 两处消费(批量条风险计数 /
- * 确认框点名)必须同用本集合。 */
+ * token 由后端 hr.resolve.safety_display 单点派生, 前端只集合比对; 消费点 = 删除确认框的
+ * HR 风险点名(_hrRiskOf) —— 与删除链同一目标集合派生。 */
 const HR_NO_DELETE = new Set(["danger"]);
 
 window.AQB_DELETE = {
   methods: {
     /* DLG-02: 批量删除文案按选择构成计数(仅辅种=N 个辅种 / 仅种子=N 个种子)。
      * 用 _bulkTargets 的有效口径 —— 虚拟行(未归组命中)无真实组 key、按种子投递, 计入"种子"
-     * 而非"辅种", 保证批量条按钮/确认框标题/提交体三处一致; 空串 = 选中项均已失效。
-     * FX-12: 批量条直接渲染它 —— 计数随**权威选择**而非当前视图漂移
+     * 而非"辅种", 保证确认框标题/提交体/回执三处一致; 空串 = 选中项均已失效。
+     * 消费点 = bulkDelete(右键批量删除菜单项)的确认框标题; 计数随**权威选择**而非当前视图漂移
      * (在种子页看"N 个辅种"不变, 这正是"三视图打通"的直观体现)。
      * WARN: 方法名不得以 `_` 开头: Vue 模板编译器不解析下划线前缀标识符
      *   (会报 "_xxx is not defined" 且整块渲染失败 —— 2026-09-17 浏览器冒烟实测)。
@@ -32,20 +32,6 @@ window.AQB_DELETE = {
       if (groupKeys.length) parts.push(`${groupKeys.length} 个${L10N_GROUP}`);
       if (memberHashes.length) parts.push(`${memberHashes.length} 个种子`);
       return parts.join("、");
-    },
-    /* 批量条 HR 风险提示(P4, 2026-09-25): 选中目标里「不能删」(HR_NO_DELETE: danger,
-     * 后端算好)的种子数 —— 与删除链同一目标集合派生, 不按视图阵列另算; 无风险返回空串(不渲染) */
-    bulkHrWarnText() {
-      const { groupKeys, memberHashes } = this._bulkTargets();
-      if (!groupKeys.length && !memberHashes.length) return "";
-      const n = this._deleteMembers(groupKeys, memberHashes)
-        .filter((m) => HR_NO_DELETE.has(m.hr_safety)).length;
-      return n ? `含 ${n} 个不能删` : "";
-    },
-    /* 批量条删除按钮文案: 计数文本前缀"删除", 空选中退化为纯"删除" */
-    bulkDeleteLabel() {
-      const t = this.bulkCountText();
-      return t ? `删除 ${t}` : "删除";
     },
     async bulkDelete() {
       const { groupKeys, memberHashes } = this._bulkTargets();

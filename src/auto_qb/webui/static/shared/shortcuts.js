@@ -417,7 +417,7 @@ window.AQB_SHORTCUTS = {
       const inInput = !!(t && t.closest && t.closest("input, textarea, select, [contenteditable]"));
       if (!item) {
         // Delete 键是注册表**外**的"额外删除操作"(§08 决策 v4): 直连删除链(_kbDelete 内部走
-        // _deleteFlow 的确认框 + HR 风险点名, 与批量浮条同链), 不占键表槽位、不进面板改键列表。
+        // _deleteFlow 的确认框 + HR 风险点名, 与批量删除同链), 不占键表槽位、不进面板改键列表。
         // 上游 qB WebUI 习惯对齐(Delete 删除所选); Shift+Delete 同走确认框, 无"永久删"分支。
         if (!inInput && e.code === "Delete" && !e.ctrlKey && !e.altKey && !e.metaKey &&
             !this._kbOverlayBusy() && this._kbScope() === "list") {
@@ -821,7 +821,7 @@ window.AQB_SHORTCUTS = {
       }
       return this._actCore(action, { keys: t.groupKeys, hashes: t.memberHashes });
     },
-    /* 删除: 与批量浮条(bulkDelete)同一条 _deleteFlow 链(确认框 + HR 风险点名 + 汇报前置),
+    /* 删除: 与批量删除(bulkDelete)同一条 _deleteFlow 链(确认框 + HR 风险点名 + 汇报前置),
      * 键盘双入口之二(D8 默认键 Shift+D 与本 Delete 直连, 注册表外, §08 决策 v4)。 */
     async _kbDelete() {
       const t = this._kbTargets();
@@ -871,7 +871,7 @@ window.AQB_SHORTCUTS = {
     },
     _kbMeta() {
       if (this.selGroups.length || this.selMembers.length) {
-        this.openMetaDialog(null);  // 有选中传 null = 整个选中集合(与批量浮条同口径)
+        this.openMetaDialog(null);  // 有选中传 null = 整个选中集合(与批量动作同口径)
         return;
       }
       const c = this.kbCursor;

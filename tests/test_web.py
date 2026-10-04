@@ -172,7 +172,7 @@
 - test_frontend_hub_field_covers_non_leaf_items: 设置页 hub-field 模板必须显式覆盖 cfgFlatten 产出的**全部**非叶子项类型(section/group/subcard) —— 缺一支, 段项就落进叶子字段的兜底 `<input>`, 值被 String(对象) 成 "[object Object]"(2026-09-25 用户报)
 - test_frontend_hub_field_renders_readonly_fields: schema Field.readonly(程序托管字段, issue 26-09-28-2135)接线守阵 —— CE_FIELD_BASE 有 readonly/readonlyComplex/readonlySummary 三成员, 控件链首支是只读摘要分支、全部可编辑控件挂 :disabled、行带「程序维护」徽标、settings-detail 块级 section 开关对 readonly 段换徽标(缺一处 = 该类字段仍可编辑, 保存却被后端覆盖/回退, 反馈误导)
 - test_frontend_statusbar_speed_reads_server_totals: 静态防回潮 —— 前端 totalDl/totalUl 必须读 status.totals, 不得改回对 this.groups 求和
-- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/bulk-hr-warn/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
+- test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列 6 处换绑 hrDurClass/hrSrcClass + 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_hr_detail_table_wiring: HR 表① 全量详情表前端接线守阵(计划 26-10-01-2216 阶段2 + 26-10-02-1936 阶段3) —— 设置分区表① 模板绑定(档位 chips 本地过滤/已删除种子切换钮/明细行/空态/失踪行挂钩/「数据截至」时间戳/三列重组列名「核实结论」「在列」)+ 拍板守卫(remain_seconds 不进表、不挂 hr-pop、单元格无原生 title、表① 段无 <details>(排障视图在 aqb:hr-diag 独立段)、来源徽章类名 hr-vsrc 不复用已退役 hr-src)+ hr_status.js 按站点明细加载与本地筛选且无 setInterval(不轮询)+ .hr-detail-table 与档位色义四档/失踪行 --paused 弱化/来源徽章样式在三套 UI CSS 成对定义(prism 拆 components.css + views.css 两件)
 - test_frontend_hr_diag_view_wiring: HR 表② 排障视图前端接线守阵(计划 26-10-01-2216 阶段3) —— 站点卡片 <details> 默认收起(无 open 属性)/ summary 文案 / 站点级 kv 行(hrsKvRows)与各档波次明细行(lanes[].detail 首获展示位)模板绑定 + 展开态不持久化(hr_status.js 无 localStorage)+ .hrs-diag/.hr-diag-kv/.hr-wave-table 三套 UI CSS 成对(波次表同挂 .hr-detail-table 继承表① 徽章色义)
 - test_frontend_hr_full_modal_wiring: HR 站点状态折叠 + 覆盖式全屏弹窗守阵(计划 26-10-02-1936 阶段2) —— aqb:hr-full-modal 扫描锚段内遮罩/面板/头部(标题+摘要+✕)绑定齐全、有「展开/收起」钮且无独立「全屏」钮、面板无预展开属性(v-show 挂 hrsOpen); hrsOpen 默认 false(state.js)不持久化(hr_status.js/config_hub.js/state.js 无该键的 localStorage 写读); hubGo 不再自动拉数只复位 hrsOpen; ESC 关闭进 lifecycle 退栈链且同步 escBusy 名单(dialogs.js), 先于 1632 清筛选兜底; 首次展开才拉(hrsToggle 未 loaded 即调 loadHrStatus)、无 setInterval; .hr-full-mask/.hr-full-modal 三套 UI CSS 成对(prism 落 components.css)
@@ -180,8 +180,9 @@
 - test_frontend_hr_table_sort_filter_reorg_wiring: HR 表① 已删除种子过滤 + 三态排序 + 三列重组守阵(计划 26-10-02-1936 阶段3; 文案 26-10-03 定) —— 切换钮默认「显示已删除种子 (N)」且 oldOn 默认关(只看本地仍在列), 旧误导文案「未做种/只看做种中」零残留; 表头十列全 sortable(hrsCols() 单点 + @click hrsSetSort + sprite 箭头)而表② 波次表无 sortable; 三态状态机(首点降→再点升→第三击恢复后端默认序, 换列直接降序); 比较器纯函数 hrsCompareRows 用 node 真跑(空值恒末位两方向不反转/verified_ts·last_seen 0 哨兵/档位 A<B<C<D 固定秩/字符串数值分型), 无 node 静默跳过; 新列结构(核实结论徽章+副行 / 在列·失踪徽章+副行)与 CSS 三处成对(th.sortable 箭头 accent·hover faint / .hr-sub 副行 / .hr-pres 徽章 / 名称列限宽钩子 + .hr-full-modal 放开); 旧列辅助 hrsVerifiedText/hrsStatusText 零残留
 - test_frontend_hr_history_wiring: HR 表③ 拉取历史前端接线守阵(计划 26-10-04-0312 §3.5/§05 S4) —— aqb:hr-history 扫描锚 begin/end 成对且段内 <details> 默认收起 + summary 文案 + 站点 chips(hrsHistSiteChips 行内集合现算)+「仅看异常」toggle + 刷新钮 + 「数据截至」时间戳 + 十列表头(时间/站点/触发/结果/页数/行数/回填/放行/耗时/说明)+ 明细行 v-for 与展开明细子行(hr-hist-sub)+ 空态/未启用态文案 + read_errors 点名行; 取数纪律: 首次展开才 fetch(limit=300, @toggle -> hrsHistEnsureLoaded)+ 「刷新」手动重拉(hrsHistReload)+ 无 setInterval + 站点过滤纯前端本地筛不拼 site 查询串; 展开态不持久化(hr_status.js 代码态零 localStorage); .hr-hist-table/.hr-hist-row/.hr-hist-sub/.hr-hres 及五档色义(ok/warn/dim/err/blue)三套 UI CSS 成对
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
-- test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、双 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
-- test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 双 UI 成对(metaOpen 对话框 + 批量浮条/批量菜单/单种子菜单三处入口)、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 两套 CSS 成对定义
+- test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
+- test_frontend_bulk_bar_retired: 批量控制条退役守阵 —— 三套 UI 模板零残留(.bulk-inline/bulkAct(/bulkDeleteLabel(/bulkHrWarnText() 与三套 CSS 死样式零残留(.bulk-inline/.bulk-btn/.bulk-hr-warn/.bulk-sep/.bulk-count/.bulk-enter-*/.ico-select/@keyframes bulk-in), 批量链路 bulkAct/bulkDelete 仍在且 ctxAct/ctxDelete 复用
+- test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
 - test_api_state_status_carries_server_state: status.server(state)恒回传不受 rid 门控(状态栏与行数据同源同轮)
 - test_api_category_tag_endpoints: 分类/标签 CRUD 端点(入队与 400 校验)
 - test_category_tag_commands_execute: 分类/标签命令执行(QbApi 封装 + 缓存失效)
@@ -2113,7 +2114,7 @@ def test_frontend_hr_safety_wiring():
       弹窗单例 DOM(teleport body)每套 UI 恰一份(26-09-26-webui-hr-popup 起 :title 换成悬停弹窗触发);
       要求时长的渲染门只认「已做种非空 + 有要求」, 不得依赖 hr_triggered(2026-09-29 实报:
       未核/在线行被一并藏掉要求, 只剩孤立的来源芯片);
-    3. hr-unk / hr-fail / hr-line / bulk-hr-warn 新样式必须三套 CSS 成对定义(改这里时同步另一套的纪律);
+    3. hr-unk / hr-fail / hr-line 新样式必须三套 CSS 成对定义(改这里时同步另一套的纪律);
       hr-pop 弹窗规则(浮层/箭头/双轨)同理成对;
       整格线(在线)必须挂**文字包裹层** .dur-body 而不是单元格 .m-dur —— 行是 grid, 单元格被拉满整列宽,
       挂它上面 width:100% 的空 <i> 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报);
@@ -2199,7 +2200,6 @@ def test_frontend_hr_safety_wiring():
             ".m-pair.hr-warn",
             ".m-pair.hr-fail",
             ".m-dur .hr-line",
-            ".bulk-hr-warn",
             ".hr-pop",
             ".hp-arrow",
             ".hp-gauge",
@@ -3353,14 +3353,14 @@ def test_removed_redundant_tooltips_stay_removed():
         # D 组 · 抽屉关闭钮: ✕ 自明, Esc 快捷键在帮助浮层有正式清单
         ("shared/tpl/drawer.html", ("关闭(Esc)", "关闭（Esc）")),
         # E 组 · 对话框族关闭钮: 关闭钮的 ✕ 自明
-        ("shared/tpl/dialogs.html", ('title="关闭"',)),
-        ("shared/tpl/dialogs-mgr.html", ('title="关闭"',)),
-        ("shared/tpl/popovers.html", ('title="关闭"',)),
+        ("shared/tpl/dialogs.html", ('title="关闭"', )),
+        ("shared/tpl/dialogs-mgr.html", ('title="关闭"', )),
+        ("shared/tpl/popovers.html", ('title="关闭"', )),
         # F 组 · 曲线标题栏 caret: 箭头方向已表意
-        ("shared/tpl/settings-detail.html", ("点击收起",)),
-        ("shared/tpl/xtpl.html", ("点击收起",)),
+        ("shared/tpl/settings-detail.html", ("点击收起", )),
+        ("shared/tpl/xtpl.html", ("点击收起", )),
         # H1 · columns.js 列偏好提示横幅: 横幅整体可点 + 手型光标 + 15s 自毁
-        ("shared/columns.js", ("点击关闭",)),
+        ("shared/columns.js", ("点击关闭", )),
     )
     for rel, needles in checks:
         text = open(os.path.join(STATIC_ROOT, *rel.split("/")), encoding="utf-8").read()
@@ -3733,6 +3733,40 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
         assert "this.menu.visible = false" in body, f"{name} 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)"
 
 
+def test_frontend_bulk_bar_retired():
+    """批量控制条退役守阵(2026-10-05) —— 防回潮
+
+    用户拍板: 移除筛选行里"已选 N 个种子 · 开始/暂停/…"的批量控制条, 批量动作一律走
+    **右键批量菜单**(被右键行属于选中集合时升级为 menu.multi 分支, 见 ctx-menus.html)。
+    控制条是模板 + 三套 CSS + 一批 JS 助手的组合, 最容易的退化形态是"只删模板、CSS/JS 残留"
+    或"某套 UI 的 CSS 没删干净"(皮肤间静默不一致 —— 用户看到的仍是半残控制条)。逐层钉住:
+      1. 三套 UI 的聚合模板里 .bulk-inline / bulkAct( / bulkDeleteLabel( / bulkHrWarnText( /
+         name="bulk" 零残留;
+      2. 三套 UI 的 CSS 聚合里 .bulk-inline/.bulk-btn/.bulk-hr-warn/.bulk-sep/.bulk-count/
+         .bulk-enter-*/.ico-select 与 @keyframes bulk-in 零残留(死样式零残留纪律);
+      3. 批量链路本身仍在(右键菜单要用): bulkAct/bulkDelete 定义保留, ctxAct/ctxDelete 复用。
+    """
+    for ui in _UI_ALL:
+        text = _ui_aggregate(ui)
+        for token in (".bulk-inline", "bulkAct(", "bulkDeleteLabel(", "bulkHrWarnText(", 'name="bulk"'):
+            assert token not in text, f"{ui} 模板仍残留批量控制条痕迹 {token!r} —— 已退役, 应零残留"
+        css = _ui_css_aggregate(ui)
+        for token in (
+            ".bulk-inline", ".bulk-btn", ".bulk-hr-warn", ".bulk-sep", ".bulk-count", ".bulk-enter", ".bulk-leave",
+            ".ico-select", "@keyframes bulk-in"
+        ):
+            assert token not in css, f"{ui} CSS 仍残留死样式 {token!r} —— 批量控制条已退役, 应删除"
+    # 批量链路仍在: 右键批量菜单要用(定义在 shared/commands.js / delete_flow.js)
+    cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    assert "async bulkAct(action) {" in cmd, "bulkAct 定义消失 —— 右键批量菜单的动作链断了"
+    assert "return this.bulkAct(action);" in cmd, "ctxAct 必须继续复用 bulkAct"
+    dfl = open(os.path.join(STATIC_ROOT, "shared", "delete_flow.js"), encoding="utf-8").read()
+    assert "async bulkDelete() {" in dfl, "bulkDelete 定义消失 —— 右键批量删除断了"
+    assert "bulkHrWarnText" not in dfl and "bulkDeleteLabel" not in dfl, (
+        "死方法 bulkHrWarnText/bulkDeleteLabel 应已随批量控制条删除(零消费方)"
+    )
+
+
 def test_frontend_meta_dialog_paired():
     """标签/分类编辑对话框守阵(静态防回潮)
 
@@ -3743,12 +3777,15 @@ def test_frontend_meta_dialog_paired():
       3. .opt-pill(atlas 此前没有该组件)与 .meta-dialog 的 CSS 必须两套成对定义,
          模板用到的类在 CSS 无定义 = 静默裸样式(挂件类名错配的变体)。
     """
-    # 1. 双 UI 成对: metaOpen 对话框 + 三处入口(批量浮条 / 批量菜单 ctxMeta / 单种子菜单)
+    # 1. 三套 UI 成对: metaOpen 对话框 + 两处入口(批量菜单 ctxMeta / 单种子菜单)
+    #    (2026-10-05 批量控制条退役: 模板层不再直接调 openMetaDialog(null), 批量入口统一走 ctxMeta)
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
-        assert 'v-if="metaOpen"' in text, f"{ui}/index.html 缺少标签/分类对话框(双 UI 必须成对改)"
-        assert text.count('openMetaDialog(null)'
-                         ) == 1, (f"{ui}/index.html 批量浮条应恰有一处 openMetaDialog(null)(批量菜单入口走 ctxMeta)")
+        assert 'v-if="metaOpen"' in text, f"{ui}/index.html 缺少标签/分类对话框(三套 UI 必须成对改)"
+        assert "openMetaDialog(null)" not in text, (
+            f"{ui}/index.html 又出现模板层直接调 openMetaDialog(null) —— 批量控制条已退役, "
+            f"批量入口应统一走 ctxMeta(右键批量菜单)"
+        )
         assert 'openMetaDialog(menu.hash)' in text, f"{ui}/index.html 单种子右键菜单缺少标签/分类入口"
         assert "ctxMeta()" in text, f"{ui}/index.html 批量右键菜单缺少 ctxMeta 入口"
     # 2. shared 逻辑接线(逻辑层两套共用, 只在 shared 出现)

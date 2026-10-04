@@ -1,7 +1,7 @@
         <transition name="pop">
         <div v-if="menu.visible" class="ctx-menu" :style="{left: menu.x+'px', top: menu.y+'px'}" @contextmenu.prevent @click.stop>
           <!-- CTX-03 批量菜单: 被右键的行属于当前选中集合时, 菜单升级为对**整个选中集合**生效
-               (与批量浮条同一套动作与链路, 见 menu.js _ctxMulti / commands.js ctxAct)。
+               (与批量动作同一套链路, 见 menu.js _ctxMulti / commands.js ctxAct)。
                收录口径(plan 26-10-02-1955 W2/W3/W4 改写): 放"对整批同一语义"的动作(开始/暂停/汇报/
                重新校验/跳检/标签分类/批量删除)、"同一目标值作用于全选"的编辑项(限速/移动 —— 本计划
                推翻旧版"批量菜单刻意不放限速等编辑项"的注释口径, 批量限速留空方向不提交/批量移动

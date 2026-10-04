@@ -231,8 +231,7 @@
  * FIX-03 防透缝(简化): --head-h 是 JS Math.round(实测高度), 顶栏行高含小数时取整可偏差
  * ±0.5px, 叠加设备像素取整仍可能现 1px 竖缝 —— top 在齐平值上多压 1px, 重叠部分藏在
  * 上方 .sticky-head(z-index 更高)之下且与页底同色, 不遮挡内容不生横向滚动。
- * FIX-06: 批量操作条已并入筛选行(.status-strip 行首 .bulk-inline), 其高度随 --head-h
- * 一起实测覆盖; 原 --bulk-h 吸顶联动(head-h + bulk-h - 2px 写法)随之退役。 */
+ * FIX-06: 筛选行(.status-strip)高度随 --head-h 一起实测覆盖。 */
 .group-head { display: grid; gap: 10px; padding: 7px 14px; color: var(--fg-dim); font-size: 11.5px;
   font-weight: 600; letter-spacing: .04em; width: fit-content; min-width: 100%;
   position: sticky; top: calc(var(--head-h, 100px) - 1px); z-index: 5;

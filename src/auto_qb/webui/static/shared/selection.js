@@ -78,7 +78,7 @@ window.AQB_SELECTION = {
         this.shiftGroupSel(g);
         return;
       }
-      this.toggleExpand(g.key, event);  // 普通点击保持"展开明细"原行为(不清除已有选择, 清除走浮条)
+      this.toggleExpand(g.key, event);  // 普通点击保持"展开明细"原行为(不清除已有选择, 清除走 Esc)
     },
     toggleGroupSel(g) {
       // FX-11: 组选择与种子选择互斥(同一时刻只一种口径, 否则批量目标混发、计数含义不明)
@@ -302,7 +302,7 @@ window.AQB_SELECTION = {
     },
   },
   computed: {
-    /* 多选总数(组 + 独立成员), 供批量浮条显隐 */
+    /* 多选总数(组 + 独立成员): 供右键菜单升级为批量菜单(menu.multi)与快捷键目标解析 */
     selectedCount() {
       return this.selGroups.length + this.selMembers.length;
     },

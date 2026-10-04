@@ -118,7 +118,7 @@ window.AQB_MENU = {
      * 症状: 选中 N 行后右键, 菜单动作只作用于**被点的那一行**(用户报"多选时右键菜单应该对
      * 所有选择的种子生效, 当前仅对鼠标指向的种子生效")。
      * 语义: 被点的这一行**属于当前选中集合**时, 菜单升级为批量菜单(动作走 bulkAct / bulkDelete,
-     * 与批量浮条**同一条链路**); 不属于时保持原来的单种子/整组/整集菜单。
+     * 与批量动作**同一条链路**); 不属于时保持原来的单种子/整组/整集菜单。
      *
      * !判据是"选中集合是否**等同于**这一行自身的范围", 不是"选中数 > 1":
      *   选中 1 个辅种 + 右键它自己       -> 等同   -> 普通组菜单("暂停整组"才是对的文案)
@@ -132,7 +132,7 @@ window.AQB_MENU = {
       return g.join("\u0001") + "\u0002" + h.join("\u0001");
     },
     _ctxMulti(anchorScope) {
-      const sel = this._bulkTargets();   // 选中集合拆解(组 key + 成员 hash; 与批量浮条同口径)
+      const sel = this._bulkTargets();   // 选中集合拆解(组 key + 成员 hash; 与批量动作同口径)
       if (!sel.groupKeys.length && !sel.memberHashes.length) return false;
       const gk = anchorScope.groupKeys || [];
       const hs = anchorScope.hashes || [];

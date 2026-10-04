@@ -424,7 +424,7 @@ window.AQB_COMMANDS = {
       return this._aggKind(e.members) || e.state;
     },
     /* ---------------- 动作统一出口(计划 26-09-28-0354 W3 的唯一重构点) ----------------
-     * 批量浮条(按钮) / 右键菜单 / 键盘快捷键三个入口共用同一条动作链。端点按目标形态路由:
+     * 右键批量菜单 / 键盘快捷键两个入口共用同一条动作链。端点按目标形态路由:
      *   单组(仅 1 个组 key 且动作在组级端点支持面内 pause/resume) -> /api/groups/{k}/{action};
      *   单种子(仅 1 个 hash)                                      -> /api/torrents/{h}/{action};
      *   其余(多目标 / 组级端点不支持的 recheck 等)                 -> /api/torrents/bulk 合单;
@@ -537,7 +537,7 @@ window.AQB_COMMANDS = {
       }
       return { groupKeys, memberHashes };
     },
-    /* 批量动作(批量浮条按钮入口): 目标集合 = _bulkTargets, 动作链交 _actCore 统一出口。
+    /* 批量动作(右键批量菜单入口): 目标集合 = _bulkTargets, 动作链交 _actCore 统一出口。
      * pause/resume/recheck 合单语义由 _actCore 的 bulk 路由承担(一次 POST + 一个聚合回执);
      * reannounce 逐目标投递 + tracker 确认聚合回执, 文案与原实现逐字一致。 */
     async bulkAct(action) {
@@ -551,10 +551,10 @@ window.AQB_COMMANDS = {
       });
     },
     /* ---------------- CTX-03 批量右键菜单的动作入口 ----------------
-     * 多选右键时菜单升级为批量菜单(见 menu.js `_ctxMulti`), 动作**直接复用批量浮条的链路** ——
+     * 多选右键时菜单升级为批量菜单(见 menu.js `_ctxMulti`), 动作**直接复用批量动作链路** ——
      * 目标集合的权威仍是 selGroups / selMembers, 这里不再自己拆一遍, 免得两处口径漂移。
      * 只多一件事: 先收起菜单 —— 菜单根节点是 `@click.stop`(见 index.html), 全局"点空白关闭"
-     * 接不到, 而 bulkAct/bulkDelete 是给浮条写的, 没有关闭菜单的责任。
+     * 接不到, 而 bulkAct/bulkDelete 本身不管菜单开合, 没有关闭菜单的责任。
      */
     ctxAct(action) {
       this.menu.visible = false;
@@ -578,7 +578,7 @@ window.AQB_COMMANDS = {
       return this.bulkDelete();
     },
     /* 批量右键菜单的"标签/分类…"入口: 目标集合的权威在对话框(openMetaDialog 传空 =
-     * 整个选中集合, 与批量浮条同口径), 这里只负责先收起菜单(菜单根 @click.stop,
+     * 整个选中集合, 与批量动作同口径), 这里只负责先收起菜单(菜单根 @click.stop,
      * 全局"点空白关闭"接不到) */
     ctxMeta() {
       this.menu.visible = false;

@@ -104,9 +104,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
   .status-strip { align-items: flex-start; }
 }
 
-/* ============ 登录"验证中"加载态 / 批量图标语义色 ============ */
+/* ============ 登录"验证中"加载态 / 图标语义色 ============ */
 .ico-history { color: var(--today-up); }
-.ico-select { color: var(--indigo); }
 .login-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 34px 32px 28px; }
 .login-loading .ico { width: 26px; height: 26px; color: var(--accent); }
 .login-loading p { margin: 0; }
@@ -123,52 +122,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
   top: 14%; bottom: 14%; width: 3px; background: var(--sel-bar, var(--accent)); opacity: .42; }
 .member-row.partial::before { top: 18%; bottom: 18%; }
 .group-row, .member-row { cursor: pointer; }
-
-/* ============ 批量操作条(V2 重设计): 悬浮指令条 ============
- * 控制台皮肤把 .bulk-inline 从分布条一行改为**底部悬浮指令条**(纯 CSS 定位替换, 选中状态源不变):
- * 出现在状态栏上方居中, 切角大面 + 静息微光; 左=选中读数 + HR 风险点名, 右=动作组,
- * 删除单独 danger 档, 清除 ghost 最末。不再挤占 status-strip 一行 —— FX-09 的行高锁定
- * (27px)随之退役: 元素已脱离文档流, 出现/消失不再推动任何布局。出入场仍走 name="bulk" transition。 */
-.bulk-inline { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--statusbar-h) + 14px);
-  z-index: 40; display: flex; flex-wrap: nowrap; align-items: center; gap: 4px 8px;
-  height: auto; max-width: min(92vw, 980px); padding: 9px 12px 9px 14px;
-  --hb-cut: 14px; clip-path: polygon(var(--hb-cut) 0, 100% 0,
-    100% calc(100% - var(--hb-cut)), calc(100% - var(--hb-cut)) 100%, 0 100%, 0 var(--hb-cut));
-  background: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-elev);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-3), 0 0 24px -8px color-mix(in srgb, var(--sel-bar) 45%, transparent);
-  animation: bulk-in .18s var(--ease-out); }
-@keyframes bulk-in { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
-.bulk-inline .bulk-count { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px;
-  line-height: 1.4; color: var(--fg-muted); white-space: nowrap; }
-.bulk-inline .bulk-count b { color: var(--fg); font-family: var(--font-mono); font-weight: 500; }
-/* HR 风险随行: 点名不能删的数量(warn 内嵌光条小签, mono 读数) */
-.bulk-inline .bulk-hr-warn { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px;
-  font: 500 11.5px/1.7 var(--font-mono); background: var(--warn-soft); color: var(--warn);
-  box-shadow: inset 2px 0 0 var(--warn); white-space: nowrap; }
-.bulk-sep { width: 1px; height: 18px; background: var(--border-soft); }
-/* 批量浮条按钮: 方角描边 + 发光语言(高度回到自然档, 不再锁 21px —— 已脱离行内布局) */
-.bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px;
-  border: 1px solid var(--border-strong); background: transparent; color: var(--fg);
-  font-size: 12px; line-height: 1; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
-    color var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
-.bulk-btn:hover { background: var(--bg-hover); border-color: var(--accent-line);
-  box-shadow: 0 0 16px -8px color-mix(in srgb, var(--accent) 60%, transparent); }
-.bulk-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.bulk-btn:disabled { opacity: .45; cursor: not-allowed; }
-.bulk-btn .ico-play { color: var(--green); }
-.bulk-btn .ico-pause { color: var(--warn); }
-.bulk-btn .ico-sync { color: var(--blue); }
-.bulk-btn .ico-tag { color: var(--indigo); }
-.bulk-btn.danger { color: var(--error); border-color: var(--error-line); }
-.bulk-btn.danger:hover { background: var(--error-soft); border-color: var(--error);
-  box-shadow: 0 0 16px -8px color-mix(in srgb, var(--error) 60%, transparent); }
-.bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }
-.bulk-btn.ghost:hover { border-color: transparent; background: var(--surface-2); color: var(--fg); box-shadow: none; }
-/* 出入场(transition name="bulk"): 上浮 + 淡入(与悬浮条语义一致, 不再是"从行内滑入") */
-.bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
-.bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translate(-50%, 8px); }
 
 /* 删除类确认框加宽形态(920 宽档) */
 .modal.wide { width: var(--modal-wide-w); }

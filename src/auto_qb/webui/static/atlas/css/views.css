@@ -164,9 +164,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
 
 /* ============ 2026-09-15 WEB UI 优化新增(多选/批量/历史流量/确认框扩展/登录加载态) ============ */
 
-/* 图标语义色(新增): 历史流量入口与批量选择 */
+/* 图标语义色(新增): 历史流量入口 */
 .ico-history { color: var(--today-up); }
-.ico-select { color: var(--indigo); }
 
 /* 登录"验证中"加载态(本地密钥 bootstrap 期间显示, 修复刷新时闪现输入密钥界面) */
 .login-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 34px 32px 28px; }
@@ -190,41 +189,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .member-row.partial::before { top: 18%; bottom: 18%; }
 /* 选中行光标语义: 修饰键可切换选择 */
 .group-row, .member-row { cursor: pointer; }
-
-/* 批量操作段(FIX-06): 并入筛选行(.status-strip)行首 —— 不再是独立吸顶条, 无独立 top/
- * z-index/margin; 无选中时完全不渲染, 有选中时在行内出现(同排不改变行高, 不再跳动)。
- * 段内 flex-wrap 兜窄屏溢出; 出入场仍走 name="bulk" transition(滑入+淡入)
- * FX-09(atlas 补齐, 与 prism 同口径): 高度必须锁死且 ≤ 27px(与 .dist-chip 自然高齐平) ——
- * 靠"自然高度不超"实现同排不改变行高, 只压按钮 padding 不够: 段自身的 padding+border
- * 也会超出, 所以段与按钮两处都锁死。 */
-.bulk-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; height: 27px;
-  padding: 0 10px 0 9px; border: 1px solid var(--accent-line); border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(59, 130, 246, .1), transparent 70%), var(--bg-card); }
-.bulk-inline .bulk-count { font-size: 12.5px; line-height: 1; color: var(--fg-muted); white-space: nowrap; }
-.bulk-inline .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
-/* 批量条 HR 风险提示(P4): 选中目标含「不能删」种子时的暖色计数(与 HR 未达标同色族) */
-.bulk-inline .bulk-hr-warn { font-size: 11.5px; line-height: 1; color: var(--hr-pending); white-space: nowrap; }
-.bulk-sep { width: 1px; height: 16px; background: var(--border); }
-/* 批量浮条按钮(2026-09-26 并入 .bt 体系 B 方案): 胶囊 + 次钮配色语言(底 bg-row/描边 border-strong,
- * hover 换 accent 描边); 高度保持 21px 紧凑档不动 —— .bulk-inline 容器 27px 与 .status-strip 的
- * min-height 是实测锁定(FIX-06/FX-09), 浮条专属语义(图标语义色 / danger / ghost)保留在此 */
-.bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 21px; padding: 0 10px; border-radius: 999px;
-  border: 1px solid var(--border-strong); background: var(--bg-row); color: var(--fg);
-  font-size: 12px; line-height: 1; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.bulk-btn:hover { background: var(--bg-hover); border-color: var(--accent-line); }
-.bulk-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.bulk-btn:disabled { opacity: .45; cursor: not-allowed; }
-.bulk-btn .ico-play { color: var(--green); }
-.bulk-btn .ico-pause { color: var(--warn); }
-.bulk-btn .ico-sync { color: var(--blue); }
-.bulk-btn.danger { color: var(--error); border-color: var(--error-line); }
-.bulk-btn.danger:hover { background: var(--error-soft); border-color: var(--error); }
-.bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }
-.bulk-btn.ghost:hover { border-color: transparent; background: var(--surface-2); color: var(--fg); }
-/* 操作段出入场(transition name="bulk"): 滑入 + 淡入 */
-.bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
-.bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
 
 /* 删除类确认框加宽形态(R05: 560 -> 720; W2-FE-2 DLG-01 再调大一档 720 -> 840 并令牌化,
  * 成员明细区已移除, 宽度服务于目标摘要/选项的宽松可读) */

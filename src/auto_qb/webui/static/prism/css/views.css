@@ -1,6 +1,5 @@
 /* auto-qb 新版 WEB UI · 视图层: 辅种页 / 设置页 / 历史流量
  * 布局契约(与 app.js 耦合, 勿改名): .sticky-head(--head-h 量测) / .statusbar(--statusbar-h 底部预留) /
- * .bulk-inline(批量段, FIX-06 起并入筛选行, 不再是独立吸顶条) /
  * .group-head/.detail-head(列宽拖拽 + TBL-05 拖动重排) / gridStyle 内联列模板 / .search-hit/.ctx-menu。
  * 记忆点 = 底部状态栏: 全站速度与流量摘要常显, 其余视觉保持安静。
  */
@@ -379,42 +378,6 @@
 
 /* 校验中呼吸 */
 .g-status.k-checking .ico, .member-row.checking .m-state .dot { animation: pulse-soft 1.6s ease-in-out infinite; }
-
-/* ---------------- 批量操作段(FIX-06: 并入筛选行) ----------------
- * 原为独立吸顶浮条(.bulk-bar, top 跟随 --head-h), 选中/取消选中时会插入或抽出表格上方,
- * 造成整页跳动; 现改为 .status-strip 行首的同行段 —— 无独立 top/z-index/margin,
- * 无选中时完全不渲染, 有选中时在行内出现(同排不改变行高)。
- * FX-09: 高度必须 ≤ 26px(与 .dist-chip 齐平) —— 它是靠"自然高度不超"来实现同排不改变行高,
- * 只靠 1. 压按钮不够: 段自身的 padding+border 也会超出, 所以两处都锁死。 */
-.bulk-inline { display: flex; flex-wrap: nowrap; align-items: center; gap: 0 9px; height: 26px;
-  padding: 0 9px 0 8px; border: 1px solid var(--accent-line); border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--accent-soft), transparent 70%), var(--bg-card); }
-.bulk-inline .bulk-count { font-size: 11.5px; line-height: 1; color: var(--fg-muted); white-space: nowrap; }
-.bulk-inline .bulk-count b { color: var(--accent-hi); font-variant-numeric: tabular-nums; }
-/* 批量条 HR 风险提示(P4): 选中目标含「不能删」种子时的暖色计数(与 HR 未达标同色族) */
-.bulk-inline .bulk-hr-warn { font-size: 11px; line-height: 1; color: var(--hr-pending); white-space: nowrap; }
-.bulk-sep { width: 1px; height: 16px; background: var(--border); }
-/* 批量浮条按钮(2026-09-26 并入 .bt 体系 C 方案): 描边次钮语言(透明底 + border-strong,
- * hover 换 accent 描边); 高度保持 20px 紧凑档不动 —— .bulk-inline 容器 26px 与 .status-strip 的
- * min-height 是实测锁定(FX-06/FX-09) */
-.bulk-btn { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong); background: transparent; color: var(--fg);
-  font-size: 11.5px; line-height: 1; cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
-.bulk-btn:hover { background: var(--surface-2); border-color: var(--accent-line); color: var(--fg); }
-.bulk-btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.bulk-btn:disabled { opacity: .45; cursor: not-allowed; }
-.bulk-btn .ico-play { color: var(--green); }
-.bulk-btn .ico-pause { color: var(--warn); }
-.bulk-btn .ico-sync { color: var(--blue); }
-.bulk-btn .ico-tag { color: var(--indigo); }
-.bulk-btn.danger { color: var(--error); border-color: var(--error-line); }
-.bulk-btn.danger:hover { background: var(--error-soft); border-color: var(--error); }
-.bulk-btn.ghost { border-color: transparent; background: transparent; color: var(--fg-dim); }
-.bulk-btn.ghost:hover { border-color: transparent; background: var(--surface-2); color: var(--fg); }
-.bulk-enter-active, .bulk-leave-active { transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
-.bulk-enter-from, .bulk-leave-to { opacity: 0; transform: translateY(-5px); }
 
 /* ---------------- 设置页(图形化配置编辑器) ----------------
  * TBL-07: 不再 2560px 居中限宽。
@@ -864,7 +827,7 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .group-row .g-stat.tone-low, .member-row .m-stat.tone-low { color: var(--fg-muted); }
 .group-row .g-stat.tone-high, .member-row .m-stat.tone-high { color: var(--accent-hi); }
 
-/* W5-RFB-01 详情抽屉纯展示化: 抽屉头只留 标题 + 状态徽章 + 关闭(操作走行右键/批量条) */
+/* W5-RFB-01 详情抽屉纯展示化: 抽屉头只留 标题 + 状态徽章 + 关闭(操作走行右键/批量菜单) */
 .drawer-close { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0;
   border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }

@@ -180,7 +180,7 @@
           </span>
         </header>
         <!-- 状态分布条 + 筛选器(仅辅种页): 分布由已加载的 groups 前端聚合, 点击 chip 按状态筛选 -->
-        <div v-if="page === 'groups' && (distTotal || viewMode === 'torrents' || viewMode === 'shows' || selectedCount)" class="status-strip">
+        <div v-if="page === 'groups' && (distTotal || viewMode === 'torrents' || viewMode === 'shows')" class="status-strip">
           <div class="dist-bar">
             <span v-for="s in distSegments" :key="s.kind" :class="'k-' + s.kind" :style="{ width: s.pct + '%' }"></span>
           </div>
@@ -191,37 +191,9 @@
               <span class="swatch"></span>{{ s.text }} <b>{{ s.count }}</b>
             </button>
           </div>
-          <!-- 批量操作段(FIX-06): 位置 = "做种数量统计后、筛选器前"(用户 2026-09-17); 有选中时行内出现,
-               无选中时不渲染; 同排插入/抽出不改变筛选行高度 -->
-          <transition name="bulk">
-            <div v-if="selectedCount" class="bulk-inline">
-              <svg class="ico ico-sm ico-select" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
-              <span class="bulk-count">已选 <b>{{ bulkCountText() }}</b></span>
-              <span v-if="bulkHrWarnText()" class="bulk-hr-warn">WARN: {{ bulkHrWarnText() }}</span>
-              <span class="bulk-sep"></span>
-              <button class="bulk-btn" @click="bulkAct('resume')">
-                <svg class="ico ico-sm ico-play" viewBox="0 0 16 16"><use href="#i-play"></use></svg>开始
-              </button>
-              <button class="bulk-btn" @click="bulkAct('pause')">
-                <svg class="ico ico-sm ico-pause" viewBox="0 0 16 16"><use href="#i-pause"></use></svg>暂停
-              </button>
-              <button class="bulk-btn" @click="bulkAct('reannounce')">
-                <svg class="ico ico-sm ico-sync" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>强制汇报
-              </button>
-              <button class="bulk-btn" @click="bulkAct('recheck')">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>校验
-              </button>
-              <button class="bulk-btn" @click="openMetaDialog(null)">
-                <svg class="ico ico-sm ico-tag" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>标签/分类
-              </button>
-              <button class="bulk-btn danger" @click="bulkDelete()">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>{{ bulkDeleteLabel() }}…
-              </button>
-              <button class="bulk-btn ghost" @click="clearSelection()">
-                <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>清除
-              </button>
-            </div>
-          </transition>
+          <!-- 批量操作段已退役(2026-10-05): 原"已选 N 个种子 · 开始/暂停/…"控制条删除,
+               批量动作一律走**右键批量菜单**(被右键行属于选中集合时升级, 见 ctx-menus.html
+               `menu.multi` 分支 / commands.js ctxAct|ctxDelete); 清除选择走 Esc(退栈链兜底) -->
           <!-- 当前筛选/搜索说明: 紧跟状态图例之后(无筛选时不占据任何空间) -->
           <span v-if="filtersActive" class="strip-note">
             <template v-if="searchQuery.trim()">搜索“{{ searchQuery.trim() }}” </template>

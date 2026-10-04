@@ -52,7 +52,6 @@ h1, h2, h3 { font-family: var(--font-display); }
 .ico-f-site { color: var(--teal); }
 .ico-f-path { color: var(--warn); }
 .ico-history { color: var(--today-up); }
-.ico-select { color: var(--indigo); }
 
 /* 动效原语: spin(进行中) + 呼吸; prefers-reduced-motion 全局降级 */
 @keyframes spin { to { transform: rotate(360deg); } }

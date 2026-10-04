@@ -830,16 +830,26 @@ async function smokeUi(browser, ui) {
      * 且**零**条逐目标 /api/torrents/{hash}/pause。合单前这是 N 次 POST + N 条回执轮询 +
      * 后端 N 次串行 qB 调用(在主循环线程上, 期间界面"卡住")—— 这是"点批量后界面卡住"的真因。
      * 单测覆盖不到(全是前端行为), 只能在真浏览器里数请求。
+     * 2026-10-05 批量控制条退役: 入口改走**右键批量菜单**(被右键行属于选中集合时升级为
+     * menu.multi 分支) —— 与 CTX-03 同一套链路, 这里只是把 N 放大到 60 验合单规模。
      */
     {
       const N = 60;
+      await page.evaluate("window.scrollTo(0, 0)");
+      await page.waitForTimeout(300);
       const picked = await page.evaluate(`(() => {
         const vm = ${INST};
         vm.selGroups = [];
         vm.selMembers = vm.filteredTorrents.slice(0, ${N}).map((r) => r.hash);
         return vm.selMembers.length;
       })()`);
-      await page.waitForSelector(".bulk-inline", { timeout: 5000 }).catch(() => null);
+      /* 行是窗口化的: 只在**已渲染**的行里挑一个属于选中集合的锚点(菜单才会升级为批量) */
+      const selHashes = await readInst(page, "vm.selMembers.slice()");
+      let selRow = null;
+      for (const r of await page.$$(".torrent-row")) {
+        const h = await r.evaluate((el) => el.getAttribute("data-hash"));
+        if (selHashes.includes(h)) { selRow = r; break; }
+      }
       const hits = { bulk: 0, single: 0 };
       const onReq = (r) => {
         const u = r.url();
@@ -847,12 +857,15 @@ async function smokeUi(browser, ui) {
         else if (/\/api\/torrents\/[^/?]+\/pause(\?|$)/.test(u)) hits.single++;
       };
       page.on("request", onReq);
-      const btns = await page.$$(".bulk-inline .bulk-btn");
       let bulkClicked = false;
-      await armPending(page, ".torrent-row.is-pending, .group-row.is-pending");  // 点击**之前**装好
-      for (const b of btns) {
-        const t = (await b.textContent()) || "";
-        if (t.includes("暂停")) { await armClick(page, b); await b.click(); bulkClicked = true; break; }
+      if (selRow) {
+        await armPending(page, ".torrent-row.is-pending, .group-row.is-pending");  // 点击**之前**装好
+        await selRow.click({ button: "right" });
+        await page.waitForSelector(".ctx-menu", { timeout: 5000 }).catch(() => null);
+        for (const h of await page.$$(".ctx-item")) {
+          const t = ((await h.textContent()) || "").trim();
+          if (t.includes("批量暂停")) { await armClick(page, h); await h.click(); bulkClicked = true; break; }
+        }
       }
       await page.waitForTimeout(1500);
       page.off("request", onReq);
@@ -887,7 +900,7 @@ async function smokeUi(browser, ui) {
      *   1. 菜单文案: 右键**选中行** -> 出现"批量暂停"; 右键**未选中行** -> 仍是"暂停该种子"。
      *   2. 实际投递: 点"批量暂停" -> 恰好 1 条 POST /api/torrents/bulk、0 条逐目标 pause。
      *      修之前这里会是 5 条逐目标 pause(菜单只认被点的那一行), 断言即红。
-     * 这里刻意复用批量浮条的链路(ctxAct -> bulkAct), 目标集合权威仍是 selMembers。
+     * 这里刻意复用批量动作的链路(ctxAct -> bulkAct), 目标集合权威仍是 selMembers。
      */
     {
       const N = 5;
