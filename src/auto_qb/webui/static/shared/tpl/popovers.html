@@ -5,7 +5,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
           <span>管理标签</span>
-          <button class="bt icon add-dialog-x" title="关闭" @click="closeMgr">
+          <button class="bt icon add-dialog-x" @click="closeMgr">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -51,7 +51,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
           <span>标签与分类</span>
-          <button class="bt icon add-dialog-x" title="关闭" @click="closeMeta">
+          <button class="bt icon add-dialog-x" @click="closeMeta">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -130,7 +130,7 @@
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
             <span class="d-value" :title="String(d.value)">{{ d.value }}</span>
-            <button v-if="String(d.value || '').length" type="button" class="bt icon d-copy" :title="'复制' + d.label"
+            <button v-if="String(d.value || '').length" type="button" class="bt icon d-copy"
                     @click="copyText(String(d.value), d.label)">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
             </button>
@@ -185,7 +185,7 @@
             <button v-for="g in ['day', 'month', 'year']" :key="g" :class="{ active: historyGran === g }"
                     @click="historyGran = g">{{ { day: '天', month: '月', year: '年' }[g] }}</button>
           </div>
-          <button class="bt icon" title="关闭" @click="historyOpen = false">
+          <button class="bt icon" @click="historyOpen = false">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -312,7 +312,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
           <h3>键盘快捷键</h3>
-          <button class="bt icon add-dialog-x" title="关闭" @click="kbHelpOpen = false">
+          <button class="bt icon add-dialog-x" @click="kbHelpOpen = false">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>

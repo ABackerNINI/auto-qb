@@ -6,7 +6,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
           <span>qBittorrent 统计</span>
-          <button class="bt icon add-dialog-x" title="关闭" @click="closeStats">
+          <button class="bt icon add-dialog-x" @click="closeStats">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -70,18 +70,18 @@
       <div class="modal-title">
         <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
         <span>限速</span>
-        <button class="bt icon add-dialog-x" title="关闭" @click="closeSpeedDialog">
+        <button class="bt icon add-dialog-x" @click="closeSpeedDialog">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
         </button>
       </div>
       <div class="add-dialog-body">
-        <div class="speed-mode-line" :title="speedMode.error || speedModeLine">
+        <div class="speed-mode-line">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="speedMode.curveEnabled ? '#i-gauge' : '#i-lock'"></use></svg>
           <span>{{ speedMode.loaded ? speedModeLine : (speedMode.error || "正在加载状态…") }}</span>
         </div>
         <!-- ALT-01(计划 26-09-28-0037 TPL-C): 主/备同窗双组 —— 生效中的一组描边高亮;
              模式切换只在状态栏乌龟按钮做, 窗内只改数值(弹窗不提供切换, 动作语义单一)。 -->
-        <div class="speed-mode-line alt" :title="'qB 报告: ' + (speedMode.loaded ? (sbAltOn ? '备用速度生效中' : '主速度生效中') : '速度模式未知')">
+        <div class="speed-mode-line alt">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-turtle"></use></svg>
           <span>{{ speedMode.loaded ? (sbAltOn ? "备用速度生效中(乌龟亮)" : "主速度生效中(乌龟灭)") : "正在加载速度模式…" }}</span>
         </div>
@@ -125,7 +125,7 @@
       <div class="modal-actions">
         <button class="bt ghost" @click="closeSpeedDialog">取消</button>
         <button class="bt primary" :disabled="!speedOvReady || speedOverride.busy || speedAlt.busy"
-                title="应用主/备两组限速(未改动的组不下发, 0 = 不限)" @click="submitSpeedDialog">
+                @click="submitSpeedDialog">
           <svg v-if="speedOverride.busy || speedAlt.busy" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
           <svg v-else class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bolt"></use></svg>
           {{ (speedOverride.busy || speedAlt.busy) ? '提交中…' : '应用' }}

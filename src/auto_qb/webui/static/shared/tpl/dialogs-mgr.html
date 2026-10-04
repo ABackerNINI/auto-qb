@@ -8,7 +8,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
           <span>添加种子</span>
-          <button class="bt icon add-dialog-x" title="关闭" @click="closeAddTorrent">
+          <button class="bt icon add-dialog-x" @click="closeAddTorrent">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
@@ -29,7 +29,7 @@
             <div v-if="addFiles.length" class="add-dialog-filelist">
               <span v-for="(f, i) in addFiles" :key="f.name + f.size" class="add-dialog-filechip" :title="f.name">
                 {{ f.name }}
-                <button class="add-dialog-chipx" title="移除" @click="removeAddFile(i)">
+                <button class="add-dialog-chipx" @click="removeAddFile(i)">
                   <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
                 </button>
               </span>
@@ -61,7 +61,7 @@
                   <!-- 清空(x): 两个修饰符缺一不可 —— @mousedown.prevent 拦掉默认动作让焦点留在输入框
                        (否则按钮抢焦点 -> 输入框失焦走 addPopBlurClose 把候选面板收掉); @click.stop
                        挡住 lifecycle 的 window click 兜底(不挡 = 点 x 顺手把下拉一起收了)。 -->
-                  <button v-if="addSavePath" type="button" class="add-pop-clear" title="清空保存路径"
+                  <button v-if="addSavePath" type="button" class="add-pop-clear"
                           @mousedown.prevent @click.stop="clearAddField('path')">
                     <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
                   </button>
@@ -98,7 +98,7 @@
                        placeholder="下拉选择或自由输入" autocomplete="off" spellcheck="false"
                        @focus="openAddCatMenu" @click.stop="openAddCatMenu"
                        @input="addCatHi = -1; addCatMenu = true" @focusout="addPopBlurClose" @keydown="onAddCatKeydown($event)">
-                <button v-if="addCategory" type="button" class="add-pop-clear" title="清空分类"
+                <button v-if="addCategory" type="button" class="add-pop-clear"
                         @mousedown.prevent @click.stop="clearAddField('cat')">
                   <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
                 </button>
@@ -122,7 +122,7 @@
                        placeholder="如 HR, Keep(可从下拉挑选)" autocomplete="off" spellcheck="false"
                        @focus="openAddTagMenu" @click.stop="openAddTagMenu"
                        @input="addTagHi = -1; addTagMenu = true" @focusout="addPopBlurClose" @keydown="onAddTagKeydown($event)">
-                <button v-if="addTags" type="button" class="add-pop-clear" title="清空标签"
+                <button v-if="addTags" type="button" class="add-pop-clear"
                         @mousedown.prevent @click.stop="clearAddField('tag')">
                   <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
                 </button>
@@ -204,16 +204,16 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
           <span>选择保存位置</span>
-          <button class="bt icon add-dialog-x" title="关闭" @click="closeDirBrowse">
+          <button class="bt icon add-dialog-x" @click="closeDirBrowse">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
         <div class="add-dialog-body">
           <div class="db-bar">
-            <button class="bt ghost sm" :disabled="!dirBrowse.parent" title="上一级(到允许根为止)" @click="dirUp()">
+            <button class="bt ghost sm" :disabled="!dirBrowse.parent" @click="dirUp()">
               上一级
             </button>
-            <span class="db-path" :title="dirBrowse.path || '起始位置'">{{ dirBrowse.path || "请选择起始目录(仅限已有保存路径)" }}</span>
+            <span class="db-path">{{ dirBrowse.path || "请选择起始目录(仅限已有保存路径)" }}</span>
           </div>
           <div v-if="dirBrowse.error" class="ce-note error">{{ dirBrowse.error }}</div>
           <div class="db-list">
@@ -246,7 +246,7 @@
         <div class="modal-title">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
           <span>管理分类</span>
-          <button class="bt icon add-dialog-x" title="关闭" @click="closeMgr">
+          <button class="bt icon add-dialog-x" @click="closeMgr">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </div>
