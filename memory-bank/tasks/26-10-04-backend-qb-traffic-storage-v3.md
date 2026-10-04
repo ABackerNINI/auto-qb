@@ -1,11 +1,12 @@
 # 26-10-04-backend-qb-traffic-storage-v3 — qB 流量存储 v3 实施
 
 **Status:** In Progress
+**Topics:** qb-traffic-storage-v3
 **Added:** 2026-10-04
 **Updated:** 2026-10-04
 **Summary:** 实施计划 26-10-04-1957 开工: feature/qb-traffic-v3 分支五期拆七步串行子智能体实施(S1 纯函数→S4 配置键→S2a/S2b 写侧→S3a/S3b 读侧→S5 收尾), 每步 test.full + 普通 git commit, 完成后合回 develop 等提交指令; D4 拍板 6mo/1y/all 三档。
 
-**Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, activeContext 切片 webui-qb-traffic-storage-v3-design
+**Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md
 
 ## 原始请求
 
