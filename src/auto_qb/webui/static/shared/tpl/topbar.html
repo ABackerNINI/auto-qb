@@ -16,13 +16,13 @@
                与表格区视图开关两处入口等价); 设置移右侧独立组; 统计入口在底部状态栏, 日志在设置"常规"章节页尾 -->
           <!-- data-view: goView 后同步导航焦点用(view.js::syncNavFocus), 三个视图页签的 DOM 身份标识 -->
           <nav class="tabs" aria-label="视图导航">
-            <button data-view="groups" :class="{ active: page === 'groups' && viewMode === 'groups' }" :title="`按${l10nGroup}展示`" @click="goView('groups')">
+            <button data-view="groups" :class="{ active: page === 'groups' && viewMode === 'groups' }" @click="goView('groups')">
               <svg class="ico ico-sm ico-seed" viewBox="0 0 16 16"><use href="#i-cards"></use></svg>{{ l10nGroup }}
             </button>
-            <button data-view="torrents" :class="{ active: page === 'groups' && viewMode === 'torrents' }" title="全部种子一行一条(替代 qB 主列表)" @click="goView('torrents')">
+            <button data-view="torrents" :class="{ active: page === 'groups' && viewMode === 'torrents' }" @click="goView('torrents')">
               <svg class="ico ico-sm ico-down" viewBox="0 0 16 16"><use href="#i-download"></use></svg>种子
             </button>
-            <button data-view="shows" :class="{ active: page === 'groups' && viewMode === 'shows' }" title="按剧→季→集聚合展示(多站点同集归并)" @click="goView('shows')">
+            <button data-view="shows" :class="{ active: page === 'groups' && viewMode === 'shows' }" @click="goView('shows')">
               <svg class="ico ico-sm ico-tv" viewBox="0 0 16 16"><use href="#i-tv"></use></svg>追剧
             </button>
           </nav>
@@ -33,7 +33,7 @@
               <input ref="searchInput" v-model="searchQuery" @input="onSearchInput" @keyup.enter="doSearch"
                      placeholder="搜索种子或文件名..." autocomplete="off" />
               <!-- mousedown.prevent: 按下瞬间不触发失焦 —— 否则输入框收窄动画把按钮移出光标, click 落空(焦点存在时清除失灵) -->
-              <button v-if="searchQuery" class="search-clear" title="清除搜索" @mousedown.prevent @click="clearSearch">
+              <button v-if="searchQuery" class="search-clear" @mousedown.prevent @click="clearSearch">
                 <svg class="ico" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
               </button>
               <!-- 搜索语法帮助(计划 26-09-28-0201 方案A): 框内幽灵「?」恒显 + 锚定浮卡。
@@ -57,14 +57,14 @@
             <span v-if="searchError" class="error">{{ searchError }}</span>
           </div>
           <!-- 添加种子入口(R1B): 辅种页/种子页共用顶栏入口(搜索框右侧), 点击开添加对话框 -->
-          <button v-if="page === 'groups'" class="table-tool add-btn" title="添加种子(.torrent / magnet / URL)"
+          <button v-if="page === 'groups'" class="table-tool add-btn"
                   @click="openAddTorrent">
             <svg class="ico ico-sm ico-add" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
             添加种子
           </button>
           <!-- 列选择器(紧邻搜索框, 见想法.md): 显示/隐藏列 + 列宽重置/适应窗口。 -->
           <div v-if="page === 'groups'" class="col-picker">
-            <button class="table-tool" :class="{ active: colMenuOpen }" title="显示/隐藏列 · 列宽"
+            <button class="table-tool" :class="{ active: colMenuOpen }"
                     @click.stop="toggleColMenu($event)">
               <svg class="ico ico-sm ico-cols" viewBox="0 0 16 16"><use href="#i-columns"></use></svg>
               列
@@ -137,7 +137,7 @@
             <!-- ui-diff: 主题引擎为棱镜专属(prism/js/theme.js + css/themes/*.css), 星图无此设施 -->
             <template v-if="ui === 'prism'">
             <div class="theme-pop">
-              <button type="button" id="theme-btn" class="table-tool theme-btn" title="界面主题">
+              <button type="button" id="theme-btn" class="table-tool theme-btn">
                 <svg class="ico ico-sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/></svg>
                 主题
               </button>
@@ -155,7 +155,7 @@
                  面板/行复用 .pop-menu/.pop-item 弹层族(与列选择器/筛选器同源, 省新增 CSS);
                  flip-x 静态右对齐 —— 锚点恒在顶栏右缘, 不需要测量翻转; 选项表单点在 state.js UI_HOME;
                  开合走 uiMenuOpen(点空白/Esc 收起挂在 lifecycle.js 既有浮层关闭链)。 -->
-            <button type="button" class="ui-link" :class="{ open: uiMenuOpen }" title="切换界面"
+            <button type="button" class="ui-link" :class="{ open: uiMenuOpen }"
                     @click.stop="uiMenuOpen = !uiMenuOpen">
               <svg class="ico ico-sm"><use :href="uiCurrent.icon"></use></svg>{{ uiCurrent.label }}
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
@@ -165,7 +165,6 @@
                    仅收起(有反馈), 点其它项整页跳转; 这与筛选器菜单(多选需常开)语义相反, 别照抄 -->
               <div v-if="uiMenuOpen" class="pop-menu flip-x">
                 <a v-for="o in uiOptions" :key="o.id" class="pop-item" :class="{ on: o.id === ui }" :href="o.href"
-                   :title="o.id === ui ? '当前界面' : '切换到' + o.label + '界面(' + o.desc + ')'"
                    @click="o.id === ui && $event.preventDefault()">
                   <svg class="ico ico-sm"><use :href="o.icon"></use></svg>
                   <span class="pop-value">{{ o.label }}</span>
@@ -182,13 +181,13 @@
         </header>
         <!-- 状态分布条 + 筛选器(仅辅种页): 分布由已加载的 groups 前端聚合, 点击 chip 按状态筛选 -->
         <div v-if="page === 'groups' && (distTotal || viewMode === 'torrents' || viewMode === 'shows' || selectedCount)" class="status-strip">
-          <div class="dist-bar" :title="distTitle">
+          <div class="dist-bar">
             <span v-for="s in distSegments" :key="s.kind" :class="'k-' + s.kind" :style="{ width: s.pct + '%' }"></span>
           </div>
           <div class="dist-legend">
             <button v-for="s in distSegments" :key="s.kind" class="dist-chip"
                     :class="['k-' + s.kind, { active: kindFilter === s.kind }]"
-                    :title="'仅显示' + s.text + '的' + l10nGroup" @click="toggleKindFilter(s.kind)">
+                    @click="toggleKindFilter(s.kind)">
               <span class="swatch"></span>{{ s.text }} <b>{{ s.count }}</b>
             </button>
           </div>
@@ -241,7 +240,6 @@
                  点击整行即选中/取消(不显示勾选框), 计数徽标绝对定位 -> 选中数不改变按钮宽度 -->
             <div v-for="f in filterDefs" :key="f.kind" class="filter-pop">
               <button class="filter-btn" :class="{ active: f.selected.length }"
-                      :title="'按' + f.label + '筛选' + l10nGroup + '(可多选)'"
                       @click.stop="toggleFilterMenu(f.kind, $event)">
                 <svg class="ico ico-sm" :class="'ico-f-' + f.kind" viewBox="0 0 16 16"><use :href="'#' + f.icon"></use></svg>
                 {{ f.label }}
