@@ -97,6 +97,7 @@ hr_check.reuse_window
 hr_check.shared_dir
 hr_check.sites
 hr_check.sites.*.enabled
+hr_check.sites.*.idle_refresh_interval
 hr_check.sites.*.refresh_interval
 hr_check.sites.*.tracker
 interval

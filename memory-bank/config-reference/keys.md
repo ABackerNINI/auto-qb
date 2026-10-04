@@ -50,7 +50,7 @@
 | `groups` | | 站点分组列表 (可多个, 自由命名无需预定义); 配置层声明不写种子; 供规则 `tracker_group` 条件按分组筛选 (2026-09-15) |
 | `remove_similar_tags` | | 覆盖全局(站点显式 `false` = 本站关闭; 空串视为未配置走全局) |
 
-## hr_check.sites 站点接入(26-09-27-1318 REV2 上收; v3 收敛为三键)
+## hr_check.sites 站点接入(26-09-27-1318 REV2 上收; v3 收敛 + 26-10-05-0555 增稳态降频键)
 
 站点启用与微调的唯一配置源; 键 = 内置站点档案 id(单点: `src/auto_qb/config/site_presets.py`, 首发两档):
 
@@ -59,7 +59,7 @@
 | `btschool` | `nexusphp` | `pt.btschool.club` | `pt.btschool.club` | `/myhr.php` | `/download.php?id={id}` | `page` |
 | `carpt` | `carpt` | `carpt.net` | `tracker.carpt.net` | `/myhr.php` | `/download.php?id={id}` | `page` |
 
-条目键集(v3, 计划 26-09-28-1932 §6.1 + 26-09-30-0240 改名): `enabled(false; 启用即管, 无 mode 分叉)` + 显式映射 `tracker(留空=默认映射; 非空=按 trackers 条目名直取)` + `refresh_interval("12H"; 拉取间隔 —— 自上次健康波起每隔多久重新拉取, 失败档随下一轮自然重试; 点「立即拉取」可越过本闸, 频控仍生效)`。页面事实(adapter/页面路径/下载路径/翻页参数/清单形态 listing)由内置站点档案填充, **任何配置位置都不再接受**; v2 的九个微调键(mode/hr_page_scopes/max_pages_per_refresh/completed_age_limit/accept_empty_listing/auto_age_limit/seeding_exempt_ratio/quota_model/page_rate_per_hour 等)已随 config v2→v3 迁移删除 —— partial/all 差异归档案 `listing` 字段(站点事实), 超额豁免以常量 SEED_EXEMPT_RATIO=3(做种 ≥ 3×要求+extra 免对账, 被动命中考察中仍管束), 空清单走 `--hr-confirm-empty` 人工对账戳。
+条目键集(v3, 计划 26-09-28-1932 §6.1 + 26-09-30-0240 改名 + 26-10-05-0555 S1 增稳态降频): `enabled(false; 启用即管, 无 mode 分叉)` + 显式映射 `tracker(留空=默认映射; 非空=按 trackers 条目名直取)` + `refresh_interval("12H"; 拉取间隔 —— 自上次健康波起每隔多久重新拉取, 失败档随下一轮自然重试; 点「立即拉取」可越过本闸, 频控仍生效)` + `idle_refresh_interval("24H"; 稳态拉取间隔 —— 本地无义务对象(对账对象集为空)时改用的对账节奏, 对象集一翻非空自动回退拉取间隔并下一轮立即拉取; 须 >= 拉取间隔, 相等 = 等效关闭降频; 校验期交叉校验拦 idle < refresh)`。页面事实(adapter/页面路径/下载路径/翻页参数/清单形态 listing)由内置站点档案填充, **任何配置位置都不再接受**; v2 的九个微调键(mode/hr_page_scopes/max_pages_per_refresh/completed_age_limit/accept_empty_listing/auto_age_limit/seeding_exempt_ratio/quota_model/page_rate_per_hour 等)已随 config v2→v3 迁移删除 —— partial/all 差异归档案 `listing` 字段(站点事实), 超额豁免以常量 SEED_EXEMPT_RATIO=3(做种 ≥ 3×要求+extra 免对账, 被动命中考察中仍管束), 空清单走 `--hr-confirm-empty` 人工对账戳。
 
 - **绑定 = 映射(26-09-27-1930)**: web 域与 announce 域是两个命名空间, **永不互相比对**。每个 mode != off 的条目按「显式直取 > 默认查表」解析: 条目 `tracker` 非空 -> 按 trackers 条目名直取; 为空 -> 档案已知 announce 域(`tracker_domain`)在同命名空间(用户 `domains`)查表, 双向子域容错(`t == d or t.endswith("." + d) or d.endswith("." + t)`, 单点 `site_presets.match_trackers`), 恰好 1 个命中即自动绑定(**用户零配置**, CarPT 只配 announce 域也能绑)。HR 页地址恒为 `https://{档案 web_domain}{page_path}`, 与用户 domains 写法无关。派生结果写入 `TrackerConfig.hr_check`(绑定结果视图, `tracker` 字段回填解析出的条目名), 下游 service/channel/parse 零感知。
 - **配置期 fail-fast**: 未登记档案 id(报错+已支持清单) / 默认映射零命中(附档案 announce 域与两条出路) / 默认映射 >=2 命中歧义 / 显式 `tracker` 键不存在 / 同一 tracker 被两个条目绑定 / 绑定站点缺 `hr` 段。

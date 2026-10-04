@@ -121,7 +121,7 @@ class HrCheckConfig:
 
 @dataclass
 class SiteHrCheckConfig:
-    """站点级在线核实参数(v3: enabled + tracker + refresh_interval 三键; 计划 §6.1)
+    """站点级在线核实参数(v3: enabled + tracker + refresh_interval + idle_refresh_interval; 计划 §6.1 + 26-10-05-0555 S1)
 
     enabled: 启用即管 —— 判定语义硬编码(命中考察中管束 / 终态放行 / 无证据本地兜底),
     不再有 mode 分叉与 unknown_policy 撤退路径。partial/all 差异是站点事实(有没有清单页),
@@ -141,6 +141,11 @@ class SiteHrCheckConfig:
     # 无匹配语义); 留空 = 用档案默认映射(已知 announce 域查表)。派生视图回填解析出的条目名。
     tracker: str = ""
     refresh_interval: float = 12 * 3600.0  # 拉取间隔(秒, 26-09-30-0240 改名: 原名「对账波周期」; 展示名见 schema)
+    # 稳态降频间隔(秒, 计划 26-10-05-0555 S1): 对账对象集为空(本地无义务对象)时的对账节奏,
+    # 对象集一翻非空自动回退 refresh_interval 并在下一 poll 立即拉取; 须 >= refresh_interval
+    # (相等 = 等效关闭降频)。拍板 26-10-05: 默认 24H 默认启用。黄金法则 4: 进 validate_config
+    # (含 idle >= refresh 交叉校验)与 schema。
+    idle_refresh_interval: float = 24 * 3600.0
     # ---- 以下全部由档案/绑定派生(配置不再接受) ----
     adapter: str = "nexusphp"  # 由站点档案填充
     hr_page_url: str = ""  # 由站点档案按 web 域派生

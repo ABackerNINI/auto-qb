@@ -47,13 +47,15 @@ KNOWN_HR_CHECK_KEYS = {
     "sites",
 }
 
-# hr_check.sites.<档案 id> 条目键集(v3): enabled + tracker 显式映射 + refresh_interval。
+# hr_check.sites.<档案 id> 条目键集(v3): enabled + tracker 显式映射 + refresh_interval
+# + idle_refresh_interval(稳态降频, 计划 26-10-05-0555 S1)。
 # adapter / hr_page_url / download_path / page_param / listing 五个页面事实由内置站点档案
 # (config/site_presets.py)填充, 任何配置位置都不再接受。
 KNOWN_HR_SITE_KEYS = {
     "enabled",
     "tracker",
     "refresh_interval",
+    "idle_refresh_interval",
 }
 #: Chrome 扩展 id 形态(32 位 a~p) —— 语义与 `hr.channel.EXTENSION_ID_RE` 一致。
 #: 此处**故意不复用** hr 包的那个常量: config 是被 hr 依赖的下层, 反向 import 会形成环;
@@ -323,7 +325,8 @@ def _validate_hr_site_bindings(cfg: dict, errors: List[str]) -> None:
 
 
 def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
-    """校验 hr_check.sites.<档案 id> 条目(enabled + tracker 显式映射 + refresh_interval; v3)
+    """校验 hr_check.sites.<档案 id> 条目(enabled + tracker 显式映射 + refresh_interval
+    + idle_refresh_interval; v3)
 
     !fail-fast 重点: enabled 时绑定站点的 `hr` 段必填 —— 由 _validate_hr_site_bindings
     在绑定层检查(绑定关系要等默认映射查表/显式直取解析完才知道)。
@@ -339,6 +342,39 @@ def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
     if "refresh_interval" in spec:
         _try_time(
             spec["refresh_interval"], f"{where}.refresh_interval", errors, positive=True, min_s=60, max_s=30 * 86400
+        )
+    # 稳态降频间隔(计划 26-10-05-0555 S1): 与 refresh_interval 同款口径(60s 下限 / 30d 上限)
+    if "idle_refresh_interval" in spec:
+        _try_time(
+            spec["idle_refresh_interval"],
+            f"{where}.idle_refresh_interval",
+            errors,
+            positive=True,
+            min_s=60,
+            max_s=30 * 86400
+        )
+    # 交叉校验(计划 26-10-05-0555 S1): 降频不能比常态还快。两侧按缺省补齐成有效值后比较 ——
+    # 覆盖「refresh 配得比默认 idle(24H)还长而未配 idle」的场景(只看显式键会漏掉它)。
+    # 某侧键存在但格式非法时其错误已由 _try_time 报过, 该侧返回 None 使交叉校验整体跳过
+    # (不拿默认值顶替参与比较, 避免与用户原意无关的叠加文案)。
+    def _effective_s(side_key: str, default_s: float):
+        """条目时间键的有效秒值: 缺省按 default_s 补齐; 存在但格式非法返回 None"""
+        if side_key not in spec:
+            return default_s
+        try:
+            return parse_time(spec[side_key])
+        except ValueError:
+            return None
+
+    from ..models import SiteHrCheckConfig  # 延迟导入防环(与 core._current_main_tick 同款)
+
+    defaults = SiteHrCheckConfig()
+    idle_s = _effective_s("idle_refresh_interval", defaults.idle_refresh_interval)
+    refresh_s = _effective_s("refresh_interval", defaults.refresh_interval)
+    if idle_s is not None and refresh_s is not None and idle_s < refresh_s:
+        errors.append(
+            f"{where}.idle_refresh_interval: 降频不能比常态还快 —— 稳态拉取间隔({_fmt_s(idle_s)}s)"
+            f"须 >= 拉取间隔({_fmt_s(refresh_s)}s); 相等 = 等效关闭降频"
         )
 
 

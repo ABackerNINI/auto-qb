@@ -4,7 +4,8 @@
 (check_hr_condition 第一行 `if not self.tracker_conf.hr: return False`), 故必须在配置期拦下。
 
 v3 收敛: 判定语义硬编码(四行判定表), 配置只留「用户身份类」事实 —— 全局 6 键 +
-channel 5 键 + sites 条目 3 键(enabled/tracker/refresh_interval)。旧 v2 键 26 个由
+channel 5 键 + sites 条目 4 键(enabled/tracker/refresh_interval/idle_refresh_interval,
+末者为稳态降频间隔, 计划 26-10-05-0555 S1, 拍板默认 24H 默认启用)。旧 v2 键 26 个由
 config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻兼容层。绑定机制不变
 (26-09-27-1930 映射制): 默认绑定 = 档案已知 announce 域在用户 domains 查表, 未命中/歧义
 用显式键 `tracker` 直取; 页面事实五键(含 listing)一律由档案填充。
@@ -15,6 +16,11 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_reuse_window_default_and_parsed: 数据复用窗(26-09-30-0240)默认 2H / 自定义时间串解析
 - test_reuse_window_range: 复用窗边界 —— 60s 下限与 7d 上限, 之外报错
 - test_sites_entry_parsed: sites 条目解析 + 绑定派生(三键来自配置 / 页面事实来自档案 / tracker 回填)
+- test_idle_refresh_interval_default_and_parsed: 稳态降频间隔(26-10-05-0555 S1)缺省 24H / 自定义解析 / 派生视图透传
+- test_idle_refresh_interval_below_refresh_errors: 交叉校验 —— idle < refresh 报「降频不能比常态还快」
+- test_idle_refresh_interval_cross_check_uses_defaults: 交叉校验按缺省补齐比较 —— refresh 配 >24H 而未配 idle 照样报错
+- test_idle_refresh_interval_range: 60s 下限 / 30d 上限(与 refresh_interval 同款口径), 之外报错
+- test_idle_refresh_interval_equal_to_refresh_valid: idle == refresh 合法(等效关闭降频)
 - test_page_url_derived_from_web_domain: HR 页地址恒为档案 web 域派生, 与用户 domains 写法无关
 - test_carpt_default_mapping_binds_without_web_domain: CarPT 回归锚 —— domains 只配 announce 域也能绑定
 - test_preset_id_must_be_registered: 未登记档案 id 报错 + 文案含已支持清单
@@ -26,7 +32,7 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_bound_site_requires_hr_section: 绑定站点缺 hr 段 -> 报错
 - test_disabled_site_does_not_require_hr_section: enabled=false(默认)不要求 hr 段
 - test_legacy_v1_key_migrates_to_v3: 生产兼容回归锚 —— 旧键形态不改一字, 加载即沿链迁移到 v3 enabled
-- test_migration_2_3_drops_v2_keys: v2→v3 迁移单测 —— 废弃键删除 / min_torrent_interval 改名 / mode→enabled
+- test_migration_2_3_drops_v2_keys: v2→v3 迁移单测 —— 废弃键删除 / min_torrent_interval 改名 / mode→enabled / idle_refresh_interval 原样保留(无章新写法不丢键)
 - test_migration_2_3_keeps_binding_essentials: v2→v3 迁移单测 —— tracker/refresh 保留, off 条目删除
 - test_migration_2_3_drops_tracker_hr_check: v2→v3 迁移单测 —— trackers.*.hr_check 残留直接删除
 - test_migration_1_2_then_2_3_chain: v1→v2→v3 沿链迁移结果一致(链式正确性)
@@ -460,7 +466,9 @@ def test_legacy_v1_key_migrates_to_v3(tmp_path):
 
 
 def test_migration_2_3_drops_v2_keys():
-    """v2→v3 迁移单测: 全局废弃键删除 / min_torrent_interval 改名 min_interval / mode→enabled"""
+    """v2→v3 迁移单测: 全局废弃键删除 / min_torrent_interval 改名 min_interval / mode→enabled;
+    idle_refresh_interval 原样保留 —— 「缺版本章 = 按 v1 处理」的存量口径下, 无章新写法也会
+    走到本迁移, 重建白名单必须携带 v4 期新增键(计划 26-10-05-0555 S1), 否则静默丢键"""
     cfg = _migrate_config_2_3(
         {
             "hr_check":
@@ -481,6 +489,7 @@ def test_migration_2_3_drops_v2_keys():
                                     "completed_age_limit": "365D",
                                     "tracker": "bt",
                                     "refresh_interval": "6H",
+                                    "idle_refresh_interval": "24H",
                                 }
                         },
                 }
@@ -494,7 +503,7 @@ def test_migration_2_3_drops_v2_keys():
     ):
         assert gone not in hr, gone
     entry = hr["sites"]["btschool"]
-    assert entry == {"enabled": True, "tracker": "bt", "refresh_interval": "6H"}
+    assert entry == {"enabled": True, "tracker": "bt", "refresh_interval": "6H", "idle_refresh_interval": "24H"}
 
 
 def test_migration_2_3_keeps_binding_essentials():
@@ -638,6 +647,124 @@ def test_reuse_window_range():
     for bad in ("59S", "7D1S", "8D"):
         errors = _validate({"hr_check": {"reuse_window": bad}})
         assert any("reuse_window" in e for e in errors), (bad, errors)
+
+
+def test_idle_refresh_interval_default_and_parsed(tmp_path):
+    """稳态降频间隔(26-10-05-0555 S1): 缺省 24H(拍板默认启用降频), 自定义时间串解析, 派生视图透传"""
+    cfg = load_config(
+        _write(
+            tmp_path, {
+                "hr_check": {
+                    "sites": {
+                        "btschool": {
+                            "enabled": "true"
+                        }
+                    }
+                },
+                "trackers": {
+                    "btschool": _bts_site()
+                },
+            }
+        )
+    )
+    assert cfg.hr_check.sites["btschool"].idle_refresh_interval == 24 * 3600.0
+    # 派生视图(trackers.*.hr_check)同值透传, 下游只读派生视图
+    assert cfg.trackers["btschool"].hr_check.idle_refresh_interval == 24 * 3600.0
+
+    cfg2 = load_config(
+        _write(
+            tmp_path, {
+                "hr_check": {
+                    "sites": {
+                        "btschool": {
+                            "enabled": "true",
+                            "idle_refresh_interval": "2D",
+                        }
+                    }
+                },
+                "trackers": {
+                    "btschool": _bts_site()
+                },
+            }
+        )
+    )
+    assert cfg2.hr_check.sites["btschool"].idle_refresh_interval == 2 * 86400.0
+    assert cfg2.trackers["btschool"].hr_check.idle_refresh_interval == 2 * 86400.0
+
+
+def test_idle_refresh_interval_below_refresh_errors():
+    """交叉校验(26-10-05-0555 S1): idle < refresh 报「降频不能比常态还快」; 互换后合法"""
+    errors = _validate(
+        {"hr_check": {
+            "sites": {
+                "btschool": {
+                    "idle_refresh_interval": "6H",
+                    "refresh_interval": "12H"
+                }
+            }
+        }}
+    )
+    assert any("idle_refresh_interval" in e and "降频不能比常态还快" in e for e in errors), errors
+    assert _validate({"hr_check": {
+        "sites": {
+            "btschool": {
+                "idle_refresh_interval": "12H",
+                "refresh_interval": "6H"
+            }
+        }
+    }}) == []
+
+
+def test_idle_refresh_interval_cross_check_uses_defaults():
+    """交叉校验按缺省补齐比较(26-10-05-0555 S1): refresh 配 >24H 而未配 idle(有效 idle = 默认 24H)照样报错;
+    反之 idle 配 >24H 而 refresh 缺省(12H)合法"""
+    errors = _validate({"hr_check": {"sites": {"btschool": {"refresh_interval": "25H"}}}})
+    assert any("降频不能比常态还快" in e for e in errors), errors
+    assert _validate({"hr_check": {"sites": {"btschool": {"idle_refresh_interval": "25H"}}}}) == []
+
+
+def test_idle_refresh_interval_range():
+    """idle_refresh_interval 边界: 60s 下限 / 30d 上限(与 refresh_interval 同款口径), 之外报错"""
+    # 边界内合法(与 refresh 同值配对, 避免踩缺省补齐的交叉校验)
+    assert _validate(
+        {"hr_check": {
+            "sites": {
+                "btschool": {
+                    "idle_refresh_interval": "60S",
+                    "refresh_interval": "60S"
+                }
+            }
+        }}
+    ) == []
+    assert _validate(
+        {"hr_check": {
+            "sites": {
+                "btschool": {
+                    "idle_refresh_interval": "30D",
+                    "refresh_interval": "30D"
+                }
+            }
+        }}
+    ) == []
+    for bad in ("59S", "30D1S", "31D"):
+        errors = _validate({"hr_check": {"sites": {"btschool": {"idle_refresh_interval": bad}}}})
+        assert any("idle_refresh_interval" in e and ("须 >=" in e or "须 <=" in e or "无效时间格式" in e)
+                   for e in errors), (bad, errors)
+
+
+def test_idle_refresh_interval_equal_to_refresh_valid():
+    """idle == refresh 合法(拍板口径: 相等 = 等效关闭降频)"""
+    errors = _validate(
+        {"hr_check": {
+            "sites": {
+                "btschool": {
+                    "idle_refresh_interval": "12H",
+                    "refresh_interval": "12H"
+                }
+            }
+        }}
+    )
+    assert errors == [], errors
 
 
 def test_channel_extension_id_format():

@@ -55,7 +55,8 @@ HR_CHECK_CHANNEL_FIELDS: Tuple[Field, ...] = (
     ),
 )
 
-#: hr_check.sites.<档案 id> 条目字段(v3: enabled + tracker 显式映射 + refresh_interval 三键)。
+#: hr_check.sites.<档案 id> 条目字段(v3: enabled + tracker 显式映射 + refresh_interval
+#: + idle_refresh_interval 稳态降频, 计划 26-10-05-0555 S1)。
 #: 页面事实(adapter/页面路径/下载路径/翻页参数/清单形态)由内置站点档案填充, 不再是可配置项 ——
 #: 「站点接入」卡片按这里的字段表渲染微调项。
 HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
@@ -85,6 +86,16 @@ HR_CHECK_SITES_FIELDS: Tuple[Field, ...] = (
         unit_default="H",
         help="自上次健康波起, 每隔多久重新拉取一次站点清单(在线对账的节奏); 失败的档位随下一轮自然重试(无独立退避)。"
         "站点访问节奏由本值与频控(最小间隔/日额/时间窗)共同决定; 点『立即拉取』可越过本闸(频控仍生效)",
+    ),
+    Field(
+        "idle_refresh_interval",
+        "稳态拉取间隔",
+        "time",
+        default="24H",
+        unit_default="H",
+        help="本地没有义务对象(对账对象集为空)时改用的对账节奏 —— 稳态期按本间隔降频, "
+        "对象集一翻非空(如新下载/本机重下)自动回退拉取间隔并在下一轮立即拉取。"
+        "须 >= 拉取间隔(相等 = 等效关闭降频)",
     ),
 )
 

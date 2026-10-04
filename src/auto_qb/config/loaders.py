@@ -150,7 +150,7 @@ def load_hr_check_config(spec) -> HrCheckConfig:
         request_timeout=_get(channel_spec, "request_timeout", channel_default.request_timeout, parse_time)
         if isinstance(channel_spec, dict) else channel_default.request_timeout,
     )
-    # 站点接入: 键 = 内置站点档案 id; 值 = enabled + tracker + refresh_interval。
+    # 站点接入: 键 = 内置站点档案 id; 值 = enabled + tracker + refresh_interval + idle_refresh_interval。
     # 合法性(档案 id 已登记 / 绑定唯一 / 缺 hr 段)由 validate_config 保证, 这里只转换。
     sites_spec = spec.get("sites")
     sites = {
@@ -171,8 +171,8 @@ def load_hr_check_config(spec) -> HrCheckConfig:
 
 
 def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
-    """解析站点级在线核实条目 hr_check.sites.<档案 id>(enabled + tracker + refresh_interval);
-    缺省 = 不启用。
+    """解析站点级在线核实条目 hr_check.sites.<档案 id>(enabled + tracker + refresh_interval
+    + idle_refresh_interval); 缺省 = 不启用。
 
     页面事实五键(adapter/hr_page_url/download_path/page_param/listing)属未知键(校验层拦下) ——
     值一律以档案为准(计划 26-09-27-1930 §3.2; listing 归档 v3)。
@@ -184,6 +184,7 @@ def load_site_hr_check_config(spec) -> SiteHrCheckConfig:
         enabled=_get(spec, "enabled", d.enabled, parse_bool),
         tracker=_get(spec, "tracker", d.tracker, lambda v: str(v).strip()),
         refresh_interval=_get(spec, "refresh_interval", d.refresh_interval, parse_time),
+        idle_refresh_interval=_get(spec, "idle_refresh_interval", d.idle_refresh_interval, parse_time),
     )
 
 
@@ -233,7 +234,7 @@ def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, Track
        恰好 1 个命中即自动绑定(用户零配置);
     解析结果派生填充 TrackerConfig.hr_check(adapter/URL/路径/参数/listing 来自档案,
     required_seeding_time 来自绑定站点的 hr 规则(required + extra, 超额线 3× 判据),
-    refresh_interval 来自配置, URL = https://{档案 web_domain}{page_path}, 与用户 domains
+    refresh_interval/idle_refresh_interval 来自配置, URL = https://{档案 web_domain}{page_path}, 与用户 domains
     写法无关); 派生视图的 tracker 字段回填解析出的条目名。未启用不绑定; 绑不上/绑多个/
     显式键不存在/唯一性/缺 hr 段由 validate_config 独立完成, 这里假定配置已合法。
 
@@ -261,6 +262,7 @@ def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, Track
             enabled=True,
             tracker=name,
             refresh_interval=site_conf.refresh_interval,
+            idle_refresh_interval=site_conf.idle_refresh_interval,
             adapter=preset.adapter,
             hr_page_url=preset.page_url(),
             download_path=preset.download_path,

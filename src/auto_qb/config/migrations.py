@@ -115,7 +115,8 @@ def _migrate_config_2_3(cfg: dict) -> dict:
     - sites 条目: mode partial/all → enabled: true, mode off 条目整体删除; 无 mode 但带
       enabled 的条目(v1 章缺失的新写法)原样保留 enabled —— 迁移是版本链上的一次性变换,
       但「缺版本章 = 按 v1 处理」的存量口径意味着新写法也会走到这里, 不能误杀。
-      tracker / refresh_interval 原样保留。
+      tracker / refresh_interval / idle_refresh_interval 原样保留(末者 v4 期新增键
+      计划 26-10-05-0555 S1: 非破坏变更刻意不抬版本, 无章新写法沿本迁移经过时不得丢键)。
     - trackers.*.hr_check 残留直接删除(v2 迁移已收敛过一轮, 不再提供旧位置兼容)。
     """
     hr = cfg.get("hr_check")
@@ -139,6 +140,8 @@ def _migrate_config_2_3(cfg: dict) -> dict:
                         new_entry["tracker"] = entry["tracker"]
                     if "refresh_interval" in entry:
                         new_entry["refresh_interval"] = entry["refresh_interval"]
+                    if "idle_refresh_interval" in entry:
+                        new_entry["idle_refresh_interval"] = entry["idle_refresh_interval"]
                 if new_entry:
                     sites[preset_id] = new_entry
                 else:
