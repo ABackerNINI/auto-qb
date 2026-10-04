@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="qb-traffic-storage-v3">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-04-1730">
+<meta name="doc-updated" content="26-10-04-1919">
+<meta name="doc-refs" content="memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md">
+<title>qB 流量历史 dat v3 设计报告 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2027;
+    --accent: #5cc0cf;
+    --accent-ink: #86d7e0;
+    --ok: #7fc08a;
+    --ok-bg: #16241a;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --bad: #e0796f;
+    --bad-bg: #2a1a18;
+    --code-bg: #171d24;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: #24424a; color: #f0f0f0; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 52px 44px 80px; }
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 28px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 78ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13px; font-family: var(--mono); }
+  .refs { margin-top: 10px; font-size: 12.5px; color: var(--ink-faint); }
+  .refs a { color: var(--ink-dim); text-decoration: none; border-bottom: 1px dotted var(--hair); }
+  .refs a:hover { color: var(--accent-ink); }
+  nav.toc { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { color: var(--accent-ink); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  h4 { font-family: var(--display); font-size: 13.5px; font-weight: 600; margin: 14px 0 6px; color: var(--ink-dim); }
+  p { margin-bottom: 11px; max-width: 86ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 86ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 6px; padding: 14px 16px; overflow-x: auto; margin: 12px 0 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--hair); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.04em; color: var(--ink-dim); background: var(--paper-2); }
+  td { color: var(--ink); }
+  .tag { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 8px; border-radius: 10px; margin-right: 4px; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+  .tag.bad { background: var(--bad-bg); color: var(--bad); }
+  .tag.info { background: #1a2530; color: var(--accent-ink); }
+  .callout { border-left: 3px solid var(--accent); background: var(--paper-2); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 14px 0; max-width: 86ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.ok { border-left-color: var(--ok); }
+  .callout.bad { border-left-color: var(--bad); }
+  .callout .t { font-family: var(--display); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 6px; }
+  .callout.warn .t { color: var(--warn); }
+  .callout.ok .t { color: var(--ok); }
+  .callout.bad .t { color: var(--bad); }
+  .callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
+  .anchor { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+  .small { font-size: 12.5px; color: var(--ink-faint); }
+  figure { margin: 16px 0; }
+  figcaption { font-size: 12.5px; color: var(--ink-faint); margin-top: 8px; max-width: 86ch; }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">Design Report · qb-traffic-storage-v3</div>
+  <h1>qB 流量历史 dat v3 设计报告</h1>
+  <p class="lede">承接 v2 落地后的三个用户认定问题(P1 落盘时机 / P2 采样率变更 / P3 主循环同步)与取证报告 26-10-04-1639 的四条根因(A1-A4), 对四项存储层重构构思逐一完成验证与量化对比: <b>四项全部成立</b>, 合成为 v3 设计 —— 采样率下限锁 main_tick + 倍数约束(告警级) · 块+元数据头行+稀疏 delta 实测时间差 · 10 分钟批量落盘 · 按天分文件按需读。本轮仅报告不实施; 旧数据不迁移, 直接换代 <code>qb-traffic-v3/</code> 新目录。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">形态</div><div class="v">report(设计验证快照, 出厂冻结)</div></div>
+    <div class="item"><div class="k">日期</div><div class="v">2026-10-04</div></div>
+    <div class="item"><div class="k">状态</div><div class="v">待评审(v3 设计未实施)</div></div>
+    <div class="item"><div class="k">代码基线</div><div class="v">develop bc23748b(静态取证, 未跑真机)</div></div>
+  </div>
+  <div class="refs">
+    关联文档:
+    <a href="../plans/26-10-04-0721-plan-qb-traffic-v2-zrow.html">plan · qb-traffic v2 z 行(26-10-04-0721)</a> ·
+    <a href="26-10-04-0636-report-qb-traffic-storage.html">report · qb-traffic 存储(26-10-04-0636)</a> ·
+    <a href="26-10-04-1639-report-webui-qb-traffic-line-breaks.html">report · 折线断裂取证(26-10-04-1639)</a> ·
+    <a href="../plans/26-10-03-0946-plan-qb-traffic-charts-c.html">plan · qb-traffic charts-c(26-10-03-0946)</a> ·
+    <a href="26-10-03-0757-report-qb-traffic-charts.html">report · qb-traffic charts(26-10-03-0757)</a>
+  </div>
+  <nav class="toc">
+    <a href="#s1">01 摘要</a><a href="#s2">02 背景与问题</a><a href="#s3">03 现状事实基线</a><a href="#s4">04 逐项验证与对比</a><a href="#s5">05 v3 合成设计</a><a href="#s6">06 裁决记录</a><a href="#s7">07 实施分期建议</a><a href="#s8">08 风险与开放问题</a>
+  </nav>
+  <div class="refs" style="margin-top:10px; border-top:1px dotted var(--hair); padding-top:8px;">
+    修订记录 · <b>版本 3</b>(2026-10-04, doc-updated 26-10-04-1919) · 触发: 用户补充输入「后续需要月/年视图; 聚合数据与 raw 同放天文件时, 月/年访问要读所有天文件, 不可取 → 聚合分开存储」, 经子智能体验证成立(年视图 365 个天文件冷读 → 1 个 agg 文件)。修订要点: hour/day/month 聚合迁出天文件入每系列 agg.dat(9 列+cov_s), 内存累计器 + flush 合流封口 + 文件尾水位恢复, 逐级派生, 零新增配置键, 新增 90d/6mo/1y/all 视图; Q4 旧口径作废; 详见 <a href="#s6">§6.4 修订裁决</a>。<br>
+    版本 2(2026-10-04, doc-updated 26-10-04-1820) · 触发: 用户补充输入「考虑主循环耗时, 改存 delta 时间差」, 经子智能体验证成立(next_tick_at 按「实际时刻」累加, <span class="anchor">qbmanager.py:518-527</span>)。要点: 纯等间隔推算定量失效(块尾误差可达 ~29s) → r/z/n 行型加可选 dt_ms(稀疏 delta + 累积漂移触发), 桶宽改按有效 dt, 「main_tick 整数倍」降级告警级; 详见 <a href="#s6">§6.3 修订裁决</a>。
+  </div>
+</header>
+
+<!-- ================================================================ -->
+<section id="s1">
+  <h2><span class="no">01</span>摘要(结论先行)</h2>
+
+  <div class="callout ok">
+    <div class="t">总结论</div>
+    <p>四项构思 <b>C1-C4 全部验证成立</b>(经 26-10-04 修订轮口径修正), 且互相咬合成一个自洽的 v3 存储层设计: 采样率下限锁 main_tick、倍数约束降级告警级(C1 管采样密度上限与 qB 请求预算) → 数据按块组织(块头带起时与采样率, 游标推算时间, 漂移行写实测 dt_ms; C1 与 dt 正交分层 —— dt 管时间真值) → 每 <code>flush_interval</code>(默认 600s)批量落盘 → 按天分文件 + 每系列一个 agg.dat 聚合文件(hour/day/month 9 列+cov_s)、读侧按查询窗口只开涉及日期或聚合段(§6.4)。<b>本轮仅出报告不实施</b>(用户拍板), 旧 <code>qb-traffic/</code> 数据不迁移, v3 直接落 <code>qb-traffic-v3/</code> 新目录、旧目录留存不读。</p>
+  </div>
+
+  <table>
+    <tr><th style="width:17%">构思</th><th style="width:36%">一句话</th><th style="width:13%">验证结论</th><th>关键量化</th></tr>
+    <tr>
+      <td><b>C1</b> 采样率下限锁 main_tick + 倍数约束(告警级)</td>
+      <td>实际节拍 = main_tick + 任务线耗时(d̄): 实际节奏 = <code>ceil(I/(main_tick+d̄))×(main_tick+d̄)</code>, 有载量化误差 ∈ [0, main_tick+d̄) 且配置时不可知 —— I = k×main_tick 仅空载(d̄=0)时误差 = 0; 时间真值不由节奏预测保证, 交由实测 dt(与 C1 正交分层)</td>
+      <td><span class="tag ok">成立</span>(口径修订)</td>
+      <td>3s 配置实走 4s(+33%, d̄=0)且随负载漂移(d̄=0.5s → 5s, +67%); 倍数失配 → 向上取整 + 告警一次; 1.5s 档不可得(I ≥ main_tick 硬校验, 与 sync_interval 钳制同一纪律)</td>
+    </tr>
+    <tr>
+      <td><b>C2</b> 块 + 元数据头行 + 稀疏 delta 推算时间</td>
+      <td>块头 <code>B,&lt;start&gt;,&lt;interval&gt;</code>; 数据行 5 列无时间戳 + 可选第 6 列 <code>dt_ms</code>(实测时间差), 游标推算 + 累积漂移超容差才写实测 dt</td>
+      <td><span class="tag ok">成立</span>(格式精化, v2 修订)</td>
+      <td>行宽省 ~11B(漂移行 +5-6B, 空载稀疏占绝大多数); 有效 dt 桶宽使 A2 伪断线根因不可再发生; 纯等间隔定量失效(块尾 ~29s)被 dt 链修正(误差界 tol+取整); 真空/断连语义分离; 聚合迁出天文件入 agg.dat(hour 9 列+cov_s, §6.4)</td>
+    </tr>
+    <tr>
+      <td><b>C3</b> 10 分钟批量落盘</td>
+      <td>采样 handler 内计时, 每 flush_interval 单次 open("a") + flush + fsync</td>
+      <td><span class="tag ok">成立</span></td>
+      <td>写 IO 300×↓(2s 档)/20×↓(30s 档); stop() 钩子使优雅退出零丢失</td>
+    </tr>
+    <tr>
+      <td><b>C4</b> 按天分文件按需读</td>
+      <td><code>qb-traffic-v3/{global,torrents/&lt;infohash&gt;}/&lt;date&gt;.dat</code>, 窗口→日期集合→只读涉及文件</td>
+      <td><span class="tag ok">成立</span>(目录定型)</td>
+      <td>30d 窗读量 20-60×↓ 且不随历史增长; index.json 机制退役</td>
+    </tr>
+  </table>
+
+  <h3>1.1 核心量化收益</h3>
+  <table>
+    <tr><th style="width:24%">收益</th><th style="width:44%">数字</th><th>出处</th></tr>
+    <tr><td>写 IO(open/flush 次数)</td><td>2s 档全局系列 43200 → 144 次/天(<b>300×</b>↓); 30s 档 2880 → 144 次/天(20×↓); 代价: 新增 fsync 144 次/天</td><td>§4.3</td></tr>
+    <tr><td>读放大</td><td>30d 窗: 现行全文件解析(raw 43200 + hour 720 行, 随历史线性涨) → v3 只读 hour 行 720-2160 行(<b>约 20-60×</b>↓, 恒定); 24h 窗只开 2 个日期文件; 聚合分层后 3d/7d/30d 冷读 ≤31 open → 1 open(§6.4)</td><td>§4.4 / §6.4</td></tr>
+    <tr><td>聚合分层(第三轮修订)</td><td>hour/day/month 迁出天文件入每系列 agg.dat: 年视图 365 天文件冷读 → <b>1 open</b>(agg ≈0.45MB/系列/年, 毫秒级); 组端点 30d 组图 M×31 → M×1(<span class="anchor">traffic_qb.py:148-149</span>); day/month 行永久(≈15KB/年/系列)</td><td>§6.4</td></tr>
+    <tr><td>伪断线根因(A2)消除</td><td>桶宽按记录<b>有效 dt</b> 逐记录计算 = <code>max(1, ceil(有效dt))</code>(显式 dt 或游程均摊 span/run_len), 实测抖动如实入行不再制造空桶; 格式代价: 仅累积漂移超容差行多写 dt_ms(+5-6B), 空载稀疏占绝大多数</td><td>§4.2</td></tr>
+    <tr><td>时间精度(修订轮新增)</td><td>实测 dt_ms 稀疏入行(累积漂移 &gt; tol 触发), 时间误差界 = tol + 取整(tol 建议 200-250ms) —— 对比纯等间隔推算的块尾误差(d̄=0.1s 时 10min 块 ≈29s, d̄=10ms 仍 ~3s)</td><td>§4.2 / §6.3</td></tr>
+    <tr><td>真空判定去 global 依赖</td><td>停机 = 块间 gap, 断连 = n 槽, 两语义分离; 组端点「借 global 判 null」退役(<span class="anchor">traffic_qb.py:148-159</span>)</td><td>§4.2</td></tr>
+    <tr><td>优雅退出零丢失</td><td>现行主循环 finally 无 dat 冲刷、开放行程必丢(≤600s); v3 经 <code>host.stop_all()</code> 触发模块 stop() 钩子全量 flush + 封游程 + 聚合封口(hour/day/month)</td><td>§4.3</td></tr>
+  </table>
+
+  <div class="callout">
+    <div class="t">边界与拍板</div>
+    <p>用户已拍板四项(§6): ①仅报告不实施 ②旧数据不迁移, 直接换代 <code>qb-traffic-v3/</code> 新目录, 旧目录留存不读 ③全程静态取证 ④本报告立档 <code>memory-bank/reports/</code>。材料中标注「待报告裁决」的 4 个开放问题(块头字段取舍 / 热重载失配策略 / 缓冲上限 / hour 补写触发点)均已按推荐方案闭合; 26-10-04 三轮修订的裁决见 §6.3-§6.4; 开放项累计四项(跨桶记录覆盖语义 / 前端档位取舍 / aggregate_window 预留 / agg 快读上界取值), 见 §8.2。</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s2">
+  <h2><span class="no">02</span>背景与问题</h2>
+
+  <h3>2.1 v1 → v2 演进(一句话)</h3>
+  <p>v2(plan <a href="../plans/26-10-04-0721-plan-qb-traffic-v2-zrow.html">26-10-04-0721</a>)新增零值游程行型 <code>z,&lt;start&gt;,&lt;end&gt;,&lt;dl_total&gt;,&lt;up_total&gt;</code>(Z_FIELDS=5)与头行 v1→v2 双读门闩(双读单写); 零样本不出 raw 行、只推进内存开放行程, 五触发封口(非零到达 / null 到达 R2 / 时长≥600s R1 / 样本≥120 / 小时封口); 读侧 z 覆盖展开 0 平线(相交即覆盖, 混桶 raw 优先)、hour 聚合 z 感知(interval_s 加权)、tooltip 三态、组空态判据补 zruns; 三修正: R1 600s 时间刷新封口 / R2 null 先封口防 z 跨断连 / R3 头行升级时机(z 追加前强制升 v2)。实测: 空闲段压缩 16.4x(纯空闲 24h)/17.9x(典型), 全文件 2.98x(hour 720 行是地板); test.full 2497 passed + 4 skipped / 覆盖率 99%。<b>遗留</b>: 图尾未封口行程 ≤600s 呈缺口; 采样节奏与读侧桶宽的错位(A1-A4)完全未触及。</p>
+
+  <h3>2.2 v2 后用户认定的三个问题</h3>
+  <table>
+    <tr><th style="width:20%">问题</th><th>内涵</th><th style="width:14%">归入构思</th></tr>
+    <tr><td><b>P1 落盘时机</b></td><td>每行 open("a")+flush 且追加前 open("rb")+seek(-1) 查尾字节(<span class="anchor">traffic_store.py:400-411</span>), 每活跃采样 3 次文件操作, 同步开销随采样率线性上涨</td><td>C3</td></tr>
+    <tr><td><b>P2 采样率变更</b></td><td>运行期改 sample_interval 后, 同一文件内新旧行距混排, 读侧全局桶宽必错; 且 task.interval 注册时定死不跟(A3)</td><td>C1 + C2</td></tr>
+    <tr><td><b>P3 主循环同步</b></td><td>采样任务真实节奏被 main_tick 量化, 配置值与实际节奏脱钩, 下游一切「按配置 interval 推算」的假设失效</td><td>C1</td></tr>
+  </table>
+
+  <h3>2.3 取证报告 26-10-04-1639 已闭合的四条根因(A1-A4)</h3>
+  <table>
+    <tr><th style="width:8%">#</th><th style="width:30%">根因</th><th>机制一句话</th><th style="width:28%">锚点 / 实证</th></tr>
+    <tr><td>A1</td><td><b>写侧: 采样节奏被节拍量化</b></td><td>真实节奏 = <code>ceil(max(interval, main_tick)/main_tick)×main_tick</code>; 3s 配置实走 4s</td><td class="anchor">6 个 dat 最近 40 行行距 {4s: 39, 5s: 1}; 截图点距 48px ≈ 4.1s</td></tr>
+    <tr><td>A2</td><td><b>读侧: 桶宽错位</b></td><td>桶宽 = ceil(sample_interval)(<span class="anchor">traffic_grid.py:91</span>), 4s 行距落进 3s/2s 桶 → 系统性空桶; 前端 spanGaps:false 如实断线; 1.5s 档桶宽(2s)恰为行距一半 → 全孤点</td><td class="anchor">traffic_grid.py:91 · qb_traffic_chart.js:452</td></tr>
+    <tr><td>A3</td><td><b>热重载: task.interval 不跟</b></td><td>任务 interval 注册时定死, 运行期改 sample_interval 只影响读侧(L0 换对象), 写侧节奏不动; 重启自愈</td><td class="anchor">traffic_sample_mod.py:225-231</td></tr>
+    <tr><td>A4</td><td><b>前端: 轮询下界残留</b></td><td>轮询夹取下界 15s 是放宽前的旧配置校验下限, 未跟 26-10-04 放宽到 1.5s</td><td class="anchor">qb_traffic_chart.js:46-48, 337-339</td></tr>
+  </table>
+
+  <div class="callout warn">
+    <div class="t">与本轮的关系</div>
+    <p>26-10-04-1639 的修复三建议(读侧桶宽按量化节奏 / handler 回写 task.interval / 前端下界 1.5s)与根因 A1-A4 <b>本轮均未实施, 由本设计吸收</b>: A1 → C1 + 实测 dt(空载倍数锁定使量化归零; 有载节拍漂移由实测 dt 吸收 —— 采样 ts 本就如实记录抖动, <span class="anchor">traffic_sample_mod.py:123</span> 设计注释「抖动是事实, 存储层不假装均匀」); A2 → C2(桶宽按有效 dt 逐记录计算, 根因在格式层面消除); A3 → C1 的热重载联动(handler 检测变化回写 task.interval + 触发一次新块); A4 → v3 保持前端轮询逻辑不变(<code>meta.interval_s</code> 语义保留), 下界常量对齐属单行修, 随实施批次顺带处理(§5.7)。z 行纪律经取证无罪(26-10-04-1639 §06 排除项)。</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s3">
+  <h2><span class="no">03</span>现状事实基线</h2>
+  <p class="small">阶段一盘点压缩版。代码以 develop <code>bc23748b</code> 为准, 路径相对 <code>src/auto_qb/</code>。</p>
+
+  <h3>3.1 采样链路 <span class="anchor">core/modules/traffic_sample_mod.py</span></h3>
+  <ul>
+    <li>内部任务 <code>Task("internal","qb_traffic_sample", interval=conf.sample_interval)</code> 注册(<span class="anchor">:225-231</span>); <code>queue_rebuilt</code> 相位重建重注册(<span class="anchor">:209-213</span>); enabled=false 不建任务(<span class="anchor">:223</span>)。</li>
+    <li>handler 跑在主循环线程、无锁(<span class="anchor">:64-66</span>); 断连 → 全局 null 点 + 照常小时封口(<span class="anchor">:245-251</span>)。</li>
+    <li>单种活跃过滤: <code>dlspeed&gt;0 or upspeed&gt;0</code> 才产 raw 行(<span class="anchor">:309</span>); 零样本 (0,0) 不出 raw 行、只 <code>_touch_zero_run</code>(<span class="anchor">:293-295, :317-330</span>); 封口 <code>_flush_zero_run → append_z_run</code>(<span class="anchor">:433-456</span>)。</li>
+    <li>游程阈值: <code>ZRUN_FLUSH_S=600</code>(<span class="anchor">:104</span>) / <code>ZRUN_CAP_SAMPLES=120</code>(<span class="anchor">:108</span>); dry_run 不落盘但行程照常(<span class="anchor">:46-47</span>)。</li>
+  </ul>
+
+  <h3>3.2 存储格式与落盘 <span class="anchor">core/traffic_store.py</span></h3>
+  <ul>
+    <li>目录: <code>&lt;data_dir&gt;/qb-traffic/</code> 下 global.dat + torrents/&lt;infohash&gt;.dat + index.json(<span class="anchor">:7-10, :358-363</span>); 头行 <code># auto-qb qb-traffic v1|v2</code>(<span class="anchor">:131, :134</span>)。</li>
+    <li>行型: <code>key,&lt;系列&gt;</code>; <code>raw,&lt;epoch_s&gt;,&lt;dl_rate&gt;,&lt;up_rate&gt;,&lt;dl_total&gt;,&lt;up_total&gt;</code> 6 列<b>每行带时间戳</b>, null 行四数据列全空(<span class="anchor">:235-239</span>); <code>hour,&lt;hour_epoch&gt;,avg,max…,totals…</code> 8 列(<span class="anchor">:242-247</span>); z 行 5 列(<span class="anchor">:250-252</span>); 全整数秒 / 非负整数。</li>
+    <li>解析: <code>parse_dat_text</code>(<span class="anchor">:265-350</span>)头行分发(<span class="anchor">:280-283</span>); v1 头行下 z 行按坏行计数(<span class="anchor">:325-338</span>); 坏行 &gt;5% 且 ≥2 隔离 .corrupt(<span class="anchor">:727</span>); 文件 ≤205KB 设计上界一次性快读(<span class="anchor">:707</span>)。</li>
+    <li>落盘: <code>append_point</code> 每行 open("a")+flush、不做常驻句柄(<span class="anchor">:407-411</span>), 每次追加前 open("rb")+seek(-1) 查尾字节补 \n(<span class="anchor">:400-403</span>); z 行同款(<span class="anchor">:438-442</span>); <b>无批量缓冲</b>。</li>
+    <li>唯一批量 = 小时封口 catch-up, 每小时首采样触发(<span class="anchor">:497-538</span>): 读全文件 → 归并 hour → 按窗裁剪 → tmp+fsync+os.replace 原子重写(<span class="anchor">:584-607</span>), 内容不变跳过(<span class="anchor">:561-567</span>)。</li>
+    <li>退出: 主循环 finally 仅 host.stop_all()+state.save(), <b>无 dat 冲刷、无开放行程封口</b>(<span class="anchor">core/qbmanager.py:589-597</span>) —— 优雅退出与崩溃同样丢开放行程(≤600s 纯零信息)(<span class="anchor">traffic_sample_mod.py:44-45</span>)。</li>
+    <li>间隔落盘先例: <code>state.maybe_flush</code> + state_save_interval 默认 120s / 下限 30s / 0=关(<span class="anchor">core/state.py:184-200</span>, <span class="anchor">config/models.py:335</span>), 主循环 next_flush_at 驱动(<span class="anchor">qbmanager.py:463</span>)。</li>
+  </ul>
+
+  <h3>3.3 读侧与前端 <span class="anchor">core/traffic_grid.py · webui/server/traffic_qb.py · webui/static/shared/qb_traffic_chart.js</span></h3>
+  <ul>
+    <li>窗口表: 1m-24h 消费 raw 段(桶宽 = <code>max(1, ceil(sample_interval))</code>, <span class="anchor">traffic_grid.py:91</span>); 3d/7d/30d 消费 hour 段(桶恒 3600s, 同 <span class="anchor">:91</span>); 桶 floor 对齐(<span class="anchor">:94-96</span>)。</li>
+    <li>归桶: raw 多行取均值、快照取最新(<span class="anchor">:121-159</span>); z 覆盖展开相交即覆盖、混桶 raw 优先(<span class="anchor">:152-158</span>); null 行不进观测表(<span class="anchor">:132</span>); 空桶 = null(<span class="anchor">:174-180</span>); 累计段相邻桶快照差分, 断链/重置 → null(<span class="anchor">:183-210</span>); 组聚合<b>借 global 系列判 null</b>(<span class="anchor">:223-240</span>), 每请求现算。</li>
+    <li>端点: 三端点(global/torrent/group)每请求<b>全文件重读 + 全量现算</b>(<span class="anchor">traffic_qb.py:115, :130, :148-149</span>); last-good 仅竞态兜底(<span class="anchor">:47, :89-105</span>); <code>meta.interval_s</code> = 桶宽(<span class="anchor">:73</span>)。</li>
+    <li>前端: 轮询 setInterval(<span class="anchor">qb_traffic_chart.js:349</span>), 间隔 = clamp(meta.interval_s, 15s, 600s)(<span class="anchor">:337-339</span>), <code>_QB_POLL_MIN_MS=15000</code>(<span class="anchor">:46-48</span>); document.hidden 跳过; spanGaps:false(<span class="anchor">:452, :458</span>)。</li>
+  </ul>
+
+  <h3>3.4 淘汰与冻结 <span class="anchor">traffic_store.py:869-934</span></h3>
+  <ul>
+    <li>删种冻结 / 重加解冻跟随采样轮(<span class="anchor">:869-898</span>); 按龄淘汰复用小时封口时点, frozen 且超 rollup_window 删文件+条目(<span class="anchor">:900-934</span>); global 永不冻结淘汰; index.json 条目变化时 atomic_write(<span class="anchor">:783-789</span>)。</li>
+  </ul>
+
+  <h3>3.5 主循环与配置 <span class="anchor">core/qbmanager.py · core/taskqueue.py · config/</span></h3>
+  <ul>
+    <li>双时间线: 同步线 sync_interval 默认 1.5s(钳 ≤main_tick)+ 任务线 main_tick 默认 2.0s(<span class="anchor">config/models.py:331</span>; 校验 0.5-3600s, <span class="anchor">validation/core.py:231</span>); 热重载每轮现读 main_tick(<span class="anchor">qbmanager.py:479</span>); _throttle 真 sleep(main_tick)(<span class="anchor">qbmanager.py:98-113</span>)。</li>
+    <li>TaskQueue 最小堆按 next_run, interval≤0 归一 1s(<span class="anchor">taskqueue.py:126-128</span>); run() 每轮 now≥next_tick_at 才跑任务线(<span class="anchor">qbmanager.py:502, :518-523</span>), run_due 弹 next_run≤now(<span class="anchor">:693</span>), 收尾 <code>next_run = now + task.interval</code>(<span class="anchor">taskqueue.py:226</span>); max_tasks_per_tick=20(<span class="anchor">models.py:333</span>); 同步线只刷快照不跑任务(<span class="anchor">qbmanager.py:467-484</span>)。</li>
+    <li>配置: qb_traffic 段 <span class="anchor">config/models.py:287-301</span> — enabled 默认 False / sample_interval 默认 30s、校验 1.5-600s(<span class="anchor">validation/sections.py:597</span>) / raw_window 默认 24h、1h-90d(<span class="anchor">:601</span>) / rollup_window 默认 30d、≥7d 无上限(<span class="anchor">:605</span>); 段缺省 None=未启用(<span class="anchor">models.py:387</span>); schema 键面 <span class="anchor">config/schema/groups.py:426-439</span>; sample_interval 属 L0 热重载段, 运行期可改但 task.interval 不跟。</li>
+  </ul>
+
+  <h3>3.6 测试与体量</h3>
+  <table>
+    <tr><th style="width:22%">项</th><th>值</th></tr>
+    <tr><td>测试存量</td><td>tests/test_traffic_store.py 60 例 / test_traffic_sample.py 30 例 / test_traffic_grid.py 17 例 / test_web.py qb_traffic 端点+前端接线家族(<span class="anchor">:2530</span> wiring, 含 <code>_QB_POLL_MIN_MS=15000</code> 守卫 <span class="anchor">:2703-2705</span>; <span class="anchor">:4220-4427</span> 端点)</td></tr>
+    <tr><td>行宽</td><td>≈40B(空闲 raw) / 52B(活跃) / 48B(z)</td></tr>
+    <tr><td>文件上界</td><td>v1 设计上界 205KB(raw 24h@30s 2880 行 + hour 30d 720 行), 一次性快读(<span class="anchor">traffic_store.py:707</span>); v2 实测全文件 2.98x(hour 720 行是地板); raw_window 放宽到 90d 后单文件理论 10MB+, 上界早已突破</td></tr>
+    <tr><td>真机现况</td><td>4s 实际节奏下 global.dat 已 6575 行, 单种最多 2734 行(26-10-04-1639 §3.1)</td></tr>
+    <tr><td>写放大</td><td>每活跃采样 3 次文件操作(open("rb")+seek / open("a") / flush)</td></tr>
+    <tr><td>读放大</td><td>每请求每系列整文件读+解析+全桶现算; 24h 窗桶数 = 86400/桶宽(30s → 2880, 4s → 21600); 组端点每请求读 1+N 文件; 30d 窗恒 720 桶</td></tr>
+    <tr><td>组织方式</td><td>无按天分文件, 单系列单文件、小时封口全量重写</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================ -->
+<section id="s4">
+  <h2><span class="no">04</span>逐项设计验证与对比(C1-C4)</h2>
+
+  <!-- ============ C1 ============ -->
+  <h3>4.1 C1 · 采样率下限锁 main_tick + 倍数约束(告警级) <span class="tag ok">成立(口径修订)</span></h3>
+
+  <h4>验证结论</h4>
+  <p><b>(a) 节拍累加是「实际时刻」, 非计划网格(修订轮实证)</b>: TaskQueue 最小堆按 next_run 到期弹出, 收尾 <code>next_run = now + task.interval</code>(<span class="anchor">taskqueue.py:226</span>), 任务只在主循环 tick 边界被执行; 但 <code>next_tick_at = time.time() + main_tick</code> 两处(<span class="anchor">qbmanager.py:518-527</span>)<b>均在本轮线执行返回之后取值</b>(合并轮还有 <span class="anchor">:520-521</span> 先同步后任务两行) —— 任务线起始节拍 = main_tick + 上一轮线耗时, 且<b>无追赶无补齐</b>(错过不补跑, run_due 弹积压上限 max_tasks_per_tick=20, <span class="anchor">models.py:333</span>)。稳态节奏 =</p>
+  <pre><code>实际采样节奏 = ceil(I / (main_tick + d̄)) × (main_tick + d̄)
+   d̄ = 任务线(含合并轮同步线)平均耗时
+
+I = k × (main_tick + d̄) 时误差才为 0 —— 仅 d̄ = 0(空载)可保证
+有载量化误差 ∈ [0, main_tick + d̄), 且在配置时不可知
+反例(硬校验保留): I = 1.5s &lt; main_tick = 2s → 档位不可得
+   —— 与 sync_interval 钳制 ≤ main_tick (qbmanager.py:484) 同一纪律先例</code></pre>
+  <p><b>(b) 拍内抖动(逐次随机)</b>: run_due 的 now = 批开始时刻(<span class="anchor">qbmanager.py:691→:693</span>, <span class="anchor">taskqueue.py:198/:226</span>), 前置任务耗时造成抖动: 采样实际时刻 ≈ tick 计划点 + [合并轮同步线耗时 d_s] + 同批堆序在前任务耗时 + handler 启动开销。批内任务全景: speed_limit_curve 每轮 qB API 网络 IO(<span class="anchor">speed_curve_mod.py:119, :191</span>); delete_tags×2 / maintenance / 规则任务多为内存决策命中才 API; check 轮询纯内存(<span class="anchor">ops_mod.py:156</span>)。正常小库多数轮抖动 0-10ms, 大库/高负载可达数百 ms~秒级(真机大库同步线 2s 有代码旁证 <span class="anchor">qbmanager.py:511</span> 注释), 队列积压时采样顺延一拍。v2 的采样 ts 本就如实记录抖动(<span class="anchor">traffic_sample_mod.py:123</span> 设计注释「抖动是事实, 存储层不假装均匀」; 调查报告行距 {4s: 39, 5s: 1} 即 +1s 抖动实证)。</p>
+  <p><b>(c) 校验规则(修订)</b>: <span class="anchor">validation/sections.py:595-598</span> 现为 1.5-600s。<b>「I ≥ main_tick」保留硬校验</b>(下限语义不变, 上限 600 保留); <b>「main_tick 整数倍」从精度保证降级为告警级</b> —— 失配向上取整到下一倍数 + 告警一次(裁决 Q2 口径保留)。<b>热重载联动</b>: main_tick 属 L0、每轮现读(<span class="anchor">qbmanager.py:479</span>); 运行期改 sample_interval → handler 检测变化时直接改 task.interval 并触发一次新块, 免 L2 依赖。<b>正交分层</b>: C1 管采样密度上限与 qB 请求预算, 实测 dt(§4.2)管时间真值, 不互替。</p>
+
+  <h4>量化对比(A1 数字重算)</h4>
+  <table>
+    <tr><th style="width:22%">项</th><th style="width:39%">现行</th><th>v3</th></tr>
+    <tr><td>配置校验</td><td>1.5-600s(<span class="anchor">sections.py:597</span>), 与 main_tick 无约束</td><td>I ≥ main_tick 硬校验(上限 600 保留); 「整数倍」降级告警级: 失配向上取整到下一倍数 + 告警一次(Q2)</td></tr>
+    <tr><td>3s 配置实际节奏(A1 重算)</td><td>空载口径: ceil(3/2)×2 = 4s, 误差 +1s(+33%)</td><td>实际 = ceil(3/(2+d̄))×(2+d̄): d̄=0 → 4s(+33%); d̄=0.5s → 5s(+67%) —— 随负载漂移、配置时不可知; 时间精度由实测 dt 保证, 不依赖节奏预测</td></tr>
+    <tr><td>1.5s 配置</td><td>节奏 2s, 读侧桶宽 2s = 行距一半 → 全孤点(26-10-04-1639 实测)</td><td>加载期报错(1.5 &lt; main_tick), 该档位不可得(不变)</td></tr>
+    <tr><td>热重载改采样率</td><td>task.interval 不跟(A3): 写旧节奏、读新配置, 错位持续到重启</td><td>handler 检测变化 → 直接改 task.interval + 触发一次新块, 即时生效且新旧数据分块各有 interval(不变)</td></tr>
+    <tr><td>main_tick 变更致失配</td><td>无检测, 节奏静默漂移</td><td>向上取整到下一倍数 + 告警一次(告警级, Q2); 采样密度上限仍受控, 时间真值不受影响</td></tr>
+    <tr><td>有载节拍漂移</td><td>ts 如实记录, 但读侧按标称 <code>ceil(sample_interval)</code> 一刀切桶宽 —— 抖动即伪断线(A1+A2 实证)</td><td>实测 dt_ms 稀疏入行 + 读侧有效 dt 桶宽, 抖动如实呈现不断线(§4.2)</td></tr>
+  </table>
+
+  <h4>风险与取舍</h4>
+  <ul>
+    <li><b>放弃什么</b>: main_tick=2s 时最细 2s 采样; 想要 1s/1.5s 必须先调 main_tick —— 全队列 tick 开销 ×2, 只在专机 + 秒级图需求时值得(TaskQueue 每 tick run_due + max_tasks_per_tick=20, <span class="anchor">models.py:333</span>)。</li>
+    <li><b>风险</b>: 配 4s 而 main_tick 改 3s → 实际 6s, 颗粒变粗但不断线; 「≥main_tick」只在加载时硬校验, 运行期失配靠「取整 + 告警一次」兜底(裁决 Q2); 有载节拍漂移的时间正确性不再依赖 C1(§8「有载节拍漂移」)。</li>
+  </ul>
+
+  <!-- ============ C2 ============ -->
+  <h3>4.2 C2 · 块 + 元数据头行 + 稀疏 delta 推算时间 <span class="tag ok">成立(格式精化, v2 修订)</span></h3>
+
+  <h4>验证结论</h4>
+  <p><b>(a) 依据</b>: 现行每行带时间戳(<span class="anchor">traffic_store.py:235-239</span>)且读侧桶宽 = 全局 <code>ceil(sample_interval)</code>(<span class="anchor">traffic_grid.py:91</span>)—— 采样率变更后同文件新旧行距不同, 全局桶宽必错, 这正是 A2 伪断线根因。块头自带采样率后, <b>桶宽按记录有效 dt 逐记录计算</b>(§5.2), 根因在格式层面消除。</p>
+  <p><b>(a2) 纯等间隔定量失效(修订轮核心证据)</b>: 初版设想的「时刻 = start + i×interval」纯槽位推算, 在任何非零任务线耗时下属<b>格式性错误</b>:</p>
+  <pre><code>每行误差 = −Σ此前各行抖动, 块内线性累积
+d̄ = 0.1s 恒定、I = 4s(main_tick = 2s) → 实际采样距 4.2s
+   10min 块 ~143 行 → 块尾误差 ≈ 29s
+   且下一块头为实测 start → 读侧凭空多出 ~29s 伪真空
+d̄ 仅 10ms → 块尾误差仍 ~3s</code></pre>
+  <p><b>(b) 时间推算与真空判定(修订: dt 链)</b>: 读侧逐块游标 t0 = B.start, 每消费一记录 <code>t += (显式 dt_ms 或 槽位数 × interval_s × 1000) / 1000</code>; 桶宽按<b>有效 dt</b> 逐记录定 = <code>max(1, ceil(有效dt))</code>(显式 dt 或游程均摊 span/run_len), 不再用标称 ceil(interval) 一刀切。<b>真空判定</b>: 块 N 结束时刻(游标终值)与下一块实测 start 的差值即真空 —— 程序停机 = 无块 = 天然真空; 断连(程序活着)仍产 n 槽, <b>两语义分离</b>; 组端点「借 global 判 null」随之退役(<span class="anchor">traffic_qb.py:148-159</span>), 每请求省一次全局文件读取。</p>
+  <p><b>(c) z 行冲突解法</b>: 旧 z 带绝对 [start, end](<span class="anchor">traffic_store.py:250-252</span>), 与「行无时间」矛盾; v3 改为块内零速游程<b>占槽即编码时间</b>, 可选 dt_ms 记行程实际跨度 last_seen − start(OpenRun 已有 start/last_seen 字段, 计算零成本), <code>ZRUN_FLUSH_S=600</code> / <code>ZRUN_CAP_SAMPLES=120</code> 阈值语义保留。对比「z 带绝对时间」方案: 破坏纯槽位模型, <b>否决</b>。</p>
+  <p><b>(d) 聚合行去留(第三轮修订: 聚合分层)</b>: sample_interval=2s 时 30d raw = 1,296,000 行/系列, 单请求全量解析不可行; 且若 hour 与 raw 同放天文件, <b>年视图 = 365 个天文件冷读</b>(每文件 open+read+全量解析, raw 占 99%+ 体量, 解析量 Σ≈536MB/2s 档上界、15-37MB/30s 典型, 秒级), 解析缓存救不了(驻留 ParsedSeries 含全 raw ≈105 万 RawRow/系列 ≈100-200MB 内存不可接受, 不驻留则每次冷读 365 open)。故 <b>hour/day/month 聚合迁出天文件</b>, 每系列一个 <code>agg.dat</code> 追加混存(§6.4): 天文件退化为纯 raw/z/n 块, 年视图读 1 个 agg 文件(≈0.45MB/系列/年, 毫秒级), 3d/7d/30d 同步受益(冷读 ≤31 open → 1)。hour 行 8 列改 <b>9 列(+cov_s)</b>, day/month 同构(行型见下方规格块); raw→hour 聚合改<b>实测 dt 加权</b>(avg = round(Σ(rate_i×dt_i)/cov_s), dt_i 裁剪到 min(dt_i, hour_end−t_i); dt_i≡interval_s 时严格退化为现行 <span class="anchor">traffic_store.py:653-657</span> 公式), hour 行入桶与 24h 栅格按实测 dt(v2 修订保留); 3d/7d/30d 窗消费 hour 段(<span class="anchor">traffic_grid.py:162-171</span> 口径不变), 30d = 720 桶。布局对比: 「hour/day/month 分层三文件」(B)与「按月分文件」(C)在文件数与裁剪复杂度上均劣于单 agg.dat(A), 否决; 「读侧按需降采样」(仍读全量 raw, 否决)与「逐级 rollup 10min 桶」(复杂度不抵收益, 否决)维持。</p>
+
+  <h4>方案规格(v3 行型)</h4>
+  <pre><code># auto-qb qb-traffic v3              文件头, 每文件一次(天文件与 agg.dat 同款); 双读门闩(对齐 v1→v2 先例 traffic_store.py:131-134)
+── 天文件(纯 raw 块) ──
+B,&lt;start_epoch&gt;,&lt;interval_s&gt;         块头: start = 块首记录实测 epoch; 块结束 = 下一块头或文件尾
+r,&lt;dl&gt;,&lt;up&gt;,&lt;dlt&gt;,&lt;upt&gt;[,&lt;dt_ms&gt;]    数据行 5 列无时间戳; dt_ms 可选第 6 列 = 距上一记录实际毫秒数(正整数),
+                                     缺省 = round(interval_s × 1000); 写入触发 = 累积漂移 &gt; tol(§6.3)
+z,&lt;run_len&gt;,&lt;dlt&gt;,&lt;upt&gt;[,&lt;dt_ms&gt;]    零速游程: 占 run_len 个采样槽, 速率 0; dt_ms 可选 = 行程实际跨度
+                                     last_seen − start(毫秒), 缺省 = run_len × interval
+n,&lt;run_len&gt;[,&lt;dt_ms&gt;]                null 游程: 占 run_len 个采样槽(断连 / 缺字段); dt_ms 语义同 z
+── 聚合文件 agg.dat(hour/day/month 同构 9 列, 追加混存, §6.4) ──
+hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&gt;,&lt;dl_total&gt;,&lt;up_total&gt;,&lt;cov_s&gt;
+day,&lt;day_epoch&gt;,同上 9 列             day_epoch = 本地当日 00:00 epoch
+month,&lt;month_epoch&gt;,同上 9 列         month_epoch = 本地自然月 1 日 00:00
+                                     (hour 8 列改 9 列: 新增 cov_s; 8 列旧行读侧兜底 cov_s = 3600)</code></pre>
+  <p class="small">块头推荐省略 <code>n_rows_declared</code> 与 <code>closed_flag</code>(裁决 Q1): 少一个回填写点, 天然支持追加式落盘; 块边界由「下一块头或文件尾」隐式表达。<b>dt_ms 触发 = 累积漂移</b>(修订): writer 维护 projected_ts(游标 + 标称), |actual_ts − projected_ts| &gt; tol 时本行写实际 dt 并自然复位(游标被推到实测点); 误差界 = tol + 取整, tol 建议 200-250ms 固定值(真机实测行距后可复核); 稳态漂移下自动退化为逐行写, 空载保持稀疏。</p>
+
+  <h4>量化对比</h4>
+  <table>
+    <tr><th style="width:22%">项</th><th style="width:39%">现行(v1/v2 行型)</th><th>v3</th></tr>
+    <tr><td>时间编码</td><td>raw 6 列带绝对 epoch_s(<span class="anchor">traffic_store.py:235-239</span>)</td><td>r 行 5 列无时间戳 + 可选 dt_ms: 游标推算, 漂移行写实测 dt; 行宽省 ~11B(40-52B → 30-40B), 漂移行 +5-6B, 空载稀疏占绝大多数</td></tr>
+    <tr><td>有载时间精度</td><td>ts 如实记录, 但读侧按标称桶宽归桶 —— 抖动即伪断线; 若改纯等间隔推算则误差线性累积(d̄=0.1s → 10min 块尾 ≈29s)</td><td>dt_ms 稀疏入行(累积漂移触发), 误差界 = tol + 取整(tol 200-250ms); 暂停恢复/系统挂起/过载顺延由实测大值 dt 天然兜底</td></tr>
+    <tr><td>采样率变更后的旧行</td><td>同文件新旧行距混排, 全局桶宽必错 → A2 伪断线</td><td>逐块 interval + 逐记录有效 dt 桶宽, 新旧数据天然分块, 根因消除</td></tr>
+    <tr><td>真空 vs 断连</td><td>同为缺行, 语义混合; 组端点借 global 判 null(<span class="anchor">traffic_qb.py:148-159</span>)</td><td>块间 gap = 真空(停机), n 槽 = 断连; 两语义分离, global 依赖退役</td></tr>
+    <tr><td>零速编码</td><td>z 行带绝对 [start, end](<span class="anchor">traffic_store.py:250-252</span>)</td><td>z 游程占槽即编码时间, 可选 dt_ms = 实际跨度(OpenRun start/last_seen 现成); ZRUN_FLUSH_S=600 / ZRUN_CAP_SAMPLES=120 语义保留</td></tr>
+    <tr><td>3d/7d/30d 窗</td><td>hour 段 720 桶</td><td>hour 行(agg.dat)消费, 桶宽口径不变(<span class="anchor">traffic_grid.py:162-171</span>), 30d = 720 桶; 冷读 31 文件 → 1 文件(§6.4)</td></tr>
+    <tr><td>单种 2s 档一天体量</td><td>43200 行 × ~40-52B ≈ 2.0-2.2MB(全带时间戳)</td><td>43200 行 × ~30-40B ≈ 1.5MB/天/系列上限(活跃过滤 + 零游程后实测远小)</td></tr>
+  </table>
+
+  <h4>风险与取舍</h4>
+  <ul>
+    <li>追加式写块「下一块头出现即块结束」依赖顺序性 —— 单写线程已保证(<span class="anchor">traffic_sample_mod.py:64-66</span>, 黄金法则 5 不变)。</li>
+    <li>读侧槽位游标(dt 链)逻辑比逐行时间戳复杂, 需测试钉住(§8, S1/S3 验收)。</li>
+    <li><b>任务线耗时拉长节拍</b>(修订): 实际采样距随负载漂移, 采样密度不可精确预期 —— 时间正确性已由实测 dt 兜底, 密度损失属可接受退化(§8「有载节拍漂移」)。</li>
+    <li><b>容差下累积陷阱</b>(修订): 触发判据若用「本行偏差 &gt; tol」, 稳态小漂移(d̄=150ms &lt; tol=250ms)每行偏差恒低于 tol → 永不写入、误差照旧累积回老病 —— 必须用<b>累积漂移</b>触发(写实测 dt 后游标复位, 自动退化逐行写)。</li>
+    <li><b>跨桶记录与伪洞</b>(修订, 开放项): 单记录有效 dt 跨多桶时中间桶空 —— 须规定「跨桶记录覆盖其间槽位」防伪洞(§8.2)。</li>
+  </ul>
+
+  <!-- ============ C3 ============ -->
+  <h3>4.3 C3 · 每 10 分钟批量落盘(flush_interval, 默认 600s) <span class="tag ok">成立</span></h3>
+
+  <h4>验证结论</h4>
+  <p><b>(a) 现行代价</b>: <code>append_point</code> 每行 open("a")+flush 且追加前 open("rb")+seek(-1)(<span class="anchor">traffic_store.py:400-411</span>); 2s 采样 + 全局 + N 活跃种 = 每秒多次 open/flush。state 侧早有间隔落盘先例(<span class="anchor">state.py:184-200</span> 默认 120s, <span class="anchor">qbmanager.py:463</span>), 但驱动点不同(见下)。</p>
+  <p><b>(b) 缓冲结构与驱动点</b>: 内存缓冲 <code>dict[series_key, BlockBuffer]</code>(§5.4); 驱动点在<b>采样 handler 内计时</b>(now - last_flush ≥ flush_interval 则批量 flush 全部缓冲)—— 不动主循环、与写入同线程(黄金法则 5 不变)、模块自包含; <b>不推荐</b> state.maybe_flush 主循环驱动点(要给模块加主循环耦合)。暂停(<span class="anchor">qbmanager.py:491-496</span>)期间 handler 不跑、缓冲滞留, 恢复后首轮补 flush, 语义正确。</p>
+  <p><b>(c) 原子性与崩溃窗口</b>: 批量 = 单次 open("a") 写 N 行 + flush + fsync(每 10min 一次代价可忽略); 块头在该块首次 flush 时随批写入; <b>不做</b> tmp+replace 整文件重写 —— 按天文件 MB 级、144 次/天重写是负优化; 现行小时封口 catch-up 读全文件归并重写(<span class="anchor">traffic_store.py:509-571</span>)退役, tmp+fsync+os.replace(<span class="anchor">:584-607</span>)退出常规写路径 —— 仅保留给 agg.dat 按龄裁剪重写(hourly piggyback hour 封口时点, 存在到龄行才重写 + same_content 跳过, ~1 次/天, §6.4)。崩溃半行保留尾字节查补纪律(仅 flush 时一次, 不再每行)。崩溃窗口: ≤10min 在内存 → 丢 = 磁盘块提前截尾 → 下一块 start 更晚 → <b>块间 gap = 真空, 与 C2 判定自洽</b>(丢的是未落盘真实数据, 图上空白与断连同形, 可接受)。</p>
+  <p><b>(d) 优雅退出</b>: qbmanager finally(<span class="anchor">qbmanager.py:589-596</span>)经 <code>host.stop_all()</code> 触发采样模块 stop() 钩子: stop() = flush 全部缓冲 + 封全部开放游程 + 聚合封口(hour/day/month); dry_run 短路; stop_all 之后才 state.save, 顺序不变(finally 本身不改)。</p>
+
+  <h4>量化对比</h4>
+  <table>
+    <tr><th style="width:24%">项</th><th style="width:38%">现行</th><th>v3</th></tr>
+    <tr><td>写路径</td><td>每行 open("a")+flush(<span class="anchor">:407-411</span>)+ 追加前 open("rb")+seek(-1)(<span class="anchor">:400-403</span>) = 每活跃采样 3 次文件操作</td><td>批量: 单次 open("a") 写 N 行 + flush + fsync, 每 flush_interval(默认 600s)一次</td></tr>
+    <tr><td>2s 档全局系列 open/flush</td><td>43200 次/天</td><td><b>144 次/天(300×↓)</b></td></tr>
+    <tr><td>30s 档(缺省)</td><td>2880 次/天</td><td>144 次/天(20×↓)</td></tr>
+    <tr><td>fsync</td><td>0</td><td>+144 次/天(可忽略)</td></tr>
+    <tr><td>尾字节查补</td><td>每行一次 open("rb")+seek(-1)</td><td>仅 flush 时一次</td></tr>
+    <tr><td>崩溃丢失</td><td>≤1 行(每行即冲)</td><td>≤10min(未落盘缓冲)—— 用户拍板接受(§6)</td></tr>
+    <tr><td>优雅退出</td><td>丢开放行程 ≤600s(<span class="anchor">qbmanager.py:589-597</span> 无冲刷; <span class="anchor">traffic_sample_mod.py:44-45</span>)</td><td>stop() 钩子全量 flush + 封游程 + 聚合封口(hour/day/month), 零丢失</td></tr>
+    <tr><td>内存代价</td><td>0</td><td>BlockBuffer: 全局 600 槽(1s 档)×~100B ≈ 60KB; 大种子库最坏 1000 种 × 600 槽 × 100B ≈ 60MB → 单系列缓冲槽上限 3600 提前单独 flush(裁决 Q3)</td></tr>
+    <tr><td>配置键</td><td>—</td><td>新增 <code>qb_traffic.flush_interval</code> 默认 600s, 范围 60-3600s; 必须进 validate_config(<span class="anchor">sections.py:579-605</span>) + schema.py(黄金法则 4)</td></tr>
+  </table>
+
+  <h4>风险与取舍</h4>
+  <ul>
+    <li>崩溃丢 10min(现状丢 ≤1 行)—— 用户拍板接受; 丢失形态与真空同形, 语义自洽(§8 风险 1)。</li>
+    <li>聚合封口(hour/day/month)由 flush 时点水位机制承接(§6.4); 裁决 Q4 旧口径(每小时首采样触发)已作废。</li>
+  </ul>
+
+  <!-- ============ C4 ============ -->
+  <h3>4.4 C4 · 按天保存、按需访问 <span class="tag ok">成立(目录定型)</span></h3>
+
+  <h4>验证结论</h4>
+  <p><b>(a) 现行读放大</b>: 单文件全量重读(<span class="anchor">traffic_qb.py:115, :130, :148-149</span> 每请求 read_series_checked 全文件解析), 且单文件只增不减; raw_window 放宽到 90d(<span class="anchor">sections.py:601</span>)后单文件理论 10MB+, 205KB 设计上界(<span class="anchor">traffic_store.py:707</span>)早已突破。</p>
+  <p><b>(b) 目录与读路径</b>: <code>qb-traffic-v3/global/&lt;YYYY-MM-DD&gt;.dat</code> 与 <code>qb-traffic-v3/torrents/&lt;infohash&gt;/&lt;YYYY-MM-DD&gt;.dat</code>(每系列一子目录); 查询窗口 → 日期集合 → 只读涉及文件; 读侧加 <b>mtime+size 键控解析缓存</b>(文件只在追加期变化, 命中率高); 24h 窗最多 2 个文件, 对比现行全文件(只增不减)读放大随运行时长线性涨。</p>
+  <p><b>(c) 块 × 天边界</b>: <b>块不跨天硬切</b> —— 落盘/推算以 00:00 为块上界, 跨界即开新块(新文件新块头, interval 不变); 代价每天每系列多一个块头 ~30B, 可忽略。对比「跨天块」: 槽位推算要跨文件接续, 读单天文件无法独立解析、缓存失效复杂化 —— <b>否决</b>。</p>
+  <p><b>(d) index.json 去留</b>: <b>删除</b>。has_entry 门(<span class="anchor">traffic_sample_mod.py:302-304</span>)改「种子目录存在且含 ≥1 个 .dat」; updated_at / 冻结淘汰改由<b>文件名日期直接算龄</b>(现行 lifecycle_sweep + evict_expired_frozen <span class="anchor">traffic_sample_mod.py:60-61, :271, :523</span> 与对账/重建孤儿条目 <span class="anchor">:195-206</span> 一并删); <b>淘汰口径(第三轮修订)</b>: 删超龄系列目录(天文件 + agg.dat)(全局系列豁免) —— agg.dat 不随天淘汰: hour 行按 rollup_window 裁剪(piggyback 重写 ~1 次/天), day/month 行永久保留, 未冻结长期不活跃种子天文件按龄删、年视图仍有其历史; 冻结语义: 删种即不再产新块与聚合, 文件留存到按龄删除, 与现行一致。</p>
+
+  <h4>量化对比</h4>
+  <table>
+    <tr><th style="width:20%">项</th><th style="width:40%">现行</th><th>v3</th></tr>
+    <tr><td>文件组织</td><td>单系列单文件(global.dat / torrents/&lt;infohash&gt;.dat), 只增不减</td><td>按天: <code>qb-traffic-v3/{global,torrents/&lt;infohash&gt;}/&lt;date&gt;.dat</code></td></tr>
+    <tr><td>读路径</td><td>每请求全文件重读 + 解析 + 全桶现算(<span class="anchor">traffic_qb.py:115, :130, :148-149</span>)</td><td>窗口 → 日期集合 → 只读涉及文件; mtime+size 键控解析缓存</td></tr>
+    <tr><td>30d 窗读量</td><td>全文件: raw 43200 + hour 720 行(随运行时长线性涨)</td><td>hour 行 720-2160 行(<b>约 20-60×↓</b>, 且恒定)</td></tr>
+    <tr><td>24h 窗读量</td><td>全文件(含全部历史)</td><td>2 个日期文件 ≤43200 行(同量级但不随历史增长)</td></tr>
+    <tr><td>index.json</td><td>条目门 + updated_at + 对账重建(<span class="anchor">traffic_store.py:783-789</span>; <span class="anchor">traffic_sample_mod.py:195-206</span>)</td><td>删除; has_entry 门改「目录存在且含 ≥1 个 .dat」; 龄期由文件名日期直接算</td></tr>
+    <tr><td>块 × 天边界</td><td>—</td><td>00:00 硬切, 跨界开新块; 跨天块方案否决</td></tr>
+  </table>
+
+  <h4>风险与取舍</h4>
+  <ul>
+    <li>小文件数增多: 365 天 ×(1+N 系列), 千级目录项可忽略(§8 风险 4)。</li>
+    <li>组端点仍逐成员读, 但只读涉事日期文件。</li>
+  </ul>
+</section>
+
+<!-- ================================================================ -->
+<section id="s5">
+  <h2><span class="no">05</span>v3 合成设计</h2>
+
+  <h3>5.1 链路时序(采样 → 缓冲 → flush → 读侧)</h3>
+  <pre><code>主循环 tick(main_tick=2s; 实际节拍 = main_tick + 任务线耗时, qbmanager.py:502, :518-527 → §4.1)
+ └─ 任务线: 采样任务到期(每 k×main_tick, k = sample_interval/main_tick, C1)
+     └─ handler 现读 main_tick / sample_interval, 倍数失配 → 取整 + 告警一次(告警级, Q2/§6.3)
+         ├─ 全局系列: 恒采 → r 记录 / 零速 → z 游程 / 断连 → n 游程 → 写内存 BlockBuffer
+         │   (writer 维护 projected_ts; 累积漂移 &gt; tol 的记录写实测 dt_ms —— 稀疏 delta;
+         │    hour_acc 逐记录累加, 与 dt 链同源 —— §6.4)
+         └─ 单种系列: 活跃过滤(dlspeed&gt;0 or upspeed&gt;0, :309)才产 r; 零速/断连进 z/n 游程
+ 每逢 flush_interval(默认 600s, handler 内计时, 与写入同线程 —— 黄金法则 5 不变):
+     ├─ 跨天切块(00:00 上界, 跨界开新块新文件, C4)
+     ├─ 每系列 open("a") 追加(块头随块首)+ flush + fsync(C3)
+     └─ 聚合封口(§6.4): 内存累计器 + 水位 wm={hour,day,month} → 末尾顺序检查完结:
+         完结整小时 → append hour 行; 完结本地日 → day 行; 完结自然月 → month 行(写 agg.dat)
+         重启: 扫 agg 文件尾一次恢复水位 + 重建当日/当月累计器 → catch-up 逐级补算
+         (hour←天文件 raw、day←agg 内 hour 行、month←day 行; 必须先于裁剪)
+ 优雅退出(qbmanager finally → host.stop_all() → 模块 stop() 钩子):
+     └─ 全量 flush + 封全部开放游程 + 聚合封口(hour/day/month)(dry_run 短路; 之后才 state.save, 顺序不变)
+ 读侧: 端点 → 窗口 → 日期文件集 / agg 文件(mtime+size 缓存解析) → 逐块游标 + 实测 dt 推算时间
+        / 逐记录有效 dt 桶宽归桶(raw 窗 1m-24h / hour 3d-30d / day 90d-1y / month all, §5.3)
+        → 真空 = 块间 gap</code></pre>
+
+  <h3>5.2 文件格式规格</h3>
+  <p>行型定义见 §4.2 方案规格代码块(文件头 / B 块头 / r 数据行(+可选 dt_ms)/ z 零游程(+可选 dt_ms)/ n null 游程(+可选 dt_ms)/ 聚合行 hour/day/month 同构 9 列(+cov_s, 存 agg.dat))。语义要点:</p>
+  <table>
+    <tr><th style="width:24%">行型</th><th style="width:32%">定义</th><th>语义</th></tr>
+    <tr><td><code># auto-qb qb-traffic v3</code></td><td>文件头, 每文件一次</td><td>双读门闩: v3 读侧遇旧头行直接忽略(对齐 v1→v2 先例 <span class="anchor">traffic_store.py:131-134</span>)</td></tr>
+    <tr><td><code>B,&lt;start_epoch&gt;,&lt;interval_s&gt;</code></td><td>块头 3 列</td><td>start = 块首记录实测 epoch; 省略 n_rows_declared / closed_flag(Q1); 块结束 = 下一块头或文件尾</td></tr>
+    <tr><td><code>r,&lt;dl&gt;,&lt;up&gt;,&lt;dlt&gt;,&lt;upt&gt;[,&lt;dt_ms&gt;]</code></td><td>数据行 5-6 列</td><td>游标推算 + 可选实测 dt_ms(距上一记录毫秒数, 正整数); 全非负整数; 触发 = 累积漂移 &gt; tol</td></tr>
+    <tr><td><code>z,&lt;run_len&gt;,&lt;dlt&gt;,&lt;upt&gt;[,&lt;dt_ms&gt;]</code></td><td>零速游程 4-5 列</td><td>占 run_len 个采样槽、速率 0; dt_ms = 行程实际跨度 last_seen − start(OpenRun 字段现成); 阈值 ZRUN_FLUSH_S=600 / ZRUN_CAP_SAMPLES=120 语义保留</td></tr>
+    <tr><td><code>n,&lt;run_len&gt;[,&lt;dt_ms&gt;]</code></td><td>null 游程 2-3 列</td><td>占槽(断连/缺字段); dt_ms 语义同 z; 与块间 gap(真空)语义分离</td></tr>
+    <tr><td><code>hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&gt;,&lt;dl_total&gt;,&lt;up_total&gt;,&lt;cov_s&gt;</code></td><td>聚合行 9 列(存 agg.dat)</td><td>8 列 + cov_s(有效时长秒); 带绝对 hour_epoch; 3d/7d/30d 窗消费, 30d = 720 桶; 入桶按实测 dt; <b>8 列旧行读侧兜底 cov_s = 3600</b>(hour 必带 cov_s 的理由: 8 列无法还原有效时长, 部分覆盖小时等权平均有偏)</td></tr>
+    <tr><td><code>day,&lt;day_epoch&gt;,同上 9 列</code></td><td>聚合行(存 agg.dat)</td><td>day_epoch = 本地当日 00:00 epoch; hour→day 逐级聚合; 90d/6mo/1y 窗消费(§5.3)</td></tr>
+    <tr><td><code>month,&lt;month_epoch&gt;,同上 9 列</code></td><td>聚合行(存 agg.dat)</td><td>month_epoch = 本地自然月 1 日 00:00; day→month 逐级聚合; all 窗消费; <b>永久段</b>(不随淘汰消失)</td></tr>
+  </table>
+
+  <h4>读侧游标与桶宽(修订轮规则)</h4>
+  <pre><code>游标 dt 链:  t0 = B.start; 每消费一记录 t += (显式 dt_ms 或 槽位数 × interval_s × 1000) / 1000
+均摊定位:    z/n 显式 dt 时, run_len 个槽在 [t, t+dt] 内均摊; 其后首个 r 的 dt 以游程终点(实测)为基准
+             —— 链式自洽
+桶宽:        逐记录 max(1, ceil(有效dt)); 有效dt = 显式 dt 或 游程均摊 span/run_len
+             两行同桶 → 聚合本就按行数取均值(traffic_store.py:657 附近 sum/(n+w) 口径)天然兼容, 无伪断线
+坏行:        r 行列数 ∈ {5,6}; dt_ms 须正整数且 ≤ 86,400,000, 非法 → 整行按坏行计数跳过(沿用 v2 口径),
+             游标不推进
+兜底:        暂停恢复 / 系统挂起 / 过载顺延 → dt 取实测大值如实入行, 天然兜底
+聚合(§6.4):  raw→hour 实测 dt 加权 avg = round(Σ(rate_i×dt_i)/cov_s), dt_i 裁剪到 min(dt_i, hour_end−t_i),
+             z 游程槽 rate=0/span 均摊, n 不贡献, cov_s=Σdt_i≤3600; hour→day→month 逐级同构
+             (avg=Σ(下级.avg×cov)/Σcov, max=max, totals=级末快照); day 不从 raw 直聚; 8 列旧行兜底 cov_s=3600
+不变机制:    真空判定(块间 gap) / 10min flush / 按天切块 / 单写线程 / dry_run; 24h 栅格按实测 dt(§6.3)</code></pre>
+
+  <h3>5.3 视图映射(第三轮修订新增)</h3>
+  <table>
+    <tr><th style="width:26%">视图</th><th style="width:20%">数据源</th><th style="width:16%">点数(约)</th><th>说明</th></tr>
+    <tr><td>1m / 5m / 30m / 3h / 6h / 12h / 24h</td><td>raw 天文件</td><td>—</td><td>不变</td></tr>
+    <tr><td>3d / 7d / 30d</td><td>hour 行(agg.dat)</td><td>72 / 168 / 720</td><td>冷读 ≤31 open → 1 open(§6.4)</td></tr>
+    <tr><td><b>90d</b>(新增)</td><td>day 行(agg.dat)</td><td>90</td><td>X 轴标月份</td></tr>
+    <tr><td><b>6mo</b>(新增)</td><td>day 行(agg.dat)</td><td>~182</td><td>滚动窗 = now−182d..now; X 轴标月份</td></tr>
+    <tr><td><b>1y</b>(新增)</td><td>day 行(agg.dat)</td><td>365</td><td>年视图: 365 天文件冷读 → 1 open; X 轴标月份</td></tr>
+    <tr><td><b>all</b>(新增)</td><td>month 行(agg.dat)</td><td>12/年</td><td>永久段恒可用(不随淘汰消失)</td></tr>
+  </table>
+  <p>语义: 图窗一律<b>滚动窗</b>(6mo = now−182d..now), 自然月边界只用于 month 行聚合粒度; 90d/6mo/1y X 轴标月份。落地面: <code>WINDOW_SPECS</code>(<span class="anchor">traffic_grid.py:42-53</span>)+ <code>WINDOW_NAMES</code>(<span class="anchor">traffic_qb.py:32</span>)+ 前端文案(<span class="anchor">qb_traffic_chart.js:519, 525</span>); 前端档位取舍(14 档偏挤, 可先上 6mo/1y/all)= 开放项(§8.2)。</p>
+
+  <h3>5.4 内存结构(BlockBuffer)</h3>
+  <pre><code>dict[series_key, BlockBuffer]
+
+BlockBuffer = {
+    start_epoch,              # 本块首记录实测 epoch(块头 B 的 start)
+    interval_s,               # 本块采样间隔(块头 B 的 interval)
+    records: list[record],    # record ∈ r / z / n, 按槽序追加; 可带实测 dt_ms
+    prev_actual_ts,           # (修订)上一记录实测时刻 —— dt_ms 计算基准
+    projected_ts,             # (修订)游标 + 标称推算时刻 —— 累积漂移触发判据 |actual − projected| &gt; tol
+}
+
+# 上界估算: 全局 600 槽(1s 档)× ~100B ≈ 60KB
+# 单种缓冲只对「活跃或开放行程中」系列存在; 大种子库最坏 1000 种 × 600 槽 × 100B ≈ 60MB
+# 保险闸(Q3): 单系列缓冲槽上限 3600, 超限提前单独 flush</code></pre>
+
+  <h3>5.5 配置键清单</h3>
+  <table>
+    <tr><th style="width:26%">键</th><th style="width:12%">动作</th><th>规格</th></tr>
+    <tr><td><code>qb_traffic.sample_interval</code></td><td><span class="tag warn">改校验</span></td><td><b>I ≥ main_tick 硬校验</b>(下限语义不变, 上限 600 保留); 「main_tick 整数倍」降级<b>告警级</b> —— 失配向上取整到下一倍数 + 告警一次(§6.3 修订, 原 Q2 口径保留); 现 1.5-600s(<span class="anchor">validation/sections.py:595-598</span>)</td></tr>
+    <tr><td><code>qb_traffic.flush_interval</code></td><td><span class="tag info">新增</span></td><td>默认 600s, 范围 60-3600s; 必须进 validate_config(<span class="anchor">sections.py:579-605</span>)并同步 <span class="anchor">config/schema.py</span>(黄金法则 4, 守卫测试会查)</td></tr>
+    <tr><td><code>qb_traffic.enabled</code></td><td>保留</td><td>默认 False; 段缺省 None=未启用(<span class="anchor">models.py:387</span>)</td></tr>
+    <tr><td><code>qb_traffic.raw_window</code></td><td>保留</td><td>默认 24h, 1h-90d(<span class="anchor">sections.py:601</span>)</td></tr>
+    <tr><td><code>qb_traffic.rollup_window</code></td><td>保留</td><td>默认 30d, ≥7d 无上限(<span class="anchor">sections.py:605</span>); 语义不变: hour 段保留窗 + 系列/天文件淘汰龄 + <b>补算窗口</b>(= 天文件存活期, 非 raw_window, §6.4)</td></tr>
+  </table>
+  <p class="small">同步点: <span class="anchor">validation/sections.py:579-605</span> + <span class="anchor">config/schema.py</span>(键面 <span class="anchor">config/schema/groups.py:426-439</span>)。第三轮修订(§6.4)<b>除 flush_interval 外零新增配置键</b>: day/month 行永久保留(≈15KB/年/系列), 如需上限预留 <code>aggregate_window</code>(开放项, §8.2); rollup_window/raw_window 沿用现键, 仍须过 validate_config + schema。</p>
+
+  <h3>5.6 目录结构</h3>
+  <pre><code>auto-qb-data/                        # 生产红线目录: 只增不改
+└── qb-traffic-v3/                   # v3 新根(换代; 旧 qb-traffic/ 原样留存, 不读)
+    ├── global/
+    │   ├── &lt;YYYY-MM-DD&gt;.dat          # 全局系列按天(纯 raw/z/n 块)
+    │   └── agg.dat                   # 全局系列聚合: hour/day/month 行(追加混存, §6.4)
+    └── torrents/
+        └── &lt;infohash&gt;/
+            ├── &lt;YYYY-MM-DD&gt;.dat      # 单种系列按天(每系列一子目录)
+            └── agg.dat               # 单种系列聚合(同构)</code></pre>
+  <figure>
+    <svg viewBox="0 0 920 218" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="现行单文件 vs v3 按天文件读放大对比示意">
+      <text x="0" y="16" fill="#9aa4ad" font-size="12" font-family="monospace">现行: 单系列单文件, 只增不减, 每请求全量重读</text>
+      <g font-family="monospace" font-size="11">
+        <rect x="20" y="28" width="700" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="20" y="28" width="620" height="26" fill="#1a2027" stroke="#232b33"/>
+        <text x="30" y="45" fill="#6d7781">raw 43200 行(随历史线性涨)…</text>
+        <rect x="640" y="28" width="80" height="26" fill="#2a2119" stroke="#e2a86e"/>
+        <text x="648" y="45" fill="#e2a86e">hour 720</text>
+        <text x="20" y="72" fill="#6d7781">↑ 30d 窗请求也要解析全文件: raw 43200 + hour 720 行(traffic_qb.py:115, :130, :148-149)</text>
+      </g>
+      <text x="0" y="108" fill="#9aa4ad" font-size="12" font-family="monospace">v3: 按天分文件 + 块结构, 查询窗口只开涉及日期</text>
+      <g font-family="monospace" font-size="11">
+        <rect x="20"  y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="50"  y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="80"  y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="110" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="140" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <text x="140" y="112" fill="#6d7781" font-size="10">&lt;date&gt;.dat × N(每天一文件, 块不跨天)</text>
+        <rect x="170" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="200" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="230" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="260" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="290" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="320" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="350" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="380" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="410" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="440" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="470" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="500" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="530" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="560" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="590" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="620" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="650" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="680" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="710" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="740" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="770" y="120" width="26" height="26" fill="#1a2027" stroke="#232b33"/>
+        <rect x="800" y="120" width="26" height="26" fill="#16241a" stroke="#7fc08a"/>
+        <rect x="830" y="120" width="26" height="26" fill="#16241a" stroke="#7fc08a"/>
+        <text x="800" y="164" fill="#7fc08a" font-size="10">24h 窗</text>
+        <text x="836" y="164" fill="#7fc08a" font-size="10">→ 2 文件</text>
+        <text x="20" y="192" fill="#6d7781">↑ 30d 窗只读 hour 行 720-2160 行(~20-60×↓); 24h 窗读 2 个日期文件 ≤43200 行(不随历史增长)</text>
+      </g>
+    </svg>
+    <figcaption>图 1 · 读放大对比示意: 现行单文件全量重读 vs v3 按天文件按需读取。文件内行数按材料估算值标注, 非严格等比。</figcaption>
+  </figure>
+
+  <h3>5.7 改造面清单(模块级)</h3>
+  <table>
+    <tr><th style="width:30%">模块</th><th>改动</th></tr>
+    <tr><td><span class="anchor">core/traffic_store.py</span></td><td>重写 v3 块格式 + 按天 + 批量 flush + 解析缓存; <b>解析器(修订)</b>: r 行列数 {5,6} / dt_ms 校验(正整数 ≤ 86,400,000, 非法按坏行计数跳过、游标不推进)/ 坏行隔离口径沿用; <b>聚合层(§6.4)</b>: agg.dat 读写 + 内存累计器(hour_acc/day_acc/month_acc)+ 水位 wm 恢复 + catch-up 补算 + 按龄裁剪重写 —— 现行读全文件归并重写(<span class="anchor">traffic_store.py:509-571</span>)与 tmp+replace(<span class="anchor">:584-607</span>)退出常规写路径, 裁剪重写保留; 现有 parse / 封口 / 对账 / 索引大半退役</td></tr>
+    <tr><td><span class="anchor">core/modules/traffic_sample_mod.py</span></td><td>块缓冲 + 游程(r/z/n)+ flush 驱动(handler 内计时)+ stop() 钩子; <b>封口路径补 dt(修订)</b>: OpenRun 已有 start/last_seen 字段, z/n 游程实际跨度计算零成本; 热重载联动(回写 task.interval + 触发新块 + 失配取整告警); <b>每小时首采样触发点 seal_sweep(<span class="anchor">traffic_sample_mod.py:497-538</span>)退役(§6.4)</b>, 淘汰/裁剪触发点改 flush 时点</td></tr>
+    <tr><td><span class="anchor">core/traffic_grid.py</span></td><td>逐记录<b>有效 dt</b> 桶宽(跨桶覆盖语义待定稿, §8.2)+ 去 global-null 依赖(组聚合借 global 判 null 退役)+ <b>day/month 段消费 + WINDOW_SPECS 扩展</b>(<span class="anchor">traffic_grid.py:42-53</span>, §5.3)</td></tr>
+    <tr><td><span class="anchor">webui/server/traffic_qb.py</span></td><td>按天读 + <b>agg 读(组端点 3d+ 窗读成员 agg 文件, earliest_row_ts 扩展计入 day/month 行)+ WINDOW_NAMES 扩展</b>(<span class="anchor">traffic_qb.py:32</span>, §5.3)+ 去 index; last-good 竞态兜底保留</td></tr>
+    <tr><td><span class="anchor">core/qbmanager.py</span></td><td>finally 不改 —— 优雅退出走 host.stop_all() → 模块 stop() 钩子</td></tr>
+    <tr><td><span class="anchor">webui/static/shared/qb_traffic_chart.js</span></td><td><b>轮询逻辑不变</b>, interval_s 语义保留(A4 的下界常量对齐属单行修, 随实施批次顺带处理); <b>视图档位文案</b>(<span class="anchor">qb_traffic_chart.js:519, 525</span>, §5.3)</td></tr>
+    <tr><td>index.json 机制</td><td>全删(条目门 / updated_at / 对账重建孤儿条目 <span class="anchor">traffic_sample_mod.py:195-206</span>)</td></tr>
+    <tr><td>迁移</td><td>不迁移即换代: 新目录 <code>qb-traffic-v3/</code>(生产红线 auto-qb-data/ 内只增不改), 旧 <code>qb-traffic/</code> 原样留存不读(删留未决, 处置权在用户); v3 读侧遇旧目录直接忽略</td></tr>
+  </table>
+
+  <h3>5.8 测试存废预估</h3>
+  <table>
+    <tr><th style="width:34%">测试</th><th style="width:30%">现状</th><th>v3 预估</th></tr>
+    <tr><td>tests/test_traffic_store.py</td><td>60 例</td><td>大半重写(v3 块格式 / 按天 / 批量 flush / 解析缓存 roundtrip / <b>dt 解析与坏 dt 用例</b>: 列数 {5,6}、dt_ms 非法按坏行跳过且游标不推进 / <b>聚合层用例(§6.4)</b>: 封口、水位文件尾恢复、停机 catch-up 补算、agg 裁剪重写、时钟回拨钳制)</td></tr>
+    <tr><td>tests/test_traffic_sample.py</td><td>30 例</td><td>改缓冲 / flush 断言(stop 钩子 / 崩溃窗口 / 跨天切块 / <b>累积漂移触发阈值</b>: tol 边界、稳态小漂移退化逐行、空载保持稀疏)</td></tr>
+    <tr><td>tests/test_traffic_grid.py</td><td>17 例</td><td>改有效 dt 桶宽(<b>游标 dt 链</b>: 显式 dt/缺省/游程均摊定位、z/n 后首 r 基准链式自洽、块间 gap 真空判定)</td></tr>
+    <tr><td>tests/test_web.py qb_traffic 家族</td><td>wiring <span class="anchor">:2530</span>(<code>_QB_POLL_MIN_MS</code> 守卫 <span class="anchor">:2703-2705</span>)+ 端点 <span class="anchor">:4220-4427</span></td><td>保留</td></tr>
+    <tr><td>黄金法则 4 守卫测试</td><td>—</td><td>需过新键 flush_interval(validate_config + schema.py)</td></tr>
+  </table>
+</section>
+
+<!-- ================================================================ -->
+<section id="s6">
+  <h2><span class="no">06</span>裁决记录</h2>
+
+  <h3>6.1 用户拍板(4 项)</h3>
+  <table>
+    <tr><th style="width:8%">#</th><th style="width:30%">裁决</th><th>内容</th></tr>
+    <tr><td>R1</td><td><b>仅报告不实施</b></td><td>只出设计报告、不动任何代码 —— 含 26-10-04 修订轮(修订同样只动本报告); §7 分期仅供后续立计划档案引用</td></tr>
+    <tr><td>R2</td><td><b>旧数据不迁移, 直接换代</b></td><td>v3 直接落新目录 <code>qb-traffic-v3/</code>; 旧 <code>qb-traffic/</code> 留存不读(删留未决, 处置权在用户); v3 读侧遇旧目录直接忽略; 生产红线 auto-qb-data/ 内只增不改</td></tr>
+    <tr><td>R3</td><td><b>静态取证</b></td><td>全程代码静态核对(develop bc23748b), 不跑真机、不跑测试</td></tr>
+    <tr><td>R4</td><td><b>reports/ 立档</b></td><td>本文件, memory-bank/reports/(doc-topic: qb-traffic-storage-v3)</td></tr>
+  </table>
+
+  <h3>6.2 开放问题闭合(4 项, 均按推荐采纳)</h3>
+  <table>
+    <tr><th style="width:8%">#</th><th style="width:30%">问题</th><th style="width:30%">采纳方案</th><th>理由</th></tr>
+    <tr><td>Q1</td><td>块头是否带 n_rows_declared / closed_flag</td><td><b>省略</b></td><td>少一个回填写点, 天然支持追加式落盘; 块结束 = 下一块头或文件尾</td></tr>
+    <tr><td>Q2</td><td>热重载后 I 与 main_tick 失配(如 main_tick 2s→3s, 配 4s)</td><td><b>向上取整到下一倍数 + 告警一次, 不拒采</b></td><td>与黄金法则 4「加载期 fail-fast / 运行期降级」口径一致; 颗粒变粗不断线(4s 配 3s tick → 6s)</td></tr>
+    <tr><td>Q3</td><td>单系列缓冲是否设上限</td><td><b>3600 槽保险闸, 超限提前单独 flush</b></td><td>防大种子库最坏 ~60MB 内存滞留(1000 种 × 600 槽 × 100B)</td></tr>
+    <tr><td>Q4</td><td>hour 行补写触发点</td><td><s>沿用每小时首采样触发点, 与 flush 合流</s> → <b>已被 §6.4 取代</b>(flush 时点水位封口)</td><td>原口径随聚合分层退役: seal_sweep(<span class="anchor">traffic_sample_mod.py:497-538</span>)退役, 作废声明见 §6.4</td></tr>
+  </table>
+
+  <h3>6.3 修订裁决(2026-10-04 第二轮)</h3>
+  <div class="callout">
+    <div class="t">用户补充输入 → 采纳</div>
+    <p>用户补充输入「<b>考虑主循环耗时, 改存 delta 时间差</b>」, 经子智能体验证成立, 采纳<b>「稀疏 delta + 累积漂移触发」</b>方案; 「main_tick 整数倍」约束同步<b>降级为告警级</b>。原「桶宽 = max(1, ceil(block.interval))」的闭合口径<b>作废</b>, 改按记录有效 dt。</p>
+  </div>
+  <ul>
+    <li><b>证据(节拍累加是实际时刻, 非计划网格)</b>: <code>next_tick_at = time.time() + main_tick</code> 两处(<span class="anchor">qbmanager.py:518-527</span>)均在本轮线执行返回之后取值(合并轮还有 <span class="anchor">:520-521</span> 先同步后任务两行) ⇒ 任务线起始节拍 = main_tick + 上一轮线耗时; 无追赶无补齐(run_due 弹积压上限 max_tasks_per_tick=20, <span class="anchor">models.py:333</span>); run_due 的 now = 批开始时刻(<span class="anchor">qbmanager.py:691→:693</span>, <span class="anchor">taskqueue.py:198/:226</span>), 前置任务耗时造成拍内抖动(逐次随机); 批内任务全景与抖动量级见 §4.1(b)。</li>
+    <li><b>定量失效</b>: 纯等间隔(时刻 = start + i×interval)每行误差 = −Σ此前各行抖动、块内线性累积 —— d̄=0.1s、I=4s 时 10min 块(~143 行)块尾误差 ≈29s 并造成读侧 ~29s 伪真空; d̄ 仅 10ms 块尾仍 ~3s。纯等间隔在任何非零耗时下属格式性错误。</li>
+    <li><b>格式修订</b>: r/z/n 行型加可选 dt_ms(实测时间差); writer 维护 projected_ts, |actual_ts − projected_ts| &gt; tol 时写实测 dt 并自然复位(游标被推到实测点), 误差界 = tol + 取整(tol 建议 200-250ms 固定值); 读侧桶宽改按有效 dt 逐记录计算。</li>
+    <li><b>C1 降级</b>: 倍数结论仅在 d̄=0 空载成立(实际节奏 = ceil(I/(main_tick+d̄))×(main_tick+d̄), 有载误差 ∈ [0, main_tick+d̄) 且配置时不可知); 「I ≥ main_tick」维持硬校验(下限语义不变); C1 与 delta 正交分层 —— C1 管采样密度上限与 qB 请求预算, dt 管时间真值, 不互替。</li>
+    <li><b>先例</b>: 采样 ts 本就如实记录抖动(<span class="anchor">traffic_sample_mod.py:123</span> 设计注释「抖动是事实, 存储层不假装均匀」; 调查报告 26-10-04-1639 行距 {4s: 39, 5s: 1} 即 +1s 抖动实证)。</li>
+  </ul>
+
+  <h3>6.4 修订裁决(2026-10-04 第三轮)</h3>
+  <div class="callout">
+    <div class="t">用户补充输入 → 采纳</div>
+    <p>用户补充输入「<b>后续需要月/年视图; 若聚合数据与 raw 一起放按天文件, 访问月/年视图要读所有天文件, 不可取; 将 hour/day/month 这类聚合数据分开存储</b>」, 经子智能体验证成立, 采纳<b>聚合分层方案</b>: 每系列一个 agg.dat 追加混存 + 9 列行型(+cov_s)+ 内存累计器/flush 合流封口 + 文件尾水位恢复 + 逐级派生 + 零新增配置键。布局选型: (A)单 agg.dat 追加混存(<b>采纳</b>: 文件数最少/裁剪最廉/复杂度最低); (B)hour/day/month 分层三文件(否决); (C)按月分文件(否决)。</p>
+  </div>
+  <ul>
+    <li><b>量化验证(用户判断成立)</b>: 现行 v3(hour 行在天文件)下年视图 = 365 个 &lt;date&gt;.dat 冷读, 每文件 open+read+全量解析(raw 行占 99%+ 体量), 解析量 Σ≈536MB(2s 档上界)/15-37MB(30s 典型), 秒级耗时; 解析缓存救不了(驻留 ParsedSeries 含全 raw ≈105 万 RawRow/系列 ≈100-200MB 内存不可接受, 不驻留则每次冷读 365 open)。分层后读 1 个 agg 文件(≈0.45MB/系列/年, 毫秒级); 3d/7d/30d 同步受益(冷读 ≤31 open → 1); 组端点 30d 组图 M×31 → M×1(<span class="anchor">traffic_qb.py:148-149</span>)。</li>
+    <li><b>行型与聚合口径</b>: hour 从 8 列改 <b>9 列(+cov_s=有效时长秒)</b> —— 8 列无法还原有效时长, 部分覆盖小时等权平均有偏; 8 列旧行读侧兜底 cov_s=3600; day/month 同构 9 列(day_epoch=本地当日 00:00, month_epoch=本地自然月 1 日 00:00)。raw→hour 改<b>实测 dt 加权</b> avg=round(Σ(rate_i×dt_i)/cov_s)(dt_i 取实测 dt 裁剪到 min(dt_i, hour_end−t_i), z 游程槽 rate=0/span 均摊, n 不贡献, cov_s=Σdt_i≤3600; dt_i≡interval_s 时严格退化为现行 <span class="anchor">traffic_store.py:653-657</span> 公式); hour→day→month 逐级同构(avg=Σ(下级.avg×cov)/Σcov, max=max, totals=级末快照); <b>派生链严格逐级</b>(day 不从 raw 直聚: raw_window 默认 24h 午夜封口时早期 raw 已在裁剪边缘, cov_s 链只在逐级传递)。</li>
+    <li><b>写入与恢复</b>: 内存累计器(hour_acc 采样时逐记录累加、与 dt 链同源; day_acc/month_acc 下级封口时累加)+ 水位 wm={hour,day,month}; 每次 flush(600s)末尾顺序检查完结 → append; 重启扫 agg 文件尾一次 → 恢复 wm + 文件内行重建当日/当月累计器 → catch-up 逐级补算(hour←天文件 raw、day←agg 内 hour 行、month←day 行)append。幂等: 崩溃于 append 后/水位落内存前 → 重启从文件尾恢复不重 append; 撕裂行坏行纪律跳过 + 同 epoch 重复行取最后一行(<span class="anchor">traffic_store.py:273</span> 口径)。<b>补算窗口 = rollup_window</b>(默认 30d)= 天文件存活期(不是 raw_window): 停机 3d&lt;30d 可完整补算, 超窗 → 天文件已删 → 对应 hour/day 行缺失跳过不标注、图上呈真空(与块间 gap 语义一致); <b>catch-up 必须先于裁剪执行</b>(否则 hour 已封/day 未封/hour 到龄被裁 → 永久丢 day 行)。</li>
+    <li><b>退役与保留</b>: <b>每小时首采样触发点 seal_sweep(<span class="anchor">traffic_sample_mod.py:497-538</span>)退役</b> → <b>裁决 Q4 旧口径(「沿用每小时首采样触发点, 与 flush 合流」)就此作废</b>; 现行读全文件归并重写(<span class="anchor">traffic_store.py:509-571</span>)退役; tmp+fsync+os.replace(<span class="anchor">:584-607</span>)退出常规写路径, 仅保留给 agg.dat 按龄裁剪重写(hourly piggyback hour 封口时点, 存在到龄行才重写 + same_content 跳过, ~1 次/天)。<b>除 flush_interval 外零新增配置键</b>(rollup_window/raw_window 沿用, 仍须过 validate_config+schema); hour 行留 rollup_window、day/month 行永久(≈15KB/年/系列, 如需上限预留 aggregate_window, 开放项); 种子淘汰口径微调为「删超龄系列目录(天文件 + agg.dat)」; 未冻结长期不活跃种子: 天文件按龄删、agg 内 day/month 行保留, 年视图仍有其历史。</li>
+    <li><b>自洽性(核过)</b>: flush / 跨天切块 / 真空判定 / 单写线程 / dry_run 全兼容 —— 聚合 append piggyback flush(每系列每 flush 至多 +1 次 open ≈ 24 次/天); dry_run 同 <span class="anchor">:482</span> 闸门不落聚合; 解析缓存 mtime+size 键控无漏洞(追加必变 size, 裁剪重写 size 严格变小); 组端点 3d+ 窗读成员 agg 文件, earliest_row_ts 扩展计入 day/month 行; 冻结即聚合自然停更, 无需专门处理。agg 文件单次快读上界需从 205KB 口径(<span class="anchor">traffic_store.py:707</span>)放宽到 ~1MB(开放项, §8.2)。</li>
+  </ul>
+</section>
+
+<!-- ================================================================ -->
+<section id="s7">
+  <h2><span class="no">07</span>实施分期建议(供后续立计划档案; 本轮不实施)</h2>
+  <table>
+    <tr><th style="width:16%">期</th><th style="width:44%">内容</th><th>验收要点(一句)</th></tr>
+    <tr><td><b>S1</b> 存储层</td><td>v3 块格式 + 按天: 行型序列化/解析纯函数(含可选 dt_ms)、游标 dt 链时间推算、按天目录与路径解析(新函数先不接线, 写侧仍 v2); <b>聚合行型(hour/day/month 9 列+cov_s)序列化/解析与 dt 加权/逐级同构纯函数(§6.4)</b></td><td>纯函数 roundtrip 单测: 写入 → 解析 → 时间推算与原始采样实测序列逐一相等(含漂移行); 聚合 roundtrip(dt 加权/逐级同构口径, 8 列旧行兜底)</td></tr>
+    <tr><td><b>S2</b> 采样器</td><td>BlockBuffer(含 projected_ts / prev_actual_ts)+ 游程(r/z/n, 累积漂移触发 dt)+ flush 驱动(handler 内计时)+ stop() 钩子; 写侧翻 v3; sample_interval 硬校验生效(倍数告警级); 热重载失配取整 + 告警一次; <b>内存累计器 + 水位 wm={hour,day,month} 封口 + 文件尾恢复 + catch-up(§6.4)</b></td><td>--dry-run 产 v3 文件(漂移行带 dt_ms、空载保持稀疏; agg.dat 产出 hour/day/month 行); 非优雅终止后重启解析无损(除最后半行); stop() 落盘断言过</td></tr>
+    <tr><td><b>S3</b> 读侧</td><td>有效 dt 桶宽 + 按天加载 + mtime/size 解析缓存 + hour 段合流; 组端点去 global 依赖; 读侧翻 v3; <b>agg 读取 + day/month 段 + 视图映射(90d/6mo/1y/all, §5.3)</b></td><td>三端点数据对照正确; 24h 窗只开 2 个日期文件; 折线连续(spanGaps 断口只剩真实真空/断连); 年视图单 agg 文件冷读</td></tr>
+    <tr><td><b>S4</b> 配置键 + schema</td><td>flush_interval 进 validate_config + schema.py; sample_interval 硬校验 = ≥main_tick(倍数降级告警级)</td><td>黄金法则 4 守卫测试过新键; 非法值聚合报错; 1.5s 档加载期被拒</td></tr>
+    <tr><td><b>S5</b> 收尾基线</td><td>index.json 机制退役清理、冻结/淘汰新口径(文件名日期算龄 + 删系列目录)、旧测试重写(store/sample/grid)、<b>agg 测试(封口/水位/补算/裁剪/时钟回拨钳制)</b>、test.full 基线切片</td><td>test.full 全绿 + 实测数字入 testing/baselines/ 新切片</td></tr>
+  </table>
+  <div class="callout warn">
+    <div class="t">合批约束</div>
+    <p><b>S4 的键面须与 S2 同批或先行合入</b> —— 采样器消费 flush_interval 之前, 键面必须过 validate_config + schema 守卫(黄金法则 4: 新配置键必须加进 validate_config 并同步 schema.py)。<b>S2(写侧翻 v3)与 S3(读侧翻 v3)建议同批</b> —— 拆分则中间态「写 v3 读 v2」会把新文件当坏行, 图面行为未定义, 不建议跨批长期共存。</p>
+  </div>
+</section>
+
+<!-- ================================================================ -->
+<section id="s8">
+  <h2><span class="no">08</span>风险与开放问题</h2>
+
+  <h3>8.1 风险清单</h3>
+  <table>
+    <tr><th style="width:20%">风险</th><th>说明</th><th style="width:18%">状态</th></tr>
+    <tr><td><b>崩溃丢 ≤10min</b></td><td>现状丢 ≤1 行(每行即冲 <span class="anchor">:407-411</span>)。丢失 = 磁盘块提前截尾 → 下一块 start 更晚 → 块间 gap = 真空, 与 C2 真空判定同形、语义自洽(丢的是未落盘真实数据, 图上空白与断连不可区分但均真实)。</td><td>用户拍板接受(§6 R 组)</td></tr>
+    <tr><td><b>读侧槽位游标复杂度</b></td><td>逐块游标 dt 链(t += 显式 dt 或 槽位数×interval)+ 有效 dt 桶宽 + 按天文件接续, 比逐行时间戳复杂; 推算错一位则整块时间漂移; z/n 显式 dt 后首 r 基准链须自洽。</td><td>待实施钉住(S1/S3 roundtrip 单测)</td></tr>
+    <tr><td><b>有载节拍漂移(修订轮新增)</b></td><td>任务线耗时使实际节拍 = main_tick + d̄, 采样距随负载漂移(正常小库多数轮抖动 0-10ms, 大库/高负载可达数百 ms~秒级, <span class="anchor">qbmanager.py:511</span> 注释旁证; 队列积压时采样顺延一拍), 量化误差 ∈ [0, main_tick+d̄) 配置时不可知 —— 时间正确性已由实测 dt 在格式层兜底(§6.3), 残余影响仅采样密度与 z 游程槽位规整。</td><td>方案已采纳(§6.3); 密度影响留实施期实测复核 tol</td></tr>
+    <tr><td><b>main_tick 调小的全队列代价</b></td><td>1s/1.5s 采样必须先调 main_tick; 全队列 tick 开销 ×2(TaskQueue 每 tick run_due + max_tasks_per_tick=20, <span class="anchor">models.py:333</span>), 只在专机 + 秒级图需求时值得。</td><td>口径已记, 无默认动作</td></tr>
+    <tr><td><b>小文件数量级</b></td><td>365 天 ×(1+N 系列); N=20 活跃种 ≈ 7700 文件/年, 千级目录项文件系统可忽略; 组端点仍逐成员读但只读涉事日期文件。</td><td>评估闭合</td></tr>
+    <tr><td><b>运行期失配仅告警一次</b></td><td>校验只在加载时做; 运行期改 main_tick 致失配 → 向上取整颗粒变粗不断线(4s 配 3s tick → 6s), 告警一次不重复。</td><td>已采纳(Q2)</td></tr>
+    <tr><td><b>单种 2s 档体量上界</b></td><td>全活跃 43200 行/天/系列 ≈ 1.5MB/天; 活跃过滤 + 零游程后实测远小; 缓冲最坏 ~60MB → 3600 槽闸兜底。</td><td>已闭合(Q3)</td></tr>
+    <tr><td><b>时钟回拨(第三轮新增)</b></td><td>traffic 链路现状无时钟防抖(<span class="anchor">traffic_sample_mod.py:244</span> time.time() 直用, 全文核过; stamp 防时钟先例仅在 kb.nav)。回拨使 dt_ms 为负(读侧坏行跳过)/ 聚合桶错位 / 水位失效。建议写侧单调钳制 <code>dt_ms = max(1, actual − prev)</code>(回拨行退回标称 dt)+ 桶归属 max(ts, prev_ts) —— 与 dt 链天然融合, 成本一行。</td><td>方案已定, v3 实施期新增项</td></tr>
+    <tr><td><b>停机超 rollup_window 的聚合空洞(第三轮新增)</b></td><td>补算窗口 = rollup_window(默认 30d)= 天文件存活期(不是 raw_window): 停机 3d &lt; 30d 可完整补算; 停机超窗 → 天文件已删 → 对应 hour/day 行缺失跳过不标注, 图上呈真空(与块间 gap 语义一致)。</td><td>语义已定义(接受)</td></tr>
+    <tr><td><b>agg 快读上界放宽(第三轮新增)</b></td><td>agg.dat 单次快读上界需从 205KB 口径(<span class="anchor">traffic_store.py:707</span>)放宽到 ~1MB(hour 全年 8760 行 × ~90B + day/month 行), 具体取值开放(§8.2)。</td><td>开放项(§8.2)</td></tr>
+  </table>
+
+  <h3>8.2 开放问题</h3>
+  <p><b>四项</b>: ①<b>跨桶记录覆盖语义</b>(v2 修订新增) —— 单记录有效 dt 跨多桶时中间桶空(伪洞), 须规定「跨桶记录覆盖其间槽位」防伪洞; 待实施期定稿(§4.2 风险、§5.2 读侧规则)。②<b>前端档位取舍</b>(第三轮新增) —— 14 档偏挤, 可先上 6mo/1y/all, 由用户拍板(§5.3)。③<b>aggregate_window 预留</b>(第三轮新增) —— day/month 行永久(≈15KB/年/系列), 如需上限再定。④<b>agg 快读上界取值</b>(第三轮新增) —— 205KB → ~1MB 的具体值(§8.1)。原有 4 项(Q1-Q4)已在 §6.2 闭合(Q4 已被 §6.4 取代), 两轮修订裁决见 §6.3-§6.4。实施期新产生的决策(如 z 游程与 n 游程相邻的编码细节、解析缓存条目上限)走任务档案(tasks/)随做随记, 不回填本报告(report 出厂即冻结)。</p>
+</section>
+
+<footer>auto-qb · memory-bank/reports · 26-10-04-1730 · doc-topic: qb-traffic-storage-v3 · 代码基线 develop bc23748b</footer>
+</div>
+</body>
+</html>
