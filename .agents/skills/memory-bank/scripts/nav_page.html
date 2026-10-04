@@ -154,8 +154,14 @@
   .count { font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; }
   .count b { color: var(--cyan); font-weight: 600; }
   .toolbar .hint { margin-left: auto; color: var(--faint); font-size: 11px; }
-  .ledgerwrap { overflow: auto; flex: 1; }
-  #v-ledger table { width: 100%; border-collapse: collapse; }
+  /* scrollbar-gutter: stable —— 与置顶专区 (.pinzone) 同款, 两侧预留等宽滚动条槽,
+     否则主表有滚动条 / 专区没有时内容宽度差 9px, 两张表的栏就错位 (栏对齐的硬前提) */
+  .ledgerwrap { overflow: auto; flex: 1; scrollbar-gutter: stable; }
+  /* table-layout: fixed —— 列宽只认首行 (thead th) 的 width, 不随内容伸缩; 置顶专区克隆主表
+     thead, 于是两表列宽同源、逐栏对齐 (auto 布局下两表各按自身内容算宽, 永远对不齐)。
+     min-width 兜底: 窗口过窄时固定列 (合计 514px) 会把标题栏压没, 改让表格保持 720px 由
+     容器横向滚动 (窄屏下两表各自横滚, 属可接受降级; 宽屏无影响) */
+  #v-ledger table { width: 100%; min-width: 720px; border-collapse: collapse; table-layout: fixed; }
   #v-ledger thead th {
     position: sticky; top: 0; z-index: 2; background: var(--bg);
     font-family: var(--disp); font-weight: 600; font-size: 10px; letter-spacing: .13em;
@@ -173,36 +179,43 @@
   td.statc { width: 84px; }
   td.topic { width: 200px; }
   td.refs { width: 54px; text-align: right; font-family: var(--mono); font-size: 11px; color: var(--faint); white-space: nowrap; }
-  td.topic code { font-family: var(--mono); font-size: 10.5px; color: var(--dim); background: var(--paper-2); border: 1px solid var(--hair); border-radius: 3px; padding: 1px 5px; }
+  /* 固定列宽下专题键不再撑列, 超长改省略号 (否则会溢出到相邻栏) */
+  td.topic code { display: inline-block; max-width: 100%; vertical-align: bottom; font-family: var(--mono); font-size: 10.5px; color: var(--dim); background: var(--paper-2); border: 1px solid var(--hair); border-radius: 3px; padding: 1px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .title-cell b { font-weight: 500; font-size: 13px; }
   .title-cell .sm { color: var(--faint); font-size: 11.5px; margin-top: 1px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
   .chain { color: var(--faint); }
   .chain.has { color: var(--cyan); }
 
   /* ============ 视图 A: 置顶 (pin) 专区 + 右键菜单 ============ */
+  /* 置顶专区 = 与主表**同栏**的详细列表, 只是置顶展示 + 强调 (2026-10-05 用户定调)。
+     横向 padding 归零, 让专区表格与主表左缘对齐; 左侧 accent 用 inset 阴影而非 border,
+     因为 border 会占掉内容宽度 3px, 两张表就错 3px (scrollbar-gutter 同理, 见 .ledgerwrap) */
   .pinzone {
-    flex: none; border-bottom: 1px solid var(--hair-2); background: var(--paper-2);
-    padding: 9px 20px 10px; max-height: 152px; overflow-y: auto;
+    flex: none; background: var(--paper-2); border-bottom: 1px solid var(--hair-2);
+    max-height: 42vh; overflow-y: auto; scrollbar-gutter: stable;
+    box-shadow: inset 3px 0 0 var(--cyan);
   }
   .pinzone[hidden] { display: none; }
   .pzhead {
+    position: sticky; top: 0; z-index: 3; height: 28px;
+    display: flex; align-items: center; gap: 8px; padding: 0 20px;
+    background: var(--paper-2); border-bottom: 1px solid var(--hair);
     font-family: var(--disp); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
-    color: var(--cyan); margin-bottom: 7px;
+    color: var(--cyan);
   }
   .pzhead b { font-weight: 600; }
-  .pzlist { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pinrow {
-    display: flex; align-items: center; gap: 7px; max-width: 360px;
-    border: 1px solid var(--hair-2); background: var(--paper); border-radius: 5px;
-    padding: 3px 5px 3px 7px; cursor: pointer;
+  .pzhead .pzhint {
+    margin-left: auto; font-family: var(--sans); font-size: 11px;
+    letter-spacing: 0; text-transform: none; color: var(--faint);
   }
-  .pinrow:hover { border-color: var(--cyan); background: var(--cyan-soft); }
-  .pinrow .pr-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-  .pinrow .pr-x {
-    flex: none; border: none; background: none; color: var(--faint); cursor: pointer;
-    font-family: var(--mono); font-size: 11px; line-height: 1; padding: 2px 4px; border-radius: 3px;
-  }
-  .pinrow .pr-x:hover { color: var(--ink); background: var(--paper-3); }
+  /* 专区表头: 跟着 .pzhead (高 28px) 之下粘住; 底色用 paper-3 与主表表头的 bg 区分 */
+  #v-ledger .pinzone thead th { position: sticky; top: 28px; z-index: 2; background: var(--paper-3); }
+  /* 置顶行强调: 淡 cyan 底 + 悬停加深; 列序/列宽与主表完全一致 (守阵 test_pin_zone_reuses_ledger_columns) */
+  #v-ledger tbody tr.pin-row { background: rgba(86,200,215,.05); }
+  #v-ledger tbody tr.pin-row:hover { background: var(--cyan-soft); }
+  /* # 栏里的实心图钉标记 (静态, 与标题栏的可点图钉区分) */
+  .pinzone .pin-mark { display: inline-block; line-height: 0; color: var(--cyan); }
+  .pinzone .pin-mark svg { width: 12px; height: 12px; fill: currentColor; stroke: currentColor; stroke-width: 1.6; }
   .pinbtn {
     display: inline-flex; align-items: center; justify-content: center; vertical-align: -2px;
     width: 18px; height: 18px; margin-right: 5px; padding: 0; flex: none;
@@ -477,9 +490,11 @@
       </div>
       <div class="pinzone" id="pinZone" hidden></div>
       <div class="ledgerwrap">
+        <!-- 列宽/列序单点 (守阵 test_pin_zone_reuses_ledger_columns): 全壳只有这一处表头;
+             置顶专区在 renderPinZone 里**克隆本 thead**, 两表逐栏对齐靠它 —— 别在别处再写一份列定义 -->
         <table>
           <thead><tr>
-            <th class="num">#</th><th style="width:96px">时间戳</th><th style="width:46px">形态</th>
+            <th class="num" style="width:34px">#</th><th style="width:96px">时间戳</th><th style="width:46px">形态</th>
             <th style="width:84px">状态</th><th>标题</th><th style="width:200px">专题</th><th style="width:54px; text-align:right">链</th>
           </tr></thead>
           <tbody id="aRows"></tbody>
@@ -788,6 +803,23 @@ function aFiltered() {
   return list.sort(cmp);
 }
 
+/* 台账行单元格: 主表与置顶专区共用同一份栏序/栏宽单点 —— 2026-10-05 用户要求「专区与主区同栏,
+   只置顶展示 + 强调」, 两处共用本函数, 从结构上排除栏漂移。pinMark=true 时 # 栏显示实心图钉标记
+   (置顶专区用), 否则显示行号。栏序 # 时间戳 形态 状态 标题 专题 链 由守阵
+   test_ledger_status_column_between_form_and_title 钉死。 */
+function ledgerCells(i, n, pinMark) {
+  const idx = pinMark ? '<span class="pin-mark" title="已置顶">' + PIN_SVG + "</span>" : n + 1;
+  const pinned = isPinned(i.link);
+  return `
+      <td class="idx">${idx}</td>
+      <td class="stamp">${esc(i.stamp)}</td>
+      <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
+      <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
+      <td class="title-cell"><button class="pinbtn${pinned ? " on" : ""}" data-pin="${esc(i.link)}" title="${pinned ? "取消置顶" : "置顶到专区"}">${PIN_SVG}</button><b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
+      <td class="topic"><code>${esc(i.topic || NO_KEY)}</code></td>
+      <td class="refs"><span class="chain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "# " + i.refs.length : "·"}</span></td>`;
+}
+
 function renderLedger() {
   if (!DATA) return;
   const cnt = f => DATA.items.filter(f).length;
@@ -814,33 +846,27 @@ function renderLedger() {
   const list = aFiltered();
   $("aCount").innerHTML = "<b>" + list.length + "</b> / " + DATA.items.length + " 件";
   $("aRows").innerHTML = list.map((i, n) => `
-    <tr data-link="${esc(i.link)}"${S.sel === i.link ? ' class="sel"' : ""}>
-      <td class="idx">${n + 1}</td>
-      <td class="stamp">${esc(i.stamp)}</td>
-      <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
-      <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
-      <td class="title-cell"><button class="pinbtn${isPinned(i.link) ? " on" : ""}" data-pin="${esc(i.link)}" title="${isPinned(i.link) ? "取消置顶" : "置顶到专区"}">${PIN_SVG}</button><b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
-      <td class="topic"><code>${esc(i.topic || NO_KEY)}</code></td>
-      <td class="refs"><span class="chain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "# " + i.refs.length : "·"}</span></td>
-    </tr>`).join("");
+    <tr data-link="${esc(i.link)}"${S.sel === i.link ? ' class="sel"' : ""}>${ledgerCells(i, n)}</tr>`).join("");
 
   if (S.sel) { if (byLink.has(S.sel)) renderDrawer(S.sel); else closeDrawer(); }
 }
 
-/* 置顶专区: 增量区 (被 pin 的件照旧留在原表格); 空则整块隐藏; 不受下方筛选影响 */
+/* 置顶专区: 与主表**同栏**的详细列表 (列宽/列序克隆主表 thead, 行单元格复用 ledgerCells),
+   只是置顶展示 + 强调底色; 空则整块隐藏; 被 pin 的件照旧留在主表 (双向显示), 不受下方筛选影响 */
 function renderPinZone() {
   const zone = $("pinZone");
   const items = pinZoneItems();
   if (!items.length) { zone.hidden = true; zone.innerHTML = ""; return; }
   zone.hidden = false;
-  zone.innerHTML = '<div class="pzhead">置顶 · PINNED <b>(' + items.length + ")</b></div>" +
-    '<div class="pzlist">' + items.map(i => `
-      <div class="pinrow" data-link="${esc(i.link)}" title="点击打开原文">
-        <span class="pinbtn on">${PIN_SVG}</span>
-        <span class="fbadge fc-${i.form}" style="width:auto;padding:1px 6px;">${FORM_CN[i.form]}</span>
-        <span class="pr-t">${esc(i.title)}</span>
-        <button class="pr-x" data-unpin="${esc(i.link)}" title="取消置顶">x</button>
-      </div>`).join("") + "</div>";
+  /* 列头/列宽单点 = 主表 thead: 直接克隆, 两表逐栏对齐由结构保证 (别在别处再写一份列定义) */
+  const thead = document.querySelector("#v-ledger .ledgerwrap thead");
+  const head = thead ? thead.outerHTML : "";
+  zone.innerHTML =
+    '<div class="pzhead">置顶 · PINNED <b>(' + items.length + ")</b>" +
+    '<span class="pzhint">点图钉取消 · 点行打开原文</span></div>' +
+    '<table class="pztable">' + head + "<tbody>" +
+    items.map(i => `<tr class="pin-row" data-link="${esc(i.link)}">${ledgerCells(i, 0, true)}</tr>`).join("") +
+    "</tbody></table>";
 }
 
 function renderDrawer(link) {
@@ -1116,15 +1142,15 @@ function wire() {
     e.preventDefault();
     openCtx(e.clientX, e.clientY, tr.dataset.link);
   });
-  /* 置顶专区: 委托点击 (取消按钮 / 条目) 与右键 */
+  /* 置顶专区: 委托点击 (图钉取消 / 条目打开) 与右键 —— 与主表行同款交互 */
   $("pinZone").addEventListener("click", e => {
-    const x = e.target.closest(".pr-x");
-    if (x) { togglePin(x.dataset.unpin); return; }
-    const row = e.target.closest(".pinrow");
+    const pb = e.target.closest(".pinbtn");
+    if (pb) { togglePin(pb.dataset.pin); return; }   /* 早退: 图钉 = 取消置顶, 免得冒泡又开原文 */
+    const row = e.target.closest("tr.pin-row");
     if (row) window.open(MB + row.dataset.link, "_blank");
   });
   $("pinZone").addEventListener("contextmenu", e => {
-    const row = e.target.closest(".pinrow");
+    const row = e.target.closest("tr.pin-row");
     if (!row) return;
     e.preventDefault();
     openCtx(e.clientX, e.clientY, row.dataset.link);

@@ -31,6 +31,13 @@
   内嵌 title-cell (零列序改动, 不新增 td), 内联 SVG 无外链图标库、无 emoji。守阵 `tests/test_kb_nav.py` +4(专区/菜单
   骨架 · derive 不碰 pins 且装载点唯一 · 双向渲染 · 内联 SVG 无 emoji)。基线 2515 passed + 4 skipped / 99%
   (切片 26-10-04-1849)。计划 [26-10-04-1830](../plans/26-10-04-1830-plan-kb-nav-pin.html)。
+  **2026-10-05 改版 (用户: 专区改为与主区同栏的详细列表, 只置顶 + 强调)**: 专区不再是紧凑 chip 列表, 而是与主表
+  **逐栏一致**的七栏详细列表 —— 列定义**单点** = 主表 thead(专区渲染时克隆 `thead.outerHTML`), 行单元格**共用**
+  `ledgerCells()`(主表与专区同一份栏序/栏宽), 从结构上排除两处漂移; 栏对齐靠 `table-layout: fixed`(列宽只认首行)
+  + 两滚动容器 `scrollbar-gutter: stable`(预留等宽滚动条槽) + 专区容器横向 padding 归零、左 accent 用 `inset` 阴影
+  而非 border(都不许改内容宽度); `#` 栏放实心图钉标记, 行加强调底色。守阵 +1(`test_pin_zone_reuses_ledger_columns`:
+  全壳仅一处表头 + 主表行与专区都调 `ledgerCells` + 专区克隆主表 thead), 另 2 条既有守阵改指共用单点。踩坑与机检
+  判据见 [pitfalls/web-ui/layout-css.md](../pitfalls/web-ui/layout-css.md)「两个独立表格逐栏对齐」节; 数据层/服务层仍零改动。
 
 - **activeContext 多 clone 冲突治理 = 时间戳切片方案 (2026-09-23, W1–W3)**: 「重写头部滚动栈」改成
   「新增/更新自己的时间戳切片」; 取消 global.md/_index.md/_recent.md 缓存(文件名自带时间与主题,

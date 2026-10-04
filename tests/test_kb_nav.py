@@ -32,7 +32,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_shell_has_three_views_and_switcher: 壳含三视图容器 (v-ledger / v-console / v-cards) 与 data-view 切换控件
 - test_shell_is_dark: 壳含 color-scheme: dark
 - test_shell_no_external_resources: 壳无 http(s) 外链 src/href 资源引用 (属性锚定, 注释/文案不受影响)
-- test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 标题 专题 链 (表头与行模板同步)
+- test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 标题 专题 链 (表头与共用行模板 ledgerCells 同步)
 - test_status_filter_not_reseeded_every_poll: derive() 对状态候选只自动入选一次 (statusSeeded 闸门在前), 30s 轮询不得盖回用户取消的选择
 - test_shell_has_filter_persistence: 筛选器持久化骨架 (FILTERS_KEY + 存/读/还原三函数 + boot 装载一次 + 输入框/下拉回填初值)
 - test_filter_state_not_reseeded_on_poll: derive() 不得读写筛选器持久化 (与 pin 同源: 轮询不得洗掉用户筛选)
@@ -40,7 +40,8 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_filter_mutations_persist: 各筛选入口 (台账四组 / 排序 / 双搜索 / 卡片三组) 均落盘, 少一处即该筛选刷新后仍旧重置
 - test_shell_has_pin_zone_and_ctxmenu: 置顶骨架在位 (#pinZone / #ctxMenu / PINS_KEY / contextmenu 监听)
 - test_pin_state_not_reseeded_by_derive: derive() 不碰 pins; S.pins = loadPins() 全壳唯一 (轮询不得洗掉 pin)
-- test_pinned_rendered_in_both_zones: 同一份 pin 状态被专区渲染 (pinZoneItems) 与行模板 (isPinned) 双处消费
+- test_pinned_rendered_in_both_zones: 同一份 pin 状态被专区渲染 (pinZoneItems) 与共用行模板 (isPinned) 双处消费
+- test_pin_zone_reuses_ledger_columns: 置顶专区与主表**同栏** —— 列定义单点 (全壳仅一处表头) + 克隆主表 thead + 共用 ledgerCells
 - test_pin_icon_is_inline_svg_no_emoji: 图钉为内联 SVG (无外链图标库), 且壳内无 emoji 图钉字符 (code-style)
 - test_static_map_serves_file_and_api: GET / 与 /api/data 200 (壳文本 / JSON 契约), 正常 memory-bank 文件 200 且 .md 给 text/plain
 - test_static_map_blocks_traversal: ../ / %2e%2e / ..%2f / %5c 反斜杠变体一律 403/404 且不泄漏目标内容; 未知文件 404
@@ -204,7 +205,8 @@ def test_shell_no_external_resources() -> None:
 
 def test_ledger_status_column_between_form_and_title() -> None:
     """台账列序 (用户 2026-10-04 定调): 状态挨着形态、在标题左侧 —— 塞到专题右边要横向拖
-    才能看见, 等于没有。表头与行模板必须同步改: 只改一头会让整行数据错位一列。"""
+    才能看见, 等于没有。表头与**共用行模板** ledgerCells 必须同步改: 只改一头会让整行数据
+    错位一列 (主表与置顶专区共用 ledgerCells, 栏序单点即在此)。"""
     text = SHELL.read_text(encoding="utf-8")
 
     head = re.search(r"<thead><tr>(.*?)</tr></thead>", text, re.S)
@@ -216,8 +218,8 @@ def test_ledger_status_column_between_form_and_title() -> None:
 
     body = re.search(r'<tbody id="aRows">', text)
     assert body, "台账行容器不见了"
-    row = re.search(r"list\.map\(\(i, n\) => `(.*?)`\)\.join", text, re.S)
-    assert row, "行模板不见了? 渲染方式变了要同步本守阵"
+    row = re.search(r"function ledgerCells\(.*?\) \{(.*?)\n\}", text, re.S)
+    assert row, "行模板 (ledgerCells) 不见了? 渲染方式变了要同步本守阵"
     cells = re.findall(r'<td class="([a-z-]+)"', row.group(1))
     assert cells == ["idx", "stamp", "formc", "statc", "title-cell", "topic", "refs"], f"行模板列序漂移: {cells}"
 
@@ -314,15 +316,36 @@ def test_pin_state_not_reseeded_by_derive() -> None:
 
 def test_pinned_rendered_in_both_zones() -> None:
     """需求 3「pin 后同时显示在专区和非专区」: 同一份 pin 状态必须被两处消费 —— 专区渲染
-    (pinZoneItems) 与行模板 (isPinned)。只改一处 = 悄悄退化成单边显示。"""
+    (pinZoneItems) 与**共用行模板** ledgerCells (isPinned)。只改一处 = 悄悄退化成单边显示。"""
     text = SHELL.read_text(encoding="utf-8")
-    row = re.search(r"list\.map\(\(i, n\) => `(.*?)`\)\.join", text, re.S)
-    assert row, "行模板不见了? 渲染方式变了要同步本守阵"
+    row = re.search(r"function ledgerCells\(.*?\) \{(.*?)\n\}", text, re.S)
+    assert row, "行模板 (ledgerCells) 不见了? 渲染方式变了要同步本守阵"
     assert "isPinned(" in row.group(1), "行模板必须按 isPinned 渲染图钉 (非专区那一路)"
 
     zone = re.search(r"function renderPinZone\(\) \{(.*?)\n\}", text, re.S)
     assert zone, "renderPinZone() 不见了"
     assert "pinZoneItems(" in zone.group(1), "专区必须消费同一份 pin 状态 (双向显示)"
+
+
+def test_pin_zone_reuses_ledger_columns() -> None:
+    """置顶专区 = 与主表**同栏**的详细列表 (2026-10-05 用户定调: 同主区域, 只置顶展示 + 强调)。
+    栏对齐靠「列定义单点」结构性保证, 而非各写一份再对表: 全壳只许有一处表头 (主表), 专区在
+    renderPinZone 里**克隆主表 thead**, 行单元格两处共用 ledgerCells。任一处另写一份列定义,
+    两张表就会各按自身内容算宽而逐栏错位 (这正是本次要修的问题形态)。"""
+    text = SHELL.read_text(encoding="utf-8")
+
+    # 列定义单点: 全壳只有主表一处 <thead><tr> (专区克隆它, 不另写)
+    assert text.count("<thead><tr>") == 1, "置顶专区另写了一份列定义 (表头不止一处), 两表会逐栏错位"
+
+    # 行单元格共用: 主表模板与专区都调 ledgerCells
+    main_row = re.search(r"list\.map\(\(i, n\) => `(.*?)`\)\.join", text, re.S)
+    assert main_row and "ledgerCells(i, n)" in main_row.group(1), "主表行必须走共用 ledgerCells"
+
+    zone = re.search(r"function renderPinZone\(\) \{(.*?)\n\}", text, re.S)
+    assert zone, "renderPinZone() 不见了"
+    body = zone.group(1)
+    assert "ledgerCells(" in body, "置顶专区行必须复用 ledgerCells (同栏), 不能另写一套 <td>"
+    assert "ledgerwrap thead" in body, "置顶专区必须克隆主表 thead (列宽同源), 而非另写一份列头"
 
 
 def test_pin_icon_is_inline_svg_no_emoji() -> None:

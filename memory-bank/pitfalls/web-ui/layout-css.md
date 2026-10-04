@@ -1,7 +1,7 @@
 # 样式 / 布局 / 表格
 
-> 摘要: 行宽口径、表头吸顶、sticky 层叠、flex 挤压、特异性之争 —— 前端版式类的固定判据。
-> 触发: 改 CSS, 布局, 表格, 滚动条, 表头吸顶, sticky, flex, flex-basis, 省略号, 媒体查询, 颜色不对, 按钮, 控件变形过高, 控件尺寸, 两态分不出, UA 默认色
+> 摘要: 行宽口径、表头吸顶、两表逐栏对齐、sticky 层叠、flex 挤压、特异性之争 —— 前端版式类的固定判据。
+> 触发: 改 CSS, 布局, 表格, 滚动条, 表头吸顶, sticky, flex, flex-basis, 省略号, 媒体查询, 颜色不对, 按钮, 控件变形过高, 控件尺寸, 两态分不出, UA 默认色, 两表对齐, 逐栏对齐, 列宽不一致, table-layout, scrollbar-gutter, 置顶专区
 
 ### 行宽口径 = `fit-content; min-width: 100%`, 且行内单元格必须 `min-width: 0`
 
@@ -40,6 +40,19 @@
 - **判别**: 子元素的 z-index **跨不出去**。判别法: 先看遮挡方是否**也有** `backdrop-filter` / `transform` / `filter`,
   **不要一味加大 z-index**。
 - **处置**: 两者都设 `position:relative` 并拉开次序 —— **只加之一无效**。
+
+### 两个独立表格要「逐栏对齐」: 列定义单点 + `table-layout: fixed` + `scrollbar-gutter: stable`
+
+- **触发**: 把一个表拆成两块(如 kb.nav 的「置顶专区 + 主表」), 要求列宽/列序逐栏一致 (2026-10-05 实测)。
+- **判别**: ①auto 布局下两表各按**自身内容**算列宽, 内容不同就永远对不齐 —— "两处照抄同一份 `width`"也无效;
+  ②更隐蔽的是**滚动条**: 主表有竖滚动条而专区没有时, 两表内容宽度差一个滚动条宽(本壳 9px), 整表栏位平移;
+  ③滚动容器上的横向 `padding` 与 `border` 同样改内容宽度 —— 差几 px 就错位。
+- **处置**: ①`table-layout: fixed`(列宽只认首行 `thead th` 的 `width`, 不随内容伸缩, 弹性列吃剩余);
+  ②**列定义单点** —— 专区渲染时**克隆主表 thead**(`thead.outerHTML`), 不在第二处再写列头(两处各写一份必然漂移);
+  ③两表滚动容器都写 `scrollbar-gutter: stable`(无滚动条时也预留等宽槽); ④专区容器横向 `padding: 0`、左侧 accent
+  用 `box-shadow: inset` 而非 `border`(inset 阴影不占栏宽); ⑤窗口过窄时给表 `min-width` 兜底, 免得固定列把弹性列压没。
+- **机检**: headless Chromium 量两表 `th`/`td` 的 `getBoundingClientRect()`, 四组 `left:width` 必须逐栏相等
+  (kb.nav 在 760/1100/1600/1900 四档宽度下实测全等)。守阵 `test_pin_zone_reuses_ledger_columns` 钉「全壳仅一处表头」。
 
 ### `:focus-within` 在带 `tabindex` 的行上, 鼠标点击也会画 outline
 
