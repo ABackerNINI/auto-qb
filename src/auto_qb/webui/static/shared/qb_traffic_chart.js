@@ -377,8 +377,8 @@ window.AQB_QB_TRAFFIC = {
       };
       // 语义: 上/下行与今日流量卡同源(--today-up/down); 兜底仍走令牌链, 不硬编码色值
       return {
-        up: pick("--today-up", "--teal", "--fg"),
-        down: pick("--today-down", "--indigo", "--fg"),
+        up: pick("--today-up", "--indigo", "--fg"),
+        down: pick("--today-down", "--teal", "--fg"),
         grid: pick("--hairline", "--border"),
         axis: pick("--fg-dim", "--fg-muted"),
       };

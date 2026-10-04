@@ -93,8 +93,9 @@
   --hr-hit: #ff8a3d;
   --limit-hit: var(--violet);
   --limit-actual: var(--blue);
-  --today-up: var(--teal);
-  --today-down: var(--indigo);
+  /* 2026-10-04 方向色交换(用户拍板): 上行=紫(--indigo) / 下行=蓝绿(--teal); 全 UI 单点 */
+  --today-up: var(--indigo);
+  --today-down: var(--teal);
   /* 今日流量组的图标色位(2026-09-20): 现在只喂组内历史入口按钮(总图标已改双色);
      取色须与 up/down 数值色不同族 —— 图标与数值同色时,
      一眼扫过去图标会被当成数值的一部分(见 issues/26-09-20-1840) */

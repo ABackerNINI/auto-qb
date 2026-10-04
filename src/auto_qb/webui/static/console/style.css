@@ -94,8 +94,9 @@
   --hr-hit: #ff8f45;
   --limit-hit: var(--violet);
   --limit-actual: var(--blue);
-  --today-up: var(--teal);
-  --today-down: var(--indigo);
+  /* 2026-10-04 方向色交换(用户拍板): 上行=紫(--indigo) / 下行=蓝绿(--teal); 全 UI 单点 */
+  --today-up: var(--indigo);
+  --today-down: var(--teal);
   --today-ico: var(--lime);
 
   /* 表面工程: 玻璃底色(顶栏) / 极淡分隔线 —— 不透明实色(PERF-01: 吸顶条禁毛玻璃) */

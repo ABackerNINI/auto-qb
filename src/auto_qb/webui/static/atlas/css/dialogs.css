@@ -472,9 +472,13 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
   transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 .sb-spd:hover { background: var(--surface-2); border-color: var(--border-soft); color: var(--fg); }
 .sb-spd .val { color: var(--fg); font-weight: 600; font-size: 12.5px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+/* 2026-10-04: 方向图标统一到流量语义色(与今日流量/历史与 qB 流量图同源), 不再用全局绿/蓝 */
+.sb-spd .ico-down { color: var(--today-down); }
+.sb-spd .ico-up { color: var(--today-up); }
 .sb-spd .slash { color: var(--fg-dim); }
-.sb-spd .lim { color: var(--fg); font-weight: 600; font-size: 12px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.sb-spd.off .lim { color: var(--fg-dim); font-weight: 500; }
+/* 2026-10-04: 限速值改中性灰(与做种要求时长 .m-pair .req 同款 --fg-dim), 读作参考值而非并列数值 */
+.sb-spd .lim { color: var(--fg-dim); font-weight: 500; font-size: 12px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sb-spd.off .lim { color: var(--fg-dim); font-weight: 400; opacity: .6; }
 /* ALT-01(计划 26-09-28-0037): 备用速度切换按钮(qB"乌龟") —— 熄灭 = 主速度 / 亮绿 = 备用速度生效;
  * 与 .sb-spd 同族(同 hover/圆角/过渡); 状态色用语义绿 + 软底(备用 = 慢速模式, 与上传方向色不冲突) */
 .sb-alt { display: inline-flex; align-items: center; justify-content: center;
