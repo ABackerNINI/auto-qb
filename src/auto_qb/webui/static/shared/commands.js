@@ -537,12 +537,30 @@ window.AQB_COMMANDS = {
       }
       return { groupKeys, memberHashes };
     },
+    /* 重新校验确认框(共用 helper, 计划 26-10-05-0314 S3): 文案与调用形态**逐字**抽自
+     * shortcuts.js _kbAct 键盘路径原状, 各入口共用一份 —— 批量(本文件 bulkAct)/单选右键
+     * 与抽屉(drawer.js torrentCmd)/键盘(shortcuts.js _kbAct 改调本 helper)。
+     * 返回 Promise<boolean>: false = 取消/Esc/点遮罩, 调用方零副作用直接返回。
+     * 文案字符串全仓只此一份(静态守阵 T13 钉死, 防多入口漂移); 不放 _actCore —— 那里是
+     * 键盘与批量共同出口, 会造成键盘路径双重确认, 且 torrentCmd 不走 _actCore 覆盖不全。 */
+    async _recheckConfirm(what) {
+      return this.confirmDialog("重新校验",
+        `将对${what}重新校验: 全量重读磁盘并校验完整性, 大库上耗时长且不可中断。`, { okText: "确定" });
+    },
     /* 批量动作(右键批量菜单入口): 目标集合 = _bulkTargets, 动作链交 _actCore 统一出口。
      * pause/resume/recheck 合单语义由 _actCore 的 bulk 路由承担(一次 POST + 一个聚合回执);
      * reannounce 逐目标投递 + tracker 确认聚合回执, 文案与原实现逐字一致。 */
     async bulkAct(action) {
       const { groupKeys, memberHashes } = this._bulkTargets();
       if (!groupKeys.length && !memberHashes.length) return;
+      /* 重新校验先确认(计划 26-10-05-0314 S3): 与键盘路径同 helper 同文案, what 取批量形态
+       * (N 个目标, 与下方 countSuffix 同口径); 取消 = 直接返回, 此时未发请求未打乐观补丁,
+       * 零副作用。批量浮条已退役(2026-10-05, topbar.html), 守卫放 bulkAct 单点 —— 批量右键
+       * (ctxAct)与未来任何复用本通道的批量入口同时覆盖, ctxAct 不必各接一遍。 */
+      if (action === "recheck") {
+        const ok = await this._recheckConfirm(`${groupKeys.length + memberHashes.length} 个目标`);
+        if (!ok) return;
+      }
       return this._actCore(action, {
         keys: groupKeys,
         hashes: memberHashes,

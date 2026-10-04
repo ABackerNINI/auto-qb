@@ -32,6 +32,7 @@
 - test_frontend_cols_legacy_keys_have_migration: LEGACY_COLS_KEYS 键链必须伴随 migrateLegacyToV5 迁移(v3->v4 清零事故的机检)
 - test_frontend_cols_empty_hint_names_browser_clear_cause: 空存储提示必须点名浏览器站点级"关闭窗口时清除 Cookie 和站点数据"这条通道 + 给自查路径 + sessionStorage 会话级去重(2026-09-24 取证: cookie 例外 127.0.0.1,* setting=4)
 - test_removed_redundant_tooltips_stay_removed: 复述型 tooltip 不得复活守阵(报告 26-10-04-0815) —— 模板已移除的复述型原生 title 文案(statusbar「点击修改」「数据状态」/ topbar 页签「按分组展示」「全部种子一行一条」/ drawer「关闭(Esc)」/ dialogs 族 title="关闭" / settings-detail·xtpl「点击收起」/ columns.js H1 横幅「点击关闭」)不得写回, 悬浮提示一律走 shared/ui_feedback.js 拦截层
+- test_recheck_confirm_wired_all_mouse_entries: 重新校验确认框三入口接线守阵(T13, 计划 26-10-05-0314 S3) —— commands.js _recheckConfirm 单点(helper 存在 + 文案与 okText 调用形态沿键盘路径原样)+ bulkAct 批量通道 / drawer.js torrentCmd 单选通道各含 recheck 确认分支 + shortcuts.js _kbAct 改调共用 helper 不再内联 confirmDialog 文案 + 共用文案字符串全仓只此一份, 任一接入点被重构摘除即红
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
@@ -3390,6 +3391,75 @@ def test_removed_redundant_tooltips_stay_removed():
                 f"{rel} 出现已移除的复述型 tooltip 文案「{needle}」(报告 26-10-04-0815 判定为移除) —— "
                 "悬浮提示一律走 shared/ui_feedback.js 拦截层, 不要把原生 title 写回去"
             )
+
+
+def test_recheck_confirm_wired_all_mouse_entries():
+    """重新校验确认框三入口接线守阵(T13, 计划 26-10-05-0314 S3)
+
+    键盘路径原有确认框(shortcuts.js _kbAct), 鼠标路径(批量右键/单选右键/抽屉)点下即执行
+    (issue 26-10-05-0254: 防护不对称)。S3 抽共用 helper(commands.js _recheckConfirm, 文案与
+    调用形态逐字沿键盘路径)后四处同一文案。本守阵读 JS 源码钉住三个接入点 + 文案单点,
+    任一被重构摘除即红:
+    1. commands.js _recheckConfirm 存在, 且 confirmDialog/okText 调用形态与文案逐字原样;
+    2. bulkAct(批量右键 ctxAct 的落点, 批量浮条退役后仍是批量通道单点)含 recheck 确认分支;
+    3. drawer.js torrentCmd(单选右键与抽屉内命令共同通道)含 recheck 确认分支;
+    4. shortcuts.js _kbAct 改调共用 helper, 不再内联 confirmDialog 文案;
+    5. 共用文案字符串全仓只在 commands.js 出现一次(防三处各抄一份漂移)。
+    """
+    cmds = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    drawer = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    shortcuts = open(os.path.join(STATIC_ROOT, "shared", "shortcuts.js"), encoding="utf-8").read()
+    text = "全量重读磁盘并校验完整性, 大库上耗时长且不可中断。"
+
+    # ① 共用 helper 单点: 调用形态(标题/okText)与文案逐字沿键盘路径原样
+    m = re.search(r"async _recheckConfirm\(what\)\s*\{(.*?)\n    \},", cmds, re.S)
+    assert m, "commands.js 找不到 _recheckConfirm(改名或挪走了? 同步本守阵)"
+    helper = m.group(1)
+    assert 'confirmDialog("重新校验"' in helper and '{ okText: "确定" }' in helper, (
+        "共用 helper 未沿键盘路径原调用形态(confirmDialog + okText 确定) —— 入口间确认形态漂移"
+    )
+    assert text in helper, "共用 helper 丢失键盘路径既有文案(重新校验确认框文案必须逐字保留)"
+
+    # ② 共用文案字符串只此一份(三入口共用, 防各抄一份漂移)
+    for name, src in (("commands.js", cmds), ("drawer.js", drawer), ("shortcuts.js", shortcuts)):
+        assert src.count(text) == (1 if name == "commands.js" else
+                                   0), (f"{name} 内联了重新校验确认文案 —— 共用文案只允许存在 commands.js _recheckConfirm 一份")
+
+    # ③ 批量通道(bulkAct): 批量右键(ctxAct)入口, recheck 先确认后投递, 取消零副作用。
+    #    分支按**整行活性**锚定(精确缩进 + if/await/if(!ok) 结构) —— 注释包裹、短路禁用、
+    #    挪出确认调用都会破坏匹配而变红; 裸字符串包含判定拦不住这些摘除形态(红验实测)。
+    m = re.search(r"async bulkAct\(action\)\s*\{(.*?)\n    \},", cmds, re.S)
+    assert m, "commands.js 找不到 bulkAct(改名或挪走了? 同步本守阵)"
+    assert re.search(
+        r'^      if \(action === "recheck"\) \{\n'
+        r"        const ok = await this\._recheckConfirm\(.+\);\n"
+        r"        if \(!ok\) return;\n"
+        r"      \}$",
+        m.group(1),
+        re.M,
+    ), "bulkAct 的 recheck 确认分支被摘除/改写 —— 批量右键重新校验恢复裸奔(计划 26-10-05-0314 S3; 接入点改写须同步本守阵)"
+
+    # ④ 单选通道(torrentCmd): 单选右键与抽屉内命令入口, 只拦 recheck 其它命令不受影响
+    m = re.search(r"async torrentCmd\(action, body = null, okText = \"\"\)\s*\{(.*?)\n    \},", drawer, re.S)
+    assert m, "drawer.js 找不到 torrentCmd(改名或挪走了? 同步本守阵)"
+    assert re.search(
+        r'^      if \(action === "recheck"\) \{\n'
+        r"        const ok = await this\._recheckConfirm\(.+\);\n"
+        r"        if \(!ok\) return;\n"
+        r"      \}$",
+        m.group(1),
+        re.M,
+    ), "torrentCmd 的 recheck 确认分支被摘除/改写 —— 单选右键/抽屉重新校验恢复裸奔(计划 26-10-05-0314 S3; 接入点改写须同步本守阵)"
+
+    # ⑤ 键盘通道(_kbAct): 改调共用 helper(整行活性锚定), 不得再内联确认框文案
+    m = re.search(r"async _kbAct\(action\)\s*\{(.*?)\n    \},", shortcuts, re.S)
+    assert m, "shortcuts.js 找不到 _kbAct(改名或挪走了? 同步本守阵)"
+    assert re.search(
+        r"^        const ok = await this\._recheckConfirm\(what\);$",
+        m.group(1),
+        re.M,
+    ), "_kbAct 未调共用 helper —— 键盘路径自成一份文案必漂移(计划 26-10-05-0314 S3)"
+    assert 'confirmDialog("重新校验"' not in m.group(1), ("_kbAct 又内联了重新校验确认框文案 —— 应改调 commands.js _recheckConfirm")
 
 
 def test_frontend_page_location_persisted():

@@ -802,7 +802,7 @@ window.AQB_SHORTCUTS = {
       if (t.memberHashes.length === 1 && !t.groupKeys.length) return "该种子";
       return `${n} 个目标`;
     },
-    /* ---------------- W4: 一级动作(危险档先确认, 鼠标路径不变, §08) ---------------- */
+    /* ---------------- W4: 一级动作(危险档先确认; S3 起鼠标路径同文案确认, 计划 26-10-05-0314) ---------------- */
     async _kbAct(action) {
       const t = this._kbTargets();
       if (!t.groupKeys.length && !t.memberHashes.length) {
@@ -811,8 +811,9 @@ window.AQB_SHORTCUTS = {
       }
       const what = this._kbTargetText(t);
       if (action === "recheck") {
-        const ok = await this.confirmDialog("重新校验",
-          `将对${what}重新校验: 全量重读磁盘并校验完整性, 大库上耗时长且不可中断。`, { okText: "确定" });
+        /* 确认框文案与调用形态单点在 commands.js _recheckConfirm(S3 抽出共用), 本路径的
+         * what 文案/时序/取消语义与抽出前逐位一致。 */
+        const ok = await this._recheckConfirm(what);
         if (!ok) return;
       } else if (action === "reannounce") {
         const ok = await this.confirmDialog("强制汇报",

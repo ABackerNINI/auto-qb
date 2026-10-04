@@ -33,6 +33,13 @@ window.AQB_DRAWER = {
       this.menu.visible = false;
       const hash = this.menu.hash;
       if (!hash) return;
+      /* 重新校验先确认(计划 26-10-05-0314 S3): 只拦 recheck, 其它命令通道行为不变 ——
+       * 单选右键(ctx-menus.html)与抽屉内命令(drawerCmd)同走本方法, 一处接入两入口覆盖;
+       * 取消 = 直接返回, 尚未发请求, 零副作用。helper 与文案单点在 commands.js。 */
+      if (action === "recheck") {
+        const ok = await this._recheckConfirm("该种子");
+        if (!ok) return;
+      }
       try {
         const resp = await this.api(`/api/torrents/${hash}/${action}`, {
           method: "POST",
