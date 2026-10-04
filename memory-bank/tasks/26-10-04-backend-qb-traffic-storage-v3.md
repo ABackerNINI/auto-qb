@@ -31,7 +31,7 @@
 |---|--------|------|------|
 | ⓪ | 计划入库 | 计划 HTML + kb.index 生成物, commit 633d58cd | Done |
 | ① | S1 存储层纯函数 | v3 行型序列化/解析/游标 dt 链/按天路径/聚合 9 列纯函数, 不接线, 既有 107 例零改动 | Done (9744655b) |
-| ② | S4 配置键 + schema | flush_interval 全链 + sample_interval ≥main_tick 硬校验 | Open |
+| ② | S4 配置键 + schema | flush_interval 全链 + sample_interval ≥main_tick 硬校验 | Done (30eebcf0) |
 | ③ | S2a 写侧翻转核心 | BlockBuffer/游程/flush 驱动/跨天切块/stop()/回拨钳制/翻 v3 目录/热重载联动 | Open |
 | ④ | S2b 聚合与恢复 | 累计器/水位封口/文件尾恢复/catch-up 硬序/hour 裁剪/淘汰新口径/seal_sweep 退役 | Open |
 | ⑤ | S3a 读侧核心 | 有效 dt 桶宽/跨桶覆盖(D1)/块间 gap 真空/按天加载/解析缓存 | Open |
@@ -45,3 +45,4 @@
 - **2026-10-04 21:xx S1 完成 (9744655b)**: traffic_store.py 末尾新增 v3 纯函数区 +661 行(行型/游标 dt 链/路径/聚合), 不接线; 新增 10 例已登记测试计划。实施期定约(§09.2 授权随做随记): 游程 dt_ms = last_seen − OpenRun.start, OpenRun.start := 链上锚点(上一记录槽位)——相邻游程间一次采样间隔并入后一游程 dt_ms, 缺省/显式语义统一; **S2 写侧须按同约定产出**。
 - **2026-10-04 21:xx 认领链修复 (01bc35b6)**: 立档 commit 曾致 test_docs_forms 2 例红(档案缺 **Topics:** 行 + Refs 未双向声明); 修法: 档案补 Topics 行, 计划/报告 HTML 补 doc-refs meta, 切片 Refs 追加本档案。子智能体 stash 对照判「既有失败」不成立——stash 不回退已提交态, 该判法不可信。
 - 全量复核: 2525 passed / 4 skipped, 覆盖率 99%。
+- **2026-10-04 21:xx S4 完成 (30eebcf0)**: flush_interval 全链 10 文件(validate/schema/groups/models/loaders/键面 fixture 155→156/keys.md/configuration.md); sample_interval 下限改 ≥main_tick 硬校验, 倍数失配不进 errors(D5 告警留 S2a)。新增 3 例 + 守卫 parametrize 补 qb_traffic 段(此前漏登记的互检缺口, 计划内补齐)。test.full 2529 passed / 4 skipped / 99%。
