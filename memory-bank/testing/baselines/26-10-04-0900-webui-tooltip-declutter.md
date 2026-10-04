@@ -14,3 +14,5 @@
   test_removed_redundant_tooltips_stay_removed(+1, 本分支对 tests/ 的唯一改动); ②判定报告
   reports/26-10-04-0815 HTML(`72a7d274`)落盘晚于上基线运行时点, test_docs_forms 按文件收集 +1
 - 覆盖率四元组与上基线完全一致 —— 纯属性删除 + 守卫, 无新逻辑面, 符合预期
+
+**Refs:** memory-bank/tasks/26-10-04-webui-tooltip-declutter.md, memory-bank/reports/26-10-04-0815-report-webui-tooltip-declutter.html

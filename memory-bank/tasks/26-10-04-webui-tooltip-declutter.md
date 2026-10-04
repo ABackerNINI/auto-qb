@@ -4,6 +4,8 @@
 **Added:** 2026-10-04
 **Updated:** 2026-10-04
 **Summary:** 按判定报告 reports/26-10-04-0815 全量移除 webui 复述型 tooltip 67 处(A-G 组 66 处散在 10 个共享模板 + H1 columns.js; dialogs.js A5 按报告「精简」而非全删), 新增守卫 test_removed_redundant_tooltips_stay_removed 钉死已删文案; 全量 2462 passed + 4 skipped / 99%(基线 26-10-04-0900)。
+**Topics:** webui-tooltip-declutter
+**Refs:** memory-bank/reports/26-10-04-0815-report-webui-tooltip-declutter.html, memory-bank/testing/baselines/26-10-04-0900-webui-tooltip-declutter.md
 
 ## 原始请求
 
@@ -32,6 +34,7 @@
 | 设置页/配置编辑器 16 处 | ✅ `a33db037` |
 | H1 columns.js 末处 + 守卫测试 | ✅ `e8203a3c` |
 | 收尾 DoD(基线 / 索引 / progress 迁出) | ✅ |
+| 遗留清理(孤儿 computed todayTrafficTitle / distTitle 删除; statusbar.html 3 处失实 title 注释改写; drawer.html:267 漏网 title「修改优先级」删除; qbTrafficTitle 核实仍被 drawer strong 消费, 保留) | ✅ |
 
 ## 进度日志
 

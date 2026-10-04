@@ -264,7 +264,7 @@
                     <td class="num">{{ r.dir ? "—" : r.progress + "%" }}</td>
                     <td>
                       <button v-if="!r.dir" class="prio-btn" :class="{ skipped: r.skipped }"
-                              title="修改优先级" @click.stop="openFilePrio($event, r.index)">{{ r.prio }}</button>
+                              @click.stop="openFilePrio($event, r.index)">{{ r.prio }}</button>
                       <span v-else>—</span>
                     </td>
                   </tr>

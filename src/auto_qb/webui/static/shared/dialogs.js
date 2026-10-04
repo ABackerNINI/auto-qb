@@ -689,9 +689,6 @@ window.AQB_DIALOGS = {
     distTotal() {
       return this.distSegments.reduce((n, s) => n + s.count, 0);
     },
-    distTitle() {
-      return this.distSegments.map((s) => `${s.text} ${s.count}`).join(" · ");
-    },
     /* ---------------- 限速/流量快照(后端 SpeedCurveMixin 发布, 随 status 恒回传) ----------------
      * state: disabled(未启用限速曲线) / ok / dry_run / stale(数据源不可用)
      * periods[].up|down 为**字节**; limit.target|actual 为 **KiB/s**(0 = 不限速, null = 该方向不管理)
@@ -704,13 +701,6 @@ window.AQB_DIALOGS = {
     },
     todayTraffic() {
       return (this.traffic.periods || []).find((p) => p.period === "day") || null;
-    },
-    /* 今日流量悬浮说明: 把口径写清楚(数据源 = Traffic Monitor dat 的按日行, 单位字节) */
-    todayTrafficTitle() {
-      const t = this.todayTraffic;
-      if (!t) return "";
-      return `今日流量(Traffic Monitor 按日口径): 下载 ${this.fmtSize(t.down)} / 上传 ${this.fmtSize(t.up)}`
-        + ` · 数据状态: ${this.traffic.state}`;
     },
     /* 全局限速取数单点(R10-04): qB server_state 的全局限速键是 **dl_rate_limit / up_rate_limit**
      * (bytes/s, 0 = 不限速), **不是 dl_limit/up_limit** —— 后者是**单种子**级字段(TorrentRecord,
