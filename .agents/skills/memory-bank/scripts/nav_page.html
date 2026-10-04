@@ -179,6 +179,54 @@
   .chain { color: var(--faint); }
   .chain.has { color: var(--cyan); }
 
+  /* ============ 视图 A: 置顶 (pin) 专区 + 右键菜单 ============ */
+  .pinzone {
+    flex: none; border-bottom: 1px solid var(--hair-2); background: var(--paper-2);
+    padding: 9px 20px 10px; max-height: 152px; overflow-y: auto;
+  }
+  .pinzone[hidden] { display: none; }
+  .pzhead {
+    font-family: var(--disp); font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--cyan); margin-bottom: 7px;
+  }
+  .pzhead b { font-weight: 600; }
+  .pzlist { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pinrow {
+    display: flex; align-items: center; gap: 7px; max-width: 360px;
+    border: 1px solid var(--hair-2); background: var(--paper); border-radius: 5px;
+    padding: 3px 5px 3px 7px; cursor: pointer;
+  }
+  .pinrow:hover { border-color: var(--cyan); background: var(--cyan-soft); }
+  .pinrow .pr-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .pinrow .pr-x {
+    flex: none; border: none; background: none; color: var(--faint); cursor: pointer;
+    font-family: var(--mono); font-size: 11px; line-height: 1; padding: 2px 4px; border-radius: 3px;
+  }
+  .pinrow .pr-x:hover { color: var(--ink); background: var(--paper-3); }
+  .pinbtn {
+    display: inline-flex; align-items: center; justify-content: center; vertical-align: -2px;
+    width: 18px; height: 18px; margin-right: 5px; padding: 0; flex: none;
+    border: none; background: none; cursor: pointer; color: var(--faint); border-radius: 3px;
+  }
+  .pinbtn:hover { color: var(--cyan); background: var(--cyan-soft); }
+  .pinbtn.on { color: var(--cyan); }
+  .pinbtn svg {
+    width: 13px; height: 13px; display: block; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .pinbtn.on svg { fill: currentColor; }
+  .ctxmenu {
+    position: fixed; z-index: 40; min-width: 168px; padding: 5px;
+    background: var(--paper-3); border: 1px solid var(--hair-2); border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  }
+  .ctxmenu[hidden] { display: none; }
+  .ctxitem {
+    display: block; width: 100%; text-align: left; border: none; background: none;
+    color: var(--ink); font: 12.5px var(--sans); padding: 7px 10px; border-radius: 4px; cursor: pointer;
+  }
+  .ctxitem:hover { background: var(--cyan-soft); color: var(--cyan); }
+
   /* ============ 视图 A: 详情抽屉 ============ */
   .drawer {
     position: fixed; top: 0; right: -430px; width: 420px; height: 100%; z-index: 30;
@@ -427,6 +475,7 @@
         <div class="count" id="aCount"></div>
         <div class="hint">点击行看关联 · 链 = doc-refs 声明数</div>
       </div>
+      <div class="pinzone" id="pinZone" hidden></div>
       <div class="ledgerwrap">
         <table>
           <thead><tr>
@@ -495,6 +544,9 @@
   </div>
 </div>
 
+<!-- 右键菜单 (台账行): 跟随光标, 点空白 / Esc / 滚动 / 切视图即收 -->
+<div class="ctxmenu" id="ctxMenu" hidden></div>
+
 <!-- 数据注入位: --gen-static 把下方唯一的占位字面量替换为 JSON (application/json 块不执行,
      http 模式壳里是占位符原样, 静态件里是可 JSON.parse 的数据) -->
 <script id="nav-data" type="application/json">__DATA__</script>
@@ -518,6 +570,9 @@ const ST_TXT = { "Open": "待办", "In Progress": "进行", "Done": "完结", "D
 const TYPES = ["bug", "perf", "docs", "test", "refactor", "feat", "chore", "question"];
 const ACTIVE_ST = new Set(["Open", "In Progress"]);
 const VIEW_KEY = "mb-nav-view";
+const PINS_KEY = "mb-nav-pins";
+/* 图钉图标 (内联 SVG, 无外链图标库): 空心 = 未 pin; 实心由 .pinbtn.on 的 CSS fill 控制 */
+const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
 
 let DATA = null;
 let byLink = new Map();      // link -> item
@@ -533,6 +588,9 @@ const S = {
   /* A 台账 */
   aForms: new Set(FORM_ORD), aStatuses: new Set(KNOWN_ST), aTypes: new Set(TYPES),
   aLive: false, aChain: false, sort: "stamp", sel: null,
+  /* 置顶 (pin): 纯前端偏好, 数组顺序即置顶序 (最近 pin 的在前)。只在 boot() 装载一次,
+     derive() 永不触碰 —— 否则 30s 轮询会把 pin 洗掉 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。 */
+  pins: [],
   /* B 控制台 */
   selTopic: null, cq: "", openRows: new Set(),
   /* C 卡片墙 */
@@ -550,6 +608,31 @@ const stCls = s => ({ "Open": "st-Open", "In Progress": "st-InProgress", "Done":
 const stBar = s => ({ "Open": "c-open", "In Progress": "c-ip", "Done": "c-done", "Dropped": "c-drop", "Superseded": "c-sup" })[s] || "c-none";
 const refKey = r => String(r).replace(/^memory-bank\//, "");
 const $ = id => document.getElementById(id);
+
+/* ---- 置顶 (pin): 纯前端偏好, 落 localStorage (与 VIEW_KEY 同款); 读写一律 try/catch 兜底 ---- */
+function loadPins() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(PINS_KEY) || "[]");
+    return Array.isArray(arr) ? arr.filter(x => typeof x === "string") : [];
+  } catch (e) { return []; }
+}
+function savePins() { try { localStorage.setItem(PINS_KEY, JSON.stringify(S.pins)); } catch (e) { /* file:// 下静默降级为会话内存态 */ } }
+const isPinned = link => S.pins.includes(link);
+function togglePin(link) {
+  const at = S.pins.indexOf(link);
+  if (at >= 0) S.pins.splice(at, 1); else S.pins.unshift(link);
+  savePins();
+  renderLedger();
+}
+/* 专区条目: 按置顶序取 DATA 中仍存在者, 过滤失效 link (件被删 / 改名) 与重复 */
+function pinZoneItems() {
+  const seen = new Set();
+  return S.pins.map(l => byLink.get(l)).filter(x => {
+    if (!x || seen.has(x.link)) return false;
+    seen.add(x.link);
+    return true;
+  });
+}
 
 /* ---- 数据派生 (每次 DATA 更新后重算; 过滤/展开状态保留在 S 里) ---- */
 function derive() {
@@ -587,6 +670,7 @@ function setView(v) {
   saveView(v);
   for (const b of document.querySelectorAll("#seg button")) b.classList.toggle("on", b.dataset.view === v);
   for (const id of ["v-ledger", "v-console", "v-cards"]) $(id).classList.toggle("on", id === "v-" + v);
+  closeCtx();
   renderCurrent();
 }
 function renderCurrent() {
@@ -673,6 +757,8 @@ function renderLedger() {
     v => (v === "live" ? S.aLive : S.aChain),
     v => { if (v === "live") S.aLive = !S.aLive; else S.aChain = !S.aChain; renderLedger(); });
 
+  renderPinZone();
+
   const list = aFiltered();
   $("aCount").innerHTML = "<b>" + list.length + "</b> / " + DATA.items.length + " 件";
   $("aRows").innerHTML = list.map((i, n) => `
@@ -681,12 +767,28 @@ function renderLedger() {
       <td class="stamp">${esc(i.stamp)}</td>
       <td class="formc"><span class="fbadge fc-${i.form}">${FORM_CN[i.form]}</span></td>
       <td class="statc"><span class="chip ${stCls(stOf(i))}">${esc(stOf(i))}</span></td>
-      <td class="title-cell"><b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
+      <td class="title-cell"><button class="pinbtn${isPinned(i.link) ? " on" : ""}" data-pin="${esc(i.link)}" title="${isPinned(i.link) ? "取消置顶" : "置顶到专区"}">${PIN_SVG}</button><b>${esc(i.title)}</b>${i["issue-summary"] ? '<div class="sm">' + esc(i["issue-summary"]) + "</div>" : ""}</td>
       <td class="topic"><code>${esc(i.topic || NO_KEY)}</code></td>
       <td class="refs"><span class="chain ${(i.refs && i.refs.length) ? "has" : ""}">${(i.refs && i.refs.length) ? "# " + i.refs.length : "·"}</span></td>
     </tr>`).join("");
 
   if (S.sel) { if (byLink.has(S.sel)) renderDrawer(S.sel); else closeDrawer(); }
+}
+
+/* 置顶专区: 增量区 (被 pin 的件照旧留在原表格); 空则整块隐藏; 不受下方筛选影响 */
+function renderPinZone() {
+  const zone = $("pinZone");
+  const items = pinZoneItems();
+  if (!items.length) { zone.hidden = true; zone.innerHTML = ""; return; }
+  zone.hidden = false;
+  zone.innerHTML = '<div class="pzhead">置顶 · PINNED <b>(' + items.length + ")</b></div>" +
+    '<div class="pzlist">' + items.map(i => `
+      <div class="pinrow" data-link="${esc(i.link)}" title="点击打开原文">
+        <span class="pinbtn on">${PIN_SVG}</span>
+        <span class="fbadge fc-${i.form}" style="width:auto;padding:1px 6px;">${FORM_CN[i.form]}</span>
+        <span class="pr-t">${esc(i.title)}</span>
+        <button class="pr-x" data-unpin="${esc(i.link)}" title="取消置顶">x</button>
+      </div>`).join("") + "</div>";
 }
 
 function renderDrawer(link) {
@@ -735,6 +837,41 @@ function renderDrawer(link) {
   $("drawer").classList.add("open");
 }
 function closeDrawer() { $("drawer").classList.remove("open"); }
+
+/* ---- 右键菜单 (台账行): 三项无子菜单; 关闭 = 点空白 / Esc / 滚动 / 切视图 ---- */
+function openCtx(x, y, link) {
+  const m = $("ctxMenu");
+  const pinned = isPinned(link);
+  m.innerHTML =
+    '<button class="ctxitem" data-act="pin">' + (pinned ? "取消置顶" : "置顶到专区") + "</button>" +
+    '<button class="ctxitem" data-act="open">打开原文</button>' +
+    '<button class="ctxitem" data-act="copy">复制仓库路径</button>';
+  m.dataset.link = link;
+  m.hidden = false;
+  /* 贴边翻侧: 默认跟随光标, 右侧 / 下缘放不下时翻到光标另一侧, 不越出视口 */
+  const r = m.getBoundingClientRect();
+  m.style.left = (x + r.width > innerWidth ? Math.max(0, x - r.width) : x) + "px";
+  m.style.top = (y + r.height > innerHeight ? Math.max(0, y - r.height) : y) + "px";
+}
+function closeCtx() {
+  const m = $("ctxMenu");
+  if (m && !m.hidden) { m.hidden = true; m.innerHTML = ""; }
+}
+function copyPath(link) {
+  const full = "memory-bank/" + link;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(full).catch(() => { /* 非安全上下文 / 无权限: 静默 */ });
+    return;
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = full;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  } catch (e) { /* 静默降级 */ }
+}
 
 /* ============================================================
    视图 B: 控制台
@@ -912,6 +1049,8 @@ function wire() {
 
   /* A */
   $("aRows").addEventListener("click", e => {
+    const pb = e.target.closest(".pinbtn");
+    if (pb) { togglePin(pb.dataset.pin); return; }   /* 早退: 免得图钉冒泡又弹详情抽屉 */
     const tr = e.target.closest("tr");
     if (!tr) return;
     S.sel = tr.dataset.link;
@@ -919,6 +1058,38 @@ function wire() {
     tr.classList.add("sel");
     renderDrawer(S.sel);
   });
+  $("aRows").addEventListener("contextmenu", e => {
+    const tr = e.target.closest("tr");
+    if (!tr) return;
+    e.preventDefault();
+    openCtx(e.clientX, e.clientY, tr.dataset.link);
+  });
+  /* 置顶专区: 委托点击 (取消按钮 / 条目) 与右键 */
+  $("pinZone").addEventListener("click", e => {
+    const x = e.target.closest(".pr-x");
+    if (x) { togglePin(x.dataset.unpin); return; }
+    const row = e.target.closest(".pinrow");
+    if (row) window.open(MB + row.dataset.link, "_blank");
+  });
+  $("pinZone").addEventListener("contextmenu", e => {
+    const row = e.target.closest(".pinrow");
+    if (!row) return;
+    e.preventDefault();
+    openCtx(e.clientX, e.clientY, row.dataset.link);
+  });
+  /* 右键菜单: 选动作 + 点空白 / Esc / 滚动即收 */
+  $("ctxMenu").addEventListener("click", e => {
+    const it = e.target.closest(".ctxitem");
+    if (!it) return;
+    const link = $("ctxMenu").dataset.link;
+    if (it.dataset.act === "pin") togglePin(link);
+    else if (it.dataset.act === "open") window.open(MB + link, "_blank");
+    else if (it.dataset.act === "copy") copyPath(link);
+    closeCtx();
+  });
+  document.addEventListener("click", e => { if (!e.target.closest("#ctxMenu")) closeCtx(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeCtx(); });
+  window.addEventListener("scroll", closeCtx, true);
   $("sort").addEventListener("change", e => { S.sort = e.target.value; renderLedger(); });
   $("dclose").onclick = () => { S.sel = null; closeDrawer(); };
 
@@ -999,6 +1170,7 @@ async function refresh(silent) {
 
 function boot() {
   wire();
+  S.pins = loadPins();   /* 全壳唯一装载点 (derive 绝不触碰): 守阵 test_pin_state_not_reseeded_by_derive */
   S.view = loadView();
   for (const b of document.querySelectorAll("#seg button")) b.classList.toggle("on", b.dataset.view === S.view);
   for (const id of ["v-ledger", "v-console", "v-cards"]) $(id).classList.toggle("on", id === "v-" + S.view);

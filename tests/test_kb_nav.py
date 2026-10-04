@@ -29,6 +29,10 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_shell_no_external_resources: 壳无 http(s) 外链 src/href 资源引用 (属性锚定, 注释/文案不受影响)
 - test_ledger_status_column_between_form_and_title: 台账列序 # 时间戳 形态 状态 标题 专题 链 (表头与行模板同步)
 - test_status_filter_not_reseeded_every_poll: derive() 对状态候选只自动入选一次 (statusSeeded 闸门在前), 30s 轮询不得盖回用户取消的选择
+- test_shell_has_pin_zone_and_ctxmenu: 置顶骨架在位 (#pinZone / #ctxMenu / PINS_KEY / contextmenu 监听)
+- test_pin_state_not_reseeded_by_derive: derive() 不碰 pins; S.pins = loadPins() 全壳唯一 (轮询不得洗掉 pin)
+- test_pinned_rendered_in_both_zones: 同一份 pin 状态被专区渲染 (pinZoneItems) 与行模板 (isPinned) 双处消费
+- test_pin_icon_is_inline_svg_no_emoji: 图钉为内联 SVG (无外链图标库), 且壳内无 emoji 图钉字符 (code-style)
 - test_static_map_serves_file_and_api: GET / 与 /api/data 200 (壳文本 / JSON 契约), 正常 memory-bank 文件 200 且 .md 给 text/plain
 - test_static_map_blocks_traversal: ../ / %2e%2e / ..%2f / %5c 反斜杠变体一律 403/404 且不泄漏目标内容; 未知文件 404
 - test_log_filters_polling: 精简 log —— /api/data 轮询与壳加载成功不上屏; 错误与静态映射请求留痕
@@ -224,6 +228,51 @@ def test_status_filter_not_reseeded_every_poll() -> None:
     assert "S.aStatuses.add(s)" in body and "S.cStatuses.add(s)" in body, "自动入选逻辑不见了"
     assert body.index(guard) < body.index("S.aStatuses.add(s)"), "闸门必须排在自动入选之前"
     assert body.count("statusSeeded.add(s)") == 1, "入选记账只能落一处, 多处会让闸门失效"
+
+
+# --------------------------------------------------------------------------- 置顶 (pin)
+
+
+def test_shell_has_pin_zone_and_ctxmenu() -> None:
+    """置顶 (pin) 交互骨架: 专区容器 / 右键浮层 / 存储键 / contextmenu 监听 —— 缺任一即回归。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert 'id="pinZone"' in text, "缺置顶专区容器 #pinZone"
+    assert 'id="ctxMenu"' in text, "缺右键菜单浮层 #ctxMenu"
+    assert "PINS_KEY" in text, "缺 pin 存储键常量 (localStorage 落点)"
+    assert "contextmenu" in text, "缺右键监听 (pin 的主入口之一)"
+
+
+def test_pin_state_not_reseeded_by_derive() -> None:
+    """pin 与「状态筛选器自动重置」同源风险: derive() 每 30s 跑一次, 绝不能碰 S.pins
+    (坑档案 pitfalls/web-ui/poll-reseed-filter.md)。装载点必须全壳唯一, 且只在 boot() 发生。"""
+    text = SHELL.read_text(encoding="utf-8")
+    block = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert block, "derive() 不见了? 数据派生逻辑搬家要同步本守阵"
+    assert "pins" not in block.group(1), "derive() 里出现 pins: 30s 轮询会把用户 pin 洗掉"
+    assert text.count("S.pins = loadPins()") == 1, "pin 装载点必须全壳唯一 (只在 boot 装载一次)"
+
+
+def test_pinned_rendered_in_both_zones() -> None:
+    """需求 3「pin 后同时显示在专区和非专区」: 同一份 pin 状态必须被两处消费 —— 专区渲染
+    (pinZoneItems) 与行模板 (isPinned)。只改一处 = 悄悄退化成单边显示。"""
+    text = SHELL.read_text(encoding="utf-8")
+    row = re.search(r"list\.map\(\(i, n\) => `(.*?)`\)\.join", text, re.S)
+    assert row, "行模板不见了? 渲染方式变了要同步本守阵"
+    assert "isPinned(" in row.group(1), "行模板必须按 isPinned 渲染图钉 (非专区那一路)"
+
+    zone = re.search(r"function renderPinZone\(\) \{(.*?)\n\}", text, re.S)
+    assert zone, "renderPinZone() 不见了"
+    assert "pinZoneItems(" in zone.group(1), "专区必须消费同一份 pin 状态 (双向显示)"
+
+
+def test_pin_icon_is_inline_svg_no_emoji() -> None:
+    """图钉为内联 SVG (守 test_shell_no_external_resources: 无外链图标库); 且按 code-style
+    口径, 代码/资源里禁止 emoji 图形符号。"""
+    text = SHELL.read_text(encoding="utf-8")
+    m = re.search(r"const PIN_SVG = '(.*?)';", text, re.S)
+    assert m and "<svg" in m.group(1), "图钉必须是内联 SVG (PIN_SVG 常量)"
+    for ch in ("\U0001F4CC", "\U0001F4CD"):  # 图钉 / 圆图钉 emoji
+        assert ch not in text, f"壳里出现 emoji 图钉字符 (code-style 禁图形符号): {ch!r}"
 
 
 # --------------------------------------------------------------------------- 服务层 (127.0.0.1 随机端口)

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="kb-nav-pin">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-04-1830">
+<meta name="doc-updated" content="26-10-04-1849">
+<meta name="doc-refs" content="">
+<title>方案 · kb.nav 右键置顶 (pin) · 置顶专区 + 双向显示 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2027;
+    --accent: #5cc0cf;
+    --accent-ink: #86d7e0;
+    --accent-soft: rgba(92,192,207,.10);
+    --ok: #7fc08a;
+    --warn: #e2a86e;
+    --bad: #e0796f;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1060px; margin: 0 auto; padding: 52px 44px 80px; }
+
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--warn); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 29px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 72ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+
+  nav.toc { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { color: var(--accent-ink); }
+
+  section { margin-top: 34px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.006em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 11px; max-width: 84ch; }
+  ul, ol { margin: 8px 0 14px; padding-left: 22px; max-width: 84ch; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--ink-faint); }
+  code { font-family: var(--mono); font-size: .86em; background: var(--paper-2); border: 1px solid var(--hair); border-radius: 4px; padding: 1px 6px; }
+  strong { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 10px; font-size: 13.5px; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-faint); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair); font-weight: 600; white-space: nowrap; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .dim { color: var(--ink-dim); }
+  .panel { background: var(--paper); border: 1px solid var(--hair); border-left: 3px solid var(--accent); border-radius: 6px; padding: 13px 18px; margin: 14px 0; font-size: 14px; max-width: 84ch; }
+  .panel.warn-p { border-left-color: var(--warn); }
+  .panel .t { font-weight: 600; margin-bottom: 4px; }
+  .figure { background: var(--paper); border: 1px solid var(--hair); border-radius: 8px; padding: 18px; margin: 16px 0; }
+  .figure .cap { font-size: 12px; color: var(--ink-faint); margin-top: 10px; font-family: var(--mono); }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--ink-dim); margin-top: 6px; }
+  .legend b { color: var(--accent-ink); font-weight: 600; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--hair); color: var(--ink-dim); }
+  .pill.rec { border-color: rgba(127,192,138,.45); color: var(--ok); background: rgba(127,192,138,.10); }
+  .pill.alt { border-color: rgba(226,168,110,.45); color: var(--warn); background: rgba(226,168,110,.10); }
+  .file { font-family: var(--mono); font-size: 12.5px; color: var(--accent-ink); }
+  hr.soft { border: none; border-top: 1px solid var(--hair-soft); margin: 22px 0; }
+  footer { margin-top: 46px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--ink-faint); font-size: 12.5px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">方案 · 已实施 (Done) · 拍板与实施见 §09</div>
+  <h1>kb.nav 增加「右键置顶 (pin)」: 置顶专区 + 双向显示 + 行内 pin 图标</h1>
+  <p class="lede">
+    给本地导航页 <code>kb.nav</code> 加一条人工置顶能力: 右键任一文档即可 pin, 被 pin 的件进「置顶专区」,
+    同时**仍留在原列表**里 (双向显示), 原列表每件带一个 pin 图标。本文件记录方案与取舍; 决策与实施记录见 §09。
+  </p>
+  <div class="meta-row">
+    <div class="item"><div class="k">状态</div><div class="v">Done · 已实施</div></div>
+    <div class="item"><div class="k">专题</div><div class="v">kb-nav-pin</div></div>
+    <div class="item"><div class="k">落点</div><div class="v">memory-bank/plans/</div></div>
+    <div class="item"><div class="k">日期</div><div class="v">26-10-04-1830</div></div>
+    <div class="item"><div class="k">改前基线</div><div class="v">已同步 1371a9b2</div></div>
+  </div>
+  <nav class="toc">
+    <a href="#s01">01 需求与解读</a>
+    <a href="#s02">02 交互设计</a>
+    <a href="#s03">03 状态与持久化</a>
+    <a href="#s04">04 实现点</a>
+    <a href="#s05">05 与既有机制的相互作用</a>
+    <a href="#s06">06 守阵与测试</a>
+    <a href="#s07">07 待拍板决策</a>
+    <a href="#s08">08 实施与验收</a>
+    <a href="#s09">09 变更记录</a>
+  </nav>
+</header>
+
+<section id="s01">
+  <h2><span class="no">01</span>需求与解读</h2>
+  <table>
+    <thead><tr><th style="width:34px">#</th><th>用户原话</th><th>我的解读 (待确认)</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>kb.nav 增加右键 pin 功能</td><td>在文档行上右键弹小菜单, 一项「置顶 / 取消置顶」; 复用现有右键交互语言 (本地页, 自绘浮层)。</td></tr>
+      <tr><td class="num">2</td><td>需要有 pin 专区</td><td>台账视图新增一块**置顶专区**面板, 列出全部被 pin 的件, 空则整块隐藏。</td></tr>
+      <tr><td class="num">3</td><td>文档 pin 后同时显示在专区和非专区</td><td>专区是**增量区**: 被 pin 的件照旧留在原表格里 (受原筛选/排序支配), 专区只是一份"总在眼前"的副本 —— 不做"从列表挪走"。</td></tr>
+      <tr><td class="num">4</td><td>为非 pin 区的文档增加 pin 图标</td><td>非专区 (即原列表) 的每一行都带一个 pin 图标: 未 pin = 空心淡色, 已 pin = 实心高亮。点它即可 pin/取消, 右键是等价入口。</td></tr>
+    </tbody>
+  </table>
+  <div class="panel">
+    <div class="t">范围边界 (本方案按「最小可用」画线)</div>
+    <ul>
+      <li><strong>v1 只做台账视图</strong> (<code>#v-ledger</code>) —— 它是文档列表的所在地, 也是用户日常盯的那张表。卡片墙 / 控制台**不改** (见 §07 D2)。</li>
+      <li><strong>pin 是"看的人"的偏好, 不是文档属性</strong> —— 不写进任何件的 meta, 不碰四工位文件, 不碰 <code>gen_doc_map</code> / <code>nav_data</code> 的数据契约 (数据层零改动)。</li>
+      <li><strong>零后端改动</strong> —— 不加写接口, 不破坏「服务模式零落盘」纪律 (见 §03)。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s02">
+  <h2><span class="no">02</span>交互设计</h2>
+
+  <h3>2.1 线框: 台账视图加了 pin 之后长什么样</h3>
+  <div class="figure">
+    <svg viewBox="0 0 980 330" width="100%" height="auto" role="img" aria-label="台账视图置顶专区与行内 pin 图标线框">
+      <rect x="0" y="0" width="980" height="330" fill="#12161b" stroke="#232b33" rx="6"/>
+      <!-- toolbar -->
+      <rect x="0" y="0" width="980" height="40" fill="#161b21"/>
+      <text x="18" y="25" fill="#9aa4ad" font-family="Consolas,monospace" font-size="12">排序 [时间 新-旧 v]    12 / 383 件                    点击行看关联</text>
+      <line x1="0" y1="40" x2="980" y2="40" stroke="#232b33"/>
+      <!-- pin zone -->
+      <rect x="0" y="41" width="980" height="96" fill="#161b21"/>
+      <text x="18" y="62" fill="#5cc0cf" font-family="Consolas,monospace" font-size="11">置顶 · PINNED (3)</text>
+      <rect x="16" y="70" width="300" height="26" fill="#12161b" stroke="#232b33" rx="4"/>
+      <text x="26" y="88" fill="#86d7e0" font-family="Consolas,monospace" font-size="11">[pin] 问题  kb.nav 状态筛选器自动重置      x</text>
+      <rect x="324" y="70" width="300" height="26" fill="#12161b" stroke="#232b33" rx="4"/>
+      <text x="334" y="88" fill="#86d7e0" font-family="Consolas,monospace" font-size="11">[pin] 计划  kb.nav 三视图导航页          x</text>
+      <rect x="632" y="70" width="300" height="26" fill="#12161b" stroke="#232b33" rx="4"/>
+      <text x="642" y="88" fill="#86d7e0" font-family="Consolas,monospace" font-size="11">[pin] 报告  kb.nav 静态映射防穿越        x</text>
+      <text x="18" y="122" fill="#6d7781" font-family="Consolas,monospace" font-size="10.5">专区内条目点击直达原文; 右侧 x 取消置顶; 专区不受下方筛选影响</text>
+      <line x1="0" y1="137" x2="980" y2="137" stroke="#232b33"/>
+      <!-- table header -->
+      <text x="18" y="158" fill="#6d7781" font-family="Consolas,monospace" font-size="10.5">#    时间戳           形态  状态     标题</text>
+      <line x1="0" y1="166" x2="980" y2="166" stroke="#1a2027"/>
+      <!-- rows -->
+      <text x="18" y="188" fill="#9aa4ad" font-family="Consolas,monospace" font-size="11">1   26-10-04-1730   报告  完结    [pin] kb.nav 静态映射防穿越   <- 已 pin: 实心</text>
+      <text x="18" y="212" fill="#9aa4ad" font-family="Consolas,monospace" font-size="11">2   26-10-04-1606   计划  完结    [pin] kb.nav 三视图导航页       <- 已 pin: 实心</text>
+      <text x="18" y="236" fill="#9aa4ad" font-family="Consolas,monospace" font-size="11">3   26-10-04-0952   计划  完结    [pin] kb.nav 状态筛选器自动重置 <- 已 pin: 实心</text>
+      <text x="18" y="260" fill="#6d7781" font-family="Consolas,monospace" font-size="11">4   26-10-03-2012   问题  待办    [pin] 某未 pin 件                <- 空心淡色</text>
+      <text x="18" y="284" fill="#6d7781" font-family="Consolas,monospace" font-size="11">5   26-10-03-1120   档案  进行    [pin] 另一件                     <- 空心淡色</text>
+      <!-- context menu -->
+      <rect x="620" y="216" width="180" height="86" fill="#1c242e" stroke="#3a4652" rx="6"/>
+      <rect x="620" y="216" width="180" height="26" fill="#202a34" rx="6"/>
+      <text x="632" y="234" fill="#dde3e8" font-family="Consolas,monospace" font-size="11.5">取消置顶</text>
+      <text x="632" y="260" fill="#dde3e8" font-family="Consolas,monospace" font-size="11.5">打开原文</text>
+      <text x="632" y="284" fill="#dde3e8" font-family="Consolas,monospace" font-size="11.5">复制仓库路径</text>
+      <text x="18" y="312" fill="#6d7781" font-family="Consolas,monospace" font-size="10.5">右键浮层: 跟随光标, 点空白 / Esc / 滚动即收</text>
+    </svg>
+    <div class="cap">图 1 · 置顶专区 (toolbar 之下、表格之上) + 行内 pin 图标 + 右键浮层; 三处都是新增, 原表格结构不动</div>
+  </div>
+
+  <h3>2.2 三个交互的形态</h3>
+  <table>
+    <thead><tr><th style="width:120px">交互</th><th>形态</th><th>细节</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>右键菜单</strong></td>
+        <td>光标处弹一块小浮层, 3 项无子菜单</td>
+        <td>
+          <span class="pill">取消置顶 / 置顶到专区</span> <span class="pill">打开原文</span> <span class="pill">复制仓库路径</span><br>
+          首项文案随当前件状态翻转; 菜单项数按 webui.md「一级只放高频」口径收敛, 不设二级。关闭: 点空白 / <code>Esc</code> / 滚动 / 切视图。
+        </td>
+      </tr>
+      <tr>
+        <td><strong>行内 pin 图标</strong></td>
+        <td>标题单元格内、标题左侧一个小按钮</td>
+        <td>内联 SVG 图钉 (空心 = 未 pin 淡色 / 实心 = 已 pin 高亮 accent)。点它 = pin 切换, 需 <code>stopPropagation</code> 免得同时弹详情抽屉。悬停出 <code>title</code> 提示 (<code>置顶到专区</code> / <code>取消置顶</code>)。</td>
+      </tr>
+      <tr>
+        <td><strong>置顶专区</strong></td>
+        <td>toolbar 与表格之间的一条横向面板, 空则隐藏</td>
+        <td>标题 <code>置顶 · PINNED (n)</code> + 每条一行紧凑条目 (pin 图标 + 形态徽章 + 标题链接 + 取消按钮)。条目多时面板内滚动 (限高)。<strong>不受</strong>下方筛选/搜索影响 (见 §05)。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="figure" style="padding:14px 18px">
+    <div class="legend">
+      <span><b>空心图钉</b> = 未置顶</span>
+      <span><b>实心图钉</b> = 已置顶</span>
+      <span>图标一律内联 SVG (无外链图标库, 守 <code>test_shell_no_external_resources</code>)</span>
+      <span>不用 emoji 图钉 (code-style 口径: 代码/资源禁图形符号)</span>
+    </div>
+  </div>
+</section>
+
+<section id="s03">
+  <h2><span class="no">03</span>状态与持久化</h2>
+  <p>pin 集合是纯前端状态, 只有一个落点问题: <strong>存哪</strong>。两个候选:</p>
+  <table>
+    <thead><tr><th style="width:150px">方案</th><th>做法</th><th>优点</th><th>代价</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="pill rec">推荐 A</span><br>浏览器 localStorage</td>
+        <td>键 <code>mb-nav-pins</code> = 被 pin 的 <code>link</code> 数组 (顺序即置顶序), 与既有 <code>mb-nav-view</code> 同款写法</td>
+        <td>零后端改动; http 与静态件两种模式都能用; 不碰仓库文件, 不产生 git 噪声; 实现量最小</td>
+        <td>只在本浏览器/本机生效, 不跨机器共享; 清缓存会丢; <code>file://</code> 下个别浏览器禁写 → 降级为本次会话内存态</td>
+      </tr>
+      <tr>
+        <td><span class="pill alt">备选 B</span><br>仓库文件 + 写接口</td>
+        <td><code>memory-bank/.nav-pins.json</code> + <code>POST /api/pins</code>, 服务端读写</td>
+        <td>跨浏览器/跨机器一致, 可入库共享</td>
+        <td>破坏「服务模式零落盘」纪律; 需新增写路由 + 防穿越/防 CSRF 考量; 静态件模式无法写; 可能被 git 跟踪造成噪声</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="panel">
+    <div class="t">为什么推荐 A</div>
+    <p style="margin-bottom:0">
+      <code>kb.nav</code> 是"人的导航页", pin 表达的是**个人视线偏好**而非库的事实 (库的事实权威在四工位 meta 单点, 见 conventions/doc-forms.md)。
+      用 A 可以不触碰任何数据契约与生成器, 风险面最小; 若日后确需跨机共享, 再按 B 升级 (A→B 只换 <code>loadPins/savePins</code> 两个函数的实现, 渲染侧不动)。
+    </p>
+  </div>
+  <p class="dim">键名与 <code>VIEW_KEY</code> 一样集中在一处常量; 读写一律 <code>try/catch</code> 兜底 (既有 <code>saveView</code> 同款), 写失败静默降级不弹错。</p>
+</section>
+
+<section id="s04">
+  <h2><span class="no">04</span>实现点 (单文件 · 台账视图)</h2>
+  <p>全部改动集中在 <span class="file">.agents/skills/memory-bank/scripts/nav_page.html</span> (单文件壳)。<strong>数据层 / 服务层零改动</strong>: <code>nav_data.py</code> / <code>nav_server.py</code> / <code>gen_doc_map.py</code> 一行不动。</p>
+  <table>
+    <thead><tr><th style="width:170px">位置 (现有锚点)</th><th>改动</th></tr></thead>
+    <tbody>
+      <tr><td class="num">常量区 <span class="dim">L512-520</span></td><td>新增 <code>const PINS_KEY = "mb-nav-pins";</code></td></tr>
+      <tr><td class="num">全局状态 <code>S</code> <span class="dim">L530-540</span></td><td>新增 <code>pins: []</code> (link 数组, 顺序即置顶序); <strong>只在 boot 时装载一次, <code>derive()</code> 永不触碰</strong></td></tr>
+      <tr><td class="num">工具函数区 <span class="dim">L542-552</span></td><td>新增 <code>loadPins()</code> / <code>savePins()</code> / <code>isPinned(link)</code> / <code>togglePin(link)</code> / <code>pinZoneItems()</code> (取 <code>DATA</code> 中仍存在者, 过滤失效 link)</td></tr>
+      <tr><td class="num">台账 DOM <span class="dim">L417-439</span></td><td>在 <code>.toolbar</code> 与 <code>.ledgerwrap</code> 之间插入 <code>&lt;div class="pinzone" id="pinZone" hidden&gt;&lt;/div&gt;</code></td></tr>
+      <tr><td class="num">body 尾部 <span class="dim">L479-496</span></td><td>新增 <code>&lt;div class="ctxmenu" id="ctxMenu" hidden&gt;&lt;/div&gt;</code> (固定定位浮层)</td></tr>
+      <tr><td class="num"><code>renderLedger()</code> <span class="dim">L655-690</span></td><td>① 渲染前先画 <code>#pinZone</code> (空则 <code>hidden</code>); ② 行模板 L678-687 的 <code>title-cell</code> 内、标题左侧插入 pin 按钮 (带 <code>on</code> 类)</td></tr>
+      <tr><td class="num"><code>wire()</code> <span class="dim">L903-968</span></td><td>① <code>#aRows</code> 上挂 <code>contextmenu</code> → <code>openCtx(x, y, link)</code>; ② <code>#pinZone</code> 委托点击 (条目 / 取消按钮 / 右键); ③ 行点击处理器 L914 顶部加 <code>if (e.target.closest(".pinbtn")) return;</code>; ④ 文档级 <code>click</code> / <code>keydown(Esc)</code> / <code>scroll</code> 关闭菜单</td></tr>
+      <tr><td class="num"><code>boot()</code> <span class="dim">L1000-1023</span></td><td>装载 <code>S.pins = loadPins();</code> (在 <code>wire()</code> 之后、首渲染之前)</td></tr>
+      <tr><td class="num">CSS <span class="dim">L14-381</span></td><td>新增 <code>.pinzone</code> / <code>.pinrow</code> / <code>.pinbtn</code> / <code>.pinbtn.on</code> / <code>.ctxmenu</code> / <code>.ctxitem</code> 段, 全部复用既有暗色令牌</td></tr>
+    </tbody>
+  </table>
+  <div class="panel warn-p">
+    <div class="t">两个易踩点 (写进实现注释, 免得后人再踩)</div>
+    <ul style="margin-bottom:0">
+      <li><strong>行点击会抢事件</strong>: 行上的 <code>click</code> 委托 (L914) 会因按钮冒泡而误开详情抽屉 —— pin 按钮必须早退。</li>
+      <li><strong>pin 不得被轮询重播种</strong>: 与 2026-10-04「状态筛选器自动重置」同源风险 (<span class="file">pitfalls/web-ui/poll-reseed-filter.md</span>)。<code>derive()</code> 每 30s 跑一次, <strong>绝不能碰 <code>S.pins</code></strong>; pin 只从 localStorage 装载、只在用户动作时改。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s05">
+  <h2><span class="no">05</span>与既有机制的相互作用</h2>
+  <table>
+    <thead><tr><th style="width:150px">既有机制</th><th>本方案的处理</th></tr></thead>
+    <tbody>
+      <tr><td>形态/状态/类型筛选, 全局搜索</td><td><strong>专区不受影响</strong> (pin 的意义就是"总在眼前"), 原表格照旧受筛选 —— 因此被 pin 的件在筛掉时不进表格、但仍留专区; 筛中时两处都在 (= 需求 3 的"同时显示")。</td></tr>
+      <tr><td>排序下拉</td><td>原表格排序不变; 专区按**置顶顺序** (最近 pin 的在前), 给用户可控的次序。</td></tr>
+      <tr><td>30s 轮询 <code>/api/data</code></td><td>pin 状态与数据无关, 轮询重渲染后原样保留 (S.pins 不被 derive 重置); 已失效 link (件被删/改名) 不渲染, 可选自动清理。</td></tr>
+      <tr><td>静态导出 <code>--gen-static</code></td><td>无需改导出逻辑; 静态件里 localStorage 若被浏览器禁写, 降级为会话内存态 (pin 仍可用, 刷新即丢)。</td></tr>
+      <tr><td>dark 主题 / 零外链</td><td>新样式全用既有暗色令牌; 图钉为内联 SVG —— 既有守阵 <code>test_shell_is_dark</code> / <code>test_shell_no_external_resources</code> 继续过。</td></tr>
+      <tr><td>台账列序守阵</td><td>图钉**内嵌 title-cell**, 不新增 <code>&lt;td&gt;</code> —— <code>test_ledger_status_column_between_form_and_title</code> 无需改动 (这是选内嵌而非独立列的主要理由)。</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s06">
+  <h2><span class="no">06</span>守阵与测试</h2>
+  <p>沿用 <span class="file">tests/test_kb_nav.py</span> 的字符串级守阵风格 (壳是静态文件, 守阵钉结构与关键接线, 不起浏览器)。<strong>新增测试须同步该文件头部 docstring 的「## 测试计划」清单</strong> (AGENTS.md 硬约束)。</p>
+  <table>
+    <thead><tr><th style="width:300px">新增守阵</th><th>钉住什么</th></tr></thead>
+    <tbody>
+      <tr><td class="num">test_shell_has_pin_zone_and_ctxmenu</td><td>壳含 <code>id="pinZone"</code> / <code>id="ctxMenu"</code> / <code>PINS_KEY</code> / <code>contextmenu</code> 监听 —— 缺任一即回归。</td></tr>
+      <tr><td class="num">test_pin_state_not_reseeded_by_derive</td><td><code>derive()</code> 函数体内不出现 <code>pins</code>; 且 <code>S.pins = loadPins()</code> 全壳只出现一次 (防"轮询把 pin 洗掉"这一类事故)。</td></tr>
+      <tr><td class="num">test_pinned_rendered_in_both_zones</td><td><code>isPinned</code> 同时被 <code>#pinZone</code> 渲染与行模板消费 —— 钉住"双向显示"这条需求不被悄悄改成单边。</td></tr>
+      <tr><td class="num">test_pin_icon_is_inline_svg_no_emoji</td><td>图钉是 <code>&lt;svg</code> 且壳内不出现 emoji 图钉字符 (code-style 口径)。</td></tr>
+      <tr><td class="num">(回归) 既有 11 条守阵</td><td>数据形状 / 防穿越 / 三视图 / dark / 零外链 / 列序 / 状态筛选不重播种 / log 过滤 —— 全部须继续绿。</td></tr>
+    </tbody>
+  </table>
+  <p class="dim">收尾按 DoD 跑 <code>commands run test.full</code>, 新建基线切片 <code>testing/baselines/26-10-04-XXXX-kb-nav-pin.md</code> 记实测数字。</p>
+</section>
+
+<section id="s07">
+  <h2><span class="no">07</span>待拍板决策 (审核请逐条给意见)</h2>
+  <table>
+    <thead><tr><th style="width:44px">#</th><th style="width:150px">决策点</th><th>选项</th><th style="width:110px">我的推荐</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="num">D1</td><td>pin 存哪</td>
+        <td>A 浏览器 localStorage (零后端) / B 仓库文件 + 写接口 (跨机共享)</td>
+        <td><span class="pill rec">A</span></td>
+      </tr>
+      <tr>
+        <td class="num">D2</td><td>做哪几个视图</td>
+        <td>仅台账 / 台账 + 卡片墙 / 三视图全做</td>
+        <td><span class="pill rec">仅台账</span></td>
+      </tr>
+      <tr>
+        <td class="num">D3</td><td>专区是否受筛选/搜索影响</td>
+        <td>不受 (总在眼前) / 跟随筛选</td>
+        <td><span class="pill rec">不受</span></td>
+      </tr>
+      <tr>
+        <td class="num">D4</td><td>pin 图标放哪</td>
+        <td>标题单元格内嵌 (零列序改动) / 新增独立 pin 列 (需同步列序守阵)</td>
+        <td><span class="pill rec">内嵌</span></td>
+      </tr>
+      <tr>
+        <td class="num">D5</td><td>右键菜单项</td>
+        <td>置顶/取消置顶 · 打开原文 · 复制仓库路径 / 只留前两项</td>
+        <td><span class="pill rec">三项</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="panel warn-p">
+    <div class="t">D2 / D4 是唯一有连锁代价的两项</div>
+    <p style="margin-bottom:0">
+      D2 若选"三视图全做", pin 集合本身是 <code>link</code> 键、天然可复用, 但三处都要加图标与右键绑定, 工作量约翻倍;
+      D4 若选"独立列", 需同步改 <code>test_ledger_status_column_between_form_and_title</code> 的期望列序 (该守阵是用户定调, 改动要显式记一笔)。
+    </p>
+  </div>
+</section>
+
+<section id="s08">
+  <h2><span class="no">08</span>实施与验收</h2>
+  <h3>分三步 (拍板后执行)</h3>
+  <ol>
+    <li><strong>S1 结构与样式</strong>: 加 <code>#pinZone</code> / <code>#ctxMenu</code> DOM 与 CSS 段; 加常量与 <code>S.pins</code>; 加 <code>loadPins/savePins/isPinned/togglePin/pinZoneItems</code>。</li>
+    <li><strong>S2 接线与渲染</strong>: <code>renderLedger()</code> 画专区 + 行内按钮; <code>wire()</code> 挂右键 / 专区委托 / 关闭逻辑; <code>boot()</code> 装载 pins。</li>
+    <li><strong>S3 守阵与收尾</strong>: 新增 4 条守阵 + docstring 清单; <code>commands run test.full</code> 全绿; 起 <code>commands run kb.nav</code> 人工过一遍 (pin / 取消 / 筛掉后专区仍在 / 轮询 30s 后仍在); 基线切片 + activeContext 回写 + <code>kb.index</code>。</li>
+  </ol>
+  <h3>验收判据 (人工可复现)</h3>
+  <ul>
+    <li>右键任一行 → 出菜单 → 点「置顶到专区」: 该件立刻出现在专区, 且原表格里它的图钉变实心 (两处同时可见)。</li>
+    <li>被 pin 的件被状态筛选筛掉时: 表格里消失, <strong>专区里仍在</strong>。</li>
+    <li>等 30s 轮询刷新: pin 与专区不变 (不被数据重播种)。</li>
+    <li>点行内空心图钉 → pin; 再点 → 取消, 专区同步增删; 点图钉不弹详情抽屉。</li>
+    <li>专区点条目 → 新标签打开原文; 专区 ✕ → 取消置顶; 空专区整块隐藏。</li>
+    <li><code>commands run test.full</code> 全绿, 既有 11 条 kb-nav 守阵一条不红。</li>
+  </ul>
+</section>
+
+<section id="s09">
+  <h2><span class="no">09</span>变更记录</h2>
+  <ul>
+    <li><strong>26-10-04-1849 · 拍板并实施</strong>: 用户「按推荐实施」—— D1–D5 全部采纳推荐项 (A localStorage · 仅台账 · 专区不受筛选 · 标题内嵌 · 三项菜单)。落点仅 <span class="file">nav_page.html</span> 单文件 + <span class="file">tests/test_kb_nav.py</span> 新增 4 条守阵; 数据层 / 服务层零改动。实测 <code>test.full</code> 2515 passed + 4 skipped / 99%, 基线切片 <span class="file">memory-bank/testing/baselines/26-10-04-1849-kb-nav-pin.md</span>。</li>
+  </ul>
+</section>
+
+<footer>
+  方案 · 已实施 (Done) · 专题 kb-nav-pin · 出稿 2026-10-04 18:30 · 实施 2026-10-04 18:49<br>
+  落点: nav_page.html (单文件) + tests/test_kb_nav.py (新增 4 条守阵); 数据层/服务层零改动。
+</footer>
+
+</div>
+</body>
+</html>

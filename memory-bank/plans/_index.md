@@ -19,6 +19,7 @@
 
 ## Done
 
+- [26-10-04-1830] [方案 · kb.nav 右键置顶 (pin) · 置顶专区 + 双向显示 · auto-qb](26-10-04-1830-plan-kb-nav-pin.html) — `kb-nav-pin`
 - [26-10-04-0952] [实施计划 · memory-bank 四工位导航页 · 三视图可切换 · auto-qb](26-10-04-0952-plan-kb-nav-page.html) — `kb-nav-page`
 - [26-10-04-0721] [实施计划 · qB 流量历史 dat v2 零值行程行（z 行）· 单种空闲 0 平线 · auto-qb](26-10-04-0721-plan-qb-traffic-v2-zrow.html) — `torrent-traffic-stats`
 - [26-10-04-0312] [修改计划 · WEBUI HR 在线核实 — 拉取历史详情表](26-10-04-0312-plan-webui-hr-fetch-history.html) — `webui-hr-fetch-history`

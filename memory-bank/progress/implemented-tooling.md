@@ -21,6 +21,15 @@
   覆盖率 99%(切片 26-10-04-1039)。计划
   [26-10-04-0952](../plans/26-10-04-0952-plan-kb-nav-page.html)。
 
+- **kb.nav 台账置顶 (pin) (2026-10-04, 专题 kb-nav-pin, 计划 26-10-04-1830 全段落地)**: 导航页台账新增人工置顶 ——
+  行内图钉 (空心 = 未 pin / 实心 = 已 pin, 点它切换) + 「置顶 · PINNED」**增量专区** (被 pin 件**同时**留在原表格
+  = 双向显示, 专区不受筛选/搜索影响) + 右键菜单 (置顶/取消置顶 · 打开原文 · 复制仓库路径)。pin 是**人的视线偏好**、
+  非文档属性: 落 localStorage `mb-nav-pins`(与视图选择同款 try/catch 降级), **只在 boot 装载一次、derive() 绝不触碰**
+  (同「状态筛选器自动重置」源风险, 坑档案 poll-reseed-filter.md), 不写进任何件 meta、**数据层/服务层零改动**。图钉
+  内嵌 title-cell (零列序改动, 不新增 td), 内联 SVG 无外链图标库、无 emoji。守阵 `tests/test_kb_nav.py` +4(专区/菜单
+  骨架 · derive 不碰 pins 且装载点唯一 · 双向渲染 · 内联 SVG 无 emoji)。基线 2515 passed + 4 skipped / 99%
+  (切片 26-10-04-1849)。计划 [26-10-04-1830](../plans/26-10-04-1830-plan-kb-nav-pin.html)。
+
 - **activeContext 多 clone 冲突治理 = 时间戳切片方案 (2026-09-23, W1–W3)**: 「重写头部滚动栈」改成
   「新增/更新自己的时间戳切片」; 取消 global.md/_index.md/_recent.md 缓存(文件名自带时间与主题,
   `kb.active` 现算); 归档阈值 14 天默认落地(`--stale-days` 可调)。W4(merge-tree 预检 + rerere)可选未做;
