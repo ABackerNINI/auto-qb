@@ -33,7 +33,7 @@
                   <div v-else-if="col.key === 'state'" class="g-cat zero"></div>
                   <div v-else-if="col.key === 'progress'" class="g-cat zero"></div>
                   <div v-else-if="col.key === 'size'" class="g-stat zero"></div>
-                  <div v-else-if="col.key === 'versions'" class="g-count" title="种子数">{{ s.member_count }}</div>
+                  <div v-else-if="col.key === 'versions'" class="g-count">{{ s.member_count }}</div>
                   <div v-else-if="col.key === 'sites'" class="g-cat">
                     <span class="zero">{{ s.seasons.length }} 个季</span>
                   </div>
@@ -80,7 +80,7 @@
                         </div>
                         <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !e.size }"
                              :title="'最完整版本大小'">{{ fmtSizeOrDash(e.size) }}</div>
-                        <div v-else-if="col.key === 'versions'" class="g-count" :title="e.count + ' 个版本'">{{ e.count }}</div>
+                        <div v-else-if="col.key === 'versions'" class="g-count">{{ e.count }}</div>
                         <div v-else-if="col.key === 'sites'" class="g-sites">
                           <span v-for="m in e.members" :key="m.hash" class="site-chip"
                                 :class="[m.kind, { 'search-hit': m.hit, 'f-on': isFilterOn('siteFilter', m.site) }]"

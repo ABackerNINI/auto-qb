@@ -23,15 +23,15 @@
              正文工具条(qbTrafficActive 块), 三挂点正文完全一致 -->
         <header v-if="drawer.kind === 'traffic'" class="drawer-head">
           <div class="drawer-title">
-            <span class="g-status k-other" :title="qbTrafficTitle">
+            <span class="g-status k-other">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
             </span>
-            <strong :title="qbTrafficTitle">{{ qbTrafficTitle }}</strong>
+            <strong>{{ qbTrafficTitle }}</strong>
           </div>
-          <button class="drawer-fold" :title="drawer.collapsed ? '展开' : '收起'" @click="toggleDrawerCollapse()">
+          <button class="drawer-fold" @click="toggleDrawerCollapse()">
             <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
           </button>
-          <button class="drawer-close" title="关闭(Esc)" @click="closeDrawer()">
+          <button class="drawer-close" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </header>
@@ -54,10 +54,10 @@
                  页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收) -->
             <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>
           </nav>
-          <button class="drawer-fold" :title="drawer.collapsed ? '展开' : '收起'" @click="toggleDrawerCollapse()">
+          <button class="drawer-fold" @click="toggleDrawerCollapse()">
             <svg class="ico ico-sm" :class="{ flip: drawer.collapsed }" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
           </button>
-          <button class="drawer-close" title="关闭(Esc)" @click="closeDrawer()">
+          <button class="drawer-close" @click="closeDrawer()">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
           </button>
         </header>
@@ -162,11 +162,11 @@
                     <svg class="ico ico-sm" :class="icoTone(r.icon)" viewBox="0 0 16 16"><use :href="r.icon"></use></svg>
                     <span class="k">{{ r.label }}</span>
                     <span class="v mono" :title="String(r.text)">{{ r.text }}</span>
-                    <button v-if="r.act === 'open'" type="button" class="bt icon f-row-act" :title="'打开' + r.label"
+                    <button v-if="r.act === 'open'" type="button" class="bt icon f-row-act"
                             @click="openTargetPath('torrent', drawer.hash)">
                       <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
                     </button>
-                    <button v-else-if="r.act === 'copy'" type="button" class="bt icon f-row-act" :title="'复制' + r.label"
+                    <button v-else-if="r.act === 'copy'" type="button" class="bt icon f-row-act"
                             @click="copyText(String(r.text), r.label)">
                       <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
                     </button>
@@ -204,10 +204,10 @@
                     <td class="wrap">{{ t.msg || "—" }}</td>
                     <td class="cell-act">
                       <template v-if="!drawerTrackerVirtual(t.url)">
-                        <button class="row-btn" title="编辑" @click="trackerEdit(t.url)">
+                        <button class="row-btn" @click="trackerEdit(t.url)">
                           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-pencil"></use></svg>
                         </button>
-                        <button class="row-btn danger" title="删除" @click="trackerRemove(t.url)">
+                        <button class="row-btn danger" @click="trackerRemove(t.url)">
                           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-trash"></use></svg>
                         </button>
                       </template>
