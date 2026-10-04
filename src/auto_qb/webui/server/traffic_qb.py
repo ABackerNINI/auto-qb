@@ -1,22 +1,30 @@
-"""qB 口径流量图三 GET 端点的读侧共享装配(plan 26-10-03-0946 方案C P4, §08)
+"""qB 口径流量图三 GET 端点的读侧共享装配(plan 26-10-03-0946 方案C P4, §08; v3 翻转
+plan 26-10-04-1957 S3b, §05.2-§05.4)
 
 三端点(global / torrent / group)的公共口径收在这里, 各域 router 在 build_router 时自建
 一个实例(一域恰一端点, last-good 快照按 window 分键互不串扰):
 
 - 响应形状三域一致: {"points": [...], "totals": [...], "meta": {...}}(§08); points/totals
-  为「桶值 | null」定长数组(§05.1 栅格离散), meta = window/interval_s/source/stale。
+  为窗口栅格上「桶值 | null」定长数组, meta = window/interval_s/source/stale。
+  interval_s = 桶宽: raw 段窗 = 采样间隔, 3d/7d/30d = 3600, 6mo/1y = 86400(本地日界),
+  all = 标称月长(真实月长按行间隔, 点位真值在 points[].t, 前端按真值落点)。
 - 未启用(qb_traffic 缺省 None / enabled=false / data_dir 为空防御)或无数据 -> 空态
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
-- window 查询参数仅认 WINDOW_NAMES(1m/5m/30m/3h/6h/12h/24h/3d/7d/30d), 其余 400(客户端错误不 500)。
-- 读盘走 TrafficDatStore.read_series_checked(快读即关 + OSError 按空系列对待); 读取失败
-  (Windows rewrite 竞态等瞬态, 概率极低)不以空态冒充「无数据」: 回退上一份成功响应并标
+- window 查询参数仅认 WINDOW_NAMES(13 档, D4), 其余 400(客户端错误不 500)。
+- 读盘 v3(plan 26-10-04-1957 R2 换代, 只读 qb-traffic-v3/ 新目录): raw 段窗(1m-24h)经
+  V3DayCache.read_window 按窗口日期集合只读涉及天文件(24h 窗至多 2 个), 块序列 ->
+  traffic_grid.v3_series_points 桶点 -> v3_grid_obs 栅格展开; agg 段窗(3d/7d/30d/6mo/1y/
+  all)经 V3DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按 kind 直映栅格桶
+  (3d+ 组图由 M×31 -> M×1 次文件读取)。
+- 读取失败(Windows 竞态等瞬态 OSError)不以空态冒充「无数据」: 回退上一份成功响应并标
   meta.stale=true(§08「最坏返回上一秒快照 + stale」), 无历史快照才回本次现算结果。
   last-good 每端点每 window 仅存一份、每次成功现算后覆盖 —— 这是竞态兜底快照, 不是聚合
   缓存(组聚合仍每请求现算, §04.3)。
-- 组端点(§04.1): key 收当前指纹 base64url(同 /api/groups/{key} 通道, 畸形 400), 成员集
-  = 查询时刻 store.groups[指纹键](与分组视图/弹层同源同刻); 聚合口径在 core.traffic_grid
-  纯函数层(API 层现算不做聚合缓存); 指纹解析不到成员 / 成员从未产过流量(全部成员文件
-  缺失或零行)-> 空态。
+- 组端点(§04.1 -> §05.4 v3): key 收当前指纹 base64url(同 /api/groups/{key} 通道, 畸形
+  400), 成员集 = 查询时刻 store.groups[指纹键]; 聚合口径在 core.traffic_grid 纯函数层
+  (API 层现算不做聚合缓存); 「借 global 判 null」退役 —— 桶 null 由成员自身观测面裁决
+  (任一成员 r/z 观测即程序存活真值); 指纹解析不到成员 / 组从未产过流量(全部成员无块无
+  agg 行, v3_earliest_row_ts 全 None)-> 空态。
 """
 import time
 from typing import Optional
@@ -24,12 +32,18 @@ from typing import Optional
 from fastapi import HTTPException
 
 from ...core import traffic_grid as tg
-from ...core.traffic_store import GLOBAL_KEY, TORRENT_KEY_PREFIX, TrafficDatStore
+from ...core.traffic_store import (
+    GLOBAL_KEY,
+    TORRENT_KEY_PREFIX,
+    V3DayCache,
+    v3_series_dir,
+)
 from .common import group_key_param
 
-#: window 查询参数合法值(§08; 1m-24h 与 qB 速度图窗口对齐 + 3d/7d 外延, 3d/7d/30d 消费
-#: hour 段); 其余一律 400
-WINDOW_NAMES = ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d")
+#: window 查询参数合法值(§08 + plan 26-10-04-1957 §05.3/D4: 1m-24h 与 qB 速度图窗口对齐
+#: + 3d/7d/30d 消费 agg hour 行 + 6mo/1y 消费 day 行 + all 消费 month 行, 共 13 档;
+#: 90d 拍板延后不上); 其余一律 400
+WINDOW_NAMES = ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d", "6mo", "1y", "all")
 
 
 def parse_window(window: str) -> str:
@@ -43,16 +57,17 @@ class QbTrafficChartApi:
     """单域流量图端点的读侧装配(每域 router 一实例; 无锁 —— 只读 + 原子替换读语义)"""
     def __init__(self, manager) -> None:
         self._manager = manager
-        self._store: Optional[TrafficDatStore] = None  # 惰性构造(路径纯计算; data_dir 为 R 级热重载字段, 进程内不变)
+        self._v3cache: Optional[V3DayCache] = None  # 惰性构造(路径纯计算; data_dir 为 R 级热重载字段)
         self._last_good: dict = {}  # window 名 -> 最近一次成功现算的响应(竞态兜底, 非聚合缓存)
 
     # ---------- 基础件 ----------
 
     @property
-    def store(self) -> TrafficDatStore:
-        if self._store is None:
-            self._store = TrafficDatStore(self._manager.config.data_dir)
-        return self._store
+    def v3cache(self) -> V3DayCache:
+        """v3 读侧缓存(天文件按天解析缓存 + agg.dat 解析缓存; Web 线程并发安全)"""
+        if self._v3cache is None:
+            self._v3cache = V3DayCache(self._manager.config.data_dir)
+        return self._v3cache
 
     def _conf(self):
         return self._manager.config.qb_traffic
@@ -63,10 +78,13 @@ class QbTrafficChartApi:
         return conf is not None and bool(conf.enabled) and bool(self._manager.config.data_dir)
 
     def _grid(self, window: str) -> tg.WindowGrid:
-        """当前时刻的时间栅格; raw 段窗口(1m-24h)桶宽 = 采样间隔(未启用/缺省兜底 30s),
-        hour 段窗口(3d/7d/30d)恒 3600s"""
+        """当前时刻的时间栅格; raw 段窗(1m-24h)桶宽 = 采样间隔(未启用/缺省兜底 30s),
+        hour 段窗(3d/7d/30d)恒 3600s, day 段窗(6mo/1y)= 本地日界 86400s;
+        month 段窗(all)栅格由数据面定, 此处只出空 buckets 兜底形(空态 meta 用)"""
         conf = self._conf()
         sample = conf.sample_interval if conf is not None else tg.DEFAULT_SAMPLE_INTERVAL_S
+        if tg.WINDOW_SPECS[window][1] == "month":
+            return tg.build_month_grid((), time.time())
         return tg.build_grid(window, time.time(), sample)
 
     def _meta(self, grid: tg.WindowGrid, stale: bool) -> dict:
@@ -104,38 +122,32 @@ class QbTrafficChartApi:
             self._last_good[grid.name] = payload
         return payload
 
-    # ---------- 三端点(§08) ----------
+    # ---------- 三端点(§08; v3 读侧 §05.2-§05.4) ----------
 
     def payload_global(self, window: str) -> dict:
-        """GET /api/traffic/qb/global: 全局系列(global.dat, 恒采含 null 点行 —— 停机/断连洞的真值源)"""
+        """GET /api/traffic/qb/global: 全局系列(qb-traffic-v3/global/ 天文件 + agg.dat)"""
         parse_window(window)
         if not self._feature_on():
             return self._empty(window)
-        grid = self._grid(window)
-        parsed, read_ok = self.store.read_series_checked(GLOBAL_KEY)
-        obs = tg.series_bucket_obs(parsed, grid)
-        return self._respond(grid, tg.rate_points(obs, grid), tg.series_totals_points(obs, grid), degraded=not read_ok)
+        return self._payload_series(GLOBAL_KEY, window)
 
     def payload_torrent(self, hash_text: str, window: str) -> dict:
-        """GET /api/traffic/qb/torrent/{hash}: 单种系列(torrents/<hash>.dat; 非活跃期无行 = 断线)"""
+        """GET /api/traffic/qb/torrent/{hash}: 单种系列(torrents/<hash>/; 非活跃期无行 = 断线)"""
         parse_window(window)
-        key = TORRENT_KEY_PREFIX + hash_text
         try:
-            self.store.series_path(key)  # 非法哈希(路径不安全字符)在存储层 fail-fast -> 400
+            v3_series_dir(self._manager.config.data_dir, TORRENT_KEY_PREFIX + hash_text)
         except ValueError:
             raise HTTPException(status_code=400, detail="种子哈希非法") from None
         if not self._feature_on():
             return self._empty(window)
-        grid = self._grid(window)
-        parsed, read_ok = self.store.read_series_checked(key)
-        obs = tg.series_bucket_obs(parsed, grid)
-        return self._respond(grid, tg.rate_points(obs, grid), tg.series_totals_points(obs, grid), degraded=not read_ok)
+        return self._payload_series(TORRENT_KEY_PREFIX + hash_text, window)
 
     def payload_group(self, key_text: str, window: str) -> dict:
-        """GET /api/traffic/qb/group/{key}: 组系列读侧现算(§04.1; 组不落盘, Σ 成员单种 dat)
+        """GET /api/traffic/qb/group/{key}: 组系列读侧现算(§04.1; 组不落盘, Σ 成员观测面)
 
         key 与成员集解析同 /api/groups/{key} 通道(decode -> store.groups 查表); 聚合口径
-        (成员求和 / 逐成员差分 / 借全局系列判 null)全部在 core.traffic_grid 纯函数层。
+        (成员求和 / 逐成员差分 / 桶 null 由成员观测面裁决)全部在 core.traffic_grid 纯函数层;
+        不再读全局系列(「借 global 判 null」退役, §05.1/§05.4)。
         """
         parse_window(window)
         key = group_key_param(key_text)  # 畸形 key -> 400(同 /api/groups/{key} 通道, 不 500)
@@ -144,19 +156,81 @@ class QbTrafficChartApi:
         members = self._manager.store.groups.get(key)
         if not members:
             return self._empty(window)  # 指纹解析不到成员(组不存在/已无成员)-> 空态(§08)
-        grid = self._grid(window)
-        global_parsed, global_ok = self.store.read_series_checked(GLOBAL_KEY)
-        member_series = [self.store.read_series_checked(TORRENT_KEY_PREFIX + h) for h in members]
-        degraded = not global_ok or any(not ok for _, ok in member_series)
-        member_parsed = [p for p, _ in member_series]
-        if all(not p.raw and not p.hours and not p.zruns for p in member_parsed):
-            # 组从未有成员产过流量(成员文件全缺/零行)-> 空态(§08); 降级时如实标 stale。
-            # 判据含 zruns(plan 26-10-04-0721 §04.4): 成员可能只剩 z 行(raw 行已滑出 24h
-            # 窗、hour 行未封的窗口内) —— z 行是真实观测, 不算「从未产过流量」
-            return {"points": [], "totals": [], "meta": self._meta(grid, stale=degraded)}
-        earliest = min(ts for ts in (tg.earliest_row_ts(p) for p in member_parsed) if ts is not None)
-        member_obs = [tg.series_bucket_obs(p, grid) for p in member_parsed]
-        mask = tg.group_null_mask(tg.series_bucket_obs(global_parsed, grid), grid, earliest)
+        seg = tg.WINDOW_SPECS[window][1]
+        degraded = False
+        if seg == "raw":
+            grid = self._grid(window)
+            member_obs = []
+            member_blocks = []
+            for h in members:
+                try:
+                    days = self.v3cache.read_window(TORRENT_KEY_PREFIX + h, grid.t0, grid.t1)
+                    blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
+                    member_obs.append(tg.v3_grid_obs(tg.v3_series_points(blocks, grid.t0, grid.t1), grid))
+                except OSError:
+                    degraded = True  # 读取竞态: 该成员按空观测面计, degraded 走 last-good 兜底
+                    blocks = ()
+                    member_obs.append({})
+                member_blocks.append(blocks)
+            if all(tg.v3_earliest_row_ts(blocks, None) is None for blocks in member_blocks):
+                # 组从未产过流量(窗内无任何成员块)-> 空态(§08); 降级时如实标 stale
+                return {"points": [], "totals": [], "meta": self._meta(grid, stale=degraded)}
+        else:
+            aggs = []
+            for h in members:
+                try:
+                    aggs.append(self.v3cache.read_agg(TORRENT_KEY_PREFIX + h))
+                except OSError:
+                    degraded = True
+                    aggs.append(None)
+
+            def _rows(a):
+                if a is None:
+                    return ()
+                return a.hours if seg == "hour" else a.days if seg == "day" else a.months
+
+            if all(a is None or not (a.hours or a.days or a.months) for a in aggs):
+                # 组从未产过流量(成员无任何 agg 行)-> 空态(§08; v2 not p.zruns 判据的 v3 平移)
+                return {"points": [], "totals": [], "meta": self._meta(self._grid(window), stale=degraded)}
+            if seg == "month":
+                # all 视图栅格由成员月行数据面的并集定(首末自然月逐月铺格, 缺失月 = null)
+                epochs = [r.epoch for a in aggs if a is not None for r in a.months]
+                grid = tg.build_month_grid(epochs, time.time()) if epochs else self._grid(window)
+            else:
+                grid = self._grid(window)
+            member_obs = [tg.v3_agg_obs(_rows(a), grid) for a in aggs]
+        mask = tg.group_null_mask(member_obs, grid)
         points = tg.group_rate_points(member_obs, grid, mask)
         totals = tg.group_totals_points(member_obs, grid, mask)
         return self._respond(grid, points, totals, degraded=degraded)
+
+    # ---------- 单系列装配(raw / agg 两段合流, §05.3) ----------
+
+    def _payload_series(self, key: str, window: str) -> dict:
+        """global/torrent 共用单系列装配: raw 段窗 = 天文件桶点 -> 栅格展开; agg 段窗 =
+        agg 行直映栅格(all 的栅格由月行数据面定)。OSError(读取竞态)-> degraded,
+        回退 last-good / 空态标 stale(§08), 不以空态冒充无数据。"""
+        seg = tg.WINDOW_SPECS[window][1]
+        if seg == "raw":
+            grid = self._grid(window)
+            try:
+                days = self.v3cache.read_window(key, grid.t0, grid.t1)
+                blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
+                obs = tg.v3_grid_obs(tg.v3_series_points(blocks, grid.t0, grid.t1), grid)
+                degraded = False
+            except OSError:
+                obs, degraded = {}, True
+            return self._respond(grid, tg.rate_points(obs, grid), tg.series_totals_points(obs, grid), degraded=degraded)
+        grid = None if seg == "month" else self._grid(window)
+        try:
+            agg = self.v3cache.read_agg(key)
+            rows = agg.hours if seg == "hour" else agg.days if seg == "day" else agg.months
+            if seg == "month":
+                grid = tg.build_month_grid((r.epoch for r in rows), time.time()) if rows else self._grid(window)
+            obs = tg.v3_agg_obs(rows, grid)
+            degraded = False
+        except OSError:
+            obs, degraded = {}, True
+            if grid is None:
+                grid = self._grid(window)
+        return self._respond(grid, tg.rate_points(obs, grid), tg.series_totals_points(obs, grid), degraded=degraded)

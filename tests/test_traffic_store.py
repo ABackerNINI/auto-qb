@@ -96,6 +96,9 @@ v3 读侧解析缓存族(plan 26-10-04-1957 S3a §05.2, V3DayCache):
   read_window 按 v3_window_dates 只读涉及日期天文件, 目录内其余天文件零 open; 日期升序; 窗口重查零新 open
 - test_v3_day_cache_budget_lru: 字节预算 LRU —— 驻留条目文本总量 <= budget, 超出最久未用先逐出
   (恒保留最新读入的一条); 命中刷新新近度
+- test_v3_agg_cache_hit_and_invalidate: (S3b)agg.dat 解析缓存(V3DayCache.read_agg) —— 未变命中
+  (同一解析对象) / 追加变 size 失效 / 裁剪重写变小失效; 缺失文件缓存空解析哨兵(文件出现后自然失效);
+  OSError(打开/读取失败)上抛不落缓存
 
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
@@ -2016,3 +2019,46 @@ def test_v3_day_cache_budget_lru(tmp_path, monkeypatch):
     assert calls == [1, 1, 1, 1]
     cache.read_day("global", "2026-10-01")  # 最新读入的条目保留: 命中
     assert calls == [1, 1, 1, 1]
+
+
+def test_v3_agg_cache_hit_and_invalidate(tmp_path, monkeypatch):
+    """agg.dat 解析缓存(S3b §05.2/§05.3, V3DayCache.read_agg): mtime_ns+size 键控与天文件
+    同款纪律 —— 未变命中(同一解析对象) / 追加变 size 失效 / 裁剪重写变小失效; 缺失文件
+    缓存空解析哨兵(文件此后出现自然失效); OSError(打开/读取失败)上抛不落缓存"""
+    data_dir = str(tmp_path)
+    rows = (AggRow("hour", 1000, 11, 21, 6, 9, 110, 210, 3500), AggRow("day", 0, 1, 2, 3, 4, 5, 6, 86400))
+    cache = V3DayCache(data_dir)
+    # 缺失文件: 空解析结果且缓存(哨兵); 文件出现后 stat 键变化自然失效
+    empty = cache.read_agg("global")
+    assert empty.key is None and empty.hours == () and empty.days == ()
+    assert cache.read_agg("global") is empty
+    store = TrafficV3Store(data_dir)
+    store.append_agg_rows("global", rows)
+    parsed = cache.read_agg("global")
+    assert parsed.key == "global" and len(parsed.hours) == 1 and len(parsed.days) == 1
+    assert cache.read_agg("global") is parsed  # 未变命中(同一解析对象)
+    # 追加(hour 行新增): size 变 -> 失效重读
+    store.append_agg_rows("global", (AggRow("hour", 4600, 12, 22, 7, 10, 120, 220, 1800), ))
+    parsed2 = cache.read_agg("global")
+    assert parsed2 is not parsed and len(parsed2.hours) == 2
+    # 裁剪重写(hour 行全部到龄): size 严格变小 -> 失效重读(hour 清空, day 行永久保留)
+    store.trim_agg_hours("global", now=100000, rollup_window=3600)
+    parsed3 = cache.read_agg("global")
+    assert parsed3 is not parsed2 and parsed3.hours == () and len(parsed3.days) == 1
+    # OSError 上抛不落缓存: 先追加使 stat 键变化(失效), 再令打开失败 —— 上抛且不落缓存,
+    # 恢复后重读生效(不以半态冒充好数据)
+    store.append_agg_rows("global", (AggRow("hour", 8200, 13, 23, 8, 11, 130, 230, 900), ))
+    agg_path = v3_agg_file_path(data_dir, "global")
+    real_open = builtins.open
+
+    def boom(file, *a, **k):
+        if os.fspath(file) == agg_path:
+            raise OSError("simulated read race")
+        return real_open(file, *a, **k)
+
+    monkeypatch.setattr(builtins, "open", boom)
+    with pytest.raises(OSError):
+        cache.read_agg("global")
+    monkeypatch.undo()
+    parsed4 = cache.read_agg("global")
+    assert parsed4.key == "global" and len(parsed4.hours) == 1  # 恢复后重读生效(失败未落缓存)

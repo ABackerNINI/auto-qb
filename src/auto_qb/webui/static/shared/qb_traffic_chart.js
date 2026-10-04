@@ -18,10 +18,10 @@
  * ref="qbChartHost"(同一时刻只渲染一个流量形态)。
  *
  * 低频轮询(§07 表「轮询/取数」列): 打开期间按采样间隔续拉 —— 间隔从最近响应 meta.interval_s
- * 取(raw 段窗(1m-24h)即采样间隔; hour 段窗(3d/7d/30d) meta 是 3600s 桶宽而非采样间隔,
- * 夹取到配置校验上界 600s), 取不到回退 30s 常量; document.hidden 跳过(对齐 drawer.js
- * _startDrawerPoll 先例); 关闭/切走形态由 _stopDrawerPoll / _qbTeardown 显式 clearInterval
- * —— 只挂打开期间, 不后台常驻。
+ * 取(raw 段窗(1m-24h)即采样间隔; agg 段窗(3d/7d/30d/6mo/1y/all) meta 是桶宽(3600s/86400s/
+ * 标称月长)而非采样间隔, 夹取到配置校验上界 600s), 取不到回退 30s 常量; document.hidden 跳过
+ * (对齐 drawer.js _startDrawerPoll 先例); 关闭/切走形态由 _stopDrawerPoll / _qbTeardown 显式
+ * clearInterval —— 只挂打开期间, 不后台常驻。
  * meta.stale=true 的响应照常渲染(读竞态兜底位, §08, 前端不特殊处理)。
  *
  * 静默续拉(2026-10-04 修「每隔几秒闪一次」): 续拉对用户不可见 —— 模板 loading 空态只在
@@ -40,10 +40,11 @@
  */
 /* global uPlot */
 
-/* 轮询间隔边界(ms): 夹取下界 = 配置校验下限 15s(§06), 上界 = 配置校验上限 600s
- * (hour 段窗(3d/7d/30d) meta.interval_s=3600 是桶宽, 按它直拉等于一小时不刷新 —— 夹到
- * 上界保低频续拉语义); meta 缺失/非法回退 30s 常量(plan §07「采样间隔」基准值)。 */
-const _QB_POLL_MIN_MS = 15000;
+/* 轮询间隔边界(ms): 夹取下界 = 配置校验下限 1.5s(§06, A4: 采样间隔下限放宽后同步对齐,
+ * 上界 = 配置校验上限 600s (hour 及以上段窗(3d/7d/30d/6mo/1y/all) meta.interval_s 是桶宽
+ * 而非采样间隔(3600s/86400s/标称月长), 按它直拉等于一小时不刷新 —— 夹到上界保低频续拉
+ * 语义); meta 缺失/非法回退 30s 常量(plan §07「采样间隔」基准值)。 */
+const _QB_POLL_MIN_MS = 1500;
 const _QB_POLL_MAX_MS = 600000;
 const _QB_POLL_FALLBACK_MS = 30000;
 
@@ -92,10 +93,11 @@ const _QB_SCOPES = {
 };
 
 /* 桶序 -> uPlot 数据(模块级纯函数, 供 node 单测探针, 同 hrsCompareRows 先例)。
- * API 响应 points 是「桶值 | null」定长数组, null 元素没有 t; 但栅格是等距的
- * (§5.1 桶键 = first + i*interval), 任取一个非 null 点作锚即可整列重建时刻:
- *   xs[i] = points[k].t + (i - k) * interval
- * null 桶 y 置 null(uPlot spanGaps:false 断线), x 保持等距 —— 缺口位置不漂移。
+ * API 响应 points 是「桶值 | null」定长数组, null 元素没有 t; 栅格按 meta.interval_s 等距
+ * 重建(锚 = 首个非 null 点): xs[i] = t0 + (i - k) * interval, 再用非 null 点携带的真值 t
+ * 覆写(等距视图恒等; all 视图月行按行间隔 28-31 天非等距, 必须按真值落点)。null 槽 y 置
+ * null(uPlot spanGaps:false 断线), x 在两真值点之间线性内插、窗端外侧按 interval 等距外推
+ * (等距视图下与栅格公式同值 —— 缺口位置不漂移)。
  * 全 null(后端已归一为 points: [], 防御)或 interval 非法 -> null(调用方回落空态)。 */
 function _qbPointsToData(points, interval) {
   const n = points.length;
@@ -108,13 +110,28 @@ function _qbPointsToData(points, interval) {
   const xs = new Array(n);
   const up = new Array(n);
   const dl = new Array(n);
+  const known = [];
   for (let i = 0; i < n; i++) {
-    xs[i] = t0 + (i - k) * interval;
     const p = points[i];
+    if (p) known.push(i);
     up[i] = p ? p.up : null;
     dl[i] = p ? p.dl : null;
   }
-  return { xs, up, dl, anchor: { k, t0, interval } };
+  let seg = 0;  // 已消费的真值段游标(known 有序, 单遍推进)
+  for (let i = 0; i < n; i++) {
+    if (seg < known.length && known[seg] === i) {
+      xs[i] = points[i].t;  // 真值覆写
+      seg++;
+    } else if (seg === 0) {
+      xs[i] = t0 - (known[0] - i) * interval;  // 首个真值点前的外推
+    } else if (seg >= known.length) {
+      xs[i] = points[known[known.length - 1]].t + (i - known[known.length - 1]) * interval;  // 末尾外推
+    } else {
+      const a = known[seg - 1], b = known[seg];  // 两真值点之间线性内插
+      xs[i] = points[a].t + (points[b].t - points[a].t) * (i - a) / (b - a);
+    }
+  }
+  return { xs, up, dl, anchor: { k, t0, interval, xs } };
 }
 
 /* 孤点索引(两侧皆 null 的非 null 桶; uPlot points.filter 约定 = 返回要画点标的索引数组)。
@@ -300,7 +317,8 @@ window.AQB_QB_TRAFFIC = {
       this.$nextTick(() => this._qbChartBuild(scope));
       this._qbPollResync(scope);
     },
-    /* 悬停桶的时刻(null 桶也能定位: 栅格等距, 用建图时的锚推算) */
+    /* 悬停桶的时刻(null 桶也能定位: 建图时的锚携带整列真值 xs(月行按行间隔非等距);
+     * 旧锚形状无 xs 时回退等距公式推算) */
     _qbBucketTs(scope, i) {
       const a = this._qbAnchors && this._qbAnchors[scope];
       if (!a) {
@@ -308,6 +326,7 @@ window.AQB_QB_TRAFFIC = {
         const p = d && d.points ? d.points[i] : null;
         return p ? p.t : 0;
       }
+      if (a.xs) return a.xs[i];
       return a.t0 + (i - a.k) * a.interval;
     },
     _qbHoverOf(scope) {
@@ -510,19 +529,21 @@ window.AQB_QB_TRAFFIC = {
         document.documentElement.addEventListener("autoqb:themechange", this._qbOnThemeChange);
       }
     },
-    /* x 轴刻度文案(窗口三族): 1m/5m 短窗标到秒(桶可落在同分钟内, HH:MM 会重标);
+    /* x 轴刻度文案(窗口四族): 1m/5m 短窗标到秒(桶可落在同分钟内, HH:MM 会重标);
+     * 6mo/1y/all(agg day/month 段窗, §05.3)标年月 —— 月/年视图一格一格看月;
      * 3d/7d/30d(hour 段窗)标日期; 其余 raw 段窗只标时刻(日期由 tooltip 补全) */
     _qbTickLabel(ts, scope) {
       const d = new Date(ts * 1000);
       const p = (n) => String(n).padStart(2, "0");
       const w = this[_QB_SCOPES[scope].window];
+      if (w === "6mo" || w === "1y" || w === "all") return `${d.getFullYear()}-${p(d.getMonth() + 1)}`;
       if (w === "3d" || w === "7d" || w === "30d") return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
       if (w === "1m" || w === "5m") return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
       return `${p(d.getHours())}:${p(d.getMinutes())}`;
     },
-    /* 窗口按钮文案(drawer.html 窗口组; 紧凑两字格, 10 档不挤工具条) */
+    /* 窗口按钮文案(drawer.html 窗口组; 紧凑两字格, 13 档不挤工具条) */
     qbWindowLabel(w) {
-      const m = { "1m": "1分", "5m": "5分", "30m": "30分", "3h": "3时", "6h": "6时", "12h": "12时", "24h": "24时", "3d": "3天", "7d": "7天", "30d": "30天" };
+      const m = { "1m": "1分", "5m": "5分", "30m": "30分", "3h": "3时", "6h": "6时", "12h": "12时", "24h": "24时", "3d": "3天", "7d": "7天", "30d": "30天", "6mo": "6月", "1y": "1年", "all": "全部" };
       return m[w] || w;
     },
     /* uPlot 1.6.x 必要基础样式(官方 uPlot.min.css 的结构性子集; 不 vendor css 文件, 按计划

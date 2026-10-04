@@ -120,10 +120,12 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.get("/api/traffic/qb/global")
     def api_traffic_qb_global(window: str = "24h"):
-        """qB 口径全局流量时序(plan 26-10-03-0946 §08, P4): global.dat 读侧栅格离散
+        """qB 口径全局流量时序(plan 26-10-03-0946 §08, P4; v3 翻转 plan 26-10-04-1957 S3b):
+        qb-traffic-v3/global/ 天文件 + agg.dat 读侧栅格离散
 
-        与 /api/traffic/history(TM 口径按日聚合)同域对照; 窗口 1m-30d 十档(WINDOW_NAMES,
-        缺省 24h), 响应形状与单种/分组端点一致(装配单点在 server/traffic_qb.py)。
+        与 /api/traffic/history(TM 口径按日聚合)同域对照; 窗口 WINDOW_NAMES 十三档
+        (1m-30d + 6mo/1y/all, D4; 缺省 24h), 响应形状与单种/分组端点一致
+        (装配单点在 server/traffic_qb.py)。
         JSONResponse 直出(24h 窗 ≈2880 点, 跳过 jsonable_encoder 遍历 —— 同 /api/state 的口径)。
         """
         manager.web.touch()

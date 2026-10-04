@@ -1413,6 +1413,14 @@ def v3_month_epoch(ts: float) -> int:
     return int(datetime(d.year, d.month, 1).timestamp())
 
 
+def v3_next_month_epoch(ts: float) -> int:
+    """epoch 秒 -> 下一自然月 1 日 00:00 epoch(S3b all 视图逐月铺格用): ts 所在月的
+    次月 1 日 00:00(本地时区); 结果严格大于输入(逐月推进必终止)。"""
+    d = datetime.fromtimestamp(int(ts))
+    year, month = (d.year + 1, 1) if d.month == 12 else (d.year, d.month + 1)
+    return int(datetime(year, month, 1).timestamp())
+
+
 def v3_window_dates(start_epoch: float, end_epoch: float) -> frozenset:
     """查询窗口起止(epoch 秒) -> 涉及的本地日期串集合(含两端所在日; §05.2 按天加载
     的窗口 -> 日期集合解析)。end < start -> ValueError(调用方口径错误, fail-fast)。"""
@@ -1799,6 +1807,10 @@ class TrafficV3Store:
 #: (§05.2 口径 —— 驻留受本预算上界约束, 105 万行/系列的驻留方案已否决)。
 V3_DAY_CACHE_BUDGET_BYTES = 4_000_000
 
+#: agg 解析缓存条目数上界(S3b; 解析产物为紧凑 AggRow 行元组, 按条目数 LRU 逐出即可,
+#: 不占天文件的文本字节预算 —— 全年 hour 行解析产物 ≈8760 行/系列, 64 系列驻留可忽略)
+V3_AGG_CACHE_MAX_ENTRIES = 64
+
 
 class V3DayCache:
     """按天文件解析缓存(S3a §05.2, 读侧; Web 线程调用): mtime_ns+size 键控
@@ -1815,7 +1827,7 @@ class V3DayCache:
 
     S3b 接缝: 视图端点经 read_window(窗口 -> 日期集合 -> 只读涉及文件, 24h 窗至多
     2 个日期文件)取 V3ParsedDay, 块序列交给 traffic_grid.v3_series_points 归桶;
-    agg.dat 消费(hour/day/month 段)不在本类, 留 S3b。
+    agg.dat 消费(hour/day/month 段)经 read_agg 同款 mtime/size 键控缓存(S3b 加)。
     """
     def __init__(self, data_dir: str, budget: int = V3_DAY_CACHE_BUDGET_BYTES) -> None:
         self._data_dir = data_dir
@@ -1823,6 +1835,8 @@ class V3DayCache:
         self._lock = threading.Lock()
         # (系列键, 日期串) -> (stat 键 | None, 文本字节数, V3ParsedDay | None)
         self._entries: OrderedDict = OrderedDict()
+        # 系列键 -> (stat 键 | None, V3ParsedAgg)(agg.dat 缓存, S3b; 条目数上界独立于天文件字节预算)
+        self._agg_entries: OrderedDict = OrderedDict()
 
     def read_day(self, key: str, date_str: str) -> Optional[V3ParsedDay]:
         """读单天文件(带缓存): 缺失/空文件 = None; 非法键/日期 fail-fast(路径纯计算)。"""
@@ -1852,6 +1866,40 @@ class V3DayCache:
         (date_str, V3ParsedDay | None) 元组。块不跨天(00:00 硬切), 单天文件可独立解析;
         24h 窗至多 2 个日期文件(窗口只开涉及文件, 不扫全目录)。"""
         return tuple((d, self.read_day(key, d)) for d in sorted(v3_window_dates(start_epoch, end_epoch)))
+
+    def read_agg(self, key: str) -> V3ParsedAgg:
+        """读系列 agg.dat(带缓存, S3b §05.2/§05.3 端点取数入口): mtime_ns+size 键控与
+        天文件同款纪律 —— agg.dat 只在追加期变化(追加必变 size), 裁剪重写(size 严格变小)
+        两向都使 stat 键变化而失效; 缺失/空文件 = 空解析结果(None 哨兵缓存, 文件此后出现
+        自然失效); OSError(打开/读取失败)上抛 —— 端点按读取竞态 degraded 处理(§08)。
+        解析产物为紧凑 AggRow 行元组, 缓存按条目数上界(V3_AGG_CACHE_MAX_ENTRIES)LRU
+        逐出, 不占天文件的字节预算。"""
+        path = v3_agg_file_path(self._data_dir, key)
+        try:
+            st = os.stat(path)
+            stat_key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            stat_key = None  # 缺失哨兵: 文件此后出现则 stat 键变化, 缓存自然失效
+        with self._lock:
+            ent = self._agg_entries.get(key)
+            if ent is not None and ent[0] == stat_key:
+                self._agg_entries.move_to_end(key)
+                return ent[1]
+        parsed = self._read_parse_agg(path)  # 锁外解析(慢段; OSError 上抛不落缓存)
+        with self._lock:
+            self._agg_entries[key] = (stat_key, parsed)
+            self._agg_entries.move_to_end(key)
+            while len(self._agg_entries) > V3_AGG_CACHE_MAX_ENTRIES:
+                self._agg_entries.popitem(last=False)
+        return parsed
+
+    @staticmethod
+    def _read_parse_agg(path: str) -> V3ParsedAgg:
+        """agg.dat 缺省解析纪律(对齐 TrafficV3Store.read_agg): 缺失/空文件 = 空解析结果。"""
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return V3ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return parse_v3_agg_text(f.read())
 
     @staticmethod
     def _read_parse(path: str) -> Optional[V3ParsedDay]:

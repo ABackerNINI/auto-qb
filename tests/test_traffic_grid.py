@@ -1,42 +1,31 @@
-"""test_traffic_grid 测试计划: qB 口径流量图读侧栅格离散与组聚合纯函数(plan 26-10-03-0946 方案C P4, §05.1/§04.1)
+"""test_traffic_grid 测试计划: qB 口径流量图读侧栅格离散与组聚合纯函数(plan 26-10-03-0946 方案C P4, §05.1/§04.1; v3 翻转 plan 26-10-04-1957 S3a/S3b)
 
 ## 测试计划(每个测试函数一条)
 - test_build_grid_24h_and_30d: 24h 窗 30s 栅格 = 2880 桶(floor 对齐); 30d 窗恒 3600s = 720 桶; 未知窗口 ValueError
 - test_build_grid_extended_windows: 1m/5m/30m/3h/6h/12h raw 段窗(桶宽 = 采样间隔, 桶数 = 跨度/间隔) + 3d/7d hour 段窗(恒 3600s = 72/168 桶)
 - test_build_grid_unaligned_t0_extra_bucket: t0 未对齐栅格时窗首桶提前(floor), 桶数 ceil = 2881(「≈2880」口径)
 - test_build_grid_fractional_interval_ceils_bucket_width: 小数采样间隔桶宽向上取整(1.5s -> 2s 桶宽; floor 会隔桶空 = 伪断线)
-- test_hour_rows_align_by_hour_epoch: 30d 窗 hour 行按 hour_epoch 对位(桶内不再聚合); 窗外/超过 t1 的行不消费
-- test_rate_points_and_earliest_row_ts: points 形状 {"t","dl","up"} | null; earliest_row_ts 取 raw+hour 全部行(含 null 行)最早时刻, 零行 = None
-- test_group_null_mask_rules: 全局桶无观测 -> null(停机/断连); 桶末 <= 成员最早行 -> null(组尚无观测); 其余桶非 null(全员空闲出 0 线)
+- test_build_grid_day_windows_d4: 6mo/1y(D4 新档) day 段窗 —— 滚动窗涉及本地日期逐日铺格(桶键 = 本地日界 00:00, 6mo = 182d + 首尾日 / 1y 比 6mo 多 183 桶), interval 86400; 90d 不存在; all 拒绝 build_grid(数据面定栅格)
+- test_build_month_grid_all_view: all 视图数据面铺格 —— 首末月行间逐月铺桶(缺失月也在 = null 桶), 乱序/重复 epoch 取最小最大; 空集合 = 空 buckets 兜底栅格
+- test_hour_rows_align_by_hour_epoch: (v2 残留面)30d 窗 hour 行按 hour_epoch 对位(桶内不再聚合); 窗外/超过 t1 的行不消费
+- test_rate_points_and_earliest_row_ts: points 形状 {"t","dl","up"} | null; (v2)earliest_row_ts 取 raw+hour 全部行最早时刻, 零行 = None
+- test_group_null_mask_rules: (v3 重写, D6)组桶 null = 无任何成员观测(任一成员 r/z 观测即程序存活真值); 无行成员按 0 计; 借 global 判 null 退役
 - test_group_rate_sums_members_missing_zero: 组速率 = 桶内 Σ 成员均值, 无行成员按 0 计; null 桶整桶 None
 - test_group_totals_per_member_diff_then_sum: 逐成员先差分再求和 —— 单成员重置贡献 0 不拖垮全组; 成员基线缺失(窗首/无行)贡献 0; null 桶断链
 - test_group_50_members_correct_and_time_bound: 50 成员 x 满窗 2880 桶聚合正确性(抽样桶 Σ 校验) + 耗时上界(<< 采样间隔 30s, 实测断言 < 3s)
-- test_earliest_row_ts_includes_zrun_start: earliest_row_ts 把 z 行 start 计入最早观测(只剩 z 行的文件也有最早观测)
-- test_group_zrun_idle_zero_line_and_outage_null: 组图回归(组三函数零改动消费 z 派生观测) —— 全员空闲 0 线 / 停机桶借 global 判 null / 成员只剩 z 行 earliest 含 z start
-
-v2 读侧行为用例随 S3a 读侧翻转重写为 v3 口径(D6; v2 series_bucket_obs/z 覆盖展开的旧断言
-退役, 构造 v3 块/天文件喂给读侧; v2 组三函数与 build_grid 仍接线, 其用例保留至 S3b/S5 翻):
-
-v3 读侧核心(plan 26-10-04-1957 S3a, §05.1/§05.2 —— 每个测试函数一条):
-- test_v3_points_known_sequence_end_to_end: 已知序列逐桶核对 —— 天文件文本 -> 解析 -> 桶点:
-  显式 dt 漂移行 / 缺省行 / z 游程均摊定位 / n 游程后首 r 链式自洽(游标 dt 链四形态在桶点
-  层复钉); 断连(n 槽)null 点 / 停机(块间真空)null 点 / 每桶 rate/totals/时间逐一断言
-- test_v3_d1_cross_bucket_coverage: 跨桶覆盖(D1) —— z 游程单记录展开多桶 rate 同值(0,0)+
-  totals 同快照非 null(覆盖语义字面形态); r 记录暂停(显式大 dt)宽桶整段承载 —— 暂停区间
-  无 null 点不伪断, totals 增量落在恢复记录一桶
-- test_v3_mixed_interval_blocks_per_record_width: 桶宽有效 dt —— 混排 interval 分块(60s/2s/30s)
-  各归各桶(逐记录桶宽 = max(1,ceil(有效dt))), 块间 gap 被首记录覆盖桶吸收不出伪真空
-- test_v3_totals_diff_reset_baseline_and_zchain: 累计段 —— 相邻桶快照差分 / 重置桶 null(dl/up
-  逐向独立) / 窗首基线缺失 / n 槽 null 点断链后继基线缺失 / 真空断链 / z 游程快照进差分链
-  (空闲段 delta=0 链不断, 后继活跃桶恢复有基线) —— v2 语义平移
-- test_v3_same_second_merge_and_mixed_key_raw_priority: 同桶合并 —— 同秒两 raw 行速率取均值+
-  快照取最新行; raw 槽与 z 槽同 key 撞桶 -> 混桶 raw 优先(确定性钉住)
-- test_v3_vacuum_and_disconnect_distinct: 真空/断连两语义分离 —— 块间 gap 出一个 null 点
-  (t = 前块游标终值)且 gap 段无任何桶点; 块内 n 游程折叠为单个 null 点(首槽位置); 互不误报
-- test_v3_window_filter_and_empty: 窗口切片 —— ts >= t1 槽不消费 / 覆盖桶触及 t0 才保留
-  (桶首允许略早于 t0) / null 点按窗口过滤 / 窗外无数据 = 空元组(停机天然真空)
-- test_v3_series_slots_seam: S3b 接缝 —— v3_series_slots 块按 start_epoch 稳定排序展平为
-  记录时间轴(乱序输入还原时间序), 逐槽 ts/dt_s/obs 与单块 v3_block_slots 一致
+- test_earliest_row_ts_includes_zrun_start: (v2 残留面)earliest_row_ts 把 z 行 start 计入最早观测
+- test_group_zrun_idle_zero_line_and_outage_null: (v3 重写)组图回归 v3 观测面 —— 全员空闲(z 覆盖)0 线 / 全员无观测(停机)断线 / 成员只剩 z 块也有观测; 组三函数消费 v3_grid_obs 产物
+- test_v3_points_known_sequence_end_to_end: 已知序列逐桶核对 —— 天文件文本 -> 解析 -> 桶点: 显式 dt / 缺省 / z 均摊 / n 后链式自洽; 断连/停机 null; totals 差分
+- test_v3_d1_cross_bucket_coverage: 跨桶覆盖(D1) —— z 游程展开多桶同值非 null; r 暂停宽桶整段承载不伪断
+- test_v3_mixed_interval_blocks_per_record_width: 桶宽有效 dt —— 混排 interval 分块各归各桶; 天然 gap 吸收
+- test_v3_totals_diff_reset_baseline_and_zchain: 累计段 —— 差分/重置/基线缺失/断链/z 快照链
+- test_v3_same_second_merge_and_mixed_key_raw_priority: 同桶合并(均值+最新快照)/混桶 raw 优先
+- test_v3_vacuum_and_disconnect_distinct: 真空/断连两语义分离
+- test_v3_window_filter_and_empty: 窗口切片/空元组
+- test_v3_series_slots_seam: S3b 接缝 —— v3_series_slots 稳定排序展平
+- test_v3_grid_obs_expansion: (S3b)栅格展开 —— 对齐记录 1:1 落桶 / D1 宽桶中间栅格桶同值非 null(totals 首桶落增量) / 跨界记录按重叠秒加权 / null 点不参与(空桶承载) / 窗外桶不消费
+- test_v3_agg_obs_direct_mapping: (S3b)agg 行直映栅格桶(hour/day/month 同构) —— 行外窗不消费, avg/totals -> 桶值
+- test_v3_earliest_row_ts_blocks_and_agg: (S3b)earliest 计入 day/month 行 —— 块首槽(B.start 含块首 z 游程)+ agg 三层全算; 双空 = None
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V3Block
 (天文件文本路径经 format_v3_day_text -> parse_v3_day_text 打通解析接缝)。
@@ -47,7 +36,9 @@ import pytest
 
 from auto_qb.core.traffic_grid import (
     BucketObs,
+    WINDOW_SPECS,
     build_grid,
+    build_month_grid,
     earliest_row_ts,
     group_null_mask,
     group_rate_points,
@@ -55,21 +46,30 @@ from auto_qb.core.traffic_grid import (
     rate_points,
     series_bucket_obs,
     series_totals_points,
+    v3_agg_obs,
+    v3_earliest_row_ts,
+    v3_grid_obs,
     v3_series_points,
     v3_series_slots,
     v3_totals_points,
 )
 from auto_qb.core.traffic_store import (
+    AggRow,
     HourRow,
     ParsedSeries,
     RawRow,
     V3Block,
     V3NullRun,
+    V3ParsedAgg,
     V3Sample,
     V3ZeroRun,
     ZRow,
     format_v3_day_text,
     parse_v3_day_text,
+    v3_date_str_epoch,
+    v3_month_epoch,
+    v3_next_month_epoch,
+    v3_window_dates,
 )
 
 #: 固定"现在"(2027-01-15, 纯测试时刻; 恰为 30 与 3600 的公倍数, 对齐断言干净)
@@ -138,6 +138,41 @@ def test_build_grid_fractional_interval_ceils_bucket_width():
     assert g.last < NOW <= g.last + 2  # 覆盖 [t0, t1) 不变
 
 
+def test_build_grid_day_windows_d4():
+    """6mo/1y(D4 新档, plan 26-10-04-1957 §05.3) day 段窗: 滚动窗(now-182d/365d..now)
+    涉及的本地日期逐日铺格, 桶键 = 本地日界 00:00(与 agg day 行 epoch 同源), 窗首桶允许
+    早于 t0(首日不满宽); 90d 拍板延后不在窗口集; all 拒绝 build_grid(数据面定栅格)"""
+    g = build_grid("6mo", NOW)
+    assert g.interval == 86400 and g.segment == "day" and g.t0 == NOW - 182 * 86400 and g.t1 == NOW
+    dates = sorted(v3_window_dates(g.t0, g.t1 - 1))
+    assert list(g.buckets) == [v3_date_str_epoch(d) for d in dates]  # 与窗口日期游走同源(跨夏令时时区一致)
+    assert g.buckets[0] <= g.t0 < g.buckets[0] + 86400  # 窗首桶 = t0 所在日界(允许不满宽)
+    assert g.buckets[-1] < g.t1  # 末桶在窗内(当日, 无 day 行 = null 桶)
+    g1 = build_grid("1y", NOW)
+    assert g1.interval == 86400 and g1.segment == "day" and g1.t0 == NOW - 365 * 86400
+    assert len(g1.buckets) - len(g.buckets) == 183  # 365d - 182d = 183 个日界桶(时区无关)
+    with pytest.raises(ValueError):
+        build_grid("90d", NOW)  # D4 拍板延后(90d 视图不存在)
+    with pytest.raises(ValueError):
+        build_grid("all", NOW)  # all 栅格由 agg month 行数据面定 -> build_month_grid
+
+
+def test_build_month_grid_all_view():
+    """all 视图数据面铺格(S3b §05.3): 首末 month 行 epoch 之间逐月铺桶(缺失月也在 =
+    null 桶, 折线断开); 乱序/重复 epoch 只取最小最大; 标称月长 meta; 空集合 = 空 buckets
+    兜底栅格(端点空态面)"""
+    m0 = v3_month_epoch(NOW)
+    m1 = v3_next_month_epoch(m0)
+    m2 = v3_next_month_epoch(m1)
+    m3 = v3_next_month_epoch(m2)
+    mg = build_month_grid((m3, m0, m2, m0), NOW)  # 乱序 + 重复: 缺失月 m1 也在栅格
+    assert mg.name == "all" and mg.segment == "month" and mg.interval == 30 * 86400
+    assert mg.buckets == (m0, m1, m2, m3)
+    assert mg.t0 == m0 and mg.t1 == m3 + 1
+    assert build_month_grid((), NOW).buckets == ()  # 无月行: 空 buckets(全 null -> 空态)
+    assert build_month_grid((), NOW).interval == 30 * 86400
+
+
 # ---------------- 单系列离散(§05.1) ----------------
 # (v2 raw 归桶/差分/z 覆盖展开用例已随 S3a 读侧翻转重写为 v3 口径, 见文件尾 v3 区)
 
@@ -177,16 +212,19 @@ def test_rate_points_and_earliest_row_ts():
 
 
 def test_group_null_mask_rules():
-    """借全局系列当真值源: 全局无观测桶 null; 桶末 <= 成员最早行 null; 其余桶非 null"""
+    """组桶 null 判定(v3 重写, D6: 借 global 判 null 退役, §05.1): 桶内任一成员有观测
+    (r/z)即非 null —— v3 采样器全局同拍, 单成员观测 = 程序存活真值; 无行成员按 0 计;
+    全员无观测(停机/断连/组尚无任何观测)-> null"""
     g = build_grid("24h", NOW, 30.0)
     b0, b1, b2 = g.buckets[10], g.buckets[11], g.buckets[12]
-    g_obs = {b0: BucketObs(1, 1, 1, 1), b2: BucketObs(1, 1, 1, 1)}  # b1 全局无行 = 停机
-    mask = group_null_mask(g_obs, g, earliest_member_ts=None)
-    assert mask[10] is False and mask[11] is True and mask[12] is False
-    # 成员最早行在 b2 桶中间: b2 桶未"早于"最早行(非 null), b1 及以前全 null
-    mask2 = group_null_mask(g_obs, g, earliest_member_ts=b2 + 10)
-    assert mask2[10] is True and mask2[11] is True and mask2[12] is False
-    assert all(mask2[:10])
+    m1 = {b0: BucketObs(1, 1, 1, 1), b2: BucketObs(1, 1, 1, 1)}  # m1 在 b1 无行
+    m2 = {b1: BucketObs(5, 5, 1, 1)}  # b1 只有 m2 有行
+    mask = group_null_mask([m1, m2], g)
+    assert mask[10] is False and mask[11] is False and mask[12] is False
+    # b1 全员无观测 -> null; 早于全部成员最早观测的桶必然无观测, 一并 null(v2 earliest 门被吞并)
+    mask2 = group_null_mask([m1], g)
+    assert mask2[10] is False and mask2[11] is True and mask2[12] is False
+    assert all(m for m in mask2[:10])  # 组尚无观测的桶全 null
 
 
 def test_group_rate_sums_members_missing_zero():
@@ -251,12 +289,10 @@ def test_group_50_members_correct_and_time_bound():
             for i in range(2880) if g.first + i * 30 + 5 < g.t1
         ]
         members.append(_series(rows))
-    global_rows = [_row(g.first + i * 30 + 1, 1, 1, i, 0) for i in range(2880) if g.first + i * 30 + 1 < g.t1]
-    g_obs = series_bucket_obs(_series(global_rows), g)
 
     t_start = time.perf_counter()
     member_obs = [series_bucket_obs(p, g) for p in members]
-    mask = group_null_mask(g_obs, g, min(earliest_row_ts(p) for p in members))
+    mask = group_null_mask(member_obs, g)
     points = group_rate_points(member_obs, g, mask)
     totals = group_totals_points(member_obs, g, mask)
     elapsed = time.perf_counter() - t_start
@@ -283,27 +319,31 @@ def test_earliest_row_ts_includes_zrun_start():
     assert earliest_row_ts(_series(raws, zruns=zruns)) == NOW - 8000  # raw 更晚: 取 z start
 
 
-# ---------------- 组图回归(P3: 组三函数零改动消费 z 派生观测) ----------------
+# ---------------- 组图回归(v3 观测面, S3b D6 重写) ----------------
 
 
 def test_group_zrun_idle_zero_line_and_outage_null():
-    """组图回归: 全员空闲(z 覆盖)出 0 线 / 停机桶借 global 判 null(即使成员有 z 派生观测) /
-    成员只剩 z 行时 earliest 含 z start 不再误判「组尚无任何观测」—— 组三函数零改动"""
+    """组图回归(v3 观测面): 全员空闲(z 覆盖)出 0 线 / 全员无观测(停机)整桶断线 /
+    成员只剩 z 块也有观测(z 游程按均摊槽展开) —— 组三函数消费 v3_grid_obs 产物,
+    「借 global 判 null」退役后停机/空闲由成员自身观测面区分"""
     g = build_grid("24h", NOW, 30.0)
-    b0, b1, b2 = g.buckets[100], g.buckets[101], g.buckets[102]
-    zruns = (ZRow(start=b0, end=b2 + 29, dl_total=500, up_total=100), )
-    member = _series(zruns=zruns)  # 成员只剩 z 行: b0..b2 全部 z 派生观测
-    member_obs = series_bucket_obs(member, g)
-    g_obs = {b0: BucketObs(0, 0, 500, 100), b2: BucketObs(0, 0, 500, 100)}  # global: b1 无行 = 停机
-    mask = group_null_mask(g_obs, g, earliest_row_ts(member))
-    assert mask[100] is False and mask[101] is True and mask[102] is False  # 停机桶借 global 判 null
-    pts = group_rate_points([member_obs], g, mask)
-    assert pts[100] == {"t": b0, "dl": 0, "up": 0}  # 全员空闲 0 线(非 null)
-    assert pts[101] is None  # 停机桶整桶 None
+    b0, b1, b2, b3 = g.buckets[100], g.buckets[101], g.buckets[102], g.buckets[103]
+    # 成员块: r @ b0+30(桶 b0, w=30 对齐) + z 游程 2 槽(桶 b1/b2, 速率 (0,0), 快照恒定)
+    blk = V3Block(b0 + 30, 30, (V3Sample(1, 1, 100, 50), V3ZeroRun(2, 100, 50)))
+    member_obs = [v3_grid_obs(v3_series_points((blk, ), g.t0, g.t1), g)]
+    mask = group_null_mask(member_obs, g)
+    assert mask[100] is False and mask[101] is False and mask[102] is False
+    assert mask[103] is True  # z 游程之后无新块 = 停机: 全员无观测 -> null(成员观测面裁决)
+    pts = group_rate_points(member_obs, g, mask)
+    assert pts[100] == {"t": b0, "dl": 1, "up": 1}
+    assert pts[101] == {"t": b1, "dl": 0, "up": 0}  # z 槽 = 空闲 0 线(非 null)
     assert pts[102] == {"t": b2, "dl": 0, "up": 0}
-    totals = group_totals_points([member_obs], g, mask)
+    assert pts[103] is None  # 停机桶整桶 None
+    totals = group_totals_points(member_obs, g, mask)
     assert totals[100] == {"t": b0, "dl": 0, "up": 0}  # 窗首基线缺失贡献 0(不出洞)
-    assert totals[102] == {"t": b2, "dl": 0, "up": 0}  # 空闲段 delta=0
+    assert totals[101] == {"t": b1, "dl": 0, "up": 0}  # z 快照(100,50)同值: 空闲段 delta=0
+    assert totals[102] == {"t": b2, "dl": 0, "up": 0}
+    assert totals[103] is None
 
 
 # ---------------- v3 读侧核心(plan 26-10-04-1957 S3a, §05.1/§05.2) ----------------
@@ -545,3 +585,97 @@ def test_v3_series_slots_seam():
     assert slots[0].obs == (1, 1, 10, 20) and not slots[0].is_zero and slots[0].dt_s == 30.0
     assert slots[1].obs == (2, 2, 30, 40) and not slots[1].is_zero
     assert all(s.obs == (0, 0, 30, 40) and s.is_zero and s.dt_s == 60.0 for s in slots[2:])
+
+
+# ---------------- v3 视图映射(S3b, §05.3): 桶点流/agg 行 -> 响应栅格 ----------------
+
+
+def test_v3_grid_obs_expansion():
+    """栅格展开(v3_grid_obs, D1 覆盖的栅格形态): 对齐记录 1:1 落桶 / D1 宽桶中间栅格桶
+    同值非 null(totals 首个覆盖桶落增量, 其余 delta=0 链不断) / 跨界记录按重叠秒加权 /
+    null 点不参与(空桶承载断线) / 窗外栅格桶不消费"""
+    g = build_grid("24h", NOW, 30.0)
+    b0 = g.first + 3000  # 任意栅格桶(3000 为 30 的整倍)
+    # 1:1 对齐: 块首槽恰在 b0+30(w=30) -> 桶 [b0, b0+30) = 栅格桶 b0
+    blk = V3Block(b0 + 30, 30, (V3Sample(10, 20, 1000, 500), V3Sample(20, 40, 2000, 900)))
+    obs = v3_grid_obs(v3_series_points((blk, ), g.t0, g.t1), g)
+    assert obs[b0] == BucketObs(10, 20, 1000, 500)
+    assert obs[b0 + 30] == BucketObs(20, 40, 2000, 900)
+    assert b0 - 30 not in obs and b0 + 60 not in obs  # 窗外/无观测桶不出现在观测表
+    # D1 宽桶: 显式 dt=150s(w=150)的记录覆盖 [b1, b1+150) —— 5 个栅格桶同值非 null 同快照
+    b1 = g.first + 30
+    blk2 = V3Block(g.first + 30, 30, (V3Sample(1, 1, 100, 50), V3Sample(2, 2, 200, 100, dt_ms=150000)))
+    pts2 = v3_series_points((blk2, ), g.t0, g.t1)
+    obs2 = v3_grid_obs(pts2, g)
+    f = g.first
+    assert obs2[f] == BucketObs(1, 1, 100, 50)  # 首记录对齐桶
+    for t in (f + 30, f + 60, f + 90, f + 120, f + 150):
+        assert obs2[t] == BucketObs(2, 2, 200, 100), t  # 宽桶覆盖的中间栅格桶同值(防伪洞)
+    assert f + 180 not in obs2
+    tot = series_totals_points(obs2, g)
+    assert tot[g.buckets.index(f + 30)] == {"t": f + 30, "dl": 100, "up": 50}  # 增量落首个覆盖桶
+    assert tot[g.buckets.index(f + 60)] == {"t": f + 60, "dl": 0, "up": 0}  # 同快照 delta=0 链不断
+    assert tot[g.buckets.index(f + 150)] == {"t": f + 150, "dl": 0, "up": 0}
+    # 跨界加权: r2 显式 dt=45s(w=45)覆盖 [T, T+45) -> 桶 T 分 30s / 桶 T+30 分 15s;
+    # 后继 r3(标称 30s)覆盖 [T+45, T+75) 与 r2 共享桶 T+30(15s+15s)—— 加权均值
+    T = b0 + 30
+    blk3 = V3Block(T, 30, (V3Sample(200, 0, 100, 0), V3Sample(100, 0, 200, 0, dt_ms=45000), V3Sample(50, 0, 300, 0)))
+    pts3 = v3_series_points((blk3, ), g.t0, g.t1)
+    obs3 = v3_grid_obs(pts3, g)
+    assert obs3[T - 30] == BucketObs(200, 0, 100, 0)  # r1 @T: 桶 [T-30, T) 恰对齐
+    assert obs3[T] == BucketObs(100, 0, 200, 0)  # r2 @T+45 w=45: 桶 [T, T+30) 只有它覆盖(30s)
+    assert obs3[T + 30] == BucketObs(75, 0, 300, 0)  # (100*15 + 50*15)/30 = 75; 快照取覆盖末端最晚的 r3
+    assert obs3[T + 60] == BucketObs(50, 0, 300, 0)  # r3 @T+75: 桶 [T+60, T+75) 15s(独占)
+    # null 点(n 游程折叠)不参与归桶: 桶无观测 = null, 断线语义由空桶承载
+    blk4 = V3Block(
+        T + 300, 30, (V3Sample(9, 9, 900, 0), V3NullRun(2, dt_ms=60000), V3Sample(9, 9, 999, 0, dt_ms=30000))
+    )
+    obs4 = v3_grid_obs(v3_series_points((blk4, ), g.t0, g.t1), g)
+    assert obs4[T + 270] == BucketObs(9, 9, 900, 0)
+    assert T + 300 not in obs4 and T + 330 not in obs4  # n 游程段无观测 -> 空(null)
+    assert obs4[T + 360] == BucketObs(9, 9, 999, 0)
+
+
+def test_v3_agg_obs_direct_mapping():
+    """agg 行直映栅格桶(S3b §05.3): hour/day/month 行 epoch 即桶键, avg/totals -> 桶值
+    (max/cov_s 不上图); 窗外行(不在栅格桶集)不消费; 缺行桶不在返回表 = null"""
+    g30 = build_grid("30d", NOW)  # hour 栅格(3600 floor 对齐)
+    h_in = g30.first + 7200
+    h_out = g30.first - 3600  # 窗前
+    rows = (
+        AggRow("hour", h_in, 111, 222, 33, 44, 1000, 500, 3600),
+        AggRow("hour", h_out, 1, 1, 1, 1, 1, 1, 3600),
+    )
+    obs = v3_agg_obs(rows, g30)
+    assert obs == {h_in: BucketObs(111, 33, 1000, 500)}
+    # day 行(6mo 栅格 = 本地日界桶)与 month 行(all 栅格)同构直映
+    m0 = v3_month_epoch(NOW)
+    gm = build_month_grid((m0, v3_next_month_epoch(m0)), NOW)
+    mrows = (
+        AggRow("month", m0, 7, 9, 8, 10, 700, 800, 2 * 86400), AggRow("month", m0 - 86400, 1, 1, 1, 1, 1, 1, 86400)
+    )
+    assert v3_agg_obs(mrows, gm) == {m0: BucketObs(7, 8, 700, 800)}
+
+
+def test_v3_earliest_row_ts_blocks_and_agg():
+    """v3 earliest 计入 day/month 行(S3b, §05.4): 块首槽实测时刻(B.start 即首槽, 含块首
+    z 游程)+ agg hour/day/month 三层行 epoch 全算 —— 观测面全层的最早证据;
+    双空(无块无 agg 行)= None(组端点空态判据「组从未产过流量」的 v3 口径)"""
+    agg = V3ParsedAgg(
+        key="k",
+        hours=(AggRow("hour", 5000, 1, 1, 1, 1, 1, 1, 3600), ),
+        days=(AggRow("day", 1000, 1, 1, 1, 1, 1, 1, 86400), ),
+        months=(),
+        bad_lines=0,
+        data_lines=2,
+    )
+    blocks = (V3Block(3000, 30, (V3Sample(1, 1, 1, 1), )), )
+    assert v3_earliest_row_ts(blocks, agg) == 1000  # day 行最早
+    assert v3_earliest_row_ts((), agg) == 1000
+    assert v3_earliest_row_ts(blocks, None) == 3000  # 只看块
+    assert v3_earliest_row_ts((V3Block(
+        2000,
+        30,
+        (V3ZeroRun(2, 1, 1)),
+    ), ), None) == 2000  # 块首 z 游程 = B.start
+    assert v3_earliest_row_ts((), None) is None  # 双空 = 组从未产过流量
