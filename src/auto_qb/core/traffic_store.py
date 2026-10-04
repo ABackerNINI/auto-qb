@@ -35,14 +35,23 @@ enabled=false(含 qb_traffic None)全程零文件零目录(保守默认, 黄金�
 
 写路径(§02.4 左, 仅主循环线程 —— 黄金法则 5, 调用方义务; 本层无锁):
 - 平时每次采样 open("a") 追加一行 raw + flush(进程崩溃丢 <=1 行), 不做常驻句柄;
-- 小时封口(每小时首个采样触发一次, 逐系列): 读全文件 -> 归并未封桶的 raw 行出 hour 行
-  (avg/max; totals 取本小时末累计快照) -> 按窗裁剪(raw 段留 raw_window、hour 段留
-  rollup_window, 窗口值由调用方从 config.qb_traffic 现取) -> 写 *.tmp -> os.replace
-  原子替换(tmp+replace 纪律对齐 utils.atomic_write; 行尾固定 \\n, dat 是行式文本,
-  对齐 TM history_traffic.dat 先例)。封口对同一小时桶幂等(upsert: 重封替换同桶 hour 行,
-  内容无变化则跳过重写 —— 黄金法则 1)。
-- 封口扫描(seal_sweep)是 catch-up 语义: 归并 < 当前桶的全部「有 raw 行且尚无 hour 行」
-  的桶 —— 每小时首个采样触发只保证触发频率, 桶本身不依赖触发不缺席: 重启跨度(停机跨越
+- 零值行程追加(append_z_run, v2 plan 26-10-04-0721 §02.3): 与 raw 追加同款纪律
+  (open("a") + flush 崩溃丢 <=1 行; 尾部半行先补 \\n); 文件不存在则建头行 + key 行,
+  头行直接写 v2; 存量 v1 头行文件追加前先做一次内容保持重写(仅头行升 v2, 数据行
+  逐字节不变, 绕过 same_content 短路)—— R3 硬不变式: 绝不向 v1 头行文件追加 z 行
+  (v1 解析器把 z 行判坏行, 反复追加会累积坏行触发整文件隔离), 升级被读侧竞态占满
+  重试后放弃则本轮不追加(OSError 上抛, 调用方按落盘失败口径处理); z 追加与 raw
+  追加同样推进 index 条目 updated_at(空闲期不因「无 raw 行」被误判超龄淘汰);
+- 小时封口(每小时首个采样触发一次, 逐系列): 读全文件 -> 归并未封桶的 raw 行与 z 覆盖
+  出 hour 行(avg/max; totals 取本小时末观测快照 —— z 覆盖桶末时取行程快照; 混合桶
+  avg 按 interval_s 加权, 见 _aggregate_bucket) -> 按窗裁剪(raw 与 z 行属 raw 段留
+  raw_window(z 行按 end 判)、hour 段留 rollup_window, 窗口值由调用方从
+  config.qb_traffic 现取) -> 写 *.tmp -> os.replace 原子替换(tmp+replace 纪律对齐
+  utils.atomic_write; 行尾固定 \\n, dat 是行式文本, 对齐 TM history_traffic.dat 先例;
+  重写输出序 = 头行(v2) + key + hour + z + raw)。封口对同一小时桶幂等(upsert: 重封
+  替换同桶 hour 行, 内容无变化则跳过重写 —— 黄金法则 1)。
+- 封口扫描(seal_sweep)是 catch-up 语义: 归并 < 当前桶的全部「有 raw 行或被 z 行覆盖
+  且尚无 hour 行」的桶 —— 每小时首个采样触发只保证触发频率, 桶本身不依赖触发不缺席: 重启跨度(停机跨越
   整小时, 恢复后首个触发补封停机前残桶)与断连跳桶都不会把已产出的 raw 行永远留在 30d
   视图之外; 已封桶不重算(空闲系列每小时扫描零写放大)。
 - rewrite 遇 PermissionError(Windows 读侧竞态: os.replace 目标被打开)退避重试 x3、
@@ -156,6 +165,11 @@ REWRITE_BACKOFF_S = 0.05
 
 #: 小时桶宽(秒)
 HOUR_SECONDS = 3600
+
+#: 混合桶加权均值的缺省采样间隔(秒; 与 config QbTraffic.sample_interval 缺省 30 同值):
+#: seal_sweep/seal_hour 的 interval_s 缺省 None 时取此值 —— 默认路径行为确定且向后兼容
+#: (纯活跃/纯空闲桶的 hour 行与该值无关); P2 起调用方传 config.qb_traffic.sample_interval 真实值
+DEFAULT_SAMPLE_INTERVAL_S = 30.0
 
 #: 单种哈希合法字符(infohash 实际为 hex, 但 FakeTorrent 式测试哈希与宽容口径取
 #: 文件名安全集: 字母/数字/下划线/连字符 —— 排除路径分隔符与点, 非法键 fail-fast)
@@ -396,17 +410,89 @@ class TrafficDatStore:
             f.write(line + "\n")
             f.flush()  # 每行即冲: 进程崩溃丢 <=1 行(§02.4)
 
-    def seal_hour(self, key: str, hour_epoch: int, now: float, raw_window: float, rollup_window: float) -> bool:
-        """单桶封口 + 按窗裁剪(§02.4): 指定桶 upsert 重封(测试与迟到行兜底入口)"""
-        return self._seal_file(key, now, raw_window, rollup_window, force_buckets=(hour_epoch, ))
+    def append_z_run(self, key: str, start: int, end: int, dl_total: int, up_total: int) -> None:
+        """追加一行零值行程(v2 §02.3): 与 append_point 同款追加纪律 —— open("a") + flush
+        (崩溃丢 <=1 行); 崩溃残留的尾部半行先补一个换行(不与残行合并); 文件不存在则建
+        头行 + key 行, 头行直接写 v2。
 
-    def seal_sweep(self, current_bucket: int, now: float, raw_window: float, rollup_window: float) -> int:
+        R3 硬不变式: 绝不向 v1 头行文件追加 z 行 —— 追加前检查头行版本, v1 先做一次
+        内容保持重写(仅头行升 v2)再追加; 升级失败(读侧竞态占满重试)本轮不追加,
+        OSError 上抛(调用方按落盘失败口径处理, 原文件完好)。end 为行程终点 = 最后
+        数据活动时刻, 单种条目 updated_at 据此推进(与 raw 追加同口径)。
+        """
+        path = self.series_path(key)  # 非法键在此 fail-fast
+        self._ensure_layout()
+        prefix = ""
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            prefix = f"{HEADER_LINE_V2}\nkey,{key}\n"  # 新文件头行直接 v2(§02.3)
+        else:
+            with open(path, "rb") as f:
+                f.seek(-1, os.SEEK_END)
+                if f.read(1) != b"\n":
+                    prefix = "\n"
+            if not self._upgrade_header_v1_to_v2(path):
+                raise OSError(f"{os.path.basename(path)} v1 头行升级失败(读侧竞态), 本轮 z 行未追加")
+        if key.startswith(TORRENT_KEY_PREFIX):
+            self._touch_entry(key[len(TORRENT_KEY_PREFIX):], float(end))
+        line = format_z_row(start, end, dl_total, up_total)
+        with open(path, "a", encoding="utf-8", newline="\n") as f:
+            if prefix:
+                f.write(prefix)
+            f.write(line + "\n")
+            f.flush()  # 每行即冲: 进程崩溃丢 <=1 行(§02.4)
+
+    def _upgrade_header_v1_to_v2(self, path: str) -> bool:
+        """R3 头行升级: v1 头行文件做一次内容保持重写(仅首行换 v2, 其余行逐字节不变,
+        绕过 same_content 短路 —— 升级本身就是本次的写目的); 重写失败(读侧竞态)返回
+        False, 调用方必须放弃本轮 z 追加(硬不变式: 未升级绝不追加)。头行非 v1(已是
+        v2 / 畸形头行)不动返回 True —— 畸形头行走既有损坏阈值口径, 不在此扩权。"""
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError as e:
+            logger.warning(f"流量存储 | {os.path.basename(path)} 头行读取失败(z 行不追加): {e}")
+            return False
+        head, sep, rest = text.partition("\n")
+        if head.strip() != HEADER_LINE:
+            return True  # 已是 v2 或畸形头行: 畸形文件由损坏阈值处置, 追加口径同 append_point
+        payload = HEADER_LINE_V2 + ("\n" + rest if sep else "\n")
+        if not self._write_payload(path, payload):
+            return False
+        logger.debug(f"流量存储 | {os.path.basename(path)} 头行 v1 -> v2(首 z 追加, R3)")
+        return True
+
+    def seal_hour(
+        self,
+        key: str,
+        hour_epoch: int,
+        now: float,
+        raw_window: float,
+        rollup_window: float,
+        interval_s: Optional[float] = None
+    ) -> bool:
+        """单桶封口 + 按窗裁剪(§02.4): 指定桶 upsert 重封(测试与迟到行兜底入口)
+
+        interval_s: 混合桶加权均值的采样间隔(秒, plan 26-10-04-0721 §04.2); None 取
+        DEFAULT_SAMPLE_INTERVAL_S(纯活跃/纯空闲桶不受影响, 默认路径向后兼容)。
+        """
+        return self._seal_file(key, now, raw_window, rollup_window, force_buckets=(hour_epoch, ), interval_s=interval_s)
+
+    def seal_sweep(
+        self,
+        current_bucket: int,
+        now: float,
+        raw_window: float,
+        rollup_window: float,
+        interval_s: Optional[float] = None
+    ) -> int:
         """小时封口扫描(catch-up 语义): global + torrents/ 全系列各补封全部未封桶(§02.4「逐系列」)
 
-        归并 < current_bucket 的「有 raw 行且尚无 hour 行」的桶 —— 触发频率由采样器保证
-        (每小时首个采样), 桶本身不依赖触发不缺席: 重启跨度 / 断连跳桶不会把已产出的 raw 行
-        永远留在 hour 段之外; 已封桶不重算。顺带完成按窗裁剪(裁剪只在重写时发生, 空闲系列的
+        归并 < current_bucket 的「有 raw 行或被 z 行覆盖且尚无 hour 行」的桶 —— 触发
+        频率由采样器保证(每小时首个采样), 桶本身不依赖触发不缺席: 重启跨度 / 断连跳桶
+        不会把已产出的 raw/z 行永远留在 hour 段之外; 已封桶不重算。行程跨小时边界时
+        按交集拆权重进相邻两桶(§04.2)。顺带完成按窗裁剪(裁剪只在重写时发生, 空闲系列的
         窗外残行留待下次活动重写时自洁 —— 读侧按窗取数不受影响)。
+        interval_s 语义同 seal_hour(None 取缺省 30s 口径, P2 起调用方传真实配置值)。
         返回发生 rewrite 的文件数(日志/测试用)。
         """
         keys = [GLOBAL_KEY]
@@ -416,7 +502,7 @@ class TrafficDatStore:
                     keys.append(TORRENT_KEY_PREFIX + name[:-len(DAT_SUFFIX)])
         rewritten = 0
         for key in keys:
-            if self._seal_file(key, now, raw_window, rollup_window, due_before=current_bucket):
+            if self._seal_file(key, now, raw_window, rollup_window, due_before=current_bucket, interval_s=interval_s):
                 rewritten += 1
         return rewritten
 
@@ -428,15 +514,19 @@ class TrafficDatStore:
         rollup_window: float,
         force_buckets: tuple = (),
         due_before: Optional[int] = None,
+        interval_s: Optional[float] = None,
     ) -> bool:
         """单文件封口: 归并待封桶出 hour 行 + 按窗裁剪, 有变化才重写; 返回是否 rewrite
 
         待封桶 = force_buckets(直接指定, upsert 重封 —— 已有同桶 hour 行也被替换)∪
-        (due_before 之下「有 raw 行且尚无 hour 行」的桶 —— catch-up 补封)。桶内全 null 行
-        不产 hour 行(空桶 = null, §05.1 —— 30d 视图由缺行呈现断线)。裁剪: raw 段留
-        ts >= now - raw_window, hour 段留 hour_epoch >= now - rollup_window(边界含)。
-        内容无变化(无新行、无裁剪、无坏行、重封行与旧行相同)则跳过重写 —— 空闲系列每小时
-        扫描零写放大(黄金法则 1); 坏行(尾部半行等)不算内容一致 —— 随重写一并清除(自洁)。
+        (due_before 之下「有 raw 行或被 z 行覆盖且尚无 hour 行」的桶 —— catch-up 补封,
+        z 行覆盖的桶按行程与桶的交集逐桶纳入)。桶内全 null 行不产 hour 行(空桶 = null,
+        §05.1); 被行程覆盖的桶可产(全空闲桶 avg=0/max=0, 混合桶加权 —— §04.2)。
+        裁剪: raw 段留 ts >= now - raw_window, z 行同属 raw 段按 end >= now - raw_window
+        留置(其派生 hour 行在 hour 段按 rollup_window 独立留置), hour 段留
+        hour_epoch >= now - rollup_window(边界含)。内容无变化(无新行、无裁剪、无坏行、
+        重封行与旧行相同, z 行纳入比较)则跳过重写 —— 空闲系列每小时扫描零写放大(黄金
+        法则 1); 坏行(尾部半行等)不算内容一致 —— 随重写一并清除(自洁)。
         """
         path = self.series_path(key)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
@@ -447,38 +537,53 @@ class TrafficDatStore:
         due = set(force_buckets)
         if due_before is not None:
             raw_buckets = {(r.ts // HOUR_SECONDS) * HOUR_SECONDS for r in parsed.raw if r.ts < due_before}
-            due |= raw_buckets - {h.hour_epoch for h in parsed.hours}
+            z_buckets = set()
+            for z in parsed.zruns:  # 行程覆盖的桶逐桶纳入(span <= 86400, 至多 25 桶)
+                b = (z.start // HOUR_SECONDS) * HOUR_SECONDS
+                top = (z.end // HOUR_SECONDS) * HOUR_SECONDS
+                while b <= top:
+                    if b < due_before:
+                        z_buckets.add(b)
+                    b += HOUR_SECONDS
+            due |= (raw_buckets | z_buckets) - {h.hour_epoch for h in parsed.hours}
         new_hours = []
         for b in sorted(due):
-            row = self._aggregate_bucket(parsed.raw, b)
+            row = self._aggregate_bucket(parsed.raw, parsed.zruns, b, interval_s)
             if row is not None:
                 new_hours.append(row)
         replaced = {h.hour_epoch for h in new_hours}
         kept_raw = sorted((r for r in parsed.raw if r.ts >= now - raw_window), key=lambda r: r.ts)
+        kept_z = tuple(sorted((z for z in parsed.zruns if z.end >= now - raw_window), key=lambda z: z.start))
         kept_hours = sorted(
             (h for h in parsed.hours if h.hour_epoch >= now - rollup_window and h.hour_epoch not in replaced),
             key=lambda h: h.hour_epoch,
         ) + new_hours
         same_content = (
             kept_hours == list(parsed.hours) and kept_raw == sorted(parsed.raw, key=lambda r: r.ts) and
-            parsed.bad_lines == 0
+            kept_z == tuple(sorted(parsed.zruns, key=lambda z: z.start)) and parsed.bad_lines == 0
         )
         if same_content:
             self._flush_index()  # 追加期内存推进的 updated_at 在封口时点落盘(§02.5)
             return False
-        if not self._rewrite_file(path, key, tuple(kept_hours), tuple(kept_raw)):
+        if not self._rewrite_file(path, key, tuple(kept_hours), tuple(kept_raw), kept_z):
             return False  # rewrite 被读侧竞态占满重试后放弃: 原文件完好, 下轮封口自然补上
         self._flush_index()
         return True
 
-    def _rewrite_file(self, path: str, key: str, hours: tuple, raws: tuple) -> bool:
-        """整文件重写: 同目录 tmp -> fsync -> os.replace(纪律对齐 utils.atomic_write;
+    def _rewrite_file(self, path: str, key: str, hours: tuple, raws: tuple, zruns: tuple = ()) -> bool:
+        """整文件重写: 输出序 = 头行(v2, R3: 内容重写即升级) + key 行 + hour 行 + z 行 +
+        raw 行(§02.3); 同目录 tmp -> fsync -> os.replace(纪律对齐 utils.atomic_write;
         行尾固定 \\n —— dat 是行式文本, 对齐 TM history.dat 先例, 与追加行一致)。
         PermissionError(Windows 读侧竞态)退避重试 x3, 仍失败放弃本轮(原文件完好)。"""
-        lines = [HEADER_LINE, f"key,{key}"]
+        lines = [HEADER_LINE_V2, f"key,{key}"]
         lines.extend(format_hour_row(h) for h in hours)
+        lines.extend(format_z_row(z.start, z.end, z.dl_total, z.up_total) for z in zruns)
         lines.extend(format_raw_row(r.ts, r.dl_rate, r.up_rate, r.dl_total, r.up_total) for r in raws)
-        payload = "\n".join(lines) + "\n"
+        return self._write_payload(path, "\n".join(lines) + "\n")
+
+    def _write_payload(self, path: str, payload: str) -> bool:
+        """payload 整文件写入: 同目录 tmp -> fsync -> os.replace; PermissionError
+        (Windows 读侧竞态)退避重试 x3, 仍失败放弃(删 tmp, 返回 False, 原文件完好)。"""
         directory = os.path.dirname(path) or "."
         attempt = 0
         while True:
@@ -511,19 +616,61 @@ class TrafficDatStore:
                 pass
 
     @staticmethod
-    def _aggregate_bucket(raw_rows: tuple, hour_epoch: int) -> Optional[HourRow]:
-        """桶内非 null raw 行归并(§02.3): avg 取整(round); totals 取本小时末累计快照"""
-        rows = [r for r in raw_rows if hour_epoch <= r.ts < hour_epoch + HOUR_SECONDS and not r.is_null]
-        if not rows:
+    def _aggregate_bucket(raw_rows: tuple, zruns: tuple, hour_epoch: int,
+                          interval_s: Optional[float]) -> Optional[HourRow]:
+        """桶内归并出 hour 行(§02.3 + plan 26-10-04-0721 §04.2)
+
+        - 纯活跃桶(只有非 null raw 行): avg 取整(round)/max 只计 raw 行, totals 取桶末
+          (最新非 null 行)累计快照 —— v1 口径不变。
+        - 纯空闲桶(只被 z 行覆盖, 无非 null raw 行): 产 avg=0/max=0 的 hour 行, totals
+          取行程快照(空闲期计数不增长)。
+        - 混合桶(既有活跃 raw 行又有 z 覆盖): avg 口径从 v1 的「活跃期均值」变为
+          「加权小时均量」—— avg = (Σ raw 速率 + 0*w) / (n + w), 权重 w = 行程与本桶
+          交集秒数 ÷ interval_s(interval_s None/非正取 DEFAULT_SAMPLE_INTERVAL_S, 与
+          config 缺省同值; P2 起调用方传 config.qb_traffic.sample_interval); 行程跨
+          小时边界按交集拆权重进相邻两桶; max 不受 0 权重影响; totals 取桶末观测快照
+          (z 覆盖桶末时 = 行程快照, 空闲期与最后活跃样本同值无歧义; 纯活跃桶沿用
+          「最新非 null 行」现行规则)。
+        - 桶内全 null 行且无 z 覆盖 -> 不产 hour 行(空桶 = null, §05.1, 现行规则不变)。
+        """
+        bucket_end = hour_epoch + HOUR_SECONDS  # 桶 = 半开区间 [b, b+HOUR); 行程 = 闭区间 [start, end]
+        rows = [r for r in raw_rows if hour_epoch <= r.ts < bucket_end and not r.is_null]
+        overlap_s = 0
+        z_end_cov = None  # 行程在本桶内的最晚观测秒(闭区间上界)
+        z_snap = None  # 取到该上界的行程(桶末覆盖者)
+        for z in zruns:
+            lo = max(z.start, hour_epoch)
+            hi = min(z.end, bucket_end - 1)
+            if lo > hi:
+                continue
+            overlap_s += hi - lo + 1
+            if z_end_cov is None or hi > z_end_cov:
+                z_end_cov = hi
+                z_snap = z
+        if not rows and overlap_s == 0:
             return None
         n = len(rows)
-        last = max(rows, key=lambda r: r.ts)
+        if not interval_s or interval_s <= 0:
+            interval_s = DEFAULT_SAMPLE_INTERVAL_S
+        w = overlap_s / interval_s  # 行程折算样本数(仅用于均值权重, §06.3)
+        if rows:
+            dl_avg = int(round(sum(r.dl_rate for r in rows) / (n + w)))
+            up_avg = int(round(sum(r.up_rate for r in rows) / (n + w)))
+            dl_max = max(r.dl_rate for r in rows)
+            up_max = max(r.up_rate for r in rows)
+        else:  # 纯空闲桶: 全程 0 观测
+            dl_avg = dl_max = up_avg = up_max = 0
+        last_raw = max(rows, key=lambda r: r.ts) if rows else None
+        if z_snap is not None and (last_raw is None or z_end_cov >= last_raw.ts):
+            last = z_snap  # 桶末观测由行程覆盖: totals 取行程快照
+        else:
+            last = last_raw
         return HourRow(
             hour_epoch=hour_epoch,
-            dl_avg=int(round(sum(r.dl_rate for r in rows) / n)),
-            dl_max=max(r.dl_rate for r in rows),
-            up_avg=int(round(sum(r.up_rate for r in rows) / n)),
-            up_max=max(r.up_rate for r in rows),
+            dl_avg=dl_avg,
+            dl_max=dl_max,
+            up_avg=up_avg,
+            up_max=up_max,
             dl_total=int(last.dl_total),
             up_total=int(last.up_total),
         )

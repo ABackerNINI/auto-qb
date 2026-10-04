@@ -48,6 +48,18 @@
 - test_z_bad_line_family_counts_bad: z 坏行族逐项计坏行(列数≠5/负数/非数值/空列/end<start), 合法 z 行不受牵连
 - test_z_span_boundary_exact_day: span = ZRUN_MAX_SPAN_S(86400) 恰好合法, 86401 坏行
 - test_z_corrupt_threshold_quarantine: 坏 z 行计入损坏占比分子分母, 达阈值整文件隔离移 .corrupt; 未达阈值照常跳过计数
+- test_append_z_run_new_file_writes_v2_header: append_z_run 全新文件头行直接 v2 + key 行 + z 行; 单种键同步建 index 条目(updated_at=行程终点)
+- test_append_z_run_upgrades_v1_header_content_preserving: v1 文件首 z 追加触发头行升级(内容保持重写, 仅头行变 v2 数据行逐字节不变), z 行落盘后解析零坏行
+- test_append_z_run_upgrade_failure_appends_nothing: 头行升级重写失败(读侧竞态) -> OSError 且文件原样(z 行绝不追加, R3 硬不变式)
+- test_append_z_run_torn_tail_repaired_no_merge: 崩溃残留半行后 z 追加先补换行不与残行合并(kill 丢 <=1 行口径与 append_point 同)
+- test_seal_rewrite_upgrades_v1_header: v1 文件封口重写(裁剪触发)头行升 v2(R3: 内容重写即升级)
+- test_rewrite_keeps_z_rows_order_and_prunes_by_window: 重写输出序 = 头行(v2)+key+hour+z+raw; z 行按 end >= now-raw_window 裁剪, 其派生 hour 行不受影响
+- test_same_content_compares_z_rows: z 行纳入 same_content: 窗内 z 行零重写(空闲零写放大); 仅 z 行差异(窗外待裁)触发真重写
+- test_idle_z_bucket_produces_zero_hour_row: 全空闲桶(仅 z 覆盖无 raw 行)产 avg=0/max=0 hour 行, totals 取行程快照
+- test_mixed_bucket_weighted_avg_and_end_snapshot: 混合桶加权均值 avg=(Σ raw 速率)/(n+w), w=交集秒数/interval_s; interval_s 缺省 None 与 30 同值; 桶末 totals 取行程快照
+- test_cross_hour_run_splits_weight: 跨小时边界行程按交集拆权重进相邻两桶(各桶独立出 hour 行)
+- test_seal_sweep_due_includes_z_only_bucket: 待封桶集合含仅 z 覆盖(无 raw 行)的桶(seal_sweep catch-up 产 hour 行); 当前桶不提前封
+- test_idle_24h_line_count_z_vs_zero_rows: 行数影响: 全空闲 24h@30s, v1 零行方案 2880 行 vs z 行方案 144 行(600s 封口节奏), 体积比 >10x
 
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
@@ -1041,3 +1053,241 @@ def test_z_corrupt_threshold_quarantine(tmp_path):
     assert len(p2.raw) == 38 and p2.bad_lines == 1 and p2.zruns == ()
     assert os.path.exists(store2.series_path("global"))
     assert not os.path.exists(store2.series_path("global") + CORRUPT_SUFFIX)
+
+
+# ---------- v2 写路径(plan 26-10-04-0721 P1b: append_z_run + R3 升级 + z 感知聚合) ----------
+
+
+def test_append_z_run_new_file_writes_v2_header(tmp_path):
+    """append_z_run 全新文件: 头行直接 v2 + key 行 + z 行; 单种键同步建 index 条目
+    (updated_at = 行程终点 —— 空闲期 z 追加与 raw 追加同样推进, 不因无 raw 行被误判超龄)"""
+    store = _store(tmp_path)
+    store.append_z_run("global", 1000, 1599, 7, 8)
+    lines = _read_text(store.series_path("global")).splitlines()
+    assert lines == [HEADER_LINE_V2, "key,global", "z,1000,1599,7,8"]
+    parsed = store.read_series("global")
+    assert parsed.zruns == (ZRow(start=1000, end=1599, dl_total=7, up_total=8), ) and parsed.bad_lines == 0
+    # 单种键: 建文件 + 建 index 条目, updated_at 推进到行程终点
+    store.append_z_run("torrent:ABC123", 2000, 2599, 9, 10)
+    e = store.entry("ABC123")
+    assert e is not None and e["frozen_at"] is None and e["created_at"] == 2599 and e["updated_at"] == 2599
+    tlines = _read_text(store.series_path("torrent:ABC123")).splitlines()
+    assert tlines[0] == HEADER_LINE_V2 and tlines[-1] == "z,2000,2599,9,10"
+
+
+def test_append_z_run_upgrades_v1_header_content_preserving(tmp_path):
+    """v1 文件首 z 追加触发头行升级(R3): 内容保持重写 —— 仅头行 v1->v2, 数据行逐字节
+    不变; 升级后 z 行落盘, 同一文件解析零坏行(绝不向未升级的 v1 头行文件追加 z 行)"""
+    store = _store(tmp_path)
+    path = store.series_path("global")
+    _write_dat(path, [HEADER_LINE, "key,global", "raw,100,1,2,3,4", "raw,130,,,,"])
+    before_body = _read_text(path).splitlines()[1:]  # 头行之外全部行
+    store.append_z_run("global", 200, 260, 5, 6)
+    lines = _read_text(path).splitlines()
+    assert lines[0] == HEADER_LINE_V2  # 头行已升级
+    assert lines[1:-1] == before_body  # 数据行逐字节不变(内容保持重写)
+    assert lines[-1] == "z,200,260,5,6"  # z 行落盘
+    parsed = store.read_series("global")
+    assert parsed.bad_lines == 0 and parsed.zruns == (ZRow(start=200, end=260, dl_total=5, up_total=6), )
+    assert [r.ts for r in parsed.raw] == [100, 130]  # 既有 raw 行原样
+
+
+def test_append_z_run_upgrade_failure_appends_nothing(tmp_path, monkeypatch):
+    """头行升级重写失败(读侧竞态占满重试) -> OSError 且文件逐字节原样:
+    未升级绝不追加 z 行(R3 硬不变式 —— v1 解析器把 z 行判坏行, 追加即累积坏行)"""
+    store = _store(tmp_path)
+    path = store.series_path("global")
+    _write_dat(path, [HEADER_LINE, "key,global", "raw,100,1,2,3,4"])
+    before = _read_text(path)
+    monkeypatch.setattr(store, "_write_payload", lambda p, payload: False)
+    with pytest.raises(OSError):
+        store.append_z_run("global", 200, 260, 5, 6)
+    assert _read_text(path) == before  # 文件原样: 头行未升级, z 行未出现
+    assert "z," not in before
+
+
+def test_append_z_run_torn_tail_repaired_no_merge(tmp_path):
+    """崩溃残留半行后 z 追加先补换行不与残行合并: 半行隔离计坏, z 行独立可读
+    (kill 丢 <=1 行口径与 append_point 同)"""
+    store = _store(tmp_path)
+    path = store.series_path("global")
+    store.append_point("global", 100, 1, 1, 1, 1)
+    store.append_point("global", 130, 2, 2, 2, 2)
+    with open(path, "r+b") as f:
+        f.truncate(os.path.getsize(path) - 4)  # 末行截半(无换行)
+    store.append_z_run("global", 200, 260, 3, 4)
+    parsed = store.read_series("global")
+    assert [r.ts for r in parsed.raw] == [100]  # 残半行未吞前行
+    assert parsed.zruns == (ZRow(start=200, end=260, dl_total=3, up_total=4), )  # z 行独立成行
+    assert parsed.bad_lines == 1 and not parsed.torn_tail  # 半行成中段坏行(下轮封口自洁), 文件已换行收尾
+
+
+def test_seal_rewrite_upgrades_v1_header(tmp_path):
+    """v1 文件封口重写(裁剪触发)头行升 v2(R3: 首次内容重写即升级)"""
+    store = _store(tmp_path)
+    path = store.series_path("global")
+    _write_dat(path, [HEADER_LINE, "key,global", "raw,9890,1,1,1,1", "raw,9900,1,1,1,1"])
+    assert store.seal_hour("global", 7200, now=10000, raw_window=100, rollup_window=3600) is True  # 9890 被裁 -> 重写
+    lines = _read_text(path).splitlines()
+    assert lines[0] == HEADER_LINE_V2
+    assert store.read_series("global").zruns == ()  # 纯 raw 文件升级不添 z 行
+
+
+def test_rewrite_keeps_z_rows_order_and_prunes_by_window(tmp_path):
+    """重写输出序 = 头行(v2) + key + hour + z + raw; z 行按 end >= now-raw_window 裁剪
+    (z 行属 raw 段数据), 其派生 hour 行在 hour 段按 rollup_window 独立留置不受影响"""
+    store = _store(tmp_path)
+    path = store.series_path("global")
+    _write_dat(
+        path,
+        [
+            HEADER_LINE_V2,
+            "key,global",
+            "z,100,200,1,1",  # end=200 << now-raw_window -> 裁
+            "z,9900,9950,3,4",  # end=9950 恰压线 -> 留
+            "raw,9950,100,50,7,8",
+        ],
+    )
+    assert store.seal_hour("global", 7200, now=10000, raw_window=100, rollup_window=3600, interval_s=30) is True
+    text = _read_text(path)
+    lines = text.splitlines()
+    assert lines[0] == HEADER_LINE_V2 and lines[1] == "key,global"
+    # 输出序: hour 段 -> z 段 -> raw 段
+    assert lines.index("z,9900,9950,3,4") > lines.index("hour,7200,37,100,19,50,3,4")
+    assert lines.index("raw,9950,100,50,7,8") > lines.index("z,9900,9950,3,4")
+    parsed = store.read_series("global")
+    assert [z.end for z in parsed.zruns] == [9950]  # 窗外 z 行已裁
+    assert [r.ts for r in parsed.raw] == [9950] and len(parsed.hours) == 1  # hour 行(raw_window 判定)不受 z 裁剪牵连
+    assert "z,100,200" not in text
+
+
+def test_same_content_compares_z_rows(tmp_path):
+    """same_content 纳入 z 行: 全部封口且 z 行在窗内 -> 零重写(空闲系列零写放大);
+    仅 z 行差异(窗外待裁, hour/raw 全同) = 内容不一致 -> 触发真重写"""
+    store = _store(tmp_path)
+    path = store.series_path("global")
+    _write_dat(
+        path,
+        [
+            HEADER_LINE_V2,
+            "key,global",
+            "hour,3600,0,0,0,0,3,4",  # z 覆盖桶已封(与聚合结果一致)
+            "hour,7200,100,50,100,50,7,8",
+            "z,9900,9950,3,4",  # 在窗内(now-raw_window=9900 压线保留)
+            "raw,9950,100,50,7,8",
+        ],
+    )
+    before = _read_text(path)
+    assert store.seal_sweep(10800, now=10000, raw_window=100, rollup_window=7200) == 0
+    assert _read_text(path) == before  # 零重写
+    # 仅 z 行差异: z 行滑出窗外 -> hour/raw 全同也必须重写(坏行不算一致口径的 z 版)
+    _write_dat(
+        path,
+        [
+            HEADER_LINE_V2,
+            "key,global",
+            "hour,3600,0,0,0,0,3,4",
+            "hour,7200,100,50,100,50,7,8",
+            "z,3800,3900,3,4",  # end=3900 < 9900 -> 待裁; 其桶(3600)已封, 不产新 hour 行
+            "raw,9950,100,50,7,8",
+        ],
+    )
+    before2 = _read_text(path)
+    assert store.seal_sweep(10800, now=10000, raw_window=100, rollup_window=7200) == 1
+    after = _read_text(path)
+    expected_after = "\n".join(l for l in before2.splitlines() if l != "z,3800,3900,3,4") + "\n"
+    assert after == expected_after  # 仅 z 行被移除, hour/raw 逐字节不变(只 z 行差异触发真重写)
+
+
+def test_idle_z_bucket_produces_zero_hour_row(tmp_path):
+    """全空闲桶(仅 z 覆盖, 无 raw 行)产 avg=0/max=0 的 hour 行, totals 取行程快照
+    (30d 单种图由 z 派生 hour 行带 0 线, §04.2)"""
+    store = _store(tmp_path)
+    store.append_z_run("global", H0, H0 + 3599, 5000, 6000)
+    assert store.seal_hour("global", H0, now=H1 + 1, raw_window=24 * HOUR, rollup_window=30 * 24 * HOUR) is True
+    parsed = store.read_series("global")
+    assert parsed.hours == (
+        HourRow(hour_epoch=H0, dl_avg=0, dl_max=0, up_avg=0, up_max=0, dl_total=5000, up_total=6000),
+    )
+    assert len(parsed.zruns) == 1 and parsed.raw == ()  # z 行本身仍在 raw 段留置
+
+
+def test_mixed_bucket_weighted_avg_and_end_snapshot(tmp_path):
+    """混合桶加权均值(§04.2): 桶内 2 行活跃 raw + 行程覆盖后段 2700s(interval 30 -> w=90):
+    dl_avg = round((100+300)/(2+90)) = 4, up_avg = round((50+150)/92) = 2, max 不受 0 影响;
+    桶末被行程覆盖 -> totals 取行程快照; interval_s 缺省 None 与显式 30 同值(默认路径确定)"""
+    store = _store(tmp_path)
+    k = "global"
+    store.append_point(k, H0 + 10, 100, 50, 1000, 500)
+    store.append_point(k, H0 + 20, 300, 150, 2000, 1000)
+    store.append_z_run(k, H0 + 900, H0 + 3599, 5000, 6000)
+    assert store.seal_hour(
+        "global", H0, now=H1 + 1, raw_window=24 * HOUR, rollup_window=30 * 24 * HOUR, interval_s=30
+    ) is True
+    row = store.read_series(k).hours[0]
+    assert (row.dl_avg, row.dl_max, row.up_avg, row.up_max) == (4, 300, 2, 150)
+    assert (row.dl_total, row.up_total) == (5000, 6000)  # 行程快照(z 覆盖桶末)
+    # 默认路径(interval_s=None -> DEFAULT_SAMPLE_INTERVAL_S=30): 数值逐列相同
+    store2 = _store(tmp_path / "sub")
+    for args in ((H0 + 10, 100, 50, 1000, 500), (H0 + 20, 300, 150, 2000, 1000)):
+        store2.append_point(k, *args)
+    store2.append_z_run(k, H0 + 900, H0 + 3599, 5000, 6000)
+    store2.seal_hour("global", H0, now=H1 + 1, raw_window=24 * HOUR, rollup_window=30 * 24 * HOUR)
+    assert store2.read_series(k).hours[0] == row
+
+
+def test_cross_hour_run_splits_weight(tmp_path):
+    """跨小时边界行程按交集拆权重进相邻两桶(§04.2): H0 段 100s(纯 z -> avg=0),
+    H1 段 501s + 行程结束后 1 行活跃 raw(w=16.7 -> dl_avg=round(300/17.7)=17);
+    各桶独立出 hour 行; 桶末在行程外 -> totals 取最新活跃行快照"""
+    store = _store(tmp_path)
+    k = "global"
+    store.append_z_run(k, H0 + 3500, H1 + 500, 900, 800)  # 行程横跨 H0/H1 边界
+    store.append_point(k, H1 + 600, 300, 200, 1200, 1100)
+    assert store.seal_hour(
+        "global", H0, now=H1 + HOUR, raw_window=24 * HOUR, rollup_window=30 * 24 * HOUR, interval_s=30
+    ) is True
+    assert store.seal_hour(
+        "global", H1, now=H1 + HOUR, raw_window=24 * HOUR, rollup_window=30 * 24 * HOUR, interval_s=30
+    ) is True
+    hours = {h.hour_epoch: h for h in store.read_series(k).hours}
+    assert (hours[H0].dl_avg, hours[H0].dl_max, hours[H0].up_avg, hours[H0].up_max) == (0, 0, 0, 0)
+    assert (hours[H0].dl_total, hours[H0].up_total) == (900, 800)  # 行程快照
+    assert (hours[H1].dl_avg, hours[H1].dl_max) == (17, 300)  # 加权: 300/(1+501/30)
+    assert (hours[H1].up_avg, hours[H1].up_max) == (11, 200)
+    assert (hours[H1].dl_total, hours[H1].up_total) == (1200, 1100)  # 桶末在行程外 -> 最新非 null 行快照
+
+
+def test_seal_sweep_due_includes_z_only_bucket(tmp_path):
+    """待封桶集合 = 有 raw 行的桶 ∪ 被 z 行覆盖的桶: 仅 z 覆盖(无 raw 行)的桶也到期
+    产 hour 行(catch-up); 当前桶内的行程不提前封"""
+    store = _store(tmp_path)
+    store.append_z_run("global", H0, H0 + 3599, 5, 6)  # 上一小时桶: 仅 z 覆盖
+    store.append_z_run("global", H1, H1 + 100, 7, 8)  # 当前桶: 不封
+    assert store.seal_sweep(H1, now=H1 + 1, raw_window=24 * HOUR, rollup_window=30 * 24 * HOUR) == 1
+    parsed = store.read_series("global")
+    assert [h.hour_epoch for h in parsed.hours] == [H0]
+    assert (parsed.hours[0].dl_avg, parsed.hours[0].dl_max, parsed.hours[0].dl_total) == (0, 0, 5)
+    assert [z.end for z in parsed.zruns] == [H0 + 3599, H1 + 100]  # 行程行不受影响
+
+
+def test_idle_24h_line_count_z_vs_zero_rows(tmp_path):
+    """行数影响(plan §1.1 问题二): 全空闲 24h@30s —— v1 零行方案 2880 行零值 raw vs
+    v2 行程行方案 144 行(600s 封口节奏, R1), 体积比 >10x(≈144 行量级断言)"""
+    now = 1_800_000_000
+    v1_lines = [HEADER_LINE, "key,global"] + [format_raw_row(now - 24 * HOUR + i * 30, 0, 0, 0, 0) for i in range(2880)]
+    v1_text = "\n".join(v1_lines) + "\n"
+    store = _store(tmp_path)
+    zpath = store.series_path("global")
+    start = now - 24 * HOUR
+    for i in range(144):  # 86400s / 600s 封口节奏 = 144 条行程行
+        store.append_z_run("global", start + i * 600, start + i * 600 + 599, 0, 0)
+    z_text = _read_text(zpath)
+    z_data_lines = len(z_text.splitlines()) - 2  # 除头行 + key 行
+    assert z_data_lines == 144  # ≈144 行量级
+    assert len(v1_lines) - 2 == 2880  # v1 同窗零行方案
+    v1_size, z_size = len(v1_text.encode("utf-8")), len(z_text.encode("utf-8"))
+    assert v1_size / z_size > 10  # raw 段空闲部分压缩显著(§6.2: 全文件口径另按真实工况实测)
+    # z 方案经解析还原零坏行(144 条行程行全部合法)
+    assert store.read_series("global").bad_lines == 0 and len(store.read_series("global").zruns) == 144
+    assert max(z.end for z in store.read_series("global").zruns) <= now  # 跨度合法(ZRUN_MAX_SPAN_S 内)
