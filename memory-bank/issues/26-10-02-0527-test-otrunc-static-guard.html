@@ -8,7 +8,7 @@
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="otrunc-static-guard">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="O_TRUNC 直写静态守阵并入: 全 src O_TRUNC 清零条件已达成">
 <meta name="issue-summary" content="1347-token 悬置的 O_TRUNC 直写静态守阵, 生效条件「全 src O_TRUNC 代码清零」已由 bc24631b(hr.token 改 atomic_write)达成, 可并入守阵">
 <title>O_TRUNC 直写静态守阵并入: 全 src O_TRUNC 清零条件已达成 · test · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-02-0527-test-otrunc-static-guard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-02 05:27</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,9 +93,20 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>修复后补充</h2>
+    <ul>
+      <li>实际修法：新守阵 <code>tests/test_no_o_trunc_write.py</code> —— tokenize 静态扫描 src/ 全部 <code>.py</code>，非 COMMENT token 文本含 <code>O_TRUNC</code> 即红（NAME 拦 <code>os.O_TRUNC</code> 属性访问；STRING 拦 <code>getattr(os, "O_TRUNC")</code> 绕行与 docstring 内嵌；注释豁免，现存两处修复注释是知识库锚点不是直写）。显式豁免走测试内 <code>_WHITELIST</code>（路径 → 理由），与建议口径一致。</li>
+      <li>红验：探针文件三类命中全抓（docstring / NAME / STRING，探针 1、4、5 行），注释行豁免；删除探针后回归绿。</li>
+      <li>验证：靶向 <code>test.one</code> 1 passed；<code>commands run test.full</code> 2538 passed + 4 skipped / 覆盖率 99% / 31.49s（基线 [26-10-05-0143](../testing/baselines/26-10-05-0143-otrunc-static-guard.md)）。守阵已登记 <code>memory-bank/testing/guards.md</code>「后端高风险动作 / 状态持久化」表。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-02 05:27 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-05 01:39 — 用户指派认领，状态 <strong>In Progress</strong>。复验：全 src <code>grep -rn "O_TRUNC" src/</code> 仅余两处修复注释（hr/channel.py:104 · webui/server/common.py:69），代码命中为零，生效条件仍成立</li>
+      <li>2026-10-05 01:43 — 修复完成，状态 <strong>Done</strong>（守阵并入 + 红验 + 全量回归，见 §04）</li>
     </ul>
   </section>
 

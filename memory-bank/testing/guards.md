@@ -87,6 +87,7 @@
 | `test_cleanup_orphan_tmp_is_wired_after_lock` | **接线守阵**: 挂在 `self._lock.acquire()` **之后**且落在 `if not no_lock` 内 | 挪到持锁之前 |
 | `test_utils.py::test_atomic_write_*` | 原子写三态 + `keep_backup` 路径按 `utils.BACKUP_SUFFIX` | — |
 | `test_utils.py::test_atomic_write_rejects_empty_path` | 空路径必须 `raise`(否则往仓库外丢 `.tmp`) | 去掉校验 |
+| `test_no_o_trunc_write.py::test_src_has_no_o_trunc_write` | src 下 .py **非注释 token 零 O_TRUNC**(NAME 拦 `os.O_TRUNC`, STRING 拦 `getattr(os, "O_TRUNC")` 绕行; 注释豁免) —— token/凭据写入只走 `utils.atomic_write` 唯一单点, 确需直写走 `_WHITELIST` 注明理由 | src 下放探针 `.py` 写 `os.O_TRUNC` 即红, 删探针回绿 |
 | `test_grouping.py::test_group_key_of_is_single_source_of_truth` | 归组 key 纯函数 == 真实 mixin 输出 | 内联公式分叉 |
 
 ## 仿真 / 语料 / 平台语义
@@ -108,6 +109,12 @@
 | `test_notify_real_send_blocked_under_pytest` | 测试期不发真实系统通知 | 去掉会话夹具 |
 | `test_config_schema.py`(20 项) | UI 元数据 vs 配置键 / 插件**一致** | 加配置键不改 `schema.py` |
 | `test_impact.py` | 分级表直测(未列出默认 L2) | 加配置项不补表 |
+
+## src 结构卫生(全 src 静态扫描)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_no_ghost_pkg_dirs.py::test_src_has_no_ghost_pkg_dirs` | src 下不存在「只剩 `__pycache__` 而无任何 `.py`」的幽灵包目录 —— 历史退役源码的空壳会误导「包还在」的排障判断(issue 26-10-01-1946) | 在 src 下建一个只含 `__pycache__` 的目录 |
 
 ## 通用纪律
 

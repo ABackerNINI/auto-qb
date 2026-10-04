@@ -17,7 +17,6 @@
 | bug | 6 |
 | perf | 5 |
 | docs | 1 |
-| test | 1 |
 | refactor | 4 |
 | feat | 15 |
 | chore | 2 |
@@ -26,7 +25,6 @@
 ## Open
 
 - [bug] [tray._set_windows_appid 自引入起生产零调用点: AUMID 从未设置, 任务栏图标修复结论前提存疑](26-10-02-0727-bug-tray-appid-setter-no-call-site.html) — tray/app.py 的 _set_windows_appid 自 9891c030 引入起生产代码零调用点(仅测试驱动), 生产进程从未设置显式 AUMID —— 与 core-domain.md 四轮实测结论「AUMID 是任务栏图标决定性变量」矛盾, 26-10-01-2203 修复前提存疑
-- [test] [O_TRUNC 直写静态守阵并入: 全 src O_TRUNC 清零条件已达成](26-10-02-0527-test-otrunc-static-guard.html) — 1347-token 悬置的 O_TRUNC 直写静态守阵, 生效条件「全 src O_TRUNC 代码清零」已由 bc24631b(hr.token 改 atomic_write)达成, 可并入守阵
 - [bug] [_sign_releases 批量签发对已 verified 的 infohash 不查重, 整条覆写既有放行记录(生产可达性未核实)](26-10-02-0526-bug-hr-sign-releases-verified-overwrite.html) — _sign_releases 对已在 data.verified 的 infohash 不查重, data.verified[h]= 直接整条覆写(源/verified_ts/锚点全换), 与「放行永续有效(终态不可逆)」语义冲突; 生产可达性待核实
 - [refactor] [hr/service.py 多处直调 time.time() 与 now_fn 注入不一致, 假时钟测试不可控](26-10-02-0526-refactor-hr-service-clock-injection-inconsistent.html) — hr/service.py 两处直调 time.time()(fail.last_ts / _advance_observation)绕过 now_fn 注入, 假时钟下行为不可控; 26-10-02 _merge_seen 收编时仅处理同函数一处
 - [perf] [渐进灌入期主循环掉拍: max_tasks_per_tick 自适应](26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — --ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s), 灌入期每拍还债; 给 max_tasks_per_tick 做自适应(候选列于 W5, 未实施)
@@ -81,6 +79,7 @@
 - [bug] [ui_harness --hr-site 启动即崩: HrIdentity 枚举 v3 漂移](26-10-02-1900-bug-ui-harness-hr-site.html) — scripts/ui_harness.py --hr-site 启动 AttributeError: 引用已不存在的 HrIdentity.VERIFIED_NON_HR(现行 v3 三态 HR/RELEASED/NO_EVIDENCE), 桩工具与 hr/resolve.py 漂移
 - [bug] [主循环首轮 tick 任意异常在 next_*_at 未推进时无退避快速重试(wait_for=0 机理)](26-10-02-0728-bug-mainloop-first-tick-exception-no-backoff.html) — 主循环 except Exception 路径不推进 next_*_at, 任意一拍(复验实证不止首轮)抛非 StopIteration 异常即形成无退避快速重试循环(wait_for=0, 红验实测拍间隔 0.001-0.003s); 修法: 异常分支把两条时间线推到 max(原值, now+main_tick), 退避起步与 _reconnect_due 口径一致
 - [docs] [AUMID 机制文档漂移两处: core-domain.md 称进程须设显式 AppUserModelID(与零调用点事实不符) + tray docstring 残留 AutoQB.UI.lnk](26-10-02-0728-docs-aumid-docs-drift.html) — core-domain.md:27「进程须先设显式 AppUserModelID」与 _set_windows_appid 生产零调用点事实不符; tray/app.py _set_windows_appid docstring 残留「对应开始菜单 AutoQB.UI.lnk」(9891c030 已改注册表键机制)
+- [test] [O_TRUNC 直写静态守阵并入: 全 src O_TRUNC 清零条件已达成](26-10-02-0527-test-otrunc-static-guard.html) — 1347-token 悬置的 O_TRUNC 直写静态守阵, 生效条件「全 src O_TRUNC 代码清零」已由 bc24631b(hr.token 改 atomic_write)达成, 可并入守阵
 - [bug] [主循环 except Exception 吞 _tick 的 StopIteration: 一旦触发即静默空转死循环](26-10-02-0442-bug-mainloop-stopiteration-swallowed.html) — qbmanager 主循环对 _tick 的 except Exception 会吞 StopIteration, 触发即 while True 空转死循环(无限快转不干活); 目前仅测试 mock 耗尽场景复现, 生产触发面未证实
 - [bug] [hr/service._finish_wave 末尾无条件 discard 三个告警去重集合, 每波重报与注释设计不符](26-10-02-0441-bug-hr-finish-wave-warn-dedupe-reset.html) — _finish_wave 无条件 discard 登录失效/无通道等三个告警去重集合, 「每站只报一次」的注释设计与实际每波重报不符; P1 覆盖提升时测试按实测行为断言
 - [bug] [tray._set_windows_appid 读回校验在非打包进程恒假: GetApplicationUserModelId 返回 15703 而非 122](26-10-02-0441-bug-tray-appid-readback-dead-branch.html) — _set_windows_appid 设置成功(hr=0)但读回校验对非打包进程恒返回 APPMODEL 15703, app.py:155 的 ==122 分支永不命中; 任务栏 python 图标 issue 的排查不可依赖此读回校验
