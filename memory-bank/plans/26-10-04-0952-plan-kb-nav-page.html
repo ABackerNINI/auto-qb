@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="kb-nav-page">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-04-0952">
+<meta name="doc-updated" content="26-10-04-0952">
+<meta name="doc-refs" content="">
+<title>实施计划 · memory-bank 四工位导航页 · 三视图可切换 · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1114;
+    --paper: #12161b;
+    --paper-2: #161b21;
+    --ink: #dde3e8;
+    --ink-dim: #9aa4ad;
+    --ink-faint: #6d7781;
+    --hair: #232b33;
+    --hair-soft: #1a2027;
+    --accent: #5cc0cf;
+    --accent-ink: #86d7e0;
+    --accent-soft: rgba(92,192,207,.10);
+    --ok: #7fc08a;
+    --warn: #e2a86e;
+    --bad: #e0796f;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1060px; margin: 0 auto; padding: 52px 44px 80px; }
+
+  header.cover { margin-bottom: 10px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 29px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.25; margin-bottom: 12px; }
+  .lede { font-size: 15.5px; color: var(--ink-dim); max-width: 72ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .meta-row .item .v a { color: var(--accent-ink); text-decoration: none; }
+
+  nav.toc { margin: 18px 0 0; font-size: 13px; color: var(--ink-faint); }
+  nav.toc a { color: var(--ink-dim); text-decoration: none; margin-right: 14px; white-space: nowrap; }
+  nav.toc a:hover { color: var(--accent-ink); }
+
+  section { margin-top: 34px; }
+  h2 { font-family: var(--display); font-size: 18px; font-weight: 600; letter-spacing: -0.006em; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); margin-right: 10px; }
+  h3 { font-family: var(--display); font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 11px; max-width: 82ch; }
+  ul, ol { margin: 8px 0 14px; padding-left: 22px; max-width: 82ch; }
+  li { margin: 5px 0; }
+  li::marker { color: var(--ink-faint); }
+  code { font-family: var(--mono); font-size: .86em; background: var(--paper-2); border: 1px solid var(--hair); border-radius: 4px; padding: 1px 6px; }
+  strong { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 10px; font-size: 13.5px; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-faint); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair); font-weight: 600; white-space: nowrap; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .dim { color: var(--ink-dim); }
+  .panel { background: var(--paper); border: 1px solid var(--hair); border-left: 3px solid var(--accent); border-radius: 6px; padding: 13px 18px; margin: 14px 0; font-size: 14px; max-width: 82ch; }
+  .panel .t { font-weight: 600; margin-bottom: 4px; }
+  .panel.warnbox { border-left-color: var(--warn); }
+  .stub { color: var(--ink-faint); font-size: 13px; font-style: italic; }
+  footer { margin-top: 52px; border-top: 1px solid var(--hair); padding-top: 16px; color: var(--ink-faint); font-size: 12.5px; }
+  @media (max-width: 760px) { .sheet { padding: 30px 18px 60px; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header class="cover">
+  <div class="kicker">实施计划 · memory-bank 工具面</div>
+  <h1>memory-bank 四工位导航页 · 三视图可切换（台账 / 控制台 / 卡片墙）</h1>
+  <p class="lede">把 issues / plans / reports / tasks 四工位的状态与关联（doc-topic 专题 + doc-refs 认领链）做成一个本地导航页：主视图三套并存、顶部一键切换，本地服务每请求现算、前端轮询准实时。可行性已论证（数据全 meta 单点 + <code>gen_doc_map.collect()</code> 现成），三套原型已用当日全库真实数据做出并通过渲染自检。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">计划</div><div class="v">26-10-04-0952</div></div>
+    <div class="item"><div class="k">专题</div><div class="v">kb-nav-page</div></div>
+    <div class="item"><div class="k">状态</div><div class="v">Open</div></div>
+    <div class="item"><div class="k">分支</div><div class="v">develop</div></div>
+    <div class="item"><div class="k">原型</div><div class="v">tmp-analysis/nav-design/ 三套</div></div>
+  </div>
+  <nav class="toc">
+    <a href="#s0">00 结论</a><a href="#s1">01 裁决与划界</a><a href="#s2">02 数据层</a><a href="#s3">03 服务层</a><a href="#s4">04 页面壳</a><a href="#s5">05 挂点与文档</a><a href="#s6">06 测试</a><a href="#s7">07 派发</a><a href="#s8">08 风险</a><a href="#s9">09 验收与回写</a>
+  </nav>
+</header>
+
+<section id="s0">
+  <h2><span class="no">00</span>结论与拍板回执</h2>
+  <p><strong>用户拍板（2026-10-04）</strong>：A 台账 / B 控制台 / C 卡片墙三套主视图「各有优点，都保留可切换」—— 不裁掉任何一套，做成同一页面里的三个可切换视图。</p>
+  <p>可行性结论（本轮已论证）：四工位状态全部在结构化 meta 单点（<code>doc-status</code> / <code>issue-status</code> / 档案 <code>**Status:**</code>），关联已有 <code>doc-topic</code> 主键与 <code>doc-refs</code> 双向认领链，扫描器 <code>gen_doc_map.collect()</code> 现成可用。26-10-01-2125 报告裁定「AI 路由索引落盘、人的查询视图现算」——导航页属后者，不违裁定；页面数据<strong>零落盘</strong>，不新增多 clone 合并热点。</p>
+  <p>当日实测底盘：全库 <strong>383 件</strong>（计划 102 / 报告 31 / 问题 124 / 档案 126）、<strong>226 个专题</strong>（活跃 70）、数据快照 JSON <strong>269KB</strong>；全量扫描 &lt;1s；三原型（265–274KB 单文件）Playwright 渲染自检零 JS 报错。</p>
+</section>
+
+<section id="s1">
+  <h2><span class="no">01</span>方案裁决与范围划界</h2>
+  <table>
+    <tr><th>裁决点</th><th>定案</th><th>理由 / 取舍</th></tr>
+    <tr><td>视图形态</td><td><strong>三视图并存</strong>，顶栏分段控件切换</td><td>用户拍板。A 精确筛查 / B 专题巡检 / C 全局浏览，三种工作流都真实存在</td></tr>
+    <tr><td>更新模式</td><td><strong>本地服务现算</strong>（主）+ 静态快照导出（备）</td><td>stdlib http.server 绑 127.0.0.1，<code>/api/data</code> 每请求现算，前端 30s 轮询；无 watcher（全量扫描本就 &lt;1s）</td></tr>
+    <tr><td>页面壳入库位置</td><td><code>.agents/skills/memory-bank/scripts/nav_page.html</code></td><td>壳是<strong>静态模板</strong>（低频写），入库无冲突面；生成物（注入数据后的页面）一律不落盘</td></tr>
+    <tr><td>数据 enrich 位置</td><td>nav 侧薄包装，<strong>不改 <code>gen_doc_map.py</code> 本体</strong></td><td>collect() 已是闸门/守阵消费单点，383 件消费方零变动</td></tr>
+    <tr><td>端口与配置</td><td>CLI 参数（<code>--port</code>，默认 8765），<strong>不进 config.yml</strong></td><td>导航页是开发工具不是程序功能，零配置键 = 零 schema 守卫链触碰</td></tr>
+    <tr><td>写权限</td><td>页面<strong>纯只读</strong></td><td>状态真相在各件 meta 单点；导航页绝不成为第二真相源</td></tr>
+  </table>
+  <h3>范围外（明确不做）</h3>
+  <ul>
+    <li>不动各 <code>_index.md</code> 生成器与四工位任何制品格式；</li>
+    <li>不做文件 watcher / 增量索引 / 全文检索（&lt;1s 全量扫描下无收益）；</li>
+    <li>不做写操作（改状态仍走 create-issue skill / 各件 meta 单点）；</li>
+    <li>activeContext 切片不入导航页数据（会话滚动状态归 <code>kb.active</code>，且切片 14 天归档会制造悬空条目）。</li>
+  </ul>
+</section>
+
+<section id="s2">
+  <h2><span class="no">02</span>数据层 · nav_data.py</h2>
+  <p>新脚本 <code>.agents/skills/memory-bank/scripts/nav_data.py</code>：import <code>gen_doc_map.collect()</code> 取全量条目，再做一层薄 enrich（原型的数据装配逻辑已验证，直接固化）：</p>
+  <ul>
+    <li>issue 侧补 <code>issue-type</code> / <code>issue-tier</code> / <code>issue-summary</code>；全形态补 <code>doc-updated</code>（缺省回落 stamp）；</li>
+    <li>派生 <code>topics[]</code>（专题键 + live 标记，live 口径同 <code>gen_doc_map.is_live</code>）与各形态 × 状态计数；</li>
+    <li>输出 <code>{stamp, items[], topics[]}</code> 单个 JSON；<code>stamp</code> 取数据自带的最新 <code>doc-updated</code>/<code>issue-stamp</code>，<strong>不生成依赖当前时钟的内容</strong>（沿用 gen_doc_map 的纪律）。</li>
+  </ul>
+  <p>函数签名 <code>collect_nav(mb: Path) -> dict</code>，服务层与静态导出共用这一个装配点。</p>
+</section>
+
+<section id="s3">
+  <h2><span class="no">03</span>服务层 · nav_server.py</h2>
+  <p>新脚本 <code>.agents/skills/memory-bank/scripts/nav_server.py</code>，纯 stdlib（<code>http.server</code>），零新依赖：</p>
+  <table>
+    <tr><th>路由</th><th>行为</th></tr>
+    <tr><td><code>GET /</code></td><td>返回页面壳（读 <code>nav_page.html</code> 进内存，UTF-8）</td></tr>
+    <tr><td><code>GET /api/data</code></td><td>每请求现算 <code>collect_nav()</code>，JSON 直返（前端 30s 轮询此端点实现准实时）</td></tr>
+    <tr><td><code>GET /memory-bank/&lt;path&gt;</code></td><td>静态映射四工位原文，供「打开原文」链接；<strong>resolve 后必须仍落在 memory-bank/ 内</strong>，越界即 403（防 <code>../</code> 穿越，测试钉死）</td></tr>
+  </table>
+  <ul>
+    <li>绑定 <code>127.0.0.1</code>（不暴露局域网）；<code>--port</code> 默认 8765；<code>--gen-static [dir]</code> 把「壳 + 注入数据」落盘成单文件到指定目录（默认 <code>tmp-analysis/nav/</code>，gitignored），作为不开服务的 fallback——链接前缀用相对路径 <code>../../memory-bank/</code>。</li>
+    <li>CLI 入口沿用 <code>_utf8_stdout()</code> Windows 编码兜底；端口被占时报错行内提示 <code>--port</code>。</li>
+  </ul>
+</section>
+
+<section id="s4">
+  <h2><span class="no">04</span>页面壳 · nav_page.html</h2>
+  <p>三套原型（<code>tmp-analysis/nav-design/template-{A,B,C}*.src.html</code>）合并为一个壳。合并原则：<strong>视图各自独立成容器，共享同一份数据与全局状态</strong>，切换零重建（<code>display</code> 翻转）：</p>
+  <ul>
+    <li><strong>顶栏（三视图共有）</strong>：品牌位 + 全局搜索框 + 视图切换分段控件（台账 / 控制台 / 卡片墙）+ 数据戳（stamp + 件数）。视图选择记忆在 <code>localStorage</code>（try/catch 包裹，file:// 下降级为默认视图）。</li>
+    <li><strong>视图 A 台账</strong>：左栏过滤轨（形态 / 状态 / issue 类型 / 关联开关）+ 排序表格 + 行点击详情抽屉（元数据 / 声明引用 / 反向引用 / 同专题件三段）。</li>
+    <li><strong>视图 B 控制台</strong>：四工位统计带（分段状态条）+ 专题频道列表（活跃点亮）+ 条目 readout 行内展开认领链。</li>
+    <li><strong>视图 C 卡片墙</strong>：专题卡片（活跃优先）+ 形态/状态药丸过滤 + 「还有 n 件」展开。</li>
+    <li><strong>数据接入</strong>：壳加载后 <code>fetch('/api/data')</code>，成功渲染 + 每 30s 静默重拉（仅更新 <code>DATA</code> 并重渲染当前视图，保持过滤状态）；fetch 失败显示错误态（含「改用 --gen-static 静态件」提示）。静态导出模式由壳内 <code>__DATA__</code> 注入（构建脚本替换），无 fetch。</li>
+    <li><strong>链接前缀自适应</strong>：<code>file:</code> 协议 → <code>../../memory-bank/</code>；<code>http:</code> → <code>/memory-bank/</code>。</li>
+    <li>三视图共用一套状态色（Open 青 / In Progress 琥珀 / 完结系灰绿），沿用深色规格（<code>color-scheme: dark</code>，底 <code>#0e~#14</code>，字 <code>≥ #d8</code>）；动效仅 hover 反馈，尊重 <code>prefers-reduced-motion</code>。</li>
+  </ul>
+</section>
+
+<section id="s5">
+  <h2><span class="no">05</span>命令挂点与文档</h2>
+  <ul>
+    <li><code>.commands/kb/config.toml</code> 新增 task <strong><code>kb.nav</code></strong>：默认起服务（打印 <code>http://127.0.0.1:8765</code>）；<code>kb.nav -- --gen-static</code> 走静态导出。收录协议按 commands skill（先 list 查重再 add）。</li>
+    <li><code>memory-bank/README.md</code> 库内细路由「跨形态专题视图」一行扩为「…专题视图 <code>kb.docmap</code>（不落盘）· <strong>人的导航页 <code>kb.nav</code>（本地服务现算）</strong>」——只指 task id，不抄命令内容（<code>doc.drift</code> 口径）。</li>
+    <li><code>plans/_index.md</code> 由 <code>kb.index</code> 重建，不手改；根 AGENTS.md 不动（导航页不改变会话协议）。</li>
+    <li>原型三套留在 <code>tmp-analysis/nav-design/</code> 至 S2 移植完成，之后可删（gitignored，不入库）。</li>
+  </ul>
+</section>
+
+<section id="s6">
+  <h2><span class="no">06</span>测试与守阵 · tests/test_kb_nav.py</h2>
+  <ul>
+    <li><strong>数据形状</strong>：<code>collect_nav()</code> 对 tests 内桩 memory-bank 目录返回 items/topics 结构完整；issue enrich 字段（type/tier/summary）在位；stamp 不含当前时钟。</li>
+    <li><strong>防穿越</strong>：<code>/memory-bank/../config.yml</code> 与 <code>/memory-bank/%2e%2e/</code> 变体一律 403/404，正常文件 200。</li>
+    <li><strong>壳完整</strong>：nav_page.html 含三视图容器标记与切换控件；含 <code>color-scheme: dark</code>；无外链资源。</li>
+    <li><strong>单点不回归</strong>：<code>gen_doc_map.collect()</code> 输出键集合不变（防 enrich 顺手改本体）。</li>
+    <li>不新增配置键 → <code>config schema</code> 守卫链零触碰；文件头 docstring 同步「## 测试计划」清单。</li>
+  </ul>
+</section>
+
+<section id="s7">
+  <h2><span class="no">07</span>三阶段派发（每段一个独立可提交单元）</h2>
+  <table>
+    <tr><th>段</th><th>内容</th><th>验收</th></tr>
+    <tr><td class="num">S1</td><td>数据 + 服务骨架：<code>nav_data.py</code> + <code>nav_server.py</code>（/ 、/api/data、静态映射防穿越）</td><td>curl 三路由实测；穿越变体全拒；扫描 &lt;1s</td></tr>
+    <tr><td class="num">S2</td><td>页面壳三视图合并：移植 A/B/C + 切换器 + 共享数据 + 轮询 + 链接自适应</td><td>Playwright 三视图截图自检（默认态 + 交互态）零 JS 报错；链接可开原文</td></tr>
+    <tr><td class="num">S3</td><td>挂点 + 测试 + 收尾：<code>kb.nav</code> task、README 路由行、<code>test_kb_nav.py</code>、test.full 基线切片、kb.index、activeContext 回写</td><td>test.full 全绿零回归；基线入册；认领链 <code>kb.check</code> 绿</td></tr>
+  </table>
+  <p class="dim">体量估计：S1 ≈ 0.5 人日，S2 ≈ 1 人日（大头是三视图整合而非新设计——原型已定），S3 ≈ 0.5 人日。合计 ≈ 2 人日。</p>
+</section>
+
+<section id="s8">
+  <h2><span class="no">08</span>风险与缓解</h2>
+  <table>
+    <tr><th>风险</th><th>缓解</th></tr>
+    <tr><td>269KB JSON 每次轮询全量重传</td><td>loopback 下 &lt;10ms 量级，30s 一拉无感；不做增量 diff（383 件规模不值）</td></tr>
+    <tr><td>多 clone 同时起服务撞端口</td><td>占用即清晰报错提示 <code>--port</code>；服务是短命工具进程，无常驻冲突面</td></tr>
+    <tr><td>壳被当成第二真相源（前端渲染状态与 meta 漂移）</td><td>页面纯只读 + 数据每请求现算；任何状态修正都落回各件 meta</td></tr>
+    <tr><td>三视图整合后行为与原型漂移</td><td>S2 以原型为移植源不改交互设计；Playwright 截图对照 shots/ 基准</td></tr>
+    <tr><td>静态导出件被误提交</td><td>默认落 <code>tmp-analysis/</code>（已 gitignored）；服务模式零落盘</td></tr>
+  </table>
+</section>
+
+<section id="s9">
+  <h2><span class="no">09</span>验收判据与回写</h2>
+  <h3>验收清单</h3>
+  <ul>
+    <li><code>commands run kb.nav</code> 起服务，浏览器三视图切换、搜索、过滤、详情展开全部可用；</li>
+    <li>「打开原文」从服务模式与静态模式都能打开真实制品；</li>
+    <li>改一个 issue 的 <code>issue-status</code> meta 后，页面 30s 内反映新状态（准实时刻服）；</li>
+    <li><code>test_kb_nav.py</code> 全绿（含防穿越）；<code>test.full</code> 全绿零回归 + 新基线切片入册；</li>
+    <li><code>commands run kb.check</code>（认领链 + 主键纪律）绿。</li>
+  </ul>
+  <h3>回写件</h3>
+  <ul>
+    <li>activeContext 切片滚动至实施完成，已完成条目迁出 progress；</li>
+    <li><code>plans/_index.md</code> 重跑 <code>kb.index</code>；本计划状态改 Done（实施完成时）；</li>
+    <li>若实施中踩到新坑（如 http.server 线程/编码类），按动作写进 <code>pitfalls/&lt;类&gt;/</code> 并重跑 kb.index。</li>
+  </ul>
+  <p class="stub">—— 本计划落文时三套原型已存在并验证；实施从 S1 起步，等用户认领指令。</p>
+</section>
+
+<footer>
+  计划 26-10-04-0952 · 专题 kb-nav-page · 2026-10-04 · develop @ a409789f · 实测数字取自当日全库扫描与原型渲染自检
+</footer>
+
+</div>
+</body>
+</html>
