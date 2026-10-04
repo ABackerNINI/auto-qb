@@ -78,6 +78,16 @@ v3 写侧存储族(plan 26-10-04-1957 S2a, TrafficV3Store):
 - test_v3_store_append_records_day_file_shape: 新文件头行(v3)+key 行, B 行随批写, r/z/n 落盘 roundtrip; 全空调用零操作
 - test_v3_store_header_once_and_torn_tail_repair: 跨 flush 同块 header 只写一次; 崩溃残留完整行补换行照常收(kill 不放大)
 - test_v3_store_series_has_data_gate: v3 数据门(目录存在且含 >=1 个 .dat): 缺失/空目录 False, 天文件/agg.dat True, 非法键 fail-fast
+- test_v3_store_agg_append_read_and_torn_tail: S2b agg 追加/读取(§04.2/§04.3) —— 新文件头行+key 行,
+  hour/day/month 9 列混存 roundtrip; 空行批零操作; 崩溃残留无换行尾补换行照常收; 缺失/空 = 空解析
+- test_v3_store_series_keys_and_day_dates: S2b 恢复入口(§04.3) —— 系列键扫描(global+torrents, 非 infohash
+  跳过); 天文件日期按补算窗口过滤(边界含, 升序); read_day 缺失 None / 非法日期 fail-fast
+- test_v3_store_trim_agg_hours: S2b hour 裁剪(§04.5, 唯一 tmp+fsync+os.replace 原子重写点) —— 边界含保留;
+  day/month 行永久不裁; 无到龄零写(same_content 字节不变); 返回新最老 epoch(空 None)
+- test_v3_store_trim_agg_hours_replace_locked: S2b 裁剪重写被占用(Windows 读侧竞态) —— PermissionError
+  退避重试 x3(共 4 试)后放弃本轮, 原文件完好返回原最老; 重试窗口内恢复则正常重写
+- test_v3_store_evict_expired_series: S2b 系列按龄淘汰新口径(§04.5) —— 超龄删整目录(天文件+agg.dat, 龄期
+  由文件名日期算); 边界(恰 window)不动; 无天文件保守跳过; 全局结构性豁免; 删除失败保留下轮重试
 
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time / time.sleep(测试进程内单线程,
 恢复由 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
@@ -1711,3 +1721,180 @@ def test_v3_store_series_has_data_gate(tmp_path):
     assert st.series_has_data("torrent:DEF") is True  # 仅 agg.dat 亦计入(.dat 后缀)
     with pytest.raises(ValueError):
         st.series_has_data("torrent:bad/key")  # 路径分隔符不进文件名
+
+
+# ---------- v3 S2b 存储层: agg 追加/读取/裁剪/淘汰(plan 26-10-04-1957 §04) ----------
+
+_S2B_H0 = (1_760_000_000 // HOUR) * HOUR  # hour 对齐的现代 epoch(Windows 不支持负 epoch, 勿用 1970 附近)
+
+
+def _agg_row(
+    kind: str, epoch: int, dl_avg=10, dl_max=20, up_avg=5, up_max=8, dl_total=100, up_total=200, cov=3600
+) -> AggRow:
+    """聚合行构造辅助(默认值可覆盖)"""
+    return AggRow(kind, epoch, dl_avg, dl_max, up_avg, up_max, dl_total, up_total, cov)
+
+
+def test_v3_store_agg_append_read_and_torn_tail(tmp_path):
+    """append_agg_rows/read_agg(§04.2/§04.3): 新文件建头行(v3)+key 行, hour/day/month
+    9 列混存追加 + roundtrip; 空行批零操作(不建文件); 崩溃残留无换行尾先补换行照常收;
+    缺失/空文件 = 空解析结果(key=None)"""
+    st = TrafficV3Store(str(tmp_path))
+    key = "torrent:ABC"
+    rows = (
+        _agg_row("hour", _S2B_H0), _agg_row("day", v3_day_epoch(_S2B_H0)), _agg_row("month", v3_month_epoch(_S2B_H0))
+    )
+    st.append_agg_rows(key, rows)  # 新文件: 惰性建目录 + 头行 + key 行
+    lines = _read_text(v3_agg_file_path(str(tmp_path), key)).splitlines()
+    assert lines[0] == HEADER_LINE_V3 and lines[1] == f"key,{key}"
+    assert lines[2:] == [format_agg_row(r) for r in rows]
+    parsed = st.read_agg(key)
+    assert parsed.key == key
+    assert parsed.hours == (rows[0], ) and parsed.days == (rows[1], ) and parsed.months == (rows[2], )
+    # 空行批: 零操作不建文件(惰性纪律)
+    st.append_agg_rows("torrent:EMPTY", ())
+    assert not os.path.exists(v3_agg_file_path(str(tmp_path), "torrent:EMPTY"))
+    # 崩溃残留: 末行无换行 -> 下批追加先补换行, 两批数据都完整可读
+    with open(v3_agg_file_path(str(tmp_path), key), "a", encoding="utf-8", newline="") as f:
+        f.write(format_agg_row(_agg_row("hour", _S2B_H0 + HOUR, dl_avg=99)))
+    st.append_agg_rows(key, (_agg_row("hour", _S2B_H0 + 2 * HOUR, dl_avg=77), ))
+    parsed = st.read_agg(key)
+    assert [h.dl_avg for h in parsed.hours] == [10, 99, 77]  # 残行补换行后照常收
+    assert parsed.bad_lines == 0 and not parsed.torn_tail
+    # 缺失/空文件 = 空解析结果(key=None, 全空)
+    empty = st.read_agg("torrent:NOPE")
+    assert empty.key is None and empty.hours == () and empty.data_lines == 0
+    os.makedirs(v3_series_dir(str(tmp_path), "torrent:BLANK"))
+    (tmp_path / TRAFFIC_V3_DIR_NAME / "torrents" / "BLANK" / "agg.dat").write_text("", encoding="utf-8")
+    assert st.read_agg("torrent:BLANK").key is None
+
+
+def test_v3_store_series_keys_and_day_dates(tmp_path):
+    """series_keys/series_day_dates/read_day(§04.3 恢复入口): global + torrents/<h> 全列出
+    (非 infohash 目录跳过); 天文件日期按补算窗口过滤(min_epoch 边界含, 升序), agg.dat 等
+    非日期杂物跳过; 目录缺失 = 空表; 非法日期串 fail-fast(路径层校验)"""
+    st = TrafficV3Store(str(tmp_path))
+    assert st.series_keys() == []  # 根目录缺失
+    d_old, d_new = "2026-01-01", "2026-03-15"
+    for key in ("global", "torrent:ABC"):
+        for d in (d_old, d_new):
+            _write_dat(st.series_day_path(key, d), [HEADER_LINE_V3, f"key,{key}"])
+        _write_dat(v3_agg_file_path(str(tmp_path), key), [HEADER_LINE_V3, f"key,{key}"])
+    os.makedirs(os.path.join(v3_root_dir(str(tmp_path)), "torrents", "NOT!HASH"))  # 非 infohash 目录: 跳过
+    assert st.series_keys() == ["global", "torrent:ABC"]
+    min_epoch = v3_date_str_epoch("2026-03-01")
+    assert st.series_day_dates("torrent:ABC", min_epoch) == (d_new, )  # 窗外天文件不进补算
+    assert st.series_day_dates("torrent:ABC", v3_date_str_epoch(d_old)) == (d_old, d_new)  # 边界含(升序)
+    assert st.series_day_dates("torrent:NOPE", 0) == ()  # 目录缺失
+    assert st.read_day("torrent:ABC", d_new) is not None and st.read_day("torrent:ABC", "2026-03-16") is None
+    with pytest.raises(ValueError):
+        st.read_day("torrent:ABC", "2026-99-01")  # 非法日期串: 路径层 fail-fast
+
+
+def test_v3_store_trim_agg_hours(tmp_path):
+    """trim_agg_hours(§04.5, v3 唯一 tmp+fsync+os.replace 原子重写点): epoch >=
+    now-rollup_window 的 hour 行保留(边界含); day/month 行全保留(永久, D7 不裁);
+    无到龄行零写(same_content, 文件字节不变); 返回重写后最老 hour epoch(空 = None)"""
+    st = TrafficV3Store(str(tmp_path))
+    key = "global"
+    window = 30 * 86400.0
+    now = 3000 * 86400.0
+    aged, boundary, fresh = now - window - 2 * HOUR, now - window, now - HOUR
+    st.append_agg_rows(
+        key, (
+            _agg_row("hour", aged, dl_avg=1),
+            _agg_row("hour", boundary, dl_avg=2),
+            _agg_row("hour", fresh, dl_avg=3),
+            _agg_row("day", v3_day_epoch(aged)),
+            _agg_row("month", v3_month_epoch(aged)),
+        )
+    )
+    path = v3_agg_file_path(str(tmp_path), key)
+    assert st.trim_agg_hours(key, now, window) == boundary  # 到龄行裁掉, 返回新最老
+    parsed = st.read_agg(key)
+    assert [h.epoch for h in parsed.hours] == [boundary, fresh]
+    # day/month 行永久: 不按龄裁剪
+    assert parsed.days[0].epoch == v3_day_epoch(aged) and parsed.months[0].epoch == v3_month_epoch(aged)
+    # same_content: 无到龄行零写(文件字节不变, 黄金法则 1)
+    snap = _read_text(path)
+    assert st.trim_agg_hours(key, now, window) == boundary
+    assert _read_text(path) == snap
+    # 全部到龄: hours 清空, day/month 照常保留
+    assert st.trim_agg_hours(key, now + 40 * 86400, window) is None
+    parsed = st.read_agg(key)
+    assert parsed.hours == () and len(parsed.days) == 1 and len(parsed.months) == 1
+    # 缺失 = None
+    assert st.trim_agg_hours("torrent:NOPE", now, window) is None
+
+
+def test_v3_store_trim_agg_hours_replace_locked(tmp_path, monkeypatch):
+    """裁剪重写被占用(Windows 读侧竞态, PermissionError): 退避重试 xREWRITE_RETRIES 后
+    放弃本轮 —— 原文件完好返回原最老 epoch(下轮重试); 重试窗口内恢复则正常重写"""
+    st = TrafficV3Store(str(tmp_path))
+    key = "global"
+    window = 30 * 86400.0
+    now = 3000 * 86400.0
+    aged = now - window - HOUR
+    st.append_agg_rows(key, (_agg_row("hour", aged), ))
+    calls = {"n": 0}
+    real_replace = os.replace  # 打桩前捕获真函数(桩内不能再走被替换的 os.replace)
+
+    def _always_locked(src, dst):
+        calls["n"] += 1
+        raise PermissionError(13, "locked")
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.time.sleep", lambda s: None)
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", _always_locked)
+    assert st.trim_agg_hours(key, now, window) == aged  # 放弃本轮: 返回原最老 epoch
+    assert calls["n"] == REWRITE_RETRIES + 1  # 首试 + 退避重试 3 次(第 4 次仍锁 -> 放弃)
+    assert len(st.read_agg(key).hours) == 1  # 原文件完好(原子重写失败不损数据)
+    # 重试窗口内恢复: 第 2 次起放行 -> 重写成功
+    calls["n"] = 0
+
+    def _locked_once(src, dst):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise PermissionError(13, "locked")
+        real_replace(src, dst)
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", _locked_once)
+    assert st.trim_agg_hours(key, now, window) is None  # 唯一 hour 行到龄被裁 -> 空
+    assert st.read_agg(key).hours == ()
+
+
+def test_v3_store_evict_expired_series(tmp_path, monkeypatch):
+    """evict_expired_series(§04.5 新口径): 系列最新天文件日期距 now 超过 rollup_window
+    -> 整目录删除(天文件 + agg.dat, 龄期由文件名日期直接算); 边界(恰 window)不动;
+    无天文件的目录保守跳过; 全局系列结构性豁免; 删除失败(读侧竞态)保留下轮重试且
+    不进返回表"""
+    st = TrafficV3Store(str(tmp_path))
+    window = 30 * 86400.0
+    edge_midnight = v3_date_str_epoch("2026-03-15")
+    now = edge_midnight + window  # now 恰在窗口边界上: 2026-03-15 的 00:00 距 now 恰 = window(边界含, 保留)
+    old_d = v3_epoch_date_str(now - 40 * 86400)
+    new_d = "2026-03-16"
+    # OLD: 超龄(天文件 + agg.dat 同删); EDGE: 恰压线保留; NEW: 新鲜; AGGONLY: 无天文件保守跳过
+    for key, d in (("torrent:OLD", old_d), ("torrent:EDGE", "2026-03-15"), ("torrent:NEW", new_d)):
+        _write_dat(st.series_day_path(key, d), [HEADER_LINE_V3, f"key,{key}"])
+    _write_dat(v3_agg_file_path(str(tmp_path), "torrent:OLD"), [HEADER_LINE_V3, "key,torrent:OLD"])
+    os.makedirs(v3_series_dir(str(tmp_path), "torrent:AGGONLY"))
+    _write_dat(v3_agg_file_path(str(tmp_path), "torrent:AGGONLY"), [HEADER_LINE_V3, "key,torrent:AGGONLY"])
+    _write_dat(st.series_day_path("global", old_d), [HEADER_LINE_V3, "key,global"])  # 全局豁免(结构性)
+    evicted = st.evict_expired_series(now, window)
+    assert evicted == ["torrent:OLD"]
+    assert not os.path.exists(v3_series_dir(str(tmp_path), "torrent:OLD"))  # 整目录(天文件 + agg.dat)
+    for key in ("torrent:EDGE", "torrent:NEW", "torrent:AGGONLY"):
+        assert os.path.exists(v3_series_dir(str(tmp_path), key))
+    assert os.path.exists(v3_series_dir(str(tmp_path), "global"))
+    # 删除失败重试: 重建 OLD(首轮已被删) -> rmtree 抛错 -> 目录保留且不进返回表 -> 下轮重试成功
+    _write_dat(st.series_day_path("torrent:OLD", old_d), [HEADER_LINE_V3, "key,torrent:OLD"])
+    _write_dat(v3_agg_file_path(str(tmp_path), "torrent:OLD"), [HEADER_LINE_V3, "key,torrent:OLD"])
+
+    def _boom(path):
+        raise OSError(16, "locked")
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.shutil.rmtree", _boom)
+    assert st.evict_expired_series(now, window) == []  # 删除失败: 不进返回表
+    assert os.path.exists(v3_series_dir(str(tmp_path), "torrent:OLD"))  # 目录保留下轮重试
+    monkeypatch.undo()
+    assert st.evict_expired_series(now, window) == ["torrent:OLD"]  # 下轮重试成功

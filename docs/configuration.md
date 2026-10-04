@@ -419,7 +419,7 @@ config:
         sample_interval: 30S   # 采样间隔（须 >= 主循环节拍 main_tick，上限 10M）
         flush_interval: 10M    # 批量落盘周期（60S~1H，整数秒；默认 10M）
         raw_window: 24H        # 高分辨率采样行保留窗（1H~90D）
-        rollup_window: 30D     # 小时均值行保留窗（7D 起，无上限）
+        rollup_window: 30D     # 小时均值行保留窗 + 系列淘汰龄 + 聚合补算窗口（7D 起，无上限）
 ```
 
 - `sample_interval`：也是 24h 流量图的曲线颗粒，越小曲线越细但存储体量线性增长。下限为硬校验——低于 `main_tick` 的间隔启动时直接拒绝（采样任务由主循环节拍驱动，更细的间隔无法被调度）；不是 `main_tick` 整数倍只是精度损耗（运行期告警一次），校验不拒绝。

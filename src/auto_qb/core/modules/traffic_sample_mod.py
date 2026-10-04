@@ -8,9 +8,7 @@
 S2a 写侧翻转(§03): 采样点不再逐行落盘, 进内存 BlockBuffer(每系列一个), 每 flush_interval
 (默认 600s, handler 内计时)批量追加落盘到 <data_dir>/qb-traffic-v3/<系列>/<YYYY-MM-DD>.dat
 (v3 块化稀疏 delta 格式; 序列化/解析纯函数单点在 core/traffic_store.py v3 纯函数区, 文件
-写入单点在同文件 TrafficV3Store)。聚合分层(内存累计器/水位封口/文件尾恢复/catch-up/hour
-裁剪/种子淘汰)属 S2b, 本阶段不接线 —— 写侧已留接缝: 块化追加(BlockBuffer.records 批量写)、
-flush 时点(_maybe_flush_all 单点)、游程封口时机(_seal_run 封口即成为 buffer 记录)。
+写入单点在同文件 TrafficV3Store)。聚合分层(S2b)见下「聚合分层与恢复」节。
 v2 写路径随翻转停用: 本模块不再触旧目录 qb-traffic/ 与 index.json(停写; 退役方法保留
 待 S5 清理, 标注 pragma no cover)。
 
@@ -60,9 +58,42 @@ flush 驱动与跨天切块(§3.3):
   flush(防大种子库最坏 ~60MB 滞留)。
 - dry_run: 缓冲与游程内存照常推进, flush 触发静默跳过写; enabled=false 不建任务零开销。
 
-优雅退出 stop() 钩子(§3.4): 经 host.stop_all() 触发 —— 封全部开放游程 + 全量 flush;
-dry_run 短路; 幂等; OSError 按落盘失败口径告警不上抛。qbmanager 的 finally 与
-state.save 顺序不改。
+优雅退出 stop() 钩子(§3.4): 经 host.stop_all() 触发 —— 封全部开放游程 + 全量 flush +
+聚合封口(完结层级照常检查落 agg); dry_run 短路; 幂等; OSError 按落盘失败口径告警不上抛。
+qbmanager 的 finally 与 state.save 顺序不改。
+
+聚合分层与恢复(S2b, §04): agg.dat(hour/day/month 9 列 + cov_s, 每系列一个, 追加混存):
+- 内存累计器(§4.1, 与 dt 链同源): _append_record 单点逐记录入账, 前向记账 —— 每记录
+  到达时把 [上一槽, 本槽) 区间记到上一观测名下(上一记录的速率持有到本记录到达为止),
+  槽位/跨度取写侧游标推进的同一计算结果(与落盘 dt 链严格同源); 块首不继承区间信用
+  (块间 gap = 真空, 崩溃窗口/跨天/改间隔不虚记覆盖)。z 游程内部槽区间速率恒 0/totals
+  恒快照, 逐槽均摊折叠为逐区间记账(聚合值等价); n 游程不贡献(null 期无观测, 信用
+  清空)。hour 桶: 区间按小时界拆分入账, cov_s = Σ桶内覆盖(≤3600, v3_hour_agg),
+  avg = dt 加权 —— dt_i ≡ interval_s 时严格退化为 v2 纯活跃桶公式(对照钉住), max 逐
+  记录取大, totals 取级末快照(桶内最后入账区间的观测快照); 只有 null 覆盖的小时不产
+  hour 行(空桶 = null)。day/month 累计器严格逐级(§4.1): hour 行封口并入 day 累计器
+  (v3_rollup_agg), day 行并入 month 累计器 —— day 不从 raw 直聚(cov_s 链只在逐级
+  传递才完整)。同 epoch 行重封 = 替换累计器旧行(append 侧为追加行, 解析取最后一行)。
+- 水位封口(§4.2): flush 时点(600s, _maybe_flush_all 驱动)顺序检查完结 —— 完结整小时
+  append hour 行 → 完结本地日 append day 行 → 完结自然月 append month 行, 每系列每
+  flush 合并一批 append(至多 +1 次 open)。水位 = agg 文件尾(不落内存): append 成功即
+  水位推进, 崩溃于 append 后重启从文件尾恢复不重 append(§4.4)。暂停恢复跨多小时时
+  pending 可含多日, 翻日/翻月由入账时点级联封口兜底(先封前一日/月再开新累计器)。
+- 重启恢复与 catch-up(§4.3, 硬序: catch-up 必须先于裁剪): start() 逐系列扫 agg 文件尾
+  一次 -> 恢复水位 + 从文件内行重建当日/当月累计器 -> catch-up 逐级补算 append:
+  hour <- 补算窗口内天文件 raw 逐槽前向记账(与在线记账同一口径)、day <- agg 内 hour 行、
+  month <- day 行。补算窗口 = rollup_window(默认 30d)= 天文件存活期(不是 raw_window);
+  停机超窗 -> 天文件已删 -> 对应 hour/day 行缺失跳过不标注(图上真空, 与块间 gap 语义
+  一致)。恢复末尾才做 hour 裁剪(硬序, 测试钉住: hour 到龄/day 未封 时 day 行不丢)。
+- 裁剪与淘汰(§4.5): hour 行按 rollup_window 裁剪, piggyback hour 封口时点, 判据用内存
+  最老行(零常规文件读), 存在到龄行才重写 + 无到龄零写(same_content 语义), tmp+fsync+
+  os.replace 仅存于此(v3 常规写路径无原子重写); day/month 行不按龄裁剪(D7 永久)。
+  种子淘汰 = 删超龄系列目录(天文件 + agg.dat), 龄期由天文件名日期直接算(index.json
+  updated_at 退役), frozen 照删, 全局系列豁免; 触发点 = flush 时点(节流至多每
+  EVICT_CHECK_INTERVAL_S 一次, 扫目录 IO 不随 600s flush 放大), 淘汰后同步清理该系列
+  全部内存缓存(数据门/累计器/基线/镜像, 防陈旧门缓存复活已删系列)。
+- dry_run: 累计器与水位封口内存照常推进; agg append 与裁剪/淘汰写操作静默跳过;
+  stop() 聚合封口随 dry_run 短路; start() 恢复(catch-up 有写)dry_run 整体跳过。
 
 C1 生效与热重载联动(§3.5): handler 每轮现读 sample_interval 与 main_tick, 失配向上取整
 到下一倍数 + 告警一次(D5: logger.warning + 已告警记忆防重复, 配置变化时记忆复位), 不拒采;
@@ -83,19 +114,26 @@ import logging
 import math
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from ..module import AppContext, BaseModule
 from ..taskqueue import REQUEUE, Task
 from ..traffic_store import (
     DRIFT_TOL_MS,
+    HOUR_SECONDS,
+    V3HourSample,
     V3NullRun,
     V3Sample,
     V3ZeroRun,
     TrafficDatStore,
     TrafficV3Store,
+    v3_block_slots,
+    v3_day_epoch,
     v3_epoch_date_str,
+    v3_hour_agg,
+    v3_month_epoch,
+    v3_rollup_agg,
 )
 
 logger = logging.getLogger(__name__)
@@ -125,6 +163,10 @@ ZRUN_CAP_SAMPLES = 120
 #: 单系列缓冲槽数上限(Q3 保险闸, plan 26-10-04-1957 §3.1): r 记录占 1 槽, 游程占 run_len
 #: 槽; 达到即提前单独 flush(防大种子库最坏 ~60MB 滞留); 模块常量非配置键
 V3_BUFFER_SLOT_CAP = 3600
+
+#: 种子按龄淘汰扫描节流间隔(秒, §4.5: 触发点 = flush 时点, 扫目录 IO 节流至多每小时
+#: 一次 —— 判据口径与触发频率解耦); 模块常量非配置键
+EVICT_CHECK_INTERVAL_S = 3600
 
 
 def _valid_counter(value) -> bool:
@@ -186,6 +228,48 @@ class BlockBuffer:
     header_written: bool  # 块头是否已随某次 flush 落盘(块头只写一次)
 
 
+@dataclass
+class SeriesAgg:
+    """v3 单系列聚合分层内存态(S2b §04, 主循环线程独占): 累计器 + 翻日/翻月状态 +
+    裁剪判据。水位不在此 —— 水位 = agg 文件尾, append 成功即推进(§4.4)。
+
+    pending: 未封口 hour 桶样本(hour_epoch -> V3HourSample 列表, 按时序); 常态只含
+    当前小时, 暂停恢复跨多小时时可含多日(封口时逐桶检查完结)。同 epoch 桶重开
+    (flush 恰在小时界后区间信用补记)时入账续接, 重封行替换累计器/文件旧行。
+    open_credit: 区间信用 (槽位, dl_rate, up_rate, dl_total, up_total) —— 上一非 null
+    槽的前向覆盖待下一记录首槽结算; None = 无信用(块首/null 期)。块首强制清零
+    (块间 gap = 真空不虚记覆盖)。
+    day_epoch/day_hours: 开放日累计器(当日已封口 hour 行); month_epoch/month_days:
+    开放自然月累计器(当月已封口 day 行)。严格逐级(§4.1), day 不从 raw 直聚。
+    earliest_hour: agg 文件内最老 hour 行 epoch(裁剪判据, §4.5 —— 零常规文件读)。
+    """
+
+    pending: dict = field(default_factory=dict)
+    open_credit: Optional[tuple] = None
+    day_epoch: Optional[int] = None
+    day_hours: list = field(default_factory=list)
+    month_epoch: Optional[int] = None
+    month_days: list = field(default_factory=list)
+    earliest_hour: Optional[int] = None
+
+
+def _record_slots(rec, anchor: float, cursor: float, block_head: bool) -> tuple:
+    """单记录的槽位序列(绝对时刻浮点秒; 与 v3_block_slots 槽位推算同一口径, 在线记账
+    与恢复离线记账共用): r = [cursor]; z/n 游程非块首 = anchor + spacing*k (k=1..len,
+    末槽恰在 cursor = 游程实测终点), 块首 = anchor + spacing*k (k=0..len-1, 首槽恰在
+    B.start)。spacing 由 cursor-anchor 派生(显式 dt 或标称), 不重复解读 dt_ms。"""
+    if isinstance(rec, V3Sample):
+        return (float(cursor), )
+    n = rec.run_len
+    if block_head:
+        if n == 1:
+            return (float(anchor), )  # 块首单槽游程: 读侧零推进
+        spacing = (cursor - anchor) / (n - 1)  # 端点含均摊(§09.2 定约)
+        return tuple(anchor + spacing * k for k in range(n))
+    spacing = (cursor - anchor) / n  # 均摊 span/run_len(§02.3)
+    return tuple(anchor + spacing * k for k in range(1, n + 1))
+
+
 class TrafficSampleModule(BaseModule):
     """qb_traffic 模块: internal 采样任务自注册 + 两系列采样 + v3 块化批量落盘(S2a)"""
 
@@ -225,6 +309,11 @@ class TrafficSampleModule(BaseModule):
         self._no_data: set = set()
         # 本轮已采样系列键(shell 缓冲清理参照, handler 每轮清空)
         self._round_keys: set = set()
+        # ---- v3 聚合分层状态(S2b) ----
+        # 单系列聚合累计器(§4.1): 系列键 -> SeriesAgg; 采样入账 lazily 建, start 恢复预建
+        self._agg_states: dict = {}
+        # 种子淘汰上次扫描时点(节流 EVICT_CHECK_INTERVAL_S, §4.5)
+        self._last_evict_check: Optional[float] = None
 
     def sections(self) -> tuple[str, ...]:
         return ("qb_traffic", )
@@ -234,6 +323,10 @@ class TrafficSampleModule(BaseModule):
     def start(self, ctx: AppContext, dry_run: bool) -> None:
         self._persistence_on = not dry_run  # dry_run 全程零落盘(含 stop 钩子短路)
         self._register_task(ctx)
+        if not dry_run:
+            # 聚合恢复 + catch-up(§4.3, 先于任何采样/flush; 含恢复末尾的 hour 裁剪 ——
+            # 硬序: catch-up 先于裁剪)。dry_run 跳过(catch-up 有写, 恢复无内存意义)。
+            self._recover_aggregates()
         # v2 启动对账(reconcile/index)随换代退役: v3 写侧不触 index.json(R2), S5 删方法
 
     def _reconcile_on_start(self, ctx: AppContext, dry_run: bool) -> None:  # pragma: no cover
@@ -583,7 +676,8 @@ class TrafficSampleModule(BaseModule):
             )
         interval = self._effective_interval or 1
         tol_s = DRIFT_TOL_MS / 1000.0
-        if buf.start_epoch is None:
+        block_head = buf.start_epoch is None
+        if block_head:
             # 新块首记录(§3.1): B.start = 块首记录实测 epoch(整数秒)
             buf.start_epoch = int(start_ts)
             buf.interval_s = interval
@@ -597,6 +691,7 @@ class TrafficSampleModule(BaseModule):
             elif rec.run_len == 1:
                 buf.records.append(rec)  # 块首单槽游程: 读侧零推进, dt 无消费者 —— 不写
                 buf.slots += 1
+                buf.projected_ts = anchor  # 游标镜像读侧零推进(不落此行则链锚点残留在旧块)
             else:
                 span = end_ts - anchor
                 nominal = (rec.run_len - 1) * interval  # 块首游程无引导间隔(读侧标称口径)
@@ -628,6 +723,10 @@ class TrafficSampleModule(BaseModule):
             buf.records.append(rec)
             buf.slots += 1 if isinstance(rec, V3Sample) else rec.run_len
             buf.prev_actual_ts = end_ts
+        # 聚合累计器入账(§4.1, S2b): 与 dt 链同源 —— anchor/cursor 取本次游标推进的
+        # 同一结果; 落盘失败丢弃整块时累计器保留已入账观测(观测面与 raw 面的已知偏差,
+        # 与「崩溃窗口丢缓冲 = 真空」口径独立)
+        self._agg_feed(key, rec, anchor, buf.projected_ts, block_head)
         if buf.slots >= V3_BUFFER_SLOT_CAP:
             self._flush_series(key)  # Q3 保险闸(§3.1): 超限提前单独 flush(不关块)
 
@@ -671,8 +770,9 @@ class TrafficSampleModule(BaseModule):
 
     def _maybe_flush_all(self, conf, now: float) -> None:
         """flush 驱动(§3.3): handler 内计时, now - last_flush >= flush_interval -> 全系列
-        批量 flush。进程首轮只记时不提前 flush(批量优先; 崩溃窗口 <= flush_interval 不变)。
-        暂停期间 handler 不跑、缓冲滞留, 恢复后首轮补 flush —— 语义正确。"""
+        批量 flush + 聚合封口 + 种子淘汰(§4.2/§4.5 时点)。进程首轮只记时不提前 flush
+        (批量优先; 崩溃窗口 <= flush_interval 不变)。暂停期间 handler 不跑、缓冲滞留,
+        恢复后首轮补 flush —— 语义正确。"""
         if self._last_flush is None:
             self._last_flush = now  # 进程首轮: 只记时点不提前 flush(批量优先)
             return
@@ -680,24 +780,294 @@ class TrafficSampleModule(BaseModule):
             return
         self._last_flush = now
         self._flush_all_series()
+        self._maybe_evict(conf, now)
 
     def _flush_all_series(self) -> None:
-        """全系列批量 flush(§3.3 驱动点; stop() 复用): 逐系列落盘待写记录; 顺带做内存
-        卫生 —— 无开放块、无待写记录、无开放游程且本轮未采样的 shell 缓冲清除。"""
+        """全系列批量 flush(§3.3 驱动点; stop() 复用): 逐系列落盘待写记录; 聚合封口
+        (§4.2: 完结层级检查 + agg append, S2b); 顺带做内存卫生 —— 无开放块、无待写
+        记录、无开放游程且本轮未采样的 shell 缓冲清除。"""
         for key in list(self._buffers):
             self._flush_series(key)
         for key in list(self._buffers):
             buf = self._buffers[key]
             if buf.start_epoch is None and not buf.records and key not in self._open_runs and key not in self._round_keys:
                 del self._buffers[key]
+        self._agg_flush_all(time.time())
+
+    # ---------- 聚合分层与恢复(S2b, §04) ----------
+
+    def _agg_state(self, key: str) -> SeriesAgg:
+        """单系列聚合累计器(lazily 建; 纯内存结构, dry_run 照常推进)"""
+        agg = self._agg_states.get(key)
+        if agg is None:
+            agg = self._agg_states[key] = SeriesAgg()
+        return agg
+
+    def _agg_feed(self, key: str, rec, anchor: float, cursor: float, block_head: bool) -> None:
+        """聚合累计器逐记录入账(§4.1): 前向记账 —— 本记录到达时结算上一非 null 槽的
+        前向覆盖 [信用槽位, 本记录首槽), 再入账本记录内部的游程槽区间(z 恒 0/n 不记),
+        信用移到本记录末槽。槽位序列与落盘 dt 链同一游标推进结果(严格同源); 块首清空
+        信用(块间 gap = 真空, 崩溃窗口/跨天/改间隔不虚记覆盖)。"""
+        agg = self._agg_state(key)
+        if block_head:
+            agg.open_credit = None
+        slots = _record_slots(rec, anchor, cursor, block_head)
+        credit = agg.open_credit
+        if credit is not None and slots:
+            self._agg_credit_hours(agg.pending, credit[0], slots[0], credit[1], credit[2], credit[3], credit[4])
+        if isinstance(rec, V3ZeroRun):
+            # 游程内部槽区间: 速率恒 0, totals 恒快照(逐槽均摊折叠为逐区间, 聚合值等价)
+            for k in range(len(slots) - 1):
+                self._agg_credit_hours(agg.pending, slots[k], slots[k + 1], 0, 0, rec.dl_total, rec.up_total)
+        if isinstance(rec, V3Sample):
+            agg.open_credit = (float(cursor), rec.dl_rate, rec.up_rate, rec.dl_total, rec.up_total)
+        elif isinstance(rec, V3ZeroRun):
+            agg.open_credit = (float(cursor), 0, 0, rec.dl_total, rec.up_total)
+        else:
+            agg.open_credit = None  # n 游程: null 期无观测, 信用清空(其后区间不记)
+
+    @staticmethod
+    def _agg_credit_hours(
+        pending: dict, start: float, end: float, dl: int, up: int, dl_total: int, up_total: int
+    ) -> None:
+        """区间 [start, end) 按小时界拆分入账(V3HourSample, dt = 桶内覆盖秒); 在线记账
+        与恢复离线记账共用(离线传局部 dict)。末槽的信用区间跨小时界时自然拆分,
+        hour 桶 cov 上界 3600 由 v3_hour_agg 收口。"""
+        if end <= start:
+            return
+        cur = start
+        while cur < end:
+            h = int(cur) // HOUR_SECONDS * HOUR_SECONDS
+            seg = min(end, h + HOUR_SECONDS) - cur
+            pending.setdefault(h, []).append(V3HourSample(dl, up, dl_total, up_total, seg))
+            cur += seg
+
+    def _agg_flush_all(self, now: float) -> None:
+        """全系列聚合封口(§4.2 flush 时点; stop() 复用 —— 未完结层级留累计器, 重启经
+        catch-up 重建, 零丢失)"""
+        for key in list(self._agg_states):
+            self._agg_flush_series(key, now)
+
+    def _agg_flush_series(self, key: str, now: float) -> bool:
+        """单系列聚合封口(§4.2): 完结整小时 -> hour 行 -> 完结本地日 -> day 行 ->
+        完结自然月 -> month 行, 顺序检查; 产出行合并一批 append(每系列每 flush 至多
+        +1 次 open)。dry_run / data_dir 空: 封口内存照常推进, 写静默跳过。hour 封口
+        时点 piggyback 裁剪检查(§4.5)。返回是否实际写了 agg 文件(测试用)。"""
+        agg = self._agg_states.get(key)
+        if agg is None:
+            return False
+        rows = []
+        for h in sorted(agg.pending):
+            if h + HOUR_SECONDS > now:
+                break  # 首个未完结小时即止(pending 按序, 之后只会更晚)
+            samples = agg.pending.pop(h)
+            if not samples:
+                continue  # 空桶不留(全 null 覆盖的小时不产行, 空桶 = null)
+            self._agg_ingest_hour(agg, v3_hour_agg(h, tuple(samples)), rows)
+        if agg.day_epoch is not None and agg.day_hours and v3_day_epoch(now) > agg.day_epoch:
+            self._agg_ingest_day(agg, v3_rollup_agg("day", agg.day_epoch, tuple(agg.day_hours)), rows)
+            agg.day_epoch, agg.day_hours = None, []
+        if agg.month_epoch is not None and agg.month_days and v3_month_epoch(now) > agg.month_epoch:
+            rows.append(v3_rollup_agg("month", agg.month_epoch, tuple(agg.month_days)))
+            agg.month_epoch, agg.month_days = None, []
+        wrote = self._agg_append(key, tuple(rows))
+        conf = self._ctx.config.qb_traffic
+        if conf is not None and any(r.kind == "hour" for r in rows):
+            self._agg_trim(key, agg, now, conf.rollup_window)  # piggyback hour 封口时点
+        return wrote
+
+    @staticmethod
+    def _agg_ingest_hour(agg: SeriesAgg, row, rows_out: list) -> None:
+        """完结 hour 行落批 + 并入 day 累计器(严格逐级): 本行先 append 进 rows_out 随本批
+        落盘(§4.2 完结整小时 append hour 行; 同 epoch 重封 = 追加行, 解析取最后一行);
+        同日追加; 同 epoch 重封替换累计器旧行; 翻日(暂停恢复跨多小时滞留)先级联封前一日
+        再开新累计器。"""
+        rows_out.append(row)
+        d = v3_day_epoch(row.epoch)
+        if agg.day_epoch is None:
+            agg.day_epoch, agg.day_hours = d, [row]
+        elif d == agg.day_epoch:
+            agg.day_hours = [h if h.epoch != row.epoch else row for h in agg.day_hours]
+            if all(h.epoch != row.epoch for h in agg.day_hours):
+                agg.day_hours.append(row)
+        else:
+            # 前一日随本行翻日封口(其末 hour 已过, 前一日必已完结)
+            TrafficSampleModule._agg_ingest_day(
+                agg, v3_rollup_agg("day", agg.day_epoch, tuple(agg.day_hours)), rows_out
+            )
+            agg.day_epoch, agg.day_hours = d, [row]
+
+    @staticmethod
+    def _agg_ingest_day(agg: SeriesAgg, row, rows_out: list) -> None:
+        """完结 day 行落批 + 并入 month 累计器(严格逐级): 本行先 append 进 rows_out 随本批
+        落盘(§4.2 完结本地日 append day 行; 同 epoch 重封 = 追加行); 同月追加 / 同 epoch
+        替换 / 翻月级联封前一月(语义同 _agg_ingest_hour)。"""
+        rows_out.append(row)
+        m = v3_month_epoch(row.epoch)
+        if agg.month_epoch is None:
+            agg.month_epoch, agg.month_days = m, [row]
+        elif m == agg.month_epoch:
+            agg.month_days = [d if d.epoch != row.epoch else row for d in agg.month_days]
+            if all(d.epoch != row.epoch for d in agg.month_days):
+                agg.month_days.append(row)
+        else:
+            rows_out.append(v3_rollup_agg("month", agg.month_epoch, tuple(agg.month_days)))
+            agg.month_epoch, agg.month_days = m, [row]
+
+    def _agg_append(self, key: str, rows: tuple) -> bool:
+        """聚合行批量落盘(同款追加纪律, dry_run 静默跳过): OSError 按落盘失败口径
+        告警不上抛(连续失败只告警一次, 与天文件共用记忆) —— 行随累计器丢失, 重启经
+        catch-up 从天文件/agg 尾重建补算(幂等)。"""
+        if not rows:
+            return False
+        if not self._persistence_on or not self._ctx.config.data_dir:
+            return False  # dry_run: 封口内存照常推进, 写静默跳过
+        try:
+            self._get_v3_store().append_agg_rows(key, rows)
+            self._persist_warned = False
+            return True
+        except OSError as e:
+            if self._persist_warned:
+                logger.debug(f"流量采样 | {key} agg 行落盘失败(持续): {e}")
+            else:
+                logger.warning(f"流量采样 | {key} agg 行落盘失败(本批聚合行丢失, 重启后补算): {e}")
+                self._persist_warned = True
+            return False
+
+    def _agg_trim(self, key: str, agg: SeriesAgg, now: float, window: float) -> None:
+        """hour 行按 rollup_window 裁剪(§4.5): 判据用内存最老行(零常规文件读), 存在
+        到龄行才重写(无到龄零写 = same_content 语义); dry_run 静默跳过。"""
+        if not self._persistence_on or not self._ctx.config.data_dir:
+            return
+        if agg.earliest_hour is None or now - agg.earliest_hour <= window:
+            return  # 无到龄行(边界含): 不读不写
+        try:
+            agg.earliest_hour = self._get_v3_store().trim_agg_hours(key, now, window)
+        except OSError as e:
+            logger.warning(f"流量采样 | {key} agg 裁剪失败(原文件完好, 下轮重试): {e}")
+
+    def _maybe_evict(self, conf, now: float) -> None:
+        """种子按龄淘汰(§4.5, flush 时点): 扫描节流至多每 EVICT_CHECK_INTERVAL_S 一次
+        (判据口径与触发频率解耦); 淘汰 = 删超龄系列目录, 返回键同步清理该系列全部内存
+        缓存(数据门/累计器/基线/镜像/缓冲/游程 —— 防陈旧门缓存复活已删系列)。"""
+        if not self._persistence_on or not self._ctx.config.data_dir:
+            return  # dry_run: 淘汰写操作静默跳过
+        if self._last_evict_check is not None and now - self._last_evict_check < EVICT_CHECK_INTERVAL_S:
+            return
+        self._last_evict_check = now
+        try:
+            evicted = self._get_v3_store().evict_expired_series(now, conf.rollup_window)
+        except OSError as e:
+            logger.warning(f"流量采样 | 种子淘汰扫描失败(下轮重试): {e}")
+            return
+        for key in evicted:
+            self._agg_states.pop(key, None)
+            self._has_data.discard(key)
+            self._no_data.discard(key)
+            self._baselines.pop(key, None)
+            self.latest.pop(key, None)
+            self._buffers.pop(key, None)
+            self._open_runs.pop(key, None)
+        if evicted:
+            logger.info(f"流量采样 | 按龄淘汰超龄系列目录 {len(evicted)} 个(天文件 + agg.dat)")
+
+    def _recover_aggregates(self) -> None:
+        """重启恢复(§4.3): 扫现存系列, 逐系列恢复水位 + 重建累计器 + catch-up 补算
+        (硬序: 补算 append 全部完成后才裁剪)。单系列失败(OSError)不阻断其它系列。"""
+        conf = self._ctx.config.qb_traffic
+        if conf is None or not conf.enabled or not self._ctx.config.data_dir:
+            return
+        now = time.time()
+        store = self._get_v3_store()
+        for key in store.series_keys():
+            try:
+                self._recover_series(key, store, now, conf.rollup_window)
+            except OSError as e:
+                logger.warning(f"流量采样 | {key} 聚合恢复失败(该系列按 agg 现状运行): {e}")
+
+    def _recover_series(self, key: str, store: TrafficV3Store, now: float, window: float) -> None:
+        """单系列恢复(§4.3/§4.4): 扫 agg 文尾 -> 水位(= 文件尾行, 不落内存不重 append)
+        + 文件内行重建当日/当月累计器 -> catch-up 逐级补算 append(hour <- 窗口内天文件
+        raw 逐槽前向记账 / day <- agg 内 hour 行 / month <- day 行) -> 末尾才裁剪(硬序)。
+        补算窗口 = rollup_window = 天文件存活期: 停机超窗的天文件已删, 对应 hour/day 行
+        缺失跳过不标注(图上真空)。"""
+        parsed = store.read_agg(key)
+        agg = self._agg_state(key)
+        agg.earliest_hour = parsed.hours[0].epoch if parsed.hours else None
+        wm_hour = parsed.hours[-1].epoch if parsed.hours else None
+        wm_day = parsed.days[-1].epoch if parsed.days else None
+        wm_month = parsed.months[-1].epoch if parsed.months else None
+        today = v3_day_epoch(now)
+        cur_month = v3_month_epoch(now)
+        # --- hour catch-up: 补算窗口内天文件 raw 逐槽前向记账(与在线记账同一口径) ---
+        hour_samples: dict = {}
+        for date in store.series_day_dates(key, now - window):
+            parsed_day = store.read_day(key, date)
+            if parsed_day is not None:
+                self._agg_credit_day_file(hour_samples, parsed_day)
+        new_hours = []
+        for h in sorted(hour_samples):
+            if wm_hour is not None and h <= wm_hour:
+                continue  # 水位之前已有行: 不重算(前向水位, §4.4)
+            samples = hour_samples[h]
+            if not samples:
+                continue
+            if h + HOUR_SECONDS <= now:
+                new_hours.append(v3_hour_agg(h, tuple(samples)))  # 完结缺失小时 -> 补算行
+            else:
+                agg.pending[h] = list(samples)  # 开放小时 -> 重建累计器
+        # --- 当日/当月累计器从文件内行重建 + day/month catch-up(严格逐级) ---
+        by_day: dict = {}
+        for h in list(parsed.hours) + new_hours:
+            by_day.setdefault(v3_day_epoch(h.epoch), []).append(h)
+        agg.day_epoch, agg.day_hours = None, []
+        new_days = []
+        for d in sorted(by_day):
+            if d >= today:
+                agg.day_epoch, agg.day_hours = d, list(by_day[d])  # 当日累计器(未完结)
+                continue
+            if wm_day is not None and d <= wm_day:
+                continue  # 已有日行: 不重算
+            new_days.append(v3_rollup_agg("day", d, tuple(by_day[d])))
+        by_month: dict = {}
+        for d in list(parsed.days) + new_days:
+            by_month.setdefault(v3_month_epoch(d.epoch), []).append(d)
+        agg.month_epoch, agg.month_days = None, []
+        new_months = []
+        for m in sorted(by_month):
+            if m >= cur_month:
+                agg.month_epoch, agg.month_days = m, list(by_month[m])  # 当月累计器(未完结)
+                continue
+            if wm_month is not None and m <= wm_month:
+                continue
+            new_months.append(v3_rollup_agg("month", m, tuple(by_month[m])))
+        rows = tuple(new_hours + new_days + new_months)
+        if rows:
+            self._agg_append(key, rows)  # catch-up 补算 append(幂等: 同 epoch 取最后一行)
+        self._agg_trim(key, agg, now, window)  # 硬序: catch-up 全部落盘后才裁剪
+
+    @staticmethod
+    def _agg_credit_day_file(hour_samples: dict, parsed_day) -> None:
+        """单天文件逐槽前向记账(恢复离线侧): 逐块展开槽位(v3_block_slots), 相邻槽区间
+        [slot_k, slot_k+1) 记 slot_k 的观测(r = 其速率 / z = 0 / n = null 不记) —— 与
+        在线 _agg_feed 结算区间信用同一口径; 块间不跨记(块首无引导区间 = gap 真空)。"""
+        for block in parsed_day.blocks:
+            slots = v3_block_slots(block)
+            for k in range(len(slots) - 1):
+                cur, nxt = slots[k], slots[k + 1]
+                if cur.obs is None:
+                    continue  # n 槽: null 期不贡献
+                dl, up, dlt, upt = cur.obs
+                TrafficSampleModule._agg_credit_hours(hour_samples, cur.ts, nxt.ts, dl, up, dlt, upt)
 
     # ---------- 优雅退出 stop() 钩子(§3.4) ----------
 
     def stop(self) -> None:
-        """stop 钩子(§3.4): 经 host.stop_all() 触发 —— 封全部开放游程 + 全量 flush, 优雅
-        退出零丢失(现行 v2 丢开放行程 <=600s 的语义在此闭合)。dry_run 短路(不落盘);
-        幂等(重复调用缓冲游程已空, 零副作用); OSError 按落盘失败口径告警不上抛。
-        聚合封口(hour/day/month)是 S2b 接缝: 在此追加即可。"""
+        """stop 钩子(§3.4): 经 host.stop_all() 触发 —— 封全部开放游程 + 全量 flush +
+        聚合封口(完结 hour/day/month 层级照常检查并落 agg; 未完结小时的累计器随进程
+        消失, 重启经 catch-up 从天文件 raw 重建, 零丢失), 优雅退出零丢失(现行 v2 丢
+        开放行程 <=600s 的语义在此闭合)。dry_run 短路(不落盘); 幂等(重复调用缓冲
+        游程已空, 零副作用); OSError 按落盘失败口径告警不上抛。"""
         if not self._persistence_on:
             return  # dry_run: 不落盘(观测写盘属真实副作用)
         conf = self._ctx.config.qb_traffic

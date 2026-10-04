@@ -101,6 +101,7 @@ import logging
 import math
 import os
 import re
+import shutil
 import tempfile
 import time
 from dataclasses import dataclass
@@ -1573,13 +1574,28 @@ def v3_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
 
 
 class TrafficV3Store:
-    """v3 写侧存储(S2a, plan 26-10-04-1957 §03.3): 按天文件块化追加 + 批量落盘
+    """v3 写侧存储(S2a 天文件 + S2b 聚合, plan 26-10-04-1957 §03.3/§04): 按天文件块化
+    追加 + 批量落盘 + agg.dat 聚合行追加/裁剪 + 系列按龄淘汰
 
     写侧翻转后的落盘单点: 采样模块 BlockBuffer 每系列每 flush 单次 open("a") 写 N 行 +
     flush + fsync; 尾字节查补(崩溃残留半行补 \\n)每 flush 仅一次; 块头(B 行)由调用方在
     块首次 flush 时随批传入(块状态单点在采样模块 —— 跨 flush 的同块只传一次头)。
     只写 qb-traffic-v3/, 不触旧 qb-traffic/ 与 index.json(R2 换代); 目录惰性创建。
-    S2b 接缝: 聚合封口(hour/day/month 行)将 append 到 v3_agg_file_path(同款追加纪律)。
+
+    S2b 聚合分层(§04, 累计器/水位在采样模块, 本层只管文件):
+    - append_agg_rows: 聚合行(hour/day/month 9 列)追加, 与 append_records 同款追加纪律
+      (open("a") + flush + fsync, 每 flush 至多一次 open —— piggyback 语义);
+    - read_agg / series_day_dates / series_keys: 重启恢复(catch-up)的读取入口;
+    - trim_agg_hours: hour 行按 rollup_window 裁剪 —— v3 唯一的 tmp+fsync+os.replace
+      原子重写点(§04.5, 常规写路径全是追加); 无到龄行零写(same_content 语义);
+    - evict_expired_series: 超龄系列整目录删除(天文件 + agg.dat), 龄期由天文件名日期
+      直接算, frozen 照删, 全局豁免。淘汰/裁剪触发点都在采样模块的 flush 时点。
+
+    rollup_window v3 语义(§06.1 扩一句): hour 行保留窗 + 系列淘汰龄 + catch-up 补算
+    窗口(= 天文件存活期)三义合一, 不再只是 v2 的 hour 段保留窗; raw_window 语义不变。
+    day/month 行永久(D7 不设上限键); 注意 §04.5 淘汰口径是删整目录(天文件 + agg.dat),
+    被淘汰系列的月行随目录一并消失 —— 「月行永久」指不按龄裁剪, 非目录删除后仍可读。
+
     OSError 上抛(调用方按落盘失败口径处理 —— 观测数据丢失无一致性后果, §01.1)。
     """
     def __init__(self, data_dir: str) -> None:
@@ -1646,6 +1662,130 @@ class TrafficV3Store:
             f.flush()
             os.fsync(f.fileno())
 
+    # ---------- S2b: 聚合文件(agg.dat)与淘汰(§04) ----------
+
+    def read_agg(self, key: str) -> V3ParsedAgg:
+        """读系列 agg.dat(§04.3 恢复入口): 缺失/空文件 = 空解析结果(key=None, 全空元组);
+        OSError 上抛(调用方按恢复失败口径处理)。解析坏行/同 epoch 取最后一行等纪律
+        全在 parse_v3_agg_text(撕裂尾行跳过, 水位从文件尾推)。"""
+        path = v3_agg_file_path(self._data_dir, key)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return V3ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return parse_v3_agg_text(f.read())
+
+    def append_agg_rows(self, key: str, rows: tuple) -> None:
+        """追加一批聚合行(§04.2): 与 append_records 同款追加纪律 —— 单次 open("a") +
+        flush + fsync, 尾字节查补一次, 文件不存在先建头行(v3) + key 行。调用方每系列
+        每 flush 至多一次调用(piggyback 语义: hour/day/month 行合并一批)。rows 空 = 零操作。"""
+        rows = tuple(rows)
+        if not rows:
+            return
+        path = v3_agg_file_path(self._data_dir, key)  # 非法键 fail-fast
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        prefix = ""
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            prefix = f"{HEADER_LINE_V3}\nkey,{key}\n"
+        else:
+            with open(path, "rb") as f:
+                f.seek(-1, os.SEEK_END)
+                if f.read(1) != b"\n":
+                    prefix = "\n"
+        with open(path, "a", encoding="utf-8", newline="\n") as f:
+            f.write(prefix)
+            f.write("\n".join(format_agg_row(r) for r in rows) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+
+    def series_keys(self) -> list:
+        """扫描 v3 根目录列出现存系列键(§04.3 恢复入口): global/ + torrents/<infohash>/
+        (目录存在即列出, 数据有无由调用方读文件判断); 根目录缺失 = 空表。"""
+        root = v3_root_dir(self._data_dir)
+        keys: list = []
+        if os.path.isdir(os.path.join(root, V3_GLOBAL_DIR_NAME)):
+            keys.append(GLOBAL_KEY)
+        torrents_dir = os.path.join(root, TORRENTS_DIR_NAME)
+        if os.path.isdir(torrents_dir):
+            for name in sorted(os.listdir(torrents_dir)):
+                if _INFOHASH_RE.match(name) and os.path.isdir(os.path.join(torrents_dir, name)):
+                    keys.append(TORRENT_KEY_PREFIX + name)
+        return keys
+
+    def series_day_dates(self, key: str, min_epoch: float) -> tuple:
+        """系列目录内天文件日期串(升序), 仅保留 date 00:00 epoch >= min_epoch 的
+        (补算窗口过滤, §04.3 —— rollup_window 外的天文件已删/不读); 目录缺失 = 空表;
+        非日期杂物(agg.dat/.corrupt 等)跳过。"""
+        try:
+            names = os.listdir(v3_series_dir(self._data_dir, key))
+        except OSError:
+            return ()
+        out = []
+        for name in names:
+            d = v3_day_file_date(name)
+            if d is not None and v3_date_str_epoch(d) >= min_epoch:
+                out.append(d)
+        return tuple(sorted(out))
+
+    def read_day(self, key: str, date_str: str) -> Optional[V3ParsedDay]:
+        """读单天文件(§04.3 catch-up 的 raw 源): 缺失/空文件 = None; OSError 上抛。"""
+        path = self.series_day_path(key, date_str)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return None
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return parse_v3_day_text(f.read())
+
+    def trim_agg_hours(self, key: str, now: float, rollup_window: float) -> Optional[int]:
+        """hour 行按 rollup_window 裁剪(§04.5, v3 唯一 tmp+fsync+os.replace 原子重写点):
+        保留 hour.epoch >= now - rollup_window(边界含)的 hour 行, day/month 行全保留
+        (永久, D7); 无到龄行零写(same_content 语义, 返回现存最老 hour epoch);
+        撕裂尾行/坏行随重写自洁。PermissionError(Windows 读侧竞态)退避重试后仍失败则
+        放弃本轮(原文件完好), 返回原最老 epoch。返回重写后的最老 hour epoch(空 = None)。"""
+        path = v3_agg_file_path(self._data_dir, key)
+        if not os.path.exists(path) or os.path.getsize(path) == 0:
+            return None
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            parsed = parse_v3_agg_text(f.read())
+        kept = tuple(h for h in parsed.hours if h.epoch >= now - rollup_window)
+        oldest = parsed.hours[0].epoch if parsed.hours else None
+        if len(kept) == len(parsed.hours):
+            return oldest  # 无到龄行: 零写(黄金法则 1)
+        lines = [HEADER_LINE_V3, f"key,{key}"]
+        lines.extend(format_agg_row(r) for r in kept)
+        lines.extend(format_agg_row(r) for r in parsed.days)
+        lines.extend(format_agg_row(r) for r in parsed.months)
+        if _write_text_payload(path, "\n".join(lines) + "\n"):
+            return kept[0].epoch if kept else None
+        return oldest
+
+    def evict_expired_series(self, now: float, rollup_window: float) -> list:
+        """单种系列按龄淘汰(§04.5 新口径): 系列目录内最新天文件日期的 00:00 epoch 距
+        now 超过 rollup_window -> 整目录删除(天文件 + agg.dat); 龄期由文件名日期直接算
+        (index.json updated_at 退役); frozen 与否不豁免(删种即不再产新块与聚合, 文件
+        留存到按龄删除); 全局系列不在 torrents/ 下, 结构性豁免。无天文件的目录(纯
+        agg.dat, 无法判龄)保守跳过。返回淘汰的系列键列表(调用方据此清内存缓存);
+        删除失败(Windows 读侧竞态)保留目录下轮重试。"""
+        torrents_dir = os.path.join(v3_root_dir(self._data_dir), TORRENTS_DIR_NAME)
+        evicted: list = []
+        if not os.path.isdir(torrents_dir):
+            return evicted
+        for name in sorted(os.listdir(torrents_dir)):
+            series_dir = os.path.join(torrents_dir, name)
+            if not _INFOHASH_RE.match(name) or not os.path.isdir(series_dir):
+                continue
+            dates = [d for d in (v3_day_file_date(n) for n in os.listdir(series_dir)) if d is not None]
+            if not dates:
+                continue
+            newest = max(dates)  # YYYY-MM-DD 字典序 = 时间序
+            if now - v3_date_str_epoch(newest) <= rollup_window:
+                continue  # 未超龄不动(边界含)
+            try:
+                shutil.rmtree(series_dir)
+            except OSError as exc:
+                logger.warning(f"流量存储 | 系列目录 {name} 淘汰删除失败(下轮重试): {exc}")
+                continue
+            evicted.append(TORRENT_KEY_PREFIX + name)
+        return evicted
+
 
 def v3_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
     """逐级派生聚合行(§04.1, 严格逐级 —— day 只从 hour 行聚, month 只从 day 行聚,
@@ -1672,3 +1812,39 @@ def v3_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
         up_total=int(last.up_total),
         cov_s=int(cov),
     )
+
+
+def _write_text_payload(path: str, payload: str) -> bool:
+    """v3 整文件重写(trim_agg_hours 专用, §04.5): 同目录 tmp -> fsync -> os.replace
+    (纪律对齐 TrafficDatStore._write_payload / utils.atomic_write; 行尾固定 \\n)。
+    PermissionError(Windows 读侧竞态)退避重试 x3, 仍失败放弃(删 tmp, 返回 False,
+    原文件完好 —— 裁剪留待下轮, 数据无损)。v3 常规写路径全是追加, 原子重写仅存于此。"""
+    directory = os.path.dirname(path) or "."
+    attempt = 0
+    while True:
+        fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+                f.write(payload)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+            return True
+        except PermissionError:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
+            attempt += 1
+            if attempt > REWRITE_RETRIES:
+                logger.warning(f"流量存储 | {os.path.basename(path)} 裁剪重写被占用(读侧竞态), 放弃本轮(数据无损)")
+                return False
+            time.sleep(REWRITE_BACKOFF_S)
+        except BaseException:
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
+            raise

@@ -1,4 +1,4 @@
-"""test_traffic_sample 测试计划: qB 口径流量采样器(plan 26-10-03-0946 方案C P1 采样器核心 + §06 配置键 + plan 26-10-04-1957 S2a 写侧翻转 v3)
+"""test_traffic_sample 测试计划: qB 口径流量采样器(plan 26-10-03-0946 方案C P1 采样器核心 + §06 配置键 + plan 26-10-04-1957 S2a 写侧翻转 v3 + S2b 聚合与恢复)
 
 ## 测试计划(每个测试函数一条)
 - test_qb_traffic_config_absent_means_disabled: 键组缺省 -> config.qb_traffic 为 None(未启用)
@@ -57,11 +57,40 @@
   失败块丢弃并复位块状态(dt 链卫生: 下次成功写起新块)
 - test_flush_all_drops_shell_buffers: 内存卫生: 无开放块无待写记录无游程且未采样的 shell 缓冲被清除
 
+聚合分层与恢复(plan 26-10-04-1957 S2b §04):
+- test_agg_hour_row_dt_weighted_across_hour_boundary: hour 行产出 —— 前向记账逐区间入账,
+  信用区间跨小时界自然拆分; avg = dt 加权 / max 逐记录取大 / totals 级末快照 / cov_s = Σ桶内覆盖;
+  未完结小时留累计器; hour 行并入 day 累计器(严格逐级)
+- test_agg_hour_degenerate_equal_interval_matches_v2: dt_i ≡ interval_s 时 hour 行与现行 v2
+  _aggregate_bucket 纯活跃桶公式逐列一致(对照钉住), 且等于 v3_hour_agg 标称输入
+- test_agg_z_n_runs_and_block_gap_vacuum: z 游程槽速率恒 0 + totals 行程快照; n 游程 null 期
+  不贡献且清空信用; 新块首清信用 —— 块间 gap = 真空不虚记覆盖
+- test_agg_day_month_rollup_and_month_boundary: 逐级派生(hour→day→month)数值 = v3_rollup_agg;
+  翻本地日产 day 行 / 翻自然月产 month 行; 跨月后累计器开新
+- test_flush_seals_completed_hours_only_and_no_duplicate: 水位封口(§4.2) —— flush 只封完结
+  整小时; 重复 flush 不重 append(水位 = agg 文件尾, 字节级不变)
+- test_recovery_catchup_equivalent_to_uninterrupted: catch-up 补算等价(§4.3) —— 停机数小时
+  重启, hour/day/month 行补齐且与不停机等价序列逐列一致(停机真空两侧同形)
+- test_recovery_hard_order_catchup_before_trim: 硬序(§4.3) —— hour 到龄/day 未封: 重启先由
+  到龄 hour 行补出 day/month 行, 之后才裁剪(先裁后补 = 永久丢 day 行)
+- test_recovery_idempotent_watermark_torn_and_duplicate: 幂等(§4.4) —— 水位从文件尾推,
+  已有行不重算; 同 epoch 重复行取最后一行; 撕裂残行按坏行纪律跳过; 二次重启字节级零追加
+- test_evict_at_flush_throttle_and_memory_cleanup: 淘汰新口径(§4.5) —— flush 时点触发 +
+  EVICT_CHECK_INTERVAL_S 节流; 超龄删系列目录且内存缓存全清; 全局豁免; dry_run 跳过
+- test_agg_trim_piggyback_on_hour_seal: hour 裁剪 piggyback(§4.5) —— hour 封口时点触发,
+  判据用内存最老行; 到龄重写并回写 earliest_hour; 无到龄只追加不重写
+- test_stop_seals_aggregates_and_dry_run_short_circuit: stop() 聚合封口 —— 完结层级落 agg,
+  幂等; dry_run 短路(累计器内存照常推进, 零落盘)
+- test_agg_defensive_paths_cascades_and_write_failure: 防御面与失败口径 —— 无累计器 flush /
+  零长区间 / 空桶不产行 / 跨日滞留级联封前一日 + 月级联 / agg append 与裁剪与淘汰扫描
+  OSError 告警不上抛(连续失败只告警一次)
+
 时钟/落盘纪律: 需要确定时刻的用例经 monkeypatch 固定模块 time 引用(_Clock 逐轮推进); flush 时点
 除专项驱动用例外用 mod._flush_all_series() 直调(绕开驱动计时, 驱动时序由专项用例钉住)。
 """
 import io
 import logging
+import os
 import threading
 from datetime import datetime, time as _time
 
@@ -71,6 +100,7 @@ from auto_qb.config import QbTraffic, load_config
 from auto_qb.config.validation import validate_config
 from auto_qb.core.modules import traffic_sample_mod as ts_mod
 from auto_qb.core.modules.traffic_sample_mod import (
+    EVICT_CHECK_INTERVAL_S,
     GLOBAL_SERIES_KEY,
     TASK_NAME,
     V3_BUFFER_SLOT_CAP,
@@ -80,13 +110,29 @@ from auto_qb.core.modules.traffic_sample_mod import (
 )
 from auto_qb.core.taskqueue import Task, TaskQueue
 from auto_qb.core.traffic_store import (
+    AggRow,
+    HEADER_LINE_V3,
+    HOUR_SECONDS,
+    RawRow,
+    TrafficDatStore,
+    TrafficV3Store,
+    V3HourSample,
     V3NullRun,
     V3Sample,
     V3ZeroRun,
+    format_agg_row,
+    parse_v3_agg_text,
     parse_v3_day_text,
+    v3_agg_file_path,
     v3_block_slots,
+    v3_day_epoch,
     v3_day_file_path,
+    v3_date_str_epoch,
     v3_epoch_date_str,
+    v3_hour_agg,
+    v3_month_epoch,
+    v3_rollup_agg,
+    v3_series_dir,
 )
 from helpers import FakeClient, FakeTorrent, make_manager, seed_store
 
@@ -1218,3 +1264,422 @@ def test_flush_all_drops_shell_buffers(tmp_path, monkeypatch):
     _flush(mod)
     assert "torrent:HASH123" not in mod._buffers  # shell 清除
     assert GLOBAL_SERIES_KEY in mod._buffers  # 活跃系列缓冲保留
+
+
+# ---------- 聚合分层与恢复(S2b, plan 26-10-04-1957 §04) ----------
+_AGG_H0 = (1_760_000_000 // HOUR_SECONDS) * HOUR_SECONDS  # hour 对齐的现代 epoch(Windows 无负 epoch)
+
+
+def _agg_text(tmp_path, key: str):
+    """读系列 agg.dat 文本(缺失 = None)"""
+    p = v3_agg_file_path(str(tmp_path), key)
+    return open(p, encoding="utf-8").read() if os.path.exists(p) else None
+
+
+def _feed_30s(mod, key, t0, obs):
+    """等间隔 30s 直灌: obs 依次在 t0, t0+30, ... 到达(首个为块首), 末记录信用由一次
+    追加到达(复用 obs[0])结算 —— 产出 len(obs) 个 30s 区间, 全落 [t0, t0+30n)"""
+    recs = [V3Sample(*o) for o in obs]
+    mod._agg_feed(key, recs[0], t0, t0, True)
+    for i in range(1, len(recs)):
+        mod._agg_feed(key, recs[i], t0 + 30 * (i - 1), t0 + 30 * i, False)
+    mod._agg_feed(key, recs[0], t0 + 30 * (len(recs) - 1), t0 + 30 * len(recs), False)
+    return recs
+
+
+def test_agg_hour_row_dt_weighted_across_hour_boundary(tmp_path):
+    """hour 行产出(§4.1): 前向记账逐区间入账, 信用区间跨小时界自然拆分 —— avg = dt
+    加权 / cov_s = Σ桶内覆盖 / max 逐记录取大 / totals 取级末快照; 未完结小时留累计器;
+    hour 行同步并入 day 累计器(严格逐级)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    h0 = _AGG_H0
+    r1, r2, r3 = V3Sample(100, 50, 1000, 2000), V3Sample(200, 60, 2000, 3000), V3Sample(300, 70, 3000, 4000)
+    mod._agg_feed(key, r1, h0 + 10, h0 + 10, True)  # 块首 r@h0+10: 信用开立(块间 gap 不继承)
+    mod._agg_feed(key, r2, h0 + 10, h0 + 40, False)  # 结算 [h0+10, h0+40) @ r1 (30s)
+    mod._agg_feed(key, r3, h0 + 40, h0 + 100, False)  # 结算 [h0+40, h0+100) @ r2 (60s)
+    mod._agg_feed(key, r1, h0 + 100, h0 + 3605, False)  # 结算 [h0+100, h1) 3500s @ r3 + [h1, h1+5) 5s
+    assert mod._agg_flush_series(key, now=h0 + 3605) is True  # h0 完结, h1 未完结
+    row = parse_v3_agg_text(_agg_text(tmp_path, key)).hours[0]
+    assert row.dl_avg == int(round((100 * 30 + 200 * 60 + 300 * 3500) / 3590))  # dt 加权
+    assert row.up_avg == int(round((50 * 30 + 60 * 60 + 70 * 3500) / 3590))
+    assert row.dl_max == 300 and row.up_max == 70  # 逐记录取大
+    assert (row.dl_total, row.up_total) == (3000, 4000)  # totals = 桶内级末快照(r3)
+    assert row.cov_s == 3590  # Σdt = 30 + 60 + 3500
+    agg = mod._agg_states[key]
+    assert [h for h in agg.pending] == [h0 + HOUR_SECONDS]  # h1 未完结留累计器, h0 已弹出
+    assert len(agg.pending[h0 + HOUR_SECONDS]) == 1 and agg.pending[h0 + HOUR_SECONDS][0].dt_s == 5.0
+    assert agg.day_epoch == v3_day_epoch(h0) and len(agg.day_hours) == 1  # 严格逐级: hour 并入 day
+    assert agg.month_epoch is None and agg.month_days == []
+
+
+def test_agg_hour_degenerate_equal_interval_matches_v2(tmp_path):
+    """dt_i ≡ interval_s 退化(§4.1 验收): 等间隔无漂移序列产出的 hour 行与现行 v2
+    _aggregate_bucket 纯活跃桶公式逐列一致(对照钉住), 且等于 v3_hour_agg 标称输入"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    h0 = _AGG_H0
+    obs = [(100 + 50 * i, 40 + 10 * i, 1000 + 100 * i, 2000 + 100 * i) for i in range(4)]
+    _feed_30s(mod, key, h0, obs)
+    mod._agg_flush_series(key, now=h0 + HOUR_SECONDS)
+    row = parse_v3_agg_text(_agg_text(tmp_path, key)).hours[0]
+    raw_rows = tuple(
+        RawRow(ts=h0 + i * 30, dl_rate=d, up_rate=u, dl_total=t, up_total=s) for i, (d, u, t, s) in enumerate(obs)
+    )
+    v2_row = TrafficDatStore._aggregate_bucket(raw_rows, (), h0, 30)
+    assert (row.dl_avg, row.up_avg) == (v2_row.dl_avg, v2_row.up_avg)  # v2 公式对照
+    assert (row.dl_max, row.up_max) == (v2_row.dl_max, v2_row.up_max)
+    assert (row.dl_total, row.up_total) == (v2_row.dl_total, v2_row.up_total) == (1300, 2300)
+    manual = v3_hour_agg(h0, tuple(V3HourSample(d, u, t, s, 30.0) for d, u, t, s in obs))
+    assert row.dl_avg == manual.dl_avg and row.cov_s == manual.cov_s == 120
+
+
+def test_agg_z_n_runs_and_block_gap_vacuum(tmp_path):
+    """游程与真空(§4.1): z 游程内部槽区间速率恒 0 + totals 行程快照, 信用链在游程两端
+    正确结算; n 游程 null 期不贡献且清空信用; 新块首清信用 —— 块间 gap = 真空不虚记"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    t0 = _AGG_H0
+    r1, r2, r3 = V3Sample(100, 50, 1000, 2000), V3Sample(200, 70, 2000, 3000), V3Sample(300, 80, 3000, 4000)
+    z, n = V3ZeroRun(3, 7000, 8000), V3NullRun(2)
+    mod._agg_feed(key, r1, t0, t0, True)
+    mod._agg_feed(key, z, t0, t0 + 90, False)  # 结算 [t0,t0+30)@r1; z 内部 2x30s @0; 信用 (t0+90, 0)
+    mod._agg_feed(key, r2, t0 + 90, t0 + 120, False)  # 结算 [t0+90,t0+120)@0(z 尾信用)
+    mod._agg_feed(key, n, t0 + 120, t0 + 180, False)  # 结算 [t0+120,t0+150)@r2; n 期不记, 信用清空
+    mod._agg_feed(key, r3, t0 + 180, t0 + 210, False)  # 信用 None: 无结算
+    mod._agg_feed(key, r1, t0 + 1000, t0 + 1000, True)  # 新块首: 信用(r3)清除 -> [t0+210, t0+1000) 真空
+    mod._agg_flush_series(key, now=t0 + HOUR_SECONDS)
+    row = parse_v3_agg_text(_agg_text(tmp_path, key)).hours[0]
+    assert row.cov_s == 150  # 5 个 30s 区间(r1 + z 内 2 + z 尾 + r2 尾), n 期与块间 gap 不计
+    assert row.dl_avg == int(round((100 * 30 + 200 * 30) / 150)) == 60  # z 区间速率恒 0
+    assert row.dl_max == 200 and row.up_max == 70  # z/n 不抬 max
+    assert (row.dl_total, row.up_total) == (2000, 3000)  # 级末快照 = r2
+
+
+def test_agg_day_month_rollup_and_month_boundary(tmp_path):
+    """逐级派生与翻月(§4.1/§4.2): hour 封口并入 day 累计器, day 并入 month 累计器
+    (day 不从 raw 直聚); 完结本地日 -> day 行, 完结自然月 -> month 行, 数值 =
+    v3_rollup_agg(avg 按 cov 加权 / max 取大 / totals 级末快照 / cov 求和)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    day31 = int(datetime(2026, 1, 31).timestamp())  # 本地 1 月 31 日 00:00
+    jan1 = int(datetime(2026, 1, 1).timestamp())
+    feb1 = int(datetime(2026, 2, 1).timestamp())
+    obs = [(100, 50, 1000, 2000), (200, 60, 2000, 3000), (300, 70, 3000, 4000)]
+    _feed_30s(mod, key, day31 + 5 * HOUR_SECONDS, obs)
+    mod._agg_flush_series(key, now=feb1 + 600)  # 跨本地日 + 跨自然月: hour/day/month 三行一批
+    parsed = parse_v3_agg_text(_agg_text(tmp_path, key))
+    assert len(parsed.hours) == 1 and len(parsed.days) == 1 and len(parsed.months) == 1
+    hour_expected = v3_hour_agg(day31 + 5 * HOUR_SECONDS, tuple(V3HourSample(d, u, t, s, 30.0) for d, u, t, s in obs))
+    assert parsed.hours[0] == hour_expected
+    day_expected = v3_rollup_agg("day", day31, (hour_expected, ))
+    assert parsed.days[0] == day_expected
+    assert parsed.months[0] == v3_rollup_agg("month", jan1, (day_expected, ))
+    # 跨月后新月份: day/month 累计器开新, 旧月行不再追加
+    _feed_30s(mod, key, feb1 + 2 * HOUR_SECONDS, obs)
+    mod._agg_flush_series(key, now=feb1 + 3 * HOUR_SECONDS + 10)
+    parsed = parse_v3_agg_text(_agg_text(tmp_path, key))
+    assert len(parsed.hours) == 2 and len(parsed.days) == 1 and len(parsed.months) == 1  # 2 月日/月未完结
+    agg = mod._agg_states[key]
+    assert agg.day_epoch == feb1 and agg.month_epoch is None  # 当日累计器开放; 月累计器待首个完整日封口
+
+
+def test_flush_seals_completed_hours_only_and_no_duplicate(tmp_path, monkeypatch):
+    """水位封口(§4.2): flush 时点只封完结整小时; 未完结留累计器; 重复 flush 不重
+    append(水位 = agg 文件尾, 字节级不变)"""
+    clock = _Clock(now=_local_epoch(10, 0, 10))
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.store.server_state = _ss()
+    mod = mgr.host.get("qb_traffic")
+    h0 = int(clock.now) // HOUR_SECONDS * HOUR_SECONDS
+    _run_sample(mgr)  # 首样 r@h0+10
+    _flush(mod)
+    assert _agg_text(tmp_path, GLOBAL_SERIES_KEY) is None  # 小时未完结: 零 agg 行
+    clock.now = h0 + HOUR_SECONDS + 10
+    _run_sample(mgr)  # 下一小时首样
+    _flush(mod)
+    text = _agg_text(tmp_path, GLOBAL_SERIES_KEY)
+    parsed = parse_v3_agg_text(text)
+    assert len(parsed.hours) == 1 and parsed.hours[0].epoch == h0  # 完结小时封口
+    assert parsed.hours[0].cov_s == 3590  # [h0+10, h1) 信用区间(游标链推进)
+    assert len(parsed.days) == 0 and len(parsed.months) == 0  # 日/月未完结
+    _flush(mod)  # 重复 flush: 无新完结层级
+    assert _agg_text(tmp_path, GLOBAL_SERIES_KEY) == text  # 字节级不变(不重 append)
+
+
+def test_recovery_catchup_equivalent_to_uninterrupted(tmp_path, monkeypatch):
+    """catch-up 补算等价(§4.3): 停机(崩溃无 stop)数小时后重启, 重启侧 hour/day/month
+    行补齐且与不停机等价序列逐列一致 —— 停机期真空两侧同形(块间 gap), 补算源 = 窗口内
+    天文件 raw 逐槽前向记账"""
+    base = int(datetime(2026, 1, 31, 22, 0, 0).timestamp())  # 月末 22:00(跨日 + 跨月)
+    t1, t2, t3 = base + 10, base + 40, base + 70
+    flush1 = base + 90  # 22:01:30: 天文件落盘(小时未完结)
+    t4 = int(datetime(2026, 2, 1, 0, 0, 10).timestamp())  # 次日 00:00:10
+    flush_end = t4 + 30
+    clock = _Clock(now=t1)
+    monkeypatch.setattr(ts_mod, "time", clock)
+
+    def _run(mgr, times):
+        for t in times:
+            clock.now = t
+            mgr.store.server_state = _ss(
+                alltime_dl=1_000_000 + t, alltime_ul=2_000_000 + t, dl_info_speed=100, up_info_speed=50
+            )
+            _run_sample(mgr)
+
+    # 不停机序列: 3 样 + flush + 次日首样 + 末日 flush
+    mgr_a = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod_a = mgr_a.host.get("qb_traffic")
+    _run(mgr_a, [t1, t2, t3])
+    clock.now = flush1
+    _flush(mod_a)
+    _run(mgr_a, [t4])
+    clock.now = flush_end
+    _flush(mod_a)
+    parsed_a = parse_v3_agg_text(_agg_text(tmp_path, GLOBAL_SERIES_KEY))
+    assert len(parsed_a.hours) == 1 and len(parsed_a.days) == 1 and len(parsed_a.months) == 1
+
+    # 停机序列: 同样 3 样 + flush 后崩溃(无 stop), 重启于次日 00:00:10
+    tmp_b = tmp_path / "b"
+    tmp_b.mkdir()
+    mgr_b1 = _mgr_with_traffic(tmp_b, QbTraffic(enabled=True, sample_interval=30))
+    mod_b1 = mgr_b1.host.get("qb_traffic")
+    _run(mgr_b1, [t1, t2, t3])
+    clock.now = flush1
+    _flush(mod_b1)
+    mgr_b2 = _mgr_with_traffic(tmp_b, QbTraffic(enabled=True, sample_interval=30))  # 重启: 全新模块实例
+    mod_b2 = mgr_b2.host.get("qb_traffic")
+    clock.now = t4
+    mod_b2.start(mgr_b2.ctx, dry_run=False)  # 恢复 + catch-up(先于一切采样)
+    recovered = parse_v3_agg_text(_agg_text(tmp_b, GLOBAL_SERIES_KEY))
+    assert len(recovered.hours) == 1 and recovered.hours[0].cov_s == 60  # 补算行与在线封口一致
+    _run(mgr_b2, [t4])
+    clock.now = flush_end
+    _flush(mod_b2)
+    parsed_b = parse_v3_agg_text(_agg_text(tmp_b, GLOBAL_SERIES_KEY))
+    assert parsed_b.hours == parsed_a.hours  # 补算 = 在线(停机真空两侧同形)
+    assert parsed_b.days == parsed_a.days and parsed_b.months == parsed_a.months
+
+
+def test_recovery_hard_order_catchup_before_trim(tmp_path, monkeypatch):
+    """硬序(§4.3 验收): hour 行已到龄而其 day 行未封 —— 重启恢复必须先由到龄 hour 行
+    补出 day/month 行, 之后才裁剪 hour 行; 若先裁后补, day 行将永久丢失(测试钉住)"""
+    window = 30 * 86400.0
+    now = v3_date_str_epoch("2026-03-20") + 12 * HOUR_SECONDS
+    h_old = now - int(window) - 2 * HOUR_SECONDS
+    aged = AggRow("hour", h_old, 7, 9, 3, 4, 500, 600, 3600)
+    TrafficV3Store(str(tmp_path)).append_agg_rows("torrent:OLD", (aged, ))  # 只有到龄 hour 行, 无 day 行
+    clock = _Clock(now=now)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)  # 恢复(catch-up -> 裁剪)
+    parsed = parse_v3_agg_text(_agg_text(tmp_path, "torrent:OLD"))
+    assert parsed.hours == ()  # 到龄 hour 行最终被裁
+    day_expected = v3_rollup_agg("day", v3_day_epoch(h_old), (aged, ))
+    assert parsed.days == (day_expected, )  # day 行由到龄 hour 行补出(catch-up 先于裁剪的铁证)
+    assert parsed.months == (v3_rollup_agg("month", v3_month_epoch(h_old), (day_expected, )), )
+
+
+def test_recovery_idempotent_watermark_torn_and_duplicate(tmp_path, monkeypatch):
+    """幂等与坏行(§4.4): 重启从文件尾恢复水位 —— 已有 hour 行不重算; 同 epoch 重复行
+    取最后一行; 撕裂残行按坏行纪律跳过; 二次重启零追加(字节级不变, 不重 append)"""
+    now = v3_date_str_epoch("2026-03-05") + 12 * HOUR_SECONDS
+    d4 = v3_date_str_epoch("2026-03-04")
+    h1 = d4 + 10 * HOUR_SECONDS
+    st = TrafficV3Store(str(tmp_path))
+    st.append_agg_rows(
+        "global",
+        (
+            AggRow("hour", h1, 1, 1, 1, 1, 1, 1, 3600),
+            AggRow("hour", h1, 2, 3, 4, 5, 6, 7, 3600),  # 同 epoch 重复: 后值胜
+        )
+    )
+    path = v3_agg_file_path(str(tmp_path), "global")
+    with open(path, "a", encoding="utf-8", newline="") as f:  # 撕裂残行(无换行, 畸形)
+        f.write("hour,not,a,valid,row")
+    clock = _Clock(now=now)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
+    parsed = parse_v3_agg_text(_agg_text(tmp_path, "global"))
+    assert [h.dl_avg for h in parsed.hours] == [2] and [h.epoch for h in parsed.hours] == [h1]
+    text1 = _agg_text(tmp_path, "global")
+    assert "hour,not,a,valid,row" in text1  # 撕裂行跳过不崩溃(按坏行纪律留原样)
+    assert len(parsed.days) == 1  # day 行由文件内 hour 行补出(catch-up: day <- agg 内 hour 行)
+    mgr2 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mgr2.host.get("qb_traffic").start(mgr2.ctx, dry_run=False)  # 二次重启: 水位从文件尾推
+    assert _agg_text(tmp_path, "global") == text1  # 零追加(不重 append, 字节级不变)
+
+
+def test_evict_at_flush_throttle_and_memory_cleanup(tmp_path):
+    """淘汰触发点(§4.5): flush 时点触发, 扫描节流 EVICT_CHECK_INTERVAL_S; 超龄系列整
+    目录删除且内存缓存(累计器/数据门/基线/镜像/缓冲/游程)同步清理; 全局豁免;
+    dry_run 静默跳过"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    conf = mgr.config.qb_traffic
+    now = 1_760_000_000.0
+    old_d = v3_epoch_date_str(now - 40 * 86400)
+    for key in ("torrent:OLD", "torrent:OLD2"):
+        _write_day_file(tmp_path, key, old_d)
+    _write_day_file(tmp_path, "global", old_d)  # 全局豁免
+    key = "torrent:OLD"
+    mod._agg_state(key)  # 预置内存缓存(淘汰须全清)
+    mod._has_data.add(key)
+    mod._no_data.add(key)
+    mod._baselines[key] = {"dl_total": 1, "up_total": 2}
+    mod.latest[key] = "stale"
+    mod._buffers[key] = "stale"
+    mod._open_runs[key] = "stale"
+    mod._maybe_evict(conf, now)  # 首扫: OLD 淘汰
+    assert not os.path.exists(v3_series_dir(str(tmp_path), key))
+    assert key not in mod._agg_states and key not in mod._has_data and key not in mod._no_data
+    assert key not in mod._baselines and key not in mod.latest
+    assert key not in mod._buffers and key not in mod._open_runs
+    assert os.path.exists(v3_series_dir(str(tmp_path), "global"))
+    _write_day_file(tmp_path, "torrent:OLD2", old_d)
+    mod._maybe_evict(conf, now + 100)  # 节流窗内: 不重扫
+    assert os.path.exists(v3_series_dir(str(tmp_path), "torrent:OLD2"))
+    mod._maybe_evict(conf, now + EVICT_CHECK_INTERVAL_S)  # 节流窗过: 淘汰
+    assert not os.path.exists(v3_series_dir(str(tmp_path), "torrent:OLD2"))
+    _write_day_file(tmp_path, "torrent:OLD3", old_d)
+    mod._persistence_on = False  # dry_run: 淘汰写操作静默跳过
+    mod._maybe_evict(conf, now + 2 * EVICT_CHECK_INTERVAL_S)
+    assert os.path.exists(v3_series_dir(str(tmp_path), "torrent:OLD3"))
+
+
+def test_agg_trim_piggyback_on_hour_seal(tmp_path):
+    """hour 裁剪 piggyback(§4.5): hour 封口时点触发, 判据用内存最老行(earliest_hour,
+    零常规文件读); 到龄行重写并回写新最老; 无到龄行只追加不重写"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    window = 30 * 86400
+    base = _AGG_H0
+    now = base + 3 * HOUR_SECONDS + 100
+    h_old = base - window - 2 * HOUR_SECONDS
+    TrafficV3Store(str(tmp_path)).append_agg_rows(key, (AggRow("hour", h_old, 9, 9, 9, 9, 9, 9, 3600), ))
+    agg = mod._agg_state(key)
+    agg.earliest_hour = h_old  # 恢复预置的内存最老行判据
+    obs = [(100, 50, 1, 2), (200, 60, 3, 4), (300, 70, 5, 6)]
+    _feed_30s(mod, key, base, obs)
+    mod._agg_flush_series(key, now=now)  # hour 封口 + piggyback 裁剪
+    parsed = parse_v3_agg_text(_agg_text(tmp_path, key))
+    assert [x.epoch for x in parsed.hours] == [base]  # 到龄行裁掉, 新行在
+    assert agg.earliest_hour == base  # 裁剪结果回写内存判据
+    text1 = _agg_text(tmp_path, key)
+    _feed_30s(mod, key, base + HOUR_SECONDS, obs)
+    mod._agg_flush_series(key, now=now)  # 第二个完结小时: 无到龄行
+    parsed = parse_v3_agg_text(_agg_text(tmp_path, key))
+    assert [x.epoch for x in parsed.hours] == [base, base + HOUR_SECONDS] and agg.earliest_hour == base
+    assert _agg_text(tmp_path, key).startswith(text1)  # 只追加, 无重写
+
+
+def test_stop_seals_aggregates_and_dry_run_short_circuit(tmp_path, monkeypatch):
+    """stop() 聚合封口(§3.4): 完结层级照常落 agg; 幂等; dry_run 短路(累计器内存照常
+    推进, 零落盘)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    base = _AGG_H0
+    obs = [(100, 50, 1, 2), (200, 60, 3, 4), (300, 70, 5, 6)]
+    _feed_30s(mod, key, base, obs)
+    mod.stop()  # 聚合封口: 完结 hour 落 agg(真实时刻远晚于测试 hour, 必然完结)
+    parsed = parse_v3_agg_text(_agg_text(tmp_path, key))
+    assert len(parsed.hours) == 1 and parsed.hours[0].cov_s == 90
+    text = _agg_text(tmp_path, key)
+    mod.stop()  # 幂等: 无新行
+    assert _agg_text(tmp_path, key) == text
+    # dry_run: stop() 短路, 零落盘; 累计器内存照常推进
+    mgr2 = _mgr_with_traffic(tmp_path / "dry", QbTraffic(enabled=True, sample_interval=30))
+    mod2 = mgr2.host.get("qb_traffic")
+    mod2.start(mgr2.ctx, dry_run=True)
+    mod2._agg_feed(key, V3Sample(100, 50, 1, 2), base, base, True)
+    mod2._agg_feed(key, V3Sample(200, 60, 3, 4), base + 30, base + 60, False)
+    assert mod2._agg_states[key].pending  # 内存累计器照常推进
+    mod2.stop()
+    assert not os.path.exists(v3_agg_file_path(str(tmp_path / "dry"), key))  # 零落盘
+
+
+def _write_day_file(tmp_path, key: str, date_str: str) -> None:
+    """手工放一个天文件(淘汰用例: 只需文件名日期, 内容最简)"""
+    st = TrafficV3Store(str(tmp_path))
+    path = st.series_day_path(key, date_str)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V3}\nkey,{key}\n")
+
+
+def test_agg_defensive_paths_cascades_and_write_failure(tmp_path, monkeypatch):
+    """S2b 防御面与级联: 空 key flush / 零长区间 / 空桶不产行 / 跨日滞留单次 flush 级联
+    封前一日(_agg_ingest_hour else)/ 月级联(_agg_ingest_day else); agg append 与裁剪
+    OSError 告警不上抛(连续失败只告警一次); 淘汰扫描 OSError 下轮重试"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    assert mod._agg_flush_series("unknown", now=0) is False  # 无累计器系列: 零操作
+    empty = {}
+    TrafficSampleModule._agg_credit_hours(empty, 5.0, 5.0, 1, 1, 1, 1)  # 零长区间: 不入账
+    assert empty == {}
+    # 空桶(全 null 覆盖小时): 弹出不产行
+    agg = mod._agg_state(key)
+    agg.pending[_AGG_H0] = []
+    mod._agg_flush_series(key, now=_AGG_H0 + HOUR_SECONDS)
+    assert _AGG_H0 not in agg.pending and _agg_text(tmp_path, key) is None
+    # 跨日滞留(暂停恢复): 单次 flush 内前一日经 day 级联封口, 跨月月行经月检查封口
+    day31, feb1 = int(datetime(2026, 1, 31).timestamp()), int(datetime(2026, 2, 1).timestamp())
+    for h, dl in ((day31 + 22 * HOUR_SECONDS, 100), (day31 + 23 * HOUR_SECONDS, 200), (feb1, 300)):
+        agg.pending[h] = [V3HourSample(dl, dl, dl, dl, 3600.0)]
+    mod._agg_flush_series(key, now=feb1 + HOUR_SECONDS + 1800)
+    parsed = parse_v3_agg_text(_agg_text(tmp_path, key))
+    assert len(parsed.hours) == 3 and len(parsed.days) == 1 and len(parsed.months) == 1
+    assert parsed.days[0].epoch == day31 and agg.day_epoch == feb1  # 前一日级联封口, 新日累计器开
+    # 月级联(_agg_ingest_day else): 开放月内到达下一月 day 行 -> 级联封前一月
+    day_jan = ts_mod.v3_rollup_agg("day", day31, (AggRow("hour", day31, 1, 1, 1, 1, 1, 1, 3600), ))
+    day_feb = ts_mod.v3_rollup_agg("day", feb1, (AggRow("hour", feb1, 2, 2, 2, 2, 2, 2, 3600), ))
+    agg.month_epoch, agg.month_days = v3_month_epoch(day31), [day_jan]
+    out = []
+    TrafficSampleModule._agg_ingest_day(agg, day_feb, out)
+    assert len(out) == 2 and out[0] == day_feb  # 本行(day)随批落盘 + 级联月行
+    assert out[1].kind == "month" and out[1].epoch == v3_month_epoch(day31)
+    assert agg.month_epoch == v3_month_epoch(feb1)
+
+    # agg append OSError: 告警不上抛, 连续失败只告警一次(第二条走 debug)
+    def _raise(self, key, rows):
+        raise OSError(28, "disk full")
+
+    monkeypatch.setattr(TrafficV3Store, "append_agg_rows", _raise)
+    agg.pending[_AGG_H0 + 5 * HOUR_SECONDS] = [V3HourSample(100, 50, 1, 2, 3600.0)]
+    with _ModuleLogCapture() as cap:
+        assert mod._agg_flush_series(key, now=_AGG_H0 + 6 * HOUR_SECONDS) is False
+        agg.pending[_AGG_H0 + 6 * HOUR_SECONDS] = [V3HourSample(100, 50, 1, 2, 3600.0)]
+        assert mod._agg_flush_series(key, now=_AGG_H0 + 7 * HOUR_SECONDS) is False
+    assert cap.text.count("agg 行落盘失败") == 2  # 首次 WARNING + 持续期 DEBUG(防刷屏)
+    # 裁剪 OSError: 告警, 内存判据不变(下轮重试); 淘汰扫描 OSError: 告警不上抛
+    agg.earliest_hour = _AGG_H0
+    monkeypatch.setattr(TrafficV3Store, "trim_agg_hours", lambda s, k, n, w: (_ for _ in ()).throw(OSError(1, "x")))
+    with _ModuleLogCapture() as cap2:
+        mod._agg_trim(key, agg, _AGG_H0 + 40 * 86400, 30 * 86400)
+    assert "裁剪失败" in cap2.text and agg.earliest_hour == _AGG_H0
+    monkeypatch.setattr(TrafficV3Store, "evict_expired_series", lambda s, n, w: (_ for _ in ()).throw(OSError(1, "x")))
+    mod._last_evict_check = None
+    with _ModuleLogCapture() as cap3:
+        mod._maybe_evict(mgr.config.qb_traffic, 1_760_000_000.0)
+    assert "淘汰扫描失败" in cap3.text
+    # 同月新日并入 month 累计器(_agg_ingest_day 同月追加支); 裁剪判据 earliest None 零操作
+    day_feb2 = ts_mod.v3_rollup_agg("day", feb1 + 86400, (AggRow("hour", feb1, 3, 3, 3, 3, 3, 3, 3600), ))
+    out2 = []
+    TrafficSampleModule._agg_ingest_day(agg, day_feb2, out2)
+    assert len(agg.month_days) == 2 and out2 == [day_feb2]
+    agg.earliest_hour = None
+    mod._agg_trim(key, agg, _AGG_H0 + 40 * 86400, 30 * 86400)  # 无判据: 不读不写
+    # dry_run: agg append 静默跳过(_agg_append False 支)
+    mod._persistence_on = False
+    agg.pending[_AGG_H0 + 8 * HOUR_SECONDS] = [V3HourSample(100, 50, 1, 2, 3600.0)]
+    assert mod._agg_flush_series(key, now=_AGG_H0 + 9 * HOUR_SECONDS) is False
+    assert _AGG_H0 + 8 * HOUR_SECONDS not in agg.pending  # 封口内存照常推进, 写跳过
