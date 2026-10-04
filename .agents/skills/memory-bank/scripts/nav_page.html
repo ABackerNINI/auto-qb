@@ -18,9 +18,12 @@
     --paper: #12161b;
     --paper-2: #171d24;
     --paper-3: #1c242e;
-    /* --chrome = 顶栏专用底色 (2026-10-05 加): 在 --paper-3 之上再亮一档, 与 --paper 拉开**可测**的
-       明度差。**不要**把它并回 --paper / --paper-3 —— 顶栏与侧栏同色正是"标题栏难区分"的成因。 */
-    --chrome: #232e3b;
+    /* --chrome = **抬起的 chrome 面**底色 (2026-10-05 加): 台账列标题行 (#v-ledger thead th)
+       与置顶专区表头 (#v-ledger .pinzone thead th) 共用。在 --paper-3 之上再亮一档, 与
+       --paper / --bg 拉开**可测**的明度差。
+       **不要**把它并回 --paper / --paper-3 —— 表头与数据行同色正是"与其余部分难区分"的成因。
+       顶栏 (.topbar) 曾短暂用过它, 已按用户要求撤销 (见 .topbar 处注释), 现仍走 --paper。 */
+    --chrome: #2b3947;
     --ink: #dde3e8;
     --dim: #98a3ad;
     --faint: #6b7681;
@@ -53,26 +56,21 @@
   ::selection { background: #24424a; color: #fff; }
 
   /* ============ 顶栏 (三视图共有) ============
-     底色用**专用令牌** --chrome, 不借 --paper —— 台账左侧栏 / 工具栏 / 控制台面板都用 --paper,
-     顶栏与它们同色时整块 chrome 连成一片, 中间只剩一条 hairline, 用户 2026-10-05 报
-     「标题栏颜色与其余部分难区分」。改前实测: 顶栏 #12161b 与侧栏/工具栏逐通道差 **0**,
-     与表格区 #0e1114 只差 **7** —— 按本仓判据 (同视图内两两 RGB 最大通道差 <20 即"分不出")
-     两条都不合格。
-     修法 = 抬**明度**(低透明度下色相差异会被压没, 只剩亮度差作数), 下缘再补一道 cyan 缝当边界。
-     不直接改 --paper 是因为它同时管侧栏与所有面板, 一改会把整页带偏 ——
-     同 prism --statusbar-bg 的先例 (views.css「不用 --glass 是因为它同时管顶栏, 改它会把顶栏一起带偏」)。
-     ⚠ 顶栏内的控件 (.gsearch / .seg / .pullbtn) 底色仍是 --paper-2, 在亮一档的栏上读作**内凹槽**,
-       不再靠"比栏亮"表示可点 —— 段选钮的选中态因此单独抬了底色, 见 .seg button.on。 */
+     底色 = --paper, 与台账左侧栏 / 工具栏 / 控制台面板同色 —— 这是**用户拍板保持的现状**, 别"顺手"改。
+     2026-10-05 曾改过一轮 (底色换 --chrome + 下缘 cyan 缝), 用户随后澄清当轮反馈的"标题栏"指的是
+     **台账列标题行**而非顶栏, 遂按范围守恒撤销本轮顶栏改动、回到原样。
+     已知的实测事实 (留着免得下次重新发现, 但**未经用户要求不要动**): 顶栏与侧栏 / 工具栏逐通道差
+     **0**, 与表格区 --bg 只差 **7** —— 按本仓判据 (同视图内两两 RGB 最大通道差 <20 即"分不出")
+     两条都不合格, 整块 chrome 连成一片、只剩一条 hairline。真要修时的口径见
+     pitfalls/web-ui/layout-css.md「顶栏 / 表头 / 状态栏底色与相邻面同色」条 (专用令牌 + 抬明度)。 */
   .topbar {
     display: flex; align-items: center; gap: 18px; padding: 0 18px; height: 52px;
-    border-bottom: 1px solid rgba(86,200,215,.3); background: var(--chrome);
+    border-bottom: 1px solid var(--hair-2); background: var(--paper);
     flex: none; position: relative; z-index: 20;
   }
   .brand { font-family: var(--disp); font-size: 15px; letter-spacing: .16em; text-transform: uppercase; color: var(--cyan); white-space: nowrap; }
   .brand .sep { color: var(--faint); }
-  /* 副标题在 --chrome 上比在旧 --paper 上暗了一档 (实测对比度 3.92:1 -> 2.97:1, 跌破 3:1),
-     随底色一起抬到 --dim (5.36:1); 层级靠 10px 字号与位置维持, 不靠颜色 */
-  .brand small { color: var(--dim); letter-spacing: .12em; margin-left: 10px; font-size: 10px; }
+  .brand small { color: var(--faint); letter-spacing: .12em; margin-left: 10px; font-size: 10px; }
   .gsearch { position: relative; flex: 0 1 400px; }
   .gsearch input {
     width: 100%; background: var(--paper-2); border: 1px solid var(--hair); color: var(--ink);
@@ -88,10 +86,7 @@
   }
   .seg button:last-child { border-right: none; }
   .seg button:hover { color: var(--ink); }
-  /* 选中态单独抬一档 (不借 --cyan-soft 的 .12): 未选中钮在 --chrome 上读作内凹槽,
-     选中钮必须比栏**亮**才立得住 —— .12 叠在 --chrome 上实测仅比栏亮 19 (低于 20 判据),
-     .22 提到 34, 且与未选中态 (#171d24) 拉开 57 */
-  .seg button.on { background: rgba(86,200,215,.22); color: var(--cyan); }
+  .seg button.on { background: var(--cyan-soft); color: var(--cyan); }
   .readout { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap; }
   .readout b { color: var(--cyan); font-weight: 600; }
 
@@ -206,10 +201,20 @@
      min-width 兜底: 窗口过窄时固定列 (合计 514px) 会把标题栏压没, 改让表格保持 720px 由
      容器横向滚动 (窄屏下两表各自横滚, 属可接受降级; 宽屏无影响) */
   #v-ledger table { width: 100%; min-width: 720px; border-collapse: collapse; table-layout: fixed; }
+  /* 列标题行 (时间戳 / 形态 / 状态 / 标题 …) 的底色走 --chrome, 不用 --bg ——
+     --bg 与数据行**完全同色** (2026-10-05 用户报「标题栏颜色与其余部分难区分」, 实测逐通道差 **0**),
+     表头于是读不出"这是一行表头", 只剩一条 hairline。--paper-3 也不够: 与数据行差 26 过了判据,
+     但与紧挨其上的 .toolbar (--paper) 只差 19 (<20) ⇒ 表头会看着像工具栏的延伸, 变成"几乎一样
+     但不是"的观感。--chrome 同时满足两条轴: 与数据行差 39 / 与工具栏差 32。
+     ⚠ 表头文字随底色从 --faint 抬到 --dim —— 10px 大字距的标签在 --chrome 上对比度只有 2.97:1
+       (原 --bg 上是 4.09:1), 抬到 --dim 后 5.36:1。
+     ⚠ sticky 底色必须**不透明** (数据行从它下面滚过), --chrome 是不透明值, 别换成带 alpha 的。
+     置顶专区表头 (.pinzone thead th) 是克隆本行 thead 来的, 底色另有一条规则显式对齐到同一枚
+     --chrome (见下方 .pinzone thead th 注释) —— 两个同款表头必须长得一样。 */
   #v-ledger thead th {
-    position: sticky; top: 0; z-index: 2; background: var(--bg);
+    position: sticky; top: 0; z-index: 2; background: var(--chrome);
     font-family: var(--disp); font-weight: 600; font-size: 10px; letter-spacing: .13em;
-    text-transform: uppercase; color: var(--faint); text-align: left;
+    text-transform: uppercase; color: var(--dim); text-align: left;
     padding: 9px 10px; border-bottom: 1px solid var(--hair-2); white-space: nowrap;
   }
   #v-ledger thead th.num { text-align: right; }
@@ -252,8 +257,11 @@
     margin-left: auto; font-family: var(--sans); font-size: 11px;
     letter-spacing: 0; text-transform: none; color: var(--faint);
   }
-  /* 专区表头: 跟着 .pzhead (高 28px) 之下粘住; 底色用 paper-3 与主表表头的 bg 区分 */
-  #v-ledger .pinzone thead th { position: sticky; top: 28px; z-index: 2; background: var(--paper-3); }
+  /* 专区表头: 跟着 .pzhead (高 28px) 之下粘住。底色跟主表表头同一枚 --chrome (2026-10-05 对齐) ——
+     原先用 --paper-3 是想"与主表表头的 bg 区分", 但那让两个**同款表头**长得不一样; 现在两处一致,
+     纵向由 .pinzone 的 border-bottom 分隔。顺带把专区表头从 --paper-2 的专区底上抬起来
+     (--paper-3 叠 --paper-2 只差 10, 与置顶行的淡 cyan 底更是只差 2 —— 等于没有表头)。 */
+  #v-ledger .pinzone thead th { position: sticky; top: 28px; z-index: 2; background: var(--chrome); }
   /* 置顶行强调: 淡 cyan 底 + 悬停加深; 列序/列宽与主表完全一致 (守阵 test_pin_zone_reuses_ledger_columns) */
   #v-ledger tbody tr.pin-row { background: rgba(86,200,215,.05); }
   #v-ledger tbody tr.pin-row:hover { background: var(--cyan-soft); }
