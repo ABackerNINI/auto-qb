@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hr-steady-throttle">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-05-0555">
+<meta name="doc-updated" content="26-10-05-0555">
+<meta name="doc-refs" content="memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html">
+<title>HR 稳态降频 (idle_refresh_interval) 分步实施计划 · auto-qb</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc7a2;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td .gap { color: var(--warn); font-weight: 600; }
+  td .ok { color: var(--ok); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<nav class="toc">
+  <div class="toc-label">Plan · Sections</div>
+  <a href="#s00"><span class="no">00</span>拍板回执与核实结论</a>
+  <a href="#s01"><span class="no">01</span>现状核实 (HEAD ee52e57d)</a>
+  <a href="#s02"><span class="no">02</span>方案设计</a>
+  <a href="#s03"><span class="no">03</span>分步实施 (S1–S6)</a>
+  <a href="#s04"><span class="no">04</span>C3 候选步 (需拍板 D2)</a>
+  <a href="#s05"><span class="no">05</span>拍板点</a>
+  <a href="#s06"><span class="no">06</span>风险与缓解</a>
+  <a href="#s07"><span class="no">07</span>验收判据与回写</a>
+  <div class="toc-foot">计划工位 · 拍板后冻结<br>实施进度走任务档案</div>
+</nav>
+
+<header class="cover">
+  <div class="kicker">Implementation Plan · HR Wave Engine</div>
+  <h1>HR 稳态降频 (idle_refresh_interval) 分步实施计划</h1>
+  <p class="lede">把取证报告 <a href="../reports/26-10-03-1505-report-hr-fetch-verify-forensics.html">26-10-03-1505</a> §13 后记（可行性分析 + 所有者拍板）落成分步实施计划。核心改动一点：拉取间隔闸按「对账对象集是否为空」动态取值 —— 稳态期用降频间隔（默认 24H），对象集一翻非空，间隔闸自动回退到已超期的常态间隔，下一 poll（≤60s）立即拉取。行号均已按当前基线核实重标。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">编号</div><div class="v">26-10-05-0555</div></div>
+    <div class="item"><div class="k">专题</div><div class="v">hr-steady-throttle</div></div>
+    <div class="item"><div class="k">上游</div><div class="v">report 26-10-03-1505 §13</div></div>
+    <div class="item"><div class="k">代码基线</div><div class="v">develop@ee52e57d · 2026-10-05</div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待实施</span></div></div>
+  </div>
+</header>
+
+<section id="s00">
+  <h2><span class="no">00</span>拍板回执与核实结论</h2>
+  <table>
+    <tr><th>事项</th><th>结论</th></tr>
+    <tr><td>idle_refresh_interval 取值</td><td><strong>已拍板 24H</strong>（2026-10-05 05:30 所有者，回写报告 §13.6）—— 与 HR 宽限期（7–14 天）量级匹配，最坏发现延迟只占宽限期 ~10%</td></tr>
+    <tr><td>默认值</td><td><strong>已拍板默认 24H（默认启用降频）</strong> —— 保守默认原则让位于所有者显式定值；破稳态即时回退（§02.3）使默认启用风险可控。等效关闭方式 = 把 idle_refresh_interval 配得与 refresh_interval 相等</td></tr>
+    <tr><td>N 波防抖</td><td><strong>省去</strong>（§13.3）—— 对象集为空是本波自证覆盖的结论；立即降频后若出现义务对象，≤60s 即被拉回常态，抖动方向无风险敞口</td></tr>
+    <tr><td>报告 B2 是否同批修</td><td><strong>已无需拍板</strong> —— 报告 §13.6 留的这项，在 9400296a（10-03 23:51）已实施完毕（「下次核对清单」换词），见 §01 表 1</td></tr>
+    <tr><td>本计划范围</td><td>核心 = A1/稳态降频（S1–S6）；候选 = C3 淘汰预告（§04，默认不同批，拍板点 D2）</td></tr>
+  </table>
+  <div class="callout">核实轮（2026-10-05，develop@ee52e57d）结论：<strong>报告 §10 缺陷清单 7 项中 5 项已实施完毕</strong>（B1/B2/B3/B4/C1，提交 9400296a 及更早的状态显示改版），遗留待实施的只有 <strong>A1 稳态降频</strong>（本计划核心，拍板已定）与 <strong>C3 淘汰预告</strong>（候选，需拍板 D2）。报告 §01–§12 取证正文与 §13 后记的机制分析不受影响，本计划全量采纳 §13.3 推荐形态。</div>
+</section>
+
+<section id="s01">
+  <h2><span class="no">01</span>现状核实 (HEAD ee52e57d)</h2>
+  <p>报告正文行号基于取证基线 23796f3b、§13 后记按 beb6223d 重标；两者之后 develop 又落了多笔 HR 提交（4f9f1f09 放行不覆写守阵、3505fda1 时钟注入收编、9400296a 显示缺陷修复等），行号再度漂移。本节为实施用锚点的<strong>实测重标</strong>。</p>
+
+  <h3>1.1 报告缺陷清单落点核对</h3>
+  <table>
+    <tr><th>报告条目</th><th>现状</th><th>证据 (HEAD ee52e57d)</th></tr>
+    <tr><td>B1 空态文案误导 (S1)</td><td><span class="ok">已实施</span></td><td>hr_status.js:284–290 <code>hrsEmptyText</code> 区分「该站点本地没有 HR 种子 / 该档位暂无」；:227 按钮动态标签「只看本地仍在列 (N) / 显示已删除种子 (M)」—— 名称与实际过滤条件（本地库存在）已对齐</td></tr>
+    <tr><td>B2 「下次拉取」语义 (S2)</td><td><span class="ok">已实施</span></td><td>9400296a：status.py:330–336 + hr_status.js:441 三处改「下次核对清单」，点明对账节奏语义</td></tr>
+    <tr><td>B3 核实结论缺中间态 (S3)</td><td><span class="ok">已实施</span></td><td>9400296a：hr_status.js:324 <code>hrsVerdictText</code> 中间态「在列·&lt;档位人话&gt;」+ 模块级 <code>hrsTerminalLane</code> 判据，后端零改动，严守「命中不写 verified」红线</td></tr>
+    <tr><td>B4 退役行徽章 (S4)</td><td><span class="ok">已实施</span></td><td>9400296a：hr_status.js:352–360 有放行记录显「已移出」/ 无记录显「已退役」（新增 <code>hr-pres-out</code>，三套皮肤 CSS 成对）；「失踪 N 波」只承担活跃行观察期</td></tr>
+    <tr><td>C1 wave_ts 跨波冻结</td><td><span class="ok">已实施</span></td><td>9400296a：service.py:553–559 改「置 0 不跨波继承」（本波首页时刻重算），刷新点 :703–705；守阵 <code>test_wave_ts_refreshes_every_wave_not_frozen</code>（变异验证）</td></tr>
+    <tr><td>A1 零对象稳态拉长间隔</td><td><span class="gap">未实施 → 本计划</span></td><td>全 src 无 <code>idle_refresh</code> 命中；拍板已定（§13.6），机制分析见报告 §13.1–13.5</td></tr>
+    <tr><td>C3 30 天静默淘汰预告</td><td><span class="gap">未实施 · 候选</span></td><td>9400296a 提交说明明文「未做(等指派)： A1 / C3」；本计划 §04 给方向，拍板点 D2</td></tr>
+  </table>
+
+  <h3>1.2 实施锚点行号重标（报告基线 → HEAD ee52e57d）</h3>
+  <table>
+    <tr><th>锚点</th><th>报告正文 (23796f3b)</th><th>§13 后记 (beb6223d)</th><th>HEAD (ee52e57d)</th></tr>
+    <tr><td>复用窗闸</td><td>464–471</td><td>470</td><td><code>service.py:468–477</code></td></tr>
+    <tr><td>拉取间隔闸（本计划改动点）</td><td>477–483</td><td>483–489</td><td><code>service.py:479–489</code>（取值式 :485）</td></tr>
+    <tr><td>allow_fetch 闸</td><td>485–488</td><td>491</td><td><code>service.py:491–499</code></td></tr>
+    <tr><td>频控闸 next_allowed_at</td><td>490–494</td><td>501</td><td><code>service.py:501–510</code></td></tr>
+    <tr><td>对象集现算点（波前）</td><td>509</td><td>540</td><td><code>service.py:539–540</code>（<code>_do_wave</code> 内）</td></tr>
+    <tr><td>_build_objects（判据本体）</td><td>1230–1249</td><td>1327–1365</td><td><code>service.py:1327–1365</code>（排除链 :1354–1359 · 漂移回炉 :1349–1352）</td></tr>
+    <tr><td>_record_hit（命中撤销放行）</td><td>861–867</td><td>915–921</td><td><code>service.py:915–925</code>（:922–925 新增换 tid 接管）</td></tr>
+    <tr><td>_freeze_terminal</td><td>1114–1142</td><td>—</td><td><code>service.py:1231–1259</code></td></tr>
+    <tr><td>_merge_seen（last_seen 唯一写点）</td><td>1108–1112</td><td>—</td><td><code>service.py:1216–1230</code></td></tr>
+    <tr><td>_advance_observation（观察期计数）</td><td>1144–1174</td><td>—</td><td><code>service.py:1261–1303</code></td></tr>
+    <tr><td>复用窗公式 min(reuse, interval)</td><td>1062</td><td>1174</td><td><code>service.py:1171–1174</code>（不变项）</td></tr>
+    <tr><td>_position_covered / _absence_proven_all</td><td>1376–1390 / 1406–1407</td><td>—</td><td><code>service.py:1491–1507 / 1508–1521</code></td></tr>
+    <tr><td>SEED_EXEMPT_RATIO / MISSING_GRACE_WAVES / INDEX_RETENTION</td><td>103 / 107 / 140</td><td>105 / 109 / —</td><td><code>service.py:105 / 109 / 142</code></td></tr>
+    <tr><td>_prune_index（30 天淘汰）</td><td>1417–1427</td><td>—</td><td><code>service.py:1532+</code></td></tr>
+    <tr><td>worker._collect_anchors（失败吞空）</td><td>—</td><td>323–325</td><td><code>worker.py:313–325</code>（异常 → 返回 <code>{}</code>）</td></tr>
+    <tr><td>anchors 每 poll 现取</td><td>—</td><td>runtime.py:358–382</td><td><code>hr/runtime.py:358–382</code> ✓（只读快照，无变化）</td></tr>
+  </table>
+
+  <h3>1.3 实施面新增事实（报告未载，本轮核实补齐）</h3>
+  <ul>
+    <li><strong>站点配置链四点</strong>：config/models.py:123–155 <code>SiteHrCheckConfig</code>（v3 三键 enabled/tracker/refresh_interval，:143 默认 12H）→ config/loaders.py:174–186 站点条目解析 + :243–263 派生透传 → config/validation/sections.py:50–56 键集 <code>KNOWN_HR_SITE_KEYS</code> + :326–344 <code>_validate_hr_site_entry</code>（时长校验走 <code>_try_time</code>，positive / min_s=60 / max_s=30d）→ config/schema/hr.py:58–88 字段表 <code>HR_CHECK_SITES_FIELDS</code>（<code>Field</code> 含展示名 / help，配置端渲染用）。新键四处同步 + 键面守阵（tests/test_config_schema.py、tests/test_config_key_surface.py）自动复核。</li>
+    <li><strong>版本策略</strong>：infra/versioning.py 模块 docstring 明文「刻意不为『补字段』这类非破坏性动作造版本」⇒ <code>HrWaveMeta</code> 加带默认值的新字段<strong>不需要</strong> bump hr_site（恒 v2），from_json 对缺键回默认值，存量文件免迁移。</li>
+    <li><strong>视图消费链</strong>：视图由四处从<strong>落盘数据</strong>构建 —— worker.py:329（每轮发布）/ webui/runtime.py:362（重建）/ report.py:114,159（走查报告）/ status.py:620。闸门内存现算的判据<strong>必须落盘</strong>才能进展示层 —— 这是 §02.4 稳态旗标设计的直接依据。</li>
+    <li><strong>展示换算单点</strong>：status.py:589–590 <code>site_conf_interval</code>（docstring 自述「『下次核对清单』这类字段的算法只有一处」）→ :331 <code>next_at</code> → :351 视图字段 <code>refresh_interval</code> → :605 <code>blocking_reason</code>。改这一处，展示全链跟随。</li>
+    <li><strong>写盘纪律先例</strong>：自动 poll 的 waiting <strong>零写盘</strong>（service.py:494 注释明文）；例外是 force defer 落历史（:494–509）。<code>_persist_step</code>（:1015–1018）在 persist=False（dry-run / hr.once）时 no-op —— 翻转写盘沿用同一口。</li>
+    <li><strong>多实例边界</strong>：&lt;site&gt;.json 是账号级共享事实（store.py:6），anchors 是<strong>本机</strong>事实（hr/runtime.py:363–382 只读快照）⇒ 稳态旗标天然是「最后写者的本地稳态」，只能做展示用；闸门永远用本实例现算值（§06 R6）。</li>
+    <li><strong>零锚点 vs 锚点失败撞车</strong>：worker.run_once:300 用 <code>anchors_by_site.get(site)</code> —— 站点本地零种子时该键缺失返回 None，与「采集失败」返回 None 形态相同；<code>refresh_site</code> 入口 :432 又有 <code>anchors or {}</code> 把 None 吞成空。报告 §13.3「获取失败 ≠ 稳态」的实现纪律必须精确到这两处（§02.5）。</li>
+  </ul>
+</section>
+
+<section id="s02">
+  <h2><span class="no">02</span>方案设计 —— 动态间隔闸 + 稳态旗标落盘</h2>
+
+  <h3>2.1 判据：对账对象集为空</h3>
+  <p>两个动议场景统一落同一判据（报告 §13.2 已论证）：S1（本地零交集）⇒ anchors 空 ⇒ 对象集空；S2（本地全 B/C 终态/放行/超额）⇒ anchors 全部撞排除链 ⇒ 对象集空。<code>_build_objects</code>（service.py:1327–1365）纯内存现算，唯一副作用是漂移回炉（:1351 <code>del data.verified[h]</code>）。判据：</p>
+  <pre><code>steady = anchors_known and not objects      # anchors_known 见 §2.5 —— 采集失败不算稳态
+interval = site_conf.idle_refresh_interval if steady else site_conf.refresh_interval</code></pre>
+
+  <h3>2.2 现算点提级：闸门前算一次，传参进波</h3>
+  <p>现算点从 <code>_do_wave</code>（:539–540）<strong>提级到 <code>_refresh_locked</code> 顶部</strong>（<code>now = self._now()</code> 之后、复用窗之前），一次现算把 <code>(objects, observing, unmatched)</code> 传参进 <code>_do_wave</code>，删除其内部调用 —— 杜绝双跑现算与双回炉。复用窗 / allow_fetch / force 各分支返回前判据已在手，稳态旗标各分支都能刷新。</p>
+  <div class="callout warn"><strong>行为变化说明（有意，且正是机制所需）</strong>：漂移回炉从「波时」提前到「poll 时」（≤60s）。本机重下的种子其放行记录作废更及时，同时它进入对象集 ⇒ 判据翻非空 ⇒ 间隔闸回退 —— 报告 §13.2「新下载自动破稳态」依赖的正是这一步。回炉语义本身不变（仍是「回清单/重下 ⇒ 重新受管束」）。开销：每 poll 每站一次 O(index+anchors) 内存遍历，零额外 IO（§13.2 已裁定可接受）。</div>
+
+  <h3>2.3 间隔闸动态取值与破稳态即时回退</h3>
+  <p>闸体 :483–489 的 <code>due_wave = healthy + site_conf.refresh_interval</code> 改用上面的 <code>interval</code>；waiting 理由在稳态期带标记（如「未到拉取时刻(拉取间隔·稳态降频, 还差 Xs)」），日志与 self-explanatory。破稳态回退不需要任何触发器：对象集翻非空 ⇒ interval 回常态 ⇒ <code>healthy + refresh_interval</code> 早已过去（healthy ≥ 24H 前）⇒ 闸门立即放行 ⇒ 下一 poll（≤60s）开波。发现延迟 5H → ≤60s + 波时长（报告 R1）。</p>
+
+  <h3>2.4 稳态旗标落盘（展示链的桥）</h3>
+  <p><code>HrWaveMeta</code>（model.py:383）加 <code>idle_mode: bool = False</code>，to_json/from_json 按既有 <code>_as_*</code> 助手口径补一行。写盘纪律：<strong>仅翻转时写</strong>（<code>if data.wave.idle_mode != steady: 赋值 + self._persist_step(session)</code>）—— 稳态期每 60s poll 旗标不变 ⇒ 零写盘，守「自动 poll 零写盘」纪律；翻转至多每天几次。展示层从落盘旗标读（§2.6），重启后语义保留。不 bump schema 版本（§1.3 版本策略）。</p>
+
+  <h3>2.5 锚点失败 ≠ 稳态（报告 §13.3 实现纪律的精确化）</h3>
+  <p>现在 <code>_collect_anchors</code> 异常返回 <code>{}</code>（worker.py:323–325），与「本站零种子」不可区分 —— 若不修，主循环侧故障会被当成稳态而降频（报告 R5 唯一实质风险）。契约改为三态：</p>
+  <table>
+    <tr><th>worker._collect_anchors 返回</th><th>语义</th><th>refresh_site 收到的 anchors</th><th>间隔闸行为</th></tr>
+    <tr><td>映射（可能缺某站键）</td><td>采集成功</td><td>该站键缺失 → <code>{}</code>；有键 → 非空映射</td><td><code>{}</code> = 确认零锚点 ⇒ <strong>可降频</strong>（S1 场景主路径）</td></tr>
+    <tr><td><code>None</code>（anchors_fn 未接 / 异常）</td><td>采集失败/未知</td><td><code>None</code>（不再被 :432 <code>or {}</code> 吞掉）</td><td><strong>不降频</strong>（按常态间隔；wave 行为沿用现状 <code>{}</code> 不变）</td></tr>
+  </table>
+  <p>落点：worker.py:317–325 失败分支改返回 <code>None</code>；run_once:300 改 <code>anchors_by_site.get(site, {}) if anchors_by_site is not None else None</code>；service.refresh_site:432 去掉 <code>anchors or {}</code> 的吞并（None 直通 <code>_refresh_locked</code>，wave 路径内部再 <code>or {}</code>）；refresh_all:449–450 同款。现算仍用 <code>anchors or {}</code> 的结果，仅 <code>anchors_known = anchors is not None</code> 参与稳态判定。</p>
+
+  <h3>2.6 展示同步（单点换算）</h3>
+  <p><code>site_conf_interval</code>（status.py:589–590）加 wave 参数：<code>wave.idle_mode</code> 为真 ⇒ 返回 <code>idle_refresh_interval</code>。:331 <code>next_at</code>、:351 视图 <code>refresh_interval</code> 字段、:605 <code>blocking_reason</code> 全部自动跟随 —— 稳态期「下次核对清单」显示 24H 倒计时，与闸门真实行为一致，不产生新的 S2 式误读。</p>
+
+  <h3>2.7 明确不变项</h3>
+  <ul>
+    <li><strong>复用窗</strong>：service.py:1171–1174 <code>min(reuse_window, refresh_interval)</code> 不跟随降频间隔 —— 稳态期复用窗仍 2H，新鲜度与节奏解耦（报告 §13.4 不变项，语义正确）。</li>
+    <li><strong>force（立即拉取）</strong>：跳过复用窗与间隔闸不动；<strong>账号安全线</strong> min_interval / 日额 / Retry-After / 时间窗照常（:501–510 在间隔闸之后，天然不受影响）。</li>
+    <li><strong>防伪语义</strong>：命中即撤销放行（_record_hit :915–925）与守阵 tests/test_hr_service.py:744/748 一字不动；观察期 / 终态冻结 / 放行签发全链不动。</li>
+    <li><strong>单波开销</strong>：对象集空不跳波（波照开、页照翻），降频省的是波次不是单波页数（§13.2；改覆盖语义不在本计划）。</li>
+    <li><strong>30 天 INDEX_RETENTION 淘汰</strong>：与降频无相互作用（还挂清单的行至少每天重见一次，last_seen 持续刷新）。</li>
+  </ul>
+</section>
+
+<section id="s03">
+  <h2><span class="no">03</span>分步实施 (S1–S6)</h2>
+  <p>每步一个可独立验证的单元；S1–S3 为最小可交付核（配置 → 引擎 → 展示），S4 守阵随后，S5–S6 收尾。预计改动面：4 个配置文件 + 3 个 hr 后端文件 + 1 个测试集 + 1 份 docs。</p>
+
+  <h3>S1 · 配置键 idle_refresh_interval（四点同步 + 键面守阵）</h3>
+  <ul>
+    <li><strong>config/models.py</strong>：<code>SiteHrCheckConfig</code> 加 <code>idle_refresh_interval: float = 24 * 3600.0</code>（注释注明：稳态降频间隔，拍板 26-10-05 默认 24H 默认启用；黄金法则 4：进 validate_config + schema）。</li>
+    <li><strong>config/loaders.py</strong>：:153 键注释、:174–186 条目解析加 <code>idle_refresh_interval=_get(spec, "idle_refresh_interval", d.idle_refresh_interval, parse_time)</code>、:243–263 派生透传补一行。</li>
+    <li><strong>config/validation/sections.py</strong>：<code>KNOWN_HR_SITE_KEYS</code>（:50–56）加键；<code>_validate_hr_site_entry</code>（:326–344）加 <code>_try_time(..., positive=True, min_s=60, max_s=30*86400)</code> + <strong>交叉校验</strong>：两侧按缺省补齐后解析比较，<code>idle &lt; refresh</code> ⇒ 聚合报错「降频不能比常态还快」（覆盖用户把 refresh 配 &gt;24H 而未配 idle 的情况）。</li>
+    <li><strong>config/schema/hr.py</strong>：<code>HR_CHECK_SITES_FIELDS</code> 加 <code>Field("idle_refresh_interval", "稳态拉取间隔", "time", default="24H", unit_default="H", help=...)</code> —— help 写清三句：本地无义务对象（对账对象集为空）时的对账节奏；对象集一翻非空自动回退常态间隔并立即拉取；须 ≥ 拉取间隔（相等 = 等效关闭降频）。</li>
+    <li>键面守阵（test_config_schema.py / test_config_key_surface.py）自动生效，跑绿；<strong>tests/test_hr_config.py</strong> 新增：默认 24H / idle&lt;refresh 红 / 60s 下限红 / 30d 上限红 / 相等合法。</li>
+  </ul>
+
+  <h3>S2 · 引擎闸：动态取值 + 稳态旗标 + 锚点三态（service.py · worker.py · model.py）</h3>
+  <ul>
+    <li><strong>model.py</strong>：<code>HrWaveMeta.idle_mode: bool = False</code> + to_json/from_json 各一行（§2.4；不 bump schema）。</li>
+    <li><strong>service.py <code>_refresh_locked</code></strong>：顶部现算（§2.2）→ 稳态判定（§2.1，<code>anchors_known</code> 见 §2.5）→ 间隔取值进闸体 :483–489 → waiting 理由稳态标记 → 旗标翻转写（§2.4）→ 把 <code>(objects, observing, unmatched)</code> 传参 <code>_do_wave</code>。</li>
+    <li><strong>service.py <code>_do_wave</code></strong>：签名加三参数，删 :539–540 内部现算（<code>wave.trusted_done</code> / <code>_sign_releases</code> 消费点不变）。</li>
+    <li><strong>service.py <code>refresh_site</code> / <code>refresh_all</code></strong>：None 直通语义（§2.5），去掉 :432 的 <code>anchors or {}</code> 吞并。</li>
+    <li><strong>worker.py</strong>：<code>_collect_anchors</code> 失败返回 <code>None</code>（:317–325）；run_once:300 按 §2.5 三态传参。</li>
+    <li>实施时确认：listing=none 全站型站点本不取数，确认其闸门路径不受影响（healthy_ts=0 时 next_at=0，展示无影响）。</li>
+  </ul>
+
+  <h3>S3 · 展示同步（status.py 单点）</h3>
+  <ul>
+    <li><code>site_conf_interval</code>（:589–590）加 wave 参数并按 <code>wave.idle_mode</code> 取值；:331 / :351 / :605 跟随（§2.6）。</li>
+    <li>拍板点 D1：kv 行稳态期注记（推荐做，见 §05）。</li>
+    <li>tests/test_hr_status.py：稳态期 next_at 用 idle 值 / 常态期不变 / 旗标缺省 False 兼容存量站点文件。</li>
+  </ul>
+
+  <h3>S4 · 测试守阵（tests/test_hr_service.py 三参数解耦区 :1327 扩展）</h3>
+  <ol>
+    <li><code>test_idle_interval_used_when_objects_empty</code>：零锚点站点，healthy+idle 内 WAITING（理由含稳态标记），过 idle 闸后正常开波。</li>
+    <li><code>test_idle_gate_releases_immediately_when_objects_become_nonempty</code>：稳态期内新增本地种子（锚点翻非空）→ 下一 poll 立即开波（破稳态即时回退；healthy 未动）。</li>
+    <li><code>test_anchor_collection_failure_disables_idle</code>：anchors=None → 常态间隔（不降频），wave 行为与现状一致。</li>
+    <li><code>test_zero_anchors_site_still_idles</code>：显式 <code>{}</code>（采集成功但该站零种子）→ 照常降频（与失败区分的回归钉）。</li>
+    <li><code>test_idle_mode_flip_persists_once</code>：翻转写一次，稳态期反复 poll 零额外写（revision 不变）；JSON 往返保真。</li>
+    <li>回归：force / min_interval / 日额 / Retry-After 行为不变（既有三参数解耦用例 :1327–1400 全绿）；复用窗公式不跟随 idle（:1331/:1343 用例口径扩展一条）。</li>
+    <li>新增测试按文件头 docstring「测试计划」清单同步登记（AGENTS 硬约束）。</li>
+  </ol>
+
+  <h3>S5 · 文档回写</h3>
+  <ul>
+    <li>docs/hr-online-verify-docs.md：配置键 + 稳态降频机制段（判据 / 回退 / 失败纪律 / 等效关闭方式）。</li>
+    <li>service.py / status.py 相关 docstring 与行内注释同步（拉取间隔闸注释块 :479–482 补动态取值口径）。</li>
+    <li>若实施轮达到立档阈值，按 memory-bank skill 立任务档案 + Refs 双向声明（本计划 + 报告）。</li>
+  </ul>
+
+  <h3>S6 · 全量测试 + 基线 + 收尾</h3>
+  <ul>
+    <li><code>commands run test.full</code> → 基线切片 testing/baselines/&lt;stamp&gt;-hr-steady-throttle.md（记实测数字）；<code>commands run kb.index</code>。</li>
+    <li>真机走查（<code>commands run dev.run -- config.yml --dry-run</code> 先行）：两站稳态期「下次核对清单」显示 24H；手动加种子后 ≤60s 回常态开波。</li>
+  </ul>
+</section>
+
+<section id="s04">
+  <h2><span class="no">04</span>C3 候选步 · 30 天静默淘汰预告（需拍板 D2）</h2>
+  <p>报告 §7.9/§10-C3：_prune_index（service.py:1532+）按 INDEX_RETENTION=30d（:142）淘汰 active=false 且 last_seen&gt;0 的行，entry_details（status.py:395）里整行消失 —— 其中无 hash 无放行记录的行历史无痕迹（生产 142 行批预计 10-28 后陆续触发）。9400296a 明确「未做(等指派)」。两个方向：</p>
+  <table>
+    <tr><th>方向</th><th>做法</th><th>代价</th></tr>
+    <tr><td><strong>A · 日志预告（推荐）</strong></td><td>_prune_index 淘汰前扫描：距期限 &lt;3 天的行 WARNING 一次（<code>_prune_warned: set[str]</code> 去重，仿 _no_channel_warned 模式 :1403–1411）</td><td>~10 行 + 1 条测试；零 UI 改动；与降频无相互作用（§2.7）</td></tr>
+    <tr><td>B · UI tombstone</td><td>entry_details 保留已淘汰行只读展示</td><td>model/status/前端三链 + 数据结构新增 tombstone 层，改动面不成比例</td></tr>
+  </table>
+  <p class="hint">独立缺陷、与稳态降频零耦合 —— 默认不同批实施（D2 拍板）。</p>
+</section>
+
+<section id="s05">
+  <h2><span class="no">05</span>拍板点</h2>
+  <table>
+    <tr><th>#</th><th>事项</th><th>推荐</th><th>备选与代价</th></tr>
+    <tr><td>D1</td><td>展示层稳态注记：kv 行「下次核对清单」在稳态期加「·稳态」之类注记（或 tooltip）</td><td><strong>推荐做</strong> —— 一行文案级改动；不做则稳态期突然出现 24H 倒计时无解释，制造新的「为什么是 24H」误读（与已修的 B2 语义配套）</td><td>不做：机制不受影响（§13.3 口径），仅观感缺口</td></tr>
+    <tr><td>D2</td><td>C3（30 天淘汰预告）是否与稳态降频同批实施</td><td><strong>推荐不同批</strong> —— 独立缺陷零耦合；距离首个真实触发（10-28 后）尚有余量</td><td>同批：+§04 方向 A 的 ~10 行，边界仍清晰</td></tr>
+  </table>
+  <p class="hint">核心机制（idle_refresh_interval=24H 默认启用、动态取值、无防抖、失败不降频）已由所有者 2026-10-05 05:30 拍板（报告 §13.6），不在本表 —— 本表只剩实施配套的两个小决策。</p>
+</section>
+
+<section id="s06">
+  <h2><span class="no">06</span>风险与缓解</h2>
+  <table>
+    <tr><th>#</th><th>风险</th><th>量化与缓解</th></tr>
+    <tr><td>R1</td><td>新下载种子的发现延迟</td><td>推荐形态下 ≤60s + 波时长（§2.3 回退机制），不是直觉的 24H —— 报告已裁定基本消除</td></tr>
+    <tr><td>R2</td><td>「本地种子被删但仍挂清单」发现延迟 ≤5H→≤24H</td><td>宽限期 10 天口径下仍有 ~9 天补救窗口；拍板已接受</td></tr>
+    <tr><td>R3</td><td>站点侧翻转（B/C→A）发现延迟 ≤24H</td><td>重见即管束防线不变（_record_hit :915–925）；种子在做种则无实际损失</td></tr>
+    <tr><td>R4</td><td>A 档观察期节奏变慢（2 波 ~10h→~48h）</td><td>只影响「行消失 ⇒ 放行/退役」登记时点，不影响保护语义（报告 §13.4）</td></tr>
+    <tr><td>R5</td><td>误判稳态（唯一实质风险）</td><td>锚点失败被当零交集 → §2.5 三态契约拦（None 显式传递）；index/verified 数据损坏为现状既有风险，非本计划引入</td></tr>
+    <tr><td>R6</td><td>稳态旗标的多实例归属：&lt;site&gt;.json 账号级共享，旗标反映「最后写实例」的本地稳态</td><td>旗标仅用于展示；<strong>闸门永远用本实例现算值</strong>（§2.1/§2.4 分工），最坏情形是展示侧短暂显示他实例的节奏，判定零影响。生产实际单实例（auto-qb-data 每 clone 独立）</td></tr>
+    <tr><td>R7</td><td>漂移回炉从波时提前到 poll 时（≤60s）</td><td>语义不变（仍是本机重下 ⇒ 放行作废），提前正是破稳态判据所需（§2.2 callout）；翻转写盘把回炉结果随之持久化，崩溃窗口内丢失 ≤ 一个翻转写</td></tr>
+    <tr><td>R8</td><td>默认启用改变存量站点行为（12H→部分时段 24H）</td><td>拍板显式接受（覆盖报告原建议 0=关）；等效关闭 = idle 配成与 refresh 相等（S1 help 文案写明）；validate 交叉校验拦住错误方向配置</td></tr>
+  </table>
+</section>
+
+<section id="s07">
+  <h2><span class="no">07</span>验收判据与回写</h2>
+  <ul>
+    <li>S4 守阵清单全绿 + 既有三参数解耦区（test_hr_service.py:1327–1400）回归全绿 + 键面守阵（test_config_schema / test_config_key_surface）全绿。</li>
+    <li><code>commands run test.full</code>：通过数只增不减、覆盖率 ≥ 现行基线（99%），实测数字入基线切片。</li>
+    <li>请求量量化（报告 §13.5 口径）：稳态期两站 14→6 请求/天（-57%），真机日志或 hr.once 走查核对。</li>
+    <li>破稳态实测：稳态期手动加种子 → 下一 poll（≤60s）开波，waiting 理由带稳态标记的日志链可读。</li>
+    <li>复用窗 / force / 频控行为回归不变（§2.7 不变项逐条过）。</li>
+    <li>docs/hr-online-verify-docs.md + docstring 回写完成；本计划状态抬 In Progress → Done（变更记录）；拍板 D1/D2 结果回写本节。</li>
+  </ul>
+</section>
+
+<footer>
+  <p>计划工位 · 上游：memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html §13（可行性 + 拍板）· 代码基线 develop@ee52e57d（行号为本计划实测重标，实施时若再有提交落入，以符号名定位为准）· 实施进度走任务档案，拍板后本计划冻结。</p>
+  <p>变更记录：26-10-05-0555 初版 —— 核实轮裁定 B1/B2/B3/B4/C1 已实施（9400296a 等），范围收窄为 A1 稳态降频（S1–S6）+ C3 候选（D2）。</p>
+</footer>
+
+</div>
+</body>
+</html>
