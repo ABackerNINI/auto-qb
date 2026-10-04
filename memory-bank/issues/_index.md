@@ -18,12 +18,14 @@
 | perf | 5 |
 | docs | 1 |
 | refactor | 3 |
-| feat | 15 |
+| feat | 17 |
 | chore | 2 |
 | question | 4 |
 
 ## Open
 
+- [feat] [WEBUI 重新校验需确认框: 鼠标路径无兜底(仅键盘路径有)](26-10-05-0254-feat-webui-recheck-confirm.html) — 右键菜单/批量条的重新校验点下即执行, 无任何确认; 键盘路径 shortcuts.js:814 已有 confirmDialog —— 两路径防护不对称, 鼠标路径需补确认框
+- [feat] [WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析](26-10-05-0254-feat-webui-skip-check-preconditions.html) — WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析
 - [perf] [渐进灌入期主循环掉拍: max_tasks_per_tick 自适应](26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — --ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s), 灌入期每拍还债; 给 max_tasks_per_tick 做自适应(候选列于 W5, 未实施)
 - [perf] [/api/state 全量构建拖垮主循环: 增量 rid 用满 + 分页/按需字段(5000 种子实测)](26-10-01-2218-perf-webui-api-state-full-scan.html) — 5000 种子下 /api/state 全量单次约 0.6s 抢占同进程主循环; 方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖, 方向②已由 shows-view issue 跟踪
 - [question] [配置切分(每站点一份)是否做(存疑)](26-10-01-2212-question-config-split-per-site.html) — (存疑)把站点配置拆为每站点一份文件, 涉及加载/热重载/校验面, 待拍板

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-skip-check-preconditions">
+<meta name="issue-stamp" content="26-10-05-0254">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="webui-skip-check-preconditions">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析">
+<meta name="issue-summary" content="WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析">
+<title>WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析 · feat · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 feat · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· feat</div>
+    <h1>WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析</h1>
+    <p class="lede">WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-05-0254-feat-webui-skip-check-preconditions</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 02:54</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>WEBUI 的跳检(右键 / 批量)对<strong>已完成的种子</strong>也照做 —— 会被删种重加、本地统计清空; 而规则侧跳检不会, 因为规则侧的决策链第 0 条明确「只校验暂停中未完成的种子, 已完成一律跳过」。</p>
+    <ul>
+      <li><strong>差异来源</strong>: WEB 入口绕过了规则决策链 —— <code>webui/commands.py:355</code> 直接调 <code>ctx.ops.skip_check(hash, source="web")</code>, 只过 ops 层的两道闸门(部分下载禁止 + 同日去重), 不经过 <code>rules/actions/checking.py</code> 的决策链 0/1/1.5/1.6。</li>
+      <li><strong>用户要求</strong>: 跳检需补前置条件, 例如「已完成的种子不能跳检」; 且<strong>具体还有哪些前置条件需专项分析</strong>(本单含一份候选清单, 见 06 节 —— 清单是待分析方向, 不等于已确认结论)。</li>
+      <li><strong>已具备</strong>: 前端 danger 确认框(<code>drawer.js:276</code> <code>skipCheckMulti</code>)与配置开关 <code>web.skip_check_menu</code> 已落地, 缺的是「该不该允许」的判定。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <p class="hint">WEB 入口直连 ops, 无规则决策链:</p>
+<pre><code># src/auto_qb/webui/commands.py:349-356 (取证 2026-10-05 02:54)
+    def _cmd_skip_check_torrent(self, hash: str, cmd_id: str = ""):
+        """WEB UI 命令: 右键跳检 —— 经 ops 层执行四阶段(与规则跳检同闸门/同去重/天然串行)
+        拒绝(今日已跳检过/种子已被移除/部分下载)回执 error 带自解释文案。"""
+        r = self.ctx.ops.skip_check(hash, source="web")</code></pre>
+    <p class="hint">ops 层现有的<strong>全部</strong>前置闸门只有两条(加 tor is None 与 R2 实时复核):</p>
+<pre><code># src/auto_qb/core/modules/ops_mod.py:349-368 (取证 2026-10-05 02:54)
+    def _skip_gates(self, hash: str, tor: TorrentRecord) -&gt; Optional[ActionResult]:
+        """跳检前置闸门: 部分下载禁止 + 跨规则同日去重(跨来源共享)。返回 None = 全部通过。"""
+        progress = tor.progress
+        if 0.0 &lt; progress &lt; 1.0:
+            return ActionResult.fail(f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
+        today = date.today().isoformat()
+        skip_day = self.state.setdefault("skip_check_day", {})
+        if skip_day.get(hash) == today:
+            return ActionResult.skip("今日已跳检过该种子(跨规则去重)")
+        ...  # 顺带清理非当日记录
+        return None</code></pre>
+    <p class="hint">规则侧有、WEB 侧没有的决策链(前两条正是用户点名的那类前置条件):</p>
+<pre><code># src/auto_qb/rules/actions/checking.py:84-95 (取证 2026-10-05 02:54)
+        # 决策链 0: 只校验"暂停中未完成"的种子(跨种添加后的典型状态), 其余状态一律跳过:
+        # - 已完成(progress&gt;=1, 无论状态): 已通过哈希校验, 重复 recheck/跳检无意义
+        # - 活跃中(downloading/uploading 等非暂停): 正在运行, 无需校验
+        if not (ctx.torrent.state_enum.is_stopped and ctx.torrent.progress &lt; 1.0):
+            return ActionResult.skip("种子非暂停中未完成状态, 无需校验")
+        # 决策链 1: 组内有活跃下载种子 -&gt; 整组未完成, 不进行任何校验(包括跳检)
+        if grouping._group_has_downloading(members):
+            return ActionResult.skip("组内有种子正在下载, 整组未完成, 不进行任何校验")</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>WEB 右键 / 批量跳检任意种子即触发。种子已完成(progress=1)、正处于做种中、或组内有活跃下载成员时, 均<strong>不会被拦</strong> —— 行为与规则侧口径相反。</td></tr>
+      <tr><td>影响范围</td><td>单种跳检 <code>commands.py:349</code> 与批量跳检 <code>commands.py:702</code> (<code>_bulk_skip_check_via_ops</code>) 两个入口; 规则源跳检不受影响(它先过决策链)。前端入口见 04 节。</td></tr>
+      <tr><td>严重度</td><td>中(偏上)。跳检必然清空本地统计(上传/下载量、做种时间), 且对已完成种子零收益(哈希早已通过); 误对做种中种子执行还会短暂中断做种。数据本身不丢(文件保留), 但统计不可逆 —— 是否可接受需拍板。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/commands.py:349</code>（取证 2026-10-05 02:54）· <code>_cmd_skip_check_torrent</code> · grep <code>_cmd_skip_check_torrent</code></li>
+      <li><code>src/auto_qb/webui/commands.py:702</code>（同上）· <code>_bulk_skip_check_via_ops</code> · grep <code>_bulk_skip_check_via_ops</code></li>
+      <li><code>src/auto_qb/webui/commands.py:586</code> · 现有 web 门控 <code>skip_check_menu</code>(菜单开关, 非前置条件)</li>
+      <li><code>src/auto_qb/core/modules/ops_mod.py:349</code> · <code>_skip_gates</code> · grep <code>_skip_gates</code> —— 现有两条闸门的唯一落点</li>
+      <li><code>src/auto_qb/core/modules/ops_mod.py:252</code> · <code>skip_check</code>; 同文件 :283-291 R2 实时复核(动手前重拉实时状态)</li>
+      <li><code>src/auto_qb/rules/actions/checking.py:84-100</code> · 决策链 0/1/1.5 · grep <code>决策链</code>; 同文件 :41 规则侧跳检四阶段前置(文件存在 + 大小检查)</li>
+      <li>前端入口: <code>src/auto_qb/webui/static/shared/tpl/ctx-menus.html:29</code>(单选/多选右键, <code>v-if="flags.skip_check_menu"</code>) · <code>static/shared/drawer.js:276</code> <code>skipCheckMulti</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查。已排除: ①「ops 层漏搬闸门」—— 看起来是有意收敛: ops 只放与安全直接相关的两条(部分下载会产生垃圾数据、同日重复零收益), 而「该不该校验」属规则语义; ②「单发入口有、批量入口没有」—— 两个入口最终都汇到同一个 <code>ops.skip_check</code>。合理怀疑: 从 rules 迁到 ops 时只搬了闸门, 决策链 0/1 被有意留在 rules 侧, WEB 直连入口因此少了这层判定。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p><strong>第一步是清单本身</strong> —— 下表是「还有哪些前置条件」的候选方向, <strong>未逐一取证</strong>, 开工时按 04 节锚点复核后再定取舍:</p>
+    <table>
+      <tr><th>候选前置条件</th><th>规则侧现状</th><th>WEB 侧现状</th></tr>
+      <tr><td>已完成(progress&gt;=1, 无论状态)</td><td>跳过(checking.py:88)</td><td>无闸门 —— 用户点名项</td></tr>
+      <tr><td>活跃中(做种/上传中, 非暂停)</td><td>跳过(同上)</td><td>无闸门</td></tr>
+      <tr><td>组内有活跃下载成员</td><td>整组不校验(checking.py:92)</td><td>无闸门</td></tr>
+      <tr><td>组内已有成员 full-checking 在途</td><td>让位等待(checking.py:99)</td><td>无闸门</td></tr>
+      <tr><td>组内其它成员校验失败且文件映射一致</td><td>失败推断 skip(checking.py:37)</td><td>无闸门</td></tr>
+      <tr><td>部分下载(0 &lt; progress &lt; 1)</td><td>禁止跳检</td><td>已有(_skip_gates)</td></tr>
+      <tr><td>今日已跳检(跨来源)</td><td>去重</td><td>已有(_skip_gates)</td></tr>
+      <tr><td>种子已不存在 / 已从客户端移除</td><td>—</td><td>已有(tor is None + R2 实时复核)</td></tr>
+      <tr><td>前置文件缺失 / 尺寸不符</td><td>四阶段前置(checking.py:41)</td><td>待核 —— 是否随四阶段一并带过来</td></tr>
+      <tr><td>无参考种子</td><td>告警(checking.py:42)</td><td>由前端确认框文案承担</td></tr>
+      <tr><td>站点 HR 要求 / 做种时长要求</td><td>未核</td><td>未核 —— 需确认跳检重加是否影响 HR 计时</td></tr>
+      <tr><td>同 hash 并发在途</td><td>—</td><td>待核 —— recheck 有在途互斥, skip_check 是否有同类保护</td></tr>
+    </table>
+    <ul>
+      <li><strong>方向 A(共用)</strong>: 把「该不该校验」的判定下沉到 ops 层 <code>_skip_gates</code>, 让 rule / web 两来源共用一套。代价: 触及规则语义, 需回归规则侧行为。</li>
+      <li><strong>方向 B(轻量)</strong>: WEB 入口前置一次与决策链 0/1 等价的只读判定(拒绝时给自解释文案), 规则侧不动。代价: 两处口径存在漂移风险, 需加注释互指。</li>
+      <li><strong>待拍板</strong>: ①已完成种子是「禁止」还是「允许但二次确认」; ②只加用户点名的那条, 还是上表一并加; ③前端 <code>flags</code> 已能拿到 progress, 可选择「灰置菜单项」而非「点后报错」—— 交互形态待定。姊妹件 <a href="26-10-05-0254-feat-webui-recheck-confirm.html">feat · WEBUI 重新校验需确认框</a> 同批提出(两者恰为互补: 跳检有确认框缺前置判定, 重新校验有键盘确认框但鼠标路径无兜底)。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-05 02:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-05-0254-feat-webui-skip-check-preconditions.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
