@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="torrent-traffic-stats">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-04-0721">
-<meta name="doc-updated" content="26-10-04-0721">
+<meta name="doc-updated" content="26-10-04-0957">
 <title>实施计划 · qB 流量历史 dat v2 零值行程行（z 行）· 单种空闲 0 平线 · auto-qb</title>
 <style>
   :root {
@@ -374,11 +374,12 @@ hour,&lt;hour_epoch&gt;,&lt;dl_avg&gt;,&lt;dl_max&gt;,&lt;up_avg&gt;,&lt;up_max&
       <li><b>索引</b>：本件入库后 <code>commands run kb.index</code> 重建；专题视图 <code>kb.docmap --topic torrent-traffic-stats</code> 核对四件（issue 26-09-27-1248 / 计划 26-10-03-0946 / 报告 26-10-04-0636 / 本计划）归组。</li>
     </ul>
     <h3>变更记录</h3>
+    <p class="hint">26-10-04-0957 P1–P5 完成（feature/traffic-v2-zrow, dfb1abf3..9b7c1bf7）：五条验收逐条核对（判据 ①②④⑤ 桩级引用用例, 悬停渲染待真机）；实测压缩比 —— raw 段空闲 16.4x（纯空闲 24h）／17.9x（典型工况 10 种子 1 活跃 2h）, 判据 3 目标 ≥5x 达标；全文件 2.98x（估算 3.5–5x 偏高: 估算取 v1 上界 155–205KB 当分母且 v1 零行字节实测偏短, hour 段地板占比高于估算）—— 基线切片 26-10-04-0957。test.full 2497 passed + 4 skipped / 覆盖率 99%。</p>
     <p class="hint">26-10-04-0721 初版：报告 26-10-04-0636 推荐方案 B 拍板落地；含三处计划修正（R1 时间刷新封口 / R2 null 先封口 / R3 头行升级时机）与一处具体化（拍板点 §03.3），压缩比口径修正为全文件 ≈3.5–5x（raw 段 ≈20x）。</p>
   </section>
 
   <footer>
-    <p>auto-qb · 实施计划 26-10-04-0721 · 专题 torrent-traffic-stats · 取证基线 9a3b74af (2026-10-04) · 上游 report 26-10-04-0636 · 状态 Open（待实施）</p>
+    <p>auto-qb · 实施计划 26-10-04-0721 · 专题 torrent-traffic-stats · 取证基线 9a3b74af (2026-10-04) · 上游 report 26-10-04-0636 · 状态 Done（P1–P5 完成 2026-10-04, 待真机核对条目见任务档案）</p>
   </footer>
 
 </div>

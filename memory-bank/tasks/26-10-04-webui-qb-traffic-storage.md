@@ -1,9 +1,9 @@
 # 26-10-04-webui-qb-traffic-storage — qB 流量历史存储压缩与「速度 0 vs 断线」语义
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-10-04
-**Updated:** 2026-10-04 07:25
-**Summary:** 用户报两问题: ①qb 流量速度 0 被记录为「断线无数据」②压缩流量记录文件/提高保存密度(速度 0 是常态可压缩, 时间高重复可「开始时间+间隔」推算, 注意配置可改)。三路子智能体网络调研 + 本仓代码取证完成, 调研报告 [26-10-04-0636](../reports/26-10-04-0636-report-qb-traffic-storage.html) 落文; 用户拍板「按推荐的方案」(B · v2 零值行程行)后, 实施计划 [26-10-04-0721](../plans/26-10-04-0721-plan-qb-traffic-v2-zrow.html) 落文: z 行型 + 开放行程五触发(新增 600s 时间刷新 R1 / null 先封口 R2 / 头行升级时机 R3) + 读侧覆盖展开 + 前端三态文案, 五阶段派发 ≈3.5-5 人日, 零新配置键, API 形状不动。待用户开工指令后按 P1-P5 实施。
+**Updated:** 2026-10-04 09:57
+**Summary:** 用户报两问题: ①qb 流量速度 0 被记录为「断线无数据」②压缩流量记录文件/提高保存密度(速度 0 是常态可压缩, 时间高重复可「开始时间+间隔」推算, 注意配置可改)。三路子智能体网络调研 + 本仓代码取证完成, 调研报告 [26-10-04-0636](../reports/26-10-04-0636-report-qb-traffic-storage.html) 落文; 用户拍板「按推荐的方案」(B · v2 零值行程行)后, 实施计划 [26-10-04-0721](../plans/26-10-04-0721-plan-qb-traffic-v2-zrow.html) 落文: z 行型 + 开放行程五触发(新增 600s 时间刷新 R1 / null 先封口 R2 / 头行升级时机 R3) + 读侧覆盖展开 + 前端三态文案, 五阶段派发 ≈3.5-5 人日, 零新配置键, API 形状不动。P1-P5 已于 2026-10-04 全部完成(分支 feature/traffic-v2-zrow, 9b7c1bf7), test.full 2497 passed + 4 skipped / 覆盖率 99%; 实测压缩比 raw 段空闲 16.4-17.9x(目标 ≥5x 达标)、全文件 2.98x(估算 3.5-5x 偏高, hour 段地板占比高于估算, 详见进度日志); 悬停渲染等真机条目待 dev.run 核对。
 **Topics:** torrent-traffic-stats
 
 ## 原始请求
@@ -42,9 +42,10 @@
 | 4 | 问题一修法设计（v2 之上） | Done | 报告 §07 |
 | 5 | 用户拍板（z 行方案 / 三个拍板点） | Done | 2026-10-04 用户「按推荐的方案」= 采纳 B + 报告三项建议 |
 | 6 | 实施计划（plans/） | Done | [26-10-04-0721](../plans/26-10-04-0721-plan-qb-traffic-v2-zrow.html)（Open, 含 R1/R2/R3 修正） |
-| 7 | v2 实施 + 测试 + 基线 | 未开工 | 依赖用户开工指令, 按 P1-P5 |
+| 7 | v2 实施 + 测试 + 基线 | Done | 计划 [26-10-04-0721](../plans/26-10-04-0721-plan-qb-traffic-v2-zrow.html) P1-P5 (Done): 分支 feature/traffic-v2-zrow 五提交 dfb1abf3..9b7c1bf7, 基线切片 [26-10-04-0957](../testing/baselines/26-10-04-0957-qb-traffic-v2-done.md) |
 
 ## 进度日志
 
 - 2026-10-04 06:47 调研轮完成：报告 [26-10-04-0636](../reports/26-10-04-0636-report-qb-traffic-storage.html) 落文（dark 单文件 HTML，doc-topic torrent-traffic-stats）。三路子智能体并行网络调研 + 本仓代码取证；test.full 因报告入池触发索引守卫红（预期），kb.index 重建后复跑记录基线。零代码改动，未提交。
 - 2026-10-04 07:25 用户拍板「按推荐的方案」（= 报告 §05 候选 B · v2 零值行程行，三个拍板点随推荐答案采纳）；实施计划 [26-10-04-0721](../plans/26-10-04-0721-plan-qb-traffic-v2-zrow.html) 落文（Open）。计划对报告三处修正：R1 行程 600s 时间刷新封口（0 平线落盘延迟 ≤1h → ≤10min，治「活跃→停止后图尾缺口文案误标」）；R2 null 点先封口再写空值行（防 z 覆盖横跨断连期把未知虚标为 0）；R3 双读单写升级时机（v1 文件首次 z 追加或重写时升头行，「未升级不追加 z」为硬不变式）。压缩比口径修正：全文件 ≈3.5-5x（hour 段 40KB 是地板），raw 段空闲 ≈20x。零代码改动，未提交，待用户开工指令。
+- 2026-10-04 09:57 P1-P5 实施完成（分支 feature/traffic-v2-zrow, 五提交 dfb1abf3..9b7c1bf7, 计划状态改 Done）。P1a/P1b 存储层 v2（z 行型 + 头行双读门闩 + append_z_run + R3 升级 + z 感知聚合）；P2 采样器开放行程（五触发 + has_entry 单种开启条件）；P3 读侧覆盖展开（z 覆盖 0 平线 + totals 续链 + 组空态判据补 zruns）；P4 前端三态文案（悬停 0 桶状态行「0 B/s · 空闲/做种中」/ 缺口合并文案 / 图例 hint / 空态收窄）。五条验收核对：①③ 桩级达标（0 平线经 test_traffic_grid::test_zrun_coverage_expansion / test_read_series_z_grid_expansion_end_to_end 还原 (0,0)；压缩比实测见下）；②④⑤ 引用既有用例（test_disconnect_seals_run_before_null_r2 / test_interval_change_mixed_series_sparse_active_and_zline / test_restart_loses_at_most_one_open_run + test_append_flush_kill_window_at_most_one_row）；悬停渲染三皮肤目检待真机（dev.run --dry-run 需真实 qB）。实测压缩比（一次性脚本, 真实写路径构造, 双侧解析零坏行）: 纯空闲 24h@30s raw 段 2880 零行 64.7KB vs 144 z 行 3.9KB = **16.4x**；典型工况（10 种子 1 活跃 2h）空闲段 2640 零行 108.3KB vs 132 z 行 6.1KB = **17.9x** —— 判据 3 目标 raw 段 ≥5x 达标；全文件（24h raw + 30d hour）154.0KB vs 51.7KB = **2.98x**, 低于估算 3.5-5x：估算把 v1 全文件上界 155-205KB 当分母（实际典型工况落 154KB 下沿）且 v1 零行实际字节偏短（115KB 估算偏高, 实测 64.7-108KB）。test.full **2497 passed + 4 skipped, 31.50s, 覆盖率 TOTAL 99%**（14677 语句 / 152 未覆盖 / 4964 分支 / 112 partial）, 基线切片 [26-10-04-0957](../testing/baselines/26-10-04-0957-qb-traffic-v2-done.md)。未提交（待用户「提交」指令）。
