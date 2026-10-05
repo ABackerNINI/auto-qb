@@ -39,7 +39,9 @@ from typing import List, Optional
 from .commands import (
     CMD_SLOW_MS,
     DEFERRED_RECEIPT_COMMANDS,
+    RC_UNCONFIRMED_PREFIX,
     REANNOUNCE_CONFIRM_TIMEOUT,
+    REANNOUNCE_JUMP_TOL,
     TRUTH_PUSH_CAP_MS,
     RESYNC_COMMANDS,
     SELF_POSTED_COMMANDS,
@@ -83,8 +85,15 @@ class WebUIRuntime:
         # 命令执行结果回执(cmd_id -> {status, error, ts, wait_ms, exec_ms, truth})。
         # 主循环线程唯一写者, Web 线程经 /api/cmd/{id} 只读
         self.results: dict = {}
-        # 强制汇报确认跟踪(cmd_id -> {deadline, items: {hash: {done, ok, err, baseline}}})
+        # 强制汇报确认跟踪(cmd_id -> {items: {hash: item}}); item 形状见
+        # commands._register_reannounce_pending(done/status/reason/baseline/epoch_mode/t0/deadline)
         self.reannounce_pending: dict = {}
+        # 推迟汇报的后台核实(D1 早回执后半段, hash -> {min_e, baseline, epoch_mode, t0}):
+        # 已受理·推迟的 item 移出回执跟踪后登记于此, 达 min_e 后每 tick 核实一次,
+        # confirmed/rejected 只落日志后移除; 上限 REANNOUNCE_BACKGROUND_MAX 条(超限丢最旧),
+        # 逾时(min_e + TIMEOUT)未出结论静默移除。与 reannounce_pending 同为主循环线程单写者
+        # (check_pending 内推进), 不引入并发(黄金法则 5)。
+        self.reannounce_background: dict = {}
         # 待推真值(cmd_id -> {cmd, args, ts}); 回执已即时发出, 这里只等真值落地再推事件
         self.truth_pending: dict = {}
         # ---- 视图快照(Web 线程只读, 发布时整体替换) ----
@@ -299,45 +308,114 @@ class WebUIRuntime:
         return changed
 
     def check_pending(self) -> None:
-        """每 tick 检查在途的强制汇报确认; 某 cmd_id 全部种子出结论后聚合写回执"""
+        """每 tick 检查在途的强制汇报确认与推迟后台核实; 某 cmd_id 全部种子出结论后聚合写回执
+
+        逐 item 推进(判定链, 见 commands._verdict_reannounce 的五分支):
+          item 级 deadline 超时 -> warn「未确认」(不再判「失败」) / store 快照 stopped 直判 ->
+          qB 断连等待 / 调 _verdict_reannounce 出 confirmed(ok)/rejected(error)。
+        全部 item 出结论后聚合三桶(D4=warn): 任一 error -> error; 否则任一 warn -> warn;
+        全 ok -> ok, 文案「成功 X, 失败 Y, 未确认 Z: <前 3 条原因>」。
+        推迟登记的后台核实(reannounce_background)同 tick 推进, 结论只落日志。
+        """
         host = self._host
-        if not self.reannounce_pending:
+        if not self.reannounce_pending and not self.reannounce_background:
             return
         now = time.time()
+        self._advance_reannounce_background(now)
+        if not self.reannounce_pending:
+            return
+        store = getattr(host, "store", None)
         finished = []
         for cmd_id, entry in self.reannounce_pending.items():
             for h, it in entry["items"].items():
                 if it["done"]:
                     continue
-                if now >= entry["deadline"]:
-                    it["done"], it["ok"] = True, False
-                    it["err"] = f"汇报确认超时({REANNOUNCE_CONFIRM_TIMEOUT:.0f}s 内未确认到 tracker 响应)"
+                if now >= it["deadline"]:
+                    # 超时落「未确认」(warn), 不与「失败」混淆; legacy 无 epoch 字段, 只承诺
+                    # 「未观测到拒绝」的诚实标签
+                    tail = (
+                        "旧版 qB 无 epoch 字段, 仅未观测到拒绝"
+                        if not it.get("epoch_mode") else f"{REANNOUNCE_CONFIRM_TIMEOUT:.0f}s 内未观测到 epoch 前跳/在途/拒绝证据"
+                    )
+                    it["done"], it["status"], it["reason"] = True, "warn", RC_UNCONFIRMED_PREFIX + tail
                     continue
+                if store is not None:
+                    rec = store.get(h)
+                    if rec is not None and rec.state_enum.is_stopped:
+                        # 用户在确认窗口内暂停了种子: qB 静默忽略强制汇报, 直判免白等
+                        it["done"], it["status"] = True, "warn"
+                        it["reason"] = RC_UNCONFIRMED_PREFIX + "种子已停止, qB 静默忽略强制汇报"
+                        continue
                 if host.client is None:
-                    continue  # qB 断连: 等恢复继续确认, 或按超时判失败
+                    continue  # qB 断连: 等恢复继续确认, item 级 deadline 到点落「未确认」
                 try:
                     trackers = host.client.torrents_trackers(h) or []
-                    r = host._confirm_reannounce_result(trackers, it["baseline"])
+                    state, reason = host._verdict_reannounce(
+                        trackers, it["baseline"], t0=it["t0"], tol=REANNOUNCE_JUMP_TOL, now=now
+                    )
                 except Exception as e:
-                    it["done"], it["ok"], it["err"] = True, False, f"读取 tracker 状态失败: {e}"
+                    it["done"], it["status"], it["reason"] = True, "error", f"读取 tracker 状态失败: {e}"
                     continue
-                if r is True:
-                    it["done"], it["ok"] = True, True
-                elif r is False:
-                    it["done"], it["ok"], it["err"] = True, False, "tracker 未接受汇报(not working)"
+                if state == "confirmed":
+                    it["done"], it["status"] = True, "ok"
+                elif state == "rejected":
+                    it["done"], it["status"], it["reason"] = True, "error", reason
             if all(it["done"] for it in entry["items"].values()):
                 finished.append(cmd_id)
         for cmd_id in finished:
             entry = self.reannounce_pending.pop(cmd_id)
             items = list(entry["items"].values())
-            fails = [it for it in items if not it["ok"]]
-            if not fails:
-                self.set_result(cmd_id, "ok")
-                logger.info(f"WEB UI | 强制汇报确认成功({len(items)}个种子)")
-            else:
-                msg = f"{len(fails)}/{len(items)} 个种子汇报确认失败: " + "; ".join(it["err"] for it in fails[:3])
+            ok_n = sum(1 for it in items if it["status"] == "ok")
+            err_n = sum(1 for it in items if it["status"] == "error")
+            warn_n = len(items) - ok_n - err_n
+            msg = f"成功 {ok_n}, 失败 {err_n}, 未确认 {warn_n}"
+            reasons = [it["reason"] for it in items if it["status"] != "ok" and it["reason"]]
+            if reasons:
+                msg += ": " + "; ".join(reasons[:3])
+            if err_n:
                 self.set_result(cmd_id, "error", msg)
-                logger.warning(f"WEB UI | {msg}")
+                logger.warning(f"WEB UI | 强制汇报回执: {msg}")
+            elif warn_n:
+                self.set_result(cmd_id, "warn", msg)
+                logger.info(f"WEB UI | 强制汇报回执: {msg}")
+            else:
+                self.set_result(cmd_id, "ok")
+                logger.info(f"WEB UI | 强制汇报确认成功({ok_n}个种子)")
+
+    def _advance_reannounce_background(self, now: float) -> None:
+        """推进推迟登记的后台核实(D1): 达 min_e 后每 tick 读一次 trackers, 出结论只落日志
+
+        登记面在 commands._register_reannounce_pending(已受理·推迟的 item); 本方法只消费:
+        confirmed -> INFO 后移除 / rejected -> WARNING 后移除 / 逾时(min_e + TIMEOUT)未出结论
+        静默移除(DEBUG)。断连 tick 跳过照旧, 逾时移除兜底(防种子被删等泄漏面, R5)。
+        """
+        if not self.reannounce_background:
+            return
+        host = self._host
+        for h in list(self.reannounce_background):
+            bg = self.reannounce_background[h]
+            if now < bg["min_e"]:
+                continue
+            if now >= bg["min_e"] + REANNOUNCE_CONFIRM_TIMEOUT:
+                del self.reannounce_background[h]
+                logger.debug(f"WEB UI | 推迟汇报后台核实逾时移除 {h[:8]}")
+                continue
+            if host.client is None:
+                continue
+            try:
+                trackers = host.client.torrents_trackers(h) or []
+                state, reason = host._verdict_reannounce(
+                    trackers, bg["baseline"], t0=bg["t0"], tol=REANNOUNCE_JUMP_TOL, now=now
+                )
+            except Exception as e:
+                logger.debug(f"WEB UI | 推迟汇报后台核实读取失败 {h[:8]}: {e}")
+                continue
+            if state == "confirmed":
+                del self.reannounce_background[h]
+                logger.info(f"WEB UI | 推迟汇报后台核实已确认 {h[:8]}: {reason or 'epoch 前跳'}")
+            elif state == "rejected":
+                del self.reannounce_background[h]
+                logger.warning(f"WEB UI | 推迟汇报后台核实失败 {h[:8]}: {reason}")
 
     def flush_views(self, force: bool = False) -> None:
         """消费视图脏标记并在 Web 活跃时惰性重建(同步线 / 任务线各自调用一次)

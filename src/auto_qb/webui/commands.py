@@ -12,16 +12,46 @@
 import logging
 import time
 from collections.abc import Mapping
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from ..config import Config
 from ..infra.utils import sanitize_tracker_url
 
 logger = logging.getLogger(__name__)
 
-# 强制汇报的 tracker 确认窗口: reannounce 后 qB 立即重发 announce, 私站响应通常 1~10s;
-# 留足慢站点余量取 30s(主循环 main_tick=2s -> 约 15 轮确认机会), 超时仍未确认即判失败。
+# 强制汇报确认常量组(plan 26-10-05-0923, epoch 语义重构)。
+# !方向语义(事故根源): next_announce/min_announce 是 **Unix epoch 绝对秒**(qB 源码
+#   toSecondsSinceEpoch), 汇报成功 = next **前跳(变大)**; 把它当倒计时用(next 变小 = 被重置
+#   = 成功)方向正好相反 —— 判据方向的单点在 _verdict_reannounce 的 docstring。
+# 立即路径基础窗口(epoch 语义): reannounce 后 qB 立即重发 announce(私站响应通常 1~10s);
+# 30s 内仍未观测到前跳/在途/拒绝证据则落「未确认」(warn, 不再判「失败」)。
+# 主循环 main_tick=2s -> 约 15 轮确认机会。
 REANNOUNCE_CONFIRM_TIMEOUT = 30.0
+# 前跳判定容差(秒, D2): next > 基线 next + TOL 才算成功证据; TOL=3.0 依 S0 真机探针复核
+# 维持(实测立即路径前跳 +5466s, 按机制 >= tracker min_interval, 分钟级量级, 余量充分)。
+REANNOUNCE_JUMP_TOL = 3.0
+# 推迟 item 的窗口外延: 立即路径 item 级 deadline = t0 + max(TIMEOUT, min_e - t0 + MARGIN)。
+REANNOUNCE_DEFER_MARGIN = 15.0
+# item 级窗口上限(秒): 防异常大的 min 值把确认窗口撑爆(公式见 _register_reannounce_pending)。
+REANNOUNCE_WINDOW_CAP = 600.0
+# 推迟检出阈值(秒, D1): epoch 模式下 min_e - t0 > 该值 -> item 立即「已受理: 推迟至 HH:MM」
+# 并登记后台核实, 不进轮询(S0 实证 min 过期前 updating 是 ~0.9s 假瞬态, 轮询会误判成功)。
+REANNOUNCE_DEFER_EARLY = 25.0
+# 推迟后台核实结构上限(条): 超限丢最旧并 WARNING(防种子被删/断连等泄漏面, R5)。
+REANNOUNCE_BACKGROUND_MAX = 500
+
+# 回执文案前缀(§3.4 文案契约, D4=warn): 机器分流依据 = 回执 status(ok/error/warn),
+# 前缀仅是人类可读文案; 前端按 status 三桶分流, 改前缀文案必须同步前端聚合分支(测试钉住)。
+# 拼接规则:
+# - 失败        = RC_FAIL_PREFIX + tracker msg
+# - 已受理·推迟 = RC_DEFERRED_PREFIX + "HH:MM" + "(后台继续核实, 结果见日志)"
+#                 (HH:MM 为基线 min_e 的本地时刻, 动态尾部不进常量; 括号段是固定尾文案)
+# - 未确认·停止 = RC_UNCONFIRMED_PREFIX + "种子已停止, qB 静默忽略强制汇报"
+# - 未确认·超时 = RC_UNCONFIRMED_PREFIX + "30s 内未观测到 epoch 前跳/在途/拒绝证据"
+#                 (legacy 超时 = RC_UNCONFIRMED_PREFIX + "旧版 qB 无 epoch 字段, 仅未观测到拒绝")
+RC_FAIL_PREFIX = "失败: tracker 未接受汇报(not working): "
+RC_DEFERRED_PREFIX = "已受理: 最小间隔未过期, 推迟至 "
+RC_UNCONFIRMED_PREFIX = "未确认: "
 
 # **自投递**命令: 由 Web 侧在自己处理过程中 put 回队列(不是用户操作), 投递后**不唤醒**主循环。
 # 目前只有 build_search_index —— web_view 在搜索索引脏时自投递(web_view.py:513/:699)。
@@ -206,13 +236,19 @@ class WebCommandsMixin:
         """
         self.web.set_result(cmd_id, status, error, timing, truth)
 
-    def _trackers_baseline(self, hashes: List[str]) -> dict:
-        """读取汇报前各种子的 tracker 状态基线: {hash: {url: (status, next_announce)}}
+    def _trackers_baseline(self, hashes: List[str]) -> Tuple[dict, bool]:
+        """读取汇报前各种子的 tracker 状态基线 -> (baseline, epoch_mode)
 
+        baseline: {hash: {url: {"status", "updating", "next", "min"}}} —— 逐 real tracker 行
+        记 status/updating 与 next_announce/min_announce(epoch 绝对秒); 行缺键时对应值为 None。
         排除 DHT/PeX/LSD 虚拟 tracker(url 以 **/[DHT]/[PeX]/[LSD] 开头, 它们不走 announce)。
+        epoch_mode(D3 字段存在性探测): 任一种子的任一 real 行含 "next_announce" 键 = qB 5.2+
+        epoch 语义; 全部行都不含 = legacy qB(无前跳判据可用)。同一 qB 实例版本一致, 全局任一
+        即可判定。
         qB 断连等读取失败时异常上抛, 由命令分发层写 error 回执。
         """
         baseline = {}
+        epoch_mode = False
         for h in hashes:
             trackers = self.client.torrents_trackers(h) or []
             real = {}
@@ -220,36 +256,82 @@ class WebCommandsMixin:
                 url = str(t.get("url") or "")
                 if url.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
                     continue
-                real[url] = (t.get("status"), t.get("next_announce"))
+                if "next_announce" in t:
+                    epoch_mode = True
+                real[url] = {
+                    "status": t.get("status"),
+                    "updating": t.get("updating"),
+                    "next": t.get("next_announce"),
+                    "min": t.get("min_announce"),
+                }
             baseline[h] = real
-        return baseline
+        return baseline, epoch_mode
 
     @staticmethod
-    def _confirm_reannounce_result(trackers: list, baseline: dict) -> Optional[bool]:
-        """判定单个种子汇报确认结果: True=已确认成功 / False=已确认失败 / None=仍在进行
+    def _verdict_reannounce(trackers: list, baseline: dict, *, t0: float, tol: float, now: float) -> Tuple[str, str]:
+        """判定单个种子强制汇报的结论(纯函数, 无 I/O 无宿主依赖) -> (state, reason)
 
-        逐 tracker 检查, 任一命中即结论:
-        - status == 3 (updating)                    -> qB 正在汇报, 视为成功
-        - next_announce 比基线提前(>60 单位, 秒/毫秒通用) -> next_announce 被重置, 视为成功
-        - status 从非 working 变为 2 (working)      -> 视为成功
-        - status == 4 (not working) 且带错误消息    -> tracker 拒绝, 视为失败
+        state: "confirmed"=已确认成功 / "rejected"=已确认失败(tracker 拒绝) / ""=仍无结论(pending)。
+        reason: 结论原因文案; confirmed 可为空或简短证据(聚合回执 ok 桶不出文案), rejected 恒以
+        RC_FAIL_PREFIX 开头。
+
+        !!方向语义(事故根源, 不得回潮): next_announce 是 **Unix epoch 绝对秒**(qB 源码
+        toSecondsSinceEpoch), 汇报成功 = next **前跳(变大)**; 旧实现把它当倒计时用
+        (next 变小视为"被重置 = 成功")方向正好相反 —— "秒/毫秒通用"式臆测同罪。
+
+        epoch 行(基线行含 next, qB 5.2+)逐行判定, 任一行命中即结论(§3.1 五分支, ①stopped
+        在轮询侧直判不进本函数):
+          ② updating 或 status==3 -> confirmed, 但仅当该行基线 min 缺失/为 0/已过期(now >= min):
+             min 窗口未过期时的 updating 是推迟登记的假瞬态(S0 探针实证 ~0.9s, 非在途直证) -> 落 pending;
+          ③ next > b_next + tol -> confirmed(主判据; 判定域限基线 status>=2 且 b_next 非空的行,
+             规避未联系行 epoch 极值假前跳; 基线 min 同向前跳写入 reason 佐证, 不作必要条件);
+          ④ status==4 且 msg 非空 -> rejected(tracker 拒绝, 唯一可靠否定信号; 逐行先于 ②③ 判,
+             防 status4 行的 next 前跳只是重试排程被误判成成功); status==4 但 msg 空 -> 不判败
+             (歧义保守落 pending);
+          其余 -> pending("")
+
+        legacy 行(基线行无 next, qB < 5.2): 成功难证、失败可证 —— ② updating/status==3(无 min
+        信息, 不加守卫) / ③′ status 2<-基线非 2 / ④ 同上; **无前跳判据**。超时由轮询侧落
+        「未确认(旧版 qB 无 epoch 字段)」, 不假称成功 —— 与 pitfalls/backend/effect-confirmation.md
+        的证据门控口径一致, 回执语义只承诺诚实标签。
+
+        t0(指令登记时刻)当前判据未直接消费, 为 R1 干扰收窄预案(「前跳距指令 < 一 tick」)保留。
         """
         for t in trackers:
             url = str(t.get("url") or "")
             if url.startswith(("**", "[DHT]", "[PeX]", "[LSD]")):
                 continue
-            b_status, b_na = baseline.get(url, (None, None))
+            b = baseline.get(url) or {}
+            b_status = b.get("status")
+            b_next = b.get("next")
+            b_min = b.get("min")
             status = t.get("status")
+            updating = bool(t.get("updating"))
+            msg = t.get("msg") or ""
+            # ④ 失败(tracker 拒绝, 唯一可靠否定信号; 两个模式同判, msg 空不武断判败)
+            if status == 4 and msg:
+                return "rejected", RC_FAIL_PREFIX + msg
+            if b_next is None:
+                # legacy 行: ② 无守卫 + ③′ 变 working; 无前跳判据
+                if updating or status == 3:
+                    return "confirmed", "announce 在途"
+                if status == 2 and b_status is not None and b_status != 2:
+                    return "confirmed", "tracker 状态转为 working"
+                continue
+            # epoch 行: ② 在途直证(min 窗口守卫)
+            if updating or status == 3:
+                if b_min is None or b_min <= 0 or now >= b_min:
+                    return "confirmed", "announce 在途"
+                continue  # min 窗口未过期: updating 是推迟登记假瞬态, 落 pending
+            # ③ 主判据: epoch 前跳(判定域限基线 status>=2 且 b_next 非空)
             na = t.get("next_announce")
-            if status == 3:
-                return True
-            if na is not None and b_na is not None and na < b_na - 60:
-                return True
-            if status == 2 and b_status is not None and b_status != 2:
-                return True
-            if status == 4 and (t.get("msg") or ""):
-                return False
-        return None
+            if na is not None and b_status is not None and b_status >= 2 and na > b_next + tol:
+                reason = f"epoch 前跳 +{na - b_next:.0f}s"
+                cur_min = t.get("min_announce")
+                if b_min is not None and cur_min is not None and cur_min > b_min + tol:
+                    reason += f"(min 同前跳 +{cur_min - b_min:.0f}s 佐证)"
+                return "confirmed", reason
+        return "", ""
 
     def _cmd_build_search_index(self):
         """WEB UI 命令: 构建搜索索引(Web 线程检测到索引脏后投递, 主循环线程执行)。
@@ -277,8 +359,8 @@ class WebCommandsMixin:
         if hashes:
             self.api.torrents_reannounce(torrent_hashes=hashes)
             # 发送仅是"已下发指令"; 成功回执由 tracker 确认跟踪器在后续 tick 写入
-            baseline = self._trackers_baseline(hashes)
-            self._register_reannounce_pending(cmd_id, hashes, baseline)
+            baseline, epoch_mode = self._trackers_baseline(hashes)
+            self._register_reannounce_pending(cmd_id, hashes, baseline, epoch_mode)
             logger.info(f"WEB UI | 强制汇报整组({len(hashes)}个种子), 等待 tracker 确认")
 
     def _cmd_delete_group(self, key: tuple, delete_files: bool = False):
@@ -304,26 +386,76 @@ class WebCommandsMixin:
                 self._set_web_result(cmd_id, "error", "种子不存在或已被删除")
             return
         self.api.torrents_reannounce(torrent_hashes=[hash])
-        baseline = self._trackers_baseline([hash])
-        self._register_reannounce_pending(cmd_id, [hash], baseline)
+        baseline, epoch_mode = self._trackers_baseline([hash])
+        self._register_reannounce_pending(cmd_id, [hash], baseline, epoch_mode)
         logger.info(f"WEB UI | 强制汇报种子 {hash[:8]}, 等待 tracker 确认")
 
-    def _register_reannounce_pending(self, cmd_id: str, hashes: List[str], baseline: dict) -> None:
-        """登记汇报确认跟踪: 全部种子出结论(成功/失败/超时)后聚合写该 cmd_id 的回执"""
+    def _register_reannounce_pending(self, cmd_id: str, hashes: List[str], baseline: dict, epoch_mode: bool) -> None:
+        """登记汇报确认跟踪: 全部种子出结论(成功/失败/未确认)后聚合写该 cmd_id 的回执
+
+        item 形状(消费方在 runtime.check_pending):
+          done      是否已出结论
+          status    结论桶: "ok"(confirmed) / "error"(rejected) / "warn"(未确认·停止/超时、已受理·推迟)
+          reason    结论原因文案(聚合回执「前 3 条原因」的来源; ok 桶可为空)
+          baseline  该种子基线 {url: {status, updating, next, min}}(形状见 _trackers_baseline)
+          epoch_mode 该种子是否按 epoch 语义判定(D3, 随基线探测)
+          t0        指令登记时刻(秒)
+          deadline  item 级确认窗口截止期 = t0 + min(max(TIMEOUT, min_e - t0 + MARGIN), CAP);
+                    min_e 为该种子 real 行基线 min 的最大值(无/缺为 0) —— 截止期从 entry 级
+                    单一下沉到 item 级, 组内混合推迟/立即种子各自算账。
+
+        注册时两个立即结论(不再进轮询):
+          (a) store 快照 state_enum.is_stopped -> done+warn「未确认: 种子已停止...」
+              (qB 对停止种子静默 no-op, 免白等窗口);
+          (b) epoch 模式且 min_e - t0 > DEFER_EARLY -> done+warn「已受理: 推迟至 HH:MM」(D1
+              早回执), 并把该种子登记进 web.reannounce_background(后台达 min_e 后核实, 只落日志;
+              S0 实证 min 过期前 updating 是假瞬态, 不能进轮询判定)。
+        """
         if not cmd_id:
             return  # 无回执需求的调用(直接构造 manager 的场景): 只发指令不跟踪
-        self.web.reannounce_pending[cmd_id] = {
-            "deadline": time.time() + REANNOUNCE_CONFIRM_TIMEOUT,
-            "items": {
-                h: {
-                    "done": False,
-                    "ok": False,
-                    "err": "",
-                    "baseline": baseline[h]
-                }
-                for h in hashes
-            },
-        }
+        t0 = time.time()
+        items = {}
+        deferred = {}
+        for h in hashes:
+            rows = baseline.get(h) or {}
+            min_e = 0.0
+            for row in rows.values():
+                m = row.get("min")
+                if m is not None and m > min_e:
+                    min_e = float(m)
+            deadline = t0 + min(
+                max(REANNOUNCE_CONFIRM_TIMEOUT, min_e - t0 + REANNOUNCE_DEFER_MARGIN), REANNOUNCE_WINDOW_CAP
+            )
+            item = {
+                "done": False,
+                "status": "",
+                "reason": "",
+                "baseline": rows,
+                "epoch_mode": bool(epoch_mode),
+                "t0": t0,
+                "deadline": deadline,
+            }
+            rec = self.store.get(h)
+            if rec is not None and rec.state_enum.is_stopped:
+                item["done"], item["status"] = True, "warn"
+                item["reason"] = RC_UNCONFIRMED_PREFIX + "种子已停止, qB 静默忽略强制汇报"
+            elif epoch_mode and min_e - t0 > REANNOUNCE_DEFER_EARLY:
+                item["done"], item["status"] = True, "warn"
+                # 推迟文案拼接: 常量稳定头 + min_e 本地时刻 HH:MM + 固定尾(§3.4, 拼接规则见常量组注释)
+                item["reason"] = (
+                    RC_DEFERRED_PREFIX + time.strftime("%H:%M", time.localtime(min_e)) + "(后台继续核实, 结果见日志)"
+                )
+                deferred[h] = {"min_e": min_e, "baseline": rows, "epoch_mode": bool(epoch_mode), "t0": t0}
+            items[h] = item
+        self.web.reannounce_pending[cmd_id] = {"items": items}
+        if deferred:
+            bg = self.web.reannounce_background
+            for h, ent in deferred.items():
+                while len(bg) >= REANNOUNCE_BACKGROUND_MAX:
+                    oldest = next(iter(bg))
+                    del bg[oldest]
+                    logger.warning(f"WEB UI | 汇报后台核实队列已满({REANNOUNCE_BACKGROUND_MAX}), 丢弃最旧: {oldest[:8]}")
+                bg[h] = ent
 
     def _cmd_delete_torrent(self, hash: str, delete_files: bool = False):
         if self.store.get(hash) is not None:

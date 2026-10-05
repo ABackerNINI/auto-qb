@@ -117,7 +117,7 @@
 - test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + facet 行负词整种子排除 —— 三页同源(26-09-26 单点化; 负词种子级 26-09-27 定案)
 ### P1 覆盖率提升轮: webui 运行时与命令长尾
 - test_web_runtime_notify_drops_are_counted: SSE 广播非阻塞(慢/坏订阅者各计丢弃)
-- test_web_runtime_check_pending_paths: 在途汇报确认全路径(完成跳过/超时/断连/异常/成败聚合)
+- test_web_runtime_check_pending_paths: 在途汇报确认全路径(item 级 deadline 超时 warn(epoch/legacy 文案)/停止直判/断连/读异常 error/判定聚合三桶与前 3 条原因截断)
 - test_web_runtime_resync_elapsed_ms_logs_by_threshold: 补刷新计时按阈值分级(慢 WARNING / 正常 DEBUG)
 - test_web_runtime_set_result_prunes_stale_and_carries_truth: 回执表 TTL 淘汰 + truth 附带
 - test_web_runtime_affected_hashes_shapes: 受影响种子三种取法 + 异常退化
@@ -167,9 +167,16 @@
 - test_cmd_trackers_write_invalidates_lazy_cache: tracker 三兄弟写后失效 _trackers_info 惰性缓存(重读拉新值)
 - test_drain_web_commands_unknown_and_error_continues: 未知命令与执行异常只记日志, 不中断后续消费
 - test_drain_web_commands_empty_queue: 队列为空直接返回(queue.Empty 分支)
-- test_reannounce_confirm_success_and_timeout: 汇报确认跟踪 next_announce 重置 -> ok 回执; 超时 -> error 回执
-- test_reannounce_confirm_group_aggregate: 组汇报按种子逐个确认, 部分失败聚合 error 带计数
-- test_confirm_reannounce_result_matrix: 判定矩阵(updating/next_announce 重置/变 working=成功; not working+msg=失败; 其余 None)
+- test_verdict_reannounce_epoch_matrix: epoch 判定矩阵(②在途/③前跳 ==TOL 边界 pending/基线 status 0/1 行极值不触发/④status4+msg rejected 且先于前跳判, 空 msg 不判败; plan 26-10-05-0923)
+- test_verdict_reannounce_legacy_matrix: legacy 判定矩阵(基线行无 epoch 字段 -> ②/③′/④ 生效, 前跳判据不参与)
+- test_verdict_reannounce_min_window_guard: 判据② min 窗口守卫(基线 min 在未来 updating=推迟登记假瞬态 -> pending; 过期/缺失/0 后在途直证, S0 探针实证)
+- test_trackers_baseline_shape_and_epoch_mode: baseline 形状回归 {url: {status, updating, next, min}} + epoch_mode 字段存在性探测(虚拟行排除)
+- test_reannounce_receipt_prefix_contract: D4=warn 前缀文案契约(三前缀常量钉死, 改文案必红; 机器分流依据 = status 三值)
+- test_reannounce_confirm_success_and_timeout: epoch 确认回执: 前跳命中 -> ok 回执跟踪清空; 超时 -> warn「未确认」不再判「失败」
+- test_reannounce_confirm_group_aggregate: 组汇报三桶聚合(ok+error -> error 带计数与原因; 全推迟 -> warn「已受理」早回执 + 后台登记)
+- test_reannounce_register_immediate_verdicts_and_deadline: 注册直判(停止种子立即 warn/推迟检出早回执+后台登记) + item 级 deadline 公式与 600 上限
+- test_reannounce_stopped_midwindow_direct_verdict: 窗口内暂停直判(下一 tick warn「种子已停止」, 不等 deadline)
+- test_reannounce_background_verify_and_cap: 推迟后台核实(达 min_e 出结论落 INFO/WARNING 日志并移除/逾时 DEBUG 静默移除/500 上限丢最旧 WARNING)
 - test_cmd_group_actions_skip_missing_group: 组 key 不存在/成员不在快照 -> 空 hashes 不调 API
 - test_cmd_reload_config_delegates: reload_config 命令委托 apply_new_config
 - test_ensure_group_view_rebuilds_when_dirty: 分组视图脏时重建(Web 请求侧兜底)/干净时复用引用
@@ -8820,72 +8827,355 @@ def test_drain_web_commands_empty_queue():
         assert client.calls == []
 
 
-def test_reannounce_confirm_success_and_timeout():
-    """强制汇报确认跟踪: next_announce 重置 -> ok 回执; 超时 -> error 回执(删除流程据此不删)"""
-    import time as _time
+# ---------- 强制汇报确认重构(plan 26-10-05-0923: epoch 前跳证据门控 + D4=warn 三桶) ----------
 
-    def _tracker(status, na, msg=""):
-        return {"url": "https://tracker.hhanclub.net/announce.php", "status": status, "next_announce": na, "msg": msg}
+
+def _epoch_tracker(url="u", status=2, updating=False, next_announce=10_000, min_announce=5_000, msg=""):
+    """构造 epoch 语义的 qB tracker 行替身(next_announce/min_announce 是 Unix epoch 绝对秒)"""
+    return {
+        "url": url,
+        "status": status,
+        "updating": updating,
+        "next_announce": next_announce,
+        "min_announce": min_announce,
+        "msg": msg,
+    }
+
+
+def test_verdict_reannounce_epoch_matrix():
+    """epoch 判定矩阵(§3.1): ②在途/③前跳=confirmed(==TOL 边界=pending, 基线 status 0/1 行不判),
+    ④status4+msg=rejected(空 msg 不判败), 其余 pending"""
+    from auto_qb.core.qbmanager import QbManager
+
+    f = QbManager._verdict_reannounce
+    base = {"u": {"status": 2, "updating": False, "next": 10_000, "min": 5_000}}
+    kw = dict(t0=9_000, tol=3.0, now=20_000)
+    # ② updating / status==3(min 已过期) -> confirmed
+    assert f([_epoch_tracker(updating=True)], base, **kw) == ("confirmed", "announce 在途")
+    assert f([_epoch_tracker(status=3)], base, **kw) == ("confirmed", "announce 在途")
+    # ③ 主判据: 前跳 > TOL -> confirmed; ==TOL 边界不触发
+    assert f([_epoch_tracker(next_announce=10_004)], base, **kw)[0] == "confirmed"
+    state, reason = f([_epoch_tracker(next_announce=10_504, min_announce=6_000)], base, **kw)
+    assert state == "confirmed" and "epoch 前跳 +504s" in reason and "min 同前跳" in reason, "min 同向前跳作佐证"
+    assert f([_epoch_tracker(next_announce=10_003)], base, **kw) == ("", ""), "==TOL 边界 -> pending"
+    assert f([_epoch_tracker(next_announce=10_001)], base, **kw) == ("", ""), "跳幅 <= TOL -> pending"
+    assert f([_epoch_tracker()], base, **kw) == ("", ""), "无变化继续等待"
+    # ③ 判定域限基线 status>=2: 基线未联系行(status 0/1)带极值 next 不触发假前跳
+    for b_status in (0, 1):
+        b = {"u": {"status": b_status, "updating": False, "next": 10_000, "min": 5_000}}
+        assert f([_epoch_tracker(next_announce=999_999)], b, **kw) == ("", ""), f"基线 status={b_status} 行不判前跳"
+    # ④ tracker 拒绝: status4+msg -> rejected(逐行先于前跳判, 防 status4 行的重试排程误判成功)
+    assert f([_epoch_tracker(status=4, msg="tracker message", next_announce=99_999)], base,
+             **kw) == ("rejected", "失败: tracker 未接受汇报(not working): tracker message")
+    assert f([_epoch_tracker(status=4)], base, **kw) == ("", ""), "status4 空 msg 不武断判败"
+    # 虚拟 tracker 行不参与判定
+    assert f([_epoch_tracker(url="** [DHT]", next_announce=99_999)], base, **kw) == ("", "")
+
+
+def test_verdict_reannounce_legacy_matrix():
+    """legacy 判定矩阵(§3.2): 基线行无 epoch 字段 -> ②在途/③′变 working/④拒绝生效, 前跳判据不参与"""
+    from auto_qb.core.qbmanager import QbManager
+
+    f = QbManager._verdict_reannounce
+    base = {"u": {"status": 1, "updating": None, "next": None, "min": None}}  # 行无 epoch 字段
+    kw = dict(t0=9_000, tol=3.0, now=20_000)
+    assert f([_epoch_tracker(status=3)], base, **kw) == ("confirmed", "announce 在途")
+    assert f([_epoch_tracker(updating=True)], base, **kw) == ("confirmed", "announce 在途")
+    assert f([_epoch_tracker(status=2)], base, **kw) == ("confirmed", "tracker 状态转为 working")
+    assert f([_epoch_tracker(status=4, msg="bad")], base, **kw) == ("rejected", "失败: tracker 未接受汇报(not working): bad")
+    # 无前跳判据: 基线非 working + 当前仍非 working, next_announce 再大也不得判成功
+    assert f([_epoch_tracker(status=1, next_announce=99_999)], base, **kw) == ("", "")
+    assert f([_epoch_tracker(status=1)], base, **kw) == ("", ""), "基线 1 -> 1 无结论"
+    b2 = {"u": {"status": 2, "updating": None, "next": None, "min": None}}
+    assert f([_epoch_tracker(status=2)], b2, **kw) == ("", ""), "基线已是 working -> ③′ 不触发"
+    assert f([_epoch_tracker(status=4)], base, **kw) == ("", ""), "status4 空 msg 不武断判败"
+
+
+def test_verdict_reannounce_min_window_guard():
+    """判据② min 窗口守卫(S0 探针实证): 基线 min 在未来时 updating 是推迟登记假瞬态 -> pending; 过期后在途直证"""
+    from auto_qb.core.qbmanager import QbManager
+
+    f = QbManager._verdict_reannounce
+    base = {"u": {"status": 2, "updating": False, "next": 100_000, "min": 200_000}}
+    kw = dict(t0=190_000, tol=3.0)
+    assert f([_epoch_tracker(updating=True)], base, now=150_000, **kw) == ("", ""), "min 未过期: updating 是假瞬态"
+    assert f([_epoch_tracker(status=3)], base, now=199_999, **kw) == ("", "")
+    assert f([_epoch_tracker(updating=True)], base, now=200_000, **kw)[0] == "confirmed", "min 已过期: 在途直证"
+    # min 缺失/为 0: 无窗口信息可用, 不加守卫(在途即直证)
+    b_none = {"u": {"status": 2, "updating": False, "next": 100_000, "min": None}}
+    assert f([_epoch_tracker(updating=True)], b_none, now=150_000, **kw)[0] == "confirmed"
+    b_zero = {"u": {"status": 2, "updating": False, "next": 100_000, "min": 0}}
+    assert f([_epoch_tracker(updating=True)], b_zero, now=150_000, **kw)[0] == "confirmed"
+
+
+def test_trackers_baseline_shape_and_epoch_mode():
+    """baseline 形状回归: {url: {status, updating, next, min}} + epoch_mode(任一 real 行含 next_announce 键)"""
+    from auto_qb.core.qbmanager import QbManager
+
+    from helpers import FakeClient
+
+    client = FakeClient()
+    client.trackers_map = {
+        "HA":
+            [
+                _epoch_tracker(url="https://t.example/ann", status=2, next_announce=1000, min_announce=900),
+                {
+                    "url": "** [DHT]",
+                    "status": 2,
+                    "next_announce": 5,
+                    "min_announce": 5
+                },
+            ],
+        "HB": [{
+            "url": "https://t2.example/ann",
+            "status": 1,
+            "msg": "x"
+        }],  # 无 epoch 字段行
+    }
+    baseline, epoch_mode = QbManager._trackers_baseline(SimpleNamespace(client=client), ["HA", "HB"])
+    assert epoch_mode is True, "任一 real 行含 next_announce 键 = epoch 模式"
+    assert baseline["HA"] == {
+        "https://t.example/ann": {
+            "status": 2,
+            "updating": False,
+            "next": 1000,
+            "min": 900
+        }
+    }, "real 行按新 dict 形状记录, 虚拟行排除"
+    assert baseline["HB"] == {"https://t2.example/ann": {"status": 1, "updating": None, "next": None, "min": None}}
+    # 全部行都无 next_announce 键 -> legacy 模式
+    client.trackers_map = {"HA": [{"url": "https://t.example/ann", "status": 1}]}
+    baseline, epoch_mode = QbManager._trackers_baseline(SimpleNamespace(client=client), ["HA"])
+    assert epoch_mode is False and baseline["HA"]["https://t.example/ann"]["next"] is None
+
+
+def test_reannounce_receipt_prefix_contract():
+    """D4=warn 双契约(§3.4): 三前缀常量文案钉死(改文案必红); 机器分流依据是回执 status 三值"""
+    from auto_qb.webui.commands import RC_DEFERRED_PREFIX, RC_FAIL_PREFIX, RC_UNCONFIRMED_PREFIX
+
+    assert RC_FAIL_PREFIX == "失败: tracker 未接受汇报(not working): "
+    assert RC_DEFERRED_PREFIX == "已受理: 最小间隔未过期, 推迟至 "
+    assert RC_UNCONFIRMED_PREFIX == "未确认: "
+
+
+def test_reannounce_confirm_success_and_timeout():
+    """强制汇报确认(epoch 语义): 前跳命中 -> ok 回执且跟踪清空; 超时 -> warn「未确认」不再判「失败」"""
+    import time as _time
 
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        client.trackers_map = {"HA": [_tracker(1, 10_000)]}
+        u = "https://tracker.hhanclub.net/announce.php"
+        client.trackers_map = {"HA": [_epoch_tracker(url=u, status=2, next_announce=100_000, min_announce=90_000)]}
         # 确认前不写回执(登记 pending), tracker 无变化时继续等待
         mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd1"}))
         mgr.web.consume_commands()
         assert "cmd1" in mgr.web.reannounce_pending and "cmd1" not in mgr.web.results
         mgr.web.check_pending()
-        assert "cmd1" not in mgr.web.results, "tracker 无变化应继续等待"
-        client.trackers_map["HA"][0]["next_announce"] = 9_000  # next_announce 被重置(提前)
+        assert "cmd1" not in mgr.web.results, "无前跳证据应继续等待"
+        client.trackers_map["HA"][0]["next_announce"] = 105_000  # epoch 前跳 +5000s
         mgr.web.check_pending()
         assert mgr.web.results["cmd1"]["status"] == "ok"
         assert mgr.web.reannounce_pending == {}, "全部确认后跟踪应移除"
-        # 超时: deadline 已过仍未确认 -> error 回执
+        # 超时: item 级 deadline 已过仍无证据 -> warn「未确认」(不与 error「失败」混淆)
         mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd2"}))
         mgr.web.consume_commands()
-        mgr.web.reannounce_pending["cmd2"]["deadline"] = _time.time() - 1
+        mgr.web.reannounce_pending["cmd2"]["items"]["HA"]["deadline"] = _time.time() - 1
         mgr.web.check_pending()
-        assert mgr.web.results["cmd2"]["status"] == "error"
-        assert "超时" in mgr.web.results["cmd2"]["error"]
+        r = mgr.web.results["cmd2"]
+        assert r["status"] == "warn"
+        assert "未确认: " in r["error"] and "前跳" in r["error"]
+        assert "汇报确认失败" not in r["error"], "超时不再用旧「失败」标签"
 
 
 def test_reannounce_confirm_group_aggregate():
-    """组强制汇报: 按种子逐个确认, 部分失败 -> 聚合 error 回执带失败计数"""
-    def _tracker(status, na, msg=""):
-        return {"url": "https://tracker.hhanclub.net/announce.php", "status": status, "next_announce": na, "msg": msg}
+    """组强制汇报三桶聚合: ok+error -> error 带计数与原因; 全推迟 -> warn「已受理」早回执 + 后台登记"""
+    import time as _time
 
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
+        u = "https://tracker.hhanclub.net/announce.php"
         client.trackers_map = {
-            "HA": [_tracker(3, 10_000)],  # updating = 正在汇报 -> 成功
-            "HB": [_tracker(4, 10_000, "rejected")],  # not working + 错误消息 -> 失败
+            "HA": [_epoch_tracker(url=u, status=2, next_announce=100_000, min_announce=90_000)],
+            "HB": [_epoch_tracker(url=u, status=4, msg="rejected by tracker", next_announce=100_000)],
         }
         mgr.web.commands.put(("reannounce_group", {"key": key, "cmd_id": "cmd3"}))
         mgr.web.consume_commands()
         assert "cmd3" not in mgr.web.results
+        # HA 前跳命中(ok); HB status4+msg(rejected) -> 聚合 error
+        client.trackers_map["HA"][0]["next_announce"] = 105_000
         mgr.web.check_pending()
-        result = mgr.web.results["cmd3"]
-        assert result["status"] == "error" and "1/2" in result["error"]
+        r = mgr.web.results["cmd3"]
+        assert r["status"] == "error"
+        assert "成功 1, 失败 1, 未确认 0" in r["error"]
+        assert "失败: tracker 未接受汇报(not working): rejected by tracker" in r["error"]
+        assert mgr.web.reannounce_pending == {}
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        u = "https://tracker.hhanclub.net/announce.php"
+        fut = _time.time() + 1000  # min_e - t0 = 1000s > 25s -> 双双推迟
+        client.trackers_map = {
+            "HA": [_epoch_tracker(url=u, status=2, next_announce=fut, min_announce=fut)],
+            "HB": [_epoch_tracker(url=u, status=2, next_announce=fut + 5, min_announce=fut)],
+        }
+        mgr.web.commands.put(("reannounce_group", {"key": key, "cmd_id": "cmd4"}))
+        mgr.web.consume_commands()
+        items = mgr.web.reannounce_pending["cmd4"]["items"]
+        assert all(it["done"] and it["status"] == "warn" for it in items.values()), "推迟 item 注册即出结论"
+        assert set(mgr.web.reannounce_background) == {"HA", "HB"}, "推迟 item 登记后台核实"
+        mgr.web.check_pending()  # 全部 item 注册时已出结论 -> 下一 tick 即聚合
+        r = mgr.web.results["cmd4"]
+        assert r["status"] == "warn" and "成功 0, 失败 0, 未确认 2" in r["error"]
+        assert r["error"].count("已受理: 最小间隔未过期, 推迟至 ") == 2
+        assert mgr.web.reannounce_pending == {}
 
 
-def test_confirm_reannounce_result_matrix():
-    """_confirm_reannounce_result 判定矩阵: updating/重置/变 working=成功; not working+msg=失败; 其余 None"""
+def test_reannounce_register_immediate_verdicts_and_deadline():
+    """注册直判: 停止种子立即 warn; 推迟检出早回执 + 后台登记; item 级 deadline 公式与 600 上限"""
+    import time as _time
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        # (a) 停止种子: store 快照 state_enum.is_stopped -> 立即 done+warn, 不等窗口
+        rec = mgr.store.get("HA")
+        rec.state = "stoppedUP"
+        rec._state_enum = None  # 复位惰性缓存(state_enum 按新 state 重算)
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd5"}))
+        mgr.web.consume_commands()
+        it = mgr.web.reannounce_pending["cmd5"]["items"]["HA"]
+        assert it["done"] and it["status"] == "warn"
+        assert it["reason"] == "未确认: 种子已停止, qB 静默忽略强制汇报"
+        assert mgr.web.reannounce_background == {}, "停止种子不走推迟后台"
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        u = "https://tracker.hhanclub.net/announce.php"
+        fut = _time.time() + 1000
+        client.trackers_map = {"HA": [_epoch_tracker(url=u, status=2, next_announce=fut, min_announce=fut)]}
+        # (b) 推迟检出: min_e - t0 > 25s -> 立即 warn「已受理」+ 后台登记
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd6"}))
+        mgr.web.consume_commands()
+        it = mgr.web.reannounce_pending["cmd6"]["items"]["HA"]
+        assert it["done"] and it["status"] == "warn"
+        assert it["reason"].startswith("已受理: 最小间隔未过期, 推迟至 ")
+        assert it["reason"].endswith("(后台继续核实, 结果见日志)")
+        assert it["deadline"] - it["t0"] == 600.0, "窗口公式 capped 600(异常大 min 值不撑爆窗口)"
+        bg = mgr.web.reannounce_background["HA"]
+        assert bg["min_e"] == fut and bg["baseline"] == it["baseline"] and bg["epoch_mode"] is True
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        u = "https://tracker.hhanclub.net/announce.php"
+        # 立即路径: min_e - t0 = 20s(<= 25 不推迟) -> deadline = t0 + max(30, 20+15) = t0+35
+        now = _time.time()
+        client.trackers_map = {"HA": [_epoch_tracker(url=u, status=2, next_announce=now + 20, min_announce=now + 20)]}
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd7"}))
+        mgr.web.consume_commands()
+        it = mgr.web.reannounce_pending["cmd7"]["items"]["HA"]
+        assert not it["done"], "min_e - t0 <= 25s 走立即路径轮询"
+        assert 34.9 <= it["deadline"] - it["t0"] <= 35.0
+        assert "HA" not in mgr.web.reannounce_background
+        # 无 min 信息: min_e 按 0 -> max(30, 负) = 30 基础窗口; legacy 行 epoch_mode=False
+        client.trackers_map = {"HB": [{"url": u, "status": 1}]}
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HB", "cmd_id": "cmd8"}))
+        mgr.web.consume_commands()
+        it8 = mgr.web.reannounce_pending["cmd8"]["items"]["HB"]
+        assert not it8["done"] and it8["epoch_mode"] is False
+        assert 29.9 <= it8["deadline"] - it8["t0"] <= 30.1
+
+
+def test_reannounce_stopped_midwindow_direct_verdict():
+    """窗口内暂停直判: 确认窗口内用户暂停种子 -> 下一 tick 立即 warn「种子已停止」, 不等 deadline"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        u = "https://tracker.hhanclub.net/announce.php"
+        client.trackers_map = {"HA": [_epoch_tracker(url=u, status=2, next_announce=100_000, min_announce=90_000)]}
+        mgr.web.commands.put(("reannounce_torrent", {"hash": "HA", "cmd_id": "cmd9"}))
+        mgr.web.consume_commands()
+        mgr.web.check_pending()
+        assert "cmd9" not in mgr.web.results, "运行中无证据继续等待"
+        rec = mgr.store.get("HA")
+        rec.state = "stoppedUP"
+        rec._state_enum = None
+        mgr.web.check_pending()
+        r = mgr.web.results["cmd9"]
+        assert r["status"] == "warn" and "未确认: 种子已停止" in r["error"]
+        assert mgr.web.reannounce_pending == {}
+
+
+def test_reannounce_background_verify_and_cap():
+    """推迟后台核实(D1): 达 min_e 出结论落日志并移除; 逾时静默移除; 500 上限丢最旧并 WARNING"""
     from auto_qb.core.qbmanager import QbManager
+    from auto_qb.webui.commands import REANNOUNCE_BACKGROUND_MAX
 
-    base = {"u": (1, 10_000)}
+    base = {"u": {"status": 2, "updating": False, "next": 100_000, "min": 90_000}}
 
-    def _trackers(status, na, msg="", url="u"):
-        return [{"url": url, "status": status, "next_announce": na, "msg": msg}]
+    def _runtime(rows):
+        client = SimpleNamespace(torrents_trackers=lambda h: rows)
+        return WebUIRuntime(SimpleNamespace(client=client, _verdict_reannounce=QbManager._verdict_reannounce))
 
-    f = QbManager._confirm_reannounce_result
-    assert f(_trackers(3, 10_000), base) is True, "updating = qB 正在汇报"
-    assert f(_trackers(1, 9_000), base) is True, "next_announce 被重置(提前)"
-    assert f(_trackers(2, 10_000), base) is True, "从非 working 变 working"
-    assert f(_trackers(4, 10_000, "rejected"), base) is False, "not working + 错误消息 = tracker 拒绝"
-    assert f(_trackers(1, 10_000), base) is None, "无变化继续等待"
-    assert f(_trackers(4, 10_000, ""), base) is None, "not working 但无 msg 不武断判失败"
-    # DHT 等虚拟 tracker 不参与判定(仅虚拟 tracker 时无结论)
-    assert f([{"url": "** [DHT]", "status": 2, "next_announce": 9_000, "msg": ""}], base) is None
+    # confirmed: 达 min_e 后前跳 -> INFO 日志后移除
+    rt = _runtime([_epoch_tracker(next_announce=105_000)])
+    rt.reannounce_background["H_OK"] = {
+        "min_e": time.time() - 10,
+        "baseline": base,
+        "epoch_mode": True,
+        "t0": time.time() - 40
+    }
+    with module_log("auto_qb.webui.runtime") as messages:
+        rt.check_pending()
+    assert "H_OK" not in rt.reannounce_background
+    assert any("后台核实已确认" in m for m in messages)
+    # rejected: status4+msg -> WARNING 日志后移除
+    rt = _runtime([_epoch_tracker(status=4, msg="nope")])
+    rt.reannounce_background["H_BAD"] = {
+        "min_e": time.time() - 10,
+        "baseline": base,
+        "epoch_mode": True,
+        "t0": time.time() - 40
+    }
+    with module_log("auto_qb.webui.runtime") as messages:
+        rt.check_pending()
+    assert "H_BAD" not in rt.reannounce_background
+    assert any("后台核实失败" in m for m in messages)
+    # 未达 min_e: 不读不判, 条目保留; 逾时(min_e + TIMEOUT)未出结论 -> DEBUG 静默移除
+    rt = _runtime([_epoch_tracker()])
+    rt.reannounce_background["H_FUT"] = {
+        "min_e": time.time() + 500,
+        "baseline": base,
+        "epoch_mode": True,
+        "t0": time.time()
+    }
+    rt.reannounce_background["H_OLD"] = {
+        "min_e": time.time() - 100,
+        "baseline": base,
+        "epoch_mode": True,
+        "t0": time.time() - 200
+    }
+    with module_log("auto_qb.webui.runtime") as messages:
+        rt.check_pending()
+    assert "H_FUT" in rt.reannounce_background, "未达 min_e 不核实"
+    assert "H_OLD" not in rt.reannounce_background, "逾时未出结论静默移除"
+    assert any("逾时移除" in m for m in messages)
+    # 上限 500: 超限丢最旧并 WARNING 一次
+    rt = _runtime([_epoch_tracker()])
+    for i in range(REANNOUNCE_BACKGROUND_MAX):
+        rt.reannounce_background[f"H{i:03d}"] = {
+            "min_e": time.time() + 500,
+            "baseline": base,
+            "epoch_mode": True,
+            "t0": time.time()
+        }
+    host = SimpleNamespace(
+        client=SimpleNamespace(torrents_trackers=lambda h: []),
+        store=SimpleNamespace(get=lambda h: None),
+        _verdict_reannounce=QbManager._verdict_reannounce,
+    )
+    host.web = rt
+    fut = time.time() + 1000  # min_e - t0 > 25s: HNEW 以推迟身份登记, 触发超限逐出
+    bg_base = {"u": {"status": 2, "updating": False, "next": fut, "min": fut}}
+    with module_log("auto_qb.webui.commands") as cmd_messages:
+        QbManager._register_reannounce_pending(host, "cmd_bg", ["HNEW"], {"HNEW": bg_base}, True)
+    assert len(rt.reannounce_background) == REANNOUNCE_BACKGROUND_MAX
+    assert "H000" not in rt.reannounce_background and "HNEW" in rt.reannounce_background, "超限丢最旧"
+    assert any("丢弃最旧" in m for m in cmd_messages)
 
 
 def test_cmd_group_actions_skip_missing_group():
@@ -11705,100 +11995,92 @@ def test_web_runtime_notify_drops_are_counted():
 
 
 def test_web_runtime_check_pending_paths():
-    """在途强制汇报确认: 已完成跳过 / 超时判失败 / 断连等待 / 读 tracker 异常 / 确认成功与失败"""
-    from auto_qb.webui.runtime import REANNOUNCE_CONFIRM_TIMEOUT
+    """在途汇报确认全路径(item 级 deadline): 完成跳过/超时 warn(epoch+legacy 文案)/停止直判/断连等待/
+    读 tracker 异常 error/判定 confirmed 与 rejected/聚合三桶与前 3 条原因截断"""
+    from auto_qb.core.qbmanager import QbManager
+    from auto_qb.webui.commands import RC_FAIL_PREFIX
 
-    verdicts = {"H_OK": True, "H_FAIL": False, "H_WAIT": None}
+    verdicts = {"H_OK": ("confirmed", ""), "H_FAIL": ("rejected", RC_FAIL_PREFIX + "ann"), "H_WAIT": ("", "")}
     client = SimpleNamespace(
         torrents_trackers=lambda h: (_ for _ in ()).throw(RuntimeError("读取失败")) if h == "H_ERR" else [h]
     )
+    store = SimpleNamespace(
+        get=lambda h: SimpleNamespace(state_enum=SimpleNamespace(is_stopped=True)) if h == "H_STOP" else None
+    )
     host = SimpleNamespace(
         client=client,
-        _confirm_reannounce_result=lambda trackers, baseline: verdicts.get(trackers[0]),
+        store=store,
+        _verdict_reannounce=lambda trackers, baseline, **kw: verdicts.get(trackers[0], ("", "")),
     )
     rt = WebUIRuntime(host)
+    now = time.time()
+
+    def _item(**over):
+        it = {
+            "done": False,
+            "status": "",
+            "reason": "",
+            "baseline": {},
+            "epoch_mode": True,
+            "t0": now,
+            "deadline": now + REANNOUNCE_CONFIRM_TIMEOUT,
+        }
+        it.update(over)
+        return it
+
     rt.reannounce_pending["c1"] = {
-        "deadline": time.time() + REANNOUNCE_CONFIRM_TIMEOUT,
         "items":
             {
-                "H_DONE": {
-                    "done": True,
-                    "ok": False,
-                    "err": "x",
-                    "baseline": {}
-                },
-                "H_OK": {
-                    "done": False,
-                    "ok": False,
-                    "err": "",
-                    "baseline": {}
-                },
-                "H_FAIL": {
-                    "done": False,
-                    "ok": False,
-                    "err": "",
-                    "baseline": {}
-                },
-                "H_WAIT": {
-                    "done": False,
-                    "ok": False,
-                    "err": "",
-                    "baseline": {}
-                },
-                "H_ERR": {
-                    "done": False,
-                    "ok": False,
-                    "err": "",
-                    "baseline": {}
-                },
+                "H_DONE": _item(done=True, status="warn", reason="未确认: 种子已停止"),
+                "H_OK": _item(),
+                "H_FAIL": _item(),
+                "H_WAIT": _item(),
+                "H_ERR": _item(),
+                "H_STOP": _item(),
             },
     }
-    rt.reannounce_pending["c_timeout"] = {
-        "deadline": time.time() - 1.0,  # 已超时: 不读 tracker 直接判失败
-        "items": {
-            "H_TIMEOUT": {
-                "done": False,
-                "ok": False,
-                "err": "",
-                "baseline": {}
-            }
-        },
-    }
-    rt.reannounce_pending["c_disconnected"] = {
-        "deadline": time.time() + REANNOUNCE_CONFIRM_TIMEOUT,
-        "items": {
-            "H_D": {
-                "done": False,
-                "ok": False,
-                "err": "",
-                "baseline": {}
-            }
-        },
-    }
+    rt.reannounce_pending["c_timeout"] = {"items": {"H_T": _item(deadline=now - 1.0)}}
+    rt.reannounce_pending["c_timeout_legacy"] = {"items": {"H_TL": _item(deadline=now - 1.0, epoch_mode=False)}}
+    rt.reannounce_pending["c_disconnected"] = {"items": {"H_D": _item()}}
     rt.check_pending()
-    assert rt.results["c_timeout"]["status"] == "error" and "超时" in rt.results["c_timeout"]["error"]
-    # 仍在进行(确认 None)的条目: 不出结论, 条目留在途; 其余已定论的先记进条目
-    assert "c1" in rt.reannounce_pending, "确认未决(None)不出结论"
+    # 超时 -> warn「未确认」(epoch/legacy 两文案), 不再判「失败」
+    assert rt.results["c_timeout"]["status"] == "warn" and "未确认: 30s" in rt.results["c_timeout"]["error"]
+    assert rt.results["c_timeout_legacy"]["status"] == "warn"
+    assert "旧版 qB 无 epoch 字段" in rt.results["c_timeout_legacy"]["error"]
+    # 仍在进行(无证据)的条目: 不出结论, 条目留在途; 其余已定论的先记进条目
+    assert "c1" in rt.reannounce_pending, "确认未决不出结论"
     items = rt.reannounce_pending["c1"]["items"]
-    assert items["H_OK"]["ok"] is True and items["H_FAIL"]["ok"] is False
-    assert items["H_ERR"]["done"] is True and "读取失败" in items["H_ERR"]["err"]
+    assert items["H_OK"]["status"] == "ok" and items["H_FAIL"]["status"] == "error"
+    assert items["H_FAIL"]["reason"] == RC_FAIL_PREFIX + "ann"
+    assert items["H_STOP"]["status"] == "warn" and "种子已停止" in items["H_STOP"]["reason"], "store 快照 stopped 直判"
+    assert items["H_ERR"]["done"] is True and "读取失败" in items["H_ERR"]["reason"]
     # 断连: client None -> 本轮跳过(等恢复), 保持在途
     host.client = None
     rt.check_pending()
     assert "c_disconnected" in rt.reannounce_pending, "断连不判失败, 等恢复继续确认"
-    # 最后一个未决出结论 -> 聚合(有失败项 -> error 回执)
+    # 最后一个未决出结论 -> 聚合三桶(任一 error -> error; 原因截断为前 3 条)
     host.client = client
-    verdicts["H_WAIT"] = True
+    verdicts["H_WAIT"] = ("confirmed", "")
+    verdicts["H_D"] = ("rejected", RC_FAIL_PREFIX + "ann")  # 同 tick 断连条目恢复, 出拒绝结论
     rt.check_pending()
     assert "c1" not in rt.reannounce_pending, "全部种子出结论后聚合并移除"
-    assert rt.results["c1"]["status"] == "error", "有失败项 -> 聚合 error 回执"
-    assert "汇报确认失败" in rt.results["c1"]["error"]
-    # 恢复后成功 -> ok 回执
-    host.client = SimpleNamespace(torrents_trackers=lambda h: ["H_D"])
-    verdicts["H_D"] = True
-    rt.check_pending()
-    assert rt.results["c_disconnected"]["status"] == "ok"
-    assert rt.reannounce_pending == {}
+    r = rt.results["c1"]
+    assert r["status"] == "error", "任一 error -> 聚合 error"
+    assert "成功 2, 失败 2, 未确认 2" in r["error"], "三桶计数按 item status 分流"
+    assert r["error"].count(";") == 2, "原因截断为前 3 条"
+    assert rt.results["c_disconnected"]["status"] == "error", "断连恢复后出结论的失败项照常聚合"
+    assert rt.results["c_disconnected"]["error"] == "成功 0, 失败 1, 未确认 0: " + RC_FAIL_PREFIX + "ann"
+    # 单条确认成功 -> ok 回执, 跟踪清空
+    rt2 = WebUIRuntime(
+        SimpleNamespace(
+            client=SimpleNamespace(torrents_trackers=lambda h: ["H_D"]),
+            store=SimpleNamespace(get=lambda h: None),
+            _verdict_reannounce=lambda trackers, baseline, **kw: ("confirmed", ""),
+        )
+    )
+    rt2.reannounce_pending["c_ok"] = {"items": {"H_D": _item()}}
+    rt2.check_pending()
+    assert rt2.results["c_ok"]["status"] == "ok" and rt2.reannounce_pending == {}
 
 
 def test_web_runtime_resync_elapsed_ms_logs_by_threshold():
