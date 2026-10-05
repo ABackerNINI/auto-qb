@@ -12,7 +12,9 @@
 > 工具 shell 里 `dev.e2e` **14.8s / exit 0**、`4 passed (12.3s)`、8137 无残留。
 > **已提交并推送 `2be3fe79`**(9 文件 +180 −35; `git ls-remote` 核实远端 == 本地 HEAD)⇒ 合并态补验
 > `test.full` **2676 + 4 / 99% / 75.06s**(基线 `26-10-06-0619`)。
-> 最后活动: 2026-10-06 06:19
+> **07:0x 追加(独立会话)**: 方案 B 分步实施计划 [`plans/26-10-06-0708`](../plans/26-10-06-0708-plan-playwright-e2e.html)
+> 已出(S0–S7 八批对账迁移, **Open · 待拍板**, 4 个拍板点留用户); 认领链 plan↔issue↔档案已闭合。
+> 最后活动: 2026-10-06 07:31
 
 **Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md, memory-bank/testing/baselines/26-10-06-0605-playwright-e2e-teardown-fix.md, memory-bank/testing/baselines/26-10-06-0619-playwright-e2e-teardown-fix-merged.md
 
@@ -54,6 +56,8 @@
   新增 `e2e/global-teardown.mjs` 用**异步** taskkill 抢在 Playwright 之前杀进程树; 实测 **14.8s / exit 0**。
   根因与实测数据见 [pitfalls/testing/playwright-teardown.md](../pitfalls/testing/playwright-teardown.md)。
 - 方案 B 已入池 `memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html`(未认领)。
+  **07:3x 更新**: 其分步实施计划 [`plans/26-10-06-0708`](../plans/26-10-06-0708-plan-playwright-e2e.html) 已出
+  (S0–S7, 待拍板; 拍板点: 批次顺序 / 模式矩阵 env 化 / 旧脚本终态删除 / `@fast` tag 门禁) —— 拍板后按批实施。
 - 顺带修正的漂移: `browser-env.md` 的 chromium 版本(151 → **153.0.8010.12**)、WorkBuddy 路径"已失效"
   结论(2026-10-06 复核可用)、轨道一 `agent-browser` 当前不在 PATH; `baseline.md` 常驻警告的包内脚本
   测试条数(47 → **103**)。

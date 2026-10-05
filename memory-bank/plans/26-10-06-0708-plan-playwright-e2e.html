@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="playwright-e2e">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-06-0708">
+<meta name="doc-updated" content="26-10-06-0708">
+<meta name="doc-refs" content="memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html,memory-bank/tasks/26-10-06-test-playwright-e2e.md">
+<title>实施计划 · ui_smoke.cjs 分批迁移到 @playwright/test · auto-qb</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1116;
+    --paper: #141920;
+    --code-bg: #10151c;
+    --ink: #dde4ec;
+    --dim: #97a3b1;
+    --faint: #6b7684;
+    --line: #293240;
+    --hair-soft: #222b37;
+    --accent: #5cc0cf;
+    --accent-dim: #35707a;
+    --mark: #17211d;
+    --bad: #e07a6e;
+    --warn: #e0b35e;
+    --good: #6fc78c;
+    --mono: "Cascadia Code", "Cascadia Mono", Consolas, "JetBrains Mono", monospace;
+    --display: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.8 var(--display); }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 44px 24px 60px; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 44px; }
+  @media (max-width: 880px) { .sheet { grid-template-columns: 1fr; } nav.toc { position: static; } }
+  nav.toc { position: sticky; top: 24px; align-self: start; font-size: 13px; border-left: 1px solid var(--hair-soft); padding-left: 14px; }
+  .toc-label { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; color: var(--faint); margin-bottom: 10px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 3px 0; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .no { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-right: 8px; }
+  .toc-foot { margin-top: 18px; color: var(--faint); font-size: 12px; line-height: 1.6; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  @media (max-width: 880px) { header.cover { grid-column: 1; } }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; color: var(--accent); margin-bottom: 10px; }
+  h1 { font-size: 27px; line-height: 1.35; margin: 0 0 12px; }
+  .lede { color: var(--dim); font-size: 15px; max-width: 76ch; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 22px; padding: 14px 0; border-top: 1px solid var(--hair-soft); border-bottom: 1px solid var(--hair-soft); }
+  .meta-row .item .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; color: var(--faint); text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; margin-top: 2px; font-family: var(--mono); }
+  .badge { display: inline-block; border: 1px solid var(--warn); color: var(--warn); border-radius: 999px; padding: 1px 12px; font-size: 12px; }
+  section { grid-column: 2; margin-top: 40px; }
+  @media (max-width: 880px) { section { grid-column: 1; } }
+  h2 { font-size: 19px; margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent); margin-right: 10px; font-weight: normal; }
+  h3 { font-size: 15.5px; margin: 22px 0 8px; }
+  h3 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 8px; font-weight: normal; }
+  p { margin: 0 0 11px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; max-width: 78ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 12px 14px; overflow-x: auto; margin: 0 0 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.65; }
+  .note { border-left: 1px solid var(--line); padding: 2px 0 2px 14px; color: var(--dim); font-size: 13.5px; margin: 0 0 14px; max-width: 78ch; }
+  .note b { color: var(--ink); }
+  table { border-collapse: collapse; width: 100%; margin: 0 0 16px; font-size: 13px; }
+  th, td { border: 1px solid var(--hair-soft); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; color: var(--faint); text-transform: uppercase; background: var(--paper); }
+  td { line-height: 1.65; }
+  td .mono, .mono { font-family: var(--mono); font-size: 12px; }
+  .dim { color: var(--dim); }
+  .faint { color: var(--faint); font-size: 12.5px; }
+  .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  .acc { color: var(--accent); }
+  .stamp { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  footer { grid-column: 2; margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair-soft); color: var(--faint); font-size: 12px; }
+  @media (max-width: 880px) { footer { grid-column: 1; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">CONTENTS</div>
+    <a href="#s1"><span class="no">01</span>结论与拍板点</a>
+    <a href="#s2"><span class="no">02</span>现状与依据</a>
+    <a href="#s3"><span class="no">03</span>目标终态与设计决策</a>
+    <a href="#s4"><span class="no">04</span>分步实施 S0–S7</a>
+    <a href="#s5"><span class="no">05</span>对账与验收计划</a>
+    <a href="#s6"><span class="no">06</span>风险与回滚</a>
+    <a href="#s7"><span class="no">07</span>非目标</a>
+    <a href="#s8"><span class="no">08</span>变更记录</a>
+    <div class="toc-foot">来源 issue:<br>26-10-06-0458<br>refactor · Open<br><br>专题:<br><span class="mono">playwright-e2e</span></div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">实施计划 · PLAN</div>
+    <h1>ui_smoke.cjs 分批迁移到 @playwright/test 框架</h1>
+    <p class="lede">把 <code>scripts/ui_smoke.cjs</code>(1992 行, 105 项断言, 手写 CJS+CDP 风格)按断言块分批迁入 <code>e2e/</code> 的 <code>@playwright/test</code> 轨道, 每批与旧脚本对跑对数后删旧块, 终态旧脚本退役 —— 白拿自动等待 / getByRole 语义定位 / trace viewer / HTML 报告, 并为存量 flaky(追剧集行 Ctrl+click 超时)第一次拿到时序证据链。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-06-0708-plan-playwright-e2e</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
+      <div class="item"><div class="k">批次</div><div class="v">S0–S7 (8 步)</div></div>
+      <div class="item"><div class="k">静态断言块</div><div class="v">8 块 ≈105 处</div></div>
+      <div class="item"><div class="k">新增依赖</div><div class="v">0 (框架链路 2026-10-06 已就位)</div></div>
+    </div>
+  </header>
+
+  <!-- ============================================================ 01 -->
+  <section id="s1">
+    <h2><span class="no">01</span>结论与拍板点</h2>
+
+    <p>issue 26-10-06-0458 指出: 真浏览器断言两条轨道并存 —— 旧脚本 <code>scripts/ui_smoke.cjs</code> 背着 <strong>105 项</strong>断言却拿不到任何框架能力, 新轨 <code>e2e/</code>(2026-10-06 引入)只有 4 项最小集。本计划把旧脚本<strong>按断言块分 6 批</strong>迁入 <code>e2e/</code>, 配一次基建批(S0)和一次退役批(S7)。核心纪律来自 issue 原文:</p>
+
+    <ul>
+      <li><strong>一次搬一个断言块, 不整仓重写</strong> —— 每批迁完先与旧脚本对跑、数字对齐, 再删旧块;</li>
+      <li><strong>同一断言只允许一处定义</strong> —— 迁移期两套并存是脚手架, 不是终态, 双写不过夜(每批收口即删);</li>
+      <li><strong>存量 flaky 所在块优先搬</strong> —— trace viewer 正是为「追剧集行 Ctrl+click 超时」这类时序故障准备的。</li>
+    </ul>
+
+    <p>本计划<strong>不认领 issue、不动代码</strong>; 拍板后由实施会话按步执行, 每批一个独立提交(提交需逐次显式授权)。</p>
+
+    <h3><span class="no">1.1</span>拍板点</h3>
+    <table>
+      <tr><th style="width:56px">No.</th><th style="width:170px">决策</th><th>推荐方案</th><th>备选与影响</th></tr>
+      <tr>
+        <td class="mono">P1</td><td><b>批次顺序</b></td>
+        <td><b>S2 把 flaky 块(追剧视图+多选右键)提前</b>, 仅排在基建与最独立的渲染/视图块之后 —— 尽早让 trace/HTML 报告对存量 flaky 生效。即: 基建 → 渲染/视图 → <span class="acc">flaky 块</span> → 乐观 UI → 菜单族 → 性能/HR → 列设置 → 退役。</td>
+        <td>按 issue 建议原序(渲染健康→视图切换→乐观 UI→右键/多选→性能→HR③), flaky 块排在 S4 —— 归因手段晚两批到位。</td>
+      </tr>
+      <tr>
+        <td class="mono">P2</td><td><b>模式矩阵怎么进框架</b></td>
+        <td><b>环境变量参数化单 config</b>: <code>e2e/harness.mjs</code> 读 <code>E2E_CMD_RESULT / E2E_SKIP_CHECK / E2E_HR_SCENE / E2E_TORRENTS</code> 拼桩命令, 测试用门控 helper 按模式跳过。一份 <code>playwright.config.mjs</code>, 与 <code>reuseExistingServer:false</code> 的多 clone 纪律天然兼容。</td>
+        <td>每模式一份 <code>playwright.&lt;mode&gt;.config.mjs</code>(ok/error/hang/skipoff 各一): 报告目录天然分离, 但 5 份 config 的桩参数会各自演化, 且收尾兜底要逐份验。</td>
+      </tr>
+      <tr>
+        <td class="mono">P3</td><td><b>旧脚本终态</b></td>
+        <td><b>S7 删除 <code>scripts/ui_smoke.cjs</code></b> —— 与「同一断言只允许一处定义」一致; 旧脚本的全部能力(模式矩阵/探针/守阵)在终态都有框架等价物。</td>
+        <td>保留为手工深挖工具: 与单点定义冲突, 两套断言必然各自演化, 正是 issue 要消灭的状态。</td>
+      </tr>
+      <tr>
+        <td class="mono">P4</td><td><b>「每次改前端」最小门禁的入口</b></td>
+        <td><b><code>@fast</code> tag + grep</b>: 快集断言打 tag, 门禁命令 <code>npx playwright test --grep @fast</code>(收进 package.json script 与 commands 任务), 断言定义仍单点。</td>
+        <td>保留独立 <code>smoke.spec.mjs</code> 壳文件: 入口直观, 但渲染健康断言会与新 spec 两处定义, 违反单点纪律。</td>
+      </tr>
+    </table>
+
+    <p class="note"><b>默认拍板含义</b>: 四项均按推荐方案执行; 任一项想改, 改的只是对应设计决策(§3)与受影响批次, 批次骨架不变。</p>
+  </section>
+
+  <!-- ============================================================ 02 -->
+  <section id="s2">
+    <h2><span class="no">02</span>现状与依据</h2>
+
+    <h3><span class="no">2.1</span>两条轨道的盘面(取证 2026-10-06 07:08)</h3>
+    <table>
+      <tr><th style="width:150px"></th><th>旧轨 <code>scripts/ui_smoke.cjs</code></th><th>新轨 <code>e2e/</code> + <code>playwright.config.mjs</code></th></tr>
+      <tr><td><b>体量</b></td><td>1992 行单文件; 105 项断言(issue 口径)/ 104 处 <code>add()</code> 调用行; 双皮肤各跑一整轮</td><td><code>smoke.spec.mjs</code> 2 条 test × 2 皮肤 = 4 项; <code>harness.mjs</code> 43 行; <code>global-teardown.mjs</code> 76 行</td></tr>
+      <tr><td><b>桩服务</b></td><td>人工先起 <code>ui_harness.py --port 8099</code>(或 <code>dev.harness</code>), 再 <code>node scripts/ui_smoke.cjs --base …</code></td><td><code>webServer</code> 自动拉起, 端口 8137, <code>reuseExistingServer:false</code>(多 clone 假信心防护已内建)</td></tr>
+      <tr><td><b>模式矩阵</b></td><td>CLI 双端对齐: <code>--expect-cmd ok|error|hang</code> / <code>--skip-check on|off</code> / <code>--hr-scene on|empty|off</code> / <code>--torrents N</code> / <code>--ui prism|atlas|both</code></td><td>仅默认(ok/on/on/300)一档; <code>harness.mjs</code> 把桩参数写死为常量单点</td></tr>
+      <tr><td><b>框架能力</b></td><td class="bad">自造 PASS/FAIL 汇总; 无自动等待; 无重试; 无 trace; 无报告(靠截图目录 + 控制台)</td><td class="good">自动等待 / 语义定位 / <code>trace: on-first-retry</code> / HTML 报告 / <code>forbidOnly</code> + CI 重试已预置</td></tr>
+      <tr><td><b>运行入口</b></td><td>手工两步(无 commands task); 依赖解析有 NODE_PATH 退路(必须 CJS 的原因)</td><td><code>npm run test:e2e</code> / commands task <code>dev.e2e</code>; 依赖 <code>@playwright/test@^1.63.0</code> 已在 <code>package.json</code></td></tr>
+    </table>
+
+    <p>版本对齐已无环境风险: <code>@playwright/test 1.63 ↔ chromium-1243</code>(Chrome 153.0.8010.12)2026-10-06 实测可用, 仓库内 <code>node_modules</code> 直接命中, 迁移不新增任何依赖(<span class="stamp">memory-bank/testing/browser-env.md 轨道二</span>)。</p>
+
+    <h3><span class="no">2.2</span>旧脚本断言块分布(批次的直接依据)</h3>
+    <p><code>smokeUi(browser, ui)</code>(<code>scripts/ui_smoke.cjs:279</code>)内部按块组织, 块间共享一个 page/context 长流水 —— 这是迁移时最大的工作量来源(见 §6 R1)。行号为取证时点值, 执行时以 grep 关键词复核:</p>
+    <table>
+      <tr><th style="width:52px">块</th><th style="width:230px">内容(grep 锚点)</th><th style="width:130px">位置(取证 07:08)</th><th style="width:72px">静态断言</th><th>迁移注意</th></tr>
+      <tr><td class="mono">A</td><td>渲染健康 + 展开态跨视图 + 导航焦点 + 种子视图/筛选器/轮询分档</td><td class="mono">L288–470</td><td class="mono">≈15</td><td>最独立; 与 smoke.spec 最小集同口径, 适合首批评建立基建</td></tr>
+      <tr><td class="mono">B</td><td>性能埋点 P1-2/P1-3 + 行窗口化 + 占位总高 + 滚动不塌陷</td><td class="mono">L500–585</td><td class="mono">≈6</td><td>预算阈值数字是断言语义, 迁移必须保留</td></tr>
+      <tr><td class="mono">C</td><td>乐观 UI: 单行右键暂停链(P0-3)+ 批量合单/覆盖/回滚(P0-4)</td><td class="mono">L588–900</td><td class="mono">≈16</td><td>armPending/readPending 时序探针主战场; 需 ok/error/hang 三模式</td></tr>
+      <tr><td class="mono">D</td><td>菜单族: CTX-03 多选(945–983)/ W2 限速(1019–1070)/ W3 跳检(1114–1192)/ W4 导出(1235–1311)/ CTX-04/05/06 次级菜单(1338–1383)</td><td class="mono">L940–1390</td><td class="mono">≈23</td><td>需 skip-check on/off 双轮; W3 确认链、W4 逐个导出是长链路用例</td></tr>
+      <tr><td class="mono">E</td><td>整组乐观 + 真值事件陈旧快照 + BUG-9 复制磁力</td><td class="mono">L1400–1515</td><td class="mono">≈5</td><td>与 C 同属乐观时序族, 并批迁移</td></tr>
+      <tr><td class="mono">F</td><td>追剧视图(剧行/集行乐观)+ CTX-03 追剧多选 + BUG-8 刷新不空白 + 辅种多组多选</td><td class="mono">L1517–1720</td><td class="mono">≈14</td><td><b class="acc">存量 flaky 所在块</b>(见 2.4); 修饰键点击落点纪律已由 issue 26-09-30-0602 清偿落码</td></tr>
+      <tr><td class="mono">G</td><td>HR 拉取历史表③(懒加载/五形态徽章/仅看异常/行展开明细)</td><td class="mono">L1725–1790</td><td class="mono">≈5</td><td>仅 <code>hr-scene on</code> 跑; empty/off 场景整组跳过(桩参数配对)</td></tr>
+      <tr><td class="mono">H</td><td>列设置守阵 ×5: 多标签同步 / 异视口双窗+F3 / 全自动页不落px / 隐藏列宽度保留 / v4→v5 迁移</td><td class="mono">L1795–1985</td><td class="mono">≈12</td><td>多 page/多视口用例(双轨模型守阵, plan 26-09-21-1551 §7.2)</td></tr>
+      <tr><td class="mono">–</td><td>模式专用探针: hang 兜底三连(L169–214)/ W5-off fail-closed 四项(L233–271)</td><td class="mono">L145–275</td><td class="mono">≈8</td><td>条件分支, 分别随 C 批(hang)与 D 批(off)迁移</td></tr>
+      <tr><td class="mono">–</td><td>收尾总检「无 console.error / pageerror」</td><td class="mono">L1988</td><td class="mono">1</td><td>终态改为每条 test 的 afterEach 公共检查, 语义更强</td></tr>
+    </table>
+    <p class="faint">静态调用点合计 ≈105; 实跑项数随模式浮动(hang 轮多 4 项 / skip-off 轮走精简组 / EXPECT_N 未给时少 1 项)。对账以每批实际双跑数字为准, 口径见 §5。</p>
+
+    <h3><span class="no">2.3</span>新轨已有件(直接复用, 不重建)</h3>
+    <ul>
+      <li><code>playwright.config.mjs</code>: testDir <code>./e2e</code> · workers=1 + <code>fullyParallel:false</code>(单桩共享实例, 确定性优先)· chromium 单 project · 视口 1440×900 对齐旧脚本 · <code>trace: on-first-retry</code> · list+HTML 双 reporter · Windows 收尾由 <code>global-teardown.mjs</code> 兜底(pitfalls/testing/playwright-teardown.md 实测)。</li>
+      <li><code>e2e/harness.mjs</code>: 桩参数单点(PORT=8137 避开 8099 惯用端口 / TORRENTS=300 / SKINS / HARNESS_CMD / READY_URL 用页面而非 /api 探活)。</li>
+      <li><code>e2e/smoke.spec.mjs</code>: 渲染健康 + 数据契约 4 项, 内含 chrome-extension 过滤的错误采集器与 v-cloak 白屏判据 —— S0 提为 lib 单点后全量复用。</li>
+      <li>commands task <code>dev.e2e</code>(<code>.commands/dev/config.toml:36</code>)已收口运行入口。</li>
+    </ul>
+
+    <h3><span class="no">2.4</span>存量 flaky: 追剧集行 Ctrl+click 超时</h3>
+    <p><span class="stamp">memory-bank/pitfalls/testing/smoke.md</span> 实锤记录(2026-10-03 首记, 2026-10-04 4/4 HEAD 对照复现): 追剧集行 Ctrl+click 的点击落点被 <code>sticky-head</code>/<code>header.topbar</code> 交替拦截, Playwright 重试 30s 耗尽。旧脚本拿不到 trace, 只能 <code>git stash</code> 对照归因; 该坑的落点修法(issue 26-09-30-0602)已落码, 但「点击拦截面随布局漂移」无静态守阵。迁移后同位置用例一红, <code>npx playwright show-report</code> 直接给出 trace 时序 —— 这是本 issue 最直接的动机, 也是 S2 提前到第二批的理由。</p>
+  </section>
+
+  <!-- ============================================================ 03 -->
+  <section id="s3">
+    <h2><span class="no">03</span>目标终态与设计决策</h2>
+
+    <h3><span class="no">3.1</span>终态定义(S7 验收口径)</h3>
+    <ul>
+      <li><code>scripts/ui_smoke.cjs</code> <strong>删除</strong>; 全部 ≈105 处断言由 <code>e2e/</code> 下按块拆分的 spec 文件承载, 每条断言一处定义;</li>
+      <li>模式矩阵保留: 双皮肤 × <code>ok|error|hang</code> × <code>skip-check on|off</code> × <code>hr-scene on|empty|off</code>, 通过环境变量驱动、门控 helper 跳过、commands 任务命令化, 不靠人记 env 组合;</li>
+      <li>「每次改前端」门禁 = <code>@fast</code> 子集(分钟级), 全量矩阵轮在收尾/排障时跑;</li>
+      <li>知识库与文件头注释中「人工深挖走 ui_smoke.cjs」的表述全部改写(清单见 S7)。</li>
+    </ul>
+
+    <h3><span class="no">3.2</span>D1 · 模式矩阵: env 参数化(拍板点 P2)</h3>
+    <p><code>e2e/harness.mjs</code> 的常量段改为「默认值 + env 覆盖」, 桩命令仍单点拼装:</p>
+    <pre><code>// e2e/harness.mjs (拟改动示意 —— 参数名与 ui_harness.py CLI 一一对应, 已核对)
+export const CMD_RESULT = process.env.E2E_CMD_RESULT || 'ok';   // ok | error | hang
+export const SKIP_CHECK = process.env.E2E_SKIP_CHECK || 'on';   // on | off
+export const HR_SCENE   = process.env.E2E_HR_SCENE   || 'on';   // on | empty | off
+export const TORRENTS   = Number(process.env.E2E_TORRENTS || 300);
+
+export const HARNESS_CMD = [
+  'uv run python scripts/ui_harness.py', `--torrents ${TORRENTS}`, `--port ${PORT}`,
+  CMD_RESULT !== 'ok' ? `--cmd-result ${CMD_RESULT}` : '',
+  SKIP_CHECK !== 'on' ? '--skip-check-menu off' : '',
+  HR_SCENE   !== 'on' ? `--hr-scene ${HR_SCENE}` : '',
+].filter(Boolean).join(' ');</code></pre>
+    <p>配套两件事: ①<code>e2e/lib/mode.mjs</code> 提供 <code>requireMode(...)</code> 门控 —— 模式不符的 describe 整组 <code>test.skip</code>, 并在 skip 消息里写明当前 env 值(排障一眼看出「为什么没跑」); ②<code>PORT</code> 保持 8137 不动 —— 模式轮是串行人跑, 不是并行实例, 换端口反而破坏「撞残留服务宁可失败」的既有纪律。</p>
+
+    <h3><span class="no">3.3</span>D2 · 断言单点与对账协议(拍板点 P3 的执行纪律)</h3>
+    <p>迁移期两套并存仅存在于「一批的内部」。每批严格执行五步(§5 展开): 新 spec 绿 → 旧脚本同参数轮绿 → 对账映射 → 删旧块 → 双复跑。任何一步红即停批, 旧脚本在对应批次收口前始终保有完整断言, 回滚面恒为「一个 commit」。</p>
+
+    <h3><span class="no">3.4</span>D3 · spec 文件规划</h3>
+    <table>
+      <tr><th style="width:220px">文件</th><th style="width:96px">承接批</th><th>内容与皮肤循环</th></tr>
+      <tr><td class="mono">e2e/lib/errors.mjs</td><td>S0</td><td><code>collectRuntimeErrors</code>(chrome-extension 过滤)从 smoke.spec 提出, 全部 spec 复用; afterEach 挂「无 console.error」公共检查</td></tr>
+      <tr><td class="mono">e2e/lib/vm.mjs</td><td>S0</td><td><code>INST</code> 探针封装(<code>document.querySelector('#app')._vnode.component.proxy</code>, 判据锚 pitfalls/testing/smoke.md Vue 3.5.13 条)</td></tr>
+      <tr><td class="mono">e2e/lib/probes.mjs</td><td>S0</td><td><code>armPending / readPending</code> MutationObserver 时序探针移植(逻辑照搬, 包装成 page 级 install/read 两段式)</td></tr>
+      <tr><td class="mono">e2e/lib/mode.mjs</td><td>S0</td><td>模式门控 <code>requireMode</code> + 矩阵合法性自检</td></tr>
+      <tr><td class="mono">e2e/views.spec.mjs</td><td>S1</td><td>块 A; 两条 <code>@fast</code> test 承接现 smoke.spec 口径; 双皮肤 describe 循环(沿用 <code>SKINS</code> 单点)</td></tr>
+      <tr><td class="mono">e2e/multiselect-shows.spec.mjs</td><td>S2</td><td>块 F + 块 D 的 CTX-03 段(L940–983); flaky 块</td></tr>
+      <tr><td class="mono">e2e/optimistic.spec.mjs</td><td>S3</td><td>块 C + E; hang 探针组; ok/error/hang 三模式门控</td></tr>
+      <tr><td class="mono">e2e/menus.spec.mjs</td><td>S4</td><td>块 D 其余(W2/W3/W4/W5/CTX-04/05/06)+ W5-off 精简组; on/off 双模式</td></tr>
+      <tr><td class="mono">e2e/perf.spec.mjs</td><td>S5</td><td>块 B(预算阈值保留)</td></tr>
+      <tr><td class="mono">e2e/hr-history.spec.mjs</td><td>S5</td><td>块 G; hr-scene 门控</td></tr>
+      <tr><td class="mono">e2e/column-prefs.spec.mjs</td><td>S6</td><td>块 H; serial 组 + 多 page/多视口</td></tr>
+    </table>
+    <p class="note">每个 spec 文件头部注释写两件事: 本文件覆盖旧脚本的哪些块(行号 + grep 锚点), 以及对账映射表(旧断言名 → 新 test 名)—— 映射表是「数字对齐」的可追溯载体, 随批更新, S7 随旧脚本一并定格。</p>
+
+    <h3><span class="no">3.5</span>D4 · 断言翻译守则(全批统一, 防止逐批各自发挥)</h3>
+    <ul>
+      <li><b>交互走真实手势</b>: 旧脚本 <code>page.evaluate</code> 直调 vm 方法(<code>${INST}.hubGo(...)</code> 等)凡有真实 UI 路径的一律换成 locator 手势(<code>getByRole</code> 优先); 仅两类允许保留 evaluate —— 注入/复原桩态(如 <code>hrsHist.badOnly = false</code>)与 vm 内部时序探针, 保留处须注释说明理由。</li>
+      <li><b>等待语义升级但不失真</b>: 装饰性 <code>waitForTimeout(600/800)</code> 换成 expect 自动等待 / <code>expect.poll</code>; 但两类 sleep 是断言语义本身, 原样保留 —— 时序窗口(乐观 pending 须存活 2500~6000ms)与「跨一个轮询周期再看错误」。整表每 2s 重渲染抢点击的坑(smoke.md)仍在: 动作类断言沿用落点纪律(行左缘 <code>position:{x:8,y:8}</code>)与「断言优先取值」。</li>
+      <li><b>阈值数字逐字保留</b>: P1-2/P1-3 预算、2500~6000ms 窗口、轮询分档期望值 —— 这些是回归基准, 不是实现细节。</li>
+      <li><b>多页面用例</b>: 每条 test 默认独立 context(localStorage 天然隔离, 比旧脚本单 context 干净); 块 H 的多标签/多视口在 test 内 <code>context.newPage()</code> + <code>setViewportSize</code>, 顺序依赖的组用 <code>test.describe.serial</code> 显式声明。</li>
+      <li><b>颜色/样式断言</b>: 沿用「读 <code>:root</code> 自定义属性而非 computed 背景」的 Dark Reader 纪律(smoke.md), 由 lib 统一提供取色 helper。</li>
+    </ul>
+
+    <h3><span class="no">3.6</span>D5 · 最小门禁 <code>@fast</code>(拍板点 P4)</h3>
+    <p>S1 起在 spec 内用 <code>test(...)</code> 名称加 <code>@fast</code> 标记(或 Playwright tag 语法), <code>package.json</code> 增 <code>"test:e2e:fast": "playwright test --grep @fast"</code>, commands task <code>dev.e2e</code> 的 note 改指 fast 子集为日常门禁。现 <code>smoke.spec.mjs</code> 的 4 项在 S1 收口时并入 views.spec 并删壳文件 —— 渲染健康断言从此单点。</p>
+  </section>
+
+  <!-- ============================================================ 04 -->
+  <section id="s4">
+    <h2><span class="no">04</span>分步实施 S0–S7</h2>
+    <p>每步的三段式: <b>改动</b>(动哪些文件) / <b>验收</b>(判据, 全部可机检或可对账) / <b>回退</b>(revert 该批 commit 即可)。批间无交叉依赖, 但顺序即风险递增, 建议按序执行。</p>
+
+    <table>
+      <tr><th style="width:64px">批</th><th style="width:240px">主题</th><th style="width:190px">承接旧块(静态断言)</th><th>模式轮</th></tr>
+      <tr><td class="mono">S0</td><td>基建: lib 四件 + env 参数化</td><td>—(0 项, 等价重构)</td><td>ok(默认)</td></tr>
+      <tr><td class="mono">S1</td><td>视图与渲染健康</td><td>块 A ≈15</td><td>ok</td></tr>
+      <tr><td class="mono">S2</td><td><b class="acc">flaky 块: 追剧 + 多选右键</b></td><td>块 F + D·CTX-03 ≈19</td><td>ok(trace 兑现)</td></tr>
+      <tr><td class="mono">S3</td><td>乐观 UI 全家(P0-3/P0-4/整组/真值)</td><td>块 C+E + hang 探针 ≈24</td><td>ok / error / hang</td></tr>
+      <tr><td class="mono">S4</td><td>菜单族(W2/W3/W4/W5/CTX-04-06)</td><td>块 D 其余 + W5-off ≈26</td><td>on / off</td></tr>
+      <tr><td class="mono">S5</td><td>性能埋点 + HR 表③</td><td>块 B+G ≈11</td><td>ok; hr-scene on(empty/off 抽验 skip 语义)</td></tr>
+      <tr><td class="mono">S6</td><td>列设置守阵 ×5</td><td>块 H ≈12</td><td>ok</td></tr>
+      <tr><td class="mono">S7</td><td>退役与回写</td><td>收尾总检 → afterEach(1)</td><td>全量矩阵验收轮</td></tr>
+    </table>
+
+    <h3><span class="no">S0</span>基建: lib 四件 + 桩参数 env 化(0 断言, 纯铺垫)</h3>
+    <p><b>改动</b>: ①<code>e2e/harness.mjs</code> 参数化(§3.2 示意); ②新建 <code>e2e/lib/{errors,vm,probes,mode}.mjs</code>(§3.4/§3.4 表); ③<code>smoke.spec.mjs</code> 改从 lib 导入(断言逻辑单点的第一次落地); ④<code>.commands/dev/config.toml</code> 视需要为 <code>dev.e2e</code> 补充模式轮用法 note(具体 task 收录按 commands skill 协议)。</p>
+    <p><b>验收</b>: <code>commands run dev.e2e</code> 全绿(4 项); 旧脚本不动照跑绿;<code>E2E_CMD_RESULT=error</code> 手验 harness 首行带 <code>--cmd-result error</code> 且 READY 探活通过。</p>
+    <p><b>回退</b>: 纯新增 + 等价重构, revert 即净。</p>
+
+    <h3><span class="no">S1</span>块 A → <code>views.spec.mjs</code>(≈15 项)</h3>
+    <p><b>改动</b>: 迁渲染健康/展开态跨视图/导航焦点/种子视图/筛选器计数/轮询分档; 两条 <code>@fast</code>(渲染健康、数据契约)承接 smoke.spec 口径, <b>删除 <code>smoke.spec.mjs</code></b>(壳退役, P4); <code>dev.e2e</code> note 改指 <code>--grep @fast</code>。</p>
+    <p><b>验收</b>: §5 五步对账全过; <code>test:e2e:fast</code> 分钟级绿; 旧脚本 <code>--ui both</code> 绿且项数下降对应块数。</p>
+    <p><b>回退</b>: revert 本批 commit(spec 文件与旧块删除同在一个 commit)。</p>
+
+    <h3><span class="no">S2</span>块 F + D·CTX-03 → <code>multiselect-shows.spec.mjs</code>(≈19 项)—— flaky 块</h3>
+    <p><b>改动</b>: 追剧视图(剧行/集行乐观/CTX-03 追剧多集/BUG-8)+ 辅种多组多选 + CTX-03 菜单形态(选中/未选中/合单/回滚/覆盖)。落点纪律(行左缘 8,8)逐用例落码; 本批跑完即 <code>npx playwright show-report</code> 确认 trace 可用, 作为对存量 flaky 的观测手段交底。</p>
+    <p><b>验收</b>: 对账五步全过; 若存量 flaky 在框架下复现 —— 按 smoke.md 口径处置: <b>不顺手修</b>, 记录位置与签名, 用 trace 归因, 必要时入池 issue; 其余用例绿即收口。</p>
+    <p><b>回退</b>: revert 本批。</p>
+
+    <h3><span class="no">S3</span>块 C+E + hang 探针 → <code>optimistic.spec.mjs</code>(≈24 项)</h3>
+    <p><b>改动</b>: 单行右键暂停链(P0-3: 补丁先于 POST/慢投递回滚/落回真值)、批量合单(P0-4)、整组乐观、真值事件陈旧快照、BUG-9; <code>lib/probes.mjs</code> 的 armPending/readPending 在本批成主力; hang 兜底三连(L169–214)随批迁入。</p>
+    <p><b>验收</b>: 对账五步 × <b>三轮模式</b>(ok/error/hang, env 驱动)全过; hang 轮的 2500~6000ms 窗口断言在框架下语义不变(窗口是断言, 不是等待)。</p>
+    <p><b>回退</b>: revert 本批。</p>
+
+    <h3><span class="no">S4</span>块 D 其余 + W5-off → <code>menus.spec.mjs</code>(≈26 项)</h3>
+    <p><b>改动</b>: W2 限速(载荷形状/toast)、W3 跳检(确认链取消/提交)、W4 导出(逐个请求/组展开)、CTX-04/05/06 次级菜单(悬停语义色/移出收起/复制族); W5-off fail-closed 四项(L233–271)以 <code>requireMode('skipCheck','off')</code> 门控迁入。</p>
+    <p><b>验收</b>: 对账五步 × on/off 双轮全过。</p>
+    <p><b>回退</b>: revert 本批。</p>
+
+    <h3><span class="no">S5</span>块 B+G → <code>perf.spec.mjs</code> + <code>hr-history.spec.mjs</code>(≈11 项)</h3>
+    <p><b>改动</b>: 性能埋点(P1-2 主线程阻塞/P1-3 强制布局/窗口化/占位高/滚动)阈值逐字保留; HR 表③ 4 项(懒加载/五形态/仅看异常/行展开)+ <code>requireMode('hrScene','on')</code>。</p>
+    <p><b>验收</b>: 对账五步全过; <code>E2E_HR_SCENE=empty</code> 抽验一轮确认 HR 组整体 skip 且消息可读。</p>
+    <p><b>回退</b>: revert 本批。</p>
+
+    <h3><span class="no">S6</span>块 H → <code>column-prefs.spec.mjs</code>(≈12 项)</h3>
+    <p><b>改动</b>: 列设置五守阵(多标签同步/异视口双窗+F3/全自动页不落px/隐藏列宽度保留/v4→v5 迁移); 拖宽手势(<code>mouse.move/down/up</code>)与双窗编排照搬, storage 隔离由独立 context 自然获得; 顺序敏感组 <code>test.describe.serial</code>。</p>
+    <p><b>验收</b>: 对账五步全过; 注意守阵 3 的取键时序坑(隐藏前从 <code>_visibleCols</code> 取 key)注释随迁。</p>
+    <p><b>回退</b>: revert 本批。</p>
+
+    <h3><span class="no">S7</span>退役与回写</h3>
+    <p><b>改动</b>: ①删 <code>scripts/ui_smoke.cjs</code> 与 lib 里仅为对账而留的过渡注释; ②文件头注释回写 —— <code>playwright.config.mjs</code>(去掉「人工深挖走 ui_smoke.cjs」定位段, 改为全量集说明)与 <code>e2e/harness.mjs</code> 头注释; ③知识库回写: <code>memory-bank/testing/browser-env.md</code>(轨道二改写为 e2e 轨道, 保留版本对齐/自检段落)、<code>memory-bank/testing/smoke.md</code> 与 <code>memory-bank/pitfalls/testing/smoke.md</code>(能力定位段; 坑条目全部保留——它们对新轨同样成立)、按 grep 现查清单更新 <code>progress/</code> 与根 README 的过时指向; ④<code>commands run kb.index</code> 重建索引; ⑤e2e 全量矩阵基线数字入 <code>testing/baselines/</code>。</p>
+    <p><b>验收</b>: §5 全量矩阵轮全绿; <code>grep -rn "ui_smoke" --include="*.md" memory-bank/ | grep -v issues/ | grep -v plans/ | grep -v reports/ | grep -v tasks/ | grep -v activeContext/</code> 冻结档案外零残留; <code>commands run test.full</code> 照常全绿(pytest 层无引用, 应零波动)。</p>
+    <p><b>回退</b>: 删除是最后一步且独立成 commit; 回退 = 恢复该文件(从 git 历史)。</p>
+  </section>
+
+  <!-- ============================================================ 05 -->
+  <section id="s5">
+    <h2><span class="no">05</span>对账与验收计划</h2>
+
+    <h3><span class="no">5.1</span>每批五步对账(数字对齐的可执行定义)</h3>
+    <ol>
+      <li><b>新 spec 绿</b>: 本批 spec 双皮肤跑绿(涉及模式的批加对应模式轮);</li>
+      <li><b>旧脚本同参数轮绿</b>: 常驻后台起桩(<code>run_in_background</code> + 新端口, smoke.md「桩没起来/旧进程」三条判据防误判), <code>node scripts/ui_smoke.cjs --base … --torrents 300 --ui both</code> 同参数绿;</li>
+      <li><b>对账映射</b>: 旧块 <code>add()</code> 调用点数 vs 新 test 数写进 spec 头注释映射表 —— 允许 1:N(合并/拆分), 但每个旧断言名必须能找到去向下落;</li>
+      <li><b>删旧块</b>: 同一 commit 内删除旧块(单点纪律的物理保证);</li>
+      <li><b>双复跑</b>: 旧脚本复跑确认总数下降且零残余失败, 新 spec 复跑绿。</li>
+    </ol>
+
+    <h3><span class="no">5.2</span>S7 全量矩阵验收轮</h3>
+    <table>
+      <tr><th style="width:250px">轮次(env 组合)</th><th style="width:110px">执行口径</th><th>验收</th></tr>
+      <tr><td class="mono">默认(ok/on/on/300)</td><td>全 spec, 双皮肤</td><td>全绿; 记总 test 数与时长</td></tr>
+      <tr><td class="mono">E2E_CMD_RESULT=error</td><td>optimistic 批用例为主</td><td>回滚族全绿, 门控外用例 skip 消息正确</td></tr>
+      <tr><td class="mono">E2E_CMD_RESULT=hang</td><td>同上</td><td>2500~6000ms 窗口三连绿</td></tr>
+      <tr><td class="mono">E2E_SKIP_CHECK=off</td><td>menus 批 fail-closed 组</td><td>精简组绿, 全套组 skip</td></tr>
+      <tr><td class="mono">E2E_HR_SCENE=empty / off</td><td>hr-history 组</td><td>整组 skip 且消息可读</td></tr>
+      <tr><td class="mono">E2E_TORRENTS=3000</td><td>views 批抽验</td><td>轮询分档断言按量取档正确(桩与断言同源 env, 不会漂)</td></tr>
+    </table>
+    <p class="note">矩阵轮是<b>串行人跑</b>(workers=1 + 单桩), 不是一次全跑 —— env 组合决定桩形态, 每轮独立起桩独立报告。S0 的 commands 任务 note 把上表六行写成可复制命令, 防止靠人记 env。</p>
+
+    <h3><span class="no">5.3</span>基线与守阵</h3>
+    <ul>
+      <li>pytest 层(<code>test.full</code>)零新增: 迁移不触碰 Python 代码; <code>tests/test_docs_forms.py</code> 对本计划文件本身的命名/meta/dark 检查在入库时生效;</li>
+      <li>S7 后 e2e 全量轮的 test 数/时长记入 <code>memory-bank/testing/baselines/</code>(口径沿 <code>testing/baseline.md</code>);</li>
+      <li>后续「改前端必做冒烟」口径从「跑 ui_smoke.cjs ok+error 两模式」平移为「<code>test:e2e:fast</code> 绿; 触碰乐观 UI/菜单/列设置时加跑对应 spec」—— 该口径变更随 S7 回写进 testing 文档。</li>
+    </ul>
+  </section>
+
+  <!-- ============================================================ 06 -->
+  <section id="s6">
+    <h2><span class="no">06</span>风险与回滚</h2>
+    <table>
+      <tr><th style="width:44px">No.</th><th style="width:230px">风险</th><th>处置(预防在前)</th></tr>
+      <tr><td class="mono">R1</td><td><b>旧脚本单页流水 → 新轨每 test 独立 context</b>: 后块依赖前块状态(展开态/选中集合/列设置), 是迁移最大工作量来源, 也是「数字对不齐」的头号嫌疑</td><td>D4 守则定为「每 test 自建 arrange, 顺序依赖显式 serial」; 对账五步的第 3 步强制映射, 状态依赖在映射表里现形; 不允许用「先跑前一个 test」替代 arrange</td></tr>
+      <tr><td class="mono">R2</td><td><b>模式门控静默少跑</b>: env 没设对 → 整组 skip → 假绿</td><td>skip 消息必须带当前 env 值; S7 矩阵轮逐组确认「该跑的跑了、该 skip 的有理由」; 模式轮命令化(commands note)不靠人记</td></tr>
+      <tr><td class="mono">R3</td><td><b>时长膨胀</b>: 每 test 新 context + 页面加载, 全量可能超旧脚本单页流水</td><td>每批对账时顺手记时长; 超旧脚本同口径 1.5× 才启动优化(serial 组内共享 page), 预防性优化不做</td></tr>
+      <tr><td class="mono">R4</td><td><b>存量 flaky 在新轨复现</b>: 误判成本迁移引入</td><td>按 smoke.md 既有口径: 命中不顺手修, HEAD 对照定存量, trace 这次能拿到时序证据; 修不修走 issue 流程</td></tr>
+      <tr><td class="mono">R5</td><td><b>翻译失真</b>: evaluate 直调 vm 绕过真实手势 / sleep 机械清零, 导致「新轨绿但真机坏」</td><td>D4 守则成文进 lib 头注释; 每批评审(对账映射评审)把「evaluate 使用处是否有注释理由」列入检查项</td></tr>
+      <tr><td class="mono">R6</td><td><b>Windows 收尾 EBUSY 复发</b>: 模式轮换 env 不改 webServer 结构, 但每轮起停都在踩这条</td><td><code>global-teardown.mjs</code> 兜底已在位且与 env 无关; S0 验收含一次 error 模式起停实跑</td></tr>
+      <tr><td class="mono">R7</td><td><b>文档漂移</b>: 两轨并存期, testing 文档同时描述两套口径</td><td>并存期不动 testing 文档(它们描述的旧轨仍是事实); 全部回写集中在 S7 一次做, 以终态口径一次写对</td></tr>
+    </table>
+    <p><b>总回退策略</b>: 每批一个 commit, 批内「删旧块」与「加新 spec」同 commit —— 任意批回退即恢复双轨原状; 旧脚本直到 S7 前始终完整可跑, 全程不存在「断言真空窗口」。</p>
+  </section>
+
+  <!-- ============================================================ 07 -->
+  <section id="s7">
+    <h2><span class="no">07</span>非目标</h2>
+    <ul>
+      <li><b>shard 并行</b>: 单桩共享实例下 shard 需要每 shard 独立端口/独立桩实例, 与 8137 单端口纪律冲突 —— 本计划不做, 有需要另立 issue;</li>
+      <li><b>CI 接入</b>: config 的 <code>forbidOnly</code>/<code>retries</code> 已预置 CI 条件, 但接线不在本计划;</li>
+      <li><b>改前端产品代码 / 改桩服务 <code>ui_harness.py</code> CLI</b>: 纯测试轨迁移, env 只影响 HARNESS_CMD 拼参;</li>
+      <li><b>顺手修存量 flaky</b>: 即便 trace 给出根因, 修复走 issue 流程(范围守恒);</li>
+      <li><b>agent-browser 轨道</b>: 轨道一的重装/可用性另行处理, 与本计划互不依赖;</li>
+      <li><b>pytest 层守阵调整</b>: <code>test_web.py</code> 296 项静态守阵不动, 层次分工不变。</li>
+    </ul>
+  </section>
+
+  <!-- ============================================================ 08 -->
+  <section id="s8">
+    <h2><span class="no">08</span>变更记录</h2>
+    <ul>
+      <li><span class="stamp">26-10-06-0708</span> — 初版, 状态 <strong>Open · 待拍板</strong>。依据 issue 26-10-06-0458; 代码取证时点 2026-10-06 07:08(块分布行号/断言计数以该时点 grep 为准, 执行时复核)。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-06-0708-plan-playwright-e2e.html · 拍板后冻结(实施走 tasks/ 档案滚动) · 源 issue: memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html
+  </footer>
+
+</div>
+</body>
+</html>

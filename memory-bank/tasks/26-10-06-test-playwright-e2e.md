@@ -4,8 +4,8 @@
 **Added:** 2026-10-06
 **Updated:** 2026-10-06
 **Topics:** playwright-e2e
-**Summary:** 把 scaffold 版 `@playwright/test` 落地成项目真冒烟（方案 A）: 修 CI 触发分支缺 `develop` 等 3 处配置瑕疵、`e2e/` 改指向 `ui_harness` 真前端（4 项: 渲染健康 + 数据契约）、修 `browser-env.md` / `ui_smoke.cjs` 的版本漂移、收录 `dev.e2e`；方案 B（迁移 1978 行 `ui_smoke.cjs`）入池不修。
-**Refs:** memory-bank/pitfalls/testing/playwright-teardown.md
+**Summary:** 把 scaffold 版 `@playwright/test` 落地成项目真冒烟（方案 A）: 修 CI 触发分支缺 `develop` 等 3 处配置瑕疵、`e2e/` 改指向 `ui_harness` 真前端（4 项: 渲染健康 + 数据契约）、修 `browser-env.md` / `ui_smoke.cjs` 的版本漂移、收录 `dev.e2e`；方案 B（迁移 1978 行 `ui_smoke.cjs`）入池不修 —— 其分步实施计划 26-10-06-0708 已出（S0–S7 八批对账迁移，Open 待拍板）。
+**Refs:** memory-bank/pitfalls/testing/playwright-teardown.md, memory-bank/plans/26-10-06-0708-plan-playwright-e2e.html
 
 ## 原始请求
 
@@ -72,6 +72,7 @@
 | S8 | 方案 B 入池 | Done |
 | S9 | 收尾 DoD（切片 / 基线 / 索引） | Done |
 | S10 | 修 webServer 收尾挂死（`e2e/global-teardown.mjs`）+ 更正首版误判 | Done |
+| S11 | 方案 B 分步实施计划撰写（issue 0458 → `plans/26-10-06-0708`，S0–S7，待拍板） | Done |
 
 ## 进度日志
 
@@ -88,6 +89,7 @@
   ⚠ **提交前发现仓库状态被并行会话改动**：HEAD 已从 `3a6e676c` 推进到 `c9ae4853`，且 `M TODO.md` 消失 —— 另一会话把 TODO.md 作为 `c9ae4853 更新TODO` **提交入库了**（此前用户要求过"TODO.md 不入库"，该约束已被覆盖）。因此本次是**全量提交**（树恰好只有我的 9 个文件），**不需要子集提交 + stash 舞蹈**。
   ⚠ **闸门跑在 rebase 之前**（提交先行的固有代价），并入的 `825e5221` 含 Python 生产代码 ⇒ 补跑合并态 `test.full` = **2676 passed + 4 skipped / 99% / 75.06s**，记新基线 `26-10-06-0619`。
 - **2026-10-06 05:5x** — **S10：修 webServer 收尾挂死**（用户带来另一会话的 EBUSY 补充信息，据此重查）。**首版判据过窄**：`spawnSync` 并非全线坏，而是**只要带管道 stdio 就 EBUSY** —— `stdio:'ignore'`/`'inherit'` 正常（`status=0`），与可执行文件无关（连 `process.execPath` 即 node.exe 自己都一样），重试 5 次 + 延迟全 EBUSY ⇒ **确定性、非竞态、非文件句柄/杀软占用**。修法：新增 `e2e/global-teardown.mjs`（异步 `exec` + `netstat -ano` 取监听 PID + `taskkill /PID <pid> /T /F` + 轮询等端口释放；非 Windows no-op），`playwright.config.mjs` 挂 `globalTeardown`。顺序依据读 1.63 源码确认：`createGlobalSetupTasks` 把全局 teardown 任务排在 plugin setup **之后**、teardown 按注册**逆序**执行 ⇒ 本函数先于 webServer plugin 的 `killProcess()`，届时 `processClosed` 已 true、整段 force-kill 被跳过。**实测：`commands run dev.e2e` 14.8s / exit 0 / `4 passed (12.3s)`，8137 无 LISTENING、无残留 `ui_harness` 进程。** 另跑端口占用负例：exit 1 + `already used`、**外来服务不被误杀**（webServer setup 失败会中断任务链，`globalTeardown` 根本不被注册）。同步更正 `pitfalls/testing/playwright-teardown.md`（新增「别踩的坑」小节）、`dev.e2e` 的 note、`e2e/harness.mjs` 注释与本任务文件。（该轮改动已于 06:1x 提交为 **`2be3fe79`**。）
+- **2026-10-06 07:0x–07:3x** — **S11：方案 B 分步实施计划已出** [`plans/26-10-06-0708-plan-playwright-e2e.html`](../plans/26-10-06-0708-plan-playwright-e2e.html)（状态 **Open · 待拍板**，topic `playwright-e2e`）。代码取证（07:08 grep）：旧脚本 1992 行 / 104 处 `add()` 调用行按 8 块分布（A 渲染视图 ≈15 / B 性能 ≈6 / C 乐观 ≈16 / D 菜单族 ≈23 / E 整组真值 ≈5 / F 追剧多选 ≈14 / G HR表③ ≈5 / H 列设置 ≈12 + 模式探针 ≈8 + 收尾总检 1）；计划把方案 B 拆 **S0–S7 八批**（S0 基建 lib 四件 + 桩参数 env 化 → S1 视图渲染 → **S2 flaky 块提前**（追剧+多选右键，trace 兑现）→ S3 乐观 UI（ok/error/hang 三模式）→ S4 菜单族（on/off）→ S5 性能+HR → S6 列设置 → S7 删旧脚本 + 回写）；每批五步对账（新 spec 绿 → 旧脚本同参轮绿 → 映射表 → 同 commit 删旧块 → 双复跑），「同一断言只允许一处定义」由此物理保证。4 个拍板点（批次顺序 / 模式矩阵 env 化 / 旧脚本终态删除 / `@fast` tag 门禁）留用户。认领链闭合：plan ↔ issue 0458 ↔ 本档案 doc-refs/Refs 三向互指；`kb.index` 已重跑。**本计划由独立会话撰写，未认领 issue、未动任何代码。**
 
 ## 未做 / 留给用户
 
