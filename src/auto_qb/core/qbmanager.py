@@ -864,6 +864,8 @@ class QbManager(
     def export_torrents_info(self, path):
         """导出种子信息, 用于debug"""
         torrents = self.client.torrents_info()
-        with open(path, "w") as f:
+        # encoding 显式 utf-8: Windows 默认 cp936, 种子名含 GBK 外字符会中途崩
+        # (同款见 exporter.py; issue 26-10-06-0028 chore-export-torrents-info-encoding)
+        with open(path, "w", encoding="utf-8") as f:
             for tor in torrents:
                 f.write(f"{tor}\n\n")

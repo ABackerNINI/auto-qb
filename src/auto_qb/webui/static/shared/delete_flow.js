@@ -105,15 +105,13 @@ window.AQB_DELETE = {
     },
     _deleteDetails(keys, hashes) {
       const members = this._deleteMembers(keys, hashes);
-      const names = [];
       const sites = [...new Set(members.map((m) => m.site).filter(Boolean))];
       const paths = [...new Set(members.map((m) => m.save_path).filter(Boolean))];
       const totalSize = members.reduce((n, m) => n + (m.size || 0), 0);
       const single = (keys || []).length + (hashes || []).length <= 1 && members.length <= 1;
       // 目标: 单目标退化为**它的名字**(单辅种 = 辅种名, 单种子 = 种子名), 多目标走集合摘要
-      const target = single && names.length === 1 ? names[0]
-        : single && members.length === 1 ? (members[0].name || members[0].hash.slice(0, 12))
-          : `${(keys || []).length} 个${L10N_GROUP} · ${members.length} 个种子`;
+      const target = single && members.length === 1 ? (members[0].name || members[0].hash.slice(0, 12))
+        : `${(keys || []).length} 个${L10N_GROUP} · ${members.length} 个种子`;
       return [
         { icon: "#i-cards", label: "目标", value: target, wide: true },
         { icon: "#i-layers", label: "成员", value: `${members.length} 个种子` },

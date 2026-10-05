@@ -37,7 +37,6 @@ from typing import Optional
 
 from .traffic_store import (
     HOUR_SECONDS,
-    V4Block,
     V4ParsedAgg,
     v4_block_slots,
     v4_bucket_width_s,

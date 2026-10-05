@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="死代码/注释合并条(JS): config_editor 重复键 + add_torrent multipart 旧注释 + delete_flow 死变量死分支">
 <meta name="issue-summary" content="F1-02+F2-01+F2-02 三条并一条; JS 工具面空白全靠人工, 重复键是改一漏一静默陷阱">
 <title>死代码/注释合并条(JS): config_editor 重复键 + add_torrent multipart 旧注释 + delete_flow 死变量死分支 · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-chore-js-dead-code-and-stale-comments</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,8 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>F1-02 删其一; F2-01 删改两处注释为 JSON/base64 口径(可直接引 :491 与 state.js:244 的正确表述); F2-02 删 names 与恒假分支, target 判据简化为 <code>single &amp;&amp; members.length === 1 ? … : …</code>; 三件可同批清理。</p><p><b>撞车(底册对照):</b> 无(三条互相不同件; 与 Py 合并条① 不同语言)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li>
+<li>26-10-06 — 修复, 状态 <strong>Done</strong>(S4 批, 计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a> §05; 实测 HEAD b32bea2d, test.full 2648 passed + 4 skipped)</li></ul></section>
 
   <footer>
     26-10-06-0028-chore-js-dead-code-and-stale-comments.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

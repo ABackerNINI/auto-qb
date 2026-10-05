@@ -359,8 +359,15 @@ class HrRefreshService:
         self.sleep_max = sleep_max
         self.round_wait_max = round_wait_max
         self.dir = hr_dir(data_dir, global_conf.shared_dir)
-        self._stores: Dict[str, HrSiteStore] = {}
         self._owner = owner
+        # 站点存储构造期预建(取数线程 × Web 线程并发首访各建一份、其一被引用覆盖丢弃 ——
+        # FileLock 按路径互斥虽兜住后果, 「每站点一实例」契约却依赖实现时序; issue
+        # 26-10-06-0028 chore-lazy-init-double-construct)。conf 外点名(CLI --hr-confirm-empty
+        # 手输站点)仍走 store() 惰性分支兜底。
+        self._stores: Dict[str, HrSiteStore] = {
+            site: HrSiteStore(site, self.dir, lock_timeout=0.0, owner=owner)
+            for site in site_confs
+        }
         #: 「无可用取数通道」已告警过的站点: 取数线程是分钟级轮询, 每轮都 WARNING 会把
         #: notify 的系统通知淹掉 —— 只在**状态变化**时报一次, 通道恢复后重置。
         self._no_channel_warned: set = set()
@@ -375,7 +382,8 @@ class HrRefreshService:
     # ---------- 基础访问 ----------
 
     def store(self, site: str) -> HrSiteStore:
-        """该站点的文件存储(惰性建; 每站点一把锁)。锁等待常量化 0(拿不到直接等下一轮, §6.2)"""
+        """该站点的文件存储(每站点一把锁; site_confs 站点已构造期预建, 惰性分支只兜 conf 外
+        点名)。锁等待常量化 0(拿不到直接等下一轮, §6.2)"""
         got = self._stores.get(site)
         if got is None:
             got = HrSiteStore(site, self.dir, lock_timeout=0.0, owner=self._owner)

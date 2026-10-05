@@ -3,7 +3,7 @@
 由根目录平铺文件归拢而来（plan 26-09-22-2112 · 方案 C · W4b）:
 - qbmanager.py  QbManager 主协调者（微内核: 主循环三时间线 + 模块宿主 + 相位广播 +
                 连接管理; 主循环唯一写线程）—— 业务已全部迁功能模块(plan
-                kernel-module-refactor P0-P5), 旧名方法只剩单行委托(§7.2 测试兼容)
+                kernel-module-refactor P0-P5), 旧名别名兼容层已随别名层处置 W3 整体退役
 - module.py     内核地基: Module 契约 / AppContext / ModuleHost / EventBus
                 —— 宿主只知「何时」, 不知「何事」
 - modules/      功能模块包: logging / notify / tracker / speed_curve / maintenance /

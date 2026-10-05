@@ -16,7 +16,6 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 from auto_qb.config import (
-    AddEpisodeTagsConfig,
     GroupingConfig,
     HRRule,
     LoggingConfig,
@@ -24,6 +23,7 @@ from auto_qb.config import (
     QbittorrentConfig,
     WebConfig,
 )  # noqa: E402
+from auto_qb.config.models import AddEpisodeTagsConfig  # noqa: E402  (重导出面已收敛, 模型类直引 models)
 from auto_qb.config.models import HrCheckConfig  # noqa: E402  (包 __init__ 未导出 HR 在线核实配置类)
 from auto_qb.core.qbmanager import QbManager  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402

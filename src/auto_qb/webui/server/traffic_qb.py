@@ -31,7 +31,6 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   agg 行, v4_earliest_row_ts 全 None)-> 空态。
 """
 import time
-from typing import Optional
 
 from fastapi import HTTPException
 
@@ -62,16 +61,18 @@ class QbTrafficChartApi:
     """单域流量图端点的读侧装配(每域 router 一实例; 无锁 —— 只读 + 原子替换读语义)"""
     def __init__(self, manager) -> None:
         self._manager = manager
-        self._v4cache: Optional[V4DayCache] = None  # 惰性构造(路径纯计算; data_dir 为 R 级热重载字段)
+        # 构造期预建(路径纯计算): 惰性建无锁在 Web 线程池并发首访同一端点时会双构造、其一
+        # 被引用覆盖丢弃(仅损失一份解析缓存, 但契约依赖实现时序; issue 26-10-06-0028
+        # chore-lazy-init-double-construct)。data_dir 为 R 级重启闸字段(热重载拒绝项), 改动
+        # 即整体重启重建 router —— 预建无快照失效面。
+        self._v4cache = V4DayCache(manager.config.data_dir)
         self._last_good: dict = {}  # window 名 -> 最近一次成功现算的响应(竞态兜底, 非聚合缓存)
 
     # ---------- 基础件 ----------
 
     @property
     def v4cache(self) -> V4DayCache:
-        """v4 读侧缓存(天文件按天解析缓存 + agg.dat 解析缓存; Web 线程并发安全)"""
-        if self._v4cache is None:
-            self._v4cache = V4DayCache(self._manager.config.data_dir)
+        """v4 读侧缓存(天文件按天解析缓存 + agg.dat 解析缓存; 构造期预建, 只读引用)"""
         return self._v4cache
 
     def _conf(self):

@@ -759,7 +759,7 @@ def _win_user32():
     (`HWND_TOPMOST = (HWND)-1`) 是**指针宽度**的 —— x64 寄存器高 32 位留着上一个调用的
     残留值, 于是 -1 被当成真实窗口句柄、目标 hwnd 被当成无效句柄。凡**取 HWND 参数**的调用
     (`GetClassNameW` / `GetWindowTextW` / `SetForegroundWindow` …) 都吃同一套随机概率:
-    窗口<｜hy_place▁holder▁no▁813｜>查不到、标题取空、焦点抢不上 —— 这才是"**有概率**不弹到顶层"的真根因,
+    窗口类名查不到、标题取空、焦点抢不上 —— 这才是"**有概率**不弹到顶层"的真根因,
     与前台锁、与 Z 序手段都无关(旧单测注入的是假 user32, 永远测不出这一类 x64 ABI 问题)。
     POSIX 上 `ctypes.windll` 不存在, 顶层引用会让 CI ImportError(见 testing/file-conventions.md)
     —— 返回 None 让调用方早退, 而不是靠"恰好抛了异常"决定行为。

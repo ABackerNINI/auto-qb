@@ -26,7 +26,6 @@ from .resolve import HrSiteView, HrViewSet
 from .service import (
     CHANNEL_SILENCE_WARN,
     ACTION_ERROR,
-    ACTION_NO_CHANNEL,
     ACTION_PARTIAL,
     ACTION_REFRESHED,
     ACTION_REUSED,

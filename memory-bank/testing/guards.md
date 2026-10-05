@@ -111,6 +111,15 @@
 | `test_web.py::test_reannounce_group_empty_snapshot_error_receipt` (E-03) | _cmd_reannounce_group 空组(成员执行时刻全不在快照)显式 error 回执、不发指令不登记跟踪 —— 对齐单发 reannounce_torrent 回执口径, 前端 waitCmd 不再挂 40s 超时 | 还原 commands.py else 分支(实测红在 KeyError: 'r-gone', 即无回执) |
 | `test_web.py::test_frontend_dir_browse_and_search_stale_guard` (F2-03) | 请求代际守卫与 drawer._drawerStale 同式收口: loadDir 发请求即记 `_dirReqPath` 戳(落袋/报错/finally 三处比对, 过期请求不动 loading 态) + doSearch 落袋/报错前比对当前 searchQuery 词 —— 慢响应不覆盖新状态 | 还原 add_torrent.js/view.js 守卫(实测红在「loadDir 未记 path 戳」) |
 
+## S4 死代码/杂项批次守阵 (26-10-06-0028 chore ×4, 红验 26-10-06 @工作区)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_hr_service.py::test_store_prebuilt_per_site_confs` (B1-01) | HrRefreshService 站点存储构造期预建(site_confs 全键) —— 取数线程 × Web 线程并发首访拿到同一实例, 「每站点一把锁/单实例」契约不再依赖首访时序; conf 外点名仍走 store() 惰性分支兜底(CLI --hr-confirm-empty 手输) | 还原 `self._stores: Dict = {}` 惰性建(实测红在「构造期 _stores 非空」) |
+| `test_config_writer.py::test_backup_atomic_write_no_partial_bak` (D-03) | writer._backup 保存前备份经 `utils.atomic_write`(与 backup_versioned 统一): 内容写到一半抛异常的干净路径上零半截 .bak, 已存在旧备份不被截断 —— 恢复资产完整性 | 还原 `_backup` 的 `open(backup_path, "w")` 直写(实测红在「备份未经 atomic_write」) |
+| `test_qbmanager.py::test_export_torrents_info` (A-02) | export_torrents_info 编码恒 `utf-8` —— GBK 外字符种子名(语料 U+20000)如实落盘不崩(Windows 默认 cp936 会 UnicodeEncodeError 中途崩); **静态钉**(inspect.getsource 断言 encoding="utf-8") + 行为面双保险 | 还原 `open(path, "w")` 无编码(实测红在静态断言 —— 本机默认编码恰为 utf-8, 行为面红验不可达, 与 O_TRUNC 守阵同判) |
+| `test_web.py::test_api_speed_mode_reads_client_with_alt_fields` (E-02) | /api/speed/mode 三读成败口径对齐: 任一失败(含首读成功后续读抛的**部分成功组合**)整组回 None + DEBUG 一行异常摘要 —— 前端浮层不出「一半真一半未知」, 排障有日志 | 还原 `except Exception: pass`(实测红在「部分成功 current 有值」) |
+
 ## 仿真 / 语料 / 平台语义
 
 | 守阵 | 钉住的结论 | 红验 |

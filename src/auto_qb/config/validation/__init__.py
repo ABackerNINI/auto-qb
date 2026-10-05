@@ -16,7 +16,6 @@
 - 规则集 spec 的条件/动作名称经 registry 延迟导入校验(避免模块循环依赖)
 """
 from .core import KNOWN_CONFIG_KEYS, MAINTENANCE_TAG_MODES, _strip_none, validate_config
-from .curves import _validate_curve_points, _validate_global_speed_limit_curve
 from .rules import (
     CHECKING_ACTION_KNOWN_KEYS,
     CHECKING_VALID_BASIC,
@@ -48,6 +47,7 @@ from .sections import (
 
 __all__ = [
     "validate_config",
+    "_strip_none",
     "KNOWN_CONFIG_KEYS",
     "KNOWN_LOG_KEYS",
     "KNOWN_QBITTORRENT_KEYS",
@@ -64,7 +64,6 @@ __all__ = [
     "KNOWN_HR_CHECK_KEYS",
     "KNOWN_HR_CHANNEL_KEYS",
     "KNOWN_HR_SITE_KEYS",
-    "KNOWN_WEB_KEYS",
     "RULE_KNOWN_KEYS",
     "EXECUTE_ONCE_VALUES",
     "STOP_IF_VALUES",

@@ -26,7 +26,6 @@ from .model import (
     LANE_SCOPE,
     LANE_UNSATISFIED,
     SOURCE_EXEMPT,
-    SOURCE_NOT_LISTED,
     SOURCE_SATISFIED,
     HrEntry,
     HrVerified,

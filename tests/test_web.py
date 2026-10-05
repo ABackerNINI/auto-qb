@@ -144,7 +144,7 @@
 - test_api_keys_endpoint_roundtrip_and_validation: 快捷键默认表/422 校验/保存读回
 - test_api_keys_sanitize_rejects_non_dict: _sanitize 非 dict 一律 None
 - test_api_category_and_tag_empty_rejections: 分类/标签空入参 400
-- test_api_speed_mode_reads_client_with_alt_fields: 限速托管直读 qB(含 ALT 双组) + 读失败回 None
+- test_api_speed_mode_reads_client_with_alt_fields: 限速托管直读 qB(含 ALT 双组) + 读失败/部分成功整组回 None(DEBUG 留摘要)
 - test_api_fs_error_semantics: fs 端点错误语义化(404/501/403/400)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
 - test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)/回退 save_path(缺失或下载中未落盘)/组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
@@ -12804,6 +12804,15 @@ def test_api_speed_mode_reads_client_with_alt_fields(web_env):
     )
     body = client.get("/api/speed/mode", headers=auth).json()
     assert body["current"] is None and body["alt_on"] is None and body["alt_current"] is None, "任一读取失败整组回 None(不拿旧缓存冒充)"
+    # 部分成功组合同样整组回 None(首读成功后续读抛 -> 不出现「一半真一半未知」浮层;
+    # issue 26-10-06-0028 chore-speed-mode-silent-except)
+    mgr.api = SimpleNamespace(
+        get_global_speed_limits=lambda: {"up_limit": 1024},
+        get_speed_limits_mode=lambda: (_ for _ in ()).throw(RuntimeError("超时")),
+        get_alt_speed_limits=lambda: {"up_limit": 512},
+    )
+    body = client.get("/api/speed/mode", headers=auth).json()
+    assert body["current"] is None and body["alt_on"] is None and body["alt_current"] is None, "部分成功也整组回 None(口径对齐)"
 
 
 def test_api_fs_error_semantics(web_env, tmp_path, monkeypatch):

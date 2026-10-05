@@ -265,7 +265,7 @@ def test_p2a_maintenance_remove_tags_dry_run_and_similar_paths():
 
 def test_p2a_maintenance_add_episode_tags_no_episodes():
     """集数标签: 文件列表解析不出集数(电影/合集) -> 不加标签"""
-    from auto_qb.config import AddEpisodeTagsConfig
+    from auto_qb.config.models import AddEpisodeTagsConfig
 
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)

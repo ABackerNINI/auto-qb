@@ -21,7 +21,6 @@ from . import migrations  # noqa: F401  # import 即注册 config schema 迁移�
 from .models import (
     DEFAULT_CONFIG_FILE,
     UNLIMITED_SPEED,
-    AddEpisodeTagsConfig,
     Config,
     CurvePoint,
     GlobalSpeedLimitCurve,

@@ -1240,9 +1240,6 @@ window.CE_FIELD_BASE = {
     sectionExists() {
       return this.ce.cfgExists(this.path);
     },
-    sectionExists() {
-      return this.ce.cfgExists(this.path);
-    },
     toggleSection(on) {
       this.ce.cfgToggleSection(this.path, this.f, on);
     },

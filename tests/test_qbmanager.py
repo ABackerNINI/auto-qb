@@ -40,7 +40,7 @@
 - test_refresh_suppress_window_exception_closes_window_in_finally: 守阵(26-10-06-0028 A-01)——suppress 窗内异常上抛后 live 旗标不残留, 下一成功轮 full_round 相位照常广播不被吞
 - test_refresh_schema_validation_missing_raises: 首次拉到非空种子信息时校验字段, 缺失抛 QbCompatError
 - test_refresh_schema_validation_passes_once: 全字段通过置 flag 不再重复校验
-- test_export_torrents_info: export_torrents_info 写种子信息到文件
+- test_export_torrents_info: export_torrents_info 写种子信息到文件(编码恒 utf-8, GBK 外字符不崩)
 - test_view_rebuild_waits_for_client_consume: 节拍对齐门控 —— 上一版没被 /api/state 取走就不生产下一版(>3000 种子时约一半 rebuild 无人消费), 且**脏标记必须保留**; 命令驱动的那一轮 force=True **必须绕过**(P0-5 要求真值几十毫秒内进快照, 不能等客户端轮询)
 - test_tick_rebuilds_all_views_when_changed: 视图变化且 Web 活跃 -> 四份视图同一入口**同次**重建
 - test_tick_rebuilds_views_when_grouping_disabled: 分组未启用时脏标记不被吞, 视图照样重建
@@ -817,19 +817,31 @@ def test_refresh_suppress_window_exception_closes_window_in_finally():
 
 
 def test_export_torrents_info():
-    """export_torrents_info: 全量种子逐条写入文件(debug 用)"""
+    """export_torrents_info: 全量种子逐条写入文件(debug 用); 编码恒 utf-8 —— 含 GBK 外
+    字符的种子名不崩(Windows 默认 cp936 会 UnicodeEncodeError 中途崩; issue
+    26-10-06-0028 chore-export-torrents-info-encoding)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         mgr.client = client
         client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
         client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+        # U+20000 不在 GBK 内: 无显式 encoding 时 cp936 环境写到该种子即崩
+        # (FakeTorrent 无 __str__, 落盘是对象 repr; 这里用带名字 __str__ 的桩验证编码)
+        client.torrents["H3"] = type("NamedStub", (), {"name": "种子𠀀X", "__str__": lambda self: self.name})()
         out = os.path.join(td, "torrents.txt")
         mgr.export_torrents_info(out)
         text = open(out, encoding="utf-8").read()
         lines = [ln for ln in text.splitlines() if ln.strip()]
-        assert len(lines) == 2, f"每个种子一行, 共 2 条: {lines}"
-        assert text.count("\n\n") == 2  # 每条种子后空行分隔
+        assert len(lines) == 3, f"每个种子一行, 共 3 条: {lines}"
+        assert text.count("\n\n") == 3  # 每条种子后空行分隔
+        assert "种子𠀀X" in text, "GBK 外字符按 utf-8 如实落盘"
+        # 静态钉: 本机默认编码恰为 utf-8 时行为面红验不可达(与 O_TRUNC 守阵同判), 源码级
+        # 断言 export_torrents_info 必须显式 encoding="utf-8" —— 还原 open(path, "w") 即红
+        import inspect
+
+        src = inspect.getsource(type(mgr).export_torrents_info)
+        assert 'encoding="utf-8"' in src, "export_torrents_info 必须显式 encoding=utf-8(禁 open(path, 'w'))"
 
 
 def test_tick_rebuilds_all_views_when_changed():

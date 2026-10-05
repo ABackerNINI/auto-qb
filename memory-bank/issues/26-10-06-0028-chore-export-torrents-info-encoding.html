@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="export_torrents_info open 无编码非原子, cp936 下含 GBK 外字符的种子名令调试导出中途崩">
 <meta name="issue-summary" content="补 encoding=&quot;utf-8&quot;(可参照 exporter.py:141 同款); CLI --export-torrents_info 调试入口">
 <title>export_torrents_info open 无编码非原子, cp936 下含 GBK 外字符的种子名令调试导出中途崩 · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-chore-export-torrents-info-encoding</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,8 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>补 encoding="utf-8"(可参照 exporter.py:141 同款); 顺手项 atomic_write 不强求。</p><p><b>撞车(底册对照):</b> 无。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li>
+<li>26-10-06 — 修复, 状态 <strong>Done</strong>(S4 批, 计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a> §05; 实测 HEAD b32bea2d, test.full 2648 passed + 4 skipped)</li></ul></section>
 
   <footer>
     26-10-06-0028-chore-export-torrents-info-encoding.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

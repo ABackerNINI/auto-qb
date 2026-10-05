@@ -17,7 +17,6 @@
 口径: 本模块只出**文案**(日志文本), 不做判断、不分级 —— 级别仍由调用点决定。标签前缀也让
 用户在日志里 `grep "[HR 页面改版]"` 就能捞出这一类事件。
 """
-import time
 from typing import Iterable, Sequence
 
 EVENT_LOGIN = "login"

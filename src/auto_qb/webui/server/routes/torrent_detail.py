@@ -4,6 +4,8 @@
 鉴权由 factory 的全局 dependencies 单点覆盖, 本模块不另挂依赖。
 日志命名空间见包 __init__(K3)。"""
 
+import logging
+
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse, Response
 
@@ -13,6 +15,8 @@ from ..traffic_qb import QbTrafficChartApi as _QbTrafficChartApi
 
 from fastapi import APIRouter
 from ..context import WebContext
+
+logger = logging.getLogger("auto_qb.web")  # noqa: F401  (speed/mode 读失败 DEBUG 记录)
 
 
 def build_router(ctx: WebContext) -> APIRouter:
@@ -164,12 +168,15 @@ def build_router(ctx: WebContext) -> APIRouter:
         if manager.client is not None:
             try:
                 current = manager.api.get_global_speed_limits()
-                # ALT-01: 备用速度模式与备用限速值同窗取(限速浮层主/备双组的数据源);
-                # 读失败回 None(前端显示"未知"), 不拿旧缓存冒充
+                # ALT-01: 备用速度模式与备用限速值同窗取(限速浮层主/备双组的数据源)
                 alt_on = bool(manager.api.get_speed_limits_mode())
                 alt_current = manager.api.get_alt_speed_limits()
-            except Exception:
-                pass
+            except Exception as e:
+                # 三读成败口径对齐: 任一失败整组回 None(前端浮层不出现「一半真一半未知」),
+                # 不拿旧缓存冒充; 异常降 DEBUG 留一行摘要(排障「为什么显示未知」有日志可查,
+                # qB 瞬时故障属常态不打 WARNING; issue 26-10-06-0028 chore-speed-mode-silent-except)
+                current = alt_on = alt_current = None
+                logger.debug("speed/mode 直读 qB 失败, 整组回 None: %s: %s", type(e).__name__, e)
         return {
             "curve_enabled": curve_enabled,
             "curve_target": target,

@@ -12,7 +12,7 @@ import os
 import tempfile
 from types import SimpleNamespace
 
-from auto_qb.config import AddEpisodeTagsConfig
+from auto_qb.config.models import AddEpisodeTagsConfig
 from auto_qb.core.episodes import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
 from auto_qb.core.qbmanager import QbManager
 from helpers import FakeClient, FakeConfig, FakeTorrent

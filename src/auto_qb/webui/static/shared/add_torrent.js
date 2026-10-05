@@ -40,8 +40,9 @@ window.AQB_ADD = {
     }
   },
   methods: {
-    /* ---------------- 添加种子对话框(R1B): multipart 提交不走 this.api()(它强制 application/json 会破坏 multipart boundary),
-     * 用原生 fetch + Bearer(this.token); 回执仍复用 waitCmd 轮询 /api/cmd/{id} ---------------- */
+    /* ---------------- 添加种子对话框(R1B): 提交走 this.api() JSON —— .torrent 读取为 base64 随 files_b64 上送
+     * (口径同 submitAddTorrent 内注释与 state.js addFiles; this.api() 恒置 application/json, 见 auth.js _request);
+     * 回执仍复用 waitCmd 轮询 /api/cmd/{id} ---------------- */
     openAddTorrent() {
       this.addFiles = [];
       this.addUrls = "";
@@ -525,7 +526,7 @@ window.AQB_ADD = {
       };
       this.addSubmitting = true;
       try {
-        // 不设 Content-Type, 浏览器自动生成 multipart boundary
+        // JSON 提交(this.api() 恒置 Content-Type: application/json, 见 auth.js _request)
         const queued = await this.api("/api/torrents/add", { method: "POST", body: JSON.stringify(payload) });
         const r = await this.waitCmd(queued.cmd_id);
         if (r.ok) {

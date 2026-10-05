@@ -135,16 +135,6 @@ def _parse_int_field(text: str) -> Optional[int]:
     return v
 
 
-def _parse_int_field(text: str) -> Optional[int]:
-    """数据列解析: 空 = None(null 列); 非负整数合法; 其余(负数/非数值)抛 ValueError -> 坏行"""
-    if text == "":
-        return None
-    v = int(text)
-    if v < 0:
-        raise ValueError(f"负数列: {text}")
-    return v
-
-
 # ======================================================================
 # 纯函数区(plan 26-10-04-1957 S1 立, §02.3/§04/§06.2; 行型定约随 v4 换代由 v4 计划
 # §01 取代, 单点见模块 docstring「格式 v4 契约」与文件尾 v4 区头注释)

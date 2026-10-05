@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="死导入/死代码合并条(Py): hr 六处 F401 + traffic_store 重复定义 + traffic_grid V3Block + config 重导出面">
 <meta name="issue-summary" content="B1-02+B2-05+C-02+C-03+D-06 五条发现并一条; HrStoreCorrupted 死异常类二选一需拍板">
 <title>死导入/死代码合并条(Py): hr 六处 F401 + traffic_store 重复定义 + traffic_grid V3Block + config 重导出面 · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-chore-py-dead-imports-hr-traffic-config</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,8 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>删各处死导入 + 删 :116-123 重复定义块 + 删两处死重导出 + __all__ 去重; <b>HrStoreCorrupted 二选一留认领时拍板, 不自行裁决</b>: (a)直接删除, 或 (b)改为 store 读坏路径真实抛出的类型(与 B2-01 修复呼应); D-06 的 _strip_none 是 exporter 链活依赖, 处置须选「补 __all__」而非删除。C-02/C-03 系 v3 落地新引入(v3 S1/S3b 滑笔), 可随死代码清理批顺手。</p><p><b>撞车(底册对照):</b> 无(五条互相不同件; 与 JS 合并条② 不同语言; B2-05 与 B1-02/C-03 的 F401 亦不同件)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li>
+<li>26-10-06 — 修复, 状态 <strong>Done</strong>(S4 批, 计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a> §05; 实测 HEAD b32bea2d, test.full 2648 passed + 4 skipped) 顺手项注明: 死导入 6 处删除(status/next_allowed_at, __init__/HrChannelQuota, channel/Optional, events/time, resolve/SOURCE_NOT_LISTED, worker/ACTION_NO_CHANNEL) + HrStoreCorrupted 死类按 S2 批 B2-01 P-02 拍板删除(store.py 定义+__all__) + traffic_store._parse_int_field 逐字重复块删后份 + traffic_grid V4Block(v3 批取证名 V3Block, 已随 v4 换代改名, 同一死导入) 死导入删除 + config 重导出面四处(config/__init__ AddEpisodeTagsConfig 删除; validation/__init__ curves 死重导出行删除 + __all__ 去 KNOWN_WEB_KEYS 重复 + _strip_none 补 __all__)。测试侧消费面(helpers/test_episodes/test_mixins_tags/test_modules_p3)同步改直引 config.models。顺手项: A-08 core/__init__.py docstring 别名层过时描述更新(别名层已随 W3 退役); H-04 infra/utils.py:762 乱码占位符 token 还原为可读中文「窗口类名查不到」。</li></ul></section>
 
   <footer>
     26-10-06-0028-chore-py-dead-imports-hr-traffic-config.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

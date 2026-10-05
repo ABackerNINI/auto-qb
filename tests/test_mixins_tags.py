@@ -41,7 +41,7 @@ import tempfile
 
 import pytest
 
-from auto_qb.config import AddEpisodeTagsConfig
+from auto_qb.config.models import AddEpisodeTagsConfig
 from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.actions import AddTagsAction
 from helpers import FakeClient, FakeConfig, FakeTorrent, _hr_rule, make_manager, seed_store

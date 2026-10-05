@@ -20,7 +20,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 from ..config.models import SiteHrCheckConfig
 from ..infra.errors import AutoQbError

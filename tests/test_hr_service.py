@@ -1,6 +1,7 @@
 """test_hr_service 测试计划: v3 波次引擎(计划 26-09-28-1932 §4/§5)
 
 ## 测试计划(每个测试函数一条)
+- test_store_prebuilt_per_site_confs: 站点存储构造期预建(每站点一实例不再依赖首访时序; conf 外点名惰性兜底)
 - test_first_wave_deep_fetch: 首波深翻(全量效果) —— 未对账对象驱动覆盖深度
 - test_stop1_completion_time_coverage: 停翻1. 完成时间覆盖(最深行早于最老对象减对齐余量 1D)
 - test_stop2_zero_remain_streak: 停翻2. 到期段强信号(remain==0 连续 5 行, 全深度证明)
@@ -241,6 +242,19 @@ def five_expired_rows(base_tid: int) -> list:
 
 
 # ---------------- 波次基本形态 ----------------
+
+
+def test_store_prebuilt_per_site_confs(tmp_path):
+    """站点存储构造期预建(issue 26-10-06-0028 chore-lazy-init-double-construct): site_confs
+    键在 __init__ 就建好 —— 取数线程 × Web 线程并发首访拿到同一实例, 不再「惰性建无锁、
+    双构造其一被引用覆盖丢弃」; conf 外点名仍走惰性分支兜底(CLI --hr-confirm-empty 手输)"""
+    fetcher = FakeFetcher(pages=standard_pages())
+    service = make_service(tmp_path, fetcher)
+    assert service._stores.keys() == {SITE}, "构造期即预建 site_confs 全部站点"
+    assert service.store(SITE) is service._stores[SITE], "conf 内站点不再新建"
+    # conf 外点名: 惰性兜底建, 且重复取同一实例
+    extra = service.store("nosuch")
+    assert service.store("nosuch") is extra
 
 
 def test_first_wave_deep_fetch(tmp_path):

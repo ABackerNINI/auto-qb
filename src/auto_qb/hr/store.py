@@ -39,10 +39,6 @@ class HrLockBusy(RuntimeError):
     """锁被别的实例持有 —— 本轮直接跳过该站点(不排队、不重试)"""
 
 
-class HrStoreCorrupted(RuntimeError):
-    """站点文件存在但无法解析(schema 不符 / JSON 坏) —— 不入库, 保守回落未核实"""
-
-
 def instance_id() -> str:
     """本进程的实例标识(心跳自检用); 每次启动生成, 不落盘"""
     return uuid.uuid4().hex[:12]
@@ -305,7 +301,6 @@ __all__ = [
     "HrLockBusy",
     "HrLockSession",
     "HrSiteStore",
-    "HrStoreCorrupted",
     "hr_dir",
     "instance_id",
 ]

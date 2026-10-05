@@ -37,7 +37,7 @@ from .model import (
     HrHistoryEvent,
     HrSiteData,
 )
-from .ratelimit import day_key, next_allowed_at, next_day_reset, quota_left
+from .ratelimit import day_key, next_day_reset, quota_left
 from .resolve import HrSiteView
 
 #: 通道状态的人话(与 `--hr-status` 逐字一致 —— 两处口径必须相同)

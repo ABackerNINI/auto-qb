@@ -18,6 +18,7 @@
 - test_write_tree_updates_derived_state_file: 改 data_dir 时派生的 state_file 一并回退
 - test_write_tree_writes_float_and_negative_scalars_plain: 浮点字符串按原生标量写出
 - test_write_tree_backup_created: 写盘前生成 `data/config.yml.bak` 备份(父目录按需创建)
+- test_backup_atomic_write_no_partial_bak: 保存前备份走 atomic_write(与 backup_versioned 统一), 写盘中断不留半截 .bak
 - test_preview_tree_does_not_touch_disk: 预览不落盘, 且内容与写盘结果一致(除注释形态)
 - test_preview_tree_invalid_raises: 预览同样做校验
 - test_preview_tree_does_not_create_backup: 预览不产生任何备份文件
@@ -355,6 +356,47 @@ def test_write_tree_backup_created(tmp_path):
     with open(backup, "r", encoding="utf-8") as f:
         assert f.read() == before
     assert not (tmp_path / "config.yml.bak").exists(), "项目目录不得再产生 .bak"
+
+
+def test_backup_atomic_write_no_partial_bak(tmp_path, monkeypatch):
+    """保存前备份走 utils.atomic_write(与 backup_versioned 统一): 写盘中断不留半截 .bak
+
+    备份恰是坏配置的恢复资产, 半截比没有更危险(issue 26-10-06-0028 chore-config-writer-backup-atomic;
+    原 "w" 直写从 O_TRUNC 守阵面外漏过)。
+    """
+    from auto_qb.config import writer as writer_mod
+    from auto_qb.infra import utils as infra_utils
+
+    path = _make(tmp_path, BASE)
+    backup = _bak(tmp_path)
+
+    routed = []
+    real_atomic = infra_utils.atomic_write
+
+    def spy_atomic(p, fn, keep_backup=False):
+        routed.append(p)
+        real_atomic(p, fn, keep_backup)
+
+    monkeypatch.setattr(infra_utils, "atomic_write", spy_atomic)
+    writer_mod._backup(path, backup)
+    assert routed == [backup], "保存前备份必须经 utils.atomic_write(与 backup_versioned 统一)"
+    assert _text(backup) == _text(path), ".bak 内容 = 写盘前原样"
+
+    # 写盘中断(内容写到一半抛): 干净路径上不得出现半截文件(atomic_write 失败即无目标文件)
+    backup2 = str(tmp_path / "data" / "config2.yml.bak")
+
+    def interrupted(p, fn, keep_backup=False):
+        def boom(f):
+            f.write("半截")
+            raise RuntimeError("模拟写盘中断")
+
+        real_atomic(p, boom, keep_backup)
+
+    monkeypatch.setattr(infra_utils, "atomic_write", interrupted)
+    with pytest.raises(RuntimeError):
+        writer_mod._backup(path, backup2)
+    assert not os.path.exists(backup2), "写盘中断不得留半截 .bak(atomic_write 失败即无目标文件)"
+    assert _text(backup) == _text(path), "已存在的旧备份在中断场景保持原样(不被截断)"
 
 
 def test_preview_tree_does_not_create_backup(tmp_path):

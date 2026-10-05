@@ -331,14 +331,21 @@ def _delete_path(tree: dict, parts: List[str]) -> None:
 
 
 def _backup(config_path: str, backup_path: str) -> None:
-    """写盘前把当前配置备份到 backup_path(调用方指定的绝对/相对路径; 父目录按需创建)"""
+    """写盘前把当前配置备份到 backup_path(调用方指定的绝对/相对路径; 父目录按需创建)
+
+    备份走 atomic_write(与 backup_versioned 统一): 备份恰是坏配置的恢复资产, 写盘中断
+    不得留半截文件(issue 26-10-06-0028 chore-config-writer-backup-atomic)。
+    """
     if not os.path.exists(config_path):
         return
     parent = os.path.dirname(backup_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    with open(config_path, "r", encoding="utf-8") as src, open(backup_path, "w", encoding="utf-8") as dst:
-        dst.write(src.read())
+    with open(config_path, "r", encoding="utf-8") as src:
+        content = src.read()
+    from ..infra import utils
+
+    utils.atomic_write(backup_path, lambda f: f.write(content))
 
 
 def _build_yaml():
