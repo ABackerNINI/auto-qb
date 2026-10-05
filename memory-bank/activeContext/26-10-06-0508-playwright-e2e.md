@@ -4,11 +4,12 @@
 > 模块类型与扩展名不一致 / 配套文件未入库)、`e2e/` 改指向 `scripts/ui_harness.py` 真前端(双皮肤 ×
 > 渲染健康 + 数据契约 共 4 项)、修 `browser-env.md` 与 `ui_smoke.cjs` 的版本漂移、收录 `dev.e2e`。
 > 方案 B(迁移 1978 行 `ui_smoke.cjs`)入池不修。
-> 实测 e2e **4/4**、`test.full` **2647 passed + 4 skipped / 98% / 67~70s**、`test.pkg` **103 passed**
-> (基线 26-10-06-0508)。**改动留在工作树未提交**(等用户显式「提交」)。
-> 最后活动: 2026-10-06 05:08
+> **已提交并推送 `e6db1fab`**(`git ls-remote` 核实远端 == 本地; 20 文件 +723 −31; TODO.md 按要求未入库)。
+> 实测 e2e **4/4**; `test.full` 提交前 **2647 / 98%**(@ 37c427fe + 未提交)⇒ 合并态 **2662 / 99%**
+> (基线 26-10-06-0508 / 26-10-06-0547); `test.pkg` **103 passed**。
+> 最后活动: 2026-10-06 05:47
 
-**Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md
+**Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md
 
 ## 现状
 
@@ -16,8 +17,10 @@
   `playwright.config.mjs`(新, 原 `.js` 删) · `e2e/harness.mjs`(新, 桩服务参数单点) ·
   `e2e/smoke.spec.mjs`(新, 4 项) · `package.json`(补 scripts) · `scripts/ui_smoke.cjs`(依赖来源 + 版本注释) ·
   `.commands/dev/config.toml`(`dev.e2e`) · `memory-bank/` 文档若干 + 新坑档 + 任务档案。
-- 待入库: `package.json` / `package-lock.json` / `playwright.config.mjs` / `e2e/` / `.github/workflows/playwright.yml`
-  —— CI 里 `npm ci` 强依赖已提交的 lock 文件, 不提交则该 workflow 必失败。
+- **已入库**: 上述改动随提交 `e6db1fab` 一并落盘(含 `package.json` / `package-lock.json` /
+  `playwright.config.mjs` / `e2e/` / `.github/workflows/playwright.yml` —— CI 的 `npm ci` 依赖**已提交**的
+  lock 文件, 这下才真正生效), 并已推 Gitee `develop`(远端 ref 经 `git ls-remote` 核实)。
+- 未入库的只剩 `M TODO.md`(用户明确要求不提交)。
 
 ## 关键决策
 
@@ -31,7 +34,8 @@
 
 ## 未闭环 / 下次注意
 
-- **未提交**: 三处瑕疵里的第 3 条(配套文件入库)要等一次显式「提交」才闭环。
+- **已提交 `e6db1fab`** ⇒ 三处瑕疵全部闭环(原「未提交」条目已消解)。
+- **合并态基线 `26-10-06-0547` 尚未入库**(新建文件与二次提交都需用户显式授权) ⇒ 下次「提交」时带上它。
 - **本工具 shell 里 `dev.e2e` 会挂死**: `spawnSync` 全线 `EBUSY` ⇒ Playwright 收尾杀不掉桩服务 ⇒
   用例全 PASS 但命令永不退出、8137 残留。属环境限制, **配置层修不掉** ⇒ 请在自己的终端跑。
   判据与清理法见 [pitfalls/testing/playwright-teardown.md](../pitfalls/testing/playwright-teardown.md)。

@@ -80,9 +80,13 @@
 - **2026-10-06 04:58** — S8：方案 B 入池 `memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html`（refactor / light / topic `playwright-e2e`）。
 - **2026-10-06 05:0x** — S7：收录 `dev.e2e`（`timeout = 180`，`doc` 指向 playwright-teardown.md）。S6：`browser-env.md` 轨道二改为"仓库内 node_modules 优先 / NODE_PATH 回退"，修正 chromium 版本（151 → **153.0.8010.12**）与 WorkBuddy 路径结论；`smoke.md` 修正 `node_modules` gitignore 口径与来源优先级。
 - **2026-10-06 05:1x** — S9：跑全量测试建基线、重建索引、写 activeContext 切片。
+- **2026-10-06 05:2x** — 用户「提交」⇒ 首次 `ship.commit` 被**命令漂移闸门**拦下（新坑档/基线里写了 `npx playwright test` 原文，而它已收录为 `dev.e2e`）⇒ 改写成 task id 并重建索引后通过。为满足「TODO.md 不入库」用**子集提交**（位置参数），并先把 TODO.md `git stash` 挪开（否则脏树挡住内部 rebase），提交后 pop 还原。**提交成功 `e6db1fab`**，推送经 `ls-remote` 核实。
+- **2026-10-06 05:4x** — 合并态补验：闸门跑在 rebase **之前**，故对合并后（含 9 个远端提交）的树补跑 `test.full` ⇒ **2662 passed + 4 skipped / 99%**，两次采样 64.45s / 72.45s；新增合并态基线切片 `26-10-06-0547`（用户指示「补一条合并态基线」，**尚未入库**）。
 
 ## 未做 / 留给用户
 
-- **未提交**（用户未说「提交」）⇒ 瑕疵 3（配套文件入库）仍未闭环；`git status` 里 `package.json` / `package-lock.json` / `playwright.config.mjs` / `e2e/` / `.github/workflows/playwright.yml` 待入库。
+- **已提交并推送 `e6db1fab`**（用户显式「提交」，并明确要求 **TODO.md 不入库** —— 已用 `git show --name-only` 断言过）。
+  推送经 `git ls-remote gitee refs/heads/develop` 核实 == 本地 HEAD。⇒ 三处瑕疵全部闭环。
+- **合并态基线 `memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md` 尚未入库**（新建文件与二次提交都需用户显式授权）。
 - **本地在 AI 工具 shell 里跑 `dev.e2e` 会挂死**（`spawnSync` EBUSY，见 `pitfalls/testing/playwright-teardown.md`）⇒ 请在自己的终端跑；这条环境限制无法在配置层修掉。
 - 方案 B 不修，已入池。
