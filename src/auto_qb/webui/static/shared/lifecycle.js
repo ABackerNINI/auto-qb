@@ -1,6 +1,35 @@
 /* lifecycle.js — 根组件生命周期(created/mounted/unmounted/updated): W2b 自 app.js 拆出。
  * WARN: 同 state.js: 走根选项展开, 不走 app.mixin —— 否则 hub-field 实例也会跑 mounted
  * (监听器/fetch 双份)。成员逐行原样搬运。 */
+/* 错误历史 · 后端条目合并与补拉(WEBUI 错误历史 S3) --------------------------------
+ * 后端在 /api/errlog 挂了 auto_qb logger 的 WARNING+ 内存环(条目 {seq, ts, level, msg},
+ * seq 进程内单调、重启归零)。本段把它并进根组件 _errHistory(S1 数据层, cap 常量
+ * ERR_HISTORY_CAP 单点在 ui_feedback.js, 加载序先于本文件):
+ *   - boot 全量合并: 密钥验证成功(auth.js bootstrap)/ 本机免鉴权(lifecycle mounted)两条
+ *     启动路径各拉一次 after=0, 不计未读(开页即见, 不算"错过");
+ *   - 补拉: 60s 定时增量合并(after=已持游标), 面板关闭期每条计未读(对齐 _recordErrorToast
+ *     的记账语义); 回包 last < 已持游标 = 后端重启过(seq 归零), 清游标重拉全量;
+ *   - 拉取失败一律静默(后端不可达不打扰用户, 下轮补拉自愈), 零持久化、零新配置键。 */
+const ERR_POLL_INTERVAL_MS = 60000;  // 补拉节拍(写常量; 不进配置 —— 纯前端体验参数)
+
+/* 后端日志级别 -> 前端 kind(环只收 WARNING+, 不存在更低档) */
+function _errLevelKind(level) {
+  return level === "WARNING" ? "warn" : "error";
+}
+
+/* 后端 epoch 秒 -> 完整 HH:MM:SS(错误历史要看秒位, 不走 fmtTime 的日期省略口径) */
+function _errBackendClock(sec) {
+  const d = new Date((sec || 0) * 1000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+/* 后端重启判定(纯函数, 探针真跑): 回包 last 低于已持游标 —— seq 进程内只增,
+ * 唯一可能倒退的路径是后端重启归零; cursor 0 = 尚无游标, 不判重启。 */
+function _errlogReseed(last, cursor) {
+  return cursor > 0 && last < cursor;
+}
+
 window.AQB_LIFECYCLE = {
   created() {
     /* P1-2 窗口化的**非响应式**缓存: 刻意不放进 data —— 容器偏移与签名每轮都会写,
@@ -23,6 +52,9 @@ window.AQB_LIFECYCLE = {
     // _rowWindow 前缀和留存(光标滚动进视口用, 见 columns.js)都是纯缓存, 刻意不进 data
     this._kbTableCache = null;
     this._rowPre = {};
+    // 错误历史 S3(非响应式: 游标与定时器句柄无渲染依赖, 刻意不进 data —— 同上 P1-2 口径)
+    this._errLogCursor = 0;  // /api/errlog 已持游标(环内最大已拉 seq; 后端重启时清零重拉)
+    this._errPollTimer = 0;  // 60s 补拉定时器句柄(unmounted 撤除防热重载堆叠)
   },
   async mounted() {
     /* P1-2: 视口高度 + 页面滚动监听(被动 + rAF 合帧, 滚动本身不做任何布局读取) */
@@ -165,6 +197,7 @@ window.AQB_LIFECYCLE = {
         this.lastRid = null;
         this.startPolling();
         this.loadWebFlags();  // R2(计划 26-10-02-1955 W1): 登录后取一次功能旗标(跳检菜单开关)
+        this._pullErrlogBoot();  // 错误历史 S3: 本机免鉴权路径的开页全量合并(密钥路径在 auth.js bootstrap)
         return;
       }
       if (savedToken) {
@@ -216,6 +249,11 @@ window.AQB_LIFECYCLE = {
       clearInterval(this._clockTimer);
       this._clockTimer = 0;
     }
+    // 错误历史 S3: 60s 补拉定时器随组件销毁撤掉(同上, 防热重载后句柄堆叠)
+    if (this._errPollTimer) {
+      clearInterval(this._errPollTimer);
+      this._errPollTimer = 0;
+    }
     // P1-3: 顶栏尺寸观察器随组件销毁断开(ResizeObserver 不随元素消失自动停)
     if (this._headObs) {
       this._headObs.disconnect();
@@ -238,6 +276,63 @@ window.AQB_LIFECYCLE = {
     this._ensureWinTop();
   },
   methods: {
+    /* ------------------------------------- 错误历史 S3(后端条目合并与补拉, 见文件头块注释) */
+    /* 后端环条目 -> _errHistory 合并单点: id = "b"+后端 seq(按 seq 稳定去重), kind 映射
+     * WARNING->warn / ERROR 及以上->error, ts 转完整 HH:MM:SS, source 固定 "backend"。
+     * 已存在的 id 不重复入列(刷新重拉不产生重复); 新条目 unshift 到顶部(照 _errHistory
+     * 新在上的排序, 与 toast 条目混排同式); 超 ERR_HISTORY_CAP 挤掉最旧(同 _recordErrorToast
+     * 的环形语义)。opts.countUnread: boot 合并不计未读; 补拉计未读 —— 面板关闭期每条 +1,
+     * 记账口径对齐 _recordErrorToast(打开时由 state.js 的 errPanelOpen watcher 清零)。 */
+    _mergeBackendErrlog(items, last, opts = {}) {
+      const countUnread = !!opts.countUnread;
+      for (const it of items || []) {
+        const id = "b" + it.seq;
+        if (this._errHistory.some((e) => e.id === id)) continue;  // 去重: 同 seq 重拉不再入列
+        this._errHistory.unshift({
+          id,
+          seq: it.seq,
+          ts: _errBackendClock(it.ts),
+          kind: _errLevelKind(it.level),
+          text: it.msg,
+          source: "backend",
+        });
+        if (this._errHistory.length > ERR_HISTORY_CAP) this._errHistory.pop();
+        if (countUnread && !this.errPanelOpen) this._errUnread++;
+      }
+      if (typeof last === "number" && last > (this._errLogCursor || 0)) {
+        this._errLogCursor = last;  // 游标只进不退(倒退走 _pullErrlog 的重启重拉路径)
+      }
+    },
+    /* 拉一次 /api/errlog(以实例游标为 after)并合并。boot 全量(after=0)与 60s 增量共用;
+     * 失败静默 —— 网络/鉴权异常不弹 toast, 下一轮补拉自愈。回包 last 低于已持游标 =
+     * 后端重启过(seq 归零): 撤掉旧 backend 条目(否则同 seq 新条目会被去重吞掉)后
+     * 清游标重拉全量; toast 条目不受影响(它们来自本会话前端, 与后端环无关)。 */
+    async _pullErrlog(countUnread) {
+      if (!this.authOk) return;  // 无凭证不出网(照 api() 门口径, 免得登出后定时器空转触发 _logout)
+      try {
+        const r = await this.api(`/api/errlog?after=${this._errLogCursor || 0}`);
+        const last = (r && r.last) || 0;
+        if (_errlogReseed(last, this._errLogCursor || 0)) {
+          this._errHistory = this._errHistory.filter((e) => e.source !== "backend");
+          this._errLogCursor = 0;
+          const full = await this.api("/api/errlog?after=0");
+          this._mergeBackendErrlog((full && full.items) || [], (full && full.last) || 0, { countUnread });
+          return;
+        }
+        this._mergeBackendErrlog((r && r.items) || [], last, { countUnread });
+      } catch (e) { /* 静默: 后端不可达不打扰用户, 下轮补拉自愈 */ }
+    },
+    /* boot 全量合并入口: 两条启动路径(auth.js bootstrap 成功 / 本机免鉴权)各调一次;
+     * 不计未读(开页即见), 拉完(或失败)即起 60s 补拉定时器 —— 首拉失败也照起, 靠自愈。 */
+    async _pullErrlogBoot() {
+      this._errLogCursor = 0;
+      await this._pullErrlog(false);
+      this._startErrPoll();
+    },
+    _startErrPoll() {
+      if (this._errPollTimer) return;  // 幂等: 双路径/重入不叠定时器
+      this._errPollTimer = setInterval(() => this._pullErrlog(true), ERR_POLL_INTERVAL_MS);
+    },
     /* R2 跳检菜单开关(计划 26-10-02-1955 W1): 登录后取一次 /api/webui/flags 写入 flags
      * (调用点: lifecycle 本机免鉴权路径 + auth.js bootstrap 成功路径; 设置页 cfgSave
      * 成功后再调刷新, 免重登)。请求失败保持 false = fail-closed(菜单不显示, 后端端点

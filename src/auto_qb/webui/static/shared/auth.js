@@ -128,6 +128,7 @@ window.AQB_AUTH = {
         this.tokenInput = "";
         this.startPolling();
         this.loadWebFlags();  // R2(计划 26-10-02-1955 W1): 登录成功取一次功能旗标(方法在 lifecycle.js); 失败保持 false = fail-closed
+        this._pullErrlogBoot();  // 错误历史 S3: 密钥路径的开页全量合并(方法在 lifecycle.js; 本机免鉴权路径在 lifecycle mounted)
       } catch (e) {
         if (!e.auth) {
           // 服务不可达 ≠ 密钥错误: 不否定候选密钥(本地存储亦保留), 给出重试入口, 防误清凭证
