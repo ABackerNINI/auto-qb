@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="规则表达式跨容器类型 ==/!= 恒错: tor.tags/tracker.groups 对列表字面量永不匹配或全员误匹配">
 <meta name="issue-summary" content="frozenset/list 与 ListLit 求值产物 tuple 永不相等; 编译期放行无报错, 规则静默失效或误放大">
 <title>规则表达式跨容器类型 ==/!= 恒错: tor.tags/tracker.groups 对列表字面量永不匹配或全员误匹配 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0027-bug-rules-expr-cross-container-equality</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:27</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">rules</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
@@ -120,7 +120,7 @@
 
   <section id="s6"><h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2><p>求值侧 _EQ 对 LIST 归一化容器形态(如两侧都转 set)或编译期直接拒绝 LIST 参与 ==/!= 并提示改用 in / ~; 修前可先在文档 expr 速查标注陷阱。</p></section>
 
-  <section id="s7"><h2><span class="no">07</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul><h3>复验</h3><p class="todo">TODO: 认领后先重跑锚点, 补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p><h3>修复后补充</h3><p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」。</p></section>
+  <section id="s7"><h2><span class="no">07</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — <strong>Done</strong>(S1 批 G-01 修复, 计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a>)</li></ul><h3>复验</h3><p>复验: 2026-10-06 @5c03269e 仍复现 —— eval.py <code>_EQ</code> 分支 / ListLit→tuple / env.py tor.tags(frozenset)·tracker.groups(list) 原样; 修前 grep 存量配置(config.yml 除外, 红线未读)与 test_yamls / tests: <strong>无任何依赖旧「恒错」行为的用例</strong>(test_expr_eval.py:367 系 len() 数值比较, 不同件)。</p><h3>修复后补充</h3><p><b>实际修法</b>: 拍板 P-01 = <strong>推荐① 求值侧归一化</strong>(保既有配置语义, 不做编译期拒绝) —— <code>rules/expr/eval.py</code> <code>_EQ</code> 分支: ==/!= 两侧 type_name 同为 LIST 时把两侧统一转 <code>set</code> 再比(frozenset/list/tuple 跨形态对齐, 集合语义无序去重); 元素不可哈希抛 <code>ExprError</code>(显式报错, 不静默)。标量比较不受影响。文档回写: rule-system/conditions-and-actions.md expr 速查新增「容器比较口径」条。</p><p><b>验证方式</b>: 守阵 <code>tests/test_expr_eval.py::test_cross_container_list_equality</code>(tor.tags==["HR","1080p"] 为 True / != 为 False, 乱序 / 重复元素 / 真子集两侧 / tracker.groups 同口径 / 不可哈希报错 / 标量钉子; 修前红验: 还原旧 _EQ 实测红)。守阵登记 <a href="../testing/guards.md">testing/guards.md</a>「规则表达式内核」节。</p><p><b>测试数字</b>: test.full <strong>2625 passed + 4 skipped, 44.09s, 覆盖率 TOTAL 99%</strong>(15630 语句 / 165 未覆盖 / 5402 分支 / 139 partial); 对照 S0 基线 26-10-06-0144(2622+4 / 15624/166/5400/139 / 99%): passed +3(S1a +2 / 本条 +1), skipped 持平, 未覆盖 166→165, partial 持平, 99% 档持平。</p></section>
 
   <footer>
     26-10-06-0027-bug-rules-expr-cross-container-equality.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕

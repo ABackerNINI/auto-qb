@@ -15,7 +15,7 @@ from ...infra import utils
 from . import env
 from .errors import ExprError
 from .parser import Binary, Call, ListLit, Lit, Name, Unary
-from .types import is_number, label, type_name
+from .types import LIST, is_number, label, type_name
 
 _LOGIC = ("and", "or")
 _ARITH = ("+", "-", "*", "/", "%")
@@ -176,8 +176,17 @@ def _binary(node: Binary, ctx):
         return left <= right
 
     if op in _EQ:
-        if type_name(left) != type_name(right):
-            raise ExprError(f"'{op}' 两侧类型不一致: {label(type_name(left))} 与 {label(type_name(right))}")
+        left_tn, right_tn = type_name(left), type_name(right)
+        if left_tn != right_tn:
+            raise ExprError(f"'{op}' 两侧类型不一致: {label(left_tn)} 与 {label(right_tn)}")
+        if left_tn == LIST:
+            # 容器形态归一化(issue 26-10-06-0027): tor.tags 是 frozenset / tracker.groups 是 list /
+            # 列表字面量求值为 tuple —— Python 跨形态 == 恒 False, 两侧统一转 set 再比(保既有配置
+            # 语义, P-01 拍板 = 求值侧归一化; 集合语义天然无序去重, 列表内重复元素不影响相等判定)
+            try:
+                left, right = set(left), set(right)
+            except TypeError as e:
+                raise ExprError(f"'{op}' 的列表元素不可哈希, 无法比较") from e
         return left == right if op == "==" else left != right
 
     if op == "in":

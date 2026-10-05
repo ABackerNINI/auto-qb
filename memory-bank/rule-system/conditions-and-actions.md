@@ -20,6 +20,7 @@ conditions:
 - **前缀**: `tor.*`(种子 70 个快照字段 + 派生) / `tracker.*`(主站点 = `tracker_conf`) / `sys.*`(时间/计数/qB 全局状态/全局流量)。函数无前缀: `freespace(path)`、`disk_total(path)`、`exists(path)`、`file_count()`、`raw("字段")`、`len/abs/min/max/round/days/hours`。
 - **一层一个运算符, 没有例外**: 同一括号内出现第二个运算符(含 `not`、含同种连续如 `a and b and c`)即报错并给出改写提示; 括号组对该层不透明 —— 因此没有优先级表可查, 也不会误读。
 - **字面量带单位**: `10GiB` / `24H` / `1MiB/s` / `22:30`(当日分钟, 配 `sys.time_of_day`)。单位解析复用 `utils`, 写 `10GB` 会报须用 iB。
+- **容器比较口径**(2026-10-06, issue 26-10-06-0027): `==` / `!=` 两侧同为 LIST 时按**集合语义**比较 —— 求值侧把两侧统一转 set 再比(不挑容器形态: `tor.tags` 是 frozenset、`tracker.groups` 是 list、列表字面量是 tuple, 跨形态比较现已对齐), `tor.tags == ["HR", "1080p"]` 即精确全量匹配(乱序 / 重复元素不影响); 真子集 / 超集**不算**相等 —— 「包含」语义用 `in`(单元素)或 `~`(模式)。
 - **出错语义**: 名字拼错 / 函数写错 / 类型不符 / 结果不是布尔 → **配置期**即报错(fail-fast, 聚合进 `ConfigError`); 运行期数据源拿不到(如 `server_state` 未同步) → `ExprError` → 按上面的「出错即停规则」处理。**绝不降级成假值**: `sys.dl_speed` 拿不到就是报错, 不返回 0(返回 0 会让「全局速度低于阈值」在数据源失效时静默成真)。
 - **「值不存在」≠「求值出错」**: 未匹配站点 `tracker.name = "Unknown"`、无 HR 配置 `tor.hr_condition_met = false` 是有定义的缺省, 正常参与求值(与旧条件同语义)。
 - **数据源门控**: `sys.upload_today / sys.download_today / sys.upload_month` 需要配置 `global_speed_limit_curve.traffic_source`, **没配则该名字禁用**(配置期即拒绝使用)。

@@ -25,6 +25,8 @@
 - test_runtime_error_paths_batch: 运行期错误路径参数化(未知名/未知函数/非布尔逻辑操作数/
   len 不可计长/数值函数吃非数值/in 非容器/比较类型错/未知运算符/未知节点)
 - test_arith_and_compare_runtime: 算术 +-*//% 与字符串比较/== !=/一元负号/列表字面量求值
+- test_cross_container_list_equality: ==/!= 对 LIST 两侧容器形态归一化(frozenset/list/tuple 转 set
+  再比, issue 26-10-06-0027): tor.tags/tracker.groups 对列表字面量精确匹配不再恒错; 标量比较不受影响
 - test_static_type_edges: 静态校验补遗(函数参数类型错含无位置字面量/列表与一元/ANY 放行/
   未知节点兜底 ANY/used_names 遍历 Unary·Call·ListLit)
 - test_trace_walks_all_node_kinds: trace 遍历 Call/Unary/ListLit + _jsonable 容器/inf/异型兜底
@@ -458,6 +460,35 @@ def test_arith_and_compare_runtime():
     assert _val("(-tor.size) < 0", ctx) is True
     assert _val('tor.state in ["stalledUP", "uploading"]', ctx) is True
     assert _val('tor.state in ["downloading"]', ctx) is False
+
+
+def test_cross_container_list_equality():
+    """==/!= 对 LIST 两侧做容器形态归一化(issue 26-10-06-0027): tor.tags 是 frozenset /
+    tracker.groups 是 list / 列表字面量求值为 tuple, Python 跨形态比较恒 False —— 两侧转 set 再比。
+    修复前: tor.tags == ["HR"] 恒 False(== 静默失效)、!= 恒 True(全员误匹配)。标量比较不受影响。"""
+    _, _, ctx = _setup(tags="HR,1080p")
+    # tor.tags(frozenset) 对列表字面量(tuple): 精确匹配(含乱序/重复元素) == True, != False
+    assert _val('tor.tags == ["HR", "1080p"]', ctx) is True
+    assert _val('tor.tags == ["1080p", "HR"]', ctx) is True  # 集合语义无序
+    assert _val('tor.tags == ["HR", "HR", "1080p"]', ctx) is True  # 去重后相等
+    assert _val('tor.tags != ["HR", "1080p"]', ctx) is False
+    assert _val('tor.tags == ["HR"]', ctx) is False  # 真子集不算相等
+    assert _val('tor.tags != ["HR"]', ctx) is True
+    # tracker.groups(list) 对列表字面量(tuple): 同口径
+    _, _, ctx2 = _setup()
+    ctx2.torrent.tracker_conf.groups = ["A组", "B组"]
+    assert _val('tracker.groups == ["A组", "B组"]', ctx2) is True
+    assert _val('tracker.groups == ["B组", "A组"]', ctx2) is True
+    assert _val('tracker.groups != ["A组", "B组"]', ctx2) is False
+    assert _val('tracker.groups != []', ctx2) is True
+    # 元素不可哈希(列表嵌列表) -> 归一化失败显式报错, 不静默
+    with pytest.raises(ExprError, match="不可哈希"):
+        _val('tracker.groups == [tracker.groups]', ctx2)
+    # 归一化只作用于 LIST: 标量 ==/!= 行为不变(钉子)
+    assert _val('tor.name == "Test"', ctx) is True
+    assert _val('tor.name != "X"', ctx) is True
+    assert _val("tor.size == 200GiB", ctx) is True
+    assert _val("tor.is_uploading == tor.is_uploading", ctx) is True  # 布尔等值不受归一化影响
 
 
 def test_static_type_edges():

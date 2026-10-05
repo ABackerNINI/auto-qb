@@ -117,6 +117,12 @@
 |---|---|---|
 | `test_no_ghost_pkg_dirs.py::test_src_has_no_ghost_pkg_dirs` | src 下不存在「只剩 `__pycache__` 而无任何 `.py`」的幽灵包目录 —— 历史退役源码的空壳会误导「包还在」的排障判断(issue 26-10-01-1946) | 在 src 下建一个只含 `__pycache__` 的目录 |
 
+## 规则表达式内核 (test_expr_eval.py)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_cross_container_list_equality` | `==`/`!=` 对 LIST 两侧做**容器形态归一化**(转 set 再比): `tor.tags`(frozenset)/`tracker.groups`(list)对列表字面量(tuple)精确匹配不再恒错(修复前 == 恒 False / != 恒 True, issue 26-10-06-0027); 标量比较不受归一化影响 | 还原 eval.py `_EQ` 的直接 `left == right`(P-01 拍板 = 求值侧归一化, 不做编译期拒绝) |
+
 ## 配置键面 / loader 消费 (test_config_key_surface.py)
 
 | 守阵 | 钉住的结论 | 红验 |
