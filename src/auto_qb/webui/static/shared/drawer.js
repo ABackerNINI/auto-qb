@@ -17,13 +17,17 @@ const SKIP_GATE_LABELS = {
 
 window.AQB_DRAWER = {
   computed: {
-    /* 抽屉可见性(2026-10-04 双形态): 流量形态全局可用(状态栏入口在任何页都能开); 种子详情形态仍
-     * 只在种子页种子视图渲染 —— 等价于原「.drawer-dock 随种子视图 v-if 出入」: 切页时面板 DOM
-     * 退场但 drawer.open 保持, 回页状态不丢(方案A W1 验收项)。 */
+    /* 抽屉可见性(2026-10-04 双形态; 2026-10-06 收页面守卫):
+     * 两形态一律只在主内容页(page === "groups")渲染 —— 面板是 sticky 吸底的停靠面板, 在设置页
+     * (整幅配置工作台, 自己的滚动容器铺满)会压住页面底部的内容块, 看着像设置页的一部分
+     * (用户报「qB 全局流量图错误地出现在设置页」)。种子详情另限种子视图(面板是表行的附属)。
+     * !状态位 drawer.open **不随切页翻**: 面板 DOM 退场但抽屉状态保持 —— 回主内容页面板连同
+     *   数据/窗口选择原样回来(W1 验收项, 与原先「DOM 随种子视图 v-if 出入」同语义)。 */
     drawerVisible() {
       if (!this.drawer.open) return false;
+      if (this.page !== "groups") return false;
       if (this.drawer.kind === "traffic") return true;
-      return this.page === "groups" && this.viewMode === "torrents";
+      return this.viewMode === "torrents";
     },
   },
   methods: {

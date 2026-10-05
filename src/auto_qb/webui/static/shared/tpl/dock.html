@@ -1,6 +1,10 @@
 
     <!-- 详情抽屉全局落点(2026-10-04 自 tpl/torrents.html 上提至 app 级):
          原先落点在种子视图内 -> 抽屉只存在于种子页; qB 口径流量图(全局/分组)并入抽屉后
-         需要任意页都能开, 故把落点提到 #app 直下(排在页面布局之后, sticky 吸底仍成立,
-         boot.js 的 drawer 条目按此选择器注入)。面板本体见 shared/tpl/drawer.html -->
+         入口要在任意页可达(状态栏/快捷键), 故把落点提到 #app 直下(排在页面布局之后,
+         sticky 吸底仍成立, boot.js 的 drawer 条目按此选择器注入)。
+         !落点 app 级 != 面板任意页可见: 面板是吸底停靠元素, 在设置页会压住页面底部内容 ——
+           可见性由 drawer.js::drawerVisible 统一把守(两形态都限主内容页 page === "groups",
+           状态位不随切页翻); 在非主内容页触发入口时 openDrawerTraffic 先切回主内容页再开。
+         面板本体见 shared/tpl/drawer.html -->
     <div class="drawer-dock"></div>

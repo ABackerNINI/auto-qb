@@ -496,7 +496,10 @@ def test_drawer_dock_keyboard_w2() -> None:
     assert "this.filePrio.visible || this.historyOpen" in busy.group(1), "_kbOverlayBusy 名单书写序漂移, 同步本守阵解析"
     dialogs_js = _read("dialogs.js")
     esc_busy = re.search(r"escBusy\(\) \{(.*?)\n    \},", dialogs_js, re.S)
-    assert esc_busy and "this.drawer.open" in esc_busy.group(1), "escBusy 必须保留 drawer.open(面板开 Esc=关面板, 退栈链零改动)"
+    # Esc 关面板这一项两处(dialogs.escBusy / lifecycle 退栈链)都写 drawerVisible —— 面板随
+    # drawerVisible 退场(不在主内容页)时不吃 Esc: 那条 Esc 属于当前页面(设置页退回首页)
+    assert esc_busy and "this.drawerVisible" in esc_busy.group(1), \
+        "escBusy 必须保留抽屉项(2026-10-06 起写 drawerVisible, 同 lifecycle 退栈链)"
     # --- §3.2 drawer-tab 四条: 详情面板组 / list 作用域 / run=_kbDrawerTab 双态 ---
     items = {it["id"]: it for it in _registry()}
     for tid in ("drawer-tab-general", "drawer-tab-trackers", "drawer-tab-peers", "drawer-tab-content"):

@@ -372,6 +372,23 @@ window.AQB_STATE = {
     cfgDirty(v) {
       this.cfgGuardSync(v);
     },
+    /* 停靠面板 DOM 出入门(drawerVisible: 两形态都限主内容页, 种子详情另限种子视图) ——
+     * Vue 的 v-if 拆装会**换掉建图宿主**: uPlot 的 root/canvas 挂在被拆走的旧 .qb-chart-host 上,
+     * 回来时 body 重建的是另一个空宿主 —— 旧实例既不可见也不自愈(要到下一次轮询落袋才重画,
+     * 而轮询间隔可能是夹取上限 600s), 症状就是「回页后面板里有文字没图」。故在这里显式接管:
+     *   退场 -> _qbChartDestroy(拆野引用, ResizeObserver 一并断开);
+     *   进场 -> 补拉一发(_qbReloadOnEnter -> _qbLoad 内含 $nextTick 建图): 隐藏期轮询被 active
+     *           守卫跳过, 数据与宿主都已陈旧, 这一发同时刷新数据并对新宿主重建图。
+     * 只认流量形态(qbCurScope 非空), 种子详情其余页签无此生命周期。 */
+    drawerVisible(v) {
+      const s = this.qbCurScope;
+      if (!s) return;
+      if (!v) {
+        this._qbChartDestroy(s);
+        return;
+      }
+      this._qbReloadOnEnter(s);  // 内含在途不叠加守卫(打开路径首发的那一发不被翻倍)
+    },
     // CTX-02: 任一浮层菜单关闭 -> 撤掉触发源强调(浮层可以多种方式关闭: Esc/点空白/执行动作)
     "menu.visible"(v) {
       if (!v) {

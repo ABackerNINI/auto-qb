@@ -524,10 +524,12 @@ window.AQB_DIALOGS = {
     },
     /* Esc 链是否被浮层占用: lifecycle.js mounted 里 Esc 关闭链的**同一名单**(顺序无关, 只看有无)。
      * config_hub.js::hubOnKey 的「Esc 返回设置首页」用它守门 —— 链上还有层要关时, 该 Esc 先归
-     * 关闭链, 不顺带把设置页退回首页。WARN: 新增浮层时两处同步: 那条 else-if 链 + 本方法(搜「escBusy」)。 */
+     * 关闭链, 不顺带把设置页退回首页。WARN: 新增浮层时两处同步: 那条 else-if 链 + 本方法(搜「escBusy」)。
+     * 抽屉一项两处都写 **drawerVisible**(不是 drawer.open): 面板 DOM 已随抽屉退场(不在主内容页)
+     * 时那条 Esc 该留给当前页面, 不是去关一张不在屏幕上的面板 —— 2026-10-06 面板加页面守卫后的连带改。 */
     escBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
-        this.metaOpen || this.hrsOpen || this.filePrio.visible || this.drawer.open || this.historyOpen ||
+        this.metaOpen || this.hrsOpen || this.filePrio.visible || this.drawerVisible || this.historyOpen ||
         this.headMenu.visible ||
         this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.kbHelpOpen || this.filterMenu ||
         this.menu.visible || this.selGroups.length || this.selMembers.length || this.expandedKey ||

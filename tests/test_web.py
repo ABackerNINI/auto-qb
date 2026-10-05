@@ -2603,7 +2603,8 @@ def test_frontend_qb_traffic_chart_wiring():
       (发请求前清 = 续拉把错误文案换成 loading/空态再换回 = 每个轮询周期闪一次)。FX-29 软切换落定登记
       (2026-10-04 修「流量页签单击换行『正在加载…』挂死」): _qbLoad 落袋登记
       _drawerDone("traffic"), 与 _drawerWaitSources 成对, 缺一边遮罩等永不到手的源。
-      drawer-dock 落点已自种子视图上提为 app 级分片(dock.html), 抽屉任意页可开。
+      drawer-dock 落点已自种子视图上提为 app 级分片(dock.html), 入口任意页可达(触发即切回主内容
+      页), 面板本体由 drawerVisible 限主内容页 —— 见 test_frontend_qb_traffic_drawer_page_guard。
     6. 缺口三态文案与空态(plan 26-10-04-0721 §05, P4): 悬停 0 桶状态行(空闲段 z 派生 (0,0)
       真实观测点, 与 null 缺口可辨)/ 悬停缺口合并文案「无采样 · 程序未运行或 qB 断连」/
       图例 hint 两处同步「缺口 = 无采样(停机/断连)」/ 单种空态收窄为「从未有传输记录」;
@@ -2683,11 +2684,12 @@ def test_frontend_qb_traffic_chart_wiring():
             "uPlot.iife.min.js 不在盘上(404 = 整页停在错误占位)"
     assert 'class="drawer-dock"' in dock_tpl, "dock.html 缺 .drawer-dock 落点(boot 会 fail-fast)"
     assert "app.mixin(window.AQB_QB_TRAFFIC)" in app_js, "app.js 未注入 AQB_QB_TRAFFIC(整块功能静默消失)"
-    # 三挂点并入抽屉后, Esc/escBusy 单点在 drawer.open(dialogs.js + lifecycle.js 两处同步)
-    assert "this.drawer.open ||" in dialogs_js, \
-        "escBusy 名单缺 drawer.open(抽屉承载流量图, 与 Esc 退栈链两处同步纪律)"
-    assert "else if (this.drawer.open) this.closeDrawer();" in lifecycle_js, \
-        "Esc 退栈链缺抽屉分支(种子详情与流量图共用 closeDrawer)"
+    # 三挂点并入抽屉后, Esc/escBusy 单点写 drawerVisible(dialogs.js + lifecycle.js 两处同步):
+    # 面板 DOM 已退场(不在主内容页)时不吃 Esc —— 那条 Esc 要留给当前页面(设置页退回首页)
+    assert "this.drawerVisible ||" in dialogs_js, \
+        "escBusy 名单缺抽屉项(drawerVisible; 抽屉承载流量图, 与 Esc 退栈链两处同步纪律)"
+    assert "else if (this.drawerVisible) this.closeDrawer();" in lifecycle_js, \
+        "Esc 退栈链缺抽屉分支(种子详情与流量图共用 closeDrawer; 判据必须是 drawerVisible)"
     assert "this.drawer.open = false" in auth_js and "this._qbTeardown()" in auth_js, \
         "_logout 必须收起抽屉并 _qbTeardown(不留对 /api/traffic/qb/* 的后台请求)"
     assert "this.qbHistData = null" in auth_js and "this.qbGroupData = null" in auth_js \
@@ -2889,6 +2891,73 @@ def test_frontend_qb_traffic_window_persist_and_single_source():
         scripts = _ui_manifest(ui)["scripts"]
         assert scripts.index("/shared/qb_traffic_chart.js") < scripts.index("/shared/state.js"), \
             f"{ui}: qb_traffic_chart.js 必须排在 state.js 之前(qbInitialWindow 定义处, 否则启动白屏)"
+
+
+def test_frontend_qb_traffic_drawer_page_guard():
+    """流量图抽屉的页面守卫(2026-10-06 修「qB 全局流量图错误地出现在设置页」)
+
+    抽屉是 app 级 sticky 吸底的停靠面板(.drawer-dock), 而 drawerVisible 原先对流量形态无条件为真
+    (口径「任意页可开」) —— 在设置页(整幅配置工作台, 自己的滚动容器铺满)面板会压住页面底部内容,
+    看着像设置页自带的一块。四类**守不全就复发**的形态钉住:
+    1. 可见性单点 drawerVisible: 两形态一律先挡非主内容页(page !== "groups"); **状态位不随切页翻**
+       (面板 DOM 退场、抽屉状态保住 —— 回主内容页连数据/窗口选择一起回来 = 方案A W1 验收项);
+    2. 轮询与建图的 active 同源守卫: 三挂点一律含 page 判据 —— 面板不在 DOM 还拉还画 = 对着空气取数
+       (同 pitfalls/web-ui/dock-panel「停靠面板隐藏后轮询要随可见性收口」);
+    3. 入口可达性: 状态栏按钮与全局快捷键(Ctrl+Backslash)任意页可达 —— openDrawerTraffic 必须先把页
+       切回主内容页, 否则「点了没反应」(状态翻了、面板不在 DOM);
+    4. 图的生命周期(state.js watch drawerVisible): Vue 的 v-if 拆装会**换掉建图宿主**, uPlot 的
+       root/canvas 挂在被拆走的旧 .qb-chart-host 上且不自愈(要等下一拍轮询, 而间隔可能夹到 600s)
+       ⇒ 症状「回主内容页后面板里有文字没图」—— 退场销毁图、进场补拉一发(_qbLoad 内含建图)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+
+    # 1. 可见性单点: 守卫在形态分支之前, 状态位不被改写
+    vis = re.search(r"drawerVisible\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
+    assert vis, "drawer.js 缺 drawerVisible(面板可见性单点, 移动了就同步本守阵)"
+    vb = vis.group(1)
+    assert "if (!this.drawer.open) return false;" in vb, "抽屉可见性必须先挡 drawer.open"
+    assert 'if (this.page !== "groups") return false;' in vb, \
+        "drawerVisible 缺主内容页守卫(设置页会浮着一张不属于它的流量图/种子详情面板)"
+    assert vb.index('this.page !== "groups"') < vb.index('drawer.kind === "traffic"'), \
+        "页面守卫必须在形态分支 **之前**(按形态各写一遍 = 又一处会漏的分叉)"
+    assert 'return this.viewMode === "torrents";' in vb, "种子详情形态仍限种子视图(表行附属面板)"
+    assert "this.drawer.open = false" not in vb, \
+        "可见性不得改写抽屉状态位(面板 DOM 退场 ≠ 关闭: 回主内容页状态还要回来)"
+
+    # 2. 三挂点 active 同源守卫(轮询 tick / 建图判据同宽)
+    scopes = re.search(r"const _QB_SCOPES = \{\n(.*?)\n\};", js, re.S)
+    assert scopes, "qb_traffic_chart.js 缺 _QB_SCOPES 作用域表(三挂点单一描述源)"
+    body = "\n" + scopes.group(1)  # 还原段首换行(正则捕获从 `  global: {` 起), 便于按段切分
+    for scope in ("global", "group", "torrent"):
+        seg = body.split("\n  %s: {" % scope)[1].split("stale:")[0]
+        assert 'page === "groups"' in seg, \
+            f"{scope} 挂点 active 缺主内容页守卫(面板已退场仍拉 /api/traffic/qb/* 且继续画不可见的图)"
+
+    # 3. 入口可达(状态栏/快捷键任意页可达): 触发即切回主内容页
+    op = re.search(r"async openDrawerTraffic\(scope, key\) \{\n(.*?)\n    \},", js, re.S)
+    assert op, "qb_traffic_chart.js 缺 openDrawerTraffic(打开流量形态抽屉的单点)"
+    ob = op.group(1)
+    assert 'if (this.page !== "groups") this.page = "groups";' in ob, \
+        "openDrawerTraffic 缺页面归一: 在设置页点状态栏入口/按 Ctrl+Backslash 会「点了没反应」"
+    assert ob.index('this.page !== "groups"') < ob.index("this._stopDrawerPoll()"), \
+        "页面归一必须在重置抽屉状态之前(切页会引发重排, 先于所有副作用)"
+
+    # 4. watch(drawerVisible): 退场销毁图 / 进场补拉重建(uPlot 宿主随 v-if 拆装被换掉)
+    wt = re.search(r"drawerVisible\(v\) \{\n(.*?)\n    \},", state_js, re.S)
+    assert wt, "state.js 缺 watch(drawerVisible)(换宿主后图不自愈 = 回页只剩文字)"
+    wb = wt.group(1)
+    assert "const s = this.qbCurScope;" in wb and "if (!s) return;" in wb, \
+        "watcher 只对流量形态生效(种子详情其余页签无此生命周期)"
+    assert "this._qbChartDestroy(s);" in wb and "this._qbReloadOnEnter(s);" in wb, \
+        "drawerVisible watcher 必须退场销毁图 + 进场补拉重画(补拉内含 $nextTick 建图单点)"
+    re_b = re.search(r"_qbReloadOnEnter\(scope\) \{\n(.*?)\n    \},", js, re.S)
+    assert re_b, "qb_traffic_chart.js 缺 _qbReloadOnEnter(面板进场补拉单点)"
+    rb = re_b.group(1)
+    assert "this._qbLoad(scope);" in rb, "_qbReloadOnEnter 必须走 _qbLoad 单点(内含建图, 不另写请求)"
+    assert 'this[def.loading]' in rb, \
+        "_qbReloadOnEnter 缺在途不叠加守卫(打开路径已先发一发, 进场 watcher 会把首次请求翻倍)"
 
 
 def test_frontend_hr_diag_view_wiring():

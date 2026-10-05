@@ -101,7 +101,10 @@ const _QB_SCOPES = {
     hoverIdx: "qbHistHoverIdx", hoverLeft: "qbHistHoverLeft",
     url: (_ctx, w) => "/api/traffic/qb/global?window=" + w,
     ctx: null,
-    active: (t) => t.drawer.open && !t.drawer.collapsed
+    // 面板 visible 同源守卫(drawerVisible): 面板只在主内容页渲染, 隐藏期还拉 = 对着不在 DOM 里的
+    // 面板取数(纯浪费 + 回页数据陈旧), 故 tick/建图一律跳过 —— 回到主内容页由 watch(drawerVisible)
+    // 补拉一发接着续(见 state.js)
+    active: (t) => t.drawer.open && !t.drawer.collapsed && t.page === "groups"
       && t.drawer.kind === "traffic" && t.drawer.scope === "global",
     stale: (t) => !(t.drawer.open && t.drawer.kind === "traffic" && t.drawer.scope === "global"),
   },
@@ -126,7 +129,8 @@ const _QB_SCOPES = {
     // 与 delete_flow/commands 的 /api/groups/${k} 同款原样内插 —— 前端不自行编码(§07 表③)
     url: (k, w) => "/api/traffic/qb/group/" + k + "?window=" + w,
     ctx: (t) => t.qbGroupKey,
-    active: (t) => t.drawer.open && !t.drawer.collapsed
+    // page 守卫与 global 同(drawerVisible 单点): 非主内容页面板不在 DOM, 不拉不画
+    active: (t) => t.drawer.open && !t.drawer.collapsed && t.page === "groups"
       && t.drawer.kind === "traffic" && t.drawer.scope === "group",
     stale: (t, k) => !(t.qbTrafficOn && t.drawer.open && t.drawer.kind === "traffic"
       && t.drawer.scope === "group" && t.qbGroupKey === k),
@@ -302,6 +306,10 @@ window.AQB_QB_TRAFFIC = {
      * 流量形态(kind/scope), 持久化开合态, 最后拉数 + 起低频轮询。 */
     async openDrawerTraffic(scope, key) {
       if (!this.qbTrafficOn || !_QB_SCOPES[scope]) return;  // fail-closed 兜底
+      // 入口不止在主内容页: 状态栏按钮与全局快捷键(shortcuts.js open-qb-traffic)任意页可达,
+      // 而面板只在主内容页渲染 —— 不先回主内容页就是「点了没反应」(状态翻了、面板不在 DOM)。
+      // 显式触发权 > 停留位置: 用户点图就是想看图, 与 goView 同款切页(抽屉状态不清)
+      if (this.page !== "groups") this.page = "groups";
       if (scope === "group") {
         if (!key) return;
         const g = this._findGroup(key);
@@ -322,6 +330,15 @@ window.AQB_QB_TRAFFIC = {
       this.persistDrawerOpen();  // W3 开合态记录(D1: 只写不回读)
       this._qbLoad(scope);
       this._qbPollStart(scope);
+    },
+    /* 面板重新进场后的补拉(state.js watch(drawerVisible) 的可见分支): 隐藏期(非主内容页)轮询被
+     * active 守卫跳过, 数据与宿主都已陈旧 —— 这里补一发同时在 $nextTick 里对新宿主重建图
+     * (_qbLoad 内含建图单点)。**在途不叠加**: 打开路径本已经先发了一发(面板进场与 _qbLoad 在
+     * 同一个 flush 前后脚走), 叠加等于把首次打开的请求翻倍(同轮询 tick 的 loading 互斥口径)。 */
+    _qbReloadOnEnter(scope) {
+      const def = _QB_SCOPES[scope];
+      if (!def || this[def.loading]) return;
+      this._qbLoad(scope);
     },
     /* 窗口切换(1m-30d 十档): 换窗即重拉重画; 打开中的轮询定时器由 _qbPollResync 按新窗重排 */
     qbSetWindow(w) {

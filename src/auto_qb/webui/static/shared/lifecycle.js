@@ -64,7 +64,10 @@ window.AQB_LIFECYCLE = {
       else if (this.metaOpen) this.closeMeta();  // 标签/分类编辑对话框: 与管理对话框同层
       else if (this.hrsOpen) this.hrsCollapse();  // HR 站点状态全屏覆盖层(计划 26-10-02-1936 阶段2): 对话框层级, 先于清筛选兜底; escBusy 已同步(dialogs.js)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
-      else if (this.drawer.open) this.closeDrawer();  // 详情抽屉(种子详情 / qB 口径流量图): 确认框优先, 其后于其它浮层
+      // 详情抽屉(种子详情 / qB 口径流量图): 确认框优先, 其后于其它浮层。判据用 drawerVisible
+      // 而非 drawer.open —— 面板 DOM 随 drawerVisible 退场(非主内容页), 看不见的面板不吃 Esc:
+      // 在设置页第一次 Esc 应该做的事是退回设置首页, 而不是关掉一张不在屏幕上的面板
+      else if (this.drawerVisible) this.closeDrawer();
       else if (this.historyOpen) this.historyOpen = false;  // 历史弹层(pop): 弹层先于右键菜单关闭
       else if (this.headMenu.visible) this.headMenu.visible = false;  // 表头右键菜单(TBL-05)
       else if (this.colMenuOpen) this.colMenuOpen = false;  // 列选择器弹层(pop)
