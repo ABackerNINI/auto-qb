@@ -174,6 +174,14 @@ window.AQB_STATE = {
         danger: false, input: false, value: "", placeholder: "",
       },
       _toastSeq: 0,           // 提示条自增 id
+      // 错误历史(会话内环形缓冲, WEBUI 错误历史 S1 数据层; 收集钩子在 ui_feedback.js):
+      // error/timeout 类 toast **发出即收**(不是退场时收 —— auth.js 登录/重连的 this.toasts = []
+      // 整表清空绕过 _dropToast, 退场钩子会漏)。纯内存不持久化(零 localStorage / 不进 state_file);
+      // auth 清 toasts 不清历史 —— 历史跨重连存活(既定设计)。面板 UI 与后端条目合并是后续步骤。
+      _errHistory: [],        // 新在上; 条目 { id, seq, ts, kind, text, source }, source: 'toast' | 'backend'
+      _errSeq: 0,             // toast 条目自增序号(展示排序兜底; 后端条目用后端环的 seq)
+      _errUnread: 0,          // 面板关闭期新增的错误数(徽标); 打开面板时清零(见下方 watch.errPanelOpen)
+      errPanelOpen: false,    // 错误历史面板开合(本步只立数据字段, 面板 UI 后续步骤接)
       _modalResolve: null,    // 模态 Promise 的 resolve(单例, 关闭时结算)
       _colAlignCss: "",       // 已注入的列对齐 CSS(值未变不重写 <style>)
       _headH: 0,              // 顶栏+状态条实测高度(写 :root --head-h, 供左栏吸顶定位; 含批量段, FIX-06)
@@ -402,6 +410,12 @@ window.AQB_STATE = {
     },
     "filePrio.visible"(v) {
       if (!v) this._clearCtxSource();
+    },
+    // 错误历史(S1): 打开面板即视为已读, 未读徽标清零 —— 后续面板 UI 直接绑 _errUnread/errPanelOpen。
+    // 写入单点在 ui_feedback.js 的 _recordErrorToast / _clearErrorHistory; watcher 放根组件选项
+    // 而非 AQB_FEEDBACK mixin —— 见文件顶部 WARN(watch 进全局 mixin 会波及子组件实例)。
+    errPanelOpen(v) {
+      if (v) this._errUnread = 0;
     },
   },
 };

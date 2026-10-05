@@ -22,6 +22,19 @@ const toastMs = (kind, ms) => {
   return ms == null ? Math.max(TOAST_MS_DEFAULT, floor) : Math.max(ms, floor);
 };
 
+/* 错误历史环形缓冲(WEBUI 错误历史 S1 数据层) --------------------------------
+ * 把 error / timeout 类 toast 在**发出瞬间**收进会话内环形缓冲(根组件 _errHistory,
+ * 字段定义在 state.js), 供后续步骤的错误历史面板回看 —— toast 停留再长也会错过。
+ * 收集时机 = emit 即收而非退场时收: auth.js 登录/重连走 this.toasts = [] 整表清空,
+ * 绕过 _dropToast, 退场钩子会漏掉刚发出的条目。sticky「等待中」条 emit 时是 busy,
+ * 不在 ERR_HISTORY_KINDS 里(busy 本身永不入历史), 只在 _finishToast 结算成 timeout /
+ * error 终态时经 _recordErrorToast 首次入历史; emit 即收 + settle upsert 双钩子靠
+ * 同 id 去重, 同一条错误只留一条。纯内存: 零 localStorage/sessionStorage、不进
+ * state_file, 刷新即失(会话内回看); cap 50 环形, 超限挤掉最旧。
+ */
+const ERR_HISTORY_CAP = 50;
+const ERR_HISTORY_KINDS = { error: 1, timeout: 1 };
+
 window.AQB_FEEDBACK = {
   methods: {
     /* ---------------------------------------------------------- 站内提示条(toast) */
@@ -29,6 +42,8 @@ window.AQB_FEEDBACK = {
     toast(text, kind = "info", ms = null, opts = {}) {
       const id = ++this._toastSeq;
       this.toasts.push({ id, text, kind });
+      // 错误历史: emit 即收(上方注释; auth 整表清空绕过退场钩子, 所以不能等退场)
+      if (ERR_HISTORY_KINDS[kind]) this._recordErrorToast(id, kind, text);
       // sticky = 常驻不自动消失(强制汇报"等待中"): 由 _finishToast 更新终态后退场
       if (opts.sticky) return id;
       setTimeout(() => this._dropToast(id), toastMs(kind, ms));
@@ -37,6 +52,8 @@ window.AQB_FEEDBACK = {
     /* 常驻提示条结算: 原位更新文案与样式(kind)后停留 ms 再退场 —— "等待中"->"成功/超时"的强反馈 */
     _finishToast(id, kind, text, ms = null) {
       this._updateToast(id, { kind, text });
+      // 错误历史: 终态 upsert —— busy 链在此首次入历史, emit 即收过的条目在此覆盖(kind/text 以终态为准)
+      if (ERR_HISTORY_KINDS[kind]) this._recordErrorToast(id, kind, text);
       setTimeout(() => this._dropToast(id), toastMs(kind, ms));
     },
     _updateToast(id, patch) {
@@ -45,6 +62,27 @@ window.AQB_FEEDBACK = {
     },
     _dropToast(id) {
       this.toasts = this.toasts.filter((t) => t.id !== id);
+    },
+    /* --------------------------------------------- 错误历史(WEBUI 错误历史 S1 数据层) */
+    /* 收集/更新单点: upsert by id —— emit 后又 settle 的条目同 id 覆盖(kind/text 以终态为准),
+     * 不产生重复; 新条目 unshift(新在上), 超过 ERR_HISTORY_CAP 挤掉最旧(环形语义)。
+     * 面板关闭期(errPanelOpen 为 false)计未读徽标 —— 后续面板 UI 直接绑 _errUnread。 */
+    _recordErrorToast(id, kind, text) {
+      const hit = this._errHistory.find((e) => e.id === id);
+      if (hit) {
+        hit.kind = kind;
+        hit.text = text;
+      } else {
+        this._errHistory.unshift({ id, seq: ++this._errSeq, ts: Date.now(), kind, text, source: "toast" });
+        if (this._errHistory.length > ERR_HISTORY_CAP) this._errHistory.pop();
+      }
+      if (!this.errPanelOpen) this._errUnread++;
+    },
+    /* 清空历史(后续面板 UI 的「清空」动作入口): 历史/未读全归零; seq 不清 —— 保持单调,
+     * 展示排序兜底不因清空而出现并列回退(后端条目用后端环的 seq, 同理不清)。 */
+    _clearErrorHistory() {
+      this._errHistory = [];
+      this._errUnread = 0;
     },
     /* ------------------------------------------- 站内确认/输入框(替代 confirm/prompt) */
     _modalInit() {
