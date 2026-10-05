@@ -81,7 +81,40 @@
 | [memory-bank/pitfalls/ops/alert-levels.md](../memory-bank/pitfalls/ops/alert-levels.md) | 坑档(运维) | 含 HR 告警分档相关条目 |
 | extensions/hr-fetch-proxy/options.html | 扩展选项页 | 选项页 UI 本体(非文档), 站点授权勾选 / 日志④区所在 |
 
-## 三、阅读路径建议
+## 三、稳态降频机制 (idle_refresh_interval · 计划 26-10-05-0555)
+
+> 2026-10-05 实施 (分支 `feat/hr-steady-throttle`)。上游: [计划 26-10-05-0555](../memory-bank/plans/26-10-05-0555-plan-hr-steady-throttle.html)
+> (取证报告 [26-10-03-1505](../memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html) §13)。
+> 核心一句话: **拉取间隔闸按「对账对象集是否为空」动态取值** —— 稳态期降频, 对象集一翻非空立即回退。
+
+### 站点配置键 `idle_refresh_interval`
+
+| 属性 | 口径 |
+|---|---|
+| 默认 | `24H`(所有者 2026-10-05 拍板, 默认启用降频 —— 量级与 HR 宽限期 7–14 天匹配, 最坏发现延迟只占宽限期 ~10%) |
+| 语义 | 本地无义务对象(对账对象集为空)时, 拉取间隔闸改用的对账节奏; 键位置 `hr_check.sites.<site>` |
+| 校验 | 须 ≥ `refresh_interval`(交叉校验拦「降频比常态还快」); 60s 下限 / 30d 上限(与拉取间隔同款口径) |
+| 等效关闭 | 把 `idle_refresh_interval` 配得**与 `refresh_interval` 相等** |
+
+### 机制口径
+
+- **判据 = 对账对象集为空**: 每 poll 在 `_refresh_locked` 波前现算(未对账 ∪ 考察中, 终态/已放行/超额 ≥3× 排除后为空);
+  锚点**采集失败不算**稳态(见失败纪律)。
+- **即时回退**: 对象集翻非空 ⇒ 间隔闸回退 `refresh_interval`, 而上次健康波早在 24H 前 ⇒ **下一 poll(≤60s)立即开波** ——
+  新种子的发现延迟是 ≤60s + 波时长, 不是 24H。
+- **失败纪律**: 锚点采集失败(`None`, 扩展侧/主循环侧故障或未接)= 「未知」⇒ **不降频**, 按常态间隔; 与「确认零锚点」
+  (空映射, 采集成功)严格区分 —— 不把「不知道」当「零种子」。
+- **写盘与展示**: 稳态旗标 `wave.idle_mode` 仅**翻转时**落盘, 稳态期反复 poll 零写盘; 展示层单点换算(`site_conf_interval`),
+  稳态期「下次核对清单」显示 idle 倒计时 + kv 行「(稳态降频)」注记。
+
+### 与既有机制的关系 (不变项)
+
+- **复用窗不跟随降频**: 时长仍 = `min(reuse_window, refresh_interval)`(取常态间隔), 新鲜度与节奏解耦;
+- **force(立即拉取)不受影响**: 照常跳过复用窗与拉取间隔两道调度闸;
+- **账号安全线照常**: `min_interval` / 日额 / Retry-After / 时间窗在间隔闸之后, 不被降频(或 force)越过;
+- **对象集为空不跳波**: 波照开、页照翻, 降频省的是波次, 不是单波页数。
+
+## 四、阅读路径建议
 
 - **想了解功能全貌**: 先读 [任务档案](../memory-bank/tasks/26-09-22-backend-partial-hr-verify.md)(主档案, 全程记录), v3 重构后的复审现状见 [activeContext 切片 26-09-29-0404](../memory-bank/activeContext/26-09-29-0404-hr-verify-v3-audit.md)。
 - **想了解为什么这么设计**: 计划 [26-09-22-2204](../memory-bank/plans/26-09-22-2204-partial-hr-site-verify-plan.html)(初版) → 审计 [26-09-26-1628](../memory-bank/reports/26-09-26-1628-report-hr-online-verify-audit.html) → v2 计划 [26-09-27-1815](../memory-bank/plans/26-09-27-1815-plan-hr-verify-audit-fixes.html)。
