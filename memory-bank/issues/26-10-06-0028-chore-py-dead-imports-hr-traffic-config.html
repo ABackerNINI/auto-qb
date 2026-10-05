@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="py-dead-imports-hr-traffic-config">
+<meta name="issue-stamp" content="26-10-06-0028">
+<meta name="issue-type" content="chore">
+<meta name="doc-topic" content="full-code-review">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="死导入/死代码合并条(Py): hr 六处 F401 + traffic_store 重复定义 + traffic_grid V3Block + config 重导出面">
+<meta name="issue-summary" content="B1-02+B2-05+C-02+C-03+D-06 五条发现并一条; HrStoreCorrupted 死异常类二选一需拍板">
+<title>死导入/死代码合并条(Py): hr 六处 F401 + traffic_store 重复定义 + traffic_grid V3Block + config 重导出面 · chore · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· chore</div>
+    <h1>死导入/死代码合并条(Py): hr 六处 F401 + traffic_store 重复定义 + traffic_grid V3Block + config 重导出面</h1>
+    <p class="lede">B1-02+B2-05+C-02+C-03+D-06 五条发现并一条; HrStoreCorrupted 死异常类二选一需拍板</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-chore-py-dead-imports-hr-traffic-config</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
+    </div>
+  </header>
+
+  <section id="s1"><h2><span class="no">01</span>现象</h2><div class="callout"><b>来源:</b> full-code-review 全项目评审(计划 <a href="../plans/26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a>) · 发现 <code>B1-02 + B2-05 + C-02 + C-03 + D-06</code>(批 A/B1/B2/C/D 合并) · 审计报告 <a href="../reports/26-10-05-1036-report-full-code-review.html">26-10-05-1036-report-full-code-review</a> §2 批 A/B1/B2/C/D 合并 发现表 / §3.1 分级终表 · 批实测 HEAD <code>a4d14a8d</code>, S5/S6 复核 HEAD <code>145eedea</code> · <b>合并条①</b>(死导入/死代码, Py): 5 条发现并 1</div><p>五条 P3 死代码类发现并一条(成员与各自位置见下): 五处+一处 F401 死导入、同名函数逐字重复定义、重导出面四处不一致, 外加 HrStoreCorrupted 死异常类(全仓零 raise 零捕获)。</p><p><b>可达性证据:</b> 全部静态即证(ruff F401×6 + RUF068×1 复核采纳; C-02 重复定义 F811 不报 —— 首定义被 :336 引用不构成 unused redefinition, 人工发现); 行为无影响。成员清单: <b>① B1-02</b> hr/status.py:40 import 行 <code>next_allowed_at</code> 全文件零使用; <b>② B2-05</b> hr/__init__.py:38(HrChannelQuota 导入未入 __all__) · hr/channel.py:23(Optional) · hr/events.py:20(time) · hr/resolve.py:29(SOURCE_NOT_LISTED) · hr/worker.py:29(ACTION_NO_CHANNEL, 告警由 service 报一次, 导入属历史残留) · hr/store.py:42+305 <code>HrStoreCorrupted</code> 定义并导出但全仓零 raise 零捕获(死异常类); <b>③ C-02</b> core/traffic_store.py:106-113 与 :116-123 <code>_parse_int_field</code> 同名纯函数连续定义两份(逐字相同, 后者遮蔽前者; 唯一调用点 :336→:356 _parse_v3_nn_int); <b>④ C-03</b> core/traffic_grid.py:40 <code>V3Block</code> F401(批 A 移交线索核实属实); <b>⑤ D-06</b> config/__init__.py:24(AddEpisodeTagsConfig 零消费重导出) · validation/__init__.py:19(_validate_curve_points/_validate_global_speed_limit_curve 重导出零消费, core.py 延迟直导) · validation/__init__.py:67(__all__ 重复 KNOWN_WEB_KEYS, RUF068) · validation/__init__.py:18(_strip_none 重导出被 loaders 消费但缺 __all__/noqa)。</p><p><b>影响面:</b> 纯可维护性面, 行为无影响</p></section>
+
+  <section id="s2"><h2><span class="no">02</span>位置</h2><p class="hint">三锚 = 文件:行 + 符号名 + grep 关键词; 行号为取证时点值, 漂移后靠符号与 grep 重定位。</p><ul><li>hr/status.py:40 · hr/__init__.py:38 · hr/channel.py:23 · hr/events.py:20 · hr/resolve.py:29 · hr/worker.py:29 · hr/store.py:42+305 · core/traffic_store.py:106/:116 · core/traffic_grid.py:40 · config/__init__.py:24 · config/validation/__init__.py:18/:19/:67(全部 取证 26-10-06 @145eedea 或 取证 26-10-05 @a4d14a8d(该文件其后未动, 26-10-06 复核 @145eedea 仍在))</li></ul></section>
+
+  <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>删各处死导入 + 删 :116-123 重复定义块 + 删两处死重导出 + __all__ 去重; <b>HrStoreCorrupted 二选一留认领时拍板, 不自行裁决</b>: (a)直接删除, 或 (b)改为 store 读坏路径真实抛出的类型(与 B2-01 修复呼应); D-06 的 _strip_none 是 exporter 链活依赖, 处置须选「补 __all__」而非删除。C-02/C-03 系 v3 落地新引入(v3 S1/S3b 滑笔), 可随死代码清理批顺手。</p><p><b>撞车(底册对照):</b> 无(五条互相不同件; 与 JS 合并条② 不同语言; B2-05 与 B1-02/C-03 的 F401 亦不同件)。</p></section>
+
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+
+  <footer>
+    26-10-06-0028-chore-py-dead-imports-hr-traffic-config.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

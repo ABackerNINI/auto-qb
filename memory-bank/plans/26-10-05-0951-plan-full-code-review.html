@@ -6,9 +6,10 @@
 <title>实施计划: 全项目全面 Code Review — 分批评审与发现分流</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="full-code-review">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-05-0951">
-<meta name="doc-updated" content="26-10-05-0951">
+<meta name="doc-updated" content="26-10-06-0028">
+<meta name="doc-refs" content="memory-bank/reports/26-10-05-1036-report-full-code-review.html">
 <style>
   :root {
     color-scheme: dark;
@@ -104,8 +105,8 @@
     <a href="#s8"><span class="no">08</span>非目标</a>
     <a href="#s9"><span class="no">09</span>变更记录</a>
     <div class="toc-foot">
-      起点基线: test.full 2581+4 / 98%<br>
-      状态 Open · 待拍板后实施
+      起点基线(S0 实测 a4d14a8d): test.full 2610+4 / 99%(成文时 ef93db56 为 2581+4 / 98%, 漂移来自他人提交)<br>
+      状态 Done · D1–D5 全按推荐执行到位 · S0–S6 完成(26-10-06)
     </div>
   </nav>
 
@@ -114,8 +115,8 @@
     <h1>全项目全面 Code Review — 分批评审与发现分流</h1>
     <p class="lede">对 <code>src/</code> 约 33.6k 行 Python + 前端约 20.5k 行 static 资产做一次只读全面评审: 按包结构分 8 批, 先建「已知问题底册」防重复报告, 逐批按十项维度读码登记发现, 末轮汇总分级、撞车去重、出审计报告并把 P0/P1 全部入池。</p>
     <div class="meta-row">
-      <div class="item"><div class="k">Status</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
-      <div class="item"><div class="k">起点 HEAD</div><div class="v mono">ef93db56 (develop)</div></div>
+      <div class="item"><div class="k">Status</div><div class="v"><span class="badge">Done · S0–S6 完成</span></div></div>
+      <div class="item"><div class="k">起点 HEAD</div><div class="v mono">a4d14a8d (S0 实测; 成文时 ef93db56)</div></div>
       <div class="item"><div class="k">评审对象</div><div class="v">src/ 全量 + static/ + extensions/ + scripts/(D2)</div></div>
       <div class="item"><div class="k">节奏</div><div class="v">约 12 轮会话, 一批一轮</div></div>
     </div>
@@ -230,19 +231,20 @@
 
   <section id="s6">
     <h2><span class="no">06</span>批次地图与重点矩阵</h2>
-    <p>S1 会用脚本重盘并逐文件展开; 下表是开工前的骨架(行数为起点 HEAD 实测)。重点维度取 §03 编号。</p>
+    <p>S1 已重盘(2026-10-05, HEAD <code>a4d14a8d</code>): 下表规模列已回填为实测值; 逐文件清单(文件 × LOC × 关联测试 × 关联文档)在报告草稿 §4。重点维度取 §03 编号。</p>
     <table>
       <tr><th>批</th><th>范围</th><th>规模</th><th>重点维度</th><th>交叉在途/备注</th></tr>
-      <tr><td class="mono">A</td><td><code>core/</code> 根(qbmanager / module / qbapi / tvshows 等) + <code>core/modules/</code> 除 traffic_sample_mod(ops / grouping / rules / maintenance / speed_curve)</td><td class="mono">≈6.0k</td><td>R1 R2 R3 R6 R9</td><td>主循环异常退避刚修过, 查同类模式; ops 危险动作闸门对照跳检计划</td></tr>
-      <tr><td class="mono">B1</td><td><code>hr/service.py</code> + <code>hr/model.py</code> + <code>hr/status.py</code></td><td class="mono">≈2.9k</td><td>R1 R3 R5 R8</td><td>近期 HR 域改动密集(降频/覆写守卫), 行号锚用函数名</td></tr>
-      <tr><td class="mono">B2</td><td><code>hr/</code> 其余(channel / worker / parse / resolve / report / store / runtime / server / adapters 等)</td><td class="mono">≈4.2k</td><td>R6 R7 R8 R9</td><td>在线核实出网请求与站点凭据面; worker 与主循环并发边界</td></tr>
-      <tr><td class="mono">C</td><td><code>core/traffic_store.py</code> + <code>core/modules/traffic_sample_mod.py</code> + <code>core/traffic_grid.py</code></td><td class="mono">≈2.7k</td><td>R3 R5 R7</td><td>v3 存储报告待评审 —— 只登记 v3 未覆盖增量</td></tr>
-      <tr><td class="mono">D</td><td><code>config/</code> 全部(loaders / models / writer / schema / validation)</td><td class="mono">≈5.0k</td><td>R2 R4</td><td>键面守卫已有; 查「校验后散落防御」与热重载一致性</td></tr>
-      <tr><td class="mono">E</td><td><code>webui/</code> 全部 py(views / commands / runtime / server / routes)</td><td class="mono">≈5.3k</td><td>R2 R8 R9</td><td>reannounce 计划将改 commands.py / runtime.py —— 只登记计划未覆盖增量</td></tr>
-      <tr><td class="mono">F1+F2</td><td><code>webui/static/</code> 31 JS 拆两轮 + CSS/HTML 机制面</td><td class="mono">≈20.5k</td><td>R8 R9 R10</td><td>D1 定深度; XSS 汇入点清单法; 不做审美评审</td></tr>
-      <tr><td class="mono">G</td><td><code>torrents/</code> + <code>rules/</code>(base / conditions / expr / actions)</td><td class="mono">≈4.0k</td><td>R1 R5 R6</td><td>表达式求值边界; 池内规则键语义梳理 issue 撞车比对</td></tr>
-      <tr><td class="mono">H</td><td><code>infra/</code> + <code>tray/</code> + 入口 + <code>scripts/</code> + <code>extensions/</code> + docker(D2)</td><td class="mono">≈4.7k+</td><td>R6 R7 R8</td><td>file_access 路径穿越; 扩展凭据出网; tray Ctrl+C 已有 issue</td></tr>
+      <tr><td class="mono">A</td><td><code>core/</code> 根(qbmanager / module / qbapi / tvshows 等) + <code>core/modules/</code> 除 traffic_sample_mod(ops / grouping / rules / maintenance / speed_curve)</td><td class="mono">5,977(20 件)</td><td>R1 R2 R3 R6 R9</td><td>主循环异常退避刚修过, 查同类模式; ops 危险动作闸门对照跳检计划</td></tr>
+      <tr><td class="mono">B1</td><td><code>hr/service.py</code> + <code>hr/model.py</code> + <code>hr/status.py</code></td><td class="mono">2,930(3 件)</td><td>R1 R3 R5 R8</td><td>近期 HR 域改动密集(降频/覆写守卫), 行号锚用函数名</td></tr>
+      <tr><td class="mono">B2</td><td><code>hr/</code> 其余(channel / worker / parse / resolve / report / store / runtime / server / adapters 等)</td><td class="mono">4,651(20 件)</td><td>R6 R7 R8 R9</td><td>在线核实出网请求与站点凭据面; worker 与主循环并发边界</td></tr>
+      <tr><td class="mono">C</td><td><code>core/traffic_store.py</code> + <code>core/modules/traffic_sample_mod.py</code> + <code>core/traffic_grid.py</code></td><td class="mono">2,889(3 件)</td><td>R3 R5 R7</td><td>v3 计划 S6(活尾合流)已随 a4d14a8d 落地, 剩 S7 agg 段窗(issue 1015, feat 不重开) —— 只登记 v3 未覆盖增量</td></tr>
+      <tr><td class="mono">D</td><td><code>config/</code> 全部(loaders / models / writer / schema / validation)</td><td class="mono">4,966(19 件)</td><td>R2 R4</td><td>键面守卫已有; 查「校验后散落防御」与热重载一致性</td></tr>
+      <tr><td class="mono">E</td><td><code>webui/</code> 全部 py(views / commands / runtime / server / routes)</td><td class="mono">5,296(25 件)</td><td>R2 R8 R9</td><td>reannounce 计划将改 commands.py / runtime.py —— 只登记计划未覆盖增量</td></tr>
+      <tr><td class="mono">F1+F2</td><td><code>webui/static/</code> 31 JS 拆两轮 + CSS/HTML 机制面</td><td class="mono">24,286(67 件: JS 13,479 / CSS 6,977 / HTML 3,830)</td><td>R8 R9 R10</td><td>D1 已定: JS 全量逐文件拆两轮; XSS 汇入点清单法; 不做审美评审。F1 = 主干 6 件 6,466 行(config_editor/drawer/shortcuts/config_hub/dialogs/commands); F2 = 其余 25 件 7,013 行 + CSS/HTML 机制面</td></tr>
+      <tr><td class="mono">G</td><td><code>torrents/</code> + <code>rules/</code>(base / conditions / expr / actions)</td><td class="mono">3,960(23 件)</td><td>R1 R5 R6</td><td>表达式求值边界; 池内规则键语义梳理 issue 撞车比对</td></tr>
+      <tr><td class="mono">H</td><td><code>infra/</code> + <code>tray/</code> + 入口 + <code>scripts/</code> + <code>extensions/</code> + docker(D2)</td><td class="mono">15,044(41 件: src 内 3,140 + scripts ≈8,900 + extensions ≈1,600 + docker 面)</td><td>R6 R7 R8</td><td>file_access 路径穿越; 扩展凭据出网; tray Ctrl+C 已有 issue</td></tr>
     </table>
+    <div class="callout"><b>S1 回填(26-10-05, 实测 HEAD a4d14a8d):</b> 8 批并集 == 源码全集 <b>0 漏 0 重</b>(221 文件, 脚本核对 Unassigned/Dups/Missing 全空)。批 H 含入口 <code>src/auto-qb.py</code> + <code>__main__.py</code> / <code>cli.py</code> / <code>__init__.py</code>(计划原表「入口」口径落实)。逐文件「文件 × LOC × 关联测试 × 关联文档 × 重点维度」清单见报告草稿 <code>26-10-05-1036-report-full-code-review.html</code> §4。</div>
   </section>
 
   <section id="s7">
@@ -274,11 +276,14 @@
     <table>
       <tr><th>时间</th><th>变更</th></tr>
       <tr><td class="mono">26-10-05-0951</td><td>初版: 分批只读评审方案 + 十项维度 + S0–S6 门控 + 拍板点 D1–D5, 待拍板。</td></tr>
+      <tr><td class="mono">26-10-05-1036</td><td>S0+S1 完成, D1–D5 用户逐项拍板「按推荐」。实测: sync 后起点 HEAD <code>a4d14a8d</code>(成文时 ef93db56, 其后他人提交: v3 S6 活尾合流 / HR 稳态降频 / test.one 覆盖率闸 / 危险动作防护); 起点基线 test.full = <b>2610 passed + 4 skipped / 覆盖率 99%</b>(计划原载 2581+4 / 98%, 漂移 +29 passed / +1pp 全部来自他人提交, 基线切片 26-10-05-1034); issues 池 Open 实测 37 条(原载 38: 0922 两条已修毕转 Done, 新增 feat 1015), 撞车比对类 16 条。S1 批次地图 0 漏 0 重(221 文件 / 24.3k+52.7k 行详见报告 §4), F1/F2 拆分 = 主干 6 件 6,466 行 / 其余 25 件 7,013 行。报告草稿: <code>reports/26-10-05-1036-report-full-code-review.html</code>(附录即底册四表)。</td></tr>
+      <tr><td class="mono">26-10-05-1210<br>~ -1530</td><td>S2–S4 完成(8 批 12 轮会话制中的评审轮全数走完, 每轮子代理一轮): 批 A(8 条)/B1(3)/B2(6)/C(5)/D(7)/E(6)/F1(5)/F2(3)/G(7)/H(7) 逐文件过目登记, 每批收尾 test.full 复跑 <b>2610+4 / 99% 持平</b>(首跑偶见 ±2 未覆盖抖动, 复跑即回 —— 判多线程收尾时序覆盖抖动, 非漂移); 十批评审 HEAD 全部 <code>a4d14a8d</code>(每批 sync 无新提交)。</td></tr>
+      <tr><td class="mono">26-10-06-0028</td><td>S5+S6 完成, 计划收口。S5 汇总分级(26-10-05): 57 条合并撞车终验(55 对得上 / 2 修正注记), 分级 <b>P0×0 / P1×3 / P2×8 / P3×46</b>, 二次论证 0 降级 / 0 升级 / 处置改判 1(E-03) / 并池裁定 2(D-05/G-05); 双基线口径: P1×3 + 受影响 P2×2 在 <code>145eedea</code>(a4d14a8d 起 17 提交)逐条复验仍成立。S6 报告与收尾(26-10-06): 报告终版 doc-status → Done(§3.2.1 逐条回填 issue 文件名); <b>28 条新 issue 入池</b>(bug 14 / chore 6 / refactor 7 / perf 1, 覆盖 35 条发现; P1×3 优先建档标准档; 合并条: 死导入 5 并 1 / JS 死代码 3 并 1 / 惰性建 2 并 1)+ <b>3 条并池备注</b>(D-05/F1-04 → 池 26-09-22-2002, G-05 → 池 26-10-01-2211), 入池数与报告 §3.4 清单一致; <code>kb.index</code> 重建 / <code>kb.docmap --check</code> 无断链 / test.quick 守卫全绿。定稿 HEAD <code>145eedea</code>。遗留拍板: B2-05 的 HrStoreCorrupted 死异常类修复二选一(留认领时定)。</td></tr>
     </table>
   </section>
 
   <footer>
-    计划 26-10-05-0951 · 专题 full-code-review · 状态 Open(待拍板后实施) · 起点 HEAD ef93db56
+    计划 26-10-05-0951 · 专题 full-code-review · 状态 Done(S0–S6 完成, D1–D5 全按推荐执行) · 起点 HEAD a4d14a8d · 终版 HEAD 145eedea
   </footer>
 
 </div>

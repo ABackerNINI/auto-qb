@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>审计报告: 全项目全面 Code Review — 分批评审发现与分流(终版) · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="full-code-review">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-05-1036">
+<meta name="doc-updated" content="26-10-06-0028">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { background:#0f1117; color:#d7dae0; font:15px/1.75 "Segoe UI","Microsoft YaHei",sans-serif; margin:0; padding:0; }
+  main { max-width:1180px; margin:0 auto; padding:32px 28px 80px; }
+  h1 { font-size:26px; color:#eef1f6; line-height:1.4; }
+  h2 { font-size:20px; color:#e8ebf0; border-bottom:1px solid #2a2f3a; padding-bottom:8px; margin-top:48px; }
+  h3 { font-size:17px; color:#dde2ea; margin-top:32px; }
+  a { color:#7ab3ff; text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  code { background:#1b1f2a; border:1px solid #2a2f3a; border-radius:4px; padding:1px 6px; font-family:Consolas,monospace; font-size:13px; color:#c9d4e8; }
+  table { border-collapse:collapse; width:100%; margin:14px 0; font-size:13.5px; }
+  th,td { border:1px solid #2a2f3a; padding:6px 10px; text-align:left; vertical-align:top; }
+  th { background:#1a1e29; color:#aeb6c4; font-weight:600; white-space:nowrap; }
+  tr:nth-child(even) td { background:#141822; }
+  .cover { border:1px solid #2a2f3a; border-radius:10px; padding:24px 28px; background:#141822; }
+  .badge { display:inline-block; border-radius:20px; padding:2px 12px; font-size:12.5px; border:1px solid; margin-right:8px; }
+  .b-open { color:#f0c674; border-color:#f0c67455; background:#f0c67414; }
+  .b-topic { color:#7ab3ff; border-color:#7ab3ff55; background:#7ab3ff14; }
+  .b-dim { color:#8b93a3; border-color:#8b93a355; }
+  .b-ok { color:#7ec98f; border-color:#7ec98f55; background:#7ec98f14; }
+  .placeholder { color:#8b93a3; font-style:italic; background:#141822; border:1px dashed #333a48; border-radius:8px; padding:14px 18px; margin:12px 0; }
+  .note { border-left:3px solid #f0c674; background:#1a1a12; padding:8px 14px; margin:12px 0; font-size:14px; }
+  .warn { border-left:3px solid #e06c75; background:#1a1214; padding:8px 14px; margin:12px 0; font-size:14px; }
+  .kv { margin:6px 0; }
+  .kv b { color:#aeb6c4; }
+  .mono { font-family:Consolas,monospace; font-size:12.5px; }
+  footer { margin-top:56px; color:#6b7280; font-size:12.5px; border-top:1px solid #2a2f3a; padding-top:14px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>审计报告: 全项目全面 Code Review — 分批评审发现底稿</h1>
+<div class="cover">
+  <p class="kv">
+    <span class="badge b-open">状态 Done · S6 定稿(2026-10-06, doc-forms「出厂即冻结」以本定稿为出厂时点)</span>
+    <span class="badge b-topic">专题 full-code-review</span>
+    <span class="badge b-dim">只读取证 · 不改码</span>
+  </p>
+  <p class="kv"><b>标题:</b> 全项目全面 Code Review — 分批评审与发现分流 · 发现底稿</p>
+  <p class="kv"><b>计划:</b> <a href="../plans/26-10-05-0951-plan-full-code-review.html">26-10-05-0951-plan-full-code-review</a>(Done, 2026-10-06)</p>
+  <p class="kv"><b>起点 HEAD:</b> <code>a4d14a8d</code> (develop, 26-10-05 my-commit-flow.sync 后; 完整 hash <span class="mono">a4d14a8d44a615f2afcbd27839f90742b4ed9560</span>)</p>
+  <p class="kv"><b>起点基线 (实测):</b> test.full = <b>2610 passed + 4 skipped / 覆盖率 99%</b>(15511 语句 / 164 未覆盖 / 5342 分支 / 138 partial, 34.06s)——
+    基线切片 <a href="../testing/baselines/26-10-05-1034-full-code-review-s0-baseline.md">26-10-05-1034-full-code-review-s0-baseline</a>。
+    计划原载 2581+4 / 98%(HEAD ef93db56)已漂移: +29 passed / +1pp, 成因 = ef93db56 → a4d14a8d 之间他人提交
+    (流量存储 v3 S6 活尾合流、HR 稳态降频、test.one 覆盖率闸、危险动作防护等)带测试落地, 与评审无关; 后续各批以新数字为基线不变式对照点。</p>
+  <p class="kv"><b>各批评审时 HEAD:</b> 十批判审均为 <code>a4d14a8d</code>(每批开工 my-commit-flow.sync 均无新提交, 见 §2 各批章节表头); S5 汇总分级与 S6 报告定稿在 <code>145eedea</code>(a4d14a8d..145eedea 共 17 提交, 双基线口径与复验记录见 §3.0)。</p>
+  <h3>拍板 D1–D5 结论(2026-10-05, 用户逐项「按推荐」)</h3>
+  <table>
+    <tr><th>#</th><th>拍板</th><th>结论</th></tr>
+    <tr><td>D1</td><td>前端评审深度</td><td>JS 逻辑全量逐文件, 拆 F1/F2 两轮; CSS/HTML 只查 XSS 汇入点与机制回归面(aq-tip / 皮肤 / 轮询边界), 不做样式审美评审</td></tr>
+    <tr><td>D2</td><td>外围纳入</td><td>extensions/ + scripts/ + docker/compose 纳入, 归批 H 一轮过</td></tr>
+    <tr><td>D3</td><td>静态工具</td><td>只读引入 ruff check + bandit 作提示源, 逐条人工复核后才可登记; 不引 mypy</td></tr>
+    <tr><td>D4</td><td>P0 当场修否</td><td>不当场修, 保持只读; P0/P1 当轮入池(create-issue)并标注建议优先级</td></tr>
+    <tr><td>D5</td><td>develop 演进对冲</td><td>每批开工先 my-commit-flow.sync; 发现按「文件+函数名+行号」三锚登记; 本报告封面记各批评审时 HEAD; 与在途计划交叉的文件标注「落地后复验」</td></tr>
+  </table>
+  <p class="kv"><b>拍板执行情况(S6 定稿核验):</b> D1–D5 全部按拍板执行到位 —— D1: JS 全量逐文件拆 F1/F2 两轮, CSS/HTML 只查 XSS 汇入点与机制回归面(XSS 核对表见 §2 两批章节, 0 未转义链); D2: extensions/scripts/docker 归批 H 一轮过(§2 批 H); D3: ruff+bandit 只读提示源逐条人工复核(各批工具源小结, 真信号 18 条全部 P3 死代码/风格面); D4: 全程零改码, P0×0、P1×3 已全部入池(S6, 见 §3.2 执行结果); D5: 每批 sync 成功且十批同 HEAD, 三锚登记齐全, S5 对 P1×3 与受影响 P2×2 在 145eedea 逐条复验(§3.0), E-03/F1-03/F1-05 的「落地后复验」标注已兑现。</p>
+</div>
+
+<h2 id="sec-format">§1 发现条目登记格式(全报告统一)</h2>
+<table>
+  <tr><th>字段</th><th>约定</th></tr>
+  <tr><td>ID</td><td><code>&lt;批字母&gt;-&lt;序号&gt;</code>(如 A-03), 跨批不重号; B1/B2/F1/F2 用带段前缀(<code>B1-01</code> / <code>F1-02</code>)</td></tr>
+  <tr><td>维度</td><td>R1–R10 之一, 必要时补「general」</td></tr>
+  <tr><td>级</td><td>P0 数据破坏/安全/PT 账号风险 · P1 功能错误(恒不触发/恒误报/洗白类) · P2 健壮性(边界/竞态/退避缺失) · P3 可维护性/命名/文档</td></tr>
+  <tr><td>位置(三锚)</td><td>文件:行 + 函数/类名(行号漂移时靠函数名找)</td></tr>
+  <tr><td>症状</td><td>一句话说清「什么条件下会出什么问题」</td></tr>
+  <tr><td>可达性证据</td><td>调用链论证或复现路径; 论证不出可达就不登记为 bug(降 P3 备查或不记)</td></tr>
+  <tr><td>撞车</td><td>底册 issue 编号 / 坑档 / 在途计划, 三者其一或「无」(对照附录 A–D)</td></tr>
+  <tr><td>处置建议</td><td>入池(建议类型与档位) / 并入在途计划备注 / 仅记录不处置</td></tr>
+</table>
+
+<h2 id="sec-batches">§2 分批评审章节(占位, 随批回填)</h2>
+<p>每批统一动作序列: sync 记 HEAD → ①读档 → ②坑档对照 → ③逐文件读码(LOC 降序, 全文件过目勾选) → ④工具提示源(ruff + bandit 限该包, 人工复核) → ⑤登记去重。「无发现」也是结论, 照记。</p>
+
+<h3>批 A — core 根 + core/modules(除 traffic_sample_mod)</h3>
+<p class="kv"><b>评审时 HEAD:</b> <code>a4d14a8d</code>(26-10-05 my-commit-flow.sync 成功, 树含评审文档未提交件, 属正常) · <b>范围:</b> 20 文件 / 5,977 行(全部逐文件过目, 无跳读) · <b>重点维度:</b> R1 R2 R3 R6 R9 · <b>文件清单:</b> 见 §4。</p>
+<p class="kv"><b>五步执行记录:</b> ①读档 systemPatterns/main-loop+taskqueue + modules/core-runtime+core-domain + ops/rule 包 docstring; ②坑档对照 behavior-core / concurrency / high-risk-ops / suppress-request-vs-live-flag / task-interval-tick-quantization; ③逐文件读码(LOC 降序); ④ruff+bandit(逐条人工复核, 见下方工具源小结); ⑤本表登记(逐条对照附录 A–D 去重)。</p>
+<p class="kv"><b>逐文件勾选结论(20/20):</b><br>
+<span class="mono">ops_mod 889 — A-05; R1✓(skip_check_day 即时落盘+同日清理, recheck_fails 冷却即落) R2✓(闸门三分流全来源生效, force 只豁越 cls=force 且留 INFO 审计, WEB/规则双入口同闸) R6✓(复核/仲裁 fail-closed)<br>
+qbmanager 864 — A-01 A-02 A-07; R1✓(两线节拍分离+异常退避 0728 已修+StopIteration 0442 重抛) R3✓(单写线程/优雅退出落盘) R9✓(_wait_next 双事件序)<br>
+grouping_mod 623 — 无发现; R2✓(缺文件/冲突动作 dry_run 闸+MISSING 豁免) R9✓(增量 dirty_groups 单消费点)<br>
+rules_mod 465 — A-06; R1✓(full_round 补建队列查重幂等 2147) R3✓(L2 重建保留内存态 1347, suppress 请求位协议)<br>
+tvshows 456 / episodes 129 / curves 124 — 无发现(纯解析, 缓存有界, 边界防护齐)<br>
+qbapi 413 — A-04; R3 写后同步 store 一览: pause/resume 两方法不对称(见 A-04)<br>
+maintenance_mod 363 — 无发现; R1✓(全局任务 has_named 幂等) R2✓(delete_tags 系配置驱动默认空)<br>
+module.py 360 — A-01 相关面(emit 无逐订阅者隔离系明文契约); 宿主/总线协议 ✓<br>
+speed_curve_mod 321 — 无独立发现(手动保护三调用点口径一致; state 日键无界并入 A-03)<br>
+state.py 228 — A-03; 原子写/.bak 回退自愈/孤儿 tmp 清理 ✓<br>
+taskqueue.py 227 — 无发现; R6✓(handler 异常内联捕获恒 REQUEUE, 任务不死 — speed_curve 无 try 的 API 调用由此兜底)<br>
+exporter 150 / tracker_mod 120 / notify_mod 79 / qbclient 64 / logging_mod 48 / modules::__init__ 31 / core::__init__ 23 — 无发现(A-08 涉 core::__init__ docstring)</span></p>
+<h4>批 A 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>A-01</td><td>R6(R9)</td><td>P2</td>
+    <td>core/qbmanager.py:801-835 <code>_refresh_torrents</code>(suppress 窗口 arm/close 两点); 相关面 core/module.py:204 <code>EventBus.emit</code></td>
+    <td>事件相位窗口内(subset: take_suppressed 置 live 旗标 → events_removed/events_added 分派 → set_suppressed(False))任何异常上抛时 live 旗标残留 True: 下一成功刷新轮在关窗点之前 emit 的 full_round(tracker 重匹配+种子级任务补建)/transitions(缺文件扫描)/events_removed/events_added 全部被吞(emit 返回 0), 删除/新增事件系边沿驱动不可重放, L2 置空的 tracker_conf 要等下一次全量轮触发才重匹配</td>
+    <td>①emit 契约明文无逐订阅者隔离(module.py:209「订阅者异常…原样上抛」); 窗口内可达异常源: qbmanager.py:821 <code>ctx.trackers.match</code> 不在 try 内 → tracker_urls → trackers_info 惰性拉取(record.py:262-264)网络异常上抛; rules_mod.py:345 事件分派内 match 同样未包 try; rule.process 异常已被 _apply_event_rule/_handle_rule 捕获(可达面收窄但不归零)②异常被 run() 主循环兜底后下一轮 _refresh_torrents 从头执行, 关窗点 :835 在本轮仅当走到 events_added 之后才可达; apply_sync 先失败则窗口持续跨轮</td>
+    <td>坑档 suppress-request-vs-live-flag 同族(请求位泄漏侧 2026-10-01 已修, live 旗标异常路径该坑未覆盖); 底册无 issue</td>
+    <td>入池(bug, P2): 建议关窗点改 try/finally 或主循环 except 分支补 set_suppressed(False)</td>
+  </tr>
+  <tr>
+    <td>A-02</td><td>general(R7)</td><td>P3</td>
+    <td>core/qbmanager.py:862 <code>export_torrents_info</code></td>
+    <td><code>open(path, "w")</code> 未指定编码: Windows 默认 cp936, 种子名含 GBK 外字符时 UnicodeEncodeError 令调试导出中途崩溃; 且非原子直写</td>
+    <td>调用链 cli.py:172-173 <code>--export-torrents_info</code>(调试入口) → qbmanager.export_torrents_info, 逐种子 f.write 可达</td>
+    <td>无</td>
+    <td>入池(chore, P3): 补 encoding="utf-8"(可参照 exporter.py:141 同款); 顺手项 atomic_write 不强求</td>
+  </tr>
+  <tr>
+    <td>A-03</td><td>R3</td><td>P3</td>
+    <td>core/state.py:204-212 <code>record_execution</code>(exec_history 键面); core/modules/speed_curve_mod.py:272-278 <code>_record_curve_state</code>(speed_limit_curve 日键)</td>
+    <td>state 两处键无界增长: exec_history 的 <code>rule:hash</code> 键从不清清理(种子已删/规则已禁的记录永久残留), speed_limit_curve 每天新增一日键无淘汰; 对照 skip_check_day 有同日清理先例(ops_mod.py:556-560)</td>
+    <td>全仓 grep: exec_history 仅 state.py 读写与 rules_mod 注释, versioning 迁移链无清理; state.json 周期落盘把增长持久化(生产实测 ~37KB, 年级缓慢)</td>
+    <td>无</td>
+    <td>入池(refactor, P3): 键清理策略(exec_history 按日期/存量上限, curve 日键保 N 天); 仅记录亦可</td>
+  </tr>
+  <tr>
+    <td>A-04</td><td>general</td><td>P3</td>
+    <td>core/qbapi.py:170-174 <code>torrents_pause</code>/<code>torrents_resume</code></td>
+    <td>与 <code>torrents_start</code>/<code>torrents_stop</code>(:119-125 走 _sync_paused_state 写回快照)不对称: pause/resume 纯透传不同步 store, 同 tick 内读到旧 is_paused</td>
+    <td>现调用方全在 WEB 命令线(webui/commands.py:266/272/292/297/543/545), P0-5 state_changed 补刷新当轮兜底 — 当前无功能性后果, 属潜伏不对称(将来同 tick 消费者/新调用点易踩)</td>
+    <td>无(坑档 concurrency「QbApi 写方法必须同步 store」的对偶复查)</td>
+    <td>入池(refactor, P3)或仅记录</td>
+  </tr>
+  <tr>
+    <td>A-05</td><td>R7</td><td>P3</td>
+    <td>core/modules/ops_mod.py:846 <code>_backup_torrent</code></td>
+    <td>跳检备份 <code>open(path, "wb")</code> 非原子直写; 守阵 test_no_o_trunc_write 只钉 <code>O_TRUNC</code> 字面 token, "wb" 模式同类语义从其面外漏过(守阵盲区非违规, 该文件不在白名单系因 token 不出现)</td>
+    <td>可达: 跳检流程必备步骤。后果评估: 备份先于删除(第一个不可逆步骤之前), 崩在写入中途只损失备份不损失种子; 重加失败路径的重写为幂等覆盖 — 实际风险低</td>
+    <td>坑档/守阵: testing/guards.md O_TRUNC 组(盲面观察, 非撞车)</td>
+    <td>仅记录(如后续改 utils.atomic_write 需同步考虑二进制形态)</td>
+  </tr>
+  <tr>
+    <td>A-06</td><td>general</td><td>P3</td>
+    <td>core/modules/rules_mod.py:255 <code>_handle_rule</code></td>
+    <td><code>handled, _stop = rule.process(ctx)</code> 的 handled 从未消费(返回值判定改用 task.has_breakpoint); ruff RUF059 复核采纳</td>
+    <td>静态即证; 行为无影响(坑档 behavior-core「handled 返回值」已明示看执行历史而非返回值)</td>
+    <td>坑档 behavior-core(handled 语义条, 佐证非 bug)</td>
+    <td>仅记录(命名层面可改 <code>_handled, _stop</code>)</td>
+  </tr>
+  <tr>
+    <td>A-07</td><td>R6</td><td>P3</td>
+    <td>core/qbmanager.py:375-378 <code>connect</code> 的 <code>except Exception</code> 分支 × run():446-456 首连重试循环</td>
+    <td>托管模式(--tray)首连失败重试循环里, 非 APIConnectionError 异常(典型: 凭据错误 LoginError)不走 _last_conn_ok 转换节流, 每 main_tick 逐次 ERROR 刷屏直至停止信号</td>
+    <td>调用链: --tray 且 qB 凭据错误 → connect() 抛 LoginError → except Exception 无条件 logger.error → 返回 False → while 循环 main_tick 后重试; 非托管模式首连即抛 QbConnectError 不受影响</td>
+    <td>无</td>
+    <td>入池(refactor, P3): 该分支套用同一转换节流或退避</td>
+  </tr>
+  <tr>
+    <td>A-08</td><td>R10</td><td>P3</td>
+    <td>core/__init__.py:6 包 docstring</td>
+    <td>「旧名方法只剩单行委托(§7.2 测试兼容)」已过时 — 别名层 W3 于 2026-10-01 整体退役(与同文件 docstring 其余描述及 systemPatterns 漂移)</td>
+    <td>静态即证(tests/test_qbmanager_alias_freeze.py 守阵佐证别名层已不存在)</td>
+    <td>池 26-09-22-2002 系 schema 文档漂移(不同对象); 无直接撞车</td>
+    <td>仅记录(顺手修候选, 一行 docstring)</td>
+  </tr>
+</table>
+<h4>批 A 工具提示源小结(D3: ruff + bandit, 逐条人工复核)</h4>
+<p>范围: 批 A 20 文件(traffic_grid/traffic_store 归批 C 不在列)。<b>ruff</b>(uvx ruff check 全规则): 310 条提示 — 采纳 1 条(A-06 RUF059); F401 <code>.traffic_store.V3Block</code> unused import 位于 traffic_grid.py:40, <b>属批 C 范围, 留批 C 核对登记</b>; 其余(UP045/UP006 现代注解 202 条、BLE001 blind-except 19 条、DTZ 系 11 条、G201 exc_info 风格 6 条等)逐类复核为项目风格/有意设计, 不采纳。S110/S112/B110(try-except-pass/continue 共 2 条)复核: ops_mod._poll_until(fail-closed 轮询, 异常视为未满足系 docstring 明文)与 exporter.collect_all_tracker_hostnames(导出 best-effort)均为有意设计, 不采纳。<b>bandit</b>(3 条): B506 yaml_load(exporter.py:126)复核为<b>误报</b> — Loader=yaml.BaseLoader 只构造标量/容器, 无任意对象实例化面; B110(ops_mod)同上不采纳。真信号合计: 采纳 1(ruff RUF059), 移交批 C 1(F401), 其余均复核排除。</p>
+<h4>批 A 收尾 · 基线不变式对照(R5 哨兵)</h4>
+<p>本批评审零改码, 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d, 与起点同 commit): 首跑 2610+4 passed 但覆盖率 <b>98%</b>(166 未覆盖 / 139 partial, 语句与分支总数 15511/5342 与基线逐位相同); 复跑第二次即 <b>99%</b>(164/138)与基线切片逐位持平 — 判定首跑差异为<b>运行间波动</b>(时序/线程调度敏感分支的覆盖抖动), 非代码漂移(语句总数相同即无代码变更)。passed/skipped 两跑均 2610+4 持平。</p>
+
+<h3>批 B1 — hr/service.py + model.py + status.py</h3>
+<p class="kv"><b>评审时 HEAD:</b> <code>a4d14a8d</code>(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 树含评审文档未提交件与批 A 产出, 属正常) · <b>范围:</b> 3 文件 / 2,930 行(service 1,621 / model 650 / status 659, 全部逐文件过目, 无跳读) · <b>重点维度:</b> R1 R3 R5 R8 · <b>备注:</b> HR 域近期改动密集(稳态降频 / verified 覆写守卫 / 在线核实), 行号锚配函数名。</p>
+<p class="kv"><b>五步执行记录:</b> ①读档 activeContext 26-10-05-0855(稳态降频六阶段落地切片) + plans/_index HR 域近期计划链(0555 降频 / 0312 拉取历史 / 0346 热重载陈旧展示 / 0932 v3 波次重建) + 三文件包 docstring; ②坑档对照 backend 类 concurrency / task-interval-tick-quantization / effect-confirmation / format-driven-parse; ③逐文件读码(LOC 降序 service → status → model); ④ruff+bandit(逐条人工复核, 见下方工具源小结); ⑤本表登记(逐条对照附录 A–D 去重)。</p>
+<p class="kv"><b>逐文件勾选结论(3/3):</b><br>
+<span class="mono">service.py 1621 — B1-01 B1-03; R1✓(稳态旗标仅翻转落盘 · defer 历史只记 force · 波内增量 commit · 失败波不推进 healthy_ts 下轮自然重试 · 日额窗口键幂等) R3✓(写路径全在取数线程持站点文件锁内, commit readonly 自检兜底「锁自检失败不写盘」; 唯一跨线程共享写点 = _stores 惰性建, 见 B1-01) R5✓(epoch 秒统一 · done_epoch naive 按本地时区折算系明文设计且覆盖判据以天为单位 · COVERAGE_SLACK 1D 只用于本地钟↔站点钟跨面比较, 站点侧内部比较(done_iso↔done_iso)不用 slack —— 口径一致) R8✓(URL 不含凭据 —— passkey 由扩展在页面上下文补, adapters/base.py download_url docstring 明示; 异常消息带 url 入日志/拉取历史不构成凭据泄漏; verified 覆写面复验见下)<br>
+status.py 659 — B1-02; 纯只读展示层 ✓(不加锁不取数不写盘; next_wave_at 现算不落盘副本; count_attested_empty 与 service.confirmed_empty 同公式同口径; build_site_statuses 读坏不抛如实带 read_error)<br>
+model.py 650 — 无发现; 纯数据 + JSON 往返 ✓(R1✓ 日额窗口键幂等注释成立; R3✓ 无 IO; R5✓ prune_history 未来时刻保留防时钟回拨; R3 陷阱 T1「count_claim None 必须显式判空」已钉 from_json)</span></p>
+<p class="kv"><b>复验不登记项(沿用可达性论证纪律, 与池条目撞车标注):</b> ①<code>_sign_releases</code> 对既有 verified 不查重直接覆写(池 26-10-02-0526, 生产可达性未核实) —— 本批复验<b>全路径不可达结论成立</b>: h∈unmatched ⇒ 波始时 verified 无 h(有记录即被 _build_objects:1396 跳出对象集, 有记录且漂移则已先 del); 波内 verified 新增点仅 _advance_observation(:1318)与 _freeze_terminal(:1286), 两者均带 <code>h not in data.verified</code> 守卫且 _freeze_terminal 排在 _sign_releases(:1187)之后; _record_hit(:959)只删不加 ⇒ 签发当刻 verified[h] 必无旧记录, 覆写分支无可达输入。②池内两件 refactor 疑似<b>已修</b>(底册状态漂移, 待 S6 核验后由定稿轮统一处理, 本轮不动池条目): 26-10-02-0526 clock 注入(service.py 现仅 :346 now_fn=time.time 注入点, fail.last_ts / _advance_observation 两处直调已收编为 self._now()/入参 now) · 26-10-02-0441 _prune_index 双体重复(现仅存模块级 :1572 一处, 类内静态版已删)。③池 bug 26-10-02-0441(finish-wave 告警去重集合每波重报)复核为<b>已修</b>: 清标记已改为恢复时 _reset_warned_on_recovery(:1443, 由 _run_pages:741 拿到正常内容页时触发)。</p>
+<h4>批 B1 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>B1-01</td><td>R3</td><td>P3</td>
+    <td>hr/service.py:377-383 <code>HrRefreshService.store</code>(_stores 惰性建); 消费点 service.py:425 <code>refresh_site</code>(取数线程)与 hr/status.py:632 <code>build_site_statuses</code> ← webui/server/routes/hr.py:123(WebUI HTTP 线程)</td>
+    <td>_stores 字典的惰性建无锁, 同一 HrRefreshService 实例被取数线程与 WebUI 请求线程并发调用: 首次并发访问同站可双重构造 HrSiteStore(其一被字典覆盖丢弃)</td>
+    <td>调用链实证: hr/runtime.py:288 构造的 service 同时交给 HrWorker(worker.run 刷波)与 WebUI 路由(routes/hr.py:123 经 build_site_statuses → status.py:632/633 → store().read_unlocked() / build_view_for → site_path/channel_state 均触 store())。后果评估为良性: GIL 下 dict 读写原子, 双构造的两个实例指向同一 lock_path, FileLock 按路径 OS 级互斥仍成立, read_unlocked 本就无锁 —— 现无可观察错误行为, 属「每站点一把锁」契约依赖实现细节的脆弱点</td>
+    <td>坑档 concurrency「主循环线程唯一写线程」的 HR 域对偶(HR 账号级数据不进 state_file, 写者=取数线程); 底册无 issue</td>
+    <td>入池(chore, P3): __init__ 预建全部 enabled 站点的 store 或加锁惰性建; 仅记录亦可</td>
+  </tr>
+  <tr>
+    <td>B1-02</td><td>general</td><td>P3</td>
+    <td>hr/status.py:40 模块顶部 import(<code>from .ratelimit import day_key, next_allowed_at, next_day_reset, quota_left</code>)</td>
+    <td><code>next_allowed_at</code> 全文件零使用(F401, ruff 复核采纳): 全文件仅 :40 一处出现</td>
+    <td>静态即证(grep 全文件仅 import 行命中); 行为无影响, 纯死导入</td>
+    <td>无(与批 A 移交批 C 的 F401 不同件)</td>
+    <td>入池(chore, P3): 删该名(可参照同批 service.py import 收口惯例)</td>
+  </tr>
+  <tr>
+    <td>B1-03</td><td>general</td><td>P3</td>
+    <td>hr/service.py:658-678 <code>_do_wave</code> 的 <code>except HrFetchError</code> 尾段(:675-678 retry_after==0 分支)</td>
+    <td>兜底分支不可达: 能上抛到 _do_wave 的 HrFetchError 只带 retry_after&gt;0(_run_pages:719-722 与 _run_downloads:1011-1016 均就地处理无 Retry-After 的失败、仅 Retry-After 上抛), :675-678 的「页面取数失败」档位截断路径永不执行</td>
+    <td>调用链实证: try 体仅 _run_pages 一个调用; 其内 get_text 的 HrFetchError 处理两分(就地/上抛)如上; adapter.parse_page / compute_infohashes 不产 HrFetchError。行为影响评估: 与其等效的就地处理(wave.had_error/_mark_fetch_failed_lane/notes)已覆盖, 死代码本身无行为分歧 —— 池条目定级 bug, 本批复核倾向死代码清理面</td>
+    <td>池 bug 26-10-02-0441(hr-do-wave-hrfetcherror-dead-tail, 本批复核确认不可达结论成立并补齐调用链证据)</td>
+    <td>沿用已入池条目不重开(S6 汇总时按「死代码清理」定档)</td>
+  </tr>
+</table>
+<h4>批 B1 工具提示源小结(D3: ruff + bandit, 逐条人工复核)</h4>
+<p>范围: 批 B1 三文件。<b>bandit</b>: 0 条。<b>ruff</b>(152 条): 采纳 1 —— status.py:40 F401(B1-02); 死代码复核 1 —— service.py:675-678 不可达尾段系池内已知项(B1-03, 非 ruff 提示但同轮复核); 其余逐类排除: UP006/UP035/UP045(现代注解 145 条, 项目风格, 与批 A 同判) · RUF022(__all__ 排序 ×2)· I001(import 排序)· G201(logger.error+exc_info 风格, 与批 A 同判)· F541(service.py:885 _stop_condition 停翻文案 f-string 无占位符, 纯外观)· SIM102(嵌套 if 合并建议, 可读性取舍)。真信号合计: 采纳 1(B1-02), 关联池条目 1(B1-03), 其余复核排除。</p>
+<h4>批 B1 收尾 · 基线不变式对照(R5 哨兵)</h4>
+<p>本批评审零改码, 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d): <b>2610 passed + 4 skipped / 99%</b>(164 未覆盖 / 138 partial, 语句与分支总数 15511/5342)与基线切片逐位持平 —— 无漂移。</p>
+
+<h3>批 B2 — hr/ 其余(channel / worker / parse / resolve / report / store / runtime / server / adapters 等)</h3>
+<p class="kv"><b>评审时 HEAD:</b> <code>a4d14a8d</code>(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 与起点同 commit, 树含前批评审产出属正常) · <b>范围:</b> 20 文件 / 4,651 行(全部逐文件过目, 无跳读; 7092 − service 1621 − status 659 − model 650 = 4651 实测相符) · <b>重点维度:</b> R6 R7 R8 R9 · <b>备注:</b> 在线核实出网请求与站点凭据面; worker 与主循环并发边界。</p>
+<p class="kv"><b>五步执行记录:</b> ①读档 activeContext 26-10-05-1130(批 B1 切片, service 层调用契约) + 26-10-05-0855(稳态降频六阶段) + 20 件包 docstring; ②坑档对照 backend 类 concurrency / page-scraping / format-driven-parse / release-record-baseline / effect-confirmation / unreachable-wait; ③逐文件读码(LOC 降序, runtime → resolve → worker → channel → server → queue → report → parse → store → fetcher → adapters/nexusphp → __init__ → bencode → events → ratelimit → adapters/base → adapters/__init__ → adapters/carpt → module → adapters/btschool); ④ruff+bandit(逐条人工复核, 见下方工具源小结); ⑤本表登记(逐条对照附录 A–D 去重)。</p>
+<p class="kv"><b>逐文件勾选结论(20/20):</b><br>
+<span class="mono">runtime 441 — 无发现; R9✓(stop/apply 先置 _sleep_stop + worker.stop 内 queue.cancel_all 再 join, 站点锁不跨关停持有; sleeper 锁内等待可中断; _anchors 只读快照, 整体替换引用契约成立 — 锚点字段单调(下载量只增), 撕裂读落入合法中间态不产假漂移) R8✓(status/token_source 不含密钥内容; extension_id 缺席纵深提示为有意 WARNING) R6✓(热重载两处「从无到有」补启动 2026-09-29 实报已修)<br>
+resolve 420 — B2-02; 纯函数 + 不可变视图 ✓(R5✓ 无时间推进; 漂移判定「无快照不判漂移」符合坑档 release-record-baseline)<br>
+worker 412 — B2-03; R9✓(publisher 三元组单写多读原子发布, 读方零撕裂; _force/_wake_seq cond 保护; 取数线程不碰 state_file/任务队列/store — 静态契约成立) R6✓(单轮异常不杀线程; 冷启动先发布磁盘既有结论防判定真空; 告警三分档与 channel_silence_warn 节流)<br>
+channel 404 — 无发现(B2-05 涉死导入); R8✓(token 恒定时间比较在 server._token_ok; 密钥内容零入日志(resolve_token 只报路径); UrlPolicy 域名+路径白名单 SSRF 边界; 协议零 cookie/passkey 字段 — 凭据面归零成立) R7✓(resolve_token atomic_write, 0600 等价)<br>
+server 396 — 无发现; R8✓(仅 127.0.0.1 + allow_reuse_address=False 独占绑定; 401 前不写任何状态; origin 白名单拒绝无 CORS 头; OPTIONS 无数据返回; token 恒时比较) R6✓(_dispatch 全捕获端点线程不死; 客户端断开 BrokenPipe 降 DEBUG) R9✓(_state_lock 保护接触时刻/origins)<br>
+queue 182 — 无发现; R9✓(单 Condition 两张内存表; 叫停标记优先于一切含「叫停后发起的等待」; 等待预算用 time.monotonic 与注入假时钟隔离; 未派发/域名不符回传双闸拒收)<br>
+report 375 — 无发现; R8✓(_print_channel 只报密钥来源与路径; 本报告不加锁不写盘口径与实现一致; LocalPageFetcher 离线替身不构成出网面) R7✓(read_text 显式 utf-8)<br>
+parse 333 — B2-04; 坑档 page-scraping 对照✓(page_bounds 锚定 &lt;/b&gt; 防「1 - 2」同形误匹配; parse_duration/parse_datetime「认不出返回 None 不猜」纪律成立 — parse_size 单元表外漏网见 B2-04)<br>
+store 308 — B2-01; R7✓(写盘 atomic_write + keep_backup 语义; 坏文件 quarantine 先于 .bak 兜底顺序正确; .bak 恢复后 rebaseline 防自愈变砖) R9✓(写者心跳自检 revision 回退/心跳被覆盖 ⇒ 退化只读) — 编码类读坏漏网见 B2-01<br>
+fetcher 218 — 无发现; R8✓(后端零直连零 cookie; UrlPolicy.require 发任务前 fail-fast; listening_fn 现读防「本机门没开伪装远端超时」— 坑档 unreachable-wait 落地点核验成立) R6✓(被叫停/无通道/超时三态分开上报, 只有超时计失败)<br>
+adapters/nexusphp 209 — 无发现(FURB167 re.S 别名不采纳; parse_page 表头缺失返回空 ParsedScope 交覆盖证明拒绝 — 不静默猜) R8✓(download_url 无凭据参数, passkey 由扩展页面上下文补)<br>
+__init__ 197 — B2-05(HrChannelQuota 死导入); R10: 包 docstring 分工表与实况一致 ✓<br>
+bencode 161 — 无发现; bandit B324(SHA1)复核为误报 — infohash v1 按定义就是 info 原始切片的 SHA-1, 非安全凭据; 深度上限/规范整数校验齐<br>
+events 147 — B2-05(time 死导入); 纯文案无判断 ✓<br>
+ratelimit 127 — B2-06; DTZ006 ×4 复核不采纳(本地时区为明文设计, 与批 B1 done_epoch 同判); 窗口键幂等 ✓<br>
+adapters/base 83 — 无发现(parse_counters 覆写契约三条 + 计数铁律「宁可不用不可错用」表述完备)<br>
+adapters/__init__ 83 — 无发现(登记点单点化口径与 site_presets 呼应)<br>
+adapters/carpt 75 — 无发现(双 id 空间 dl_id 提取链实证完整)<br>
+module 41 — 无发现(RET501 不采纳; sections 认领 hr_check+trackers 与 hot-reload 语义一致)<br>
+adapters/btschool 39 — 无发现(计数口径校准记录留档完整, B 档无声明的结构后果已自证)</span></p>
+<h4>批 B2 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>B2-01</td><td>R6(R7)</td><td>P2</td>
+    <td>hr/store.py:116-118 <code>HrSiteStore._read_full</code>(<code>self.path.read_text(encoding="utf-8")</code> 只捕 <code>OSError</code>); 同构面 store.py:189-192 <code>read_backup</code>; 消费面 build_views(service.py:1425)/build_site_statuses(status.py:632)/report.py:158/cli</td>
+    <td>站点文件含非法 UTF-8 字节时 <code>UnicodeDecodeError</code>(ValueError 子类, 非 OSError)从 read_text 逃出 — 专为坏文件设计的整条自愈链(quarantine → .bak 兜底 → read_error 如实带回)对该类坏文件全程不可达; 且 <code>build_views</code> 单站点抛异常会中止整个视图集构建, 一个坏文件拖垮全部站点的视图发布</td>
+    <td>调用链实证: ①坏文件来源可达 — 站点 JSON 含中文种子名, Windows 记事本/编辑器按 ANSI(GBK)重存即产出; ②取数线程: run_once → refresh_site → hold() → HrLockSession.__init__ 首行 <code>store._read_full()</code> 上抛 ⇒ quarantine 未及执行, 异常被 refresh_site 宽捕记 ACTION_ERROR — 坏文件永不被隔离、.bak 永不被消费, 每波 ERROR 刷屏; ③视图面: 轮末 _build_views → build_views 逐站 read_unlocked ⇒ 上抛被 _loop 单轮兜住但发布中止 — 全部站点 judge() 回落行 4 本地兜底(HR 管束/终态证据全失, 且每轮复现直到人工介入); ④CLI: --hr-status(report.py:158 无 try)直接 traceback 崩溃; ⑤status.py:623 docstring「站点文件读坏时不抛」契约对 encoding 类读坏不成立(WebUI /hr 路由面 500)</td>
+    <td>无(坑档 platform-fs 不覆盖此形态; 批 B1 对 status.py 的「读坏不抛如实带 read_error」勾选结论以 _read_full 的异常分类完整为前提, 本条是对该前提的边界修正 — 非重复登记)</td>
+    <td>入池(bug, P2): _read_full/_read_backup 的 except 补 <code>UnicodeDecodeError</code>(归入「坏文件」recoverable 类走 quarantine + .bak); 可顺带钉 status.py docstring 契约的守阵</td>
+  </tr>
+  <tr>
+    <td>B2-02</td><td>general</td><td>P3</td>
+    <td>hr/resolve.py:242-280 <code>judge_record</code>(docstring :256-257); 旁证 ruff F841 :271 <code>best_key</code> 赋值后零使用</td>
+    <td>docstring 承诺的双 hash 平局合并未实现: 「同为放行取依据更强者(D 免罪 &gt; B &gt; 缺席)」「同为管束取剩余时间更少」— 实现为 <code>_rank(res) &gt; _rank(best)</code> 严格大于, 平局恒保留先到的 hash(v1); F841 的 best_key 即平局分支的遗留残迹</td>
+    <td>可达: 双 hash 键(v1, v2)都命中放行且依据不同(如 v1=放行记录/缺席式, v2=D 档命中)时, 展示层 safety_display 走 SRC_SITE_RELEASED「在线·已核实，安全放行」而非 SRC_SITE_EXEMPT「在线·已免罪」— 两态同为 SAFETY_SAFE, 无判定差异, 纯展示口径偏离; 「剩余时间更少」同样恒取 v1 行</td>
+    <td>无</td>
+    <td>入池(refactor, P3): 补平局合并或改 docstring 收窄承诺(顺带清 best_key; 同函数 <code>now</code> 形参链路未消费, 一并核对是否签名预留)</td>
+  </tr>
+  <tr>
+    <td>B2-03</td><td>general</td><td>P3</td>
+    <td>hr/worker.py:168-169 <code>HrWorker._force</code> 声明处注释</td>
+    <td>注释「空集 = 全部启用站点」与实现相反: run_once(:299)判 <code>site in force_sites</code>, 空集 ⇒ 无站点 force; 空集实际只在 request_refresh 交集为空时产生(语义 = 「受理为空」)</td>
+    <td>静态即证: request_refresh(:232)对 sites=None 物化 <code>set(enabled)</code> 非空集, 空 _force 集合在 run_once 中逐站 force=False — 行为自洽, 仅注释陈旧(疑为早期「空参=全站」设计的残迹); 该旗标是并发契约面(端点线程写/取数线程读), 注释误导未来修改的风险大于其本身</td>
+    <td>无</td>
+    <td>仅记录(一行注释修正, 顺手修候选)</td>
+  </tr>
+  <tr>
+    <td>B2-04</td><td>general</td><td>P3</td>
+    <td>hr/parse.py:36-45 <code>parse_size</code>(<code>_SIZE_UNITS.get(m.group(2).upper(), 1)</code>)</td>
+    <td>docstring「认不出返回 None(不猜)」对单元表外字母单位不成立: 缩写形态如「2.5T」「800M」(不在 TB/MB 等键内)被当 <b>1 字节</b>静默算错, 而非返回 None</td>
+    <td>可达: parse_size 用于 adapters _map_row 的上传/下载列; 变体站点经 column_names 注入即可接入, 无单元形态校验; uploaded/downloaded 不在 REQUIRED_KEYS(:57, nexusphp.py) ⇒ missing_field_rate 防改版信号也不覆盖该列 — 错值直达展示(分享率/下载量对账)与 B/C/D 行宽泛匹配的辅助面</td>
+    <td>坑档 page-scraping 同族(「认不出就 None 比 猜 安全」纪律的既有表述; 本条是该纪律在 parse_size 单点的漏网)</td>
+    <td>入池(bug, P3): 单元表外返回 None(与 parse_duration 同款); 可补「纯字母缩写单位」样张钉死</td>
+  </tr>
+  <tr>
+    <td>B2-05</td><td>general</td><td>P3</td>
+    <td>hr/__init__.py:38(<code>HrChannelQuota</code> 导入未入 __all__) · hr/channel.py:23(<code>Optional</code>) · hr/events.py:20(<code>time</code>) · hr/resolve.py:29(<code>SOURCE_NOT_LISTED</code>) · hr/worker.py:29(<code>ACTION_NO_CHANNEL</code>) · hr/store.py:42+305(<code>HrStoreCorrupted</code> 定义并导出但全仓零 raise 零捕获 — 死异常类)</td>
+    <td>五处死导入 + 一个死异常类(ruff F401 ×5 复核采纳; HrStoreCorrupted 为全仓 grep 复核: src+tests 仅定义行与 __all__ 行两处命中)</td>
+    <td>静态即证; 行为无影响。注: ACTION_NO_CHANNEL 的告警由 service 报一次(worker._note 有意不重复), 导入属历史残留而非逻辑缺口</td>
+    <td>无(与 B1-02 status.py F401 不同件; 与批 A 移交批 C 的 F401 不同件)</td>
+    <td>入池(chore, P3): 删五处死导入; HrStoreCorrupted 删除或改为 store 读坏路径真实抛出的类型(二选一, 需拍板语义)</td>
+  </tr>
+  <tr>
+    <td>B2-06</td><td>R5</td><td>P3</td>
+    <td>hr/ratelimit.py:88 <code>window_start_on</code>(<code>ts + 86400</code>)与 :94 <code>next_day_reset</code>(<code>+ 86400</code>)</td>
+    <td>「明天同一时刻/次日零点」用固定 86400 秒推算, DST 切换日(夏令时时区每年 2 天)与真实次日挂钟时刻偏 ±1h — 影响时间窗起点与日额重置时刻</td>
+    <td>可达性成立但影响面极窄: 仅 observe DST 的时区用户 + 每年 2 天 + 1 小时漂移; 项目主受众(UTC+8 无 DST)内数值恒精确。local-time 语义本身是明文设计(与批 B1 done_epoch 同判), 漂移仅在跨 DST 边界的推算步</td>
+    <td>无</td>
+    <td>仅记录(备查; 若将来有 DST 时区实报, 改为「replace 到次日同 HH:MM 再 timestamp」)</td>
+  </tr>
+</table>
+<h4>批 B2 复验不登记项(可达性论证纪律)</h4>
+<p class="kv">①池 perf 26-09-30-0052「HR 末页追翻省略」(底册 A.1 #7, 撞车比对批 = 本批): 改动面经 grep 定位在 service.py <code>_run_pages</code> 翻页循环(:783-790 一带, has_next 判定后的收尾), 属批 B1 已过目文件 — <b>B2 范围 20 文件内无对应逻辑, 沿用已入池条目不重开</b>。②server.py RUF100 ×4(noqa A003/N802「未启用」)复核不采纳: 指令为跨 linter 文档化保留, 删除无害但无收益。③report.py <code>LocalPageFetcher._scope_of</code> 由 URL query 取文件名片段, 理论可拼 <code>../</code> 读目录外 .html — 复核为<b>非安全边界</b>: 该路径仅 CLI 诊断(--hr-html-dir), 目录与 URL 同出用户自己的配置, 攻击者即配置者, 不登记。④queue.submit 回传 url 缺省时跳过域名校验直接回填任务 url — 复核为可接受: token 鉴权在先, 回传体无法伪造任务 id(未派发即拒), 无可达伪造面。⑤runtime._anchors 撕裂读: 锚点字段单调(下载量只增/added_on 不变), 中间态组合不产生假漂移, 契约成立不登记。⑥bencode B324/B101、runtime B105/B101、resolve B101(bandit): 全部复核为误报(SHA-1 系 infohash 定义; assert 系 fail-fast 风格且逻辑上不可绕过; 'X-Hr-Token'/'' 系头名与空串缺省)。</p>
+<h4>批 B2 工具提示源小结(D3: ruff + bandit, 逐条人工复核)</h4>
+<p>范围: 批 B2 20 文件(ruff 全包 400 条 − B1 三文件 152 条 = <b>248 条</b>)。<b>采纳 6</b>: F401 ×5(B2-05)+ F841 ×1(B2-02 旁证)。<b>其余逐类复核排除</b>: UP006/UP045/UP035(现代注解 ~208 条, 项目风格, 与批 A/B1 同判) · G004 f-string 日志(项目惯例) · G201(5 条, error+exc_info 风格) · I001/RUF022/RUF023(排序 11 条) · DTZ006 ×4 ratelimit(本地时区明文设计) · DTZ007 parse.py(站点时间 naive 按本地折算, 明文设计) · B905 ×2 report(等宽元组 zip) · PIE810 ×2/TRY004 ×2/FURB167/RET501/SIM102(风格取舍) · B023 worker:285(wait_for 谓词内同步消费 seq, 非延迟绑定, 误报) · BLE001 worker:328(_collect_anchors 主循环侧失败不拖刷新, docstring 明文, 有意设计) · RUF100 ×4(见复验不登记项)。<b>bandit</b>(7 条): B324 ×1(bencode SHA1, infohash 定义)、B105 ×2(头名/空串)、B101 ×3(fail-fast assert) — 全部误报; B105/B101 与批 A 同判。真信号合计: 采纳 6, 全部为 P3 级死代码/注释面; 无 P0/P1/P2 来自工具源(B2-01 系人工读码发现)。</p>
+<h4>批 B2 收尾 · 基线不变式对照(R5 哨兵)</h4>
+<p>本批评审零改码, 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d): <b>2610 passed + 4 skipped / 99%</b>(164 未覆盖 / 138 partial, 语句与分支总数 15511/5342)与基线切片逐位持平 —— 无漂移。</p>
+
+<h3>批 C — traffic_store.py + traffic_sample_mod.py + traffic_grid.py</h3>
+<p class="kv"><b>评审时 HEAD:</b> <code>a4d14a8d</code>(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 与起点同 commit, 树含前批评审产出属正常) · <b>范围:</b> 3 文件 / 2,889 行(traffic_store 1,263 / traffic_sample_mod 1,096 / traffic_grid 530, 全部逐文件过目, 无跳读) · <b>重点维度:</b> R3 R5 R7 · <b>备注:</b> v3 存储 S6(活尾合流)已在起点 HEAD a4d14a8d 落地; 剩余在途 = agg 段窗合流(候选 S7, issue 26-10-05-1015)—— 本批只登记 v3 未覆盖增量, 发现逐条标注与 v3 计划的关系。</p>
+<p class="kv"><b>五步执行记录:</b> ①读档 v3 存储报告 26-10-04-1730 全文(格式契约/写侧/聚合/读侧/裁决/风险) + traffic_store.py 包 docstring(现行唯一格式契约单点); ②坑档对照 backend 类 concurrency(主循环唯一写线程/带叫停等待) / task-interval-tick-quantization / format-driven-parse / platform-fs / behavior-core; ③逐文件读码(LOC 降序 traffic_store → traffic_sample_mod → traffic_grid); ④ruff+bandit(逐条人工复核, 见下方工具源小结); ⑤本表登记(逐条对照附录 A–D 去重, 逐条标注 v3 关系)。</p>
+<p class="kv"><b>逐文件勾选结论(3/3):</b><br>
+<span class="mono">traffic_store 1263 — C-02 C-04; R3✓(写路径全在主循环线程 handler 调用链内, 本层无锁成立; V3DayCache 读侧锁保护 + 解析锁外进行系明文契约, 并发重复解析无害; OSError 上抛口径统一) R5✓(epoch 秒/毫秒全整数口径; 时钟回拨钳制 dt_ms &gt;= 1 已落地(v3 §8.1 实施项核验); 除零全守卫 —— v3_hour_agg/v3_rollup_agg cov&lt;=0 fail-fast, 槽均摊 spacing 分母全带 run_len&gt;1/n&gt;1 守卫; end&lt;start 窗口倒置 fail-fast) R7✓(常规写全追加 open("a")+flush+fsync, 尾字节查补每 flush 一次; 唯一原子重写点 trim = tmp+fsync+os.replace + PermissionError 退避重试; utf-8 显式; 无 O_TRUNC 直写无句柄泄漏)<br>
+traffic_sample_mod 1096 — C-01 C-05; R3✓(handler 主循环线程独占, buffers/baselines/游程/累计器无锁成立; live_tail 不可变快照整体替换引用发布, Web 线程只读单引用 —— 黄金法则 5 单写线程不变式成立; 优雅退出 stop() 封游程+全量 flush+聚合封口, 幂等, OSError 不上抛) R1✓(catch-up 水位幂等(append 即水位, 崩溃后从文件尾恢复不重 append); trim same_content 零写; 数据门缓存与淘汰清理闭环) R5✓(累积漂移判据正确实现 —— 判 |actual-(游标+标称)| 而非本行偏差, 稳态小漂移自动退化周期写, 坑档 task-interval-tick-quantization 同族风险已被 v3 dt 链吸收; C1 失配取整+告警一次+采样率变化关块联动)<br>
+traffic_grid 530 — C-03; 纯函数层全过目 ✓(R5✓ 真空(块间 gap)与断连(n 槽)两语义分离; D1 覆盖桶模型自洽; 活尾合流按 ts 精确去重镜像口径成立; 归桶除零守卫齐(e[3]/a[0] 恒 &gt;=1); build_month_grid 空集兜底/v3_next_month_epoch 严格递增必终止)</p>
+<p class="kv"><b>R4 顺带核验:</b> v3 新键 flush_interval 已进 validate_config(validation/sections.py:650-658, 60-3600s)与 schema 键面(schema/groups.py:442)—— 黄金法则 4 守卫面完整, 无发现。</p>
+<h4>批 C 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>v3 关系</th><th>处置建议</th></tr>
+  <tr>
+    <td>C-01</td><td>R3</td><td>P2</td>
+    <td>core/modules/traffic_sample_mod.py:952 <code>_agg_trim</code>(<code>agg.earliest_hour is None or ...</code> 早退)+ :1006 <code>_recover_series</code>(唯一初始化点); 写入面 _agg_ingest_hour(:889-908) / _agg_flush_series(:861-887) 均不触该字段(SeriesAgg.earliest_hour :254)</td>
+    <td>hour 裁剪判据 earliest_hour 只在启动恢复(_recover_series)初始化, 运行期才开始产数据的系列(hour 聚合行照常入账)该判据恒 None —— _agg_trim 恒早退, agg.dat 的 hour 行永不受 rollup_window 裁剪, 文件无界增长(约 24 行/天/系列, 约 2.2KB/天), 直到下次重启恢复才补上判据</td>
+    <td>调用链实证: handle_traffic_sample → _maybe_flush_all → _flush_all_series → _agg_flush_series(:876 经 _agg_ingest_hour 入账 hour 行, 全程不写 earliest_hour) → _agg_trim(:952 earliest_hour None → return)。全仓 grep earliest_hour 仅 5 处(字段/注释/恢复初始化/trim 读/trim 写回), 无其它初始化点。可达场景: ①全新安装的 global 系列(start 时无 global/ 目录, _recover_series 不建) ②运行期新增数据的种子 ③qb_traffic 经热重载启用(start 时 conf 为 None, _recover_aggregates :988 直接 return, L2 重建只重注册任务不补恢复)。后果: 违反 v3 §04.5「hour 行保留窗」契约 —— 正确性无碍(窗外语法桶不消费)但存储与 3d+ 窗读放大随运行时长无界涨(agg 快读口径 ~1MB 约 1 年即触顶)</td>
+    <td>无</td>
+    <td>未覆盖(v3 报告 §4.5/§5.7 只定裁剪设计口径, 此系 S2b 落地实现缺口)</td>
+    <td>入池(bug, P2): _agg_ingest_hour(或 _agg_flush_series 收批时)对 earliest_hour 做初始化/min 更新; 可补「运行期新建系列满窗后裁剪生效」守阵</td>
+  </tr>
+  <tr>
+    <td>C-02</td><td>general</td><td>P3</td>
+    <td>core/traffic_store.py:116-123 模块级 <code>_parse_int_field</code>(与 :106-113 逐字相同的重复定义, 后者遮蔽前者; 唯一调用点 :336 <code>_parse_v3_nn_int</code>)</td>
+    <td>同名纯函数连续定义两份(逐字相同), 纯冗余死代码; ruff F811 不报 —— 首定义在被遮蔽前已被后续引用, 不构成「未使用重定义」</td>
+    <td>静态即证(两体逐字一致, 行为无影响); 系人工读码发现(工具源盲区)</td>
+    <td>无</td>
+    <td>落地后新引入(v3 S1 纯函数区实现滑笔, v3 报告无此面)</td>
+    <td>入池(chore, P3): 删 :116-123 重复块</td>
+  </tr>
+  <tr>
+    <td>C-03</td><td>general(R10)</td><td>P3</td>
+    <td>core/traffic_grid.py:40 import 块 <code>V3Block</code></td>
+    <td>F401 未使用导入 —— 批 A 移交线索核对属实(ruff --select F 全量对本批仅此 1 条; v3_series_slots 只消费 v3_block_slots 不引用 V3Block 名)</td>
+    <td>静态即证(全文件零使用); 行为无影响</td>
+    <td>无(批 A 工具源小结明示「移交批 C 核对登记」)</td>
+    <td>未覆盖(S3b 落地遗留死导入)</td>
+    <td>入池(chore, P3): 删该名(与 B1-02/B2-05 死导入同批清理亦可)</td>
+  </tr>
+  <tr>
+    <td>C-04</td><td>R7(R10)</td><td>P3</td>
+    <td>core/traffic_store.py:242-244 / :766-772(V3ParsedDay.bad_lines/data_lines/torn_tail 字段) + :26 docstring「坏行占比超阈值的隔离处置在解析纪律内计数呈现」</td>
+    <td>v2 的坏行隔离动作(「坏行 &gt;5% 且 ≥2 隔离 .corrupt」, v3 报告 §3.2 现状基线)在 v3 实现中退役: 坏行只计数, 且 bad_lines/data_lines/torn_tail 全仓零生产消费方(仅 tests 引用)—— 天文件/agg 真实损坏(非撕裂尾)被静默逐行跳过, 图面缺数据无任何告警或隔离信号</td>
+    <td>静态即证(grep src/ 对 .bad_lines/.data_lines/.torn_tail 仅 traffic_store.py 自身与 tests 命中); 触发面 = 磁盘坏块/外部编辑等低频场景, 后果限观测数据缺失去真(§01.1 丢失无一致性后果), 不破坏一致性</td>
+    <td>无</td>
+    <td>未覆盖(v3 报告 §5.7 写「坏行隔离口径沿用」而实现未沿用 —— 报告出厂冻结, 漂移以代码为准)</td>
+    <td>入池(refactor, P3): 二选一 —— 补消费方(阈值告警或隔离动作)或按代码现状收窄 docstring 口径(「沿用」表述一并以 issue 备注)</td>
+  </tr>
+  <tr>
+    <td>C-05</td><td>R5</td><td>P3</td>
+    <td>core/modules/traffic_sample_mod.py:850 <code>_agg_credit_hours</code>(<code>h = int(cur) // HOUR_SECONDS * HOUR_SECONDS</code>, UTC 整小时对齐)对照 core/traffic_store.py:694-703 <code>v3_day_epoch</code>/<code>v3_month_epoch</code>(本地日界口径)</td>
+    <td>hour 桶键按 epoch 整除 3600 对齐, day/month 桶键按本地日界 —— 整小时偏移时区(含主受众 UTC+8)两者恒对齐无碍; 半小时偏移时区(UTC+5:30/9:30 等)下 hour 行与本地钟错位半小时、且与 day 桶边界错位(hour→day 归组仍按本地日界, 桶内均值不偏但「本地整点」语义破)</td>
+    <td>逻辑即证; 影响面限非整小时时区部署(项目主受众外, 无实报); 与 C-01 无关的独立口径点</td>
+    <td>坑档同族判例 = B2-06(ratelimit 86400 推算 DST 边缘, 同判 local-time 系明文设计)</td>
+    <td>未覆盖(v3 报告 §6.4 只定 day/month 本地口径, hour 桶对齐基准未约定)</td>
+    <td>仅记录(备查; 有半小时时区实报再改按本地时区取整)</td>
+  </tr>
+</table>
+<h4>批 C 复验不登记项(可达性/影响面论证纪律)</h4>
+<p class="kv">①<code>_publish_live_tail</code>(traffic_sample_mod.py:409)interval_s 取 buf.interval_s(旧值)而非 docstring 所称「无块时取当前生效采样间隔」—— 采样率变化关块后 buf.interval_s 残留旧值; 复核影响面: 仅当轮开放游程槽 dt_s 的零跨度兜底分支(v3_live_tail_slots:613 <code>spacing or interval</code>)可消费该差, 且全局系列每轮必采样必刷新、单种空闲系列 open_run 定位用 span/(n-1) 与 interval 无关 —— 图面无感, doc 微观漂移不登记。②<code>_advance_run</code>(:504-506)零样本到达时若开放游程为 n 型: 封 n 后开 z 需 totals 快照(零样本路径不带)→ 该零样本不产槽 —— 「开 z 游程需要 totals 快照; 缺失不开, 空闲不出 null 槽」系 docstring 明文设计, 不登记。③<code>evict_expired_series</code>(traffic_store.py:1077)单系列 listdir OSError 会中止本轮扫描 —— 调用方 _maybe_evict(:968-972)兜底告警且节流 1h 后重试, 观测面无一致性后果, 不登记。④<code>_write_text_payload</code> 崩溃窗口可残留孤儿 .tmp(mkstemp 同目录, 量级约 1 次/天/系列)—— 不入任何数据门(series_has_data / v3_day_file_date 均按 .dat 后缀与日期形状过滤), 无清理面但无害, 不登记。⑤parse_v3_day_text:429 torn_tail 判定 <code>i == last_idx - 1</code> 混用 enumerate(lines[1:]) 相对索引与绝对索引两坐标系 —— 复核恒等(末行 i = len-2 = last_idx-1), 无 bug 仅可读性弱, 不登记。⑥活尾与磁盘链竞态: 读侧按 ts 精确去重 + 严格更晚后缀保留(traffic_grid.py:380), 快照先于/后于 flush 均不重不漏, 镜像论证成立不登记。</p>
+<h4>批 C 工具提示源小结(D3: ruff + bandit, 逐条人工复核)</h4>
+<p>范围: 批 C 三文件。<b>bandit</b>: 0 条。<b>ruff</b>(87 条): F 类仅 1 条 —— F401 <code>V3Block</code>(traffic_grid.py:40, 采纳 = C-03, 批 A 移交线索闭环); 其余逐类复核排除: UP045(Optional → X | None)×59 / RUF046(int(round()) 冗余强转)×13 / DTZ006 ×6 + DTZ007 ×3 + DTZ001 ×3(本地时区口径系 v3 明文设计, 与批 B1/B2 同判) / SIM102 ×1 / I001 ×1(风格取舍)。F811 未报 C-02 的重复定义(首定义被 :336 引用不构成 unused redefinition), C-02 系人工读码发现。真信号合计: 工具源采纳 1(C-03), 人工发现 4(C-01/C-02/C-04/C-05); 无 P0/P1。</p>
+
+<h3>批 D — config/ 全部(loaders / models / writer / schema / validation)</h3>
+<p class="kv"><b>评审时 HEAD:</b> <code>a4d14a8d</code>(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 与起点同 commit, 树含前批评审产出属正常) · <b>范围:</b> 19 文件 / 4,966 行(全部逐文件过目, 无跳读) · <b>重点维度:</b> R2 R4 · <b>备注:</b> 键面守卫已有; 查「校验后散落防御」与热重载一致性。</p>
+<p class="kv"><b>五步执行记录:</b> ①读档 config-reference/loading-and-write.md(加载/写回/校验机制) + 包 docstring(config/validation/schema 三层) + tasks/26-10-04-backend-cross-group-conflict.md(最新新键档案); ②坑档对照 backend 类 schema-stamp-writeback / hot-reload-held-config / hot-reload-stale-bindings-derived-views / format-driven-parse; ③逐文件读码(LOC 降序 sections → loaders → groups → writer → models → rules → core → schema/rules → migrations → schema/__init__ → fields → hr → trackers → curves → site_presets → __init__ → validation/__init__ → impact → errors); ④ruff+bandit(逐条人工复核, 见下方工具源小结; D-01/D-02 经临时配置实测复现); ⑤本表登记(逐条对照附录 A–D 去重)。</p>
+<p class="kv"><b>逐文件勾选结论(19/19):</b><br>
+<span class="mono">validation/sections.py 665 — 无独立发现; R2✓(web.skip_local_verify/skip_check_menu、hr_check/channel/sites.enabled、qb_traffic.enabled 全默认关; 危险值域齐: required_share_ratio [0,100] 拦 nan/inf、interval 下限防 TaskQueue 归一化风暴、flush_interval 整数秒) R4✓(各段未知键全量拒绝; hr_check.sites 键面 = 内置档案白名单; trackers.*.hr_check 报废除错指向新位置)<br>
+loaders.py 586 — D-01 D-04 D-07; R4✓(先验证再解析纪律成立, load_* 零检查; out_bool 对 bool 键无 tri_state 声明故 '' 已被 strip 不会达 parse_bool —— 与 fields.py「bool 键不标」互证一致)<br>
+schema/groups.py 484 — 无发现(纯元数据; readonly/R 级/tone 标注与 writer 回退防线一一对应)<br>
+writer.py 454 — D-03; R7✓(_dump_roundtrip 走 utils.atomic_write; _validate_tree 临时文件 finally 清理) R4✓(热重载校验面与冷启动完全同路径 —— 提交树落临时文件走 load_config; 版本闸门 + readonly 键面回退双防线与坑档 schema-stamp-writeback 两道防线吻合)<br>
+models.py 396 — 无发现(R2 保守默认单点核对: web/hr_check/channel/qb_traffic/add_episode_tags.enabled 全 false; grouping.enabled=true 属功能主开关非危险动作; GlobalSpeedLimitCurve.enabled=true 但整段缺省=None 不启用, 双重闸门成立; skip_checking_tag 默认非空)<br>
+validation/rules.py 335 — D-02; R2✓(checking spec 顶层未知键拒绝含 skip_checking_tag 防按规则覆盖 —— 全局单点; on_torrent_deleted 动作白名单; trigger×action 兼容)<br>
+validation/core.py 312 — 无发现(max_tasks_per_tick 范围显式校验注释自证 schema min 不进校验; _strip_none tri_state 豁免单点按 schema 声明派生无第二清单; validate_config 聚合出口统一)<br>
+schema/rules.py 308 — 无发现(插件表 vs registry 覆盖由守卫钉住; checking 子段字段元数据见 D-02 缺口)<br>
+migrations.py 222 — D-05; 纯函数纪律 ✓(不 log, notes 经 migrate_with_notes 上交)<br>
+schema/__init__.py 192 — 无发现(readonly_config_paths 单点供 writer 防线)<br>
+schema/fields.py 183 — 无发现(tri_state 仅 4 个 str 键声明, bool/list 刻意不标 —— 注释与 _strip_none/loader 行为互证)<br>
+schema/hr.py 179 — 无发现(allow_window 与 quiet_hours 语义相反的 WARN 提示落位)<br>
+schema/trackers.py 177 — 无发现<br>
+validation/curves.py 118 — 无发现(阈值 &gt;0 严格递增/单项映射/方向键白名单/traffic_source 单数据源齐)<br>
+site_presets.py 111 — 无发现(三命名空间纪律成文; match_trackers 为校验/loader 共用判定单点, 不留第二口径)<br>
+config/__init__.py 86 — D-06(AddEpisodeTagsConfig 重导出面)<br>
+validation/__init__.py 78 — D-06(F401 ×3 + RUF068 __all__ 重复)<br>
+impact.py 69 — 无发现(R 级闸单点 RESTART_SECTIONS + KERNEL_SECTIONS 认领完备守阵 P6)<br>
+errors.py 11 — 无发现</span></p>
+<p class="kv"><b>重点维度结论(R2/R4):</b> R2 配置侧闸门完备 —— 跳检(skip_check_menu/skip_checking_tag)/强制汇报(无配置键, 动作内置)/覆盖限速(曲线段 enabled 缺省 + 整段缺省 None 双重闸)/web 鉴权(skip_local_verify)全部默认关且 schema 同标; 执行侧双入口一致性归批 A/E/G。R4 热重载一致性: writer._validate_tree 与启动物化均走 load_config 同一校验面, 等价成立 —— 唯迁移链内部 load 与 materialize 的 strip/迁移顺序差产生边缘分歧(D-05); 校验后散落防御仅 _resolve_hr_site_bindings 一处(D-04)。</p>
+<h4>批 D 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>D-01</td><td>R4</td><td><b>P1</b></td>
+    <td>config/loaders.py:92-98 <code>load_grouping_config</code>(返回构造漏读 <code>cross_group_conflict_check</code>); 消费方 core/modules/grouping_mod.py:490; 键面五处登记: models.py:192 字段 / schema/groups.py:302 Field / sections.py:15 KNOWN_GROUPING_KEYS / fixtures/config_key_surface.txt:72 / keys.md:25</td>
+    <td>配置键 <code>grouping.cross_group_conflict_check</code> 全链五处齐备但 loader 不取值: YAML 显式写 <code>true</code> 校验零报错、解析结果恒为默认 False —— 跨组文件交叉检查(防同盘静默覆盖, issue 26-09-22-2221 的修复面)经配置永无法启用</td>
+    <td>临时配置实测复现: load_config 对 <code>cross_group_conflict_check: true</code> 返回 <code>c.grouping.cross_group_conflict_check == False</code>(校验零报错)。调用链: 任意含该键的 config.yml → load_config → load_grouping_config(只取 enabled/check_missing_files/missing_tag 三键) → GroupingConfig 字段恒缺省 → grouping_mod.py:490 <code>if not cfg.cross_group_conflict_check: return</code> 恒早退。守阵盲区: 键面守卫只查键存在(test_config_key_surface docstring 自认「键不变、语义改义没有结构信号, 拦不住, 靠评审」); test_config_schema 三用例只测 validate_config 与 dataclass 缺省; test_grouping 直设属性 <code>mgr.config.grouping.cross_group_conflict_check = True</code> 绕过 loader —— 三道守卫全部探不到 loader 缺口</td>
+    <td>计划 26-10-04-0107 S1 自记「全链贯通」但其清单(models/sections/schema/键面基线/keys.md)缺 loaders —— 档案表述与实现漂移; 池 2002 的反形态(未知键被拒 vs 已知键不被加载); 无坑档直接对应</td>
+    <td>入池(bug, P1): load_grouping_config 补第四键(对齐 check_missing_files 写法 parse_bool); 可补「YAML 显式值 == 解析值」回读守阵防该形态复发(键面守卫加 loader 消费核对的域)</td>
+  </tr>
+  <tr>
+    <td>D-02</td><td>R4</td><td>P2</td>
+    <td>config/validation/rules.py:204-222 <code>_validate_checking_action_spec</code>(对 with_reference/without_reference 子段只查「是字典 + mode 取值」); 运行时 rules/actions/checking.py:66-75 <code>_parse_section</code>(全 <code>.get</code> 静默默认) + :54-57 <code>__init__</code> 注释「spec 合法性…由 config 校验阶段保证」</td>
+    <td>checking 动作子段(with_reference/without_reference)的键面无 fail-fast: <code>enabled</code>/<code>auto_start</code> 拼写错(如 enabeld/autostart)校验零报错, 运行时按缺省静默生效 —— enabled 拼错 = 该分支静默不启用, auto_start 拼错 = 校验后种子停在暂停</td>
+    <td>临时 spec 实测复现: _validate_checking_action_spec 对 <code>{'mode':'full-checking','enabeld':'true','autostart':'true'}</code> 返回零错误; _parse_section 逐键 <code>seg.get("enabled", False)</code>/<code>seg.get("auto_start", False)</code> 未知键永不消费。可达: 任意规则 checking 动作 spec 手写即触发; 子段结构复杂(嵌套两层)拼错概率不低。对照: 顶层 spec 键有 _check_unknown_keys(CHECKING_ACTION_KNOWN_KEYS), 独缺子段层</td>
+    <td>池 26-09-22-2002 同族(schema 外键静默忽略的嵌套 spec 变体); 坑档 format-driven-parse 的「写死形状」教训面</td>
+    <td>入池(bug, P2): _validate_checking_action_spec 对子段补 _check_unknown_keys(CHECKING_SECTION_FIELDS 键面: enabled/mode/auto_start) + enabled 取值校验; 可顺带核「其它 object 型插件 spec 子段」同形态(add_category/freespace/move_to 的 fields 键面)</td>
+  </tr>
+  <tr>
+    <td>D-03</td><td>R7</td><td>P3</td>
+    <td>config/writer.py:333-341 <code>_backup</code>(<code>open(backup_path, "w", encoding="utf-8")</code> 直写); 对照 :191-207 <code>backup_versioned</code>(走 utils.atomic_write)</td>
+    <td>保存前备份(恰为坏配置的恢复资产)非原子直写: 写盘中断留半截 .bak; 同模块版本号备份却走原子写 —— 同文件两形态不一致</td>
+    <td>可达: write_tree 每次保存先经 _backup; WebUI 保存高频路径。后果限备份完整性(主配置在 _dump_roundtrip 走原子写不受影响), 但「恢复资产本身半截」在需要恢复的灾难场景伤害放大。守阵 test_no_o_trunc_write 只钉 O_TRUNC 字面 token, "w" 模式同语义从其面外漏过(与 A-05 同判)</td>
+    <td>批 A-05 同族不同件; 坑档/守阵 testing/guards.md O_TRUNC 组(盲面观察)</td>
+    <td>入池(chore, P3): _backup 改 utils.atomic_write(与 backup_versioned 统一)</td>
+  </tr>
+  <tr>
+    <td>D-04</td><td>R4</td><td>P3</td>
+    <td>config/loaders.py:249 / :253 / :258 / :272 <code>_resolve_hr_site_bindings</code>(四处静默 <code>continue</code>: preset None / 显式键不存在 / 绑不上绑多个 / hr_rule None)</td>
+    <td>「校验后散落防御」本批唯一实例: docstring 自称「这里假定配置已合法」, 函数体却带四处与 validate_config 同判定的静默跳过分支 —— 若两处口径将来漂移, 绑定静默消失 = 站点 HR 保护静默失效(正对 SiteHrCheckConfig docstring「!enabled 时该站 hr 段必填否则整站保护静默失效」警告面)</td>
+    <td>当前不可达(校验先拦, 四分支全死); 登记为口径备查非 bug: loader 的正确形态是「校验保证后直接 KeyError/裸取」, 或至少把 continue 换成显式断言 —— 静默跳过让「校验/loading 双口径」从单点变成两份可漂移清单</td>
+    <td>无(黄金法则 4「校验通过后的代码不应再散落防御式校验」的直接核对点)</td>
+    <td>仅记录(备查; 若动 hr 绑定链顺手收口)</td>
+  </tr>
+  <tr>
+    <td>D-05</td><td>R4(R10)</td><td>P3</td>
+    <td>config/migrations.py:111-154 <code>_migrate_config_2_3</code>(:136 <code>enabled</code> 原样保留 + 全函数无 notes 返回); 对照 :84-80 <code>_migrate_config_1_2</code> 同样无 notes; v3→v4(:204-219)已带 per-key notes 先例</td>
+    <td>两点: ①v1→v2/v2→v3 迁移删除/改写键(20 个废弃键 + 旧 hr_check 结构)无 per-key WARNING, 「升级失效键无提示」在旧迁移层仍缺(v3→v4 已按用户拍板补齐); ②<code>enabled: ""</code> 边缘输入在两条路径语义分歧 —— load 路径先 _strip_none 后迁移, "" 被剥 → mode partial/all 派生 enabled=True; materialize 路径先迁移后 strip, "" 原样保留 → 迁移后条目仅剩 enabled="" → load 再剥 → 条目失效 disabled: 同一 v2 配置首启(enabled)与次启(disabled)判定不一致</td>
+    <td>①可达: 持 v2 章存量配置升级即触发(生产曾有 v1→v2 实迁); ②可达性极窄: 需 v1 章缺失的「新写法」条目显式写 enabled 留空 + mode partial/all, 降 P3 备查</td>
+    <td>池 26-09-22-2002「升级失效键无提示」半边(migration notes 面)</td>
+    <td>入池(chore, P3): v1→v2/v2→v3 补 notes 返回形态(机制已在); enabled="" 分歧随 notes 一并收口(如 strip 后再判)</td>
+  </tr>
+  <tr>
+    <td>D-06</td><td>general(R10)</td><td>P3</td>
+    <td>config/__init__.py:24(<code>AddEpisodeTagsConfig</code> 零消费重导出) · validation/__init__.py:19(<code>_validate_curve_points</code>/<code>_validate_global_speed_limit_curve</code> 重导出零消费 —— core.py 延迟直导) · validation/__init__.py:67(<code>__all__</code> 重复 <code>KNOWN_WEB_KEYS</code>, RUF068) · validation/__init__.py:18(<code>_strip_none</code> 重导出被 loaders 消费但缺 __all__/noqa, F401 噪音)</td>
+    <td>重导出面四处不一致(ruff F401 ×4 + RUF068 ×1 复核采纳): 两处真死重导出、一处 __all__ 重复、一处活重导出缺声明</td>
+    <td>静态即证(grep 全仓消费方); 行为无影响。注: _strip_none 是 exporter 链活依赖, 处置须选「补 __all__」而非删除</td>
+    <td>无(B1-02 / B2-05 / C-03 死导入同族不同件)</td>
+    <td>入池(chore, P3): 删两处死重导出 + __all__ 去重 + _strip_none 补 __all__ 声明</td>
+  </tr>
+  <tr>
+    <td>D-07</td><td>general</td><td>P3</td>
+    <td>config/loaders.py:212 <code>load_tracker_config</code>(<code>d = TrackerConfig(name=name, domains=spec["domains"])</code> 冗余构造)</td>
+    <td>d 仅作其余字段默认源, name/domains 两实参从未被消费 —— 迷惑性冗余(看似参与构造, 实为纯噪音)</td>
+    <td>静态即证(返回另行完整构造); 行为无影响</td>
+    <td>无</td>
+    <td>仅记录(改 <code>d = TrackerConfig(name="<dummy>", domains=[])</code> 或直接以类属性取默认, 顺手修候选)</td>
+  </tr>
+</table>
+<h4>批 D 复验不登记项(可达性/影响面论证纪律)</h4>
+<p class="kv">①<b>池 26-09-22-2002 config 半边复核</b>(底册 A.1 #4, 撞车比对批 = 本批): 「load_config 对 schema 外键静默忽略」在当前代码已被结构性覆盖 —— validate_config 对根节点/config 顶层/各段/tracker 段/站点 hr 段/规则 spec 未知键全量报错(fail-fast), 另有 schema↔validation 键集合互检守卫(test_config_schema 20 项)与第三份键面基线(test_config_key_surface); issue 内建议的「warnings 分级不拦启动」与现行 fail-fast 口径不同, 漂移以代码为准。残余面 = 本批 D-01/D-02 两个新形态 + webui 伪警示半边(批 E), 沿用已入池条目不重开。②<code>match_trackers</code> 双向子域容错 <code>d.endswith("." + t)</code>: 用户 domains 配超短伪域(如 "net")可假命中 —— 配置者即本人, 且绑定后仍需 hr 段齐备才生效, 无越权面, 不登记。③_validate_fs 前缀检查「父子路径都拦」系注释明文设计(D:/Downloads 与 D:/Downloads/sub 一并拦下), 非 bug。④unmask_tree 旧值即哨兵时保持哨兵(宁可写明显占位串)—— 明文设计。⑤RUF013 隐式 Optional ×3 / UP 系现代注解 165 条 —— 与批 A–C 同判项目风格, 注解债归池 26-09-21-1408。⑥RUF001/002/003 全角标点与 ×/∪ 符号 —— 中文帮助文案语境正常, AGENTS.md 编码约束针对 emoji/图形符号, 不采纳。⑦validate_config 接受任意 <code>*_rules</code> 段(含退化名 "_rules")—— 运行期 registry 按名索引 + 规则 spec 深度校验兜底, 无可达错误行为。</p>
+<h4>批 D 工具提示源小结(D3: ruff + bandit, 逐条人工复核)</h4>
+<p>范围: 批 D 19 文件。<b>ruff</b>(全规则 193 条): 采纳 5 —— F401 ×4 + RUF068 ×1(归并 D-06)。其余逐类复核排除: UP006/UP035/UP045(现代注解 165 条, 项目风格, 与批 A–C 同判) · I001(12 条 import 排序) · SIM102 ×4 · RUF013 ×3(归池 1408) · RUF022 ×3(__all__ 排序) · RUF001/002/005(全角标点/符号, 见复验不登记项⑥)。F811 未报(无重复定义); 键面/语义类缺口(D-01/D-02/D-04/D-05/D-07)系工具盲区, 全部人工读码发现。<b>bandit</b>(2 条): B506 yaml_load ×2(loaders.py:487 / writer.py:64)复核均为<b>误报</b> —— Loader=yaml.BaseLoader 只构造标量/容器, 无任意对象实例化面(与批 A exporter B506 同判)。真信号合计: 工具源采纳 5(全部 P3 归 D-06); D-01(P1)/D-02(P2)两个实质发现均经临时配置实测复现后登记。</p>
+<h4>批 D 收尾 · 基线不变式对照(R5 哨兵)</h4>
+<p>本批评审零改码, 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d): <b>2610 passed + 4 skipped / 99%</b>(164 未覆盖 / 138 partial, 语句与分支总数 15511/5342)与基线切片逐位持平 —— 无漂移。批 D 守阵存活核对: test_config_key_surface / test_config_schema / test_config / test_config_writer / test_impact 共 160 用例局部跑全绿(覆盖率闸失败系部分跑预期)。</p>
+
+<h3>批 E — webui/ 全部 py(views / commands / runtime / server / routes)</h3>
+<p class="kv"><b>评审时 HEAD:</b> a4d14a8d(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 与起点同 commit, 树含前批评审产出属正常) · <b>范围:</b> 25 文件 / 5,296 行(全部逐文件过目, 无跳读) · <b>重点维度:</b> R2 R8 R9 · <b>备注:</b> 先读 reannounce 计划(26-10-05-0923)§设计再读码; commands.py / runtime.py 只登记计划未覆盖增量, 逐条标注与该计划的关系。</p>
+<p class="kv"><b>五步执行记录:</b> ①读档 计划 §03 维度/§06 批 E 行 + reannounce 计划 §03 目标行为设计全文(判定五分支/legacy 回退/推迟早回执/前缀契约) + webui 包与 server 包 docstring(线程契约/K3 日志命名); ②坑档对照 backend 类 concurrency(主循环唯一写线程/视图组装不发 qB API) / high-risk-ops(跳检七防护/reannounce 约束/删除仅 WEB 入口) / web-package-split / web-ui 类 contract-api; ③逐文件读码(LOC 降序, views → commands → runtime → torrent_cmds → traffic_qb → fs → hr → torrent_detail → lifecycle → config → auth → state → keys → common → module → events → context → sites → static_ui → groups → system → __init__ ×3 → factory → routes/__init__); ④ruff+bandit(逐条人工复核, 见下方工具源小结); ⑤本表登记(逐条对照附录 A–D 去重 + 逐条标注 reannounce 计划关系)。</p>
+<p class="kv"><b>逐文件勾选结论(25/25):</b><br>
+views 925 — E-01 E-04; R9✓(search_index「新字典重组+整体替换」原子交换契约成立(views.py:775 自证其迭代危害面); _build_* 纯读不发 qB API, TTL/预算双限额齐(ERROR_REASON/SEARCH_INDEX_BUDGET); 唯 WEB 侧重建与 store 原地变更的竞态见 E-01) R8✓(错误原因取数单点; 虚拟 tracker 排除口径与 commands 一致)<br>
+commands 900 — E-03; reannounce 计划面(_trackers_baseline:209 / _confirm_reannounce_result:228 / _register_reannounce_pending:311)按计划只登记未覆盖增量(E-03); R2✓(单发/bulk 跳检同经 ctx.ops.skip_check 提交点, 跳检七防护原样生效; bulk 分派处读实时配置拒单 fail-closed; tracker 日志一律 sanitize_tracker_url 脱敏) R8✓<br>
+runtime 696 — E-06; check_pending/check_pending 侧 reannounce 确认链系计划 S2 改动面, 已知判据方向缺陷(b_na − 60 恒假)由计划覆盖不重开; R3✓(results/reannounce_pending/truth_pending 主循环单写, Web 只读; post_command 只投递意图+唤醒, 写操作零旁路) R9✓(view_lock「判脏→重建→读取」同临界区; SSE 订阅队列有界 put_nowait 慢消费者丢弃退化轮询)<br>
+server/routes/torrent_cmds 272 — 无发现; R2✓(单发 skip-check/skip-check/precheck 路由层 403 gate(web.skip_check_menu, 读实时配置); force 提供才透传, cls=blocked 硬拒在 ops 层服务端裁决; bulk limits 负数路由层 400)<br>
+server/traffic_qb 265 — E-05; v3 关系: 本文件读侧装配系 v3 S3b 已落地范围(底册附录 C 在途件), 批 C 结论不重开; OSError→degraded→last-good/stale 竞态兜底链成立; hash 非法 400 / window 白名单 400<br>
+server/routes/fs 258 — 无发现; R8✓(白名单只由服务端快照派生不收客户端传参; mkdir 单层名拒分隔符/点项; open-path 只收 kind+标识路径服务端派生; 大小写兄弟越界有守阵钉住)<br>
+server/routes/hr 232 — 无发现; R8✓(唯一写通路 = request_refresh 置旗标 + confirm-empty 走站点锁单点; 只读端点 read_unlocked 契约「写侧原子替换, 读到必是完整一份」成立; read_error 如实带出不冒充空态); mark_local_present 的 by_hash 迭代归 E-01<br>
+server/routes/torrent_detail 221 — E-02; R8✓(export 走 content_disposition 头注入清洗; peers/files/trackers 断连 503 优先于缓存不冒充)<br>
+server/lifecycle 207 — 无发现; 网络噪音白名单降 INFO(其余异常一律不吞交默认处理器); proxy_headers=False 拒 XFF 伪造 loopback(1408 B-03 落地核验成立); 启动失败先确认再打日志不掩盖 bind 失败<br>
+server/routes/config 177 — 无发现; R8✓(/api/config 敏感键掩码哨兵 + PUT 按磁盘旧值还原; /api/config/public loopback-only 403 拒远端; 热重载经命令队列主循环应用); 表达式试算 dry_run 只读<br>
+server/auth 162 — 无发现; 跨站防护(Host 白名单+写方法 Origin 同源)仅 skip_local_verify 开且无凭证时生效 fail-closed; compare_digest 恒时比较; SSE 一次性票据取即删 30s TTL(长期密钥不入查询串); 错密钥 WARNING 不含密钥内容; 拒绝留痕值白名单化防日志注入<br>
+server/routes/state 134 — 无发现(本文件是池 2218/2122 复核锚, 见复验不登记项①②; JSONResponse 直出跳过 jsonable_encoder 有注释契约与守阵)<br>
+server/routes/keys 117 — 无发现(读时结构 fail-fast 严格校验 + 主文件→.bak→默认表兜底链 + atomic_write keep_backup; 后端不重复前端键位语义单点)<br>
+server/common 109 — 无发现(头值控制字符清洗防头注入; token 内容零入日志, atomic_write 0600; group_key_param 畸形 400 不 500)<br>
+module 106 — 无发现(apply「有差异即置脏 + 仅监听身份变化才重启」与 10048 先停旧再启语义正确; start 幂等; 门面经 manager.web 现取不缓存引用)<br>
+server/routes/events 81 — 无发现(SSE 只推信号与小真值不推全量; 订阅队列有界; keepalive 5s &lt; WEB_VIEW_TTL 防自锁有注释)<br>
+server/context 77 — 无发现(RoCache 写序号键失效 + 128 条防无界; require_torrent/require_client 404/503 语义单点)<br>
+server/routes/sites 59 — 无发现(只读扫描; BLE001 复核为 502 语义化转译非吞并)<br>
+server/static_ui 59 — 无发现(UI cookie 形状校验 + index.html 存在性校验挡路径逃逸进重定向目标; no-cache 中间件仅非 /api)<br>
+server/routes/groups 54 — 无发现(组命令全走 _enqueue 主循环执行)<br>
+server/routes/system 53 — 无发现(/api/log 256KB 截断 + 等级按格式串过滤失败如实带 note)<br>
+__init__ 41 / server/__init__ 38 / server/factory 33 / server/routes/__init__ 20 — 无发现(K3 日志命名冻结 / 组装壳守阵 / 路由金清单守阵三者与实况一致)</p>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>E-01</td><td>R9</td><td>P2</td>
+    <td>主循环原地变更 vs Web 线程无锁迭代 store 共享 dict。迭代面: views.py:897 <code>search_torrents</code>(迭代 <code>store.by_hash.items()</code>) · views.py:563 <code>_build_flat_view</code> / :588 <code>_build_singles_view</code> / :411-412 <code>_build_group_view</code>(经 runtime.py:653/663 <code>ensure_view</code>/<code>ensure_state</code> 的「Web 请求触发重建」路径在 Web 线程执行) · routes/fs.py:92-93 <code>api_paths</code>(迭代 groups 键与 by_hash.values) · routes/hr.py:35/181 <code>mark_local_present</code>(迭代 by_hash)。变更点(全部主循环线程): torrents/store.py:550 <code>remove_torrent</code>(<code>by_hash.pop</code> 原地) / :559 <code>restore_torrent</code>(原地赋值) / :448 <code>reset_runtime</code>(<code>groups.clear()</code>) · grouping_mod.py:266 <code>_leave_group</code>(<code>del store.groups[key]</code>)+ :555 起 cross_group_conflict_warned 的 add/discard</td>
+    <td>Web 线程迭代 store.by_hash / groups 期间主循环线程原地增删同一 dict → <code>RuntimeError: dictionary changed size during iteration</code>, 请求 500</td>
+    <td>①by_hash 的常规同步路径(store.apply_sync:201-258)是新字典重组+整体替换, 迭代安全 —— 危险面收窄为 remove_torrent/restore_torrent 两处原地变更, 调用链 = QbApi.torrents_delete(qbapi.py:157, WEB 删除命令)与 ops.skip_check 四阶段(删种→重加, 阻塞约 6s)②无脏门控的三个端点(/api/search routes/state.py:98、/api/hr/sites/{site}/entries、/api/paths)每请求必迭代, 迭代时长随库线性(大库百 ms 级), 与 6s 跳检窗/删除命令重叠概率真实存在;/api/state 的 Web 侧重建需 group_view_dirty=True 时才走(窗口窄但首开页面/门控未消费时可达)③后果: 瞬时 500 + 前端 toast, 下一轮自愈, 无数据破坏 —— views.py:775 对 search_index 已写明同款危害与原子交换对策, store 迭代面无对应防护</td>
+    <td>无(池 2218/2122/1408 系 perf 面; 坑档 concurrency「主循环唯一写线程」的 Web 读侧对偶缺口) · reannounce 计划: 未覆盖(计划改动面仅 commands.py 判定链/runtime.py check_pending, 不涉 store 迭代契约)</td>
+    <td>入池(bug, P2): 二选一 —— ①store 原地变更点(remove/restore)改为登记待报延迟到 apply_sync 统一应用(与「本程序自身发起的删除」既有补报机制同向) ②Web 侧迭代一律取快照引用(<code>tuple(by_hash)</code>/<code>list(groups)</code>)后再遍历; 可补「删除期间并发 /api/search 不 500」守阵</td>
+  </tr>
+  <tr>
+    <td>E-02</td><td>R6</td><td>P3</td>
+    <td>server/routes/torrent_detail.py:164-172 <code>api_speed_mode</code>(<code>except Exception: pass</code>; ruff S110 / bandit B110 复核采纳)</td>
+    <td>qB 全局限速/备用速度三个读调用任一异常被静默吞并: 无日志无观测面, 且只声明「读失败回 None」未声明部分成功组合(get_global_speed_limits 成功而 get_speed_limits_mode 失败时 current 有值而 alt_on/alt_current 为 None, 前端同一浮层一半真一半「未知」)</td>
+    <td>可达: qB API 瞬时故障/超时即触发(浮层每次打开都直读)。后果限展示(None 显示「未知」), 无状态污染 —— 但排查「为什么显示未知」零日志可用</td>
+    <td>无 · reannounce 计划: 无交叠</td>
+    <td>入池(chore, P3): except 降 DEBUG 留一行异常摘要 + 对齐三调用的成败口径(任一失败整组回 None 或逐字段如实标注)</td>
+  </tr>
+  <tr>
+    <td>E-03</td><td>general</td><td>P3</td>
+    <td>webui/commands.py:275-282 <code>_cmd_reannounce_group</code>(<code>if hashes:</code> 守卫无 else); 对照同文件 :300-309 <code>_cmd_reannounce_torrent</code>(缺失显式 error 回执)与 :684 起 <code>_bulk_recheck_via_ops</code>(缺失计数入回执)</td>
+    <td>reannounce_group ∈ DEFERRED_RECEIPT_COMMANDS(commands.py:69, drain 不补写回执)且组内成员执行时刻已全部不在快照时 <code>_group_hashes</code> 回空 → 不发指令、不登记跟踪、不写任何回执, 前端 waitCmd 挂到自身超时才弹「超时」</td>
+    <td>可达: 组视图快照渲染 → 用户点「强制汇报」→ 命令排队(主循环被长任务/6s 跳检占住时延迟秒级)→ 执行前组内成员全被删除。同口径单发 reannounce_torrent / recheck_torrent 对缺失都写了 error 回执, 唯组命令静默</td>
+    <td>无 · reannounce 计划: <b>未覆盖</b>(计划 S1/S2 重写判定纯函数与 item 级登记结构, 未改「空组守卫无 else」的入口行为 —— 实施时建议顺带核对空组在 item 级聚合下的回执形状)</td>
+    <td>并入 reannounce 计划备注(实施 S1 时顺带补 else error 回执)或独立入池(bug, P3)</td>
+  </tr>
+  <tr>
+    <td>E-04</td><td>general(R10)</td><td>P3</td>
+    <td>webui/views.py:527 <code>_seed_view</code>(<code>"magnet_uri": r.magnet_uri</code> 进平铺视图 → /api/state 的 torrents 数组随每轮轮询回传); 前端消费 static/shared/drawer.js:617-628 <code>copyTorrentInfo</code> 的按需取详情兜底</td>
+    <td>契约漂移: 坑档 contract-api 明文「只在用户显式动作时才需要的字段不要塞进轮询载荷(如 magnet_uri), 每轮响应体加字段在大库上是 MB 级, 处置 = 按需取一次详情」—— drawer 的按需兜底已实现, 但种子页平铺数组仍每轮携带全量 magnet_uri(magnet 添加型库为 MB 级增量), 且该兜底在种子页(memberByHash 由 torrents 补齐时)恒短路成死路径, 两组注释口径互相矛盾(decorate.js:152「magnet_uri 等扩展字段在这份」vs drawer.js:620「不给每轮响应体加字段」)</td>
+    <td>静态即证(views.py:527 在 SEED_ITEM 契约内; decorate.js/drawer.js 注释自证两种口径并存); 行为无错(磁力复制双路都通), 纯载荷成本 + 契约双口径漂移</td>
+    <td>坑档 web-ui/contract-api(magnet_uri 即其例); 池 2218/1408 载荷成本面 · reannounce 计划: 无交叠</td>
+    <td>入池(refactor, P3): 二选一 —— ①_seed_view 去掉 magnet_uri(按需兜底已全)或 ②更新坑档把「种子页平铺数组携带」记为明文例外; 随池 2218 的载荷瘦身一并处置亦可</td>
+  </tr>
+  <tr>
+    <td>E-05</td><td>R3</td><td>P3</td>
+    <td>server/traffic_qb.py:70-75 <code>QbTrafficChartApi.v3cache</code>(惰性建无锁); 同类面 :66 <code>_last_good</code> 多线程读写</td>
+    <td>FastAPI 同步端点跑线程池, 同域两并发请求可双重构造 V3DayCache(其一被引用覆盖丢弃)—— B1-01(hr/service._stores)同族; 后果评估同样良性: 双实例指向同一数据目录, FileLock 按路径互斥仍成立, 丢弃实例仅损失一份解析缓存</td>
+    <td>调用链: 三个 router 各持一实例(state/torrent_detail/groups, 每域一件系 docstring 明文设计), 实例内并发首访即触发; GIL 下字典读写原子, 无可观察错误行为, 属「单实例单缓存」契约依赖时序的脆弱点</td>
+    <td>B1-01 同族不同件(hr/_stores) · reannounce 计划: 无交叠</td>
+    <td>入池(chore, P3): 与 B1-01 同批处理(__init__ 预建或加锁惰性建); 仅记录亦可</td>
+  </tr>
+  <tr>
+    <td>E-06</td><td>general</td><td>P3</td>
+    <td>webui/runtime.py:289-292 <code>consume_commands</code>(<code>except KeyError</code> 分支)</td>
+    <td>handler 体内任何 KeyError(典型: 队列载荷缺必填参数, 如 pause_torrent 缺 hash)都会被误标成「WEB UI 未知命令」—— 日志与 error 回执文案双重误导(命令其实是已知的, 错在参数)</td>
+    <td>当前 11 个路由模块的载荷拼装齐全, 正常路径不可达; 可达面 = 程序化 post_command 误用/将来路由漏参 —— 判据「handlers[cmd] 的 KeyError」与「handler 体内的 KeyError」未分离(前者才是未知命令)</td>
+    <td>无 · reannounce 计划: 无交叠</td>
+    <td>仅记录(备查; 收口形态 = 分发前 <code>if cmd not in handlers</code> 显式判未知, KeyError 归入通用异常分支)</td>
+  </tr>
+</table>
+<h4>批 E 复验不登记项(可达性/影响面论证纪律)</h4>
+<p class="kv">①<b>池 26-10-01-2218 复核</b>(底册 A.1 #6, 撞车比对批 = 本批): 现状无结构性缓解 —— /api/state(routes/state.py:34-86)仍为「脏则 Web 侧全量重建四视图 + rid 全量门控(仅整表跳过, 无字段级增量)+ view 分片(P1-1 已落地)+ JSONResponse 直出(161ms 编码器已省)」; rid 增量未用满/无分页/按需字段三点判准原样成立, 沿用已入池条目不重开。②<b>池 26-09-19-2122 复核</b>: ensure_state 的请求路径重建仍存在(runtime.py:674-676), 「门控把重建搬进请求路径」形状未变, 不重开。③<b>池 26-09-21-1408</b>(四视图重建成本): 后端构建器无结构性变化, 前端消费面归批 F, 不重开。④<b>池 26-09-22-2002 webui 半边定位</b>(底册 A.1 #4, 批 D 移交): 伪警示条的数据源 = /api/config/schema 的 risk 元数据(config_schema.schema_payload, 批 D 已过目)+ 前端复述逻辑(config_editor.js / config_hub.js)—— 后端侧本批无新增面, 半边落点为批 F1 非批 E。⑤<b>池 26-10-05-0402 WEB 半边复核</b>(底册 A.1 #1): WEB 跳检入口与规则侧同一提交点(ctx.ops.skip_check, commands.py:361/:756), 七防护原样生效; 路由层 403 gate(torrent_cmds.py:60/:80)+ bulk 分派处读实时配置拒单(commands.py:613)双层并存; force 只豁越 cls=force、cls=blocked 硬拒(ops 层服务端裁决, 前端绕不过)—— WEB 侧无绕闸旁路, 洗白面在规则侧 chain0, 归批 G 复核。⑥<b>R2 总结论</b>: WEB 危险动作四类全部过闸或同闸 —— 跳检(上述双层)/强制汇报(确认跟踪, 高风险约束不放宽)/删种(WEB 唯一删除入口 + 前端危险确认, delete_files 显式)/覆盖限速(手动覆盖语义明文, 曲线接管写回)—— 双入口一致性成立, 无发现。⑦<b>R8 总结论</b>: 凭据面 —— tracker 日志一律 sanitize_tracker_url(commands.py:491-503), token 生成零入日志(common.py:74-78), /api/config 掩码哨兵, /api/log 不含密钥内容(经 common.ensure_web_token 契约); 输入校验面 —— group_key_param/window/hash 白名单/fs 三闸齐; /api/torrents/{hash}/trackers 透传含 passkey 的 announce URL 到已鉴权浏览器 —— 与 qB 自家 WebUI 同口径、鉴权在先、本地管理工具语义, 不登记。⑧auth._local_skip_logged 免锁 bool(Reloked 最坏多记一条 INFO)/ RoCache 写序号键 / traffic_qb._last_good 多线程写: GIL 原子 + 最坏多算一次, 无正确性后果, 不登记。⑨api_config_put 并发双写: unmask 同盘基线 + atomic_write, 后到者覆盖(last-wins), 前端保存按钮天然串行, 不登记。⑩RUF012 ×2(_QUEUE_ACTIONS/_BULK_ACTIONS 类属性可变默认): 只读使用不采纳; RUF100 ×1(fs.py:25 noqa 失效, logger 在 build_router 内重绑定): 纯注释卫生, 归死代码清理顺手项。</p>
+<h4>批 E 工具提示源小结(D3: ruff + bandit, 逐条人工复核)</h4>
+<p>范围: 批 E 25 文件。<b>ruff</b>(全规则 1,843 条, 系全批最大提示量 —— 主因中文 docstring 全角标点与行宽, 逐类复核): F 类 0 条(无死导入/未用变量/重复定义, 为 A–E 五批最干净); 采纳 1 —— S110(torrent_detail.py:171, 归 E-02, 与 bandit B110 同点)。其余逐类复核排除: RUF013 隐式 Optional ×33(注解债归池 26-09-21-1408, 与批 A–D 同判) · B904 ×10(HTTPException 语义化转译场景 raise-from 无收益) · A002 hash 遮内建 ×15(与 qB 术语对齐的参数名, 路由/命令签名一致性优先) · BLE001 ×4(runtime 三处系 docstring 明文契约(notify 永不阻塞 / check_pending 断连写回执 / _affected_* 退化不写真值), sites.py 系 502 转译) · ERA001 ×5(runtime 注释化文档段非死代码) · TID252/PLC0415(相对导入与函数内延迟导入系 web-package-split 拆包纪律与循环依赖对策) · E501/D415/D400/COM812/RUF002(全角标点/文档格式, 中文 docstring 语境, 与前批同判) · RET501(module.py ×2, 风格)。真信号合计: 工具源采纳 1(E-02); E-01/E-03/E-04/E-05/E-06 系人工读码发现(工具盲区: F811 不报同形缺参误标, 迭代竞态系运行期形态)。<b>bandit</b>(1 条): B110 = E-02 采纳; B101/B105/B324/B506 零命中 —— webui 面无安全类工具信号, 与 R8 人工核对结论互证。</p>
+<h4>批 E 收尾 · 基线不变式对照(R5 哨兵)</h4>
+<p>本批评审零改码, 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d): <b>2610 passed + 4 skipped / 99%</b>(164 未覆盖 / 138 partial, 语句与分支总数 15511/5342)与基线切片逐位持平 —— 无漂移。</p>
+
+<h3>批 F1 — 前端 JS 主干(config_editor / drawer / shortcuts / config_hub / dialogs / commands)</h3>
+<p class="kv"><b>评审时 HEAD:</b> a4d14a8d(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 与起点同 commit, 树含前批评审产出属正常) · <b>范围:</b> 6 文件 / 6,466 行 JS(明细见 §4 拆分) · <b>重点维度:</b> R8 R9 R10 · <b>备注:</b> commands.js 在 reannounce 计划改动面内, 只登记计划未覆盖增量并标「落地后复验」。</p>
+<h4>五步执行记录</h4>
+<p>①读档 计划 §03/§06 批 F1 行 + reannounce 计划(26-10-05-0923)§03/§04 全文(前端改动面 = S3 commands.js :470–500 聚合分支与 sticky 文案) + 报告底册附录 A–D + pitfalls/web-ui 索引 30 主题逐条对照(深读 13 篇: js-comment-terminator / unsaved-guard-reload-keys / modal-mask-click-self-drag / drawer-switch-flicker / dock-panel / combobox-focusout-close / hover-keynav-fight / poll-reseed-filter / contract-api / vue-reactivity / columns-persist / search-views / aq-tip 双篇按索引一句话对照); ②坑档对照 如上 —— 六文件全部踩坑史条目(遮罩臂位 / FX-29 软切换 / dock 让位单点 / combobox focusout / hover 门限 / cjk-regex-norm / 刷新守卫双链 / vue-reactivity 四类)逐条核对现状实现均按坑档处置落地; ③逐文件读码(LOC 降序, 全文件过目无跳读); ④工具提示源 —— 仓库无任何 eslint 配置(eslintrc / eslint.config 均不存在), 按任务约定跳过并在此注明; 替代跑 <code>node --check</code> 六文件全过(与守阵 test_frontend_static_bundle_health 同源); ruff/bandit 为 Python 工具不适用 JS; ⑤本表登记(逐条对照附录 A–D 去重)。</p>
+<h4>逐文件勾选结论(6/6)</h4>
+<p class="kv"><b>config_editor 1371</b> — F1-02 F1-03; 脏检测/保存回读/刷新守卫三链与坑档 unsaved-guard-reload-keys 逐位吻合(cfgGuardSync 挂摘成对幂等 · _cfgOnReloadKey 独立 keydown 守卫不进黑名单 · cfgReloadGuard 主动刷新前先 cfgGuardRelease); R8✓(树全经 Vue 插值, 不碰 Web Storage —— 与守阵反向断言一致); 站点回退链回填/徽标/占位三件套口径自洽(tri_state '' 经 cfgRaw 存在性判不误判缺失); 曲线图表 hover 换算按 preserveAspectRatio 实缩放(svg-chart-mapping 坑档处置在位)。<b>drawer 1320</b> — F1-01; W2 请求代际(seq + hash 双守卫)四 fetcher 纪律成立, 迟到响应一律不落袋不闪 loading; FX-29 软切换五处(保留旧数据/160ms 延迟点亮/按 tab 待到集合/落定登记/stale 不登记)与坑档 drawer-switch-flicker 三次复发修法一致; W3 高度治理/出入过渡 rAF 追赶循环 seq 代际闸自洽; dock-panel 让位三发(_kbRevealRow + 挂单兑现 + drawerAfterEnterHook 补发)齐; 轮询可见性守卫(切页跳过不拆定时器)在位。<b>shortcuts 1177</b> — 无发现; 注册表单一事实源/黑名单拒绑/录制器 capture 段隔离/冲突三选一/SSE 与轮询赛跑的 waitCmd 契约全部自洽; _kbViewBottom 下界单点(dock-panel 处置)为全部滚动算式唯一消费点; KB_BLACKLIST 语义注释与 unsaved-guard-reload-keys 坑档口径一致(js-comment-terminator 事故点已修, 注释内无 */ 序列残留)。<b>config_hub 971</b> — F1-04; hubGo/hubRestore 分区恢复带 schema 校验(ui-location-persist 处置在位); 站点搜索 trackerNorm 用 [^\p{L}\p{N}]+/gu(cjk-regex-norm 处置在位); 命中面板 hover 走 mousemove+3px 门限 + scrollTop 差值无 scrollIntoView(hover-keynav-fight 处置在位); hrSiteBinding 映射制口径与后端同构(双向子域容错与批 D 复验不登记项②同判)。<b>dialogs 908</b> — 无发现; 遮罩臂位(maskDownSelf/maskCloseIfArmed 成对)与 modal-mask-click-self-drag 处置一致; loadMetaOptions 带 metaOpen 守卫防慢响应污染下次打开; escBusy 名单与 _kbOverlayBusy 的职责分叉(退栈含 drawer.open/选中态, 引擎名单不含)系注释明文设计; metaCat 失焦收层 40ms 合帧 + _popBlurShouldHold 四轮加固在位。<b>commands 719</b> — F1-05; reannounce 计划面(_actCore :470–500 聚合分支 / sticky 文案 / waitCmd 40s 上限)按计划只登记未覆盖增量, 三处均标「落地后复验」; 乐观 UI 三层纪律(贴前存 prev / 真值只改 patch+prev 不删 pendingOps / _snapshotTruth 比服务端原始值拷值不拷引用)与 contract-api 坑档逐位吻合; TRUTH_HOLD_MS=8000 与后端 TRUTH_PUSH_CAP_MS 一致性有静态守阵钉住。</p>
+<h4>XSS 数据源 → 渲染点核对表(D1 清单法, 覆盖 6 文件全部汇入点)</h4>
+<p>渲染点 grep(innerHTML / outerHTML / insertAdjacentHTML / document.write / v-html / eval( / new Function( / srcdoc / setAttribute / .href= / .src=): <b>六文件合计 1 处 HTML 邻接汇入点 + 3 处选择器插值</b>, 无一条「外部可控数据 → 未转义 DOM 写入」链:</p>
+<table>
+  <tr><th>#</th><th>汇入点</th><th>数据源</th><th>判定</th></tr>
+  <tr><td>1</td><td class="mono">commands.js:676 <code>_exportDownload</code> <code>a.href = url</code>(全六文件唯一 HTML 邻接写点)</td><td>url = <code>URL.createObjectURL(new Blob([buf]))</code> —— buf 来自本机后端 <code>/api/torrents/{hash}/export</code> 字节流, scheme 恒为本地生成的 <code>blob:</code>, 无任何外部串接面; <code>a.download</code> 文件名经 <code>replace(/["\\/]/g, "_")</code> 清洗(无路径穿越/引号注入)</td><td>有防护, 安全</td></tr>
+  <tr><td>2</td><td class="mono">shortcuts.js:575/576/605 <code>_kbScrollRowIntoView</code> / <code>_kbRevealRow</code> querySelector 属性选择器插值</td><td>hash/key 来自后端状态或光标行, 一律经 <code>CSS.escape()</code></td><td>有转义, 安全</td></tr>
+  <tr><td>3</td><td>其余全部动态内容(qB 外部不可信源: 种子名 / comment / created_by / tracker URL / peer ip·client·flags / 日志行; 用户输入: prompt/表单/站点重命名; 持久化: localStorage UI 偏好)</td><td>全部经 Vue 模板插值({{ }})自动转义; 六文件 v-html / innerHTML 系 0 处(shared 全目录仅 boot.js:27/88/89/97 三处 innerHTML, 注入内容为打包期静态模板清单, 归 F2 机制面核对)</td><td>无未转义链, 0 登记</td></tr>
+  <tr><td>4</td><td>凭据面(R8): shortcuts.js AQB_KEYS reload/save / commands.js _exportDownload 均走 <code>Authorization: Bearer</code> 头, token 不进 URL/查询串/localStorage; console 输出仅 [perf] 时序数字(commands.js:87/88/164), 无凭据/种子凭据引用</td><td>—</td><td>合格</td></tr>
+</table>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>F1-01</td>
+    <td>R9</td>
+    <td>P2</td>
+    <td>drawer.js:160(<code>_skipPrecheck</code> 落袋守卫)· :94 <code>_skipCheckDialog</code></td>
+    <td>跳检预检的迟到回执可写进**无关弹窗**: 落袋守卫只复核 <code>seq !== this._skipCheckSeq || !this.modal.visible</code> 两条件, 不校验当前可见 modal 是否仍是本跳检框 —— 用户取消跳检框(seq 不再递增)后在预检回执到达前打开任何其它 modal(限速/重命名/删除确认, 共用 <code>this.modal</code> 单例, ui_feedback.js:92 <code>_openModal</code>), 回执落袋即把 <code>modal.verdict</code> 覆写成跳检明细、<code>okDisabled/okText/extraText/busy</code> 按跳检三分流改写, 无关弹窗出现「预检/禁止/需强制」行且确认钮文案被换成「跳检 N 个」</td>
+    <td>调用链: skipCheckTorrent/skipCheckMulti → _skipCheckDialog(:120 不 await 发 _skipPrecheck) → 用户 Esc 取消(p resolve false, 函数返回, _skipCheckSeq 保持) → 用户右键打开 editLimits 等 → _openModal 置 modal.visible=true → 数秒级预检回执(批量 waitCmd 60s 上限, 大库预检慢)到达 → :160 两条件全过 → :162-185 直接写 this.modal.*。非纯理论: 取消到再开框的窗口内回执必触发; precheck 慢时窗口秒级</td>
+    <td>无(底册无; 坑档 modal-mask/combobox 系事件判据族不同件; drawer-switch-flicker 复发 2 的「成对协议跨模块」教训同族但非同点)</td>
+    <td>入池(bug, P2): 落袋守卫补第三条件 —— modal 身份戳(_openModal 时在 cfg 里带一次性 id, 或 _skipCheckDialog 记 <code>this._skipModalTag = seq</code> 并在守卫比对); 顺手把「单例 modal + 异步落框」形态收成守卫单点, 防后续同形对话框复发(与 drawer-switch-flicker 复发 2 的教训同构: 成对协议必须有显式锚)</td>
+  </tr>
+  <tr>
+    <td>F1-02</td>
+    <td>general(R10)</td>
+    <td>P3</td>
+    <td>config_editor.js:1240-1245(<code>CE_FIELD_BASE</code> computed <code>sectionExists</code> 同名键定义两次, 两体逐字相同)</td>
+    <td>对象字面量重复键: 后者静默覆盖前者 —— 现两体相同零行为差, 但它是「改了一处漏改另一处」的静默陷阱(改前者不生效, 无任何报错)</td>
+    <td>静态即证(Vue 选项合并取后者); node --check 与静态守阵对重复键零告警 —— JS 工具面(ruff F811 的同族位)空缺的直接实例</td>
+    <td>无(B1-02/B2-05/C-03 死导入同族不同件, 那是 Python F401; 本条是 JS 重复键, 工具面同样空白)</td>
+    <td>入池(chore, P3): 删其一; 与 F1-05 同批清理亦可</td>
+  </tr>
+  <tr>
+    <td>F1-03</td>
+    <td>R9</td>
+    <td>P3</td>
+    <td>commands.js:116-118(<code>waitCmd</code> 的 <code>Promise.race</code> 后清理段)· :180 <code>_awaitCmd</code> · :193 <code>_cancelCmdWait</code></td>
+    <td>轮询路径抛出(e.auth 401)时 race 直接 reject, 其后的 <code>stop.v = true</code> 与 <code>_cancelCmdWait(cmdId)</code> 不执行 —— SSE waiter 条目与其超时定时器悬挂至 timeoutMs(默认 40s / 跳检 60s)才自清, 期间该 cmdId 的迟到 SSE 事件会调用孤儿 waiter(空 resolve, 无行为差)</td>
+    <td>可达: waitCmd 在途(批量跳检 60s)中 token 被更换 → 任一轮询 401 → _pollCmd :135 throw e.auth → race reject → 清理两行跳过。影响有界(单条 waiter + 定时器, 到点自愈, 孤儿 resolve 无副作用), 故 P3 非功能错误</td>
+    <td>无</td>
+    <td>仅记录(备查): 收口形态 = race 包 <code>.finally(() => { stop.v = true; this._cancelCmdWait(cmdId); })</code>; 若动 waitCmd(reannounce 计划不触此处)顺手收</td>
+  </tr>
+  <tr>
+    <td>F1-04</td>
+    <td>R10</td>
+    <td>P3</td>
+    <td>config_hub.js:217-230 <code>hubRiskList</code> + :514-530 <code>hubCollectRisk</code>(警示条取数单点)· 渲染 tpl/settings.html:46-52(模板归 F2 机制面, 此处只登记 JS 侧)</td>
+    <td>池 2002「设置页伪警示」前端半边定位确认: 首页警示条(<code>hb-attn</code>)的 risk 文案 = <code>it.field.risk</code> schema 原文逐字复述, 健康判定只有「已配置」一道门槛(<code>cfgExists(it.path)</code>), 不反映配置实际健康; 与 LED 判定(hubLedOf:458-461 另有 web.host≠127.0.0.1 的 warn)是两套互不通气的口径 —— 警示条文案与真实风险状态脱节即在此两点</td>
+    <td>静态即证(hubCollectRisk 只比 risk 字段非空 + cfgExists); 规则页侧(cfgRuleRisk)同形态。本条仅做半边定位补全, 不构成新缺陷论证</td>
+    <td>池 26-09-22-2002(底册 A.1 #4, 批 D/E 双移交的 F1 落点)</td>
+    <td>并入池 26-09-22-2002, 不重开(定位信息: 前端取数单点 hubRiskList/hubCollectRisk, 健康维度缺口 = 「仅已配置过滤 + schema 文案复述」; 修复时与 hubLedOf 口径合流)</td>
+  </tr>
+  <tr>
+    <td>F1-05</td>
+    <td>R9(计划未覆盖增量, 落地后复验)</td>
+    <td>P3</td>
+    <td>commands.js:464-468 + :32-48(<code>_newCmdStats</code> 单槽 vs 并发命令)</td>
+    <td>reannounce 计划 S3 改动面(:470–500 聚合分支/sticky 文案)之外的增量: <code>cmdStats</code> 是单槽对象, 并发两条命令(如 bulk 跳检 60s 在途时再点单种暂停)时后发 <code>_newCmdStats</code> 整体重写, 先发命令的 <code>_cmdRecToResult</code>/:233 <code>onTruthEvent</code> 随后把时序数字合并进**后一条**的槽 —— [perf] 日志把两条命令的各段耗时刻到同一条上, 排查时可能误归因</td>
+    <td>可达: 跳检 waitCmd(60s)在途 + 任意其它命令(_actCore/torrentCmd 均不互斥; modal 不阻止已开命令的回执到达)。影响限 console 诊断日志, 零 UI/数据后果 —— P3 备查非 bug。注: reannounce 计划只改 :470–500 聚合与文案, 本条在其面外</td>
+    <td>无(与 reannounce 计划无交叠)</td>
+    <td>仅记录(备查); reannounce 落地后复验时若顺手动 cmdStats 面可一并收(按 cmdId 分槽或以 <code>c.cmdId</code> 归属校验后再写)</td>
+  </tr>
+</table>
+<h4>批 F1 复验不登记项(可达性/影响面论证纪律)</h4>
+<p class="kv">①<b>commands.js:535 <code>_bulkTargets</code> 虚拟组空成员崩溃面</b>(<code>g.members[0].hash</code> 无守卫): 虚拟组行(未归组命中)由搜索命中构造, 构造时恒 ≥1 成员; 键盘路径 _kbTargets(:792)带 <code>g.members[0] ? …</code> 守卫系同形防御冗余, 空成员虚拟组在当前后端视图构造下不可达, 不登记。②<b>drawer.js:1141 <code>drawerDel</code> 的 Promise 无 catch</b>: delTorrent 内部自吞错误并给 toast(与 bulkDelete 同链), 论证不出可达拒绝路径; 真拒绝时 <code>_drawerDeletePending</code> 残留 true 也只影响下一次 drawerDel 的覆盖写, 不登记。③<b>dialogs.js:536 <code>submitSpeedDialog</code> 主速空串时 alt 成功但窗不关</b>: 主速字段由 _fillSpeedFields 从 qB 当前值回填恒非空(0 → "0"), 仅 /api/speed/mode 请求失败时主速两栏为空 —— 该态下输入框本就无基线值, 留窗重试合理, 不登记。④<b>drawer.js:574 <code>setFilePriority</code> 依赖打开时刻的 index</b>: 内容页签无自动轮询(files 仅按需拉), 菜单开着时行集不会因轮询重排, 不登记。⑤<b>shortcuts.js:519 <code>_kbViewportRow</code> 全 DOM 扫描</b>: 仅无光标回落路径一次触发, 非热路径(热路径前缀和分支优先), 不登记。⑥<b>坑档复发核对</b>: js-comment-terminator(shortcuts.js 注释 */ 残留 0)· unsaved-guard-reload-keys(三链全在位)· modal-mask-click-self-drag(臂位成对)· drawer-switch-flicker(FX-29 五处 + 流量图三挂点收口)· dock-panel(下界单点 + 三发让位)· combobox-focusout-close(metaCat 四轮加固)· hover-keynav-fight(mousemove 门限 + 差值滚动)· cjk-regex-norm(\p{L}\p{N} 口径)—— 批 F1 六文件全部历史坑处置在位, 零复发形态。</p>
+<h4>批 F1 工具提示源小结(D3: JS 无 ruff/bandit 覆盖, grep 清单 + node --check 替代)</h4>
+<p>范围: 批 F1 6 文件。<b>eslint</b>: 仓库无任何 eslint 配置(eslintrc / eslint.config.* 均不存在), 按任务约定跳过并注明 —— 引入与否属工具链决策, 不在本批评审范围。<b>node --check</b>(与守阵 test_frontend_static_bundle_health 同源): 6/6 语法全过。<b>XSS 渲染点 grep 清单</b>: 见上方核对表 —— 1 处 HTML 邻接写点(commands.js:676 blob 下载, 有防护) + 3 处选择器插值(CSS.escape 全覆盖), 无未转义外部数据链。<b>重复键/死代码面</b>(ruff F811/F401 的 JS 对应位, 工具空白全靠人工): 采纳 1 —— F1-02(config_editor.js sectionExists 重复键)。真信号合计: 工具源(node --check + grep)采纳 0, 人工发现 5(F1-01 竞态 / F1-02 重复键 / F1-03 清理缺 finally / F1-04 池 2002 半边定位 / F1-05 cmdStats 单槽), 无 P0/P1。</p>
+<h4>批 F1 收尾 · 基线不变式对照(R5 哨兵)</h4>
+<p>本批评审零改码(产出仅报告章节 + activeContext 切片), 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d): <b>2610 passed + 4 skipped / 99%</b>(164 未覆盖 / 138 partial, 语句与分支总数 15511/5342)与基线切片逐位持平 —— 无漂移。备注: 首跑曾出 166 未覆盖 / 139 partial(98%), 同 HEAD 立即复跑回到 164/138 —— 判定为多线程(Web 线程/HR worker)收尾时序导致的覆盖抖动, 非代码漂移; 后续批次遇 ±2 级小抖动可先复跑一次再判漂移。</p>
+
+<h3>批 F2 — 前端 JS 其余 25 文件 + CSS/HTML 机制面</h3>
+<p class="kv"><b>评审时 HEAD:</b> a4d14a8d(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 与起点/F1 批同 commit) · <b>范围:</b> 25 JS / 7,013 行 + CSS 18 件 / 6,977 行 + HTML 18 件 / 3,830 行 · <b>重点维度:</b> R8 R9 R10 ·
+<b>备注:</b> CSS/HTML 按 D1 只查 XSS 汇入点与机制回归面(aq-tip / 皮肤 / 轮询边界); XSS 用「数据源 → 渲染点」grep 清单法(innerHTML / insertAdjacentHTML / v-html 等), 清单覆盖 static 全部 JS 汇入点并留核对表; 三皮肤 CSS 同构, 机制面以 shared/console 为主深查、prism/atlas 差异面抽查。</p>
+<h4>五步执行记录</h4>
+<p>①读档 计划 §03/§06 批 F2 行 + pitfalls/web-ui/_index.md 30 主题逐条对照(aq-tip 双篇 / columns-persist / poll-reseed-filter / template-render / tpl-comment-split-orphan / css-comment-terminator / js-comment-terminator / cjk-regex-norm / combobox-focusout-close / hover-keynav-fight / modal-mask-click-self-drag / clip-path-clips-fixed / nav-focus-stale-ring / hr-tooltip-overlap / vue-reactivity / contract-api / search-views / ui-location-persist / frontend-split 按索引一句话核对, 其中 19 篇直接命中 F2 文件); ②坑档对照 如上 —— F2 文件的踩坑史条目(aq-tip 断供式 MutationObserver / 列状态双轨与 hide 播种 / 筛选派生候选 statusSeeded 同族(facetRows 单点) / 悬停接管 3px 门限 / 失焦收层 40ms 合帧 + _popBlurShouldHold / cjk 归一化(前端已不持文本匹配) / 进度条数值盒 / svg-chart 映射 / dock 下界单点)逐条核对现状实现均按坑档处置落地; ③逐文件读码: 25 件 JS 按 LOC 降序全文件过目无跳读(vendor 2 件按 S1 矩阵口径只核版本与集成面: Vue 3.5.13 官方 prod dist / uPlot 1.6.32 官方 IIFE, 经 boot.js 清单依序放行, 未逐行审库内代码); CSS/HTML 36 件按机制面清单过(§上方核对表); ④工具提示源 —— eslint 仓库无配置(沿 F1 判), 替代跑 <code>node --check</code> 25/25 全过(23 非 vendor + 2 vendor); grep 清单为主逐条人工复核; ⑤本表登记(逐条对照附录 A–D 去重, 池 2002/2120/2211/1408 族均不撞)。</p>
+<h4>逐文件勾选结论(25/25)</h4>
+<p class="kv"><b>columns 716</b> — 无发现; 双轨模型纪律成立(意图/生效分轨, persistPage 唯一写漏斗 + loadColState 白名单洗净 + hide 播种「从无偏好才播」), 行窗口化三硬约束(逐行实测前缀和 / 展开退避看真实面板 / ROW_WIN_MIN 阈值)齐; _winGapOf 返回 null 不缓存防跨页污染(文件头 BUG-1 注释)在位; colAlignCss 生成规则数据源为列模型常量, 无外部串。<b>hr_status 636</b> — 无发现; 纯展示纪律(不重算阈值/新鲜度, 人话全由后端算好)贯彻; 站点明细按需拉一次带 loading/loaded 双守卫, 单站失败不阻塞; 表③ 首展开才拉不轮询; 0 哨兵纪律(verified_ts/last_seen 绝不显 epoch)在位; lane 徽章类名由后端 token 映射白名单。<b>add_torrent 594</b> — F2-01 F2-03; DND-01 深度计数对称 / 三浮层互斥双向 / combobox 40ms 合帧 + _popBlurShouldHold 四轮加固 / 下拉限高 watcher 全覆盖(开层/候选到位/过滤词变化)在位; 提交链 JSON base64(与 state.js:244 注释一致)但两处 multipart 旧注释残留(见 F2-01)。<b>qb_traffic_chart 591</b> — 无发现; _QB_SCOPES 作用域单一描述源 + stale 代际判据(对齐 drawer.js _drawerStale)+ 轮询 interval_s 夹取 [1.5s, 600s] + document.hidden/active/loading 三守卫 + 静默续拉(qbCurPending 三合一判据 + 同宿主 setData 快路)+ 换肤先销毁再重建(canvas 烘焙色)+ ResizeObserver 自摘守卫齐; _qbPointsToData 纯函数有 node 守阵真跑(test_web.py test_frontend_qb_traffic_chart_wiring)。<b>app 501</b> — 无发现; 常量单点(列模型/排序/状态优先级表)与接线, localStorage 读侧全部白名单(initialPage/initialViewMode/initialDrawerTab/initialDrawerHeight/loadTimeFmt); STATE_RANK 与后端 _SHOW_STATE_RANK 双表一致性有 _scan_state_rank 机械守阵。<b>state 390</b> — 无发现; 根选项展开(不走 mixin)纪律与 _scan_mixin_wiring 守阵对应; flags fail-closed 双旗标缺省 false。<b>hr 358</b> — 无发现; 悬停弹窗 120ms/160ms 调度 + 行被轮询重建(rect 全 0)即收弹窗 + 模块级定时器不进响应式; gauge 除零全 guard(req>0 才进比例分支); 前端不重算 HR 语义(只映射 token)贯彻。<b>ui_feedback 337</b> — 无发现; aq-tip 断供式机制(MutationObserver 单向迁移 title → data-aq-tip, show() 以 textContent 渲染明示不吃 HTML 注入)+ 350ms 窗口锚点被换按指针坐标 elementFromPoint 重解析 + 定位「任何分支不越过锚点」修订在位; modal 单例悬空 Promise 先结算; 老浏览器滚轮穿透兜底 CSS.supports 门控。<b>selection 326</b> — 无发现; 锚点/光标/选中三概念分离 + 起点单点解析(_selAnchor 兜底链)+ FX-11 组/种子互斥 + selHashSet 权威派生(虚拟行 members[0] 有守卫)。<b>config_rules 257</b> — 无发现; spec 读写全走 cfgSetPath 路径制(无直接树改); 动作可选集按 trigger 白名单过滤(与后端 validation 同源); cfgExprTry 试算取消/关闭不发请求。<b>lifecycle 256</b> — 复验不登记项①(unmounted 摘除清单不齐但不可达); Esc 退栈链 17 层序与 dialogs.js escBusy 名单同步(注释明文双处同步纪律); loadWebFlags fail-closed 整对象替换赋值。<b>filters 253</b> — 无发现; facetRows 取数面单点(组视图/种子页各按真实筛选行集)+ 搜索文本匹配前端零实现(注释明文防复活); filteredTorrents 刻意不复制行对象(68ms 实测注释)。<b>delete_flow 250</b> — F2-02; FX-16 四入口统一 _deleteFlow + HR 风险点名(danger 才拦)+ _reannounceAll 全等回执失败即保留在位。<b>menu 236</b> — 无发现; CTX-03 批量升级判据「集合等同于该行范围」非 selectedCount>1; CTX-05 子面板 180ms 缝隙宽限挂父项 mouseleave; openTargetPath 服务端派生路径(前端不传路径)。<b>shows 194</b> — 无发现; memberHashesOf 双形态容错(hash 数组/成员对象, 防 "[object Object]" 404); decoratedShows 搜索/筛选/排序全按后端聚合层消费。<b>polling 178</b> — 复验不登记项③(refresh 无并发代际守卫但同 rid 起跑自愈); SSE 票据制(一次性短票, 重连换票 3s)+ ver 去抖 60ms + 失败退避 15s 上限 + 「不做无变化退避」论证注释在位。<b>decorate 172</b> — 无发现; _aggStatus 单点(与乐观 UI 共用); totalDl/totalUl 只读 status.totals(视图分片防冻结注释); memberByHash 三源并集。<b>auth 153</b> — 复验不登记项②(_logout 不停 SSE 但无可达后果); R10-01 鉴权模式显式化(authOk 判据单点)+ _logout 数据清场收口(受保护内容全清)+ bootstrap 防重复提交在位。<b>format 152</b> — 无发现; 哨兵口径单点(ETA 8640000 / 时间点 -1·0 / peers -1)+ cell* 系列单元格口径单点化 + fmtRelTime 时基必须读 nowSec(WARN 注释)在位。<b>view 147</b> — F2-03(doSearch 同族); 视图切换 stash/restore 展开态带存活性校验(防 groupWin 永久退避)+ lastRid 置空强制全量 + persistUiPage 唯一写入口。<b>boot 113</b> — 复验不登记项④(fail 拼串数据源全静态); 分片 fetch 串行 + 全成才放行脚本(fail-fast 不留半挂)+ script async=false onload 链保序 + 皮肤 cookie 白名单在位。<b>prism/js/theme.js 109</b> — 无发现; THEMES 注册表白名单(set/apply 双 guard)+ 首帧前同步执行无 FOUC + autoqb:themechange 派发(流量图换肤重建消费点)。<b>sort 83</b> — 无发现; 三视图排序键分轨 + 三态循环语义与 hr_status.js hrsSetSort 同构。<b>vendor/vue.global.prod.js 9</b> — 抽查通过(v3.5.13 官方 prod dist, 清单首脚本有守阵钉住)。<b>vendor/uPlot.iife.min.js 2</b> — 抽查通过(v1.6.32 官方 IIFE, 仅被 qb_traffic_chart.js 消费)。</p>
+<h4>XSS 数据源 → 渲染点核对表(D1 清单法, 覆盖 25 JS + 18 CSS + 18 HTML 全部汇入点)</h4>
+<p>渲染点 grep(innerHTML / outerHTML / insertAdjacentHTML / document.write / v-html / eval( / new Function( / srcdoc / setAttribute / .href= / .src= / document.cookie / location.href / window.open / postMessage / setTimeout 字符串): <b>非 vendor JS 仅 boot.js 4 处 HTML 邻接写点</b>(F1 核对表预告的归属件), 无一条「外部可控数据 → 未转义 DOM 写入」链:</p>
+<table>
+  <tr><th>#</th><th>汇入点</th><th>数据源</th><th>判定</th></tr>
+  <tr><td>1</td><td class="mono">boot.js:27 fail() innerHTML 拼接(msg 含 err.message / part.src / slots[si].sel)</td><td>msg 全部来源 = 打包期静态字符串、tpl-manifest 静态 JSON(三皮肤 index.html 内联, 同源静态资产)、同源 fetch 的 HTTP 状态与 JSON.parse 错误文本; 无 qB 外部数据(种子名/tracker 等)可达此路径</td><td>数据源不可控, 安全(本地单用户边界)</td></tr>
+  <tr><td>2</td><td class="mono">boot.js:88/89/97 insertAdjacentHTML(buckets.app / buckets.body / slots)</td><td>内容 = tpl-manifest 清单列出的 /shared/tpl/*.html 同源静态分片, 清单本身也是打包期静态 JSON(守阵 test_web.py _ui_manifest 钉住三皮肤一致 + scripts 首 Vue 末 app.js)</td><td>静态打包面, 安全</td></tr>
+  <tr><td>3</td><td class="mono">boot.js:104 <code>el.src = src</code> + :19 <code>document.cookie</code></td><td>src 来自静态清单 scripts 数组; cookie 值 skin 经 <code>/^[A-Za-z][A-Za-z0-9_-]{0,31}$/</code> 白名单(目录存在性由服务端把关)</td><td>有白名单, 安全</td></tr>
+  <tr><td>4</td><td class="mono">ui_feedback.js:190/203 setAttribute(role / data-aq-tip) + :233 textContent</td><td>data-aq-tip 值 = 被单向拦截的 title 属性原文(模板静态文案或 Vue :title 绑定), show() 一律按纯文本渲染(注释明文「不吃 HTML 注入」); MutationObserver attributeFilter=["title"] 收窄</td><td>纯文本通道, 安全</td></tr>
+  <tr><td>5</td><td class="mono">theme.js:40 setAttribute("data-theme", id)</td><td>id 经 THEMES 注册表 known() 白名单(ocean/galaxy/frost/golden/orbit)</td><td>有白名单, 安全</td></tr>
+  <tr><td>6</td><td class="mono">dialogs.js:495 querySelector("#sp-" + dir)(唯一选择器插值; F1 三处 CSS.escape 在 shortcuts.js)</td><td>dir ∈ "up"|"down" 内部常量(speedAt.dir)</td><td>内部常量, 安全</td></tr>
+  <tr><td>7</td><td>HTML 18 件模板动态内容(qB 外部不可信源: 种子名/comment/tracker/peer/日志行; 用户输入; localStorage 偏好)</td><td>全部经 Vue 插值自动转义; <b>v-html / srcdoc / iframe / javascript: / onclick= 系内联事件 0 处</b>(事件全走 Vue @ 编译绑定); 全部 :href 绑定为 sprite 内部图标常量(statusbar it.icon = dialogs.js sbStats 内部表 / topbar uiOptions = state.js UI_HOME 常量 / 排序箭头三元 / kindIcon 映射表)</td><td>无未转义链, 0 登记</td></tr>
+  <tr><td>8</td><td>CSS 18 件机制面</td><td><code>url()</code> 外链 / <code>@import</code> / <code>expression()</code> / <code>javascript:</code> / <code>-moz-binding</code> 全 0(aq-tip 样式单点 shared/console_hub.css, 色值走令牌); 注释平铺解析(状态机)无提前闭合 —— css-comment-terminator 坑零复发(若干注释体内 <code>themes/*.css</code> 字样含 <code>/*</code>, CSS 语义无害, 无 <code>*/</code> 早闭)</td><td>干净</td></tr>
+  <tr><td>9</td><td>跨分片注释(dlg 系)</td><td>dialogs.html:135 尾部未闭合注释与 dialogs-mgr.html:1 行首 <code>--&gt;</code> 半配对 —— tpl-comment-split-orphan 坑的已知受控形态: 三皮肤 manifest 中两分片相邻且同入 app 桶, boot.js 顺序拼接复原; 分片顺序被 test_web.py <code>_ui_manifest</code> rels 冻结断言机械钉住</td><td>守阵覆盖, 安全</td></tr>
+  <tr><td>10</td><td>皮肤机制 + 轮询边界(R8/R9 机制回归面)</td><td>皮肤三入口全白名单(boot.js cookie 正则 / theme.js THEMES / state.js _aqbDetectUi 三值); 轮询边界: polling.js document.hidden 停排+可见即刷 / lifecycle.js visibilitychange 补齐列偏好与时间口径 / qb_traffic_chart.js 三守卫跳过不拆表 / drawer.js :717 同款 / hr 与日志按需拉不轮询 —— 页面隐藏、断连、登出路径行为一致</td><td>机制面无回归</td></tr>
+</table>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>F2-01</td>
+    <td>R10</td>
+    <td>P3</td>
+    <td>add_torrent.js:43-44(<code>window.AQB_ADD</code> 方法域头注释)· :520(<code>submitAddTorrent</code> 内联注释)· 实际实现 :519-521</td>
+    <td>注释与实现漂移: 两处注释声称「multipart 提交不走 this.api()(它强制 application/json 会破坏 multipart boundary), 用原生 fetch + Bearer」与「不设 Content-Type, 浏览器自动生成 multipart boundary」, 而实现是 <code>this.api("/api/torrents/add", { body: JSON.stringify(payload) })</code> 的 JSON 提交(.torrent 读为 base64 随 files_b64 上送, :491 注释与 state.js:244 注释均为 JSON 口径)—— multipart 版本已退役, 旧注释残留会误导后续维护者按 multipart 思路改动(以为 this.api 不能用于此端点)</td>
+    <td>静态即证: auth.js:21 <code>_request</code> 恒置 <code>Content-Type: application/json</code>, :521 传 JSON.stringify 体; 文件读取链 :493-505 FileReader.readAsDataURL → base64; 全文件无 FormData、无原生 fetch。注释描述的旧实现已不存在</td>
+    <td>无(与 reannounce 计划无交叠; B2-05/F1-02 系死代码/重复键同族但不同件)</td>
+    <td>入池(chore, P3): 删改 :43-44 头注释与 :520 内联注释为 JSON/base64 口径(可直接引 :491 与 state.js:244 的正确表述)</td>
+  </tr>
+  <tr>
+    <td>F2-02</td>
+    <td>general(R10)</td>
+    <td>P3</td>
+    <td>delete_flow.js:108(<code>_deleteDetails</code> 声明 <code>const names = []</code>)· :114-115(消费点)</td>
+    <td>死变量 + 死分支: <code>names</code> 声明后零写入(恒空数组), <code>single &amp;&amp; names.length === 1 ? names[0]</code> 分支恒 false 不可达; 单目标命名实际由 :115 <code>members[0].name</code> 承担 —— 行为正确, 但死分支暗示「曾有名字收集逻辑被删一半」, 读者需反向考证 (ruff F841 的 JS 同族位, JS 工具面空白全靠人工)</td>
+    <td>静态即证: 全函数对 <code>names</code> 只有 :108 声明与 :114 读取两处, 无 push; 四个入口(delGroup/delTorrent/delEpisode/bulkDelete)经 _deleteFlow 到此, names 恒 []</td>
+    <td>无(F1-02 config_editor 重复键 / B2-05 F401 死导入同族不同件 —— 同为「重复键/死代码面工具空白」的人工发现)</td>
+    <td>入池(chore, P3): 删 <code>names</code> 与恒假分支, target 判据简化为 <code>single &amp;&amp; members.length === 1 ? … : …</code>; 与 F1-02 同批清理亦可</td>
+  </tr>
+  <tr>
+    <td>F2-03</td>
+    <td>R9</td>
+    <td>P3</td>
+    <td>add_torrent.js:248(<code>loadDir</code>)· view.js:23(<code>doSearch</code>)—— 两处取数链无请求代际守卫</td>
+    <td>快速连续操作时前序慢响应可后到并覆盖新状态: ①目录浏览器快速连点目录 A→B, A 的响应后到会把 <code>dirBrowse.path/dirs</code> 覆写回 A 的列表(标题路径与列表错位); ②搜索词 a→b 连续输入, 若 a 的 /api/search 响应后到, <code>searchHits/searchUncovered</code> 变成 a 的命中集而搜索框显示 b(高亮集与词错位, 无轮询自动纠正)</td>
+    <td>可达性: HTTP 乱序真实可达但窗口小(同源本地服务, 响应通常有序); 两处均自愈型 —— 目录浏览器再点一次即重拉, 搜索再输入一词/building 重查即覆盖; 无数据/资金面后果, 故 P3 备查非功能错误。对照: drawer.js 四 fetcher 有 seq+hash 双守卫, 本两处未收同款纪律</td>
+    <td>无(F1-01 drawer 迟到回执写错弹窗同族不同件 —— 那条因「落袋进无关 modal、不自愈」定 P2, 本两条自愈)</td>
+    <td>入池(refactor, P3): 两处补请求代际守卫(loadDir 以 path 戳、doSearch 以 query 戳, 落袋前比对当前值; 与 drawer.js _drawerStale 同式收口), 或随下次触达该文件的计划顺手收</td>
+  </tr>
+</table>
+<h4>批 F2 复验不登记项(可达性/影响面论证纪律)</h4>
+<p class="kv">①<b>lifecycle.js mounted 四个匿名监听未随 unmounted 摘除</b>(:34 window click 收浮层链 / :55 Esc 退栈链 / :100 resize 防抖 / :147 contextmenu 屏蔽)—— 与同函数内 _kbKeyDown/_cfgGuardKey/storage×2/_clockTimer「防热重载堆叠」成对摘除的纪律不一致; 但根实例经 createApp 仅 mount 一次且全仓无 unmount 路径, 论证不出可达, 不登记(若未来引入组件化重建再收)。②<b>auth.js:45 _logout 不调 stopEvents</b>(SSE 流在 401 登出后保持): 登出后 authOk=false, ver 事件触发的 refresh() 在 api() 入口即抛 noAuth(不发请求、不落数据), onCmd/onTruth 无等待者; 重登录 startEvents 以 <code>if (this._es) return</code> 复用既有流 —— 无数据落地与请求面, 不登记。③<b>polling.js:117 refresh 无并发代际守卫</b>: SSE ver 触发的 refresh 与轮询链 refresh 可短暂并发, 但两者以相同 lastRid 起跑且服务端状态单调, 迟到响应最多回放同版数据, 下一轮(≤3s)自愈, 不登记。④<b>columns.js startResize/startColDrag 的 document 级手势监听</b>(mousemove/mouseup)无卸载摘除: 同①不可达; 且监听在 mouseup 即自摘, 悬挂窗口仅拖拽进行中, 不登记。⑤<b>坑档复发核对</b>: aq-tip 双篇(断供式 observer + 重解析 + 定位修订全在位)· columns-persist(双轨 + 唯一写漏斗 + 白名单洗净)· poll-reseed-filter 同族(facetRows 单点 + 候选派生不回写选中集)· combobox-focusout-close(40ms 合帧 + _popBlurShouldHold + label @mousedown.prevent)· hover-keynav-fight(mousemove 3px 门限, add/meta 三处下拉同款)· cjk-regex-norm(前端已零文本匹配实现, addTagCurrent 仅逗号分段)· css/js-comment-terminator(CSS 平铺状态机 0 早闭 / node --check 全过)· tpl-comment-split-orphan(dialogs 系半配对注释受 manifest 冻结守阵覆盖)· modal-mask-click-self-drag(dialogs-mgr.html:2 addOpen 遮罩 mousedown/mouseup 臂位成对)· clip-path-clips-fixed(浮层单点挂 body 级)· hr-tooltip-overlap(短文本列无 :title, 做种时长列走 hrPop)· vue-reactivity(state.js 全字段显式建)· ui-location-persist(initialPage 补 cfgLoad 在 polling.js:80)—— 批 F2 范围历史坑处置在位, 零复发形态。</p>
+<h4>批 F2 工具提示源小结(D3: JS 无 ruff/bandit/eslint 覆盖, grep 清单 + node --check 替代)</h4>
+<p>范围: 批 F2 25 文件(JS) + 36 件(CSS/HTML 机制面)。<b>eslint</b>: 仓库无任何 eslint 配置(沿批 F1 实测), 跳过并注明。<b>node --check</b>(与守阵 test_frontend_static_bundle_health 同源): 25/25 语法全过(23 非 vendor + vendor 2 件)。<b>XSS 渲染点 grep 清单</b>: 见上方核对表 —— 非 vendor JS 的 HTML 邻接写点仅 boot.js 4 处(数据源全为打包期静态面), 1 处内部常量选择器插值, HTML 模板 v-html/内联事件 0 处, CSS 外链/表达式 0 处; 无未转义外部数据链, XSS 面 0 登记。<b>死代码/注释漂移面</b>(ruff F811/F401 的 JS 对应位, 工具空白全靠人工): 采纳 3 —— F2-01(add_torrent multipart 注释漂移)· F2-02(delete_flow 死变量死分支)· F2-03 同族竞争面(工具源测不出, 人工读码发现)。真信号合计: 工具源(node --check + grep)采纳 0, 人工发现 3, 全部 P3, 无 P0/P1/P2。</p>
+<h4>批 F2 收尾 · 基线不变式对照(R5 哨兵)</h4>
+<p>本批评审零改码(产出仅报告章节 + activeContext 切片), 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d): 首跑 2610 passed + 4 skipped / 98%(166 未覆盖 / 139 partial), 按 F1 批先例(多线程收尾时序覆盖抖动)立即复跑 —— 第二跑 <b>2610 passed + 4 skipped / 99%</b>(164 未覆盖 / 138 partial, 语句与分支总数 15511/5342)与基线切片逐位持平 —— 无漂移, 首跑判 ±2 级抖动(与 F1 批记录同形)。</p>
+
+<h3>批 G — torrents/ + rules/(base / conditions / expr / actions)</h3>
+<p class="kv"><b>评审时 HEAD:</b> a4d14a8d(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 与起点同 commit) · <b>范围:</b> 23 文件 / 3,960 行(torrents 5 件 1,314 + rules 18 件 2,646; 全部逐文件过目, 无跳读) · <b>重点维度:</b> R1 R5 R6 · <b>备注:</b> 表达式求值边界; 与池内规则键语义 issue(26-10-01-2211)撞车比对; 跳检自证闸门 issue(26-10-05-0402)规则侧复核(见复验不登记项①)。</p>
+<p class="kv"><b>五步执行记录:</b> ①读档 rule-system 三篇(rules-and-triggers / conditions-and-actions / checking) + modules/core-domain(torrents 包) + modules/rules-and-deps(依赖方向/测试对应) + 各包 docstring; ②坑档对照 backend 类 high-risk-ops(跳检七防护/reannounce 约束/or 默认值/死防御) / effect-confirmation(生效证据谓词) / concurrency(判败须曾见 checking/断点续跑 keep_progress) / task-interval-tick-quantization / behavior-core(handled 语义/interval 归一化/快照回退) / qb-api(sync 增量语义/TorrentRecord 唯一所有者) / format-driven-parse / suppress-request-vs-live-flag; ③逐文件读码(LOC 降序, 全文件过目); ④ruff+bandit(uvx 临时版, 仓库无 ruff/bandit 配置; 逐条人工复核, 见下方工具源小结); ⑤本表登记(逐条对照附录 A–D 去重)。</p>
+<p class="kv"><b>逐文件勾选结论(23/23):</b><br>
+torrents/store 560 — 无发现; R1✓(update_torrent_fields 幂等写不加标/同值写不登记自写; restore_torrent 幂等撤销 pending) R3✓(by_hash/server_state 每轮新 dict 原子替换; rounds_applied==0 全量扫描兼容分支在) R6✓(apply_sync 只捕获 _SYNC_UNAVAILABLE 降级, 其它异常 rid 归零后原样上抛不掩盖断连); 全量轮 pending-removed 窗口内种子被如实重收(此时 qB 里确实还在), 删除终态由下轮 removed 收敛 — 复核非 bug<br>
+rules/expr/env 463 — G-01(容器类型边界, 实证) G-02 G-06; R5✓(server_state/流量/盘空间数据源不可用一律 ExprError 显式报错不降级假值; 除零在 eval 层拦; _idle=-1 → inf 为文档化语义且 trace 的 _jsonable 已把 inf 转字符串兜住 JSON 面) R6✓(gated names 配置期禁用)<br>
+torrents/record 457 — 无发现; R5✓(_local_hr_triggered total_size==0 除零守卫; apply_delta None 视为未提供) R7✓(惰性缓存随记录回收); hr_managed/check_hr_* 直读 tracker_conf.hr 的 None 面复核为不可达: HrCondition(conditions.py:155)与 expr _hr getter(env.py:103)均先判 conf is None, maintenance_mod/views 调用点同样先守卫, views docstring 明文「不做 None 防御(早暴露配置匹配错误)」系有意设计<br>
+rules/base 314 — 无发现; R1✓(去重键 state.exec_history 单点 record_execution; cooldown/daily/hourly 全走挂钟自然窗口系文档化语义) R6✓(条件异常 → ERROR 节流 + stop=True 优先于 stop_following_rules_if; 动作异常 → fail 可观测); spec 单键性由 config 校验强制(validation/rules.py:297「多键/空值会被静默丢弃, 必须报错」), next(iter(items)) 无静默丢动作面<br>
+rules/conditions 261 — G-03; HrCondition 对 conf=None/conf.hr=None 显式双分支(防 AttributeError 被吞的注释在); ExprCondition 运行期非布尔兜底 ExprError<br>
+rules/expr/parser 256 — 无发现; 一层一运算符判定完备(含右操作数带一元即拒); 负号字面量只能写比较左侧(`tor.max_ratio >= -1` 报错、`-1 <= tor.max_ratio` 放行)系「含一元负号算运算符」的文档化语法约束, 有左侧改写出路, 不登记<br>
+rules/actions/checking 198 — G-07; R2 复核✓: 决策链 0/1/1.5/1.6/4 全部闸门先于委托, 执行体一行委托 ctx.ops.skip_check / ctx.ops.recheck(source="rule") — 与 WEB 同一 ops 层闸门(R2 实时复核/同日去重/七防护), 规则侧无绕闸旁路; group_has_downloading 经 grouping_mod:606 逐成员委托 store 单点(plan 0314 S1a 委托链成立)<br>
+rules/expr/eval 196 — G-01 求值侧; R5✓(and/or 短路; 除零/取模零显式 ExprError; _ORDER/_EQ 类型运行期兜底)<br>
+rules/expr/lexer 170 — 无发现; 单位解析复用 utils 同口径; 数字后边界检查(24Hours/1.5.2 即报错); eof 恒收尾(_peek 不越界)<br>
+rules/actions/basic 166 — G-04; R1✓(add_tags 已存在 skip / start/stop 状态守卫幂等; add_category 同值写 skip)<br>
+rules/actions/full_checking 153 — G-05; R1✓(1.5 等待经 check-wait 独立 kind 不占 _active_checks 防互等; 超时强制恢复防活锁) R6✓(wait_poll 异常 → ERROR + revive + FINISHED 不滞留); 1.5 的 is_checking 含 checkingResumeData 复核为正确 — 等待闸门关心的是「组内有无校验 I/O」, 与 effect-confirmation 的「recheck 生效证据谓词」是两个语义面, 不混用<br>
+torrents/compat 132 — 无发现(字段表 21+6+43=70 单一来源; missing_torrent_fields 双形态支持)<br>
+rules/checking_meta 114 — 无发现; poll_verdict 纯函数「无证据成功」签名层不可表达(160 组合穷举守阵在 checking.py 之外仍成立); bump 即时落盘注释带理由<br>
+torrents/view 114 — 无发现; 负数哨兵不量化(-1 地板除会变 -60 的守卫在)<br>
+rules/expr/types 92 — 无发现(G-01 的编译期根因一侧: LIST==LIST 放行, 类型系统无容器元素/具体容器形态概念)<br>
+rules/actions/transfer 86 — 无发现; R1✓(限速 current_limit==value skip 幂等 + 奇数 KiB 手动保护走 utils.is_manual_speed_limit 单点) R2✓(reannounce MIN_INTERVAL 600s 独立兜底, dry-run 不记 ts); 规则系统无删除动作边界成立(transfer/basic 全文件确认)<br>
+torrents/__init__ 51 — 无发现(重导出面; F401 三条系刻意 re-export, 复核不采纳)<br>
+rules/expr/__init__ 46 — 无发现<br>
+rules/actions/__init__ 43 — 无发现(注册入口 + 公共名重导出)<br>
+rules/registry 30 — 无发现(名称合法性信任 config 校验的明文契约)<br>
+rules/actions/skip_checking 28 — 无发现(一行委托; 无参考告警归规则侧语义由 has_reference 区分)<br>
+rules/expr/errors 22 — 无发现<br>
+rules/__init__ 8 — 无发现(插件注册 import 面)</p>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>G-01</td><td>R5</td><td>P1</td>
+    <td>rules/expr/eval.py:179-181(_binary 的 _EQ 分支)+ rules/expr/env.py:295/323(tor.tags 返回 frozenset / tracker.groups 返回 list)+ rules/expr/eval.py:35(ListLit 求值为 tuple)</td>
+    <td>表达式里「取值名 == / != 列表字面量」跨容器类型比较恒错: tor.tags(frozenset)或 tracker.groups(list)与 ListLit 求值产物(tuple)在 Python 里永不相等 — == 恒 False(规则永不匹配), != 恒 True(全员误匹配); 编译期 LIST==LIST 放行(types.py:64 只查同标记), 无任何报错</td>
+    <td>实证(本批跑通): compile_expr('tor.tags == ["HR"]') 编译通过, 对 tags_set=frozenset({'HR'}) 求值得 False(应为 True); 'tor.tags != ["HR"]' 恒 True。配置合法 → 每次条件评估必经; 用户写「标签集合精确匹配」是自然意图(文档只示范 in / ~ 惯用法, 未禁 ==)</td>
+    <td>无(底册无; 池 26-10-01-2211 系容错键语义, 不同件)</td>
+    <td>入池(bug, 标准): 求值侧 _EQ 对 LIST 归一化容器形态(如两侧都转 set)或编译期直接拒绝 LIST 参与 ==/!= 并提示改用 in / ~; 修前可先在文档 expr 速查标注陷阱</td>
+  </tr>
+  <tr>
+    <td>G-02</td><td>R5</td><td>P3</td>
+    <td>rules/expr/env.py:335-337(sys.time_of_day 的 getter lambda)</td>
+    <td>hour 与 minute 取自两次独立 datetime.now(): 跨午夜瞬间(23:59:59.9 取 hour、00:00:00.1 取 minute)得 1380 而非 0, 该次求值用错值</td>
+    <td>含 sys.time_of_day 的规则恰在午夜边界执行即可达; 自愈于下一次执行, 仅单次判值错(如「time_of_day &lt; 12:00」在 00:00 错判 False 一轮)</td>
+    <td>无</td>
+    <td>仅记录(或并入下次 expr 触碰顺手改): 单次 now() 存变量再取 hour/minute</td>
+  </tr>
+  <tr>
+    <td>G-03</td><td>R6</td><td>P3</td>
+    <td>rules/conditions.py:259-260(FreespaceCondition.match 的 except OSError)</td>
+    <td>同一函数两种失败语义劈叉: FileAccessError(映射 miss)显式抛 ExprError 停规则, OSError(盘不可读/盘符掉线)静默 return False — 低空间类规则在磁盘故障时静默失活, 与 expr 形式 freespace()(env.py:201 同样 OSError 抛 ExprError)判据不一致</td>
+    <td>配置 freespace 条件 + 磁盘 OSError 即可达; 失败表现是「规则不匹配」, 与「空间确实够」同形(坑档 format-driven-parse 的「恒空同形」同族); rule-system 文档虽记载旧行为, 但与本项目「绝不降级成假值」原则(env.py 头注)冲突</td>
+    <td>无(坑档 format-driven-parse「过滤类失效恒空同形」同族, 非同件)</td>
+    <td>入池(bug, 便签): OSError 改抛 ExprError 与映射 miss / expr 形式同口径; 若怕行为变化可先只登记文档差异</td>
+  </tr>
+  <tr>
+    <td>G-04</td><td>R6</td><td>P3</td>
+    <td>rules/actions/basic.py:87-88(AddCategoryAction.execute 的 except Exception: pass)</td>
+    <td>create_category 失败被静默吞并: 后续 set_category 若也失败, 报错指向 set 而根因(create 被拒)丢失, 排障少一条证据; bandit B110 / ruff S110+BLE001 同点</td>
+    <td>add_category 动作 + 创建分类失败(qB 拒名/HTTP 错误)即可达; 若 set_category 恰好成功(「已存在」竞态)则无影响 — 吞并面仅限根因掩蔽, 非静默功能失效</td>
+    <td>无</td>
+    <td>仅记录(或顺手项): except 内补一行 DEBUG/WARNING 带异常, 不改控制流</td>
+  </tr>
+  <tr>
+    <td>G-05</td><td>R3</td><td>P3</td>
+    <td>rules/actions/full_checking.py:146(_skip_on_group_check_failed 的假失败自愈 pop)</td>
+    <td>recheck_fails 的自愈清除写点不落盘: behavior-core 明文「skip_check_day / recheck_fails 在写点即时落盘(重放代价最高)」, bump_recheck_fail(checking_meta.py:113)有 state.save(), 本 pop 没有</td>
+    <td>决策链 1.6 自愈(失败记录指向已完成/已删成员)后、周期落盘(state_save_interval 默认 120s)前崩溃/断电即丢 — 丢的后果有界: 残留记录下次 1.6 再自愈一次, 代价一次多余 recheck, 非毒化</td>
+    <td>坑档 behavior-core「state_file 落盘时机」条(自家的写点纪律, 本写点漏网)</td>
+    <td>仅记录(自愈有界): 或在池 26-10-01-2211 规则域顺手项里捎带补 state.save()</td>
+  </tr>
+  <tr>
+    <td>G-06</td><td>general</td><td>P3</td>
+    <td>rules/expr/env.py:144-152(_count)+ :340(sys.torrent_count 注册行)</td>
+    <td>sys.torrent_count 每次求值 list(store.by_hash.values()) 全库浅拷贝后只取 len — O(N) 拷贝纯浪费(len(by_hash) 即 O(1)); 且是唯一未标 expensive 的 _count 系名字, 同规则内多次引用也吃不到 ctx 缓存, 与 downloading_count/seeding_count 行为不一致</td>
+    <td>interval:0 规则含该名字时每种子每 tick 一次 O(N) 拷贝(3000 种子库 ≈ 每轮 900 万次元素拷贝); 不产生错误结果, 纯性能面 — rule-system 文档「sys.*_count 必须配 interval」的告警对它同样适用但它没进昂贵缓存</td>
+    <td>rule-system/conditions-and-actions「昂贵取值要配 interval」告警(文档面已覆盖使用侧, 取值侧未收口)</td>
+    <td>入池(perf, 便签): getter 改 len(ctx.manager.store.by_hash) 一行</td>
+  </tr>
+  <tr>
+    <td>G-07</td><td>general</td><td>P3</td>
+    <td>rules/actions/checking.py:182-198(_run_custom_check)+ :164-165(逐候选调用点)</td>
+    <td>custom basic_check 在主循环线程同步 subprocess.run 每候选至多 600s、无多候选总预算 — 慢/挂的自定义程序一次规则执行最长阻塞主循环 600s×N 候选(期间 qB 同步/HR/WEB 全停)</td>
+    <td>basic_check=custom + 自定义程序慢即必然可达(功能内生); timeout=600 单发有界但逐候选串行无上限; 文档与 spec 校验均无该成本提示(用户通常假设「校验在后台」)</td>
+    <td>无</td>
+    <td>仅记录: 若要收口可加「单轮 custom 判定总预算」或文档 WARNING; 现状 timeout 单发有界, 非急</td>
+  </tr>
+</table>
+<p class="kv"><b>复验不登记项(逐条人工复核后不采纳):</b> ①<b>池 26-10-05-0402 跳检自证闸门规则侧复核</b>(底册 A.1 #1, 洗白面归本批): 规则入口 checking 动作决策链 0/1/1.5/1.6/4 全部先于委托, 执行体一行委托 ctx.ops.skip_check(source="rule")/ctx.ops.recheck — 与 WEB 命令同一 ops 层服务端闸门(七防护/R2 实时复核/同日去重, 批 A 已过目 ops_mod), 规则侧无绕闸旁路; issue 指认的「候选自身当日校验失败后无闸门」在 checking.py 决策链确认仍无对自身 recheck_fails 的检查(1.6 只查组内其它成员) — <b>issue 现状成立, 沿用已入池条目不重开</b>。②限速覆盖闸门: 单种限速动作奇数 KiB 手动保护 + 已设置 skip, 全局曲线侧归批 A/C; 删除动作: rules 全包确认无 delete 动作, high-risk-ops「唯一删除入口是 WEB」边界成立 — 双入口一致性成立, R2 无发现。③`_idle` 返回 float("inf")(last_activity=-1 从未传输): 文档化语义「从未活动即无限久」, 比较语义正确, WEB 试算面板经 eval.trace 的 _jsonable 把 inf 转字符串, JSON 面已兜住 — 不登记。④record.py hr_* 方法直读 tracker_conf.hr 的 None 面: 全部调用点(HrCondition:155 / env._hr:103 / maintenance_mod / views)均先守卫, views docstring 明文「不做 None 防御(早暴露配置匹配错误)」系有意设计 — 不登记。⑤parser 负号字面量只能写比较左侧: 「含一元负号算运算符」的文档化语法约束, 有 `-1 &lt;= tor.max_ratio` 改写出路 — 不登记。⑥full_checking 1.5 等待闸门的 is_checking 含 checkingResumeData: 等待闸门语义是「组内有无校验 I/O」而非「本轮 recheck 生效证据」, 与 effect-confirmation 谓词收窄是两个语义面, 不混用 — 不登记。⑦apply_sync 全量轮 pending-removed 窗口: 种子被如实重收进 by_hash(此时 qB 里确实还在), 删除终态由下轮 torrents_removed 收敛, 事件误触发由任务删除守卫判死 — 非 bug。⑧base.py:8 TorrentDictionary 死导入(F401)+ torrents/__init__ 三条 re-export F401: 前者归死代码清理顺手项(沿批 E 对 RUF100 口径不立条), 后者系「调用方 from auto_qb.torrents import X 不变」的刻意 re-export — 不登记。⑨ruff UP 系 138 条(UP006/UP045/UP035/UP007)+ I001×8 + RUF022×4: 与批 A–D 同判项目注解/风格债, 归池 26-09-21-1408。⑩DTZ005/DTZ011 ×13(naive now/today): 本项目时间语义全部是「本地挂钟自然窗」(date_time 条件、daily/hourly、sys.now/time_of_day、cooldown), naive datetime 系有意口径 — 不采纳。⑪BLE001 ×5(base 条件/动作兜异常、wait_poll、piece hashes 降级): 全部有 ERROR/WARNING 级日志可观测, 符合「出错即停」契约 — 不采纳。⑫bandit B404/B603(subprocess): custom_program 出自用户自己的 config.yml, 参数为服务端派生的 hash 与 save_path, 配置者即本人, 无 shell=True, timeout=600 — 与批 B2 server.py 同判法, 无越权面。⑬PLR0124(eval.py:75 value != value): nan 检测惯用法 — 不采纳。⑭PLW1510(subprocess 无 check): 代码自判 returncode, check=True 会把非零 rc 变异常改变语义 — 不采纳。</p>
+<p>本批评审零改码(产出仅报告章节 + activeContext 切片), 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d): <b>2610 passed + 4 skipped / 99%</b>, 语句与分支总数 15511/5342 与基线切片 26-10-05-1034 逐位持平 — 无漂移。</p>
+
+<h3>批 H — infra/ + tray/ + 入口 + scripts/ + extensions/ + docker(D2)</h3>
+<p class="kv"><b>评审时 HEAD:</b> a4d14a8d(26-10-05 my-commit-flow.sync 成功「已同步 a4d14a8d」, 与起点同 commit) · <b>范围:</b> 41 文件 / 15,044 行 · <b>重点维度:</b> R6 R7 R8 · <b>备注:</b> file_access 路径穿越; 扩展凭据出网; tray Ctrl+C 已有 issue(26-10-01-2203)、任务栏图标 issue In Progress(26-10-01-2203); scripts 为开发/仿真工具, 深度按「与主程序耦合面」收窄。</p>
+<p class="kv"><b>五步执行记录:</b> ①读档 pitfalls/backend(fs-pathmap-tristate / platform-fs / windows-long-path) + pitfalls/web-ui(extension-bridge) + pitfalls/ops(docker-host-features / console-encoding) 逐篇 + infra/tray/入口/extensions 各包 docstring; ②坑档对照 如上 —— file_access 的三态哨兵/挂载根逃逸校验与坑档 fs-pathmap-tristate 逐条核对现状实现均按坑档处置落地, 扩展端点归一化/离屏窗口/焦点守卫与 extension-bridge 三条实测坑逐一核对; ③逐文件读码: src 15 件 + extensions 7 件 + docker 4 件全文件过目, scripts 16 件按风险分层(全读 5 件: qb_capture / hr_fetch_experiment / dev_webui / sync_agent_skills / update_config_key_surface; 抽查 11 件: sim_×5 / ui_×2 / check_×3 / bench_expr, 按 docstring + subprocess/网络/写盘面 grep + 关键段复核); ④ruff+bandit(uvx 临时版, 限 infra/tray/入口)+ extensions grep 清单(innerHTML / eval / fetch 目标域 / 凭据变量流), 逐条人工复核见下方工具源小结; ⑤本表登记(逐条对照附录 A–D 去重)。</p>
+<p class="kv"><b>逐文件勾选结论(41/41):</b><br>
+infra/utils 1075 — H-03(列表分支口径) H-04(注释损坏); R7✓(atomic_write 空路径拒绝/fsync/异常清理单点; O_TRUNC 复发 0 — 守阵绿) R8✓(sanitize_tracker_url 整段丢 path+query 不猜参数名; open_path 全链绝不抛错的承诺复核: Windows 分支 os.startfile 对不存在路径会抛, 但两调用面(webui /api/open-path 前置 isdir/isfile 校验、托盘 _open_logs 先 makedirs)均兜住, 端点仅剩校验后删除的 TOCTOU 窄窗 — 不登记); _win_user32 PIDL/前台锁三层升级与坑档 ctypes-x64-argforms/explorer-foreground 一致<br>
+infra/file_access 393 — 无发现; R7/R8 重点核: SEC-1 逃逸校验经双侧 realpath 兜住 `..` 与符号链接(词法 `..` 未在 _norm_logical 折叠, 恰好交给 _root_contained 解析), 映射 miss 三态语义(UNDETERMINED 禁布尔化/FileAccessError)与坑档 fs-pathmap-tristate 单点分流一致; scandir 逐条挂载根校验剔除逃逸条目<br>
+infra/notify 302 — H-02(IconUri 断路径); R6✓(emit 全兜 handleError/防自环/免打扰先于节流的配额语义注释成立) R8✓(toast 三平台命令注入面全封: Windows base64 EncodedCommand / Linux argv 列表 / osascript 转义反斜杠引号)<br>
+infra/versioning 185 — 无发现(迁移表缺项 fail-fast; config 迁移注册于 config/migrations.py 三条齐全, 单点纪律成立)<br>
+infra/locking 112 — H-06(锁文件路径推导边界); R7✓(meta 直写 open("w") 非凭据类且读失败回 {} 语义良性, 不在 O_TRUNC 守阵口径内)<br>
+infra/logging 128 — 无发现(filter_log_lines 记录级跟随/续行保留; _level_line_re 右对齐等级名走「筛不了」提示不静默给空)<br>
+infra/autostart 97 — 无发现(三平台注册/注销幂等; OSError → AutoQbError UI 提示)<br>
+infra/errors 22 · infra/__init__ 14 — H-05(docstring 依赖纪律漏 notify→config 已显式化例外)<br>
+tray/app 529 — 无发现(池 26-10-01-2203 Ctrl+C 对照: 现状仍主线程 Tk mainloop 结构, issue 现状成立不重开; 任务栏图标 AUMID 已按 issue 26-10-02-0441/0727 补齐调用点) R3✓(manager 线程是唯一写者/UI 只读快照/退出预算 10s 超时明示不补写 state) R8✓(IPC 仅回环随机端口 + 内容只触发 show)<br>
+cli 211 — 无发现(R6 复核: tray 唤起 except-pass 落到常规锁错误提示, 非静默失效; SIGTERM→KeyboardInterrupt 复用优雅关闭链, handler 注册失败静默跳过与改动前一致)<br>
+auto-qb.py 10 · __main__.py 7 · __init__.py 28 — 无发现(版本双源 = 底册 A.1 #15 已有, 不重开)<br>
+extensions/manifest 32 — 无发现(host_permissions 仅回环三写法; optional 站点权限走用户手势逐域授予)<br>
+extensions/background 868 — 无发现; R8 重点核: 凭据出网面干净 —— cookie 全程不出浏览器(只 fetch credentials:include 由浏览器自带), token 仅发归一化后的回环端点(normalizeEndpoint 强制 127.0.0.1+端口), 日志/事件环不含 token 与 cookie; task.url 由后端适配器拼 download.php?id={tid}(无 passkey 进 URL, 日志落 url 不构成凭据落盘); 站点打爆面有独立第二道闸(site-caps 时/日台账, 键比较跨 SW 回收)<br>
+extensions/options 642 — 无发现(innerHTML 8 处汇入点逐个核: 全部经 esc() 或纯静态串; token 仅展示前 8 字符)<br>
+extensions/normalize 69 · site-caps 23 · options.html 203 — 无发现(html 无内联事件, script 三件静态载入)<br>
+docker/Dockerfile 30 · compose.yaml 36 · .dockerignore 50 · config.example.yml 82 — H-07(端口暴露面); 凭据注入面✓(config.yml/auto-qb-data 排除出镜像, 凭据走 bind mount 不落层; healthcheck 走非 /api 免 token 面)<br>
+scripts/qb_capture 1553 — H-01(P1); R8✓(脱敏单射+守恒对拍阻断式; 凭据泄漏自检扫明文产物; meta 只记 shape 不记真实路径; 语料目录自带 .gitignore+警示 README)<br>
+scripts/hr_fetch_experiment 863 — 无发现(cookie 不打印不落明文/CDP 走回环/专用 profile 落 gitignored 目录; --cookie 命令行形态有明文提示)<br>
+scripts/dev_webui 198 — 无发现(最小配置关全部自动写动作并明示残留面; 数据目录独立)<br>
+scripts/sync_agent_skills 185 · update_config_key_surface 56 — 无发现(写面均为声明目标; junction 判定/删除只对重解析点)<br>
+scripts/sim_qb 2079 · sim_run 950 · sim_baseline 326 · sim_fsmock 226 · sim_autoqb 56 · ui_harness 611 · ui_smoke.cjs 1978 · bench_expr 258 · check_context_caps 262 · check_command_drift 164 · check_doc_links 104 — 抽查档: docstring+subprocess/网络/写盘面 grep+关键段复核(subprocess 无 shell=True; 网络仅回环; ui_harness 显式只认回环 bind; sim_run 经 sim_autoqb 包装优雅停; 写面均落声明目录), 无发现</p>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>H-01</td><td>general</td><td>P1</td>
+    <td>scripts/qb_capture.py:990(Capture._sanitize_mapping 的 raw_seen 集合推导)+ :1048(write_corpus 的 "sanitize_map" 字段调用点)</td>
+    <td>`raw_seen = {revs.get(t, t) for t in seen}` 里 `seen` 未定义 —— NameError; write_corpus 经 meta.update 的 dict 字面量必然求值该调用, 抓取/录制全流程在**任何文件落盘之前**崩掉</td>
+    <td>调用链闭合: main → run_full/run_snapshot → write_corpus(:1048) → _sanitize_mapping(:990) → NameError; 一场 capture(默认 10 分钟起)采完数据后即崩, sync-stream/files/trackers/groups/meta 全部不落盘, 整场语料丢失。tests/test_qb_capture.py 只盖 Sanitizer/StreamAccumulator/diff_full, 无 write_corpus 全链用例所以绿</td>
+    <td>无(底册无; 守阵无此域)</td>
+    <td>入池(bug, 标准): 意图按注释还原 — 收集流内已脱敏标签伪名经 san._revs["tag"] 反查原字面量再比对 KNOWN_TAG_LITERALS, 需把 StreamAccumulator 的 tags 传进来(顺带补一条 write_corpus 端到端最小用例)</td>
+  </tr>
+  <tr>
+    <td>H-02</td><td>R8</td><td>P2</td>
+    <td>src/auto_qb/infra/notify.py:45(模块级 ICON_ICO)+ :136(_register_appid_registry 写 IconUri)</td>
+    <td>ICON_ICO = dirname(__file__)/assets/icon.ico 指向 src/auto_qb/infra/assets/icon.ico —— 该目录不存在(真实文件在 src/auto_qb/assets/icon.ico, 同仓库 tray/app.py:32 用两级 dirname 是正确写法): AUMID 注册表 IconUri 恒写入不存在路径, toast 通知来源图标恒回退默认</td>
+    <td>Windows + notify.enabled → PlatformChannel 构造 → _register_appid_registry 每进程一次必经; ls 实证 infra/assets/ 不存在、pyproject 无 assets 复制步骤; 注册表键本身写成功(通知能发), 仅图标面恒不生效</td>
+    <td>池 26-10-01-2203(任务栏 python 图标, In Progress)同族图标面但不同表现(那是任务栏按钮, 本条是 toast 来源图标), 底册 A.2 In Progress 行; 无同件</td>
+    <td>入池(bug, 便签)或并入 2203 图标族一并修: 改两级 dirname 与 tray 同口径(一行)</td>
+  </tr>
+  <tr>
+    <td>H-03</td><td>general</td><td>P2</td>
+    <td>src/auto_qb/infra/utils.py:115-132(convert_bool_in_dict, 列表分支 :130 对照字典分支 :125)</td>
+    <td>同函数两种口径: 字典值对纯数字字符串跳过转换(v.isdecimal() 守卫, "1" 保持 "1"), 列表分支对**每个元素**无条件递归 —— 列表里的 "1"/"on"/"true" 会被改写成 True/False</td>
+    <td>唯一调用点 core/exporter.py:127(export_yaml_template 出口): 导出模板里任何列表值(tags/domains/类别清单)含数字串或布尔形字符串即被静默改型; 导出物若被用户回填 config 再导入, 类型与原值不符(校验层拒 str 字段收 bool 即报错, 收 bool 的字段则静默变义)</td>
+    <td>无(底册无; 坑档 behavior-core「看着像 bug 其实是特性」复核过 — 两分支无各自成立的理由, 系疏漏)</td>
+    <td>入池(bug, 便签): 列表分支补与字典分支同款 isdecimal 守卫(或列表元素只递归容器类型)</td>
+  </tr>
+  <tr>
+    <td>H-04</td><td>general</td><td>P3</td>
+    <td>src/auto_qb/infra/utils.py:758(_win_user32 docstring 中段)</td>
+    <td>注释文本含残留占位符 `&lt;｜hy_place▁holder▁no▁813｜&gt;`(「窗口…查不到」处), 系某次 AI 工具改写把原文吞成占位 token 未还原, 上下文语义缺失(原意应为「窗口句柄查不到」一类)</td>
+    <td>纯注释面, 运行时不可达; 0e43bf7d「非 ASCII 替换」提交之后仍在, 人工读码发现</td>
+    <td>无</td>
+    <td>仅记录(下次触碰 utils.py 顺手改): 还原为可读中文</td>
+  </tr>
+  <tr>
+    <td>H-05</td><td>R10</td><td>P3</td>
+    <td>src/auto_qb/infra/__init__.py(包 docstring 依赖纪律行)</td>
+    <td>写「不 import core / 表现层 / config」, 漏掉计划 26-09-22-2112 §04 已显式化的唯一例外 notify → config(读 NotifyConfig, notify.py:28 实存) — 文档与代码漂移, 按字面执行会误判违规</td>
+    <td>notify.py:28 `from ..config import NotifyConfig` 与 docstring 字面冲突; 计划 §04 原文「唯一例外 notify → config(既有事实依赖, 实施时发现并显式化)」</td>
+    <td>计划 26-09-22-2112 §04(例外单点)</td>
+    <td>仅记录(docstring 一行补「唯但不例外 notify→config」)</td>
+  </tr>
+  <tr>
+    <td>H-06</td><td>general</td><td>P3</td>
+    <td>src/auto_qb/infra/locking.py:42-44(SingleInstanceLock.__init__ 的 rpartition(".") 扩展名推导)</td>
+    <td>锁文件按「最后一个点之后是扩展名」推导: 路径目录段含点且 basename 无扩展名时(如 `my.dir/state`)切点落在目录段, 锁文件落成 CWD 下 `my.lock` 而非 `my.dir/state.lock`, 与 docstring「与 state 文件同目录不同名」矛盾 — 双实例互斥仍成立(同配置恒同错位路径)但锁文件位置漂</td>
+    <td>需用户把 state_file 配成「目录段含点 + basename 无扩展名」形态; config 校验不约束扩展名, 但真实配置均为 .json, 当前生产配置不可达 — 备查</td>
+    <td>无</td>
+    <td>仅记录(不可达备查): 若要收口改用 os.path.splitext(basename) 判定</td>
+  </tr>
+  <tr>
+    <td>H-07</td><td>R8</td><td>P3</td>
+    <td>compose.yaml:12(ports "8081:8080")</td>
+    <td>端口映射未钉宿主侧地址, docker 默认绑 0.0.0.0 —— WebUI(API 有 token/登录鉴权; 静态面与非 /api 路径免 token)对宿主所在网段开放; 家用网段即可直达登录页</td>
+    <td>compose up 即生效; 属部署面加固项而非缺陷(远程访问可能是意图), config.example.yml 的 web.host 0.0.0.0 是容器内必要口径, 宿主侧收敛不影响容器内绑定</td>
+    <td>无(坑档 docker-host-features 系功能降级面, 不同件)</td>
+    <td>仅记录(部署文档提示): 无远程访问需求时示例/文档建议 `127.0.0.1:8081:8080`</td>
+  </tr>
+</table>
+<p class="kv"><b>工具源小结(ruff 87 条 / bandit 19 条, 逐条人工复核):</b> UP006/UP035/UP045/UP037×49 + I001×8 + RUF022×1 + F401×1(tray/app.py messagebox 延迟导入域未用) + RUF059×1 + RUF100×1 + FURB188×1 —— 与批 A–G 同判项目注解/风格债, 归池 26-09-21-1408 不立条; LOG015×3(cli.py 用根 logger, 启动期 setup_logging 之前的有意口径)不采纳; S110/S112/BLE001×14 逐点核: cli.py:195(托盘唤起兜底, 落常规锁错误提示非静默)/locking.py:71,75(release 清理幂等)/notify.py:260(close best-effort)/tray/app.py:56(日志 handler 禁抛)/utils.py:281,349(URL 解析 best-effort 跳过)—— 全部有 debug 日志或失败语义良性, 沿批 G「可观测即契约」判不采纳; PLW1510×1(notify send 自判 returncode)与 B404/B603/B606/B607×12(notify/open_path 的 os.startfile / explorer / xdg-open / osascript, 参数全为服务端派生路径或用户自有配置, 无 shell=True)沿批 B2/G 同判法不采纳。extensions grep 清单: innerHTML 8 处全经 esc() 或纯静态、eval/Function 0、fetch 目标域 = 回环端点(normalizeEndpoint 强制)+ 站点任务 URL(host_permissions 用户手势逐域授予为闸), 凭据变量流 = token 仅入回环请求头不入日志 —— 0 登记。node 无新检(F 批已全量 node --check)。</p>
+<p><b>复验不登记项(逐条人工复核后不采纳):</b> ①<b>池 26-10-01-2203 tray Ctrl+C 不退出</b>(底册 A.1 #2, 本批对照件): tray/app.py 现状仍主线程 Tk mainloop + manager 后台线程结构, Windows 控制台 Ctrl+C 与 Tk mainloop 的冲突面未变, issue 现状成立 —— <b>沿用已入池条目不重开</b>。②atomic_write 未 fsync 目录(POSIX 持久化语义): 项目生产为 Windows(os.replace 原子), 跨平台仅 CI, 不登记。③locking meta / tray ui.port 直写 open("w"): 均非 token/凭据类, 失败模式良性(meta 读失败回 {} / port 文件残留由 connect 失败退化), 不在 O_TRUNC 守阵「凭据类」口径内。④notify.py quiet_hours 非法格式会在 emit 内抛: config 校验层已挡(validate_config), 不可达。⑤ShowIpcServer 任意本地进程可连: 触发面仅「显示窗口」, 无状态副作用, 威胁模型不成立。⑥MiniWS/hr_fetch_experiment 的 ws socket 未显式关闭: dev 脚本进程随退, 不登记。⑦qb_capture._stream_bytes 用尾 50 帧估算总体积: 熔断为保守估计, 语义有意, 不登记。⑧ruff SIM114/FURB188: 纯风格, 归池 1408。</p>
+<p>本批评审零改码(产出仅报告章节 + activeContext 切片), 收尾复跑 <code>commands run test.full</code>(HEAD 仍 a4d14a8d): <b>2610 passed + 4 skipped / 99%</b>(164 未覆盖 / 138 partial), 语句与分支总数 15511/5342 与基线切片 26-10-05-1034 逐位持平 — 无漂移。</p>
+
+<h2 id="sec-summary">§3 汇总分级与处置分流(S5 定稿, 2026-10-05)</h2>
+
+<h3>3.0 HEAD 漂移说明(双基线口径)</h3>
+<p>十批判审全部在起点 HEAD <code>a4d14a8d</code>(各批开工 sync 均无新提交, 见 §2 各批表头)。S5 汇总开工 <code>my-commit-flow.sync</code> 同步到 <code>145eedea</code>(a4d14a8d..HEAD 共 17 提交), 按计划 D5 口径与拍板结论执行<b>双基线</b>: P1×3 与受新提交影响的 P2×2 在当期 HEAD 145eedea 逐条复验, 其余 52 条(不受影响的 6 条 P2 与全部 P3)沿用各批评审 HEAD a4d14a8d 的三锚与调用链证据。</p>
+<p class="kv"><b>17 提交概要(按代码影响归类):</b> 代码类 8 笔 —— reannounce 确认重构落地三连(89840a3c 判定核心/runtime.py+commands.py、554bf03e 前端三桶分流/commands.js+delete_flow.js、43af8240 收尾回写) · qB 流量采样 1.5s 浮点间隔(f98385a5, traffic_sample_mod.py/traffic_store.py) · 流量图窗口持久化+快捷键(f060c294) · toast 时长下限(9bcd20b7) · open-path 下载中回退(2130450c, routes/fs.py) · commands.js 纯缩进(e40c962b); 文档/杂项类 9 笔(v4 delta 报告两轮、错误历史计划两笔、cap 债务清理、TODO/cspell/config.yml)。波及生产文件: <span class="mono">core/traffic_store.py · core/modules/traffic_sample_mod.py · webui/commands.py · webui/runtime.py · webui/server/routes/fs.py · static/shared/*.js 若干</span>。</p>
+<table>
+  <tr><th>复验条目</th><th>为何受新提交影响</th><th>145eedea 复验结论</th></tr>
+  <tr><td class="mono">D-01 (P1)</td><td>拍板要求 P1 全复验</td><td><b>仍成立</b> —— config/ 全部未动; loaders.py <code>load_grouping_config</code> 现取 enabled/check_missing_files/missing_tag 三键, 仍漏 <code>cross_group_conflict_check</code>; 键面五处登记与 grouping_mod 消费点调用链原样</td></tr>
+  <tr><td class="mono">G-01 (P1)</td><td>拍板要求 P1 全复验</td><td><b>仍成立</b> —— rules/ 全部未动; eval.py <code>_EQ</code> 分支 / env.py <code>tor.tags</code>(frozenset)·<code>tracker.groups</code>(list) / ListLit→tuple 原样, 跨容器 ==/!= 恒错面不变</td></tr>
+  <tr><td class="mono">H-01 (P1)</td><td>拍板要求 P1 全复验</td><td><b>仍成立</b> —— scripts/qb_capture.py 未动; :990 <code>raw_seen = {…for t in seen}</code> 的 <code>seen</code> 全函数无定义(NameError), :1048 write_corpus 必经调用, 落盘前必崩链不变</td></tr>
+  <tr><td class="mono">E-01 (P2)</td><td>webui/runtime.py(+118)/commands.py(+218)/routes/fs.py(17) 大改</td><td><b>仍成立</b> —— fs.py 改动(open-path 回退)未触及 :92-93 的 groups/by_hash 迭代面; 变更点 torrents/store.py(remove_torrent :550 原地 pop / reset_runtime :448 groups.clear)与 views.py、routes/hr.py 迭代面均未动; 竞态面原样</td></tr>
+  <tr><td class="mono">C-01 (P2)</td><td>traffic_sample_mod.py / traffic_store.py 改动(f98385a5)</td><td><b>仍成立</b> —— 1.5s 浮点间隔改动不触 earliest_hour; 该键仍仅 5 处命中(字段 :247/:256、_agg_trim 读 :956、trim 写回 :959、_recover_series 初始化 :1010), ingest 链仍不写, 无界增长行为未变; <b>行号漂 +4</b>(原 :952/:1006), 函数名锚有效</td></tr>
+  <tr><td class="mono">E-03 (P3, 处置改判)</td><td>reannounce 计划(0923)已随 89840a3c/554bf03e 落地</td><td>缺口仍在 —— <code>_cmd_reannounce_group</code>(commands.py:357)重构后仍 <code>if hashes:</code> 无 else, 空组不发指令不写回执; 原「并入计划备注」处置失效, <b>改判独立入池(bug, P3)</b></td></tr>
+</table>
+<p class="kv"><b>未受影响条目沿用理由:</b> 其余 52 条所涉文件均不在 17 提交改动列表内(config/hr/torrents/rules/infra/tray/scripts/extensions 及 views.py 等), 三锚与调用链在 a4d14a8d 的证据对 145eedea 仍然有效。另: F1-03/F1-05 标「落地后复验」的 commands.js 面已落地, S6 归档时按新行号复核即可, 条目级判读不变(F1-03 清理缺 finally 与 F1-05 cmdStats 单槽均不在 rework 改动面内)。</p>
+
+<h3>3.1 分级终表(57 条全列)</h3>
+<p>「撞车(终验)」= 与附录 A–D 底册逐条核对后的终值; 带 <b>[终验]</b> 标记的为本轮修正/裁定注记。处置三档: <b>入池</b>(S6 动作, 类型+档位) / <b>并池</b>(并入既有 Open issue 备注) / <b>仅记录</b>。</p>
+<table>
+  <tr><th>ID</th><th>级</th><th>维度</th><th>位置(文件 + 函数)</th><th>一句话</th><th>撞车(终验)</th><th>最终处置</th></tr>
+  <tr><td class="mono">A-01</td><td>P2</td><td>R6(R9)</td><td class="mono">core/qbmanager.py _refresh_torrents</td><td>suppress 窗内异常上抛致 live 旗标残留, 下轮事件被吞</td><td>坑档 suppress-request-vs-live-flag 同族; 无 issue(池 0750 系 Done 相邻件不同点)</td><td>入池(bug, P2)</td></tr>
+  <tr><td class="mono">A-02</td><td>P3</td><td>general(R7)</td><td class="mono">core/qbmanager.py export_torrents_info</td><td>调试导出 open 无编码非原子, cp936 下中途崩</td><td>无</td><td>入池(chore, P3)</td></tr>
+  <tr><td class="mono">A-03</td><td>P3</td><td>R3</td><td class="mono">core/state.py record_execution; speed_curve_mod _record_curve_state</td><td>exec_history 与限速曲线日键无界增长无清理</td><td>无(skip_check_day 有清理先例对照)</td><td>入池(refactor, P3)</td></tr>
+  <tr><td class="mono">A-04</td><td>P3</td><td>general</td><td class="mono">core/qbapi.py torrents_pause/resume</td><td>pause/resume 纯透传不同步 store, 与 start/stop 不对称</td><td>坑档 concurrency 对偶复查</td><td>入池(refactor, P3)</td></tr>
+  <tr><td class="mono">A-05</td><td>P3</td><td>R7</td><td class="mono">core/modules/ops_mod.py _backup_torrent</td><td>跳检备份 "wb" 非原子直写(守阵只钉 O_TRUNC 字面)</td><td>守阵 O_TRUNC 组(盲面观察)</td><td>仅记录</td></tr>
+  <tr><td class="mono">A-06</td><td>P3</td><td>general</td><td class="mono">core/modules/rules_mod.py _handle_rule</td><td>handled 返回值从未消费(静态即证)</td><td>坑档 behavior-core(佐证非 bug)</td><td>仅记录</td></tr>
+  <tr><td class="mono">A-07</td><td>P3</td><td>R6</td><td class="mono">core/qbmanager.py connect + run 首连重试</td><td>托管模式首连非 API 异常(凭据错)每 tick ERROR 刷屏</td><td>无</td><td>入池(refactor, P3)</td></tr>
+  <tr><td class="mono">A-08</td><td>P3</td><td>R10</td><td class="mono">core/__init__.py 包 docstring</td><td>「别名层单行委托」描述过时(别名层已退役)</td><td><b>[终验修正]</b> 无直接撞车成立, 但原引「池 2002」有误 —— 注释漂移族应引 docs 26-10-01-1738(代码内注释残留, Done), 本条系该族未覆盖新点位</td><td>仅记录(一行 docstring, 可归死代码/注释清理批)</td></tr>
+  <tr><td class="mono">B1-01</td><td>P3</td><td>R3</td><td class="mono">hr/service.py HrRefreshService.store</td><td>_stores 惰性建无锁, 取数线程与 Web 线程并发双构造</td><td>坑档 concurrency 对偶; 无 issue</td><td>入池(chore, P3)<b>[与 E-05 合并一条]</b></td></tr>
+  <tr><td class="mono">B1-02</td><td>P3</td><td>general</td><td class="mono">hr/status.py:40 import</td><td>next_allowed_at F401 死导入</td><td>无</td><td>入池(chore, P3)<b>[归死导入合并条①]</b></td></tr>
+  <tr><td class="mono">B1-03</td><td>P3</td><td>general</td><td class="mono">hr/service.py _do_wave 尾段 :675-678</td><td>except HrFetchError 兜底分支不可达(死代码)</td><td><b>[终验修正]</b> 池 26-10-02-0441(dead-tail)实存但状态为 <b>Dropped 非 Open</b> —— 原标注「沿用已入池条目」失效</td><td>仅记录(池条目已 Dropped 不复活; 归死代码顺手项)</td></tr>
+  <tr><td class="mono">B2-01</td><td>P2</td><td>R6(R7)</td><td class="mono">hr/store.py _read_full / read_backup</td><td>非 UTF-8 站点文件读崩整条自愈链并拖垮全站视图</td><td>无(坑档 platform-fs 不覆盖此形态)</td><td>入池(bug, P2)</td></tr>
+  <tr><td class="mono">B2-02</td><td>P3</td><td>general</td><td class="mono">hr/resolve.py judge_record</td><td>docstring 承诺的双 hash 平局合并未实现(恒取先到)</td><td>无(F841 best_key 旁证)</td><td>入池(refactor, P3)</td></tr>
+  <tr><td class="mono">B2-03</td><td>P3</td><td>general</td><td class="mono">hr/worker.py _force 注释</td><td>「空集=全部站点」注释与实现相反</td><td>无</td><td>仅记录</td></tr>
+  <tr><td class="mono">B2-04</td><td>P3</td><td>general</td><td class="mono">hr/parse.py parse_size</td><td>单元表外缩写(2.5T/800M)被当 1 字节算错而非回 None</td><td>坑档 page-scraping 同族(纪律单点漏网)</td><td>入池(bug, P3 便签)</td></tr>
+  <tr><td class="mono">B2-05</td><td>P3</td><td>general</td><td class="mono">hr/ 五文件</td><td>五处 F401 死导入 + HrStoreCorrupted 死异常类</td><td>无</td><td>入池(chore, P3)<b>[归死导入合并条①]</b></td></tr>
+  <tr><td class="mono">B2-06</td><td>P3</td><td>R5</td><td class="mono">hr/ratelimit.py window_start_on / next_day_reset</td><td>固定 86400s 推算, DST 切换日偏 ±1h(主受众外)</td><td>无(local-time 明文设计同判)</td><td>仅记录</td></tr>
+  <tr><td class="mono">C-01</td><td>P2</td><td>R3</td><td class="mono">core/modules/traffic_sample_mod.py _agg_trim(:956)</td><td>运行期新建系列 hour 行不裁剪, agg.dat 无界增长</td><td>无(v3 报告未覆盖增量)</td><td>入池(bug, P2)<b>[145eedea 复验仍成立, 行号漂 +4]</b></td></tr>
+  <tr><td class="mono">C-02</td><td>P3</td><td>general</td><td class="mono">core/traffic_store.py:116-123</td><td>_parse_int_field 同名函数逐字重复定义两份</td><td>无</td><td>入池(chore, P3)<b>[归死导入合并条①]</b></td></tr>
+  <tr><td class="mono">C-03</td><td>P3</td><td>general(R10)</td><td class="mono">core/traffic_grid.py:40</td><td>V3Block F401(批 A 移交线索核实属实)</td><td>无</td><td>入池(chore, P3)<b>[归死导入合并条①]</b></td></tr>
+  <tr><td class="mono">C-04</td><td>P3</td><td>R7(R10)</td><td class="mono">core/traffic_store.py V3ParsedDay 坏行字段</td><td>v3 坏行隔离动作退役, 字段零消费, 真损坏静默丢行</td><td>无(v3 报告「沿用」表述漂移)</td><td>入池(refactor, P3)</td></tr>
+  <tr><td class="mono">C-05</td><td>P3</td><td>R5</td><td class="mono">core/modules/traffic_sample_mod.py _agg_credit_hours</td><td>hour 桶 UTC 整点对齐 vs 本地日界, 半小时时区错位</td><td>坑档同族(B2-06 同判)</td><td>仅记录</td></tr>
+  <tr><td class="mono">D-01</td><td><b>P1</b></td><td>R4</td><td class="mono">config/loaders.py load_grouping_config</td><td>cross_group_conflict_check 键面五处齐备但 loader 漏读, 经配置永无法启用(实测复现)</td><td>计划 26-10-04-0107 档案漂移; 池 2002 反形态</td><td><b>入池(bug, P1 标准)</b><b>[145eedea 复验仍成立]</b></td></tr>
+  <tr><td class="mono">D-02</td><td>P2</td><td>R4</td><td class="mono">config/validation/rules.py _validate_checking_action_spec</td><td>checking 子段键面无 fail-fast, 拼写错静默缺省(实测复现)</td><td>池 26-09-22-2002 同族(嵌套 spec 变体)</td><td>入池(bug, P2)</td></tr>
+  <tr><td class="mono">D-03</td><td>P3</td><td>R7</td><td class="mono">config/writer.py _backup</td><td>保存前备份非原子直写(同模块版本号备份却原子)</td><td>守阵 O_TRUNC 盲面(同 A-05 判)</td><td>入池(chore, P3)</td></tr>
+  <tr><td class="mono">D-04</td><td>P3</td><td>R4</td><td class="mono">config/loaders.py _resolve_hr_site_bindings</td><td>「校验后散落防御」唯一实例: 四处静默 continue(当前不可达)</td><td>无</td><td>仅记录</td></tr>
+  <tr><td class="mono">D-05</td><td>P3</td><td>R4(R10)</td><td class="mono">config/migrations.py _migrate_config_2_3 等</td><td>旧迁移无 per-key notes + enabled="" 双路径语义分歧</td><td>池 26-09-22-2002 半边(migration notes 面)</td><td><b>[终验裁定] 并池</b> → 池 2002 备注, 不另开新条(该 issue 已含「升级失效键无提示」半边)</td></tr>
+  <tr><td class="mono">D-06</td><td>P3</td><td>general(R10)</td><td class="mono">config/__init__.py + validation/__init__.py</td><td>重导出面四处不一致(F401×4 + RUF068)</td><td>无(死导入同族不同件)</td><td>入池(chore, P3)<b>[归死导入合并条①]</b></td></tr>
+  <tr><td class="mono">D-07</td><td>P3</td><td>general</td><td class="mono">config/loaders.py load_tracker_config</td><td>TrackerConfig 冗余构造, 两实参从未消费</td><td>无</td><td>仅记录</td></tr>
+  <tr><td class="mono">E-01</td><td>P2</td><td>R9</td><td class="mono">webui/views.py + routes/fs.py + routes/hr.py 迭代面 vs torrents/store.py 原地变更</td><td>Web 线程无锁迭代 store 期间主循环原地增删 → RuntimeError 500</td><td>无(池 2218/2122/1408 系 perf 面; reannounce 计划不覆盖)</td><td>入池(bug, P2)<b>[145eedea 复验仍成立]</b></td></tr>
+  <tr><td class="mono">E-02</td><td>P3</td><td>R6</td><td class="mono">webui/server/routes/torrent_detail.py api_speed_mode</td><td>except pass 静默吞并三读调用, 排障零日志</td><td>无</td><td>入池(chore, P3)</td></tr>
+  <tr><td class="mono">E-03</td><td>P3</td><td>general</td><td class="mono">webui/commands.py _cmd_reannounce_group(:357)</td><td>组内成员全不在快照时不发指令不写回执, 前端挂到超时</td><td>reannounce 计划未覆盖<b>[终验: 计划已落地且缺口仍在]</b></td><td><b>[处置改判] 入池(bug, P3)</b> —— 原「并入计划备注」因计划落地失效</td></tr>
+  <tr><td class="mono">E-04</td><td>P3</td><td>general(R10)</td><td class="mono">webui/views.py _seed_view</td><td>种子页平铺数组每轮携带全量 magnet_uri + 契约双口径</td><td>坑档 contract-api; 池 2218/1408 载荷成本面</td><td>入池(refactor, P3)(随池 2218 载荷瘦身一并处置亦可)</td></tr>
+  <tr><td class="mono">E-05</td><td>P3</td><td>R3</td><td class="mono">webui/server/traffic_qb.py v3cache</td><td>惰性建无锁双构造(B1-01 同族, 后果同样良性)</td><td>B1-01 同族不同件</td><td>入池(chore, P3)<b>[与 B1-01 合并一条]</b></td></tr>
+  <tr><td class="mono">E-06</td><td>P3</td><td>general</td><td class="mono">webui/runtime.py consume_commands</td><td>handler 体内 KeyError 被误标「未知命令」(正常路径不可达)</td><td>无</td><td>仅记录</td></tr>
+  <tr><td class="mono">F1-01</td><td>P2</td><td>R9</td><td class="mono">static/shared/drawer.js _skipPrecheck</td><td>跳检预检迟到回执可写进无关弹窗(守卫缺 modal 身份条件)</td><td>无(坑档 modal 系事件判据族不同件)</td><td>入池(bug, P2)</td></tr>
+  <tr><td class="mono">F1-02</td><td>P3</td><td>general(R10)</td><td class="mono">static/shared/config_editor.js CE_FIELD_BASE</td><td>sectionExists 对象字面量重复键(改一漏一静默陷阱)</td><td>无</td><td>入池(chore, P3)<b>[归死代码合并条②]</b></td></tr>
+  <tr><td class="mono">F1-03</td><td>P3</td><td>R9</td><td class="mono">static/shared/commands.js waitCmd</td><td>race reject 后清理跳过, SSE waiter 悬挂至超时自愈</td><td>无</td><td>仅记录<b>[落地后复验面已落地, 判读不变]</b></td></tr>
+  <tr><td class="mono">F1-04</td><td>P3</td><td>R10</td><td class="mono">static/shared/config_hub.js hubCollectRisk</td><td>伪警示前端半边定位(仅「已配置」门槛 + schema 文案复述)</td><td>池 26-09-22-2002(批 D/E 双移交落点)</td><td><b>并池</b> → 池 2002 备注(定位信息, 不重开)</td></tr>
+  <tr><td class="mono">F1-05</td><td>P3</td><td>R9</td><td class="mono">static/shared/commands.js _newCmdStats</td><td>cmdStats 单槽, 并发命令时序数字混刻误归因</td><td>无(reannounce 计划面外)</td><td>仅记录<b>[落地后复验面已落地, S6 按新行号复核]</b></td></tr>
+  <tr><td class="mono">F2-01</td><td>P3</td><td>R10</td><td class="mono">static/shared/add_torrent.js:43-44/:520</td><td>multipart 旧注释残留(实现已是 JSON/base64)</td><td>无</td><td>入池(chore, P3)<b>[归死代码合并条②]</b></td></tr>
+  <tr><td class="mono">F2-02</td><td>P3</td><td>general(R10)</td><td class="mono">static/shared/delete_flow.js _deleteDetails</td><td>死变量 names + 恒假分支(ruff F841 的 JS 同族位)</td><td>无</td><td>入池(chore, P3)<b>[归死代码合并条②]</b></td></tr>
+  <tr><td class="mono">F2-03</td><td>P3</td><td>R9</td><td class="mono">static/shared/add_torrent.js loadDir; view.js doSearch</td><td>两处取数链无请求代际守卫, 慢响应覆盖新状态(自愈型)</td><td>无(F1-01 同族不同件, 那条不自愈定 P2)</td><td>入池(refactor, P3)</td></tr>
+  <tr><td class="mono">G-01</td><td><b>P1</b></td><td>R5</td><td class="mono">rules/expr/eval.py _EQ + env.py tor.tags/tracker.groups</td><td>表达式跨容器类型 ==/!= 恒错(== 永不匹配, != 全员误匹配; 实测复现)</td><td>无(池 26-10-01-2211 系容错键语义不同件)</td><td><b>入池(bug, P1 标准)</b><b>[145eedea 复验仍成立]</b></td></tr>
+  <tr><td class="mono">G-02</td><td>P3</td><td>R5</td><td class="mono">rules/expr/env.py sys.time_of_day</td><td>两次 now() 跨午夜瞬间取错值(单次自愈)</td><td>无</td><td>仅记录</td></tr>
+  <tr><td class="mono">G-03</td><td>P3</td><td>R6</td><td class="mono">rules/conditions.py FreespaceCondition.match</td><td>OSError 静默 return False, 与 expr 形式抛 ExprError 判据劈叉</td><td>坑档 format-driven-parse 同族</td><td>入池(bug, P3 便签)</td></tr>
+  <tr><td class="mono">G-04</td><td>P3</td><td>R6</td><td class="mono">rules/actions/basic.py AddCategoryAction.execute</td><td>create_category 失败静默吞, 排障少根因证据</td><td>无</td><td>仅记录</td></tr>
+  <tr><td class="mono">G-05</td><td>P3</td><td>R3</td><td class="mono">rules/actions/full_checking.py:146 自愈 pop</td><td>recheck_fails 自愈清除写点不落盘(后果有界)</td><td>坑档 behavior-core 写点纪律; 池 26-10-01-2211</td><td><b>并池</b> → 池 2211 备注(顺手补 state.save)</td></tr>
+  <tr><td class="mono">G-06</td><td>P3</td><td>general</td><td class="mono">rules/expr/env.py _count / sys.torrent_count</td><td>每求值全库浅拷贝取 len(O(N) 纯浪费, 未进昂贵缓存)</td><td>rule-system 文档「配 interval」告警(取值侧未收口)</td><td>入池(perf, P3 便签)</td></tr>
+  <tr><td class="mono">G-07</td><td>P3</td><td>general</td><td class="mono">rules/actions/checking.py _run_custom_check</td><td>custom 校验主循环线程同步 subprocess, 最长阻塞 600s×N</td><td>无(timeout 单发有界)</td><td>仅记录</td></tr>
+  <tr><td class="mono">H-01</td><td><b>P1</b></td><td>general</td><td class="mono">scripts/qb_capture.py _sanitize_mapping(:990)</td><td>seen 未定义 NameError, write_corpus 必经 —— 语料任何文件落盘前全灭</td><td>无(守阵无此域; 坑档 testing/corpus-capture 系实施坑不同点)</td><td><b>入池(bug, P1 标准)</b><b>[145eedea 复验仍成立]</b></td></tr>
+  <tr><td class="mono">H-02</td><td>P2</td><td>R8</td><td class="mono">src/auto_qb/infra/notify.py ICON_ICO</td><td>ICON_ICO 指向不存在目录, toast 来源图标恒回退默认</td><td>池 26-10-01-2203(In Progress)同族图标面不同件</td><td>入池(bug, P2 便签; 可与 2203 图标族同批修)</td></tr>
+  <tr><td class="mono">H-03</td><td>P2</td><td>general</td><td class="mono">src/auto_qb/infra/utils.py convert_bool_in_dict</td><td>列表分支缺 isdecimal 守卫, 列表内数字/布尔形字符串被改型</td><td>无</td><td>入池(bug, P2 便签)</td></tr>
+  <tr><td class="mono">H-04</td><td>P3</td><td>general</td><td class="mono">src/auto_qb/infra/utils.py:758 docstring</td><td>注释残留 AI 占位符 token, 语义缺失</td><td>无</td><td>仅记录(可归死代码/注释清理批)</td></tr>
+  <tr><td class="mono">H-05</td><td>P3</td><td>R10</td><td class="mono">src/auto_qb/infra/__init__.py docstring</td><td>依赖纪律漏 notify→config 已显式化例外</td><td>计划 26-09-22-2112 §04(例外单点)</td><td>仅记录</td></tr>
+  <tr><td class="mono">H-06</td><td>P3</td><td>general</td><td class="mono">src/auto_qb/infra/locking.py rpartition(".")</td><td>锁文件路径推导边界(当前生产配置不可达)</td><td>无</td><td>仅记录</td></tr>
+  <tr><td class="mono">H-07</td><td>P3</td><td>R8</td><td class="mono">docker/compose.yaml:12 ports</td><td>端口映射未钉宿主侧地址(部署面加固项非缺陷)</td><td>无(坑档 docker-host-features 不同件)</td><td>仅记录(部署文档提示 127.0.0.1 前缀)</td></tr>
+</table>
+
+<h3>3.2 入池清单定稿(S6 已执行, 2026-10-06 @145eedea)</h3>
+<p class="kv"><b>定稿口径:</b> P0×0 无; P1×3 一律入池(计划 §05); P2×8 全部入池(抽查论证均维持); P3 按各批处置建议汇总定稿, 同类合并。新入池合计 <b>28 条 issue(覆盖 35 条发现)</b>; 并入既有池备注 3 条; 仅记录 19 条。</p>
+<table>
+  <tr><th>类型</th><th>条数</th><th>内容(档位)</th></tr>
+  <tr><td>bug</td><td>14</td><td><b>P1 标准 ×3:</b> D-01(loaders 漏读键) · G-01(表达式跨容器恒错) · H-01(qb_capture NameError)<br><b>P2 标准 ×6:</b> A-01(suppress 旗标残留) · B2-01(站点文件编码读崩) · C-01(agg hour 无界增长) · D-02(checking 子段键面) · E-01(store 迭代竞态) · F1-01(迟到回执写错弹窗)<br><b>P2 便签 ×2:</b> H-02(notify 图标断路径) · H-03(convert_bool_in_dict 列表分支)<br><b>P3 ×3:</b> B2-04(parse_size 表外单位, 便签) · G-03(freespace OSError 口径, 便签) · E-03(空组无回执, <b>处置改判</b>)</td></tr>
+  <tr><td>chore</td><td>6</td><td><b>①死导入/死代码合并条(P3, Py):</b> B1-02 + B2-05 + C-02 + C-03 + D-06(5 条并 1; HrStoreCorrupted 语义二选一需拍板) · <b>②死代码/注释合并条(P3, JS):</b> F1-02 + F2-01 + F2-02(3 并 1) · <b>③惰性建双构造族(P3):</b> B1-01 + E-05(2 并 1) · ④ D-03(writer._backup 原子写统一) · ⑤ A-02(导出编码) · ⑥ E-02(speed_mode 静默吞)</td></tr>
+  <tr><td>refactor</td><td>7</td><td>A-03(state 键清理) · A-04(pause/resume 对称) · A-07(首连退避) · B2-02(平局合并或收窄 docstring) · C-04(坏行口径二选一) · E-04(magnet_uri 载荷) · F2-03(代际守卫)</td></tr>
+  <tr><td>perf</td><td>1</td><td>G-06(sys.torrent_count 改 len, 便签)</td></tr>
+  <tr><td>并池备注</td><td>3</td><td>D-05 → 池 26-09-22-2002(migration notes 半边) · F1-04 → 池 26-09-22-2002(前端半边定位) · G-05 → 池 26-10-01-2211(顺手补 state.save)</td></tr>
+  <tr><td>仅记录</td><td>19</td><td>A-05 · A-06 · A-08 · B1-03 · B2-03 · B2-06 · C-05 · D-04 · D-07 · E-06 · F1-03 · F1-05 · G-02 · G-04 · G-07 · H-04 · H-05 · H-06 · H-07(其中 A-08/H-04 docstring 面可随死代码合并条①顺手清)</td></tr>
+</table>
+<div class="note"><b>撞车终验总结论:</b> 57 条撞车字段逐条对底册四表 + issues/_index.md(Open 37 实数与附录 A 记载一致)核验, <b>55 条对得上, 2 条修正注记</b>(A-08 引号有误、B1-03 撞车对象状态已变 Dropped), 不存在「发现与 Open issue 重复登记」情形。坑档类撞车(同族标注)全部成立; 在途件关系(reannounce 计划 / v3 报告)逐条成立, 其中 E-03 因计划落地触发处置改判。</div>
+
+<h3>3.2.1 S6 入池执行结果(2026-10-06, 逐条回填 issue 文件名)</h3>
+<p class="kv"><b>执行记录:</b> 开工 sync <code>145eedea</code> → 28 条新 issue 经 create-issue 协议建档(每条含七字段全量: 位置三锚/症状/可达性证据/影响面/撞车/处置建议, 来源标注「full-code-review 评审 26-10-05-0951」并互链本报告, doc-topic 全部 <code>full-code-review</code>) → 3 条并池备注按池条目更新路径追加(不新建条目) → <code>kb.index</code> 重建。行号按 HEAD 复核: C-01 锚漂 +4(:952→:956/:1006→:1010)、E-03(commands.py :275-282→:357)、F1-03/F1-05 按 rework 落地后行号, 其余按批实测并在 issue 内标注取证时点。</p>
+<table>
+  <tr><th>发现 → issue 文件(memory-bank/issues/)</th><th>类型·档位</th></tr>
+  <tr><td><b>P1 标准 ×3:</b> D-01 → <a href="../issues/26-10-06-0027-bug-config-cross-group-conflict-key-not-loaded.html">26-10-06-0027-bug-config-cross-group-conflict-key-not-loaded</a> · G-01 → <a href="../issues/26-10-06-0027-bug-rules-expr-cross-container-equality.html">26-10-06-0027-bug-rules-expr-cross-container-equality</a> · H-01 → <a href="../issues/26-10-06-0027-bug-qb-capture-sanitize-nameerror.html">26-10-06-0027-bug-qb-capture-sanitize-nameerror</a></td><td>bug / standard</td></tr>
+  <tr><td><b>P2 标准 ×6:</b> A-01 → <a href="../issues/26-10-06-0028-bug-qbmanager-suppress-live-flag-leak.html">26-10-06-0028-bug-qbmanager-suppress-live-flag-leak</a> · B2-01 → <a href="../issues/26-10-06-0028-bug-hr-store-unicode-decode-error.html">26-10-06-0028-bug-hr-store-unicode-decode-error</a> · C-01 → <a href="../issues/26-10-06-0028-bug-traffic-agg-hour-unbounded-growth.html">26-10-06-0028-bug-traffic-agg-hour-unbounded-growth</a> · D-02 → <a href="../issues/26-10-06-0028-bug-config-checking-subspec-unknown-keys.html">26-10-06-0028-bug-config-checking-subspec-unknown-keys</a> · E-01 → <a href="../issues/26-10-06-0028-bug-webui-store-iteration-race-500.html">26-10-06-0028-bug-webui-store-iteration-race-500</a> · F1-01 → <a href="../issues/26-10-06-0028-bug-drawer-skip-precheck-late-modal-write.html">26-10-06-0028-bug-drawer-skip-precheck-late-modal-write</a></td><td>bug / standard</td></tr>
+  <tr><td><b>P2 便签 ×2:</b> H-02 → <a href="../issues/26-10-06-0028-bug-notify-icon-ico-broken-path.html">26-10-06-0028-bug-notify-icon-ico-broken-path</a> · H-03 → <a href="../issues/26-10-06-0028-bug-convert-bool-list-branch-coercion.html">26-10-06-0028-bug-convert-bool-list-branch-coercion</a></td><td>bug / light</td></tr>
+  <tr><td><b>P3 bug ×3:</b> B2-04 → <a href="../issues/26-10-06-0028-bug-hr-parse-size-unknown-unit.html">26-10-06-0028-bug-hr-parse-size-unknown-unit</a> · G-03 → <a href="../issues/26-10-06-0028-bug-freespace-oserror-silent-false.html">26-10-06-0028-bug-freespace-oserror-silent-false</a> · E-03(处置改判) → <a href="../issues/26-10-06-0028-bug-reannounce-group-empty-no-receipt.html">26-10-06-0028-bug-reannounce-group-empty-no-receipt</a></td><td>bug / light·standard</td></tr>
+  <tr><td><b>chore ×6:</b> ①死导入/死代码合并条(B1-02+B2-05+C-02+C-03+D-06, 5 并 1) → <a href="../issues/26-10-06-0028-chore-py-dead-imports-hr-traffic-config.html">26-10-06-0028-chore-py-dead-imports-hr-traffic-config</a> · ②死代码/注释合并条(F1-02+F2-01+F2-02, 3 并 1) → <a href="../issues/26-10-06-0028-chore-js-dead-code-and-stale-comments.html">26-10-06-0028-chore-js-dead-code-and-stale-comments</a> · ③惰性建双构造族(B1-01+E-05, 2 并 1) → <a href="../issues/26-10-06-0028-chore-lazy-init-double-construct.html">26-10-06-0028-chore-lazy-init-double-construct</a> · ④D-03 → <a href="../issues/26-10-06-0028-chore-config-writer-backup-atomic.html">26-10-06-0028-chore-config-writer-backup-atomic</a> · ⑤A-02 → <a href="../issues/26-10-06-0028-chore-export-torrents-info-encoding.html">26-10-06-0028-chore-export-torrents-info-encoding</a> · ⑥E-02 → <a href="../issues/26-10-06-0028-chore-speed-mode-silent-except.html">26-10-06-0028-chore-speed-mode-silent-except</a></td><td>chore / light</td></tr>
+  <tr><td><b>refactor ×7:</b> A-03 → <a href="../issues/26-10-06-0028-refactor-state-keys-unbounded-growth.html">26-10-06-0028-refactor-state-keys-unbounded-growth</a> · A-04 → <a href="../issues/26-10-06-0028-refactor-qbapi-pause-resume-store-sync.html">26-10-06-0028-refactor-qbapi-pause-resume-store-sync</a> · A-07 → <a href="../issues/26-10-06-0028-refactor-tray-first-connect-error-throttle.html">26-10-06-0028-refactor-tray-first-connect-error-throttle</a> · B2-02 → <a href="../issues/26-10-06-0028-refactor-hr-resolve-tie-merge-docstring.html">26-10-06-0028-refactor-hr-resolve-tie-merge-docstring</a> · C-04 → <a href="../issues/26-10-06-0028-refactor-traffic-v3-bad-line-fields-retired.html">26-10-06-0028-refactor-traffic-v3-bad-line-fields-retired</a> · E-04 → <a href="../issues/26-10-06-0028-refactor-seed-view-magnet-uri-payload.html">26-10-06-0028-refactor-seed-view-magnet-uri-payload</a> · F2-03 → <a href="../issues/26-10-06-0028-refactor-load-dir-dosearch-stale-guard.html">26-10-06-0028-refactor-load-dir-dosearch-stale-guard</a></td><td>refactor / light</td></tr>
+  <tr><td><b>perf ×1:</b> G-06 → <a href="../issues/26-10-06-0028-perf-sys-torrent-count-full-copy.html">26-10-06-0028-perf-sys-torrent-count-full-copy</a></td><td>perf / light</td></tr>
+  <tr><td><b>并池备注 ×3(不新建条目):</b> D-05 + F1-04 → 池 <a href="../issues/26-09-22-2002-bug-webui-config-health-warning.html">26-09-22-2002-bug-webui-config-health-warning</a>(「评审并池备注」节追加, 状态保持 Open) · G-05 → 池 <a href="../issues/26-10-01-2211-refactor-rules-keys-semantics-review.html">26-10-01-2211-refactor-rules-keys-semantics-review</a>(同上)</td><td>—</td></tr>
+</table>
+<p class="kv"><b>入池数核对:</b> 新建 28(bug 14 / chore 6 / refactor 7 / perf 1, 覆盖 35 条发现: 合并条消化 10 条 = 死导入 5 并 1 + JS 死代码 3 并 1 + 惰性建 2 并 1) + 并池备注 3(D-05/F1-04/G-05) + 仅记录 19(未建档, 本报告即其记录载体) = 57 条全部有去向, 与 §3.4 统计一致。遗留拍板点 1 处: B2-05 的 HrStoreCorrupted 死异常类在合并条①内列两个修复选项(直接删除 / 改为 store 读坏路径真实抛出的类型), 留认领时拍板。</p>
+
+<h3>3.3 二次论证记录(S5 复验)</h3>
+<p class="kv"><b>总结论: 0 降级 / 0 升级 / 57 条级别全部维持。</b> P1×3 逐条在 145eedea 做位置+调用链复验(见 3.0 表); P2×8 逐条抽查论证; P3 沿用各批登记时已按纪律完成的可达性论证, 抽查未见反例。级动为 0, 但有 <b>1 条处置改判</b>(E-03)与 <b>2 条并池裁定</b>(D-05/G-05)。</p>
+<p class="kv"><b>P1 逐条论证(维持 P1):</b></p>
+<ul>
+  <li><b>D-01 维持 P1:</b> 级判据「功能错误(恒不触发)」精确命中 —— 配置键经配置永无法启用, 校验零报错(静默失效); 批 D 临时配置实测复现在案(load_config 返回 False)。145eedea 复验: loaders.py 三键构造原样、消费点 grouping_mod 恒早退链不变。非 P0: 无数据破坏/安全面(交叉检查是新增保护, 不启用回到旧行为)。</li>
+  <li><b>G-01 维持 P1:</b> 「恒误报」命中 —— != 全员误匹配会让含该条件的规则对全部种子恒真(规则域误操作放大面), == 恒假即静默失效; 批 G 实测复现在案(compile_expr 通过 + 求值 False)。145eedea 复验: rules/ 零提交, _EQ 分支/容器类型源原样。非 P0: 规则动作本身另有闸门(批 G R2 复核), 不构成洗白面。</li>
+  <li><b>H-01 维持 P1:</b> NameError 不可捕获地发生在 write_corpus 字面量求值处, 一场 capture(10 分钟起)全流程语料必灭 —— 恒触发且损失完整产出; 调用链闭合(main → run_* → write_corpus:1048 → :990)。145eedea 复验: 文件未动, seen 全函数无定义。dev 工具链属性使它不升 P0(不涉生产数据/账号)。</li>
+</ul>
+<p class="kv"><b>P2 抽查论证(重点核处置建议合理性, 全部维持):</b> A-01(处置 try/finally 关窗对症异常路径; 非恒现故 P2 恰当) · B2-01(except 补 UnicodeDecodeError 归 recoverable 类是最小修复, 与既有 quarantine 链对齐) · C-01(ingest 侧初始化/min 更新与 v3 §04.5 契约对齐; 复验行为未变) · D-02(子段补 _check_unknown_keys 与顶层同构, 顺带核同形态 spec 合理) · E-01(两案均收敛竞态且不动单写线程假设; 瞬时 500 自愈故非 P1) · F1-01(modal 身份戳第三条件直接对症「单例 modal + 异步落框」形态) · H-02(两级 dirname 一行修, 便签档恰当 —— 仅图标面无功能损失) · H-03(列表分支补同款守卫恢复单口径, 与坑档 behavior-core「无各自成立理由」复核一致)。</p>
+
+<h3>3.4 统计</h3>
+<table>
+  <tr><th>口径</th><th>分布</th></tr>
+  <tr><td>按级</td><td><b>P0 ×0 · P1 ×3 · P2 ×8 · P3 ×46</b>(合计 57)</td></tr>
+  <tr><td>按批</td><td>A 8(P2×1/P3×7) · B1 3(P3×3) · B2 6(P2×1/P3×5) · C 5(P2×1/P3×4) · D 7(P1×1/P2×1/P3×5) · E 6(P2×1/P3×5) · F1 5(P2×1/P3×4) · F2 3(P3×3) · G 7(P1×1/P3×6) · H 7(P1×1/P2×2/P3×4)</td></tr>
+  <tr><td>按维度(主维度)</td><td>R3 ×5 · R4 ×4 · R5 ×4 · R6 ×6 · R7 ×3 · R8 ×2 · R9 ×5 · R10 ×4 · general ×24(括号次维度另见终表)</td></tr>
+  <tr><td>按处置</td><td>入池 35 发现 → 28 条 issue(bug 14 / chore 6 / refactor 7 / perf 1) · 并池备注 3 · 仅记录 19</td></tr>
+  <tr><td>工具源 vs 人工</td><td>十个批工具源(ruff/bandit/node --check/grep 清单)真信号合计 18 条, 全部 P3 死代码/风格面; 全部 P0/P1/P2 共 11 条均为人工读码发现(工具盲区), 与 D3「工具只作提示源」口径互证</td></tr>
+</table>
+
+<h3>3.5 ID 连续性核对结论</h3>
+<p>十批 57 条逐批核对: A-01…A-08(8) · B1-01…B1-03(3) · B2-01…B2-06(6) · C-01…C-05(5) · D-01…D-07(7) · E-01…E-06(6) · F1-01…F1-05(5) · F2-01…F2-03(3) · G-01…G-07(7) · H-01…H-07(7) —— 各批内部从 01 起连续<b>无断号</b>, 批前缀互异<b>无重号</b>, 与 §2 各批发现表行数逐一相符, 合计 8+3+6+5+7+6+5+3+7+7 = <b>57</b>, 与计划 §05「P0/P1 逐条复验 + 无 ID 断号」完成判据相符。</p>
+
+<h2 id="sec-map">§4 S1 批次地图(实测于起点 HEAD a4d14a8d, 2026-10-05)</h2>
+<p>生成方式: <code>git ls-files</code> 全集 × 按文件字节行数计 LOC; 批次划分按计划 §06; 关联测试按 tests/ 文件名与包/模块同名对应(启发式, 各批开工时再精化)。</p>
+
+<h3>4.1 批次汇总矩阵</h3>
+<table>
+  <tr><th>批</th><th>范围</th><th>文件数</th><th>LOC</th><th>重点维度</th><th>关联测试(tests/)</th><th>关联文档</th><th>在途交叉</th></tr>
+  <tr><td>A</td><td>core/ 根 + core/modules(除 traffic_sample_mod)</td><td>20</td><td>5,977</td><td>R1 R2 R3 R6 R9</td><td>test_qbmanager · test_taskqueue · test_tvshows · test_episodes · test_exporter(+ core modules 族)</td><td>modules.md(core 节) · systemPatterns.md · pitfalls/backend/(behavior-core/concurrency/high-risk-ops)</td><td>主循环异常退避刚修(26-10-05-0127), 查同类模式</td></tr>
+  <tr><td>B1</td><td>hr/service.py + model.py + status.py</td><td>3</td><td>2,930</td><td>R1 R3 R5 R8</td><td>test_hr_service · test_hr_status(+test_hr)</td><td>modules.md(hr 节) · tasks/26-10-05-backend-hr-steady-throttle.md · 报告 26-09-29-0404 hr-verify-v3-audit</td><td>HR 降频计划(Done)刚落地, 行号锚用函数名</td></tr>
+  <tr><td>B2</td><td>hr/ 其余</td><td>20</td><td>4,651</td><td>R6 R7 R8 R9</td><td>test_hr_channel · test_hr_worker · test_hr_parse · test_hr_resolve · test_hr_report · test_hr_store · test_hr_runtime · test_hr_server · test_hr_fetcher_channel · test_hr_multisite · test_hr_queue · test_hr_ratelimit · test_hr_bencode · test_hr_config</td><td>modules.md(hr 节) · pitfalls/backend/page-scraping · hr 系列任务档案</td><td>无</td></tr>
+  <tr><td>C</td><td>traffic_store + traffic_sample_mod + traffic_grid</td><td>3</td><td>2,889</td><td>R3 R5 R7</td><td>test_traffic_store · test_traffic_grid</td><td>报告 26-10-04-1730 v3 设计 · tasks/26-10-04-backend-qb-traffic-storage-v3.md</td><td>v3 计划 Open(S6 已落地, 剩 S7 agg = issue 1015) — 只登记未覆盖增量</td></tr>
+  <tr><td>D</td><td>config/ 全部</td><td>19</td><td>4,966</td><td>R2 R4</td><td>test_config · test_config_schema · test_config_key_surface · test_config_writer · test_impact(+test_hr_config)</td><td>config-reference.md · modules.md(config 节) · pitfalls/backend/schema-stamp-writeback · hot-reload-held-config</td><td>无</td></tr>
+  <tr><td>E</td><td>webui/ 全部 py</td><td>25</td><td>5,296</td><td>R2 R8 R9</td><td>test_web* 族 · test_commands_engine · test_extension_proxy(webui 面)</td><td>systemPatterns.md · pitfalls/backend/concurrency · pitfalls/web-ui/contract-api</td><td>reannounce 计划 0923 将改 commands.py / runtime.py — 只登记未覆盖增量</td></tr>
+  <tr><td>F1</td><td>static/shared JS 主干 6 件</td><td>6</td><td>6,466(JS)</td><td>R8 R9 R10</td><td>test_frontend_* 静态守阵族(tests/test_ui.py 等)</td><td>pitfalls/web-ui/(vue-reactivity/contract-api/template-render/overlays)</td><td>commands.js ∈ reannounce 计划改动面 — 标「落地后复验」</td></tr>
+  <tr><td>F2</td><td>static 其余 25 JS + CSS 18 件 + HTML 18 件</td><td>61</td><td>7,013(JS) + 6,977(CSS) + 3,830(HTML)</td><td>R8 R9 R10</td><td>test_frontend_static_bundle_health 等 11 项静态健康守阵</td><td>pitfalls/web-ui/ 全类 · conventions/webui.md</td><td>无(XSS 清单为新增产出)</td></tr>
+  <tr><td>G</td><td>torrents/ + rules/</td><td>23</td><td>3,960</td><td>R1 R5 R6</td><td>test_torrents · test_conditions · test_expr_parse · test_expr_eval · test_checking · test_actions · test_registry · test_delete_tags</td><td>rule-system.md · pitfalls/backend/high-risk-ops · qb-api</td><td>池 26-10-01-2211 规则键语义 / 26-10-05-0402 跳检自证闸门</td></tr>
+  <tr><td>H</td><td>infra/ + tray/ + 入口 + scripts/ + extensions/ + docker</td><td>41</td><td>15,044</td><td>R6 R7 R8</td><td>test_utils · test_file_access · test_notify · test_logging · test_locking · test_versioning · test_cli · test_tray · test_qb_capture · test_extension_proxy</td><td>techContext.md · pitfalls/backend/platform-fs · windows-long-path · pitfalls/ops/prod-files · docker-host-features</td><td>tray 两 issue(2203 族)</td></tr>
+</table>
+
+<h3>4.2 F1/F2 拆分明细(D1: 各约 6.5–7k 行 JS, 规模均衡)</h3>
+<p>拆分原则: 共享数据/状态/命令主干收进 F1 一轮读完(交叉引用密集), 其余页面/部件 JS 归 F2; 全部 31 个 JS(含 2 个 vendor)无一遗漏, CSS/HTML 机制面随 F2。</p>
+<table>
+  <tr><th>轮</th><th>文件 × LOC</th><th>小计</th></tr>
+  <tr><td>F1</td><td class="mono">config_editor.js 1371 · drawer.js 1320 · shortcuts.js 1177 · config_hub.js 971 · dialogs.js 908 · commands.js 719</td><td>6 文件 / 6,466 行</td></tr>
+  <tr><td>F2(JS)</td><td class="mono">columns.js 716 · hr_status.js 636 · add_torrent.js 594 · qb_traffic_chart.js 591 · app.js 501 · state.js 390 · hr.js 358 · ui_feedback.js 337 · selection.js 326 · config_rules.js 257 · lifecycle.js 256 · filters.js 253 · delete_flow.js 250 · menu.js 236 · shows.js 194 · polling.js 178 · decorate.js 172 · auth.js 153 · format.js 152 · view.js 147 · boot.js 113 · prism/js/theme.js 109 · sort.js 83 · vendor/vue.global.prod.js 9 · vendor/uPlot.iife.min.js 2</td><td>25 文件 / 7,013 行</td></tr>
+  <tr><td>F2(CSS/HTML)</td><td class="mono">CSS 18 件 6,977 行(console console_hub 1127 / prism views 958 / atlas components 699 / prism components 667 / console components 630 / atlas dialogs 629 / console dialogs 569 / atlas views 414 / console views 284 / atlas style 201 / console style 192 / prism themes 5 件 467 / prism base 79 / prism tokens 42)+ HTML 18 件 3,830 行(shared/tpl 15 件 + 3 皮肤 index.html)</td><td>36 文件 / 10,807 行(机制面为主)</td></tr>
+</table>
+
+<h3>4.3 各批逐文件清单(LOC 实测)</h3>
+
+<h4>批 A(20 文件 / 5,977 行)</h4>
+<p class="mono">ops_mod.py 889 · qbmanager.py 864 · grouping_mod.py 623 · rules_mod.py 465 · tvshows.py 456 · qbapi.py 413 · maintenance_mod.py 363 · module.py 360 · speed_curve_mod.py 321 · state.py 228 · taskqueue.py 227 · exporter.py 150 · episodes.py 129 · curves.py 124 · tracker_mod.py 120 · notify_mod.py 79 · qbclient.py 64 · logging_mod.py 48 · modules/__init__.py 31 · core/__init__.py 23</p>
+
+<h4>批 B1(3 文件 / 2,930 行)</h4>
+<p class="mono">hr/service.py 1621 · hr/status.py 659 · hr/model.py 650</p>
+
+<h4>批 B2(20 文件 / 4,651 行)</h4>
+<p class="mono">runtime.py 441 · resolve.py 420 · worker.py 412 · channel.py 404 · server.py 396 · report.py 375 · parse.py 333 · store.py 308 · fetcher.py 218 · adapters/nexusphp.py 209 · __init__.py 197 · queue.py 182 · bencode.py 161 · events.py 147 · ratelimit.py 127 · adapters/__init__.py 83 · adapters/base.py 83 · adapters/carpt.py 75 · module.py 41 · adapters/btschool.py 39</p>
+
+<h4>批 C(3 文件 / 2,889 行)</h4>
+<p class="mono">core/traffic_store.py 1263 · core/modules/traffic_sample_mod.py 1096 · core/traffic_grid.py 530</p>
+
+<h4>批 D(19 文件 / 4,966 行)</h4>
+<p class="mono">validation/sections.py 665 · loaders.py 586 · schema/groups.py 484 · writer.py 454 · models.py 396 · validation/rules.py 335 · validation/core.py 312 · schema/rules.py 308 · migrations.py 222 · schema/__init__.py 192 · schema/fields.py 183 · schema/hr.py 179 · schema/trackers.py 177 · validation/curves.py 118 · site_presets.py 111 · __init__.py 86 · validation/__init__.py 78 · impact.py 69 · errors.py 11</p>
+
+<h4>批 E(25 文件 / 5,296 行)</h4>
+<p class="mono">views.py 925 · commands.py 900 · runtime.py 696 · server/routes/torrent_cmds.py 272 · server/traffic_qb.py 265 · server/routes/fs.py 258 · server/routes/hr.py 232 · server/routes/torrent_detail.py 221 · server/lifecycle.py 207 · server/routes/config.py 177 · server/auth.py 162 · server/routes/state.py 134 · server/routes/keys.py 117 · server/common.py 109 · module.py 106 · server/routes/events.py 81 · server/context.py 77 · server/routes/sites.py 59 · server/static_ui.py 59 · server/routes/groups.py 54 · server/routes/system.py 53 · __init__.py 41 · server/__init__.py 38 · server/factory.py 33 · server/routes/__init__.py 20</p>
+
+<h4>批 G(23 文件 / 3,960 行)</h4>
+<p class="mono">torrents/store.py 560 · rules/expr/env.py 463 · torrents/record.py 457 · rules/base.py 314 · rules/conditions.py 261 · rules/expr/parser.py 256 · rules/actions/checking.py 198 · rules/expr/eval.py 196 · rules/expr/lexer.py 170 · rules/actions/basic.py 166 · rules/actions/full_checking.py 153 · torrents/compat.py 132 · rules/checking_meta.py 114 · torrents/view.py 114 · rules/expr/types.py 92 · rules/actions/transfer.py 86 · torrents/__init__.py 51 · rules/expr/__init__.py 46 · rules/actions/__init__.py 43 · rules/registry.py 30 · rules/actions/skip_checking.py 28 · rules/expr/errors.py 22 · rules/__init__.py 8</p>
+
+<h4>批 H(41 文件 / 15,044 行)</h4>
+<p class="mono">scripts/sim_qb.py 2079 · scripts/ui_smoke.cjs 1978 · scripts/qb_capture.py 1553 · infra/utils.py 1075 · scripts/sim_run.py 950 · extensions/hr-fetch-proxy/background.js 868 · scripts/hr_fetch_experiment.py 863 · extensions/hr-fetch-proxy/options.js 642 · scripts/ui_harness.py 611 · tray/app.py 529 · infra/file_access.py 393 · scripts/sim_baseline.py 326 · infra/notify.py 302 · scripts/check_context_caps.py 262 · scripts/bench_expr.py 258 · scripts/sim_fsmock.py 226 · cli.py 211 · extensions/hr-fetch-proxy/options.html 203 · scripts/dev_webui.py 198 · scripts/sync_agent_skills.py 185 · infra/versioning.py 185 · scripts/check_command_drift.py 164 · infra/logging.py 128 · infra/locking.py 112 · scripts/check_doc_links.py 104 · infra/autostart.py 97 · docker/config.example.yml 82 · extensions/hr-fetch-proxy/normalize.js 69 · scripts/sim_autoqb.py 56 · scripts/update_config_key_surface.py 56 · .dockerignore 50 · extensions/hr-fetch-proxy/site-caps.js 23 · extensions/hr-fetch-proxy/manifest.json 32 · compose.yaml 36 · Dockerfile 30 · __init__.py 28 · tray/__init__.py 27 · infra/errors.py 22 · infra/__init__.py 14 · auto-qb.py 10 · __main__.py 7</p>
+
+<h3>4.4 并集核对(S1 完成判据)</h3>
+<p>核对脚本: git ls-files 全集按批次规则指派后取并集, 与「源码全集」(src 全部 .py + webui/static 的 js/css/html + extensions 前端件 + scripts/ + docker 面)比对。实测输出摘要:</p>
+<pre class="mono" style="background:#141822;border:1px solid #2a2f3a;border-radius:8px;padding:12px 16px;">
+TOTAL assigned: 221  unique: 221  | universe: 221
+Unassigned: []      # 无未指派文件
+Dups: []            # 无跨批重复
+Missing: []         # 无遗漏
+批 A 20 / B1 3 / B2 20 / C 3 / D 19 / E 25 / F 67 / G 23 / H 41  (合计 221)
+</pre>
+<p><b>结论: 8 批并集 == 源码全集, 0 漏 0 重。</b>(注: 评审对象不含 resources/、tests/、memory-bank/ 与根文档; tests/ 质量作为 R10 视角随批看。)</p>
+
+<h2 id="appx-issues">附录 A · 已知问题底册 —— issues 池 Open 条目</h2>
+<p>实测(2026-10-05 起点 HEAD a4d14a8d, 以 issues/_index.md 生成物为准): <b>Open 共 37 条</b> = bug 4 / perf 5 / docs 1 / refactor 4 / feat 17 / chore 2 / question 4。
+计划记载 38 条(bug 4 / perf 5 / docs 2 / refactor 4 / feat 16 / chore 3 / question 4, 于 ef93db56 时点)——差异 3 笔均可解释:
+26-10-05-0922 chore(pytest-cov-gate-test-one)与 26-10-05-0922 docs(config-schema-docstring-drift)在计划成文后已被认领修毕转 Done(chore 3→2, docs 2→1); 新增 feat 26-10-05-1015(v3 agg 段窗, feat 16→17)。<b>无需拍板, 属正常演进。</b>
+撞车比对只对 <b>bug/perf/refactor/docs/chore 共 16 条</b>做; feat/question 共 21 条标「不重开」。</p>
+
+<h3>A.1 撞车比对类(16 条, 评审发现须逐条对照)</h3>
+<table>
+  <tr><th>#</th><th>类型</th><th>条目(域)</th><th>一句话</th><th>撞车比对批/维度</th></tr>
+  <tr><td>1</td><td>bug</td><td>26-10-05-0402 跳检自证闸门(rules/ops/web)</td><td>候选种子自身当日校验失败后跳检无任何闸门, 已证实坏数据可洗白成已校验; 规则侧 without_reference 段与 WEB 路径双入口, chain 0 永不回头复查</td><td>批 G(checking/skip_checking)· 批 A(ops_mod)· 批 F(webui); R2 危险闸门</td></tr>
+  <tr><td>2</td><td>bug</td><td>26-10-01-2203 tray Ctrl+C 不退出(tray)</td><td>--tray 模式下 Ctrl+C 信号不退出进程, Windows 控制台信号与托盘生命周期冲突</td><td>批 H(tray/app.py); R6</td></tr>
+  <tr><td>3</td><td>bug</td><td>26-10-01-2129 删种连删文件误报缺文件(ops×webui)</td><td>连文件删除的种子被缺文件扫描误报 WARNING, 删除路径与缺文件检测未互斥</td><td>批 A(maintenance_mod)· 批 E/F; R1</td></tr>
+  <tr><td>4</td><td>bug</td><td>26-09-22-2002 设置页伪警示 + schema 外键静默忽略(webui×config)</td><td>警示条只复述 schema risk 文案不反映配置健康; load_config 对 schema 外键静默忽略, 升级失效键无提示</td><td>批 D(R4 fail-fast)· 批 E</td></tr>
+  <tr><td>5</td><td>perf</td><td>26-10-01-2218 主循环灌入期掉拍(core)</td><td>--ramp 时稳态间隔 2.87s vs main_tick 2.0s; max_tasks_per_tick 自适应未实施</td><td>批 A(R1/R3)</td></tr>
+  <tr><td>6</td><td>perf</td><td>26-10-01-2218 /api/state 全量构建抢占主循环(webui)</td><td>5000 种子单次约 0.6s; rid 增量未用满 + 无分页/按需字段</td><td>批 E(R9); 批 E 读码时核对现状是否已被 v3/其它提交部分缓解</td></tr>
+  <tr><td>7</td><td>perf</td><td>26-09-30-0052 HR 末页追翻省略(hr)</td><td>HR 计数翻页达末页后仍多做一次追翻请求(P3 缓做项)</td><td>批 B2</td></tr>
+  <tr><td>8</td><td>perf</td><td>26-09-21-1408 四视图全量重建单轮成本大头(webui)</td><td>5000 种子单轮 ~550ms, shows 聚合最重</td><td>批 E(R9)· 批 F</td></tr>
+  <tr><td>9</td><td>perf</td><td>26-09-19-2122 节拍门控未省总重建(webui)</td><td>门控只是把重建从主循环搬到请求路径, 未省 CPU</td><td>批 E/F(R9)</td></tr>
+  <tr><td>10</td><td>refactor</td><td>26-10-05-0922 fetchable 零消费方(hr/config)</td><td>SiteHrCheckConfig.fetchable 全仓零消费方; listing=none 未被取数侧强制</td><td>批 B1· 批 D(R4)</td></tr>
+  <tr><td>11</td><td>refactor</td><td>26-10-01-2211 规则容错键语义(rules)</td><td>ignore_next_action_error / stop_following_rules_if 语义与组合行为待梳理</td><td>批 G(R1/R6)</td></tr>
+  <tr><td>12</td><td>refactor</td><td>26-10-01-2120 管理标签/分类弹窗重构(webui)</td><td>弹窗结构陈旧待重构(TODO 无细节, 开工先复验)</td><td>批 F</td></tr>
+  <tr><td>13</td><td>refactor</td><td>26-09-21-1408 类型注解 43% 无 mypy(全仓)</td><td>749 个 def: 完整 43%/部分 41%/无 16%</td><td>跨批 R10 视角; D3 拍板评审不引 mypy, 不重开工具面</td></tr>
+  <tr><td>14</td><td>docs</td><td>26-09-28-1946 插件 spec 键无逐键文档(config)</td><td>conditions/actions 插件 spec 键在 keys.md 与 rule-system 文档均无逐键覆盖, 守卫对该层豁免</td><td>批 D(R10)</td></tr>
+  <tr><td>15</td><td>chore</td><td>26-09-21-1408 版本号双源(infra)</td><td>__init__.__version__ 0.2.0 vs pyproject 0.1.0</td><td>批 H(infra/versioning.py)</td></tr>
+  <tr><td>16</td><td>chore</td><td>26-09-20-1427 hatch-pet 付费 API 无提示(.agents)</td><td>skill 调付费 OpenAI 图像 API 无成本标注</td><td>评审范围外(非 src/static/scripts), 不重开</td></tr>
+</table>
+
+<h3>A.2 feat 17 条 + question 4 条 —— 一律「不重开」(需求/存疑类, 评审不翻案)</h3>
+<p class="mono">feat: agg 段窗活尾合流(1015, v3 S7 候选·与批 C 在途关联) · hr-prune-notice · disaster-site-rebuild · ext-info-display · ext-version-pinning · i18n-multi-language · group-move-atomicity · hr-verify-sync-hr-tags · speedlimit-curve-emphasis · webui-shows-grouping-research · webui-tracker-error-warning-state · webui-optimistic-ui-expansion · webui-settings-help-followup · webui-custom-chip-colors · webui-search-highlight · hr-badge-total-crosscheck · stats-redesign-torrent-traffic<br>
+question: config-split-per-site · search-based-recheck-feasibility · hr-same-group-download-priority · skipcheck-no-completed-in-group</p>
+<p>In Progress 2 条: bug 26-10-01-2203 任务栏 python 图标(批 H 对照) · question 26-10-01-2212 Transmission 兼容可行性(批外)。</p>
+
+<h2 id="appx-pitfalls">附录 B · 已知问题底册 —— 坑档按类索引(7 类, pitfalls/)</h2>
+<p>评审核法: 每批读码前按域对照对应类; 坑档描述的历史缺陷模式即免费检查清单。</p>
+<h3>B.1 backend(23 主题)</h3>
+<p class="mono">behavior-core(看着像 bug 其实是特性, 改前先确认) · cold-start-view-gap(广播时机排在长任务后=功能像没生效) · concurrency(七条线程/状态机硬约束) · ctypes-x64-argtypes(不声明签名=静默失败/有概率失效) · effect-confirmation(陈旧观测下确定性结论) · explorer-foreground(后台进程弹窗被压前台) · format-driven-parse(字段书写形状写死=换 format 静默失效) · fs-pathmap-tristate(casefold 折叠回原串切片等) · fuzzy-match-noise(模糊匹配先剥分辨率/来源/编码) · high-risk-ops(已有防护不得削弱) · hot-reload-held-config(消费方按值拷走旧配置) · hot-reload-stale-bindings-derived-views(换对象≠下游跟进) · page-scraping(不锤定结构的正则匹配到别处) · platform-fs(双平台差异/长路径/稀疏文件) · qb-api(版本差异/增量语义/add 选项缺省) · release-record-baseline(凭据靠快照比对判失效) · schema-stamp-writeback(校验走副本落盘写原始树) · suppress-request-vs-live-flag(suppress 请求语义vs相位抑制) · task-interval-tick-quantization(到期判据只在 tick 边界) · unreachable-wait(对面收不到无法本机判) · web-package-split(web.py 拆包四条) · windows-long-path(长路径三种失败方式)</p>
+<h3>B.2 docs(5)</h3>
+<p class="mono">access-url(只能写 localhost) · drift(裁决顺序/🚧 语义) · html-edit(字符串替换吃闭合标签/残留旧块) · md-edit(替换卷进下一行字段标签) · pack-readme-entry(指针写 task id 不写包 README)</p>
+<h3>B.3 git(9)</h3>
+<p class="mono">editing-traps(编辑器静默事故全集) · history-integration(rebase/merge/stash 事故档案, 禁令已解除) · message(反引号/heredoc/实测数字) · package-move-imports(移动包 import 清点) · push(TMPDIR/ls-remote 真值) · refs(ref 三处核对/写入静默丢弃) · ship-commit-staged-delete(已暂存删除 pathspec 落空) · subagent-mixed-workspace(半途夭折混杂交织) · sync-pull(ahead/behind 是快照)</p>
+<h3>B.4 kb(8)</h3>
+<p class="mono">cap-counting(CRLF 计数/轮转正解) · cap-debt(债务降级三处静默回退) · discipline(纪律失效机理) · refs-rename(改名全仓查引用) · request-boundary(问答vs执行任务红线) · scripts(未定义名/STOP/列宽输出) · skills-loading(脚本路径口径) · task-command-surface(task 元数据被写死) · tasks-archive(状态词表/回扫)</p>
+<h3>B.5 ops(6)</h3>
+<p class="mono">alert-levels(WARNING 以上推系统通知口径) · console-encoding(管道子进程 cp936 vs UTF-8) · docker-host-features(qB 报回宿主路径容器里不存在) · msys-container-path(Git Bash 容器路径参数) · prod-files(config.yml/auto-qb-data 红线) · shell-env(长驻会话 PATH 撑爆)</p>
+<h3>B.6 testing(31)</h3>
+<p class="mono">annotations-lazy-eval(PEP 649 惰性注解) · assertions(恒真/恒红/安慰剂) · bg-process-cleanup(TaskStop 只杀外层) · browser-verify-iab(IAB evaluate 序列化假象) · bulk-rename(批量改名两坑) · corpus-capture(qb_capture 实施坑) · corpus-fs-mock(脱敏第二层 key) · coverage-export(.coverage.json 命名撞车) · event-handler-mock(patch 拦不住已注册 handler) · fake-config-shared-mutables(类属性共享可变) · gate-probe-must-not-run-action(--help 真跑动作) · ghost-pkg-residue(__pycache__ 空壳) · hot-reload-mock-sections(MagicMock 替身区) · hot-reload-section-choice-side-effects(apply 有副作用段) · log-capture(自建 handler 不碰 caplog) · node-guards-silent-skip(无 node 静默 pass) · parallel-run(xdist 默认/回传) · patching(平台相关 monkeypatch) · perf-measurement(固定过路费/单次采样无意义) · sandbox-full-run(沙箱拒写 TMPDIR) · side-effects(sidefx 记账) · sim-root-sentinel(哨兵只写一次) · single-file-coverage-gate(单文件覆盖率假红) · smoke(ui_harness/ui_smoke) · static-guard-mutation(弱正则守阵拦不住突变) · stubs-sim(替身像≠够用) · timing-tolerance(挂钟断言容差) · tmpdir(临时目录纪律) · ui-preview-harness(无头浏览器坑) · unreached-branch-guard(夹具让分支进不去) · web-auth-test-forms(TestClient Host 形态)</p>
+<h3>B.7 web-ui(30)</h3>
+<p class="mono">aq-tip-nested-title-double · aq-tip-position-clamp(自绘 tooltip 两处定位缺陷) · cjk-regex-norm(Python→JS \W 直译废中文搜索) · clip-path-clips-fixed(fixed 后代被祖先改写) · columns-persist(列偏好重置全机制/双轨模型) · combobox-focusout-close(label 转发激活关了又开) · contract-api(字段不一致沿派生链追) · css-comment-terminator(注释提前砍断) · css-perf-parity(backdrop-filter 成本) · dialog-measure(居中弹窗量位移减半) · dock-panel(停靠面板视口算式) · drawer-switch-flicker(换种子闪烁四处成因) · extension-bridge(扩展运行期 pytest 跑不到) · frontend-split(聚合/差异口/data 不进 mixin) · hover-keynav-fight(悬停与键盘活动项同源) · hr-tooltip-overlap(自绘与原生 title 叠加) · js-comment-terminator(JS 注释同族) · layout-css(行宽/吸顶/对齐判据) · modal-mask-click-self-drag(click.target 判据) · nav-focus-stale-ring(焦点残留 outline) · overlays(弹层排查顺序) · perf-cadence(节拍/缓存/埋点) · poll-reseed-filter(派生候选回填勾选) · progress-bar(flex 行文本宽度) · search-views(搜索/负词/脏标记) · svg-chart-mapping(letterbox 映射错位) · template-render(静默失效/成对改) · tpl-comment-split-orphan(模板切分注释孤儿) · ui-location-persist(位置恢复补加载) · unsaved-guard-reload-keys(F5 黑名单误导) · vue-reactivity(四类静默白屏)</p>
+
+<h2 id="appx-inflight">附录 C · 已知问题底册 —— 在途/待评审件清单</h2>
+<table>
+  <tr><th>件</th><th>状态(实测)</th><th>覆盖文件</th><th>评审口径</th></tr>
+  <tr><td>计划 26-10-05-0923 强制汇报确认机制重构(reannounce-confirm-rework)</td><td>Open</td><td>webui/commands.py · webui/runtime.py · shared/commands.js</td><td>批 E 与 F1(commands.js)只登记计划未覆盖增量; 交叉文件标「落地后复验」; 依据件 = 报告 26-10-05-0854(Done)</td></tr>
+  <tr><td>计划 26-10-04-1957 qB 流量历史 dat v3</td><td>Open(S6 活尾合流已随 a4d14a8d 落地)</td><td>core/traffic_store.py · core/modules/traffic_sample_mod.py · core/traffic_grid.py · webui/server/traffic_qb.py</td><td>批 C 与批 E(traffic_qb.py)只登记 v3 未覆盖增量; 剩余 agg 段窗合流 = issue 26-10-05-1015(feat, 候选 S7, 不重开)</td></tr>
+  <tr><td>报告 26-10-04-1730 v3 设计报告</td><td>Done(已实施)</td><td>同上</td><td>底册状态由「待评审」更正为「已落地」—— 评审不重复报告 v3 已覆盖面</td></tr>
+  <tr><td>报告 26-10-05-0854 强制汇报确认机制与 qB 汇报状态接口调研</td><td>Done</td><td>—</td><td>0923 计划依据件, 不单独构成评审豁免面</td></tr>
+  <tr><td>计划 26-10-01-1758 issue 清理路线图</td><td>Open</td><td>—(meta 层, 池条目排期)</td><td>评审入池的新发现与它合流排期, 不改它</td></tr>
+  <tr><td>issue 26-10-01-2203 任务栏 python 图标(In Progress) / 26-10-01-2212 Transmission 兼容(In Progress)</td><td>In Progress</td><td>tray/app.py 等 / 可行性分析</td><td>批 H 评审核 tray 时对照前者; 后者批外</td></tr>
+  <tr><td>本计划 26-10-05-0951 全面 Code Review</td><td>In Progress</td><td>全部源码</td><td>本报告即其发现底稿</td></tr>
+</table>
+
+<h2 id="appx-guards">附录 D · 已知问题底册 —— 守阵清单(testing/guards.md 蒸馏)</h2>
+<p>评审核法: ①行为变更处守阵是否还活着(红验可信) ②该有而没有的域(R10)。守阵 = 违反就红的测试; 全表见 <a href="../testing/guards.md">testing/guards.md</a>, 此处蒸馏高风险组。</p>
+<table>
+  <tr><th>组(条数)</th><th>守阵 × 守护点(高风险)</th></tr>
+  <tr><td>知识库结构(19)</td><td>test_index_is_regenerated(_index==生成器输出) · 双向一致族(索引↔文件 bijective) · test_kb_files_respect_caps(AGENTS.md 8000 硬上限=problem, 其余尺寸=债务) · test_kb_pitfall_entries_have_required_fields(触发/判别/处置)</td></tr>
+  <tr><td>前端/WEB UI(13)</td><td>test_frontend_static_bundle_health(静态资源健康 11 项: node --check 真语法/CSS 块闭合/STATE_RANK 一致/筛选单点等) · test_frontend_computed_not_invoked_as_function(computed 不得当函数调用) · test_frontend_cols_store_single_setitem_site(全仓唯一 setItem 漏斗) · test_api_state_skips_jsonable_encoder(热路径直返) · test_api_readonly_endpoints_short_cache(短缓存四边界) · test_view_rebuild_waits_for_client_consume(版本门控) · test_api_fs_dirs_case_sibling_is_outside_whitelist(大小写兄弟越界)</td></tr>
+  <tr><td>主循环/命令链路(11)</td><td>test_qbmanager_source_has_no_web_state_fields(19 个表现层字段禁入) · test_web_state_alias_proxies_to_runtime(别名只转发) · test_drain_web_commands_bumps_write_seq + 回执先失效缓存(写序/缓存一致性) · test_run_loop_layered_cadence(同步线/任务线分离) · test_api_enqueue_wakes_main_loop(唤醒+自投递登记防自激) · test_run_loop_throttles_without_stop_event(真实时间节流)</td></tr>
+  <tr><td>后端高危/状态持久化(17)</td><td>备份先于删除三连(precedes/未生效清/失败中止) · test_load_state_corrupt_falls_back_to_bak(损坏回退 .bak 自愈) + 首启静默 + 自愈失败非致命 · test_cleanup_orphan_tmp_*(只删 state tmp/.bak 反例/接线在锁后) · test_utils.py atomic_write 三态+空路径拒绝 · test_no_o_trunc_write(全 src 非注释 O_TRUNC 清零, _WHITELIST 单点) · test_grouping.py group_key 单点真值</td></tr>
+  <tr><td>仿真/语料/平台(13)</td><td>test_sim_is_within_*(宿主语义/Linux 等价/折叠红验) · test_safe_delete_*(越界拒删+记账/数量双侧) · CORPUS.group_exact 族(语料真值分组红验) · CORPUS.maindata_lag_modeled(快照滞后建模) · test_notify_real_send_blocked_under_pytest(测试不发真通知) · test_config_schema.py 20 项(UI 元数据 vs 配置键一致) · test_impact.py(分级表直测)</td></tr>
+  <tr><td>src 结构卫生(1)</td><td>test_no_ghost_pkg_dirs(幽灵包目录清零)</td></tr>
+</table>
+
+<footer>
+  26-10-05-1036 · 专题 full-code-review · 终版(S6 定稿 2026-10-06): 十批 57 条发现 + §3 分级分流 + §3.2.1 入池执行结果(28 新建 issue + 3 并池备注, 文件名已回填) · 状态 Done, doc-forms「出厂即冻结」以本定稿为出厂时点<br>
+  起点 HEAD a4d14a8d · 起点基线 2610+4 / 99% · 基线切片 26-10-05-1034 · 批次进度: A✓ B1✓ B2✓ C✓ D✓(26-10-05-1210 回填, 7 条: P1 ×1 / P2 ×1 / P3 ×5) · E✓(26-10-05 回填, 6 条: P2 ×1 / P3 ×5) · F1✓(26-10-05 回填, 5 条: P2 ×1 / P3 ×4; XSS 清单 0 登记) · F2✓(26-10-05 回填, 3 条: P3 ×3; XSS 核对表 0 登记, 覆盖 25 JS + 18 CSS + 18 HTML) · G✓(26-10-05 回填, 7 条: P1 ×1 / P3 ×6) · H✓(26-10-05 回填, 7 条: P1 ×1 / P2 ×2 / P3 ×4; 扩展凭据出网面/file_access 路径穿越/docker 凭据注入面均核过, P1 为 scripts 语料抓取器落盘前必崩)
+</footer>
+
+</main>
+</body>
+</html>

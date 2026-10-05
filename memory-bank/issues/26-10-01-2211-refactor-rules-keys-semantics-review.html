@@ -95,6 +95,12 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 22:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-06 — full-code-review 评审(计划 26-10-05-0951)并池备注追加 1 条(G-05 自愈 pop 不落盘, 顺手补 state.save), 见下方「评审并池备注」; 状态保持 <strong>Open</strong>。</li>
+    </ul>
+    <h3>full-code-review 评审并池备注(2026-10-06, 状态保持 Open)</h3>
+    <p>来源: full-code-review 全项目评审(计划 <a href="../plans/26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a>) · 发现 G-05(P3, 写点纪律)按报告 §3.4 清单并池到本条备注, 全文见 <a href="../reports/26-10-05-1036-report-full-code-review.html">26-10-05-1036-report-full-code-review</a>。</p>
+    <ul>
+      <li><b>G-05(自愈 pop 不落盘, 顺手补 state.save):</b> <code>rules/actions/full_checking.py:146</code>(<code>_skip_on_group_check_failed</code> 的假失败自愈 pop): recheck_fails 的自愈清除写点不落盘 —— 坑档 behavior-core 明文「skip_check_day / recheck_fails 在写点即时落盘(重放代价最高)」, bump_recheck_fail(checking_meta.py:113)有 state.save(), 本 pop 没有。决策链 1.6 自愈(失败记录指向已完成/已删成员)后、周期落盘(state_save_interval 默认 120s)前崩溃/断电即丢 — 丢的后果有界: 残留记录下次 1.6 再自愈一次, 代价一次多余 recheck, 非毒化。处置: 本池认领/顺手触达规则域时可捎带补 <code>state.save()</code>。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行（L211）由末阶段统一移除，本报告不回改 TODO.md。</p>
   </section>
