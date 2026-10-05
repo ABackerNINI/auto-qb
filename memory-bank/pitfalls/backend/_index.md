@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [announce-epoch-semantics.md](announce-epoch-semantics.md) | qB 5.2(WebAPI 2.13.0)起 `torrents/trackers` 的 `next_announce`/`min_announce` 是 **Unix epoch 绝对秒**(qB 源码 `toSecondsSinceEpoch`, PR #23045 "seconds since epoch"), 旧汇报确认判据 `na < b_na - 60` 却按**倒计时语义**写(值应变小)—— 而汇报成功 = 重新调度 = next_announce **前跳(变大)**, 判据方向反了恒假: 不抛错、不报警, 只表现为确认窗口走满 30s **恒误报「失败」**。修法(plan 26-10-05-0923, 2026-10-05 落地): 方向反转为主判据 `next > b_next + TOL`(TOL=3.0s) + 证据门控(在途直证/status4+msg 判败/停止直判/超时落 warn 第三态) + 基线 status≥2 极值守卫 + min 窗口假瞬态守卫。 | next_announce, min_announce, epoch, 前跳, 倒计时, 绝对时间, 相对时间, 汇报确认, 强制汇报, reannounce, trackers, 确认超时, 恒误报, 误报失败, TOL, updating, 假瞬态, 判据方向 |
 | [behavior-core.md](behavior-core.md) | 后端一批"看着像 bug 其实是特性"的行为 —— 改之前先确认它是不是有意设计。 | 改规则, 改主循环, 改归组, 改缺文件扫描, 改限速, 改状态持久化, 改 web 服务生命周期 |
 | [cold-start-view-gap.md](cold-start-view-gap.md) | 数据/结论已经写进磁盘或内存, 但**广播/发布的时机**排在一个长达数小时的任务之后 —— | 重启后功能像没生效, 视图, 发布, publish, 广播, 冷启动, 判定真空期, 回落本地, 第一波, 长任务, 取数波 |
 | [concurrency.md](concurrency.md) | 七条线程 / 状态机硬约束, 违反即引入难以复现的 bug。 | 加线程, 改队列, 改 state_file, 改校验流程, 视图组装, QbApi 写方法, 阻塞等待, 关停, stop, join |

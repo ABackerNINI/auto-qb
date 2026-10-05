@@ -7,6 +7,23 @@
 
 > 本文件只留近期条目; 2026-09-26~10-02 十六条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 强制汇报确认机制重构: epoch 前跳证据门控 + warn 第三态**(2026-10-05, 计划
+  [plans/26-10-05-0923](../plans/26-10-05-0923-plan-reannounce-confirm-rework.html) S0-S5 全落地, 提交链
+  `f251e301`(S0 真机探针三点实证: 前跳 +5466s / TOL=3.0 维持 / 推迟路径 min_e+1 冻结)→`8873c889`
+  (S1+S2 webui/commands.py 判定提为纯函数 `_verdict_reannounce` 五分支: ②updating 直证 / ③
+  `next > b_next+TOL` 前跳主判据 —— 方向反转, 旧判据 `na < b_na-60` 把 epoch 绝对秒当倒计时恒不触发是
+  失效根因, 限基线 status≥2 行 + min 窗口假瞬态守卫 / ④status4+msg 判败先于②③防重试排程假前跳误判 /
+  legacy 回退; runtime.py check_pending 三桶聚合 + item 级窗口 + `reannounce_background` 后台核实上限 500)
+  →`04b5899f`(S3 static/shared/commands.js: `_pollCmd` 终结纳入 warn 第三态 / SSE 与轮询共用 status 透传 /
+  三桶按 r.status 分流 / sticky 文案补推迟子句 / delete_flow 保守口径 warn 不放行删除), 分支
+  feat/reannounce-confirm-rework 待并回): 推迟路径(min_interval 未过期)早回执「已受理: 推迟至 HH:MM」+
+  后台日志核实, 停止种子直判「未确认」, 超时落 warn 诚实标签不再恒误报「失败」; 机器分流依据从「前缀」
+  改为「status」(ok/error/warn)。§05 十一组用例全落地净增 +7; 新坑档
+  [pitfalls/backend/announce-epoch-semantics](../pitfalls/backend/announce-epoch-semantics.md);
+  test.full 2610 passed + 4 skipped / 98%(基线
+  [26-10-05-1202](../testing/baselines/26-10-05-1202-reannounce-confirm-rework.md)); 档案
+  [tasks/26-10-05-backend-reannounce-confirm-rework](../tasks/26-10-05-backend-reannounce-confirm-rework.md)(Done)。
+
 - **WEB UI 危险动作防护: 重新校验确认框 + 跳检前置条件三分流预检**(2026-10-05, 计划
   [plans/26-10-05-0314](../plans/26-10-05-0314-plan-webui-danger-guards.html) S0-S5 全落地, 提交链
   `bcc2bce2`(S1a store 组级判定上移单点, grouping_mod 委托保签名)→`09683720`(S1b-1 ops

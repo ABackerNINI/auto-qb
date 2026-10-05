@@ -31,8 +31,10 @@
 - **库内既有范本** (同一纪律的四处先例):
   [src/auto_qb/webui/runtime.py](../../../src/auto_qb/webui/runtime.py) `defer_receipt` / `flush_truths`
   (改种子状态的命令回执推迟到补刷新之后再写 —— 宣称落后于真值落地); 同文件 `check_pending` +
-  [commands.py](../../../src/auto_qb/webui/commands.py) `_confirm_reannounce_result`(reannounce 只发指令
-  并登记确认跟踪, 回执由确认机制对照 baseline 核实后给出 —— 发出 ≠ 成功);
+  [commands.py](../../../src/auto_qb/webui/commands.py) `_verdict_reannounce`(reannounce 只发指令
+  并登记确认跟踪, 回执由五分支纯函数对照 baseline 核实后给出, 结论 ∈ confirmed/rejected/pending,
+  pending 落 warn 第三态诚实标签不混入「失败」 —— 发出 ≠ 成功; plan 26-10-05-0923 落地,
+  判据方向事故详见 [announce-epoch-semantics](announce-epoch-semantics.md));
   [src/auto_qb/core/modules/ops_mod.py](../../../src/auto_qb/core/modules/ops_mod.py) skip_check R2 实时
   复核 + `_poll_until`(动手前对 qB 短间隔直查确认); 同 webui/runtime.py WEB 命令真值直查红线(取不到就
   返回 None 不回落快照 —— 回落会把「读不到」伪装成「读到了旧值」)。本次修复点: 同文件 `OpsModule.recheck`
