@@ -124,6 +124,20 @@ class QbApi:
         self._client.torrents_stop(torrent_hashes=torrent_hashes, **kwargs)
         self._sync_paused_state(torrent_hashes, paused=True)
 
+    def torrents_pause(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+        """暂停(issue A-04: 与 torrents_stop 同为暂停轴写操作, 同步 store 快照保持对称)
+
+        写后同步 _sync_paused_state(坑档 concurrency「QbApi 写方法必须同步 store」):
+        不写回的话, 同 tick 内读 is_paused 仍是旧值, 幂等判定会再发一次请求。
+        """
+        self._client.torrents_pause(torrent_hashes=torrent_hashes, **kwargs)
+        self._sync_paused_state(torrent_hashes, paused=True)
+
+    def torrents_resume(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
+        """恢复(与 torrents_start 对称, 同步 store 快照; 见 torrents_pause 注)"""
+        self._client.torrents_resume(torrent_hashes=torrent_hashes, **kwargs)
+        self._sync_paused_state(torrent_hashes, paused=False)
+
     def torrents_set_upload_limit(
         self,
         torrent_hashes: Optional[HashType] = None,
@@ -166,12 +180,6 @@ class QbApi:
 
     def torrents_reannounce(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
         return self._client.torrents_reannounce(torrent_hashes=torrent_hashes, **kwargs)
-
-    def torrents_pause(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
-        self._client.torrents_pause(torrent_hashes=torrent_hashes, **kwargs)
-
-    def torrents_resume(self, torrent_hashes: Optional[HashType] = None, **kwargs: Any):
-        self._client.torrents_resume(torrent_hashes=torrent_hashes, **kwargs)
 
     def torrents_set_super_seeding(
         self, enable: bool = False, torrent_hashes: Optional[HashType] = None, **kwargs: Any

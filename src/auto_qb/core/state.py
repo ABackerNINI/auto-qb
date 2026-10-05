@@ -11,7 +11,7 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from ..infra import utils
@@ -22,6 +22,17 @@ logger = logging.getLogger(__name__)
 
 # 哨兵: 状态文件"存在但内容不可用"(与"文件不存在"区分 —— 后者是首启, 属正常, 不该告警)
 _CORRUPT = object()
+
+# exec_history 键面清理(issue A-03: rule:hash 键从不清, 种子已删/规则已禁的记录永久残留):
+# - 日期淘汰: 早于 _EXEC_HISTORY_KEEP_DAYS 天的记录删除 —— 同日窗口(daily/hourly)的活跃键
+#   永不受影响; 代价是超过保留期的 execute_once: once 去重与超长 cooldown 失效(可接受:
+#   执行历史是去重辅助不是审计日志, 实际配置的 cooldown 均为小时~天级)。
+# - 存量上限: 仍超出 _EXEC_HISTORY_MAX_ENTRIES 时按 ts 淘汰最旧的**非当日**记录 ——
+#   当日记录一律保留(守「活跃键不被误清」); 单日键数天然有界(种子数 x 规则数), 淘汰后
+#   规模上界 = 上限 + 单日活动量。
+# 固定常量而非配置键: 数据保留期不是行为开关, 不值得为它开配置面。
+_EXEC_HISTORY_KEEP_DAYS = 30
+_EXEC_HISTORY_MAX_ENTRIES = 2000
 
 
 class StateService:
@@ -202,14 +213,34 @@ class StateService:
     # ---------- 执行历史(规则去重依据) ----------
 
     def record_execution(self, rule_name: str, hash: str) -> None:
-        """记录规则执行历史(execute_once/cooldown 去重依据); 仅主循环线程调用, 线程安全"""
+        """记录规则执行历史(execute_once/cooldown 去重依据); 仅主循环线程调用, 线程安全
+
+        写入时顺带清理键面(对齐 ops_mod skip_check_day 的执行路径清理先例, issue A-03):
+        日期淘汰 + 存量上限, 见模块头 _EXEC_HISTORY_* 常量注释。幂等: 重复执行清理结果一致。
+        """
         now = datetime.now()
         history = self.data.setdefault("exec_history", {})
+        self._prune_exec_history(history, now.date())
         history[f"{rule_name}:{hash}"] = {
             "ts": now.timestamp(),
             "date": now.date().isoformat(),
             "hour": now.hour,
         }
+
+    def _prune_exec_history(self, history: dict, today: date) -> None:
+        """exec_history 键面清理: 早于保留期的记录 + 超上限时最旧的非当日记录(仅主循环线程)"""
+        cutoff = (today - timedelta(days=_EXEC_HISTORY_KEEP_DAYS)).isoformat()
+        stale = [k for k, v in history.items() if v.get("date", "") < cutoff]
+        for k in stale:
+            del history[k]
+        overflow = len(history) - _EXEC_HISTORY_MAX_ENTRIES
+        if overflow > 0:
+            candidates = sorted(
+                (kv for kv in history.items() if kv[1].get("date") != today.isoformat()),
+                key=lambda kv: kv[1].get("ts", 0),
+            )
+            for k, _ in candidates[:overflow]:
+                del history[k]
 
     def get_exec_record(self, rule_name: str, hash: str) -> Optional[dict]:
         return self.data.get("exec_history", {}).get(f"{rule_name}:{hash}")

@@ -31,7 +31,9 @@ v4 全部写新目录; 旧 qb-traffic-v3/ 与更早的 qb-traffic/ 原样留存�
   interval / run_len x interval 推进); 时钟回拨钳制 dt_ms >= 1。dt 链定约(读写两侧同源)
   见「纯函数区」头注释: 游标 = 上一已消费记录槽位锚点, 游程槽均摊, 链式自洽; 全路径无
   纯等间隔推算(证伪用例钉住)。
-- 撕裂尾半行(崩溃残留)豁免损坏占比; 坏行占比超阈值的隔离处置在解析纪律内计数呈现。
+- 撕裂尾半行(崩溃残留)豁免损坏占比; 坏行整行跳过计数, 无隔离动作(v2 的 .corrupt 隔离
+  已随换代退役)—— 真实损坏的观测信号 = 读侧坏行占比超阈(>=2 行且 >5%, 撕裂尾豁免)时
+  WARNING 告警(节流, 仅日志; _warn_bad_lines, issue C-04 P-05)。
 
 关块状态机(写侧单点在采样模块 BlockBuffer, §01「关块状态机」定约):
 - 关块触发: 既有触发点(00:00 硬切 / 改间隔 / 落盘失败复位)+ 计数器重置(cur < last)强制
@@ -118,6 +120,52 @@ HOUR_SECONDS = 3600
 #: 单种哈希合法字符(infohash 实际为 hex, 但 FakeTorrent 式测试哈希与宽容口径取
 #: 文件名安全集: 字母/数字/下划线/连字符 —— 排除路径分隔符与点, 非法键 fail-fast)
 _INFOHASH_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+#: 坏行占比告警阈值(沿用 v2 口径, issue C-04 P-05 最小消费方): 坏行(撕裂尾豁免)>=2 行
+#: 且占比 >5% 时 WARNING。固定常量而非配置键: 观测面告警阈值不是行为开关。
+_BAD_LINE_WARN_MIN_LINES = 2
+_BAD_LINE_WARN_RATIO = 0.05
+
+#: 同一文件坏行告警的最小间隔(秒, 节流): 天文件随追加反复重解析, 不节流等于逐次读刷屏。
+_BAD_LINE_WARN_GAP_S = 3600.0
+
+# 告警节流表(键 = 文件标识): 读侧被 Web 线程并发调用, 无锁 —— 竞态最坏多告一条, 无害;
+# 只增则在上界处整体重置(最坏重复告警一次), 不做精细 LRU(不值当)。
+_bad_line_warn_ts: dict = {}
+
+
+def _warn_bad_lines(source: str, bad_lines: int, data_lines: int, torn_tail: bool = False) -> None:
+    """坏行占比超阈值的解析告警(仅日志零行为, issue C-04 P-05)
+
+    v2 的「坏行超阈隔离 .corrupt」动作在 v3/v4 退役: 坏行整行跳过只计数, 真实损坏
+    (磁盘坏块/外部编辑)此前被静默逐行跳过 —— 图面缺数据无任何信号。本函数补**最小
+    观测消费方**: 超阈(>=2 行且占比 >5%, 撕裂尾豁免)时 WARNING 一条, 不改任何解析结果。
+    节流: 同一文件 _BAD_LINE_WARN_GAP_S 内至多一条。
+    """
+    bad = bad_lines - (1 if torn_tail else 0)
+    if bad < _BAD_LINE_WARN_MIN_LINES or data_lines <= 0 or bad / data_lines <= _BAD_LINE_WARN_RATIO:
+        return
+    now = time.monotonic()
+    prev = _bad_line_warn_ts.get(source)
+    if prev is not None and now - prev < _BAD_LINE_WARN_GAP_S:
+        return
+    _bad_line_warn_ts[source] = now
+    if len(_bad_line_warn_ts) > 256:
+        _bad_line_warn_ts.clear()
+    logger.warning(
+        f"流量存储 | {source} 坏行 {bad}/{data_lines} 行(占比 {bad / data_lines:.1%} 超阈), "
+        "已逐行跳过(图面数据缺失, 疑似磁盘损坏/外部编辑)"
+    )
+
+
+def _warn_bad_lines_path(path: str, parsed) -> None:
+    """按文件路径取告警标识(系列目录名/文件名, 如 global/2026-10-06.dat)并转 _warn_bad_lines"""
+    _warn_bad_lines(
+        f"{os.path.basename(os.path.dirname(path))}/{os.path.basename(path)}",
+        parsed.bad_lines,
+        parsed.data_lines,
+        getattr(parsed, "torn_tail", False),
+    )
 
 
 def _fmt_int(v: int) -> str:
@@ -814,7 +862,9 @@ class TrafficV4Store:
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return V4ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_v4_agg_text(f.read())
+            parsed = parse_v4_agg_text(f.read())
+        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
+        return parsed
 
     def append_agg_rows(self, key: str, rows: tuple) -> None:
         """追加一批聚合行(§04.2): 与 append_records 同款追加纪律 —— 单次 open("a") +
@@ -875,7 +925,9 @@ class TrafficV4Store:
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return None
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_v4_day_text(f.read())
+            parsed = parse_v4_day_text(f.read())
+        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
+        return parsed
 
     def trim_agg_hours(self, key: str, now: float, rollup_window: float) -> Optional[int]:
         """hour 行按 rollup_window 裁剪(§04.5, 本层唯一 tmp+fsync+os.replace 原子重写点):
@@ -1031,7 +1083,9 @@ class V4DayCache:
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return V4ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_v4_agg_text(f.read())
+            parsed = parse_v4_agg_text(f.read())
+        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
+        return parsed
 
     @staticmethod
     def _read_parse(path: str) -> Optional["V4ParsedDay"]:
@@ -1040,7 +1094,9 @@ class V4DayCache:
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return None
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_v4_day_text(f.read())
+            parsed = parse_v4_day_text(f.read())
+        _warn_bad_lines_path(path, parsed)  # 坏行超阈告警(仅日志, issue C-04 P-05)
+        return parsed
 
 
 def v4_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:

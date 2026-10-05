@@ -661,7 +661,8 @@ class FakeTorrent:
         !没有这个方法时桩服务的详情端点 `/api/torrents/{hash}` **恒 500**
         (`'FakeTorrent' object has no attribute 'to_dict'`, 2026-09-19 实测), 于是整条依赖详情的
         链路在冒烟里从未被覆盖: 详情抽屉、限速/分享率/移动/重命名对话框、以及"复制磁力"
-        (magnet_uri 只在平铺 SEED_ITEM 与详情里, 成员索引没有该字段 —— 见 app.js copyTorrentInfo)。
+        (magnet_uri 只在详情里 —— 轮询载荷按需取详情口径已不含它, issue E-04 P-06;
+        见 drawer.js copyTorrentInfo)。
         与真实现一致: 惰性缓存槽(下划线开头)与 tracker_conf 不进导出(后者是配置对象, 不可 JSON 化)。
         """
         skip = {"tor", "tracker_conf"}

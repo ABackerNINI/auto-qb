@@ -11054,7 +11054,6 @@ def test_seed_flat_view_fields_and_gating():
             "force_start",
             "super_seeding",
             "priority",
-            "magnet_uri",
             "infohash_v1",
             "infohash_v2",
             "private",
@@ -11094,7 +11093,8 @@ def test_seed_flat_view_fields_and_gating():
         # 量化: eta 8640030->8640000, time_active 3641->3600(与重建判定同一步长)
         assert item["eta"] == 8640000 and item["time_active"] == 3600
         assert item["num_seeds"] == 5 and item["num_leechs"] == 2
-        assert item["magnet_uri"] == "magnet:?xt=urn:btih:H1" and item["max_ratio"] == 1.5
+        # magnet_uri 不在轮询载荷(issue E-04 P-06): 按需取 /api/torrents/{hash} 详情
+        assert "magnet_uri" not in item and item["max_ratio"] == 1.5
         assert item["hr_triggered"] is False, "HR 字段与成员视图同源(未配置站点为 False)"
         # 同版本: torrents 与 groups/singles/shows 同门控不回传
         again = mgr.web.ensure_state(rid=state["rid"])

@@ -49,11 +49,14 @@
 - test_p2a_init_with_lock_cleans_orphan_tmp_and_releases: 持锁构造清孤儿 tmp; 释放后可再持锁 (P2-a)
 - test_p2a_run_with_lock_releases_in_finally: run() finally 释放锁 (P2-a)
 - test_p2a_run_managed_stop_event_exits_during_connect_retry: 托管模式连接失败遇停止信号干净返回 (P2-a)
+- test_a07_connect_non_api_error_transition_throttled: 守阵(26-10-06-0028 A-07)——非 API 连接异常(凭据错)与连接类同用转换节流, 失败态重复 connect 不重复 ERROR
+- test_a07_managed_first_connect_retry_warns_once: 守阵(A-07)——托管首连重试 WARNING 只说明白一次, 停止信号仍即时响应
 - test_p2a_run_materializes_schema_migration_dry_run_then_write: run() 启动物化 dry-run 不落盘 / 非 dry-run 迁移+备份 (P2-a)
 - test_p2a_sync_line_flush_propagates_to_host: _sync_line flush=True 经 host.run_sync_line; False 不调 (P2-a)
 - test_p2a_refresh_added_pipeline_skips_ghost_and_unmatched: added 管线幽灵 hash / 未匹配 tracker 跳过 (P2-a)
 """
 import json
+import logging
 import os
 import tempfile
 import threading
@@ -70,7 +73,7 @@ from auto_qb.infra.errors import AutoQbError
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
 from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle
 from auto_qb.torrents import QbCompatError
-from helpers import FakeClient, FakeConfig, FakeTorrent, make_manager, seed_store
+from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, make_manager, seed_store
 
 
 def test_create_global_tasks():
@@ -1080,6 +1083,53 @@ def test_p2a_run_managed_stop_event_exits_during_connect_retry():
         stop_event.set()
         mgr.run(dry_run=False, stop_event=stop_event)  # 不抛即通过
         assert mgr.connect.call_count == 1, "停止信号生效: 不无限重试连接"
+
+
+def test_a07_connect_non_api_error_transition_throttled():
+    """守阵(26-10-06-0028 A-07): 非 API 类连接异常(典型凭据错 LoginError)与连接类同用转换节流
+
+    修复前 connect() 的 except Exception 无条件 ERROR —— 托管模式首连重试循环每 main_tick
+    调一次 connect(), 凭据错误场景逐拍 ERROR 刷屏。守阵: 失败态下重复 connect 不再重复
+    ERROR(同因只说明白一次); 连接恢复后再失败重新报一次(状态转换)。
+    (日志断言用 capture_logs 不用 caplog: QbManager 构造链清 root handlers, 见 helpers。)
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        with mock.patch("auto_qb.core.qbmanager.new_client", side_effect=Exception("Login failed")):
+            with capture_logs("auto_qb.core.qbmanager") as cap:
+                assert mgr.connect() is False  # 首次失败: ERROR 一次
+                assert mgr.connect() is False  # 失败态再失败: 静默
+        errors = [r for r in cap.records if r.levelno == logging.ERROR]
+        assert len(errors) == 1, f"同因失败只说明白一次, 实际 {len(errors)} 条 ERROR"
+        # 状态转换: 连接成功(翻转 _last_conn_ok)后再失败, 重新报一次
+        with mock.patch("auto_qb.core.qbmanager.new_client", return_value=mock.Mock()):
+            assert mgr.connect() is True
+        with mock.patch("auto_qb.core.qbmanager.new_client", side_effect=Exception("Login failed")):
+            with capture_logs("auto_qb.core.qbmanager") as cap:
+                assert mgr.connect() is False
+        assert len([r for r in cap.records if r.levelno == logging.ERROR]) == 1
+
+
+def test_a07_managed_first_connect_retry_warns_once():
+    """守阵(A-07): 托管模式首连重试循环的 WARNING 只说明白一次, 停止信号仍即时响应"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.config.main_tick = 0.01
+        stop = threading.Event()
+        calls = {"n": 0}
+
+        def fake_connect():
+            calls["n"] += 1
+            if calls["n"] >= 5:
+                stop.set()  # 重试数次后置位停止: 验证循环仍即时退出
+            return False
+
+        mgr.connect = fake_connect
+        with capture_logs("auto_qb.core.qbmanager", level=logging.WARNING) as cap:
+            mgr.run(dry_run=False, stop_event=stop)  # 不抛即通过(停止即时响应)
+        warns = [m for m in cap.messages if "重试" in m]
+        assert len(warns) == 1, f"重试 WARNING 只说明白一次, 实际 {len(warns)} 条"
+        assert calls["n"] >= 5
 
 
 def test_p2a_run_materializes_schema_migration_dry_run_then_write():

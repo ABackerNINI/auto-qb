@@ -13,6 +13,7 @@ P0 是纯加法(契约 + 状态服务 + ctx 接线), 本文件锁住三件事:
 - test_manager_state_delegate_roundtrip: record_execution/get_exec_record 经委托走 ctx.state(旧调用面不变)
 - test_state_service_roundtrip_standalone: 服务独立构造: 空->写入->落盘->重读带 schema 版本章
 - test_maybe_flush_via_service: 周期落盘到期触发/间隔内不重复/interval=0 关闭(语义与迁移前一致)
+- test_exec_history_prune_bounded_and_active_kept: 守阵(26-10-06-0028 A-03)——exec_history 日期淘汰+存量上限有界, 当日活跃键不被误清
 - test_module_host_register_order_and_dup_fail_fast: 注册保序; 无名/重名 fail-fast
 - test_module_host_register_invokes_subscribe: 装配点回调 subscribe, 相位认领发生在注册时
 - test_module_host_lifecycle_order: start_all/apply_all 装配序, stop_all 逆序
@@ -129,6 +130,60 @@ def test_maybe_flush_via_service():
         assert not os.path.exists(path)
         svc.maybe_flush(100.0, 0)  # interval=0: 关闭(旧行为逃生口)
         assert not os.path.exists(path)
+
+
+def test_exec_history_prune_bounded_and_active_kept():
+    """守阵(26-10-06-0028 A-03): exec_history 键面有界 + 活跃键不被误清
+
+    - 日期淘汰: 早于保留期(_EXEC_HISTORY_KEEP_DAYS 天)的记录被清; 当日记录(同日窗口
+      daily/hourly 的去重依据)永不清 —— 同日窗口语义靠 state_file 去重不受影响。
+    - 存量上限: 超上限时只淘汰最旧的**非当日**记录, 当日记录即便 ts 最旧也保留。
+    """
+    from datetime import datetime, timedelta
+
+    from auto_qb.core import state as state_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        svc = StateService(os.path.join(td, "state.json"))
+        today = datetime.now().date()
+        expired = (today - timedelta(days=state_mod._EXEC_HISTORY_KEEP_DAYS + 1)).isoformat()
+        recent = (today - timedelta(days=1)).isoformat()
+        svc.data["exec_history"] = {
+            "r_old:H": {
+                "ts": 0.0,
+                "date": expired,
+                "hour": 0
+            },
+            "r_recent:H": {
+                "ts": 1.0,
+                "date": recent,
+                "hour": 0
+            },
+            "r_today:H": {
+                "ts": 2.0,
+                "date": today.isoformat(),
+                "hour": 0
+            },
+        }
+        svc.record_execution("r_today", "H2")
+        hist = svc.data["exec_history"]
+        assert "r_old:H" not in hist, "超保留期记录被淘汰(键面不无界增长)"
+        assert "r_recent:H" in hist and "r_today:H" in hist and "r_today:H2" in hist
+
+        # 存量上限: 塞满当日记录 + 一条昨日记录, 昨日先淘汰, 当日全保留
+        svc.data["exec_history"] = {
+            f"r{i}:H": {
+                "ts": float(i),
+                "date": today.isoformat(),
+                "hour": 0
+            }
+            for i in range(state_mod._EXEC_HISTORY_MAX_ENTRIES)
+        }
+        svc.data["exec_history"]["r_y:H"] = {"ts": -1.0, "date": recent, "hour": 0}
+        svc.record_execution("x", "y")
+        hist = svc.data["exec_history"]
+        assert "r_y:H" not in hist, "超上限先淘汰最旧的非当日记录"
+        assert len(hist) == state_mod._EXEC_HISTORY_MAX_ENTRIES + 1, "当日记录全保留(活跃键不被误清)"
 
 
 # ---------- ModuleHost 骨架 ----------

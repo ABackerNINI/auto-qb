@@ -120,6 +120,19 @@
 | `test_qbmanager.py::test_export_torrents_info` (A-02) | export_torrents_info 编码恒 `utf-8` —— GBK 外字符种子名(语料 U+20000)如实落盘不崩(Windows 默认 cp936 会 UnicodeEncodeError 中途崩); **静态钉**(inspect.getsource 断言 encoding="utf-8") + 行为面双保险 | 还原 `open(path, "w")` 无编码(实测红在静态断言 —— 本机默认编码恰为 utf-8, 行为面红验不可达, 与 O_TRUNC 守阵同判) |
 | `test_web.py::test_api_speed_mode_reads_client_with_alt_fields` (E-02) | /api/speed/mode 三读成败口径对齐: 任一失败(含首读成功后续读抛的**部分成功组合**)整组回 None + DEBUG 一行异常摘要 —— 前端浮层不出「一半真一半未知」, 排障有日志 | 还原 `except Exception: pass`(实测红在「部分成功 current 有值」) |
 
+## S5 refactor/语义批次守阵 (26-10-06-0028 ×6, 红验 26-10-06 @工作区)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_module_host.py::test_exec_history_prune_bounded_and_active_kept` (A-03) | exec_history 键面有界: 超保留期(30 天)日期淘汰 + 超存量上限(2000)淘汰最旧**非当日**记录; 当日活跃键(同日窗口 daily/hourly 去重依据)即便 ts 最旧也不被误清 | 还原 record_execution 无 _prune_exec_history(键面只增不减) |
+| `test_speed_curve.py::test_curve_state_day_keys_pruned` (A-03) | speed_limit_curve 日键保 7 天: 写入时顺带淘汰保留期外旧日键(调试快照无正确性消费方), 保留期内与当日键不受影响 | 还原 _record_curve_state 直写不淘汰 |
+| `test_actions.py::test_pause_resume_sync_store_snapshot` (A-04) | QbApi pause/resume 写后同步 store 快照(与 start/stop 对称, 坑档 concurrency「写方法必须同步 store」): 同 tick 读 is_paused 为新值, 完成位不翻转 | 还原 torrents_pause/resume 纯透传(实测红在「pause 后 state 仍是 downloading」) |
+| `test_qbmanager.py::test_a07_connect_non_api_error_transition_throttled` (A-07) | 非 API 类连接异常(凭据错 LoginError)与连接类同用 _last_conn_ok 转换节流: 失败态重复 connect 不重复 ERROR; 恢复后再失败重新报一次 | 还原 except Exception 无条件 logger.error |
+| `test_qbmanager.py::test_a07_managed_first_connect_retry_warns_once` (A-07) | 托管模式首连重试循环的 WARNING 只说明白一次, 停止信号仍即时响应(不抛 QbConnectError 干净返回) | 还原逐拍 logger.warning |
+| `test_hr_resolve.py::test_tie_*` 六条 (B2-02, P-04) | judge_record 双 hash 平局合并兑现 docstring: 同为放行取依据更强者(D 免罪>B>缺席), 同为管束取剩余时间更少(None 未知视为无穷大), 两态同为 SAFE 无判定翻转, 无证据平局保先到; C 终态未达标(failed 展示)恒保留不被洗成可删 | 还原 `_rank(res) > _rank(best)` 严格大于(平局恒取先到, 实测红在 D 免罪被缺席式放行压住) |
+| `test_traffic_store.py::test_v4_bad_line_ratio_warning_once_throttled` (C-04, P-05) | 坏行占比超阈(>=2 行且 >5%, v2 口径; 撕裂尾豁免)读侧 WARNING 恰一次(按文件节流); 正常文件零告警 —— 真实损坏不再静默丢行 | 还原 read_day 不调 _warn_bad_lines |
+| `test_web.py` SEED_ITEM 契约测试(E-04, P-06) | /api/state 平铺 SEED_ITEM 载荷**不含** magnet_uri(按需取详情契约, 坑档 contract-api 正向口径); 磁力复制走 /api/torrents/{hash} 详情端点(该端点 to_dict 全字段含 magnet_uri) | 还原 _seed_view 的 `"magnet_uri": r.magnet_uri` 行 |
+
 ## 仿真 / 语料 / 平台语义
 
 | 守阵 | 钉住的结论 | 红验 |

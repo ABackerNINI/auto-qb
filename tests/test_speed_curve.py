@@ -21,6 +21,7 @@
 - test_speed_curve_global_task_registered: 配置存在 -> 创建 speed_limit_curve 全局任务
 - test_speed_curve_global_task_uses_own_interval: 曲线配置专属 interval
 - test_speed_curve_global_task_not_registered: 未配置 -> 不创建
+- test_curve_state_day_keys_pruned: 守阵(26-10-06-0028 A-03)——speed_limit_curve 日键保 N 天, 保留期外旧日键写入时顺带淘汰
 - test_speed_curve_applies_staged_upload_limit: 命中档位 -> transfer_set_upload_limit(bytes/s)
 - test_speed_curve_idempotent_second_run_no_write: 同档位重复执行不重复写
 - test_speed_curve_manual_odd_kib_skips_direction: 当前正奇数 KiB(手动)不覆盖该方向
@@ -53,7 +54,7 @@ from auto_qb.core import curves
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve, load_config
 from auto_qb.config import ConfigError
 from auto_qb.core.modules.speed_curve_mod import (
-    _MANUAL_REMIND_GAP, _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
+    _CURVE_STATE_KEEP_DAYS, _MANUAL_REMIND_GAP, _cn_number, _fmt_bytes, _fmt_global_limit, _period_label
 )
 from auto_qb.core.taskqueue import Task
 from helpers import FakeClient, make_manager
@@ -703,6 +704,23 @@ def test_speed_curve_global_task_not_registered(tmp_path):
     mgr.client = FakeClient()
     mgr._create_global_tasks()
     assert all(t.name != "speed_limit_curve" for t in mgr.task_queue._fast)
+
+
+def test_curve_state_day_keys_pruned(tmp_path):
+    """守阵(26-10-06-0028 A-03): speed_limit_curve 日键保 _CURVE_STATE_KEEP_DAYS 天
+
+    修复前每天新增一日键且从不清 -> state 缓慢无界增长; 修复后写入时顺带淘汰保留期外
+    的旧日键(该键仅供调试, 无正确性消费方), 保留期内与当日键不受影响。
+    """
+    mgr, _ = _make_mgr(tmp_path, _gslc("x.dat"), with_app=False)
+    today = date.today()
+    expired = (today - timedelta(days=_CURVE_STATE_KEEP_DAYS + 1)).isoformat()
+    recent = (today - timedelta(days=1)).isoformat()
+    mgr.state["speed_limit_curve"] = {expired: {"upload_kib": None}, recent: {"upload_kib": None}}
+    mgr.host.get("speed_curve")._record_curve_state(today, None, None, False)
+    keys = set(mgr.state["speed_limit_curve"])
+    assert expired not in keys, "保留期外旧日键被淘汰(键面有界)"
+    assert recent in keys and today.isoformat() in keys, "保留期内与当日键不受影响"
 
 
 def test_speed_curve_applies_staged_upload_limit(tmp_path):

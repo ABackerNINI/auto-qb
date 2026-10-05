@@ -373,8 +373,12 @@ class QbManager(
                 self._last_conn_ok = False
             return False
         except Exception as e:
-            logger.error(f"连接 qBittorrent 失败: {e}")
-            self._last_conn_ok = False
+            # 非 API 类连接异常(典型: 凭据错 LoginError)与连接类同用转换节流(issue A-07):
+            # 托管模式首连重试循环每 main_tick 走一次这里, 无条件 ERROR 等于逐拍刷屏;
+            # 同一根因只说明白一次(pitfalls/ops/alert-levels.md 2.), 失败态下再失败静默。
+            if self._last_conn_ok is not False:
+                logger.error(f"连接 qBittorrent 失败: {e}")
+                self._last_conn_ok = False
             return False
 
     def reconnect(self) -> None:
@@ -443,6 +447,10 @@ class QbManager(
             # 首连失败: 托管模式按 main_tick 重试直至成功/停止; 非托管模式 fail-fast 抛
             # QbConnectError(退出码 1, docs/deployment.md 契约)。条件本身是有意语义(见
             # behavior-core.md: 不要把 or 改成 and), 只允许改 None 分支的处置。
+            # 重试 WARNING 只在进入重试时说明白一次(issue A-07: 凭据错等非连接类异常此前
+            # connect() ERROR + 本行 WARNING 每 main_tick 逐拍刷屏; connect() 侧转换节流后,
+            # 这里同口径不再逐拍重复 —— 同因静默, 连接成功后有 INFO 收尾)。
+            retry_warned = False
             while not self.connect():
                 if stop_event is None or stop_event.wait(main_tick):
                     if stop_event is None:
@@ -453,7 +461,9 @@ class QbManager(
                             "(容器里连宿主机 qB 应填 host.docker.internal; 详细失败原因见上方日志)"
                         )
                     return
-                logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
+                if not retry_warned:
+                    logger.warning(f"连接 qBittorrent 失败, {main_tick:g}s 后重试(检查 qB 是否运行/端口是否正确)")
+                    retry_warned = True
             self.state = self.ctx.state.load()
             self.ctx.state.bind_field_snapshots(self.store)  # state 被整体替换, 字段变化基线重新挂接
             # schema 迁移物化(计划 26-09-26-0506): 磁盘版本 < CURRENT 时立即落盘一次新版本。

@@ -120,6 +120,12 @@
 - **触发**: 想让前端"随时能拿到"某字段(如 `magnet_uri`)。
 - **判别**: 每轮响应体加字段在大库上是 **MB 级**。
 - **处置**: 按需取一次详情即可。
+- **复发**: 1 —— 2026-10-06 (S5 批 E-04, 计划 26-10-06-0103): 本条的**正向口径已落地** ——
+  `_seed_view` 的平铺 SEED_ITEM 数组此前仍每轮携带全量 `magnet_uri`(magnet 添加型库 MB 级/轮),
+  且 drawer 按需兜底因"种子页索引由 torrents 补齐"恒短路成死路径, 两组注释口径互相矛盾
+  (decorate.js「扩展字段在这份」vs drawer.js「不给响应体加字段」)。修复 = `_seed_view` 去掉
+  `magnet_uri`, `copyTorrentInfo` 按需取 `/api/torrents/{hash}` 详情成唯一路径, 注释收口;
+  守阵 = test_web.py SEED_ITEM 契约测试(断言载荷**不含** magnet_uri)。
 
 ### HR 标签着色靠"**文本逐字相等**"
 

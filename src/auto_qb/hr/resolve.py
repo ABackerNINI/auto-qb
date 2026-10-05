@@ -253,7 +253,10 @@ def judge_record(
 
     infohash 传 (v1, v2): 命中是站点侧事实, 两个键哪个命中都算命中; 取两者中**更保守**的结论
     (管束 > 放行 > 无证据)。同为放行时取依据更强者(D 免罪 > B > 缺席); 同为管束时取
-    「剩余时间更少」的行展示(无判定差异, 纯展示)。
+    「剩余时间更少」的行展示(无判定差异, 纯展示)。C 终态未达标是例外: 它在展示层是
+    failed(不能删, 见 safety_display), 不被任何「更强的放行依据」盖掉 —— 否则等于把不能删
+    洗成可删, 违背保守合并序(issue B2-02 P-04, 实现见 _tie_prefer)。
+    `now` 形参按签名预留原样转发 resolve_identity(双 hash 平局合并不需要时间输入)。
     """
     if view is None or view.listing == "none":
         return None
@@ -261,13 +264,16 @@ def judge_record(
     if not keys:
         return HrJudgement(identity=HrIdentity.NO_EVIDENCE, reason="身份缺位(infohash 未回填)", site=view.site)
     best: Optional[HrResolution] = None
-    best_key = keys[0]
     best_entry: Optional[HrEntry] = None
     for h in keys:
         res = resolve_identity(view, h, anchor=anchor, now=now)
         entry = view.lane_a.get(h) or view.lane_terminal.get(h)
-        if best is None or _rank(res) > _rank(best):
-            best, best_key, best_entry = res, h, entry
+        if best is None:
+            best, best_entry = res, entry
+            continue
+        rk, rk_best = _rank(res), _rank(best)
+        if rk > rk_best or (rk == rk_best and _tie_prefer(res, entry, best, best_entry)):
+            best, best_entry = res, entry
     assert best is not None
     return HrJudgement(
         identity=best.identity,
@@ -286,6 +292,38 @@ _RANK = {HrIdentity.HR: 3, HrIdentity.RELEASED: 2, HrIdentity.NO_EVIDENCE: 1}
 
 def _rank(res: HrResolution) -> int:
     return _RANK.get(res.identity, 0)
+
+
+# 放行依据强度(双 hash 平局合并用, issue B2-02 P-04): D 免罪 > B 达标 > 缺席式放行。
+# C 终态未达标不进这张表: 它在展示层是 failed(不能删, 见 safety_display), 被「更强的
+# 放行依据」替换等于把不能删洗成可删 —— 保守方向恒保留(_tie_prefer 内特判)。
+_RELEASE_SRC_STRENGTH = {SOURCE_EXEMPT: 3, SOURCE_SATISFIED: 2}
+
+
+def _tie_prefer(
+    res: HrResolution,
+    entry: Optional[HrEntry],
+    best: HrResolution,
+    best_entry: Optional[HrEntry],
+) -> bool:
+    """同 rank 平局时, 后到行是否替换已保留行(纯展示口径, 两态同为 SAFE 无判定翻转):
+    - 同为管束(HR): 取「剩余时间更少」的行展示; remain_seconds None(未知)视为无穷大,
+      有具体更小值的行优先, 两边都未知保先到。
+    - 同为放行(RELEASED): 取依据更强者(D 免罪 > B > 缺席); C 终态未达标(lane=UNSATISFIED)
+      恒保留 —— failed 展示不被任何放行依据替换(见 _RELEASE_SRC_STRENGTH 注)。
+    - NO_EVIDENCE 平局: 无差异, 保先到。
+    """
+    if res.identity is HrIdentity.HR and best.identity is HrIdentity.HR:
+        remain = entry.remain_seconds if entry is not None else None
+        best_remain = best_entry.remain_seconds if best_entry is not None else None
+        return remain is not None and (best_remain is None or remain < best_remain)
+    if res.identity is HrIdentity.RELEASED and best.identity is HrIdentity.RELEASED:
+        res_c = entry is not None and entry.lane == LANE_UNSATISFIED
+        best_c = best_entry is not None and best_entry.lane == LANE_UNSATISFIED
+        if res_c or best_c:
+            return res_c and not best_c
+        return (_RELEASE_SRC_STRENGTH.get(res.released_src, 1) > _RELEASE_SRC_STRENGTH.get(best.released_src, 1))
+    return False
 
 
 # ---------------- 删除安全档位 × 来源档位(WEB UI 展示单点) ----------------

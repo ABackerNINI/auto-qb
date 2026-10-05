@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="judge_record docstring 承诺的双 hash 平局合并未实现(恒取先到)">
 <meta name="issue-summary" content="_rank 严格大于使平局恒保留 v1; F841 best_key 系平局分支残迹; 两态同为 SAFETY_SAFE 无判定差异">
 <title>judge_record docstring 承诺的双 hash 平局合并未实现(恒取先到) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-refactor-hr-resolve-tie-merge-docstring</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,7 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>补平局合并或改 docstring 收窄承诺(顺带清 best_key; 同函数 <code>now</code> 形参链路未消费, 一并核对是否签名预留)。</p><p><b>撞车(底册对照):</b> 无(F841 best_key 旁证)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — 状态 Open → <strong>Done</strong>(S5 批修复, P-04 拍板 = 补平局合并: judge_record 兑现 docstring —— 同为放行取依据更强者(D免罪>B>缺席, _RELEASE_SRC_STRENGTH), 同为管束取剩余时间更少(None 视为无穷大); C 终态未达标(failed 展示)特判恒保留不被洗成可删; 两态同为 SAFE 无判定翻转; F841 best_key 已清; now 形参核为签名预留(转发 resolve_identity)原样保留; 守阵 test_hr_resolve.py::test_tie_* 六条)</li></ul></section>
 
   <footer>
     26-10-06-0028-refactor-hr-resolve-tie-merge-docstring.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

@@ -7,6 +7,7 @@
 - test_remove_category: 移除分类动作
 - test_start_stop_idempotent: 开始/停止动作幂等(重复执行不报错)
 - test_stop_preserves_completeness: 暂停/恢复后快照 state 的**完成位**不得翻转(停一个正在下载的种子不能被写成 pausedUP ⇒ is_complete 变真)
+- test_pause_resume_sync_store_snapshot: 守阵(26-10-06-0028 A-04)——QbApi pause/resume 写后同步 store 快照(与 start/stop 对称), 同 tick 读 is_paused 为新值
 - test_move_to: 移动保存路径动作
 - test_reannounce: 重新 announce 动作
 - test_speed_limit_actions: 限速动作(下载/上传/全局)
@@ -204,6 +205,38 @@ def test_stop_preserves_completeness():
         assert tor2.state == "pausedUP", tor2.state
         assert StartAction("").execute(ctx2).is_ok
         assert tor2.state == "stalledUP", tor2.state
+
+
+def test_pause_resume_sync_store_snapshot():
+    """守阵(26-10-06-0028 A-04): QbApi pause/resume 写后同步 store 快照, 与 start/stop 对称
+
+    修复前 torrents_pause/resume 纯透传不同步 store —— 同 tick 内读 is_paused 仍是旧值
+    (坑档 concurrency「QbApi 写方法必须同步 store」的对偶复查)。守阵: 调用后同 tick 读
+    is_paused 为新值, 且完成位不翻转(与 test_stop_preserves_completeness 同口径)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+
+        # 正在下载(未下完): pause -> pausedDL, resume -> stalledDL
+        tor = FakeTorrent(state="downloading", downloaded=10 * 1024**2, total_size=100 * 1024**2)
+        make_ctx(mgr, tor, client)
+        mgr.api.torrents_pause(tor.hash)
+        assert tor.state == "pausedDL", f"未完成种子暂停后应为 pausedDL: {tor.state}"
+        assert tor.state_enum.is_paused is True, "同 tick 幂等依赖暂停位即时生效"
+        assert tor.state_enum.is_complete is False, "完成位被翻转 ⇒ is_complete 误真"
+        mgr.api.torrents_resume(tor.hash)
+        assert tor.state == "stalledDL", f"未完成种子恢复后应为 stalledDL: {tor.state}"
+        assert tor.state_enum.is_paused is False
+
+        # 已完成做种: pause -> pausedUP, resume -> stalledUP
+        tor2 = FakeTorrent(state="uploading", downloaded=100 * 1024**2, total_size=100 * 1024**2)
+        make_ctx(mgr, tor2, client)
+        mgr.api.torrents_pause(tor2.hash)
+        assert tor2.state == "pausedUP" and tor2.state_enum.is_complete is True
+        mgr.api.torrents_resume(tor2.hash)
+        assert tor2.state == "stalledUP" and tor2.state_enum.is_complete is True
+        assert ("pause", tor.hash) in client.calls and ("resume", tor.hash) in client.calls
 
 
 def test_move_to():

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="v3 坏行隔离动作退役, bad_lines/data_lines/torn_tail 零生产消费, 真损坏静默丢行">
 <meta name="issue-summary" content="v3 报告写「沿用」而实现未沿用(漂移以代码为准); 二选一: 补消费方或收窄 docstring 口径">
 <title>v3 坏行隔离动作退役, bad_lines/data_lines/torn_tail 零生产消费, 真损坏静默丢行 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-refactor-traffic-v3-bad-line-fields-retired</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,7 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>二选一: 补消费方(阈值告警或隔离动作)或按代码现状收窄 docstring 口径(「沿用」表述一并以 issue 备注)。</p><p><b>撞车(底册对照):</b> 无(v3 报告「沿用」表述漂移, 已记; 无 issue)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — 状态 Open → <strong>Done</strong>(S5 批修复, P-05 拍板 = 补最小消费方: 坏行占比超阈(v2 口径 >=2 行且 >5%, 撕裂尾豁免)读侧 WARNING 一次(按文件节流 1h, 仅日志零行为; _warn_bad_lines, 四条读路径接线), 头部 docstring 对齐实况(隔离动作已退役); 守阵 test_traffic_store.py::test_v4_bad_line_ratio_warning_once_throttled; 锚点漂移注: v3 已换代为 v4(V4ParsedDay/V4ParsedAgg), 修在 v4 读侧)</li></ul></section>
 
   <footer>
     26-10-06-0028-refactor-traffic-v3-bad-line-fields-retired.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

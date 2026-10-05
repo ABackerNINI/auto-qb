@@ -17,6 +17,12 @@
 - test_none_when_listing_none: 全站型(listing=none) → None(恒行 4 本地兜底)
 - test_dual_hash_conservative_merge_hr_wins: 双 hash 保守合并 —— 命中压过放行
 - test_dual_hash_conservative_merge_released_wins_over_unknown: 双 hash 保守合并 —— 放行压过无证据
+- test_tie_release_takes_stronger_source: 平局合并(issue B2-02 P-04)—— 同为放行取依据更强者(D 免罪 > 缺席)
+- test_tie_release_exempt_beats_satisfied: 平局合并 —— D 免罪 > B 达标
+- test_tie_release_both_safe_no_flip: 平局合并 —— 两态同为 SAFE 无判定翻转
+- test_tie_hr_takes_less_remain: 平局合并 —— 同为管束取剩余时间更少(None 未知视为无穷大)
+- test_tie_no_evidence_keeps_first: 平局合并 —— 同为无证据无差异保先到
+- test_tie_c_terminal_preserved_over_release: 平局合并 —— C 终态未达标(failed)不被更强放行依据盖掉(保守序)
 - test_matrix_local_satisfied: 12 格矩阵本地已达标行(A 管束, 其余放行)
 - test_matrix_local_unsatisfied: 12 格矩阵本地未达标行(A 与无证据管束, 终态放行)
 - test_matrix_counts: 管束恰好三格(管束只发生在三格的不变量)
@@ -50,6 +56,7 @@ from auto_qb.hr.model import (
     HrVerified,
 )
 from auto_qb.hr.resolve import (
+    SAFETY_FAILED,
     SAFETY_SAFE,
     SRC_SITE_EXEMPT,
     SRC_SITE_SATISFIED,
@@ -267,6 +274,96 @@ def test_dual_hash_conservative_merge_released_wins_over_unknown():
     view = make_view(verified=ver)
     j = judge_record(view, ("h1", "h2"), anchor=anchor(), now=NOW)
     assert j.identity is HrIdentity.RELEASED
+
+
+# ---------------- 双 hash 平局合并(issue B2-02, P-04 补平局合并; 纯展示口径) ----------------
+
+
+def _two_entry_view(e1, e2, verified=None):
+    """两个条目各占一个 infohash 的视图(平局合并用; 与 build_site_view 同款分桶; 条目可为 None)"""
+    lane_a, lane_terminal = {}, {}
+    for e in (e1, e2):
+        if e is None:
+            continue
+        target = lane_a if e.lane == LANE_SCOPE else lane_terminal
+        for h in (e.infohash_v1, e.infohash_v2):
+            if h:
+                target.setdefault(h, e)
+    return HrSiteView(
+        site="example",
+        listing="list",
+        lane_a=lane_a,
+        lane_terminal=lane_terminal,
+        verified=verified or {},
+        healthy_ts=NOW - 60,
+    )
+
+
+def test_tie_release_takes_stronger_source():
+    """同为放行: 取依据更强者 —— D 免罪 > 缺席式放行(v1 先到不被保留, 兑现 docstring 承诺)"""
+    ver = make_verified("h1")  # 放行记录(缺席式, SRC_SITE_RELEASED)
+    e2 = make_entry(LANE_EXEMPT, "h2", remain=0)
+    view = _two_entry_view(None, e2, verified={ver.infohash: ver})
+    j = judge_record(view, ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+    assert j.released_src == SOURCE_EXEMPT
+    assert safety_display(j, triggered=False, satisfied=True).src == SRC_SITE_EXEMPT
+
+
+def test_tie_release_exempt_beats_satisfied():
+    """同为放行: D 免罪 > B 达标"""
+    e1 = make_entry(LANE_SATISFIED, "h1", remain=0)
+    e2 = make_entry(LANE_EXEMPT, "h2", remain=0)
+    j = judge_record(_two_entry_view(e1, e2), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+    assert j.released_src == SOURCE_EXEMPT
+
+
+def test_tie_release_both_safe_no_flip():
+    """两态同为 SAFE: B(已达标) 与缺席式放行合并仍 SAFE —— 无判定翻转(纯展示口径)"""
+    e1 = make_entry(LANE_SATISFIED, "h1", remain=0)
+    ver = make_verified("h2")
+    view = _two_entry_view(e1, None, verified={ver.infohash: ver})
+    j = judge_record(view, ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.RELEASED
+    d = safety_display(j, triggered=False, satisfied=True)
+    assert d.safety == SAFETY_SAFE and d.src == SRC_SITE_SATISFIED
+
+
+def test_tie_no_evidence_keeps_first():
+    """同为无证据: 无差异保先到(NO_EVIDENCE 平局不翻转)"""
+    j = judge_record(make_view(), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.NO_EVIDENCE
+
+
+def test_tie_hr_takes_less_remain():
+    """同为管束: 取「剩余时间更少」的行展示; 两边都未知/相等保先到"""
+    e1 = make_entry(LANE_SCOPE, "h1", remain=3600)
+    e2 = make_entry(LANE_SCOPE, "h2", remain=100)
+    j = judge_record(_two_entry_view(e1, e2), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.identity is HrIdentity.HR
+    assert j.facts is not None and j.facts.remain_seconds == 100
+    # remain_seconds None(未知)视为无穷大: 具体更小值的行胜出未知行
+    e3 = make_entry(LANE_SCOPE, "h1", remain=None)
+    e4 = make_entry(LANE_SCOPE, "h2", remain=100)
+    j2 = judge_record(_two_entry_view(e3, e4), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j2.facts is not None and j2.facts.remain_seconds == 100
+
+
+def test_tie_c_terminal_preserved_over_release():
+    """C 终态未达标(failed 展示)不被「更强的放行依据」盖掉 —— 把不能删洗成可删违背保守序
+
+    两个键序都断言: C 在后要翻转为 C, C 在前不被缺席式放行替换。
+    """
+    ver = make_verified("h1")
+    c = make_entry(LANE_UNSATISFIED, "h2", remain=0)
+    j = judge_record(_two_entry_view(None, c, verified={ver.infohash: ver}), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j.facts is not None and j.facts.lane == LANE_UNSATISFIED
+    assert safety_display(j, triggered=False, satisfied=False).safety == SAFETY_FAILED
+    ver2 = make_verified("h2")
+    c1 = make_entry(LANE_UNSATISFIED, "h1", remain=0)
+    j2 = judge_record(_two_entry_view(c1, None, verified={ver2.infohash: ver2}), ("h1", "h2"), anchor=anchor(), now=NOW)
+    assert j2.facts is not None and j2.facts.lane == LANE_UNSATISFIED
 
 
 # ---------------- §3.2 十二格情形矩阵(逐格参数化) ----------------

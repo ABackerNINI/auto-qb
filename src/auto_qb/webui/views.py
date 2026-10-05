@@ -529,7 +529,10 @@ class WebviewMixin:
             "force_start": r.force_start,
             "super_seeding": r.super_seeding,
             "priority": r.priority,
-            "magnet_uri": r.magnet_uri,
+            # magnet_uri 刻意不在轮询载荷(issue E-04, P-06 拍板): 契约口径 = 只在用户显式
+            # 动作时才需要的字段不进每轮响应体(magnet 添加型库为 MB 级增量, 坑档
+            # contract-api); "复制磁力"经 /api/torrents/{hash} 按需取一次详情(drawer.js
+            # copyTorrentInfo), 该端点 to_dict() 全字段兜底。
             "infohash_v1": r.infohash_v1,
             "infohash_v2": r.infohash_v2,
             "private": r.private,

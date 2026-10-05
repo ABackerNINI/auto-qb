@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="种子页平铺数组每轮携带全量 magnet_uri, 与「按需取详情」契约双口径并存">
 <meta name="issue-summary" content="drawer 按需兜底已在但恒短路成死路径; magnet 添加型库为 MB 级增量载荷 + 注释口径互相矛盾">
 <title>种子页平铺数组每轮携带全量 magnet_uri, 与「按需取详情」契约双口径并存 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-refactor-seed-view-magnet-uri-payload</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,7 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>二选一: ①_seed_view 去掉 magnet_uri(按需兜底已全)或 ②更新坑档把「种子页平铺数组携带」记为明文例外; 随池 2218 的载荷瘦身一并处置亦可。</p><p><b>撞车(底册对照):</b> 坑档 web-ui/contract-api(magnet_uri 即其例); 池 2218/1408 载荷成本面 · reannounce 计划: 无交叠。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — 状态 Open → <strong>Done</strong>(S5 批修复, P-06 拍板 = 去字段: _seed_view 去掉 magnet_uri(/api/state 轮询载荷不再携带), drawer.js copyTorrentInfo 按需详情成唯一路径, decorate.js/drawer.js 两组矛盾注释收口; 契约依据 = 坑档 contract-api 正向口径; 守阵 test_web.py SEED_ITEM 契约测试(断言载荷不含 magnet_uri))</li></ul></section>
 
   <footer>
     26-10-06-0028-refactor-seed-view-magnet-uri-payload.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

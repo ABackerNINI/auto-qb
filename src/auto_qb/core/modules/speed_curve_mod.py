@@ -26,7 +26,7 @@ Traffic Monitor 流量数据 -> qB 全局速度限制, 知识从 SpeedCurveMixin
 """
 import logging
 import time
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional, Tuple
 
 from ...infra import utils
@@ -41,6 +41,11 @@ _CN_DIGITS = "零一二三四五六七八九"
 #: 手动保护命中的**周期提醒**间隔(秒): 同一状态在此期间只说明白一次, 其余轮次降 DEBUG。
 #: 固定常量而非配置键 —— 这是日志节流, 不是行为开关(判据见 pitfalls/ops/alert-levels.md 4.)。
 _MANUAL_REMIND_GAP = 3600.0
+
+#: speed_limit_curve 日键的保留天数(issue A-03: 每天新增一日键、从不清 -> state 缓慢无界增长):
+#: 该键仅供调试观察, 全仓无正确性消费方, 保 7 天足够; 固定常量而非配置键 —— 数据保留期
+#: 不是行为开关, 不值得为它开配置面。
+_CURVE_STATE_KEEP_DAYS = 7
 
 
 def _fmt_bytes(n: int) -> str:
@@ -270,8 +275,17 @@ class SpeedCurveModule(BaseModule):
             logger.debug(f"限速曲线 | {label}限速当前 {cur}KiB/s 为奇数, 疑似用户手动设置(同状态不重复记)")
 
     def _record_curve_state(self, today: date, upload_kib: Optional[int], download_kib: Optional[int], dry_run: bool):
-        """记录当日曲线计算结果到 state(供调试; 落盘走周期 save_state + 优雅退出)"""
-        self._ctx.state.data.setdefault("speed_limit_curve", {})[today.isoformat()] = {
+        """记录当日曲线计算结果到 state(供调试; 落盘走周期 save_state + 优雅退出)
+
+        日键保 _CURVE_STATE_KEEP_DAYS 天(issue A-03: 每天新增一日键且从不清 -> state 缓慢
+        无界增长; 对齐 ops_mod skip_check_day 的执行路径清理先例): 写入时顺带删掉保留期外的
+        旧日键。仅主循环线程调用(黄金法则 5), 重复执行清理结果一致(幂等)。
+        """
+        curve_state = self._ctx.state.data.setdefault("speed_limit_curve", {})
+        cutoff = (today - timedelta(days=_CURVE_STATE_KEEP_DAYS)).isoformat()
+        for day in [d for d in curve_state if d < cutoff]:
+            del curve_state[day]
+        curve_state[today.isoformat()] = {
             "upload_kib": upload_kib,
             "download_kib": download_kib,
             "dry_run": dry_run,

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="托管模式首连非 API 异常(凭据错 LoginError)不走转换节流, 每 tick ERROR 刷屏">
 <meta name="issue-summary" content="--tray + qB 凭据错误时 while 重试循环逐次 ERROR 直至停止信号; 非托管模式不受影响">
 <title>托管模式首连非 API 异常(凭据错 LoginError)不走转换节流, 每 tick ERROR 刷屏 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-refactor-tray-first-connect-error-throttle</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,7 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>该分支套用同一转换节流或退避。</p><p><b>撞车(底册对照):</b> 无。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — 状态 Open → <strong>Done</strong>(S5 批修复: connect() except Exception 套用 _last_conn_ok 转换节流 + run() 首连重试 WARNING 只说明白一次(qbmanager.py); 验收守阵 test_qbmanager.py::test_a07_connect_non_api_error_transition_throttled + test_a07_managed_first_connect_retry_warns_once(停止信号仍即时响应))</li></ul></section>
 
   <footer>
     26-10-06-0028-refactor-tray-first-connect-error-throttle.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

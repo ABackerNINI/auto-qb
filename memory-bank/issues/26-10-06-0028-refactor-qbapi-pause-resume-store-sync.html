@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="torrents_pause/resume 纯透传不同步 store, 与 start/stop 不对称">
 <meta name="issue-summary" content="当前调用方全在 WEB 命令线且 P0-5 补刷新兜底, 属潜伏不对称(将来同 tick 消费者易踩)">
 <title>torrents_pause/resume 纯透传不同步 store, 与 start/stop 不对称 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-refactor-qbapi-pause-resume-store-sync</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,7 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>补 _sync_paused_state 同款写回(对齐 start/stop)。</p><p><b>撞车(底册对照):</b> 无(坑档 concurrency「QbApi 写方法必须同步 store」的对偶复查)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — 状态 Open → <strong>Done</strong>(S5 批修复: torrents_pause/resume 补 _sync_paused_state 写回快照(qbapi.py, 与 start/stop 对称, 移入暂停轴组); 守阵 test_actions.py::test_pause_resume_sync_store_snapshot(同 tick is_paused 新值+完成位不翻转))</li></ul></section>
 
   <footer>
     26-10-06-0028-refactor-qbapi-pause-resume-store-sync.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

@@ -18,6 +18,8 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
 - test_v4_amortized_run_chain_self_consistent: 均摊定位与链式自洽; 块首游程端点含
 - test_v4_parse_bad_line_family_cursor_not_advanced: 坏行族逐项计坏(v1/v2/v3 旧头行整文件不匹配 —— R2 不设双读 /
   r 列数 {5,6} 之外 / dt_ms 非法族 / 负速率 / run_len<1 / interval<1 / 块头前数据行), 好行不受牵连且游标不推进
+- test_v4_bad_line_ratio_warning_once_throttled: 守阵(26-10-06-0028 C-04, P-05)——坏行占比超阈(>=2 行且 >5%, 撕裂尾豁免)
+  读侧 WARNING 一次(按文件节流); 正常文件零告警
 - test_v4_no_equal_interval_drift_immunity: 纯等间隔路径不存在(证伪)
 - test_v4_decimal_interval_roundtrip_and_bad_parse: 块头 interval_s 小数秒 —— B 行 1.5 roundtrip +
   标称槽位推进 1.5s + 解析侧非法族整行计坏; 整值形态不变
@@ -75,6 +77,7 @@ v4 定约专测(B1 用例, 批 2 回归):
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
 import builtins
+import logging
 import os
 import threading
 import time
@@ -462,6 +465,54 @@ def test_v4_parse_bad_line_family_cursor_not_advanced():
     for head in ("# auto-qb qb-traffic v1", "# auto-qb qb-traffic v2", "key,global"):
         old = parse_v4_day_text(_v4_day_text([head, "key,global", "B,1000,30", "r,1,1,1,1"]))
         assert old.key is None and old.blocks == () and old.bad_lines == 4 and old.data_lines == 4
+
+
+def test_v4_bad_line_ratio_warning_once_throttled(tmp_path, caplog, monkeypatch):
+    """守阵(26-10-06-0028 C-04, P-05 最小消费方): 坏行占比超阈(>=2 行且 >5%, 撕裂尾豁免)
+    读侧 WARNING 一次(按文件节流); 正常文件零告警; 超阈单行/撕裂尾不告"""
+    monkeypatch.setattr(traffic_store_module, "_bad_line_warn_ts", {})
+    store = TrafficV4Store(str(tmp_path))
+    # 头行 + key + B + 34 好行 = 37 行, + 2 坏行 = 38 受检行(头行不计, 2/38 ≈ 5.3% > 5%)
+    good = [HEADER_LINE_V4, "key,global", "B,1000,30,5,8"] + ["r,1,1,1,1"] * 34
+
+    def _write(date_str: str, text: str) -> str:
+        path = v4_day_file_path(str(tmp_path), "global", date_str)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    _write("2026-10-06", _v4_day_text(good + ["garbage1", "garbage2"]))
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        parsed = store.read_day("global", "2026-10-06")
+    assert parsed.bad_lines == 2 and parsed.data_lines == 38
+    assert len([r for r in caplog.records if "坏行" in r.getMessage()]) == 1, "超阈告警恰好一次"
+    # 节流: 同文件再读(缓存命中路径)不重复告警
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-06")
+    assert not [r for r in caplog.records if "坏行" in r.getMessage()]
+    # 节流表上界保险: 塞满 256+ 条后告警路径整体重置不崩(clear 分支)
+    full = {f"f{i}": 0.0 for i in range(300)}
+    monkeypatch.setattr(traffic_store_module, "_bad_line_warn_ts", full)
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-06")
+    assert len([r for r in caplog.records if "坏行" in r.getMessage()]) == 1
+    assert len(traffic_store_module._bad_line_warn_ts) <= 256, "上界保险: 节流表整体重置"
+    # 正常文件零告警
+    caplog.clear()
+    _write("2026-10-05", _v4_day_text(good))
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-05")
+    assert not [r for r in caplog.records if "坏行" in r.getMessage()]
+    # 撕裂尾豁免: 尾部半行(1 坏行)豁免占比口径 → 有效坏行 0 < 2, 不告警
+    caplog.clear()
+    _write("2026-10-04", _v4_day_text(good + ["garbage"])[:-1])
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        torn = store.read_day("global", "2026-10-04")
+    assert torn.bad_lines == 1 and torn.torn_tail is True
+    assert not [r for r in caplog.records if "坏行" in r.getMessage()], "撕裂尾豁免后不超阈"
 
 
 def test_v4_decimal_interval_roundtrip_and_bad_parse():

@@ -149,7 +149,7 @@ window.AQB_DECORATE = {
       const map = new Map();
       for (const g of this.groups) for (const m of g.members) map.set(m.hash, m);
       for (const r of this.singles) if (!map.has(r.hash)) map.set(r.hash, r);
-      for (const r of this.torrents) if (!map.has(r.hash)) map.set(r.hash, r);  // SEED_ITEM 全量(magnet_uri 等扩展字段在这份)
+      for (const r of this.torrents) if (!map.has(r.hash)) map.set(r.hash, r);  // SEED_ITEM 全量(扩展展示字段在这份; magnet_uri 刻意不在 —— 按需取详情, 见 drawer.js copyTorrentInfo)
       return map;
     },
     /* 未识别折叠区: hash → 成员解析, 过同一套筛选/搜索, 按种子名排序 */

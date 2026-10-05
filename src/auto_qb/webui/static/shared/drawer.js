@@ -622,13 +622,13 @@ window.AQB_DRAWER = {
       if (!m) return;
       let value = field === "name" ? m.name
         : field === "hash" ? (m.infohash_v1 || m.hash)
-          : (m.magnet_uri || "");
-      /* magnet_uri **不在成员索引里**: 只有种子页的平铺 SEED_ITEM 数组带它(见 memberByHash
-       * 注释), 而索引优先取分组/未归组条目 —— 那两份都出自后端 _member_view, 没有该字段
-       * ⇒ 索引条目恒为 undefined, "复制磁力"曾 100% 落到"该种子没有 magnet 链接"(BUG-9)。
-       * 改成**点的时候按需取一次详情**(复用 _editDetail: 抽屉已开则连请求都不发),
-       * 而不是给每 1.5~3s 一轮的响应体加一个几十字节的字段(3000 种子 ≈ +0.6MB/轮)。 */
-      if (!value && field === "magnet") {
+          : "";
+      /* magnet_uri **不在任何轮询载荷里**(issue E-04, P-06 拍板: 后端 _seed_view 已去掉;
+       * 契约口径 = 只在用户显式动作时才需要的字段不进每 1.5~3s 一轮的响应体 —— magnet
+       * 添加型库为 MB 级增量): "复制磁力"点的时候**按需取一次详情**(复用 _editDetail:
+       * 抽屉已开则连请求都不发)。曾因索引条目没有该字段 100% 落到"该种子没有 magnet
+       * 链接"(BUG-9), 按需详情即当时的修法。 */
+      if (field === "magnet") {
         const d = await this._editDetail(hash);
         value = (d && d.magnet_uri) || "";
       }
