@@ -11,7 +11,7 @@
 - test_group_null_mask_rules: (v3 重写, D6)组桶 null = 无任何成员观测(任一成员 r/z 观测即程序存活真值); 无行成员按 0 计; 借 global 判 null 退役
 - test_group_rate_sums_members_missing_zero: 组速率 = 桶内 Σ 成员均值, 无行成员按 0 计; null 桶整桶 None
 - test_group_totals_per_member_diff_then_sum: 逐成员先差分再求和 —— 单成员重置贡献 0 不拖垮全组; 成员基线缺失(窗首/无行)贡献 0; null 桶断链
-- test_group_50_members_correct_and_time_bound: (v3 口径)50 成员 x 满窗 2880 桶聚合正确性(抽样桶 Σ 校验, 每成员一块 -> v3_grid_obs) + 耗时上界(<< 采样间隔 30s, 实测断言 < 3s)
+- test_group_50_members_correct_and_time_bound: (v3 口径)50 成员 x 满窗 2880 桶聚合正确性(抽样桶 Σ 校验, 每成员一块 -> v3_grid_obs) + 耗时上界(CPU 时间口径 << 采样间隔 30s, 断言 < 8s)
 - test_group_zrun_idle_zero_line_and_outage_null: (v3 重写)组图回归 v3 观测面 —— 全员空闲(z 覆盖)0 线 / 全员无观测(停机)断线 / 成员只剩 z 块也有观测; 组三函数消费 v3_grid_obs 产物
 - test_v3_points_known_sequence_end_to_end: 已知序列逐桶核对 —— 天文件文本 -> 解析 -> 桶点: 显式 dt / 缺省 / z 均摊 / n 后链式自洽; 断连/停机 null; totals 差分
 - test_v3_d1_cross_bucket_coverage: 跨桶覆盖(D1) —— z 游程展开多桶同值非 null; r 暂停宽桶整段承载不伪断
@@ -231,9 +231,15 @@ def test_group_totals_per_member_diff_then_sum():
 def test_group_50_members_correct_and_time_bound():
     """50 成员 x 满窗 2880 桶: 抽样桶 Σ 成员均值/逐成员差分校验 + 耗时上界
 
-    上界依据: 组图弹层按采样间隔(30s)低频续拉(§07), 单次聚合须远小于一个间隔;
-    断言 3s 为含 CI 慢机的宽裕上界。v3 口径: 每成员一个 2880 记录块(标称 30s),
-    组三函数消费 v3_series_points -> v3_grid_obs 产物。
+    上界依据: 组图弹层按采样间隔(30s)低频续拉(§07), 单次聚合须远小于一个间隔 ——
+    上界 8s ≈ 间隔的 1/4, 是拦「数量级劣化」的粗闸(紧阈值回归基线见
+    tests/test_modules_p5.py::test_rebuild_benchmark_5000_seeds + perf_baseline.json)。
+    计时口径: CPU 时间(process_time)而非挂钟 —— 断言环境是 `-n 4` 并行 worker + 覆盖率
+    插桩, 挂钟上界会被合法负载拉长(同一负载 dev 插桩中位 ~1.26s, windows-latest 实测
+    4.01s 假红; 见 pitfalls/testing/timing-tolerance.md「不要为对称加挂钟上界」),
+    CPU 时间只计本进程真烧的核时, 不受 worker 抢占 / 调度放大。余量按被守回归量级定:
+    8s ≈ 6.3x dev 插桩中位, 2x 于 CI 实测最坏值, 仍 << 30s 间隔。
+    v3 口径: 每成员一个 2880 记录块(标称 30s), 组三函数消费 v3_series_points -> v3_grid_obs 产物。
     """
     g = build_grid("24h", NOW, 30.0)
     n = 50
@@ -242,12 +248,12 @@ def test_group_50_members_correct_and_time_bound():
         recs = tuple(V3Sample(100 + m, 200 + m, i * 10 + m, 0) for i in range(2880))  # 每桶恰一记录, totals 每桶 +10
         blocks.append(V3Block(g.first + 30, 30, recs))  # 槽位 = g.first+30+30i -> 桶键 = g.buckets[i]
 
-    t_start = time.perf_counter()
+    t_start = time.process_time()
     member_obs = [v3_grid_obs(v3_series_points((blk, ), g.t0, g.t1 + 1), g) for blk in blocks]
     mask = group_null_mask(member_obs, g)
     points = group_rate_points(member_obs, g, mask)
     totals = group_totals_points(member_obs, g, mask)
-    elapsed = time.perf_counter() - t_start
+    elapsed = time.process_time() - t_start
 
     assert len(points) == len(g.buckets)
     assert all(p is not None for p in points)  # 每桶每成员都有观测: 无 null
@@ -256,7 +262,7 @@ def test_group_50_members_correct_and_time_bound():
     assert points[idx] == {"t": b, "dl": 100 * n + n * (n - 1) // 2, "up": 200 * n + n * (n - 1) // 2}
     assert totals[idx] == {"t": b, "dl": 10 * n, "up": 0}  # 逐成员每桶 +10; 上行恒 0
     assert totals[g.buckets.index(g.first)] == {"t": g.first, "dl": 0, "up": 0}  # 窗首基线缺失 -> 0
-    assert elapsed < 3.0, f"50 成员聚合耗时 {elapsed:.3f}s 超上界"
+    assert elapsed < 8.0, f"50 成员聚合 CPU 耗时 {elapsed:.3f}s 超上界"
 
 
 # ---------------- 组图回归(v3 观测面, S3b D6 重写) ----------------
