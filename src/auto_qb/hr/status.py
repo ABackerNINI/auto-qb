@@ -15,8 +15,9 @@
 - `wave.healthy_ts`: 上次**健康波**时刻(至少一档有有效数据) —— 它才是新鲜度与**拉取节奏**的基准
   (计划 26-09-30-0240: 拉取间隔闸门与「下次核对清单」展示都从它算, 失败波不推进 ⇒ 失败档下一轮重试);
 - `expires_at`: 复用窗截止(别的实例刚抓过就不再抓; 时长 = min(复用窗, 拉取间隔));
-- `next_wave_at`: 下次**可能**取的时刻(现算: healthy_ts + refresh_interval) —— 站点文件里不存它,
-  因为它随周期配置变化, 存下来就会重复一份可能过期的副本。
+- `next_wave_at`: 下次**可能**取的时刻(现算: healthy_ts + 拉取间隔, 稳态期用 idle_refresh_interval,
+  单点见 `site_conf_interval`) —— 站点文件里不存它, 因为它随周期配置变化, 存下来就会重复一份
+  可能过期的副本。
 """
 import time
 from dataclasses import asdict, dataclass, field
@@ -156,6 +157,9 @@ class SiteStatus:
     expires_at: float = 0.0
     next_wave_at: float = 0.0
     refresh_interval: float = 0.0
+    #: 稳态降频旗标(计划 26-10-05-0555 §2.4「展示链的桥」): 透传落盘的 wave.idle_mode, 前端 kv 行
+    #: 只读旗标挑文案(同 stale/(已过) 先例), 不重算判据(§06 R6 分工)
+    idle_mode: bool = False
     stale: bool = False
     fresh_text: str = ""
     #: 波次视图(各档独立状态: 有效/失效/截断、页数、行数、覆盖边界、连续失效)
@@ -328,12 +332,14 @@ def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: flo
     # 失败波不推进 healthy_ts ⇒ 「下次核对」不因失败波顺延, 与「下一轮重试」的处置一致。
     # 文案口径(2026-10-03 修 B2): 这是**对账节奏**(下一次核对站点清单的时刻), 不是取种进度 ——
     # 「下次拉取」易被读成「还有多少没拉完」, 故改「下次核对清单」(与「立即拉取」按钮区分)。
-    next_at = data.wave.healthy_ts + site_conf_interval(conf) if data.wave.healthy_ts else 0.0
+    next_at = data.wave.healthy_ts + site_conf_interval(conf, data.wave) if data.wave.healthy_ts else 0.0
     fresh = f"上次取波 {ago_text(data.fetched_at, now)} · 最近健康波 {ago_text(data.wave.healthy_ts, now)}"
     if data.expires_at:
         fresh += f" · 复用窗至 {stamp_text(data.expires_at)}" + ("(已过)" if stale else "")
     if next_at:
-        fresh += f" · 下次核对清单 {stamp_text(next_at)}"
+        # 拍板 D1(计划 26-10-05-0555 §05): 稳态期给「下次核对清单」补一句降频注记 ——
+        # 不加则 24H 倒计时空降无解释; 数据源是落盘旗标 wave.idle_mode(§2.4), 常态期不出现。
+        fresh += f" · 下次核对清单 {stamp_text(next_at)}" + ("(稳态降频)" if data.wave.idle_mode else "")
     return SiteStatus(
         site=site,
         enabled=conf.enabled,
@@ -348,7 +354,8 @@ def site_status(site: str, data: HrSiteData, view: HrSiteView, service, now: flo
         healthy_ts=data.wave.healthy_ts,
         expires_at=data.expires_at,
         next_wave_at=next_at,
-        refresh_interval=site_conf_interval(conf),
+        refresh_interval=site_conf_interval(conf, data.wave),
+        idle_mode=data.wave.idle_mode,
         stale=stale,
         fresh_text=fresh,
         lanes=lanes,
@@ -584,9 +591,15 @@ def history_rows(datas: Mapping[str, HrSiteData], limit: int, now: float = 0.0) 
     return out
 
 
-def site_conf_interval(conf) -> float:
+def site_conf_interval(conf, wave) -> float:
     """站点拉取间隔(秒, 计划 26-09-30-0240 改名: 原名「对账波周期」); 单独提出来是为了让
-    「下次核对清单」这类字段的算法只有一处"""
+    「下次核对清单」这类字段的算法只有一处。
+
+    按落盘稳态旗标取值(计划 26-10-05-0555 §2.6): wave.idle_mode 为真(引擎在稳态期翻转落盘,
+    §2.4)返回 idle_refresh_interval, 展示与闸门真实行为一致; 常态期与存量站点文件(旗标缺省
+    False)返回 refresh_interval。展示只读落盘旗标、不现算判据(§06 R6 分工)。"""
+    if getattr(wave, "idle_mode", False):
+        return float(getattr(conf, "idle_refresh_interval", 0.0) or 0.0)
     return float(getattr(conf, "refresh_interval", 0.0) or 0.0)
 
 

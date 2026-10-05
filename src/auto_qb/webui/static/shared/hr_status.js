@@ -438,7 +438,7 @@ window.AQB_HR_STATUS = {
         { k: "放行签发", v: s.releases_enabled ? "开" : "冻结", cls: s.releases_enabled ? "" : "warn" },
         { k: "取波", v: s.fresh_text || "—" },
         { k: "复用窗至", v: exp ? `${exp}${s.stale ? "(已过)" : ""}` : "—" },
-        { k: "下次核对清单", v: this.fmtTs(s.next_wave_at) || "—" },
+        { k: "下次核对清单", v: (this.fmtTs(s.next_wave_at) || "—") + (s.next_wave_at && s.idle_mode ? "(稳态降频)" : "") },
         { k: "配额", v: (s.quota && s.quota.text) || "—" },
         { k: "零行三态", v: zero, cls: unconfirmed ? "warn" : "", act: unconfirmed },
         { k: "守恒", v: `索引 ${s.index_total} 条(活跃 ${s.index_active}) · 待回填 ${s.pending_infohash} 条(${this.hrsPct(s.backfill_ratio)}) · ${s.retention_text || "—"}` },

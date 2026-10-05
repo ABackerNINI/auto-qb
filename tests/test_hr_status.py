@@ -30,7 +30,19 @@
 - test_history_rows_plain_texts_and_lanes: 人话字段取值 —— ts_text/elapsed_text 复用单点, kind/trigger
   人话映射, lanes 附 lane_text/status_text(取 LANE_TEXTS/LANE_STATUS_TEXTS 单点), 计数字段透传
 - test_history_rows_field_surface: 行键面 = §3.4 全集; lane 子键面钉死(前端只消费后端算好字段的契约面)
+
+### 稳态降频展示同步(计划 26-10-05-0555 S3 + 拍板 D1)
+- test_site_status_steady_uses_idle_interval_everywhere: 稳态期(落盘旗标 idle_mode=True)—— 单点换算
+  返回 idle_refresh_interval, next_wave_at / refresh_interval / fresh_text 全链跟随 + 「(稳态降频)」注记;
+  idle_mode 旗标透出视图(D1 前端 kv 行数据源, 同 stale/(已过) 先例)
+- test_site_status_normal_period_keeps_refresh_interval: 常态期(旗标 False)—— next_at / 视图字段仍是
+  refresh_interval, 稳态注记不出现
+- test_legacy_site_file_without_idle_key_reads_as_false: 存量站点文件兼容 —— 旧 JSON 波次段无 idle_mode
+  键读入仍 False, 展示走常态间隔不误降频
 """
+import json
+
+from auto_qb.config.models import SiteHrCheckConfig
 from auto_qb.hr import report
 from auto_qb.hr.model import (
     SOURCE_EXEMPT,
@@ -40,7 +52,9 @@ from auto_qb.hr.model import (
     HrHistoryEvent,
     HrSiteData,
     HrVerified,
+    HrWaveMeta,
 )
+from auto_qb.hr.ratelimit import HrLimits
 from auto_qb.hr.resolve import HrSiteView
 from auto_qb.hr.status import (
     LANE_STATUS_TEXTS,
@@ -53,6 +67,8 @@ from auto_qb.hr.status import (
     entry_details,
     history_rows,
     need_seed_text,
+    site_conf_interval,
+    site_status,
     stamp_text,
 )
 
@@ -479,3 +495,66 @@ def test_history_rows_field_surface():
         "by",
     }, "字段面要与计划 §3.4 逐字对齐(多导出 = 体积浪费, 少导出 = 前端没得吃)"
     assert set(row["lanes"][0]) == {"lane", "lane_text", "status", "status_text", "pages", "rows", "detail"}
+
+
+# ---------- 稳态降频展示同步(计划 26-10-05-0555 S3 + 拍板 D1) ----------
+
+
+class _StatusSvc:
+    """site_status 的最小 service 依赖(配置 + 频控 + 路径) —— 本文件保持纯 status 测试, 不起引擎"""
+    def __init__(self, conf: SiteHrCheckConfig):
+        self.site_confs = {"s": conf}
+        self.limits = HrLimits(min_interval=2.0, max_requests_per_day=100)
+
+    def limits_for(self, site: str) -> HrLimits:
+        return self.limits
+
+    def site_path(self, site: str) -> str:
+        return "s.json"
+
+
+def _status_snapshot(conf: SiteHrCheckConfig, wave: HrWaveMeta):
+    """固定锚点的站点快照: 空 view(通道/判定文案不影响被测面), now 取一个真实可格式化的时刻"""
+    data = HrSiteData()
+    data.wave = wave
+    return site_status("s", data, HrSiteView(site="s"), _StatusSvc(conf), 1_800_000_000.0)
+
+
+def test_site_status_steady_uses_idle_interval_everywhere():
+    """稳态期(落盘旗标 idle_mode=True): 单点换算回 idle_refresh_interval, next_wave_at / 视图字段 /
+    fresh_text 全链跟随(计划 26-10-05-0555 §2.6), 并带拍板 D1 的「(稳态降频)」注记"""
+    conf = SiteHrCheckConfig(refresh_interval=3600.0, idle_refresh_interval=86400.0)
+    assert site_conf_interval(conf, HrWaveMeta(idle_mode=True)) == 86400.0, "单点换算: 旗标真 -> idle 间隔"
+    snap = _status_snapshot(conf, HrWaveMeta(healthy_ts=1_000_000.0, idle_mode=True))
+    assert snap.next_wave_at == 1_000_000.0 + 86400.0, "「下次核对清单」稳态期按 idle 间隔倒计时(与闸门同算法)"
+    assert snap.refresh_interval == 86400.0, "视图字段 refresh_interval 同步跟随(前端契约面)"
+    assert snap.idle_mode is True, "旗标透出视图: D1 前端 kv 行注记的数据源(只读落盘旗标, 不重算判据)"
+    assert f"下次核对清单 {stamp_text(1_000_000.0 + 86400.0)}" in snap.fresh_text
+    assert snap.fresh_text.endswith("(稳态降频)"), "D1: 稳态期注记, 24H 倒计时不空降无解释"
+
+
+def test_site_status_normal_period_keeps_refresh_interval():
+    """常态期(旗标 False): 展示不变 —— next_at / 视图字段仍是 refresh_interval, 稳态注记不出现"""
+    conf = SiteHrCheckConfig(refresh_interval=3600.0, idle_refresh_interval=86400.0)
+    assert site_conf_interval(conf, HrWaveMeta(idle_mode=False)) == 3600.0
+    snap = _status_snapshot(conf, HrWaveMeta(healthy_ts=1_000_000.0))
+    assert snap.next_wave_at == 1_000_000.0 + 3600.0
+    assert snap.refresh_interval == 3600.0
+    assert snap.idle_mode is False
+    assert f"下次核对清单 {stamp_text(1_000_000.0 + 3600.0)}" in snap.fresh_text
+    assert "(稳态降频)" not in snap.fresh_text, "D1: 常态期注记不出现"
+
+
+def test_legacy_site_file_without_idle_key_reads_as_false():
+    """存量站点文件兼容(§2.4 旗标缺省 False): 旧 JSON 波次段无 idle_mode 键, 读入仍 False ——
+    展示走常态间隔, 不把存量文件误显示成稳态降频"""
+    conf = SiteHrCheckConfig(refresh_interval=3600.0, idle_refresh_interval=86400.0)
+    legacy = json.loads(json.dumps(HrSiteData().to_json()))
+    legacy["wave"].pop("idle_mode", None)  # 模拟 S2 之前落盘的站点文件
+    legacy["wave"]["healthy_ts"] = 1_000_000.0
+    data = HrSiteData.from_json(legacy)
+    assert data.wave.idle_mode is False
+    snap = _status_snapshot(conf, data.wave)
+    assert snap.next_wave_at == 1_000_000.0 + 3600.0
+    assert snap.refresh_interval == 3600.0
+    assert "(稳态降频)" not in snap.fresh_text
