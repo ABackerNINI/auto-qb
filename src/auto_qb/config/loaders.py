@@ -405,6 +405,9 @@ def load_qb_traffic(spec) -> Optional[QbTraffic]:
         flush_interval: 10M        # 缓冲批量落盘周期(60S~1H, 整数秒)
         raw_window: 24H            # raw 段保留窗(1h-90d)
         rollup_window: 30D         # hour 段保留窗(7d 起, 无上限)
+    配比口径(v4 计划 26-10-05-2200 裁决 N2): flush_interval 远大于 sample_interval(块内 >= 约
+        20 行)才能吃满块头基线 delta 收益; 缺省 30S/10M = 块内 20 行恰在界上, 30s 档 B 行占比
+        约 5%(收益缩水但不影响正确性), 故不做校验约束。
     """
     if spec is None:
         return None

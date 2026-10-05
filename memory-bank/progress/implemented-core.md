@@ -5,7 +5,26 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
-- **🆕 recheck 轮询生效确认整体重设计: 证据门控判定 (2026-10-04, 计划
+- **🆕 qB 口径流量 v4 格式换代: 块头基线 delta + 按落盘切块 + 自然推算结算 (2026-10-05~06, 计划
+  [plans/26-10-05-2200](../plans/26-10-05-2200-plan-qb-traffic-v4-delta.html) 全段, 报告
+  [26-10-05-1946](../reports/26-10-05-1946-report-qb-traffic-v4-delta.html) Done)**:
+  v3 天文件逐行绝对 totals 的行宽随 all-time 计数无界增长, 换代打包四件事: 块头 B 行携带
+  totals 基线(5 列; 块首 n 游程前缀拆 3 列无基线块, 块内 r/z 判坏行) + r/z 行存相对块基线的
+  delta(内存结构恒绝对, delta 只存在于线格式 —— parse 以基线 cumsum 复原、format 减法序列化,
+  读侧/agg/catch-up/WebUI 语义零改动) + 关块状态机「flush ∧ 块内有 r 行才关, 空闲块跨 flush
+  开放」(空闲段盘上恰 1 条长 z 行, 空闲期写盘归零、解析缓存全天有效; ZRUN 保险闸退役为天级;
+  计数器重置强制关块重立基线) + 覆盖结算判定函数单点 `v4_block_gap_continuous`(gap ≤ interval +
+  DRIFT_TOL → 连续, 在线 _agg_feed 与离线 _agg_credit_day_file 两路同源复用)。v3 格式函数与旧写
+  路径随翻转退役, 全仓 V3→V4 符号代际改名; 目录 `qb-traffic-v4/` 全新落点, 旧 v3 原样留存不读
+  不迁移(删留决定权在用户)。B1 纯函数区并存(6a98c504, 2628 passed + 4 skipped / 99% / 25.7s) →
+  B2 原子翻转(B2-1..B2-3 合并前 squash, 2632 passed + 4 skipped / 98.50% / 28.1s, 机检零残留) →
+  B3 收尾(配置配比口径 N2 入 models/loaders 注释; v3 计划 §02.1 条款级取代; dry-run 真机零 ERROR)。
+  字节对照三档全落报告 §07 推演区间: 满速活跃天 -12.5% / 低速 -22.3% / 空闲天 -98.9%(基线
+  [26-10-06-0132](../testing/baselines/26-10-06-0132-qb-traffic-v4-delta-b3.md), test.full 2632
+  passed + 4 skipped / 98% / 27.8s)。格式契约单点 = traffic_store.py 模块 docstring。档案
+  [tasks/26-10-05-backend-qb-traffic-v4-delta](../tasks/26-10-05-backend-qb-traffic-v4-delta.md)。
+
+- **recheck 轮询生效确认整体重设计: 证据门控判定 (2026-10-04, 计划
   [plans/26-10-04-1824](../plans/26-10-04-1824-plan-ops-recheck-effect-confirmation.html) 全段, issue
   [26-10-03-1140](../issues/26-10-03-1140-bug-ops-recheck-false-success.html) Done)**:
   recheck 轮询原成功分支 `if rec.progress >= 1.0` 直接对陈旧快照下结论 —— 已完成种子提交后首跳

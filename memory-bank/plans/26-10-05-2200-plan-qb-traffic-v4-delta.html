@@ -6,7 +6,7 @@
 <title>实施计划 · qB 流量 v4 · 块头基线 delta + 按落盘切块(空闲块不关) + 自然推算结算 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="qb-traffic-v4-delta">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-05-2200">
 <meta name="doc-updated" content="26-10-05-2200">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-05-backend-qb-traffic-v4-delta.md">
@@ -188,7 +188,7 @@
         <div class="meta-row">
           <span>计划 · plan</span>
           <span><b>topic</b> qb-traffic-v4-delta</span>
-          <span><b>status</b> Open</span>
+          <span><b>status</b> Done</span>
           <span><b>added</b> 26-10-05-2200</span>
           <span><b>报告</b> 26-10-05-1946</span>
           <span><b>基线</b> f2dc8725 (develop)</span>
@@ -350,7 +350,8 @@ n,&lt;run_len&gt;[,&lt;dt_ms&gt;]<span class="c">                            不
         <span class="kicker">Colophon</span>
         <p>依据:报告 <span class="ref">memory-bank/reports/26-10-05-1946-report-qb-traffic-v4-delta.html</span>(经 2100 / 2137 两轮复核,§11 决策 ⑤⑥ 已落档);任务档案 <span class="ref">memory-bank/tasks/26-10-05-backend-qb-traffic-v4-delta.md</span>;代码事实核查基线 f2dc8725(store 纯函数区 / mod 状态机 / grid·qb 导入面 / config 校验入口 / scripts 全目录零流量引用)。</p>
         <p>口径声明:计划不重写报告的量化推演(收益 / 字节对照均以报告 §06-07 为准);实施期实测数字进基线切片。凡本计划与报告冲突(已知的:N3 sim 行;未知的:实施中发现的),以本计划为准并记进档案。</p>
-        <p>26-10-05-2200 立计划 · status Open · 待拍板:本计划获批即视为报告 §11 决策 ①-④ 按推荐口径拍板,开工批 1。</p>
+        <p class="hint">26-10-06 变更记录:实施完成(三批)—— B1 纯函数区并存新增(6a98c504)、B2 原子翻转 + 符号代际改名(B2-1..B2-3 合并前 squash)、B3 收尾回写(配置口径 N2 / v3 计划条款级取代 / 基线切片 26-10-06-0132 含字节对照三档落推演区间 / dry-run 验证)。status Open → Done;交付合并与推送待用户指令。</p>
+        <p>26-10-05-2200 立计划 · status Done · 实施完成(三批), 交付合并与推送待用户指令。</p>
       </footer>
 
     </main>
