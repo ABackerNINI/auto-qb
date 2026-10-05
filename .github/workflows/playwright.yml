@@ -1,0 +1,67 @@
+name: Playwright (WEB UI 冒烟)
+
+# 与 ci.yml 保持同一套触发分支 —— 本仓库主线是 develop, 只写 [main, master] 会让本 workflow
+# 在日常分支上永不触发(scaffold 默认值的直接后果)。加 workflow_dispatch 便于手动补跑。
+on:
+  push:
+    branches: [develop, master, main]
+  pull_request:
+    branches: [develop, master, main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: WEB UI smoke (chromium)
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # setup-uv 不再发布 v10 这类浮动大版本标签(只有 v10.0.0/v10.0.1/v10.1.0 等固定标签),
+      # 用 @v10 会报 "unable to find version v10"; 按上游建议固定到 commit SHA(与 ci.yml 同值)。
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Python dependencies
+        run: uv sync
+
+      # npm ci 强依赖已入库的 package-lock.json —— 缺了只会报一句很难懂的 EUSAGE。
+      # 前置判一次, 报错直接指向原因。
+      - name: Check lockfile is committed
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::error::package-lock.json 未入库 —— npm ci 需要它; 请先提交 package.json + package-lock.json"
+            exit 1
+          fi
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      # 只装 chromium: 本项目 UI 是内部工具, scaffold 默认的三浏览器矩阵(firefox+webkit)纯属浪费 CI 时间。
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # 桩服务由 playwright.config.mjs 的 webServer 自动拉起(真 create_app + 合成种子), 无需手工起。
+      - name: Run WEB UI smoke
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+          if-no-files-found: ignore

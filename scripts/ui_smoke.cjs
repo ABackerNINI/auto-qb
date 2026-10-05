@@ -7,8 +7,16 @@
  *
  * 运行:
  *   1) uv run python scripts/ui_harness.py --torrents 3000 --port 8099
- *   2) NODE_PATH=C:/Users/<你>/.workbuddy-ai/binaries/node/workspace/node_modules \
- *      node scripts/ui_smoke.cjs --base http://127.0.0.1:8099
+ *   2) node scripts/ui_smoke.cjs --base http://127.0.0.1:8099 --torrents 3000
+ *
+ * 依赖从哪来(2026-10-06 起本 clone 装了依赖, 优先级见下):
+ *   ① 仓库内 `node_modules/playwright-core` —— `require()` 从本文件向上解析会**先**命中它,
+ *      正常情况什么都不用设;
+ *   ② 没有 `node_modules` 的 clone(它已 gitignore, 新 clone / 别的工作区不会有)则退回
+ *      `NODE_PATH=<仓库外一次性安装的 node_modules>`, 例:
+ *      `NODE_PATH=$HOME/.aqb-smoke-deps/node_modules node scripts/ui_smoke.cjs --base …`
+ *   ③ 两条都不行时脚本会退到 `chromium.launch({channel:"msedge"})`(Edge 恒可用)。
+ *   ❗脚本必须保持 **CJS(.cjs)**: ESM 的 `import` 不认 `NODE_PATH`, 退路 ② 会直接失效。
  *
  * 参数:
  *   --base       桩服务地址(默认 http://127.0.0.1:8099)
@@ -27,8 +35,9 @@ const fs = require("fs");
 const path = require("path");
 
 let chromium;
-// 先试 playwright-core: 它的版本与**本机已下载的 chromium**对齐(1.62 ↔ chromium-1234);
-// 顶层 `playwright` 包可能更新(1.63 要 chromium-1243)从而报 "Executable doesn't exist"。
+// 先试 playwright-core: 本 clone 的 node_modules 里就有它(1.63 ↔ 本机 chromium-1243, 已对齐),
+// `require` 向上解析会先命中; 无 node_modules 的 clone 靠 NODE_PATH 退路(见文件头「依赖从哪来」);
+// 顶层 `playwright` 包只作最后兜底。
 try {
   chromium = require("playwright-core").chromium;
 } catch (e) {
@@ -1971,8 +1980,13 @@ async function smokeUi(browser, ui) {
 })();
 
 /*
- * 版本对齐(踩过的坑): playwright 1.63 要 chromium-1243, 本机已装的是 chromium-1234 ⇒
- * 报 "Executable doesn't exist"。解法: 装与之匹配的 playwright-core@1.62(不用下浏览器):
- *   cd <node workspace> && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm i --no-audit --no-fund playwright-core@1.62.0
+ * 版本对齐(踩过的坑, 2026-10-06 复核更新): playwright 的版本必须与 `%LOCALAPPDATA%\ms-playwright`
+ * 里已下载的 chromium **配对**, 否则报 "Executable doesn't exist"。
+ *   当前配对(2026-10-06 实测可用): playwright-core **1.63.x ↔ chromium-1243**
+ *   (`chromium-1243` / `chromium_headless_shell-1243` 在盘上; 旧的 chromium-1234 已不在)。
+ *   历史配对: core 1.62 ↔ chromium-1234 —— 那段"装 1.62 绕开"的配方已过期, 别再照抄。
+ * 现在本仓库 `package.json` 已把 `@playwright/test@1.63` 列为 devDependency, 所以 playwright-core
+ * 就在仓库内 `node_modules/`, `require("playwright-core")` 直接命中, 无需 NODE_PATH。
+ * 装了新包却没下对应浏览器时, 用 `npx playwright install chromium` 补(别指望它自己下)。
  * 运行时用 `require("playwright-core")` —— ESM 的 import 不认 NODE_PATH, 故本脚本用 CJS。
  */

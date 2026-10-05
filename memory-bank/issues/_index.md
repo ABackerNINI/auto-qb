@@ -19,13 +19,14 @@
 | bug | 6 |
 | perf | 6 |
 | docs | 1 |
-| refactor | 10 |
+| refactor | 11 |
 | feat | 17 |
 | chore | 2 |
 | question | 4 |
 
 ## Open
 
+- [refactor] [把 ui_smoke.cjs 分批迁移到 @playwright/test 框架](26-10-06-0458-refactor-e2e-migrate-ui-smoke.html) — 1978 行自研冒烟脚本是手写 CJS+CDP 风格; 迁移后白拿自动等待 /…
 - [bug] [FreespaceCondition.match 对 OSError 静默 return False, 与 expr 形式抛 ExprError 判据劈叉](26-10-06-0028-bug-freespace-oserror-silent-false.html) — 磁盘故障时低空间类规则静默失活, 与「绝不降级成假值」原则冲突
 - [bug] [parse_size 单元表外缩写(2.5T/800M)被当 1 字节静默算错而非回 None](26-10-06-0028-bug-hr-parse-size-unknown-unit.html) — 违反「认不出返回 None 不猜」纪律; 错值直达展示(分享率/下载量对账)面
 - [perf] [sys.torrent_count 每求值全库浅拷贝取 len, O(N) 纯浪费且未进昂贵缓存](26-10-06-0028-perf-sys-torrent-count-full-copy.html) — interval:0 规则每种子每 tick 一次 O(N) 拷贝(3000 库…

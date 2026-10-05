@@ -32,3 +32,10 @@ run     = ["uv run python scripts/ui_harness.py <args>"]
 timeout = 900
 when    = "浏览器冒烟（真浏览器跑前端断言合集）"
 note    = "必须 uv run —— 裸 python 会缺 qbittorrentapi"
+
+[tasks."dev.e2e"]
+run     = ["npx playwright test <args>"]
+timeout = 180
+when    = "改前端后跑 WEB UI 真浏览器冒烟（e2e/ 最小集: 渲染健康 + 数据契约; 桩服务由 webServer 自动起）"
+note    = "必须在真实终端跑: AI 工具 shell 里 spawnSync 全线 EBUSY, Playwright 收尾杀不掉桩服务 ⇒ 用例全 PASS 但命令永不退出、8137 残留占端口（见 memory-bank/pitfalls/testing/playwright-teardown.md）; 端口固定 8137 且 reuseExistingServer=false, 别改成复用"
+doc     = "../../memory-bank/pitfalls/testing/playwright-teardown.md"

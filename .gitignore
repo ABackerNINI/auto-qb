@@ -70,3 +70,11 @@ USER.md
 
 # 会话临时件区(分析笔记 / 冒烟脚本 / 桩日志) —— 历来不入库; 26-10-03 实锤误提交(冒烟脚本混进阶段2 提交), 加忽略防复发
 tmp-analysis/
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

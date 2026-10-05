@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="e2e-migrate-ui-smoke">
+<meta name="issue-stamp" content="26-10-06-0458">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="playwright-e2e">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="把 ui_smoke.cjs 分批迁移到 @playwright/test 框架">
+<meta name="issue-summary" content="1978 行自研冒烟脚本是手写 CJS+CDP 风格; 迁移后白拿自动等待 / getByRole 语义定位 / trace / shard 并行 / HTML 报告">
+<title>把 ui_smoke.cjs 分批迁移到 @playwright/test 框架 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>把 ui_smoke.cjs 分批迁移到 @playwright/test 框架</h1>
+    <p class="lede">1978 行自研冒烟脚本是手写 CJS+CDP 风格; 迁移后白拿自动等待 / getByRole 语义定位 / trace / shard 并行 / HTML 报告</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-06-0458-refactor-e2e-migrate-ui-smoke</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 04:58</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>两套真浏览器链路并存: <code>scripts/ui_smoke.cjs</code>（1978 行, 手写 CJS + <code>page.evaluate</code> 字符串 + 自造 PASS/FAIL 汇总）已覆盖 <strong>105 项</strong>断言, 而 <code>e2e/</code>（2026-10-06 新增的 <code>@playwright/test</code> 链路）只跑 4 项最小集。同一类断言分散两处, 且 <code>ui_smoke.cjs</code> 拿不到框架能力: 无自动等待/重试、无 trace viewer（存量 flaky「追剧集行 Ctrl+click 超时」只能靠 <code>git stash</code> 对照归因）、无 <code>--shard</code> 并行、无 HTML 报告。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <ul>
+      <li><code>scripts/ui_smoke.cjs</code>（1978 行, 取证 2026-10-06 04:58）· grep 关键词 <code>const add = (ui, name, ok, detail)</code>（自造断言收集器）、<code>async function smokeUi(browser, ui)</code>（唯一入口, 内含按块划分的断言组）、<code>armPending</code> / <code>readPending</code>（MutationObserver 时序探针, 迁移时最需要 trace 的那部分）</li>
+      <li>同批断言的框架版最小集: <code>e2e/smoke.spec.mjs</code>（4 项）、<code>e2e/harness.mjs</code>（桩服务参数单点）、<code>playwright.config.mjs</code>（testDir / projects / webServer）</li>
+      <li>两条轨道的能力边界与回退判据: <code>memory-bank/testing/browser-env.md</code>、<code>memory-bank/pitfalls/testing/smoke.md</code></li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>按「一次搬一个断言组」推进, 不整仓重写: 从 <code>smokeUi()</code> 里已分块的断言组（渲染健康 → 视图切换 → 乐观 UI → 右键/多选菜单 → 性能埋点 → HR 表③）逐块迁进 <code>e2e/</code>, 每搬完一块就用 <code>--ui both</code> 与旧脚本对跑一轮、数字对齐后再删旧块。优先搬「存量 flaky 所在的那一块」—— trace viewer 正是为它准备的。迁移期两套并存, 但<strong>同一断言只允许有一处定义</strong>, 别让它在两边各自演化。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-06 04:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-06-0458-refactor-e2e-migrate-ui-smoke.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

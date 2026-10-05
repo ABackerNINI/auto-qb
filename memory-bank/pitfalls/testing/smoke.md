@@ -10,18 +10,19 @@
   + `ui_smoke.cjs`(Playwright, 双 UI 断言 + 内置 A/B)。前端渲染**pytest 覆盖不到** ⇒ **改前端必做冒烟**。
 - **处置**: `ok`(看正向)与 `--expect-cmd error`(看回滚)两种模式都要跑。
 
-### Playwright 从哪来: 本 clone 无 `node_modules` ⇒ 挂 **npx 缓存**的 `NODE_PATH`
+### Playwright 从哪来: 优先仓库内 `node_modules`, 没有才挂 `NODE_PATH`
 
 - **触发**: `Cannot find module 'playwright'`, 或版本不匹配报 `Executable doesn't exist`(2026-09-25 实测)。
-- **判别**: `node_modules` **不在 `.gitignore` 里** ⇒ 就地 `npm i` 会污染 git status; playwright 包先查
-  **npx 缓存**(`npx --no-install playwright --version` 有版本号就是它), 缓存目录
-  `%LOCALAPPDATA%\npm-cache\_npx\<hash>\node_modules`。
-- **处置**: `NODE_PATH='…\_npx\<hash>\node_modules' node scripts/ui_smoke.cjs --base …`
+- **判别**: 按优先级找包 —— ①**仓库内** `node_modules/playwright-core`(`require` 从 `scripts/` 向上解析先命中);
+  ②没有 `node_modules` 的 clone(`node_modules/` **已 gitignore**, 不会跟着 clone 走)⇒ `NODE_PATH` 指仓库外一份;
+  ③npx 缓存 `%LOCALAPPDATA%\npm-cache\_npx\<hash>\node_modules`(可能已空)。
+- **处置**: ①优先 `node scripts/ui_smoke.cjs --base …`, 什么都不用设(2026-10-06 起本仓库有 `package.json`,
+  列了 `@playwright/test@1.63` 作 devDependency); ②③才加 `NODE_PATH=…`
   (❗ESM 的 `import` 不认 `NODE_PATH`, 冒烟脚本必须 CJS); 版本对齐 `playwright-core@1.63` ↔ `chromium-1243`;
   换不到退回 `chromium.launch({channel:"msedge"})`(**Edge 恒可用**)。
   复发: 1 —— 2026-10-02 npx 缓存已空(只剩空 hash 目录; 浏览器二进制 chromium-1243 仍在
-  `%LOCALAPPDATA%\ms-playwright`) ⇒ 新来源: **仓库外**一次性 `npm i playwright-core@1.63`
-  (如 `~/.aqb-smoke-deps`), `NODE_PATH=$HOME/.aqb-smoke-deps/node_modules`; 别装进仓库根。
+  `%LOCALAPPDATA%\ms-playwright`) ⇒ 当时改用**仓库外**一次性 `npm i playwright-core@1.63`
+  (如 `~/.aqb-smoke-deps`); 2026-10-06 起仓库内已有, 这条降为备选。
 
 ### 桩服务没起来 / 起来的是**旧进程** ⇒ 冒烟整轮"整体执行超时", 看着像前端白屏
 
