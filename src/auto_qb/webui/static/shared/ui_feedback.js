@@ -109,7 +109,10 @@ window.AQB_FEEDBACK = {
       if (this.modal.visible) this.resolveModal(false);  // 单例: 上一个悬空 Promise 先结算为取消
       return new Promise((resolve) => {
         this._modalResolve = resolve;
-        this.modal = { ...this._modalInit(), ...cfg, visible: true };
+        // 模态身份戳(issue 26-10-06-0028 F1-01 单点): 每开一框自增一次 mid, 随框存进
+        // this.modal —— 「单例 modal + 异步落框」形态的落袋守卫统一走 _modalIsCurrent,
+        // 防迟到异步回执把上一框的结果写进无关弹窗
+        this.modal = { ...this._modalInit(), ...cfg, visible: true, mid: (this._modalSeq = (this._modalSeq || 0) + 1) };
         this.$nextTick(() => {
           // 多字段形态聚焦第一个输入框(fields), 单输入形态聚焦 modalInput;
           // 确认类(计划 26-09-28-0354 §08): 默认焦点在「确定」钮 —— Enter 即确认(按钮原生行为),
@@ -126,6 +129,13 @@ window.AQB_FEEDBACK = {
           if (ok) ok.focus();
         });
       });
+    },
+    /* 异步落框守卫单点(issue 26-10-06-0028 F1-01): 「单例 modal + 异步回执回写 this.modal」
+     * 形态在落袋前必经 —— 比对发起时刻的框身份戳与当前可见框是否同一框(关闭/被任何新框
+     * 取代即失配)。单靠业务代际 seq 兜不住「取消后 seq 不递增、用户已开无关弹窗」分支,
+     * 身份戳才拦得住; 后续同形对话框一律复用本方法, 不再各写各的守卫。 */
+    _modalIsCurrent(mid) {
+      return !!(mid && this.modal.visible && this.modal.mid === mid);
     },
     /* choice: true(确认) | false(取消/Esc/点暗幕) | "extra"(第三个钮, 见 confirmThreeDialog)。
      * 既有调用点全走 true/false 两态, "extra" 只有三选一框会传, 老契约不变。 */

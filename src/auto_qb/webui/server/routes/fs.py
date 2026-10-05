@@ -89,8 +89,12 @@ def build_router(ctx: WebContext) -> APIRouter:
         同径不重复出现)。只读快照, 无副作用(不触发视图重建/不投命令)。
         """
         manager.web.touch()
-        paths = {key[0] for key in manager.store.groups if key and key[0]}
-        paths.update(path_normalize(rec.save_path) for rec in manager.store.by_hash.values() if rec.save_path)
+        # 读侧快照(同 views._build_group_view 处说明, issue 26-10-06-0028 E-01): Web 线程
+        # 遍历 store 索引与主循环原地增删并发, 取快照引用后再迭代
+        group_keys = tuple(manager.store.groups)
+        recs = tuple(manager.store.by_hash.values())
+        paths = {key[0] for key in group_keys if key and key[0]}
+        paths.update(path_normalize(rec.save_path) for rec in recs if rec.save_path)
         return {"paths": sorted(paths)}
 
     def _browse_roots() -> List[str]:
@@ -99,7 +103,9 @@ def build_router(ctx: WebContext) -> APIRouter:
         白名单只由服务端从自己的快照派生, 不接受客户端传参 —— 这是文件系统读端点的第一道闸门。
         !roots 恒为**逻辑空间**路径(qB 报回的 save_path) —— 与映射无关, 见报告 §04。
         """
-        roots = {path_normalize(rec.save_path or "") for rec in manager.store.by_hash.values() if rec.save_path}
+        # 读侧快照(同 api_paths): /api/fs/* 同为 Web 线程读端点
+        recs = tuple(manager.store.by_hash.values())
+        roots = {path_normalize(rec.save_path or "") for rec in recs if rec.save_path}
         return sorted(r for r in roots if r)
 
     def _within_roots(target: str, roots: List[str]) -> bool:

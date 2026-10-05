@@ -102,6 +102,15 @@
 | `test_notify.py::test_notify_icon_ico_points_to_real_file` (H-02) | ICON_ICO 两级 dirname 指向真实存在的 icon.ico(与 tray/app.py 同口径), AUMID IconUri 不再恒写不存在路径 | 还原为一级 dirname |
 | `test_utils.py::test_convert_bool_in_dict_list_branch_keeps_decimal_strings` (H-03) | convert_bool_in_dict 列表分支与字典分支同口径: 列表内纯数字串保持原样不 True 化(导出模板回填类型不漂移) | 还原列表分支为无条件递归 |
 
+## S3 竞态/回执批次守阵 (26-10-06-0028 ×4, 红验 26-10-06 @工作区)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_web.py::test_web_store_iteration_snapshot_race_guard` (E-01) | Web 读侧迭代面(search_torrents / _build_* 系 / mark_local_present)取快照引用(tuple/list)后再遍历 —— 写线程高频原地增删 by_hash/groups/cross_group_conflict_warned 期间零 "dictionary changed size during iteration"(读侧快照对偶「主循环唯一写线程」, 口径同 build_search_index 原子交换) | 还原 views.py/hr.py/fs.py 的 tuple() 快照包装(实测 4s 内必抛 RuntimeError) |
+| `test_web.py::test_modal_identity_stamp_landing_guard` (F1-01) | 模态身份戳落袋守卫单点: ui_feedback._openModal 每框发自增 `mid` + `_modalIsCurrent`(visible+mid 双比对)单点 + drawer._skipPrecheck 落袋守卫 = seq 代际 + 身份戳且先于任何 this.modal 写 —— 取消跳检框后开无关 modal(seq 不递增)只有身份戳拦得住迟到回执 | 还原 drawer.js/ui_feedback.js 身份戳四处(实测红在「_openModal 未随框发 mid」) |
+| `test_web.py::test_reannounce_group_empty_snapshot_error_receipt` (E-03) | _cmd_reannounce_group 空组(成员执行时刻全不在快照)显式 error 回执、不发指令不登记跟踪 —— 对齐单发 reannounce_torrent 回执口径, 前端 waitCmd 不再挂 40s 超时 | 还原 commands.py else 分支(实测红在 KeyError: 'r-gone', 即无回执) |
+| `test_web.py::test_frontend_dir_browse_and_search_stale_guard` (F2-03) | 请求代际守卫与 drawer._drawerStale 同式收口: loadDir 发请求即记 `_dirReqPath` 戳(落袋/报错/finally 三处比对, 过期请求不动 loading 态) + doSearch 落袋/报错前比对当前 searchQuery 词 —— 慢响应不覆盖新状态 | 还原 add_torrent.js/view.js 守卫(实测红在「loadDir 未记 path 戳」) |
+
 ## 仿真 / 语料 / 平台语义
 
 | 守阵 | 钉住的结论 | 红验 |

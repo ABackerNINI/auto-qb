@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="Web 线程无锁迭代 store.by_hash/groups 期间主循环原地增删, RuntimeError 500">
 <meta name="issue-summary" content="remove_torrent/restore_torrent 原地变更 vs /api/search 等端点每请求迭代, 大库重叠概率真实">
 <title>Web 线程无锁迭代 store.by_hash/groups 期间主循环原地增删, RuntimeError 500 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-bug-webui-store-iteration-race-500</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
@@ -120,7 +120,7 @@
 
   <section id="s6"><h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2><p>二选一: ①store 原地变更点(remove/restore)改为登记待报延迟到 apply_sync 统一应用 ②Web 侧迭代一律取快照引用(<code>tuple(by_hash)</code>/<code>list(groups)</code>)后再遍历; 可补「删除期间并发 /api/search 不 500」守阵。</p></section>
 
-  <section id="s7"><h2><span class="no">07</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul><h3>复验</h3><p class="todo">TODO: 认领后先重跑锚点, 补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p><h3>修复后补充</h3><p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」。</p></section>
+  <section id="s7"><h2><span class="no">07</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — 认领并修复(S3 批, 计划 26-10-06-0103 §05), 状态 <strong>Done</strong></li></ul><h3>复验</h3><p>26-10-06 @f9a6d6ab 复核: 全部锚点仍复现 —— views.py:897 search_torrents / :412 _build_group_view / :563 _build_flat_view / :578 _build_speed_totals / :588-590 _build_singles_view / :658 _build_shows_view(_build_* 系经 runtime.ensure_view/ensure_state 的 Web 请求触发重建路径执行)、fs.py:92-93 api_paths(:102 _browse_roots 同形同修)、hr.py:35 mark_local_present(:181 调用); 写入点 store.py:448/:550/:559、grouping_mod.py:266 未动。</p><h3>修复后补充</h3><p><b>拍板 P-03 按推荐① 落地: 读侧快照</b> —— 全部 Web 读侧迭代面取快照引用(tuple(by_hash…)/tuple(groups…))后再遍历, 单写线程写路径一行不动; views.py:775 build_search_index 原子交换注释口径一致化(完整口径注释钉在 _build_group_view)。fs.py:102 _browse_roots 与 views.py:411 cross_group_conflict_warned 集合迭代为同函数/同文件同形面, 随锚点一并收口。守阵: <code>test_web.py::test_web_store_iteration_snapshot_race_guard</code>(写线程高频增删期间连续跑全部读侧面, 红验=还原快照 4s 内必抛 RuntimeError, 已做)。<b>实测: test.full 2646 passed + 4 skipped, 覆盖率五项与 f9a6d6ab 基线持平(未覆盖 167 / 分支 5444 / partial 143, 98% 档)。</b></p></section>
 
   <footer>
     26-10-06-0028-bug-webui-store-iteration-race-500.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕

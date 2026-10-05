@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="add_torrent.loadDir 与 view.doSearch 取数链无请求代际守卫, 慢响应覆盖新状态">
 <meta name="issue-summary" content="自愈型(F1-01 同族不同件, 那条不自愈定 P2); 对照 drawer.js 四 fetcher 的 seq+hash 双守卫">
 <title>add_torrent.loadDir 与 view.doSearch 取数链无请求代际守卫, 慢响应覆盖新状态 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-refactor-load-dir-dosearch-stale-guard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,7 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>两处补请求代际守卫(loadDir 以 path 戳、doSearch 以 query 戳, 落袋前比对当前值; 与 drawer.js _drawerStale 同式收口), 或随下次触达该文件的计划顺手收。</p><p><b>撞车(底册对照):</b> 无(F1-01 drawer 迟到回执写错弹窗同族不同件 —— 那条因「落袋进无关 modal、不自愈」定 P2, 本两条自愈)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — 认领并修复(S3 批, 计划 26-10-06-0103 §05), 状态 <strong>Done</strong>。锚点复核 @f9a6d6ab 两处仍在(行号吻合)。<b>实际修法</b>(与 drawer.js _drawerStale 同式收口): ①add_torrent.js loadDir 发请求即记 path 戳 <code>this._dirReqPath = reqPath</code>, 落袋/报错两处比对丢弃过期响应, finally 按戳守卫(过期请求不动 loading 态, 免闪"加载完"假象); ②view.js doSearch 落袋/报错前比对当前 <code>searchQuery</code> 词(清空搜索随词复位自动失配)。<b>守阵</b>: <code>test_web.py::test_frontend_dir_browse_and_search_stale_guard</code>(静态钉两处守卫形状; 红验=还原守卫, 实测红在「loadDir 未记 path 戳」, 已做)。<b>实测: test.full 2646 passed + 4 skipped, 覆盖率五项与 f9a6d6ab 基线持平。</b></li></ul></section>
 
   <footer>
     26-10-06-0028-refactor-load-dir-dosearch-stale-guard.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

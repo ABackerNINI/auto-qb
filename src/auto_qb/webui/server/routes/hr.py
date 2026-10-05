@@ -32,7 +32,9 @@ def mark_local_present(rows: List[Dict], by_hash: Mapping[str, Any]) -> None:
     - 纯响应层展示标记: 不落盘、不进 /api/state 轮询载荷, 不影响任何判定/取数调度;
       `entry_details()` 本体保持纯站点口径(不加本地字段)。
     """
-    local = {h.casefold() for h in by_hash}
+    # 读侧快照(同 views._build_group_view 处说明, issue 26-10-06-0028 E-01): 本函数在
+    # /api/hr/* Web 请求线程上执行, 迭代 store.by_hash 与主循环原地增删并发, 取快照后再迭代
+    local = {h.casefold() for h in tuple(by_hash)}
     for row in rows:
         row["local_present"] = any(
             h and h.casefold() in local for h in (row.get("infohash_v1") or "", row.get("infohash_v2") or "")

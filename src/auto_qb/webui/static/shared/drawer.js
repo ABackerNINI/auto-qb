@@ -117,7 +117,7 @@ window.AQB_DRAWER = {
         busy: true,
         verdict: warnRows,
       });
-      this._skipPrecheck(seq, hashes, warnRows);  // 不 await: 对话框已开, 回执异步落框
+      this._skipPrecheck(seq, this.modal.mid, hashes, warnRows);  // 不 await: 对话框已开, 回执异步落框; mid = 本框身份戳
       const choice = await p;
       if (!choice) return;  // 取消/Esc/遮罩: 零副作用(此时未发任何执行请求)
       // 走到这说明点的是确认/强制钮 —— _skipVerdict 只在 seq 复核通过后写入, 故取值必属
@@ -130,7 +130,7 @@ window.AQB_DRAWER = {
     /* 预检投递与落框(不 await 调用): 回执后把三分流结果接在固定警示区之后, 并按态切换
      * 确认/强制钮。非 ok 回执与请求异常一律走 D10 降级; 403(web.skip_check_menu 关)同形 ——
      * 文案自解释, 执行端点同样有 403 兜底(fail-closed, 前端降级不构成绕过)。 */
-    async _skipPrecheck(seq, hashes, warnRows) {
+    async _skipPrecheck(seq, mid, hashes, warnRows) {
       let rows = [], okHashes = [], counts = null, degraded = false;
       try {
         const resp = await this.api("/api/torrents/skip-check/precheck", {
@@ -156,8 +156,10 @@ window.AQB_DRAWER = {
         degraded = true;
         rows = [{ icon: "#i-warn", label: "预检失败", value: `${e.message}, 后端闸门仍会在执行时拦截`, wide: true }];
       }
-      // 迟到回执 / 框已关 / 已被新框取代: 不落袋(防旧结果驱动新框的按钮)
-      if (seq !== this._skipCheckSeq || !this.modal.visible) return;
+      // 迟到回执 / 框已关 / 已被新框取代: 不落袋(防旧结果驱动新框的按钮)。seq 复核跳检
+      // 代际, 身份戳复核弹窗本身(F1-01 守卫单点 ui_feedback._modalIsCurrent) —— 取消跳检框
+      // 后 seq 不递增, 用户再开限速/重命名等无关 modal(共用单例)时只有身份戳拦得住
+      if (seq !== this._skipCheckSeq || !this._modalIsCurrent(mid)) return;
       this.modal.busy = false;
       this.modal.verdict = [...warnRows, ...rows];
       this._skipVerdict = { degraded, okHashes };

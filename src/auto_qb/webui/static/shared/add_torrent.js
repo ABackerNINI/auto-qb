@@ -246,18 +246,26 @@ window.AQB_ADD = {
       this.dirBrowse.open = false;
     },
     async loadDir(path) {
+      // 请求代际守卫(path 戳, 同 drawer.js _drawerStale 收口式): 发请求即记目标路径,
+      // 落袋前比对 —— 快速连点目录 A→B 时 A 的慢响应后到不得把 B 的列表覆写回 A
+      // (issue 26-10-06-0028 F2-03)
+      const reqPath = path || "";
+      this._dirReqPath = reqPath;
       this.dirBrowse.loading = true;
       this.dirBrowse.error = "";
       try {
-        const r = await this.api("/api/fs/dirs?path=" + encodeURIComponent(path || ""));
+        const r = await this.api("/api/fs/dirs?path=" + encodeURIComponent(reqPath));
+        if (this._dirReqPath !== reqPath) return;  // 已有更新的目录请求: 旧响应丢弃
         this.dirBrowse.path = r.path || "";
         this.dirBrowse.parent = r.parent || "";
         this.dirBrowse.roots = r.roots || [];
         this.dirBrowse.dirs = r.dirs || [];
       } catch (e) {
+        if (this._dirReqPath !== reqPath) return;
         if (!e.auth) this.dirBrowse.error = e.message || "读取目录失败";
       } finally {
-        this.dirBrowse.loading = false;
+        // 过期请求不动 loading 态(新在途请求持有它), 免得闪一帧"加载完"假象
+        if (this._dirReqPath === reqPath) this.dirBrowse.loading = false;
       }
     },
     dirEnter(p) {

@@ -362,6 +362,11 @@ class WebCommandsMixin:
             baseline, epoch_mode = self._trackers_baseline(hashes)
             self._register_reannounce_pending(cmd_id, hashes, baseline, epoch_mode)
             logger.info(f"WEB UI | 强制汇报整组({len(hashes)}个种子), 等待 tracker 确认")
+        elif cmd_id:
+            # 组内成员执行时刻已全部不在快照(组快照渲染后成员被删光): 不发指令也不登记跟踪,
+            # 必须显式给 error 回执 —— 否则前端 waitCmd 挂到自身超时才弹「超时」; 对齐同文件
+            # _cmd_reannounce_torrent 对缺失的显式回执口径(issue 26-10-06-0028 E-03)
+            self._set_web_result(cmd_id, "error", "组内种子不存在或已被删除")
 
     def _cmd_delete_group(self, key: tuple, delete_files: bool = False):
         hashes = self._group_hashes(key)

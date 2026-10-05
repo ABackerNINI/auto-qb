@@ -28,6 +28,11 @@ window.AQB_VIEW = {
       }
       try {
         const data = await this.api(`/api/search?q=${encodeURIComponent(q)}`);
+        // 请求代际守卫(query 戳, 同 drawer.js _drawerStale 收口式): 落袋前比对当前搜索框
+        // 词 —— a→b 连续输入时 a 的慢响应后到不得把命中集覆写成 a 的(搜索框显示 b、高亮
+        // 集却是 a, 且无轮询自动纠正; issue 26-10-06-0028 F2-03)。清空搜索也随 searchQuery
+        // 复位自动失配, 在途旧响应同样丢弃
+        if ((this.searchQuery || "").trim() !== q) return;
         const results = data.results || [];
         this.searchHits = new Set(results.map((r) => r.hash));
         // 实际归组的种子由分组筛选展示; 未归组的命中(分组未启用/文件列表不可读)单独兜底
@@ -43,6 +48,7 @@ window.AQB_VIEW = {
           this.searchTimer = setTimeout(() => this.doSearch(), 1000);
         }
       } catch (e) {
+        if ((this.searchQuery || "").trim() !== q) return;  // 旧请求的错误不得写进新词的状态
         // 不再静默(否则与"无匹配结果"无法区分): 401 由 api() 回登录框, 其余在搜索框旁提示
         if (!e.auth) {
           const msg = e.message || "搜索失败";

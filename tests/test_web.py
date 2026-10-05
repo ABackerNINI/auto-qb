@@ -35,6 +35,9 @@
 - test_recheck_confirm_wired_all_mouse_entries: 重新校验确认框三入口接线守阵(T13, 计划 26-10-05-0314 S3) —— commands.js _recheckConfirm 单点(helper 存在 + 文案与 okText 调用形态沿键盘路径原样)+ bulkAct 批量通道 / drawer.js torrentCmd 单选通道各含 recheck 确认分支 + shortcuts.js _kbAct 改调共用 helper 不再内联 confirmDialog 文案 + 共用文案字符串全仓只此一份, 任一接入点被重构摘除即红
 - test_skip_check_dialog_precheck_wired: 跳检预检对话框接线守阵(T23, 计划 26-10-05-0314 S4) —— ui_feedback.js _modalInit 声明 okDisabled/busy/verdict 三字段 + popovers.html 确认钮 :disabled="modal.okDisabled" 绑定 / busy 行 / verdict 行式渲染区(强制钮复用 extraText 第三钮 danger-solid) + drawer.js 两入口(skipCheckTorrent/skipCheckMulti)均交棒 _skipCheckDialog 且不再自带 _openModal + _skipCheckDialog 进框即禁用(busy + 固定警示区)并发预检(_skipPrecheck), 任一被重构摘除即红
 - test_skip_check_dialog_verdict_render: 跳检预检三分流渲染逻辑守阵(T24, 计划 26-10-05-0314 S4) —— _skipPrecheck 状态机分支(预检失败降级=启用普通确认且无强制钮 / 含 blocked=确认强制双钮全收 / ok+force 混合=确认钮文案「跳检 N 个可跳检的」+ 强制钮「强制跳检全部」/ force-only=确认保持禁用 / 全 ok=只启用确认)+ ok 子集派生(cls==="ok" 过滤)+ 确认路径送 ok 子集而强制路径送全量+force(_skipExec 单发 body 仅 force 时带 force 键, 批量确认只走 hashes 通道)+ 降级文案「后端闸门仍会在执行时拦截」+ _skipVerdictRows 计数行与分组上限截断(slice(0,5)+等 X 个), 任一分支被改写即红
+- test_modal_identity_stamp_landing_guard: 模态身份戳落袋守卫单点(F1-01, issue 26-10-06-0028) —— ui_feedback.js _openModal 每框发自增 mid + _modalIsCurrent 单点(visible + mid 双比对) + drawer.js _skipCheckDialog 把 this.modal.mid 交棒 _skipPrecheck 且落袋守卫为 seq + 身份戳双条件(取消跳检框后开无关 modal, 只有身份戳拦得住迟到回执)
+- test_frontend_dir_browse_and_search_stale_guard: 目录浏览与搜索的请求代际守卫(F2-03, issue 26-10-06-0028) —— add_torrent.js loadDir 发请求即记 _dirReqPath 戳, 落袋/报错/finally 三处比对(过期响应丢弃且不动 loading 态) + view.js doSearch 落袋与报错前比对 searchQuery 当前词(慢响应不覆盖新词状态), 任一处守卫被摘除即红
+- test_web_store_iteration_snapshot_race_guard: Web 读侧快照竞态守阵(E-01, issue 26-10-06-0028) —— 写线程高频原地增删 store.by_hash/groups/cross_group_conflict_warned 期间, 连续跑 search_torrents/_build_* 系/mark_local_present 不抛 "dictionary changed size during iteration"(修复前大库下必抛)
 - test_frontend_page_location_persisted: 顶层 page 与设置分区必须持久化(读侧白名单 / 写侧单漏斗) + 启动补一次 cfgLoad + 分区 key 对 schema 校验 —— 否则"设置页刷新掉回种子页"复发(2026-09-25 用户报)
 - test_frontend_unsaved_changes_guard_wiring: 设置页未保存改动防护接线守阵(issue 26-09-25-1702 / 报告 26-10-02-0508 U1-b) —— 键盘刷新(F5/Ctrl+R)走自绘三选一框(保存并刷新/放弃并刷新/留在此页)+ 其余导航走原生 beforeunload 兜底 + 兜底随脏态挂摘成对 + 主动刷新前摘兜底防双框连击 + 不做草稿恢复(不碰 Web Storage)
 - test_frontend_expand_state_survives_view_switch: 展开态跨视图记忆守阵 —— 切视图不得置空 expandedKey/expandedShows/expandedShowEp(辅种页→种子页→辅种页 展开的组会收起, 2026-09-25 用户报); 还回前必须验那一行还在, 且 groupWin 的退避判据要同步(否则为不存在的面板永久退化成全量渲染)
@@ -124,6 +127,7 @@
 - test_web_runtime_affected_hashes_shapes: 受影响种子三种取法 + 异常退化
 - test_web_runtime_affected_truth_queries_live_api: 真值直查 qB, 失败回 None 不回落快照
 - test_web_commands_delete_with_files_and_reannounce_gone_receipt: 删除透传 delete_files; 汇报缺失显式回执
+- test_reannounce_group_empty_snapshot_error_receipt: 组命令空组回执(E-03) —— 组内成员执行时刻全不在快照时显式 error 回执, 不发指令不登记跟踪(对齐单发口径, 前端不再挂到超时)
 - test_web_commands_recheck_and_skip_check_receipts: recheck/skip-check 拒绝回执带文案
 - test_web_commands_limits_partial_directions: 限速只下发提供的方向; 分享限制缺省 -2 补齐
 - test_web_commands_rename_fs_folder_branch: 重命名文件夹分支
@@ -3649,7 +3653,7 @@ def test_skip_check_dialog_verdict_render():
 
     # ① 状态机六态分支: 逐分支提取语句清单(剥注释滤空行后)与期望逐一比对 ——
     #    摘除/新增/改写任一语句(如降级分支删掉解锁行、blocked 分支漏收强制钮)即红
-    m = re.search(r"async _skipPrecheck\(seq, hashes, warnRows\)\s*\{(.*?)\n    \},", drawer, re.S)
+    m = re.search(r"async _skipPrecheck\(seq, mid, hashes, warnRows\)\s*\{(.*?)\n    \},", drawer, re.S)
     assert m, "drawer.js 找不到 _skipPrecheck(S4 状态机被改名/挪走? 同步本守阵)"
     pre = re.sub(r"//[^\n]*", "", m.group(1))
 
@@ -3717,6 +3721,143 @@ def test_skip_check_dialog_verdict_render():
         "分组展示缺计数行(可跳检/需强制/禁止)"
     assert "g.names.slice(0, 5)" in rows, "分组行缺名称上限截断(5 个)"
     assert "等 ${g.names.length} 个" in rows, "分组行缺「等 X 个」尾注"
+
+
+def test_modal_identity_stamp_landing_guard():
+    """模态身份戳落袋守卫单点(F1-01, issue 26-10-06-0028) —— 迟到异步回执不得写进无关弹窗
+
+    单例 modal 共用 this.modal, 落袋守卫只复核「seq + visible」兜不住: 用户取消跳检框后
+    seq 不递增, 在回执到达前打开限速/重命名/删除确认等任意 modal, 回执落袋即覆写其
+    verdict 与按钮文案。修法 = _openModal 每框发自增身份戳 mid, 落袋统一走 _modalIsCurrent
+    单点(visible + mid 双比对) —— 本守阵静态钉住四处, 防「单例 modal + 异步落框」同形复发:
+    1. ui_feedback.js _openModal 发戳(自增表达式必须内联在 modal 字面量里);
+    2. ui_feedback.js _modalIsCurrent 单点存在且双条件齐全;
+    3. drawer.js _skipCheckDialog 把 this.modal.mid 交棒 _skipPrecheck;
+    4. drawer.js _skipPrecheck 落袋守卫 = seq 代际 + 身份戳, 且位于任何 this.modal 写之前。
+    """
+    drawer = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    ui = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
+
+    # ① _openModal 发戳: mid 自增必须随 modal 字面量一同创建(后补属性不进 Vue 响应的旧坑)
+    m = re.search(r"_openModal\(cfg\)\s*\{(.*?)\n    \},", ui, re.S)
+    assert m, "ui_feedback.js 找不到 _openModal(改名或挪走了? 同步本守阵)"
+    assert re.search(
+        r"this\.modal = \{[^}]*mid: \(this\._modalSeq = \(this\._modalSeq \|\| 0\) \+ 1\)", m.group(1)
+    ), "_openModal 未随框发自增身份戳 mid —— 异步落框守卫失锚(F1-01)"
+
+    # ② 守卫单点: visible + mid 双比对(mid 缺省/框已关/被新框取代一律失配)
+    m = re.search(r"_modalIsCurrent\(mid\)\s*\{(.*?)\n    \},", ui, re.S)
+    assert m, "ui_feedback.js 找不到 _modalIsCurrent(守卫单点被摘除? 同步本守阵)"
+    body = re.sub(r"//[^\n]*", "", m.group(1))
+    assert "this.modal.visible" in body and "this.modal.mid === mid" in body, \
+        "_modalIsCurrent 必须同时复核 visible 与 mid(缺一不可)"
+
+    # ③ 交棒: _skipCheckDialog 发预检时携带本框身份戳
+    assert "this._skipPrecheck(seq, this.modal.mid, hashes, warnRows)" in drawer, \
+        "_skipCheckDialog 未把 modal 身份戳交棒 _skipPrecheck(F1-01)"
+
+    # ④ 落袋守卫: seq 代际 + _modalIsCurrent, 且在首处 this.modal 写之前
+    m = re.search(r"async _skipPrecheck\(seq, mid, hashes, warnRows\)\s*\{(.*?)\n    \},", drawer, re.S)
+    assert m, "drawer.js 找不到 _skipPrecheck(签名被改? 同步本守阵)"
+    pre = re.sub(r"//[^\n]*", "", m.group(1))
+    guard = re.search(r"if \(seq !== this\._skipCheckSeq \|\| !this\._modalIsCurrent\(mid\)\) return;", pre)
+    assert guard, "落袋守卫缺身份戳条件(F1-01: 只有 seq 兜不住取消后开无关 modal 的分支)"
+    assert pre.index(guard.group(0)) < pre.find("this.modal.busy = false"), \
+        "守卫必须前置 —— 迟到回执在守卫通过前不得写任何 this.modal 字段"
+
+
+def test_frontend_dir_browse_and_search_stale_guard():
+    """目录浏览与搜索的请求代际守卫(F2-03, issue 26-10-06-0028) —— 慢响应不得覆盖新状态
+
+    add_torrent.loadDir 快速连点 A→B 时 A 的响应后到会把 dirBrowse 覆写回 A; view.doSearch
+    连续输入 a→b 时 a 的响应后到会把命中集覆写成 a(搜索框显示 b、高亮集却是 a, 无轮询
+    自动纠正)。修法 = 与 drawer.js _drawerStale 同式收口: loadDir 以 path 戳(_dirReqPath)、
+    doSearch 以 query 戳(落袋前比对当前 searchQuery), 守卫覆盖落袋与报错两路, 且过期请求
+    不动 loading 态(新在途请求持有它, 免闪一帧"加载完"假象)。
+    """
+    at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
+    vw = open(os.path.join(STATIC_ROOT, "shared", "view.js"), encoding="utf-8").read()
+
+    # ① loadDir: 发请求即记 path 戳
+    m = re.search(r"async loadDir\(path\)\s*\{(.*?)\n    \},", at, re.S)
+    assert m, "add_torrent.js 找不到 loadDir(改名或挪走了? 同步本守阵)"
+    body = re.sub(r"//[^\n]*", "", m.group(1))
+    assert re.search(r"const reqPath = path \|\| \"\";\s*this\._dirReqPath = reqPath;", body), \
+        "loadDir 未在发请求前记录 path 戳(_dirReqPath) —— A→B 连点旧响应会覆盖新状态"
+    # 落袋与报错两路都比对(截获 return 而非 continue 写状态)
+    assert body.count("if (this._dirReqPath !== reqPath) return;") == 2, \
+        "loadDir 落袋/报错两路都须有过期响应丢弃守卫(恰两处)"
+    assert "if (this._dirReqPath === reqPath) this.dirBrowse.loading = false;" in body, \
+        "loadDir finally 未按戳守卫 —— 过期请求会闪一帧\"加载完\"假象(新在途请求持有 loading)"
+
+    # ② doSearch: 落袋前比对当前搜索词
+    m = re.search(r"async doSearch\(\)\s*\{(.*?)\n    \},", vw, re.S)
+    assert m, "view.js 找不到 doSearch(改名或挪走了? 同步本守阵)"
+    body = re.sub(r"//[^\n]*", "", m.group(1))
+    assert body.count('if ((this.searchQuery || "").trim() !== q) return;') == 2, \
+        "doSearch 落袋/报错两路都须比对当前搜索词(query 戳) —— 慢响应会把命中集覆写成旧词的"
+
+
+def test_web_store_iteration_snapshot_race_guard(tmp_path):
+    """Web 读侧快照竞态守阵(E-01, issue 26-10-06-0028) —— 迭代 store 期间原地增删不 500
+
+    remove_torrent/restore_torrent(原地 pop/赋值)/reset_runtime(groups.clear)/
+    grouping_mod._leave_group(del) 都在主循环线程; /api/search、/api/paths、/api/hr/*/entries
+    与 Web 请求触发的视图重建(_build_* 系)在 Web 线程无锁迭代同一批 dict —— 修复前大库
+    重叠窗口内必抛 "dictionary changed size during iteration"。守阵 = 写线程高频原地增删
+    by_hash/groups/cross_group_conflict_warned 期间连续跑全部读侧迭代面, 断言零异常
+    (读侧快照后 mutation 不再打进迭代中的 dict 视图; 写线程只碰非组员 hash, 免得踩
+    组员快照的 by_hash[h] 查找 —— 那是成员一致性语义, 不属本条)。
+    """
+    import threading
+
+    from auto_qb.webui.server.routes.hr import mark_local_present
+    from helpers import FakeTorrent, make_manager
+
+    mgr = make_manager(str(tmp_path / "state.json"))
+    n = 20000
+    for i in range(n):
+        mgr.store.by_hash[f"h{i}"] = FakeTorrent(hash=f"h{i}", name=f"t{i} 2026")
+    # 分组索引给一点真形: 组 key = (save_path, files); 组员固定不动(见 docstring 口径)
+    gkey = ("R:/seeds", ("a.mkv", ))
+    mgr.store.groups[gkey] = ["h0", "h1", "h2"]
+    mgr.store.cross_group_conflict_warned.add(("R:/seeds", "R:/other"))
+
+    stop = threading.Event()
+
+    def writer():
+        i = 0
+        while not stop.is_set():
+            h = f"new{i}"
+            mgr.store.by_hash[h] = FakeTorrent(hash=h, name="x")  # restore_torrent 形
+            mgr.store.by_hash.pop(h, None)  # remove_torrent 形
+            if i % 100 == 0:
+                mgr.store.groups[(f"R:/tmp{i}", ())] = []  # _leave_group / reset_runtime 形
+                mgr.store.groups.pop((f"R:/tmp{i}", ()), None)
+                mgr.store.cross_group_conflict_warned.add((f"R:/tmp{i}", "R:/x"))
+                mgr.store.cross_group_conflict_warned.discard((f"R:/tmp{i}", "R:/x"))
+            i += 1
+
+    t = threading.Thread(target=writer, daemon=True)
+    t.start()
+    errors = []
+    try:
+        deadline = time.time() + 2.0
+        while time.time() < deadline and not errors:
+            try:
+                mgr.search_torrents("t1")
+                mgr._build_group_view()
+                mgr._build_singles_view()
+                mgr._build_flat_view()
+                mgr._build_speed_totals()
+                mgr._build_shows_view()
+                mark_local_present([{"infohash_v1": "h1", "infohash_v2": ""}], mgr.store.by_hash)
+            except RuntimeError as e:  # 修复前必抛: dictionary changed size during iteration
+                errors.append(e)
+    finally:
+        stop.set()
+        t.join()
+    assert not errors, f"Web 读侧迭代与主循环原地增删并发仍崩溃: {errors[0]!r}"
 
 
 def test_frontend_page_location_persisted():
@@ -12268,6 +12409,26 @@ def test_web_commands_delete_with_files_and_reannounce_gone_receipt():
         assert client.calls[-1] == ("delete", True), "delete_files 透传给 API"
         assert mgr.web.results["d1"]["status"] == "ok"
         assert mgr.web.results["r1"]["status"] == "error" and "不存在" in mgr.web.results["r1"]["error"]
+
+
+def test_reannounce_group_empty_snapshot_error_receipt():
+    """组强制汇报空组回执(E-03): 组内成员执行时刻全不在快照 -> 显式 error 回执, 不发指令不登记
+
+    组快照渲染后、命令执行前组内成员全被删除(主循环被长任务占住时窗口秒级): _group_hashes
+    回空 -> 修复前不发指令不写回执, 前端 waitCmd 挂到自身超时才弹「超时」。对齐单发
+    reannounce_torrent 对缺失的显式 error 回执口径。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.store.remove_torrent("HA")
+        mgr.store.remove_torrent("HB")
+        assert mgr._group_hashes(key) == [], "前置: 组内成员已全部不在快照"
+        mgr.web.commands.put(("reannounce_group", {"key": key, "cmd_id": "r-gone"}))
+        mgr.web.consume_commands()
+        assert client.calls == [], "空组不得发任何指令"
+        assert mgr.web.reannounce_pending == {}, "空组不登记确认跟踪"
+        r = mgr.web.results["r-gone"]
+        assert r["status"] == "error" and "不存在" in r["error"], "空组必须显式 error 回执"
 
 
 def test_web_commands_recheck_and_skip_check_receipts():

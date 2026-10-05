@@ -408,8 +408,13 @@ class WebviewMixin:
         view = []
         # 跨组文件交叉标记的组 key 全集: 去重集合(plan 26-10-04-0107, 软信号纯内存)展平一次,
         # 组装循环里只做 O(1) 成员判定; 空集合时零开销(开关关/无交叉的常态)
-        cross_keys = {k for pair in self.store.cross_group_conflict_warned for k in pair}
-        for key, members in self.store.groups.items():
+        # 读侧快照(issue 26-10-06-0028 E-01): _build_* 系会在 Web 请求触发的重建路径
+        # (runtime.ensure_view/ensure_state)上由 Web 线程执行, 与主循环线程 remove_torrent /
+        # restore_torrent / reset_runtime / grouping_mod._leave_group 的原地增删并发, 直接迭代
+        # 会抛 "dictionary changed size during iteration"(请求 500)。口径同 build_search_index
+        # 的原子交换契约: 一律取快照引用(tuple/list)后再遍历, 单写线程的写路径一行不动。
+        cross_keys = {k for pair in tuple(self.store.cross_group_conflict_warned) for k in pair}
+        for key, members in tuple(self.store.groups.items()):
             recs = [self.store.by_hash[h] for h in members if h in self.store.by_hash]
             if not recs:
                 continue
@@ -560,7 +565,7 @@ class WebviewMixin:
         WEB UI 替代 qB 界面的"种子页"数据源: 不依赖辅种分组是否启用, store.by_hash
         全量进视图(前端在平铺列表上自行筛选/排序/多选; 字段集 = SEED_ITEM 契约)。
         """
-        return [self._seed_view(r) for r in self.store.by_hash.values()]
+        return [self._seed_view(r) for r in tuple(self.store.by_hash.values())]  # 读侧快照(见 _build_group_view)
 
     def _build_speed_totals(self) -> dict:
         """全量种子的上传/下载速度合计(状态栏常显统计的数据源)
@@ -575,7 +580,7 @@ class WebviewMixin:
         """
         dl = 0
         ul = 0
-        for r in self.store.by_hash.values():
+        for r in tuple(self.store.by_hash.values()):  # 读侧快照(见 _build_group_view): Web 重建路径可达
             dl += r.dlspeed
             ul += r.upspeed
         return {"dlspeed": dl, "upspeed": ul}
@@ -585,9 +590,9 @@ class WebviewMixin:
         只能从这里进入单种子视图; 搜索兜底路径不含全量)。与分组视图在同一脏窗口重建,
         store.view_changed 对任意种子的视图字段变化置真, 故不会读到陈旧状态。"""
         grouped: set = set()
-        for members in self.store.groups.values():
+        for members in tuple(self.store.groups.values()):  # 读侧快照(见 _build_group_view)
             grouped.update(members)
-        return [self._member_view(r) for h, r in self.store.by_hash.items() if h not in grouped]
+        return [self._member_view(r) for h, r in tuple(self.store.by_hash.items()) if h not in grouped]
 
     # ---------- 追剧视图(shows): 全量种子按 剧→季→集 聚合 ----------
 
@@ -655,7 +660,7 @@ class WebviewMixin:
         shows: Dict[str, dict] = {}
         unrecognized: List[str] = []
         pending: List[str] = []
-        for h, rec in self.store.by_hash.items():
+        for h, rec in tuple(self.store.by_hash.items()):  # 读侧快照(见 _build_group_view)
             parsed = tvshows.parse_release(rec.name)
             files = (index.get(h) or {}).get("files")
             if parsed.kind in (tvshows.KIND_SEASON_PACK, tvshows.KIND_UNKNOWN) and parsed.key:
@@ -894,7 +899,7 @@ class WebviewMixin:
         results = []
         file_hits = []
         idx = self.web.search_index
-        for h, rec in self.store.by_hash.items():
+        for h, rec in tuple(self.store.by_hash.items()):  # 读侧快照(见 _build_group_view): /api/search 每请求必迭代
             rows = _instant_rows(rec)
             file_rows = idx[h]["files_q"] if idx is not None and h in idx else []
             # 负词优先于一切正词, 按「单个种子」统一计算: 任一候选行(名字/站点/分类/路径/标签/

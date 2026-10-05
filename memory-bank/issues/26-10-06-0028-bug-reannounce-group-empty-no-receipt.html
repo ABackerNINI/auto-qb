@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="reannounce_group 组内成员全不在快照时不发指令不写回执, 前端挂到超时">
 <meta name="issue-summary" content="if hashes: 无 else, 同口径单发命令都写 error 回执唯组命令静默(rework 落地后缺口仍在)">
 <title>reannounce_group 组内成员全不在快照时不发指令不写回执, 前端挂到超时 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-bug-reannounce-group-empty-no-receipt</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
@@ -120,7 +120,7 @@
 
   <section id="s6"><h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2><p>入口补 else error 回执(对齐单发命令口径); 实施时顺带核对空组在 rework 后 item 级聚合下的回执形状。</p></section>
 
-  <section id="s7"><h2><span class="no">07</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul><h3>复验</h3><p class="todo">TODO: 认领后先重跑锚点, 补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p><h3>修复后补充</h3><p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」。</p></section>
+  <section id="s7"><h2><span class="no">07</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — 认领并修复(S3 批, 计划 26-10-06-0103 §05), 状态 <strong>Done</strong></li></ul><h3>复验</h3><p>26-10-06 @f9a6d6ab 复核: 锚点漂移后以函数名定位 —— <code>_cmd_reannounce_group</code>(commands.py:357, <code>if hashes:</code> 无 else)仍复现; 对照 <code>_cmd_reannounce_torrent</code> 的显式 error 回执口径成立。</p><h3>修复后补充</h3><p><b>实际修法</b>: <code>if hashes:</code> 补 <code>elif cmd_id:</code> else 分支 —— 空组不发指令、不登记跟踪, 显式 <code>_set_web_result(cmd_id, "error", "组内种子不存在或已被删除")</code>; 无 cmd_id 的直接调用场景零变化。rework 后 item 级聚合下空组不进 pending, 回执形状即单 error(与单发口径一致), 无需聚合形状。<b>守阵</b>: <code>test_web.py::test_reannounce_group_empty_snapshot_error_receipt</code>(断言空组不发指令 / 不进 reannounce_pending / error 回执; 红验=还原 else 分支, 实测红在 KeyError: 'r-gone', 已做)。<b>验收</b>: 组内成员执行时全不在快照时, 前端立即收到 error 回执而非挂到 40s 超时。<b>实测: test.full 2646 passed + 4 skipped, 覆盖率五项与 f9a6d6ab 基线持平。</b></p></section>
 
   <footer>
     26-10-06-0028-bug-reannounce-group-empty-no-receipt.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
