@@ -65,7 +65,8 @@ class QbTrafficChartApi:
         # 被引用覆盖丢弃(仅损失一份解析缓存, 但契约依赖实现时序; issue 26-10-06-0028
         # chore-lazy-init-double-construct)。data_dir 为 R 级重启闸字段(热重载拒绝项), 改动
         # 即整体重启重建 router —— 预建无快照失效面。
-        self._v4cache = V4DayCache(manager.config.data_dir)
+        # data_dir 缺字段(测试替身 config)时落空串 = 未启用防御语义, 用法仍由 _feature_on 兜底
+        self._v4cache = V4DayCache(getattr(manager.config, "data_dir", ""))
         self._last_good: dict = {}  # window 名 -> 最近一次成功现算的响应(竞态兜底, 非聚合缓存)
 
     # ---------- 基础件 ----------
