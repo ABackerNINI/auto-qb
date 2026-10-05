@@ -16,14 +16,18 @@
 |---|---|
 | bug | 4 |
 | perf | 5 |
-| docs | 1 |
-| refactor | 3 |
-| feat | 15 |
-| chore | 2 |
+| docs | 2 |
+| refactor | 4 |
+| feat | 16 |
+| chore | 3 |
 | question | 4 |
 
 ## Open
 
+- [chore] [覆盖率闸使 test.one 部分运行绿测试仍 FAIL 退出](26-10-05-0922-chore-pytest-cov-gate-test-one.html) — pytest.ini --cov-fail-under=98 对 test.one 部分文件运行同样生效, 用例全绿仍以覆盖率 FAIL 退出, 排障须手工 --no-cov
+- [docs] [test_config_schema.py 头部测试计划清单与实际函数漂移](26-10-05-0922-docs-config-schema-docstring-drift.html) — 头部 docstring 列出的 test_hr_check_field_levels_cover_validation_keys 等用例已不存在, 违反新增测试同步清单硬约束
+- [feat] [C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)](26-10-05-0922-feat-hr-prune-notice.html) — _prune_index 淘汰 active=false 行时整行消失无痕迹无预警, 建议淘汰前 <3 天 WARNING 一次 (计划 26-10-05-0555 §04 方向 A)
+- [refactor] [SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制](26-10-05-0922-refactor-hr-fetchable-dead-config.html) — fetchable 字段零消费方, 全站型不取数仅判定侧尊重; 当前无 preset 定义 listing=none 属潜在缺口
 - [bug] [跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验](26-10-05-0402-bug-skip-check-self-fail-gate.html) — 候选种子自身当日校验失败(recheck_fails[hash]>0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查
 - [perf] [渐进灌入期主循环掉拍: max_tasks_per_tick 自适应](26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — --ramp 200/拍时稳态间隔 2.87s vs main_tick 2.0s(最大漂移 1.22s), 灌入期每拍还债; 给 max_tasks_per_tick 做自适应(候选列于 W5, 未实施)
 - [perf] [/api/state 全量构建拖垮主循环: 增量 rid 用满 + 分页/按需字段(5000 种子实测)](26-10-01-2218-perf-webui-api-state-full-scan.html) — 5000 种子下 /api/state 全量单次约 0.6s 抢占同进程主循环; 方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖, 方向②已由 shows-view issue 跟踪
