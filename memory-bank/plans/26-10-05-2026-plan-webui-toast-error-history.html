@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-toast-error-history">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-05-2026">
+<meta name="doc-updated" content="26-10-05-2046">
+<meta name="doc-refs" content="memory-bank/issues/26-10-05-2013-feat-webui-toast-error-history.html">
+<title>WEBUI 错误信息历史: toast 单点环形缓冲 + 常驻入口面板 · 实施计划</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --ok: #8fc7a2;
+    --err: #e07a72;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 66ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td.yes { color: var(--ok); font-family: var(--display); font-size: 12px; white-space: nowrap; }
+  td.no { color: var(--faint); font-family: var(--display); font-size: 12px; white-space: nowrap; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  .decision { border: 1px solid var(--hair); padding: 2px 0; margin-bottom: 14px; }
+  .decision .d-row { display: flex; gap: 14px; padding: 10px 14px; border-bottom: 1px solid var(--hair-soft); align-items: baseline; }
+  .decision .d-row:last-child { border-bottom: none; }
+  .decision .d-key { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; color: var(--faint); white-space: nowrap; min-width: 178px; }
+  .decision .d-val { font-size: 14px; }
+  .decision .d-val.on { color: var(--accent-ink); }
+  a { color: var(--accent-ink); }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+
+  /* ============ 模板卡与交互演示 ============ */
+  .tpl-card { border: 1px solid var(--hair); margin: 18px 0 26px; }
+  .tpl-card.picked { border-color: #2b5a63; background: #11181e; }
+  .tpl-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 14px 16px 10px; }
+  .tpl-head h3 { margin: 0 0 4px; font-size: 15.5px; }
+  .tpl-no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); margin-right: 8px; }
+  .tpl-tag { font-size: 13px; color: var(--dim); max-width: 70ch; }
+  .d-pick { flex: none; font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; color: var(--dim); background: none; border: 1px solid var(--hair); padding: 6px 14px; cursor: pointer; border-radius: 3px; }
+  .d-pick:hover { color: var(--accent-ink); border-color: #2b5a63; }
+  .tpl-card.picked .d-pick { color: var(--accent-ink); border-color: #2b5a63; background: #14222a; }
+  .tpl-notes { padding: 10px 16px 14px; font-size: 13.5px; color: var(--dim); }
+  .tpl-notes b { color: var(--ink); font-weight: 600; }
+
+  .demo-ctl { display: flex; flex-wrap: wrap; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--hair-soft); border-bottom: 1px solid var(--hair-soft); background: #111820; align-items: center; }
+  .ctl-lbl { font-family: var(--display); font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--faint); margin-right: 6px; }
+  .d-btn { font: 12px var(--sans); color: var(--dim); background: #1a232c; border: 1px solid #2c3944; border-radius: 3px; padding: 4px 11px; cursor: pointer; }
+  .d-btn:hover { color: var(--ink); border-color: #3a4a57; }
+  .d-btn.ghost { background: none; }
+
+  .demo-app { position: relative; height: 350px; background: #10151a; display: flex; flex-direction: column; overflow: hidden; font-size: 12.5px; }
+  .dm-top { display: flex; align-items: center; gap: 14px; padding: 0 12px; height: 40px; border-bottom: 1px solid var(--hair-soft); background: #131a21; flex: none; }
+  .dm-brand { font-family: var(--display); font-size: 12.5px; letter-spacing: 0.04em; color: var(--ink); margin-right: 6px; }
+  .dm-brand .qb { color: var(--accent-ink); }
+  .dm-tab { color: var(--faint); font-size: 12px; padding: 3px 2px; border-bottom: 1px solid transparent; }
+  .dm-tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .dm-top-r { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--faint); }
+  .dm-rows { flex: 1; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; overflow: hidden; min-height: 0; }
+  .dm-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: #131a21; border: 1px solid var(--hair-soft); border-radius: 3px; color: var(--dim); }
+  .dm-row .nm { color: var(--ink); }
+  .dm-row .sz { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-left: auto; }
+  .dm-chip { font-family: var(--display); font-size: 10px; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 2px; background: #16232a; color: var(--accent-ink); border: 1px solid #2b4048; }
+  .dm-chip.g { background: #16211b; color: var(--ok); border-color: #2b4034; }
+  .dm-status { height: 32px; border-top: 1px solid var(--hair-soft); background: #12181f; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 11.5px; color: var(--faint); flex: none; }
+  .dm-sb-r { display: flex; align-items: center; gap: 12px; }
+
+  .dm-toasts { position: absolute; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; width: 320px; pointer-events: none; z-index: 6; }
+  .dm-toast { pointer-events: auto; display: flex; gap: 8px; align-items: flex-start; background: #1a232c; border: 1px solid #34424e; padding: 7px 11px; border-radius: 4px; font-size: 12px; color: var(--ink); animation: dtoast-in .18s ease; max-width: 100%; text-align: left; }
+  .dm-toast svg { flex: none; margin-top: 2px; }
+  .dm-toast.error svg { color: var(--err); }
+  .dm-toast.timeout svg { color: var(--warn); }
+  .dm-toast.out { opacity: 0; transform: translateY(4px); transition: opacity .15s ease, transform .15s ease; }
+  @keyframes dtoast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .dm-entry { position: relative; display: inline-flex; align-items: center; gap: 5px; color: var(--dim); background: transparent; border: 1px solid transparent; border-radius: 3px; cursor: pointer; padding: 4px 7px; font: 12px var(--sans); }
+  .dm-entry:hover { color: var(--ink); border-color: #34424e; background: #1a232c; }
+  .dm-entry.has-unread { color: var(--accent-ink); }
+  .dm-badge { display: none; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 3px; background: #7e3f3b; color: #f2dcda; font: 600 10px/15px var(--mono); text-align: center; }
+  .dm-entry.has-unread .dm-badge { display: inline-block; }
+  #h1 .dm-entry { position: absolute; right: 12px; bottom: 12px; width: 32px; height: 32px; justify-content: center; padding: 0; background: #1a232c; border-color: #34424e; z-index: 7; }
+  #h1 .dm-entry.has-unread { border-color: #2b5a63; }
+  #h1 .dm-toasts { bottom: 52px; }
+
+  .dm-panel { position: absolute; width: 340px; background: #161e26; border: 1px solid #34424e; border-radius: 4px; z-index: 8; display: none; }
+  .dm-panel.on { display: block; }
+  .dm-panel-h { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid #232f39; font-size: 12px; color: var(--ink); }
+  .dm-panel-h .dm-count { font-family: var(--mono); font-size: 10.5px; color: var(--faint); font-weight: 400; margin-left: 6px; }
+  .dm-clear { display: inline-flex; align-items: center; gap: 4px; font: 11px var(--sans); color: var(--faint); background: none; border: 1px solid transparent; border-radius: 3px; padding: 2px 7px; cursor: pointer; }
+  .dm-clear:hover { color: var(--ink); border-color: #34424e; }
+  .dm-list { max-height: 196px; overflow-y: auto; }
+  .dm-item { display: flex; gap: 8px; padding: 6px 10px; border-bottom: 1px solid #1c252d; font-size: 12px; align-items: flex-start; }
+  .dm-item:last-child { border-bottom: none; }
+  .dm-item.fresh { background: #1a2530; transition: background 1.2s ease; }
+  .dm-item .t { font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; padding-top: 2px; }
+  .dm-item .dot { width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; flex: none; }
+  .dm-item.kind-error .dot { background: var(--err); }
+  .dm-item.kind-timeout .dot { background: var(--warn); }
+  .dm-item .x { flex: 1; color: var(--dim); word-break: break-all; }
+  .dm-cp { flex: none; display: inline-flex; align-items: center; gap: 3px; font: 10.5px var(--sans); color: var(--faint); background: none; border: 1px solid transparent; border-radius: 3px; padding: 2px 5px; cursor: pointer; opacity: 0; min-width: 30px; justify-content: center; }
+  .dm-item:hover .dm-cp { opacity: 1; }
+  .dm-cp:hover { color: var(--ink); border-color: #34424e; }
+  .dm-cp.ok { color: var(--ok); opacity: 1; }
+  .dm-empty { padding: 16px 12px; text-align: center; color: var(--faint); font-size: 12px; }
+
+  #h1 .dm-panel { right: 12px; bottom: 52px; }
+  #h2 .dm-panel { right: 12px; bottom: 44px; }
+  #h3 .dm-panel { right: 12px; top: 48px; }
+  #h2 .dm-sb-entry { border-color: #34424e; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>结论与拍板点</a>
+    <a href="#s2"><span class="no">02</span>复验结论与问题面</a>
+    <a href="#s3"><span class="no">03</span>方案与取舍</a>
+    <a href="#s4"><span class="no">04</span>模板三选一(可交互)</a>
+    <a href="#s5"><span class="no">05</span>分步实施</a>
+    <a href="#s6"><span class="no">06</span>测试计划(盯死)</a>
+    <a href="#s7"><span class="no">07</span>风险与回滚</a>
+    <a href="#s8"><span class="no">08</span>变更记录</a>
+    <div class="toc-foot">
+      认领 issue 26-10-05-2013<br>
+      口径: 完整方案 + 收 error<br>
+      拍板后实施, 每步一笔提交
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">实施计划 · Open(待拍板 D1/D2)</div>
+    <h1>WEBUI 错误信息历史: toast 单点环形缓冲 + 常驻入口面板</h1>
+    <p class="lede">按 issue 的完整方案落地: 所有错误已在 <code>toast()</code> 单点汇合, 在该单点把 error / timeout 类条目追加进<strong>会话内环形缓冲</strong>(上限 50 条, 不持久化、不进后端); 右下角常驻入口 + 未读徽标 + 列表弹层, 支持单条复制与一键清空; 登录 / 重连清 toasts 时历史保留。本计划同时给出 <strong>3 个可交互模板</strong>(§04, 可直接试用)供拍板入口形态。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-05-2026-plan-webui-toast-error-history</div></div>
+      <div class="item"><div class="k">编制</div><div class="v">2026-10-05 20:26</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">认领 issue</div><div class="v"><a href="../issues/26-10-05-2013-feat-webui-toast-error-history.html">26-10-05-2013-feat-webui-toast-error-history</a></div></div>
+      <div class="item"><div class="k">涉及面</div><div class="v">webui 前端 · 三皮肤共用层</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论与拍板点</h2>
+    <p><strong>方案一句话</strong>: 在 <code>ui_feedback.js</code> 的 <code>toast()</code> / <code>_finishToast()</code> 两个既有单点上挂收集钩子, error / timeout 类条目进 Vue 实例内的环形缓冲(新在上, cap 50); 入口 + 面板 UI 全部走 shared 层(<code>overlays.html</code> + <code>console_hub.css</code>), 三皮肤零差异自动生效; 全程零后端改动、零持久化、零新配置键。</p>
+    <p><strong>已定口径</strong>(本轮用户指示 + issue §06 倾向): 按完整方案实施; 收集范围 = <strong>收 error</strong>(详见 §03 口径表: error 即时错误 + busy 结算出的超时/失败终态; warn 不收)。</p>
+    <div class="decision">
+      <div class="d-row"><span class="d-key">D1 · 入口模板三选一</span><span class="d-val" id="d1-state">待拍板 —— 在 §04 试用三张可交互模板后选定(推荐 T2)</span></div>
+      <div class="d-row"><span class="d-key">D2 · 断线/重连事件源</span><span class="d-val">待拍板 —— 推荐<strong>采纳</strong>: SSE 断线沿发一条 error toast「与服务的推送连接断开, 正在自动重连…」, 自动落进错误历史(挂机型断线自此可追溯); 恢复成功不广播。不做则 §05 S4 跳过, 其余不受影响</span></div>
+    </div>
+    <p class="hint">D1 可先在 §04 的演示里点「就选这个」标记(仅本页内存标记, 正式拍板请在会话里回复)。D2 若不采纳, 断线仍静默重连, 与现状一致 —— 历史功能本身不依赖它。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>复验结论与问题面</h2>
+    <p>认领后按防过期原则重跑 issue 全部锚点(取证 <strong>2026-10-05 20:26</strong>, 基线 = 同步后 HEAD <code>2130450c</code>): <strong>六条全部复现</strong>, 行号微漂如下。</p>
+    <table>
+      <tr><th>issue 锚点(取证 20:13)</th><th>复验(20:26)</th><th>结论</th></tr>
+      <tr><td><code>toast(text, kind, ms, opts)</code> 单点 · <code>ui_feedback.js:29</code></td><td>:29 未漂</td><td class="yes">复现</td></tr>
+      <tr><td><code>_dropToast(id)</code> 退场销毁 · :46</td><td>:46 未漂</td><td class="yes">复现</td></tr>
+      <tr><td><code>.toast-wrap</code> 模板 · <code>shared/tpl/overlays.html:2</code></td><td>:2 未漂</td><td class="yes">复现</td></tr>
+      <tr><td><code>.toast-wrap</code> 定位样式 · 三皮肤 CSS</td><td>atlas 520 / prism 219 / console 443</td><td class="yes">复现</td></tr>
+      <tr><td>登录/重连清空 · <code>shared/auth.js:68</code> <code>this.toasts = []</code></td><td>:68 未漂</td><td class="yes">复现</td></tr>
+      <tr><td>断线静默重连 · <code>shared/polling.js:48</code> <code>es.onerror</code></td><td>:48 未漂</td><td class="yes">复现</td></tr>
+    </table>
+    <h3>认领后新增的实施面事实(issue 未载)</h3>
+    <ul>
+      <li><strong>停留时长已被今日另一轮改动抬升</strong>(20:07, <code>TOAST_MS_FLOOR</code>): error / timeout 下限 12s、warn 8s。issue 里「8~9s 自动消失」的表述被取代, 但 12s 不改变「错过 = 无处可查」—— 挂机型场景下用户几分钟才看一眼, 历史缺口原样成立。</li>
+      <li><strong>sticky 结算链是第二个收集必经点</strong>: 常驻「等待中」条由 <code>_finishToast(id, kind, text)</code> 结算, 调用方 3 个文件(commands.js:511/521/728/732、drawer.js:269/270、delete_flow.js:191/195), 结算 kind 可落 <code>error</code>/<code>timeout</code> —— 只钩 <code>toast()</code> 会漏掉「强制汇报超时」「批量删除未完全成功」这类最重要的终态。</li>
+      <li><strong>模板注入机制</strong>: 三皮肤 <code>index.html</code> 各带 <code>tpl-manifest</code> JSON, boot.js 按 <code>into: app</code> 注入; <code>overlays.html</code> 已在三皮肤清单里 —— 面板本体放这里 = <strong>零清单改动</strong>, 三皮肤自动生效。</li>
+      <li><strong>状态声明单点</strong>: <code>shared/state.js:171</code> <code>toasts: []</code> —— 新状态字段加在同类位置(data 不进 mixin, pitfalls/web-ui/frontend-split)。</li>
+      <li><strong>样式三皮肤单点</strong>: <code>shared/console_hub.css</code> 三皮肤同载(.aq-tip 先例), 面板样式落这里, 颜色走各皮肤令牌。</li>
+      <li><strong>存量图标够用</strong>: sprite 已有 <code>#i-history</code> <code>#i-bell</code> <code>#i-warn</code> <code>#i-clock</code> <code>#i-copy</code> <code>#i-close</code>, 入口与面板零新图标。</li>
+      <li><strong>复制助手现成</strong>: <code>commands.js:635 _copyText()</code> + <code>:660 copyText()</code>(模板安全封装, Vue 3.5 下划线方法坑已修), 面板复制钮直接复用。</li>
+      <li><strong>状态栏图标钮有直接先例</strong>: <code>statusbar.html</code> 的 <code>.sb-hist</code> / <code>.sb-qb</code>(<code>@click.stop</code> + title), 模板 T2 的入口照此范式。</li>
+      <li><strong>直接以 <code>timeout</code> kind 发出的 toast 全库仅 1 处</strong>: config_editor.js:204(保存热重载「部分字段未写入」回执)。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>方案与取舍(完整方案 × 收 error 口径)</h2>
+    <h3>数据层: 收集判定口径</h3>
+    <table>
+      <tr><th>来源</th><th>kind</th><th>收?</th><th>例</th></tr>
+      <tr><td>直接发出的错误</td><td><code>error</code></td><td class="yes">收</td><td>「批量跳检未完成: …」「打开目标文件夹失败: …」</td></tr>
+      <tr><td>sticky 等待结算的失败 / 超时终态</td><td><code>error</code> / <code>timeout</code></td><td class="yes">收</td><td>「强制汇报超时」「导出: 成功 2 / 失败 1」「批量删除未完全成功」</td></tr>
+      <tr><td>未完全成功回执</td><td><code>timeout</code></td><td class="yes">收</td><td>「已保存并热重载; X 为程序托管字段, 本次未写入」(config_editor.js:204)</td></tr>
+      <tr><td>提醒类</td><td><code>warn</code></td><td class="no">不收</td><td>「站点已存在」类 —— 用户本轮拍板「收 error」, 与 issue §06「只收 error 最克制」一致</td></tr>
+      <tr><td>成功 / 进行中 / 常驻等待</td><td><code>ok</code> / <code>info</code> / <code>busy</code></td><td class="no">不收</td><td>成功回执瞬时语义即可; busy 未结算无终态可收</td></tr>
+    </table>
+    <p>口径实现为单点常量 <code>ERR_HISTORY_KINDS = { error: 1, timeout: 1 }</code> —— <code>timeout</code> 在本库的实际语义是「超时/未完全成功终态」而非纯超时, 属 issue §06 倾向句里「busy 结算出的超时/失败终态」的覆盖面; 若拍板要严格到字面 error-only, 删掉 <code>timeout: 1</code> 一个键即可(守阵按 KINDS 判, 不与具体键集耦合)。</p>
+    <h3>数据结构与会话语义</h3>
+    <pre><code>// state.js data 新增(与 toasts 同区):
+_errHistory: [],   // 环形缓冲, 新在上: { id, seq, ts, kind, text }
+_errSeq: 0,        // 条目自增序号(展示排序兜底)
+_errUnread: 0,     // 面板关闭期新增的错误数(徽标)
+errPanelOpen: false,
+
+// ui_feedback.js:
+ERR_HISTORY_CAP = 50,
+ERR_HISTORY_KINDS = { error: 1, timeout: 1 },
+_recordErrorToast(id, kind, text)  // upsert: 同 id 更新(emit 后又 settle 的条目), 否则 unshift
+                                   // cap: length &gt; 50 时 pop 最旧; 面板关着时 _errUnread++</code></pre>
+    <ul>
+      <li><strong>收集时机 = 发出即收, 结算即更</strong>: issue 原建议「退场时追加」, 但 <code>auth.js:68</code> 的 <code>this.toasts = []</code> 绕过 <code>_dropToast</code> —— 挂退场会漏掉重连前最后一批错误(恰恰是挂机型最需要追溯的一批)。发出即收对齐「模拟重连清 toast 不清历史」的演示语义。</li>
+      <li><strong>不持久化</strong>: 会话内存级, 刷新即失(预期语义, 完整方案拍板过); 全程审计仍由后端日志文件承担。守阵钉死「历史面零 localStorage / sessionStorage 写」防未来漂移。</li>
+      <li><strong>清空时机</strong>: 登录 / 重连路径不动(<code>auth.js</code> 零改动), 历史跨重连存活; 唯一清除路径 = 面板「一键清空」(低风险动作, 不加确认框)。</li>
+    </ul>
+    <h3>入口与面板</h3>
+    <ul>
+      <li>入口 = 常驻图标钮 + 未读徽标(面板关闭期每条 +1, 打开即清零; 无未读时静默 —— 保守默认, 不打扰)。</li>
+      <li>面板 = 列表弹层: 时间(HH:MM:SS) + kind 色点 + 文本 + 行内复制(<code>copyText(text, '错误详情')</code>); 头部「N 条 · 清空」; 空态「暂无错误记录」。</li>
+      <li>关闭交互 = Esc + 点击面板外; 面板是非模态浮层, 不上遮罩不拦滚动(避开 modal-mask-click-self-drag 一族问题)。</li>
+      <li>z-index 取紧邻 <code>toast-wrap</code>(120)之上的一档, 实施时核 components.css 现行层级表后定值。</li>
+    </ul>
+    <h3>不做清单(完整方案的「不建议」边界)</h3>
+    <ul>
+      <li>后端持久化 / 日志端点代理、错误分级过滤、跨会话保留 —— 单用户个人工具属过度设计。</li>
+      <li>warn 收集 —— 拍板收 error(见口径表)。</li>
+      <li>新配置键(容量 50 写常量; 要调档改一行)。</li>
+    </ul>
+    <h3>改动文件 → 角色对照(单点纪律)</h3>
+    <table>
+      <tr><th>文件</th><th>角色</th></tr>
+      <tr><td><code>shared/state.js</code></td><td>4 个新 data 字段声明(状态声明单点)</td></tr>
+      <tr><td><code>shared/ui_feedback.js</code></td><td>收集原语 + toast()/_finishToast() 两钩子(数据流单点)</td></tr>
+      <tr><td><code>shared/tpl/overlays.html</code></td><td>面板本体(三皮肤 manifest 已含, 零清单改动)</td></tr>
+      <tr><td><code>shared/tpl/statusbar.html</code> 或 <code>topbar.html</code></td><td>入口挂点(按 D1: T2 → statusbar / T3 → topbar / T1 → 与面板同放 overlays)</td></tr>
+      <tr><td><code>shared/console_hub.css</code></td><td>样式单点(三皮肤同载, 令牌取 --bg-elev / --border-strong / --error 等)</td></tr>
+      <tr><td><code>shared/auth.js</code></td><td><strong>不动</strong>(历史跨登录/重连保留的关键)</td></tr>
+      <tr><td><code>shared/polling.js</code></td><td>仅 D2 采纳时动(es.onerror 断线沿 emit)</td></tr>
+    </table>
+    <p class="hint">黄金法则对照: 零新配置键(fail-fast 面不变) · 无跨轮状态(state_file 不涉) · 单写线程(全在 Vue 实例主线程) · 保守默认(无未读时入口静默) · 幂等(收集是纯追加 + upsert, 重复 settle 不产生重复条目)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>模板三选一(可交互试用)</h2>
+    <p>三张卡内的演示<strong>完全可交互</strong>: 点「触发一条错误」→ toast 右下弹出、约 3.2s 退场(演示压缩了真实的 12s 下限)→ <strong>同刻落入历史</strong>; 入口出未读徽标; 点入口开面板, 可单条复制 / 一键清空; 「模拟重连」只清可见 toast 而历史存活 —— 对应 <code>auth.js</code> 清 toasts 不清历史的既定设计。差异维度 = <strong>入口锚点 + 面板形态</strong>, 数据层完全同构(§03), 换模板只影响 S2 的挂点文件与面板定位。</p>
+
+    <article class="tpl-card" id="card-t1">
+      <header class="tpl-head">
+        <div>
+          <h3><span class="tpl-no">T1</span>toast 同域锚点 · 「历史就是留下的 toast」</h3>
+          <p class="tpl-tag">入口钮与 toast 同一落点(右下角 20px 域), 有错时 toast 排在入口上方堆叠; 面板向上展开, 复用 toast 的表面 / 宽度 / 圆角语言。</p>
+        </div>
+        <button class="d-pick" data-pick="T1" type="button">就选这个</button>
+      </header>
+      <div class="demo-ctl">
+        <span class="ctl-lbl">演示控制</span>
+        <button class="d-btn" data-act="one" type="button">触发一条错误</button>
+        <button class="d-btn" data-act="burst" type="button">批量失败 ×3</button>
+        <button class="d-btn" data-act="reconn" type="button">模拟重连(清 toast 不清历史)</button>
+        <button class="d-btn ghost" data-act="reset" type="button">重置演示</button>
+      </div>
+      <div class="demo-app" id="h1">
+        <div class="dm-top">
+          <span class="dm-brand">auto-<span class="qb">qb</span></span>
+          <span class="dm-tab active">种子</span><span class="dm-tab">分组</span><span class="dm-tab">追剧</span>
+        </div>
+        <div class="dm-rows">
+          <div class="dm-row"><span class="dm-chip g">做种</span><span class="nm">Some.Site.Package.2026.1080p</span><span class="sz">4.2 GB</span></div>
+          <div class="dm-row"><span class="dm-chip">下载</span><span class="nm">Another.Group.Release.2160p</span><span class="sz">18.7 GB</span></div>
+          <div class="dm-row"><span class="dm-chip g">做种</span><span class="nm">Third.Torrent.Name.2025</span><span class="sz">812 MB</span></div>
+        </div>
+        <div class="dm-status"><span>今日 ↓ 1.2 GB · ↑ 3.4 GB</span><span class="dm-sb-r"><span>↓ 2.1 MB/s</span><span>↑ 8.4 MB/s</span></span></div>
+        <div class="dm-toasts"></div>
+        <button class="dm-entry" type="button" aria-label="错误历史" title="错误历史">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.6"/><path d="M8 5v3.2l2.1 1.6"/></svg>
+          <span class="dm-badge"></span>
+        </button>
+        <div class="dm-panel">
+          <div class="dm-panel-h"><span>错误历史<b class="dm-count"></b></span><button class="dm-clear" type="button"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.8 4.5l.6 8h5.2l.6-8"/></svg>清空</button></div>
+          <div class="dm-list"></div>
+          <div class="dm-empty">暂无错误记录 —— 点上方「触发一条错误」试试</div>
+        </div>
+      </div>
+      <div class="tpl-notes">
+        <p><b>形态</b>: 面板与 toast 同一种表面(同宽 380px 档、同底色描边), 语义上「历史 = 退场后的 toast」, 视觉连续性最强, 最贴 issue 原文的「右下角小入口弹层」。<b>代价</b>: 浮空按钮常驻右下角, 零错误时是一处独立噪音; 入口与 toast 堆叠同域, 几何耦合最紧(有 toast 在场时面板开合要处理与堆叠的层叠序)。<b>挂点</b>: 入口与面板都放 <code>overlays.html</code>(<code>.toast-wrap</code> 兄弟节点, app 根层)。</p>
+      </div>
+    </article>
+
+    <article class="tpl-card" id="card-t2">
+      <header class="tpl-head">
+        <div>
+          <h3><span class="tpl-no">T2</span>状态栏徽标 + 上拉面板 · 可观测性归位(推荐)</h3>
+          <p class="tpl-tag">入口并入状态栏右段(与速度组同排, <code>.sb-hist</code> / <code>.sb-qb</code> 同款范式); 面板从状态栏上方右侧拉开, 空间更大更可读。</p>
+        </div>
+        <button class="d-pick" data-pick="T2" type="button">就选这个</button>
+      </header>
+      <div class="demo-ctl">
+        <span class="ctl-lbl">演示控制</span>
+        <button class="d-btn" data-act="one" type="button">触发一条错误</button>
+        <button class="d-btn" data-act="burst" type="button">批量失败 ×3</button>
+        <button class="d-btn" data-act="reconn" type="button">模拟重连(清 toast 不清历史)</button>
+        <button class="d-btn ghost" data-act="reset" type="button">重置演示</button>
+      </div>
+      <div class="demo-app" id="h2">
+        <div class="dm-top">
+          <span class="dm-brand">auto-<span class="qb">qb</span></span>
+          <span class="dm-tab active">种子</span><span class="dm-tab">分组</span><span class="dm-tab">追剧</span>
+        </div>
+        <div class="dm-rows">
+          <div class="dm-row"><span class="dm-chip g">做种</span><span class="nm">Some.Site.Package.2026.1080p</span><span class="sz">4.2 GB</span></div>
+          <div class="dm-row"><span class="dm-chip">下载</span><span class="nm">Another.Group.Release.2160p</span><span class="sz">18.7 GB</span></div>
+          <div class="dm-row"><span class="dm-chip g">做种</span><span class="nm">Third.Torrent.Name.2025</span><span class="sz">812 MB</span></div>
+        </div>
+        <div class="dm-status">
+          <span>今日 ↓ 1.2 GB · ↑ 3.4 GB</span>
+          <span class="dm-sb-r">
+            <span>↓ 2.1 MB/s</span><span>↑ 8.4 MB/s</span>
+            <button class="dm-entry dm-sb-entry" type="button" aria-label="错误历史" title="错误历史">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.6"/><path d="M8 5v3.2l2.1 1.6"/></svg>
+              <span class="dm-badge"></span>
+            </button>
+          </span>
+        </div>
+        <div class="dm-toasts"></div>
+        <div class="dm-panel">
+          <div class="dm-panel-h"><span>错误历史<b class="dm-count"></b></span><button class="dm-clear" type="button"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.8 4.5l.6 8h5.2l.6-8"/></svg>清空</button></div>
+          <div class="dm-list"></div>
+          <div class="dm-empty">暂无错误记录 —— 点上方「触发一条错误」试试</div>
+        </div>
+      </div>
+      <div class="tpl-notes">
+        <p><b>形态</b>: 右下角落点语义不变(状态栏右段就在右下角), 但入口嵌在既有信息排里 —— 常驻可发现、零错误时只是一枚安静图标, 无浮空噪音; 状态栏本就是「今日流量 / 速度 / 历史入口」的可观测性 home, 语义归位。面板可以更高(表格式时间 + 文本 + 行内复制)。状态栏图标钮范式(<code>.sb-hist</code>/<code>.sb-qb</code>)现成, 实现挂点最干净。<b>代价</b>: 面板 bottom 偏移须按 <code>--statusbar-h</code> 令牌算(不写死像素, 三皮肤核对); 面板与 toast 堆叠同处右下, 需各归其位(toast 贴角、面板贴栏)。<b>挂点</b>: 入口 <code>statusbar.html</code> 右段, 面板 <code>overlays.html</code>。</p>
+      </div>
+    </article>
+
+    <article class="tpl-card" id="card-t3">
+      <header class="tpl-head">
+        <div>
+          <h3><span class="tpl-no">T3</span>顶栏铃铛 + 下拉列表 · 通知中心惯例</h3>
+          <p class="tpl-tag">入口放顶栏右侧(铃铛 + 徽标), 面板从铃铛下方右对齐下拉 —— 最常规的通知中心模式, 可发现性最强。</p>
+        </div>
+        <button class="d-pick" data-pick="T3" type="button">就选这个</button>
+      </header>
+      <div class="demo-ctl">
+        <span class="ctl-lbl">演示控制</span>
+        <button class="d-btn" data-act="one" type="button">触发一条错误</button>
+        <button class="d-btn" data-act="burst" type="button">批量失败 ×3</button>
+        <button class="d-btn" data-act="reconn" type="button">模拟重连(清 toast 不清历史)</button>
+        <button class="d-btn ghost" data-act="reset" type="button">重置演示</button>
+      </div>
+      <div class="demo-app" id="h3">
+        <div class="dm-top">
+          <span class="dm-brand">auto-<span class="qb">qb</span></span>
+          <span class="dm-tab active">种子</span><span class="dm-tab">分组</span><span class="dm-tab">追剧</span>
+          <span class="dm-top-r">
+            <button class="dm-entry" type="button" aria-label="错误历史" title="错误历史">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.2a3.8 3.8 0 0 0-3.8 3.8v2.8L3 11h10l-1.2-2.2V6A3.8 3.8 0 0 0 8 2.2z"/><path d="M6.7 13a1.4 1.4 0 0 0 2.6 0"/></svg>
+              <span class="dm-badge"></span>
+            </button>
+            <span>设置</span>
+          </span>
+        </div>
+        <div class="dm-rows">
+          <div class="dm-row"><span class="dm-chip g">做种</span><span class="nm">Some.Site.Package.2026.1080p</span><span class="sz">4.2 GB</span></div>
+          <div class="dm-row"><span class="dm-chip">下载</span><span class="nm">Another.Group.Release.2160p</span><span class="sz">18.7 GB</span></div>
+          <div class="dm-row"><span class="dm-chip g">做种</span><span class="nm">Third.Torrent.Name.2025</span><span class="sz">812 MB</span></div>
+        </div>
+        <div class="dm-status"><span>今日 ↓ 1.2 GB · ↑ 3.4 GB</span><span class="dm-sb-r"><span>↓ 2.1 MB/s</span><span>↑ 8.4 MB/s</span></span></div>
+        <div class="dm-toasts"></div>
+        <div class="dm-panel">
+          <div class="dm-panel-h"><span>错误历史<b class="dm-count"></b></span><button class="dm-clear" type="button"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.8 4.5l.6 8h5.2l.6-8"/></svg>清空</button></div>
+          <div class="dm-list"></div>
+          <div class="dm-empty">暂无错误记录 —— 点上方「触发一条错误」试试</div>
+        </div>
+      </div>
+      <div class="tpl-notes">
+        <p><b>形态</b>: 惯例最强(一切通知中心都长这样), 新用户零学习成本; 徽标在顶栏, 视线不用下移。<b>代价</b>: 顶栏是导航区, 「铃铛」的全局通知语义会诱导未来把非错误通知也塞进来(范围蠕变入口); 鼠标行程最长(右上开面板看右下弹过的错); 与既有 <code>.aq-tip</code> / 右键菜单的顶栏浮层序要核对。<b>挂点</b>: 入口 <code>topbar.html</code> 右组, 面板 <code>overlays.html</code>(注意 sticky-head / service-banner 的层叠上下文)。</p>
+      </div>
+    </article>
+
+    <h3>横向对比</h3>
+    <table>
+      <tr><th>维度</th><th>T1 toast 同域</th><th>T2 状态栏徽标(推荐)</th><th>T3 顶栏铃铛</th></tr>
+      <tr><td>入口锚点</td><td>右下角浮空钮(toast 域)</td><td>状态栏右段(右下角语义不变)</td><td>顶栏右侧</td></tr>
+      <tr><td>面板形态</td><td>向上开, toast 同宽同表面</td><td>贴栏上拉, 空间最大</td><td>铃下下拉, 右对齐</td></tr>
+      <tr><td>可发现性</td><td>中(角落小钮)</td><td>高(信息排内常驻)</td><td>最高(惯例位置)</td></tr>
+      <tr><td>零错误时噪音</td><td>浮空钮常驻 = 有</td><td>无(嵌排内一枚图标)</td><td>无(嵌排内一枚图标)</td></tr>
+      <tr><td>与既有体系关系</td><td>与 toast 视觉同域最自然</td><td>.sb-hist/.sb-qb 范式现成</td><td>通知语义有范围蠕变诱导</td></tr>
+      <tr><td>实现挂点</td><td>overlays.html 一处</td><td>statusbar.html + overlays.html</td><td>topbar.html + overlays.html</td></tr>
+      <tr><td>主要风险</td><td>与 toast 堆叠几何耦合</td><td>面板偏移须按 --statusbar-h 算</td><td>sticky-head 层叠上下文</td></tr>
+    </table>
+    <p><strong>推荐 T2</strong>: 「右下角」的落点语义与 issue 一致, 但入口借状态栏既有信息排获得常驻可发现性而不添浮空噪音; 可观测性入口归位可观测性区域(状态栏已有今日流量 / 速度 / 两类历史入口); 实现范式现成、风险面最小。T1 视觉连续性最好, 适合把「历史就是 toast 的延长」当第一语义的情形; T3 适合未来确要扩展成全局通知中心的情形(本计划明确不做)。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>分步实施(每步一笔提交, 拍板后执行)</h2>
+    <h3>S1 · 数据层与收集钩子</h3>
+    <ul>
+      <li><code>shared/state.js</code>: data 新增 <code>_errHistory / _errSeq / _errUnread / errPanelOpen</code>(§03 结构)。</li>
+      <li><code>shared/ui_feedback.js</code>: 常量 <code>ERR_HISTORY_CAP = 50</code> + <code>ERR_HISTORY_KINDS</code>; 原语 <code>_recordErrorToast(id, kind, text)</code>(upsert by id + cap 裁剪 + 未读记账)与 <code>_clearErrorHistory()</code>; 钩子两处 —— <code>toast()</code> emit 时 kind ∈ KINDS 即收, <code>_finishToast()</code> 结算时 kind ∈ KINDS 即 upsert(覆盖 sticky busy → 超时/失败链)。</li>
+      <li><code>auth.js</code> <strong>零改动</strong>(历史跨重连存活的既定设计)。</li>
+      <li><strong>验收</strong>(Node 探针驱动生产原语, 同 20:07 轮验证范式): ①error emit 即入历史; ②sticky busy 结算 timeout 入历史且 upsert 无重复; ③第 51 条挤掉最旧; ④面板关闭期未读 +1、打开清零; ⑤清空后全归零; ⑥登录/重连清 toasts 后历史原样。</li>
+    </ul>
+    <h3>S2 · 入口与面板 UI(按 D1 拍板的模板实施)</h3>
+    <ul>
+      <li>面板本体进 <code>shared/tpl/overlays.html</code>(app 根层, 与 .toast-wrap 兄弟; 规避 clip-path/transform 包含块坑 —— pitfalls/web-ui/clip-path-clips-fixed); Vue 绑定 <code>errPanelOpen</code> / <code>_errHistory</code> / <code>_errUnread</code>。</li>
+      <li>入口按模板: <strong>T1</strong> → overlays.html 内 .toast-wrap 域浮空钮; <strong>T2</strong> → <code>statusbar.html</code> 右段 <code>.sb-err</code>(照 .sb-hist/.sb-qb 范式: 图标 + title + @click.stop + 徽标); <strong>T3</strong> → <code>topbar.html</code> 右组铃铛。</li>
+      <li>样式单点 <code>shared/console_hub.css</code>: 面板/入口/徽标/列表段, 颜色全走皮肤令牌(--bg-elev / --border-strong / --error / --warn), 三皮肤零差异; z-index 核 components.css 层级表取 toast-wrap(120) 之上相邻档。</li>
+      <li>交互: 开面板清未读; Esc + 点外关闭(非模态, 不上遮罩); T2 面板 bottom 偏移按 <code>--statusbar-h</code> 令牌计算。</li>
+      <li><strong>验收</strong>: 三皮肤(atlas/prism/console)各开一次 → 入口可见、徽标准确、面板开合 / 点外关 / Esc 关全通; 有 toast 在场时面板层叠正确。</li>
+    </ul>
+    <h3>S3 · 条目交互</h3>
+    <ul>
+      <li>行内复制: 复用 <code>copyText(text, '错误详情')</code>(commands.js:660 模板安全封装); 行 hover 显钮。</li>
+      <li>一键清空: <code>_clearErrorHistory()</code>, 不加确认框; 时间显示 <code>fmtErrTs(ts)</code> → HH:MM:SS(展示口径单点 method); 空态文案。</li>
+      <li><strong>验收</strong>: 复制拿到完整原文; 清空后徽标/计数/空态同步; 50 条滚动下列表流畅(纯静态列表, 无虚拟化需求)。</li>
+    </ul>
+    <h3>S4 · 断线事件源(拍板 D2 后, 可整步跳过)</h3>
+    <ul>
+      <li><code>shared/polling.js</code> <code>es.onerror</code>: 以 connected 状态位取<strong>沿</strong>(断线沿 emit 一次, 重试期不重复): <code>toast('与服务的推送连接断开, 正在自动重连…', 'error')</code> —— 自动落进历史; 恢复成功静默。</li>
+      <li><strong>验收</strong>: 停后端 → 一条断线错误入历史; 重连风暴期无重复; 恢复后无新条目。</li>
+    </ul>
+    <h3>S5 · 守阵</h3>
+    <ul>
+      <li>新文件 <code>tests/test_webui_error_history.py</code>(静态守阵范式, 同 button-system / toast-floor 先例; 文件头 docstring 同步「## 测试计划」清单 —— AGENTS 硬要求): 5 条守阵见 §06。</li>
+      <li><strong>红验</strong>: 摘钩子 / 去 cap 裁剪 / 加 localStorage 写 / 摘入口, 逐条先红后恢复全绿。</li>
+    </ul>
+    <h3>S6 · 收尾</h3>
+    <ul>
+      <li><code>commands run test.full</code> + 基线切片(增量预计 +5 = §06 守阵); 三皮肤真机走查; issue 置 Done 并回写「实际修法 / 验证方式 / 测试数字」; progress 回写; <code>commands run kb.index</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>测试计划(盯死)</h2>
+    <table>
+      <tr><th>守阵</th><th>钉住什么</th><th>红验探针</th></tr>
+      <tr><td><code>test_frontend_error_history_hooks_present</code></td><td>ui_feedback.js 含 <code>_recordErrorToast</code> 且 <code>toast()</code> 与 <code>_finishToast()</code> 两处都接线(漏一处的回归 = sticky 链或直接链丢历史)</td><td>摘任一钩子 → 红</td></tr>
+      <tr><td><code>test_frontend_error_history_cap_ring</code></td><td><code>ERR_HISTORY_CAP</code> 存在且裁剪为「超限 pop」(环形语义, 防改成无界增长)</td><td>去裁剪行 → 红</td></tr>
+      <tr><td><code>test_frontend_error_history_no_persistence</code></td><td>shared 层 localStorage/sessionStorage 写入计数不增(历史语义钉死在会话内存)</td><td>加一条 localStorage 写 → 红</td></tr>
+      <tr><td><code>test_frontend_error_history_entry_wired</code></td><td>D1 模板对应 tpl 有入口钮 + 未读徽标绑定; overlays.html 有面板与清空钮</td><td>摘入口或徽标绑定 → 红</td></tr>
+      <tr><td><code>test_frontend_error_history_copy_wired</code></td><td>面板复制钮走 <code>copyText</code>(不是 _copyText —— Vue 模板下划线方法坑)</td><td>换成 _copyText → 红</td></tr>
+    </table>
+    <p>全量回归: <code>commands run test.full</code>, 预期基线数字只增不减(+5)。浏览器侧行为(开合/复制/徽标)以三皮肤真机走查为准, 静态守阵只钉接线存在性。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>风险与回滚</h2>
+    <table>
+      <tr><th>风险</th><th>成因 / 坑源</th><th>处置</th></tr>
+      <tr><td>面板被裁剪或错位</td><td>fixed 后代落进 clip-path / transform 祖先(pitfalls/web-ui/clip-path-clips-fixed)</td><td>面板挂 overlays.html(app 根层, 与 .toast-wrap 同层先例); 不进任何切角/动画容器</td></tr>
+      <tr><td>T2 面板贴栏偏移漂移</td><td>三皮肤 --statusbar-h 若不同值或后续调档</td><td>偏移用令牌 calc, 不写死像素; 守阵不动这类值(视觉项走真机走查)</td></tr>
+      <tr><td>重复条目 / 双计数</td><td>emit 与 settle 双钩子对同一条目各记一次</td><td>upsert by id 钉死; S1 验收例②专测; busy 永不入历史(无终态)</td></tr>
+      <tr><td>徽标状态被轮询重渲染扰动</td><td>30s 级轮询重渲染整表(近期 kb.nav 台账筛选器同族教训)</td><td>_errHistory / _errUnread 是独立 data, 不从轮询数据派生 —— 无派生候选即无 poll-reseed 同族坑</td></tr>
+      <tr><td>剪贴板权限失败</td><td>非安全上下文 navigator.clipboard 不可用</td><td>复用 _copyText 既有降级路径(commands.js 已在真机长期使用)</td></tr>
+    </table>
+    <p><strong>回滚</strong>: 纯增量特性, 无迁移 / 无配置键 / 无后端 —— 按 S1~S5 逐笔 revert 即可; 残留 state 字段无消费方, 无害。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>变更记录</h2>
+    <ul>
+      <li>2026-10-05 20:26 — 创建; 认领 issue <a href="../issues/26-10-05-2013-feat-webui-toast-error-history.html">26-10-05-2013</a>(Open → In Progress), 六锚点复验全复现; 口径按完整方案 + 收 error; 附 3 个可交互模板供 D1 拍板。状态 <strong>Open</strong>(待拍板 D1/D2)。</li>
+      <li>2026-10-05 20:46 — 修演示页缺陷(用户报「演示控制点击无反应」): mount 以 .demo-app 为根找控制钮, 但 .demo-ctl 是卡片级兄弟不在其子树内, 按钮从未绑上事件 —— 改回 .tpl-card 根上查找; 附带把首条「fresh」闪高亮收敛为仅新条目入历史时触发。真浏览器走查后放行。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-05-2026-plan-webui-toast-error-history.html · 认领 memory-bank/issues/26-10-05-2013-feat-webui-toast-error-history.html · 拍板 D1/D2 后按 §05 分步实施
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // 演示引擎: 三张模板卡共用一套参数化实现, 各自独立实例(历史/未读/开关互不影响)。
+  // 样例文案取自生产调用点的真实形态(drawer.js/commands.js/config_editor.js/activeContext 取证)。
+  var POOL = [
+    ["error", "批量跳检未完成: 3 个目标中 1 个失败(任务校验中, 无法跳检)"],
+    ["timeout", "导出: 成功 2 / 失败 1(my_site_abc.torrent)"],
+    ["error", "打开目标文件夹失败: 目标文件不存在或不可访问"],
+    ["error", "强制汇报超时(30s 未确认): Site-A"],
+    ["timeout", "已保存并热重载(变更 2 项); fs.path_map 为程序托管字段, 本次未写入"]
+  ];
+  var ICONS = {
+    error: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2.6 14.2 13H1.8L8 2.6z"/><path d="M8 6.6v3"/><path d="M8 11.4v.01"/></svg>',
+    timeout: '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.6"/><path d="M8 5v3.2l2.1 1.6"/></svg>',
+    copy: '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5.5" y="5.5" width="7" height="7" rx="1"/><path d="M3.5 10.5v-7h7"/></svg>'
+  };
+  var DEMO_MS = 3200;
+
+  function fallbackCopy(text, done) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { void e; }
+    ta.remove();
+    done();
+  }
+
+  function mount(harness) {
+    var q = function (s) { return harness.querySelector(s); };
+    var wrap = q(".dm-toasts"), panel = q(".dm-panel"), list = q(".dm-list"),
+        entry = q(".dm-entry"), badge = q(".dm-badge"), countEl = q(".dm-count"),
+        emptyEl = q(".dm-empty"), clearBtn = q(".dm-clear");
+    var hist = [], unread = 0, seq = 0, poolIdx = 0, open = false;
+
+    function nowText() { var d = new Date(); return d.toTimeString().slice(0, 8); }
+
+    function render(grew) {
+      list.textContent = "";
+      hist.forEach(function (it, i) {
+        var row = document.createElement("div");
+        row.className = "dm-item kind-" + it.kind + (grew && i === 0 ? " fresh" : "");
+        var t = document.createElement("span"); t.className = "t"; t.textContent = it.ts;
+        var dot = document.createElement("span"); dot.className = "dot";
+        var x = document.createElement("span"); x.className = "x"; x.textContent = it.text;
+        var cp = document.createElement("button");
+        cp.type = "button"; cp.className = "dm-cp"; cp.innerHTML = ICONS.copy; cp.title = "复制全文";
+        cp.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          var done = function () {
+            cp.classList.add("ok"); cp.textContent = "已复制";
+            setTimeout(function () { cp.classList.remove("ok"); cp.innerHTML = ICONS.copy; }, 900);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(it.text).then(done, function () { fallbackCopy(it.text, done); });
+          } else fallbackCopy(it.text, done);
+        });
+        row.appendChild(t); row.appendChild(dot); row.appendChild(x); row.appendChild(cp);
+        list.appendChild(row);
+      });
+      countEl.textContent = hist.length ? " " + hist.length + " 条" : "";
+      emptyEl.style.display = hist.length ? "none" : "block";
+      if (unread > 0 && !open) {
+        badge.textContent = unread > 99 ? "99+" : String(unread);
+        entry.classList.add("has-unread");
+      } else {
+        badge.textContent = "";
+        entry.classList.remove("has-unread");
+      }
+    }
+
+    function record(kind, text) {
+      hist.unshift({ ts: nowText(), kind: kind, text: text, seq: ++seq });
+      if (hist.length > 50) hist.pop();
+      if (!open) unread += 1;
+      render(true);
+    }
+
+    function toast(kind, text) {
+      var el = document.createElement("div");
+      el.className = "dm-toast " + kind;
+      el.innerHTML = ICONS[kind];
+      var sp = document.createElement("span"); sp.textContent = text;
+      el.appendChild(sp);
+      wrap.appendChild(el);
+      record(kind, text);
+      setTimeout(function () {
+        el.classList.add("out");
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 170);
+      }, DEMO_MS);
+    }
+
+    function nextErr() { var it = POOL[poolIdx % POOL.length]; poolIdx += 1; return it; }
+
+    entry.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      open = !open;
+      if (open) unread = 0;
+      panel.classList.toggle("on", open);
+      render();
+    });
+    document.addEventListener("click", function (ev) {
+      if (open && !panel.contains(ev.target) && !entry.contains(ev.target)) {
+        open = false;
+        panel.classList.remove("on");
+        render();
+      }
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && open) { open = false; panel.classList.remove("on"); render(); }
+    });
+    clearBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      hist = []; unread = 0;
+      render();
+    });
+
+    // 控制条(.demo-ctl)是 .demo-app 的卡片级兄弟, 不在其子树内 —— 事件绑定必须回到 .tpl-card 根上找
+    var card = harness.closest(".tpl-card") || document;
+    card.querySelectorAll(".demo-ctl [data-act]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var act = btn.getAttribute("data-act");
+        if (act === "one") { var it = nextErr(); toast(it[0], it[1]); }
+        else if (act === "burst") {
+          for (var i = 0; i < 3; i++) {
+            (function (k) {
+              setTimeout(function () { var it2 = nextErr(); toast(it2[0], it2[1]); }, k * 280);
+            })(i);
+          }
+        }
+        else if (act === "reconn") {
+          wrap.textContent = "";   // 只清可见 toast(对应 auth.js this.toasts = []), 历史不动
+        }
+        else if (act === "reset") { hist = []; unread = 0; seq = 0; poolIdx = 0; wrap.textContent = ""; render(); }
+      });
+    });
+    render();
+  }
+
+  document.querySelectorAll(".demo-app").forEach(mount);
+
+  // D1 拍板辅助: 卡内「就选这个」仅在本页标记选择, 正式拍板走会话回复。
+  var d1 = document.getElementById("d1-state");
+  document.querySelectorAll(".d-pick").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var card = btn.closest(".tpl-card");
+      document.querySelectorAll(".tpl-card").forEach(function (c) {
+        c.classList.toggle("picked", c === card);
+      });
+      if (d1) {
+        d1.textContent = "已标选 " + btn.getAttribute("data-pick") + "(演示内标记, 正式拍板请在会话里回复)";
+        d1.classList.add("on");
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

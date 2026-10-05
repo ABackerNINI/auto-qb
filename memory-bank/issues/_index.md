@@ -66,6 +66,7 @@
 
 ## In Progress
 
+- [feat] [WEBUI 错误信息历史: 右下角 toast 退场即销毁, 错过后无处可查](26-10-05-2013-feat-webui-toast-error-history.html) — WEBUI 加错误历史功能: 全局错误反馈只有右下角 toast 一条通道, 8…
 - [question] [兼容 Transmission 可行性分析](26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BM…
 

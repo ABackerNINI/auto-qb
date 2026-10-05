@@ -13,6 +13,7 @@
 
 ## Open
 
+- [26-10-05-2026] [WEBUI 错误信息历史: toast 单点环形缓冲 + 常驻入口面板 · 实施计划](26-10-05-2026-plan-webui-toast-error-history.html) — `webui-toast-error-history`
 - [26-10-05-0951] [实施计划: 全项目全面 Code Review — 分批评审与发现分流](26-10-05-0951-plan-full-code-review.html) — `full-code-review`
 - [26-10-04-1957] [实施计划 · qB 流量历史 dat v3 · 块化稀疏 delta + 批量落盘 + 按天文件 + 聚合分层 · auto-qb](26-10-04-1957-plan-qb-traffic-storage-v3.html) — `qb-traffic-storage-v3`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
