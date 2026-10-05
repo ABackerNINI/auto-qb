@@ -364,6 +364,15 @@ window.AQB_STATE = {
     authOk() {
       return this.authMode === "local" || !!this.token;
     },
+    /* 错误历史模板别名(S4): `_` 前缀 data 字段不对模板代理暴露(Vue 保留域,
+     * issue 26-10-03-1412), 面板与徽标经这两个无前缀 computed 读; 写入仍走
+     * ui_feedback.js 的下划线单点(_recordErrorToast / _clearErrorHistory)。 */
+    errHistory() {
+      return this._errHistory;
+    },
+    errUnread() {
+      return this._errUnread;
+    },
   },
   watch: {
     // 切回辅种页时表格 DOM 是新建的, 需要重新实体化列宽(设置页期间表格不存在)

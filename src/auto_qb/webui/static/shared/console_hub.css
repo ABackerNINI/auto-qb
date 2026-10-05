@@ -920,6 +920,83 @@
 @keyframes aq-tip-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
 
 /* ==========================================================================
+   错误历史面板(WEBUI 错误历史 S4/S5): 状态栏入口(.sb-err)+ 弹层(.err-panel)
+   --------------------------------------------------------------------------
+   三套皮肤共用本层, 颜色一律走皮肤令牌(同 .aq-tip 先例), 皮肤零差异;
+   mono 字体用 var(--font-mono, 内联栈) —— 星图/控制台无 --font-mono 令牌,
+   font 一律写 longhand(shorthand 遇未定义令牌整条失效, 见上方顶栏搜索浮卡段注释)。
+   层级: z-index 121 = toast-wrap(120, 三皮肤 components.css 同值)之上相邻一档 ——
+   面板开着时新 toast 仍从右下来但被面板压住(面板信息量更大), 同时低于 HR 全屏
+   覆盖层(128/129) / modal(130) / 限速浮层(131), 非模态浮层不盖对话框。
+   位置: 与 toast 同处右下 —— 面板贴状态栏(bottom 按 --statusbar-h calc), toast 贴角。
+   ========================================================================== */
+/* 入口: 照 .sb-hist/.sb-qb 范式(轻量小钮, 三皮肤各有一份同族样式, 本段为 .sb-err 的单点);
+   徽标是 inline 子元素(不 absolute 出界) —— 状态栏自身 overflow: hidden, 出界必被裁。 */
+.sb-err { display: inline-flex; align-items: center; gap: 3px; margin-left: 2px; padding: 1px 8px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface-1);
+  color: var(--fg-muted); font: inherit; font-size: 11.5px; cursor: pointer; flex: 0 0 auto;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-err:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
+.sb-err .ico { color: var(--fg-muted); }
+.sb-err:hover .ico { color: var(--accent-hi); }
+.sb-err.on { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-hi); }
+.sb-err.on .ico { color: var(--accent-hi); }
+/* 未读徽标: 语义色软底 + 语义色字(.hb-badge.risk 同配方, 比实底白字更耐各主题对比度) */
+.sb-err-badge { min-width: 15px; padding: 1px 4px; border-radius: 999px; background: var(--error-soft);
+  color: var(--error); font-family: var(--font-mono, ui-monospace, Consolas, "Cascadia Mono", monospace);
+  font-size: 9.5px; font-weight: 600; line-height: 1.2; text-align: center; }
+
+/* 面板本体: v-if 挂载即播入场动画; max-height 兜底防极端窄高视口溢出(状态栏之上留 24px) */
+.err-panel { position: fixed; right: 20px; bottom: calc(var(--statusbar-h, 34px) + 8px); z-index: 121;
+  width: min(430px, calc(100vw - 40px));
+  max-height: calc(100vh - var(--statusbar-h, 34px) - 24px);
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-3); animation: err-panel-in .12s var(--ease-out); }
+@keyframes err-panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* 头部: 标题 + 「N 条」+ 清空 + 关闭 */
+.err-hd { display: flex; align-items: center; gap: 7px; padding: 8px 12px; flex: none;
+  background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.err-hd .ico { color: var(--warn); }
+.err-hd-t { font-size: 13px; font-weight: 600; }
+.err-hd-n { font-family: var(--font-mono, ui-monospace, Consolas, "Cascadia Mono", monospace);
+  font-size: 11px; color: var(--fg-dim); }
+.err-clear { margin-left: auto; padding: 2px 9px; border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); background: var(--surface-1); color: var(--fg-muted);
+  font: inherit; font-size: 11.5px; cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.err-clear:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
+.err-clear[disabled] { opacity: .45; cursor: not-allowed; }
+.err-x { flex: none; display: inline-flex; border: 0; background: transparent; color: var(--fg-dim);
+  cursor: pointer; padding: 2px; }
+.err-x:hover { color: var(--fg); }
+
+/* 列表: 只内滚不越面板; 行 hover 才显复制钮(含键盘 focus-within) */
+.err-list { overflow-y: auto; overscroll-behavior: contain; }
+.err-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 12px;
+  border-top: 1px solid var(--hairline); }
+.err-row:first-child { border-top: 0; }
+.err-ts { flex: none; padding-top: 1px; font-family: var(--font-mono, ui-monospace, Consolas, "Cascadia Mono", monospace);
+  font-size: 11px; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+/* kind 色点: error/warn 语义色, 其余(理论不出现)中性灰兜底 */
+.err-dot { flex: none; width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: var(--fg-dim); }
+.err-row.error .err-dot { background: var(--error); }
+.err-row.warn .err-dot { background: var(--warn); }
+.err-text { flex: 1 1 auto; min-width: 0; font-size: 12.3px; line-height: 1.55; color: var(--fg);
+  overflow-wrap: anywhere; white-space: pre-line; }
+/* source='backend' 小标: 区分后端环条目与前端 toast 条目 */
+.err-src { flex: none; padding: 1px 5px; border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--fg-dim); font-size: 10px; line-height: 1.5; }
+.err-copy { flex: none; display: inline-flex; border: 0; background: transparent; color: var(--fg-dim);
+  cursor: pointer; padding: 2px; opacity: 0; transition: opacity var(--dur-fast) var(--ease), color var(--dur) var(--ease); }
+.err-row:hover .err-copy, .err-copy:focus-visible { opacity: 1; }
+.err-copy:hover { color: var(--accent-hi); }
+
+/* 空态 */
+.err-empty { padding: 30px 12px; text-align: center; color: var(--fg-muted); font-size: 12.5px; }
+
+/* ==========================================================================
    规则: 「当…做…」两栏
    ========================================================================== */
 .hb-rule { background: var(--bg-card); border: 1px solid var(--border); margin-bottom: 10px; overflow: hidden; }
@@ -1049,7 +1126,7 @@
   .hb-tr-drop-list { max-height: 55vh; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hb-view.on, .hb-pop.on, .aq-tip.on { animation: none; }
+  .hb-view.on, .hb-pop.on, .aq-tip.on, .err-panel { animation: none; }
 }
 
 /* ---------------- 键盘快捷键: 光标行(计划 26-09-28-0354 W2) ----------------

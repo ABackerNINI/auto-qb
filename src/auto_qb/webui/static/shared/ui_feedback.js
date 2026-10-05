@@ -78,11 +78,24 @@ window.AQB_FEEDBACK = {
       }
       if (!this.errPanelOpen) this._errUnread++;
     },
-    /* 清空历史(后续面板 UI 的「清空」动作入口): 历史/未读全归零; seq 不清 —— 保持单调,
+    /* 清空历史(面板「清空」动作入口): 历史/未读全归零; seq 不清 —— 保持单调,
      * 展示排序兜底不因清空而出现并列回退(后端条目用后端环的 seq, 同理不清)。 */
     _clearErrorHistory() {
       this._errHistory = [];
       this._errUnread = 0;
+    },
+    /* 模板别名: `_` 前缀方法对模板代理不可见(issue 26-10-03-1412), 面板「清空」经此中转。 */
+    clearErrorHistory() {
+      this._clearErrorHistory();
+    },
+    /* 时间展示口径单点(S5, 模板直接调用故为非下划线方法 —— 模板坑: 下划线方法模板调不到):
+     * toast 条目 ts = Date.now()(毫秒数), backend 条目 ts = lifecycle 合并时已格式化好的
+     * "HH:MM:SS" 字符串; 两种来源统一回 HH:MM:SS。 */
+    fmtErrTs(ts) {
+      if (typeof ts === "string") return ts;
+      const d = new Date(ts);
+      const p = (n) => String(n).padStart(2, "0");
+      return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
     },
     /* ------------------------------------------- 站内确认/输入框(替代 confirm/prompt) */
     _modalInit() {

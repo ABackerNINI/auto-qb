@@ -78,6 +78,8 @@ window.AQB_LIFECYCLE = {
        * @focusout(2026-10-03 补)收, 这里补兜底。⚠ 有它才必须给 meta 的字段 label 挂
        * @click.stop —— 否则点 label 走"window click 收层 → label 转发 click 重开" = 闪烁。 */
       this.metaCatMenu = false;
+      // 错误历史面板(S4): 非模态浮层同族 —— 点空白收层(面板根与入口钮 .sb-err 都已 @click.stop 拦截)
+      this.errPanelOpen = false;
       // FX-08: 限速浮层无遮罩 -> 点空白视为"放弃本次修改"直接收起(与 Esc 同语义)
       if (this.speedOpen) this.closeSpeedDialog();
     });
@@ -106,6 +108,7 @@ window.AQB_LIFECYCLE = {
       else if (this.uiMenuOpen) this.uiMenuOpen = false;  // 顶栏界面切换下拉(pop)
       else if (this.searchHelpOpen) this.searchHelpOpen = false;  // 搜索语法浮卡(pop)
       else if (this.kbHelpOpen) this.kbHelpOpen = false;  // 快捷键帮助浮层(W6, H 组 Shift+Slash 打开)
+      else if (this.errPanelOpen) this.errPanelOpen = false;  // 错误历史面板(S4): pop 层, escBusy 已同步
       else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
       else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
       else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)
