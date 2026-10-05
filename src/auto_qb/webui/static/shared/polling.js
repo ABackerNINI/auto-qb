@@ -1,5 +1,13 @@
 /* polling.js — 轮询与推送域(startEvents/stopEvents/startPolling/stopPolling/scheduleNext/
  * basePollMs/currentPollMs/refresh): W2b 自 app.js 拆出, 全局 mixin 方法域。 */
+/* SSE 断线沿判定(纯函数, 探针真跑, 同 lifecycle.js _errlogReseed 先例): prev 为已持
+ * connected 位(undefined=本会话尚未连上过 / true=在连 / false=断线重试期), 返回是否
+ * 处于「断线沿」—— 首次断线或 true→false 跳变。重试期内重复 onerror(prev=false)与
+ * 恢复成功(prev=true)都不是沿, 不发 toast。 */
+function _esDisconnectEdge(prev) {
+  return prev !== false;
+}
+
 window.AQB_POLL = {
   methods: {
     /* ---------------- P2 事件驱动(SSE /api/events) ----------------
@@ -45,7 +53,18 @@ window.AQB_POLL = {
         if (this._verTimer) clearTimeout(this._verTimer);
         this._verTimer = setTimeout(() => { this._verTimer = null; this.refresh(); }, 60);
       });
+      es.onopen = () => {
+        // 恢复成功: 只回置状态位, 静默不广播(断线提示只在断线沿发, 不发"已恢复"噪音)
+        this._esConnected = true;
+      };
       es.onerror = () => {
+        // 断线沿(WEBUI 错误历史 S6, D2 拍板): 以 _esConnected 取沿, 首次断线或
+        // true→false 跳变时发一条 error toast —— 经 toast() 内的 _recordErrorToast
+        // 钩子自动进错误历史(挂机型断线自此可追溯); 重试期内重复 onerror 不重复发。
+        if (_esDisconnectEdge(this._esConnected)) {
+          this._esConnected = false;
+          this.toast("与服务的推送连接断开, 正在自动重连…", "error");
+        }
         // 一次性票据在重连时必失效(服务端取即删) —— EventSource 自带重连会一直拿旧票
         // 撞 401, 必须关掉旧连接换新票重开(3s, 与 EventSource 默认重连同拍); 服务不可达时
         // 换票请求失败, startEvents 直接返回, 不会空转
@@ -61,6 +80,7 @@ window.AQB_POLL = {
       if (this._esRetry) { clearTimeout(this._esRetry); this._esRetry = null; }
       if (this._verTimer) { clearTimeout(this._verTimer); this._verTimer = null; }
       if (this._es) { this._es.close(); this._es = null; }
+      this._esConnected = undefined;  // 断线沿状态位随连接会话归置: 重登后首断仍算「首次断线」
     },
     startPolling() {
       this.stopPolling();
