@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="sys.torrent_count 每求值全库浅拷贝取 len, O(N) 纯浪费且未进昂贵缓存">
 <meta name="issue-summary" content="interval:0 规则每种子每 tick 一次 O(N) 拷贝(3000 库约每轮 900 万次元素拷贝); 改 len(by_hash) 一行">
 <title>sys.torrent_count 每求值全库浅拷贝取 len, O(N) 纯浪费且未进昂贵缓存 · perf · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-perf-sys-torrent-count-full-copy</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,7 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>getter 改 <code>len(ctx.manager.store.by_hash)</code> 一行(便签档)。</p><p><b>撞车(底册对照):</b> rule-system/conditions-and-actions「昂贵取值要配 interval」告警(文档面已覆盖, 取值侧未收口)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — <strong>Done</strong>(S6 批 G-06 修复, 计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a>)</li></ul><h3>修复后补充</h3><p><b>实际修法</b>: <code>rules/expr/env.py _count</code> 无谓词分支改 <code>len(ctx.manager.store.by_hash)</code>(O(1)), 消灭每求值 <code>list(by_hash.values())</code> 的全库浅拷贝; 带谓词分支(downloading_count / seeding_count)维持全库遍历 + expensive=True 按 ctx 缓存不变。</p><p><b>验证方式</b>: 守阵 <code>tests/test_expr_eval.py::test_torrent_count_no_full_copy</code>(by_hash 换成 values() 一被调即炸的哨兵 dict, 求值只走 len), 测试计划 docstring 同步。守阵登记 <a href="../testing/guards.md">testing/guards.md</a>。</p><p><b>测试数字</b>(S6 批实测, test.full): <strong>2676 passed + 4 skipped, 40.0s, 覆盖率 TOTAL 99%</strong>(15823 语句 / 163 未覆盖 / 5472 分支 / 143 partial); 对照 S5 后基线(2674+4 / 15820/163/5470/143 / 99%): passed +2 恰为本批新增守阵 2 条, skipped 持平, 未覆盖 / partial 逐字持平, 99% 档持平; 语句 +3 / 分支 +2 为本批新增修复与守阵代码。</p></section>
 
   <footer>
     26-10-06-0028-perf-sys-torrent-count-full-copy.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

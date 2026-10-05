@@ -17,7 +17,7 @@
 - test_freespace_no_path: FreespaceCondition 无 path 不触发; 空 amount 构造抛 ValueError
 - test_freespace_triggered: 磁盘剩余空间低于阈值 -> 触发
 - test_freespace_not_triggered: 空间充足 -> 不触发
-- test_freespace_os_error: disk_usage 抛 OSError -> 不触发
+- test_freespace_os_error: disk_usage 抛 OSError -> ExprError(绝不降级成假值, 拍板 P-07)
 - test_tags_condition_invalid_regex: 标签条件非法正则 -> 不匹配
 - test_tags_condition_regex_no_match: 标签条件正则无匹配 -> 不匹配
 - test_category_condition_invalid_regex: 分类条件非法正则 -> 跳过继续
@@ -58,6 +58,7 @@ from auto_qb.rules.conditions import (
     TrackersCondition,
     UploadRatioCondition,
 )
+from auto_qb.rules.expr.errors import ExprError
 from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager
 
 
@@ -367,7 +368,8 @@ def test_freespace_not_triggered(monkeypatch):
 
 
 def test_freespace_os_error(monkeypatch):
-    """磁盘空间条件: disk_usage 抛 OSError -> 不匹配(不中断)"""
+    """磁盘空间条件: disk_usage 抛 OSError -> ExprError(绝不降级成假值, 与映射 miss / expr
+    形式 freespace() 同口径, 拍板 P-07; 磁盘故障时规则显式停而不是静默失活)"""
     def boom(path):
         raise OSError("no such drive")
 
@@ -375,7 +377,8 @@ def test_freespace_os_error(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         ctx = _ctx(mgr, FakeTorrent())
-        assert FreespaceCondition({"path": r"R:\\", "amount": "<100GiB"}).match(ctx) is False
+        with pytest.raises(ExprError, match="磁盘不可用"):
+            FreespaceCondition({"path": r"R:\\", "amount": "<100GiB"}).match(ctx)
 
 
 def test_tags_condition_invalid_regex():

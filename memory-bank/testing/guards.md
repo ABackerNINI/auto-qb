@@ -133,6 +133,14 @@
 | `test_traffic_store.py::test_v4_bad_line_ratio_warning_once_throttled` (C-04, P-05) | 坏行占比超阈(>=2 行且 >5%, v2 口径; 撕裂尾豁免)读侧 WARNING 恰一次(按文件节流); 正常文件零告警 —— 真实损坏不再静默丢行 | 还原 read_day 不调 _warn_bad_lines |
 | `test_web.py` SEED_ITEM 契约测试(E-04, P-06) | /api/state 平铺 SEED_ITEM 载荷**不含** magnet_uri(按需取详情契约, 坑档 contract-api 正向口径); 磁力复制走 /api/torrents/{hash} 详情端点(该端点 to_dict 全字段含 magnet_uri) | 还原 _seed_view 的 `"magnet_uri": r.magnet_uri` 行 |
 
+## S6 P3 小修批次守阵 (26-10-06-0028 ×3, 红验 26-10-06 @工作区)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_hr_parse.py::test_parse_size_unknown_unit_returns_none` (B2-04) | parse_size 单元表外字母缩写("2.5T" / "800M" / "12 Bytes" / "3 ZB")返回 None —— 不再 `.get(unit, 1)` 当 1 字节静默算错(与 parse_duration「认不出不猜」同款) | 还原 `.get(m.group(2).upper(), 1)` 默认兜底(实测红在 2.5T 算成 2 字节) |
+| `test_conditions.py::test_freespace_os_error` (G-03, P-07) | FreespaceCondition disk_usage 抛 OSError → ExprError("磁盘不可用"), 绝不降级成假值(与映射 miss / expr 形式 freespace() 同口径; 磁盘故障时规则显式停不静默失活) | 还原 `except OSError: return False`(实测红在 DID NOT RAISE) |
+| `test_expr_eval.py::test_torrent_count_no_full_copy` (G-06) | sys.torrent_count 无谓词直接 len(by_hash) O(1), 不做每求值全库浅拷贝(by_hash 换 values() 即炸的哨兵 dict) | 还原 `list(by_hash.values())` 先拷贝再 len(实测红在哨兵 AssertionError) |
+
 ## 仿真 / 语料 / 平台语义
 
 | 守阵 | 钉住的结论 | 红验 |

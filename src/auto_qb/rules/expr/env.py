@@ -142,11 +142,15 @@ def _server_value(key: str, kind: str):
 
 
 def _count(pred=None):
-    """全局种子计数; 带谓词的需要遍历全库 -> 昂贵(按 ctx 缓存)"""
+    """全局种子计数; 带谓词的需要遍历全库 -> 昂贵(按 ctx 缓存)。
+
+    无谓词直接 len(by_hash) O(1), 不做全库浅拷贝(曾每求值 list(values()) 只取 len,
+    3000 种子库 interval:0 规则每轮数百万次元素拷贝, 纯浪费)。
+    """
     def get(ctx):
-        records = list(ctx.manager.store.by_hash.values())
         if pred is None:
-            return len(records)
+            return len(ctx.manager.store.by_hash)
+        records = list(ctx.manager.store.by_hash.values())
         return sum(1 for t in records if pred(t))
 
     return get

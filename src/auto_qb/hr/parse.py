@@ -34,7 +34,11 @@ _SIZE_RE = re.compile(r"([\d.,]+)\s*([A-Za-z]+)")
 
 
 def parse_size(text: str) -> Optional[int]:
-    """"27.34 GB" -> 字节数; 认不出返回 None(不猜)。"""
+    """"27.34 GB" -> 字节数; 认不出返回 None(不猜)。
+
+    单元表外的字母缩写(如 "2.5T" / "800M", T/M 不在 _SIZE_UNITS 内)同样认不出 -> None,
+    不当 1 字节静默算错(与 parse_duration「认不出不猜」同款纪律)。
+    """
     m = _SIZE_RE.search(text or "")
     if not m:
         return None
@@ -42,7 +46,10 @@ def parse_size(text: str) -> Optional[int]:
         value = float(m.group(1).replace(",", ""))
     except ValueError:
         return None
-    return int(value * _SIZE_UNITS.get(m.group(2).upper(), 1))
+    unit = _SIZE_UNITS.get(m.group(2).upper())
+    if unit is None:
+        return None  # 表外字母单位不猜(猜成 1 字节会让错值直达展示/对账面)
+    return int(value * unit)
 
 
 _DURATION_DIGITS_RE = re.compile(r"^[\d:.\s]+$")

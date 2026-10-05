@@ -2,6 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_parse_size: "27.34 GB" / "0.00 KB" / 十进制与二进制单位 / 认不出返回 None
+- test_parse_size_unknown_unit_returns_none: 表外字母缩写单位("2.5T"/"800M") -> None, 不当 1 字节静默算错
 - test_parse_duration: "H:MM:SS" / "MM:SS" / "X天HH:MM:SS" 与非法形态
 - test_parse_ratio_and_datetime: 分享率与完成时间解析(认不出返回 None, 不猜)
 - test_extract_table_handles_nested_wrapper: HR 表被 <td class="embedded"> 再套一层 table, 仍能锚定表头与数据行
@@ -465,6 +466,15 @@ def test_cross_page_violation_desc_and_asc():
 def test_parse_size_malformed_number_returns_none():
     """数值段含多个小数点(float 拒收) -> None, 不猜(逗号按千分位剥除, 不算畸形)"""
     assert parse_size("1.2.3 GB") is None
+
+
+def test_parse_size_unknown_unit_returns_none():
+    """表外字母缩写单位("2.5T" / "800M", T/M 不在 _SIZE_UNITS 表内) -> None, 不当 1 字节
+    静默算错(与 parse_duration「认不出不猜」同款纪律, issue 26-10-06-0028)"""
+    assert parse_size("2.5T") is None
+    assert parse_size("800M") is None
+    assert parse_size("12 Bytes") is None  # 归一后不在表内(表只收 B/KB/.../KiB/...)
+    assert parse_size("3 ZB") is None
 
 
 def test_parse_duration_days_only():

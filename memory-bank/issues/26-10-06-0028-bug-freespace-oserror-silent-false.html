@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="FreespaceCondition.match 对 OSError 静默 return False, 与 expr 形式抛 ExprError 判据劈叉">
 <meta name="issue-summary" content="磁盘故障时低空间类规则静默失活, 与「绝不降级成假值」原则冲突">
 <title>FreespaceCondition.match 对 OSError 静默 return False, 与 expr 形式抛 ExprError 判据劈叉 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-bug-freespace-oserror-silent-false</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,7 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>OSError 改抛 ExprError 与映射 miss / expr 形式同口径; 若怕行为变化可先只登记文档差异。</p><p><b>撞车(底册对照):</b> 无(坑档 format-driven-parse「过滤类失效恒空同形」同族, 非同件)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li><li>26-10-06 — <strong>Done</strong>(S6 批 G-03 修复, 计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a>; <b>拍板结论 P-07 = 改抛 ExprError</b>)</li></ul><h3>修复后补充</h3><p><b>实际修法</b>: <code>rules/conditions.py FreespaceCondition.match</code> 的 <code>except OSError</code> 由 <code>return False</code> 改为抛 <code>ExprError(f"磁盘不可用: ...")</code>, 与映射 miss(FileAccessError)/ expr 形式 <code>env.py _freespace</code> 同口径(「绝不降级成假值」); 行为变化 = 磁盘故障时低空间类规则由静默失活变显式停规则 + ERROR, 属修复非回归。文档回写: rule-system/conditions-and-actions.md freespace 条同步新判据。</p><p><b>验证方式</b>: 守阵 <code>tests/test_conditions.py::test_freespace_os_error</code> 改钉 <code>pytest.raises(ExprError, match="磁盘不可用")</code>(原断言静默 False 已随拍板改写)。</p><p><b>测试数字</b>(S6 批实测, test.full): <strong>2676 passed + 4 skipped, 40.0s, 覆盖率 TOTAL 99%</strong>(15823 语句 / 163 未覆盖 / 5472 分支 / 143 partial); 对照 S5 后基线(2674+4 / 15820/163/5470/143 / 99%): passed +2 恰为本批新增守阵 2 条, skipped 持平, 未覆盖 / partial 逐字持平, 99% 档持平; 语句 +3 / 分支 +2 为本批新增修复与守阵代码。</p></section>
 
   <footer>
     26-10-06-0028-bug-freespace-oserror-silent-false.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕

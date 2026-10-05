@@ -5,6 +5,7 @@
 - test_derived_values: 派生值(progress_pct / age / idle 哨兵 / hr 缺省)
 - test_tracker_values: tracker.name 未匹配站点 = "Unknown"、groups = 空列表(有定义的缺省, 不报错)
 - test_sys_time_and_counts: sys 时间类与全局计数
+- test_torrent_count_no_full_copy: sys.torrent_count 无谓词直接 len(by_hash) O(1), 不做全库浅拷贝
 - test_server_state_unavailable: server_state 未同步 -> ExprError(绝不返回假 0)
 - test_server_state_values: server_state 可用 -> 取值正确; 缺字段 -> 报错
 - test_expensive_values_cached: freespace 同表达式内只查一次(ctx 缓存)
@@ -134,6 +135,22 @@ def test_sys_time_and_counts():
     assert _val("sys.time_of_day", ctx) == now.hour * 60 + now.minute
     assert _val("sys.torrent_count", ctx) >= 1
     assert _val("sys.torrent_count", ctx) == len(mgr.store.by_hash)
+
+
+def test_torrent_count_no_full_copy():
+    """sys.torrent_count 无谓词直接 len(by_hash) O(1), 不做全库浅拷贝(issue 26-10-06-0028)。
+
+    守法: values() 一被调用即炸 —— 曾每求值 list(by_hash.values()) 只取 len,
+    3000 种子库 interval:0 规则每轮数百万次元素拷贝纯浪费。
+    """
+    mgr, _, ctx = _setup()
+
+    class _NoValues(dict):
+        def values(self):
+            raise AssertionError("sys.torrent_count 不应遍历全库(应 len(by_hash) O(1))")
+
+    mgr.store.by_hash = _NoValues({"h1": object(), "h2": object(), "h3": object()})
+    assert _val("sys.torrent_count", ctx) == 3
 
 
 def test_server_state_unavailable():
