@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-05-0854] [调研报告: 强制汇报确认机制与 qB 汇报状态接口](26-10-05-0854-report-reannounce-confirm-api.html) — `reannounce-confirm-api`
 - [26-10-04-1730] [qB 流量历史 dat v3 设计报告 · auto-qb](26-10-04-1730-report-qb-traffic-storage-v3.html) — `qb-traffic-storage-v3`
 - [26-10-04-1639] [WEBUI qB 流量图折线断裂取证报告 · auto-qb](26-10-04-1639-report-webui-qb-traffic-line-breaks.html) — `qb-traffic-line-breaks`
 - [26-10-04-0815] [WEBUI tooltip 全量清点与去留判定 · auto-qb](26-10-04-0815-report-webui-tooltip-declutter.html) — `webui-tooltip-declutter`

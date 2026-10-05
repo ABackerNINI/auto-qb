@@ -148,6 +148,7 @@
 - [26-09-15-rule-tracker-groups] tracker 分组 (站点 groups 字段 + tracker_group 条件) - 后端与条件插件完成入库, 条件 15→16; 遗留: 阶段 2/3 前端增强待排期 (2026-09-15)
 - [26-09-15-webui-polish-and-redesign] WEB UI 打磨轮次与棱镜重设计 (第六 ~ 八轮 + 双界面命名) - `atlas`/`prism`/`shared` 目录化 + 五主题令牌 + 各轮冒烟全绿 (2026-09-15)
 - [26-09-15-webui-tvshows-view] 追剧视图 (tvshows) - 剧/季/集解析 + 缺集计算 + atlas 三态视图, 已合入 develop; 遗留: prism 模板欠账 (2026-09-15)
+- [26-10-05-backend-reannounce-confirm] 强制汇报确认机制调研 - 调研 qB/qbittorrent-api 汇报状态接口并解码用户观察的 0 抖动场景: WebAPI 2.13.0(qB 5.2) 起 torrents/tr…
 
 ## Dropped
 

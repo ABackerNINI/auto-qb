@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>调研报告: 强制汇报确认机制与 qB 汇报状态接口</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="reannounce-confirm-api">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-05-0854">
+<meta name="doc-updated" content="26-10-05-0854">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-05-backend-reannounce-confirm.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101317;
+    --paper: #15191f;
+    --paper-2: #1a2028;
+    --ink: #dfe5ec;
+    --ink-dim: #9aa5b1;
+    --line: #2a323d;
+    --accent: #5ec2a7;
+    --accent-2: #e0b35e;
+    --bad: #e07a6e;
+    --good: #6fc78c;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.75 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 28px 80px; }
+  header h1 { font-size: 26px; line-height: 1.35; margin: 0 0 6px; }
+  header .sub { color: var(--ink-dim); font-size: 13px; }
+  header .sub code { color: var(--accent); }
+  h2 {
+    font-size: 19px; margin: 44px 0 14px; padding: 8px 14px;
+    background: var(--paper-2); border-left: 3px solid var(--accent); border-radius: 4px;
+  }
+  h3 { font-size: 16px; margin: 26px 0 10px; color: var(--accent); }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--paper-2); padding: 1px 6px; border-radius: 4px; }
+  pre {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--paper-2); color: var(--ink); font-weight: 600; white-space: nowrap; }
+  td code, th code { white-space: nowrap; }
+  .tl { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; margin: 14px 0; }
+  .tl b { color: var(--accent); }
+  .ok { color: var(--good); } .no { color: var(--bad); } .warn { color: var(--accent-2); }
+  .dim { color: var(--ink-dim); }
+  ul { margin: 8px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  .kicker {
+    display: inline-block; font-size: 12px; letter-spacing: 2px; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 999px; padding: 2px 12px; margin-bottom: 12px;
+  }
+  footer { margin-top: 56px; border-top: 1px solid var(--line); padding-top: 14px; color: var(--ink-dim); font-size: 12.5px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <span class="kicker">调研报告 · 可行性分析</span>
+  <h1>强制汇报确认机制调研: qB / qbittorrent-api 的汇报状态接口</h1>
+  <div class="sub">
+    2026-10-05 · 基线 911af7ef (develop) · 目标 qB <code>5.2.3</code> (用户实测) ·
+    依赖 <code>qbittorrent-api 2026.8.1</code> · 档案:
+    <code>memory-bank/tasks/26-10-05-backend-reannounce-confirm.md</code>
+  </div>
+</header>
+
+<h2 id="t1">§1 结论先行</h2>
+<div class="tl">
+  <p><b>有 —— 而且 qB 5.2 起就有"准直接"接口。</b> <code>GET /api/v2/torrents/trackers</code>
+  自 WebAPI <b>2.13.0 (qB 5.2.0, PR #23045)</b> 起, 每个 tracker 返回
+  <code>next_announce</code> / <code>min_announce</code> (单位: <b>Unix epoch 秒</b>) 与
+  <code>endpoints</code> 明细数组, 外加既有 <code>updating</code> (bool) / <code>status</code> /
+  <code>msg</code>。配合 libtorrent 源码级状态机, 可以把"强制汇报是否真的发生了"做成
+  <b>持久、2 秒轮询粒度即可判定</b>的证据门控, 不再依赖捕捉半秒抖动。</p>
+  <p><b>现判定失准的根因不是"接口缺信号", 而是把 epoch 绝对时间当倒计时用:</b>
+  <code>_confirm_reannounce_result</code> 的核心判据
+  <code>next_announce &lt; 基线 - 60</code> 在 epoch 语义下方向相反 ——
+  汇报成功时 <code>next_announce</code> 是<b>前跳(变大)</b>而不是变小, 该判据在成功路径上恒不触发,
+  于是 30 秒窗口走完只能误报"确认超时"。用户观察到的「下一个 announce 8分钟 → 0 → 回到 8分钟」
+  恰好是这个机制的直接证据(§2 解码)。</p>
+  <p class="dim">本报告只做调研与可行性结论, 不动代码; 修复方案如需落地, 走后续计划文档。</p>
+</div>
+
+<h2 id="t2">§2 用户观察解码 (对照 libtorrent 源码)</h2>
+<p>用户实测(qB 5.2.3 GUI, 中文界面): 投递(下发强制汇报指令)前显示「下一个announce 8分钟, 最小announce 8分钟」,
+投递后瞬间显示「0分钟, 0分钟」约半秒, 随后回到「8分钟, 8分钟」。</p>
+<table>
+  <tr><th style="width:14%">时刻</th><th style="width:24%">qB 显示</th><th>libtorrent 层实际状态 (RC_2_0 源码)</th></tr>
+  <tr>
+    <td>投递前</td><td><code>8分钟 / 8分钟</code></td>
+    <td>上次 announce 响应以来: <code>next_announce = P + interval</code>, <code>min_announce = P + min_interval</code>
+    (P = 上次响应时刻; 该站 interval ≈ min_interval ≈ 8min)。倒计时显示 = epoch − now。</td>
+  </tr>
+  <tr>
+    <td>投递后 ~0.5s</td><td><code>0分钟 / 0分钟</code></td>
+    <td><b>announce 请求在途</b>: 发送瞬间 libtorrent 置 <code>updating=true; next_announce = min_announce = now</code>
+    (torrent.cpp L3387-3390) → 倒计时归 0。能走"立即路径"说明此刻 min_interval 已过期
+    (否则会被推迟到 <code>min_announce</code> 才发, 见 §5)。</td>
+  </tr>
+  <tr>
+    <td>之后</td><td><code>8分钟 / 8分钟</code></td>
+    <td>tracker 响应: <code>next_announce = now + interval</code>, <code>min_announce = now + min_interval</code>,
+    <code>fails = 0</code>, <code>last_error</code> 清空 (torrent.cpp L3621-3627)。</td>
+  </tr>
+</table>
+<p><b>要点: 投递前后的「8分钟」数值相同但含义不同</b> —— 前者是旧周期计划的剩余量, 后者是本次汇报完成后
+重新排期的新计划。GUI 的倒计时显示把两者折叠成同一个数, 这正是"汇报发生了却看不出差别"的观感根源;
+而 API 暴露的是 <b>epoch 绝对时间</b>, 前后两个值相差恰好"上次汇报至今的时长", 可拆可测(§7 判据 A)。</p>
+
+<h2 id="t3">§3 现状实现与失效分析</h2>
+<h3>3.1 现状链路 (代码锚点)</h3>
+<ul>
+  <li><code>webui/commands.py:24</code> — <code>REANNOUNCE_CONFIRM_TIMEOUT = 30.0</code> (确认窗口, 主循环 <code>main_tick=2s</code> → 约 15 轮确认机会)。</li>
+  <li><code>commands.py:209</code> <code>_trackers_baseline</code> — 汇报前逐种子读 <code>torrents/trackers</code>, 排除 <code>** [DHT] **</code> / <code>[PeX]</code> / <code>[LSD]</code> 虚拟行, 记 <code>{url: (status, next_announce)}</code>。</li>
+  <li><code>commands.py:227</code> <code>_confirm_reannounce_result</code> — 四判据 (下表)。</li>
+  <li><code>runtime.py:301</code> <code>check_pending</code> — 每 tick 轮询 <code>torrents_trackers</code>, 全部种子出结论或 30s 超时后聚合写回执。</li>
+</ul>
+<h3>3.2 四判据 vs 实际机制</h3>
+<table>
+  <tr><th>判据 (现码)</th><th>设计假设</th><th>qB 5.2 epoch 语义下的实际</th><th>结果</th></tr>
+  <tr>
+    <td><code>status == 3</code> → 成功</td><td>轮询能撞见 updating 态</td>
+    <td>updating 窗口 ≈ 0.5s (用户实测), 轮询周期 2s → 命中概率 ≈ 0.5/2 = <b>25%</b></td>
+    <td class="no">多数错过</td>
+  </tr>
+  <tr>
+    <td><code>na &lt; b_na − 60</code> → 成功</td><td>na 是"秒数倒计时", 汇报后被重置变小</td>
+    <td>na 是 <b>epoch 绝对时间</b>: 汇报成功时 na <b>前跳(变大)</b>, 本式恒假; 仅当 tracker 返回更短 interval 时才可能为真</td>
+    <td class="no">成功路径恒不触发 (语义错位)</td>
+  </tr>
+  <tr>
+    <td><code>status==2 ∧ b_status≠2</code> → 成功</td><td>tracker 从未联系变 working</td>
+    <td>对"已在做种(working)"的种子 2→2 无变化 —— 恰是辅种/投递场景的常态</td>
+    <td class="no">常态场景不触发</td>
+  </tr>
+  <tr>
+    <td><code>status==4 ∧ msg</code> → 失败</td><td>tracker 拒绝可见</td>
+    <td>成立: libtorrent 把 tracker 文本放进 <code>message</code>, 状态转 not working, 持久可读</td>
+    <td class="ok">有效 (否定信号)</td>
+  </tr>
+  <tr>
+    <td>30s 未出结论 → 失败</td><td>私站响应 1~10s</td>
+    <td>若 min_interval 未过期, libtorrent 把强制汇报<b>推迟</b>到 <code>min_announce</code>(可能数分钟后)才发(§5) —— 30s 必超时</td>
+    <td class="warn">"推迟"被误报成"失败"</td>
+  </tr>
+</table>
+<p><b>用户场景(已 working + 立即成功)下, 三条正向判据全部落空 → 恒走 30s 超时 → 误报失败。</b>
+这与"经常无法识别"的现象完全吻合。</p>
+<div class="tl">
+  <b>附注 — 停止种子盲区:</b> libtorrent <code>torrent::force_tracker_request</code> 开头就是
+  <code>if (is_paused()) return;</code> (torrent.cpp L3900) —— 对停止的种子, <code>torrents/reannounce</code>
+  返回 HTTP 200 但<b>静默不执行任何汇报</b>。现实现同样要白等 30s 才超时。
+</div>
+
+<h2 id="t4">§4 可用信号盘点 (直接 / 间接)</h2>
+<table>
+  <tr><th style="width:4%">#</th><th>信号</th><th>来源端点 / 字段</th><th>版本门槛</th><th>方向</th><th>持续性</th><th>评注</th></tr>
+  <tr>
+    <td>A</td><td><b>next_announce 前跳</b></td>
+    <td><code>torrents/trackers</code> → <code>next_announce</code></td>
+    <td>qB 5.2+ (WebAPI 2.13.0)</td><td class="ok">正向</td><td>持久(至下次 announce)</td>
+    <td><b>推荐主判据</b>。epoch 恒定、无衰减噪声; 成功后数值 = 响应时刻 + interval, 与基线差 = 上次汇报年龄(§7)</td>
+  </tr>
+  <tr>
+    <td>B</td><td>min_announce 前跳 (与 next 耦合)</td>
+    <td><code>torrents/trackers</code> → <code>min_announce</code></td>
+    <td>qB 5.2+</td><td class="ok">正向</td><td>持久</td>
+    <td>佐证信号; 且推迟路径下 <code>min_announce := next_announce</code> 同步移动, 可算出"预计发送时刻"</td>
+  </tr>
+  <tr>
+    <td>C</td><td>updating / status==3</td>
+    <td><code>torrents/trackers</code> → <code>updating</code>(bool) / <code>status</code></td>
+    <td>全版本 (bool 为 5.x 键名)</td><td class="ok">正向</td><td class="warn">瞬时 ~0.5s</td>
+    <td>唯一"正在汇报"的直接证据; 2s 轮询命中率低, 只作加强证据</td>
+  </tr>
+  <tr>
+    <td>D</td><td>tracker 拒绝 (not working + 文本)</td>
+    <td><code>torrents/trackers</code> → <code>status==4</code> + <code>msg</code></td>
+    <td>全版本</td><td class="no">否向</td><td>持久</td>
+    <td>可靠; 现实现已用, 保留</td>
+  </tr>
+  <tr>
+    <td>E</td><td>汇报健康位 + sync 主动重推</td>
+    <td><code>sync/maindata</code> → <code>has_tracker_error</code> / <code>has_tracker_warning</code> / <code>has_other_announce_error</code></td>
+    <td>5.2 (changelog: "Provide announce stats within sync data", e309b17)</td><td class="no">否向为主</td><td>持久</td>
+    <td><b>零额外调用</b>: 项目已接入 <code>has_other_announce_error</code> (<code>record.py:106</code>); qB 对"汇报状态刚变过"的种子会在下一 sync tick 主动再推 (<code>m_announcedTorrents</code>)</td>
+  </tr>
+  <tr>
+    <td>F</td><td>种子级 reannounce 倒计时</td>
+    <td><code>sync/maindata</code> / <code>torrents/info</code> → <code>reannounce</code></td>
+    <td>全版本 (源码 <code>KEY_TORRENT_REANNOUNCE = torrent.nextAnnounce()</code>)</td><td class="ok">正向(弱)</td><td>持久</td>
+    <td><b>倒计时语义有盲区</b>: 剩余 ≈ interval 时成功与否不可区分 —— 用户场景正是如此; 仅作旧版兜底</td>
+  </tr>
+  <tr>
+    <td>G</td><td>指令受理</td>
+    <td><code>torrents/reannounce</code> HTTP 200</td>
+    <td>全版本</td><td class="ok">正向(弱)</td><td>—</td>
+    <td>仅"指令已受理", 无回执语义; 支持可选 <code>urls</code> 参数按 tracker 定向; 停止种子静默 no-op</td>
+  </tr>
+  <tr>
+    <td>H</td><td>qB 主日志</td>
+    <td><code>log/main</code></td>
+    <td>全版本</td><td class="dim">无</td><td>—</td>
+    <td>成功 announce 不产生主日志条目 (libtorrent 的 announce 日志在 debug 级, 不进 log/main; qB 只聚合 warning/error 为 <code>has_*_error</code> 位) —— 无正向信号</td>
+  </tr>
+</table>
+
+<h3>4.1 <code>torrents/trackers</code> 字段总表 (qB 5.2.3 源码 <code>getTrackers</code>, torrentscontroller.cpp L280-332)</h3>
+<table>
+  <tr><th>字段</th><th>类型 / 单位</th><th>语义</th></tr>
+  <tr><td><code>url</code> / <code>tier</code></td><td>str / int</td><td>tracker 地址与层级; 虚拟行 <code>"** [DHT] **"</code> 等由 <code>getStickyTrackers</code> 单独生成, <b>没有</b> announce 字段</td></tr>
+  <tr><td><code>updating</code></td><td>bool</td><td>正在汇报 (等待 tracker 响应)</td></tr>
+  <tr><td><code>status</code></td><td>int</td><td>0 禁用 / 1 未联系 / 2 working / 3 updating / 4 not working (WebUI wiki 口径)</td></tr>
+  <tr><td><code>msg</code></td><td>str</td><td>tracker 消息; <b>成功响应后清空</b>(除非 warning)</td></tr>
+  <tr><td><code>num_peers</code> / <code>num_seeds</code> / <code>num_leeches</code> / <code>num_downloaded</code></td><td>int</td><td>peer 计数 (来自 scrape)</td></tr>
+  <tr><td><code>next_announce</code></td><td>qint64, <b>epoch 秒</b></td><td>下次 announce 的绝对时间 (源码 <code>toSecondsSinceEpoch</code> L284-288; 提交注明 "seconds since epoch")</td></tr>
+  <tr><td><code>min_announce</code></td><td>qint64, <b>epoch 秒</b></td><td>"no announces before this time" —— 最早允许下次汇报的绝对时间</td></tr>
+  <tr><td><code>endpoints[]</code></td><td>array</td><td>每 endpoint (含 BT v1/v2) 明细: <code>name</code>/<code>updating</code>/<code>status</code>/<code>msg</code>/<code>bt_version</code>/<code>num_*</code>/<code>next_announce</code>/<code>min_announce</code>; <b>顶层 next/min 取各 endpoint 最早值</b> (torrentimpl.cpp L264-267)</td></tr>
+</table>
+<p class="dim">注意: 未联系过的 tracker 其时间点未设 (libtorrent 默认 <code>time_point32::min()</code>), 序列化后的具体值(极大负数或 0)需真机确认; 消费时把判定域限定在 <code>status ≥ 2</code> 的行即可规避。</p>
+
+<h2 id="t5">§5 libtorrent 机制 (源码级, RC_2_0 = qB 5.2.3 实配)</h2>
+<p>调用链: WebAPI <code>torrents/reannounce</code> → qB <code>reannounceAction</code> →
+<code>TorrentImpl::forceReannounce()</code> → <code>lt::force_reannounce(0, index)</code> →
+<code>torrent::force_tracker_request(now, idx, flags)</code>。</p>
+<pre><code># qB 5.2.3 torrentimpl.cpp L1655 —— 关键: 不带 ignore_min_interval 旗标
+void TorrentImpl::forceReannounce(const int index)
+{
+    m_nativeHandle.force_reannounce(0, index);
+}
+
+# libtorrent torrent.cpp L3893 (force_tracker_request)
+if (is_paused()) return;                       // 停止种子: 静默 no-op
+a.next_announce = (flags &amp; ignore_min_interval)
+    ? t + 1s
+    : std::max(t, a.min_announce) + 1s;        // qB 无旗标 ⇒ 尊重 min_interval,
+                                               // 未过期时推迟到 min_announce 才发
+a.min_announce = a.next_announce;              // 两者被拉成同一时刻
+a.triggered_manually = true;
+
+# 发送瞬间 (torrent.cpp L3387) —— 用户看到的 0/0 抖动
+a.updating = true; a.next_announce = now; a.min_announce = now;
+
+# tracker 响应 (torrent.cpp L3621)
+a.next_announce = now + interval;
+a.min_announce = now + resp.min_interval;
+a.updating = false; a.fails = 0; a.last_error.clear();
+a.message = resp.warning_message 或 空串;      // 成功时 msg 干净</code></pre>
+<ul>
+  <li><b>两种路径</b>: min_interval 已过期 → 立即发送(0 抖动可见); 未过期 → <b>推迟</b>到
+  <code>min_announce + 1s</code> 才发(HTTP 200 已返回, 无任何报错) —— 任何确认机制都必须覆盖推迟路径。</li>
+  <li><b>成功响应的可观测变化</b>: <code>next_announce</code>/<code>min_announce</code> 前跳(epoch 持久可读)、
+  <code>fails</code> 清零、<code>msg</code> 清空、状态回 working —— 但对"本就 working 且 msg 本就为空"的种子,
+  后两项与汇报前无差别, <b>唯一持久的正向证据就是 epoch 前跳</b>。</li>
+  <li><b>另一个盲区</b>: qB 自身的周期性 announce 到期同样会前跳 <code>next_announce</code> ——
+  若语义要求"强制触发的汇报", 需结合前跳时刻 ≈ 指令时刻收窄; 若语义是"tracker 侧收到了新鲜汇报"
+  (辅种场景的真实目的), 两者等价(§7 讨论)。</li>
+</ul>
+
+<h2 id="t6">§6 兼容性</h2>
+<table>
+  <tr><th>项</th><th>事实</th><th>结论</th></tr>
+  <tr>
+    <td>字段引入版本</td><td>WebAPI 2.13.0 (PR <a href="https://github.com/qbittorrent/qBittorrent/pull/23045">#23045</a>, milestone qB 5.2, 2025-08-11 合入);
+    qB 5.2.0 changelog 同步收入 "announce stats within sync data"</td>
+    <td>qB ≥ 5.2.0 可用; 用户实测 5.2.3 ✓ (qb-api 坑档已记录 5.2 = WebAPI 2.14.0, 2.13.0 同批进入 5.2)</td>
+  </tr>
+  <tr>
+    <td>qbittorrent-api</td><td>2026.8.1: <code>Tracker</code> MRO = Tracker → ListEntry → Dictionary → AttrDict
+    (dict 透传, 不裁剪未知键)</td>
+    <td><b>新字段零成本可用, 无需升级库</b></td>
+  </tr>
+  <tr>
+    <td>版本探测</td><td>库提供 <code>app_web_api_version()</code> → <code>GET /app/webapiVersion</code>;
+    项目当前<b>没有任何 qB 版本探测</b> (grep 证实)</td>
+    <td>判据 A/B 需版本闸门(探测或字段存在性), 旧版回退 §7 兜底分支</td>
+  </tr>
+  <tr>
+    <td>项目既有接入</td><td><code>record.py:74-75</code> 已快照 <code>reannounce_in</code>/<code>reannounce</code>;
+    <code>record.py:106</code> 已接 5.2 的 <code>has_other_announce_error</code>;
+    <code>compat.py</code> 有跨版本字段兼容机制</td>
+    <td>信号 E/F 零新增调用; 信号 A/B 需在确认窗口内逐种子拉 <code>torrents/trackers</code> (现实现已在做)</td>
+  </tr>
+</table>
+
+<h2 id="t7">§7 候选判定设计 (供后续拍板, 本轮不实施)</h2>
+<pre><code>基线 (指令时刻 t0, 逐 real tracker):  status, updating, next_e, min_e
+
+每 tick 轮询 (复用 check_pending 的 30s 级窗口):
+  ① 种子 stopped                    → 未发送   (直接出结论, 免白等 30s)
+  ② 任一 tracker updating / status 3 → 成功(在途)  — 直接证据, 撞见即收
+  ③ 任一 tracker next_e &gt; b.next_e + TOL   → 成功      — 主判据 (epoch 前跳)
+     (min_e &gt; b.min_e + TOL 同向佐证)
+  ④ 任一 tracker status 4 且 msg 非空      → 失败      — tracker 拒绝, 持久可靠
+  ⑤ 窗口走完仍无 ①-④                      → 未确认    — 单列, 不与"失败"混淆
+
+TOL 建议 3~5s: epoch 在两次 announce 之间恒定, 噪声只剩秒级取整;
+立即路径的前跳幅度 = 响应时刻 − 上次响应时刻(恒 &gt; 0), 上次汇报越"新鲜"跳幅越小,
+故 TOL 不能大 —— 用户"投递后立刻汇报"场景的跳幅可能只有几秒。
+
+窗口建议 max(30s, min_e − t0 + 余量, 上限如 10min):
+推迟路径的 announce 在 min_announce 才发, min_e 是 API 直出的预计发送时刻 ——
+也可选择直接回"推迟, 预计 HH:MM"回执, 不必干等。
+
+旧 qB (&lt; 5.2.0, 无 epoch 字段): 回退 status/msg/updating + 种子级 reannounce 的
+证据门控 —— 成功难证、失败可证, 与 pitfalls/backend/effect-confirmation.md 的
+"证据门控"口径一致; 该场景下回执语义建议只承诺"未观测到拒绝"。</code></pre>
+<ul>
+  <li><b>语义边界需拍板</b>: qB 周期 announce 到期同样前跳 <code>next_e</code>。"成功"指
+  (a) 强制指令触发的汇报, 还是 (b) 窗口内 tracker 收到了新鲜汇报? 辅种场景目的上是 (b),
+  两者在效果上等价; 若取 (a), 用"前跳时刻距指令时刻 &lt; 一个 tick"收窄即可。</li>
+  <li><b>规则侧缺口顺带记录</b>: 规则动作 <code>rules/actions/transfer.py</code> 的
+  <code>ReannounceAction</code> 只有 600s 限频, 没有任何结果确认 —— 若确认器重构, 可复用同一判定函数。</li>
+</ul>
+
+<h2 id="t8">§8 待真机验证 (落地前先证一次)</h2>
+<p>以下三点本报告从源码推出、未在真机 5.2.3 上实测, 落地前建议先跑一条只读探针:</p>
+<ul>
+  <li>未联系/未调度 tracker 的 <code>next_announce</code> 序列化值(预期极大负数或 0);</li>
+  <li>立即路径的实际前跳幅度与 0 抖动时长(用户观察 ~0.5s);</li>
+  <li>推迟路径: min_interval 未过期时强制汇报前后 <code>next_announce/min_announce</code> 是否同值移动。</li>
+</ul>
+<pre><code># 只读探针骨架 (qbittorrent-api): 对一个做种中种子, 记基线 → reannounce → 高频采样
+import time, json, qbittorrentapi
+qb = qbittorrentapi.Client(host=..., username=..., password=...)
+print("webapiVersion:", qb.app_web_api_version())
+h = qb.torrents_info(filter="seeding")[0].hash
+base = {t["url"]: (t.get("status"), t.get("next_announce"), t.get("min_announce"))
+        for t in qb.torrents_trackers(torrent_hash=h) if not t["url"].startswith("**")}
+qb.torrents_reannounce(torrent_hashes=[h])
+for i in range(40):                                  # ~12s, 0.3s 一次
+    snap = {t["url"]: (t.get("updating"), t.get("status"), t.get("next_announce"),
+                       t.get("min_announce"), t.get("msg"))
+            for t in qb.torrents_trackers(torrent_hash=h) if not t["url"].startswith("**")}
+    print(json.dumps(snap, ensure_ascii=False))
+    time.sleep(0.3)</code></pre>
+
+<h2 id="t9">§9 信息源</h2>
+<ul>
+  <li>qB 源码 (release-5.2.3 tag): <code>src/webui/api/torrentscontroller.cpp</code> (getTrackers / getStickyTrackers / reannounceAction), <code>src/base/bittorrent/torrentimpl.cpp</code> (forceReannounce / nextAnnounce / updateTrackerEntryStatus / announceStatus)</li>
+  <li>libtorrent (RC_2_0): <code>src/torrent.cpp</code> (force_tracker_request L3893 / 发送置位 L3387 / 响应处理 L3621), <code>include/libtorrent/announce_entry.hpp</code>, <code>src/torrent_handle.cpp</code></li>
+  <li><a href="https://github.com/qbittorrent/qBittorrent/pull/23045">PR #23045</a> (milestone qB 5.2, "seconds since epoch") · <a href="https://github.com/qbittorrent/qBittorrent/blob/master/doc/WebAPI_Changelog.md">WebAPI Changelog 2.13.0</a> · <a href="https://www.qbittorrent.org/news">qB 5.2.0 News</a> (announce stats in sync data)</li>
+  <li><a href="https://libtorrent.org/reference-Torrent_Handle.html">libtorrent reference: force_reannounce</a> (ignore_min_interval / min_interval 语义) · <a href="https://libtorrent.org/reference-Trackers.html">announce_entry 参考</a></li>
+  <li>qbittorrent-api 2026.8.1 本地包源码 (Tracker 透传 / app_web_api_version)</li>
+</ul>
+
+<footer>
+  调研报告 · 出厂即冻结 · 状态 Done · 认领档案:
+  <code>memory-bank/tasks/26-10-05-backend-reannounce-confirm.md</code><br>
+  <span class="dim">行号基于 qB release-5.2.3 / libtorrent RC_2_0 检索当日快照, 仅作定位参考。</span>
+</footer>
+</div>
+</body>
+</html>
