@@ -290,6 +290,9 @@
 - test_api_events_sse_generator_error_still_unsubscribes: 生成器异常死亡也走 finally 退订
 - test_api_hr_confirm_empty: 人工对账戳端点(缺 site/未启用/未接入 400, 成功 ok, 写入失败 409)
 - test_api_hr_refresh_single_site_and_no_runtime: refresh 指定单站受理 + hr 门面缺席回 409
+- test_frontend_toast_duration_floor_by_kind: 错误/超时类 toast 停留下限守阵(2026-10-05 用户报「右下角错误信息停留太短」) ——
+  ui_feedback.js 头部 `TOAST_MS_FLOOR` 给 error/timeout 设 ≥8s 下限, `toast()` 与 `_finishToast()`
+  两条排期路径都经 `toastMs(kind, ms)` 解析且 ms 缺省为 null(绕过即回到裸 ms, 下限形同虚设)
 """
 import base64
 import errno
@@ -12689,3 +12692,29 @@ def test_api_traffic_qb_group_live_tail_member_only(web_env):
     # 单种端点同享活尾
     body = client.get("/api/traffic/qb/torrent/HB", headers=auth, params={"window": "5m"}).json()
     assert any(p and p["t"] == b0 and p["dl"] == 300 for p in body["points"])
+
+
+def test_frontend_toast_duration_floor_by_kind() -> None:
+    """错误 / 超时类 toast 停留时长下限守阵(2026-10-05 用户报「右下角错误信息停留太短」)
+
+    停留时长单点在 `shared/ui_feedback.js` 头部的 `TOAST_MS_FLOOR`; `toast()` 与 `_finishToast()`
+    两条排期路径都必须经 `toastMs(kind, ms)` 解析 —— 绕过即回到裸 ms, 按 kind 的下限形同虚设。
+    钉住三件事(全是"pytest 全绿、界面行为退化"的形态):
+    1. error / timeout 的下限不得低于 8s(用户报障的正是"4s 一闪而过, 带原因段的报错读不完");
+    2. 排期点恰好 2 处且都走 `toastMs(kind, ms)`(新增排期点须一并走解析, 否则新链路漏掉下限);
+    3. 两处 `ms` 缺省为 `null`(写死数字会让 kind 下限在缺省路径不生效 —— 而报障的恰恰是缺省路径)。
+    """
+    fb = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
+    m = re.search(r"TOAST_MS_FLOOR = \{([^}]*)\}", fb)
+    assert m, "ui_feedback.js 缺 TOAST_MS_FLOOR(停留时长单点; 改名或挪走了? 同步本守阵)"
+    floors = {k: int(v) for k, v in re.findall(r"(\w+)\s*:\s*(\d+)", m.group(1))}
+    assert floors.get("error", 0) >= 8000, \
+        f"error 类 toast 停留下限过低({floors.get('error')}ms) —— 「错误信息一闪而过」会复发"
+    assert floors.get("timeout", 0) >= 8000, \
+        f"timeout 类 toast 停留下限过低({floors.get('timeout')}ms) —— 部分失败汇总同样要读得完"
+    assert fb.count("toastMs(kind, ms)") == 2, \
+        "排期点应为 2 处(toast / _finishToast)且都必须走 toastMs(kind, ms)(绕过 = 下限失效)"
+    assert re.search(r"toast\(text, kind = \"info\", ms = null, opts = \{\}\)", fb), \
+        "toast() 的 ms 缺省必须是 null(写死 4000 会让 kind 下限在缺省路径不生效)"
+    assert re.search(r"_finishToast\(id, kind, text, ms = null\)", fb), \
+        "_finishToast() 的 ms 缺省必须是 null(同上)"

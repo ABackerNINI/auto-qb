@@ -7,21 +7,37 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_FEEDBACK);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+/* toast 停留时长策略(单点) --------------------------------------------------
+ * 用户报「右下角错误信息停留太短」(2026-10-05): 此前 error / timeout 缺省只有 4000ms
+ * (少数调用点自填 8000ms) —— 报错文案常带原因段, 4s 根本读不完。
+ * 口径 = 按 kind 设**下限**: 调用点缺省 ms 取下限, 显式传更短的 ms 一律抬到下限
+ * (传更长照旧, 不封顶)。这样全量 error / timeout 调用点(约 30 处, 散在 8 个片段文件)
+ * 无需逐个改, 以后新写的调用点也不会再退回短停留。想再调长只动这一个常量。
+ * sticky 常驻条不经此处(early return), info / ok 行为不变(缺省 4000)。
+ */
+const TOAST_MS_DEFAULT = 4000;
+const TOAST_MS_FLOOR = { error: 12000, timeout: 12000, warn: 8000 };
+const toastMs = (kind, ms) => {
+  const floor = TOAST_MS_FLOOR[kind] || 0;
+  return ms == null ? Math.max(TOAST_MS_DEFAULT, floor) : Math.max(ms, floor);
+};
+
 window.AQB_FEEDBACK = {
   methods: {
     /* ---------------------------------------------------------- 站内提示条(toast) */
-    toast(text, kind = "info", ms = 4000, opts = {}) {
+    /* 停留时长见文件头 TOAST_MS_FLOOR(ms 缺省 = 按 kind 取下限) */
+    toast(text, kind = "info", ms = null, opts = {}) {
       const id = ++this._toastSeq;
       this.toasts.push({ id, text, kind });
       // sticky = 常驻不自动消失(强制汇报"等待中"): 由 _finishToast 更新终态后退场
       if (opts.sticky) return id;
-      setTimeout(() => this._dropToast(id), ms);
+      setTimeout(() => this._dropToast(id), toastMs(kind, ms));
       return id;
     },
     /* 常驻提示条结算: 原位更新文案与样式(kind)后停留 ms 再退场 —— "等待中"->"成功/超时"的强反馈 */
-    _finishToast(id, kind, text, ms = 4000) {
+    _finishToast(id, kind, text, ms = null) {
       this._updateToast(id, { kind, text });
-      setTimeout(() => this._dropToast(id), ms);
+      setTimeout(() => this._dropToast(id), toastMs(kind, ms));
     },
     _updateToast(id, patch) {
       const t = this.toasts.find((x) => x.id === id);
