@@ -45,6 +45,7 @@
 - test_fail_streak_resets_on_clean_wave: 失效波数清零 —— 连续失效只跨失效波延续, 恢复波清零, 单次失效不背历史(修复既有从未清零)
 - test_reuse_window_uses_min_of_config_and_interval: 1.复用窗时长 = min(reuse_window, 拉取间隔)(计划 26-09-30-0240), 窗内 REUSED 语义不变
 - test_reuse_window_never_exceeds_interval: 1b. clamp 另一半 —— 复用窗 > 拉取间隔时静默收敛到拉取间隔
+- test_reuse_window_not_extended_by_idle_interval: 1c. 复用窗公式 min(reuse_window, refresh_interval) 不跟随 idle —— 稳态降频只动节奏闸, 新鲜度窗不放大(计划 26-10-05-0555 §2.7 不变项)
 - test_interval_gate_waits_between_waves: 2.复用窗外 + 拉取间隔内 → WAITING「未到拉取时刻(拉取间隔)」(节奏闸门, 防频率放大)
 - test_interval_gate_due_runs_next_wave: 3.健康波 + interval 到点 → 正常开波(默认节奏与解耦前一致)
 - test_force_bypasses_reuse_and_interval_gates: 4.立即拉取(force)→ 跳过复用窗与拉取间隔两道闸
@@ -53,6 +54,13 @@
 - test_partial_wave_advances_healthy_ts_failed_lane_waits: 7.部分失败波 healthy_ts 前进 → 失败档位等下一波
 - test_refresh_all_force_not_blocked_by_gates: 8.走查 refresh_all(force=True)不被两道闸挡(--hr-once 语义)
 - test_wave_ts_refreshes_every_wave_not_frozen: C1 回归 —— lane.wave_ts 每波刷新(不冻结首成功波; 缺席证明新鲜度闸基准正确)
+
+### 稳态降频(计划 26-10-05-0555 §2/S4; 锚点三态契约: None=采集失败不降频 / {}=确认零锚点可降频)
+- test_idle_interval_used_when_objects_empty: 稳态 1. 零锚点站点(对象集空)healthy+idle 内 WAITING(理由带「稳态降频」), 过 idle 闸正常开波
+- test_idle_gate_releases_immediately_when_objects_become_nonempty: 稳态 2. 破稳态即时回退 —— 稳态期锚点翻非空, 下一 poll 立即开波(间隔闸沿用旧 healthy_ts)
+- test_anchor_collection_failure_disables_idle: 稳态 3. 锚点采集失败(None)≠稳态 —— 常态间隔照常判闸, wave 行为与实施前一致
+- test_zero_anchors_site_still_idles: 稳态 4. 显式 {}(采集成功零种子)照常降频 —— 与失败路径的区分回归钉
+- test_idle_mode_flip_persists_once: 稳态 5. 旗标仅翻转时写盘(翻转恰一次, 稳态期反复 poll 零额外写), JSON 往返保真
 
 ### P1 覆盖率提升轮(T1.1 错误路径系统补齐)
 - test_refresh_site_guard_paths: 站点未接入 / 全局开关关 / result.ok 属性
@@ -114,6 +122,7 @@ from auto_qb.hr.model import (
     HrLaneState,
     HrSiteData,
     HrVerified,
+    HrWaveMeta,
 )
 from auto_qb.hr.resolve import HrAnchor, HrIdentity, judge_record
 from auto_qb.hr.status import build_site_statuses, entry_details
@@ -1358,6 +1367,18 @@ def test_reuse_window_never_exceeds_interval(tmp_path):
     assert data.expires_at == clock.now + 3600.0
 
 
+def test_reuse_window_not_extended_by_idle_interval(tmp_path):
+    """1c. 复用窗公式不跟随 idle(计划 26-10-05-0555 §2.7 不变项): 稳态降频只动拉取间隔闸,
+    复用窗仍 = min(reuse_window, refresh_interval) —— 新鲜度与节奏解耦, 稳态期窗不放大到 24H"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)  # 默认 reuse_window=2H / refresh=12H / idle=24H
+    run_wave(service, {})  # 确认零锚点 → 稳态降频生效
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.idle_mode is True, "前置: 零对象站点已进稳态"
+    assert data.expires_at == clock.now + 2 * 3600.0, "稳态期复用窗仍 min(2H, 12H)=2H, 不跟随 idle(24H)"
+
+
 def test_interval_gate_waits_between_waves(tmp_path):
     """2. 复用窗外 + 拉取间隔内 → WAITING「未到拉取时刻(拉取间隔)」: 节奏闸门存在,
     缩短复用窗不会把取数频率放大到「每复用窗一波」(§2 关键正确性 —— 唯一否决点)"""
@@ -1478,6 +1499,112 @@ def test_refresh_all_force_not_blocked_by_gates(tmp_path):
     assert blocked[0].action == "reused", "不带 force: 复用窗内照旧复用"
     forced = service.refresh_all(force=True)
     assert forced[0].action in ("refreshed", "partial"), "force=True: 走查立即开波"
+
+
+# ---------------- 稳态降频: idle_refresh_interval(计划 26-10-05-0555 §2/S4; 锚点三态契约见 §2.5) ----------------
+
+
+def test_idle_interval_used_when_objects_empty(tmp_path):
+    """稳态 1. 零锚点站点(对账对象集为空): healthy+idle 间隔内 WAITING 且理由带「稳态降频」标记,
+    过 idle 闸后正常开波 —— 降频只动节奏闸, 波的形态不变"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    first = run_wave(service, {})  # 首波 healthy_ts=0 间隔闸不拦, 照常开波并立稳态旗
+    assert first.action in (ACTION_REFRESHED, ACTION_PARTIAL)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.healthy_ts == clock.now and data.wave.idle_mode is True
+    clock.advance(3 * 3600.0)  # 复用窗(2H)外, idle 间隔(24H)内
+    waiting = run_wave(service, {})
+    assert waiting.action == ACTION_WAITING
+    assert "未到拉取时刻" in waiting.reason and "稳态降频" in waiting.reason
+    clock.advance(21 * 3600.0 + 60.0)  # 过 idle 闸(累计 24H+60s)
+    assert run_wave(service, {}).action in (ACTION_REFRESHED, ACTION_PARTIAL)
+
+
+def test_idle_gate_releases_immediately_when_objects_become_nonempty(tmp_path):
+    """稳态 2. 破稳态即时回退: 稳态期内新增本地种子(锚点翻非空 → 对象集翻非空) → 下一 poll
+    立即开波 —— 无需等 idle 闸到点, 也不要求先有新的健康波(间隔闸沿用旧 healthy_ts 判已到点)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {})  # 零锚点首波 → 稳态
+    clock.advance(13 * 3600.0)  # 常态间隔(12H)已过, idle(24H)未到
+    waiting = run_wave(service, {})
+    assert waiting.action == ACTION_WAITING and "稳态降频" in waiting.reason
+    # 稳态期内本机新下载一个种子 → 锚点翻非空(刚完成, 不吃超额线)
+    _, h_new = mk_blob("BRAND NEW 99")
+    anchors = {h_new: anchor_for("BRAND NEW 99", completion_on=T_DONE_NEW, seeding_time=0)}
+    released = run_wave(service, anchors)
+    assert released.action in (ACTION_REFRESHED, ACTION_PARTIAL), \
+        f"破稳态即时回退: healthy+12H 早已过去, 下一 poll 应立即开波: {released.action} {released.reason}"
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.idle_mode is False
+
+
+def test_anchor_collection_failure_disables_idle(tmp_path):
+    """稳态 3. 锚点采集失败(None)≠稳态(§2.5, 报告 R5 唯一实质风险): 常态间隔照常判闸 ——
+    已过 12H 即开波不吃 idle 降频; wave 拿到空锚点, 行为与实施前一致"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {})  # 首波零锚点 → 稳态立旗
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.idle_mode is True
+    clock.advance(13 * 3600.0)  # 常态间隔(12H)已过, idle(24H)未到
+    result = run_wave(service, None)  # anchors=None: 采集失败/未知原样直通(不被吞成 {})
+    assert result.action in (ACTION_REFRESHED, ACTION_PARTIAL), \
+        f"采集失败不构成稳态: 常态间隔已到应立即开波: {result.action} {result.reason}"
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.idle_mode is False and data.wave.lanes["A"].status == "ok"
+
+
+def test_zero_anchors_site_still_idles(tmp_path):
+    """稳态 4. 显式 {}(采集成功但该站零种子)照常降频 —— 与失败路径的区分回归钉:
+    同为「13H 处 poll」, {} 等 idle 闸; None 立即开波(test_anchor_collection_failure_disables_idle)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {})  # 确认零锚点 → 稳态
+    clock.advance(13 * 3600.0)  # 常态间隔(12H)已过, idle(24H)未到
+    waiting = run_wave(service, {})
+    assert waiting.action == ACTION_WAITING
+    assert "未到拉取时刻" in waiting.reason and "稳态降频" in waiting.reason
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.idle_mode is True
+
+
+def test_idle_mode_flip_persists_once(tmp_path):
+    """稳态 5. 旗标仅翻转时写盘(§2.4): 翻转 poll 恰好一次写(revision +1), 稳态期反复 poll
+    零额外写; 落盘数据 JSON 往返保真(idle_mode 不丢)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+
+    def revision():
+        data, _ = service.store(SITE).read_unlocked()
+        return data.revision, data.wave.idle_mode
+
+    run_wave(service)  # 锚点未知(None): 不构成稳态, 旗标保持 False; 波照常跑
+    rev0, idle0 = revision()
+    assert idle0 is False
+    result = run_wave(service, {})  # 确认零锚点 → 翻稳态; 复用窗内 REUSED —— 翻转写是本次唯一写
+    assert result.action == "reused"
+    rev1, idle1 = revision()
+    assert idle1 is True and rev1 == rev0 + 1, "翻转 False→True 恰写一次(只有旗标写, 复用窗分支无波次写)"
+    clock.advance(3 * 3600.0)  # 复用窗外, idle 间隔内
+    waiting = run_wave(service, {})
+    assert waiting.action == ACTION_WAITING and "稳态降频" in waiting.reason
+    assert revision() == (rev1, True), "稳态期 poll 零写盘(revision 不变)"
+    clock.advance(3600.0)
+    assert run_wave(service, {}).action == ACTION_WAITING
+    assert revision() == (rev1, True), "稳态期反复 poll 零额外写"
+    data, _ = service.store(SITE).read_unlocked()
+    assert HrWaveMeta.from_json(data.wave.to_json()).idle_mode is True, "JSON 往返保真"
+    # 破稳态: 锚点翻非空 → 旗标翻回 False 也恰写一次; 间隔闸按常态 12H 判(4H 处仍 WAITING)
+    result = run_wave(service, {"h1": anchor_for("h1", completion_on=T_DONE_NEW, seeding_time=0)})
+    assert result.action == ACTION_WAITING and "稳态降频" not in result.reason
+    assert revision() == (rev1 + 1, False), "破稳态翻转 True→False 恰写一次(间隔闸 WAITING 无波次写)"
 
 
 # ==================== P1 覆盖率提升轮(T1.1 错误路径系统补齐) ====================
