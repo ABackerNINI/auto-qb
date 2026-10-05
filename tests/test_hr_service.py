@@ -83,13 +83,13 @@
 - test_download_invalid_blob_counted_as_fail: .torrent 内容非法 -> 计种子失败不外抛, fail.last_ts 记注入时钟(26-10-02-0526 时钟收编守阵)
 - test_readonly_degradation_noted_in_result: 锁自检失败(只读退化) -> 波照跑但不写盘, reason 注明
 - test_persist_false_reports_readonly_mode: 只读走查(persist=False)不写盘且 reason 注明「只读模式」
-- test_lane_summary_and_prune_and_position_units: 波次纯函数单元: 档位摘要 / 陈旧淘汰(模块级单点, 含恒 0 存量不淘汰) / 位置覆盖 / 缺席证明 / 下载反查
+- test_wave_pure_function_units: 波次纯函数单元: 档位摘要缺档形态 / 陈旧淘汰(模块级单点) / 位置覆盖 / 缺席证明
 - test_merge_seen_refreshes_last_seen: 合并口刷新 last_seen(本波已见行=合并时刻, 未重见条目冻结在最后见到时刻) —— issue 26-10-01-2335 写入点, 详情表导出契约随点亮
 - test_index_retention_prune_revives: INDEX_RETENTION 复活链 —— 退役条目距 last_seen 超期被清理 / 活跃条目与观察期条目不误清 / 放行记录不随索引清理丢失 / 淘汰落盘
 - test_build_objects_unit_guards: 对象集现算单元: 空 hash / 非活跃条目 / 锚点漂移回炉 / 已放行未漂移不回对象集(issue 26-10-02-0526)
 - test_build_views_skips_disabled_and_channel_states: 视图构建跳过未启用站点; 通道状态 ok/silent/disabled 与无锁读
 - test_lane_fail_streak_alerts_error: 连续 3 波同档失效 -> ERROR 升级(只提示人, 不改行为)
-- test_worker_and_freeze_guards: 终态冻结的档位无效守卫 / 观察期位置未覆盖冻结 / 出口无 hash 不落记录
+- test_freeze_and_observation_guards: 终态冻结: 档位本波失效 -> 维持原状; 观察期: 位置未覆盖冻结计数; 出口身份缺位不落记录
 
 ### S2 拉取历史记录点(计划 26-10-04-0312 §3.3)
 - test_history_wave_events_six_terminal_states: 六终态(refreshed/partial/login/no-channel/quota/Retry-After)

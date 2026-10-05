@@ -1,7 +1,7 @@
 # 改名 / 移动 / 生成链接
 
 > 摘要: 改文件名或移动文档后必须全仓查引用(坏链不会让任何测试失败); 生成型脚本写路径有两个必踩的坑; 认领链 `doc-refs` 是仓库根相对口径。
-> 触发: 改名, 移动文档, 重命名, 生成索引, 写链接, relative_to, relpath, 认领链, doc-refs, Refs
+> 触发: 改名, 移动文档, 重命名, 生成索引, 写链接, 新写切片, 相对深度, relative_to, relpath, 认领链, doc-refs, Refs
 
 ### 改文件名 / 移动文档后必须查全仓引用 (三步缺一不可)
 
@@ -12,12 +12,21 @@
   ③替换后再 grep 确认为 0。
   （相对链接存在性扫描守卫已建: `tests/test_memory_bank.py::test_doc_links_are_not_broken`,
   2026-09-29 实战拦截过一次 —— 守卫兜底不豁免本条三步, 写对路径仍是人的责任。）
+  **新写的链接同样适用**: 相对路径按**写入文件所在目录**算深度(如 `testing/baselines/` 下指
+  `tasks/` 要 `../../tasks/`, 不是 `../tasks/`), 写完**先跑一次该守卫**(`commands run test.one -- tests/test_memory_bank.py::test_doc_links_are_not_broken`)
+  再收尾, 别等全量闸门才红。
 - **复发**: 1 —— 2026-09-29 (auto-qb-clone1): M2 收尾把档案两条进度日志**外迁**进 `tasks/attachments/`
   时, 段内 `../testing/…`/`../plans/…` 链接深度差一层全变坏链; 手写的指针行还猜错了计划文件名
   (`plan-hr-v3-rebuild` ≠ 实际 `plan-hr-verify-rebuild`)。守卫 `test_doc_links_are_not_broken` 拦下,
   改 `../../` 与真实文件名后转绿。**为什么没命中**: 把「外迁搬段落」当成「追加」, 没路由到本条
   (「移动文档」触发词) —— 段落搬家 = 引用面搬家, 搬完必须按本条三步扫链接; 文件名一律 `ls` 核对,
   不凭印象拼。
+- **复发**: 2 —— 2026-10-05 (auto-qb-clone5): 新写基线切片
+  `testing/baselines/26-10-05-0945-test-plan-docstring-drift.md` 时, 正文链接 `[档案](../tasks/26-10-05-backend-hr-steady-throttle.md)`
+  少一层 —— 从 `baselines/` 到 `tasks/` 需 `../../tasks/`, 全量闸门 `test.full` 红(唯一一条 failed)。
+  **为什么没命中**: 本条当时的处置段只谈「改名/搬家后查引用」, 而这次是**新写**链接, 自认为
+  "没动老文件就不在触发面内"; 实际触发词早有「写链接」, 且深度必须按**写入文件所在目录**独立算 ——
+  别拿别处见过的 `../tasks/` 直接套。
 
 ### 生成型脚本往 markdown / html 里写路径: `relative_to` 不会生成 `..` 回跳
 

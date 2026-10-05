@@ -8,7 +8,7 @@
 - test_match_tracker_multi_domain: 多域名配置匹配
 - test_match_tracker_subdomain: 配置主域匹配子域 tracker hostname
 - test_match_tracker_no_substring_match: 子串不再误匹配(如 hhanclub.net 不匹配 fakehhanclub.net)
-- test_match_tracker_conf_multi_match_error_log: 匹配到多个 tracker 配置返回第一个并打印 ERROR 日志
+- test_match_tracker_conf_multi_match_warning_log: 匹配到多个 tracker 配置返回第一个并打印 WARNING 日志(等级整改 26-09-27-1126: 自动降级属排障语义)
 - test_apply_speed_limit_sets_both_directions: 未设限速时写入上传+下载
 - test_apply_speed_limit_skips_when_equal: 当前值==目标值不重复写
 - test_apply_speed_limit_odd_manual_skip: 当前为奇数 KiB 手动限速不覆盖(仅另一方向写)

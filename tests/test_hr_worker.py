@@ -9,8 +9,8 @@
 - test_start_publishes_disk_views_before_first_wave: 冷启动先把**磁盘既有结论**发布出去(不得留判定真空期)
 - test_run_once_keeps_revision_when_reusing: 数据仍在有效期 -> 复用 -> 视图不变 -> revision 不抬
 - test_run_once_logs_no_channel_once_per_state: 无通道告警只报一次(分钟级轮询不得刷通知)
-- test_run_once_warns_on_partial_refresh: 刷新不完备(疑似改版) -> WARNING(service 不报这条)
-- test_pacing_is_info_not_warning_and_not_repeated: **被自己频控拦下**的 partial / 未到点 waiting 只记 INFO(
+- test_run_once_warns_on_parse_breakdown: 全档「没有 HR 表」(疑似改版) -> error + 告警(service 不报这条)
+- test_pacing_partial_is_info_not_warning_and_not_repeated: **被自己频控拦下**的 partial / 未到点 waiting 只记 INFO(
   绝不 WARNING —— 会被 notify 推成系统通知), 且同状态不逐轮刷(数字抹掉后同键)
 - test_pacing_state_reminds_once_per_window: 节流态持续时按 channel_silence_warn 周期提醒一次(不静默消失)
 - test_worker_does_not_repeat_alert_owned_by_producer: 已由产生处告警的事件只记 INFO(不重复 WARNING)

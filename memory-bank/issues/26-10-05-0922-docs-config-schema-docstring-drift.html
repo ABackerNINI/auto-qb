@@ -6,12 +6,12 @@
 <meta name="issue-slug" content="config-schema-docstring-drift">
 <meta name="issue-stamp" content="26-10-05-0922">
 <meta name="issue-type" content="docs">
-<meta name="doc-topic" content="hr-steady-throttle">
-<meta name="doc-refs" content="">
+<meta name="doc-topic" content="test-plan-docstring-drift">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-05-test-plan-docstring-drift.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="test_config_schema.py 头部测试计划清单与实际函数漂移">
-<meta name="issue-summary" content="头部 docstring 列出的 test_hr_check_field_levels_cover_validation_keys 等用例已不存在, 违反新增测试同步清单硬约束">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="测试文件头部「## 测试计划」清单与实际函数漂移(tests/ 全量: 11 文件 21 条幽灵条目)">
+<meta name="issue-summary" content="起点是 test_config_schema.py 头部清单列出已删用例; 扩面扫描 79 份带清单的测试文件后共 11 文件 21 条条目指向全仓不存在的函数, 违反新增测试同步清单硬约束">
 <title>test_config_schema.py 头部测试计划清单与实际函数漂移 · docs · 计划外问题（便签）</title>
 <style>
   :root {
@@ -63,26 +63,27 @@
 
   <header class="cover">
     <div class="kicker">计划外问题（便签）· docs</div>
-    <h1>test_config_schema.py 头部测试计划清单与实际函数漂移</h1>
-    <p class="lede">头部 docstring 列出的 test_hr_check_field_levels_cover_validation_keys 等用例已不存在, 违反新增测试同步清单硬约束</p>
+    <h1>测试文件头部「## 测试计划」清单与实际函数漂移(tests/ 全量)</h1>
+    <p class="lede">起点是 test_config_schema.py 头部清单列着已删用例; 扩面扫描 79 份带「## 测试计划」的测试文件后, 共 11 份 / 21 条清单条目指向全仓不存在的函数 —— 守阵退役/改名/搬迁后条目无人跟删</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-0922-docs-config-schema-docstring-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 09:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
 
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
-    <p>tests/test_config_schema.py 头部 docstring 的「## 测试计划」清单与文件内实际函数漂移: 列出的 <code>test_hr_check_field_levels_cover_validation_keys</code> 及多条 impact 用例在文件中已不存在。AGENTS 硬约束要求「新增测试必须同步该文件头部 docstring 的测试计划清单」, 该文件只进不出、清单一侧长期无人维护。</p>
+    <p>测试文件头部 docstring 的「## 测试计划」清单与实际函数漂移。起点: tests/test_config_schema.py 列出 <code>test_hr_check_field_levels_cover_validation_keys</code> 及多条 impact 用例, 文件内已不存在。认领后按「建议」扩面扫描, 全 tests/ 79 份带清单的文件里有 11 份 / 21 条同类幽灵条目 —— 共性是清单**只进不出**: 守阵退役、改名、搬迁之后没人跟删条目。AGENTS 硬约束只要求「新增测试必须同步清单」, 反向(删改测试时同步清单)无守阵, 故漂移静默累积。</p>
   </section>
 
   <section id="s2">
     <h2><span class="no">02</span>位置</h2>
     <ul>
-      <li><code>tests/test_config_schema.py</code> 头部 docstring「## 测试计划」段 (取证 2026-10-05 09:22, 计划 26-10-05-0555 S1 阶段发现)</li>
+      <li>起点: <code>tests/test_config_schema.py</code> 头部 docstring「## 测试计划」段 (取证 2026-10-05 09:22, 计划 26-10-05-0555 S1 阶段发现)</li>
+      <li>扩面(认领后按「建议」扫描): 另 10 份文件 —— <code>test_checking.py</code> · <code>test_config_writer.py</code> · <code>test_hr_config.py</code>(6 条) · <code>test_hr_report.py</code>(4 条) · <code>test_hr_runtime.py</code> · <code>test_hr_service.py</code>(2 条) · <code>test_hr_worker.py</code>(2 条) · <code>test_state_matrix.py</code> · <code>test_torrents.py</code>(2 条) · <code>test_tracker.py</code></li>
       <li>grep: <code>"## 测试计划"</code> · <code>test_hr_check_field_levels_cover_validation_keys</code></li>
     </ul>
   </section>
@@ -93,9 +94,21 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法 · 验证</h2>
+    <p><strong>实际修法</strong>(用户拍板把扫出的同类漂移并入本件): ①<code>test_config_schema.py</code> 按文件内实际用例重建清单 —— 删幽灵 <code>test_hr_check_field_levels_cover_validation_keys</code>(该守阵随 impact 级别表退役时已删, 全仓零定义), 补登 <code>test_optional_only_on_object_fields</code> 与 <code>test_checking_action_spec_keys_match_validation</code>; ②扩面到全 tests/ 后逐条裁决其余 21 条 —— <strong>改名或合并 15 条</strong>(如 <code>test_checking_full_checking_defer_resume</code> → <code>..._pending_resume</code>; test_hr_config 的 6 条 <code>test_impact_*_is_l0/l1</code> 在 W4 级别表退役后并为 2 条段级条目)、<strong>删除 5 条</strong>(特性整体退役 —— 超龄豁免 <code>completed_age_limit</code> 已随 resolve 重构删除、<code>--hr-resume</code> CLI 已不存在、缺失字段清单用例已迁 test_sync.py 等)、<strong>修正跨文件指针 1 条</strong>(<code>test_state_matrix.py</code> 原指 <code>test_conditions.py(test_state_condition_invalid_attr_fails_fast)</code>, 实为 <code>test_config.py::test_validate_state_condition_spec</code>)。<strong>只改 docstring, 未动测试代码</strong>。</p>
+    <p><strong>验证方式</strong>: ①脚本比对 79 份带清单文件的「清单条目 vs AST 实际 <code>def test_*</code>」—— 改前 21 条幽灵 → 改后 <strong>0 条</strong>(另剔除两类误报: 清单里引用的**文件名**、跨文件引用的用例名); ②<code>commands run test.full</code> 全绿。</p>
+    <p><strong>测试数字</strong>: 2603 passed + 4 skipped / 99%(40.15s, 2026-10-05 09:45 实测)。相对上基线 2589+4 的 +14 全部来自既有 HR 稳态降频分支(<code>86441e54</code> 之后新增 <code>def test_*</code> 14 条 / 删除 0 条), 与本笔无关 —— 本笔零用例增删。</p>
+    <p class="hint">遗留(本件未做, 范围守恒): 「文件内有、清单无」的漏登只对 <code>test_config_schema.py</code> 做了全量核对; 多数文件清单本就不穷举(<code>test_web.py</code> 280 个用例只列 ~90 条), 全量补登是另一件事。反向守阵(删改测试时同步清单)仍缺 —— 本件只清了存量。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-05 09:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-05 09:36 — 认领（用户指派），状态 <strong>Open</strong> → <strong>In Progress</strong>。复验（09:36）：锚点仍复现 —— 清单中的 <code>test_hr_check_field_levels_cover_validation_keys</code> 文件内无对应函数；反向也有漏登（<code>test_optional_only_on_object_fields</code> / <code>test_checking_action_spec_keys_match_validation</code> 实存但未入清单）</li>
+      <li>2026-10-05 09:41 — 修复完成，状态 <strong>In Progress</strong> → <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见「04 实际修法 · 验证」）</li>
+      <li>2026-10-05 09:42 — 用户拍板「扫出的同类漂移并入本件一起修」+「补完整 DoD + 提交」：本件范围扩到 tests/ 全量（11 文件 / 21 条幽灵条目），状态 <strong>Done</strong> → <strong>In Progress</strong>，专题由 <code>hr-steady-throttle</code> 改为 <code>test-plan-docstring-drift</code></li>
+      <li>2026-10-05 09:45 — 扩面修复完成，状态 <strong>In Progress</strong> → <strong>Done</strong>：改名/合并 15 条 · 删除 5 条 · 跨文件指针修正 1 条；复扫 79 份文件幽灵 0 条；test.full 2603 passed + 4 skipped / 99%（40.15s）。认领链：本件 ↔ <a href="../tasks/26-10-05-test-plan-docstring-drift.md">tasks/26-10-05-test-plan-docstring-drift.md</a></li>
     </ul>
   </section>
 

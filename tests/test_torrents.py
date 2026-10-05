@@ -11,9 +11,7 @@
 - test_store_refresh_diff: 次轮增删检测
 - test_record_check_hr_on_real_record: 真实 TorrentRecord.check_hr_* 直测(防鸭子影子掩盖)
 - test_store_refresh_keeps_records: 已存在记录对象跨 tick 保留(惰性缓存存活)
-- test_store_refresh_cleans_cache_on_remove: 删除种子的记录回收, 缓存清理
-- test_missing_torrent_fields: 缺失字段清单(全字段/缺字段/dict 形状)
-- test_store_restore_torrent: restore_torrent 恢复删除前记录(对象身份+幂等)
+- test_store_refresh_cleans_cache_on_remove: 删除种子的记录回收, 缓存清理- test_store_restore_torrent: restore_torrent 恢复删除前记录(对象身份+幂等)
 - test_store_queries: get/__contains__/all/hashes/__len__
 - test_store_trackers_lazy: 记录级 trackers_info/tracker_urls 惰性拉取+缓存
 - test_store_files_lazy: 记录级 files 惰性拉取+缓存
@@ -33,7 +31,7 @@
 - test_view_field_value_quantizes_seeding_time: 视图量化: seeding_time 按分钟取整, 其余原样
 - test_store_seeding_time_quantized_no_repaint: 做种时长秒级递增不每轮置脏, 跨分钟才置脏
 - test_record_seeding_time_quantized_update_from: update_from 双通道(Mapping/对象)的分钟量化
-- test_record_hr_follows_site_judgement: 接入站点后 hr_managed 听站点侧(转移种子 downloaded=0 也受管束); check_hr_condition 只答本地触发
+- test_record_hr_managed_follows_site_judgement: 接入站点后 hr_managed 听站点侧(转移种子 downloaded=0 也受管束); check_hr_condition 只答本地触发
 - test_record_hr_released_by_site_view: 已核实放行 -> hr_managed False(本地 downloaded 再大也不管束)
 - test_record_hr_falls_back_without_link: 未注入判定桥 / 站点未接入 / 桥返回 None -> 行为与既有本地逻辑完全一致(零静默变更)
 - test_record_hr_no_evidence_row4_semantics: 行 4(站点无有效证据)语义反转 —— 纯辅种做种满即达标 / 未达标即管束; 结构断言两方法互不调用(回归 2026-09-29 RecursionError)

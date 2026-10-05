@@ -15,7 +15,7 @@ TorrentState 枚举属性(state_enum.is_*); StateCondition spec 直接写枚举�
 - test_state_enum_has_exactly_22_members: TorrentState 枚举成员数量锁定(qB 当前 22 个, 含 allocating)
 - test_state_condition_matches_enum_matrix: StateCondition(is_* 属性名 spec) 判定 == 枚举属性(全状态 × 全语义)
 - test_group_has_downloading_matrix: 全部状态 × _group_has_downloading 组内判定(活跃下载 = is_downloading 且非停止且非校验)
-- StateCondition 非法 spec 的 fail-fast 校验测试见 test_conditions.py(test_state_condition_invalid_attr_fails_fast)
+- StateCondition 非法 spec 的 fail-fast 校验测试见 test_config.py(test_validate_state_condition_spec)
 """
 import os
 import tempfile

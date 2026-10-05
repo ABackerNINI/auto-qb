@@ -27,9 +27,7 @@
 - test_write_tree_rejects_v2_tree_with_legacy_key: 已盖 v2 章仍带旧键(手改/事故残留) -> 报废除错且磁盘一字不动(无常驻兼容层)
 - test_preview_tree_rejects_stale_version_tree: 预览同口径被闸门拦截
 - test_materialize_migrates_and_backups: 启动物化: 版本号备份(迁移前原样) + 磁盘落当前版本新结构 + 返回 desc 与备份路径
-- test_materialize_idempotent_and_noop: 已是当前版本零 IO; 二次调用幂等, 不产生新备份
-- test_materialize_invalid_aborts_without_touching_disk: 迁移后校验不过(旧键定位不到档案) -> 不备份不落盘
-- test_materialize_dry_run_probe: write=False(dry-run 探测)只报 desc, 不校验不备份不落盘
+- test_materialize_idempotent_and_noop: 已是当前版本零 IO; 二次调用幂等, 不产生新备份- test_materialize_dry_run_probe: write=False(dry-run 探测)只报 desc, 不校验不备份不落盘
 - test_mask_tree_non_dict_passthrough: 掩码只处理映射, 列表整体不动
 - test_unmask_tree_guards_and_sentinel_old_value: 非映射树原样返回; 旧值缺失/本身是哨兵时保持哨兵
 - test_stamp_schema_version_ignores_non_dict_cfg: 树缺 config 段时盖章静默跳过

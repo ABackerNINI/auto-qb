@@ -41,12 +41,8 @@ config v2→v3 迁移(config/migrations.py)一次性删除或改名, 无常驻�
 - test_ranges_and_formats: 间隔下限 / 日额范围 / 页上限 / 时间窗格式聚合报错
 - test_channel_extension_id_format: extension_id 只接受 32 位 a~p
 - test_channel_request_timeout_range: request_timeout 上下限
-- test_impact_hr_check_field_is_l0: hr_check 字段变更 -> L0 字段级路径
-- test_impact_channel_field_is_l1: channel 子段变更 -> L1(端点监听身份, 要重挂)
-- test_impact_shared_dir_is_l1: shared_dir 变更 -> L1(站点文件目录变了, 服务与线程要重建)
-- test_impact_reuse_window_is_l0: reuse_window 变更 -> L0 字段级路径(取数线程每轮现读)
-- test_impact_sites_is_l0: sites 子段变更 -> hr_check.sites 一条 L0
-- test_impact_site_hr_check_is_l0: 派生站点 hr_check 变更 -> trackers.<站点>.hr_check 一条 L0
+- test_impact_hr_check_is_single_section_change: hr_check 段变更 -> 整段一条(W4 级别表退役后粒度 = 段, 无字段级展开)
+- test_impact_trackers_whole_section_change: trackers 段变更(含派生站点 hr_check) -> 整段一条; 重匹配语义归 tracker 模块 full_round
 - test_config_error_message_points_to_section: 校验失败经 ConfigError 抛出, 消息里带具体路径
 """
 import os

@@ -6,7 +6,6 @@
 - test_tracker_fields_match_validation: 站点字段集合 == KNOWN_TRACKER_KEYS
 - test_tracker_hr_fields_match_validation: 站点 hr 字段集合 == KNOWN_TRACKER_HR_KEYS
 - test_hr_sites_fields_match_validation: hr_check.sites 条目字段集合 == KNOWN_HR_SITE_KEYS
-- test_hr_check_field_levels_cover_validation_keys: impact 的 hr_check 字段级别表覆盖全部已知键(漏登记 = 静默按 L2)
 - test_rule_fields_cover_rule_known_keys: 规则级字段(+conditions/actions 专段) == RULE_KNOWN_KEYS
 - test_condition_plugins_cover_registry / test_action_plugins_cover_registry: 插件表覆盖全部已注册插件
 - test_field_kinds_are_declared: 所有 Field.kind 在 KINDS 中
@@ -14,8 +13,10 @@
   R 级段全部打标; fs 段与其叶子 path_map 都打标(前端叶子分支只认自身 Field.readonly)
 - test_plugin_kinds_are_declared: 所有 Plugin.spec_kind/item_kind 在约定集合中, 且形态自洽
 - test_enum_fields_have_options / test_object_fields_have_children: enum 有选项, object 有子字段
+- test_optional_only_on_object_fields: optional(整段可省略, 前端以开关控制)仅用于 object 字段, 且与 required 互斥
 - test_unit_default_only_on_unit_kinds: unit_default 仅用于 UNIT_KINDS 且在合法单位表内
 - test_unit_kind_defaults_are_parseable: UNIT_KINDS 字段的 default 可拆为 数值+单位(单位合法)
+- test_checking_action_spec_keys_match_validation: checking 动作 spec 字段 == CHECKING_ACTION_KNOWN_KEYS
 - test_deleted_trigger_whitelist_matches_validation: 删除触发白名单与 validation 一致
 - test_schema_payload_is_complete: schema_payload 含全部前端所需分区
 - test_tri_state_marks_site_hr_str_fallback_keys: tri_state(站点级「覆盖为空」)声明面守卫 —— 全库仅

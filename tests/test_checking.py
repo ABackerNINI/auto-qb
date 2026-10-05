@@ -44,7 +44,7 @@
 - test_checking_full_checking_dup_ignore: 全检重复提交忽略
 - test_checking_full_checking_auto_start_false: auto_start=false 不自动开始
 - test_checking_full_checking_send_error: 发送失败处理
-- test_checking_full_checking_defer_resume: 任务队列驱动: 触发任务让位 -> 成功 resume 恢复
+- test_checking_full_checking_pending_resume: 任务队列驱动: 提交后 pending(断点, 不重入队) -> 校验成功 -> 子任务重新入队 origin 续跑(记录执行历史)
 - test_checking_full_checking_resume_continues_actions: 断点续跑: 校验成功后执行断点后的剩余动作
 - test_checking_full_checking_resume_skips_conditions: 断点续跑跳过条件评估(条件变化不影响续跑)
 - test_checking_full_checking_resume_skips_dedup: 断点续跑跳过去重(execute_once=once 不拦截续跑)

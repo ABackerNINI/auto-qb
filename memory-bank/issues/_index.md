@@ -16,7 +16,7 @@
 |---|---|
 | bug | 4 |
 | perf | 5 |
-| docs | 2 |
+| docs | 1 |
 | refactor | 4 |
 | feat | 16 |
 | chore | 3 |
@@ -25,7 +25,6 @@
 ## Open
 
 - [chore] [覆盖率闸使 test.one 部分运行绿测试仍 FAIL 退出](26-10-05-0922-chore-pytest-cov-gate-test-one.html) — pytest.ini --cov-fail-under=98 对 test.one 部分文件运行同样生效, 用例全绿仍以覆盖率 FAIL 退出, 排障须手工 --no-cov
-- [docs] [test_config_schema.py 头部测试计划清单与实际函数漂移](26-10-05-0922-docs-config-schema-docstring-drift.html) — 头部 docstring 列出的 test_hr_check_field_levels_cover_validation_keys 等用例已不存在, 违反新增测试同步清单硬约束
 - [feat] [C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)](26-10-05-0922-feat-hr-prune-notice.html) — _prune_index 淘汰 active=false 行时整行消失无痕迹无预警, 建议淘汰前 <3 天 WARNING 一次 (计划 26-10-05-0555 §04 方向 A)
 - [refactor] [SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制](26-10-05-0922-refactor-hr-fetchable-dead-config.html) — fetchable 字段零消费方, 全站型不取数仅判定侧尊重; 当前无 preset 定义 listing=none 属潜在缺口
 - [bug] [跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验](26-10-05-0402-bug-skip-check-self-fail-gate.html) — 候选种子自身当日校验失败(recheck_fails[hash]>0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查
@@ -70,6 +69,7 @@
 
 ## Done
 
+- [docs] [测试文件头部「## 测试计划」清单与实际函数漂移(tests/ 全量: 11 文件 21 条幽灵条目)](26-10-05-0922-docs-config-schema-docstring-drift.html) — 起点是 test_config_schema.py 头部清单列出已删用例; 扩面扫描 79 份带清单的测试文件后共 11 文件 21 条条目指向全仓不存在的函数, 违反新增测试同步清单硬约束
 - [feat] [WEBUI 重新校验需确认框: 鼠标路径无兜底(仅键盘路径有)](26-10-05-0254-feat-webui-recheck-confirm.html) — 右键菜单/批量条的重新校验点下即执行, 无任何确认; 键盘路径 shortcuts.js:814 已有 confirmDialog —— 两路径防护不对称, 鼠标路径需补确认框
 - [feat] [WEBUI 跳检缺前置条件: 已完成种子仍可跳检, 前置清单待分析](26-10-05-0254-feat-webui-skip-check-preconditions.html) — WEB 右键/批量跳检直连 ops.skip_check, 只过『部分下载禁止+同日去重』两道闸门(ops_mod.py:349), 未过规则侧决策链『仅暂停中未完成』(checking.py:88) —— 已完成(progress=1)种子仍会被删种重加; 完整前置条件清单需专项分析
 - [test] [QbManager 测试组合下 pytest caplog 恒空: setup_logging 清根 handlers 连 caplog handler 一起摘](26-10-04-2311-test-caplog-qbm-setup-logging.html) — QbManager 测试组合下 pytest caplog 恒空: 模块装配 LoggingModule 调 setup_logging 清根 handlers, caplog 挂在根上的 handler 被一并摘除; test_ops.py 已有 capture_ops_logs 自挂模块 logger 的绕过范式

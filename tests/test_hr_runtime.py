@@ -19,9 +19,7 @@
 - test_view_snapshot_and_wake_are_safe_when_not_started: 未启动时读视图/唤醒都安全
 - test_judge_is_none_when_disabled: 总开关关 -> judge 返回 None(消费方回落本地字段逻辑)
 - test_judge_reads_published_view: 启用时按**当前已发布**视图现算(命中清单 -> 受管束 + 站点达标结论)
-- test_judge_without_published_view_falls_back: 还没发布过视图(启动窗口) -> None, 不是"未核实"
-- test_judge_passes_completed_age_limit: 超龄豁免线从调用方透传到判定收口(缺省 0 = 关闭)
-- test_sleeper_is_interruptible_by_stop: 锁内等待可中断 —— 关停/热重挂不必等它把间隔睡完
+- test_judge_without_published_view_falls_back: 还没发布过视图(启动窗口) -> None, 不是"未核实"- test_sleeper_is_interruptible_by_stop: 锁内等待可中断 —— 关停/热重挂不必等它把间隔睡完
 - test_sleeper_returns_after_the_wait: 没被打断时按秒数返回(不提前也不卡住)
 - test_production_service_gets_a_sleeper: 生产服务必须带 sleeper(2026-09-25 实报: 不等待 ⇒ 下载被页面饿死)
 - test_apply_starts_worker_when_never_started: 站点接入热重载(启动时无站点) -> apply 必须把服务/线程/端点都带起来

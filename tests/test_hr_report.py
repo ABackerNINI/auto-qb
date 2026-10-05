@@ -19,12 +19,10 @@
   实际意思 / 还需做种镜像站点形态(HH:MM:SS)/ 剩余达标时间不再显示 —— 它是「考核窗口」不是
   「还需做种的量」, 摆出来会被读成后者(2026-09-25 实报: 9d21h 被当成还要做种 9 天)
 - test_run_hr_status_survives_broken_file: 站点文件坏掉时如实标 WARN:, 报告仍出得来
-- test_run_hr_status_shows_observation_lines: 观测面四行(排序/P 分布/骤降/档位对比)
-- test_run_hr_status_shows_order_violation: 排序违反轮的 x + 首处位置
+- test_run_hr_status_shows_defense_lines: 防伪观测行: A 档流转守恒 / 骤降观测 / 各档波次
+- test_run_hr_status_shows_order_violation_note: 排序违反波的报告: 各档行标出该档状态 + 备注行给出首处位置
 - test_run_hr_status_zero_row_counter_attested_tail: M3 展示口径 —— 计数自证空集的零行波
   尾注标「计数自证空集, 无需人工确认」, 全文不再出现 --hr-confirm-empty 话术(计划 26-09-29-2036 §2.5)
-- test_period_stats_consistency_and_gap: P 反算一致率与离散(前置实测2.的证据口径)
-- test_run_hr_resume_clears_suspension: --hr-resume 清停用 + 记恢复痕迹; 未停用如实说明
 
 ### P1 覆盖率提升轮: 报告层长尾
 - test_scope_of_url_variants: URL 档位提取(hrtype=/status=/都没有)
