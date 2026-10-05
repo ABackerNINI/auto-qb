@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实施计划: 全项目全面 Code Review — 分批评审与发现分流</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="full-code-review">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-05-0951">
+<meta name="doc-updated" content="26-10-05-0951">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1116;
+    --paper: #141920;
+    --paper-2: #1a212b;
+    --code-bg: #10151c;
+    --ink: #dde4ec;
+    --dim: #97a3b1;
+    --faint: #6b7684;
+    --line: #293240;
+    --hair-soft: #222b37;
+    --accent: #5ec2a7;
+    --mark: #17211d;
+    --bad: #e07a6e;
+    --good: #6fc78c;
+    --warn: #e0b35e;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+    --display: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.8 var(--display);
+  }
+  .sheet {
+    max-width: 1180px; margin: 0 auto; padding: 44px 24px 60px;
+    display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 44px;
+  }
+  @media (max-width: 880px) { .sheet { grid-template-columns: 1fr; } .toc { position: static; } }
+  nav.toc {
+    position: sticky; top: 24px; align-self: start;
+    font-size: 13px; border-left: 1px solid var(--hair-soft); padding-left: 14px;
+  }
+  .toc-label { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; color: var(--faint); margin-bottom: 10px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 3px 0; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .no { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-right: 8px; }
+  .toc-foot { margin-top: 18px; color: var(--faint); font-size: 12px; line-height: 1.6; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  @media (max-width: 880px) { header.cover { grid-column: 1; } }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; color: var(--accent); margin-bottom: 10px; }
+  h1 { font-size: 27px; line-height: 1.35; margin: 0 0 12px; }
+  .lede { color: var(--dim); font-size: 15px; max-width: 76ch; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 22px; padding: 14px 0; border-top: 1px solid var(--hair-soft); border-bottom: 1px solid var(--hair-soft); }
+  .meta-row .item .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; color: var(--faint); text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; margin-top: 2px; }
+  .badge { display: inline-block; border: 1px solid var(--warn); color: var(--warn); border-radius: 999px; padding: 1px 12px; font-size: 12px; }
+  section { grid-column: 2; margin-top: 40px; }
+  @media (max-width: 880px) { section { grid-column: 1; } }
+  h2 { font-size: 20px; margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 13px; color: var(--accent); margin-right: 12px; }
+  h3 { font-size: 15.5px; color: var(--accent); margin: 24px 0 8px; }
+  p { margin: 9px 0; max-width: 82ch; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--paper-2); padding: 1px 6px; border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; margin: 13px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--paper-2); font-weight: 600; white-space: nowrap; }
+  td code, th code { white-space: nowrap; }
+  td.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .ok { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); } .dimtxt { color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 11px 15px; margin: 13px 0; font-size: 14px; max-width: 82ch; }
+  .callout.red { border-left-color: var(--bad); }
+  .callout.warn { border-left-color: var(--warn); }
+  .flow {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--dim);
+    white-space: pre; overflow-x: auto; padding: 14px 16px; margin: 13px 0;
+    background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px;
+  }
+  .flow b { color: var(--ink); font-weight: 400; }
+  .flow i { color: var(--accent); font-style: normal; }
+  .flow em { color: var(--warn); font-style: normal; }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px; padding: 13px 15px; overflow-x: auto; font-size: 12.5px; line-height: 1.65; }
+  pre code { background: none; padding: 0; }
+  ul { margin: 8px 0; padding-left: 22px; } li { margin: 4px 0; max-width: 82ch; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  footer { grid-column: 2; margin-top: 52px; padding-top: 14px; border-top: 1px solid var(--hair-soft); color: var(--faint); font-size: 12.5px; }
+  @media (max-width: 880px) { footer { grid-column: 1; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>结论与拍板点</a>
+    <a href="#s2"><span class="no">02</span>范围与底数</a>
+    <a href="#s3"><span class="no">03</span>评审维度 R1–R10</a>
+    <a href="#s4"><span class="no">04</span>评审方法与发现登记</a>
+    <a href="#s5"><span class="no">05</span>分步实施(S0–S6)</a>
+    <a href="#s6"><span class="no">06</span>批次地图与重点矩阵</a>
+    <a href="#s7"><span class="no">07</span>风险与对冲</a>
+    <a href="#s8"><span class="no">08</span>非目标</a>
+    <a href="#s9"><span class="no">09</span>变更记录</a>
+    <div class="toc-foot">
+      起点基线: test.full 2581+4 / 98%<br>
+      状态 Open · 待拍板后实施
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">IMPLEMENTATION PLAN · FULL CODE REVIEW</div>
+    <h1>全项目全面 Code Review — 分批评审与发现分流</h1>
+    <p class="lede">对 <code>src/</code> 约 33.6k 行 Python + 前端约 20.5k 行 static 资产做一次只读全面评审: 按包结构分 8 批, 先建「已知问题底册」防重复报告, 逐批按十项维度读码登记发现, 末轮汇总分级、撞车去重、出审计报告并把 P0/P1 全部入池。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">Status</div><div class="v"><span class="badge">Open · 待拍板</span></div></div>
+      <div class="item"><div class="k">起点 HEAD</div><div class="v mono">ef93db56 (develop)</div></div>
+      <div class="item"><div class="k">评审对象</div><div class="v">src/ 全量 + static/ + extensions/ + scripts/(D2)</div></div>
+      <div class="item"><div class="k">节奏</div><div class="v">约 12 轮会话, 一批一轮</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论与拍板点</h2>
+    <p>本任务定性为 <b>只读取证</b>: 评审轮内 <span class="bad">不改一行代码、不改一份文档</span>, 全部产出是「发现清单 + 分级 + 处置去向」。修复一律另走认领(issue → 计划 → 实施), 避免评审轮与修复轮混在一起导致范围失控。方案骨架三句话:</p>
+    <ul>
+      <li><b>先底册后读码</b> —— 评审开工先把 issues 池 38 条 Open、坑档 7 类、在途计划/报告、守阵清单蒸馏成一页「已知问题底册」, 之后每条发现先对底册去重, 不报告已知问题。</li>
+      <li><b>分批包结构 + 统一动作序列</b> —— 8 个批次覆盖全部源码(前端可拆两轮), 每批一轮会话, 统一走「读档 → 坑档对照 → 逐文件读码 → 工具提示源 → 登记去重」五步, 每轮收尾走会话 DoD。</li>
+      <li><b>证据纪律</b> —— 每条发现必须带 <code>文件:行</code> 位置 + 可达性论证; 沿用近期复验先例(如 hr verified 覆写 issue 复验判「全路径不可达」), 不可达不登记为 bug。</li>
+    </ul>
+    <div class="callout">评审报告落在 <code>memory-bank/reports/</code>(审计工位), 与本计划共用专题 <code>full-code-review</code>; P0/P1 在 S6 一律经 create-issue 入池并互链。</div>
+    <h3>拍板点(实施前逐项确认)</h3>
+    <table>
+      <tr><th>#</th><th>问题</th><th>推荐</th></tr>
+      <tr><td class="mono">D1</td><td>前端评审深度: static/ 有 31 个 JS(≈13.5k 行) + 18 个 CSS(≈7.0k 行) + 18 个 HTML, 全量逐文件一轮装不下</td><td>JS 逻辑<b>全量逐文件</b>但拆 F1/F2 两轮; CSS/HTML 只查 XSS 汇入点与机制回归面(aq-tip / 皮肤 / 轮询边界), <b>不做样式审美评审</b></td></tr>
+      <tr><td class="mono">D2</td><td>外围是否纳入: <code>extensions/</code>(≈1.6k 行 JS) + <code>scripts/</code> + <code>docker/</code>/compose</td><td>纳入, 归批 H 一轮过(体积小、与主程序耦合面清晰)</td></tr>
+      <tr><td class="mono">D3</td><td>是否引入静态扫描工具作提示源</td><td>只读引入 <code>ruff check</code> + <code>bandit</code>, 逐条人工复核后才可登记; <b>不引 mypy</b>(存量注解不齐, 噪音淹真信号)</td></tr>
+      <tr><td class="mono">D4</td><td>评审中撞见 P0(数据破坏/安全级)是否当场修</td><td><span class="bad">不当场修</span> —— 保持只读; P0/P1 当轮入池并标注建议优先级, 由用户决定何时认领</td></tr>
+      <tr><td class="mono">D5</td><td>评审期间 develop 演进的对冲</td><td>每批开工先 <code>my-commit-flow.sync</code>; 发现按「文件 + 函数名 + 行号」三锚登记; 报告封面记各批评审时 HEAD; 与在途计划交叉的文件标注「落地后复验」</td></tr>
+    </table>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>范围与底数</h2>
+    <p>以下数字取自起点 HEAD <code>ef93db56</code> 实测(<code>git ls-files</code> + <code>wc -l</code>), 实施时以 S1 重盘为准。</p>
+    <table>
+      <tr><th>域</th><th>文件数</th><th>行数</th><th>最大单文件</th><th>一句话说明</th></tr>
+      <tr><td><code>src/auto_qb/hr/</code></td><td class="mono">18</td><td class="mono">7,092</td><td class="mono">service.py 1,621</td><td>HR 考核域: 签发/观察期/在线核实/降频</td></tr>
+      <tr><td><code>core/</code> + <code>core/modules/</code></td><td class="mono">23</td><td class="mono">8,685</td><td class="mono">traffic_store.py 1,147</td><td>主循环、任务队列、qB API、各任务模块</td></tr>
+      <tr><td><code>webui/</code>(py)</td><td class="mono">26</td><td class="mono">5,267</td><td class="mono">views.py 925</td><td>WebUI 后端: 视图/命令/运行时/路由</td></tr>
+      <tr><td><code>config/</code>(schema+validation)</td><td class="mono">19</td><td class="mono">4,966</td><td class="mono">validation/sections.py 665</td><td>配置加载/模型/写盘/schema/校验</td></tr>
+      <tr><td><code>rules/</code>(expr+actions)</td><td class="mono">18</td><td class="mono">2,646</td><td class="mono">expr/env.py 463</td><td>规则引擎: 条件/表达式/动作</td></tr>
+      <tr><td><code>torrents/</code></td><td class="mono">5</td><td class="mono">1,314</td><td class="mono">store.py 560</td><td>TorrentRecord 种子数据独占层</td></tr>
+      <tr><td><code>infra/</code></td><td class="mono">9</td><td class="mono">2,328</td><td class="mono">utils.py 1,075</td><td>工具/文件访问/通知</td></tr>
+      <tr><td><code>tray/</code> + 入口</td><td class="mono">7</td><td class="mono">802</td><td class="mono">tray/app.py 529</td><td>托盘 + <code>src/auto-qb.py</code></td></tr>
+      <tr><td><code>webui/static/</code></td><td class="mono">67</td><td class="mono">≈20,460</td><td class="mono">31 JS ≈13.5k</td><td>前端(js 13.5k / css 7.0k / html 18 件)</td></tr>
+      <tr><td><code>extensions/</code> + <code>scripts/</code></td><td class="mono">—</td><td class="mono">≈1.6k JS + 脚本</td><td class="mono">hr-fetch-proxy</td><td>浏览器扩展(出网代理) + 开发脚本(D2)</td></tr>
+    </table>
+    <h3>已知问题底数(防重复报告的清单源)</h3>
+    <ul>
+      <li><b>issues 池 38 条 Open</b>: bug 4 / perf 5 / docs 2 / refactor 4 / feat 16 / chore 3 / question 4 —— 评审只对齐 bug/perf/refactor/docs/chore 共 18 条做撞车比对; feat/question 是需求讨论不重开。</li>
+      <li><b>坑档 7 类</b>(<code>pitfalls/</code>: git · web-ui · backend · testing · ops · kb · docs) —— 每批读码前按域对照, 坑档描述的历史缺陷模式就是免费的检查清单。</li>
+      <li><b>在途/待评审件</b>: 计划 <a href="../plans/26-10-05-0923-plan-reannounce-confirm-rework.html">26-10-05-0923 reannounce 确认重构</a>(Open, 将改 <code>webui/commands.py</code> / <code>webui/runtime.py</code> / <code>shared/commands.js</code>); 报告 <a href="../reports/26-10-04-1730-report-qb-traffic-storage-v3.html">26-10-04-1730 流量存储 v3</a>(待评审, 指向 traffic_store 重设计) —— 这两处覆盖的文件上, 评审发现只登记「计划未覆盖」的增量。</li>
+      <li><b>守阵</b>: <code>testing/guards.md</code> 登记的高风险守阵(O_TRUNC 清零、生成物 LF、跳检闸门等) —— 评审核「守阵是否还活着 + 该有而没有的域」。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>评审维度 R1–R10</h2>
+    <p>十项维度从根 AGENTS.md 黄金法则 + 近期实际事故导出, 是本项目的「特色评审面」; 通用正确性/可读性问题仍随时登记, 但每批重点核对下表。</p>
+    <table>
+      <tr><th>#</th><th>维度</th><th>核对判据</th><th>近期出处(为什么查它)</th></tr>
+      <tr><td class="mono">R1</td><td>幂等与窗口语义</td><td>「每天一次/只跑一次」类窗口必须靠 state_file 去重(<code>record_execution</code>), 不依赖循环频率; 重复执行无副作用</td><td>黄金法则 1; 去重窗口散落检查</td></tr>
+      <tr><td class="mono">R2</td><td>保守默认与危险闸门</td><td>跳检/强制汇报/删种子/覆盖限速默认关 + 只对显式范围生效; 规则路径与 WEB 路径<b>双入口都要过闸</b></td><td>黄金法则 2; 跳检闸门计划刚扩过 G3-G8; 池内 0402「跳检洗白坏数据」bug</td></tr>
+      <tr><td class="mono">R3</td><td>状态持久化与单一写线程</td><td>只有主循环线程改任务队列与 state_file; 找绕开假设的写点; 优雅退出落盘 + state_save_interval 周期落盘</td><td>黄金法则 3/5; webui 后台线程边界</td></tr>
+      <tr><td class="mono">R4</td><td>fail-fast 边界</td><td>新配置键全量进 <code>validate_config</code> 且同步 <code>config/schema.py</code>(守卫测试在查); 校验通过后的代码不应再散落防御式校验</td><td>黄金法则 4; 池内 2002「schema 外键静默忽略」</td></tr>
+      <tr><td class="mono">R5</td><td>时间与数值语义</td><td>epoch 秒 vs 倒计时; 挂钟 vs 单调钟; 时区; 挂钟上界断言滥用; 除零/空集合</td><td>epoch 当倒计时事故(reannounce); 坑档 timing-tolerance「不要为对称加挂钟上界」</td></tr>
+      <tr><td class="mono">R6</td><td>错误处理与退避</td><td>except 静默吞并; 异常路径时间线推进/退避(已修主循环一处, 查同类模式未覆盖面); 失败可观测</td><td>池 0728 主循环异常无退避已修; <code>or {}</code> 吞并类先例</td></tr>
+      <tr><td class="mono">R7</td><td>IO 与资源</td><td>原子写(tmp+replace); O_TRUNC 直写(守阵已清零, 查复发); 句柄泄漏; 编码; 跨平台路径</td><td>坑档 editing-traps; O_TRUNC 守阵</td></tr>
+      <tr><td class="mono">R8</td><td>安全面</td><td>凭据引用不入日志/报告; webui 输入校验与路径穿越(<code>file_access.py</code>); 前端 XSS 汇入点(innerHTML 系); 外部进程/API 注入面</td><td>config.yml 是真实生产配置; extensions 走站点凭据出网</td></tr>
+      <tr><td class="mono">R9</td><td>并发与竞态</td><td>webui 轮询读主循环共享结构的快照一致性; HR 后台 worker 与主循环边界; 双写竞态</td><td>hr/worker.py 与主循环并存; /api/state 全量构建挤占主循环(池 2218)</td></tr>
+      <tr><td class="mono">R10</td><td>测试缺口与文档漂移</td><td>行为变更处守阵是否存在; 坑档复发检查; docs 与代码漂移点(只登记不修)</td><td>池 0922 两件 docs 漂移; guards.md 对照</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>评审方法与发现登记</h2>
+    <h3>每批统一动作序列(五步)</h3>
+    <div class="flow"><b>开工</b>  my-commit-flow.sync → 记本批 HEAD
+  ↓
+<b>① 读档</b>    systemPatterns / modules 对应主题 + 该包 docstring 建心智模型
+<b>② 坑档对照</b> pitfalls/ 相关类先过一遍(历史缺陷模式 = 免费检查清单)
+<b>③ 逐文件读码</b> 按 LOC 降序, 每文件对照维度矩阵勾选, 全文件过目
+<b>④ 工具提示源</b> ruff + bandit 限该包范围, 逐条人工复核(D3 拍板后)
+<b>⑤ 登记去重</b> 发现表回填报告草稿 + 已知底册撞车标注
+  ↓
+<b>收尾</b>  会话 DoD: activeContext 切片 + test.full 记数字 + 报告草稿落盘</div>
+    <div class="callout warn"><b>基线不变式</b>: 评审轮不改码, 每轮 test.full 数字应与起点基线(2581+4 / 98%)持平 —— 漂移只可能来自他人提交或环境变化, 先查明再继续, 这本身就是评审期间的回归哨兵。</div>
+    <h3>发现条目登记格式</h3>
+    <table>
+      <tr><th>字段</th><th>约定</th></tr>
+      <tr><td class="mono">ID</td><td><code>&lt;批字母&gt;-&lt;序号&gt;</code>(如 <code>A-03</code>), 跨批不重号</td></tr>
+      <tr><td class="mono">维度</td><td>R1–R10 之一 + 必要时补「general」</td></tr>
+      <tr><td class="mono">级</td><td><b>P0</b> 数据破坏/安全/PT 账号风险 · <b>P1</b> 功能错误(恒不触发/恒误报/洗白类) · <b>P2</b> 健壮性(边界/竞态/退避缺失) · <b>P3</b> 可维护性/命名/文档</td></tr>
+      <tr><td class="mono">位置</td><td>三锚: <code>文件:行</code> + 函数/类名(行号漂移时靠函数名找)</td></tr>
+      <tr><td class="mono">症状</td><td>一句话说清「什么条件下会出什么问题」</td></tr>
+      <tr><td class="mono">可达性证据</td><td>调用链论证或复现路径; <b>论证不出可达就不登记为 bug</b>(降 P3 备查或不记)</td></tr>
+      <tr><td class="mono">撞车</td><td>底册 issue 编号 / 坑档 / 在途计划, 三者其一或「无」</td></tr>
+      <tr><td class="mono">处置建议</td><td>入池(建议类型与档位) / 并入在途计划备注 / 仅记录不处置</td></tr>
+    </table>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>分步实施(S0–S6)</h2>
+    <table>
+      <tr><th>步</th><th>内容</th><th>产出</th><th>完成判据(证据门控)</th></tr>
+      <tr><td class="mono">S0<br>准备</td><td>sync 记起点 HEAD → test.full 记起点基线 → 建<b>已知问题底册</b>(issues 38 条 Open 蒸馏成「包 × 一句话」表 + 坑档按类索引 + 在途计划/报告清单 + guards.md 守阵清单) → 创建报告草稿骨架 → 拍板 D1–D5 回写本计划</td><td>报告草稿 <code>reports/&lt;stamp&gt;-report-full-code-review.html</code>(状态 Open, 附录即底册四表); 计划状态 → In Progress</td><td>底册四表齐全; D1–D5 逐项有结论; 报告草稿封面记起点 HEAD 与基线数字</td></tr>
+      <tr><td class="mono">S1<br>批次地图</td><td>重盘 <code>git ls-files</code> 生成 8 批文件全集清单(文件 × LOC × 关联测试 × 关联文档 × 重点维度), 回填 §06 矩阵</td><td>§06 矩阵定稿(带实测行号基线)</td><td>脚本核对: 各批文件并集 == 源码全集, 0 漏 0 重</td></tr>
+      <tr><td class="mono">S2<br>后端第一批</td><td>批 A(主循环与任务模块) + 批 B1(HR 核心) + 批 B2(HR 周边), 各一轮, 走 §4 五步</td><td>三批发现表(A-xx / B1-xx / B2-xx)</td><td>每批: 全文件过目勾选 + 发现表登记(「无发现」也是结论) + 底册去重注记 + 每轮 DoD 完成</td></tr>
+      <tr><td class="mono">S3<br>后端第二批</td><td>批 C(流量采集与存储) + 批 D(配置链) + 批 E(WebUI 后端), 各一轮; E 批先读 reannounce 计划 §设计再读码, 只登记计划未覆盖增量</td><td>三批发现表(C/D/E-xx)</td><td>同 S2; C 批发现逐条标注与 v3 存储报告的关系</td></tr>
+      <tr><td class="mono">S4<br>前端与外围</td><td>批 F1/F2(前端 JS 拆两轮) + 批 G(规则引擎与种子数据) + 批 H(infra/tray/入口/脚本/扩展), 各一轮; F 批 XSS 用「数据源 → 渲染点」grep 清单法(innerHTML / insertAdjacentHTML / v-html 等)</td><td>四批发现表(F1/F2/G/H-xx)</td><td>同 S2; XSS 清单覆盖 static 全部 JS 汇入点并留核对表</td></tr>
+      <tr><td class="mono">S5<br>汇总分级</td><td>全部发现合并 → 底册撞车终验 → 每条 P 级二次论证(降级/升级都要写理由) → 处置分流(入池清单定稿)</td><td>分级终表 + 入池清单</td><td>P0/P1 逐条有可达性复验论证; 撞车标注与底册逐条对得上; 无 ID 断号</td></tr>
+      <tr><td class="mono">S6<br>报告与收尾</td><td>报告定稿(doc-status → Done, 记各批 HEAD) → P0/P1 全部 create-issue 入池并互链 → 本计划状态 → Done → <code>kb.index</code> 重建 → activeContext 迁出 → 向用户汇报分级统计与拍板执行情况</td><td>终版报告 + 新 issue 若干 + 计划 Done</td><td><code>kb.docmap --check</code> 无断链; 入池数与报告清单一致; 生成器索引重建绿</td></tr>
+    </table>
+    <div class="flow"><b>S0 准备+底册</b> → <b>S1 批次地图</b> → <i>S2</i> [A] [B1] [B2] → <i>S3</i> [C] [D] [E] → <i>S4</i> [F1] [F2] [G] [H] → <b>S5 汇总</b> → <b>S6 报告+入池</b>
+每轮: <em>sync → 读档 → 坑档对照 → 逐文件读码 → 工具提示源 → 登记去重 → DoD</em>     (约 12 轮, 可并轮; 深度优先于速度)</div>
+    <p class="dimtxt">中间发现 accumulate 在报告草稿滚动回填; doc-forms 对 report 的「出厂即冻结」以 S6 定稿为出厂时点, 草稿期只增不改旧条目。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>批次地图与重点矩阵</h2>
+    <p>S1 会用脚本重盘并逐文件展开; 下表是开工前的骨架(行数为起点 HEAD 实测)。重点维度取 §03 编号。</p>
+    <table>
+      <tr><th>批</th><th>范围</th><th>规模</th><th>重点维度</th><th>交叉在途/备注</th></tr>
+      <tr><td class="mono">A</td><td><code>core/</code> 根(qbmanager / module / qbapi / tvshows 等) + <code>core/modules/</code> 除 traffic_sample_mod(ops / grouping / rules / maintenance / speed_curve)</td><td class="mono">≈6.0k</td><td>R1 R2 R3 R6 R9</td><td>主循环异常退避刚修过, 查同类模式; ops 危险动作闸门对照跳检计划</td></tr>
+      <tr><td class="mono">B1</td><td><code>hr/service.py</code> + <code>hr/model.py</code> + <code>hr/status.py</code></td><td class="mono">≈2.9k</td><td>R1 R3 R5 R8</td><td>近期 HR 域改动密集(降频/覆写守卫), 行号锚用函数名</td></tr>
+      <tr><td class="mono">B2</td><td><code>hr/</code> 其余(channel / worker / parse / resolve / report / store / runtime / server / adapters 等)</td><td class="mono">≈4.2k</td><td>R6 R7 R8 R9</td><td>在线核实出网请求与站点凭据面; worker 与主循环并发边界</td></tr>
+      <tr><td class="mono">C</td><td><code>core/traffic_store.py</code> + <code>core/modules/traffic_sample_mod.py</code> + <code>core/traffic_grid.py</code></td><td class="mono">≈2.7k</td><td>R3 R5 R7</td><td>v3 存储报告待评审 —— 只登记 v3 未覆盖增量</td></tr>
+      <tr><td class="mono">D</td><td><code>config/</code> 全部(loaders / models / writer / schema / validation)</td><td class="mono">≈5.0k</td><td>R2 R4</td><td>键面守卫已有; 查「校验后散落防御」与热重载一致性</td></tr>
+      <tr><td class="mono">E</td><td><code>webui/</code> 全部 py(views / commands / runtime / server / routes)</td><td class="mono">≈5.3k</td><td>R2 R8 R9</td><td>reannounce 计划将改 commands.py / runtime.py —— 只登记计划未覆盖增量</td></tr>
+      <tr><td class="mono">F1+F2</td><td><code>webui/static/</code> 31 JS 拆两轮 + CSS/HTML 机制面</td><td class="mono">≈20.5k</td><td>R8 R9 R10</td><td>D1 定深度; XSS 汇入点清单法; 不做审美评审</td></tr>
+      <tr><td class="mono">G</td><td><code>torrents/</code> + <code>rules/</code>(base / conditions / expr / actions)</td><td class="mono">≈4.0k</td><td>R1 R5 R6</td><td>表达式求值边界; 池内规则键语义梳理 issue 撞车比对</td></tr>
+      <tr><td class="mono">H</td><td><code>infra/</code> + <code>tray/</code> + 入口 + <code>scripts/</code> + <code>extensions/</code> + docker(D2)</td><td class="mono">≈4.7k+</td><td>R6 R7 R8</td><td>file_access 路径穿越; 扩展凭据出网; tray Ctrl+C 已有 issue</td></tr>
+    </table>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>风险与对冲</h2>
+    <table>
+      <tr><th>风险</th><th>对冲</th></tr>
+      <tr><td>评审跨约 12 轮, develop 持续演进, 行号漂移导致发现不可复现</td><td>D5 三锚登记(文件+函数+行号); 报告记各批 HEAD; S5 汇总时对 P0/P1 逐条在当期 HEAD 复验位置仍有效</td></tr>
+      <tr><td>与在途计划(reannounce 重构、v3 存储)双重报告同一问题</td><td>C/E 两批只登记「计划未覆盖增量」; 底册列在途件清单, 每条发现强制填撞车字段</td></tr>
+      <tr><td>误报: 理论缺陷实际全路径不可达</td><td>可达性证据强制字段; 不可达不登记为 bug(近例: hr verified 覆写复验判不可达); S5 二次论证</td></tr>
+      <tr><td>漏检: 单轮文件太多走马观花</td><td>每批全文件过目勾选制(批量上限按轮内负荷调, F 批已拆两轮); 静态工具提示源兜底; 坑档对照当第二张清单</td></tr>
+      <tr><td>评审中发现顺手想修</td><td>黄金法则 7 + scope-guard: 计划外缺陷一行不改, 登记入池; D4 拍板兜底(P0 也不当场修)</td></tr>
+      <tr><td>评审期间 test.full 数字漂移(他人提交)</td><td>基线不变式: 每轮记数字, 漂移先查明再继续; 数字对比一律 <code>kb.baseline</code> 取最新切片不手抄</td></tr>
+    </table>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>非目标</h2>
+    <ul>
+      <li><b>不改码、不改文档</b> —— 评审轮只读; 修复走后续认领(P0/P1 入池后由用户排期)。</li>
+      <li><b>不做性能优化与重构实施</b> —— 池内 perf/refactor 条目维持原排期, 评审只补「它们没覆盖的新发现」。</li>
+      <li><b>不评审知识库与命令包本身</b> —— <code>memory-bank/</code>、<code>.commands/</code>、<code>.agents/</code>、测试基建的组织方式不在本次范围(tests/ 的<b>测试质量</b>作为 R10 视角随批看, 不单独立批)。</li>
+      <li><b>不做 UI 审美评审</b> —— CSS/HTML 只查机制回归面与安全汇入点。</li>
+      <li><b>不重开 feat/question 类需求论证</b> —— 池内 20 条需求/存疑类条目不因评审翻案。</li>
+    </ul>
+  </section>
+
+  <section id="s9">
+    <h2><span class="no">09</span>变更记录</h2>
+    <table>
+      <tr><th>时间</th><th>变更</th></tr>
+      <tr><td class="mono">26-10-05-0951</td><td>初版: 分批只读评审方案 + 十项维度 + S0–S6 门控 + 拍板点 D1–D5, 待拍板。</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    计划 26-10-05-0951 · 专题 full-code-review · 状态 Open(待拍板后实施) · 起点 HEAD ef93db56
+  </footer>
+
+</div>
+</body>
+</html>
