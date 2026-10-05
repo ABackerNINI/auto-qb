@@ -6,10 +6,10 @@
 <title>实施计划 · 全项目 Code Review 发现分批修复(六批 28 issue) · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="full-code-review-remediation">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-06-0103">
-<meta name="doc-updated" content="26-10-06-0103">
-<meta name="doc-refs" content="memory-bank/reports/26-10-05-1036-report-full-code-review.html">
+<meta name="doc-updated" content="26-10-06-0620">
+<meta name="doc-refs" content="memory-bank/reports/26-10-05-1036-report-full-code-review.html,memory-bank/reports/26-10-06-0620-report-full-code-review-remediation.html">
 <style>
   :root {
     color-scheme: dark;
@@ -435,6 +435,7 @@
   <table>
     <tr><th style="width:18%">时间</th><th>变更</th></tr>
     <tr><td class="anch">26-10-06-0103</td><td>计划成文(Open): 依据报告 26-10-05-1036 §3.2/§3.2.1 定稿六批结构(S1 P1×3 → S2 P2×6 → S3 竞态族×4 → S4 chore×6+顺手×2 → S5 refactor×6 → S6 小修×3), 汇总 7 处拍板点与批间依赖; 未 commit, 等用户指令。</td></tr>
+    <tr><td class="anch">26-10-06-0620</td><td>计划归档(Open → Done): 六批 28 条全部修毕 Done(核验: issues 索引无本计划来源 Open 残留); 7 处拍板点全部按推荐案(P-01 求值侧归一化 / P-02 删 HrStoreCorrupted / P-03 读侧快照 / P-04 补平局合并 / P-05 补最小告警消费方 / P-06 去 magnet_uri / P-07 OSError 改抛 ExprError); 最终 test.full 实测 2676 passed + 4 skipped / 99% / 15823 语句 / 163 未覆盖 / 5472 分支 / 143 partial, 基线切片 26-10-06-0612; 汇总报告 <code>memory-bank/reports/26-10-06-0620-report-full-code-review-remediation.html</code>。</td></tr>
   </table>
 </section>
 

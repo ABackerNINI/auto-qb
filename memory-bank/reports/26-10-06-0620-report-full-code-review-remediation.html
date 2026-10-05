@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>修复汇总报告 · 全项目 Code Review 分批修复(六批 28 issue) · auto-qb</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="full-code-review-remediation">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-06-0620">
+<meta name="doc-updated" content="26-10-06-0620">
+<meta name="doc-refs" content="memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1116;
+    --paper: #141920;
+    --paper-2: #1a212b;
+    --line: #2a3442;
+    --ink: #dde4ec;
+    --ink-dim: #8b98a9;
+    --ink-faint: #5c6878;
+    --accent: #4fc38f;
+    --accent-dim: #2b5c47;
+    --warn: #d9a54a;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 15px;
+    line-height: 1.75;
+  }
+  .page { max-width: 1080px; margin: 0 auto; padding: 48px 40px 80px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--paper-2); border: 1px solid var(--line); padding: 1px 5px; border-radius: 3px; }
+  h1 { font-size: 30px; font-weight: 700; line-height: 1.3; letter-spacing: 0.01em; }
+  h2 { font-size: 21px; font-weight: 700; margin: 56px 0 6px; padding-top: 18px; border-top: 1px solid var(--line); }
+  h2 .no { color: var(--accent); font-family: var(--mono); font-size: 15px; margin-right: 10px; font-weight: 400; }
+  h3 { font-size: 16px; font-weight: 700; margin: 26px 0 8px; color: var(--ink); }
+  .kicker { font-family: var(--mono); font-size: 12.5px; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 14px; }
+  .lede { color: var(--ink-dim); font-size: 15.5px; margin: 14px 0 0; max-width: 72ch; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); border: 1px solid var(--line); margin: 30px 0 0; }
+  .meta-grid > div { padding: 12px 16px; border-right: 1px solid var(--line); }
+  .meta-grid > div:last-child { border-right: none; }
+  .meta-grid .k { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.1em; }
+  .meta-grid .v { font-size: 15px; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 6px; font-size: 13.8px; }
+  th { text-align: left; font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: var(--ink-dim); letter-spacing: 0.08em; border-bottom: 1px solid var(--line); padding: 8px 10px; white-space: nowrap; }
+  td { border-bottom: 1px solid var(--line); padding: 9px 10px; vertical-align: top; }
+  tr:last-child td { border-bottom: 1px solid var(--line); }
+  td.hash { font-family: var(--mono); font-size: 12.5px; color: var(--accent); white-space: nowrap; }
+  td.id { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: var(--ink-dim); }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 1px 8px; border: 1px solid var(--accent-dim); color: var(--accent); border-radius: 3px; white-space: nowrap; }
+  .badge.dim { border-color: var(--line); color: var(--ink-dim); }
+  .note { border-left: 2px solid var(--accent-dim); padding: 2px 0 2px 16px; margin: 16px 0; color: var(--ink-dim); font-size: 14px; }
+  .note b { color: var(--ink); }
+  ul.plain { margin: 8px 0 8px 20px; }
+  ul.plain li { margin: 5px 0; }
+  .final { border: 1px solid var(--accent-dim); background: rgba(79,195,143,0.05); padding: 16px 20px; margin: 18px 0; }
+  .final .big { font-family: var(--mono); font-size: 22px; color: var(--accent); }
+  footer { margin-top: 72px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-faint); font-size: 12.5px; font-family: var(--mono); }
+  @media (max-width: 720px) { .page { padding: 28px 18px 60px; } table { font-size: 12.5px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="kicker">REMEDIATION REPORT · 26-10-06-0620</div>
+<h1>全项目 Code Review 分批修复 — 汇总报告</h1>
+<p class="lede">实施计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a> 收尾存证: 六批全部落地, 28 条 issue 全部 Done, 7 处拍板点全部按推荐案结案, 最终全量测试绿。来源评审报告 <a href="26-10-05-1036-report-full-code-review.html">26-10-05-1036</a> 出厂冻结, 不因本报告回改。</p>
+
+<div class="meta-grid">
+  <div><div class="k">收尾 HEAD</div><div class="v"><code>825e5221</code></div></div>
+  <div><div class="k">最终 test.full</div><div class="v">2676 passed + 4 skipped</div></div>
+  <div><div class="k">覆盖率 / 分支</div><div class="v">99% · 5472 分支</div></div>
+  <div><div class="k">issue 结案</div><div class="v">28 / 28 Done</div></div>
+  <div><div class="k">拍板点</div><div class="v">7 / 7 按推荐案</div></div>
+</div>
+
+<h2><span class="no">01</span>概览</h2>
+<p>来源评审报告 <a href="26-10-05-1036-report-full-code-review.html">26-10-05-1036</a> 分流出 28 条修复项, 实施计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a> 定稿为六批 (S1 P1×3 → S2 P2×6 → S3 竞态族×4 → S4 chore×6+顺手×2 → S5 refactor×6 → S6 P3 小修×3)。执行自 26-10-06 起, 每批独立提交、收尾 <code>test.full</code> 对照基线, 修毕 issue 状态随主提交回写。收尾核验 (HEAD <code>825e5221</code>): issues 索引中本计划来源的 28 条 (stamp 26-10-06-0027 / 26-10-06-0028) meta 与索引分区全部为 <b>Done</b>, 无 Open 残留。</p>
+<div class="note"><b>范围边界</b>: 3 条并池备注 (D-05 / F1-04 → 池 26-09-22-2002; G-05 → 池 26-10-01-2211) 不在本计划, 随对应池条目认领时处理; 不引 mypy / eslint。</div>
+
+<h2><span class="no">02</span>逐批明细</h2>
+
+<h3>S0 — 基线</h3>
+<table>
+  <tr><th style="width:12%">批</th><th>内容</th><th style="width:13%">守阵</th><th style="width:11%">提交</th><th style="width:13%">test.full 实测</th></tr>
+  <tr><td class="id">S0</td><td>基线切片 <code>26-10-06-0144-full-code-review-remediation-s0-baseline.md</code> 落 <code>testing/baselines/</code></td><td>—</td><td class="hash">2a75810d</td><td>2622+4 · 99% · 15624 语句 / 166 未覆盖 · 5400 分支 / 139 partial</td></tr>
+</table>
+
+<h3>S1 — P1 阻断级 ×3 (三条独立提交)</h3>
+<table>
+  <tr><th style="width:12%">条目</th><th>修法一句话</th><th style="width:30%">守阵</th><th style="width:11%">提交</th><th style="width:13%">实测</th></tr>
+  <tr><td class="id">S1a · D-01</td><td>loaders 补读 <code>grouping.cross_group_conflict_check</code>, YAML 显式值可达 config; 键面守阵结构性堵住「键在面上 loader 漏读」形态</td><td><code>test_config_key_surface.py</code> 双守阵 (探针表覆盖 + 真链路 round-trip)</td><td class="hash">5c03269e</td><td>2624+4</td></tr>
+  <tr><td class="id">S1b · G-01</td><td>expr 求值 <code>_EQ</code> 对 LIST 两侧转 set 归一化再比 (P-01), 元素不可哈希抛 <code>ExprError</code>; 文档回写 rule-system「容器比较口径」</td><td><code>test_expr_eval.py::test_cross_container_list_equality</code></td><td class="hash">473aa8df</td><td>2625+4</td></tr>
+  <tr><td class="id">S1c · H-01</td><td><code>qb_capture._sanitize_mapping</code> 未定义 <code>seen</code> 引用修复, 语料落盘链复活; 补端到端用例钉住全链</td><td><code>test_write_corpus_end_to_end_minimal</code></td><td class="hash">5f321099</td><td>2626+4</td></tr>
+</table>
+
+<h3>S2 — P2 后端健壮性 ×6 (一批一提交)</h3>
+<table>
+  <tr><th style="width:12%">条目</th><th>修法一句话</th><th style="width:30%">守阵</th><th style="width:11%">提交</th><th style="width:13%">实测</th></tr>
+  <tr><td class="id">A-01</td><td>suppress 窗改 try/finally 关窗, 异常上抛后 live 旗标不残留, 下轮边沿事件不被吞</td><td><code>test_refresh_suppress_window_exception_closes_window_in_finally</code></td><td class="hash" rowspan="6">f9a6d6ab</td><td rowspan="6">2642+4</td></tr>
+  <tr><td class="id">B2-01</td><td>站点文件非 UTF-8 字节归 recoverable 走 quarantine → .bak 自愈链, 读坏不抛 (P-02 族, HrStoreCorrupted 随 S4 删除)</td><td><code>test_non_utf8_file_is_quarantined_and_recovered_from_backup</code> 等 2 条</td></tr>
+  <tr><td class="id">C-01</td><td>运行期新建系列 earliest_hour 随 hour 行入账初始化 / min 更新, agg.dat hour 行有界</td><td><code>test_agg_trim_engages_for_runtime_created_series</code></td></tr>
+  <tr><td class="id">D-02</td><td>checking 动作子段键面 (enabled/auto_start 等) 补 fail-fast 校验, 拼错即聚合报错</td><td>config schema 校验守阵</td></tr>
+  <tr><td class="id">H-02</td><td>notify ICON_ICO 一级 dirname 少算一层修正, toast 来源图标不再恒回退默认</td><td>路径解析用例</td></tr>
+  <tr><td class="id">H-03</td><td>convert_bool_in_dict 列表分支补 isdecimal 守卫, "1"/"on" 不再被静默改型</td><td><code>test_convert_bool_list_branch_coercion</code> 族</td></tr>
+</table>
+
+<h3>S3 — WebUI 竞态回执族 ×4 (一批一提交)</h3>
+<table>
+  <tr><th style="width:12%">条目</th><th>修法一句话</th><th style="width:30%">守阵</th><th style="width:11%">提交</th><th style="width:13%">实测</th></tr>
+  <tr><td class="id">E-01</td><td>Web 读侧迭代面取快照引用后再遍历 (P-03=推荐①), 高频写线程下零 "dictionary changed size"</td><td><code>test_web_store_iteration_snapshot_race_guard</code></td><td class="hash" rowspan="4">b32bea2d</td><td rowspan="4">2646+4 (覆盖档复测 98%, 零回退)</td></tr>
+  <tr><td class="id">F1-01</td><td>modal 身份戳: 每框发自增 mid + visible+mid 双比对单点, 迟到回执落不进无关弹窗</td><td><code>test_modal_identity_stamp_landing_guard</code></td></tr>
+  <tr><td class="id">E-03</td><td>reannounce_group 空组显式 error 回执, 不发指令不登记, 前端不再挂 40s 超时</td><td><code>test_reannounce_group_empty_snapshot_error_receipt</code></td></tr>
+  <tr><td class="id">F2-03</td><td>loadDir / doSearch 请求代际守卫, 慢响应不覆盖新状态</td><td><code>test_frontend_dir_browse_and_search_stale_guard</code></td></tr>
+</table>
+
+<h3>S4 — chore ×6 + 顺手 ×2 (两笔提交)</h3>
+<table>
+  <tr><th style="width:12%">条目</th><th>修法一句话</th><th style="width:30%">守阵</th><th style="width:11%">提交</th><th style="width:13%">实测</th></tr>
+  <tr><td class="id">chore ×6<br>+ A-08 / H-04</td><td>死导入×5 / HrStoreCorrupted 删除 (P-02 执行) / _parse_int_field 重复块 / V3Block→V4Block 同名死导入 / config 重导出面收窄 / JS 重复键死代码与旧注释 / 惰性建无锁双构造×2 / writer._backup 走 atomic / export 补 utf-8 / speed_mode except 口径对齐; 顺手 A-08 / H-04</td><td><code>test_store_prebuilt_per_site_confs</code> · <code>test_backup_atomic_write_no_partial_bak</code> · <code>test_export_torrents_info</code> · <code>test_api_speed_mode_reads_client_with_alt_fields</code></td><td class="hash">2cb72adb<br>0b69cd49 (追补)</td><td>本 clone 2648+4; rebase 合入他 clone 批次后 2662+4</td></tr>
+</table>
+
+<h3>S5 — refactor / 语义 ×6 (一批一提交)</h3>
+<table>
+  <tr><th style="width:12%">条目</th><th>修法一句话</th><th style="width:30%">守阵</th><th style="width:11%">提交</th><th style="width:13%">实测</th></tr>
+  <tr><td class="id">A-03</td><td>state 两处无界键收口: exec_history 30 天 / 2000 上限淘汰 (当日活跃键保护), speed_limit_curve 日键保 7 天</td><td><code>test_exec_history_prune_bounded_and_active_kept</code> · <code>test_curve_state_day_keys_pruned</code></td><td class="hash" rowspan="6">2119931d</td><td rowspan="6">2674+4</td></tr>
+  <tr><td class="id">A-04</td><td>pause / resume 写后同步 store 快照, 与 start / stop 对称</td><td><code>test_pause_resume_sync_store_snapshot</code></td></tr>
+  <tr><td class="id">A-07</td><td>非 API 类首连异常走 _last_conn_ok 转换节流, 托管首连重试 WARNING 只说一次</td><td><code>test_a07_connect_non_api_error_transition_throttled</code> · <code>test_a07_managed_first_connect_retry_warns_once</code></td></tr>
+  <tr><td class="id">B2-02</td><td>judge_record 双 hash 平局合并兑现 docstring 承诺 (P-04): 放行取依据更强 / 管束取剩余更少 / C 终态不被洗</td><td><code>test_hr_resolve.py::test_tie_*</code> 六条</td></tr>
+  <tr><td class="id">C-04</td><td>v4 坏行占比超阈读侧 WARNING 一次按文件节流 (P-05), 真实损坏不再静默丢行; docstring 对齐实况</td><td><code>test_v4_bad_line_ratio_warning_once_throttled</code></td></tr>
+  <tr><td class="id">E-04</td><td>/api/state 平铺载荷去 magnet_uri (P-06), 磁力复制走详情端点按需取, 契约单口径</td><td>test_web.py SEED_ITEM 契约测试</td></tr>
+</table>
+
+<h3>S6 — P3 小修 ×3 (一批一提交)</h3>
+<table>
+  <tr><th style="width:12%">条目</th><th>修法一句话</th><th style="width:30%">守阵</th><th style="width:11%">提交</th><th style="width:13%">实测</th></tr>
+  <tr><td class="id">B2-04</td><td>parse_size 单元表外缩写返回 None, 不再当 1 字节静默算错</td><td><code>test_parse_size_unknown_unit_returns_none</code></td><td class="hash" rowspan="3">825e5221</td><td rowspan="3">2676+4 (最终)</td></tr>
+  <tr><td class="id">G-03</td><td>FreespaceCondition OSError 改抛 ExprError (P-07), 磁盘故障时规则显式停不静默失活</td><td><code>test_conditions.py::test_freespace_os_error</code></td></tr>
+  <tr><td class="id">G-06</td><td>sys.torrent_count 无谓词直接 len O(1), 去掉每求值全库浅拷贝</td><td><code>test_expr_eval.py::test_torrent_count_no_full_copy</code></td></tr>
+</table>
+
+<h2><span class="no">03</span>7 处拍板点结论 (全部按推荐案, 结论已记入对应 issue)</h2>
+<table>
+  <tr><th style="width:8%">编号</th><th style="width:14%">归属条目</th><th style="width:36%">拍板</th><th>执行批次 / 备注</th></tr>
+  <tr><td class="id">P-01</td><td>G-01 跨容器相等</td><td>求值侧归一化: ==/!= 对 LIST 两侧统一转 set 再比, 不做编译期拒绝</td><td>S1b (473aa8df)</td></tr>
+  <tr><td class="id">P-02</td><td>B2-01 族</td><td>直接删除 HrStoreCorrupted (自愈链接管, 不留旧异常类型)</td><td>S4 执行 (2cb72adb)</td></tr>
+  <tr><td class="id">P-03</td><td>E-01 迭代竞态</td><td>读侧快照 (推荐①), 不引入锁与写时复制</td><td>S3 (b32bea2d)</td></tr>
+  <tr><td class="id">P-04</td><td>B2-02 平局合并</td><td>补平局合并, 兑现 judge_record docstring 双 hash 语义</td><td>S5 (2119931d)</td></tr>
+  <tr><td class="id">P-05</td><td>C-04 v4 坏行</td><td>补最小告警消费方: 占比超阈读侧 WARNING 一次按文件节流, 仅日志零行为</td><td>S5 (2119931d)</td></tr>
+  <tr><td class="id">P-06</td><td>E-04 magnet_uri</td><td>去 magnet_uri, 平铺载荷回归按需取详情契约</td><td>S5 (2119931d)</td></tr>
+  <tr><td class="id">P-07</td><td>G-03 OSError</td><td>OSError 改抛 ExprError, 不静默 return False</td><td>S6 (825e5221)</td></tr>
+</table>
+
+<h2><span class="no">04</span>基线演进 (test.full 实测)</h2>
+<table>
+  <tr><th style="width:16%">阶段</th><th style="width:20%">passed + skipped</th><th>覆盖 / 分支面</th><th style="width:24%">基线切片</th></tr>
+  <tr><td class="id">S0 基线</td><td>2622 + 4</td><td>99% · 15624 语句 / 166 未覆盖 · 5400 分支 / 139 partial</td><td><code>26-10-06-0144-…-s0-baseline.md</code></td></tr>
+  <tr><td class="id">S1a→S1c</td><td>2624 → 2625 → 2626 + 4</td><td>—</td><td>—</td></tr>
+  <tr><td class="id">S2</td><td>2642 + 4</td><td>—</td><td>—</td></tr>
+  <tr><td class="id">S3</td><td>2646 + 4</td><td>覆盖档复测 98%, 零回退</td><td><code>26-10-06-0404-…-s3.md</code></td></tr>
+  <tr><td class="id">S4</td><td>本 clone 2648 + 4; rebase 合流后 2662 + 4</td><td>—</td><td>—</td></tr>
+  <tr><td class="id">S5</td><td>2674 + 4</td><td>—</td><td>—</td></tr>
+  <tr><td class="id">S6 最终</td><td><b>2676 + 4</b></td><td>99% · 15823 语句 / 163 未覆盖 · 5472 分支 / 143 partial</td><td><code>26-10-06-0612-…-s6.md</code></td></tr>
+</table>
+<div class="final">
+  净增 <span class="big">+54</span> 用例 (2622 → 2676, skipped 恒 4), 语句 +199 条且未覆盖数下降 (166 → 163), 分支 +72, 覆盖档保持 99%。全计划期间零回退。
+</div>
+
+<h2><span class="no">05</span>新增守阵与文档回写清单</h2>
+<h3>守阵登记 <code>testing/guards.md</code> (每批新守阵均红验: 还原 → 红 → 恢复)</h3>
+<table>
+  <tr><th style="width:20%">guards.md 节</th><th style="width:12%">条目数</th><th>覆盖</th></tr>
+  <tr><td class="id">S1 (规则表达式内核 / 键面 / 语料节)</td><td>4 条守阵</td><td>键面探针表 + round-trip 双守阵 (D-01 形态结构性封堵) · 跨容器列表相等 · write_corpus 端到端</td></tr>
+  <tr><td class="id">S2 健壮性批次</td><td>×6</td><td>suppress 关窗 · 非 UTF-8 quarantine 自愈 · agg 裁剪 · checking 子段校验 · 图标路径 · convert_bool 守卫</td></tr>
+  <tr><td class="id">S3 竞态/回执批次</td><td>×4</td><td>读侧快照 · modal 身份戳 · 空组回执 · 请求代际守卫</td></tr>
+  <tr><td class="id">S4 死代码/杂项批次</td><td>×4</td><td>存储构造期预建 · 备份原子写 · 导出编码 (静态钉+行为面) · speed_mode 三读口径</td></tr>
+  <tr><td class="id">S5 refactor/语义批次</td><td>×8</td><td>exec_history 有界 · 曲线日键 7 天 · pause/resume 写回 · 首连节流×2 · 平局合并六条 · v4 坏行告警 · SEED_ITEM 契约</td></tr>
+  <tr><td class="id">S6 P3 小修批次</td><td>×3</td><td>parse_size None · freespace ExprError · torrent_count O(1)</td></tr>
+</table>
+<p>各测试文件头部「测试计划」清单已随守阵同步。</p>
+
+<h3>文档回写</h3>
+<ul class="plain">
+  <li><b>rule-system</b> (conditions-and-actions.md): expr 速查新增「容器比较口径」条 (G-01 / P-01); G-03 OSError→ExprError 判据同步 (绝不降级成假值口径)。</li>
+  <li><b>contract-api 坑档</b>: E-04 按需取详情契约的正向口径 (SEED_ITEM 不含 magnet_uri, 详情端点全字段)。</li>
+  <li><b>keys.md</b>: D-01 涉及的 <code>grouping.cross_group_conflict_check</code> 键面与 loader 消费对齐。</li>
+  <li><b>issues 索引</b>: 28 条状态回写随主提交, <code>kb.index</code> 收尾重建。</li>
+</ul>
+
+<h2><span class="no">06</span>插曲与披露</h2>
+<ul class="plain">
+  <li><b>S4 rebase 合流与追补笔</b>: S4 收尾 <code>ship.commit</code> 时 rebase 自动合入他 clone 的错误历史批次 (<code>5331d052..9957cd07</code>, +14 用例), 合流后全量仍绿; 但闸门在合流面抓到一处真回归, 以追补笔 <code>0b69cd49</code> 修复后入库。S4 因此是本计划唯一两笔提交的批次。</li>
+  <li><b>锚点漂移 v3→v4</b>: 修复执行期间 traffic 存储完成 v3→v4 换代, 两处修法落在 v4 上 —— C-01 (earliest_hour 裁剪) 修在 v4 读侧契约; C-04 (坏行告警) 同修在 v4; S4 的 traffic_grid 死导入由 V3Block 同名改为 V4Block。相关 issue 均已注明漂移。</li>
+  <li><b>S3 覆盖档复测</b>: S3 收尾时点覆盖率报表口径为 98% (其余各批 99%), 复测确认非回退 —— 竞态族新增用例不削减分支覆盖, 最终 S6 仍回到 99%。</li>
+  <li><b>来源报告冻结</b>: 26-10-05-1036 全程未改, 修复去向以 issue 状态 + 本报告与计划变更记录为准。</li>
+</ul>
+
+<footer>报告 26-10-06-0620 · 专题 full-code-review-remediation · 单文件 HTML · dark 主题 · 收尾 HEAD 825e5221 · 2026-10-06</footer>
+
+</div>
+</body>
+</html>

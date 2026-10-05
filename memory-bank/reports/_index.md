@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-06-0620] [修复汇总报告 · 全项目 Code Review 分批修复(六批 28 issue) · auto-qb](26-10-06-0620-report-full-code-review-remediation.html) — `full-code-review-remediation`
 - [26-10-05-1946] [块头基线 + Delta 行编码与按落盘切块 · 可行性分析](26-10-05-1946-report-qb-traffic-v4-delta.html) — `qb-traffic-v4-delta`
 - [26-10-05-1036] [审计报告: 全项目全面 Code Review — 分批评审发现与分流(终版) · auto-qb](26-10-05-1036-report-full-code-review.html) — `full-code-review`
 - [26-10-05-0854] [调研报告: 强制汇报确认机制与 qB 汇报状态接口](26-10-05-0854-report-reannounce-confirm-api.html) — `reannounce-confirm-api`
