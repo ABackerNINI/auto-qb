@@ -76,8 +76,9 @@
               <div class="qb-tabs">
                 <!-- 窗口序(2026-10-04 v3 十三档, D4): 1m/5m/30m/3h/6h/12h/24h 与 qB 速度图
                      对齐 + 3d/7d/30d(agg hour 行) + 6mo/1y/all(agg day/month 行; 90d 拍板
-                     延后不上), 顺序即展示序(短窗在前); 标签紧凑两字格, 13 档不挤工具条 -->
-                <button v-for="w in ['1m', '5m', '30m', '3h', '6h', '12h', '24h', '3d', '7d', '30d', '6mo', '1y', 'all']" :key="w"
+                     延后不上), 顺序即展示序(短窗在前); 标签紧凑两字格, 13 档不挤工具条。
+                     清单单点在 qb_traffic_chart.js QB_WINDOW_NAMES(展示/切换/持久化同源) -->
+                <button v-for="w in qbWindowNames" :key="w"
                         :class="{ active: qbCurWindow === w }"
                         @click="qbSetWindow(w)">{{ qbWindowLabel(w) }}</button>
               </div>

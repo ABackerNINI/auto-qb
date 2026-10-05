@@ -62,6 +62,11 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
   收起期跟随暂停双守卫); 模板 grip 四 pointer 事件 / fold 钮 / aside collapsed 类+内联高度双绑定;
   Alt+1~4 收起态先展开再切页签; 三皮肤 CSS 成对(collapsed 隐 body / grip touch-action / 拖拽期
   禁选中 / fold 钮 / .drawer relative)
+- test_qb_traffic_shortcuts: 流量图三入口(2026-10-05) —— open-qb-traffic(Ctrl+Backslash, run
+  openQbHistory 含 qbTrafficOn 门 + 未启用提示) / drawer-tab-traffic(Alt+Digit5, run
+  _kbDrawerTab("traffic") 且方法内补流量门控: 未启用提示后忽略, 不许切到无按钮隐形页签) /
+  traffic-win-prev-next(新「流量图」组, [ ], **when 条件绑定 qbTrafficActive** + run qbCycleWindow);
+  引擎在 preventDefault 之前分流 when(假则不消费键位, 留给浏览器)
 - test_modal_whitelist_branch: 引擎含模态白名单分流(modal 条目仅模态内响应, 模态内非模态键位一律失效)
 - test_recorder_and_panel_wiring: 录制器按下即录(捕获段监听+stopPropagation) / 纯修饰键拒收 /
   Esc 取消 / 黑名单当场拒绑 / 冲突三选一(交换/覆盖对方置空/取消) / 单条与全部重置 /
@@ -137,6 +142,7 @@ def _registry() -> list[dict]:
             "fixed": 'fixed: true' in chunk,
             "inputSafe": 'inputSafe: true' in chunk,
             "repeat": 'repeat: true' in chunk,
+            "when": _pick(chunk, r"when: \(vm\) => vm\.(\w+)"),
             "run_null": "run: null" in chunk,
             "runs": re.findall(r"run: \(vm\) => vm\.(\w+)\(", chunk),
         }
@@ -695,6 +701,61 @@ def test_drawer_height_collapse_w3() -> None:
         assert "body.drawer-resizing" in css and "user-select: none" in css, f"{ui}: 拖拽期禁选中文本缺失"
         assert ".drawer-fold" in css, f"{ui}: fold 钮样式缺失"
         assert re.search(r"\.drawer \{ position: relative;", css), f"{ui}: .drawer 必须 relative(grip absolute 定位参照)"
+
+
+def test_qb_traffic_shortcuts() -> None:
+    """流量图三入口快捷键(2026-10-05): 打开全局图 / 流量页签 Alt+5 / 窗口前后切换 [ ]
+
+    注册表是键位单一事实源, 前端无 JS 测试框架 —— 漏接线只表现为"按了没反应"(静默)。逐条钉:
+    ① open-qb-traffic: 视图与导航 / global / Ctrl+Backslash / run openQbHistory(内含 qbTrafficOn
+       门 + 未启用提示, 键盘入口不许静默无反应);
+    ② drawer-tab-traffic: 详情面板组 / list / Alt+Digit5 / run _kbDrawerTab("traffic"), 且
+       _kbDrawerTab 内补流量门控(qbTrafficOn false 提示后忽略, 不许切到无按钮的隐形页签 ——
+       页签按钮 v-if=qbTrafficOn 不渲染);
+    ③ traffic-win-prev/next: 新「流量图」组 / global / [ ] / **when 条件绑定 qbTrafficActive**
+       (仅流量图可见时消费键位) / run qbCycleWindow(±1); 引擎必须在 preventDefault **之前**
+       分流 when(假则不消费, 键位留给浏览器 —— 否则无流量图时 [ / ] 被无谓吞掉)。"""
+    items = {it["id"]: it for it in _registry()}
+    eng = _read("shortcuts.js")
+    chart = _read("qb_traffic_chart.js")
+
+    # ① 打开全局流量图(状态栏入口的键盘对应)
+    it = items["open-qb-traffic"]
+    assert it["group"] == "视图与导航" and it["scope"] == "global", "open-qb-traffic 应 视图与导航 / global"
+    assert it["def"] == "Ctrl+Backslash", "open-qb-traffic 默认键必须是 Ctrl+Backslash"
+    assert it["runs"] == ["openQbHistory"], "open-qb-traffic 必须走 openQbHistory(内含 qbTrafficOn 门)"
+    assert "if (!this.qbTrafficOn) {" in chart and "qB 口径流量图未启用" in chart, \
+        "openQbHistory 必须补未启用提示(键盘入口不能静默无反应)"
+
+    # ② 详情面板流量页签(Alt+1-4 的第五档)
+    it = items["drawer-tab-traffic"]
+    assert it["group"] == "详情面板" and it["scope"] == "list", "drawer-tab-traffic 应 详情面板 / list"
+    assert it["def"] == "Alt+Digit5", "drawer-tab-traffic 默认键必须是 Alt+Digit5"
+    assert 'run: (vm) => vm._kbDrawerTab("traffic")' in eng, "drawer-tab-traffic run 未走 _kbDrawerTab"
+    dtab = re.search(r"_kbDrawerTab\(tab\) \{(.*?)\n    \},", eng, re.S)
+    assert dtab, "shortcuts.js 找不到 _kbDrawerTab"
+    tb = dtab.group(1)
+    gate = tb.index('tab === "traffic" && !this.qbTrafficOn')
+    assert gate > tb.index('this.page !== "groups"'), "流量门控必须在页面守卫之后(守卫序: 页面 -> 功能门 -> 双态)"
+    assert gate < tb.index("if (this.drawer.open)"), "流量门控必须先于开态切页(未启用不得切到隐形页签)"
+    assert "qB 口径流量图未启用" in tb, "流量页签未启用必须 toast 提示后忽略, 不许静默"
+
+    # ③ 窗口前后切换(when 条件绑定 + 端点夹取, 见 test_web 的持久化守阵)
+    for tid, key, delta in (("traffic-win-prev", "BracketLeft", "-1"), ("traffic-win-next", "BracketRight", "1")):
+        it = items[tid]
+        assert it["group"] == "流量图" and it["scope"] == "global", f"{tid} 应 流量图 / global"
+        assert it["def"] == key, f"{tid} 默认键必须是 {key}"
+        assert it["when"] == "qbTrafficActive", f"{tid} 必须 when 条件绑定 qbTrafficActive(无流量图不消费键位)"
+        assert f"run: (vm) => vm.qbCycleWindow({delta})" in eng, f"{tid} run 未走 qbCycleWindow({delta})"
+    assert "qbCycleWindow(delta) {" in chart, "qb_traffic_chart.js 缺 qbCycleWindow 落点"
+    # 引擎: when 必须在 preventDefault 之前分流(假 = 不消费, 键位留给浏览器/其它 handler)
+    eng_disp = re.search(r"_kbOnKeyDown\(e\) \{(.*?)\n    \},", eng, re.S)
+    assert eng_disp, "shortcuts.js 找不到 _kbOnKeyDown"
+    body = eng_disp.group(1)
+    assert "if (item.when && !item.when(this)) return;" in body, \
+        "引擎缺 when 条件绑定分流(条件项无流量图时也会吞掉 [ / ])"
+    assert body.index("item.when && !item.when(this)") < body.index("e.preventDefault();\n      item.run(this);"), \
+        "when 分流必须在 preventDefault 之前(否则键位已被消费, 「留给浏览器」成空话)"
 
 
 def test_modal_whitelist_branch() -> None:

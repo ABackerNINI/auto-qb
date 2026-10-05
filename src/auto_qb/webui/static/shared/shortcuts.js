@@ -27,6 +27,10 @@
  *     (计划 26-10-03-0917)起无条目 —— 停靠面板是列表附属, Alt+1-4 改 list 作用域双态(_kbDrawerTab)。
  *   - W6 自定义: 设置页「快捷键」分区(录制器 VS Code 按下即录模式 / 冲突三选一 / 黑名单拒绑 /
  *     单条与全部重置 / 保存 PUT 落盘) + ? 帮助浮层(只读速查)。Esc 是唯一 fixed 键, 面板不可改。
+ *   - 流量图三入口(2026-10-05): 打开全局图 Ctrl+Backslash(run 内 qbTrafficOn 门控 + 未启用
+ *     提示) / 详情面板流量页签 Alt+5(_kbDrawerTab 内同门控) / 窗口前后切换 [ ](新机制
+ *     **when 条件绑定**: 仅 qbTrafficActive 时消费键位, 无流量图时留给浏览器 —— 见条目形状注
+ *     与引擎派发处的 when 分流)。
  *   - 光标滚动跟随**禁用 scrollIntoView**(逐层滚动可滚祖先会连带滚整页, pitfalls
  *     web-ui/hover-keynav-fight): 渲染行用 getBoundingClientRect+scrollBy 差值, 窗口化未渲染行
  *     用 _rowWindow 前缀和换算(columns.js 已留存 this._rowPre[kind])。
@@ -112,8 +116,11 @@ function kbDisplayName(serial) {
 const KB_DEF_RE = /^(Ctrl\+)?(Alt\+)?(Shift\+)?(Meta\+)?[A-Z][A-Za-z0-9]*$/;
 
 /* ---------------- 动作注册表(单一事实源) ----------------
- * 条目形状: { id, group, label, def, scope, danger?, fixed?, repeat?, run }
+ * 条目形状: { id, group, label, def, scope, danger?, fixed?, repeat?, when?, run }
  *   def  = 默认键位归一化串; "" = 默认不绑定(空位, 可被自定义); fixed = 不可改键(Esc)。
+ *   when = 条件绑定(vm) => bool: 假则本次按键**不消费**(不 preventDefault, 键位留给浏览器/
+ *          其它 handler), 用于只在特定界面存在的动作(如流量图窗口切换 [ / ] —— 无流量图时
+ *          这两键不该被吞)。条件项照常进面板与冲突检测(键位唯一性不受条件影响)。
  *   repeat = 长按连发: e.repeat 自动重复事件默认被引擎丢弃, 标记后放行(只给光标/选择扩展
  *   上下键族 —— 每按一次就发一条后端命令的键位(队列移动)不开, 免得长按刷爆命令)。
  *   scope = global(任何非输入态) | list(三数据视图) | drawer(抽屉内; 方案A W2 起注册表无条目,
@@ -148,6 +155,9 @@ const AQB_SHORTCUT_DEFS = [
   { id: "open-history", group: "视图与导航", label: "历史流量",
     def: "Shift+Backslash", scope: "global",
     run: (vm) => vm.openHistory() },
+  { id: "open-qb-traffic", group: "视图与导航", label: "qB 口径流量图",
+    def: "Ctrl+Backslash", scope: "global",
+    run: (vm) => vm.openQbHistory() },  // 状态栏入口的键盘对应(openQbHistory 内含 qbTrafficOn 门 + 未启用提示)
   { id: "speed-down", group: "视图与导航", label: "限速(下载方向)",
     def: "KeyL", scope: "list",
     run: (vm) => vm.openSpeedAt(null, "down") },
@@ -277,6 +287,17 @@ const AQB_SHORTCUT_DEFS = [
   { id: "drawer-tab-content", group: "详情面板", label: "详情面板 · 打开/切到内容页",
     def: "Alt+Digit4", scope: "list",
     run: (vm) => vm._kbDrawerTab("content") },
+  { id: "drawer-tab-traffic", group: "详情面板", label: "详情面板 · 打开/切到流量页",
+    def: "Alt+Digit5", scope: "list",
+    run: (vm) => vm._kbDrawerTab("traffic") },  // 功能未启用时 _kbDrawerTab 内提示后忽略(页签按钮 v-if=qbTrafficOn 不渲染)
+  // ---- J · 流量图(2026-10-05): 窗口前后切换 —— when 条件绑定, 仅流量图可见时消费 [ / ]
+  // (无流量图时键位不消费, 留给浏览器; 端点由 qbCycleWindow 夹取, 走 qbSetWindow 单点重拉+落盘) ----
+  { id: "traffic-win-prev", group: "流量图", label: "流量图 · 前一档窗口",
+    def: "BracketLeft", scope: "global", when: (vm) => vm.qbTrafficActive,
+    run: (vm) => vm.qbCycleWindow(-1) },
+  { id: "traffic-win-next", group: "流量图", label: "流量图 · 后一档窗口",
+    def: "BracketRight", scope: "global", when: (vm) => vm.qbTrafficActive,
+    run: (vm) => vm.qbCycleWindow(1) },
   { id: "settings-save", group: "局部作用域", label: "设置页 · 保存配置",
     def: "Ctrl+KeyS", scope: "settings", inputSafe: true,
     run: (vm) => vm.cfgSave() },  // inputSafe: 输入框内也放行; 浏览器保存网页可拦, §3.3
@@ -440,6 +461,9 @@ window.AQB_SHORTCUTS = {
       } else if (item.scope !== "global" && item.scope !== scope) {
         return;                                        // 非焦点页不串扰
       }
+      // 条件绑定(表头 when, 见注册表条目形状注): 条件不成立即**不消费**本次按键 ——
+      // 不 preventDefault, 键位留给浏览器/其它 handler(流量图窗口键 [ / ] 无图时不该被吞)
+      if (item.when && !item.when(this)) return;
       e.preventDefault();
       item.run(this);
     },
@@ -675,6 +699,12 @@ window.AQB_SHORTCUTS = {
     _kbDrawerTab(tab) {
       if (this.page !== "groups" || this.viewMode !== "torrents") {
         this.toast("详情面板只在种子页可用", "info", 2500);
+        return;
+      }
+      // 流量页签受功能门控: 页签按钮 v-if=qbTrafficOn 不渲染, 切到隐形页签 = 卡在一个没有
+      // 按钮可切回的页(与 openTorrentDrawer 的 initialTab 归一同一口径), 未启用时提示后忽略
+      if (tab === "traffic" && !this.qbTrafficOn) {
+        this.toast("qB 口径流量图未启用", "info", 2500);
         return;
       }
       if (this.drawer.open) {

@@ -40,6 +40,17 @@
  * 三主题令牌(getComputedStyle(:root)); DOM 侧(十字线样式/uPlot 结构样式)由 _qbChartInjectCss
  * 注入 token 化样式(var(--fg-dim)), 换肤自动跟随 —— 禁止硬编码色值。
  * prism 五主题动态换肤派发 autoqb:themechange(theme.js), 图在建时读令牌, 换肤事件触发重建。
+ *
+ * 窗口档位单点(QB_WINDOW_NAMES)与「视图选择」持久化(2026-10-05, 用户拍板): 十三档清单、
+ * 前后切换(qbCycleWindow)与落盘校验(qbInitialWindow)共用同一份常量 —— 展示面模板走
+ * qbWindowNames computed, 不再各自硬编码。持久化粒度 = **全局单独一份 / 分组与种子共用一份**
+ * (autoqb.ui.qbWinGlobal / autoqb.ui.qbWinShared, 键单点 qbWinStoreKey): 全局图与单对象图
+ * 观察尺度习惯不同, 而组与种子常被当作同类"单对象"视图对照着看。初值读取 qbInitialWindow
+ * 定义在本文件(三份 tpl-manifest 里本文件均排在 state.js 之前, 见 prism/atlas/console),
+ * 由 state.js 的 data() 调用 —— 档位域归流量图模块所有。落盘纪律与 persistDrawerTab 同款:
+ * 只落"选了哪档"这个用户意图, 写失败吞异常(刷新后回落默认), 不打断换窗。
+ * 快捷键三入口(shortcuts.js): 打开全局图 Ctrl+Backslash / 详情面板流量页签 Alt+5 /
+ * 窗口前后切换 [ ](后两条走 when 条件绑定, 仅流量图可见时消费键位)。
  */
 /* global uPlot */
 
@@ -50,6 +61,33 @@
 const _QB_POLL_MIN_MS = 1500;
 const _QB_POLL_MAX_MS = 600000;
 const _QB_POLL_FALLBACK_MS = 30000;
+
+/* 窗口档位(13 档, 顺序即展示序: 短窗 -> 长窗; 与后端 webui/server/traffic_qb.py 的
+ * WINDOW_NAMES 逐字一致) —— 展示(drawer.html v-for 走 qbWindowNames computed)、前后切换
+ * (qbCycleWindow)、持久化校验(qbInitialWindow)三处共用同一份, 不再各自硬编码。 */
+const QB_WINDOW_NAMES = ["1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d", "6mo", "1y", "all"];
+const QB_WINDOW_DEFAULT = "24h";
+
+/* 窗口选择持久化键(2026-10-05 用户拍板粒度: 全局单独一份, 分组/种子共用一份) ——
+ * 全局图看的是"整机吞吐尺度", 种子/组图看的是"单对象活跃尺度", 两者习惯常不同故分开;
+ * 而组与种子常被当作同一类"单对象"视图对照着看, 故共用一份。 */
+const QB_WIN_STORE_KEY_GLOBAL = "autoqb.ui.qbWinGlobal";
+const QB_WIN_STORE_KEY_SHARED = "autoqb.ui.qbWinShared";
+function qbWinStoreKey(scope) {
+  return scope === "global" ? QB_WIN_STORE_KEY_GLOBAL : QB_WIN_STORE_KEY_SHARED;
+}
+/* 窗口初值(持久化偏好; 与 initialDrawerTab 同纪律: 只认合法档位, 坏值/无存储回落默认)。
+ * 定义在本文件(三份 tpl-manifest 里本文件均排在 state.js 之前)由 state.js 的 data() 调用;
+ * localStorage 访问只在函数体内(本文件会被 test_web 的 node 探针 eval, 顶层不得碰 DOM/BOM)。 */
+function qbInitialWindow(scope) {
+  try {
+    const v = localStorage.getItem(qbWinStoreKey(scope));
+    if (QB_WINDOW_NAMES.includes(v)) return v;
+  } catch (e) {
+    /* 无存储/坏数据: 回落默认(偏好类读取失败不该影响启动) */
+  }
+  return QB_WINDOW_DEFAULT;
+}
 
 /* 三挂点作用域表(模块级单一描述源): 字段名一律指到 state.js 根选项的字段(不进 app.mixin,
  * frontend-split 纪律); url(ctx, window) 组端点串, ctx = 单种 hash / 分组 key(经 this 取);
@@ -234,6 +272,10 @@ window.AQB_QB_TRAFFIC = {
       const base = "累计为窗口内增量(断线期不计)";
       return s === "group" ? base + " · 组口径 = 当前成员集聚合" : base;
     },
+    /* 窗口档位清单(模板 v-for 的唯一来源, 与前后切换/持久化校验同源 QB_WINDOW_NAMES) */
+    qbWindowNames() {
+      return QB_WINDOW_NAMES;
+    },
   },
   methods: {
     /* ---------------- 流量形态开关(三挂点并入抽屉; 打开 = 把抽屉切到流量形态) ----------------
@@ -241,6 +283,12 @@ window.AQB_QB_TRAFFIC = {
      * 单种: 走 drawer.js openTorrentDrawer + drawerTab('traffic')(页签本体, 不在本模块)。
      * 关闭统一走 drawer.js closeDrawer()(Esc/关闭钮/切页三路同口), 收轮询与图见 _qbTeardown。 */
     async openQbHistory() {
+      // 状态栏入口本身 v-if 在 qbHistEntryOn 上(关闭时无按钮), 这里补的是**键盘入口**
+      // (shortcuts.js open-qb-traffic): 功能关闭时按了键要给出反馈, 不静默
+      if (!this.qbTrafficOn) {
+        this.toast("qB 口径流量图未启用", "info", 2500);
+        return;
+      }
       return this.openDrawerTraffic("global", "");
     },
     /* 分组入口(S5b, §07 表③): 入口 = 组右键菜单「qB 口径流量图」(ctx-menus.html, v-if=qbTrafficOn)。
@@ -288,7 +336,27 @@ window.AQB_QB_TRAFFIC = {
       const def = _QB_SCOPES[scope];
       if (this[def.window] === w) return;
       this[def.window] = w;
+      this.persistQbWindow(scope, w);  // 视图选择是用户意图: 换窗即落盘, 刷新后保持(见文件头)
       return this._qbLoad(scope);
+    },
+    /* 窗口选择落盘(与 persistDrawerTab 同纪律: 只落"选了哪档"这个意图, 写失败吞异常)。
+     * 键单点 qbWinStoreKey: 全局一份 / 分组与种子共用一份。 */
+    persistQbWindow(scope, w) {
+      try {
+        localStorage.setItem(qbWinStoreKey(scope), w);
+      } catch { /* 写入失败: 本轮仍生效, 刷新后回落默认 */ }
+    },
+    /* 窗口前后切换(快捷键落点, 见 shortcuts.js traffic-win-prev/next): 按 QB_WINDOW_NAMES
+     * 声明序步进, 端点夹取(不环绕 —— 从"全部"跳到"1分"是惊扰); 无流量形态(qbCurScope 空)时
+     * 零副作用。走 qbSetWindow 单点: 重拉重画 + 轮询重排 + 落盘三事一体。 */
+    qbCycleWindow(delta) {
+      const s = this.qbCurScope;
+      if (!s) return;
+      const cur = this[_QB_SCOPES[s].window];
+      let i = QB_WINDOW_NAMES.indexOf(cur);
+      if (i < 0) i = QB_WINDOW_NAMES.indexOf(QB_WINDOW_DEFAULT);
+      const next = QB_WINDOW_NAMES[Math.max(0, Math.min(QB_WINDOW_NAMES.length - 1, i + delta))];
+      if (next !== cur) this.qbSetWindow(next);
     },
     /* 三挂点统一收尾(关抽屉 / 形态切换 / 登出): 停三挂点轮询 + 销毁三挂点图, 单点防漏 */
     _qbTeardown() {

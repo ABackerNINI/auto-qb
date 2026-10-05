@@ -213,7 +213,7 @@ window.AQB_STATE = {
       // 时序速率, 响应三域同形 { points, totals, meta }; 组件在 qb_traffic_chart.js)。
       // 2026-10-04: 三挂点并入底部详情抽屉(开合 = drawer.open + drawer.kind === "traffic"
       // + drawer.scope), 不再各持独立 open 字段。
-      qbHistWindow: "24h",    // 1m-30d(WINDOW_NAMES 十档, 2026-10-04 起)
+      qbHistWindow: qbInitialWindow("global"),  // 十三档; 持久化 autoqb.ui.qbWinGlobal(全局单独一份)
       qbHistData: null,       // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
       qbHistLoading: false,
       qbHistError: "",
@@ -221,7 +221,7 @@ window.AQB_STATE = {
       qbHistHoverLeft: 0,     // 悬停十字线 px(tooltip 水平定位)
       // qB 口径流量图 · 单种挂点(S5b, plan §07 表②): 种子详情抽屉「流量」页签; 开合由
       // drawer.kind === "seed" + drawer.tab === "traffic" 表达, 不设独立 open 字段(正文块在 drawer.html)
-      qbTorrentWindow: "24h", // 1m-30d(WINDOW_NAMES 十档, 2026-10-04 起)
+      qbTorrentWindow: qbInitialWindow("torrent"), // 十三档; 持久化 autoqb.ui.qbWinShared(与组共用)
       qbTorrentData: null,    // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
       qbTorrentLoading: false,
       qbTorrentError: "",
@@ -231,7 +231,7 @@ window.AQB_STATE = {
       // 入口 = 组右键菜单「qB 口径流量图」; key = 分组视图 g.key(encode_group_key 通道)
       qbGroupKey: "",         // 打开时刻锁定的组 key(慢响应不污染下一次打开)
       qbGroupName: "",        // 弹层标题用(经 _findGroup 取, 找不到留空)
-      qbGroupWindow: "24h",   // 1m-30d(WINDOW_NAMES 十档, 2026-10-04 起)
+      qbGroupWindow: qbInitialWindow("group"),  // 十三档; 持久化 autoqb.ui.qbWinShared(与种子共用)
       qbGroupData: null,      // 最近一次成功响应(null = 无数据/失败, 空态分支接管)
       qbGroupLoading: false,
       qbGroupError: "",
