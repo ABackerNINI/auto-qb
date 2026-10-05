@@ -95,6 +95,7 @@ def load_grouping_config(spec: dict) -> GroupingConfig:
         enabled=_get(spec, "enabled", d.enabled, parse_bool),
         check_missing_files=_get(spec, "check_missing_files", d.check_missing_files, parse_bool),
         missing_tag=_get(spec, "missing_tag", d.missing_tag),
+        cross_group_conflict_check=_get(spec, "cross_group_conflict_check", d.cross_group_conflict_check, parse_bool),
     )
 
 

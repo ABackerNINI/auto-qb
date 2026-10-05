@@ -35,13 +35,24 @@
   (rule-system/conditions-and-actions.md), 跟随委托关系不重复维护。**豁免**: 插件 spec 内部键
   (<任意>_rules.*.conditions/actions.<插件名> 之下的层级) —— 插件 spec 键面尚未逐键进参考文档,
   权威单点是 schema 插件表; 插件名本身仍要求有出处。展开插件 spec 键面属独立回写任务, 未做前豁免保持
+- test_loader_probe_table_covers_named_leaf_surface: loader 消费探针表必须恰好覆盖键面命名叶键
+  (扣动态段与豁免) —— 新增键不配探针当场红, 逼着补「YAML 显式值」探针; 键在面上但 loader 漏读
+  (issue 26-10-06-0027 D-01 形态: 键面/schema/校验五处齐备唯独 loaders 不取值, 三道旧守卫全探不到)
+  由此被结构性堵住
+- test_named_leaf_keys_round_trip_through_load_config: 每个命名叶键以显式 YAML 值(≠字段默认)写进
+  临时配置, load_config 回读后必须 == 期望解析值 —— YAML 写了但解析拿不到即红(键面守卫域的
+  loader 消费核对); 探针期望值 ≠ 字段默认值本身也是断言, 防探针退化成与缺省同值的空转核对
 """
+import logging
 import re
+import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 
-from auto_qb.config import schema
+from auto_qb.config import Config, load_config, schema
+from auto_qb.config.models import QbTraffic
 from auto_qb.config.schema import HR_CHECK_SITES_FIELDS, RULE_FIELDS, TRACKER_FIELDS
 from auto_qb.config.validation import KNOWN_CONFIG_KEYS
 from auto_qb.config.validation.sections import KNOWN_PATH_MAP_ENTRY_KEYS
@@ -202,4 +213,163 @@ def test_keys_md_covers_key_surface():
             missing.append(path)
     assert not missing, (
         "键面叶键在参考文档(keys.md + rule-system/conditions-and-actions.md)无出处(改键必须同步回写):\n  " + "\n  ".join(missing)
+    )
+
+
+# ---------- loader 消费核对(issue 26-10-06-0027 D-01 守阵): 键在键面上 ≠ loader 真的读它 ----------
+# D-01 形态: 键在 models/schema/校验/键面基线/keys.md 五处齐备, 唯 load_grouping_config 漏取值,
+# YAML 显式写 true 校验零报错、解析恒为默认 False —— 键面/schema/直设属性三道旧守卫全探不到。
+# 本守阵给每个命名叶键配「YAML 显式值(≠字段默认) -> 期望解析值」探针, 一份全键探针配置走
+# load_config 真链路回读, 显式值拿不到即红。
+
+# 探针豁免键(无法构造「非默认合法探针」/ 专段结构, 逐个注明理由):
+# - global_speed_limit_curve: curve 专段编辑器, 内部键本就不入键面(见上方「键面口径」边界),
+#   结构与 enabled 开关由 test_validate_gslc* 与 test_config.py 的曲线用例覆盖;
+# - notify.channels: v1 渠道值域只有 platform 一档(== 字段默认), 显式探针恒等于缺省, 回读不可判别;
+#   loader 显式分支(channels 列表 -> 渠道名)由 test_config.py::test_load_notify_config 覆盖。
+_LOADER_PROBE_EXCLUDED = {"global_speed_limit_curve", "notify.channels"}
+
+# Optional 段的缺省实例(Config() 上该属性为 None = 功能未启用, 探针空转核对要用段数据类默认兜底)
+_OPTIONAL_SECTION_DEFAULTS = {"qb_traffic": QbTraffic}
+
+# 命名叶键探针表: 键路径 -> (YAML 显式值, 期望解析值)。期望值一律硬编码字面量(不复用 parse 函数),
+# 让「YAML 写的 == 解析出的」核对完全独立于被测解析器; 全部取 ≠ 字段默认的合法值(空转核对自断言)。
+_LOADER_PROBES = {
+    # 顶层标量
+    "main_tick": ("3S", 3.0),
+    "sync_interval": ("7S", 7.0),
+    "interval": ("3M", 180.0),
+    "state_save_interval": ("45S", 45.0),
+    "max_tasks_per_tick": ("7", 7),
+    "data_dir": ("/probe-data", "/probe-data"),
+    "state_file": ("/probe-data/state-probe.json", "/probe-data/state-probe.json"),
+    "remove_similar_tags": ("true", True),
+    "maintenance_tag_mode": ("on_change", "on_change"),
+    "skip_checking_tag": ("probe-skip", "probe-skip"),
+    "delete_tags": (["probe-a"], ["probe-a"]),
+    "delete_tags_if_has_no_torrents": (["probe-b"], ["probe-b"]),
+    # log 段(YAML 键 log -> 模型属性 logging)
+    "log.level": ("DEBUG", logging.DEBUG),
+    "log.file": ("probe-autolog.log", "probe-autolog.log"),
+    "log.max_bytes": ("2MiB", 2 * 1024**2),
+    "log.format": ("probe-format %(message)s", "probe-format %(message)s"),
+    # add_episode_tags 段
+    "add_episode_tags.enabled": ("true", True),
+    "add_episode_tags.add_tag_single": ("sE${episode_first}", "sE${episode_first}"),
+    "add_episode_tags.add_tag_multi": ("mE${episode_first}-${episode_last}", "mE${episode_first}-${episode_last}"),
+    # hr 段
+    "hr.add_tag": ("probe-hr-tag", "probe-hr-tag"),
+    "hr.add_category": ("probe-hr-cat", "probe-hr-cat"),
+    "hr.overwrite_category": ("true", True),
+    "hr.add_tag_for_satisfied": ("probe-hr-done-tag", "probe-hr-done-tag"),
+    "hr.add_category_for_satisfied": ("probe-hr-done-cat", "probe-hr-done-cat"),
+    "hr.overwrite_category_for_satisfied": ("true", True),
+    "hr.exclude_tags": (["probe-ex-t"], ["probe-ex-t"]),
+    "hr.exclude_categories": (["probe-ex-c"], ["probe-ex-c"]),
+    # grouping 段(cross_group_conflict_check 即 D-01 缺口键: 默认 False, 显式 true 必须真正解析成 True)
+    "grouping.enabled": ("false", False),
+    "grouping.check_missing_files": ("false", False),
+    "grouping.missing_tag": ("PROBETAG", "PROBETAG"),
+    "grouping.cross_group_conflict_check": ("true", True),
+    # qbittorrent 段
+    "qbittorrent.host": ("192.0.2.1", "192.0.2.1"),
+    "qbittorrent.port": ("16585", 16585),
+    "qbittorrent.username": ("probe-user", "probe-user"),
+    "qbittorrent.password": ("probe-pass", "probe-pass"),
+    # web 段
+    "web.enabled": ("true", True),
+    "web.host": ("192.0.2.1", "192.0.2.1"),
+    "web.port": ("18080", 18080),
+    "web.token": ("probe-token", "probe-token"),
+    "web.skip_local_verify": ("true", True),
+    "web.skip_check_menu": ("true", True),
+    # notify 段(channels 豁免, 见 _LOADER_PROBE_EXCLUDED)
+    "notify.enabled": ("true", True),
+    "notify.min_level": ("WARNING", "WARNING"),
+    "notify.quiet_hours": ("02:00-05:00", "02:00-05:00"),
+    "notify.max_per_hour": ("90", 90),
+    "notify.dedup_window": ("90S", 90.0),
+    # hr_check 段(sites 动态段不入探针)
+    "hr_check.enabled": ("true", True),
+    "hr_check.min_interval": ("100S", 100.0),
+    "hr_check.max_requests_per_day": ("333", 333),
+    "hr_check.max_pages_per_wave": ("33", 33),
+    "hr_check.allow_window": ("01:00-06:00", "01:00-06:00"),
+    "hr_check.shared_dir": ("/probe-hr-shared", "/probe-hr-shared"),
+    "hr_check.reuse_window": ("3H", 10800.0),
+    "hr_check.channel.enabled": ("true", True),
+    "hr_check.channel.port": ("18788", 18788),
+    "hr_check.channel.token": ("probe-ch-token", "probe-ch-token"),
+    "hr_check.channel.extension_id": ("a" * 32, "a" * 32),  # 32 位 Chrome 扩展 id(a~p)
+    "hr_check.channel.request_timeout": ("240S", 240.0),
+    # qb_traffic 段(探针值须过校验: sample >= main_tick(3S) 且 <= 600s; flush 60-3600 整数秒;
+    # raw 1h-90d; rollup >= 7d)
+    "qb_traffic.enabled": ("true", True),
+    "qb_traffic.sample_interval": ("40S", 40.0),
+    "qb_traffic.flush_interval": ("150S", 150.0),
+    "qb_traffic.raw_window": ("2H", 7200.0),
+    "qb_traffic.rollup_window": ("8D", 691200.0),
+}
+
+
+def _named_leaf_keys() -> list:
+    """键面里可逐键回读的「命名叶键」: 扣动态段(trackers.* / *_rules.* / fs.path_map.* /
+    hr_check.sites.* 通配)与探针豁免键, 只留不被更深路径前缀的末端键"""
+    paths = build_config_key_surface()
+    return sorted(
+        p for p in paths if ".*" not in p and "<任意>" not in p and p not in _LOADER_PROBE_EXCLUDED and
+        not any(q != p and q.startswith(p + ".") for q in paths)
+    )
+
+
+def _attr_walk(root, path: str):
+    """按键路径取配置模型属性; YAML 键 log 对应模型属性 logging"""
+    node = root
+    for part in path.split("."):
+        node = getattr(node, "logging" if part == "log" else part)
+    return node
+
+
+def test_loader_probe_table_covers_named_leaf_surface():
+    """探针表必须恰好覆盖键面命名叶键(扣豁免): 新增键不配探针当场红 —— 键在面上但 loader 漏读
+    (D-01 形态)没有结构信号, 靠「加键必须配回读探针」这道闸逼出消费核对"""
+    named = set(_named_leaf_keys())
+    probed = set(_LOADER_PROBES)
+    assert probed == named, (
+        "loader 消费探针表与键面命名叶键不一致(键在键面上但回读探针缺失/多余, 新增配置键必须同步配探针):\n"
+        f"  缺探针: {sorted(named - probed)}\n"
+        f"  多余探针: {sorted(probed - named)}\n"
+        f"  豁免口径见 _LOADER_PROBE_EXCLUDED(逐键注明理由)"
+    )
+
+
+def test_named_leaf_keys_round_trip_through_load_config():
+    """每个命名叶键以显式 YAML 值写进临时配置, load_config 真链路回读必须 == 期望解析值;
+    同时断言期望值 ≠ 字段默认(防探针与缺省同值退化为空转核对)"""
+    # 空转防线: 期望值必须偏离字段默认(Optional 段默认 None, 用段数据类默认兜底)
+    for path, (_raw, expected) in _LOADER_PROBES.items():
+        root_part = path.split(".")[0]
+        if root_part in _OPTIONAL_SECTION_DEFAULTS:
+            default_value = _attr_walk(_OPTIONAL_SECTION_DEFAULTS[root_part](), path.split(".", 1)[1])
+        else:
+            default_value = _attr_walk(Config(), path)
+        assert expected != default_value, (f"探针 {path} 的期望值 {expected!r} 与字段默认相同, 回读核对空转 —— 换一个非默认的合法探针值")
+    # 一份全键探针配置走 load_config 真链路(读文件 -> _strip_none -> 迁移 -> 全量校验 -> 解析)
+    probe_cfg: dict = {"config": {}}
+    for path, (raw, _expected) in _LOADER_PROBES.items():
+        node = probe_cfg["config"]
+        parts = path.split(".")
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = raw
+    with tempfile.TemporaryDirectory() as td:
+        config_path = Path(td) / "probe_config.yml"
+        config_path.write_text(yaml.safe_dump(probe_cfg, allow_unicode=True), encoding="utf-8")
+        cfg = load_config(str(config_path))
+    mismatched = [
+        f"{path}: 期望 {_LOADER_PROBES[path][1]!r}, 实得 {_attr_walk(cfg, path)!r}"
+        for path in _LOADER_PROBES if _attr_walk(cfg, path) != _LOADER_PROBES[path][1]
+    ]
+    assert not mismatched, (
+        "键面命名叶键的 YAML 显式值未按期望进入 load_config 解析结果(loader 漏读/错读, D-01 形态):\n  " + "\n  ".join(mismatched)
     )

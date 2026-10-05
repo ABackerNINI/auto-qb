@@ -117,6 +117,13 @@
 |---|---|---|
 | `test_no_ghost_pkg_dirs.py::test_src_has_no_ghost_pkg_dirs` | src 下不存在「只剩 `__pycache__` 而无任何 `.py`」的幽灵包目录 —— 历史退役源码的空壳会误导「包还在」的排障判断(issue 26-10-01-1946) | 在 src 下建一个只含 `__pycache__` 的目录 |
 
+## 配置键面 / loader 消费 (test_config_key_surface.py)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_loader_probe_table_covers_named_leaf_surface` | loader 消费探针表恰好覆盖键面命名叶键(扣动态段与 `_LOADER_PROBE_EXCLUDED` 豁免) —— 新增配置键不配「YAML 显式值」探针当场红, 键在面上但 loader 漏读(D-01 形态, issue 26-10-06-0027)被结构性堵住 | 删表里任一键条目 |
+| `test_named_leaf_keys_round_trip_through_load_config` | 每个命名叶键的 YAML 显式值(≠字段默认, 空转自断言)经 load_config 真链路回读 == 期望解析值; 还原 D-01 缺陷实测红在 `grouping.cross_group_conflict_check: 期望 True, 实得 False` | 还原 loaders.py 漏读 fix |
+
 ## 通用纪律
 
 - **红验优先用运行时 monkeypatch 还原旧实现**(不碰工作区), `lru_cache` 记得先 `cache_clear()`。
