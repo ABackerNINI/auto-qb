@@ -48,22 +48,22 @@
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_api_traffic_qb_disabled_empty_state: qB 口径流量三端点未启用(qb_traffic None / enabled=false)空态与 /api/traffic/history 同构(plan 26-10-03-0946 §08 P4)
 - test_api_traffic_qb_requires_token: 三 GET 端点沿用全局 token 鉴权单点(无凭证 401)
-- test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十三档(v3 D4: 1m-30d + 6mo/1y/all, 90d 延后)
-- test_api_traffic_qb_global_24h_points_totals_and_stale: (v3)global 24h 窗天文件块 -> 栅格展开(points 对齐桶/空桶 null=断连真空) + totals 差分(重置/断链) + 读取竞态降级回上一份快照标 stale
-- test_api_traffic_qb_global_30d_hour_segment: (v3)global 30d 窗 agg hour 行直映栅格桶(epoch 即桶键), interval_s=3600, 相邻桶差分
-- test_api_traffic_qb_global_6mo_1y_day_segment: (v3 S3b D4 新档)6mo/1y 窗 agg day 行直映本地日界桶 —— 滚动窗切片(300 天前行 1y 可见/6mo 不可见), 缺日断链, interval_s=86400
-- test_api_traffic_qb_global_all_month_segment: (v3 S3b D4 新档)all 窗 agg month 行数据面逐月铺格(缺失月 null), 相邻月差分, interval_s=标称月长; 空数据面空态
-- test_api_traffic_qb_torrent_endpoint: (v3)单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
-- test_api_traffic_qb_torrent_1y_single_agg_cold_read: (v3 S3b 验收)年视图单 agg 文件冷读恰 1 open, 缓存命中再查零 open
-- test_api_traffic_qb_global_24h_reads_only_involved_day_files: (v3 S3b 端点面回归)24h 窗只开窗口涉及日期天文件(恰 2 个), 窗外日期/agg.dat 零 open
-- test_api_traffic_qb_group_endpoint: (v3)分组读侧现算(Σ 成员均值/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
-- test_api_traffic_qb_group_30d_reads_member_agg_only: (v3 S3b 验收)3d+ 窗组图只读成员 agg 文件(2 成员恰 2 open = M×1, 天文件零读取)
+- test_api_traffic_qb_window_validation: window 非法值 400 / 缺省 24h / 仅认 WINDOW_NAMES 十三档(D4 沿用: 1m-30d + 6mo/1y/all, 90d 延后)
+- test_api_traffic_qb_global_24h_points_totals_and_stale: global 24h 窗天文件块 -> 栅格展开(points 对齐桶/空桶 null=断连真空) + totals 差分(重置/断链) + 读取竞态降级回上一份快照标 stale
+- test_api_traffic_qb_global_30d_hour_segment: global 30d 窗 agg hour 行直映栅格桶(epoch 即桶键), interval_s=3600, 相邻桶差分
+- test_api_traffic_qb_global_6mo_1y_day_segment: (S3b D4 沿用)6mo/1y 窗 agg day 行直映本地日界桶 —— 滚动窗切片(300 天前行 1y 可见/6mo 不可见), 缺日断链, interval_s=86400
+- test_api_traffic_qb_global_all_month_segment: (S3b D4 沿用)all 窗 agg month 行数据面逐月铺格(缺失月 null), 相邻月差分, interval_s=标称月长; 空数据面空态
+- test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
+- test_api_traffic_qb_torrent_1y_single_agg_cold_read: (S3b 验收)年视图单 agg 文件冷读恰 1 open, 缓存命中再查零 open
+- test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(恰 2 个), 窗外日期/agg.dat 零 open
+- test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员均值/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
+- test_api_traffic_qb_group_30d_reads_member_agg_only: (S3b 验收)3d+ 窗组图只读成员 agg 文件(2 成员恰 2 open = M×1, 天文件零读取)
 - test_api_traffic_qb_global_live_tail_realtime: (S6 验收追加)raw 段窗活尾合流 —— 纯活尾(零盘)出实时桶点;
   磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏), 快照清空后磁盘响应与合流响应逐点一致
 - test_api_traffic_qb_group_live_tail_member_only: (S6)组端点空态判据计入活尾 —— 成员仅活尾(零盘)组图非空;
   单种端点同享活尾
 - test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
-- test_api_traffic_qb_group_member_only_zruns_not_empty: (v3)组空态判据观测面平移 —— 成员只剩 z 块不算「从未产过流量」, 出 0 线而非空态
+- test_api_traffic_qb_group_member_only_zruns_not_empty: 组空态判据观测面 —— 成员只剩 z 块不算「从未产过流量」, 出 0 线而非空态
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
 - test_config_tree_roundtrip: 配置树读取/保存写回文件并投递热重载命令
 - test_config_tree_invalid_rejected: 非法配置树 -> 400 且不写回
@@ -4595,11 +4595,11 @@ def _enable_qb_traffic(mgr, **kw):
     return mgr.config.qb_traffic
 
 
-def _qb_v3(mgr):
-    """指向替身 data_dir(tmp_path)的 v3 存储层: 用例经真实写路径造 qb-traffic-v3/ 天文件与 agg.dat"""
-    from auto_qb.core.traffic_store import TrafficV3Store
+def _qb_v4(mgr):
+    """指向替身 data_dir(tmp_path)的 v4 存储层: 用例经真实写路径造 qb-traffic-v4/ 天文件与 agg.dat"""
+    from auto_qb.core.traffic_store import TrafficV4Store
 
-    return TrafficV3Store(mgr.config.data_dir)
+    return TrafficV4Store(mgr.config.data_dir)
 
 
 def _qb_open_spy(monkeypatch):
@@ -4617,9 +4617,9 @@ def _qb_open_spy(monkeypatch):
     return opened
 
 
-def _v3_opens(opened):
-    """qb-traffic-v3/ 数据面的打开路径(请求链路会开无关文件, 只看 v3 读盘)"""
-    return [p for p in opened if "qb-traffic-v3/" in p]
+def _v4_opens(opened):
+    """qb-traffic-v4/ 数据面的打开路径(请求链路会开无关文件, 只看 v4 读盘)"""
+    return [p for p in opened if "qb-traffic-v4/" in p]
 
 
 def test_api_traffic_qb_disabled_empty_state(web_env):
@@ -4671,32 +4671,42 @@ def test_api_traffic_qb_window_validation(web_env):
 
 
 def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch):
-    """global 24h 窗(v3 raw 段): 天文件块 -> 桶点 -> 栅格展开(points 对齐桶 1:1 / 空桶 null
+    """global 24h 窗(raw 段): 天文件块 -> 桶点 -> 栅格展开(points 对齐桶 1:1 / 空桶 null
     = 断连真空) + totals 相邻桶快照差分(重置 null / 断连断链) + 读取竞态降级: 回上一份成功
     快照标 stale=true, 不以空态冒充无数据(§08)"""
-    from auto_qb.core.traffic_store import V3Block, V3DayCache, V3NullRun, V3Sample, v3_epoch_date_str
+    from auto_qb.core.traffic_store import V4Block, V4DayCache, V4NullRun, V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     base = ((now - 7200) // 30) * 30  # 窗内 2h 处的 30s 对齐桶
     # 块首记录槽位恰在 base+30(w=30) -> 桶 base 1:1 对位, 其后标称 30s 逐桶对齐;
     # n 游程 3 槽(槽位 base+180/210/240)在响应面 = 连续空桶(断连), 尾记录以游程终点续链
+    # v4 行型: 计数器回落处拆块(与写侧「重置强制关块重立基线」一致), 槽位序列不变
     store.append_records(
         "global",
-        v3_epoch_date_str(base + 30),
+        v4_epoch_date_str(base + 30),
         (base + 30, 30),
         (
-            V3Sample(100, 50, 1000, 500),  # 桶 base
-            V3Sample(200, 70, 2000, 800),  # 桶 base+30
-            V3Sample(5, 5, 2400, 900),  # 桶 base+60
-            V3Sample(300, 90, 3400, 1300),  # 桶 base+90
-            V3Sample(10, 10, 2900, 1400),  # 桶 base+120: dl 快照回落(重置, 逐向独立)
-            V3NullRun(3, dt_ms=90000),  # 断连 3 槽: 桶 base+150/180/210 空
-            V3Sample(12, 22, 3500, 1500, dt_ms=30000),  # 桶 base+240(断链后基线缺失)
+            V4Sample(100, 50, 1000, 500),  # 桶 base
+            V4Sample(200, 70, 2000, 800),  # 桶 base+30
+            V4Sample(5, 5, 2400, 900),  # 桶 base+60
+            V4Sample(300, 90, 3400, 1300),  # 桶 base+90
         ),
+        (1000, 500),
+    )
+    store.append_records(
+        "global",
+        v4_epoch_date_str(base + 30),
+        (base + 150, 30),
+        (
+            V4Sample(10, 10, 2900, 1400),  # 桶 base+120: dl 快照回落(重置, 新块立基线)
+            V4NullRun(3, dt_ms=90000),  # 断连 3 槽: 桶 base+150/180/210 空
+            V4Sample(12, 22, 3500, 1500, dt_ms=30000),  # 桶 base+240(断链后基线缺失)
+        ),
+        (2900, 1400),
     )
 
     def point_at(body, bucket):
@@ -4734,11 +4744,11 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
 
         return raise_oserror
 
-    monkeypatch.setattr(V3DayCache, "read_window", _read_broken())
+    monkeypatch.setattr(V4DayCache, "read_window", _read_broken())
     stale = client.get("/api/traffic/qb/global", headers=auth).json()
     assert stale["meta"]["stale"] is True
     assert stale["points"] == body["points"] and stale["totals"] == body["totals"]
-    monkeypatch.setattr(V3DayCache, "read_agg", _read_broken())
+    monkeypatch.setattr(V4DayCache, "read_agg", _read_broken())
     fresh = client.get("/api/traffic/qb/global", headers=auth, params={"window": "30d"}).json()
     assert fresh["points"] == [] and fresh["totals"] == [] and fresh["meta"]["stale"] is True
     monkeypatch.undo()
@@ -4746,14 +4756,14 @@ def test_api_traffic_qb_global_24h_points_totals_and_stale(web_env, monkeypatch)
 
 
 def test_api_traffic_qb_global_30d_hour_segment(web_env):
-    """global 30d 窗(v3 agg hour 段): agg.dat hour 行直映栅格桶(epoch 即桶键, 桶内不再
+    """global 30d 窗(agg hour 段): agg.dat hour 行直映栅格桶(epoch 即桶键, 桶内不再
     聚合), meta.interval_s=3600; 相邻 hour 桶快照差分"""
     from auto_qb.core.traffic_store import AggRow
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     h = ((now - 172800) // 3600) * 3600  # 窗内 2 天前的小时桶
     store.append_agg_rows(
@@ -4774,7 +4784,7 @@ def test_api_traffic_qb_global_30d_hour_segment(web_env):
 
 
 def test_api_traffic_qb_global_6mo_1y_day_segment(web_env):
-    """6mo/1y 窗(v3 agg day 段, D4 新档): day 行直映本地日界桶, 滚动窗切片正确 ——
+    """6mo/1y 窗(agg day 段, D4 沿用): day 行直映本地日界桶, 滚动窗切片正确 ——
     300 天前的行 1y 可见 / 6mo 不可见; 缺日 = null 桶(totals 断链基线缺失);
     meta.interval_s=86400"""
     from datetime import datetime, timedelta
@@ -4784,7 +4794,7 @@ def test_api_traffic_qb_global_6mo_1y_day_segment(web_env):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     today = datetime.fromtimestamp(now).date()
 
@@ -4817,19 +4827,19 @@ def test_api_traffic_qb_global_6mo_1y_day_segment(web_env):
 
 
 def test_api_traffic_qb_global_all_month_segment(web_env):
-    """all 窗(v3 agg month 段, D4 新档): month 行数据面逐月铺格(缺失月 = null 桶, 折线
+    """all 窗(agg month 段, D4 沿用): month 行数据面逐月铺格(缺失月 = null 桶, 折线
     断开), 相邻月桶快照差分; meta.interval_s = 标称月长(真实月长按行间隔, 点位真值在
     points[].t —— 前端按真值落点)"""
-    from auto_qb.core.traffic_store import AggRow, v3_month_epoch
+    from auto_qb.core.traffic_store import AggRow, v4_month_epoch
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
-    m0 = v3_month_epoch(now)  # 本自然月(完结月行; 当月行未封不写, 用例直接造历史月)
-    m1 = v3_month_epoch(m0 - 86400)  # 上月
-    m4 = v3_month_epoch(v3_month_epoch(v3_month_epoch(m1 - 86400) - 86400) - 86400)  # 再往前 3 个自然月
+    m0 = v4_month_epoch(now)  # 本自然月(完结月行; 当月行未封不写, 用例直接造历史月)
+    m1 = v4_month_epoch(m0 - 86400)  # 上月
+    m4 = v4_month_epoch(v4_month_epoch(v4_month_epoch(m1 - 86400) - 86400) - 86400)  # 再往前 3 个自然月
     store.append_agg_rows(
         "global", (
             AggRow("month", m4, 10, 10, 1, 1, 100, 50, 3 * 86400),
@@ -4853,19 +4863,19 @@ def test_api_traffic_qb_global_all_month_segment(web_env):
 
 
 def test_api_traffic_qb_torrent_endpoint(web_env):
-    """单种端点(v3): 正常取数 / 非法哈希 400 / 未知哈希空态; 数据挂 infohash ——
+    """单种端点: 正常取数 / 非法哈希 400 / 未知哈希空态; 数据挂 infohash ——
     不在当前快照的冻结种子历史仍可查"""
-    from auto_qb.core.traffic_store import V3Sample, v3_epoch_date_str
+    from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     base = ((now - 3600) // 30) * 30
     # 块首记录槽位恰在 base+30(w=30) -> 桶 base 1:1 对位
     store.append_records(
-        "torrent:HA", v3_epoch_date_str(base + 30), (base + 30, 30), (V3Sample(500, 100, 5000, 1000), )
+        "torrent:HA", v4_epoch_date_str(base + 30), (base + 30, 30), (V4Sample(500, 100, 5000, 1000), ), (5000, 1000)
     )
     body = client.get("/api/traffic/qb/torrent/HA", headers=auth).json()
     assert body["meta"]["source"] == "qb" and body["meta"]["stale"] is False
@@ -4874,14 +4884,14 @@ def test_api_traffic_qb_torrent_endpoint(web_env):
     # 非法哈希(路径不安全字符, 存储层 fail-fast) -> 400; 未知哈希(合法字符, 无文件) -> 空态
     assert client.get("/api/traffic/qb/torrent/HA.X", headers=auth).status_code == 400
     assert client.get("/api/traffic/qb/torrent/ZZ", headers=auth).json()["points"] == []
-    # 删种冻结(hash 已不在 by_hash 快照)后历史仍可查: 数据以 v3 天文件为准, 不以快照存在性裁决
+    # 删种冻结(hash 已不在 by_hash 快照)后历史仍可查: 数据以 v4 天文件为准, 不以快照存在性裁决
     assert "HA" not in mgr.store.by_hash
     body2 = client.get("/api/traffic/qb/torrent/HA", headers=auth).json()
     assert any(p2 and p2["t"] == base for p2 in body2["points"])
 
 
 def test_api_traffic_qb_torrent_1y_single_agg_cold_read(web_env, monkeypatch):
-    """年视图单 agg 文件冷读(§05.3 验收): 1y 窗恰好 1 次 qb-traffic-v3 open(agg.dat,
+    """年视图单 agg 文件冷读(§05.3 验收): 1y 窗恰好 1 次 qb-traffic-v4 open(agg.dat,
     天文件零读取); 再查(mtime/size 键控缓存命中)零新 open"""
     from datetime import datetime, timedelta
 
@@ -4890,7 +4900,7 @@ def test_api_traffic_qb_torrent_1y_single_agg_cold_read(web_env, monkeypatch):
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     today = datetime.fromtimestamp(now).date()
 
@@ -4907,12 +4917,12 @@ def test_api_traffic_qb_torrent_1y_single_agg_cold_read(web_env, monkeypatch):
     )
     opened = _qb_open_spy(monkeypatch)
     body = client.get("/api/traffic/qb/torrent/HA", headers=auth, params={"window": "1y"}).json()
-    assert len(_v3_opens(opened)) == 1  # 单 agg 文件冷读(360 天前的 day 行无需任何天文件)
+    assert len(_v4_opens(opened)) == 1  # 单 agg 文件冷读(360 天前的 day 行无需任何天文件)
     monkeypatch.undo()
     assert next(p for p in body["points"] if p and p["t"] == d1) == {"t": d1, "dl": 10, "up": 1}
     opened2 = _qb_open_spy(monkeypatch)
     client.get("/api/traffic/qb/torrent/HA", headers=auth, params={"window": "1y"})
-    assert _v3_opens(opened2) == []  # 缓存命中零 open
+    assert _v4_opens(opened2) == []  # 缓存命中零 open
     monkeypatch.undo()
 
 
@@ -4921,76 +4931,87 @@ def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkey
     零 open), agg.dat 亦不触"""
     from datetime import datetime, timedelta
 
-    from auto_qb.core.traffic_store import V3Sample, v3_epoch_date_str, v3_window_dates
+    from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str, v4_window_dates
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     base = ((now - 600) // 30) * 30  # 窗内 10 分钟前的对齐桶
-    involved = sorted(v3_window_dates(now - 86400, now))
+    involved = sorted(v4_window_dates(now - 86400, now))
     older_date = (datetime.strptime(involved[0], "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
     # 造数: 现行记录落 base 所在日期; 其余涉及日期与窗外更早日期各放一块(读侧按窗过滤)
     for d in involved + [older_date]:
-        if d == v3_epoch_date_str(base + 30):
-            store.append_records("global", d, (base + 30, 30), (V3Sample(7, 7, 100, 50), ))
+        if d == v4_epoch_date_str(base + 30):
+            store.append_records("global", d, (base + 30, 30), (V4Sample(7, 7, 100, 50), ), (100, 50))
         else:
             ts = int(datetime.strptime(d, "%Y-%m-%d").timestamp()) + 30
-            store.append_records("global", d, (ts, 30), (V3Sample(1, 1, 1, 1), ))
+            store.append_records("global", d, (ts, 30), (V4Sample(1, 1, 1, 1), ), (1, 1))
     opened = _qb_open_spy(monkeypatch)
     body = client.get("/api/traffic/qb/global", headers=auth).json()
     monkeypatch.undo()
-    dat_opens = sorted(os.path.basename(p) for p in _v3_opens(opened))
+    dat_opens = sorted(os.path.basename(p) for p in _v4_opens(opened))
     assert dat_opens == sorted(d + ".dat" for d in involved)  # 只开涉及日期(至多 2 个), 更早日期/agg.dat 不触
     assert len(involved) == 2
     assert next(p for p in body["points"] if p and p["t"] == base) == {"t": base, "dl": 7, "up": 7}
 
 
 def test_api_traffic_qb_group_endpoint(web_env, monkeypatch):
-    """分组端点读侧现算(v3 观测面, §05.1/§05.4): Σ 成员均值 / 全员空闲(z 覆盖)出 0 线 /
+    """分组端点读侧现算(观测面, §05.1/§05.4): Σ 成员均值 / 全员空闲(z 覆盖)出 0 线 /
     全员无观测(停机)整桶断线 —— 「借 global 判 null」退役: 全程零全局系列文件读取 /
     成员重置贡献 0 不拖垮全组 / 成员历史回溯可见 / 解析不到成员空态 / 畸形 key 400"""
-    from auto_qb.core.traffic_store import V3Sample, V3ZeroRun, v3_epoch_date_str
+    from auto_qb.core.traffic_store import V4Sample, V4ZeroRun, v4_epoch_date_str
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     base = ((now - 3600) // 30) * 30
     b0, b1, b2, b3, b4, b5 = (base + i * 30 for i in range(6))
     # HA: b0..b3 r 行(块首槽位恰在 b0+30 -> 桶 1:1 对位) + b4 z 覆盖(空闲观测, 快照恒定)
     #     —— b4 之后无任何块 = 停机(桶 b5 全员无观测)
+    # v4 行型: 计数器回落处拆块(与写侧「重置强制关块重立基线」一致), 槽位序列不变
     store.append_records(
         "torrent:HA",
-        v3_epoch_date_str(b0 + 30),
+        v4_epoch_date_str(b0 + 30),
         (b0 + 30, 30),
         (
-            V3Sample(100, 10, 1000, 0),  # 桶 b0
-            V3Sample(0, 0, 2000, 0),  # 桶 b1
-            V3Sample(10, 5, 500, 0),  # 桶 b2: 快照回落(重置)
-            V3Sample(10, 5, 600, 0),  # 桶 b3
-            V3ZeroRun(1, 600, 0),  # 桶 b4: 空闲 z 观测
-        )
+            V4Sample(100, 10, 1000, 0),  # 桶 b0
+            V4Sample(0, 0, 2000, 0),  # 桶 b1
+        ),
+        (1000, 0),
+    )
+    store.append_records(
+        "torrent:HA",
+        v4_epoch_date_str(b0 + 30),
+        (b2 + 30, 30),
+        (
+            V4Sample(10, 5, 500, 0),  # 桶 b2: 快照回落(重置, 新块立基线)
+            V4Sample(10, 5, 600, 0),  # 桶 b3
+            V4ZeroRun(1, 600, 0),  # 桶 b4: 空闲 z 观测
+        ),
+        (500, 0),
     )
     # HB: b0 就有数据(200, 快照 100) —— b0 的行在其"入组前", 回溯同样可见; b1/b2 连续产点
     store.append_records(
         "torrent:HB",
-        v3_epoch_date_str(b0 + 30),
+        v4_epoch_date_str(b0 + 30),
         (b0 + 30, 30),
         (
-            V3Sample(200, 20, 100, 0),  # 桶 b0
-            V3Sample(0, 0, 300, 0),  # 桶 b1
-            V3Sample(30, 3, 400, 0),  # 桶 b2
-        )
+            V4Sample(200, 20, 100, 0),  # 桶 b0
+            V4Sample(0, 0, 300, 0),  # 桶 b1
+            V4Sample(30, 3, 400, 0),  # 桶 b2
+        ),
+        (100, 0),
     )
     enc = encode_group_key(KEY)
     opened = _qb_open_spy(monkeypatch)
     body = client.get(f"/api/traffic/qb/group/{enc}", headers=auth).json()
     monkeypatch.undo()
-    # 组端点无 global 依赖: 请求全程零 qb-traffic-v3/global/ 读取(本用例根本未造全局数据)
-    assert not [p for p in _v3_opens(opened) if "/global/" in p]
+    # 组端点无 global 依赖: 请求全程零 qb-traffic-v4/global/ 读取(本用例根本未造全局数据)
+    assert not [p for p in _v4_opens(opened) if "/global/" in p]
 
     def pt(seg, t):
         return next((p for p in body[seg] if p and p["t"] == t), None)
@@ -5016,14 +5037,14 @@ def test_api_traffic_qb_group_endpoint(web_env, monkeypatch):
 
 def test_api_traffic_qb_group_30d_reads_member_agg_only(web_env, monkeypatch):
     """3d+ 窗组图只读成员 agg 文件(§05.4, 组图 30d 由 M×31 -> M×1 次文件读取):
-    2 成员 30d 窗请求恰好 2 次 qb-traffic-v3 open(各成员 agg.dat 一次), 天文件与全局零读取;
+    2 成员 30d 窗请求恰好 2 次 qb-traffic-v4 open(各成员 agg.dat 一次), 天文件与全局零读取;
     组速率 = 成员 agg 行求和"""
     from auto_qb.core.traffic_store import AggRow
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     h = ((now - 172800) // 3600) * 3600  # 窗内 2 天前的小时桶
     for key in ("torrent:HA", "torrent:HB"):
@@ -5031,8 +5052,8 @@ def test_api_traffic_qb_group_30d_reads_member_agg_only(web_env, monkeypatch):
     opened = _qb_open_spy(monkeypatch)
     body = client.get(f"/api/traffic/qb/group/{encode_group_key(KEY)}", headers=auth, params={"window": "30d"}).json()
     monkeypatch.undo()
-    v3 = _v3_opens(opened)
-    assert len(v3) == 2 and all(p.endswith("agg.dat") for p in v3)  # M×1, 不读任何天文件
+    v4 = _v4_opens(opened)
+    assert len(v4) == 2 and all(p.endswith("agg.dat") for p in v4)  # M×1, 不读任何天文件
     p = next(p for p in body["points"] if p and p["t"] == h)
     assert p == {"t": h, "dl": 200, "up": 20}  # Σ 成员 avg
     total = next(p for p in body["totals"] if p and p["t"] == h)
@@ -5049,19 +5070,21 @@ def test_api_traffic_qb_group_never_transferred_empty_state(web_env):
 
 
 def test_api_traffic_qb_group_member_only_zruns_not_empty(web_env):
-    """组空态判据 v3 观测面(§05.4, v2 not p.zruns 语义平移): 成员只剩 z 块(raw 已滑出
+    """组空态判据观测面(§05.4 沿用): 成员只剩 z 块(raw 已滑出
     窗/从未活跃传输)不算「从未产过流量」—— z 覆盖是真实观测, 组出 0 线而非空态;
     全程不读全局系列(本用例未造任何全局数据)"""
-    from auto_qb.core.traffic_store import V3ZeroRun, v3_epoch_date_str
+    from auto_qb.core.traffic_store import V4ZeroRun, v4_epoch_date_str
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     start = ((now - 600) // 30) * 30
     # 块首记录 = z 游程: 块首槽位恰在 start+30 -> 桶 start 1:1 对位
-    store.append_records("torrent:HA", v3_epoch_date_str(start + 30), (start + 30, 30), (V3ZeroRun(1, 100, 50), ))
+    store.append_records(
+        "torrent:HA", v4_epoch_date_str(start + 30), (start + 30, 30), (V4ZeroRun(1, 100, 50), ), (100, 50)
+    )
     body = client.get(f"/api/traffic/qb/group/{encode_group_key(KEY)}", headers=auth).json()
     assert body["points"] != []  # 非空态: 只剩 z 覆盖的成员仍产出 points
     p = next(p for p in body["points"] if p and p["t"] == start)
@@ -12633,16 +12656,16 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env):
     """(S6)raw 段窗活尾合流: 纯活尾(零盘)出实时桶点(不等 flush_interval 落盘);
     磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏),
     快照清空后磁盘响应与合流响应逐点一致 —— 图面全程无跳变"""
-    from auto_qb.core.traffic_store import LiveTail, V3Sample, v3_epoch_date_str
+    from auto_qb.core.traffic_store import LiveTail, V4Sample, v4_epoch_date_str
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     _enable_qb_traffic(mgr)
-    store = _qb_v3(mgr)
+    store = _qb_v4(mgr)
     now = int(time.time())
     base = ((now - 240) // 30) * 30  # 5m 窗内
     b0, b1, b2 = (base + i * 30 for i in range(3))
-    recs = (V3Sample(100, 50, 1000, 500), V3Sample(200, 70, 2000, 800))
+    recs = (V4Sample(100, 50, 1000, 500), V4Sample(200, 70, 2000, 800))
     tail_full = LiveTail(
         block_open=True,
         head_pending=True,
@@ -12666,7 +12689,7 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env):
     assert pt("totals", b1) == {"t": b1, "dl": 1000, "up": 300}
     live_body = body
     # flush 落盘(同两记录) + 滞后快照仍重列全部记录: 按 ts 去重, 响应逐点不变
-    store.append_records("global", v3_epoch_date_str(b0 + 30), (b0 + 30, 30), recs)
+    store.append_records("global", v4_epoch_date_str(b0 + 30), (b0 + 30, 30), recs, (1000, 500))
     body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
     assert body == live_body
     # 快照清空(flush 后的下一轮发布): 纯磁盘读路径, 响应仍逐点一致
@@ -12678,7 +12701,7 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env):
 def test_api_traffic_qb_group_live_tail_member_only(web_env):
     """(S6)组端点空态判据计入活尾: 成员仅活尾(零盘)组图非空(不再误判「从未产过流量」);
     单种端点同享活尾"""
-    from auto_qb.core.traffic_store import LiveTail, V3Sample
+    from auto_qb.core.traffic_store import LiveTail, V4Sample
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
@@ -12692,7 +12715,7 @@ def test_api_traffic_qb_group_live_tail_member_only(web_env):
         start_epoch=b0 + 30,
         interval_s=30,
         projected_ts=float(b1 + 30),
-        records=(V3Sample(300, 30, 500, 50), ),
+        records=(V4Sample(300, 30, 500, 50), ),
         open_run=None,
     )
     _attach_live_tail_host(mgr, {"torrent:HB": tail})

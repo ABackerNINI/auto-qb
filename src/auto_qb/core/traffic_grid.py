@@ -1,18 +1,18 @@
 """traffic_grid: qB 口径流量图读侧栅格离散与组聚合纯函数(plan 26-10-03-0946 方案C P4, §05.1/§04.1; v3 读侧 plan 26-10-04-1957 S3a/S3b)
 
-S4 API 读侧的取数口径, 全部纯函数(输入 v3 天文件块序列 / agg 行 / 栅格桶表, 输出响应段),
+S4 API 读侧的取数口径, 全部纯函数(输入 v4 天文件块序列 / agg 行 / 栅格桶表, 输出响应段),
 不触文件不触时钟 —— Web 线程直接调用, 单测可独立构造输入。v2 逐行格式的读侧(系列解析 /
 raw 归桶 / z 行程覆盖展开 / 最早观测行)已随 S5 退役删除, 本模块即现行唯一读侧:
 
 窗口与栅格(§05.1/§05.3, WINDOW_SPECS 13 档):
 - raw 段窗(1m-24h): 桶宽 = 采样间隔(向上取整防伪断线), 桶 = floor 对齐; 数据经
-  traffic_store.V3DayCache 按天加载 -> 块序列 -> v3_series_points 桶点 -> v3_grid_obs
+  traffic_store.V4DayCache 按天加载 -> 块序列 -> v4_series_points 桶点 -> v4_grid_obs
   按重叠秒加权展开到栅格(D1 跨桶覆盖: 宽桶中间栅格桶同值非 null); 另合流采样模块
   活尾快照(S6: 未落盘记录 + 开放游程续链, 图面尾部随采样节拍实时, 不等 flush)。
 - hour 段窗(3d/7d/30d): 桶宽恒 3600s, 消费 agg hour 行; day 段窗(6mo/1y): 滚动窗涉及
   本地日期逐日铺格(桶键 = 本地日界 00:00), 消费 agg day 行; month 段窗(all): 数据面定栅格
   (build_month_grid, 首末月行之间逐月铺格), 消费 agg month 行。agg 行 epoch 即栅格桶键
-  (v3_agg_obs 直映, 桶内不再聚合)。
+  (v4_agg_obs 直映, 桶内不再聚合)。
 
 桶点模型(D1 实施期定稿, §05.1): 每个观测槽生成一个覆盖桶, 桶宽 = max(1, ceil(有效dt)),
 桶 = [ceil(ts)-w, ceil(ts)) —— 单记录的桶天然覆盖其有效 dt 全程; z 游程按均摊槽展开为
@@ -27,7 +27,7 @@ totals 段(§05.1, 单系列与组共用差分层):
 组读侧聚合(§04.1 -> §05.4, API 层现算不做聚合缓存):
 - 速率 = 各成员栅格桶观测 Σ 成员均值, 无行成员按 0 计;
 - 累计增量 = 逐成员先差分(重置/基线缺失贡献 0)再求和 —— 宁可少计一桶不出洞;
-- 桶 null 判定(v3): 桶内无任何成员观测 -> null —— 单成员的 r/z 观测即「程序存活且 qB
+- 桶 null 判定(v4): 桶内无任何成员观测 -> null —— 单成员的 r/z 观测即「程序存活且 qB
   在线」真值, 不借全局系列(组图 3d+ 窗 M 个成员各只读 1 个 agg 文件)。
 """
 import math
@@ -37,13 +37,13 @@ from typing import Optional
 
 from .traffic_store import (
     HOUR_SECONDS,
-    V3Block,
-    V3ParsedAgg,
-    v3_block_slots,
-    v3_bucket_width_s,
-    v3_date_str_epoch,
-    v3_next_month_epoch,
-    v3_window_dates,
+    V4Block,
+    V4ParsedAgg,
+    v4_block_slots,
+    v4_bucket_width_s,
+    v4_date_str_epoch,
+    v4_next_month_epoch,
+    v4_window_dates,
 )
 
 #: 窗口名 -> (跨度秒, 消费段): 1m-24h 消费 raw 天文件(桶宽 = 采样间隔), 3d/7d/30d 消费
@@ -131,7 +131,7 @@ def build_grid(window: str, now: float, sample_interval: float = DEFAULT_SAMPLE_
         interval = DAY_SECONDS
         t1 = int(now)
         t0 = t1 - span
-        buckets = tuple(v3_date_str_epoch(d) for d in sorted(v3_window_dates(t0, t1 - 1)))
+        buckets = tuple(v4_date_str_epoch(d) for d in sorted(v4_window_dates(t0, t1 - 1)))
     else:  # hour
         interval = HOUR_SECONDS
         t1 = int(now)
@@ -159,7 +159,7 @@ def build_month_grid(month_epochs: tuple, now: float) -> WindowGrid:
     cur = int(lo)
     while cur <= hi:
         buckets.append(cur)
-        cur = v3_next_month_epoch(cur)  # 严格递增, 必终止
+        cur = v4_next_month_epoch(cur)  # 严格递增, 必终止
     return WindowGrid("all", int(lo), int(hi) + 1, MONTH_NOMINAL_S, "month", tuple(buckets))
 
 
@@ -218,9 +218,9 @@ def series_totals_points(obs: dict, grid: WindowGrid) -> list:
 
 
 def group_null_mask(member_obs: list, grid: WindowGrid) -> list:
-    """组桶 null 判定(v3 观测面, §05.1「借 global 判 null」退役) -> bool 列表(True = 该桶 null)
+    """组桶 null 判定(v4 观测面, §05.1「借 global 判 null」退役) -> bool 列表(True = 该桶 null)
 
-    v3 采样器全局同拍 —— 单成员的 r/z 观测即「程序存活且 qB 在线」的真值:
+    采样器全局同拍 —— 单成员的 r/z 观测即「程序存活且 qB 在线」的真值:
     - 桶内任一成员有观测(r/z) -> 非 null(无行成员按 0 计, 全员空闲出 0 线);
     - 全员无观测 = 程序停机(块间真空)/ qB 断连(n 游程)/ 组尚无任何观测 -> null;
     组图停机段断线、空闲段 0 线, 二者由成员自身观测面区分, 不再借全局系列
@@ -280,15 +280,15 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 
 
 # ======================================================================
-# v3 读侧核心(plan 26-10-04-1957 S3a, §05.1/§05.2)
+# v4 读侧核心(plan 26-10-04-1957 S3a 立, §05.1/§05.2)
 #
-# 分层纯化(为 S3b 留接缝): 天文件解析产物(V3ParsedDay.blocks) -> 本层 v3_series_slots
-# (记录时间轴, S3b agg 段合流的并流点) -> v3_series_points(桶点) -> v3_totals_points
-# (累计增量)。天文件读取在 traffic_store.V3DayCache(按天加载 + mtime/size 解析缓存);
+# 分层纯化(为 S3b 留接缝): 天文件解析产物(V4ParsedDay.blocks) -> 本层 v4_series_slots
+# (记录时间轴, S3b agg 段合流的并流点) -> v4_series_points(桶点) -> v4_totals_points
+# (累计增量)。天文件读取在 traffic_store.V4DayCache(按天加载 + mtime/size 解析缓存);
 # 本模块不触文件不触时钟, 视图映射(WINDOW_SPECS/agg 段/组端点)属 S3b。
 #
 # 归桶模型(D1 实施期定稿: 逐记录覆盖桶):
-# - 每个观测槽(r/z)生成一个覆盖桶: 桶宽 w = v3_bucket_width_s(有效dt)(S1 槽层的 dt_s =
+# - 每个观测槽(r/z)生成一个覆盖桶: 桶宽 w = v4_bucket_width_s(有效dt)(S1 槽层的 dt_s =
 #   显式 dt 或游程均摊 span/run_len), 桶 = [t, ceil(ts)), t = ceil(ts) - w。
 #   替代 v2 全局 ceil(sample_interval) 一刀切 —— 混排 interval 分块
 #   各归各桶, 抖动/漂移不再制造空桶(A2 伪断线根因的读侧残留一并消除)。
@@ -316,16 +316,16 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 # ======================================================================
 
 #: 真空判定浮点容差(秒): 块间 gap 与首记录覆盖桶的比较 ε
-_V3_VACUUM_EPS_S = 1e-6
+_V4_VACUUM_EPS_S = 1e-6
 
 
 @dataclass(frozen=True)
-class V3PointEntry:
-    """v3 读侧单桶点(S3a 桶点层输出, S3b 视图映射的输入形态)
+class V4PointEntry:
+    """v4 读侧单桶点(S3a 桶点层输出, S3b 视图映射的输入形态)
 
     t = 桶起点 epoch 秒(覆盖桶 [t, t+w)); rate/totals 全 None = null 点(n 游程/块间真空
-    标记, 断线语义 —— v3 r/z 行无 null 形态, null 只来自这两种标记)。w = 覆盖桶宽秒
-    (同 key 多记录合并取最大; 栅格展开 v3_grid_obs 据此铺盖 D1 跨桶覆盖; null 点恒 0)。
+    标记, 断线语义 —— v4 r/z 行无 null 形态, null 只来自这两种标记)。w = 覆盖桶宽秒
+    (同 key 多记录合并取最大; 栅格展开 v4_grid_obs 据此铺盖 D1 跨桶覆盖; null 点恒 0)。
     """
 
     t: int  # 桶起点 epoch 秒
@@ -337,29 +337,29 @@ class V3PointEntry:
 
 
 @dataclass(frozen=True)
-class V3TotalsEntry:
-    """v3 单桶点累计增量(v3_totals_points 输出): dl/up = 相邻桶快照差分, None = null"""
+class V4TotalsEntry:
+    """单桶点累计增量(v4_totals_points 输出): dl/up = 相邻桶快照差分, None = null"""
 
     t: int
     dl: Optional[int]
     up: Optional[int]
 
 
-def v3_series_slots(blocks: tuple) -> tuple:
+def v4_series_slots(blocks: tuple) -> tuple:
     """块序列 -> 扁平槽序(记录时间轴层; S3b agg 段合流的接缝): 块按 start_epoch 升序
-    (稳定排序, 同刻保文件序), 逐块 v3_block_slots 展开(复用 S1 游标 dt 链, 不另写推算)。"""
+    (稳定排序, 同刻保文件序), 逐块 v4_block_slots 展开(复用 S1 游标 dt 链, 不另写推算)。"""
     out = []
     for blk in sorted(blocks, key=lambda b: b.start_epoch):
-        out.extend(v3_block_slots(blk))
+        out.extend(v4_block_slots(blk))
     return tuple(out)
 
 
-def v3_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()) -> tuple:
-    """v3 读侧核心(§05.1/§05.2): 块序列 -> 窗口 [t0, t1) 内按 t 升序的桶点列
+def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()) -> tuple:
+    """v4 读侧核心(§05.1/§05.2): 块序列 -> 窗口 [t0, t1) 内按 t 升序的桶点列
 
-    blocks = V3Block 序列(单系列的若干天文件解析产物合并传入; 天文件按日期升序读出,
+    blocks = V4Block 序列(单系列的若干天文件解析产物合并传入; 天文件按日期升序读出,
     块不跨天故按 start_epoch 排序即恢复时间序)。归桶/覆盖/真空/合并规则见本区头注释。
-    tail_slots = 活尾快照槽序(S6 验收追加, v3_live_tail_slots 产物; 缺省空 = 纯磁盘读):
+    tail_slots = 活尾快照槽序(S6 验收追加, v4_live_tail_slots 产物; 缺省空 = 纯磁盘读):
     追加在磁盘链之后 —— 同链延续不做块间真空判定, 且按槽 ts 与磁盘链精确去重(同一记录
     「写侧游标推进」与「落盘后重算」的槽 ts 恒等, 保留严格更晚的后缀即不重不漏, 快照与
     flush 的先后竞态无害)。
@@ -369,7 +369,7 @@ def v3_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
     marks: list = []  # null 点 (t, ...) —— n 游程折叠 + 块间真空
     prev_chain_end: Optional[float] = None
     last_was_null = False
-    groups = [(v3_block_slots(blk), False) for blk in sorted(blocks, key=lambda blk: blk.start_epoch)]
+    groups = [(v4_block_slots(blk), False) for blk in sorted(blocks, key=lambda blk: blk.start_epoch)]
     if tail_slots:
         groups.append((tuple(tail_slots), True))
     for slots, is_tail in groups:
@@ -377,13 +377,13 @@ def v3_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
             continue
         if prev_chain_end is not None:
             if is_tail:
-                slots = tuple(s for s in slots if s.ts > prev_chain_end + _V3_VACUUM_EPS_S)
+                slots = tuple(s for s in slots if s.ts > prev_chain_end + _V4_VACUUM_EPS_S)
                 if not slots:
                     continue
             else:
-                first_w = v3_bucket_width_s(slots[0].dt_s)
+                first_w = v4_bucket_width_s(slots[0].dt_s)
                 # 真空: 下一块首记录覆盖桶起点晚于上一块游标终值 -> 差值段出 null 点
-                if math.ceil(slots[0].ts) - first_w > prev_chain_end + _V3_VACUUM_EPS_S:
+                if math.ceil(slots[0].ts) - first_w > prev_chain_end + _V4_VACUUM_EPS_S:
                     marks.append(int(prev_chain_end))
         for s in slots:
             if s.obs is None:
@@ -396,7 +396,7 @@ def v3_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
             last_was_null = False
             if s.ts >= t1:
                 continue  # 窗尾之后的槽不消费(v2 ts >= t1 口径)
-            w = v3_bucket_width_s(s.dt_s)
+            w = v4_bucket_width_s(s.dt_s)
             key = math.ceil(s.ts) - w
             if key + w < t0:  # 覆盖桶不触及窗口左界(桶 [key, key+w) 与 [t0, t1) 无交集)
                 continue
@@ -424,17 +424,17 @@ def v3_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
     for key in sorted(cells):
         e = cells[key]
         n = e[3]
-        entries.append((key, 1, V3PointEntry(key, int(round(e[1] / n)), int(round(e[2] / n)), e[5], e[6], w=e[7])))
+        entries.append((key, 1, V4PointEntry(key, int(round(e[1] / n)), int(round(e[2] / n)), e[5], e[6], w=e[7])))
     for t in marks:
         if t0 <= t < t1:
-            entries.append((t, 0, V3PointEntry(t)))
+            entries.append((t, 0, V4PointEntry(t)))
     # null 点排同刻观测点之前(null 在先 = 该时刻断线、其后才是观测覆盖; 稳定保插入序)
     entries.sort(key=lambda x: (x[0], x[1]))
     return tuple(e for _, _, e in entries)
 
 
-def v3_totals_points(points: tuple) -> tuple:
-    """v3 累计增量段(§05.1): 相邻桶点快照差分 —— v2 规则平移(series_totals_points):
+def v4_totals_points(points: tuple) -> tuple:
+    """累计增量段(§05.1): 相邻桶点快照差分 —— v2 规则平移(series_totals_points):
     max(0,·) 等价形 + cur < last 判计数器重置 -> null + 基线缺失(窗首/null 点断链)->
     null; dl/up 两向独立判定。游程快照(z 槽桶 totals 恒定)进差分链 —— 空闲段每桶
     delta = 0 链不断, 其后首个活跃桶恢复有基线; 宽桶(跨桶覆盖)的 delta 覆盖其整段
@@ -443,33 +443,33 @@ def v3_totals_points(points: tuple) -> tuple:
     prev = None  # 相邻前桶点快照(dl_total, up_total)
     for p in points:
         if p.dl_rate is None:  # null 点: 断线且断链
-            out.append(V3TotalsEntry(t=p.t, dl=None, up=None))
+            out.append(V4TotalsEntry(t=p.t, dl=None, up=None))
             prev = None
             continue
         dl = _bucket_delta(p.dl_total, prev[0]) if prev is not None else None
         up = _bucket_delta(p.up_total, prev[1]) if prev is not None else None
-        out.append(V3TotalsEntry(t=p.t, dl=dl, up=up))
+        out.append(V4TotalsEntry(t=p.t, dl=dl, up=up))
         prev = (p.dl_total, p.up_total)
     return tuple(out)
 
 
 # ======================================================================
-# v3 视图映射(S3b, §05.3): 桶点流/agg 行 -> 响应栅格桶观测
+# v4 视图映射(S3b, §05.3): 桶点流/agg 行 -> 响应栅格桶观测
 #
 # 响应数组 = 窗口栅格上的「桶值 | null」定长数组(§08 形状不变); 两类入流在栅格桶
 # 观测(BucketObs 表)层面合流, 之后的 rate_points / series_totals_points / group_*
 # 与 v2 共用同一差分层:
-# - raw 段窗(1m-24h): v3_series_points 桶点流 --v3_grid_obs--> 栅格桶(覆盖加权展开);
-# - agg 段窗(3d/7d/30d hour / 6mo/1y day / all month): agg 行 --v3_agg_obs--> 栅格桶
+# - raw 段窗(1m-24h): v4_series_points 桶点流 --v4_grid_obs--> 栅格桶(覆盖加权展开);
+# - agg 段窗(3d/7d/30d hour / 6mo/1y day / all month): agg 行 --v4_agg_obs--> 栅格桶
 #   (行 epoch 即桶键, 直映; 3d+ 窗只读成员 agg 文件, 组图 30d 由 M×31 -> M×1 次读取)。
 # ======================================================================
 
 
-def v3_grid_obs(points: tuple, grid: WindowGrid) -> dict:
-    """v3 桶点流 -> 栅格桶观测(S3b §05.1/§05.3, D1 覆盖的栅格展开)
+def v4_grid_obs(points: tuple, grid: WindowGrid) -> dict:
+    """v4 桶点流 -> 栅格桶观测(S3b §05.1/§05.3, D1 覆盖的栅格展开)
 
     桶点覆盖区间 [t, t+w) 与栅格桶 [b, b+interval) 按重叠秒数加权:
-    - 速率 = Σ(rate x 重叠秒) / Σ重叠秒(口径对齐 v3_hour_agg 的 dt 加权) —— 对齐记录
+    - 速率 = Σ(rate x 重叠秒) / Σ重叠秒(口径对齐 v4_hour_agg 的 dt 加权) —— 对齐记录
       恰好 1:1 落桶, 抖动/漂移记录跨界时相邻桶按真实覆盖占比分摊(无伪洞无伪值);
     - 快照取覆盖末端(t+w)最晚的桶点(同末端后到者优先)—— 宽桶(跨多栅格桶)的中间桶
       同值非 null 且同快照(D1 跨桶覆盖的栅格形态: totals 差分在首个覆盖桶落增量,
@@ -506,7 +506,7 @@ def v3_grid_obs(points: tuple, grid: WindowGrid) -> dict:
     return {b: BucketObs(int(round(a[1] / a[0])), int(round(a[2] / a[0])), a[4], a[5]) for b, a in acc.items()}
 
 
-def v3_agg_obs(rows: tuple, grid: WindowGrid) -> dict:
+def v4_agg_obs(rows: tuple, grid: WindowGrid) -> dict:
     """agg 行(hour/day/month) -> 栅格桶观测(S3b §05.3 视图映射): 行 epoch 即栅格桶键
 
     hour 行 epoch 恰为 3600 整倍(与 hour 栅格 floor 对齐同源), day 行 = 本地日界 00:00
@@ -518,11 +518,11 @@ def v3_agg_obs(rows: tuple, grid: WindowGrid) -> dict:
     return {r.epoch: BucketObs(r.dl_avg, r.up_avg, r.dl_total, r.up_total) for r in rows if r.epoch in buckets}
 
 
-def v3_earliest_row_ts(blocks: tuple, agg: Optional[V3ParsedAgg]) -> Optional[int]:
-    """v3 单系列最早观测时刻(S3b, §05.4): 块首槽实测时刻(B.start 即首槽, 含 z 游程开块
+def v4_earliest_row_ts(blocks: tuple, agg: Optional[V4ParsedAgg]) -> Optional[int]:
+    """v4 单系列最早观测时刻(S3b, §05.4): 块首槽实测时刻(B.start 即首槽, 含 z 游程开块
     —— 块首游程首槽 = B.start) + agg 行 epoch(hour/day/month 三层全算 —— 观测面全层的
     最早证据, day/month 行计入 —— 观测面全层的覆盖(v3 新增)); 双空(无块无 agg 行)
-    = None(组端点空态判据「组从未产过流量」的 v3 观测面口径)。"""
+    = None(组端点空态判据「组从未产过流量」的观测面口径)。"""
     cands = [b.start_epoch for b in blocks]
     if agg is not None:
         for section in (agg.hours, agg.days, agg.months):

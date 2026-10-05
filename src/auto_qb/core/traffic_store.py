@@ -1,68 +1,83 @@
-"""traffic_store: qB 口径流量 v3 存储层(plan 26-10-04-1957 §02 格式规格/§03 写侧/§04 聚合/§05 读侧)
+"""traffic_store: qB 口径流量 v4 存储层(行型定约 = plan 26-10-05-2200 §01; 聚合/读侧沿用 plan 26-10-04-1957 §04/§05)
 
-【格式 v3 契约 —— 主题事实单点(计划 §09.2, memory-bank 无 qb-traffic 独立主题文档)】
-v1/v2 逐行格式及其写侧/解析已随 S5 退役删除; v3 读侧遇旧头行按「整文件不匹配格式」
+【格式 v4 契约 —— 主题事实单点(plan 26-10-05-2200 §01, 取代 v3 计划 §02.1「逐列冻结」条款)】
+v1/v2/v3 逐行格式及其写侧/解析均已随各代退役删除; v4 读侧遇旧头行按「整文件不匹配格式」
 整文件记坏(R2 换代不设双读) —— 本 docstring 即现行唯一格式契约。
 
-数据落点(§01.1 观测/日志数据: append-only、丢失无一致性后果; §06.2 R2 换代):
-    <data_dir>/qb-traffic-v3/
+数据落点(§01.1 观测/日志数据: append-only、丢失无一致性后果):
+    <data_dir>/qb-traffic-v4/
       global/<YYYY-MM-DD>.dat + agg.dat                  # 全局系列
       torrents/<infohash>/<YYYY-MM-DD>.dat + agg.dat     # 每有数据种子一目录(组不落盘)
-v3 全部写新目录; 旧 qb-traffic/ 原样留存不读不迁移(删留决定权在用户)。目录惰性创建;
-enabled=false(含 qb_traffic None)全程零文件零目录(保守默认, 黄金法则 2)。
+v4 全部写新目录; 旧 qb-traffic-v3/ 与更早的 qb-traffic/ 原样留存不读不迁移(删留决定权在
+用户)。目录惰性创建; enabled=false(含 qb_traffic None)全程零文件零目录(保守默认, 黄金法则 2)。
 
-天文件行型(§02.1 逐列冻结; interval_s 小数秒 + dt_ms 毫秒口径; 坏行整行跳过计数、游标不推进):
-    # auto-qb qb-traffic v3              文件头, 每文件一次(头行必须恰为 v3)
-    key,<系列标识>                        global 固定 key,global; torrents/ = torrent:<infohash>
-    B,<start_epoch>,<interval_s>         块头: start = 块首记录实测 epoch(整数秒); interval_s >= 1 允许小数秒; 块不跨天(00:00 硬切)
-    r,<dl>,<up>,<dlt>,<upt>[,<dt_ms>]    数据行 5 列无时间戳; dt_ms 可选 = 距上一记录实测毫秒
-    z,<run_len>,<dlt>,<upt>[,<dt_ms>]    零速游程: 占 run_len 个采样槽, 速率恒 (0,0)
-    n,<run_len>[,<dt_ms>]                null 游程: 占 run_len 个采样槽(断连/缺字段)
-- r 行无 null 形态(null 走 n 游程); z 游程 totals 快照恒定(空闲期 all-time 计数不增长)。
+天文件行型(§01 spec; interval_s 小数秒 + dt_ms 毫秒口径沿用; 坏行整行跳过计数、游标不推进):
+    # auto-qb qb-traffic v4                                    文件头, 每文件一次(头行门闩, 不设双读)
+    key,<系列标识>                                      global 固定 key,global; torrents/ = torrent:<infohash>
+    B,<start_epoch>,<interval_s>                        3 列 = 无基线块(仅 n 游程合法)
+    B,<start_epoch>,<interval_s>,<dl_base>,<up_base>    5 列 = 基线 = 块内首个带 totals 观测的快照
+    r,<dl_rate>,<up_rate>,<dl_delta>,<up_delta>[,<dt_ms>]  delta 相对块基线; 负值 = 坏行(免费校验)
+    z,<run_len>,<dl_delta>,<up_delta>[,<dt_ms>]         零速游程: 占 run_len 个采样槽, 速率恒 (0,0); 块首 z 的 delta = 0
+    n,<run_len>[,<dt_ms>]                               null 游程: 占 run_len 个采样槽(断连/缺字段), 行型不变
+- 核心不变式: delta 只存在于线格式 —— 内存结构(V4Sample/V4ZeroRun/V4NullRun/V4Block/LiveTail/
+  聚合累计器)全部维持绝对 totals; format 序列化时减块基线, parse 以块基线逐行复原
+  (绝对值 = 基线 + 本行 delta; delta-vs-基线逐行独立 —— 坏行整行跳过不传播, 无块内链式状态)。
+- 基线立点: 块首记录带 totals(r 或 z)时基线 = 该快照, 其 delta = 0; 块首为 n 游程时写侧
+  把 n-only 前缀拆成 3 列 B 无基线块(块内仅 n 游程合法, 出现 r/z 即坏行 —— 解析守卫),
+  恢复传输的记录开新块立基线。基线二态须成对(全 None / 全非 None)。
+- 负 delta: 基线块内必是损坏 —— 绝对值形态做不到的解析免费校验(计数器回落由写侧「重置
+  强制关块重立基线」排除)。
 - dt_ms: 正整数且 <= DT_MS_MAX; 写侧累积漂移 <= DRIFT_TOL_MS(250ms, D2)时缺省(按标称
-  interval / run_len x interval 推进); 时钟回拨钳制 dt_ms >= 1。dt 链定约(§02.3, 读写两侧
-  同源)见「v3 纯函数区」头注释: 游标 = 上一已消费记录槽位锚点, 游程槽均摊, 链式自洽;
-  全路径无纯等间隔推算(证伪用例钉住)。
+  interval / run_len x interval 推进); 时钟回拨钳制 dt_ms >= 1。dt 链定约(读写两侧同源)
+  见「纯函数区」头注释: 游标 = 上一已消费记录槽位锚点, 游程槽均摊, 链式自洽; 全路径无
+  纯等间隔推算(证伪用例钉住)。
 - 撕裂尾半行(崩溃残留)豁免损坏占比; 坏行占比超阈值的隔离处置在解析纪律内计数呈现。
 
-聚合文件 agg.dat(§02.2, 每系列一个, hour/day/month 9 列追加混存):
+关块状态机(写侧单点在采样模块 BlockBuffer, §01「关块状态机」定约):
+- 关块触发: 既有触发点(00:00 硬切 / 改间隔 / 落盘失败复位)+ 计数器重置(cur < last)强制
+  关块(新块基线 = 重置后 totals, 首记录 delta = 0)+ flush 且块内有 r 行才关(纯空闲块跨
+  flush 开放); 关块时开放 z/n 游程先封口。
+- 空闲封口: 开放 z 游程按「非 z 事件」封口 —— 恢复传输 / null 游程 / 计数器重置 / 00:00 /
+  stop。空闲段盘上恰 1 条长 z 行, 空闲期主文件零写入; ZRUN_CAP_SAMPLES / ZRUN_FLUSH_S
+  退役为防溢出保险闸(阈值天级, 正常路径不触闸)。代价(已知接受): 崩溃窗口 <= 当天已过
+  时长, 丢失形态 = 真空, avg/totals/max 无偏。
+
+聚合文件 agg.dat(§02.2, 每系列一个, hour/day/month 9 列追加混存; 行型与逐级派生不变):
     <kind>,<epoch>,<dl_avg>,<dl_max>,<up_avg>,<up_max>,<dl_total>,<up_total>,<cov_s>
 - epoch: hour = 桶起点 / day = 本地当日 00:00 / month = 自然月 1 日 00:00; cov_s = 有效
   覆盖秒(hour 必带 —— 8 列无法还原有效时长)。同 kind 同 epoch 重复行取最后一行(重封 =
   追加行, 读侧口径)。
-- 8 列旧行兜底 cov_s = 3600(AGG_LEGACY_FIELDS, 防御性保留 —— v3 全新目录正常不出现,
-  计划 §02.2 明文)。
+- 8 列旧行兜底 cov_s = 3600(AGG_LEGACY_FIELDS, 防御性保留 —— v4 全新目录正常不出现)。
 - 严格逐级派生(§04.1): day 只从 hour 行聚, month 只从 day 行聚, day 不从 raw 直聚
   (cov_s 链只在逐级传递才完整)。
 
-换代语义与保留窗(§04.5/§06.1):
+覆盖结算(§01「覆盖结算」, 判定函数单点 v4_block_gap_continuous, 在线/离线两路复用):
+gap = 新块 B.start - 上一块末槽; gap <= interval_s + DRIFT_TOL -> 连续, 按上一记录速率
+把 [末槽, 本槽) 结算进覆盖信用; 否则真空(崩溃保护内核不动)。
+
+换代语义与保留窗(§01 换代语义 + §04.5/§06.1):
+- 目录 qb-traffic-v4/ 全新落点; 旧 qb-traffic-v3/ 原样留存不读不迁移(R2, 删留决定权在
+  用户); 头行门闩 v4, 不设双读。
 - rollup_window 三义合一: hour 行保留窗 + 系列淘汰龄 + catch-up 补算窗口(= 天文件存活期);
   raw_window 语义不变(raw 段 = 按天整文件存删)。
 - 淘汰: 系列最新天文件日期距 now 超 rollup_window -> 整目录删除(天文件 + agg.dat), 龄期
-  由文件名日期直接算(v2 注册表机制退役); frozen 照删; 全局结构性豁免。
+  由文件名日期直接算; frozen 照删; 全局结构性豁免。
 - catch-up(§04.3): 停机 < rollup_window 重启逐级补算(hour <- 窗口内天文件 raw / day <-
   hour 行 / month <- day 行), 硬序 catch-up 先于裁剪; 停机超窗天文件已删, 缺失跳过不标注
   (图上真空, 与块间 gap 语义一致)。
 
 写路径(§03, 仅主循环线程 —— 黄金法则 5, 本层无锁): 每系列每 flush_interval 单次
-open("a") 批量追加 + flush + fsync(崩溃窗口 <= flush_interval, 丢失形态与真空同形);
-尾字节查补每 flush 一次; agg 行随 flush 时点水位封口合并追加(piggyback, 至多 +1 次
-open); 唯一原子重写点 = hour 裁剪(tmp+fsync+os.replace); stop() 优雅退出全量落盘
-(封游程 + flush + 聚合封口)。OSError 上抛(调用方按落盘失败口径处理)。
+open("a") 批量追加 + flush + fsync(正常期崩溃窗口 <= flush_interval); 尾字节查补每 flush
+一次; agg 行随 flush 时点水位封口合并追加(piggyback, 至多 +1 次 open); 唯一原子重写点 =
+hour 裁剪(tmp+fsync+os.replace); stop() 优雅退出全量落盘(封游程 + flush + 聚合封口)。
+OSError 上抛(调用方按落盘失败口径处理)。
 
-读路径(§05, Web 线程只读): 按窗口日期集合只读涉及天文件(24h 窗至多 2 个), V3DayCache
+读路径(§05, Web 线程只读): 按窗口日期集合只读涉及天文件(24h 窗至多 2 个), V4DayCache
 mtime_ns+size 键控解析缓存; 3d+ 窗只读成员 agg.dat 单文件; OSError 上抛由端点按竞态
 降级处理(回退 last-good 标 stale, 不以空态冒充无数据)。raw 段窗另合流采样模块活尾快照
-(S6 验收追加, 2026-10-05): 未落盘 buffer 记录 + 开放游程经 v3_live_tail_slots 复原绝对
+(S6 验收追加, 2026-10-05): 未落盘 buffer 记录 + 开放游程经 v4_live_tail_slots 复原绝对
 槽位(head_pending 整块重算 / 否则从写侧游标倒推)—— 镜像保证下槽 ts 与落盘重算恒等,
 读侧按 ts 精确去重, 图面尾部随采样节拍实时, 不等 flush_interval 落盘。
-
-【v4 过渡注记(plan 26-10-05-2200 B1, 2026-10-05)】
-v4 行型纯函数(format_v4_* / parse_v4_day_text; 结构 V4Sample/V4ZeroRun/V4NullRun/V4Block/
-V4ParsedDay)已就位、未接线 —— 生产行为仍为上方 v3 契约, 本节与「v3 纯函数区」原样保留,
-v3 常量到批 2 翻转时才退役。v4 行型定约(块头基线二态 + r/z 相对基线 delta + 无基线块
-n-only 守卫 + 负 delta 免费校验)单点在文件尾「v4 纯函数区」头注释, 规格出处为 v4 计划
-§01; 写侧状态机 / 目录 / 头行 / 符号代际翻转与 docstring 契约整体重写均在批 2。
 """
 import logging
 import math
@@ -131,21 +146,13 @@ def _parse_int_field(text: str) -> Optional[int]:
 
 
 # ======================================================================
-# v3 纯函数区(plan 26-10-04-1957 S1, §02/§04/§06.2)
+# 纯函数区(plan 26-10-04-1957 S1 立, §02.3/§04/§06.2; 行型定约随 v4 换代由 v4 计划
+# §01 取代, 单点见模块 docstring「格式 v4 契约」与文件尾 v4 区头注释)
 #
-# v1/v2 旧格式与其写侧/解析已随 S5 退役删除(换代语义 R2): v3 全部落 qb-traffic-v3/
-# 新目录, 旧 qb-traffic/ 原样留存不读不迁移; 本区为现行唯一实现。
-#
-# 天文件行型(§02.1):
-#     # auto-qb qb-traffic v3              文件头, 每文件一次(非 v3 头行整文件不匹配, 不设双读)
-#     key,<系列标识>
-#     B,<start_epoch>,<interval_s>         块头: start = 块首记录实测 epoch; 块结束 = 下一块头或文件尾
-#     r,<dl>,<up>,<dlt>,<upt>[,<dt_ms>]    数据行 5 列无时间戳; dt_ms 可选 = 距上一记录实测毫秒数
-#     z,<run_len>,<dlt>,<upt>[,<dt_ms>]    零速游程: 占 run_len 个采样槽, 速率恒 0
-#     n,<run_len>[,<dt_ms>]                null 游程: 占 run_len 个采样槽(断连/缺字段)
-# 整数/小数秒 + 毫秒口径: start_epoch 整数秒; interval_s >= 1 允许小数秒(规范十进制 ——
-# 整数值不带小数点, 与历史整秒文件形态一致; 非整值最短往返表示如 1.5); dt_ms 正整数且
-# <= DT_MS_MAX; 非法整行按坏行计数跳过、游标不推进(沿用 v2 坏行口径 + 损坏阈值隔离)。
+# 天文件解析/序列化、路径解析、聚合与活尾槽位推算的纯函数层(读写两侧同源)。解析纪律
+# (坏行整行跳过、游标不推进、撕裂尾豁免)沿用 v2/v3 先例; 整数/小数秒 + 毫秒口径:
+# start_epoch 整数秒; interval_s >= 1 允许小数秒(规范十进制 —— 整数值不带小数点, 与
+# 历史整秒文件形态一致; 非整值最短往返表示如 1.5); dt_ms 正整数且 <= DT_MS_MAX。
 #
 # dt 链定约(§02.3 读侧规则 + §09.2 授权的实施期细化, S2 写侧必须同约定产出):
 # - 游标 t = 上一已消费记录的槽位锚点; t0 = B.start = 块首记录实测 epoch(块首记录
@@ -164,17 +171,11 @@ def _parse_int_field(text: str) -> Optional[int]:
 # - 有效 dt(桶宽, §02.3): r = 显式 dt 或标称 interval; 游程槽 = 均摊 span/run_len。
 # ======================================================================
 
-#: 头行 v3(每文件一次; v3 读侧遇 v1/v2 旧头行直接忽略, 不设双读 —— R2 换代语义)
-HEADER_LINE_V3 = "# auto-qb qb-traffic v3"
+#: v4 全局系列目录名(天文件 + agg.dat 的父目录)
+V4_GLOBAL_DIR_NAME = "global"
 
-#: v3 存储根目录名(相对 data_dir, §06.2; 旧 qb-traffic/ 原样留存不读)
-TRAFFIC_V3_DIR_NAME = "qb-traffic-v3"
-
-#: v3 全局系列目录名(天文件 + agg.dat 的父目录)
-V3_GLOBAL_DIR_NAME = "global"
-
-#: v3 每系列聚合文件名(hour/day/month 9 列追加混存, §02.2)
-V3_AGG_NAME = "agg.dat"
+#: v4 每系列聚合文件名(hour/day/month 9 列追加混存, §02.2)
+V4_AGG_NAME = "agg.dat"
 
 #: dt_ms 校验上界(毫秒, 一天; §02.1 全整数/毫秒口径)
 DT_MS_MAX = 86_400_000
@@ -185,76 +186,25 @@ DRIFT_TOL_MS = 250
 #: agg 行字段数(kind + epoch + 6 数据列 + cov_s; §02.2 hour/day/month 同构)
 AGG_FIELDS = 9
 
-#: agg 8 列旧行型字段数(解析兜底 cov_s = 3600, 防御性 —— v3 全新目录正常不出现)
+#: agg 8 列旧行型字段数(解析兜底 cov_s = 3600, 防御性 —— v4 全新目录正常不出现)
 AGG_LEGACY_FIELDS = 8
 
 #: agg 行型种类(§02.2)
 AGG_KINDS = ("hour", "day", "month")
 
 #: 本地日期串格式(天文件名与 day_epoch 口径, §06.2/§02.2)
-V3_DATE_FORMAT = "%Y-%m-%d"
+V4_DATE_FORMAT = "%Y-%m-%d"
 
 #: 逐级派生合法行型(§04.1: 严格逐级 —— day 只从 hour 行聚, month 只从 day 行聚)
-V3_ROLLUP_KINDS = ("day", "month")
+V4_ROLLUP_KINDS = ("day", "month")
 
 #: 天文件日期串形状(严格 4-2-2 位, 配合 strptime 拒绝 2 月 30 日等)
-_V3_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_V4_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 @dataclass(frozen=True)
-class V3Sample:
-    """v3 数据记录(r 行): 速率对 + all-time totals 快照对; dt_ms = 距上一记录链上
-    终点的实测毫秒数(写侧累积漂移 > DRIFT_TOL_MS 才写, §02.3), None = 标称 interval"""
-
-    dl_rate: int
-    up_rate: int
-    dl_total: int
-    up_total: int
-    dt_ms: Optional[int] = None
-
-
-@dataclass(frozen=True)
-class V3ZeroRun:
-    """v3 零速游程(z 行): 占 run_len 个采样槽, 速率恒 (0,0); dt_ms = 游程开启时链上
-    锚点到末槽的实测毫秒数(§02.1 行程实际跨度, 缺省 = run_len x interval)"""
-
-    run_len: int
-    dl_total: int
-    up_total: int
-    dt_ms: Optional[int] = None
-
-
-@dataclass(frozen=True)
-class V3NullRun:
-    """v3 null 游程(n 行): 占 run_len 个采样槽(断连/缺字段), 无观测; dt_ms 语义同 z"""
-
-    run_len: int
-    dt_ms: Optional[int] = None
-
-
-@dataclass(frozen=True)
-class V3Block:
-    """v3 块: 块头 B + 记录序列(按槽序); 块不跨天(00:00 硬切, §03.3)"""
-
-    start_epoch: int  # 块首记录实测 epoch 秒
-    interval_s: float  # 本块采样间隔(秒, >= 1; 允许小数秒如 1.5, 整数值存 float)
-    records: tuple  # Tuple[V3Sample | V3ZeroRun | V3NullRun, ...]
-
-
-@dataclass(frozen=True)
-class V3ParsedDay:
-    """单天文件解析结果(parse_v3_day_text 返回; S3 按天加载的入口形态, 纯数据)"""
-
-    key: Optional[str]  # 头行 key 行的系列标识(无头行/坏头行/头行非 v3 时 None)
-    blocks: tuple  # Tuple[V3Block, ...](文件序; 空块不保留)
-    bad_lines: int  # 跳过的坏行数(含尾部半行)
-    data_lines: int  # 受检行总数(头行后全部行; 损坏占比分母)
-    torn_tail: bool = False  # 末尾未写完的半行(正常崩溃残留; 豁免损坏占比)
-
-
-@dataclass(frozen=True)
-class V3Slot:
-    """v3 块内单槽展开(v3_block_slots 返回): 游标 dt 链推算出的观测点
+class V4Slot:
+    """v4 块内单槽展开(v4_block_slots 返回): 游标 dt 链推算出的观测点
 
     obs 形态: r 槽 = (dl_rate, up_rate, dl_total, up_total); z 槽 = (0, 0, dlt, upt)
     (空闲观测, totals 恒定); n 槽 = None(null)。ts 为浮点秒 —— 显式 dt_ms 带亚秒精度;
@@ -267,7 +217,7 @@ class V3Slot:
     is_zero: bool  # True = z 游程槽(速率恒 0); n 槽为 False 且 obs = None
 
 
-def _fmt_v3_dt_ms(dt_ms: Optional[int]) -> str:
+def _fmt_dt_ms(dt_ms: Optional[int]) -> str:
     """可选 dt_ms 列文本(None = 缺省标称); 非法 fail-fast(写侧纪律 —— 解析侧按坏行)"""
     if dt_ms is None:
         return ""
@@ -276,9 +226,9 @@ def _fmt_v3_dt_ms(dt_ms: Optional[int]) -> str:
     return str(dt_ms)
 
 
-def _fmt_v3_dt_tail(dt_ms: Optional[int]) -> str:
+def _fmt_dt_tail(dt_ms: Optional[int]) -> str:
     """可选第 6 列的行尾段(空 = 不写该列)"""
-    tail = _fmt_v3_dt_ms(dt_ms)
+    tail = _fmt_dt_ms(dt_ms)
     return f",{tail}" if tail else ""
 
 
@@ -290,50 +240,7 @@ def _fmt_interval_s(interval_s: float) -> str:
     return repr(float(interval_s))
 
 
-def format_v3_b_row(start_epoch: int, interval_s: float) -> str:
-    """块头行文本(§02.1): B,<start_epoch>,<interval_s>; interval_s >= 1, 允许小数秒"""
-    if not isinstance(interval_s, (int, float)) or isinstance(interval_s, bool):
-        raise ValueError(f"非法 interval_s(须 >= 1 数值): {interval_s!r}")
-    if not math.isfinite(interval_s) or interval_s < 1:
-        raise ValueError(f"非法 interval_s(须 >= 1): {interval_s!r}")
-    return f"B,{_fmt_int(start_epoch)},{_fmt_interval_s(float(interval_s))}"
-
-
-def format_v3_r_row(rec: V3Sample) -> str:
-    """数据行文本(§02.1): r,<dl>,<up>,<dlt>,<upt>[,<dt_ms>](5/6 列; 无 null 形态)"""
-    return (
-        f"r,{_fmt_int(rec.dl_rate)},{_fmt_int(rec.up_rate)},{_fmt_int(rec.dl_total)},{_fmt_int(rec.up_total)}"
-        f"{_fmt_v3_dt_tail(rec.dt_ms)}"
-    )
-
-
-def format_v3_z_row(rec: V3ZeroRun) -> str:
-    """零速游程行文本(§02.1): z,<run_len>,<dlt>,<upt>[,<dt_ms>]"""
-    return f"z,{_fmt_int(rec.run_len)},{_fmt_int(rec.dl_total)},{_fmt_int(rec.up_total)}{_fmt_v3_dt_tail(rec.dt_ms)}"
-
-
-def format_v3_n_row(rec: V3NullRun) -> str:
-    """null 游程行文本(§02.1): n,<run_len>[,<dt_ms>]"""
-    return f"n,{_fmt_int(rec.run_len)}{_fmt_v3_dt_tail(rec.dt_ms)}"
-
-
-def format_v3_day_text(key: str, blocks: tuple) -> str:
-    """v3 天文件整文件文本(头行 v3 + key 行 + 逐块 B 行与记录行; \\n 行尾, 对齐 v2
-    输出纪律)。S2 flush 的批量写入口形态; 本函数只做序列化, 不触文件系统。"""
-    lines = [HEADER_LINE_V3, f"key,{key}"]
-    for b in blocks:
-        lines.append(format_v3_b_row(b.start_epoch, b.interval_s))
-        for rec in b.records:
-            if isinstance(rec, V3Sample):
-                lines.append(format_v3_r_row(rec))
-            elif isinstance(rec, V3ZeroRun):
-                lines.append(format_v3_z_row(rec))
-            else:
-                lines.append(format_v3_n_row(rec))
-    return "\n".join(lines) + "\n"
-
-
-def _parse_v3_dt_ms(text: str) -> int:
+def _parse_dt_ms(text: str) -> int:
     """dt_ms 列解析(§02.1/§02.3): 须正整数且 <= DT_MS_MAX; 违者 ValueError -> 整行坏行"""
     v = int(text)  # 非数值抛 ValueError
     if v < 1 or v > DT_MS_MAX:
@@ -341,7 +248,7 @@ def _parse_v3_dt_ms(text: str) -> int:
     return v
 
 
-def _parse_v3_pos_int(text: str) -> int:
+def _parse_pos_int(text: str) -> int:
     """正整数列(run_len); < 1 抛 ValueError"""
     v = int(text)
     if v < 1:
@@ -349,7 +256,7 @@ def _parse_v3_pos_int(text: str) -> int:
     return v
 
 
-def _parse_v3_interval_s(text: str) -> float:
+def _parse_interval_s(text: str) -> float:
     """块头 interval_s 列解析: >= 1 的数值, 允许小数秒(1.5); 整数十进制归一 float。
     NaN/inf/非数值/越界抛 ValueError -> 整行坏行(与 run_len 的正整数口径分离)"""
     v = float(text)
@@ -358,7 +265,7 @@ def _parse_v3_interval_s(text: str) -> float:
     return v
 
 
-def _parse_v3_nn_int(text: str) -> int:
+def _parse_nn_int(text: str) -> int:
     """非空非负整数列(r/z 数据列 —— 无 null 形态, null 走 n 游程); 违者 ValueError"""
     v = _parse_int_field(text)
     if v is None:
@@ -366,103 +273,10 @@ def _parse_v3_nn_int(text: str) -> int:
     return v
 
 
-def parse_v3_day_text(text: str) -> V3ParsedDay:
-    """v3 天文件文本 -> V3ParsedDay(纯函数, 无文件访问; §02.1 逐字规格)
-
-    头行必须恰为 HEADER_LINE_V3: 缺失/不符(含 v1/v2 旧头行 —— R2 换代, v3 读侧对旧
-    格式不设双读)整文件不匹配格式, 全部行记坏。其后每行都计入 data_lines(损坏占比
-    分母), key 行取首个(重复记坏), 空行/注释行跳过不计坏; B 行开新块(前块在下一块头
-    或文件尾结束, 无记录的空块不保留), r/z/n 行按列解析, 其余一律跳过计数。坏行纪律
-    (§02.3): r 行列数 ∈ {5,6}, z ∈ {4,5}, n ∈ {2,3}; dt_ms 须正整数且 <= DT_MS_MAX ——
-    违者整行按坏行跳过、游标不推进(坏行不落 records, 后续行推算链不受影响)。无换行
-    结尾的末段: 解析成功照常收数据, 失败记 torn_tail(豁免损坏占比, 对齐 v2 口径)。
-    """
-    lines = text.splitlines()
-    torn = bool(text) and not text.endswith("\n")
-    header = lines[0].strip() if lines else None
-    if header != HEADER_LINE_V3:
-        # 头行缺失/不符(含旧版头行): 文件级不匹配格式 —— 每一行都算坏行(损坏判定必然命中)
-        return V3ParsedDay(key=None, blocks=(), bad_lines=len(lines), data_lines=len(lines), torn_tail=torn)
-    key: Optional[str] = None
-    blocks: list = []
-    cur_start: Optional[int] = None
-    cur_interval: Optional[float] = None
-    cur_records: list = []
-
-    def _close() -> None:
-        nonlocal cur_start, cur_interval, cur_records
-        if cur_start is not None and cur_records:
-            blocks.append(V3Block(start_epoch=cur_start, interval_s=cur_interval, records=tuple(cur_records)))
-        cur_start = None
-        cur_interval = None
-        cur_records = []
-
-    bad = 0
-    data = 0
-    torn_tail = False
-    last_idx = len(lines) - 1
-    for i, line in enumerate(lines[1:]):
-        data += 1
-        s = line.strip()
-        if not s or s.startswith("#"):
-            continue  # 空行/注释行跳过不计坏(对齐 v2 先例)
-        parts = s.split(",")
-        try:
-            if parts[0] == "key" and len(parts) == 2 and parts[1] and key is None:
-                key = parts[1]
-                continue
-            if parts[0] == "B" and len(parts) == 3:
-                # 先解析校验再切换块状态: 非法 B 行整行计坏, 既有块不受影响
-                b_start = int(parts[1])
-                b_interval = _parse_v3_interval_s(parts[2])
-                _close()
-                cur_start = b_start
-                cur_interval = b_interval
-                continue
-            if cur_start is None:
-                raise ValueError("块头前出现数据行")  # 游标无锚点, 记坏不消费
-            if parts[0] == "r" and len(parts) in (5, 6):
-                cur_records.append(
-                    V3Sample(
-                        dl_rate=_parse_v3_nn_int(parts[1]),
-                        up_rate=_parse_v3_nn_int(parts[2]),
-                        dl_total=_parse_v3_nn_int(parts[3]),
-                        up_total=_parse_v3_nn_int(parts[4]),
-                        dt_ms=_parse_v3_dt_ms(parts[5]) if len(parts) == 6 else None,
-                    )
-                )
-                continue
-            if parts[0] == "z" and len(parts) in (4, 5):
-                cur_records.append(
-                    V3ZeroRun(
-                        run_len=_parse_v3_pos_int(parts[1]),
-                        dl_total=_parse_v3_nn_int(parts[2]),
-                        up_total=_parse_v3_nn_int(parts[3]),
-                        dt_ms=_parse_v3_dt_ms(parts[4]) if len(parts) == 5 else None,
-                    )
-                )
-                continue
-            if parts[0] == "n" and len(parts) in (2, 3):
-                cur_records.append(
-                    V3NullRun(
-                        run_len=_parse_v3_pos_int(parts[1]),
-                        dt_ms=_parse_v3_dt_ms(parts[2]) if len(parts) == 3 else None,
-                    )
-                )
-                continue
-        except (ValueError, IndexError):
-            pass
-        bad += 1  # 键名/列数不匹配或字段非法(整行跳过, 游标不推进)
-        if torn and i == last_idx - 1:
-            torn_tail = True  # 尾部半行 = 正常崩溃残留(阈值豁免, 对齐 v2)
-    _close()
-    return V3ParsedDay(key=key, blocks=tuple(blocks), bad_lines=bad, data_lines=data, torn_tail=torn_tail)
-
-
-def v3_block_slots(block: V3Block) -> tuple:
+def v4_block_slots(block) -> tuple:
     """块内逐槽时间推算(游标 dt 链 + 均摊定位; §02.3 读侧规则, 纯函数)
 
-    规则见模块 v3 纯函数区头注释「dt 链定约」: t0 = B.start; 每消费一记录游标推进
+    规则见文件头「纯函数区」头注释「dt 链定约」: t0 = B.start; 每消费一记录游标推进
     (显式 dt_ms 或 槽位数 x interval_s x 1000)/1000 秒, r 槽落在新游标处, z/n 游程的
     run_len 个槽在 [t, t+advance] 内均摊(末槽恰在 t+advance = 游程实测终点), 其后
     记录的 dt 以游程终点为基准 —— 链式自洽。缺省按标称 interval; 显式 dt 行严格按
@@ -471,14 +285,15 @@ def v3_block_slots(block: V3Block) -> tuple:
 
     块首记录槽位恰在 B.start(其自身 dt 列无语义, 不消费); 块首记录为游程时首槽 =
     B.start、槽距 = dt_ms/(run_len-1)(端点含)或缺省标称 interval。
-    返回 Tuple[V3Slot, ...](槽序 = 槽位升序 = 记录槽序展开)。
+    本函数只认 V4 记录型(基线列与槽位数学无关)。
+    返回 Tuple[V4Slot, ...](槽序 = 槽位升序 = 记录槽序展开)。
     """
     slots: list = []
     interval = float(block.interval_s)
     t = float(block.start_epoch)  # 游标 = 上一已消费记录的槽位锚点; 块首记录锚点 = B.start
     for idx, rec in enumerate(block.records):
         first = idx == 0
-        if isinstance(rec, V3Sample):
+        if isinstance(rec, V4Sample):
             if first:
                 advance = 0.0  # 块首记录槽位恰在 B.start(其 dt 列无语义, 不消费)
                 dt_s = interval
@@ -486,7 +301,7 @@ def v3_block_slots(block: V3Block) -> tuple:
                 advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else interval
                 dt_s = advance
             slots.append(
-                V3Slot(
+                V4Slot(
                     ts=t + advance,
                     dt_s=dt_s,
                     obs=(rec.dl_rate, rec.up_rate, rec.dl_total, rec.up_total),
@@ -495,7 +310,7 @@ def v3_block_slots(block: V3Block) -> tuple:
             )
             t += advance
             continue
-        if isinstance(rec, (V3ZeroRun, V3NullRun)):
+        if isinstance(rec, (V4ZeroRun, V4NullRun)):
             run_len = rec.run_len
             if first:
                 # 块首游程: 首槽 = B.start, 端点含均摊(§09.2 实施期定约, 见区头注释);
@@ -510,25 +325,25 @@ def v3_block_slots(block: V3Block) -> tuple:
                 spacing = advance / run_len
                 base = spacing
             for k in range(run_len):
-                if isinstance(rec, V3ZeroRun):
+                if isinstance(rec, V4ZeroRun):
                     obs = (0, 0, rec.dl_total, rec.up_total)
                     is_zero = True
                 else:
                     obs = None
                     is_zero = False
-                slots.append(V3Slot(ts=t + base + spacing * k, dt_s=spacing, obs=obs, is_zero=is_zero))
+                slots.append(V4Slot(ts=t + base + spacing * k, dt_s=spacing, obs=obs, is_zero=is_zero))
             t += base + spacing * (run_len - 1)  # 游标 = 末槽 = 游程实测终点(链式自洽)
             continue
-        raise TypeError(f"未知 v3 记录型: {type(rec).__name__}")
+        raise TypeError(f"未知块记录型: {type(rec).__name__}")
     return tuple(slots)
 
 
-def v3_bucket_width_s(dt_s: float) -> int:
+def v4_bucket_width_s(dt_s: float) -> int:
     """逐记录桶宽(秒): max(1, ceil(有效dt))(§02.3/§05.1 —— S3 归桶的纯函数层)"""
     return max(1, math.ceil(dt_s))
 
 
-# ---------- v3 活尾快照(S6 验收追加, 2026-10-05): 写侧未落盘状态 -> 读侧续链 ----------
+# ---------- 活尾快照(S6 验收追加, 2026-10-05): 写侧未落盘状态 -> 读侧续链 ----------
 
 
 @dataclass(frozen=True)
@@ -551,8 +366,8 @@ class LiveTail:
     游程, 供流量图 raw 段窗合流(图面尾部实时, 不等 flush_interval)。
 
     block_open=True 时 records = 当前开放块未落盘的记录序列。镜像保证: 同一记录
-    「写侧游标推进」与「落盘后 v3_block_slots 重算」的槽 ts 恒等 ——
-    - head_pending=True(块尚无任何落盘, records = 全块记录): 槽位 = v3_block_slots
+    「写侧游标推进」与「落盘后 v4_block_slots 重算」的槽 ts 恒等 ——
+    - head_pending=True(块尚无任何落盘, records = 全块记录): 槽位 = v4_block_slots
       整块重算(块首规则), 与 eventual 落盘重算恒等;
     - head_pending=False(块首已随此前 flush 落盘): 记录均为非块首, 槽位从写侧游标
       projected_ts(最后一条记录的槽位锚点)**倒推**复原 —— 倒推与前向推进对非块首
@@ -568,34 +383,36 @@ class LiveTail:
     start_epoch: Optional[int]  # 开放块 B.start(block_open 才非 None; head_pending 复用)
     interval_s: float  # 槽位标称推进秒(块 interval; 无块时取当前生效采样间隔)
     projected_ts: float  # 写侧游标 = 最后一条记录的槽位锚点(block_open 才有语义)
-    records: tuple  # 未落盘记录(V3Sample/V3ZeroRun/V3NullRun, 按槽序; block_open 才非空)
+    records: tuple  # 未落盘记录(V4Sample/V4ZeroRun/V4NullRun, 按槽序; block_open 才非空)
     open_run: Optional[LiveTailRun]  # 开放游程冻结副本(None = 无)
 
 
-def v3_live_tail_slots(tail: LiveTail) -> tuple:
+def v4_live_tail_slots(tail: LiveTail) -> tuple:
     """活尾快照 -> 槽序(S6 读侧接缝, 纯函数): 绝对槽位复原规则见 LiveTail docstring
-    (head_pending 整块复用 v3_block_slots / 否则从 projected_ts 倒推 —— 两者都与这些
+    (head_pending 整块复用 v4_block_slots / 否则从 projected_ts 倒推 —— 两者都与这些
     记录落盘后的重算恒等)。开放游程 = 未来封口形态的槽位: 链锚点 = 记录链终点
     (head_pending 时 = 全块重算游标终值; 否则 = projected_ts), 非块首封口在
     (锚点, last_seen] 均摊(末槽 = last_seen); 无开放块按块首封口形态([B.start,
-    last_seen] 端点含)。z 槽 obs = (0,0,快照), n 槽 obs = None。返回 Tuple[V3Slot, ...]
+    last_seen] 端点含)。z 槽 obs = (0,0,快照), n 槽 obs = None。返回 Tuple[V4Slot, ...]
     (ts 升序)。"""
     if not tail.block_open and (tail.records or tail.head_pending):
         raise ValueError("活尾快照 invariant 破坏: block_open=False 不得携带 records/head_pending")
     slots: list = []
     interval = float(tail.interval_s)
     if tail.block_open and tail.head_pending and tail.records:
-        # 块全量未落盘: 活尾 = 整块, 槽位复用块内推算(块首规则, 与落盘重算恒一)
-        slots.extend(v3_block_slots(V3Block(int(tail.start_epoch), tail.interval_s, tail.records)))
+        # 块全量未落盘: 活尾 = 整块, 槽位复用块内推算(块首规则, 与落盘重算恒一)。
+        # 活尾 records 为 V4 记录型(totals 恒绝对值, 槽位数学与基线无关), 构造 V4Block
+        # 无基线形态仅作槽位推算载体
+        slots.extend(v4_block_slots(V4Block(int(tail.start_epoch), tail.interval_s, None, None, tail.records)))
         chain_end = slots[-1].ts if slots else float(tail.start_epoch)
     else:
         # 非块首记录从写侧游标倒推(游标 = 最后一条记录锚点; 逐记录回退各自 advance)
         cursor = float(tail.projected_ts)
         for rec in reversed(tail.records):
-            if isinstance(rec, V3Sample):
+            if isinstance(rec, V4Sample):
                 advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else interval
                 slots.append(
-                    V3Slot(
+                    V4Slot(
                         ts=cursor,
                         dt_s=advance,
                         obs=(rec.dl_rate, rec.up_rate, rec.dl_total, rec.up_total),
@@ -604,17 +421,17 @@ def v3_live_tail_slots(tail: LiveTail) -> tuple:
                 )
                 cursor -= advance
                 continue
-            if isinstance(rec, (V3ZeroRun, V3NullRun)):
+            if isinstance(rec, (V4ZeroRun, V4NullRun)):
                 # 非块首游程: run_len 个槽在 (cursor - advance, cursor] 均摊, 末槽 = cursor
                 advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else rec.run_len * interval
                 spacing = advance / rec.run_len
-                is_z = isinstance(rec, V3ZeroRun)
+                is_z = isinstance(rec, V4ZeroRun)
                 for k in range(rec.run_len):
                     if is_z:
                         obs = (0, 0, rec.dl_total, rec.up_total)
                     else:
                         obs = None
-                    slots.append(V3Slot(ts=cursor - spacing * k, dt_s=spacing, obs=obs, is_zero=is_z))
+                    slots.append(V4Slot(ts=cursor - spacing * k, dt_s=spacing, obs=obs, is_zero=is_z))
                 cursor -= advance
                 continue
             raise TypeError(f"未知活尾记录型: {type(rec).__name__}")
@@ -630,53 +447,54 @@ def v3_live_tail_slots(tail: LiveTail) -> tuple:
             span = run.last_seen - chain_end
             spacing = span / n if span > 0 else interval
             for k in range(n):
-                slots.append(V3Slot(ts=chain_end + spacing * (k + 1), dt_s=spacing, obs=z_obs, is_zero=is_z))
+                slots.append(V4Slot(ts=chain_end + spacing * (k + 1), dt_s=spacing, obs=z_obs, is_zero=is_z))
         else:
             # 块首封口形态(无开放块): B.start = int(run.start), 端点含均摊至 last_seen
             start = float(int(run.start))
             span = max(run.last_seen - start, 0.0)
             spacing = span / (n - 1) if n > 1 else 0.0
             for k in range(n):
-                slots.append(V3Slot(ts=start + spacing * k, dt_s=spacing or interval, obs=z_obs, is_zero=is_z))
+                slots.append(V4Slot(ts=start + spacing * k, dt_s=spacing or interval, obs=z_obs, is_zero=is_z))
     return tuple(slots)
 
 
-# ---------- v3 按天目录与路径解析(§06.2) ----------
+# ---------- 按天目录与路径解析(§06.2) ----------
 
 
-def v3_root_dir(data_dir: str) -> str:
-    """v3 存储根: <data_dir>/qb-traffic-v3/(§06.2; 旧 qb-traffic/ 原样留存不读)"""
-    return os.path.join(data_dir, TRAFFIC_V3_DIR_NAME)
+def v4_root_dir(data_dir: str) -> str:
+    """存储根: <data_dir>/qb-traffic-v4/(v4 计划 §01 换代语义; 旧 qb-traffic-v3/ 原样留存
+    不读不迁移 —— R2, 删留决定权在用户)"""
+    return os.path.join(data_dir, TRAFFIC_V4_DIR_NAME)
 
 
-def v3_series_dir(data_dir: str, key: str) -> str:
+def v4_series_dir(data_dir: str, key: str) -> str:
     """系列键 -> 系列目录(global/ 或 torrents/<infohash>/); 非法键 fail-fast(对齐 v2)"""
     if key == GLOBAL_KEY:
-        return os.path.join(v3_root_dir(data_dir), V3_GLOBAL_DIR_NAME)
+        return os.path.join(v4_root_dir(data_dir), V4_GLOBAL_DIR_NAME)
     if key.startswith(TORRENT_KEY_PREFIX):
         h = key[len(TORRENT_KEY_PREFIX):]
         if not h or not _INFOHASH_RE.match(h):
             raise ValueError(f"非法单种系列键(哈希须为文件名安全字符): {key!r}")
-        return os.path.join(v3_root_dir(data_dir), TORRENTS_DIR_NAME, h)
+        return os.path.join(v4_root_dir(data_dir), TORRENTS_DIR_NAME, h)
     raise ValueError(f"未知系列键: {key!r}")
 
 
-def v3_day_file_path(data_dir: str, key: str, date_str: str) -> str:
+def v4_day_file_path(data_dir: str, key: str, date_str: str) -> str:
     """系列键 + 本地日期串 -> 天文件路径(<YYYY-MM-DD>.dat); 日期串非法 fail-fast"""
-    _validate_v3_date(date_str)
-    return os.path.join(v3_series_dir(data_dir, key), date_str + DAT_SUFFIX)
+    _validate_date(date_str)
+    return os.path.join(v4_series_dir(data_dir, key), date_str + DAT_SUFFIX)
 
 
-def v3_agg_file_path(data_dir: str, key: str) -> str:
+def v4_agg_file_path(data_dir: str, key: str) -> str:
     """系列键 -> agg.dat 路径(§02.2: 每系列一个聚合文件)"""
-    return os.path.join(v3_series_dir(data_dir, key), V3_AGG_NAME)
+    return os.path.join(v4_series_dir(data_dir, key), V4_AGG_NAME)
 
 
-def v3_rel_dir_to_key(rel_dir: str) -> Optional[str]:
-    """v3 根下相对目录 -> 系列键(global -> "global", torrents/<h> -> "torrent:<h>");
+def v4_rel_dir_to_key(rel_dir: str) -> Optional[str]:
+    """v4 根下相对目录 -> 系列键(global -> "global", torrents/<h> -> "torrent:<h>");
     不匹配返回 None(S3 扫目录时跳过非系列项)。两种路径分隔符都认(Windows 扫目录)"""
     norm = rel_dir.replace("\\", "/").strip("/")
-    if norm == V3_GLOBAL_DIR_NAME:
+    if norm == V4_GLOBAL_DIR_NAME:
         return GLOBAL_KEY
     if norm.startswith(TORRENTS_DIR_NAME + "/"):
         h = norm[len(TORRENTS_DIR_NAME) + 1:]
@@ -685,52 +503,52 @@ def v3_rel_dir_to_key(rel_dir: str) -> Optional[str]:
     return None
 
 
-def v3_day_file_date(filename: str) -> Optional[str]:
+def v4_day_file_date(filename: str) -> Optional[str]:
     """天文件名 "<YYYY-MM-DD>.dat" -> 日期串; 其余(agg.dat/.corrupt/杂物/非真实日历
     日期形状)返回 None"""
     if not filename.endswith(DAT_SUFFIX):
         return None
     d = filename[:-len(DAT_SUFFIX)]
-    if not _V3_DATE_RE.match(d):
+    if not _V4_DATE_RE.match(d):
         return None
     try:
-        datetime.strptime(d, V3_DATE_FORMAT)  # 真实日期校验(2 月 30 日等)
+        datetime.strptime(d, V4_DATE_FORMAT)  # 真实日期校验(2 月 30 日等)
     except ValueError:
         return None
     return d
 
 
-def _validate_v3_date(date_str: str) -> None:
+def _validate_date(date_str: str) -> None:
     """日期串校验: 形状 YYYY-MM-DD 且为真实日历日期; 违者 ValueError"""
-    if not _V3_DATE_RE.match(date_str or ""):
+    if not _V4_DATE_RE.match(date_str or ""):
         raise ValueError(f"非法日期串(须 YYYY-MM-DD): {date_str!r}")
-    datetime.strptime(date_str, V3_DATE_FORMAT)  # 真实日期校验(2 月 30 日等)
+    datetime.strptime(date_str, V4_DATE_FORMAT)  # 真实日期校验(2 月 30 日等)
 
 
-def v3_date_str_epoch(date_str: str) -> int:
+def v4_date_str_epoch(date_str: str) -> int:
     """本地日期串 -> 当日 00:00 epoch(本地时区, §02.2 day_epoch 口径)"""
-    _validate_v3_date(date_str)
-    return int(datetime.strptime(date_str, V3_DATE_FORMAT).timestamp())
+    _validate_date(date_str)
+    return int(datetime.strptime(date_str, V4_DATE_FORMAT).timestamp())
 
 
-def v3_epoch_date_str(ts: float) -> str:
+def v4_epoch_date_str(ts: float) -> str:
     """epoch 秒 -> 本地日期串(YYYY-MM-DD)"""
-    return datetime.fromtimestamp(ts).strftime(V3_DATE_FORMAT)
+    return datetime.fromtimestamp(ts).strftime(V4_DATE_FORMAT)
 
 
-def v3_day_epoch(ts: float) -> int:
+def v4_day_epoch(ts: float) -> int:
     """epoch 秒 -> 本地当日 00:00 epoch(§02.2 day_epoch)"""
     d = datetime.fromtimestamp(ts)
     return int(datetime(d.year, d.month, d.day).timestamp())
 
 
-def v3_month_epoch(ts: float) -> int:
+def v4_month_epoch(ts: float) -> int:
     """epoch 秒 -> 本地自然月 1 日 00:00 epoch(§02.2 month_epoch)"""
     d = datetime.fromtimestamp(ts)
     return int(datetime(d.year, d.month, 1).timestamp())
 
 
-def v3_next_month_epoch(ts: float) -> int:
+def v4_next_month_epoch(ts: float) -> int:
     """epoch 秒 -> 下一自然月 1 日 00:00 epoch(S3b all 视图逐月铺格用): ts 所在月的
     次月 1 日 00:00(本地时区); 结果严格大于输入(逐月推进必终止)。"""
     d = datetime.fromtimestamp(int(ts))
@@ -738,7 +556,7 @@ def v3_next_month_epoch(ts: float) -> int:
     return int(datetime(year, month, 1).timestamp())
 
 
-def v3_window_dates(start_epoch: float, end_epoch: float) -> frozenset:
+def v4_window_dates(start_epoch: float, end_epoch: float) -> frozenset:
     """查询窗口起止(epoch 秒) -> 涉及的本地日期串集合(含两端所在日; §05.2 按天加载
     的窗口 -> 日期集合解析)。end < start -> ValueError(调用方口径错误, fail-fast)。"""
     if end_epoch < start_epoch:
@@ -748,17 +566,17 @@ def v3_window_dates(start_epoch: float, end_epoch: float) -> frozenset:
     out = set()
     d = d0
     while d <= d1:
-        out.add(d.strftime(V3_DATE_FORMAT))
+        out.add(d.strftime(V4_DATE_FORMAT))
         d += timedelta(days=1)
     return frozenset(out)
 
 
-# ---------- v3 聚合行型(agg.dat, §02.2 + §04.1) ----------
+# ---------- 聚合行型(agg.dat, §02.2 + §04.1) ----------
 
 
 @dataclass(frozen=True)
 class AggRow:
-    """v3 聚合行(§02.2): hour/day/month 同构 9 列, agg.dat 追加混存
+    """聚合行(§02.2): hour/day/month 同构 9 列, agg.dat 追加混存
 
     epoch 语义: hour = 桶起点; day = 本地当日 00:00; month = 本地自然月 1 日 00:00。
     cov_s = 有效时长秒(hour 必带 —— 8 列无法还原有效时长, 部分覆盖小时等权平均有偏)。
@@ -775,9 +593,9 @@ class AggRow:
     cov_s: int
 
 
-class V3HourSample(NamedTuple):
+class V4HourSample(NamedTuple):
     """hour 累计器的逐记录输入(§04.1): dt_s 由调用方裁剪到桶内(min(dt_i, hour_end-t_i));
-    z 游程槽 rate=0/span 均摊(v3_block_slots 的 z 槽即此形态), n 槽不贡献(调用方剔除)"""
+    z 游程槽 rate=0/span 均摊(v4_block_slots 的 z 槽即此形态), n 槽不贡献(调用方剔除)"""
 
     dl_rate: int
     up_rate: int
@@ -787,8 +605,8 @@ class V3HourSample(NamedTuple):
 
 
 @dataclass(frozen=True)
-class V3ParsedAgg:
-    """agg.dat 解析结果(parse_v3_agg_text 返回)"""
+class V4ParsedAgg:
+    """agg.dat 解析结果(parse_v4_agg_text 返回)"""
 
     key: Optional[str]
     hours: tuple  # Tuple[AggRow, ...](epoch 升序, 同 epoch 取最后一行 —— 重封追加行读侧口径)
@@ -811,19 +629,19 @@ def format_agg_row(row: AggRow) -> str:
     )
 
 
-def parse_v3_agg_text(text: str) -> V3ParsedAgg:
-    """agg.dat 文本 -> V3ParsedAgg(纯函数; §02.2 + §04.4)
+def parse_v4_agg_text(text: str) -> V4ParsedAgg:
+    """agg.dat 文本 -> V4ParsedAgg(纯函数; §02.2 + §04.4)
 
-    头行必须恰为 HEADER_LINE_V3(缺失/不符整文件记坏, 同天文件口径); hour/day/month
-    行 9 列, 8 列旧行兜底 cov_s = 3600(防御性, v3 全新目录正常不出现); 同 kind 同
+    头行必须恰为 HEADER_LINE_V4(缺失/不符整文件记坏, 同天文件口径); hour/day/month
+    行 9 列, 8 列旧行兜底 cov_s = 3600(防御性, v4 全新目录正常不出现); 同 kind 同
     epoch 重复行取最后一行(重封 = 追加行的读侧口径); 坏行纪律与天文件一致。
     返回按 kind 分列、epoch 升序。
     """
     lines = text.splitlines()
     torn = bool(text) and not text.endswith("\n")
     header = lines[0].strip() if lines else None
-    if header != HEADER_LINE_V3:
-        return V3ParsedAgg(
+    if header != HEADER_LINE_V4:
+        return V4ParsedAgg(
             key=None, hours=(), days=(), months=(), bad_lines=len(lines), data_lines=len(lines), torn_tail=torn
         )
     key: Optional[str] = None
@@ -844,16 +662,16 @@ def parse_v3_agg_text(text: str) -> V3ParsedAgg:
                 continue
             if parts[0] in AGG_KINDS and len(parts) in (AGG_LEGACY_FIELDS, AGG_FIELDS):
                 # 8 列旧行兜底 cov_s = 3600(§02.2 防御性)
-                cov = _parse_v3_nn_int(parts[8]) if len(parts) == AGG_FIELDS else HOUR_SECONDS
+                cov = _parse_nn_int(parts[8]) if len(parts) == AGG_FIELDS else HOUR_SECONDS
                 row = AggRow(
                     kind=parts[0],
                     epoch=int(parts[1]),
-                    dl_avg=_parse_v3_nn_int(parts[2]),
-                    dl_max=_parse_v3_nn_int(parts[3]),
-                    up_avg=_parse_v3_nn_int(parts[4]),
-                    up_max=_parse_v3_nn_int(parts[5]),
-                    dl_total=_parse_v3_nn_int(parts[6]),
-                    up_total=_parse_v3_nn_int(parts[7]),
+                    dl_avg=_parse_nn_int(parts[2]),
+                    dl_max=_parse_nn_int(parts[3]),
+                    up_avg=_parse_nn_int(parts[4]),
+                    up_max=_parse_nn_int(parts[5]),
+                    dl_total=_parse_nn_int(parts[6]),
+                    up_total=_parse_nn_int(parts[7]),
                     cov_s=cov,
                 )
                 rows_by_kind[row.kind][row.epoch] = row  # 同 epoch 重复取最后一行(重封读侧口径)
@@ -864,7 +682,7 @@ def parse_v3_agg_text(text: str) -> V3ParsedAgg:
         if torn and i == last_idx - 1:
             torn_tail = True
     by_kind = {k: tuple(rows_by_kind[k][e] for e in sorted(rows_by_kind[k])) for k in AGG_KINDS}
-    return V3ParsedAgg(
+    return V4ParsedAgg(
         key=key,
         hours=by_kind["hour"],
         days=by_kind["day"],
@@ -875,7 +693,7 @@ def parse_v3_agg_text(text: str) -> V3ParsedAgg:
     )
 
 
-def v3_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
+def v4_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
     """hour 聚合行(dt 加权, §04.1): avg = round(Σ(rate_i x dt_i) / cov_s),
     cov_s = min(Σdt_i, HOUR_SECONDS); max 取逐记录最大; totals 取级末快照(末记录);
     cov_s = 0(无有效覆盖)或空 samples -> ValueError(hour 行只在有覆盖时产出, 调用方
@@ -900,25 +718,26 @@ def v3_hour_agg(hour_epoch: int, samples: tuple) -> AggRow:
     )
 
 
-class TrafficV3Store:
-    """v3 写侧存储(S2a 天文件 + S2b 聚合, plan 26-10-04-1957 §03.3/§04): 按天文件块化
+class TrafficV4Store:
+    """v4 写侧存储(S2a 天文件 + S2b 聚合, plan 26-10-04-1957 §03.3/§04): 按天文件块化
     追加 + 批量落盘 + agg.dat 聚合行追加/裁剪 + 系列按龄淘汰
 
     写侧翻转后的落盘单点: 采样模块 BlockBuffer 每系列每 flush 单次 open("a") 写 N 行 +
     flush + fsync; 尾字节查补(崩溃残留半行补 \\n)每 flush 仅一次; 块头(B 行)由调用方在
-    块首次 flush 时随批传入(块状态单点在采样模块 —— 跨 flush 的同块只传一次头)。
-    只写 qb-traffic-v3/, 不触旧 qb-traffic/(R2 换代); 目录惰性创建。
+    块首次 flush 时随批传入(块状态单点在采样模块 —— 跨 flush 的同块只传一次头), 行型为
+    v4(B 行携带块基线, r/z 行相对基线 delta, 见文件尾 v4 纯函数区)。只写 qb-traffic-v4/,
+    旧 qb-traffic-v3/ 原样留存不读不迁移(R2 换代); 目录惰性创建。
 
     S2b 聚合分层(§04, 累计器/水位在采样模块, 本层只管文件):
     - append_agg_rows: 聚合行(hour/day/month 9 列)追加, 与 append_records 同款追加纪律
       (open("a") + flush + fsync, 每 flush 至多一次 open —— piggyback 语义);
     - read_agg / series_day_dates / series_keys: 重启恢复(catch-up)的读取入口;
-    - trim_agg_hours: hour 行按 rollup_window 裁剪 —— v3 唯一的 tmp+fsync+os.replace
+    - trim_agg_hours: hour 行按 rollup_window 裁剪 —— 本层唯一的 tmp+fsync+os.replace
       原子重写点(§04.5, 常规写路径全是追加); 无到龄行零写(same_content 语义);
     - evict_expired_series: 超龄系列整目录删除(天文件 + agg.dat), 龄期由天文件名日期
       直接算, frozen 照删, 全局豁免。淘汰/裁剪触发点都在采样模块的 flush 时点。
 
-    rollup_window v3 语义(§06.1 扩一句): hour 行保留窗 + 系列淘汰龄 + catch-up 补算
+    rollup_window 语义(§06.1 扩一句): hour 行保留窗 + 系列淘汰龄 + catch-up 补算
     窗口(= 天文件存活期)三义合一, 不再只是 v2 的 hour 段保留窗; raw_window 语义不变。
     day/month 行永久(D7 不设上限键); 注意 §04.5 淘汰口径是删整目录(天文件 + agg.dat),
     被淘汰系列的月行随目录一并消失 —— 「月行永久」指不按龄裁剪, 非目录删除后仍可读。
@@ -934,7 +753,7 @@ class TrafficV3Store:
 
     def series_day_path(self, key: str, date_str: str) -> str:
         """系列键 + 本地日期串 -> 天文件路径(路径计算复用 S1 纯函数, 非法键/日期 fail-fast)"""
-        return v3_day_file_path(self._data_dir, key, date_str)
+        return v4_day_file_path(self._data_dir, key, date_str)
 
     def series_has_data(self, key: str) -> bool:
         """「系列目录存在且含 >=1 个 .dat」(§3.2: v2 index 条目门改目录判定, 惰性零目录零 IO)
@@ -942,7 +761,7 @@ class TrafficV3Store:
         门语义(v2 §3.3 平移): 有数据(或已开游程)的系列零样本才开/延长游程, 从未传输种子
         零文件零游程。agg.dat 亦以 .dat 结尾, 计入(有聚合必有历史, 语义一致)。
         """
-        series_dir = v3_series_dir(self._data_dir, key)
+        series_dir = v4_series_dir(self._data_dir, key)
         if not os.path.isdir(series_dir):
             return False
         try:
@@ -953,12 +772,15 @@ class TrafficV3Store:
             return False
         return False
 
-    def append_records(self, key: str, date_str: str, header: Optional[tuple], records: tuple) -> None:
-        """块化追加一批记录(§03.3 批量写): 单次 open("a") + flush + fsync
+    def append_records(self, key: str, date_str: str, header: Optional[tuple], records: tuple, block_base=None) -> None:
+        """块化追加一批记录(§03.3 批量写; 批 2 本棒起 v4 行型 —— B 行携带块基线, r/z 行
+        存相对基线 delta): 单次 open("a") + flush + fsync
 
         header = (start_epoch, interval_s) 时先写 B 行(该块首次 flush; 跨 flush 的同块
-        由调用方只传一次); records 为 V3Sample / V3ZeroRun / V3NullRun 序列(按槽序)。
-        文件不存在先建头行(v3) + key 行; 崩溃残留尾部半行先补一个换行(不与残行合并,
+        由调用方只传一次); block_base = (dl_base, up_base) 本块基线快照对(每批必传 ——
+        r/z 行 delta 序列化需减基线; 全 None = 无基线块, 3 列 B 且仅 n 游程合法);
+        records 为 V4Sample / V4ZeroRun / V4NullRun 序列(按槽序, totals 恒绝对值)。
+        文件不存在先建头行(v4) + key 行; 崩溃残留尾部半行先补一个换行(不与残行合并,
         每 flush 查补一次 —— v2 逐行查补退役)。records 与 header 全空 = 零操作。
         """
         if header is None and not records:
@@ -967,22 +789,23 @@ class TrafficV3Store:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         prefix = ""
         if not os.path.exists(path) or os.path.getsize(path) == 0:
-            prefix = f"{HEADER_LINE_V3}\nkey,{key}\n"
+            prefix = f"{HEADER_LINE_V4}\nkey,{key}\n"
         else:
             with open(path, "rb") as f:
                 f.seek(-1, os.SEEK_END)
                 if f.read(1) != b"\n":
                     prefix = "\n"
+        dl_base, up_base = block_base if block_base is not None else (None, None)
         lines = []
         if header is not None:
-            lines.append(format_v3_b_row(int(header[0]), float(header[1])))
+            lines.append(format_v4_b_row(int(header[0]), float(header[1]), dl_base, up_base))
         for rec in records:
-            if isinstance(rec, V3Sample):
-                lines.append(format_v3_r_row(rec))
-            elif isinstance(rec, V3ZeroRun):
-                lines.append(format_v3_z_row(rec))
+            if isinstance(rec, V4Sample):
+                lines.append(format_v4_r_row(rec, dl_base, up_base))
+            elif isinstance(rec, V4ZeroRun):
+                lines.append(format_v4_z_row(rec, dl_base, up_base))
             else:
-                lines.append(format_v3_n_row(rec))
+                lines.append(format_v4_n_row(rec))
         with open(path, "a", encoding="utf-8", newline="\n") as f:
             f.write(prefix)
             f.write("\n".join(lines) + "\n")
@@ -991,30 +814,30 @@ class TrafficV3Store:
 
     # ---------- S2b: 聚合文件(agg.dat)与淘汰(§04) ----------
 
-    def read_agg(self, key: str) -> V3ParsedAgg:
+    def read_agg(self, key: str) -> V4ParsedAgg:
         """读系列 agg.dat(§04.3 恢复入口): 缺失/空文件 = 空解析结果(key=None, 全空元组);
         OSError 上抛(调用方按恢复失败口径处理)。解析坏行/同 epoch 取最后一行等纪律
-        全在 parse_v3_agg_text(撕裂尾行跳过, 水位从文件尾推)。
+        全在 parse_v4_agg_text(撕裂尾行跳过, 水位从文件尾推)。
         读侧快读口径(D3, §05.2): agg.dat 单次快读上界按 ~1MB 口径放宽(全年 hour 行
         ≈8760 x ~90B + day/month 行) —— 口径记录非强制截断, S3b 视图读取沿用本入口。"""
-        path = v3_agg_file_path(self._data_dir, key)
+        path = v4_agg_file_path(self._data_dir, key)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
-            return V3ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
+            return V4ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_v3_agg_text(f.read())
+            return parse_v4_agg_text(f.read())
 
     def append_agg_rows(self, key: str, rows: tuple) -> None:
         """追加一批聚合行(§04.2): 与 append_records 同款追加纪律 —— 单次 open("a") +
-        flush + fsync, 尾字节查补一次, 文件不存在先建头行(v3) + key 行。调用方每系列
+        flush + fsync, 尾字节查补一次, 文件不存在先建头行(v4) + key 行。调用方每系列
         每 flush 至多一次调用(piggyback 语义: hour/day/month 行合并一批)。rows 空 = 零操作。"""
         rows = tuple(rows)
         if not rows:
             return
-        path = v3_agg_file_path(self._data_dir, key)  # 非法键 fail-fast
+        path = v4_agg_file_path(self._data_dir, key)  # 非法键 fail-fast
         os.makedirs(os.path.dirname(path), exist_ok=True)
         prefix = ""
         if not os.path.exists(path) or os.path.getsize(path) == 0:
-            prefix = f"{HEADER_LINE_V3}\nkey,{key}\n"
+            prefix = f"{HEADER_LINE_V4}\nkey,{key}\n"
         else:
             with open(path, "rb") as f:
                 f.seek(-1, os.SEEK_END)
@@ -1027,11 +850,11 @@ class TrafficV3Store:
             os.fsync(f.fileno())
 
     def series_keys(self) -> list:
-        """扫描 v3 根目录列出现存系列键(§04.3 恢复入口): global/ + torrents/<infohash>/
+        """扫描 v4 根目录列出现存系列键(§04.3 恢复入口): global/ + torrents/<infohash>/
         (目录存在即列出, 数据有无由调用方读文件判断); 根目录缺失 = 空表。"""
-        root = v3_root_dir(self._data_dir)
+        root = v4_root_dir(self._data_dir)
         keys: list = []
-        if os.path.isdir(os.path.join(root, V3_GLOBAL_DIR_NAME)):
+        if os.path.isdir(os.path.join(root, V4_GLOBAL_DIR_NAME)):
             keys.append(GLOBAL_KEY)
         torrents_dir = os.path.join(root, TORRENTS_DIR_NAME)
         if os.path.isdir(torrents_dir):
@@ -1045,40 +868,41 @@ class TrafficV3Store:
         (补算窗口过滤, §04.3 —— rollup_window 外的天文件已删/不读); 目录缺失 = 空表;
         非日期杂物(agg.dat/.corrupt 等)跳过。"""
         try:
-            names = os.listdir(v3_series_dir(self._data_dir, key))
+            names = os.listdir(v4_series_dir(self._data_dir, key))
         except OSError:
             return ()
         out = []
         for name in names:
-            d = v3_day_file_date(name)
-            if d is not None and v3_date_str_epoch(d) >= min_epoch:
+            d = v4_day_file_date(name)
+            if d is not None and v4_date_str_epoch(d) >= min_epoch:
                 out.append(d)
         return tuple(sorted(out))
 
-    def read_day(self, key: str, date_str: str) -> Optional[V3ParsedDay]:
-        """读单天文件(§04.3 catch-up 的 raw 源): 缺失/空文件 = None; OSError 上抛。"""
+    def read_day(self, key: str, date_str: str) -> Optional["V4ParsedDay"]:
+        """读单天文件(§04.3 catch-up 的 raw 源; 批 2 本棒起 v4 行型解析): 缺失/空文件 =
+        None; OSError 上抛。"""
         path = self.series_day_path(key, date_str)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return None
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_v3_day_text(f.read())
+            return parse_v4_day_text(f.read())
 
     def trim_agg_hours(self, key: str, now: float, rollup_window: float) -> Optional[int]:
-        """hour 行按 rollup_window 裁剪(§04.5, v3 唯一 tmp+fsync+os.replace 原子重写点):
+        """hour 行按 rollup_window 裁剪(§04.5, 本层唯一 tmp+fsync+os.replace 原子重写点):
         保留 hour.epoch >= now - rollup_window(边界含)的 hour 行, day/month 行全保留
         (永久, D7); 无到龄行零写(same_content 语义, 返回现存最老 hour epoch);
         撕裂尾行/坏行随重写自洁。PermissionError(Windows 读侧竞态)退避重试后仍失败则
         放弃本轮(原文件完好), 返回原最老 epoch。返回重写后的最老 hour epoch(空 = None)。"""
-        path = v3_agg_file_path(self._data_dir, key)
+        path = v4_agg_file_path(self._data_dir, key)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return None
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            parsed = parse_v3_agg_text(f.read())
+            parsed = parse_v4_agg_text(f.read())
         kept = tuple(h for h in parsed.hours if h.epoch >= now - rollup_window)
         oldest = parsed.hours[0].epoch if parsed.hours else None
         if len(kept) == len(parsed.hours):
             return oldest  # 无到龄行: 零写(黄金法则 1)
-        lines = [HEADER_LINE_V3, f"key,{key}"]
+        lines = [HEADER_LINE_V4, f"key,{key}"]
         lines.extend(format_agg_row(r) for r in kept)
         lines.extend(format_agg_row(r) for r in parsed.days)
         lines.extend(format_agg_row(r) for r in parsed.months)
@@ -1093,7 +917,7 @@ class TrafficV3Store:
         留存到按龄删除); 全局系列不在 torrents/ 下, 结构性豁免。无天文件的目录(纯
         agg.dat, 无法判龄)保守跳过。返回淘汰的系列键列表(调用方据此清内存缓存);
         删除失败(Windows 读侧竞态)保留目录下轮重试。"""
-        torrents_dir = os.path.join(v3_root_dir(self._data_dir), TORRENTS_DIR_NAME)
+        torrents_dir = os.path.join(v4_root_dir(self._data_dir), TORRENTS_DIR_NAME)
         evicted: list = []
         if not os.path.isdir(torrents_dir):
             return evicted
@@ -1101,11 +925,11 @@ class TrafficV3Store:
             series_dir = os.path.join(torrents_dir, name)
             if not _INFOHASH_RE.match(name) or not os.path.isdir(series_dir):
                 continue
-            dates = [d for d in (v3_day_file_date(n) for n in os.listdir(series_dir)) if d is not None]
+            dates = [d for d in (v4_day_file_date(n) for n in os.listdir(series_dir)) if d is not None]
             if not dates:
                 continue
             newest = max(dates)  # YYYY-MM-DD 字典序 = 时间序
-            if now - v3_date_str_epoch(newest) <= rollup_window:
+            if now - v4_date_str_epoch(newest) <= rollup_window:
                 continue  # 未超龄不动(边界含)
             try:
                 shutil.rmtree(series_dir)
@@ -1117,25 +941,25 @@ class TrafficV3Store:
 
 
 #: 解析缓存默认字节预算(按天文件文本字节数计, LRU; S3a 实施期定约, §05.2): 解析产物
-#: (V3Block/V3Sample 对象图)对文本约有 6-8 倍内存膨胀, 4MB 文本预算把最坏驻留(2s 档
+#: (V4Block/V4Sample 对象图)对文本约有 6-8 倍内存膨胀, 4MB 文本预算把最坏驻留(2s 档
 #: 天文件 ≈2MB 文本/天)压在约 2 个文件 ≈25-30MB 对象内存; 30s 档(≈115KB/天)可驻 ~34 个
-#: 天文件。缓存粒度 = 整天解析结果(V3ParsedDay): 命中率最高的入口是 Web 图窗按
+#: 天文件。缓存粒度 = 整天解析结果(V4ParsedDay): 命中率最高的入口是 Web 图窗按
 #: meta.interval_s 的重复轮询(查询窗口日期集不变即全命中); 不驻留 90d x 2s 档全量 raw
 #: (§05.2 口径 —— 驻留受本预算上界约束, 105 万行/系列的驻留方案已否决)。
-V3_DAY_CACHE_BUDGET_BYTES = 4_000_000
+V4_DAY_CACHE_BUDGET_BYTES = 4_000_000
 
 #: agg 解析缓存条目数上界(S3b; 解析产物为紧凑 AggRow 行元组, 按条目数 LRU 逐出即可,
 #: 不占天文件的文本字节预算 —— 全年 hour 行解析产物 ≈8760 行/系列, 64 系列驻留可忽略)
-V3_AGG_CACHE_MAX_ENTRIES = 64
+V4_AGG_CACHE_MAX_ENTRIES = 64
 
 
-class V3DayCache:
+class V4DayCache:
     """按天文件解析缓存(S3a §05.2, 读侧; Web 线程调用): mtime_ns+size 键控
 
     - 失效键 = os.stat 的 (st_mtime_ns, st_size): 天文件只在追加期变化(追加必变 size),
       裁剪/重写(tmp+replace)size 严格变小 —— 两向都使 stat 键变化而失效; 未变即命中,
       直接复用解析产物(不重读不重解析)。
-    - 内存上界: 驻留条目的文件文本字节总量 <= budget(默认 V3_DAY_CACHE_BUDGET_BYTES),
+    - 内存上界: 驻留条目的文件文本字节总量 <= budget(默认 V4_DAY_CACHE_BUDGET_BYTES),
       超出按 LRU 逐出(命中移队尾, 最久未用先逐出; 至少保留最新一条 —— 单文件超预算时
       不自我清空)。缺失/空文件也缓存(stat 键 = None 哨兵): 文件此后出现则 stat 变化
       自然失效。
@@ -1143,21 +967,22 @@ class V3DayCache:
       并发对同一文件重复解析无害(后写胜, 黄金法则 5 的单写线程约束不涉及只读缓存)。
 
     S3b 接缝: 视图端点经 read_window(窗口 -> 日期集合 -> 只读涉及文件, 24h 窗至多
-    2 个日期文件)取 V3ParsedDay, 块序列交给 traffic_grid.v3_series_points 归桶;
+    2 个日期文件)取 V4ParsedDay, 块序列交给 traffic_grid.v4_series_points 归桶;
     agg.dat 消费(hour/day/month 段)经 read_agg 同款 mtime/size 键控缓存(S3b 加)。
     """
-    def __init__(self, data_dir: str, budget: int = V3_DAY_CACHE_BUDGET_BYTES) -> None:
+    def __init__(self, data_dir: str, budget: int = V4_DAY_CACHE_BUDGET_BYTES) -> None:
         self._data_dir = data_dir
         self._budget = max(1, int(budget))
         self._lock = threading.Lock()
-        # (系列键, 日期串) -> (stat 键 | None, 文本字节数, V3ParsedDay | None)
+        # (系列键, 日期串) -> (stat 键 | None, 文本字节数, V4ParsedDay | None)
         self._entries: OrderedDict = OrderedDict()
-        # 系列键 -> (stat 键 | None, V3ParsedAgg)(agg.dat 缓存, S3b; 条目数上界独立于天文件字节预算)
+        # 系列键 -> (stat 键 | None, V4ParsedAgg)(agg.dat 缓存, S3b; 条目数上界独立于天文件字节预算)
         self._agg_entries: OrderedDict = OrderedDict()
 
-    def read_day(self, key: str, date_str: str) -> Optional[V3ParsedDay]:
-        """读单天文件(带缓存): 缺失/空文件 = None; 非法键/日期 fail-fast(路径纯计算)。"""
-        path = v3_day_file_path(self._data_dir, key, date_str)
+    def read_day(self, key: str, date_str: str) -> Optional["V4ParsedDay"]:
+        """读单天文件(带缓存; 批 2 本棒起 v4 行型解析): 缺失/空文件 = None; 非法键/日期
+        fail-fast(路径纯计算)。"""
+        path = v4_day_file_path(self._data_dir, key, date_str)
         try:
             st = os.stat(path)
             stat_key = (st.st_mtime_ns, st.st_size)
@@ -1180,18 +1005,18 @@ class V3DayCache:
 
     def read_window(self, key: str, start_epoch: float, end_epoch: float) -> tuple:
         """查询窗口 -> 日期集合 -> 只读涉及的天文件(§05.2 按天加载): 按日期升序返回
-        (date_str, V3ParsedDay | None) 元组。块不跨天(00:00 硬切), 单天文件可独立解析;
+        (date_str, V4ParsedDay | None) 元组。块不跨天(00:00 硬切), 单天文件可独立解析;
         24h 窗至多 2 个日期文件(窗口只开涉及文件, 不扫全目录)。"""
-        return tuple((d, self.read_day(key, d)) for d in sorted(v3_window_dates(start_epoch, end_epoch)))
+        return tuple((d, self.read_day(key, d)) for d in sorted(v4_window_dates(start_epoch, end_epoch)))
 
-    def read_agg(self, key: str) -> V3ParsedAgg:
+    def read_agg(self, key: str) -> V4ParsedAgg:
         """读系列 agg.dat(带缓存, S3b §05.2/§05.3 端点取数入口): mtime_ns+size 键控与
         天文件同款纪律 —— agg.dat 只在追加期变化(追加必变 size), 裁剪重写(size 严格变小)
         两向都使 stat 键变化而失效; 缺失/空文件 = 空解析结果(None 哨兵缓存, 文件此后出现
         自然失效); OSError(打开/读取失败)上抛 —— 端点按读取竞态 degraded 处理(§08)。
-        解析产物为紧凑 AggRow 行元组, 缓存按条目数上界(V3_AGG_CACHE_MAX_ENTRIES)LRU
+        解析产物为紧凑 AggRow 行元组, 缓存按条目数上界(V4_AGG_CACHE_MAX_ENTRIES)LRU
         逐出, 不占天文件的字节预算。"""
-        path = v3_agg_file_path(self._data_dir, key)
+        path = v4_agg_file_path(self._data_dir, key)
         try:
             st = os.stat(path)
             stat_key = (st.st_mtime_ns, st.st_size)
@@ -1206,34 +1031,35 @@ class V3DayCache:
         with self._lock:
             self._agg_entries[key] = (stat_key, parsed)
             self._agg_entries.move_to_end(key)
-            while len(self._agg_entries) > V3_AGG_CACHE_MAX_ENTRIES:
+            while len(self._agg_entries) > V4_AGG_CACHE_MAX_ENTRIES:
                 self._agg_entries.popitem(last=False)
         return parsed
 
     @staticmethod
-    def _read_parse_agg(path: str) -> V3ParsedAgg:
-        """agg.dat 缺省解析纪律(对齐 TrafficV3Store.read_agg): 缺失/空文件 = 空解析结果。"""
+    def _read_parse_agg(path: str) -> V4ParsedAgg:
+        """agg.dat 缺省解析纪律(对齐 TrafficV4Store.read_agg): 缺失/空文件 = 空解析结果。"""
         if not os.path.exists(path) or os.path.getsize(path) == 0:
-            return V3ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
+            return V4ParsedAgg(key=None, hours=(), days=(), months=(), bad_lines=0, data_lines=0)
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_v3_agg_text(f.read())
+            return parse_v4_agg_text(f.read())
 
     @staticmethod
-    def _read_parse(path: str) -> Optional[V3ParsedDay]:
-        """缺省解析纪律(对齐 TrafficV3Store.read_day): 缺失/空文件 None, 其余整读解析。"""
+    def _read_parse(path: str) -> Optional["V4ParsedDay"]:
+        """缺省解析纪律(对齐 TrafficV4Store.read_day): 缺失/空文件 None, 其余整读解析。
+        批 2 本棒起天文件为 v4 行型(头行门闩 v4, 不设双读)。"""
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             return None
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            return parse_v3_day_text(f.read())
+            return parse_v4_day_text(f.read())
 
 
-def v3_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
+def v4_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
     """逐级派生聚合行(§04.1, 严格逐级 —— day 只从 hour 行聚, month 只从 day 行聚,
     day 不从 raw 直聚: raw_window 裁剪边缘的 cov_s 链只在逐级传递才完整):
     avg = round(Σ(下级.avg x 下级.cov) / Σcov), max = max(下级.max), totals = 级末快照
-    (epoch 最大的下级行), cov = Σ下级.cov。kind 限 {"day","month"}(hour 由 v3_hour_agg
+    (epoch 最大的下级行), cov = Σ下级.cov。kind 限 {"day","month"}(hour 由 v4_hour_agg
     从记录直聚); children 空或 Σcov <= 0 -> ValueError。"""
-    if kind not in V3_ROLLUP_KINDS:
+    if kind not in V4_ROLLUP_KINDS:
         raise ValueError(f"非法逐级聚合行型(须 day/month): {kind!r}")
     if not children:
         raise ValueError("逐级聚合无下级行")
@@ -1255,10 +1081,10 @@ def v3_rollup_agg(kind: str, epoch: int, children: tuple) -> AggRow:
 
 
 def _write_text_payload(path: str, payload: str) -> bool:
-    """v3 整文件重写(trim_agg_hours 专用, §04.5): 同目录 tmp -> fsync -> os.replace
+    """整文件重写(trim_agg_hours 专用, §04.5): 同目录 tmp -> fsync -> os.replace
     (纪律对齐 utils.atomic_write 先例; 行尾固定 \\n)。
     PermissionError(Windows 读侧竞态)退避重试 x3, 仍失败放弃(删 tmp, 返回 False,
-    原文件完好 —— 裁剪留待下轮, 数据无损)。v3 常规写路径全是追加, 原子重写仅存于此。"""
+    原文件完好 —— 裁剪留待下轮, 数据无损)。常规写路径全是追加, 原子重写仅存于此。"""
     directory = os.path.dirname(path) or "."
     attempt = 0
     while True:
@@ -1291,7 +1117,7 @@ def _write_text_payload(path: str, payload: str) -> bool:
 
 
 # ======================================================================
-# v4 纯函数区(plan 26-10-05-2200 B1: 并存新增, 未接线 —— 生产行为仍为 v3, 翻转见批 2)
+# v4 纯函数区(plan 26-10-05-2200 B1 立, 批 2 起接线为生产行为; 契约单点在模块 docstring)
 #
 # v4 行型定约(读写两侧同源单点; 规格出处 = v4 计划 §01, 取代 v3 计划 §02.1「逐列冻结」
 # 条款; interval_s 小数秒 + dt_ms 毫秒口径沿用):
@@ -1310,22 +1136,21 @@ def _write_text_payload(path: str, payload: str) -> bool:
 # delta = 0; 块首为 n 游程时写侧把 n-only 前缀拆成 3 列 B 无基线块, 恢复传输的记录开新
 # 块立基线。解析守卫: 无基线块内出现 r/z 即坏行; 基线块内负 delta 必是损坏(绝对值形态
 # 做不到的免费校验 —— 计数器回落由写侧「重置强制关块重立基线」排除, 批 2 状态机)。
-# dt 链 / 撕裂尾 / 损坏占比口径原样沿用 v3(dt 列语义与 v3 完全一致, 辅助函数直接共用,
-# 批 2 符号代际改名时随行翻转; dt 链定约见上方「v3 纯函数区」头注释, 此处不复写)。
+# dt 链 / 撕裂尾 / 损坏占比口径原样沿用 v3(dt 列语义与 v3 完全一致, 辅助函数共用;
+# dt 链定约见文件头「纯函数区」头注释, 此处不复写)。
 # ======================================================================
 
 #: 头行 v4(每文件一次; v4 读侧对 v1/v2/v3 旧头行整文件不匹配, 不设双读 —— R2 换代语义)
 HEADER_LINE_V4 = "# auto-qb qb-traffic v4"
 
-#: v4 存储根目录名(相对 data_dir, v4 计划 §01 换代语义; 旧 qb-traffic-v3/ 原样留存不读。
-#: B1 仅立常量, 路径助手与写侧目录接线随批 2 翻转)
+#: v4 存储根目录名(相对 data_dir, v4 计划 §01 换代语义; 旧 qb-traffic-v3/ 原样留存不读)
 TRAFFIC_V4_DIR_NAME = "qb-traffic-v4"
 
 
 @dataclass(frozen=True)
 class V4Sample:
     """v4 数据记录(r 行): 速率对 + all-time totals 绝对快照对(内存恒绝对值, delta 只在
-    线格式 —— 序列化时减块基线); dt_ms 语义同 V3Sample(距上一记录链上终点的实测毫秒数,
+    线格式 —— 序列化时减块基线); dt_ms 语义同 v3(距上一记录链上终点的实测毫秒数,
     None = 标称 interval)"""
 
     dl_rate: int
@@ -1338,7 +1163,7 @@ class V4Sample:
 @dataclass(frozen=True)
 class V4ZeroRun:
     """v4 零速游程(z 行): 占 run_len 个采样槽, 速率恒 (0,0); totals 快照为绝对值(delta
-    相对块基线只在行文本); dt_ms 语义同 V3ZeroRun"""
+    相对块基线只在行文本); dt_ms 语义同 v3"""
 
     run_len: int
     dl_total: int
@@ -1348,7 +1173,7 @@ class V4ZeroRun:
 
 @dataclass(frozen=True)
 class V4NullRun:
-    """v4 null 游程(n 行): 占 run_len 个采样槽(断连/缺字段), 无观测; 行型与语义同 V3NullRun"""
+    """v4 null 游程(n 行): 占 run_len 个采样槽(断连/缺字段), 无观测; 行型与语义同 v3"""
 
     run_len: int
     dt_ms: Optional[int] = None
@@ -1370,7 +1195,7 @@ class V4Block:
 
 @dataclass(frozen=True)
 class V4ParsedDay:
-    """单天文件解析结果(parse_v4_day_text 返回; 形态同 V3ParsedDay, 块为 V4Block, 纯数据)"""
+    """单天文件解析结果(parse_v4_day_text 返回; 块为 V4Block, 纯数据)"""
 
     key: Optional[str]  # 头行 key 行的系列标识(无头行/坏头行/头行非 v4 时 None)
     blocks: tuple  # Tuple[V4Block, ...](文件序; 空块不保留)
@@ -1411,7 +1236,7 @@ def format_v4_r_row(rec: V4Sample, dl_base: Optional[int], up_base: Optional[int
         raise ValueError(f"负 delta(计数器回落须先关块重立基线): dl={dlt}, up={upt}")
     return (
         f"r,{_fmt_int(rec.dl_rate)},{_fmt_int(rec.up_rate)},{_fmt_int(dlt)},{_fmt_int(upt)}"
-        f"{_fmt_v3_dt_tail(rec.dt_ms)}"
+        f"{_fmt_dt_tail(rec.dt_ms)}"
     )
 
 
@@ -1424,12 +1249,12 @@ def format_v4_z_row(rec: V4ZeroRun, dl_base: Optional[int], up_base: Optional[in
     upt = int(rec.up_total) - int(up_base)
     if dlt < 0 or upt < 0:
         raise ValueError(f"负 delta(计数器回落须先关块重立基线): dl={dlt}, up={upt}")
-    return f"z,{_fmt_int(rec.run_len)},{_fmt_int(dlt)},{_fmt_int(upt)}{_fmt_v3_dt_tail(rec.dt_ms)}"
+    return f"z,{_fmt_int(rec.run_len)},{_fmt_int(dlt)},{_fmt_int(upt)}{_fmt_dt_tail(rec.dt_ms)}"
 
 
 def format_v4_n_row(rec: V4NullRun) -> str:
     """null 游程行文本(v4 §01, 行型与 v3 不变): n,<run_len>[,<dt_ms>]"""
-    return f"n,{_fmt_int(rec.run_len)}{_fmt_v3_dt_tail(rec.dt_ms)}"
+    return f"n,{_fmt_int(rec.run_len)}{_fmt_dt_tail(rec.dt_ms)}"
 
 
 def format_v4_day_text(key: str, blocks: tuple) -> str:
@@ -1458,10 +1283,10 @@ def parse_v4_day_text(text: str) -> V4ParsedDay:
     即坏行 —— 解析守卫), 5 列 = 基线块(dl_base/up_base = 块内首个带 totals 观测的快照)。
     r/z 行存相对块基线的 delta, 解析逐行复原绝对值(绝对值 = 基线 + 本行 delta;
     delta-vs-基线逐行独立 —— 坏行整行跳过、游标不推进, 后续行复原不受影响); 负 delta 必
-    是损坏(免费校验: 计数器回落在绝对值形态合法, delta 形态非法, _parse_v3_nn_int 即拒)。
+    是损坏(免费校验: 计数器回落在绝对值形态合法, delta 形态非法, _parse_nn_int 即拒)。
     n 行不变。其余纪律 —— key 行取首个(重复记坏)/空行注释行跳过/坏行列数 r ∈ {5,6},
     z ∈ {4,5}, n ∈ {2,3}/dt_ms 须正整数且 <= DT_MS_MAX/撕裂尾半行豁免损坏占比/损坏占比
-    分母 —— 原样沿用 v3 口径(对齐 parse_v3_day_text)。
+    分母 —— 原样沿用 v3 口径。
     """
     lines = text.splitlines()
     torn = bool(text) and not text.endswith("\n")
@@ -1511,11 +1336,11 @@ def parse_v4_day_text(text: str) -> V4ParsedDay:
                 continue
             if parts[0] == "B" and len(parts) in (3, 5):
                 # 二态块头: 3 列无基线 / 5 列基线; 先解析校验再切换块状态(非法 B 行整行计坏,
-                # 既有块不受影响); 基线列负值按坏行(_parse_v3_nn_int 拒负)
+                # 既有块不受影响); 基线列负值按坏行(_parse_nn_int 拒负)
                 b_start = int(parts[1])
-                b_interval = _parse_v3_interval_s(parts[2])
-                b_dl = _parse_v3_nn_int(parts[3]) if len(parts) == 5 else None
-                b_up = _parse_v3_nn_int(parts[4]) if len(parts) == 5 else None
+                b_interval = _parse_interval_s(parts[2])
+                b_dl = _parse_nn_int(parts[3]) if len(parts) == 5 else None
+                b_up = _parse_nn_int(parts[4]) if len(parts) == 5 else None
                 _close()
                 cur_start = b_start
                 cur_interval = b_interval
@@ -1529,31 +1354,31 @@ def parse_v4_day_text(text: str) -> V4ParsedDay:
             if parts[0] == "r" and len(parts) in (5, 6):
                 cur_records.append(
                     V4Sample(
-                        dl_rate=_parse_v3_nn_int(parts[1]),
-                        up_rate=_parse_v3_nn_int(parts[2]),
+                        dl_rate=_parse_nn_int(parts[1]),
+                        up_rate=_parse_nn_int(parts[2]),
                         # delta 以块基线逐行复原绝对值(基线 + 本行 delta, 逐行独立 —— 坏行不传播);
-                        # 负 delta 在 _parse_v3_nn_int 即抛(免费校验)
-                        dl_total=cur_dl_base + _parse_v3_nn_int(parts[3]),
-                        up_total=cur_up_base + _parse_v3_nn_int(parts[4]),
-                        dt_ms=_parse_v3_dt_ms(parts[5]) if len(parts) == 6 else None,
+                        # 负 delta 在 _parse_nn_int 即抛(免费校验)
+                        dl_total=cur_dl_base + _parse_nn_int(parts[3]),
+                        up_total=cur_up_base + _parse_nn_int(parts[4]),
+                        dt_ms=_parse_dt_ms(parts[5]) if len(parts) == 6 else None,
                     )
                 )
                 continue
             if parts[0] == "z" and len(parts) in (4, 5):
                 cur_records.append(
                     V4ZeroRun(
-                        run_len=_parse_v3_pos_int(parts[1]),
-                        dl_total=cur_dl_base + _parse_v3_nn_int(parts[2]),
-                        up_total=cur_up_base + _parse_v3_nn_int(parts[3]),
-                        dt_ms=_parse_v3_dt_ms(parts[4]) if len(parts) == 5 else None,
+                        run_len=_parse_pos_int(parts[1]),
+                        dl_total=cur_dl_base + _parse_nn_int(parts[2]),
+                        up_total=cur_up_base + _parse_nn_int(parts[3]),
+                        dt_ms=_parse_dt_ms(parts[4]) if len(parts) == 5 else None,
                     )
                 )
                 continue
             if parts[0] == "n" and len(parts) in (2, 3):
                 cur_records.append(
                     V4NullRun(
-                        run_len=_parse_v3_pos_int(parts[1]),
-                        dt_ms=_parse_v3_dt_ms(parts[2]) if len(parts) == 3 else None,
+                        run_len=_parse_pos_int(parts[1]),
+                        dt_ms=_parse_dt_ms(parts[2]) if len(parts) == 3 else None,
                     )
                 )
                 continue
@@ -1564,3 +1389,17 @@ def parse_v4_day_text(text: str) -> V4ParsedDay:
             torn_tail = True  # 尾部半行 = 正常崩溃残留(阈值豁免, 对齐 v3)
     _close()
     return V4ParsedDay(key=key, blocks=tuple(blocks), bad_lines=bad, data_lines=data, torn_tail=torn_tail)
+
+
+def v4_block_gap_continuous(prev_end_ts: float, next_block_start: float, interval_s: float) -> bool:
+    """跨块覆盖结算判定单点(v4 计划 §01「覆盖结算」定约; 纯函数)
+
+    gap = 新块首槽(B.start, 即新块 B 行起点) - 上一块末槽; gap <= interval_s + DRIFT_TOL
+    (250ms) -> 连续 —— 调用方按上一记录速率把 [上一块末槽, 新块首槽) 结算进覆盖信用;
+    否则真空(崩溃保护内核不动 —— 崩溃窗口/停机间隙不虚记覆盖)。interval_s 取新块的
+    B 行采样间隔(间隙由新块节拍产出; 改间隔场景按新档判定)。gap <= 0(病态重叠)按
+    连续判定, 结算区间为空调用方自然无操作。在线 _agg_feed 与离线 _agg_credit_day_file
+    两路必须复用本函数(镜像保证靠同源保持) —— 顺带消除现行块首清零信用在 00:00 边界
+    每天约 2s 的既有覆盖损失。
+    """
+    return (next_block_start - prev_end_ts) <= interval_s + DRIFT_TOL_MS / 1000.0

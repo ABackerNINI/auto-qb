@@ -11,10 +11,10 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
 - 未启用(qb_traffic 缺省 None / enabled=false / data_dir 为空防御)或无数据 -> 空态
   (points/totals 空数组 + meta), 与 /api/traffic/history 未启用空数组分支同构。
 - window 查询参数仅认 WINDOW_NAMES(13 档, D4), 其余 400(客户端错误不 500)。
-- 读盘 v3(plan 26-10-04-1957 R2 换代, 只读 qb-traffic-v3/ 新目录): raw 段窗(1m-24h)经
-  V3DayCache.read_window 按窗口日期集合只读涉及天文件(24h 窗至多 2 个), 块序列 ->
-  traffic_grid.v3_series_points 桶点 -> v3_grid_obs 栅格展开; agg 段窗(3d/7d/30d/6mo/1y/
-  all)经 V3DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按 kind 直映栅格桶
+- 读盘 v4(plan 26-10-04-1957 R2 换代立, 只读 qb-traffic-v4/ 新目录): raw 段窗(1m-24h)经
+  V4DayCache.read_window 按窗口日期集合只读涉及天文件(24h 窗至多 2 个), 块序列 ->
+  traffic_grid.v4_series_points 桶点 -> v4_grid_obs 栅格展开; agg 段窗(3d/7d/30d/6mo/1y/
+  all)经 V4DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按 kind 直映栅格桶
   (3d+ 组图由 M×31 -> M×1 次文件读取)。
 - 活尾合流(S6 验收追加, 2026-10-05): raw 段窗在磁盘块之外合流采样模块活尾快照
   (未落盘 buffer 记录 + 开放游程, handler 每轮整体替换引用)—— 图面尾部随采样节拍实时,
@@ -28,7 +28,7 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   400), 成员集 = 查询时刻 store.groups[指纹键]; 聚合口径在 core.traffic_grid 纯函数层
   (API 层现算不做聚合缓存); 「借 global 判 null」退役 —— 桶 null 由成员自身观测面裁决
   (任一成员 r/z 观测即程序存活真值); 指纹解析不到成员 / 组从未产过流量(全部成员无块无
-  agg 行, v3_earliest_row_ts 全 None)-> 空态。
+  agg 行, v4_earliest_row_ts 全 None)-> 空态。
 """
 import time
 from typing import Optional
@@ -39,9 +39,9 @@ from ...core import traffic_grid as tg
 from ...core.traffic_store import (
     GLOBAL_KEY,
     TORRENT_KEY_PREFIX,
-    V3DayCache,
-    v3_live_tail_slots,
-    v3_series_dir,
+    V4DayCache,
+    v4_live_tail_slots,
+    v4_series_dir,
 )
 from .common import group_key_param
 
@@ -62,17 +62,17 @@ class QbTrafficChartApi:
     """单域流量图端点的读侧装配(每域 router 一实例; 无锁 —— 只读 + 原子替换读语义)"""
     def __init__(self, manager) -> None:
         self._manager = manager
-        self._v3cache: Optional[V3DayCache] = None  # 惰性构造(路径纯计算; data_dir 为 R 级热重载字段)
+        self._v4cache: Optional[V4DayCache] = None  # 惰性构造(路径纯计算; data_dir 为 R 级热重载字段)
         self._last_good: dict = {}  # window 名 -> 最近一次成功现算的响应(竞态兜底, 非聚合缓存)
 
     # ---------- 基础件 ----------
 
     @property
-    def v3cache(self) -> V3DayCache:
-        """v3 读侧缓存(天文件按天解析缓存 + agg.dat 解析缓存; Web 线程并发安全)"""
-        if self._v3cache is None:
-            self._v3cache = V3DayCache(self._manager.config.data_dir)
-        return self._v3cache
+    def v4cache(self) -> V4DayCache:
+        """v4 读侧缓存(天文件按天解析缓存 + agg.dat 解析缓存; Web 线程并发安全)"""
+        if self._v4cache is None:
+            self._v4cache = V4DayCache(self._manager.config.data_dir)
+        return self._v4cache
 
     def _conf(self):
         return self._manager.config.qb_traffic
@@ -138,10 +138,10 @@ class QbTrafficChartApi:
             self._last_good[grid.name] = payload
         return payload
 
-    # ---------- 三端点(§08; v3 读侧 §05.2-§05.4) ----------
+    # ---------- 三端点(§08; v4 读侧 §05.2-§05.4) ----------
 
     def payload_global(self, window: str) -> dict:
-        """GET /api/traffic/qb/global: 全局系列(qb-traffic-v3/global/ 天文件 + agg.dat)"""
+        """GET /api/traffic/qb/global: 全局系列(qb-traffic-v4/global/ 天文件 + agg.dat)"""
         parse_window(window)
         if not self._feature_on():
             return self._empty(window)
@@ -151,7 +151,7 @@ class QbTrafficChartApi:
         """GET /api/traffic/qb/torrent/{hash}: 单种系列(torrents/<hash>/; 非活跃期无行 = 断线)"""
         parse_window(window)
         try:
-            v3_series_dir(self._manager.config.data_dir, TORRENT_KEY_PREFIX + hash_text)
+            v4_series_dir(self._manager.config.data_dir, TORRENT_KEY_PREFIX + hash_text)
         except ValueError:
             raise HTTPException(status_code=400, detail="种子哈希非法") from None
         if not self._feature_on():
@@ -182,12 +182,12 @@ class QbTrafficChartApi:
             for h in members:
                 tail_slots = ()
                 try:
-                    days = self.v3cache.read_window(TORRENT_KEY_PREFIX + h, grid.t0, grid.t1)
+                    days = self.v4cache.read_window(TORRENT_KEY_PREFIX + h, grid.t0, grid.t1)
                     blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
                     tail = self._live_tail(TORRENT_KEY_PREFIX + h)
-                    tail_slots = v3_live_tail_slots(tail) if tail is not None else ()
+                    tail_slots = v4_live_tail_slots(tail) if tail is not None else ()
                     member_obs.append(
-                        tg.v3_grid_obs(tg.v3_series_points(blocks, grid.t0, grid.t1, tail_slots=tail_slots), grid)
+                        tg.v4_grid_obs(tg.v4_series_points(blocks, grid.t0, grid.t1, tail_slots=tail_slots), grid)
                     )
                 except OSError:
                     degraded = True  # 读取竞态: 该成员按空观测面计, degraded 走 last-good 兜底
@@ -197,7 +197,7 @@ class QbTrafficChartApi:
                 member_blocks.append(blocks)
                 member_has_tail.append(bool(tail_slots))
             if all(
-                tg.v3_earliest_row_ts(blocks, None) is None and not has_tail
+                tg.v4_earliest_row_ts(blocks, None) is None and not has_tail
                 for blocks, has_tail in zip(member_blocks, member_has_tail)
             ):
                 # 组从未产过流量(窗内无任何成员块且无成员活尾)-> 空态(§08); 降级时如实标 stale
@@ -206,7 +206,7 @@ class QbTrafficChartApi:
             aggs = []
             for h in members:
                 try:
-                    aggs.append(self.v3cache.read_agg(TORRENT_KEY_PREFIX + h))
+                    aggs.append(self.v4cache.read_agg(TORRENT_KEY_PREFIX + h))
                 except OSError:
                     degraded = True
                     aggs.append(None)
@@ -225,7 +225,7 @@ class QbTrafficChartApi:
                 grid = tg.build_month_grid(epochs, time.time()) if epochs else self._grid(window)
             else:
                 grid = self._grid(window)
-            member_obs = [tg.v3_agg_obs(_rows(a), grid) for a in aggs]
+            member_obs = [tg.v4_agg_obs(_rows(a), grid) for a in aggs]
         mask = tg.group_null_mask(member_obs, grid)
         points = tg.group_rate_points(member_obs, grid, mask)
         totals = tg.group_totals_points(member_obs, grid, mask)
@@ -241,22 +241,22 @@ class QbTrafficChartApi:
         if seg == "raw":
             grid = self._grid(window)
             try:
-                days = self.v3cache.read_window(key, grid.t0, grid.t1)
+                days = self.v4cache.read_window(key, grid.t0, grid.t1)
                 blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
                 tail = self._live_tail(key)
-                tail_slots = v3_live_tail_slots(tail) if tail is not None else ()
-                obs = tg.v3_grid_obs(tg.v3_series_points(blocks, grid.t0, grid.t1, tail_slots=tail_slots), grid)
+                tail_slots = v4_live_tail_slots(tail) if tail is not None else ()
+                obs = tg.v4_grid_obs(tg.v4_series_points(blocks, grid.t0, grid.t1, tail_slots=tail_slots), grid)
                 degraded = False
             except OSError:
                 obs, degraded = {}, True
             return self._respond(grid, tg.rate_points(obs, grid), tg.series_totals_points(obs, grid), degraded=degraded)
         grid = None if seg == "month" else self._grid(window)
         try:
-            agg = self.v3cache.read_agg(key)
+            agg = self.v4cache.read_agg(key)
             rows = agg.hours if seg == "hour" else agg.days if seg == "day" else agg.months
             if seg == "month":
                 grid = tg.build_month_grid((r.epoch for r in rows), time.time()) if rows else self._grid(window)
-            obs = tg.v3_agg_obs(rows, grid)
+            obs = tg.v4_agg_obs(rows, grid)
             degraded = False
         except OSError:
             obs, degraded = {}, True
