@@ -24,9 +24,12 @@
  * clearInterval —— 只挂打开期间, 不后台常驻。
  * meta.stale=true 的响应照常渲染(读竞态兜底位, §08, 前端不特殊处理)。
  *
- * 静默续拉(2026-10-04 修「每隔几秒闪一次」): 续拉对用户不可见 —— 模板 loading 空态只在
- * 无数据时接管正文(drawer.html), 数据落袋走 _qbChartBuild 的 setData 原地快路(同一宿主上
- * 图还活着就不销毁重建; 完整重建仅首图/宿主被拆后/换肤三次)。
+ * 静默续拉(2026-10-04 修「每隔几秒闪一次」; 2026-10-05 补齐空态/错误态): 续拉对用户不可见 ——
+ * 模板 loading 空态只在「本作用域尚无任何落袋结果」时接管正文(drawer.html qbCurPending =
+ * loading + 无数据 + 无错误), 数据落袋走 _qbChartBuild 的 setData 原地快路(同一宿主上图还活着
+ * 就不销毁重建; 完整重建仅首图/宿主被拆后/换肤三次)。2026-10-04 那版只门了「有图」一态
+ * (!qbCurPoints.length), 空数据集的空态文案与错误文案仍会被每个轮询周期的 loading 顶掉一帧 ——
+ * 判据因此改为按「有无落袋结果」而不是按「有无点」。
  *
  * 容器尺寸自适应(便签 26-10-04-0134 + 2026-10-04 高度跟随): 建图尺寸不是一次取定 —— 建图后对
  * 宿主挂 ResizeObserver, 宽/高任一变化即 u.setSize 重画(高度取自宿主 clientHeight, 随抽屉拖拽
@@ -194,6 +197,15 @@ window.AQB_QB_TRAFFIC = {
       const s = this.qbCurScope;
       return s ? this[_QB_SCOPES[s].error] : "";
     },
+    /* 首载空态判据(2026-10-05 修「空态每隔一个轮询周期闪一次」): loading 空态只在**本作用域
+     * 尚无任何落袋结果**时接管正文。判据三合一 = 在途 loading + 无数据 + 无错误 ——
+     * ① 空态响应落袋后 data 是非 null 对象(空 points 也是对象, 只有出错才置 null), 续拉不再接管;
+     * ② 错误态落袋后 error 非空, 同样不接管(错误文案由下一次成功落袋清除, 见 _qbLoad);
+     * 已有结果时续拉一律不动正文 —— 图/空态文案/错误文案都是「既有状态」(同 drawer-switch-flicker
+     * 的「加载态立即点亮 = 制造新闪烁」)。 */
+    qbCurPending() {
+      return !!(this.qbCurLoading && !this.qbCurData && !this.qbCurError);
+    },
     qbCurWindow() {
       const s = this.qbCurScope;
       return s ? this[_QB_SCOPES[s].window] : "24h";
@@ -291,12 +303,17 @@ window.AQB_QB_TRAFFIC = {
       if (!this.qbTrafficOn) return;  // P5 验收: enabled=false 不发请求(入口 v-if 已门, 这里兜底)
       const ctx = def.ctx ? def.ctx(this) : "";
       this[def.loading] = true;
-      this[def.error] = "";
+      // error **不在此清空**(2026-10-05 修「空态/错误态每隔一个轮询周期闪一次」): 请求前清错误 =
+      // 续拉把错误文案换成一帧 loading/空态再换回, 与「清空旧数据把等待渲染成空态」同型; 错误态
+      // 改由**下一次成功落袋**清除(见下), 期间的旧文案由 FX-29 遮罩在换目标时兜住(160ms 延迟点亮)。
       let stale = true;  // 保守初值: 只有确认未过期才落袋/清 loading(在途竞态纪律, 同 _drawerStale)
       try {
         const data = await this.api(def.url(ctx, this[def.window]));
         stale = def.stale(this, ctx);
-        if (!stale) this[def.data] = data;
+        if (!stale) {
+          this[def.data] = data;
+          this[def.error] = "";  // 成功落袋才清错误态(见上: 在途期不动既有状态)
+        }
       } catch (e) {
         stale = def.stale(this, ctx);
         if (!stale) {

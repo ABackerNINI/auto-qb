@@ -83,11 +83,14 @@
               </div>
               <span class="drawer-toolbar-hint">qB 口径 · 程序运行期间(缺口 = 无采样, 停机/断连)</span>
             </div>
-            <!-- 静默续拉(修「每隔几秒闪一次」): 已有数据时 loading 不接管正文 —— 整块 v-if 换成
-                 加载空态 = 每个轮询周期图 DOM 被拆装一次(闪的根源, 同 drawer-switch-flicker 的
-                 「快中间态本身就是闪」); loading 只在首载/无数据时显示, 在途互斥语义仍在
-                 qbCurLoading 本体上(轮询 tick 跳过判据不变) -->
-            <div v-if="qbCurLoading && !qbCurPoints.length" class="empty">
+            <!-- 静默续拉(2026-10-04 修「每隔几秒闪一次」+ 2026-10-05 修「空态也闪」): 已有结果时
+                 loading 不接管正文 —— 整块 v-if 换成加载空态 = 每个轮询周期正文 DOM 被拆装一次
+                 (闪的根源, 同 drawer-switch-flicker 的「快中间态本身就是闪」)。判据 qbCurPending
+                 三合一(loading + 无数据 + 无错误): 空态响应/错误态落袋后续拉一律不接管 —— 2026-10-04
+                 只门了「有图」一态(`!qbCurPoints.length`), 空数据集的空态文案仍在每个轮询周期被
+                 「正在加载流量数据…」顶掉一帧。在途互斥语义仍在 qbCurLoading 本体上(轮询 tick 跳过
+                 判据不变) -->
+            <div v-if="qbCurPending" class="empty">
               <svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg>
               <span>正在加载流量数据…</span>
             </div>
