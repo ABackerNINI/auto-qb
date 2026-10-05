@@ -245,6 +245,15 @@ GROUPS: Tuple[Group, ...] = (
         ),
         icon="i-settings",
     ),
+    # 站点排第二(2026-10-06 用户要求): 紧跟「常规」, 日常最常改的分区前置;
+    # 顺序即设置首页卡片顺序(hubCards 直接按 schema.groups 渲染, 见 config_hub.js)
+    Group(
+        "trackers",
+        "站点",
+        "站点匹配、标签、限速与 HR",
+        fields=(Field("trackers", "站点列表", "trackers", default={}, help="按 tracker 域名匹配种子; 未配置的站点不做任何管理"), ),
+        icon="i-globe",
+    ),
     Group(
         "maintenance",
         "自动化",
@@ -384,40 +393,6 @@ GROUPS: Tuple[Group, ...] = (
         icon="i-cards",
     ),
     Group(
-        "hr_check",
-        "HR 在线核实",
-        "部分种子 HR 站点的在线核实(取 HR 统计页 + 对账建索引)",
-        fields=(
-            Field(
-                "hr_check",
-                "在线核实",
-                "object",
-                default=None,
-                optional=True,
-                open=True,
-                help="部分站点只有一部分种子受 HR 约束, 且站点不提供可机读的逐种标记 ⇒ 逐种子在线核实; "
-                "未接入的站点行为完全不变",
-                fields=HR_CHECK_FIELDS,
-            ),
-        ),
-        icon="i-clock",
-    ),
-    Group(
-        "speed",
-        "限速曲线",
-        "按累计流量自动设置 qB 全局限速",
-        fields=(
-            Field(
-                "global_speed_limit_curve",
-                "全局限速曲线",
-                "curve",
-                default=None,
-                help="根据 Traffic Monitor 统计的累计流量(当天/当月/最近 N 天)自动调 qB 全局限速; 某档限速填 0 = 该档不限速; enabled: false 整体停用(缺省启用)"
-            ),
-        ),
-        icon="i-gauge",
-    ),
-    Group(
         "traffic",
         "流量图",
         "qB 口径的上下行流量历史曲线(方案C 采样管线)",
@@ -465,13 +440,6 @@ GROUPS: Tuple[Group, ...] = (
         icon="i-monitor",
     ),
     Group(
-        "trackers",
-        "站点",
-        "站点匹配、标签、限速与 HR",
-        fields=(Field("trackers", "站点列表", "trackers", default={}, help="按 tracker 域名匹配种子; 未配置的站点不做任何管理"), ),
-        icon="i-globe",
-    ),
-    Group(
         "rules",
         "规则集",
         "条件 + 动作的自动化规则",
@@ -480,5 +448,40 @@ GROUPS: Tuple[Group, ...] = (
             Field("rules", "规则集", "rules", default={}, ui_only=True, help="全部规则集(配置文件里以 _rules 结尾的段)"),
         ),
         icon="i-bolt",
+    ),
+    # 限速 / HR 在线核实排末尾(2026-10-06 用户要求): 低频 / 进阶配置后置
+    Group(
+        "speed",
+        "限速曲线",
+        "按累计流量自动设置 qB 全局限速",
+        fields=(
+            Field(
+                "global_speed_limit_curve",
+                "全局限速曲线",
+                "curve",
+                default=None,
+                help="根据 Traffic Monitor 统计的累计流量(当天/当月/最近 N 天)自动调 qB 全局限速; 某档限速填 0 = 该档不限速; enabled: false 整体停用(缺省启用)"
+            ),
+        ),
+        icon="i-gauge",
+    ),
+    Group(
+        "hr_check",
+        "HR 在线核实",
+        "部分种子 HR 站点的在线核实(取 HR 统计页 + 对账建索引)",
+        fields=(
+            Field(
+                "hr_check",
+                "在线核实",
+                "object",
+                default=None,
+                optional=True,
+                open=True,
+                help="部分站点只有一部分种子受 HR 约束, 且站点不提供可机读的逐种标记 ⇒ 逐种子在线核实; "
+                "未接入的站点行为完全不变",
+                fields=HR_CHECK_FIELDS,
+            ),
+        ),
+        icon="i-clock",
     ),
 )

@@ -5308,8 +5308,9 @@ def test_config_schema_endpoint(web_env):
     data = client.get("/api/config/schema", headers=auth).json()
     # 2026-09-26: 日志/WebUI/通知 三个短段并入 basic(设置页不再单列三张卡)
     # 26-10-03: 流量图分组(plan 26-10-03-0946 §06)插在 speed 与 trackers 之间
+    # 26-10-06 用户要求重排: 站点提到第二(紧跟常规), 限速 / HR 在线核实 后置到末尾
     assert [g["key"]
-            for g in data["groups"]] == ["basic", "maintenance", "hr_check", "speed", "traffic", "trackers", "rules"]
+            for g in data["groups"]] == ["basic", "trackers", "maintenance", "traffic", "rules", "speed", "hr_check"]
     assert [f["key"] for f in data["groups"][0]["fields"]][-3:] == ["log", "web", "notify"]
     # 2026-09-28: 三段在「常规」页必须各自成块展示分类名(「常规/日志」而非并入「常规/常规」) ——
     # 成块的前提是不声明 open(open 段被 cfgFlatten 平铺成无标题同级字段, 正是本次回归的根因)
