@@ -38,6 +38,13 @@ EMPTY_HINT = {
     "Open": "(暂无 — 撞见计划外问题时用 new_issue.py 入池)",
 }
 
+# 索引行里摘要的截断长度 —— 与 `gen_tasks_index.SUMMARY_MAX` 同款 (同一病: 摘要全文只增不减,
+# 整条打进索引后索引大小由「摘要写得多长」决定而不是由「有几个 issue」决定)。
+# 2026-10-05 实测: 133 条 × 平均 86 字符摘要 ⇒ 索引 26,260 撞 `index-auto` cap (25,200),
+# 而条目数本身远没到上限; 摘要截断后 ≈20,500, 摘要全文点开报告就有, 无信息损失。
+# 该修法即切片 26-10-01-2125-memory-bank-dir-refactor 记的「issues 索引补 SUMMARY_MAX 截断」。
+SUMMARY_MAX = 40
+
 
 def header(issues_dir: Path, root: Path) -> str:
     skill_rel = rel_skill(issues_dir)
@@ -52,6 +59,8 @@ def header(issues_dir: Path, root: Path) -> str:
 > 每行 = **类型 · 简述 · 报告链接**(分区即状态); 状态改在报告 HTML 的封面徽标与
 > `<meta name="issue-status">`(两处一起改)。状态取值: {" / ".join(f"`{s}`" for s in STATUSES)}。
 > 文件名 = `<YY-MM-DD-HHMM>-<type>-<slug>.html`, type 取值: {" / ".join(TYPES)}。
+> 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在报告里): 这样索引大小由**条数**决定, 不随摘要写得多长而膨胀
+> —— 否则迟早撞 `index-auto` cap, 而靠"外迁老条目"化解会打坏外部引用。
 > **入池规则**: 计划外问题一律不改码, 只入池 —— 见 create-issue skill {skill_link}
 > (该不该现在修, 见 scope-guard skill)。
 """
@@ -118,7 +127,10 @@ def render(items: list[dict], issues_dir: Path, root: Path) -> str:
         for item in sorted(group, key=lambda i: i["stamp"], reverse=True):
             line = f"- [{item['type']}] [{item['title']}]({item['file']})"
             if item["summary"]:
-                line += f" — {item['summary']}"
+                summary = item["summary"]
+                if len(summary) > SUMMARY_MAX:
+                    summary = summary[:SUMMARY_MAX].rstrip() + "…"
+                line += f" — {summary}"
             out.append(line)
         out.append("")
     return "\n".join(out)

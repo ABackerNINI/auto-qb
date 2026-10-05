@@ -1,7 +1,7 @@
 # 26-09-30-2112-memory-bank-cap-debt — cap 守卫改债务制 (WARN 不拦提交 + 独立清理会话)
 
 > 摘要: 用户命题: cap 守卫在任务后期触发, 当场改字数要带着满载会话历史反复返工、token 成本巨大 —— 要求改为「只提示 WARNING、不当场修改, 知识库清理单独开会话」。**守卫改造已实施完成 (2026-09-30 22:xx)**: 除 AGENTS.md 外的尺寸全部降级为**债务** (提交不拦、提交时派生输出并转告用户、清理另开会话), AGENTS.md 保持**硬规定** (超 8,000 且本次改动命中仍 STOP, 不入债务体系、不套 50%); 严重度单点在 skill 的 `HARD_CAP_ROLES`, `doc.caps` 为派生可见单一入口。**实测 cap 债务 0 项** (`doc.caps -- --strict` 绿), 全量 1874 passed + 3 skipped / 91%。剩余 = **AGENTS.md 削薄 (独立清理项, 余量 25)**, 待用户另开清理会话。
-> 最后活动: 2026-09-30 22:35
+> 最后活动: 2026-10-05 18:40
 
 ## 状态
 
@@ -31,3 +31,11 @@
 - 排除项: 8 片有入链(删则 `doc.links` 红 —— docs/hr-online-verify-docs.md · plans/26-09-26-0529 · baselines/26-09-28-0401 · progress/implemented-webui-history.md · tasks 档案 ×2 · issues/26-09-29-2142)+ 3 片仍有开放待办(docker-deploy W5 真机验收 / settings-back-nav 待拍板 / timekit 用户令暂不实施)+ 真机走查待用户的 3 片。
 - 删前逐个 grep 入链; 删后 `kb.check`(主键纪律 357 文档 / 211 专题)与 `doc.links` 均绿。
 - **结构性提示**: 104 片全在 9 天内产出 ⇒ 实测 ~11 片/日(多 clone 并行), 而上限按 5 片/日校准 ⇒ 会反复触顶; 长期处置走治理议题, 本会话未自行调数。
+
+## 追加(2026-10-05): 三项 cap 债务一次清理 —— 切片 128 → 67 · issues 索引 26,260 → 20,620 · implemented-webui 21,172 → 9,407
+
+- 用户开清理会话报三项债务: 切片数 128 > 70、`issues/_index.md` 超 cap、`progress/implemented-webui.md` 超 cap。三项一次收口, `commands run doc.caps` 债务清零。
+- **① 切片 128 → 67**: 按 [cap-counting 坑档](../pitfalls/kb/cap-counting.md)「切片计数触顶的合法出口」删 61 片 —— 判据 = ①无入链(逐片 grep 精确文件名, 删后 `doc.links` 绿) 且 ②非「待拍板 / 待指派 / 待决策 / 待商榷」的开放决策片。未抬 `SLICE_COUNT_LIMIT`、未删活跃片。保留 = 有入链 51 + 开放决策 12 + 显式保留 4(`tracker-url-source-sanitize` 计划未开工·决策点待批 / `memory-bank-dir-refactor` 待拍板 / `ops-recheck-false-success` 等指派 / `qb-traffic-decimal-interval` 最新片) + `_about.md`。本轮 14 天规则**零命中**(最老片 26-09-23, 仅 12 天)。
+- **② `issues/_index.md` 26,260 → 20,620**: 走**渲染口径**而非外迁条目 —— 给 `gen_issues_index.py` 补 `SUMMARY_MAX = 40`(摘要截断, 与 `gen_tasks_index.SUMMARY_MAX` 同款), 正是切片 [26-10-01-2125-memory-bank-dir-refactor](26-10-01-2125-memory-bank-dir-refactor.md) 记的待拍板项。判据: 133 条**无摘要**也才 14,790 字符 < cap ⇒ 是摘要(11,470 字符)把索引顶爆的, 条目数本身没撑爆 cap ⇒ 按坑档「先查渲染口径」不搬条目(外迁会打坏外部引用)。未达 50% 线(12,600)属该文件性质(index-auto 无可行收缩路径, 见 `CAP_POLICY` 注释), 现余量 4,580。
+- **③ `progress/implemented-webui.md` 21,172 → 9,407**: 按 `log` 轮转口径把最老 13 条(2026-10-02~10-04)原文外迁 → `implemented-webui-history.md`(44,494/48,000), 原位留一行指针; 顺带把历史文件**混合行尾归一 LF**(`.gitattributes` = `eol=lf`, 消掉 git 的「CRLF will be replaced」警告)。
+- 收口: `doc.caps` 债务 0 项 / `kb.check` / `doc.links` / `test.full` 全绿。**未提交**(等用户显式「提交」指令)。
