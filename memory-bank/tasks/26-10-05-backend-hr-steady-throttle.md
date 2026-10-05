@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-05
-**Updated:** 2026-10-05 09:03
+**Updated:** 2026-10-05 09:11
 **Topics:** backend-hr-steady-throttle
 **Summary:** HR 在线核实稳态降频六阶段落地: 新站点键 idle_refresh_interval(默认 24H, 默认启用, 等效关闭 = 与 refresh_interval 相等) → 引擎拉取间隔闸按「对账对象集是否为空」动态取值 + 稳态旗标仅翻转落盘 + 锚点三态(None = 采集失败不降频) → 展示单点 site_conf_interval 跟随 + kv 行「(稳态降频)」注记(拍板 D1) → 守阵 6 条 → docs 机制段回写 → 全量基线与收尾。C3 淘汰预告未实施(拍板 D2: 不同批); 真机走查待做。
 **Refs:** memory-bank/plans/26-10-05-0555-plan-hr-steady-throttle.html,memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html
@@ -55,4 +55,4 @@
 - **2026-10-05 05:55–08:32** 实施六阶段, 每阶段独立 commit 全绿(各步 test.quick 依次 2572 / 2572 / 2575 / 2581 passed + 4 skipped; S4 结论「未发现前序阶段实现缺陷」): `66696eac`(S1 配置键) → `3e4745c2`(S2 引擎闸; 既有用例计划内最小调整 12 处) → `e087aa57`(S3 展示 + D1 注记) → `22625b49`(S4 守阵 6 条) → `9f096c09`(S5 docs 机制段 + service docstring 对齐)。
 - **2026-10-05 09:03** S6 收尾回写完成: ①全量基线已记(数字单点见 `testing/baselines/` 最新切片, `commands run kb.baseline`; 相对上基线 26-10-05-0630 的 2567+4 净增 14 用例 = S1 5 + S3 3 + S4 6, 全计划内); ②计划 meta doc-status Open → Done + §05 D1/D2「结果」列 + §07 验收判据逐条标注 + footer 变更记录追加实施完成轮; ③docs 漂移补齐两处 —— configuration.md 站点接入键清单(3 键→4 键)与配置样例补 `idle_refresh_interval`、hr-online-verify-docs.md 主线时间总表补 26-10-03-1505 报告与 26-10-05-0555 计划两行; ④本档案立档(Refs 双向: 计划 + 报告); ⑤kb.index 重建索引。
 - **2026-10-05 09:02** 真机 dry-run 冒烟(`commands run dev.run -- config.yml --dry-run`, 只读): 配置加载 / schema 迁移 v3→v4(仅内存不落盘) / 全局任务创建均正常, 走到连接 qB(127.0.0.1:16585)一步因 qB 未运行失败(WinError 10061 连接被拒) —— 环境性失败, 按口径记录不重试不修复; 配置面与 HR 模块装载路径无异常。
-- **遗留**: ①**真机走查未做**(两站稳态期「下次核对清单」显示 24H / 手动加种子 ≤60s 回常态开波 / 稳态期请求量 14→6 每天核对 —— 计划 §07 标「待真机验收」); ②**C3 淘汰预告未实施**(拍板 D2 不同批, 首个真实触发 10-28 后); ③前序阶段(S1–S5 会话)汇报的**三个只报告未修项**(未入池未落盘, 明细见对应阶段会话汇报; 需跟踪应走 create-issue 入池)。
+- **遗留**: ①**真机走查未做**(两站稳态期「下次核对清单」显示 24H / 手动加种子 ≤60s 回常态开波 / 稳态期请求量 14→6 每天核对 —— 计划 §07 标「待真机验收」); ②**C3 淘汰预告未实施**(拍板 D2 不同批, 首个真实触发 10-28 后); ③**三个只报告未修项**(未入池, 是否入池待所有者拍板): (a) tests/test_config_schema.py 头部 docstring「测试计划」清单与实际函数漂移, 列出的 test_hr_check_field_levels_cover_validation_keys 等用例已不存在(S1 发现); (b) pytest.ini 的 --cov-fail-under=98 使 test.one 部分文件运行在用例全绿时仍以覆盖率 FAIL 退出, 单文件排障须手工带 --no-cov, 既有行为(S1 发现); (c) SiteHrCheckConfig.fetchable(config/models.py:159)src 全仓零消费方 —— 「全站型(listing=none)不取数」未被取数侧强制, 当前无 preset 定义 listing="none", 属潜在缺口, 建议入池 issue(P2 发现)。
