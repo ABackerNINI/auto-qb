@@ -24,6 +24,8 @@
 - test_v3_grid_obs_expansion: (S3b)栅格展开 —— 对齐记录 1:1 落桶 / D1 宽桶中间栅格桶同值非 null(totals 首桶落增量) / 跨界记录按重叠秒加权 / null 点不参与(空桶承载) / 窗外桶不消费
 - test_v3_agg_obs_direct_mapping: (S3b)agg 行直映栅格桶(hour/day/month 同构) —— 行外窗不消费, avg/totals -> 桶值
 - test_v3_earliest_row_ts_blocks_and_agg: (S3b)earliest 计入 day/month 行 —— 块首槽(B.start 含块首 z 游程)+ agg 三层全算; 双空 = None
+- test_v3_series_points_live_tail_merge_dedup: (S6 验收追加)活尾合流 —— 磁盘部分块+活尾 == 整块桶点(无真空 null 点);
+  滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏); 无块纯活尾(z 游程 0 线)照常出点
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V3Block
 (天文件文本路径经 format_v3_day_text -> parse_v3_day_text 打通解析接缝)。
@@ -51,6 +53,8 @@ from auto_qb.core.traffic_grid import (
 )
 from auto_qb.core.traffic_store import (
     AggRow,
+    LiveTail,
+    LiveTailRun,
     V3Block,
     V3NullRun,
     V3ParsedAgg,
@@ -58,6 +62,8 @@ from auto_qb.core.traffic_store import (
     V3ZeroRun,
     format_v3_day_text,
     parse_v3_day_text,
+    v3_block_slots,
+    v3_live_tail_slots,
     v3_date_str_epoch,
     v3_month_epoch,
     v3_next_month_epoch,
@@ -625,3 +631,53 @@ def test_v3_earliest_row_ts_blocks_and_agg():
         (V3ZeroRun(2, 1, 1)),
     ), ), None) == 2000  # 块首 z 游程 = B.start
     assert v3_earliest_row_ts((), None) is None  # 双空 = 组从未产过流量
+
+
+# ---------- v3 活尾合流(S6 验收追加, 2026-10-05) ----------
+
+
+def test_v3_series_points_live_tail_merge_dedup():
+    """(S6)活尾合流: 磁盘部分块 + 活尾槽 == 整块桶点(边界无真空 null 点); 滞后快照重列
+    已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏); 无块纯活尾(z 游程)照常出 0 线"""
+    interval = 30
+    start = 1_800_000_000
+    recs = (
+        V3Sample(100, 50, 1000, 500),
+        V3Sample(200, 70, 2000, 800),
+        V3ZeroRun(2, 2000, 800),
+        V3Sample(150, 60, 2600, 1100),
+        V3Sample(90, 40, 3000, 1300),
+    )
+    full = v3_series_points((V3Block(start, interval, recs), ), start - 10, start + 400)
+    full_slots = v3_block_slots(V3Block(start, interval, recs))
+    # 中途 flush: 磁盘前 2 条 + 活尾后 3 条(写侧游标 = 整块末槽)
+    disk = (V3Block(start, interval, recs[:2]), )
+    tail = LiveTail(
+        block_open=True,
+        head_pending=False,
+        start_epoch=start,
+        interval_s=interval,
+        projected_ts=full_slots[-1].ts,
+        records=recs[2:],
+        open_run=None,
+    )
+    merged = v3_series_points(disk, start - 10, start + 400, tail_slots=v3_live_tail_slots(tail))
+    assert merged == full  # 合流 == 整块(边界一次标称间隔不被误判真空, 无 null 点)
+    # 滞后快照(重列已落盘的 recs[1]): 去重后仍 == 整块桶点
+    stale = LiveTail(
+        block_open=True,
+        head_pending=False,
+        start_epoch=start,
+        interval_s=interval,
+        projected_ts=full_slots[-1].ts,
+        records=recs[1:],
+        open_run=None,
+    )
+    merged_stale = v3_series_points(disk, start - 10, start + 400, tail_slots=v3_live_tail_slots(stale))
+    assert merged_stale == full
+    # 无块纯活尾(进程首日全空闲, 天文件未产生): z 游程槽出 0 线桶点
+    run = LiveTailRun(kind="z", start=start + 60.0, last_seen=start + 120.0, dl_total=9, up_total=8, samples=4)
+    tail_only = LiveTail(False, False, None, interval, 0.0, (), run)
+    pts = v3_series_points((), start, start + 200, tail_slots=v3_live_tail_slots(tail_only))
+    assert pts and all(p.dl_rate == 0 and p.up_rate == 0 and p.dl_total == 9 for p in pts)
+    assert not any(p.dl_rate is None for p in pts)

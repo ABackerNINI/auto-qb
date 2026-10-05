@@ -57,6 +57,10 @@
 - test_api_traffic_qb_global_24h_reads_only_involved_day_files: (v3 S3b 端点面回归)24h 窗只开窗口涉及日期天文件(恰 2 个), 窗外日期/agg.dat 零 open
 - test_api_traffic_qb_group_endpoint: (v3)分组读侧现算(Σ 成员均值/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
 - test_api_traffic_qb_group_30d_reads_member_agg_only: (v3 S3b 验收)3d+ 窗组图只读成员 agg 文件(2 成员恰 2 open = M×1, 天文件零读取)
+- test_api_traffic_qb_global_live_tail_realtime: (S6 验收追加)raw 段窗活尾合流 —— 纯活尾(零盘)出实时桶点;
+  磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏), 快照清空后磁盘响应与合流响应逐点一致
+- test_api_traffic_qb_group_live_tail_member_only: (S6)组端点空态判据计入活尾 —— 成员仅活尾(零盘)组图非空;
+  单种端点同享活尾
 - test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
 - test_api_traffic_qb_group_member_only_zruns_not_empty: (v3)组空态判据观测面平移 —— 成员只剩 z 块不算「从未产过流量」, 出 0 线而非空态
 - test_config_schema_endpoint: 图形化配置元数据端点(分组/插件/热重载级别)
@@ -12238,3 +12242,94 @@ def test_api_fs_error_semantics(web_env, tmp_path, monkeypatch):
     encoded = encode_group_key((norm(root), ("a.mkv", )))
     resp = client.post("/api/open-path", json={"kind": "group", "key": encoded}, headers=auth)
     assert resp.status_code == 501 and "复制路径" in resp.json()["detail"]
+
+
+# ---------- v3 活尾合流(S6 验收追加, 2026-10-05) ----------
+
+
+def _attach_live_tail_host(mgr, tails):
+    """manager 替身挂模块宿主最小桩: host.get("qb_traffic") -> 带 live_tail 的模块桩
+    (真 manager 经 QbManager.host 持 ModuleHost, 端点 getattr 防御取用)"""
+    from types import SimpleNamespace
+
+    mgr.host = SimpleNamespace(get=lambda name: SimpleNamespace(live_tail=tails))
+
+
+def test_api_traffic_qb_global_live_tail_realtime(web_env):
+    """(S6)raw 段窗活尾合流: 纯活尾(零盘)出实时桶点(不等 flush_interval 落盘);
+    磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏),
+    快照清空后磁盘响应与合流响应逐点一致 —— 图面全程无跳变"""
+    from auto_qb.core.traffic_store import LiveTail, V3Sample, v3_epoch_date_str
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    store = _qb_v3(mgr)
+    now = int(time.time())
+    base = ((now - 240) // 30) * 30  # 5m 窗内
+    b0, b1, b2 = (base + i * 30 for i in range(3))
+    recs = (V3Sample(100, 50, 1000, 500), V3Sample(200, 70, 2000, 800))
+    tail_full = LiveTail(
+        block_open=True,
+        head_pending=True,
+        start_epoch=b0 + 30,
+        interval_s=30,
+        projected_ts=float(b1 + 30),
+        records=recs,
+        open_run=None,
+    )
+    # 纯活尾(块全量未落盘, 零天文件): 图面实时出点
+    _attach_live_tail_host(mgr, {"global": tail_full})
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
+
+    def pt(seg, t):
+        return next((p for p in body[seg] if p and p["t"] == t), None)
+
+    assert body["meta"]["stale"] is False
+    assert pt("points", b0) == {"t": b0, "dl": 100, "up": 50}
+    assert pt("points", b1) == {"t": b1, "dl": 200, "up": 70}
+    assert pt("points", b2) is None  # 活尾之外无观测
+    assert pt("totals", b1) == {"t": b1, "dl": 1000, "up": 300}
+    live_body = body
+    # flush 落盘(同两记录) + 滞后快照仍重列全部记录: 按 ts 去重, 响应逐点不变
+    store.append_records("global", v3_epoch_date_str(b0 + 30), (b0 + 30, 30), recs)
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
+    assert body == live_body
+    # 快照清空(flush 后的下一轮发布): 纯磁盘读路径, 响应仍逐点一致
+    _attach_live_tail_host(mgr, {})
+    body = client.get("/api/traffic/qb/global", headers=auth, params={"window": "5m"}).json()
+    assert body == live_body
+
+
+def test_api_traffic_qb_group_live_tail_member_only(web_env):
+    """(S6)组端点空态判据计入活尾: 成员仅活尾(零盘)组图非空(不再误判「从未产过流量」);
+    单种端点同享活尾"""
+    from auto_qb.core.traffic_store import LiveTail, V3Sample
+
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    _enable_qb_traffic(mgr)
+    now = int(time.time())
+    base = ((now - 240) // 30) * 30  # 5m 窗内
+    b0, b1 = (base + i * 30 for i in range(2))
+    tail = LiveTail(
+        block_open=True,
+        head_pending=True,
+        start_epoch=b0 + 30,
+        interval_s=30,
+        projected_ts=float(b1 + 30),
+        records=(V3Sample(300, 30, 500, 50), ),
+        open_run=None,
+    )
+    _attach_live_tail_host(mgr, {"torrent:HB": tail})
+    body = client.get(f"/api/traffic/qb/group/{encode_group_key(KEY)}", headers=auth, params={"window": "5m"}).json()
+
+    def pt(seg, t):
+        return next((p for p in body[seg] if p and p["t"] == t), None)
+
+    assert pt("points", b0) == {"t": b0, "dl": 300, "up": 30}  # HB 活尾观测(HA 无数据按 0 计)
+    assert pt("totals", b0) == {"t": b0, "dl": 0, "up": 0}  # 窗首基线缺失
+    assert pt("points", b1) is None  # 单记录覆盖桶 [b0, b0+30) 恰一格, b1 无观测
+    # 单种端点同享活尾
+    body = client.get("/api/traffic/qb/torrent/HB", headers=auth, params={"window": "5m"}).json()
+    assert any(p and p["t"] == b0 and p["dl"] == 300 for p in body["points"])

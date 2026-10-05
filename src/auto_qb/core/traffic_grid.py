@@ -7,7 +7,8 @@ raw 归桶 / z 行程覆盖展开 / 最早观测行)已随 S5 退役删除, 本�
 窗口与栅格(§05.1/§05.3, WINDOW_SPECS 13 档):
 - raw 段窗(1m-24h): 桶宽 = 采样间隔(向上取整防伪断线), 桶 = floor 对齐; 数据经
   traffic_store.V3DayCache 按天加载 -> 块序列 -> v3_series_points 桶点 -> v3_grid_obs
-  按重叠秒加权展开到栅格(D1 跨桶覆盖: 宽桶中间栅格桶同值非 null)。
+  按重叠秒加权展开到栅格(D1 跨桶覆盖: 宽桶中间栅格桶同值非 null); 另合流采样模块
+  活尾快照(S6: 未落盘记录 + 开放游程续链, 图面尾部随采样节拍实时, 不等 flush)。
 - hour 段窗(3d/7d/30d): 桶宽恒 3600s, 消费 agg hour 行; day 段窗(6mo/1y): 滚动窗涉及
   本地日期逐日铺格(桶键 = 本地日界 00:00), 消费 agg day 行; month 段窗(all): 数据面定栅格
   (build_month_grid, 首末月行之间逐月铺格), 消费 agg month 行。agg 行 epoch 即栅格桶键
@@ -308,6 +309,10 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
 #   null 点, 但来源不同: 真空无任何观测, n 槽是显式 null 观测。
 # - 窗口 [t0, t1): 槽 ts >= t1 不消费; 覆盖桶触及窗口左界(ceil(ts) >= t0)才保留 ——
 #   桶首允许略早于 t0(上界一个桶宽, 行照收, 对齐 v2 窗首口径); null 点按 t 过滤。
+# - 活尾合流(S6 验收追加, 2026-10-05): tail_slots(采样模块活尾快照续链产物)追加在磁盘
+#   链之后 —— 同链延续不做块间真空判定(磁盘链末槽与活尾首槽之间是一次标称采样间隔,
+#   非块界), 且按槽 ts 与磁盘链精确去重(镜像保证: 同一记录写侧游标推进与落盘重算的
+#   槽 ts 恒等, 保留严格更晚的后缀即不重不漏)。
 # ======================================================================
 
 #: 真空判定浮点容差(秒): 块间 gap 与首记录覆盖桶的比较 ε
@@ -349,26 +354,37 @@ def v3_series_slots(blocks: tuple) -> tuple:
     return tuple(out)
 
 
-def v3_series_points(blocks: tuple, t0: float, t1: float) -> tuple:
+def v3_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()) -> tuple:
     """v3 读侧核心(§05.1/§05.2): 块序列 -> 窗口 [t0, t1) 内按 t 升序的桶点列
 
     blocks = V3Block 序列(单系列的若干天文件解析产物合并传入; 天文件按日期升序读出,
     块不跨天故按 start_epoch 排序即恢复时间序)。归桶/覆盖/真空/合并规则见本区头注释。
-    无块(停机/无数据)返回空元组(天然真空, 调用方按空态处理)。
+    tail_slots = 活尾快照槽序(S6 验收追加, v3_live_tail_slots 产物; 缺省空 = 纯磁盘读):
+    追加在磁盘链之后 —— 同链延续不做块间真空判定, 且按槽 ts 与磁盘链精确去重(同一记录
+    「写侧游标推进」与「落盘后重算」的槽 ts 恒等, 保留严格更晚的后缀即不重不漏, 快照与
+    flush 的先后竞态无害)。
+    无块且无活尾(停机/无数据)返回空元组(天然真空, 调用方按空态处理)。
     """
     cells = {}  # 桶键 -> [is_raw, dl_sum, up_sum, n, last_ts, dl_total, up_total, w_max]
     marks: list = []  # null 点 (t, ...) —— n 游程折叠 + 块间真空
     prev_chain_end: Optional[float] = None
     last_was_null = False
-    for block in sorted(blocks, key=lambda blk: blk.start_epoch):
-        slots = v3_block_slots(block)
+    groups = [(v3_block_slots(blk), False) for blk in sorted(blocks, key=lambda blk: blk.start_epoch)]
+    if tail_slots:
+        groups.append((tuple(tail_slots), True))
+    for slots, is_tail in groups:
         if not slots:
             continue
         if prev_chain_end is not None:
-            first_w = v3_bucket_width_s(slots[0].dt_s)
-            # 真空: 下一块首记录覆盖桶起点晚于上一块游标终值 -> 差值段出 null 点
-            if math.ceil(slots[0].ts) - first_w > prev_chain_end + _V3_VACUUM_EPS_S:
-                marks.append(int(prev_chain_end))
+            if is_tail:
+                slots = tuple(s for s in slots if s.ts > prev_chain_end + _V3_VACUUM_EPS_S)
+                if not slots:
+                    continue
+            else:
+                first_w = v3_bucket_width_s(slots[0].dt_s)
+                # 真空: 下一块首记录覆盖桶起点晚于上一块游标终值 -> 差值段出 null 点
+                if math.ceil(slots[0].ts) - first_w > prev_chain_end + _V3_VACUUM_EPS_S:
+                    marks.append(int(prev_chain_end))
         for s in slots:
             if s.obs is None:
                 # n 槽: 连续 null 槽折叠为一个 null 点(首槽位置取整; 断连语义)

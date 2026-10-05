@@ -44,6 +44,15 @@ S5 实测(plan §09.1):
 - test_v3_row_width_vs_legacy_layout_bytes: 体量对比 —— 同一构造采样序列按 v2 行型布局与 v3 行型
   序列化的实测字节对照(r 行 40-52B -> 30-40B; 空闲段游程压缩)
 
+v3 活尾快照(S6 验收追加, 2026-10-05):
+- test_v3_live_tail_slots_mirror_identity_family: 镜像保证族 —— 磁盘部分块槽 + 活尾槽 == 整块
+  重算槽(逐槽恒等): 块全量未落盘(head_pending 整块重算, 含块首 r/块首游程)/块中途 flush 后
+  倒推复原(显式 dt + z/n 游程混排)/全部落盘仅剩开放游程
+- test_v3_live_tail_slots_open_run_forms: 开放游程封口形态 —— 无开放块块首形([int(run.start),
+  last_seen] 端点含, n=1 单槽)/有开放块非块首形((链终点, last_seen] 均摊, 末槽 = last_seen)
+- test_v3_live_tail_slots_invariants_fail_fast: block_open=False 带 records/head_pending -> ValueError;
+  未知记录型 -> TypeError
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
@@ -67,6 +76,8 @@ from auto_qb.core.traffic_store import (
     REWRITE_RETRIES,
     TRAFFIC_V3_DIR_NAME,
     AggRow,
+    LiveTail,
+    LiveTailRun,
     TrafficV3Store,
     V3Block,
     V3DayCache,
@@ -91,6 +102,7 @@ from auto_qb.core.traffic_store import (
     v3_day_file_path,
     v3_epoch_date_str,
     v3_hour_agg,
+    v3_live_tail_slots,
     v3_month_epoch,
     v3_rel_dir_to_key,
     v3_rollup_agg,
@@ -1089,3 +1101,110 @@ def test_v3_row_width_vs_legacy_layout_bytes():
     parsed = parse_v3_day_text(format_v3_day_text("global", (block, )))
     assert parsed.bad_lines == 0 and len(parsed.blocks) == 1
     assert len(parsed.blocks[0].records) == 2880 + 144
+
+
+# ---------- v3 活尾快照(S6 验收追加, 2026-10-05) ----------
+
+
+def _s6_mixed_records(interval: int) -> tuple:
+    """S6 镜像保证用例的混排记录序列: r(标称) / r(显式 dt) / z 游程 / r / n 游程 / r"""
+    base = 1_800_000_000
+    return (
+        V3Sample(100, 50, 1000, 500),  # 块首 r(槽位 = B.start)
+        V3Sample(200, 70, 2000, 800, dt_ms=(interval + 1) * 1000),  # 显式 dt(超容差)
+        V3ZeroRun(3, 2000, 800),  # 零速游程(标称 3 槽)
+        V3Sample(150, 60, 2600, 1100),  # 游程后 r(链锚点 = 游程终点)
+        V3NullRun(2, dt_ms=(2 * interval - 1) * 1000),  # 断连游程(显式 dt)
+        V3Sample(90, 40, 3000, 1300),  # 末记录
+    )
+
+
+def test_v3_live_tail_slots_mirror_identity_family():
+    """镜像保证族: 磁盘部分块槽 + 活尾槽 == 整块重算槽(逐槽恒等, S6 去重的正确性根基)
+
+    三分割点: k=0(块全量未落盘 -> head_pending 整块重算)/ 0<k<N(中途 flush 后从写侧
+    游标倒推)/ k=N(全部落盘, 活尾只剩开放游程 —— 单独在 open_run 用例覆盖)。
+    """
+    interval = 30
+    recs = _s6_mixed_records(interval)
+    start = 1_800_000_000
+    full_block = V3Block(start, interval, recs)
+    full_slots = v3_block_slots(full_block)
+    # 写侧游标 = 最后一条记录的槽位锚点(游程末槽 = 游标终点, S1 定约) -> 镜像值取整块末槽
+    projected = full_slots[-1].ts
+    # k=0: 块全量未落盘(head_pending) -> 活尾槽 == 整块重算槽
+    tail_head = LiveTail(
+        block_open=True,
+        head_pending=True,
+        start_epoch=start,
+        interval_s=interval,
+        projected_ts=projected,
+        records=recs,
+        open_run=None,
+    )
+    assert v3_live_tail_slots(tail_head) == full_slots
+    for k in (1, 3, 5):  # 中途 flush: 磁盘已收前 k 条, 缓冲滞留其余
+        disk_slots = v3_block_slots(V3Block(start, interval, recs[:k]))
+        tail = LiveTail(
+            block_open=True,
+            head_pending=False,
+            start_epoch=start,
+            interval_s=interval,
+            projected_ts=projected,
+            records=recs[k:],
+            open_run=None,
+        )
+        assert disk_slots + v3_live_tail_slots(tail) == full_slots, k
+    # 倒推不依赖磁盘链可见(1m 窗场景): 仅活尾自身也逐槽落在整块槽序的后缀上
+    k = 3  # 前 3 条记录 = 1+1+3(r,r,z 游程) = 5 槽
+    prefix_slots = sum(rec.run_len if hasattr(rec, "run_len") else 1 for rec in recs[:k])
+    tail_only = v3_live_tail_slots(LiveTail(True, False, start, interval, projected, recs[k:], None))
+    assert tail_only == full_slots[prefix_slots:]
+
+
+def test_v3_live_tail_slots_open_run_forms():
+    """开放游程封口形态: 无开放块 -> 块首形([int(run.start), last_seen] 端点含, n=1 单槽);
+    有开放块 -> 非块首形((链终点, last_seen] 均摊, 末槽 = last_seen); n 游程 obs = None"""
+    dlt, upt = 3000, 1300
+    # 无开放块: 块首形, 120 槽端点含均摊 [100, 340]
+    run_z = LiveTailRun(kind="z", start=100.4, last_seen=340.4, dl_total=dlt, up_total=upt, samples=120)
+    slots = v3_live_tail_slots(LiveTail(False, False, None, 2, 0.0, (), run_z))
+    assert len(slots) == 120
+    assert slots[0].ts == 100.0 and slots[-1].ts == pytest.approx(340.4)
+    assert all(s.obs == (0, 0, dlt, upt) and s.is_zero for s in slots)
+    # n 游程同形: obs = None, is_zero = False
+    run_n = LiveTailRun(kind="n", start=100.0, last_seen=160.0, dl_total=0, up_total=0, samples=4)
+    slots_n = v3_live_tail_slots(LiveTail(False, False, None, 2, 0.0, (), run_n))
+    assert [s.ts for s in slots_n] == [100.0, 120.0, 140.0, 160.0]
+    assert all(s.obs is None and not s.is_zero for s in slots_n)
+    # n=1 块首单槽: 槽位恰在 int(run.start)
+    run_z1 = LiveTailRun(kind="z", start=100.4, last_seen=100.4, dl_total=dlt, up_total=upt, samples=1)
+    slots_1 = v3_live_tail_slots(LiveTail(False, False, None, 2, 0.0, (), run_z1))
+    assert len(slots_1) == 1 and slots_1[0].ts == 100.0
+    # 有开放块(全落盘): 非块首形, 槽在 (projected_ts, last_seen] 均摊, 末槽 = last_seen
+    run_open = LiveTailRun(kind="z", start=1000.0, last_seen=1010.0, dl_total=dlt, up_total=upt, samples=5)
+    slots_open = v3_live_tail_slots(LiveTail(True, False, 900, 30, 1000.0, (), run_open))
+    assert [s.ts for s in slots_open] == [1002.0, 1004.0, 1006.0, 1008.0, 1010.0]
+    assert all(s.obs == (0, 0, dlt, upt) and s.is_zero for s in slots_open)
+    # 有开放块且块全量未落盘: 游程链锚点 = 整块重算游标终值(链式接续)
+    recs = _s6_mixed_records(30)
+    full_slots = v3_block_slots(V3Block(1_800_000_000, 30, recs))
+    chain_end = full_slots[-1].ts
+    run_at_chain = LiveTailRun(
+        kind="z", start=chain_end, last_seen=chain_end + 10, dl_total=dlt, up_total=upt, samples=5
+    )
+    tail = LiveTail(True, True, 1_800_000_000, 30, chain_end, recs, run_at_chain)
+    slots_both = v3_live_tail_slots(tail)
+    assert slots_both[:len(full_slots)] == full_slots
+    assert [s.ts for s in slots_both[len(full_slots):]] == [chain_end + 2.0 * k for k in range(1, 6)]
+
+
+def test_v3_live_tail_slots_invariants_fail_fast():
+    """invariant 拦截: block_open=False 携带 records / head_pending -> ValueError;
+    未知记录型 -> TypeError(发布侧单点保证, 读侧 tripwire)"""
+    with pytest.raises(ValueError):
+        v3_live_tail_slots(LiveTail(False, False, None, 30, 0.0, (V3Sample(1, 1, 1, 1), ), None))
+    with pytest.raises(ValueError):
+        v3_live_tail_slots(LiveTail(False, True, None, 30, 0.0, (), None))
+    with pytest.raises(TypeError):
+        v3_live_tail_slots(LiveTail(True, False, 100, 30, 100.0, ("bad", ), None))

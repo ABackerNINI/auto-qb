@@ -16,6 +16,10 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   traffic_grid.v3_series_points 桶点 -> v3_grid_obs 栅格展开; agg 段窗(3d/7d/30d/6mo/1y/
   all)经 V3DayCache.read_agg 单文件读取(mtime/size 键控缓存), 行按 kind 直映栅格桶
   (3d+ 组图由 M×31 -> M×1 次文件读取)。
+- 活尾合流(S6 验收追加, 2026-10-05): raw 段窗在磁盘块之外合流采样模块活尾快照
+  (未落盘 buffer 记录 + 开放游程, handler 每轮整体替换引用)—— 图面尾部随采样节拍实时,
+  不等 flush_interval 落盘; 槽 ts 镜像保证下按 ts 精确去重, 快照与 flush 竞态不重不漏。
+  agg 段窗(3d+)仍纯磁盘(未完结小时/日/月桶缺口的合流留待后续切片)。
 - 读取失败(Windows 竞态等瞬态 OSError)不以空态冒充「无数据」: 回退上一份成功响应并标
   meta.stale=true(§08「最坏返回上一秒快照 + stale」), 无历史快照才回本次现算结果。
   last-good 每端点每 window 仅存一份、每次成功现算后覆盖 —— 这是竞态兜底快照, 不是聚合
@@ -36,6 +40,7 @@ from ...core.traffic_store import (
     GLOBAL_KEY,
     TORRENT_KEY_PREFIX,
     V3DayCache,
+    v3_live_tail_slots,
     v3_series_dir,
 )
 from .common import group_key_param
@@ -89,6 +94,17 @@ class QbTrafficChartApi:
 
     def _meta(self, grid: tg.WindowGrid, stale: bool) -> dict:
         return {"window": grid.name, "interval_s": grid.interval, "source": "qb", "stale": stale}
+
+    def _live_tail(self, key: str):
+        """采样模块活尾快照(S6 验收追加): 未落盘 buffer 记录 + 开放游程的当轮冻结副本,
+        raw 段窗合流使图面尾部随采样节拍实时(不等 flush_interval)。模块宿主缺位(manager
+        替身 / 功能未启用 / 模块未注册)返回 None —— 活尾纯增益, 缺席即退回纯磁盘读路径。"""
+        host = getattr(self._manager, "host", None)
+        get = getattr(host, "get", None) if host is not None else None
+        mod = get("qb_traffic") if callable(get) else None
+        if mod is None:
+            return None
+        return getattr(mod, "live_tail", {}).get(key)
 
     def _empty(self, window: str) -> dict:
         """空态(§08): 未启用/无数据 —— points/totals 空数组 + meta(未启用空态先例:
@@ -162,18 +178,29 @@ class QbTrafficChartApi:
             grid = self._grid(window)
             member_obs = []
             member_blocks = []
+            member_has_tail = []
             for h in members:
+                tail_slots = ()
                 try:
                     days = self.v3cache.read_window(TORRENT_KEY_PREFIX + h, grid.t0, grid.t1)
                     blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
-                    member_obs.append(tg.v3_grid_obs(tg.v3_series_points(blocks, grid.t0, grid.t1), grid))
+                    tail = self._live_tail(TORRENT_KEY_PREFIX + h)
+                    tail_slots = v3_live_tail_slots(tail) if tail is not None else ()
+                    member_obs.append(
+                        tg.v3_grid_obs(tg.v3_series_points(blocks, grid.t0, grid.t1, tail_slots=tail_slots), grid)
+                    )
                 except OSError:
                     degraded = True  # 读取竞态: 该成员按空观测面计, degraded 走 last-good 兜底
                     blocks = ()
+                    tail_slots = ()
                     member_obs.append({})
                 member_blocks.append(blocks)
-            if all(tg.v3_earliest_row_ts(blocks, None) is None for blocks in member_blocks):
-                # 组从未产过流量(窗内无任何成员块)-> 空态(§08); 降级时如实标 stale
+                member_has_tail.append(bool(tail_slots))
+            if all(
+                tg.v3_earliest_row_ts(blocks, None) is None and not has_tail
+                for blocks, has_tail in zip(member_blocks, member_has_tail)
+            ):
+                # 组从未产过流量(窗内无任何成员块且无成员活尾)-> 空态(§08); 降级时如实标 stale
                 return {"points": [], "totals": [], "meta": self._meta(grid, stale=degraded)}
         else:
             aggs = []
@@ -216,7 +243,9 @@ class QbTrafficChartApi:
             try:
                 days = self.v3cache.read_window(key, grid.t0, grid.t1)
                 blocks = tuple(blk for _, parsed in days if parsed for blk in parsed.blocks)
-                obs = tg.v3_grid_obs(tg.v3_series_points(blocks, grid.t0, grid.t1), grid)
+                tail = self._live_tail(key)
+                tail_slots = v3_live_tail_slots(tail) if tail is not None else ()
+                obs = tg.v3_grid_obs(tg.v3_series_points(blocks, grid.t0, grid.t1, tail_slots=tail_slots), grid)
                 degraded = False
             except OSError:
                 obs, degraded = {}, True

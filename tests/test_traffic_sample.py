@@ -69,6 +69,9 @@
   翻本地日产 day 行 / 翻自然月产 month 行; 跨月后累计器开新
 - test_flush_seals_completed_hours_only_and_no_duplicate: 水位封口(§4.2) —— flush 只封完结
   整小时; 重复 flush 不重 append(水位 = agg 文件尾, 字节级不变)
+- test_live_tail_published_per_round_and_cleared_by_flush: (S6 验收追加)活尾快照发布 —— 每轮 handler 末尾
+  整体替换 live_tail(未落盘 buffer 记录 + 开放游程冻结副本); flush 后 records 清空(磁盘接管); 断连轮 n 游程入快照;
+  运行期关闭(enabled=false)不发布
 - test_recovery_catchup_equivalent_to_uninterrupted: catch-up 补算等价(§4.3) —— 停机数小时
   重启, hour/day/month 行补齐且与不停机等价序列逐列一致(停机真空两侧同形)
 - test_recovery_hard_order_catchup_before_trim: 硬序(§4.3) —— hour 到龄/day 未封: 重启先由
@@ -1759,3 +1762,57 @@ def test_v3_write_io_full_day_30s_interval(tmp_path, monkeypatch):
     parsed = parse_v3_day_text(_dat_text(tmp_path, GLOBAL_SERIES_KEY, v3_epoch_date_str(day0)))
     assert len(parsed.blocks) == 1 and parsed.blocks[0].interval_s == 30
     assert len(parsed.blocks[0].records) == 2880
+
+
+# ---------- v3 活尾快照发布(S6 验收追加, 2026-10-05) ----------
+
+
+def test_live_tail_published_per_round_and_cleared_by_flush(tmp_path, monkeypatch):
+    """(S6)活尾快照发布: 每轮 handler 末尾整体替换 live_tail —— 非零轮 = 未落盘 buffer
+    记录(block_open/head_pending 如实)+ 开放游程冻结副本; flush 后 records 清空(磁盘接管);
+    断连轮 n 游程入快照; 运行期关闭不发布(引用保持旧值, 端点由 feature 判定兜底)"""
+    from auto_qb.core.traffic_store import LiveTail
+
+    clock = _Clock()
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=60))
+    mod = mgr.host.get("qb_traffic")
+    assert mod.live_tail == {}  # 初始空表
+    # 首轮(非零): r 进缓冲未落盘 -> head_pending=True, records 恰为 buffer 内容
+    mgr.store.server_state = _ss()
+    _run_sample(mgr)
+    tail = mod.live_tail.get(GLOBAL_SERIES_KEY)
+    assert isinstance(tail, LiveTail) and tail.block_open and tail.head_pending
+    assert tail.records == tuple(mod._buffers[GLOBAL_SERIES_KEY].records)
+    assert tail.start_epoch == mod._buffers[GLOBAL_SERIES_KEY].start_epoch
+    assert tail.open_run is None and tail.interval_s == 30
+    # 次轮(零速): z 游程开启 -> 快照携冻结副本(records 不变, 游程随样本推进)
+    mgr.store.server_state = _ss(dl_info_speed=0, up_info_speed=0)
+    _run_sample(mgr)
+    tail = mod.live_tail[GLOBAL_SERIES_KEY]
+    assert tail.open_run is not None and tail.open_run.kind == "z" and tail.open_run.samples == 1
+    run_before = tail.open_run
+    clock.advance(30)
+    _run_sample(mgr)
+    tail = mod.live_tail[GLOBAL_SERIES_KEY]
+    assert tail.open_run.samples == 2 and tail.open_run is not run_before  # 冻结副本非原对象
+    assert tail.records == tuple(mod._buffers[GLOBAL_SERIES_KEY].records)
+    # flush 到点: 记录落盘 -> 快照 records 清空(磁盘接管), 开放游程照常携带
+    clock.advance(60)
+    mgr.store.server_state = _ss(dl_info_speed=0, up_info_speed=0)
+    _run_sample(mgr)
+    tail = mod.live_tail[GLOBAL_SERIES_KEY]
+    assert tail.records == () and mod._buffers[GLOBAL_SERIES_KEY].records == []
+    assert _v3_read(tmp_path, GLOBAL_SERIES_KEY, clock.now) is not None
+    # 断连轮: n 游程入快照
+    mgr.client = None
+    clock.advance(30)
+    _run_sample(mgr)
+    tail = mod.live_tail[GLOBAL_SERIES_KEY]
+    assert tail.open_run is not None and tail.open_run.kind == "n"
+    # 运行期关闭: handler 短路不发布(live_tail 保持旧值, 端点按 feature 判定兜底)
+    mgr.client = FakeClient()
+    mgr.config.qb_traffic = QbTraffic(enabled=False, sample_interval=30, flush_interval=60)
+    clock.advance(30)
+    _run_sample(mgr)
+    assert mod.live_tail[GLOBAL_SERIES_KEY].open_run.kind == "n"  # 未被本轮改写

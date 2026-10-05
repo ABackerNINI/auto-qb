@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="qb-traffic-agg-live-buckets">
+<meta name="issue-stamp" content="26-10-05-1015">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="qb-traffic-storage-v3">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-04-backend-qb-traffic-storage-v3.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺">
+<meta name="issue-summary" content="agg 段窗(3d/7d/30d/6mo/1y/all)仍纯磁盘取数, 未完结小时/日/月桶随封口才落盘 —— 当前小时不出 3d 图 / 当日不出 1y 图 / 当月不出 all 图, 图右缘恒空洞; S6 已修 raw 段窗, agg 段合流为候选 S7">
+<title>agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺 · feat · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 feat · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· feat</div>
+    <h1>agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺</h1>
+    <p class="lede">agg 段窗(3d/7d/30d/6mo/1y/all)仍纯磁盘取数, 未完结小时/日/月桶随封口才落盘 —— 当前小时不出 3d 图 / 当日不出 1y 图 / 当月不出 all 图, 图右缘恒空洞; S6 已修 raw 段窗, agg 段合流为候选 S7</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-05-1015-feat-qb-traffic-agg-live-buckets</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 10:15</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core/traffic_* · webui/server/traffic_qb</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">用户(v3 真机验收)</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-10-05 上午 qB 流量存储 v3(plan 26-10-04-1957)真机验收: 用户报「流量图不实时更新, 得等后端数据落盘时才更新」→ S6 活尾合流修 raw 段窗(1m-24h)时, 排查发现 agg 段窗(3d/7d/30d/6mo/1y/all)的尾部缺口比 raw 段窗更重且未被该修法覆盖: 未完结小时/日/月桶要等封口才产出 agg 行, 图右缘恒为空洞。用户拍板: 本缺口入池不随 S6 修。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>封口判据(写侧只产完结层级行, 取证 2026-10-05 10:15, <code>traffic_sample_mod.py::_agg_flush_series</code>):</p>
+<pre><code># hour 行: 首个未完结小时即止(traffic_sample_mod.py:871)
+if h + HOUR_SECONDS &gt; now:
+    break  # 首个未完结小时即止(pending 按序, 之后只会更晚)
+# day 行: 翻本地日才封(traffic_sample_mod.py:877)
+if agg.day_epoch is not None and agg.day_hours and v3_day_epoch(now) &gt; agg.day_epoch:
+# month 行: 翻自然月才封(traffic_sample_mod.py:880)
+if agg.month_epoch is not None and agg.month_days and v3_month_epoch(now) &gt; agg.month_epoch:</code></pre>
+    <p>读侧 agg 段窗纯磁盘(端点只读 agg.dat, S6 活尾只接 raw 段窗; 取证同上, <code>traffic_qb.py:255-256</code>):</p>
+<pre><code>agg = self.v3cache.read_agg(key)
+rows = agg.hours if seg == "hour" else agg.days if seg == "day" else agg.months</code></pre>
+    <p>推论(由以上两处代码事实直接得出): 当前小时的桶值在 3d/7d/30d 图恒 null(要等整小时完结 + 其后某次 flush); 当日在 6mo/1y 图恒 null(等整天); 当月在 all 图恒 null(等整月)。与 S6 基线切片「已知留面」一致。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>qb_traffic 启用即恒现(与平台/采样率无关); 活跃时段查看长窗口时最明显</td></tr>
+      <tr><td>影响范围</td><td>三端点(/api/traffic/qb/global · torrent/{hash} · group/{key})的 3d/7d/30d(缺当前小时)、6mo/1y(缺当日)、all(缺当月)共 6 档视图; totals 面同缺</td></tr>
+      <tr><td>严重度</td><td>低-中(图右缘空洞, 长窗口下观感差; 数据无损, 封口后自然补齐; raw 段窗不受影响)</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>src/auto_qb/core/modules/traffic_sample_mod.py:871,877,880</code>(取证 2026-10-05 10:15)· <code>_agg_flush_series</code> · grep <code>h + HOUR_SECONDS &gt; now</code></li>
+      <li><code>src/auto_qb/webui/server/traffic_qb.py:255-256</code>(取证同日)· <code>_payload_series</code> agg 分支 · grep <code>agg.hours if seg</code></li>
+      <li><code>src/auto_qb/core/traffic_grid.py:509</code>(取证同日)· <code>v3_agg_obs</code>(行直映栅格, 无活数据入口) · grep <code>def v3_agg_obs</code></li>
+      <li>组端点同构分支: <code>traffic_qb.py::payload_group</code> 的 <code>seg != "raw"</code> 路径(grep <code>a.hours if seg == "hour"</code>)</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">已查明(非猜测): agg 行只在「完结层级 + flush 时点」由内存累计器封口追加(<code>_agg_flush_series</code>), 未完结小时/日/月的累计器(<code>SeriesAgg.pending / day_hours / month_days</code>)只在内存; 而 agg 段窗读侧只消费 agg.dat(S6 活尾快照只覆盖 raw 段窗的未落盘记录与开放游程, 不含聚合累计器)—— 两个面之间没有活数据桥。v3 计划 26-10-04-1957 设计期未覆盖图面尾部新鲜度(全文「实时」零命中), S6 只修了被验收报出的 raw 段窗。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>候选 S7(方向, 未拍板未实施): 把 S6 活尾发布面扩到聚合累计器 —— LiveTail 快照增 <code>pending_hours / day_epoch+day_hours / month_epoch+month_days</code> 冻结副本, 端点 agg 分支现算 live hour/day/month 行(v3_hour_agg / v3_rollup_agg)并入栅格映射。要点与代价:</p>
+    <ul>
+      <li>hour 行可能与 agg.dat 已封行同 epoch(重封竞态), 需要 cov 加权合并规则(day/month 无此问题: 当前日/月行必然不在 agg.dat);</li>
+      <li>发布面扩大(每轮多拷贝 pending 桶), 量级仍小(常态只含当前小时);</li>
+      <li>grouping 端点需逐成员合流后再 Σ; 测试面 = 时钟边界族(小时界/日界/月界) + 重封竞态。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-05 10:15 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-05-1015-feat-qb-traffic-agg-live-buckets.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

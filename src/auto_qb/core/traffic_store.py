@@ -52,7 +52,10 @@ open); 唯一原子重写点 = hour 裁剪(tmp+fsync+os.replace); stop() 优雅�
 
 读路径(§05, Web 线程只读): 按窗口日期集合只读涉及天文件(24h 窗至多 2 个), V3DayCache
 mtime_ns+size 键控解析缓存; 3d+ 窗只读成员 agg.dat 单文件; OSError 上抛由端点按竞态
-降级处理(回退 last-good 标 stale, 不以空态冒充无数据)。
+降级处理(回退 last-good 标 stale, 不以空态冒充无数据)。raw 段窗另合流采样模块活尾快照
+(S6 验收追加, 2026-10-05): 未落盘 buffer 记录 + 开放游程经 v3_live_tail_slots 复原绝对
+槽位(head_pending 整块重算 / 否则从写侧游标倒推)—— 镜像保证下槽 ts 与落盘重算恒等,
+读侧按 ts 精确去重, 图面尾部随采样节拍实时, 不等 flush_interval 落盘。
 """
 import logging
 import math
@@ -496,6 +499,119 @@ def v3_block_slots(block: V3Block) -> tuple:
 def v3_bucket_width_s(dt_s: float) -> int:
     """逐记录桶宽(秒): max(1, ceil(有效dt))(§02.3/§05.1 —— S3 归桶的纯函数层)"""
     return max(1, math.ceil(dt_s))
+
+
+# ---------- v3 活尾快照(S6 验收追加, 2026-10-05): 写侧未落盘状态 -> 读侧续链 ----------
+
+
+@dataclass(frozen=True)
+class LiveTailRun:
+    """活尾开放游程冻结副本(S6): OpenRun 的不可变投影(发布时拷贝, Web 线程只读);
+    槽位 = 未来封口形态 —— 非块首在 (锚点, last_seen] 均摊, 块首在 [B.start, last_seen]
+    端点含(封口前 last_seen 仍会推进, 活尾按当轮快照近似, 偏差亚桶宽级图面无感)。"""
+
+    kind: str  # "z" | "n"
+    start: float  # 首个零/null 样本实测时刻(块首封口时 B.start = int(start))
+    last_seen: float  # 最后一个样本时刻(活尾区间终点)
+    dl_total: int  # all-time 下载累计快照(开启时刻, n 游程恒 0)
+    up_total: int
+    samples: int  # 游程内样本计数(封口后 = run_len)
+
+
+@dataclass(frozen=True)
+class LiveTail:
+    """单系列活尾快照(S6, 采样模块每轮发布, Web 线程只读): 未落盘 buffer 记录 + 开放
+    游程, 供流量图 raw 段窗合流(图面尾部实时, 不等 flush_interval)。
+
+    block_open=True 时 records = 当前开放块未落盘的记录序列。镜像保证: 同一记录
+    「写侧游标推进」与「落盘后 v3_block_slots 重算」的槽 ts 恒等 ——
+    - head_pending=True(块尚无任何落盘, records = 全块记录): 槽位 = v3_block_slots
+      整块重算(块首规则), 与 eventual 落盘重算恒等;
+    - head_pending=False(块首已随此前 flush 落盘): 记录均为非块首, 槽位从写侧游标
+      projected_ts(最后一条记录的槽位锚点)**倒推**复原 —— 倒推与前向推进对非块首
+      记录恒等(游程末槽 = 游标, 逐记录回退各自 advance), 且不依赖磁盘链在窗内可见
+      (1m 窗看不到上次 flush 的记录时活尾定位照常成立)。读侧据此按 ts 精确去重,
+      快照与 flush 的先后竞态不重不漏。
+    block_open=False 时 records 恒空(发布侧保证; 此时开放游程按块首封口形态定位
+    —— 首槽 = int(run.start))。
+    """
+
+    block_open: bool  # 写侧是否存在开放块(start_epoch 非 None)
+    head_pending: bool  # 开放块尚无任何落盘(B 行未写, records = 全块记录)
+    start_epoch: Optional[int]  # 开放块 B.start(block_open 才非 None; head_pending 复用)
+    interval_s: int  # 槽位标称推进秒(块 interval; 无块时取当前生效采样间隔)
+    projected_ts: float  # 写侧游标 = 最后一条记录的槽位锚点(block_open 才有语义)
+    records: tuple  # 未落盘记录(V3Sample/V3ZeroRun/V3NullRun, 按槽序; block_open 才非空)
+    open_run: Optional[LiveTailRun]  # 开放游程冻结副本(None = 无)
+
+
+def v3_live_tail_slots(tail: LiveTail) -> tuple:
+    """活尾快照 -> 槽序(S6 读侧接缝, 纯函数): 绝对槽位复原规则见 LiveTail docstring
+    (head_pending 整块复用 v3_block_slots / 否则从 projected_ts 倒推 —— 两者都与这些
+    记录落盘后的重算恒等)。开放游程 = 未来封口形态的槽位: 链锚点 = 记录链终点
+    (head_pending 时 = 全块重算游标终值; 否则 = projected_ts), 非块首封口在
+    (锚点, last_seen] 均摊(末槽 = last_seen); 无开放块按块首封口形态([B.start,
+    last_seen] 端点含)。z 槽 obs = (0,0,快照), n 槽 obs = None。返回 Tuple[V3Slot, ...]
+    (ts 升序)。"""
+    if not tail.block_open and (tail.records or tail.head_pending):
+        raise ValueError("活尾快照 invariant 破坏: block_open=False 不得携带 records/head_pending")
+    slots: list = []
+    interval = float(tail.interval_s)
+    if tail.block_open and tail.head_pending and tail.records:
+        # 块全量未落盘: 活尾 = 整块, 槽位复用块内推算(块首规则, 与落盘重算恒一)
+        slots.extend(v3_block_slots(V3Block(int(tail.start_epoch), tail.interval_s, tail.records)))
+        chain_end = slots[-1].ts if slots else float(tail.start_epoch)
+    else:
+        # 非块首记录从写侧游标倒推(游标 = 最后一条记录锚点; 逐记录回退各自 advance)
+        cursor = float(tail.projected_ts)
+        for rec in reversed(tail.records):
+            if isinstance(rec, V3Sample):
+                advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else interval
+                slots.append(
+                    V3Slot(
+                        ts=cursor,
+                        dt_s=advance,
+                        obs=(rec.dl_rate, rec.up_rate, rec.dl_total, rec.up_total),
+                        is_zero=False,
+                    )
+                )
+                cursor -= advance
+                continue
+            if isinstance(rec, (V3ZeroRun, V3NullRun)):
+                # 非块首游程: run_len 个槽在 (cursor - advance, cursor] 均摊, 末槽 = cursor
+                advance = (rec.dt_ms / 1000.0) if rec.dt_ms is not None else rec.run_len * interval
+                spacing = advance / rec.run_len
+                is_z = isinstance(rec, V3ZeroRun)
+                for k in range(rec.run_len):
+                    if is_z:
+                        obs = (0, 0, rec.dl_total, rec.up_total)
+                    else:
+                        obs = None
+                    slots.append(V3Slot(ts=cursor - spacing * k, dt_s=spacing, obs=obs, is_zero=is_z))
+                cursor -= advance
+                continue
+            raise TypeError(f"未知活尾记录型: {type(rec).__name__}")
+        slots.reverse()
+        chain_end = float(tail.projected_ts)
+    run = tail.open_run
+    if run is not None:
+        n = run.samples
+        is_z = run.kind == "z"
+        z_obs = (0, 0, run.dl_total, run.up_total) if is_z else None
+        if tail.block_open:
+            # 非块首封口形态: 槽在 (chain_end, last_seen] 均摊, 末槽 = last_seen
+            span = run.last_seen - chain_end
+            spacing = span / n if span > 0 else interval
+            for k in range(n):
+                slots.append(V3Slot(ts=chain_end + spacing * (k + 1), dt_s=spacing, obs=z_obs, is_zero=is_z))
+        else:
+            # 块首封口形态(无开放块): B.start = int(run.start), 端点含均摊至 last_seen
+            start = float(int(run.start))
+            span = max(run.last_seen - start, 0.0)
+            spacing = span / (n - 1) if n > 1 else 0.0
+            for k in range(n):
+                slots.append(V3Slot(ts=start + spacing * k, dt_s=spacing or interval, obs=z_obs, is_zero=is_z))
+    return tuple(slots)
 
 
 # ---------- v3 按天目录与路径解析(§06.2) ----------

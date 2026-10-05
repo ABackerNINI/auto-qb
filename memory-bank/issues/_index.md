@@ -18,12 +18,13 @@
 | perf | 5 |
 | docs | 1 |
 | refactor | 4 |
-| feat | 16 |
+| feat | 17 |
 | chore | 2 |
 | question | 4 |
 
 ## Open
 
+- [feat] [agg 段窗活尾合流: 未完结小时/日/月桶在 3d+/1y/all 图恒缺](26-10-05-1015-feat-qb-traffic-agg-live-buckets.html) — agg 段窗(3d/7d/30d/6mo/1y/all)仍纯磁盘取数, 未完结小时/日/月桶随封口才落盘 —— 当前小时不出 3d 图 / 当日不出 1y 图 / 当月不出 all 图, 图右缘恒空洞; S6 已修 raw 段窗, agg 段合流为候选 S7
 - [feat] [C3: 30 天静默淘汰淘汰前无预告 (方向 A: 日志预告)](26-10-05-0922-feat-hr-prune-notice.html) — _prune_index 淘汰 active=false 行时整行消失无痕迹无预警, 建议淘汰前 <3 天 WARNING 一次 (计划 26-10-05-0555 §04 方向 A)
 - [refactor] [SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制](26-10-05-0922-refactor-hr-fetchable-dead-config.html) — fetchable 字段零消费方, 全站型不取数仅判定侧尊重; 当前无 preset 定义 listing=none 属潜在缺口
 - [bug] [跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验](26-10-05-0402-bug-skip-check-self-fail-gate.html) — 候选种子自身当日校验失败(recheck_fails[hash]>0)后跳检无任何闸门: 决策链 1.6 仅查其它成员, 失败冷却只限 recheck —— 规则侧 without_reference 段与 WEB 路径都能把已证实的坏数据洗白成已校验(zSkipChecked), 且 chain 0 永不回头复查

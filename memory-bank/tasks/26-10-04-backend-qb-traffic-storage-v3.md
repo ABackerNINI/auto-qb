@@ -4,9 +4,9 @@
 **Topics:** qb-traffic-storage-v3
 **Added:** 2026-10-04
 **Updated:** 2026-10-05
-**Summary:** 实施计划 26-10-04-1957 开工: feature/qb-traffic-v3 分支五期拆七步串行子智能体实施(S1 纯函数→S4 配置键→S2a/S2b 写侧→S3a/S3b 读侧→S5 收尾), 每步 test.full + 普通 git commit, 完成后合回 develop 等提交指令; D4 拍板 6mo/1y/all 三档。
+**Summary:** 实施计划 26-10-04-1957 开工: feature/qb-traffic-v3 分支五期拆七步串行子智能体实施(S1 纯函数→S4 配置键→S2a/S2b 写侧→S3a/S3b 读侧→S5 收尾), 每步 test.full + 普通 git commit, 完成后合回 develop 等提交指令; D4 拍板 6mo/1y/all 三档。真机验收追加 S6 活尾合流(2026-10-05): 用户报「流量图不实时更新, 得等落盘才更新」→ 方案 A 落地(采样模块每轮发布 LiveTail 快照 + 三端点 raw 段窗合流 + ts 精确去重), 图面尾部随采样节拍实时。
 
-**Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md
+**Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md, memory-bank/issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html
 
 ## 原始请求
 
@@ -38,6 +38,7 @@
 | ⑥ | S3b 视图+端点+前端 | WINDOW_SPECS(D4: 6mo/1y/all)/组端点去 global/A4 下界常量/档位文案 | Done (eb66e3c4) |
 | ⑦ | S5 收尾与基线 | index.json/v1v2 死代码退役/docstring v3 契约/实测数字/基线切片/回写 | Done (7f155e3b) |
 | ⑧ | 合回 develop | 分支合并回本地 develop, 等用户提交指令 | Done (fast-forward) |
+| ⑨ | S6 活尾合流(验收追加) | 真机验收发现图面不实时 -> LiveTail 快照发布 + 三端点 raw 段窗合流 + ts 精确去重; 零新配置键 | Done (未提交, 等提交指令) |
 
 ## 进度日志
 
@@ -54,3 +55,6 @@
 - **2026-10-05 S3b 完成 (eb66e3c4)**: WINDOW_SPECS 13 档(3d/7d/30d→hour 行, 6mo/1y→day 行滚动窗, all→month 行, 90d 不存在 400); V3DayCache.read_agg(64 条目 LRU); 三端点翻 v3; 组端点去 global(null=桶内无成员观测); earliest_row_ts 三层全算; 前端 A4 下界 1500+13 档文案+月轴; D1 栅格形态=覆盖区间重叠秒加权。实施期定约: _qbPointsToData 非 null 点真值覆写(all 视图月行非等距防 5 天漂移, 对等距视图恒等); all 视图 meta.interval_s=标称月长 30d。grid 25/web 家族重写+5/node 探针+4。2574 passed / 4 skipped, 覆盖率 98%。
 - **2026-10-05 S5 完成 (7f155e3b)**: 退役清理净 -1942 行(TrafficDatStore 整类/v2 解析面/6 存根/grid v2 残留; 删 53 条死代码用例); 保留 v1/v2 头行识别-忽略(R2)与 8 列兜底 cov_s=3600(防御); traffic_store docstring 升 v3 契约单点。实测: test.full 2526 passed/4 skipped/99%(98% 疑虑闭合); 写 IO 144+24 次/天(300x↓@2s, 20x↓@30s); 24h 窗 2 文件/组 Mx1/1y 冷读 1 open; r 行 49B→36B, 空闲天 16.4x 压缩。基线切片 testing/baselines/26-10-05-0447-qb-traffic-v3-s5-done.md。
 - **2026-10-05 收尾**: 七步全清, feature/qb-traffic-v3 fast-forward 合回本地 develop(未推送, 等用户提交指令)。§9.1 端到端 --dry-run 真机验收与旧目录 qb-traffic/ 删留待用户; D2 tol 真机复核窗在 S5 后仍开放。
+- **2026-10-05 S6 活尾合流(真机验收追加, 用户拍板「按推荐修复, 并入 V3」)**: 用户报「流量图不实时更新, 得等后端数据落盘时才更新」并贴 v3 实测 dat。根因定位: 写侧采样点进内存 BlockBuffer 每 flush_interval(默认 600s)批量落盘, 读侧三端点纯磁盘取数(V3DayCache), 两版间无活数据桥; 计划全文「实时」零命中 —— 设计缺口非拍板取舍。附带发现 agg 段窗更糟: 未完结小时/日/月桶在 3d+/1y/all 图恒缺(行只随封口产出)。
+  修法(方案 A, set_traffic_view 快照发布同款): ①采样模块 `_publish_live_tail` 每轮 handler 末尾构建不可变 LiveTail 表整体替换引用(Web 线程只读单引用, 黄金法则 5 不破); ②store 纯函数 `v3_live_tail_slots` 复原绝对槽位 —— **head_pending(块全量未落盘)整块复用 v3_block_slots / 部分落盘从写侧游标 projected_ts 倒推**(关键定约: 中途 flush 后 buf.records 的链锚点在磁盘链上, 前向续推不成立, 倒推对非块首记录恒等且不依赖磁盘链在窗内可见 —— 1m 窗看不到上次 flush 记录时活尾定位照常); ③grid `v3_series_points` 增 tail_slots 合流(同链延续不做块间真空判定, 按槽 ts 精确去重 —— 镜像保证: 同一记录写侧推进与落盘重算的槽 ts 恒等, 保留严格更晚后缀即不重不漏); ④三端点 raw 段窗接活尾(组端点空态判据计入成员活尾)。模块宿主缺位/替身 manager 全防御退回纯磁盘读路径, 既有测试零改动。agg 段窗合流已入池 [26-10-05-1015](../issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html)(候选 S7, 未拍板不实施)。
+  新增守阵 7 条(store 3 含镜像保证族 / grid 1 / sample 1 / web 2 含端到端三态逐点一致), 全部登记各文件「## 测试计划」。**实测: test.full 2596 passed + 4 skipped / 99% / 29.09+31.05s(基线 [26-10-05-1007](../testing/baselines/26-10-05-1007-qb-traffic-v3-s6-live-tail.md); 相对本 clone 改动前真值 +7 用例 / +84 语句 / +34 分支; 附: 0846 基线绝对语句数在重写历史下不可复现, 已在基线切片注记)。**

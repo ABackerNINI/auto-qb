@@ -104,6 +104,8 @@ by_hash 本就无采样), 文件留存到按龄删除(淘汰属 S2b)。
 
 线程模型(黄金法则 5): handler 由 TaskQueue 在主循环线程执行, buffers/baselines/latest/
 游程全部只在该线程读写, 无锁; 模块自身不创建任何线程; 全部落盘写在 handler 调用链内。
+活尾快照 live_tail(S6 验收追加)每轮 handler 末尾构建不可变 LiveTail 表整体替换引用,
+Web 线程只读单引用无锁(ctx.web.set_traffic_view 同款快照发布先例)。
 
 配置: config.qb_traffic(QbTraffic, 缺省 None = 未启用)。任务自注册仿 speed_curve;
 热重载 enabled=true 经 queue_rebuilt 相位自然起任务; 运行期关闭 handler 短路。
@@ -124,6 +126,8 @@ from ..traffic_store import (
     V3NullRun,
     V3Sample,
     V3ZeroRun,
+    LiveTail,
+    LiveTailRun,
     TrafficV3Store,
     v3_block_slots,
     v3_day_epoch,
@@ -305,8 +309,13 @@ class TrafficSampleModule(BaseModule):
         # ---- v3 聚合分层状态(S2b) ----
         # 单系列聚合累计器(§4.1): 系列键 -> SeriesAgg; 采样入账 lazily 建, start 恢复预建
         self._agg_states: dict = {}
-        # 种子淘汰上次扫描时点(节流 EVICT_CHECK_INTERVAL_S, §4.5)
+        # 种子按龄淘汰上次扫描时点(节流 EVICT_CHECK_INTERVAL_S, §4.5)
         self._last_evict_check: Optional[float] = None
+        # ---- v3 活尾快照(S6 验收追加) ----
+        # 系列键 -> LiveTail(未落盘 buffer 记录 + 开放游程的当轮冻结副本): handler 末尾
+        # 整体替换引用, Web 线程只读单引用无锁(对齐 ctx.web.set_traffic_view 快照发布
+        # 先例; 黄金法则 5 不破 —— 快照只读, 写仍单点在 handler 调用链内)
+        self.live_tail: dict = {}
 
     def sections(self) -> tuple[str, ...]:
         return ("qb_traffic", )
@@ -367,11 +376,51 @@ class TrafficSampleModule(BaseModule):
             self._touch_null_run(GLOBAL_SERIES_KEY, now)
             logger.debug("流量采样 | qB 断连, 本轮全局记 n 游程槽")
             self._maybe_flush_all(conf, now)
+            self._publish_live_tail()
             return REQUEUE
         self._sample_global(store.server_state, now)
         self._sample_torrents(store, now)
         self._maybe_flush_all(conf, now)
+        self._publish_live_tail()
         return REQUEUE
+
+    # ---------- v3 活尾快照发布(S6 验收追加) ----------
+
+    def _publish_live_tail(self) -> None:
+        """活尾快照发布(S6): 每轮 handler 末尾把「未落盘 buffer 记录 + 开放游程」冻结成
+        不可变 LiveTail 表整体替换 self.live_tail 引用 —— 主线程单写, Web 线程只读单引用,
+        无锁(set_traffic_view 同款快照发布)。读侧经 v3_live_tail_slots 复原绝对槽位
+        (head_pending 整块复用块内推算 / 否则从写侧游标倒推), 槽 ts 与这些记录落盘后
+        v3_block_slots 重算恒等(写侧游标严格镜像读侧链), 端点按 ts 精确去重 —— 快照与
+        flush 的先后竞态不重不漏。records 只在 block_open 时发布(block_open=False 时
+        读侧按块首游程形态定位开放游程, records 恒空)。"""
+        tails: dict = {}
+        for key in set(self._buffers) | set(self._open_runs):
+            buf = self._buffers.get(key)
+            run = self._open_runs.get(key)
+            has_block = buf is not None and buf.start_epoch is not None
+            records = tuple(buf.records) if has_block else ()
+            if run is None and not records:
+                continue  # 无待写记录无开放游程: 无活尾信息(shell 缓冲不留快照)
+            tails[key] = LiveTail(
+                block_open=has_block,
+                head_pending=has_block and not buf.header_written,
+                start_epoch=buf.start_epoch if has_block else None,
+                interval_s=(buf.interval_s if buf is not None and buf.interval_s else (self._effective_interval or 1)),
+                projected_ts=buf.projected_ts if buf is not None else 0.0,
+                records=records,
+                open_run=(
+                    LiveTailRun(
+                        kind=run.kind,
+                        start=run.start,
+                        last_seen=run.last_seen,
+                        dl_total=run.dl_total,
+                        up_total=run.up_total,
+                        samples=run.samples,
+                    ) if run is not None else None
+                ),
+            )
+        self.live_tail = tails
 
     # ---------- C1 生效与热重载联动(§3.5) ----------
 
