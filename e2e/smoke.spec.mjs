@@ -23,8 +23,13 @@ import { BASE_URL, SKINS, TORRENTS } from './harness.mjs';
  * 采集本页的运行时错误。
  * Dark Reader 这类**企业策略强装**的扩展即使 `--disable-extensions` + 全新 profile 也会注入并报错
  * (pitfalls/testing/smoke.md), 故按来源过滤 chrome-extension —— 否则本断言在本机会恒红。
+ *
+ * @param {import('@playwright/test').Page} page —— 必须显式标注: 本文件开了 `// @ts-check` 且仓库
+ *   没有 tsconfig/jsconfig, TS 走默认严格档, 裸写 `page` 就是 ts(7006) 隐式 any。
+ * @returns {string[]} 错误文本列表(空数组 = 本页无运行期错误)。
  */
 function collectRuntimeErrors(page) {
+  /** @type {string[]} —— 不标注会被当成"演化中的 any[]"(ts(7005)), 与上面的 7006 成对出现。 */
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
