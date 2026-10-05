@@ -23,7 +23,7 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_index_has_all_status_sections: 索引保留四个状态分区标题
 - test_index_is_regenerated: `_index.md` == memory-bank skill 的 `gen_tasks_index.py` 生成结果
 - test_active_context_has_no_rolled_up_session_log: 流水账只许住在 `activeContext/` 切片里, `activeContext.md` 本体不得出现 `^- 2026-` 行
-- test_session_protocol_is_exposed_in_always_on_entries: skill 载体存在且含阈值/DoD, AGENTS 与 copilot-instructions 均声明阈值并指向 skill
+- test_session_protocol_is_exposed_in_always_on_entries: skill 载体存在且含阈值/DoD, `AGENTS.md` 声明阈值并指向 skill (copilot-instructions 2026-10-06 降级为指针后不再受查)
 
 知识库目录化守卫 (检查器在 memory-bank skill 的 `scripts/check_kb_structure.py`, 进程内 import):
 
@@ -194,10 +194,14 @@ def test_session_protocol_is_exposed_in_always_on_entries() -> None:
     for token in ("立档阈值", "收尾 DoD", "会话开始"):
         assert token in skill_text, f"SKILL.md 缺少 {token}"
 
-    for entry in (ROOT / "AGENTS.md", ROOT / ".github" / "copilot-instructions.md"):
-        text = entry.read_text(encoding="utf-8")
-        assert "立档阈值" in text, f"{entry.name} 未声明立档阈值"
-        assert ".agents/skills/memory-bank/SKILL.md" in text, f"{entry.name} 未指向 memory-bank skill"
+    # 2026-10-06 起只查 `AGENTS.md` —— `.github/copilot-instructions.md` 已降级为**纯指针**
+    # (内容只有"以 ../AGENTS.md 为准")。原先"两个入口都得含阈值 / skill 路径"的断言实际是在
+    # **替过期副本兜底**: 副本一改成不重复口径就判红, 逼得它要么留着旧说法、要么留一行机械 token。
+    # 会话协议守单点足够 —— 指针自己不承载口径, 也就不需要被守。
+    agents = ROOT / "AGENTS.md"
+    text = agents.read_text(encoding="utf-8")
+    assert "立档阈值" in text, f"{agents.name} 未声明立档阈值"
+    assert ".agents/skills/memory-bank/SKILL.md" in text, f"{agents.name} 未指向 memory-bank skill"
 
 
 # ---------------------------------------------------------------------------
