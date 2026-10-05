@@ -56,6 +56,13 @@ mtime_ns+size 键控解析缓存; 3d+ 窗只读成员 agg.dat 单文件; OSError
 (S6 验收追加, 2026-10-05): 未落盘 buffer 记录 + 开放游程经 v3_live_tail_slots 复原绝对
 槽位(head_pending 整块重算 / 否则从写侧游标倒推)—— 镜像保证下槽 ts 与落盘重算恒等,
 读侧按 ts 精确去重, 图面尾部随采样节拍实时, 不等 flush_interval 落盘。
+
+【v4 过渡注记(plan 26-10-05-2200 B1, 2026-10-05)】
+v4 行型纯函数(format_v4_* / parse_v4_day_text; 结构 V4Sample/V4ZeroRun/V4NullRun/V4Block/
+V4ParsedDay)已就位、未接线 —— 生产行为仍为上方 v3 契约, 本节与「v3 纯函数区」原样保留,
+v3 常量到批 2 翻转时才退役。v4 行型定约(块头基线二态 + r/z 相对基线 delta + 无基线块
+n-only 守卫 + 负 delta 免费校验)单点在文件尾「v4 纯函数区」头注释, 规格出处为 v4 计划
+§01; 写侧状态机 / 目录 / 头行 / 符号代际翻转与 docstring 契约整体重写均在批 2。
 """
 import logging
 import math
@@ -1281,3 +1288,279 @@ def _write_text_payload(path: str, payload: str) -> bool:
             except OSError:
                 pass
             raise
+
+
+# ======================================================================
+# v4 纯函数区(plan 26-10-05-2200 B1: 并存新增, 未接线 —— 生产行为仍为 v3, 翻转见批 2)
+#
+# v4 行型定约(读写两侧同源单点; 规格出处 = v4 计划 §01, 取代 v3 计划 §02.1「逐列冻结」
+# 条款; interval_s 小数秒 + dt_ms 毫秒口径沿用):
+#     # auto-qb qb-traffic v4                                文件头, 每文件一次(头行门闩, 不设双读)
+#     key,<系列标识>                                    不变(global / torrent:<infohash>)
+#     B,<start_epoch>,<interval_s>                      3 列 = 无基线块(仅 n 游程合法)
+#     B,<start_epoch>,<interval_s>,<dl_base>,<up_base>  5 列 = 基线 = 块内首个带 totals 观测的快照
+#     r,<dl_rate>,<up_rate>,<dl_delta>,<up_delta>[,<dt_ms>]  delta 相对块基线; 负值 = 坏行(免费校验)
+#     z,<run_len>,<dl_delta>,<up_delta>[,<dt_ms>]        块首 z 的 delta = 0
+#     n,<run_len>[,<dt_ms>]                              不变
+#
+# 核心不变式: delta 只存在于线格式 —— 内存结构(V4Sample/V4ZeroRun/V4NullRun/V4Block)
+# 全部维持绝对 totals; format 序列化时减法(绝对值 - 块基线), parse 以块基线逐行复原
+# (绝对值 = 基线 + 本行 delta; delta-vs-基线逐行独立 —— 坏行整行跳过不传播, 无块内链式
+# 状态, 与 flush 批次无关)。基线立点: 块首记录带 totals(r 或 z)时基线 = 该快照, 其
+# delta = 0; 块首为 n 游程时写侧把 n-only 前缀拆成 3 列 B 无基线块, 恢复传输的记录开新
+# 块立基线。解析守卫: 无基线块内出现 r/z 即坏行; 基线块内负 delta 必是损坏(绝对值形态
+# 做不到的免费校验 —— 计数器回落由写侧「重置强制关块重立基线」排除, 批 2 状态机)。
+# dt 链 / 撕裂尾 / 损坏占比口径原样沿用 v3(dt 列语义与 v3 完全一致, 辅助函数直接共用,
+# 批 2 符号代际改名时随行翻转; dt 链定约见上方「v3 纯函数区」头注释, 此处不复写)。
+# ======================================================================
+
+#: 头行 v4(每文件一次; v4 读侧对 v1/v2/v3 旧头行整文件不匹配, 不设双读 —— R2 换代语义)
+HEADER_LINE_V4 = "# auto-qb qb-traffic v4"
+
+#: v4 存储根目录名(相对 data_dir, v4 计划 §01 换代语义; 旧 qb-traffic-v3/ 原样留存不读。
+#: B1 仅立常量, 路径助手与写侧目录接线随批 2 翻转)
+TRAFFIC_V4_DIR_NAME = "qb-traffic-v4"
+
+
+@dataclass(frozen=True)
+class V4Sample:
+    """v4 数据记录(r 行): 速率对 + all-time totals 绝对快照对(内存恒绝对值, delta 只在
+    线格式 —— 序列化时减块基线); dt_ms 语义同 V3Sample(距上一记录链上终点的实测毫秒数,
+    None = 标称 interval)"""
+
+    dl_rate: int
+    up_rate: int
+    dl_total: int
+    up_total: int
+    dt_ms: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class V4ZeroRun:
+    """v4 零速游程(z 行): 占 run_len 个采样槽, 速率恒 (0,0); totals 快照为绝对值(delta
+    相对块基线只在行文本); dt_ms 语义同 V3ZeroRun"""
+
+    run_len: int
+    dl_total: int
+    up_total: int
+    dt_ms: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class V4NullRun:
+    """v4 null 游程(n 行): 占 run_len 个采样槽(断连/缺字段), 无观测; 行型与语义同 V3NullRun"""
+
+    run_len: int
+    dt_ms: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class V4Block:
+    """v4 块: 块头 B + 记录序列(按槽序); 块不跨天(00:00 硬切)。dl_base/up_base = 块基线
+    (5 列块头; = 块内首个带 totals 观测的快照, 块首记录的 delta 恒 0), 二者成对: 全 None =
+    无基线块(3 列 B, 仅 n 游程合法 —— 块首 n 游程前缀), 全非 None = 基线块。records 内
+    totals 恒为绝对值(delta 只在序列化时减法)"""
+
+    start_epoch: int  # 块首记录实测 epoch 秒
+    interval_s: float  # 本块采样间隔(秒, >= 1; 允许小数秒如 1.5, 整数值存 float)
+    dl_base: Optional[int]  # 块基线: 下载 all-time 快照(None = 无基线块, 与 up_base 成对)
+    up_base: Optional[int]
+    records: tuple  # Tuple[V4Sample | V4ZeroRun | V4NullRun, ...]
+
+
+@dataclass(frozen=True)
+class V4ParsedDay:
+    """单天文件解析结果(parse_v4_day_text 返回; 形态同 V3ParsedDay, 块为 V4Block, 纯数据)"""
+
+    key: Optional[str]  # 头行 key 行的系列标识(无头行/坏头行/头行非 v4 时 None)
+    blocks: tuple  # Tuple[V4Block, ...](文件序; 空块不保留)
+    bad_lines: int  # 跳过的坏行数(含尾部半行)
+    data_lines: int  # 受检行总数(头行后全部行; 损坏占比分母)
+    torn_tail: bool = False  # 末尾未写完的半行(正常崩溃残留; 豁免损坏占比)
+
+
+def format_v4_b_row(
+    start_epoch: int, interval_s: float, dl_base: Optional[int] = None, up_base: Optional[int] = None
+) -> str:
+    """块头行文本(v4 §01 二态): 无基线 = B,<start_epoch>,<interval_s>(3 列, 仅 n 游程
+    合法); 基线块 = B,<start_epoch>,<interval_s>,<dl_base>,<up_base>(5 列, 基线 = 块内
+    首个带 totals 观测的快照)。基线二态须成对(缺一 fail-fast); interval_s 校验口径同 v3
+    (>= 1 数值, 允许小数秒)。"""
+    if (dl_base is None) != (up_base is None):
+        raise ValueError(f"块头基线须成对(全 None = 无基线块 / 全非 None = 基线块): {dl_base!r}/{up_base!r}")
+    if not isinstance(interval_s, (int, float)) or isinstance(interval_s, bool):
+        raise ValueError(f"非法 interval_s(须 >= 1 数值): {interval_s!r}")
+    if not math.isfinite(interval_s) or interval_s < 1:
+        raise ValueError(f"非法 interval_s(须 >= 1): {interval_s!r}")
+    head = f"B,{_fmt_int(start_epoch)},{_fmt_interval_s(float(interval_s))}"
+    if dl_base is None:
+        return head
+    return f"{head},{_fmt_int(dl_base)},{_fmt_int(up_base)}"
+
+
+def format_v4_r_row(rec: V4Sample, dl_base: Optional[int], up_base: Optional[int]) -> str:
+    """数据行文本(v4 §01): r,<dl>,<up>,<dl_delta>,<up_delta>[,<dt_ms>]; delta = 内存绝对
+    totals - 块基线(减法单点在此, 读侧复原后逐列语义与 v3 一致)。r 行须基线块(无基线块
+    仅 n 游程合法); 负 delta = 写侧违约 fail-fast(计数器回落须先关块重立基线 —— 解析侧
+    对应按坏行, 免费校验)。"""
+    if dl_base is None or up_base is None:
+        raise ValueError("r 行须基线块(无基线块仅 n 游程合法)")
+    dlt = int(rec.dl_total) - int(dl_base)
+    upt = int(rec.up_total) - int(up_base)
+    if dlt < 0 or upt < 0:
+        raise ValueError(f"负 delta(计数器回落须先关块重立基线): dl={dlt}, up={upt}")
+    return (
+        f"r,{_fmt_int(rec.dl_rate)},{_fmt_int(rec.up_rate)},{_fmt_int(dlt)},{_fmt_int(upt)}"
+        f"{_fmt_v3_dt_tail(rec.dt_ms)}"
+    )
+
+
+def format_v4_z_row(rec: V4ZeroRun, dl_base: Optional[int], up_base: Optional[int]) -> str:
+    """零速游程行文本(v4 §01): z,<run_len>,<dl_delta>,<up_delta>[,<dt_ms>](delta 相对
+    块基线; 块首 z 的 delta = 0 —— 基线 = 该快照); 其余纪律同 format_v4_r_row"""
+    if dl_base is None or up_base is None:
+        raise ValueError("z 行须基线块(无基线块仅 n 游程合法)")
+    dlt = int(rec.dl_total) - int(dl_base)
+    upt = int(rec.up_total) - int(up_base)
+    if dlt < 0 or upt < 0:
+        raise ValueError(f"负 delta(计数器回落须先关块重立基线): dl={dlt}, up={upt}")
+    return f"z,{_fmt_int(rec.run_len)},{_fmt_int(dlt)},{_fmt_int(upt)}{_fmt_v3_dt_tail(rec.dt_ms)}"
+
+
+def format_v4_n_row(rec: V4NullRun) -> str:
+    """null 游程行文本(v4 §01, 行型与 v3 不变): n,<run_len>[,<dt_ms>]"""
+    return f"n,{_fmt_int(rec.run_len)}{_fmt_v3_dt_tail(rec.dt_ms)}"
+
+
+def format_v4_day_text(key: str, blocks: tuple) -> str:
+    """v4 天文件整文件文本(头行 v4 + key 行 + 逐块 B 行[二态携带块基线] 与记录行; \\n
+    行尾, 对齐 v3 输出纪律)。批 2 flush 的批量写入口形态; 本函数只做序列化, 不触文件
+    系统。r/z 行 delta 由块基线减法序列化 —— 无基线块内 r/z 在此 fail-fast(与解析守卫
+    同源)。"""
+    lines = [HEADER_LINE_V4, f"key,{key}"]
+    for b in blocks:
+        lines.append(format_v4_b_row(b.start_epoch, b.interval_s, b.dl_base, b.up_base))
+        for rec in b.records:
+            if isinstance(rec, V4Sample):
+                lines.append(format_v4_r_row(rec, b.dl_base, b.up_base))
+            elif isinstance(rec, V4ZeroRun):
+                lines.append(format_v4_z_row(rec, b.dl_base, b.up_base))
+            else:
+                lines.append(format_v4_n_row(rec))
+    return "\n".join(lines) + "\n"
+
+
+def parse_v4_day_text(text: str) -> V4ParsedDay:
+    """v4 天文件文本 -> V4ParsedDay(纯函数, 无文件访问; v4 计划 §01 行型定约)
+
+    头行必须恰为 HEADER_LINE_V4: 缺失/不符(含 v1/v2/v3 旧头行 —— R2 换代, 不设双读)
+    整文件不匹配格式, 全部行记坏。B 行二态: 3 列 = 无基线块(块内仅 n 游程合法, 出现 r/z
+    即坏行 —— 解析守卫), 5 列 = 基线块(dl_base/up_base = 块内首个带 totals 观测的快照)。
+    r/z 行存相对块基线的 delta, 解析逐行复原绝对值(绝对值 = 基线 + 本行 delta;
+    delta-vs-基线逐行独立 —— 坏行整行跳过、游标不推进, 后续行复原不受影响); 负 delta 必
+    是损坏(免费校验: 计数器回落在绝对值形态合法, delta 形态非法, _parse_v3_nn_int 即拒)。
+    n 行不变。其余纪律 —— key 行取首个(重复记坏)/空行注释行跳过/坏行列数 r ∈ {5,6},
+    z ∈ {4,5}, n ∈ {2,3}/dt_ms 须正整数且 <= DT_MS_MAX/撕裂尾半行豁免损坏占比/损坏占比
+    分母 —— 原样沿用 v3 口径(对齐 parse_v3_day_text)。
+    """
+    lines = text.splitlines()
+    torn = bool(text) and not text.endswith("\n")
+    header = lines[0].strip() if lines else None
+    if header != HEADER_LINE_V4:
+        # 头行缺失/不符(含旧版头行): 文件级不匹配格式 —— 每一行都算坏行(损坏判定必然命中)
+        return V4ParsedDay(key=None, blocks=(), bad_lines=len(lines), data_lines=len(lines), torn_tail=torn)
+    key: Optional[str] = None
+    blocks: list = []
+    cur_start: Optional[int] = None
+    cur_interval: Optional[float] = None
+    cur_dl_base: Optional[int] = None
+    cur_up_base: Optional[int] = None
+    cur_records: list = []
+
+    def _close() -> None:
+        nonlocal cur_start, cur_interval, cur_dl_base, cur_up_base, cur_records
+        if cur_start is not None and cur_records:
+            blocks.append(
+                V4Block(
+                    start_epoch=cur_start,
+                    interval_s=cur_interval,
+                    dl_base=cur_dl_base,
+                    up_base=cur_up_base,
+                    records=tuple(cur_records),
+                )
+            )
+        cur_start = None
+        cur_interval = None
+        cur_dl_base = None
+        cur_up_base = None
+        cur_records = []
+
+    bad = 0
+    data = 0
+    torn_tail = False
+    last_idx = len(lines) - 1
+    for i, line in enumerate(lines[1:]):
+        data += 1
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue  # 空行/注释行跳过不计坏(对齐 v3 先例)
+        parts = s.split(",")
+        try:
+            if parts[0] == "key" and len(parts) == 2 and parts[1] and key is None:
+                key = parts[1]
+                continue
+            if parts[0] == "B" and len(parts) in (3, 5):
+                # 二态块头: 3 列无基线 / 5 列基线; 先解析校验再切换块状态(非法 B 行整行计坏,
+                # 既有块不受影响); 基线列负值按坏行(_parse_v3_nn_int 拒负)
+                b_start = int(parts[1])
+                b_interval = _parse_v3_interval_s(parts[2])
+                b_dl = _parse_v3_nn_int(parts[3]) if len(parts) == 5 else None
+                b_up = _parse_v3_nn_int(parts[4]) if len(parts) == 5 else None
+                _close()
+                cur_start = b_start
+                cur_interval = b_interval
+                cur_dl_base = b_dl
+                cur_up_base = b_up
+                continue
+            if cur_start is None:
+                raise ValueError("块头前出现数据行")  # 游标无锚点, 记坏不消费
+            if cur_dl_base is None and parts[0] in ("r", "z"):
+                raise ValueError("无基线块内出现 r/z(仅 n 游程合法)")  # 解析守卫, 整行坏
+            if parts[0] == "r" and len(parts) in (5, 6):
+                cur_records.append(
+                    V4Sample(
+                        dl_rate=_parse_v3_nn_int(parts[1]),
+                        up_rate=_parse_v3_nn_int(parts[2]),
+                        # delta 以块基线逐行复原绝对值(基线 + 本行 delta, 逐行独立 —— 坏行不传播);
+                        # 负 delta 在 _parse_v3_nn_int 即抛(免费校验)
+                        dl_total=cur_dl_base + _parse_v3_nn_int(parts[3]),
+                        up_total=cur_up_base + _parse_v3_nn_int(parts[4]),
+                        dt_ms=_parse_v3_dt_ms(parts[5]) if len(parts) == 6 else None,
+                    )
+                )
+                continue
+            if parts[0] == "z" and len(parts) in (4, 5):
+                cur_records.append(
+                    V4ZeroRun(
+                        run_len=_parse_v3_pos_int(parts[1]),
+                        dl_total=cur_dl_base + _parse_v3_nn_int(parts[2]),
+                        up_total=cur_up_base + _parse_v3_nn_int(parts[3]),
+                        dt_ms=_parse_v3_dt_ms(parts[4]) if len(parts) == 5 else None,
+                    )
+                )
+                continue
+            if parts[0] == "n" and len(parts) in (2, 3):
+                cur_records.append(
+                    V4NullRun(
+                        run_len=_parse_v3_pos_int(parts[1]),
+                        dt_ms=_parse_v3_dt_ms(parts[2]) if len(parts) == 3 else None,
+                    )
+                )
+                continue
+        except (ValueError, IndexError):
+            pass
+        bad += 1  # 键名/列数不匹配或字段非法(整行跳过, 游标不推进)
+        if torn and i == last_idx - 1:
+            torn_tail = True  # 尾部半行 = 正常崩溃残留(阈值豁免, 对齐 v3)
+    _close()
+    return V4ParsedDay(key=key, blocks=tuple(blocks), bad_lines=bad, data_lines=data, torn_tail=torn_tail)

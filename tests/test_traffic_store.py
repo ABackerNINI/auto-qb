@@ -55,6 +55,23 @@ v3 活尾快照(S6 验收追加, 2026-10-05):
 - test_v3_live_tail_slots_invariants_fail_fast: block_open=False 带 records/head_pending -> ValueError;
   未知记录型 -> TypeError
 
+v4 纯函数区(plan 26-10-05-2200 B1, 并存新增未接线 —— 生产行为仍 v3, 翻转见批 2):
+- test_v4_day_roundtrip_with_drift_rows: roundtrip —— v4 序列化->解析与原始块逐点相等(显式 dt 漂移行/
+  z+n 游程/标称缺省行); delta 列 = 绝对值 - 块基线字面文本; dt 链信息经 v3 同构转换后槽位
+  实测序列逐点相等(v4 与 v3 dt 口径同源)
+- test_v4_b_row_dual_form_3col_5col: B 行 3/5 列二态(无基线块/基线块)格式与解析两侧 +
+  基线缺一 fail-fast + interval_s 小数秒口径沿用 + n 行行型不变 + 二态同文件任意顺序并存
+- test_v4_negative_delta_bad_row_non_propagating: 负 delta 判坏行(整行跳过、游标不推进)+
+  坏行不传播(中段坏行后后续行 totals 复原仍精确, delta-vs-基线逐行独立)+ 序列化侧负
+  delta fail-fast + 撕裂尾半行豁免口径沿用
+- test_v4_no_baseline_block_n_only_guard: n-only 无基线块(3 列 B + 纯 n 合法, roundtrip);
+  无基线块内 r/z 判坏行(解析守卫, 后续 n 照常收); 序列化侧同源守卫 fail-fast; n-only
+  前缀块 -> 恢复传输基线块两块接续
+- test_v4_cumsum_restore_pointwise: delta 以块基线复原绝对值逐点相等(大基线量级 + 块内
+  递增 delta r/z 混排 + 块首 z 立基线 delta=0 + 多块基线独立)
+- test_v4_header_latch_whole_file_mismatch: 头行 v4 门闩 —— v3/v1/v2 旧头行/缺失整文件
+  不匹配(R2 不设双读); v4 常量字面值钉住
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
@@ -74,9 +91,11 @@ from auto_qb.core.traffic_store import (
     DRIFT_TOL_MS,
     DT_MS_MAX,
     HEADER_LINE_V3,
+    HEADER_LINE_V4,
     HOUR_SECONDS,
     REWRITE_RETRIES,
     TRAFFIC_V3_DIR_NAME,
+    TRAFFIC_V4_DIR_NAME,
     AggRow,
     LiveTail,
     LiveTailRun,
@@ -87,14 +106,24 @@ from auto_qb.core.traffic_store import (
     V3NullRun,
     V3Sample,
     V3ZeroRun,
+    V4Block,
+    V4NullRun,
+    V4Sample,
+    V4ZeroRun,
     format_agg_row,
     format_v3_b_row,
     format_v3_day_text,
     format_v3_n_row,
     format_v3_r_row,
     format_v3_z_row,
+    format_v4_b_row,
+    format_v4_day_text,
+    format_v4_n_row,
+    format_v4_r_row,
+    format_v4_z_row,
     parse_v3_agg_text,
     parse_v3_day_text,
+    parse_v4_day_text,
     v3_agg_file_path,
     v3_block_slots,
     v3_bucket_width_s,
@@ -1233,3 +1262,235 @@ def test_v3_live_tail_slots_invariants_fail_fast():
         v3_live_tail_slots(LiveTail(False, True, None, 30, 0.0, (), None))
     with pytest.raises(TypeError):
         v3_live_tail_slots(LiveTail(True, False, 100, 30, 100.0, ("bad", ), None))
+
+
+# ---------- v4 纯函数区(plan 26-10-05-2200 B1, 并存新增未接线 —— 生产行为仍 v3) ----------
+
+
+def _v4_day_text(lines) -> str:
+    """手工构造 v4 天文件文本(行列表逐行写, \\n 行尾)"""
+    return "\n".join(lines) + "\n"
+
+
+def _v4_to_v3_block(block):
+    """v4 块 -> v3 块(仅 dt 链推算用: v4 的 dt 列口径与 v3 完全一致, 槽位数学批 2 才随
+    代际改名接线; 测试内同构转换以复用 v3_block_slots 钉住「v4 行型携带的 dt 链信息与
+    v3 逐点同构」)"""
+    def _rec3(rec):
+        if isinstance(rec, V4Sample):
+            return V3Sample(rec.dl_rate, rec.up_rate, rec.dl_total, rec.up_total, rec.dt_ms)
+        if isinstance(rec, V4ZeroRun):
+            return V3ZeroRun(rec.run_len, rec.dl_total, rec.up_total, rec.dt_ms)
+        return V3NullRun(rec.run_len, rec.dt_ms)
+
+    return V3Block(block.start_epoch, block.interval_s, tuple(_rec3(r) for r in block.records))
+
+
+def test_v4_day_roundtrip_with_drift_rows():
+    """B1 roundtrip: v4 序列化 -> 解析与原始内存块逐点相等(绝对 totals + 显式 dt 漂移行 +
+    z+n 游程 + 标称缺省行); delta 列 = 绝对值 - 块基线的字面文本核对; dt 链信息经 v3 同构
+    转换后槽位实测序列逐点相等"""
+    interval = 30
+    recs = [
+        V4Sample(10, 20, 1000, 2000),  # 块首 r: 基线 = 该快照, delta = 0
+        V4Sample(11, 21, 1100, 2100, dt_ms=30400),  # r1 @1030.4, delta 100/100
+        V4Sample(12, 22, 1200, 2200, dt_ms=30400),  # r2 @1060.8
+        # z 游程 3 槽 @1091.6/1122.4/1153.2(空闲 totals 恒定): delta = 200/200 相对块基线
+        V4ZeroRun(3, 1200, 2200, dt_ms=92400),
+        V4NullRun(2, dt_ms=61600),
+        V4Sample(13, 23, 1300, 2300, dt_ms=30800),  # r3 @1245.6, delta 300/300
+        V4Sample(14, 24, 1400, 2400, dt_ms=30800),  # r4
+        V4Sample(15, 25, 1500, 2500),  # r5 标称缺省行
+        V4Sample(16, 26, 1600, 2600, dt_ms=30400),  # r6
+    ]
+    expected_ts = [1000.0, 1030.4, 1060.8, 1091.6, 1122.4, 1153.2, 1184.0, 1214.8, 1245.6, 1276.4, 1306.4, 1336.8]
+    block = V4Block(start_epoch=1000, interval_s=interval, dl_base=1000, up_base=2000, records=tuple(recs))
+    text = format_v4_day_text("global", (block, ))
+    lines = text.splitlines()
+    assert lines[0] == HEADER_LINE_V4 and lines[1] == "key,global"
+    assert lines[2] == "B,1000,30,1000,2000"  # 5 列基线块
+    assert lines[3] == "r,10,20,0,0" and lines[4] == "r,11,21,100,100,30400"  # delta = 绝对值 - 基线
+    assert lines[5] == "r,12,22,200,200,30400" and lines[6] == "z,3,200,200,92400"  # 空闲 z: delta 持平非 0
+    parsed = parse_v4_day_text(text)
+    assert parsed.key == "global" and parsed.bad_lines == 0 and parsed.data_lines == 11 and not parsed.torn_tail
+    assert len(parsed.blocks) == 1 and parsed.blocks[0] == block  # 解析还原 == 原始内存形态(逐点)
+    # dt 链信息逐点同构: v4 行携带的 dt 列经同构转换后, v3 槽位推算与实测序列逐一相等
+    assert [s.ts for s in v3_block_slots(_v4_to_v3_block(parsed.blocks[0]))] == pytest.approx(expected_ts, abs=1e-6)
+    # 多块: 各块基线独立(delta 各自相对本块基线)
+    b2 = V4Block(
+        start_epoch=5000,
+        interval_s=60,
+        dl_base=100,
+        up_base=200,
+        records=(V4Sample(1, 1, 101, 202), V4Sample(1, 1, 161, 262, dt_ms=61000)),
+    )
+    assert format_v4_day_text("k", (b2, )).splitlines()[4] == "r,1,1,61,62,61000"
+    parsed2 = parse_v4_day_text(format_v4_day_text("torrent:ABC", (block, b2)))
+    assert parsed2.key == "torrent:ABC" and len(parsed2.blocks) == 2 and parsed2.blocks[1] == b2
+
+
+def test_v4_b_row_dual_form_3col_5col():
+    """B 行 3/5 列二态(v4 §01): 无基线 = 3 列(仅 n 游程合法)/ 基线 = 5 列(基线 = 块内
+    首个带 totals 观测的快照); 格式与解析两侧二态识别; 基线缺一 fail-fast; interval_s
+    小数秒口径沿用; n 行行型与 v3 不变; 二态同文件任意顺序并存"""
+    assert format_v4_b_row(1000, 30) == "B,1000,30"  # 3 列无基线
+    assert format_v4_b_row(1000, 30, 5_000_000_000, 8_000_000_000) == "B,1000,30,5000000000,8000000000"  # 5 列
+    assert format_v4_b_row(1000, 1.5, 5, 8) == "B,1000,1.5,5,8"  # 小数秒口径沿用
+    assert format_v4_b_row(1000, 30.0, 5, 8) == "B,1000,30,5,8"  # 整值不带小数点
+    # 基线二态须成对(缺一 fail-fast); interval_s 校验口径同 v3
+    for bad_pair in ((5, None), (None, 8)):
+        with pytest.raises(ValueError):
+            format_v4_b_row(1000, 30, *bad_pair)
+    for bad_iv in (0, -30, True, float("nan"), float("inf"), "30"):
+        with pytest.raises(ValueError):
+            format_v4_b_row(1000, bad_iv)
+    # n 行不变(与 v3 同形)
+    assert format_v4_n_row(V4NullRun(2)) == "n,2" and format_v4_n_row(V4NullRun(2, dt_ms=5000)) == "n,2,5000"
+    # 解析二态: 3 列 B -> 基线 None/None; 5 列 B -> 基线还原; 同文件并存(无基线块在前)
+    parsed = parse_v4_day_text(
+        _v4_day_text(
+            [
+                HEADER_LINE_V4,
+                "key,global",
+                "B,1000,30",
+                "n,3",
+                "n,2,9000",  # 无基线块(纯 n)
+                "B,2000,60,100,200",
+                "r,1,1,0,0",
+                "r,2,2,50,60,61000",  # 基线块
+            ]
+        )
+    )
+    assert parsed.bad_lines == 0 and len(parsed.blocks) == 2
+    assert (parsed.blocks[0].dl_base, parsed.blocks[0].up_base) == (None, None)
+    assert parsed.blocks[0].records == (V4NullRun(3), V4NullRun(2, 9000))
+    assert (parsed.blocks[1].dl_base, parsed.blocks[1].up_base) == (100, 200)
+    assert parsed.blocks[1].records == (V4Sample(1, 1, 100, 200), V4Sample(2, 2, 150, 260, 61000))
+    # 反序并存: 基线块 -> 无基线块(如 00:00 硬切后空闲开场)同样二态各自成立
+    rev = parse_v4_day_text(
+        _v4_day_text([HEADER_LINE_V4, "key,global", "B,1000,30,5,8", "r,1,1,0,0", "B,2000,60", "n,2"])
+    )
+    assert rev.bad_lines == 0 and len(rev.blocks) == 2
+    assert (rev.blocks[0].dl_base, rev.blocks[0].up_base) == (5, 8)
+    assert (rev.blocks[1].dl_base, rev.blocks[1].up_base) == (None, None) and len(rev.blocks[1].records) == 1
+    # 二态之外(4/6 列)与基线列负值: 整行计坏、不开新块、既有块不受影响
+    head = [HEADER_LINE_V4, "key,global", "B,1000,30,5,8", "r,1,1,0,0"]
+    bad_bs = ["B,1000,30,5", "B,1000,30,5,8,9", "B,1000,30,-5,8", "B,1000,30,5,-8"]
+    out = parse_v4_day_text(_v4_day_text(head + bad_bs + ["r,2,2,10,10"]))
+    assert out.bad_lines == len(bad_bs)
+    assert len(out.blocks) == 1 and [r.dl_total for r in out.blocks[0].records] == [5, 15]
+
+
+def test_v4_negative_delta_bad_row_non_propagating():
+    """负 delta 判坏行(§01 免费校验: 计数器回落在绝对值形态合法, delta 形态必是损坏):
+    整行跳过计数、游标不推进; delta-vs-基线逐行独立 —— 块中段坏行后, 后续行 totals 复原
+    仍精确(坏行不传播); r/z 两行型都判; 序列化侧负 delta fail-fast(写侧纪律); 撕裂尾
+    半行豁免口径沿用"""
+    base_dl, base_up = 10_000, 20_000
+    head = [HEADER_LINE_V4, "key,global", f"B,1000,30,{base_dl},{base_up}", "r,10,20,0,0", "r,11,21,100,100"]
+    bads = ["r,12,22,-1,50", "z,2,0,-3"]  # r 与 z 的负 delta 各一
+    tail = ["r,13,23,300,300", "z,2,300,300,45000", "n,2", "r,14,24,400,400,30000"]
+    parsed = parse_v4_day_text(_v4_day_text(head + bads + tail))
+    assert parsed.bad_lines == 2 and parsed.data_lines == 10
+    (block, ) = parsed.blocks
+    # 复原绝对值 = 基线 + 本行 delta(逐行独立): 坏行两侧的好行都精确
+    # (若实现误作块内增量链, 坏行后一行会复位成 10400 —— 本断言同时甄别两种语义)
+    assert [type(r) for r in block.records] == [V4Sample, V4Sample, V4Sample, V4ZeroRun, V4NullRun, V4Sample]
+    assert [(r.dl_total, r.up_total) for r in block.records[:3]] == [(10000, 20000), (10100, 20100), (10300, 20300)]
+    assert (block.records[3].dl_total, block.records[3].up_total) == (10300, 20300)
+    assert (block.records[5].dl_total, block.records[5].up_total) == (10400, 20400)
+    # 游标不推进: 坏行剔除后的 dt 链推算时刻与干净文件(无坏行)完全一致
+    clean = parse_v4_day_text(_v4_day_text(head + tail))
+    assert [s.ts for s in v3_block_slots(_v4_to_v3_block(block))] == [
+        s.ts for s in v3_block_slots(_v4_to_v3_block(clean.blocks[0]))
+    ]
+    assert block.records[5].dt_ms == 30000  # 尾行显式 dt 以好行链上锚点起算(坏行不占链)
+    # 序列化侧: 负 delta fail-fast(计数器回落须先关块重立基线); r/z 行须基线块
+    with pytest.raises(ValueError):
+        format_v4_r_row(V4Sample(1, 1, 9_999, 20_000), base_dl, base_up)
+    with pytest.raises(ValueError):
+        format_v4_z_row(V4ZeroRun(2, 10_000, 19_999), base_dl, base_up)
+    with pytest.raises(ValueError):
+        format_v4_r_row(V4Sample(1, 1, 5, 5), None, None)
+    # 撕裂尾半行豁免口径沿用: 残缺末行记 torn_tail 且计坏, 前面好行照常收
+    torn = parse_v4_day_text(_v4_day_text(head + tail + ["r,15,25,5"])[:-1])
+    assert torn.torn_tail is True and torn.bad_lines == 1 and len(torn.blocks[0].records) == 6
+
+
+def test_v4_no_baseline_block_n_only_guard():
+    """n-only 无基线块(v4 §01 基线立点: 块首 n 游程 -> 写侧拆 3 列 B 无基线块): 3 列 B +
+    纯 n 合法(roundtrip); 无基线块内 r/z 判坏行(解析守卫, 整行跳过、后续 n 照常收);
+    序列化侧同源守卫 fail-fast; n-only 前缀块 -> 恢复传输记录开新块立基线(两块接续)"""
+    # 合法: 3 列 B + 纯 n, roundtrip 还原
+    block = V4Block(1000, 30, None, None, (V4NullRun(3), V4NullRun(2, 9000)))
+    text = format_v4_day_text("global", (block, ))
+    assert text.splitlines()[2] == "B,1000,30"
+    parsed = parse_v4_day_text(text)
+    assert parsed.bad_lines == 0 and parsed.blocks[0] == block
+    # 解析守卫: 无基线块内 r/z 整行判坏, 后续 n 照常收(游标不推进)
+    guarded = parse_v4_day_text(
+        _v4_day_text([HEADER_LINE_V4, "key,global", "B,1000,30", "r,1,1,0,0", "z,2,0,0", "n,3,45000", "n,2"])
+    )
+    assert guarded.bad_lines == 2 and guarded.data_lines == 6 and len(guarded.blocks) == 1
+    assert guarded.blocks[0].records == (V4NullRun(3, 45000), V4NullRun(2))
+    # n-only 前缀块 -> 恢复传输开新块立基线: 前块无基线, 后块 5 列, 两块接续不断史
+    seq = parse_v4_day_text(
+        _v4_day_text([HEADER_LINE_V4, "key,global", "B,1000,30", "n,3", "B,1090,30,1000,2000", "r,1,1,0,0"])
+    )
+    assert seq.bad_lines == 0 and len(seq.blocks) == 2
+    assert (seq.blocks[0].dl_base, seq.blocks[0].up_base) == (None, None) and seq.blocks[0].records == (V4NullRun(3), )
+    assert (seq.blocks[1].dl_base, seq.blocks[1].up_base) == (1000, 2000)
+    assert seq.blocks[1].records == (V4Sample(1, 1, 1000, 2000), )
+    # 序列化侧同源守卫: r 行须基线块; day_text 组装无基线块内 r 同样 fail-fast
+    with pytest.raises(ValueError):
+        format_v4_r_row(V4Sample(1, 1, 2, 2), None, None)
+    with pytest.raises(ValueError):
+        format_v4_day_text("global", (V4Block(1000, 30, None, None, (V4Sample(1, 1, 2, 2), )), ))
+
+
+def test_v4_cumsum_restore_pointwise():
+    """delta 以块基线复原绝对值逐点相等(B1「cumsum 复原」): 大基线量级(all-time ~10^13,
+    报告 §06 字节对照同量级)+ 块内递增 delta(delta = 块内已传量)r/z 混排逐行复原 == 原始
+    绝对 totals; 块首 z 立基线(delta = 0)与块首 r 同为合法基线立点; 多块基线独立互不串扰"""
+    base_dl, base_up = 54_975_581_388_800, 5_497_558_138_880  # ~50 TiB / 5 TiB
+    d_deltas = [0, 200_000_000, 500_000_000, 500_000_000, 900_000_000]  # 块内已传量递增(z 持平)
+    u_deltas = [0, 20_000_000, 50_000_000, 50_000_000, 90_000_000]
+    recs = (
+        V4Sample(100_000_000, 10_000_000, base_dl + d_deltas[0], base_up + u_deltas[0]),  # 块首 r 立基线
+        V4Sample(100_000_000, 10_000_000, base_dl + d_deltas[1], base_up + u_deltas[1], dt_ms=2001),
+        V4Sample(100_000_000, 10_000_000, base_dl + d_deltas[2], base_up + u_deltas[2]),
+        V4ZeroRun(10, base_dl + d_deltas[3], base_up + u_deltas[3], dt_ms=20005),  # 空闲: delta 持平
+        V4Sample(100_000_000, 10_000_000, base_dl + d_deltas[4], base_up + u_deltas[4]),
+    )
+    block = V4Block(1000, 2, base_dl, base_up, recs)
+    text = format_v4_day_text("global", (block, ))
+    lines = text.splitlines()
+    assert lines[2] == f"B,1000,2,{base_dl},{base_up}"
+    assert lines[3] == "r,100000000,10000000,0,0" and lines[4] == "r,100000000,10000000,200000000,20000000,2001"
+    assert lines[6] == "z,10,500000000,50000000,20005"
+    parsed = parse_v4_day_text(text)
+    assert parsed.bad_lines == 0 and parsed.blocks[0] == block
+    # 逐行复原 == 原始绝对值(基线 + 本行 delta, 逐点)
+    restored = [(r.dl_total - base_dl, r.up_total - base_up) for r in parsed.blocks[0].records]
+    assert restored == list(zip(d_deltas, u_deltas))
+    # 块首 z 立基线(delta = 0)+ 多块基线独立
+    b2 = V4Block(
+        9000, 2, 7_000_000, 8_000_000, (V4ZeroRun(5, 7_000_000, 8_000_000), V4Sample(1, 1, 7_000_100, 8_000_100))
+    )
+    parsed2 = parse_v4_day_text(format_v4_day_text("global", (block, b2)))
+    assert parsed2.blocks[1] == b2
+    assert parsed2.blocks[1].records[0].dl_total == 7_000_000  # 块首 z: 基线 = 该快照, 复原持平
+
+
+def test_v4_header_latch_whole_file_mismatch():
+    """头行 v4 门闩(v4 §01, R2 不设双读): 头行必须恰为 v4 —— v3/v1/v2 旧头行/缺失/非头行
+    整文件不匹配格式, 全部行记坏、key None; v4 常量字面值钉住(批 2 翻转的接线依据)"""
+    assert HEADER_LINE_V4 == "# auto-qb qb-traffic v4"
+    assert TRAFFIC_V4_DIR_NAME == "qb-traffic-v4"
+    body = ["key,global", "B,1000,30,5,8", "r,1,1,0,0"]
+    for head in ("# auto-qb qb-traffic v3", "# auto-qb qb-traffic v1", "# auto-qb qb-traffic v2", "key,global"):
+        old = parse_v4_day_text(_v4_day_text([head] + body))
+        assert old.key is None and old.blocks == () and old.bad_lines == 4 and old.data_lines == 4
+    # 空文本: 头行缺失 -> 全空解析(与 v3 口径一致)
+    empty = parse_v4_day_text("")
+    assert empty.key is None and empty.blocks == () and empty.bad_lines == 0 and empty.data_lines == 0
