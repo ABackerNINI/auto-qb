@@ -34,7 +34,8 @@ import queue
 import secrets
 import threading
 import time
-from typing import List, Optional
+from collections import deque
+from typing import List, Optional, Tuple
 
 from .commands import (
     CMD_SLOW_MS,
@@ -70,6 +71,35 @@ SSE_KEEPALIVE_S = 5.0
 EVENT_TICKET_TTL_S = 30.0
 # 未消费票据上限: 防签发端无界堆积(签发需要凭证, 上限只是内存卫生)
 EVENT_TICKET_MAX = 64
+
+# ---- 错误历史环(WEBUI 错误历史 S2): 挂 auto_qb logger 的 WARNING+ 内存环 ----
+# 容量写常量(零新配置键): 环满挤最旧, 200 条足够前端重连后补拉一段历史
+WEB_ERR_RING_MAX = 200
+# 单条消息截断上限: traceback 等长文案收集时压掉, 展示层不再处理
+WEB_ERR_MSG_MAX = 500
+
+
+class WebErrLogHandler(logging.Handler):
+    """auto_qb logger -> WEB 错误历史内存环(WARNING+; tray/app.py UiLogHandler 同款范式)
+
+    emit 仅格式化 + 入环(持 runtime 的锁), 全程 try/except 静默 —— 收集器永不干扰
+    业务日志; 环操作零 IO, 纯内存不进 state_file。环本体与 seq 计数器是 WebUIRuntime
+    字段, handler 持引用写: 日志线程经 lock 写, Web 线程端点只读(单一写者纪律不破)。
+    """
+    def __init__(self, runtime: "WebUIRuntime"):
+        super().__init__()
+        self._runtime = runtime
+
+    def emit(self, record: logging.LogRecord):
+        try:
+            if record.levelno >= logging.WARNING:
+                # 多行合一(换行等空白折叠成空格)+ 截断: 收集时一次处理, 展示层不管
+                msg = " ".join(str(record.getMessage()).split())
+                if len(msg) > WEB_ERR_MSG_MAX:
+                    msg = msg[:WEB_ERR_MSG_MAX]
+                self._runtime.append_err(msg, record.levelname)
+        except Exception:
+            pass
 
 
 class WebUIRuntime:
@@ -142,6 +172,15 @@ class WebUIRuntime:
         # SSE 一次性票据(ticket -> 签发时刻): Web 线程签发/消费, 锁保护(端点跑在线程池)
         self._event_tickets: dict = {}
         self._event_tickets_lock = threading.Lock()
+        # ---- 错误历史环(/api/errlog 数据源; 挂 auto_qb logger 的 WARNING+ 条目) ----
+        # 纯内存(零磁盘触点, 不进 state_file —— 跨轮状态零新增): 日志线程经 lock 写,
+        # Web 线程端点只读。seq 进程内单调递增, 重启回零 —— 客户端以 last < 已持游标
+        # 判定后端重启并清空重拉, 服务端只如实返回。
+        self.err_log_lock = threading.Lock()
+        self.err_log_seq: int = 0
+        self.err_log_ring: deque = deque(maxlen=WEB_ERR_RING_MAX)
+        # 已挂 handler 引用(幂等闸: 已挂不重挂, 照 module.py start() 同款范式)
+        self._err_log_handler: Optional[WebErrLogHandler] = None
 
     # ------------------------------------------------------------------ 事件推送
 
@@ -192,6 +231,35 @@ class WebUIRuntime:
         with self._event_tickets_lock:
             issued_at = self._event_tickets.pop(ticket, None)
         return issued_at is not None and (time.time() - issued_at) <= EVENT_TICKET_TTL_S
+
+    # ------------------------------------------------------------------ 错误历史(/api/errlog)
+
+    def append_err(self, msg: str, level: str) -> None:
+        """入环一条 WARNING+ 记录(日志线程经 WebErrLogHandler 调用): seq 自增, 环满挤最旧"""
+        with self.err_log_lock:
+            self.err_log_seq += 1
+            self.err_log_ring.append({"seq": self.err_log_seq, "ts": time.time(), "level": level, "msg": msg})
+
+    def err_log_since(self, after: int) -> Tuple[List[dict], int]:
+        """只读增量(Web 线程): 回 (seq > after 的条目, 环当前最大 seq)
+
+        after >= 当前 last 时回空列表 —— 含后端重启后客户端持旧游标的场景(seq 回零),
+        重启判定在客户端(last < 游标即重启), 服务端只如实返回。
+        """
+        with self.err_log_lock:
+            items = [e for e in self.err_log_ring if e["seq"] > after]
+            return items, self.err_log_seq
+
+    def attach_err_log_handler(self) -> None:
+        """把 WebErrLogHandler 挂到 auto_qb logger(幂等: 已挂不重挂, 黄金法则 1)
+
+        在 start_server() 里调用; 热重载重启服务器会再进 start_server, 而环与 handler
+        都是进程级(不随服务器重启), 故以 _err_log_handler 引用闸防重复挂载。
+        """
+        if self._err_log_handler is not None:
+            return
+        self._err_log_handler = WebErrLogHandler(self)
+        logging.getLogger("auto_qb").addHandler(self._err_log_handler)
 
     def notify(self, etype: str, payload: dict) -> int:
         """广播一条事件; 返回送达的订阅者数
@@ -659,10 +727,12 @@ class WebUIRuntime:
         """启动 WEB 服务器(独立线程): 先确定密钥再拉起 —— 启用时的启动与热重载重启共用
 
         WebUIModule 是宿主侧唯一调用方(run() 的 web 启动块已退役, plan P2)。
+        错误历史 handler 挂接在启动前完成(幂等, 重启不重挂)。
         """
         from . import start_web_server
 
         self.ensure_token()
+        self.attach_err_log_handler()
         self.handle = start_web_server(self._host)
 
     def stop_server(self) -> None:

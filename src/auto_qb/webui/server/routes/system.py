@@ -1,4 +1,4 @@
-"""系统诊断路由: /api/log · /api/cmd/{cmd_id}.
+"""系统诊断路由: /api/log · /api/cmd/{cmd_id} · /api/errlog.
 
 端点体逐字平移(plan 26-09-22-1857 W2); 仅 @app.* → @router.* 与共享件别名(原闭包名不变)。
 鉴权由 factory 的全局 dependencies 单点覆盖, 本模块不另挂依赖。
@@ -49,5 +49,18 @@ def build_router(ctx: WebContext) -> APIRouter:
         manager.web.touch()
         result = manager.web.results.get(cmd_id)
         return dict(result) if result else {"status": "pending"}
+
+    @router.get("/api/errlog")
+    def api_errlog(after: int = 0):
+        """错误历史内存环增量(只读): 只回 seq > after 的条目, last = 环当前最大 seq
+
+        挂机型场景浏览器关闭期 core 模块的 WARNING+ 日志不产生 toast —— 前端重连后凭
+        游标经本端点补拉。seq 是进程内计数, 后端重启回零: 客户端以 last < 已持游标判定
+        重启并清空重拉, 本端点只如实返回(服务端零重启逻辑)。环纯内存(cap 200, 挤最旧,
+        runtime.WebErrLogHandler), 零磁盘触点, 不落任何持久化状态。
+        """
+        manager.web.touch()
+        items, last = manager.web.err_log_since(after)
+        return {"items": items, "last": last}
 
     return router
