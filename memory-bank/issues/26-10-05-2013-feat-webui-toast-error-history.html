@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-toast-error-history">
 <meta name="doc-refs" content="memory-bank/plans/26-10-05-2026-plan-webui-toast-error-history.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="WEBUI 错误信息历史: 右下角 toast 退场即销毁, 错过后无处可查">
 <meta name="issue-summary" content="WEBUI 加错误历史功能: 全局错误反馈只有右下角 toast 一条通道, 8~9 秒自动消失且不留痕迹, 刷新/重连还清空; WEBUI 又不暴露后端日志, 错过 = 无处可查。建议 toast() 单点追加会话内错误环形缓冲 + 右下角小入口弹层">
 <title>WEBUI 错误信息历史: 右下角 toast 退场即销毁, 错过后无处可查 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-2013-feat-webui-toast-error-history</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 20:13</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -181,11 +181,20 @@
       <li>2026-10-05 20:13 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-05 20:26 — 用户指派认领，状态 <strong>In Progress</strong>；认领计划 <a href="../plans/26-10-05-2026-plan-webui-toast-error-history.html">26-10-05-2026-plan-webui-toast-error-history</a>（完整方案 + 收 error 口径 + 3 个可交互入口模板待拍板）</li>
       <li>2026-10-05 21:43 — 计划范围修订(用户复审「按推荐更新文档」): 挂机场景浏览器关闭是常态, 纯前端缓冲覆盖不了关闭期; 计划增补后端 WARNING+ 内存错误环 + /api/errlog 增量端点 + boot 合并/60s 补拉(计划 §03/§05 S2/S3)。同轮修正本文 §02「无处可查」证据(见该节修正条)。§06 建议修法原文保留作历史。</li>
+      <li>2026-10-06 04:13 — S1-S8 实施完成, 状态 <strong>Done</strong>(分支 feat/webui-error-history, 6 笔提交 9e70b0bd…ae94311e, 待并回 develop)。实际修法/验证方式/测试数字见下方「修复后补充」。</li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-10-05 20:26 仍复现 —— 六个锚点全部命中（.toast-wrap 三皮肤 CSS 行号微漂为 atlas 520 / prism 219 / console 443，其余未漂）。另：toast 停留下限已于当日 20:07 改为按 kind 下限（error/timeout 12s、warn 8s，TOAST_MS_FLOOR），本文「8~9s 自动消失」的表述被该改动取代，「错过 = 无处可查」的历史缺口不变。详见计划 §02。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>(2026-10-06 实施完成, 与 §06 建议的差异 = 按计划增补了后端错误环; 建议原文保留作历史):</p>
+    <ul>
+      <li><strong>数据层(S1, 9e70b0bd)</strong>: <code>toast()</code> / <code>_finishToast()</code> 双钩子<strong>发出即收</strong>(非建议的「退场时追加」—— <code>auth.js:68</code> 绕过 _dropToast 清空, 挂退场会漏重连前最后一批错误), error/timeout 条目 upsert by id 进会话内环形缓冲(cap 50); 零持久化、零新配置键, 收集范围 = error + timeout(本库 timeout 语义 = 超时/失败终态), warn 不收。</li>
+      <li><strong>后端错误环(S2, 07cca037)</strong>: <code>auto_qb</code> logger 单挂 WARNING+ 内存 ring handler(cap 200, msg 截断 500 字符, emit 全程 try/except 零 IO) + 只读增量端点 <code>GET /api/errlog</code>(after 游标) —— 覆盖「浏览器关闭期」盲区(纯前端方案对关闭期零覆盖, 建议方案未覆盖这层)。</li>
+      <li><strong>boot 合并(S3, 855a4f22)</strong>: 前端 boot 拉全量合并进 <code>_errHistory</code>(后端条目不计未读) + 60s 补拉(计未读) + 游标回退检测重拉。</li>
+      <li><strong>入口(S4+S5, 81f85e3d)</strong>: D1 拍板 <strong>T2 状态栏徽标 + 上拉面板</strong>(statusbar.html 右段, <code>.sb-hist</code> 同款范式); 面板挂 overlays.html(app 根层), 支持单条复制(copyText)/一键清空, 点外关 + Esc 关。</li>
+      <li><strong>断线源(S6, f98cbf55)</strong>: D2 采纳 —— SSE <code>es.onerror</code> 以 connected 状态位取沿, 断线沿发一条 error toast 自动落进历史, 重试期不重复, 恢复静默。</li>
+    </ul>
+    <p><strong>验证方式</strong>: 前端静态守阵 6 条(tests/test_webui_error_history.py: 双钩子接线 / cap 裁剪 / 零持久化 / 入口+徽标接线 / copyText 接线 / boot 合并+补拉定时器) + 后端行为测试 7 条(tests/test_webui_backend_errlog.py: 环 cap 与 WARNING 以下不入环 / after 增量 / 零磁盘触点等) + test_web.py 路由金清单增 <code>/api/errlog</code>(77→78); 全量 <code>commands run test.full</code> <strong>2649 passed + 4 skipped, 28.52s, 覆盖率 TOTAL 98%</strong>(基线切片 <a href="../testing/baselines/26-10-06-0413-webui-toast-error-history-done.md">26-10-06-0413</a>; 相对功能开工前 2622 +14 条即本功能增量)。三皮肤真机走查(atlas/prism/console 入口可见/徽标/面板开合/点外关/Esc/「后端」小标)<strong>未做</strong>(实施会话为 CLI 会话, 无真机浏览器 + 真实 qB 环境), 待用户真机验证。</p>
   </section>
 
   <footer>

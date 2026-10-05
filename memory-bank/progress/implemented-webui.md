@@ -7,6 +7,21 @@
 
 > 本文件只留近期条目; 2026-09-26~10-04 二十九条及更早的条目已按 cap 轮转**原文外迁** → [implemented-webui-history.md](implemented-webui-history.md)(下方各条留一行指针, 事实不变)。
 
+- **WEB UI 错误信息历史: toast 环形缓冲 + 后端错误环 + 状态栏入口面板**(2026-10-05~06, 计划
+  [plans/26-10-05-2026](../plans/26-10-05-2026-plan-webui-toast-error-history.html) S1-S8 全落地, 分支
+  feat/webui-error-history 六笔提交 `9e70b0bd`…`ae94311e` 待并回; 认领 issue
+  [26-10-05-2013](../issues/26-10-05-2013-feat-webui-toast-error-history.html), Done): `toast()` /
+  `_finishToast()` 双钩子**发出即收**(auth 清 toasts 绕过退场钩, 退场收会漏重连前最后一批错误),
+  error/timeout 条目 upsert by id 进会话内环形缓冲(cap 50, 零持久化 / 零新配置键, warn 不收);
+  后端 `auto_qb` logger 挂 WARNING+ 内存错误环(cap 200, msg 截断, emit 零 IO)+ 只读增量端点
+  `GET /api/errlog`(after 游标), 前端 boot 拉全量合并(不计未读)+ 60s 补拉(计未读)+ 游标回退重拉
+  —— 补「浏览器关闭期」盲区; 入口按 D1 拍板 **T2 状态栏右段徽标 + 上拉面板**(单条 copyText 复制 /
+  一键清空 / 点外关 / Esc 关); D2 采纳: SSE 断线沿发一条 error toast 自动落历史, 重试期不重复。
+  守阵: 前端静态 6 条(tests/test_webui_error_history.py)+ 后端行为 7 条(tests/test_webui_backend_errlog.py)
+  + 路由金清单 `/api/errlog`(77→78); test.full 2649 passed + 4 skipped / 98%(基线
+  [26-10-06-0413](../testing/baselines/26-10-06-0413-webui-toast-error-history-done.md)); 三皮肤真机
+  走查未做(CLI 会话, 无真机浏览器 + 真实 qB), 待用户真机验证。
+
 - **WEB UI 强制汇报确认机制重构: epoch 前跳证据门控 + warn 第三态**(2026-10-05, 计划
   [plans/26-10-05-0923](../plans/26-10-05-0923-plan-reannounce-confirm-rework.html) S0-S5 全落地, 提交链
   `f251e301`(S0 真机探针三点实证: 前跳 +5466s / TOL=3.0 维持 / 推迟路径 min_e+1 冻结)→`8873c889`

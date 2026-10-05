@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-toast-error-history">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-05-2026">
-<meta name="doc-updated" content="26-10-05-2143">
+<meta name="doc-updated" content="26-10-06-0413">
 <meta name="doc-refs" content="memory-bank/issues/26-10-05-2013-feat-webui-toast-error-history.html">
 <title>WEBUI 错误信息历史: toast 环形缓冲 + 后端错误环 + 常驻入口面板 · 实施计划</title>
 <style>
@@ -180,13 +180,13 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">实施计划 · Open(待拍板 D1/D2)</div>
+    <div class="kicker">实施计划 · Done(S1-S8 全落地)</div>
     <h1>WEBUI 错误信息历史: toast 环形缓冲 + 后端错误环 + 常驻入口面板</h1>
     <p class="lede">按 issue 的完整方案落地: 所有错误已在 <code>toast()</code> 单点汇合, 在该单点把 error / timeout 类条目追加进<strong>会话内环形缓冲</strong>(上限 50 条, 前端不持久化); 右下角常驻入口 + 未读徽标 + 列表弹层, 支持单条复制与一键清空; 登录 / 重连清 toasts 时历史保留。26-10-05 复审增补(挂机场景「浏览器关闭才是常态」, 纯前端缓冲对关闭期零覆盖): <strong>后端 WARNING+ 内存错误环 + <code>/api/errlog</code> 增量端点 + 前端 boot 合并 / 60s 补拉</strong>, 面板成为「本页 toast + 后端自治错误」合并视图; 后端持久化与通用日志查看器仍不做。本计划同时给出 <strong>3 个可交互模板</strong>(§04, 可直接试用)供拍板入口形态。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-2026-plan-webui-toast-error-history</div></div>
       <div class="item"><div class="k">编制</div><div class="v">2026-10-05 20:26</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">认领 issue</div><div class="v"><a href="../issues/26-10-05-2013-feat-webui-toast-error-history.html">26-10-05-2013-feat-webui-toast-error-history</a></div></div>
       <div class="item"><div class="k">涉及面</div><div class="v">webui 前端 · 三皮肤共用层 + 后端错误环/端点</div></div>
     </div>
@@ -546,11 +546,12 @@ _recordErrorToast(id, kind, text)  // upsert: 同 id 更新(emit 后又 settle �
       <li>2026-10-05 20:26 — 创建; 认领 issue <a href="../issues/26-10-05-2013-feat-webui-toast-error-history.html">26-10-05-2013</a>(Open → In Progress), 六锚点复验全复现; 口径按完整方案 + 收 error; 附 3 个可交互模板供 D1 拍板。状态 <strong>Open</strong>(待拍板 D1/D2)。</li>
       <li>2026-10-05 20:46 — 修演示页缺陷(用户报「演示控制点击无反应」): mount 以 .demo-app 为根找控制钮, 但 .demo-ctl 是卡片级兄弟不在其子树内, 按钮从未绑上事件 —— 改回 .tpl-card 根上查找; 附带把首条「fresh」闪高亮收敛为仅新条目入历史时触发。真浏览器走查后放行。</li>
       <li>2026-10-05 21:43 — 范围修订(用户复审拍板「按推荐更新文档」): 挂机场景「浏览器关闭才是常态」, 纯前端缓冲对关闭期零覆盖; 原「不做清单」把持久化 / 日志代理 / 后端内存环三个成本不同的选项捆绑拒绝属论证漏洞, 拆分重裁 —— 增补<strong>后端 WARNING+ 内存错误环 + <code>/api/errlog</code> 增量端点 + 前端 boot 合并 / 60s 补拉</strong>(新增 S2/S3, 条目增 source 字段, 守阵 +4), 持久化与通用日志查看器维持不做; 同时修正 issue §02 证据(/api/log 与 FE-2C 日志弹窗已存在, 原取证漏扫 server/routes/)。D1/D2 拍板点不变, 状态仍 <strong>Open</strong>。</li>
+      <li>2026-10-06 04:13 — <strong>S1-S8 实施完成, 状态 Open → Done</strong>(分支 feat/webui-error-history, 6 笔提交: 9e70b0bd S1 数据层 → 07cca037 S2 后端错误环+/api/errlog → 855a4f22 S3 boot 合并补拉 → 81f85e3d S4+S5 T2 入口与面板 → f98cbf55 S6 断线源 → ae94311e S7 前端守阵)。D1 拍板 <strong>T2 状态栏徽标+上拉面板</strong>, D2 <strong>采纳断线源</strong>(S6 已落地)。实测 test.full <strong>2649 passed + 4 skipped, 28.52s, 覆盖率 TOTAL 98%</strong>(15946/169/5444/143; 基线切片 <a href="../testing/baselines/26-10-06-0413-webui-toast-error-history-done.md">26-10-06-0413</a>), 本功能增量 = 守阵 6 + 行为测试 7 + 路由金清单 77→78 共 <strong>+14 条</strong>(§06/S8 预估「前端 +5 / 后端 +4」按实施实况为前端 +6 / 后端 +7)。三皮肤真机走查未做(CLI 会话无真机浏览器 + 真实 qB), 待用户真机验证; issue 26-10-05-2013 已同步置 Done 并回写「实际修法/验证方式/测试数字」。</li>
     </ul>
   </section>
 
   <footer>
-    26-10-05-2026-plan-webui-toast-error-history.html · 认领 memory-bank/issues/26-10-05-2013-feat-webui-toast-error-history.html · 拍板 D1/D2 后按 §05 分步实施
+    26-10-05-2026-plan-webui-toast-error-history.html · 认领 memory-bank/issues/26-10-05-2013-feat-webui-toast-error-history.html · S1-S8 已全落地(Done), 待并回 develop + 用户真机走查
   </footer>
 
 </div>
