@@ -145,31 +145,31 @@ window.AQB_COMMANDS = {
     /* 回执 -> {ok, truth|error}, 并落埋点/[perf](事件路径与轮询路径共用, 保证两边观感一致) */
     _cmdRecToResult(r, start, cmdId) {
       if (typeof r.wait_ms === "number") {
-              // 合并而非替换: 点击侧的两段(_newCmdStats 写入)不能在这里被冲掉
-              this.cmdStats = {
-                ...(this.cmdStats || {}),
-                totalMs: Date.now() - start,
-                waitMs: r.wait_ms,
-                execMs: r.exec_ms,
-                cmdId,
-              };
-              /* 埋点必须有消费者, 否则就是死字段(2026-09-19 复核: 此前 cmdStats 只写不读,
-               * 计划里那张"走查表"从未产出)。超阈值时打一条 [perf] —— 冒烟脚本会收集并打印。
-               * patchMs 大 = 补丁没做到"点击即变"(被同步工作或 POST 挡住); postMs 大 = 命令投递慢
-               * (真机大库长 tick / GIL 争用); waitMs 大 = 命令没被及时消费(P0-1 唤醒退化);
-               * totalMs 大 = 轮询曲线或网络慢。 */
-            const c = this.cmdStats;
-              /* !端到端阈值**不再**加"等真值"的宽限 —— D2 之后回执不再被扣住等真值,
-               * 它就是命令执行时间(真机实测 pause 端到端应远小于旧值 1259ms)。
-               * 真值那一段现在由 `撤下` 之后的"值覆盖"独立负责, 不混进端到端。 */
-              const e2eBudget = 400;
-              if (c.waitMs > 100 || c.totalMs > e2eBudget || (c.postMs || 0) > 400 || (c.patchMs || 0) > 50) {
-                console.warn(
-                  `[perf] 命令 ${cmdId}${c.action ? "(" + c.action + ")" : ""}: 补丁 ${c.patchMs}ms` +
-                  ` / POST ${c.postMs}ms / 排队 ${c.waitMs}ms / 执行 ${c.execMs}ms` +
-                  ` / 端到端 ${c.totalMs}ms(补丁>50 或 POST>400 或 排队>100 或 端到端>${e2eBudget}属异常)`
-                );
-              }
+        // 合并而非替换: 点击侧的两段(_newCmdStats 写入)不能在这里被冲掉
+        this.cmdStats = {
+          ...(this.cmdStats || {}),
+          totalMs: Date.now() - start,
+          waitMs: r.wait_ms,
+          execMs: r.exec_ms,
+          cmdId,
+        };
+        /* 埋点必须有消费者, 否则就是死字段(2026-09-19 复核: 此前 cmdStats 只写不读,
+         * 计划里那张"走查表"从未产出)。超阈值时打一条 [perf] —— 冒烟脚本会收集并打印。
+         * patchMs 大 = 补丁没做到"点击即变"(被同步工作或 POST 挡住); postMs 大 = 命令投递慢
+         * (真机大库长 tick / GIL 争用); waitMs 大 = 命令没被及时消费(P0-1 唤醒退化);
+         * totalMs 大 = 轮询曲线或网络慢。 */
+        const c = this.cmdStats;
+        /* !端到端阈值**不再**加"等真值"的宽限 —— D2 之后回执不再被扣住等真值,
+         * 它就是命令执行时间(真机实测 pause 端到端应远小于旧值 1259ms)。
+         * 真值那一段现在由 `撤下` 之后的"值覆盖"独立负责, 不混进端到端。 */
+        const e2eBudget = 400;
+        if (c.waitMs > 100 || c.totalMs > e2eBudget || (c.postMs || 0) > 400 || (c.patchMs || 0) > 50) {
+          console.warn(
+            `[perf] 命令 ${cmdId}${c.action ? "(" + c.action + ")" : ""}: 补丁 ${c.patchMs}ms` +
+            ` / POST ${c.postMs}ms / 排队 ${c.waitMs}ms / 执行 ${c.execMs}ms` +
+            ` / 端到端 ${c.totalMs}ms(补丁>50 或 POST>400 或 排队>100 或 端到端>${e2eBudget}属异常)`
+          );
+        }
       }
       // `truth` = 回执里附带的真值({hash: {kind}})。带上它前端就不必再拉一次全量 /api/state。
       // `status` = 后端回执原值(ok/error/warn, D4=warn): reannounce 聚合分支按它三桶分流
