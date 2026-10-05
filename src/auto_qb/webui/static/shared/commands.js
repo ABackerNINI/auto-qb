@@ -95,7 +95,9 @@ window.AQB_COMMANDS = {
     },
     /* ---------------- 命令回执(轮询 /api/cmd/{id}): 主循环执行完/确认完才出结果 ----------------
      * pause/resume 等命令几乎即时; reannounce 的回执由后端 tracker 确认跟踪器在
-     * "status 变 working / next_announce 被重置"或超时后写入(窗口 30s, 前端多留余量)。
+     * "tracker 状态转 working / next_announce epoch 前跳(成功 = 前跳变大, 不是被重置)
+     * /tracker 拒绝/超时"后写入, status 三值 ok/error/warn(计划 26-10-05-0923 D4=warn);
+     * 受最小间隔推迟的目标立即回 warn「已受理」早回执, 不占确认窗口(窗口 30s, 前端多留余量)。
      */
     async waitCmd(cmdId, timeoutMs = 40000, opts = {}) {
       /* 首查后退避(原实现第一查也要先睡 500ms —— 快命令平白多 500ms):
@@ -128,7 +130,8 @@ window.AQB_COMMANDS = {
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
         try {
           const r = await this.api(`/api/cmd/${cmdId}`);
-          if (r.status === "ok" || r.status === "error") {
+          // warn 也是终结态(reannounce 已受理·推迟/未确认, D4=warn): 不放行会一直挂到 40s 等待超时
+          if (r.status === "ok" || r.status === "error" || r.status === "warn") {
             return r;  // 埋点与结果转换统一在 _cmdRecToResult 做(事件路径与轮询路径共用)
           }
         } catch (e) {
@@ -169,9 +172,12 @@ window.AQB_COMMANDS = {
               }
       }
       // `truth` = 回执里附带的真值({hash: {kind}})。带上它前端就不必再拉一次全量 /api/state。
+      // `status` = 后端回执原值(ok/error/warn, D4=warn): reannounce 聚合分支按它三桶分流
+      // (warn = 已受理·推迟/未确认, 不等于失败); 其余消费方只读 ok/error, 添字段零影响。
+      // SSE 与轮询两路都经这里转换, 终结语义单点(改回执词汇只动这一处 + 后端契约测试)。
       return r.status === "ok"
-        ? { ok: true, truth: r.truth || null }
-        : { ok: false, error: r.error || "执行失败" };
+        ? { ok: true, truth: r.truth || null, status: "ok" }
+        : { ok: false, error: r.error || "执行失败", status: r.status || "" };
     },
     /* ---------------- P2 事件驱动: 订阅式等回执 ----------------
      * 由 app.js 的 EventSource(/api/events)收 `cmd` 事件后回调这里兑现。
@@ -474,8 +480,8 @@ window.AQB_COMMANDS = {
           ];
           const tid = this.toast(
             n > 1
-              ? `强制汇报等待中…(${n} 个目标, tracker 确认最长 30s)`
-              : "强制汇报等待中…(已投递, tracker 确认最长 30s)",
+              ? `强制汇报等待中…(${n} 个目标, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
+              : "强制汇报等待中…(已投递, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)",
             "busy", 0, { sticky: true }
           );
           const results = await Promise.allSettled(
@@ -483,19 +489,36 @@ window.AQB_COMMANDS = {
               this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id, 40000, { firstMs: 500, capMs: 1000 }))
             )
           );
-          const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
-          if (!fails.length) {
+          /* 三桶按回执 status 分流(计划 26-10-05-0923 D4=warn, 机器依据 = status 不看前缀):
+           * ok = tracker 已确认; error = tracker 拒绝(含投递失败/等待超时); warn = 已受理·推迟
+           * 与未确认·停止/超时。前缀(已受理/未确认/失败)只作文案, 不参与分流。 */
+          let okN = 0, errN = 0, warnN = 0, firstMsg = "";
+          for (const r of results) {
+            if (r.status === "rejected") {
+              errN += 1;
+              if (!firstMsg) firstMsg = (r.reason && r.reason.message) || "投递失败";
+            } else if (r.value.ok) {
+              okN += 1;
+            } else if (r.value.status === "warn") {
+              warnN += 1;
+              if (!firstMsg) firstMsg = r.value.error || "";
+            } else {
+              errN += 1;
+              if (!firstMsg) firstMsg = r.value.error || "";
+            }
+          }
+          if (!errN && !warnN) {
             this._finishToast(tid, "ok",
               n > 1 ? `强制汇报成功(tracker 已确认, ${n} 个目标)` : "强制汇报成功(tracker 已确认)", 3000);
             return;
           }
-          const firstErr = fails[0].status === "rejected" ? fails[0].reason.message : fails[0].value.error;
-          this._finishToast(
-            tid,
-            "timeout",
-            `强制汇报: 成功 ${n - fails.length}, 失败 ${fails.length}${firstErr ? ` (${firstErr})` : ""}`,
-            6000
-          );
+          /* toast 类型映射(计划 §3.4): 含 error -> error / 仅 warn -> timeout(复用现有类型, 不新增)。 */
+          const kind = errN ? "error" : "timeout";
+          const head = `强制汇报: 成功 ${okN}, 失败 ${errN}, 未确认 ${warnN}`;
+          /* 后端聚合 msg 头部「成功 X, 失败 Y, 未确认 Z: 」与前端三桶计数重复(格式被契约测试
+           * 钉住), 剥头只留原因段; 投递失败/等待超时无头部, 原样保留。 */
+          const detail = firstMsg.replace(/^成功 [0-9]+, 失败 [0-9]+, 未确认 [0-9]+: /, "");
+          this._finishToast(tid, kind, detail ? `${head} (${detail})` : head, 6000);
           return;
         }
         let resp;

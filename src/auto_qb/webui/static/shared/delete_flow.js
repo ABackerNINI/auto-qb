@@ -150,7 +150,7 @@ window.AQB_DELETE = {
           ...hashes.map((h) => `/api/torrents/${h}/reannounce`),
         ];
         const ok = await this._reannounceAll(jobs, targets.label);
-        if (!ok) return;  // 汇报失败: 已提示且保留未删除
+        if (!ok) return;  // 汇报未全部确认(失败/未确认): 已提示且保留未删除
       }
       // 投递删除: 统一走 bulk 单命令并等聚合回执(比旧右键的"已投递"更可信: 失败可见)
       try {
@@ -166,16 +166,30 @@ window.AQB_DELETE = {
       }
       this.clearSelection();  // 列表交下一轮 rid 轮询自然刷新(不主动 refresh)
     },
-    /* 汇报前置: 逐目标投递并**全部等回执**; 全部成功返回 true(任一失败 -> 已提示且保留未删除) */
+    /* 汇报前置: 逐目标投递并**全部等回执**; 全部确认成功(ok)才返回 true(任一未过 -> 已提示且保留未删除)。
+     * 回执按 status 分流(D4=warn): error = tracker 明确拒绝, 汇报失败; warn(已受理·推迟/未确认·
+     * 停止/超时)不是失败但**仍不放行删除** —— 推迟中的汇报要等最小间隔过期才真正发出, 立即删除
+     * 会随种子一并丢失(正是汇报前置要避免的 H&R 风险), 未确认则没有任何「tracker 已接受」的
+     * 正证据; 删除不可逆, 按保守口径处理, 文案诚实区分「失败/未确认」。 */
     async _reannounceAll(jobs, label) {
       if (!jobs.length) return true;
       const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标, 等待确认…`, "busy", 0, { sticky: true });
       const results = await Promise.allSettled(
         jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
       );
-      const fails = results.filter((r) => r.status === "rejected" || !r.value.ok);
-      if (fails.length) {
-        this._finishToast(tid, "timeout", `${fails.length}/${jobs.length} 个目标汇报确认失败${label ? `(${label})` : ""}, 已保留未删除`, 6000);
+      const errs = [];
+      const warns = [];
+      for (const r of results) {
+        if (r.status === "rejected") errs.push((r.reason && r.reason.message) || "投递失败");
+        else if (!r.value.ok) (r.value.status === "warn" ? warns : errs).push(r.value.error || "执行失败");
+      }
+      if (errs.length || warns.length) {
+        const head = errs.length
+          ? `${errs.length}/${jobs.length} 个目标汇报失败`
+          : `${warns.length}/${jobs.length} 个目标汇报未确认`;
+        const first = errs[0] || warns[0];
+        this._finishToast(tid, errs.length ? "error" : "timeout",
+          `${head}${label ? `(${label})` : ""}: ${first}, 已保留未删除`, 8000);
         return false;
       }
       this._finishToast(tid, "ok", "汇报确认成功, 开始删除…", 2000);
@@ -189,7 +203,7 @@ window.AQB_DELETE = {
         details: opts.details || null,
         wide: true,  // 删除类确认框一律加宽: 摘要与选项宽松可读(DLG-01 成员明细已移除, 宽度见 --modal-wide-w)
         checks: [
-          { key: "reannounce", label: "删除前先强制汇报(等待 tracker 确认, 失败则不删除)", checked: true },
+          { key: "reannounce", label: "删除前先强制汇报(等待 tracker 确认, 失败或未确认则不删除)", checked: true },
           { key: "delete_files", label: "同时删除磁盘文件(不可恢复)", checked: false },
         ],
         okText: "删除",
