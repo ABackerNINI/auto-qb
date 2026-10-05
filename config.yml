@@ -9,7 +9,7 @@ config:
     data_dir: "auto-qb-data"
 
     # 主循环时间间隔
-    main_tick: 2S
+    main_tick: 1.5S
     # 每个循环最大执行任务数
     max_tasks_per_tick: 20
 
@@ -29,6 +29,7 @@ config:
         host: "127.0.0.1"
         port: 38080
         skip_local_verify: true
+        skip_check_menu: true
 
     # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
     notify:
@@ -64,10 +65,8 @@ config:
 
     # 全局 HR 设置(站点 hr: 段未设置时兜底)
     hr:
-        add_tag: ''                                                     # 满足 HR 触发条件时添加的标签格式，支持变量
         add_category: '!!HR${required_seeding_time}!!'                  # 满足 HR 触发条件时添加的分类格式，支持变量
         overwrite_category: false                                       # HR 触发条件时是否覆盖分类 (qb中一个种子只能有一个分类)
-        add_tag_for_satisfied: ''                                       # 做种时长满足要求时添加的标签格式
         add_category_for_satisfied: '--HR${required_seeding_time}--'    # 做种时长满足要求时添加的分类格式
         overwrite_category_for_satisfied: false                         # 做种时长满足要求时是否覆盖分类
 
@@ -83,10 +82,10 @@ config:
             extension_id: obdcncpkinclbpjhfmnakkgcjobbenig
         sites:
             btschool:
-                enabled: false
+                enabled: true
                 refresh_interval: 5H
             carpt:
-                enabled: false
+                enabled: true
                 refresh_interval: 5H
     global_speed_limit_curve:
         interval: 10M
@@ -502,4 +501,9 @@ config:
             rules:
               - '@add_drive_letter_tag_rules'
               - "@skip_checking_rules"
-    schema_version: 3
+    schema_version: 4
+    qb_traffic:
+        enabled: true
+        sample_interval: 1.5S
+        raw_window: 30D
+        rollup_window: 1000000D
