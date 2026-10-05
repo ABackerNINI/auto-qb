@@ -27,11 +27,12 @@ export const SKINS = ['prism', 'atlas'];
  * 起桩服务的命令。用 `uv run` —— 与 .commands/dev/config.toml 的 dev.harness 保持**同一条口径**
  * (裸 `python` 会缺 qbittorrentapi, 别改成系统 python)。
  *
- * ⚠ 收尾依赖(踩过, 见 memory-bank/pitfalls/testing/smoke.md「webServer 收尾」条):
+ * WARN 收尾依赖(踩过, 见 memory-bank/pitfalls/testing/playwright-teardown.md):
  * Playwright 停 webServer 时等的是子进程的 `'close'` 事件, 而 Node 的 `'close'` 要求**所有
- * stdio 管道都关闭**。Windows 上它用 `taskkill /pid <pid> /T /F`(同步 spawn), 非 Windows 上
- * 用 `process.kill(-pid, SIGKILL)` 杀整个进程组 —— 两条路都必须能**真正杀掉** `uv run` 拉起的
- * 子进程, 否则 Playwright 会卡在收尾不退出、桩服务残留占着端口。
+ * stdio 管道都关闭**。Windows 上它用 `spawnSync('taskkill ...')`(带管道 stdio) —— 本机 node 的
+ * `spawnSync` 遇管道 stdio 必 EBUSY, 失败被静默吞掉 => 桩服务没死 => 命令永不退出、8137 残留。
+ * 现由 `e2e/global-teardown.mjs`(配置里的 `globalTeardown`)在 Playwright 动手之前用**异步**
+ * taskkill 先杀掉进程树兜底; 非 Windows 走 `process.kill(-pid, SIGKILL)` 本来就没问题。
  */
 export const HARNESS_CMD = `uv run python scripts/ui_harness.py --torrents ${TORRENTS} --port ${PORT}`;
 

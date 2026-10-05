@@ -39,7 +39,8 @@
 ### 3. 排障实录（两条值得记的）
 
 - **自踩 `js-comment-terminator`**：首版 spec 的 docblock 里写了"星号斜杠"那个符号组合，注释在第 12 行被提前砍断 ⇒ Playwright 报 `Invalid left-hand side in postfix operation` + `No tests found`。而该文件**不在** `test_web.py` 静态守阵的扫描范围（守阵只扫 `src/auto_qb/webui/static`）⇒ 静态全绿、只有真跑才现形 —— 恰好实证了这套 e2e 的存在价值。
-- **webServer 收尾挂死**：用例 4/4 PASS 后命令永不退出、桩服务残留占 8137。读 playwright-core 源码定位到 `killProcess()` 用 `spawnSync('taskkill /pid <pid> /T /F', {shell:true})`，而本工具 shell 里 **`spawnSync` 全线 `EBUSY`**（连全路径 `taskkill.exe`、不带 shell 都一样）⇒ 失败被 try/catch 静默吞掉 ⇒ 管道关不掉 ⇒ `waitForCleanup` 永不 resolve。**是工具 shell 的环境限制，不是配置问题**（`spawn` 异步路径正常，所以起服务/浏览器/用例全不受影响）。已记 `pitfalls/testing/playwright-teardown.md`。
+- **webServer 收尾挂死**：用例 4/4 PASS 后命令永不退出、桩服务残留占 8137。读 playwright-core 源码定位到 `killProcess()` 用 `spawnSync('taskkill /pid <pid> /T /F', {shell:true})`，而本机 node 的 **`spawnSync` 只要带管道 stdio 就必 `EBUSY`**（`stdio:'ignore'` / `'inherit'` 正常；与可执行文件无关，连 node.exe 自己都一样；重试 5 次 + 延迟全 EBUSY，是**确定性**的不是竞态，也不是文件句柄/杀软占用）⇒ 失败被 try/catch 静默吞掉 ⇒ 管道关不掉 ⇒ `waitForCleanup` 永不 resolve。
+  ⚠ **本会话首版结论「是工具 shell 的环境限制、配置层修不掉、只能在真实终端跑」已作废** —— 判据下得早（只测了一种带管道的调用形态），把"某条调用形态失败"升格成了"整个 API 不可用"。**已于 2026-10-06 05:5x 修复**（见下方进度日志），更正版根因与实测数据在 `pitfalls/testing/playwright-teardown.md`。
 
 ### 4. 一处回退（避免把猜测写成结论）
 
@@ -70,6 +71,7 @@
 | S7 | 收录 `dev.e2e` | Done |
 | S8 | 方案 B 入池 | Done |
 | S9 | 收尾 DoD（切片 / 基线 / 索引） | Done |
+| S10 | 修 webServer 收尾挂死（`e2e/global-teardown.mjs`）+ 更正首版误判 | Done |
 
 ## 进度日志
 
@@ -82,11 +84,15 @@
 - **2026-10-06 05:1x** — S9：跑全量测试建基线、重建索引、写 activeContext 切片。
 - **2026-10-06 05:2x** — 用户「提交」⇒ 首次 `ship.commit` 被**命令漂移闸门**拦下（新坑档/基线里写了 `npx playwright test` 原文，而它已收录为 `dev.e2e`）⇒ 改写成 task id 并重建索引后通过。为满足「TODO.md 不入库」用**子集提交**（位置参数），并先把 TODO.md `git stash` 挪开（否则脏树挡住内部 rebase），提交后 pop 还原。**提交成功 `e6db1fab`**，推送经 `ls-remote` 核实。
 - **2026-10-06 05:4x** — 合并态补验：闸门跑在 rebase **之前**，故对合并后（含 9 个远端提交）的树补跑 `test.full` ⇒ **2662 passed + 4 skipped / 99%**，两次采样 64.45s / 72.45s；新增合并态基线切片 `26-10-06-0547`（用户指示「补一条合并态基线」，**尚未入库**）。
+- **2026-10-06 05:5x** — **S10：修 webServer 收尾挂死**（用户带来另一会话的 EBUSY 补充信息，据此重查）。**首版判据过窄**：`spawnSync` 并非全线坏，而是**只要带管道 stdio 就 EBUSY** —— `stdio:'ignore'`/`'inherit'` 正常（`status=0`），与可执行文件无关（连 `process.execPath` 即 node.exe 自己都一样），重试 5 次 + 延迟全 EBUSY ⇒ **确定性、非竞态、非文件句柄/杀软占用**。修法：新增 `e2e/global-teardown.mjs`（异步 `exec` + `netstat -ano` 取监听 PID + `taskkill /PID <pid> /T /F` + 轮询等端口释放；非 Windows no-op），`playwright.config.mjs` 挂 `globalTeardown`。顺序依据读 1.63 源码确认：`createGlobalSetupTasks` 把全局 teardown 任务排在 plugin setup **之后**、teardown 按注册**逆序**执行 ⇒ 本函数先于 webServer plugin 的 `killProcess()`，届时 `processClosed` 已 true、整段 force-kill 被跳过。**实测：`commands run dev.e2e` 14.8s / exit 0 / `4 passed (12.3s)`，8137 无 LISTENING、无残留 `ui_harness` 进程。** 另跑端口占用负例：exit 1 + `already used`、**外来服务不被误杀**（webServer setup 失败会中断任务链，`globalTeardown` 根本不被注册）。同步更正 `pitfalls/testing/playwright-teardown.md`（新增「别踩的坑」小节）、`dev.e2e` 的 note、`e2e/harness.mjs` 注释与本任务文件。**未提交**（用户未说「提交」）。
 
 ## 未做 / 留给用户
 
 - **已提交并推送 `e6db1fab`**（用户显式「提交」，并明确要求 **TODO.md 不入库** —— 已用 `git show --name-only` 断言过）。
   推送经 `git ls-remote gitee refs/heads/develop` 核实 == 本地 HEAD。⇒ 三处瑕疵全部闭环。
-- **合并态基线 `memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md` 尚未入库**（新建文件与二次提交都需用户显式授权）。
-- **本地在 AI 工具 shell 里跑 `dev.e2e` 会挂死**（`spawnSync` EBUSY，见 `pitfalls/testing/playwright-teardown.md`）⇒ 请在自己的终端跑；这条环境限制无法在配置层修掉。
+- 合并态基线 `26-10-06-0547` **已随 `3a6e676c` 入库**（原记"尚未入库"于 2026-10-06 06:0x 复核更正）。
+- **本轮（S10）改动全部未入库**：`e2e/global-teardown.mjs`(新) · `playwright.config.mjs` · `e2e/harness.mjs` ·
+  `.commands/dev/config.toml`(note) · `pitfalls/testing/playwright-teardown.md`(更正) + 索引 ·
+  本任务文件 · activeContext 切片 · 新基线 `26-10-06-0605`。用户未说「提交」⇒ 未 commit / push。
+- ~~**本地在 AI 工具 shell 里跑 `dev.e2e` 会挂死**~~ —— **已修**（2026-10-06 05:5x，新增 `e2e/global-teardown.mjs` + 配置挂 `globalTeardown`）：工具 shell 里 `commands run dev.e2e` 实测 **14.8s / exit 0**、打印 `4 passed (12.3s)`、8137 无 `LISTENING`、无残留 `ui_harness` 进程。原记的"环境限制无法在配置层修掉"是**误判**，已在 `pitfalls/testing/playwright-teardown.md` 更正。
 - 方案 B 不修，已入池。

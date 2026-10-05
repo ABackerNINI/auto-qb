@@ -7,9 +7,12 @@
 > **已提交并推送 `e6db1fab`**(`git ls-remote` 核实远端 == 本地; 20 文件 +723 −31; TODO.md 按要求未入库)。
 > 实测 e2e **4/4**; `test.full` 提交前 **2647 / 98%**(@ 37c427fe + 未提交)⇒ 合并态 **2662 / 99%**
 > (基线 26-10-06-0508 / 26-10-06-0547); `test.pkg` **103 passed**。
-> 最后活动: 2026-10-06 05:47
+> **05:5x 追加修复**: 原记的"`spawnSync` 全线 EBUSY ⇒ 环境限制、只能在真实终端跑"是**误判** —— 实为
+> **只要带管道 stdio 就 EBUSY**(`ignore`/`inherit` 正常)。已新增 `e2e/global-teardown.mjs` 兜底,
+> 工具 shell 里 `dev.e2e` **14.8s / exit 0**、`4 passed (12.3s)`、8137 无残留(**未提交**)。
+> 最后活动: 2026-10-06 06:00
 
-**Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md
+**Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0508-test-playwright-e2e.md, memory-bank/testing/baselines/26-10-06-0547-playwright-e2e-merged.md, memory-bank/testing/baselines/26-10-06-0605-playwright-e2e-teardown-fix.md
 
 ## 现状
 
@@ -17,6 +20,9 @@
   `playwright.config.mjs`(新, 原 `.js` 删) · `e2e/harness.mjs`(新, 桩服务参数单点) ·
   `e2e/smoke.spec.mjs`(新, 4 项) · `package.json`(补 scripts) · `scripts/ui_smoke.cjs`(依赖来源 + 版本注释) ·
   `.commands/dev/config.toml`(`dev.e2e`) · `memory-bank/` 文档若干 + 新坑档 + 任务档案。
+- **05:5x 新增(未入库)**: `e2e/global-teardown.mjs`(Windows 收尾兜底) + `playwright.config.mjs` 挂
+  `globalTeardown` + `e2e/harness.mjs` 注释 + `.commands/dev/config.toml` 的 `dev.e2e` note +
+  `pitfalls/testing/playwright-teardown.md` 更正版。
 - **已入库**: 上述改动随提交 `e6db1fab` 一并落盘(含 `package.json` / `package-lock.json` /
   `playwright.config.mjs` / `e2e/` / `.github/workflows/playwright.yml` —— CI 的 `npm ci` 依赖**已提交**的
   lock 文件, 这下才真正生效), 并已推 Gitee `develop`(远端 ref 经 `git ls-remote` 核实)。
@@ -35,10 +41,13 @@
 ## 未闭环 / 下次注意
 
 - **已提交 `e6db1fab`** ⇒ 三处瑕疵全部闭环(原「未提交」条目已消解)。
-- **合并态基线 `26-10-06-0547` 尚未入库**(新建文件与二次提交都需用户显式授权) ⇒ 下次「提交」时带上它。
-- **本工具 shell 里 `dev.e2e` 会挂死**: `spawnSync` 全线 `EBUSY` ⇒ Playwright 收尾杀不掉桩服务 ⇒
-  用例全 PASS 但命令永不退出、8137 残留。属环境限制, **配置层修不掉** ⇒ 请在自己的终端跑。
-  判据与清理法见 [pitfalls/testing/playwright-teardown.md](../pitfalls/testing/playwright-teardown.md)。
+- 合并态基线 `26-10-06-0547` **已随 `3a6e676c` 入库**(原记"尚未入库"已过期, 2026-10-06 06:0x 复核更正)。
+- **本轮新增基线 `26-10-06-0605`**(2662 + 4 / 99%, 零 Python 改动 ⇒ 与 0547 数字一致, 未入库)。
+- ~~**本工具 shell 里 `dev.e2e` 会挂死**~~ —— **已修(2026-10-06 05:5x, 未入库)**。真因是 `spawnSync`
+  **带管道 stdio** 必 `EBUSY`(`ignore`/`inherit` 正常), 而 Playwright 1.63 停 webServer 走的
+  `spawnSync('taskkill …', {shell:true})` 正是默认管道 ⇒ 失败被静默吞掉 ⇒ `'close'` 不触发。
+  新增 `e2e/global-teardown.mjs` 用**异步** taskkill 抢在 Playwright 之前杀进程树; 实测 **14.8s / exit 0**。
+  根因与实测数据见 [pitfalls/testing/playwright-teardown.md](../pitfalls/testing/playwright-teardown.md)。
 - 方案 B 已入池 `memory-bank/issues/26-10-06-0458-refactor-e2e-migrate-ui-smoke.html`(未认领)。
 - 顺带修正的漂移: `browser-env.md` 的 chromium 版本(151 → **153.0.8010.12**)、WorkBuddy 路径"已失效"
   结论(2026-10-06 复核可用)、轨道一 `agent-browser` 当前不在 PATH; `baseline.md` 常驻警告的包内脚本

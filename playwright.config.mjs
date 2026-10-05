@@ -18,6 +18,10 @@ import { BASE_URL, HARNESS_CMD, READY_URL } from './e2e/harness.mjs';
 export default defineConfig({
   testDir: './e2e',
 
+  /* Windows 上给 webServer 收尾兜底 —— 不兜的话用例全 PASS 但命令永不退出(根因与实测见该文件
+   * 顶部注释)。非 Windows 是 no-op, CI 不受影响。 */
+  globalTeardown: './e2e/global-teardown.mjs',
+
   /* 桩服务是**单个共享实例**, 用例之间会互相影响观测(轮询 / 乐观态), 故不并发 ——
    * 这是冒烟不是压测, 确定性优先于速度。 */
   fullyParallel: false,
