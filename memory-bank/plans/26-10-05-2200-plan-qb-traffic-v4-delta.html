@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实施计划 · qB 流量 v4 · 块头基线 delta + 按落盘切块(空闲块不关) + 自然推算结算 · auto-qb</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="qb-traffic-v4-delta">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-05-2200">
+<meta name="doc-updated" content="26-10-05-2200">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-05-backend-qb-traffic-v4-delta.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101214;
+    --paper: #14171a;
+    --well: #0c0e10;
+    --ink: #e8e6e0;
+    --ink-dim: #a3a196;
+    --ink-faint: #6f6d64;
+    --hair: rgba(255,255,255,.09);
+    --hair-strong: rgba(255,255,255,.18);
+    --accent: #e2a83d;
+    --accent-dim: rgba(226,168,61,.55);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    padding: 56px 32px 96px;
+  }
+  .sheet { max-width: 1300px; margin: 0 auto; }
+  .frame { display: grid; grid-template-columns: 216px minmax(0,1fr); gap: 56px; }
+
+  .kicker {
+    font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  header.cover { padding-bottom: 40px; border-bottom: 1px solid var(--hair-strong); margin-bottom: 40px; }
+  header.cover .kicker { display: block; margin-bottom: 18px; }
+  h1 {
+    font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 34px; font-weight: 600; line-height: 1.18; letter-spacing: -.01em;
+    max-width: 980px; text-wrap: balance;
+  }
+  .subtitle { margin-top: 10px; font-size: 16px; color: var(--ink-dim); max-width: 720px; }
+  .meta-row {
+    margin-top: 28px; display: flex; flex-wrap: wrap; gap: 0 28px;
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 11.5px; color: var(--ink-faint);
+  }
+  .meta-row b { color: var(--ink-dim); font-weight: 400; }
+
+  aside nav { position: sticky; top: 40px; }
+  aside .toc-title {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px;
+    letter-spacing: .12em; color: var(--ink-faint); margin-bottom: 14px;
+  }
+  aside ol { list-style: none; border-left: 1px solid var(--hair); }
+  aside li a {
+    display: block; padding: 6px 0 6px 16px; text-decoration: none;
+    color: var(--ink-dim); font-size: 12.5px; line-height: 1.4;
+    border-left: 1px solid transparent; margin-left: -1px;
+  }
+  aside li a .no { font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px; color: var(--ink-faint); margin-right: 8px; }
+  aside li a:hover { color: var(--ink); border-left-color: var(--hair-strong); }
+
+  main section { margin-bottom: 64px; }
+  .sec-head { margin-bottom: 22px; }
+  .sec-head .kicker { display: block; margin-bottom: 8px; }
+  h2 {
+    font-family: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 22px; font-weight: 600; letter-spacing: -.005em; line-height: 1.2;
+  }
+  h3 {
+    font-size: 15.5px; font-weight: 600; margin: 30px 0 10px;
+  }
+  p { max-width: 76ch; margin-bottom: 14px; color: var(--ink); }
+  p.dim { color: var(--ink-dim); }
+  strong { font-weight: 600; }
+  code {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: .88em;
+    background: var(--well); padding: 1px 5px; border: 1px solid var(--hair);
+  }
+  .ref { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; color: var(--ink-dim); }
+
+  table { width: 100%; border-collapse: collapse; margin: 20px 0 8px; font-size: 13.5px; }
+  th {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px; font-weight: 400;
+    letter-spacing: .09em; text-transform: uppercase; color: var(--ink-faint);
+    text-align: left; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--hair-strong);
+  }
+  td { padding: 9px 14px 9px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
+  td .sub { display: block; font-size: 12px; color: var(--ink-faint); margin-top: 1px; }
+  .tbl-note { font-size: 12px; color: var(--ink-faint); margin: 6px 0 0; max-width: 76ch; }
+
+  .spec { background: var(--well); border: 1px solid var(--hair); padding: 18px 20px; margin: 18px 0; overflow-x: auto; }
+  .spec .spec-title {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 10.5px;
+    letter-spacing: .1em; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 12px;
+  }
+  .spec pre {
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; line-height: 1.75;
+    color: var(--ink);
+  }
+  .spec pre .c { color: var(--ink-faint); }
+  .spec pre .a { color: var(--accent-dim); }
+
+  .tag {
+    display: inline-block; font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 10.5px; letter-spacing: .08em; padding: 1px 7px;
+    border: 1px solid var(--hair-strong); color: var(--ink-dim); vertical-align: 1px;
+  }
+  .tag.rec { border-color: var(--accent-dim); color: var(--accent); }
+  .tag.rej { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: var(--ink-faint); }
+
+  /* 批次卡与步骤清单 */
+  .batch { border: 1px solid var(--hair-strong); padding: 22px 26px 14px; margin: 26px 0; }
+  .batch .batch-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .batch .batch-no {
+    font-family: "Bahnschrift", "Segoe UI", sans-serif; font-size: 24px; font-weight: 600;
+    color: var(--accent); line-height: 1;
+  }
+  .batch .batch-title { font-size: 16.5px; font-weight: 600; }
+  .batch .batch-prop {
+    margin-left: auto; font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 10.5px; letter-spacing: .08em; color: var(--ink-faint); white-space: nowrap;
+  }
+  .batch p.lead { font-size: 13.5px; color: var(--ink-dim); margin-bottom: 14px; }
+  ol.steps { list-style: none; counter-reset: st; margin: 0 0 14px; }
+  ol.steps li {
+    counter-increment: st; display: grid; grid-template-columns: 34px 1fr;
+    gap: 0 12px; padding: 8px 0; border-bottom: 1px solid var(--hair);
+  }
+  ol.steps li:last-child { border-bottom: none; }
+  ol.steps li::before {
+    content: counter(st, decimal-leading-zero);
+    font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px;
+    color: var(--accent); padding-top: 2px;
+  }
+  ol.steps li .st-body { font-size: 14px; }
+  ol.steps li .st-body .st-note { display: block; font-size: 12.5px; color: var(--ink-dim); margin-top: 2px; }
+  .accept {
+    background: var(--well); border-left: 2px solid var(--accent-dim);
+    padding: 10px 14px; margin: 4px 0 12px; font-size: 13px; color: var(--ink-dim);
+  }
+  .accept b { color: var(--accent); font-weight: 600; }
+
+  footer.colophon { border-top: 1px solid var(--hair-strong); margin-top: 24px; padding-top: 26px; }
+  footer.colophon .kicker { display: block; margin-bottom: 14px; }
+  footer.colophon p { font-size: 12.5px; color: var(--ink-dim); max-width: 76ch; margin-bottom: 8px; }
+  footer.colophon .ref { color: var(--ink-faint); }
+
+  @media (max-width: 900px) { .frame { grid-template-columns: 1fr; } aside nav { position: static; } .batch .batch-prop { display: none; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="frame">
+
+    <aside>
+      <nav>
+        <div class="toc-title">CONTENTS</div>
+        <ol>
+          <li><a href="#s00"><span class="no">00</span>拍板承接与计划裁决</a></li>
+          <li><a href="#s01"><span class="no">01</span>方案总览与 v4 格式规格</a></li>
+          <li><a href="#s02"><span class="no">02</span>实施影响面</a></li>
+          <li><a href="#s03"><span class="no">03</span>实施批次与分步清单</a></li>
+          <li><a href="#s04"><span class="no">04</span>测试计划</a></li>
+          <li><a href="#s05"><span class="no">05</span>风险与回滚</a></li>
+          <li><a href="#s06"><span class="no">06</span>回写与收尾清单</a></li>
+        </ol>
+      </nav>
+    </aside>
+
+    <main>
+
+      <header class="cover">
+        <span class="kicker">qb-traffic-v4-delta · 实施计划</span>
+        <h1>qB 流量 v4:块头基线 delta + 按落盘切块 + 自然推算结算</h1>
+        <p class="subtitle">把可行性报告的推荐路径落成可执行的分步实施计划:三批交付,批 2 为单提交原子换代。依据 = 报告 26-10-05-1946(经两轮复核),凡两文冲突以本计划为准。</p>
+        <div class="meta-row">
+          <span>计划 · plan</span>
+          <span><b>topic</b> qb-traffic-v4-delta</span>
+          <span><b>status</b> Open</span>
+          <span><b>added</b> 26-10-05-2200</span>
+          <span><b>报告</b> 26-10-05-1946</span>
+          <span><b>基线</b> f2dc8725 (develop)</span>
+        </div>
+      </header>
+
+      <section id="s00">
+        <div class="sec-head"><span class="kicker">00 · Gate &amp; Rulings</span><h2>拍板承接与计划裁决</h2></div>
+        <p>报告 §11 六项决策中,⑤块生命周期细型与⑥空闲 z 封口口径已按推荐落档。本计划获批即视为决策 <strong>①是否实施 / ②换代时机(现在) / ③覆盖结算选型(自然推算) / ④打包方式(一次换代不拆分)</strong> 按报告推荐口径拍板 —— 拍板载体从「报告 §11」移交给本计划。</p>
+        <h3>计划新增裁决</h3>
+        <table>
+          <thead><tr><th>#</th><th>裁决</th><th>内容与理由</th></tr></thead>
+          <tbody>
+            <tr><td>N1</td><td>符号代际改名 <span class="tag rec">全量 V3→V4</span></td><td>凡以 v3 为<strong>格式代际名</strong>的符号(常量 / format / parse / 存储类 / 路径助手 / 解析缓存)随换代改名 V4,含 grid / qb 两读侧文件的纯标识符替换(零逻辑变化)。报告「读侧零改动」指<strong>语义与逻辑</strong>零改动;半改必留「<code>V3Sample</code> 装着 v4 数据」的永久错位。先例:v1/v2 格式代码随 S5 全量退役。保留不改的仅限与代际无关的结构名:<code>LiveTail / LiveTailRun / TrafficSampleModule</code> 及不含 v3 字样的通用名。</td></tr>
+            <tr><td>N2</td><td>配比口径 <span class="tag rec">文档口径</span></td><td>flush_interval ≫ sample_interval(块内 ≥ 约 20 行)只影响收益幅度、不影响正确性;<code>validate_config</code> 加硬约束会拒绝升级前合法配置(违反保守默认),不加。<span class="ref">config/models.py</span> QbTraffic docstring 与 <span class="ref">config/loaders.py</span> 示例注释补口径:缺省 30S/10M = 20 行恰在界上,30s 档 B 行占比约 5%。</td></tr>
+            <tr><td>N3</td><td>报告 §08/§10 sim 行 <span class="tag rec">剔除</span></td><td>代码事实核查:<span class="ref">scripts/</span> 全目录零流量存储引用(sim_run / sim_baseline 的 <code>avg_interval_s</code> 是主循环同步指标,非流量块 interval_s)。报告 §08「sim 脚本同步」与 §10 对应行按本计划修订剔除,实施不含 sim 步骤。按 v3 先例(计划 §00),凡两文冲突以本计划为准。</td></tr>
+            <tr><td>N4</td><td>z 保险闸阈值 <span class="tag rec">天级</span></td><td>「非 z 事件封口」成为正常路径后,<code>ZRUN_CAP_SAMPLES(120)</code> / <code>ZRUN_FLUSH_S(600)</code> 退役为防溢出保险闸,阈值上调至天级(CAP = ceil(86400 / sample_interval) 样本,FLUSH_S = 86400),常量仍非配置键。正常空闲段任何路径都不应触闸,触闸即测试 bug。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s01">
+        <div class="sec-head"><span class="kicker">01 · Format Spec</span><h2>方案总览与 v4 格式规格</h2></div>
+        <p>一次 v3 → v4 格式换代打包四件事:<strong>块头携带 totals 基线 + r/z 行存相对基线的 delta + 按落盘切块(flush ∧ 块内有 r 行才关,空闲块不关) + 跨块覆盖自然推算结算</strong>。收益定位 = 行宽结构性封顶(与 all-time 计数增长脱钩)+ 约 10-14% 文本量 + 每种子 B 行放大器拆除 + 空闲期写盘归零;动机与量化见报告 §03-08,本计划不复写。核心不变式:<strong>delta 只存在于线格式</strong> —— 内存结构(<code>V4Sample / V4ZeroRun / V4NullRun / LiveTail</code> / 聚合累计器)全部维持绝对 totals,parse 以块基线 cumsum 复原、format 序列化时减法,读侧归桶 / agg / catch-up / WebUI 语义零改动。</p>
+        <div class="spec">
+          <div class="spec-title">v4 行型(取代 v3 计划 §02.1「逐列冻结」条款;interval_s 小数秒 + dt_ms 毫秒口径沿用)</div>
+<pre># auto-qb qb-traffic v4<span class="c">                              文件头, 每文件一次(头行门闩, 不设双读)</span>
+key,&lt;系列标识&gt;<span class="c">                                  不变(global / torrent:&lt;infohash&gt;)</span>
+B,&lt;start_epoch&gt;,&lt;interval_s&gt;<span class="a">                    3 列 = 无基线块(仅 n 游程合法)</span>
+B,&lt;start_epoch&gt;,&lt;interval_s&gt;,&lt;dl_base&gt;,&lt;up_base&gt;<span class="a">  5 列 = 基线 = 块内首个带 totals 观测的快照</span>
+r,&lt;dl_rate&gt;,&lt;up_rate&gt;,&lt;dl_delta&gt;,&lt;up_delta&gt;[,&lt;dt_ms&gt;]<span class="c">  delta 相对块基线; 负值 = 坏行(免费校验)</span>
+z,&lt;run_len&gt;,&lt;dl_delta&gt;,&lt;up_delta&gt;[,&lt;dt_ms&gt;]<span class="c">      块首 z 的 delta = 0</span>
+n,&lt;run_len&gt;[,&lt;dt_ms&gt;]<span class="c">                            不变</span></pre>
+        </div>
+        <h3>定约清单(读写两侧同源,风格与现行 dt 链一致)</h3>
+        <table>
+          <thead><tr><th>定约</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr><td>基线立点</td><td>块首记录带 totals(r 或 z)→ 基线 = 该快照,其 delta = 0;块首为 n 游程 → 写侧把 n-only 前缀拆成 3 列 B 无基线块,恢复传输的记录开新块立基线。解析守卫:无基线块内出现 r/z 即坏行。</td></tr>
+            <tr><td>关块状态机</td><td>既有触发点(00:00 硬切 / 改间隔 / 落盘失败复位)+ 新增<strong>计数器重置(cur &lt; last)强制关块</strong>(新块基线 = 重置后 totals,首记录 delta = 0)+ <strong>flush ∧ 块内有 r 行才关</strong>(纯空闲块跨 flush 开放)。关块时开放 z/n 游程先封口。</td></tr>
+            <tr><td>空闲封口</td><td>开放 z 游程按「非 z 事件」封口:恢复传输 / null 游程 / 计数器重置 / 00:00 / stop。空闲段盘上恰 1 条长 z 行,空闲期主文件零写入,解析缓存全天有效。代价(已知接受):崩溃窗口 ≤ 当天已过时长,丢失形态 = 真空,avg/totals/max 无偏。</td></tr>
+            <tr><td>负 delta</td><td>基线块内负 delta 必是损坏 —— 绝对值形态做不到的解析免费校验;整行跳过计数、游标不推进,现行坏行纪律原样保留(delta-vs-基线逐行独立,坏行不传播)。</td></tr>
+            <tr><td>覆盖结算</td><td>判定函数单点、在线/离线两路复用:<code>gap = 新块 B.start − 上一块末槽</code>,gap ≤ interval_s + DRIFT_TOL(250ms)→ 连续,按上一记录速率把 [末槽, 本槽) 结算进 credit;否则真空(崩溃保护内核不动)。</td></tr>
+            <tr><td>换代语义</td><td>目录 <code>qb-traffic-v4/</code> 全新落点;旧 <code>qb-traffic-v3/</code> 原样留存不读不迁移(R2,删留决定权在用户);头行门闩 <code>v4</code>,不设双读。agg.dat 行型与逐级派生不变(仅结算规则同上)。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s02">
+        <div class="sec-head"><span class="kicker">02 · Blast Radius</span><h2>实施影响面</h2></div>
+        <table>
+          <thead><tr><th>面</th><th>文件 / 部件</th><th>改动</th></tr></thead>
+          <tbody>
+            <tr><td rowspan="4">改</td><td><span class="ref">src/auto_qb/core/traffic_store.py</span></td><td>v4 常量(头行 / 目录名)、format_v4_* / parse_v4_day_text 纯函数区(delta 序列化 / cumsum 复原 / 负 delta 判坏 / n-only 守卫)、覆盖结算判定函数单点;模块 docstring 契约整体重写;v3 格式函数随翻转退役删除;符号改名 V3→V4(N1)</td></tr>
+            <tr><td><span class="ref">src/auto_qb/core/modules/traffic_sample_mod.py</span></td><td>BlockBuffer(+基线字段 / has_r_row / n 前缀暂存);关块状态机(reset 触发、flush ∧ 有 r 行才关、n 前缀拆块、关块时封口);空闲游程非 z 事件封口(保险闸阈值天级化,N4);_agg_feed 条件结算;TrafficV3Store → TrafficV4Store 接线</td></tr>
+            <tr><td><span class="ref">src/auto_qb/core/traffic_grid.py</span> · <span class="ref">src/auto_qb/webui/server/traffic_qb.py</span></td><td>仅标识符替换(V3→V4,约 57 + 31 处),零逻辑变化(N1);读侧差分消费 / 响应形状不动</td></tr>
+            <tr><td><span class="ref">tests/</span> 四文件</td><td>test_traffic_store / test_traffic_sample / test_traffic_grid / test_web:fixture 全面更新 + 新定约用例(§04);各文件头部 docstring「## 测试计划」清单同步</td></tr>
+            <tr><td rowspan="3">不改</td><td>槽位数学与内存结构</td><td><code>v4_block_slots</code>(原 v3_block_slots)/ <code>v4_live_tail_slots</code> / <code>v4_bucket_width_s</code> / 窗口日期助手 —— 槽位与窗口口径不变;LiveTail 的 <code>head_pending=False</code> 倒推分支保留(空闲块跨 flush,零新增不删旧)</td></tr>
+            <tr><td>agg.dat / 聚合链 / catch-up 口径</td><td>行型与逐级派生不变;仅结算规则随 §01 同改(在线/离线同一判定函数)</td></tr>
+            <tr><td>配置键面</td><td>无新键(golden rule 4 不触发);仅 models.py / loaders.py 注释口径(N2,批 3)</td></tr>
+            <tr><td>剔</td><td><span class="ref">scripts/sim_*.py</span></td><td>报告 §08/§10 该行经核查剔除(N3),实施不含 sim 步骤</td></tr>
+          </tbody>
+        </table>
+        <p class="tbl-note">代码锚点(基线 f2dc8725 实测):store 纯函数区 L286-452、路径助手 L640-668、解析缓存口径 L1112-1122;mod 游程常量 L159-172、BlockBuffer L215、写侧核心 L640-800、种子数据门 L475-541、聚合入账 L820-858(块首清零信用 :826-831)、离线记账 L1064-1075。行号随批 1/批 2 漂移,以符号为准。</p>
+      </section>
+
+      <section id="s03">
+        <div class="sec-head"><span class="kicker">03 · Batches</span><h2>实施批次与分步清单</h2></div>
+        <p>三批交付,每批一个独立可提交单元。批 1 纯新增(与 v3 函数并存,零行为变化)可单独提交;批 2 是<strong>原子翻转</strong> —— R2 不设双读决定了头行 / 目录 / 行型 / 写侧 / 解析必须同一提交切换,本批 diff 大但机械,是换代语义本身;批 3 纯文档与回写。批内顺序即依赖顺序:格式函数 → 状态机 → 结算 → 测试。</p>
+
+        <div class="batch">
+          <div class="batch-head"><span class="batch-no">B1</span><span class="batch-title">store v4 纯函数区并存新增</span><span class="batch-prop">独立可提交 · 零行为变化</span></div>
+          <p class="lead">文件:<span class="ref">src/auto_qb/core/traffic_store.py</span> + <span class="ref">tests/test_traffic_store.py</span>。v4 函数与 v3 并存,旧路径原样全绿 —— 本批结束时生产行为与基线完全一致。</p>
+          <ol class="steps">
+            <li><div class="st-body">新增 v4 常量:<code>HEADER_LINE_V4 = "# auto-qb qb-traffic v4"</code>、<code>TRAFFIC_V4_DIR_NAME = "qb-traffic-v4"</code>。
+              <span class="st-note">v3 同款常量保留到批 2 翻转时一并退役。</span></div></li>
+            <li><div class="st-body">新增 format_v4_* 纯函数:B 行 3/5 列双形态、r/z 行 delta 序列化(内存绝对值 − 块基线)、n 行不变、day_text 组装携带块基线。</div></li>
+            <li><div class="st-body">新增 parse_v4_day_text + <code>V4ParsedDay</code>:B 行 3/5 列二态识别;r/z delta 以块基线 cumsum 复原绝对值;负 delta 判坏行(整行跳过、游标不推进);无基线块内 r/z 判坏行;dt 链 / 撕裂尾 / 损坏占比口径原样沿用。</div></li>
+            <li><div class="st-body">docstring 契约区追加 v4 过渡注记:v4 纯函数已就位未接线,行型定约见 v4 计划 §01,翻转见批 2。
+              <span class="st-note">契约整体重写仍留批 2 —— 本批 docstring 不得出现自相矛盾的「现行契约」表述。</span></div></li>
+            <li><div class="st-body">test_traffic_store.py 新增 v4 用例:roundtrip(含漂移行逐点相等)、3/5 列 B 二态、负 delta 坏行、n-only 块守卫、cumsum 复原逐点相等、头行 v4 门闩;同步文件头「## 测试计划」清单。</div></li>
+          </ol>
+          <div class="accept"><b>验收</b>:全量 pytest 绿且生产行为零变化(v3 路径未接线);v4 纯函数用例全过。</div>
+        </div>
+
+        <div class="batch">
+          <div class="batch-head"><span class="batch-no">B2</span><span class="batch-title">原子翻转:写侧状态机 + 结算 + 换代</span><span class="batch-prop">单提交 · 换代语义</span></div>
+          <p class="lead">文件:store + mod + grid + qb + 四测试文件。头行 / 目录 / 行型 / 写侧 / 解析同一提交切换;v3 格式函数与旧写路径随翻转退役删除(v1/v2 → S5 先例)。</p>
+          <ol class="steps">
+            <li><div class="st-body">mod 写侧状态机:BlockBuffer 增加 <code>dl_base / up_base</code>(块内首个带 totals 观测的快照)、<code>has_r_row</code> 旗标与 n-only 前缀暂存;关块谓词 <code>flush ∧ has_r_row</code>;计数器重置(cur &lt; last)强制关块重开;关块时开放 z/n 游程先封口。</div></li>
+            <li><div class="st-body">空闲游程改「非 z 事件封口」:封口触发 = 恢复传输 / null 游程 / 计数器重置 / 00:00 / stop;<code>ZRUN_CAP_SAMPLES / ZRUN_FLUSH_S</code> 阈值上调天级退役为保险闸(N4);<code>header_written</code> 旗标与 LiveTail <code>head_pending=False</code> 倒推分支保留原样。</div></li>
+            <li><div class="st-body">覆盖结算:store 纯函数区新增判定函数单点(gap ≤ interval_s + DRIFT_TOL → 连续);在线 <code>_agg_feed</code>(mod :826-831 区块首清零信用改为条件结算)与离线 <code>_agg_credit_day_file</code>(:1064-1075 跨块段)两路复用同一函数 —— 镜像保证靠同源保持;顺带消除现行 00:00 边界每天 2s 的既有损失。</div></li>
+            <li><div class="st-body">翻转与退役:mod 切 v4 写路径(TrafficV3Store → TrafficV4Store 接线);store 头行 / 目录常量切 v4;docstring 契约整体重写为 v4(格式契约单点);v3 格式函数删除。</div></li>
+            <li><div class="st-body">符号代际改名(N1):全仓 V3→V4 标识符边界替换(format / parse / 存储类 / 路径助手 / 解析缓存 / 结构类),含 grid 与 qb 读侧文件的纯机械替换;历史注释(「v3 计划 26-10-04-1957」「D2」等)不盲替,逐处人工甄别。</div></li>
+            <li><div class="st-body">测试切换:四测试文件 fixture 全面更新为 v4 行文本;§04 新定约用例 ①-⑦ 全部落地;test_traffic_grid / test_web 仅 fixture 与标识符适配,断言逻辑不动。</div></li>
+          </ol>
+          <div class="accept"><b>验收</b>:test.full 全绿;<code>grep -rn "HEADER_LINE_V3\|TRAFFIC_V3_DIR_NAME\|format_v3_\|parse_v3_day_text"</code> 零残留(历史注释除外);对 <code>qb-traffic-v3/</code> 目录的代码读写路径零触碰(R2)。</div>
+        </div>
+
+        <div class="batch">
+          <div class="batch-head"><span class="batch-no">B3</span><span class="batch-title">收尾:配置口径 + 回写 + 基线</span><span class="batch-prop">纯文档 · 可独立提交</span></div>
+          <p class="lead">注释口径、知识库回写、实测基线。不触碰任何生产行为。</p>
+          <ol class="steps">
+            <li><div class="st-body">配置口径(N2):<span class="ref">config/models.py</span> QbTraffic docstring 与 <span class="ref">config/loaders.py</span> 示例注释补「flush ≫ sample(块内 ≥ 约 20 行)」配比口径与 30s 档约 5% B 行占比提示;无新键、无校验改动。</div></li>
+            <li><div class="st-body">旧计划条款修订:v3 计划(<span class="ref">26-10-04-1957</span>)「变更记录」加一行 —— §02.1 行型「逐列冻结」条款由本计划 §01 取代,其余条款(§04 聚合 / §05 读侧)继续有效;整件状态不动(条款级取代,不整件 Superseded)。</div></li>
+            <li><div class="st-body">任务档案回写:子任务表与进度日志更新;报告 §08/§10 sim 行修订记录在案(N3)。</div></li>
+            <li><div class="st-body">实测基线:<code>commands run test.full</code> 新建基线切片(testing/baselines/),记录实测数字与<strong>天文件字节对照</strong>(v4 实测 vs 报告推演值 -10~14%,以实测复核推演)。</div></li>
+            <li><div class="st-body">真机验证:<code>commands run dev.run -- config.yml --dry-run</code> 走通 v4 写路径与结算;观察首日 qb-traffic-v4/ 目录产物。</div></li>
+          </ol>
+          <div class="accept"><b>验收</b>:基线切片入档且字节对照有实测数;dry-run 无错;档案 / 索引 / 认领链机检全绿。</div>
+        </div>
+      </section>
+
+      <section id="s04">
+        <div class="sec-head"><span class="kicker">04 · Test Plan</span><h2>测试计划</h2></div>
+        <p>fixture 面与新增定约用例照录报告 §10(七类全上),补交付口径:每文件新增测试同步头部 docstring「## 测试计划」清单(仓库规约);①-④ 随批 1 落 store 测试,⑤-⑦ 随批 2 落 sample / grid 测试。</p>
+        <table>
+          <thead><tr><th>#</th><th>用例</th><th>钉住什么</th><th class="num">落点</th></tr></thead>
+          <tbody>
+            <tr><td>①</td><td>坏行不传播</td><td>块中段坏行后,后续行 totals 复原仍精确(delta-vs-基线逐行独立)</td><td class="num">B1</td></tr>
+            <tr><td>②</td><td>n-only 无基线块</td><td>3 列 B + 纯 n 合法;无基线块内 r/z 判坏</td><td class="num">B1</td></tr>
+            <tr><td>③</td><td>计数器重置强制关块</td><td>重置后块内负 delta 不出现;新块基线 = 重置后 totals</td><td class="num">B2</td></tr>
+            <tr><td>④</td><td>负 delta 解析判坏行</td><td>基线块内负 delta 整行跳过、游标不推进</td><td class="num">B1</td></tr>
+            <tr><td>⑤</td><td>跨块覆盖结算两路同源</td><td>在线 _agg_feed 与离线 _agg_credit_day_file 对同一文件(连续边界 / 崩溃间隙 / 00:00 边界)产出逐桶一致 cov_s</td><td class="num">B2</td></tr>
+            <tr><td>⑥</td><td>空闲块不关</td><td>纯空闲系列(数据门有数据 + 零速)天文件恰 1 条 B 行;跨 flush 开放 z 游程的 LiveTail 复原与落盘重算恒等;恢复传输后下一 flush 关块重开,delta ≤ flush 窗 × 速率</td><td class="num">B2</td></tr>
+            <tr><td>⑦</td><td>非 z 事件封口</td><td>长空闲段恰 1 条长 z 行,午夜物化进当日天文件(B + z 一批 append);LiveTail 开放游程跨天接力与落盘重算恒等;崩溃重启该时段 = 真空(cov_s 缺失,avg 无偏)</td><td class="num">B2</td></tr>
+          </tbody>
+        </table>
+        <p class="tbl-note">全量闸门 = <code>commands run test.full</code>(批 1、批 2 各跑一次,批 2 结果建基线切片)。TMPDIR 已内置,勿手工加前缀。</p>
+      </section>
+
+      <section id="s05">
+        <div class="sec-head"><span class="kicker">05 · Risks</span><h2>风险与回滚</h2></div>
+        <table>
+          <thead><tr><th>风险</th><th>缓解 / 回滚</th></tr></thead>
+          <tbody>
+            <tr><td>批 2 原子翻转不可部分回滚</td><td>回滚 = 整提交 revert。R2 旧目录留存在此成为回滚资产:v3 目录数据完整,v3 写读代码在 revert 后恢复,数据面无损回 v3;翻转早期 v4 目录数据量小,弃置成本可忽略。</td></tr>
+            <tr><td>符号改名误伤历史注释</td><td>只做标识符边界替换;「v3 计划 / v3 四触发 / D2」等历史引用逐处人工甄别;全量测试兜底;机检 grep 零残留判据见 B2 验收。</td></tr>
+            <tr><td>崩溃窗口扩大(非 z 事件封口)</td><td>报告已裁:空闲期零落盘使开放游程成唯一副本,崩溃丢「在场证明」→ 零速率覆盖 = 真空,avg/totals/max 无偏,与「不虚记覆盖」保守取向同向;崩溃保真若被抬为需求,保险闸常量退 3600s 档即可,零新机制。</td></tr>
+            <tr><td>配比失配使 delta 收益缩水</td><td>文档口径(N2)不打扰用户现有配置;30S/10M 缺省恰在 20 行界上;若后续实测发现普遍失配,再议 validate_config 非阻断提示(另立计划)。</td></tr>
+            <tr><td>升级部署跨代</td><td>写侧状态机在内存、天文件按头行门闩整文件判代;升级 = 进程重启,天然新代,不存在跨代混写文件。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s06">
+        <div class="sec-head"><span class="kicker">06 · Write-back</span><h2>回写与收尾清单</h2></div>
+        <p>随批 3 执行,按 memory-bank 收尾 DoD:</p>
+        <ol class="steps">
+          <li><div class="st-body">任务档案 <span class="ref">tasks/26-10-05-backend-qb-traffic-v4-delta.md</span>:子任务状态表(实施三批逐批勾)、进度日志、Refs 双向认领链维护。</div></li>
+          <li><div class="st-body">基线切片:testing/baselines/ 新建,含 test.full 实测 + 天文件字节对照(v4 实测 vs 报告推演);报告推演值若与实测偏差超档,偏差与原因记进档案,不回填报告(出厂冻结)。</div></li>
+          <li><div class="st-body">代码事实回写:store docstring 即 qb-traffic 格式契约单点(批 2 已重写);memory-bank 无 qb-traffic 独立主题文档,契约变更无需另回写主题文档;根 README 不涉(无新配置键、无用户可见行为变化)。</div></li>
+          <li><div class="st-body">索引与机检:<code>commands run kb.index</code> 重建;<code>commands run kb.docmap -- --topic qb-traffic-v4-delta</code> 确认报告 / 计划 / 档案三件同挂一专题且认领链双向。</div></li>
+          <li><div class="st-body">收尾后本计划置 Done(实施完成)或 In Progress(跨会话续作),变更记录随档案维护。</div></li>
+        </ol>
+      </section>
+
+      <footer class="colophon">
+        <span class="kicker">Colophon</span>
+        <p>依据:报告 <span class="ref">memory-bank/reports/26-10-05-1946-report-qb-traffic-v4-delta.html</span>(经 2100 / 2137 两轮复核,§11 决策 ⑤⑥ 已落档);任务档案 <span class="ref">memory-bank/tasks/26-10-05-backend-qb-traffic-v4-delta.md</span>;代码事实核查基线 f2dc8725(store 纯函数区 / mod 状态机 / grid·qb 导入面 / config 校验入口 / scripts 全目录零流量引用)。</p>
+        <p>口径声明:计划不重写报告的量化推演(收益 / 字节对照均以报告 §06-07 为准);实施期实测数字进基线切片。凡本计划与报告冲突(已知的:N3 sim 行;未知的:实施中发现的),以本计划为准并记进档案。</p>
+        <p>26-10-05-2200 立计划 · status Open · 待拍板:本计划获批即视为报告 §11 决策 ①-④ 按推荐口径拍板,开工批 1。</p>
+      </footer>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>
