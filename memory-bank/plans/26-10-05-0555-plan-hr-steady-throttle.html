@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hr-steady-throttle">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-05-0555">
-<meta name="doc-updated" content="26-10-05-0555">
-<meta name="doc-refs" content="memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html">
+<meta name="doc-updated" content="26-10-05-0855">
+<meta name="doc-refs" content="memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html,memory-bank/tasks/26-10-05-backend-hr-steady-throttle.md">
 <title>HR 稳态降频 (idle_refresh_interval) 分步实施计划 · auto-qb</title>
 <style>
   :root {
@@ -99,7 +99,7 @@
     <div class="item"><div class="k">专题</div><div class="v">hr-steady-throttle</div></div>
     <div class="item"><div class="k">上游</div><div class="v">report 26-10-03-1505 §13</div></div>
     <div class="item"><div class="k">代码基线</div><div class="v">develop@ee52e57d · 2026-10-05</div></div>
-    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open · 待实施</span></div></div>
+    <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done · 已实施 (26-10-05)</span></div></div>
   </div>
 </header>
 
@@ -274,9 +274,9 @@ interval = site_conf.idle_refresh_interval if steady else site_conf.refresh_inte
 <section id="s05">
   <h2><span class="no">05</span>拍板点</h2>
   <table>
-    <tr><th>#</th><th>事项</th><th>推荐</th><th>备选与代价</th></tr>
-    <tr><td>D1</td><td>展示层稳态注记：kv 行「下次核对清单」在稳态期加「·稳态」之类注记（或 tooltip）</td><td><strong>推荐做</strong> —— 一行文案级改动；不做则稳态期突然出现 24H 倒计时无解释，制造新的「为什么是 24H」误读（与已修的 B2 语义配套）</td><td>不做：机制不受影响（§13.3 口径），仅观感缺口</td></tr>
-    <tr><td>D2</td><td>C3（30 天淘汰预告）是否与稳态降频同批实施</td><td><strong>推荐不同批</strong> —— 独立缺陷零耦合；距离首个真实触发（10-28 后）尚有余量</td><td>同批：+§04 方向 A 的 ~10 行，边界仍清晰</td></tr>
+    <tr><th>#</th><th>事项</th><th>推荐</th><th>备选与代价</th><th>结果 (26-10-05)</th></tr>
+    <tr><td>D1</td><td>展示层稳态注记：kv 行「下次核对清单」在稳态期加「·稳态」之类注记（或 tooltip）</td><td><strong>推荐做</strong> —— 一行文案级改动；不做则稳态期突然出现 24H 倒计时无解释，制造新的「为什么是 24H」误读（与已修的 B2 语义配套）</td><td>不做：机制不受影响（§13.3 口径），仅观感缺口</td><td><span class="ok"><strong>已采纳并实施</strong></span>（e087aa57）—— kv 行稳态期「(稳态降频)」注记已落，常态期不出现</td></tr>
+    <tr><td>D2</td><td>C3（30 天淘汰预告）是否与稳态降频同批实施</td><td><strong>推荐不同批</strong> —— 独立缺陷零耦合；距离首个真实触发（10-28 后）尚有余量</td><td>同批：+§04 方向 A 的 ~10 行，边界仍清晰</td><td><span class="ok"><strong>已采纳推荐：不同批</strong></span> —— C3 未实施，候选留档（§04）；距首个真实触发（10-28 后）尚有余量</td></tr>
   </table>
   <p class="hint">核心机制（idle_refresh_interval=24H 默认启用、动态取值、无防抖、失败不降频）已由所有者 2026-10-05 05:30 拍板（报告 §13.6），不在本表 —— 本表只剩实施配套的两个小决策。</p>
 </section>
@@ -299,18 +299,19 @@ interval = site_conf.idle_refresh_interval if steady else site_conf.refresh_inte
 <section id="s07">
   <h2><span class="no">07</span>验收判据与回写</h2>
   <ul>
-    <li>S4 守阵清单全绿 + 既有三参数解耦区（test_hr_service.py:1327–1400）回归全绿 + 键面守阵（test_config_schema / test_config_key_surface）全绿。</li>
-    <li><code>commands run test.full</code>：通过数只增不减、覆盖率 ≥ 现行基线（99%），实测数字入基线切片。</li>
-    <li>请求量量化（报告 §13.5 口径）：稳态期两站 14→6 请求/天（-57%），真机日志或 hr.once 走查核对。</li>
-    <li>破稳态实测：稳态期手动加种子 → 下一 poll（≤60s）开波，waiting 理由带稳态标记的日志链可读。</li>
-    <li>复用窗 / force / 频控行为回归不变（§2.7 不变项逐条过）。</li>
-    <li>docs/hr-online-verify-docs.md + docstring 回写完成；本计划状态抬 In Progress → Done（变更记录）；拍板 D1/D2 结果回写本节。</li>
+    <li><span class="ok">已达成</span> —— S4 守阵 6 条全绿（22625b49：idle 间隔闸 5 条 + 复用窗不跟随回归 1 条）+ 既有三参数解耦区回归全绿 + 键面守阵（test_config_schema / test_config_key_surface）全绿。</li>
+    <li><span class="ok">已达成</span> —— <code>commands run test.full</code> 实测 <strong>2581 passed + 4 skipped / 30.8–31.0s / TOTAL 98%</strong>（15331 语句 / 163 未覆盖 / 5252 分支 / 137 partial；门槛 98% 达标；相对上基线 2567+4 只增不减，+14 = S1 5 + S3 3 + S4 6 全计划内），数字入基线切片 <code>testing/baselines/26-10-05-0905-hr-steady-throttle.md</code>。</li>
+    <li><span class="gap">待真机验收</span> —— 请求量量化（报告 §13.5 口径）：稳态期两站 14→6 请求/天（-57%），需真机日志或 hr.once 走查核对。</li>
+    <li><span class="ok">单测侧已达成</span>（S4 守阵钉死：破稳态下一 poll 立即开波 + waiting 理由带「稳态降频」标记）；<span class="gap">真机走查待做</span> —— 稳态期手动加种子 → 下一 poll（≤60s）开波。</li>
+    <li><span class="ok">已达成</span> —— 复用窗 / force / 频控行为回归不变（§2.7 不变项：复用窗不跟随 idle 守阵 + force / min_interval / 日额 / Retry-After 既有用例未动未红）。</li>
+    <li><span class="ok">已达成</span> —— docs/hr-online-verify-docs.md（S5 机制段 9f096c09 + 本轮主线时间总表补两行）+ docstring 回写完成；本计划状态已抬 Done（变更记录）；拍板 D1/D2 结果已回写 §05。</li>
   </ul>
 </section>
 
 <footer>
-  <p>计划工位 · 上游：memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html §13（可行性 + 拍板）· 代码基线 develop@ee52e57d（行号为本计划实测重标，实施时若再有提交落入，以符号名定位为准）· 实施进度走任务档案，拍板后本计划冻结。</p>
+  <p>计划工位 · 上游：memory-bank/reports/26-10-03-1505-report-hr-fetch-verify-forensics.html §13（可行性 + 拍板）· 代码基线 develop@ee52e57d（行号为本计划实测重标，实施时若再有提交落入，以符号名定位为准）· 任务档案：memory-bank/tasks/26-10-05-backend-hr-steady-throttle.md，拍板后本计划冻结。</p>
   <p>变更记录：26-10-05-0555 初版 —— 核实轮裁定 B1/B2/B3/B4/C1 已实施（9400296a 等），范围收窄为 A1 稳态降频（S1–S6）+ C3 候选（D2）。</p>
+  <p>变更记录：26-10-05 实施完成轮（分支 feat/hr-steady-throttle，每阶段一 commit）—— S1 配置键 66696eac · S2 引擎闸 3e4745c2 · S3 展示层（D1 落地）e087aa57 · S4 守阵 22625b49 · S5 文档回写 9f096c09 · S6 收尾回写（全量基线切片 + 任务档案立档 + docs 漂移补齐 + 本计划状态 Open → Done）。C3 未实施（拍板 D2：不同批）；真机走查待做（§07 逐条标注）。</p>
 </footer>
 
 </div>
