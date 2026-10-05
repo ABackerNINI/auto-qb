@@ -1,0 +1,55 @@
+# 26-10-05-backend-reannounce-confirm-rework — 强制汇报确认机制重构实施
+
+**Status:** In Progress
+**Added:** 2026-10-05
+**Updated:** 2026-10-05 10:26
+**Topics:** backend-reannounce-confirm-rework
+**Summary:** 按实施计划 26-10-05-0923 落地强制汇报确认重构(epoch 前跳证据门控): 拍板 D1-D5 已落定(D1/D2/D3/D5 采纳推荐, D4 偏离推荐取备选「新增 warn 状态」并牵连前端终结条件/SSE/守阵与 §3.4 status 三值口径), 拍板结果已回写计划 v2; S0 真机探针完成 —— ①无未联系行可采样(80/80 working), ②立即路径前跳 +5466s(TOL=3.0 维持), ③推迟路径 next=min=min_e+1 冻结 ≥104s 后同值移动; S1-S5 代码实施未开始。
+**Refs:** memory-bank/plans/26-10-05-0923-plan-reannounce-confirm-rework.html,memory-bank/reports/26-10-05-0854-report-reannounce-confirm-api.html
+
+## 原始请求
+
+> 用户确认实施计划 [26-10-05-0923](../plans/26-10-05-0923-plan-reannounce-confirm-rework.html)(认领调研报告 [26-10-05-0854](../reports/26-10-05-0854-report-reannounce-confirm-api.html) 的后续落地轮), 逐项拍板 D1-D5 后下达实施指令; 分支 `feat/reannounce-confirm-rework`。首轮(T1)范围 = 拍板结果回写计划 + 立实施档案 + S0 真机只读探针; S1-S5 代码实施按计划推进。
+
+## 思考过程与决策
+
+- **D1 推迟路径 = 早回执 + 后台日志核实**(采纳推荐): 推迟路径检出即回「已受理: 推迟至 HH:MM」并移出回执跟踪, 后台在预计发送时刻后核实一次、只落日志。
+- **D2 主判据 = TOL=3.0s + 语义(b)**(采纳推荐): 确认窗口内 tracker 收到新鲜汇报即成功; S0 探针复核 —— 实测前跳 +5466s ≫ 3.0s, **TOL=3.0 维持**(立即路径前跳按机制 ≥ tracker min_interval, 分钟级量级, 3.0s 余量充分)。
+- **D3 版本闸门 = 字段存在性探测**(采纳推荐): 基线读时判 trackers 行有无 `next_announce` 键 → epoch/legacy 模式, 不调 `app_web_api_version`。
+- **D4 = 偏离推荐, 取备选「新增 warn 状态」**(所有者选 warn 三值, 弃二值 ok/error + 前缀分流)。牵连改动面(计划 §3.4/§04/§05/§06 已按此口径改写): ① 前端 `_pollCmd`(commands.js:131) 终结条件纳入 warn; ② SSE 事件路径核对放行 warn; ③ 相关静态守阵同步; ④ 回执 status 列: 已确认→ok / 失败→error / 已受理·推迟→warn / 未确认·停止→warn / 未确认·超时→warn; ⑤ 聚合回执 status 规则: 任一 item error → error, 否则任一 warn → warn, 全 ok → ok; ⑥ toast 类型映射: ok→success 型 / error→error 型 / warn→timeout 型(复用现有 toast 类型); ⑦ 三个前缀常量保留作文案(人类可读), 机器分流依据从「前缀」改为「status」。
+- **D5 = 非目标**(采纳推荐): 规则侧 `rules/actions/transfer.py` 本轮不动。
+- **S0 = 用户确认现在跑真机探针**: 只读采样 + 计划 S0 范围内的 force reannounce 各一次, 数字回填本档案; 探针脚本放系统 TEMP 不入库。
+
+## 实现计划
+
+单点: [plans/26-10-05-0923](../plans/26-10-05-0923-plan-reannounce-confirm-rework.html)(§03 目标行为设计 / §04 分步实施 S0-S5 / §05 测试计划 / §06 风险与回滚)。
+
+- **S0** 真机只读探针: ① 未联系行 `next_announce` 序列化值; ② 立即路径前跳幅度与 updating 窗口时长; ③ 推迟路径 next/min 同值冻结与 min_e 后同值移动。
+- **S1** 判定核心重构(`webui/commands.py`): 常量组(含 REANNOUNCE_JUMP_TOL=3.0) + baseline 形状 `{status, updating, next, min}` + epoch_mode + `_verdict_reannounce` 纯函数 + item 级窗口/推迟检出。
+- **S2** 轮询状态机(`webui/runtime.py` check_pending): item 级 deadline + 停止种子直判 + 三桶聚合(§3.4) + `reannounce_background` 后台核实(上限 500)。
+- **S3** 前端 reannounce 分支(`static/shared/commands.js`): sticky 文案 + 按 `r.status` 三桶聚合与 toast 映射 + `_pollCmd` warn 终结(D4=warn 牵连) + SSE 放行核对 + 静态守阵同步; waitCmd 40s 上限不变。
+- **S4** 测试守阵(`tests/test_web.py`, 用例清单见计划 §05, 含状态与前缀双契约)。
+- **S5** 收尾回写(坑档 announce-epoch-semantics / effect-confirmation 锚点更新 / kb.index / test.full 基线)。
+
+## 子任务状态表
+
+| 步骤 | 内容 | 状态 |
+|---|---|---|
+| 拍板 | D1-D5 逐项确认(所有者) | Closed(D1/D2/D3/D5 采纳推荐; D4 取备选 warn) |
+| 拍板回写 | 计划 v2: §01/§3.1/§3.3/§3.4/§04 S2·S3/§05/§06/§08 | Done |
+| S0 | 真机只读探针 | Done(①无未联系行可采样; ②前跳 +5466s, TOL=3.0 维持; ③min_e+1 冻结→同值移动) |
+| S1 | 判定核心重构 commands.py | Pending |
+| S2 | 轮询状态机 runtime.py | Pending |
+| S3 | 前端 reannounce 分支 commands.js | Pending |
+| S4 | 测试守阵 test_web.py | Pending |
+| S5 | 收尾回写 | Pending |
+
+## 进度日志
+
+- **2026-10-05 10:07** 拍板结果回写计划(meta doc-updated 26-10-05-0923 · §08 加 v2 行, 状态保持 Open 待 S5 收尾): §01 拍板点表加「拍板结果」列 + D4 拍板记录 callout(D4=warn 牵连面全列); §3.1 判据⑤ / §3.3 聚合流 / §3.4 回执契约表(status 三值 + 聚合规则 + toast 映射, 前缀改文案)按 D4=warn 改写; §04 S2③ 聚合 status 规则与 S3 改动清单(新增④ _pollCmd warn 终结 / SSE 核对 / 守阵同步)同步; §05 超时回执(warn)/推迟早回执(status=warn)/组聚合三桶(按 r.status 计数)/「前缀契约」扩为「状态与前缀双契约」; §06 R4 双侧契约。本档案立档(In Progress), Refs 双向: 计划 + 报告(报告 doc-refs 已补反向声明, 链闭环)。
+- **2026-10-05 10:26** S0 真机探针完成(脚本放 `H:\Temp` 不入库, `uv run python` 跑; 只读 + 2 次 force reannounce, 计划 S0 范围内; 连接信息只读自 config.yml, 未动 config.yml / auto-qb-data / git):
+  - **连通性**: qB `v5.2.3` / WebAPI `2.15.1`(≥2.13.0 闸门通过), 127.0.0.1:16585; 做种 80 个全扫描, real tracker 行 80 行(每种子 1 行), 全部 status=2。
+  - **① 未联系行**: **无 status<2 行可采样**(80/80 均 working, 不阻塞)—— 未联系行 epoch 极值序列化值未证得, 判据③「基线 status ≥ 2」守卫按计划保留(无反证)。
+  - **② 立即路径**(btschool 单 tracker, min 过期 5395s): 基线 `next=1791168212 / min=1791161189 / status=2 / msg=""` → call+0.91s `updating=True, next=min=1791166585`(发送态瞬态, ≈call+1s) → call+3.03s `next=1791173678 / min=1791166616`。**前跳 = new_next − baseline_next = +5466s ≫ 3.0s → TOL=3.0 维持**(min 同向前跳 +5427s 佐证); updating 窗口实测 ≈2.1s(报告估 ~0.5s 偏小, 2s tick 命中率比预估高); status 2→2、msg 恒空 —— 「已 working 种子唯一持久正向证据 = epoch 前跳」根因实证。
+  - **③ 推迟路径**(hdtime 单 tracker, min_e − t0 = 112s): 基线 `next=min=1791166710` → call+0.91s 瞬态(`updating=True, next=min=1791166597`) → call+1.82s 起**冻结 `next=min=1791166711 = min_e+1`**, 冻结 ≥104s(t_rel 12.1s→116.23s 零变化) → min_e+~2.2s(t_rel 116.23)**next/min 同值移动**至 `1791168397`(resp+interval ≈ +1686s, 该站 interval==min_interval)。D1 机制实测成立: `min_e` 就是可靠的预计发送时刻, 冻结期 next==min 同值。实际发送时刻的 updating 窗口未被采样命中(2s 轻采样 + 密集段晚于移动点), 按口径记未完成, 判定设计不依赖。
+  - **计划外观察(只记录, 不改不修)**: (a) 顶层 trackers 行是 **endpoints 聚合**——实测每行 7 个 endpoint(按本机网络接口, 全 bt_version 1), 顶层 next/min = 各 endpoint 最早值、updating = OR, 计划非目标「顶层够用」口径实测确认; (b) endpoint 级存在 **status=6**(msg「skipping tracker announce (unreachable)」), 不在 wiki 0-4 枚举内, 顶层仍聚合为 2 —— 判据④(status==4+msg)按顶层行判定不受扰; (c) 推迟路径 call+~1s 有 **~0.9s 的 updating=True 瞬态**(endpoint 发送态钉住所致)—— D1 早回执门控(min_e−t0>25s 不进轮询)遮蔽主路径; min_e−t0 ∈ (0,25] 的边界 item 若 2s tick 撞上瞬态会经判据②提前出「已确认」(实际汇报在 min_e+1 ≤ t0+26s 才发出, 若届时被拒则回执已出) —— 概率窄, 留给 S1 实现/S4 测试斟酌, 本轮不动设计; (d) hdtime msg="ook" 跨成功 announce 持续非空而 status=2 —— 佐证判据④必须 status==4 且 msg 非空, 只看 msg 会误判。

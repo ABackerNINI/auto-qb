@@ -9,7 +9,7 @@
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-05-0923">
 <meta name="doc-updated" content="26-10-05-0923">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-05-backend-reannounce-confirm.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-05-backend-reannounce-confirm.md,memory-bank/tasks/26-10-05-backend-reannounce-confirm-rework.md">
 <style>
   :root {
     color-scheme: dark;
@@ -105,7 +105,7 @@
     <a href="#s8"><span class="no">08</span>变更记录</a>
     <div class="toc-foot">
       依据报告 26-10-05-0854<br>
-      状态 Open · 待拍板后实施
+      状态 Open · 已拍板(D1-D5 落定) · 实施中
     </div>
   </nav>
 
@@ -127,33 +127,41 @@
     <p>本计划认领调研报告(26-10-05-0854)的后续落地。报告已从 qB 5.2.3 / libtorrent RC_2_0 源码级确证: 现四判据里三条正向判据在「已 working + 立即成功」这一最常见场景下<strong>全部落空</strong>, 30s 窗口走完恒误报「确认超时」; 唯一持久的正向信号是 <code>torrents/trackers</code> 的 <code>next_announce</code> <strong>epoch 前跳</strong>(WebAPI 2.13.0 / qB 5.2.0 起, qbittorrent-api 2026.8.1 零成本可用)。修复不引入新配置键、不动规则侧, 全部改动收敛在 webui 确认链路三处文件 + 测试。</p>
     <h3>拍板点(实施前逐项确认)</h3>
     <table>
-      <tr><th style="width:6%">#</th><th>决策</th><th style="width:22%">推荐</th><th>备选与理由</th></tr>
+      <tr><th style="width:6%">#</th><th>决策</th><th style="width:20%">推荐</th><th>备选与理由</th><th style="width:14%">拍板结果(26-10-05)</th></tr>
       <tr>
         <td class="mono">D1</td><td>推迟路径(min_interval 未过期, 汇报被 libtorrent 推迟到 <code>min_announce</code> 才发)怎么处置</td>
         <td class="ok">早回执 + 后台日志核实</td>
         <td>检出即对该种子写「已受理(推迟至 HH:MM)」结论并移出回执跟踪, 后续由轻量后台结构在预计发送时刻后核实一次、只落日志; 用户不必盯最长 10 分钟的 busy toast, 回执语义诚实。<strong>备选 A</strong>: 干等 —— item 截止期延到 <code>min_e+15s</code>(上限 600s), 前端 <code>waitCmd</code> 40s 上限同步放宽, 换取回执里直接写「确认成功」; 代价是组操作时用户可能干等数分钟。<strong>备选 C</strong>: 维持 30s 超时报「未确认」, 最省但推迟场景永远拿不到确认证据。</td>
+        <td class="ok">✅ 采纳推荐</td>
       </tr>
       <tr>
         <td class="mono">D2</td><td>主判据 TOL 与「成功」语义</td>
         <td class="ok">TOL = 3.0s; 语义取 (b) 窗口内 tracker 收到新鲜汇报即成功</td>
         <td>跳幅 = 响应时刻 − 上次响应时刻, 「投递后立刻汇报」场景跳幅可能只有几秒, TOL 不能大(报告 §7); 语义 (b) 与辅种目的等价, 且确认窗口(≤30s)远小于私站周期 interval, 窗口内前跳几乎必为本指令所触发。<strong>备选</strong>: 语义 (a) 收窄「前跳时刻距指令时刻 &lt; 一个 tick」—— 留作真机探针发现周期 announce 干扰时的加固项, 不预先实现。</td>
+        <td class="ok">✅ 采纳推荐(TOL=3.0s / 语义(b); S0 探针复核: 立即路径前跳实测 +5466s ≫ 3.0s, TOL=3.0 维持)</td>
       </tr>
       <tr>
         <td class="mono">D3</td><td>5.2 前后版本闸门</td>
         <td class="ok">字段存在性探测(基线读时判), 不调 <code>app_web_api_version</code></td>
         <td>qB &lt; 5.2 的 trackers 行根本没有 <code>next_announce</code> 键, 基线读一次即可判 epoch / legacy 模式, 零额外 API。<strong>备选</strong>: 主动探测 WebAPI 版本 —— 多一次调用且要处理探测失败, 无收益。</td>
+        <td class="ok">✅ 采纳推荐</td>
       </tr>
       <tr>
         <td class="mono">D4</td><td>「未确认」第三态的回执形态</td>
         <td class="ok">回执状态保持二值(ok/error), 未确认/已受理走 error + 文案前缀约定</td>
         <td>前端 <code>_pollCmd</code> 只认 <code>status === "ok" || "error"</code> 为终结(commands.js:131), 加第三态会挂死 waitCmd 直到超时; 前缀分流只改 reannounce 聚合分支一处。<strong>备选</strong>: 新增 <code>warn</code> 状态 —— 需同步改前端终结条件、SSE 事件路径与静态守阵, 改动面大且无机器可读收益的场景。</td>
+        <td class="warn">⚠ 偏离推荐: 采纳备选「新增 warn 状态」(见下注)</td>
       </tr>
       <tr>
         <td class="mono">D5</td><td>规则侧 <code>rules/actions/transfer.py</code> 的 <code>ReannounceAction</code> 是否本轮接入确认</td>
         <td class="ok">非目标</td>
         <td>报告 §7 顺带记录的缺口(只有 600s 限频、无结果确认)真实存在, 但其调用环境(规则线程、无 cmd_id 回执通道)与 webui 不同, 接入要做日志面回执, 独立成轮。判定函数本轮保持纯函数落在 <code>webui/commands.py</code>, 将来复用时再上提中性叶。</td>
+        <td class="ok">✅ 采纳推荐(非目标)</td>
       </tr>
     </table>
+    <div class="callout warn">
+      <strong>拍板记录(2026-10-05 所有者确认)</strong>: D1 / D2 / D3 / D5 采纳推荐; <strong>D4 偏离推荐, 取备选「新增 warn 状态」</strong>。D4 牵连改动面: 前端 <code>_pollCmd</code>(static/shared/commands.js:131) 终结条件纳入 warn; SSE 事件路径核对放行 warn; 相关静态守阵同步; §3.4 回执 status 列改三值 —— 已确认→ok / 失败→error / 已受理·推迟→warn / 未确认·停止→warn / 未确认·超时→warn; 聚合回执 status 规则 = 任一 item error → error, 否则任一 warn → warn, 全 ok → ok; 前端 toast 类型映射 ok→success 型 / error→error 型 / warn→timeout 型(复用现有 toast 类型); 三个前缀常量保留作文案(人类可读), 机器分流依据从「前缀」改为「status」。
+    </div>
   </section>
 
   <section id="s2">
@@ -181,7 +189,7 @@
       <tr><td class="mono">②</td><td><code>updating</code> 或 <code>status==3</code></td><td class="ok">已确认</td><td>announce 在途直证, 撞见即收(~0.5s 窗口, 命中是加强证据)</td></tr>
       <tr><td class="mono">③</td><td><code>next &gt; b_next + TOL</code>(限基线 <code>status ≥ 2</code> 且 <code>b_next</code> 非空的行)</td><td class="ok">已确认</td><td><strong>主判据</strong>; TOL=3.0s(D2); <code>min</code> 同向前跳可记入 reason 作佐证, 不作必要条件</td></tr>
       <tr><td class="mono">④</td><td><code>status==4</code> 且 <code>msg</code> 非空</td><td class="bad">失败</td><td>tracker 拒绝, 唯一可靠否定信号; msg 空的 status 4 不判败(歧义保守落「未确认」)</td></tr>
-      <tr><td class="mono">⑤</td><td>窗口走完仍无 ①–④</td><td class="warn">未确认</td><td>不与「失败」混淆; 回执 error + 前缀「未确认」(D4)</td></tr>
+      <tr><td class="mono">⑤</td><td>窗口走完仍无 ①–④</td><td class="warn">未确认</td><td>不与「失败」混淆; 回执 status=warn + 前缀「未确认」(D4=warn)</td></tr>
     </table>
     <h3>3.2 legacy 模式(qB &lt; 5.2, 基线行无 <code>next_announce</code> 键)</h3>
     <p>判据集 = ② updating + ③′ <code>status 2←非2</code> + ④ status4+msg; 成功难证、失败可证, 超时一律落「未确认(旧版 qB 无 epoch 字段, 仅未观测到拒绝)」—— 与 <code>pitfalls/backend/effect-confirmation.md</code> 的证据门控口径一致, 回执语义只承诺诚实标签。</p>
@@ -195,18 +203,20 @@
    │
    └─ 立即路径 ──→ item deadline = t0 + max(30s, min_e − t0 + 15s, 上限 600s)
             └→ 每 tick(2s)轮询 trackers → ②③④ → 全部 item 出结论后聚合回执:
-               全确认 → ok;否则 error「成功 X / 失败 Y / 未确认 Z: &lt;前 3 条原因&gt;」</div>
+               任一 error → error; 否则任一 warn(已受理/未确认) → warn; 全 ok → ok
+               「成功 X / 失败 Y / 未确认 Z: &lt;前 3 条原因&gt;」</div>
     <p>基线形状变更: <code>{url: (status, next_announce)}</code> → <code>{url: {status, updating, next, min}}</code> + item 级 <code>epoch</code> / <code>deadline</code> / <code>t0</code> 字段; 截止期从 entry 级单一下沉到 item 级(组内混合推迟/立即种子时各自算账)。</p>
-    <h3>3.4 回执文案契约(前缀单点)</h3>
+    <h3>3.4 回执文案契约(status 分流 + 前缀文案, D4=warn)</h3>
     <table>
-      <tr><th>结论</th><th>回执 status</th><th>error 文案前缀(前端分流依据)</th></tr>
-      <tr><td>已确认</td><td class="ok">ok</td><td>—(聚合全 ok 时无 error)</td></tr>
+      <tr><th>结论</th><th>回执 status(机器分流依据)</th><th>文案前缀(人类可读, 不作分流)</th></tr>
+      <tr><td>已确认</td><td class="ok">ok</td><td>—(item 级无需文案)</td></tr>
       <tr><td>失败(tracker 拒绝)</td><td class="bad">error</td><td class="mono">失败: tracker 未接受汇报(not working): &lt;msg&gt;</td></tr>
-      <tr><td>已受理·推迟</td><td class="bad">error</td><td class="mono">已受理: 最小间隔未过期, 推迟至 HH:MM(后台继续核实, 结果见日志)</td></tr>
-      <tr><td>未确认·停止</td><td class="bad">error</td><td class="mono">未确认: 种子已停止, qB 静默忽略强制汇报</td></tr>
-      <tr><td>未确认·超时</td><td class="bad">error</td><td class="mono">未确认: 30s 内未观测到 epoch 前跳/在途/拒绝证据</td></tr>
+      <tr><td>已受理·推迟</td><td class="warn">warn</td><td class="mono">已受理: 最小间隔未过期, 推迟至 HH:MM(后台继续核实, 结果见日志)</td></tr>
+      <tr><td>未确认·停止</td><td class="warn">warn</td><td class="mono">未确认: 种子已停止, qB 静默忽略强制汇报</td></tr>
+      <tr><td>未确认·超时</td><td class="warn">warn</td><td class="mono">未确认: 30s 内未观测到 epoch 前跳/在途/拒绝证据</td></tr>
     </table>
-    <p class="dimtxt">前缀常量(<code>RC_FAIL_PREFIX</code> / <code>RC_DEFERRED_PREFIX</code> / <code>RC_UNCONFIRMED_PREFIX</code>)定义在 <code>webui/commands.py</code> 单点, 前端按前缀分流展示; 改前缀必须同步 commands.js 聚合分支(测试钉住)。</p>
+    <p><strong>聚合回执 status 规则</strong>(D4=warn): 任一 item error → error; 否则任一 warn → warn; 全 ok → ok。前端 toast 类型映射: ok→success 型 / error→error 型 / warn→timeout 型(复用现有 toast 类型, 不新增)。</p>
+    <p class="dimtxt">前缀常量(<code>RC_FAIL_PREFIX</code> / <code>RC_DEFERRED_PREFIX</code> / <code>RC_UNCONFIRMED_PREFIX</code>)定义在 <code>webui/commands.py</code> 单点, <strong>保留作文案(人类可读)</strong>; 机器分流依据从「前缀」改为「status」, 前端 <code>_pollCmd</code> 终结条件同步纳入 warn(commands.js:131); 改前缀文案必须同步 commands.js 聚合分支(测试钉住)。</p>
   </section>
 
   <section id="s4">
@@ -237,7 +247,7 @@
       <tr><td class="mono">改动</td><td>
         ① 循环体改按 item 级 <code>deadline</code> 判超时; 超时/断连语义: 断连 continue 照旧, 超时落「未确认」(不再写「失败」)。<br>
         ② 每 tick 先查 store 快照 <code>state_enum.is_stopped</code>(record.py:231)直判 ①。<br>
-        ③ 判定改调 <code>_verdict_reannounce</code>; 聚合回执改三桶计数(成功/失败/未确认), 文案按 §3.4。<br>
+        ③ 判定改调 <code>_verdict_reannounce</code>; 聚合回执改三桶计数(成功/失败/未确认), 聚合 status 与文案按 §3.4(任一 error→error / 否则任一 warn→warn / 全 ok→ok)。<br>
         ④ 新增 <code>reannounce_background</code> 轻量结构(同函数内推进): 达 <code>min_e</code> 后每 tick 读一次 trackers, 出 ②③④ 结论落 INFO/WARNING 日志后移除; item 上限 500, 超限丢最旧并 WARNING 一次(单写线程内, 黄金法则 5 不破)。
       </td></tr>
       <tr><td class="mono">验收</td><td>回执三桶计数正确; 后台结构有界; <code>reannounce_pending</code> 全 done 即清(现有语义保留)。</td></tr>
@@ -247,10 +257,11 @@
     <table>
       <tr><td class="mono">改动</td><td>
         ① sticky 等待文案: 「tracker 确认最长 30s」→「tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执」。<br>
-        ② 聚合分支: fails 按 <code>r.error</code> 前缀分流「失败 / 未确认 / 已受理」三桶, toast 文案改「成功 X, 失败 Y, 未确认 Z」; 全失败 → error 型, 含未确认/已受理 → timeout 型(复用现有 toast 类型, 不新增)。<br>
-        ③ <code>waitCmd</code> 40s 上限<strong>不变</strong>(D1 推荐项下推迟目标即刻回执, 不占等待窗口; 若 D1 改选备选 A 则此项必须同步放宽)。
+        ② 聚合分支: 逐 item 按 <code>r.status</code> 三桶分流(ok / error / warn, 不再按前缀), 计数文案改「成功 X, 失败 Y, 未确认/已受理 Z」; 聚合回执 status = 任一 error → error, 否则任一 warn → warn, 全 ok → ok; toast 类型映射 ok→success 型 / error→error 型 / warn→timeout 型(复用现有 toast 类型, 不新增)。<br>
+        ③ <code>waitCmd</code> 40s 上限<strong>不变</strong>(D1 推荐项下推迟目标即刻回执, 不占等待窗口; 若 D1 改选备选 A 则此项必须同步放宽)。<br>
+        ④ <strong>D4=warn 牵连项</strong>: <code>_pollCmd</code>(commands.js:131) 终结条件由 <code>ok || error</code> 扩为 <code>ok || error || warn</code>(否则 warn 回执会挂死等待到超时); SSE 事件路径核对放行 warn; 相关静态守阵同步。
       </td></tr>
-      <tr><td class="mono">验收</td><td>三桶展示正确; grep 证实无其它入口硬编码「30s」等待语义(grep 已证测试未钉住旧文案)。</td></tr>
+      <tr><td class="mono">验收</td><td>三桶展示正确且 warn 回执不再挂死等待; grep 证实无其它入口硬编码「30s」等待语义(grep 已证测试未钉住旧文案)。</td></tr>
     </table>
 
     <h3>S4 · 测试 — <code>tests/test_web.py</code>(随 S1–S3 同步, 见 §05)</h3>
@@ -274,13 +285,13 @@
       <tr><td class="mono">判定矩阵(epoch 模式)</td><td>②updating→confirmed; ③前跳 &gt;TOL→confirmed、≤TOL(含 ==TOL 边界)→pending; 限基线 status≥2 行(status 0/1 行带极值 next 不触发); ④status4+msg→rejected、status4+空 msg→pending; 其余→pending</td></tr>
       <tr><td class="mono">判定矩阵(legacy 模式)</td><td>基线行无 <code>next_announce</code> 键 → ②/③′(2←非2)/④ 生效, 前跳判据不参与</td></tr>
       <tr><td class="mono">确认成功回执</td><td>前跳命中 → ok 回执, 跟踪结构清空(替代原 next_announce「重置」用例)</td></tr>
-      <tr><td class="mono">超时回执</td><td>窗口走尽 → error 回执文案含「未确认」前缀, 不再写「失败」</td></tr>
+      <tr><td class="mono">超时回执</td><td>窗口走尽 → warn 回执文案含「未确认」前缀, 不与 error「失败」混淆</td></tr>
       <tr><td class="mono">停止种子直判</td><td>store 快照 stopped → 立即结论, 不等窗口, 文案前缀「未确认: 种子已停止」</td></tr>
-      <tr><td class="mono">推迟早回执</td><td>epoch 且 <code>min_e − t0 &gt; 25s</code> → item 立即结论前缀「已受理」; 全推迟命令下一 tick 即出聚合回执; 后台结构登记</td></tr>
+      <tr><td class="mono">推迟早回执</td><td>epoch 且 <code>min_e − t0 &gt; 25s</code> → item 立即结论 status=warn 前缀「已受理」; 全推迟命令下一 tick 即出聚合回执(聚合 status=warn); 后台结构登记</td></tr>
       <tr><td class="mono">后台核实</td><td>达 min_e 后 tick 出 confirmed/rejected → 日志(INFO/WARNING)并移除; 500 条上限丢最旧</td></tr>
       <tr><td class="mono">item 级窗口</td><td>deadline = max(30, min_e−t0+15) capped 600; 组内混合(立即+推迟+停止)各自出结论后聚合</td></tr>
-      <tr><td class="mono">组聚合三桶</td><td>成功/失败/未确认计数与文案(含前 3 条原因截断)</td></tr>
-      <tr><td class="mono">前缀契约</td><td>三个前缀常量与 §3.4 表一致(前端分流依赖, 改前缀必红)</td></tr>
+      <tr><td class="mono">组聚合三桶</td><td>成功/失败/未确认计数与文案(含前 3 条原因截断); 计数口径按 item <code>r.status</code>(ok / error / warn)三桶分流</td></tr>
+      <tr><td class="mono">状态与前缀双契约</td><td>item/聚合 status 词汇(ok / error / warn)与聚合规则(任一 error→error / 否则任一 warn→warn / 全 ok→ok)钉住(D4=warn, 前端分流依赖, 改词汇必红); 三个前缀常量与 §3.4 文案表一致(人类可读文案契约, 改文案必红)</td></tr>
       <tr><td class="mono">baseline 形状回归</td><td><code>_trackers_baseline</code> 新形状 <code>{status, updating, next, min}</code> + epoch_mode; 受波及的既有测试逐一修(基线形状变更的涟漪面)</td></tr>
     </table>
   </section>
@@ -292,7 +303,7 @@
       <tr><td class="mono">R1</td><td>qB 自身周期 announce 到期同样前跳 epoch, 被算作本指令成功</td><td>语义取 (b)(D2)下两者效果等价(辅种目的); 确认窗口 ≤30s ≪ 私站周期, 误纳面极小; 真机探针若见干扰 → 启用「前跳时刻距指令 &lt; 一 tick」收窄(报告 §5 预案)</td></tr>
       <tr><td class="mono">R2</td><td>TOL=3s 偏小: 上次汇报极新鲜时跳幅 &lt; 3s 漏判 → 落「未确认」</td><td>漏判方向是诚实标签而非假失败; S0 探针实测跳幅后可收紧/放宽; ② updating 与后台核实作二次机会</td></tr>
       <tr><td class="mono">R3</td><td>未联系 tracker 的 epoch 极值造成假前跳</td><td>判据 ③ 判定域锁基线 status≥2; S0 探针证实序列化值后可再加 <code>b_next &gt; 0</code> 类守卫</td></tr>
-      <tr><td class="mono">R4</td><td>回执前缀文案被两侧各自改动而漂移</td><td>前缀常量后端单点 + 契约测试钉住(§05); 前端只在 reannounce 聚合分支一处消费</td></tr>
+      <tr><td class="mono">R4</td><td>回执 status 词汇与前缀文案被两侧各自改动而漂移</td><td>双侧契约(D4=warn): 机器分流依据 = status(ok / error / warn)+ 聚合规则, 前缀常量保留作文案(后端单点); 两面均由契约测试钉住(§05); 前端只在 reannounce 聚合分支一处消费</td></tr>
       <tr><td class="mono">R5</td><td>后台核实结构泄漏(种子被删/qB 断连)</td><td>item 上限 500 丢最旧; 断连 tick 跳过照旧; 结论或 deadline 必移除</td></tr>
       <tr><td class="mono">回滚</td><td colspan="2">改动收敛在三个文件 + 测试, 判定单点为纯函数 —— revert 单个提交即回旧判据; 无状态迁移、无配置键、无 qB 写行为变化(reannounce 指令本身照发), 回滚零残留</td></tr>
     </table>
@@ -314,6 +325,7 @@
     <table>
       <tr><th style="width:20%">版本</th><th>内容</th></tr>
       <tr><td class="mono">26-10-05-0923 · v1</td><td>首版: 依据调研报告 26-10-05-0854 出分步实施计划(S0–S5), 拍板点 D1–D5 待确认; 状态 Open。</td></tr>
+      <tr><td class="mono">26-10-05-0923 · v2</td><td>拍板落定(所有者确认): D1/D2/D3/D5 采纳推荐; <strong>D4 偏离推荐取备选「新增 warn 状态」</strong>(牵连: _pollCmd 终结条件 / SSE 放行 / 静态守阵 / §3.4 status 三值与聚合规则 / toast 映射)。§01/§3.1/§3.3/§3.4/§04 S2·S3/§05/§06 按该口径同步; S0 真机探针执行(①无未联系行可采样 80/80 working; ②立即路径前跳 +5466s, TOL=3.0 维持; ③推迟路径 min_e+1 冻结 ≥104s 后同值移动 —— 三点数字与原始 JSON 关键行见实施档案 <code>tasks/26-10-05-backend-reannounce-confirm-rework.md</code>)。状态保持 Open(S5 收尾改 Done)。</td></tr>
     </table>
   </section>
 
