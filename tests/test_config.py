@@ -26,7 +26,9 @@
 - test_validate_value_ranges: 取值范围收紧聚合(interval/main_tick/sync_interval 上下界, max_tasks_per_tick 上界, log.max_bytes 轮转区间, required_share_ratio 有限性与范围, hr.condition 边界, notify 上界, 规则 interval 正时间)
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
 - test_validate_state_condition_spec: state 条件非法 is_* 属性/裸枚举成员名报错
-- test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键)
+- test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键);
+  守阵(26-10-06-0028 D-02)——with_reference/without_reference 子段键面 fail-fast(enabeld/autostart 拼错报未知键,
+  enabled 非布尔报错, 全键面合法不报)
 - test_validate_rule_refs: tracker.rules 引用必须 @ 开头且目标存在; 重复引用判重(尾随空白归一判重/畸形只报格式错不叠加/合法配置原样保序不去重)
 - test_validate_regex_patterns: 非法 regex: 模式报错
 - test_validate_condition_and_remove_tags_regex: tags/category/trackers 条件与 remove_tags 动作非法 regex: fail-fast
@@ -634,6 +636,22 @@ def test_validate_checking_action_spec():
             "        - checking:\n"
             "            basic_check: filelist\n"
             "            skip_checking_tag: zSkipChecked\n"
+            "    rule10:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {mode: skip-checking, enabeld: 'true', autostart: 'true'}\n"
+            "    rule11:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            without_reference: {mode: full-checking, enabled: 'maybe'}\n"
+            "    rule12:\n"
+            "      actions:\n"
+            "        - checking:\n"
+            "            basic_check: filelist\n"
+            "            with_reference: {mode: skip-checking, enabled: 'true', auto_start: 'no'}\n"
+            "            without_reference: {mode: full-checking, enabled: false, auto_start: true}\n"
         )
         err = _load_errors(td, text)
         assert "checking 动作只接受 dict 配置" in err, err
@@ -645,7 +663,10 @@ def test_validate_checking_action_spec():
         assert "basic_check=custom 时必须配置 custom_basic_check_program_path" in err, err
         # skip_checking_tag 为全局配置, spec 配同名键报未知键
         assert "未知键 ['skip_checking_tag']" in err, err
-        assert "rule8" not in err, err  # 合法 spec 不报错
+        # 子段键面 fail-fast(26-10-06-0028 D-02): enabled/auto_start 拼错原先校验零报错、运行时静默缺省
+        assert "with_reference: 未知键 ['autostart', 'enabeld']" in err, err
+        assert "without_reference.enabled: 无效布尔值: maybe" in err, err
+        assert "rule8" not in err and "rule12" not in err, err  # 合法 spec(含子段全键面)不报错
 
 
 def test_validate_rule_refs():

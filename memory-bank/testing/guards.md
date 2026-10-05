@@ -91,6 +91,17 @@
 | `test_no_o_trunc_write.py::test_src_has_no_o_trunc_write` | src 下 .py **非注释 token 零 O_TRUNC**(NAME 拦 `os.O_TRUNC`, STRING 拦 `getattr(os, "O_TRUNC")` 绕行; 注释豁免) —— token/凭据写入只走 `utils.atomic_write` 唯一单点, 确需直写走 `_WHITELIST` 注明理由 | src 下放探针 `.py` 写 `os.O_TRUNC` 即红, 删探针回绿 |
 | `test_grouping.py::test_group_key_of_is_single_source_of_truth` | 归组 key 纯函数 == 真实 mixin 输出 | 内联公式分叉 |
 
+## S2 健壮性批次守阵 (26-10-06-0028 ×6, 红验 26-10-06 @工作区)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_qbmanager.py::test_refresh_suppress_window_exception_closes_window_in_finally` (A-01) | suppress 窗内异常上抛后 live 旗标不残留(try/finally 关窗), 下一成功轮 full_round 相位照常广播不被吞(边沿驱动事件不可重放) | 还原 qbmanager 关窗点为裸 `set_suppressed(False)` |
+| `test_hr_store.py::test_non_utf8_file_is_quarantined_and_recovered_from_backup` + `..._never_raise_on_unlocked_read_and_backup` (B2-01) | 非 UTF-8 字节(GBK 重存)归「坏文件」recoverable 类走 quarantine → .bak 自愈链; 无锁只读/备份路径「读坏不抛」如实带回错误(status.py 契约对 encoding 类成立) | `except (OSError, UnicodeDecodeError)` 还原为 `except OSError` |
+| `test_traffic_sample.py::test_agg_trim_engages_for_runtime_created_series` (C-01) | 运行期新建系列(不经 _recover_series)earliest_hour 随 hour 行入账初始化/min 更新, 满窗后裁剪生效(agg.dat hour 行有界, v3 §04.5 契约落地) | 删掉 `_agg_ingest_hour` 里的 earliest_hour 维护 |
+| `test_config.py::test_validate_checking_action_spec` (D-02, 扩展既有用例) | checking 动作子段(with_reference/without_reference)键面 fail-fast: enabeld/autostart 拼错报未知键, enabled 非布尔报错, 全键面合法不报 | 还原 `_validate_checking_action_spec` 为只查 mode |
+| `test_notify.py::test_notify_icon_ico_points_to_real_file` (H-02) | ICON_ICO 两级 dirname 指向真实存在的 icon.ico(与 tray/app.py 同口径), AUMID IconUri 不再恒写不存在路径 | 还原为一级 dirname |
+| `test_utils.py::test_convert_bool_in_dict_list_branch_keeps_decimal_strings` (H-03) | convert_bool_in_dict 列表分支与字典分支同口径: 列表内纯数字串保持原样不 True 化(导出模板回填类型不漂移) | 还原列表分支为无条件递归 |
+
 ## 仿真 / 语料 / 平台语义
 
 | 守阵 | 钉住的结论 | 红验 |

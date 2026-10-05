@@ -114,7 +114,9 @@ class HrSiteStore:
             return HrSiteData(), None, False
         try:
             text = self.path.read_text(encoding="utf-8")
-        except OSError as e:
+        except (OSError, UnicodeDecodeError) as e:
+            # UnicodeDecodeError(ValueError 子类, 非 OSError): 非 UTF-8 字节(编辑器 ANSI/GBK 重存等)
+            # 同属「坏文件」recoverable 类 —— 归入既有 quarantine → .bak 自愈链, 不许逃出拖垮视图面
             return HrSiteData(), f"站点文件读取失败: {e}{self._file_hint()}", True
         return self._parse(text)
 
@@ -188,7 +190,8 @@ class HrSiteStore:
             return HrSiteData(), "没有备份文件"
         try:
             text = backup.read_text(encoding="utf-8")
-        except OSError as e:
+        except (OSError, UnicodeDecodeError) as e:
+            # 同 _read_full: 非 UTF-8 备份也归「读不到可用备份」, 不抛(契约见 status.py)
             return HrSiteData(), f"备份读取失败: {e}"
         data, err, _recoverable = self._parse(text)
         return data, err

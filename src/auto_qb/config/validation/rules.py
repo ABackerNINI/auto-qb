@@ -50,6 +50,10 @@ CHECKING_VALID_BASIC = ("filelist", "piecehashes", "custom")
 
 CHECKING_VALID_MODES = ("skip-checking", "full-checking")
 
+# checking 动作子段(with_reference / without_reference)已知键(与 schema CHECKING_SECTION_FIELDS 同键面;
+# 26-10-06-0028 D-02: 子段嵌套两层拼错概率不低, 未知键必须 fail-fast 而非运行时静默缺省)
+CHECKING_SECTION_KNOWN_KEYS = {"enabled", "mode", "auto_start"}
+
 
 def _check_rule_refs(refs: List[str], rules_config: dict, where: str, errors: List[str]) -> None:
     """tracker.rules 引用校验: 必须 @ 开头, 且引用的规则集/规则存在(否则运行时静默不执行);
@@ -216,10 +220,17 @@ def _validate_checking_action_spec(value, where: str, errors: List[str]) -> None
     for seg in ("with_reference", "without_reference"):
         if seg not in value:
             continue
-        if not isinstance(value[seg], dict):
+        sub = value[seg]
+        if not isinstance(sub, dict):
             errors.append(f"{where}.{seg}: 必须是字典")
-        elif str(value[seg].get("mode", "")) not in CHECKING_VALID_MODES:
-            errors.append(f"{where}.{seg}.mode 取值非法: '{value[seg].get('mode', '')}', 可选: {list(CHECKING_VALID_MODES)}")
+            continue
+        # 子段键面 fail-fast(26-10-06-0028 D-02): enabled/auto_start 拼错原先校验零报错,
+        # 运行时 _parse_section 全 .get 按缺省静默生效(enabled 拼错 = 分支静默不启用)
+        _check_unknown_keys(sub, CHECKING_SECTION_KNOWN_KEYS, f"{where}.{seg}", errors)
+        if "enabled" in sub:
+            _try(parse_bool, sub["enabled"], f"{where}.{seg}.enabled", errors)
+        if str(sub.get("mode", "")) not in CHECKING_VALID_MODES:
+            errors.append(f"{where}.{seg}.mode 取值非法: '{sub.get('mode', '')}', 可选: {list(CHECKING_VALID_MODES)}")
 
 
 def _validate_tags_condition_spec(value, where: str, errors: List[str]) -> None:

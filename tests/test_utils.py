@@ -7,6 +7,7 @@
 - test_parse_hr_condition: HR 条件解析
 - test_parse_bool: 布尔解析
 - test_convert_bool_in_dict: 字典内布尔转换
+- test_convert_bool_in_dict_list_branch_keeps_decimal_strings: 守阵(26-10-06-0028 H-03)——列表元素与字典分支同口径, 纯数字串保持原样不 True 化
 - test_compare: 比较操作符
 - test_add_long_path_prefix_for_win: Windows 长路径前缀
 - test_extract_tracker_hostnames: 提取 tracker hostname
@@ -157,6 +158,18 @@ def test_convert_bool_in_dict():
     assert result["b"]["d"] is True
     assert result["e"] == 1  # 纯数字不转换
     assert result["f"] == "notbool"  # 非 bool 字符串保留
+
+
+def test_convert_bool_in_dict_list_branch_keeps_decimal_strings():
+    """守阵(26-10-06-0028 H-03): 列表元素与字典分支同口径 —— 纯数字串保持原样不 True 化
+
+    列表分支原无条件递归, 列表里的 "1"/"on"/"true" 被静默改写为 True/False;
+    导出模板(tags/domains 等列表值)回填导入时类型与原值不符。
+    """
+    d = {"tags": ["1", "on", "true", "notbool", "2026"], "nested": {"list": ["0", "x"]}}
+    result = utils.convert_bool_in_dict(d)
+    assert result["tags"] == ["1", True, True, "notbool", "2026"], "数字串保持原样, 布尔形串照常转换"
+    assert result["nested"]["list"] == ["0", "x"], "嵌套容器内同口径(数字串含 \"0\" 保持原样)"
 
 
 def test_compare():

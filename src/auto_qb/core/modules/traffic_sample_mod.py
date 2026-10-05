@@ -1005,8 +1005,12 @@ class TrafficSampleModule(BaseModule):
         """完结 hour 行落批 + 并入 day 累计器(严格逐级): 本行先 append 进 rows_out 随本批
         落盘(§4.2 完结整小时 append hour 行; 同 epoch 重封 = 追加行, 解析取最后一行);
         同日追加; 同 epoch 重封替换累计器旧行; 翻日(暂停恢复跨多小时滞留)先级联封前一日
-        再开新累计器。"""
+        再开新累计器。顺带维护 earliest_hour 裁剪判据(§4.5): 运行期才开始产数据的系列
+        (全新安装 global / 新种子 / 热重载启用)不经 _recover_series, 判据只能在此初始化
+        + min 更新, 否则 _agg_trim 恒早退、agg.dat 无界增长(26-10-06-0028 C-01)。"""
         rows_out.append(row)
+        if agg.earliest_hour is None or row.epoch < agg.earliest_hour:
+            agg.earliest_hour = row.epoch
         d = v4_day_epoch(row.epoch)
         if agg.day_epoch is None:
             agg.day_epoch, agg.day_hours = d, [row]

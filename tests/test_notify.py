@@ -26,9 +26,11 @@
 - test_notify_legacy_shortcut_cleanup: legacy lnk 清理: 存在的旧快捷方式被删除(APPDATA 显式给定, winreg 注入替身, 文件操作经 monkeypatch, 不动真实开始菜单)
 - test_notify_real_send_blocked_under_pytest: conftest 会话夹具拦截通知器命令(不启动真实进程), send 走失败分支返回 False
 - test_notify_fatal_enabled_does_not_launch_process: 通知**启用且全程不 mock** 走 `notify_fatal` 真实路径 ⇒ 一个进程都不启动(用户原始诉求"测试时弹出通知框"的最直接回归点)
+- test_notify_icon_ico_points_to_real_file: 守阵(26-10-06-0028 H-02)——ICON_ICO 两级 dirname 指向真实存在的 icon.ico(与 tray 同口径)
 """
 import base64
 import logging
+import os
 import re
 import sys
 import time
@@ -511,3 +513,14 @@ def test_notify_fatal_enabled_does_not_launch_process(sidefx_recorder):
     notify_fatal("致命: 测试期不应弹出", NotifyConfig(enabled=True))  # 不 mock: 走真实发送路径
     launched = [r for r in sidefx_recorder.records[before:] if r[0] == "POPEN"]
     assert not launched, f"通知启用时竟启动了外部进程(会真弹系统通知): {launched}"
+
+
+def test_notify_icon_ico_points_to_real_file():
+    """守阵(26-10-06-0028 H-02): ICON_ICO 指向真实存在的 icon.ico
+
+    修复前 ICON_ICO = dirname(__file__)/assets/... 指向不存在的 src/auto_qb/infra/assets/,
+    AUMID 注册表 IconUri 恒写不存在路径, toast 来源图标恒回退默认;
+    现与 tray/app.py 同口径(两级 dirname -> src/auto_qb/assets/icon.ico)。
+    """
+    assert os.path.isfile(notify_mod.ICON_ICO), f"ICON_ICO 不存在: {notify_mod.ICON_ICO}"
+    assert os.path.basename(notify_mod.ICON_ICO) == "icon.ico"

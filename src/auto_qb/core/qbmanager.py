@@ -800,39 +800,44 @@ class QbManager(
         # 下一轮全量同步(rid 已失效)把存量种子全判 added, 事件规则对全库重放
         if self.events.take_suppressed():
             self.events.set_suppressed(True)
-        self.events.emit(
-            "events_removed",
-            {
-                "removed": list(removed),
-                "snapshots": removed_snapshots,
-                "dry_run": dry_run
-            },
-        )
+        try:
+            self.events.emit(
+                "events_removed",
+                {
+                    "removed": list(removed),
+                    "snapshots": removed_snapshots,
+                    "dry_run": dry_run
+                },
+            )
 
-        matched_added: List[str] = []
-        if added:
-            logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
-            # 先为所有新增种子匹配 tracker 配置(事件分派与后续自有动作都需要; D3 服务)
-            for h in added:
-                torrent = self.store.get(h)
-                if torrent is None:
-                    continue
-                if torrent.tracker_conf is None:
-                    torrent.tracker_conf = self.ctx.trackers.match(torrent)
-                if not torrent.tracker_conf:
-                    try:
-                        trackers_info = torrent.trackers_info(self.client)
-                        all_domains = utils.extract_tracker_hostnames(trackers_info)
-                    except Exception:
-                        all_domains = []
-                    logger.warning(f"种子[{h[:8]}] | 未匹配 tracker 配置, 域名: {', '.join(all_domains)}")
-                    continue  # 未匹配tracker配置, 直接跳过
-                matched_added.append(h)
-            # 事件分派相位(plan §4.2 events_added): on_torrent_added —— 新增种子已匹配
-            # tracker 配置, 同步触发事件规则
-            self.events.emit("events_added", {"added": list(matched_added), "dry_run": dry_run})
-        # 重放保护窗口关闭: 抑制仅覆盖热重载后的首轮事件分派(两个事件相位)
-        self.events.set_suppressed(False)
+            matched_added: List[str] = []
+            if added:
+                logger.info(f"检测到新增种子 {len(added)} 个, 创建内置+规则任务")
+                # 先为所有新增种子匹配 tracker 配置(事件分派与后续自有动作都需要; D3 服务)
+                for h in added:
+                    torrent = self.store.get(h)
+                    if torrent is None:
+                        continue
+                    if torrent.tracker_conf is None:
+                        torrent.tracker_conf = self.ctx.trackers.match(torrent)
+                    if not torrent.tracker_conf:
+                        try:
+                            trackers_info = torrent.trackers_info(self.client)
+                            all_domains = utils.extract_tracker_hostnames(trackers_info)
+                        except Exception:
+                            all_domains = []
+                        logger.warning(f"种子[{h[:8]}] | 未匹配 tracker 配置, 域名: {', '.join(all_domains)}")
+                        continue  # 未匹配tracker配置, 直接跳过
+                    matched_added.append(h)
+                # 事件分派相位(plan §4.2 events_added): on_torrent_added —— 新增种子已匹配
+                # tracker 配置, 同步触发事件规则
+                self.events.emit("events_added", {"added": list(matched_added), "dry_run": dry_run})
+        finally:
+            # 重放保护窗口关闭: 抑制仅覆盖热重载后的首轮事件分派(两个事件相位)。
+            # try/finally 兜底: 窗内异常(tracker 匹配/订阅者)上抛时 live 旗标不残留,
+            # 下一成功刷新轮 full_round/transitions/events_* 不被吞(坑 suppress-request-vs-live-flag,
+            # live 旗标异常路径侧; emit 无逐订阅者隔离, 异常原样上抛)
+            self.events.set_suppressed(False)
 
         # 逐新增种子管线(plan §4.2 torrents_added 相位): 维护/限速/建任务/归组/集数由
         # maintenance/tracker/rules/grouping 按装配序认领, 内核不再点名

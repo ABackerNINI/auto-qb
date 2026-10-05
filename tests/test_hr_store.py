@@ -16,6 +16,10 @@
   且恢复后的写入**不得**把好备份盖成坏内容
 - test_corrupt_file_without_backup_warns_once: 无备份 -> 空数据 + 同一坏文件只告警一次
 - test_repeated_read_failure_does_not_rewarn: 坏文件挪不走(被占用)时也不逐轮重报(降 DEBUG)
+- test_non_utf8_file_is_quarantined_and_recovered_from_backup: 守阵(26-10-06-0028 B2-01)——非 UTF-8 字节(GBK 重存)
+  同属「坏文件」, 归入隔离 -> .bak 自愈链而非每波 ERROR 刷屏
+- test_non_utf8_bytes_never_raise_on_unlocked_read_and_backup: 守阵(26-10-06-0028 B2-01)——无锁只读 / 备份路径
+  对非 UTF-8 文件「读坏不抛」如实带回错误(status.py 契约钉死)
 - test_schema_mismatch_is_not_quarantined: schema 不符是版本迁移, 不挪走也不从备份猜
 - test_schema_version_old_migrates_and_materializes_on_commit: 旧版本沿链迁移(旧迁新拒), 随下次 commit 物化新版本
 - test_schema_migration_logs_once: 迁移 INFO 只报一次(读路径含无锁只读, 防通知轰炸)
@@ -290,6 +294,40 @@ def test_repeated_read_failure_does_not_rewarn(tmp_path, caplog):
     assert alerted == [True, False, False], "坏文件是持续状态: 只报一次, 其余轮次降 DEBUG"
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
     assert len(warnings) == 1, f"同一坏文件只告警一次: {[w.getMessage() for w in warnings]}"
+
+
+def test_non_utf8_file_is_quarantined_and_recovered_from_backup(tmp_path):
+    """守阵(26-10-06-0028 B2-01): 非 UTF-8 字节(编辑器 ANSI/GBK 重存)同属「坏文件」
+
+    UnicodeDecodeError(ValueError 子类)必须归入既有 quarantine -> .bak 自愈链,
+    不许从 _read_full 逃出(否则自愈链全程不可达, 每波 ERROR 刷屏 + 视图面发布中止)。
+    """
+    store = _write_versions(tmp_path, entries=(1, ))
+    # 模拟 Windows 编辑器按 GBK 重存站点 JSON(中文种子名)
+    (tmp_path / "s.json").write_text('{"index": [{"tid": 1, "name": "例站 S01"}]}', encoding="gbk")
+
+    with store.hold() as session:
+        assert "站点文件读取失败" in session.read_error, session.read_error
+        assert session.recovered_from_backup is True, "GBK 坏文件必须走 .bak 兜底, 不是每波 ERROR 刷屏"
+        assert set(session.data.index) == {1}, "备份里的条目应当恢复出来"
+        assert session.commit(now=9.0) == "written"
+    data, err = store.read_unlocked()
+    assert err is None and set(data.index) == {1}
+    assert len(list(tmp_path.glob("s.json.bad-*"))) == 1, "GBK 坏文件要原样留证"
+
+
+def test_non_utf8_bytes_never_raise_on_unlocked_read_and_backup(tmp_path):
+    """守阵(26-10-06-0028 B2-01): 非 UTF-8 文件在无锁只读 / 备份路径「读坏不抛」, 如实带回错误
+
+    status.py「站点文件读坏时不抛」契约对 encoding 类读坏同样成立(WebUI /hr 路由不 500)。
+    """
+    (tmp_path / "u.json").write_text('{"index": [{"tid": 1, "name": "例站 S01"}]}', encoding="gbk")
+    data, err = HrSiteStore("u", str(tmp_path)).read_unlocked()  # 不抛
+    assert err is not None and "读取失败" in err and data.index == {}
+
+    (tmp_path / "b.json.bak").write_bytes(b"\xb9\xf9\xb2\xcb\xd6\xd0\xce\xc4")  # GBK 字节
+    bdata, berr = HrSiteStore("b", str(tmp_path)).read_backup()  # 不抛
+    assert berr is not None and bdata.index == {}
 
 
 def test_schema_mismatch_is_not_quarantined(tmp_path):

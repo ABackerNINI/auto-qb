@@ -37,6 +37,7 @@
 - test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
 - test_refresh_added_no_tracker_match_skips: 新增种子未匹配 tracker 配置 -> 警告并跳过
 - test_refresh_removed_grouping_disabled: 删除种子且分组关闭 -> 只移除任务不扫描
+- test_refresh_suppress_window_exception_closes_window_in_finally: 守阵(26-10-06-0028 A-01)——suppress 窗内异常上抛后 live 旗标不残留, 下一成功轮 full_round 相位照常广播不被吞
 - test_refresh_schema_validation_missing_raises: 首次拉到非空种子信息时校验字段, 缺失抛 QbCompatError
 - test_refresh_schema_validation_passes_once: 全字段通过置 flag 不再重复校验
 - test_export_torrents_info: export_torrents_info 写种子信息到文件
@@ -780,6 +781,39 @@ def test_refresh_removed_grouping_disabled():
         mgr._refresh_torrents()
         assert mgr.store.get("H1") is None
         assert mgr.config.grouping.enabled is False  # 分组关闭: 跳过组内扫描
+
+
+def test_refresh_suppress_window_exception_closes_window_in_finally():
+    """守阵(26-10-06-0028 A-01): suppress 窗内异常上抛后 live 旗标不残留, 下一成功轮相位不被吞
+
+    事件分派两相位窗口(events_removed 前 arm -> events_added 后 close)内异常原样上抛
+    (issue 取证源: ctx.trackers.match 网络异常; emit 无逐订阅者隔离), 关窗点必须在
+    finally 兜底: 残留 live 旗标会把下一成功刷新轮的 full_round / events_* 全吞
+    (emit 返回 0), 边沿驱动事件不可重放。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+        seen: list = []
+        mgr.events.on("full_round", lambda event: seen.append("full_round"))
+        # match 异常只注入 added 循环调用点(窗内), full_round 订阅者(_on_full_round)同方法
+        # 需照常成功 —— 按调用序给效果: R1 全量轮(成功) / R1 added 循环(炸) / R2 全量轮(成功) / R2 added 循环(炸)
+        mgr.ctx.trackers.match = mock.Mock(
+            side_effect=[None, RuntimeError("match boom"), None,
+                         RuntimeError("match boom")]
+        )
+        mgr.events.request_suppression()  # 热重载首轮: 挂请求位, take 即 arm
+        with pytest.raises(RuntimeError, match="match boom"):
+            mgr._refresh_torrents()
+        assert not mgr.events.suppressed, "异常路径关窗: live 旗标不得残留(try/finally 兜底)"
+        # 下一成功刷新轮(强制全量同步触发 full_round): 相位照常广播, 不被残留旗标吞掉
+        # (本轮无新增种子, added 循环不跑, 刷新完整走完)
+        seen.clear()
+        mgr.store.rid = 0
+        mgr._refresh_torrents()
+        assert seen == ["full_round"], "下一成功轮 full_round 相位照常广播(修复前被吞)"
 
 
 def test_export_torrents_info():

@@ -42,7 +42,9 @@ WINDOWS_TOAST_APPID_FALLBACK = "Microsoft.Windows.PowerShell"
 # toast 正文字符上限(WinRT toast 单文本节点约 250 字符可见, 截断防溢出)
 MAX_BODY_LEN = 280
 # AUMID 注册表图标(orbit): 通知来源显示该图标而非 python 图标
-ICON_ICO = os.path.join(os.path.dirname(__file__), "assets", "icon.ico")
+# 两级 dirname 与 tray/app.py 同口径(26-10-06-0028 H-02): 一级 dirname 指向 infra/assets(不存在),
+# 真实文件在 src/auto_qb/assets/icon.ico
+ICON_ICO = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "icon.ico")
 # 历史 .lnk 快捷方式(隐式 AUMID 机制, 已弃用): 注册时清理, 防开始菜单残留僵尸条目
 LEGACY_SHORTCUTS = ("AutoQB.UI.lnk", "AutoQB.lnk")
 

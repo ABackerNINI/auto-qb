@@ -88,6 +88,8 @@
   EVICT_CHECK_INTERVAL_S 节流; 超龄删系列目录且内存缓存全清; 全局豁免; dry_run 跳过
 - test_agg_trim_piggyback_on_hour_seal: hour 裁剪 piggyback(§4.5) —— hour 封口时点触发,
   判据用内存最老行; 到龄重写并回写 earliest_hour; 无到龄只追加不重写
+- test_agg_trim_engages_for_runtime_created_series: 守阵(26-10-06-0028 C-01) —— 运行期新建系列
+  (未经 _recover_series)earliest_hour 随 hour 行入账初始化/min 更新, 满窗后裁剪生效(agg.dat hour 行有界)
 - test_stop_seals_aggregates_and_dry_run_short_circuit: stop() 聚合封口 —— 完结层级落 agg,
   幂等; dry_run 短路(累计器内存照常推进, 零落盘)
 - test_agg_defensive_paths_cascades_and_write_failure: 防御面与失败口径 —— 无累计器 flush /
@@ -1644,6 +1646,32 @@ def test_agg_trim_piggyback_on_hour_seal(tmp_path):
     assert _agg_text(tmp_path, key).startswith(text1)  # 只追加, 无重写
 
 
+def test_agg_trim_engages_for_runtime_created_series(tmp_path):
+    """守阵(26-10-06-0028 C-01): 运行期新建系列(全新安装 global / 新种子 / 热重载启用,
+    不经 _recover_series)满窗后裁剪生效 —— earliest_hour 在 _agg_ingest_hour 入账时
+    初始化 + min 更新, hour 行数有界(修复前判据恒 None, _agg_trim 恒早退, 无界增长)"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    window = 30 * 86400
+    base = _AGG_H0
+    now = base + 3 * HOUR_SECONDS + 100
+    obs = [(100, 50, 1, 2), (200, 60, 3, 4), (300, 70, 5, 6)]
+    agg = mod._agg_state(key)
+    assert agg.earliest_hour is None  # 运行期新建: 无恢复判据
+    _feed_30s(mod, key, base, obs)
+    mod._agg_flush_series(key, now=now)  # 首个完结小时入账: 判据就地初始化
+    assert agg.earliest_hour == base
+    assert [x.epoch for x in parse_v4_agg_text(_agg_text(tmp_path, key)).hours] == [base]
+    # 时间推进到首行到龄: 运行期继续产数据并封口
+    later = base + window + 5 * HOUR_SECONDS
+    _feed_30s(mod, key, base + window + 3 * HOUR_SECONDS, obs)
+    mod._agg_flush_series(key, now=later)
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
+    assert [x.epoch for x in parsed.hours] == [base + window + 3 * HOUR_SECONDS], "到龄首行被裁, hour 行有界"
+    assert agg.earliest_hour == base + window + 3 * HOUR_SECONDS, "裁剪结果回写内存判据"
+
+
 def test_stop_seals_aggregates_and_dry_run_short_circuit(tmp_path, monkeypatch):
     """stop() 聚合封口(§3.4): 完结层级照常落 agg; 幂等; dry_run 短路(累计器内存照常
     推进, 零落盘)"""
@@ -1651,9 +1679,13 @@ def test_stop_seals_aggregates_and_dry_run_short_circuit(tmp_path, monkeypatch):
     mod = mgr.host.get("qb_traffic")
     key = GLOBAL_SERIES_KEY
     base = _AGG_H0
+    # 时钟钉在测试 hour 附近: stop() 封口用真实 time.time() 时, 该 hour 行已到龄会被
+    # rollup_window 裁剪(C-01 修复后运行期新建系列裁剪生效, 数据降级进 day 行) —— 本用例
+    # 验的是封口语义, 与裁剪无关, 故注入时钟
+    monkeypatch.setattr(ts_mod, "time", _Clock(now=base + 2 * HOUR_SECONDS))
     obs = [(100, 50, 1, 2), (200, 60, 3, 4), (300, 70, 5, 6)]
     _feed_30s(mod, key, base, obs)
-    mod.stop()  # 聚合封口: 完结 hour 落 agg(真实时刻远晚于测试 hour, 必然完结)
+    mod.stop()  # 聚合封口: 完结 hour 落 agg(now 钉在 base+2h, 必然完结)
     parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
     assert len(parsed.hours) == 1 and parsed.hours[0].cov_s == 90
     text = _agg_text(tmp_path, key)

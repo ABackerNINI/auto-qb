@@ -127,7 +127,11 @@ def convert_bool_in_dict(d):
             elif isinstance(v, dict):
                 d[k] = convert_bool_in_dict(v)
             elif isinstance(v, list):
-                d[k] = [convert_bool_in_dict(item) for item in v]
+                # 列表元素与字典分支同口径(26-10-06-0028 H-03): 纯数字串跳过, 其余递归 ——
+                # 无条件递归会把列表里的 "1"/"on" 改写成 True/False(导出模板回填类型漂移)
+                d[k] = [
+                    item if isinstance(item, str) and item.isdecimal() else convert_bool_in_dict(item) for item in v
+                ]
 
     return d
 

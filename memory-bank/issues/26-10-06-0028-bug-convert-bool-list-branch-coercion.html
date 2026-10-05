@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="convert_bool_in_dict 列表分支缺 isdecimal 守卫, 列表内数字/布尔形字符串被改型">
 <meta name="issue-summary" content="导出模板列表值 &quot;1&quot;/&quot;on&quot; 被静默改成 True/False, 回填导入类型与原值不符">
 <title>convert_bool_in_dict 列表分支缺 isdecimal 守卫, 列表内数字/布尔形字符串被改型 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-06-0028-bug-convert-bool-list-branch-coercion</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-06 00:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">full-code-review 评审 26-10-05-0951</div></div>
     </div>
   </header>
@@ -80,7 +80,8 @@
 
   <section id="s3"><h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2><p>列表分支补与字典分支同款 isdecimal 守卫(或列表元素只递归容器类型)。</p><p><b>撞车(底册对照):</b> 无(底册无)。</p></section>
 
-  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li></ul></section>
+  <section id="s4"><h2><span class="no">04</span>状态变更日志</h2><ul><li>26-10-06 — 入池, 状态 <strong>Open</strong>(full-code-review 评审 S6 定稿入池, 按报告 §3.4 清单执行; 未修)</li>
+<li>26-10-06 — 修复, 状态 <strong>Done</strong>(S2 批, 计划 <a href="../plans/26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a> §05)</li></ul><h3>修复后补充(2026-10-06 S2 批实施完成)</h3><p><strong>实际修法</strong>: <code>src/auto_qb/infra/utils.py</code> <code>convert_bool_in_dict</code> 列表分支补与字典分支同款 isdecimal 守卫(纯数字串跳过, 其余递归) —— 列表内 "1"/"2026" 保持原样不 True 化, "on"/"true" 照常转换, 单口径恢复。</p><p><strong>守阵</strong>: <code>tests/test_utils.py::test_convert_bool_in_dict_list_branch_keeps_decimal_strings</code>(含嵌套容器对照)。</p><p>批实测(2026-10-06 S2 批 @工作区): test.quick / test.full 均 2642 passed + 4 skipped, 覆盖率 98.94%(15718 语句 / 167 未覆盖 / 143 partial), 与基线(S1c 后 5f321099 实测 99% 档)持平; 未覆盖增量经核对全部位于本批未触碰的既有区域, 本批改动行 100% 覆盖。守阵均已红验(临时还原修复即红)。提交: S2 批一笔(🐛), 提交信息见 .git/COMMIT_MSG_AI.txt。</p></section>
 
   <footer>
     26-10-06-0028-bug-convert-bool-list-branch-coercion.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
