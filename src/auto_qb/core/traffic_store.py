@@ -11,10 +11,10 @@ v1/v2 逐行格式及其写侧/解析已随 S5 退役删除; v3 读侧遇旧头�
 v3 全部写新目录; 旧 qb-traffic/ 原样留存不读不迁移(删留决定权在用户)。目录惰性创建;
 enabled=false(含 qb_traffic None)全程零文件零目录(保守默认, 黄金法则 2)。
 
-天文件行型(§02.1 逐列冻结; 全整数/毫秒口径; 坏行整行跳过计数、游标不推进):
+天文件行型(§02.1 逐列冻结; interval_s 小数秒 + dt_ms 毫秒口径; 坏行整行跳过计数、游标不推进):
     # auto-qb qb-traffic v3              文件头, 每文件一次(头行必须恰为 v3)
     key,<系列标识>                        global 固定 key,global; torrents/ = torrent:<infohash>
-    B,<start_epoch>,<interval_s>         块头: start = 块首记录实测 epoch(整数秒); 块不跨天(00:00 硬切)
+    B,<start_epoch>,<interval_s>         块头: start = 块首记录实测 epoch(整数秒); interval_s >= 1 允许小数秒; 块不跨天(00:00 硬切)
     r,<dl>,<up>,<dlt>,<upt>[,<dt_ms>]    数据行 5 列无时间戳; dt_ms 可选 = 距上一记录实测毫秒
     z,<run_len>,<dlt>,<upt>[,<dt_ms>]    零速游程: 占 run_len 个采样槽, 速率恒 (0,0)
     n,<run_len>[,<dt_ms>]                null 游程: 占 run_len 个采样槽(断连/缺字段)
@@ -136,7 +136,8 @@ def _parse_int_field(text: str) -> Optional[int]:
 #     r,<dl>,<up>,<dlt>,<upt>[,<dt_ms>]    数据行 5 列无时间戳; dt_ms 可选 = 距上一记录实测毫秒数
 #     z,<run_len>,<dlt>,<upt>[,<dt_ms>]    零速游程: 占 run_len 个采样槽, 速率恒 0
 #     n,<run_len>[,<dt_ms>]                null 游程: 占 run_len 个采样槽(断连/缺字段)
-# 全整数/毫秒口径: start_epoch/interval_s 整数秒(interval_s >= 1); dt_ms 正整数且
+# 整数/小数秒 + 毫秒口径: start_epoch 整数秒; interval_s >= 1 允许小数秒(规范十进制 ——
+# 整数值不带小数点, 与历史整秒文件形态一致; 非整值最短往返表示如 1.5); dt_ms 正整数且
 # <= DT_MS_MAX; 非法整行按坏行计数跳过、游标不推进(沿用 v2 坏行口径 + 损坏阈值隔离)。
 #
 # dt 链定约(§02.3 读侧规则 + §09.2 授权的实施期细化, S2 写侧必须同约定产出):
@@ -229,7 +230,7 @@ class V3Block:
     """v3 块: 块头 B + 记录序列(按槽序); 块不跨天(00:00 硬切, §03.3)"""
 
     start_epoch: int  # 块首记录实测 epoch 秒
-    interval_s: int  # 本块采样间隔(整数秒, >= 1)
+    interval_s: float  # 本块采样间隔(秒, >= 1; 允许小数秒如 1.5, 整数值存 float)
     records: tuple  # Tuple[V3Sample | V3ZeroRun | V3NullRun, ...]
 
 
@@ -274,11 +275,21 @@ def _fmt_v3_dt_tail(dt_ms: Optional[int]) -> str:
     return f",{tail}" if tail else ""
 
 
-def format_v3_b_row(start_epoch: int, interval_s: int) -> str:
-    """块头行文本(§02.1): B,<start_epoch>,<interval_s>; interval_s 须 >= 1 整数秒"""
-    if not isinstance(interval_s, int) or isinstance(interval_s, bool) or interval_s < 1:
-        raise ValueError(f"非法 interval_s(须 >= 1 整数秒): {interval_s!r}")
-    return f"B,{_fmt_int(start_epoch)},{_fmt_int(interval_s)}"
+def _fmt_interval_s(interval_s: float) -> str:
+    """块头 interval_s 列文本(规范十进制): 整数值不带小数点(与历史整秒文件形态一致),
+    非整值最短往返表示(1.5 -> "1.5")"""
+    if interval_s == int(interval_s):
+        return str(int(interval_s))
+    return repr(float(interval_s))
+
+
+def format_v3_b_row(start_epoch: int, interval_s: float) -> str:
+    """块头行文本(§02.1): B,<start_epoch>,<interval_s>; interval_s >= 1, 允许小数秒"""
+    if not isinstance(interval_s, (int, float)) or isinstance(interval_s, bool):
+        raise ValueError(f"非法 interval_s(须 >= 1 数值): {interval_s!r}")
+    if not math.isfinite(interval_s) or interval_s < 1:
+        raise ValueError(f"非法 interval_s(须 >= 1): {interval_s!r}")
+    return f"B,{_fmt_int(start_epoch)},{_fmt_interval_s(float(interval_s))}"
 
 
 def format_v3_r_row(rec: V3Sample) -> str:
@@ -324,10 +335,19 @@ def _parse_v3_dt_ms(text: str) -> int:
 
 
 def _parse_v3_pos_int(text: str) -> int:
-    """正整数列(run_len/interval_s); < 1 抛 ValueError"""
+    """正整数列(run_len); < 1 抛 ValueError"""
     v = int(text)
     if v < 1:
         raise ValueError(f"须正整数: {text}")
+    return v
+
+
+def _parse_v3_interval_s(text: str) -> float:
+    """块头 interval_s 列解析: >= 1 的数值, 允许小数秒(1.5); 整数十进制归一 float。
+    NaN/inf/非数值/越界抛 ValueError -> 整行坏行(与 run_len 的正整数口径分离)"""
+    v = float(text)
+    if not math.isfinite(v) or v < 1:
+        raise ValueError(f"interval_s 须 >= 1: {text}")
     return v
 
 
@@ -359,7 +379,7 @@ def parse_v3_day_text(text: str) -> V3ParsedDay:
     key: Optional[str] = None
     blocks: list = []
     cur_start: Optional[int] = None
-    cur_interval: Optional[int] = None
+    cur_interval: Optional[float] = None
     cur_records: list = []
 
     def _close() -> None:
@@ -387,7 +407,7 @@ def parse_v3_day_text(text: str) -> V3ParsedDay:
             if parts[0] == "B" and len(parts) == 3:
                 # 先解析校验再切换块状态: 非法 B 行整行计坏, 既有块不受影响
                 b_start = int(parts[1])
-                b_interval = _parse_v3_pos_int(parts[2])
+                b_interval = _parse_v3_interval_s(parts[2])
                 _close()
                 cur_start = b_start
                 cur_interval = b_interval
@@ -539,7 +559,7 @@ class LiveTail:
     block_open: bool  # 写侧是否存在开放块(start_epoch 非 None)
     head_pending: bool  # 开放块尚无任何落盘(B 行未写, records = 全块记录)
     start_epoch: Optional[int]  # 开放块 B.start(block_open 才非 None; head_pending 复用)
-    interval_s: int  # 槽位标称推进秒(块 interval; 无块时取当前生效采样间隔)
+    interval_s: float  # 槽位标称推进秒(块 interval; 无块时取当前生效采样间隔)
     projected_ts: float  # 写侧游标 = 最后一条记录的槽位锚点(block_open 才有语义)
     records: tuple  # 未落盘记录(V3Sample/V3ZeroRun/V3NullRun, 按槽序; block_open 才非空)
     open_run: Optional[LiveTailRun]  # 开放游程冻结副本(None = 无)
@@ -948,7 +968,7 @@ class TrafficV3Store:
                     prefix = "\n"
         lines = []
         if header is not None:
-            lines.append(format_v3_b_row(int(header[0]), int(header[1])))
+            lines.append(format_v3_b_row(int(header[0]), float(header[1])))
         for rec in records:
             if isinstance(rec, V3Sample):
                 lines.append(format_v3_r_row(rec))

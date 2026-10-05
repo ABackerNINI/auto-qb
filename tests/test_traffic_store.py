@@ -17,6 +17,8 @@ v3 纯函数区(S1, S5 起为现行唯一实现):
 - test_v3_parse_bad_line_family_cursor_not_advanced: 坏行族逐项计坏(v1/v2 旧头行整文件不匹配 —— R2 识别-忽略保留 / r 列数 {5,6} 之外 /
   dt_ms 非法族 / 负速率 / run_len<1 / interval<1 / 块头前数据行), 好行不受牵连且游标不推进
 - test_v3_no_equal_interval_drift_immunity: 纯等间隔路径不存在(证伪)
+- test_v3_decimal_interval_roundtrip_and_bad_parse: 块头 interval_s 小数秒(2026-10-05 放宽)——
+  B 行 1.5 roundtrip + 标称槽位推进 1.5s + 解析侧非法族整行计坏; 整值形态不变
 - test_v3_bucket_width_effective_dt: 桶宽 max(1, ceil(有效dt)) 各形态
 - test_v3_paths_dates_and_window: 按天目录与路径解析(§06.2)
 - test_v3_agg_roundtrip_and_legacy_8col: agg.dat roundtrip + 8 列旧行兜底 cov_s=3600(防御性保留, 计划 §02.2 明文)
@@ -487,6 +489,25 @@ def test_v3_parse_bad_line_family_cursor_not_advanced():
         assert old.key is None and old.blocks == () and old.bad_lines == 4 and old.data_lines == 4
 
 
+def test_v3_decimal_interval_roundtrip_and_bad_parse():
+    """块头 interval_s 小数秒(2026-10-05 放宽, 修复 1.5/1.5 被整数秒口径静默抬到 2s):
+    B 行 1.5 roundtrip(interval_s 还原 + 标称槽位推进 1.5s); 解析侧非法族(0.5/非数值/
+    非有限)整行计坏不开新块; 整秒历史文件形态不受影响(整值序列化不带小数点)"""
+    recs = (V3Sample(1, 2, 3, 4), V3Sample(5, 6, 7, 8))
+    parsed = parse_v3_day_text(format_v3_day_text("global", (V3Block(1000, 1.5, recs), )))
+    assert parsed.bad_lines == 0
+    (block, ) = parsed.blocks
+    assert block.start_epoch == 1000 and block.interval_s == 1.5
+    # 标称槽位推进 1.5s(缺省 dt 链): 槽 1000, 1001.5
+    assert [s.ts for s in v3_block_slots(block)] == pytest.approx([1000.0, 1001.5], abs=1e-9)
+    # 解析侧非法族: 整行坏、不开新块、游标不推进
+    good_head = [HEADER_LINE_V3, "key,global", "B,1000,30"]
+    bad_b = ["B,1000,0.5", "B,1000,abc", "B,1000,nan", "B,1000,inf", "B,1000,1.5.5"]
+    out = parse_v3_day_text(_v3_day_text(good_head + ["r,1,1,1,1"] + bad_b + ["r,2,2,2,2"]))
+    assert out.bad_lines == len(bad_b)
+    assert len(out.blocks) == 1 and len(out.blocks[0].records) == 2
+
+
 def test_v3_no_equal_interval_drift_immunity():
     """纯等间隔路径不存在(§02.3): 构造 d̄>0 全显式 dt 序列 —— dt 链逐点等于实测,
     等间隔推算(start + i x interval)漂移远超 tol(证无累积误差)"""
@@ -670,7 +691,11 @@ def test_v3_format_fail_fast_and_torn_tail():
             format_v3_r_row(V3Sample(1, 1, 1, 1, dt_ms=bad_dt))
         with pytest.raises(ValueError):
             format_v3_z_row(V3ZeroRun(2, 1, 1, dt_ms=bad_dt))
-    for bad_iv in (0, -30, 30.5, True):
+    # interval_s >= 1 数值(允许小数秒); 非数值/越界/非有限 fail-fast
+    assert format_v3_b_row(1000, 30) == "B,1000,30"  # 整值不带小数点(与历史文件形态一致)
+    assert format_v3_b_row(1000, 30.0) == "B,1000,30"
+    assert format_v3_b_row(1000, 1.5) == "B,1000,1.5"  # 小数秒最短往返表示
+    for bad_iv in (0, -30, True, float("nan"), float("inf"), "30"):
         with pytest.raises(ValueError):
             format_v3_b_row(1000, bad_iv)
     head = [HEADER_LINE_V3, "key,global", "B,1000,30", "r,1,1,1,1"]

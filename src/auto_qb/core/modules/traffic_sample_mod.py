@@ -95,7 +95,9 @@ qbmanager 的 finally 与 state.save 顺序不改。
   stop() 聚合封口随 dry_run 短路; start() 恢复(catch-up 有写)dry_run 整体跳过。
 
 C1 生效与热重载联动(§3.5): handler 每轮现读 sample_interval 与 main_tick, 失配向上取整
-到下一倍数 + 告警一次(D5: logger.warning + 已告警记忆防重复, 配置变化时记忆复位), 不拒采;
+到 main_tick 下一倍数 + 告警一次(D5: logger.warning + 已告警记忆防重复, 配置变化时记忆
+复位), 不拒采; 整数倍匹配的小数档(1.5s 配 main_tick=1.5s)原样生效 —— 块头 interval_s
+允许小数秒(2026-10-05 起; 修复小数档被整数秒口径静默抬到下一整秒)。
 检测 sample_interval 变化 -> 直接改 task.interval + 关闭全部现块(旧块落盘, 新块带新
 interval —— 新旧数据分块各有 interval); main_tick 每轮现读无需联动。
 
@@ -220,7 +222,7 @@ class BlockBuffer:
     """
 
     start_epoch: Optional[int]  # 本块首记录槽位 epoch 秒(B 行 start); None = 尚无开放块
-    interval_s: int  # 本块采样间隔(整数秒, 块头 B 列; 开块时取生效间隔)
+    interval_s: float  # 本块采样间隔(秒, 块头 B 列; 允许小数秒; 开块时取生效间隔)
     date_str: Optional[str]  # 本块本地日期(YYYY-MM-DD; 块不跨天, 00:00 硬切)
     records: list  # 待写记录(V3Sample/V3ZeroRun/V3NullRun, 按槽序; flush 时清空)
     slots: int  # 待写槽数(r=1 / 游程=run_len; Q3 保险闸判据)
@@ -296,8 +298,8 @@ class TrafficSampleModule(BaseModule):
         self._v3store: Optional[TrafficV3Store] = None
         # flush 驱动时点(None = 进程首轮只记时不 flush)
         self._last_flush: Optional[float] = None
-        # 当前生效采样间隔(整数秒, C1 失配取整后; 块头 interval 列口径)
-        self._effective_interval: Optional[int] = None
+        # 当前生效采样间隔(浮点秒, C1 失配归倍数后; 块头 interval 列口径, 允许小数秒)
+        self._effective_interval: Optional[float] = None
         # 失配告警记忆键(sample_interval, main_tick): 配置对变化时复位(同配对只告警一次, D5)
         self._interval_signature: Optional[tuple] = None
         self._ratio_warned: bool = False
@@ -425,7 +427,9 @@ class TrafficSampleModule(BaseModule):
     # ---------- C1 生效与热重载联动(§3.5) ----------
 
     def _apply_interval(self, conf, task: Optional[Task]) -> None:
-        """采样间隔现读与联动(C1, §3.5): 失配向上取整到下一倍数 + 告警一次(D5), 不拒采;
+        """采样间隔现读与联动(C1, §3.5): 失配向上取整到 main_tick 下一倍数 + 告警一次(D5),
+        不拒采; 整数倍匹配的小数档(如 1.5s 配 main_tick=1.5s)原样生效不取整 —— 块头
+        interval_s 允许小数秒(2026-10-05 起; 修复 1.5/1.5 被整数秒口径静默抬到 2s)。
         sample_interval 变化 -> 直接改 task.interval + 关闭全部现块(旧块落盘, 新块带新
         interval —— 新旧数据分块各有 interval, A3 根因闭合); main_tick 每轮现读。"""
         main_tick = float(getattr(self._ctx.config, "main_tick", 0.0) or 0.0)
@@ -435,7 +439,7 @@ class TrafficSampleModule(BaseModule):
             effective = multiple * main_tick  # 整数倍时恰等于配置值; 失配向上取整
         else:
             effective = sample_interval
-        interval_s = max(1, int(math.ceil(effective - 1e-9)))  # 块头 interval_s 整数秒口径
+        effective = max(1.0, effective)  # 块头 interval_s 同下限(配置校验已保证, 防御)
         signature = (sample_interval, main_tick)
         if signature != self._interval_signature:
             self._interval_signature = signature  # 配置对变化: 告警记忆复位(新失配新告警)
@@ -443,17 +447,17 @@ class TrafficSampleModule(BaseModule):
         if main_tick > 0 and abs(effective - sample_interval) > 1e-9 and not self._ratio_warned:
             logger.warning(
                 f"流量采样 | sample_interval {sample_interval:g}s 非 main_tick {main_tick:g}s 整数倍, "
-                f"实际节拍取整为 {interval_s}s(颗粒变粗不断线, 本失配只告警一次)"
+                f"实际节拍取整为 {effective:g}s(颗粒变粗不断线, 本失配只告警一次)"
             )
             self._ratio_warned = True
         if self._effective_interval is None:
-            self._effective_interval = interval_s  # 进程首轮: 只立基线不开关块
-        elif interval_s != self._effective_interval:
-            logger.info(f"流量采样 | 采样率变化 -> {interval_s}s: 关闭全部现块, 新数据分块带新 interval")
-            self._effective_interval = interval_s
+            self._effective_interval = effective  # 进程首轮: 只立基线不开关块
+        elif effective != self._effective_interval:
+            logger.info(f"流量采样 | 采样率变化 -> {effective:g}s: 关闭全部现块, 新数据分块带新 interval")
+            self._effective_interval = effective
             self._close_blocks_for_interval_change()
         if task is not None:
-            task.interval = interval_s  # 直接改运行中任务的间隔(A3: 注册时定死不跟 的修复点)
+            task.interval = effective  # 直接改运行中任务的间隔(A3: 注册时定死不跟 的修复点)
 
     def _close_blocks_for_interval_change(self) -> None:
         """采样率变化关块(§3.5): 开放块内游程先封口(记录入旧块), 旧块全量落盘并复位 ——

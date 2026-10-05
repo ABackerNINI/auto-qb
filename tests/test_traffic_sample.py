@@ -48,6 +48,8 @@
   task.interval 回写 + 旧块落盘(旧 interval) + 新块带新 interval(新旧数据分块各有 interval)
 - test_interval_mismatch_ceils_and_warns_once: 运行期失配(D5): 向上取整到下一倍数(task.interval=取整值) +
   告警一次(防重复), 配置再变记忆复位; 不拒采
+- test_interval_decimal_match_kept_not_ceiled: 整数倍匹配的小数档(1.5 配 main_tick=1.5)原样生效 ——
+  task.interval/_effective_interval/块头 B 行均 1.5, 失配告警不触发, 同块零漂移(2026-10-05 修复)
 - test_day_boundary_cut: 跨天切块(00:00 硬切, §3.3): 23:59 块落旧日期文件 + 00:00 新块新日期文件, 各带正确块头
 - test_day_boundary_seals_open_run: 跨天封游程: 游程不跨天(00:00 样本先封旧游程); 块首单槽游程不写 dt
 - test_buffer_slot_cap_3600_early_flush: Q3 保险闸: 缓冲槽 >= 3600 提前单独 flush(不关块, 块头只写一次)
@@ -1084,6 +1086,33 @@ def test_interval_mismatch_ceils_and_warns_once(tmp_path, monkeypatch):
     with _ModuleLogCapture() as cap3:
         mod.handle_traffic_sample(task, dry_run=False)
     assert task.interval == 6 and "取整" in cap3.text
+
+
+def test_interval_decimal_match_kept_not_ceiled(tmp_path, monkeypatch):
+    """整数倍匹配的小数档原样生效(2026-10-05 修复): main_tick=1.5 配 1.5s -> task.interval
+    == 1.5(不再被整数秒口径静默抬到 2), 块头 interval_s == 1.5(B 行写 1.5), 失配告警不
+    触发; 同块两记录标称 1.5s 推进零漂移(r 行不写显式 dt)"""
+    clock = _Clock()
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=1.5))
+    mgr.config.main_tick = 1.5  # FakeConfig 缺省 1.0; 显式对齐构造匹配小数档
+    mgr.store.server_state = _ss()
+    mod = mgr.host.get("qb_traffic")
+    task = Task("internal", TASK_NAME, interval=1.5, handler=mod.handle_traffic_sample)
+    with _ModuleLogCapture() as cap:
+        mod.handle_traffic_sample(task, dry_run=False)  # t0: 块首 r
+    assert task.interval == 1.5 and mod._effective_interval == 1.5
+    assert "取整" not in cap.text  # 整数倍匹配: 失配告警不触发
+    clock.advance(1.5)
+    mod.handle_traffic_sample(task, dry_run=False)  # t0+1.5: 同块续写
+    _flush(mod)
+    parsed = _v3_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    assert len(parsed.blocks) == 1 and parsed.blocks[0].interval_s == 1.5
+    text = _v3_path(tmp_path, GLOBAL_SERIES_KEY, clock.now).read_text(encoding="utf-8")
+    b_rows = [ln for ln in text.splitlines() if ln.startswith("B,")]
+    assert len(b_rows) == 1 and b_rows[0].endswith(",1.5")  # B 行如实带小数
+    recs = parsed.blocks[0].records
+    assert [type(r) for r in recs] == [V3Sample, V3Sample] and recs[1].dt_ms is None  # 零漂移
 
 
 def _local_epoch(hour: int, minute: int, second: int) -> float:
