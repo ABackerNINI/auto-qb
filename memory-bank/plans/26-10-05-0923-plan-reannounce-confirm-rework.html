@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>实施计划: 强制汇报确认机制重构 — epoch 前跳证据门控</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="reannounce-confirm-api">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-05-0923">
+<meta name="doc-updated" content="26-10-05-0923">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-05-backend-reannounce-confirm.md">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0e1116;
+    --paper: #141920;
+    --paper-2: #1a212b;
+    --code-bg: #10151c;
+    --ink: #dde4ec;
+    --dim: #97a3b1;
+    --faint: #6b7684;
+    --line: #293240;
+    --hair-soft: #222b37;
+    --accent: #5ec2a7;
+    --mark: #17211d;
+    --bad: #e07a6e;
+    --good: #6fc78c;
+    --warn: #e0b35e;
+    --mono: "Cascadia Code", Consolas, "JetBrains Mono", monospace;
+    --display: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.8 var(--display);
+  }
+  .sheet {
+    max-width: 1180px; margin: 0 auto; padding: 44px 24px 60px;
+    display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 44px;
+  }
+  @media (max-width: 880px) { .sheet { grid-template-columns: 1fr; } .toc { position: static; } }
+  nav.toc {
+    position: sticky; top: 24px; align-self: start;
+    font-size: 13px; border-left: 1px solid var(--hair-soft); padding-left: 14px;
+  }
+  .toc-label { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; color: var(--faint); margin-bottom: 10px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 3px 0; }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc .no { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-right: 8px; }
+  .toc-foot { margin-top: 18px; color: var(--faint); font-size: 12px; line-height: 1.6; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  @media (max-width: 880px) { header.cover { grid-column: 1; } }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: .18em; color: var(--accent); margin-bottom: 10px; }
+  h1 { font-size: 27px; line-height: 1.35; margin: 0 0 12px; }
+  .lede { color: var(--dim); font-size: 15px; max-width: 76ch; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; margin-top: 22px; padding: 14px 0; border-top: 1px solid var(--hair-soft); border-bottom: 1px solid var(--hair-soft); }
+  .meta-row .item .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; color: var(--faint); text-transform: uppercase; }
+  .meta-row .item .v { font-size: 13.5px; margin-top: 2px; }
+  .badge { display: inline-block; border: 1px solid var(--warn); color: var(--warn); border-radius: 999px; padding: 1px 12px; font-size: 12px; }
+  section { grid-column: 2; margin-top: 40px; }
+  @media (max-width: 880px) { section { grid-column: 1; } }
+  h2 { font-size: 20px; margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 13px; color: var(--accent); margin-right: 12px; }
+  h3 { font-size: 15.5px; color: var(--accent); margin: 24px 0 8px; }
+  p { margin: 9px 0; max-width: 82ch; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--paper-2); padding: 1px 6px; border-radius: 3px; }
+  table { border-collapse: collapse; width: 100%; margin: 13px 0; font-size: 13.5px; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--paper-2); font-weight: 600; white-space: nowrap; }
+  td code, th code { white-space: nowrap; }
+  td.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .ok { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); } .dimtxt { color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 11px 15px; margin: 13px 0; font-size: 14px; max-width: 82ch; }
+  .callout.red { border-left-color: var(--bad); }
+  .callout.warn { border-left-color: var(--warn); }
+  .flow {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7; color: var(--dim);
+    white-space: pre; overflow-x: auto; padding: 14px 16px; margin: 13px 0;
+    background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px;
+  }
+  .flow b { color: var(--ink); font-weight: 400; }
+  .flow i { color: var(--accent); font-style: normal; }
+  .flow em { color: var(--warn); font-style: normal; }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); border-radius: 4px; padding: 13px 15px; overflow-x: auto; font-size: 12.5px; line-height: 1.65; }
+  pre code { background: none; padding: 0; }
+  ul { margin: 8px 0; padding-left: 22px; } li { margin: 4px 0; max-width: 82ch; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  footer { grid-column: 2; margin-top: 52px; padding-top: 14px; border-top: 1px solid var(--hair-soft); color: var(--faint); font-size: 12.5px; }
+  @media (max-width: 880px) { footer { grid-column: 1; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>结论与拍板点</a>
+    <a href="#s2"><span class="no">02</span>依据与根因(引用报告)</a>
+    <a href="#s3"><span class="no">03</span>目标行为设计</a>
+    <a href="#s4"><span class="no">04</span>分步实施(S0–S5)</a>
+    <a href="#s5"><span class="no">05</span>测试计划</a>
+    <a href="#s6"><span class="no">06</span>风险与回滚</a>
+    <a href="#s7"><span class="no">07</span>非目标</a>
+    <a href="#s8"><span class="no">08</span>变更记录</a>
+    <div class="toc-foot">
+      依据报告 26-10-05-0854<br>
+      状态 Open · 待拍板后实施
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb-clone · 实施计划 · backend / webui 汇报确认</div>
+    <h1>强制汇报确认机制重构: epoch 前跳证据门控</h1>
+    <p class="lede">现判定把 qB 5.2 的 <code>next_announce</code>(epoch 绝对时间)当倒计时用, 成功判据方向反了恒不触发, 用户看到的「经常无法识别」是结构性误报。本计划按调研报告的候选设计落地: 主判据改为 <strong>epoch 前跳</strong>, 停止种子直判, 「未确认」与「失败」分列, 推迟路径早回执 + 后台日志核实, 旧版 qB 回退证据门控 —— 把确认机制从「大概率误报失败」修成「每一条回执都有正证据或诚实标签」。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-05-0923-plan-reannounce-confirm-rework</div></div>
+      <div class="item"><div class="k">依据报告</div><div class="v"><a href="../reports/26-10-05-0854-report-reannounce-confirm-api.html">26-10-05-0854-report-reannounce-confirm-api</a></div></div>
+      <div class="item"><div class="k">验证基线</div><div class="v">86441e54 (develop)</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui/commands · webui/runtime · static/shared/commands.js · tests/test_web</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>结论与拍板点</h2>
+    <p>本计划认领调研报告(26-10-05-0854)的后续落地。报告已从 qB 5.2.3 / libtorrent RC_2_0 源码级确证: 现四判据里三条正向判据在「已 working + 立即成功」这一最常见场景下<strong>全部落空</strong>, 30s 窗口走完恒误报「确认超时」; 唯一持久的正向信号是 <code>torrents/trackers</code> 的 <code>next_announce</code> <strong>epoch 前跳</strong>(WebAPI 2.13.0 / qB 5.2.0 起, qbittorrent-api 2026.8.1 零成本可用)。修复不引入新配置键、不动规则侧, 全部改动收敛在 webui 确认链路三处文件 + 测试。</p>
+    <h3>拍板点(实施前逐项确认)</h3>
+    <table>
+      <tr><th style="width:6%">#</th><th>决策</th><th style="width:22%">推荐</th><th>备选与理由</th></tr>
+      <tr>
+        <td class="mono">D1</td><td>推迟路径(min_interval 未过期, 汇报被 libtorrent 推迟到 <code>min_announce</code> 才发)怎么处置</td>
+        <td class="ok">早回执 + 后台日志核实</td>
+        <td>检出即对该种子写「已受理(推迟至 HH:MM)」结论并移出回执跟踪, 后续由轻量后台结构在预计发送时刻后核实一次、只落日志; 用户不必盯最长 10 分钟的 busy toast, 回执语义诚实。<strong>备选 A</strong>: 干等 —— item 截止期延到 <code>min_e+15s</code>(上限 600s), 前端 <code>waitCmd</code> 40s 上限同步放宽, 换取回执里直接写「确认成功」; 代价是组操作时用户可能干等数分钟。<strong>备选 C</strong>: 维持 30s 超时报「未确认」, 最省但推迟场景永远拿不到确认证据。</td>
+      </tr>
+      <tr>
+        <td class="mono">D2</td><td>主判据 TOL 与「成功」语义</td>
+        <td class="ok">TOL = 3.0s; 语义取 (b) 窗口内 tracker 收到新鲜汇报即成功</td>
+        <td>跳幅 = 响应时刻 − 上次响应时刻, 「投递后立刻汇报」场景跳幅可能只有几秒, TOL 不能大(报告 §7); 语义 (b) 与辅种目的等价, 且确认窗口(≤30s)远小于私站周期 interval, 窗口内前跳几乎必为本指令所触发。<strong>备选</strong>: 语义 (a) 收窄「前跳时刻距指令时刻 &lt; 一个 tick」—— 留作真机探针发现周期 announce 干扰时的加固项, 不预先实现。</td>
+      </tr>
+      <tr>
+        <td class="mono">D3</td><td>5.2 前后版本闸门</td>
+        <td class="ok">字段存在性探测(基线读时判), 不调 <code>app_web_api_version</code></td>
+        <td>qB &lt; 5.2 的 trackers 行根本没有 <code>next_announce</code> 键, 基线读一次即可判 epoch / legacy 模式, 零额外 API。<strong>备选</strong>: 主动探测 WebAPI 版本 —— 多一次调用且要处理探测失败, 无收益。</td>
+      </tr>
+      <tr>
+        <td class="mono">D4</td><td>「未确认」第三态的回执形态</td>
+        <td class="ok">回执状态保持二值(ok/error), 未确认/已受理走 error + 文案前缀约定</td>
+        <td>前端 <code>_pollCmd</code> 只认 <code>status === "ok" || "error"</code> 为终结(commands.js:131), 加第三态会挂死 waitCmd 直到超时; 前缀分流只改 reannounce 聚合分支一处。<strong>备选</strong>: 新增 <code>warn</code> 状态 —— 需同步改前端终结条件、SSE 事件路径与静态守阵, 改动面大且无机器可读收益的场景。</td>
+      </tr>
+      <tr>
+        <td class="mono">D5</td><td>规则侧 <code>rules/actions/transfer.py</code> 的 <code>ReannounceAction</code> 是否本轮接入确认</td>
+        <td class="ok">非目标</td>
+        <td>报告 §7 顺带记录的缺口(只有 600s 限频、无结果确认)真实存在, 但其调用环境(规则线程、无 cmd_id 回执通道)与 webui 不同, 接入要做日志面回执, 独立成轮。判定函数本轮保持纯函数落在 <code>webui/commands.py</code>, 将来复用时再上提中性叶。</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>依据与根因(引用报告)</h2>
+    <p>根因取证、libtorrent 源码机制、信号盘点与兼容性结论的<strong>单点在调研报告</strong>(§2 观察解码 / §3 现状失效 / §4 信号盘点 / §5 机制 / §6 兼容性), 本节只留与本计划直接相关的最小引用, 不复写。</p>
+    <table>
+      <tr><th>现判据(commands.py:228 <code>_confirm_reannounce_result</code>)</th><th>qB 5.2 epoch 语义下的实际</th><th>本计划的处置</th></tr>
+      <tr><td><code>status == 3</code> → 成功</td><td class="bad">updating 窗口 ≈0.5s, 2s tick 命中率 ≈25%, 多数错过</td><td>保留为判据 ②, 撞见即收(直接证据)</td></tr>
+      <tr><td><code>na &lt; b_na − 60</code> → 成功</td><td class="bad">na 是 epoch 秒, 成功时<strong>前跳(变大)</strong>, 本式恒假 —— 失效根因</td><td>方向反转: <code>next &gt; b_next + TOL</code> 为主判据 ③</td></tr>
+      <tr><td><code>status 2←非2</code> → 成功</td><td class="bad">对已 working 的种子 2→2 无变化, 辅种常态不触发</td><td>降级进 legacy 回退分支(qB&lt;5.2 无 epoch 字段时的正向判据)</td></tr>
+      <tr><td><code>status==4 ∧ msg</code> → 失败</td><td class="ok">可靠(持久否定信号)</td><td>保留为判据 ④</td></tr>
+      <tr><td>30s 未出结论 → 失败</td><td class="warn">推迟路径必超时; 停止种子白等 30s</td><td>改为「未确认」独立标签; 停止种子直判; 推迟路径走 D1</td></tr>
+    </table>
+    <div class="callout">
+      <strong>关键机制事实</strong>(报告 §4.1/§5): <code>next_announce</code>/<code>min_announce</code> 是 <strong>Unix epoch 秒</strong>(qB 源码 <code>toSecondsSinceEpoch</code>); 未联系过的 tracker 时间点未设(libtorrent <code>time_point32::min()</code>), 序列化值待真机探针确认 —— 消费时把判据 ③ 的判定域限定在基线 <code>status ≥ 2</code> 的行即可规避; 虚拟行(DHT/PeX/LSD)照旧排除。
+    </div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>目标行为设计</h2>
+    <h3>3.1 新判定(五分支, epoch 模式)</h3>
+    <table>
+      <tr><th style="width:6%">#</th><th>条件(逐 tracker, 任一命中即结论)</th><th style="width:16%">结论</th><th>说明</th></tr>
+      <tr><td class="mono">①</td><td>种子 stopped(store 快照 <code>state_enum.is_stopped</code>)</td><td class="warn">未确认</td><td>qB 对停止种子静默 no-op(torrent.cpp L3900), 立即出结论免白等 30s; 在 <code>check_pending</code> 侧判, 不进纯函数</td></tr>
+      <tr><td class="mono">②</td><td><code>updating</code> 或 <code>status==3</code></td><td class="ok">已确认</td><td>announce 在途直证, 撞见即收(~0.5s 窗口, 命中是加强证据)</td></tr>
+      <tr><td class="mono">③</td><td><code>next &gt; b_next + TOL</code>(限基线 <code>status ≥ 2</code> 且 <code>b_next</code> 非空的行)</td><td class="ok">已确认</td><td><strong>主判据</strong>; TOL=3.0s(D2); <code>min</code> 同向前跳可记入 reason 作佐证, 不作必要条件</td></tr>
+      <tr><td class="mono">④</td><td><code>status==4</code> 且 <code>msg</code> 非空</td><td class="bad">失败</td><td>tracker 拒绝, 唯一可靠否定信号; msg 空的 status 4 不判败(歧义保守落「未确认」)</td></tr>
+      <tr><td class="mono">⑤</td><td>窗口走完仍无 ①–④</td><td class="warn">未确认</td><td>不与「失败」混淆; 回执 error + 前缀「未确认」(D4)</td></tr>
+    </table>
+    <h3>3.2 legacy 模式(qB &lt; 5.2, 基线行无 <code>next_announce</code> 键)</h3>
+    <p>判据集 = ② updating + ③′ <code>status 2←非2</code> + ④ status4+msg; 成功难证、失败可证, 超时一律落「未确认(旧版 qB 无 epoch 字段, 仅未观测到拒绝)」—— 与 <code>pitfalls/backend/effect-confirmation.md</code> 的证据门控口径一致, 回执语义只承诺诚实标签。</p>
+    <h3>3.3 窗口与推迟早回执(D1 推荐项的时序)</h3>
+    <div class="flow"><b>投递 reannounce</b> → 基线读(<i>逐 real tracker: status/updating/next/min</i> + <i>epoch 模式判定</i>)
+   │
+   ├─ 停止种子──────────────→ item 立即结论 <em>「未确认: 种子已停止」</em>(不再轮询)
+   │
+   ├─ epoch 且 min_e − t0 &gt; <i>25s</i> ──→ item 立即结论 <em>「已受理: 最小间隔未过期, 推迟至 HH:MM」</em>
+   │        └→ 移入 reannounce_background(min_e 后每 tick 核实一次, 出 ②③④ 结论只落 INFO/WARNING 日志)
+   │
+   └─ 立即路径 ──→ item deadline = t0 + max(30s, min_e − t0 + 15s, 上限 600s)
+            └→ 每 tick(2s)轮询 trackers → ②③④ → 全部 item 出结论后聚合回执:
+               全确认 → ok;否则 error「成功 X / 失败 Y / 未确认 Z: &lt;前 3 条原因&gt;」</div>
+    <p>基线形状变更: <code>{url: (status, next_announce)}</code> → <code>{url: {status, updating, next, min}}</code> + item 级 <code>epoch</code> / <code>deadline</code> / <code>t0</code> 字段; 截止期从 entry 级单一下沉到 item 级(组内混合推迟/立即种子时各自算账)。</p>
+    <h3>3.4 回执文案契约(前缀单点)</h3>
+    <table>
+      <tr><th>结论</th><th>回执 status</th><th>error 文案前缀(前端分流依据)</th></tr>
+      <tr><td>已确认</td><td class="ok">ok</td><td>—(聚合全 ok 时无 error)</td></tr>
+      <tr><td>失败(tracker 拒绝)</td><td class="bad">error</td><td class="mono">失败: tracker 未接受汇报(not working): &lt;msg&gt;</td></tr>
+      <tr><td>已受理·推迟</td><td class="bad">error</td><td class="mono">已受理: 最小间隔未过期, 推迟至 HH:MM(后台继续核实, 结果见日志)</td></tr>
+      <tr><td>未确认·停止</td><td class="bad">error</td><td class="mono">未确认: 种子已停止, qB 静默忽略强制汇报</td></tr>
+      <tr><td>未确认·超时</td><td class="bad">error</td><td class="mono">未确认: 30s 内未观测到 epoch 前跳/在途/拒绝证据</td></tr>
+    </table>
+    <p class="dimtxt">前缀常量(<code>RC_FAIL_PREFIX</code> / <code>RC_DEFERRED_PREFIX</code> / <code>RC_UNCONFIRMED_PREFIX</code>)定义在 <code>webui/commands.py</code> 单点, 前端按前缀分流展示; 改前缀必须同步 commands.js 聚合分支(测试钉住)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>分步实施(S0–S5)</h2>
+    <p>每步给出文件锚点 / 改动要点 / 验收。步骤有依赖序: S0 是 S1 的前置闸; S1→S2→S3 可同轮连续提交, S4 随各步同步走(见 §05), S5 收尾。</p>
+
+    <h3>S0 · 真机只读探针(前置闸)</h3>
+    <table>
+      <tr><td class="mono">做什么</td><td>按报告 §8 探针骨架对真机 qB 5.2.3 跑只读采样(做种中种子, 基线 → reannounce → 0.3s×40 采样), 确证三点: ①未联系 tracker 的 <code>next_announce</code> 序列化值; ②立即路径实际前跳幅度与 0 抖动时长; ③推迟路径 <code>next/min</code> 是否同值移动。临时脚本不入库(uv run python - heredoc), 数字记进实施档案。</td></tr>
+      <tr><td class="mono">改动</td><td class="dimtxt">无代码改动(只读探针)。</td></tr>
+      <tr><td class="mono">验收</td><td>三点数字落档; 若①证实未联系行带极值 → 判据 ③ 的「基线 status ≥ 2」守卫确认必要; TOL=3.0s 依②实测复核定值(跳幅实测 &lt; 3s 时收窄并回写 D2)。</td></tr>
+    </table>
+
+    <h3>S1 · 判定核心重构 — <code>src/auto_qb/webui/commands.py</code></h3>
+    <table>
+      <tr><td class="mono">锚点</td><td><code>:24</code> 窗口常量 · <code>:209</code> <code>_trackers_baseline</code> · <code>:228</code> <code>_confirm_reannounce_result</code> · <code>:311</code> <code>_register_reannounce_pending</code></td></tr>
+      <tr><td class="mono">改动</td><td>
+        ① 常量组: <code>REANNOUNCE_CONFIRM_TIMEOUT=30.0</code>(语义改为立即路径基础窗口, 注释重写为 epoch 语义) + 新增 <code>REANNOUNCE_JUMP_TOL=3.0</code> / <code>REANNOUNCE_DEFER_MARGIN=15.0</code> / <code>REANNOUNCE_WINDOW_CAP=600.0</code> / <code>REANNOUNCE_DEFER_EARLY=25.0</code> + 三个回执前缀常量。<strong>不新增配置键</strong>(黄金法则 4 无涉及)。<br>
+        ② <code>_trackers_baseline</code>: 行记录扩为 <code>{status, updating, next, min}</code>(dict), 保留虚拟行排除; 顺带判 <code>epoch_mode = any(行含 "next_announce" 键)</code> 随 baseline 返回。<br>
+        ③ <code>_confirm_reannounce_result</code> 重写为纯函数 <code>_verdict_reannounce(trackers, baseline, *, t0, tol)</code> → <code>(state, reason)</code>, state ∈ <code>confirmed / rejected / ""</code>; epoch 与 legacy 两分支(§3.1/§3.2); docstring 写死「epoch 前跳=成功」的方向语义, 防「秒/毫秒通用」式臆测回潮。<br>
+        ④ <code>_register_reannounce_pending</code>: item 扩 <code>epoch / deadline / t0</code>; 截止期 item 级 = <code>t0 + max(30, min_e − t0 + margin)</code> capped 600; 检出推迟(§3.3)→ 该 item 立即结论并登记进后台结构; 停止种子 item 立即结论。
+      </td></tr>
+      <tr><td class="mono">验收</td><td>判定函数无 I/O、无宿主依赖(静态方法可直测); 四判据旧语义在代码中零残留(grep <code>b_na - 60</code> 为空)。</td></tr>
+    </table>
+
+    <h3>S2 · 轮询状态机 — <code>src/auto_qb/webui/runtime.py</code> <code>check_pending</code>(:301)</h3>
+    <table>
+      <tr><td class="mono">改动</td><td>
+        ① 循环体改按 item 级 <code>deadline</code> 判超时; 超时/断连语义: 断连 continue 照旧, 超时落「未确认」(不再写「失败」)。<br>
+        ② 每 tick 先查 store 快照 <code>state_enum.is_stopped</code>(record.py:231)直判 ①。<br>
+        ③ 判定改调 <code>_verdict_reannounce</code>; 聚合回执改三桶计数(成功/失败/未确认), 文案按 §3.4。<br>
+        ④ 新增 <code>reannounce_background</code> 轻量结构(同函数内推进): 达 <code>min_e</code> 后每 tick 读一次 trackers, 出 ②③④ 结论落 INFO/WARNING 日志后移除; item 上限 500, 超限丢最旧并 WARNING 一次(单写线程内, 黄金法则 5 不破)。
+      </td></tr>
+      <tr><td class="mono">验收</td><td>回执三桶计数正确; 后台结构有界; <code>reannounce_pending</code> 全 done 即清(现有语义保留)。</td></tr>
+    </table>
+
+    <h3>S3 · 前端 reannounce 分支 — <code>src/auto_qb/webui/static/shared/commands.js</code>(:470–500)</h3>
+    <table>
+      <tr><td class="mono">改动</td><td>
+        ① sticky 等待文案: 「tracker 确认最长 30s」→「tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执」。<br>
+        ② 聚合分支: fails 按 <code>r.error</code> 前缀分流「失败 / 未确认 / 已受理」三桶, toast 文案改「成功 X, 失败 Y, 未确认 Z」; 全失败 → error 型, 含未确认/已受理 → timeout 型(复用现有 toast 类型, 不新增)。<br>
+        ③ <code>waitCmd</code> 40s 上限<strong>不变</strong>(D1 推荐项下推迟目标即刻回执, 不占等待窗口; 若 D1 改选备选 A 则此项必须同步放宽)。
+      </td></tr>
+      <tr><td class="mono">验收</td><td>三桶展示正确; grep 证实无其它入口硬编码「30s」等待语义(grep 已证测试未钉住旧文案)。</td></tr>
+    </table>
+
+    <h3>S4 · 测试 — <code>tests/test_web.py</code>(随 S1–S3 同步, 见 §05)</h3>
+
+    <h3>S5 · 收尾回写(实施轮 DoD)</h3>
+    <table>
+      <tr><td class="mono">改动</td><td>
+        ① 新坑档 <code>memory-bank/pitfalls/backend/announce-epoch-semantics.md</code>: 「绝对时间被当倒计时」判据方向事故(补三行头元数据, 触发词含 next_announce / epoch / 前跳 / 倒计时语义)。<br>
+        ② <code>pitfalls/backend/effect-confirmation.md</code> 范本区锚点更新(<code>_confirm_reannounce_result</code> → 新函数名与五分支)。<br>
+        ③ 实施档案 <code>tasks/</code> 新立(与计划互链 <code>**Refs:**</code>), 调研档案保持 Done 不动。<br>
+        ④ <code>commands run kb.index</code> 重建 + <code>kb.docmap --check</code> 链校验 + <code>test.full</code> 基线切片。
+      </td></tr>
+    </table>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>测试计划</h2>
+    <p>全部落在 <code>tests/test_web.py</code>(现三例: <code>test_reannounce_confirm_success_and_timeout</code> :8819 / <code>test_reannounce_confirm_group_aggregate</code> :8848 / <code>test_confirm_reannounce_result_matrix</code> :8867, 均按新语义重写), 并同步文件头部 docstring「测试计划」清单。新增/重写用例:</p>
+    <table>
+      <tr><th style="width:28%">用例</th><th>钉住什么</th></tr>
+      <tr><td class="mono">判定矩阵(epoch 模式)</td><td>②updating→confirmed; ③前跳 &gt;TOL→confirmed、≤TOL(含 ==TOL 边界)→pending; 限基线 status≥2 行(status 0/1 行带极值 next 不触发); ④status4+msg→rejected、status4+空 msg→pending; 其余→pending</td></tr>
+      <tr><td class="mono">判定矩阵(legacy 模式)</td><td>基线行无 <code>next_announce</code> 键 → ②/③′(2←非2)/④ 生效, 前跳判据不参与</td></tr>
+      <tr><td class="mono">确认成功回执</td><td>前跳命中 → ok 回执, 跟踪结构清空(替代原 next_announce「重置」用例)</td></tr>
+      <tr><td class="mono">超时回执</td><td>窗口走尽 → error 回执文案含「未确认」前缀, 不再写「失败」</td></tr>
+      <tr><td class="mono">停止种子直判</td><td>store 快照 stopped → 立即结论, 不等窗口, 文案前缀「未确认: 种子已停止」</td></tr>
+      <tr><td class="mono">推迟早回执</td><td>epoch 且 <code>min_e − t0 &gt; 25s</code> → item 立即结论前缀「已受理」; 全推迟命令下一 tick 即出聚合回执; 后台结构登记</td></tr>
+      <tr><td class="mono">后台核实</td><td>达 min_e 后 tick 出 confirmed/rejected → 日志(INFO/WARNING)并移除; 500 条上限丢最旧</td></tr>
+      <tr><td class="mono">item 级窗口</td><td>deadline = max(30, min_e−t0+15) capped 600; 组内混合(立即+推迟+停止)各自出结论后聚合</td></tr>
+      <tr><td class="mono">组聚合三桶</td><td>成功/失败/未确认计数与文案(含前 3 条原因截断)</td></tr>
+      <tr><td class="mono">前缀契约</td><td>三个前缀常量与 §3.4 表一致(前端分流依赖, 改前缀必红)</td></tr>
+      <tr><td class="mono">baseline 形状回归</td><td><code>_trackers_baseline</code> 新形状 <code>{status, updating, next, min}</code> + epoch_mode; 受波及的既有测试逐一修(基线形状变更的涟漪面)</td></tr>
+    </table>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>风险与回滚</h2>
+    <table>
+      <tr><th>#</th><th>风险</th><th>缓解</th></tr>
+      <tr><td class="mono">R1</td><td>qB 自身周期 announce 到期同样前跳 epoch, 被算作本指令成功</td><td>语义取 (b)(D2)下两者效果等价(辅种目的); 确认窗口 ≤30s ≪ 私站周期, 误纳面极小; 真机探针若见干扰 → 启用「前跳时刻距指令 &lt; 一 tick」收窄(报告 §5 预案)</td></tr>
+      <tr><td class="mono">R2</td><td>TOL=3s 偏小: 上次汇报极新鲜时跳幅 &lt; 3s 漏判 → 落「未确认」</td><td>漏判方向是诚实标签而非假失败; S0 探针实测跳幅后可收紧/放宽; ② updating 与后台核实作二次机会</td></tr>
+      <tr><td class="mono">R3</td><td>未联系 tracker 的 epoch 极值造成假前跳</td><td>判据 ③ 判定域锁基线 status≥2; S0 探针证实序列化值后可再加 <code>b_next &gt; 0</code> 类守卫</td></tr>
+      <tr><td class="mono">R4</td><td>回执前缀文案被两侧各自改动而漂移</td><td>前缀常量后端单点 + 契约测试钉住(§05); 前端只在 reannounce 聚合分支一处消费</td></tr>
+      <tr><td class="mono">R5</td><td>后台核实结构泄漏(种子被删/qB 断连)</td><td>item 上限 500 丢最旧; 断连 tick 跳过照旧; 结论或 deadline 必移除</td></tr>
+      <tr><td class="mono">回滚</td><td colspan="2">改动收敛在三个文件 + 测试, 判定单点为纯函数 —— revert 单个提交即回旧判据; 无状态迁移、无配置键、无 qB 写行为变化(reannounce 指令本身照发), 回滚零残留</td></tr>
+    </table>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>非目标</h2>
+    <ul>
+      <li><strong>规则侧 <code>ReannounceAction</code> 接入确认</strong>(D5): 报告 §7 已记录缺口, 独立成轮; 判定函数届时再上提中性叶。</li>
+      <li><strong>确认窗口/TOL 配置键化</strong>: 常量足够, 免 validate_config / schema 面扩大。</li>
+      <li><strong><code>endpoints[]</code> 明细判定</strong>: 顶层 <code>next/min</code> 已取各 endpoint 最早值(qB torrentimpl.cpp L264-267), 够用。</li>
+      <li><strong>HR 详情页 / exporter 的 trackers 展示</strong>(views.py:188 / exporter.py:32): 只读消费不受影响, 不动。</li>
+      <li><strong>GUI 侧「0 抖动」观感</strong>: qB 自家显示行为, 不在本项目范围。</li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>变更记录</h2>
+    <table>
+      <tr><th style="width:20%">版本</th><th>内容</th></tr>
+      <tr><td class="mono">26-10-05-0923 · v1</td><td>首版: 依据调研报告 26-10-05-0854 出分步实施计划(S0–S5), 拍板点 D1–D5 待确认; 状态 Open。</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    实施计划 · 状态 Open · 依据 <code>memory-bank/reports/26-10-05-0854-report-reannounce-confirm-api.html</code>(根因与源码证据单点)<br>
+    <span class="dimtxt">行号基于基线 86441e54, 实施时如有漂移以代码为准; 拍板后按 memory-bank 流程立实施档案再动代码。</span>
+  </footer>
+</div>
+</body>
+</html>

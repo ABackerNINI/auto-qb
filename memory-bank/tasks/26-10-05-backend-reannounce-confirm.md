@@ -6,7 +6,7 @@
 **Summary:** 调研 qB/qbittorrent-api 汇报状态接口并解码用户观察的 0 抖动场景: WebAPI 2.13.0(qB 5.2) 起 torrents/trackers 直出 next_announce/min_announce(epoch 秒)/endpoints/updating; 现判定 `na < b_na-60` 把 epoch 当倒计时、方向反了故恒不触发, 30s 超时误报失败; 候选判定(next_e 前跳+TOL 3~5s / updating / status4+msg / stopped 直判 / 未确认单列)已写入报告待拍板。
 **Topics:** backend-reannounce-confirm
 
-**Refs:** memory-bank/reports/26-10-05-0854-report-reannounce-confirm-api.html, memory-bank/testing/baselines/26-10-05-0907-reannounce-confirm-research.md
+**Refs:** memory-bank/reports/26-10-05-0854-report-reannounce-confirm-api.html, memory-bank/testing/baselines/26-10-05-0907-reannounce-confirm-research.md, memory-bank/plans/26-10-05-0923-plan-reannounce-confirm-rework.html
 
 ## 原始请求
 
