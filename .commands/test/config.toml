@@ -36,10 +36,10 @@ note    = "**-n 0 曾挂住, 已于 2026-10-03 修根因**(根因与修法见 me
 silent_success = true
 
 [tasks."test.one"]
-run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest <args> -q -n 0']
+run     = ['set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest <args> -q -n 0 --no-cov']
 timeout = 900
 when    = "排查单个文件 / 用 -k 筛一组用例"
-note    = "<args> 填文件路径或 -k 表达式；单文件用 -n 0（并行会慢在 worker 启动上）"
+note    = "<args> 填文件路径或 -k 表达式；单文件用 -n 0（并行会慢在 worker 启动上）。**内置 --no-cov**（2026-10-05, issue 26-10-05-0922-chore-pytest-cov-gate-test-one）: pytest.ini addopts 的 --cov-fail-under=98 是对**全量收集面**设的闸, 单文件/筛选收集面小 ⇒ 覆盖率必然远低于门槛, 会把「用例全绿」打成覆盖率 FAIL（假红, 实测 11 passed + Total 18.52%）；覆盖率闸只归 test.full（及 CI 全量跑）, 要覆盖率报表用 test.full。详见 memory-bank/pitfalls/testing/single-file-coverage-gate.md"
 
 [tasks."test.keys-update"]
 run     = ["uv run python scripts/update_config_key_surface.py"]

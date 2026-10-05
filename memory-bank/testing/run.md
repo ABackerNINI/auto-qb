@@ -15,6 +15,7 @@ commands run test.one -- tests/test_checking.py -k skip  # 按关键词
 
 - **当前基线数字** → [baseline.md](baseline.md)(口径段; 看数字 `commands run kb.baseline`); **逐次增量流水** → `testing/baselines/` 切片。
 - `pytest.ini`: `pythonpath = src`(env.sync 也会把项目 editable 装入 venv, 双保险), `testpaths = tests`, addopts 含覆盖率。
+- **覆盖率闸只归全量**: addopts 的 `--cov-fail-under=98` 是对**全量收集面**设的门槛。`test.one`(单文件/筛选)已**内置 `--no-cov`**(2026-10-05, issue 26-10-05-0922-chore-pytest-cov-gate-test-one) —— 部分运行收集面小, 覆盖率必然远低于 98%, 不关闸就会把「用例全绿」打成覆盖率 FAIL(假红)。裸跑 `uv run pytest tests/x.py -q` 仍会撞这条(需手工 `--no-cov`); 判据与处置见 [../pitfalls/testing/single-file-coverage-gate.md](../pitfalls/testing/single-file-coverage-gate.md)。
 
 ## ⚠️ `TMPDIR` 已内置在 task 里 —— 不要再手工加前缀
 

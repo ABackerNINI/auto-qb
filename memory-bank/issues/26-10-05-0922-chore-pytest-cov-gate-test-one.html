@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="hr-steady-throttle">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="覆盖率闸使 test.one 部分运行绿测试仍 FAIL 退出">
 <meta name="issue-summary" content="pytest.ini --cov-fail-under=98 对 test.one 部分文件运行同样生效, 用例全绿仍以覆盖率 FAIL 退出, 排障须手工 --no-cov">
 <title>覆盖率闸使 test.one 部分运行绿测试仍 FAIL 退出 · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-0922-chore-pytest-cov-gate-test-one</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-05 09:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,7 +96,17 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-05 09:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-05 09:57 — 所有者指派「认领并修复」，状态 <strong>In Progress</strong>；复验现象仍复现（见 §05）。</li>
+      <li>2026-10-05 10:00 — 修复完成并验证，状态 <strong>Done</strong>（拍板方向①，见 §05）。</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法 / 验证</h2>
+    <p><strong>拍板方向</strong>: 采纳建议① —— <code>.commands/test/config.toml</code> 的 <code>test.one</code> run 串尾部加 <code>--no-cov</code>。理由: 与既有 <code>test.quick</code> / <code>test.pkg</code> 同款; <code>pytest.ini</code> addopts 的闸门原样保留 ⇒ <code>test.full</code> 与 CI 两处 <code>uv run pytest tests -q</code> 的覆盖率闸零回归; 改动面最小 (1 处 task 定义)。</p>
+    <p><strong>改动文件</strong>: <code>.commands/test/config.toml</code> (test.one run 串 + when/note 说明) · 事实回写 <code>memory-bank/testing/run.md</code> 与 <code>memory-bank/pitfalls/testing/single-file-coverage-gate.md</code> (该坑条 <code>复发</code> 1→2)。</p>
+    <p><strong>验证</strong>: 修复前复验 <code>commands run test.one -- tests/test_docs_forms.py</code> → <code>11 passed in 4.42s</code> 同屏 <code>FAIL Required test coverage of 98% not reached. Total coverage: 18.52%</code> (现象仍在); 修复后同命令 → <code>11 passed in 1.50s</code>, 无覆盖率 FAIL, 且因免去覆盖率插桩而更快。全量数字见 <code>testing/baselines/</code> 本轮切片。</p>
+    <p class="hint">注: 裸跑 <code>uv run pytest tests/x.py -q</code> 不经过 task, 仍会撞该假红 (手工加 <code>--no-cov</code>) —— 坑档保留此半边判据。</p>
   </section>
 
   <footer>
