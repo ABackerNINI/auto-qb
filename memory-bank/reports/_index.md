@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-05-1946] [块头基线 + Delta 行编码与按落盘切块 · 可行性分析](26-10-05-1946-report-qb-traffic-v4-delta.html) — `qb-traffic-v4-delta`
 - [26-10-05-0854] [调研报告: 强制汇报确认机制与 qB 汇报状态接口](26-10-05-0854-report-reannounce-confirm-api.html) — `reannounce-confirm-api`
 - [26-10-04-1730] [qB 流量历史 dat v3 设计报告 · auto-qb](26-10-04-1730-report-qb-traffic-storage-v3.html) — `qb-traffic-storage-v3`
 - [26-10-04-1639] [WEBUI qB 流量图折线断裂取证报告 · auto-qb](26-10-04-1639-report-webui-qb-traffic-line-breaks.html) — `qb-traffic-line-breaks`
