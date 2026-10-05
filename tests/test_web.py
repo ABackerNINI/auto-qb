@@ -143,7 +143,7 @@
 - test_api_speed_mode_reads_client_with_alt_fields: 限速托管直读 qB(含 ALT 双组) + 读失败回 None
 - test_api_fs_error_semantics: fs 端点错误语义化(404/501/403/400)
 - test_api_paths_endpoint: GET /api/paths 已知目录聚合(组 save_path + 现有种子 save_path 归一去重排序; 空路径跳过; 无副作用; 鉴权)
-- test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)、回退 save_path、组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
+- test_api_open_path_endpoint: POST /api/open-path 打开目标文件夹(FX-14 + R10-10) —— 目录/单文件(select=True 定位选中)/回退 save_path(缺失或下载中未落盘)/组键首元、未知目标 404、kind 非法 400、客户端传 path 被忽略、无副作用、鉴权
 - test_api_fs_dirs_endpoint: GET /api/fs/dirs 目录浏览(R10-11) —— 首屏允许根/只列目录(排除文件与越界符号链接)/上溯到根为止/.. 穿越与白名单外 403/不存在 404/无白名单空返回/鉴权/无副作用
 - test_api_fs_dirs_case_sibling_is_outside_whitelist: **仅 Linux** —— 大小写兄弟目录(/x/Media 与 /x/media)必须判为越界, 白名单归一不得做 NTFS 式折叠(折叠 => 越界放行, fail-open)
 - test_api_fs_mkdir_endpoint: POST /api/fs/mkdir 新建目录(R10-11) —— 正常创建/重名目录幂等/重名文件 409/名字含分隔符或点为 400/白名单外 403/父目录不存在 404/鉴权/不投命令
@@ -7560,8 +7560,9 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     """POST /api/open-path (FX-14 + R10-10): 服务端自行派生目录/文件后交系统默认程序打开
 
     覆盖: 目录型 content_path 取自身 / **文件型 content_path 取文件本身并带 select=True(R10-10
-    "在文件夹中选中相关文件")** / content_path 缺失回退 save_path / 组键取 key 首元 /
-    未知组与不存在目录 404 / kind 非法 400 /
+    "在文件夹中选中相关文件")** / content_path 缺失回退 save_path / **content_path 未落盘(下载中,
+    qB 报逻辑完成名而磁盘尚无该路径)回退 save_path, 不因"未完成"而 404** / 组键取 key 首元 /
+    未知组与不存在目录 404 / content 与 save_path 都不存在 404 / kind 非法 400 /
     **客户端额外传入的 path 被忽略**(安全红线: 否则等于把"任意文件执行"暴露给 WEB 端点) / 鉴权 401。
     """
     mgr, client = web_env
@@ -7575,9 +7576,18 @@ def test_api_open_path_endpoint(web_env, tmp_path):
     norm = lambda p: str(p).replace("\\", "/")  # noqa: E731  与 utils.path_normalize 同径(仅统一分隔符)
     mgr.store.groups = {(norm(d_seed), ("a.mkv", )): ["HA"]}
     mgr.store.by_hash = {
-        "HA": SimpleNamespace(hash="HA", save_path=str(d_seed), content_path=str(d_content)),
-        "HB": SimpleNamespace(hash="HB", save_path=str(d_seed), content_path=str(f_file)),
-        "HC": SimpleNamespace(hash="HC", save_path=str(d_seed), content_path=""),
+        "HA":
+            SimpleNamespace(hash="HA", save_path=str(d_seed), content_path=str(d_content)),
+        "HB":
+            SimpleNamespace(hash="HB", save_path=str(d_seed), content_path=str(f_file)),
+        "HC":
+            SimpleNamespace(hash="HC", save_path=str(d_seed), content_path=""),
+        # 下载中单文件种子: content_path 是 qB 报的逻辑完成名, 磁盘上尚未落盘(或带 .!qB 后缀) —— 实际故障场景
+        "HD":
+            SimpleNamespace(hash="HD", save_path=str(d_seed), content_path=str(d_seed / "incomplete.mkv")),
+        # content 与 save_path 都不存在: 回退后终检兜底 404
+        "HE":
+            SimpleNamespace(hash="HE", save_path=str(tmp_path / "gone"), content_path=str(tmp_path / "gone" / "x.mkv")),
     }
     # web_env 的 store 是轻量 namespace(get 恒 None), 这里按真实 Store.get 语义接上 by_hash
     mgr.store.get = lambda h: mgr.store.by_hash.get(h)
@@ -7597,6 +7607,10 @@ def test_api_open_path_endpoint(web_env, tmp_path):
         spy.reset_mock()
         assert post({"kind": "torrent", "hash": "HC"}).json() == {"opened": norm(d_seed), "select": False}
         spy.assert_called_once_with(norm(d_seed), select=False)
+        # 3b. content_path 未落盘(下载中既非目录也非文件) -> 回退 save_path, 不 404
+        spy.reset_mock()
+        assert post({"kind": "torrent", "hash": "HD"}).json() == {"opened": norm(d_seed), "select": False}
+        spy.assert_called_once_with(norm(d_seed), select=False)
         # 4. 组: 组键首元即规范化 save_path(组内成员天然一致)
         spy.reset_mock()
         group_key = encode_group_key((norm(d_seed), ("a.mkv", )))
@@ -7610,6 +7624,7 @@ def test_api_open_path_endpoint(web_env, tmp_path):
         spy.reset_mock()
         assert post({"kind": "group", "key": encode_group_key(("D:/nope", ("z", )))}).status_code == 404
         assert post({"kind": "torrent", "hash": "NOPE"}).status_code == 404
+        assert post({"kind": "torrent", "hash": "HE"}).status_code == 404  # content 未落盘 + save_path 也不存在 -> 终检兜底 404
         assert post(
             {
                 "kind": "group",

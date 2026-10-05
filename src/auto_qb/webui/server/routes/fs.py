@@ -216,9 +216,12 @@ def build_router(ctx: WebContext) -> APIRouter:
         路径一律由服务端从自己的快照派生, 且只允许**已存在的目录或(单文件种子的)文件**。
 
         解析口径: group 取组 key 首元(store.groups 的 key = (规范化 save_path, 文件列表),
-        组内成员路径天然一致, 无需再比对); torrent 的 content_path 指向文件时是**单文件种子**
-        —— 打开所在目录并**定位选中**该文件(R10-10 用户诉求: "没有创建文件夹的要在文件夹中
-        选中相关文件"), 否则取 content_path, 都缺则回退 save_path。
+        组内成员路径天然一致, 无需再比对); torrent 按 content_path 的**实际存在形态**三段分流:
+        文件存在 = 单文件种子, 打开所在目录并**定位选中**该文件(R10-10 用户诉求: "没有创建
+        文件夹的要在文件夹中选中相关文件"); 目录存在 = 多文件种子, 打开内容目录; 都不存在
+        (下载中最常见 —— qB 报的 content_path 是逻辑完成名, 文件未落盘 / 启用 .!qB 未完成
+        后缀时磁盘上没有该路径) 则回退 save_path, 至少把目录打开, 不因"未完成"而 404。
+        content_path 与 save_path 都缺时同样回退 save_path(空)。
         只读: 不投命令、不写 state —— 单一写线程假设不受影响。
 
         容器(Mapped)实现 open_path 恒 NotSupported —— 优雅降级为 501 + 引导「复制路径」
@@ -237,10 +240,12 @@ def build_router(ctx: WebContext) -> APIRouter:
         elif kind == "torrent":
             rec = _require_torrent(str(b.get("hash") or "").strip())
             content = path_normalize(rec.content_path or "")
-            if content and not _determinable(fa.isdir(content), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
-                target, select = content, True  # 单文件种子: 定位选中, 不降级成"只打开父目录"
+            if content and _determinable(fa.isfile(content), "路径不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
+                target, select = content, True  # 单文件种子(文件已落盘): 定位选中, 不降级成"只打开父目录"
+            elif content and _determinable(fa.isdir(content), "目录不可判定(未命中 fs.path_map 映射, 请检查 config.fs.path_map)"):
+                target = content  # 多文件种子: 打开内容目录
             else:
-                target = content or path_normalize(rec.save_path or "")
+                target = path_normalize(rec.save_path or "")  # content 未落盘(下载中) -> 回退保存路径
         else:
             raise HTTPException(status_code=400, detail="kind 必须是 group 或 torrent")
         target = path_normalize(target)
