@@ -16,12 +16,18 @@
 - test_group_conservation_red_on_member_path_change: **红验** —— 改掉组内一个成员路径的一个字符, 判据必须变红
 - test_stream_accumulator_matches_store_semantics: server_state 是 merge / torrents 后写覆盖 / *_removed 净额
 - test_diff_full_tolerates_volatile_but_flags_structural: 采样抖动(last_activity)不判红, 结构字段(state)判红
+- test_write_corpus_end_to_end_minimal: write_corpus 端到端回归(H-01): 一场最小 capture 落盘全链成功不 NameError,
+  meta.sanitize_map.known_tags 经伪名反查命中 auto-qb 自有标签
 """
 from __future__ import annotations
 
+import gzip
 import importlib.util
+import json
 import sys
+import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -345,6 +351,105 @@ def test_diff_full_tolerates_volatile_but_flags_structural():
     res2 = cap.diff_full(acc2, frame)
     assert not res2["ok"], "state 漂移必须判红"
     assert res2["field_diff_counts"].get("state") == 1
+
+
+# --------------------------------------------------------------------------- 落盘全链
+def _bare_capture(tmp_path):
+    """不经 __init__(它会连真机登录)构造 Capture, 只装配 sanitize_all/write_corpus 所需状态"""
+    c = cap.Capture.__new__(cap.Capture)
+    c.args = SimpleNamespace(probe_fs="off")
+    c.out = Path(tmp_path) / "corpus"
+    c.warnings = []
+    c.stream = []
+    c._stream_lock = threading.Lock()
+    c.files_map = {}
+    c.trackers_map = {}
+    c.peers_map = {}
+    c.disk_map = {}
+    c.meta = {}
+    c.status = "ok"
+    c.abort_at = None
+    c.checkpoints = []
+    c.sanitizer = None
+    c._raw_torrents = {}
+    c._raw_files = {}
+    c._pre_groups = None
+    c.acc_torrents = {}
+    return c
+
+
+def test_write_corpus_end_to_end_minimal(tmp_path):
+    """**回归守阵**(H-01): write_corpus 端到端 —— 一场最小 capture 采完必须能落盘
+
+    曾因 _sanitize_mapping 引用未定义的 seen 直接 NameError, 语料在任何文件落盘前全灭。
+    按 run_full 的收尾序列(raw 快照 -> 脱敏 -> 终态重取 -> write_corpus)手工走一遍,
+    断言全链无异常且 meta.sanitize_map.known_tags 经伪名反查命中 auto-qb 自有标签。
+    """
+    c = _bare_capture(tmp_path)
+    tor = {"name": "ShowA", "save_path": "R:\\Download\\TV", "state": "stalledUP"}
+    c.stream = [
+        {
+            "t_seq": 0,
+            "role": "t0",
+            "full_update": True,
+            "torrents": {
+                "H1": dict(tor)
+            },
+            "server_state": {
+                "free_space_on_disk": 1
+            },
+            "tags": ["MISSING", "SiteA"],
+            "categories": {}
+        },
+        {
+            "t_seq": 1,
+            "role": "inc",
+            "torrents": {},
+            "tags": ["zSkipChecked"]
+        },
+        {
+            "t_seq": 2,
+            "role": "closure",
+            "full_update": True,
+            "torrents": {
+                "H1": dict(tor)
+            },
+            "server_state": {
+                "free_space_on_disk": 2
+            },
+            "tags": ["MISSING", "SiteA", "zSkipChecked"]
+        },
+    ]
+    c.files_map = {"H1": [{"name": "ShowA/a.mkv", "size": 100}]}
+    c.trackers_map = {"H1": [{"url": "https://tracker.example.com/announce"}]}
+
+    # run_full 收尾序列(scripts/qb_capture.py run_full 尾部): raw 快照 -> 脱敏 -> 终态重取
+    c.acc_torrents = c._final_torrents()
+    c._raw_torrents = {h: dict(v) for h, v in c.acc_torrents.items()}
+    c._raw_files = {h: [dict(f) for f in v] for h, v in c.files_map.items()}
+    c.sanitize_all()
+    c.acc_torrents = c._final_torrents()
+
+    c.write_corpus()  # 修复前: _sanitize_mapping NameError -> 整场语料全灭
+
+    meta = json.loads((c.out / "meta.json").read_text(encoding="utf-8"))
+    smap = meta["sanitize_map"]
+    san = c.sanitizer
+    # auto-qb 自有标签按伪名反查命中; 站点标签绝不入 known_tags
+    assert set(smap["known_tags"]) == {"MISSING", "zSkipChecked"}, f"known_tags 反查必须命中自有标签: {smap}"
+    assert smap["known_tags"]["MISSING"] == san.text("MISSING")
+    assert smap["known_tags"]["zSkipChecked"] == san.text("zSkipChecked")
+    assert "SiteA" not in smap["known_tags"]
+    # 落盘产物完整且自洽: 流三帧齐全、流内标签已伪名化、守恒判据绿
+    with gzip.open(c.out / "sync-stream.jsonl.gz", "rt", encoding="utf-8") as fh:
+        frames = [json.loads(line) for line in fh]
+    assert [f["t_seq"] for f in frames] == [0, 1, 2]
+    for f in frames:
+        for t in f.get("tags") or []:
+            assert t not in ("MISSING", "SiteA", "zSkipChecked"), f"流内标签必须已伪名化: {t!r}"
+    assert meta["group_conservation"]["ok"], f"脱敏分组守恒必须绿: {meta['group_conservation']}"
+    for name in ("files.json.gz", "trackers.json.gz", "groups.json.gz", "warnings.jsonl"):
+        assert (c.out / name).exists(), f"产物 {name} 必须落盘"
 
 
 if __name__ == "__main__":

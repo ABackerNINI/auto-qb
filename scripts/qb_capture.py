@@ -968,7 +968,7 @@ class Capture:
         return out
 
     # ---------- 落盘 ----------
-    def _sanitize_mapping(self) -> dict:
+    def _sanitize_mapping(self, seen: set[str] | None = None) -> dict:
         """脱敏后的「tracker 域名 ↔ 站点标签」与「auto-qb 自有标签字面量」映射
 
         为什么必须记下来: 语料里的域名已换成 `site-N.example`、标签已伪名化, 而回放端生成的 config
@@ -984,10 +984,11 @@ class Capture:
         san = self.sanitizer
         out: dict = {"tracker_tags": {}, "known_tags": {}}
         # 1) auto-qb 自有标签字面量 -> 伪名(只在真机上真出现过才记, 免得凭空造出不存在的标签)
-        # !self.tags 里存的是**已脱敏**的伪名; 拿原始字面量 "MISSING" 去比对永远对不上。
+        # !seen 是流内出现过的标签集合, 存的是**已脱敏**的伪名; 拿原始字面量 "MISSING" 去比对永远对不上。
         #   必须用反查表把伪名还原成原标签再比(san._revs[kind] = {伪名: 原文}, 同模块内取用)。
+        #   调用方(write_corpus)把 StreamAccumulator 累积出的 tags 传进来。
         revs = san._revs.get("tag") or {}
-        raw_seen = {revs.get(t, t) for t in seen}
+        raw_seen = {revs.get(t, t) for t in (seen or set())}
         for lit in KNOWN_TAG_LITERALS:
             if lit in raw_seen:
                 out["known_tags"][lit] = san.text(lit)
@@ -1022,6 +1023,11 @@ class Capture:
                 f["t_seq"] = i
             stream = list(self.stream)
 
+        # 流终态标签集合(已脱敏伪名): 供 _sanitize_mapping 反查 auto-qb 自有标签是否真出现过
+        acc = StreamAccumulator()
+        for f in stream:
+            acc.apply(f)
+
         with gzip.open(self.out / "sync-stream.jsonl.gz", "wt", encoding="utf-8") as fh:
             for f in stream:
                 fh.write(json.dumps(f, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -1045,7 +1051,7 @@ class Capture:
                 "hashes_with_files": len(self.files_map),
                 "hashes_with_trackers": len(self.trackers_map),
                 "total_files": sum(len(v) for v in self.files_map.values()),
-                "sanitize_map": self._sanitize_mapping(),
+                "sanitize_map": self._sanitize_mapping(set(acc.tags)),
                 "checkpoints_total": len(self.checkpoints),
                 "checkpoints_failed": len(self.checkpoints) - n_ok,
                 "warnings": len(self.warnings),

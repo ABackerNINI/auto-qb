@@ -105,6 +105,7 @@
 | `test_fsmock_long_path_prefix_and_case` | 长路径前缀 + 大小写折叠(语料语料取自 NTFS) | — |
 | `CORPUS.group_exact` + `group_exact_diff` 三道红验 | 语料真值分组 == auto-qb 实际分组(**成员串组 / 一组拆两组 / 真值组没被分出** 都要红) | 只比组数会放过串组 |
 | `CORPUS.maindata_lag_modeled` | 两个滞后都为 0 时判据必须转红 | issue 26-09-20-2145 的验收凭据 |
+| `test_write_corpus_end_to_end_minimal` (test_qb_capture.py) | **write_corpus 落盘全链**(T0 ⊕ 增量 ⊕ closure 最小 capture, sanitize_all → write_corpus): 落盘成功不 NameError; meta.sanitize_map.known_tags 经 `san._revs["tag"]` 伪名反查命中 auto-qb 自有标签(MISSING/zSkipChecked)、站点标签不入; 流内标签已伪名化; group_conservation 绿(H-01, issue 26-10-06-0027) | 还原 `_sanitize_mapping` 旧体(引用未定义 `seen`) ⇒ write_corpus 必 NameError、整场语料不落盘 |
 | `CORPUS.fs_mock_coverage` | FS mock 的入口覆盖(把探测换成 pathlib 必须红) | 换 `pathlib` |
 | `tests/test_sidefx.py`(10 项策略单测) | 记账 / 放行清单判定 + **临时目录判定必须剥 `\\?\` 前缀** | — |
 | `test_notify_real_send_blocked_under_pytest` | 测试期不发真实系统通知 | 去掉会话夹具 |
