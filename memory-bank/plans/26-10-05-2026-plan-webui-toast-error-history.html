@@ -7,9 +7,9 @@
 <meta name="doc-topic" content="webui-toast-error-history">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-05-2026">
-<meta name="doc-updated" content="26-10-05-2046">
+<meta name="doc-updated" content="26-10-05-2143">
 <meta name="doc-refs" content="memory-bank/issues/26-10-05-2013-feat-webui-toast-error-history.html">
-<title>WEBUI 错误信息历史: toast 单点环形缓冲 + 常驻入口面板 · 实施计划</title>
+<title>WEBUI 错误信息历史: toast 环形缓冲 + 后端错误环 + 常驻入口面板 · 实施计划</title>
 <style>
   :root {
     --bg: #10151a;
@@ -174,31 +174,31 @@
     <a href="#s8"><span class="no">08</span>变更记录</a>
     <div class="toc-foot">
       认领 issue 26-10-05-2013<br>
-      口径: 完整方案 + 收 error<br>
+      口径: 完整方案 + 收 error + 后端错误环<br>
       拍板后实施, 每步一笔提交
     </div>
   </nav>
 
   <header class="cover">
     <div class="kicker">实施计划 · Open(待拍板 D1/D2)</div>
-    <h1>WEBUI 错误信息历史: toast 单点环形缓冲 + 常驻入口面板</h1>
-    <p class="lede">按 issue 的完整方案落地: 所有错误已在 <code>toast()</code> 单点汇合, 在该单点把 error / timeout 类条目追加进<strong>会话内环形缓冲</strong>(上限 50 条, 不持久化、不进后端); 右下角常驻入口 + 未读徽标 + 列表弹层, 支持单条复制与一键清空; 登录 / 重连清 toasts 时历史保留。本计划同时给出 <strong>3 个可交互模板</strong>(§04, 可直接试用)供拍板入口形态。</p>
+    <h1>WEBUI 错误信息历史: toast 环形缓冲 + 后端错误环 + 常驻入口面板</h1>
+    <p class="lede">按 issue 的完整方案落地: 所有错误已在 <code>toast()</code> 单点汇合, 在该单点把 error / timeout 类条目追加进<strong>会话内环形缓冲</strong>(上限 50 条, 前端不持久化); 右下角常驻入口 + 未读徽标 + 列表弹层, 支持单条复制与一键清空; 登录 / 重连清 toasts 时历史保留。26-10-05 复审增补(挂机场景「浏览器关闭才是常态」, 纯前端缓冲对关闭期零覆盖): <strong>后端 WARNING+ 内存错误环 + <code>/api/errlog</code> 增量端点 + 前端 boot 合并 / 60s 补拉</strong>, 面板成为「本页 toast + 后端自治错误」合并视图; 后端持久化与通用日志查看器仍不做。本计划同时给出 <strong>3 个可交互模板</strong>(§04, 可直接试用)供拍板入口形态。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-05-2026-plan-webui-toast-error-history</div></div>
       <div class="item"><div class="k">编制</div><div class="v">2026-10-05 20:26</div></div>
       <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
       <div class="item"><div class="k">认领 issue</div><div class="v"><a href="../issues/26-10-05-2013-feat-webui-toast-error-history.html">26-10-05-2013-feat-webui-toast-error-history</a></div></div>
-      <div class="item"><div class="k">涉及面</div><div class="v">webui 前端 · 三皮肤共用层</div></div>
+      <div class="item"><div class="k">涉及面</div><div class="v">webui 前端 · 三皮肤共用层 + 后端错误环/端点</div></div>
     </div>
   </header>
 
   <section id="s1">
     <h2><span class="no">01</span>结论与拍板点</h2>
-    <p><strong>方案一句话</strong>: 在 <code>ui_feedback.js</code> 的 <code>toast()</code> / <code>_finishToast()</code> 两个既有单点上挂收集钩子, error / timeout 类条目进 Vue 实例内的环形缓冲(新在上, cap 50); 入口 + 面板 UI 全部走 shared 层(<code>overlays.html</code> + <code>console_hub.css</code>), 三皮肤零差异自动生效; 全程零后端改动、零持久化、零新配置键。</p>
-    <p><strong>已定口径</strong>(本轮用户指示 + issue §06 倾向): 按完整方案实施; 收集范围 = <strong>收 error</strong>(详见 §03 口径表: error 即时错误 + busy 结算出的超时/失败终态; warn 不收)。</p>
+    <p><strong>方案一句话</strong>: 在 <code>ui_feedback.js</code> 的 <code>toast()</code> / <code>_finishToast()</code> 两个既有单点上挂收集钩子, error / timeout 类条目进 Vue 实例内的环形缓冲(新在上, cap 50); 入口 + 面板 UI 全部走 shared 层(<code>overlays.html</code> + <code>console_hub.css</code>), 三皮肤零差异自动生效; 前端零持久化、零新配置键。后端仅增一处: <code>auto_qb</code> logger 单挂一个 WARNING+ 内存错误环 handler(托盘 UiLogHandler 同款范式)+ 一个只读增量端点 <code>/api/errlog</code>, 前端 boot 合并 + 60s 补拉 —— 覆盖「浏览器关闭期」盲区(§02/§03)。</p>
+    <p><strong>已定口径</strong>(本轮用户指示 + issue §06 倾向): 按完整方案实施; 收集范围 = <strong>收 error</strong>(详见 §03 口径表: error 即时错误 + busy 结算出的超时/失败终态; 前端 toast 的 warn 不收)。<strong>26-10-05 21:43 复审追加拍板</strong>(用户「按推荐更新文档」): 采纳后端内存错误环 + 增量端点 + boot 合并, 修「浏览器关闭期零覆盖」盲区(论证见 §02/§03); 后端持久化 / 跨会话保留与通用日志查看器维持不做。</p>
     <div class="decision">
       <div class="d-row"><span class="d-key">D1 · 入口模板三选一</span><span class="d-val" id="d1-state">待拍板 —— 在 §04 试用三张可交互模板后选定(推荐 T2)</span></div>
-      <div class="d-row"><span class="d-key">D2 · 断线/重连事件源</span><span class="d-val">待拍板 —— 推荐<strong>采纳</strong>: SSE 断线沿发一条 error toast「与服务的推送连接断开, 正在自动重连…」, 自动落进错误历史(挂机型断线自此可追溯); 恢复成功不广播。不做则 §05 S4 跳过, 其余不受影响</span></div>
+      <div class="d-row"><span class="d-key">D2 · 断线/重连事件源</span><span class="d-val">待拍板 —— 推荐<strong>采纳</strong>: SSE 断线沿发一条 error toast「与服务的推送连接断开, 正在自动重连…」, 自动落进错误历史(挂机型断线自此可追溯); 恢复成功不广播。不做则 §05 S6 跳过, 其余不受影响</span></div>
     </div>
     <p class="hint">D1 可先在 §04 的演示里点「就选这个」标记(仅本页内存标记, 正式拍板请在会话里回复)。D2 若不采纳, 断线仍静默重连, 与现状一致 —— 历史功能本身不依赖它。</p>
   </section>
@@ -215,7 +215,7 @@
       <tr><td>登录/重连清空 · <code>shared/auth.js:68</code> <code>this.toasts = []</code></td><td>:68 未漂</td><td class="yes">复现</td></tr>
       <tr><td>断线静默重连 · <code>shared/polling.js:48</code> <code>es.onerror</code></td><td>:48 未漂</td><td class="yes">复现</td></tr>
     </table>
-    <h3>认领后新增的实施面事实(issue 未载)</h3>
+    <h3>认领后新增的实施面事实(issue 未载 / 含对 issue 证据的修正)</h3>
     <ul>
       <li><strong>停留时长已被今日另一轮改动抬升</strong>(20:07, <code>TOAST_MS_FLOOR</code>): error / timeout 下限 12s、warn 8s。issue 里「8~9s 自动消失」的表述被取代, 但 12s 不改变「错过 = 无处可查」—— 挂机型场景下用户几分钟才看一眼, 历史缺口原样成立。</li>
       <li><strong>sticky 结算链是第二个收集必经点</strong>: 常驻「等待中」条由 <code>_finishToast(id, kind, text)</code> 结算, 调用方 3 个文件(commands.js:511/521/728/732、drawer.js:269/270、delete_flow.js:191/195), 结算 kind 可落 <code>error</code>/<code>timeout</code> —— 只钩 <code>toast()</code> 会漏掉「强制汇报超时」「批量删除未完全成功」这类最重要的终态。</li>
@@ -226,6 +226,10 @@
       <li><strong>复制助手现成</strong>: <code>commands.js:635 _copyText()</code> + <code>:660 copyText()</code>(模板安全封装, Vue 3.5 下划线方法坑已修), 面板复制钮直接复用。</li>
       <li><strong>状态栏图标钮有直接先例</strong>: <code>statusbar.html</code> 的 <code>.sb-hist</code> / <code>.sb-qb</code>(<code>@click.stop</code> + title), 模板 T2 的入口照此范式。</li>
       <li><strong>直接以 <code>timeout</code> kind 发出的 toast 全库仅 1 处</strong>: config_editor.js:204(保存热重载「部分字段未写入」回执)。</li>
+      <li><strong>修正 issue §02 证据: 「WEBUI 没有暴露任何日志查看端点」「无处可查」不成立</strong>(取证 2026-10-05 21:43, 基线 b7790ae1): <code>/api/log</code> 端点已存在(<code>server/routes/system.py:19</code>, 日志文件 tail + 等级过滤), 且前端已有两处消费 —— <code>dialogs.js:411</code> 日志 tail 弹窗(FE-2C, 手动刷新不轮询)与 <code>config_hub.js:402</code> 设置页运行日志块。原取证只 grep 了 <code>views.py</code>(视图构建器), 未覆盖 <code>server/routes/</code>。真实缺口由此收敛为: <strong>无人值守期错误不进错误反馈面, 查错要手动开日志弹窗翻原始行</strong>。</li>
+      <li><strong>浏览器关闭期的错误主体</strong>: core 模块 <code>logger.warning/error</code> 调用点 102 处、分布 10 个文件(ops / maintenance / rules / tracker / grouping / taskqueue / state 等, grep 取证 21:43)—— 这些从不产生 toast, 前端环形缓冲物理收不到。同窗口内还有「命令已投递后浏览器关闭/刷新」: 回执在后端仅留 120s / 64 条(<code>runtime.py:56</code> <code>WEB_RESULT_TTL</code>), 前端命令追踪状态随 JS 丢失无补取(<code>commands.js:102</code>), 其超时话术自证兜底是「结果以程序日志为准」(<code>commands.js:122</code>)。</li>
+      <li><strong>日志→UI 内存收集是本库既有模式, 不是首创工程</strong>: <code>tray/app.py:43</code> <code>UiLogHandler</code>(挂 <code>auto_qb</code> logger, emit 仅入 deque + lock, UI 线程 drain; logger 名单点 <code>infra/logging.py:123</code>)。后端错误环照此范式, 成本 ≈ 30~40 行 handler + 一个只读端点。</li>
+      <li><strong>挂接单点已勘定</strong>: handler 挂在 <code>WebUIRuntime.start_server()</code>(<code>runtime.py:658</code>; <code>module.py:37</code> start() 有幂等闸; factory.py 是薄装配壳且有 test_create_app_is_thin_assembly 守阵, 不放 handler)。前端 boot / 定时器先例: <code>lifecycle.js:27</code> mounted、<code>:132</code> <code>_clockTimer = setInterval(...)</code>(unmounted 撤除防热重载堆叠)。</li>
     </ul>
   </section>
 
@@ -237,14 +241,15 @@
       <tr><td>直接发出的错误</td><td><code>error</code></td><td class="yes">收</td><td>「批量跳检未完成: …」「打开目标文件夹失败: …」</td></tr>
       <tr><td>sticky 等待结算的失败 / 超时终态</td><td><code>error</code> / <code>timeout</code></td><td class="yes">收</td><td>「强制汇报超时」「导出: 成功 2 / 失败 1」「批量删除未完全成功」</td></tr>
       <tr><td>未完全成功回执</td><td><code>timeout</code></td><td class="yes">收</td><td>「已保存并热重载; X 为程序托管字段, 本次未写入」(config_editor.js:204)</td></tr>
+      <tr><td>后端自治错误(经 <code>/api/errlog</code> 合并)</td><td>WARNING→<code>warn</code> · ERROR+→<code>error</code></td><td class="yes">收</td><td>「强制汇报回执: …」/「状态落盘失败」等 102 处调用点 —— 自治失败主体在 warning 级, 只收 ERROR+ 会漏掉大头</td></tr>
       <tr><td>提醒类</td><td><code>warn</code></td><td class="no">不收</td><td>「站点已存在」类 —— 用户本轮拍板「收 error」, 与 issue §06「只收 error 最克制」一致</td></tr>
       <tr><td>成功 / 进行中 / 常驻等待</td><td><code>ok</code> / <code>info</code> / <code>busy</code></td><td class="no">不收</td><td>成功回执瞬时语义即可; busy 未结算无终态可收</td></tr>
     </table>
     <p>口径实现为单点常量 <code>ERR_HISTORY_KINDS = { error: 1, timeout: 1 }</code> —— <code>timeout</code> 在本库的实际语义是「超时/未完全成功终态」而非纯超时, 属 issue §06 倾向句里「busy 结算出的超时/失败终态」的覆盖面; 若拍板要严格到字面 error-only, 删掉 <code>timeout: 1</code> 一个键即可(守阵按 KINDS 判, 不与具体键集耦合)。</p>
     <h3>数据结构与会话语义</h3>
     <pre><code>// state.js data 新增(与 toasts 同区):
-_errHistory: [],   // 环形缓冲, 新在上: { id, seq, ts, kind, text }
-_errSeq: 0,        // 条目自增序号(展示排序兜底)
+_errHistory: [],   // 环形缓冲, 新在上: { id, seq, ts, kind, text, source }  // source: 'toast' | 'backend'(S3 合并后端条目)
+_errSeq: 0,        // toast 条目自增序号(展示排序兜底; 后端条目用后端环的 seq)
 _errUnread: 0,     // 面板关闭期新增的错误数(徽标)
 errPanelOpen: false,
 
@@ -255,8 +260,15 @@ _recordErrorToast(id, kind, text)  // upsert: 同 id 更新(emit 后又 settle �
                                    // cap: length &gt; 50 时 pop 最旧; 面板关着时 _errUnread++</code></pre>
     <ul>
       <li><strong>收集时机 = 发出即收, 结算即更</strong>: issue 原建议「退场时追加」, 但 <code>auth.js:68</code> 的 <code>this.toasts = []</code> 绕过 <code>_dropToast</code> —— 挂退场会漏掉重连前最后一批错误(恰恰是挂机型最需要追溯的一批)。发出即收对齐「模拟重连清 toast 不清历史」的演示语义。</li>
-      <li><strong>不持久化</strong>: 会话内存级, 刷新即失(预期语义, 完整方案拍板过); 全程审计仍由后端日志文件承担。守阵钉死「历史面零 localStorage / sessionStorage 写」防未来漂移。</li>
-      <li><strong>清空时机</strong>: 登录 / 重连路径不动(<code>auth.js</code> 零改动), 历史跨重连存活; 唯一清除路径 = 面板「一键清空」(低风险动作, 不加确认框)。</li>
+      <li><strong>不持久化</strong>: 前端 toast 收集会话内存级、刷新即失; 后端环独立于页面生命周期(刷新 / 重开不丢, 进程重启清零 —— 重启本身是日志可查的大事件)。两者都零落盘: 不进 state_file、无 localStorage / sessionStorage 写(守阵钉死防漂移)。全程审计仍由日志文件 + <code>/api/log</code> 弹窗承担。</li>
+      <li><strong>清空时机</strong>: 登录 / 重连路径不动(<code>auth.js</code> 零改动), 历史跨重连存活; 唯一清除路径 = 面板「一键清空」(低风险动作, 不加确认框)。清空只清本地视图: 后端环条目在刷新后随 boot 合并回来(内存语义, 不加删除端点 —— 保守默认)。</li>
+    </ul>
+    <h3>后端错误环与增量端点(26-10-05 复审增补, 修「浏览器关闭期」盲区)</h3>
+    <ul>
+      <li><strong>收集</strong>: <code>auto_qb</code> logger 单挂一个 handler(<code>tray/app.py:43</code> UiLogHandler 同款范式), 收 <code>WARNING+</code>, 环为 <code>deque(maxlen=200)</code> + lock, 每条 <code>{seq, ts, level, msg}</code>(msg 截断 500 字符、多行合一); emit 全程 try/except 静默 —— 收集器永不干扰业务日志。挂接在 <code>WebUIRuntime.start_server()</code>(幂等, 已挂不重挂); 环本体与 seq 计数器是 WebUIRuntime 字段: 日志线程经 lock 写, Web 线程经端点只读(与 results / 订阅队列同款单写纪律)。</li>
+      <li><strong>端点</strong>: <code>GET /api/errlog?after=&lt;seq&gt;</code> 落 <code>server/routes/system.py</code>(与 /api/log、/api/cmd 同属「系统诊断路由」); 鉴权由 factory 全局 dependencies 单点覆盖, 零新增。返回 <code>{items, last}</code>: 只回 seq &gt; after 的条目; 客户端发现 <code>last</code> 小于已持游标即判定后端重启过 → 清游标重拉全量。</li>
+      <li><strong>前端合并</strong>: bootstrap 成功 + 本机免鉴权两条路径(lifecycle.js mounted 范式)各拉一次 <code>after=0</code> 全量入 <code>_errHistory</code>(source='backend', <strong>不计未读</strong>); 之后 <code>setInterval</code> 60s 补拉增量(source='backend', <strong>计未读</strong>); 定时器 unmounted 撤除(<code>lifecycle.js:132</code> 时钟先例)。按 seq 去重, 刷新重拉不产生重复条目。</li>
+      <li><strong>黄金法则对照</strong>: 零新配置键(cap / 间隔写常量, 要调档改一行) · 无跨轮状态(环纯内存, state_file 不涉) · 单写线程(handler lock 内追加, Web 端点只读) · 保守默认(boot 前条目不计未读、无删除端点、不主动打扰) · 幂等(纯追加 + after 游标, 重复拉取不重复入列)。</li>
     </ul>
     <h3>入口与面板</h3>
     <ul>
@@ -265,29 +277,34 @@ _recordErrorToast(id, kind, text)  // upsert: 同 id 更新(emit 后又 settle �
       <li>关闭交互 = Esc + 点击面板外; 面板是非模态浮层, 不上遮罩不拦滚动(避开 modal-mask-click-self-drag 一族问题)。</li>
       <li>z-index 取紧邻 <code>toast-wrap</code>(120)之上的一档, 实施时核 components.css 现行层级表后定值。</li>
     </ul>
-    <h3>不做清单(完整方案的「不建议」边界)</h3>
+    <h3>不做清单(26-10-05 复审拆分重写: 三个被拒项成本不同, 分别裁决)</h3>
     <ul>
-      <li>后端持久化 / 日志端点代理、错误分级过滤、跨会话保留 —— 单用户个人工具属过度设计。</li>
-      <li>warn 收集 —— 拍板收 error(见口径表)。</li>
-      <li>新配置键(容量 50 写常量; 要调档改一行)。</li>
+      <li>后端<strong>持久化</strong>错误历史 / <strong>跨会话保留</strong> —— 落盘方案引入 state_file 写路径与容量治理; 内存环重启清零可接受(重启本身是日志可查的大事件)。维持不做。</li>
+      <li>通用<strong>日志查看器</strong> —— 无需列入不做: <strong>已存在</strong>(/api/log + FE-2C 日志弹窗 + 设置页运行日志块, 见 §02)。后端环是结构化错误事件面(增量游标 / 等级预滤), 与它互补不重复。</li>
+      <li>错误分级过滤 <strong>UI</strong> —— 环收 WARNING+ 即分级本身; cap 200 的条目量撑不起筛选控件, 维持不做。</li>
+      <li>前端 toast 的 <strong>warn 收集</strong> —— 拍板收 error(见口径表); 后端侧 WARNING 级收进环(自治失败主体在 warning 级, 见口径表后端行)。</li>
+      <li><strong>新配置键</strong>(容量 / 间隔写常量; 要调档改一行)。</li>
     </ul>
     <h3>改动文件 → 角色对照(单点纪律)</h3>
     <table>
       <tr><th>文件</th><th>角色</th></tr>
       <tr><td><code>shared/state.js</code></td><td>4 个新 data 字段声明(状态声明单点)</td></tr>
       <tr><td><code>shared/ui_feedback.js</code></td><td>收集原语 + toast()/_finishToast() 两钩子(数据流单点)</td></tr>
+      <tr><td><code>webui/runtime.py</code></td><td>后端: 错误环 handler + 环/seq 字段 + start_server 挂接(后端数据流单点)</td></tr>
+      <tr><td><code>webui/server/routes/system.py</code></td><td>后端: <code>GET /api/errlog</code> 增量端点(系统诊断路由)</td></tr>
+      <tr><td><code>shared/lifecycle.js</code></td><td>前端: boot 合并 + 60s 补拉定时器(mounted/unmounted 单点)</td></tr>
       <tr><td><code>shared/tpl/overlays.html</code></td><td>面板本体(三皮肤 manifest 已含, 零清单改动)</td></tr>
       <tr><td><code>shared/tpl/statusbar.html</code> 或 <code>topbar.html</code></td><td>入口挂点(按 D1: T2 → statusbar / T3 → topbar / T1 → 与面板同放 overlays)</td></tr>
       <tr><td><code>shared/console_hub.css</code></td><td>样式单点(三皮肤同载, 令牌取 --bg-elev / --border-strong / --error 等)</td></tr>
       <tr><td><code>shared/auth.js</code></td><td><strong>不动</strong>(历史跨登录/重连保留的关键)</td></tr>
       <tr><td><code>shared/polling.js</code></td><td>仅 D2 采纳时动(es.onerror 断线沿 emit)</td></tr>
     </table>
-    <p class="hint">黄金法则对照: 零新配置键(fail-fast 面不变) · 无跨轮状态(state_file 不涉) · 单写线程(全在 Vue 实例主线程) · 保守默认(无未读时入口静默) · 幂等(收集是纯追加 + upsert, 重复 settle 不产生重复条目)。</p>
+    <p class="hint">前端侧黄金法则对照: 零新配置键(fail-fast 面不变) · 无跨轮状态(state_file 不涉) · 单写线程(全在 Vue 实例主线程) · 保守默认(无未读时入口静默) · 幂等(收集是纯追加 + upsert, 重复 settle 不产生重复条目); 后端侧见「后端错误环」节末对照。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>模板三选一(可交互试用)</h2>
-    <p>三张卡内的演示<strong>完全可交互</strong>: 点「触发一条错误」→ toast 右下弹出、约 3.2s 退场(演示压缩了真实的 12s 下限)→ <strong>同刻落入历史</strong>; 入口出未读徽标; 点入口开面板, 可单条复制 / 一键清空; 「模拟重连」只清可见 toast 而历史存活 —— 对应 <code>auth.js</code> 清 toasts 不清历史的既定设计。差异维度 = <strong>入口锚点 + 面板形态</strong>, 数据层完全同构(§03), 换模板只影响 S2 的挂点文件与面板定位。</p>
+    <p>三张卡内的演示<strong>完全可交互</strong>: 点「触发一条错误」→ toast 右下弹出、约 3.2s 退场(演示压缩了真实的 12s 下限)→ <strong>同刻落入历史</strong>; 入口出未读徽标; 点入口开面板, 可单条复制 / 一键清空; 「模拟重连」只清可见 toast 而历史存活 —— 对应 <code>auth.js</code> 清 toasts 不清历史的既定设计。差异维度 = <strong>入口锚点 + 面板形态</strong>, 数据层完全同构(§03), 换模板只影响 S4 的挂点文件与面板定位。后端合并条目(source='backend')的呈现三模板通用(时间 + kind 色点 + 「后端」小标), 不影响选型。</p>
 
     <article class="tpl-card" id="card-t1">
       <header class="tpl-head">
@@ -439,41 +456,54 @@ _recordErrorToast(id, kind, text)  // upsert: 同 id 更新(emit 后又 settle �
 
   <section id="s5">
     <h2><span class="no">05</span>分步实施(每步一笔提交, 拍板后执行)</h2>
-    <h3>S1 · 数据层与收集钩子</h3>
-    <ul>
-      <li><code>shared/state.js</code>: data 新增 <code>_errHistory / _errSeq / _errUnread / errPanelOpen</code>(§03 结构)。</li>
-      <li><code>shared/ui_feedback.js</code>: 常量 <code>ERR_HISTORY_CAP = 50</code> + <code>ERR_HISTORY_KINDS</code>; 原语 <code>_recordErrorToast(id, kind, text)</code>(upsert by id + cap 裁剪 + 未读记账)与 <code>_clearErrorHistory()</code>; 钩子两处 —— <code>toast()</code> emit 时 kind ∈ KINDS 即收, <code>_finishToast()</code> 结算时 kind ∈ KINDS 即 upsert(覆盖 sticky busy → 超时/失败链)。</li>
-      <li><code>auth.js</code> <strong>零改动</strong>(历史跨重连存活的既定设计)。</li>
-      <li><strong>验收</strong>(Node 探针驱动生产原语, 同 20:07 轮验证范式): ①error emit 即入历史; ②sticky busy 结算 timeout 入历史且 upsert 无重复; ③第 51 条挤掉最旧; ④面板关闭期未读 +1、打开清零; ⑤清空后全归零; ⑥登录/重连清 toasts 后历史原样。</li>
-    </ul>
-    <h3>S2 · 入口与面板 UI(按 D1 拍板的模板实施)</h3>
+  <h3>S1 · 数据层与收集钩子</h3>
+  <ul>
+    <li><code>shared/state.js</code>: data 新增 <code>_errHistory / _errSeq / _errUnread / errPanelOpen</code>(§03 结构; 条目带 <code>source: 'toast' | 'backend'</code>)。</li>
+    <li><code>shared/ui_feedback.js</code>: 常量 <code>ERR_HISTORY_CAP = 50</code> + <code>ERR_HISTORY_KINDS</code>; 原语 <code>_recordErrorToast(id, kind, text)</code>(upsert by id + cap 裁剪 + 未读记账)与 <code>_clearErrorHistory()</code>; 钩子两处 —— <code>toast()</code> emit 时 kind ∈ KINDS 即收, <code>_finishToast()</code> 结算时 kind ∈ KINDS 即 upsert(覆盖 sticky busy → 超时/失败链)。</li>
+    <li><code>auth.js</code> <strong>零改动</strong>(历史跨重连存活的既定设计)。</li>
+    <li><strong>验收</strong>(Node 探针驱动生产原语, 同 20:07 轮验证范式): ①error emit 即入历史(source='toast'); ②sticky busy 结算 timeout 入历史且 upsert 无重复; ③第 51 条挤掉最旧; ④面板关闭期未读 +1、打开清零; ⑤清空后全归零; ⑥登录/重连清 toasts 后历史原样。</li>
+  </ul>
+  <h3>S2 · 后端错误环与只读端点</h3>
+  <ul>
+    <li><code>webui/runtime.py</code>: <code>WebErrLogHandler</code>(deque maxlen 200 + lock, WARNING+ 收录, msg 截断 500 字符多行合一, emit 全程 try/except 静默 —— tray <code>UiLogHandler</code> 同款范式); WebUIRuntime 新增环与 seq 字段; <code>start_server()</code> 挂 <code>logging.getLogger("auto_qb")</code>(幂等: 已挂不重挂)。</li>
+    <li><code>webui/server/routes/system.py</code>: <code>GET /api/errlog?after=&lt;seq&gt;</code> → <code>{items, last}</code>(只回 seq &gt; after; touch()); 鉴权走 factory 全局 dependencies 单点, 零新增。</li>
+    <li><strong>验收</strong>(pytest, 独立文件 tests/test_webui_backend_errlog.py): ①DEBUG/INFO 不入环; ②第 201 条挤掉最旧; ③after 增量与 last 正确; ④msg 超长截断; ⑤无 token 请求 401(沿 routes 既有测试范式)。</li>
+  </ul>
+  <h3>S3 · 前端 boot 合并与补拉</h3>
+  <ul>
+    <li><code>shared/lifecycle.js</code>: bootstrap 成功路径 + 本机免鉴权路径(两处都过)各拉 <code>/api/errlog?after=0</code> 合并入 <code>_errHistory</code>(source='backend', 不计未读, ts 用完整 HH:MM:SS); <code>this._errPollTimer = setInterval(60s)</code> 补拉增量(source='backend', 计未读); 回包 <code>last</code> 小于已持游标 = 后端重启过 → 清游标重拉; unmounted 撤定时器(<code>lifecycle.js:132</code> 时钟先例)。</li>
+    <li><strong>验收</strong>(Node 探针 + 真机): ①boot 前的环内错误开页即见且徽标不亮; ②补拉期内新出的后端 warning 进面板并亮徽标; ③按 seq 去重: 刷新重拉无重复条目; ④游标回退检测生效。</li>
+  </ul>
+    <h3>S4 · 入口与面板 UI(按 D1 拍板的模板实施)</h3>
     <ul>
       <li>面板本体进 <code>shared/tpl/overlays.html</code>(app 根层, 与 .toast-wrap 兄弟; 规避 clip-path/transform 包含块坑 —— pitfalls/web-ui/clip-path-clips-fixed); Vue 绑定 <code>errPanelOpen</code> / <code>_errHistory</code> / <code>_errUnread</code>。</li>
       <li>入口按模板: <strong>T1</strong> → overlays.html 内 .toast-wrap 域浮空钮; <strong>T2</strong> → <code>statusbar.html</code> 右段 <code>.sb-err</code>(照 .sb-hist/.sb-qb 范式: 图标 + title + @click.stop + 徽标); <strong>T3</strong> → <code>topbar.html</code> 右组铃铛。</li>
       <li>样式单点 <code>shared/console_hub.css</code>: 面板/入口/徽标/列表段, 颜色全走皮肤令牌(--bg-elev / --border-strong / --error / --warn), 三皮肤零差异; z-index 核 components.css 层级表取 toast-wrap(120) 之上相邻档。</li>
-      <li>交互: 开面板清未读; Esc + 点外关闭(非模态, 不上遮罩); T2 面板 bottom 偏移按 <code>--statusbar-h</code> 令牌计算。</li>
-      <li><strong>验收</strong>: 三皮肤(atlas/prism/console)各开一次 → 入口可见、徽标准确、面板开合 / 点外关 / Esc 关全通; 有 toast 在场时面板层叠正确。</li>
+    <li>交互: 开面板清未读; Esc + 点外关闭(非模态, 不上遮罩); T2 面板 bottom 偏移按 <code>--statusbar-h</code> 令牌计算。</li>
+    <li>条目渲染区分来源: source='backend' 条目加「后端」小标(kind 色点沿用: 后端 WARNING→warn 色 / ERROR+→error 色)。</li>
+    <li><strong>验收</strong>: 三皮肤(atlas/prism/console)各开一次 → 入口可见、徽标准确、面板开合 / 点外关 / Esc 关全通; 有 toast 在场时面板层叠正确; 后端合并条目的「后端」小标与色点正确。</li>
     </ul>
-    <h3>S3 · 条目交互</h3>
+    <h3>S5 · 条目交互</h3>
     <ul>
       <li>行内复制: 复用 <code>copyText(text, '错误详情')</code>(commands.js:660 模板安全封装); 行 hover 显钮。</li>
       <li>一键清空: <code>_clearErrorHistory()</code>, 不加确认框; 时间显示 <code>fmtErrTs(ts)</code> → HH:MM:SS(展示口径单点 method); 空态文案。</li>
       <li><strong>验收</strong>: 复制拿到完整原文; 清空后徽标/计数/空态同步; 50 条滚动下列表流畅(纯静态列表, 无虚拟化需求)。</li>
     </ul>
-    <h3>S4 · 断线事件源(拍板 D2 后, 可整步跳过)</h3>
+    <h3>S6 · 断线事件源(拍板 D2 后, 可整步跳过)</h3>
     <ul>
       <li><code>shared/polling.js</code> <code>es.onerror</code>: 以 connected 状态位取<strong>沿</strong>(断线沿 emit 一次, 重试期不重复): <code>toast('与服务的推送连接断开, 正在自动重连…', 'error')</code> —— 自动落进历史; 恢复成功静默。</li>
       <li><strong>验收</strong>: 停后端 → 一条断线错误入历史; 重连风暴期无重复; 恢复后无新条目。</li>
     </ul>
-    <h3>S5 · 守阵</h3>
-    <ul>
-      <li>新文件 <code>tests/test_webui_error_history.py</code>(静态守阵范式, 同 button-system / toast-floor 先例; 文件头 docstring 同步「## 测试计划」清单 —— AGENTS 硬要求): 5 条守阵见 §06。</li>
-      <li><strong>红验</strong>: 摘钩子 / 去 cap 裁剪 / 加 localStorage 写 / 摘入口, 逐条先红后恢复全绿。</li>
-    </ul>
-    <h3>S6 · 收尾</h3>
-    <ul>
-      <li><code>commands run test.full</code> + 基线切片(增量预计 +5 = §06 守阵); 三皮肤真机走查; issue 置 Done 并回写「实际修法 / 验证方式 / 测试数字」; progress 回写; <code>commands run kb.index</code>。</li>
-    </ul>
+  <h3>S7 · 守阵</h3>
+  <ul>
+    <li>前端: 新文件 <code>tests/test_webui_error_history.py</code>(静态守阵范式, 同 button-system / toast-floor 先例; 文件头 docstring 同步「## 测试计划」清单 —— AGENTS 硬要求): 6 条守阵见 §06(原 5 条 + boot 合并接线)。</li>
+    <li>后端: 新文件 <code>tests/test_webui_backend_errlog.py</code>(行为测试): 4 条见 §06; 文件头同带「## 测试计划」。</li>
+    <li><strong>红验</strong>: 摘钩子 / 去 cap 裁剪 / 加 localStorage 写 / 摘入口 / 摘 boot 合并 / 后端环收 INFO / 破坏 after 过滤, 逐条先红后恢复全绿。</li>
+  </ul>
+  <h3>S8 · 收尾</h3>
+  <ul>
+    <li><code>commands run test.full</code> + 基线切片(增量预计前端 +5 / 后端 +4, 以实测为准 = §06 守阵); 三皮肤真机走查; issue 置 Done 并回写「实际修法 / 验证方式 / 测试数字」; progress 回写; <code>commands run kb.index</code>。</li>
+  </ul>
   </section>
 
   <section id="s6">
@@ -485,8 +515,12 @@ _recordErrorToast(id, kind, text)  // upsert: 同 id 更新(emit 后又 settle �
       <tr><td><code>test_frontend_error_history_no_persistence</code></td><td>shared 层 localStorage/sessionStorage 写入计数不增(历史语义钉死在会话内存)</td><td>加一条 localStorage 写 → 红</td></tr>
       <tr><td><code>test_frontend_error_history_entry_wired</code></td><td>D1 模板对应 tpl 有入口钮 + 未读徽标绑定; overlays.html 有面板与清空钮</td><td>摘入口或徽标绑定 → 红</td></tr>
       <tr><td><code>test_frontend_error_history_copy_wired</code></td><td>面板复制钮走 <code>copyText</code>(不是 _copyText —— Vue 模板下划线方法坑)</td><td>换成 _copyText → 红</td></tr>
+      <tr><td><code>test_frontend_error_history_boot_merge_wired</code></td><td>lifecycle 含 errlog boot 拉取 + 60s 补拉定时器 + unmounted 撤除(漏一处 = 后端环条目进不了面板, 或定时器热重载堆叠)</td><td>摘任一处 → 红</td></tr>
+      <tr><td><code>test_backend_errlog_ring_cap</code></td><td>环 cap 200 挤最旧 + WARNING 以下不入环 + msg 截断(防无界增长与超长行)</td><td>收 INFO / 去裁剪 → 红</td></tr>
+      <tr><td><code>test_backend_errlog_endpoint_incremental</code></td><td>/api/errlog 的 after 过滤与 last 字段(增量语义钉死)</td><td>破坏 after 过滤 → 红</td></tr>
+      <tr><td><code>test_backend_errlog_memory_only</code></td><td>错误环实现零磁盘触点(不写 state_file / 日志文件, 纯内存语义钉死)</td><td>环加持久化调用 → 红</td></tr>
     </table>
-    <p>全量回归: <code>commands run test.full</code>, 预期基线数字只增不减(+5)。浏览器侧行为(开合/复制/徽标)以三皮肤真机走查为准, 静态守阵只钉接线存在性。</p>
+    <p>全量回归: <code>commands run test.full</code>, 预期基线数字只增不减(前端静态守阵 +5, 后端行为测试 +4, 以实测为准)。浏览器侧行为(开合/复制/徽标)以三皮肤真机走查为准, 静态守阵只钉接线存在性。</p>
   </section>
 
   <section id="s7">
@@ -498,8 +532,12 @@ _recordErrorToast(id, kind, text)  // upsert: 同 id 更新(emit 后又 settle �
       <tr><td>重复条目 / 双计数</td><td>emit 与 settle 双钩子对同一条目各记一次</td><td>upsert by id 钉死; S1 验收例②专测; busy 永不入历史(无终态)</td></tr>
       <tr><td>徽标状态被轮询重渲染扰动</td><td>30s 级轮询重渲染整表(近期 kb.nav 台账筛选器同族教训)</td><td>_errHistory / _errUnread 是独立 data, 不从轮询数据派生 —— 无派生候选即无 poll-reseed 同族坑</td></tr>
       <tr><td>剪贴板权限失败</td><td>非安全上下文 navigator.clipboard 不可用</td><td>复用 _copyText 既有降级路径(commands.js 已在真机长期使用)</td></tr>
+      <tr><td>收集器干扰业务日志</td><td>logging handler emit 抛异常会波及日志系统本身</td><td>emit 全程 try/except 静默 + 环操作零 IO(tray UiLogHandler 同款范式, 真机长期在跑)</td></tr>
+      <tr><td>超长 / 多行日志撑爆面板</td><td>异常栈、代理长报错</td><td>msg 截断 500 字符 + 多行合一(收集时处理, 展示层不管)</td></tr>
+      <tr><td>后端重启后游标错位</td><td>seq 计数器是进程内的, 重启回零</td><td>客户端 last 回退检测 → 清游标重拉全量(S3 验收例④)</td></tr>
+      <tr><td>环被高频 warning 刷满</td><td>第三方库 Retry 类刷屏</td><td>urllib3 已封顶 ERROR(infra/logging.py:122), 自身日志有节流摘要; cap 200 兜底; 60s 补拉不放大请求量</td></tr>
     </table>
-    <p><strong>回滚</strong>: 纯增量特性, 无迁移 / 无配置键 / 无后端 —— 按 S1~S5 逐笔 revert 即可; 残留 state 字段无消费方, 无害。</p>
+    <p><strong>回滚</strong>: 纯增量特性, 无迁移 / 无配置键 —— 前端(S1/S3~S6)与后端(S2)相互独立, 按 S 逐笔 revert 即可; 残留 state 字段与后端环字段无消费方, 无害。</p>
   </section>
 
   <section id="s8">
@@ -507,6 +545,7 @@ _recordErrorToast(id, kind, text)  // upsert: 同 id 更新(emit 后又 settle �
     <ul>
       <li>2026-10-05 20:26 — 创建; 认领 issue <a href="../issues/26-10-05-2013-feat-webui-toast-error-history.html">26-10-05-2013</a>(Open → In Progress), 六锚点复验全复现; 口径按完整方案 + 收 error; 附 3 个可交互模板供 D1 拍板。状态 <strong>Open</strong>(待拍板 D1/D2)。</li>
       <li>2026-10-05 20:46 — 修演示页缺陷(用户报「演示控制点击无反应」): mount 以 .demo-app 为根找控制钮, 但 .demo-ctl 是卡片级兄弟不在其子树内, 按钮从未绑上事件 —— 改回 .tpl-card 根上查找; 附带把首条「fresh」闪高亮收敛为仅新条目入历史时触发。真浏览器走查后放行。</li>
+      <li>2026-10-05 21:43 — 范围修订(用户复审拍板「按推荐更新文档」): 挂机场景「浏览器关闭才是常态」, 纯前端缓冲对关闭期零覆盖; 原「不做清单」把持久化 / 日志代理 / 后端内存环三个成本不同的选项捆绑拒绝属论证漏洞, 拆分重裁 —— 增补<strong>后端 WARNING+ 内存错误环 + <code>/api/errlog</code> 增量端点 + 前端 boot 合并 / 60s 补拉</strong>(新增 S2/S3, 条目增 source 字段, 守阵 +4), 持久化与通用日志查看器维持不做; 同时修正 issue §02 证据(/api/log 与 FE-2C 日志弹窗已存在, 原取证漏扫 server/routes/)。D1/D2 拍板点不变, 状态仍 <strong>Open</strong>。</li>
     </ul>
   </section>
 

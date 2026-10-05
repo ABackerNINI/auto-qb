@@ -125,6 +125,7 @@
       <li><strong>错误来源广且单通道</strong>：error 类 toast 调用点 <code>grep -rn 'toast(' shared/*.js | grep '"error"'</code> 计 49 处、分布 15 个 shared 模块（增删种子 / 命令 / 批量导出 / 配置保存 / 导入 / 鉴权等），全部汇到 <code>toast()</code> 这一个函数。</li>
       <li><strong>无处可查</strong>：<code>webui/views.py</code> 无任何日志查看路由（grep「日志|logfile|log_view|tail」零命中）；后端日志只落 <code>auto-qb-data/</code> 文件。</li>
       <li><strong>无既有实现</strong>：grep「errorLog|错误历史|错误日志|errHistory」全 static 目录零命中。</li>
+      <li><strong>2026-10-05 21:43 复勘修正「无处可查」条</strong>: <code>/api/log</code> 端点已存在(<code>webui/server/routes/system.py:19</code>, tail + 等级过滤), 前端已有两处消费 —— FE-2C 日志 tail 弹窗(dialogs.js:411)与设置页运行日志块(config_hub.js:402); 原取证只 grep 了 views.py, 未覆盖 server/routes/。缺口修正为「无人值守期错误不进错误反馈面, 查错要手动开日志弹窗翻原始行」。</li>
     </ul>
   </section>
 
@@ -179,6 +180,7 @@
     <ul>
       <li>2026-10-05 20:13 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-05 20:26 — 用户指派认领，状态 <strong>In Progress</strong>；认领计划 <a href="../plans/26-10-05-2026-plan-webui-toast-error-history.html">26-10-05-2026-plan-webui-toast-error-history</a>（完整方案 + 收 error 口径 + 3 个可交互入口模板待拍板）</li>
+      <li>2026-10-05 21:43 — 计划范围修订(用户复审「按推荐更新文档」): 挂机场景浏览器关闭是常态, 纯前端缓冲覆盖不了关闭期; 计划增补后端 WARNING+ 内存错误环 + /api/errlog 增量端点 + boot 合并/60s 补拉(计划 §03/§05 S2/S3)。同轮修正本文 §02「无处可查」证据(见该节修正条)。§06 建议修法原文保留作历史。</li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-10-05 20:26 仍复现 —— 六个锚点全部命中（.toast-wrap 三皮肤 CSS 行号微漂为 atlas 520 / prism 219 / console 443，其余未漂）。另：toast 停留下限已于当日 20:07 改为按 kind 下限（error/timeout 12s、warn 8s，TOAST_MS_FLOOR），本文「8~9s 自动消失」的表述被该改动取代，「错过 = 无处可查」的历史缺口不变。详见计划 §02。</p>
