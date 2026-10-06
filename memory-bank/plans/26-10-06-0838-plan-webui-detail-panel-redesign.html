@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>种子详情面板重构 · 15 模板全量实施(可切换) — 实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-detail-panel-redesign">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-06-0838">
+<meta name="doc-updated" content="26-10-06-0838">
+<meta name="doc-refs" content="memory-bank/reports/26-10-06-0723-report-webui-detail-panel-redesign.html,memory-bank/tasks/26-10-06-webui-detail-panel.md">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0d1724; --bg-card:#15233a; --bg-row:#112034; --bg-hover:#1c3050; --bg-elev:#1b2d4b;
+    --ink:#e9eff7; --ink-muted:#9cadc6; --ink-dim:#6e84a3;
+    --accent:#3aa6a6; --accent-hi:#5cc3c3; --accent-soft:rgba(58,166,166,.15); --accent-line:rgba(58,166,166,.45);
+    --border:#23395a; --border-strong:#34507c; --hairline:rgba(255,255,255,.07);
+    --green:#3fd699; --warn:#f5bb42; --error:#f3766f;
+    --font-body:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    --font-display:"Bahnschrift","Segoe UI","Microsoft YaHei",sans-serif;
+    --font-mono:"Cascadia Code","Consolas",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:14.5px; line-height:1.62;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility}
+  .wrap{max-width:1140px; margin:0 auto; padding:52px 36px 72px}
+  p{margin:0 0 12px; max-width:78ch}
+  strong{font-weight:600; color:var(--ink)}
+  a{color:var(--accent-hi); text-decoration:none; border-bottom:1px solid rgba(92,195,195,.35); padding-bottom:1px}
+  a:hover{border-bottom-color:var(--accent-hi)}
+  code{font-family:var(--font-mono); font-size:.86em; color:var(--ink); background:var(--bg-row);
+    border:1px solid var(--hairline); border-radius:3px; padding:1px 6px; white-space:nowrap}
+  .kick-row{display:flex; align-items:baseline; gap:18px; border-top:2px solid var(--accent); padding-top:14px; flex-wrap:wrap}
+  .kick{font-family:var(--font-mono); font-size:11.5px; letter-spacing:.09em; color:var(--accent); text-transform:uppercase}
+  .kick-meta{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim)}
+  .kick-meta .st{color:var(--warn)}
+  h1{font-family:var(--font-display); font-size:38px; font-weight:600; line-height:1.12; letter-spacing:-.02em; margin:22px 0 14px; max-width:24ch}
+  h1 .thin{color:var(--ink-muted); font-weight:400}
+  .lede{font-size:16.5px; line-height:1.65; color:var(--ink-muted); max-width:66ch}
+  .lede strong{color:var(--ink)}
+  .head-meta{margin-top:20px; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim);
+    display:flex; gap:8px 22px; flex-wrap:wrap; border-top:1px solid var(--hairline); padding-top:12px}
+  .toc{margin:34px 0 0; border:1px solid var(--border); background:var(--bg-card); padding:4px 0}
+  .toc-row{display:grid; grid-template-columns:64px 1fr auto; gap:12px; align-items:baseline;
+    padding:9px 18px; border-bottom:1px solid var(--hairline); text-decoration:none}
+  .toc-row:last-child{border-bottom:none}
+  .toc-row:hover{background:var(--bg-hover)}
+  .toc-no{font-family:var(--font-mono); font-size:12px; color:var(--accent)}
+  .toc-t{color:var(--ink); font-size:14px}
+  .toc-sub{font-family:var(--font-mono); font-size:11px; color:var(--ink-dim)}
+  a.toc-row{border-bottom:none}
+  section{margin-top:64px}
+  .sec-head{border-top:1px solid var(--border-strong); padding-top:16px; display:grid; grid-template-columns:96px 1fr; gap:0 18px}
+  .sec-no{font-family:var(--font-display); font-size:44px; font-weight:600; color:var(--border-strong); line-height:1; letter-spacing:-.02em}
+  h2{font-family:var(--font-display); font-size:27px; font-weight:600; letter-spacing:-.01em; margin:0 0 6px; line-height:1.2}
+  .sec-sub{color:var(--ink-dim); font-size:13.5px; margin:0; max-width:70ch}
+  .sec-body{grid-column:2; margin-top:22px}
+  h3{font-family:var(--font-display); font-size:17.5px; font-weight:600; margin:34px 0 10px}
+  h3 .h3-mono{font-family:var(--font-mono); font-size:12.5px; color:var(--ink-dim); font-weight:400; margin-left:10px}
+  table{width:100%; border-collapse:collapse; margin:14px 0 6px; font-size:13.2px}
+  th{font-family:var(--font-mono); font-size:10.5px; font-weight:400; text-transform:uppercase; letter-spacing:.07em;
+    color:var(--ink-dim); text-align:left; border-bottom:1px solid var(--border-strong); padding:7px 12px; white-space:nowrap}
+  td{border-bottom:1px solid var(--hairline); padding:10px 12px; vertical-align:top; line-height:1.55}
+  tr:hover td{background:rgba(255,255,255,.018)}
+  td.num, th.num{text-align:right; font-variant-numeric:tabular-nums}
+  .grp td{background:var(--bg-row); font-family:var(--font-mono); font-size:10.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--ink-muted); border-bottom:1px solid var(--border); padding:6px 12px}
+  .pill{font-family:var(--font-mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+    border:1px solid var(--border-strong); color:var(--ink-muted); border-radius:2px; padding:1px 6px; white-space:nowrap}
+  .pill.new{border-color:var(--accent-line); color:var(--accent-hi); background:var(--accent-soft)}
+  .pill.keep{color:var(--green); border-color:rgba(63,214,153,.42)}
+  .verdict{border:1px solid var(--accent-line); background:var(--accent-soft); padding:16px 18px; margin:20px 0}
+  .verdict .vt{font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; color:var(--accent-hi); text-transform:uppercase; margin-bottom:6px}
+  .verdict p{margin-bottom:8px}
+  .verdict p:last-child{margin-bottom:0}
+  .note{border:1px solid var(--border); background:var(--bg-card); padding:12px 16px; margin:14px 0}
+  .note p{margin:0; max-width:none}
+  pre{font-family:var(--font-mono); font-size:12.3px; line-height:1.6; background:var(--bg-row);
+    border:1px solid var(--border); border-radius:4px; padding:14px 18px; overflow-x:auto; margin:14px 0}
+  pre code{background:none; border:none; padding:0; white-space:pre}
+  footer{margin-top:72px; border-top:1px solid var(--border-strong); padding-top:18px;
+    font-family:var(--font-mono); font-size:11.5px; color:var(--ink-dim); line-height:2}
+  footer b{color:var(--ink-muted); font-weight:400}
+  @media (max-width:860px){
+    .wrap{padding:36px 20px 56px}
+    h1{font-size:30px}
+    .sec-head{grid-template-columns:1fr}
+    .sec-no{font-size:32px; margin-bottom:8px}
+    .toc-row{grid-template-columns:48px 1fr}
+    .toc-sub{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ 头部 ============ -->
+  <header>
+    <div class="kick-row">
+      <span class="kick">Plan · 实施计划</span>
+      <span class="kick-meta">webui-detail-panel-redesign · 26-10-06-0838 · <span class="st">Open(待拍板)</span></span>
+    </div>
+    <h1>种子详情面板重构<br><span class="thin">15 模板全量实施 · 可切换</span></h1>
+    <p class="lede">
+      拍板输入:报告 26-10-06-0723 的 15 份模板<strong>不逐页三选一, 而是全部落地、运行时随时切换</strong>,
+      用一段实际试用期代替纸面选型。配套两条硬要求:<strong>每套模板的挂载点尽量少</strong>(之后增删一套模板
+      不应波及其它代码), 以及<strong>每页签的模板选择存 localStorage</strong>。本计划给出注册表 + 宿主 +
+      经典版兜底的架构、挂载点总账、15 个变体的功能映射、S0-S7 分步实施与 6 处拍板点。
+      <strong>拍板前不动代码。</strong>
+    </p>
+    <div class="head-meta">
+      <span>doc-type plan</span><span>doc-topic webui-detail-panel-redesign</span><span>doc-status Open</span>
+      <span>变体 15 + 经典兜底</span><span>阶段 S0-S7</span><span>拍板点 6 处</span>
+    </div>
+
+    <nav class="toc" aria-label="目录">
+      <a class="toc-row" href="#s1"><span class="toc-no">01</span><span class="toc-t">背景与拍板</span><span class="toc-sub">报告路径如何被本次拍板改写</span></a>
+      <a class="toc-row" href="#s2"><span class="toc-t">总体架构</span><span class="toc-sub">注册表 + 宿主 + 经典兜底</span></a>
+      <a class="toc-row" href="#s3"><span class="toc-t">挂载点总账</span><span class="toc-sub">常驻一次 · 每变体一处 · 删除配方</span></a>
+      <a class="toc-row" href="#s4"><span class="toc-t">变体功能映射</span><span class="toc-sub">15 份 · 数据源 · 动作平移 · 缺口</span></a>
+      <a class="toc-row" href="#s5"><span class="toc-t">分步实施 S0-S7</span><span class="toc-sub">每阶段动作与验收</span></a>
+      <a class="toc-row" href="#s6"><span class="toc-t">拍板点清单</span><span class="toc-sub">P-01…P-06 · 各带推荐案</span></a>
+      <a class="toc-row" href="#s7"><span class="toc-t">风险与对冲</span><span class="toc-sub">XSS · 重渲染 · 令牌漂移 · 守阵</span></a>
+      <a class="toc-row" href="#s8"><span class="toc-t">非目标 · 完成判据 · 变更记录</span><span class="toc-sub">范围收口</span></a>
+    </nav>
+  </header>
+
+  <!-- ============ 01 背景与拍板 ============ -->
+  <section id="s1">
+    <div class="sec-head">
+      <span class="sec-no">01</span>
+      <div>
+        <h2>背景与拍板</h2>
+        <p class="sec-sub">设计轮已闭环(报告 + 15 份模板); 本计划把报告 §6 的「逐页选型」路径改写为「全量实施 + 试用切换」。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <h3>设计轮底数</h3>
+      <p>
+        15 份可交互单文件模板(<a href="../../resources/detail-panel-templates/_brief.md">_brief.md</a> + 同目录
+        <code>01-15-*.html</code>)= 五页签 general / trackers / peers / content / traffic × 三方向
+        tall(高·信息全景) / low(矮·紧凑) / collapsed(收起·表格化), prism ocean 令牌, 已真机质检全过。
+        汇总报告 <a href="../reports/26-10-06-0723-report-webui-detail-panel-redesign.html">26-10-06-0723</a>
+        给出收起态论证(机制真实、反馈弱, 三条补强)与逐页推荐。现状实现地图(报告 §1 实测):
+      </p>
+      <table>
+        <tbody>
+          <tr><td style="width:280px"><code>shared/tpl/drawer.html</code>(286 行)</td><td>面板 DOM 单点, 三皮肤共用; 五页签正文 = 各一段 <code>&lt;template v-else-if&gt;</code></td></tr>
+          <tr><td><code>shared/drawer.js</code>(1326 行)</td><td><code>window.AQB_DRAWER</code> mixin(app.js 末尾注入); 开合/页签/收起/拖拽/5s 轮询/各页数据组装与格式化</td></tr>
+          <tr><td>三皮肤 CSS(atlas / console / prism)</td><td>历来讲究逐提交三处锁步同改 —— 本计划把锁步面收窄到 <em>0</em>(见 §3)</td></tr>
+          <tr><td>三份 <code>index.html</code> 的 <code>tpl-manifest</code></td><td>boot.js 的 parts + scripts 清单(现 29 项脚本), 新 JS 文件的唯一加载入口</td></tr>
+        </tbody>
+      </table>
+
+      <h3>本次拍板(用户, 2026-10-06)</h3>
+      <table>
+        <thead><tr><th style="width:56px">#</th><th style="width:220px">拍板</th><th>对实施 means 什么</th></tr></thead>
+        <tbody>
+          <tr><td class="num">①</td><td><strong>15 套全部实施, 可切换</strong></td><td>报告 §4 的逐页推荐从「实施目标」降级为切换器里的<strong>预置选项</strong>; 报告 §6 步骤 1「用户逐页选型」由「试用期随时切」取代</td></tr>
+          <tr><td class="num">②</td><td><strong>每套模板挂载点尽量少</strong></td><td>增删一套模板的接触面 = <strong>1 个新文件 + 3 行 manifest</strong>(§3 总账); 面板骨架改动一次性做足, 之后不再动</td></tr>
+          <tr><td class="num">③</td><td><strong>选择存 localStorage</strong></td><td>新键 <code>autoqb.ui.drawerTpl</code>(按页签记 id), 沿 <code>autoqb.ui.drawerTab</code> 同族口径(白名单 + 脏值回落 + 写失败吞异常)</td></tr>
+        </tbody>
+      </table>
+
+      <div class="verdict">
+        <div class="vt">路径改写声明</div>
+        <p>报告 §6 的三步(逐页选型 → 实施计划 → 实施)中, 第 1 步被拍板①取代, 第 2 步即本文件, 第 3 步实施面由「三皮肤 CSS 锁步」改为「骨架单点 + 变体自包含」。报告 §4 的推荐(02 / 04 / 08 / 11 / 15)保留为 <strong>P-01 的备选项</strong>(初装默认版式二选一)。</p>
+        <p style="margin-bottom:0">报告 §5 的三条收起态补强: <strong>补强二(收起态点页签自动展开)与补强三(收起态头部摘要化)纳入本计划</strong>(S1 落地, 变体可覆写摘要); <strong>补强一(开合态持久化回读)不纳入</strong> —— 与 D1 拍板(首屏恒默认收起, <code>drawer.js:946</code> 在案硬约束)冲突, 翻案需显式拍板, 见 §8 非目标。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 总体架构 ============ -->
+  <section id="s2">
+    <div class="sec-head">
+      <span class="sec-no">02</span>
+      <div>
+        <h2>总体架构</h2>
+        <p class="sec-sub">注册表 + 宿主 + 经典版兜底: 模板是「插进面板的渲染模块」, 面板骨架与数据管线一次性留好插座。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+
+      <h3>四层结构<span class="h3-mono">数据仍是 Vue 的, 皮是插拔的</span></h3>
+      <table>
+        <thead><tr><th style="width:190px">层</th><th>载体</th><th>职责与不变式</th></tr></thead>
+        <tbody>
+          <tr><td><strong>数据层(不动)</strong></td><td>drawer.js 现有管线</td><td><code>_fetchDrawer*</code> 四源 + 流量 <code>qbCur*</code> 三挂点、5s 轮询、FX-29 软切换、请求代际 —— <strong>零改动</strong>, 只在落袋处补一发通知(§3)</td></tr>
+          <tr><td><strong>骨架层(一次改)</strong></td><td>drawer.html + drawer.js 钩子</td><td>每页签 = <strong>经典版包裹层</strong> + <strong>变体宿主</strong> 二选一显示; 头部加切换器与收起摘要条; 挂载/通知/卸载钩子共约 9 行</td></tr>
+          <tr><td><strong>核心层(新)</strong></td><td><code>shared/drawer_templates.js</code> <span class="pill new">new</span></td><td>注册表 / 生命周期(dtSync·dtNotify·卸载) / <code>dtHtml</code> 自动转义标签模板 / CSS 注入单点 / <code>autoqb.ui.drawerTpl</code> 读写 / 收起态摘要默认实现</td></tr>
+          <tr><td><strong>变体层(新 ×15)</strong></td><td><code>shared/drawer_tpl/01-…-15-…js</code> <span class="pill new">new ×15</span></td><td>每变体一个自注册文件: <code>{id, tab, label, css, render(host, ctx), summary?, destroy?}</code>; CSS/内部状态/定时器全自包含, <strong>删除 = 删文件 + manifest 3 行</strong></td></tr>
+        </tbody>
+      </table>
+
+      <h3>变体契约<span class="h3-mono">核心层保证的</span></h3>
+      <pre><code>/* shared/drawer_tpl/02-general-cards-low.js — 每变体一个文件, 形状统一 */
+(function () {
+  "use strict";
+  const reg = window.AQB_DRAWER_TPL_REG;
+  if (!reg) return;                       /* 核心未载入(清单序错): 静默退出, 守阵会抓 */
+  reg.register({
+    id: "02", tab: "general",             /* id = 模板 NN 号, 与报告/模板文件一一对应 */
+    label: "六卡聚类(矮档)",
+    css: "...",                           /* 一次性注入 &lt;style data-dt="02"&gt;, 规则一律挂在 .drawer 作用域下 */
+    render(host, ctx) { /* 全量重建 host; ctx = 组件实例(白名单面见下) */ },
+    summary(ctx)  { /* 可选: 收起态摘要, 返回已转义 HTML; 缺省用核心内置 */ },
+    destroy(host) { /* 可选: 定时器/监听清理; 关面板与换变体时核心必调 */ },
+  });
+})();</code></pre>
+      <p>
+        <strong>ctx 契约(白名单, 写进核心头注释)</strong> —— 读: <code>drawer.detail / trackers / files / peers</code>
+        及各 loading 态、<code>qbCur*</code> 流量态、<code>memberByHash</code>; 格式化复用现成单点
+        (<code>fmtSpeed/fmtSize/fmtDuration/fmtTs/fmtEta/fmtPeersQb/drawerFileRows/drawerPeerRows/drawerTrackerStatus…</code>);
+        动作直接调现有方法(<code>drawerCmd("reannounce") / trackerAdd/Edit/Remove / setFilePriority /
+        openFilePrio / openTargetPath / copyText / qbSetWindow / _editDetail(magnet 按需)</code>)。
+        变体<strong>只读这些、只调这些</strong>, 不触碰面板几何(dock/动画/高度)与轮询生命周期。
+      </p>
+      <p>
+        <strong>渲染纪律</strong>: host 子树归变体自管, Vue 零感知; 变体内禁止 <code>innerHTML =</code> 裸拼 ——
+        一律走核心的标签模板 <code>dtHtml\`...\`</code>(插值自动转义, <code>dtRaw()</code> 显式豁免且守阵 grep),
+        XSS 单点收口(对齐 F1/F2 审计口径)。每次 notify 全量重建时用 <code>replaceChildren</code> 原子换帧,
+        自保滚动位置与内部 UI 态(折叠/筛选/选中), 5s 轮询频度下不闪不跳。
+      </p>
+
+      <h3>生命周期与数据流<span class="h3-mono">9 行钩子在哪触发</span></h3>
+      <table>
+        <thead><tr><th style="width:300px">时机(drawer.js 现有方法)</th><th>核心动作</th></tr></thead>
+        <tbody>
+          <tr><td><code>_loadDrawerTab</code>(:812)尾部</td><td><code>_dtSync()</code>: 换页签时卸旧变体、按 <code>drawerTplSel</code> 挂当前变体并喂当前数据; 选中 classic 则只亮经典包裹层</td></tr>
+          <tr><td>四 fetcher 落袋(:738/:756/:770/:784)</td><td><code>_dtNotify("detail"|"trackers"|"files"|"peers")</code>: 活动变体重渲染(过期响应照旧不落袋不通知)</td></tr>
+          <tr><td><code>closeDrawer</code>(:684)</td><td><code>_dtUnmountAll()</code>: 逐变体 <code>destroy()</code>, 定时器(如 06 倒计时)必清</td></tr>
+          <tr><td><code>toggleDrawerCollapse</code>(:995)</td><td><code>_dtNotify("collapse")</code>: 刷新收起摘要条(含 15 的迷你走势)</td></tr>
+          <tr><td><code>drawerTab</code>(:800)</td><td><strong>补强二</strong>: 收起态点页签 = 先展开再切页签(2 行), 消灭「点了没反应」</td></tr>
+        </tbody>
+      </table>
+      <p>
+        FX-29 软切换 / 收起遮罩 / 页面守卫不用动: 变体宿主位于 <code>.drawer-body</code> 内,
+        <code>switching</code> 遮罩与可见性门天然覆盖; 换种子时数据落袋走同一批 fetcher 钩子, 变体自动跟新。
+      </p>
+
+      <h3>取舍: 为什么是命令式渲染, 不是 Vue 动态组件<span class="h3-mono">挂载点最少优先</span></h3>
+      <p>
+        备选是每变体一个 Vue 动态组件(<code>&lt;component :is&gt;</code>): 响应式更新免费, 但子组件拿不到根实例的
+        mixin 方法面(drawerCmd / fmt* 等), 得铺 props / provide 接线, 面板骨架与 15 个变体全部耦合进 Vue 组件树 ——
+        增删一套要动的东西反而更多, 与拍板②相反。命令式 render(host, ctx) 把变体做成「纯插件」: 核心一次保证
+        转义 / 原子换帧 / 生命周期, 变体只写纯渲染。代价(自保 UI 态、5s 全量重建)在 §7 风险表里有对冲。
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 03 挂载点总账 ============ -->
+  <section id="s3">
+    <div class="sec-head">
+      <span class="sec-no">03</span>
+      <div>
+        <h2>挂载点总账</h2>
+        <p class="sec-sub">拍板②的落地承诺: 骨架只改这一次; 之后每套模板 = 1 个文件 + 3 行清单。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+
+      <h3>常驻挂载(一次性, S1 做完不再动)<span class="h3-mono">共 5 个文件 + 3 行清单</span></h3>
+      <table>
+        <thead><tr><th style="width:250px">文件</th><th style="width:110px">改动量</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td><code>shared/tpl/drawer.html</code></td><td class="num">约 15 处小元素</td><td>四页签既有正文包一层 <code>v-show</code> 经典包裹层 + 各加一个变体宿主 div; 流量块 <code>&lt;template v-else&gt;</code> 转 div 带布局类 + 图前/图后两个宿主; 头部 <strong>切换器 select ×2</strong>(种子头部 / 流量头部)与<strong>收起摘要条 ×2</strong>。全部是加挂, 既有行不动(v-else-if 链的 template 转 div 除外)</td></tr>
+          <tr><td><code>shared/drawer.js</code></td><td class="num">约 9 行</td><td>§2 生命周期表列的钩子(<code>_dtSync / _dtNotify ×4 / _dtUnmountAll / collapse 通知</code>) + 补强二 2 行; 方法本体实现在核心层, 这里只有一行式调用</td></tr>
+          <tr><td><code>shared/state.js</code></td><td class="num">1 行</td><td><code>drawerTplSel: initialDrawerTpl(),</code>(响应式, 切换器/包裹层读它; 显式建字段守 vue-reactivity 坑)</td></tr>
+          <tr><td><code>shared/app.js</code></td><td class="num">1 函数 + 1 行</td><td><code>initialDrawerTpl()</code>(读 <code>autoqb.ui.drawerTpl</code>, 白名单校验、脏值/缺失一律 classic, 与 <code>initialDrawerTab()</code>:429 同口径) + <code>app.mixin(window.AQB_DRAWER_TPL)</code></td></tr>
+          <tr><td>三份 <code>index.html</code> scripts 清单</td><td class="num">各 1 行(S1)</td><td><code>/shared/drawer_templates.js</code> 插在 <code>drawer.js</code> 之后、<code>state.js</code> 之前 —— <strong>唯一的 ×3 面</strong></td></tr>
+        </tbody>
+      </table>
+
+      <h3>每变体挂载(增删成本)<span class="h3-mono">拍板②的承诺兑现</span></h3>
+      <table>
+        <thead><tr><th style="width:220px">动作</th><th>接触面</th></tr></thead>
+        <tbody>
+          <tr><td><strong>增加一套模板</strong></td><td>新建 <code>shared/drawer_tpl/&lt;NN&gt;-&lt;tab&gt;-&lt;slug&gt;.js</code>(自注册) + 三份 manifest 各加 1 行。<strong>其它一切零接触</strong>: 切换器选项、持久化白名单、收起摘要、守阵计数全部由注册表派生</td></tr>
+          <tr><td><strong>删除一套模板</strong></td><td>删该文件 + 三份 manifest 各去 1 行。已存进 localStorage 的失效 id 由白名单自动回落 classic, 不报错</td></tr>
+          <tr><td><strong>删除整个特性</strong></td><td>S1-S7 每阶段独立成提交, <code>git revert</code> 对应区间即净退(骨架钩子都是一行式, revert 无残留)</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <p><strong>三皮肤锁步面收窄为 0 行 CSS</strong>: 变体 CSS 与切换器/宿主/摘要条的基础样式全部由核心按需注入
+        <code>&lt;style data-dt&gt;</code>(规则挂在 <code>.drawer</code> 作用域 + 结构令牌 var()), atlas / console / prism
+        的 CSS 文件<strong>一行不改</strong> —— 历来「三处锁步同改」的成本只留给 manifest 清单这一处机械行。
+        前提令牌同名性 S1 首任务对账(已抽查 <code>--bg-card</code> 三皮肤同名; 未对账的令牌一律带字面 fallback)。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 变体功能映射 ============ -->
+  <section id="s4">
+    <div class="sec-head">
+      <span class="sec-no">04</span>
+      <div>
+        <h2>变体功能映射</h2>
+        <p class="sec-sub">15 份逐一落点: 数据全部来自现有端点(零后端改动), 动作平移到现有方法链, 缺口当场定处置。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <p>
+        模板是设计稿, 落地时按本表对齐: 「动作平移」列 = 变体内可用的操作及所用现有方法; 「缺口处置」列 =
+        设计与数据现实的差异怎么处理(全部不加端点)。共通的渐进字段纪律: qB 透传字段随版本浮动
+        (<code>country / connection / files / availability</code> 等), <strong>有则渲染、无则整列/整徽章省略</strong>, 不报错不占位。
+      </p>
+      <table>
+        <thead><tr><th style="width:56px">NN</th><th style="width:190px">变体(模板文件)</th><th style="width:250px">动作平移(现有方法)</th><th>落地要点与缺口处置</th></tr></thead>
+        <tbody>
+          <tr class="grp"><td colspan="4">general · 常规(数据: /api/torrents/{hash} 全字段 + site + hr_*)</td></tr>
+          <tr><td class="num">01</td><td><a href="../../resources/detail-panel-templates/01-general-hero-tall.html">01-general-hero-tall</a></td><td>分组折叠(纯前端); 打开目录/复制</td><td>英雄行五数字 = progress / ratio / upspeed / num_seeds / reannounce_in; 4 列键值栅格直接吃 <code>drawerGeneralSections()</code> 预格式化结果</td></tr>
+          <tr><td class="num">02</td><td><a href="../../resources/detail-panel-templates/02-general-cards-low.html">02-general-cards-low</a></td><td>卡片折叠; 打开目录/复制; 磁力复制</td><td>回收未展示字段(tags / category / site / 限速 / magnet_uri)全在 detail 里; 磁力走 <code>_editDetail</code> 按需取(BUG-9 先例口径: 不进轮询载荷)</td></tr>
+          <tr><td class="num">03</td><td><a href="../../resources/detail-panel-templates/03-general-dossier-collapsed.html">03-general-dossier-collapsed</a></td><td>打开目录/复制</td><td>左条带 + 右 252px 元信息栏; <strong>summary() = 做种中 · 进度 · ↑速 · 比率 · HR 剩余 · 站点</strong>(报告 §5 口径的基准实现)</td></tr>
+          <tr class="grp"><td colspan="4">trackers · Tracker(数据: /trackers qB 透传, 5s 轮询)</td></tr>
+          <tr><td class="num">04</td><td><a href="../../resources/detail-panel-templates/04-trackers-status-cards-tall.html">04-trackers-status-cards-tall</a></td><td>添加/编辑/删除(trackerAdd/Edit/Remove); 强制汇报(drawerCmd)</td><td>总览计数即筛选; tier / num_peers / num_downloaded 透传即有; 虚拟条目(** / [DHT] / [PeX] / [LSD])沿用 <code>drawerTrackerVirtual</code> 弱化</td></tr>
+          <tr><td class="num">05</td><td><a href="../../resources/detail-panel-templates/05-trackers-health-groups-low.html">05-trackers-health-groups-low</a></td><td>失败区重报钮(drawerCmd("reannounce"))</td><td>失败 → 警告 → 更新中 → 正常 → 未启用分组前置; msg 全文 + 处置建议文案为变体内置映射</td></tr>
+          <tr><td class="num">06</td><td><a href="../../resources/detail-panel-templates/06-trackers-table-collapsed.html">06-trackers-table-collapsed</a></td><td>行内 msg 展开; 仅看异常过滤</td><td>逐行倒计时 <strong>缺 per-tracker 数据</strong> → 按 P-02 处置(默认: 以 detail.reannounce_in 全局值近似展示并标注); summary() = 健康比例条</td></tr>
+          <tr class="grp"><td colspan="4">peers · 用户(数据: /peers qB sync 透传整包, 5s 轮询)</td></tr>
+          <tr><td class="num">07</td><td><a href="../../resources/detail-panel-templates/07-peers-dashboard-tall.html">07-peers-dashboard-tall</a></td><td>纯观察无动作</td><td>四卡聚合(上下行累计 / 方向构成 / 客户端 Top / 链路健康)全部前端派生自 peers 数组; 上行去向分段与行速度微条同色(方向色令牌 --today-up/down)</td></tr>
+          <tr><td class="num">08</td><td><a href="../../resources/detail-panel-templates/08-peers-groups-low.html">08-peers-groups-low</a></td><td>分组折叠; 只看在传数据过滤</td><td>五区(取流/供流/闲置/限流/握手)按 flags 派生; 组头聚合数随 5s 轮询刷新, 折叠态自保</td></tr>
+          <tr><td class="num">09</td><td><a href="../../resources/detail-panel-templates/09-peers-density-collapsed.html">09-peers-density-collapsed</a></td><td>悬停标记(展示)</td><td><strong>封禁钮按 P-04 处置(默认: v1 省略, 无后端端点)</strong>; 迅雷红标 = client 名含 "XL/迅雷" 启发式, 纯展示; summary() = 构成比例条 + 吸血计数</td></tr>
+          <tr class="grp"><td colspan="4">content · 内容(数据: /files qB 透传, 拉一次)</td></tr>
+          <tr><td class="num">10</td><td><a href="../../resources/detail-panel-templates/10-content-tree-detail-tall.html">10-content-tree-detail-tall</a></td><td>目录点选子树聚合; 优先级点改(openFilePrio)</td><td>右 324px 选中详情含每文件 availability(现状未展示, 渐进字段); 重命名不在本变体设计内 → 回 classic 用(试用期对照场景之一)</td></tr>
+          <tr><td class="num">11</td><td><a href="../../resources/detail-panel-templates/11-content-treegrid-batch-low.html">11-content-treegrid-batch-low</a></td><td>勾选批量优先级(setFilePriority → files/priority indices 数组)</td><td>目录行聚合(子树大小 / 加权进度 / 最低可用性); 勾目录 = 整棵子树三态框, indices 从 <code>drawerFileRows()</code> 树收集; availability 列渐进</td></tr>
+          <tr><td class="num">12</td><td><a href="../../resources/detail-panel-templates/12-content-space-treemap-collapsed.html">12-content-space-treemap-collapsed</a></td><td>悬停互联(纯前端)</td><td>squarified 树图纯前端计算(块面积 = 体积占比, 绿水位 = 完成度, 琥珀虚位 = 缺块); summary() = 体积构成条 + 未完成数</td></tr>
+          <tr class="grp"><td colspan="4">traffic · 流量(数据: /api/traffic/qb/{global|group/{key}|torrent/{hash}}, 三挂点共用正文块)</td></tr>
+          <tr><td class="num">13</td><td><a href="../../resources/detail-panel-templates/13-traffic-chart-led-tall.html">13-traffic-chart-led-tall</a></td><td>窗口切换(qbSetWindow, 13 档)</td><td>KPI 头行(累计 / 峰值 / 均值 / 采样健康)从 points 派生, 进图前宿主; 限速虚线与缺口斜纹按 P-03(默认 v1 省略, 不动 qb_traffic_chart.js); 13 档窗口清单沿用 QB_WINDOW_NAMES 单点</td></tr>
+          <tr><td class="num">14</td><td><a href="../../resources/detail-panel-templates/14-traffic-annotated-split-low.html">14-traffic-annotated-split-low</a></td><td>悬停看图(现有 tooltip 不动)</td><td>左图右解读栏 = 布局类 + 图后宿主; 解读栏内容(合计占比 / 峰值 Top3 / 缺口事件列表)前端派生; 悬停联动按 P-05(默认 v1 静态)</td></tr>
+          <tr><td class="num">15</td><td><a href="../../resources/detail-panel-templates/15-traffic-adaptive-collapsed.html">15-traffic-adaptive-collapsed</a></td><td>窗口切换</td><td>纯 CSS 布局类随容器高降级(KPI 5 格 → 单行 → 收起); <strong>summary() = 近 30 分钟迷你走势(内联 SVG polyline)</strong>, 是收起摘要条的流量页实现</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <p><strong>uPlot 图保持 Vue/现有管线所有</strong>: 流量三变体只加「布局类 + 两个宿主 div」(KPI 行 / 解读栏),
+        <code>ref="qbChartHost"</code>、tooltip、图例、汇总等既有元素原样留在 Vue 模板里 ——
+        <code>qb_traffic_chart.js</code> 零改动, 三挂点(全局/分组/单种)行为与页面守卫回归项不变。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 05 分步实施 ============ -->
+  <section id="s5">
+    <div class="sec-head">
+      <span class="sec-no">05</span>
+      <div>
+        <h2>分步实施 S0-S7</h2>
+        <p class="sec-sub">S1 骨架先行(零观感差异可验证), 之后每页签一批变体, 每阶段独立可回退。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+
+      <h3>总览<span class="h3-mono">建议每阶段独立提交(revert 粒度 = 阶段)</span></h3>
+      <table>
+        <thead><tr><th style="width:64px">阶段</th><th style="width:250px">内容</th><th style="width:110px">涉及文件</th><th>验收门</th></tr></thead>
+        <tbody>
+          <tr><td class="num">S0</td><td>开工准备</td><td class="num">0</td><td>sync; 拍板点 P-01…P-06 定案; 精读坑档 7 篇(brief §10); <code>kb.baseline</code> 记现役基线</td></tr>
+          <tr><td class="num">S1</td><td>核心层 + 骨架挂载 + 经典兜底</td><td class="num">5 + 3 清单</td><td><strong>零观感差异</strong>(默认全 classic); 切换器出现且切 classic 有记忆; test.quick 绿 + 新守阵绿; Playwright 打开/切页签/收起/展开冒烟</td></tr>
+          <tr><td class="num">S2</td><td>general 变体 01/02/03</td><td class="num">+3 文件</td><td>三变体切换/交互/收起摘要过; classic 对照无回归</td></tr>
+          <tr><td class="num">S3</td><td>trackers 变体 04/05/06</td><td class="num">+3 文件</td><td>增删改/汇报动作回执链通; 5s 轮询重渲染不闪不丢态</td></tr>
+          <tr><td class="num">S4</td><td>peers 变体 07/08/09</td><td class="num">+3 文件</td><td>100+ 连接重渲染实测不卡; 渐进字段(无 country 时)不破相</td></tr>
+          <tr><td class="num">S5</td><td>content 变体 10/11/12</td><td class="num">+3 文件</td><td>批量优先级(indices 数组)真机生效; 树图/树表数据一致</td></tr>
+          <tr><td class="num">S6</td><td>traffic 变体 13/14/15</td><td class="num">+3 文件</td><td>三挂点(全局/分组/单种)回归全过; 图/tooltip/轮询零改动面确认</td></tr>
+          <tr><td class="num">S7</td><td>收口</td><td class="num">0 文件</td><td>15×classic × 三档(收起/矮/高)真机巡检; 持久化 e2e; test.full 新基线切片; 文档回写(§8 完成判据)</td></tr>
+        </tbody>
+      </table>
+
+      <h3 id="s5x1">S1 核心层与骨架(唯一动骨架的阶段)<span class="h3-mono">验收标准: 看不出任何变化</span></h3>
+      <p>
+        ①令牌对账: 列出变体将用到的结构/语义令牌名, 对三皮肤逐一核实存在性, 白名单写进核心头注释,
+        未入名单的必须带字面 fallback。②写核心 <code>drawer_templates.js</code>(注册表 / dtSync·dtNotify·卸载 /
+        <code>dtHtml</code> 转义标签模板 / CSS 注入单点 / 摘要内置实现: 常规=状态·进度·速度·比率·HR, Tracker=健康比例,
+        用户=构成比例, 内容=体积构成+未完成数, 流量=窗口累计)。③drawer.html 约 15 处加挂(§3 表)。
+        ④drawer.js 约 9 行钩子 + 补强二。⑤state.js / app.js 持久化。⑥三 manifest 加核心 1 行。
+        ⑦新守阵: <code>test_drawer_tpl_registry_wiring</code>(三 manifest 成对含核心; 变体 (id,tab) 唯一且 tab 合法;
+        核心含 dtHtml/autoqb.ui.drawerTpl 单点)与 <code>test_drawer_tpl_classic_default</code>(initialDrawerTpl 白名单脏值回落)。
+      </p>
+
+      <h3 id="s5x2">S2-S6 每批统一动作序列(每批六步)</h3>
+      <table>
+        <tbody>
+          <tr><td style="width:56px" class="num">1</td><td>对照模板 HTML + §4 映射行, 写 <code>drawer_tpl/&lt;NN&gt;-*.js</code>(css / render / summary / destroy 四件套; 收起/矮/高三档布局全部做进同一变体, 对应模板内置的三档切换语义)</td></tr>
+          <tr><td class="num">2</td><td>三份 manifest 各加 1 行(变体文件)</td></tr>
+          <tr><td class="num">3</td><td>Playwright 真机过该页签: 三变体 × 三档切换 + §4 列动作逐个点一遍 + 收起态摘要显示</td></tr>
+          <tr><td class="num">4</td><td>localStorage 断续验: 切变体 → reload → 保持; 塞脏 id → 回落 classic</td></tr>
+          <tr><td class="num">5</td><td>三皮肤抽查: prism 全过, atlas / console 各过一档(令牌 fallback 生效即可)</td></tr>
+          <tr><td class="num">6</td><td><code>commands run test.quick</code> 绿; 守阵断红先判语义(钉住的事实被计划内改动, 更新断言并注明计划号)</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <strong>S7 收口</strong>: ①15 变体 + classic 全矩阵真机巡检(收起/矮/高三档 × 切换器 × 刷新恢复);
+        ②持久化 e2e 进 <code>@playwright/test</code> 冒烟(切变体 → reload → 断言保持); ③<code>commands run test.full</code>
+        新建基线切片; ④tasks 档案追加结论、<code>kb.index</code> 重建、踩坑按动作写 <code>pitfalls/web-ui/</code>;
+        ⑤试用期使用说明(切换器在哪 / 如何增删变体)回写 tasks 档案。
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 06 拍板点 ============ -->
+  <section id="s6">
+    <div class="sec-head">
+      <span class="sec-no">06</span>
+      <div>
+        <h2>拍板点清单</h2>
+        <p class="sec-sub">P-01…P-06, 各带推荐案; 未拍板不动工(S0 的第一项)。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <table>
+        <thead><tr><th style="width:64px">号</th><th style="width:230px">问题</th><th style="width:320px">推荐案</th><th>备选与代价</th></tr></thead>
+        <tbody>
+          <tr><td class="num">P-01</td><td>初装(无 localStorage)默认版式</td><td><strong>全页签 classic</strong> —— 升级零观感差异, 保守默认(黄金法则 2), 试用期用户自己逐页切</td><td>直接套报告推荐组合 02/04/08/11/15 —— 省切换动作, 但升级即换脸, 回退路径变模糊</td></tr>
+          <tr><td class="num">P-02</td><td>06 的逐 tracker 汇报倒计时数据缺 per-tracker 口径</td><td><strong>以 detail.reannounce_in 全局值近似展示</strong>, 行内标「全局」; 不加端点</td><td>省略倒计时列(信息增量少一块); 或后端加端点(超范围)</td></tr>
+          <tr><td class="num">P-03</td><td>13 的限速虚线 / 缺口斜纹注解层</td><td><strong>v1 省略</strong>, KPI 行以文字展示限速值 —— 不动 qb_traffic_chart.js</td><td>暴露 uPlot 实例加注解插件: 效果完整但要动现管线 + 守阵(test_frontend_qb_traffic_chart_wiring)</td></tr>
+          <tr><td class="num">P-04</td><td>09 的悬停封禁钮(后端无 peer 封禁端点, 已核实 routes 0 命中)</td><td><strong>v1 省略该钮</strong>, 迅雷红标保留(纯展示)</td><td>新增后端端点 + qB 版本核查 —— 独立需求, 不属本次重构</td></tr>
+          <tr><td class="num">P-05</td><td>14 解读栏与图悬停联动</td><td><strong>v1 静态解读栏</strong>(合计/占比/峰值 Top3/缺口事件), 图侧 tooltip 已有</td><td>联动 = hover 事件通知变体重渲染, 高频 setState 面值得不偿失</td></tr>
+          <tr><td class="num">P-06</td><td>收起态摘要条的头部几何</td><td><strong>压缩进 44px</strong>: 标题截断让位, 摘要同行(报告模板 03/06/09/12/15 的演示形态)</td><td>头部加高到约 64px 两行制 —— 信息全但收起回收空间变少, 削弱收起价值</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 07 风险与对冲 ============ -->
+  <section id="s7">
+    <div class="sec-head">
+      <span class="sec-no">07</span>
+      <div>
+        <h2>风险与对冲</h2>
+        <p class="sec-sub">逐条给判据与对冲, 实施期按此巡检。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <table>
+        <thead><tr><th style="width:230px">风险</th><th>对冲</th></tr></thead>
+        <tbody>
+          <tr><td><strong>XSS</strong>: 变体命令式拼 HTML, 15 处新渲染面</td><td>核心 <code>dtHtml</code> 标签模板单点自动转义, <code>dtRaw()</code> 显式豁免; 守阵 grep 变体文件裸 <code>innerHTML</code>/拼接点; 与 F1/F2 审计口径一致</td></tr>
+          <tr><td><strong>5s 重渲染开销与闪烁</strong>(peers 100+ 行、tracker 卡片)</td><td><code>replaceChildren</code> 原子换帧 + 变体自保滚动/折叠/筛选态; 数据未变(浅比较)跳过重建; 卡顿再降频/增量, 现象级问题记坑</td></tr>
+          <tr><td><strong>变体与 Vue 争 DOM</strong>(host 子树被 Vue patch 摸掉)</td><td>纪律: Vue 模板只渲染空的 host 元素, 子树零接触; 宿主显隐只走 host 元素自身的 <code>v-show</code>; S1 零观感验收兜底</td></tr>
+          <tr><td><strong>三皮肤令牌漂移</strong>(变体写死 prism ocean 色值)</td><td>S1 令牌对账白名单 + fallback 纪律; 设计稿里的色值只属于 resources/ 评审件, 产品代码一律 var()</td></tr>
+          <tr><td><strong>守阵误伤</strong>(test_web.py 钉 drawer 结构与接线, :2619 起直读源码断言)</td><td>每批 test.quick; 断红先判语义: 计划内事实变更 → 更新断言注明本计划号; 计划外 → 停手按 scope-guard 处置</td></tr>
+          <tr><td><strong>交互面回归</strong>(FX-29 软切换 / 收起副作用 / 流量页守卫 / 键盘跟随)</td><td>这些机制零改动, 变体在遮罩与守卫下游; 每批验收含回归项(切种子软切换、收起暂停轮询、切页面板隐藏)</td></tr>
+          <tr><td><strong>试用期功能空洞</strong>(个别动作只在 classic 有, 如重命名)</td><td>§4 映射表逐变体标明; classic 恒在切换器首位, 增删 tracker / 重命名等管理动作随时回得去 —— 这正是保留 classic 的理由</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 08 非目标 · 完成判据 · 变更记录 ============ -->
+  <section id="s8">
+    <div class="sec-head">
+      <span class="sec-no">08</span>
+      <div>
+        <h2>非目标 · 完成判据 · 变更记录</h2>
+        <p class="sec-sub">范围收口, 防蔓延。</p>
+      </div>
+    </div>
+    <div class="sec-body">
+      <h3>非目标</h3>
+      <table>
+        <tbody>
+          <tr><td style="width:280px"><strong>补强一: 开合态持久化回读</strong></td><td>与 D1 拍板(首屏恒默认收起, <code>drawer.js:946</code> 硬约束注释)冲突; 要翻案请显式说, 另立小改</td></tr>
+          <tr><td><strong>peer 封禁端点</strong></td><td>后端零端点改动是本计划边界(P-04 默认省略该钮)</td></tr>
+          <tr><td><strong>删除经典版 / 退役旧排版</strong></td><td>classic 是试用期的对照组与功能兜底; 试用期结束拍板后再议退役(那是下一轮计划)</td></tr>
+          <tr><td><strong>后端与配置</strong></td><td>零端点新增、零 config 键(选择只进 localStorage, 不进 config.yml 体系)</td></tr>
+          <tr><td><strong>三皮肤 CSS 文件改动</strong></td><td>atlas / console / prism 的 css 文件一行不改(§3)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>完成判据(全计划 DoD)</h3>
+      <table>
+        <tbody>
+          <tr><td style="width:56px" class="num">1</td><td>15 变体 + classic 在三皮肤全部可切、可记住、可回退; 收起态摘要在 classic 与变体下都按 P-06 形态显示</td></tr>
+          <tr><td class="num">2</td><td>增删一套变体 = 1 文件 + 3 行 manifest, 由「删一个变体再恢复」实测演示一次并记进档案</td></tr>
+          <tr><td class="num">3</td><td>新守阵两条落地; 持久化 e2e 进冒烟; <code>test.full</code> 新基线切片全绿</td></tr>
+          <tr><td class="num">4</td><td>tasks 档案追加实施结论(含各拍板点执行情况), <code>kb.index</code> / <code>kb.docmap --check</code> 闭环</td></tr>
+        </tbody>
+      </table>
+
+      <h3>变更记录</h3>
+      <table>
+        <tbody>
+          <tr><td style="width:150px"><code>26-10-06-0838</code></td><td>v1 初稿: 拍板①②③转写为注册表 + 宿主 + 经典兜底架构; 挂载点总账与 S0-S7 分步; P-01…P-06 拍板点带推荐案; doc-status Open, 待拍板后转 In Progress。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <b>文件</b> memory-bank/plans/26-10-06-0838-plan-webui-detail-panel-redesign.html<br>
+    <b>生成</b> 2026-10-06 08:38 · ZCode · 单文件自包含, 双击即开<br>
+    <b>状态</b> Open(待拍板 P-01…P-06; 拍板前不动代码) · 代码事实快照以 26-10-06 HEAD b0767903 为准<br>
+    <b>相关</b> <a href="../reports/26-10-06-0723-report-webui-detail-panel-redesign.html">报告 26-10-06-0723</a> · <a href="../../resources/detail-panel-templates/_brief.md">_brief.md</a> · <a href="../tasks/26-10-06-webui-detail-panel.md">任务档案 26-10-06-webui-detail-panel</a> · 同目录 15 份模板
+  </footer>
+
+</div>
+</body>
+</html>

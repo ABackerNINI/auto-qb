@@ -4,8 +4,8 @@
 **Added:** 2026-10-06
 **Updated:** 2026-10-06
 **Topics:** webui-detail-panel-redesign
-**Summary:** 设计模板轮闭环: 针对下方面板三痛点(常规页右侧大块留白 / Tracker·用户·内容裸表格无设计感 / 收起态疑似无用)产出 15 份可交互单文件模板(五页 general/trackers/peers/content/traffic × 高·矮·收起三方向, prism ocean 令牌, 每份内置三档高度切换) + `_brief.md` 调研简报 + 汇总报告 26-10-06-0723(内含收起态论证: 有实际作用但反馈弱, 附三条补强点; 逐页推荐供拍板); Playwright 真实浏览器逐份三档+交互全过。用户逐页选型后另立 plan 实施 drawer.html/drawer.js/三皮肤 CSS。未 commit 等用户指令。
-**Refs:** memory-bank/reports/26-10-06-0723-report-webui-detail-panel-redesign.html
+**Summary:** 设计模板轮闭环: 针对下方面板三痛点(常规页右侧大块留白 / Tracker·用户·内容裸表格无设计感 / 收起态疑似无用)产出 15 份可交互单文件模板(五页 general/trackers/peers/content/traffic × 高·矮·收起三方向, prism ocean 令牌, 每份内置三档高度切换) + `_brief.md` 调研简报 + 汇总报告 26-10-06-0723(内含收起态论证: 有实际作用但反馈弱, 附三条补强点; 逐页推荐供拍板); Playwright 真实浏览器逐份三档+交互全过。**用户拍板(26-10-06): 15 套全量实施可切换(以试用期取代逐页选型)、每套挂载点尽量少、选择存 localStorage** —— 实施计划 26-10-06-0838 已出(注册表 + 宿主 + 经典版兜底, S0-S7, 拍板点 P-01…P-06), doc-status Open 待拍板开工。
+**Refs:** memory-bank/reports/26-10-06-0723-report-webui-detail-panel-redesign.html,memory-bank/plans/26-10-06-0838-plan-webui-detail-panel-redesign.html
 
 ## 原始请求
 
@@ -24,11 +24,13 @@
 - **信息增量回收**: 模板不止重排现有字段, 顺带回收「有数据但未展示」的字段(报告 §信息增量)。
 - **逐页推荐写进报告, 标注「供拍板」** —— 用户可整页采纳, 也可指定吸收组合(如 general = 02 基线 + 01 英雄行)。
 - **质检中修复**: 01-12 号模板缺 `[hidden]` 规则共 12 行 —— `[hidden]` 属性会被显式 `display` 规则压掉, 单文件模板必须自带 `[hidden]{display:none}` 才能保证档位切换生效。
+- **实施拍板(2026-10-06, 用户)**: 15 套模板**不逐页三选一, 全部实施可切换**, 用实际试用期代替纸面选型; 两条硬要求 —— **每套模板挂载点尽量少**(增删一套 = 1 文件 + 3 行 manifest)、**选择存 localStorage**(按页签记 id)。报告 §4 逐页推荐降级为拍板点 P-01 备选; 补强二(收起态点页签自动展开)/补强三(收起态头部摘要化)纳入实施, 补强一(开合态回读)因 D1 拍板在案不入范围。
+- **实施架构(计划 26-10-06-0838 定稿待拍板)**: 注册表 + 宿主 + 经典版兜底 —— 数据管线(drawer.js fetcher/轮询/FX-29)零改动, 骨架一次性加挂(每页签经典包裹层 + 变体宿主 + 切换器 + 收起摘要条), 核心层 `drawer_templates.js` 管注册表/生命周期/转义/CSS 注入, 15 变体各一个自注册文件。三皮肤 CSS 零改动(变体样式 JS 注入), 锁步面收窄到三份 index.html manifest。
 
 ## 实现计划
 
-- **设计轮(本轮, 已闭环)**: `_brief.md` 调研简报(唯一输入: 现状实现地图 / prism ocean 令牌 / 产出规格) → 15 份编号模板 01-15 → 汇总报告(论证 + 逐页推荐) → Playwright 真机质检。
-- **实施轮(未开工)**: 用户逐页选型后**另立 plan**, 落地 `drawer.html` / `drawer.js` / 三皮肤 CSS; 实施会话在**本档案追加**结论与决策(一个专题一个档案, 不另新建)。
+- **设计轮(已闭环)**: `_brief.md` 调研简报(唯一输入: 现状实现地图 / 令牌 / 产出规格) → 15 份编号模板 01-15 → 汇总报告(论证 + 逐页推荐) → Playwright 真机质检。
+- **实施轮(进行中)**: 用户拍板后已出实施计划 [26-10-06-0838](../plans/26-10-06-0838-plan-webui-detail-panel-redesign.html)(注册表 + 宿主 + 经典兜底, S0-S7, 拍板点 P-01…P-06, doc-status Open); 拍板点定案后按计划 S1-S7 实施, 实施会话在本档案追加结论与决策。
 
 ## 子任务状态表
 
@@ -38,10 +40,12 @@
 | 2 | 15 份编号模板 01-15(五页 × 三方向, 三档高度切换) | Done |
 | 3 | 汇总报告 26-10-06-0723(收起论证 + 逐页推荐, reports/_index.md 已登记) | Done |
 | 4 | 质检: Playwright 真机逐份三档+交互全过; 修 01-12 缺 `[hidden]` 规则 | Done |
-| 5 | 用户逐页选型(拍板) | Open |
-| 6 | 实施轮: 另立 plan + drawer.html/drawer.js/三皮肤 CSS | Open |
+| 5 | 用户选型拍板 | Done(26-10-06 拍板: 15 套全量实施可切换 + 挂载点最少 + localStorage 记忆) |
+| 6 | 实施轮: 实施计划 26-10-06-0838 | In Progress(计划已出 doc-status Open, 待拍板点定案开工 S0) |
+| 7 | S1-S7 实施(核心骨架 → 五页签变体 → 收口) | Open |
 
 ## 进度日志
 
 - **2026-10-06 07:23 设计轮完成**: 15 份模板 + `_brief.md` + 报告 26-10-06-0723 全部就位, 报告登记进 `reports/_index.md`(kb.index 已重建)。零代码改动(未动 `src/` / `config`), 未 commit 等用户指令。
 - **2026-10-06 07:5x 收尾 DoD**: 新建 activeContext 切片 `26-10-06-0751-webui-detail-panel-design.md` + 本档案; 报告补 `doc-refs` 反向声明闭环认领链; `kb.docmap --check` 绿(456 份 / 250 专题, 双向闭环; `--topic webui-detail-panel-redesign` 归组报告 Done + 档案 In Progress); test.full **豁免**(零代码改动, 现役基线 `26-10-06-0713` 不变), 改跑 `test.one tests/test_memory_bank.py` 验 KB 守卫 **32 passed**。
+- **2026-10-06 08:38 拍板 + 实施计划出稿**: 用户拍板 15 套全量实施可切换、挂载点尽量少、选择存 localStorage(取代报告 §6「逐页选型」路径)。通读报告 + 抽读 drawer.js(1326 行)/drawer.html(286 行)/三皮肤 manifest/app.js 恢复通道/qb_traffic_chart.js 宿主解析后, 出实施计划 [26-10-06-0838](../plans/26-10-06-0838-plan-webui-detail-panel-redesign.html): 注册表 + 宿主 + 经典版兜底架构, 常驻挂载 5 文件约 25 行 + 每变体 1 文件 + 3 行 manifest, S0-S7 分步, 拍板点 P-01…P-06 各带推荐案(含: 初装默认 classic / 06 倒计时全局近似 / 13 注解层省略 / 09 封禁钮省略(已核实后端无 peer 封禁端点) / 14 联动静态 / 摘要条压 44px)。报告 meta 补计划反向声明(仅机械面), 本档案登记拍板与计划。计划 doc-status **Open 待拍板**, 未动任何产品代码, 未 commit。
