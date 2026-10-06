@@ -1,7 +1,25 @@
 # 渲染 / 静态资源 / 两套 UI
 
-> 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记。
-> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板
+> 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记、详情面板变体的通知驱动渲染。
+> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板
+
+### 变体渲染是通知驱动的: 状态翻转后必须补一发 _dtNotify, 否则停在旧态到下一拍轮询
+
+- **触发**: 改 drawer.js 列表 fetcher(trackers/files/peers)或任何被详情面板变体
+  (dt01~dt12)消费的响应式状态(2026-10-07 实测: 用户页空列表停"正在加载…"好几秒才翻到
+  空态)。
+- **判别**: 变体不是 Vue 组件 —— **只在收到 `_dtNotify` 时重渲染**(`_dtSync` 挂载时
+  渲染一发, 之后全靠通知)。fetcher 原写法把 `_dtNotify` 放 try 块(数据落袋处), 而
+  `xxLoading = false` 在 finally —— 通知那一刻 loading 还挂着, 空列表变体渲染出"正在
+  加载…", 随后 loading 清掉但**没有通知** ⇒ 停在旧态, 要等下一拍 5s 轮询的下一发通知才
+  翻到空态。经典包裹层走 Vue 响应式无此窗口, 所以只在变体皮肤下复现; 后端接口毫秒级,
+  与网络无关。非空列表同样中招的场景: 状态只翻转、数据不变的分支(错误清 toast 后的
+  loading 复位)。
+- **处置**: 通知一律放 finally、**在 loading 清掉之后**(stale 响应仍不通知不落袋);
+  守阵 `test_web.py::test_drawer_tpl_registry_wiring` §4a 断言三 fetcher 内
+  `loading = false` 的位置先于 `_dtNotify`。给变体加新消费状态时同问一句: 这个状态翻转
+  的每条路径都有通知跟着吗。
+- **守阵**: `tests/test_web.py::test_drawer_tpl_registry_wiring`(§4a 次序断言)。
 
 ### Vue <transition> 接 JS 钩子做布局动画: 钩位/几何登记/迟到的 after 钩子三处静默坑
 

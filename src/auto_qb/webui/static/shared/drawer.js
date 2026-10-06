@@ -767,11 +767,16 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/trackers`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.trackers = Array.isArray(r) ? r : [];
-        this._dtNotify("trackers");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知
       } catch (e) {
         if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
       } finally {
-        if (!this._drawerStale(hash, seq)) this.drawer.trackersLoading = false;
+        // 模板核心层(计划 26-10-06-0838 S1)落袋通知放 finally: 变体(dt04/05/06)只在 _dtNotify
+        // 时重渲染, 通知必须发生在 loading 清掉之后 —— 否则空列表变体会停在"正在加载…",
+        // 等下一拍 5s 轮询才翻到空态(2026-10-07 报障: 用户页实测复现同一机理)
+        if (!this._drawerStale(hash, seq)) {
+          this.drawer.trackersLoading = false;
+          this._dtNotify("trackers");
+        }
         this._drawerDone("trackers", hash, seq);
       }
     },
@@ -782,11 +787,13 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/files`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.files = Array.isArray(r) ? r : [];
-        this._dtNotify("files");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知
       } catch (e) {
         if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
       } finally {
-        if (!this._drawerStale(hash, seq)) this.drawer.filesLoading = false;
+        if (!this._drawerStale(hash, seq)) {
+          this.drawer.filesLoading = false;
+          this._dtNotify("files");  // 通知在 loading 清掉之后(理由同 trackers, 变体 dt10/11/12)
+        }
         this._drawerDone("files", hash, seq);
       }
     },
@@ -797,11 +804,13 @@ window.AQB_DRAWER = {
         const r = await this.api(`/api/torrents/${hash}/peers`);
         if (this._drawerStale(hash, seq)) return;
         this.drawer.peers = r || { peers: [] };
-        this._dtNotify("peers");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知
       } catch (e) {
         if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
       } finally {
-        if (!this._drawerStale(hash, seq)) this.drawer.peersLoading = false;
+        if (!this._drawerStale(hash, seq)) {
+          this.drawer.peersLoading = false;
+          this._dtNotify("peers");  // 通知在 loading 清掉之后(理由同 trackers, 变体 dt07/08/09)
+        }
         this._drawerDone("peers", hash, seq);
       }
     },
