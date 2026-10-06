@@ -7,7 +7,7 @@
 
 ## 现状
 
-- **改动完成, 待提交**。改动面: `static/shared/tpl/torrents.html`(种子行) · `tpl/groups.html`(组行) · `tpl/shows.html`(集行 + 未识别行) · `shared/columns.js`(删 `isHit`) · `shared/filters.js`(组对象去 `hit` + 注释) · `shared/shows.js`(集对象去 `hit` + 注释) · `shared/decorate.js`(未识别行去 `hit`)。共 7 个源文件。
+- **改动完成**。改动面: `static/shared/tpl/torrents.html`(种子行) · `tpl/groups.html`(组行) · `tpl/shows.html`(集行 + 未识别行) · `shared/columns.js`(删 `isHit`) · `shared/filters.js`(组对象去 `hit` + 注释) · `shared/shows.js`(集对象去 `hit` + 注释) · `shared/decorate.js`(未识别行去 `hit`)。共 7 个源文件。
 - 验证: `node --check` 4 个 JS 全绿; `commands run test.full` **2689 passed + 4 skipped / 0 failed / 99% / 59.24s**(与上一条基线 26-10-07-0251 逐位持平, 本轮无测试增删; 既有守阵 `test_web.py::test_frontend_search_syntax_wiring` 仍绿 —— `filteredTorrents` 的 `hits.has(r.hash)` 过滤逻辑未动)。
 - 未验证面 / 残留风险: 未做真机 Playwright 冒烟(需真实 qB); 判据为模板静态读 + 类绑定消费者全量 grep —— 剩余 `search-hit` 绑定 = 组明细成员行 / 剧明细成员行 / 站点挂件 / 追剧剧行, 均有区分力。
 - 判据沉淀: 「行级高亮只在'同一容器里同时存在命中与未命中行'时才有信息量 —— 若行的保留条件本身等于命中条件, 高亮恒亮, 无区分」。

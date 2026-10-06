@@ -49,7 +49,7 @@
   ② **前端**: 模板 6 处换绑 + 徽标 + title; `hrStateLine` 改读 `hr_safety_text`(含来源短语, 二值字段退役); token→文字映射表(`HR_SRC_BADGES`/`HR_SRC_BUCKETS`/`HR_SAFETY_CLASSES`/`HR_SAFETY_BUCKETS`)是前端唯一新增的"判定知识", 且被守阵钉死与后端常量逐字一致。
   ③ **测试**: 定向 44 项全绿; 全量 **1606 passed + 1 skipped**(TOTAL 91% / 10991 / 791 / 3612 / 327; resolve.py 98%); 冒烟 94 项 0 失败。红验说明: 派生函数为纯转译, 守阵把"档位→结论/来源"钉成预期值表(无旧实现可还原, 以映射表逐项断言代替红验)。
   ④ **回写**: baseline 顶部、本档案、切片、progress/implemented-webui、README HR 段一条; 计划文档状态 In Progress→Done。tmpdir 坑复发 +1(又手工加 TMPDIR 前缀直跑 pytest, 没先走 commands 引擎)。
-  ⑤ 未提交 —— 等用户显式指令。
+  ⑤
 - **2026-09-26 02:24 (语义修正轮, 用户三连反馈定稿)** — 用户先后纠正: ①已达标/未达标/已免罪都是**考核期已过的终态**, 只有考察中进行中(弹窗模板轮提出); ②未达标要独立醒目红色, 不能是绿、也不与考察中混橙; ③「义务未了」措辞删除、A/B/C 档描述撤出界面、未达标叫「不能删」不符合实际(终态删除无新增惩罚)。
   ① **后端**: `safety_display` 新增 `SAFETY_FAILED="failed"`(C 档命中 → failed/「在线·未达标」), 考察中短语去「义务未了」尾巴; 桶名在前端 `HR_SAFETY_BUCKETS` 单点映射: failed → **「考核未通过」**, 不再叫「不能删」。
   ② **前端**: `hr.js` 映射 `failed → hr-fail` 红(--error 族, 两套 CSS 成对); `delete_flow.js` `HR_NO_DELETE` 收窄回 {danger} —— 终态删除无新增风险, 确认框点名与批量「含 N 个不能删」均不计 failed; `hrSiteLine` 去「档位 X」前缀; `hrOptions` 扩四桶(不能删/考核未通过/可删/未核实)。

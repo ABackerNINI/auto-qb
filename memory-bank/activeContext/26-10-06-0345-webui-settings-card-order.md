@@ -12,7 +12,6 @@
 
 ## 现状
 
-- 改动留在工作树未提交(等用户显式「提交」指令)。
 - 改动面: `src/auto_qb/config/schema/groups.py`(GROUPS 元组重排 + 两处注释) +
   `tests/test_web.py`(test_config_schema_endpoint 分组序列断言 + 注释)。
 - 未立 tasks/ 档案: 单轮小改, 2 文件, 未达立档阈值(≥3 源文件)。

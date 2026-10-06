@@ -30,6 +30,16 @@
   首次跑 test.quick 即被守阵 `test_generated_indexes_are_lf_only` 抓到 11 个 `_index.md` 残留(`eol=lf` 归一化下
   git status 不可见); `kb.index` 重建即绿。没翻到本条的原因: 本轮任务是纯文档编辑, 未走 git 前置路由;
   守阵报错自带处置配方, 拦截闭环成立。
+- **复发 +2 (2026-10-07)**: 同一根因换了个入口 —— **一次性清洗脚本**用 `Path.write_text(text, encoding="utf-8")`
+  写回 64 个**手写** `memory-bank/*.md`, 默认 `newline=None` 在 Windows 上按 `os.linesep` 把 LF 翻成 CRLF,
+  整批文件变 `w/crlf`; `.gitattributes` 归一化下 `git diff` **只显示改动行**(内容差异 84 行), 肉眼完全看不出来。
+  **暴露它的是 git 的警告行**「CRLF will be replaced by LF the next time Git touches it」—— 不是任何守阵
+  (守阵 `test_generated_indexes_are_lf_only` 只覆盖**生成物**, 手写文件没有对应守卫)。处置: 就地
+  `p.write_text(p.read_text(), encoding="utf-8", newline="\n")` 重写, 复核 `b"\r" in p.read_bytes()` 归零。
+  **为什么没命中**: 本条处置①的措辞是「**生成器**写盘点一律显式 `newline="\n"`」, 读起来像"只约束生成器";
+  而这次是**一次性脚本写手写文档**, 不在那句话的射程内 —— 判据其实是「**任何** `write_text` 都要显式
+  `newline="\n"`」, 与是不是生成器无关。**建议**: 写 md 类文件时 `newline="\n"` 当默认肌肉记忆, 别等守阵
+  (手写文件那条路没有守阵兜底)。
 
 ### 工具 shell 里 `git rebase --continue` / `commit --amend` / `merge` 一律带 `GIT_EDITOR=true`
 

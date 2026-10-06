@@ -58,7 +58,7 @@
   单标签六路径无回归；ok 模式双 UI **56 项 0 失败**、error 模式 **56 项 0 失败**；
   **红验**（摘掉标签 2 的 storage 监听）⇒ 缺陷如期复现 ⇒ 守阵钉得住；`pytest` **1062 passed**（未退化）。
   知识库回写：`pitfalls.md`（R10-09 条目加 ③ 多标签整份覆盖 + 判别法）、`modules.md`（列偏好写侧两约束）、
-  `testing.md`（冒烟 54→56）。issue 置 `Fixed` 并重建索引。**未提交**（用户未下触发词）。
+  `testing.md`（冒烟 54→56）。issue 置 `Fixed` 并重建索引。
 - **09-21 12:48** 用户反馈仍复现 ⇒ 失败分析(`memory-bank/reports/26-09-21-1248-column-prefs-fix-failure-analysis.html`)实测:
   显隐/列序已稳, 宽度另有通道(非手动页自适应 px 落盘/跨窗口互写)→ 二次修复入库 `6c1b7f4`;
   "隐藏列宽被抹"与结构脆弱性仍敞着。
@@ -72,7 +72,7 @@
 - **09-21 22:4x** 验证收口: 全量 `uv run pytest tests -q` **1142 passed**(39.88s, Windows); 冒烟双 UI
   **64 项失败 2 项**(均为既有「P0-3 乐观态落回真值」, 与列偏好无关), 新 4 场景(异视口互不吞+F3 /
   全自动页不落px / 隐藏列保宽 / v4→v5 迁移)双 UI 全 PASS。知识库回写: pitfalls(双轨铁律 + 指纹不可达)/
-  modules(列偏好持久化改写)/issue 状态日志。**未提交**(待用户触发词)。
+  modules(列偏好持久化改写)/issue 状态日志。
 - **09-24 04:0x** 用户把"浏览器重启后localStorage重置"写进 `想法.md` KNOWN BUGS 并要求修复 ⇒ **真因不在应用**:
   逐条核对(全仓无 `localStorage.clear()` / 唯一写入口 `persistPage` 只在用户操作时调 / 启动路径只读不写)
   后转去翻浏览器配置, 取证到 **Edge 与 Chrome 的 `Default/Preferences` 里各有一条**

@@ -148,7 +148,7 @@
   只 catch `OSError`, 抛异常会让 `channel._appid` 回退成 `WINDOWS_TOAST_APPID_FALLBACK` 打乱既有断言);
   ②替身必须支持 `with`(源码是 `with winreg.CreateKeyEx(...) as key:`)。其余注册表写入放行 ⇒
   autostart 的 Run 键测试行为不变。**复核**: 全量注册表台账只剩 Run 键(写+删), **AUMID 归零**;
-  1007 passed / 0 failed。**未提交**。
+  1007 passed / 0 failed。
 - 2026-09-18: 用户要求"将 sidefx_probe.py 机制加入测试" —— 普查探针是临时脚本(在 `%TEMP%`, 随会话消失),
   同类问题下次还得靠人肉发现, 于是固化成常驻守卫:
   ①新增 `tests/sidefx.py`: `SideFxRecorder` 记账器(patch 六类入口, **只记账不阻断**)+ 放行清单
@@ -163,7 +163,7 @@
 - 2026-09-18: **反向验证守卫不是摆设**: 临时加一个注入越界记录的测试文件 ⇒ pytest 退出码 1、
   打出"共 10 条, 越界 1 条 / POPEN 1 条越界 1 / !! POPEN: ['notify-send', ...]"台账; 验证后即删该文件。
 - 2026-09-18: 全量 **1015 passed / 0 failed**(基线 1007 + 8), 守卫全程生效且无误报;
-  `tests/sidefx.py` 模块 docstring 用 raw 字符串(避免 `\\?\` 触发 `SyntaxWarning`)。**未提交**。
+  `tests/sidefx.py` 模块 docstring 用 raw 字符串(避免 `\\?\` 触发 `SyntaxWarning`)。
 - 2026-09-18: **补 `LAUNCH` 类** —— 复查 `src/` 的启动类 API 时发现口子: `os.startfile`(开资源管理器) /
   `webbrowser.open`(开浏览器)/ `os.system` **不走 `subprocess`**, `POPEN` 抓不到; 而 `utils.open_path()`
   在 Windows 上就走 `os.startfile`, `/api/open-path` 能触达它。新增 `LAUNCH` 类, **放行清单为空**

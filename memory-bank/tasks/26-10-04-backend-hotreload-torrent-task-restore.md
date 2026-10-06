@@ -46,4 +46,4 @@
 - **2026-10-04 02:06** 用户指派认领, issue 置 In Progress, `kb.index` 重建。
 - **2026-10-04 02:30** 修复落地: `taskqueue.py`(+has_task, has_named 委托) / `rules_mod.py`(subscribe + _on_full_round + _create_torrent_tasks 幂等/immediate)。红验 3 用例坐实红后同用例转绿; 既有测试随行为变化同步 3 处(test_modules_p3 full_round 订阅者 1→2 / test_qbmanager 返回值 None→False / test_modules_p5 管线序 order 首元素 = full_round 补建)。
 - **2026-10-04 02:35** 闸门全绿: test.quick 2422 passed + 3 skipped(22.80s); test.full 2422 passed + 3 skipped(29.07s) 覆盖率 99%。issue 置 Done(修法/验证/数字回写 §07 修复后补充), 主题文档回写 3 份(main-loop.md 相位表 / core-runtime.md RulesModule 行 / rules-and-triggers.md 种子级任务创建), 基线切片 26-10-04-0230, progress/implemented-core.md 迁出, pitfall 家族(hot-reload-stale-bindings-derived-views.md)补第三段「换队列 ≠ 任务面自动跟进」。
-- 改动全部留在工作树等用户提交指令(未 commit/push)。
+- 改动随本专题入库。

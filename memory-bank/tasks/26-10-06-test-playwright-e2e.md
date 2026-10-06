@@ -14,7 +14,7 @@
 > 修复配置瑕疵/飘移, 将 playwright 整合进项目, 先做 A, 将 B 入池
 
 （第一轮为只读核查，结论：配置正确且可用 —— 三浏览器 6/6 全绿；第二轮为适配性分析；
-本轮为执行：修瑕疵/漂移 + 方案 A + B 入池。**用户未说「提交」，故未 commit / push**。）
+本轮为执行：修瑕疵/漂移 + 方案 A + B 入池。**用户未说「提交」，故/ push**）
 
 ## 思考过程与决策
 
@@ -105,7 +105,7 @@
   `git ls-remote gitee refs/heads/develop` 核实远端 == 本地 HEAD。
   闸门跑在 rebase **之前** ⇒ 补跑合并态 `test.full` = **2676 passed + 4 skipped / 99% / 75.06s**
   （新基线 `26-10-06-0619`；+14 全部来自并入的 `825e5221`/`2119931d`，本次零 Python 改动）。
-- **未提交（提交后回写 —— 提交 hash 只能在提交后才知道）**：本条更正 + 新基线 `26-10-06-0619` ⇒
+- 本条更正 + 新基线 `26-10-06-0619` ⇒
   按本仓库惯例随下一次「提交」一并带上。
 - ~~**本地在 AI 工具 shell 里跑 `dev.e2e` 会挂死**~~ —— **已修**（2026-10-06 05:5x，新增 `e2e/global-teardown.mjs` + 配置挂 `globalTeardown`）：工具 shell 里 `commands run dev.e2e` 实测 **14.8s / exit 0**、打印 `4 passed (12.3s)`、8137 无 `LISTENING`、无残留 `ui_harness` 进程。原记的"环境限制无法在配置层修掉"是**误判**，已在 `pitfalls/testing/playwright-teardown.md` 更正。
 - 方案 B 不修，已入池。

@@ -17,7 +17,7 @@
 
 ## 现状
 
-- **修复完成, 待提交**。改动面: `src/auto_qb/core/traffic_store.py`(格式化/解析/类型/
+- **修复完成**。改动面: `src/auto_qb/core/traffic_store.py`(格式化/解析/类型/
   docstring 契约) · `src/auto_qb/core/modules/traffic_sample_mod.py`(`_apply_interval` 浮点
   化 + BlockBuffer/`_effective_interval` 类型) · 两测试文件(新增 2 例 + 重钉 1 例) ·
   本切片 · 基线切片 · v3 档案进度日志 · keys.md sample_interval 行 · `kb.index` 生成物。

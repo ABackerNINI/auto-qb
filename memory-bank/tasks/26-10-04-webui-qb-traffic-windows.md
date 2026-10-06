@@ -3,7 +3,7 @@
 **Status:** Done
 **Added:** 2026-10-04
 **Updated:** 2026-10-04
-**Summary:** 用户要求流量图添加 1/5/30 分钟、3/6/12/24 小时视图(与 qB 速度图窗口对齐)外加 3/7 天视图, 组/种子流量图同样。后端 `WINDOW_SPECS`/`WINDOW_NAMES` 扩为十档(1m/5m/30m/3h/6h/12h/24h 消费 raw 段桶宽=采样间隔; 3d/7d/30d 消费 hour 段桶宽恒 3600s, 零存储改动), 前端抽屉窗口按钮组 2→10 档 + `qbWindowLabel` 紧凑文案 + `_qbTickLabel` 三族刻度(1m/5m 标到秒, 3d/7d/30d 标日期, 其余标时刻)。test.full 2442 passed + 4 skipped / 99%(基线 26-10-04-0458)。改动留工作树未提交, 等用户显式提交指令。
+**Summary:** 用户要求流量图添加 1/5/30 分钟、3/6/12/24 小时视图(与 qB 速度图窗口对齐)外加 3/7 天视图, 组/种子流量图同样。后端 `WINDOW_SPECS`/`WINDOW_NAMES` 扩为十档(1m/5m/30m/3h/6h/12h/24h 消费 raw 段桶宽=采样间隔; 3d/7d/30d 消费 hour 段桶宽恒 3600s, 零存储改动), 前端抽屉窗口按钮组 2→10 档 + `qbWindowLabel` 紧凑文案 + `_qbTickLabel` 三族刻度(1m/5m 标到秒, 3d/7d/30d 标日期, 其余标时刻)。test.full 2442 passed + 4 skipped / 99%(基线 26-10-04-0458)。
 
 **Topics:** torrent-traffic-stats
 

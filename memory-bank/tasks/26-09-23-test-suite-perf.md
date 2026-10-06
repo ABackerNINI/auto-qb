@@ -133,7 +133,7 @@ PowerShell 的 `Get-MpComputerStatus` / `Get-MpPreference` 也无输出 ⇒ **�
 - **新坑入档**: [../pitfalls/testing/perf-measurement.md](../pitfalls/testing/perf-measurement.md) 四条 ——
   ①本机文件操作固定开销是耗时支配项 ②判断单项优化收益不能看全量总时 ③并发污染下的数字一律是假的
   ④批量替换 `node --check` 的语义坑。
-- **实测(空载单进程, 未提交)**: 全量 `1191 passed + 1 skipped`(与基线收集数一致, 未增删用例),
+- **实测(空载单进程)**: 全量 `1191 passed + 1 skipped`(与基线收集数一致, 未增删用例)
   TOTAL 91%; 同一条命令多次实测得 **62~114s**(中位约 75s, 极差 1.8 倍)⇒
   **耗时基线改为区间口径**, 逐次数字只枚举在 `baseline.md` 一处。
   sidefx 台账 2036 条 / **越界 0**; 探针实测临时目录"建 577 个, 收尾残留 2 → 1";

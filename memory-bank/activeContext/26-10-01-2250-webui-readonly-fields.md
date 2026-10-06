@@ -1,4 +1,4 @@
-# webui-readonly-fields — issue 2135 实施完成(待提交)
+# webui-readonly-fields — issue 2135 实施完成
 
 > 摘要: 认领实施 issues/26-09-28-2135(WEBUI 设置页只读字段)已全部完成, 待 ship.commit 入库。
 > 触发: 只读字段, 程序托管, readonly, issue 2135, 设置页

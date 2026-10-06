@@ -22,7 +22,7 @@
 
 ## 思考过程与决策
 
-- **编排策略**: 主会话只委派与总结; 计划轮一个子代理完成(调研 + 计划产出一体, 免跨代理上下文搬运); 实施轮按阶段串行派发, 强关联合并进同阶段, 单阶段工作量可控防长任务; 代码阶段每阶段独立提交(ship.commit), 文档轮不提交等指令; 子代理异常失败 3 次停手。
+- **编排策略**: 主会话只委派与总结; 计划轮一个子代理完成(调研 + 计划产出一体, 免跨代理上下文搬运); 实施轮按阶段串行派发, 强关联合并进同阶段, 单阶段工作量可控防长任务; 代码阶段每阶段独立提交(ship.commit), 文档轮不提交随本专题入库; 子代理异常失败 3 次停手。
 - **计划轮结论**(子代理调研, 详情见计划文档): 5 决策点推荐 —— ①覆盖式弹窗(复用 modal 基建, 状态随节点保留; 内嵌全屏侵入大) ②"毕业"用户可见 4 处全改 + 注释 6 处保留 ③做种中/老旧判定收后端单点 `local_present`(本地库存在含暂停, 暂停仍是义务对象) ④三列结构化(档位徽章 / 核实结论徽章+副行 / 在列徽章+最近被见到副行) ⑤折叠后首次展开才拉数(运行日志 hubLogsToggle 先例)。
 - **关键现状**: 排序参考 `shared/sort.js` 三态 setSet(首点降→再点升→复默认), 箭头在 torrents.html; 折叠先例 settings-detail.html:372-397 + config_hub.js:399-406; 本地 join 原料 routes/hr.py 闭包内 manager.store.by_hash; "毕业"可见 4 处(status.py:66 / resolve.py:234,350 / events.py:109) + 注释 6 处 + 测试钉 2 处; ESC 关闭需与 26-10-02-1632(ESC 清筛选)核对作用域优先级; 三套 UI CSS 成对改(守阵锚 aqb:hr-detail-table / aqb:hr-diag 可复用)。
 
@@ -69,4 +69,4 @@
   - **B3 核实结论中间态**. 后端刻意「命中不写 verified」(防伪, 守阵 test_hr_service.py:744/748), 无记录 + 行在列 + 终态档(B/C/D)显「未核实」掩没「已达标」⇒ 前端新增中间态「在列·<档位人话>」(蓝) + 副行「站侧已定论, 行未移出」。**后端零改动**, 只消费现状字段(verified_source/lane/lane_text/active); 新增模块级 `hrsTerminalLane` 判据(仅展示). 严守「切勿改成命中即写 verified」。
   - **C1 wave_ts 跨波冻结(真 bug)**. service.py:522 `wave_ts = prev.wave_ts if prev.ok else 0.0` + 每波 `if st.wave_ts <= 0` 置一次 ⇒ 连续 ok 档 wave_ts 永停进程内首成功波, 违背 model.py:319「本档最近一波完成取的时刻」, 缺席证明新鲜度闸(service.py:1406-1407 `anchor.added_on > st.wave_ts`)用陈旧基准 ⇒ 近几天新加种子拿不到「未列出」批量放行。修法 = 置 0 不跨波继承(本波重算首页时刻); 方向安全(只让合法放行发生, 不新增误放行 —— 缺席仍须本波位置覆盖, 判据在 cutoff_done 非 wave_ts)。新增回归 test_wave_ts_refreshes_every_wave_not_frozen(变异验证: 还原旧码即红)。
   - **未做**: A1 设计确认项(零对象稳态拉长间隔, 产品取舍) / C3(30 天静默淘汰预告) 未动, 仍等指派。
-  - 测试: `test.full` **2417 passed + 3 skipped / 99%**(37.22s); 基线切片 [testing/baselines/26-10-03-2348-hr-display-defects-b234-c1](../testing/baselines/26-10-03-2348-hr-display-defects-b234-c1.md)。回写件留工作树, 等「提交」指令。
+  - 测试: `test.full` **2417 passed + 3 skipped / 99%**(37.22s); 基线切片 [testing/baselines/26-10-03-2348-hr-display-defects-b234-c1](../testing/baselines/26-10-03-2348-hr-display-defects-b234-c1.md)。回写件留工作树

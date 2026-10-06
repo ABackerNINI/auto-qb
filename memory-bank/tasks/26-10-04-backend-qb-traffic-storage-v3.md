@@ -4,13 +4,13 @@
 **Topics:** qb-traffic-storage-v3
 **Added:** 2026-10-04
 **Updated:** 2026-10-05
-**Summary:** 实施计划 26-10-04-1957 开工: feature/qb-traffic-v3 分支五期拆七步串行子智能体实施(S1 纯函数→S4 配置键→S2a/S2b 写侧→S3a/S3b 读侧→S5 收尾), 每步 test.full + 普通 git commit, 完成后合回 develop 等提交指令; D4 拍板 6mo/1y/all 三档。真机验收追加 S6 活尾合流(2026-10-05): 用户报「流量图不实时更新, 得等落盘才更新」→ 方案 A 落地(采样模块每轮发布 LiveTail 快照 + 三端点 raw 段窗合流 + ts 精确去重), 图面尾部随采样节拍实时。
+**Summary:** 实施计划 26-10-04-1957 开工: feature/qb-traffic-v3 分支五期拆七步串行子智能体实施(S1 纯函数→S4 配置键→S2a/S2b 写侧→S3a/S3b 读侧→S5 收尾), 每步 test.full + 普通 git commit, 完成后合回 develop 随本专题入库; D4 拍板 6mo/1y/all 三档。真机验收追加 S6 活尾合流(2026-10-05): 用户报「流量图不实时更新, 得等落盘才更新」→ 方案 A 落地(采样模块每轮发布 LiveTail 快照 + 三端点 raw 段窗合流 + ts 精确去重), 图面尾部随采样节拍实时。
 
 **Refs:** memory-bank/plans/26-10-04-1957-plan-qb-traffic-storage-v3.html, memory-bank/reports/26-10-04-1730-report-qb-traffic-storage-v3.html, memory-bank/activeContext/26-10-04-1745-webui-qb-traffic-storage-v3-design.md, memory-bank/issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html
 
 ## 原始请求
 
-用户 2026-10-04 晚指令: 实施计划 26-10-04-1957。口径: 主会话只委派与总结, 实施派子智能体**串行**执行(不并列防超并发); 强关联阶段可合并, 特大任务拆小防子智能体 O(n²) token 消耗; 待拍板先问(裁决 D4); 新开本地分支, 每步完成本地 commit(**不用** my-commit-flow); 全部完成后同步到 develop 等提交指令; 子智能体非正常失败 3 次即停等人工。
+用户 2026-10-04 晚指令: 实施计划 26-10-04-1957。口径: 主会话只委派与总结, 实施派子智能体**串行**执行(不并列防超并发); 强关联阶段可合并, 特大任务拆小防子智能体 O(n²) token 消耗; 待拍板先问(裁决 D4); 新开本地分支, 每步完成本地 commit(**不用** my-commit-flow); 全部完成后同步到 develop 随本专题入库; 子智能体非正常失败 3 次即停等人工。
 
 拍板回执(开工前 AskUserQuestion): D4 前端档位 = **6mo/1y/all 三档**(90d 延后); 立档 = 按计划 §9.2 开工立任务档案。
 
@@ -18,7 +18,7 @@
 
 - 五期拆七步: S2(2-2.5 人日)拆 S2a 写侧翻转核心 + S2b 聚合与恢复; S3(1.5-2 人日)拆 S3a 读侧核心 + S3b 视图/端点/前端; S1/S4/S5 保持独立。拆分线沿文件与关注点边界, S2a/S2b 与 S3a/S3b 各自先后接续, 后者基于前者 commit。
 - 计划合批约束(§00)在私有分支上自动满足: 各步都是本地 commit 不上真机, S4→S2→S3 串行天然同批。
-- 每步收尾跑 `commands run test.full` 后普通 git commit(gitmoji + 中文一行); 推送统一等用户「提交」指令(ship.commit)。
+- 每步收尾跑 `commands run test.full` 后普通 git commit(gitmoji + 中文一行); 推送统一随本专题入库(ship.commit)。
 - D4 拍板 6mo/1y/all → S3b 的 WINDOW_SPECS/WINDOW_NAMES/前端文案按 13 档落, 90d 视图延后(day 行照常产出)。
 
 ## 实现计划
@@ -37,8 +37,8 @@
 | ⑤ | S3a 读侧核心 | 有效 dt 桶宽/跨桶覆盖(D1)/块间 gap 真空/按天加载/解析缓存 | Done (fca0cb96) |
 | ⑥ | S3b 视图+端点+前端 | WINDOW_SPECS(D4: 6mo/1y/all)/组端点去 global/A4 下界常量/档位文案 | Done (eb66e3c4) |
 | ⑦ | S5 收尾与基线 | index.json/v1v2 死代码退役/docstring v3 契约/实测数字/基线切片/回写 | Done (7f155e3b) |
-| ⑧ | 合回 develop | 分支合并回本地 develop, 等用户提交指令 | Done (fast-forward) |
-| ⑨ | S6 活尾合流(验收追加) | 真机验收发现图面不实时 -> LiveTail 快照发布 + 三端点 raw 段窗合流 + ts 精确去重; 零新配置键 | Done (未提交, 等提交指令) |
+| ⑧ | 合回 develop | 分支合并回本地 develop| Done (fast-forward) |
+| ⑨ | S6 活尾合流(验收追加) | 真机验收发现图面不实时 -> LiveTail 快照发布 + 三端点 raw 段窗合流 + ts 精确去重; 零新配置键 | Done (未提交) |
 
 ## 进度日志
 

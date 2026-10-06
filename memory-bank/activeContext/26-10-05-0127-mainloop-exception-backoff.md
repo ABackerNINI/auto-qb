@@ -8,4 +8,4 @@
 ## 现状
 
 - issue Done, 认领链闭合。主循环异常语义: 意外异常退避一拍 (main_tick) 重试; StopIteration 重抛 (26-10-02-0442) / APIConnectionError 走 _reconnect_due 指数退避 / AutoQbError 穿透 —— 四类异常路径各有归宿, 互不重叠。
-- 改动未提交: src/auto_qb/core/qbmanager.py / tests/test_qbmanager.py + issue HTML + 基线切片 + 本切片, 等用户显式提交指令。
+- 改动面: src/auto_qb/core/qbmanager.py / tests/test_qbmanager.py + issue HTML + 基线切片 + 本切片

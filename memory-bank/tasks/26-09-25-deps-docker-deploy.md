@@ -46,7 +46,7 @@
   - **P3**: cli.py 加 `import signal` + `_sigterm_to_keyboardinterrupt`(首信号后 SIG_IGN) + `_install_sigterm_handler`(注册失败静默), main() 参数校验后统一调用 —— handler 在主线程抛 KeyboardInterrupt, 关闭路径仍全在主循环线程, 不破单一写线程红线。test_cli.py 头部测试计划同步 +4 条。
   - **验证**: 全量 **1612 collected: 1611 passed + 1 skipped**(+4), 91% 覆盖率, 17.5s —— 无回归; dev.fmt 已跑。
   - **坑**: ①minimal.yml 本身已过不了当前 fail-fast 校验(`add_episode_tags: true` 旧形态, 现要求字典) —— 抄它当底子直接翻车, 已记 `pitfalls/docs/drift.md`; minimal.yml 的修复属计划外, **未动, 报告交用户决定**。②计划外发现: `.dockerignore` 不能排除 README.md/LICENSE(同上 hatchling 元数据)。
-  - **未做/待办**: 本机无 Docker Desktop, P1/P2/P3 的真机验收(build / compose up / docker stop)全部待用户在有 Docker 的机器执行; 体积/耗时数字未实测不回填计划文档; **未提交** —— 等显式提交指令。
+  - **未做/待办**: 本机无 Docker Desktop, P1/P2/P3 的真机验收(build / compose up / docker stop)全部待用户在有 Docker 的机器执行; 体积/耗时数字未实测不回填计划文档;
 - **2026-09-26 (minimal.yml 修复 + 示例守阵 + 提交)** — 用户令修复 minimal.yml: `add_episode_tags` 改字典形态(`enabled: true`), 过 load_config ✓ —— 注意旧布尔写法在 schema 改版后被静默解析成**关**(enabled 默认 false), 不只是校验红。用户令补示例守阵: test_config.py +2 条(minimal 开箱语义 + docker 示例容器契约字段), minimal 守阵红验过(HEAD 旧形态 → 红)。全量 **1614 collected: 1613 passed + 1 skipped**, 91% 覆盖率, 17.0s。用户令提交: ✨ 一笔入库(gitee/develop), 知识库旗标随主提交更新。剩余待办不变: Docker 真机验收。
 
 - **2026-09-26 01:33 (真机验收 + 缺陷修复 + 文档重写)** — 用户令「验证 docker 部署」(全功能关闭, 连真实 qB 127.0.0.1:16585), 后令「清理现场 / 修复问题 / 重写部署文档」。
@@ -56,7 +56,7 @@
   - **修复③凭据防护**: `config/`(docs 指引的部署配置目录, 含真实 qB 凭据)补进 .gitignore —— 此前 git 可见, 一次 `git add -A` 即泄漏。
   - **文档**: docs/deployment.md 重写为 14 节完整手册(架构/前置/快速开始/配置详解含 qB 地址三案与 web.enabled↔healthcheck 耦合/验证清单/运维/升级回滚含 state 兼容警告/备份迁移/健康检查语义/退出码与重启行为/宿主差异/安全/排障速查含 Git Bash 路径坑/实测基线); docker/config.example.yml 的 web.enabled 注释补耦合后果。
   - **坑**: ①Git Bash 把 docker 的**容器内**路径参数也做 POSIX→Windows 转换(`cat /data/web.token` 变 `D:/Program Files/Git/data/...`), `MSYS_NO_PATHCONV=1` 解 —— 已记 pitfalls/ops/msys-container-path.md; ②手工子集跑 pytest 裸 `uv run pytest` 又踩 TMPDIR 坑(复发, 见该条)。
-  - **现场**: 容器/卷/网络已 `down -v` 清空, 临时 fail-fast 配置已删; 仓库余 config/config.yml(已 gitignore, 用户可留作即用配置)。**未提交** —— 等显式提交指令。
+  - **现场**: 容器/卷/网络已 `down -v` 清空, 临时 fail-fast 配置已删; 仓库余 config/config.yml(已 gitignore, 用户可留作即用配置)。
 
 
 - 2026-10-04 18:41 — 状态 In Progress → Done：P1–P3 全部交付 + 2026-09-26 真机验收通过(build 223s/252MB、up→healthy 12~21s、stop rc=0、91 种子库零写入); docs/deployment.md 已重写为完整操作手册。

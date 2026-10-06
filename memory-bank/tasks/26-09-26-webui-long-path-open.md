@@ -116,7 +116,7 @@ WebUI 的同步端点在 anyio/uvicorn 的线程池 worker 里跑, 而 Python �
 | `routes/fs.py` 前缀化 | Done | `_bare`/`_fs`/`_fs_real` 三 helper 提为**模块级**(便于跨平台单测); 全部 syscall 过 `_fs`; 前缀不进 JSON |
 | LAUNCH 守阵扩展 | Done | `tests/sidefx.py` 收录 `utils._win_shell_open`, **且只在 `is_windows()` 时记账**(否则直接调它的单测会被判假阳性) |
 | 测试更新与新增 | Done | `test_utils.py` 6 条 + `test_web.py` 2 条; 平台分支一律 `monkeypatch sys.platform`; 三文件头部测试计划清单已同步 |
-| 收尾(闸门 + 协议产物) | Done | 退役最老切片(待拍板项先蒸馏进 `想法.md`)后 `test.full` **1673 passed + 1 skipped / 0 红**, 覆盖率 91%; 新建 `pitfalls/backend/windows-long-path.md` + 复发 +1; 5 份文档回写; 基线切片 `baselines/26-09-26-1946-webui-long-path-open.md`; 已提交 `db0993c` + `7bea270` 并推送(**本档案自身未提交**, 见下) |
+| 收尾(闸门 + 协议产物) | Done | 退役最老切片(待拍板项先蒸馏进 `想法.md`)后 `test.full` **1673 passed + 1 skipped / 0 红**, 覆盖率 91%; 新建 `pitfalls/backend/windows-long-path.md` + 复发 +1; 5 份文档回写; 基线切片 `baselines/26-09-26-1946-webui-long-path-open.md`; 已提交 `db0993c` + `7bea270` 并推送(**本档案自身**, 见下) |
 | 本档案入库 | pending | **受阻**: 提交本档案必须同时提交生成索引 `tasks/_index.md` / `_doc-map.md`, 而它们必然引用**同一 clone 并发会话**的 `webui-search-query-syntax` 件(4 个未提交文件) ⇒ 按用户「只提交你修改的」指令**暂缓**, 等那批件一起入库 |
 
 ## 进度日志
@@ -140,7 +140,6 @@ WebUI 的同步端点在 anyio/uvicorn 的线程池 worker 里跑, 而 Python �
   **真机端到端验证**: 修复后 `open_path(314 字符目录)` 与 `open_path(长文件, select=True)` 均正确开窗
   并指向目标目录(截图/窗口标题核对过, 探针与窗口已清理)。`test.full` 全绿; 新增
   `pitfalls/backend/windows-long-path.md`(四条坑 + 本条复发记录); 5 份文档事实回写; `kb.index` 重跑。
-  **未提交** —— 用户未说「提交」。
 - **2026-09-26 19:42 (闸门受阻: KB 切片容量)** — 复跑 `test.full`: **1672 passed / 1 skipped / 1 failed**,
   覆盖率 91%。唯一红是 `test_memory_bank.py::test_kb_active_context_slices_are_valid`:
   **切片数 41 > `SLICE_COUNT_LIMIT`(40)** —— 加本切片**之前已恰好 40/40**, 所以这是 KB 容量问题,

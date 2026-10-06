@@ -3,7 +3,7 @@
 **Status:** Done
 **Added:** 2026-10-05
 **Updated:** 2026-10-05 17:59
-**Summary:** 用户动议三项 —— ①流量图「视图选择」(时间窗口 13 档)记入 localStorage; ②种子流量图并入种子详情面板; ③缺口 = 缺快捷键。②经核对**当前代码已实现**(2026-10-04 三挂点并入底部详情抽屉, 种子详情已有「流量」页签, 三挂点共用同一段正文块与同一拖拽高度), 本轮实施 ①③。① 持久化粒度按用户拍板 = 全局单独一份 `autoqb.ui.qbWinGlobal` / 分组与种子共用一份 `autoqb.ui.qbWinShared`, 换窗即落盘刷新保持; 档位清单收成单点 `QB_WINDOW_NAMES`(与后端 `traffic_qb.WINDOW_NAMES` 逐字一致), 同时喂模板展示(`v-for="w in qbWindowNames"`, 去原先硬编码 13 档字面量)/前后切换/持久化校验。③ 三条快捷键: 打开全局图 `Ctrl+Backslash` / 详情面板流量页签 `Alt+5` / 窗口前后切换 `[` `]`(新增引擎 **`when` 条件绑定**: 仅 `qbTrafficActive` 时消费键位, 无图时不 preventDefault 留给浏览器)。改动 4 源文件 + 2 测试文件; 新增守阵 2 条红验通过 + 一次性 node 探针 22/22; test.full **2619 passed + 4 skipped / 99% / 44.2s**(基线切片 26-10-05-1759)。改动留工作树未提交, 等用户显式提交指令。
+**Summary:** 用户动议三项 —— ①流量图「视图选择」(时间窗口 13 档)记入 localStorage; ②种子流量图并入种子详情面板; ③缺口 = 缺快捷键。②经核对**当前代码已实现**(2026-10-04 三挂点并入底部详情抽屉, 种子详情已有「流量」页签, 三挂点共用同一段正文块与同一拖拽高度), 本轮实施 ①③。① 持久化粒度按用户拍板 = 全局单独一份 `autoqb.ui.qbWinGlobal` / 分组与种子共用一份 `autoqb.ui.qbWinShared`, 换窗即落盘刷新保持; 档位清单收成单点 `QB_WINDOW_NAMES`(与后端 `traffic_qb.WINDOW_NAMES` 逐字一致), 同时喂模板展示(`v-for="w in qbWindowNames"`, 去原先硬编码 13 档字面量)/前后切换/持久化校验。③ 三条快捷键: 打开全局图 `Ctrl+Backslash` / 详情面板流量页签 `Alt+5` / 窗口前后切换 `[` `]`(新增引擎 **`when` 条件绑定**: 仅 `qbTrafficActive` 时消费键位, 无图时不 preventDefault 留给浏览器)。改动 4 源文件 + 2 测试文件; 新增守阵 2 条红验通过 + 一次性 node 探针 22/22; test.full **2619 passed + 4 skipped / 99% / 44.2s**(基线切片 26-10-05-1759)。
 
 **Topics:** torrent-traffic-stats
 

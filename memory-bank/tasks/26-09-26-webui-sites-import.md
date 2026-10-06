@@ -47,7 +47,7 @@
   ② 前端：`config_hub.js` 新增 `hubImportSites()`（约 40 行），两套 UI 模板按钮成对加（`hb-pill` 样式与「＋ 新增站点」一致）。
   ③ 测试：首跑 2 红 —— 根因是替身 `torrents_info` 给了 dict 而 `collect_all_tracker_hostnames` 按 `tor.hash` **属性**取值，AttributeError 被 try/except 吞掉 → 扫描恒空；改 `SimpleNamespace(hash=...)` 后全绿（CLI 侧 FakeClient 无此问题，因其返回 FakeTorrent 对象）。
   ④ 验证：test_exporter + test_cli 33 绿；test_web 定向 7 绿、全文件 155 passed + 1 skipped；**全量 test.full 1623 passed + 1 skipped, TOTAL 92%**（10952 语句 / 785 未覆盖 / 3624 分支 / 326 partial）。
-  ⑤ 未提交 —— 等用户显式指令。
+  ⑤
 - **2026-09-26 (合流推送)** — 用户令「提交」。本地提交 `e3fb35d` 后发现远端 develop 领先 9 笔(多 clone 并行):
   按 pitfalls/git/history-integration「单提交重放」纪律 `cp -a .git` 备份 → `git merge-tree` 只读判冲突(4 处:
   README / baseline.md / baseline-history.md / _doc-map) → `git merge` 手工解冲突(README 同句并集; baseline 我方

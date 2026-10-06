@@ -7,7 +7,7 @@
 
 ## 现状
 
-- **修复完成, 待提交**。改动面: `.commands/test/config.toml`(test.one run 串 + when/note) · 事实回写 `memory-bank/testing/run.md`(命令段补「覆盖率闸只归全量」) 与 `memory-bank/pitfalls/testing/single-file-coverage-gate.md`(处置段记 test.one 已内置 + 复发 1→2) · issue 状态回填 (Open → In Progress → Done + §05 实际修法/验证) · 本切片 · 基线切片 · `kb.index` 重建生成物。
+- **修复完成**。改动面: `.commands/test/config.toml`(test.one run 串 + when/note) · 事实回写 `memory-bank/testing/run.md`(命令段补「覆盖率闸只归全量」) 与 `memory-bank/pitfalls/testing/single-file-coverage-gate.md`(处置段记 test.one 已内置 + 复发 1→2) · issue 状态回填 (Open → In Progress → Done + §05 实际修法/验证) · 本切片 · 基线切片 · `kb.index` 重建生成物。
 - 验证: 修复前复验 `commands run test.one -- tests/test_docs_forms.py` → `11 passed in 4.42s` 同屏 `FAIL Required test coverage of 98% not reached. Total coverage: 18.52%`(现象仍在, 防过期原则第 5 条); 修复后 → `11 passed in 1.50s`, 无覆盖率 FAIL。全量 `test.full` 2603 passed + 4 skipped / 99% / 50.03s。
 - 未验证面 / 残留风险: 裸跑 `uv run pytest tests/x.py -q` 不经 task, 仍会撞该假红(手工 `--no-cov`) —— 坑档保留此半边判据。
 - 判据沉淀: 「覆盖率闸只归全量收集面, 部分运行不背全库闸」写进 run.md 命令段 + task note; 坑档 single-file-coverage-gate 处置段更新为「用 test.one 即免」。

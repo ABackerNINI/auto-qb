@@ -39,10 +39,11 @@ run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_doc_map.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_active_recent.py --check",
            "python <skill-dir:memory-bank>/scripts/gen_baseline_recent.py --check",
+           "python <skill-dir:memory-bank>/scripts/check_wording.py --check",
            "python <skill-dir:memory-bank>/scripts/timekit.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验 + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加)"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验 + 回写措辞守卫(tasks/ 与 activeContext/ 不得写「待提交」这类时点相对断言, 2026-10-07 加; 判据单点在 skill 的「回写措辞」节) + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加)"
 
 [tasks."kb.nav"]
 run     = ["python <skill-dir:memory-bank>/scripts/nav_server.py <args>"]

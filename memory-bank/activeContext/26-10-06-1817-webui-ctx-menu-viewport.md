@@ -16,7 +16,6 @@
 > ③全量 e2e **82 passed + 10 skipped / 0 failed**(2.9m); ④`test.full` 数字见基线切片。
 > 未采用建议修法的第二方案(无脑 `max-height + overflow-y`)作常态解: `overflow` 非 visible 的盒子会裁掉
 > `position:absolute` 的 flyout 次级面板(「更多操作」) —— 只作极矮视口的退化兜底, 且每次开层先复位。
-> **未 commit**(用户未说「提交」)。
 > 最后活动: 2026-10-06 18:25
 
 **Refs:** memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md, memory-bank/testing/baselines/26-10-06-1830-webui-ctx-menu-viewport.md
@@ -33,7 +32,7 @@
 
 ## 未闭环 / 下次注意
 
-- **未提交**: 改动与知识库回写在树上, 等用户显式「提交」。
+- 改动与知识库回写在树上
 - 本任务**未**动 e2e 里那条"挑上部行"的 arrange(W4 组选中导出)—— 修复后它不再必要, 但保留不影响结论,
   只把注释改成"已修 + 指向 CTX-fit"; 若后续要收窄对账面再动。
 - 同批入池的姊妹件未认领: `26-10-06-1717-question-webui-wide-row-click-landing`(宽行落点, 待拍板)与

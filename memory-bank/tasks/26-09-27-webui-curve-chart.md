@@ -3,7 +3,7 @@
 **Status:** Done
 **Added:** 2026-09-27
 **Updated:** 2026-09-28
-**Summary:** 用户报预览图三宗罪: 各档等宽不反映真实流量长度、悬停映射错位、图宽度不对。重构 `_buildCurveChart`: X 轴改**按各档实际流量长度比例分段**(取代 SPD-02 等宽), 末档与后端语义一致(`curves.py` X ≥ 末档下限后一直沿用末档速度, 末档阈值不改变速度函数)显示为 **∞ 区且占宽 ≤30%**(仅 1 档时独占全宽), 有限档分摊其余 70%; 末档阈值不再出现在几何里(无刻度/参考线)。悬停换算按 SVG 实际渲染缩放(letterbox 安全), tooltip 用真实像素定位; 根因之一是共享 `console_hub.css` 残留 `height:128px` 以特异性压过主题 aspect-ratio 把图压扁 —— 已删。流程按用户要求「先做模板调整好再应用」: 独立模板 5 用例浏览器实测全部验收点后, 再移植进真实代码并用真实 config_editor.js + vendor Vue 集成冒烟(含故意压扁容器的悬停回归用例)。test.full 1752 passed + 3 skipped / 91%, 与前基线持平零回归。未提交(等用户指令)。
+**Summary:** 用户报预览图三宗罪: 各档等宽不反映真实流量长度、悬停映射错位、图宽度不对。重构 `_buildCurveChart`: X 轴改**按各档实际流量长度比例分段**(取代 SPD-02 等宽), 末档与后端语义一致(`curves.py` X ≥ 末档下限后一直沿用末档速度, 末档阈值不改变速度函数)显示为 **∞ 区且占宽 ≤30%**(仅 1 档时独占全宽), 有限档分摊其余 70%; 末档阈值不再出现在几何里(无刻度/参考线)。悬停换算按 SVG 实际渲染缩放(letterbox 安全), tooltip 用真实像素定位; 根因之一是共享 `console_hub.css` 残留 `height:128px` 以特异性压过主题 aspect-ratio 把图压扁 —— 已删。流程按用户要求「先做模板调整好再应用」: 独立模板 5 用例浏览器实测全部验收点后, 再移植进真实代码并用真实 config_editor.js + vendor Vue 集成冒烟(含故意压扁容器的悬停回归用例)。test.full 1752 passed + 3 skipped / 91%, 与前基线持平零回归。
 **Topics:** webui-curve-chart
 **Refs:** resources/curve-chart-template.html, resources/curve-chart-smoke.html
 

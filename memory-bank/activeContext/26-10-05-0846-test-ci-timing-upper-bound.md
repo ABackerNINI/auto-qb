@@ -7,7 +7,7 @@
 
 ## 现状
 
-- **修复完成, 待提交**。改动面: `tests/test_traffic_grid.py`(计时口径 + 上界 + 函数 docstring + 文件头「## 测试计划」行) · `memory-bank/pitfalls/testing/timing-tolerance.md`(复发 +1 / 触发词扩容 / 守阵指到新测试) · `memory-bank/pitfalls/testing/_index.md`(`kb.index` 重生) · 本切片 · 基线切片。
+- **修复完成**。改动面: `tests/test_traffic_grid.py`(计时口径 + 上界 + 函数 docstring + 文件头「## 测试计划」行) · `memory-bank/pitfalls/testing/timing-tolerance.md`(复发 +1 / 触发词扩容 / 守阵指到新测试) · `memory-bank/pitfalls/testing/_index.md`(`kb.index` 重生) · 本切片 · 基线切片。
 - 验证: `commands run test.full` **2589 passed + 4 skipped / 99%**(40.29s / 51.84s 两次采样); 红验(临时把上界压到 1.0)→ 断言真触发, 实测 CPU **1.328s** 超上界; 复原 8.0 后回归绿。
 - 未验证面 / 残留风险: CI 侧复跑以 GitHub Actions 运行为准; 若仍偶发(8s 余量 ≈ 2x 于本次 CI 实测), 按坑档余量口径再抬, 或按仓库「刻意用计数不用计时」先例改为**计数守阵**(钉 O(桶 × 成员) 工作量)。
 - 不满足立档阈值(单文件小修), 无任务档案。

@@ -56,7 +56,7 @@
   属沿革旁白)。保留: `(3次事故)`(次数非日期)、「stash 舞蹈自提交路径退役」(判据由来, 只去日期)。
 - 追加删首行 `(Copilot/Codex/Cursor/Gemini CLI/Claude Code/ZCode/Trae通用)` —— 工具名单会过期, 「所有 AI
   编码代理的统一入口」已含其义。**6,596 → 6,538 字符**。
-- 机检: `doc.caps` PASS · `doc.drift` 0 处 · `test_memory_bank.py` **32 passed**。**未提交**。
+- 机检: `doc.caps` PASS · `doc.drift` 0 处 · `test_memory_bank.py` **32 passed**。
 
 ## 修锚点引文 (09:0x)
 

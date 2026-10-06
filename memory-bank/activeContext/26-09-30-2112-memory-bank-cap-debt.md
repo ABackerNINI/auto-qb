@@ -38,7 +38,7 @@
 - **① 切片 128 → 67**: 按 [cap-counting 坑档](../pitfalls/kb/cap-counting.md)「切片计数触顶的合法出口」删 61 片 —— 判据 = ①无入链(逐片 grep 精确文件名, 删后 `doc.links` 绿) 且 ②非「待拍板 / 待指派 / 待决策 / 待商榷」的开放决策片。未抬 `SLICE_COUNT_LIMIT`、未删活跃片。保留 = 有入链 51 + 开放决策 12 + 显式保留 4(`tracker-url-source-sanitize` 计划未开工·决策点待批 / `memory-bank-dir-refactor` 待拍板 / `ops-recheck-false-success` 等指派 / `qb-traffic-decimal-interval` 最新片) + `_about.md`。本轮 14 天规则**零命中**(最老片 26-09-23, 仅 12 天)。
 - **② `issues/_index.md` 26,260 → 20,620**: 走**渲染口径**而非外迁条目 —— 给 `gen_issues_index.py` 补 `SUMMARY_MAX = 40`(摘要截断, 与 `gen_tasks_index.SUMMARY_MAX` 同款), 正是切片 [26-10-01-2125-memory-bank-dir-refactor](26-10-01-2125-memory-bank-dir-refactor.md) 记的待拍板项。判据: 133 条**无摘要**也才 14,790 字符 < cap ⇒ 是摘要(11,470 字符)把索引顶爆的, 条目数本身没撑爆 cap ⇒ 按坑档「先查渲染口径」不搬条目(外迁会打坏外部引用)。未达 50% 线(12,600)属该文件性质(index-auto 无可行收缩路径, 见 `CAP_POLICY` 注释), 现余量 4,580。
 - **③ `progress/implemented-webui.md` 21,172 → 9,407**: 按 `log` 轮转口径把最老 13 条(2026-10-02~10-04)原文外迁 → `implemented-webui-history.md`(44,494/48,000), 原位留一行指针; 顺带把历史文件**混合行尾归一 LF**(`.gitattributes` = `eol=lf`, 消掉 git 的「CRLF will be replaced」警告)。
-- 收口: `doc.caps` 债务 0 项 / `kb.check` / `doc.links` / `test.full` 全绿。**未提交**(等用户显式「提交」指令)。
+- 收口: `doc.caps` 债务 0 项 / `kb.check` / `doc.links` / `test.full` 全绿。
 
 ## 追加(2026-10-06): 清理轮 —— 切片 92 → 68 · issues 索引 25,598 → 23,170 · 第三项系口径误报
 

@@ -3,7 +3,7 @@
 **Status:** Done
 **Added:** 2026-10-04
 **Updated:** 2026-10-04
-**Summary:** 用户拍板交换上下行流量方向色(原 上行=teal 蓝绿 / 下行=indigo 紫 → 现 上行=indigo 紫 / 下行=teal 蓝绿), 覆盖历史流量图 / qB 流量图(种子·组·全局) / 状态栏今日统计 / 状态栏速度组图标; 速度组方向图标由全局绿/蓝统一到流量语义色(按 `.sb-spd` 作用域覆盖), 状态栏限速值改中性灰 `--fg-dim`(与做种要求值 `.m-pair .req` 同款)。改动 = 7 处令牌定义 + 3 皮肤 i-traffic 内联兜底 + `qb_traffic_chart.js` 兜底链 + 3 皮肤 `.sb-spd` 规则, 共 14 文件; test.full **2508 passed + 4 skipped / 99%**(基线 26-10-04-1722); 真浏览器三皮肤 30 断言全过。改动留在工作树, 等用户显式提交指令。
+**Summary:** 用户拍板交换上下行流量方向色(原 上行=teal 蓝绿 / 下行=indigo 紫 → 现 上行=indigo 紫 / 下行=teal 蓝绿), 覆盖历史流量图 / qB 流量图(种子·组·全局) / 状态栏今日统计 / 状态栏速度组图标; 速度组方向图标由全局绿/蓝统一到流量语义色(按 `.sb-spd` 作用域覆盖), 状态栏限速值改中性灰 `--fg-dim`(与做种要求值 `.m-pair .req` 同款)。改动 = 7 处令牌定义 + 3 皮肤 i-traffic 内联兜底 + `qb_traffic_chart.js` 兜底链 + 3 皮肤 `.sb-spd` 规则, 共 14 文件; test.full **2508 passed + 4 skipped / 99%**(基线 26-10-04-1722); 真浏览器三皮肤 30 断言全过。
 **Topics:** webui-traffic-color-swap
 **Refs:** memory-bank/testing/baselines/26-10-04-1722-webui-traffic-color-swap.md
 

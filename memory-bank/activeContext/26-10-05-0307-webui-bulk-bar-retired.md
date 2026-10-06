@@ -13,6 +13,6 @@
 
 ## 现状
 
-- 全部实施完成(单会话), 改动留在工作树未提交, 等用户显式提交指令。
+- 全部实施完成(单会话)
 - 改动面: 1 模板(topbar.html) + 6 CSS + 7 JS + 1 冒烟脚本(ui_smoke.cjs) + tests/test_web.py + conventions/webui.md + testing/smoke.md + 本切片/档案/基线。
 - 待用户侧动作: 真机走查(三皮肤: 选中行右键出批量菜单 / Esc 清选择) + 提交。

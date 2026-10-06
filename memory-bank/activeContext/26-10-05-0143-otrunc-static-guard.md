@@ -9,4 +9,4 @@
 
 - issue Done, 认领链闭合: 1347 (web.token 非原子写) → 26-10-01-2151 (hr.token 修法 bc24631b) → 清零条件达成 → 守阵落地 (本条)。此后 src 再现 O_TRUNC 直写 = 守阵红, 唯一合法写盘单点 `utils.atomic_write`。
 - 收尾补登记 (01:48): 既有守阵 `test_no_ghost_pkg_dirs` 建档时漏登记, 按用户指派补进 guards.md 新节「src 结构卫生」(全 src 静态扫描); O_TRUNC 守阵登记位置不动, issue/切片里的节名引用保持有效。
-- 改动未提交: tests/test_no_o_trunc_write.py / memory-bank/testing/guards.md / issue HTML / 基线切片 / 本切片, 等用户显式提交指令。
+- 改动面: tests/test_no_o_trunc_write.py / memory-bank/testing/guards.md / issue HTML / 基线切片 / 本切片

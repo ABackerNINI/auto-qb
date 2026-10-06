@@ -7,7 +7,7 @@
 
 ## 现状
 
-- **修复完成, 待提交**。改动面: `src/auto_qb/webui/static/shared/qb_traffic_chart.js`(openDrawerTraffic 短路 + 块注释口径) · `tests/test_web.py`(守阵第 5 锚 + docstring 补第 5 类) · 坑档 drawer-switch-flicker 复发行 + 摘要/触发词扩充 · 本切片 · 基线切片 · `kb.index` 重建生成物。
+- **修复完成**。改动面: `src/auto_qb/webui/static/shared/qb_traffic_chart.js`(openDrawerTraffic 短路 + 块注释口径) · `tests/test_web.py`(守阵第 5 锚 + docstring 补第 5 类) · 坑档 drawer-switch-flicker 复发行 + 摘要/触发词扩充 · 本切片 · 基线切片 · `kb.index` 重建生成物。
 - 验证: `commands run test.quick` 2689 passed(两轮, 改码后与收尾各一); `commands run test.full` 2689 passed + 4 skipped / 99% / 34.43s。守阵锚点正则以改动后源码实文校验过。
 - 未验证面 / 残留风险: 未做真机 Playwright 冒烟(需真实 qB); 判据为静态锚 + 逻辑推演 —— 短路命中路径不触碰轮询/图/数据, 理论零观感变化。分组入口重复点击同 key 同样受益。
 - 判据沉淀: 「打开类入口要问重入同一目标会怎样 —— 已开着的东西再'打开'一次应当是零副作用, 不是重新表演一遍开动作」入坑档 drawer-switch-flicker 第四次复发行。

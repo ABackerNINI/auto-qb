@@ -38,7 +38,7 @@
 | 1 | P1 TrackerModule.apply + 单测 + 提交 | Done (`2a5d07a2`) |
 | 2 | P2 hr.revision 置脏 + 单测 + 提交 | Done (`e4df1fc0`) |
 | 3 | P3 桩走查(四时刻链路 + 回归两场景) | Done (PASS, 桩保真度局限已记) |
-| 4 | P4 收尾回写(pitfalls / 常青文档 / 切片 / 基线 / 计划标 Done) | Done (留工作区待提交) |
+| 4 | P4 收尾回写(pitfalls / 常青文档 / 切片 / 基线 / 计划标 Done) | Done (留工作区) |
 | 5 | 真机复核(需真实 qB 与扩展在线, 走计划 Step 4 场景) | Open |
 
 ## 进度日志

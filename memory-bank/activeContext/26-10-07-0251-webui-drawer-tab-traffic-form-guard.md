@@ -7,7 +7,7 @@
 
 ## 现状
 
-- **修复完成, 待提交**。改动面: `src/auto_qb/webui/static/shared/shortcuts.js`(_kbDrawerTab 开态判据 + 块注释口径) · `tests/test_web_shortcuts.py`(两处守阵锚点改形 + 新增流量形态锚 + docstring 测试计划同步) · 本切片 · 基线切片 · `kb.index` 重建生成物。
+- **修复完成**。改动面: `src/auto_qb/webui/static/shared/shortcuts.js`(_kbDrawerTab 开态判据 + 块注释口径) · `tests/test_web_shortcuts.py`(两处守阵锚点改形 + 新增流量形态锚 + docstring 测试计划同步) · 本切片 · 基线切片 · `kb.index` 重建生成物。
 - 验证: `commands run test.quick` 2689 passed(两轮, 中途锚点改形失败修复后复跑全绿); `commands run test.full` 结果见基线切片。
 - 未验证面 / 残留风险: 未做真机 Playwright 冒烟(需真实 qB); 判据为静态锚 + 逻辑推演 —— 流量形态开态下 Alt+1~5 现走与关态完全相同的 `openTorrentDrawer` 路径(该路径在流量图与详情面板互切场景已被 Enter/KeyI/双击长期使用)。
 - 判据沉淀: 「`drawer.open` 为真不等于种子详情形态 —— 三挂点并入抽屉后 open(开合)与 kind(形态)是两个正交维度, 操作抽屉内数据(页签/页签数据/hash 定向请求)的入口必须连 kind 一起判」。

@@ -19,4 +19,3 @@
 - 两条 issue 均 Open 未修: issue 1 待做方案 B 口径修正 + ensure_view 清账小修; issue 2 可认领（根因栏
   「dirty 集合 × 剧键派生」正确性论证仍是先决）。
 - runtime.py:499 注释漂移的处置待用户定: 一行注释修正, 或并入 issue 1 方案 B。
-- **未 commit（用户已指令提交, 进行中）**。

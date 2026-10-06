@@ -18,4 +18,4 @@
 ## 现状
 
 - issue Done: hr/service.py 时钟获取全量统一走 now_fn 注入, 全文件直调 time.time() 仅剩 :344 注入默认值。
-- 改动未提交: src/auto_qb/hr/service.py / tests/test_hr_service.py / issue HTML / 基线切片 / 本切片, 等用户显式提交指令。
+- 改动面: src/auto_qb/hr/service.py / tests/test_hr_service.py / issue HTML / 基线切片 / 本切片

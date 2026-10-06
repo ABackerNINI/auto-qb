@@ -6,7 +6,7 @@
 > 落地: 三皮肤 `css/views.css` 给 `.group-row > :first-child` 上 `position: sticky; left: 0` + 不透明底
 > (半透明状态用同色 `linear-gradient` 叠 `--bg-row` 合成); 表头 `.group-head` 在滚动容器之外, 首格用
 > `translateX(max(0px, calc(var(--head-pin-x) - 14px)))` 反向抵消, 由三处 `sync*HeadScroll` 写位移量。
-> 真浏览器实测: 横滚 400 后首格 `left` == 容器左缘, 表头首格同值。**未 commit**。
+> 真浏览器实测: 横滚 400 后首格 `left` == 容器左缘, 表头首格同值。
 > 最后活动: 2026-10-06 18:40
 
 **Refs:** memory-bank/tasks/26-10-06-webui-frozen-first-column.md, memory-bank/testing/baselines/26-10-06-1840-webui-frozen-first-column.md

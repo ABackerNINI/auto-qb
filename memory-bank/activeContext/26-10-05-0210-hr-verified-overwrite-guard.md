@@ -8,4 +8,4 @@
 ## 现状
 
 - issue Done, 守阵双保险: build 层(排除分支直接钉住) + 波次层(放行记录跨波不被覆写的语义级钉住)。未来任何重构破坏「unmatched 不含已 verified infohash」不变量, 两层任一即红。
-- 改动未提交: tests/test_hr_service.py / issue HTML / 基线切片 / 本切片, 等用户显式提交指令。
+- 改动面: tests/test_hr_service.py / issue HTML / 基线切片 / 本切片

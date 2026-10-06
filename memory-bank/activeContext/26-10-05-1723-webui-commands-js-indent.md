@@ -11,7 +11,7 @@
 
 ## 现状
 
-- **修复完成, 待提交**。改动面: `src/auto_qb/webui/static/shared/commands.js`(25 行缩进归位, 仅空白) ·
+- **修复完成**。改动面: `src/auto_qb/webui/static/shared/commands.js`(25 行缩进归位, 仅空白) ·
   本切片 · 基线切片 · `kb.index` 重建生成物。
 - 判别手法(可复用): 用脚本全文件扫缩进异常(奇数缩进 / 缩进跳变 >2 且上一行非开括号、非注释续行)复扫 0 条;
   `git diff -w` 为空即证纯空白; `node --check` 验语法。

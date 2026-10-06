@@ -7,7 +7,7 @@
 
 ## 现状
 
-- **S6 实施完成, 待提交**(develop @ 86441e54 + 工作区改动; 与 v3 主体的提交统一等用户「提交」指令)。改动面: `core/traffic_store.py`(LiveTail/LiveTailRun 契约 + v3_live_tail_slots 纯函数) · `core/traffic_grid.py`(v3_series_points 增 tail_slots 形参) · `core/modules/traffic_sample_mod.py`(live_tail 发布) · `webui/server/traffic_qb.py`(三端点 raw 段合流) · 四个测试文件(+7 守阵, 测试计划已登记)。
+- **S6 实施完成**(develop @ 86441e54 + 工作区改动; 与 v3 主体同批入库)。改动面: `core/traffic_store.py`(LiveTail/LiveTailRun 契约 + v3_live_tail_slots 纯函数) · `core/traffic_grid.py`(v3_series_points 增 tail_slots 形参) · `core/modules/traffic_sample_mod.py`(live_tail 发布) · `webui/server/traffic_qb.py`(三端点 raw 段合流) · 四个测试文件(+7 守阵, 测试计划已登记)。
 - 验证: `commands run test.full` **2596 passed + 4 skipped / 99% / 29.09+31.05s**(基线 [26-10-05-1007](../testing/baselines/26-10-05-1007-qb-traffic-v3-s6-live-tail.md); 相对本 clone 改动前真值(stash 往返实测)+7 用例 / +84 语句 / +34 分支)。镜像保证族守阵 `test_v3_live_tail_slots_mirror_identity_family` 钉死去重正确性根基; web 层端到端三态(纯活尾 → 滞后快照 → 快照清空)逐点一致。
 - ⚠ 26-10-05-0846 基线的绝对语句数(15576)在本 clone 不可复现(另一 clone 测得, danger-guards 提交哈希在 Gitee develop 上被重写; 本 clone 无 bcc2bce2 等对象)—— 本 clone HEAD 字面真值 15398 语句已实测钉住, 后续语句面对比以 1007 基线为准。
 - 已知留面(记录非缺陷, 已入池 [26-10-05-1015](../issues/26-10-05-1015-feat-qb-traffic-agg-live-buckets.html)): agg 段窗(3d/7d/30d/6mo/1y/all)仍纯磁盘 —— 未完结小时/日/月桶缺口(当前小时不出 3d 图 / 当日不出 1y 图 / 当月不出 all 图)未合流, 候选 S7 待用户拍板。

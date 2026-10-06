@@ -47,6 +47,12 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_timekit_guards_catch_three_layers: 文件名未来 / 坏「最后活动」/ 斜杠日期三种种子全逮住
 - test_timekit_body_ignores_code_and_paths: 正文层跳过代码上下文与路径标识符 (不误报)
 - test_timekit_check_is_green_on_current_kb: 存量 KB 零违规 (清洗完成后)
+
+回写措辞守卫 (检查器 memory-bank skill 的 `scripts/check_wording.py`, 2026-10-07 加):
+
+- test_wording_guard_is_green_on_current_kb: 存量 KB 零违规 (清洗完成后)
+- test_wording_guard_flags_status_but_exempts_dated_and_tree_state: 无日期状态行判红; 日期流水 / 树态 / 行内代码引述 / 豁免标记 都不报
+- test_wording_guard_is_wired_into_kb_check: 守卫已挂进 `kb.check` 的 run 列表 (不接线 = 没人跑)
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
 - test_kb_scripts_import_cleanly: skill 的脚本都能 import
@@ -580,7 +586,7 @@ def test_kb_scripts_import_cleanly() -> None:
         sys.path.insert(0, str(SKILL_SCRIPTS))
     for name in (
         "_common", "gen_tasks_index", "gen_kb_index", "gen_docs_index", "gen_all", "check_kb_structure",
-        "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit"
+        "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit", "check_wording"
     ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
@@ -774,3 +780,69 @@ def test_timekit_check_is_green_on_current_kb() -> None:
     problems = _timekit().collect_violations(ROOT, MB)
 
     assert not problems, "日期守卫违规 (取时走 `commands run kb.time`):\n" + "\n".join(problems)
+
+
+# ---------------------------------------------------------------------------
+# 回写措辞守卫 (2026-10-07, 口径单点在 skill 的「回写措辞」节)
+#
+# 为什么值得机检: `commit` 的 hash 由 tree + parent + 时间戳决定 —— 一个提交**永远无法包含自己的
+# hash**; 而 DoD 要求回写件随主提交一并暂存, 于是「待提交」写在 hash 尚不存在的时点, 提交一落地
+# 就变成假话。2026-09-27 审计 (reports/26-09-27-1547) 实证「靠收尾回扫修正」会失败: 切片停在
+# 「等待提交」而提交已完成。检查器同样**进程内 import** (本项目测试禁止起子进程)。
+# ---------------------------------------------------------------------------
+
+
+def _wording():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import check_wording
+
+    return check_wording
+
+
+def test_wording_guard_is_green_on_current_kb() -> None:
+    """存量 KB 零违规 (清洗完成后) —— 两个滚动更新面上不得再有「待提交」类时点相对断言。"""
+    problems = _wording().collect_violations(ROOT, MB)
+
+    assert not problems, ("回写措辞违规 (提交后必然过期; 改用时不变措辞「随本专题入库」或直接省去):\n" + "\n".join(problems))
+
+
+def test_wording_guard_flags_status_but_exempts_dated_and_tree_state(tmp_path: Path) -> None:
+    """五条边界各走一次: 无日期的状态行判红; 带日期流水 / 树态描述 / 行内代码 / 豁免标记 都不判红。
+
+    这些豁免不是"放松", 是判据本身: 带日期的条目**自带时点**(改写它是篡改日志);
+    `未提交改动` 是**树态描述**而非状态断言 (基线切片里 76 处这类合法用法);
+    行内代码要能**引述**被禁措辞 (元讨论 —— 口径文档 / 坑档 / 本档案自己都要写它)。
+    """
+    wording = _wording()
+    mb = tmp_path / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    (mb / "tasks" / "a.md").write_text(
+        "- 修复完成, 待提交。\n"
+        "- 2026-10-07 批 3 落地(改动留工作区待提交)。\n"
+        "- 工作树含本轮未提交改动。\n"
+        "- 口径禁写 `待提交` 这类断言。\n"
+        "- 改动待提交 <!-- wording:allow -->\n"
+        "- **未 commit**(用户未说「提交」)。\n"
+        "- 等用户显式指令。\n",
+        encoding="utf-8",
+    )
+
+    problems = wording.collect_violations(tmp_path, mb)
+    joined = "\n".join(problems)
+
+    assert len(problems) == 3, f"应恰好判红 3 条 (状态行 / 粗体标记 / 等指令): {problems}"
+    assert "待提交" in joined and "未 commit" in joined and "等…指令" in joined
+    assert "批 3 落地" not in joined, "带日期的历史流水条目必须豁免"
+    assert "工作树含本轮未提交改动" not in joined, "树态描述必须豁免"
+    assert "口径禁写" not in joined, "行内代码里的引述必须豁免"
+    assert "wording:allow" not in joined, "豁免标记行不得被判红"
+
+
+def test_wording_guard_is_wired_into_kb_check() -> None:
+    """守卫必须挂在 `kb.check` 的 run 列表里 —— 不接线 = 没人跑 (与 timekit 同款要求)。"""
+    cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    body = re.search(r'^\[tasks\."kb\.check"\]\n(.*?)(?=^\[|\Z)', cfg, re.S | re.M)
+
+    assert body, "kb/config.toml 里找不到 kb.check"
+    assert "check_wording.py --check" in body.group(1), "check_wording.py --check 未挂进 kb.check"

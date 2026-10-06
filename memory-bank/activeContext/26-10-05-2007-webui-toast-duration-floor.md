@@ -13,7 +13,7 @@
 
 ## 现状
 
-- **改动完成, 待提交**。改动面: `src/auto_qb/webui/static/shared/ui_feedback.js`(+20/-4) ·
+- **改动完成**。改动面: `src/auto_qb/webui/static/shared/ui_feedback.js`(+20/-4) ·
   `tests/test_web.py`(新守阵 `test_frontend_toast_duration_floor_by_kind` + 测试计划清单一行) ·
   `memory-bank/testing/guards.md`(登记一行) · 本切片 + 基线切片 · `kb.index` 重建生成物。
 - 口径 = **按 kind 设下限**, 不是给每个调用点改数字: 调用点缺省 `ms` 取下限; 显式传更短的抬到下限; 传更长不封顶。

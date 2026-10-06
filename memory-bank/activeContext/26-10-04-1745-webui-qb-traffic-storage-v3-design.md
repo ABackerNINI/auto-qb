@@ -17,11 +17,11 @@
 
 ## 下一步
 
-- **实施已完成(2026-10-05)**: 计划 26-10-04-1957 七步(S1/S4/S2a/S2b/S3a/S3b/S5)全部入库, feature/qb-traffic-v3 已合回本地 develop(fast-forward), **未推送——等用户「提交」指令**(ship.commit)。进度单点: [tasks/26-10-04-backend-qb-traffic-storage-v3](../tasks/26-10-04-backend-qb-traffic-storage-v3.md); 基线: testing/baselines/26-10-05-0447(2526 passed/99%, 写 IO 300x↓, r 行 36B)。
+- **实施已完成(2026-10-05)**: 计划 26-10-04-1957 七步(S1/S4/S2a/S2b/S3a/S3b/S5)全部入库, feature/qb-traffic-v3 已合回本地 develop(fast-forward), 推送由 ship.commit 统一执行(ship.commit)。进度单点: [tasks/26-10-04-backend-qb-traffic-storage-v3](../tasks/26-10-04-backend-qb-traffic-storage-v3.md); 基线: testing/baselines/26-10-05-0447(2526 passed/99%, 写 IO 300x↓, r 行 36B)。
 - 待用户: ①提交指令 ②真机 `--dry-run` 端到端验收(计划 §9.1) ③旧目录 qb-traffic/ 删留决定 ④D2 tol=250ms 真机复核(可选, S5 后仍开放)。
 
 ## 实施开工轮 (20:3x)
 
 - 开工授权已下达(用户显式指令), D4 拍板: **6mo/1y/all 三档**; 立档拍板: 按计划 §9.2。
-- 执行形态: 主会话只委派, 子智能体串行实施; 五期拆七步(S2→S2a/S2b, S3→S3a/S3b)在分支 `feature/qb-traffic-v3`, 每步 test.full + 普通 git commit(不走 my-commit-flow), 全部完成后合回 develop 等提交指令。
+- 执行形态: 主会话只委派, 子智能体串行实施; 五期拆七步(S2→S2a/S2b, S3→S3a/S3b)在分支 `feature/qb-traffic-v3`, 每步 test.full + 普通 git commit(不走 my-commit-flow), 全部完成后合回 develop 随本专题入库。
 - 任务档案: [tasks/26-10-04-backend-qb-traffic-storage-v3](../tasks/26-10-04-backend-qb-traffic-storage-v3.md)(进度单点); commit⓪ 计划入库 633d58cd。
