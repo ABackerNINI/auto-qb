@@ -160,9 +160,14 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hr-detail-table .hr-pres { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-dim); font-size: 10.5px; white-space: nowrap; }
 .hr-detail-table .hr-pres.hr-pres-on { border-color: var(--green-line); color: var(--green); }
 .hr-detail-table .hr-pres.hr-pres-out { border-color: var(--blue-line); color: var(--blue); }
-.hr-detail-table th.sortable { cursor: pointer; user-select: none; }
+.hr-detail-table th.sortable { position: relative; cursor: pointer; user-select: none; }
 .hr-detail-table th.sortable:hover { color: var(--fg); }
-.hr-detail-table th .arrow { display: inline-block; margin-left: 3px; color: var(--accent); opacity: 0; }
+/* 排序箭头绝对定位不占流(2026-10-06, 计划 26-10-06-1009 §7 · 报告 26-10-06-0945 B1):
+ * 原 display:inline-block 恒占 11px + margin-left 3px = 14px, 把右对齐(num)列的表头文字整体
+ * 左顶(实测 14px, 三主题一致)。改绝对定位后无偏移 = 取静态位置(仍紧贴标签右缘, opacity 揭示
+ * 与 hover 语义不变), 但不再参与行内布局 => 标签回到列右缘, 与值文字同缘。
+ * 别改回 inline-block, 也别补内层 v-if(切换排序列时标题会左右跳, 与主表 P3 同形)。 */
+.hr-detail-table th .arrow { position: absolute; margin-left: 3px; color: var(--accent); opacity: 0; }
 .hr-detail-table th .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
 .hr-detail-table th.sortable:hover .arrow { opacity: .45; }
 .hr-detail-table th.sortable .arrow.on { opacity: 1; }
